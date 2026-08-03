@@ -12,3 +12,14 @@ export { createNodeId } from './node'
 
 export type { NodeVisit } from './tree'
 export { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from './tree'
+
+export type { ComponentDef, EditorControl, EditorField } from './component/define'
+export { defineComponent } from './component/define'
+export {
+  defaultStructure,
+  getComponent,
+  listComponents,
+  registerComponent,
+  requireComponent,
+  resetRegistry,
+} from './component/registry'

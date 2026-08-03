@@ -1,0 +1,81 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { z } from 'zod'
+import { defineComponent } from '../../src/component/define'
+import {
+  defaultStructure,
+  getComponent,
+  listComponents,
+  registerComponent,
+  requireComponent,
+  resetRegistry,
+} from '../../src/component/registry'
+
+const Sample = defineComponent({
+  type: 'Sample',
+  props: z.object({ label: z.string(), disabled: z.boolean() }),
+  editor: [{ prop: 'label', control: 'text', label: '라벨' }],
+  structures: ['plain', 'fancy'],
+  parts: ['body'],
+  variants: ['default'],
+  states: ['disabled'],
+  children: 'none',
+})
+
+describe('컴포넌트 레지스트리', () => {
+  beforeEach(() => {
+    resetRegistry()
+  })
+
+  it('등록한 컴포넌트를 타입으로 찾는다', () => {
+    registerComponent(Sample)
+    expect(getComponent('Sample')).toBe(Sample)
+  })
+
+  it('등록하지 않은 타입은 undefined를 준다', () => {
+    expect(getComponent('Unknown')).toBeUndefined()
+  })
+
+  it('requireComponent는 없는 타입에 대해 던진다', () => {
+    expect(() => requireComponent('Unknown')).toThrow('알 수 없는 컴포넌트 타입: Unknown')
+  })
+
+  it('같은 타입을 두 번 등록하면 던진다', () => {
+    registerComponent(Sample)
+    expect(() => registerComponent(Sample)).toThrow('이미 등록된 컴포넌트 타입: Sample')
+  })
+
+  it('등록 순서대로 목록을 준다', () => {
+    const Other = defineComponent({ ...Sample, type: 'Other' })
+    registerComponent(Sample)
+    registerComponent(Other)
+    expect(listComponents().map((d) => d.type)).toEqual(['Sample', 'Other'])
+  })
+
+  it('첫 번째 구조가 기본 구조다', () => {
+    expect(defaultStructure(Sample)).toBe('plain')
+  })
+})
+
+describe('defineComponent', () => {
+  it('구조가 비어 있으면 던진다', () => {
+    expect(() =>
+      defineComponent({ ...Sample, type: 'Empty', structures: [] }),
+    ).toThrow('Empty: structures는 최소 하나여야 합니다')
+  })
+
+  it('구조 이름이 중복이면 던진다', () => {
+    expect(() =>
+      defineComponent({ ...Sample, type: 'Dup', structures: ['a', 'a'] }),
+    ).toThrow('Dup: structures에 중복이 있습니다')
+  })
+
+  it('editor가 가리키는 prop이 스키마에 없으면 던진다', () => {
+    expect(() =>
+      defineComponent({
+        ...Sample,
+        type: 'Bad',
+        editor: [{ prop: 'missing', control: 'text', label: '없음' }],
+      }),
+    ).toThrow('Bad: editor가 스키마에 없는 prop을 가리킵니다: missing')
+  })
+})
