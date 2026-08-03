@@ -161,6 +161,29 @@ describe('인증 훅', () => {
     })
   })
 
+  it('resolveSession 조회 자체가 실패해도 401이고 500이 아니다', async () => {
+    await withApi(async ({ app, db }) => {
+      const userId = await seedUser(db, 'crash@example.com')
+      const { token } = await createSession(db, userId, 24)
+      app.get('/__me', { preHandler: app.requireAuth }, async (request) => request.currentUser)
+
+      // withTransaction 없이 raw db로 유니크 위반을 직접 낸다 (db.test.ts가 문서화한
+      // 25P02 함정). 이 트랜잭션 위의 모든 이후 쿼리가 내용과 무관하게 실패하는
+      // 상태가 되므로, resolveSession의 SELECT도 예외 없이 던진다 — 이제서야
+      // onRequest 훅의 try/catch가 실제로 시험대에 오른다. 이 try/catch를 지우면
+      // 이 테스트는 실패한다(500).
+      await expect(
+        db.insertInto('users')
+          .values({ email: 'crash@example.com', name: '중복', password_hash: 'y' })
+          .execute(),
+      ).rejects.toThrow()
+
+      const res = await app.inject({ method: 'GET', url: '/__me', cookies: { wb_session: token } })
+      expect(res.statusCode).toBe(401)
+      expect(res.json().error.code).toBe('unauthenticated')
+    })
+  })
+
   it('requireAuth가 없는 라우트는 쿠키가 없어도 돈다', async () => {
     await withApi(async ({ app }) => {
       app.get('/__open', async (request) => ({ user: request.currentUser }))

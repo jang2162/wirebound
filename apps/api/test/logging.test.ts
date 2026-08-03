@@ -2,9 +2,11 @@ import { Writable } from 'node:stream'
 import { describe, expect, it } from 'vitest'
 import Fastify from 'fastify'
 import { buildLoggerOptions } from '../src/app'
+import { createSession } from '../src/auth/session'
 import { loadConfig } from '../src/config'
 import { registerErrorHandler } from '../src/http/error-handler'
 import { healthRoutes } from '../src/routes/health'
+import { testConfig, withApi } from './helpers'
 
 const testEnv = {
   DATABASE_URL: 'postgres://wirebound:wirebound@127.0.0.1:5433/wirebound_test',
@@ -28,10 +30,14 @@ describe('로그 리다크션', () => {
     const marker = 'MARKER-3f9a1c7e-9b2d-session-secret'
     const { stream, read } = captureLogStream()
 
-    // buildApp이 아니라 이 세 조각(로거 옵션·에러 핸들러·health 라우트)을 직접 조립한다 —
-    // buildApp의 로거는 스트림을 주입할 통로가 없기 때문이다(BuildAppOptions는 이 태스크에서
-    // { config }뿐이어야 한다). logLevel은 'info'로 강제한다 — NODE_ENV=test의 기본값인
-    // 'silent'로 두면 애초에 아무 로그도 찍히지 않아 이 테스트가 아무것도 검증하지 못한다.
+    // buildApp이 아니라 이 세 조각(로거 옵션·에러 핸들러·health 라우트)을 직접 조립한다.
+    // DB 없이(=withApi 밖에서) 돌아가는 가장 빠르고 단순한 회귀 테스트로 남겨 둔다 —
+    // "Fastify 기본 req 시리얼라이저가 애초에 headers를 로그에 넣지 않는다"는 성질 자체는
+    // 쿠키 플러그인·인증 훅과 무관하게 항상 성립하므로, 이 조립만으로도 그 성질은 잡아낸다.
+    // 다만 이것만으로는 부족하다 — 아래 두 번째 테스트가 실제 `buildApp` 파이프라인
+    // (쿠키 파싱·인증 훅 포함)을 검증한다. logLevel은 'info'로 강제한다 — NODE_ENV=test의
+    // 기본값인 'silent'로 두면 애초에 아무 로그도 찍히지 않아 이 테스트가 아무것도
+    // 검증하지 못한다.
     const config = { ...loadConfig(testEnv), logLevel: 'info' as const }
     const app = Fastify({ logger: { ...buildLoggerOptions(config), stream } })
     registerErrorHandler(app)
@@ -54,5 +60,33 @@ describe('로그 리다크션', () => {
     const logged = read()
     expect(logged.length).toBeGreaterThan(0) // 로그가 실제로 찍혔는지부터 확인한다(공허한 통과 방지).
     expect(logged).not.toContain(marker)
+  })
+
+  it('실제 buildApp 파이프라인(쿠키 파싱·인증 훅 포함)에서도 세션 토큰이 로그에 나타나지 않는다', async () => {
+    // 태스크 7이 `buildApp`에 `@fastify/cookie`와 세션 인증 훅을 등록해, 이제 /health를
+    // 포함한 모든 요청에서 쿠키를 읽는다. 위 테스트는 그 파이프라인을 거치지 않으므로,
+    // "언젠가 누가 request.cookies나 resolveSession의 결과를 디버그 로그로 찍는다"는
+    // 회귀를 잡지 못한다. 여기서는 실제 `buildApp`을 통째로 돌리고, 실제로 DB에
+    // 만들어진 세션의 진짜 토큰을 쿠키에 실어 보낸다 — 가짜 마커 문자열이 아니다.
+    const { stream, read } = captureLogStream()
+    let token = ''
+
+    await withApi(
+      async ({ app, db }) => {
+        const user = await db.insertInto('users')
+          .values({ email: 'logredact@example.com', name: '로그검증', password_hash: 'x' })
+          .returning('id').executeTakeFirstOrThrow()
+        const created = await createSession(db, user.id, 24)
+        token = created.token
+
+        await app.inject({ method: 'GET', url: '/health', cookies: { wb_session: token } })
+      },
+      { config: { ...testConfig(), logLevel: 'info' as const }, loggerStream: stream },
+    )
+
+    const logged = read()
+    expect(logged.length).toBeGreaterThan(0) // 로그가 실제로 찍혔는지부터 확인한다(공허한 통과 방지).
+    expect(token).not.toBe('') // 토큰이 실제로 만들어졌는지 확인한다 — 빈 문자열은 항상 "안 보임"으로 통과해 버린다.
+    expect(logged).not.toContain(token)
   })
 })

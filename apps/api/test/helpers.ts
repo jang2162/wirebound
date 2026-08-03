@@ -1,3 +1,4 @@
+import type { Writable } from 'node:stream'
 import type { FastifyInstance } from 'fastify'
 import { buildApp } from '../src/app'
 import type { ApiConfig } from '../src/config'
@@ -46,6 +47,21 @@ export function testConfig(): ApiConfig {
 class Rollback extends Error {}
 
 /**
+ * `withApi`가 `buildApp`에 그대로 전달할 선택적 오버라이드.
+ *
+ * - `config`: 기본은 `testConfig()`다. `test/logging.test.ts`가 `logLevel: 'info'`로
+ *   덮어써야 로그가 실제로 찍힌다(테스트 기본 `logLevel`은 `silent`라 그냥 두면
+ *   아무것도 안 찍혀 로그 캡처 자체가 공허해진다).
+ * - `loggerStream`: `buildApp`의 같은 이름 필드를 그대로 통과시킨다. 이 필드가
+ *   존재하는 유일한 이유도 `test/logging.test.ts`다 — 실제 `buildApp` 파이프라인
+ *   (쿠키 파싱·인증 훅 포함)을 그대로 돌리면서 로그만 메모리로 가로채기 위해서다.
+ */
+export interface WithApiOptions {
+  config?: ApiConfig
+  loggerStream?: Writable
+}
+
+/**
  * 테스트 하나를 트랜잭션으로 감싸고 끝나면 롤백한다.
  * 앱은 그 트랜잭션 핸들을 db로 받으므로 커밋되는 것이 없다.
  *
@@ -75,12 +91,20 @@ class Rollback extends Error {}
  * `app.ready()`를 부르지 않는다. Fastify 5는 ready 이후 라우트 등록을 거부하는데,
  * 여러 테스트가 인증 훅 같은 것을 확인하려고 임시 라우트를 등록한다.
  * `inject()`가 첫 호출에서 알아서 ready를 태우므로 미리 부를 이유도 없다.
+ *
+ * `options`는 대부분의 호출자에게 필요 없다 — 생략하면 지금까지와 완전히 같게
+ * `testConfig()`로 `buildApp`을 만든다. `test/logging.test.ts`만 `config`(로그 레벨을
+ * `info`로)와 `loggerStream`(로그를 메모리로 캡처)을 넘긴다.
  */
-export async function withApi(fn: (ctx: TestContext) => Promise<void>): Promise<void> {
+export async function withApi(fn: (ctx: TestContext) => Promise<void>, options?: WithApiOptions): Promise<void> {
   const db = getTestDb()
   try {
     await db.transaction().execute(async (trx) => {
-      const app = await buildApp({ db: trx, config: testConfig() })
+      const app = await buildApp({
+        db: trx,
+        config: options?.config ?? testConfig(),
+        loggerStream: options?.loggerStream,
+      })
 
       // fn과 app.close() 둘 다 던질 수 있다. finally 블록에서 던지면 try 블록의
       // 에러를 덮어써 버리므로(JS 표준 동작), fn의 에러를 직접 잡아두고 close의

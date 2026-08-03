@@ -1,3 +1,4 @@
+import type { Writable } from 'node:stream'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { registerAuthPlugin } from './auth/plugin'
 import type { ApiConfig } from './config'
@@ -14,6 +15,19 @@ declare module 'fastify' {
 export interface BuildAppOptions {
   db: DbHandle
   config: ApiConfig
+  /**
+   * 테스트 전용: pino가 쓸 목적지 스트림을 주입한다. 운영 코드(`main.ts`)는 절대
+   * 채우지 않는다 — 생략하면 pino가 원래 목적지(표준출력)를 그대로 쓴다.
+   *
+   * 이 필드가 존재하는 유일한 이유는 `test/logging.test.ts`다. 태스크 7 전까지는
+   * 그 테스트가 `buildApp`을 거치지 않고 로거 옵션·에러 핸들러·health 라우트를
+   * 직접 조립해 로그를 캡처했다 — 그때는 실제 앱과의 차이가 문제되지 않았다(아무것도
+   * 쿠키를 만지지 않았으므로). 이제 `buildApp`이 `@fastify/cookie`와 세션 인증 훅을
+   * 등록해 매 요청 쿠키를 읽으므로, 로그 리다크션이 실제로 지켜야 할 파이프라인은
+   * "직접 조립한 미니 앱"이 아니라 이 `buildApp`이다. `loggerStream`은 그 실제
+   * 파이프라인을 그대로 쓰면서 로그만 메모리로 가로챌 수 있게 해 준다.
+   */
+  loggerStream?: Writable
 }
 
 /**
@@ -62,9 +76,12 @@ export function buildLoggerOptions(config: ApiConfig): ApiLoggerOptions {
  * 이 함수가 만들지 않은 자원(DB 풀 등)은 닫지 않는다 — 그 자원의 생애주기는 호출자의 것이다.
  */
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const { db, config } = options
+  const { db, config, loggerStream } = options
 
-  const app = Fastify({ logger: buildLoggerOptions(config) })
+  const loggerOptions = buildLoggerOptions(config)
+  const app = Fastify({
+    logger: loggerStream ? { ...loggerOptions, stream: loggerStream } : loggerOptions,
+  })
 
   app.decorate('db', db)
   registerErrorHandler(app)
