@@ -23,3 +23,6 @@ export {
   requireComponent,
   resetRegistry,
 } from './component/registry'
+
+export { CATALOG_TYPES, installCatalog } from './component/catalog/index'
+export * from './component/catalog/index'
