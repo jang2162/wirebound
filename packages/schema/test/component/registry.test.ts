@@ -78,4 +78,22 @@ describe('defineComponent', () => {
       }),
     ).toThrow('Bad: editor가 스키마에 없는 prop을 가리킵니다: missing')
   })
+
+  it('states가 가리키는 prop이 스키마에 없으면 던진다', () => {
+    expect(() =>
+      defineComponent({ ...Sample, type: 'X', states: ['missing'] }),
+    ).toThrow('X: states와 같은 이름의 prop이 없습니다: missing')
+  })
+
+  it('editor의 visibleWhen이 없는 구조를 가리키면 던진다', () => {
+    expect(() =>
+      defineComponent({
+        ...Sample,
+        type: 'Vis',
+        editor: [
+          { prop: 'label', control: 'text', label: '라벨', visibleWhen: { structure: 'nope' } },
+        ],
+      }),
+    ).toThrow('Vis: editor의 visibleWhen이 없는 구조를 가리킵니다: nope')
+  })
 })
