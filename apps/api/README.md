@@ -7,6 +7,12 @@ Fastify 5 기반 REST + WebSocket 서버. 설계서 편집을 지원하는 백�
 1. `docker compose up -d` — 저장소 루트에서. Postgres(호스트 포트 `5433`)를 띄운다.
    `docker compose ps`로 `healthy`가 될 때까지 기다린다. 컨테이너가 healthy가
    아니면 이후 마이그레이션·테스트가 전부 접속 실패로 죽는다.
+   - `docker/postgres-init/01-test-db.sql`(`wirebound_test` 생성)은 Postgres 볼륨을
+     **처음 만들 때만** 실행된다. `wirebound-pgdata` 볼륨이 이미 있는 상태로(예: 예전
+     버전의 이미지를 쓰다가) 새로 받았다면 `wirebound_test`가 없을 수 있다 — 이 경우
+     `docker compose down -v`로 볼륨까지 지우고 다시 `up -d`하거나, 컨테이너 안에서
+     `CREATE DATABASE wirebound_test;`를 직접 실행한다. 그렇지 않으면 테스트
+     `globalSetup`이 이유를 알기 어려운 접속 에러로 죽는다.
 2. `.env.example`을 `.env`로 복사하고 필요하면 값을 조정한다.
 3. `pnpm build` — `packages/schema`를 먼저 빌드한다. `tsx`는 워크스페이스 패키지를
    `package.json`의 `exports`를 통해 해석하는데, 그 `exports`가 가리키는 대상이

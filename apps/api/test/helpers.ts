@@ -54,6 +54,24 @@ class Rollback extends Error {}
  * `catch`가 `Rollback`만 골라 삼킨다. `fn`이 진짜 에러를 던졌다면 그 에러가 트랜잭션의
  * 롤백을 유발한 뒤 `Rollback`이 아니므로 그대로 다시 던져져 호출자에게 보인다.
  *
+ * **이 `catch (error) { if (!(error instanceof Rollback)) throw error }` 줄이
+ * 이 태스크 이후 아홉 개 태스크 전체가 의지하는 지점이다.** 여기가 언젠가
+ * `catch {}`처럼 전부 삼키는 코드로 퇴행하면, `withApi` 안의 모든 `expect`가
+ * 던지는 진짜 실패까지 조용히 삼켜져 스위트가 초록으로 보이면서 아무것도
+ * 증명하지 못하게 된다. `db.test.ts`의 "테스트가 던진 진짜 에러는 그대로 밖으로
+ * 나온다"가 이 성질 자체를 고정한다.
+ *
+ * **트랜잭션 오염에 주의.** `withApi`가 감싸는 것은 테스트 전체를 위한 하나의
+ * Postgres 트랜잭션이다. 그 안에서 어떤 문장이든(제약 위반 등으로) 실패하면
+ * Postgres가 트랜잭션 전체를 aborted 상태로 만들고, 이후 그 트랜잭션 위의 모든
+ * 쿼리가 실제 내용과 무관하게 `25P02`로 실패한다. 그래서 이 태스크가 만드는 409
+ * 경로(가입 시 중복 이메일 등, 전부 DB 제약 위반으로 구현된다) 같은 걸 테스트
+ * 안에서 직접(=raw `db`로) 유발하면, 그 실패 자체를 잡아도 트랜잭션은 이미
+ * 오염돼 있어 같은 테스트에서 그 뒤에 무언가를 더 확인하려는 시도가 전부
+ * 무너진다. `withTransaction`(`src/db/tx.ts`)이 SAVEPOINT로 구간을 격리해
+ * 이 문제를 푼다 — 제약 위반이 날 수 있는 조작은 raw `db`가 아니라 반드시
+ * `withTransaction(db, fn)`을 통해 실행한다.
+ *
  * `app.ready()`를 부르지 않는다. Fastify 5는 ready 이후 라우트 등록을 거부하는데,
  * 여러 테스트가 인증 훅 같은 것을 확인하려고 임시 라우트를 등록한다.
  * `inject()`가 첫 호출에서 알아서 ready를 태우므로 미리 부를 이유도 없다.
@@ -63,11 +81,25 @@ export async function withApi(fn: (ctx: TestContext) => Promise<void>): Promise<
   try {
     await db.transaction().execute(async (trx) => {
       const app = await buildApp({ db: trx, config: testConfig() })
+
+      // fn과 app.close() 둘 다 던질 수 있다. finally 블록에서 던지면 try 블록의
+      // 에러를 덮어써 버리므로(JS 표준 동작), fn의 에러를 직접 잡아두고 close의
+      // 에러보다 우선한다 — fn이 실패했다면 그게 진짜 원인이고, close 실패는
+      // 부수 효과일 뿐이다. fn이 성공했는데 close만 실패했다면 close의 에러가
+      // 유일한 신호이므로 그대로 던진다.
+      let fnError: unknown
       try {
         await fn({ app, db: trx })
-      } finally {
-        await app.close()
+      } catch (error) {
+        fnError = error
       }
+      try {
+        await app.close()
+      } catch (closeError) {
+        if (fnError === undefined) throw closeError
+      }
+      if (fnError !== undefined) throw fnError
+
       throw new Rollback()
     })
   } catch (error) {
