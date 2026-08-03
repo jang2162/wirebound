@@ -2,7 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { applyOp, applyOps } from '../../src/patch/apply'
 import { PatchError } from '../../src/patch/types'
 
-function doc() {
+interface TestChild {
+  id: string
+  type: string
+  props: { content: string }
+  marker?: number
+}
+
+interface TestDoc {
+  version: number
+  root: { id: string; type: string; children: TestChild[] }
+}
+
+function doc(): TestDoc {
   return {
     version: 1,
     root: {
