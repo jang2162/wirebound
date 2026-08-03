@@ -8,6 +8,7 @@
     { "path": "./packages/schema" },
     { "path": "./packages/schema/tsconfig.test.json" },
     { "path": "./packages/renderer" },
-    { "path": "./apps/playground" }
+    { "path": "./apps/playground" },
+    { "path": "./apps/api" }
   ]
 }

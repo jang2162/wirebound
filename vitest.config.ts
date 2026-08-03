@@ -28,6 +28,16 @@ export default defineConfig({
           include: ['packages/*/test/**/*.test.{ts,tsx}', 'apps/playground/test/**/*.test.{ts,tsx}'],
         },
       },
+      {
+        ...shared,
+        test: {
+          name: 'api',
+          include: ['apps/api/test/**/*.test.ts'],
+          // DB 하나를 공유하므로 파일 간 병렬을 끈다. 태스크 5에서 의미가 생긴다.
+          fileParallelism: false,
+          testTimeout: 20_000,
+        },
+      },
     ],
   },
 })
