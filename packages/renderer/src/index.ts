@@ -9,3 +9,6 @@ export {
   requireStructure,
   resetStructures,
 } from './structures/registry'
+
+export type { RenderOptions } from './render'
+export { renderDocument, renderNode, resolveStructure } from './render'
