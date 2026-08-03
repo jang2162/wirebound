@@ -21,12 +21,19 @@ async function withApp(fn: (app: FastifyInstance) => Promise<void>): Promise<voi
 
 describe('loadConfig', () => {
   it('DATABASE_URL이 없으면 한국어 메시지로 던진다', () => {
-    expect(() => loadConfig({ NODE_ENV: 'test' })).toThrow(/DATABASE_URL/)
+    // 부분 문자열이 아니라 실제로 던져지는 문구 그 자체를 확인한다 — "DATABASE_URL"이라는
+    // 글자만 어딘가 들어 있으면 통과하는 검증은 zod의 일반 메시지가 우연히 필드 경로를
+    // 포함하는 것만으로도 속아 넘어간다.
+    expect(() => loadConfig({ NODE_ENV: 'test' })).toThrow('DATABASE_URL이 필요합니다')
     try {
       loadConfig({ NODE_ENV: 'test' })
     } catch (error) {
       expect((error as Error).message).toMatch(/[가-힣]/)
     }
+  })
+
+  it('DATABASE_URL이 빈 문자열이어도 같은 메시지로 던진다', () => {
+    expect(() => loadConfig({ ...testEnv, DATABASE_URL: '' })).toThrow('DATABASE_URL이 필요합니다')
   })
 
   it('기본값을 채운다', () => {

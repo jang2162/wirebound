@@ -29,11 +29,25 @@ function numericEnv(fieldName: string) {
     .transform((value) => Number.parseInt(value, 10))
 }
 
+const DATABASE_URL_MESSAGE = 'DATABASE_URL이 필요합니다'
+
+/**
+ * DATABASE_URL은 필수다. `z.string().min(1, ...)`만 쓰면 값이 아예 없을 때(undefined)
+ * `.min()`이 아니라 base 타입 체크(invalid_type)가 먼저 걸려 로케일의 일반 메시지가 나가고,
+ * 우리가 원하는 메시지는 빈 문자열("")을 넣었을 때만 나온다 — 실제 운영 실수(키 자체가 없는
+ * 경우)에서는 정작 이 메시지를 보지 못하는 상황이었다. undefined를 빈 문자열로 미리
+ * 치환해 두 경우 모두 같은 `.min()` 검사 하나로 수렴시킨다.
+ */
+const RequiredDatabaseUrl = z.preprocess(
+  (value) => (value === undefined ? '' : value),
+  z.string().min(1, DATABASE_URL_MESSAGE),
+)
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   HOST: z.string().default('127.0.0.1'),
   PORT: numericEnv('PORT').default(3001),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL이 필요합니다'),
+  DATABASE_URL: RequiredDatabaseUrl,
   SESSION_COOKIE_NAME: z.string().default('wb_session'),
   SESSION_TTL_HOURS: numericEnv('SESSION_TTL_HOURS').default(720),
   PASSWORD_SCRYPT_N: numericEnv('PASSWORD_SCRYPT_N').default(32768),

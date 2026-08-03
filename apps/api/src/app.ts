@@ -12,6 +12,44 @@ export interface BuildAppOptions {
 }
 
 /**
+ * `buildLoggerOptions`가 반환하는 실제 옵션의 형태.
+ * `FastifyServerOptions['logger']`는 `boolean | (...)` 유니온이라 스프레드가 안 되므로,
+ * 회귀 테스트가 `stream`을 얹어 스프레드할 수 있도록 구체적인 객체 타입으로 좁혀 둔다.
+ */
+interface ApiLoggerOptions {
+  level: ApiConfig['logLevel']
+  redact: { paths: string[]; censor: string }
+}
+
+/**
+ * Fastify pino 로거 옵션을 만든다. `buildApp`과 로그 리다크션 회귀 테스트
+ * (`test/logging.test.ts`)가 이 함수 하나를 함께 쓴다 — 테스트가 실제 앱과
+ * 다른 레시피를 검증하는 일이 없도록 하기 위해서다.
+ *
+ * **오늘 시점에 비밀이 로그에 남지 않는 실제 이유는 이 `redact`가 아니다.** Fastify의
+ * 기본 `req` 시리얼라이저(`fastify/lib/logger-pino.js`)는 method·url·version·host·
+ * remoteAddress·remotePort만 골라 담고 `headers`는 애초에 로그 객체에 넣지 않는다.
+ * pino는 시리얼라이저를 먼저 돌리고 그 결과에 redact를 적용하므로, `req.headers.cookie`
+ * 경로는 지금 아무 것도 가리지 않는다 — 애초에 그 경로에 값이 없기 때문이다.
+ *
+ * 그래도 이 `redact`를 남겨 두는 이유는 방어선(defense-in-depth)이다: 나중에 누군가
+ * `req`용 커스텀 시리얼라이저를 추가해 `headers`를 로그에 포함시키는 순간, 그 시리얼라이저가
+ * 헤더를 `req.headers.*` 아래 유지하는 한 이 규칙이 즉시 실제로 값을 가리기 시작한다.
+ * 그런 시리얼라이저를 추가하는 사람은 헤더를 `req.headers.*` 아래 두거나, 그게 아니면
+ * 이 paths를 새 위치에 맞게 넓혀야 한다. `test/logging.test.ts`는 "세션 토큰이 로그에
+ * 나타나지 않는다"는 성질 자체를 고정해 두므로, 이 계약이 깨지면 그 테스트가 실패한다.
+ */
+export function buildLoggerOptions(config: ApiConfig): ApiLoggerOptions {
+  return {
+    level: config.logLevel,
+    redact: {
+      paths: ['req.headers.cookie', 'req.headers.authorization'],
+      censor: '[REDACTED]',
+    },
+  }
+}
+
+/**
  * Fastify 인스턴스를 조립해 반환한다.
  *
  * `listen`은 절대 호출하지 않는다 — 포트를 여는 것은 `main.ts`만의 책임이고,
@@ -21,16 +59,7 @@ export interface BuildAppOptions {
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
   const { config } = options
 
-  const app = Fastify({
-    logger: {
-      level: config.logLevel,
-      // 세션 쿠키·인증 헤더는 절대 로그에 남기지 않는다.
-      redact: {
-        paths: ['req.headers.cookie', 'req.headers.authorization'],
-        censor: '[REDACTED]',
-      },
-    },
-  })
+  const app = Fastify({ logger: buildLoggerOptions(config) })
 
   registerErrorHandler(app)
   await app.register(healthRoutes)
