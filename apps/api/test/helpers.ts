@@ -5,6 +5,7 @@ import type { ApiConfig } from '../src/config'
 import { loadConfig } from '../src/config'
 import { createDb, createPool } from '../src/db/client'
 import type { DbHandle } from '../src/db/tx'
+import type { ProjectRole } from '../src/db/types'
 
 export const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://wirebound:wirebound@127.0.0.1:5433/wirebound_test'
@@ -186,4 +187,62 @@ export async function signup(
     cookie: authCookie(token),
     password,
   }
+}
+
+export interface CreatedProject {
+  id: string
+  name: string
+  slug: string
+}
+
+/** `createProject()`가 만드는 slug가 테스트 간에 겹치지 않도록 매기는 모듈 스코프 카운터. */
+let projectCounter = 0
+
+/**
+ * 주어진 쿠키의 사용자를 owner로 하는 프로젝트를 만든다. slug는 호출마다 유일하다.
+ *
+ * `/api/projects`를 실제로 호출한다(`signup`과 같은 이유) — 이 태스크가 검증하는
+ * 생성 경로(트랜잭션·slug 유니크 처리 포함)를 그대로 거쳐야 이후 태스크의
+ * 픽스처가 실제 API와 어긋나지 않는다.
+ */
+export async function createProject(
+  ctx: TestContext,
+  cookie: { wb_session: string },
+  overrides?: Partial<{ name: string; slug: string }>,
+): Promise<CreatedProject> {
+  projectCounter += 1
+  const name = overrides?.name ?? `프로젝트${projectCounter}`
+  const slug = overrides?.slug ?? `project-${projectCounter}`
+
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: '/api/projects',
+    cookies: cookie,
+    payload: { name, slug },
+  })
+
+  if (res.statusCode !== 201) {
+    throw new Error(`createProject 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
+  }
+
+  return res.json()
+}
+
+/**
+ * 이미 있는 프로젝트에 사용자를 특정 역할로 넣는다 (API를 거치지 않는다).
+ *
+ * 멤버 초대 API가 아직 없는 태스크(이 태스크 포함)에서도 권한 시나리오를 세울 수
+ * 있어야 하므로 DB에 직접 쓴다. 태스크 11 이후 초대 API가 생겨도 그대로 둔다 —
+ * 픽스처가 검사 대상 API에 의존하면 그 API가 깨졌을 때 무관한 테스트가 전부 무너진다.
+ */
+export async function addMember(
+  ctx: TestContext,
+  projectId: string,
+  userId: string,
+  role: ProjectRole,
+): Promise<void> {
+  await ctx.db
+    .insertInto('project_members')
+    .values({ project_id: projectId, user_id: userId, role })
+    .execute()
 }

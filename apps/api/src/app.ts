@@ -7,6 +7,7 @@ import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
 import { authRoutes } from './routes/auth'
 import { healthRoutes } from './routes/health'
+import { projectRoutes } from './routes/projects'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -90,6 +91,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await registerAuthPlugin(app, config)
   registerProjectRoleDecorator(app)
   await app.register(authRoutes(config), { prefix: '/api/auth' })
+  await app.register(projectRoutes(), { prefix: '/api/projects' })
   await app.register(healthRoutes)
 
   return app
