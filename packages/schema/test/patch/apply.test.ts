@@ -13,7 +13,7 @@ function doc() {
         { id: 'n_000000000003', type: 'Text', props: { content: '나' } },
       ],
     },
-  } as any
+  }
 }
 
 describe('applyOp — replace', () => {
@@ -46,7 +46,7 @@ describe('applyOp — add', () => {
       path: '/root/children/1',
       value: { id: 'n_000000000004', type: 'Divider' },
     })
-    expect(next.root.children.map((c: any) => c.id)).toEqual([
+    expect(next.root.children.map((c) => c.id)).toEqual([
       'n_000000000002',
       'n_000000000004',
       'n_000000000003',
@@ -78,7 +78,7 @@ describe('applyOp — add', () => {
 describe('applyOp — remove', () => {
   it('배열 요소를 지운다', () => {
     const next = applyOp(doc(), { op: 'remove', path: '/root/children/0' })
-    expect(next.root.children.map((c: any) => c.id)).toEqual(['n_000000000003'])
+    expect(next.root.children.map((c) => c.id)).toEqual(['n_000000000003'])
   })
 
   it('객체 키를 지운다', () => {
@@ -98,7 +98,7 @@ describe('applyOp — move', () => {
       from: '/root/children/0',
       path: '/root/children/1',
     })
-    expect(next.root.children.map((c: any) => c.id)).toEqual([
+    expect(next.root.children.map((c) => c.id)).toEqual([
       'n_000000000003',
       'n_000000000002',
     ])
