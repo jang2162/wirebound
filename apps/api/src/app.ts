@@ -4,6 +4,7 @@ import { registerAuthPlugin } from './auth/plugin'
 import type { ApiConfig } from './config'
 import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
+import { authRoutes } from './routes/auth'
 import { healthRoutes } from './routes/health'
 
 declare module 'fastify' {
@@ -86,6 +87,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.decorate('db', db)
   registerErrorHandler(app)
   await registerAuthPlugin(app, config)
+  await app.register(authRoutes(config), { prefix: '/api/auth' })
   await app.register(healthRoutes)
 
   return app

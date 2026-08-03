@@ -130,3 +130,60 @@ export async function withApi(fn: (ctx: TestContext) => Promise<void>, options?:
     if (!(error instanceof Rollback)) throw error
   }
 }
+
+/** 세션 쿠키 이름. 운영·테스트 설정 모두 기본값(`wb_session`)을 바꾸지 않으므로 여기서 고정한다. */
+const SESSION_COOKIE_NAME = 'wb_session'
+
+/** 토큰 원문을 `app.inject({ cookies })`에 바로 쓸 수 있는 객체로 만든다. */
+export function authCookie(token: string): { wb_session: string } {
+  return { [SESSION_COOKIE_NAME]: token }
+}
+
+export interface SignedUpUser {
+  user: { id: string; email: string; name: string }
+  cookie: { wb_session: string }
+  password: string
+}
+
+/** `signup()`가 만드는 이메일이 테스트 간에 겹치지 않도록 매기는 모듈 스코프 카운터. */
+let signupCounter = 0
+
+/**
+ * 가입시키고 로그인 쿠키까지 돌려준다. 이메일 기본값은 호출마다 유일하게 만든다
+ * (모듈 스코프 카운터) — `withApi`가 테스트마다 롤백하므로 파일 간 충돌은 없지만,
+ * 한 테스트 안에서 여러 사용자를 만드는 경우가 흔해 그 안에서도 겹치면 안 된다.
+ *
+ * `/api/auth/signup`을 실제로 호출한다(직접 `insertUser`를 부르지 않는다) — 그래야
+ * 비밀번호 해시·세션 발급까지 실제 라우트가 하는 그대로 거치고, 이후 태스크가
+ * 돌려받은 쿠키로 바로 인증된 요청을 보낼 수 있다.
+ */
+export async function signup(
+  ctx: TestContext,
+  overrides?: Partial<{ email: string; name: string; password: string }>,
+): Promise<SignedUpUser> {
+  signupCounter += 1
+  const email = overrides?.email ?? `user${signupCounter}@example.com`
+  const name = overrides?.name ?? `사용자${signupCounter}`
+  const password = overrides?.password ?? 'password1234'
+
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: '/api/auth/signup',
+    payload: { email, name, password },
+  })
+
+  if (res.statusCode !== 201) {
+    throw new Error(`signup 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
+  }
+
+  const token = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME)?.value
+  if (!token) {
+    throw new Error('signup 픽스처가 실패했습니다: 응답에 세션 쿠키가 없습니다')
+  }
+
+  return {
+    user: res.json(),
+    cookie: authCookie(token),
+    password,
+  }
+}
