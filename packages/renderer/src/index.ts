@@ -12,3 +12,5 @@ export {
 
 export type { RenderOptions } from './render'
 export { renderDocument, renderNode, resolveStructure } from './render'
+
+export { installStructures } from './structures/index'
