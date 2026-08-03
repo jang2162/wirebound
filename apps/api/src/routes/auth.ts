@@ -8,7 +8,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { DEFAULT_SCRYPT_PARAMS, hashPassword, verifyPassword } from '../auth/password'
 import { sessionCookieOptions } from '../auth/plugin'
-import { createSession, destroySession, destroyUserSessions } from '../auth/session'
+import { createSession, destroySession } from '../auth/session'
 import type { ApiConfig } from '../config'
 import { conflict, unauthenticated } from '../errors'
 import { parseBody } from '../http/parse'
@@ -25,12 +25,12 @@ const LOGIN_FAILURE_MESSAGE = '이메일 또는 비밀번호가 올바르지 않
  * `.email()`은 형식만 검증한다 — 정규화(소문자화)는 이 스키마의 `.transform()`이 한다.
  * 이후 `repos/users.ts`는 이미 정규화된 이메일만 받는다고 가정한다.
  *
- * 기본 `z.email()` 정규식(`regexes.email`)은 로컬 파트를 ASCII로 제한해 한글 등
- * 비-ASCII 로컬 파트를 가진 이메일(`없는사람@example.com` 같은)을 형식 오류로
- * 잘못 거부한다. `unicodeEmail` 패턴(`@` 하나로 나뉜 두 비공백 구간만 요구)으로
- * 바꿔 이런 주소도 형식상 유효하게 받아들인다.
+ * zod 기본 정규식(`regexes.email`)을 그대로 쓴다 — 로컬 파트를 ASCII로 제한한다.
+ * 국제화 로컬 파트 지원은 이 도구가 메일을 보내지도 않는 P1 시점에 저장 데이터의
+ * 게이트만 느슨하게 할 뿐 실질적인 이득이 없는 별도의 제품 결정이라, 여기서
+ * 임의로 넓히지 않는다.
  */
-const NormalizedEmail = z.email({ pattern: z.regexes.unicodeEmail }).transform((value) => value.toLowerCase())
+const NormalizedEmail = z.email().transform((value) => value.toLowerCase())
 
 /** 회원가입 본문. `z.strictObject`라 선언되지 않은 키(예: `role`)가 오면 그 자체로 400이다 — 권한 상승 필드를 조용히 무시하지 않는다. */
 const SignupBody = z.strictObject({
@@ -103,11 +103,10 @@ export function authRoutes(config: ApiConfig) {
         throw unauthenticated(LOGIN_FAILURE_MESSAGE)
       }
 
-      // 계정당 세션은 하나만 유효하게 유지한다 — 새로 로그인하면 그 계정의 이전
-      // 세션(들)은 전부 폐기한다. 이전 로그인의 토큰은 이 시점에 이미 무효가 되고,
-      // 뒤이어 그 토큰으로 로그아웃을 호출해도 조용히 아무 일도 하지 않는다
-      // (`destroySession`은 없는 토큰이어도 조용히 끝난다).
-      await destroyUserSessions(app.db, found.id)
+      // 로그인은 새 세션을 만들 뿐, 그 계정의 다른 세션에는 손대지 않는다 — 한
+      // 계정이 동시에 여러 기기·탭에서 로그인해 있을 수 있다(설계 §10, P3의
+      // WebSocket 인증도 이를 전제한다). "전부 로그아웃"이 필요하면
+      // `destroyUserSessions`를 별도 경로(예: 비밀번호 변경)에서 명시적으로 쓴다.
       const { token, expiresAt } = await createSession(app.db, found.id, config.sessionTtlHours)
       reply.setCookie(config.sessionCookieName, token, sessionCookieOptions(config, expiresAt))
       return { id: found.id, email: found.email, name: found.name }

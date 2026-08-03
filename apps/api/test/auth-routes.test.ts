@@ -106,7 +106,7 @@ describe('POST /api/auth/login', () => {
 
   it.each([
     ['틀린 비밀번호', { email: 'signup@example.com', password: '틀린비밀번호1234' }],
-    ['없는 이메일', { email: '없는사람@example.com', password: 'password1234' }],
+    ['없는 이메일', { email: 'nosuchuser@example.com', password: 'password1234' }],
   ])('%s은 401이고 메시지가 같다', async (_label, payload) => {
     await withApi(async ({ app }) => {
       await app.inject({ method: 'POST', url: '/api/auth/signup', payload: 가입본문 })
@@ -168,11 +168,16 @@ describe('POST /api/auth/logout', () => {
       const tokenA = first.cookies.find((c) => c.name === 'wb_session')!.value
       const tokenB = second.cookies.find((c) => c.name === 'wb_session')!.value
 
+      // 로그아웃 직전에는 tokenA가 아직 살아 있어야 한다 — 그래야 뒤이은 401이
+      // "애초에 죽어 있던 토큰"이 아니라 로그아웃이 실제로 무효화한 결과임을 증명한다.
+      expect((await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { wb_session: tokenA } })).statusCode).toBe(200)
+
       await app.inject({ method: 'POST', url: '/api/auth/logout', cookies: { wb_session: tokenA } })
 
       expect((await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { wb_session: tokenA } })).statusCode).toBe(401)
       expect((await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { wb_session: tokenB } })).statusCode).toBe(200)
-      expect(await db.selectFrom('sessions').selectAll().execute()).toHaveLength(1)
+      // signup + login(first) + login(second) = 세션 3개, 로그아웃으로 tokenA(1개)만 지워 2개가 남는다.
+      expect(await db.selectFrom('sessions').selectAll().execute()).toHaveLength(2)
     })
   })
 
