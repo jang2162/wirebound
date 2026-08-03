@@ -15,6 +15,11 @@ describe('WbNodeSchema', () => {
     expect(WbNodeSchema.safeParse(goodRoot).success).toBe(true)
   })
 
+  it('64자 id를 통과시킨다', () => {
+    const id64 = 'a'.repeat(64)
+    expect(WbNodeSchema.safeParse({ id: id64, type: 'Page' }).success).toBe(true)
+  })
+
   it('중첩된 children까지 검사한다', () => {
     const nested = {
       id: 'n_000000000001',
@@ -35,6 +40,7 @@ describe('WbNodeSchema', () => {
     ['id가 빈 문자열', { id: '', type: 'Page' }],
     ['id에 슬래시', { id: 'a/b', type: 'Page' }],
     ['id에 물결', { id: 'a~b', type: 'Page' }],
+    ['id가 65자', { id: 'a'.repeat(65), type: 'Page' }],
     ['type이 없음', { id: 'n_000000000001' }],
     ['type이 빈 문자열', { id: 'n_000000000001', type: '' }],
     ['marker가 문자열', { id: 'n_000000000001', type: 'Page', marker: 'two' }],
@@ -157,6 +163,67 @@ describe('validatePage — 봉투 게이트', () => {
     const doc = { version: 1, root: { id: 'n_000000000001', type: 'Nonexistent' } }
     const issues = validatePage(doc as never)
     expect(issues.some((issue) => issue.code === 'unknown-type')).toBe(true)
+  })
+})
+
+describe('validatePage — bad-document의 nodeId 해석', () => {
+  it('id 필드 자체가 문자열이지만 패턴을 어기면 nodeId는 null이다', () => {
+    const doc = { version: 1, root: { id: 'hello world', type: 'Page' } }
+    const issues = validatePage(doc as never)
+    const issue = issues.find((i) => i.path === '/root/id')
+    expect(issue?.nodeId).toBeNull()
+  })
+
+  it.each([
+    ['id가 null', null],
+    ['id가 숫자', 42],
+  ])('id 필드 자체가 깨지면(%s) nodeId는 null이다', (_label, id) => {
+    const doc = { version: 1, root: { id, type: 'Page' } }
+    const issues = validatePage(doc as never)
+    const issue = issues.find((i) => i.path === '/root/id')
+    expect(issue?.nodeId).toBeNull()
+  })
+
+  it('자식의 marker가 깨지고 자식 id가 유효하면 nodeId는 자식의 id다', () => {
+    const doc = {
+      version: 1,
+      root: {
+        id: 'n_000000000001',
+        type: 'Page',
+        children: [{ id: 'n_000000000002', type: 'Text', marker: 'two' }],
+      },
+    }
+    const issues = validatePage(doc as never)
+    const issue = issues.find((i) => i.path === '/root/children/0/marker')
+    expect(issue?.nodeId).toBe('n_000000000002')
+  })
+
+  it('자식의 id가 깨지고 루트 id가 유효하면 nodeId는 루트의 id다', () => {
+    const doc = {
+      version: 1,
+      root: {
+        id: 'n_000000000001',
+        type: 'Page',
+        children: [{ id: 'bad id', type: 'Text' }],
+      },
+    }
+    const issues = validatePage(doc as never)
+    const issue = issues.find((i) => i.path === '/root/children/0/id')
+    expect(issue?.nodeId).toBe('n_000000000001')
+  })
+
+  it('자식의 marker가 깨지고 루트 id가 패턴을 어기면 nodeId는 null이다 (조상의 손상이 전파된다)', () => {
+    const doc = {
+      version: 1,
+      root: {
+        id: 'hello world',
+        type: 'Page',
+        children: [{ id: 'n_000000000002', type: 'Text', marker: 'two' }],
+      },
+    }
+    const issues = validatePage(doc as never)
+    const issue = issues.find((i) => i.path === '/root/children/0/marker')
+    expect(issue?.nodeId).toBeNull()
   })
 })
 

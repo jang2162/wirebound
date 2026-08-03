@@ -1,5 +1,5 @@
 import { getComponent } from './component/registry'
-import { DocumentEnvelopeSchema } from './envelope'
+import { DocumentEnvelopeSchema, NODE_ID_PATTERN } from './envelope'
 import type { LayoutDocument, PageDocument, WbNode } from './node'
 import { walkNodes } from './tree'
 import { getKoreanErrorMap } from './locale'
@@ -74,17 +74,35 @@ function validateEnvelope(doc: unknown): ValidationIssue[] {
 
 /**
  * zod 이슈 경로를 문서 루트부터 따라가며, 그 경로가 속한 노드의 id를 찾는다.
- * 경로 위에서 지나친 마지막 문자열 id를 쓴다 — 이슈가 id 필드 자체(예: `/root/id`)를 가리키면
- * 그 값은 아직 검증되지 않아 신뢰할 수 없으므로 반영하지 않는다. 알아낼 수 없으면 null.
+ *
+ * - 이슈가 id 필드 자체를 가리키면(예: `/root/id`) 그 지점의 값은 반영하지 않는다 —
+ *   그 값이 바로 이 이슈가 문제 삼는 대상이므로 검증되지 않은 채 새어 나가면 안 된다.
+ * - 지나친 조상 노드의 id가 `NODE_ID_PATTERN`을 만족하지 않으면(문자열이 아니거나 패턴에
+ *   맞지 않으면) 그 자체를 앵커로 쓰지 않는다. 뿐만 아니라 그 지점부터는 더 안쪽에서
+ *   찾아낸 id도 신뢰하지 않는다 — 경로 위 한 지점의 정체성이 이미 깨졌다면, 그 밑에서
+ *   찾은 id가 실제로 이 이슈를 가리키는 노드의 것인지 보장할 수 없기 때문이다.
+ *
+ * 알아낼 수 없으면 null.
  */
 function resolveNodeId(doc: unknown, path: readonly PropertyKey[]): string | null {
   let current: unknown = doc
   let nodeId: string | null = null
+  let poisoned = false
 
   for (const key of path) {
     if (current === null || typeof current !== 'object') break
-    const id = (current as Record<PropertyKey, unknown>).id
-    if (typeof id === 'string') nodeId = id
+
+    if (key !== 'id') {
+      const id = (current as Record<PropertyKey, unknown>).id
+      if (id !== undefined) {
+        if (typeof id === 'string' && NODE_ID_PATTERN.test(id)) {
+          if (!poisoned) nodeId = id
+        } else {
+          poisoned = true
+        }
+      }
+    }
+
     current = (current as Record<PropertyKey, unknown>)[key]
   }
 
