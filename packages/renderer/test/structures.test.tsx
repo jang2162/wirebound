@@ -30,6 +30,57 @@ describe('기본 구조 구현체', () => {
   })
 })
 
+/** 렌더러가 테마에 노출하기로 한 속성 계약 전부. 설계 문서 §6.11 */
+const CONTRACT_ATTRS = [
+  'data-wb-id',
+  'data-wb-component',
+  'data-wb-structure',
+  'data-wb-variant',
+  'data-wb-part',
+  'data-wb-state',
+]
+
+/**
+ * 계약 밖인데 지금 실제로 나오는 속성. **승인된 어휘가 아니라 남은 부채다.**
+ * - `data-wb-role`: Text (structures/document.tsx)
+ * - `data-control`: Field (structures/input.tsx)
+ * - `data-direction`: Divider (structures/document.tsx)
+ *
+ * 테마 규격을 확정하는 P4a에서 계약 어휘로 흡수하거나 없앤다.
+ * 아래 검사는 이 목록과 **정확히 같을 때만** 통과한다. 새 구조가 계약 밖 속성을 내면 깨지고,
+ * 셋 중 하나를 정리해도 깨진다 — 목록이 실제 상태를 계속 정직하게 가리키게 하려는 것이다.
+ */
+const DEFERRED_NON_CONTRACT_ATTRS = ['data-control', 'data-direction', 'data-wb-role']
+
+function renderDefault(type: string): string {
+  return renderToStaticMarkup(renderNode({ id: 'n_000000000001', type }))
+}
+
+function captures(html: string, pattern: RegExp): string[] {
+  return [...html.matchAll(pattern)].map((match) => match[1]!)
+}
+
+describe('part 계약', () => {
+  it('모든 컴포넌트가 카탈로그에 선언된 part만 낸다', () => {
+    for (const type of CATALOG_TYPES) {
+      const declared = new Set(requireComponent(type).parts)
+      for (const part of captures(renderDefault(type), /data-wb-part="([^"]*)"/g)) {
+        expect(declared.has(part), `${type}: 카탈로그에 없는 part "${part}"`).toBe(true)
+      }
+    }
+  })
+
+  it('계약 밖 data-* 속성은 P4a로 미뤄둔 셋뿐이다', () => {
+    const found = new Set<string>()
+    for (const type of CATALOG_TYPES) {
+      for (const attr of captures(renderDefault(type), /\s(data-[a-z0-9-]+)=/g)) {
+        if (!CONTRACT_ATTRS.includes(attr)) found.add(attr)
+      }
+    }
+    expect([...found].sort()).toEqual(DEFERRED_NON_CONTRACT_ATTRS)
+  })
+})
+
 describe('개별 구조', () => {
   it('Text는 role을 그대로 내려보낸다', () => {
     const html = renderToStaticMarkup(
