@@ -6,6 +6,7 @@
   "files": [],
   "references": [
     { "path": "./packages/schema" },
-    { "path": "./packages/renderer" }
+    { "path": "./packages/renderer" },
+    { "path": "./apps/playground" }
   ]
 }

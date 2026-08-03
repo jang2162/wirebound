@@ -1,0 +1,13 @@
+/* P0 확인용 최소 스타일. 실제 테마는 P4a에서 CSS로 컴파일된다. */
+body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: #1f2937; }
+[data-wb-component] { outline: 1px dashed #cbd5e1; outline-offset: -1px; }
+[data-wb-component="Page"] { padding: 12px; }
+[data-wb-component="Slot"] { flex: 1; padding: 12px; }
+[data-wb-component="Tree"] { width: 200px; list-style: none; margin: 0; padding: 12px; }
+[data-wb-component="List"] { width: 100%; border-collapse: collapse; }
+[data-wb-part="cell"] { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; }
+[data-wb-part="header"] [data-wb-part="cell"] { background: #f9fafb; font-weight: 600; }
+[data-wb-part="control"] { border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; min-width: 140px; }
+[data-wb-component="Field"] { display: inline-flex; gap: 6px; align-items: center; margin-right: 12px; }
+[data-wb-component="SearchForm"] { display: flex; gap: 12px; align-items: center; padding: 12px 0; }
+[data-wb-component="Button"][data-wb-state~="disabled"] { opacity: 0.5; }
