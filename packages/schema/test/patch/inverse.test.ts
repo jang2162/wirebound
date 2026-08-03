@@ -24,7 +24,11 @@ function roundtrip(ops: PatchOp[]) {
   return applyOps(after, inverses)
 }
 
-/** 부모가 둘인 트리 — 서로 다른 children 배열 사이의 move를 검증하기 위한 픽스처 */
+/**
+ * 부모가 둘인 트리 — 서로 다른 children 배열 사이의 move를 검증하기 위한 픽스처.
+ * 첫 카드의 props는 값이 든 객체 키를 목적지로 쓰는 move를 위해
+ * 스칼라(title)·객체(meta)·배열(tags)을 모두 갖는다.
+ */
 function nestedDoc() {
   return {
     version: 1,
@@ -35,6 +39,7 @@ function nestedDoc() {
         {
           id: 'n_000000000010',
           type: 'Card',
+          props: { title: '첫 카드', meta: { author: '가' }, tags: ['ㄱ', 'ㄴ'] },
           children: [
             { id: 'n_000000000011', type: 'Text', props: { content: '가' } },
             { id: 'n_000000000012', type: 'Text', props: { content: '나' } },
@@ -43,6 +48,7 @@ function nestedDoc() {
         {
           id: 'n_000000000020',
           type: 'Card',
+          props: { title: '둘째 카드' },
           children: [{ id: 'n_000000000021', type: 'Text', props: { content: '다' } }],
         },
       ],
@@ -177,6 +183,85 @@ describe('invertOps', () => {
     expect(invertOps(nestedDoc(), ops)).toEqual([
       { op: 'move', from: '/root/children/0/children/2', path: '/root/children/1/children/0' },
     ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('비어 있던 객체 키로 옮긴 move의 역은 반대 방향 move 하나다', () => {
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/props/extra' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'move', from: '/root/children/0/props/extra', path: '/root/children/1/children/0' },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('값이 든 객체 키를 덮은 move의 역은 replace 뒤 add다', () => {
+    // 되돌리는 move는 목적지 키를 통째로 지우므로 덮인 스칼라를 담을 자리가 없다.
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/props/title' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'replace', path: '/root/children/0/props/title', value: '첫 카드' },
+      {
+        op: 'add',
+        path: '/root/children/1/children/0',
+        value: { id: 'n_000000000021', type: 'Text', props: { content: '다' } },
+      },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('덮인 값이 객체여도 그대로 되살린다', () => {
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/props/meta' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'replace', path: '/root/children/0/props/meta', value: { author: '가' } },
+      {
+        op: 'add',
+        path: '/root/children/1/children/0',
+        value: { id: 'n_000000000021', type: 'Text', props: { content: '다' } },
+      },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('덮인 값이 배열이어도 그대로 되살린다', () => {
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/props/tags' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'replace', path: '/root/children/0/props/tags', value: ['ㄱ', 'ㄴ'] },
+      {
+        op: 'add',
+        path: '/root/children/1/children/0',
+        value: { id: 'n_000000000021', type: 'Text', props: { content: '다' } },
+      },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('앞자리를 빼서 인덱스가 밀린 목적지로 덮어써도 왕복한다', () => {
+    // /root/children/0 을 빼면 둘째 카드가 0번으로 밀린다. 목적지는 그 밀린 카드의 키다.
+    // 옮긴 노드를 먼저 되돌려 넣으면 인덱스가 다시 밀려 목적지가 어긋나므로 replace가 앞이어야 한다.
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/0', path: '/root/children/0/props/title' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'replace', path: '/root/children/0/props/title', value: '둘째 카드' },
+      { op: 'add', path: '/root/children/0', value: nestedDoc().root.children[0] },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('덮어쓰는 move가 섞인 목록도 역순으로 합쳐져 왕복한다', () => {
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/props/title' },
+      { op: 'replace', path: '/root/children/0/children/0/props/content', value: '라' },
+    ]
+    const inverses = invertOps(nestedDoc(), ops)
+    expect(inverses.map((op) => op.op)).toEqual(['replace', 'replace', 'add'])
     expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
   })
 

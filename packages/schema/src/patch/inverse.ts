@@ -8,7 +8,9 @@ import { PatchError, type PatchOp } from './types'
  * 돌려받은 목록을 적용 후 문서에 그대로 적용하면 원본으로 돌아간다.
  */
 export function invertOps<T>(doc: T, ops: PatchOp[]): PatchOp[] {
-  const inverses: PatchOp[] = []
+  // 연산 하나의 역이 여러 개일 수 있으므로 묶음으로 모은다.
+  // 묶음 순서만 뒤집고 묶음 **안**의 순서는 그대로 둬야 역이 제대로 적용된다.
+  const inverses: PatchOp[][] = []
   let current: T = doc
 
   for (const op of ops) {
@@ -16,43 +18,91 @@ export function invertOps<T>(doc: T, ops: PatchOp[]): PatchOp[] {
     current = applyOp(current, op)
   }
 
-  return inverses.reverse()
+  return inverses.reverse().flat()
 }
 
-function inverseOf(doc: unknown, op: PatchOp): PatchOp {
+function inverseOf(doc: unknown, op: PatchOp): PatchOp[] {
   switch (op.op) {
     case 'add':
-      return inverseOfAdd(doc, op)
+      return [inverseOfAdd(doc, op)]
     case 'remove': {
       const old = getByPointer(doc, op.path)
       if (old === undefined) {
         throw new PatchError(`지울 값을 찾을 수 없습니다: ${op.path}`, op.path)
       }
-      return { op: 'add', path: op.path, value: structuredClone(old) }
+      return [{ op: 'add', path: op.path, value: structuredClone(old) }]
     }
     case 'replace': {
       const old = getByPointer(doc, op.path)
       if (old === undefined) {
         throw new PatchError(`바꿀 값을 찾을 수 없습니다: ${op.path}`, op.path)
       }
-      return { op: 'replace', path: op.path, value: structuredClone(old) }
+      return [{ op: 'replace', path: op.path, value: structuredClone(old) }]
     }
     case 'move':
-      return { op: 'move', from: resolveMoveTarget(doc, op), path: op.from }
+      return inverseOfMove(doc, op)
   }
 }
 
 /**
+ * move의 역.
+ *
+ * 목적지가 비어 있으면 반대 방향 move 하나로 끝난다.
+ * 하지만 목적지가 **값이 들어 있는 객체 키**면 applyOp의 add 단계(addAt)가 그 값을 덮어쓴다.
+ * move 하나는 값 하나만 옮기므로 "노드를 제자리로"와 "덮인 값을 복원"을 함께 담을 수 없다.
+ *
+ * 그래서 이 경우만 두 연산으로 나눈다. 순서는 replace 먼저다 —
+ * 옮긴 노드를 원래 자리(배열)에 먼저 넣으면 뒤 원소가 밀려 목적지 경로가 다른 노드를 가리킨다.
+ */
+function inverseOfMove(doc: unknown, op: { op: 'move'; from: string; path: string }): PatchOp[] {
+  // move는 remove 후 add다. 목적지 판단은 모두 **값을 뺀 뒤** 문서를 기준으로 한다.
+  const afterRemove = applyOp(doc, { op: 'remove', path: op.from })
+  const target = resolveMoveTarget(afterRemove, op)
+  const overwritten = overwrittenAt(afterRemove, target)
+
+  if (overwritten === null) return [{ op: 'move', from: target, path: op.from }]
+
+  const moved = getByPointer(doc, op.from)
+  if (moved === undefined) {
+    throw new PatchError(`옮길 값을 찾을 수 없습니다: ${op.from}`, op.from)
+  }
+
+  return [
+    { op: 'replace', path: target, value: structuredClone(overwritten.value) },
+    { op: 'add', path: op.from, value: structuredClone(moved) },
+  ]
+}
+
+/**
+ * add 단계가 덮어쓸 값을 찾는다. 덮어쓰는 값이 없으면 null.
+ * 배열 목적지는 splice로 끼워 넣으므로 덮어쓰는 값이 없다.
+ * 값이 `undefined`인 키와 없는 키를 구분해야 하므로 값을 감싸서 돌려준다.
+ */
+function overwrittenAt(doc: unknown, path: string): { value: unknown } | null {
+  const tokens = parsePointer(path)
+  const key = tokens[tokens.length - 1]
+  if (key === undefined) return null
+
+  const parent = getByPointer(doc, formatPointer(tokens.slice(0, -1)))
+  if (Array.isArray(parent) || parent === null || typeof parent !== 'object') return null
+  if (!Object.hasOwn(parent, key)) return null
+
+  return { value: (parent as Record<string, unknown>)[key] }
+}
+
+/**
  * move 목적지의 `-`를 실제 인덱스로 바꾼다.
- * RFC 6902의 move는 remove 후 add이므로 **값을 뺀 뒤** 문서를 기준으로 잡는다.
+ * RFC 6902의 move는 remove 후 add이므로 **값을 뺀 뒤** 문서(`afterRemove`)를 기준으로 잡는다.
  * 같은 배열이면 길이가 하나 줄어든 상태가, 다른 배열이면 원래 길이가 기준이다.
  */
-function resolveMoveTarget(doc: unknown, op: { op: 'move'; from: string; path: string }): string {
+function resolveMoveTarget(
+  afterRemove: unknown,
+  op: { op: 'move'; from: string; path: string },
+): string {
   const tokens = parsePointer(op.path)
   if (tokens[tokens.length - 1] !== '-') return op.path
 
   const parentTokens = tokens.slice(0, -1)
-  const afterRemove = applyOp(doc, { op: 'remove', path: op.from })
   const parent = getByPointer(afterRemove, formatPointer(parentTokens))
 
   // 배열이 아니면 `-`는 그냥 객체 키다. 그대로 둔다.

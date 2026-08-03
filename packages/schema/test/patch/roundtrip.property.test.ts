@@ -16,7 +16,9 @@ function seedDocument(): PageDocument {
         {
           id: 'n_000000000002',
           type: 'Card',
-          props: { title: '카드', subtitle: '' },
+          // meta·tags는 값이 든 객체 키를 목적지로 쓰는 move가 스칼라뿐 아니라
+          // 객체·배열도 덮게 하려고 둔다.
+          props: { title: '카드', subtitle: '', meta: { author: '가' }, tags: ['ㄱ', 'ㄴ'] },
           children: [
             { id: 'n_000000000003', type: 'Text', props: { content: '가', role: 'body' } },
             { id: 'n_000000000004', type: 'Text', props: { content: '나', role: 'body' } },
@@ -38,7 +40,7 @@ function newNode(): WbNode {
 /**
  * 시드에서 현재 문서에 유효한 연산 하나를 고른다. 만들 수 없으면 null.
  * add는 배열 끝(`-`)·배열 중간·이미 있는 객체 키·없던 객체 키를,
- * move는 구체적 인덱스와 `-`를(같은 배열·다른 배열 모두) 낸다.
+ * move는 구체적 인덱스와 `-`를(같은 배열·다른 배열 모두), 그리고 값이 든 객체 키를 낸다.
  */
 function pickOp(doc: PageDocument, seed: number): PatchOp | null {
   const visits = [...walkNodes(doc.root)].filter((visit) => visit.parent !== null)
@@ -48,7 +50,7 @@ function pickOp(doc: PageDocument, seed: number): PatchOp | null {
   /** 형제 배열의 경로 (`/…/children`) */
   const siblingsPath = parentPath(visit.path)
 
-  switch (Math.floor(seed / 7) % 9) {
+  switch (Math.floor(seed / 7) % 10) {
     case 0:
       // 자식 배열 끝에 새 노드를 덧붙인다
       return { op: 'add', path: `${siblingsPath}/-`, value: newNode() }
@@ -86,15 +88,32 @@ function pickOp(doc: PageDocument, seed: number): PatchOp | null {
       // move: 같은 배열의 끝(-)으로
       return { op: 'move', from: visit.path, path: `${siblingsPath}/-` }
 
+    case 8: {
+      // move: **이미 값이 든 객체 키** 위로. addAt이 그 값을 덮어쓰므로
+      // 역을 반대 방향 move 하나로 쓰면 덮인 값이 사라진다.
+      // 목적지는 여기서도 값을 뺀 뒤 문서에서 골라야 유효하다(옮길 노드 자신이 후보에서 빠진다).
+      const afterRemove = removed(doc, visit.path)
+      if (!afterRemove) return null
+
+      // 노드가 실제로 갖고 있는 키만 쓴다. 모두 `/`·`~` 없는 이름이라 그대로 포인터가 된다.
+      const slots: string[] = []
+      for (const target of walkNodes(afterRemove.root)) {
+        slots.push(`${target.path}/type`)
+        for (const key of Object.keys(target.node.props ?? {})) {
+          slots.push(`${target.path}/props/${key}`)
+        }
+      }
+      if (slots.length === 0) return null
+
+      return { op: 'move', from: visit.path, path: slots[Math.floor(seed / 13) % slots.length]! }
+    }
+
     default: {
       // move: 아무 노드의 children 끝(-)으로.
       // move는 remove 후 add이므로 목적지는 **값을 뺀 뒤** 문서에서 골라야 항상 유효하다.
-      let afterRemove: PageDocument
-      try {
-        afterRemove = applyOp(doc, { op: 'remove', path: visit.path })
-      } catch {
-        return null
-      }
+      const afterRemove = removed(doc, visit.path)
+      if (!afterRemove) return null
+
       const targets = [...walkNodes(afterRemove.root)].filter((v) => v.node.children !== undefined)
       if (targets.length === 0) return null
       const target = targets[Math.floor(seed / 11) % targets.length]!
@@ -106,6 +125,15 @@ function pickOp(doc: PageDocument, seed: number): PatchOp | null {
 /** `/root/children/2` → `/root/children` */
 function parentPath(path: string): string {
   return path.slice(0, path.lastIndexOf('/'))
+}
+
+/** `path`를 뺀 문서. 뺄 수 없으면 null. move 목적지는 이 문서에서 골라야 유효하다. */
+function removed(doc: PageDocument, path: string): PageDocument | null {
+  try {
+    return applyOp(doc, { op: 'remove', path })
+  } catch {
+    return null
+  }
 }
 
 function hasNodes(root: WbNode): boolean {
