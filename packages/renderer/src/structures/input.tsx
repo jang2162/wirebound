@@ -25,7 +25,7 @@ export const FieldOutlined: StructureRenderer = ({ attrs, props, part }) => (
   <div {...attrs}>
     <label {...part('label')}>{String(props.label)}</label>
     <div {...part('control')} data-control={String(props.control)}>
-      {String(props.placeholder) || ' '}
+      {String(props.placeholder) || ' '}
     </div>
   </div>
 )
