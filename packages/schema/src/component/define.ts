@@ -26,7 +26,7 @@ export interface EditorField {
  */
 export interface ComponentDef {
   type: string
-  props: z.ZodTypeAny
+  props: z.ZodType
   editor: EditorField[]
   /** 첫 번째가 기본 구조 */
   structures: string[]
@@ -77,7 +77,7 @@ function assertUnique(type: string, field: string, values: string[]): void {
 }
 
 /** zod 객체 스키마에서 최상위 prop 이름을 뽑는다. */
-function propKeys(schema: z.ZodTypeAny): Set<string> {
+function propKeys(schema: z.ZodType): Set<string> {
   const shape = (schema as unknown as { shape?: Record<string, unknown> }).shape
   return new Set(shape ? Object.keys(shape) : [])
 }

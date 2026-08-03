@@ -1,4 +1,5 @@
 import { getComponent } from './component/registry'
+import { DocumentEnvelopeSchema } from './envelope'
 import type { LayoutDocument, PageDocument, WbNode } from './node'
 import { walkNodes } from './tree'
 import { getKoreanErrorMap } from './locale'
@@ -11,6 +12,7 @@ export type ValidationCode =
   | 'duplicate-id'
   | 'bad-root'
   | 'slot-count'
+  | 'bad-document'
 
 export interface ValidationIssue {
   code: ValidationCode
@@ -20,6 +22,9 @@ export interface ValidationIssue {
 }
 
 export function validatePage(doc: PageDocument): ValidationIssue[] {
+  const envelopeIssues = validateEnvelope(doc)
+  if (envelopeIssues.length > 0) return envelopeIssues
+
   const issues = validateTree(doc.root)
   const slots = countSlots(doc.root)
   if (slots > 0) {
@@ -34,6 +39,9 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
 }
 
 export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
+  const envelopeIssues = validateEnvelope(doc)
+  if (envelopeIssues.length > 0) return envelopeIssues
+
   const issues = validateTree(doc.root)
   const slots = countSlots(doc.root)
   if (slots !== 1) {
@@ -45,6 +53,42 @@ export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
     })
   }
   return issues
+}
+
+/**
+ * 문서 봉투(버전·루트 형태)를 검사한다. 트리 순회(`walkNodes`)보다 먼저 돌아야 한다 —
+ * root가 null이거나 형태가 깨져 있으면 walkNodes가 그대로 터지기 때문이다.
+ * 실패하면 봉투 이슈만 담아 즉시 반환하고, 노드 단위 검증은 시도하지 않는다.
+ */
+function validateEnvelope(doc: unknown): ValidationIssue[] {
+  const parsed = DocumentEnvelopeSchema.safeParse(doc, { error: getKoreanErrorMap() })
+  if (parsed.success) return []
+
+  return parsed.error.issues.map((issue) => ({
+    code: 'bad-document',
+    nodeId: resolveNodeId(doc, issue.path),
+    path: `/${issue.path.join('/')}`,
+    message: issue.message,
+  }))
+}
+
+/**
+ * zod 이슈 경로를 문서 루트부터 따라가며, 그 경로가 속한 노드의 id를 찾는다.
+ * 경로 위에서 지나친 마지막 문자열 id를 쓴다 — 이슈가 id 필드 자체(예: `/root/id`)를 가리키면
+ * 그 값은 아직 검증되지 않아 신뢰할 수 없으므로 반영하지 않는다. 알아낼 수 없으면 null.
+ */
+function resolveNodeId(doc: unknown, path: readonly PropertyKey[]): string | null {
+  let current: unknown = doc
+  let nodeId: string | null = null
+
+  for (const key of path) {
+    if (current === null || typeof current !== 'object') break
+    const id = (current as Record<PropertyKey, unknown>).id
+    if (typeof id === 'string') nodeId = id
+    current = (current as Record<PropertyKey, unknown>)[key]
+  }
+
+  return nodeId
 }
 
 export function assertValidPage(doc: PageDocument): void {
