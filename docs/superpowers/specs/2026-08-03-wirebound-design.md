@@ -282,20 +282,19 @@ defineComponent({
       visibleWhen: { structure: 'table' } },   // 구조에 따라 보이는 속성이 다름
     { prop: 'pagination', control: 'switch',     label: '페이지네이션' },
   ],
-  structures: ['table', 'cardGrid', 'stackedList', 'mediaList'],
+  structures: ['table', 'cardGrid', 'stackedList', 'mediaList'],  // 첫 번째가 기본
   parts:      ['header', 'row', 'rowAlt', 'cell', 'item', 'media', 'title', 'meta'],
   variants:   ['default', 'featured', 'compact'],
   states:     ['selected', 'disabled', 'loading', 'empty'],
-  render: {                                    // 구조별 headless DOM
-    table:    (node, ctx) => ( ... ),
-    cardGrid: (node, ctx) => ( ... ),
-    stackedList: (node, ctx) => ( ... ),
-    mediaList:   (node, ctx) => ( ... ),
-  },
+  children:   'none',                          // none | many
 })
 ```
 
+**정의(계약)와 구현은 패키지가 다르다.** 위 선언은 `schema` 패키지에 있고 React에 의존하지 않는다. 구조별 실제 DOM을 그리는 함수는 `renderer` 패키지가 `(type, structure)` 키로 등록한다. `schema`가 의존을 갖지 않아야 한다는 §3.3의 원칙 때문이다. 카탈로그가 선언한 모든 구조에 구현이 존재하는지는 `renderer`의 테스트가 검사한다.
+
 여기 선언된 것이 곧 **테마가 쓸 수 있는 어휘**다. 테마는 `structures`에 없는 구조를 고를 수 없고, `parts`에 없는 조각을 스타일링할 수 없으며, `states`에 없는 상태를 만들 수 없다. 테마 검증이 이 선언과 대조해 이루어진다.
+
+상태는 props에서 파생된다. `states`에 선언된 이름과 같은 props가 `true`이면 그 상태가 활성화되고, 렌더러가 `data-wb-state`에 실어 보낸다.
 
 속성 패널이 정의에서 자동 생성되므로 컴포넌트를 늘려도 에디터 코드를 수정하지 않는다. `visibleWhen`은 현재 테마가 선택한 구조에 따라 관련 없는 속성을 감춘다 — 카드 그리드에는 "컬럼"이 의미 없다.
 
@@ -588,7 +587,18 @@ acme-portal    (프로젝트 소유, 일부만 오버라이드)
 }
 ```
 
-렌더러와 테마의 계약은 네 속성뿐이다: `data-wb-component` · `data-wb-structure` · `data-wb-variant` · `data-wb-part`, 그리고 상태를 나타내는 `data-wb-state`. 웹 앱은 이 CSS를 `<style>`로 주입하고, 내보낸 번들은 `assets/theme.css`로 담는다. 동일한 컴파일러를 쓰므로 결과가 같다.
+렌더러가 내보내는 속성은 여섯 개다.
+
+| 속성 | 값 | 용도 |
+|---|---|---|
+| `data-wb-id` | 노드 id | 에디터의 선택·잠금·코멘트 앵커 |
+| `data-wb-component` | 컴포넌트 타입 | 테마 셀렉터의 기준 |
+| `data-wb-structure` | 테마가 고른 구조 | 구조별 스타일 분기 |
+| `data-wb-variant` | 노드의 variant | 표현 변형 |
+| `data-wb-part` | 내부 조각 이름 | 복합 컴포넌트 내부 스타일링 |
+| `data-wb-state` | 공백 구분 상태 목록 | 상태 스킨 |
+
+이 여섯이 렌더러와 테마 사이의 전체 계약이다. 웹 앱은 컴파일된 CSS를 `<style>`로 주입하고, 내보낸 번들은 `assets/theme.css`로 담는다. 동일한 컴파일러를 쓰므로 결과가 같다.
 
 ---
 
