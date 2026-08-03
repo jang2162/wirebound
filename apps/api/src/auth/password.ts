@@ -28,18 +28,73 @@ const SALT_LENGTH = 16
 const FORMAT_PREFIX = 'scrypt'
 
 /**
- * 저장된 파라미터가 넘을 수 없는 상한. `parseEncoded`가 이 값을 넘는 N/r/p를
- * 즉시 거부해, 깨진 행 하나가 scrypt를 실제로 호출해 수백 MB~수 GiB 메모리를
- * 할당하려 들면서 요청을 멎게 하거나 프로세스를 OOM으로 몰아넣는 것을 막는다.
+ * scrypt 파라미터가 실제로 요구하는 메모리(대략 `128 × N × r` 바이트)의 상한.
+ * `N`·`r`·`p` 각각에 개별 상한을 두는 대신 **이 곱셈 결과**에 상한을 건다 —
+ * 개별 상한은 각각의 한도 안에 있는 조합끼리 곱했을 때도 여전히 터무니없이
+ * 클 수 있어(예: N이 상한이고 r도 상한이면 곱은 두 상한의 곱만큼 커진다),
+ * 상한을 두는 목적(메모리 소진 방지) 자체를 놓친다.
  *
- * `MAX_N`(2^20)은 기본값(2^15)의 32배로, 앞으로 비용을 몇 차례 올릴 여지는
- * 남기면서도 2의 거듭제곱이라는 조건과 함께 최악의 메모리 요청을 유한하게
- * 묶어 둔다. `MAX_R`·`MAX_P`도 같은 이유로 기본값의 소수 배 안에서 넉넉히
- * 잡았다 — scrypt 실무에서 r·p를 이보다 크게 쓸 이유가 없다.
+ * 512 MiB로 잡은 근거: 오늘의 기본값(N=2^15, r=8)이 요구하는 메모리는 정확히
+ * 32 MiB다. `N`을 (r을 그대로 두고) 3번 두 배로 올리면 32 × 2^3 = 256 MiB가
+ * 필요해지므로, 그보다 한 번 더 두 배의 여유(512 MiB = 32 × 2^4)를 둬 "비용을
+ * 몇 차례 올릴 여지"가 실제로 남도록 했다. 그러면서도 깨진 행 하나가 이 값을
+ * 넘는 파라미터를 요구하면, 실제 메모리를 할당하기 전에 거부되어 요청이 멎거나
+ * 프로세스가 OOM되는 사고로 이어지지 않는다.
+ *
+ * `scrypt()` 헬퍼가 계산하는 `maxmem`(이 값의 2배 헤드룸)도 항상 이 상한을
+ * 통과한 `N`·`r`로만 계산되므로, `maxmem`이 이 상한과 어긋날 일이 없다.
  */
-const MAX_N = 2 ** 20
-const MAX_R = 16
-const MAX_P = 16
+const MAX_SCRYPT_MEMORY_BYTES = 512 * 1024 * 1024
+
+/**
+ * `n`이 2의 거듭제곱인 양의 정수인지 정확히 판정한다.
+ *
+ * 흔한 구현인 `(n & (n - 1)) === 0`은 JS의 비트 연산이 피연산자를 32비트
+ * 정수로 자르고 계산하기 때문에 2^31 이상에서 거짓 양성을 낼 수 있다 — 예를
+ * 들어 2의 거듭제곱이 **아닌** `2^32 + 2^31`도 그 방식으로는 "거듭제곱"으로
+ * 잘못 판정된다(직접 확인함). 이 함수는 `BigInt`로 계산해 크기와 무관하게
+ * 정확하다.
+ */
+function isPowerOfTwo(n: number): boolean {
+  if (!Number.isInteger(n) || n <= 0) {
+    return false
+  }
+  const big = BigInt(n)
+  return (big & (big - 1n)) === 0n
+}
+
+/**
+ * scrypt 비용 파라미터가 안전한지 검증한다. **쓰기 경로(`hashPassword`)와
+ * 읽기 경로(`parseEncoded`)가 반드시 이 함수 하나를 같이 쓴다.** 두 경로가
+ * 따로 검증하면(또는 한쪽만 검증하면), `DEFAULT_SCRYPT_PARAMS`의 `N`을 상한
+ * 근처로 올렸을 때 "해싱은 조용히 성공하고, 그 해시로 로그인은 매번 실패
+ * (500)하는" 상황이 생길 수 있다 — 쓰기 시점엔 조용하고 읽기 시점엔 전면
+ * 잠금이라 원인 추적이 어렵다. 잘못된 파라미터는 해싱 시점에 크게(즉시 던져서)
+ * 실패해야 한다.
+ */
+function validateScryptParams(params: ScryptParams): void {
+  const { N, r, p } = params
+
+  if (!isPowerOfTwo(N) || N <= 1) {
+    throw new Error(`scrypt 파라미터가 올바르지 않습니다 (N은 1보다 큰 2의 거듭제곱인 정수여야 함: ${N})`)
+  }
+  if (!Number.isInteger(r) || r < 1) {
+    throw new Error(`scrypt 파라미터가 올바르지 않습니다 (r은 1 이상의 정수여야 함: ${r})`)
+  }
+  if (!Number.isInteger(p) || p < 1) {
+    throw new Error(`scrypt 파라미터가 올바르지 않습니다 (p는 1 이상의 정수여야 함: ${p})`)
+  }
+
+  // 개별 상한이 아니라 실제 메모리 요구량에 상한을 건다 — 위 독스트링 참고.
+  const requiredBytes = 128 * N * r
+  if (requiredBytes > MAX_SCRYPT_MEMORY_BYTES) {
+    const requiredMiB = Math.ceil(requiredBytes / (1024 * 1024))
+    const maxMiB = MAX_SCRYPT_MEMORY_BYTES / (1024 * 1024)
+    throw new Error(
+      `scrypt 파라미터가 올바르지 않습니다 (N=${N}, r=${r} 조합이 필요로 하는 메모리 약 ${requiredMiB}MiB가 상한 ${maxMiB}MiB를 넘음)`,
+    )
+  }
+}
 
 /**
  * `crypto.scrypt` 콜백판을 Promise로 감싼다. `scryptSync`는 이벤트 루프를
@@ -66,8 +121,12 @@ function scrypt(password: string | Buffer, salt: Buffer, keylen: number, params:
 /**
  * 비밀번호를 해싱해 `scrypt$N$r$p$salt$hash` 형식 문자열로 돌려준다.
  * salt는 매번 무작위로 만들므로 같은 비밀번호도 매번 다른 결과가 나온다.
+ *
+ * `params`는 `validateScryptParams`로 `parseEncoded`(검증 경로)와 똑같이
+ * 검증한다 — 호출자가 부주의한 파라미터를 넘기면 여기서 즉시 던진다.
  */
 export async function hashPassword(password: string, params: ScryptParams = DEFAULT_SCRYPT_PARAMS): Promise<string> {
+  validateScryptParams(params)
   const salt = randomBytes(SALT_LENGTH)
   const derivedKey = await scrypt(password, salt, KEY_LENGTH, params)
   return [
@@ -92,24 +151,6 @@ function asSixParts(parts: string[]): [string, string, string, string, string, s
   return parts as [string, string, string, string, string, string]
 }
 
-/** `N`을 파싱하고 검증한다: 정수, 2의 거듭제곱, 1보다 크고, `MAX_N` 이하. */
-function parseScryptN(raw: string): number {
-  const N = Number(raw)
-  if (!Number.isInteger(N) || N <= 1 || N > MAX_N || (N & (N - 1)) !== 0) {
-    throw new Error(`비밀번호 해시 형식이 올바르지 않습니다 (N이 올바르지 않음: ${raw})`)
-  }
-  return N
-}
-
-/** `r`·`p`처럼 "1 이상, 상한 이하인 정수"만 허용하는 필드를 파싱한다. */
-function parseBoundedInt(raw: string, max: number, label: string): number {
-  const value = Number(raw)
-  if (!Number.isInteger(value) || value < 1 || value > max) {
-    throw new Error(`비밀번호 해시 형식이 올바르지 않습니다 (${label}이(가) 올바르지 않음: ${raw})`)
-  }
-  return value
-}
-
 /**
  * base64url 조각을 디코딩하고 바이트 길이가 정확히 `expectedLength`인지 확인한다.
  * `Buffer.from(str, 'base64url')`은 잘못된 문자를 조용히 건너뛸 뿐 던지지 않으므로,
@@ -127,9 +168,12 @@ function decodeFixedLength(base64url: string, expectedLength: number, label: str
 
 /**
  * 저장된 해시 문자열을 파싱한다. 형식이 어긋나면(필드 수 부족, 알고리즘 불일치,
- * 파라미터가 숫자가 아니거나 범위를 벗어남, salt/hash 세그먼트 길이 불일치 등)
- * `Error`를 던진다 — 저장된 값이 깨진 것은 데이터 무결성 문제이므로, 조용히
+ * 파라미터가 숫자가 아니거나 안전 범위를 벗어남, salt/hash 세그먼트 길이 불일치
+ * 등) `Error`를 던진다 — 저장된 값이 깨진 것은 데이터 무결성 문제이므로, 조용히
  * `false`를 돌려줘서 "비밀번호 틀림"으로 가리지 않는다.
+ *
+ * 파라미터 검증은 `hashPassword`와 똑같이 `validateScryptParams` 하나로 한다
+ * (쓰기·읽기 경로가 다른 기준을 쓰지 않도록).
  */
 function parseEncoded(encoded: string): {
   params: ScryptParams
@@ -142,12 +186,11 @@ function parseEncoded(encoded: string): {
     throw new Error(`비밀번호 해시 형식이 올바르지 않습니다 (알 수 없는 알고리즘: ${algorithm})`)
   }
 
-  const N = parseScryptN(nRaw)
-  const r = parseBoundedInt(rRaw, MAX_R, 'r')
-  const p = parseBoundedInt(pRaw, MAX_P, 'p')
+  const params: ScryptParams = { N: Number(nRaw), r: Number(rRaw), p: Number(pRaw) }
+  validateScryptParams(params)
 
   return {
-    params: { N, r, p },
+    params,
     salt: decodeFixedLength(saltRaw, SALT_LENGTH, 'salt'),
     hash: decodeFixedLength(hashRaw, KEY_LENGTH, 'hash'),
   }

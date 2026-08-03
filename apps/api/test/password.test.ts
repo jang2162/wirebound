@@ -35,6 +35,22 @@ describe('hashPassword', () => {
     const encoded = await hashPassword('원문이드러나면안됨', fast)
     expect(encoded).not.toContain('원문이드러나면안됨')
   })
+
+  it.each([
+    ['N이 0', { N: 0, r: 8, p: 1 }],
+    ['N이 2의 거듭제곱이 아님', { N: 1000, r: 8, p: 1 }],
+    ['r이 0', { N: 1024, r: 0, p: 1 }],
+    ['p가 0', { N: 1024, r: 8, p: 0 }],
+  ])(
+    '쓰기 경로도 읽기 경로와 같은 검증을 쓴다 — parseEncoded라면 거부할 파라미터(%s)는 해싱 전에 거부한다',
+    async (_label, badParams) => {
+      // 쓰기 경로(hashPassword)와 읽기 경로(parseEncoded)가 서로 다른 파라미터를
+      // 받아들이면, DEFAULT_SCRYPT_PARAMS의 N을 조심성 없이 올렸을 때 "해싱은
+      // 조용히 성공하고 로그인 검증은 매번 던지는"(쓰기 시엔 조용, 읽기 시엔 전면
+      // 잠금) 상황이 생긴다. 두 경로가 같은 검증 함수를 쓰는지 여기서 고정한다.
+      await expect(hashPassword('아무비번', badParams)).rejects.toThrow()
+    },
+  )
 })
 
 describe('verifyPassword', () => {
@@ -109,6 +125,19 @@ describe('verifyPassword', () => {
     const truncated = encoded.slice(0, encoded.lastIndexOf('$') + 1)
     expect(truncated.endsWith('$')).toBe(true) // 마지막 세그먼트가 실제로 비어 있는지 확인
     await expect(verifyPassword('완전히_아무_비밀번호', truncated)).rejects.toThrow()
+  })
+
+  it('N=2^24처럼 2의 거듭제곱이고 uint32 범위 안이어도 메모리 상한을 넘으면 던진다', async () => {
+    // Node 자신의 range 검증이나 거듭제곱 검증만으로는 이 값을 못 거른다 — 둘 다
+    // 통과하는 "합법적으로 보이는" 값이기 때문이다. 오직 우리 쪽 메모리 상한
+    // (128×N×r ≤ MAX_SCRYPT_MEMORY_BYTES) 검사만이 이 값을 막는다.
+    //
+    // 이 검증은 scrypt를 호출하기 전에 끝나므로 실제로는 아무 메모리도 할당되지
+    // 않아 라이브로 안전하게 테스트할 수 있다 — 이 순서가 훗날 뒤바뀌면 이
+    // 테스트는 조용히 통과하는 대신 멎거나(hang) OOM 나야 정상이다(그 자체가
+    // 순서가 깨졌다는 신호다).
+    const encoded = ['scrypt', 2 ** 24, 8, 1, validSalt, validHash].join('$')
+    await expect(verifyPassword('아무거나', encoded)).rejects.toThrow()
   })
 })
 
