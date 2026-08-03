@@ -13,12 +13,20 @@ export interface UserRecord {
   name: string
 }
 
-/**
- * Postgres 유니크 위반 SQLSTATE. `users` 테이블에 있는 유니크 제약은 `email` 하나뿐이므로
- * (`id`는 PK지만 서버가 만드는 uuid라 현실적으로 충돌하지 않는다), 삽입 중 이 코드가
- * 나타나면 곧 이메일 중복이라고 봐도 된다.
- */
+/** Postgres 유니크 위반 SQLSTATE. */
 const UNIQUE_VIOLATION = '23505'
+
+/**
+ * `0001-users-sessions` 마이그레이션이 `email` 컬럼에 `.unique()`로 건 제약의
+ * 이름. Postgres가 단일 컬럼 유니크 제약에 붙이는 기본 명명 규칙(`<table>_<column>_key`)을
+ * 그대로 따른다 — 실제 DB에서 `\d users`로 확인했다.
+ *
+ * 오늘은 `users`의 유니크 제약이 이거 하나뿐이라 `23505` 코드만 봐도 이메일 중복이라고
+ * 단정할 수 있지만, 나중에 다른 컬럼(예: 소셜 로그인 provider id)에 유니크 제약이
+ * 추가되면 코드만으로는 어느 제약이 걸렸는지 구분할 수 없다 — 그 삽입도 `23505`를
+ * 내기 때문이다. 제약 이름까지 맞춰 봐야 "정말 이메일 중복이 맞다"를 보장한다.
+ */
+const USERS_EMAIL_UNIQUE_CONSTRAINT = 'users_email_key'
 
 /** 이메일이 이미 등록돼 있을 때 `insertUser`가 던진다. 라우트가 postgres 에러 코드를 직접 알 필요가 없도록 여기서 감싼다. */
 export class DuplicateEmailError extends Error {
@@ -28,8 +36,12 @@ export class DuplicateEmailError extends Error {
   }
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof DatabaseError && error.code === UNIQUE_VIOLATION
+function isEmailUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof DatabaseError &&
+    error.code === UNIQUE_VIOLATION &&
+    error.constraint === USERS_EMAIL_UNIQUE_CONSTRAINT
+  )
 }
 
 /**
@@ -75,7 +87,7 @@ export async function insertUser(
         .executeTakeFirstOrThrow(),
     )
   } catch (error) {
-    if (isUniqueViolation(error)) {
+    if (isEmailUniqueViolation(error)) {
       throw new DuplicateEmailError()
     }
     throw error

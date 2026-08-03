@@ -89,4 +89,33 @@ describe('로그 리다크션', () => {
     expect(token).not.toBe('') // 토큰이 실제로 만들어졌는지 확인한다 — 빈 문자열은 항상 "안 보임"으로 통과해 버린다.
     expect(logged).not.toContain(token)
   })
+
+  it('회원가입·로그인 요청 본문의 평문 비밀번호가 로그에 나타나지 않는다', async () => {
+    // 위 두 테스트는 쿠키 헤더에 실린 세션 토큰만 다룬다. task 8의 `/api/auth/login`은
+    // 매 호출마다 평문 비밀번호를 요청 **본문**에 담아 나른다 — 헤더가 아니라 본문이므로
+    // 위 redact 설정(`req.headers.*`)의 대상도 아니다. 이 값이 로그에 안 남는 진짜 이유는
+    // `buildLoggerOptions`의 redact가 아니라(그 redact는 헤더 경로만 가린다), Fastify
+    // 기본 req 시리얼라이저가 애초에 method·url·hostname 등만 담고 body를 아예 로그
+    // 객체에 넣지 않기 때문이다 — 그 사실을 "그럴 것이다"로 남겨두지 않고 실측한다.
+    const marker = 'MARKER-plaintext-password-f7d2b9'
+    const { stream, read } = captureLogStream()
+
+    await withApi(
+      async ({ app }) => {
+        await app.inject({
+          method: 'POST', url: '/api/auth/signup',
+          payload: { email: 'logpw@example.com', name: '로그검증', password: marker },
+        })
+        await app.inject({
+          method: 'POST', url: '/api/auth/login',
+          payload: { email: 'logpw@example.com', password: marker },
+        })
+      },
+      { config: { ...testConfig(), logLevel: 'info' as const }, loggerStream: stream },
+    )
+
+    const logged = read()
+    expect(logged.length).toBeGreaterThan(0) // 로그가 실제로 찍혔는지부터 확인한다(공허한 통과 방지).
+    expect(logged).not.toContain(marker)
+  })
 })

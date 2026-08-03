@@ -40,7 +40,7 @@ describe('POST /api/auth/signup', () => {
   })
 
   it('중복 이메일은 409다 (대소문자 무시)', async () => {
-    await withApi(async ({ app }) => {
+    await withApi(async ({ app, db }) => {
       await app.inject({ method: 'POST', url: '/api/auth/signup', payload: 가입본문 })
       const res = await app.inject({
         method: 'POST', url: '/api/auth/signup',
@@ -49,6 +49,14 @@ describe('POST /api/auth/signup', () => {
       expect(res.statusCode).toBe(409)
       expect(res.json().error.code).toBe('conflict')
       expect(res.json().error.message).toMatch(/[가-힣]/)
+
+      // 이 쿼리는 (withApi가 감싼) 바깥 트랜잭션에서 돈다. insertUser가 자신의
+      // INSERT를 withTransaction(세이브포인트)으로 감싸지 않았다면, 위 409를 낸
+      // 유니크 위반이 이 바깥 트랜잭션 전체를 aborted 상태로 만들어 이 SELECT가
+      // 내용과 무관하게 25P02로 던졌을 것이다. 409만 확인하고 멈추면 그 회귀를
+      // 절대 못 잡는다 — 이 assertion이 바로 그 지점을 지킨다.
+      const rows = await db.selectFrom('users').selectAll().execute()
+      expect(rows).toHaveLength(1)
     })
   })
 
