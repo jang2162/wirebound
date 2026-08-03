@@ -1,5 +1,6 @@
 import type { Migration, MigrationProvider } from 'kysely'
 import { migration as m0001 } from './0001-users-sessions'
+import { migration as m0002 } from './0002-projects-members'
 
 /**
  * 정적 마이그레이션 레지스트리.
@@ -15,6 +16,7 @@ import { migration as m0001 } from './0001-users-sessions'
  */
 export const MIGRATIONS: Record<string, Migration> = {
   '0001-users-sessions': m0001,
+  '0002-projects-members': m0002,
 }
 
 export const migrationProvider: MigrationProvider = {

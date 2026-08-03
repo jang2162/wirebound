@@ -1,0 +1,129 @@
+/**
+ * 프로젝트 권한 가드. 설계 §10의 권한 모델을 구현하는 단일 지점이다.
+ *
+ * `requireProjectRole`은 Fastify를 전혀 모른다 — `db` 핸들과 `projectId`·`userId`·
+ * 최소 역할 네 값만 받고 `ApiError`를 던진다. `projectGuard`는 그 위에 얹은 얇은
+ * Fastify preHandler 껍데기일 뿐이다. P3의 WebSocket은 방 입장·패치별 권한 확인에
+ * 다른 껍데기를 새로 만들되, 안쪽의 `requireProjectRole`은 그대로 재사용한다 —
+ * REST와 WebSocket이 같은 권한 판정을 공유해야 하기 때문이다(설계 §10).
+ *
+ * **역할을 비교하는 코드는 이 파일의 `roleAtLeast` 하나뿐이어야 한다.** 다른 곳에서
+ * 역할 순위를 다시 비교하는 코드를 쓰면 이 가드의 판정과 갈라질 수 있다.
+ */
+import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify'
+import { z } from 'zod'
+import type { DbHandle } from '../db/tx'
+import type { ProjectRole } from '../db/types'
+import { forbidden, notFound, unauthenticated } from '../errors'
+import { parseParams } from '../http/parse'
+
+/** 컬럼 타입과 도메인 타입이 갈라지지 않도록 `db/types.ts`의 타입을 그대로 재수출한다. */
+export type { ProjectRole }
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    /** `projectGuard`를 통과하면 실제 역할이 담긴다. 가드를 거치지 않은 요청은 `null`이다. */
+    projectRole: ProjectRole | null
+  }
+}
+
+/** 역할 순위. 숫자가 클수록 강한 권한이다(설계 §10: viewer < editor < owner). */
+export const ROLE_RANK: Record<ProjectRole, number> = {
+  viewer: 0,
+  editor: 1,
+  owner: 2,
+}
+
+/**
+ * `actual`이 `min` 이상의 권한을 가지는지 비교한다.
+ * **두 역할을 비교하는 코드베이스의 유일한 지점이다** — 다른 곳에서 `ROLE_RANK`를
+ * 직접 비교하거나 역할 순서를 재구현하지 않는다.
+ */
+export function roleAtLeast(actual: ProjectRole, min: ProjectRole): boolean {
+  return ROLE_RANK[actual] >= ROLE_RANK[min]
+}
+
+/**
+ * 사용자가 프로젝트의 멤버인지 조회한다. 멤버가 아니면 `null`이다 — 프로젝트
+ * 자체가 없는 경우와, 프로젝트는 있지만 이 사용자가 멤버가 아닌 경우를 구분하지
+ * 않는다. `requireProjectRole`이 이 성질을 그대로 이용해 404/403을 가른다.
+ */
+export async function findMembership(db: DbHandle, projectId: string, userId: string): Promise<ProjectRole | null> {
+  const row = await db
+    .selectFrom('project_members')
+    .select('role')
+    .where('project_id', '=', projectId)
+    .where('user_id', '=', userId)
+    .executeTakeFirst()
+
+  return row?.role ?? null
+}
+
+/**
+ * 프로젝트에 대한 최소 역할을 요구한다. 설계 §10의 404/403 규칙을 구현하는 단일 함수다.
+ *
+ * | 상황 | 응답 |
+ * |---|---|
+ * | 프로젝트가 없다 | 404 |
+ * | 프로젝트는 있지만 멤버가 아니다 | 404 — 존재를 숨긴다 |
+ * | 멤버지만 역할이 모자라다 | 403 |
+ *
+ * 앞의 두 상황은 `findMembership`이 똑같이 `null`을 돌려주므로 조회 한 번으로
+ * 구분 없이 처리된다 — 존재하지 않는 프로젝트와 멤버가 아닌 프로젝트가 같은
+ * 응답을 내야 프로젝트 id의 존재 여부가 비멤버에게 새어 나가지 않는다.
+ *
+ * Fastify를 전혀 모른다: `db`·`projectId`·`userId`·`min` 네 값만 받고 `ApiError`를
+ * 던진다. `projectGuard`(REST)와 P3의 WebSocket 껍데기가 이 함수를 함께 재사용한다.
+ */
+export async function requireProjectRole(
+  db: DbHandle,
+  projectId: string,
+  userId: string,
+  min: ProjectRole,
+): Promise<ProjectRole> {
+  const role = await findMembership(db, projectId, userId)
+  if (!role) {
+    throw notFound('프로젝트를 찾을 수 없습니다')
+  }
+  if (!roleAtLeast(role, min)) {
+    throw forbidden('이 작업을 수행할 권한이 없습니다')
+  }
+  return role
+}
+
+/**
+ * `projectGuard`가 경로 파라미터에서 읽는 스키마. `z.object`(비엄격)를 쓴다 —
+ * 이후 태스크가 `/projects/:projectId/pages/:pageId`처럼 `projectId` 외의
+ * 파라미터를 함께 갖는 라우트에도 이 가드를 그대로 붙일 수 있어야 한다.
+ */
+const ProjectParams = z.object({ projectId: z.uuid() })
+
+/**
+ * `requireProjectRole`을 감싼 Fastify preHandler. 라우트에
+ * `{ preHandler: projectGuard('editor') }` 형태로 붙인다.
+ *
+ * - `request.params.projectId`를 uuid로 파싱한다(형식이 틀리면 `parseParams`가 400을 던진다).
+ * - 로그인하지 않았으면(`request.currentUser`가 없으면) 401을 던진다.
+ * - `requireProjectRole`의 결과(사용자의 실제 역할)를 `request.projectRole`에 담는다.
+ *
+ * 이 함수 자체는 얇은 껍데기일 뿐 판정 로직을 갖지 않는다 — 전부 `requireProjectRole`이
+ * 한다. P3의 WebSocket은 이 함수가 아니라 `requireProjectRole`을 직접 재사용해
+ * 자신만의 껍데기(방 입장, 패치별 확인)를 만든다.
+ */
+export function projectGuard(min: ProjectRole): preHandlerHookHandler {
+  return async (request: FastifyRequest, _reply: FastifyReply) => {
+    const { projectId } = parseParams(ProjectParams, request.params)
+    if (!request.currentUser) {
+      throw unauthenticated()
+    }
+    request.projectRole = await requireProjectRole(request.server.db, projectId, request.currentUser.id, min)
+  }
+}
+
+/**
+ * `FastifyRequest.projectRole` 데코레이터를 등록한다. `app.ts`의 `buildApp`이
+ * 한 번 부른다 — `registerAuthPlugin`이 `currentUser`를 등록하는 것과 같은 자리다.
+ */
+export function registerProjectRoleDecorator(app: FastifyInstance): void {
+  app.decorateRequest('projectRole', null)
+}
