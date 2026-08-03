@@ -5,6 +5,7 @@
   },
   "files": [],
   "references": [
-    { "path": "./packages/schema" }
+    { "path": "./packages/schema" },
+    { "path": "./packages/renderer" }
   ]
 }
