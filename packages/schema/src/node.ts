@@ -28,15 +28,30 @@ export interface WbNode {
   children?: WbNode[]
 }
 
+declare const documentKind: unique symbol
+
+/**
+ * 페이지 문서. 렌더링 시 레이아웃의 Slot 자리에 주입된다.
+ *
+ * `documentKind`는 컴파일 타임 전용 팬텀 프로퍼티다. 런타임 값이 없고
+ * JSON 직렬화에도 나타나지 않는다. LayoutDocument와 뒤바뀌는 것을
+ * 컴파일러가 잡게 하려고 존재한다.
+ */
 export interface PageDocument {
   version: number
   root: WbNode
+  readonly [documentKind]?: 'page'
 }
 
+/** 레이아웃 문서. Slot 노드를 정확히 하나 품는다 (설계 §4.4). */
 export interface LayoutDocument {
   version: number
   root: WbNode
+  readonly [documentKind]?: 'layout'
 }
+
+/** 페이지와 레이아웃 양쪽을 받는 함수의 파라미터 타입. */
+export type AnyDocument = PageDocument | LayoutDocument
 
 const HEX = '0123456789abcdef'
 

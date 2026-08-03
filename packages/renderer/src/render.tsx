@@ -1,7 +1,7 @@
 import {
   defaultStructure,
   requireComponent,
-  type PageDocument,
+  type AnyDocument,
   type WbNode,
 } from '@wirebound/schema'
 import { Fragment, type ReactElement, type ReactNode } from 'react'
@@ -49,6 +49,6 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
   })
 }
 
-export function renderDocument(doc: PageDocument, options: RenderOptions = {}): ReactElement {
+export function renderDocument(doc: AnyDocument, options: RenderOptions = {}): ReactElement {
   return renderNode(doc.root, options)
 }

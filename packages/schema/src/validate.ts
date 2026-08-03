@@ -110,7 +110,16 @@ function resolveNodeId(doc: unknown, path: readonly PropertyKey[]): string | nul
 }
 
 export function assertValidPage(doc: PageDocument): void {
-  const issues = validatePage(doc)
+  throwOnFirstIssue(validatePage(doc))
+}
+
+/** `assertValidPage`와 대칭인 레이아웃 버전. */
+export function assertValidLayout(doc: LayoutDocument): void {
+  throwOnFirstIssue(validateLayout(doc))
+}
+
+/** 이슈 목록의 첫 항목을 메시지로 만들어 던진다. 이슈가 없으면 아무 일도 하지 않는다. */
+function throwOnFirstIssue(issues: ValidationIssue[]): void {
   const first = issues[0]
   if (first) {
     throw new Error(`문서 검증 실패 [${first.code}] ${first.path}: ${first.message}`)

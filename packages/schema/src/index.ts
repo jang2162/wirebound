@@ -1,6 +1,7 @@
 export const PACKAGE_NAME = '@wirebound/schema'
 
 export type {
+  AnyDocument,
   Interaction,
   InteractionAction,
   InteractionTrigger,
@@ -28,7 +29,7 @@ export { CATALOG_TYPES, installCatalog } from './component/catalog/index'
 export * from './component/catalog/index'
 
 export type { ValidationCode, ValidationIssue } from './validate'
-export { assertValidPage, validateLayout, validatePage } from './validate'
+export { assertValidLayout, assertValidPage, validateLayout, validatePage } from './validate'
 
 export { DocumentEnvelopeSchema, InteractionSchema, NODE_ID_PATTERN, WbNodeSchema } from './envelope'
 
