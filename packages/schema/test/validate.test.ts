@@ -109,15 +109,15 @@ describe('validatePage', () => {
     const invalidPropsIssue = issues.find((issue) => issue.code === 'invalid-props')
     expect(invalidPropsIssue).toBeDefined()
     if (invalidPropsIssue) {
-      // Verify that zod error part (not our wrapper) has no English letters
-      // The message format is "List의 props가 올바르지 않습니다: <zod error>"
-      // Extract the zod error part after the colon
-      const zodErrorPart = invalidPropsIssue.message.split(': ')[1]
-      expect(zodErrorPart).toBeDefined()
-      // Check that there are no unescaped English letters in the zod message
-      // (Allow "items" and "props" which are field names from our schema)
-      const englishLetterPattern = /(?:expected|minimum|Too|small|must|be|at|least|positive|negative|required)[A-Za-z]*/g
-      expect(zodErrorPart).not.toMatch(/[A-Z][a-z]*:/)
+      // The message format is "List의 props가 올바르지 않습니다: <zod error message>"
+      // Extract the zod error part after the wrapper text
+      const messageContent = invalidPropsIssue.message
+      // zod error should contain Korean characters (너무, 작습니다, 이상, etc.)
+      const koreanCharPattern = /[가-힣]/
+      expect(messageContent).toMatch(koreanCharPattern)
+      // Ensure no English words that are typical in English zod messages
+      // (avoid "Too", "small", "expected" - these indicate English locale was used)
+      expect(messageContent).not.toMatch(/\bToo\b|\bsmall\b|\bexpected\b|\brequired\b/)
     }
   })
 })

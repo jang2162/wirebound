@@ -1,7 +1,7 @@
-import './locale'
 import { getComponent } from './component/registry'
 import type { LayoutDocument, PageDocument, WbNode } from './node'
 import { walkNodes } from './tree'
+import { getKoreanErrorMap } from './locale'
 
 export type ValidationCode =
   | 'unknown-type'
@@ -90,7 +90,7 @@ function validateTree(root: WbNode): ValidationIssue[] {
       continue
     }
 
-    const parsed = def.props.safeParse(node.props ?? {})
+    const parsed = def.props.safeParse(node.props ?? {}, { error: getKoreanErrorMap() })
     if (!parsed.success) {
       issues.push({
         code: 'invalid-props',
