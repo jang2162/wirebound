@@ -29,3 +29,8 @@ export * from './component/catalog/index'
 
 export type { ValidationCode, ValidationIssue } from './validate'
 export { assertValidPage, validateLayout, validatePage } from './validate'
+
+export type { PatchOp } from './patch/types'
+export { PatchError } from './patch/types'
+export { formatPointer, getByPointer, parsePointer } from './patch/pointer'
+export { applyOp, applyOps } from './patch/apply'
