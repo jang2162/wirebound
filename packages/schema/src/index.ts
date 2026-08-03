@@ -35,3 +35,6 @@ export { PatchError } from './patch/types'
 export { formatPointer, getByPointer, parsePointer } from './patch/pointer'
 export { applyOp, applyOps } from './patch/apply'
 export { invertOps } from './patch/inverse'
+
+export type { Migration } from './migrate'
+export { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument } from './migrate'
