@@ -62,6 +62,8 @@ function captures(html: string, pattern: RegExp): string[] {
 
 describe('part 계약', () => {
   it('모든 컴포넌트가 카탈로그에 선언된 part만 낸다', () => {
+    // 검사가 전부 루프 안에 있다. part가 하나도 안 나오면 단언 없이 통과하므로 못을 박는다.
+    expect.hasAssertions()
     for (const type of CATALOG_TYPES) {
       const declared = new Set(requireComponent(type).parts)
       for (const part of captures(renderDefault(type), /data-wb-part="([^"]*)"/g)) {
@@ -73,7 +75,9 @@ describe('part 계약', () => {
   it('계약 밖 data-* 속성은 P4a로 미뤄둔 셋뿐이다', () => {
     const found = new Set<string>()
     for (const type of CATALOG_TYPES) {
-      for (const attr of captures(renderDefault(type), /\s(data-[a-z0-9-]+)=/g)) {
+      // React는 `data-wbFoo`처럼 대문자·밑줄이 섞인 이름도 그대로 내보낸다.
+      // 소문자·하이픈만 훑으면 그런 속성이 검사를 그냥 빠져나간다.
+      for (const attr of captures(renderDefault(type), /\s(data-[\w-]+)=/gi)) {
         if (!CONTRACT_ATTRS.includes(attr)) found.add(attr)
       }
     }
