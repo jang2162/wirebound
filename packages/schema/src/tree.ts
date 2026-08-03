@@ -50,25 +50,25 @@ export function collectNodeIds(root: WbNode): string[] {
 export function remapNodeIds(
   root: WbNode,
   generate: () => string = createNodeId,
-): { root: WbNode; mapping: Record<string, string> } {
-  const mapping: Record<string, string> = {}
+): { root: WbNode; mapping: Map<string, string> } {
+  // 일반 객체를 쓰면 id가 `__proto__`인 노드에서 프로토타입을 읽어 오므로 Map을 쓴다.
+  const mapping = new Map<string, string>()
   for (const id of collectNodeIds(root)) {
-    mapping[id] = generate()
+    mapping.set(id, generate())
   }
   return { root: rewrite(root, mapping), mapping }
 }
 
-function rewrite(node: WbNode, mapping: Record<string, string>): WbNode {
-  const next: WbNode = { ...node, id: mapping[node.id] ?? node.id }
+function rewrite(node: WbNode, mapping: Map<string, string>): WbNode {
+  const next: WbNode = { ...node, id: mapping.get(node.id) ?? node.id }
 
   if (node.interactions) {
     next.interactions = node.interactions.map((interaction) => ({
       ...interaction,
-      actions: interaction.actions.map((action) =>
-        'target' in action && mapping[action.target]
-          ? { ...action, target: mapping[action.target]! }
-          : { ...action },
-      ),
+      actions: interaction.actions.map((action) => {
+        const mapped = 'target' in action ? mapping.get(action.target) : undefined
+        return mapped ? { ...action, target: mapped } : { ...action }
+      }),
     }))
   }
 

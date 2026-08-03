@@ -1,4 +1,4 @@
-import { getByPointer, parsePointer } from './pointer'
+import { getByPointer, parsePointer, readMember } from './pointer'
 import { PatchError, type PatchOp } from './types'
 
 /** 연산 하나를 적용한 새 문서를 돌려준다. 입력은 변경하지 않는다. */
@@ -51,9 +51,7 @@ function resolveSlot(doc: unknown, path: string): Slot {
     if (parent === null || parent === undefined) {
       throw new PatchError(`경로를 찾을 수 없습니다: ${path}`, path)
     }
-    parent = Array.isArray(parent)
-      ? parent[Number(token)]
-      : (parent as Record<string, unknown>)[token]
+    parent = readMember(parent, token)
   }
 
   if (parent === null || typeof parent !== 'object') {
@@ -88,7 +86,7 @@ function removeAt(doc: unknown, path: string): void {
     return
   }
   const record = parent as Record<string, unknown>
-  if (!(key in record)) {
+  if (!Object.hasOwn(record, key)) {
     throw new PatchError(`지울 키가 없습니다: ${path}`, path)
   }
   delete record[key]
@@ -101,7 +99,7 @@ function replaceAt(doc: unknown, path: string, value: unknown): void {
     return
   }
   const record = parent as Record<string, unknown>
-  if (!(key in record)) {
+  if (!Object.hasOwn(record, key)) {
     throw new PatchError(`바꿀 키가 없습니다: ${path}`, path)
   }
   record[key] = value

@@ -123,6 +123,42 @@ describe('applyOp — move', () => {
   })
 })
 
+describe('applyOp — 프로토타입 오염 차단', () => {
+  it('constructor/prototype 경로로 Object.prototype을 더럽히지 못한다', () => {
+    expect(() =>
+      applyOp(doc(), { op: 'add', path: '/root/constructor/prototype/pwned', value: 'yes' }),
+    ).toThrow(PatchError)
+    expect('pwned' in {}).toBe(false)
+  })
+
+  it('__proto__ 경로로 노드의 프로토타입을 바꾸지 못한다', () => {
+    expect(() =>
+      applyOp(doc(), { op: 'add', path: '/root/__proto__', value: { injected: true } }),
+    ).toThrow(PatchError)
+    expect('injected' in {}).toBe(false)
+  })
+
+  it('remove·replace·move도 같은 토큰을 거부한다', () => {
+    expect(() => applyOp(doc(), { op: 'remove', path: '/root/__proto__' })).toThrow(PatchError)
+    expect(() =>
+      applyOp(doc(), { op: 'replace', path: '/root/constructor', value: 1 }),
+    ).toThrow(PatchError)
+    expect(() =>
+      applyOp(doc(), { op: 'move', from: '/root/children/0', path: '/root/__proto__' }),
+    ).toThrow(PatchError)
+    expect(() =>
+      applyOp(doc(), { op: 'move', from: '/root/__proto__', path: '/root/children/0' }),
+    ).toThrow(PatchError)
+  })
+
+  it('상속된 키를 지우거나 바꾸려 하면 던진다', () => {
+    expect(() => applyOp(doc(), { op: 'remove', path: '/root/toString' })).toThrow(PatchError)
+    expect(() =>
+      applyOp(doc(), { op: 'replace', path: '/root/toString', value: 1 }),
+    ).toThrow(PatchError)
+  })
+})
+
 describe('applyOps', () => {
   it('연산을 순서대로 적용한다', () => {
     const next = applyOps(doc(), [

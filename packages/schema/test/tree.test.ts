@@ -92,7 +92,24 @@ describe('remapNodeIds', () => {
   it('옛 id에서 새 id로의 매핑을 함께 준다', () => {
     let counter = 0
     const { mapping } = remapNodeIds(sample(), () => `n_new${String(counter++).padStart(9, '0')}`)
-    expect(mapping['n_000000000003']).toBe('n_new000000002')
+    expect(mapping.get('n_000000000003')).toBe('n_new000000002')
+  })
+
+  it('id가 `__proto__`여도 프로토타입을 id로 쓰지 않는다', () => {
+    const tree: WbNode = {
+      id: '__proto__',
+      type: 'Page',
+      children: [{ id: 'constructor', type: 'Text' }],
+    }
+    let counter = 0
+    const { root, mapping } = remapNodeIds(
+      tree,
+      () => `n_new${String(counter++).padStart(9, '0')}`,
+    )
+    expect(root.id).toBe('n_new000000000')
+    expect(root.children![0]!.id).toBe('n_new000000001')
+    expect(mapping.get('__proto__')).toBe('n_new000000000')
+    expect(typeof root.id).toBe('string')
   })
 
   it('원본 트리를 변경하지 않는다', () => {

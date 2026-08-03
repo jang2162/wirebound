@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { formatPointer, getByPointer, parsePointer } from '../../src/patch/pointer'
+import { PatchError } from '../../src/patch/types'
 
 describe('parsePointer', () => {
   it('빈 문자열은 빈 배열이다', () => {
@@ -16,6 +17,29 @@ describe('parsePointer', () => {
 
   it('슬래시로 시작하지 않으면 던진다', () => {
     expect(() => parsePointer('root')).toThrow('잘못된 JSON Pointer: root')
+  })
+
+  it.each(['/root/__proto__', '/root/constructor/prototype/pwned', '/prototype', '/a/b/__proto__/c'])(
+    '프로토타입 오염 토큰이 든 경로 %s 를 거부한다',
+    (pointer) => {
+      expect(() => parsePointer(pointer)).toThrow(PatchError)
+      expect(() => parsePointer(pointer)).toThrow('쓸 수 없는 JSON Pointer 토큰입니다')
+    },
+  )
+
+  it('막힌 토큰을 알려주는 PatchError는 경로를 함께 담는다', () => {
+    try {
+      parsePointer('/root/__proto__')
+      expect.unreachable('던져야 한다')
+    } catch (error) {
+      expect(error).toBeInstanceOf(PatchError)
+      expect((error as PatchError).path).toBe('/root/__proto__')
+    }
+  })
+
+  it('토큰의 일부로 들어간 이름은 막지 않는다', () => {
+    expect(parsePointer('/root/__proto__x')).toEqual(['root', '__proto__x'])
+    expect(parsePointer('/root/props/constructorName')).toEqual(['root', 'props', 'constructorName'])
   })
 })
 
@@ -51,5 +75,14 @@ describe('getByPointer', () => {
 
   it('없는 경로는 undefined다', () => {
     expect(getByPointer(doc, '/root/children/9/id')).toBeUndefined()
+  })
+
+  it('상속된 멤버는 읽지 않는다', () => {
+    expect(getByPointer({ a: 1 }, '/toString')).toBeUndefined()
+    expect(getByPointer({ a: 1 }, '/hasOwnProperty')).toBeUndefined()
+  })
+
+  it('프로토타입 오염 토큰이 든 경로는 던진다', () => {
+    expect(() => getByPointer(doc, '/root/__proto__')).toThrow(PatchError)
   })
 })
