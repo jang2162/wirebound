@@ -55,6 +55,16 @@
 | 내보내기 | HTML 정적 번들 우선, PPTX는 렌더 이미지 방식으로 후속 | 렌더러 재사용으로 비용이 거의 없음. 도형 변환은 포기 |
 | MVP 범위 | 실시간 동시편집 + 스냅샷 + 상호작용 포함, MCP/CLI 제외 | 협업 도구로서의 핵심을 먼저 완성 |
 
+**서버 구현 결정 (P1에서 확정)**
+
+| 축 | 결정 | 근거 |
+|---|---|---|
+| DB 접근 | Kysely 쿼리 빌더 + 손으로 쓴 SQL 마이그레이션 | jsonb 컬럼(`schema`·`tokens`·`ops`)이 많고 §7.1의 트랜잭션 경계를 직접 제어해야 한다. ORM 추상화가 얻는 것이 없다 |
+| 인증 | HttpOnly 세션 쿠키 + DB 세션 (§10) | WebSocket 핸드셰이크가 같은 쿠키를 쓰고, 권한 회수가 즉시 반영된다 |
+| 비밀번호 | `node:crypto`의 scrypt (파라미터를 해시 문자열에 동봉) | 네이티브 의존 없이 OWASP 권장 KDF를 쓴다. 파라미터 동봉으로 나중에 비용을 올려도 기존 해시가 유효하다 |
+| 패키지 배포 | `schema`·`renderer`를 tsdown으로 빌드, `exports`는 `dist` | §3.3의 "Node와 브라우저 양쪽에서 동작"을 번들러 없이 만족시킨다. 개발·테스트는 `development` 조건으로 소스를 직접 본다 |
+| 테스트 DB | Docker Compose Postgres + 테스트별 트랜잭션 롤백 | §14의 권한 매트릭스·통합 테스트가 실제 Postgres 동작(제약·jsonb)을 요구한다 |
+
 ### 2.1 명시적으로 제외한 것 (YAGNI)
 
 - **페이지의 반응형 편집** — 페이지 스키마에 브레이크포인트별 분기를 두지 않는다. 반응형은 **테마가 정의**하고(§6.4), 사용자는 뷰포트 프리셋을 바꿔 확인만 한다.
@@ -140,6 +150,10 @@ Project ──┬── ProjectMember (user, role: owner|editor|viewer)
 
 ```sql
 users(id, email, name, password_hash, created_at)
+  UNIQUE (email)
+
+sessions(id, user_id, expires_at, created_at, last_seen_at)
+  id = 쿠키에 실린 세션 토큰의 sha256 해시 (원문은 저장하지 않는다)
 
 projects(id, name, slug, description, default_layout_id, created_at, updated_at)
 
@@ -731,8 +745,10 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 | **editor** | 메뉴·페이지·컴포넌트·코멘트·상호작용 편집, 스냅샷 생성 (복원 불가) |
 | **viewer** | 조회 전용 — 편집·코멘트 모두 불가 |
 
+- 사용자 인증은 **HttpOnly 세션 쿠키**다. 쿠키에는 랜덤 토큰이 실리고 서버는 그 sha256 해시만 `sessions`에 보관한다. WebSocket 핸드셰이크도 같은 쿠키를 쓰므로 REST와 WS의 인증 경로가 하나다. 세션 행을 지우면 열려 있는 WS 연결의 권한도 즉시 회수된다.
 - 권한 체크는 REST와 WebSocket이 **동일한 가드 함수**를 쓴다.
 - WS는 룸 참가 시 한 번, 각 patch 수신 시 한 번 확인한다(연결 도중 권한 회수 대응).
+- 프로젝트 멤버가 아닌 사용자에게는 **404**를 준다(프로젝트 존재 자체를 숨긴다). 멤버지만 역할이 모자라면 **403**이다.
 - API 토큰은 **발급자의 권한을 상속**한다. editor가 만든 토큰으로는 스냅샷 복원이 안 된다. 토큰 스코프는 프로젝트 단위다.
 
 테마·레이아웃 편집을 owner로 제한한 이유는 이 둘이 프로젝트 전체 페이지의 외형을 한 번에 바꾸는 전역 자원이기 때문이다. 시스템 테마는 누구도 편집할 수 없으며, 수정이 필요하면 `extends`로 파생 테마를 만든다(§6.9).
