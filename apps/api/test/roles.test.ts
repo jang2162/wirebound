@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ProjectRole } from '../src/db/types'
 import { findMembership, projectGuard, requireProjectRole, roleAtLeast, ROLE_RANK } from '../src/auth/roles'
 import { withApi, signup } from './helpers'
-import type { DbHandle } from '../src/db/tx'
+import { withTransaction, type DbHandle } from '../src/db/tx'
 
 async function seedProject(db: DbHandle, ownerId: string): Promise<string> {
   const project = await db.insertInto('projects')
@@ -96,11 +96,19 @@ describe('role CHECK 제약', () => {
       const { user } = await signup(ctx)
       const projectId = await seedProject(ctx.db, user.id)
       const other = await signup(ctx)
+
+      // 제약 위반(CHECK)을 직접 유발하는 조작이므로 `withTransaction`으로 감싼다 —
+      // 감싸지 않으면 이 실패가 `withApi`의 바깥 트랜잭션 전체를 aborted로 만들어
+      // 이후 문장이 내용과 무관하게 `25P02`로 실패한다(`src/db/tx.ts`, `repos/users.ts` 참고).
+      // `23514`는 Postgres의 CHECK 위반 SQLSTATE다 — 임의의 실패가 아니라 이
+      // 제약이 실제로 걸렸다는 것까지 확인한다.
       await expect(
-        ctx.db.insertInto('project_members')
-          .values({ project_id: projectId, user_id: other.user.id, role: 'admin' as never })
-          .execute(),
-      ).rejects.toThrow()
+        withTransaction(ctx.db, (trx) =>
+          trx.insertInto('project_members')
+            .values({ project_id: projectId, user_id: other.user.id, role: 'admin' as never })
+            .execute(),
+        ),
+      ).rejects.toMatchObject({ code: '23514' })
     })
   })
 })
