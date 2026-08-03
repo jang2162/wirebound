@@ -24,6 +24,39 @@ function roundtrip(ops: PatchOp[]) {
   return applyOps(after, inverses)
 }
 
+/** 부모가 둘인 트리 — 서로 다른 children 배열 사이의 move를 검증하기 위한 픽스처 */
+function nestedDoc() {
+  return {
+    version: 1,
+    root: {
+      id: 'n_000000000001',
+      type: 'Page',
+      children: [
+        {
+          id: 'n_000000000010',
+          type: 'Card',
+          children: [
+            { id: 'n_000000000011', type: 'Text', props: { content: '가' } },
+            { id: 'n_000000000012', type: 'Text', props: { content: '나' } },
+          ],
+        },
+        {
+          id: 'n_000000000020',
+          type: 'Card',
+          children: [{ id: 'n_000000000021', type: 'Text', props: { content: '다' } }],
+        },
+      ],
+    },
+  }
+}
+
+function nestedRoundtrip(ops: PatchOp[]) {
+  const before = nestedDoc()
+  const after = applyOps(before, ops)
+  const inverses = invertOps(before, ops)
+  return applyOps(after, inverses)
+}
+
 describe('invertOps', () => {
   it('replace의 역은 옛 값으로의 replace다', () => {
     const ops: PatchOp[] = [
@@ -85,6 +118,26 @@ describe('invertOps', () => {
       { op: 'move', from: '/root/children/1', path: '/root/children/0' },
     ])
     expect(roundtrip(ops)).toEqual(doc())
+  })
+
+  it('서로 다른 부모의 children 배열 사이로 옮기는 move의 역은 반대 방향 move다', () => {
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/0/children/0', path: '/root/children/1/children/1' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'move', from: '/root/children/1/children/1', path: '/root/children/0/children/0' },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('반대 방향(옮겨간 쪽에서 원래 자리로)으로도 부모 간 move가 왕복된다', () => {
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/children/2' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'move', from: '/root/children/0/children/2', path: '/root/children/1/children/0' },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
   })
 
   it('여러 연산의 역은 역순으로 나온다', () => {
