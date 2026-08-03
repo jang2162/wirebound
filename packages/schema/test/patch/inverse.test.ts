@@ -140,6 +140,56 @@ describe('invertOps', () => {
     expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
   })
 
+  it('같은 배열 끝(-)으로 옮긴 move의 역은 제거 후 길이 자리에서 되돌린다', () => {
+    // 길이 2인 배열에서 0번을 빼면 1이 되므로 `-`는 인덱스 1이다.
+    const ops: PatchOp[] = [{ op: 'move', from: '/root/children/0', path: '/root/children/-' }]
+    expect(invertOps(doc(), ops)).toEqual([
+      { op: 'move', from: '/root/children/1', path: '/root/children/0' },
+    ])
+    expect(roundtrip(ops)).toEqual(doc())
+  })
+
+  it('같은 부모의 children 끝(-)으로 옮긴 move도 왕복한다', () => {
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/0/children/0', path: '/root/children/0/children/-' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'move', from: '/root/children/0/children/1', path: '/root/children/0/children/0' },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('다른 부모의 children 끝(-)으로 옮긴 move의 역은 그 배열의 원래 길이 자리다', () => {
+    // 목적지 배열은 제거의 영향을 받지 않으므로 길이 1 그대로 → `-`는 인덱스 1
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/0/children/0', path: '/root/children/1/children/-' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'move', from: '/root/children/1/children/1', path: '/root/children/0/children/0' },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('반대 방향으로 다른 부모의 children 끝(-)에 붙인 move도 왕복한다', () => {
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/children/-' },
+    ]
+    expect(invertOps(nestedDoc(), ops)).toEqual([
+      { op: 'move', from: '/root/children/0/children/2', path: '/root/children/1/children/0' },
+    ])
+    expect(nestedRoundtrip(ops)).toEqual(nestedDoc())
+  })
+
+  it('- 로 끝나는 move의 역을 실제로 적용할 수 있다', () => {
+    const ops: PatchOp[] = [
+      { op: 'move', from: '/root/children/0/children/0', path: '/root/children/1/children/-' },
+    ]
+    const before = nestedDoc()
+    const after = applyOps(before, ops)
+    expect(after.root.children[1]!.children).toHaveLength(2)
+    expect(() => applyOps(after, invertOps(before, ops))).not.toThrow()
+  })
+
   it('여러 연산의 역은 역순으로 나온다', () => {
     const ops: PatchOp[] = [
       { op: 'replace', path: '/root/children/0/props/content', value: '다' },

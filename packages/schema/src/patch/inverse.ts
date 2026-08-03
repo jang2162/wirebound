@@ -38,8 +38,27 @@ function inverseOf(doc: unknown, op: PatchOp): PatchOp {
       return { op: 'replace', path: op.path, value: structuredClone(old) }
     }
     case 'move':
-      return { op: 'move', from: op.path, path: op.from }
+      return { op: 'move', from: resolveMoveTarget(doc, op), path: op.from }
   }
+}
+
+/**
+ * move 목적지의 `-`를 실제 인덱스로 바꾼다.
+ * RFC 6902의 move는 remove 후 add이므로 **값을 뺀 뒤** 문서를 기준으로 잡는다.
+ * 같은 배열이면 길이가 하나 줄어든 상태가, 다른 배열이면 원래 길이가 기준이다.
+ */
+function resolveMoveTarget(doc: unknown, op: { op: 'move'; from: string; path: string }): string {
+  const tokens = parsePointer(op.path)
+  if (tokens[tokens.length - 1] !== '-') return op.path
+
+  const parentTokens = tokens.slice(0, -1)
+  const afterRemove = applyOp(doc, { op: 'remove', path: op.from })
+  const parent = getByPointer(afterRemove, formatPointer(parentTokens))
+
+  // 배열이 아니면 `-`는 그냥 객체 키다. 그대로 둔다.
+  if (!Array.isArray(parent)) return op.path
+
+  return formatPointer([...parentTokens, String(parent.length)])
 }
 
 function inverseOfAdd(doc: unknown, op: { op: 'add'; path: string; value: unknown }): PatchOp {
@@ -57,7 +76,7 @@ function inverseOfAdd(doc: unknown, op: { op: 'add'; path: string; value: unknow
     return { op: 'remove', path: formatPointer([...parentTokens, String(index)]) }
   }
 
-  if (parent !== null && typeof parent === 'object' && key in (parent as object)) {
+  if (parent !== null && typeof parent === 'object' && Object.hasOwn(parent, key)) {
     const old = (parent as Record<string, unknown>)[key]
     return { op: 'replace', path: op.path, value: structuredClone(old) }
   }
