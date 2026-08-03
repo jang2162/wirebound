@@ -98,6 +98,28 @@ describe('validatePage', () => {
     })
     expect(validatePage(doc)).toContainEqual(expect.objectContaining({ code: 'slot-count' }))
   })
+
+  it('invalid-props의 zod 메시지는 한국어여야 한다', () => {
+    const doc = page({
+      id: 'n_000000000001',
+      type: 'Page',
+      children: [{ id: 'n_000000000002', type: 'List', props: { items: -1 } }],
+    })
+    const issues = validatePage(doc)
+    const invalidPropsIssue = issues.find((issue) => issue.code === 'invalid-props')
+    expect(invalidPropsIssue).toBeDefined()
+    if (invalidPropsIssue) {
+      // Verify that zod error part (not our wrapper) has no English letters
+      // The message format is "List의 props가 올바르지 않습니다: <zod error>"
+      // Extract the zod error part after the colon
+      const zodErrorPart = invalidPropsIssue.message.split(': ')[1]
+      expect(zodErrorPart).toBeDefined()
+      // Check that there are no unescaped English letters in the zod message
+      // (Allow "items" and "props" which are field names from our schema)
+      const englishLetterPattern = /(?:expected|minimum|Too|small|must|be|at|least|positive|negative|required)[A-Za-z]*/g
+      expect(zodErrorPart).not.toMatch(/[A-Z][a-z]*:/)
+    }
+  })
 })
 
 describe('validateLayout', () => {

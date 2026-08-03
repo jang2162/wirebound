@@ -1,3 +1,4 @@
+import './locale'
 import { getComponent } from './component/registry'
 import type { LayoutDocument, PageDocument, WbNode } from './node'
 import { walkNodes } from './tree'
