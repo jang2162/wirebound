@@ -31,41 +31,75 @@ function seedDocument(): PageDocument {
 
 let nextId = 100
 
-/** 시드에서 현재 문서에 유효한 연산 하나를 고른다. 만들 수 없으면 null. */
+function newNode(): WbNode {
+  return { id: `n_gen${String((nextId += 1)).padStart(9, '0')}`, type: 'Divider' }
+}
+
+/**
+ * 시드에서 현재 문서에 유효한 연산 하나를 고른다. 만들 수 없으면 null.
+ * add는 배열 끝(`-`)·배열 중간·이미 있는 객체 키·없던 객체 키를,
+ * move는 구체적 인덱스와 `-`를(같은 배열·다른 배열 모두) 낸다.
+ */
 function pickOp(doc: PageDocument, seed: number): PatchOp | null {
   const visits = [...walkNodes(doc.root)].filter((visit) => visit.parent !== null)
   if (visits.length === 0) return null
 
   const visit = visits[seed % visits.length]!
-  const kind = Math.floor(seed / 7) % 4
+  /** 형제 배열의 경로 (`/…/children`) */
+  const siblingsPath = parentPath(visit.path)
 
-  if (kind === 0) {
-    // 자식 배열 끝에 새 노드를 덧붙인다
-    const target = visit.parent!
-    if (!target.children) return null
-    return {
-      op: 'add',
-      path: `${parentPath(visit.path)}/-`,
-      value: { id: `n_gen${String((nextId += 1)).padStart(9, '0')}`, type: 'Divider' },
+  switch (Math.floor(seed / 7) % 9) {
+    case 0:
+      // 자식 배열 끝에 새 노드를 덧붙인다
+      return { op: 'add', path: `${siblingsPath}/-`, value: newNode() }
+
+    case 1:
+      // 배열 한가운데(자기 자리)에 새 노드를 끼워 넣는다
+      return { op: 'add', path: `${siblingsPath}/${visit.index}`, value: newNode() }
+
+    case 2:
+      return { op: 'remove', path: visit.path }
+
+    case 3:
+      return { op: 'replace', path: `${visit.path}/type`, value: 'Divider' }
+
+    case 4:
+      // 이미 있는 객체 키를 덮어쓰는 add — 역이 remove가 아니라 replace여야 한다
+      return { op: 'add', path: `${visit.path}/type`, value: 'Divider' }
+
+    case 5:
+      // 없던 객체 키를 만드는 add — 역은 remove다 (같은 노드에 두 번째면 replace가 된다)
+      return { op: 'add', path: `${visit.path}/marker`, value: seed % 97 }
+
+    case 6: {
+      // move: 형제가 둘 이상일 때만, 구체적인 인덱스로
+      const siblings = visit.parent!.children ?? []
+      if (siblings.length < 2) return null
+      return {
+        op: 'move',
+        from: visit.path,
+        path: `${siblingsPath}/${(visit.index + 1) % siblings.length}`,
+      }
     }
-  }
 
-  if (kind === 1) {
-    return { op: 'remove', path: visit.path }
-  }
+    case 7:
+      // move: 같은 배열의 끝(-)으로
+      return { op: 'move', from: visit.path, path: `${siblingsPath}/-` }
 
-  if (kind === 2) {
-    return { op: 'replace', path: `${visit.path}/type`, value: 'Divider' }
-  }
-
-  // move: 형제가 둘 이상일 때만
-  const siblings = visit.parent!.children ?? []
-  if (siblings.length < 2) return null
-  const targetIndex = (visit.index + 1) % siblings.length
-  return {
-    op: 'move',
-    from: visit.path,
-    path: `${parentPath(visit.path)}/${targetIndex}`,
+    default: {
+      // move: 아무 노드의 children 끝(-)으로.
+      // move는 remove 후 add이므로 목적지는 **값을 뺀 뒤** 문서에서 골라야 항상 유효하다.
+      let afterRemove: PageDocument
+      try {
+        afterRemove = applyOp(doc, { op: 'remove', path: visit.path })
+      } catch {
+        return null
+      }
+      const targets = [...walkNodes(afterRemove.root)].filter((v) => v.node.children !== undefined)
+      if (targets.length === 0) return null
+      const target = targets[Math.floor(seed / 11) % targets.length]!
+      return { op: 'move', from: visit.path, path: `${target.path}/children/-` }
+    }
   }
 }
 
