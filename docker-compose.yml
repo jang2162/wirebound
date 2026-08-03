@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wirebound-postgres
+    environment:
+      POSTGRES_USER: wirebound
+      POSTGRES_PASSWORD: wirebound
+      POSTGRES_DB: wirebound
+    ports:
+      - '5433:5432'
+    volumes:
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+      - wirebound-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wirebound -d wirebound']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  wirebound-pgdata:

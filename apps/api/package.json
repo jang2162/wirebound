@@ -5,16 +5,21 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "start": "tsx src/main.ts"
+    "start": "tsx src/main.ts",
+    "migrate": "tsx src/db/migrate.ts latest",
+    "migrate:down": "tsx src/db/migrate.ts down"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
     "@wirebound/schema": "workspace:*",
     "fastify": "^5.2.0",
+    "kysely": "^0.28.0",
+    "pg": "^8.13.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "@types/pg": "^8.11.0",
     "tsx": "^4.19.0"
   }
 }

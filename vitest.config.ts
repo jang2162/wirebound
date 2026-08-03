@@ -36,6 +36,10 @@ export default defineConfig({
           // DB 하나를 공유하므로 파일 간 병렬을 끈다. 태스크 5에서 의미가 생긴다.
           fileParallelism: false,
           testTimeout: 20_000,
+          // 전체 실행 전 한 번: 테스트 DB를 최신 마이그레이션까지 올린다.
+          globalSetup: ['apps/api/test/global-setup.ts'],
+          // 파일마다: 공유 DB 풀을 afterAll에서 정리한다.
+          setupFiles: ['apps/api/test/setup.ts'],
         },
       },
     ],

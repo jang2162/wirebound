@@ -1,22 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { FastifyInstance } from 'fastify'
-import { buildApp } from '../src/app'
 import { loadConfig } from '../src/config'
 import { badRequest, conflict, forbidden, notFound, unauthenticated, validationFailed } from '../src/errors'
+import { withApi } from './helpers'
 
 const testEnv = {
   DATABASE_URL: 'postgres://wirebound:wirebound@127.0.0.1:5433/wirebound_test',
   NODE_ENV: 'test',
-}
-
-async function withApp(fn: (app: FastifyInstance) => Promise<void>): Promise<void> {
-  const app = await buildApp({ config: loadConfig(testEnv) })
-  await app.ready()
-  try {
-    await fn(app)
-  } finally {
-    await app.close()
-  }
 }
 
 describe('loadConfig', () => {
@@ -81,7 +70,7 @@ describe('ApiError', () => {
 
 describe('HTTP 계약', () => {
   it('GET /health가 200을 낸다', async () => {
-    await withApp(async (app) => {
+    await withApi(async ({ app }) => {
       const res = await app.inject({ method: 'GET', url: '/health' })
       expect(res.statusCode).toBe(200)
       expect(res.json()).toEqual({ status: 'ok' })
@@ -89,7 +78,7 @@ describe('HTTP 계약', () => {
   })
 
   it('없는 경로는 404 not-found 봉투를 낸다', async () => {
-    await withApp(async (app) => {
+    await withApi(async ({ app }) => {
       const res = await app.inject({ method: 'GET', url: '/그런거없음' })
       expect(res.statusCode).toBe(404)
       expect(res.json().error.code).toBe('not-found')
@@ -98,7 +87,7 @@ describe('HTTP 계약', () => {
   })
 
   it('깨진 JSON 본문은 400 bad-request를 낸다', async () => {
-    await withApp(async (app) => {
+    await withApi(async ({ app }) => {
       const res = await app.inject({
         method: 'POST',
         url: '/health',
@@ -111,25 +100,24 @@ describe('HTTP 계약', () => {
   })
 
   it('예상 못 한 예외는 500 internal이고 내부 메시지를 노출하지 않는다', async () => {
-    // Fastify는 ready() 이후 라우트 추가를 막는다(플러그인 트리가 이미 부팅된 상태로 취급).
-    // 그래서 이 테스트만 공용 withApp을 쓰지 않고, ready() 이전에 임시 라우트를 붙인다.
-    const app = await buildApp({ config: loadConfig(testEnv) })
-    app.get('/__boom', async () => {
-      throw new Error('데이터베이스 비밀번호가 담긴 내부 메시지')
-    })
-    await app.ready()
-    try {
+    // 태스크 4 시점의 하네스는 ready()를 먼저 불렀다. Fastify 5는 ready 이후
+    // 라우트 등록을 거부하므로, 이 테스트만 공용 withApp을 쓰지 못하고 자체 앱을
+    // 조립해 ready() 이전에 임시 라우트를 붙이는 식으로 우회했다. 지금의 withApi는
+    // ready()를 부르지 않으므로(inject()가 첫 호출에서 알아서 태운다) 그 우회가
+    // 필요 없다 — 다른 테스트와 똑같이 공용 헬퍼 위에서 임시 라우트를 등록한다.
+    await withApi(async ({ app }) => {
+      app.get('/__boom', async () => {
+        throw new Error('데이터베이스 비밀번호가 담긴 내부 메시지')
+      })
       const res = await app.inject({ method: 'GET', url: '/__boom' })
       expect(res.statusCode).toBe(500)
       expect(res.json().error.code).toBe('internal')
       expect(res.body).not.toContain('비밀번호가 담긴')
-    } finally {
-      await app.close()
-    }
+    })
   })
 
   it('에러 봉투에 issues가 없으면 키 자체가 없다', async () => {
-    await withApp(async (app) => {
+    await withApi(async ({ app }) => {
       const res = await app.inject({ method: 'GET', url: '/그런거없음' })
       // 키 집합을 본다. JSON의 키 순서에 의존하지 않는다.
       expect(Object.keys(res.json().error).sort()).toEqual(['code', 'message'])

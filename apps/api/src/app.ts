@@ -1,13 +1,17 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import type { ApiConfig } from './config'
+import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
 import { healthRoutes } from './routes/health'
 
-/**
- * 이 태스크에서 `BuildAppOptions`는 `{ config }`뿐이다.
- * 태스크 5가 여기에 `db`를 추가한다.
- */
+declare module 'fastify' {
+  interface FastifyInstance {
+    db: DbHandle
+  }
+}
+
 export interface BuildAppOptions {
+  db: DbHandle
   config: ApiConfig
 }
 
@@ -57,10 +61,11 @@ export function buildLoggerOptions(config: ApiConfig): ApiLoggerOptions {
  * 이 함수가 만들지 않은 자원(DB 풀 등)은 닫지 않는다 — 그 자원의 생애주기는 호출자의 것이다.
  */
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const { config } = options
+  const { db, config } = options
 
   const app = Fastify({ logger: buildLoggerOptions(config) })
 
+  app.decorate('db', db)
   registerErrorHandler(app)
   await app.register(healthRoutes)
 
