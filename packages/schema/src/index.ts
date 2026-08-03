@@ -26,3 +26,6 @@ export {
 
 export { CATALOG_TYPES, installCatalog } from './component/catalog/index'
 export * from './component/catalog/index'
+
+export type { ValidationCode, ValidationIssue } from './validate'
+export { assertValidPage, validateLayout, validatePage } from './validate'
