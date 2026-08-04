@@ -644,7 +644,7 @@ describe('DELETE /api/projects/:projectId/menu/:nodeId', () => {
         cookies: owner.cookie,
       })
       expect(res.statusCode).toBe(409)
-      // 태스크 13이 이 검사를 "자식 메뉴나 페이지"로 넓히면서 메시지도 함께 바뀌었다
+      // 이 검사는 "자식 메뉴나 페이지" 둘 다를 센다(처음엔 자식 메뉴만 셌다)
       // (repos/menu.ts의 HasChildrenError). 이 테스트는 자식 메뉴 쪽 경로만 확인한다 —
       // 페이지 쪽 경로는 test/pages.test.ts의 "메뉴 연동" 테스트가 확인한다.
       expect(res.json().error.message).toBe('하위 메뉴나 페이지가 있어 삭제할 수 없습니다')

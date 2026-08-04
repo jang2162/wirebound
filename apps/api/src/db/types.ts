@@ -2,9 +2,8 @@ import type { ColumnType, Generated, JSONColumnType } from 'kysely'
 import type { PageDocument, PatchOp } from '@wirebound/schema'
 
 /**
- * `Database` 스키마 인터페이스. `users`·`sessions`는 태스크 1이 넣었고,
- * `projects`·`project_members`는 태스크 9(이 태스크)가 추가한다 — 이후
- * 태스크(12·13)가 각자의 테이블 인터페이스를 여기에 더 얹는다.
+ * `Database` 스키마 인터페이스. 테이블을 만드는 마이그레이션은 대응하는 인터페이스를
+ * 여기에 함께 더한다 — 아래 선언 순서가 `db/migrations/`의 번호 순서다.
  */
 export interface UsersTable {
   id: Generated<string>
@@ -43,7 +42,7 @@ export interface ProjectMembersTable {
 }
 
 /**
- * 메뉴 트리 노드(태스크 12). `parent_id`가 `null`이면 루트 노드다.
+ * 메뉴 트리 노드(`0003-menu-nodes`). `parent_id`가 `null`이면 루트 노드다.
  * `sort_order`는 형제(같은 `project_id`·`parent_id`) 안에서 0부터 시작하는
  * 연속 정수다 — 불변식은 `repos/menu.ts`가 지킨다(`db/types.ts`는 컬럼 타입만 안다).
  */
@@ -57,7 +56,7 @@ export interface MenuNodesTable {
 }
 
 /**
- * 페이지(태스크 13). `menu_node_id`는 이 페이지가 매달린 메뉴 트리 리프다.
+ * 페이지(`0004-pages`). `menu_node_id`는 이 페이지가 매달린 메뉴 트리 리프다.
  * `sort_order`는 형제(같은 `project_id`·`menu_node_id`) 안에서 0부터 시작하는
  * 연속 정수다 — `menu_nodes`와 같은 불변식, 지키는 것은 `repos/pages.ts`다.
  *
@@ -90,7 +89,7 @@ export interface PagesTable {
 export type RevisionActorType = 'user' | 'mcp' | 'cli'
 
 /**
- * 페이지 편집 이력(태스크 3). append-only다 — UPDATE도 DELETE도 하지 않는다
+ * 페이지 편집 이력(`0005-revisions`). append-only다 — UPDATE도 DELETE도 하지 않는다
  * (페이지 삭제 시의 CASCADE만 예외).
  *
  * `seq`는 `bigint`다. `pg`가 int8을 문자열로 주므로 select 타입이 `string`이고,

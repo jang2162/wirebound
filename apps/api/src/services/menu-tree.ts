@@ -11,7 +11,7 @@
  */
 
 /**
- * 태스크 14: 통합 트리(`routes/tree.ts`, 설계 §9)의 페이지 노드. `repos/pages.ts`의
+ * 통합 트리(`routes/tree.ts`, 설계 §9)의 페이지 노드. `repos/pages.ts`의
  * 전체 `PageRecord`와 달리 `id`·`title`·`sortOrder` 셋만 담는다 — 트리 응답에
  * `schema`가 실리면 프로젝트가 커질수록 응답이 무거워진다(브리프: 목록이 무거워지면
  * 안 된다). `routes/tree.ts`의 SELECT 자체가 `schema` 컬럼을 고르지 않는다.
@@ -22,7 +22,7 @@ export interface TreePage {
   sortOrder: number
 }
 
-/** 태스크 14: 통합 트리의 메뉴 노드. `repos/menu.ts`의 `MenuTreeNode`(`listMenuTree` 전용)에 `pages`만 더한 형태다. */
+/** 통합 트리의 메뉴 노드. `repos/menu.ts`의 `MenuTreeNode`(`listMenuTree` 전용)에 `pages`만 더한 형태다. */
 export interface TreeMenuNode {
   id: string
   title: string
@@ -32,7 +32,7 @@ export interface TreeMenuNode {
 }
 
 /**
- * 태스크 14: `buildMenuTree`가 받는 메뉴 행. `routes/tree.ts`가 `menu_nodes`를 한 번
+ * `buildMenuTree`가 받는 메뉴 행. `routes/tree.ts`가 `menu_nodes`를 한 번
  * SELECT한 결과(camelCase 변환 없이, DB 컬럼 이름 그대로)를 그대로 넘긴다.
  */
 export interface MenuRow {
@@ -43,7 +43,7 @@ export interface MenuRow {
 }
 
 /**
- * 태스크 14: `buildMenuTree`가 받는 페이지 행. `repos/pages.ts`의 `PageRecord`와
+ * `buildMenuTree`가 받는 페이지 행. `repos/pages.ts`의 `PageRecord`와
  * 달리 트리 조립에 필요한 네 필드만 담는다 — `schema`는 여기 없다(`repos/pages.ts`의
  * `listPageRows`가 애초에 그 컬럼을 고르지 않는다).
  */
@@ -61,7 +61,7 @@ export interface PageRow {
  * 페이지를 다시 조회하면 N+1이 되므로, 이 함수가 메모리에서 두 목록을 이어 붙이는
  * 대가로 그 조회 비용을 없앤다.
  *
- * **입력을 신뢰하지 않는다.** DB의 FK와 태스크 12의 재귀 CTE 검사(`assertParentValid`)가
+ * **입력을 신뢰하지 않는다.** DB의 FK와 `repos/menu.ts`의 재귀 CTE 검사(`assertParentValid`)가
  * 순환 참조나 존재하지 않는 부모를 이미 막고 있지만, 이 함수는 그 보장에 기대지
  * 않는다 — 순수 함수이므로 어떤 배열이 들어와도 예외 없이, 무한 루프 없이 끝나야 한다.
  *

@@ -866,17 +866,18 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       expect(res.statusCode).toBe(400)
       expect(res.json().error.message).toContain('NUL')
 
-      // 이 뒤의 GET이 무엇을 증명하고 무엇을 증명하지 않는지 정확히 적는다.
+      // 이 뒤의 GET이 무엇을 증명하지 **않는지**만 적는다.
       //
-      // 증명하는 것: **라우트가 DB에 닿기 전에 막는다.** 3.5단계(`containsNulByte`)가
-      // 걸러 내므로 이 요청은 어떤 SQL도 실행하지 않고, 따라서 뒤이은 요청이 정상
-      // 동작한다. 사전 필터가 사라져 NUL이 Postgres까지 갔다면 22P05가 나고 그
-      // 뒤의 GET은 25P02로 죽는다.
-      //
-      // 증명하지 **않는** 것: 세이브포인트. 여기서는 실패하는 SQL 자체가 없으므로
+      // 세이브포인트가 아니다. 여기서는 실패하는 SQL 자체가 없으므로
       // `withTransaction`이 있든 없든 이 단언은 통과한다. 저장 함수를 감싼
       // 세이브포인트가 실제로 바깥 트랜잭션을 지키는지는 라우트를 건너뛰고 저장소
       // 함수를 직접 부르는 `repos-revisions.test.ts:291`만이 증명한다.
+      //
+      // "라우트가 DB에 닿기 전에 막는다"도 아니다. 라우트 3.5단계와 파이프라인
+      // 8단계가 같은 문안의 `badRequest`를 던지므로(`routes/pages.ts`의 3.5단계와
+      // `toApiError`의 `nul-byte` 분기), 위 400과 이 200만으로는 둘 중 어느 쪽이
+      // 걸렀는지 구분되지 않는다. 이 단언이 구분하는 것은 NUL이 Postgres까지
+      // 갔는지 여부다 — 갔다면 22P05로 트랜잭션이 오염돼 이 GET이 25P02로 죽는다.
       const after = await ctx.app.inject({
         method: 'GET',
         url: `/api/projects/${project.id}/pages/${page.id}`,
@@ -1168,7 +1169,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
    *    `/version`이 항상 존재하는 경로라 발생 불가, `stale`은 `withApi`의 단일
    *    트랜잭션에서 만들 수 없다). `unsupported-version`만이 실제로 `toApiError`
    *    호출부까지 도달하므로, 이 절이 없으면 그 줄을 아무 에러로 바꿔도 스위트가 초록이다.
-   * 2. **태스크 7이 바꾼 동작.** 전에는 `PUT .../schema`가 **들어온** 문서만
+   * 2. **이 브랜치가 바꾼 동작.** 전에는 `PUT .../schema`가 **들어온** 문서만
    *    마이그레이션하고 저장된 문서를 통째로 덮어썼으므로 이 상황의 유일한 탈출구였다.
    *    이제 PUT도 파이프라인을 타고 그 2단계가 **저장된** 문서를 마이그레이션하므로
    *    GET·`PATCH .../ops`·`PUT .../schema` 셋이 전부 400이다. 인지된 결과이고,

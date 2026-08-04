@@ -182,19 +182,19 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
     // jsonb 컬럼에 저장되므로, 결과 문서만 검사하면 그 경우를 놓친다.
     //
     // **`containsNulByte(input.ops)` 단독을 격리하는 테스트는 없다.** 이 패치
-    // 엔진(add·remove·replace·move 네 종류, `@wirebound/schema`의 `patch/`)의 구조상
-    // 반례를 만들 수 없어 보인다: ops가 NUL 값을 도입했는데 after에는 안 남는다면
-    // (즉 그 값이 최종적으로 지워지거나 덮어써진다면), 지우거나 덮어쓰는 연산의
-    // 역은 언제나 "지워지기/덮이기 직전의 값"을 그대로 담는다 — remove의 역은 항상
-    // `{op:'add', value: 지워진 값}`이고 replace의 역은 항상 `{op:'replace', value:
-    // 이전 값}`이다(`patch/inverse.ts`). 그 "이전 값"이 바로 우리가 지우려는 NUL
-    // 값이므로 inverse도 함께 NUL을 갖게 된다. 값을 전혀 싣지 않는 유일한 역은
-    // 배열에 새로 끼워 넣는 add의 역(그냥 remove, 값 없음)인데, 그건 "도입"이지
-    // "제거"가 아니라서 after를 다시 깨끗하게 만드는 데 쓸 수 없다. 즉 지금 이
-    // 함수로는 ops만 지워도 19개 케이스 중 아무것도 반례가 안 된다 — 그렇다고 이
-    // 줄을 지워도 되는 신호는 아니다. jsonb 컬럼에 저장되는 건 어디까지나 `ops`
-    // 그 자체이고(D8), 이 엔진에 op 종류가 늘어나면(예: 값을 안 남기는 삭제류
-    // 연산) 반례가 다시 생길 수 있다.
+    // 엔진(add·remove·replace·move 네 종류, `@wirebound/schema`의 `patch/`)에서 그
+    // 줄만 지웠을 때 실패하는 케이스를 아직 찾지 못했다. 관찰: ops가 NUL 값을
+    // 도입했는데 after에는 안 남는다면(즉 그 값이 최종적으로 지워지거나 덮어써진다면),
+    // 지우거나 덮어쓰는 연산의 역이 "지워지기/덮이기 직전의 값"을 그대로 담아
+    // inverse 쪽 검사에 걸린다 — remove의 역은 `{op:'add', value: 지워진 값}`이고
+    // replace의 역은 `{op:'replace', value: 이전 값}`이다(`patch/inverse.ts`).
+    //
+    // **이것은 반례가 없다는 증명이 아니다.** 값을 전혀 싣지 않는 역도 있다 —
+    // `inverseOfAdd`는 배열에 끼워 넣은 add와 객체에 **없던** 키를 만든 add 양쪽에
+    // 값 없는 `remove`를 돌려준다. 위 관찰은 그것들이 "도입"이라 after를 다시 깨끗하게
+    // 만드는 데 쓰이지 않는다는 데 기대고 있을 뿐이다. 그러니 이 줄을 지워도 되는
+    // 신호로 읽지 마라 — jsonb 컬럼에 저장되는 건 어디까지나 `ops` 그 자체이고(D8),
+    // 이 엔진에 op 종류가 늘어나면(예: 값을 안 남기는 삭제류 연산) 그 기댈 곳이 사라진다.
     if (containsNulByte(input.ops) || containsNulByte(inverse) || containsNulByte(after)) {
       return { ok: false, reason: 'nul-byte' }
     }

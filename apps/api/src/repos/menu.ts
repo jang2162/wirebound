@@ -45,7 +45,7 @@ const MENU_NODES_PARENT_FK_CONSTRAINT = 'menu_nodes_parent_id_fkey'
 
 /**
  * `0004-pages` 마이그레이션이 `pages.menu_node_id`에 건 FK(`ON DELETE RESTRICT`)의
- * 기본 명명 규칙 이름(태스크 13) — 페이지를 가진 메뉴를 지우려는 시도도 이 함수가
+ * 기본 명명 규칙 이름 — 페이지를 가진 메뉴를 지우려는 시도도 이 함수가
  * (자식 메뉴와 함께) 같은 `HasChildrenError`로 잡는다.
  */
 const PAGES_MENU_NODE_FK_CONSTRAINT = 'pages_menu_node_id_fkey'
@@ -86,8 +86,8 @@ export class ParentNotFoundError extends Error {
 }
 
 /**
- * 자식 메뉴나 페이지가 있는 노드를 지우려 할 때 `deleteMenuNode`가 던진다(태스크 13:
- * 처음엔 자식 메뉴만 셌으나, `pages.menu_node_id`도 같은 `ON DELETE RESTRICT`라
+ * 자식 메뉴나 페이지가 있는 노드를 지우려 할 때 `deleteMenuNode`가 던진다(처음엔
+ * 자식 메뉴만 셌으나, `pages.menu_node_id`도 같은 `ON DELETE RESTRICT`라
  * 페이지를 가진 메뉴도 같은 이유로 막아야 한다).
  */
 export class HasChildrenError extends Error {
@@ -395,7 +395,7 @@ export async function updateMenuNode(
  * 존재하지 않으면) `'not-found'`를 돌려준다.
  *
  * 자식 메뉴나 페이지가 있으면 `HasChildrenError`를 던진다(호출자가 409로 매핑) —
- * DELETE 문장을 시도하기 전에 둘 다 미리 확인한다(태스크 13: 원래 자식 메뉴만
+ * DELETE 문장을 시도하기 전에 둘 다 미리 확인한다(원래 자식 메뉴만
  * 셌으나, 페이지도 `menu_node_id`로 이 노드를 참조하므로 함께 센다). `parent_id`·
  * `pages.menu_node_id` 양쪽의 `ON DELETE RESTRICT`(`0003-menu-nodes`·`0004-pages`
  * 마이그레이션)가 두 번째 방어선이라, 이 사전 확인과 실제 DELETE 사이에 자식이나

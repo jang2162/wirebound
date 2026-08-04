@@ -3,15 +3,15 @@ import { sql } from 'kysely'
 
 /**
  * `pages` 테이블을 만든다 — 설계 §7.1의 서버 검증 게이트가 지키는 문서(설계 §13)를
- * 담는 테이블이다(태스크 13). 메뉴 트리(태스크 12)의 리프에 매달린다.
+ * 담는 테이블이다. 메뉴 트리(`0003-menu-nodes`)의 리프에 매달린다.
  *
  * `project_id`는 `projects(id)`를 `ON DELETE CASCADE`로 참조한다 — 프로젝트가
  * 지워지면 그 페이지 전체가 함께 지워진다(`repos/projects.ts`의 `deleteProject`와
  * 같은 전제, `menu_nodes`와 동일).
  *
  * `menu_node_id`는 `menu_nodes(id)`를 `ON DELETE RESTRICT`로 참조한다. 페이지를
- * 가진 메뉴를 지우려는 시도를 API(`repos/menu.ts`의 `deleteMenuNode`, 이 태스크가
- * 확장)가 사전에 409로 막지만, 그 확인과 실제 DELETE 사이의 경합까지 막는 두 번째
+ * 가진 메뉴를 지우려는 시도를 API(`repos/menu.ts`의 `deleteMenuNode`)가 사전에
+ * 409로 막지만, 그 확인과 실제 DELETE 사이의 경합까지 막는 두 번째
  * 방어선이 이 RESTRICT다 — `0003-menu-nodes`의 `parent_id ... ON DELETE RESTRICT`와
  * 같은 이유.
  *
@@ -49,9 +49,10 @@ export const migration: Migration = {
       .execute()
   },
 
-  // 인덱스는 테이블과 함께 자동으로 사라지므로 따로 DROP하지 않는다. `pages`를
-  // 참조하는 다른 테이블이 없으므로(이 태스크 시점) 순서를 고려할 필요 없이
-  // 테이블 하나만 DROP하면 된다.
+  // 인덱스는 테이블과 함께 자동으로 사라지므로 따로 DROP하지 않는다. `revisions`가
+  // `pages`를 참조하지만 그 테이블을 만든 0005의 `down`이 마이그레이션 역순상 먼저
+  // 돌아 이미 사라진 뒤다 — 이 순서는 `test/global-setup.ts`가 매 실행 latest → none →
+  // latest를 왕복하며 확인한다.
   async down(db: Kysely<unknown>): Promise<void> {
     await db.schema.dropTable('pages').execute()
   },

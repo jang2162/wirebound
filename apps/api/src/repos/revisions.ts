@@ -1,6 +1,6 @@
 /**
  * 페이지 편집 이력(`revisions`) 저장소. SQL만 안다 — HTTP도 zod도 패치 적용도 이
- * 파일 밖의 일이다(파이프라인은 태스크 5, `services/edit-pipeline.ts`).
+ * 파일 밖의 일이다(파이프라인은 `services/edit-pipeline.ts`).
  *
  * `revisions`는 append-only다 — UPDATE·DELETE 문장이 이 파일에 없다(페이지 삭제 시
  * `ON DELETE CASCADE`로 함께 사라지는 것만 예외이고, 그것도 이 파일이 아니라
@@ -70,7 +70,7 @@ function toRecord(row: RevisionRow): RevisionRecord {
 }
 
 /**
- * revision 한 행을 append한다. 호출자(파이프라인, 태스크 5)가 `lockPageForEdit`으로
+ * revision 한 행을 append한다. 호출자(파이프라인)가 `lockPageForEdit`으로
  * 잠근 `head_seq`를 바탕으로 `seq`를 이미 채번해 넘긴다 — 이 함수는 채번하지 않는다.
  *
  * `withTransaction`으로 감싼다. `(page_id, seq)` UNIQUE 위반과 `ops`/`inverse`의

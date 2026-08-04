@@ -8,8 +8,8 @@
  * 맡긴다. 권한 판정은 `auth/roles.ts`의 `projectGuard` 하나가 전담한다 — 이
  * 파일은 역할을 비교하지 않는다.
  *
- * 페이지 라우트(`/:projectId/pages`)는 이 태스크의 범위가 아니다 — 태스크 13이
- * 이 트리의 리프에 매단다.
+ * 페이지 라우트(`/:projectId/pages`)는 이 파일이 아니라 `routes/pages.ts`에 있다 —
+ * 페이지는 이 트리의 리프에 매달린다.
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'

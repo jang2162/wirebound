@@ -28,7 +28,7 @@ export interface BuildAppOptions {
    * 테스트 전용: pino가 쓸 목적지 스트림을 주입한다. 운영 코드(`main.ts`)는 절대
    * 채우지 않는다 — 생략하면 pino가 원래 목적지(표준출력)를 그대로 쓴다.
    *
-   * 이 필드가 존재하는 유일한 이유는 `test/logging.test.ts`다. 태스크 7 전까지는
+   * 이 필드가 존재하는 유일한 이유는 `test/logging.test.ts`다. 전에는
    * 그 테스트가 `buildApp`을 거치지 않고 로거 옵션·에러 핸들러·health 라우트를
    * 직접 조립해 로그를 캡처했다 — 그때는 실제 앱과의 차이가 문제되지 않았다(아무것도
    * 쿠키를 만지지 않았으므로). 이제 `buildApp`이 `@fastify/cookie`와 세션 인증 훅을

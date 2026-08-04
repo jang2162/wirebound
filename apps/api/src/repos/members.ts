@@ -148,8 +148,8 @@ export async function insertMember(
  * 한다(`lockOwnerIds` 문서 참고). 대상이 owner인데 새 역할이 owner가 아니고,
  * 잠근 owner 집합이 대상 하나뿐이면(`size <= 1`) 갱신 전에 `LastOwnerError`를
  * 던진다 — 갱신문을 먼저 날려보고 결과를 되돌리는 방식이 아니다: 이 검사부터
- * 갱신까지 같은 트랜잭션·같은 잠금 아래서 끊기지 않아야 경합 시나리오(설계 §10,
- * 태스크 11 브리프)가 실제로 막힌다.
+ * 갱신까지 같은 트랜잭션·같은 잠금 아래서 끊기지 않아야 경합 시나리오(설계 §10)가
+ * 실제로 막힌다.
  */
 export async function updateMemberRole(
   db: DbHandle,

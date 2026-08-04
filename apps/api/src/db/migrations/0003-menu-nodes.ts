@@ -2,8 +2,8 @@ import type { Kysely, Migration } from 'kysely'
 import { sql } from 'kysely'
 
 /**
- * `menu_nodes` 테이블을 만든다 — 설계 §9 좌측 패널의 폴더 트리(태스크 12).
- * 페이지(태스크 13)는 이 트리의 리프에 매달린다.
+ * `menu_nodes` 테이블을 만든다 — 설계 §9 좌측 패널의 폴더 트리.
+ * 페이지(`0004-pages`)는 이 트리의 리프에 매달린다.
  *
  * `project_id`는 `projects(id)`를 `ON DELETE CASCADE`로 참조한다 — 프로젝트가
  * 지워지면 그 메뉴 트리 전체가 함께 지워진다(`repos/projects.ts`의 `deleteProject`와

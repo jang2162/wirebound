@@ -21,7 +21,7 @@ import { DuplicateMemberError, LastOwnerError, insertMember, listMembers, remove
 import { findUserByEmail } from '../repos/users'
 
 /**
- * `.email()`은 형식만 검증하고, 이메일 대소문자 무시(태스크 11 브리프)는 이
+ * `.email()`은 형식만 검증하고, 이메일 대소문자 무시는 이
  * `.transform()`이 담당한다 — `routes/auth.ts`의 `NormalizedEmail`과 정확히 같은
  * 규칙이다: 사용자는 이미 소문자로 정규화되어 저장돼 있으므로, 초대 이메일도
  * 같은 방식으로 소문자화하면 대소문자와 무관하게 같은 행을 찾는다.

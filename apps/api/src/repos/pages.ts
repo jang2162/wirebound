@@ -326,18 +326,23 @@ export interface LockedPage {
 }
 
 /**
- * 편집 파이프라인(태스크 5)이 페이지를 잠그고 현재 상태를 읽는다.
+ * 편집 파이프라인(`services/edit-pipeline.ts`)이 페이지를 잠그고 현재 상태를 읽는다.
  * `SELECT id, schema, schema_version, head_seq FROM pages WHERE id = ? AND project_id = ? FOR UPDATE`.
  *
  * **`withTransaction`으로 감싸지 않는다.** 세이브포인트로 감쌀 이유가 없어서다 —
- * SELECT 하나뿐이라 제약 위반이 날 수 없고(세이브포인트는 제약 위반의 오염을
- * 막는 장치이지 잠금과는 무관하다), 오히려 `FOR UPDATE`가 건 행 잠금은 세이브포인트
- * RELEASE/ROLLBACK이 아니라 **트랜잭션이 COMMIT되거나 ROLLBACK될 때까지** 유지돼야
- * 한다 — 이 함수 하나만 감싸는 세이브포인트를 열고 그 안에서 즉시 RELEASE하면
- * 잠금의 지속 시간이 그 함수 호출로 좁아져 버려, 파이프라인이 잠근 뒤 이어서
- * 실행하려는 나머지 로직(패치 적용·`insertRevision`·`writePageSchemaAtSeq`) 동안은
- * 더 이상 잠겨 있지 않게 된다. 파라미터 이름을 `db`가 아니라 `trx`로 둔 것도 "이미
- * 트랜잭션 안에서 불러야 한다"는 전제를 시그니처로 드러내기 위해서다.
+ * SELECT 하나뿐이라 제약 위반이 날 수 없고, 세이브포인트는 제약 위반의 오염을 막는
+ * 장치이지 잠금과는 무관하다.
+ *
+ * **잠금과 무관하다는 것은 실측이다.** `RELEASE SAVEPOINT`는 하위 트랜잭션을 부모에
+ * 병합할 뿐이라 그 안에서 얻은 행 잠금은 부모 트랜잭션으로 넘어간다. 확인한 방법:
+ * `begin; savepoint s1; select … for update; release savepoint s1;` 상태의 세션을 둔 채
+ * 다른 세션에서 같은 행에 `select … for update nowait`을 걸면 `55P03 could not obtain
+ * lock on row`가 난다(양성 대조: 앞 세션이 COMMIT한 뒤 같은 nowait은 성공한다).
+ * 그러므로 `writePageSchemaAtSeq`가 잠금을 쥔 채 세이브포인트를 여는 것도 안전하다 —
+ * 그 래퍼를 "잠금 구간이라 위험하다"는 이유로 걷어내지 마라.
+ *
+ * 파라미터 이름을 `db`가 아니라 `trx`로 둔 것은 "이미 트랜잭션 안에서 불러야 한다"는
+ * 전제를 시그니처로 드러내기 위해서다.
  *
  * 대상이 `projectId` 소속이 아니면(다른 프로젝트, 또는 존재하지 않으면) `null`이다.
  *
@@ -378,7 +383,7 @@ export async function lockPageForEdit(trx: DbHandle, projectId: string, pageId: 
 }
 
 /**
- * 편집 파이프라인(태스크 5)이 패치를 적용한 결과를 저장한다. `schema`·`schema_version`·
+ * 편집 파이프라인(`services/edit-pipeline.ts`)이 패치를 적용한 결과를 저장한다. `schema`·`schema_version`·
  * `head_seq`·`updated_at` 넷을 함께 갱신한다 — 다른 컬럼(`title`·`menu_node_id` 등)은
  * 건드리지 않는다. 반환값은 없다(`void`) — 호출자가 이미 결과 문서(`schema`)와 새
  * `headSeq`를 갖고 있으므로 다시 읽어 돌려줄 이유가 없다.
@@ -419,8 +424,9 @@ export async function writePageSchemaAtSeq(
  * 페이지를 지운다. 대상이 `projectId` 소속이 아니면 `'not-found'`다.
  *
  * 삭제 뒤 남은 형제들을 `closeGap`으로 재번호한다. `withTransaction`으로 감싸는
- * 이유는 `repos/menu.ts`의 `deleteMenuNode`와 다르다 — `pages`를 참조하는 다른
- * 테이블이 없어(이 태스크 시점) 이 DELETE 자체는 제약 위반을 낼 수 없다. 그래도
+ * 이유는 `repos/menu.ts`의 `deleteMenuNode`와 다르다 — `pages`를 참조하는 것은
+ * `revisions.page_id` 하나이고 그것이 `ON DELETE CASCADE`라(0005), 이 DELETE 자체는
+ * 제약 위반을 낼 수 없다(`RESTRICT` 참조가 생기면 이 문장이 깨진다). 그래도
  * 감싸는 것은 "삭제 + 재번호"가 하나의 원자적 단위여야 하기 때문이다(둘 사이에
  * 죽으면 형제 sort_order에 구멍이 남는다).
  */

@@ -10,7 +10,7 @@ import { migration as m0005 } from './0005-revisions'
  *
  * Kysely의 `FileMigrationProvider`는 마이그레이션 파일을 동적 `import()`로 읽는다.
  * `.ts` 파일의 동적 import는 tsx·vitest·순수 node에서 서로 다르게 동작한다 —
- * 태스크 1이 닫은 것과 같은 부류의 문제다. 그래서 각 마이그레이션을 여기서
+ * 실행기마다 결과가 갈리는 부류의 문제다. 그래서 각 마이그레이션을 여기서
  * 정적으로 import해 객체에 담는다: 동적 해석이 사라지고, 마이그레이션을 추가하는
  * 비용은 import 한 줄이 되며, 순서가 파일에 그대로 드러난다. 키를 빠뜨리면
  * (참조하지 않은 import) 컴파일 오류가 된다.

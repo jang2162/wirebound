@@ -13,8 +13,11 @@ const SetPropActionSchema = z.strictObject({
   type: z.literal('setProp'),
   target: z.string(),
   prop: z.string(),
-  // 임의 JSON 값. z.unknown()은 키를 선택적으로 만들지만, 액션의 의미상
-  // value: undefined와 키 부재는 같은 뜻이므로 문제되지 않는다.
+  // 임의 JSON 값. **z.unknown()은 키를 선택적으로 만들지 않는다** — 지금 zod에서
+  // `.optional()`이 붙지 않은 필드는 그 타입이 undefined를 받아들이든 말든 키가
+  // 없으면 거부된다(변이 검사 결과는 apps/api/src/http/patch-ops.ts의 PatchValue
+  // 주석에 있다). 즉 이 키는 필수다. 액션의 의미상 value: undefined와 키 부재는
+  // 같은 뜻이라 그 요구가 해롭지 않으므로 그대로 둔다.
   value: z.unknown(),
 })
 

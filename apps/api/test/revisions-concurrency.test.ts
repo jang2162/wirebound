@@ -169,10 +169,12 @@ describe('편집 seq 채번의 동시성', () => {
       // 타임아웃(20초)에 걸리지 않는 것을 확인했다.
       //
       // **이 파일의 잠금 검출력은 전적으로 이 케이스와 아래 PUT 케이스에 있다.**
-      // `.forUpdate()`를 지우고 여섯 번 돌린 결과 이 둘은 여섯 번 모두 실패했고,
-      // 위의 "동시에 두 편집" 케이스는 한 번만 실패했다. 여기 동시 요청 수를 줄이면
-      // (예: "둘이면 충분하다") 그 검출력이 사라진다 — 줄이려거든 먼저 줄인 수로
-      // `.forUpdate()`를 지운 채 여러 번 돌려 여전히 잡는지 확인해라.
+      // 측정: `lockPageForEdit`에서 `.forUpdate()`를 지우고 이 파일만 여섯 번 돌렸을 때
+      // 이 케이스와 PUT 케이스는 6/6 실패했고, 위의 "동시에 두 편집" 케이스는 0/6이었다
+      // (그 케이스는 앞선 측정에서 1/6이었다 — 어느 쪽이든 거기에 검출력을 기대면 안
+      // 된다). 여기 동시 요청 수를 줄이면(예: "둘이면 충분하다") 그 검출력이 사라진다 —
+      // 줄이려거든 먼저 줄인 수로 `.forUpdate()`를 지운 채 여러 번 돌려 여전히 잡는지
+      // 확인해라.
       const responses = await Promise.all(
         Array.from({ length: 10 }, (_, i) => patchOps(ctx, fx, fx.page.id, 0, [addTextOp(`n_conc_${i}`)])),
       )
@@ -337,9 +339,10 @@ describe('편집 seq 채번의 동시성', () => {
  * 남의 행 잠금에 막히면 대기는 `locktype = 'transactionid'` 행으로 나타나고, 그 행의
  * `database`는 **NULL이다.** 실제로 확인한 값:
  *
- *     ungranted 행: [{ locktype: 'transactionid', database: null, datname: 'wirebound_test' }]
- *     ... where not granted and database = (현재 DB oid)      → 0   ← 영원히 못 찾는다
- *     ... join pg_stat_activity where a.datname = current_database() → 1
+ *     -- l = pg_locks, a = pg_stat_activity (datname은 조인해 온 컬럼이다)
+ *     ungranted 행: [{ l.locktype: 'transactionid', l.database: null, a.datname: 'wirebound_test' }]
+ *     ... where not l.granted and l.database = (현재 DB oid)         → 0   ← 영원히 못 찾는다
+ *     ... join pg_stat_activity a where a.datname = current_database() → 1
  *
  * 그래서 잠금 행이 아니라 **기다리는 백엔드**의 DB로 좁힌다.
  *

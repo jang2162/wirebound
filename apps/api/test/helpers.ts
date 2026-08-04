@@ -72,7 +72,7 @@ export interface WithApiOptions {
  * 롤백을 유발한 뒤 `Rollback`이 아니므로 그대로 다시 던져져 호출자에게 보인다.
  *
  * **이 `catch (error) { if (!(error instanceof Rollback)) throw error }` 줄이
- * 이 태스크 이후 아홉 개 태스크 전체가 의지하는 지점이다.** 여기가 언젠가
+ * api 테스트 스위트 전체가 의지하는 지점이다.** 여기가 언젠가
  * `catch {}`처럼 전부 삼키는 코드로 퇴행하면, `withApi` 안의 모든 `expect`가
  * 던지는 진짜 실패까지 조용히 삼켜져 스위트가 초록으로 보이면서 아무것도
  * 증명하지 못하게 된다. `db.test.ts`의 "테스트가 던진 진짜 에러는 그대로 밖으로
@@ -232,7 +232,7 @@ export async function createProject(
  * 이미 있는 프로젝트에 사용자를 특정 역할로 넣는다 (API를 거치지 않는다).
  *
  * 멤버 초대 API가 아직 없는 태스크(이 태스크 포함)에서도 권한 시나리오를 세울 수
- * 있어야 하므로 DB에 직접 쓴다. 태스크 11 이후 초대 API가 생겨도 그대로 둔다 —
+ * 있어야 하므로 DB에 직접 쓴다. 초대 API(`POST .../members`)가 생긴 뒤에도 그대로 둔다 —
  * 픽스처가 검사 대상 API에 의존하면 그 API가 깨졌을 때 무관한 테스트가 전부 무너진다.
  */
 export async function addMember(
@@ -261,8 +261,8 @@ let menuNodeCounter = 0
 /**
  * 프로젝트에 메뉴 노드를 만든다. `POST /api/projects/:projectId/menu`를 실제로
  * 호출한다(`createProject`와 같은 이유) — 이 태스크가 검증하는 생성 경로
- * (형제 재번호·부모 검증 포함)를 그대로 거쳐야 이후 태스크(13)의 픽스처가 실제
- * API와 어긋나지 않는다.
+ * (형제 재번호·부모 검증 포함)를 그대로 거쳐야 이것을 쓰는 픽스처(`createPage`)가
+ * 실제 API와 어긋나지 않는다.
  */
 export async function createMenuNode(
   ctx: TestContext,
