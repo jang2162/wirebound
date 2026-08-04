@@ -263,6 +263,29 @@ describe('GET /api/projects/:projectId/pages/:pageId', () => {
     })
   })
 
+  it('페이지 응답은 계약된 키만 담는다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const menu = await createMenuNode(ctx, owner.cookie, project.id)
+      const page = await createPage(ctx, owner.cookie, project.id, menu.id)
+
+      const res = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+      })
+
+      expect(res.statusCode).toBe(200)
+      expect(Object.keys(res.json()).sort()).toEqual(
+        ['description', 'headSeq', 'id', 'menuNodeId', 'schema', 'schemaVersion', 'sortOrder', 'title'].sort(),
+      )
+      // projectId가 새어 나가지 않는다 — 경로에 이미 있고, 응답 계약에 없다.
+      expect(res.json()).not.toHaveProperty('projectId')
+      expect(res.json().headSeq).toBe(0)
+    })
+  })
+
   it('다른 프로젝트의 pageId는 404', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)

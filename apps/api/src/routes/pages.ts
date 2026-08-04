@@ -120,6 +120,7 @@ function toResponse(page: PageRecord) {
     sortOrder: page.sortOrder,
     schemaVersion: page.schemaVersion,
     schema: page.schema,
+    headSeq: page.headSeq,
   }
 }
 

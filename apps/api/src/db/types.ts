@@ -1,5 +1,5 @@
 import type { ColumnType, Generated, JSONColumnType } from 'kysely'
-import type { PageDocument } from '@wirebound/schema'
+import type { PageDocument, PatchOp } from '@wirebound/schema'
 
 /**
  * `Database` 스키마 인터페이스. `users`·`sessions`는 태스크 1이 넣었고,
@@ -78,6 +78,41 @@ export interface PagesTable {
   schema_version: number
   created_at: Generated<Date>
   updated_at: Generated<Date>
+  /**
+   * 이 페이지의 최신 revision seq. 클라이언트가 patch를 보낼 때 `baseSeq`로 쓴다
+   * (설계 §4.2). `0`은 "아직 편집 이력이 없다"는 뜻이다. `seq`와 같은 이유로
+   * select 타입이 `string`이고, insert는 생략 가능하다(DEFAULT 0).
+   */
+  head_seq: ColumnType<string, number | undefined, number>
+}
+
+/** revision을 만든 주체의 종류. 설계 §4.2. `'mcp'`·`'cli'`는 P9가 쓴다. */
+export type RevisionActorType = 'user' | 'mcp' | 'cli'
+
+/**
+ * 페이지 편집 이력(태스크 3). append-only다 — UPDATE도 DELETE도 하지 않는다
+ * (페이지 삭제 시의 CASCADE만 예외).
+ *
+ * `seq`는 `bigint`다. `pg`가 int8을 문자열로 주므로 select 타입이 `string`이고,
+ * insert는 `number`를 받는다(Postgres가 캐스트한다). update는 `never`다 —
+ * 이 컬럼은 만들어진 뒤 절대 바뀌지 않으므로, 바꾸려는 코드를 컴파일러가 막는다.
+ *
+ * `ops`·`inverse`는 `JSONColumnType<PatchOp[]>`, 즉 `ColumnType<PatchOp[], string, string>`이다 —
+ * `PagesTable.schema`와 같은 비대칭이다: 삽입 시엔 `JSON.stringify`한 문자열,
+ * 조회 시엔 파싱된 배열.
+ */
+export interface RevisionsTable {
+  id: Generated<string>
+  page_id: string
+  seq: ColumnType<string, number, never>
+  actor_type: RevisionActorType
+  /** `actor_type`이 `'user'`면 `users.id`. FK는 걸지 않는다(마이그레이션 0005 주석 참고). */
+  actor_id: string | null
+  /** 편집 시점의 표시 이름 스냅샷. 사용자가 이름을 바꿔도 이력의 표시는 그대로다. */
+  actor_label: string
+  ops: JSONColumnType<PatchOp[]>
+  inverse: JSONColumnType<PatchOp[]>
+  created_at: Generated<Date>
 }
 
 export interface Database {
@@ -87,4 +122,5 @@ export interface Database {
   project_members: ProjectMembersTable
   menu_nodes: MenuNodesTable
   pages: PagesTable
+  revisions: RevisionsTable
 }

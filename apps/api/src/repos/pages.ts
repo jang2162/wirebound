@@ -36,6 +36,8 @@ export interface PageRecord {
   sortOrder: number
   schemaVersion: number
   schema: PageDocument
+  /** 이 페이지의 최신 revision seq. `db/types.ts`의 `PagesTable.head_seq` 참고. */
+  headSeq: number
 }
 
 export interface PagePatch {
@@ -63,6 +65,7 @@ const PAGE_COLUMNS = [
   'sort_order',
   'schema_version',
   'schema',
+  'head_seq',
 ] as const
 
 interface PageRow {
@@ -74,6 +77,8 @@ interface PageRow {
   sort_order: number
   schema_version: number
   schema: PageDocument
+  /** `pg`가 int8을 문자열로 준다(`db/types.ts`의 `head_seq` 컬럼 타입 참고). */
+  head_seq: string
 }
 
 function toRecord(row: PageRow): PageRecord {
@@ -86,6 +91,8 @@ function toRecord(row: PageRow): PageRecord {
     sortOrder: row.sort_order,
     schemaVersion: row.schema_version,
     schema: row.schema,
+    // head_seq는 pg가 문자열로 주는 bigint다 — API 응답은 number여야 하므로 경계에서 변환한다(D9).
+    headSeq: Number(row.head_seq),
   }
 }
 
