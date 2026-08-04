@@ -76,6 +76,29 @@ describe('repos/revisions', () => {
     })
   })
 
+  it('insertRevision이 (page_id, seq) UNIQUE 위반으로 실패해도, withTransaction의 세이브포인트가 바깥 트랜잭션을 지킨다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const menu = await createMenuNode(ctx, owner.cookie, project.id)
+      const page = await createPage(ctx, owner.cookie, project.id, menu.id)
+      const actor = actorFor(owner.user)
+
+      await insertRevision(ctx.db, { pageId: page.id, seq: 1, actor, ops: [], inverse: [] })
+
+      // 같은 (page_id, seq)로 다시 넣어 실제 23505 UNIQUE 위반을 일으킨다.
+      await expect(insertRevision(ctx.db, { pageId: page.id, seq: 1, actor, ops: [], inverse: [] })).rejects.toThrow()
+
+      // 세이브포인트가 실제로 트랜잭션을 지켰다는 유일한 증거: 같은 withApi
+      // 트랜잭션 위에서 던진 이후 쿼리가 25P02 없이 성공한다. "실패한다"만
+      // 확인하고 끝내면 insertRevision이 withTransaction으로 감싸져 있든
+      // 아니든 통과한다(위반 자체는 어느 쪽이든 던진다) — 판별력은 전적으로
+      // 그 다음 쿼리가 사는가에 있다.
+      const rows = await ctx.db.selectFrom('revisions').select('seq').where('page_id', '=', page.id).execute()
+      expect(rows).toHaveLength(1)
+    })
+  })
+
   it('listRevisions는 seq 내림차순이다', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
@@ -262,6 +285,35 @@ describe('repos/revisions', () => {
 
       expect(after.title).toBe('원래 제목')
       expect(after.menu_node_id).toBe(menu.id)
+    })
+  })
+
+  it('writePageSchemaAtSeq가 NUL 문자로 인한 22P05로 실패해도, withTransaction의 세이브포인트가 바깥 트랜잭션을 지킨다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const menu = await createMenuNode(ctx, owner.cookie, project.id)
+      const page = await createPage(ctx, owner.cookie, project.id, menu.id)
+
+      // 애플리케이션 경계의 사전 필터(containsNulByte, routes/pages.ts)를 우회해
+      // 저장소 함수를 직접 부른다 — schema::jsonb 캐스팅 자체가 22P05로 죽는지
+      // 실측한다(`pages.test.ts:894`의 updatePageSchema 테스트와 같은 패턴).
+      // NUL 문자를 소스에 직접 타이핑하지 않는 이유는 db/nul-guard.ts의
+      // 헤더 주석이 설명한다 — String.fromCharCode(0)으로 런타임에 만든다.
+      const nul = String.fromCharCode(0)
+      const docWithNul: PageDocument = {
+        version: 1,
+        root: { id: 'n_root', type: 'Page', children: [{ id: 'n_text', type: 'Text', props: { content: `a${nul}b` } }] },
+      }
+
+      await expect(writePageSchemaAtSeq(ctx.db, page.id, docWithNul, 1, 1)).rejects.toThrow()
+
+      // 세이브포인트가 실제로 트랜잭션을 지켰다는 유일한 증거: 같은 withApi
+      // 트랜잭션 위에서 던진 이후 쿼리가 25P02 없이 성공한다. "실패한다"만
+      // 확인하고 끝내면 writePageSchemaAtSeq가 withTransaction으로 감싸져
+      // 있든 아니든 통과한다 — 판별력은 전적으로 그 다음 쿼리가 사는가에 있다.
+      const row = await ctx.db.selectFrom('pages').select('id').where('id', '=', page.id).executeTakeFirstOrThrow()
+      expect(row.id).toBe(page.id)
     })
   })
 
