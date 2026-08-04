@@ -22,7 +22,7 @@ export interface TreePage {
   sortOrder: number
 }
 
-/** 태스크 14: 통합 트리의 메뉴 노드. `MenuTreeNode`(위, `listMenuTree` 전용)에 `pages`만 더한 형태다. */
+/** 태스크 14: 통합 트리의 메뉴 노드. `repos/menu.ts`의 `MenuTreeNode`(`listMenuTree` 전용)에 `pages`만 더한 형태다. */
 export interface TreeMenuNode {
   id: string
   title: string

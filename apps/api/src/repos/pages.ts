@@ -212,10 +212,10 @@ export async function findPageById(db: DbHandle, projectId: string, pageId: stri
 }
 
 /**
- * 태스크 14: `repos/menu.ts`의 `buildMenuTree`가 받을 페이지 행을 조회한다.
+ * `services/menu-tree.ts`의 `buildMenuTree`가 받을 페이지 행을 조회한다.
  * 프로젝트의 `pages`에서 `id`·`menu_node_id`·`title`·`sort_order` 네 필드만 고른다 —
  * `schema`는 여기서 애초에 select하지 않는다(통합 트리 응답에 스키마가 실리면
- * 프로젝트가 커질수록 무거워진다). 반환 타입은 `repos/menu.ts`의 `PageRow`와
+ * 프로젝트가 커질수록 무거워진다). 반환 타입은 `services/menu-tree.ts`의 `PageRow`와
  * 구조적으로 같다 — 이 파일 안의 (비공개) `PageRow`(전체 컬럼을 담는 타입)와
  * 이름이 겹치므로 그 타입을 직접 import하지 않고 인라인으로 선언한다.
  *
