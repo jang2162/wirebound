@@ -41,9 +41,24 @@ export interface ProjectMembersTable {
   invited_at: Generated<Date>
 }
 
+/**
+ * 메뉴 트리 노드(태스크 12). `parent_id`가 `null`이면 루트 노드다.
+ * `sort_order`는 형제(같은 `project_id`·`parent_id`) 안에서 0부터 시작하는
+ * 연속 정수다 — 불변식은 `repos/menu.ts`가 지킨다(`db/types.ts`는 컬럼 타입만 안다).
+ */
+export interface MenuNodesTable {
+  id: Generated<string>
+  project_id: string
+  parent_id: string | null
+  title: string
+  sort_order: number
+  created_at: Generated<Date>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
   projects: ProjectsTable
   project_members: ProjectMembersTable
+  menu_nodes: MenuNodesTable
 }

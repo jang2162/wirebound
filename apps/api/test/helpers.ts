@@ -246,3 +246,44 @@ export async function addMember(
     .values({ project_id: projectId, user_id: userId, role })
     .execute()
 }
+
+export interface CreatedMenuNode {
+  id: string
+  projectId: string
+  parentId: string | null
+  title: string
+  sortOrder: number
+}
+
+/** `createMenuNode()`가 만드는 title이 눈에 띄게 겹치지 않도록 매기는 모듈 스코프 카운터. */
+let menuNodeCounter = 0
+
+/**
+ * 프로젝트에 메뉴 노드를 만든다. `POST /api/projects/:projectId/menu`를 실제로
+ * 호출한다(`createProject`와 같은 이유) — 이 태스크가 검증하는 생성 경로
+ * (형제 재번호·부모 검증 포함)를 그대로 거쳐야 이후 태스크(13)의 픽스처가 실제
+ * API와 어긋나지 않는다.
+ */
+export async function createMenuNode(
+  ctx: TestContext,
+  cookie: { wb_session: string },
+  projectId: string,
+  input?: Partial<{ parentId: string | null; title: string }>,
+): Promise<CreatedMenuNode> {
+  menuNodeCounter += 1
+  const title = input?.title ?? `메뉴${menuNodeCounter}`
+  const parentId = input?.parentId ?? null
+
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${projectId}/menu`,
+    cookies: cookie,
+    payload: { parentId, title },
+  })
+
+  if (res.statusCode !== 201) {
+    throw new Error(`createMenuNode 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
+  }
+
+  return res.json()
+}
