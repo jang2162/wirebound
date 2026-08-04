@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   CATALOG_TYPES,
+  CURRENT_DOCUMENT_VERSION,
   applyOps,
   defineComponent,
   getComponent,
@@ -865,12 +866,17 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       expect(res.statusCode).toBe(400)
       expect(res.json().error.message).toContain('NUL')
 
-      // 여기가 핵심 단정이다. 저장 함수(오늘은 파이프라인의 `writePageSchemaAtSeq`)가
-      // withTransaction 없이 저장을
-      // 시도했다면(고치기 전 상태) 22P05가 withApi를 감싸는 바깥 트랜잭션 전체를
-      // aborted(25P02)로 만들어, 이 시점 이후 같은 withApi 안의 모든 쿼리가 실제
-      // 내용과 무관하게 실패했을 것이다. 그 뒤에도 평범한 요청이 여전히 성공한다는
-      // 사실만이 트랜잭션이 살아 있음을 증명한다.
+      // 이 뒤의 GET이 무엇을 증명하고 무엇을 증명하지 않는지 정확히 적는다.
+      //
+      // 증명하는 것: **라우트가 DB에 닿기 전에 막는다.** 3.5단계(`containsNulByte`)가
+      // 걸러 내므로 이 요청은 어떤 SQL도 실행하지 않고, 따라서 뒤이은 요청이 정상
+      // 동작한다. 사전 필터가 사라져 NUL이 Postgres까지 갔다면 22P05가 나고 그
+      // 뒤의 GET은 25P02로 죽는다.
+      //
+      // 증명하지 **않는** 것: 세이브포인트. 여기서는 실패하는 SQL 자체가 없으므로
+      // `withTransaction`이 있든 없든 이 단언은 통과한다. 저장 함수를 감싼
+      // 세이브포인트가 실제로 바깥 트랜잭션을 지키는지는 라우트를 건너뛰고 저장소
+      // 함수를 직접 부르는 `repos-revisions.test.ts:291`만이 증명한다.
       const after = await ctx.app.inject({
         method: 'GET',
         url: `/api/projects/${project.id}/pages/${page.id}`,
@@ -1149,6 +1155,105 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         expect(res.json().title).toBe(page.title)
         expect(res.json().menuNodeId).toBe(page.menuNodeId)
         expect(res.json().sortOrder).toBe(page.sortOrder)
+      })
+    })
+  })
+
+  /**
+   * **저장된 문서가 지원 범위 밖 버전일 때.** 이 절이 두 가지를 동시에 고정한다.
+   *
+   * 1. **라우트가 파이프라인 실패를 그대로 매핑한다.** `EditOutcome`의 여섯 사유 중
+   *    다섯은 `PUT` 경로에서 그 앞 단계에 가려진다(`not-found`는 `findPageById`,
+   *    `invalid`는 라우트 3단계, `nul-byte`는 3.5단계, `patch-failed`는 `/root`·
+   *    `/version`이 항상 존재하는 경로라 발생 불가, `stale`은 `withApi`의 단일
+   *    트랜잭션에서 만들 수 없다). `unsupported-version`만이 실제로 `toApiError`
+   *    호출부까지 도달하므로, 이 절이 없으면 그 줄을 아무 에러로 바꿔도 스위트가 초록이다.
+   * 2. **태스크 7이 바꾼 동작.** 전에는 `PUT .../schema`가 **들어온** 문서만
+   *    마이그레이션하고 저장된 문서를 통째로 덮어썼으므로 이 상황의 유일한 탈출구였다.
+   *    이제 PUT도 파이프라인을 타고 그 2단계가 **저장된** 문서를 마이그레이션하므로
+   *    GET·`PATCH .../ops`·`PUT .../schema` 셋이 전부 400이다. 인지된 결과이고,
+   *    복구 경로를 어떻게 줄지는 별도 설계 결정이다(`routes/pages.ts`의 GET 주석 참고).
+   */
+  describe('저장된 문서가 미지원 버전이면', () => {
+    /** 저장된 `schema`의 버전만 지원 범위 밖으로 바꾼다. `edit-pipeline.test.ts`의 같은 기법(제약 위반 가능 경로라 withTransaction으로 감싼다). */
+    async function seedUnsupportedVersion(ctx: TestContext, pageId: string): Promise<void> {
+      await withTransaction(ctx.db, (trx) =>
+        trx
+          .updateTable('pages')
+          .set({
+            schema: JSON.stringify({
+              version: CURRENT_DOCUMENT_VERSION + 1,
+              root: { id: 'n_root', type: 'Page', children: [] },
+            }),
+          })
+          .where('id', '=', pageId)
+          .execute(),
+      )
+    }
+
+    it('유효한 문서를 PUT해도 400이고 revision을 남기지 않는다', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+
+        // 양성 대조: 심기 **전에는** 같은 문서가 200이고 revision이 1행 생긴다.
+        // 이게 없으면 라우트가 아예 죽어도(모든 PUT이 400) 아래 단언이 통과한다.
+        const beforeSeed = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText('심기 전'))
+        expect(beforeSeed.statusCode, beforeSeed.body).toBe(200)
+        expect(await revisionRows(ctx, page.id)).toHaveLength(1)
+
+        await seedUnsupportedVersion(ctx, page.id)
+
+        const res = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText('심은 뒤'))
+        expect(res.statusCode, res.body).toBe(400)
+        expect(res.json().error.code).toBe('bad-request')
+        // 메시지까지 못박는 이유: 400만 보면 `toApiError` 호출부를 아무 400짜리
+        // 에러로 바꿔도 통과한다. 이 메시지는 파이프라인이 돌려준 `outcome.message`가
+        // 그대로 실려야만 나온다(`migrateDocument`가 던지는 문구).
+        expect(res.json().error.message).toBe(`지원하지 않는 문서 버전: ${CURRENT_DOCUMENT_VERSION + 1}`)
+
+        // 아무것도 쓰이지 않았다 — 심기 전의 1행에서 늘지 않는다.
+        expect(await revisionRows(ctx, page.id)).toHaveLength(1)
+        expect(await headSeqOf(ctx, page.id)).toBe(1)
+      })
+    })
+
+    it('들어온 문서가 카탈로그 위반이면 422다 (라우트의 사전 검증이 파이프라인보다 먼저다)', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+        await seedUnsupportedVersion(ctx, page.id)
+
+        // 이 픽스처에서만 라우트 3단계(`validatePage`)의 존재가 관측된다. 사전 검증이
+        // 있으면 422(카탈로그 위반), 지우면 파이프라인 2단계가 먼저 죽어 400(미지원
+        // 버전)이 된다. 다른 어떤 테스트도 이 차이를 보지 못한다 — 저장 문서가
+        // 정상이면 라우트와 파이프라인이 바이트 단위로 같은 422를 내기 때문이다.
+        const res = await putSchema(ctx, project.id, page.id, owner.cookie, {
+          version: 1,
+          root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Bogus' }] },
+        })
+        expect(res.statusCode, res.body).toBe(422)
+        expect(res.json().error.code).toBe('validation-failed')
+        expect(res.json().error.issues[0].code).toBe('unknown-type')
+      })
+    })
+
+    it('들어온 문서에 NUL 문자가 있으면 400 NUL이다 (라우트의 3.5단계가 파이프라인보다 먼저다)', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+        await seedUnsupportedVersion(ctx, page.id)
+
+        // 위와 같은 이유. 3.5단계를 지우면 파이프라인 2단계가 먼저 죽어 **같은
+        // 400이지만 다른 메시지**('지원하지 않는 문서 버전')가 나온다 — 그래서
+        // 상태 코드가 아니라 메시지가 판별력을 낸다.
+        const nul = String.fromCharCode(0)
+        const res = await putSchema(ctx, project.id, page.id, owner.cookie, {
+          version: 1,
+          root: { id: 'n_root', type: 'Page', children: [{ id: 'n_text', type: 'Text', props: { content: `a${nul}b` } }] },
+        })
+        expect(res.statusCode, res.body).toBe(400)
+        expect(res.json().error.message).toContain('NUL')
       })
     })
   })

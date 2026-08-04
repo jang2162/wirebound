@@ -308,7 +308,12 @@ describe('repos/revisions', () => {
         root: { id: 'n_root', type: 'Page', children: [{ id: 'n_text', type: 'Text', props: { content: `a${nul}b` } }] },
       }
 
-      await expect(writePageSchemaAtSeq(ctx.db, page.id, docWithNul, 1, 1)).rejects.toThrow()
+      // `rejects.toThrow()`만 두면 **22P05가 아닌 이유로 실패해도 통과한다** — 예컨대
+      // 이 함수 맨 앞의 `isTransaction` 가드가 던지는 에러도 rejection이다. 그러면
+      // 이 테스트 이름이 주장하는 "NUL 문자로 인한 22P05"가 실제로 일어났는지는
+      // 아무도 확인하지 않는다. pg 에러의 SQLSTATE는 message가 아니라 `code`에
+      // 실리므로(message는 'unsupported Unicode escape sequence'다) 코드를 단언한다.
+      await expect(writePageSchemaAtSeq(ctx.db, page.id, docWithNul, 1, 1)).rejects.toMatchObject({ code: '22P05' })
 
       // 세이브포인트가 실제로 트랜잭션을 지켰다는 유일한 증거: 같은 withApi
       // 트랜잭션 위에서 던진 이후 쿼리가 25P02 없이 성공한다. "실패한다"만

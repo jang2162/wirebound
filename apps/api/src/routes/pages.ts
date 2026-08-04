@@ -235,8 +235,17 @@ export function pageRoutes() {
       // 볼 일이 없지만, 그 보장은 이 프로세스가 아는 `CURRENT_DOCUMENT_VERSION` 안에서만
       // 유효하다 — 더 새 배포가 저장한 문서를 이 프로세스가 되읽으면(예: 배포 롤백,
       // 여러 버전이 같은 DB를 공유하는 롤링 배포) `migrateDocument`가 똑같이 던진다.
-      // 여기서 잡지 않으면 그 페이지의 모든 후속 GET이 처리되지 않은 예외로 500이
-      // 되고, PUT과 달리 그 페이지는 고칠 방법(같은 GET)조차 막혀 영구히 죽는다.
+      // 여기서 잡지 않으면 그 페이지의 모든 후속 GET이 처리되지 않은 예외로 500이 된다.
+      //
+      // **그리고 그런 문서는 API로 되살릴 수 없다 — 인지된 결과다.** 전에는 `PUT
+      // .../schema`가 탈출구였다: 그 경로는 **들어온** 문서만 마이그레이션하고 저장된
+      // 문서를 통째로 덮어썼기 때문이다. 지금은 PUT도 편집 파이프라인을 타고, 그
+      // 2단계가 **저장된** 문서를 `migrateDocument`에 태워 `unsupported-version` →
+      // 400으로 끝난다. 즉 GET·`PATCH .../ops`·`PUT .../schema` 세 경로가 전부 같은
+      // 이유로 400이다. 그래도 파이프라인을 우회하는 쓰기 경로를 되살리지는 않는다 —
+      // 그것은 D1(모든 스키마 변경이 revision을 남긴다)을 다시 뚫는 일이고, 복구
+      // 경로를 어떻게 줄지는 별도 설계 결정이다(P6 스냅샷 복원이 유력한 자리다).
+      // 여기서 500을 400으로 바꾸는 것은 그 사이에 최소한 원인을 말해 주기 위해서다.
       let migrated
       try {
         migrated = migrateDocument(page.schema)
@@ -359,9 +368,12 @@ export function pageRoutes() {
       // 마이그레이션으로 올라간 버전까지 정확히 되돌린다.
       //
       // 이 `replace /version`은 파이프라인 7단계(`after.version !== before.version`이면
-      // `invalid`)에 걸리지 않는다. `migrateDocument`는 목표 버전(`CURRENT_DOCUMENT_VERSION`)에
-      // 도달하거나 던지거나 둘 중 하나이고, 저장된 문서(파이프라인 2단계)와 들어온
-      // 문서(위 2단계)를 둘 다 그 함수에 태우므로 두 버전이 반드시 같다.
+      // `invalid`)에 걸리지 않는다. **`MIGRATIONS`의 모든 단계가 `to <= CURRENT_DOCUMENT_VERSION`을
+      // 지킨다는 전제 하에** `migrateDocument`는 목표 버전에 도달하거나 던지거나 둘 중
+      // 하나이고, 저장된 문서(파이프라인 2단계)와 들어온 문서(위 2단계)를 둘 다 그
+      // 함수에 태우므로 두 버전이 반드시 같다. 그 전제가 깨지면(어떤 단계의 `to`가
+      // 목표를 넘으면) `migrateDocument`가 목표를 초과한 채 반환하므로 이 성질도 함께
+      // 깨진다 — 그 보증은 `packages/schema`의 몫이다.
       const outcome = await applyEdit(app.db, {
         projectId,
         pageId,

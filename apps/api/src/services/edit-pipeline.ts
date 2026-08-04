@@ -38,8 +38,12 @@
  * `DocumentEnvelopeSchema`에서 그냥 양의 정수이고, `validatePage`는 버전 값 자체의
  * 의미를 검사하지 않는다). 이걸 그대로 저장하면 다음 읽기부터 `migrateDocument`가
  * `version > target`으로 던져 그 페이지의 모든 GET·편집이 영구히 막힌다 —
- * `not-found`·`stale`과 달리 클라이언트가 스스로 복구할 방법이 없다(유일한 탈출구인
- * `PUT .../schema` 전체 교체를 이 파이프라인을 쓰는 편집기 클라이언트는 쓰지 않는다).
+ * `not-found`·`stale`과 달리 클라이언트가 스스로 복구할 방법이 없다. **`PUT
+ * .../schema` 전체 교체도 탈출구가 아니다:** 그 라우트도 이 파이프라인을 타므로
+ * 아래 2단계가 저장된 문서를 그대로 `migrateDocument`에 태워 `unsupported-version`으로
+ * 끝난다. 즉 GET·`PATCH .../ops`·`PUT .../schema` 세 경로가 전부 400이 되고, 그
+ * 페이지는 API로 복구할 수 없다(인지된 결과 — `routes/pages.ts`의 GET 핸들러 주석에
+ * 재현 조건과 함께 적어 뒀다). 그래서 이 7단계가 사후 복구가 아니라 **사전 차단**이다.
  * `before`는 2단계에서 이미 최신 버전으로 올라와 있으므로, `ops`가 `/version`을
  * 건드리지 않았다면 `after.version`은 `before.version`과 항상 같아야 한다 — 이
  * 불변식을 REST·WebSocket(P3) 두 호출자가 각자 다시 지키게 하는 대신 여기(공유
