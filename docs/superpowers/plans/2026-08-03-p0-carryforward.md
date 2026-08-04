@@ -50,7 +50,7 @@ P0에서는 소비자가 번들러뿐이라 무해했다. 그러나 **P1은 `app
 
 둘 다 `{ version: number; root: WbNode }`이고 판별자가 없어 상호 대입된다. 다음이 전부 컴파일된다:
 
-- `renderComposed(page, layout)` — 인자 뒤바꿈. 조용히 렌더된다(3344자 대신 1885자의 엉뚱한 출력).
+- `renderComposed`의 인자 뒤바꿈. 실제 시그니처는 `renderComposed(layout, page)`인데 `renderComposed(page, layout)`로 넘겨도 컴파일되고 조용히 렌더된다(3344자 대신 1885자의 엉뚱한 출력).
 - `validatePage(layoutDoc)` — Slot 하나가 필수인 레이아웃에 "Slot 금지" 규칙을 적용한다.
 - `renderDocument(doc: PageDocument)`는 이미 `compose.tsx`에서 `LayoutDocument`를 받고 있다. 타입이 구분되지 않아 동작할 뿐이라 시그니처가 거짓말을 하고 있다.
 
