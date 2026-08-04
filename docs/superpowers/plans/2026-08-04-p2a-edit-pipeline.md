@@ -845,8 +845,8 @@ git commit -m "feat(db): revisions 테이블과 pages.head_seq 추가"
 **Files:**
 - Create: `apps/api/src/repos/revisions.ts`
 - Create: `apps/api/src/db/nul-guard.ts`
-- Modify: `apps/api/src/repos/pages.ts` (`lockPageForEdit`·`writePageSchemaAtSeq` 추가, `updatePageSchema` 제거)
-- Modify: `apps/api/src/routes/pages.ts` (`containsNulByte` 제거 후 import, `updatePageSchema` 호출 임시 대체)
+- Modify: `apps/api/src/repos/pages.ts` (`lockPageForEdit`·`writePageSchemaAtSeq` 추가. `updatePageSchema`는 그대로 둔다 — 태스크 7이 지운다)
+- Modify: `apps/api/src/routes/pages.ts` (`containsNulByte` 정의를 제거하고 `db/nul-guard.ts`에서 import. 그 밖에는 손대지 않는다)
 - Create: `apps/api/test/repos-revisions.test.ts`
 
 **Interfaces:**
@@ -990,11 +990,11 @@ pnpm vitest run apps/api/test/repos-revisions.test.ts
 - 반환값 없음(`void`). 호출자(파이프라인)가 이미 결과 문서를 갖고 있다.
 - `withTransaction`으로 감싼다 — `schema::jsonb` 캐스팅이 NUL로 실패할 수 있다(`updatePageSchema`가 그랬던 것과 같은 이유). 파이프라인이 사전에 막지만, 방어선은 남긴다.
 
-`updatePageSchema`를 **제거**한다. 호출자가 `routes/pages.ts`의 `PUT .../schema` 하나뿐이고, 태스크 7이 그것을 파이프라인으로 옮긴다. 이 태스크에서는 그 라우트가 아직 파이프라인을 쓰지 않으므로, **임시로** `withTransaction` + `lockPageForEdit` + `writePageSchemaAtSeq(head_seq 그대로)` 조합으로 같은 동작을 내게 바꾼다. 태스크 7이 그 자리를 파이프라인 호출로 다시 바꾼다.
+**`updatePageSchema`는 이 태스크에서 손대지 않는다.** 그대로 남겨 둔다 — `routes/pages.ts`의 `PUT .../schema`가 아직 그것을 쓰고 있고, 태스크 7이 그 라우트를 파이프라인으로 옮기면서 함수까지 함께 지운다.
 
-> 이 임시 조치를 남기는 이유: `updatePageSchema`를 남겨 두면 D1을 우회하는 두 번째 쓰기 경로가 계속 살아 있게 되고, 태스크 7에서 지워지지 않은 채 잊힐 위험이 있다. 함수를 지금 없애고 호출부를 명시적으로 임시 코드로 만들어 두면 태스크 7이 그것을 반드시 만진다.
+> **왜 지금 지우지 않는가.** 지금 지우면 라우트가 임시로 `withTransaction`·`lockPageForEdit`·`writePageSchemaAtSeq`를 직접 부르게 되는데, 그것은 Global Constraints의 계층 규칙("`routes/`는 SQL을 직접 쓰지 않는다")을 정면으로 어긴다. 한 태스크의 편의를 위해 프로젝트의 계층 규칙을 임시로 깨뜨리는 것은 값이 없다 — 태스크 7의 Step 3이 "`updatePageSchema`가 코드베이스에 남아 있지 않다"를 명시적으로 확인하므로, 잊힐 위험은 그쪽에서 닫힌다.
 
-`updatePageSchema`의 독스트링에 담긴 지식(NUL → `22P05`, 세이브포인트가 필요한 이유)은 `writePageSchemaAtSeq`로 옮긴다.
+`updatePageSchema`의 독스트링에 담긴 지식(NUL → `22P05`, 세이브포인트가 필요한 이유)은 **복사해서** `writePageSchemaAtSeq`에도 남긴다. 태스크 7이 원본을 지울 때 그 지식이 함께 사라지면 안 된다.
 
 - [ ] **Step 6: 테스트를 통과시키고 변이 검사**
 
@@ -1315,11 +1315,12 @@ D1(모든 스키마 변경이 revision을 남긴다)을 완성한다.
 
 **Files:**
 - Modify: `apps/api/src/routes/pages.ts`
+- Modify: `apps/api/src/repos/pages.ts` (`updatePageSchema` 제거)
 - Modify: `apps/api/test/pages.test.ts`
 
 **Interfaces:**
 - Consumes: `services/edit-pipeline.ts`의 `applyEdit`
-- Produces: `PUT .../schema`가 revision을 남기고 `head_seq`를 올린다. 응답 형태는 **바뀌지 않는다**(페이지 객체 그대로, 이제 `headSeq` 포함).
+- Produces: `PUT .../schema`가 revision을 남기고 `head_seq`를 올린다. 응답 형태는 **바뀌지 않는다**(페이지 객체 그대로, 이제 `headSeq` 포함). `repos/pages.ts`에서 `updatePageSchema`가 사라진다.
 
 - [ ] **Step 1: 테스트를 먼저 쓴다**
 
@@ -1363,9 +1364,18 @@ D1(모든 스키마 변경이 revision을 남긴다)을 완성한다.
 - 파이프라인 결과 매핑은 `PATCH .../ops`와 같다. `patch-failed`는 `replace /root`에서 발생할 수 없지만(경로가 항상 존재한다) `switch`의 모든 가지를 채운다.
 - 성공 시 응답은 **페이지 객체**다(형태 불변). 파이프라인이 돌려준 `schema`·`schemaVersion`·`seq`로 `toResponse`에 넘길 레코드를 조립한다 — DB를 다시 조회하지 않는다.
 
-- [ ] **Step 3: 태스크 4의 임시 코드를 지운다**
+- [ ] **Step 3: `updatePageSchema`를 지운다**
 
-태스크 4가 `updatePageSchema` 제거 후 남긴 임시 조합(`withTransaction` + `lockPageForEdit` + `writePageSchemaAtSeq`)이 이 핸들러에서 완전히 사라져야 한다. **`routes/pages.ts`에 `lockPageForEdit`·`writePageSchemaAtSeq`·`withTransaction` import가 하나도 남지 않는 것이 확인 방법이다** — 라우트는 SQL도 트랜잭션도 직접 다루지 않는다(계층 규칙).
+이 핸들러가 파이프라인을 쓰게 되면 `repos/pages.ts`의 `updatePageSchema`는 호출자가 없어진다. **그 함수를 지운다** — D1을 우회하는 두 번째 쓰기 경로(revision 없이 `pages.schema`를 갱신하는 경로)가 코드베이스에 남아 있으면, 나중에 누군가 그것을 다시 부르는 순간 `head_seq`와 문서가 조용히 어긋난다.
+
+확인 방법 두 가지를 모두 만족해야 한다:
+
+```bash
+rg 'updatePageSchema' apps/api          # 결과가 0건이어야 한다
+rg 'withTransaction|lockPageForEdit|writePageSchemaAtSeq' apps/api/src/routes  # 결과가 0건이어야 한다
+```
+
+두 번째는 계층 규칙의 확인이다 — 라우트는 SQL도 트랜잭션도 직접 다루지 않는다.
 
 - [ ] **Step 4: 통과 확인과 변이 검사**
 
