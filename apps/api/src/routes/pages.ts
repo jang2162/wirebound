@@ -100,7 +100,16 @@ export function pageRoutes() {
       // 설계 §13.1: 읽을 때 최신 버전으로 올려 내보낸다. 이 응답을 만드는 데만
       // 쓰고, 올라간 결과를 다시 저장하지는 않는다 — 다음 저장(PUT .../schema) 때
       // 갱신된다.
-      return toResponse({ ...page, schema: migrateDocument(page.schema) })
+      //
+      // migrateDocument는 한 번만 부르고 `schemaVersion`·`schema`를 **그 결과 하나**에서
+      // 함께 파생시킨다. 저장된 `schema_version` 컬럼을 그대로 흘려보내면(예:
+      // `{ ...page, schema: migrateDocument(page.schema) }`처럼 스프레드로 옛 컬럼
+      // 값을 살려 두면) 실제 마이그레이션이 문서 버전을 올리는 순간 응답의
+      // `schemaVersion`과 `schema.version`이 서로 다른 값을 가리키게 된다 —
+      // `PUT .../schema`가 저장 시 `migrated.version`으로 두 값을 동시에 맞추는 것과
+      // 같은 이유로, 읽기도 똑같이 해야 한다.
+      const migrated = migrateDocument(page.schema)
+      return toResponse({ ...page, schema: migrated, schemaVersion: migrated.version })
     })
 
     app.post('/:projectId/pages', { preHandler: projectGuard('editor') }, async (request, reply) => {

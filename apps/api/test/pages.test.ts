@@ -306,6 +306,34 @@ describe('GET /api/projects/:projectId/pages/:pageId', () => {
       expect(res.statusCode).toBe(200)
     })
   })
+
+  it('schemaVersion은 항상 schema.version과 같다 (컬럼이 문서 안 버전과 어긋나 있어도)', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+
+      // 오늘은 @wirebound/schema의 MIGRATIONS가 비어 있어 실제 마이그레이션으로
+      // schema.version을 끌어올릴 방법이 없다 — 라우트도 migrateDocument를 기본
+      // 인자(내장 MIGRATIONS·CURRENT_DOCUMENT_VERSION)로만 부르므로 이 테스트에서
+      // 다른 마이그레이션 체인을 주입할 수도 없다. 대신 "저장된 schema_version
+      // 컬럼이 문서 내부 버전과 어긋난" 상태를 DB에 직접 만들어 같은 모양의
+      // 불일치를 재현한다 — 실제 마이그레이션이 문서를 올렸는데 컬럼 갱신이
+      // 따라가지 못한 상황과 관찰 가능한 결과가 동일하다: "응답의 schemaVersion이
+      // 컬럼값을 그대로 흘려보내는가, 아니면 방금 만든 migrated 결과에서
+      // 파생되는가"라는, 이 버그가 실제로 갈리는 지점을 정확히 건드린다.
+      await ctx.db.updateTable('pages').set({ schema_version: 999 }).where('id', '=', page.id).execute()
+
+      const res = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+      })
+      expect(res.statusCode).toBe(200)
+      const body = res.json() as PageResponse
+      expect(body.schemaVersion).toBe(body.schema.version)
+      expect(body.schemaVersion).not.toBe(999)
+    })
+  })
 })
 
 describe('PATCH /api/projects/:projectId/pages/:pageId', () => {
@@ -696,6 +724,21 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         .executeTakeFirstOrThrow()
       expect(row.schema).toEqual(originalSchema)
       expect(row.schema_version).toBe(page.schemaVersion)
+    })
+  })
+
+  it('없는 pageId는 404', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+
+      const res = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${project.id}/pages/${NONEXISTENT_UUID}/schema`,
+        cookies: owner.cookie,
+        payload: { schema: minimalValidDoc() },
+      })
+      expect(res.statusCode).toBe(404)
     })
   })
 
