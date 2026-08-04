@@ -18,6 +18,12 @@
  * 1·3단계가 갈리는 이유: "요청이 잘못됨"(400)과 "내용이 처리 불가함"(422)은 다른
  * 성질이다(설계 §13). 1~3 중 어디서든 실패하면 저장(4단계)에 도달하지 못하므로
  * 기존 `schema`는 그대로 남는다 — 이 게이트가 존재하는 이유 자체다.
+ *
+ * **`PATCH .../ops`는 같은 게이트를 부분 편집에 대해 수행한다.** 다만 검증·적용·
+ * 이력 기록을 이 파일이 직접 하지 않고 `services/edit-pipeline.ts`의 `applyEdit`
+ * 하나에 맡긴다 — P3의 WebSocket 핸들러가 같은 함수를 부르므로, 규칙이 이 파일에
+ * 있으면 두 진입점이 갈라진다. 여기 남는 것은 zod 경계(본문 모양·경로 제약·ops 상한)와
+ * `EditOutcome`의 실패 사유를 상태 코드로 옮기는 일뿐이다.
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
@@ -30,8 +36,9 @@ import {
 } from '@wirebound/schema'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
-import { badRequest, notFound, validationFailed } from '../errors'
+import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
+import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
 import {
   MenuNodeNotFoundError,
   deletePage,
@@ -75,6 +82,117 @@ const UpdatePageBody = z
  * 갖고 선언되지 않은 키(예: `style`)를 갖지 않는다.
  */
 const PutSchemaBody = z.strictObject({ schema: DocumentEnvelopeSchema })
+
+/**
+ * ops의 경로 제약. `/root`이거나 `/root/`로 시작해야 한다.
+ *
+ * `version`은 마이그레이션이 소유하는 필드이지 편집 대상이 아니다(설계 §13.1).
+ * 문서 루트 자체(`""`)는 `applyOp`가 애초에 거부한다. 이 제약을 **HTTP 본문에만**
+ * 거는 이유: `PUT .../schema`가 파이프라인을 부를 때 만드는 `replace /version`은
+ * 서버가 스스로 만든 것이라 신뢰할 수 있고, 이 zod를 거치지 않는다.
+ *
+ * 파이프라인도 `/version` 편집을 `invalid`(422)로 막지만 그건 마지막 방어선이다 —
+ * 여기서 400으로 미리 끊어야 "본문이 계약을 어겼다"와 "문서 내용이 처리 불가하다"가
+ * 섞이지 않는다(설계 §13).
+ */
+const PatchPath = z
+  .string()
+  .max(2000, '경로가 너무 깁니다')
+  .refine((path) => path === '/root' || path.startsWith('/root/'), {
+    message: '경로는 /root 아래여야 합니다',
+  })
+
+/**
+ * `add`·`replace`가 싣는 임의의 JSON 값. **키 자체가 있어야 한다** — 값 없는 add는
+ * 문서에 `undefined`를 심고, 그건 jsonb 직렬화에서 조용히 사라져 클라이언트가 보낸
+ * 편집과 서버에 남은 문서가 말없이 갈라진다.
+ *
+ * **키 부재를 실제로 막는 것은 zod 4.4.3의 객체 파서다.** `.optional()`이 붙지 않은
+ * 필드는 그 타입이 `undefined`를 받아들이든 말든 키가 없으면 `invalid_type`으로
+ * 거부한다 — 변이 검사로 확인했다: 아래 술어를 `() => true`로 바꿔도 값 없는 add는
+ * 여전히 400이고, `.optional()`을 붙여야 비로소 통과한다. 그러니 이 술어는 그 판정을
+ * 대신하는 게 아니라 **그보다 먼저 걸려 사람이 읽을 메시지를 주는 층**이다. 술어 없이
+ * `z.unknown()`만 두면 응답에 "잘못된 입력: 예상 타입은 nonoptional, 받은 타입은
+ * undefined입니다"가 실려 zod 내부 용어가 그대로 클라이언트에게 새어 나간다.
+ *
+ * `envelope.ts`의 `SetPropActionSchema`에는 "z.unknown()은 키를 선택적으로 만든다"는
+ * 정반대 주석이 달려 있다 — 지금 zod에서는 사실이 아니다. 그 주석을 믿고 이 필드를
+ * `.optional()`로 바꾸면 값 없는 add가 통과한다.
+ *
+ * `null`은 통과한다 — 정당한 JSON 값이다. 막는 것은 값의 **부재**뿐이다.
+ */
+const PatchValue = z.custom<unknown>((value) => value !== undefined, { message: 'value가 필요합니다' })
+
+/**
+ * ops 하나. `@wirebound/schema`의 `PatchOp`(add·remove·replace·move 넷)와 같은
+ * 모양을 zod로 다시 쓴 것이다 — 그 패키지에는 대응하는 zod 스키마가 없다. 패치
+ * 함수들은 이미 신뢰된 입력을 받는 순수 함수이고(브라우저에서도 돈다), 신뢰할 수
+ * 없는 입력을 거르는 것은 HTTP 경계인 이 파일의 몫이기 때문이다. 두 정의가 갈라지면
+ * 컴파일이 깨진다 — `applyEdit`이 `PatchOp[]`를 받으므로 여기 추론 결과가 그 타입에
+ * 대입 가능해야 한다.
+ *
+ * 네 종류 밖(예: RFC 6902의 `copy`)은 여기서 400이다. 파이프라인은 op 종류를 검사
+ * 하지 않는다 — `applyOp`의 switch가 어느 분기도 타지 않아 문서가 그대로 남으므로,
+ * 여기서 막지 않으면 "아무 일도 안 일어났는데 revision만 남는" 편집이 된다.
+ */
+const PatchOpBody = z.discriminatedUnion('op', [
+  z.strictObject({ op: z.literal('add'), path: PatchPath, value: PatchValue }),
+  z.strictObject({ op: z.literal('remove'), path: PatchPath }),
+  z.strictObject({ op: z.literal('replace'), path: PatchPath, value: PatchValue }),
+  z.strictObject({ op: z.literal('move'), path: PatchPath, from: PatchPath }),
+])
+
+/** `PATCH .../ops`의 본문. */
+const OpsBody = z.strictObject({
+  /** 클라이언트가 아는 마지막 seq. 새 페이지(이력 없음)는 0이다. */
+  baseSeq: z.int().min(0),
+  /**
+   * 최대 200개. 상한을 두는 이유는 요청 하나가 임의로 큰 문서 변형을 일으켜
+   * 메모리·CPU를 소진하는 것을 막기 위해서다 — 파이프라인은 ops마다 문서를
+   * structuredClone하므로 비용이 ops 수에 선형이다. 사람의 한 동작이 만드는
+   * ops는 많아야 몇 개이고, 큰 변형은 `PUT .../schema`(통째 교체)의 몫이다.
+   *
+   * 빈 배열은 허용한다(`.min(1)`을 걸지 않는다) — 파이프라인이 빈 ops에도 revision을
+   * 남기도록 정의돼 있고, 그 성질에 기대는 호출자가 생길 수 있다.
+   */
+  ops: z.array(PatchOpBody).max(200, 'ops는 200개 이하여야 합니다'),
+  /**
+   * 클라이언트의 pending 큐 식별자. 서버는 저장하지 않고 응답에 그대로 되돌려
+   * 준다 — 멱등 키가 아니다(설계 결정 D4). 중복 적용은 baseSeq가 막는다.
+   */
+  clientOpId: z.string().min(1).max(64).optional(),
+})
+
+/**
+ * 파이프라인의 실패 사유를 HTTP 에러로 옮긴다. 매핑 표가 곧 이 함수다.
+ *
+ * **`default` 절을 두지 않는다.** 반환 타입을 `ApiError`로 못박아 두면 `EditOutcome`에
+ * 새 사유가 생기는 순간 "값을 반환하지 않고 끝나는 경로가 있다"로 컴파일이 깨진다.
+ * `default`를 두면 그 신호가 사라지고, 새 사유가 조용히 엉뚱한 상태 코드로 나간다.
+ */
+function toApiError(outcome: Extract<EditOutcome, { ok: false }>, baseSeq: number): ApiError {
+  switch (outcome.reason) {
+    case 'not-found':
+      return notFound()
+    case 'stale':
+      // 현재 headSeq를 에러 봉투의 새 필드가 아니라 **메시지에** 싣는다: 봉투는
+      // `{ error: { code, message, issues? } }` 하나뿐이고, 409를 받은 클라이언트는
+      // 어차피 페이지를 재조회한다 — 권위 있는 값은 그 재조회 응답의 headSeq다.
+      // 여기 숫자는 사람이 로그를 읽을 때를 위한 것이다.
+      return conflict(`페이지가 이미 변경되었습니다 (요청 baseSeq ${baseSeq}, 현재 ${outcome.headSeq})`)
+    case 'patch-failed':
+      // 400이 아니라 409인 이유: 본문 자체는 계약을 지켰다(zod를 통과했다). 서버
+      // 문서의 현재 모양과 맞지 않을 뿐이라 stale과 같은 성질의 충돌이고, 클라이언트의
+      // 대응도 같다 — 재조회 후 다시 시도한다.
+      return conflict(`편집을 적용할 수 없습니다: ${outcome.message}`)
+    case 'invalid':
+      return validationFailed('스키마 검증에 실패했습니다', outcome.issues)
+    case 'unsupported-version':
+      return badRequest(outcome.message)
+    case 'nul-byte':
+      return badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
+  }
+}
 
 /** API 계약이 노출하는 필드만 담는다 — 저장소의 `projectId`는 응답에 싣지 않는다(경로에 이미 있다). */
 function toResponse(page: PageRecord) {
@@ -210,6 +328,49 @@ export function pageRoutes() {
         throw notFound()
       }
       return toResponse(page)
+    })
+
+    app.patch('/:projectId/pages/:pageId/ops', { preHandler: projectGuard('editor') }, async (request) => {
+      const { projectId, pageId } = parseParams(PageParams, request.params)
+      const body = parseBody(OpsBody, request.body)
+
+      // `projectGuard('editor')`가 이미 인증을 요구하므로 여기 도달했다면
+      // `currentUser`는 있다. 그래도 `as`로 좁히지 않고 던지는 이유: 언젠가 가드가
+      // 이 라우트에서 빠지면 `as`는 그대로 통과시켜 `actor_id`가 undefined인 revision을
+      // append-only 로그에 남기지만(되돌릴 수 없다), 이 던지기는 401로 막는다.
+      const currentUser = request.currentUser
+      if (!currentUser) {
+        throw unauthenticated()
+      }
+
+      // 검증·적용·역패치·기록은 전부 파이프라인이 한 트랜잭션 안에서 한다. 이
+      // 핸들러는 그 결과를 HTTP로 옮기기만 한다 — P3의 WebSocket이 같은 `applyEdit`을
+      // 부르므로, 규칙을 여기 두면 두 진입점이 갈라진다.
+      const outcome = await applyEdit(app.db, {
+        projectId,
+        pageId,
+        baseSeq: body.baseSeq,
+        ops: body.ops,
+        actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+      })
+
+      if (!outcome.ok) {
+        throw toApiError(outcome, body.baseSeq)
+      }
+
+      // 성공 결과의 `schema`(적용 후 문서 전체)는 응답에 싣지 않는다 — 클라이언트는
+      // 같은 ops를 자기도 적용했으므로 문서를 이미 갖고 있다. 편집마다 문서 전체를
+      // 되돌려 주면 이 엔드포인트를 타이핑 속도로 부르는 의미가 없어진다.
+      // `clientOpId`는 요청에 있었을 때만 넣는다 — 서버가 만들어 내는 값이 아니라
+      // 클라이언트가 맡긴 값을 그대로 되돌려 주는 것이므로, 없던 키가 생기면
+      // 클라이언트의 pending 큐 대조가 어긋난다.
+      return {
+        seq: outcome.seq,
+        revisionId: outcome.revisionId,
+        inverse: outcome.inverse,
+        schemaVersion: outcome.schemaVersion,
+        ...(body.clientOpId !== undefined ? { clientOpId: body.clientOpId } : {}),
+      }
     })
 
     app.delete('/:projectId/pages/:pageId', { preHandler: projectGuard('editor') }, async (request, reply) => {

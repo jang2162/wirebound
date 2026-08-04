@@ -146,6 +146,17 @@ const CASES: Case[] = [
     setup: 페이지하나,
   },
   {
+    label: '페이지 ops 편집',
+    method: 'PATCH',
+    url: '/api/projects/:projectId/pages/:pageId/ops',
+    // 빈 ops를 보낸다 — 이 행이 검사하는 것은 권한 판정이지 편집 내용이 아니다.
+    // 문서를 실제로 바꾸는 payload를 쓰면 카탈로그·경로 규칙이 실패할 때 권한과
+    // 무관한 이유로 이 행 전체가 무너진다.
+    payload: { baseSeq: 0, ops: [] },
+    allowed: ['owner', 'editor'],
+    setup: 페이지하나,
+  },
+  {
     label: '페이지 삭제',
     method: 'DELETE',
     url: '/api/projects/:projectId/pages/:pageId',
