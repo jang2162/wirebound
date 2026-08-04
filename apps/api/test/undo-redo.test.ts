@@ -30,7 +30,7 @@ import {
  * **이 파일이 라우트를 거치기 때문에 닫히는 구멍이 하나 있다.** 케이스 1의 세 번째
  * 편집이 `move`인데, 그 전까지 저장소 전체에서 `PATCH .../ops`에 **유효한** `move`를
  * 보내는 테스트가 없었다(`revisions.test.ts`의 `move` 케이스는 `from`이 `/root` 밖이라
- * 400을 기대한다). 그래서 `routes/pages.ts`의 `PatchOpBody`에서 `move` 변형을 통째로
+ * 400을 기대한다). 그래서 `http/patch-ops.ts`의 `PatchOpBody`에서 `move` 변형을 통째로
  * 지워도 컴파일이 통과하고(좁아지는 쪽은 여전히 `PatchOp[]`에 대입 가능하다) 기존
  * 테스트도 전부 초록이었다. 이제 그러면 케이스 1이 400으로 죽는다.
  */
@@ -237,6 +237,45 @@ describe('undo/redo 왕복', () => {
       const restored = await getPage(ctx, fx)
       expect(restored.schema).toEqual(initial.schema)
       expect(restored.headSeq).toBe(6)
+    })
+  })
+
+  it('PUT .../schema가 만든 revision도 이력의 inverse로 되돌릴 수 있다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const initial = await getPage(ctx, fx)
+
+      // **이 왕복은 반드시 라우트를 거쳐야 한다.** `pages.test.ts`가 같은 성질을
+      // 검사하지만 저장된 문서에 `applyOps`를 **직접** 적용하므로 zod 경계를 지나지
+      // 않는다 — 그래서 이 경로가 400으로 튕기던 동안에도 그 테스트는 초록이었다
+      // (P2a 최종 리뷰 I1).
+      const put = await ctx.app.inject({
+        method: 'PUT',
+        url: `${pageUrl(fx)}/schema`,
+        cookies: fx.owner.cookie,
+        payload: {
+          schema: {
+            version: 1,
+            root: { id: 'n_put_root', type: 'Page', children: [NODE_A] },
+          },
+        },
+      })
+      expect(put.statusCode, put.body).toBe(200)
+
+      // 새로고침한 클라이언트처럼 이력에서만 inverse를 얻는다(설계 §7.3).
+      const revisions = await getRevisions(ctx, fx)
+      expect(revisions.map((r) => r.seq)).toEqual([1])
+      const inverse = revisions[0]?.inverse ?? []
+      // `/version`이 inverse에 실려 있다는 것 자체가 이 케이스의 전제다. 빠지면
+      // 왕복은 성립하지만 이 테스트가 겨냥한 경로를 지나지 않는다.
+      expect(inverse.map((op) => op.path)).toContain('/version')
+
+      const undo = await tryEdit(ctx, fx, 1, inverse)
+      expect(undo.statusCode, undo.body).toBe(200)
+
+      const restored = await getPage(ctx, fx)
+      expect(restored.schema).toEqual(initial.schema)
+      expect(restored.headSeq).toBe(2)
     })
   })
 

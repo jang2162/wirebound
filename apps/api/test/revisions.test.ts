@@ -31,10 +31,15 @@ import {
  * 1. `EditOutcome`의 여섯 실패 사유가 각각 어떤 상태 코드·에러 봉투가 되는가.
  * 2. 어떤 본문이 파이프라인에 **도달조차 못 하는가**(zod 경계).
  *
- * 2번이 중요한 이유: `/version` 편집 금지(케이스 13·14)처럼 zod가 막는 것과
- * 파이프라인이 막는 것이 겹칠 때, 기대 상태를 400(zod)으로 못박아야 zod 제약이
- * 사라진 순간을 잡아낸다. 422(파이프라인)로 느슨하게 기대하면 zod를 통째로 지워도
- * 초록인 채로 남는다.
+ * 2번이 중요한 이유: 경로 제약처럼 zod가 막는 것과 파이프라인이 막는 것이 겹칠 때,
+ * 기대 상태를 400(zod)으로 못박아야 zod 제약이 사라진 순간을 잡아낸다. 422(파이프라인)로
+ * 느슨하게 기대하면 zod를 통째로 지워도 초록인 채로 남는다.
+ *
+ * **`/version`은 그 반대 방향으로 고정한다.** P2a 최종 리뷰에서 D6를 개정해 `PatchPath`가
+ * `/version`을 허용하게 됐다(`PUT .../schema`가 만든 revision을 undo로 되돌릴 수 있어야
+ * 하기 때문이다). 그래서 `/version`을 다른 값으로 바꾸는 편집의 기대는 400이 아니라
+ * **422**이고, 그 422를 못박는 것이 곧 "버전 변조 차단이 zod가 아니라 파이프라인
+ * 7단계에 있다"를 고정하는 일이다.
  */
 
 const NONEXISTENT_UUID = '00000000-0000-0000-0000-000000000000'
@@ -271,16 +276,18 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
     })
   })
 
-  it('path가 /root 밖이면 400이다', async () => {
+  it('path가 /root 아래도 /version도 아니면 400이다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
-      // 파이프라인도 /version 편집을 422(invalid)로 막지만, 기대를 400으로 못박아야
-      // zod 제약(PatchPath)이 사라진 순간을 이 테스트가 잡는다.
+      // `/meta`는 봉투에 없는 최상위 키다. `PatchPath`가 사라지면 이 요청은 400이
+      // 아니라 다른 코드로 나간다(파이프라인이 `DocumentEnvelopeSchema`의
+      // strictObject 위반을 422로 잡는다) — 400을 못박아야 그 자리를 이 테스트가
+      // 지킨다.
       const res = await patchOps(
         ctx,
         fx,
-        { baseSeq: 0, ops: [{ op: 'replace', path: '/version', value: 2 }] },
+        { baseSeq: 0, ops: [{ op: 'add', path: '/meta', value: 2 }] },
         fx.owner.cookie,
       )
 
@@ -288,18 +295,82 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
     })
   })
 
-  it('move의 from이 /root 밖이면 400이다', async () => {
+  it('move의 from이 /root 아래도 /version도 아니면 400이다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
       const res = await patchOps(
         ctx,
         fx,
-        { baseSeq: 0, ops: [{ op: 'move', path: '/root/children/0', from: '/version' }] },
+        { baseSeq: 0, ops: [{ op: 'move', path: '/root/children/0', from: '/meta' }] },
         fx.owner.cookie,
       )
 
       expect(res.statusCode, res.body).toBe(400)
+    })
+  })
+
+  it('/version을 다른 값으로 바꾸면 400이 아니라 422다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      // D6 개정(P2a 최종 리뷰) 이후 `/version`은 zod를 통과한다. 버전 변조를 막는
+      // 것은 파이프라인 7단계(`after.version !== before.version` → `invalid`)이고,
+      // 이 케이스가 그 자리를 못박는다 — 7단계를 지우면 여기가 200이 된다.
+      const res = await patchOps(
+        ctx,
+        fx,
+        { baseSeq: 0, ops: [{ op: 'replace', path: '/version', value: 2 }] },
+        fx.owner.cookie,
+      )
+
+      expect(res.statusCode, res.body).toBe(422)
+      const error = res.json<{ error: { code: string; issues: { path: string }[] } }>().error
+      expect(error.code).toBe('validation-failed')
+      expect(error.issues[0]?.path).toBe('/version')
+    })
+  })
+
+  it('/version을 지우거나 다른 곳으로 옮기는 편집도 200이 아니다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      // D6 개정으로 `/version`이 zod를 통과하게 된 이상, `replace` 말고 `remove`·`move`도
+      // 그 경로를 탈 수 있다. 둘 다 문서에서 `version`을 없애므로 여기서 막히지 않으면
+      // 저장된 문서가 봉투를 잃는다.
+      const removed = await patchOps(
+        ctx,
+        fx,
+        { baseSeq: 0, ops: [{ op: 'remove', path: '/version' }] },
+        fx.owner.cookie,
+      )
+      expect(removed.statusCode, removed.body).toBe(422)
+
+      const moved = await patchOps(
+        ctx,
+        fx,
+        { baseSeq: 0, ops: [{ op: 'move', path: '/root/children/0', from: '/version' }] },
+        fx.owner.cookie,
+      )
+      expect(moved.statusCode, moved.body).toBe(422)
+    })
+  })
+
+  it('/version을 같은 값으로 다시 써넣는 편집은 통과한다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      // `PUT .../schema`가 만든 revision의 inverse가 정확히 이 모양이다. 이것이
+      // 통과하지 않으면 그 revision을 undo로 되돌릴 수 없다(왕복 자체는
+      // `undo-redo.test.ts`가 라우트를 거쳐 확인한다).
+      const res = await patchOps(
+        ctx,
+        fx,
+        { baseSeq: 0, ops: [{ op: 'replace', path: '/version', value: fx.page.schemaVersion }] },
+        fx.owner.cookie,
+      )
+
+      expect(res.statusCode, res.body).toBe(200)
     })
   })
 

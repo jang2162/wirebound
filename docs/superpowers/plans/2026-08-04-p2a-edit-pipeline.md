@@ -55,6 +55,14 @@
 
 **D6. ops의 `path`·`from`은 `/root`이거나 `/root/`로 시작해야 한다.** 그 밖(`/version` 등)은 400이다. `version`은 마이그레이션이 소유하는 필드이지 편집 대상이 아니다. `PUT .../schema` 경로가 내부적으로 만드는 `replace /version`은 파이프라인 함수를 직접 부르므로 이 zod 제약을 거치지 않는다 — 제약은 **HTTP 본문**에만 건다.
 
+> **P2a 최종 리뷰에서 개정: `/version`을 허용한다.** 위 원문은 `/version`을 zod에서 400으로 막았는데, 그러면 `PUT .../schema`가 만든 revision을 **문서화된 undo 경로로 되돌릴 수 없다.** 그 revision의 `ops`는 `[replace /root, replace /version]`이고 `invertOps`가 만드는 `inverse`에도 `/version`이 남으므로, README(§편집 파이프라인 4·5단계)가 정의한 대로 그 `inverse`를 `PATCH .../ops`로 되보내면 400으로 튕겼다(실측). 설계 §7.3은 undo를 보편 메커니즘으로 정의하고, P2b는 `GET .../revisions?mine=true` 응답만으로는 그 revision을 구분할 수 없다 — 되돌릴 수 없는 revision이 스택에 섞이는 것은 모델의 구멍이지 문서로 덮을 일이 아니다.
+>
+> **개정 후 규칙:** `path`·`from`은 `/root`이거나 `/root/`로 시작하거나, 정확히 `/version`이어야 한다. 그 밖은 여전히 400이다.
+>
+> **버전 변조 차단은 파이프라인 7단계가 담당한다**(`after.version !== before.version`이면 `invalid` → 422). 다른 값으로 바꾸면 거기서 막히고, 같은 값이면 무연산이라 PUT의 inverse만 통과한다. 즉 D6가 막으려던 실패("클라이언트가 버전을 바꿔 페이지를 영구히 못 열게 만든다")는 그대로 막힌다 — 상태 코드가 400에서 422로 바뀔 뿐이다. **대가:** `/version`에 관한 한 D5/D6의 400↔422 경계(본문 계약 위반 vs 내용 처리 불가)가 흐려진다.
+>
+> 고정하는 테스트: `revisions.test.ts`의 "`/version`을 다른 값으로 바꾸면 400이 아니라 422다"(앞쪽), `undo-redo.test.ts`의 "`PUT .../schema`가 만든 revision도 이력의 inverse로 되돌릴 수 있다"(뒤쪽, 라우트를 경유한다).
+
 **D7. `add`·`replace`의 `value` 키는 반드시 존재해야 한다.** JSON 본문에는 `undefined`가 없으므로, 키가 빠지면 `op.value`가 `undefined`가 되고 `applyOp`가 그 값을 문서에 심는다. 그 문서를 `JSON.stringify`로 저장하면 그 키가 **사라진다** — 서버가 200을 돌려준 편집 결과와 실제 저장된 문서가 달라진다. 키가 없으면 400이다.
 
 **D8. NUL(U+0000) 검사 대상은 "저장하는 것 전부"다.** `ops`·`inverse`·결과 문서 셋 다 검사한다. 결과 문서만 검사하면 `add` 후 `remove`처럼 값이 문서에 남지 않는 ops 쌍의 NUL을 놓치는데, 그 ops는 `revisions.ops`(jsonb)에 그대로 저장되므로 거기서 `22P05`로 죽는다.

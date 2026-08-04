@@ -31,8 +31,9 @@
  * **`PATCH .../ops`는 같은 게이트를 부분 편집에 대해 수행한다.** 다만 검증·적용·
  * 이력 기록을 이 파일이 직접 하지 않고 `services/edit-pipeline.ts`의 `applyEdit`
  * 하나에 맡긴다 — P3의 WebSocket 핸들러가 같은 함수를 부르므로, 규칙이 이 파일에
- * 있으면 두 진입점이 갈라진다. 여기 남는 것은 zod 경계(본문 모양·경로 제약·ops 상한)와
- * `EditOutcome`의 실패 사유를 상태 코드로 옮기는 일뿐이다.
+ * 있으면 두 진입점이 갈라진다. **같은 이유로 그 본문의 zod 경계(모양·경로 제약·ops
+ * 상한)도 이 파일에 두지 않는다** — `http/patch-ops.ts`에 있고 P3가 그것을 그대로
+ * import한다. 여기 남는 것은 `EditOutcome`의 실패 사유를 상태 코드로 옮기는 일뿐이다.
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
@@ -47,6 +48,7 @@ import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
+import { OpsBody } from '../http/patch-ops'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
 import { MenuNodeNotFoundError, deletePage, findPageById, insertPage, updatePage, type PageRecord } from '../repos/pages'
 
@@ -83,86 +85,6 @@ const UpdatePageBody = z
  * 갖고 선언되지 않은 키(예: `style`)를 갖지 않는다.
  */
 const PutSchemaBody = z.strictObject({ schema: DocumentEnvelopeSchema })
-
-/**
- * ops의 경로 제약. `/root`이거나 `/root/`로 시작해야 한다.
- *
- * `version`은 마이그레이션이 소유하는 필드이지 편집 대상이 아니다(설계 §13.1).
- * 문서 루트 자체(`""`)는 `applyOp`가 애초에 거부한다. 이 제약을 **HTTP 본문에만**
- * 거는 이유: `PUT .../schema`가 파이프라인을 부를 때 만드는 `replace /version`은
- * 서버가 스스로 만든 것이라 신뢰할 수 있고, 이 zod를 거치지 않는다.
- *
- * 파이프라인도 `/version` 편집을 `invalid`(422)로 막지만 그건 마지막 방어선이다 —
- * 여기서 400으로 미리 끊어야 "본문이 계약을 어겼다"와 "문서 내용이 처리 불가하다"가
- * 섞이지 않는다(설계 §13).
- */
-const PatchPath = z
-  .string()
-  .max(2000, '경로가 너무 깁니다')
-  .refine((path) => path === '/root' || path.startsWith('/root/'), {
-    message: '경로는 /root 아래여야 합니다',
-  })
-
-/**
- * `add`·`replace`가 싣는 임의의 JSON 값. **키 자체가 있어야 한다** — 값 없는 add는
- * 문서에 `undefined`를 심고, 그건 jsonb 직렬화에서 조용히 사라져 클라이언트가 보낸
- * 편집과 서버에 남은 문서가 말없이 갈라진다.
- *
- * **키 부재를 실제로 막는 것은 zod 4.4.3의 객체 파서다.** `.optional()`이 붙지 않은
- * 필드는 그 타입이 `undefined`를 받아들이든 말든 키가 없으면 `invalid_type`으로
- * 거부한다 — 변이 검사로 확인했다: 아래 술어를 `() => true`로 바꿔도 값 없는 add는
- * 여전히 400이고, `.optional()`을 붙여야 비로소 통과한다. 그러니 이 술어는 그 판정을
- * 대신하는 게 아니라 **그보다 먼저 걸려 사람이 읽을 메시지를 주는 층**이다. 술어 없이
- * `z.unknown()`만 두면 응답에 "잘못된 입력: 예상 타입은 nonoptional, 받은 타입은
- * undefined입니다"가 실려 zod 내부 용어가 그대로 클라이언트에게 새어 나간다.
- *
- * `envelope.ts`의 `SetPropActionSchema`에는 "z.unknown()은 키를 선택적으로 만든다"는
- * 정반대 주석이 달려 있다 — 지금 zod에서는 사실이 아니다. 그 주석을 믿고 이 필드를
- * `.optional()`로 바꾸면 값 없는 add가 통과한다.
- *
- * `null`은 통과한다 — 정당한 JSON 값이다. 막는 것은 값의 **부재**뿐이다.
- */
-const PatchValue = z.custom<unknown>((value) => value !== undefined, { message: 'value가 필요합니다' })
-
-/**
- * ops 하나. `@wirebound/schema`의 `PatchOp`(add·remove·replace·move 넷)와 같은
- * 모양을 zod로 다시 쓴 것이다 — 그 패키지에는 대응하는 zod 스키마가 없다. 패치
- * 함수들은 이미 신뢰된 입력을 받는 순수 함수이고(브라우저에서도 돈다), 신뢰할 수
- * 없는 입력을 거르는 것은 HTTP 경계인 이 파일의 몫이기 때문이다. 두 정의가 갈라지면
- * 컴파일이 깨진다 — `applyEdit`이 `PatchOp[]`를 받으므로 여기 추론 결과가 그 타입에
- * 대입 가능해야 한다.
- *
- * 네 종류 밖(예: RFC 6902의 `copy`)은 여기서 400이다. 파이프라인은 op 종류를 검사
- * 하지 않는다 — `applyOp`의 switch가 어느 분기도 타지 않아 문서가 그대로 남으므로,
- * 여기서 막지 않으면 "아무 일도 안 일어났는데 revision만 남는" 편집이 된다.
- */
-const PatchOpBody = z.discriminatedUnion('op', [
-  z.strictObject({ op: z.literal('add'), path: PatchPath, value: PatchValue }),
-  z.strictObject({ op: z.literal('remove'), path: PatchPath }),
-  z.strictObject({ op: z.literal('replace'), path: PatchPath, value: PatchValue }),
-  z.strictObject({ op: z.literal('move'), path: PatchPath, from: PatchPath }),
-])
-
-/** `PATCH .../ops`의 본문. */
-const OpsBody = z.strictObject({
-  /** 클라이언트가 아는 마지막 seq. 새 페이지(이력 없음)는 0이다. */
-  baseSeq: z.int().min(0),
-  /**
-   * 최대 200개. 상한을 두는 이유는 요청 하나가 임의로 큰 문서 변형을 일으켜
-   * 메모리·CPU를 소진하는 것을 막기 위해서다 — 파이프라인은 ops마다 문서를
-   * structuredClone하므로 비용이 ops 수에 선형이다. 사람의 한 동작이 만드는
-   * ops는 많아야 몇 개이고, 큰 변형은 `PUT .../schema`(통째 교체)의 몫이다.
-   *
-   * 빈 배열은 허용한다(`.min(1)`을 걸지 않는다) — 파이프라인이 빈 ops에도 revision을
-   * 남기도록 정의돼 있고, 그 성질에 기대는 호출자가 생길 수 있다.
-   */
-  ops: z.array(PatchOpBody).max(200, 'ops는 200개 이하여야 합니다'),
-  /**
-   * 클라이언트의 pending 큐 식별자. 서버는 저장하지 않고 응답에 그대로 되돌려
-   * 준다 — 멱등 키가 아니다(설계 결정 D4). 중복 적용은 baseSeq가 막는다.
-   */
-  clientOpId: z.string().min(1).max(64).optional(),
-})
 
 /**
  * 파이프라인의 실패 사유를 HTTP 에러로 옮긴다. 매핑 표가 곧 이 함수다.
@@ -336,8 +258,9 @@ export function pageRoutes() {
         throw badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
       }
 
-      // `PATCH .../ops`와 같은 이유로 `as`로 좁히지 않고 던진다 — 이 라우트도 이제
-      // append-only 로그에 actor를 남긴다.
+      // `PATCH .../ops`의 같은 검사와 같은 이유로 `as`로 좁히지 않고 던진다: 아래에서
+      // `currentUser.id`·`.name`을 **반드시** 읽으므로, `as` 버전은 가드가 빠지는 순간
+      // (본문·경로가 유효하면) 미인증 요청에 `null` 역참조로 500을 낸다.
       const currentUser = request.currentUser
       if (!currentUser) {
         throw unauthenticated()
@@ -407,7 +330,8 @@ export function pageRoutes() {
       // `projectGuard('editor')`가 이미 인증을 요구하므로 여기 도달했다면
       // `currentUser`는 있다. 그래도 `as`로 좁히지 않고 던지는 이유: 이 핸들러는 아래에서
       // `currentUser.id`·`.name`을 **반드시** 읽으므로, `as` 버전은 가드가 빠지는 순간
-      // 미인증 요청에 `null` 역참조로 500을 낸다(실측). 500은 처리되지 않은 프로그래밍
+      // 미인증 요청에 `null` 역참조로 500을 낸다(실측 — 단, `parseParams`·`parseBody`를
+      // 통과한 요청에 한한다. 그 앞에서 걸리면 400이다). 500은 처리되지 않은 프로그래밍
       // 오류지 "로그인이 필요하다"는 응답이 아니다 — 이 던지기가 그것을 401로 바꾼다.
       //
       // **actor 없는 revision이 로그에 남는 것을 막는 것은 아니다.** `applyEdit`에 넘길

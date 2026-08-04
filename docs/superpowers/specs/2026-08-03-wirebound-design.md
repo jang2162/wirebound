@@ -657,6 +657,8 @@ P3가 같은 파이프라인 위에 얹는다 — 서버의 검증·기록 절�
 
 undo도 새 revision으로 append되므로 다른 사람 화면과 절대 어긋나지 않는다.
 
+**문서 전체 교체(`PUT .../schema`)가 만든 revision도 같은 방식으로 되돌릴 수 있다** — 그 `inverse`는 `/root`뿐 아니라 `/version`도 담지만 편집 경로가 그것을 받아들인다(P2a 계획 D6 개정). undo 스택에 되돌릴 수 없는 항목이 섞이지 않는다.
+
 ### 7.4 LLM 편집 경로
 
 MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이프라인(검증 → revision → 브로드캐스트)은 완전히 같다. 에이전트가 고친 내용이 열려 있는 사람 화면에 즉시 나타나고, `actor_type='mcp'`, `actor_label='<토큰명>'`으로 구분 표시된다.

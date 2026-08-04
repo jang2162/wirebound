@@ -47,9 +47,23 @@ api 프로젝트의 vitest 테스트는 실제 Postgres에 붙는다. 컨테이�
 latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `migrate`를 실행할
 필요는 없다.
 
-각 테스트는 `test/helpers.ts`의 `withApi()`로 감싼다. `withApi`는 테스트 하나를
-트랜잭션으로 감싸고 끝나면 롤백하므로, 테스트가 커밋하는 데이터는 없다 — 다음
-테스트는 항상 깨끗한 스키마에서 시작한다.
+기본은 `test/helpers.ts`의 `withApi()`다. `withApi`는 테스트 하나를 트랜잭션으로
+감싸고 끝나면 롤백하므로 그 테스트가 커밋하는 데이터는 없다 — 다음 테스트는 항상
+깨끗한 스키마에서 시작한다.
+
+**예외가 하나 있다: `test/revisions-concurrency.test.ts`는 실제로 커밋한다.**
+`withApi`는 커넥션 하나·트랜잭션 하나 안에서 도므로 그 안에서 요청을 겹쳐도 전부
+직렬화된다 — 행 잠금과 `seq` 채번의 원자성은 **여러 커넥션이 실제로 커밋해야만**
+검증된다. 그 파일은 각 테스트 전후로 자기가 만든 `projects`·`users`를 스스로 지운다.
+새 테스트를 그 형식으로 쓰기 전에 "여러 커넥션이 실제로 커밋해야만 드러나는
+성질인가"를 먼저 확인한다. 아니면 `withApi`를 쓴다.
+
+**그 예외를 성립시키는 것은 `vitest.config.ts`의 api 프로젝트에 걸린
+`poolOptions.forks.singleFork`다 — 이 설정은 편의가 아니라 격리 전략의 일부다.**
+그것이 사라지면 커밋된 행이 동시에 도는 다른 파일의 `withApi` 트랜잭션에 보이고,
+그 파일의 정리 DELETE가 남의 데이터를 지운다(실제로 겪었다: 매 실행마다 서로 다른
+5~6개 파일이 깨졌다). 같은 목적으로 `fileParallelism: false`를 **쓰면 안 된다** —
+프로젝트 설정에서는 에러도 경고도 없이 조용히 무시된다.
 
 ## API 개요
 
@@ -111,8 +125,8 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
 | `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder? }`(하나 이상, `schema`는 여기서 못 바꾼다) | 200 페이지 |
 | `/api/projects/:projectId/pages/:pageId/schema` | PUT | editor | `{ schema }`(문서 봉투 전체) | 200 페이지(봉투 위반 400, 카탈로그 위반 422, 실패 시 기존 스키마 보존). 통째 교체도 revision을 남긴다 |
-| `/api/projects/:projectId/pages/:pageId/ops` | PATCH | editor | `{ baseSeq, ops[], clientOpId? }` | 200 `{ seq, revisionId, inverse, schemaVersion, clientOpId? }`(본문·경로 제약 위반과 지원하지 않는 문서 버전·NUL 문자는 400, baseSeq 불일치·패치 실패 409, 카탈로그 위반 422) |
-| `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순) |
+| `/api/projects/:projectId/pages/:pageId/ops` | PATCH | editor | `{ baseSeq, ops[], clientOpId? }` | 200 `{ seq, revisionId, inverse, schemaVersion, clientOpId? }`(본문·경로 제약 위반과 지원하지 않는 문서 버전·NUL 문자는 400, 페이지 없음 404, baseSeq 불일치·패치 실패 409, 카탈로그 위반 422) |
+| `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다(D11) |
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
 | `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
@@ -155,6 +169,12 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
    `ops`로 보내면 그 편집이 취소된다 — 이것이 undo다. 서버에 undo 개념은 없다.
 5. 새로고침 후에는 `GET .../revisions?mine=true`로 자기 revision을 받아
    undo 스택을 복원한다.
+
+**`PUT .../schema`가 만든 revision도 같은 방식으로 되돌린다 — 예외가 아니다.** 그
+revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `/version`이
+남지만, 그것을 그대로 `PATCH .../ops`로 되보내면 200이다. 버전을 **다른 값으로**
+바꾸는 편집만 422로 막힌다(`version`은 마이그레이션이 소유하는 필드다) — undo가
+싣는 `/version`은 같은 값이므로 무연산으로 지나간다.
 
 **요청은 직렬화한다.** in-flight 요청은 항상 하나여야 한다 — 앞 요청의 `seq`를
 받아야 다음 `baseSeq`가 정해지기 때문이다. 어기면 두 번째 요청이 409를 받는다.
