@@ -350,6 +350,42 @@ describe('PATCH /api/projects/:projectId/menu/:nodeId — parentId', () => {
     })
   })
 
+  it('기존 형제 그룹의 중간 위치로 옮기면 그 뒤 형제들이 밀린다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const target = await createMenuNode(ctx, owner.cookie, project.id, { title: '대상 부모' })
+      // target 밑에 이미 형제가 셋 있는 상태(빈 그룹도 끝자리도 아님)에서, 그
+      // 가운데(index 1)로 다른 노드를 끼워 넣는다 — openGap의 "새 위치보다 뒤에
+      // 있는 형제들을 한 칸씩 미는" 경로는 그룹이 비어 있거나 맨 끝에 붙일 때는
+      // 전혀 실행되지 않는다(WHERE sort_order >= insertIndex가 매칭하는 행이
+      // 없다). 이 테스트만이 그 경로에 실제로 행을 매칭시킨다.
+      const x = await createMenuNode(ctx, owner.cookie, project.id, { parentId: target.id, title: '엑스' })
+      const y = await createMenuNode(ctx, owner.cookie, project.id, { parentId: target.id, title: '와이' })
+      const z = await createMenuNode(ctx, owner.cookie, project.id, { parentId: target.id, title: '제트' })
+      const moving = await createMenuNode(ctx, owner.cookie, project.id, { title: '이동 노드' })
+
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${project.id}/menu/${moving.id}`,
+        cookies: owner.cookie,
+        payload: { parentId: target.id, sortOrder: 1 },
+      })
+      expect(res.statusCode).toBe(200)
+      expect(res.json()).toMatchObject({ id: moving.id, parentId: target.id, sortOrder: 1 })
+
+      const tree = (
+        await ctx.app.inject({ method: 'GET', url: `/api/projects/${project.id}/menu`, cookies: owner.cookie })
+      ).json() as MenuTreeNodeResponse[]
+      const targetNode = tree.find((n) => n.id === target.id)
+      expect(targetNode?.children.map((c) => c.title)).toEqual(['엑스', '이동 노드', '와이', '제트'])
+      expect(targetNode?.children.map((c) => c.sortOrder)).toEqual([0, 1, 2, 3])
+      void x
+      void y
+      void z
+    })
+  })
+
   it('자기 자신 400', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
@@ -365,7 +401,10 @@ describe('PATCH /api/projects/:projectId/menu/:nodeId — parentId', () => {
       expect(res.statusCode).toBe(400)
       expect(res.json().error.message).toBe('메뉴를 자기 자신의 하위로 옮길 수 없습니다')
 
-      // 세이브포인트가 없다면 여기서부터 25P02로 실패한다 — 통과 자체가 증거다.
+      // SelfParentError는 어떤 UPDATE도 시도하기 전에 애플리케이션 검사에서
+      // 던져진다 — DB에는 실패한 문장 자체가 없으므로 이 확인은 세이브포인트
+      // 증거가 아니다. 응답의 400과는 별개로, 요청이 parent_id를 실제로
+      // 바꾸지 않았는지를 확인한다.
       const row = await ctx.db
         .selectFrom('menu_nodes')
         .select('parent_id')
@@ -600,8 +639,10 @@ describe('DELETE /api/projects/:projectId/menu/:nodeId', () => {
       expect(res.statusCode).toBe(409)
       expect(res.json().error.message).toBe('하위 메뉴가 있어 삭제할 수 없습니다')
 
-      // 세이브포인트가 없다면 여기서부터 25P02로 실패한다 — 통과 자체가 증거다.
-      // 부모·자식 행이 둘 다 그대로 남아 있는지까지 확인한다.
+      // HasChildrenError는 DELETE 문장을 시도하기 전, 자식 존재를 먼저 확인하는
+      // 단계에서 던져진다 — DB에 실패한 문장 자체가 없으므로 이 확인은 세이브포인트
+      // 증거가 아니다(세이브포인트가 실제로 필요한 경로는 이 파일의 "DB의 RESTRICT
+      // 제약도..." 테스트 하나뿐이다). 부모·자식 행이 둘 다 그대로 남아 있는지만 확인한다.
       const rows = await ctx.db
         .selectFrom('menu_nodes')
         .select('id')
