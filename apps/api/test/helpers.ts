@@ -287,3 +287,50 @@ export async function createMenuNode(
 
   return res.json()
 }
+
+export interface CreatedPage {
+  id: string
+  menuNodeId: string
+  title: string
+  description: string | null
+  sortOrder: number
+  schemaVersion: number
+  schema: unknown
+}
+
+/** `createPage()`가 만드는 title이 눈에 띄게 겹치지 않도록 매기는 모듈 스코프 카운터. */
+let pageCounter = 0
+
+/**
+ * 프로젝트의 메뉴 노드 밑에 페이지를 만든다. `POST /api/projects/:projectId/pages`를
+ * 실제로 호출한다(`createMenuNode`와 같은 이유) — 이 태스크가 검증하는 생성 경로
+ * (기본 스키마·정렬·카탈로그 게이트 포함)를 그대로 거쳐야 픽스처가 실제 API와
+ * 어긋나지 않는다.
+ */
+export async function createPage(
+  ctx: TestContext,
+  cookie: { wb_session: string },
+  projectId: string,
+  menuNodeId: string,
+  input?: Partial<{ title: string; description: string }>,
+): Promise<CreatedPage> {
+  pageCounter += 1
+  const title = input?.title ?? `페이지${pageCounter}`
+
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${projectId}/pages`,
+    cookies: cookie,
+    payload: {
+      menuNodeId,
+      title,
+      ...(input?.description !== undefined ? { description: input.description } : {}),
+    },
+  })
+
+  if (res.statusCode !== 201) {
+    throw new Error(`createPage 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
+  }
+
+  return res.json()
+}

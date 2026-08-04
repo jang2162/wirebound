@@ -21,10 +21,20 @@ export const ERROR_STATUS: Record<ApiErrorCode, number> = {
   internal: 500,
 }
 
-/** 응답 본문에 실을 개별 이슈. zod 내부 객체를 그대로 노출하지 않기 위한 최소 형태다. */
+/**
+ * 응답 본문에 실을 개별 이슈. zod 내부 객체를 그대로 노출하지 않기 위한 최소 형태다.
+ *
+ * `code`·`nodeId`는 optional이다. `http/parse.ts`가 zod 이슈에서 만드는 이슈는
+ * `path`·`message`만 채우고, `routes/pages.ts`의 `PUT .../schema`가
+ * `@wirebound/schema`의 `ValidationIssue`(카탈로그 검증 실패)를 그대로 실을 때만
+ * (`code`가 `ValidationCode` 리터럴이라 `string`의 부분집합이고, `nodeId`가
+ * `string | null`이라 이 타입에 구조적으로 들어맞으므로 캐스트 없이) 두 필드가 채워진다.
+ */
 export interface ApiErrorIssue {
   path: string
   message: string
+  code?: string
+  nodeId?: string | null
 }
 
 /**

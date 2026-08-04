@@ -9,7 +9,9 @@ import { authRoutes } from './routes/auth'
 import { healthRoutes } from './routes/health'
 import { memberRoutes } from './routes/members'
 import { menuRoutes } from './routes/menu'
+import { pageRoutes } from './routes/pages'
 import { projectRoutes } from './routes/projects'
+import { ensureCatalog } from './schema-setup'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -88,6 +90,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     logger: loggerStream ? { ...loggerOptions, stream: loggerStream } : loggerOptions,
   })
 
+  // validatePage(routes/pages.ts의 PUT .../schema 게이트)가 기대하는 컴포넌트
+  // 레지스트리를 채운다. ensureCatalog는 멱등하다 — 이 스위트가 buildApp을
+  // 수백 번 부르므로 필수다(schema-setup.ts 참고).
+  ensureCatalog()
+
   app.decorate('db', db)
   registerErrorHandler(app)
   await registerAuthPlugin(app, config)
@@ -96,6 +103,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(projectRoutes(), { prefix: '/api/projects' })
   await app.register(memberRoutes(), { prefix: '/api/projects' })
   await app.register(menuRoutes(), { prefix: '/api/projects' })
+  await app.register(pageRoutes(), { prefix: '/api/projects' })
   await app.register(healthRoutes)
 
   return app
