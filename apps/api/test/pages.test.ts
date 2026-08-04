@@ -9,6 +9,7 @@ import {
   resetRegistry,
 } from '@wirebound/schema'
 import { withTransaction } from '../src/db/tx'
+import { updatePageSchema } from '../src/repos/pages'
 import { ensureCatalog } from '../src/schema-setup'
 import {
   addMember,
@@ -812,6 +813,87 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       })
       expect(after.statusCode).toBe(200)
       expect(after.json().schema).toEqual(page.schema)
+    })
+  })
+
+  it('NUL 문자(U+0000)가 객체 "키"에 있어도 400이고, 트랜잭션이 오염되지 않는다 (interactions[].actions[].value)', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+
+      // SetPropActionSchema의 value는 z.unknown()(packages/schema/src/envelope.ts)이고,
+      // validateTree(packages/schema/src/validate.ts)는 액션의 value 내용을 전혀
+      // 들여다보지 않는다 — 그래서 value가 아니라 그 안 객체의 "키"에 NUL을 심으면
+      // 봉투 검증도 카탈로그 검증도 둘 다 통과한다. containsNulByte가 Object.values만
+      // 훑었다면(고치기 전) 이 키는 보이지 않아 저장까지 도달해 22P05로 500이 났을
+      // 것이다 — 위 props 값 테스트와 서로 다른 코드 경로(값 vs 키)를 확인한다.
+      const nul = String.fromCharCode(0)
+      const res = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${project.id}/pages/${page.id}/schema`,
+        cookies: owner.cookie,
+        payload: {
+          schema: {
+            version: 1,
+            root: {
+              id: 'n_root',
+              type: 'Page',
+              children: [
+                {
+                  id: 'n_text',
+                  type: 'Text',
+                  interactions: [
+                    {
+                      on: 'click',
+                      actions: [{ type: 'setProp', target: 'n_text', prop: 'x', value: { [`a${nul}b`]: 1 } }],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      })
+      expect(res.statusCode).toBe(400)
+      expect(res.json().error.message).toContain('NUL')
+
+      // 값 테스트와 같은 이유로 트랜잭션 생존도 함께 본다.
+      const after = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+      })
+      expect(after.statusCode).toBe(200)
+      expect(after.json().schema).toEqual(page.schema)
+    })
+  })
+
+  it('containsNulByte 사전 필터를 우회해 updatePageSchema를 직접 불러도, withTransaction의 세이브포인트가 바깥 트랜잭션을 지킨다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+
+      // 라우트를 거치면(Fix 1b가 완전해진 뒤) NUL 문서가 더 이상 DB까지 도달할
+      // 방법이 없다 — 그래서 Fix 1a(updatePageSchema를 withTransaction으로 감싼 것)가
+      // 실제로 트랜잭션을 지키는지는 라우트를 건너뛰고 repos 계층 함수를 직접
+      // 불러야만 확인할 수 있다. 이 문서는 실제로 Postgres까지 가서 jsonb 캐스팅이
+      // 22P05로 죽는다.
+      const nul = String.fromCharCode(0)
+      const docWithNul = {
+        version: 1,
+        root: {
+          id: 'n_root',
+          type: 'Page',
+          children: [{ id: 'n_text', type: 'Text', props: { content: `a${nul}b` } }],
+        },
+      }
+
+      await expect(updatePageSchema(ctx.db, project.id, page.id, docWithNul, 1)).rejects.toThrow()
+
+      // 세이브포인트가 실제로 트랜잭션을 지켰다는 유일한 증거: 같은 withApi
+      // 트랜잭션 위에서 던진 이후 쿼리가 25P02 없이 성공한다.
+      const row = await ctx.db.selectFrom('pages').select('id').where('id', '=', page.id).executeTakeFirstOrThrow()
+      expect(row.id).toBe(page.id)
     })
   })
 
