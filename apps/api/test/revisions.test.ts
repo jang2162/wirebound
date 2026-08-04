@@ -15,7 +15,11 @@ import {
 } from './helpers'
 
 /**
- * `PATCH /api/projects/:projectId/pages/:pageId/ops`의 라우트 테스트다.
+ * 편집 이력 관련 두 라우트의 테스트다 — `PATCH .../pages/:pageId/ops`(편집)와
+ * `GET .../pages/:pageId/revisions`(이력 조회). 후자는 아래 두 번째 `describe`에 있고,
+ * 자기 계약을 그 자리에서 다시 설명한다.
+ *
+ * 아래 설명은 첫 번째 `describe`(`PATCH .../ops`)의 것이다.
  *
  * **여기서 검사하는 것은 HTTP 매핑과 zod 경계뿐이다.** 파이프라인 규칙 자체
  * (잠금 순서·stale 판정·역패치 생성·아무것도 안 쓰기)는 `edit-pipeline.test.ts`가
@@ -507,6 +511,417 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
       expect(row.actor_id).toBe(editor.user.id)
       expect(row.actor_label).toBe(editor.user.name)
       expect(row.actor_id).not.toBe(fx.owner.user.id)
+    })
+  })
+})
+
+/** `GET .../revisions` 응답 항목. 응답은 `any`로 오므로 단언에 쓸 형태를 여기서 못박는다. */
+interface RevisionResponse {
+  id: string
+  seq: number
+  actorType: string
+  actorId: string | null
+  actorLabel: string
+  ops: PatchOp[]
+  inverse: PatchOp[]
+  createdAt: string
+}
+
+function revisionsUrl(fx: Fixture, query = ''): string {
+  return `/api/projects/${fx.project.id}/pages/${fx.page.id}/revisions${query}`
+}
+
+function getRevisions(ctx: TestContext, url: string, cookie: { wb_session: string } | undefined) {
+  return ctx.app.inject({ method: 'GET', url, cookies: cookie })
+}
+
+/**
+ * 편집을 `count`회 적용해 revision을 `count`개 만든다(seq는 1..count).
+ *
+ * 노드 id를 매번 다르게 준다 — 같은 id를 두 번 넣으면 카탈로그 검증이 `duplicate-id`로
+ * 막아 픽스처가 200을 받지 못한다. 200이 아니면 여기서 던진다: 이력이 조용히 덜 만들어진
+ * 채로 아래 단언이 도는 것보다 픽스처 실패로 죽는 편이 낫다.
+ */
+async function editTimes(ctx: TestContext, fx: Fixture, count: number): Promise<void> {
+  for (let index = 0; index < count; index += 1) {
+    const res = await patchOps(
+      ctx,
+      fx,
+      { baseSeq: index, ops: [textOp(`n_seed${String(index).padStart(6, '0')}`)] },
+      fx.owner.cookie,
+    )
+    if (res.statusCode !== 200) {
+      throw new Error(`편집 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
+    }
+  }
+}
+
+/**
+ * `GET /api/projects/:projectId/pages/:pageId/revisions`의 라우트 테스트다.
+ *
+ * 이 엔드포인트의 존재 이유는 설계 §7.3의 "새로고침 후 undo 스택 복원"이다 —
+ * 클라이언트가 페이지를 다시 열면 자기 actor의 최근 revision을 받아 그 `inverse`만으로
+ * 스택을 재구성한다. 그래서 '`inverse`를 그대로 실어 준다'가 이 스위트의 중심이고,
+ * 나머지는 그 주변의 계약(정렬·필터·상한·권한)이다.
+ *
+ * **404 케이스마다 양성 대조(같은 URL 모양이 정상 조건에서는 200)를 함께 둔다.**
+ * 라우트를 아예 등록하지 않아도 Fastify가 404를 주므로, 상태 코드만 보는 404 테스트는
+ * 라우트가 없어도 초록이다(이 저장소에서 실제로 그렇게 통과한 테스트가 있었다).
+ */
+describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
+  it('기본은 그 페이지의 모든 revision을 seq 내림차순으로 준다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 3)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      // 삽입 순서(1,2,3)와 기대 순서(3,2,1)가 반대다 — 두 순서가 같으면 정렬을
+      // 통째로 지워도 Postgres가 우연히 같은 순서를 돌려줘 통과할 수 있다.
+      const body: RevisionResponse[] = res.json()
+      expect(body.map((revision) => revision.seq)).toEqual([3, 2, 1])
+    })
+  })
+
+  it('배열을 그대로 낸다 (봉투가 없다)', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 1)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      // `/projects`·`/members`·`/menu`가 전부 배열을 그대로 낸다. `{ revisions: [...] }`
+      // 같은 두 번째 관용구를 늘리지 않는다.
+      expect(Array.isArray(res.json())).toBe(true)
+    })
+  })
+
+  it('각 항목은 계약된 키만 담는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 1)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      const [first] = res.json() as RevisionResponse[]
+      // 저장소 레코드를 그대로 흘려보내면 나중에 그 타입에 필드가 붙는 순간(예:
+      // `pageId`) 응답 계약이 조용히 넓어진다. 라우트의 명시적 투영이 그것을 막는다.
+      expect(Object.keys(first ?? {}).sort()).toEqual(
+        ['id', 'seq', 'actorType', 'actorId', 'actorLabel', 'ops', 'inverse', 'createdAt'].sort(),
+      )
+    })
+  })
+
+  it('createdAt은 ISO 8601이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 1)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      const [first] = res.json() as RevisionResponse[]
+      // `invitedAt`(멤버 목록)과 같은 형식이다 — `Date`를 그대로 반환하고 Fastify가
+      // 직렬화한다. 정규식만으로는 "그럴듯한 문자열"도 통과하므로 파싱까지 확인한다.
+      expect(first?.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      expect(Number.isNaN(Date.parse(first?.createdAt ?? ''))).toBe(false)
+    })
+  })
+
+  it('mine=true는 내 revision만 준다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const editor = await signup(ctx)
+      await addMember(ctx, fx.project.id, editor.user.id, 'editor')
+
+      // 내 편집이 먼저(seq 1), 남의 편집이 나중(seq 2)이다. 필터가 사라지면 최신
+      // 항목이 남의 것이 되므로 길이와 actorId 둘 다 어긋난다.
+      const mine = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp('n_mine000001')] }, fx.owner.cookie)
+      expect(mine.statusCode, mine.body).toBe(200)
+      const other = await patchOps(ctx, fx, { baseSeq: 1, ops: [textOp('n_other00001')] }, editor.cookie)
+      expect(other.statusCode, other.body).toBe(200)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx, '?mine=true'), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      const body: RevisionResponse[] = res.json()
+      expect(body.map((revision) => revision.seq)).toEqual([1])
+      expect(body[0]?.actorId).toBe(fx.owner.user.id)
+    })
+  })
+
+  it('mine=false는 전부 준다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const editor = await signup(ctx)
+      await addMember(ctx, fx.project.id, editor.user.id, 'editor')
+
+      const mine = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp('n_mine000002')] }, fx.owner.cookie)
+      expect(mine.statusCode, mine.body).toBe(200)
+      const other = await patchOps(ctx, fx, { baseSeq: 1, ops: [textOp('n_other00002')] }, editor.cookie)
+      expect(other.statusCode, other.body).toBe(200)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx, '?mine=false'), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      const body: RevisionResponse[] = res.json()
+      expect(body.map((revision) => revision.actorId)).toEqual([editor.user.id, fx.owner.user.id])
+    })
+  })
+
+  it('mine을 생략하면 전부 준다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const editor = await signup(ctx)
+      await addMember(ctx, fx.project.id, editor.user.id, 'editor')
+
+      const mine = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp('n_mine000003')] }, fx.owner.cookie)
+      expect(mine.statusCode, mine.body).toBe(200)
+      const other = await patchOps(ctx, fx, { baseSeq: 1, ops: [textOp('n_other00003')] }, editor.cookie)
+      expect(other.statusCode, other.body).toBe(200)
+
+      // 브리프의 18개 케이스에 없던 행이다. `mine=false`만 검사하면 "생략도 내 것만"
+      // (기본값을 mine으로 뒤집는 변이)이 아무 테스트에도 안 걸린다 — 다른 케이스는
+      // 전부 한 사용자만 편집하기 때문이다.
+      const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      const body: RevisionResponse[] = res.json()
+      expect(body.map((revision) => revision.actorId)).toEqual([editor.user.id, fx.owner.user.id])
+    })
+  })
+
+  it('limit을 지킨다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 5)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx, '?limit=2'), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      // 개수만 보면 "앞에서 2개"(오래된 것)를 잘라도 통과한다. 최신 2개인지까지 본다.
+      const body: RevisionResponse[] = res.json()
+      expect(body.map((revision) => revision.seq)).toEqual([5, 4])
+    })
+  })
+
+  it('limit 기본값은 50이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 3)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      // **이 이름은 실제보다 강한 주장을 한다.** 여기서 증명되는 것은 "limit을 생략해도
+      // 200이고 3개가 전부 온다"뿐이다 — 기본값이 3 이상인 어떤 값이어도(50이든 200이든)
+      // 이 단언은 통과한다. 51개를 만들어 50을 확인하는 것이 진짜 검사지만 그만큼 느리다.
+      expect((res.json() as RevisionResponse[]).map((revision) => revision.seq)).toEqual([3, 2, 1])
+    })
+  })
+
+  it('limit이 200을 넘으면 400이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx, '?limit=201'), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(400)
+      expect(res.json().error.code).toBe('bad-request')
+    })
+  })
+
+  it('limit이 0이면 400이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx, '?limit=0'), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(400)
+    })
+  })
+
+  it('limit이 숫자가 아니면 400이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx, '?limit=abc'), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(400)
+    })
+  })
+
+  it('선언 안 된 쿼리 키가 있으면 400이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      // 본문 스키마와 같은 관례(`z.strictObject`)를 쿼리에도 적용한다. 이 케이스가
+      // 없으면 `strictObject`를 `object`로 바꿔도 아무 테스트가 실패하지 않는다.
+      const res = await getRevisions(ctx, revisionsUrl(fx, '?since=3'), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(400)
+    })
+  })
+
+  it('없는 페이지는 404다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      const res = await getRevisions(
+        ctx,
+        `/api/projects/${fx.project.id}/pages/${NONEXISTENT_UUID}/revisions`,
+        fx.owner.cookie,
+      )
+
+      expect(res.statusCode, res.body).toBe(404)
+      expect(res.json().error.code).toBe('not-found')
+
+      // 양성 대조. 라우트를 등록하지 않아도 Fastify가 404를 주므로 위 두 줄만으로는
+      // "라우트가 없다"와 "페이지가 없다"가 구분되지 않는다.
+      const exists = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+      expect(exists.statusCode, exists.body).toBe(200)
+    })
+  })
+
+  it('다른 프로젝트의 페이지는 404다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 1)
+
+      // **실재하는** 다른 프로젝트의 페이지를 쓴다. 임의 uuid로는 이 케이스가
+      // 아무것도 판별하지 못한다 — 페이지 존재 확인을 지워도 조회 결과가 비어 있어
+      // 404가 아닌 200이 나오는지 알 수 없기 때문이다. 그 페이지에 이력까지 남겨
+      // 두면, 존재 확인이 사라지는 순간 이 요청이 200과 **남의 프로젝트 이력**을
+      // 돌려주고 이 단언이 실패한다(설계 §10).
+      const outsider = await signup(ctx)
+      const otherProject = await createProject(ctx, outsider.cookie)
+      const otherMenu = await createMenuNode(ctx, outsider.cookie, otherProject.id)
+      const otherPage = await createPage(ctx, outsider.cookie, otherProject.id, otherMenu.id)
+      const seeded = await patchOps(
+        ctx,
+        fx,
+        { baseSeq: 0, ops: [textOp('n_leak000001')] },
+        outsider.cookie,
+        `/api/projects/${otherProject.id}/pages/${otherPage.id}/ops`,
+      )
+      expect(seeded.statusCode, seeded.body).toBe(200)
+
+      const res = await getRevisions(
+        ctx,
+        `/api/projects/${fx.project.id}/pages/${otherPage.id}/revisions`,
+        fx.owner.cookie,
+      )
+
+      expect(res.statusCode, res.body).toBe(404)
+      expect(res.json().error.code).toBe('not-found')
+
+      // 양성 대조 — 같은 URL 모양이 내 프로젝트의 페이지로는 200이다.
+      const exists = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+      expect(exists.statusCode, exists.body).toBe(200)
+    })
+  })
+
+  it('viewer도 읽을 수 있다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 1)
+      const viewer = await signup(ctx)
+      await addMember(ctx, fx.project.id, viewer.user.id, 'viewer')
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), viewer.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      // 200이기만 하면 viewer에게 빈 배열을 돌려줘도 통과한다. 이력이 실제로 보이는지
+      // 확인한다 — 이 엔드포인트는 조회 전용이므로 viewer가 남의 편집도 볼 수 있다.
+      expect((res.json() as RevisionResponse[]).map((revision) => revision.seq)).toEqual([1])
+    })
+  })
+
+  it('비멤버는 404다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const outsider = await signup(ctx)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), outsider.cookie)
+
+      // 프로젝트가 없는 경우와 구분하지 않는다(설계 §10).
+      expect(res.statusCode, res.body).toBe(404)
+      expect(res.json().error.code).toBe('not-found')
+
+      const member = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+      expect(member.statusCode, member.body).toBe(200)
+    })
+  })
+
+  it('미인증은 401이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), undefined)
+
+      expect(res.statusCode, res.body).toBe(401)
+      expect(res.json().error.code).toBe('unauthenticated')
+    })
+  })
+
+  it('이력이 없으면 빈 배열이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      // 페이지 생성(`POST .../pages`)은 편집이 아니므로 revision을 남기지 않는다 —
+      // 새 페이지의 head_seq는 0이고 이력은 비어 있다.
+      expect(res.json()).toEqual([])
+    })
+  })
+
+  it('inverse를 그대로 실어 준다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const edit = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp('n_undo000001')] }, fx.owner.cookie)
+      expect(edit.statusCode, edit.body).toBe(200)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      const [first] = res.json() as RevisionResponse[]
+      // **이 단언이 이 엔드포인트의 존재 이유다**(설계 §7.3): 새로고침한 클라이언트가
+      // 여기서 받은 `inverse`를 그대로 `PATCH .../ops`로 되보내 undo를 한다.
+      expect(first?.inverse).toEqual(edit.json().inverse)
+      // 위 한 줄만으로는 양쪽이 나란히 빈 배열이어도 통과한다. 실제 역연산까지 못박는다.
+      expect(first?.inverse).toEqual([{ op: 'remove', path: '/root/children/0' }])
+      // `ops`·`id`도 함께 확인한다 — 세 필드를 서로 바꿔 실어도 위 단언만으로는
+      // `inverse` 자리만 맞으면 통과한다.
+      expect(first?.ops).toEqual([textOp('n_undo000001')])
+      expect(first?.id).toBe(edit.json().revisionId)
+    })
+  })
+
+  it('actor 필드는 편집한 사용자를 가리킨다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const editor = await signup(ctx)
+      await addMember(ctx, fx.project.id, editor.user.id, 'editor')
+
+      const edit = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp('n_actor00001')] }, editor.cookie)
+      expect(edit.statusCode, edit.body).toBe(200)
+
+      // 브리프의 18개 케이스에 없던 행이다. 나머지 케이스는 `actorId`만 보므로
+      // 응답 투영이 `actorLabel`·`actorType`을 엉뚱한 필드에서 채워도 잡히지 않는다.
+      // 편집자를 owner가 아닌 다른 사람으로 두어 "페이지 소유자를 실어 준다"는 오류도
+      // 함께 배제한다.
+      const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      const [first] = res.json() as RevisionResponse[]
+      expect(first?.actorType).toBe('user')
+      expect(first?.actorId).toBe(editor.user.id)
+      expect(first?.actorLabel).toBe(editor.user.name)
     })
   })
 })

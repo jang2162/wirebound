@@ -1,6 +1,6 @@
 # @wirebound/api
 
-Fastify 5 기반 REST 서버. 설계서 편집을 지원하는 백엔드다(P1 범위 — WebSocket은 P3).
+Fastify 5 기반 REST 서버. 설계서 편집을 지원하는 백엔드다(P1·P2a 범위 — WebSocket은 P3).
 
 필요한 것: Docker, Node ≥ 22.9, pnpm.
 
@@ -108,9 +108,11 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder? }`(하나 이상) | 200 메뉴 노드 |
 | `/api/projects/:projectId/menu/:nodeId` | DELETE | editor | — | 204(자식 메뉴·페이지가 있으면 409) |
 | `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description? }` | 201 페이지(기본 스키마: 빈 `Page`) |
-| `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴) |
+| `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
 | `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder? }`(하나 이상, `schema`는 여기서 못 바꾼다) | 200 페이지 |
-| `/api/projects/:projectId/pages/:pageId/schema` | PUT | editor | `{ schema }`(문서 봉투 전체) | 200 페이지(봉투 위반 400, 카탈로그 위반 422, 실패 시 기존 스키마 보존) |
+| `/api/projects/:projectId/pages/:pageId/schema` | PUT | editor | `{ schema }`(문서 봉투 전체) | 200 페이지(봉투 위반 400, 카탈로그 위반 422, 실패 시 기존 스키마 보존). 통째 교체도 revision을 남긴다 |
+| `/api/projects/:projectId/pages/:pageId/ops` | PATCH | editor | `{ baseSeq, ops[], clientOpId? }` | 200 `{ seq, revisionId, inverse, schemaVersion, clientOpId? }`(baseSeq 불일치·패치 실패 409, 카탈로그 위반 422) |
+| `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순) |
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
 | `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
@@ -140,6 +142,43 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 페이지 본문(스키마 포함)이 필요하면 `GET /api/projects/:projectId/pages/:pageId`를
 따로 호출한다.
 
+### 편집 파이프라인 (`PATCH .../ops`)
+
+`pages.schema`를 바꾸는 **모든** 경로는 `revisions`에 한 행을 append하고
+`pages.head_seq`를 그 `seq`로 올린다. 예외는 없다(`PUT .../schema`도 그렇다).
+
+1. 클라이언트는 `GET .../pages/:pageId`로 문서와 `headSeq`를 받는다.
+2. 편집을 로컬에 낙관적으로 적용하고, `PATCH .../ops`로 `{ baseSeq: headSeq, ops }`를 보낸다.
+3. 서버는 페이지 행을 잠그고, `baseSeq`가 현재 `head_seq`와 같은지 확인하고,
+   ops를 적용해 검증한 뒤, `(ops, inverse)`를 `head_seq + 1`로 기록한다.
+4. 응답의 `seq`가 다음 요청의 `baseSeq`다. 응답의 `inverse`를 그대로 다시
+   `ops`로 보내면 그 편집이 취소된다 — 이것이 undo다. 서버에 undo 개념은 없다.
+5. 새로고침 후에는 `GET .../revisions?mine=true`로 자기 revision을 받아
+   undo 스택을 복원한다.
+
+**요청은 직렬화한다.** in-flight 요청은 항상 하나여야 한다 — 앞 요청의 `seq`를
+받아야 다음 `baseSeq`가 정해지기 때문이다. 어기면 두 번째 요청이 409를 받는다.
+409를 받으면 페이지를 재조회해 `headSeq`와 문서를 다시 맞춘다.
+
+`GET .../revisions`의 항목은 아래 여덟 키를 담는다. `ops`·`inverse`는 저장된 그대로
+실려 나온다 — 5단계의 스택 복원이 `inverse`만으로 성립해야 하기 때문이다.
+
+```jsonc
+[
+  { "id": "…", "seq": 3, "actorType": "user", "actorId": "…", "actorLabel": "홍길동",
+    "ops": [ /* … */ ], "inverse": [ /* … */ ], "createdAt": "2026-08-04T09:00:00.000Z" }
+]
+```
+
+`mine=true`는 `actorType`이 `user`이고 `actorId`가 호출자인 revision만 고른다(생략하면
+그 페이지의 이력 전체). `limit`은 1~200이고 기본값은 50이다 — 벗어나면 400이다.
+
+**`PUT .../schema`는 복구 경로가 아니다.** 이 서버가 아는 버전보다 높은 문서가 저장돼
+있으면 `GET`·`PATCH .../ops`·`PUT .../schema` 세 경로가 전부 400이다(파이프라인이
+**저장된** 문서를 마이그레이션에 태우기 때문에 PUT도 예외가 아니다). 파이프라인을
+우회해 스키마를 덮어쓰는 쓰기 경로는 일부러 두지 않았다 — 그것을 되살리면 "모든
+스키마 변경이 revision을 남긴다"가 다시 뚫린다. 복구는 스냅샷 복원(P6)의 몫이다.
+
 ## DB 계층
 
 - `src/db/types.ts` — Kysely `Database` 스키마 인터페이스. 새 테이블은 여기에 추가한다.
@@ -164,19 +203,20 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
   preHandler로 권한을 판정한다(404/403 규칙 포함) — 라우트 파일 자체는 역할을
   비교하지 않는다.
 
-## P1이 만들지 않은 것
+## P1·P2a가 만들지 않은 것
 
-이 서버는 P1(1단계) 범위만 구현한다. 아래는 의도적으로 빠져 있다 — 이후 단계의 몫이다.
+이 서버는 P1(1단계)과 P2a(서버 편집 파이프라인) 범위만 구현한다. 아래는 의도적으로
+빠져 있다 — 이후 단계의 몫이다.
 
-- **리비전(revision)**: 페이지 스키마의 변경 이력·되돌리기. 지금은 `PUT .../schema`가
-  현재 스키마를 덮어쓸 뿐, 과거 버전을 보관하지 않는다.
+- **실시간 동기화**: WebSocket, 브로드캐스트, 소프트 잠금(설계 §12, P3). 편집은 REST뿐이고,
+  동시 편집 방어는 `baseSeq`와 행 잠금이 전부다. `baseSeq`가 어긋나면 서버가
+  리베이스를 시도하지 않고 곧바로 409를 낸다.
 - **레이아웃**: 여러 페이지가 공유하는 헤더·사이드바 같은 레이아웃 문서·`Slot` 합성.
   `@wirebound/schema`에 `validateLayout`은 있지만 이 API는 레이아웃 리소스·엔드포인트를
   갖지 않는다.
 - **테마**: 테마 선택·적용·CSS 컴파일. `@wirebound/themes`와 연결되지 않는다.
-- **WebSocket**: 실시간 공동 편집, 방 입장, 패치 브로드캐스트(설계 §12, P3 범위).
-  지금은 REST뿐이다.
 - **API 토큰**: 세션 쿠키 외의 인증 수단(서비스 간 호출, CLI/MCP용 토큰 등)이 없다.
+  `revisions.actor_type`은 `mcp`·`cli`를 이미 담을 수 있지만 그 행을 만드는 경로는 없다.
 
 ## 명령 요약
 

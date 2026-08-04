@@ -11,6 +11,7 @@ import { memberRoutes } from './routes/members'
 import { menuRoutes } from './routes/menu'
 import { pageRoutes } from './routes/pages'
 import { projectRoutes } from './routes/projects'
+import { revisionRoutes } from './routes/revisions'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
 
@@ -106,6 +107,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(menuRoutes(), { prefix: '/api/projects' })
   await app.register(pageRoutes(), { prefix: '/api/projects' })
   await app.register(treeRoutes(), { prefix: '/api/projects' })
+  await app.register(revisionRoutes(), { prefix: '/api/projects' })
   await app.register(healthRoutes)
 
   return app

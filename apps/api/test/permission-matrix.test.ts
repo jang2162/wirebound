@@ -157,6 +157,13 @@ const CASES: Case[] = [
     setup: 페이지하나,
   },
   {
+    label: '페이지 이력 조회',
+    method: 'GET',
+    url: '/api/projects/:projectId/pages/:pageId/revisions',
+    allowed: ['owner', 'editor', 'viewer'],
+    setup: 페이지하나,
+  },
+  {
     label: '페이지 삭제',
     method: 'DELETE',
     url: '/api/projects/:projectId/pages/:pageId',
