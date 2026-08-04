@@ -69,9 +69,16 @@ export function revisionRoutes() {
       const query = parseQuery(RevisionQuery, request.query)
 
       // `projectGuard('viewer')`가 이미 인증을 요구하므로 여기 도달했다면 `currentUser`는
-      // 있다. `as`로 좁히지 않고 던지는 이유는 `routes/pages.ts`와 같다 — 언젠가 가드가
-      // 빠지면 `as`는 그대로 통과해 `mine=true`가 `actorId: undefined`로 조회되어
-      // 필터가 조용히 사라지지만, 이 던지기는 401로 막는다.
+      // 있다. 그래도 `as`로 좁히지 않고 던지는 이유: **이 핸들러에는 `currentUser`를 한 번도
+      // 역참조하지 않는 경로가 있다.** `mine`을 생략하면 아래 조회가 `actorId`를 넘기지
+      // 않으므로 `currentUser.id`를 읽지 않는다. 그래서 언젠가 가드가 빠지면 `as` 버전은
+      // 미인증 요청에 401이 아니라 **200과 그 페이지의 이력**을 돌려준다(실측: 가드와 이
+      // 던지기를 함께 없애면 `미인증은 401이다`가 200을 받는다).
+      //
+      // **이 검사를 `mine === 'true'` 분기 안으로 옮기면 그 누수가 실제로 열린다.**
+      //
+      // 이 성질은 테스트 하나로 고정되지 않는다 — `미인증은 401이다`는 가드만 있어도,
+      // 이 던지기만 있어도 통과한다. 둘을 동시에 없애야 실패한다.
       const currentUser = request.currentUser
       if (!currentUser) {
         throw unauthenticated()

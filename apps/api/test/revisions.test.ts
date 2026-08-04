@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
 import { withTransaction } from '../src/db/tx'
+import { insertRevision } from '../src/repos/revisions'
 import {
   addMember,
   createMenuNode,
@@ -711,15 +712,30 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
   it('limit 기본값은 50이다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
-      await editTimes(ctx, fx, 3)
+
+      // 51개를 `PATCH .../ops`로 만들면 HTTP 왕복이 51번이다. 이 케이스가 검사하는 것은
+      // **라우트의 `limit` 기본값**이지 파이프라인이 아니므로 저장소로 직접 심는다.
+      // `seq`는 `(page_id, seq)`가 UNIQUE라 1..51로 유일하게 준다. 이렇게 심으면
+      // `pages.head_seq`(새 페이지는 0)와 어긋나지만 이 케이스의 목적에는 무관하다 —
+      // 조회 경로는 `head_seq`를 보지 않고 `page_id`로만 좁힌다.
+      for (let seq = 1; seq <= 51; seq += 1) {
+        await insertRevision(ctx.db, {
+          pageId: fx.page.id,
+          seq,
+          actor: { type: 'user', id: fx.owner.user.id, label: fx.owner.user.name },
+          ops: [],
+          inverse: [],
+        })
+      }
 
       const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
 
       expect(res.statusCode, res.body).toBe(200)
-      // **이 이름은 실제보다 강한 주장을 한다.** 여기서 증명되는 것은 "limit을 생략해도
-      // 200이고 3개가 전부 온다"뿐이다 — 기본값이 3 이상인 어떤 값이어도(50이든 200이든)
-      // 이 단언은 통과한다. 51개를 만들어 50을 확인하는 것이 진짜 검사지만 그만큼 느리다.
-      expect((res.json() as RevisionResponse[]).map((revision) => revision.seq)).toEqual([3, 2, 1])
+      const body: RevisionResponse[] = res.json()
+      // 이력이 기본값보다 많을 때만 기본값이 관측된다 — 그래서 51개다.
+      expect(body).toHaveLength(50)
+      // 개수만 보면 오래된 쪽 50개를 잘라도 통과한다. 최신 50개(51..2)인지까지 본다.
+      expect(body.map((revision) => revision.seq)).toEqual(Array.from({ length: 50 }, (_, index) => 51 - index))
     })
   })
 
@@ -791,11 +807,12 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
       const fx = await setup(ctx)
       await editTimes(ctx, fx, 1)
 
-      // **실재하는** 다른 프로젝트의 페이지를 쓴다. 임의 uuid로는 이 케이스가
-      // 아무것도 판별하지 못한다 — 페이지 존재 확인을 지워도 조회 결과가 비어 있어
-      // 404가 아닌 200이 나오는지 알 수 없기 때문이다. 그 페이지에 이력까지 남겨
-      // 두면, 존재 확인이 사라지는 순간 이 요청이 200과 **남의 프로젝트 이력**을
-      // 돌려주고 이 단언이 실패한다(설계 §10).
+      // **실재하는** 다른 프로젝트의 페이지를 쓴다. 임의 uuid로도 404 단언 자체는
+      // 성립한다(존재 확인을 지우면 빈 배열과 함께 200이 나온다 — 바로 위
+      // '없는 페이지는 404다'가 그 경우다). 실재하는 남의 페이지에 이력까지 남겨 두는
+      // 이유는 이 케이스가 **위 케이스와 다른 성질**을 고정하게 만들기 위해서다:
+      // 존재 확인이 사라지는 순간 이 요청은 빈 배열이 아니라 200과 **남의 프로젝트
+      // 이력**을 돌려준다(설계 §10 — 다른 프로젝트의 id가 존재를 흘리면 안 된다).
       const outsider = await signup(ctx)
       const otherProject = await createProject(ctx, outsider.cookie)
       const otherMenu = await createMenuNode(ctx, outsider.cookie, otherProject.id)

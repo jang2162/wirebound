@@ -405,9 +405,16 @@ export function pageRoutes() {
       const body = parseBody(OpsBody, request.body)
 
       // `projectGuard('editor')`가 이미 인증을 요구하므로 여기 도달했다면
-      // `currentUser`는 있다. 그래도 `as`로 좁히지 않고 던지는 이유: 언젠가 가드가
-      // 이 라우트에서 빠지면 `as`는 그대로 통과시켜 `actor_id`가 undefined인 revision을
-      // append-only 로그에 남기지만(되돌릴 수 없다), 이 던지기는 401로 막는다.
+      // `currentUser`는 있다. 그래도 `as`로 좁히지 않고 던지는 이유: 이 핸들러는 아래에서
+      // `currentUser.id`·`.name`을 **반드시** 읽으므로, `as` 버전은 가드가 빠지는 순간
+      // 미인증 요청에 `null` 역참조로 500을 낸다(실측). 500은 처리되지 않은 프로그래밍
+      // 오류지 "로그인이 필요하다"는 응답이 아니다 — 이 던지기가 그것을 401로 바꾼다.
+      //
+      // **actor 없는 revision이 로그에 남는 것을 막는 것은 아니다.** `applyEdit`에 넘길
+      // actor를 만드는 시점에 이미 던지므로, `as` 버전이든 이쪽이든 그 경우엔 아무것도
+      // 기록되지 않는다. 반면 `routes/revisions.ts`의 같은 검사는 성질이 다르다 —
+      // 그쪽엔 `currentUser`를 역참조하지 않는 경로가 있어 검사가 사라지면 실제로
+      // 미인증 요청에 데이터가 나간다.
       const currentUser = request.currentUser
       if (!currentUser) {
         throw unauthenticated()
