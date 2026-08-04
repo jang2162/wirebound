@@ -113,6 +113,11 @@ export function projectRoutes() {
         throw error
       }
 
+      if (!project) {
+        // projectGuard의 권한 확인과 updateProject의 UPDATE 사이에 프로젝트가
+        // 삭제되는 경합이다 — GET /:projectId(위)가 같은 경합을 다루는 방식과 같다.
+        throw notFound()
+      }
       return { ...project, role }
     })
 

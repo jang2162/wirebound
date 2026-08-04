@@ -75,6 +75,30 @@ const UpdatePageBody = z
  */
 const PutSchemaBody = z.strictObject({ schema: DocumentEnvelopeSchema })
 
+/**
+ * NUL(U+0000) 문자를 담은 상수. 이스케이프 시퀀스를 소스에 직접 타이핑하면 도구
+ * 체인(에디터·JSON 파이프라인)에 따라 실제 제어 문자로 오인돼 조용히 치환되는
+ * 사고가 나기 쉽다 — 이 파일에서 실제로 한 번 겪었다. `String.fromCharCode(0)`은
+ * 소스 텍스트 어디에도 그 문자를 직접 적지 않고 런타임에 만들어 그 위험을 피한다.
+ */
+const NUL_CHAR = String.fromCharCode(0)
+
+/**
+ * 문서 트리 안 어딘가의 문자열 값에 NUL 문자(U+0000)가 있는지 재귀로 훑는다.
+ * `PUT .../schema`의 3.5단계가 저장 전에 부른다 — 이유는 그 단계의 주석 참고.
+ * `props`가 `z.record(z.string(), z.unknown())`(패키지 schema)이라 임의로 중첩된
+ * 값을 실을 수 있으므로, 문자열이 아닌 값(배열·객체)은 재귀로 계속 내려가고
+ * 그 밖의 원시값(숫자·불리언·null 등)은 NUL을 가질 수 없으므로 그대로 통과시킨다.
+ */
+function containsNulByte(value: unknown): boolean {
+  if (typeof value === 'string') return value.includes(NUL_CHAR)
+  if (Array.isArray(value)) return value.some(containsNulByte)
+  if (value !== null && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some(containsNulByte)
+  }
+  return false
+}
+
 /** API 계약이 노출하는 필드만 담는다 — 저장소의 `projectId`는 응답에 싣지 않는다(경로에 이미 있다). */
 function toResponse(page: PageRecord) {
   return {
@@ -108,7 +132,20 @@ export function pageRoutes() {
       // `schemaVersion`과 `schema.version`이 서로 다른 값을 가리키게 된다 —
       // `PUT .../schema`가 저장 시 `migrated.version`으로 두 값을 동시에 맞추는 것과
       // 같은 이유로, 읽기도 똑같이 해야 한다.
-      const migrated = migrateDocument(page.schema)
+      //
+      // `PUT .../schema`(아래)와 마찬가지로 try/catch로 감싼다. 오늘은 PUT이 저장
+      // 시점에 지원하지 않는 버전을 이미 400으로 막아 이 조회 경로가 그런 문서를
+      // 볼 일이 없지만, 그 보장은 이 프로세스가 아는 `CURRENT_DOCUMENT_VERSION` 안에서만
+      // 유효하다 — 더 새 배포가 저장한 문서를 이 프로세스가 되읽으면(예: 배포 롤백,
+      // 여러 버전이 같은 DB를 공유하는 롤링 배포) `migrateDocument`가 똑같이 던진다.
+      // 여기서 잡지 않으면 그 페이지의 모든 후속 GET이 처리되지 않은 예외로 500이
+      // 되고, PUT과 달리 그 페이지는 고칠 방법(같은 GET)조차 막혀 영구히 죽는다.
+      let migrated
+      try {
+        migrated = migrateDocument(page.schema)
+      } catch (error) {
+        throw badRequest(error instanceof Error ? error.message : '지원하지 않는 문서 버전입니다')
+      }
       return toResponse({ ...page, schema: migrated, schemaVersion: migrated.version })
     })
 
@@ -176,6 +213,17 @@ export function pageRoutes() {
       const issues = validatePage(migrated)
       if (issues.length > 0) {
         throw validationFailed('스키마 검증에 실패했습니다', issues)
+      }
+
+      // 3.5단계: NUL 문자(U+0000) 검사. `DocumentEnvelopeSchema`(1단계)는 타입만,
+      // `validatePage`(3단계)는 카탈로그 규칙만 본다 — 문자열 값의 문자 내용은
+      // 둘 다 검사하지 않으므로 NUL이 여기까지 그대로 통과한다. 이 검사가 없으면
+      // 4단계의 `schema::jsonb` 캐스팅이 Postgres에서 `22P05 unsupported Unicode
+      // escape sequence`로 죽는다(실측 확인). Postgres의 텍스트 계열 타입이 NUL을
+      // 담지 못하는 한정적 제약이라, 브라우저에서도 도는 `@wirebound/schema`
+      // (`DocumentEnvelopeSchema`)가 아니라 여기(API, Postgres를 아는 계층)에서 막는다.
+      if (containsNulByte(migrated)) {
+        throw badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
       }
 
       // 4단계: 통과한 문서만 저장한다.

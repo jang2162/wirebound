@@ -122,21 +122,28 @@ export async function findProjectById(db: DbHandle, projectId: string): Promise<
  * slug를 바꿀 때 다른 프로젝트가 이미 그 slug를 쓰고 있으면 유니크 위반이 나므로,
  * `insertProject`와 같은 이유로 `withTransaction`에 감싸 그 실패를 격리한 뒤
  * `DuplicateSlugError`로 바꿔 던진다.
+ *
+ * `executeTakeFirst`를 쓴다(`OrThrow`가 아니다) — `projectGuard`의 권한 확인과 이
+ * UPDATE 사이에 그 프로젝트가 삭제되는 경합이 나면 대상 행이 없어 정상적으로
+ * 아무것도 갱신하지 못한다. 이때 `null`을 돌려준다: `GET /:projectId`
+ * (`routes/projects.ts`)가 같은 경합을 `notFound()`로 다루는 것과 같은 취급이다 —
+ * `OrThrow`로 던지게 두면 호출자가 잡지 않는 예외가 되어 500이 났다.
  */
 export async function updateProject(
   db: DbHandle,
   projectId: string,
   patch: { name?: string; slug?: string; description?: string | null },
-): Promise<ProjectRecord> {
+): Promise<ProjectRecord | null> {
   try {
-    return await withTransaction(db, (trx) =>
+    const row = await withTransaction(db, (trx) =>
       trx
         .updateTable('projects')
         .set({ ...patch, updated_at: sql`now()` })
         .where('id', '=', projectId)
         .returning(['id', 'name', 'slug', 'description'])
-        .executeTakeFirstOrThrow(),
+        .executeTakeFirst(),
     )
+    return row ?? null
   } catch (error) {
     if (isSlugUniqueViolation(error)) {
       throw new DuplicateSlugError()
@@ -146,10 +153,20 @@ export async function updateProject(
 }
 
 /**
- * 프로젝트를 지운다. `ON DELETE CASCADE`가 `project_members`(그리고 이후 태스크가
- * 추가할 메뉴·페이지)를 함께 지운다 — 이 함수는 그 사실을 알 필요 없이 `projects`
- * 행 하나만 지우면 된다.
+ * 프로젝트를 지운다. `ON DELETE CASCADE`가 `project_members`·`menu_nodes`·`pages`를
+ * 함께 지운다 — 이 함수는 그 사실을 알 필요 없이 `projects` 행 하나만 지우면 된다.
+ *
+ * `withTransaction`으로 감싼다. 이 함수가 처음 쓰였을 때는 `projects`를 RESTRICT로
+ * 참조하는 테이블이 없어 실제로 감쌀 이유가 없었지만, 이후 `menu_nodes.parent_id`·
+ * `pages.menu_node_id`에 `ON DELETE RESTRICT` FK가 생겼다(`0003-menu-nodes`·
+ * `0004-pages`). 이 DELETE 자체는 여전히 살아 있다 — `menu_nodes`/`pages`는
+ * `project_id`를 통해 CASCADE로 참조하므로, Postgres가 그 CASCADE로 큐에 넣은
+ * 삭제들을 RESTRICT 제약 검사보다 먼저 처리해 실측으로도 매번 성공한다(중첩
+ * 메뉴 트리·페이지가 있어도). 그래도 감싸는 이유는 `repos/`의 다른 쓰기 경로와
+ * 같다 — 이 문장이 실패할 수 있는 경로(FK 제약)가 이제 존재하는 이상, 세이브포인트
+ * 없이 실패하면 호출자의 트랜잭션이 `25P02`로 오염된다는 사실 자체가 이 함수를
+ * 예외로 둘 근거를 없앤다(`src/db/tx.ts` 참고).
  */
 export async function deleteProject(db: DbHandle, projectId: string): Promise<void> {
-  await db.deleteFrom('projects').where('id', '=', projectId).execute()
+  await withTransaction(db, (trx) => trx.deleteFrom('projects').where('id', '=', projectId).execute())
 }

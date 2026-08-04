@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addMember, createProject, signup, withApi } from './helpers'
+import { addMember, createMenuNode, createPage, createProject, signup, withApi } from './helpers'
 
 describe('POST /api/projects', () => {
   it('201과 role: owner를 반환한다', async () => {
@@ -433,6 +433,46 @@ describe('DELETE /api/projects/:projectId', () => {
         .where('project_id', '=', project.id)
         .execute()
       expect(members).toHaveLength(0)
+    })
+  })
+
+  it('중첩 메뉴 트리와 페이지가 있어도 지워지고, 딸린 행이 모두 함께 지워진다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      // menu_nodes.parent_id와 pages.menu_node_id는 둘 다 ON DELETE RESTRICT다
+      // (repos/projects.ts의 deleteProject 주석 참고) — 이 프로젝트 안에서는
+      // 서로를 참조하는 관계지만, projects → menu_nodes/pages는 CASCADE라
+      // Postgres가 이들을 같은 삭제 큐에 함께 넣고 RESTRICT 검사보다 먼저
+      // 처리한다. 이 테스트는 그 사실을 "중첩된" 트리(부모 하나, 자식 하나,
+      // 그 밑 손자 하나)와 두 메뉴에 각각 매달린 페이지로 실제 확인한다 —
+      // 평평한 트리 하나만으로는 RESTRICT가 걸릴 여지가 있는 형태를 재현하지
+      // 못한다.
+      const root = await createMenuNode(ctx, owner.cookie, project.id, { title: '루트' })
+      const child = await createMenuNode(ctx, owner.cookie, project.id, { parentId: root.id, title: '자식' })
+      const grandchild = await createMenuNode(ctx, owner.cookie, project.id, {
+        parentId: child.id,
+        title: '손자',
+      })
+      await createPage(ctx, owner.cookie, project.id, root.id, { title: '루트 페이지' })
+      await createPage(ctx, owner.cookie, project.id, grandchild.id, { title: '손자 페이지' })
+
+      const res = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/projects/${project.id}`,
+        cookies: owner.cookie,
+      })
+      expect(res.statusCode).toBe(204)
+
+      const menuNodes = await ctx.db
+        .selectFrom('menu_nodes')
+        .selectAll()
+        .where('project_id', '=', project.id)
+        .execute()
+      expect(menuNodes).toHaveLength(0)
+
+      const pages = await ctx.db.selectFrom('pages').selectAll().where('project_id', '=', project.id).execute()
+      expect(pages).toHaveLength(0)
     })
   })
 })

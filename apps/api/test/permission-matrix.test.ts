@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { ProjectRole } from '../src/db/types'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 

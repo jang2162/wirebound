@@ -344,9 +344,13 @@ describe('PATCH /api/projects/:projectId/menu/:nodeId — parentId', () => {
         cookies: owner.cookie,
       })
       const roots = tree.json() as MenuTreeNodeResponse[]
-      const remainingRoots = roots.filter((r) => r.id === a.id || r.id === c.id)
-      expect(remainingRoots.map((r) => r.title)).toEqual(['가', '다'])
-      expect(remainingRoots.map((r) => r.sortOrder)).toEqual([0, 1])
+      // target(새 부모)도 포함한다 — b가 빠지며 생긴 빈틈을 closeGap이 메울 때
+      // target 자신의 sort_order도 3에서 2로 당겨져야 한다(target은 이동 대상 b의
+      // 새 부모일 뿐, b가 있던 루트 형제 그룹의 네 번째 자리였다). target을 빼고
+      // a·c만 보면 이 재번호가 실제로 이 값까지 미쳤는지 확인하지 못한다.
+      const remainingRoots = roots.filter((r) => r.id === a.id || r.id === c.id || r.id === target.id)
+      expect(remainingRoots.map((r) => r.title)).toEqual(['가', '다', '새 부모'])
+      expect(remainingRoots.map((r) => r.sortOrder)).toEqual([0, 1, 2])
     })
   })
 
@@ -482,7 +486,10 @@ describe('PATCH /api/projects/:projectId/menu/:nodeId — parentId', () => {
         payload: { parentId: null },
       })
       expect(res.statusCode).toBe(200)
-      expect(res.json()).toMatchObject({ id: child.id, parentId: null })
+      // 루트 레벨엔 이미 root(sortOrder 0)가 있다 — child는 그 형제 그룹의 맨 끝
+      // (sortOrder 1)에 붙어야 한다. parentId만 확인하면 승격된 노드가 실제로
+      // 새 형제 그룹 안에서 정렬 불변식을 지키는지는 검증하지 못한다.
+      expect(res.json()).toMatchObject({ id: child.id, parentId: null, sortOrder: 1 })
 
       const tree = (
         await ctx.app.inject({ method: 'GET', url: `/api/projects/${project.id}/menu`, cookies: owner.cookie })

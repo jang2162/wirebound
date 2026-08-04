@@ -334,6 +334,49 @@ describe('GET /api/projects/:projectId/pages/:pageId', () => {
       expect(body.schemaVersion).not.toBe(999)
     })
   })
+
+  it('저장된 문서 버전이 지원 범위를 넘으면 500이 아니라 400이다 (PUT과 같은 취급)', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+
+      // PUT은 저장 시점에 지원하지 않는 버전(migrateDocument가 던지는 경우)을 이미
+      // 400으로 막으므로, 오늘은 이런 문서가 정상 쓰기 경로로 생기지 않는다 —
+      // 재현되는 상황은 배포 롤백이나, 여러 버전이 같은 DB를 공유하는 롤링 배포처럼
+      // "이 프로세스보다 새 버전이 저장한 문서를 되읽는" 경우다. 그 상황을 DB에
+      // 직접 만든다(위 테스트가 schema_version 컬럼만 어긋낸 것과 달리, 여기서는
+      // 문서 안(root)의 version 자체를 올린다 — migrateDocument가 실제로 던지는
+      // 조건은 `doc.version > target`이다).
+      await ctx.db
+        .updateTable('pages')
+        .set({
+          schema: JSON.stringify({ version: 999, root: { id: 'n_root', type: 'Page', children: [] } }),
+          schema_version: 999,
+        })
+        .where('id', '=', page.id)
+        .execute()
+
+      const res = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+      })
+      // 고치기 전에는 GET이 migrateDocument를 try/catch 없이 불러 이 경로가 처리
+      // 되지 않은 예외로 500이었다 — PUT의 동일 조건(위 '지원하지 않는 버전(현재보다
+      // 큼)이면 400')과 다르게 취급됐다는 것 자체가 이 태스크가 고치는 불일치다.
+      expect(res.statusCode).toBe(400)
+      expect(res.json().error.code).toBe('bad-request')
+
+      // 500이 아니라는 것만으로는 부족하다 — 이 GET 자체가 그 페이지를 영구히
+      // 막지 않는다는 것도 같이 본다: 트랜잭션이 살아 있어야 뒤이은 요청도 통과한다.
+      const listRes = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}`,
+        cookies: owner.cookie,
+      })
+      expect(listRes.statusCode).toBe(200)
+    })
+  })
 })
 
 describe('PATCH /api/projects/:projectId/pages/:pageId', () => {
@@ -724,6 +767,51 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         .executeTakeFirstOrThrow()
       expect(row.schema).toEqual(originalSchema)
       expect(row.schema_version).toBe(page.schemaVersion)
+    })
+  })
+
+  it('NUL 문자(U+0000)가 담긴 props는 400이고, 트랜잭션이 오염되지 않아 다음 요청도 그대로 통과한다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+
+      // 'a b'의 가운데는 공백이 아니라 실제 NUL 문자다. `Text.content`는
+      // `z.string()`(길이·패턴 제약 없음)이라 이 값은 봉투 검증(1단계, 타입만
+      // 봄)과 카탈로그 검증(3단계, `props 타입 오류면 422` 테스트와 달리 타입은
+      // 맞으므로 통과)을 둘 다 통과한다 — 그래서 실제 API 사용자가 흔히 만들
+      // 수 있는 입력이다. 그런데도 `schema::jsonb` 캐스팅이 Postgres에서
+      // 22P05로 죽는다 — 고치기 전에는 이 요청이 500이었다.
+      const nul = String.fromCharCode(0)
+      const res = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${project.id}/pages/${page.id}/schema`,
+        cookies: owner.cookie,
+        payload: {
+          schema: {
+            version: 1,
+            root: {
+              id: 'n_root',
+              type: 'Page',
+              children: [{ id: 'n_text', type: 'Text', props: { content: `a${nul}b` } }],
+            },
+          },
+        },
+      })
+      expect(res.statusCode).toBe(400)
+      expect(res.json().error.message).toContain('NUL')
+
+      // 여기가 핵심 단정이다. updatePageSchema가 withTransaction 없이 저장을
+      // 시도했다면(고치기 전 상태) 22P05가 withApi를 감싸는 바깥 트랜잭션 전체를
+      // aborted(25P02)로 만들어, 이 시점 이후 같은 withApi 안의 모든 쿼리가 실제
+      // 내용과 무관하게 실패했을 것이다. 그 뒤에도 평범한 요청이 여전히 성공한다는
+      // 사실만이 트랜잭션이 살아 있음을 증명한다.
+      const after = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+      })
+      expect(after.statusCode).toBe(200)
+      expect(after.json().schema).toEqual(page.schema)
     })
   })
 

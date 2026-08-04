@@ -309,11 +309,15 @@ export async function updatePage(
  * 저장한다. `schema`·`schema_version`·`updated_at` 셋만 갱신한다 — 다른 컬럼은
  * 건드리지 않는다.
  *
- * 이 문장은 `project_id`·`menu_node_id` 등 어떤 제약도 참조하지 않으므로
- * `withTransaction`으로 감쌀 이유가 없다(`db/tx.ts`의 규칙은 "제약 위반을 낼 수
- * 있는 경로"만을 대상으로 한다) — 실패할 수 있는 유일한 이유는 대상이 없는
- * 경우뿐이고, 그건 제약 위반이 아니라 `executeTakeFirst`가 `undefined`를
- * 돌려주는 정상 경로다.
+ * `withTransaction`으로 감싼다. 이 문장은 `project_id`·`menu_node_id` 같은 FK
+ * 제약은 참조하지 않지만, `schema::jsonb` 캐스팅 자체가 제약 위반과 같은 방식으로
+ * 실패할 수 있다는 게 실측으로 드러났다: 문자열 값 안에 NUL 문자(U+0000)가 있으면
+ * Postgres가 `22P05 unsupported Unicode escape sequence`를 던진다. `routes/pages.ts`가
+ * 저장 전에 이 조건을 미리 걸러 400으로 돌려주지만(`containsNulByte`), 그 방어를
+ * 우회해 이 함수가 직접 불리는 경로가 생기면(P3의 협업 편집처럼 더 큰 트랜잭션
+ * 안에서 이 문장이 도는 경우 포함) 세이브포인트 없이는 호출자의 트랜잭션 전체가
+ * `25P02`로 오염된다(`src/db/tx.ts` 참고) — `repos/`의 다른 쓰기 경로와 같은 이유로
+ * 감싼다.
  */
 export async function updatePageSchema(
   db: DbHandle,
@@ -322,14 +326,16 @@ export async function updatePageSchema(
   schema: PageDocument,
   schemaVersion: number,
 ): Promise<PageRecord | null> {
-  const row = await db
-    .updateTable('pages')
-    .set({ schema: JSON.stringify(schema), schema_version: schemaVersion, updated_at: sql`now()` })
-    .where('id', '=', pageId)
-    .where('project_id', '=', projectId)
-    .returning(PAGE_COLUMNS)
-    .executeTakeFirst()
-  return row ? toRecord(row) : null
+  return withTransaction(db, async (trx) => {
+    const row = await trx
+      .updateTable('pages')
+      .set({ schema: JSON.stringify(schema), schema_version: schemaVersion, updated_at: sql`now()` })
+      .where('id', '=', pageId)
+      .where('project_id', '=', projectId)
+      .returning(PAGE_COLUMNS)
+      .executeTakeFirst()
+    return row ? toRecord(row) : null
+  })
 }
 
 /**
