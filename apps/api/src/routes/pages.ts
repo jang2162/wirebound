@@ -14,10 +14,19 @@
  * 2. `migrateDocument`로 최신 버전까지 올린다. 던지면(지원하지 않는 버전) → 400.
  * 3. `validatePage`를 부른다. 이슈가 있으면(봉투는 멀쩡한데 카탈로그 규칙 위반)
  *    → 422 `validation-failed`, `issues`에 `ValidationIssue[]`를 그대로 싣는다.
- * 4. 통과한 문서만 `updatePageSchema`로 저장한다.
+ * 4. 통과한 문서만 `applyEdit`(편집 파이프라인)에 태워 저장한다 — `PATCH .../ops`와
+ *    **같은 쓰기 경로**다.
  * 1·3단계가 갈리는 이유: "요청이 잘못됨"(400)과 "내용이 처리 불가함"(422)은 다른
  * 성질이다(설계 §13). 1~3 중 어디서든 실패하면 저장(4단계)에 도달하지 못하므로
  * 기존 `schema`는 그대로 남는다 — 이 게이트가 존재하는 이유 자체다.
+ *
+ * **`pages.schema`를 바꾸는 경로는 파이프라인 하나뿐이다(설계 결정 D1).** 그래서
+ * 통째 교체인 `PUT`도 revision을 남긴다. 예외를 두면 이렇게 깨진다: PUT이 문서만
+ * 갈아 끼우고 `head_seq`를 그대로 두면, 그 뒤 클라이언트가 보내는 undo(저장된
+ * `inverse`의 재적용)가 **교체된 문서** 위에서 돈다. 경로가 어긋나면 409로 튕기지만
+ * 우연히 살아 있으면 조용히 엉뚱한 값이 들어간다. `repos/pages.ts`에 revision 없이
+ * `schema`를 쓰는 함수를 남겨 두지 않는 것도(이 태스크가 그런 함수 하나를 지웠다)
+ * 같은 이유다 — 두 번째 쓰기 경로가 있으면 그것을 부르는 순간 같은 구멍이 다시 난다.
  *
  * **`PATCH .../ops`는 같은 게이트를 부분 편집에 대해 수행한다.** 다만 검증·적용·
  * 이력 기록을 이 파일이 직접 하지 않고 `services/edit-pipeline.ts`의 `applyEdit`
@@ -39,15 +48,7 @@ import { containsNulByte } from '../db/nul-guard'
 import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
-import {
-  MenuNodeNotFoundError,
-  deletePage,
-  findPageById,
-  insertPage,
-  updatePage,
-  updatePageSchema,
-  type PageRecord,
-} from '../repos/pages'
+import { MenuNodeNotFoundError, deletePage, findPageById, insertPage, updatePage, type PageRecord } from '../repos/pages'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
@@ -318,16 +319,73 @@ export function pageRoutes() {
       // escape sequence`로 죽는다(실측 확인). Postgres의 텍스트 계열 타입이 NUL을
       // 담지 못하는 한정적 제약이라, 브라우저에서도 도는 `@wirebound/schema`
       // (`DocumentEnvelopeSchema`)가 아니라 여기(API, Postgres를 아는 계층)에서 막는다.
+      //
+      // 파이프라인도 같은 검사를 하므로(8단계) 지워도 400이 나오기는 한다. 그래도
+      // 남기는 이유는 1~3단계와 같다 — 여기서 걸러야 이 요청이 잠금도 트랜잭션도
+      // 열지 않고 끝난다.
       if (containsNulByte(migrated)) {
         throw badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
       }
 
-      // 4단계: 통과한 문서만 저장한다.
-      const page = await updatePageSchema(app.db, projectId, pageId, migrated, migrated.version)
-      if (!page) {
+      // `PATCH .../ops`와 같은 이유로 `as`로 좁히지 않고 던진다 — 이 라우트도 이제
+      // append-only 로그에 actor를 남긴다.
+      const currentUser = request.currentUser
+      if (!currentUser) {
+        throw unauthenticated()
+      }
+
+      // 4단계: 통과한 문서를 파이프라인에 태운다. 이 엔드포인트가 `PATCH .../ops`와
+      // **같은 쓰기 경로**를 쓰는 것이 D1(모든 스키마 변경이 revision을 남긴다)이다.
+      //
+      // `PUT`은 "통째 교체"이므로 baseSeq를 본문으로 받지 않고 라우트가 현재 head_seq를
+      // 읽어 넘긴다 — 이 엔드포인트의 실제 사용자는 JSON 가져오기(P7)와 스냅샷
+      // 복원(P6)이고, 그 둘은 마지막 쓰기가 이기는 것이 옳다. 에디터(P2b)는 이
+      // 엔드포인트를 쓰지 않는다.
+      //
+      // **읽기와 파이프라인 호출 사이에는 경합 창이 있다.** 그 사이 다른 편집이
+      // 커밋되면 파이프라인이 `stale`을 돌려주고, 그건 그대로 409가 된다(위
+      // `toApiError`). 재시도 루프를 넣지 않는다: 창이 매우 좁고, 409를 받은
+      // 호출자(가져오기 도구)가 다시 시도하면 된다. `stale`을 조용히 삼켜 덮어쓰면
+      // "덮어썼는데 무엇을 덮어썼는지 모르는" 상황이 된다.
+      const before = await findPageById(app.db, projectId, pageId)
+      if (!before) {
         throw notFound()
       }
-      return toResponse(page)
+
+      // ops를 두 개로 만드는 이유: `applyOp`는 문서 루트(`""`)에 연산을 적용하지
+      // 못하므로(`resolveSlot`이 거부한다) `{version, root}` 전체를 한 번에 갈아
+      // 끼울 수 없다. `/root`와 `/version`을 따로 replace한다. `/version`이 같은
+      // 값이어도 생략하지 않는다 — 두 필드를 항상 함께 기록해야 inverse가
+      // 마이그레이션으로 올라간 버전까지 정확히 되돌린다.
+      //
+      // 이 `replace /version`은 파이프라인 7단계(`after.version !== before.version`이면
+      // `invalid`)에 걸리지 않는다. `migrateDocument`는 목표 버전(`CURRENT_DOCUMENT_VERSION`)에
+      // 도달하거나 던지거나 둘 중 하나이고, 저장된 문서(파이프라인 2단계)와 들어온
+      // 문서(위 2단계)를 둘 다 그 함수에 태우므로 두 버전이 반드시 같다.
+      const outcome = await applyEdit(app.db, {
+        projectId,
+        pageId,
+        baseSeq: before.headSeq,
+        ops: [
+          { op: 'replace', path: '/root', value: migrated.root },
+          { op: 'replace', path: '/version', value: migrated.version },
+        ],
+        actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+      })
+
+      if (!outcome.ok) {
+        throw toApiError(outcome, before.headSeq)
+      }
+
+      // 응답 형태는 바뀌지 않는다(페이지 객체 그대로). 바뀐 세 필드만 파이프라인
+      // 결과로 덮어쓰고 나머지(제목·메뉴·순서)는 위에서 읽은 레코드를 쓴다 — 이
+      // 엔드포인트는 그 필드들을 건드리지 않으므로 DB를 다시 조회할 이유가 없다.
+      return toResponse({
+        ...before,
+        schema: outcome.schema,
+        schemaVersion: outcome.schemaVersion,
+        headSeq: outcome.seq,
+      })
     })
 
     app.patch('/:projectId/pages/:pageId/ops', { preHandler: projectGuard('editor') }, async (request) => {

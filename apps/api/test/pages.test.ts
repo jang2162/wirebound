@@ -2,14 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   CATALOG_TYPES,
+  applyOps,
   defineComponent,
   getComponent,
   listComponents,
   registerComponent,
   resetRegistry,
+  type PageDocument,
 } from '@wirebound/schema'
 import { withTransaction } from '../src/db/tx'
-import { updatePageSchema } from '../src/repos/pages'
 import { ensureCatalog } from '../src/schema-setup'
 import {
   addMember,
@@ -46,6 +47,46 @@ async function createProjectWithPage(ctx: TestContext, owner: SignedUpUser) {
   const menu = await createMenuNode(ctx, owner.cookie, project.id, { title: '메뉴' })
   const page = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '페이지' })
   return { project, menu, page }
+}
+
+/** POST가 만드는 빈 기본 문서와 확실히 다른(자식이 하나 있는) 유효 문서. revision 테스트들이 공유한다. */
+function docWithText(content = '안녕') {
+  return {
+    version: 1,
+    root: { id: 'n_root', type: 'Page', children: [{ id: 'n_text', type: 'Text', props: { content } }] },
+  }
+}
+
+/** `PUT .../schema` 한 번. 아래 revision 테스트들이 공유한다. */
+function putSchema(
+  ctx: TestContext,
+  projectId: string,
+  pageId: string,
+  cookie: { wb_session: string },
+  schema: unknown,
+) {
+  return ctx.app.inject({
+    method: 'PUT',
+    url: `/api/projects/${projectId}/pages/${pageId}/schema`,
+    cookies: cookie,
+    payload: { schema } as never,
+  })
+}
+
+/** 페이지의 `revisions` 행 전부를 seq 순으로 읽는다. */
+function revisionRows(ctx: TestContext, pageId: string) {
+  return ctx.db
+    .selectFrom('revisions')
+    .select(['id', 'seq', 'actor_type', 'actor_id', 'actor_label', 'ops', 'inverse'])
+    .where('page_id', '=', pageId)
+    .orderBy('seq')
+    .execute()
+}
+
+/** 페이지의 현재 `head_seq`. `pg`가 int8을 문자열로 주므로 여기서 숫자로 바꾼다(`repos/pages.ts`의 `toRecord`와 같은 이유). */
+async function headSeqOf(ctx: TestContext, pageId: string): Promise<number> {
+  const row = await ctx.db.selectFrom('pages').select('head_seq').where('id', '=', pageId).executeTakeFirstOrThrow()
+  return Number(row.head_seq)
 }
 
 describe('ensureCatalog', () => {
@@ -824,7 +865,8 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       expect(res.statusCode).toBe(400)
       expect(res.json().error.message).toContain('NUL')
 
-      // 여기가 핵심 단정이다. updatePageSchema가 withTransaction 없이 저장을
+      // 여기가 핵심 단정이다. 저장 함수(오늘은 파이프라인의 `writePageSchemaAtSeq`)가
+      // withTransaction 없이 저장을
       // 시도했다면(고치기 전 상태) 22P05가 withApi를 감싸는 바깥 트랜잭션 전체를
       // aborted(25P02)로 만들어, 이 시점 이후 같은 withApi 안의 모든 쿼리가 실제
       // 내용과 무관하게 실패했을 것이다. 그 뒤에도 평범한 요청이 여전히 성공한다는
@@ -891,32 +933,223 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
     })
   })
 
-  it('containsNulByte 사전 필터를 우회해 updatePageSchema를 직접 불러도, withTransaction의 세이브포인트가 바깥 트랜잭션을 지킨다', async () => {
-    await withApi(async (ctx) => {
-      const owner = await signup(ctx)
-      const { project, page } = await createProjectWithPage(ctx, owner)
+  /**
+   * D1: **`pages.schema`를 바꾸는 모든 경로가 revision을 남긴다. 예외 없다.**
+   *
+   * 이 절이 그 불변식을 `PUT .../schema`에 대해 고정한다. 예외를 두지 않는 이유:
+   * PUT이 revision 없이 문서를 갈아 끼우면 `head_seq`는 그대로인데 문서만 달라져,
+   * 그 뒤 클라이언트가 보내는 undo(=저장된 inverse의 재적용)가 **교체된 문서** 위에서
+   * 돈다. 경로가 어긋나면 409로 튕기지만 우연히 살아 있으면 조용히 엉뚱한 값이
+   * 들어간다 — 실패가 눈에 보이지 않는 종류라 코드가 아니라 이 테스트들이 막는다.
+   */
+  describe('revision을 남긴다 (D1)', () => {
+    it('PUT .../schema도 revision을 남긴다', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
 
-      // 라우트를 거치면(Fix 1b가 완전해진 뒤) NUL 문서가 더 이상 DB까지 도달할
-      // 방법이 없다 — 그래서 Fix 1a(updatePageSchema를 withTransaction으로 감싼 것)가
-      // 실제로 트랜잭션을 지키는지는 라우트를 건너뛰고 repos 계층 함수를 직접
-      // 불러야만 확인할 수 있다. 이 문서는 실제로 Postgres까지 가서 jsonb 캐스팅이
-      // 22P05로 죽는다.
-      const nul = String.fromCharCode(0)
-      const docWithNul = {
-        version: 1,
-        root: {
-          id: 'n_root',
-          type: 'Page',
-          children: [{ id: 'n_text', type: 'Text', props: { content: `a${nul}b` } }],
-        },
-      }
+        // 양성 대조: PUT 전에는 이력이 없다. 이 단언이 없으면 "원래부터 1행이었다"와
+        // "PUT이 남겼다"를 구별하지 못한다.
+        expect(await revisionRows(ctx, page.id)).toHaveLength(0)
+        expect(await headSeqOf(ctx, page.id)).toBe(0)
 
-      await expect(updatePageSchema(ctx.db, project.id, page.id, docWithNul, 1)).rejects.toThrow()
+        const res = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText())
+        expect(res.statusCode, res.body).toBe(200)
 
-      // 세이브포인트가 실제로 트랜잭션을 지켰다는 유일한 증거: 같은 withApi
-      // 트랜잭션 위에서 던진 이후 쿼리가 25P02 없이 성공한다.
-      const row = await ctx.db.selectFrom('pages').select('id').where('id', '=', page.id).executeTakeFirstOrThrow()
-      expect(row.id).toBe(page.id)
+        const rows = await revisionRows(ctx, page.id)
+        expect(rows).toHaveLength(1)
+        expect(Number(rows[0]?.seq)).toBe(1)
+        expect(await headSeqOf(ctx, page.id)).toBe(1)
+      })
+    })
+
+    it('그 revision의 ops는 replace /root와 replace /version 둘이다', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+        const doc = docWithText()
+
+        const res = await putSchema(ctx, project.id, page.id, owner.cookie, doc)
+        expect(res.statusCode, res.body).toBe(200)
+
+        const rows = await revisionRows(ctx, page.id)
+        // 경로만 보면 값이 엉뚱해도(예: /version에 옛 버전을 싣거나 /root에 빈
+        // 문서를 싣거나) 초록이므로 ops 전체를 못박는다. `/version`이 같은 값이어도
+        // 생략하지 않는다는 규칙도 여기서 고정된다 — 빼면 배열 길이가 1이 된다.
+        expect(rows[0]?.ops).toEqual([
+          { op: 'replace', path: '/root', value: doc.root },
+          { op: 'replace', path: '/version', value: doc.version },
+        ])
+      })
+    })
+
+    it('그 revision의 inverse를 적용하면 이전 문서로 돌아온다', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+        const before = page.schema
+
+        const res = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText())
+        expect(res.statusCode, res.body).toBe(200)
+
+        const rows = await revisionRows(ctx, page.id)
+        const inverse = rows[0]?.inverse
+        expect(inverse).toBeDefined()
+
+        // 저장된 문서(응답이 아니라 DB 원본)에 inverse를 적용해 원본으로 돌아오는지
+        // 본다 — 이것이 undo가 실제로 기대는 성질이다. 응답을 쓰면 라우트가 응답에
+        // 실은 문서와 DB에 쓴 문서가 갈라져도 초록이다.
+        const stored = await ctx.db
+          .selectFrom('pages')
+          .select('schema')
+          .where('id', '=', page.id)
+          .executeTakeFirstOrThrow()
+        expect(stored.schema).not.toEqual(before)
+        expect(applyOps(stored.schema as PageDocument, inverse ?? [])).toEqual(before)
+      })
+    })
+
+    it('PUT 후 ops로 편집하려면 baseSeq가 1이어야 한다', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+
+        const put = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText())
+        expect(put.statusCode, put.body).toBe(200)
+
+        const opsUrl = `/api/projects/${project.id}/pages/${page.id}/ops`
+        const op = { op: 'add', path: '/root/children/1', value: { id: 'n_text2', type: 'Text', props: { content: 'x' } } }
+
+        // PUT이 revision을 남기지 않았다면 head_seq가 0에 머물러 이 요청이 200이 된다.
+        const stale = await ctx.app.inject({
+          method: 'PATCH',
+          url: opsUrl,
+          cookies: owner.cookie,
+          payload: { baseSeq: 0, ops: [op] },
+        })
+        expect(stale.statusCode, stale.body).toBe(409)
+
+        // 양성 대조: baseSeq만 바꾼 같은 요청은 200이다 — 위 409가 ops 자체가
+        // 잘못돼서 나온 것이 아님을 증명한다.
+        const fresh = await ctx.app.inject({
+          method: 'PATCH',
+          url: opsUrl,
+          cookies: owner.cookie,
+          payload: { baseSeq: 1, ops: [op] },
+        })
+        expect(fresh.statusCode, fresh.body).toBe(200)
+        expect(fresh.json().seq).toBe(2)
+      })
+    })
+
+    it('봉투가 깨지면 400이고 revision을 남기지 않는다', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+
+        const res = await putSchema(ctx, project.id, page.id, owner.cookie, {
+          version: 1,
+          root: { id: null, type: 'Page', children: [] },
+        })
+        expect(res.statusCode, res.body).toBe(400)
+        expect(await revisionRows(ctx, page.id)).toHaveLength(0)
+        expect(await headSeqOf(ctx, page.id)).toBe(0)
+
+        // 양성 대조 겸 더 강한 단언: 같은 URL에 유효한 문서를 보내면 200이고 그
+        // revision의 seq는 **1**이다. 위 400이 조용히 head_seq를 올렸다면 여기서 2가 된다.
+        const ok = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText())
+        expect(ok.statusCode, ok.body).toBe(200)
+        const rows = await revisionRows(ctx, page.id)
+        expect(rows).toHaveLength(1)
+        expect(Number(rows[0]?.seq)).toBe(1)
+      })
+    })
+
+    it('카탈로그 위반이면 422이고 revision을 남기지 않는다', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+
+        const res = await putSchema(ctx, project.id, page.id, owner.cookie, {
+          version: 1,
+          root: { id: 'n_root', type: 'Page', children: [{ id: 'n_x', type: 'Bogus' }] },
+        })
+        expect(res.statusCode, res.body).toBe(422)
+        expect(await revisionRows(ctx, page.id)).toHaveLength(0)
+        expect(await headSeqOf(ctx, page.id)).toBe(0)
+
+        // 봉투 케이스와 같은 이유의 양성 대조.
+        const ok = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText())
+        expect(ok.statusCode, ok.body).toBe(200)
+        const rows = await revisionRows(ctx, page.id)
+        expect(rows).toHaveLength(1)
+        expect(Number(rows[0]?.seq)).toBe(1)
+      })
+    })
+
+    it('응답의 headSeq가 새 seq와 같다', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+
+        const first = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText('첫째'))
+        expect(first.statusCode, first.body).toBe(200)
+        expect(first.json().headSeq).toBe(1)
+
+        // 두 번 보내 2까지 확인한다. 1만 보면 라우트가 `headSeq: 1`을 상수로 박아도
+        // 통과한다. 응답 조립이 편집 **전** 레코드의 headSeq를 흘려보내면 여기서 1이다.
+        const second = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText('둘째'))
+        expect(second.statusCode, second.body).toBe(200)
+        expect(second.json().headSeq).toBe(2)
+        expect(await headSeqOf(ctx, page.id)).toBe(2)
+      })
+    })
+
+    it('revision의 actor가 PUT을 보낸 사용자다', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const editor = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+        await addMember(ctx, project.id, editor.user.id, 'editor')
+
+        const res = await putSchema(ctx, project.id, page.id, editor.cookie, docWithText())
+        expect(res.statusCode, res.body).toBe(200)
+
+        const rows = await revisionRows(ctx, page.id)
+        expect(rows[0]?.actor_type).toBe('user')
+        // 라우트가 actor를 세션이 아니라 페이지 소유자에서 가져오면 이 단언이
+        // 실패한다 — 그래서 owner가 아닌 editor로 편집한다(`revisions.test.ts`와 같은 이유).
+        expect(rows[0]?.actor_id).toBe(editor.user.id)
+        expect(rows[0]?.actor_label).toBe(editor.user.name)
+        expect(rows[0]?.actor_id).not.toBe(owner.user.id)
+      })
+    })
+
+    it('응답은 계약된 키만 담는다 (파이프라인 결과가 새어 나오지 않는다)', async () => {
+      await withApi(async (ctx) => {
+        const owner = await signup(ctx)
+        const { project, page } = await createProjectWithPage(ctx, owner)
+
+        const res = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText())
+        expect(res.statusCode, res.body).toBe(200)
+
+        // 응답 형태는 이 태스크에서 **바뀌지 않는다**. 파이프라인 결과(`seq`·
+        // `revisionId`·`inverse`)를 그대로 스프레드하면 여기서 걸린다.
+        expect(Object.keys(res.json()).sort()).toEqual([
+          'description',
+          'headSeq',
+          'id',
+          'menuNodeId',
+          'schema',
+          'schemaVersion',
+          'sortOrder',
+          'title',
+        ])
+        // 응답의 나머지 필드는 편집 전 레코드에서 온다 — 조립하다 뒤바뀌지 않았는지 본다.
+        expect(res.json().title).toBe(page.title)
+        expect(res.json().menuNodeId).toBe(page.menuNodeId)
+        expect(res.json().sortOrder).toBe(page.sortOrder)
+      })
     })
   })
 

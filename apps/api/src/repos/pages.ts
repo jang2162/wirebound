@@ -1,7 +1,13 @@
 /**
  * 페이지 저장소. SQL만 안다 — HTTP도 zod도 스키마 검증(카탈로그 게이트)도 이 파일
- * 밖의 일이다. `routes/pages.ts`가 `@wirebound/schema`의 `migrateDocument`·
- * `validatePage`를 부른 뒤, 검증을 통과한 `PageDocument`만 이 파일에 넘긴다.
+ * 밖의 일이다. `routes/pages.ts`와 `services/edit-pipeline.ts`가 `@wirebound/schema`의
+ * `migrateDocument`·`validatePage`를 부른 뒤, 검증을 통과한 `PageDocument`만 이 파일에
+ * 넘긴다.
+ *
+ * **`schema`를 쓰는 함수는 `writePageSchemaAtSeq` 하나뿐이고, 그 유일한 호출자는
+ * 편집 파이프라인이다(설계 결정 D1).** revision 없이 `schema`만 갱신하는 함수를
+ * 여기 두지 않는다 — 그런 함수가 있으면 나중에 누군가 그것을 부르는 순간 `head_seq`와
+ * 문서가 조용히 어긋나고, 그 페이지의 undo가 엉뚱한 문서 위에서 돈다.
  *
  * API가 주고받는 키는 camelCase, DB 컬럼은 snake_case다. 그 변환은 이 파일이
  * 전담한다 — `routes/pages.ts`는 이미 camelCase로 바뀐 객체만 주고받는다.
@@ -242,7 +248,8 @@ export async function listPageRows(
 
 /**
  * 페이지의 제목·설명·소속 메뉴·순서를 갱신한다. `schema`는 이 함수의 책임이
- * 아니다(`updatePageSchema` 참고) — 그 게이트는 별도 엔드포인트(`PUT .../schema`)다.
+ * 아니다 — 문서를 바꾸는 유일한 경로는 편집 파이프라인(`services/edit-pipeline.ts`)이고,
+ * 이 파일에서 그 경로가 쓰는 함수는 `lockPageForEdit`·`writePageSchemaAtSeq` 둘뿐이다.
  *
  * 대상이 `projectId` 소속이 아니면 `null`을 돌려준다(호출자가 404로 매핑).
  *
@@ -308,40 +315,6 @@ export async function updatePage(
 
     const updated = await trx.selectFrom('pages').select(PAGE_COLUMNS).where('id', '=', pageId).executeTakeFirstOrThrow()
     return toRecord(updated)
-  })
-}
-
-/**
- * 검증(마이그레이션·카탈로그 게이트, `routes/pages.ts`)을 통과한 문서를 그대로
- * 저장한다. `schema`·`schema_version`·`updated_at` 셋만 갱신한다 — 다른 컬럼은
- * 건드리지 않는다.
- *
- * `withTransaction`으로 감싼다. 이 문장은 `project_id`·`menu_node_id` 같은 FK
- * 제약은 참조하지 않지만, `schema::jsonb` 캐스팅 자체가 제약 위반과 같은 방식으로
- * 실패할 수 있다는 게 실측으로 드러났다: 문자열 값 안에 NUL 문자(U+0000)가 있으면
- * Postgres가 `22P05 unsupported Unicode escape sequence`를 던진다. `routes/pages.ts`가
- * 저장 전에 이 조건을 미리 걸러 400으로 돌려주지만(`containsNulByte`), 그 방어를
- * 우회해 이 함수가 직접 불리는 경로가 생기면(P3의 협업 편집처럼 더 큰 트랜잭션
- * 안에서 이 문장이 도는 경우 포함) 세이브포인트 없이는 호출자의 트랜잭션 전체가
- * `25P02`로 오염된다(`src/db/tx.ts` 참고) — `repos/`의 다른 쓰기 경로와 같은 이유로
- * 감싼다.
- */
-export async function updatePageSchema(
-  db: DbHandle,
-  projectId: string,
-  pageId: string,
-  schema: PageDocument,
-  schemaVersion: number,
-): Promise<PageRecord | null> {
-  return withTransaction(db, async (trx) => {
-    const row = await trx
-      .updateTable('pages')
-      .set({ schema: JSON.stringify(schema), schema_version: schemaVersion, updated_at: sql`now()` })
-      .where('id', '=', pageId)
-      .where('project_id', '=', projectId)
-      .returning(PAGE_COLUMNS)
-      .executeTakeFirst()
-    return row ? toRecord(row) : null
   })
 }
 
@@ -416,9 +389,8 @@ export async function lockPageForEdit(trx: DbHandle, projectId: string, pageId: 
  *
  * `withTransaction`으로 감싼다. 이 문장은 `project_id`·`menu_node_id` 같은 FK 제약은
  * 참조하지 않지만, `schema::jsonb` 캐스팅 자체가 제약 위반과 같은 방식으로 실패할
- * 수 있다는 게 실측으로 드러났다(`updatePageSchema`가 같은 이유로 겪은 것과 동일):
- * 문자열 값 안에 NUL 문자(U+0000)가 있으면 Postgres가 `22P05 unsupported Unicode
- * escape sequence`를 던진다. 파이프라인이 저장 전에 `containsNulByte`로 이 조건을
+ * 수 있다는 게 실측으로 드러났다: 문자열 값 안에 NUL 문자(U+0000)가 있으면 Postgres가
+ * `22P05 unsupported Unicode escape sequence`를 던진다. 파이프라인이 저장 전에 `containsNulByte`로 이 조건을
  * 미리 걸러내지만, 그 방어를 우회해 이 함수가 직접 불리는 경로가 생기면 세이브포인트
  * 없이는 호출자의 트랜잭션 전체가 `25P02`로 오염된다(`src/db/tx.ts` 참고) — `repos/`의
  * 다른 쓰기 경로와 같은 이유로 감싼다.

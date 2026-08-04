@@ -295,9 +295,11 @@ describe('repos/revisions', () => {
       const menu = await createMenuNode(ctx, owner.cookie, project.id)
       const page = await createPage(ctx, owner.cookie, project.id, menu.id)
 
-      // 애플리케이션 경계의 사전 필터(containsNulByte, routes/pages.ts)를 우회해
-      // 저장소 함수를 직접 부른다 — schema::jsonb 캐스팅 자체가 22P05로 죽는지
-      // 실측한다(`pages.test.ts:894`의 updatePageSchema 테스트와 같은 패턴).
+      // 애플리케이션 경계의 사전 필터(containsNulByte — routes/pages.ts의 3.5단계와
+      // 파이프라인 8단계)를 우회해 저장소 함수를 직접 부른다 — schema::jsonb 캐스팅
+      // 자체가 22P05로 죽는지 실측한다. 라우트를 거치면 NUL 문서가 DB까지 도달할
+      // 방법이 없으므로, 이 함수를 감싼 withTransaction이 실제로 바깥 트랜잭션을
+      // 지키는지는 이렇게 계층을 건너뛰어야만 확인할 수 있다.
       // NUL 문자를 소스에 직접 타이핑하지 않는 이유는 db/nul-guard.ts의
       // 헤더 주석이 설명한다 — String.fromCharCode(0)으로 런타임에 만든다.
       const nul = String.fromCharCode(0)
