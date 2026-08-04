@@ -2,7 +2,7 @@
 
 Fastify 5 기반 REST 서버. 설계서 편집을 지원하는 백엔드다(P1 범위 — WebSocket은 P3).
 
-필요한 것: Docker, Node ≥ 22, pnpm.
+필요한 것: Docker, Node ≥ 22.9, pnpm.
 
 ## 기동 절차
 
@@ -23,7 +23,13 @@ Fastify 5 기반 REST 서버. 설계서 편집을 지원하는 백엔드다(P1 �
    직접 보므로 이 제약이 없다 — `tsx`로 실행할 때만 해당한다).
    - 스키마를 함께 고치며 개발할 때는 `pnpm --filter @wirebound/schema build:watch`를
      별도 터미널에서 같이 돌린다.
-4. `.env.example`을 `.env`로 복사하고 필요하면 값을 조정한다.
+4. `.env.example`을 `.env`로 복사하고 필요하면 값을 조정한다. `dev`·`start`·`migrate`·
+   `migrate:down` 스크립트가 전부 `tsx`에 `--env-file-if-exists=.env`를 붙여
+   실행하므로(Node 22.9+, `apps/api/package.json`), `apps/api/.env`가 있으면 자동으로
+   읽는다 — 이 프로젝트는 `dotenv` 같은 별도 패키지를 쓰지 않는다. `.env` 파일 없이
+   셸에 직접 `export DATABASE_URL=...` 해도 그대로 동작한다(`--env-file-if-exists`는
+   파일이 없어도 에러 없이 넘어가고, 파일이 있어도 이미 셸에 있는 값을 덮어쓰지
+   않는다 — 둘 중 하나만 있어도, 둘 다 있어도 안전하다).
 5. `pnpm --filter @wirebound/api migrate` — 마이그레이션을 최신까지 올린다.
 6. `pnpm --filter @wirebound/api dev` — `tsx watch`로 서버를 띄운다.
 

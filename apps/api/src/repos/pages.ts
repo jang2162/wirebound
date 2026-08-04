@@ -212,6 +212,28 @@ export async function findPageById(db: DbHandle, projectId: string, pageId: stri
 }
 
 /**
+ * 태스크 14: `repos/menu.ts`의 `buildMenuTree`가 받을 페이지 행을 조회한다.
+ * 프로젝트의 `pages`에서 `id`·`menu_node_id`·`title`·`sort_order` 네 필드만 고른다 —
+ * `schema`는 여기서 애초에 select하지 않는다(통합 트리 응답에 스키마가 실리면
+ * 프로젝트가 커질수록 무거워진다). 반환 타입은 `repos/menu.ts`의 `PageRow`와
+ * 구조적으로 같다 — 이 파일 안의 (비공개) `PageRow`(전체 컬럼을 담는 타입)와
+ * 이름이 겹치므로 그 타입을 직접 import하지 않고 인라인으로 선언한다.
+ *
+ * `routes/tree.ts`가 이 함수를 부른다 — routes는 SQL을 직접 쓰지 않는다는
+ * 계층 규칙(README "계층 규칙" 절)을 지킨다.
+ */
+export async function listPageRows(
+  db: DbHandle,
+  projectId: string,
+): Promise<Array<{ id: string; menu_node_id: string; title: string; sort_order: number }>> {
+  return db
+    .selectFrom('pages')
+    .select(['id', 'menu_node_id', 'title', 'sort_order'])
+    .where('project_id', '=', projectId)
+    .execute()
+}
+
+/**
  * 페이지의 제목·설명·소속 메뉴·순서를 갱신한다. `schema`는 이 함수의 책임이
  * 아니다(`updatePageSchema` 참고) — 그 게이트는 별도 엔드포인트(`PUT .../schema`)다.
  *

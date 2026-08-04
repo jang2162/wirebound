@@ -279,8 +279,8 @@ export interface MenuRow {
 
 /**
  * 태스크 14: `buildMenuTree`가 받는 페이지 행. `repos/pages.ts`의 `PageRecord`와
- * 달리 트리 조립에 필요한 네 필드만 담는다 — `schema`는 여기 없다(`routes/tree.ts`의
- * SELECT가 애초에 그 컬럼을 고르지 않는다).
+ * 달리 트리 조립에 필요한 네 필드만 담는다 — `schema`는 여기 없다(`repos/pages.ts`의
+ * `listPageRows`가 애초에 그 컬럼을 고르지 않는다).
  */
 export interface PageRow {
   id: string
@@ -353,6 +353,20 @@ export function buildMenuTree(nodes: MenuRow[], pages: PageRow[]): TreeMenuNode[
   }
 
   return roots
+}
+
+/**
+ * `buildMenuTree`가 받을 메뉴 행을 조회한다. 프로젝트의 `menu_nodes`를 정렬 없이
+ * 한 번 SELECT할 뿐이다(정렬은 `buildMenuTree`가 스스로 한다) — `routes/tree.ts`가
+ * SQL을 직접 쓰지 않고 이 함수를 부르게 해서 계층 규칙(routes는 SQL을 모른다)을
+ * 지킨다.
+ */
+export async function listMenuRows(db: DbHandle, projectId: string): Promise<MenuRow[]> {
+  return db
+    .selectFrom('menu_nodes')
+    .select(['id', 'parent_id', 'title', 'sort_order'])
+    .where('project_id', '=', projectId)
+    .execute()
 }
 
 /**

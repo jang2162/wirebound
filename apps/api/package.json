@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "start": "tsx src/main.ts",
-    "migrate": "tsx src/db/migrate.ts latest",
-    "migrate:down": "tsx src/db/migrate.ts down"
+    "dev": "tsx watch --env-file-if-exists=.env src/main.ts",
+    "start": "tsx --env-file-if-exists=.env src/main.ts",
+    "migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts latest",
+    "migrate:down": "tsx --env-file-if-exists=.env src/db/migrate.ts down"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
