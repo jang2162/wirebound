@@ -92,6 +92,38 @@ describe('revisions 스키마', () => {
     })
   })
 
+  it("actor_type이 'mcp'면 actor_id가 없어도 허용한다", async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const menu = await createMenuNode(ctx, owner.cookie, project.id)
+      const page = await createPage(ctx, owner.cookie, project.id, menu.id)
+
+      // revisions_user_actor_id_check는 `actor_type <> 'user' or actor_id is not null`이다.
+      // actor_type이 'user'가 아니면 뒤쪽 조건과 무관하게 항상 참이어야 한다 — 이 테스트가
+      // 그 "허용되는 쪽"을 고정한다. 이게 없으면 누군가 이 제약을 (실수로) `actor_id is not
+      // null` 하나로 좁혀도(즉 actor_type과 무관하게 항상 actor_id를 요구하도록 회귀해도)
+      // 위 거부 테스트만으로는 잡지 못한다 — 그 테스트는 'user'/null 조합만 보기 때문이다.
+      // P9(MCP 액터)가 실제로 이 조합(actor_type: 'mcp', actor_id: null)을 쓴다.
+      await expect(
+        withTransaction(ctx.db, (trx) =>
+          trx
+            .insertInto('revisions')
+            .values({
+              page_id: page.id,
+              seq: 1,
+              actor_type: 'mcp',
+              actor_id: null,
+              actor_label: 'MCP',
+              ops: JSON.stringify([]),
+              inverse: JSON.stringify([]),
+            })
+            .execute(),
+        ),
+      ).resolves.not.toThrow()
+    })
+  })
+
   it('actor_type이 세 값 밖이면 거부한다', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)

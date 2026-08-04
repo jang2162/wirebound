@@ -57,7 +57,11 @@ export const migration: Migration = {
 
     await db.schema.createIndex('revisions_page_seq_idx').on('revisions').columns(['page_id', 'seq']).unique().execute()
 
-    await sql`create index revisions_page_actor_seq_idx on revisions (page_id, actor_id, seq desc)`.execute(db)
+    await db.schema
+      .createIndex('revisions_page_actor_seq_idx')
+      .on('revisions')
+      .columns(['page_id', 'actor_id', 'seq desc'])
+      .execute()
 
     // 기존 행은 DEFAULT 0으로 채워진다 — "이력이 비어 있다"의 정의가 head_seq = 0이다.
     // 브리프의 `addColumn(...).alterTable('pages')` 순서는 Kysely 빌더 API와 맞지
