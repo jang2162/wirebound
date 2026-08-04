@@ -152,6 +152,7 @@ const CASES: Case[] = [
     allowed: ['owner', 'editor'],
     setup: 페이지하나,
   },
+  { label: '트리 조회', method: 'GET', url: '/api/projects/:projectId/tree', allowed: ['owner', 'editor', 'viewer'] },
 ]
 
 const ACTORS: Actor[] = ['owner', 'editor', 'viewer', 'outsider', 'anonymous']
