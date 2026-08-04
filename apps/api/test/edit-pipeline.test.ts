@@ -128,12 +128,20 @@ describe('applyEdit', () => {
 
       const row = await ctx.db
         .selectFrom('pages')
-        .select(['schema', 'head_seq'])
+        .select(['schema', 'head_seq', 'schema_version'])
         .where('id', '=', fx.page.id)
         .executeTakeFirstOrThrow()
 
       expect(row.schema).toEqual(outcome.schema)
       expect(Number(row.head_seq)).toBe(outcome.seq)
+
+      // schemaVersion은 after.version에서 파생돼야 한다 — 저장된 schema_version
+      // 컬럼(locked.schemaVersion)을 그대로 흘려보내면 마이그레이션이 버전을 올리는
+      // 순간 두 값이 어긋난다. MIGRATIONS가 비어 있는 오늘은 두 값이 우연히 같으므로
+      // 이 단언만으로는 파생 여부를 못 가른다 — outcome.schema.version과의 일치,
+      // 그리고 실제로 저장된 schema_version 컬럼과의 일치를 함께 고정해 둔다.
+      expect(outcome.schemaVersion).toBe(outcome.schema.version)
+      expect(row.schema_version).toBe(outcome.schemaVersion)
     })
   })
 
@@ -153,11 +161,12 @@ describe('applyEdit', () => {
 
       const rows = await ctx.db
         .selectFrom('revisions')
-        .select(['ops', 'inverse'])
+        .select(['id', 'ops', 'inverse'])
         .where('page_id', '=', fx.page.id)
         .execute()
 
       expect(rows).toHaveLength(1)
+      expect(rows[0]?.id).toBe(outcome.revisionId)
       expect(rows[0]?.ops).toEqual(ops)
       expect(rows[0]?.inverse).toEqual(outcome.inverse)
     })
@@ -387,6 +396,13 @@ describe('applyEdit', () => {
 
       expect(Number(after.head_seq)).toBe(Number(before.head_seq))
       expect(after.schema).toEqual(before.schema)
+
+      // 10번(stale)·12번(patch-failed)과 대칭으로 revisions 행 수도 확인한다 —
+      // head_seq·schema만 보면 insertRevision만 validatePage보다 앞으로 옮겨져도
+      // (그래서 append-only 로그에 고아 행이 남아도) 이 테스트는 초록인 채로
+      // 통과해 버린다.
+      const revisions = await ctx.db.selectFrom('revisions').select('id').where('page_id', '=', fx.page.id).execute()
+      expect(revisions).toHaveLength(1)
     })
   })
 
@@ -459,6 +475,66 @@ describe('applyEdit', () => {
       if (!outcome.ok) {
         expect(outcome.reason).toBe('unsupported-version')
       }
+    })
+  })
+
+  it('ops가 /version을 직접 바꾸면 invalid다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const edit1 = await seed(ctx, fx)
+
+      // version은 마이그레이션이 소유하는 필드다. validatePage는 이 필드의 값
+      // 자체(양의 정수)만 보고 "편집으로 바뀌었는가"는 보지 않으므로, 이 케이스는
+      // validatePage만으로는 안 잡히고 before.version과의 비교가 있어야 잡힌다.
+      // 저장됐다면 다음 읽기부터 migrateDocument가 던져 페이지가 영구히 막힌다.
+      const outcome = await applyEdit(ctx.db, {
+        projectId: fx.project.id,
+        pageId: fx.page.id,
+        baseSeq: edit1.seq,
+        ops: [{ op: 'replace', path: '/version', value: 2 }],
+        actor: actorFor(fx.owner.user),
+      })
+
+      expect(outcome.ok).toBe(false)
+      if (!outcome.ok && outcome.reason === 'invalid') {
+        expect(outcome.issues[0]?.path).toBe('/version')
+      } else {
+        throw new Error(`invalid를 기대했지만 실제로는 ${JSON.stringify(outcome)}`)
+      }
+    })
+  })
+
+  it('/version을 바꾸는 편집이 거부되면 아무것도 쓰지 않는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const edit1 = await seed(ctx, fx)
+
+      const before = await ctx.db
+        .selectFrom('pages')
+        .select(['head_seq', 'schema'])
+        .where('id', '=', fx.page.id)
+        .executeTakeFirstOrThrow()
+
+      const outcome = await applyEdit(ctx.db, {
+        projectId: fx.project.id,
+        pageId: fx.page.id,
+        baseSeq: edit1.seq,
+        ops: [{ op: 'replace', path: '/version', value: 2 }],
+        actor: actorFor(fx.owner.user),
+      })
+      expect(outcome.ok).toBe(false)
+
+      const after = await ctx.db
+        .selectFrom('pages')
+        .select(['head_seq', 'schema'])
+        .where('id', '=', fx.page.id)
+        .executeTakeFirstOrThrow()
+
+      expect(Number(after.head_seq)).toBe(Number(before.head_seq))
+      expect(after.schema).toEqual(before.schema)
+
+      const revisions = await ctx.db.selectFrom('revisions').select('id').where('page_id', '=', fx.page.id).execute()
+      expect(revisions).toHaveLength(1)
     })
   })
 
