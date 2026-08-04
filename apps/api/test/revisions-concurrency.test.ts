@@ -27,20 +27,27 @@ import {
  *
  * 격리: 각 테스트 전후로 `projects`·`users`를 지운다. `projects` 삭제는
  * `menu_nodes`·`pages`(CASCADE) → `revisions`(CASCADE)까지 지우고, `users`
- * 삭제는 `sessions`(CASCADE)를 지운다. vitest의 api 프로젝트는
- * `fileParallelism: false`이므로 이 파일이 도는 동안 다른 파일이 같은 DB를
- * 만지지 않는다.
+ * 삭제는 `sessions`(CASCADE)를 지운다. 이 파일이 도는 동안 다른 파일이 같은 DB를
+ * 만지지 않는 근거는 **`vitest.config.ts`의 api 프로젝트에 걸린
+ * `poolOptions.forks.singleFork`**다 — 그 프로젝트의 파일 전부가 포크 하나에서
+ * 차례로 돈다. 테스트 DB에 붙는 파일은 `apps/api/test/**`뿐이므로(다른 프로젝트인
+ * `unit`·`build`에는 DB를 만지는 테스트가 없다) 그 직렬화로 충분하다.
+ *
+ * **그 자리를 `fileParallelism: false`로 바꾸지 마라 — 프로젝트 설정에서는 조용히
+ * 무시된다**(vitest의 타입 정의가 그 옵션을 `NonProjectOptions`로 분류한다). 실제로
+ * 그 상태에서 이 파일을 추가했을 때 매 실행마다 서로 다른 파일 5~6개가 깨졌다.
+ * 경위는 `vitest.config.ts`의 주석에 적어 뒀다.
  *
  * 이 파일에 새 테스트를 더할 때는 반드시 "여러 커넥션이 실제로 커밋해야만
  * 검증되는 성질"인지 먼저 확인한다. 그렇지 않으면 `withApi`를 쓴다.
  *
- * **`projects` 한 번의 DELETE로 `pages`까지 지워지는 것은 우연이 아니다.**
+ * **`projects` 한 번의 DELETE로 `pages`까지 지워지는 것은 순서에 기대고 있다.**
  * `pages.menu_node_id`는 `ON DELETE RESTRICT`이고 `menu_nodes`도 `projects`의
  * CASCADE 대상이라, 두 CASCADE의 순서에 따라 RESTRICT가 먼저 걸릴 수 있어 보인다.
- * Postgres는 한 문장이 유발한 연쇄 삭제를 참조하는 쪽부터 처리하므로 실제로는
- * `pages`가 먼저 지워진다(실측 확인) — 그래도 이 순서에 기대는 코드가 여기밖에
- * 없다는 점은 알고 있어야 한다. 이 reset이 언젠가 FK 위반으로 실패하기 시작하면
- * `pages` → `menu_nodes` → `projects` 순서로 명시적으로 지우면 된다.
+ * 실측상 `pages`가 먼저 지워져 문제가 없지만 **문서화된 보증은 아니다** — 한 문장이
+ * 유발한 연쇄 삭제와 RESTRICT 검사를 Postgres가 어떤 순서로 처리하는지에 달려 있고,
+ * 그 순서에 기대는 코드는 저장소에서 여기뿐이다. 이 reset이 언젠가 FK 위반으로
+ * 실패하기 시작하면 `pages` → `menu_nodes` → `projects` 순서로 명시적으로 지우면 된다.
  */
 
 /** 이 파일은 하네스가 아니라 풀 핸들을 직접 쓴다. 파일이 끝나면 `setup.ts`의 `afterAll`이 닫는다. */
@@ -160,6 +167,12 @@ describe('편집 seq 채번의 동시성', () => {
       // 동시에 두 커넥션을 잡는 구간이 없어(권한 조회는 파이프라인 트랜잭션을 열기
       // 전에 끝난다) 상한에 걸려도 대기만 할 뿐 교착되지 않는다 — 실행해서
       // 타임아웃(20초)에 걸리지 않는 것을 확인했다.
+      //
+      // **이 파일의 잠금 검출력은 전적으로 이 케이스와 아래 PUT 케이스에 있다.**
+      // `.forUpdate()`를 지우고 여섯 번 돌린 결과 이 둘은 여섯 번 모두 실패했고,
+      // 위의 "동시에 두 편집" 케이스는 한 번만 실패했다. 여기 동시 요청 수를 줄이면
+      // (예: "둘이면 충분하다") 그 검출력이 사라진다 — 줄이려거든 먼저 줄인 수로
+      // `.forUpdate()`를 지운 채 여러 번 돌려 여전히 잡는지 확인해라.
       const responses = await Promise.all(
         Array.from({ length: 10 }, (_, i) => patchOps(ctx, fx, fx.page.id, 0, [addTextOp(`n_conc_${i}`)])),
       )
@@ -234,9 +247,19 @@ describe('편집 seq 채번의 동시성', () => {
       // 1. 다른 커넥션에서 페이지 행을 잠그고 head_seq를 2로 올리되 **커밋하지 않는다.**
       //    커밋 전이므로 PUT의 `findPageById`(잠금 없는 읽기)는 READ COMMITTED에서
       //    여전히 1을 본다 — 여기엔 타이밍 가정이 없다.
-      // 2. PUT을 던진다. 읽기를 마치고 `FOR UPDATE`에서 막힌다.
-      // 3. **막힌 것을 확인한 뒤**(pg_locks 폴링) 커밋한다. 이 확인이 있어야
+      // 2. **그 잠금이 잡힌 것을 확인한 뒤**(`prepared`) PUT을 던진다. 읽기를 마치고
+      //    `FOR UPDATE`에서 막힌다.
+      // 3. **막힌 것을 확인한 뒤**(`waitForLockWaiter`) 커밋한다. 이 확인이 있어야
       //    "PUT이 아직 읽지도 않았는데 커밋해 버려 우연히 2를 읽는" 경우가 없다.
+      //
+      // 2단계의 `prepared`가 없으면 시작 순서가 정해지지 않는다: PUT이 먼저 행을
+      // 잠그면 `waitForLockWaiter`가 보는 대기자는 PUT이 아니라 **이 트랜잭션**이고,
+      // 그 뒤 이 트랜잭션이 `seq: 2`를 넣다 UNIQUE 위반으로 죽는다. 실패 방향이라
+      // 거짓 초록은 아니지만 불필요한 flake다.
+      let markPrepared = (): void => {}
+      const prepared = new Promise<void>((resolve) => {
+        markPrepared = resolve
+      })
       let release = (): void => {}
       const blocked = new Promise<void>((resolve) => {
         release = resolve
@@ -261,8 +284,14 @@ describe('편집 seq 채번의 동시성', () => {
           })
           .execute()
         await trx.updateTable('pages').set({ head_seq: 2 }).where('id', '=', fx.page.id).execute()
+        markPrepared()
         await blocked
       })
+
+      // `prepared`만 기다리면 이 트랜잭션이 준비 전에 죽었을 때 영원히 매달린다.
+      // `otherEditor`는 정상 경로에서 `release()` 전에는 끝나지 않으므로, 이 race가
+      // 먼저 결판나는 경우는 그쪽이 **던졌을 때**뿐이다 — 그때는 그 에러로 즉시 죽는다.
+      await Promise.race([prepared, otherEditor])
 
       const put = ctx.app.inject({
         method: 'PUT',
@@ -295,15 +324,40 @@ describe('편집 seq 채번의 동시성', () => {
  * 어떤 트랜잭션이 잠금을 기다리며 막힐 때까지 기다린다.
  *
  * `pg_locks`에서 `granted = false`인 행은 "이 백엔드가 잠금을 요청했지만 아직 못
- * 받았다"는 뜻이다. 이 파일이 도는 동안 같은 DB를 만지는 다른 테스트 파일이 없으므로
- * (`fileParallelism: false`) 그런 행이 나타났다는 것은 우리가 던진 요청이 `FOR UPDATE`에서
- * 막혔다는 뜻이다. 고정 `sleep` 대신 이것을 쓰는 이유는 느린 머신에서 조용히 시나리오가
- * 뒤집히는(= 아무것도 검증하지 않는 초록) 것을 막기 위해서다 — 나타나지 않으면 던진다.
+ * 받았다"는 뜻이다. 고정 `sleep` 대신 이것을 쓰는 이유는 느린 머신에서 조용히
+ * 시나리오가 뒤집히는(= 아무것도 검증하지 않는 초록) 것을 막기 위해서다 —
+ * 나타나지 않으면 던진다.
+ *
+ * **왜 `pg_stat_activity`와 조인하는가.** `pg_locks`는 인스턴스 전역이고, 이 저장소는
+ * 개발용 DB(`wirebound`)와 테스트 DB(`wirebound_test`)가 같은 컨테이너에 있다. 좁히지
+ * 않으면 개발용 DB에서 누가 잠금을 기다리는 것만으로 오탐해, PUT이 읽기도 전에
+ * 커밋해 버려 시나리오가 성립하지 않는다.
+ *
+ * **좁히는 조건이 `pg_locks.database`가 아닌 이유(실측).** `SELECT ... FOR UPDATE`가
+ * 남의 행 잠금에 막히면 대기는 `locktype = 'transactionid'` 행으로 나타나고, 그 행의
+ * `database`는 **NULL이다.** 실제로 확인한 값:
+ *
+ *     ungranted 행: [{ locktype: 'transactionid', database: null, datname: 'wirebound_test' }]
+ *     ... where not granted and database = (현재 DB oid)      → 0   ← 영원히 못 찾는다
+ *     ... join pg_stat_activity where a.datname = current_database() → 1
+ *
+ * 그래서 잠금 행이 아니라 **기다리는 백엔드**의 DB로 좁힌다.
+ *
+ * 같은 DB 안에서는 이 파일이 도는 동안 다른 테스트 파일이 붙지 않는다는 전제가 남는데,
+ * 그것을 성립시키는 것이 `vitest.config.ts`의 api 프로젝트에 걸린
+ * `poolOptions.forks.singleFork`다 — **그 설정과 이 헬퍼는 묶여 있다.** 그 설정이
+ * 사라져 api 파일들이 병렬로 돌기 시작하면 다른 파일의 대기까지 세어 이 헬퍼가 무너진다.
  */
 async function waitForLockWaiter(timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const result = await sql<{ n: number }>`select count(*)::int as n from pg_locks where not granted`.execute(db)
+    const result = await sql<{ n: number }>`
+      select count(*)::int as n
+        from pg_locks l
+        join pg_stat_activity a on a.pid = l.pid
+       where not l.granted
+         and a.datname = current_database()
+    `.execute(db)
     if ((result.rows[0]?.n ?? 0) > 0) return
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
