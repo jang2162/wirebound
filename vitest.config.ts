@@ -33,8 +33,23 @@ export default defineConfig({
         test: {
           name: 'api',
           include: ['apps/api/test/**/*.test.ts'],
-          // DB 하나를 공유하므로 파일 간 병렬을 끈다. 태스크 5에서 의미가 생긴다.
-          fileParallelism: false,
+          // DB 하나를 공유하므로 파일 간 병렬을 끈다.
+          //
+          // **`fileParallelism: false`를 여기 쓰면 안 된다 — 조용히 무시된다.**
+          // 그 옵션은 프로젝트 설정이 아니라 루트 전용이라, 여기 적어 두면 에러도
+          // 경고도 없이 그냥 파일이 병렬로 돈다(실측: 이 자리에 `fileParallelism: false`를
+          // 둔 채 `revisions-concurrency.test.ts`를 추가하니 매 실행마다 서로 다른
+          // 파일 5~6개가 깨졌고, CLI로 `--no-file-parallelism`을 주면 전부 통과했다).
+          // `poolOptions.forks.singleFork`는 프로젝트 단위로 먹히고 같은 결과를 낸다 —
+          // 이 프로젝트의 파일 전부가 포크 하나에서 차례로 돈다.
+          //
+          // 이 설정이 사라지면 `revisions-concurrency.test.ts`가 실제로 커밋한 행이
+          // 동시에 도는 다른 파일의 `withApi` 트랜잭션에 보이고, 그 파일의 정리
+          // (`projects`·`users` 전체 삭제)가 남의 데이터를 지운다. `pool`을 명시하는
+          // 것은 기본값이 언젠가 바뀌어도 `poolOptions.forks`가 계속 유효하도록
+          // 못박아 두기 위해서다.
+          pool: 'forks',
+          poolOptions: { forks: { singleFork: true } },
           testTimeout: 20_000,
           // 전체 실행 전 한 번: 테스트 DB를 최신 마이그레이션까지 올린다.
           globalSetup: ['apps/api/test/global-setup.ts'],

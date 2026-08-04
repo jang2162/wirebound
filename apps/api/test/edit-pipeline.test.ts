@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyOps, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, applyOps, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { applyEdit } from '../src/services/edit-pipeline'
 import { withTransaction } from '../src/db/tx'
 import type { RevisionActor } from '../src/repos/revisions'
@@ -142,6 +142,49 @@ describe('applyEdit', () => {
       // 그리고 실제로 저장된 schema_version 컬럼과의 일치를 함께 고정해 둔다.
       expect(outcome.schemaVersion).toBe(outcome.schema.version)
       expect(row.schema_version).toBe(outcome.schemaVersion)
+    })
+  })
+
+  it('schemaVersion은 저장된 schema_version 컬럼이 아니라 결과 문서의 version에서 나온다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      // **부족한 것은 단언이 아니라 픽스처였다.** 바로 위 테스트가 이미
+      // `outcome.schemaVersion === outcome.schema.version`을 단언하지만, `MIGRATIONS`가
+      // 비어 있는 오늘은 저장된 `schema_version` 컬럼과 문서 `version`이 항상 같은
+      // 값이라 파이프라인이 어느 쪽에서 파생시켜도 그 단언이 통과한다.
+      //
+      // `pages.schema_version`에는 문서 `version`과 값을 묶는 제약이 없다
+      // (마이그레이션 0004: 그냥 `integer NOT NULL`). 그래서 두 값을 일부러 갈라
+      // 둘 수 있다 — 마이그레이션이 실제로 버전을 올리기 시작했을 때 벌어질 상황을
+      // 오늘 미리 만드는 것이다.
+      await withTransaction(ctx.db, (trx) =>
+        trx.updateTable('pages').set({ schema_version: 7 }).where('id', '=', fx.page.id).execute(),
+      )
+
+      const outcome = await applyEdit(ctx.db, {
+        projectId: fx.project.id,
+        pageId: fx.page.id,
+        baseSeq: 0,
+        ops: [seedOp()],
+        actor: actorFor(fx.owner.user),
+      })
+      if (!outcome.ok) throw new Error(`편집이 실패했습니다: ${JSON.stringify(outcome)}`)
+
+      // 저장된 문서 자체의 버전은 1 그대로다 — 컬럼만 갈라 둔 것이므로.
+      expect(outcome.schema.version).toBe(CURRENT_DOCUMENT_VERSION)
+      // `locked.schemaVersion`을 흘려보내면 여기가 7이 된다.
+      expect(outcome.schemaVersion).toBe(CURRENT_DOCUMENT_VERSION)
+
+      // 응답값뿐 아니라 저장까지 본다 — `writePageSchemaAtSeq`에 넘기는 버전도 같은
+      // 곳에서 나와야 한다. 컬럼이 7로 남으면 그 다음 GET부터 응답의 `schemaVersion`이
+      // 문서 `version`과 어긋난다.
+      const row = await ctx.db
+        .selectFrom('pages')
+        .select('schema_version')
+        .where('id', '=', fx.page.id)
+        .executeTakeFirstOrThrow()
+      expect(row.schema_version).toBe(CURRENT_DOCUMENT_VERSION)
     })
   })
 
