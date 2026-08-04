@@ -42,6 +42,18 @@ export default defineConfig({
           setupFiles: ['apps/api/test/setup.ts'],
         },
       },
+      {
+        ...shared,
+        test: {
+          name: 'build',
+          include: ['packages/*/build-test/**/*.test.ts'],
+          // tsdown 재빌드를 beforeAll에서 돈다. 기본 테스트 실행에서 분리한 이유:
+          // pnpm test가 PATH의 pnpm과 전체 재빌드에 묶이면 개발 루프가 매번 수십 초씩
+          // 느려진다. 이 프로젝트만 `pnpm test:build`로 따로 돌린다.
+          testTimeout: 300_000,
+          hookTimeout: 300_000,
+        },
+      },
     ],
   },
 })

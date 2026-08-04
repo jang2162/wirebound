@@ -38,17 +38,21 @@ describe('hashPassword', () => {
 
   it.each([
     ['N이 0', { N: 0, r: 8, p: 1 }],
-    ['N이 2의 거듭제곱이 아님', { N: 1000, r: 8, p: 1 }],
+    // Node가 자체적으로 거부하지 않는 유일한 규칙이 메모리 상한이다 —
+    // scrypt() 헬퍼가 maxmem을 128*N*r의 두 배로 넉넉히 넘기므로 Node의 maxmem
+    // 검사에 걸리지 않는다. 이 행이 표 전체의 판별력을 담당한다.
+    ['N·r 조합이 메모리 상한을 넘음', { N: 2 ** 20, r: 8, p: 1 }],
     ['r이 0', { N: 1024, r: 0, p: 1 }],
     ['p가 0', { N: 1024, r: 8, p: 0 }],
   ])(
     '쓰기 경로도 읽기 경로와 같은 검증을 쓴다 — parseEncoded라면 거부할 파라미터(%s)는 해싱 전에 거부한다',
     async (_label, badParams) => {
-      // 쓰기 경로(hashPassword)와 읽기 경로(parseEncoded)가 서로 다른 파라미터를
-      // 받아들이면, DEFAULT_SCRYPT_PARAMS의 N을 조심성 없이 올렸을 때 "해싱은
-      // 조용히 성공하고 로그인 검증은 매번 던지는"(쓰기 시엔 조용, 읽기 시엔 전면
-      // 잠금) 상황이 생긴다. 두 경로가 같은 검증 함수를 쓰는지 여기서 고정한다.
-      await expect(hashPassword('아무비번', badParams)).rejects.toThrow()
+      // 메시지까지 단언하는 이유: 그냥 rejects.toThrow()면 Node가 던진 영문 에러로도
+      // 통과해 버려, validateScryptParams를 지워도 초록이 된다(실제로 P1에서 이 표
+      // 전체가 그런 상태였다). 우리 검증 함수의 한국어 메시지를 고정한다.
+      await expect(hashPassword('아무비번', badParams)).rejects.toThrow(
+        /scrypt 파라미터가 올바르지 않습니다/,
+      )
     },
   )
 })

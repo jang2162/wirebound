@@ -6,6 +6,6 @@
     "types": ["node"],
     "composite": true
   },
-  "include": ["test"],
+  "include": ["test", "build-test"],
   "references": [{ "path": "./" }]
 }

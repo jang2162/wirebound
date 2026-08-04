@@ -186,5 +186,6 @@ pnpm --filter @wirebound/api migrate:down          # 마이그레이션 하나 �
 pnpm --filter @wirebound/api dev                   # 개발 서버 (tsx watch)
 pnpm vitest run --project api                       # api 테스트만 실행 (컨테이너 필요)
 pnpm test                                          # 전체 워크스페이스 테스트
+pnpm test:build                                    # dist 로드 가능성 검증 (패키지 재빌드 포함, 수십 초)
 pnpm typecheck                                     # 전체 타입 체크
 ```

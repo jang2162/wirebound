@@ -98,6 +98,7 @@ describe('POST /api/auth/login', () => {
       expect(res.statusCode).toBe(200)
       expect(res.json().email).toBe('signup@example.com')
       expect(res.cookies.find((c) => c.name === 'wb_session')?.value).toBeTruthy()
+      expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'name'])
     })
   })
 
@@ -140,6 +141,7 @@ describe('GET /api/auth/me', () => {
       const res = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { wb_session: token } })
       expect(res.statusCode).toBe(200)
       expect(res.json().email).toBe('signup@example.com')
+      expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'name'])
     })
   })
 })
