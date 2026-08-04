@@ -345,6 +345,104 @@ export async function updatePageSchema(
   })
 }
 
+export interface LockedPage {
+  id: string
+  schema: PageDocument
+  schemaVersion: number
+  headSeq: number
+}
+
+/**
+ * 편집 파이프라인(태스크 5)이 페이지를 잠그고 현재 상태를 읽는다.
+ * `SELECT id, schema, schema_version, head_seq FROM pages WHERE id = ? AND project_id = ? FOR UPDATE`.
+ *
+ * **`withTransaction`으로 감싸지 않는다.** 세이브포인트로 감쌀 이유가 없어서다 —
+ * SELECT 하나뿐이라 제약 위반이 날 수 없고(세이브포인트는 제약 위반의 오염을
+ * 막는 장치이지 잠금과는 무관하다), 오히려 `FOR UPDATE`가 건 행 잠금은 세이브포인트
+ * RELEASE/ROLLBACK이 아니라 **트랜잭션이 COMMIT되거나 ROLLBACK될 때까지** 유지돼야
+ * 한다 — 이 함수 하나만 감싸는 세이브포인트를 열고 그 안에서 즉시 RELEASE하면
+ * 잠금의 지속 시간이 그 함수 호출로 좁아져 버려, 파이프라인이 잠근 뒤 이어서
+ * 실행하려는 나머지 로직(패치 적용·`insertRevision`·`writePageSchemaAtSeq`) 동안은
+ * 더 이상 잠겨 있지 않게 된다. 파라미터 이름을 `db`가 아니라 `trx`로 둔 것도 "이미
+ * 트랜잭션 안에서 불러야 한다"는 전제를 시그니처로 드러내기 위해서다.
+ *
+ * 대상이 `projectId` 소속이 아니면(다른 프로젝트, 또는 존재하지 않으면) `null`이다.
+ *
+ * **호출자가 트랜잭션 밖에서 부르면 잠금이 즉시 풀린다.** `db.selectFrom(...).forUpdate()`를
+ * 트랜잭션이 아닌 핸들로 실행하면 Postgres가 그 SELECT 문장 하나만을 위한 암묵적
+ * 트랜잭션을 열고 문장이 끝나자마자 커밋한다 — `FOR UPDATE`가 건 잠금도 그 순간
+ * 함께 풀린다. 즉 이 함수가 "잠갔다"고 믿고 그 뒤에 `head_seq`를 읽어 `+1`하는
+ * 코드를 짜면, 동시에 같은 페이지를 편집하는 두 요청이 서로의 잠금을 전혀 보지
+ * 못한 채 같은 `seq`를 채번해 `(page_id, seq)` UNIQUE 위반(또는 더 나쁘게, 타이밍에
+ * 따라 그 위반조차 피해 한쪽의 편집이 조용히 사라지는 경우)으로 이어진다. 이
+ * 실수는 조용히 동시성 방어를 없애는 종류이므로, 방어적으로 트랜잭션이 아닌
+ * 핸들이 오면 즉시 크게 실패시킨다(아래 `if (!trx.isTransaction)`).
+ */
+export async function lockPageForEdit(trx: DbHandle, projectId: string, pageId: string): Promise<LockedPage | null> {
+  if (!trx.isTransaction) {
+    throw new Error(
+      'lockPageForEdit은 트랜잭션 핸들(trx)로만 불러야 합니다 — 그렇지 않으면 FOR UPDATE 잠금이 이 문장 직후 즉시 풀립니다.',
+    )
+  }
+
+  const row = await trx
+    .selectFrom('pages')
+    .select(['id', 'schema', 'schema_version', 'head_seq'])
+    .where('id', '=', pageId)
+    .where('project_id', '=', projectId)
+    .forUpdate()
+    .executeTakeFirst()
+
+  if (!row) return null
+
+  return {
+    id: row.id,
+    schema: row.schema,
+    schemaVersion: row.schema_version,
+    // head_seq는 pg가 문자열로 주는 bigint다 — repos/pages.ts의 toRecord와 같은 이유로 변환한다(D9).
+    headSeq: Number(row.head_seq),
+  }
+}
+
+/**
+ * 편집 파이프라인(태스크 5)이 패치를 적용한 결과를 저장한다. `schema`·`schema_version`·
+ * `head_seq`·`updated_at` 넷을 함께 갱신한다 — 다른 컬럼(`title`·`menu_node_id` 등)은
+ * 건드리지 않는다. 반환값은 없다(`void`) — 호출자가 이미 결과 문서(`schema`)와 새
+ * `headSeq`를 갖고 있으므로 다시 읽어 돌려줄 이유가 없다.
+ *
+ * `lockPageForEdit`과 같은 이유로 트랜잭션 전제를 확인한다 — 이 함수는 `lockPageForEdit`이
+ * 건 행 잠금이 여전히 걸려 있는 같은 트랜잭션 안에서, 그 잠금이 지키는 `head_seq`를
+ * 갱신하는 문장이다. 트랜잭션 밖에서 불리면 그 전제 자체가 깨진다.
+ *
+ * `withTransaction`으로 감싼다. 이 문장은 `project_id`·`menu_node_id` 같은 FK 제약은
+ * 참조하지 않지만, `schema::jsonb` 캐스팅 자체가 제약 위반과 같은 방식으로 실패할
+ * 수 있다는 게 실측으로 드러났다(`updatePageSchema`가 같은 이유로 겪은 것과 동일):
+ * 문자열 값 안에 NUL 문자(U+0000)가 있으면 Postgres가 `22P05 unsupported Unicode
+ * escape sequence`를 던진다. 파이프라인이 저장 전에 `containsNulByte`로 이 조건을
+ * 미리 걸러내지만, 그 방어를 우회해 이 함수가 직접 불리는 경로가 생기면 세이브포인트
+ * 없이는 호출자의 트랜잭션 전체가 `25P02`로 오염된다(`src/db/tx.ts` 참고) — `repos/`의
+ * 다른 쓰기 경로와 같은 이유로 감싼다.
+ */
+export async function writePageSchemaAtSeq(
+  trx: DbHandle,
+  pageId: string,
+  schema: PageDocument,
+  schemaVersion: number,
+  headSeq: number,
+): Promise<void> {
+  if (!trx.isTransaction) {
+    throw new Error('writePageSchemaAtSeq는 트랜잭션 핸들(trx)로만 불러야 합니다 — lockPageForEdit과 같은 트랜잭션이어야 합니다.')
+  }
+
+  await withTransaction(trx, async (tx) => {
+    await tx
+      .updateTable('pages')
+      .set({ schema: JSON.stringify(schema), schema_version: schemaVersion, head_seq: headSeq, updated_at: sql`now()` })
+      .where('id', '=', pageId)
+      .execute()
+  })
+}
+
 /**
  * 페이지를 지운다. 대상이 `projectId` 소속이 아니면 `'not-found'`다.
  *
