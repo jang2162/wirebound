@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
 import type { LayoutDocument, PageDocument } from '../src/node'
-import { assertValidPage, validateLayout, validatePage } from '../src/validate'
+import { assertValidLayout, assertValidPage, validateLayout, validatePage } from '../src/validate'
 
 beforeAll(() => {
   installCatalog()
@@ -163,5 +163,23 @@ describe('assertValidPage', () => {
   it('올바른 문서면 던지지 않는다', () => {
     const doc = page({ id: 'n_000000000001', type: 'Page' })
     expect(() => assertValidPage(doc)).not.toThrow()
+  })
+})
+
+describe('assertValidLayout', () => {
+  it('assertValidLayout은 Slot이 정확히 하나인 레이아웃을 통과시킨다', () => {
+    const doc: LayoutDocument = {
+      version: 1,
+      root: { id: 'n_000000000001', type: 'Page', children: [{ id: 'n_000000000002', type: 'Slot' }] },
+    }
+    expect(() => assertValidLayout(doc)).not.toThrow()
+  })
+
+  it('assertValidLayout은 Slot이 없으면 첫 이슈를 메시지에 담아 던진다', () => {
+    const doc: LayoutDocument = {
+      version: 1,
+      root: { id: 'n_000000000001', type: 'Page', children: [] },
+    }
+    expect(() => assertValidLayout(doc)).toThrow(/slot-count/)
   })
 })

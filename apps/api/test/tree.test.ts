@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMenuTree, type MenuRow, type PageRow, type TreeMenuNode } from '../src/repos/menu'
+import { buildMenuTree, type MenuRow, type PageRow, type TreeMenuNode } from '../src/services/menu-tree'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi } from './helpers'
 
 /** `menuRow`/`pageRow`가 채우지 않는 필드에 쓰는 기본값. 테스트마다 필요한 필드만 덮어쓴다. */

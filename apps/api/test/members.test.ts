@@ -96,6 +96,11 @@ describe('GET /api/projects/:projectId/members', () => {
       expect(member).not.toHaveProperty('passwordHash')
       expect(member).not.toHaveProperty('password_hash')
       expect(Object.keys(member).sort()).toEqual(['email', 'invitedAt', 'name', 'role', 'userId'].sort())
+      // P2b가 이 값을 Date로 파싱한다. Fastify가 Date를 ISO 8601(UTC, `Z` 접미)로
+      // 직렬화하는 데 의존하고 있으므로, 그 의존을 여기서 고정한다 — repos가
+      // Date 대신 문자열이나 epoch 숫자를 돌려주도록 바뀌면 이 단언이 실패한다.
+      expect(member.invitedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      expect(Number.isNaN(Date.parse(member.invitedAt))).toBe(false)
     })
   })
 })

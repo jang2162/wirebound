@@ -153,9 +153,11 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 
 ## 계층 규칙
 
-- `repos/`는 SQL만 안다 — HTTP·zod를 모른다. `routes/`는 HTTP·zod만 다루고 SQL을
-  직접 쓰지 않는다. API가 주고받는 키는 camelCase, DB 컬럼은 snake_case이고, 그
-  변환은 항상 `repos/`가 전담한다.
+- `repos/`는 SQL만 안다 — HTTP·zod를 모른다. `services/`는 SQL을 직접 쓰지 않고
+  HTTP도 모른다 — 순수 도메인 함수(`menu-tree.ts`)와 여러 repo를 조율하는 로직
+  (`edit-pipeline.ts`)이 여기 산다. `routes/`는 HTTP·zod만 다루고 SQL을 직접
+  쓰지 않는다. API가 주고받는 키는 camelCase, DB 컬럼은 snake_case이고, 그 변환은
+  항상 `repos/`가 전담한다.
 - 역할(`owner`/`editor`/`viewer`)을 비교하는 코드는 `auth/roles.ts`의
   `roleAtLeast` 하나뿐이다. 다른 곳에서 역할 순위를 다시 비교하지 않는다.
 - 프로젝트 하위 라우트는 전부 `auth/roles.ts`의 `projectGuard(minRole)`

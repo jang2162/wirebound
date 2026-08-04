@@ -7,7 +7,7 @@
  * HTTP·zod 검증만 다룬다 — SQL은 전부 `repos/menu.ts`(`listMenuRows`)와
  * `repos/pages.ts`(`listPageRows`)에 맡긴다(README "계층 규칙": `routes/`는 SQL을
  * 직접 쓰지 않는다 — 다른 라우트 파일과 같은 규칙이다). 메뉴 전체와 페이지 전체를
- * 각각 한 번씩(총 2회) 조회하고, 조립은 순수 함수인 `repos/menu.ts`의 `buildMenuTree`에
+ * 각각 한 번씩(총 2회) 조회하고, 조립은 순수 함수인 `services/menu-tree.ts`의 `buildMenuTree`에
  * 맡긴다 — 노드마다 페이지를 다시 조회하면 N+1이 되므로 여기서 반드시 피한다.
  *
  * `listMenuRows`·`listPageRows` 둘 다 `schema` 컬럼을 고르지 않는다 — 트리 응답에
@@ -20,8 +20,9 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { projectGuard } from '../auth/roles'
 import { parseParams } from '../http/parse'
-import { buildMenuTree, listMenuRows } from '../repos/menu'
+import { listMenuRows } from '../repos/menu'
 import { listPageRows } from '../repos/pages'
+import { buildMenuTree } from '../services/menu-tree'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 
