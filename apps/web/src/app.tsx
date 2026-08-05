@@ -6,16 +6,8 @@
 import type { ReactElement } from 'react'
 import { Outlet, Route, Routes, useParams } from 'react-router'
 import { LoginRoute } from './routes/login'
+import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
-
-/** 태스크 5가 실제 목록으로 바꾼다. */
-function ProjectListPlaceholder(): ReactElement {
-  return (
-    <main>
-      <h1>프로젝트</h1>
-    </main>
-  )
-}
 
 /** 태스크 6·7이 메뉴 트리와 캔버스로 채운다. */
 function EditorShellPlaceholder(): ReactElement {
@@ -50,7 +42,7 @@ export function App(): ReactElement {
           </RequireAuth>
         }
       >
-        <Route path="/" element={<ProjectListPlaceholder />} />
+        <Route path="/" element={<ProjectListRoute />} />
         <Route path="/projects/:projectId" element={<EditorShellPlaceholder />} />
         <Route path="/projects/:projectId/pages/:pageId" element={<EditorShellPlaceholder />} />
       </Route>

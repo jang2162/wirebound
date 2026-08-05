@@ -2,10 +2,21 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { SessionUser } from '../../src/api/types'
+import type { ProjectDetail, SessionUser } from '../../src/api/types'
 import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
+
+/**
+ * 도착지가 **목록 화면인지** 보기 위한, 목록의 데이터로만 나올 수 있는 문자열.
+ *
+ * 목록 화면의 제목은 조회가 실패한 상태에서도 뜨므로, 제목만 보면 목록이 오류 화면을
+ * 그리고 있어도 통과한다(실측). 그래서 가짜가 준 프로젝트 이름으로 확인한다.
+ */
+const PROJECT_NAME = '내 설계서 [T4-LOGIN-도착지]'
+const PROJECTS: ProjectDetail[] = [
+  { id: 'p-1', name: PROJECT_NAME, slug: 'mine', description: null, role: 'owner' },
+]
 
 /**
  * 서버가 준 문장이 그대로 화면에 오는지 보려면, 화면이 하드코딩할 리 없는 문자열이어야
@@ -26,6 +37,9 @@ function fakeSession(login: ApiClient['login'] = async () => USER): ApiClient {
       if (!signedIn) throw unauthenticatedError()
       return USER
     },
+    // 로그인 뒤 도착하는 목록 화면이 부른다. 스텁하지 않으면 그 화면이 오류 상태로
+    // 떠서, 도착 여부를 확인하려는 단언이 망가진 화면 위에서 통과한다.
+    listProjects: async () => PROJECTS,
     login: async (email, password) => {
       const user = await login(email, password)
       signedIn = true
@@ -74,7 +88,7 @@ describe('로그인 화면', () => {
 
     // 위치만 보면 인증 문지기가 다시 튕겨 냈어도 통과할 수 있으므로, 그 자리의 화면이
     // 실제로 떴는지까지 본다.
-    await screen.findByRole('heading', { name: '프로젝트' })
+    await screen.findByText(PROJECT_NAME)
     expect(currentPath()).toBe('/')
   })
 
@@ -131,7 +145,7 @@ describe('로그인 화면', () => {
     expect(login).toHaveBeenCalledTimes(1)
 
     release()
-    await screen.findByRole('heading', { name: '프로젝트' })
+    await screen.findByText(PROJECT_NAME)
   })
 
   it('이메일이 비면 제출하지 않는다', async () => {
@@ -148,11 +162,11 @@ describe('로그인 화면', () => {
 
   it('이미 로그인돼 있으면 로그인 화면 대신 목록으로 간다', async () => {
     renderWithProviders(<App />, {
-      client: fakeApi({ me: async () => USER }),
+      client: fakeApi({ me: async () => USER, listProjects: async () => PROJECTS }),
       route: '/login',
     })
 
-    await screen.findByRole('heading', { name: '프로젝트' })
+    await screen.findByText(PROJECT_NAME)
     expect(currentPath()).toBe('/')
     expect(screen.queryByLabelText('이메일')).toBeNull()
   })

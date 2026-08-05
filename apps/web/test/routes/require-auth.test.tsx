@@ -1,14 +1,29 @@
 import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
-import { ApiError } from '../../src/api/client'
-import type { SessionUser } from '../../src/api/types'
+import { ApiError, type ApiClient } from '../../src/api/client'
+import type { ProjectDetail, SessionUser } from '../../src/api/types'
 import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
 /** 서버가 준 문장이 그대로 오는지 보기 위한, 화면이 하드코딩할 리 없는 문자열. */
 const SERVER_MESSAGE = '세션 저장소가 응답하지 않습니다 [T4-AUTH-5]'
+
+/**
+ * 보호된 라우트가 **열렸는지** 보기 위한 문자열. 그 자리의 목록 화면은 조회가 실패해도
+ * 제목을 그리므로, 제목만 보면 문지기가 통과시켰다는 것 말고는 아무것도 보장하지
+ * 못한다(실측). 목록의 데이터로만 나올 수 있는 이름을 본다.
+ */
+const PROJECT_NAME = '보호된 설계서 [T4-AUTH-도착지]'
+const PROJECTS: ProjectDetail[] = [
+  { id: 'p-1', name: PROJECT_NAME, slug: 'guarded', description: null, role: 'viewer' },
+]
+
+/** 로그인된 사용자. 목록 화면이 부르는 `listProjects`까지 갖춰 둔다. */
+function signedIn(): ApiClient {
+  return fakeApi({ me: async () => USER, listProjects: async () => PROJECTS })
+}
 
 // 로그인 화면의 8번("me()가 401이면 로그인 화면이 보인다")은 `/login`에서 돌기 때문에
 // 문지기의 리다이렉트를 지워도 통과한다 — 이미 로그인 화면에 있으니까. 인증이 필요한
@@ -25,13 +40,10 @@ describe('인증 문지기', () => {
   })
 
   it('로그인돼 있으면 인증 필요 라우트가 그대로 열린다', async () => {
-    renderWithProviders(<App />, {
-      client: fakeApi({ me: async () => USER }),
-      route: '/',
-    })
+    renderWithProviders(<App />, { client: signedIn(), route: '/' })
 
     // 양성 대조: 위 케이스는 "언제나 /login으로 보낸다"는 구현으로도 통과한다.
-    await screen.findByRole('heading', { name: '프로젝트' })
+    await screen.findByText(PROJECT_NAME)
     expect(currentPath()).toBe('/')
   })
 
@@ -52,7 +64,10 @@ describe('인증 문지기', () => {
         resolve(USER)
       }
     })
-    renderWithProviders(<App />, { client: fakeApi({ me: () => pending }), route: '/' })
+    renderWithProviders(<App />, {
+      client: fakeApi({ me: () => pending, listProjects: async () => PROJECTS }),
+      route: '/',
+    })
 
     // 로그인 화면도, 목록도 뜨면 안 된다 — 둘 중 하나를 그렸다가 바꾸면 깜빡인다.
     expect(screen.queryByRole('heading')).toBeNull()
@@ -61,7 +76,7 @@ describe('인증 문지기', () => {
     // 양성 대조: 확인이 끝나면 나온다. 이것이 없으면 앱이 아예 안 뜨는 경우와
     // 구분되지 않는다.
     admit()
-    await screen.findByRole('heading', { name: '프로젝트' })
+    await screen.findByText(PROJECT_NAME)
   })
 
   it('unauthenticated가 아닌 오류면 로그인 화면으로 보내지 않고 이유를 보여준다', async () => {
