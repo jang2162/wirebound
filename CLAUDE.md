@@ -5,6 +5,7 @@
 - 패키지명 `wirebound`, CLI 명령 `wireb`
 - 설계 문서: `docs/superpowers/specs/2026-08-03-wirebound-design.md`
 - 구현 계획: `docs/superpowers/plans/`
+- API 기동 절차·엔드포인트 계약: `apps/api/README.md`
 
 ## 스택
 
@@ -34,24 +35,29 @@ pnpm vitest run <경로>    # 단일 파일 테스트
 
 ---
 
-# 병렬 작업과 워크트리
+# 워크트리 작업
 
-이 저장소는 여러 에이전트·작업이 워크트리를 통해 병렬로 돌 수 있다. **최상위 체크아웃은 혼자 쓰는 디렉터리가 아니라 공유 자원으로 취급한다.**
+**코드 변경 작업은 항상 워크트리에서 한다. 병렬 작업이든 단일 작업이든 예외 없다.** 최상위 체크아웃(워크트리가 아닌 원본 디렉터리)은 혼자 쓰는 작업 공간이 아니라 **공유 자원**이다 — IntelliJ, 실행 중인 `pnpm --filter @wirebound/api dev`, vitest watch, 다른 에이전트 세션이 동시에 그 디렉터리를 보고 있다.
+
+두 줄 요약:
+
+1. **메인 세션은 브랜치를 갈아타지 않는다.** `checkout`/`switch` 대신 워크트리를 만든다.
+2. **메인 세션은 워크트리를 만들고, 그 안의 실제 작업은 Orca로 띄운 Claude 세션이 한다.** 메인 세션은 지시·감독·리뷰·병합만 한다.
 
 ## 최상위에서는 임의로 브랜치를 체크아웃하지 않는다
 
 최상위 프로젝트 디렉터리(워크트리가 아닌 원본 체크아웃)에서는 브랜치를 마음대로 `checkout`/`switch` 하지 않는다.
 
-**Why:** 최상위의 HEAD를 옮기면 그 디렉터리를 보고 있는 다른 작업·IntelliJ·실행 중인 `pnpm dev`·vitest watch가 전부 영향을 받아 병렬 작업이 깨진다.
+**Why:** 최상위의 HEAD를 옮기면 그 디렉터리를 보고 있는 다른 작업·IntelliJ·실행 중인 `pnpm dev`·vitest watch가 전부 영향을 받는다. 동시 작업이 하나도 없어 보여도 사람이 켜 둔 IDE·서버는 남아 있다.
 
 **How to apply:**
 
 - 다른 브랜치에서 작업해야 하면 브랜치를 갈아타지 말고 워크트리를 새로 만든다 (`git worktree add`).
-- 최상위에서 허용되는 것은 읽기 작업(`status`, `log`, `diff`, `show`, `fetch`)이다.
+- 최상위에서 허용되는 것은 읽기 작업(`status`, `log`, `diff`, `show`, `fetch`)과 워크트리 관리(`worktree add/list/remove`)다.
 - 체크아웃이 꼭 필요하면 먼저 사용자에게 확인을 받는다.
 - 워크트리 내부에서는 그 워크트리의 브랜치를 자유롭게 다뤄도 된다.
 
-## 병렬 작업 중 커밋 주의
+## 커밋 주의
 
 최상위 체크아웃은 다른 에이전트가 동시에 만지고 있을 수 있다.
 
@@ -61,7 +67,7 @@ pnpm vitest run <경로>    # 단일 파일 테스트
 
 ## 워크트리 생성 규칙
 
-- **위치:** `.worktrees/<브랜치-슬러그>/` (저장소 루트 하위, gitignore 됨). 저장소 바깥이나 임의 경로에 만들지 않는다 — 다른 에이전트가 찾지 못한다.
+- **위치:** `.worktrees/<브랜치-슬러그>/` (저장소 루트 하위, gitignore 됨). 저장소 바깥이나 임의 경로에 만들지 않는다 — 다른 에이전트가 찾지 못하고 Orca도 인식하지 못한다.
 - **브랜치:** 워크트리를 만들 때 새 브랜치를 함께 만든다. 이미 다른 워크트리가 체크아웃한 브랜치는 git이 거부한다.
 
   ```bash
@@ -80,12 +86,84 @@ pnpm vitest run <경로>    # 단일 파일 테스트
 ```bash
 cd .worktrees/feat-<작업명>
 pnpm install       # node_modules 는 워크트리마다 따로 필요하다
+pnpm build         # packages/* 의 dist 생성 — tsx로 도는 api가 이것을 본다
 pnpm typecheck     # 컴파일 확인 겸 캐시 예열
-pnpm test
 ```
 
 - `pnpm install`을 빠뜨리면 워크스페이스 심링크가 없어 `@wirebound/*` import가 전부 깨진다.
-- gitignore 대상인 로컬 설정은 따라오지 않는다. `.env.local`처럼 커밋되지 않는 파일이 필요하면 최상위 체크아웃에서 복사한다.
+- `pnpm build`를 빠뜨리면 `tsx`로 도는 것(`api`의 `dev`·`migrate`)이 `@wirebound/schema`를 못 찾는다. `dist/`는 gitignore라 새 워크트리에 없는데 워크스페이스 패키지의 `exports`가 `dist`를 가리키기 때문이다. vitest는 alias로 소스를 직접 보므로 영향이 없다 — "테스트는 통과하는데 서버만 안 뜨는" 형태로 나타난다.
+- gitignore 대상인 로컬 설정은 따라오지 않는다. `.env`·`.env.*`가 전부 무시되므로 api를 기동할 워크트리라면 `apps/api/.env`를 최상위에서 복사하거나 `apps/api/.env.example`에서 만든다.
+- Postgres 컨테이너는 워크트리마다 띄우지 않는다. `docker-compose.yml`이 컨테이너 이름과 호스트 포트(5433)를 고정하므로 최상위에서 띄운 하나를 공유한다.
+
+이 세팅은 워커를 띄우기 전에 메인 세션이 해 두는 편이 낫다. 워커가 첫 실행에서 빌드 누락으로 헤매는 시간을 없앤다.
+
+## 워크트리 안의 작업은 Orca 세션이 한다
+
+워크트리를 만들었으면 **그 워크트리에서 돌 Claude 세션을 Orca로 띄운다.** 병렬 작업일 때만이 아니라 **워크트리를 쓰는 모든 작업**이 그렇다. 메인 세션이 워크트리 안으로 들어가 직접 파일을 고치지 않는다 — 백그라운드 서브에이전트(Agent 도구)보다 Orca 터미널 워커가 우선이다.
+
+**Why:** Orca 터미널 워커는 앱에 독립 터미널로 떠서 진행을 직접 보고 개입할 수 있고, Orca 태스크·디스패치 이력(provenance)이 남는다. 서브에이전트는 컨텍스트가 코디네이터 안에 숨어 안 보인다. 메인 세션이 직접 작업하면 워크트리를 나눈 의미(격리·관찰 가능성)가 사라진다.
+
+**판단 지점은 "워크트리를 만들 때"가 아니라 "일을 시작할 때"다.** 워크트리만 만들어 놓고 메인 세션이 직접 작업하거나 Agent 도구를 써버리는 것이 가장 흔한 이탈이다. 워크트리 **생성**은 `git worktree add`로 해도 되지만, 갈리는 지점은 그 안에서 실제 작업을 시작하는 순간이다. 그러므로 워크트리를 만들기 전에 `orca status --json`을 먼저 실행한다 — running runtime이면 "메인 세션이 직접 작업"과 "Agent 도구"는 선택지에서 빠진다.
+
+**환경 확인:** `orca status --json`이 running runtime을 보이면 Orca 환경이다. (CLI 실행자: `ORCA_CLI_COMMAND`가 있으면 그 값, 없으면 macOS·일반은 `orca`, Linux는 `orca-ide` — 리눅스에서 bare `orca`는 GNOME 스크린리더로 붙는다.) 오케스트레이션 experimental 기능이 켜져 있어야 한다.
+
+**방식은 외우지 말고** `orca skills get orchestration`으로 버전 맞춤 가이드를 읽는다 (플래그·서브커맨드가 릴리스마다 바뀐다). 요지:
+
+1. `git worktree add`로 만든 `.worktrees/*`도 Orca가 인식한다 (`orca worktree list --json`에 id로 나옴)
+2. 그 워크트리 id로 `orca terminal create --worktree id:<fullId> --command "claude"` — **터미널 생성만** 하고 handle을 받는다
+3. `orca terminal wait --terminal <handle> --for tui-idle` — TUI가 다 그려질 때까지 기다린다
+4. 감독이면 `orchestration task-create` 후 `worker-start --task <task_id> --terminal <handle>`(또는 `dispatch --inject`)로 브리프를 주입한다
+5. **제출 확인** — `orca terminal read`로 브리프가 실제로 제출됐는지 본다 (아래 절). 이 단계는 생략하지 않는다
+6. 제출을 확인한 **뒤에** `check --wait --types worker_done,escalation,question`
+
+**감독(supervised) vs 완전 위임(handoff):** 완료를 기다려 리뷰·병합하면 supervised(`task-create` + `dispatch --inject` + `check --wait`). 소유권을 넘기고 안 지켜보면 full handoff(`terminal send` 또는 `worktree create --prompt`, lifecycle 프리앰블 안 붙임).
+
+**Orca 환경이 아니거나 오케스트레이션이 불가하면** 워크트리는 그대로 만들고, 그 안에서 서브에이전트(Agent 도구)로 진행하거나 사용자에게 워크트리 경로를 알려 직접 세션을 띄우게 한다.
+
+## 워커 브리프는 주입이 아니라 제출까지 확인한다
+
+워크트리 생성·세션 기동·브리프 입력이 전부 정상인데 **마지막 제출(Enter)만 누락되어** 브리프가 입력창에 텍스트로 남은 채 워커가 아무것도 하지 않는 사고가 반복된다. 코디네이터는 그대로 `check --wait`로 넘어가 타임아웃(기본 15분)까지 기다린 뒤에야 방치를 알아챈다. 한 세션에서 워커 3개를 띄웠는데 1·2번째는 정상 실행되고 3번째만 방치되는 식으로, **같은 명령이 될 때도 있고 안 될 때도 있다.**
+
+**Why:**
+
+- `worker-start` / `dispatch --inject`의 성공 응답은 **전송까지만** 보증한다. `stage: input_accepted`, `dispatch_input.state: accepted`는 터미널에 바이트를 썼다는 뜻이지 TUI가 그 입력을 제출했다는 뜻이 아니다. 반환값만으로는 실행 여부를 알 수 없다.
+- `worker-start`는 터미널 생성과 브리프 주입을 한 번에 처리하므로 그 사이에 TUI 준비 대기가 없다. Claude Code TUI가 시작 화면을 그리는 중에 여러 줄 브리프가 들어가면 마지막 Enter가 제출이 아니라 줄바꿈으로 흡수된다. 성공 여부가 타이밍에 달려 있다.
+
+**예방 — 터미널 생성과 주입을 분리한다**
+
+```bash
+orca terminal create --worktree id:<fullId> --command "claude"        # handle 확보
+orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000
+orca orchestration worker-start --task <task_id> --terminal <handle> --json
+```
+
+**검증 — 생략 금지**
+
+주입 직후 터미널을 읽어 제출됐는지 눈으로 확인한다.
+
+```bash
+orca terminal read --terminal <handle> --json
+```
+
+입력창(`❯`)에 브리프 텍스트가 그대로 보이면 미제출이다. 엔터만 보내 제출시킨다.
+
+```bash
+orca terminal send --terminal <handle> --text "" --enter --json
+```
+
+다시 읽어 입력창이 비었는지 확인한 뒤에 대기로 넘어간다.
+
+**제출을 확인하지 않은 채 `check --wait`로 넘어가지 않는다.**
+
+**Why:** 예방책은 레이스 창을 좁힐 뿐 없애지 못한다 — 분리해서 띄워도 TUI가 늦게 뜨면 같은 일이 난다. 검증이 이 사고를 잡는 유일한 지점이고, 여기서 놓치면 다음 신호는 15분 뒤 타임아웃뿐이다.
+
+**How to apply:** 워커를 여러 개 띄웠으면 **하나도 빠짐없이** 각각 read로 확인한다. 앞의 워커가 정상이었다는 사실은 뒤의 워커에 대해 아무것도 보증하지 않는다.
+
+## 워커를 띄웠으면 곧바로 수신 대기에 들어간다
+
+제출을 확인했으면 `orca orchestration check --wait --types worker_done,escalation,question`으로 대기한다. 워커가 `ask`로 물어봐도 코디네이터가 수신하고 있지 않으면 타임아웃(기본 15분)까지 방치되고, 워커는 스스로 가정을 세워 진행하거나 멈춘다.
+
+코디네이터가 다른 일을 하느라 대기하지 못할 상황이면, 최소한 워커가 물어볼 만한 지점(브리프에 확신이 없는 값, 기존 코드와 충돌 가능성)을 디스패치 spec에 미리 판단해 넣어 둔다.
 
 ## 워크트리 폐기
 
@@ -95,33 +173,15 @@ pnpm test
 git worktree remove .worktrees/<워크트리명>
 ```
 
-디렉터리를 `rm -rf`로 먼저 지웠다면 `git worktree prune`을 함께 돌려 등록 정보를 지운다.
-
-## 병렬·워크트리 작업은 Orca 환경이면 `/orchestration`으로
-
-병렬 작업이나 워크트리를 분리해 굴리는 상황이면, 먼저 Orca 앱 환경인지 확인하고 가능하면 Orca 오케스트레이션(`/orchestration`)으로 별도 Orca 터미널에 워커를 띄워 진행한다 — 백그라운드 서브에이전트(Agent 도구)보다 우선한다.
-
-**Why:** Orca 터미널 워커는 앱에 독립 터미널로 떠서 진행을 직접 보고 개입할 수 있고, Orca 태스크·디스패치 이력(provenance)이 남는다. 서브에이전트는 컨텍스트가 코디네이터 안에 숨어 안 보인다.
-
-**환경 확인:** `orca status --json`이 running runtime을 보이면 Orca 환경이다. (CLI 실행자: `ORCA_CLI_COMMAND`가 있으면 그 값, 없으면 macOS·일반은 `orca`, Linux는 `orca-ide` — 리눅스에서 bare `orca`는 GNOME 스크린리더로 붙는다.) 오케스트레이션 experimental 기능이 켜져 있어야 한다.
-
-**방식은 외우지 말고** `orca skills get orchestration`으로 버전 맞춤 가이드를 읽는다 (플래그·서브커맨드가 릴리스마다 바뀐다). 요지:
-
-1. `git worktree add`로 만든 `.worktrees/*`도 Orca가 인식한다 (`orca worktree list --json`에 id로 나옴)
-2. 그 워크트리 id로 `orca terminal create --worktree id:<fullId> --command "claude"`
-3. `terminal wait --for tui-idle`
-4. 감독이면 `orchestration task-create` + `dispatch --inject` + `check --wait --types worker_done,escalation,decision_gate`
-
-**감독(supervised) vs 완전 위임(handoff):** 완료를 기다려 리뷰·병합하면 supervised(`task-create` + `dispatch --inject` + `check --wait`). 소유권을 넘기고 안 지켜보면 full handoff(`terminal send` 또는 `worktree create --prompt`, lifecycle 프리앰블 안 붙임).
-
-Orca 환경이 아니거나 오케스트레이션이 불가하면 기존대로 워크트리 + 서브에이전트(Agent 도구)로 진행한다.
+- 그 워크트리에 붙어 있는 Orca 터미널이 있으면 먼저 종료한다. 세션이 살아 있으면 제거가 실패하거나 지워진 경로에서 도는 좀비 세션이 남는다.
+- 디렉터리를 `rm -rf`로 먼저 지웠다면 `git worktree prune`을 함께 돌려 등록 정보를 지운다.
 
 ## 이 프로젝트에서 병렬화가 잘 맞는 지점
 
-구현 계획의 태스크는 대부분 앞 태스크의 산출물을 쓰므로 순차 실행이 기본이다. 병렬로 돌릴 만한 것은 다음 정도다.
+워크트리 자체는 단일 작업에도 쓴다. 여기서 말하는 것은 **워커를 여럿 띄울 만한** 지점이다. 구현 계획의 태스크는 대부분 앞 태스크의 산출물을 쓰므로 순차 실행이 기본이다.
 
 - 카탈로그 그룹별 컴포넌트 정의 (구조/데이터/입력/액션/문서) — 서로 독립적이다
 - 구조 구현체를 그룹별로 나눠 구현할 때 (P4b)
 - 시스템 테마 5종 제작 (P4b) — 테마 엔진이 완성된 뒤라면 서로 간섭하지 않는다
 
-반대로 `packages/schema`의 patch·validate·tree는 서로 물려 있어 나눠 돌리면 충돌만 난다.
+반대로 `packages/schema`의 patch·validate·tree는 서로 물려 있어 나눠 돌리면 충돌만 난다. api 테스트를 도는 작업끼리도 Postgres 하나를 공유하므로 동시에 돌리지 않는다.
