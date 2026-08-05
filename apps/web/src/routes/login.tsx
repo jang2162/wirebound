@@ -1,0 +1,89 @@
+/**
+ * 로그인 화면. 성공하면 서버가 세션 쿠키를 심어 주고, 이 화면은 프로젝트 목록으로 넘긴다.
+ */
+import { useState, type FormEvent, type ReactElement } from 'react'
+import { useNavigate } from 'react-router'
+import { ApiError } from '../api/client'
+import { useApi } from '../api/context'
+
+/** 서버까지 가 보지 않아도 실패가 확실한 경우에만 쓰는 문장. */
+const EMPTY_EMAIL = '이메일을 입력하세요'
+const EMPTY_PASSWORD = '비밀번호를 입력하세요'
+/** 서버가 이유를 주지 않은 실패(네트워크 단절 등)에 쓸 문장. */
+const UNKNOWN_FAILURE = '로그인하지 못했습니다'
+
+export function LoginRoute(): ReactElement {
+  const api = useApi()
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+
+    // 빈 칸은 서버에 물어볼 것도 없이 실패한다. 왕복을 아끼려는 것이 아니라, 왕복하면
+    // 사용자가 자기 오타 대신 서버의 일반적인 거절 문구를 보게 되기 때문이다.
+    if (email.trim() === '') {
+      setError(EMPTY_EMAIL)
+      return
+    }
+    if (password === '') {
+      setError(EMPTY_PASSWORD)
+      return
+    }
+
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.login(email, password)
+      // `replace`: 로그인한 뒤 뒤로 가기로 로그인 화면에 돌아오면, 이미 세션이 있으니
+      // 문지기가 다시 목록으로 보낸다. 히스토리에 남길 이유가 없다.
+      await navigate('/', { replace: true })
+    } catch (caught) {
+      // 서버가 준 문장을 그대로 보여준다. 화면이 문안을 다시 쓰면 서버가 거절 이유를
+      // 바꿔도 사용자는 옛 이유를 듣게 된다.
+      setError(caught instanceof ApiError ? caught.message : UNKNOWN_FAILURE)
+      // 성공했을 때는 이 화면을 떠나므로 되돌리지 않는다.
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <main>
+      <h1>wirebound</h1>
+      <form
+        onSubmit={(event) => {
+          void submit(event)
+        }}
+      >
+        <p>
+          <label htmlFor="login-email">이메일</label>
+          <input
+            id="login-email"
+            type="email"
+            value={email}
+            // 실패한 뒤에도 입력을 지우지 않는다. 다시 타이핑하게 만들면 사용자는 자기
+            // 이메일이 문제였다고 오해한다.
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </p>
+        <p>
+          <label htmlFor="login-password">비밀번호</label>
+          <input
+            id="login-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </p>
+        {/* 요청이 도는 동안 잠근다 — 두 번 눌러 두 세션을 만들 이유가 없다. */}
+        <button type="submit" disabled={submitting}>
+          로그인
+        </button>
+      </form>
+      {error !== null && <p role="alert">{error}</p>}
+    </main>
+  )
+}
