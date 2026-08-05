@@ -72,6 +72,10 @@ export default defineConfig({
           // 있어야 vitest 옆에 링크된다. apps/web에만 넣으면
           // `Cannot find package 'jsdom'`으로 죽는다(실측).
           environment: 'jsdom',
+          // 파일마다: RTL의 DOM cleanup을 afterEach에 등록한다. 이 저장소는
+          // `globals`를 켜지 않아 RTL이 스스로 등록하지 못한다 — 자세한 이유는
+          // 그 파일 주석에 있다.
+          setupFiles: ['apps/web/test/setup.ts'],
         },
       },
       {

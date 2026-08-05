@@ -13,4 +13,11 @@ describe('앱 골격', () => {
     // 바뀌어도 실패한다.
     screen.getByRole('heading', { name: 'wirebound' })
   })
+
+  it('같은 파일에서 두 번 렌더해도 앞 DOM이 남지 않는다', () => {
+    render(<App />)
+    // 앞 it이 붙인 DOM이 정리되지 않으면 heading이 둘이 되어
+    // getByRole이 "found multiple elements"로 던진다.
+    screen.getByRole('heading', { name: 'wirebound' })
+  })
 })

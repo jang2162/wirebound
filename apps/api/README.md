@@ -253,7 +253,7 @@ pnpm install && pnpm build                         # 워크스페이스 설치 +
 pnpm --filter @wirebound/api migrate               # 마이그레이션 최신화
 pnpm --filter @wirebound/api migrate:down          # 마이그레이션 하나 내리기(반복 시 0까지)
 pnpm --filter @wirebound/api dev                   # 개발 서버 (tsx watch)
-pnpm --filter @wirebound/web dev                   # 에디터 개발 서버 (/api를 이 서버로 프록시 — 함께 띄운다)
+pnpm --filter @wirebound/web dev                   # 에디터 개발 서버 (/api를 위 API 서버로 프록시 — 함께 띄운다)
 pnpm vitest run --project api                       # api 테스트만 실행 (컨테이너 필요)
 pnpm test                                          # 전체 워크스페이스 테스트
 pnpm test:build                                    # dist 로드 가능성 검증 (패키지 재빌드 포함, 수십 초)

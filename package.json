@@ -6,10 +6,10 @@
   "engines": { "node": ">=22.9.0" },
   "scripts": {
     "build": "pnpm --filter './packages/*' -r build",
-    "test": "vitest run --project unit --project api --project web",
-    "test:watch": "vitest --project unit --project api --project web",
+    "test": "vitest run --project '!build'",
+    "test:watch": "vitest --project '!build'",
     "test:build": "vitest run --project build",
-    "typecheck": "tsc --build --force"
+    "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig.json"
   },
   "devDependencies": {
     "jsdom": "^25.0.0",
