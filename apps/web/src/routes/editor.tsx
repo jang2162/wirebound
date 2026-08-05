@@ -176,8 +176,11 @@ function ShellRegion(props: { className: string; name: string; children?: ReactN
 /**
  * 캔버스 프레임. 뷰포트 폭과 줌이 여기서 실제 치수가 된다.
  *
- * **프레임 안쪽에는 셸의 클래스를 더 붙이지 않는다** — 그 안은 P4a의 테마 CSS가 전담한다
- * (설계 D7).
+ * **프레임 안쪽에는 셸의 클래스를 붙이지 않는다** — 그 안은 P4a의 테마 CSS가 전담한다
+ * (설계 D7). 그래서 아래 두 안내 문단에 클래스가 없고, 스타일도 없다. 셸이 글꼴·글자색을
+ * 걸어 두면 상속으로 프레임 안까지 내려가 테마가 정해야 할 값을 누른다 — 선택자를
+ * 겨냥하지 않아도 새는 형태라 `shell.css`의 선택자 검사가 보지 못한다(그쪽에 속성
+ * 이름을 보는 검사를 따로 두었다).
  */
 function CanvasFrame(props: { pageId: string | undefined }): ReactElement {
   const store = useEditorStoreInstance()
@@ -191,11 +194,7 @@ function CanvasFrame(props: { pageId: string | undefined }): ReactElement {
       // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
       style={{ width: `${viewportWidth}px`, transform: `scale(${zoom})` }}
     >
-      {props.pageId === undefined ? (
-        <p className="wb-shell-placeholder">{NO_PAGE_NOTICE}</p>
-      ) : (
-        <p className="wb-shell-placeholder">페이지 {props.pageId}</p>
-      )}
+      {props.pageId === undefined ? <p>{NO_PAGE_NOTICE}</p> : <p>페이지 {props.pageId}</p>}
     </div>
   )
 }

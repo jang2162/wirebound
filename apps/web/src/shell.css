@@ -11,13 +11,23 @@
   3. 자손 선택자를 쓰지 않는다. 셸의 상자를 기준으로 안쪽을 겨냥하면 그 상자 안에
      들어올 내용까지 함께 잡힌다. 스타일이 필요한 자리에는 클래스를 직접 붙인다.
 
-  상속도 같은 이유로 다룬다. 글꼴·글자색을 셸 전체나 캔버스 상자에 걸지 않고 셸이
-  실제로 그리는 조각(머리·좌측·우측·자리 표시자)에만 건다. 그래야 캔버스 프레임
-  안으로 물려 내려가는 값이 없다.
+  4. **상속되는 속성은 셸 루트나 캔버스 상자에 걸지 않는다.** 선택자를 겨냥하지 않아도
+     자식으로 물려 내려가므로 1·2·3을 보는 검사가 잡지 못하는 누수다. 글꼴·글자색·
+     `color-scheme`은 셸이 실제로 그리는 조각(머리·좌측·우측·안내 화면)에만 각각 건다.
+     캔버스 프레임 안에는 셸의 클래스가 하나도 없고(`editor.tsx`의 `CanvasFrame`),
+     그래서 물려 내려가는 값도 없다.
 
-  검사 (0건이어야 한다):
+  검사 (셋 다 0건이어야 한다). 앞 둘은 1·2·3을, 마지막은 4를 본다 — 4는 선택자가
+  아니라 **속성 이름**으로 봐야 하므로 검사도 따로다:
+
     rg '^\s*[a-z]+\s*\{' apps/web/src/shell.css
     rg 'wb-shell-[a-z-]+\s+[.a-z]' apps/web/src/shell.css
+    rg -U '\.wb-shell(-canvas)? \{[^}]*\b(color|color-scheme|font|font-family|font-size|letter-spacing|line-height|text-align|text-transform|text-indent|white-space|word-break|cursor|visibility|font-variant-numeric)\s*:' apps/web/src/shell.css
+
+  마지막 명령은 캔버스를 감싸는 두 상자만 본다. `.wb-shell-canvas-frame`은 일부러
+  빼 두었다 — 프레임 자신에 거는 값은 D10이 폭·배율을 거는 자리와 같은 컨테이너
+  자신의 규칙이다(실측: `.wb-shell`·`.wb-shell-canvas`에 `color-scheme`이나
+  `font-family`를 넣으면 잡히고, `.wb-shell-canvas-frame`에 넣으면 잡히지 않는다).
 */
 
 .wb-shell {
@@ -41,11 +51,14 @@
     'side canvas panel';
   gap: var(--wb-shell-gap);
   background: var(--wb-shell-line);
-  color-scheme: light;
 }
 
+/* `color-scheme`은 상속 속성이다. `.wb-shell`에 걸면 캔버스 프레임 안까지 내려가,
+   P4a가 어두운 테마를 실어도 그 안의 `<input>`·`<select>`·스크롤바만 UA가 밝은
+   스킴으로 그린다. 그래서 셸이 그 컨트롤을 실제로 그리는 조각에만 각각 건다(위 4번). */
 .wb-shell-header {
   grid-area: head;
+  color-scheme: light;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -138,6 +151,7 @@
 
 .wb-shell-side {
   grid-area: side;
+  color-scheme: light;
   display: flex;
   flex-direction: column;
   gap: var(--wb-shell-gap);
@@ -187,6 +201,7 @@
 
 .wb-shell-panel {
   grid-area: panel;
+  color-scheme: light;
   min-width: 0;
   overflow: auto;
   padding: 10px 12px;
@@ -205,6 +220,7 @@
 
 /* 셸에 이르지 못한 화면(조회 중·조회 실패). 레이아웃이 아직 없으므로 문서 흐름 그대로 둔다. */
 .wb-shell-notice {
+  color-scheme: light;
   padding: 24px;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: #1d2530;

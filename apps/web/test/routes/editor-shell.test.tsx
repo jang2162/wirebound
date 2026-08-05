@@ -11,12 +11,56 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useNavigate } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
 import type { ProjectDetail, SessionUser } from '../../src/api/types'
+import type { EditorStore } from '../../src/store/editor-store'
 import { fakeApi, renderWithProviders } from '../helpers'
+
+/**
+ * 셸이 만든 `EditorStore` 인스턴스를 손에 쥐는 장치.
+ *
+ * **화면만 보는 단언으로는 "상태가 스토어에 들어간다"를 지킬 수 없다.** 셸이 모드·줌·
+ * 뷰포트 폭을 자기 `useState`로 들고 화면의 두 자리를 그 값으로 그리면 화면은 똑같이
+ * 움직인다. 실측: 셋을 각각 `EditorShell`의 로컬 `useState`로 승격시킨 변이 셋이 이
+ * 장치가 없던 판을 **12/12 전부 통과했다**. 태스크 9의 캔버스는 이 값들을 스토어에서
+ * 읽으므로, 여기서 못박지 않으면 배선이 끊긴 채로 다음 태스크가 시작된다.
+ *
+ * 셸에 테스트 전용 prop을 뚫지 않는다. 그러면 `<App />`을 라우트째 렌더하는 구조를
+ * 포기해야 하는데(라우트 표가 주는 것은 props 없는 element다), 그 구조가 위 주석이 말한
+ * 거짓 초록을 막는 장치다. 대신 스토어 모듈을 가로채 **셸이 `new` 하는 그 인스턴스**를
+ * 기록한다. 화면 코드는 한 줄도 바뀌지 않는다.
+ *
+ * 하위 클래스인 것은 `EditorStore`의 메서드가 프로토타입이 아니라 화살표 필드이기
+ * 때문이다(`editor-store.ts`의 주석 참고) — 프로토타입에 스파이를 걸 자리가 없다.
+ */
+const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
+
+vi.mock('../../src/store/editor-store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/store/editor-store')>()
+  return {
+    ...actual,
+    EditorStore: class extends actual.EditorStore {
+      constructor() {
+        super()
+        createdStores.push(this)
+      }
+    },
+  }
+})
+
+beforeEach(() => {
+  createdStores.length = 0
+})
+
+/** 셸이 지금 들고 있는 스토어. 셸이 떠 있는 동안에만 쓸 수 있다. */
+function shellStore(): EditorStore {
+  const store = createdStores.at(-1)
+  if (store === undefined) throw new Error('셸이 EditorStore를 만들지 않았습니다')
+  return store as EditorStore
+}
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -118,18 +162,21 @@ describe('에디터 셸', () => {
     expect(edit.getAttribute('aria-pressed')).toBe('false')
     expect(view.getAttribute('aria-pressed')).toBe('true')
     // 토글과 좌측 트리는 서로 다른 자리다. **둘이 함께 움직여야** 모드가 한 곳에
-    // 모여 있다고 할 수 있다. 스토어 객체는 셸이 만들어 들고 있어 테스트가 손에 쥘 수
-    // 없으므로, 화면에서 그것을 재는 방법은 이것뿐이다.
+    // 모여 있다고 할 수 있다.
     //
     // 실측: 토글이 모드를 자기 `useState`에 들고 스토어에 쓰지 않게 바꾸면 이 줄과
     // 아래 마지막 줄에서 죽는다. 이 두 줄이 없던 판에서는 그 변이가 살아남았다.
     expect(screen.queryByRole('region', { name: '구조 트리' })).toBeNull()
+    // 그리고 그 한 곳이 **스토어**다. 위 두 줄은 셸 전체가 공유하는 로컬 상태로도
+    // 만족되므로(실측: 그 변이가 12/12 통과했다) 여기서 스토어를 직접 본다.
+    expect(shellStore().getState().mode).toBe('view')
 
     // 되돌아오는 것까지 본다. 한 방향만 보면 "누르면 뷰 모드로 고정"인 구현도 통과한다.
     fireEvent.click(edit)
 
     expect(edit.getAttribute('aria-pressed')).toBe('true')
     screen.getByRole('region', { name: '구조 트리' })
+    expect(shellStore().getState().mode).toBe('edit')
   })
 
   it('프로젝트 이름이 셸에 보인다', async () => {
@@ -186,11 +233,15 @@ describe('에디터 셸', () => {
     // 스토어의 초기 폭. 양성 대조로도 쓴다 — 처음부터 375였다면 아래가 무의미하다.
     expect(select.value).toBe('1280')
     expect(canvasFrame().style.width).toBe('1280px')
+    expect(shellStore().getState().viewportWidth).toBe(1280)
 
     fireEvent.change(select, { target: { value: '375' } })
 
     expect(select.value).toBe('375')
     expect(canvasFrame().style.width).toBe('375px')
+    // 고른 폭이 스토어에 들어간다. 위 두 줄은 셸의 로컬 상태로도 만족된다 — 태스크 9의
+    // 캔버스는 이 값을 스토어에서 읽으므로 거기까지 못박아야 배선이 이어진다.
+    expect(shellStore().getState().viewportWidth).toBe(375)
   })
 
   it('줌을 바꾸면 스토어에 반영된다', async () => {
@@ -198,17 +249,22 @@ describe('에디터 셸', () => {
 
     screen.getByText('100%')
     expect(canvasFrame().style.transform).toBe('scale(1)')
+    expect(shellStore().getState().zoom).toBe(1)
 
     fireEvent.click(screen.getByRole('button', { name: '확대' }))
 
     screen.getByText('125%')
     expect(screen.queryByText('100%')).toBeNull()
     expect(canvasFrame().style.transform).toBe('scale(1.25)')
+    // 이름이 약속한 자리. 화면 세 줄은 셸이 줌을 자기 `useState`로 들고 클램프까지
+    // 흉내 내도 통과한다(실측: 그 변이가 12/12 통과했다).
+    expect(shellStore().getState().zoom).toBe(1.25)
 
     // 되돌아온다. 확대만 보면 "누르면 125%로 고정"인 구현도 통과한다.
     fireEvent.click(screen.getByRole('button', { name: '축소' }))
 
     screen.getByText('100%')
+    expect(shellStore().getState().zoom).toBe(1)
   })
 })
 

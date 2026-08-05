@@ -10,9 +10,14 @@ const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터
  * 로그인된 상태로 라우트 표(설계 D6)만 본다.
  *
  * `getProject`가 **받은 id를 이름에 실어** 돌려준다. 그 이름이 화면에 뜨면 라우트가
- * 잡혔고, 경로 파라미터가 풀렸고, 그 값이 조회까지 갔다는 뜻이다 — 셸이 프로젝트
- * 이름을 서버 응답에서만 얻기 때문이다. 셸의 자리 표시자가 경로 파라미터를 그대로
- * 찍어 주던 시절보다 한 칸 더 간다.
+ * 잡혔고 경로 파라미터가 풀렸다는 뜻이다.
+ *
+ * **거기까지다.** 가짜가 돌려주는 `설계서 ${projectId}`는 경로 파라미터만으로 만들 수
+ * 있는 문자열이라, 셸이 조회 결과를 버리고 경로 id로 제목을 지어도 아래 두 케이스는
+ * 통과한다(실측: 셸이 `project.name` 대신 `props.project.id`를 찍게 바꾸면
+ * `editor-shell.test.tsx` 8케이스가 죽고 여기 둘은 산다). "이름이 조회 결과에서 왔다"를
+ * 지키는 것은 경로로 만들 수 없는 이름을 쓰는 `editor-shell.test.tsx`의
+ * `프로젝트 이름이 셸에 보인다`다.
  */
 function renderAt(route: string): void {
   renderWithProviders(<App />, {
