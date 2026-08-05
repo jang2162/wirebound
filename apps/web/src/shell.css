@@ -1,0 +1,211 @@
+/*
+  에디터 셸의 레이아웃과 도구 모음. **캔버스 안쪽은 이 파일의 소관이 아니다** —
+  설계서 내용의 외형은 P4a의 테마 CSS가 전담한다. 셸 규칙이 거기까지 닿으면 설계서가
+  테마마다 다르게 보여야 하는데 셸이 정한 값에 눌린다.
+
+  그래서 세 가지를 지킨다(설계 D7).
+
+  1. 모든 클래스에 `wb-shell-` 접두어를 붙인다. 테마가 쓰는 이름과 겹칠 수 없다.
+  2. 요소 선택자를 쓰지 않는다. 캔버스 안의 노드는 결국 평범한 태그로 그려지므로,
+     태그를 겨냥한 규칙은 예외 없이 그 안까지 간다.
+  3. 자손 선택자를 쓰지 않는다. 셸의 상자를 기준으로 안쪽을 겨냥하면 그 상자 안에
+     들어올 내용까지 함께 잡힌다. 스타일이 필요한 자리에는 클래스를 직접 붙인다.
+
+  상속도 같은 이유로 다룬다. 글꼴·글자색을 셸 전체나 캔버스 상자에 걸지 않고 셸이
+  실제로 그리는 조각(머리·좌측·우측·자리 표시자)에만 건다. 그래야 캔버스 프레임
+  안으로 물려 내려가는 값이 없다.
+
+  검사 (0건이어야 한다):
+    rg '^\s*[a-z]+\s*\{' apps/web/src/shell.css
+    rg 'wb-shell-[a-z-]+\s+[.a-z]' apps/web/src/shell.css
+*/
+
+.wb-shell {
+  --wb-shell-line: #dfe3e8;
+  --wb-shell-chrome: #f6f7f9;
+  --wb-shell-ink: #1d2530;
+  --wb-shell-muted: #6b7684;
+  --wb-shell-accent: #2f6fed;
+  --wb-shell-gap: 1px;
+
+  /* `position: fixed`는 문서 여백을 피하려는 것이다. `body`의 기본 여백을 지우려면
+     요소 선택자가 필요한데(위 2번), 셸은 창을 가득 채우는 화면이므로 흐름에서 빼는
+     쪽이 더 곧다. */
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr) 300px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'head head head'
+    'side canvas panel';
+  gap: var(--wb-shell-gap);
+  background: var(--wb-shell-line);
+  color-scheme: light;
+}
+
+.wb-shell-header {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 10px 16px;
+  background: var(--wb-shell-chrome);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-shell-tools {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.wb-shell-modes {
+  display: inline-flex;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.wb-shell-mode {
+  appearance: none;
+  border: 0;
+  padding: 5px 12px;
+  background: transparent;
+  font: inherit;
+  color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-mode[aria-pressed='true'] {
+  background: var(--wb-shell-accent);
+  color: #fff;
+}
+
+.wb-shell-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-select {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wb-shell-zoom-step {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-zoom-value {
+  min-width: 4ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wb-shell-gap);
+  min-height: 0;
+  background: var(--wb-shell-line);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--wb-shell-ink);
+}
+
+/* 좌측의 두 상자는 같은 규칙을 쓴다. 뷰 모드에서 구조 트리가 DOM에서 빠지면 남은
+   상자가 `flex: 1`로 좌측 전체를 차지한다 — 설계 §9의 "접히면 메뉴 트리가 전체를
+   쓴다"가 여기서 나온다. */
+.wb-shell-region {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.wb-shell-region-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-canvas {
+  grid-area: canvas;
+  min-width: 0;
+  overflow: auto;
+  padding: 24px;
+  background: #eef0f3;
+}
+
+.wb-shell-canvas-frame {
+  /* 폭은 프리셋이 정하고 줌은 그 위의 배율이다. 좌상단 기준으로 키워야 확대해도
+     프레임의 시작점이 제자리에 있다. */
+  transform-origin: top left;
+  min-height: 320px;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+.wb-shell-panel {
+  grid-area: panel;
+  min-width: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  background: #fff;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-placeholder {
+  margin: 0;
+  padding: 12px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: #98a1ad;
+}
+
+/* 셸에 이르지 못한 화면(조회 중·조회 실패). 레이아웃이 아직 없으므로 문서 흐름 그대로 둔다. */
+.wb-shell-notice {
+  padding: 24px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #1d2530;
+}

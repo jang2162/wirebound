@@ -4,22 +4,11 @@
  * 읽을 수 있다.
  */
 import type { ReactElement } from 'react'
-import { Outlet, Route, Routes, useParams } from 'react-router'
+import { Outlet, Route, Routes } from 'react-router'
+import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
 import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
-
-/** 태스크 6·7이 메뉴 트리와 캔버스로 채운다. */
-function EditorShellPlaceholder(): ReactElement {
-  const params = useParams()
-  return (
-    <main>
-      <h1>에디터</h1>
-      <p>프로젝트 {params.projectId}</p>
-      {params.pageId !== undefined && <p>페이지 {params.pageId}</p>}
-    </main>
-  )
-}
 
 export function App(): ReactElement {
   return (
@@ -43,8 +32,11 @@ export function App(): ReactElement {
         }
       >
         <Route path="/" element={<ProjectListRoute />} />
-        <Route path="/projects/:projectId" element={<EditorShellPlaceholder />} />
-        <Route path="/projects/:projectId/pages/:pageId" element={<EditorShellPlaceholder />} />
+        {/* 두 주소가 같은 셸이다. 페이지를 연 것은 셸 안의 캔버스가 달라지는 일이지
+            다른 화면이 아니므로, 라우터가 컴포넌트를 다시 마운트하지 않고 편집 상태가
+            그대로 이어진다. */}
+        <Route path="/projects/:projectId" element={<EditorShellRoute />} />
+        <Route path="/projects/:projectId/pages/:pageId" element={<EditorShellRoute />} />
       </Route>
     </Routes>
   )
