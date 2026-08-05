@@ -16,6 +16,12 @@
  * 여러 필드가 필요하면 selector를 여러 번 부른다. 스토어는 변경이 있을 때만 알리므로
  * (`editor-store.ts`) 구독이 늘어나는 비용은 거의 없다.
  *
+ * **`(s) => s`는 화면 코드에서 쓰지 마라.** 상태 객체 전체는 이 조건("안정된 참조")을
+ * 문자 그대로 만족하지만 — 스토어가 바뀐 필드가 있을 때만 객체를 교체하므로 —
+ * 그렇게 고른 컴포넌트는 **어느 필드가 바뀌든 다시 그린다**(실측: `setZoom`·`setMode`·
+ * `setViewportWidth`·`selectNode`·`loadPage` 다섯 전부에서 리렌더). 그 형태는 참조
+ * 안정성 자체를 재는 테스트(`test/store/use-editor-store.test.tsx`)에만 있다.
+ *
  * `useEditorStore`가 스토어를 인자로 받는 것은 의도다 — 컨텍스트에서 꺼내는 형태만
  * 있으면 Provider 없이 스토어를 직접 쥐고 하는 테스트가 불가능해진다. 화면이 컨텍스트의
  * 스토어를 원하면 `useEditorStoreInstance()`로 꺼내 넘긴다.

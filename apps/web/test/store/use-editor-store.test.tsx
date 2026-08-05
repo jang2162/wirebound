@@ -17,35 +17,29 @@ import {
 } from '../../src/store/use-editor-store'
 
 describe('useEditorStore', () => {
-  it('처음 렌더는 한 번으로 끝난다', () => {
-    // 이 프로브의 selector는 원시값을 고른다. 그래서 `getState`가 호출마다 새 객체를
-    // 주더라도 여기서는 죽지 않는다 — 스냅샷이 매번 `1`이라 React가 `Object.is`로
-    // 바일아웃한다(변이로 확인했다). `getState`의 참조 안정성은 아래
-    // `상태 객체 전체를 고르는 selector도 렌더를 반복하지 않는다`가 지킨다.
-    const store = new EditorStore()
-    let renders = 0
-    function Probe(): ReactElement {
-      renders += 1
-      const zoom = useEditorStore(store, (s) => s.zoom)
-      return <span>{`zoom ${zoom}`}</span>
-    }
-
-    render(<Probe />)
-
-    screen.getByText('zoom 1')
-    expect(renders).toBe(1)
-  })
-
   it('상태 객체 전체를 고르는 selector도 렌더를 반복하지 않는다', () => {
     // `(s) => s`는 `getState`가 돌려준 참조를 그대로 스냅샷으로 쓴다. 그래서
     // `getState`가 호출마다 새 객체를 만들면 스냅샷이 매 렌더 달라지고, React가
     // 다시 그리기를 반복하다 `Maximum update depth exceeded`로 죽는다.
     //
+    // **이 selector 모양은 여기서만 쓴다. 화면 코드에서 흉내 내지 마라** — 상태
+    // 객체 전체를 고르면 그 컴포넌트가 모든 상태 변경에 묶인다. 실측: 같은 프로브를
+    // 두고 `setZoom`·`setMode`·`setViewportWidth`·`selectNode`·`loadPage` 다섯을
+    // 차례로 부르면 다섯 번 다 다시 그렸고, selector만 `(s) => s.zoom`으로 바꾼
+    // 대조군은 `setZoom` 하나에서만 그렸다. 여기서 쓰는 것은 참조 안정성을 재는
+    // 것이 목적이어서지 권장하는 형태여서가 아니다 — 화면은
+    // `use-editor-store.tsx` 독스트링대로 필요한 필드만 고른다.
+    //
     // 변이로 확인했다: `getState`를 `() => ({ ...this.#state })`로 바꾸면 web
     // 프로젝트에서 이 테스트와 `editor-store.test.ts`의
     // `getState는 매번 같은 참조를 준다(변경 없으면)` 둘만 죽는다. 나머지 바인딩
-    // 테스트는 전부 통과한다 — selector가 원시값이거나 중첩 필드를 고르면
-    // 얕은 복사를 그대로 통과하기 때문이다.
+    // 테스트는 전부 통과한다 — 넷은 selector가 원시값이라(`s.zoom`·
+    // `s.selectedNodeId`) 얕은 복사를 그대로 통과하고, `Provider 밖에서 부르면
+    // 던진다`는 스냅샷에 닿기 전에 던진다.
+    //
+    // 아래 두 단언은 마운트 렌더가 1회인 것과 기본 `zoom`이 React까지 흘러가는
+    // 것도 함께 본다(실측: `initialState()`의 `zoom`을 0.75로 바꾸면 `getByText`가
+    // 죽는다). 같은 것만 보던 별도 프로브가 있었으나 어떤 변이도 잡지 못해 지웠다.
     const store = new EditorStore()
     let renders = 0
     function Probe(): ReactElement {
