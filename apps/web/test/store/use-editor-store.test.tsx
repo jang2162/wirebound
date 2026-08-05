@@ -18,8 +18,10 @@ import {
 
 describe('useEditorStore', () => {
   it('처음 렌더는 한 번으로 끝난다', () => {
-    // 스냅샷이 매번 달라지면 React가 렌더를 반복한다. 이 단언이 그 상태를 잡는다 —
-    // `EditorStore.getState`가 매번 새 객체를 주면 여기서 렌더 폭주로 죽는다.
+    // 이 프로브의 selector는 원시값을 고른다. 그래서 `getState`가 호출마다 새 객체를
+    // 주더라도 여기서는 죽지 않는다 — 스냅샷이 매번 `1`이라 React가 `Object.is`로
+    // 바일아웃한다(변이로 확인했다). `getState`의 참조 안정성은 아래
+    // `상태 객체 전체를 고르는 selector도 렌더를 반복하지 않는다`가 지킨다.
     const store = new EditorStore()
     let renders = 0
     function Probe(): ReactElement {
@@ -31,6 +33,30 @@ describe('useEditorStore', () => {
     render(<Probe />)
 
     screen.getByText('zoom 1')
+    expect(renders).toBe(1)
+  })
+
+  it('상태 객체 전체를 고르는 selector도 렌더를 반복하지 않는다', () => {
+    // `(s) => s`는 `getState`가 돌려준 참조를 그대로 스냅샷으로 쓴다. 그래서
+    // `getState`가 호출마다 새 객체를 만들면 스냅샷이 매 렌더 달라지고, React가
+    // 다시 그리기를 반복하다 `Maximum update depth exceeded`로 죽는다.
+    //
+    // 변이로 확인했다: `getState`를 `() => ({ ...this.#state })`로 바꾸면 web
+    // 프로젝트에서 이 테스트와 `editor-store.test.ts`의
+    // `getState는 매번 같은 참조를 준다(변경 없으면)` 둘만 죽는다. 나머지 바인딩
+    // 테스트는 전부 통과한다 — selector가 원시값이거나 중첩 필드를 고르면
+    // 얕은 복사를 그대로 통과하기 때문이다.
+    const store = new EditorStore()
+    let renders = 0
+    function Probe(): ReactElement {
+      renders += 1
+      const state = useEditorStore(store, (s) => s)
+      return <span>{`zoom ${state.zoom} / 선택 ${state.selectedNodeId ?? '없음'}`}</span>
+    }
+
+    render(<Probe />)
+
+    screen.getByText('zoom 1 / 선택 없음')
     expect(renders).toBe(1)
   })
 
