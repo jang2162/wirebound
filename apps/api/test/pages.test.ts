@@ -876,8 +876,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       // "라우트가 DB에 닿기 전에 막는다"도 아니다. 라우트 3.5단계와 파이프라인
       // 8단계가 같은 문안의 `badRequest`를 던지므로(`routes/pages.ts`의 3.5단계와
       // `toApiError`의 `nul-byte` 분기), 위 400과 이 200만으로는 둘 중 어느 쪽이
-      // 걸렀는지 구분되지 않는다. 이 단언이 구분하는 것은 NUL이 Postgres까지
-      // 갔는지 여부다 — 갔다면 22P05로 트랜잭션이 오염돼 이 GET이 25P02로 죽는다.
+      // 걸렀는지 구분되지 않는다.
       const after = await ctx.app.inject({
         method: 'GET',
         url: `/api/projects/${project.id}/pages/${page.id}`,

@@ -31,13 +31,15 @@ import { z } from 'zod'
  *
  * **버전 변조를 막는 것은 이 술어가 아니라 파이프라인 7단계다**
  * (`after.version !== before.version`이면 `invalid` → 422). 다른 값으로 바꾸면 거기서
- * 막히고, 같은 값이면 무연산이므로 PUT의 inverse만 통과한다. 이 두 성질을 확인한
- * 방법은 `revisions.test.ts`의 두 케이스다 — "`/version`을 다른 값으로 바꾸면 400이
- * 아니라 422다"가 앞을, `undo-redo.test.ts`의 "`PUT .../schema`가 만든 revision도
- * 이력의 inverse로 되돌릴 수 있다"가 뒤를 라우트를 거쳐 못박는다. `replace` 말고
- * `remove`·`move`도 이 술어를 지나가게 됐으므로 그 둘도 함께 확인했다 — 같은 파일의
- * "`/version`을 지우거나 다른 곳으로 옮기는 편집도 200이 아니다"가 둘 다 422임을
- * 고정한다(봉투 검증(6단계)이 `version` 없는 문서를 거부한다).
+ * 막히고, 같은 값이면 무연산이므로 PUT의 inverse만 통과한다. 이 두 성질을 라우트를
+ * 거쳐 못박는 테스트는 셋이다:
+ *
+ * - `revisions.test.ts`의 "`/version`을 다른 값으로 바꾸면 400이 아니라 422다"
+ * - `revisions.test.ts`의 "`/version`을 지우거나 다른 곳으로 옮기는 편집도 200이
+ *   아니다" — `replace` 말고 `remove`·`move`도 이 술어를 지나가게 됐으므로 그 둘도
+ *   422임을 고정한다(봉투 검증(6단계)이 `version` 없는 문서를 거부한다)
+ * - `undo-redo.test.ts`의 "`PUT .../schema`가 만든 revision도 이력의 inverse로
+ *   되돌릴 수 있다"
  *
  * **대가(D6 개정의 비용).** `/version`에 관한 한 400(본문이 계약을 어김)과
  * 422(문서 내용이 처리 불가)의 경계가 흐려진다(설계 §13). `/root`·`/version` 둘 다
