@@ -60,6 +60,23 @@ export default defineConfig({
       {
         ...shared,
         test: {
+          name: 'web',
+          include: ['apps/web/test/**/*.test.{ts,tsx}'],
+          // React 컴포넌트를 렌더하므로 DOM이 필요하다. api·unit 프로젝트는
+          // DOM이 없어야 하므로(노드 전용 코드가 DOM 전역에 기대지 않도록)
+          // 이 프로젝트에만 jsdom을 건다.
+          //
+          // `jsdom`은 vitest의 optional peer dependency이고, vitest가 자기
+          // 위치에서 `import('jsdom')` 한다. pnpm의 strict node_modules에서는
+          // vitest를 의존하는 패키지 — 즉 **저장소 루트** — 가 jsdom을 갖고
+          // 있어야 vitest 옆에 링크된다. apps/web에만 넣으면
+          // `Cannot find package 'jsdom'`으로 죽는다(실측).
+          environment: 'jsdom',
+        },
+      },
+      {
+        ...shared,
+        test: {
           name: 'build',
           include: ['packages/*/build-test/**/*.test.ts'],
           // tsdown 재빌드를 beforeAll에서 돈다. 기본 테스트 실행에서 분리한 이유:
