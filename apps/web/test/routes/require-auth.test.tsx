@@ -78,4 +78,36 @@ describe('인증 문지기', () => {
     expect(currentPath()).toBe('/')
     expect(screen.queryByLabelText('이메일')).toBeNull()
   })
+
+  it('로그인 화면에서는 unauthenticated가 아닌 오류에도 로그인 폼이 보인다', async () => {
+    renderWithProviders(<App />, {
+      client: fakeApi({
+        me: async () => Promise.reject(new ApiError(500, 'internal', SERVER_MESSAGE)),
+      }),
+      route: '/login',
+    })
+
+    // 보호된 라우트에서는 실패 이유를 보여주는 것이 맞지만(위 케이스), 로그인 화면에서는
+    // 정반대다. 여기서 폼을 치우면 사용자가 할 수 있는 유일한 행동이 사라지고, 자동
+    // 재시도도 재시도 버튼도 없으므로 새로고침 말고는 복구 경로가 없다.
+    await screen.findByLabelText('이메일')
+    expect(currentPath()).toBe('/login')
+    // 왜 로그인 화면에 있는지 알려 준다 — 서버가 준 문장 그대로.
+    expect(screen.getByRole('status').textContent).toBe(SERVER_MESSAGE)
+  })
+
+  it('네트워크가 끊겨 ApiError조차 아니어도 로그인 폼이 보인다', async () => {
+    // `fetch`는 응답을 받지 못하면 raw `TypeError`로 reject한다. `http-client`가 그것을
+    // `ApiError`로 번역하지만, 화면은 `ApiError`가 아닌 값도 받을 수 있어야 한다 —
+    // 이 경로가 이 버그의 실제 유입 지점이었으므로 따로 못박는다.
+    renderWithProviders(<App />, {
+      client: fakeApi({ me: async () => Promise.reject(new TypeError('Failed to fetch')) }),
+      route: '/login',
+    })
+
+    await screen.findByLabelText('이메일')
+    expect(currentPath()).toBe('/login')
+    // 서버가 이유를 주지 않았으므로 화면이 가진 문장을 쓴다.
+    expect(screen.getByRole('status').textContent).toBe('세션을 확인하지 못했습니다')
+  })
 })

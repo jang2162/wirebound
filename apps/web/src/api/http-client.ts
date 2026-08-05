@@ -13,6 +13,17 @@ const API_PREFIX = '/api'
 /** 응답을 읽지 못했을 때 쓰는 메시지. 서버가 준 문장이 아니므로 한 곳에만 둔다. */
 const UNREADABLE = '서버 응답을 이해할 수 없습니다'
 
+/** 요청이 서버에 닿지도 못했을 때 쓰는 메시지. 사용자에게 그대로 보여도 되는 문장이어야 한다. */
+const UNREACHABLE = '서버에 연결하지 못했습니다'
+
+/**
+ * 연결 자체가 실패한 `ApiError`의 `status`.
+ *
+ * **응답이 없었기 때문에 실을 상태 코드가 없다.** 0은 서버가 낼 수 있는 값이 아니므로
+ * 실제 응답에서 온 상태 코드와 섞이지 않는다 — 로그에서 "서버가 0을 냈다"로 읽힐 여지가 없다.
+ */
+const NO_RESPONSE = 0
+
 const API_ERROR_CODES: readonly string[] = [
   'bad-request',
   'unauthenticated',
@@ -89,7 +100,19 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
         : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
     }
 
-    const response = await fetchImpl(`${API_PREFIX}${path}`, init)
+    // `fetch`는 응답을 받지 못하면(네트워크 단절·DNS 실패·CORS 차단) 실패 응답이
+    // 아니라 raw `TypeError`로 reject한다. **그것은 `ApiError`가 아니다.** 호출자는
+    // `err instanceof ApiError`로 분기하므로, 번역하지 않으면 그 분기가 통째로 빗나가
+    // 네트워크 오류만 다른 부류로 새어 나간다. `fetch`를 부르는 곳이 여기 하나이므로
+    // 번역할 자리도 여기 하나다.
+    let response: Response
+    try {
+      response = await fetchImpl(`${API_PREFIX}${path}`, init)
+    } catch {
+      // `code`는 `internal`이다 — 서버 에러 코드 집합(README "에러 형식")에 "연결 실패"가
+      // 없고, 화면이 `switch`로 가르는 값이라 계약 밖의 코드를 새로 만들지 않는다.
+      throw new ApiError(NO_RESPONSE, 'internal', UNREACHABLE)
+    }
 
     if (!response.ok) throw await toApiError(response)
 

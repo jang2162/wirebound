@@ -282,6 +282,23 @@ describe('createHttpClient', () => {
     }
   })
 
+  it('fetch 자체가 실패하면 ApiError로 바꾼다', async () => {
+    // 네트워크 단절·DNS 실패·CORS 차단에서 `fetch`는 응답 없이 raw `TypeError`로
+    // reject한다 — 실패 응답이 아니므로 봉투 번역 경로를 아예 지나가지 않는다.
+    // 그것이 그대로 새어 나가면 호출자의 `err instanceof ApiError` 분기가 통째로
+    // 빗나가서, 화면이 네트워크 오류를 오류로 알아보지 못한다.
+    const fetchImpl: typeof fetch = () => Promise.reject(new TypeError('Failed to fetch'))
+    const client = createHttpClient(fetchImpl)
+
+    const error = asApiError(await client.me().catch((e: unknown) => e))
+
+    expect(error.code).toBe('internal')
+    // 응답이 없었다는 뜻의 0. 서버가 낼 수 있는 상태 코드가 아니라서 실제 응답과 섞이지 않는다.
+    expect(error.status).toBe(0)
+    // 사용자에게 그대로 보여도 되는 문장이어야 한다 — 브라우저별 영문 문구를 흘리지 않는다.
+    expect(error.message).toBe('서버에 연결하지 못했습니다')
+  })
+
   it('경로에 들어가는 id는 URL 인코딩된다', async () => {
     // 주소창에서 온 id가 그대로 경로에 붙으면 URL이 깨지거나 다른 경로로 샌다.
     const stub = stubFetch(jsonResponse(404, { error: { code: 'not-found', message: '대상을 찾을 수 없습니다' } }))

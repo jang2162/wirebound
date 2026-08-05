@@ -20,10 +20,16 @@ type SessionState =
 const UNKNOWN_FAILURE = '세션을 확인하지 못했습니다'
 
 /**
- * `me()`를 한 번 불러 세션 상태를 판정한다.
+ * `me()`를 한 번 불러 세션 상태를 판정한다. **한 번뿐이다** — 이펙트는 `api`가 바뀔
+ * 때만 다시 돌므로 자동 재시도가 없고, 재시도 버튼도 없다.
  *
- * `status`가 아니라 `code`로 가른다. 서버는 같은 401을 여러 이유로 낼 수 있고, 반대로
- * 500을 "로그아웃됨"으로 읽으면 사용자는 될 리 없는 로그인을 반복하게 된다.
+ * `status`가 아니라 `code`로 가른다. 서버는 같은 401을 여러 이유로 낼 수 있으므로,
+ * `unauthenticated`가 아닌 실패는 "로그아웃됨"이 아니라 `failed`다.
+ *
+ * **`failed`를 화면에서 어떻게 다룰지는 이 훅이 정하지 않는다 — 호출자마다 답이 다르다.**
+ * 보호된 라우트에서는 로그인 화면으로 보내면 안 된다(로그인해 봐야 통과하지 못하므로
+ * 사용자가 될 리 없는 로그인을 반복하게 된다). 로그인 화면에서는 정확히 뒤집힌다 —
+ * 거기서 폼을 치우면 재시도 경로가 없어 새로고침 말고는 앱에 들어갈 방법이 사라진다.
  */
 function useSession(): SessionState {
   const api = useApi()
@@ -87,12 +93,24 @@ export function RequireAuth(props: { children: ReactNode }): ReactElement | null
  *
  * `RequireAuth`와 같은 확인을 반대 방향으로 쓴다. 로그인 화면만 예외로 두면, 세션이
  * 살아 있는 사용자가 주소창으로 `/login`에 들어와 다시 로그인하는 길이 남는다.
+ *
+ * **`failed`는 `anonymous`처럼 다뤄 폼을 그린다.** `RequireAuth`와 갈리는 유일한
+ * 지점이다 — 여기서 실패 화면을 내면 API가 잠깐 500을 내거나 네트워크가 끊긴 동안
+ * 로그인 폼이 사라지고, `useSession`이 재시도하지 않으므로 서버가 회복돼도 사용자는
+ * 새로고침 전까지 앱에 들어갈 수 없다.
  */
 export function RedirectWhenAuthenticated(props: { children: ReactNode }): ReactElement | null {
   const session = useSession()
 
   if (session.status === 'pending') return null
-  if (session.status === 'failed') return <SessionFailure message={session.message} />
   if (session.status === 'authenticated') return <Navigate to="/" replace />
-  return <>{props.children}</>
+  return (
+    <>
+      {/* 확인이 실패했으면 왜 로그인 화면에 있는지 알려 준다. `alert`가 아니라 `status`인
+          것은 사용자가 한 행동의 결과가 아니기 때문이다 — 폼의 `alert` 자리는 제출
+          결과에 남겨 둔다. */}
+      {session.status === 'failed' && <p role="status">{session.message}</p>}
+      {props.children}
+    </>
+  )
 }
