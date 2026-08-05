@@ -181,6 +181,51 @@
   color: var(--wb-shell-muted);
 }
 
+/* 메뉴·페이지 트리(`panels/menu-tree.tsx`). 목록 표식과 기본 여백은 `<ul>`마다 지운다 —
+   요소 선택자도 자손 선택자도 쓸 수 없으므로(위 2·3번) 규칙을 클래스에 직접 건다.
+   `list-style`은 상속되므로 `<li>`에는 클래스가 필요 없다. */
+.wb-shell-tree {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+/* 안쪽 목록. 들여쓰기가 깊이를 보여 준다. */
+.wb-shell-tree-list {
+  margin: 0;
+  padding-left: 12px;
+  list-style: none;
+}
+
+.wb-shell-tree-menu {
+  display: block;
+  padding: 3px 4px;
+  font-weight: 600;
+}
+
+.wb-shell-tree-page {
+  display: block;
+  padding: 3px 4px;
+  border-radius: 4px;
+  color: var(--wb-shell-muted);
+  text-decoration: none;
+}
+
+/* 선택된 페이지. 표시는 `aria-current`가 갖고 색은 여기서 나온다 — 보조 기술이 읽는 것과
+   눈에 보이는 것이 같은 하나에서 갈라져 나와야 둘이 어긋나지 않는다. */
+.wb-shell-tree-page[aria-current='page'] {
+  background: var(--wb-shell-accent);
+  color: #fff;
+}
+
+/* 트리 자리의 안내·오류 문장. */
+.wb-shell-tree-notice {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wb-shell-muted);
+}
+
 .wb-shell-canvas {
   grid-area: canvas;
   min-width: 0;

@@ -30,6 +30,20 @@ function renderAt(route: string): void {
         description: null,
         role: 'owner',
       }),
+      // 셸의 세 자리가 각각 조회한다. 여기서 보는 것은 라우트 표뿐이지만, 스텁하지 않은
+      // 메서드는 `fakeApi`가 던지므로 트리와 캔버스가 오류 화면이 된다 — 그러면 아래
+      // 단언이 "라우트가 잡혔다"가 아니라 "오류가 떴다"를 보게 된다.
+      getTree: async () => [],
+      getPage: async (_projectId, pageId) => ({
+        id: pageId,
+        menuNodeId: 'm-1',
+        title: `페이지 ${pageId}`,
+        description: null,
+        sortOrder: 0,
+        schemaVersion: 1,
+        headSeq: 1,
+        schema: { version: 1, root: { id: 'n_00000000000a', type: 'Page', children: [] } },
+      }),
     }),
     route,
   })
@@ -52,7 +66,9 @@ describe('라우트 표', () => {
     renderAt('/projects/p-1/pages/pg-2')
 
     await screen.findByRole('heading', { name: '설계서 p-1' })
-    screen.getByText('페이지 pg-2')
+    // 캔버스는 `pageId`로 문서를 받아 온 **뒤에** 그 자리를 그린다. 조회가 끝날 때까지
+    // 기다려야 하는 것은 그래서다.
+    await screen.findByText('페이지 pg-2')
     expect(currentPath()).toBe('/projects/p-1/pages/pg-2')
   })
 })

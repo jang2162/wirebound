@@ -2,11 +2,14 @@
  * 설계서를 여는 에디터 셸. 좌측에 메뉴·구조 트리, 가운데 캔버스, 우측 속성 패널이다
  * (설계 §9).
  *
- * **이 단계는 틀과 상단 도구까지다.** 세 패널은 빈 상자로 두고, 좌측 트리는 태스크 8이,
- * 캔버스 내용과 속성 패널은 태스크 9가 채운다. 그래서 셸이 부르는 API는 `getProject`
- * 하나뿐이다 — 트리·페이지 조회는 그것을 그리는 태스크가 함께 가져온다.
+ * **캔버스 내용과 속성 패널은 아직 자리 표시자다** — 태스크 9가 채운다. 좌측의 메뉴·페이지
+ * 트리는 `panels/menu-tree.tsx`가 그린다.
  *
- * 편집 상태(모드·뷰포트 폭·줌·선택)는 `EditorStore`가 갖는다. 셸이 그것을 `useState`로
+ * 조회는 자리마다 나뉘어 있다. 셸은 `getProject`, 트리는 `getTree`, 캔버스는 `getPage`를
+ * 각각 부르고 각자 실패를 자기 자리에 그린다. 한 곳에 모아 두면 어느 하나가 실패할 때
+ * 화면 전체가 오류로 바뀌고, 사용자는 멀쩡한 트리까지 잃는다.
+ *
+ * 편집 상태(모드·뷰포트 폭·줌·선택·문서)는 `EditorStore`가 갖는다. 셸이 그것을 `useState`로
  * 들고 내려보내지 않는 이유는 P2b-2 때문이다 — 낙관적 적용·롤백·undo가 붙으면 그 상태는
  * 화면 없이 단위 테스트할 수 있어야 하고, 컴포넌트 안에 있으면 그럴 수 없다.
  */
@@ -15,6 +18,7 @@ import { useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import type { ProjectDetail } from '../api/types'
+import { MenuTree } from '../panels/menu-tree'
 import { EditorStore, VIEWPORT_PRESETS, type ViewportWidth } from '../store/editor-store'
 import {
   EditorStoreProvider,
@@ -28,6 +32,8 @@ const UNKNOWN_FAILURE = '프로젝트를 불러오지 못했습니다'
 const FAILURE_TITLE = '설계서를 열지 못했습니다'
 /** 아직 페이지를 고르지 않은 캔버스의 안내. */
 const NO_PAGE_NOTICE = '왼쪽 트리에서 페이지를 고르세요'
+/** 페이지 조회가 이유 없이 실패했을 때의 문장. 프로젝트 쪽(`UNKNOWN_FAILURE`)과 다르다. */
+const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 
 /** 줌 한 칸. 한계(0.25~2)는 스토어가 클램프하므로 여기서 다시 알 필요가 없다. */
 const ZOOM_STEP = 0.25
@@ -136,14 +142,19 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
       </header>
 
       <nav className="wb-shell-side" aria-label="메뉴와 구조">
-        <ShellRegion className="wb-shell-region" name="메뉴·페이지 트리" />
+        <ShellRegion className="wb-shell-region" name="메뉴·페이지 트리">
+          {/* 트리에 주는 `projectId`는 **조회해 온 프로젝트의 id**다. 경로의 파라미터를
+              다시 읽지 않는 것은, 트리가 만드는 주소가 지금 열려 있는 프로젝트를 가리켜야
+              하기 때문이다 — 둘은 같은 값이지만 진실은 조회 결과 쪽에 있다. */}
+          <MenuTree projectId={props.project.id} pageId={props.pageId} />
+        </ShellRegion>
         {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를
             쓴다(설계 §9).
 
-            "접힘"을 `hidden`이 아니라 **DOM에서 제거**로 구현한다. 태스크 8이 여기에
-            실제 트리를 채우면 뷰 모드에서 보이지도 않는 트리가 계속 렌더되고 스토어를
-            구독하게 되는데, 접힌 동안 그 상태를 유지할 이유가 없다(선택은 스토어가 갖고
-            있어 다시 펼칠 때 그대로 돌아온다).
+            "접힘"을 `hidden`이 아니라 **DOM에서 제거**로 구현한다. 여기에 실제 구조 트리가
+            채워지면 뷰 모드에서 보이지도 않는 트리가 계속 렌더되고 스토어를 구독하게 되는데,
+            접힌 동안 그 상태를 유지할 이유가 없다(선택은 스토어가 갖고 있어 다시 펼칠 때
+            그대로 돌아온다).
 
             **테스트는 둘 중 어느 쪽인지까지 잡지 못한다.** RTL의 role 조회가 `hidden`
             요소를 접근성 트리에서 빼므로 두 구현 모두 같은 단언을 통과한다(실측:
@@ -153,7 +164,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
       </nav>
 
       <main className="wb-shell-canvas" aria-label="캔버스">
-        <CanvasFrame pageId={props.pageId} />
+        <CanvasFrame projectId={props.project.id} pageId={props.pageId} />
       </main>
 
       <aside className="wb-shell-panel" aria-label="속성 패널">
@@ -174,18 +185,79 @@ function ShellRegion(props: { className: string; name: string; children?: ReactN
 }
 
 /**
- * 캔버스 프레임. 뷰포트 폭과 줌이 여기서 실제 치수가 된다.
+ * 캔버스에 담길 것의 상태. 문서 자체는 여기 두지 않는다 — 스토어가 갖는다. 화면이 문서를
+ * 자기 `useState`에 들면 태스크 9의 캔버스·속성 패널·구조 트리가 각자 다른 사본을 보게
+ * 된다.
+ */
+type PageLoadState =
+  | { status: 'empty' }
+  | { status: 'loading' }
+  | { status: 'ready' }
+  | { status: 'failed'; message: string }
+
+/**
+ * 캔버스 프레임. 뷰포트 폭과 줌이 여기서 실제 치수가 되고, **열린 페이지의 문서를 받아
+ * 스토어에 싣는 자리**이기도 하다.
+ *
+ * 문서를 받는 일이 트리가 아니라 여기 있는 이유는 `panels/menu-tree.tsx`의 주석에 있다 —
+ * 요지는 "주소가 열린 페이지의 단일 진실"이라는 것이다. 트리는 주소만 바꾸고, 문서는
+ * 주소(`pageId`)를 보고 받는다. 그래서 눌러서 연 페이지와 주소로 들어와 열린 페이지가
+ * 같은 경로를 지난다.
  *
  * **프레임 안쪽에는 셸의 클래스를 붙이지 않는다** — 그 안은 P4a의 테마 CSS가 전담한다
- * (설계 D7). 그래서 아래 두 안내 문단에 클래스가 없고, 스타일도 없다. 셸이 글꼴·글자색을
+ * (설계 D7). 그래서 아래 안내 문단들에 클래스가 없고, 스타일도 없다. 셸이 글꼴·글자색을
  * 걸어 두면 상속으로 프레임 안까지 내려가 테마가 정해야 할 값을 누른다 — 선택자를
  * 겨냥하지 않아도 새는 형태라 `shell.css`의 선택자 검사가 보지 못한다(그쪽에 속성
  * 이름을 보는 검사를 따로 두었다).
+ *
+ * 태스크 9는 아래 `ready` 자리(지금은 자리 표시자 한 줄)를 스토어의 문서를 그리는
+ * 렌더러로 바꾼다. 나머지 세 자리(안내·로딩·오류)는 그대로 쓰면 된다.
  */
-function CanvasFrame(props: { pageId: string | undefined }): ReactElement {
+function CanvasFrame(props: { projectId: string; pageId: string | undefined }): ReactElement {
+  const api = useApi()
   const store = useEditorStoreInstance()
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
   const zoom = useEditorStore(store, (s) => s.zoom)
+  const [state, setState] = useState<PageLoadState>({ status: 'empty' })
+  const { projectId, pageId } = props
+
+  useEffect(() => {
+    if (pageId === undefined) {
+      setState({ status: 'empty' })
+      return
+    }
+
+    // 응답이 오기 전에 다른 페이지로 옮기면 결과를 버린다. 이것이 없으면 늦게 온 앞
+    // 페이지의 문서가 뒤 페이지를 덮어쓴다.
+    let alive = true
+    setState({ status: 'loading' })
+
+    // 열 페이지를 **인자로** 받는다. 이펙트 위쪽의 `undefined` 검사만으로는 이 안에서
+    // `pageId`가 좁혀지지 않는다(호이스팅된 함수 선언이라 TS가 호출 시점을 모른다).
+    async function load(openPageId: string): Promise<void> {
+      try {
+        const page = await api.getPage(projectId, openPageId)
+        if (!alive) return
+        // **문서는 스토어로 간다.** `headSeq`가 P2b-2의 `baseSeq`다 — 문서와 함께
+        // 실어야 편집 요청이 어느 revision 위에서 만들어졌는지가 어긋나지 않는다.
+        store.loadPage(page.schema, page.headSeq)
+        setState({ status: 'ready' })
+      } catch (caught) {
+        if (!alive) return
+        // 실패는 **이 상자 안에서** 끝난다. 셸 전체를 오류로 바꾸면 멀쩡한 트리까지
+        // 사라져, 사용자가 다른 페이지로 옮겨 갈 길이 없어진다.
+        setState({
+          status: 'failed',
+          message: caught instanceof ApiError ? caught.message : PAGE_UNKNOWN_FAILURE,
+        })
+      }
+    }
+
+    void load(pageId)
+    return () => {
+      alive = false
+    }
+  }, [api, projectId, pageId, store])
 
   return (
     <div
@@ -194,7 +266,13 @@ function CanvasFrame(props: { pageId: string | undefined }): ReactElement {
       // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
       style={{ width: `${viewportWidth}px`, transform: `scale(${zoom})` }}
     >
-      {props.pageId === undefined ? <p>{NO_PAGE_NOTICE}</p> : <p>페이지 {props.pageId}</p>}
+      {state.status === 'empty' && <p>{NO_PAGE_NOTICE}</p>}
+      {state.status === 'loading' && <p role="status">페이지를 불러오는 중…</p>}
+      {/* 실패한 동안에는 문서를 그리지 않는다. 스토어에는 앞 페이지의 문서가 남아 있을
+          수 있는데, 그것을 오류 문장 밑에 함께 그리면 어느 페이지를 보고 있는지 알 수
+          없다. */}
+      {state.status === 'failed' && <p role="alert">{state.message}</p>}
+      {state.status === 'ready' && <p>페이지 {pageId}</p>}
     </div>
   )
 }
