@@ -58,6 +58,22 @@ const DOC = pageDoc({
   ],
 })
 
+/**
+ * `JSON.stringify`가 **던지는** 값. 순환 참조가 그렇다.
+ *
+ * `getPage` 응답의 JSON에서는 이런 값이 나올 수 없다 — 여기서 손으로 만든다. 지키는 것은
+ * "패널이 값을 문자열로 만들다 던져도 셸이 살아 있다"이고, 그것이 필요한 이유는 패널이
+ * 캔버스의 오류 경계 **밖**에 있기 때문이다(`panels/property-panel.tsx`의 `stringify`).
+ */
+const CIRCULAR: Record<string, unknown> = { name: '순환' }
+CIRCULAR.self = CIRCULAR
+
+const THROWING_DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [{ id: 'n-card', type: 'Card', props: { title: CIRCULAR, subtitle: '부제' } }],
+})
+
 function panel(): HTMLElement {
   return screen.getByRole('complementary', { name: '속성 패널' })
 }
@@ -214,6 +230,21 @@ describe('속성 패널', () => {
 
     // **이 케이스가 이 태스크의 범위를 고정한다.** P2b-2가 편집을 얹으면 여기가 죽고,
     // 그 죽음이 곧 "편집이 생겼다"는 신호다.
+  })
+
+  it('값을 문자열로 만들 수 없어도 셸은 살아 있다', async () => {
+    await openPage(THROWING_DOC)
+
+    select('Card')
+
+    // 그 줄만 대신 문장을 낸다. 나머지 줄이 그대로인 것이 양성 대조다 — 패널이 통째로
+    // 무너지거나 아무것도 그리지 않는 구현은 이 단언을 통과할 수 없다.
+    expect(propRows()).toEqual([
+      { label: '제목', value: '(표시할 수 없는 값)' },
+      { label: '부제', value: '부제' },
+    ])
+    // 셸도 그대로다. `stringify`의 `try`를 걷어내면 여기까지 오지 못하고 렌더가 던진다.
+    screen.getByRole('heading', { name: PROJECT_NAME })
   })
 
   it('문서가 없으면 안내를 보여준다', async () => {

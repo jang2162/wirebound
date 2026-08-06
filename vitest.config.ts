@@ -72,6 +72,13 @@ export default defineConfig({
           // 있어야 vitest 옆에 링크된다. apps/web에만 넣으면
           // `Cannot find package 'jsdom'`으로 죽는다(실측).
           environment: 'jsdom',
+          // CSS 임포트를 실제로 처리한다. **`shell-css.test.ts`가 이것에 매여 있다** —
+          // 그 파일은 `../src/shell.css?raw`로 원문을 읽어 D7 검사를 돌리는데, 이 옵션이
+          // 꺼져 있으면(기본값) vitest가 CSS 임포트를 **빈 문자열**로 바꾼다. 그러면 검사가
+          // 빈 파일을 훑어 위반 0건을 내고, 심어 둔 위반만 걸리는 초록이 된다.
+          // (실측: 이 줄을 넣기 전 `검사가 진짜 shell.css를 읽는다`가 `''`로 실패했고,
+          // 나머지 37케이스는 전부 통과했다 — 그 한 케이스가 없었으면 못 알아챘다.)
+          css: true,
           // 파일마다: RTL의 DOM cleanup을 afterEach에 등록한다. 이 저장소는
           // `globals`를 켜지 않아 RTL이 스스로 등록하지 못한다 — 자세한 이유는
           // 그 파일 주석에 있다.

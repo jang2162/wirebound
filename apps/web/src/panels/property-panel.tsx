@@ -56,6 +56,12 @@ export function PropertyPanel(): ReactElement {
 
   const fields = visibleFields(def)
 
+  // **props 검증 실패는 이 패널이 말하지 않는다.** 캔버스는 그리지 못한 이유 둘(알 수 없는
+  // 타입 / props 검증 실패)을 폴백과 배너로 알리는데, 여기는 앞의 하나만 안내하고 검증에
+  // 실패한 노드에는 원본 값을 평범하게 보여 준다. 이 단계에서 닫지 않은 이유는 둘이다 —
+  // 패널이 스스로 검증하면 렌더러의 판정과 갈라질 수 있고(같은 위험을 `currentStructure`의
+  // 주석이 구조 선택에 대해 적고 있다), P2b-2의 편집이 필요로 하는 것은 노드 단위 성패가
+  // 아니라 **필드 단위** 결과라 지금 만든 모양이 그때 다시 뒤집힌다.
   return (
     <>
       <h2 className="wb-shell-panel-title">{node.type}</h2>
@@ -127,7 +133,31 @@ function formatValue(value: unknown): string {
   // 여기 오는 값은 카탈로그의 어느 control에도 해당하지 않는 것이다. 지금 카탈로그에는
   // 그런 prop이 없지만(문자열·수·불리언·문자열 배열·키-값 배열이 전부다), 검증을 통과하지
   // 못한 문서가 스토어에 실리는 P2b-2에서는 들어올 수 있다. 마지막 수단으로 원문을 보인다.
-  return JSON.stringify(value) ?? ''
+  return stringify(value)
+}
+
+/**
+ * 마지막 수단의 서식. **`JSON.stringify`는 던진다** — 순환 참조와 `BigInt`가 그렇다.
+ *
+ * 이 패널은 오류 경계 **밖**이다(`apps/web/src` 전체에서 경계는 캔버스의 `CanvasBoundary`
+ * 하나뿐이다 — 실측). 그래서 여기서 예외가 새면 캔버스만 무너지는 것이 아니라 셸 전체가
+ * 흰 화면이 된다.
+ *
+ * **오늘은 던질 수 없다.** 스토어에 문서를 싣는 자리는 `routes/editor.tsx`의
+ * `store.loadPage(page.schema, …)` 하나이고(실측: `apps/web/src`에서 `loadPage(`를 부르는
+ * 자리가 그 한 곳이다), 그 값은 `getPage` 응답의 JSON이다. JSON에서 나온 값에는 순환도
+ * `BigInt`도 없다. 그래도 잡는 것은 **P2b-2가 편집으로 만든 값을 싣기 시작하면 그 전제가
+ * 사라지기 때문**이고, 그때 이 한 줄이 없으면 편집 중 흰 화면이 된다.
+ *
+ * 이 갈래는 `test/panels/property-panel.test.tsx`의
+ * `값을 문자열로 만들 수 없어도 셸은 살아 있다`가 순환 참조를 심어 지킨다.
+ */
+function stringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? ''
+  } catch {
+    return '(표시할 수 없는 값)'
+  }
 }
 
 /** 배열 원소 하나. `pairList`의 키-값 쌍만 따로 다룬다. */
