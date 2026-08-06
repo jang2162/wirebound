@@ -185,21 +185,38 @@ describe('스토어 페이지 상태 우회 검사', () => {
     expect(document[0]?.message).toContain('useOpenDocument(pageId)')
     expect(document[0]?.message).not.toContain('src/store/use-editor-store.tsx')
 
-    // `getState()` 경로도 같은 길을 지목한다(메시지를 만드는 자리가 둘로 갈려 있다).
+    // **메시지를 만드는 자리는 셋이다** — selector 하나와 `getState()` 둘(프로퍼티 접근,
+    // 구조 분해). 자리마다 문장을 따로 조립하므로 **셋을 각각 봐야 한다**: 앞 판은 둘만
+    // 봤고, 그래서 구조 분해 자리의 메시지는 조용히 되돌아갈 수 있었다(실측: 그 자리만
+    // 옛 문장으로 되돌리면 264개가 전부 통과했다).
     expect(findViolations('const s = store.getState().headSeq')[0]?.message).toContain(
+      'src/store/use-editor-store.tsx',
+    )
+    expect(findViolations('const { headSeq } = store.getState()')[0]?.message).toContain(
       'src/store/use-editor-store.tsx',
     )
   })
 
   it('알려진 오탐 — 이름만 보는 판정의 대가다', () => {
-    // 여기서 `headSeq`는 스토어의 필드가 아니라 pending 항목의 프로퍼티인데 걸린다.
-    // 좁히지 않기로 한 근거는 `store-access-guard.ts`의 `checkSelectors` 주석에 있다
-    // (좁히면 사각 셋이 생긴다 — 실측).
+    // 페이지 필드와 **같은 이름이 스토어가 아닌 것에 붙어 있으면** 걸린다. 아래 둘에서
+    // `document`·`headSeq`는 각각 undo 스택 항목과 pending 항목의 프로퍼티다.
+    // **이 부류가 둘뿐이라는 뜻이 아니다** — guard 머리말이 다섯을 심어 잰 값을 적고 있고,
+    // 여기 둘은 그중 성질이 갈리는 둘(체이닝 / 콜백 안)을 골라 온 것이다.
     //
-    // **이 케이스가 죽는 것은 검사를 좁혔다는 뜻이다.** 그때는 그 셋이 되살아나지 않았는지
+    // 좁히지 않기로 한 근거는 `store-access-guard.ts`의 `checkSelectors` 주석에 있다
+    // (좁히면 오탐 다섯이 사라지는 대신 사각 하나가 남는데, 그 하나가 이 검사의 핵심 형태
+    // 위에 나는 조용한 구멍이다 — 실측).
+    //
+    // **이 케이스가 죽는 것은 검사를 좁혔다는 뜻이다.** 그때는 그 사각이 생기지 않았는지
     // 함께 재라.
-    const violations = findViolations('useEditorStore(store, (s) => s.pending.some((p) => p.headSeq < base))')
-
-    expect(violations.map((violation) => violation.check)).toEqual(['selector-page-field'])
+    for (const selector of [
+      '(s) => s.undoStack.at(-1)?.document',
+      '(s) => s.pending.some((p) => p.headSeq < base)',
+    ]) {
+      const violations = findViolations(`useEditorStore(store, ${selector})`)
+      expect(violations.map((violation) => violation.check), selector).toEqual([
+        'selector-page-field',
+      ])
+    }
   })
 })

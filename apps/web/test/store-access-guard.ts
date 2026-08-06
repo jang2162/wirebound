@@ -30,8 +30,9 @@
  *   그것은 이 저장소에 없다.
  * - **`getState()`와 필드 사이에 무엇이 끼는 형태.** 넷을 심어 재보니 넷 다 0건이다 —
  *   `getState()?.document` · `getState()!.document` · `` getState()[`document`] `` ·
- *   `const { document: { root } } = getState()`(중첩 구조 분해). 앞 셋은 심기 표가 잡는
- *   `getState().document`와 **한 글자 차이**다. 원인은 아래 `checkGetState`의 정규식이
+ *   `const { document: { root } } = getState()`(중첩 구조 분해). **앞 둘**은 심기 표가 잡는
+ *   `getState().document`와 한 글자 차이고, 백틱 쪽은 심기 표의 `getState()['document']`에서
+ *   따옴표만 바뀐 형태다. 원인은 아래 `checkGetState`의 정규식이
  *   `)` 바로 뒤의 `.`과 `'`·`"` 키만 보고, 구조 분해 쪽은 `\{([^{}]*)\}`라 중괄호가
  *   중첩되면 매칭되지 않는 것이다. **백틱은 리터럴이고 이름이 소스에 그대로 남는데도
  *   안 잡힌다** — 이것을 못 보는 이유는 "이름이 남지 않아서"가 아니라 정규식이 두 따옴표만
@@ -51,10 +52,12 @@
  *
  * **거짓 양성으로 남겨 둔 것**(전부 잰 값이다):
  *
- * - **selector 안의 이름이 스토어 필드가 아닐 때.** `(s) => s.pending.some((p) => p.headSeq
- *   < base)`가 `selector-page-field`로 걸린다 — `headSeq`가 pending 항목의 프로퍼티인데도
- *   그렇다. 좁히는 판을 만들어 재봤고 **사각 셋과 맞바꾸는 거래라 좁히지 않았다**(근거는
- *   아래 `checkSelectors` 주석).
+ * - **selector 안의 이름이 스토어 필드가 아닐 때.** 페이지 필드와 같은 이름이 다른 것에
+ *   붙어 있으면 걸린다 — `(s) => s.undoStack.at(-1)?.document`,
+ *   `(s) => s.pending.some((p) => p.headSeq < base)` 등 **다섯을 심어 다섯 다 걸리는 것을
+ *   확인했다**(그 다섯이 부류의 전부라는 뜻은 아니다). 좁히는 판을 만들어 재봤고 **사각
+ *   하나와 맞바꾸는 거래라 좁히지 않았다** — 수가 아니라 그 사각의 성질 때문이고, 근거는
+ *   아래 `checkSelectors` 주석에 있다.
  * - **문자열·템플릿 리터럴 안의 우회 모양.** 실측: 템플릿 안의
  *   `${store.getState().document}`가 1건. 아래 `stripComments`가 문자열의 내용을 남기기
  *   때문인데, 그것은 `getState()['document']`의 이름을 살리려고 그런 것이고 여기서는 부수
@@ -161,15 +164,30 @@ export function findViolations(source: string): Violation[] {
  * 않는다. 이름만 보므로 구조 분해(`({ document }) => document`)·`as` 캐스팅·selector 안에서
  * 한 번 더 변수를 거치는 형태가 전부 함께 걸린다.
  *
- * **그 값으로 오탐이 하나 있다**(실측): `(s) => s.pending.some((p) => p.headSeq < base)`가
- * `selector-page-field`로 걸린다. 여기서 `headSeq`는 스토어의 필드가 아니라 **pending 항목의
- * 프로퍼티**다. P2b-2가 낼 법한 모양이라 가상의 예가 아니다.
+ * **그 값으로 오탐이 난다** — 페이지 필드와 **같은 이름이 스토어가 아닌 것에 붙어 있는**
+ * selector가 전부 걸린다. 심어서 잰 다섯(전부 `selector-page-field`):
  *
- * **그래도 좁히지 않았다.** selector 파라미터 이름을 추적해 `s.headSeq`만 잡는 판을 만들어
- * 재보니 오탐 하나가 사라지는 대신 **사각 셋이 생겼다**(실측: `(s = init) => s.document` /
- * `(s) => (s as EditorState).document` / `(s) => { const t = s; return t.document }`). 뒤
- * 둘은 값이 어디서 왔는지를 알아야 잡히므로 정규식으로 닫을 수 있는 것이 아니다. **오탐은
- * 사람이 읽고 넘길 수 있지만 사각은 조용하다.**
+ * ```ts
+ * (s) => s.undoStack.at(-1)?.document        // P2b-2의 undo/redo에서 나올 모양이다
+ * (s) => s.snapshots.map((snap) => snap.document)
+ * (s) => s.pending.filter((p) => p.openPageId === id)
+ * (s) => s.pending.some((p) => p.headSeq < base)
+ * (s) => s.lastResponse.headSeq
+ * ```
+ *
+ * **다섯이 전부라는 뜻이 아니다** — 부류가 그렇다는 것이고, 심어서 잰 것만 적었다.
+ *
+ * **그래도 좁히지 않았다.** selector 파라미터의 첫 식별자를 뽑고 `(x as T)`를 걷은 뒤 그
+ * 파라미터에 붙은 접근만 보는 판을 만들어 재봤다(구조 분해 목록은 그 안의 이름을 그대로
+ * 본다). 결과: **위 다섯이 전부 통과**하고 잡아야 하는 아홉 형태와 음성 대조 셋은 그대로인데,
+ * **사각이 하나 남는다** — `(s) => { const t = s; return t.document }`. selector 안에서 변수를
+ * 한 번 거치는 형태이고, 값이 어디서 왔는지를 알아야 하므로 정규식으로 닫을 수 있는 종류가
+ * 아니다. (`(s = init) => s.document`와 `(s) => (s as EditorState).document`는 그 판에서도
+ * **잡힌다** — 앞 판이 사각으로 적었던 것은 내 파라미터 추출이 기본값 문법을 못 넘어서였다.)
+ *
+ * **거래는 "오탐 다섯 ↔ 사각 하나"인데도 좁히지 않는 이유는 수가 아니라 성질이다.** 남는
+ * 사각이 하필 이 검사의 **핵심 형태**(스토어의 `document`를 곧장 읽기) 위에 나고,
+ * **오탐은 테스트가 실패해 사람이 읽고 판단하지만 사각은 아무 소리도 내지 않는다.**
  *
  * 걸렸는데 스토어의 페이지 필드를 읽는 것이 아니라면, 그 자리에 이 사실을 적고 넘어가라.
  * 스토어의 필드를 **읽는 것이 맞다면** 위 `fixHint`가 가리키는 길을 보라.
