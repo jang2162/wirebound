@@ -75,6 +75,34 @@ const THROWING_DOC = pageDoc({
 })
 
 /**
+ * **`props`를 갖지 않는 노드 둘.** `readProp`의 `node.props?.[prop]`에 하중을 거는 자리다.
+ *
+ * - `n-bare`는 `props`가 아예 없다. **스키마가 허용하는 정상 문서다**
+ *   (`packages/schema/src/node.ts`의 `props?: Record<string, unknown>` — optional).
+ * - `n-null`은 `props`가 `null`이다. 타입은 막지만 런타임에는 들어올 수 있다 —
+ *   검증을 통과하지 못한 문서가 스토어에 실리는 P2b-2가 그 경로다.
+ *
+ * 둘 다 `editor`가 비지 않은 타입이어야 뜻이 있다. `Page`·`Slot`처럼 `editor`가 빈
+ * 컴포넌트를 고르면 `readProp`이 한 번도 불리지 않는다.
+ *
+ * **이 파일에 케이스가 없었을 뿐, 하중이 0이었던 것은 아니다.** 실측: `?.`를 걷어내면
+ * (`node.props![prop]`) 이 둘 없이도 넷이 죽는다 — `canvas.test.tsx`의 `편집 모드에서
+ * 선택 노드에 아웃라인이 붙는다`(`n-search`가 `props` 없는 `SearchForm`이고, 그 클릭이
+ * 패널에 `collapsed`를 읽게 한다)와 `structure-tree.test.tsx`의 셋(`n-list`가 `props` 없는
+ * `List`다). **다만 그 넷은 다른 성질을 재는 케이스라 죽어도 무엇이 깨졌는지가 이름에
+ * 나오지 않는다.** 여기 둘은 그것을 이름으로 고정한다. `props`가 **객체가 아닌** 경우
+ * (`n-null`)는 지금 트리에서 이 파일이 유일한 하중이다.
+ */
+const NO_PROPS_DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    { id: 'n-bare', type: 'Card' },
+    { id: 'n-null', type: 'Field', props: null } as never,
+  ],
+})
+
+/**
  * `type`이 문자열이 **아닌** 노드. 렌더러는 폴백으로 흡수하지만(`shapeError`), 그것을 그대로
  * `{node.type}`으로 그리는 화면은 React가 렌더 도중 던진다. 이 패널은 캔버스의 오류 경계
  * **밖**이라 그 예외는 셸 전체를 지운다 — `값을 문자열로 만들 수 없어도…`와 같은 부류이고,
@@ -269,6 +297,34 @@ describe('속성 패널', () => {
     within(panel()).getByText('이 노드의 타입을 읽을 수 없습니다')
     expect(propRows()).toHaveLength(0)
     // 셸이 남아 있다. 가드를 지우면 여기까지 오지 못하고 `.wb-shell`이 DOM에서 사라진다.
+    screen.getByRole('heading', { name: PROJECT_NAME })
+    expect(document.body.querySelector('.wb-shell')).not.toBeNull()
+  })
+
+  it('props가 아예 없는 노드를 골라도 값 자리만 빈다', async () => {
+    await openPage(NO_PROPS_DOC)
+
+    select('Card')
+
+    // 필드는 카탈로그에서 나오므로 그대로 있고, 값만 전부 빈다. **패널이 통째로 사라지는
+    // 구현은 이 단언을 통과할 수 없다** — 그것이 여기 `propRows()`를 쓰는 이유다.
+    expect(propRows()).toEqual([
+      { label: '제목', value: '' },
+      { label: '부제', value: '' },
+    ])
+    // `readProp`의 `?.`를 걷어내면 여기까지 오지 못하고 셸이 통째로 사라진다. 이 패널은
+    // 캔버스의 오류 경계 **밖**이다(`property-panel.tsx`의 `stringify` 주석).
+    screen.getByRole('heading', { name: PROJECT_NAME })
+    expect(document.body.querySelector('.wb-shell')).not.toBeNull()
+  })
+
+  it('props가 객체가 아닌 노드를 골라도 셸은 살아 있다', async () => {
+    await openPage(NO_PROPS_DOC)
+
+    select('Field')
+
+    // `Field`의 `editor` 여섯 줄이 그대로 나오고 값만 빈다.
+    expect(propRows().map((row) => row.value)).toEqual(['', '', '', '', '', ''])
     screen.getByRole('heading', { name: PROJECT_NAME })
     expect(document.body.querySelector('.wb-shell')).not.toBeNull()
   })
