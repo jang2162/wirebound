@@ -22,8 +22,15 @@
  * 되어 D5의 실패 → 화면 규칙(`api/failure.tsx`)을 그대로 지난다. 그래서 `getPage`가 `null`인
  * 경우의 **문안만** 바뀐다(이유가 더 정확해진다). 셸이 사는 것은 그대로다.
  *
- * `schema.root` 안쪽을 보지 않는 것은 렌더러가 거기서부터 폴백으로 흡수하기 때문이다
- * (D8 — 실측: `{root:'x'}`는 셸이 살고 "타입을 읽을 수 없는 노드"가 그려진다).
+ * `schema.root` **안쪽**을 보지 않는 것은 렌더러가 거기서부터 폴백으로 흡수하기 때문이다(D8).
+ * 실측: `{root:{id:'n-root',type:99}}`는 봉투 검사를 지나 캔버스까지 가고, 거기서
+ * `.wb-shell-canvas-surface`가 그려진 채 `노드 1개를 그리지 못했습니다`와
+ * `data-wb-error="노드의 type이 문자열이 아닙니다"`가 붙는다. 아래
+ * `문서 노드가 깨진 것은 렌더러가 흡수한다`가 그 경계를 지킨다.
+ *
+ * **root 자신은 그 반대편이다.** `{root:'x'}`는 위 표의 `getPage` 줄에 걸려 렌더러에 닿지도
+ * 않는다(실측: `ApiError(200, 'internal')`, 화면에는 `alert` 하나뿐이고
+ * `.wb-shell-canvas-surface`는 **null**이다).
  */
 import { screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
