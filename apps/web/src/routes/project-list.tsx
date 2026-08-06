@@ -54,7 +54,9 @@ export function ProjectListRoute(): ReactElement {
   }, [api])
 
   // 세션이 끊겼으면 목록 대신 로그인이다. 화면 **전체**를 대신하는 것이라 아래 JSX보다
-  // 앞에 둔다 — 목록 틀 안에 `<Navigate>`를 끼우면 이동하기 전 한 프레임 동안 빈 목록이 뜬다.
+  // 앞에 둔다 — 아래 JSX 안에 `<SignedOut />`을 끼우면 실패한 커밋에 목록 **틀**이 함께
+  // 그려진다(실측: `<main>`과 `<h1>프로젝트</h1>`. `<ul>`은 `ready`에서만 그려지므로
+  // 그 커밋에 목록은 없다).
   if (state.status === 'failed' && state.failure.kind === 'signed-out') return <SignedOut />
 
   return (
