@@ -7,11 +7,16 @@
  * 가지**를 먼저 기다린다: 프로젝트 이름(`getProject` 성공)과 메뉴 제목(`getTree` 성공).
  * 이름표(`메뉴·페이지 트리`)와 랜드마크는 두 조회가 실패해도 남으므로 증거가 되지 못한다.
  *
- * 실측: 아래 기본 가짜의 `getTree`를 실패하게 바꾸면 **케이스 1~8이 전부 죽는다**(케이스
- * 10도 함께 죽는다 — 그쪽도 트리가 남았는지를 본다). 살아남는 것은 자기 손으로 `getTree`를
- * 실패시키는 두 케이스(9·11)뿐이다.
+ * 실측(`apps/web/test` 전량): 아래 기본 가짜의 `getTree`를 실패하게 바꾸면 **이 파일의
+ * 13케이스 중 11이 죽는다.** 살아남는 것은 자기 손으로 `getTree`를 실패시키는 둘
+ * (`트리 조회에 실패하면…`·`서버가 이유를 주지 않으면…`)뿐이고, 다른 파일은 하나도 죽지 않는다.
+ *
+ * 케이스를 번호로 부르지 않는다 — 사이에 하나를 끼워 넣는 순간 그 번호를 적은 주석이
+ * 전부 거짓이 되기 때문이다(이 파일에서 실제로 그렇게 됐다).
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement, ReactNode } from 'react'
+import { useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
@@ -25,8 +30,9 @@ import { currentPath, fakeApi, renderWithProviders } from '../helpers'
  *
  * **화면만 보는 단언으로는 "문서가 스토어에 실린다"를 지킬 수 없다.** 트리나 캔버스가
  * 받아온 문서를 자기 `useState`에 들고 그것으로 그리면 화면은 똑같이 움직인다. 실측:
- * `store.loadPage(...)` 대신 `CanvasFrame`의 로컬 `useState`에 문서와 `headSeq`를 담게 바꾼
- * 변이에서 **스토어를 직접 보는 두 케이스(5·7)만 죽고 나머지 아홉은 전부 통과했다.**
+ * `store.loadPage(...)`·`store.clearPage()` 대신 `CanvasFrame`의 로컬 `useState`에 문서와
+ * `headSeq`를 담게 바꾼 변이에서 **스토어를 직접 보는 네 케이스만 죽고 나머지 88케이스
+ * (다른 11개 파일 포함)가 전부 통과했다.**
  * 화면만 보는 단언은 그 변이를 하나도 잡지 못한다는 뜻이다. 태스크 9의 캔버스는 문서를
  * 스토어에서 읽으므로, 여기서 못박지 않으면 배선이 끊긴 채로 다음 태스크가 시작된다.
  *
@@ -71,7 +77,7 @@ const PROJECT: ProjectDetail = {
 
 /**
  * 서버가 준 문장이 그대로 오는지 보려면 화면이 하드코딩할 리 없는 문자열이어야 한다.
- * 트리와 페이지에 서로 다른 것을 쓴다 — 케이스 10이 둘을 가려야 한다.
+ * 트리와 페이지에 서로 다른 것을 쓴다 — `페이지 조회에 실패하면…`이 둘을 가려야 한다.
  */
 const TREE_MESSAGE = '메뉴 저장소가 응답하지 않습니다 [T8-TREE-9]'
 const PAGE_MESSAGE = '이 페이지를 볼 권한이 없습니다 [T8-PAGE-10]'
@@ -82,13 +88,16 @@ const PAGE_MESSAGE = '이 페이지를 볼 권한이 없습니다 [T8-PAGE-10]'
  */
 const TREE_UNKNOWN_FAILURE = '메뉴를 불러오지 못했습니다'
 const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
+/** 페이지를 고르지 않은 캔버스의 안내. 페이지를 떠난 뒤 이 대역으로 돌아왔다는 증거로 쓴다. */
+const NO_PAGE_NOTICE = '왼쪽 트리에서 페이지를 고르세요'
 
 /**
  * 트리 한 벌. **배열의 삽입 순서를 `sortOrder`와 일부러 어긋나게 둔다 — 세 자리 전부:**
  * 최상위 메뉴(`주문관리`가 먼저 들어 있다), 한 메뉴의 페이지(`회원 상세`가 먼저),
- * 중첩 메뉴(`등급`이 먼저). 한쪽만 정렬하는 구현이 케이스 3을 통과하지 못하게 한다.
+ * 중첩 메뉴(`등급`이 먼저). 한쪽만 정렬하는 구현이 `sortOrder 순서대로 그린다`를 통과하지
+ * 못하게 한다.
  *
- * `주문관리`는 페이지도 자식도 없다 — 케이스 8이 보는 자리다.
+ * `주문관리`는 페이지도 자식도 없다 — `페이지가 없는 메뉴도 그린다`가 보는 자리다.
  *
  * 호출마다 새로 만든다. 구현이 응답 배열을 제자리에서 정렬해도 다음 케이스의 입력 순서가
  * 바뀌지 않게 하기 위해서다.
@@ -169,27 +178,63 @@ beforeEach(() => {
   asked = []
 })
 
-function renderEditor(overrides: Partial<ApiClient> = {}, route = '/projects/p-1'): void {
-  renderWithProviders(<App />, {
-    client: fakeApi({
-      me: async () => USER,
-      getProject: async () => PROJECT,
-      getTree: async () => tree(),
-      getPage: async (projectId, pageId) => {
-        asked.push([projectId, pageId])
-        const page = PAGES[pageId]
-        if (page === undefined) throw new Error(`가짜 서버가 모르는 페이지: ${pageId}`)
-        return page
-      },
-      ...overrides,
-    }),
-    route,
-  })
+/**
+ * 브라우저의 뒤로 가기를 대신하는 버튼. 트리에는 페이지를 **떠나는** 길이 없어(링크는 전부
+ * 다른 페이지로 간다) 테스트가 직접 놓는다 — `editor-shell.test.tsx`가 프로젝트 전환에
+ * 같은 장치를 쓴다.
+ *
+ * `navigate(-1)`이다 — 특정 주소로 가는 것이 아니라 히스토리를 한 칸 되짚는다. 사용자가
+ * 실제로 밟는 경로(페이지를 눌러 들어갔다가 뒤로)와 같아야 "돌아왔을 때"를 재는 뜻이 있다.
+ */
+function Back(): ReactElement {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => void navigate(-1)}>
+      뒤로
+    </button>
+  )
+}
+
+/**
+ * `extra`는 라우터 **안**에 함께 그릴 것이다(`<App />`의 형제). 화면에 없는 조작을
+ * 테스트가 놓아야 할 때만 쓴다 — 넘기지 않으면 다른 케이스의 DOM은 한 글자도 달라지지
+ * 않는다.
+ */
+function renderEditor(
+  overrides: Partial<ApiClient> = {},
+  route = '/projects/p-1',
+  extra?: ReactNode,
+): void {
+  renderWithProviders(
+    <>
+      <App />
+      {extra}
+    </>,
+    {
+      client: fakeApi({
+        me: async () => USER,
+        getProject: async () => PROJECT,
+        getTree: async () => tree(),
+        getPage: async (projectId, pageId) => {
+          asked.push([projectId, pageId])
+          const page = PAGES[pageId]
+          if (page === undefined) throw new Error(`가짜 서버가 모르는 페이지: ${pageId}`)
+          return page
+        },
+        ...overrides,
+      }),
+      route,
+    },
+  )
 }
 
 /** 셸과 트리가 **둘 다 성공 대역으로** 그려질 때까지 기다린다. */
-async function openEditor(overrides: Partial<ApiClient> = {}, route = '/projects/p-1'): Promise<void> {
-  renderEditor(overrides, route)
+async function openEditor(
+  overrides: Partial<ApiClient> = {},
+  route = '/projects/p-1',
+  extra?: ReactNode,
+): Promise<void> {
+  renderEditor(overrides, route, extra)
   await screen.findByRole('heading', { name: PROJECT_NAME })
   await screen.findByText('회원관리')
 }
@@ -206,7 +251,7 @@ function canvas(): HTMLElement {
  * 트리에 그려진 줄의 제목을 **문서 순서대로**.
  *
  * 역할 조회로는 메뉴(제목뿐)와 페이지(링크)를 한 줄에 세울 수 없어 클래스로 모은다.
- * 클래스가 바뀌면 빈 배열이 되어 케이스 3이 요란하게 깨진다.
+ * 클래스가 바뀌면 빈 배열이 되어 `sortOrder 순서대로 그린다`가 요란하게 깨진다.
  */
 function treeRows(): string[] {
   const rows = treeRegion().querySelectorAll<HTMLElement>('.wb-shell-tree-menu, .wb-shell-tree-page')
@@ -291,6 +336,68 @@ describe('메뉴·페이지 트리', () => {
     expect(asked).toEqual([['p-1', 'pg-detail']])
   })
 
+  it('페이지를 떠나 pageId 없는 주소로 돌아오면 스토어의 문서가 비워진다', async () => {
+    await openEditor({}, '/projects/p-1', <Back />)
+
+    fireEvent.click(screen.getByRole('link', { name: '회원 상세' }))
+
+    // **성공 대역이 실제로 쓰였다는 증거를 먼저 못박는다.** 이것 없이 뒤의 `toBeNull()`만
+    // 보면 애초에 문서를 싣지 않는 구현이 통과한다 — 비운 적이 없는데 비어 있으니까.
+    await waitFor(() => {
+      expect(shellStore().getState().document).toBe(PAGES['pg-detail']?.schema)
+    })
+    expect(shellStore().getState().headSeq).toBe(12)
+
+    // 브라우저 뒤로 가기. 주소에서 `pageId`가 사라진다.
+    fireEvent.click(screen.getByRole('button', { name: '뒤로' }))
+    expect(currentPath()).toBe('/projects/p-1')
+
+    // 화면은 안내로 돌아가는데 스토어에 앞 페이지의 문서가 남으면, 문서를 스토어에서 읽는
+    // 쪽(태스크 9)이 열려 있지 않은 페이지를 그린다. `headSeq`도 함께 본다 — P2b-2의
+    // `baseSeq`가 그 값이라, 문서만 비우고 seq를 남기면 열린 페이지 없이 편집 요청이 만들어진다.
+    await waitFor(() => {
+      expect(shellStore().getState().document).toBeNull()
+    })
+    expect(shellStore().getState().headSeq).toBe(0)
+    // 그리고 캔버스가 정말 안내 대역이다 — 스토어만 보면 화면이 앞 페이지에 멈춘 구현과
+    // 갈리지 않는다.
+    within(canvas()).getByText(NO_PAGE_NOTICE)
+  })
+
+  it('다른 페이지의 조회가 실패하면 앞 페이지의 문서가 남지 않는다', async () => {
+    await openEditor(
+      {
+        getPage: async (projectId, pageId) => {
+          asked.push([projectId, pageId])
+          // `pg-detail`만 실패한다. 앞 페이지(`pg-list`)는 성공해야 "남지 않는다"를 잴 수 있다.
+          if (pageId === 'pg-detail') throw new ApiError(404, 'not-found', PAGE_MESSAGE)
+          const page = PAGES[pageId]
+          if (page === undefined) throw new Error(`가짜 서버가 모르는 페이지: ${pageId}`)
+          return page
+        },
+      },
+      '/projects/p-1/pages/pg-list',
+    )
+
+    // 성공 대역 증거: 앞 페이지는 실제로 실렸다.
+    await waitFor(() => {
+      expect(shellStore().getState().document).toBe(PAGES['pg-list']?.schema)
+    })
+    expect(shellStore().getState().headSeq).toBe(7)
+
+    fireEvent.click(screen.getByRole('link', { name: '회원 상세' }))
+
+    // **실패 대역이 실제로 그려졌다는 증거를 먼저 세운다.** 스토어만 보면 "실패해서
+    // 비웠다"와 "조회를 시작할 때 비웠고 아직 응답이 안 왔다"를 구분할 수 없다.
+    await screen.findByText(PAGE_MESSAGE)
+    within(canvas()).getByText(PAGE_MESSAGE)
+
+    // 열지 못한 페이지의 자리에 앞 페이지의 문서가 남아 있으면, 오류를 보면서 다른 페이지의
+    // 문서를 편집하는 상태가 된다.
+    expect(shellStore().getState().document).toBeNull()
+    expect(shellStore().getState().headSeq).toBe(0)
+  })
+
   it('선택된 페이지가 시각적으로 구분된다', async () => {
     await openEditor()
 
@@ -326,10 +433,13 @@ describe('메뉴·페이지 트리', () => {
     await openEditor()
 
     // `pages: []`·`children: []`인 메뉴다. 페이지를 가진 메뉴만 그리는 구현과 갈린다.
+    // 그 메뉴가 그려졌다는 증거는 `menuItem()` 자신이다 — 제목을 못 찾으면 던진다.
     const order = menuItem('주문관리')
-    within(order).getByText('주문관리')
+    // 그리고 그 안에 링크가 없다. 빈 메뉴에 페이지가 새어 들어온 구현과, 메뉴 제목 자체를
+    // 누를 수 있게 만든 구현이 여기서 죽는다(실측: 제목을 `<Link>`로 바꾸면 이 줄과
+    // `메뉴와 그 아래 페이지를 함께 그린다`의 양성 대조, 둘이 함께 죽는다).
     expect(within(order).queryAllByRole('link')).toEqual([])
-    // 그리고 그 메뉴가 트리의 제자리에 있다(케이스 3의 순서에서 마지막).
+    // 그리고 그 메뉴가 트리의 제자리에 있다(`sortOrder 순서대로 그린다`의 순서에서 마지막).
     expect(treeRows()).toContain('주문관리')
   })
 
@@ -343,7 +453,8 @@ describe('메뉴·페이지 트리', () => {
     // 한 실패가 화면 전체를 죽이지 않는다 — 셸은 그대로다.
     screen.getByRole('heading', { name: PROJECT_NAME })
     screen.getByRole('main', { name: '캔버스' })
-    // 그리고 트리 내용은 없다. 이것이 위 케이스 1~8이 기다리는 성공 대역의 증거다.
+    // 그리고 트리 내용은 없다. 이것이 `openEditor()`로 시작하는 케이스들이 기다리는
+    // 성공 대역의 증거다.
     expect(screen.queryByText('회원관리')).toBeNull()
   })
 
@@ -356,13 +467,15 @@ describe('메뉴·페이지 트리', () => {
     await screen.findByText(PAGE_MESSAGE)
     // 에러가 뜨는 자리는 캔버스다.
     within(canvas()).getByText(PAGE_MESSAGE)
-    // 트리는 남는다. `getPage` 실패를 화면 전체 에러로 만든 구현은 여기서 죽는다 —
-    // 트리 자리 자체가 사라지므로 `treeRegion()`이 던진다.
+    // 트리는 남는다. **`getPage` 실패를 화면 전체 에러로 만든 구현은 이 줄에 닿지 못하고
+    // `openEditor()`에서 먼저 죽는다** — 셸 대신 오류 화면이 뜨면 프로젝트 이름이 사라지기
+    // 때문이다(실측: 그 변이에서 이 케이스는 `openEditor()`의 `findByRole('heading')`에서
+    // 죽었다). 이 단언이 잡는 것은 **셸은 남기고 트리 자리만 지운** 구현이다.
     within(treeRegion()).getByRole('link', { name: '회원 목록' })
-    // 한 줄이 아니라 트리 전체가 남았다. 순서까지 보지 않는 것은 그것이 케이스 3의
-    // 몫이기 때문이다 — 여기서 함께 보면 정렬을 깨뜨렸을 때 이 케이스도 같이 죽어
-    // 어느 변이가 무엇을 잡았는지 흐려진다(실측: 그렇게 두었더니 정렬 제거 변이가
-    // 케이스 3과 10을 함께 죽였다).
+    // 한 줄이 아니라 트리 전체가 남았다. 순서까지 보지 않는 것은 그것이
+    // `sortOrder 순서대로 그린다`의 몫이기 때문이다 — 여기서 함께 보면 정렬을 깨뜨렸을 때
+    // 이 케이스도 같이 죽어 어느 변이가 무엇을 잡았는지 흐려진다(실측: 그렇게 두었더니
+    // 정렬 제거 변이가 두 케이스를 함께 죽였다).
     expect(treeRows()).toHaveLength(EXPECTED_ROWS.length)
     screen.getByRole('heading', { name: PROJECT_NAME })
     // 그리고 트리 자리에는 이 에러가 없다. 두 실패의 자리가 섞이지 않는다.

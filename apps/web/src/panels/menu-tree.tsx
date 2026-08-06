@@ -90,6 +90,11 @@ export function MenuTree(props: { projectId: string; pageId: string | undefined 
       {byOrder(state.menu).map((node) => (
         // 키는 노드 id다. 인덱스를 쓰면 정렬이 바뀔 때 React가 앞 노드의 상태를 다른
         // 노드에 재사용한다.
+        //
+        // **이 성질은 테스트가 지키지 않는다**(실측: 아래 두 자리까지 세 곳 전부 인덱스로
+        // 바꿔도 `apps/web/test` 92케이스가 전부 통과한다). 트리를 한 번 받아 그대로 그리는
+        // 지금 화면에는 순서가 런타임에 바뀌는 자리가 없어서다. P2b-2에서 트리를 다시 받거나 순서를
+        // 편집하게 되면 그때 케이스와 함께 지켜야 한다 — 그 전까지 이 주석이 유일한 방벽이다.
         <MenuItem key={node.id} node={node} projectId={projectId} pageId={props.pageId} />
       ))}
     </ul>
@@ -117,6 +122,8 @@ function MenuItem(props: {
 
       {(pages.length > 0 || children.length > 0) && (
         <ul className="wb-shell-tree-list">
+          {/* 여기 두 자리의 키도 인덱스가 아니라 id다 — 이유와 "테스트가 지키지 않는다"는
+              사실은 `MenuTree`의 키 주석에 있다. */}
           {pages.map((page) => (
             <li key={page.id}>
               <PageLink page={page} projectId={projectId} pageId={pageId} />

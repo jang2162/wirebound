@@ -85,6 +85,17 @@ export class EditorStore {
     this.#apply({ document, headSeq, selectedNodeId: null })
   }
 
+  /**
+   * 열린 페이지가 없어졌을 때. `loadPage`의 짝이다 — 문서·`headSeq`·선택을 함께 비운다.
+   *
+   * 모드·뷰포트 폭·줌은 **건드리지 않는다.** 그 셋은 페이지가 아니라 보는 사람에게 매인
+   * 값이라, 페이지를 닫았다고 되돌리면 사용자가 맞춰 둔 화면이 이유 없이 초기화된다.
+   * 프로젝트를 떠날 때 그것까지 지우는 것은 `reset`의 몫이다.
+   */
+  readonly clearPage = (): void => {
+    this.#apply({ document: null, headSeq: 0, selectedNodeId: null })
+  }
+
   readonly selectNode = (nodeId: string | null): void => {
     this.#apply({ selectedNodeId: nodeId })
   }
@@ -106,7 +117,10 @@ export class EditorStore {
     this.#apply({ zoom: Math.min(Math.max(zoom, MIN_ZOOM), MAX_ZOOM) })
   }
 
-  /** 페이지를 떠날 때. 문서만 지우면 이전 페이지의 선택·줌이 다음 페이지에 남는다. */
+  /**
+   * 프로젝트를 떠날 때. 문서만 지우면 이전 프로젝트의 선택·줌이 다음 프로젝트에 남는다.
+   * 페이지 하나를 닫는 것은 `clearPage`다 — 그쪽은 보기 설정을 남긴다.
+   */
   readonly reset = (): void => {
     this.#apply(initialState())
   }

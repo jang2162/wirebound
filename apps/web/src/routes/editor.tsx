@@ -174,7 +174,10 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
   )
 }
 
-/** 이름표가 붙은 빈 상자. 태스크 8·9가 `children` 자리를 채운다. */
+/**
+ * 이름표가 붙은 상자. `children`이 그 안의 내용이다 — 메뉴·페이지 트리는 채워져 있고,
+ * 구조 트리 자리는 아직 비어 있다.
+ */
 function ShellRegion(props: { className: string; name: string; children?: ReactNode }): ReactElement {
   return (
     <section className={props.className} aria-label={props.name}>
@@ -204,6 +207,11 @@ type PageLoadState =
  * 주소(`pageId`)를 보고 받는다. 그래서 눌러서 연 페이지와 주소로 들어와 열린 페이지가
  * 같은 경로를 지난다.
  *
+ * **스토어의 문서는 지금 열려 있는 페이지의 것이거나 비어 있다.** 여기가 문서를 싣는
+ * 유일한 자리이면서 비우는 자리이기도 하기 때문이다 — 주소에서 `pageId`가 사라질 때와
+ * `getPage`가 실패할 때 양쪽에서 `store.clearPage()`를 부른다. 이 성질이 없으면 문서를
+ * 스토어에서 읽는 쪽이 열려 있지 않은 페이지를 그린다.
+ *
  * **프레임 안쪽에는 셸의 클래스를 붙이지 않는다** — 그 안은 P4a의 테마 CSS가 전담한다
  * (설계 D7). 그래서 아래 안내 문단들에 클래스가 없고, 스타일도 없다. 셸이 글꼴·글자색을
  * 걸어 두면 상속으로 프레임 안까지 내려가 테마가 정해야 할 값을 누른다 — 선택자를
@@ -223,6 +231,11 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
 
   useEffect(() => {
     if (pageId === undefined) {
+      // 화면만 되돌리면 스토어에는 앞 페이지의 문서와 `headSeq`가 남는다. 주소에 열린
+      // 페이지가 없는데 스토어는 있다고 말하는 상태다 — 문서를 스토어에서 읽는 쪽(태스크 9의
+      // 캔버스·구조 트리·속성 패널)이 열려 있지 않은 페이지를 그리게 된다. P2b-2에서는
+      // 남은 `headSeq`가 `baseSeq`가 되어 더 나쁘다.
+      store.clearPage()
       setState({ status: 'empty' })
       return
     }
@@ -244,6 +257,9 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
         setState({ status: 'ready' })
       } catch (caught) {
         if (!alive) return
+        // 열지 못한 페이지의 자리에 앞 페이지의 문서를 남기지 않는다. 위 `empty`와 같은
+        // 이유다 — 주소는 이 페이지를 가리키는데 스토어는 다른 페이지의 문서를 들고 있다.
+        store.clearPage()
         // 실패는 **이 상자 안에서** 끝난다. 셸 전체를 오류로 바꾸면 멀쩡한 트리까지
         // 사라져, 사용자가 다른 페이지로 옮겨 갈 길이 없어진다.
         setState({
@@ -268,9 +284,9 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
     >
       {state.status === 'empty' && <p>{NO_PAGE_NOTICE}</p>}
       {state.status === 'loading' && <p role="status">페이지를 불러오는 중…</p>}
-      {/* 실패한 동안에는 문서를 그리지 않는다. 스토어에는 앞 페이지의 문서가 남아 있을
-          수 있는데, 그것을 오류 문장 밑에 함께 그리면 어느 페이지를 보고 있는지 알 수
-          없다. */}
+      {/* 실패한 동안에는 그릴 문서가 없다. 이 상태로 들어오는 길(위 `catch`)에서 스토어의
+          문서를 함께 비우기 때문이다 — 앞 페이지의 문서를 오류 문장 밑에 그리면 어느
+          페이지를 보고 있는지 알 수 없다. */}
       {state.status === 'failed' && <p role="alert">{state.message}</p>}
       {state.status === 'ready' && <p>페이지 {pageId}</p>}
     </div>
