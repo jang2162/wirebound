@@ -24,18 +24,32 @@ const UNREACHABLE = '서버에 연결하지 못했습니다'
  */
 const NO_RESPONSE = 0
 
-const API_ERROR_CODES: readonly string[] = [
-  'bad-request',
-  'unauthenticated',
-  'forbidden',
-  'not-found',
-  'conflict',
-  'validation-failed',
-  'internal',
-]
+/**
+ * 계약에 있는 `code` 전부.
+ *
+ * **`Record<ApiErrorCode, true>`인 것이 요점이다** — 배열이면 이 목록과 `ApiErrorCode`
+ * 유니온이 컴파일러로 이어지지 않아, 오타가 나거나 유니온에 코드를 더하고 여기 안 넣으면 그
+ * 코드가 조용히 `internal`로 흡수된다(`toApiError`의 `: 'internal'`). 레코드로 두면
+ * **빠뜨림과 오타가 양방향으로 컴파일 에러**가 된다. P2b-2가 `conflict`(리베이스)·
+ * `validation-failed`(서버 검증 실패)로 분기하므로 그 둘이 조용히 틀어지면 안 된다.
+ */
+const API_ERROR_CODES: Record<ApiErrorCode, true> = {
+  'bad-request': true,
+  unauthenticated: true,
+  forbidden: true,
+  'not-found': true,
+  conflict: true,
+  'validation-failed': true,
+  internal: true,
+}
 
+/**
+ * `in`이 아니라 `Object.hasOwn`인 것은 `in`이 프로토타입까지 보기 때문이다 —
+ * `'toString' in {}`은 `true`다. 서버가 `code: "toString"`을 내면 그대로 실려 화면의
+ * 분기가 닿지 않는 값을 받는다(`test/api/http-client.test.ts`가 그 문자열로 지킨다).
+ */
 function isApiErrorCode(value: unknown): value is ApiErrorCode {
-  return typeof value === 'string' && API_ERROR_CODES.includes(value)
+  return typeof value === 'string' && Object.hasOwn(API_ERROR_CODES, value)
 }
 
 /**

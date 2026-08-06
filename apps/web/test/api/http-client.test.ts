@@ -7,7 +7,7 @@
  * 쿠키를 싣기 위한 `credentials`, `{ menu }` 봉투 벗기기, 에러 봉투 → `ApiError`.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../../src/api/client'
+import { ApiError, type ApiErrorCode } from '../../src/api/client'
 import { createHttpClient } from '../../src/api/http-client'
 import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
 
@@ -267,6 +267,45 @@ describe('createHttpClient', () => {
     expect(error.status).toBe(418)
     // 메시지는 서버가 준 것을 유지한다 — 코드를 몰라도 사람이 읽을 값은 있다.
     expect(error.message).toBe('나는 주전자다')
+  })
+
+  it('계약의 code 일곱을 그대로 싣는다', async () => {
+    // **일곱을 하나씩 지나간다.** 여기까지 오는 값은 `API_ERROR_CODES`를 통과한 것이고,
+    // 통과하지 못한 문자열은 위 케이스가 보듯 `internal`로 흡수된다 — 즉 목록에서 하나가
+    // 빠지거나 오타가 나면 그 코드가 조용히 `internal`이 되고 화면의 분기가 닿지 않는다.
+    // `ApiErrorCode` 유니온을 그대로 훑는 것은 유니온에 코드가 늘면 이 배열이 컴파일
+    // 에러가 되게 하기 위해서다.
+    const codes: ApiErrorCode[] = [
+      'bad-request',
+      'unauthenticated',
+      'forbidden',
+      'not-found',
+      'conflict',
+      'validation-failed',
+      'internal',
+    ]
+
+    for (const code of codes) {
+      const stub = stubFetch(jsonResponse(400, { error: { code, message: '이유' } }))
+      const client = createHttpClient(stub.fetchImpl)
+
+      const error = asApiError(await client.me().catch((e: unknown) => e))
+
+      expect(error.code).toBe(code)
+    }
+  })
+
+  it('프로토타입에 있는 이름은 code가 아니다', async () => {
+    // `'toString' in API_ERROR_CODES`는 `true`다. 목록을 `in`으로 보면 이 문자열이
+    // 계약의 코드인 척 그대로 실려, 화면의 `switch`가 어느 갈래에도 닿지 않는 값을 받는다.
+    const stub = stubFetch(
+      jsonResponse(500, { error: { code: 'toString', message: '이상한 코드' } }),
+    )
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(await client.me().catch((e: unknown) => e))
+
+    expect(error.code).toBe('internal')
   })
 
   it('fetchImpl을 주지 않으면 전역 fetch를 쓴다', async () => {
