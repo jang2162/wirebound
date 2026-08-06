@@ -19,17 +19,18 @@ import {
   type EditorField,
   type WbNode,
 } from '@wirebound/schema'
-import { useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
+import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 // 카탈로그가 없으면 모든 노드가 "알 수 없는 타입"이 된다. 설치는 import만으로 끝난다.
 import '../catalog-setup'
 
 /** 고를 노드가 아직 없을 때. 페이지를 열지 않았을 때와 고르지 않았을 때가 같은 문장이다. */
 const NO_SELECTION = '노드를 고르면 속성이 보입니다'
 
-export function PropertyPanel(): ReactElement {
+export function PropertyPanel(props: { pageId: string | undefined }): ReactElement {
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다(`use-editor-store.tsx`의 주석 — `(s) => s`는 테스트 전용이다).
-  const doc = useEditorStore(store, (s) => s.document)
+  // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 그린다.
+  const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 P2b-2의 낙관적
@@ -144,8 +145,8 @@ function formatValue(value: unknown): string {
  * 흰 화면이 된다.
  *
  * **오늘은 던질 수 없다.** 스토어에 문서를 싣는 자리는 `routes/editor.tsx`의
- * `store.loadPage(page.schema, …)` 하나이고(실측: `apps/web/src`에서 `loadPage(`를 부르는
- * 자리가 그 한 곳이다), 그 값은 `getPage` 응답의 JSON이다. JSON에서 나온 값에는 순환도
+ * `store.loadPage(openPageId, page.schema, …)` 하나이고(실측: `apps/web/src`에서
+ * `loadPage(`를 부르는 자리가 그 한 곳이다), 그 값은 `getPage` 응답의 JSON이다. JSON에서 나온 값에는 순환도
  * `BigInt`도 없다. 그래도 잡는 것은 **P2b-2가 편집으로 만든 값을 싣기 시작하면 그 전제가
  * 사라지기 때문**이고, 그때 이 한 줄이 없으면 편집 중 흰 화면이 된다.
  *

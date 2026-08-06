@@ -20,7 +20,8 @@
  * 갖는다.
  */
 import { screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { useLayoutEffect, type ReactNode } from 'react'
+import { useLocation } from 'react-router'
 import { CURRENT_DOCUMENT_VERSION, type PageDocument, type WbNode } from '@wirebound/schema'
 import { App } from '../src/app'
 import { ApiError } from '../src/api/client'
@@ -39,6 +40,7 @@ export const OTHER_PAGE_TITLE = '회원 상세'
 
 export const PROJECT_ROUTE = `/projects/${PROJECT_ID}`
 export const PAGE_ROUTE = `${PROJECT_ROUTE}/pages/${PAGE_ID}`
+export const OTHER_PAGE_ROUTE = `${PROJECT_ROUTE}/pages/${OTHER_PAGE_ID}`
 
 /** 서버가 준 `headSeq`. 이 값이 스토어로 들어가는지는 태스크 8의 케이스가 본다. */
 const HEAD_SEQ = 7
@@ -173,4 +175,77 @@ export function canvasSurface(): HTMLElement {
 /** 선택 아웃라인. 어느 노드에 붙었는지는 `data-wb-selected-id`가 말한다. */
 export function selectionOutline(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>('[data-wb-selected-id]')
+}
+
+/**
+ * 캔버스에 그려져 있는 문서 **루트**의 id. 문서가 없으면 `null`이다.
+ *
+ * 첫 `[data-wb-id]`가 루트인 것은 렌더러가 문서를 위에서부터 그리기 때문이다. 오류 배너는
+ * 이 속성을 달지 않으므로 배너가 떠 있어도 값이 흔들리지 않는다.
+ */
+export function canvasRootId(): string | null {
+  const surface = document.body.querySelector('.wb-shell-canvas-surface')
+  return surface?.querySelector('[data-wb-id]')?.getAttribute('data-wb-id') ?? null
+}
+
+/** 구조 트리가 지금 그리고 있는 노드 타입들. 트리가 없거나 비어 있으면 빈 배열이다. */
+export function structureTypes(): string[] {
+  const region = document.body.querySelector('.wb-shell-structure')
+  if (region === null) return []
+  return [...region.querySelectorAll('.wb-shell-structure-node, .wb-shell-structure-broken')].map(
+    (row) => row.textContent ?? '',
+  )
+}
+
+/** 속성 패널의 머리(선택 노드의 타입). 고른 것이 없으면 `null`이다. */
+export function panelTitle(): string | null {
+  return document.body.querySelector('.wb-shell-panel-title')?.textContent ?? null
+}
+
+/** 커밋 하나에서 본 것. `path`는 그 커밋의 주소이고 나머지 셋은 그때 DOM에 있던 내용이다. */
+export interface CommitObservation {
+  path: string
+  canvasRootId: string | null
+  structureTypes: string[]
+  panelTitle: string | null
+}
+
+/**
+ * **주소가 바뀐 커밋을 들여다보는 장치.**
+ *
+ * 왜 필요한가. 이 스위트의 단언은 전부 "완전히 가라앉은 트리"만 본다 — `findBy*`·`waitFor`가
+ * RTL의 `asyncWrapper`를 지나며 이펙트를 다 흘리고 돌아오기 때문이다(`test/setup.ts`).
+ * 그래서 **커밋 하나짜리 잘못된 중간 상태는 어떤 `expect`도 보지 못한다.** `pageId`가 바뀐
+ * 뒤 첫 커밋이 정확히 그 상태다: 라우터는 새 페이지를 가리키는데 스토어는 아직 앞 페이지의
+ * 문서를 들고 있다.
+ *
+ * 그 창을 여는 것이 이 컴포넌트다. `useLocation()`을 구독하므로 **주소가 바뀐 커밋마다**
+ * 다시 그려지고, `useLayoutEffect`가 그 커밋의 DOM이 꽂힌 직후·passive effect가 돌기
+ * 전에 화면을 읽어 `sink`에 적는다. 세 자리를 함께 읽는 것은 스토어의 문서를 읽는 화면이
+ * 셋이기 때문이다(캔버스·구조 트리·속성 패널).
+ *
+ * **읽는 것은 DOM이지 스토어가 아니다.** 스토어를 읽으면 "스토어가 앞 페이지를 들고 있다"
+ * 까지만 알 수 있고, 그것이 화면에 나왔는지는 알 수 없다. 이 장치가 잡아야 하는 것은
+ * 뒤쪽이다.
+ *
+ * **재지 못하는 것:** 그 커밋이 브라우저에 실제로 **페인트되는지**는 이 장치로도 알 수 없다
+ * (jsdom에 페인트가 없다). 그래서 커밋을 DOM에 꽂은 뒤 레이아웃 이펙트로 지우는 형태의
+ * 수정은 이 장치에 **고쳐진 것으로 보이지 않는다** — 실측으로 확인했고, P2b-1 최종 fix
+ * 보고서의 I2 절에 적었다.
+ */
+export function CommitProbe(props: { sink: CommitObservation[] }): null {
+  const location = useLocation()
+  const { sink } = props
+
+  // 의존성 배열이 없다 — 이 컴포넌트가 다시 그려진 커밋마다 한 줄씩 적는다.
+  useLayoutEffect(() => {
+    sink.push({
+      path: location.pathname,
+      canvasRootId: canvasRootId(),
+      structureTypes: structureTypes(),
+      panelTitle: panelTitle(),
+    })
+  })
+
+  return null
 }

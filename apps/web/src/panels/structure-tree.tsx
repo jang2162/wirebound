@@ -10,12 +10,13 @@
  */
 import type { ReactElement } from 'react'
 import type { WbNode } from '@wirebound/schema'
-import { useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
+import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 
-export function StructureTree(): ReactElement {
+export function StructureTree(props: { pageId: string | undefined }): ReactElement {
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다(`use-editor-store.tsx`의 주석 — `(s) => s`는 테스트 전용이다).
-  const doc = useEditorStore(store, (s) => s.document)
+  // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 그린다.
+  const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
 
   if (doc === null) {

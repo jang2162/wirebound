@@ -34,6 +34,8 @@ describe('EditorStore', () => {
 
   it('초기 상태는 문서 없음·선택 없음·편집 모드다', () => {
     const state = new EditorStore().getState()
+    // 문서가 없으면 열린 페이지도 없다. 이 둘이 갈라지면 읽는 쪽의 대조가 무의미해진다.
+    expect(state.openPageId).toBeNull()
     expect(state.document).toBeNull()
     expect(state.headSeq).toBe(0)
     expect(state.selectedNodeId).toBeNull()
@@ -46,32 +48,52 @@ describe('EditorStore', () => {
     expect(state.zoom).toBe(1)
   })
 
-  it('loadPage는 문서와 headSeq를 함께 넣는다', () => {
+  it('loadPage는 페이지 id·문서·headSeq를 함께 넣는다', () => {
     const store = new EditorStore()
     const page = doc('n_root')
-    store.loadPage(page, 42)
+    store.loadPage('pg-1', page, 42)
     // `toBe`인 것은 의도다 — 스토어는 문서를 복사하지 않고 받은 객체를 그대로 들고
     // 있는다. 문서는 크고, 스토어는 그 내용을 해석하지 않는다.
     expect(store.getState().document).toBe(page)
     expect(store.getState().headSeq).toBe(42)
+    // **셋이 한 번에 들어가야 한다.** 읽는 쪽은 이 id를 주소와 대조해 "이 문서가 지금
+    // 열린 페이지의 것인가"를 판정한다(`store/use-editor-store.tsx`의 `useOpenDocument`).
+    expect(store.getState().openPageId).toBe('pg-1')
+  })
+
+  it('loadPage는 openPageId를 문서와 함께 갈아 끼운다', () => {
+    const store = new EditorStore()
+    store.loadPage('pg-a', doc('n_a'), 1)
+    const before = store.getState()
+
+    store.loadPage('pg-b', doc('n_b'), 2)
+
+    // 앞 페이지의 id가 남으면 읽는 쪽이 새 문서를 앞 페이지의 것으로 판정한다 — 대조가
+    // 있으나 마나가 된다. 한 번의 교체로 셋이 함께 움직이는지 본다.
+    expect(store.getState().openPageId).toBe('pg-b')
+    expect(store.getState().document).not.toBe(before.document)
+    expect(store.getState().headSeq).toBe(2)
   })
 
   it('loadPage는 이전 선택을 지운다', () => {
     const store = new EditorStore()
-    store.loadPage(doc('n_a'), 1)
+    store.loadPage('pg-a', doc('n_a'), 1)
     store.selectNode('n_only_in_page_a')
-    store.loadPage(doc('n_b'), 2)
+    store.loadPage('pg-b', doc('n_b'), 2)
     // 노드 id는 문서 안에서만 뜻이 있다. 남으면 선택 표시가 없는 노드를 가리킨다.
     expect(store.getState().selectedNodeId).toBeNull()
   })
 
-  it('clearPage는 문서·headSeq·선택을 비운다', () => {
+  it('clearPage는 openPageId·문서·headSeq·선택을 비운다', () => {
     const store = new EditorStore()
-    store.loadPage(doc('n_a'), 9)
+    store.loadPage('pg-a', doc('n_a'), 9)
     store.selectNode('n_a')
 
     store.clearPage()
 
+    // 문서를 비웠는데 열린 페이지 id가 남으면, 읽는 쪽은 "그 페이지가 열려 있다"고 보면서
+    // 그릴 문서를 못 받는다. 둘은 함께 움직여야 한다.
+    expect(store.getState().openPageId).toBeNull()
     expect(store.getState().document).toBeNull()
     // `headSeq`를 함께 본다 — P2b-2가 그 값을 `baseSeq`로 쓰므로, 문서만 비우고 seq를
     // 남기면 열린 페이지 없이 편집 요청이 만들어진다.
@@ -84,7 +106,7 @@ describe('EditorStore', () => {
   it('clearPage는 모드·줌·뷰포트 폭을 남긴다', () => {
     const store = new EditorStore()
     // 셋 다 초기값과 다르게 둔다. 초기값 그대로면 통째로 초기화하는 구현도 통과한다.
-    store.loadPage(doc('n_a'), 9)
+    store.loadPage('pg-a', doc('n_a'), 9)
     store.setMode('view')
     store.setZoom(2)
     store.setViewportWidth(375)
@@ -113,7 +135,7 @@ describe('EditorStore', () => {
     // 참조까지 본다 — 값이 같은 새 객체로 교체해도 `useSyncExternalStore`는 바뀐 것으로 본다.
     expect(store.getState()).toBe(empty)
 
-    store.loadPage(doc('n_a'), 3)
+    store.loadPage('pg-a', doc('n_a'), 3)
     store.clearPage()
     expect(listener).toHaveBeenCalledTimes(2)
 
@@ -224,7 +246,7 @@ describe('EditorStore', () => {
 
   it('reset은 초기 상태로 돌린다', () => {
     const store = new EditorStore()
-    store.loadPage(doc('n_a'), 9)
+    store.loadPage('pg-a', doc('n_a'), 9)
     store.selectNode('n_a')
     store.setMode('view')
     store.setViewportWidth(375)

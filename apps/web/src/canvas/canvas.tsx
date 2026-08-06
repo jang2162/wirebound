@@ -4,9 +4,9 @@
  * `CanvasFrame`이다.
  *
  * **문서는 스토어에서 읽는다.** 여기서 `getPage`를 부르지 않는 이유는 `CanvasFrame`의
- * 주석에 있다 — 요지는 "주소가 열린 페이지의 단일 진실"이고, 스토어의 문서는 지금 열려
- * 있는 페이지의 것이거나 비어 있다는 것이다. 그 성질 덕분에 여기서는 문서가 어느
- * 페이지의 것인지 다시 확인하지 않는다.
+ * 주석에 있다 — 요지는 "주소가 열린 페이지의 단일 진실"이라는 것이다. 스토어가 든 문서가
+ * **지금 주소의 것인지**는 `useOpenDocument`가 대조한다(`store/use-editor-store.tsx`) —
+ * 여기서 다시 확인하지 않는 것은 그 대조가 한 곳에 있기 때문이지, 어긋날 수 없어서가 아니다.
  *
  * **D7 — 이 파일이 그리는 것 중 문서 안쪽에 스타일을 주는 것은 없다.** 설계서 내용의
  * 외형은 P4a의 테마 CSS가 전담한다. 그래서 셸의 클래스가 붙는 것은 문서를 **감싸는**
@@ -26,7 +26,7 @@ import {
 } from 'react'
 import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
 import type { PageDocument } from '@wirebound/schema'
-import { useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
+import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
 // 끝난다 — 그 모듈의 주석 참고.
 import '../catalog-setup'
@@ -47,11 +47,11 @@ interface Box {
  * 갈라 안내하는 것은 `CanvasFrame`의 몫이고, 여기서 또 문안을 내면 같은 자리에 두 개가
  * 겹친다.
  */
-export function Canvas(): ReactElement | null {
+export function Canvas(props: { pageId: string | undefined }): ReactElement | null {
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다. 상태 객체 전체(`(s) => s`)를 고르면 어느 필드가 바뀌든
   // 다시 그린다 — `use-editor-store.tsx`의 주석 참고.
-  const doc = useEditorStore(store, (s) => s.document)
+  const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const mode = useEditorStore(store, (s) => s.mode)
   const zoom = useEditorStore(store, (s) => s.zoom)

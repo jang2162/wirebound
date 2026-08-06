@@ -33,6 +33,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
+import type { PageDocument } from '@wirebound/schema'
 import type { EditorState, EditorStore } from './editor-store'
 
 /**
@@ -59,4 +60,29 @@ export function useEditorStoreInstance(): EditorStore {
   const store = useContext(EditorStoreContext)
   if (store === null) throw new Error('useEditorStoreInstance는 EditorStoreProvider 안에서만 부를 수 있습니다')
   return store
+}
+
+/**
+ * **지금 주소가 가리키는 페이지의 문서.** 스토어가 든 것이 다른 페이지의 문서면 `null`이다.
+ *
+ * 문서를 스토어에서 읽는 화면 셋(캔버스·구조 트리·속성 패널)은 `s.document`가 아니라 이것을
+ * 쓴다. 이유는 `pageId`가 바뀐 뒤 **첫 커밋 하나** 때문이다 — 문서를 비우는 일이
+ * `routes/editor.tsx`의 passive `useEffect`에 있어 커밋보다 뒤에 돌므로, 그 커밋에서 주소는
+ * 새 페이지인데 스토어는 앞 페이지의 문서·`headSeq`·선택을 그대로 들고 있다. 셋이 `s.document`를
+ * 곧장 읽으면 그 커밋에 **앞 페이지가 새 주소 밑에 그려진다**(실측: 세 화면 전부에서 그랬다 —
+ * `test/canvas/canvas.test.tsx`의 `주소가 바뀐 커밋에 앞 페이지가 그려지지 않는다`).
+ *
+ * **대조를 여기 한 곳에 둔 이유.** 셋이 각자 막으면 규칙이 세 벌이 되고, P2b-2가 `baseSeq`를
+ * 읽는 자리가 늘 때 그 자리에는 규칙이 없다. 스토어가 `openPageId`를 문서와 함께 싣고
+ * (`editor-store.ts`) 읽는 쪽이 여기서 한 번 대조하면 규칙이 한 곳에 남는다.
+ *
+ * `pageId`는 셸이 주소에서 푼 값을 내려받는다. 여기서 `useParams()`를 다시 부르지 않는 것은
+ * `panels/menu-tree.tsx`가 적은 이유와 같다 — 라우트 표가 바뀔 때 고칠 곳이 둘이 된다.
+ */
+export function useOpenDocument(pageId: string | undefined): PageDocument | null {
+  const store = useEditorStoreInstance()
+  const document = useEditorStore(store, (s) => s.document)
+  const openPageId = useEditorStore(store, (s) => s.openPageId)
+
+  return openPageId !== null && openPageId === pageId ? document : null
 }

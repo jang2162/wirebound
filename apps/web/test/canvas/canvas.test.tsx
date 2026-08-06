@@ -14,20 +14,26 @@ import { registerStructure } from '@wirebound/renderer'
 import { ListDef, defineComponent, registerComponent } from '@wirebound/schema'
 import type { EditorStore } from '../../src/store/editor-store'
 import {
+  CommitProbe,
   OTHER_PAGE_ID,
+  OTHER_PAGE_ROUTE,
   OTHER_PAGE_TITLE,
   PAGE_ID,
   PROJECT_NAME,
   PROJECT_ROUTE,
   canvasFrame,
+  canvasRootId,
   canvasSurface,
   nodeElement,
   openPage,
   pageDoc,
+  panelTitle,
   renderEditor,
   requireNode,
   selectionOutline,
+  structureTypes,
   waitForNode,
+  type CommitObservation,
 } from '../editor-harness'
 
 /**
@@ -300,6 +306,45 @@ describe('캔버스', () => {
     // 노드 id는 문서 안에서만 뜻이 있다. 남으면 존재하지 않는 노드를 가리킨다.
     expect(shellStore().getState().selectedNodeId).toBeNull()
     expect(selectionOutline()).toBeNull()
+  })
+
+  it('주소가 바뀐 커밋에 앞 페이지가 그려지지 않는다', async () => {
+    // **이 케이스는 커밋 하나짜리 창을 본다.** 나머지 케이스가 쓰는 `expect`로는 이 창을
+    // 볼 수 없다 — `findBy*`·`waitFor`가 이펙트를 다 흘리고 돌아오기 때문이다
+    // (`../test/setup.ts`). 장치의 생김새와 한계는 `../editor-harness`의 `CommitProbe`에 있다.
+    const other = pageDoc({ id: 'n-other', type: 'Page' })
+    const commits: CommitObservation[] = []
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: other },
+      children: <CommitProbe sink={commits} />,
+    })
+    // 앞 페이지에서 노드를 하나 골라 둔다. 그래야 속성 패널도 앞 페이지의 것을 그리고
+    // 있어, 세 화면 전부에서 "앞 페이지가 남았는지"를 볼 수 있다.
+    fireEvent.click(requireNode('n-list'))
+
+    // 양성 대조: 읽는 함수 셋이 실제로 지금 화면을 읽는다. 셋 다 빈 값만 돌려주면
+    // 아래 필터는 무엇이 그려져 있든 통과한다.
+    expect(canvasRootId()).toBe('n-root')
+    expect(structureTypes()).toContain('Flex')
+    expect(panelTitle()).toBe('List')
+
+    commits.length = 0
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitForNode('n-other')
+
+    // 양성 대조: 장치가 **새 주소의 커밋을 실제로 봤다.** 비어 있으면 아래가 공허하다.
+    expect(commits.map((commit) => commit.path)).toContain(OTHER_PAGE_ROUTE)
+
+    // 셋 다 pg-1에만 있는 것이다(pg-2의 문서는 루트 하나뿐이고 선택도 없다). 새 주소
+    // 아래 커밋에서 하나라도 보이면 그 커밋이 **앞 페이지를 새 주소 밑에 그린 것**이다.
+    const stale = commits.filter(
+      (commit) =>
+        commit.path === OTHER_PAGE_ROUTE &&
+        (commit.canvasRootId === 'n-root' ||
+          commit.structureTypes.includes('Flex') ||
+          commit.panelTitle === 'List'),
+    )
+    expect(stale).toEqual([])
   })
 
   it('페이지를 떠나면 선택이 남지 않는다', async () => {
