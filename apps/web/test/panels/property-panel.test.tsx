@@ -79,8 +79,11 @@ const THROWING_DOC = pageDoc({
  *
  * - `n-bare`는 `props`가 아예 없다. **스키마가 허용하는 정상 문서다**
  *   (`packages/schema/src/node.ts`의 `props?: Record<string, unknown>` — optional).
- * - `n-null`은 `props`가 `null`이다. 타입은 막지만 런타임에는 들어올 수 있다 —
- *   검증을 통과하지 못한 문서가 스토어에 실리는 P2b-2가 그 경로다.
+ * - `n-null`은 `props`가 `null`이다. 타입은 막지만 런타임에는 들어온다. **오늘 실재하는
+ *   경로는 "서버가 계약을 어긴 문서를 200으로 낸다"이다**(실측: `SHAPES.pageDetail`은
+ *   `schema.root`가 객체인지까지만 보고 자식으로 내려가지 않으므로, `root.children`에
+ *   `props: null`인 노드를 담은 응답이 `getPage`를 그대로 지난다 — `api/http-client.ts`).
+ *   P2b-2의 낙관적 패치가 두 번째 경로를 더하겠지만 그것은 아직 없는 코드다.
  *
  * 둘 다 `editor`가 비지 않은 타입이어야 뜻이 있다. `Page`·`Slot`처럼 `editor`가 빈
  * 컴포넌트를 고르면 `readProp`이 한 번도 불리지 않는다.
@@ -323,8 +326,13 @@ describe('속성 패널', () => {
 
     select('Field')
 
-    // `Field`의 `editor` 여섯 줄이 그대로 나오고 값만 빈다.
-    expect(propRows().map((row) => row.value)).toEqual(['', '', '', '', '', ''])
+    // 필드는 그대로 나오고 **값만** 전부 빈다. 줄 수를 여기서 다시 못박지 않는 것은
+    // 카탈로그가 바뀔 때 이 케이스가 이유 없이 어긋나기 때문이다 — `Field`의 `editor`
+    // 여섯 줄은 위 `선택 노드의 editor 명세대로 필드를 나열한다`가 이미 지킨다.
+    const values = propRows().map((row) => row.value)
+    // 양성 대조: 값이 실제로 그려진 상태에서 세야 뜻이 있다(빈 패널은 당연히 통과한다).
+    expect(values.length).toBeGreaterThan(0)
+    expect(values.every((value) => value === '')).toBe(true)
     screen.getByRole('heading', { name: PROJECT_NAME })
     expect(document.body.querySelector('.wb-shell')).not.toBeNull()
   })
