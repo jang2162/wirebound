@@ -198,6 +198,31 @@ describe('구조 트리', () => {
     expect(nodeRows().map((node) => node.textContent)).toEqual(['Page'])
   })
 
+  it('type이 문자열이 아닌 노드가 있어도 셸은 살아 있다', async () => {
+    // 렌더러가 폴백으로 흡수하는 값이다(`packages/renderer/src/render.tsx`의 `shapeError`).
+    // 여기서 그대로 `{node.type}`을 그리면 React가 `Objects are not valid as a React child`로
+    // 렌더 도중 던지는데, 이 패널은 캔버스와 달리 **오류 경계 밖**이라 그 예외는 캔버스만이
+    // 아니라 셸 전체를 지운다. P2b-2가 검증 전 문서를 스토어에 싣기 시작하면 도달한다.
+    await openPage(
+      pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [{ id: 'n-bad', type: { broken: true }, children: [] } as never],
+      }),
+    )
+
+    // 셸이 남아 있다. 가드를 지우면 여기까지 오지 못하고 `.wb-shell`이 DOM에서 사라진다.
+    screen.getByRole('heading', { name: PROJECT_NAME })
+    expect(document.body.querySelector('.wb-shell')).not.toBeNull()
+
+    // 그 줄은 **대신 쓸 이름으로 남는다.** 줄째 지워 버리면 캔버스에는 폴백이 그려져 있는데
+    // 트리에서만 사라져 무엇이 깨졌는지 더 알기 어렵다(id 없는 노드와 같은 판단이다).
+    expect(nodeRows().map((node) => node.textContent)).toEqual([
+      'Page',
+      '(타입을 읽을 수 없는 노드)',
+    ])
+  })
+
   it('문서가 없으면 비어 있다', async () => {
     renderEditor({ route: PROJECT_ROUTE, docs: { [PAGE_ID]: DOC } })
     await screen.findByRole('heading', { name: PROJECT_NAME })

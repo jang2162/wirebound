@@ -20,11 +20,15 @@ import {
   type WbNode,
 } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { BROKEN_TYPE_LABEL, nodeType } from './node-shape'
 // 카탈로그가 없으면 모든 노드가 "알 수 없는 타입"이 된다. 설치는 import만으로 끝난다.
 import '../catalog-setup'
 
 /** 고를 노드가 아직 없을 때. 페이지를 열지 않았을 때와 고르지 않았을 때가 같은 문장이다. */
 const NO_SELECTION = '노드를 고르면 속성이 보입니다'
+
+/** 타입을 읽지 못한 노드의 안내. 캔버스는 같은 노드를 폴백으로 그리고 배너로 알린다. */
+const BROKEN_TYPE_NOTICE = '이 노드의 타입을 읽을 수 없습니다'
 
 export function PropertyPanel(props: { pageId: string | undefined }): ReactElement {
   const store = useEditorStoreInstance()
@@ -42,15 +46,32 @@ export function PropertyPanel(props: { pageId: string | undefined }): ReactEleme
     return <p className="wb-shell-panel-notice">{NO_SELECTION}</p>
   }
 
-  const def = getComponent(node.type)
+  // **타입부터 모양을 본다.** 검증 전 문서(P2b-2)에는 `type`이 문자열이 아닌 노드가 들어올
+  // 수 있고, 그것을 그대로 `{node.type}`으로 그리면 React가 렌더 도중 던진다. 이 패널은 오류
+  // 경계 밖이라 그 예외는 셸 전체를 지운다(`./node-shape.ts`의 머리말 — 실측). 아래 `stringify`가
+  // 같은 이유로 있고, 이쪽이 더 흔한 경로다.
+  const type = nodeType(node)
+
+  if (type === null) {
+    return (
+      <>
+        <h2 className="wb-shell-panel-title">{BROKEN_TYPE_LABEL}</h2>
+        {/* "카탈로그에 없다"와 갈라 말한다. 카탈로그에 없는 것은 이름을 잘못 적은 문서이고,
+            이쪽은 노드의 모양 자체가 깨진 것이라 사용자가 할 일이 다르다. */}
+        <p className="wb-shell-panel-notice">{BROKEN_TYPE_NOTICE}</p>
+      </>
+    )
+  }
+
+  const def = getComponent(type)
 
   if (def === undefined) {
     return (
       <>
-        <h2 className="wb-shell-panel-title">{node.type}</h2>
+        <h2 className="wb-shell-panel-title">{type}</h2>
         {/* 캔버스는 이 노드를 폴백으로 그리고 배너로 알린다. 패널이 잠자코 비어 있으면
             사용자는 "왜 속성이 안 나오지"를 묻게 된다. */}
-        <p className="wb-shell-panel-notice">카탈로그에 없는 컴포넌트입니다: {node.type}</p>
+        <p className="wb-shell-panel-notice">카탈로그에 없는 컴포넌트입니다: {type}</p>
       </>
     )
   }
@@ -65,7 +86,7 @@ export function PropertyPanel(props: { pageId: string | undefined }): ReactEleme
   // 아니라 **필드 단위** 결과라 지금 만든 모양이 그때 다시 뒤집힌다.
   return (
     <>
-      <h2 className="wb-shell-panel-title">{node.type}</h2>
+      <h2 className="wb-shell-panel-title">{type}</h2>
       {fields.length === 0 ? (
         // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
         // "아직 고르지 않았다"와 구분되지 않는다.
@@ -142,13 +163,13 @@ function formatValue(value: unknown): string {
  *
  * 이 패널은 오류 경계 **밖**이다(`apps/web/src` 전체에서 경계는 캔버스의 `CanvasBoundary`
  * 하나뿐이다 — 실측). 그래서 여기서 예외가 새면 캔버스만 무너지는 것이 아니라 셸 전체가
- * 흰 화면이 된다.
+ * 흰 화면이 된다. 위쪽의 `nodeType` 가드가 같은 이유로 있다(`./node-shape.ts`).
  *
  * **오늘은 던질 수 없다.** 스토어에 문서를 싣는 자리는 `routes/editor.tsx`의
  * `store.loadPage(openPageId, page.schema, …)` 하나이고(실측: `apps/web/src`에서
- * `loadPage(`를 부르는 자리가 그 한 곳이다), 그 값은 `getPage` 응답의 JSON이다. JSON에서 나온 값에는 순환도
- * `BigInt`도 없다. 그래도 잡는 것은 **P2b-2가 편집으로 만든 값을 싣기 시작하면 그 전제가
- * 사라지기 때문**이고, 그때 이 한 줄이 없으면 편집 중 흰 화면이 된다.
+ * `loadPage(`를 부르는 자리가 그 한 곳이다), 그 값은 `getPage` 응답의 JSON이다. JSON에서
+ * 나온 값에는 순환도 `BigInt`도 없다. 그래도 잡는 것은 **P2b-2가 편집으로 만든 값을 싣기
+ * 시작하면 그 전제가 사라지기 때문**이고, 그때 이 한 줄이 없으면 편집 중 흰 화면이 된다.
  *
  * 이 갈래는 `test/panels/property-panel.test.tsx`의
  * `값을 문자열로 만들 수 없어도 셸은 살아 있다`가 순환 참조를 심어 지킨다.

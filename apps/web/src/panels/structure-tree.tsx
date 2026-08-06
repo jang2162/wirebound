@@ -11,6 +11,7 @@
 import type { ReactElement } from 'react'
 import type { WbNode } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { nodeTypeLabel } from './node-shape'
 
 export function StructureTree(props: { pageId: string | undefined }): ReactElement {
   const store = useEditorStoreInstance()
@@ -49,11 +50,14 @@ function StructureNode(props: {
   onSelect: (nodeId: string) => void
 }): ReactElement {
   const { node } = props
-  // `children`이 배열이 아닌 문서는 지금 들어올 수 없지만(서버가 검증한다), 들어오면
-  // `.map`이 던져 셸 전체가 죽는다 — 캔버스와 달리 이쪽에는 오류 경계가 없다. P2b-2가
-  // 검증 전 문서를 스토어에 싣기 시작하면 렌더러(`packages/renderer/src/render.tsx`)처럼
-  // 모양 가드가 더 필요해진다. 지금 막는 것은 그 한 줄뿐이다.
+  // **모양 가드 둘.** 검증 전 문서(P2b-2)에는 `children`이 배열이 아니거나 `type`이
+  // 문자열이 아닌 노드가 들어올 수 있고, 둘 다 렌더 도중 던진다 — 앞은 `.map`이,
+  // 뒤는 React가(`Objects are not valid as a React child`). 이쪽에는 캔버스와 달리 오류
+  // 경계가 없어서 던지면 **셸 전체가 DOM에서 사라진다**(실측: `type`이 객체인 노드로
+  // 재 봤다 — `./node-shape.ts`의 머리말). 지금 막는 것이 이 둘이고, 목록이 완전한지는
+  // 재지 못했다.
   const children = Array.isArray(node.children) ? node.children : []
+  const typeLabel = nodeTypeLabel(node)
 
   return (
     <li>
@@ -75,10 +79,10 @@ function StructureNode(props: {
           aria-current={props.selectedNodeId === node.id ? true : undefined}
           onClick={() => props.onSelect(node.id)}
         >
-          {node.type}
+          {typeLabel}
         </button>
       ) : (
-        <span className="wb-shell-structure-broken">{node.type}</span>
+        <span className="wb-shell-structure-broken">{typeLabel}</span>
       )}
 
       {children.length > 0 && (

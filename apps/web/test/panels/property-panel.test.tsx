@@ -74,6 +74,18 @@ const THROWING_DOC = pageDoc({
   children: [{ id: 'n-card', type: 'Card', props: { title: CIRCULAR, subtitle: '부제' } }],
 })
 
+/**
+ * `type`이 문자열이 **아닌** 노드. 렌더러는 폴백으로 흡수하지만(`shapeError`), 그것을 그대로
+ * `{node.type}`으로 그리는 화면은 React가 렌더 도중 던진다. 이 패널은 캔버스의 오류 경계
+ * **밖**이라 그 예외는 셸 전체를 지운다 — `값을 문자열로 만들 수 없어도…`와 같은 부류이고,
+ * 이쪽이 더 흔한 경로다(P2b-2의 낙관적 패치가 만드는 검증 전 문서).
+ */
+const BROKEN_TYPE_DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [{ id: 'n-bad', type: { broken: true }, children: [] } as never],
+})
+
 function panel(): HTMLElement {
   return screen.getByRole('complementary', { name: '속성 패널' })
 }
@@ -245,6 +257,20 @@ describe('속성 패널', () => {
     ])
     // 셸도 그대로다. `stringify`의 `try`를 걷어내면 여기까지 오지 못하고 렌더가 던진다.
     screen.getByRole('heading', { name: PROJECT_NAME })
+  })
+
+  it('type이 문자열이 아닌 노드를 골라도 셸은 살아 있다', async () => {
+    await openPage(BROKEN_TYPE_DOC)
+
+    select('(타입을 읽을 수 없는 노드)')
+
+    // "카탈로그에 없다"와 다른 문장이어야 한다. 앞은 이름을 잘못 적은 문서이고, 이쪽은
+    // 노드의 모양 자체가 깨진 것이라 사용자가 할 일이 다르다.
+    within(panel()).getByText('이 노드의 타입을 읽을 수 없습니다')
+    expect(propRows()).toHaveLength(0)
+    // 셸이 남아 있다. 가드를 지우면 여기까지 오지 못하고 `.wb-shell`이 DOM에서 사라진다.
+    screen.getByRole('heading', { name: PROJECT_NAME })
+    expect(document.body.querySelector('.wb-shell')).not.toBeNull()
   })
 
   it('문서가 없으면 안내를 보여준다', async () => {
