@@ -11,11 +11,14 @@
   3. 자손 선택자를 쓰지 않는다. 셸의 상자를 기준으로 안쪽을 겨냥하면 그 상자 안에
      들어올 내용까지 함께 잡힌다. 스타일이 필요한 자리에는 클래스를 직접 붙인다.
 
-  4. **상속되는 속성은 셸 루트나 캔버스 상자에 걸지 않는다.** 선택자를 겨냥하지 않아도
+  4. **상속되는 속성은 문서를 감싸는 상자에 걸지 않는다.** 선택자를 겨냥하지 않아도
      자식으로 물려 내려가므로 1·2·3을 보는 검사가 잡지 못하는 누수다. 글꼴·글자색·
      `color-scheme`은 셸이 실제로 그리는 조각(머리·좌측·우측·안내 화면)에만 각각 건다.
-     캔버스 프레임 안에는 셸의 클래스가 하나도 없고(`editor.tsx`의 `CanvasFrame`),
-     그래서 물려 내려가는 값도 없다.
+
+     **감싸는 상자는 넷이다** — `.wb-shell`, `.wb-shell-canvas`, `.wb-shell-canvas-frame`,
+     `.wb-shell-canvas-surface`. 태스크 9 전까지는 프레임 안이 자리 표시자 한 줄이라
+     앞 둘만 봤지만, **이제 프레임 안에 설계서 문서가 들어온다**(`canvas/canvas.tsx`).
+     그래서 검사 대상이 넷으로 늘었다.
 
      **예외 — 커스텀 프로퍼티.** 아래 `.wb-shell`이 선언하는 `--wb-shell-*` 여섯 개도
      상속 속성이라 프레임 안까지 내려간다. 그래도 두는 것은 `wb-shell-` 접두어가 P4a
@@ -23,17 +26,23 @@
      **아래 셋째 검사는 이것을 잡지 못한다** — 속성 이름 목록으로 보므로 `--*`가 걸리지
      않는다. 접두어 없는 변수를 셸 루트에 선언하지 마라. 검사가 아니라 이 규칙이 막는다.
 
+  5. **문서 옆에 그리는 셸의 장치는 여기 규칙을 그대로 따른다.** 태스크 9가 프레임 안에
+     둘을 더했다 — 선택 아웃라인(`.wb-shell-selection`)과 렌더 실패 배너
+     (`.wb-shell-canvas-error*`)다. 둘 다 **문서 노드를 겨냥하지 않고**(자기 클래스에만
+     규칙이 붙는다) 문서 노드를 **자식으로 갖지도 않아서**(문서의 형제다) 상속으로도
+     닿지 않는다. 선택 표시를 노드에 클래스로 얹지 않은 이유가 이것이다 — 그 순간 셸이
+     테마의 어휘 안으로 들어간다.
+
   검사 (셋 다 0건이어야 한다). 앞 둘은 1·2·3을, 마지막은 4를 본다 — 4는 선택자가
   아니라 **속성 이름**으로 봐야 하므로 검사도 따로다(위 예외만큼 좁다):
 
     rg '^\s*[a-z]+\s*\{' apps/web/src/shell.css
     rg 'wb-shell-[a-z-]+\s+[.a-z]' apps/web/src/shell.css
-    rg -U '\.wb-shell(-canvas)? \{[^}]*\b(color|color-scheme|font|font-family|font-size|letter-spacing|line-height|text-align|text-transform|text-indent|white-space|word-break|cursor|visibility|font-variant-numeric)\s*:' apps/web/src/shell.css
+    rg -U '\.wb-shell(-canvas|-canvas-frame|-canvas-surface)? \{[^}]*\b(color|color-scheme|font|font-family|font-size|letter-spacing|line-height|text-align|text-transform|text-indent|white-space|word-break|cursor|visibility|font-variant-numeric)\s*:' apps/web/src/shell.css
 
-  마지막 명령은 캔버스를 감싸는 두 상자만 본다. `.wb-shell-canvas-frame`은 일부러
-  빼 두었다 — 프레임 자신에 거는 값은 D10이 폭·배율을 거는 자리와 같은 컨테이너
-  자신의 규칙이다(실측: `.wb-shell`·`.wb-shell-canvas`에 `color-scheme`이나
-  `font-family`를 넣으면 잡히고, `.wb-shell-canvas-frame`에 넣으면 잡히지 않는다).
+  마지막 명령은 문서를 감싸는 네 상자만 본다. 배너·아웃라인처럼 **자기 글자만 갖는**
+  조각은 대상이 아니다(실측: 네 상자 중 어디에 `font-family`나 `color-scheme`을 넣어도
+  잡히고, `.wb-shell-canvas-error`에 넣으면 잡히지 않는다).
 */
 
 .wb-shell {
@@ -232,6 +241,52 @@
   color: var(--wb-shell-muted);
 }
 
+/* 구조 트리(`panels/structure-tree.tsx`). 목록 표식과 기본 여백은 `<ul>`마다 지운다 —
+   메뉴 트리와 같은 이유(요소·자손 선택자를 쓸 수 없다)로 규칙을 클래스에 직접 건다.
+   메뉴 트리의 클래스를 함께 쓰지 않는 것은 둘의 줄 모양이 다르기 때문이다 — 한쪽이
+   바뀔 때 다른 쪽이 딸려 가지 않는다. */
+.wb-shell-structure {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.wb-shell-structure-list {
+  margin: 0;
+  padding-left: 12px;
+  list-style: none;
+}
+
+.wb-shell-structure-node {
+  display: block;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 3px 4px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+/* id가 없어 고를 수 없는 줄(`panels/structure-tree.tsx`). 누를 수 없다는 것이 보여야
+   한다 — 같은 모양인데 반응만 없으면 고장으로 읽힌다. */
+.wb-shell-structure-broken {
+  display: block;
+  padding: 3px 4px;
+  color: var(--wb-shell-muted);
+  font-style: italic;
+}
+
+/* 선택된 노드. 표시는 `aria-current`가 갖고 색은 여기서 나온다. */
+.wb-shell-structure-node[aria-current='true'] {
+  background: var(--wb-shell-accent);
+  color: #fff;
+}
+
 .wb-shell-canvas {
   grid-area: canvas;
   min-width: 0;
@@ -250,6 +305,52 @@
   box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
 }
 
+/* 문서를 담는 상자. `position: relative`인 것은 선택 아웃라인이 이 상자를 기준으로
+   자리를 잡기 때문이다(`canvas/canvas.tsx`의 `measure`). `min-height: inherit`은 문서가
+   짧아도 상자가 프레임의 최소 높이만큼 남게 한다 — 그래야 문서 아래의 빈 자리를 눌러
+   선택을 풀 수 있다. 상속되는 속성은 여기 걸지 않는다(머리말 4번). */
+.wb-shell-canvas-surface {
+  position: relative;
+  min-height: inherit;
+}
+
+/* 선택 아웃라인. 문서 노드 위에 겹쳐 그리되 **노드를 건드리지 않는다**(머리말 5번).
+   자리는 자바스크립트가 인라인 style로 넣는다 — 노드마다 달라지는 값이라 CSS로 쓸 수 없다. */
+.wb-shell-selection {
+  position: absolute;
+  outline: 2px solid var(--wb-shell-accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+  /* 아래의 노드가 그대로 눌려야 한다. 이것이 없으면 선택한 노드를 다시 누를 수 없다. */
+  pointer-events: none;
+}
+
+/* 그리지 못한 노드를 알리는 배너. 프레임 안(문서 위)에 둔 것은 어느 문서의 이야기인지가
+   자리로 보이기 때문이다. 문서의 형제라 아래 글꼴·글자색이 문서로 새지 않는다. */
+.wb-shell-canvas-error {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0c6c6;
+  background: #fff5f5;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #a11;
+}
+
+.wb-shell-canvas-error-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.wb-shell-canvas-error-list {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.wb-shell-canvas-error-item {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 .wb-shell-panel {
   grid-area: panel;
   color-scheme: light;
@@ -261,12 +362,41 @@
   color: var(--wb-shell-ink);
 }
 
-.wb-shell-placeholder {
-  margin: 0;
-  padding: 12px;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+/* 속성 패널(`panels/property-panel.tsx`). 머리에는 선택 노드의 컴포넌트 타입이 온다. */
+.wb-shell-panel-title {
+  margin: 0 0 8px;
   font-size: 13px;
-  color: #98a1ad;
+  font-weight: 600;
+}
+
+/* 고를 노드가 없거나 그릴 속성이 없을 때의 문장. */
+.wb-shell-panel-notice {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-props {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* 속성 한 줄. 라벨과 값을 좌우로 둔다. */
+.wb-shell-prop {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--wb-shell-line);
+}
+
+.wb-shell-prop-label {
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-prop-value {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 /* 셸에 이르지 못한 화면(조회 중·조회 실패). 레이아웃이 아직 없으므로 문서 흐름 그대로 둔다. */

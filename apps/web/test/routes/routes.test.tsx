@@ -34,6 +34,8 @@ function renderAt(route: string): void {
       // 메서드는 `fakeApi`가 던지므로 트리와 캔버스가 오류 화면이 된다 — 그러면 아래
       // 단언이 "라우트가 잡혔다"가 아니라 "오류가 떴다"를 보게 된다.
       getTree: async () => [],
+      // 문서 안에 `pageId`를 심는다. 캔버스가 그리는 것은 제목이 아니라 **문서**이므로
+      // (태스크 9), "어느 페이지가 열렸는가"를 화면에서 읽으려면 문서에 실려 있어야 한다.
       getPage: async (_projectId, pageId) => ({
         id: pageId,
         menuNodeId: 'm-1',
@@ -42,7 +44,16 @@ function renderAt(route: string): void {
         sortOrder: 0,
         schemaVersion: 1,
         headSeq: 1,
-        schema: { version: 1, root: { id: 'n_00000000000a', type: 'Page', children: [] } },
+        schema: {
+          version: 1,
+          root: {
+            id: 'n_00000000000a',
+            type: 'Page',
+            children: [
+              { id: 'n_00000000000b', type: 'Text', props: { content: `페이지 ${pageId}` } },
+            ],
+          },
+        },
       }),
     }),
     route,
@@ -66,8 +77,10 @@ describe('라우트 표', () => {
     renderAt('/projects/p-1/pages/pg-2')
 
     await screen.findByRole('heading', { name: '설계서 p-1' })
-    // 캔버스는 `pageId`로 문서를 받아 온 **뒤에** 그 자리를 그린다. 조회가 끝날 때까지
-    // 기다려야 하는 것은 그래서다.
+    // 캔버스는 `pageId`로 문서를 받아 온 **뒤에** 그린다. 조회가 끝날 때까지 기다려야
+    // 하는 것은 그래서다. 이 문자열은 가짜가 문서에 심어 둔 `Text` 노드의 내용이라,
+    // 화면에 나왔다는 것은 `pageId`가 조회까지 갔고 그 응답이 렌더러를 지나 그려졌다는
+    // 뜻이다.
     await screen.findByText('페이지 pg-2')
     expect(currentPath()).toBe('/projects/p-1/pages/pg-2')
   })

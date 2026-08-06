@@ -1,0 +1,176 @@
+/**
+ * 캔버스·구조 트리·속성 패널 테스트의 공통 배선.
+ *
+ * 세 화면 모두 **`<App />`을 라우트째로 렌더해서** 본다. 셸을 떼어 내고 스토어를 직접
+ * 쥐면 케이스가 짧아지지만, 그러면 조회가 실패한 화면 위에서도 단언이 통과한다 — 이
+ * 브랜치에서 실제로 난 사고다(`routes/editor-shell.test.tsx` 머리말). 그래서
+ * `openPage()`는 **성공 대역에서만 나오는 것 둘**을 차례로 기다린다.
+ *
+ * 1. 프로젝트 이름(`getProject`가 성공해야 나온다)
+ * 2. 문서 루트의 `data-wb-id`(`getPage`가 성공해 스토어에 실려야 나온다)
+ *
+ * 기다리는 일을 `findBy*`·`waitFor`로만 하는 것도 의도다. 두 함수는 RTL의
+ * `asyncWrapper`를 지나므로 `test/setup.ts`가 얹은 `act` 한 칸을 함께 받는다 —
+ * 직접 만든 폴링(`while` + `await Promise.resolve()`)으로 바꾸면 구독이 붙기 전에
+ * 헬퍼가 돌아와 클릭이 조용히 무시되는 그 함정에 다시 빠진다(그 파일 주석 참고).
+ *
+ * **스토어를 보는 단언에 쓰는 `shellStore()`는 여기 없다.** `vi.mock`은 그것이 적힌
+ * 파일에서만 호이스팅되므로(실측: 이 파일에 두고 테스트에서 import하면 import 순서에
+ * 따라 mock이 늦게 걸려 셸이 진짜 `EditorStore`를 만든다), 필요한 테스트 파일이 각자
+ * 갖는다.
+ */
+import { screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { CURRENT_DOCUMENT_VERSION, type PageDocument, type WbNode } from '@wirebound/schema'
+import { App } from '../src/app'
+import { ApiError } from '../src/api/client'
+import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../src/api/types'
+import { fakeApi, renderWithProviders } from './helpers'
+
+const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
+
+/** 성공한 `getProject`에서만 화면에 나오는 문자열. 셸이 떴다는 증거로 쓴다. */
+export const PROJECT_NAME = '관리자 콘솔 설계서'
+
+export const PROJECT_ID = 'p-1'
+export const PAGE_ID = 'pg-1'
+export const OTHER_PAGE_ID = 'pg-2'
+export const OTHER_PAGE_TITLE = '회원 상세'
+
+export const PROJECT_ROUTE = `/projects/${PROJECT_ID}`
+export const PAGE_ROUTE = `${PROJECT_ROUTE}/pages/${PAGE_ID}`
+
+/** 서버가 준 `headSeq`. 이 값이 스토어로 들어가는지는 태스크 8의 케이스가 본다. */
+const HEAD_SEQ = 7
+
+const PROJECT: ProjectDetail = {
+  id: PROJECT_ID,
+  name: PROJECT_NAME,
+  slug: 'admin-console',
+  description: '내부 운영 도구',
+  role: 'owner',
+}
+
+/** 페이지 둘. 두 번째는 "다른 페이지로 옮기면 …" 케이스가 쓴다. */
+const TREE: TreeMenuNode[] = [
+  {
+    id: 'mn-1',
+    title: '회원관리',
+    sortOrder: 1,
+    pages: [
+      { id: PAGE_ID, title: '회원 목록', sortOrder: 1 },
+      { id: OTHER_PAGE_ID, title: OTHER_PAGE_TITLE, sortOrder: 2 },
+    ],
+    children: [],
+  },
+]
+
+/** 문서 봉투. 버전은 스키마가 가진 현재 값을 그대로 쓴다 — 마이그레이션은 이 태스크 밖이다. */
+export function pageDoc(root: WbNode): PageDocument {
+  return { version: CURRENT_DOCUMENT_VERSION, root }
+}
+
+function pageDetail(pageId: string, schema: PageDocument): PageDetail {
+  return {
+    id: pageId,
+    menuNodeId: 'mn-1',
+    title: pageId === PAGE_ID ? '회원 목록' : OTHER_PAGE_TITLE,
+    description: null,
+    sortOrder: 1,
+    schemaVersion: schema.version,
+    headSeq: HEAD_SEQ,
+    schema,
+  }
+}
+
+export interface EditorOptions {
+  /** `pageId` → 문서. 여기 없는 페이지를 열면 가짜가 404로 답한다. */
+  docs?: Record<string, PageDocument>
+  /** 라우터의 시작 위치. 생략하면 `pg-1`이 열린 주소다. */
+  route?: string
+  /** 라우터 안에 함께 놓을 것(주소를 바꾸는 버튼 등). */
+  children?: ReactNode
+}
+
+/** 셸을 렌더하기만 한다. 성공 대역을 기다리는 것은 호출자 몫이다. */
+export function renderEditor(options: EditorOptions = {}): void {
+  const docs = options.docs ?? {}
+
+  renderWithProviders(
+    <>
+      <App />
+      {options.children}
+    </>,
+    {
+      client: fakeApi({
+        me: async () => USER,
+        getProject: async () => PROJECT,
+        getTree: async () => TREE,
+        getPage: async (_projectId, pageId) => {
+          const schema = docs[pageId]
+          // 스텁하지 않은 페이지를 여는 것은 테스트의 실수다. 빈 문서를 돌려주면 그 실수가
+          // "문서가 없는 화면"으로 위장된다(`fakeApi`가 스텁 안 된 메서드에서 던지는 것과
+          // 같은 이유).
+          if (schema === undefined) {
+            throw new ApiError(404, 'not-found', `가짜에 없는 페이지입니다: ${pageId}`)
+          }
+          return pageDetail(pageId, schema)
+        },
+      }),
+      route: options.route ?? PAGE_ROUTE,
+    },
+  )
+}
+
+/**
+ * `pg-1`에 `doc`을 실어 셸을 열고 **성공 대역까지** 기다린다. 돌아온 시점에 문서는
+ * 스토어에 있고 캔버스에 그려져 있다.
+ */
+export async function openPage(doc: PageDocument, options: EditorOptions = {}): Promise<void> {
+  renderEditor({ ...options, docs: { [PAGE_ID]: doc, ...options.docs } })
+
+  await screen.findByRole('heading', { name: PROJECT_NAME })
+  await waitForNode(doc.root.id)
+}
+
+/** 캔버스에 그려진 노드의 엘리먼트. 폴백도 `data-wb-id`를 그대로 달고 있어 같이 잡힌다. */
+export function nodeElement(nodeId: string): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>(`[data-wb-id="${nodeId}"]`)
+}
+
+/** 있어야 하는 노드. 없으면 그 자리에서 요란하게 깨진다. */
+export function requireNode(nodeId: string): HTMLElement {
+  const element = nodeElement(nodeId)
+  if (element === null) throw new Error(`캔버스에 노드가 없습니다: ${nodeId}`)
+  return element
+}
+
+/** 노드가 캔버스에 나타날 때까지 기다린다. */
+export async function waitForNode(nodeId: string): Promise<HTMLElement> {
+  return waitFor(() => requireNode(nodeId))
+}
+
+/** 캔버스 프레임. 뷰포트 폭·줌이 실제 치수로 이어졌는지 보는 자리다(태스크 7과 같은 방식). */
+export function canvasFrame(): HTMLElement {
+  const frame = screen
+    .getByRole('main', { name: '캔버스' })
+    .querySelector<HTMLElement>('.wb-shell-canvas-frame')
+  if (frame === null) throw new Error('캔버스 프레임을 찾지 못했습니다')
+  return frame
+}
+
+/**
+ * 문서를 품은 상자. 노드가 없는 자리를 누르는 케이스가 쓴다. 클래스로 찾는 것은
+ * `canvasFrame()`과 같은 이유다 — 이름을 붙일 까닭이 없는 요소이고, 클래스가 바뀌면
+ * 여기서 `null`이 되어 요란하게 깨진다.
+ */
+export function canvasSurface(): HTMLElement {
+  const surface = canvasFrame().querySelector<HTMLElement>('.wb-shell-canvas-surface')
+  if (surface === null) throw new Error('캔버스 표면을 찾지 못했습니다')
+  return surface
+}
+
+/** 선택 아웃라인. 어느 노드에 붙었는지는 `data-wb-selected-id`가 말한다. */
+export function selectionOutline(): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>('[data-wb-selected-id]')
+}

@@ -18,7 +18,10 @@ import { useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import type { ProjectDetail } from '../api/types'
+import { Canvas } from '../canvas/canvas'
 import { MenuTree } from '../panels/menu-tree'
+import { PropertyPanel } from '../panels/property-panel'
+import { StructureTree } from '../panels/structure-tree'
 import { EditorStore, VIEWPORT_PRESETS, type ViewportWidth } from '../store/editor-store'
 import {
   EditorStoreProvider,
@@ -160,7 +163,11 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             요소를 접근성 트리에서 빼므로 두 구현 모두 같은 단언을 통과한다(실측:
             이 자리를 `hidden` 방식으로 바꿔도 10케이스가 전부 통과했다). 테스트가
             지키는 것은 "접힌다"는 사용자가 보는 성질이고, 방식은 여기 적힌 이유다. */}
-        {mode === 'edit' && <ShellRegion className="wb-shell-region" name="구조 트리" />}
+        {mode === 'edit' && (
+          <ShellRegion className="wb-shell-region" name="구조 트리">
+            <StructureTree />
+          </ShellRegion>
+        )}
       </nav>
 
       <main className="wb-shell-canvas" aria-label="캔버스">
@@ -168,7 +175,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
       </main>
 
       <aside className="wb-shell-panel" aria-label="속성 패널">
-        <p className="wb-shell-placeholder">태스크 9가 채운다</p>
+        <PropertyPanel />
       </aside>
     </div>
   )
@@ -240,14 +247,25 @@ type PageLoadState =
  * 조회 중이다(`loading`), 조회가 실패했다(`failed`). 태스크 9가 그 셋을 갈라 그려야 하면
  * 스토어가 아니라 이 컴포넌트의 `PageLoadState`를 봐야 한다.
  *
- * **프레임 안쪽에는 셸의 클래스를 붙이지 않는다** — 그 안은 P4a의 테마 CSS가 전담한다
- * (설계 D7). 그래서 아래 안내 문단들에 클래스가 없고, 스타일도 없다. 셸이 글꼴·글자색을
- * 걸어 두면 상속으로 프레임 안까지 내려가 테마가 정해야 할 값을 누른다 — 선택자를
- * 겨냥하지 않아도 새는 형태라 `shell.css`의 선택자 검사가 보지 못한다(그쪽에 속성
- * 이름을 보는 검사를 따로 두었다).
+ * **프레임 안쪽에는 문서를 겨냥하는 셸의 스타일이 없다** — 그 안은 P4a의 테마 CSS가
+ * 전담한다(설계 D7). 그래서 아래 안내 문단들에 클래스가 없고, 스타일도 없다. 셸이
+ * 글꼴·글자색을 걸어 두면 상속으로 프레임 안까지 내려가 테마가 정해야 할 값을 누른다 —
+ * 선택자를 겨냥하지 않아도 새는 형태라 `shell.css`의 선택자 검사가 보지 못한다(그쪽에
+ * 속성 이름을 보는 검사를 따로 두었다).
  *
- * 태스크 9는 아래 `ready` 자리(지금은 자리 표시자 한 줄)를 스토어의 문서를 그리는
- * 렌더러로 바꾼다. 나머지 세 자리(안내·로딩·오류)는 그대로 쓰면 된다.
+ * **태스크 9에서 프레임 안에 셸의 클래스가 셋 생겼다**(`canvas/canvas.tsx`): 문서를 감싸는
+ * 상자와, 문서 **옆에** 그려지는 선택 아웃라인·오류 배너다. 셋 다 문서 노드를 겨냥하지
+ * 않고, 상속되는 속성도 걸지 않는다 — `shell.css` 머리말의 검사 셋이 프레임과 그 상자까지
+ * 함께 본다.
+ *
+ * `ready` 분기만 문서를 그린다. 나머지 세 자리(안내·로딩·오류)에는 그릴 문서가 없다 —
+ * 스토어의 문서가 비어 있다는 것은 그 셋 중 하나라는 뜻이므로(위), 스토어만 보고는
+ * 어느 쪽인지 알 수 없다.
+ *
+ * **이 게이트는 지금 어떤 케이스도 지키지 않는다**(실측: 게이트를 없애고 `<Canvas />`를
+ * 늘 그려도 `apps/web` 131케이스가 전부 통과한다). 그래도 두는 것은, 통과하는 이유가
+ * "위의 성질이 지켜지고 있어서"이기 때문이다 — 그 셋에서는 스토어의 문서가 비어 있어
+ * 캔버스가 아무것도 그리지 않는다. 성질이 깨지는 날 이 게이트가 마지막 방벽이다.
  */
 function CanvasFrame(props: { projectId: string; pageId: string | undefined }): ReactElement {
   const api = useApi()
@@ -333,7 +351,7 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
           조회가 시작될 때 스토어의 문서를 비웠기 때문이다 — 앞 페이지의 문서를 오류 문장
           밑에 그리면 어느 페이지를 보고 있는지 알 수 없다. */}
       {state.status === 'failed' && <p role="alert">{state.message}</p>}
-      {state.status === 'ready' && <p>페이지 {pageId}</p>}
+      {state.status === 'ready' && <Canvas />}
     </div>
   )
 }
