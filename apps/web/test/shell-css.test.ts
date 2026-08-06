@@ -63,6 +63,13 @@ const PLANTED: { css: string; check: CheckName }[] = [
 
   // 검사가 읽지 못하는 형태를 조용히 지나가지 않는다.
   { css: '@font-face { font-family: x; src: url(x.woff2); }', check: 'unreadable' },
+
+  // `@keyframes`를 건너뛰되 **그 뒤를 계속 읽는다.** 건너뛰기가 스캔을 멈추는 형태로
+  // 구현되면 그 아래 전부가 검사 밖에 놓인다.
+  {
+    css: '@keyframes wb-shell-spin { from { opacity: 0 } }\n.wb-shell-canvas-frame { font-family: serif }',
+    check: 'wrapper-property',
+  },
 ]
 
 /**
@@ -85,6 +92,13 @@ const ALLOWED: string[] = [
   '.wb-shell-title,\n.wb-shell-tools { color: red; }',
   // 안에 규칙을 품는 at-rule은 안으로 들어가서 본다.
   '@media (min-width: 800px) { .wb-shell-canvas-frame { margin: 0 auto; } }',
+  // `@keyframes` 안의 `from`·`to`·`50%`는 선택자가 아니다. 규칙으로 세면 정당한 CSS가
+  // `` `.wb-shell…`로 시작하지 않는다 ``로 막힌다(수정 전 실측: 2건).
+  '@keyframes wb-shell-spin { from { opacity: 0 } to { opacity: 1 } }',
+  '@keyframes wb-shell-pulse { 0% { opacity: 0 } 50% { opacity: .5 } 100% { opacity: 1 } }',
+  '@-webkit-keyframes wb-shell-spin { from { opacity: 0 } to { opacity: 1 } }',
+  // `@media` 안에 든 것도 같다. 수정 전 실측: 1건.
+  '@media (min-width: 900px) { @keyframes wb-shell-fade { from { opacity: 0 } to { opacity: 1 } } }',
 ]
 
 describe('shell.css D7 검사', () => {

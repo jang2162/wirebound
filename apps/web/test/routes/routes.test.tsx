@@ -13,11 +13,16 @@ const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터
  * 잡혔고 경로 파라미터가 풀렸다는 뜻이다.
  *
  * **거기까지다.** 가짜가 돌려주는 `설계서 ${projectId}`는 경로 파라미터만으로 만들 수
- * 있는 문자열이라, 셸이 조회 결과를 버리고 경로 id로 제목을 지어도 아래 두 케이스는
- * 통과한다(실측: 셸이 `project.name` 대신 `props.project.id`를 찍게 바꾸면
- * `editor-shell.test.tsx` 8케이스가 죽고 여기 둘은 산다). "이름이 조회 결과에서 왔다"를
- * 지키는 것은 경로로 만들 수 없는 이름을 쓰는 `editor-shell.test.tsx`의
- * `프로젝트 이름이 셸에 보인다`다.
+ * 있는 문자열이라, **셸이 조회 결과를 통째로 버리고 경로의 id로 제목을 지어도** 아래 두
+ * 케이스는 통과한다.
+ *
+ * 그것을 재는 변이는 `` 셸의 제목을 {`설계서 ${경로의 projectId}`} 로 바꾸기 ``다(실측:
+ * `editor-shell.test.tsx`의 케이스들이 죽고 **여기 둘은 산다**). 앞 라운드의 주석은 그
+ * 변이를 `props.project.id`로 적었는데 **그것은 재현되지 않는다** — 그렇게 바꾸면 제목이
+ * `p-1`이 되어 여기 둘도 함께 죽는다. 결론은 같지만 변이가 달랐다.
+ *
+ * "이름이 조회 결과에서 왔다"를 지키는 것은 경로로 만들 수 없는 이름을 쓰는
+ * `editor-shell.test.tsx`의 `프로젝트 이름이 셸에 보인다`다.
  */
 function renderAt(route: string): void {
   renderWithProviders(<App />, {

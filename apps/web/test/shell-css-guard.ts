@@ -25,7 +25,32 @@
  *   그 목록은 `canvas/canvas.tsx`·`routes/editor.tsx`가 무엇을 감싸는지에 매여 있고,
  *   검사가 스스로 알아낼 방법이 없다.
  * - 주석 걷기를 속이는 형태. 주석 여는 기호가 CSS 문자열 안에 들어 있으면 파서가 거기서
- *   부터 잘못 읽는다. 지금 파일에는 CSS 문자열 자체가 없다.
+ *   부터 잘못 읽는다. **지금 파일의 CSS 문자열에는 중괄호도 주석 기호도 없다** — 문자열
+ *   자체는 10줄에 있다(`grid-template-areas`의 두 줄, `'Segoe UI'` 다섯 줄, 속성 선택자
+ *   세 줄). 즉 오늘 파서를 속이는 것이 없을 뿐, 문자열을 다루지 않아도 되는 것은 아니다.
+ *   흔한 형태(`content: "{"`)에서는 `unreadable`을 내고 **거기서 스캔을 멈춘다** — 조용히
+ *   지나가지는 않지만 그 뒤의 위반은 보고되지 않는다.
+ * - **CSS 중첩. 실질적인 사각이다.** 비-wrapper 규칙 안의 중첩은 완전히 보이지 않는다
+ *   (실측: `.wb-shell-header { .planted { color: blue } }`·`{ & div { … } }`·
+ *   `{ @media (…) { … } }` 전부 **0건**). 감싸는 상자 넷 안의 중첩은 `checkWrapperBody`가
+ *   선언 파서로 훑다가 우연히 걸리지만 메시지가 틀린 말을 한다. 그리고
+ *   `.wb-shell-header { & ~ .wb-shell-canvas * { font-family: serif } }`처럼 중첩 안에서
+ *   결합자로 문서까지 뻗으면 **진짜 D7 위반이 검사를 통과한다**(실측 0건). CSS 중첩은
+ *   오늘 브라우저에 다 있으므로 P4a·P4b가 쓰기 전에 닫아야 한다.
+ * - **`@import`.** 조용히 0건이다(실측: `@import url('other.css');`). `shell.css`가 다른
+ *   파일을 import하면 그 안의 규칙 전부가 검사 밖에 놓인다. `@font-face`를 fail-loud로
+ *   막은 것과 같은 이유로 막는 편이 일관된다.
+ * - **`@keyframes`의 이름과 그 안의 선언.** 통째로 건너뛴다(`scanRules`의 주석 — 거짓
+ *   양성을 없애려고 그렇게 뒀다). 애니메이션 이름에 `wb-shell-` 접두어가 있는지 보지
+ *   않는다.
+ *
+ * **거짓 양성으로 남겨 둔 것 둘**(잰 값이다):
+ *
+ * - 선언만 갖는 at-rule(`@font-face` 등)은 `unreadable`을 낸다. **설계된 fail-loud다** —
+ *   조용히 지나가면 그 안이 검사 밖에 놓이므로, 메시지가 "검사를 확장하고 나서 써라"라고
+ *   말한다.
+ * - 규칙이 하나도 없는 `@media (…) { }`도 같은 이유로 `unreadable`이 된다. 규칙 없는
+ *   미디어 쿼리는 죽은 코드라 실질적으로 무해하다.
  */
 
 /** 검사 이름. 어느 규칙이 물었는지가 실패 메시지와 양성 대조 표에 그대로 나온다. */
@@ -157,13 +182,24 @@ function scanRules(css: string, rules: Rule[], violations: Violation[]): void {
       const body = css.slice(index + 1, end)
 
       if (prelude.startsWith('@')) {
-        if (body.includes('{')) scanRules(body, rules, violations)
-        else
-          violations.push({
-            check: 'unreadable',
-            selector: normalize(prelude),
-            message: '이 at-rule은 검사가 다루지 않는다 — 검사를 확장하고 나서 써라',
-          })
+        // **`@keyframes`는 통째로 건너뛴다.** 안의 `from`·`to`·`50%`는 선택자가 아니라
+        // 키프레임 선택자인데, 그것을 규칙으로 세면 `` `.wb-shell…` 클래스로 시작하지
+        // 않는다 ``는 엉뚱한 말로 **정당한 CSS를 막는다**(실측: `@keyframes wb-shell-spin
+        // { from{…} to{…} }` 하나가 `selector-prefix` 2건을 냈다).
+        //
+        // 안의 선언이 문서로 새지 않는 것은 **애니메이션을 감싸는 상자에 걸 수 없기**
+        // 때문이다 — `animation`도 `animation-name`도 `WRAPPER_PROPERTIES`에 없어 그
+        // 자리에서 먼저 걸린다. 대신 **애니메이션 이름의 접두어는 보지 않는다**(아래
+        // 머리말의 못 보는 것 목록).
+        if (!isKeyframes(prelude)) {
+          if (body.includes('{')) scanRules(body, rules, violations)
+          else
+            violations.push({
+              check: 'unreadable',
+              selector: normalize(prelude),
+              message: '이 at-rule은 검사가 다루지 않는다 — 검사를 확장하고 나서 써라',
+            })
+        }
       } else if (prelude !== '') {
         rules.push({ prelude, body })
       }
@@ -182,6 +218,14 @@ function scanRules(css: string, rules: Rule[], violations: Violation[]): void {
 
     index += 1
   }
+}
+
+/**
+ * `@keyframes`인가. 뒤에 애니메이션 이름이 붙으므로 전체가 아니라 앞부분으로 본다.
+ * 벤더 접두어(`@-webkit-keyframes`)도 같이 잡는다.
+ */
+function isKeyframes(prelude: string): boolean {
+  return /^@(-[a-z]+-)?keyframes\b/i.test(prelude)
 }
 
 /** `open`의 `{`와 짝이 되는 `}`의 위치. 없으면 `-1`이다. */

@@ -39,7 +39,9 @@ describe('useEditorStore', () => {
     //
     // 아래 두 단언은 마운트 렌더가 1회인 것과 기본 `zoom`이 React까지 흘러가는
     // 것도 함께 본다(실측: `initialState()`의 `zoom`을 0.75로 바꾸면 `getByText`가
-    // 죽는다). 같은 것만 보던 별도 프로브가 있었으나 어떤 변이도 잡지 못해 지웠다.
+    // 죽는다). 같은 것만 보던 별도 프로브가 있었으나 **태스크 6의 변이 표 20개 어디에서도**
+    // 잡히지 않아 지웠다 — 바로 위의 `zoom 0.75` 변이는 표 밖의 것이고, 그 변이에서는
+    // 지운 프로브도 죽었다.
     const store = new EditorStore()
     let renders = 0
     function Probe(): ReactElement {
