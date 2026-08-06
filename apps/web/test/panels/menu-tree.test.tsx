@@ -8,8 +8,9 @@
  * 이름표(`메뉴·페이지 트리`)와 랜드마크는 두 조회가 실패해도 남으므로 증거가 되지 못한다.
  *
  * 실측(`apps/web/test` 전량): 아래 기본 가짜의 `getTree`를 실패하게 바꾸면 **이 파일의
- * 13케이스 중 11이 죽는다.** 살아남는 것은 자기 손으로 `getTree`를 실패시키는 둘
- * (`트리 조회에 실패하면…`·`서버가 이유를 주지 않으면…`)뿐이고, 다른 파일은 하나도 죽지 않는다.
+ * 14케이스 중 12가 죽는다**(전부 `openEditor()`의 `findByText('회원관리')`에서). 살아남는
+ * 것은 자기 손으로 `getTree`를 실패시키는 둘(`트리 조회에 실패하면…`·`서버가 이유를
+ * 주지 않으면…`)뿐이고, 다른 파일은 하나도 죽지 않는다.
  *
  * 케이스를 번호로 부르지 않는다 — 사이에 하나를 끼워 넣는 순간 그 번호를 적은 주석이
  * 전부 거짓이 되기 때문이다(이 파일에서 실제로 그렇게 됐다).
@@ -31,7 +32,7 @@ import { currentPath, fakeApi, renderWithProviders } from '../helpers'
  * **화면만 보는 단언으로는 "문서가 스토어에 실린다"를 지킬 수 없다.** 트리나 캔버스가
  * 받아온 문서를 자기 `useState`에 들고 그것으로 그리면 화면은 똑같이 움직인다. 실측:
  * `store.loadPage(...)`·`store.clearPage()` 대신 `CanvasFrame`의 로컬 `useState`에 문서와
- * `headSeq`를 담게 바꾼 변이에서 **스토어를 직접 보는 네 케이스만 죽고 나머지 88케이스
+ * `headSeq`를 담게 바꾼 변이에서 **스토어를 직접 보는 다섯 케이스만 죽고 나머지 91케이스
  * (다른 11개 파일 포함)가 전부 통과했다.**
  * 화면만 보는 단언은 그 변이를 하나도 잡지 못한다는 뜻이다. 태스크 9의 캔버스는 문서를
  * 스토어에서 읽으므로, 여기서 못박지 않으면 배선이 끊긴 채로 다음 태스크가 시작된다.
@@ -90,6 +91,8 @@ const TREE_UNKNOWN_FAILURE = '메뉴를 불러오지 못했습니다'
 const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 /** 페이지를 고르지 않은 캔버스의 안내. 페이지를 떠난 뒤 이 대역으로 돌아왔다는 증거로 쓴다. */
 const NO_PAGE_NOTICE = '왼쪽 트리에서 페이지를 고르세요'
+/** 조회 중인 캔버스의 문장. **전환 중**을 실제로 관측했다는 증거로 쓴다. */
+const LOADING_NOTICE = '페이지를 불러오는 중…'
 
 /**
  * 트리 한 벌. **배열의 삽입 순서를 `sortOrder`와 일부러 어긋나게 둔다 — 세 자리 전부:**
@@ -336,6 +339,58 @@ describe('메뉴·페이지 트리', () => {
     expect(asked).toEqual([['p-1', 'pg-detail']])
   })
 
+  it('다른 페이지를 여는 동안 스토어에 앞 페이지의 문서가 남지 않는다', async () => {
+    // 두 번째 페이지의 응답을 붙잡아 둔다. 그래야 "주소는 새 페이지인데 아직 문서가 오지
+    // 않은" 창을 멈춰 세우고 그 안에서 스토어를 볼 수 있다. 붙잡지 않으면 조회가 즉시
+    // 끝나 이 창이 아예 관측되지 않는다.
+    let release: () => void = () => {
+      throw new Error('pg-detail 조회가 아직 시작되지 않았습니다')
+    }
+    await openEditor(
+      {
+        getPage: async (projectId, pageId) => {
+          asked.push([projectId, pageId])
+          const page = PAGES[pageId]
+          if (page === undefined) throw new Error(`가짜 서버가 모르는 페이지: ${pageId}`)
+          if (pageId !== 'pg-detail') return page
+          return new Promise<PageDetail>((resolve) => {
+            release = () => resolve(page)
+          })
+        },
+      },
+      '/projects/p-1/pages/pg-list',
+    )
+
+    // 성공 대역 증거: 앞 페이지는 실제로 실렸다. 이것이 없으면 애초에 문서를 싣지 않는
+    // 구현이 아래 `toBeNull()`을 그냥 통과한다.
+    await waitFor(() => {
+      expect(shellStore().getState().document).toBe(PAGES['pg-list']?.schema)
+    })
+    expect(shellStore().getState().headSeq).toBe(7)
+
+    fireEvent.click(screen.getByRole('link', { name: '회원 상세' }))
+
+    // **전환 중이라는 증거 둘.** 주소는 이미 새 페이지이고, 캔버스는 조회 대역이다.
+    // 둘 다 없으면 이 케이스는 "아직 클릭이 반영되지 않은 순간"을 재고 있을 수 있다.
+    expect(currentPath()).toBe('/projects/p-1/pages/pg-detail')
+    await within(canvas()).findByText(LOADING_NOTICE)
+
+    // 이 순간 스토어가 앞 페이지의 문서를 들고 있으면, 주소는 `pg-detail`인데 문서를
+    // 스토어에서 읽는 쪽(태스크 9의 캔버스·구조 트리·속성 패널)은 `pg-list`를 그린다.
+    // `headSeq`도 함께 본다 — P2b-2가 그 값을 `baseSeq`로 쓰므로, 남으면 앞 페이지의
+    // revision 위에서 새 페이지의 편집 요청이 만들어진다.
+    expect(shellStore().getState().document).toBeNull()
+    expect(shellStore().getState().headSeq).toBe(0)
+
+    // 그리고 붙잡아 둔 응답을 놓으면 새 페이지가 실린다 — **비우기만 하고 싣지 않는**
+    // 구현이 위 두 줄만으로는 통과한다.
+    release()
+    await waitFor(() => {
+      expect(shellStore().getState().document).toBe(PAGES['pg-detail']?.schema)
+    })
+    expect(shellStore().getState().headSeq).toBe(12)
+  })
+
   it('페이지를 떠나 pageId 없는 주소로 돌아오면 스토어의 문서가 비워진다', async () => {
     await openEditor({}, '/projects/p-1', <Back />)
 
@@ -387,8 +442,10 @@ describe('메뉴·페이지 트리', () => {
 
     fireEvent.click(screen.getByRole('link', { name: '회원 상세' }))
 
-    // **실패 대역이 실제로 그려졌다는 증거를 먼저 세운다.** 스토어만 보면 "실패해서
-    // 비웠다"와 "조회를 시작할 때 비웠고 아직 응답이 안 왔다"를 구분할 수 없다.
+    // **실패 대역이 실제로 그려졌다는 증거를 먼저 세운다.** 화면이 비우는 자리는 조회
+    // **시작** 시점이므로, 이것이 없으면 이 케이스는 "비웠고 아직 응답이 안 왔다"까지만
+    // 재고 **실패한 뒤에 앞 페이지의 문서를 되살려 놓는** 구현을 놓친다. 바로 위
+    // `다른 페이지를 여는 동안…`이 그 앞 창을, 여기가 그 뒤를 맡는다.
     await screen.findByText(PAGE_MESSAGE)
     within(canvas()).getByText(PAGE_MESSAGE)
 
@@ -468,9 +525,18 @@ describe('메뉴·페이지 트리', () => {
     // 에러가 뜨는 자리는 캔버스다.
     within(canvas()).getByText(PAGE_MESSAGE)
     // 트리는 남는다. **`getPage` 실패를 화면 전체 에러로 만든 구현은 이 줄에 닿지 못하고
-    // `openEditor()`에서 먼저 죽는다** — 셸 대신 오류 화면이 뜨면 프로젝트 이름이 사라지기
-    // 때문이다(실측: 그 변이에서 이 케이스는 `openEditor()`의 `findByRole('heading')`에서
-    // 죽었다). 이 단언이 잡는 것은 **셸은 남기고 트리 자리만 지운** 구현이다.
+    // `openEditor()`에서 먼저 죽는다** — 셸 대신 오류 화면이 뜨면 `openEditor()`가 기다리는
+    // 성공 대역의 증거 둘(프로젝트 이름·메뉴 제목)이 함께 사라지기 때문이다.
+    //
+    // **둘 중 어느 줄에서 죽는지는 그 구현을 어떻게 쓰느냐에 달렸다.** 실측 둘: 조회
+    // 자체를 셸의 이펙트로 올린 변이는 `findByRole('heading')`에서, 실패만 셸로 올린
+    // 변이(셸이 한 번 뜬 뒤 오류로 바뀐다)는 `findByText('회원관리')`에서 죽는다.
+    // 변이를 가로질러 변하지 않는 것은 **여기까지 오지 못한다**는 것뿐이라 그것만 적는다.
+    //
+    // 이 단언이 잡는 것은 **셸은 남기고 트리의 `region` 랜드마크만 지운** 구현이다
+    // (실측: 트리의 `<section aria-label>`을 `<div>`로 바꾸면 이 케이스는 `treeRegion()`
+    // 자신에서 죽는다). "트리 자리"라고만 적으면 "트리의 내용을 지운다"로도 읽히는데,
+    // 그 구현에서는 `openEditor()`가 먼저 죽어 이 줄이 발화하지 않는다.
     within(treeRegion()).getByRole('link', { name: '회원 목록' })
     // 한 줄이 아니라 트리 전체가 남았다. 순서까지 보지 않는 것은 그것이
     // `sortOrder 순서대로 그린다`의 몫이기 때문이다 — 여기서 함께 보면 정렬을 깨뜨렸을 때

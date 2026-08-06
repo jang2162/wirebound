@@ -65,6 +65,64 @@ describe('EditorStore', () => {
     expect(store.getState().selectedNodeId).toBeNull()
   })
 
+  it('clearPage는 문서·headSeq·선택을 비운다', () => {
+    const store = new EditorStore()
+    store.loadPage(doc('n_a'), 9)
+    store.selectNode('n_a')
+
+    store.clearPage()
+
+    expect(store.getState().document).toBeNull()
+    // `headSeq`를 함께 본다 — P2b-2가 그 값을 `baseSeq`로 쓰므로, 문서만 비우고 seq를
+    // 남기면 열린 페이지 없이 편집 요청이 만들어진다.
+    expect(store.getState().headSeq).toBe(0)
+    // 노드 id는 문서 안에서만 뜻이 있다. 문서를 비웠는데 선택이 남으면 존재하지 않는
+    // 노드를 가리킨다(`loadPage`가 선택을 지우는 것과 같은 이유다).
+    expect(store.getState().selectedNodeId).toBeNull()
+  })
+
+  it('clearPage는 모드·줌·뷰포트 폭을 남긴다', () => {
+    const store = new EditorStore()
+    // 셋 다 초기값과 다르게 둔다. 초기값 그대로면 통째로 초기화하는 구현도 통과한다.
+    store.loadPage(doc('n_a'), 9)
+    store.setMode('view')
+    store.setZoom(2)
+    store.setViewportWidth(375)
+
+    store.clearPage()
+
+    // 보기 설정은 페이지가 아니라 보는 사람에게 매인 값이다. 페이지를 닫았다고 되돌리면
+    // 사용자가 맞춰 둔 화면이 이유 없이 초기화된다. **`reset`과 갈리는 자리가 여기다** —
+    // 위 `reset은 초기 상태로 돌린다`가 반대쪽을 지킨다.
+    expect(store.getState().mode).toBe('view')
+    expect(store.getState().zoom).toBe(2)
+    expect(store.getState().viewportWidth).toBe(375)
+  })
+
+  it('clearPage는 이미 비어 있으면 알리지 않는다', () => {
+    const store = new EditorStore()
+    const listener = vi.fn()
+    store.subscribe(listener)
+    const empty = store.getState()
+
+    // 문서가 없는 상태에서 부르는 것은 변경이 아니다. 화면이 페이지를 열 때마다
+    // 조회 시작 시점에 이것을 부르므로(`routes/editor.tsx`의 `CanvasFrame`), 여기서
+    // 매번 알리면 스토어를 구독하는 쪽이 페이지마다 헛일을 한다.
+    store.clearPage()
+    expect(listener).not.toHaveBeenCalled()
+    // 참조까지 본다 — 값이 같은 새 객체로 교체해도 `useSyncExternalStore`는 바뀐 것으로 본다.
+    expect(store.getState()).toBe(empty)
+
+    store.loadPage(doc('n_a'), 3)
+    store.clearPage()
+    expect(listener).toHaveBeenCalledTimes(2)
+
+    const cleared = store.getState()
+    store.clearPage()
+    expect(listener).toHaveBeenCalledTimes(2)
+    expect(store.getState()).toBe(cleared)
+  })
+
   it('selectNode는 구독자에게 알린다', () => {
     const store = new EditorStore()
     const listener = vi.fn()
