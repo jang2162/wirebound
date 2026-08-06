@@ -53,7 +53,8 @@
  * **거짓 양성으로 남겨 둔 것**(전부 잰 값이다):
  *
  * - **selector 안의 이름이 스토어 필드가 아닐 때.** 페이지 필드와 같은 이름이 다른 것에
- *   붙어 있으면 걸린다 — `(s) => s.undoStack.at(-1)?.document`,
+ *   붙어 있으면 **인라인 selector에서** 걸린다(변수로 빼면 위 사각 첫 줄이라 0건이다) —
+ *   `(s) => s.undoStack.at(-1)?.document`,
  *   `(s) => s.pending.some((p) => p.headSeq < base)` 등 **다섯을 심어 다섯 다 걸리는 것을
  *   확인했다**(그 다섯이 부류의 전부라는 뜻은 아니다). 좁히는 판을 만들어 재봤고 **사각
  *   하나와 맞바꾸는 거래라 좁히지 않았다** — 수가 아니라 그 사각의 성질 때문이고, 근거는
@@ -162,10 +163,17 @@ export function findViolations(source: string): Violation[] {
  *
  * **selector 텍스트 안에서는 이름만으로 판정한다** — 그 이름이 무엇에 붙어 있는지 보지
  * 않는다. 이름만 보므로 구조 분해(`({ document }) => document`)·`as` 캐스팅·selector 안에서
- * 한 번 더 변수를 거치는 형태가 전부 함께 걸린다.
+ * 한 번 더 변수를 거치는 형태가 **인라인으로 쓰이는 한** 함께 걸린다(selector 자체를 밖으로
+ * 빼면 이름이 관문 안에 없다 — 위 사각 목록 첫 줄).
  *
  * **그 값으로 오탐이 난다** — 페이지 필드와 **같은 이름이 스토어가 아닌 것에 붙어 있는**
- * selector가 전부 걸린다. 심어서 잰 다섯(전부 `selector-page-field`):
+ * **인라인** selector가 걸린다. 인라인이라는 단서가 붙는 것은, 같은 selector를 변수나 함수로
+ * 빼서 넘기면 이름이 관문 안에 없어 **0건**이기 때문이다(실측: `const pick = (s) =>
+ * s.undoStack.at(-1)?.document` 뒤의 `useEditorStore(store, pick)`도, 같은 것을 `function
+ * pick(s) {…}`으로 쓴 판도 0건. 같은 것을 인라인으로 두면 각 1건이다). 그것은 위 사각
+ * 목록 첫 줄이 이미 못박은 형태이고, 오탐과 사각이 같은 자리에서 갈린다.
+ *
+ * 심어서 잰 다섯(전부 `selector-page-field`):
  *
  * ```ts
  * (s) => s.undoStack.at(-1)?.document        // P2b-2의 undo/redo에서 나올 모양이다
