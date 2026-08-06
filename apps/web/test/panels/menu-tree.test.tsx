@@ -8,14 +8,14 @@
  * 이름표(`메뉴·페이지 트리`)와 랜드마크는 두 조회가 실패해도 남으므로 증거가 되지 못한다.
  *
  * 실측(`apps/web/test` 전량): 아래 기본 가짜의 `getTree`를 실패하게 바꾸면 **이 파일의
- * 14케이스 중 12가 죽는다**(전부 `openEditor()`의 `findByText('회원관리')`에서). 살아남는
+ * 15케이스 중 13이 죽는다**(전부 `openEditor()`의 `findByText('회원관리')`에서). 살아남는
  * 것은 자기 손으로 `getTree`를 실패시키는 둘(`트리 조회에 실패하면…`·`서버가 이유를
  * 주지 않으면…`)뿐이고, 다른 파일은 하나도 죽지 않는다.
  *
  * 케이스를 번호로 부르지 않는다 — 사이에 하나를 끼워 넣는 순간 그 번호를 적은 주석이
  * 전부 거짓이 되기 때문이다(이 파일에서 실제로 그렇게 됐다).
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -32,7 +32,7 @@ import { currentPath, fakeApi, renderWithProviders } from '../helpers'
  * **화면만 보는 단언으로는 "문서가 스토어에 실린다"를 지킬 수 없다.** 트리나 캔버스가
  * 받아온 문서를 자기 `useState`에 들고 그것으로 그리면 화면은 똑같이 움직인다. 실측:
  * `store.loadPage(...)`·`store.clearPage()` 대신 `CanvasFrame`의 로컬 `useState`에 문서와
- * `headSeq`를 담게 바꾼 변이에서 **스토어를 직접 보는 다섯 케이스만 죽고 나머지 91케이스
+ * `headSeq`를 담게 바꾼 변이에서 **스토어를 직접 보는 여섯 케이스만 죽고 나머지 91케이스
  * (다른 11개 파일 포함)가 전부 통과했다.**
  * 화면만 보는 단언은 그 변이를 하나도 잡지 못한다는 뜻이다. 태스크 9의 캔버스는 문서를
  * 스토어에서 읽으므로, 여기서 못박지 않으면 배선이 끊긴 채로 다음 태스크가 시작된다.
@@ -388,6 +388,74 @@ describe('메뉴·페이지 트리', () => {
     await waitFor(() => {
       expect(shellStore().getState().document).toBe(PAGES['pg-detail']?.schema)
     })
+    expect(shellStore().getState().headSeq).toBe(12)
+  })
+
+  it('앞 페이지의 응답이 늦게 와도 새 페이지의 문서를 덮어쓰지 않는다', async () => {
+    // 위 케이스가 전환 **창**을 재는 것과 달리 여기는 전환이 **끝난 뒤**를 잰다.
+    // 두 페이지의 응답을 각각 붙잡아 두고 **순서를 어겨** 놓는다 — 뒤 페이지를 먼저,
+    // 앞 페이지를 나중에. 조회 두 건이 동시에 떠 있으면 서버가 요청 순서대로 답한다는
+    // 보장이 없으므로 실제로 나는 순서다.
+    const held: Record<string, (() => void) | undefined> = {}
+    function release(pageId: string): void {
+      const resolve = held[pageId]
+      if (resolve === undefined) throw new Error(`조회가 아직 시작되지 않았습니다: ${pageId}`)
+      resolve()
+    }
+
+    await openEditor(
+      {
+        getPage: async (projectId, pageId) => {
+          asked.push([projectId, pageId])
+          const page = PAGES[pageId]
+          if (page === undefined) throw new Error(`가짜 서버가 모르는 페이지: ${pageId}`)
+          return new Promise<PageDetail>((resolve) => {
+            held[pageId] = () => resolve(page)
+          })
+        },
+      },
+      '/projects/p-1/pages/pg-list',
+    )
+
+    // 앞 페이지의 조회가 떠 있고 아직 응답이 없다.
+    expect(asked).toEqual([['p-1', 'pg-list']])
+    await within(canvas()).findByText(LOADING_NOTICE)
+
+    fireEvent.click(screen.getByRole('link', { name: '회원 상세' }))
+
+    // **두 조회가 동시에 떠 있다는 증거.** 앞 페이지의 것을 아직 놓지 않았으므로 이 뒤에
+    // 오는 것이 진짜 "늦게 온 앞 페이지의 응답"이다.
+    expect(currentPath()).toBe('/projects/p-1/pages/pg-detail')
+    await waitFor(() => {
+      expect(asked).toEqual([
+        ['p-1', 'pg-list'],
+        ['p-1', 'pg-detail'],
+      ])
+    })
+
+    // 뒤 페이지가 먼저 도착한다. 여기까지가 양성 대조 — 새 페이지는 실제로 실렸다.
+    release('pg-detail')
+    await waitFor(() => {
+      expect(shellStore().getState().document).toBe(PAGES['pg-detail']?.schema)
+    })
+    expect(shellStore().getState().headSeq).toBe(12)
+
+    // 그리고 **뒤늦게** 앞 페이지의 응답이 온다.
+    release('pg-list')
+    // 그 응답이 화면 쪽까지 실제로 도달할 시간을 준다. `waitFor`로는 잴 수 없다 — 이미
+    // 참인 단언 앞에서는 한 번도 양보하지 않고 그대로 통과하므로, 늦은 응답이 닿기 전에
+    // 재고 끝날 수 있다. 매크로태스크를 하나 실제로 건너뛰면 그 사이 프라미스 연쇄는
+    // 전부 흘러간다.
+    await act(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0)
+      })
+    })
+
+    // 스토어는 여전히 **주소가 가리키는** 페이지의 것이다. 이것이 없으면 사용자는
+    // `pg-detail`의 주소·선택 표시 아래에서 `pg-list`의 문서를 편집하게 되고, P2b-2에서는
+    // 그 `headSeq: 7` 위에서 편집 요청이 만들어진다.
+    expect(shellStore().getState().document).toBe(PAGES['pg-detail']?.schema)
     expect(shellStore().getState().headSeq).toBe(12)
   })
 

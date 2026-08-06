@@ -93,7 +93,7 @@ describe('EditorStore', () => {
 
     // 보기 설정은 페이지가 아니라 보는 사람에게 매인 값이다. 페이지를 닫았다고 되돌리면
     // 사용자가 맞춰 둔 화면이 이유 없이 초기화된다. **`reset`과 갈리는 자리가 여기다** —
-    // 위 `reset은 초기 상태로 돌린다`가 반대쪽을 지킨다.
+    // 아래 `reset은 초기 상태로 돌린다`가 반대쪽을 지킨다.
     expect(store.getState().mode).toBe('view')
     expect(store.getState().zoom).toBe(2)
     expect(store.getState().viewportWidth).toBe(375)
