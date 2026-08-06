@@ -15,6 +15,12 @@
  * 없다). 그래서 검사도 그 둘만 본다. 이름이 같은 다른 것(`api/types.ts`의 `headSeq`,
  * `main.tsx`의 전역 `document`)에 걸리지 않는 이유가 그것이다 — 관문 안에서만 이름을 본다.
  *
+ * **걸렸으면 어디로 가야 하나.** `document`에는 오늘 길이 있다(`useOpenDocument`). **`headSeq`·
+ * `openPageId`에는 없다** — 그 훅은 `PageDocument | null`만 내주므로 **P2b-2는 `baseSeq`
+ * (= `headSeq`, 이월 문서 §3)를 읽는 순간 반드시 여기 걸린다.** 그때 할 일은 가드를 우회하는
+ * 것이 아니라 `src/store/use-editor-store.tsx`에 같은 대조를 하는 관문을 하나 더 두는
+ * 것이다. 자세한 것은 아래 `fixHint`에 있고, 위반 메시지가 그것을 그대로 말한다.
+ *
  * **이 검사가 보지 못하는 것**(고의로 열어 둔 것이 아니라, 심어서 재보니 0건이던 것):
  *
  * - **한 문에서 끝나지 않는 형태.** 셋을 심어 재보니 셋 다 0건이다 — 상태를 변수에 담고
@@ -22,22 +28,38 @@
  *   넘기기(`const pick = (s: EditorState) => s.document` → `useEditorStore(store, pick)`),
  *   상태를 함수 인자로 넘겨 그 안에서 읽기. 변수를 따라가려면 타입을 아는 도구가 필요하고,
  *   그것은 이 저장소에 없다.
- * - **필드 이름을 값으로 만드는 형태.** `store.getState()[key]`(실측 0건). 문자열 리터럴이
- *   아니면 이름이 소스에 남지 않는다.
+ * - **`getState()`와 필드 사이에 무엇이 끼는 형태.** 넷을 심어 재보니 넷 다 0건이다 —
+ *   `getState()?.document` · `getState()!.document` · `` getState()[`document`] `` ·
+ *   `const { document: { root } } = getState()`(중첩 구조 분해). 앞 셋은 심기 표가 잡는
+ *   `getState().document`와 **한 글자 차이**다. 원인은 아래 `checkGetState`의 정규식이
+ *   `)` 바로 뒤의 `.`과 `'`·`"` 키만 보고, 구조 분해 쪽은 `\{([^{}]*)\}`라 중괄호가
+ *   중첩되면 매칭되지 않는 것이다. **백틱은 리터럴이고 이름이 소스에 그대로 남는데도
+ *   안 잡힌다** — 이것을 못 보는 이유는 "이름이 남지 않아서"가 아니라 정규식이 두 따옴표만
+ *   열거해서다.
+ * - **필드 이름을 값으로 만드는 형태.** `store.getState()[key]`(실측 0건). 이쪽은 이름이
+ *   소스에 아예 남지 않으므로 텍스트 검사로 닿을 수 있는 형태가 아니다.
  * - **정규식 리터럴.** 주석 걷기가 `/`를 나눗셈으로 보므로 `/a\/\/b/` 같은 형태 뒤가
  *   잘못 읽힐 수 있다. 지금 `apps/web/src`에는 정규식 리터럴이 없어 **재지 못했다.**
  * - **제외한 파일 둘 안에서의 우회**(아래 `EXEMPT`). 그 둘은 규칙을 정의하는 곳이라
  *   대상에서 빼는데, 그래서 `use-editor-store.tsx`에 우회를 새로 심어도 조용하다.
  *   대신 그 파일 안에 우회 형태가 실제로 있다는 사실을 **양성 대조로** 쓴다.
  *
- * 잡는 형태는 심기 표가 열일곱 줄로 열거한다 — **그 표에 없는 형태가 안전하다는 뜻은
- * 아니다.**
+ * **이 목록이 사각의 전부라는 뜻이 아니다** — 심어서 잰 것만 적었다. 잡는 형태는 심기 표가
+ * 열일곱 줄로 열거하는데, 마찬가지로 **그 표에 없는 형태가 안전하다는 뜻은 아니다.**
+ * (`getState()` 쪽 정규식을 넓히는 것은 이월했다 — 지금 트리에 그 형태가 0건이라 오늘 새는
+ * 것이 없고, 넓히면 구분력을 새로 실증해야 한다.)
  *
- * **거짓 양성으로 남겨 둔 것**(잰 값이다): 문자열·템플릿 리터럴 **안에** 우회 모양이 있으면
- * 잡힌다(실측: 템플릿 안의 `${store.getState().document}`가 1건). 아래 `stripComments`가
- * 문자열의 내용을 남기기 때문인데, 그것은 `getState()['document']`의 이름을 살리려고 그런
- * 것이고 여기서는 부수 효과다. 템플릿 안의 그것은 진짜로 실행되는 코드이므로 잡히는 편이
- * 맞고, 실행되지 않는 문자열에 우회 모양을 적을 이유는 없다.
+ * **거짓 양성으로 남겨 둔 것**(전부 잰 값이다):
+ *
+ * - **selector 안의 이름이 스토어 필드가 아닐 때.** `(s) => s.pending.some((p) => p.headSeq
+ *   < base)`가 `selector-page-field`로 걸린다 — `headSeq`가 pending 항목의 프로퍼티인데도
+ *   그렇다. 좁히는 판을 만들어 재봤고 **사각 셋과 맞바꾸는 거래라 좁히지 않았다**(근거는
+ *   아래 `checkSelectors` 주석).
+ * - **문자열·템플릿 리터럴 안의 우회 모양.** 실측: 템플릿 안의
+ *   `${store.getState().document}`가 1건. 아래 `stripComments`가 문자열의 내용을 남기기
+ *   때문인데, 그것은 `getState()['document']`의 이름을 살리려고 그런 것이고 여기서는 부수
+ *   효과다. 템플릿 안의 그것은 진짜로 실행되는 코드이므로 잡히는 편이 맞고, 실행되지 않는
+ *   문자열에 우회 모양을 적을 이유는 없다.
  */
 
 /** 검사 이름. 어느 규칙이 물었는지가 실패 메시지와 심기 표에 그대로 나온다. */
@@ -85,6 +107,26 @@ export function isExempt(path: string): boolean {
 }
 
 /**
+ * 걸렸을 때 **합법적으로 갈 수 있는 길**. 가드가 길을 지목하지 못하면 다음 사람은 가드를
+ * 무력화한다 — 이월 문서가 경계한 자리가 정확히 그것이다.
+ *
+ * **`document`에는 오늘 그 길이 있다**(`useOpenDocument`). **`headSeq`·`openPageId`에는
+ * 없다** — 그 훅의 반환 타입은 `PageDocument | null`이라 나머지 둘을 내주지 않는다.
+ * 이월 문서 §3이 P2b-2의 `baseSeq`를 `headSeq`라고 못박았으므로, **P2b-2는 `baseSeq`를 읽는
+ * 순간 반드시 여기 걸린다.**
+ *
+ * 그때 할 일은 가드를 우회하는 것이 아니라 `src/store/use-editor-store.tsx`에 **같은 대조를
+ * 하는 관문을 하나 더 두는 것**이다(예: 문서와 `headSeq`를 함께 내주는 훅). 그 파일이 제외
+ * 대상인 이유가 그것이다 — 규칙을 정의하는 자리이므로 규칙을 넓히는 것도 거기서 한다.
+ * **훅을 지금 만들어 두지 않은 것은 쓸 자리가 아직 없어서다**(P2b-2가 그 모양을 정한다).
+ */
+function fixHint(name: string): string {
+  return name === 'document'
+    ? '주소와 대조하는 `useOpenDocument(pageId)`를 써라'
+    : `\`useOpenDocument\`는 문서만 내준다 — \`${name}\`가 필요하면 \`src/store/use-editor-store.tsx\`에 같은 대조를 하는 관문을 더해라(그 파일이 이 검사의 제외 대상인 이유다)`
+}
+
+/**
  * 파일 여럿을 한 번에. 키는 파일 경로, 값은 그 소스 전문이다. 빈 배열이면 우회가 없다.
  *
  * **파일이 하나도 없어도 빈 배열이 나온다** — 그래서 이 함수의 결과만으로는 검사가 일을
@@ -115,10 +157,25 @@ export function findViolations(source: string): Violation[] {
 /**
  * `useEditorStore(store, selector)`의 인자를 본다.
  *
- * **selector 텍스트 안에서는 이름만으로 판정한다.** 그 안에 `document`가 나오는 정당한
- * 이유가 없기 때문이다 — 전역 `document`를 selector 안에서 읽을 일도, `headSeq`라는 지역
- * 변수를 거기 둘 일도 없다. 이름만 보므로 구조 분해(`({ document }) => document`)도 같이
- * 걸린다.
+ * **selector 텍스트 안에서는 이름만으로 판정한다** — 그 이름이 무엇에 붙어 있는지 보지
+ * 않는다. 이름만 보므로 구조 분해(`({ document }) => document`)·`as` 캐스팅·selector 안에서
+ * 한 번 더 변수를 거치는 형태가 전부 함께 걸린다.
+ *
+ * **그 값으로 오탐이 하나 있다**(실측): `(s) => s.pending.some((p) => p.headSeq < base)`가
+ * `selector-page-field`로 걸린다. 여기서 `headSeq`는 스토어의 필드가 아니라 **pending 항목의
+ * 프로퍼티**다. P2b-2가 낼 법한 모양이라 가상의 예가 아니다.
+ *
+ * **그래도 좁히지 않았다.** selector 파라미터 이름을 추적해 `s.headSeq`만 잡는 판을 만들어
+ * 재보니 오탐 하나가 사라지는 대신 **사각 셋이 생겼다**(실측: `(s = init) => s.document` /
+ * `(s) => (s as EditorState).document` / `(s) => { const t = s; return t.document }`). 뒤
+ * 둘은 값이 어디서 왔는지를 알아야 잡히므로 정규식으로 닫을 수 있는 것이 아니다. **오탐은
+ * 사람이 읽고 넘길 수 있지만 사각은 조용하다.**
+ *
+ * 걸렸는데 스토어의 페이지 필드를 읽는 것이 아니라면, 그 자리에 이 사실을 적고 넘어가라.
+ * 스토어의 필드를 **읽는 것이 맞다면** 위 `fixHint`가 가리키는 길을 보라.
+ *
+ * (참고: `(s) => s.pendingByPage[s.openPageId ?? '']`도 걸리는데 **그쪽은 오탐이 아니다** —
+ * 스토어의 `openPageId`를 주소와 대조 없이 읽고 있고, 그것이 이 검사의 대상이다.)
  *
  * `useEditorStoreInstance(`가 함께 걸리지 않는 것은 이름 뒤에 곧바로 `(`가 오는 형태만
  * 찾기 때문이다.
@@ -149,7 +206,7 @@ function checkSelectors(code: string, violations: Violation[]): void {
         violations.push({
           check: 'selector-page-field',
           snippet: normalize(selector),
-          message: `\`${name}\`를 스토어에서 곧장 고른다 — 주소와 대조하는 \`useOpenDocument(pageId)\`를 써라`,
+          message: `\`${name}\`를 스토어에서 곧장 고른다 — ${fixHint(name)}`,
         })
       }
     }
@@ -182,7 +239,7 @@ function checkGetState(code: string, violations: Violation[]): void {
       violations.push({
         check: 'get-state-page-field',
         snippet: normalize(match[0]),
-        message: `\`${name}\`를 스토어에서 곧장 읽는다 — 주소와 대조하는 \`useOpenDocument(pageId)\`를 써라`,
+        message: `\`${name}\`를 스토어에서 곧장 읽는다 — ${fixHint(name)}`,
       })
     }
   }
@@ -195,7 +252,7 @@ function checkGetState(code: string, violations: Violation[]): void {
         violations.push({
           check: 'get-state-page-field',
           snippet: normalize(match[0]),
-          message: `\`${name}\`를 스토어에서 곧장 꺼낸다 — 주소와 대조하는 \`useOpenDocument(pageId)\`를 써라`,
+          message: `\`${name}\`를 스토어에서 곧장 꺼낸다 — ${fixHint(name)}`,
         })
       }
     }

@@ -143,10 +143,11 @@ describe('스토어 페이지 상태 우회 검사', () => {
     expect(scanSources(SOURCES)).toEqual([])
   })
 
-  it('검사가 도는 파일이 스무 개 안팎이다', () => {
+  it('검사가 도는 파일이 열 개를 넘고 그중에 아는 파일이 있다', () => {
     // 위 케이스가 "0건"인 이유가 **파일을 하나도 안 봤기 때문**일 수 있다. glob이 아무것도
     // 잡지 못하면 `scanSources`는 조용히 빈 배열을 낸다. 수를 못박지 않는 것은 P2b-2가
-    // 파일을 더할 때 이 케이스가 이유 없이 깨지지 않게 하기 위해서다.
+    // 파일을 더할 때 이 케이스가 이유 없이 깨지지 않게 하기 위해서다 — 이름도 단언이
+    // 실제로 재는 만큼만 말한다(지금 스캔 대상은 17개지만 그 수를 지키지는 않는다).
     const scanned = Object.keys(SOURCES).filter((path) => !isExempt(path))
 
     expect(scanned.length).toBeGreaterThan(10)
@@ -165,5 +166,40 @@ describe('스토어 페이지 상태 우회 검사', () => {
     it.each(ALLOWED)('%s', (code) => {
       expect(findViolations(`${SOURCES['../src/canvas/canvas.tsx'] ?? ''}\n${code}\n`)).toEqual([])
     })
+  })
+
+  it('위반 메시지가 갈 수 있는 길을 지목한다', () => {
+    // **가드가 길을 지목하지 못하면 다음 사람은 가드를 무력화한다.** `useOpenDocument`는
+    // `PageDocument | null`만 내주므로 `headSeq`·`openPageId`에는 그 훅이 답이 아니고,
+    // 이월 문서 §3이 P2b-2의 `baseSeq`를 `headSeq`라고 못박았으므로 **P2b-2는 그 자리에서
+    // 반드시 걸린다.** 위 심기 표는 `check` 이름만 보므로 메시지가 조용히 되돌아가도
+    // 알려 주지 않는다 — 그래서 여기서 따로 잡는다.
+    for (const field of ['headSeq', 'openPageId']) {
+      const violations = findViolations(`useEditorStore(store, (s) => s.${field})`)
+      expect(violations[0]?.message, field).toContain('src/store/use-editor-store.tsx')
+    }
+
+    // `document`에는 오늘 길이 있으므로 그쪽을 지목한다. **둘이 갈리는 것이 요점이다** —
+    // 한 문장으로 뭉뚱그리면 `headSeq`를 읽는 사람이 없는 훅을 찾아 헤맨다.
+    const document = findViolations('useEditorStore(store, (s) => s.document)')
+    expect(document[0]?.message).toContain('useOpenDocument(pageId)')
+    expect(document[0]?.message).not.toContain('src/store/use-editor-store.tsx')
+
+    // `getState()` 경로도 같은 길을 지목한다(메시지를 만드는 자리가 둘로 갈려 있다).
+    expect(findViolations('const s = store.getState().headSeq')[0]?.message).toContain(
+      'src/store/use-editor-store.tsx',
+    )
+  })
+
+  it('알려진 오탐 — 이름만 보는 판정의 대가다', () => {
+    // 여기서 `headSeq`는 스토어의 필드가 아니라 pending 항목의 프로퍼티인데 걸린다.
+    // 좁히지 않기로 한 근거는 `store-access-guard.ts`의 `checkSelectors` 주석에 있다
+    // (좁히면 사각 셋이 생긴다 — 실측).
+    //
+    // **이 케이스가 죽는 것은 검사를 좁혔다는 뜻이다.** 그때는 그 셋이 되살아나지 않았는지
+    // 함께 재라.
+    const violations = findViolations('useEditorStore(store, (s) => s.pending.some((p) => p.headSeq < base))')
+
+    expect(violations.map((violation) => violation.check)).toEqual(['selector-page-field'])
   })
 })
