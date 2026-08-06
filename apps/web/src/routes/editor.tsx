@@ -15,8 +15,8 @@
  */
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { useParams } from 'react-router'
-import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
+import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { MenuTree } from '../panels/menu-tree'
@@ -48,7 +48,7 @@ const ZOOM_STEP = 0.25
 type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; project: ProjectDetail }
-  | { status: 'failed'; message: string }
+  | { status: 'failed'; failure: Failure }
 
 /**
  * 라우트가 잡는 컴포넌트. `/projects/:projectId`와 `/projects/:projectId/pages/:pageId`가
@@ -88,12 +88,8 @@ export function EditorShellRoute(): ReactElement {
         if (alive) setState({ status: 'ready', project })
       } catch (caught) {
         if (!alive) return
-        // 서버가 준 문장을 그대로 보여준다. 화면이 문안을 다시 쓰면 서버가 이유를 바꿔도
-        // 사용자는 옛 이유를 듣는다.
-        setState({
-          status: 'failed',
-          message: caught instanceof ApiError ? caught.message : UNKNOWN_FAILURE,
-        })
+        // 실패 → 화면 규칙은 `api/failure.tsx`에 있다(D5). 여기서 다시 판정하지 않는다.
+        setState({ status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) })
       }
     }
 
@@ -112,6 +108,10 @@ export function EditorShellRoute(): ReactElement {
   }
 
   if (state.status === 'failed') {
+    // 세션이 끊겼으면 오류 화면이 아니라 로그인이다(D5). 여기까지 온 사용자는 문지기를
+    // 이미 통과한 뒤라, 이 판정이 없으면 새로고침 말고는 로그인 화면에 갈 길이 없다.
+    if (state.failure.kind === 'signed-out') return <SignedOut />
+
     /**
      * **셸 대신** 오류다. 실패했는데도 셸의 랜드마크가 남아 있으면, 셸을 보는 테스트가
      * 오류 화면 위에서 통과한다 — 이 브랜치에서 실제로 난 사고다. 제목도 프로젝트
@@ -120,7 +120,7 @@ export function EditorShellRoute(): ReactElement {
     return (
       <main className="wb-shell-notice">
         <h1>{FAILURE_TITLE}</h1>
-        <p role="alert">{state.message}</p>
+        <p role="alert">{state.failure.message}</p>
       </main>
     )
   }
@@ -204,7 +204,7 @@ type PageLoadState =
   | { status: 'empty' }
   | { status: 'loading' }
   | { status: 'ready' }
-  | { status: 'failed'; message: string }
+  | { status: 'failed'; failure: Failure }
 
 /**
  * 캔버스 프레임. 뷰포트 폭과 줌이 여기서 실제 치수가 되고, **열린 페이지의 문서를 받아
@@ -333,11 +333,9 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
         // **되살려 놓는** 구현은 `다른 페이지의 조회가 실패하면…` 하나가 잡는다.
         //
         // 실패는 **이 상자 안에서** 끝난다. 셸 전체를 오류로 바꾸면 멀쩡한 트리까지
-        // 사라져, 사용자가 다른 페이지로 옮겨 갈 길이 없어진다.
-        setState({
-          status: 'failed',
-          message: caught instanceof ApiError ? caught.message : PAGE_UNKNOWN_FAILURE,
-        })
+        // 사라져, 사용자가 다른 페이지로 옮겨 갈 길이 없어진다. **세션이 끊긴 것만 예외다**
+        // — 그 실패는 이 상자 안에서 끝낼 수 없다(`api/failure.tsx`, D5).
+        setState({ status: 'failed', failure: toFailure(caught, PAGE_UNKNOWN_FAILURE) })
       }
     }
 
@@ -359,7 +357,12 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
       {/* 실패한 동안에는 그릴 문서가 없다. 이 상태로 들어오는 길은 조회뿐이고, 그
           조회가 시작될 때 스토어의 문서를 비웠기 때문이다 — 앞 페이지의 문서를 오류 문장
           밑에 그리면 어느 페이지를 보고 있는지 알 수 없다. */}
-      {state.status === 'failed' && <p role="alert">{state.message}</p>}
+      {state.status === 'failed' &&
+        (state.failure.kind === 'signed-out' ? (
+          <SignedOut />
+        ) : (
+          <p role="alert">{state.failure.message}</p>
+        ))}
       {state.status === 'ready' && <Canvas pageId={pageId} />}
     </div>
   )

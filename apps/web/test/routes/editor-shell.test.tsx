@@ -17,7 +17,13 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
 import type { ProjectDetail, SessionUser } from '../../src/api/types'
 import type { EditorStore } from '../../src/store/editor-store'
-import { fakeApi, renderWithProviders } from '../helpers'
+import {
+  currentPath,
+  expiringSession,
+  fakeApi,
+  renderWithProviders,
+  unauthenticatedError,
+} from '../helpers'
 
 /**
  * 셸이 만든 `EditorStore` 인스턴스를 손에 쥐는 장치.
@@ -204,6 +210,27 @@ describe('에디터 셸', () => {
     expect(screen.queryByRole('main', { name: '캔버스' })).toBeNull()
     expect(screen.queryByRole('complementary', { name: '속성 패널' })).toBeNull()
     expect(screen.queryByText(PROJECT_NAME)).toBeNull()
+  })
+
+  it('세션이 끊긴 실패면 로그인 화면으로 보낸다', async () => {
+    // 설계 D5. **여기가 가장 아픈 자리다** — 에디터에 들어와 있는 동안 서버가 세션을
+    // 지우면 문지기는 이미 통과했으므로 다시 판정하지 않는다. 이 판정이 없으면 화면에
+    // 오류 문장만 뜨고 새로고침 말고는 로그인 화면에 갈 방법이 없다.
+    renderWithProviders(<App />, {
+      client: fakeApi({
+        me: expiringSession(USER),
+        getProject: async () => Promise.reject(unauthenticatedError()),
+      }),
+      route: '/projects/p-1',
+    })
+
+    await waitFor(() => {
+      expect(currentPath()).toBe('/login')
+    })
+    // 양성 대조: 실제로 로그인 화면이다. 주소만 보면 빈 화면으로 보내는 구현도 통과한다.
+    await screen.findByRole('heading', { name: 'wirebound' })
+    // 오류 화면이 아니다 — 셸의 실패 제목이 남아 있으면 화면이 바뀐 것이 아니다.
+    expect(screen.queryByText('설계서를 열지 못했습니다')).toBeNull()
   })
 
   it('서버가 이유를 주지 않으면 화면이 가진 문장을 쓴다', async () => {

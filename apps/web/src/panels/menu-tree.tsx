@@ -13,8 +13,8 @@
  */
 import { useEffect, useState, type ReactElement } from 'react'
 import { Link } from 'react-router'
-import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
+import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { TreeMenuNode, TreePage } from '../api/types'
 
 /** 서버가 이유를 주지 않은 실패에 쓸 문장. */
@@ -27,7 +27,7 @@ const UNKNOWN_FAILURE = '메뉴를 불러오지 못했습니다'
 type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; menu: TreeMenuNode[] }
-  | { status: 'failed'; message: string }
+  | { status: 'failed'; failure: Failure }
 
 /**
  * `projectId`·`pageId`를 셸에서 받는다. 여기서 `useParams`를 다시 부르지 않는 것은,
@@ -54,12 +54,8 @@ export function MenuTree(props: { projectId: string; pageId: string | undefined 
         if (alive) setState({ status: 'ready', menu })
       } catch (caught) {
         if (!alive) return
-        // 서버가 준 문장을 그대로 보여준다. 화면이 문안을 다시 쓰면 서버가 이유를 바꿔도
-        // 사용자는 옛 이유를 듣는다.
-        setState({
-          status: 'failed',
-          message: caught instanceof ApiError ? caught.message : UNKNOWN_FAILURE,
-        })
+        // 실패 → 화면 규칙은 `api/failure.tsx`에 있다(D5). 여기서 다시 판정하지 않는다.
+        setState({ status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) })
       }
     }
 
@@ -78,9 +74,13 @@ export function MenuTree(props: { projectId: string; pageId: string | undefined 
   }
 
   if (state.status === 'failed') {
+    // 세션이 끊긴 것은 이 상자 안에서 끝낼 수 없는 실패다 — 트리만 오류 문장을 내고
+    // 사용자는 셸 안에 갇힌다. 나머지 이유는 지금대로 서버 문장을 이 자리에 그린다.
+    if (state.failure.kind === 'signed-out') return <SignedOut />
+
     return (
       <p className="wb-shell-tree-notice" role="alert">
-        {state.message}
+        {state.failure.message}
       </p>
     )
   }

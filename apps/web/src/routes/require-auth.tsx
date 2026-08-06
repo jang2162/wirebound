@@ -7,8 +7,8 @@
  */
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
 import { Navigate } from 'react-router'
-import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
+import { toFailure } from '../api/failure'
 
 type SessionState =
   | { status: 'pending' }
@@ -45,14 +45,17 @@ function useSession(): SessionState {
       },
       (caught: unknown) => {
         if (!alive) return
-        if (caught instanceof ApiError && caught.code === 'unauthenticated') {
+        // **"세션이 끊겼다"의 정의는 `api/failure.tsx`가 갖는다.** 문지기와 네 조회 자리가
+        // 같은 판정을 써야, 한쪽이 로그인으로 보내는 실패를 다른 쪽이 오류 문장으로
+        // 그리는 어긋남이 생기지 않는다.
+        const failure = toFailure(caught, UNKNOWN_FAILURE)
+        // 여기서는 화면으로 보내지 않고 **상태로 답한다** — 문지기가 낼 답은 이 훅을 쓰는
+        // 쪽마다 다르고(아래 두 컴포넌트가 정확히 갈린다), 그 결정은 호출자 몫이다.
+        if (failure.kind === 'signed-out') {
           setState({ status: 'anonymous' })
           return
         }
-        setState({
-          status: 'failed',
-          message: caught instanceof ApiError ? caught.message : UNKNOWN_FAILURE,
-        })
+        setState({ status: 'failed', message: failure.message })
       },
     )
     return () => {

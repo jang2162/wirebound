@@ -11,6 +11,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
 import { ApiError, type ApiClient } from '../src/api/client'
 import { ApiProvider } from '../src/api/context'
+import type { SessionUser } from '../src/api/types'
 
 /**
  * 스텁되지 않은 메서드 자리에 놓는 함수. **`undefined`를 돌려주지 않고 던진다.**
@@ -40,6 +41,28 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
 /** 세션이 없을 때 서버가 내는 오류. 여러 테스트가 같은 모양을 쓴다. */
 export function unauthenticatedError(message = '로그인이 필요합니다'): ApiError {
   return new ApiError(401, 'unauthenticated', message)
+}
+
+/**
+ * **첫 호출만 성공하고 그 뒤로는 세션이 없다고 답하는 `me`.**
+ *
+ * 재현하는 상황은 "화면에 들어와 있는 동안 서버가 세션을 지웠다"이다 — 문지기
+ * (`routes/require-auth.tsx`)는 첫 호출로 이미 통과했고, 그다음 조회부터 401이 온다.
+ * D5의 `code` 분기가 문지기 하나에만 있으면 사용자는 그 화면에 갇힌다.
+ *
+ * **뒤 호출까지 성공하게 두면 안 된다.** 로그인 화면의 `RedirectWhenAuthenticated`가 다시
+ * `me()`를 부르는데, 그것이 성공하면 목록으로 되돌려 보내고 그 목록이 다시 401을 받아
+ * 케이스가 두 주소를 무한히 오간다.
+ */
+export function expiringSession(user: SessionUser): ApiClient['me'] {
+  let alive = true
+  return async () => {
+    if (alive) {
+      alive = false
+      return user
+    }
+    throw unauthenticatedError()
+  }
 }
 
 /** `currentPath()`가 읽는 자리. 화면이 쓸 일이 없도록 테스트 전용 이름을 쓴다. */

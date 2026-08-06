@@ -8,7 +8,7 @@
  */
 import { useEffect, useState, type ReactElement } from 'react'
 import { Link } from 'react-router'
-import { ApiError } from '../api/client'
+import { SignedOut, toFailure, type Failure } from '../api/failure'
 import { useApi } from '../api/context'
 import type { ProjectDetail } from '../api/types'
 
@@ -24,7 +24,7 @@ const EMPTY_NOTICE = '참여 중인 프로젝트가 없습니다'
 type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; projects: ProjectDetail[] }
-  | { status: 'failed'; message: string }
+  | { status: 'failed'; failure: Failure }
 
 export function ProjectListRoute(): ReactElement {
   const api = useApi()
@@ -42,12 +42,8 @@ export function ProjectListRoute(): ReactElement {
         if (alive) setState({ status: 'ready', projects })
       } catch (caught) {
         if (!alive) return
-        // 서버가 준 문장을 그대로 보여준다. 화면이 문안을 다시 쓰면 서버가 이유를 바꿔도
-        // 사용자는 옛 이유를 듣는다.
-        setState({
-          status: 'failed',
-          message: caught instanceof ApiError ? caught.message : UNKNOWN_FAILURE,
-        })
+        // 실패 → 화면 규칙은 `api/failure.tsx`에 있다(D5). 여기서 다시 판정하지 않는다.
+        setState({ status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) })
       }
     }
 
@@ -57,11 +53,17 @@ export function ProjectListRoute(): ReactElement {
     }
   }, [api])
 
+  // 세션이 끊겼으면 목록 대신 로그인이다. 화면 **전체**를 대신하는 것이라 아래 JSX보다
+  // 앞에 둔다 — 목록 틀 안에 `<Navigate>`를 끼우면 이동하기 전 한 프레임 동안 빈 목록이 뜬다.
+  if (state.status === 'failed' && state.failure.kind === 'signed-out') return <SignedOut />
+
   return (
     <main>
       <h1>프로젝트</h1>
       {state.status === 'loading' && <p role="status">불러오는 중…</p>}
-      {state.status === 'failed' && <p role="alert">{state.message}</p>}
+      {state.status === 'failed' && state.failure.kind === 'message' && (
+        <p role="alert">{state.failure.message}</p>
+      )}
       {state.status === 'ready' &&
         (state.projects.length === 0 ? (
           <p>{EMPTY_NOTICE}</p>

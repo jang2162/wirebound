@@ -23,7 +23,13 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import type { EditorStore } from '../../src/store/editor-store'
-import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import {
+  currentPath,
+  expiringSession,
+  fakeApi,
+  renderWithProviders,
+  unauthenticatedError,
+} from '../helpers'
 
 /**
  * 셸이 만든 `EditorStore` 인스턴스를 손에 쥐는 장치. 태스크 7이 같은 이유로 둔 것을
@@ -581,6 +587,31 @@ describe('메뉴·페이지 트리', () => {
     // 그리고 트리 내용은 없다. 이것이 `openEditor()`로 시작하는 케이스들이 기다리는
     // 성공 대역의 증거다.
     expect(screen.queryByText('회원관리')).toBeNull()
+  })
+
+  it('트리 조회가 세션 끊김이면 로그인 화면으로 보낸다', async () => {
+    // 설계 D5. 트리의 실패는 보통 이 상자 안에서 끝나지만(위 케이스), 세션이 끊긴 것은
+    // 이 상자 안에서 끝낼 수 없다 — 트리만 오류 문장을 내면 사용자는 셸 안에 갇힌다.
+    renderEditor({ me: expiringSession(USER), getTree: async () => Promise.reject(unauthenticatedError()) })
+
+    await waitFor(() => {
+      expect(currentPath()).toBe('/login')
+    })
+    await screen.findByRole('heading', { name: 'wirebound' })
+  })
+
+  it('페이지 조회가 세션 끊김이면 로그인 화면으로 보낸다', async () => {
+    // 설계 D5. 위 `페이지 조회에 실패하면…`과 짝이다 — 그쪽은 캔버스 자리에 서버 문장을
+    // 남기고, 세션 끊김만 화면을 통째로 바꾼다.
+    renderEditor(
+      { me: expiringSession(USER), getPage: async () => Promise.reject(unauthenticatedError()) },
+      '/projects/p-1/pages/pg-list',
+    )
+
+    await waitFor(() => {
+      expect(currentPath()).toBe('/login')
+    })
+    await screen.findByRole('heading', { name: 'wirebound' })
   })
 
   it('페이지 조회에 실패하면 트리는 남고 캔버스 자리에만 에러가 뜬다', async () => {

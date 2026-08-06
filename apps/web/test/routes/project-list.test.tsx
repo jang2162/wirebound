@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectDetail, SessionUser } from '../../src/api/types'
-import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import {
+  currentPath,
+  expiringSession,
+  fakeApi,
+  renderWithProviders,
+  unauthenticatedError,
+} from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -86,6 +92,28 @@ describe('프로젝트 목록 화면', () => {
     // 실패는 "프로젝트가 없음"이 아니다. 둘을 같은 화면으로 뭉개면 사용자는 자기
     // 프로젝트가 사라졌다고 읽는다.
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
+  })
+
+  it('세션이 끊긴 실패면 로그인 화면으로 보낸다', async () => {
+    // 설계 D5: 화면은 `code`로 분기한다 — `unauthenticated`면 로그인으로. 문지기는 이미
+    // 통과한 뒤라 다시 판정하지 않으므로, 이 판정이 없으면 사용자는 오류 문장만 보고
+    // 새로고침 말고는 로그인 화면에 갈 길이 없다.
+    renderWithProviders(<App />, {
+      client: fakeApi({
+        me: expiringSession(USER),
+        listProjects: async () => Promise.reject(unauthenticatedError()),
+      }),
+      route: '/',
+    })
+
+    await waitFor(() => {
+      expect(currentPath()).toBe('/login')
+    })
+    // 양성 대조: 실제로 **로그인 화면**이 떴다. 주소만 보면 빈 화면으로 보내는 구현도
+    // 통과한다.
+    await screen.findByRole('heading', { name: 'wirebound' })
+    // 그리고 그 문장은 목록 자리에 남지 않는다 — 화면이 통째로 바뀌었다는 뜻이다.
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('서버가 이유를 주지 않으면 화면이 가진 문장을 쓴다', async () => {
