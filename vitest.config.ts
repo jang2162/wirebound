@@ -60,6 +60,36 @@ export default defineConfig({
       {
         ...shared,
         test: {
+          name: 'web',
+          include: ['apps/web/test/**/*.test.{ts,tsx}'],
+          // React 컴포넌트를 렌더하므로 DOM이 필요하다. api·unit 프로젝트는
+          // DOM이 없어야 하므로(노드 전용 코드가 DOM 전역에 기대지 않도록)
+          // 이 프로젝트에만 jsdom을 건다.
+          //
+          // `jsdom`은 vitest의 optional peer dependency이고, vitest가 자기
+          // 위치에서 `import('jsdom')` 한다. pnpm의 strict node_modules에서는
+          // vitest를 의존하는 패키지 — 즉 **저장소 루트** — 가 jsdom을 갖고
+          // 있어야 vitest 옆에 링크된다. apps/web에만 넣으면
+          // `Cannot find package 'jsdom'`으로 죽는다(실측).
+          environment: 'jsdom',
+          // CSS 임포트를 실제로 처리한다. **`shell-css.test.ts`가 이것에 매여 있다** —
+          // 그 파일은 `../src/shell.css?raw`로 원문을 읽어 D7 검사를 돌리는데, 이 옵션이
+          // 꺼져 있으면(기본값) vitest가 CSS 임포트를 **빈 문자열**로 바꾼다. 그러면 검사가
+          // 빈 파일을 훑어 위반 0건을 내고, 심어 둔 위반만 걸리는 초록이 된다.
+          // (실측: 이 줄을 넣기 전 `검사가 진짜 shell.css를 읽는다` **한 케이스만** 실패했고
+          // 나머지는 전부 통과했다 — 그 한 케이스가 없었으면 못 알아챘다. 분모를 적지 않는
+          // 것은 그 파일에 케이스를 더할 때마다 어긋나기 때문이다. 지키려는 것은
+          // "카나리아 한 줄만 실패했다"이지 분모가 아니다.)
+          css: true,
+          // 파일마다: RTL의 DOM cleanup을 afterEach에 등록한다. 이 저장소는
+          // `globals`를 켜지 않아 RTL이 스스로 등록하지 못한다 — 자세한 이유는
+          // 그 파일 주석에 있다.
+          setupFiles: ['apps/web/test/setup.ts'],
+        },
+      },
+      {
+        ...shared,
+        test: {
           name: 'build',
           include: ['packages/*/build-test/**/*.test.ts'],
           // tsdown 재빌드를 beforeAll에서 돈다. 기본 테스트 실행에서 분리한 이유:

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".tsbuild",
+    "composite": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    // packages/schema는 브라우저·Node 양쪽에서 돌아야 해서 DOM 전역을 일부러
+    // 배제한다. 여기는 브라우저 전용 앱이므로 DOM이 있어야 한다.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src", "test", "vite.config.ts"],
+  "references": [{ "path": "../../packages/schema" }, { "path": "../../packages/renderer" }]
+}
