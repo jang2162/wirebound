@@ -13,9 +13,15 @@
  */
 import { useCallback, useRef } from 'react'
 import { useApi } from '../api/context'
+import { toFailure } from '../api/failure'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import type { EditStatus } from '../store/editor-store'
 import { propOps } from './ops'
+
+/** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
+const EDIT_UNKNOWN_FAILURE = '편집을 저장하지 못했습니다'
+/** 재조회마저 실패했을 때. 편집 실패와 갈라 적어야 사용자가 무엇이 남았는지 안다. */
+const RECOVER_UNKNOWN_FAILURE = '편집에 실패한 뒤 페이지를 다시 불러오지도 못했습니다'
 
 export interface EditCommit {
   /** 노드의 prop 하나를 바꾼다. 적용할 수 없으면 아무 일도 일어나지 않는다(D7). */
@@ -34,6 +40,53 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   // 편집이 그 갱신이 커밋되기 전에 들어와 루프를 하나 더 시작한다(그것이 D6 위반이다).
   const pumpingRef = useRef(false)
 
+  /**
+   * 실패 하나를 수습한다. **실패 종류로 갈리지 않는다**(D4) — 409든 422든 네트워크든
+   * 페이지를 다시 받아 서버 상태로 수렴한다. 왜 항목별 롤백이 아닌지는 설계 §7.1에 있다:
+   * `inverse`를 서버가 만드는 것과 같은 이유로, 클라이언트가 계산한 되돌리기는 낙관적으로
+   * 앞서 있는 만큼 틀릴 수 있다.
+   *
+   * **세션이 끊긴 실패 하나만 갈린다.** 다시 받아도 401이고 그 사이 요청만 쌓이므로
+   * 재조회하지 않는다. 통지 자리(`shell/edit-alert.tsx`)가 그 값을 보고 `<SignedOut />`을
+   * 그리면 웨이브 1의 세션 무효화 경로로 이어진다.
+   */
+  const recover = useCallback(
+    async (caught: unknown): Promise<void> => {
+      const failure = toFailure(caught, EDIT_UNKNOWN_FAILURE)
+      if (failure.kind === 'signed-out') {
+        // 큐는 비운다 — 로그인하고 돌아와도 그 편집들은 이미 낡은 `baseSeq` 위에 있다.
+        store.failEdits()
+        store.setEditStatus('idle')
+        store.setEditFailure(failure)
+        return
+      }
+
+      const dropped = store.failEdits()
+      try {
+        const page = await api.getPage(projectId, pageId)
+        store.loadPage(pageId, page.schema, page.headSeq)
+        // 버린 수는 **센 값이다.** 전송에 실패한 하나와 큐에 남아 있던 것들을 합친 것이고,
+        // 전부 사라졌다는 뜻이다(문서가 서버 것으로 되돌아갔으므로).
+        store.setEditFailure({
+          kind: 'message',
+          message: `${failure.message} 페이지를 서버 상태로 다시 불러왔고, 편집 ${dropped.length}개가 취소됐습니다.`,
+        })
+      } catch (recoverCaught) {
+        // **여기서 다시 재조회하지 않는다.** 서버가 계속 실패하는 동안 요청이 쌓인다 —
+        // 세션 확인에 자동 재시도를 두지 않은 것과 같은 판단이다.
+        const recoverFailure = toFailure(recoverCaught, RECOVER_UNKNOWN_FAILURE)
+        store.setEditFailure(
+          recoverFailure.kind === 'signed-out'
+            ? recoverFailure
+            : { kind: 'message', message: recoverFailure.message },
+        )
+      } finally {
+        store.setEditStatus('idle')
+      }
+    },
+    [api, projectId, pageId, store],
+  )
+
   const pump = useCallback(async (): Promise<void> => {
     if (pumpingRef.current) return
     pumpingRef.current = true
@@ -43,25 +96,26 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         // ack되며 이미 낡아 있다 — ack의 `setState`는 이 루프가 도는 microtask 뒤에야
         // 커밋되기 때문이다.
         const request = store.nextRequest()
-        if (request === null) return
+        if (request === null) {
+          if (store.getState().editStatus === 'sending') store.setEditStatus('idle')
+          return
+        }
 
         store.setEditStatus('sending')
         try {
           const result = await api.patchOps(projectId, pageId, request)
           store.ackEdit(request.clientOpId, result)
-        } catch {
-          // **실패의 수렴은 Task 6이 채운다.** 지금은 큐를 비워 루프를 끝내기만 한다 —
-          // 그러지 않으면 같은 편집을 무한히 다시 보낸다.
-          store.failEdits()
+        } catch (caught) {
+          // 루프를 여기서 끝낸다. `recover`가 큐를 비우므로 남은 편집이 다시 나가지 않고,
+          // 재조회가 문서를 서버 것으로 맞춘다.
+          await recover(caught)
           return
         }
       }
     } finally {
       pumpingRef.current = false
-      // 큐가 비었으면 `idle`로 돌린다. `recovering`은 Task 6이 재조회를 마칠 때 푼다.
-      if (store.getState().editStatus === 'sending') store.setEditStatus('idle')
     }
-  }, [api, projectId, pageId, store])
+  }, [api, projectId, pageId, store, recover])
 
   const commitProp = useCallback(
     (nodeId: string, prop: string, value: unknown): void => {
@@ -75,6 +129,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       if (ops === null) return
       if (store.applyEdit(ops) === null) return
 
+      // 앞 실패의 통지를 치운다. 남겨 두면 사용자가 방금 낸 편집도 실패했다고 읽는다.
+      store.setEditFailure(null)
       void pump()
     },
     [open, store, pump],

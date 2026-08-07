@@ -30,6 +30,16 @@ export type EditorMode = 'edit' | 'view'
 export type EditStatus = 'idle' | 'sending' | 'recovering'
 
 /**
+ * 편집이 실패한 이유. 화면에 그리는 것은 `shell/edit-alert.tsx` 하나다(D8).
+ *
+ * **`api/failure.tsx`의 `Failure`와 같은 모양이고 그쪽 값이 그대로 들어온다.** 그 타입을
+ * import하지 않는 것은 이 파일이 런타임 의존을 갖지 않기 위해서다(머리말) — 그쪽은
+ * React·react-router를 쓰는 `.tsx`다. **모양이 갈리면 `edit/use-edit-commit.tsx`의
+ * 대입에서 컴파일이 막힌다** — 구조적 타이핑이라 필드가 어긋나는 순간 그 대입이 에러다.
+ */
+export type EditFailure = { kind: 'signed-out' } | { kind: 'message'; message: string }
+
+/**
  * 되돌릴 수 있는 revision 하나. 설계 §7.3이 *"클라이언트가 자기 revision id 스택을
  * 보유한다"*고 했고, README가 *"응답의 `inverse`를 그대로 다시 `ops`로 보내면 그 편집이
  * 취소된다"*고 했다 — **둘 다 필요하다.** id는 새로고침 복원(D10)에서 중복을 거르는 데
@@ -93,6 +103,8 @@ export interface EditorState {
   /** 되돌릴 수 있는 revision. 최근 것이 끝이다. */
   undoStack: RevisionRef[]
   editStatus: EditStatus
+  /** 마지막 편집 실패. 새 편집을 내면 지워진다 — 남아 있으면 방금 낸 편집도 실패한 것으로 읽힌다. */
+  editFailure: EditFailure | null
 }
 
 /**
@@ -111,6 +123,7 @@ function initialState(): EditorState {
     pending: [],
     undoStack: [],
     editStatus: 'idle',
+    editFailure: null,
   }
 }
 
@@ -188,6 +201,7 @@ export class EditorStore {
       pending: pending.length === 0 ? pending : [],
       undoStack: undoStack.length === 0 ? undoStack : [],
       editStatus: 'idle',
+      editFailure: null,
     })
   }
 
@@ -282,6 +296,11 @@ export class EditorStore {
 
   readonly setEditStatus = (editStatus: EditStatus): void => {
     this.#apply({ editStatus })
+  }
+
+  /** 실패 통지를 세우거나(`Failure`) 치운다(`null`). 그리는 것은 `shell/edit-alert.tsx`다. */
+  readonly setEditFailure = (editFailure: EditFailure | null): void => {
+    this.#apply({ editFailure })
   }
 
   readonly selectNode = (nodeId: string | null): void => {

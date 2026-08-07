@@ -22,6 +22,7 @@ import { Canvas } from '../canvas/canvas'
 import { MenuTree } from '../panels/menu-tree'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
+import { EditAlert } from '../shell/edit-alert'
 import { EditorStore, VIEWPORT_PRESETS, type ViewportWidth } from '../store/editor-store'
 import {
   EditorStoreProvider,
@@ -142,6 +143,11 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
       <header className="wb-shell-header">
         <h1 className="wb-shell-title">{props.project.name}</h1>
         <ShellTools />
+        {/* 편집 실패 통지는 **한 자리**다(D8). 조회 실패처럼 화면마다 나누지 않는 것은,
+            어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
+            받고 보내지 못한 편집을 잃는다(D4). 셸 상단에 두면 어느 패널을 보고 있어도
+            눈에 들어온다. */}
+        <EditAlert />
       </header>
 
       <nav className="wb-shell-side" aria-label="메뉴와 구조">
