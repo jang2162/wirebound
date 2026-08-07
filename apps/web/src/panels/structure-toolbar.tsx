@@ -15,6 +15,7 @@
  * 만들 수 없으면 `null`을 낸다.
  */
 import type { ReactElement } from 'react'
+import { findNode } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { moveNodeOps, removeNodeOps } from '../edit/ops'
 import { nodeSpot, structureAbilities, type StructureAbilities } from '../edit/structure-actions'
@@ -113,6 +114,65 @@ export function StructureToolbar(props: {
     commitOps(moveNodeOps(document, selectedNodeId, spot.parentId, spot.index + delta))
   }
 
+  /**
+   * 한 단계 안으로 — **앞 형제의 마지막 자식**이 된다(D3).
+   *
+   * 목적지 인덱스가 앞 형제의 `children` 길이인 것은 그 배열이 **소스를 빼는 것과
+   * 무관하기 때문이다.** 노드는 부모의 배열에서 빠지고 앞 형제의 배열로 들어가므로,
+   * 웨이브 1이 잰 "값을 뺀 뒤 기준"이 여기서는 뺀 것과 같은 값을 낸다.
+   *
+   * **앞 형제에 `children` 키가 없으면 `moveNodeOps`가 배열을 먼저 만든다**(웨이브 1의
+   * 두 op 갈래). 여기서 그것을 다시 다루지 않는다 — 빈 컨테이너로 들여쓰는 흔한 경로가
+   * 그 갈래를 탄다(`앞 형제에 children 키가 없으면 배열을 먼저 만든다`).
+   */
+  function indentSelected(): void {
+    if (document === null || selectedNodeId === null) return
+    const spot = nodeSpot(document, selectedNodeId)
+    if (spot === null) return
+
+    const parent = findNode(document.root, spot.parentId)
+    // **첫 형제는 여기서 걸린다** — 인덱스 0의 앞은 `-1`이고 그 자리는 비어 있다
+    // (`noUncheckedIndexedAccess`가 그것을 타입으로도 말해 준다). `spot.index === 0`을
+    // 따로 두지 않는 것은 그 검사가 0 사망이었기 때문이다 — 재 봤고, 이 줄이 덮는다.
+    const previous = parent?.children?.[spot.index - 1]
+    if (previous === undefined) return
+
+    // 검증 전 문서에는 `children`이 배열이 아닌 노드가 온다. `structureAbilities`가
+    // 그런 앞 형제를 이미 거르지만(`acceptsChildren`), 여기서 길이를 읽는 것이므로
+    // 값으로 한 번 더 본다 — 문자열이면 `.length`가 글자 수를 낸다.
+    const room = Array.isArray(previous.children) ? previous.children.length : 0
+
+    commitOps(moveNodeOps(document, selectedNodeId, previous.id, room))
+  }
+
+  /**
+   * 한 단계 밖으로 — **부모의 다음 형제**가 된다(D3).
+   *
+   * 부모의 자리를 `nodeSpot`으로 한 번 더 읽는다. 그것이 `null`이면 부모가 루트라
+   * 나갈 곳이 없다 — `structureAbilities`의 `outdent`와 같은 판정이지만, 여기서는
+   * 조부모 id와 부모 인덱스가 **필요해서** 부른다.
+   *
+   * **그 `null` 검사는 지금 0 사망이다 — 재 봤다.** 부모가 루트면 버튼이 이미 비활성이라
+   * 클릭이 핸들러에 닿지 않는다. 벗겨지는 때가 온다: **Task 8의 키보드 단축키는 버튼을
+   * 지나지 않으므로**(D8 케이스 5가 "단축키가 비활성 조작을 실행하지 않는다"를 요구한다)
+   * 그때 이 검사가 마지막 방벽이다. **그것은 계획을 읽은 것이지 잰 것이 아니다.**
+   *
+   * 목적지가 `부모 인덱스 + 1`인 것도 소스를 빼는 것과 무관하다 — 노드는 부모의 배열
+   * 안에 있으므로 조부모의 배열은 그대로다.
+   */
+  function outdentSelected(): void {
+    if (document === null || selectedNodeId === null) return
+    const spot = nodeSpot(document, selectedNodeId)
+    if (spot === null) return
+
+    const parentSpot = nodeSpot(document, spot.parentId)
+    if (parentSpot === null) return
+
+    commitOps(
+      moveNodeOps(document, selectedNodeId, parentSpot.parentId, parentSpot.index + 1),
+    )
+  }
+
   return (
     <div className="wb-shell-structure-toolbar" role="group" aria-label="구조 편집">
       <ToolButton label="삭제" ability="remove" abilities={abilities} onClick={removeSelected} />
@@ -127,6 +187,18 @@ export function StructureToolbar(props: {
         ability="moveDown"
         abilities={abilities}
         onClick={() => moveSelected(1)}
+      />
+      <ToolButton
+        label="들여쓰기"
+        ability="indent"
+        abilities={abilities}
+        onClick={indentSelected}
+      />
+      <ToolButton
+        label="내어쓰기"
+        ability="outdent"
+        abilities={abilities}
+        onClick={outdentSelected}
       />
     </div>
   )

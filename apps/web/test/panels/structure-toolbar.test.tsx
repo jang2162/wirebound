@@ -136,8 +136,22 @@ function undoButton(): HTMLButtonElement {
   )
 }
 
-/** 툴바 버튼 셋의 이름. Task 6이 여기에 둘을 더한다. */
-const BUTTONS = ['삭제', '위로', '아래로']
+/** 툴바 버튼의 이름. 늘어나면 `버튼이 전부 비활성이다`가 새 버튼도 함께 본다. */
+const BUTTONS = ['삭제', '위로', '아래로', '들여쓰기', '내어쓰기']
+
+/**
+ * `childType` 줄이 `parentType` 줄 **안에** 그려져 있는가.
+ *
+ * **계층 이동은 전위 순회 목록을 바꾸지 않는다** — 들여써도 순서가 그대로라
+ * `structureTypes()`만으로는 `['Page','Card','Section',…]`이 양쪽에서 같다. 중첩을
+ * 보지 않으면 "아무 일도 안 일어난 구현"이 통과한다.
+ */
+function isNestedIn(childType: string, parentType: string): boolean {
+  const child = within(structureRegion()).getByRole('button', { name: childType }).closest('li')
+  const parent = within(structureRegion()).getByRole('button', { name: parentType }).closest('li')
+  if (child === null || parent === null) throw new Error('구조 트리의 줄이 목록 항목이 아닙니다')
+  return parent.contains(child)
+}
 
 describe('구조 툴바 — 삭제와 순서 이동', () => {
   it('노드를 고르지 않으면 버튼이 전부 비활성이다', async () => {
@@ -367,5 +381,234 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
 
     await waitFor(() => expect(structureTypes()).toEqual(INITIAL_TYPES))
     expect(selectedType()).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Task 6 — 계층 이동
+// ---------------------------------------------------------------------------
+
+/**
+ * 계층 이동용 문서. **앞 형제의 종류가 케이스를 가른다.**
+ *
+ * ```
+ * n-root  (Page)
+ * ├ n-box   (Card)      many · children 키가 **없다** — 배열을 먼저 만드는 갈래를 탄다
+ * ├ n-group (Section)   many · 자식 둘 — 서브트리가 따라가는지 본다
+ * │  ├ n-1 (Button)
+ * │  └ n-2 (Link)
+ * ├ n-tail  (Divider)   앞 형제가 `many`라 들여쓸 수 있다
+ * └ n-last  (Text)      앞 형제가 `none`이라 들여쓸 수 없다 — D3의 핵심 제약
+ * ```
+ */
+function nestDoc(): ReturnType<typeof pageDoc> {
+  return pageDoc({
+    id: 'n-root',
+    type: 'Page',
+    children: [
+      { id: 'n-box', type: 'Card' },
+      {
+        id: 'n-group',
+        type: 'Section',
+        children: [
+          { id: 'n-1', type: 'Button' },
+          { id: 'n-2', type: 'Link' },
+        ],
+      },
+      { id: 'n-tail', type: 'Divider' },
+      { id: 'n-last', type: 'Text' },
+    ],
+  })
+}
+
+/** `nestDoc`의 서버 대역. 자기 문서를 들고 `inverse`를 만든다. */
+function nestServer(): Server {
+  const calls: { ops: PatchOp[]; baseSeq: number }[] = []
+  let seq = HEAD_SEQ
+  let held = nestDoc()
+
+  const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+    calls.push({ ops: body.ops, baseSeq: body.baseSeq })
+    const { applyOps, invertOps } = await import('@wirebound/schema')
+    const inverse = invertOps(held, body.ops)
+    held = applyOps(held, body.ops)
+    seq += 1
+    const result: PatchResult = {
+      seq,
+      revisionId: `rev-${seq}`,
+      inverse,
+      schemaVersion: 1,
+      ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+    }
+    return result
+  }
+
+  const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
+    const detail: PageDetail = { ...pageDetail(pageId, held), headSeq: seq }
+    return detail
+  }
+
+  return { calls, api: { patchOps, getPage } }
+}
+
+describe('구조 툴바 — 들여쓰기와 내어쓰기', () => {
+  it('들여쓰면 앞 형제의 마지막 자식이 된다', async () => {
+    await openPage(nestDoc(), { apiOverrides: nestServer().api })
+    select('Divider')
+
+    fireEvent.click(toolButton('들여쓰기'))
+
+    // Divider가 Section 안으로. **전위 순회 목록은 그대로다** — 중첩으로만 보인다.
+    await waitFor(() => expect(isNestedIn('Divider', 'Section')).toBe(true))
+    expect(structureTypes()).toEqual(['Page', 'Card', 'Section', 'Button', 'Link', 'Divider', 'Text'])
+  })
+
+  it('들여쓰면 앞 형제의 뒤에 붙는다', async () => {
+    // "마지막 자식"이 어디인지를 op으로 못박는다. 앞 형제(`n-group`)의 자식이 둘이므로
+    // 인덱스는 2다 — **다른 배열이라 값을 뺀 것의 영향을 받지 않는다**(웨이브 1의 계약).
+    const srv = nestServer()
+    await openPage(nestDoc(), { apiOverrides: srv.api })
+    select('Divider')
+
+    fireEvent.click(toolButton('들여쓰기'))
+
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    expect(srv.calls[0]?.ops).toEqual([
+      { op: 'move', from: '/root/children/2', path: '/root/children/1/children/2' },
+    ])
+  })
+
+  it('앞 형제에 children 키가 없으면 배열을 먼저 만든다', async () => {
+    // **웨이브 1이 잰 갈래가 화면에서 실제로 쓰이는 자리다.** `n-box`는 `children` 키가
+    // 없는 `Card`이고, 거기로 `move` 하나만 보내면 `applyOps`가
+    // `경로를 찾을 수 없습니다`로 던져 D7이 편집을 삼킨다.
+    const srv = nestServer()
+    await openPage(nestDoc(), { apiOverrides: srv.api })
+    select('Section')
+
+    fireEvent.click(toolButton('들여쓰기'))
+
+    await waitFor(() => expect(isNestedIn('Section', 'Card')).toBe(true))
+    expect(srv.calls[0]?.ops).toEqual([
+      { op: 'add', path: '/root/children/0/children', value: [] },
+      { op: 'move', from: '/root/children/1', path: '/root/children/0/children/0' },
+    ])
+  })
+
+  it('서브트리가 통째로 따라간다', async () => {
+    await openPage(nestDoc(), { apiOverrides: nestServer().api })
+    select('Section')
+
+    fireEvent.click(toolButton('들여쓰기'))
+
+    await waitFor(() => expect(isNestedIn('Section', 'Card')).toBe(true))
+    // 자식 둘이 여전히 Section 안에 있고, 그 Section이 Card 안에 있다.
+    expect(isNestedIn('Button', 'Section')).toBe(true)
+    expect(isNestedIn('Link', 'Section')).toBe(true)
+    expect(structureTypes()).toEqual(['Page', 'Card', 'Section', 'Button', 'Link', 'Divider', 'Text'])
+  })
+
+  it('앞 형제가 none이면 들여쓰기 버튼이 비활성이다', async () => {
+    // **D3의 핵심 제약.** `n-last`의 앞 형제는 `Divider`이고 자식을 담을 수 없다 —
+    // 들여쓰면 그 문서는 `children-not-allowed`로 검증에 걸린다.
+    await openPage(nestDoc(), { apiOverrides: nestServer().api })
+    select('Text')
+
+    expect(toolButton('들여쓰기').disabled).toBe(true)
+    expect(toolButton('들여쓰기').title).toBe('앞 형제가 자식을 담을 수 있어야 합니다')
+  })
+
+  it('첫 형제는 들여쓰기가 비활성이다', async () => {
+    // 앞 형제가 아예 없다. `Card`가 `many`인데도 안 되는 것은 자기 자신 안으로는 갈 수
+    // 없기 때문이고, 위 케이스와 이유가 다르다.
+    await openPage(nestDoc(), { apiOverrides: nestServer().api })
+    select('Card')
+
+    expect(toolButton('들여쓰기').disabled).toBe(true)
+  })
+
+  it('내어쓰면 부모의 다음 형제가 된다', async () => {
+    await openPage(nestDoc(), { apiOverrides: nestServer().api })
+    select('Button')
+
+    fireEvent.click(toolButton('내어쓰기'))
+
+    await waitFor(() => expect(isNestedIn('Button', 'Section')).toBe(false))
+    // **부모 "다음"이 어디인지가 여기서 걸린다.** Section 바로 뒤여야 한다 — 루트의
+    // 끝이 아니다.
+    expect(structureTypes()).toEqual(['Page', 'Card', 'Section', 'Link', 'Button', 'Divider', 'Text'])
+  })
+
+  it('내어쓰기는 부모 인덱스 + 1로 나간다', async () => {
+    const srv = nestServer()
+    await openPage(nestDoc(), { apiOverrides: srv.api })
+    select('Button')
+
+    fireEvent.click(toolButton('내어쓰기'))
+
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    expect(srv.calls[0]?.ops).toEqual([
+      { op: 'move', from: '/root/children/1/children/0', path: '/root/children/2' },
+    ])
+  })
+
+  it('부모가 루트면 내어쓰기가 비활성이다', async () => {
+    await openPage(nestDoc(), { apiOverrides: nestServer().api })
+    select('Divider')
+
+    expect(toolButton('내어쓰기').disabled).toBe(true)
+    expect(toolButton('내어쓰기').title).toBe('부모가 루트가 아니어야 합니다')
+  })
+
+  it('들여쓴 뒤 내어쓰면 제자리로 돌아온다', async () => {
+    // **왕복 대조 — 이 태스크의 핵심이다.** "부모의 **다음** 형제"의 인덱스를 손으로
+    // 적으면 틀리기 쉽다. 한쪽만 맞아도 왕복은 어긋난다.
+    await openPage(nestDoc(), { apiOverrides: nestServer().api })
+    select('Divider')
+
+    fireEvent.click(toolButton('들여쓰기'))
+    await waitFor(() => expect(isNestedIn('Divider', 'Section')).toBe(true))
+
+    fireEvent.click(toolButton('내어쓰기'))
+    await waitFor(() => expect(isNestedIn('Divider', 'Section')).toBe(false))
+
+    // 원래 자리는 Section **뒤**, Text **앞**이다.
+    expect(structureTypes()).toEqual(['Page', 'Card', 'Section', 'Button', 'Link', 'Divider', 'Text'])
+  })
+
+  it('배열을 만드는 갈래도 왕복한다', async () => {
+    // 위 왕복은 `move` 하나짜리 갈래다. `children` 키를 만드는 두 op 갈래도 제자리로
+    // 돌아오는지 본다 — 그쪽은 `add`와 `move`의 경로 기준이 다르다(웨이브 1).
+    await openPage(nestDoc(), { apiOverrides: nestServer().api })
+    select('Section')
+
+    fireEvent.click(toolButton('들여쓰기'))
+    await waitFor(() => expect(isNestedIn('Section', 'Card')).toBe(true))
+
+    fireEvent.click(toolButton('내어쓰기'))
+    await waitFor(() => expect(isNestedIn('Section', 'Card')).toBe(false))
+
+    expect(structureTypes()).toEqual(['Page', 'Card', 'Section', 'Button', 'Link', 'Divider', 'Text'])
+  })
+
+  it('undo하면 들여쓰기가 되돌아간다', async () => {
+    const srv = nestServer()
+    await openPage(nestDoc(), { apiOverrides: srv.api })
+    select('Section')
+
+    fireEvent.click(toolButton('들여쓰기'))
+    await waitFor(() => expect(isNestedIn('Section', 'Card')).toBe(true))
+
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    fireEvent.click(undoButton())
+
+    await waitFor(() => expect(isNestedIn('Section', 'Card')).toBe(false))
+    // 되보낸 것이 서버가 만든 `inverse`인지 본다 — 두 op 갈래의 역은 둘이고,
+    // **빈 `children`이 남지 않는다**(웨이브 1의 실측).
+    await waitFor(() => expect(srv.calls).toHaveLength(2))
+    expect(srv.calls[1]?.ops).toEqual([
+      { op: 'move', from: '/root/children/0/children/0', path: '/root/children/1' },
+      { op: 'remove', path: '/root/children/0/children' },
+    ])
   })
 })
