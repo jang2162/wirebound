@@ -345,6 +345,33 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
     // 낫다. 이미 비어 있으면 스토어가 알리지 않으므로 구독자가 헛일을 하지도 않는다.
     store.clearPage()
 
+    /**
+     * 내 revision을 받아 undo 스택을 채운다(D10). **실패는 삼킨다** — 조회가 실패하면
+     * undo만 없고 페이지는 그대로 열려 있다.
+     *
+     * **재조회(복구) 경로에서는 이것을 부르지 않는다.** 재조회는 서버가 내 것과 갈라졌다는
+     * 뜻이고, 그때 옛 `inverse`를 되살리면 **남의 편집을 조용히 덮는다** — 실측: 내가 `A→B`로
+     * 바꾼 뒤 남이 `C`로 바꾼 문서에 내 `inverse`(`replace … ← "A"`)를 적용하면 던지지 않고
+     * 그대로 `A`가 되어 `C`가 사라진다. §7.3의 건너뛰기는 **노드가 지워진 경우만** 잡는다
+     * (그쪽은 `경로를 찾을 수 없습니다`로 던진다). 값이 갈린 흔한 경우는 못 잡으므로,
+     * 충돌 뒤에는 스택을 비운 채 두고 사용자가 새로고침으로 되찾게 한다.
+     */
+    async function restoreUndo(openPageId: string): Promise<void> {
+      try {
+        const revisions = await api.listMyRevisions(projectId, openPageId)
+        // 늦게 온 응답이 새 페이지의 스택을 덮지 않게 한다(문서 조회와 같은 가드).
+        if (!alive) return
+        // 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 —
+        // 스토어가 `RevisionSummary`를 알면 `apps/web`의 HTTP 경계가 스토어까지 새어 든다.
+        store.restoreUndoStack(
+          revisions.map((revision) => ({ revisionId: revision.id, inverse: revision.inverse })),
+        )
+      } catch {
+        // 여기서 알리지 않는다. 사용자가 할 수 있는 일이 없고, 편집 실패 통지 자리(D8)를
+        // 부가 기능의 실패로 채우면 진짜 편집 실패가 묻힌다.
+      }
+    }
+
     // 열 페이지를 **인자로** 받는다. 이펙트 위쪽의 `undefined` 검사만으로는 이 안에서
     // `pageId`가 좁혀지지 않는다(호이스팅된 함수 선언이라 TS가 호출 시점을 모른다).
     async function load(openPageId: string): Promise<void> {
@@ -359,6 +386,15 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
         // 연 페이지의 id도 같은 호출로 넘긴다: 읽는 쪽이 그것을 주소와 대조한다.
         store.loadPage(openPageId, page.schema, page.headSeq)
         setState({ status: 'ready' })
+        // **undo 스택 복원은 `loadPage` 뒤다**(D10). 순서가 뒤바뀌면 방금 채운 스택을
+        // `loadPage`가 지운다 — 그것이 페이지 상태를 서버 것으로 놓는 자리이기 때문이다
+        // (`store/editor-store.ts`). `restoreUndoStack이 loadPage 뒤에 온다`가 그 순서를
+        // 고정한다.
+        //
+        // **페이지가 뜬 뒤에 받는다.** 이 조회가 실패해도 `setState({ status: 'ready' })`는
+        // 이미 지났으므로 페이지는 열려 있다 — undo 복원은 부가 기능이고, 그것 때문에
+        // 문서를 못 보게 되면 안 된다.
+        void restoreUndo(openPageId)
       } catch (caught) {
         if (!alive) return
         // 여기서 다시 `clearPage()`를 부르지 않는다. 조회 시작 시점에 이미 비웠고, 그

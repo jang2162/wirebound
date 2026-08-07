@@ -92,3 +92,20 @@ export interface PatchResult {
   clientOpId?: string
 }
 
+/**
+ * `GET /api/projects/:projectId/pages/:pageId/revisions`의 항목. 여덟 키가 계약이다
+ * (README "편집 파이프라인"의 예시 JSON).
+ *
+ * `ops`·`inverse`는 저장된 그대로 실려 나온다 — README가 그렇게 못박은 것은
+ * **새로고침 뒤의 스택 복원이 `inverse`만으로 성립해야 하기 때문**이다(설계 §7.3, D10).
+ */
+export interface RevisionSummary {
+  id: string
+  seq: number
+  actorType: 'user' | 'mcp' | 'cli'
+  actorId: string | null
+  actorLabel: string | null
+  ops: PatchOp[]
+  inverse: PatchOp[]
+  createdAt: string
+}

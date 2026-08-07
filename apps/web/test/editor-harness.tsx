@@ -131,6 +131,10 @@ export function renderEditor(options: EditorOptions = {}): void {
           }
           return pageDetail(pageId, schema)
         },
+        // 페이지를 열면 셸이 undo 스택을 복원하려고 부른다(D10). 기본은 빈 목록이다 —
+        // 스텁하지 않으면 `notStubbed`가 던지고, 그 예외는 복원 쪽 `catch`가 삼켜서
+        // **아무 일도 안 일어난 것과 구별되지 않는다.**
+        listMyRevisions: async () => [],
         ...options.apiOverrides,
       }),
       route: options.route ?? PAGE_ROUTE,

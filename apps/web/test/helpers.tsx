@@ -35,6 +35,7 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     getTree: notStubbed('getTree'),
     getPage: notStubbed('getPage'),
     patchOps: notStubbed('patchOps'),
+    listMyRevisions: notStubbed('listMyRevisions'),
     ...overrides,
   }
 }

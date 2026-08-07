@@ -6,7 +6,14 @@
  * `/api`로 시작하는 경로만 쓴다.
  */
 import { ApiError, type ApiClient, type ApiErrorCode, type ApiErrorIssue } from './client'
-import type { PageDetail, PatchResult, ProjectDetail, SessionUser, TreeMenuNode } from './types'
+import type {
+  PageDetail,
+  PatchResult,
+  ProjectDetail,
+  RevisionSummary,
+  SessionUser,
+  TreeMenuNode,
+} from './types'
 
 const API_PREFIX = '/api'
 
@@ -130,6 +137,20 @@ const SHAPES = {
    * 보는 것은 `@wirebound/schema`의 일이다 — `schema.root` 안쪽을 보지 않는 것과 같은
    * 경계다(D8).
    */
+  /**
+   * revision 목록. **각 항목의 `inverse`가 배열인지까지 본다** — 그 값이 그대로 undo
+   * 스택에 실리고, 배열이 아니면 undo가 그것을 `ops`로 보내다 죽는다. `inverse` **안쪽**은
+   * 보지 않는다(D11 — `patchResult`와 같은 경계).
+   */
+  revisionList: (value) =>
+    isArrayOf(
+      value,
+      (item) =>
+        isRecord(item) &&
+        typeof item['id'] === 'string' &&
+        typeof item['seq'] === 'number' &&
+        Array.isArray(item['inverse']),
+    ),
   patchResult: (value) =>
     isRecord(value) &&
     typeof value['seq'] === 'number' &&
@@ -273,6 +294,14 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
         body.clientOpId === undefined
           ? { baseSeq: body.baseSeq, ops: body.ops }
           : { baseSeq: body.baseSeq, ops: body.ops, clientOpId: body.clientOpId },
+      ),
+    listMyRevisions: (projectId, pageId) =>
+      request<RevisionSummary[]>(
+        'GET',
+        // `mine=true` 하나뿐이다. 선언하지 않은 쿼리 키는 400이므로(README) 캐시 버스터도
+        // 붙일 수 없고, `limit`은 기본값 50이 설계 §7.3의 "최근 50개"와 같아 생략한다.
+        `${pagePath(projectId, pageId)}/revisions?mine=true`,
+        SHAPES.revisionList,
       ),
   }
 }

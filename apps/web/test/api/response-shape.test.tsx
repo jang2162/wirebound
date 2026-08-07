@@ -67,6 +67,18 @@ const PATCH_RESULT = {
   schemaVersion: 1,
 }
 
+/** `GET .../revisions?mine=true`의 계약대로인 항목. */
+const REVISION = {
+  id: 'rev-1',
+  seq: 8,
+  actorType: 'user',
+  actorId: 'u1',
+  actorLabel: '홍길동',
+  ops: [],
+  inverse: [],
+  createdAt: '2026-08-04T09:00:00.000Z',
+}
+
 /** 경로 끝으로 응답을 고르는 가짜 `fetch`. 전부 200 JSON이다 — 여기서 재는 것은 성공 대역이다. */
 function routedFetch(bodies: Record<string, unknown>): typeof fetch {
   return (input) => {
@@ -132,6 +144,21 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
       bodies: [null, [], {}, { ...PAGE, schema: 'x' }, { ...PAGE, schema: {} }, { ...PAGE, headSeq: '7' }],
     },
     {
+      // undo 스택을 채우는 값이다. 배열이 아니거나 원소의 `inverse`가 배열이 아니면
+      // 그것이 그대로 스택에 실려 undo가 `ops`로 보내다 죽는다.
+      name: 'listMyRevisions',
+      call: (api) => api.listMyRevisions('p-1', 'pg-1'),
+      bodies: [
+        null,
+        {},
+        'x',
+        [{}],
+        [{ ...REVISION, id: 1 }],
+        [{ ...REVISION, inverse: 'x' }],
+        [{ ...REVISION, inverse: null }],
+      ],
+    },
+    {
       // `seq`가 다음 요청의 `baseSeq`이고 `inverse`가 undo가 되보낼 ops다. 둘 중 하나라도
       // 계약을 어기면 그 값이 그대로 큐와 undo 스택에 실린다 — `seq`가 문자열이면 다음
       // `baseSeq`가 조용히 어긋나고, `inverse`가 배열이 아니면 undo가 그것을 `ops`로
@@ -191,6 +218,19 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
     const api = client({ '/ops': PATCH_RESULT })
 
     await expect(api.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: [] })).resolves.toEqual(PATCH_RESULT)
+  })
+
+  it('revision 목록이 비어 있어도 지나간다', async () => {
+    // 편집한 적이 없는 페이지다. 검사가 "비어 있으면 잘못됐다"로 새면 여기서 죽는다.
+    const api = client({ '/revisions?mine=true': [] })
+
+    await expect(api.listMyRevisions('p-1', 'pg-1')).resolves.toEqual([])
+  })
+
+  it('계약을 지킨 revision 목록은 그대로 지나간다', async () => {
+    const api = client({ '/revisions?mine=true': [REVISION] })
+
+    await expect(api.listMyRevisions('p-1', 'pg-1')).resolves.toEqual([REVISION])
   })
 
   it('inverse가 빈 배열인 응답도 지나간다', async () => {

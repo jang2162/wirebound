@@ -6,7 +6,14 @@
  * 구현은 `http-client.ts`(실제 서버)와 각 화면 테스트의 가짜 두 부류다.
  */
 import type { PatchOp } from '@wirebound/schema'
-import type { PageDetail, PatchResult, ProjectDetail, SessionUser, TreeMenuNode } from './types'
+import type {
+  PageDetail,
+  PatchResult,
+  ProjectDetail,
+  RevisionSummary,
+  SessionUser,
+  TreeMenuNode,
+} from './types'
 
 export interface ApiClient {
   login(email: string, password: string): Promise<SessionUser>
@@ -38,6 +45,16 @@ export interface ApiClient {
     pageId: string,
     body: { baseSeq: number; ops: PatchOp[]; clientOpId?: string },
   ): Promise<PatchResult>
+  /**
+   * 이 페이지에서 **내가** 만든 revision. 새로고침 뒤 undo 스택을 복원하는 데 쓴다(D10).
+   *
+   * **응답은 `seq` 내림차순이고 여기서 뒤집지 않는다** — 스택으로 옮기는 자리가 그 순서를
+   * 안다(`store/editor-store.ts`의 `restoreUndoStack`).
+   *
+   * **`limit`을 붙이지 않는다.** 서버 기본값 50이 설계 §7.3의 "최근 50개"와 같고,
+   * **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — `mine` 외에는 아무것도 붙일 수 없다.
+   */
+  listMyRevisions(projectId: string, pageId: string): Promise<RevisionSummary[]>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

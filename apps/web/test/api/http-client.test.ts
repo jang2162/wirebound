@@ -445,3 +445,49 @@ describe('patchOps', () => {
     expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1/ops')
   })
 })
+
+describe('listMyRevisions', () => {
+  const revision = {
+    id: 'rev-1',
+    seq: 8,
+    actorType: 'user',
+    actorId: 'u1',
+    actorLabel: '홍길동',
+    ops: [{ op: 'replace', path: '/root/children/0/props/title', value: '새' }],
+    inverse: [{ op: 'replace', path: '/root/children/0/props/title', value: '옛' }],
+    createdAt: '2026-08-04T09:00:00.000Z',
+  }
+
+  it('mine=true만 붙여 GET한다', async () => {
+    // **`limit`을 붙이지 않는다.** 기본값 50이 설계 §7.3의 "최근 50개"와 같고,
+    // **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — 캐시 버스터도 거부된다.
+    const stub = stubFetch(jsonResponse(200, [revision]))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.listMyRevisions('p-1', 'pg-1')
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p-1/pages/pg-1/revisions?mine=true')
+    expect(stub.calls[0]?.init?.method).toBe('GET')
+  })
+
+  it('응답을 순서 그대로 낸다', async () => {
+    // 서버가 `seq` 내림차순으로 준다. 여기서 뒤집지 않는다 — 스택으로 옮기는 자리가
+    // 그 순서를 안다(`store/editor-store.ts`의 `restoreUndoStack`).
+    const older = { ...revision, id: 'rev-0', seq: 7 }
+    const stub = stubFetch(jsonResponse(200, [revision, older]))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const result = await client.listMyRevisions('p-1', 'pg-1')
+
+    expect(result.map((r) => r.seq)).toEqual([8, 7])
+  })
+
+  it('경로에 들어가는 id는 URL 인코딩된다', async () => {
+    const stub = stubFetch(jsonResponse(200, []))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.listMyRevisions('p 1/x', '../pg1')
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1/revisions?mine=true')
+  })
+})
