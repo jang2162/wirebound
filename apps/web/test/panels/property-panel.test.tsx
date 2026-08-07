@@ -152,9 +152,20 @@ const BROKEN_TYPE_DOC = pageDoc({
 })
 
 /** 이 웨이브에서 위젯이 생긴 control. Task 8·9가 여기로 옮겨 온다. */
-const WIDGET_CONTROLS: EditorControl[] = ['text', 'textarea', 'number', 'switch', 'select']
-/** 아직 위젯이 없어 `formatValue`가 글자로만 그리는 control. */
-const NOT_YET: EditorControl[] = ['stringList', 'pairList']
+const WIDGET_CONTROLS: EditorControl[] = [
+  'text',
+  'textarea',
+  'number',
+  'switch',
+  'select',
+  'stringList',
+  'pairList',
+]
+/**
+ * 아직 위젯이 없어 `formatValue`가 글자로만 그리는 control. **지금은 비어 있다** —
+ * 웨이브 3이 일곱을 전부 덮었다. 카탈로그에 여덟 번째가 생기면 아래 대조가 그것을 잡는다.
+ */
+const NOT_YET: EditorControl[] = []
 
 /** 카탈로그가 **실제로 쓰는** control 집합. 손으로 적지 않고 센다. */
 function catalogControls(): Set<EditorControl> {
@@ -320,20 +331,27 @@ describe('속성 패널', () => {
     // 같은 `editor` 명세인데 이쪽은 현재 구조가 `table`이라 보인다. 위 케이스와 짝이다 —
     // 둘이 함께 통과해야 필터가 구조를 실제로 보고 있다고 할 수 있다.
     expect(labels()).toContain('컬럼')
-    expect(propRows()).toContainEqual({ label: '컬럼', value: '이름, 이메일' })
+    // 값은 이제 목록 위젯이 그린다(Task 9). 한 줄로 이어 붙인 글자가 아니라 칸마다 하나다.
+    const cells = [...panel().querySelectorAll<HTMLInputElement>('.wb-shell-list-cell')]
+    expect(cells.map((cell) => cell.value)).toEqual(['이름', '이메일'])
   })
 
-  it('목록 값은 한 줄로 이어 보여 준다', async () => {
+  it('pairList는 키와 값을 각각 칸으로 그린다', async () => {
+    // **앞 판에서는 `한 줄로 이어 보여 준다`였다.** `formatValue`가 그리던 자리를 Task 9의
+    // 목록 위젯이 가져갔으므로 재는 대상이 바뀐다 — 지키는 성질(`[object Object]`가
+    // 보이지 않는다)은 그대로다.
     await openPage(DOC)
 
     select('KeyValue')
 
-    // `pairList`는 원소가 `{ key, value }`다. 배열을 그대로 찍으면 `[object Object]`가
-    // 보인다.
-    expect(propRows()).toContainEqual({
-      label: '키-값',
-      value: '가입일: 2026-01-01, 등급: VIP',
-    })
+    const cells = [...panel().querySelectorAll<HTMLInputElement>('.wb-shell-list-cell')]
+    expect(cells.map((cell) => cell.value)).toEqual([
+      '가입일',
+      '2026-01-01',
+      '등급',
+      'VIP',
+    ])
+    expect(within(panel()).queryByText(/\[object Object\]/)).toBeNull()
   })
 
   it('선택이 없으면 안내를 보여준다', async () => {
@@ -371,14 +389,14 @@ describe('속성 패널', () => {
     expect(propRows()).toHaveLength(0)
   })
 
-  it('카탈로그의 control마다 대응하는 위젯이 있다 — 아직 둘은 덮지 못한다', async () => {
+  it('카탈로그의 control 일곱에 전부 대응하는 위젯이 있다', async () => {
     // **P2b-1의 `이 단계에서는 입력이 없다`를 대체한 케이스다.** 이월 문서가
     // *"그 테스트를 바꾸는 것이 '편집이 생겼다'는 신호다"*라고 못박았고, 이것이 그
     // 반대 방향이다 — 경계를 "입력이 없다"에서 "control마다 위젯이 있다"로 뒤집는다.
     //
-    // **덮지 못한 것을 이름과 아래 목록에 적어 둔다.** 지금 위젯이 있는 것은 다섯이고
-    // 둘(`stringList`·`pairList`)이 남는다. Task 9가 그 둘을 덮으면 `NOT_YET`이 비고
-    // 이 이름도 바뀐다.
+    // **일곱을 전부 덮었다 — 그리고 그 "일곱"은 아래에서 세어 나온 값이다.** `NOT_YET`이
+    // 비어 있는 것이 그 상태의 표시이고, 카탈로그에 새 control이 생기면 두 목록의 합이
+    // 어긋나 여기서 죽는다.
     await openPage(CONTROLS_DOC)
 
     // **분모를 손으로 적지 않는다.** 카탈로그가 실제로 쓰는 control 집합을 세어

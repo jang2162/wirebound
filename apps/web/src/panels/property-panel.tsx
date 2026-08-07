@@ -21,6 +21,7 @@ import {
 } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { ListControl } from './controls/list-control'
 import { SelectControl } from './controls/select-control'
 import { SwitchControl } from './controls/switch-control'
 import { TextControl } from './controls/text-control'
@@ -110,7 +111,11 @@ export function PropertyPanel(props: {
             // 스타일과 테스트가 "줄"을 다룰 수 있다.
             <div className="wb-shell-prop" key={field.prop}>
               <dt className="wb-shell-prop-label">
-                <label htmlFor={controlId(field.prop)}>{field.label}</label>
+                {/* 목록 컨트롤은 입력이 여럿이라 `htmlFor` 하나로 이름을 줄 수 없다.
+                    그쪽은 `role="group"`이 이 `<label>`을 `aria-labelledby`로 가리킨다. */}
+                <label id={`${controlId(field.prop)}-label`} htmlFor={controlId(field.prop)}>
+                  {field.label}
+                </label>
               </dt>
               <dd className="wb-shell-prop-value">
                 <PropControl
@@ -172,6 +177,10 @@ function PropControl(props: {
 
   if (field.control === 'switch') {
     return <SwitchControl field={field} value={value} id={id} onCommit={onCommit} />
+  }
+
+  if (field.control === 'stringList' || field.control === 'pairList') {
+    return <ListControl field={field} value={value} id={id} onCommit={onCommit} />
   }
 
   // `options`가 없거나 비면 `<select>`를 그리지 않는다(`SelectControl`이 `null`을 낸다).
@@ -245,11 +254,17 @@ function formatValue(value: unknown): string {
  * **오늘은 던질 수 없다.** 스토어에 문서를 싣는 자리는 `routes/editor.tsx`의
  * `store.loadPage(openPageId, page.schema, …)` 하나이고(실측: `apps/web/src`에서
  * `loadPage(`를 부르는 자리가 그 한 곳이다), 그 값은 `getPage` 응답의 JSON이다. JSON에서
- * 나온 값에는 순환도 `BigInt`도 없다. 그래도 잡는 것은 **P2b-2가 편집으로 만든 값을 싣기
- * 시작하면 그 전제가 사라지기 때문**이고, 그때 이 한 줄이 없으면 편집 중 흰 화면이 된다.
+ * 나온 값에는 순환도 `BigInt`도 없다.
  *
- * 이 갈래는 `test/panels/property-panel.test.tsx`의
- * `값을 문자열로 만들 수 없어도 셸은 살아 있다`가 순환 참조를 심어 지킨다.
+ * **웨이브 3에서 이 `try`의 하중이 0이 됐다.** 걷어내도 죽는 케이스가 없다(실측).
+ * 앞 판에서 그것을 지키던 `값을 문자열로 만들 수 없어도 셸은 살아 있다`는 이제 다른 자리를
+ * 지난다 — `Card.title`이 `text` control이라 `TextControl`이 그리고, 그쪽은 객체 값을 빈
+ * 칸으로 시작할 뿐 `JSON.stringify`를 부르지 않는다(`controls/text-control.tsx`의 `toDraft`).
+ *
+ * **그래도 지우지 않는다.** `formatValue` 자체는 아직 하중이 있고(`options`가 없는 `select`가
+ * 그 길로 그려진다 — `options가 없는 select는 그리지 않는다`가 그 값을 단언한다), 이 `try`는
+ * 그 길에 객체 값이 실릴 때의 마지막 방벽이다. 이 패널이 오류 경계 **밖**이라는 사정은
+ * 그대로다. **다만 지금은 재지 않은 방어라는 것을 여기 적어 둔다.**
  */
 function stringify(value: unknown): string {
   try {
