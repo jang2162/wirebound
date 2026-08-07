@@ -11,8 +11,11 @@
  * 구조 트리는 오류 경계 밖이라 던지면 셸 전체가 흰 화면이 된다.
  */
 import {
+  applyOps,
+  findNode,
   findNodePath,
   getByPointer,
+  walkNodes,
   type PageDocument,
   type PatchOp,
   type WbNode,
@@ -139,6 +142,89 @@ export function removeNodeOps(document: PageDocument, nodeId: string): PatchOp[]
   if (path === undefined || path === ROOT_PATH) return null
 
   return [{ op: 'remove', path }]
+}
+
+/**
+ * 노드를 다른 부모의 `index` 자리로 옮기는 op. 같은 부모 안 순서 변경도 이것이다.
+ * 옮길 수 없으면 `null`이다.
+ *
+ * **`index`는 결과 배열에서 그 노드가 놓일 자리다.** `move`가 remove 후 add이므로 목적지
+ * 인덱스는 **값을 뺀 배열**을 기준으로 읽히고(실측: `[A,B,C]`에서 A를 인덱스 2로 옮기면
+ * `[B,C,A]`다 — `[B,A,C]`가 아니다), 그것이 곧 결과에서의 자리다. 그래서 호출자는
+ * "한 칸 아래로"를 `index + 1`, "앞 형제 안 마지막"을 `앞형제.children.length`로 적을 수
+ * 있다 — 방향에 따라 보정을 나눌 필요가 없다.
+ *
+ * **목적지 경로도 값을 뺀 뒤 문서에서 찾는다 — 계획서가 재지 않은 자리다.** 소스가 목적지
+ * 부모보다 앞에 있으면 뺀 순간 부모의 인덱스가 당겨진다. 원본 기준 경로를 그대로 쓰면
+ * `applyOps`가 `경로를 찾을 수 없습니다`로 던지고(실측) D7이 편집을 삼킨다. 계획서는 이
+ * 보정을 "같은 배열 안에서 뒤로 옮길 때"로 좁게 적었는데, **부모가 다를 때도 난다.**
+ *
+ * **목적지에 `children` 키가 없으면 빈 배열을 먼저 놓는다**(`insertNodeOps`의 같은 갈래와
+ * 같은 원인 — 실측으로 던지는 것을 봤다). 그때만 op이 둘이 되고, **그 둘의 경로 기준이
+ * 다르다**: `add`는 첫 op이라 원본 문서 기준이고 `move`의 `path`는 remove가 지나간 뒤
+ * 기준이다. 한쪽으로 통일하면 둘 중 하나가 다른 노드를 가리킨다(테스트가 그 두 값이
+ * 실제로 갈리는 문서로 고정한다).
+ *
+ * op을 둘로 나누는 것이 D2를 어기지 않는 이유: **편집 하나는 revision 하나**이고 서버가
+ * `invertOps(before, ops)`로 배열째 역을 만든다(`apps/api/src/services/edit-pipeline.ts`).
+ * 그 사이에 다른 편집이 끼지 않는다. D2가 막으려던 것은 이동을 `remove`+`add` **두 편집**
+ * 으로 쪼개는 쪽이다.
+ *
+ * `null`을 내는 자리: 노드가 없거나 루트다 · 부모가 없다 · **자기 자신이나 자기 자손을
+ * 부모로 삼는다**(트리가 끊어진다) · 인덱스가 범위 밖이다 · 목적지 `children`이 배열이
+ * 아니다.
+ */
+export function moveNodeOps(
+  document: PageDocument,
+  nodeId: string,
+  parentId: string,
+  index: number,
+): PatchOp[] | null {
+  const from = findNodePath(document.root, nodeId)
+  if (from === undefined || from === ROOT_PATH) return null
+
+  const node = findNode(document.root, nodeId)
+  if (node === undefined) return null
+
+  // 자기 서브트리 안으로는 못 옮긴다. `walkNodes`는 자기 자신부터 내므로 "자신을 부모로"도
+  // 같은 검사에 걸린다.
+  //
+  // **이 루프와 위 루트 판정은 서로를 덮는다 — 하나씩 지우면 둘 다 0 사망이다(실측).**
+  // 이 루프만 지우면 자손을 부모로 준 편집은 아래 `parentPathAfter === undefined`가 잡고
+  // (자손은 뺀 문서에 없다), 루트 판정만 지우면 **루트는 모든 노드의 조상이므로** 어떤
+  // 부모를 줘도 이 루프에 걸린다. 케이스를 더해 하나만 죽이는 입력을 만들지 못했다 —
+  // 정상 문서에서 둘이 잡는 입력 집합이 같다.
+  //
+  // **그래도 둘 다 남긴 것은 함께 지우면 던지기 때문이다(실측).** 둘 다 없애고 루트를
+  // 옮기려 하면 아래 `remove /root`가 문서에서 root를 지우고, 그 문서를 `findNodePath`에
+  // 넣은 `walkNodes`가 `Cannot read properties of undefined (reading 'id')`로 던진다 —
+  // 여기는 오류 경계 밖이라 그 예외가 셸을 통째로 지운다.
+  for (const visit of walkNodes(node)) {
+    if (visit.node.id === parentId) return null
+  }
+
+  const parentPathBefore = findNodePath(document.root, parentId)
+  if (parentPathBefore === undefined) return null
+
+  // **여기부터가 remove 후 기준이다.** 위 자손 검사를 통과했으므로 부모는 빠지는 서브트리
+  // 밖에 있고, 그래서 뺀 문서에도 남아 있다.
+  const afterRemove = applyOps(document, [{ op: 'remove', path: from }])
+  const parentPathAfter = findNodePath(afterRemove.root, parentId)
+  if (parentPathAfter === undefined) return null
+
+  const children = getByPointer(afterRemove, `${parentPathAfter}/children`)
+
+  if (children === undefined) {
+    if (index !== 0) return null
+    return [
+      { op: 'add', path: `${parentPathBefore}/children`, value: [] },
+      { op: 'move', from, path: `${parentPathAfter}/children/0` },
+    ]
+  }
+  if (!Array.isArray(children)) return null
+  if (!Number.isInteger(index) || index < 0 || index > children.length) return null
+
+  return [{ op: 'move', from, path: `${parentPathAfter}/children/${index}` }]
 }
 
 /**

@@ -17,7 +17,7 @@ import {
   type WbNode,
 } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
-import { insertNodeOps, propOps, removeNodeOps } from '../../src/edit/ops'
+import { insertNodeOps, moveNodeOps, propOps, removeNodeOps } from '../../src/edit/ops'
 
 function doc(root: WbNode): PageDocument {
   return { version: 1, root }
@@ -392,5 +392,235 @@ describe('removeNodeOps', () => {
       },
     ])
     expect(applyOps(applyOps(document, ops), invertOps(document, ops))).toEqual(document)
+  })
+})
+
+describe('moveNodeOps', () => {
+  it('같은 부모 안에서 앞으로 옮긴다', () => {
+    const document = withSiblings()
+
+    expect(childIds(applied(document, moveNodeOps(document, 'n_c', 'n_root', 0)), 'n_root'))
+      .toEqual(['n_c', 'n_a', 'n_b'])
+  })
+
+  it('같은 부모 안에서 뒤로 옮긴다', () => {
+    // **계획서가 답을 정하지 않은 자리다 — 재서 확정했다.** `[A,B,C]`에서 A를 인덱스 2로
+    // 옮기면 `[B,C,A]`다(실측). `move`는 remove 후 add이므로 목적지 인덱스는 **값을 뺀
+    // 배열**을 기준으로 읽히고, 그래서 결과 배열에서 그 노드가 놓이는 자리와 같아진다.
+    //
+    // 이 함수의 `index`는 그 성질을 그대로 계약으로 삼는다: **결과 배열에서의 인덱스**다.
+    // 그래야 "한 칸 아래로"가 `index + 1`, "앞 형제 안 마지막"이 `앞형제.children.length`로
+    // 자연스럽게 나온다 — 호출자가 방향에 따라 보정을 나눠 쓰지 않아도 된다.
+    const document = withSiblings()
+
+    expect(childIds(applied(document, moveNodeOps(document, 'n_a', 'n_root', 2)), 'n_root'))
+      .toEqual(['n_b', 'n_c', 'n_a'])
+  })
+
+  it('한 칸 아래로는 index + 1이다', () => {
+    // 위 계약이 툴바에서 쓰이는 모양이다(Task 5). `n_a`가 0번이므로 1을 준다.
+    const document = withSiblings()
+
+    expect(childIds(applied(document, moveNodeOps(document, 'n_a', 'n_root', 1)), 'n_root'))
+      .toEqual(['n_b', 'n_a', 'n_c'])
+  })
+
+  it('다른 부모로 옮긴다', () => {
+    const document = withSubtree()
+    const next = applied(document, moveNodeOps(document, 'n_tail', 'n_box', 0))
+
+    expect(childIds(next, 'n_box')).toEqual(['n_tail', 'n_1', 'n_2'])
+    expect(childIds(next, 'n_root')).toEqual(['n_box'])
+  })
+
+  it('목적지 부모가 뒤에 있으면 경로가 밀린 것을 보정한다', () => {
+    // **계획서가 재지 않은 자리다 — 실측으로 찾았다.** `move`는 remove 후 add이므로
+    // 목적지 경로도 **값을 뺀 뒤** 문서를 기준으로 잡아야 한다. 소스가 목적지 부모보다
+    // 앞에 있으면 뺀 순간 부모의 인덱스가 당겨지는데, 원본 기준 경로를 그대로 쓰면
+    // `applyOps`가 `경로를 찾을 수 없습니다: /root/children/1/children/0`으로 던진다(실측).
+    //
+    // 여기서는 `n_first`(인덱스 0)를 `n_second`(인덱스 1) 안으로 옮긴다 — 뺀 뒤
+    // `n_second`는 인덱스 0이다. **왕복 대조가 아니면 이 오프바이원이 안 잡힌다.**
+    const document = doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_first', type: 'Text' },
+        { id: 'n_second', type: 'Card', children: [{ id: 'n_kid', type: 'Text' }] },
+      ],
+    })
+
+    expect(moveNodeOps(document, 'n_first', 'n_second', 0)).toEqual([
+      { op: 'move', from: '/root/children/0', path: '/root/children/0/children/0' },
+    ])
+    const next = applied(document, moveNodeOps(document, 'n_first', 'n_second', 0))
+    expect(childIds(next, 'n_second')).toEqual(['n_first', 'n_kid'])
+    expect(childIds(next, 'n_root')).toEqual(['n_second'])
+  })
+
+  it('children 키가 없는 부모로 옮기면 배열을 먼저 만든다', () => {
+    // **`move` 하나로는 안 되는 자리다 — 실측했다.** `children` 키가 없는 노드로
+    // `move … path /…/children/0`을 주면 `경로를 찾을 수 없습니다`로 던진다
+    // (`insertNodeOps`의 같은 갈래와 같은 원인). 그래서 빈 배열을 먼저 놓는다.
+    //
+    // **op 둘의 경로 기준이 다르다.** `add`는 첫 op이라 **원본 문서** 기준이고,
+    // `move`의 `path`는 그 앞의 remove가 지나간 뒤 기준이다. 여기서는 소스(`n_lead`,
+    // 인덱스 0)가 목적지 부모(`n_empty`, 인덱스 1)보다 앞이라 둘이 실제로 갈린다 —
+    // `add`는 `/root/children/1/children`, `move`는 `/root/children/0/children/0`이다.
+    // 한 기준으로 통일하면 둘 중 하나가 다른 노드를 가리킨다.
+    const document = doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_lead', type: 'Text' },
+        { id: 'n_empty', type: 'Card' },
+      ],
+    })
+
+    expect(moveNodeOps(document, 'n_lead', 'n_empty', 0)).toEqual([
+      { op: 'add', path: '/root/children/1/children', value: [] },
+      { op: 'move', from: '/root/children/0', path: '/root/children/0/children/0' },
+    ])
+    const next = applied(document, moveNodeOps(document, 'n_lead', 'n_empty', 0))
+    expect(childIds(next, 'n_empty')).toEqual(['n_lead'])
+    expect(childIds(next, 'n_root')).toEqual(['n_empty'])
+  })
+
+  it('children 키가 없는 부모의 0이 아닌 자리는 null이다', () => {
+    const document = doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_lead', type: 'Text' },
+        { id: 'n_empty', type: 'Card' },
+      ],
+    })
+
+    expect(moveNodeOps(document, 'n_lead', 'n_empty', 1)).toBeNull()
+  })
+
+  it('자기 자손 안으로는 옮길 수 없다', () => {
+    // 트리가 끊어진다 — 옮긴 노드가 자기 서브트리 밑에 들어가면 그 서브트리는
+    // 문서 어디에서도 닿을 수 없다.
+    expect(moveNodeOps(withSubtree(), 'n_box', 'n_1', 0)).toBeNull()
+  })
+
+  it('자기 자신을 부모로 삼을 수 없다', () => {
+    expect(moveNodeOps(withSubtree(), 'n_box', 'n_box', 0)).toBeNull()
+  })
+
+  it('루트는 옮길 수 없다', () => {
+    expect(moveNodeOps(withSiblings(), 'n_root', 'n_a', 0)).toBeNull()
+  })
+
+  it('없는 노드·없는 부모면 null이다', () => {
+    expect(moveNodeOps(withSiblings(), 'n_missing', 'n_root', 0)).toBeNull()
+    expect(moveNodeOps(withSiblings(), 'n_a', 'n_missing', 0)).toBeNull()
+  })
+
+  it('범위 밖 인덱스면 null이다', () => {
+    // 같은 부모 안이면 **값을 뺀 뒤** 길이가 기준이다 — 형제가 셋이어도 2까지다.
+    expect(moveNodeOps(withSiblings(), 'n_a', 'n_root', 3)).toBeNull()
+    expect(moveNodeOps(withSiblings(), 'n_a', 'n_root', 2)).not.toBeNull()
+    expect(moveNodeOps(withSiblings(), 'n_a', 'n_root', -1)).toBeNull()
+  })
+
+  it('children이 배열이 아닌 부모면 null이다', () => {
+    const document = doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_a', type: 'Text' },
+        { id: 'n_bad', type: 'Card', children: 'nope' as unknown as WbNode[] },
+      ],
+    })
+
+    expect(moveNodeOps(document, 'n_a', 'n_bad', 0)).toBeNull()
+  })
+
+  it('옮긴 뒤 서브트리가 통째로 따라간다', () => {
+    const document = withSubtree()
+    const next = applied(document, moveNodeOps(document, 'n_box', 'n_root', 1))
+
+    expect(childIds(next, 'n_root')).toEqual(['n_tail', 'n_box'])
+    expect(childIds(next, 'n_box')).toEqual(['n_1', 'n_2'])
+    // 자손이 사라지거나 두 번 실리지 않았는지 — 전체 id 집합으로 본다.
+    expect(collectNodeIds(next.root).sort()).toEqual(collectNodeIds(document.root).sort())
+  })
+
+  it('서버가 만들 inverse를 여기서 재 둔다', () => {
+    // **계획서 D2가 소스를 읽고 낸 추론을 여기서 잰다** — *"목적지가 배열이면 덮어쓸 값이
+    // 없으므로 반대 방향 `move` 하나"*. 서버는 `packages/schema`의 `invertOps`를 그대로
+    // 쓰므로(`apps/api/src/services/edit-pipeline.ts`) 여기서 잰 값이 서버가 낼 값이다.
+    //
+    // **잰 결과 D2가 맞다** — 아래 셋이 전부 `move` 하나다. 다만 그것은 `move` op **하나만**
+    // 낼 때의 이야기이고, `children` 배열을 먼저 만드는 갈래는 `inverse`도 둘이다(그 다음
+    // 케이스). 이 함수가 재는 것은 "목적지가 배열인 `move`"까지다.
+    const back = withSiblings()
+    expect(invertOps(back, moveNodeOps(back, 'n_a', 'n_root', 2) ?? [])).toEqual([
+      { op: 'move', from: '/root/children/2', path: '/root/children/0' },
+    ])
+
+    const forward = withSiblings()
+    expect(invertOps(forward, moveNodeOps(forward, 'n_c', 'n_root', 0) ?? [])).toEqual([
+      { op: 'move', from: '/root/children/0', path: '/root/children/2' },
+    ])
+
+    const across = withSubtree()
+    expect(invertOps(across, moveNodeOps(across, 'n_tail', 'n_box', 0) ?? [])).toEqual([
+      { op: 'move', from: '/root/children/0/children/0', path: '/root/children/1' },
+    ])
+  })
+
+  it('배열을 만드는 갈래의 inverse는 둘이다', () => {
+    // 위 케이스의 예외다. 빈 배열을 놓은 `add`의 역이 `remove /…/children`으로 함께
+    // 오므로, undo 뒤 문서에 **빈 `children`이 남지 않는다**(실측 — `propOps`의 통째
+    // `add`가 빈 `props`를 남기지 않는 것과 같은 성질).
+    //
+    // **역의 두 경로도 서로 다른 시점을 기준으로 읽힌다.** `invertOps`는 묶음 순서만
+    // 뒤집으므로 먼저 `move`가 `n_lead`를 루트 인덱스 0으로 돌려놓고, 그 순간 `n_empty`가
+    // 인덱스 1로 밀린 뒤에 `remove /root/children/1/children`이 온다. 아래 값은 **잰
+    // 것이다** — 처음에 `/root/children/0/children`이라고 적었다가 실행이 반증했고, 그때
+    // 참고한 실측은 소스가 목적지보다 **뒤**에 있던 다른 문서의 값이었다.
+    const document = doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_lead', type: 'Text' },
+        { id: 'n_empty', type: 'Card' },
+      ],
+    })
+    const ops = moveNodeOps(document, 'n_lead', 'n_empty', 0) ?? []
+
+    expect(invertOps(document, ops)).toEqual([
+      { op: 'move', from: '/root/children/0/children/0', path: '/root/children/0' },
+      { op: 'remove', path: '/root/children/1/children' },
+    ])
+  })
+
+  it('inverse를 되적용하면 원래 문서로 돌아간다', () => {
+    // 위 두 케이스는 `inverse`의 **모양**만 본다. undo가 실제로 제자리로 돌리는지는
+    // 되적용해야 안다 — 갈래 넷을 전부 지나간다.
+    const emptyDest = (): PageDocument =>
+      doc({
+        id: 'n_root',
+        type: 'Page',
+        children: [
+          { id: 'n_lead', type: 'Text' },
+          { id: 'n_empty', type: 'Card' },
+        ],
+      })
+    const cases: { name: string; document: PageDocument; ops: PatchOp[] | null }[] = [
+      { name: '같은 배열 뒤로', document: withSiblings(), ops: moveNodeOps(withSiblings(), 'n_a', 'n_root', 2) },
+      { name: '같은 배열 앞으로', document: withSiblings(), ops: moveNodeOps(withSiblings(), 'n_c', 'n_root', 0) },
+      { name: '다른 부모로', document: withSubtree(), ops: moveNodeOps(withSubtree(), 'n_tail', 'n_box', 0) },
+      { name: '배열을 만들며', document: emptyDest(), ops: moveNodeOps(emptyDest(), 'n_lead', 'n_empty', 0) },
+    ]
+
+    for (const { name, document, ops } of cases) {
+      if (ops === null) throw new Error(`${name}: ops가 null이다`)
+      const inverse = invertOps(document, ops)
+      expect(applyOps(applyOps(document, ops), inverse), name).toEqual(document)
+    }
   })
 })
