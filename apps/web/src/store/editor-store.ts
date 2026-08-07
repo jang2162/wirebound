@@ -15,7 +15,7 @@
  * 기준으로 들고 있으므로, 밖에서 고치면 변경이 알림 없이 새어 들어간다.
  */
 import { applyOps, type PageDocument, type PatchOp } from '@wirebound/schema'
-import { ackPending, clearPending, type PendingEdit } from './edit-queue'
+import { ackPending, clearPending, nextPending, type PendingEdit } from './edit-queue'
 
 /** 편집 모드. `view`는 편집 도구를 감추고 결과만 보여 준다. */
 export type EditorMode = 'edit' | 'view'
@@ -219,6 +219,25 @@ export class EditorStore {
     // 제자리에서 `push`하면 알림이 안 간다.
     this.#apply({ document: next, pending: [...pending, { clientOpId, ops, baseSeq: headSeq }] })
     return clientOpId
+  }
+
+  /**
+   * 지금 보낼 요청. 큐가 비어 있으면 `null`이다.
+   *
+   * **`baseSeq`를 여기서 붙이는 것이 요점이다.** 큐에 담긴 `PendingEdit.baseSeq`는 그
+   * 편집을 **만들 때**의 값이라 앞 편집이 ack되며 이미 낡았다. 전송 시점의 `headSeq`를
+   * 읽어야 README 4단계(*"응답의 `seq`가 다음 요청의 `baseSeq`다"*)가 지켜진다.
+   *
+   * **부르는 쪽이 `headSeq`를 직접 읽지 않게 하려는 것이기도 하다.** 그 필드는 페이지와
+   * 함께 실리고 함께 비워지므로 주소와 대조한 뒤에 써야 하는데(`test/store-access-guard.ts`),
+   * 전송은 이펙트 뒤의 비동기 흐름이라 훅으로 읽은 값이 이미 낡아 있다. 스토어가 자기
+   * `#state`에서 그 순간의 값을 붙이면 낡을 창이 없고, "어느 페이지의 편집인가"는 큐가
+   * `clearPage`에서 함께 비워지는 것으로 닫힌다.
+   */
+  readonly nextRequest = (): { clientOpId: string; ops: PatchOp[]; baseSeq: number } | null => {
+    const head = nextPending(this.#state.pending)
+    if (head === null) return null
+    return { clientOpId: head.clientOpId, ops: head.ops, baseSeq: this.#state.headSeq }
   }
 
   /**
