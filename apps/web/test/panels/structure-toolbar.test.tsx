@@ -137,7 +137,7 @@ function undoButton(): HTMLButtonElement {
 }
 
 /** 툴바 버튼의 이름. 늘어나면 `버튼이 전부 비활성이다`가 새 버튼도 함께 본다. */
-const BUTTONS = ['삭제', '위로', '아래로', '들여쓰기', '내어쓰기']
+const BUTTONS = ['안에 추가', '아래 추가', '삭제', '위로', '아래로', '들여쓰기', '내어쓰기']
 
 /**
  * `childType` 줄이 `parentType` 줄 **안에** 그려져 있는가.

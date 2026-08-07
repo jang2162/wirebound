@@ -14,12 +14,14 @@
  * `structureAbilities`·`nodeSpot`은 깨진 문서에도 던지지 않고, `ops` 생성기들은
  * 만들 수 없으면 `null`을 낸다.
  */
-import type { ReactElement } from 'react'
-import { findNode } from '@wirebound/schema'
+import { useState, type ReactElement } from 'react'
 import { useEditCommit } from '../edit/use-edit-commit'
-import { moveNodeOps, removeNodeOps } from '../edit/ops'
+import { createNode } from '../edit/create-node'
+import { insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
+import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, structureAbilities, type StructureAbilities } from '../edit/structure-actions'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { TypePicker } from './type-picker'
 
 /**
  * 버튼이 비활성일 때 붙는 설명.
@@ -58,6 +60,53 @@ export function StructureToolbar(props: {
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
 
   const abilities = structureAbilities(document, selectedNodeId)
+  /** 타입 목록이 열려 있으면 어디에 넣을지. 닫혀 있으면 `null`이다. */
+  const [adding, setAdding] = useState<'inside' | 'after' | null>(null)
+
+  /**
+   * 고른 타입으로 새 노드를 만들어 넣는다. 편집이 실제로 들어갔을 때만 선택을 옮긴다.
+   *
+   * **웨이브 2에서 "Task 7이 이 반환값 검사에 하중을 준다"고 적었는데 그 예측은
+   * 빗나갔다 — 여기서도 0 사망이다(재 봤다).** 무조건 옮기도록 바꿔도 이 파일의 케이스가
+   * 하나도 죽지 않는다. 앞의 가드들이 여전히 덮기 때문이다: `createNode`가 받는 타입은
+   * **목록이 카탈로그에서 만든 것**이라 `null`이 될 수 없고, `insertNodeOps`가 받는
+   * 부모·인덱스는 `structureAbilities`·`nodeSpot`을 지난 값이다.
+   *
+   * 그래도 남긴다. `routes/editor.tsx`의 `ready` 게이트와 같은 자리다 — **지금 통과하는
+   * 이유가 "위의 성질이 지켜지고 있어서"이므로**, 그 성질이 깨지는 날 이것이 마지막
+   * 방벽이다. **닫는 케이스를 만들지 못했다**: 화면에서 `commitOps`를 `false`로 만들려면
+   * 비활성인 버튼을 눌러야 하는데 그 경로가 없다.
+   *
+   * 목록은 **성패와 무관하게 닫는다.** 열어 둔 채로 두면 실패했을 때 같은 편집을 다시
+   * 내게 되고, 그것도 같은 이유로 실패한다.
+   */
+  function addNode(type: string): void {
+    setAdding(null)
+    if (document === null || selectedNodeId === null || adding === null) return
+
+    const node = createNode(type)
+    if (node === null) return
+
+    const ops =
+      adding === 'inside' ? insertInside(selectedNodeId, node) : insertAfter(selectedNodeId, node)
+
+    if (commitOps(ops)) store.selectNode(node.id)
+  }
+
+  /** 선택 노드의 **마지막 자식**으로. `children`이 없으면 0이고 `insertNodeOps`가 배열째 만든다. */
+  function insertInside(nodeId: string, node: ReturnType<typeof createNode>) {
+    if (document === null || node === null) return null
+    const parent = findNodeSafely(document.root, nodeId)
+    return insertNodeOps(document, nodeId, parent?.children?.length ?? 0, node)
+  }
+
+  /** 선택 노드의 **다음 형제**로. `moveNodeOps`의 계약과 같은 자리 계산이다. */
+  function insertAfter(nodeId: string, node: ReturnType<typeof createNode>) {
+    if (document === null || node === null) return null
+    const spot = nodeSpot(document, nodeId)
+    if (spot === null) return null
+    return insertNodeOps(document, spot.parentId, spot.index + 1, node)
+  }
 
   /**
    * 선택 노드를 지운다. **지운 뒤 선택을 부모로 옮긴다**(D5).
@@ -82,10 +131,10 @@ export function StructureToolbar(props: {
    *   선택은 부모가 아니라 `null`이다. `편집이 실패하면 선택이 지워진다`가 그 값을
    *   고정한다.
    *
-   * 그래도 남기는 것은 **Task 7(추가)이 `commitOps`에 `null`이 실제로 흘러갈 경로를
-   * 만들기 때문이다** — `createNode`·`insertNodeOps` 둘 다 `null`을 낼 수 있고, 그때
-   * "편집이 안 들어갔는데 새 노드를 선택하는" 자리가 생긴다. **그것은 예측이지 잰 것이
-   * 아니다.**
+   * **그때 적은 예측("Task 7이 하중을 준다")은 빗나갔다** — Task 7에서 재보니 그쪽도
+   * 0 사망이다(`addNode`의 주석에 이유를 적었다). 남기는 근거는 예측이 아니라
+   * `routes/editor.tsx`의 `ready` 게이트와 같은 것이다: 지금 통과하는 이유가 위의
+   * 성질이 지켜지고 있어서이므로, 그것이 깨지는 날 이 검사가 마지막 방벽이다.
    */
   function removeSelected(): void {
     if (document === null || selectedNodeId === null) return
@@ -130,7 +179,7 @@ export function StructureToolbar(props: {
     const spot = nodeSpot(document, selectedNodeId)
     if (spot === null) return
 
-    const parent = findNode(document.root, spot.parentId)
+    const parent = findNodeSafely(document.root, spot.parentId)
     // **첫 형제는 여기서 걸린다** — 인덱스 0의 앞은 `-1`이고 그 자리는 비어 있다
     // (`noUncheckedIndexedAccess`가 그것을 타입으로도 말해 준다). `spot.index === 0`을
     // 따로 두지 않는 것은 그 검사가 0 사망이었기 때문이다 — 재 봤고, 이 줄이 덮는다.
@@ -174,6 +223,18 @@ export function StructureToolbar(props: {
 
   return (
     <div className="wb-shell-structure-toolbar" role="group" aria-label="구조 편집">
+      <ToolButton
+        label="안에 추가"
+        ability="addInside"
+        abilities={abilities}
+        onClick={() => setAdding('inside')}
+      />
+      <ToolButton
+        label="아래 추가"
+        ability="addAfter"
+        abilities={abilities}
+        onClick={() => setAdding('after')}
+      />
       <ToolButton label="삭제" ability="remove" abilities={abilities} onClick={removeSelected} />
       <ToolButton
         label="위로"
@@ -199,6 +260,10 @@ export function StructureToolbar(props: {
         abilities={abilities}
         onClick={outdentSelected}
       />
+      {/* 목록은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 노드에 붙는
+          작업인지가 보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이
+          그대로 남는다. */}
+      {adding !== null && <TypePicker onPick={addNode} onCancel={() => setAdding(null)} />}
     </div>
   )
 }

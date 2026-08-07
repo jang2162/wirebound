@@ -474,3 +474,45 @@
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: #1d2530;
 }
+
+/* 타입 목록(`panels/type-picker.tsx`, D6). 툴바 안에서 줄을 통째로 차지한다 — 조작 버튼과
+   같은 줄에 두면 좁은 좌측 패널에서 목록이 잘린다. */
+.wb-shell-picker {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.wb-shell-picker-label {
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-picker-select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+}
+
+.wb-shell-picker-action {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+/* 고를 것이 없을 때. 카탈로그가 비어 있는 판이라 정상 경로에서는 오지 않는다. */
+.wb-shell-picker-notice {
+  flex-basis: 100%;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
