@@ -430,4 +430,67 @@ describe('undo / redo', () => {
     expect(document.activeElement?.tagName).toBe('BODY')
     expect((widget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
   })
+
+  it('같은 틱에 편집과 undo가 들어와도 요청이 하나씩 나간다', async () => {
+    // **D6를 지키는 것은 스토어의 펌프 가드다.** undo/redo 버튼은 속성 패널과 **다른**
+    // `useEditCommit` 인스턴스를 쓰므로, 가드가 훅의 `ref`에 있으면 둘이 각자 자기 것을
+    // 갖는다. 그 판에서 재면 요청이 셋이 되고 `maxInFlight`가 2이며 **같은 `clientOpId`가
+    // 두 요청에 실린다** — 서버는 그 둘째를 409로 거절한다(README: 앞 요청의 `seq`를
+    // 받아야 다음 `baseSeq`가 정해진다).
+    //
+    // 겹침을 재려면 **호출 수가 아니라 동시에 떠 있는 수**를 세야 한다 — 곧바로 resolve하는
+    // 가짜로는 두 요청이 겹치는 순간이 존재하지 않아 병렬 전송 판도 통과한다.
+    let inFlight = 0
+    let maxInFlight = 0
+    const opIds: (string | undefined)[] = []
+    const calls: PatchOp[][] = []
+    let seq = 7
+    let held = DOC
+
+    const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+      inFlight += 1
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      calls.push(body.ops)
+      opIds.push(body.clientOpId)
+      try {
+        // 한 틱 미룬다 — 그래야 겹치는 판에서 실제로 겹친다.
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        const { applyOps, invertOps } = await import('@wirebound/schema')
+        const inverse = invertOps(held, body.ops)
+        held = applyOps(held, body.ops)
+        seq += 1
+        const result: PatchResult = {
+          seq,
+          revisionId: `rev-${seq}`,
+          inverse,
+          schemaVersion: 1,
+          ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+        }
+        return result
+      } finally {
+        inFlight -= 1
+      }
+    }
+
+    await openPage(DOC, { apiOverrides: { patchOps } })
+
+    // 되돌릴 것을 하나 만든다.
+    select('Text')
+    typeAndCommit('내용', '편집1')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+
+    // **한 틱 안에서** 두 인스턴스가 각각 편집을 낸다: 패널의 blur 커밋과 버튼의 undo.
+    fireEvent.change(widget('내용'), { target: { value: '편집2' } })
+    await act(async () => {
+      fireEvent.blur(widget('내용'))
+      fireEvent.click(undoButton())
+    })
+    await act(async () => {})
+
+    // 겹치지 않았다.
+    expect(maxInFlight).toBe(1)
+    // 같은 편집이 두 번 나가지도 않았다 — id가 전부 다르다.
+    expect(new Set(opIds).size).toBe(opIds.length)
+  })
 })
