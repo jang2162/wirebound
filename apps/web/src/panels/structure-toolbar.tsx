@@ -45,10 +45,36 @@ const WHY_DISABLED: Record<keyof StructureAbilities, string> = {
   outdent: '부모가 루트가 아니어야 합니다',
 }
 
-export function StructureToolbar(props: {
+/**
+ * 툴바 버튼과 키보드 단축키가 **공유하는** 조작 묶음(D8).
+ *
+ * **두 경로가 같은 함수를 부르는 것이 계약이다.** 각자 자기 구현을 가지면 한쪽만
+ * 고쳐지는 자리가 생긴다 — `structure-keyboard.test.tsx`의 `단축키와 버튼이 같은 op을
+ * 만든다`가 그것을 고정한다.
+ *
+ * 훅을 **한 번만** 부르는 것도 의도다. 트리가 불러 툴바에 내려 주므로 `useEditCommit`
+ * 인스턴스가 하나다 — 둘이어도 D6는 지켜지지만(펌프 가드가 스토어에 있다) 같은 화면에서
+ * 굳이 둘을 만들 이유가 없다.
+ */
+export interface StructureCommands {
+  abilities: StructureAbilities
+  remove: () => void
+  moveUp: () => void
+  moveDown: () => void
+  indent: () => void
+  outdent: () => void
+  /** 타입 목록을 연다. 실제 추가는 `pick`이 한다. */
+  openAdd: (where: 'inside' | 'after') => void
+  /** 목록이 열려 있으면 어디에 넣을지. 닫혀 있으면 `null`. */
+  adding: 'inside' | 'after' | null
+  pick: (type: string) => void
+  cancelAdd: () => void
+}
+
+export function useStructureCommands(props: {
   projectId: string
   pageId: string | undefined
-}): ReactElement {
+}): StructureCommands {
   const store = useEditorStoreInstance()
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 본다
   // (`store/use-editor-store.tsx`가 그 대조를 갖는 유일한 자리다).
@@ -221,49 +247,65 @@ export function StructureToolbar(props: {
     )
   }
 
+  return {
+    abilities,
+    remove: removeSelected,
+    moveUp: () => moveSelected(-1),
+    moveDown: () => moveSelected(1),
+    indent: indentSelected,
+    outdent: outdentSelected,
+    openAdd: setAdding,
+    adding,
+    pick: addNode,
+    cancelAdd: () => setAdding(null),
+  }
+}
+
+/** 툴바. **판정도 조작도 갖지 않는다** — `useStructureCommands`가 준 것을 그릴 뿐이다. */
+export function StructureToolbar(props: { commands: StructureCommands }): ReactElement {
+  const { commands } = props
+  const { abilities } = commands
+
   return (
     <div className="wb-shell-structure-toolbar" role="group" aria-label="구조 편집">
       <ToolButton
         label="안에 추가"
         ability="addInside"
         abilities={abilities}
-        onClick={() => setAdding('inside')}
+        onClick={() => commands.openAdd('inside')}
       />
       <ToolButton
         label="아래 추가"
         ability="addAfter"
         abilities={abilities}
-        onClick={() => setAdding('after')}
+        onClick={() => commands.openAdd('after')}
       />
-      <ToolButton label="삭제" ability="remove" abilities={abilities} onClick={removeSelected} />
-      <ToolButton
-        label="위로"
-        ability="moveUp"
-        abilities={abilities}
-        onClick={() => moveSelected(-1)}
-      />
+      <ToolButton label="삭제" ability="remove" abilities={abilities} onClick={commands.remove} />
+      <ToolButton label="위로" ability="moveUp" abilities={abilities} onClick={commands.moveUp} />
       <ToolButton
         label="아래로"
         ability="moveDown"
         abilities={abilities}
-        onClick={() => moveSelected(1)}
+        onClick={commands.moveDown}
       />
       <ToolButton
         label="들여쓰기"
         ability="indent"
         abilities={abilities}
-        onClick={indentSelected}
+        onClick={commands.indent}
       />
       <ToolButton
         label="내어쓰기"
         ability="outdent"
         abilities={abilities}
-        onClick={outdentSelected}
+        onClick={commands.outdent}
       />
       {/* 목록은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 노드에 붙는
           작업인지가 보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이
           그대로 남는다. */}
-      {adding !== null && <TypePicker onPick={addNode} onCancel={() => setAdding(null)} />}
+      {commands.adding !== null && (
+        <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />
+      )}
     </div>
   )
 }

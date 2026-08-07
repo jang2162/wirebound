@@ -6,6 +6,7 @@
  */
 import { fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WbNode } from '@wirebound/schema'
 import type { EditorStore } from '../../src/store/editor-store'
 import {
   PAGE_ID,
@@ -126,6 +127,24 @@ describe('구조 트리', () => {
     expect(search.contains(field)).toBe(true)
     // 형제는 안에 들어 있지 않다. 이것이 없으면 모두를 한 줄 안에 넣은 구현도 통과한다.
     expect(search.contains(list)).toBe(false)
+  })
+
+  it('children 배열 안에 노드가 아닌 원소가 있어도 셸은 살아 있다', async () => {
+    // **리뷰가 `<App />` 층에서 찾은 자리다.** 웨이브 1 정정이 `structureAbilities`의
+    // 순회를 고쳤지만, 이 문서에서는 **선택이 아직 없어 그 함수가 불리지도 않는다** —
+    // 던지는 것은 `StructureNode`의 `isSelectable(null)`이고 그것은 P2b-3 이전부터
+    // 그 자리에 있던 코드다. 여기는 오류 경계 밖이라 던지면 셸이 통째로 사라진다.
+    await openPage(
+      pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [null as unknown as WbNode, { id: 'n-a', type: 'Text' }],
+      }),
+    )
+
+    expect(screen.getByRole('region', { name: '구조 트리' })).toBeTruthy()
+    // 노드가 아닌 원소는 줄로 그리지 않는다 — 그릴 이름도 고를 id도 없다.
+    expect(nodeRows().map((node) => node.textContent)).toEqual(['Page', 'Text'])
   })
 
   it('노드 타입을 보여준다', async () => {

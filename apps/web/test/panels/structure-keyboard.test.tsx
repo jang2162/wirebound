@@ -1,0 +1,356 @@
+/**
+ * 구조 트리의 키보드 단축키(Task 8, D8).
+ *
+ * **단축키는 툴바 버튼과 같은 함수를 부른다** — 두 경로가 갈리면 한쪽만 고쳐지는 자리가
+ * 생긴다. `단축키와 버튼이 같은 op을 만든다`가 그것을 고정한다.
+ *
+ * **가장 무거운 케이스는 `속성 패널에서 타이핑 중에는 …`이다.** 전역 리스너의 함정이고,
+ * 없으면 텍스트를 지우려고 Delete를 누른 사용자가 노드를 잃는다.
+ */
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import type { PatchOp } from '@wirebound/schema'
+import type { ApiClient, } from '../../src/api/client'
+import type { PageDetail, PatchResult } from '../../src/api/types'
+import { HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
+import '../../src/catalog-setup'
+
+/**
+ * ```
+ * n-root (Page)
+ * ├ n-a   (Text)     첫 형제 — 위로가 비활성이다
+ * ├ n-box (Card)     자식 하나
+ * │  └ n-1 (Button)
+ * └ n-c   (Divider)  막내
+ * ```
+ */
+function doc(): ReturnType<typeof pageDoc> {
+  return pageDoc({
+    id: 'n-root',
+    type: 'Page',
+    children: [
+      { id: 'n-a', type: 'Text', props: { content: '지울 글자' } },
+      { id: 'n-box', type: 'Card', children: [{ id: 'n-1', type: 'Button' }] },
+      { id: 'n-c', type: 'Divider' },
+    ],
+  })
+}
+
+const INITIAL_TYPES = ['Page', 'Text', 'Card', 'Button', 'Divider']
+
+interface Server {
+  calls: { ops: PatchOp[]; baseSeq: number }[]
+  api: Partial<ApiClient>
+}
+
+function server(): Server {
+  const calls: { ops: PatchOp[]; baseSeq: number }[] = []
+  let seq = HEAD_SEQ
+  let held = doc()
+
+  const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+    calls.push({ ops: body.ops, baseSeq: body.baseSeq })
+    const { applyOps, invertOps } = await import('@wirebound/schema')
+    const inverse = invertOps(held, body.ops)
+    held = applyOps(held, body.ops)
+    seq += 1
+    const result: PatchResult = {
+      seq,
+      revisionId: `rev-${seq}`,
+      inverse,
+      schemaVersion: 1,
+      ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+    }
+    return result
+  }
+
+  const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
+    const detail: PageDetail = { ...pageDetail(pageId, held), headSeq: seq }
+    return detail
+  }
+
+  return { calls, api: { patchOps, getPage } }
+}
+
+function structureRegion(): HTMLElement {
+  return screen.getByRole('region', { name: '구조 트리' })
+}
+
+/** 트리의 노드 줄. 키 이벤트를 여기서 일으킨다 — 사용자가 고른 줄이 포커스를 갖는다. */
+function row(type: string): HTMLElement {
+  return within(structureRegion()).getByRole('button', { name: type })
+}
+
+function select(type: string): void {
+  fireEvent.click(row(type))
+}
+
+function toolButton(name: string): HTMLButtonElement {
+  return within(within(structureRegion()).getByRole('group', { name: '구조 편집' })).getByRole(
+    'button',
+    { name },
+  )
+}
+
+/** 속성 패널의 컨트롤. Delete가 여기서는 노드를 지우면 안 된다. */
+function panelInput(label: string): HTMLElement {
+  return within(screen.getByRole('complementary', { name: '속성 패널' })).getByLabelText(label)
+}
+
+describe('구조 트리의 키보드 단축키', () => {
+  it('구조 트리에 포커스가 있을 때 Delete가 노드를 지운다', async () => {
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+
+    fireEvent.keyDown(row('Card'), { key: 'Delete' })
+
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Text', 'Divider']))
+  })
+
+  it('Backspace도 지운다', async () => {
+    // **macOS 노트북 키보드에는 `Delete`(forward delete) 키가 없다** — 그 자리의 키가
+    // 내는 것이 `Backspace`다. 둘 다 받지 않으면 그 기기에서 삭제 단축키가 없는 셈이다.
+    // (Backspace가 브라우저 "뒤로 가기"였던 것은 Chrome 52에서 제거됐다 — 그 값은
+    // 릴리스 노트를 읽은 것이지 **내가 잰 것이 아니다.**)
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+
+    fireEvent.keyDown(row('Card'), { key: 'Backspace' })
+
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Text', 'Divider']))
+  })
+
+  it('속성 패널에서 타이핑 중에는 Delete가 노드를 지우지 않는다', async () => {
+    // **D8의 핵심이다.** 전역 리스너로 만들면 여기서 노드가 사라진다 — 사용자는 글자를
+    // 지우려 했을 뿐이다.
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Text')
+
+    fireEvent.keyDown(panelInput('내용'), { key: 'Delete' })
+    fireEvent.keyDown(panelInput('내용'), { key: 'Backspace' })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('Alt+위/아래가 순서를 바꾼다', async () => {
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+
+    fireEvent.keyDown(row('Card'), { key: 'ArrowUp', altKey: true })
+
+    await waitFor(() =>
+      expect(structureTypes()).toEqual(['Page', 'Card', 'Button', 'Text', 'Divider']),
+    )
+  })
+
+  it('Alt 없는 화살표는 순서를 바꾸지 않는다', async () => {
+    // 화살표만으로 옮기면 트리를 **읽으려고** 누른 키가 문서를 바꾼다.
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Card')
+
+    fireEvent.keyDown(row('Card'), { key: 'ArrowUp' })
+    fireEvent.keyDown(row('Card'), { key: 'ArrowDown' })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('Tab이 트리 안에서 들여쓰기를 하지 않는다', async () => {
+    // **Tab은 포커스 이동이다 — 빼앗으면 키보드 사용자가 트리를 빠져나갈 수 없다.**
+    // 들여쓰기 단축키로 쓰고 싶어지는 자리라 케이스로 못박는다.
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Divider')
+
+    // `fireEvent`는 기본 동작이 막히지 않았을 때 `true`를 낸다.
+    expect(fireEvent.keyDown(row('Divider'), { key: 'Tab' })).toBe(true)
+    expect(fireEvent.keyDown(row('Divider'), { key: 'Tab', shiftKey: true })).toBe(true)
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('단축키가 비활성 조작을 실행하지 않는다', async () => {
+    // **버튼과 같은 판정을 지난다**(D8). 키 이벤트는 `disabled`를 지나지 않으므로
+    // 여기가 그 판정이 실제로 걸리는 유일한 자리다.
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Text')
+    expect(toolButton('위로').disabled).toBe(true)
+
+    fireEvent.keyDown(row('Text'), { key: 'ArrowUp', altKey: true })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('앞 형제가 none이면 들여쓰기 단축키가 아무것도 하지 않는다', async () => {
+    // **이 케이스가 판정 검사의 하중이다 — 위 케이스만으로는 0 사망이었다(재 봤다).**
+    //
+    // 순서 이동·삭제는 판정을 지우고 실행해도 뒤에서 막힌다: `moveNodeOps`가 범위 밖
+    // 인덱스에 `null`을 내고, `removeNodeOps`는 루트에 `null`을 낸다. **들여쓰기만 다르다** —
+    // `moveNodeOps`는 **설계상 타입을 읽지 않으므로**(카탈로그에 없는 타입도 옮길 수
+    // 있어야 한다) 앞 형제가 자식을 담을 수 없어도 ops를 만든다.
+    //
+    // 실측: `Text` 안으로 `Text`를 넣는 문서가 만들어지고 `validatePage`가
+    // `children-not-allowed`를 낸다 — 그대로 나가면 서버가 422다. 그것을 막는 것이
+    // `structureAbilities.indent` 하나뿐이고, 단축키는 그것을 **직접** 지나야 한다.
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Divider')
+    // 앞 형제가 `Card`가 아니라… 확인: `n-c`의 앞은 `n-box`(Card)이므로 가능하다.
+    // 앞 형제가 `none`인 자리는 `n-box`다(앞이 `n-a`, Text).
+    select('Card')
+    expect(toolButton('들여쓰기').disabled).toBe(true)
+
+    fireEvent.keyDown(row('Card'), { key: 'ArrowLeft', altKey: true, shiftKey: true })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('들여쓰기·내어쓰기 단축키가 실제로 옮긴다', async () => {
+    // 위 케이스의 양성 대조. `n-c`(Divider)의 앞 형제는 `n-box`(Card)라 들여쓸 수 있다.
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Divider')
+
+    fireEvent.keyDown(row('Divider'), { key: 'ArrowLeft', altKey: true, shiftKey: true })
+
+    await waitFor(() =>
+      expect(
+        within(structureRegion())
+          .getByRole('button', { name: 'Card' })
+          .closest('li')
+          ?.contains(within(structureRegion()).getByRole('button', { name: 'Divider' })),
+      ).toBe(true),
+    )
+
+    fireEvent.keyDown(row('Divider'), { key: 'ArrowRight', altKey: true, shiftKey: true })
+
+    await waitFor(() =>
+      expect(
+        within(structureRegion())
+          .getByRole('button', { name: 'Card' })
+          .closest('li')
+          ?.contains(within(structureRegion()).getByRole('button', { name: 'Divider' })),
+      ).toBe(false),
+    )
+  })
+
+  it('Shift 없는 Alt+좌우는 아무것도 하지 않는다', async () => {
+    // **`Alt`+`←`·`→`는 Windows·Linux 브라우저의 뒤로/앞으로다.** 그 조합을 쓰지 않기로
+    // 했다는 것을 케이스로 못박는다 — 나중에 "화살표만으로 충분하다"고 줄이면 여기서 죽는다.
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Divider')
+
+    expect(fireEvent.keyDown(row('Divider'), { key: 'ArrowLeft', altKey: true })).toBe(true)
+    expect(fireEvent.keyDown(row('Divider'), { key: 'ArrowRight', altKey: true })).toBe(true)
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('내어쓴 뒤 들여쓰면 제자리가 아니다', async () => {
+    // **결함이 아니라 D3의 귀결이다 — 리뷰가 재서 알려 준 성질을 여기 고정한다.**
+    // 들여쓰기는 언제나 앞 형제의 **마지막** 자식으로 가므로, 첫 자식이 아니었던 노드는
+    // 돌아올 때 뒤로 밀린다. 계획서 케이스 6이 요구한 왕복은 **들여쓴 뒤 내어쓰기**이고
+    // 그쪽은 제자리다(`structure-toolbar.test.tsx`).
+    //
+    // **단축키는 연달아 누르는 자리라 이 성질이 눈에 띈다.** 적어 두지 않으면 다음
+    // 사람이 이것을 결함으로 읽고 "돌아온 자리를 기억하는" 상태를 만들려 한다 — 그것은
+    // 조작마다 이력을 드는 일이고 D3의 순수 판정 밖이다.
+    await openPage(
+      pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          {
+            id: 'n-p',
+            type: 'Card',
+            children: [
+              { id: 'n-x', type: 'Text' },
+              { id: 'n-y', type: 'Link' },
+            ],
+          },
+          { id: 'n-q', type: 'Divider' },
+        ],
+      }),
+      { apiOverrides: server().api },
+    )
+    select('Text')
+
+    // 내어쓰기 → 루트로 나온다.
+    fireEvent.keyDown(row('Text'), { key: 'ArrowRight', altKey: true, shiftKey: true })
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Card', 'Link', 'Text', 'Divider']))
+
+    // 다시 들여쓰기 → `Card`로 돌아가지만 **`Link` 뒤**다.
+    fireEvent.keyDown(row('Text'), { key: 'ArrowLeft', altKey: true, shiftKey: true })
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Card', 'Link', 'Text', 'Divider']))
+    // 전위 순회로는 같아 보이므로 중첩으로 본다 — `Text`가 `Card` 안이고 `Link` 뒤다.
+    const card = within(structureRegion()).getByRole('button', { name: 'Card' }).closest('li')
+    expect(card?.contains(within(structureRegion()).getByRole('button', { name: 'Text' }))).toBe(true)
+  })
+
+  it('루트에서 Delete는 아무것도 하지 않는다', async () => {
+    // 삭제도 같은 판정을 지난다.
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Page')
+
+    fireEvent.keyDown(row('Page'), { key: 'Delete' })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('고른 노드가 없으면 단축키가 아무것도 하지 않는다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+
+    fireEvent.keyDown(row('Card'), { key: 'Delete' })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('단축키와 버튼이 같은 op을 만든다', async () => {
+    // **두 경로가 갈리지 않는다**(D8). 같은 문서·같은 선택에서 각각 내고 나가는 ops를
+    // 맞대 본다.
+    const viaKey = server()
+    await openPage(doc(), { apiOverrides: viaKey.api })
+    select('Card')
+    fireEvent.keyDown(row('Card'), { key: 'ArrowDown', altKey: true })
+    await waitFor(() => expect(viaKey.calls).toHaveLength(1))
+
+    screen.getByRole('region', { name: '구조 트리' }) // 앞 렌더가 살아 있는지 확인
+    const keyOps = viaKey.calls[0]?.ops
+
+    // 화면을 새로 띄워 같은 조작을 버튼으로 낸다.
+    const { cleanup } = await import('@testing-library/react')
+    cleanup()
+    const viaButton = server()
+    await openPage(doc(), { apiOverrides: viaButton.api })
+    select('Card')
+    fireEvent.click(toolButton('아래로'))
+    await waitFor(() => expect(viaButton.calls).toHaveLength(1))
+
+    expect(keyOps).toEqual(viaButton.calls[0]?.ops)
+  })
+
+  it('삭제 단축키도 선택을 부모로 옮긴다', async () => {
+    // 버튼과 같은 함수를 부른다는 것의 다른 면 — D5가 단축키 경로에도 그대로 온다.
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Button')
+
+    fireEvent.keyDown(row('Button'), { key: 'Delete' })
+
+    await waitFor(() =>
+      expect(
+        structureRegion().querySelector('.wb-shell-structure-node[aria-current="true"]')
+          ?.textContent,
+      ).toBe('Card'),
+    )
+  })
+})
