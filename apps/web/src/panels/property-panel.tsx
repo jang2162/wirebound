@@ -21,6 +21,8 @@ import {
 } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { SelectControl } from './controls/select-control'
+import { SwitchControl } from './controls/switch-control'
 import { TextControl } from './controls/text-control'
 import { BROKEN_TYPE_LABEL, nodeType } from './node-shape'
 // 카탈로그가 없으면 모든 노드가 "알 수 없는 타입"이 된다. 설치는 import만으로 끝난다.
@@ -166,6 +168,17 @@ function PropControl(props: {
 
   if (field.control === 'text' || field.control === 'textarea' || field.control === 'number') {
     return <TextControl field={field} value={value} id={id} onCommit={onCommit} />
+  }
+
+  if (field.control === 'switch') {
+    return <SwitchControl field={field} value={value} id={id} onCommit={onCommit} />
+  }
+
+  // `options`가 없거나 비면 `<select>`를 그리지 않는다(`SelectControl`이 `null`을 낸다).
+  // 그 판정을 여기서 한 번 더 하는 것은, 그때 **아래 글자로 되돌아가야** 하기 때문이다 —
+  // 위젯도 글자도 없으면 그 줄이 통째로 비어 사용자가 값을 볼 수 없다.
+  if (field.control === 'select' && field.options !== undefined && field.options.length > 0) {
+    return <SelectControl field={field} value={value} id={id} onCommit={onCommit} />
   }
 
   return <>{formatValue(value)}</>

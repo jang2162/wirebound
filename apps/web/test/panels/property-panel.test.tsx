@@ -15,9 +15,17 @@ import {
   registerComponent,
   type EditorControl,
 } from '@wirebound/schema'
-import type { ApiClient } from '../../src/api/client'
+import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
-import { PAGE_ID, PROJECT_NAME, PROJECT_ROUTE, openPage, pageDoc, renderEditor } from '../editor-harness'
+import {
+  PAGE_ID,
+  PROJECT_NAME,
+  PROJECT_ROUTE,
+  openPage,
+  pageDetail,
+  pageDoc,
+  renderEditor,
+} from '../editor-harness'
 // 카탈로그가 설치돼 있어야 `listComponents()`가 빈 배열이 아니다.
 import '../../src/catalog-setup'
 
@@ -41,6 +49,22 @@ registerComponent(
 // 캔버스가 폴백 대신 이 구현으로 그리도록 기본 구조 하나를 등록해 둔다. 속성 패널의
 // 단언과는 무관하지만, 폴백이 뜨면 그 화면이 무엇을 말하는지 읽기 어려워진다.
 registerStructure(PROBE_TYPE, 'cardGrid', ({ attrs }) => <div {...attrs} />)
+
+/**
+ * **`options`를 갖지 않는 `select`.** 카탈로그에는 그런 자리가 없으므로(실측: `control:
+ * 'select'` 여덟 자리가 전부 `options`를 갖는다) 여기서 만든다 — `EditorField.options`가
+ * 선택 필드라 컴파일러가 그 짝을 강제하지 않고, 카탈로그는 데이터라 언제든 그렇게 될 수 있다.
+ */
+const NO_OPTIONS_TYPE = '선택지없음프로브'
+
+registerComponent(
+  defineComponent({
+    ...ListDef,
+    type: NO_OPTIONS_TYPE,
+    editor: [{ prop: 'items', control: 'select', label: '선택지 없는 필드' }],
+  }),
+)
+registerStructure(NO_OPTIONS_TYPE, 'table', ({ attrs }) => <div {...attrs} />)
 
 const DOC = pageDoc({
   id: 'n-root',
@@ -128,9 +152,9 @@ const BROKEN_TYPE_DOC = pageDoc({
 })
 
 /** 이 웨이브에서 위젯이 생긴 control. Task 8·9가 여기로 옮겨 온다. */
-const WIDGET_CONTROLS: EditorControl[] = ['text', 'textarea', 'number']
+const WIDGET_CONTROLS: EditorControl[] = ['text', 'textarea', 'number', 'switch', 'select']
 /** 아직 위젯이 없어 `formatValue`가 글자로만 그리는 control. */
-const NOT_YET: EditorControl[] = ['switch', 'select', 'stringList', 'pairList']
+const NOT_YET: EditorControl[] = ['stringList', 'pairList']
 
 /** 카탈로그가 **실제로 쓰는** control 집합. 손으로 적지 않고 센다. */
 function catalogControls(): Set<EditorControl> {
@@ -252,8 +276,13 @@ describe('속성 패널', () => {
       { label: '안내 문구', value: '검색어' },
       // 켜짐/꺼짐으로 보여 준다. `true`를 그대로 찍으면 사용자가 읽을 문장이 아니다.
       { label: '필수', value: '켜짐' },
-      { label: '비활성', value: '' },
-      { label: '오류 상태', value: '' },
+      // **값이 없는 스위치는 "꺼짐"으로 보인다.** 앞 판에서 이 둘이 빈 문자열이었던 것은
+      // `formatValue(undefined)`가 그렸기 때문이고, 이제는 체크박스가 그린다. 체크박스에는
+      // "값 없음"을 표현할 자리가 없어 **화면에서는 `false`와 구분되지 않는다** — 문서
+      // 안에서는 그대로 갈린다(값이 없던 prop을 켜면 `replace`가 아니라 `add`가 나가는
+      // 것을 `값이 없던 prop을 켜면 true가 들어간다`가 지킨다).
+      { label: '비활성', value: '꺼짐' },
+      { label: '오류 상태', value: '꺼짐' },
     ])
   })
 
@@ -342,14 +371,14 @@ describe('속성 패널', () => {
     expect(propRows()).toHaveLength(0)
   })
 
-  it('카탈로그의 control마다 대응하는 위젯이 있다 — 아직 넷은 덮지 못한다', async () => {
+  it('카탈로그의 control마다 대응하는 위젯이 있다 — 아직 둘은 덮지 못한다', async () => {
     // **P2b-1의 `이 단계에서는 입력이 없다`를 대체한 케이스다.** 이월 문서가
     // *"그 테스트를 바꾸는 것이 '편집이 생겼다'는 신호다"*라고 못박았고, 이것이 그
     // 반대 방향이다 — 경계를 "입력이 없다"에서 "control마다 위젯이 있다"로 뒤집는다.
     //
-    // **덮지 못한 것을 이름과 아래 목록에 적어 둔다.** 지금 위젯이 있는 것은 셋
-    // (`text`·`textarea`·`number`)이고 넷이 남는다. Task 8이 `switch`·`select`를,
-    // Task 9가 `stringList`·`pairList`를 덮으면 `NOT_YET`이 비고 이 이름도 바뀐다.
+    // **덮지 못한 것을 이름과 아래 목록에 적어 둔다.** 지금 위젯이 있는 것은 다섯이고
+    // 둘(`stringList`·`pairList`)이 남는다. Task 9가 그 둘을 덮으면 `NOT_YET`이 비고
+    // 이 이름도 바뀐다.
     await openPage(CONTROLS_DOC)
 
     // **분모를 손으로 적지 않는다.** 카탈로그가 실제로 쓰는 control 집합을 세어
@@ -424,13 +453,17 @@ describe('속성 패널', () => {
 
     select('Field')
 
-    // 필드는 그대로 나오고 **값만** 전부 빈다. 줄 수를 여기서 다시 못박지 않는 것은
-    // 카탈로그가 바뀔 때 이 케이스가 이유 없이 어긋나기 때문이다 — `Field`의 `editor`
+    // 필드는 그대로 나오고 **값을 든 자리가 하나도 없다.** 줄 수를 여기서 다시 못박지 않는
+    // 것은 카탈로그가 바뀔 때 이 케이스가 이유 없이 어긋나기 때문이다 — `Field`의 `editor`
     // 여섯 줄은 위 `선택 노드의 editor 명세대로 필드를 나열한다`가 이미 지킨다.
+    //
+    // **"빈 문자열"이 아니라 "빈 값"으로 본다.** 스위치 자리는 체크박스가 그리므로 값이
+    // 없어도 `꺼짐`으로 읽히고(위 케이스에 그 사실을 적었다), 그것은 "props를 읽지
+    // 못했다"와 다른 말이 아니다 — 읽지 못한 스위치는 꺼진 것으로 보인다.
     const values = propRows().map((row) => row.value)
     // 양성 대조: 값이 실제로 그려진 상태에서 세야 뜻이 있다(빈 패널은 당연히 통과한다).
     expect(values.length).toBeGreaterThan(0)
-    expect(values.every((value) => value === '')).toBe(true)
+    expect(values.every((value) => value === '' || value === '꺼짐')).toBe(true)
     screen.getByRole('heading', { name: PROJECT_NAME })
     expect(document.body.querySelector('.wb-shell')).not.toBeNull()
   })
@@ -670,5 +703,174 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     // 초안은 나가지 않았고, 입력은 새 노드의 값이다.
     expect(calls).toHaveLength(0)
     expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
+  })
+})
+
+/** `props`가 아예 없는 노드. 스위치를 처음 켜는 경로가 지나는 자리다. */
+const SWITCH_DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    { id: 'n-field', type: 'Field', props: { label: '이름', required: true } },
+    { id: 'n-bare', type: 'Field' },
+    { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
+    { id: 'n-noopt', type: NO_OPTIONS_TYPE, props: { items: 2 } },
+  ],
+})
+
+describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
+  it('스위치를 누르면 즉시 편집이 나간다', async () => {
+    // blur를 기다리지 않는다 — 중간 상태가 없는 조작이라 미룰 이유가 없다(D5).
+    const { calls, api } = editable()
+    await openPage(SWITCH_DOC, { apiOverrides: api })
+
+    selectAt('Field', 0)
+    fireEvent.click(requireWidget('필수'))
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+  })
+
+  it('스위치는 불리언으로 나간다', async () => {
+    const { calls, api } = editable()
+    await openPage(SWITCH_DOC, { apiOverrides: api })
+
+    selectAt('Field', 0)
+    fireEvent.click(requireWidget('필수'))
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    // `'on'`이 아니라 `false`다. 체크박스의 폼 값을 그대로 보내는 구현을 잡는다.
+    expect(lastOps(calls)).toEqual([
+      { op: 'replace', path: '/root/children/0/props/required', value: false },
+    ])
+  })
+
+  it('값이 없던 prop을 켜면 true가 들어간다', async () => {
+    // **`props`가 없는 노드다.** `propOps`의 세 갈래 중 통째 `add`가 지나는 자리이고,
+    // 그 갈래가 없으면 `applyOps`가 던져 D7이 요청을 막는다(웨이브 2가 실측했다).
+    const { calls, api } = editable()
+    await openPage(SWITCH_DOC, { apiOverrides: api })
+
+    selectAt('Field', 1)
+    expect((requireWidget('필수') as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(requireWidget('필수'))
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([
+      { op: 'add', path: '/root/children/1/props', value: { required: true } },
+    ])
+  })
+
+  it('select는 고른 값을 즉시 낸다', async () => {
+    const { calls, api } = editable()
+    await openPage(SWITCH_DOC, { apiOverrides: api })
+
+    selectAt('Text', 0)
+    fireEvent.change(requireWidget('역할'), { target: { value: 'h2' } })
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([
+      { op: 'replace', path: '/root/children/2/props/role', value: 'h2' },
+    ])
+  })
+
+  it('select의 선택지는 카탈로그의 options다', async () => {
+    await openPage(SWITCH_DOC)
+
+    selectAt('Text', 0)
+    const options = [...requireWidget('역할').querySelectorAll('option')].map((o) => o.value)
+
+    // `TextDef`의 `role` 필드가 선언한 그대로다. 손으로 적는 것은 카탈로그를 import해
+    // 훑기만 해도 통과하는 단언을 만들지 않기 위해서다.
+    expect(options).toEqual([
+      'display',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'body',
+      'caption',
+    ])
+  })
+
+  it('options가 없는 select는 그리지 않는다', async () => {
+    // 카탈로그의 실수를 화면이 흡수하면 안 된다 — 빈 `<select>`는 고를 것이 없는데도
+    // 편집할 수 있는 것처럼 보인다.
+    await openPage(SWITCH_DOC)
+
+    select(NO_OPTIONS_TYPE)
+
+    // 위젯이 없고, 값은 `formatValue`가 그린 글자로 남는다 — 줄이 통째로 비면 사용자가
+    // 값을 볼 수 없다.
+    expect(panel().querySelector('select')).toBeNull()
+    expect(propRows()).toContainEqual({ label: '선택지 없는 필드', value: '2' })
+
+    // 양성 대조: options가 있는 자리는 그린다.
+    selectAt('Field', 0)
+    expect(controlWidget('입력 종류')).not.toBeNull()
+  })
+
+  it('편집이 실패하면 재조회가 선택을 지운다', async () => {
+    // **원래 재려던 것은 "스위치가 문서를 그대로 비춘다"였는데, 그 성질은 오늘 코드에서
+    // 관측할 수 없다.** 재조회가 `loadPage`를 지나고 그것이 `selectedNodeId`를 비우므로
+    // (`store/editor-store.ts` — 노드 id는 문서 안에서만 뜻이 있다), 실패 뒤에는 스위치가
+    // 아예 사라진다. 그래서 로컬 state를 든 구현과 문서를 비추는 구현이 갈리는 자리가
+    // 없다(실측: 로컬 state를 들게 하는 변이로 죽는 케이스가 0이었다).
+    //
+    // 여기서는 실제로 일어나는 일만 고정한다 — 그것이 사용자에게 보이는 결과이고,
+    // "고르던 노드를 잃는다"는 사실 자체가 다음 사람이 볼 값이다.
+    let getPageCalls = 0
+    const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
+      getPageCalls += 1
+      return pageDetail(pageId, SWITCH_DOC)
+    }
+    const patchOps: ApiClient['patchOps'] = () =>
+      Promise.reject(new ApiError(409, 'conflict', '문서가 이미 바뀌었습니다'))
+
+    await openPage(SWITCH_DOC, { apiOverrides: { getPage, patchOps } })
+
+    selectAt('Field', 0)
+    expect((requireWidget('필수') as HTMLInputElement).checked).toBe(true)
+
+    fireEvent.click(requireWidget('필수'))
+    // 낙관적으로 꺼졌다.
+    expect((requireWidget('필수') as HTMLInputElement).checked).toBe(false)
+
+    await waitFor(() => expect(getPageCalls).toBe(2))
+
+    // 선택이 지워져 패널이 안내로 돌아간다. 다시 고르면 서버 값이다.
+    await waitFor(() => {
+      within(panel()).getByText('노드를 고르면 속성이 보입니다')
+    })
+    selectAt('Field', 0)
+    expect((requireWidget('필수') as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('연속으로 두 번 누르면 두 편집이 순서대로 나간다', async () => {
+    // D6가 스위치에도 적용된다 — 두 요청이 겹치지 않고 순서대로 나간다.
+    const { calls, api } = editable()
+    await openPage(SWITCH_DOC, { apiOverrides: api })
+
+    selectAt('Field', 0)
+    fireEvent.click(requireWidget('필수'))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    fireEvent.click(requireWidget('필수'))
+
+    await waitFor(() => expect(calls).toHaveLength(2))
+    expect(calls.map((call) => call.ops)).toEqual([
+      [{ op: 'replace', path: '/root/children/0/props/required', value: false }],
+      [{ op: 'replace', path: '/root/children/0/props/required', value: true }],
+    ])
+  })
+
+  it('스위치는 문서의 값을 그대로 비춘다', async () => {
+    // 로컬 state를 들고 있는 구현을 잡는다 — 스위치는 중간 상태가 없으므로 문서가
+    // 곧 화면이어야 하고, 실패한 편집이 재조회로 되돌아가면 화면도 함께 돌아와야 한다.
+    await openPage(SWITCH_DOC)
+
+    selectAt('Field', 0)
+    expect((requireWidget('필수') as HTMLInputElement).checked).toBe(true)
+    expect((requireWidget('비활성') as HTMLInputElement).checked).toBe(false)
   })
 })
