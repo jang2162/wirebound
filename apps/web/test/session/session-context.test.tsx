@@ -74,6 +74,16 @@ function InvalidateButton(): ReactElement {
   )
 }
 
+/** 무효화의 짝. 확정이 멱등인지 재는 케이스가 쓴다. */
+function ConfirmButton(): ReactElement {
+  const confirm = useConfirmSession()
+  return (
+    <button type="button" onClick={confirm}>
+      확정
+    </button>
+  )
+}
+
 describe('SessionProvider', () => {
   it('me는 앱이 뜨는 동안 한 번만 불린다', async () => {
     let meCalls = 0
@@ -245,6 +255,42 @@ describe('SessionProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: '무효화' }))
 
     expect(screen.getByTestId('status').textContent).toBe('anonymous')
+    expect(renders).toBe(settled)
+  })
+
+  it('이미 authenticated면 확정이 상태를 교체하지 않는다', async () => {
+    // 위 케이스의 짝이다. **리뷰가 이 계약을 "재지 않았다"고 지목해서 더했다** — 독스트링이
+    // "이미 `authenticated`면 아무 일도 하지 않는다"고 적고 있었는데, 그것을
+    // `setState({ status: 'authenticated' })`로 바꿔 멱등성을 깨도 죽는 케이스가 0개였다.
+    //
+    // 오늘 `confirm`을 두 번 부르는 자리는 없다(`login.tsx`가 성공에 한 번 부른다).
+    // 그래도 재 두는 것은, 무효화 쪽이 정확히 그런 자리(`SignedOut`이 렌더될 때마다
+    // 부른다)를 갖게 되면서 다리가 됐기 때문이다 — 확정 쪽도 그런 호출자가 생기면
+    // 같은 자리가 렌더 루프가 된다.
+    let renders = 0
+    function StatusProbe(): ReactElement {
+      renders += 1
+      const state = useSessionState()
+      return <span data-testid="status">{state.status}</span>
+    }
+
+    renderInSession(
+      <>
+        <StatusProbe />
+        <ConfirmButton />
+      </>,
+      { client: fakeApi({ me: async () => USER }) },
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toBe('authenticated')
+    })
+    const settled = renders
+
+    fireEvent.click(screen.getByRole('button', { name: '확정' }))
+    fireEvent.click(screen.getByRole('button', { name: '확정' }))
+
+    expect(screen.getByTestId('status').textContent).toBe('authenticated')
     expect(renders).toBe(settled)
   })
 

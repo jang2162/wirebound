@@ -100,9 +100,15 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
     }
   }, [api])
 
-  // 갱신 함수로 쓰는 것이 요점이다 — 지금 상태를 의존성으로 받지 않으므로 이 콜백의
-  // 참조가 앱이 도는 내내 그대로다. `SignedOut`이 `useEffect(invalidate, [invalidate])`로
-  // 부르는데, 참조가 렌더마다 바뀌면 그 이펙트가 커밋마다 다시 돈다.
+  // **순환을 닫는 다리는 아래 `current.status === 'anonymous' ? current : ANONYMOUS`다.**
+  // 그것을 `setState({ status: 'anonymous' })`로 바꿔 매번 새 객체를 만들게 하면
+  // `이미 anonymous면 무효화가 상태를 교체하지 않는다`가 죽는다(실측 1 사망).
+  //
+  // **`useCallback`은 겹치는 방어다 — 하중이 아니다.** 걷어내 참조를 불안정하게 만들어도
+  // 죽는 케이스가 **0개**이고, 위 상태 교체와 **동시에** 깨도 `Maximum update depth`가
+  // 나지 않고 죽는 것은 상태 교체 쪽이 죽이는 그 하나뿐이다(실측). 그래도 두는 것은
+  // `SignedOut`이 `useEffect(invalidate, [invalidate])`로 부르기 때문이다 — 참조가 렌더마다
+  // 바뀌면 그 이펙트가 커밋마다 다시 돈다. 즉 헛일을 줄이는 것이지 순환을 막는 것이 아니다.
   const invalidate = useCallback(() => {
     setState((current) => (current.status === 'anonymous' ? current : ANONYMOUS))
   }, [])

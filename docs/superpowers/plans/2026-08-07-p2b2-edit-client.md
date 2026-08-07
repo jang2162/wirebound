@@ -22,7 +22,7 @@
 - **`apps/web`에 `zod`를 들이지 않는다.** 봉투 검사는 얕은 형태 검사다(P2b-1의 `SHAPES` 관례).
 - **사용자 대면 메시지와 주석은 전부 한국어.** 주변 코드의 주석 밀도·어투(무엇이 아니라 왜)를 따른다.
 - Node ≥ 22.9.0, ESM only, TypeScript strict + `noUncheckedIndexedAccess`, `moduleResolution: bundler`, `verbatimModuleSyntax`. `pnpm typecheck`가 exit 0이어야 한다.
-- **`pnpm test`가 초록이어야 한다.** 현재 **989 tests / 59 files**.
+- **`pnpm test`가 초록이어야 한다.** **이 수는 웨이브가 끝날 때마다 는다** — 기준으로 삼을 것은 "직전 웨이브가 보고한 수보다 줄지 않았다"이지 아래 숫자 자체가 아니다. 계획을 쓴 시점 989/59 → 웨이브 1 끝 1007/60 → **웨이브 2 끝 1077 tests / 64 files**.
 - 커밋할 파일은 **경로로 명시해서** stage한다. `git add -A` 금지.
 - **완결성을 주장하지 마라.** "전부"·"항상"·"유일"은 측정한 뒤에만 쓰고, 쓸 때는 그 측정을 함께 적어라. 모르면 "재지 못했다"고 적어라. (이월 문서 "반복된 결함" 절 — 그 규칙이 P2b-1 마무리에서 두 번 더 깨졌다.)
 
@@ -446,12 +446,31 @@ export function propOps(document: PageDocument, nodeId: string, prop: string, va
 | 1 | `루트 자식의 prop을 바꾸는 경로를 만든다` | `/root/children/0/props/title` |
 | 2 | `깊이 중첩된 노드의 경로를 만든다` | 손자 노드 |
 | 3 | `props가 없던 노드에는 props 객체째로 add한다` | op 하나 — `add /root/children/0/props` 값 `{ title: '…' }` |
+| 3b | `props는 있는데 그 prop이 없으면 그 키만 add한다` | op 하나 — `add /root/children/0/props/title` |
 | 4 | `없는 노드면 null이다` | 요청을 보내지 않는 신호 |
 | 5 | `만든 ops를 applyOps에 넣으면 그 값이 들어간다` | **왕복 대조** — 경로를 손으로 적은 단언만 있으면 오프바이원을 못 잡는다 |
 
 **케이스 5가 이 파일의 핵심이다.** `findNodePath`(schema가 이미 낸다)를 쓰면 경로 조립이 짧아진다.
 
-**케이스 3의 모양은 소스를 읽어 확정했다.** `packages/schema/src/patch/apply.ts`의 `resolveSlot`은 경로의 마지막 토큰만 남기고 나머지를 따라 내려가는데, `props`가 없는 노드에서 `/…/props/title`을 주면 `parent`가 `undefined`가 되어 **`경로를 찾을 수 없습니다`로 던진다.** 그러므로 `props`가 없을 때는 **`props` 객체를 통째로 `add`한다**(op 둘로 나누지 않는다 — 하나면 되고 서버가 만들 `inverse`도 단순해진다). 이미 `props`가 있으면 통째 `add`는 남의 prop을 지우므로 `replace /…/props/<prop>`를 쓴다. **두 갈래를 케이스로 각각 고정하라.**
+**갈래는 셋이다.** 계획 첫 판은 둘로 적었고 **웨이브 2가 소스 실측으로 반증했다** — 아래 표는 실측 결과다(`packages/schema/src/patch/apply.ts`).
+
+| 노드 상태 | `replace /…/props/<prop>`를 주면 | 그래서 쓰는 op |
+|---|---|---|
+| `props` 자체가 없다 | `resolveSlot`이 `parent`를 `undefined`로 만들어 **`경로를 찾을 수 없습니다`로 던진다** | `add /…/props` 값 `{ [prop]: value }` |
+| `props`는 있고 그 **키**가 없다 | `replaceAt`의 `Object.hasOwn`에 걸려 **`바꿀 키가 없습니다`로 던진다** | `add /…/props/<prop>` |
+| `props`에 그 키가 있다 | 통과한다 | `replace /…/props/<prop>` |
+
+**가운데 줄이 첫 판이 빠뜨린 갈래다.** 그것 없이 `replace`를 쓰면 `applyOps`가 던지고 D7이 요청을 막아 **값이 없던 prop을 처음 켜는 편집이 아예 나가지 못한다**(Task 8 케이스 3이 정확히 그 경로다). 통째 `add`로 합치는 것도 답이 아니다 — 그 노드의 다른 prop이 지워진다. op을 하나로 유지하는 것은 서버가 만들 `inverse`가 단순해지기 때문이다.
+
+**`inverse`도 웨이브 2가 쟀다** — 아래 "남은 위험"이 "재지 않았다"고 적어 둔 자리다. 서버는 `packages/schema`의 `invertOps`를 그대로 쓰므로(`apps/api/src/services/edit-pipeline.ts`) 잰 값이 서버가 낼 값이다.
+
+| 갈래 | 서버가 낼 `inverse` |
+|---|---|
+| 통째 `add /…/props` | `[{ op: 'remove', path: '/…/props' }]` — **하나다** |
+| 키 `add /…/props/<prop>` | `[{ op: 'remove', path: '/…/props/<prop>' }]` |
+| `replace /…/props/<prop>` | `[{ op: 'replace', path: '/…/props/<prop>', value: 옛값 }]` |
+
+셋 다 되적용하면 원래 문서로 돌아간다(실측). **Task 10 케이스 1이 `props` 없는 노드에 대해서도 돌아야 한다는 아래 지적은 그대로 유효하다** — 여기서 잰 것은 `inverse`의 모양과 왕복이지 undo 경로 전체가 아니다.
 
 - [ ] **Step 2: 실패를 확인하고 `ops.ts`를 구현한다**
 
@@ -911,7 +930,7 @@ git commit -m "feat(web): 새로고침 뒤 내 revision으로 undo 스택을 복
 **남은 위험 — 계획이 답을 정하지 않은 것**
 
 - **Task 7의 케이스 9(`다른 노드를 고르면 입력이 그 노드 값으로 바뀐다`)를 `key`로 닫을지 이펙트로 닫을지** 정하지 않았다. `key`가 단순하지만, 입력 중에 노드가 바뀌면 **커밋되지 않은 타이핑이 조용히 사라진다** — 그 경로가 실제로 나는지(구조 트리 클릭이 입력 포커스를 뺏는가) 재보고 고르라. `key`를 골랐으면 그 손실이 설계된 것임을 주석에 적어라.
-- **`props`를 통째로 `add`한 편집의 `inverse`가 무엇인지 재지 않았다.** 서버가 만들지만(§7.1), undo가 그것으로 원래 상태에 정확히 돌아가는지는 Task 10 케이스 1이 `props` 없는 노드에 대해서도 도는지로 확인하라. **돌지 않으면 그것이 Task 10에 케이스를 하나 더할 신호다.**
+- ~~**`props`를 통째로 `add`한 편집의 `inverse`가 무엇인지 재지 않았다.**~~ **웨이브 2가 쟀다 — Task 4의 표를 보라**(`[{ op: 'remove', path: '/…/props' }]` 하나이고 되적용하면 원래 문서로 돌아간다). **남은 부분은 그대로다:** 그 `inverse`로 undo가 원래 상태에 돌아가는지는 Task 10 케이스 1이 `props` 없는 노드에 대해서도 도는지로 확인하라 — 여기서 잰 것은 `applyOps`/`invertOps` 수준의 왕복이지 undo 경로(전송·ack·스택) 전체가 아니다. **돌지 않으면 그것이 Task 10에 케이스를 하나 더할 신호다.**
 
 **분모를 적지 않은 것**
 
