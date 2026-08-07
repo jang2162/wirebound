@@ -56,6 +56,17 @@ const PAGE = {
   schema: { version: 1, root: { id: 'n-root', type: 'Page', children: [] } },
 }
 
+/**
+ * `PATCH .../ops`의 계약대로인 응답. **`inverse` 안쪽은 보지 않는다**(D11) — 그것은 서버가
+ * 만든 `PatchOp[]`이고 거기서부터는 `@wirebound/schema`의 일이다.
+ */
+const PATCH_RESULT = {
+  seq: 8,
+  revisionId: 'rev-1',
+  inverse: [{ op: 'replace', path: '/root/children/0/props/title', value: '옛 제목' }],
+  schemaVersion: 1,
+}
+
 /** 경로 끝으로 응답을 고르는 가짜 `fetch`. 전부 200 JSON이다 — 여기서 재는 것은 성공 대역이다. */
 function routedFetch(bodies: Record<string, unknown>): typeof fetch {
   return (input) => {
@@ -120,6 +131,23 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
       call: (api) => api.getPage('p-1', 'pg-1'),
       bodies: [null, [], {}, { ...PAGE, schema: 'x' }, { ...PAGE, schema: {} }, { ...PAGE, headSeq: '7' }],
     },
+    {
+      // `seq`가 다음 요청의 `baseSeq`이고 `inverse`가 undo가 되보낼 ops다. 둘 중 하나라도
+      // 계약을 어기면 그 값이 그대로 큐와 undo 스택에 실린다 — `seq`가 문자열이면 다음
+      // `baseSeq`가 조용히 어긋나고, `inverse`가 배열이 아니면 undo가 그것을 `ops`로
+      // 보내다 죽는다.
+      name: 'patchOps',
+      call: (api) => api.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: [] }),
+      bodies: [
+        null,
+        [],
+        {},
+        { ...PATCH_RESULT, seq: 'x' },
+        { ...PATCH_RESULT, revisionId: 1 },
+        { ...PATCH_RESULT, inverse: 'x' },
+        { ...PATCH_RESULT, inverse: null },
+      ],
+    },
   ]
 
   describe('ApiError로 바꾼다', () => {
@@ -155,6 +183,24 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
     await expect(api.getProject('p-1')).resolves.toEqual(PROJECT)
     await expect(api.getTree('p-1')).resolves.toEqual(MENU)
     await expect(api.getPage('p-1', 'pg-1')).resolves.toEqual(PAGE)
+  })
+
+  it('patchOps의 계약을 지킨 응답은 그대로 지나간다', async () => {
+    // 음성 대조. `clientOpId`가 없는 응답도 계약대로다 — 서버는 요청에 그 키가 있었을
+    // 때만 되돌려 준다(`apps/api/src/routes/pages.ts`).
+    const api = client({ '/ops': PATCH_RESULT })
+
+    await expect(api.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: [] })).resolves.toEqual(PATCH_RESULT)
+  })
+
+  it('inverse가 빈 배열인 응답도 지나간다', async () => {
+    // 계약이 허용하는 경계값이다. 검사가 "비어 있으면 잘못됐다"로 새면 여기서 죽는다.
+    const api = client({ '/ops': { ...PATCH_RESULT, inverse: [] } })
+
+    await expect(api.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: [] })).resolves.toEqual({
+      ...PATCH_RESULT,
+      inverse: [],
+    })
   })
 
   it('빈 트리·설명 없는 프로젝트처럼 정상인 경계값도 지나간다', async () => {
