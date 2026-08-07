@@ -137,12 +137,11 @@ export function StructureToolbar(props: {
     const previous = parent?.children?.[spot.index - 1]
     if (previous === undefined) return
 
-    // 검증 전 문서에는 `children`이 배열이 아닌 노드가 온다. `structureAbilities`가
-    // 그런 앞 형제를 이미 거르지만(`acceptsChildren`), 여기서 길이를 읽는 것이므로
-    // 값으로 한 번 더 본다 — 문자열이면 `.length`가 글자 수를 낸다.
-    const room = Array.isArray(previous.children) ? previous.children.length : 0
-
-    commitOps(moveNodeOps(document, selectedNodeId, previous.id, room))
+    // **앞 형제의 `children`이 배열인지 여기서 보지 않는다.** `structureAbilities`의
+    // `indent`가 `acceptsChildren`으로 이미 거르므로(배열도 `undefined`도 아니면 `false`)
+    // 그런 앞 형제에서는 버튼이 비활성이다. 겹으로 두면 판정이 두 곳에 생기고 — 그것이
+    // D3이 막으려는 것이다 — 실제로 0 사망이었다(재 봤다).
+    commitOps(moveNodeOps(document, selectedNodeId, previous.id, previous.children?.length ?? 0))
   }
 
   /**
