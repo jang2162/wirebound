@@ -285,10 +285,21 @@ const BROKEN_OPS: PatchOp[] = [
   { op: 'replace', path: '/root/children/9/props/title', value: 'x' },
 ]
 
-/** 서버가 준 ack. `inverse`는 서버가 만든 것이다(설계 §7.1). */
-function ack(seq: number): { seq: number; revisionId: string; inverse: PatchOp[] } {
-  return { seq, revisionId: `rev-${seq}`, inverse: [{ op: 'remove', path: '/root/props' }] }
+/**
+ * 서버가 준 ack. `inverse`는 서버가 만든 것이다(설계 §7.1).
+ *
+ * 기본값은 `TITLE_OPS`(통째 `add`)의 역인 `remove /root/props`다 — 웨이브 2가 잰 값이다.
+ * undo가 만든 revision의 역은 그 반대이므로 케이스가 직접 준다.
+ */
+function ack(
+  seq: number,
+  inverse: PatchOp[] = [{ op: 'remove', path: '/root/props' }],
+): { seq: number; revisionId: string; inverse: PatchOp[] } {
+  return { seq, revisionId: `rev-${seq}`, inverse }
 }
+
+/** undo가 만든 revision의 `inverse` — 지워진 `props`를 도로 넣는다. */
+const REDO_INVERSE: PatchOp[] = [{ op: 'add', path: '/root/props', value: { title: '새 제목' } }]
 
 /** id를 순서대로 내주는 생성기. 스토어가 전역(`crypto.randomUUID`)에 기대지 않는다는 계약이다. */
 function idSequence(): () => string {
@@ -321,7 +332,10 @@ describe('EditorStore의 편집 상태', () => {
     expect(clientOpId).toBe('op-1')
     // 낙관적 적용 — 서버에 묻기 전에 문서가 이미 바뀌어 있다.
     expect(store.getState().document?.root.props).toEqual({ title: '새 제목' })
-    expect(store.getState().pending).toEqual([{ clientOpId: 'op-1', ops: TITLE_OPS, baseSeq: 7 }])
+    // `kind`는 ack가 어느 스택에 쌓을지를 가르는 표시다(Task 10).
+    expect(store.getState().pending).toEqual([
+      { clientOpId: 'op-1', ops: TITLE_OPS, baseSeq: 7, kind: 'edit' },
+    ])
     // `headSeq`는 ack 전까지 그대로다 — 그것을 여기서 올리면 다음 편집이 아직 없는
     // revision을 `baseSeq`로 쓴다.
     expect(store.getState().headSeq).toBe(7)
@@ -477,5 +491,156 @@ describe('EditorStore의 편집 상태', () => {
     store.loadPage('pg-1', doc('n_root'), 7)
 
     expect(typeof store.applyEdit(TITLE_OPS)).toBe('string')
+  })
+
+  it('편집을 내면 redo 스택이 비워진다', () => {
+    // 표준 undo 의미론이다 — undo 뒤 새 편집을 하면 되돌아갈 미래가 없어진다.
+    const store = loaded()
+    store.applyEdit(TITLE_OPS)
+    store.ackEdit('op-1', ack(8))
+    store.startUndo()
+    store.ackEdit('op-2', ack(9, REDO_INVERSE))
+    expect(store.getState().redoStack).toHaveLength(1)
+
+    // undo가 `props`를 통째로 지웠으므로 다시 통째로 넣는 편집이라야 적용된다.
+    store.applyEdit([{ op: 'add', path: '/root/props', value: { other: 1 } }])
+
+    expect(store.getState().redoStack).toEqual([])
+  })
+
+  it('undo가 만든 revision은 redo 스택으로 간다', () => {
+    // **ack 시점에 그것을 알려면 큐 항목에 표시가 있어야 한다.** undo가 만든 revision의
+    // `inverse`는 원래 편집을 **다시** 적용하는 것이므로 undo 스택에 쌓으면 안 된다.
+    const store = loaded()
+    store.applyEdit(TITLE_OPS)
+    store.ackEdit('op-1', ack(8))
+
+    const attempt = store.startUndo()
+    expect(attempt.clientOpId).toBe('op-2')
+    // 스택에서 이미 빠졌다 — 낙관적으로 적용했으므로.
+    expect(store.getState().undoStack).toEqual([])
+
+    store.ackEdit('op-2', ack(9, REDO_INVERSE))
+
+    expect(store.getState().undoStack).toEqual([])
+    expect(store.getState().redoStack.map((r) => r.revisionId)).toEqual(['rev-9'])
+  })
+
+  it('redo가 만든 revision은 다시 undo 스택으로 간다', () => {
+    const store = loaded()
+    store.applyEdit(TITLE_OPS)
+    store.ackEdit('op-1', ack(8))
+    store.startUndo()
+    store.ackEdit('op-2', ack(9, REDO_INVERSE))
+
+    const attempt = store.startRedo()
+    expect(attempt.clientOpId).toBe('op-3')
+    store.ackEdit('op-3', ack(10))
+
+    expect(store.getState().redoStack).toEqual([])
+    expect(store.getState().undoStack.map((r) => r.revisionId)).toEqual(['rev-10'])
+  })
+
+  it('되돌릴 것이 없으면 startUndo가 아무것도 하지 않는다', () => {
+    const store = loaded()
+    const before = store.getState()
+
+    expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 0 })
+
+    expect(store.getState()).toBe(before)
+  })
+
+  it('적용할 수 없는 inverse는 스택에서 빼고 다음으로 넘어간다', () => {
+    // **설계 §7.3의 계약이다 — 에러가 아니라 정상 흐름이다.** 그 경로가 없으면 다른
+    // 사람이 지운 노드를 undo할 때 스택 맨 위에 갇힌다.
+    const store = loaded()
+    // **인자는 최신이 앞이다**(서버 응답 순서). 그러므로 `rev-bad`가 스택 top이다.
+    store.restoreUndoStack([
+      { revisionId: 'rev-bad', inverse: [{ op: 'replace', path: '/root/children/9/props/x', value: 1 }] },
+      { revisionId: 'rev-old', inverse: [{ op: 'add', path: '/root/props', value: { title: '옛' } }] },
+    ])
+
+    const attempt = store.startUndo()
+
+    // 못 쓰는 것 하나를 건너뛰고 그 아래를 집었다.
+    expect(attempt.skipped).toBe(1)
+    expect(attempt.clientOpId).toBe('op-1')
+    expect(store.getState().undoStack).toEqual([])
+    expect(store.getState().document?.root.props).toEqual({ title: '옛' })
+  })
+
+  it('스택이 전부 적용 불가면 비우고 건너뛴 수를 알린다', () => {
+    const store = loaded()
+    store.restoreUndoStack([
+      { revisionId: 'r1', inverse: [{ op: 'replace', path: '/root/children/8/props/x', value: 1 }] },
+      { revisionId: 'r2', inverse: [{ op: 'replace', path: '/root/children/9/props/x', value: 1 }] },
+    ])
+
+    const attempt = store.startUndo()
+
+    expect(attempt).toEqual({ clientOpId: null, skipped: 2 })
+    // 갇히지 않도록 비운다 — 남겨 두면 다음 undo가 같은 항목을 또 시도한다.
+    expect(store.getState().undoStack).toEqual([])
+  })
+
+  it('restoreUndoStack은 최신이 top이 되게 싣는다', () => {
+    // 서버 응답은 `seq` 내림차순(최신이 앞)이고, 이 스토어의 스택은 **끝이 top**이다
+    // (`ackEdit`이 `[...undoStack, ref]`로 쌓는다). 그래서 싣는 쪽이 뒤집는다 —
+    // **계획서는 "뒤집지 마라"고 적었는데 그것은 스택을 "앞이 top"으로 두는 표현을
+    // 전제한 말이다.** 여기서 재는 것은 배열 모양이 아니라 **어느 것이 먼저 undo되는가**다.
+    const store = loaded()
+    store.restoreUndoStack([
+      { revisionId: 'rev-최신', inverse: [{ op: 'add', path: '/root/props', value: { title: '최신' } }] },
+      { revisionId: 'rev-옛것', inverse: [{ op: 'add', path: '/root/props', value: { title: '옛것' } }] },
+    ])
+
+    store.startUndo()
+
+    // 최신 것이 먼저 되돌아간다.
+    expect(store.getState().document?.root.props).toEqual({ title: '최신' })
+    expect(store.getState().pending[0]?.ops).toEqual([
+      { op: 'add', path: '/root/props', value: { title: '최신' } },
+    ])
+  })
+
+  it('restoreUndoStack은 redo 스택을 비운다', () => {
+    // D10 — 복원한 항목은 redo를 갖지 않는다. redo 스택은 세션 안에서 undo를 눌러야 생긴다.
+    const store = loaded()
+    store.applyEdit(TITLE_OPS)
+    store.ackEdit('op-1', ack(8))
+    store.startUndo()
+    store.ackEdit('op-2', ack(9, REDO_INVERSE))
+    expect(store.getState().redoStack).toHaveLength(1)
+
+    store.restoreUndoStack([{ revisionId: 'r', inverse: [] }])
+
+    expect(store.getState().redoStack).toEqual([])
+  })
+
+  it('loadPage는 redo 스택도 비운다', () => {
+    const store = loaded()
+    store.applyEdit(TITLE_OPS)
+    store.ackEdit('op-1', ack(8))
+    store.startUndo()
+    store.ackEdit('op-2', ack(9, REDO_INVERSE))
+
+    store.loadPage('pg-1', doc('n_root2'), 50)
+
+    expect(store.getState().undoStack).toEqual([])
+    expect(store.getState().redoStack).toEqual([])
+  })
+
+  it('펌프는 한 번에 하나만 돈다', () => {
+    // **훅 인스턴스가 둘이어도 D6가 지켜져야 한다.** 실측: 펌프 가드가 훅의 ref에 있으면
+    // `useEditCommit`을 두 번 부른 트리에서 `maxInFlight`가 2가 된다. 가드를 스토어에 두면
+    // 인스턴스 수와 무관해진다 — undo/redo 버튼이 속성 패널과 다른 인스턴스를 쓰기 때문에
+    // 이 자리가 실재하는 경로다.
+    const store = loaded()
+
+    expect(store.beginPump()).toBe(true)
+    expect(store.beginPump()).toBe(false)
+
+    store.endPump()
+    expect(store.beginPump()).toBe(true)
   })
 })

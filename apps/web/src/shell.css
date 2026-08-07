@@ -112,6 +112,13 @@
   font-size: 13px;
 }
 
+/* 편집 이력 버튼. 도구 묶음과 같은 크기 규칙을 쓴다. */
+.wb-shell-history {
+  display: inline-flex;
+  gap: 4px;
+  font-size: 13px;
+}
+
 .wb-shell-title {
   margin: 0;
   font-size: 15px;

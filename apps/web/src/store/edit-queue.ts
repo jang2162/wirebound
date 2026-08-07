@@ -9,6 +9,13 @@
  */
 import type { PatchOp } from '@wirebound/schema'
 
+/**
+ * 이 편집이 어디서 나왔나. **ack 시점에 revision을 어느 스택에 쌓을지가 여기서 갈린다** —
+ * undo가 만든 revision의 `inverse`는 원래 편집을 **다시** 적용하므로 redo 스택으로 가야 한다.
+ * 큐를 지날 때 그 사실이 남지 않으면 ack가 그것을 알 길이 없다.
+ */
+export type EditKind = 'edit' | 'undo' | 'redo'
+
 export interface PendingEdit {
   /**
    * 이 편집을 만든 쪽이 붙인 id.
@@ -32,6 +39,7 @@ export interface PendingEdit {
    * P3의 리베이스가 그것을 쓴다.
    */
   baseSeq: number
+  kind: EditKind
 }
 
 /** 지금 보낼 것. 없으면 `null`이다. */

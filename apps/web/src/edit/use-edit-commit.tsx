@@ -11,7 +11,7 @@
  * 아래 `pumpingRef`와 **한 번에 하나씩 `await`하는 루프**다. 루프가 도는 동안 들어온 편집은
  * 큐에 쌓이고, 앞 요청이 끝난 뒤 같은 루프가 그것을 집는다.
  */
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
@@ -23,9 +23,27 @@ const EDIT_UNKNOWN_FAILURE = '편집을 저장하지 못했습니다'
 /** 재조회마저 실패했을 때. 편집 실패와 갈라 적어야 사용자가 무엇이 남았는지 안다. */
 const RECOVER_UNKNOWN_FAILURE = '편집에 실패한 뒤 페이지를 다시 불러오지도 못했습니다'
 
+/**
+ * 되돌릴 수 없는 항목을 건너뛰었을 때의 안내(설계 §7.3).
+ *
+ * **에러가 아니라 정상 흐름이다** — 다른 사람이 그 노드를 지웠으면 내 `inverse`가 적용되지
+ * 않는 것이 당연하고, 그때 할 일은 멈추는 것이 아니라 다음 항목으로 넘어가는 것이다.
+ * 자리는 편집 실패와 같은 `role="alert"` 하나를 쓴다(D8) — 사용자가 누른 행동의 결과라는
+ * 점이 같고, 자리를 나누면 그 하나뿐인 통지 규칙이 흩어진다.
+ */
+function skippedNotice(skipped: number, applied: boolean): string {
+  const head = `되돌릴 수 없는 편집 ${skipped}개를 건너뛰었습니다.`
+  return applied ? `${head} 그 앞의 편집을 되돌렸습니다.` : `${head} 되돌릴 것이 더 없습니다.`
+}
+
 export interface EditCommit {
   /** 노드의 prop 하나를 바꾼다. 적용할 수 없으면 아무 일도 일어나지 않는다(D7). */
   commitProp: (nodeId: string, prop: string, value: unknown) => void
+  /** 한 단계 되돌린다. **서버에는 새 편집으로 나간다** — 서버에 undo 개념은 없다(README). */
+  undo: () => void
+  redo: () => void
+  canUndo: boolean
+  canRedo: boolean
   status: EditStatus
 }
 
@@ -35,10 +53,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const store = useEditorStoreInstance()
   const open = useOpenPage(pageId)
   const status = useEditorStore(store, (s) => s.editStatus)
-
-  // 루프가 돌고 있는지. **state가 아니라 ref인 것이 요점이다** — state로 두면 두 번째
-  // 편집이 그 갱신이 커밋되기 전에 들어와 루프를 하나 더 시작한다(그것이 D6 위반이다).
-  const pumpingRef = useRef(false)
+  const canUndo = useEditorStore(store, (s) => s.undoStack.length > 0)
+  const canRedo = useEditorStore(store, (s) => s.redoStack.length > 0)
 
   /**
    * 실패 하나를 수습한다. **실패 종류로 갈리지 않는다**(D4) — 409든 422든 네트워크든
@@ -96,8 +112,10 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   )
 
   const pump = useCallback(async (): Promise<void> => {
-    if (pumpingRef.current) return
-    pumpingRef.current = true
+    // **가드는 스토어가 든다.** 훅의 `ref`에 두면 `useEditCommit`을 부르는 자리가 둘일 때
+    // (속성 패널과 undo/redo 버튼) 각자 자기 것을 갖는다 — 실측: 그 트리에서 편집을 각각
+    // 내면 `maxInFlight`가 2가 되어 D6가 깨진다.
+    if (!store.beginPump()) return
     try {
       for (;;) {
         // **`baseSeq`는 스토어가 전송 시점에 붙인다.** 훅으로 읽은 `headSeq`는 앞 편집이
@@ -121,9 +139,43 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         }
       }
     } finally {
-      pumpingRef.current = false
+      store.endPump()
     }
   }, [api, projectId, pageId, store, recover])
+
+  /**
+   * 스택에서 한 단계 꺼내 보낸다. undo와 redo가 같은 규칙을 쓰므로 한 곳에 둔다 —
+   * 다른 것은 어느 스택을 보느냐뿐이고, 그 판단은 스토어 안에 있다.
+   */
+  const step = useCallback(
+    (start: () => { clientOpId: string | null; skipped: number }): void => {
+      // 지금 열린 페이지가 아니면 아무것도 하지 않는다(`commitProp`과 같은 대조).
+      if (open === null) return
+
+      const attempt = start()
+      if (attempt.skipped > 0) {
+        store.setEditFailure({
+          kind: 'message',
+          message: skippedNotice(attempt.skipped, attempt.clientOpId !== null),
+        })
+      } else {
+        // 앞 통지를 치운다 — 남겨 두면 방금 누른 undo도 실패한 것으로 읽힌다.
+        store.setEditFailure(null)
+      }
+
+      if (attempt.clientOpId === null) return
+      void pump()
+    },
+    [open, store, pump],
+  )
+
+  const undo = useCallback(() => {
+    step(store.startUndo)
+  }, [step, store])
+
+  const redo = useCallback(() => {
+    step(store.startRedo)
+  }, [step, store])
 
   const commitProp = useCallback(
     (nodeId: string, prop: string, value: unknown): void => {
@@ -154,5 +206,5 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
     [open, store, pump],
   )
 
-  return { commitProp, status }
+  return { commitProp, undo, redo, canUndo, canRedo, status }
 }

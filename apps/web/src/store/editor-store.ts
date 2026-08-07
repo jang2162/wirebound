@@ -15,7 +15,13 @@
  * 기준으로 들고 있으므로, 밖에서 고치면 변경이 알림 없이 새어 들어간다.
  */
 import { applyOps, type PageDocument, type PatchOp } from '@wirebound/schema'
-import { ackPending, clearPending, nextPending, type PendingEdit } from './edit-queue'
+import {
+  ackPending,
+  clearPending,
+  nextPending,
+  type EditKind,
+  type PendingEdit,
+} from './edit-queue'
 
 /** 편집 모드. `view`는 편집 도구를 감추고 결과만 보여 준다. */
 export type EditorMode = 'edit' | 'view'
@@ -100,8 +106,15 @@ export interface EditorState {
    * 큐를 옮기는 규칙은 `edit-queue.ts`에 순수 함수로 있다.
    */
   pending: PendingEdit[]
-  /** 되돌릴 수 있는 revision. 최근 것이 끝이다. */
+  /** 되돌릴 수 있는 revision. **끝이 top**(최근)이다 — `ackEdit`이 뒤에 쌓는다. */
   undoStack: RevisionRef[]
+  /**
+   * 되돌린 것을 다시 적용할 revision. undo가 만든 revision이 여기 쌓인다.
+   *
+   * **새 편집을 내면 비워진다**(표준 undo 의미론 — 되돌아갈 미래가 없어진다).
+   * 복원(D10)도 이것을 채우지 않는다: redo는 세션 안에서 undo를 눌러야 생긴다.
+   */
+  redoStack: RevisionRef[]
   editStatus: EditStatus
   /** 마지막 편집 실패. 새 편집을 내면 지워진다 — 남아 있으면 방금 낸 편집도 실패한 것으로 읽힌다. */
   editFailure: EditFailure | null
@@ -122,9 +135,18 @@ function initialState(): EditorState {
     zoom: 1,
     pending: [],
     undoStack: [],
+    redoStack: [],
     editStatus: 'idle',
     editFailure: null,
   }
+}
+
+/** `startUndo`·`startRedo`의 결과. 건너뛴 수는 §7.3의 안내에 쓴다. */
+export interface UndoAttempt {
+  /** 큐에 들어간 편집의 id. 적용할 수 있는 항목이 없었으면 `null`이다. */
+  clientOpId: string | null
+  /** 적용할 수 없어 버린 항목 수. */
+  skipped: number
 }
 
 type Listener = () => void
@@ -135,6 +157,16 @@ export class EditorStore {
   readonly #listeners = new Set<Listener>()
 
   readonly #nextOpId: () => string
+
+  /**
+   * 전송 루프가 돌고 있는가. **관측 상태가 아니라 제어 플래그라 `#state` 밖에 있다.**
+   *
+   * **훅이 아니라 스토어가 드는 것이 요점이다.** 앞 판은 `use-edit-commit.tsx`의 `ref`가
+   * 이것을 들었는데, `useEditCommit`을 부르는 자리가 둘이 되면(속성 패널과 undo/redo 버튼)
+   * 각자 자기 `ref`를 갖는다 — 실측: 그 트리에서 편집을 각각 내면 `maxInFlight`가 **2**가
+   * 되어 D6가 깨진다. 스토어에 두면 인스턴스 수와 무관해진다.
+   */
+  #pumping = false
 
   constructor(options: EditorStoreOptions = {}) {
     // `crypto.randomUUID`를 여기서 한 번만 참조한다. 이 줄이 이 파일의 유일한 전역
@@ -183,7 +215,7 @@ export class EditorStore {
    * 재조회 경로를 새로 만들어도 같은 틈이 안 생긴다.
    */
   readonly loadPage = (pageId: string, document: PageDocument, headSeq: number): PendingEdit[] => {
-    const { pending, undoStack } = this.#state
+    const { pending, undoStack, redoStack } = this.#state
     // 선택을 함께 지운다. 노드 id는 문서 안에서만 뜻이 있으므로, 다른 페이지의 id가
     // 남으면 선택 표시가 존재하지 않는 노드를 가리킨다.
     this.#apply({
@@ -194,12 +226,34 @@ export class EditorStore {
       // **이미 비어 있으면 같은 배열을 그대로 넘긴다**(`clearPage`와 같은 이유) — 빈 배열을
       // 새로 만들면 참조가 달라져 `pending`을 구독하는 쪽이 페이지를 열 때마다 헛일을 한다.
       pending: pending.length === 0 ? pending : [],
-      // **undo 스택도 함께 비운다.** 문서가 서버 것으로 되돌아갔으므로 그 전 revision의
-      // `inverse`를 되보내면 서버 상태와 어긋난다. 새로고침 뒤의 복원은 Task 11이
-      // `GET .../revisions?mine=true`로 따로 채운다.
+      // **undo·redo 스택도 함께 비운다.** 문서가 서버 것으로 되돌아갔으므로 그 전 revision의
+      // `inverse`를 되보내면 서버 상태와 어긋난다. 페이지를 여는 경로의 복원은 Task 11이
+      // `GET .../revisions?mine=true`로 **이 호출 뒤에** 따로 채운다 — 순서가 뒤바뀌면
+      // 방금 채운 스택을 이것이 지운다(`routes/editor.tsx`에 그 순서가 있다).
       undoStack: undoStack.length === 0 ? undoStack : [],
+      redoStack: redoStack.length === 0 ? redoStack : [],
     })
     return pending
+  }
+
+  /**
+   * 서버가 준 내 revision으로 undo 스택을 채운다(D10).
+   *
+   * **인자는 `seq` 내림차순(최신이 앞)이다** — 서버 응답 순서 그대로 받는다. 이 스토어의
+   * 스택은 **끝이 top**이므로 여기서 뒤집어 싣는다. (계획서는 "뒤집지 마라"고 적었는데,
+   * 그것은 스택을 "앞이 top"으로 두는 표현을 전제한 말이다. 재는 것은 배열 모양이 아니라
+   * **어느 것이 먼저 undo되는가**이고, `restoreUndoStack은 최신이 top이 되게 싣는다`가
+   * 그것을 고정한다.)
+   *
+   * **redo 스택은 비운다.** 복원한 항목은 redo를 갖지 않는다 — redo는 세션 안에서 undo를
+   * 눌러야 생긴다.
+   */
+  readonly restoreUndoStack = (revisions: readonly RevisionRef[]): void => {
+    const { redoStack } = this.#state
+    this.#apply({
+      undoStack: [...revisions].reverse(),
+      redoStack: redoStack.length === 0 ? redoStack : [],
+    })
   }
 
   /**
@@ -212,7 +266,7 @@ export class EditorStore {
    * 프로젝트를 떠날 때 그것까지 지우는 것은 `reset`의 몫이다.
    */
   readonly clearPage = (): void => {
-    const { pending, undoStack } = this.#state
+    const { pending, undoStack, redoStack } = this.#state
     this.#apply({
       openPageId: null,
       document: null,
@@ -228,6 +282,7 @@ export class EditorStore {
       // (`clearPage는 이미 비어 있으면 알리지 않는다`가 이 줄을 지킨다 — 실제로 잡혔다.)
       pending: pending.length === 0 ? pending : [],
       undoStack: undoStack.length === 0 ? undoStack : [],
+      redoStack: redoStack.length === 0 ? redoStack : [],
       editStatus: 'idle',
       editFailure: null,
     })
@@ -243,8 +298,8 @@ export class EditorStore {
    * **`headSeq`는 여기서 올리지 않는다.** 그 값은 서버가 revision을 기록한 뒤에야 정해지고
    * (`ackEdit`), 미리 올리면 다음 편집이 아직 없는 revision을 `baseSeq`로 쓴다.
    */
-  readonly applyEdit = (ops: PatchOp[]): string | null => {
-    const { document, headSeq, pending } = this.#state
+  readonly applyEdit = (ops: PatchOp[], kind: EditKind = 'edit'): string | null => {
+    const { document, redoStack } = this.#state
     if (document === null) return null
 
     let next: PageDocument
@@ -256,11 +311,98 @@ export class EditorStore {
       return null
     }
 
+    return this.#enqueue(next, ops, kind, {
+      // **새 편집은 redo 스택을 비운다**(표준 undo 의미론 — 되돌아갈 미래가 없어진다).
+      // undo·redo가 만드는 항목은 그 자리를 건드리면 안 된다: undo가 자기 redo를 지운다.
+      redoStack: kind === 'edit' && redoStack.length > 0 ? [] : redoStack,
+    })
+  }
+
+  /**
+   * 문서와 큐를 한 번에 옮긴다. `applyEdit`·`startUndo`·`startRedo`가 공유한다 —
+   * 셋이 각자 `#apply`를 부르면 "낙관 적용과 큐 삽입이 함께 일어난다"가 세 벌이 된다.
+   */
+  #enqueue(
+    document: PageDocument,
+    ops: PatchOp[],
+    kind: EditKind,
+    extra: Partial<EditorState>,
+  ): string {
     const clientOpId = this.#nextOpId()
     // `pending`을 **새 배열로** 만드는 것이 계약이다 — `#apply`가 참조 비교를 하므로
     // 제자리에서 `push`하면 알림이 안 간다.
-    this.#apply({ document: next, pending: [...pending, { clientOpId, ops, baseSeq: headSeq }] })
+    this.#apply({
+      ...extra,
+      document,
+      pending: [...this.#state.pending, { clientOpId, ops, baseSeq: this.#state.headSeq, kind }],
+    })
     return clientOpId
+  }
+
+  /**
+   * undo 한 단계. 스택 top부터 **적용 가능한 것을 찾아** 낙관적으로 적용하고 큐에 넣는다.
+   *
+   * **적용 불가는 에러가 아니라 정상 흐름이다**(설계 §7.3) — 그 항목을 버리고 다음으로
+   * 넘어간다. 그 경로가 없으면 다른 사람이 지운 노드를 되돌릴 때 스택 맨 위에 갇힌다.
+   * 전부 적용 불가면 스택을 비우고 `clientOpId: null`을 낸다 — 남겨 두면 다음 undo가 같은
+   * 항목을 또 시도한다.
+   */
+  readonly startUndo = (): UndoAttempt => this.#startFrom('undo')
+
+  /** redo 한 단계. `startUndo`와 같은 규칙을 redo 스택에 쓴다. */
+  readonly startRedo = (): UndoAttempt => this.#startFrom('redo')
+
+  #startFrom(kind: 'undo' | 'redo'): UndoAttempt {
+    const { document } = this.#state
+    if (document === null) return { clientOpId: null, skipped: 0 }
+
+    let stack = kind === 'undo' ? this.#state.undoStack : this.#state.redoStack
+    let skipped = 0
+
+    while (stack.length > 0) {
+      const ref = stack[stack.length - 1]
+      const rest = stack.slice(0, -1)
+      if (ref === undefined) break
+
+      let next: PageDocument
+      try {
+        // 건너뛴 항목이 문서를 바꾸지 않으므로 후보마다 **같은 문서**에 시험한다.
+        next = applyOps(document, ref.inverse)
+      } catch {
+        stack = rest
+        skipped += 1
+        continue
+      }
+
+      const clientOpId = this.#enqueue(
+        next,
+        // **서버가 준 `inverse`를 그대로 보낸다**(설계 §7.1). 클라이언트가 `invertOps`로
+        // 계산하지 않는다 — 클라이언트 상태가 낙관적으로 앞서 있을 수 있기 때문이다.
+        ref.inverse,
+        kind,
+        kind === 'undo' ? { undoStack: rest } : { redoStack: rest },
+      )
+      return { clientOpId, skipped }
+    }
+
+    if (skipped > 0) {
+      this.#apply(kind === 'undo' ? { undoStack: [] } : { redoStack: [] })
+    }
+    return { clientOpId: null, skipped }
+  }
+
+  /**
+   * 전송 루프를 시작해도 되는지. **`true`면 시작한 것이고 반드시 `endPump()`로 닫아야 한다.**
+   * 이미 돌고 있으면 `false`다(D6 — in-flight는 항상 하나).
+   */
+  readonly beginPump = (): boolean => {
+    if (this.#pumping) return false
+    this.#pumping = true
+    return true
+  }
+
+  readonly endPump = (): void => {
+    this.#pumping = false
   }
 
   /**
@@ -293,17 +435,26 @@ export class EditorStore {
     clientOpId: string,
     result: { seq: number; revisionId: string; inverse: PatchOp[] },
   ): void => {
-    const { pending, undoStack } = this.#state
+    const { pending, undoStack, redoStack } = this.#state
+    // 큐에서 빼기 **전에** 종류를 읽는다 — 어느 스택에 쌓을지가 그것으로 갈린다.
+    const head = nextPending(pending)
     const nextPendingQueue = ackPending(pending, clientOpId)
     // 같은 참조면 맞는 ack가 아니었다는 뜻이다. 그때 `headSeq`나 스택을 건드리면
     // 모르는 응답이 상태를 바꾸게 된다.
     if (nextPendingQueue === pending) return
 
+    // 서버가 준 `inverse`를 **그대로** 싣는다(설계 §7.1).
+    const ref: RevisionRef = { revisionId: result.revisionId, inverse: result.inverse }
+    // **undo가 만든 revision은 redo 스택으로 간다.** 그 revision의 `inverse`는 원래 편집을
+    // 다시 적용하는 것이므로 undo 스택에 쌓으면 같은 편집을 무한히 되돌리게 된다.
+    // redo가 만든 것은 반대로 다시 undo 스택으로 간다.
+    const undone = head?.kind === 'undo'
+
     this.#apply({
       pending: nextPendingQueue,
       headSeq: result.seq,
-      // 서버가 준 `inverse`를 **그대로** 싣는다(설계 §7.1).
-      undoStack: [...undoStack, { revisionId: result.revisionId, inverse: result.inverse }],
+      undoStack: undone ? undoStack : [...undoStack, ref],
+      redoStack: undone ? [...redoStack, ref] : redoStack,
     })
   }
 

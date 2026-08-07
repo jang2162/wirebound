@@ -16,6 +16,9 @@ function edit(clientOpId: string, baseSeq = 7): PendingEdit {
     clientOpId,
     ops: [{ op: 'replace', path: '/root/children/0/props/title', value: clientOpId }],
     baseSeq,
+    // 이 파일은 큐의 순서만 재므로 종류는 상관없다. ack가 그것으로 어느 스택에 쌓을지를
+    // 가르는 것은 `editor-store.test.ts`가 본다.
+    kind: 'edit',
   }
 }
 

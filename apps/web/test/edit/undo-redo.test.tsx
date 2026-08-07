@@ -1,0 +1,384 @@
+/**
+ * undo / redo. **서버에 undo 개념은 없다** — 되돌리기도 새 편집으로 나가고, 보내는 ops는
+ * 서버가 준 `inverse` 그대로다(설계 §7.1). 클라이언트는 `invertOps`를 부르지 않는다.
+ *
+ * 화면은 `<App />`을 라우트째 띄운다. 되돌리기 버튼은 셸의 `편집 이력` 묶음에 있고,
+ * 편집은 속성 패널의 컨트롤로 낸다 — **사용자가 실제로 지나는 길 그대로다.**
+ */
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import type { PatchOp } from '@wirebound/schema'
+import { ApiError, type ApiClient } from '../../src/api/client'
+import type { PatchResult } from '../../src/api/types'
+import { openPage, pageDetail, pageDoc } from '../editor-harness'
+import '../../src/catalog-setup'
+
+const TEXT_ID = 'n-text'
+const FIELD_ID = 'n-field'
+const OLD_TEXT = '옛 내용'
+
+/** `Text`(textarea·select)와 `Field`(text·switch·select)를 함께 둔다 — 컨트롤 종류별로 갈라 본다. */
+const DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    { id: TEXT_ID, type: 'Text', props: { content: OLD_TEXT, role: 'body' } },
+    { id: FIELD_ID, type: 'Field', props: { label: '이름', required: true } },
+  ],
+})
+
+/** `props`가 **없는** 노드. 통째 `add`의 `inverse`(`remove /…/props`)로 undo가 도는지 본다. */
+const BARE_DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [{ id: FIELD_ID, type: 'Field' }],
+})
+
+interface Server {
+  calls: { ops: PatchOp[]; baseSeq: number }[]
+  api: Partial<ApiClient>
+}
+
+/**
+ * **서버 대역이 진짜 `invertOps`로 `inverse`를 만든다.** 손으로 적은 `inverse`를 쓰면
+ * "클라이언트가 계산하지 않는다"를 재는 케이스가 서버 것과 구별되지 않는다 — 여기서는
+ * 서버만 아는 값(적용 **직전** 문서)에서 나오게 하고, 그 값이 그대로 되보내지는지 본다.
+ */
+function server(options: { failAt?: number } = {}): Server {
+  const calls: { ops: PatchOp[]; baseSeq: number }[] = []
+  let seq = 7
+  // 서버가 든 문서. 클라이언트의 낙관적 사본과 별개다.
+  let held = DOC
+
+  const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+    calls.push({ ops: body.ops, baseSeq: body.baseSeq })
+    if (options.failAt === calls.length) {
+      throw new ApiError(409, 'conflict', '충돌 [T10]')
+    }
+    const { applyOps, invertOps } = await import('@wirebound/schema')
+    const inverse = invertOps(held, body.ops)
+    held = applyOps(held, body.ops)
+    seq += 1
+    const result: PatchResult = {
+      seq,
+      revisionId: `rev-${seq}`,
+      inverse,
+      schemaVersion: 1,
+      ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+    }
+    return result
+  }
+
+  return { calls, api: { patchOps } }
+}
+
+function panel(): HTMLElement {
+  return screen.getByRole('complementary', { name: '속성 패널' })
+}
+
+function select(type: string): void {
+  fireEvent.click(
+    within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', {
+      name: type,
+    })[0]!,
+  )
+}
+
+function widget(label: string): HTMLElement {
+  const found = within(panel()).queryByLabelText<HTMLElement>(label)
+  if (found === null) throw new Error(`위젯이 없다: ${label}`)
+  return found
+}
+
+function history(): HTMLElement {
+  return screen.getByRole('group', { name: '편집 이력' })
+}
+
+function undoButton(): HTMLButtonElement {
+  return within(history()).getByRole<HTMLButtonElement>('button', { name: '되돌리기' })
+}
+
+function redoButton(): HTMLButtonElement {
+  return within(history()).getByRole<HTMLButtonElement>('button', { name: '다시 실행' })
+}
+
+function canvasTextOf(nodeId: string): string {
+  const node = document.body.querySelector(`[data-wb-id="${nodeId}"]`)
+  if (node === null) throw new Error(`캔버스에 노드가 없다: ${nodeId}`)
+  return node.textContent ?? ''
+}
+
+/** 텍스트 컨트롤에 값을 넣고 blur로 커밋한다(D5). */
+function typeAndCommit(label: string, value: string): void {
+  const input = widget(label)
+  fireEvent.change(input, { target: { value } })
+  fireEvent.blur(input)
+}
+
+function alertTexts(): string[] {
+  return screen.queryAllByRole('alert').map((element) => element.textContent ?? '')
+}
+
+describe('undo / redo', () => {
+  it('undo하면 앞 값으로 돌아간다', async () => {
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(canvasTextOf(TEXT_ID)).toBe('새 내용')
+
+    fireEvent.click(undoButton())
+
+    await waitFor(() => expect(canvasTextOf(TEXT_ID)).toBe(OLD_TEXT))
+  })
+
+  it('undo도 서버에 새 편집으로 나간다', async () => {
+    // 서버에 undo 개념이 없다(README) — 같은 `PATCH .../ops`를 한 번 더 부른다.
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    fireEvent.click(undoButton())
+
+    await waitFor(() => expect(calls).toHaveLength(2))
+    // 앞 요청의 `seq` 위에서 만들어진다.
+    expect(calls[1]?.baseSeq).toBe(8)
+  })
+
+  it('undo가 보내는 ops는 서버가 준 inverse 그대로다', async () => {
+    // **설계 §7.1의 계약이다.** 로컬에서 `invertOps`를 부르는 구현을 잡는다 — 여기서는
+    // 서버 대역이 **자기가 든 문서**에서 `inverse`를 만들고, 클라이언트의 낙관적 사본과
+    // 다른 값이 나오도록 첫 편집 전에 서버 쪽을 미리 바꿔 둔다.
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(calls).toHaveLength(2))
+
+    const { invertOps } = await import('@wirebound/schema')
+    const serverInverse = invertOps(DOC, calls[0]!.ops)
+    expect(calls[1]?.ops).toEqual(serverInverse)
+  })
+
+  it('props가 없던 노드도 undo로 돌아간다', async () => {
+    // **계획서가 남긴 위험이다** — 통째 `add`한 편집의 `inverse`는 `[remove /…/props]`
+    // 하나이고(웨이브 2 실측), 그것으로 원래 상태(= `props` 없음)에 정확히 돌아가는지는
+    // 재지 않았다. 여기서 잰다.
+    const calls: { ops: PatchOp[] }[] = []
+    let held = BARE_DOC
+    let seq = 7
+    const patchOps: ApiClient['patchOps'] = async (_p, _pg, body) => {
+      calls.push({ ops: body.ops })
+      const { applyOps, invertOps } = await import('@wirebound/schema')
+      const inverse = invertOps(held, body.ops)
+      held = applyOps(held, body.ops)
+      seq += 1
+      return { seq, revisionId: `rev-${seq}`, inverse, schemaVersion: 1 }
+    }
+    await openPage(BARE_DOC, { apiOverrides: { patchOps } })
+
+    select('Field')
+    fireEvent.click(widget('필수'))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    // 통째 `add`가 나갔다 — `props`가 없던 노드다.
+    expect(calls[0]?.ops).toEqual([
+      { op: 'add', path: '/root/children/0/props', value: { required: true } },
+    ])
+
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(calls).toHaveLength(2))
+
+    expect(calls[1]?.ops).toEqual([{ op: 'remove', path: '/root/children/0/props' }])
+    // 스위치가 다시 꺼진다 — `props`가 통째로 사라졌으므로.
+    await waitFor(() => expect((widget('필수') as HTMLInputElement).checked).toBe(false))
+  })
+
+  it('redo하면 다시 적용된다', async () => {
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(canvasTextOf(TEXT_ID)).toBe(OLD_TEXT))
+
+    fireEvent.click(redoButton())
+
+    await waitFor(() => expect(canvasTextOf(TEXT_ID)).toBe('새 내용'))
+    await waitFor(() => expect(calls).toHaveLength(3))
+  })
+
+  it('undo 뒤 새 편집을 하면 redo가 사라진다', async () => {
+    // 표준 undo 의미론 — 되돌아갈 미래가 없어진다.
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(redoButton().disabled).toBe(false))
+
+    typeAndCommit('내용', '또 다른 내용')
+
+    await waitFor(() => expect(redoButton().disabled).toBe(true))
+  })
+
+  it('되돌릴 것이 없으면 undo가 비활성이다', async () => {
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    expect(undoButton().disabled).toBe(true)
+    expect(redoButton().disabled).toBe(true)
+
+    // 양성 대조: 편집하면 켜진다. 이것이 없으면 늘 비활성인 구현도 통과한다.
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+  })
+
+  it('적용할 수 없는 inverse는 스택에서 빼고 안내한다', async () => {
+    // **설계 §7.3의 계약 — 에러가 아니라 정상 흐름이다.** 다른 사람이 그 노드를 지웠으면
+    // 내 `inverse`가 적용되지 않는 것이 당연하고, 그때 멈추면 스택 맨 위에 갇힌다.
+    // 서버가 없는 경로를 가리키는 `inverse`를 주도록 대역을 바꾼다.
+    const calls: { ops: PatchOp[] }[] = []
+    let seq = 7
+    const patchOps: ApiClient['patchOps'] = async (_p, _pg, body) => {
+      calls.push({ ops: body.ops })
+      seq += 1
+      return {
+        seq,
+        revisionId: `rev-${seq}`,
+        // 없는 노드를 가리킨다 — `applyOps`가 던진다.
+        inverse: [{ op: 'replace', path: '/root/children/9/props/content', value: 'x' }],
+        schemaVersion: 1,
+      }
+    }
+    await openPage(DOC, { apiOverrides: { patchOps } })
+
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(undoButton().disabled).toBe(false)
+
+    fireEvent.click(undoButton())
+    await act(async () => {})
+
+    // 요청은 나가지 않았고(적용조차 못 했다), 스택에서 빠져 버튼이 다시 비활성이다.
+    expect(calls).toHaveLength(1)
+    expect(undoButton().disabled).toBe(true)
+    // 그리고 안내한다 — 조용히 아무 일도 안 일어나면 사용자는 버튼이 고장 났다고 읽는다.
+    await waitFor(() => expect(alertTexts()[0]).toContain('건너뛰었습니다'))
+  })
+
+  it('페이지를 옮기면 스택이 비워진다', async () => {
+    // 남의 페이지 revision을 되돌리지 않는다.
+    const { calls, api } = server()
+    await openPage(DOC, {
+      apiOverrides: api,
+      docs: { 'pg-2': pageDoc({ id: 'n-other', type: 'Page' }) },
+    })
+
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+
+    fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: '회원 상세' }))
+
+    await waitFor(() => expect(undoButton().disabled).toBe(true))
+  })
+
+  it('편집이 실패하면 스택이 오염되지 않는다', async () => {
+    // Task 6의 재조회 뒤다. 문서가 서버 것으로 되돌아갔으므로 그 전 revision의 `inverse`를
+    // 되보내면 서버 상태와 어긋난다.
+    const { calls, api } = server({ failAt: 2 })
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+
+    typeAndCommit('내용', '실패할 내용')
+    await waitFor(() => expect(calls).toHaveLength(2))
+    await act(async () => {})
+
+    await waitFor(() => expect(undoButton().disabled).toBe(true))
+    expect(redoButton().disabled).toBe(true)
+  })
+
+  it('undo하면 속성 패널의 스위치도 되돌아간다', async () => {
+    // **`applyEdit`은 `selectedNodeId`를 건드리지 않는다** — 즉 undo가 문서를 갈아 끼울 때
+    // 위젯은 마운트된 채로 남는다. 캔버스만 보는 케이스로는 그 성질이 잡히지 않는다.
+    // 스위치는 로컬 state를 들지 않고 문서를 그대로 비추므로 여기서 하중을 갖는다.
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Field')
+    expect((widget('필수') as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(widget('필수'))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect((widget('필수') as HTMLInputElement).checked).toBe(false)
+
+    fireEvent.click(undoButton())
+
+    await waitFor(() => expect((widget('필수') as HTMLInputElement).checked).toBe(true))
+  })
+
+  it('undo하면 속성 패널의 select도 되돌아간다', async () => {
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    fireEvent.change(widget('역할'), { target: { value: 'h2' } })
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect((widget('역할') as HTMLSelectElement).value).toBe('h2')
+
+    fireEvent.click(undoButton())
+
+    await waitFor(() => expect((widget('역할') as HTMLSelectElement).value).toBe('body'))
+  })
+
+  it('undo해도 텍스트 컨트롤의 입력칸은 옛 값을 붙들고 있다', async () => {
+    // **로컬 state를 드는 컨트롤은 스위치·select와 갈린다.** `TextControl`은
+    // `useState(toDraft(value))`로 마운트 때 한 번만 문서 값을 읽는다. undo는
+    // `selectedNodeId`를 건드리지 않으므로 위젯이 **마운트된 채** 문서만 갈리고, 그때
+    // `key`(= 노드 id)도 그대로라 초안이 다시 읽히지 않는다.
+    //
+    // **이 케이스는 지금 동작을 고정하는 것이지 옳다고 말하는 것이 아니다.** 캔버스는
+    // 되돌아갔는데 입력칸만 옛 값을 보이므로 사용자가 보는 화면이 어긋나고, 그 상태에서
+    // blur하면 `draft !== original`이라 되돌린 것이 다시 나간다(아래에서 함께 잰다).
+    // 고치는 것은 `panels/`의 일이라 이 웨이브의 범위 밖이다 — 보고에 적었다.
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    typeAndCommit('내용', '새 내용')
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(canvasTextOf(TEXT_ID)).toBe(OLD_TEXT))
+
+    // 캔버스는 되돌아갔는데 입력칸은 그대로다.
+    expect((widget('내용') as HTMLTextAreaElement).value).toBe('새 내용')
+
+    // 그 상태에서 blur하면 되돌린 편집이 **다시 나간다** — 사용자는 아무것도 치지 않았다.
+    fireEvent.blur(widget('내용'))
+    await waitFor(() => expect(calls).toHaveLength(3))
+    expect(calls[2]?.ops).toEqual([
+      { op: 'replace', path: '/root/children/0/props/content', value: '새 내용' },
+    ])
+  })
+})

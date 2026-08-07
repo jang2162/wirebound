@@ -22,6 +22,7 @@ import { Canvas } from '../canvas/canvas'
 import { MenuTree } from '../panels/menu-tree'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
+import { useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
 import { EditorStore, VIEWPORT_PRESETS, type ViewportWidth } from '../store/editor-store'
 import {
@@ -142,6 +143,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
     <div className="wb-shell">
       <header className="wb-shell-header">
         <h1 className="wb-shell-title">{props.project.name}</h1>
+        <UndoTools projectId={props.project.id} pageId={props.pageId} />
         <ShellTools />
         {/* 편집 실패 통지는 **한 자리**다(D8). 조회 실패처럼 화면마다 나누지 않는 것은,
             어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
@@ -184,6 +186,35 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
       <aside className="wb-shell-panel" aria-label="속성 패널">
         <PropertyPanel projectId={props.project.id} pageId={props.pageId} />
       </aside>
+    </div>
+  )
+}
+
+/**
+ * 되돌리기·다시 실행 버튼.
+ *
+ * **`useEditCommit`의 두 번째 인스턴스다**(첫째는 속성 패널). 그래도 D6가 지켜지는 것은
+ * 전송 루프의 가드를 스토어가 들기 때문이다 — 훅의 `ref`에 두면 여기서 낸 undo와 패널에서
+ * 낸 편집이 동시에 나간다(실측: `maxInFlight`가 2가 됐다. `store/editor-store.ts`의
+ * `#pumping` 주석에 그 값이 있다).
+ *
+ * `pageId`가 없으면 되돌릴 것도 없다 — 훅은 `''`를 받아 `useOpenPage('')`가 `null`을 내고
+ * 스택이 비어 두 버튼이 다 비활성이 된다(속성 패널과 같은 관례).
+ */
+function UndoTools(props: { projectId: string; pageId: string | undefined }): ReactElement {
+  const { undo, redo, canUndo, canRedo } = useEditCommit({
+    projectId: props.projectId,
+    pageId: props.pageId ?? '',
+  })
+
+  return (
+    <div className="wb-shell-history" role="group" aria-label="편집 이력">
+      <button type="button" className="wb-shell-history-step" onClick={undo} disabled={!canUndo}>
+        되돌리기
+      </button>
+      <button type="button" className="wb-shell-history-step" onClick={redo} disabled={!canRedo}>
+        다시 실행
+      </button>
     </div>
   )
 }
