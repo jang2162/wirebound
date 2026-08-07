@@ -24,6 +24,8 @@ const DOC = pageDoc({
   children: [
     { id: TEXT_ID, type: 'Text', props: { content: OLD_TEXT, role: 'body' } },
     { id: FIELD_ID, type: 'Field', props: { label: '이름', required: true } },
+    // 구조 트리 클릭으로 노드를 옮기는 케이스가 쓴다.
+    { id: 'n-text2', type: 'Text', props: { content: '둘째 내용', role: 'body' } },
   ],
 })
 
@@ -351,16 +353,14 @@ describe('undo / redo', () => {
     await waitFor(() => expect((widget('역할') as HTMLSelectElement).value).toBe('body'))
   })
 
-  it('undo해도 텍스트 컨트롤의 입력칸은 옛 값을 붙들고 있다', async () => {
-    // **로컬 state를 드는 컨트롤은 스위치·select와 갈린다.** `TextControl`은
-    // `useState(toDraft(value))`로 마운트 때 한 번만 문서 값을 읽는다. undo는
-    // `selectedNodeId`를 건드리지 않으므로 위젯이 **마운트된 채** 문서만 갈리고, 그때
-    // `key`(= 노드 id)도 그대로라 초안이 다시 읽히지 않는다.
+  it('undo하면 텍스트 컨트롤의 입력칸도 되돌아간다', async () => {
+    // **앞 판에서는 이것이 깨져 있었다.** `TextControl`은 로컬 초안을 드는데 undo는
+    // `selectedNodeId`를 건드리지 않아 위젯이 마운트된 채 문서만 갈리고, `key`도 그대로라
+    // 초안이 다시 읽히지 않았다. 실측: 캔버스는 되돌아갔는데 입력칸은 `"새 내용"`을
+    // 붙들었고, 거기서 blur하면 `draft !== original`이라 **되돌린 편집이 다시 나갔다**
+    // (요청이 셋이 되고 마지막 ops가 방금 취소한 값이었다).
     //
-    // **이 케이스는 지금 동작을 고정하는 것이지 옳다고 말하는 것이 아니다.** 캔버스는
-    // 되돌아갔는데 입력칸만 옛 값을 보이므로 사용자가 보는 화면이 어긋나고, 그 상태에서
-    // blur하면 `draft !== original`이라 되돌린 것이 다시 나간다(아래에서 함께 잰다).
-    // 고치는 것은 `panels/`의 일이라 이 웨이브의 범위 밖이다 — 보고에 적었다.
+    // 이제 문서 값이 밖에서 바뀌면 초안을 버린다(`controls/text-control.tsx`에 근거가 있다).
     const { calls, api } = server()
     await openPage(DOC, { apiOverrides: api })
 
@@ -371,14 +371,63 @@ describe('undo / redo', () => {
     fireEvent.click(undoButton())
     await waitFor(() => expect(canvasTextOf(TEXT_ID)).toBe(OLD_TEXT))
 
-    // 캔버스는 되돌아갔는데 입력칸은 그대로다.
-    expect((widget('내용') as HTMLTextAreaElement).value).toBe('새 내용')
+    // 입력칸도 되돌아간다.
+    expect((widget('내용') as HTMLTextAreaElement).value).toBe(OLD_TEXT)
 
-    // 그 상태에서 blur하면 되돌린 편집이 **다시 나간다** — 사용자는 아무것도 치지 않았다.
+    // 그리고 입력을 벗어나도 아무것도 나가지 않는다 — 사용자는 아무것도 치지 않았다.
     fireEvent.blur(widget('내용'))
-    await waitFor(() => expect(calls).toHaveLength(3))
-    expect(calls[2]?.ops).toEqual([
-      { op: 'replace', path: '/root/children/0/props/content', value: '새 내용' },
-    ])
+    await act(async () => {})
+    expect(calls).toHaveLength(2)
+  })
+
+  it('자기가 커밋해 문서가 바뀐 것은 입력칸을 흔들지 않는다', async () => {
+    // **초안 버리기의 양성 대조다.** 타이핑 → blur → 낙관적 적용으로 문서 값이 바뀌는데,
+    // 그때도 초안을 버리면 방금 친 값이 사라지거나 깜빡인다. 새 값과 초안이 같은 값이라
+    // 보이는 변화가 없어야 한다.
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    typeAndCommit('내용', '내가 친 값')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => {})
+
+    // 친 값이 그대로 있다.
+    expect((widget('내용') as HTMLTextAreaElement).value).toBe('내가 친 값')
+    expect(canvasTextOf(TEXT_ID)).toBe('내가 친 값')
+
+    // 한 번 더 벗어나도 다시 나가지 않는다(값이 그대로이므로).
+    fireEvent.blur(widget('내용'))
+    await act(async () => {})
+    expect(calls).toHaveLength(1)
+  })
+
+  it('구조 트리를 클릭해 노드를 옮기면 커밋되지 않은 타이핑이 사라진다', async () => {
+    // **주석이 오래 주장하던 것의 반대다.** 앞 판은 "구조 트리로 고르면 버튼이 포커스를
+    // 받아 blur가 나고 초안이 커밋된다"고 적었는데, 그것은 `focus()`로 잰 값이고 **사용자가
+    // 하는 것은 클릭이다.** 실측: 트리 버튼을 클릭하면 `activeElement`가 `BODY`에 남아
+    // `blur`가 나지 않고 요청이 0건이며, 입력은 새 노드의 값이 된다 — 캔버스 클릭과
+    // 갈리지 않는다.
+    //
+    // 실브라우저는 플랫폼에 달렸고 **여기서 재지 않았다**(`controls/text-control.tsx`가
+    // 아니라 `panels/property-panel.tsx`의 `PropControl` 주석에 그 사실이 있다).
+    const { calls, api } = server()
+    await openPage(DOC, { apiOverrides: api })
+
+    select('Text')
+    fireEvent.focus(widget('내용'))
+    fireEvent.change(widget('내용'), { target: { value: '버려질 타이핑' } })
+
+    // 두 번째 `Text` 노드를 **클릭**한다(사용자가 하는 동작).
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', {
+        name: 'Text',
+      })[1]!,
+    )
+    await act(async () => {})
+
+    expect(calls).toHaveLength(0)
+    expect(document.activeElement?.tagName).toBe('BODY')
+    expect((widget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
   })
 })

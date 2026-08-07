@@ -38,6 +38,27 @@ export function TextControl(props: TextControlProps): ReactElement {
   const { field, value, id, onCommit } = props
   const original = toDraft(value)
   const [draft, setDraft] = useState(original)
+  const [seen, setSeen] = useState(original)
+
+  // **문서 값이 밖에서 바뀌면 초안을 버린다.**
+  //
+  // 초안은 "아직 커밋하지 않은 사용자 입력"이고, 그 기준은 초안을 시작할 때의 문서 값이다.
+  // 그 값이 밖에서 바뀌었다는 것은 **기준이 사라졌다**는 뜻이므로 초안을 붙들 근거가 없다.
+  //
+  // 이것이 없으면 undo가 신뢰할 수 없는 기능이 된다(실측): 값을 고쳐 커밋한 뒤 되돌리기를
+  // 누르면 캔버스는 되돌아가는데 입력칸은 옛 초안을 붙들고, 그 상태에서 입력을 벗어나기만
+  // 해도 `draft !== original`이라 **되돌린 편집이 다시 나간다** — 요청이 셋이 되고 마지막
+  // ops가 방금 취소한 그 값이었다.
+  //
+  // **자기 커밋 경로는 깜빡이지 않는다.** 타이핑 → blur → 낙관적 적용으로 문서 값이 바뀌면
+  // 여기서 초안을 새 값으로 맞추는데, 그 둘이 같은 값이라 화면에 보이는 변화가 없다.
+  //
+  // 렌더 중 `setState`는 React가 권하는 파생 상태 갱신 형태다 — 이펙트로 하면 옛 값이 한
+  // 커밋 그려진 뒤 바뀐다.
+  if (original !== seen) {
+    setSeen(original)
+    setDraft(original)
+  }
 
   const isNumber = field.control === 'number'
   const isTextarea = field.control === 'textarea'

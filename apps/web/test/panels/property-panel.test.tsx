@@ -5,7 +5,7 @@
  * 노드를 고르는 일은 구조 트리를 눌러서 한다. 스토어를 직접 건드리지 않는 것은 의도다 —
  * 사용자가 실제로 지나는 길(트리 → 스토어 → 패널)이 이어져 있는지 함께 보게 된다.
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { registerStructure } from '@wirebound/renderer'
 import {
@@ -16,6 +16,10 @@ import {
   type EditorControl,
 } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
+import { ApiProvider } from '../../src/api/context'
+import { PropertyPanel } from '../../src/panels/property-panel'
+import { EditorStore } from '../../src/store/editor-store'
+import { EditorStoreProvider } from '../../src/store/use-editor-store'
 import type { PatchResult } from '../../src/api/types'
 import {
   PAGE_ID,
@@ -27,6 +31,7 @@ import {
   renderEditor,
 } from '../editor-harness'
 // 카탈로그가 설치돼 있어야 `listComponents()`가 빈 배열이 아니다.
+import { fakeApi } from '../helpers'
 import '../../src/catalog-setup'
 
 /**
@@ -830,14 +835,15 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
   })
 
   it('편집이 실패하면 재조회가 선택을 지운다', async () => {
-    // **원래 재려던 것은 "스위치가 문서를 그대로 비춘다"였는데, 그 성질은 오늘 코드에서
-    // 관측할 수 없다.** 재조회가 `loadPage`를 지나고 그것이 `selectedNodeId`를 비우므로
-    // (`store/editor-store.ts` — 노드 id는 문서 안에서만 뜻이 있다), 실패 뒤에는 스위치가
-    // 아예 사라진다. 그래서 로컬 state를 든 구현과 문서를 비추는 구현이 갈리는 자리가
-    // 없다(실측: 로컬 state를 들게 하는 변이로 죽는 케이스가 0이었다).
+    // **재조회 경로에서는** 스위치가 문서를 비추는지 볼 수 없다 — `loadPage`가
+    // `selectedNodeId`를 비우므로(`store/editor-store.ts` — 노드 id는 문서 안에서만 뜻이
+    // 있다) 위젯이 아예 사라진다. 여기서는 실제로 일어나는 일만 고정한다: 사용자가 고르던
+    // 노드를 잃는다.
     //
-    // 여기서는 실제로 일어나는 일만 고정한다 — 그것이 사용자에게 보이는 결과이고,
-    // "고르던 노드를 잃는다"는 사실 자체가 다음 사람이 볼 값이다.
+    // **"오늘 코드에서 관측할 수 없다"고 적었던 것은 틀렸다** — 그것은 이 순차 경로에서만
+    // 참이다. `loadPage`와 `selectNode`를 한 배치에 넣으면 `key`가 그대로라 위젯이 마운트된
+    // 채 문서만 갈리고, 거기서 두 구현이 갈린다. 아래
+    // `문서가 밖에서 바뀌면 스위치가 새 값을 비춘다`가 그 자리를 잡는다.
     let getPageCalls = 0
     const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
       getPageCalls += 1
@@ -883,12 +889,119 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
   })
 
   it('스위치는 문서의 값을 그대로 비춘다', async () => {
-    // 로컬 state를 들고 있는 구현을 잡는다 — 스위치는 중간 상태가 없으므로 문서가
-    // 곧 화면이어야 하고, 실패한 편집이 재조회로 되돌아가면 화면도 함께 돌아와야 한다.
+    // **이 케이스는 초기 렌더 값만 본다 — 로컬 state를 드는 구현을 잡지 못한다.**
+    // 그쪽도 `value`로 초기화하므로 같은 값을 낸다(실측: `SwitchControl`에 `useState`를
+    // 들게 해도 web 전량 0 사망). 그것을 잡는 것은 아래
+    // `문서가 밖에서 바뀌면 스위치가 새 값을 비춘다`이고, 그 케이스는 위젯이 **마운트된 채**
+    // 문서만 갈리는 자리를 만든다.
     await openPage(SWITCH_DOC)
 
     selectAt('Field', 0)
     expect((requireWidget('필수') as HTMLInputElement).checked).toBe(true)
     expect((requireWidget('비활성') as HTMLInputElement).checked).toBe(false)
+  })
+})
+
+/**
+ * 위젯이 **마운트된 채** 문서만 갈리는 자리. 그것이 "컨트롤이 문서를 비춘다"가 로컬 state를
+ * 드는 구현과 갈리는 유일한 조건이다.
+ *
+ * 스토어 API만으로 만든다 — 프로덕션 코드를 건드리지 않고, `loadPage`와 `selectNode`를
+ * **한 `act()` 배치**에 넣어 React가 둘을 함께 커밋하게 한다. 그러면 `key`(= 노드 id)가
+ * 그대로라 언마운트가 없다. 순차로 부르면 `loadPage`가 선택을 비워 위젯이 사라진다(위
+ * `편집이 실패하면 재조회가 선택을 지운다`가 그 경로다).
+ *
+ * **Task 10이 이 자리를 실제 경로로 만들었다** — `applyEdit`은 `selectedNodeId`를 건드리지
+ * 않으므로 undo가 문서를 갈아 끼울 때 위젯이 마운트된 채 남는다. 그쪽은
+ * `test/edit/undo-redo.test.tsx`의 `undo하면 속성 패널의 스위치도 되돌아간다`가 잡는다.
+ */
+describe('문서가 밖에서 바뀔 때', () => {
+  const NODE_ID = 'n-field'
+
+  function fieldDoc(required: boolean, label: string): ReturnType<typeof pageDoc> {
+    return pageDoc({
+      id: 'n-root',
+      type: 'Page',
+      children: [{ id: NODE_ID, type: 'Field', props: { label, required } }],
+    })
+  }
+
+  function mountPanel(store: EditorStore): void {
+    render(
+      <ApiProvider client={fakeApi()}>
+        <EditorStoreProvider store={store}>
+          <PropertyPanel projectId="p-1" pageId="pg-1" />
+        </EditorStoreProvider>
+      </ApiProvider>,
+    )
+  }
+
+  it('문서가 밖에서 바뀌면 스위치가 새 값을 비춘다', async () => {
+    const store = new EditorStore()
+    store.loadPage('pg-1', fieldDoc(true, '이름'), 7)
+    store.selectNode(NODE_ID)
+    mountPanel(store)
+
+    expect((screen.getByLabelText('필수') as HTMLInputElement).checked).toBe(true)
+
+    // **한 배치다.** 나눠 부르면 `loadPage`가 선택을 비워 위젯이 사라진다.
+    act(() => {
+      store.loadPage('pg-1', fieldDoc(false, '이름'), 9)
+      store.selectNode(NODE_ID)
+    })
+
+    // 위젯이 그대로 있고(언마운트 없음) 값만 새 문서를 따라간다.
+    expect((screen.getByLabelText('필수') as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('문서가 밖에서 바뀌면 텍스트 입력도 새 값을 비춘다', async () => {
+    // 텍스트는 로컬 초안을 드는 유일한 컨트롤이라 따로 본다 — 초안의 기준이 사라지면
+    // 버린다(`controls/text-control.tsx`). undo가 그 경로이고 여기서는 배치로 만든다.
+    const store = new EditorStore()
+    store.loadPage('pg-1', fieldDoc(true, '이름'), 7)
+    store.selectNode(NODE_ID)
+    mountPanel(store)
+
+    const input = screen.getByLabelText('라벨') as HTMLInputElement
+    expect(input.value).toBe('이름')
+    // 커밋하지 않은 초안을 둔다.
+    fireEvent.change(input, { target: { value: '치던 값' } })
+
+    act(() => {
+      store.loadPage('pg-1', fieldDoc(true, '밖에서 바뀐 이름'), 9)
+      store.selectNode(NODE_ID)
+    })
+
+    expect((screen.getByLabelText('라벨') as HTMLInputElement).value).toBe('밖에서 바뀐 이름')
+  })
+
+  it('값이 같은 다른 노드로 옮겨도 초안이 넘어가지 않는다', async () => {
+    // **`key={node.id}`가 지키는 자리다.** `TextControl`의 초안 버리기는 **문서 값이 바뀔 때**
+    // 도는데, 두 노드의 그 prop 값이 같으면 값이 안 바뀌므로 도지 않는다 — 그때 초안이
+    // 다음 노드로 넘어간다. 노드가 바뀔 때 위젯을 다시 만드는 것이 그것을 막는다.
+    //
+    // **초안 버리기를 넣은 뒤 `key`의 하중이 0이 됐다가 이 케이스로 돌아왔다**(실측:
+    // `key`를 걷는 변이가 438개 전량 통과였고, 이 케이스를 더하니 죽는다).
+    const store = new EditorStore()
+    const twin = pageDoc({
+      id: 'n-root',
+      type: 'Page',
+      children: [
+        { id: 'n-a', type: 'Field', props: { label: '같은 값' } },
+        { id: 'n-b', type: 'Field', props: { label: '같은 값' } },
+      ],
+    })
+    store.loadPage('pg-1', twin, 7)
+    store.selectNode('n-a')
+    mountPanel(store)
+
+    fireEvent.change(screen.getByLabelText('라벨'), { target: { value: '치던 값' } })
+
+    act(() => {
+      store.selectNode('n-b')
+    })
+
+    // 두 노드의 값이 같으므로 초안 버리기는 돌지 않는다. `key`가 위젯을 새로 만든다.
+    expect((screen.getByLabelText('라벨') as HTMLInputElement).value).toBe('같은 값')
   })
 })
