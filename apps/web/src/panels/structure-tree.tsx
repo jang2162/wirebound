@@ -6,14 +6,20 @@
  * 같은 것을 가리킨다 — 각자 상태를 들면 "캔버스에서 고른 노드"와 "트리에서 고른 노드"가
  * 서로 다른 것이 되고, 그 어긋남은 속성 패널이 어느 쪽을 믿어야 할지의 문제로 번진다.
  *
- * 이 단계는 **고르는 것까지**다. 추가·삭제·드래그 이동(설계 §9)은 P2b-2가 얹는다.
+ * 고르는 것 위에 **구조 편집이 얹혀 있다**(P2b-3) — 트리 아래의 툴바가 그것이다.
+ * 툴바는 자기 판정과 편집을 스스로 하고(`panels/structure-toolbar.tsx`), 트리는 여전히
+ * 고르는 일만 한다. 추가와 드래그 이동(설계 §9)은 아직 없다.
  */
 import type { ReactElement } from 'react'
 import type { WbNode } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { nodeTypeLabel } from './node-shape'
+import { StructureToolbar } from './structure-toolbar'
 
-export function StructureTree(props: { pageId: string | undefined }): ReactElement {
+export function StructureTree(props: {
+  projectId: string
+  pageId: string | undefined
+}): ReactElement {
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다(`use-editor-store.tsx`의 주석 — `(s) => s`는 테스트 전용이다).
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 그린다.
@@ -24,13 +30,21 @@ export function StructureTree(props: { pageId: string | undefined }): ReactEleme
     // 문서가 없는 이유가 셋(페이지 미선택·조회 중·조회 실패)이라는 것은 스토어만 봐서는
     // 알 수 없다(`routes/editor.tsx`의 `CanvasFrame` 주석). 어느 쪽이든 트리에 그릴
     // 것은 없으므로 여기서는 가르지 않고, 이유는 캔버스가 그 자리에서 말한다.
+    //
+    // **툴바도 함께 없다.** 문서가 없으면 판정이 전부 `false`라 비활성 버튼만 남는데,
+    // 그리려면 "왜 아무것도 못 하는가"를 트리 자리의 안내와 두 번 말하게 된다.
     return <p className="wb-shell-tree-notice">열린 페이지가 없습니다</p>
   }
 
   return (
-    <ul className="wb-shell-structure">
-      <StructureNode node={doc.root} selectedNodeId={selectedNodeId} onSelect={store.selectNode} />
-    </ul>
+    <>
+      <ul className="wb-shell-structure">
+        <StructureNode node={doc.root} selectedNodeId={selectedNodeId} onSelect={store.selectNode} />
+      </ul>
+      {/* 툴바가 트리 **아래**인 것은 D4다. 스크롤되는 상자 안이라 `sticky`로 바닥에
+          붙여 둔다 — 트리가 길어지면 조작 버튼이 화면 밖으로 밀려난다. */}
+      <StructureToolbar projectId={props.projectId} pageId={props.pageId} />
+    </>
   )
 }
 

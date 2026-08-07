@@ -174,7 +174,9 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             이유다. */}
         {mode === 'edit' && (
           <ShellRegion className="wb-shell-region" name="구조 트리">
-            <StructureTree pageId={props.pageId} />
+            {/* `projectId`는 메뉴 트리와 같은 이유로 **조회해 온 프로젝트의 id**다.
+                구조 편집이 그것을 `PATCH /projects/:id/pages/:id/ops`의 경로로 쓴다. */}
+            <StructureTree projectId={props.project.id} pageId={props.pageId} />
           </ShellRegion>
         )}
       </nav>
