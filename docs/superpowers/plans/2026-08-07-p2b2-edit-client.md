@@ -128,7 +128,7 @@
 
 **Files:**
 - Create: `apps/web/src/session/session-context.tsx`
-- Modify: `apps/web/src/routes/require-auth.tsx`, `apps/web/src/app.tsx`, `apps/web/src/api/failure.tsx`
+- Modify: `apps/web/src/routes/require-auth.tsx`, `apps/web/src/app.tsx`, `apps/web/src/api/failure.tsx`, `apps/web/src/routes/login.tsx`
 - Test: `apps/web/test/session/session-context.test.tsx`, `apps/web/test/routes/require-auth.test.tsx`(기존)
 
 **Interfaces:**
@@ -147,7 +147,16 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement
 export function useSessionState(): SessionState
 /** 세션이 끊긴 것을 알았을 때 부른다. 이미 `anonymous`면 아무 일도 하지 않는다. */
 export function useInvalidateSession(): () => void
+/** 로그인이 성공한 것을 알았을 때 부른다. 이미 `authenticated`면 아무 일도 하지 않는다. */
+export function useConfirmSession(): () => void
 ```
+
+**`useConfirmSession`과 `login.tsx` 수정이 왜 필요한가** (구현 중 발견 — 계획 첫 판이 빠뜨렸다).
+세션이 전역 상태 하나가 되면 **로그인 성공을 알릴 길이 따로 있어야 한다.** 앞 판은
+`RequireAuth`가 마운트마다 `me()`를 새로 불러 그 일이 저절로 됐는데, 그것이 바로 이 태스크가
+없애는 것이다. 그것 없이는 `login.tsx`가 `api.login()` 뒤 `/`로 옮겨도 전역 상태가 아직
+`anonymous`라 문지기가 곧바로 되튕긴다(기존 케이스 `로그인에 성공하면 프로젝트 목록으로
+간다`도 같은 이유로 죽는다). 아래 Step 1의 케이스 5가 그 경로를 고정한다.
 
 - [ ] **Step 1: 순환을 재는 테스트를 먼저 쓴다**
 
@@ -220,6 +229,13 @@ Expected: 파일이 없어 실패. 케이스 2를 기존 구조에 옮겨 심으
 
 `useSession()`(로컬 훅)을 지우고 `useSessionState()`를 쓴다. **두 컴포넌트의 갈림(`failed`를 어떻게 다루나)은 그대로 둔다** — 그 주석이 왜 갈리는지 적고 있고 그 판단은 여전히 옳다.
 
+- [ ] **Step 4b: `login.tsx`가 세션을 확정하게 한다**
+
+`api.login()`이 성공하면 `useConfirmSession()`을 부른다. **목적지는 여기서 정하지 않는다** —
+상태가 `authenticated`가 되면 이 화면을 감싼 `RedirectWhenAuthenticated`가 목록으로 보내므로
+`navigate('/')`는 지우고, "로그인한 사람은 `/login`에 머물지 않는다"는 규칙을 그 한 곳에
+남긴다. (구현 중 실측: 그 경로가 실제로 돈다 — `login.test.tsx` 8케이스 전부 통과.)
+
 - [ ] **Step 5: `failure.tsx`가 세션을 무효화하게 한다**
 
 `toFailure`는 순수 함수로 두고(테스트가 쉽다), `SignedOut`이 렌더될 때 무효화한다:
@@ -249,7 +265,7 @@ Expected: 새 케이스 6개 통과, 기존 `require-auth.test.tsx`도 통과(�
 - [ ] **Step 9: 커밋**
 
 ```bash
-git add apps/web/src/session/session-context.tsx apps/web/src/routes/require-auth.tsx apps/web/src/api/failure.tsx apps/web/src/app.tsx apps/web/test/session/session-context.test.tsx
+git add apps/web/src/session/session-context.tsx apps/web/src/routes/require-auth.tsx apps/web/src/routes/login.tsx apps/web/src/api/failure.tsx apps/web/src/app.tsx apps/web/test/session/session-context.test.tsx
 git commit -m "fix(web): 세션을 앱 전역 상태 하나로 두어 리다이렉트 순환을 닫는다"
 ```
 

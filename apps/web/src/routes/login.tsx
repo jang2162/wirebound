@@ -2,9 +2,9 @@
  * 로그인 화면. 성공하면 서버가 세션 쿠키를 심어 주고, 이 화면은 프로젝트 목록으로 넘긴다.
  */
 import { useState, type FormEvent, type ReactElement } from 'react'
-import { useNavigate } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
+import { useConfirmSession } from '../session/session-context'
 
 /** 서버까지 가 보지 않아도 실패가 확실한 경우에만 쓰는 문장. */
 const EMPTY_EMAIL = '이메일을 입력하세요'
@@ -14,7 +14,7 @@ const UNKNOWN_FAILURE = '로그인하지 못했습니다'
 
 export function LoginRoute(): ReactElement {
   const api = useApi()
-  const navigate = useNavigate()
+  const confirmSession = useConfirmSession()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -38,9 +38,15 @@ export function LoginRoute(): ReactElement {
     setError(null)
     try {
       await api.login(email, password)
-      // `replace`: 로그인한 뒤 뒤로 가기로 로그인 화면에 돌아오면, 이미 세션이 있으니
-      // 문지기가 다시 목록으로 보낸다. 히스토리에 남길 이유가 없다.
-      await navigate('/', { replace: true })
+      // **여기서 주소를 옮기지 않는다.** 상태가 `authenticated`가 되면 이 화면을 감싼
+      // `RedirectWhenAuthenticated`가 목록으로 보낸다 — "로그인한 사람은 `/login`에
+      // 머물지 않는다"는 규칙이 그 한 곳에만 남는다. `navigate('/')`를 여기 함께 두면
+      // 규칙이 두 벌이 되고, 둘의 순서가 뒤바뀌면(먼저 옮기고 나중에 확정하면) 문지기가
+      // 아직 `anonymous`인 상태를 보고 되튕긴다.
+      //
+      // 세션을 다시 묻지 않는 것이 요점이다. 앞 판은 `RequireAuth`가 마운트마다 `me()`를
+      // 새로 불러 이 일이 저절로 됐고, 그것이 이월 문서 §1 순환의 엔진이었다.
+      confirmSession()
     } catch (caught) {
       // 서버가 준 문장을 그대로 보여준다. 화면이 문안을 다시 쓰면 서버가 거절 이유를
       // 바꿔도 사용자는 옛 이유를 듣게 된다.
