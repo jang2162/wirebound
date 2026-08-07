@@ -27,8 +27,11 @@ export interface ApiClient {
    * (`edit/use-edit-commit.tsx`) — 여기서 큐를 들면 가짜를 끼우는 테스트마다 그 큐가
    * 함께 딸려 온다.
    *
-   * `clientOpId`는 클라이언트가 붙이는 값이고 서버는 그대로 되돌려 준다. pending 큐가
-   * 그것으로 ack를 가른다.
+   * `clientOpId`는 클라이언트가 붙이는 값이고 서버는 그대로 되돌려 준다. **다만 클라이언트는
+   * 그 에코를 읽지 않는다** — ack는 보낸 요청의 id와 큐의 `[0]`을 맞춘다
+   * (`store/edit-queue.ts`의 `PendingEdit.clientOpId`에 근거가 있다). 그래서
+   * `PatchResult.clientOpId`는 지금 **읽는 자리가 없는 필드**다(이월 문서의 `ApiError.status`와
+   * 같은 부류 — 계약에 있으니 타입에 두지만 소비자가 아직 없다).
    */
   patchOps(
     projectId: string,

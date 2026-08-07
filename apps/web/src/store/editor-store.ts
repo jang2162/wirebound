@@ -162,16 +162,44 @@ export class EditorStore {
   }
 
   /**
-   * 서버에서 받은 페이지를 싣는다. `headSeq`는 P2b-2가 baseSeq로 쓴다.
+   * 서버에서 받은 페이지를 싣는다. **페이지 상태를 서버 것으로 놓는 자리는 여기 하나다.**
+   * 그래서 편집 큐와 undo 스택도 여기서 함께 재설정하고, **버려진 pending을 돌려준다**
+   * (알림이 실제 영향받은 수를 말해야 한다 — `edit/use-edit-commit.tsx`).
    *
-   * **`pageId`를 함께 받는 것이 계약이다.** 셋이 한 번의 `#apply`로 들어가므로 "어느
+   * **`pageId`를 함께 받는 것이 계약이다.** 넷이 한 번의 `#apply`로 들어가므로 "어느
    * 페이지의 문서이고 어느 revision인가"가 스토어 안에서 어긋날 수 없다 — 읽는 쪽은
    * `openPageId`를 주소와 대조하기만 하면 된다(`use-editor-store.tsx`의 `useOpenDocument`).
+   *
+   * **왜 큐까지 여기서 비우나.** 앞 판은 문서·`headSeq`·`openPageId`·선택 넷만 갈아 끼우고
+   * `pending`을 남겼는데, 실패 복구의 재조회가 그 틈에서 편집을 고아로 만들었다. 실측한
+   * 경로: 편집A가 409를 받아 `recover()`가 `failEdits()`로 큐를 비우고 `getPage`를 기다리는
+   * 동안 편집B를 내면, B는 큐에 들어가지만 펌프가 이미 돌고 있어 전송되지 않고, 이어 도착한
+   * `loadPage`가 문서를 서버 것으로 갈아 끼워도 큐에 그대로 남는다. 그 뒤 편집C가 펌프를
+   * 깨우면 **B가 재조회 이후의 `baseSeq` 위에서 서버로 나간다** — 사용자는 "취소됐다"고
+   * 들은 편집이 적용된 문서를 보게 된다(실측: 알림은 `편집 1개가 취소됐습니다`인데 실제로
+   * 나간 요청은 `{baseSeq:42, v:"편집B"}`였고 undo 스택도 2가 됐다).
+   *
+   * `clearPage`가 넷을 **함께 비우는** 것과 대칭이다. 재설정이 한 곳에 있으면 다음 사람이
+   * 재조회 경로를 새로 만들어도 같은 틈이 안 생긴다.
    */
-  readonly loadPage = (pageId: string, document: PageDocument, headSeq: number): void => {
+  readonly loadPage = (pageId: string, document: PageDocument, headSeq: number): PendingEdit[] => {
+    const { pending, undoStack } = this.#state
     // 선택을 함께 지운다. 노드 id는 문서 안에서만 뜻이 있으므로, 다른 페이지의 id가
     // 남으면 선택 표시가 존재하지 않는 노드를 가리킨다.
-    this.#apply({ openPageId: pageId, document, headSeq, selectedNodeId: null })
+    this.#apply({
+      openPageId: pageId,
+      document,
+      headSeq,
+      selectedNodeId: null,
+      // **이미 비어 있으면 같은 배열을 그대로 넘긴다**(`clearPage`와 같은 이유) — 빈 배열을
+      // 새로 만들면 참조가 달라져 `pending`을 구독하는 쪽이 페이지를 열 때마다 헛일을 한다.
+      pending: pending.length === 0 ? pending : [],
+      // **undo 스택도 함께 비운다.** 문서가 서버 것으로 되돌아갔으므로 그 전 revision의
+      // `inverse`를 되보내면 서버 상태와 어긋난다. 새로고침 뒤의 복원은 Task 11이
+      // `GET .../revisions?mine=true`로 따로 채운다.
+      undoStack: undoStack.length === 0 ? undoStack : [],
+    })
+    return pending
   }
 
   /**

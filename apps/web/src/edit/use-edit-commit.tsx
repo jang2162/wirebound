@@ -64,14 +64,22 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       const dropped = store.failEdits()
       try {
         const page = await api.getPage(projectId, pageId)
-        store.loadPage(pageId, page.schema, page.headSeq)
-        // 버린 수는 **센 값이다.** 전송에 실패한 하나와 큐에 남아 있던 것들을 합친 것이고,
-        // 전부 사라졌다는 뜻이다(문서가 서버 것으로 되돌아갔으므로).
+        // **`loadPage`가 그 사이 들어온 편집까지 버리고 그것을 돌려준다.** 재조회는 왕복
+        // 하나라 그 동안 새 편집이 큐에 쌓일 수 있고, 비우지 않으면 "취소됐다"고 알린 편집이
+        // 나중에 새 `baseSeq` 위에서 서버로 나간다(`store/editor-store.ts`에 실측이 있다).
+        const alsoDropped = store.loadPage(pageId, page.schema, page.headSeq)
+        // 버린 수는 **센 값이다** — 전송에 실패한 것, 큐에 남아 있던 것, 재조회를 기다리는
+        // 동안 들어온 것을 합친 것이고, 셋 다 문서가 서버 것으로 되돌아가며 사라졌다.
+        const lost = dropped.length + alsoDropped.length
         store.setEditFailure({
           kind: 'message',
-          message: `${failure.message} 페이지를 서버 상태로 다시 불러왔고, 편집 ${dropped.length}개가 취소됐습니다.`,
+          message: `${failure.message} 페이지를 서버 상태로 다시 불러왔고, 편집 ${lost}개가 취소됐습니다.`,
         })
       } catch (recoverCaught) {
+        // **재조회를 기다리는 동안 들어온 편집은 여기서도 버린다.** 서버 상태를 모르는 채
+        // 그것을 보내면 낡은 `baseSeq` 위에서 기록된다(실측: 이 줄이 없으면 그 편집이
+        // `baseSeq 7`로 나간다 — 재조회가 성공한 판의 42와 달리 서버가 다시 409를 낼 값이다).
+        store.failEdits()
         // **여기서 다시 재조회하지 않는다.** 서버가 계속 실패하는 동안 요청이 쌓인다 —
         // 세션 확인에 자동 재시도를 두지 않은 것과 같은 판단이다.
         const recoverFailure = toFailure(recoverCaught, RECOVER_UNKNOWN_FAILURE)
@@ -119,9 +127,19 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
 
   const commitProp = useCallback(
     (nodeId: string, prop: string, value: unknown): void => {
+      // **재조회 중(`editStatus === 'recovering'`)에도 편집을 받는다.** 막는 판을 고르지
+      // 않은 이유 둘: 재조회는 왕복 하나로 짧고, 입력을 막으려면 컨트롤 넷이 각자 비활성
+      // 상태를 다뤄야 해서 범위가 는다. 대신 그 창에서 들어온 편집은 `loadPage`가 문서를
+      // 서버 것으로 놓을 때 함께 버려지고, 알림이 그 수를 합쳐 말한다 — 사용자가 낸 편집이
+      // 조용히 되살아나지 않는 것이 요점이고 그것은 스토어 쪽에서 닫힌다.
+      //
       // 지금 열린 페이지의 문서가 아니면 편집을 만들지 않는다. `useOpenPage`가 주소와
       // 대조한 결과이므로, 주소가 바뀐 뒤 스토어가 아직 앞 페이지를 들고 있는 커밋에서도
-      // 여기가 `null`이다.
+      // 여기가 `null`이다. **그 대조를 지우면 앞 페이지의 ops가 다음 페이지 경로로 나간다** —
+      // `test/edit/use-edit-commit.test.tsx`의 `스토어가 다른 페이지를 들고 있으면…`이
+      // 그것을 잡고, `test/store-access.test.ts`의 가드는 "우회를 썼다"는 사실을 잡는다.
+      // **둘은 다른 것을 잡는다:** 가드는 소스 텍스트라 우회의 존재만 알고 무엇이 잘못되는지
+      // 말하지 못하고, 동작 케이스는 그 반대다.
       if (open === null) return
 
       const ops = propOps(open.document, nodeId, prop, value)

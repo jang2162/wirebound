@@ -10,7 +10,17 @@
 import type { PatchOp } from '@wirebound/schema'
 
 export interface PendingEdit {
-  /** 이 편집을 만든 쪽이 붙인 id. 서버 응답의 `clientOpId`와 맞춰 ack를 가른다. */
+  /**
+   * 이 편집을 만든 쪽이 붙인 id.
+   *
+   * **ack를 가르는 것은 이 값과 큐의 `[0]`이지 서버 응답의 에코가 아니다.** 서버가
+   * `clientOpId`를 되돌려 주지만(`api/types.ts`의 `PatchResult`) 클라이언트는 그것을 읽지
+   * 않는다 — `edit/use-edit-commit.tsx`가 `store.ackEdit(request.clientOpId, result)`로
+   * **보낸 요청의** id를 넘긴다. D6로 in-flight가 하나이므로 응답은 반드시 그 요청의
+   * 것이고, **요청 id로 맞추는 편이 서버 에코를 믿는 것보다 견고하다** — 서버가 엉뚱한
+   * 값을 되돌려 줘도 ack가 어긋나지 않는다(실측: 그렇게 해도 `headSeq`·큐·undo 스택이
+   * 정상으로 움직인다).
+   */
   clientOpId: string
   ops: PatchOp[]
   /**

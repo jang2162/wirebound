@@ -345,4 +345,261 @@ describe('편집 실패는 재조회로 수렴한다', () => {
 
     expect(alertTexts()).toEqual([])
   })
+
+  it('재조회를 기다리는 동안 낸 편집은 서버로 나가지 않는다', async () => {
+    // **재조회 창의 고아 편집.** 실측한 결함이다 — 고치기 전에는 그 편집이 큐에 남아
+    // 있다가 다음 편집이 펌프를 깨울 때 **재조회 이후의 `baseSeq` 위에서** 서버로 나갔다
+    // (요청 자취 `{baseSeq:7,"편집A"} {baseSeq:42,"편집B"} {baseSeq:42,"편집C"}`).
+    // 사용자는 "취소됐다"고 들은 편집이 적용된 문서를 보게 된다.
+    let release = (): void => {}
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let getPageCalls = 0
+    let patchCalls = 0
+    const values: unknown[] = []
+
+    const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
+      getPageCalls += 1
+      if (getPageCalls === 1) return pageDetail(pageId, textDoc(OLD_TEXT))
+      // 재조회는 테스트가 흘려 준다 — 그 사이가 창이다.
+      await blocked
+      return { ...pageDetail(pageId, textDoc(SERVER_TEXT)), headSeq: SERVER_HEAD_SEQ }
+    }
+    const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+      patchCalls += 1
+      values.push((body.ops as { value?: unknown }[])[0]?.value)
+      if (patchCalls === 1) throw new ApiError(409, 'conflict', SERVER_REASON)
+      return {
+        seq: SERVER_HEAD_SEQ + patchCalls,
+        revisionId: `rev-${patchCalls}`,
+        inverse: [],
+        schemaVersion: 1,
+        ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+      }
+    }
+
+    await openPage(textDoc(OLD_TEXT), { apiOverrides: { getPage, patchOps } })
+    mountDriver({ getPage, patchOps } as unknown as ApiClient)
+
+    commit('편집A')
+    await waitFor(() => expect(patchCalls).toBe(1))
+    await act(async () => {})
+
+    // 창 안에서 낸 편집. 큐에는 들어가지만 펌프가 이미 돌고 있어 전송되지 않는다.
+    commit('편집B')
+    await act(async () => {})
+    expect(shellStore().getState().pending).toHaveLength(1)
+
+    await act(async () => {
+      release()
+    })
+    await waitFor(() => expect(getPageCalls).toBe(2))
+
+    // 재조회가 문서를 서버 것으로 놓으면서 창의 편집도 버린다.
+    expect(shellStore().getState().pending).toHaveLength(0)
+
+    // 다음 편집이 펌프를 깨워도 편집B는 되살아나지 않는다.
+    commit('편집C')
+    await waitFor(() => expect(patchCalls).toBe(2))
+    await act(async () => {})
+
+    expect(values).toEqual(['편집A', '편집C'])
+    expect(patchCalls).toBe(2)
+  })
+
+  it('재조회 창의 편집은 undo 스택에도 쌓이지 않는다', async () => {
+    // 고치기 전에는 편집B가 나중에 ack되며 undo 스택에 실렸다(실측: `undo=2`).
+    // 되돌릴 수 없는 편집이 스택에 있으면 Task 10의 undo가 서버 상태와 어긋난다.
+    let release = (): void => {}
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let getPageCalls = 0
+    let patchCalls = 0
+
+    const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
+      getPageCalls += 1
+      if (getPageCalls === 1) return pageDetail(pageId, textDoc(OLD_TEXT))
+      await blocked
+      return { ...pageDetail(pageId, textDoc(SERVER_TEXT)), headSeq: SERVER_HEAD_SEQ }
+    }
+    const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+      patchCalls += 1
+      if (patchCalls === 1) throw new ApiError(409, 'conflict', SERVER_REASON)
+      return {
+        seq: SERVER_HEAD_SEQ + patchCalls,
+        revisionId: `rev-${patchCalls}`,
+        inverse: [],
+        schemaVersion: 1,
+        ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+      }
+    }
+
+    await openPage(textDoc(OLD_TEXT), { apiOverrides: { getPage, patchOps } })
+    mountDriver({ getPage, patchOps } as unknown as ApiClient)
+
+    commit('편집A')
+    await waitFor(() => expect(patchCalls).toBe(1))
+    await act(async () => {})
+    commit('편집B')
+    await act(async () => {})
+
+    await act(async () => {
+      release()
+    })
+    await waitFor(() => expect(getPageCalls).toBe(2))
+
+    // 재조회가 문서를 되돌렸으므로 그 전 revision도 되돌릴 수 없다.
+    expect(shellStore().getState().undoStack).toHaveLength(0)
+
+    commit('편집C')
+    await waitFor(() => expect(patchCalls).toBe(2))
+    await act(async () => {})
+
+    // 편집C 하나뿐이다 — 고치기 전에는 둘이었다.
+    expect(shellStore().getState().undoStack).toHaveLength(1)
+  })
+
+  it('알림은 재조회 창의 편집까지 세어 말한다', async () => {
+    // 고치기 전에는 `failEdits()`가 센 값만 써서 `편집 1개가 취소됐습니다`였다 —
+    // 실제로 영향받은 것은 둘이었다.
+    let release = (): void => {}
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let getPageCalls = 0
+    let patchCalls = 0
+
+    const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
+      getPageCalls += 1
+      if (getPageCalls === 1) return pageDetail(pageId, textDoc(OLD_TEXT))
+      await blocked
+      return { ...pageDetail(pageId, textDoc(SERVER_TEXT)), headSeq: SERVER_HEAD_SEQ }
+    }
+    const patchOps: ApiClient['patchOps'] = () => {
+      patchCalls += 1
+      return Promise.reject(new ApiError(409, 'conflict', SERVER_REASON))
+    }
+
+    await openPage(textDoc(OLD_TEXT), { apiOverrides: { getPage, patchOps } })
+    mountDriver({ getPage, patchOps } as unknown as ApiClient)
+
+    commit('편집A')
+    await waitFor(() => expect(patchCalls).toBe(1))
+    await act(async () => {})
+    commit('편집B')
+    commit('편집C')
+    await act(async () => {})
+
+    await act(async () => {
+      release()
+    })
+    await waitFor(() => expect(getPageCalls).toBe(2))
+
+    // 전송에 실패한 하나 + 창에서 들어온 둘 = 셋.
+    await waitFor(() => expect(alertTexts()[0]).toContain('3개'))
+  })
+
+  it('재조회가 실패해도 창의 편집이 남지 않는다', async () => {
+    // 재조회가 실패하면 서버 상태를 모르므로 문서를 되돌리지 못한다. 그래도 창의 편집은
+    // 버린다 — 남기면 **낡은 `baseSeq` 위에서** 나가고 서버가 다시 409를 낸다
+    // (실측: 고치기 전 그 편집이 `baseSeq 7`로 나갔다. 재조회가 성공한 판의 42와 다르다).
+    let release = (): void => {}
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let getPageCalls = 0
+    let patchCalls = 0
+    const values: unknown[] = []
+
+    const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
+      getPageCalls += 1
+      if (getPageCalls === 1) return pageDetail(pageId, textDoc(OLD_TEXT))
+      await blocked
+      throw new ApiError(500, 'internal', '페이지 조회가 실패했습니다 [T6-refetch]')
+    }
+    const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+      patchCalls += 1
+      values.push((body.ops as { value?: unknown }[])[0]?.value)
+      if (patchCalls === 1) throw new ApiError(409, 'conflict', SERVER_REASON)
+      return {
+        seq: SERVER_HEAD_SEQ + patchCalls,
+        revisionId: `rev-${patchCalls}`,
+        inverse: [],
+        schemaVersion: 1,
+        ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+      }
+    }
+
+    await openPage(textDoc(OLD_TEXT), { apiOverrides: { getPage, patchOps } })
+    mountDriver({ getPage, patchOps } as unknown as ApiClient)
+
+    commit('편집A')
+    await waitFor(() => expect(patchCalls).toBe(1))
+    await act(async () => {})
+    commit('편집B')
+    await act(async () => {})
+    expect(shellStore().getState().pending).toHaveLength(1)
+
+    await act(async () => {
+      release()
+    })
+    await waitFor(() => expect(getPageCalls).toBe(2))
+    await act(async () => {})
+
+    expect(shellStore().getState().pending).toHaveLength(0)
+
+    commit('편집C')
+    await waitFor(() => expect(patchCalls).toBe(2))
+    await act(async () => {})
+
+    expect(values).toEqual(['편집A', '편집C'])
+  })
+
+  it('재조회는 그 전에 성공한 편집의 undo 스택도 비운다', async () => {
+    // **앞 케이스가 못 잡던 자리다.** `재조회 창의 편집은 undo 스택에도 쌓이지 않는다`는
+    // 그 시나리오에서 재조회 시점의 스택이 이미 비어 있어(성공한 편집이 없다) `loadPage`의
+    // undo 비우기를 되돌려도 죽지 않았다(실측 0 사망). 여기서는 **성공한 편집을 하나 먼저**
+    // 만들어 스택을 채운 뒤 실패시킨다.
+    //
+    // 왜 비워야 하나: 문서가 서버 것으로 되돌아갔으므로 그 전 revision의 `inverse`를
+    // 되보내면 서버 상태와 어긋난다. 새로고침 뒤의 복원은 Task 11이
+    // `GET .../revisions?mine=true`로 따로 채운다.
+    let getPageCalls = 0
+    let patchCalls = 0
+
+    const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
+      getPageCalls += 1
+      if (getPageCalls === 1) return pageDetail(pageId, textDoc(OLD_TEXT))
+      return { ...pageDetail(pageId, textDoc(SERVER_TEXT)), headSeq: SERVER_HEAD_SEQ }
+    }
+    const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+      patchCalls += 1
+      // 첫 편집은 성공해 undo 스택을 채우고, 둘째가 실패해 재조회를 부른다.
+      if (patchCalls === 2) throw new ApiError(409, 'conflict', SERVER_REASON)
+      return {
+        seq: HEAD_SEQ + patchCalls,
+        revisionId: `rev-${patchCalls}`,
+        inverse: [{ op: 'replace', path: '/root/children/0/props/content', value: OLD_TEXT }],
+        schemaVersion: 1,
+        ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+      }
+    }
+
+    await openPage(textDoc(OLD_TEXT), { apiOverrides: { getPage, patchOps } })
+    mountDriver({ getPage, patchOps } as unknown as ApiClient)
+
+    commit('성공한 편집')
+    await waitFor(() => expect(patchCalls).toBe(1))
+    await act(async () => {})
+    // 양성 대조: 스택이 실제로 찼다. 이것이 없으면 아래 단언이 "원래 비어 있었다"로도 참이다.
+    expect(shellStore().getState().undoStack).toHaveLength(1)
+
+    commit('실패할 편집')
+    await waitFor(() => expect(getPageCalls).toBe(2))
+    await act(async () => {})
+
+    expect(shellStore().getState().undoStack).toHaveLength(0)
+  })
 })

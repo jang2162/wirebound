@@ -342,4 +342,29 @@ describe('useEditCommit', () => {
     await waitForNode(TEXT_ID)
     expect(canvasText()).toBe(NEW_TEXT)
   })
+
+  it('스토어가 다른 페이지를 들고 있으면 편집이 나가지 않는다', async () => {
+    // **주소 대조의 동작 케이스다.** 앞서 이 자리를 지키는 것은 `store-access.test.ts`의
+    // 가드 하나뿐이었다 — 대조를 스토어 직접 읽기로 바꾸는 변이에서 죽는 동작 케이스가
+    // 0개였다. **둘은 다른 것을 잡는다:** 가드는 소스 텍스트라 "우회를 썼다"는 사실만
+    // 알고, 이 케이스는 "우회하면 무엇이 잘못되는가"를 잡는다.
+    //
+    // 잘못되는 것: 대조가 없으면 **앞 페이지의 ops가 다음 페이지 경로로, 앞 페이지의
+    // revision을 `baseSeq`로 달고** 나간다(실측: 우회 판에서 `PATCH …/pages/pg-2/ops`가
+    // `baseSeq 7`로 1건 나갔고 ops의 경로는 `pg-1` 문서에서 만든 것이었다). 두 페이지의
+    // 구조가 겹치면 서버가 엉뚱한 페이지에 편집을 적용한다.
+    const { calls, patchOps } = deferredPatchOps()
+    await openPage(textDoc(), { apiOverrides: { patchOps } })
+
+    // 스토어에는 `pg-1`이 실려 있는데 드라이버에는 `pg-2`를 준다 — 주소가 먼저 바뀐
+    // 커밋의 상태다.
+    mountDriver({ patchOps } as unknown as ApiClient, OTHER_PAGE_ID)
+
+    commit(NEW_TEXT)
+    await act(async () => {})
+
+    expect(calls).toHaveLength(0)
+    // 낙관적 적용도 없다 — 요청만 막고 문서를 바꾸는 구현을 잡는다.
+    expect(canvasText()).toBe(OLD_TEXT)
+  })
 })
