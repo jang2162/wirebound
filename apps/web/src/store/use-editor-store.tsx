@@ -29,6 +29,7 @@
 import {
   createContext,
   useContext,
+  useMemo,
   useSyncExternalStore,
   type ReactElement,
   type ReactNode,
@@ -62,27 +63,67 @@ export function useEditorStoreInstance(): EditorStore {
   return store
 }
 
+/** 지금 열려 있는 페이지의 문서와 그 revision. 편집은 `headSeq`를 `baseSeq`로 쓴다. */
+export interface OpenPage {
+  document: PageDocument
+  /** 이 문서의 최신 revision seq. `PATCH .../ops`의 `baseSeq`가 이 값이다. */
+  headSeq: number
+}
+
 /**
- * **지금 주소가 가리키는 페이지의 문서.** 스토어가 든 것이 다른 페이지의 문서면 `null`이다.
+ * **지금 주소가 가리키는 페이지의 문서와 `headSeq`.** 스토어가 든 것이 다른 페이지의
+ * 것이면 `null`이다.
  *
- * 문서를 스토어에서 읽는 화면 셋(캔버스·구조 트리·속성 패널)은 `s.document`가 아니라 이것을
- * 쓴다. 이유는 `pageId`가 바뀐 뒤 **첫 커밋 하나** 때문이다 — 문서를 비우는 일이
+ * 페이지 상태를 스토어에서 읽는 화면들은 `s.document`·`s.headSeq`가 아니라 이것을 쓴다.
+ * 이유는 `pageId`가 바뀐 뒤 **첫 커밋 하나** 때문이다 — 문서를 비우는 일이
  * `routes/editor.tsx`의 passive `useEffect`에 있어 커밋보다 뒤에 돌므로, 그 커밋에서 주소는
- * 새 페이지인데 스토어는 앞 페이지의 문서·`headSeq`·선택을 그대로 들고 있다. 셋이 `s.document`를
- * 곧장 읽으면 그 커밋에 **앞 페이지가 새 주소 밑에 그려진다**(실측: 세 화면 전부에서 그랬다 —
- * `test/canvas/canvas.test.tsx`의 `주소가 바뀐 커밋에 앞 페이지가 그려지지 않는다`).
+ * 새 페이지인데 스토어는 앞 페이지의 문서·`headSeq`·선택을 그대로 들고 있다. 곧장 읽으면
+ * 그 커밋에 **앞 페이지가 새 주소 밑에 그려진다**(실측: 캔버스·구조 트리·속성 패널 셋 전부
+ * 에서 그랬다 — `test/canvas/canvas.test.tsx`의
+ * `주소가 바뀐 커밋에 앞 페이지가 그려지지 않는다`). `headSeq`는 그리는 값이 아니지만 같은
+ * 창에서 앞 페이지의 것이고, 그것을 `baseSeq`로 보내면 서버가 409를 낸다.
  *
- * **대조를 여기 한 곳에 둔 이유.** 셋이 각자 막으면 규칙이 세 벌이 되고, P2b-2가 `baseSeq`를
- * 읽는 자리가 늘 때 그 자리에는 규칙이 없다. 스토어가 `openPageId`를 문서와 함께 싣고
+ * **대조를 여기 한 곳에 둔 이유.** 읽는 화면이 각자 막으면 규칙이 여러 벌이 되고, 새로 읽는
+ * 자리가 늘 때 그 자리에는 규칙이 없다. 스토어가 `openPageId`를 문서·`headSeq`와 함께 싣고
  * (`editor-store.ts`) 읽는 쪽이 여기서 한 번 대조하면 규칙이 한 곳에 남는다.
+ *
+ * **이 파일이 `test/store-access-guard.ts`의 제외 대상인 이유가 이것이다.** 그 가드는
+ * `document`·`headSeq`·`openPageId`를 selector나 `getState()` 안에서 읽는 것을 잡고,
+ * 걸렸을 때의 위반 메시지가 지목하는 합법적인 자리가 **바로 여기**다("`src/store/
+ * use-editor-store.tsx`에 같은 대조를 하는 관문을 더해라"). 규칙을 정의하는 자리이므로
+ * 규칙을 넓히는 것도 여기서 한다.
+ *
+ * **반환 객체를 `useMemo`로 묶는 것이 계약이다.** 세 값을 한 객체로 모으는 자리라 그냥
+ * 쓰면 렌더마다 새 객체가 나온다. `useSyncExternalStore`의 스냅샷이 아니라 훅의 반환값이므로
+ * 렌더가 반복되지는 않지만, 이것을 의존 배열에 넣는 쪽(편집 전송 이펙트)이 매 렌더 다시
+ * 돈다. `test/store/use-editor-store.test.tsx`의 `같은 상태에서 반환 참조가 유지된다`가
+ * 그것을 잡는다.
  *
  * `pageId`는 셸이 주소에서 푼 값을 내려받는다. 여기서 `useParams()`를 다시 부르지 않는 것은
  * `panels/menu-tree.tsx`가 적은 이유와 같다 — 라우트 표가 바뀔 때 고칠 곳이 둘이 된다.
  */
-export function useOpenDocument(pageId: string | undefined): PageDocument | null {
+export function useOpenPage(pageId: string | undefined): OpenPage | null {
   const store = useEditorStoreInstance()
   const document = useEditorStore(store, (s) => s.document)
+  const headSeq = useEditorStore(store, (s) => s.headSeq)
   const openPageId = useEditorStore(store, (s) => s.openPageId)
 
-  return openPageId !== null && openPageId === pageId ? document : null
+  // 대조를 `useMemo` 밖에서 끝내 둔다. 안에서 하면 `document`가 `PageDocument | null`인 채로
+  // 남아 반환 타입이 `null`을 품게 되고, 그러면 쓰는 쪽이 대조를 한 번 더 하게 된다.
+  const openDocument = openPageId !== null && openPageId === pageId ? document : null
+
+  return useMemo(
+    () => (openDocument === null ? null : { document: openDocument, headSeq }),
+    [openDocument, headSeq],
+  )
+}
+
+/**
+ * 문서만 필요할 때. `useOpenPage`의 얇은 껍질이다 — 대조는 그쪽 한 곳에 있다.
+ *
+ * 세 화면(캔버스·구조 트리·속성 패널)이 이것을 쓴다. 편집이 붙기 전부터 있던 이름이라
+ * 남겨 두는 것이지, 새로 읽는 자리가 문서만 필요하다면 이쪽을 써도 된다.
+ */
+export function useOpenDocument(pageId: string | undefined): PageDocument | null {
+  return useOpenPage(pageId)?.document ?? null
 }

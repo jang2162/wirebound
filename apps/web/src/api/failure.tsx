@@ -19,8 +19,9 @@
  * 하나**이고, 나머지는 전부 `message`로 모인다 — 갈라야 할 이유가 생기면 그때 여기에 갈래를
  * 더한다.
  */
-import type { ReactElement } from 'react'
+import { useEffect, type ReactElement } from 'react'
 import { Navigate } from 'react-router'
+import { useInvalidateSession } from '../session/session-context'
 import { ApiError } from './client'
 
 /**
@@ -54,8 +55,16 @@ export function toFailure(caught: unknown, unknownMessage: string): Failure {
  * 때문이다(`routes/require-auth.tsx`의 `RequireAuth`와 같은 이유).
  *
  * **컴포넌트인 것이 요점이다.** 목적지를 문자열로 돌려주면 네 자리가 각자 `<Navigate>`를
- * 쓰게 되고 규칙이 다시 흩어진다.
+ * 쓰게 되고 규칙이 다시 흩어진다. **전역 세션을 끊는 자리이기도 하다** — 조회가
+ * `unauthenticated`를 받았다는 것은 문지기가 들고 있는 `authenticated`가 이미 틀렸다는
+ * 뜻이므로, 주소만 옮기고 상태를 두면 로그인 화면이 다시 목록으로 돌려보낸다(이월 문서
+ * §1의 순환).
  */
 export function SignedOut(): ReactElement {
+  const invalidate = useInvalidateSession()
+  // 렌더 중이 아니라 커밋 뒤에 부른다 — 렌더 도중의 `setState`는 다른 컴포넌트를 갱신할 수
+  // 없다. `invalidate`의 참조는 앱이 도는 내내 그대로이므로(`session-context.tsx`) 이
+  // 이펙트는 마운트에 한 번만 돈다.
+  useEffect(invalidate, [invalidate])
   return <Navigate to="/login" replace />
 }

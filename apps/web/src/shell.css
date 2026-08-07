@@ -94,11 +94,29 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* 편집 실패 통지가 셋째 조각으로 들어온다. 감싸지 않으면 `space-between`이 셋을
+     펼쳐 도구가 가운데로 밀린다 — 통지가 뜰 때만 그러므로 눈에 띄는 흔들림이 된다. */
+  flex-wrap: wrap;
   gap: 24px;
   padding: 10px 16px;
   background: var(--wb-shell-chrome);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--wb-shell-ink);
+}
+
+/* 통지는 제목·도구 아래 줄로 내려온다. 색을 주지 않는 것은 이 셸의 다른 `role="alert"`
+   자리(목록·캔버스)도 색이 없기 때문이다 — 문안 스타일을 손대려면 그 셋을 함께 봐야 한다. */
+.wb-shell-edit-alert {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+}
+
+/* 편집 이력 버튼. 도구 묶음과 같은 크기 규칙을 쓴다. */
+.wb-shell-history {
+  display: inline-flex;
+  gap: 4px;
+  font-size: 13px;
 }
 
 .wb-shell-title {

@@ -3,9 +3,9 @@
  * (설계 §5.1·§9) — 컴포넌트마다 패널을 따로 만들지 않는다는 뜻이고, 그래서 카탈로그에
  * 컴포넌트가 늘어도 이 파일은 그대로다.
  *
- * **이 단계는 읽기 전용이다.** 입력 컨트롤(`EditorField.control`)을 실제 위젯으로 바꾸는
- * 것은 P2b-2다. `test/panels/property-panel.test.tsx`의 `이 단계에서는 입력이 없다` 케이스가
- * 그 경계를 지키고 있어, 그 케이스가 죽는 날이 곧 편집이 생긴 날이다.
+ * **여기가 편집의 입구다.** P2b-1에서는 읽기 전용이었고 `이 단계에서는 입력이 없다`
+ * 케이스가 그 경계를 고정했다. 그 케이스를 `카탈로그의 control마다 대응하는 위젯이 있다`로
+ * 바꾼 것이 "편집이 생겼다"는 신호다(이월 문서 §3).
  *
  * 설계 §9의 우측 패널은 탭 셋(속성·코멘트·상호작용)이지만 이 단계에는 속성뿐이라 탭을
  * 두지 않는다. 뷰 모드의 "페이지 설명" 탭도 마찬가지로 이후 단계다.
@@ -19,7 +19,12 @@ import {
   type EditorField,
   type WbNode,
 } from '@wirebound/schema'
+import { useEditCommit } from '../edit/use-edit-commit'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { ListControl } from './controls/list-control'
+import { SelectControl } from './controls/select-control'
+import { SwitchControl } from './controls/switch-control'
+import { TextControl } from './controls/text-control'
 import { BROKEN_TYPE_LABEL, nodeType } from './node-shape'
 // 카탈로그가 없으면 모든 노드가 "알 수 없는 타입"이 된다. 설치는 import만으로 끝난다.
 import '../catalog-setup'
@@ -30,12 +35,20 @@ const NO_SELECTION = '노드를 고르면 속성이 보입니다'
 /** 타입을 읽지 못한 노드의 안내. 캔버스는 같은 노드를 폴백으로 그리고 배너로 알린다. */
 const BROKEN_TYPE_NOTICE = '이 노드의 타입을 읽을 수 없습니다'
 
-export function PropertyPanel(props: { pageId: string | undefined }): ReactElement {
+export function PropertyPanel(props: {
+  projectId: string
+  pageId: string | undefined
+}): ReactElement {
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다(`use-editor-store.tsx`의 주석 — `(s) => s`는 테스트 전용이다).
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 그린다.
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  // 훅은 조건부로 부를 수 없으므로 페이지가 없어도 부른다. `pageId`가 없으면 `''`를 주는데,
+  // 그 값은 어느 페이지 id와도 같지 않아 `useOpenPage('')`가 `null`을 내고 `commitProp`이
+  // 그 자리에서 돌아온다 — 즉 페이지가 없을 때 편집이 나갈 길이 없다. (그 상태에서는 아래
+  // `node === undefined` 분기가 먼저 걸려 위젯 자체가 그려지지 않는다.)
+  const { commitProp } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 P2b-2의 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
@@ -97,14 +110,95 @@ export function PropertyPanel(props: { pageId: string | undefined }): ReactEleme
             // `<dl>` 안의 `<div>`는 표준이 허용하는 묶음이다. 라벨과 값을 한 줄로 묶어야
             // 스타일과 테스트가 "줄"을 다룰 수 있다.
             <div className="wb-shell-prop" key={field.prop}>
-              <dt className="wb-shell-prop-label">{field.label}</dt>
-              <dd className="wb-shell-prop-value">{formatValue(readProp(node, field.prop))}</dd>
+              <dt className="wb-shell-prop-label">
+                {/* 목록 컨트롤은 입력이 여럿이라 `htmlFor` 하나로 이름을 줄 수 없다.
+                    그쪽은 `role="group"`이 이 `<label>`을 `aria-labelledby`로 가리킨다. */}
+                <label id={`${controlId(field.prop)}-label`} htmlFor={controlId(field.prop)}>
+                  {field.label}
+                </label>
+              </dt>
+              <dd className="wb-shell-prop-value">
+                <PropControl
+                  // **노드가 바뀌면 위젯을 다시 만든다.** 로컬 초안(타이핑 중인 값)을
+                  // 버리는 장치이고, 아래 `PropControl`의 주석에 그 선택의 근거와 잰 값이 있다.
+                  key={node.id}
+                  field={field}
+                  value={readProp(node, field.prop)}
+                  onCommit={(value) => commitProp(node.id, field.prop, value)}
+                />
+              </dd>
             </div>
           ))}
         </dl>
       )}
     </>
   )
+}
+
+/** 입력에 붙는 id. 필드는 한 패널 안에서 `prop`이 유일하므로 그것으로 충분하다. */
+function controlId(prop: string): string {
+  return `wb-prop-${prop}`
+}
+
+/**
+ * 필드 하나를 그린다. **control 종류가 위젯을 고른다.**
+ *
+ * 위젯이 아직 없는 control은 `formatValue`가 그린 글자로 남는다 — `formatValue`를 남겨 둔
+ * 이유가 그것이고, 카탈로그 밖 값(검증을 통과하지 못한 문서)을 그리는 데도 쓴다.
+ * 지금 덮은 것과 남은 것은 `test/panels/property-panel.test.tsx`의
+ * `카탈로그의 control마다 대응하는 위젯이 있다`가 카탈로그를 세어 대조한다.
+ *
+ * **노드가 바뀔 때 로컬 초안을 버리는 일은 부르는 쪽의 `key`가 한다.** 이펙트로 동기화하는
+ * 대신 `key`를 고른 근거:
+ *
+ * - **클릭으로 노드를 옮기면 초안이 사라진다 — 구조 트리든 캔버스든 같다.** 실측(jsdom):
+ *   트리 버튼을 **클릭**하면 `activeElement`가 `BODY`에 남아 `blur`가 나지 않고 요청이
+ *   0건이며, 입력은 새 노드의 값이 된다. 캔버스의 `<div onClick>`도 같은 값이다. 두 경로를
+ *   각각 케이스가 고정한다(`구조 트리를 클릭해…`·`캔버스로 다른 노드를 고르면…`).
+ * - **`focus()`로 옮기면 커밋된다.** 같은 하네스에서 트리 버튼에 `focus()`를 부르면
+ *   `activeElement`가 `BUTTON`이 되고 `blur`가 나 요청이 1건 나간다. **앞 판의 주석은 이
+ *   값을 "구조 트리로 고르면 손실이 없다"로 적었는데, 잰 것은 `focus()`이고 사용자가 하는
+ *   것은 클릭이다** — 조건이 다른 값을 옮겨 적은 것이었다.
+ * - **실브라우저에서는 재지 않았다.** 브라우저마다 `mousedown`에 버튼을 포커스하는지가
+ *   다르므로 결과가 갈릴 수 있는데, 이 저장소에서 실브라우저를 띄워 본 적이 없다.
+ *   **그래서 "실사용에서는 커밋된다"고 적지 않는다.**
+ * - 대안(노드가 바뀔 때 초안을 커밋)을 고르지 않은 것은, 사용자가 **다른 노드로 옮겨 가며
+ *   버린** 값을 서버에 쓰게 되기 때문이다. 지우는 쪽이 놀랍지 않다. 그 손실을 없애려면
+ *   "선택이 바뀔 때 커밋한다"는 별도 경로가 필요한데 D5(blur/Enter 커밋)를 넘는다.
+ *
+ * **이펙트로 닫는 판을 만들어 재보지는 않았다** — 위 실측만으로 `key`를 골랐다.
+ *
+ * **문서 값이 밖에서 바뀔 때 초안을 버리는 것은 `key`가 아니라 `TextControl` 자신이 한다**
+ * (`controls/text-control.tsx`). undo가 그 경로다 — 노드가 그대로라 `key`가 갈리지 않는다.
+ */
+function PropControl(props: {
+  field: EditorField
+  value: unknown
+  onCommit: (value: unknown) => void
+}): ReactElement {
+  const { field, value, onCommit } = props
+  const id = controlId(field.prop)
+
+  if (field.control === 'text' || field.control === 'textarea' || field.control === 'number') {
+    return <TextControl field={field} value={value} id={id} onCommit={onCommit} />
+  }
+
+  if (field.control === 'switch') {
+    return <SwitchControl field={field} value={value} id={id} onCommit={onCommit} />
+  }
+
+  if (field.control === 'stringList' || field.control === 'pairList') {
+    return <ListControl field={field} value={value} id={id} onCommit={onCommit} />
+  }
+
+  // `options`가 없거나 비면 `<select>`를 그리지 않는다(`SelectControl`이 `null`을 낸다).
+  // 그 판정을 여기서 한 번 더 하는 것은, 그때 **아래 글자로 되돌아가야** 하기 때문이다 —
+  // 위젯도 글자도 없으면 그 줄이 통째로 비어 사용자가 값을 볼 수 없다.
+  if (field.control === 'select' && field.options !== undefined && field.options.length > 0) {
+    return <SelectControl field={field} value={value} id={id} onCommit={onCommit} />
+  }
+
+  return <>{formatValue(value)}</>
 }
 
 /**
@@ -168,11 +262,17 @@ function formatValue(value: unknown): string {
  * **오늘은 던질 수 없다.** 스토어에 문서를 싣는 자리는 `routes/editor.tsx`의
  * `store.loadPage(openPageId, page.schema, …)` 하나이고(실측: `apps/web/src`에서
  * `loadPage(`를 부르는 자리가 그 한 곳이다), 그 값은 `getPage` 응답의 JSON이다. JSON에서
- * 나온 값에는 순환도 `BigInt`도 없다. 그래도 잡는 것은 **P2b-2가 편집으로 만든 값을 싣기
- * 시작하면 그 전제가 사라지기 때문**이고, 그때 이 한 줄이 없으면 편집 중 흰 화면이 된다.
+ * 나온 값에는 순환도 `BigInt`도 없다.
  *
- * 이 갈래는 `test/panels/property-panel.test.tsx`의
- * `값을 문자열로 만들 수 없어도 셸은 살아 있다`가 순환 참조를 심어 지킨다.
+ * **웨이브 3에서 이 `try`의 하중이 0이 됐다.** 걷어내도 죽는 케이스가 없다(실측).
+ * 앞 판에서 그것을 지키던 `값을 문자열로 만들 수 없어도 셸은 살아 있다`는 이제 다른 자리를
+ * 지난다 — `Card.title`이 `text` control이라 `TextControl`이 그리고, 그쪽은 객체 값을 빈
+ * 칸으로 시작할 뿐 `JSON.stringify`를 부르지 않는다(`controls/text-control.tsx`의 `toDraft`).
+ *
+ * **그래도 지우지 않는다.** `formatValue` 자체는 아직 하중이 있고(`options`가 없는 `select`가
+ * 그 길로 그려진다 — `options가 없는 select는 그리지 않는다`가 그 값을 단언한다), 이 `try`는
+ * 그 길에 객체 값이 실릴 때의 마지막 방벽이다. 이 패널이 오류 경계 **밖**이라는 사정은
+ * 그대로다. **다만 지금은 재지 않은 방어라는 것을 여기 적어 둔다.**
  */
 function stringify(value: unknown): string {
   try {

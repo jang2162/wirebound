@@ -24,7 +24,7 @@ import { useLayoutEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
 import { CURRENT_DOCUMENT_VERSION, type PageDocument, type WbNode } from '@wirebound/schema'
 import { App } from '../src/app'
-import { ApiError } from '../src/api/client'
+import { ApiError, type ApiClient } from '../src/api/client'
 import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../src/api/types'
 import { fakeApi, renderWithProviders } from './helpers'
 
@@ -42,8 +42,13 @@ export const PROJECT_ROUTE = `/projects/${PROJECT_ID}`
 export const PAGE_ROUTE = `${PROJECT_ROUTE}/pages/${PAGE_ID}`
 export const OTHER_PAGE_ROUTE = `${PROJECT_ROUTE}/pages/${OTHER_PAGE_ID}`
 
-/** 서버가 준 `headSeq`. 이 값이 스토어로 들어가는지는 태스크 8의 케이스가 본다. */
-const HEAD_SEQ = 7
+/**
+ * 서버가 준 `headSeq`. 이 값이 스토어로 들어가는지는 태스크 8의 케이스가 본다.
+ *
+ * P2b-2가 이것을 첫 편집의 `baseSeq`로 기대므로 내보낸다 —
+ * `test/edit/use-edit-commit.test.tsx`의 `baseSeq는 지금 headSeq다`가 이 값을 단언한다.
+ */
+export const HEAD_SEQ = 7
 
 const PROJECT: ProjectDetail = {
   id: PROJECT_ID,
@@ -72,7 +77,8 @@ export function pageDoc(root: WbNode): PageDocument {
   return { version: CURRENT_DOCUMENT_VERSION, root }
 }
 
-function pageDetail(pageId: string, schema: PageDocument): PageDetail {
+/** 서버가 낼 페이지 응답. 재조회를 세는 테스트가 자기 `getPage`를 만들 때도 쓴다. */
+export function pageDetail(pageId: string, schema: PageDocument): PageDetail {
   return {
     id: pageId,
     menuNodeId: 'mn-1',
@@ -92,6 +98,13 @@ export interface EditorOptions {
   route?: string
   /** 라우터 안에 함께 놓을 것(주소를 바꾸는 버튼 등). */
   children?: ReactNode
+  /**
+   * 가짜 `ApiClient`에 덮어씌울 메서드. 기본값 **뒤에** 펼쳐지므로 여기 준 것이 이긴다.
+   *
+   * P2b-2의 편집 테스트가 `patchOps`를 주입하는 자리이고, 재조회를 세는 테스트가
+   * `getPage`를 감싸는 자리이기도 하다.
+   */
+  apiOverrides?: Partial<ApiClient>
 }
 
 /** 셸을 렌더하기만 한다. 성공 대역을 기다리는 것은 호출자 몫이다. */
@@ -118,6 +131,11 @@ export function renderEditor(options: EditorOptions = {}): void {
           }
           return pageDetail(pageId, schema)
         },
+        // 페이지를 열면 셸이 undo 스택을 복원하려고 부른다(D10). 기본은 빈 목록이다 —
+        // 스텁하지 않으면 `notStubbed`가 던지고, 그 예외는 복원 쪽 `catch`가 삼켜서
+        // **아무 일도 안 일어난 것과 구별되지 않는다.**
+        listMyRevisions: async () => [],
+        ...options.apiOverrides,
       }),
       route: options.route ?? PAGE_ROUTE,
     },

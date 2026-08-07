@@ -2,9 +2,9 @@
  * 로그인 화면. 성공하면 서버가 세션 쿠키를 심어 주고, 이 화면은 프로젝트 목록으로 넘긴다.
  */
 import { useState, type FormEvent, type ReactElement } from 'react'
-import { useNavigate } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
+import { useConfirmSession } from '../session/session-context'
 
 /** 서버까지 가 보지 않아도 실패가 확실한 경우에만 쓰는 문장. */
 const EMPTY_EMAIL = '이메일을 입력하세요'
@@ -14,7 +14,7 @@ const UNKNOWN_FAILURE = '로그인하지 못했습니다'
 
 export function LoginRoute(): ReactElement {
   const api = useApi()
-  const navigate = useNavigate()
+  const confirmSession = useConfirmSession()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -38,9 +38,26 @@ export function LoginRoute(): ReactElement {
     setError(null)
     try {
       await api.login(email, password)
-      // `replace`: 로그인한 뒤 뒤로 가기로 로그인 화면에 돌아오면, 이미 세션이 있으니
-      // 문지기가 다시 목록으로 보낸다. 히스토리에 남길 이유가 없다.
-      await navigate('/', { replace: true })
+      // **여기서 주소를 옮기지 않는다.** 상태가 `authenticated`가 되면 이 화면을 감싼
+      // `RedirectWhenAuthenticated`가 목록으로 보낸다 — "로그인한 사람은 `/login`에
+      // 머물지 않는다"는 규칙이 그 한 곳에만 남는다. `navigate('/')`를 여기 함께 두면
+      // 규칙이 두 벌이 된다.
+      //
+      // **되튕김의 조건은 "순서를 뒤집으면"이 아니라 "확정이 이동보다 한 틱 이상 늦으면"
+      // 이다.** 재서 확인했다 — `navigate('/')`를 앞에 두고 `confirmSession()`을 뒤에 둔
+      // 판은 주소 자취가 `["/login","/"]`로 지금과 **똑같고** 되튕기지 않는다. React가
+      // 같은 틱의 두 setState를 배치하므로 중간 상태(`anonymous` + `/`)가 커밋되지
+      // 않는다. 둘 사이에 틱 하나(`await setTimeout(0)`)를 넣으면 자취가
+      // `["/login","/","/login","/"]`가 되어 **되튕김이 실제로 난다.**
+      //
+      // **그 계약은 테스트로 고정돼 있지 않다.** 되튕김이 나는 판에서도 죽는 케이스가
+      // 0개다(web 전량 재확인). 지금 코드에 `navigate`가 없어 오늘 도달 가능한 결함이
+      // 아니라 케이스를 만들지 않았다 — **`navigate`를 되살리는 사람이 그 케이스를 함께
+      // 만들어야 한다.**
+      //
+      // 세션을 다시 묻지 않는 것이 요점이다. 앞 판은 `RequireAuth`가 마운트마다 `me()`를
+      // 새로 불러 이 일이 저절로 됐고, 그것이 이월 문서 §1 순환의 엔진이었다.
+      confirmSession()
     } catch (caught) {
       // 서버가 준 문장을 그대로 보여준다. 화면이 문안을 다시 쓰면 서버가 거절 이유를
       // 바꿔도 사용자는 옛 이유를 듣게 된다.

@@ -5,7 +5,15 @@
  *
  * 구현은 `http-client.ts`(실제 서버)와 각 화면 테스트의 가짜 두 부류다.
  */
-import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from './types'
+import type { PatchOp } from '@wirebound/schema'
+import type {
+  PageDetail,
+  PatchResult,
+  ProjectDetail,
+  RevisionSummary,
+  SessionUser,
+  TreeMenuNode,
+} from './types'
 
 export interface ApiClient {
   login(email: string, password: string): Promise<SessionUser>
@@ -17,6 +25,36 @@ export interface ApiClient {
   /** 메뉴·페이지 통합 트리. 서버의 `{ menu }` 봉투는 구현이 벗겨 준다. */
   getTree(projectId: string): Promise<TreeMenuNode[]>
   getPage(projectId: string, pageId: string): Promise<PageDetail>
+  /**
+   * 편집 하나를 보낸다. **응답의 `seq`가 다음 호출의 `baseSeq`다**(README 4단계).
+   *
+   * **호출은 직렬화해야 한다** — README가 *"in-flight 요청은 항상 하나여야 한다 — 앞
+   * 요청의 `seq`를 받아야 다음 `baseSeq`가 정해지기 때문이다. 어기면 두 번째 요청이
+   * 409를 받는다"*라고 못박았다. 그 직렬화는 이 인터페이스가 아니라 부르는 쪽이 한다
+   * (`edit/use-edit-commit.tsx`) — 여기서 큐를 들면 가짜를 끼우는 테스트마다 그 큐가
+   * 함께 딸려 온다.
+   *
+   * `clientOpId`는 클라이언트가 붙이는 값이고 서버는 그대로 되돌려 준다. **다만 클라이언트는
+   * 그 에코를 읽지 않는다** — ack는 보낸 요청의 id와 큐의 `[0]`을 맞춘다
+   * (`store/edit-queue.ts`의 `PendingEdit.clientOpId`에 근거가 있다). 그래서
+   * `PatchResult.clientOpId`는 지금 **읽는 자리가 없는 필드**다(이월 문서의 `ApiError.status`와
+   * 같은 부류 — 계약에 있으니 타입에 두지만 소비자가 아직 없다).
+   */
+  patchOps(
+    projectId: string,
+    pageId: string,
+    body: { baseSeq: number; ops: PatchOp[]; clientOpId?: string },
+  ): Promise<PatchResult>
+  /**
+   * 이 페이지에서 **내가** 만든 revision. 새로고침 뒤 undo 스택을 복원하는 데 쓴다(D10).
+   *
+   * **응답은 `seq` 내림차순이고 여기서 뒤집지 않는다** — 스택으로 옮기는 자리가 그 순서를
+   * 안다(`store/editor-store.ts`의 `restoreUndoStack`).
+   *
+   * **`limit`을 붙이지 않는다.** 서버 기본값 50이 설계 §7.3의 "최근 50개"와 같고,
+   * **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — `mine` 외에는 아무것도 붙일 수 없다.
+   */
+  listMyRevisions(projectId: string, pageId: string): Promise<RevisionSummary[]>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

@@ -6,6 +6,7 @@
  * (`apps/api/README.md`의 엔드포인트 표)을 어떻게 번역하느냐"다 — 경로·메서드·본문,
  * 쿠키를 싣기 위한 `credentials`, `{ menu }` 봉투 벗기기, 에러 봉투 → `ApiError`.
  */
+import type { PatchOp } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiErrorCode } from '../../src/api/client'
 import { createHttpClient } from '../../src/api/http-client'
@@ -64,6 +65,15 @@ const treeNode: TreeMenuNode = {
   pages: [{ id: 'pg1', title: '목록', sortOrder: 0 }],
   children: [{ id: 'm2', title: '권한', sortOrder: 0, pages: [], children: [] }],
 }
+/** `PATCH .../ops` 성공 응답. `inverse`는 **서버가** 만든 것이다(설계 §7.1). */
+const patchResult = {
+  seq: 8,
+  revisionId: 'rev-1',
+  inverse: [{ op: 'replace', path: '/root/children/0/props/title', value: '옛 제목' }],
+  schemaVersion: 1,
+  clientOpId: 'op-1',
+}
+
 const page: PageDetail = {
   id: 'pg1',
   menuNodeId: 'm1',
@@ -346,5 +356,138 @@ describe('createHttpClient', () => {
     await client.getPage('p 1/x', '../pg1').catch(() => undefined)
 
     expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1')
+  })
+})
+
+describe('patchOps', () => {
+  const OPS: PatchOp[] = [{ op: 'replace', path: '/root/children/0/props/title', value: '새 제목' }]
+
+  it('ops를 PATCH로 보낸다', async () => {
+    const stub = stubFetch(jsonResponse(200, patchResult))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS, clientOpId: 'op-1' })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p-1/pages/pg-1/ops')
+    expect(stub.calls[0]?.init?.method).toBe('PATCH')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      baseSeq: 7,
+      ops: OPS,
+      clientOpId: 'op-1',
+    })
+  })
+
+  it('clientOpId가 없으면 본문에 키를 만들지 않는다', async () => {
+    // 서버는 `z.strictObject`를 쓰므로 선언되지 않은 키는 400이다. `clientOpId: undefined`를
+    // 그대로 넘기면 `JSON.stringify`가 키를 지우므로 실제로는 통과하지만, 그것에 기대면
+    // 본문 조립이 바뀔 때 조용히 어긋난다 — 나가는 본문을 직접 본다.
+    const stub = stubFetch(jsonResponse(200, { ...patchResult, clientOpId: undefined }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ baseSeq: 7, ops: OPS })
+  })
+
+  it('응답의 seq와 inverse를 그대로 낸다', async () => {
+    // **봉투를 벗기지 않는다** — 서버 응답이 곧 `PatchResult`다. `inverse`는 서버가 적용
+    // 직전 상태를 보고 만든 것이고(설계 §7.1), 클라이언트는 그것을 그대로 되보내는 것
+    // 말고는 아무것도 하지 않는다.
+    const stub = stubFetch(jsonResponse(200, patchResult))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const result = await client.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS })
+
+    expect(result).toEqual(patchResult)
+    expect(result.inverse).toEqual(patchResult.inverse)
+  })
+
+  it('baseSeq 불일치는 conflict 코드로 온다', async () => {
+    // 서버는 리베이스를 시도하지 않고 곧바로 409를 낸다(README). 화면은 그것을 재조회로
+    // 수렴시킨다(D4).
+    const stub = stubFetch(
+      jsonResponse(409, { error: { code: 'conflict', message: '문서가 이미 바뀌었습니다' } }),
+    )
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client.patchOps('p-1', 'pg-1', { baseSeq: 3, ops: OPS }).catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('conflict')
+    expect(error.status).toBe(409)
+  })
+
+  it('카탈로그 위반은 validation-failed와 issues를 싣는다', async () => {
+    const issues = [
+      { code: 'unknown-prop', nodeId: 'n_1', path: '/root/children/0/props/nope', message: '알 수 없는 prop' },
+    ]
+    const stub = stubFetch(
+      jsonResponse(422, { error: { code: 'validation-failed', message: '검증 실패', issues } }),
+    )
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client.patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS }).catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('validation-failed')
+    expect(error.issues).toHaveLength(1)
+    expect(error.issues).toEqual(issues)
+  })
+
+  it('경로에 들어가는 id는 URL 인코딩된다', async () => {
+    const stub = stubFetch(jsonResponse(200, patchResult))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.patchOps('p 1/x', '../pg1', { baseSeq: 7, ops: OPS })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1/ops')
+  })
+})
+
+describe('listMyRevisions', () => {
+  const revision = {
+    id: 'rev-1',
+    seq: 8,
+    actorType: 'user',
+    actorId: 'u1',
+    actorLabel: '홍길동',
+    ops: [{ op: 'replace', path: '/root/children/0/props/title', value: '새' }],
+    inverse: [{ op: 'replace', path: '/root/children/0/props/title', value: '옛' }],
+    createdAt: '2026-08-04T09:00:00.000Z',
+  }
+
+  it('mine=true만 붙여 GET한다', async () => {
+    // **`limit`을 붙이지 않는다.** 기본값 50이 설계 §7.3의 "최근 50개"와 같고,
+    // **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — 캐시 버스터도 거부된다.
+    const stub = stubFetch(jsonResponse(200, [revision]))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.listMyRevisions('p-1', 'pg-1')
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p-1/pages/pg-1/revisions?mine=true')
+    expect(stub.calls[0]?.init?.method).toBe('GET')
+  })
+
+  it('응답을 순서 그대로 낸다', async () => {
+    // 서버가 `seq` 내림차순으로 준다. 여기서 뒤집지 않는다 — 스택으로 옮기는 자리가
+    // 그 순서를 안다(`store/editor-store.ts`의 `restoreUndoStack`).
+    const older = { ...revision, id: 'rev-0', seq: 7 }
+    const stub = stubFetch(jsonResponse(200, [revision, older]))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const result = await client.listMyRevisions('p-1', 'pg-1')
+
+    expect(result.map((r) => r.seq)).toEqual([8, 7])
+  })
+
+  it('경로에 들어가는 id는 URL 인코딩된다', async () => {
+    const stub = stubFetch(jsonResponse(200, []))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.listMyRevisions('p 1/x', '../pg1')
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1/revisions?mine=true')
   })
 })

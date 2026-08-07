@@ -6,7 +6,14 @@
  * `/api`로 시작하는 경로만 쓴다.
  */
 import { ApiError, type ApiClient, type ApiErrorCode, type ApiErrorIssue } from './client'
-import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from './types'
+import type {
+  PageDetail,
+  PatchResult,
+  ProjectDetail,
+  RevisionSummary,
+  SessionUser,
+  TreeMenuNode,
+} from './types'
 
 const API_PREFIX = '/api'
 
@@ -121,6 +128,34 @@ const SHAPES = {
     typeof value['headSeq'] === 'number' &&
     isRecord(value['schema']) &&
     isRecord((value['schema'] as Record<string, unknown>)['root']),
+  /**
+   * 편집 응답. **`seq`가 다음 요청의 `baseSeq`이고 `inverse`가 undo가 되보낼 ops다** —
+   * 둘 다 값이 그대로 큐와 undo 스택에 실리므로, 계약을 어긴 값이 지나가면 `baseSeq`가
+   * 조용히 어긋나거나 undo가 배열이 아닌 것을 `ops`로 보내다 죽는다.
+   *
+   * **`inverse` 안쪽은 보지 않는다**(D11). 그것은 서버가 만든 `PatchOp[]`이고 그 안까지
+   * 보는 것은 `@wirebound/schema`의 일이다 — `schema.root` 안쪽을 보지 않는 것과 같은
+   * 경계다(D8).
+   */
+  /**
+   * revision 목록. **각 항목의 `inverse`가 배열인지까지 본다** — 그 값이 그대로 undo
+   * 스택에 실리고, 배열이 아니면 undo가 그것을 `ops`로 보내다 죽는다. `inverse` **안쪽**은
+   * 보지 않는다(D11 — `patchResult`와 같은 경계).
+   */
+  revisionList: (value) =>
+    isArrayOf(
+      value,
+      (item) =>
+        isRecord(item) &&
+        typeof item['id'] === 'string' &&
+        typeof item['seq'] === 'number' &&
+        Array.isArray(item['inverse']),
+    ),
+  patchResult: (value) =>
+    isRecord(value) &&
+    typeof value['seq'] === 'number' &&
+    typeof value['revisionId'] === 'string' &&
+    Array.isArray(value['inverse']),
 } satisfies Record<string, Shape>
 
 /**
@@ -223,6 +258,9 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
 
   const projectPath = (projectId: string): string => `/projects/${encodeURIComponent(projectId)}`
 
+  const pagePath = (projectId: string, pageId: string): string =>
+    `${projectPath(projectId)}/pages/${encodeURIComponent(pageId)}`
+
   return {
     login: (email, password) =>
       request<SessionUser>('POST', '/auth/login', SHAPES.sessionUser, { email, password }),
@@ -244,10 +282,26 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
       return body.menu
     },
     getPage: (projectId, pageId) =>
-      request<PageDetail>(
+      request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail),
+    patchOps: (projectId, pageId, body) =>
+      request<PatchResult>(
+        'PATCH',
+        `${pagePath(projectId, pageId)}/ops`,
+        SHAPES.patchResult,
+        // `clientOpId`가 없으면 **키를 만들지 않는다.** 서버의 본문 스키마는
+        // `z.strictObject`라 선언되지 않은 키가 그 자체로 400인데, `undefined`를 실은 키는
+        // `JSON.stringify`가 지워 주므로 오늘은 통과한다 — 그 우연에 기대지 않는다.
+        body.clientOpId === undefined
+          ? { baseSeq: body.baseSeq, ops: body.ops }
+          : { baseSeq: body.baseSeq, ops: body.ops, clientOpId: body.clientOpId },
+      ),
+    listMyRevisions: (projectId, pageId) =>
+      request<RevisionSummary[]>(
         'GET',
-        `${projectPath(projectId)}/pages/${encodeURIComponent(pageId)}`,
-        SHAPES.pageDetail,
+        // `mine=true` 하나뿐이다. 선언하지 않은 쿼리 키는 400이므로(README) 캐시 버스터도
+        // 붙일 수 없고, `limit`은 기본값 50이 설계 §7.3의 "최근 50개"와 같아 생략한다.
+        `${pagePath(projectId, pageId)}/revisions?mine=true`,
+        SHAPES.revisionList,
       ),
   }
 }
