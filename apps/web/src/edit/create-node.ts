@@ -13,8 +13,25 @@
  * 어긋나는 자리를 하나 더 만든다.
  *
  * `children`도 만들지 않는다. `many`인 타입도 마찬가지다 — `insertNodeOps`가 `children`
- * 키가 없는 부모에 **배열째 넣는 갈래를 이미 갖는다**(그쪽 실측). 빈 배열을 미리 두면
- * undo 왕복 뒤 그 키가 문서에 남아 원본과 달라진다.
+ * 키가 없는 부모에 **배열째 넣는 갈래를 이미 갖는다**(그쪽 실측).
+ *
+ * **처음 적은 근거는 틀렸다.** *"빈 배열을 미리 두면 undo 왕복 뒤 그 키가 문서에 남아
+ * 원본과 달라진다"*고 적었는데, 리뷰가 반증했고 나도 재현했다 — **두 판 모두 왕복이
+ * 자기 원본과 정확히 같다:**
+ *
+ * | 판 | ops | inverse | 왕복 == 원본 |
+ * |---|---|---|---|
+ * | `children` 키 없음(현 구현) | `add /…/children [새노드]` | `remove /…/children` | true |
+ * | `children: []`을 미리 둔 판 | `add /…/children/0` | `remove /…/children/0` | true |
+ *
+ * **잔여물은 오히려 현 구현 쪽에 있다**(리뷰가 낸 반대 방향 실측, 나도 재현했다):
+ * `children` 키가 없던 부모에 넣은 뒤 그 노드를 **undo가 아니라 `removeNodeOps`로**
+ * 지우면 `children: []`이 남아 원본과 달라진다. **무해하다** — `children: []`이 붙은
+ * 노드는 `children`이 `none`인 타입이어도 `validatePage` 이슈가 0이다(실측).
+ *
+ * 그래서 남는 근거는 하나다: **`insertNodeOps`가 갈래를 이미 갖고 문서를 최소로 유지한다.**
+ * 잔여물의 방향이 반대였다는 것이 그 판단을 뒤집지는 않는다 — 어느 쪽을 골라도 왕복은
+ * 같고 검증도 같으므로, 만들 때 덜 넣는 쪽이 남는다.
  */
 import { createNodeId, getComponent, type WbNode } from '@wirebound/schema'
 

@@ -598,6 +598,56 @@ describe('moveNodeOps', () => {
     ])
   })
 
+  it('자손을 부모로 주면 null이다 — applyOps가 던지는 것을 미리 끊는다', () => {
+    // **처음 적은 근거("트리가 끊어진다")는 리뷰가 반증했고 나도 재현했다.** 가드를
+    // 우회해 그 op을 직접 만들면 끊어진 트리가 **만들어지지 않는다** — `move`가 `from`을
+    // 먼저 빼므로 목적지 경로가 그 순간 문서에서 사라지고 `applyOps`가 던진다(실측).
+    //
+    // 그러니 이 판정이 막는 것은 "끊어진 트리"가 아니라 **`PatchError`**다. 그마저도
+    // `EditorStore.applyEdit`이 `try/catch`로 잡아 `null`을 내므로 화면이 죽지는 않는다 —
+    // 이 판정의 값어치는 **적용해 보기 전에 끊는 것**(D7)까지다.
+    const document = withSubtree()
+
+    expect(moveNodeOps(document, 'n_box', 'n_1', 0)).toBeNull()
+    // 그 op을 손으로 만들면 무엇이 되는지 — 아래가 위 문장의 근거다.
+    expect(() =>
+      applyOps(document, [
+        { op: 'move', from: '/root/children/0', path: '/root/children/0/children/0/children/0' },
+      ]),
+    ).toThrow(/경로를 찾을 수 없습니다/)
+  })
+
+  it('경로 기준을 한쪽으로 통일하면 둘 다 던진다', () => {
+    // **`children` 키를 만드는 갈래에서 `add`와 `move`의 기준이 갈린다는 근거다.**
+    // 처음에는 *"한쪽으로 통일하면 둘 중 하나가 다른 노드를 가리킨다"*라고 적었는데,
+    // 리뷰가 반증했고 나도 재현했다 — **다른 노드를 가리키는 것이 아니라 둘 다 던진다.**
+    // 결론(기준을 갈라야 한다)은 그대로다.
+    const document = doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_lead', type: 'Text' },
+        { id: 'n_empty', type: 'Card' },
+      ],
+    })
+
+    expect(() =>
+      applyOps(document, [
+        { op: 'add', path: '/root/children/1/children', value: [] },
+        { op: 'move', from: '/root/children/0', path: '/root/children/1/children/0' },
+      ]),
+    ).toThrow(/경로를 찾을 수 없습니다/)
+    expect(() =>
+      applyOps(document, [
+        { op: 'add', path: '/root/children/0/children', value: [] },
+        { op: 'move', from: '/root/children/0', path: '/root/children/0/children/0' },
+      ]),
+    ).toThrow(/경로를 찾을 수 없습니다/)
+    // 갈라 쓰는 현 구현만 지나간다.
+    expect(childIds(applied(document, moveNodeOps(document, 'n_lead', 'n_empty', 0)), 'n_empty'))
+      .toEqual(['n_lead'])
+  })
+
   it('inverse를 되적용하면 원래 문서로 돌아간다', () => {
     // 위 두 케이스는 `inverse`의 **모양**만 본다. undo가 실제로 제자리로 돌리는지는
     // 되적용해야 안다 — 갈래 넷을 전부 지나간다.
@@ -622,5 +672,97 @@ describe('moveNodeOps', () => {
       const inverse = invertOps(document, ops)
       expect(applyOps(applyOps(document, ops), inverse), name).toEqual(document)
     }
+  })
+})
+
+describe('ops.ts의 방어선 — children 배열 안에 노드가 아닌 원소', () => {
+  /**
+   * **리뷰가 찾은 입력이고, 재보니 범위가 리뷰가 지목한 둘보다 넓었다.**
+   * 리뷰는 `moveNodeOps`만 던진다고 적었는데 그것은 대상 노드가 `null` 원소보다 **앞**에
+   * 있는 문서에서 잰 값이었다. 대상이 뒤에 있으면 `propOps`·`removeNodeOps`도 던진다 —
+   * 셋 다 `findNodePath`를 지나고 그것이 `walkNodes`를 쓰기 때문이다(실측).
+   *
+   * `insertNodeOps(…, 'n_root', …)`만 던지지 않았는데, 루트가 첫 방문이라 순회가
+   * `null`에 닿기 전에 반환하기 때문이다 — 그 노드가 뒤에 있으면 그쪽도 던진다.
+   */
+  const afterNull = (): PageDocument =>
+    doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [null as unknown as WbNode, { id: 'n_a', type: 'Text' }],
+    })
+
+  /** `null`이 다른 노드의 자식이다. 루트의 직계는 멀쩡하다. */
+  const nestedNull = (): PageDocument =>
+    doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_box', type: 'Card', children: [null as unknown as WbNode] },
+        { id: 'n_a', type: 'Text' },
+      ],
+    })
+
+  it('넷 다 던지지 않는다', () => {
+    // **`ops.ts` 머리말이 "던지지 않는다"를 계약으로 적은 자리다.** 이 함수들은 렌더
+    // 중에도 불릴 수 있고 구조 트리·속성 패널은 오류 경계 밖이다.
+    for (const [name, document] of [
+      ['대상이 null 뒤', afterNull()],
+      ['null이 중첩', nestedNull()],
+    ] as const) {
+      expect(() => propOps(document, 'n_a', 'content', 'x'), name).not.toThrow()
+      expect(() => insertNodeOps(document, 'n_a', 0, NEW_NODE), name).not.toThrow()
+      expect(() => removeNodeOps(document, 'n_a'), name).not.toThrow()
+      expect(() => moveNodeOps(document, 'n_a', 'n_root', 0), name).not.toThrow()
+    }
+  })
+
+  it('없는 노드를 찾아 순회가 끝까지 가도 던지지 않는다', () => {
+    // 위 케이스는 대상을 찾은 시점에 멈춘다. 못 찾는 경우가 **순회를 끝까지** 돌므로
+    // 노드가 아닌 원소를 전부 지나간다.
+    for (const [name, document] of [
+      ['대상이 null 뒤', afterNull()],
+      ['null이 중첩', nestedNull()],
+    ] as const) {
+      expect(propOps(document, 'n_missing', 'content', 'x'), name).toBeNull()
+      expect(removeNodeOps(document, 'n_missing'), name).toBeNull()
+      expect(moveNodeOps(document, 'n_missing', 'n_root', 0), name).toBeNull()
+    }
+  })
+
+  it('자손 판정도 서브트리에 노드가 아닌 원소가 있어도 던지지 않는다', () => {
+    // `moveNodeOps`의 자손 판정은 **옮길 노드의 서브트리**를 훑는다 — 위 케이스들과
+    // 다른 순회다.
+    const document = doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_box', type: 'Card', children: [null as unknown as WbNode] },
+        { id: 'n_t', type: 'Text' },
+      ],
+    })
+
+    expect(() => moveNodeOps(document, 'n_box', 'n_root', 1)).not.toThrow()
+  })
+
+  it('노드가 아닌 원소를 건너뛰어도 경로의 인덱스는 실제 자리다', () => {
+    // **건너뛴 만큼 인덱스를 당기면 op이 다른 노드를 가리킨다.** `n_a`는 배열의 1번
+    // 자리에 있고, `null`을 세지 않으면 0이 된다.
+    const document = afterNull()
+
+    expect(removeNodeOps(document, 'n_a')).toEqual([{ op: 'remove', path: '/root/children/1' }])
+    // 왕복 대조 — 지운 뒤 남는 것이 `null` 하나다.
+    expect(applied(document, removeNodeOps(document, 'n_a')).root.children).toEqual([null])
+  })
+
+  it('노드가 아닌 원소는 형제로 세지 않는다', () => {
+    // `walkNodes`를 그대로 쓰면 `null`도 방문 대상이라 자손 판정·검색이 그것을 노드로
+    // 본다. 여기서 재는 것은 검색이 그 원소를 **찾지 못한다**는 것이다.
+    const document = afterNull()
+
+    expect(propOps(document, 'n_root', 'x', 1)).not.toBeNull()
+    expect(moveNodeOps(document, 'n_a', 'n_root', 0)).toEqual([
+      { op: 'move', from: '/root/children/1', path: '/root/children/0' },
+    ])
   })
 })

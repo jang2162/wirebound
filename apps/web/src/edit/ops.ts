@@ -10,16 +10,11 @@
  * 던지지 않는 것도 같은 이유다 — 이 함수들은 렌더 도중에도 불릴 수 있고, 속성 패널과
  * 구조 트리는 오류 경계 밖이라 던지면 셸 전체가 흰 화면이 된다.
  */
-import {
-  applyOps,
-  findNode,
-  findNodePath,
-  getByPointer,
-  walkNodes,
-  type PageDocument,
-  type PatchOp,
-  type WbNode,
-} from '@wirebound/schema'
+import { applyOps, getByPointer, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+// **schema의 `findNodePath`·`findNode`·`walkNodes`를 쓰지 않는다.** 셋 다 `walkNodes`를
+// 지나고 그것이 `children` 배열 안의 `null` 원소에서 던진다 — 이 파일의 계약("던지지
+// 않는다")이 거기서 깨졌다(리뷰가 찾았고 나도 재현했다. `./safe-walk.ts` 머리말에 실측).
+import { findNodePathSafely, findNodeSafely, walkSafely } from './safe-walk'
 
 /**
  * 문서 루트 노드의 JSON Pointer. `walkNodes`의 `basePath` 기본값과 같은 값이고,
@@ -58,7 +53,7 @@ export function propOps(
   prop: string,
   value: unknown,
 ): PatchOp[] | null {
-  const nodePath = findNodePath(document.root, nodeId)
+  const nodePath = findNodePathSafely(document.root, nodeId)
   if (nodePath === undefined) return null
 
   const propsPath = `${nodePath}/props`
@@ -110,7 +105,7 @@ export function insertNodeOps(
   index: number,
   node: WbNode,
 ): PatchOp[] | null {
-  const parentPath = findNodePath(document.root, parentId)
+  const parentPath = findNodePathSafely(document.root, parentId)
   if (parentPath === undefined) return null
 
   const childrenPath = `${parentPath}/children`
@@ -138,7 +133,7 @@ export function insertNodeOps(
  * 간다. 그 `inverse`도 서브트리를 통째로 품은 `add` 하나다(실측).
  */
 export function removeNodeOps(document: PageDocument, nodeId: string): PatchOp[] | null {
-  const path = findNodePath(document.root, nodeId)
+  const path = findNodePathSafely(document.root, nodeId)
   if (path === undefined || path === ROOT_PATH) return null
 
   return [{ op: 'remove', path }]
@@ -180,10 +175,10 @@ export function moveNodeOps(
   parentId: string,
   index: number,
 ): PatchOp[] | null {
-  const from = findNodePath(document.root, nodeId)
+  const from = findNodePathSafely(document.root, nodeId)
   if (from === undefined || from === ROOT_PATH) return null
 
-  const node = findNode(document.root, nodeId)
+  const node = findNodeSafely(document.root, nodeId)
   if (node === undefined) return null
 
   // 자기 서브트리 안으로는 못 옮긴다. `walkNodes`는 자기 자신부터 내므로 "자신을 부모로"도
@@ -199,17 +194,17 @@ export function moveNodeOps(
   // 옮기려 하면 아래 `remove /root`가 문서에서 root를 지우고, 그 문서를 `findNodePath`에
   // 넣은 `walkNodes`가 `Cannot read properties of undefined (reading 'id')`로 던진다 —
   // 여기는 오류 경계 밖이라 그 예외가 셸을 통째로 지운다.
-  for (const visit of walkNodes(node)) {
+  for (const visit of walkSafely(node)) {
     if (visit.node.id === parentId) return null
   }
 
-  const parentPathBefore = findNodePath(document.root, parentId)
+  const parentPathBefore = findNodePathSafely(document.root, parentId)
   if (parentPathBefore === undefined) return null
 
   // **여기부터가 remove 후 기준이다.** 위 자손 검사를 통과했으므로 부모는 빠지는 서브트리
   // 밖에 있고, 그래서 뺀 문서에도 남아 있다.
   const afterRemove = applyOps(document, [{ op: 'remove', path: from }])
-  const parentPathAfter = findNodePath(afterRemove.root, parentId)
+  const parentPathAfter = findNodePathSafely(afterRemove.root, parentId)
   if (parentPathAfter === undefined) return null
 
   const children = getByPointer(afterRemove, `${parentPathAfter}/children`)

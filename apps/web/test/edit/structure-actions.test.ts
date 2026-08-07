@@ -103,8 +103,13 @@ describe('structureAbilities', () => {
   })
 
   it('가운데 형제는 위아래로 다 갈 수 있다', () => {
-    // 위 둘의 양성 대조다. 이것이 없으면 `moveUp`·`moveDown`을 항상 `false`로 굳힌
-    // 구현도 통과한다.
+    // 위 둘의 양성 대조다.
+    //
+    // **처음 적은 반사실은 틀렸다** — *"이것이 없으면 항상 `false`로 굳힌 구현도
+    // 통과한다"*. 리뷰가 반증했고 나도 재현했다: 이 케이스를 뺀 판에서도 그 변이는
+    // **3개를 죽인다.** 앞 두 케이스(`첫 형제는 위로 못 간다`·`막내는 아래로 못 간다`)가
+    // 각각 **반대 방향까지** 단언하기 때문이다. 이 케이스가 더하는 것은 "한 노드에서
+    // 둘이 동시에 참"이라는 자리 하나다.
     const abilities = structureAbilities(withSiblings(), 'n_mid')
 
     expect(abilities.moveUp).toBe(true)
@@ -137,6 +142,21 @@ describe('structureAbilities', () => {
     expect(structureAbilities(withGrandchild(), 'n_deep').outdent).toBe(true)
   })
 
+  it('루트와 같은 id를 가진 부모도 루트가 아니다', () => {
+    // **참조 비교(`parent !== document.root`)가 id 비교와 갈리는 자리다.** 리뷰가 그
+    // 판정이 케이스로 고정돼 있지 않다고 지적했고, 인과가 성립하는 것도 함께 확인했다 —
+    // 검증 전 문서에는 id가 중복된 노드가 올 수 있고(`validatePage`의 `duplicate-id`가
+    // 검증에서 그것을 잡는다는 것이 곧 그런 문서가 존재한다는 뜻이다), id로 비교하면
+    // 이 노드의 부모가 루트로 오판된다.
+    const document = doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [{ id: 'n_root', type: 'Card', children: [{ id: 'n_deep', type: 'Text' }] }],
+    })
+
+    expect(structureAbilities(document, 'n_deep').outdent).toBe(true)
+  })
+
   it('카탈로그에 없는 타입은 안에 추가할 수 없다', () => {
     // 검증 전 문서가 스토어에 실린다(P2b-2). `getComponent`가 `undefined`를 준다.
     const document = doc({
@@ -156,8 +176,11 @@ describe('structureAbilities', () => {
     // 실측: 카탈로그에 없는 타입의 노드가 하나라도 있으면 `validatePage`가
     // `unknown-type`을 내고, 편집 파이프라인 6단계가 그것을 `invalid`로 거절한다
     // (`apps/api/src/services/edit-pipeline.ts`). 다른 노드의 prop을 바꾸는 편집도,
-    // 그 노드를 **옮기는** 편집도 이슈가 남는다 — **그 노드를 지우는 편집만 이슈가
-    // 0이 된다.** 즉 삭제가 그 페이지를 다시 편집 가능하게 만드는 유일한 길이다.
+    // 그 노드를 **옮기는** 편집도, 무관한 노드를 지우는 편집도 이슈가 남는다.
+    //
+    // **이슈를 0으로 만드는 것은 그 노드를 문서에서 없애는 편집이다.** 처음에는
+    // *"그 노드를 지우는 편집만"*이라고 적었는데 리뷰가 **조상 삭제도 0**이라는 것을
+    // 찾았고 나도 재현했다. 결론(삭제가 탈출구다)은 오히려 넓어진다.
     //
     // 계획서의 케이스 표도 좁은 해석과 맞는다 — 케이스 12는 `안에 추가`만 지목한다.
     // 그래서 **카탈로그를 보는 조작(`addInside`·`indent`)만 타입에 걸고**, 자리만
@@ -234,12 +257,70 @@ describe('structureAbilities', () => {
         document: { version: 1, root: null } as unknown as PageDocument,
         nodeId: 'n_root',
       },
+      // **아래 넷이 리뷰가 찾은 반례다.** 내가 처음 잰 여섯은 "노드의 필드가 깨진" 모양만
+      // 덮었고, **`children` 배열의 원소 자체가 노드가 아닌** 경우를 재지 않았다.
+      // 대상이 그 원소보다 **뒤**에 있을 때만 던졌다 — 앞에 있으면 순회가 닿기 전에
+      // 반환한다.
+      {
+        name: 'children에 null 원소 (대상보다 앞)',
+        document: doc({
+          id: 'n_root',
+          type: 'Page',
+          children: [null as unknown as WbNode, { id: 'n_a', type: 'Text' }],
+        }),
+        nodeId: 'n_a',
+      },
+      {
+        name: 'children에 null 원소 (중첩)',
+        document: doc({
+          id: 'n_root',
+          type: 'Page',
+          children: [
+            { id: 'n_box', type: 'Card', children: [null as unknown as WbNode] },
+            { id: 'n_a', type: 'Text' },
+          ],
+        }),
+        nodeId: 'n_a',
+      },
+      {
+        name: 'children에 undefined 원소',
+        document: doc({
+          id: 'n_root',
+          type: 'Page',
+          children: [undefined as unknown as WbNode, { id: 'n_a', type: 'Text' }],
+        }),
+        nodeId: 'n_a',
+      },
+      {
+        name: '없는 노드를 찾아 순회가 끝까지 간다',
+        document: doc({
+          id: 'n_root',
+          type: 'Page',
+          children: [null as unknown as WbNode, { id: 'n_a', type: 'Text' }],
+        }),
+        nodeId: 'n_missing',
+      },
     ]
 
     for (const { name, document, nodeId } of broken) {
       expect(() => structureAbilities(document, nodeId), name).not.toThrow()
       expect(() => nodeSpot(document, nodeId), name).not.toThrow()
     }
+  })
+
+  it('노드가 아닌 원소를 건너뛰어도 인덱스는 실제 자리다', () => {
+    // **건너뛴 만큼 인덱스를 당기면 `nodeSpot`이 낸 값으로 만든 op이 다른 노드를
+    // 가리킨다.** `n_a`는 배열의 1번 자리다.
+    const document = doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [null as unknown as WbNode, { id: 'n_a', type: 'Text' }],
+    })
+
+    expect(nodeSpot(document, 'n_a')).toEqual({ parentId: 'n_root', index: 1, siblingCount: 2 })
+    // 앞에 원소가 하나 있으므로 위로 갈 수 있다고 판정한다 — 그 자리가 `null`이어도
+    // `moveNodeOps`가 만드는 것은 배열 안의 자리 이동이라 성립한다.
+    expect(structureAbilities(document, 'n_a').moveUp).toBe(true)
   })
 
   it('type이 객체인 노드는 안에 추가할 수 없고 지울 수는 있다', () => {
