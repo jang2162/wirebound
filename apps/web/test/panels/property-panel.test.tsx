@@ -5,11 +5,21 @@
  * 노드를 고르는 일은 구조 트리를 눌러서 한다. 스토어를 직접 건드리지 않는 것은 의도다 —
  * 사용자가 실제로 지나는 길(트리 → 스토어 → 패널)이 이어져 있는지 함께 보게 된다.
  */
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { registerStructure } from '@wirebound/renderer'
-import { ListDef, defineComponent, registerComponent } from '@wirebound/schema'
+import {
+  ListDef,
+  defineComponent,
+  listComponents,
+  registerComponent,
+  type EditorControl,
+} from '@wirebound/schema'
+import type { ApiClient } from '../../src/api/client'
+import type { PatchResult } from '../../src/api/types'
 import { PAGE_ID, PROJECT_NAME, PROJECT_ROUTE, openPage, pageDoc, renderEditor } from '../editor-harness'
+// 카탈로그가 설치돼 있어야 `listComponents()`가 빈 배열이 아니다.
+import '../../src/catalog-setup'
 
 /**
  * `visibleWhen`이 **맞지 않는** 노드를 만들기 위한 테스트 전용 컴포넌트.
@@ -117,8 +127,60 @@ const BROKEN_TYPE_DOC = pageDoc({
   children: [{ id: 'n-bad', type: { broken: true }, children: [] } as never],
 })
 
+/** 이 웨이브에서 위젯이 생긴 control. Task 8·9가 여기로 옮겨 온다. */
+const WIDGET_CONTROLS: EditorControl[] = ['text', 'textarea', 'number']
+/** 아직 위젯이 없어 `formatValue`가 글자로만 그리는 control. */
+const NOT_YET: EditorControl[] = ['switch', 'select', 'stringList', 'pairList']
+
+/** 카탈로그가 **실제로 쓰는** control 집합. 손으로 적지 않고 센다. */
+function catalogControls(): Set<EditorControl> {
+  return new Set(listComponents().flatMap((def) => def.editor.map((field) => field.control)))
+}
+
+/**
+ * control 종류마다 그것을 쓰는 카탈로그 자리 하나씩. **일곱을 전부 짚는다** — 위
+ * `catalogControls()`와의 대조가 그 사실을 지킨다.
+ */
+const CONTROL_SAMPLES: { control: EditorControl; type: string; label: string }[] = [
+  { control: 'text', type: 'Field', label: '라벨' },
+  { control: 'textarea', type: 'Text', label: '내용' },
+  { control: 'number', type: 'List', label: '항목 수' },
+  { control: 'switch', type: 'Field', label: '필수' },
+  { control: 'select', type: 'Field', label: '입력 종류' },
+  { control: 'stringList', type: 'List', label: '컬럼' },
+  { control: 'pairList', type: 'KeyValue', label: '키-값' },
+]
+
+/** 위 표가 짚는 자리를 전부 담은 문서. `DOC`을 건드리지 않는 것은 다른 케이스가 그것에 매여 있어서다. */
+const CONTROLS_DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    {
+      id: 'n-field',
+      type: 'Field',
+      props: { label: '이름', control: 'select', placeholder: '검색어', required: true },
+    },
+    { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
+    { id: 'n-list', type: 'List', props: { columns: ['이름'], items: 3 } },
+    { id: 'n-kv', type: 'KeyValue', props: { pairs: [{ key: 'k', value: 'v' }] } },
+  ],
+})
+
 function panel(): HTMLElement {
   return screen.getByRole('complementary', { name: '속성 패널' })
+}
+
+/** 라벨이 가리키는 위젯. 위젯이 아직 없는 자리는 `null`이다. */
+function controlWidget(label: string): HTMLElement | null {
+  return within(panel()).queryByLabelText<HTMLElement>(label)
+}
+
+/** 있어야 하는 위젯. 없으면 그 자리에서 요란하게 깨진다. */
+function requireWidget(label: string): HTMLElement {
+  const widget = controlWidget(label)
+  if (widget === null) throw new Error(`위젯이 없다: ${label}`)
+  return widget
 }
 
 /**
@@ -128,8 +190,22 @@ function panel(): HTMLElement {
 function propRows(): { label: string; value: string }[] {
   return [...panel().querySelectorAll('.wb-shell-prop')].map((row) => ({
     label: row.querySelector('.wb-shell-prop-label')?.textContent ?? '',
-    value: row.querySelector('.wb-shell-prop-value')?.textContent ?? '',
+    // **위젯이 있으면 그 값이 사용자가 보는 값이다.** 입력의 내용은 `textContent`가 아니라
+    // `value`에 있으므로, 그것을 보지 않으면 위젯이 생긴 자리가 전부 빈 문자열로 읽힌다.
+    // 위젯이 없는 자리(`formatValue`가 글자로 그리는 control)는 그대로 `textContent`다.
+    value: rowValue(row),
   }))
+}
+
+function rowValue(row: Element): string {
+  const widget = row.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    'input, textarea, select',
+  )
+  if (widget === null) return row.querySelector('.wb-shell-prop-value')?.textContent ?? ''
+  if (widget instanceof HTMLInputElement && widget.type === 'checkbox') {
+    return widget.checked ? '켜짐' : '꺼짐'
+  }
+  return widget.value
 }
 
 function labels(): string[] {
@@ -138,9 +214,17 @@ function labels(): string[] {
 
 /** 구조 트리에서 노드를 고른다. 사용자가 지나는 길 그대로다. */
 function select(type: string): void {
-  fireEvent.click(
-    within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: type }),
-  )
+  selectAt(type, 0)
+}
+
+/** 같은 타입이 여럿일 때 몇 번째를 고를지. 문서 순서 그대로다. */
+function selectAt(type: string, index: number): void {
+  const buttons = within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', {
+    name: type,
+  })
+  const button = buttons[index]
+  if (button === undefined) throw new Error(`구조 트리에 ${type}[${index}]이 없다`)
+  fireEvent.click(button)
 }
 
 describe('속성 패널', () => {
@@ -258,21 +342,30 @@ describe('속성 패널', () => {
     expect(propRows()).toHaveLength(0)
   })
 
-  it('이 단계에서는 입력이 없다(읽기 전용)', async () => {
-    await openPage(DOC)
+  it('카탈로그의 control마다 대응하는 위젯이 있다 — 아직 넷은 덮지 못한다', async () => {
+    // **P2b-1의 `이 단계에서는 입력이 없다`를 대체한 케이스다.** 이월 문서가
+    // *"그 테스트를 바꾸는 것이 '편집이 생겼다'는 신호다"*라고 못박았고, 이것이 그
+    // 반대 방향이다 — 경계를 "입력이 없다"에서 "control마다 위젯이 있다"로 뒤집는다.
+    //
+    // **덮지 못한 것을 이름과 아래 목록에 적어 둔다.** 지금 위젯이 있는 것은 셋
+    // (`text`·`textarea`·`number`)이고 넷이 남는다. Task 8이 `switch`·`select`를,
+    // Task 9가 `stringList`·`pairList`를 덮으면 `NOT_YET`이 비고 이 이름도 바뀐다.
+    await openPage(CONTROLS_DOC)
 
-    select('Field')
+    // **분모를 손으로 적지 않는다.** 카탈로그가 실제로 쓰는 control 집합을 세어
+    // 두 목록의 합과 맞춘다 — 카탈로그에 여덟 번째 control이 생기면 여기서 죽는다.
+    expect(new Set([...WIDGET_CONTROLS, ...NOT_YET])).toEqual(catalogControls())
 
-    // 양성 대조: 값이 실제로 그려진 상태에서 세야 뜻이 있다. 빈 패널은 아무 입력도
-    // 없는 것이 당연하다.
-    expect(propRows().length).toBeGreaterThan(0)
-    expect(panel().querySelectorAll('input, textarea, select')).toHaveLength(0)
-    // 셸에는 입력이 있다(뷰포트 폭 `<select>`). 위 단언이 화면 어디에도 입력이 없어서
-    // 참인 것이 아님을 못박는다.
-    expect(document.body.querySelectorAll('select').length).toBeGreaterThan(0)
-
-    // **이 케이스가 이 태스크의 범위를 고정한다.** P2b-2가 편집을 얹으면 여기가 죽고,
-    // 그 죽음이 곧 "편집이 생겼다"는 신호다.
+    for (const { control, type, label } of CONTROL_SAMPLES) {
+      select(type)
+      const widget = controlWidget(label)
+      if (WIDGET_CONTROLS.includes(control)) {
+        expect(widget, `${control}에는 위젯이 있어야 한다`).not.toBeNull()
+      } else {
+        // 아직 위젯이 없는 자리는 `formatValue`가 그린 글자만 있다.
+        expect(widget, `${control}은 아직 위젯이 없다`).toBeNull()
+      }
+    }
   })
 
   it('값을 문자열로 만들 수 없어도 셸은 살아 있다', async () => {
@@ -280,13 +373,18 @@ describe('속성 패널', () => {
 
     select('Card')
 
-    // 그 줄만 대신 문장을 낸다. 나머지 줄이 그대로인 것이 양성 대조다 — 패널이 통째로
-    // 무너지거나 아무것도 그리지 않는 구현은 이 단언을 통과할 수 없다.
+    // **지키는 성질은 그대로이고 지키는 자리가 옮겨 갔다.** `Card.title`은 `text` control이라
+    // 이제 위젯이 그리고, 위젯은 객체 값을 빈 칸으로 시작한다(`controls/text-control.tsx`의
+    // `toDraft`) — `JSON.stringify`를 부르지 않으므로 던질 일이 없다. 앞 판에서 이 줄이
+    // `(표시할 수 없는 값)`이었던 것은 `formatValue`가 그렸기 때문이다.
+    //
+    // 나머지 줄이 그대로인 것이 양성 대조다 — 패널이 통째로 무너지거나 아무것도 그리지
+    // 않는 구현은 이 단언을 통과할 수 없다.
     expect(propRows()).toEqual([
-      { label: '제목', value: '(표시할 수 없는 값)' },
+      { label: '제목', value: '' },
       { label: '부제', value: '부제' },
     ])
-    // 셸도 그대로다. `stringify`의 `try`를 걷어내면 여기까지 오지 못하고 렌더가 던진다.
+    // 셸도 그대로다.
     screen.getByRole('heading', { name: PROJECT_NAME })
   })
 
@@ -344,5 +442,233 @@ describe('속성 패널', () => {
     // 페이지를 열지 않은 상태. 선택이 없을 때와 같은 안내다 — 둘 다 "고를 노드가 아직
     // 없다"이고, 사용자가 할 일도 같다.
     within(panel()).getByText('노드를 고르면 속성이 보입니다')
+  })
+})
+
+/**
+ * 편집이 실제로 나가는지 보는 자리. **`patchOps`를 가짜로 끼워 호출을 센다** — 위 케이스들이
+ * `openPage`의 기본 가짜를 쓰는 것과 달리, 여기서는 나가는 본문까지 봐야 한다.
+ */
+function editable(): { calls: { ops: unknown }[]; api: Partial<ApiClient> } {
+  const calls: { ops: unknown }[] = []
+  let seq = 7
+  const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+    calls.push({ ops: body.ops })
+    seq += 1
+    const result: PatchResult = {
+      seq,
+      revisionId: `rev-${seq}`,
+      inverse: [],
+      schemaVersion: 1,
+      ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+    }
+    return result
+  }
+  return { calls, api: { patchOps } }
+}
+
+/** 마지막 요청이 실은 ops. 요청이 없으면 `null`이다. */
+function lastOps(calls: { ops: unknown }[]): unknown {
+  return calls.at(-1)?.ops ?? null
+}
+
+const EDIT_DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    { id: 'n-text', type: 'Text', props: { content: '옛 내용', role: 'body' } },
+    { id: 'n-text2', type: 'Text', props: { content: '둘째 내용', role: 'body' } },
+    { id: 'n-list', type: 'List', props: { columns: ['이름'], items: 3 } },
+  ],
+})
+
+/** 캔버스에 그려진 노드의 글자. 낙관적 적용이 화면까지 닿았는지 본다. */
+function canvasTextOf(nodeId: string): string {
+  const node = document.body.querySelector(`[data-wb-id="${nodeId}"]`)
+  if (node === null) throw new Error(`캔버스에 노드가 없다: ${nodeId}`)
+  return node.textContent ?? ''
+}
+
+describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
+  it('text 필드에 값을 넣고 blur하면 편집이 나간다', async () => {
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    selectAt('Text', 0)
+    const input = requireWidget('내용')
+    fireEvent.change(input, { target: { value: '새 내용' } })
+    fireEvent.blur(input)
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([
+      { op: 'replace', path: '/root/children/0/props/content', value: '새 내용' },
+    ])
+  })
+
+  it('Enter로도 나간다', async () => {
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    select('List')
+    const input = requireWidget('항목 수')
+    fireEvent.change(input, { target: { value: '9' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([
+      { op: 'replace', path: '/root/children/2/props/items', value: 9 },
+    ])
+  })
+
+  it('타이핑만으로는 나가지 않는다', async () => {
+    // **D5의 핵심이다.** 글자마다 요청하는 구현을 잡는다 — 그런 구현은 undo 한 단계가
+    // 글자 하나가 되어 이력이 무의미해지고, 요청 수가 타이핑 속도에 비례한다.
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    selectAt('Text', 0)
+    const input = requireWidget('내용')
+    fireEvent.change(input, { target: { value: '새' } })
+    fireEvent.change(input, { target: { value: '새 내' } })
+    fireEvent.change(input, { target: { value: '새 내용' } })
+
+    // 화면에는 보이지만 서버로는 나가지 않는다.
+    expect((input as HTMLInputElement).value).toBe('새 내용')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('값이 그대로면 blur해도 나가지 않는다', async () => {
+    // blur마다 revision이 나면 이력이 무의미해진다.
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    selectAt('Text', 0)
+    const input = requireWidget('내용')
+    fireEvent.focus(input)
+    fireEvent.blur(input)
+
+    expect(calls).toHaveLength(0)
+  })
+
+  it('number 필드는 수로 나간다', async () => {
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    select('List')
+    const input = requireWidget('항목 수')
+    fireEvent.change(input, { target: { value: '5' } })
+    fireEvent.blur(input)
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    // `'5'`가 아니라 `5`다. 문자열로 나가면 서버의 카탈로그 검증이 422를 낸다.
+    expect(lastOps(calls)).toEqual([
+      { op: 'replace', path: '/root/children/2/props/items', value: 5 },
+    ])
+  })
+
+  it('수가 아닌 입력은 나가지 않는다', async () => {
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    select('List')
+    const input = requireWidget('항목 수')
+    fireEvent.change(input, { target: { value: 'abc' } })
+    fireEvent.blur(input)
+
+    expect(calls).toHaveLength(0)
+  })
+
+  it('빈 수 입력도 나가지 않는다', async () => {
+    // `Number('')`은 `0`이다. 빈 칸을 0으로 보내면 사용자가 지우기만 해도 값이 바뀐다.
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    select('List')
+    const input = requireWidget('항목 수')
+    fireEvent.change(input, { target: { value: '' } })
+    fireEvent.blur(input)
+
+    expect(calls).toHaveLength(0)
+  })
+
+  it('textarea는 여러 줄을 담는다', async () => {
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    selectAt('Text', 0)
+    const input = requireWidget('내용')
+    expect(input.tagName).toBe('TEXTAREA')
+
+    fireEvent.change(input, { target: { value: '첫 줄\n둘째 줄' } })
+    fireEvent.blur(input)
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([
+      { op: 'replace', path: '/root/children/0/props/content', value: '첫 줄\n둘째 줄' },
+    ])
+  })
+
+  it('textarea에서 Enter는 커밋이 아니라 줄바꿈이다', async () => {
+    // 계획서 표에 없는 케이스다. `Enter`가 모든 control에서 커밋이면 여러 줄을 칠 수 없다 —
+    // 케이스 `textarea는 여러 줄을 담는다`는 `fireEvent.change`로 값을 통째로 넣으므로
+    // 그 함정을 지나간다.
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    selectAt('Text', 0)
+    const input = requireWidget('내용')
+    fireEvent.change(input, { target: { value: '첫 줄' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(calls).toHaveLength(0)
+  })
+
+  it('편집한 값이 캔버스에 반영된다', async () => {
+    // 낙관적 적용이 화면까지 닿는지 본다 — 패널만 보는 구현을 잡는다.
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    selectAt('Text', 0)
+    const input = requireWidget('내용')
+    fireEvent.change(input, { target: { value: '캔버스까지' } })
+    fireEvent.blur(input)
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(canvasTextOf('n-text')).toBe('캔버스까지')
+  })
+
+  it('다른 노드를 고르면 입력이 그 노드 값으로 바뀐다', async () => {
+    const { api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    selectAt('Text', 0)
+    expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('옛 내용')
+
+    // 같은 타입의 다른 노드다 — `editor` 명세가 같아 줄이 재조정되므로, 로컬 초안을
+    // 버리는 장치가 없으면 앞 노드의 값이 그대로 남는다.
+    selectAt('Text', 1)
+
+    expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
+  })
+
+  it('캔버스로 다른 노드를 고르면 커밋되지 않은 타이핑이 사라진다', async () => {
+    // **설계된 손실이다.** 노드가 바뀔 때 로컬 초안을 버리는 방식(`key`)을 골랐기 때문이고,
+    // 그 근거는 `panels/controls/text-control.tsx`에 잰 값과 함께 있다.
+    //
+    // 구조 트리로 고르면 이 손실이 없다 — 버튼이 포커스를 받아 blur가 나고 그때 커밋된다
+    // (실측). 캔버스는 `<div onClick>`이라 포커스가 옮겨 가지 않아 blur가 없다.
+    const { calls, api } = editable()
+    await openPage(EDIT_DOC, { apiOverrides: api })
+
+    selectAt('Text', 0)
+    fireEvent.change(requireWidget('내용'), { target: { value: '버려질 타이핑' } })
+
+    const other = document.body.querySelector('[data-wb-id="n-text2"]')
+    if (other === null) throw new Error('캔버스에 둘째 노드가 없다')
+    fireEvent.click(other)
+
+    // 초안은 나가지 않았고, 입력은 새 노드의 값이다.
+    expect(calls).toHaveLength(0)
+    expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
   })
 })

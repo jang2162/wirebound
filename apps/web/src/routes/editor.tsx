@@ -182,7 +182,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
       </main>
 
       <aside className="wb-shell-panel" aria-label="속성 패널">
-        <PropertyPanel pageId={props.pageId} />
+        <PropertyPanel projectId={props.project.id} pageId={props.pageId} />
       </aside>
     </div>
   )

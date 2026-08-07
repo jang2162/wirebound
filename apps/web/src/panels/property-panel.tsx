@@ -3,9 +3,9 @@
  * (설계 §5.1·§9) — 컴포넌트마다 패널을 따로 만들지 않는다는 뜻이고, 그래서 카탈로그에
  * 컴포넌트가 늘어도 이 파일은 그대로다.
  *
- * **이 단계는 읽기 전용이다.** 입력 컨트롤(`EditorField.control`)을 실제 위젯으로 바꾸는
- * 것은 P2b-2다. `test/panels/property-panel.test.tsx`의 `이 단계에서는 입력이 없다` 케이스가
- * 그 경계를 지키고 있어, 그 케이스가 죽는 날이 곧 편집이 생긴 날이다.
+ * **여기가 편집의 입구다.** P2b-1에서는 읽기 전용이었고 `이 단계에서는 입력이 없다`
+ * 케이스가 그 경계를 고정했다. 그 케이스를 `카탈로그의 control마다 대응하는 위젯이 있다`로
+ * 바꾼 것이 "편집이 생겼다"는 신호다(이월 문서 §3).
  *
  * 설계 §9의 우측 패널은 탭 셋(속성·코멘트·상호작용)이지만 이 단계에는 속성뿐이라 탭을
  * 두지 않는다. 뷰 모드의 "페이지 설명" 탭도 마찬가지로 이후 단계다.
@@ -19,7 +19,9 @@ import {
   type EditorField,
   type WbNode,
 } from '@wirebound/schema'
+import { useEditCommit } from '../edit/use-edit-commit'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { TextControl } from './controls/text-control'
 import { BROKEN_TYPE_LABEL, nodeType } from './node-shape'
 // 카탈로그가 없으면 모든 노드가 "알 수 없는 타입"이 된다. 설치는 import만으로 끝난다.
 import '../catalog-setup'
@@ -30,12 +32,20 @@ const NO_SELECTION = '노드를 고르면 속성이 보입니다'
 /** 타입을 읽지 못한 노드의 안내. 캔버스는 같은 노드를 폴백으로 그리고 배너로 알린다. */
 const BROKEN_TYPE_NOTICE = '이 노드의 타입을 읽을 수 없습니다'
 
-export function PropertyPanel(props: { pageId: string | undefined }): ReactElement {
+export function PropertyPanel(props: {
+  projectId: string
+  pageId: string | undefined
+}): ReactElement {
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다(`use-editor-store.tsx`의 주석 — `(s) => s`는 테스트 전용이다).
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 그린다.
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  // 훅은 조건부로 부를 수 없으므로 페이지가 없어도 부른다. `pageId`가 없으면 `''`를 주는데,
+  // 그 값은 어느 페이지 id와도 같지 않아 `useOpenPage('')`가 `null`을 내고 `commitProp`이
+  // 그 자리에서 돌아온다 — 즉 페이지가 없을 때 편집이 나갈 길이 없다. (그 상태에서는 아래
+  // `node === undefined` 분기가 먼저 걸려 위젯 자체가 그려지지 않는다.)
+  const { commitProp } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 P2b-2의 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
@@ -97,14 +107,68 @@ export function PropertyPanel(props: { pageId: string | undefined }): ReactEleme
             // `<dl>` 안의 `<div>`는 표준이 허용하는 묶음이다. 라벨과 값을 한 줄로 묶어야
             // 스타일과 테스트가 "줄"을 다룰 수 있다.
             <div className="wb-shell-prop" key={field.prop}>
-              <dt className="wb-shell-prop-label">{field.label}</dt>
-              <dd className="wb-shell-prop-value">{formatValue(readProp(node, field.prop))}</dd>
+              <dt className="wb-shell-prop-label">
+                <label htmlFor={controlId(field.prop)}>{field.label}</label>
+              </dt>
+              <dd className="wb-shell-prop-value">
+                <PropControl
+                  // **노드가 바뀌면 위젯을 다시 만든다.** 로컬 초안(타이핑 중인 값)을
+                  // 버리는 장치이고, 아래 `PropControl`의 주석에 그 선택의 근거와 잰 값이 있다.
+                  key={node.id}
+                  field={field}
+                  value={readProp(node, field.prop)}
+                  onCommit={(value) => commitProp(node.id, field.prop, value)}
+                />
+              </dd>
             </div>
           ))}
         </dl>
       )}
     </>
   )
+}
+
+/** 입력에 붙는 id. 필드는 한 패널 안에서 `prop`이 유일하므로 그것으로 충분하다. */
+function controlId(prop: string): string {
+  return `wb-prop-${prop}`
+}
+
+/**
+ * 필드 하나를 그린다. **control 종류가 위젯을 고른다.**
+ *
+ * 위젯이 아직 없는 control은 `formatValue`가 그린 글자로 남는다 — `formatValue`를 남겨 둔
+ * 이유가 그것이고, 카탈로그 밖 값(검증을 통과하지 못한 문서)을 그리는 데도 쓴다.
+ * 지금 덮은 것과 남은 것은 `test/panels/property-panel.test.tsx`의
+ * `카탈로그의 control마다 대응하는 위젯이 있다`가 카탈로그를 세어 대조한다.
+ *
+ * **노드가 바뀔 때 로컬 초안을 버리는 일은 부르는 쪽의 `key`가 한다.** 이펙트로 동기화하는
+ * 대신 `key`를 고른 근거:
+ *
+ * - **주된 선택 경로에서는 손실이 없다.** 구조 트리로 노드를 고르면 그 `<button>`이 포커스를
+ *   받아 입력에 `blur`가 나고, 그때 초안이 커밋된다(실측: 셸의 입력에 포커스를 준 뒤 트리
+ *   버튼에 포커스를 옮기면 `blur`가 실제로 발생한다).
+ * - **캔버스로 고르면 초안이 사라진다.** 캔버스의 선택은 `<div onClick>`이라 포커스가 옮겨
+ *   가지 않아 `blur`가 없다(실측: `canvas/canvas.tsx`의 클릭 핸들러가 그 `div`에 붙어 있고,
+ *   jsdom에서 클릭만으로는 `activeElement`가 바뀌지 않는다). **이 손실은 설계된 것이다** —
+ *   케이스 `캔버스로 다른 노드를 고르면 커밋되지 않은 타이핑이 사라진다`가 그것을 고정한다.
+ * - 대안(노드가 바뀔 때 초안을 커밋)을 고르지 않은 것은, 사용자가 **다른 노드로 옮겨 가며
+ *   버린** 값을 서버에 쓰게 되기 때문이다. 지우는 쪽이 놀랍지 않다.
+ *
+ * **이펙트로 닫는 판을 만들어 재보지는 않았다** — 위 두 실측만으로 `key`를 골랐다.
+ */
+function PropControl(props: {
+  field: EditorField
+  value: unknown
+  onCommit: (value: unknown) => void
+}): ReactElement {
+  const { field, value, onCommit } = props
+  const id = controlId(field.prop)
+
+  if (field.control === 'text' || field.control === 'textarea' || field.control === 'number') {
+    return <TextControl field={field} value={value} id={id} onCommit={onCommit} />
+  }
+
+  return <>{formatValue(value)}</>
 }
 
 /**
