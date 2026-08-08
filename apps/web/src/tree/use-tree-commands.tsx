@@ -24,7 +24,7 @@ import { useNavigate } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
 import type { TreeMenuNode } from '../api/types'
-import { treeAbilities, type TreeAbilities, type TreeSelection } from './tree-actions'
+import { treeAbilities, treeSpot, type TreeAbilities, type TreeSelection } from './tree-actions'
 
 /** 서버가 이유를 주지 않은 조회 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '메뉴를 불러오지 못했습니다'
@@ -66,6 +66,11 @@ export interface TreeCommands {
   /** Enter로 확정. 빈 문자열이면 아무것도 하지 않는다(D6). */
   submitInput: (title: string) => void
   cancelInput: () => void
+  /** 삭제 확인이 걸려 있으면 `true`(D7). */
+  confirmingRemove: boolean
+  askRemove: () => void
+  confirmRemove: () => void
+  cancelRemove: () => void
 }
 
 export function useTreeCommands(props: {
@@ -86,6 +91,7 @@ export function useTreeCommands(props: {
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [editing, setEditing] = useState<TreeEditing | null>(null)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
 
   /**
    * **선택은 파생값이다(D3).** `picked`가 `null`이면 주소가 말하는 페이지가 선택이다.
@@ -202,6 +208,9 @@ export function useTreeCommands(props: {
   function select(next: TreeSelection | null): void {
     setPicked(next)
     setEditing(null)
+    // **삭제 확인이 함께 풀린다**(D7의 취소 조건 셋 중 하나) — 다른 항목에 대고 두 번째
+    // 클릭이 되면 사용자가 확인한 것과 지워지는 것이 달라진다.
+    setConfirmingRemove(false)
   }
 
   /**
@@ -211,6 +220,8 @@ export function useTreeCommands(props: {
    */
   function openInput(kind: TreeEditing['kind']): void {
     setFailure(null)
+    // **다른 조작을 시작하면 확인이 풀린다**(D7의 셋째 조건).
+    setConfirmingRemove(false)
     setEditing({ kind, initial: kind === 'rename' ? currentTitle() : '' })
   }
 
@@ -281,6 +292,47 @@ export function useTreeCommands(props: {
     )
   }
 
+  /**
+   * 삭제를 실행한다(D7의 두 번째 클릭).
+   *
+   * **지우기 전에 자리를 먼저 읽는다** — 지운 뒤에는 그 노드가 트리에 없어 `treeSpot`이
+   * `null`이고 부모를 알 길이 없다. `StructureToolbar`의 `removeSelected`가 같은 형태다.
+   *
+   * **메뉴를 지우면 선택이 부모로 간다.** 지운 것을 계속 가리키면 툴바가 사라진 항목에
+   * 작동하는 상태가 되고, `treeAbilities`가 전부 `false`를 내므로 사용자는 아무것도 못 하는
+   * 채로 자기 위치를 잃는다. 루트 메뉴였으면 갈 부모가 없어 `null`이다.
+   *
+   * **연 페이지를 지우면 프로젝트 루트로 `replace` 이동한다(D8).** `replace`인 것은 뒤로
+   * 가기가 지워진 페이지로 돌아가면 404를 만나기 때문이다. **열지 않은 페이지를 지운
+   * 경우에는 주소를 건드리지 않는다** — 보고 있던 것이 그대로 열려 있어야 한다.
+   */
+  function confirmRemove(): void {
+    if (menu === null || selection === null) return
+    // 자리를 **지금** 읽는다. `run`은 비동기라 그 안에서는 이미 늦다.
+    const spot = treeSpot(menu, selection)
+    setConfirmingRemove(false)
+
+    if (selection.kind === 'menu') {
+      const parentId = spot?.parentId ?? null
+      const target = selection.id
+      void run(
+        () => api.deleteMenu(projectId, target),
+        () => setPicked(parentId === null ? null : { kind: 'menu', id: parentId }),
+      )
+      return
+    }
+
+    const target = selection.id
+    const wasOpen = pageId === target
+    void run(
+      () => api.deletePage(projectId, target),
+      () => {
+        setPicked(null)
+        if (wasOpen) navigate(`/projects/${projectId}`, { replace: true })
+      },
+    )
+  }
+
   return {
     state,
     selection,
@@ -292,6 +344,15 @@ export function useTreeCommands(props: {
     openInput,
     submitInput,
     cancelInput: () => setEditing(null),
+    confirmingRemove,
+    askRemove: () => {
+      // 확인을 걸면서 열려 있던 입력과 앞 실패를 함께 지운다 — 한 번에 하나만 진행한다.
+      setFailure(null)
+      setEditing(null)
+      setConfirmingRemove(true)
+    },
+    confirmRemove,
+    cancelRemove: () => setConfirmingRemove(false),
   }
 }
 

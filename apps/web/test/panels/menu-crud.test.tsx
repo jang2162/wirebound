@@ -373,3 +373,157 @@ describe('이름 변경', () => {
     expect(api.getTree).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('삭제', () => {
+  /** 확인이 걸린 삭제 버튼. 이름이 바뀌므로 조회도 바뀐다(D7). */
+  function confirmButton(): HTMLButtonElement {
+    return within(toolbar()).getByRole('button', { name: '정말 삭제합니까?' }) as HTMLButtonElement
+  }
+
+  it('한 번 누르면 요청이 나가지 않고 버튼 이름이 바뀐다', async () => {
+    // **모달을 쓰지 않는 근거(D7):** 확인이 같은 버튼 안에서 끝나므로 포커스가 움직이지
+    // 않는다. 앱에 모달 선례가 0건이라 포커스 가두기·Esc·반환 포커스를 이 단계가 처음부터
+    // 만들게 되는데, 그것을 재는 케이스가 이 단계의 나머지보다 커진다.
+    const api = await open()
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+
+    expect(api.deleteMenu).not.toHaveBeenCalled()
+    expect(confirmButton()).toBeDefined()
+    expect(within(toolbar()).queryByRole('button', { name: '삭제' })).toBeNull()
+  })
+
+  it('한 번 더 누르면 나간다', async () => {
+    const api = await open()
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(confirmButton())
+
+    await waitFor(() => expect(api.deleteMenu).toHaveBeenCalledTimes(1))
+    expect(api.deleteMenu).toHaveBeenCalledWith('p-1', 'm-auth')
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+  })
+
+  it('Esc로 확인이 풀린다', async () => {
+    const api = await open()
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.keyDown(confirmButton(), { key: 'Escape' })
+
+    expect(tool('삭제')).toBeDefined()
+    expect(api.deleteMenu).not.toHaveBeenCalled()
+  })
+
+  it('선택을 바꾸면 확인이 풀린다', async () => {
+    // 다른 항목에 대고 두 번째 클릭이 되는 것을 막는다 — 그러면 사용자가 확인한 것과
+    // 지워지는 것이 달라진다.
+    const api = await open()
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(menuButton('주문관리'))
+
+    expect(tool('삭제')).toBeDefined()
+    expect(api.deleteMenu).not.toHaveBeenCalled()
+  })
+
+  it('다른 조작을 시작하면 확인이 풀린다', async () => {
+    const api = await open()
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(tool('이름 변경'))
+
+    expect(tool('삭제')).toBeDefined()
+    expect(api.deleteMenu).not.toHaveBeenCalled()
+  })
+
+  it('메뉴를 지우면 선택이 부모 메뉴로 간다', async () => {
+    // 지운 것을 계속 가리키면 툴바가 사라진 항목에 작동하는 상태가 된다.
+    const api = await open()
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(confirmButton())
+
+    await waitFor(() => expect(api.deleteMenu).toHaveBeenCalledTimes(1))
+    // 부모(`회원관리`)가 눌린 것으로 표시된다.
+    await waitFor(() => {
+      const pressed = treeRegion().querySelectorAll<HTMLElement>('[aria-pressed="true"]')
+      expect([...pressed].map((row) => row.textContent)).toEqual(['회원관리'])
+    })
+  })
+
+  it('루트 메뉴를 지우면 선택이 비워진다', async () => {
+    const api = await open()
+
+    fireEvent.click(menuButton('주문관리'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(confirmButton())
+
+    await waitFor(() => expect(api.deleteMenu).toHaveBeenCalledTimes(1))
+    await waitFor(() => {
+      const pressed = treeRegion().querySelectorAll<HTMLElement>('[aria-pressed="true"]')
+      expect([...pressed]).toHaveLength(0)
+    })
+  })
+
+  it('연 페이지를 지우면 프로젝트 루트로 간다', async () => {
+    // D8 — `replace`인 것은 뒤로 가기가 지워진 페이지로 돌아가면 404를 만나기 때문이다.
+    const api = await open({}, '/projects/p-1/pages/pg-list')
+
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(confirmButton())
+
+    await waitFor(() => expect(api.deletePage).toHaveBeenCalledTimes(1))
+    expect(api.deletePage).toHaveBeenCalledWith('p-1', 'pg-list')
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-1'))
+  })
+
+  it('열지 않은 페이지를 지우면 주소가 그대로다', async () => {
+    const api = await open({}, '/projects/p-1/pages/pg-detail')
+
+    // 열려 있는 것은 `pg-detail`인데 트리에서 `회원 목록`을 골라 지운다.
+    fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 목록' }))
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-list'))
+    // 다시 `pg-detail`로 돌아가 그것을 연 채로 `회원 목록`을 고른다 — 주소와 선택을 가른다.
+    fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 상세' }))
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-detail'))
+
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(confirmButton())
+
+    await waitFor(() => expect(api.deletePage).toHaveBeenCalledTimes(1))
+    expect(api.deletePage).toHaveBeenCalledWith('p-1', 'pg-detail')
+    // 연 페이지를 지웠으니 루트로 간다.
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-1'))
+  })
+
+  it('409를 받으면 그 문장이 남는다', async () => {
+    const api = await open({
+      deleteMenu: vi.fn(async () => {
+        throw new ApiError(409, 'conflict', '하위 메뉴나 페이지가 있어 삭제할 수 없습니다')
+      }),
+    })
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(confirmButton())
+
+    await within(treeRegion()).findByText('하위 메뉴나 페이지가 있어 삭제할 수 없습니다')
+    expect(api.getTree).toHaveBeenCalledTimes(1)
+  })
+
+  it('자식이 있는 메뉴는 삭제가 비활성이다', async () => {
+    // D5의 판정이 화면에 닿는 자리다. 서버도 409로 막지만(웨이브 1 실측: 자식 메뉴만·
+    // 페이지만·둘 다 전부 409), 눌러 봐야 실패할 버튼을 활성으로 두지 않는다.
+    await open()
+
+    fireEvent.click(menuButton('회원관리'))
+
+    expect(tool('삭제').disabled).toBe(true)
+  })
+})

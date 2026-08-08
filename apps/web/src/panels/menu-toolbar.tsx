@@ -10,7 +10,7 @@
  * 경계는 캔버스의 `CanvasBoundary` 하나뿐이라(웨이브 1이 셌다), 던지면 `.wb-shell`이 통째로
  * DOM에서 사라진다. 여기서 부르는 것들은 값으로 답해야 한다.
  */
-import type { ReactElement } from 'react'
+import type { KeyboardEvent, ReactElement } from 'react'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
 import { TreeInput } from './tree-input'
@@ -69,7 +69,24 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
         commands={commands}
         onClick={() => commands.openInput('rename')}
       />
-      <ToolButton label="삭제" ability="remove" commands={commands} onClick={NOT_YET} />
+      {/* **삭제만 버튼 이름이 상태에 따라 바뀐다**(D7). 확인이 같은 버튼 안에서 끝나므로
+          포커스가 움직이지 않는다 — 모달을 쓰지 않은 근거가 그것이다.
+
+          **Esc를 이 버튼에서 받는다.** 확인이 걸린 동안 포커스가 여기 있으므로(방금 눌렀다)
+          키가 이 자리로 온다. 전역 리스너를 두지 않는 것은 그것이 다른 패널의 Esc까지
+          가로채기 때문이다. */}
+      <ToolButton
+        label={commands.confirmingRemove ? REMOVE_CONFIRM_LABEL : REMOVE_LABEL}
+        ability="remove"
+        commands={commands}
+        onClick={commands.confirmingRemove ? commands.confirmRemove : commands.askRemove}
+        onKeyDown={(event) => {
+          if (commands.confirmingRemove && event.key === 'Escape') {
+            event.preventDefault()
+            commands.cancelRemove()
+          }
+        }}
+      />
 
       {/* 입력은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 항목에 붙는 작업인지가
           보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이 그대로 남는다
@@ -93,10 +110,9 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
 /** 인라인 입력의 라벨. 용도가 여럿이지만 입력은 하나다(D6). */
 const INPUT_LABEL = '이름'
 
-/**
- * 아직 배선되지 않은 조작. **판정은 이미 걸려 있고 실행만 다음 태스크가 붙인다.**
- */
-const NOT_YET = (): void => undefined
+/** 삭제 버튼의 두 얼굴(D7). 확인이 걸리면 이름이 바뀌고, 한 번 더 눌러야 나간다. */
+const REMOVE_LABEL = '삭제'
+const REMOVE_CONFIRM_LABEL = '정말 삭제합니까?'
 
 /**
  * 버튼 하나. **비활성 여부와 그 이유가 같은 하나(`ability`)에서 나온다** — 둘을 따로
@@ -110,6 +126,7 @@ function ToolButton(props: {
   ability: keyof TreeAbilities
   commands: TreeCommands
   onClick: () => void
+  onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void
 }): ReactElement {
   const allowed = props.commands.abilities[props.ability]
   const enabled = allowed && !props.commands.busy
@@ -124,6 +141,7 @@ function ToolButton(props: {
       // 고르세요"가 뜨면 거짓말이다.
       title={allowed ? '' : WHY_DISABLED[props.ability]}
       onClick={props.onClick}
+      onKeyDown={props.onKeyDown}
     >
       {props.label}
     </button>
