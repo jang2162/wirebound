@@ -72,9 +72,21 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
       {/* **삭제만 버튼 이름이 상태에 따라 바뀐다**(D7). 확인이 같은 버튼 안에서 끝나므로
           포커스가 움직이지 않는다 — 모달을 쓰지 않은 근거가 그것이다.
 
-          **Esc를 이 버튼에서 받는다.** 확인이 걸린 동안 포커스가 여기 있으므로(방금 눌렀다)
-          키가 이 자리로 온다. 전역 리스너를 두지 않는 것은 그것이 다른 패널의 Esc까지
-          가로채기 때문이다. */}
+          **Esc를 이 버튼에서 받는다** — 전역 리스너를 두지 않는 것은 그것이 다른 패널의
+          Esc까지 가로채기 때문이다.
+
+          **그래서 이 취소는 "포커스가 이 버튼에 있다"를 전제한다. 그 전제는 이 저장소에서
+          검증되지 않는다 — 재고 적는다.** 앞 판은 *"확인이 걸린 동안 포커스가 여기 있으므로
+          (방금 눌렀다)"*라고 적었는데, 이 저장소는 `userEvent`를 0건 쓰고 `fireEvent`만
+          쓰며 **`fireEvent.click`은 포커스를 옮기지 않는다**(실측: 클릭 뒤
+          `document.activeElement`가 이 버튼이 아니고, 포커스를 밖에 둔 채 문서에 Escape를
+          보내면 확인이 풀리지 않는다). **실제 브라우저의 클릭이 버튼에 포커스를 주는지는
+          재지 못했다** — 브라우저·OS에 따라 갈린다고 알려져 있지만 그것도 잰 것이 아니다
+          (`structure-toolbar.tsx`의 `title` 한계 주석과 같은 형식이다).
+
+          케이스 둘이 그 두 쪽을 각각 값으로 고정한다: `버튼에 포커스가 있을 때 Esc로 확인이
+          풀린다`와 `포커스가 버튼 밖이면 Esc가 닿지 않는다`. D7의 나머지 두 취소 조건
+          (선택 변경·다른 조작)은 이 전제를 갖지 않는다. */}
       <ToolButton
         label={commands.confirmingRemove ? REMOVE_CONFIRM_LABEL : REMOVE_LABEL}
         ability="remove"
@@ -98,7 +110,6 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
           key={commands.editing.kind}
           label={INPUT_LABEL}
           initial={commands.editing.initial}
-          disabled={commands.busy}
           onSubmit={commands.submitInput}
           onCancel={commands.cancelInput}
         />

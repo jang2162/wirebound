@@ -8,13 +8,23 @@
  * **Enter만 확정하고 Esc·blur는 취소다.** P2b-2의 속성 편집은 blur에도 커밋했는데
  * **그것은 undo가 받쳐 줬기 때문이다.** 이 경로에는 undo가 없어(D1) "취소하려고 다른 곳을
  * 눌렀는데 이름이 바뀌었다"가 복구 불가한 사고가 된다.
+ *
+ * **`disabled`를 받지 않는다 — 걷어냈다.** 앞 판은 조작이 나가 있는 동안 입력을 잠그려고
+ * `disabled={commands.busy}`를 두었는데 **그 상태가 만들어지지 않는다**: `submitInput`이
+ * 요청을 내기 전에 `setEditing(null)`을 하므로 요청이 나가는 동안 이 컴포넌트는 이미 DOM에
+ * 없고(실측), 다른 조작으로 `busy`가 서면 툴바가 비활성이라 입력을 열 수 없다.
+ * 변이(`disabled={false}`)가 **0 사망**이었고 도달 경로를 찾지 못했다.
+ *
+ * 계획서 Task 10도 그 상태를 만들지 않는다 — 케이스 5가 *"입력이 열려 있는 동안에는 단축키가
+ * 걸리지 않는다"*, 케이스 6이 *"`busy`인 동안 단축키가 걸리지 않는다"*이다(**계획을 읽은
+ * 것이지 잰 것이 아니다**). 웨이브 1에서 `previousMenuSibling`의 잉여 가드를 걷어낸 것과 같은
+ * 판단이고, 다시 필요해지는 조건은 **입력을 연 채로 조작을 내는 호출자가 생기는 때**다.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 
 export function TreeInput(props: {
   label: string
   initial: string
-  disabled: boolean
   onSubmit: (value: string) => void
   onCancel: () => void
 }): ReactElement {
@@ -47,7 +57,6 @@ export function TreeInput(props: {
       type="text"
       aria-label={props.label}
       value={value}
-      disabled={props.disabled}
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={(event) => {
         if (event.key === 'Enter') {
