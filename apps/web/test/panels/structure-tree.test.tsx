@@ -6,6 +6,7 @@
  */
 import { fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WbNode } from '@wirebound/schema'
 import type { EditorStore } from '../../src/store/editor-store'
 import {
   PAGE_ID,
@@ -73,18 +74,34 @@ function structureRegion(): HTMLElement {
   return screen.getByRole('region', { name: '구조 트리' })
 }
 
+/**
+ * 노드 줄이 들어 있는 목록. **region이 아니라 이것으로 좁히는 것은 P2b-3의 툴바 때문이다** —
+ * 조작 버튼이 트리와 같은 region 안에 산다(D4). region 전체에서 버튼을 세면 그 버튼들이
+ * 노드 줄로 섞인다.
+ *
+ * 문서가 없으면 목록 자체가 없다(`열린 페이지가 없습니다`). 그때는 `null`이고, 아래
+ * 헬퍼들이 빈 결과를 낸다 — 던지면 "줄이 없다"를 재는 케이스가 그 자리에서 깨진다.
+ */
+function structureList(): HTMLElement | null {
+  return structureRegion().querySelector<HTMLElement>('.wb-shell-structure')
+}
+
 /** 구조 트리의 노드 줄. 순서는 화면에 그려진 순서 그대로다. */
 function nodeRows(): HTMLElement[] {
-  return within(structureRegion()).queryAllByRole('button')
+  const list = structureList()
+  return list === null ? [] : within(list).queryAllByRole('button')
 }
 
 /** 지금 구분 표시가 붙은 줄. `aria-current`가 표시의 단일 진실이다. */
 function currentRows(): HTMLElement[] {
-  return within(structureRegion()).queryAllByRole('button', { current: true })
+  const list = structureList()
+  return list === null ? [] : within(list).queryAllByRole('button', { current: true })
 }
 
 function row(type: string): HTMLElement {
-  return within(structureRegion()).getByRole('button', { name: type })
+  const list = structureList()
+  if (list === null) throw new Error('구조 트리 목록이 없습니다')
+  return within(list).getByRole('button', { name: type })
 }
 
 describe('구조 트리', () => {
@@ -110,6 +127,24 @@ describe('구조 트리', () => {
     expect(search.contains(field)).toBe(true)
     // 형제는 안에 들어 있지 않다. 이것이 없으면 모두를 한 줄 안에 넣은 구현도 통과한다.
     expect(search.contains(list)).toBe(false)
+  })
+
+  it('children 배열 안에 노드가 아닌 원소가 있어도 셸은 살아 있다', async () => {
+    // **리뷰가 `<App />` 층에서 찾은 자리다.** 웨이브 1 정정이 `structureAbilities`의
+    // 순회를 고쳤지만, 이 문서에서는 **선택이 아직 없어 그 함수가 불리지도 않는다** —
+    // 던지는 것은 `StructureNode`의 `isSelectable(null)`이고 그것은 P2b-3 이전부터
+    // 그 자리에 있던 코드다. 여기는 오류 경계 밖이라 던지면 셸이 통째로 사라진다.
+    await openPage(
+      pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [null as unknown as WbNode, { id: 'n-a', type: 'Text' }],
+      }),
+    )
+
+    expect(screen.getByRole('region', { name: '구조 트리' })).toBeTruthy()
+    // 노드가 아닌 원소는 줄로 그리지 않는다 — 그릴 이름도 고를 id도 없다.
+    expect(nodeRows().map((node) => node.textContent)).toEqual(['Page', 'Text'])
   })
 
   it('노드 타입을 보여준다', async () => {

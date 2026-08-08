@@ -14,6 +14,7 @@ import {
   listComponents,
   registerComponent,
   type EditorControl,
+  type WbNode,
 } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
@@ -452,6 +453,34 @@ describe('속성 패널', () => {
     // 셸이 남아 있다. 가드를 지우면 여기까지 오지 못하고 `.wb-shell`이 DOM에서 사라진다.
     screen.getByRole('heading', { name: PROJECT_NAME })
     expect(document.body.querySelector('.wb-shell')).not.toBeNull()
+  })
+
+  it('children 배열 안에 노드가 아닌 원소가 있어도 노드를 고를 수 있다', async () => {
+    // **웨이브 3 정정이 `<App />` 층에서 절반만 닫혀 있던 자리다 — 리뷰가 찾았고 나도
+    // 재현했다.** `edit/`와 구조 트리는 `safe-walk`·`isNodeShaped`로 닫혔는데 이 패널만
+    // schema의 `findNode`를 쓰고 있었다.
+    //
+    // 실측한 갈래: 그 문서로 **열기만** 하면 셸이 산다(패널이 노드를 찾지 않는다).
+    // **노드를 고르는 순간** `reading 'id'`로 던지고 `.wb-shell`이 DOM에서 사라진다.
+    //
+    // **도달 경로는 없다** — 서버가 봉투를 검증하고 `WbNodeSchema`가 `children` 원소를
+    // 본다. 그래도 닫는 것은 `edit/safe-walk.ts` 머리말이 *"구조 트리·속성 패널은 오류
+    // 경계 밖"*이라고 이 패널을 명시하기 때문이다: 그 성질이 셸 전체로 성립해야 한다.
+    await openPage(
+      pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          null as unknown as WbNode,
+          { id: 'n-text', type: 'Text', props: { content: '살아 있다' } },
+        ],
+      }),
+    )
+
+    select('Text')
+
+    expect(document.body.querySelector('.wb-shell')).not.toBeNull()
+    expect(propRows()).toContainEqual({ label: '내용', value: '살아 있다' })
   })
 
   it('props가 아예 없는 노드를 골라도 값 자리만 빈다', async () => {

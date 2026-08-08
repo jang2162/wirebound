@@ -12,6 +12,7 @@
  * 큐에 쌓이고, 앞 요청이 끝난 뒤 같은 루프가 그것을 집는다.
  */
 import { useCallback } from 'react'
+import type { PatchOp } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
@@ -39,6 +40,28 @@ function skippedNotice(skipped: number, applied: boolean): string {
 export interface EditCommit {
   /** 노드의 prop 하나를 바꾼다. 적용할 수 없으면 아무 일도 일어나지 않는다(D7). */
   commitProp: (nodeId: string, prop: string, value: unknown) => void
+  /**
+   * 이미 만들어진 `ops`를 낸다. **낸 편집이 큐에 들어갔으면 `true`다.**
+   *
+   * `ops`가 `null`인 것은 `edit/ops.ts`의 생성기들이 "요청을 만들지 마라"를 말하는
+   * 방식이고(D7), 그대로 넘길 수 있게 받아 준다 — 부르는 쪽마다 `null` 검사를 두면
+   * 그중 하나가 빠지는 날 잘못된 요청이 나간다.
+   *
+   * **반환값이 있는 것은 구조 편집 때문이다.** 삭제는 편집이 큐에 들어간 뒤에만 선택을
+   * 옮긴다(D5).
+   *
+   * **여기 처음 적었던 인과("실패했는데 옮기면 노드는 그대로인데 선택만 부모로 간다")는
+   * 거짓이다.** 툴바 쪽에서 같은 문장을 고치면서 이 자리를 놓쳤고 리뷰가 잡았다 —
+   * 한 사실을 말하는 다른 곳을 함께 고치지 않은 형태다. 잰 값 둘:
+   *
+   * - **서버 실패는 이 반환값과 무관하다.** `commitOps`는 큐에 넣고 `true`를 내며 409는
+   *   그 뒤에 온다. 그리고 그때 선택은 부모가 아니라 **`null`**이다 — 재조회가 `loadPage`를
+   *   지나고 그것이 선택까지 재설정한다(P2b-2 이월 §1).
+   * - **로컬 실패 경로는 호출자의 앞선 가드가 먼저 잡는다.** 그래서 이 반환값 검사는
+   *   지금 0 사망이다(`panels/structure-toolbar.tsx`의 `removeSelected`·`addNode` 주석에
+   *   무엇이 덮는지 적어 두었다).
+   */
+  commitOps: (ops: PatchOp[] | null) => boolean
   /** 한 단계 되돌린다. **서버에는 새 편집으로 나간다** — 서버에 undo 개념은 없다(README). */
   undo: () => void
   redo: () => void
@@ -177,6 +200,35 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
     step(store.startRedo)
   }, [step, store])
 
+  /**
+   * 편집 하나를 큐에 넣고 전송을 밟는다. **`commitProp`과 구조 편집(P2b-3의 툴바)이
+   * 공유하는 유일한 통로다** — 둘이 각자 `applyEdit` + `pump`를 쓰면 그 사이에 끼는
+   * 규칙(열린 페이지 대조·통지 치우기)이 두 벌이 되고, 한쪽만 고쳐지는 날이 온다.
+   */
+  const commitOps = useCallback(
+    (ops: PatchOp[] | null): boolean => {
+      // 지금 열린 페이지가 아니면 편집을 만들지 않는다. `useOpenPage`가 주소와 대조한
+      // 결과이므로, 주소가 바뀐 뒤 스토어가 아직 앞 페이지를 들고 있는 커밋에서도 여기가
+      // `null`이다. **그 대조를 지우면 앞 페이지의 ops가 다음 페이지 경로로 나간다** —
+      // `test/edit/use-edit-commit.test.tsx`의 `스토어가 다른 페이지를 들고 있으면…`이
+      // 그것을 잡고, `test/store-access.test.ts`의 가드는 "우회를 썼다"는 사실을 잡는다.
+      // **둘은 다른 것을 잡는다:** 가드는 소스 텍스트라 우회의 존재만 알고 무엇이
+      // 잘못되는지 말하지 못하고, 동작 케이스는 그 반대다.
+      if (open === null) return false
+      // 만드는 쪽이 "요청을 보내지 마라"라고 답한 것이다(D7).
+      if (ops === null) return false
+      // 로컬 적용이 실패했다 — 클라이언트가 만든 잘못된 `ops`다. 보내 봐야 서버도 같은
+      // 자리에서 거절한다.
+      if (store.applyEdit(ops) === null) return false
+
+      // 앞 실패의 통지를 치운다. 남겨 두면 사용자가 방금 낸 편집도 실패했다고 읽는다.
+      store.setEditFailure(null)
+      void pump()
+      return true
+    },
+    [open, store, pump],
+  )
+
   const commitProp = useCallback(
     (nodeId: string, prop: string, value: unknown): void => {
       // **재조회 중(`editStatus === 'recovering'`)에도 편집을 받는다.** 막는 판을 고르지
@@ -185,26 +237,15 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // 서버 것으로 놓을 때 함께 버려지고, 알림이 그 수를 합쳐 말한다 — 사용자가 낸 편집이
       // 조용히 되살아나지 않는 것이 요점이고 그것은 스토어 쪽에서 닫힌다.
       //
-      // 지금 열린 페이지의 문서가 아니면 편집을 만들지 않는다. `useOpenPage`가 주소와
-      // 대조한 결과이므로, 주소가 바뀐 뒤 스토어가 아직 앞 페이지를 들고 있는 커밋에서도
-      // 여기가 `null`이다. **그 대조를 지우면 앞 페이지의 ops가 다음 페이지 경로로 나간다** —
-      // `test/edit/use-edit-commit.test.tsx`의 `스토어가 다른 페이지를 들고 있으면…`이
-      // 그것을 잡고, `test/store-access.test.ts`의 가드는 "우회를 썼다"는 사실을 잡는다.
-      // **둘은 다른 것을 잡는다:** 가드는 소스 텍스트라 우회의 존재만 알고 무엇이 잘못되는지
-      // 말하지 못하고, 동작 케이스는 그 반대다.
+      // **`open`을 여기서도 보는 것은 `open.document`가 필요해서다.** 열린 페이지 대조
+      // 자체는 `commitOps`가 다시 한다 — 그쪽이 그 규칙을 갖는 자리다.
       if (open === null) return
 
-      const ops = propOps(open.document, nodeId, prop, value)
-      // 문서에 없는 노드다. 보내 봐야 서버가 409/422를 낸다(D7).
-      if (ops === null) return
-      if (store.applyEdit(ops) === null) return
-
-      // 앞 실패의 통지를 치운다. 남겨 두면 사용자가 방금 낸 편집도 실패했다고 읽는다.
-      store.setEditFailure(null)
-      void pump()
+      // 문서에 없는 노드면 `propOps`가 `null`을 내고 `commitOps`가 그 자리에서 돌아온다(D7).
+      commitOps(propOps(open.document, nodeId, prop, value))
     },
-    [open, store, pump],
+    [open, commitOps],
   )
 
-  return { commitProp, undo, redo, canUndo, canRedo, status }
+  return { commitProp, commitOps, undo, redo, canUndo, canRedo, status }
 }
