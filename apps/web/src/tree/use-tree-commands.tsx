@@ -71,6 +71,8 @@ export interface TreeCommands {
   askRemove: () => void
   confirmRemove: () => void
   cancelRemove: () => void
+  /** 형제 사이에서 한 칸 옮긴다. `-1`이면 위로, `+1`이면 아래로. */
+  move: (delta: -1 | 1) => void
 }
 
 export function useTreeCommands(props: {
@@ -330,6 +332,46 @@ export function useTreeCommands(props: {
   }
 
   /**
+   * 형제 사이에서 한 칸 옮긴다(Task 7). `delta`가 `-1`이면 위로, `+1`이면 아래로다.
+   *
+   * **목적지가 `index + delta`이고 방향 보정이 없는 것은 서버가 결과 배열 기준이기
+   * 때문이다 — 잰 값이다**(계획서 "계획이 재지 않은 것" #1. api 하네스로 재고 임시 파일을
+   * 지웠다):
+   *
+   * ```
+   * 메뉴   [A:0 B:1 C:2] 에 PATCH {sortOrder: 2} (A)  →  [B:0 C:1 A:2]   결과 기준
+   * 페이지 [A:0 B:1 C:2] 에 PATCH {sortOrder: 2} (A)  →  [B:0 C:1 A:2]   같다
+   * 메뉴   [A:0 B:1 C:2] 에 PATCH {sortOrder: 0} (B)  →  [B:0 A:1 C:2]   반대 방향도 맞는다
+   * ```
+   *
+   * **메뉴와 페이지를 각각 쟀다** — 서로 다른 저장소 함수를 지나므로(`repos/menu.ts` vs
+   * `repos/pages.ts`) 한쪽만 재고 양쪽에 쓸 수 없었다. 값은 같았다.
+   *
+   * **`treeSpot.index`를 쓰지 `node.sortOrder`를 쓰지 않는다.** 그 인덱스는 `sortOrder`
+   * 오름차순으로 정렬한 뒤의 자리이고(웨이브 1), 서버가 0부터 연속으로 재번호한다는 것은
+   * **서버의 불변식이지 이 화면이 지킬 수 있는 것이 아니다.**
+   * `sortOrder가 0부터 연속이 아닌 트리에서도 목적지가 맞는다`가 그것을 못박는다.
+   *
+   * **페이지는 `sortOrder` 하나만 싣는다** — `menuNodeId`가 섞여 나가면 사용자가 옮기지
+   * 않은 소속까지 덮어쓴다(서버가 그 키를 받으므로 실수가 조용히 통과한다).
+   *
+   * **선택은 손대지 않는다.** id가 바뀌지 않으므로 저절로 따라간다 — 옮긴 뒤 다시 골라야
+   * 하면 연속으로 두 칸 옮길 수 없다.
+   */
+  function move(delta: -1 | 1): void {
+    if (menu === null || selection === null) return
+    const spot = treeSpot(menu, selection)
+    if (spot === null) return
+
+    const target = selection.id
+    const sortOrder = spot.index + delta
+    void run(async () => {
+      if (selection.kind === 'menu') await api.updateMenu(projectId, target, { sortOrder })
+      else await api.updatePage(projectId, target, { sortOrder })
+    })
+  }
+
+  /**
    * 삭제를 실행한다(D7의 두 번째 클릭).
    *
    * **지우기 전에 자리를 먼저 읽는다** — 지운 뒤에는 그 노드가 트리에 없어 `treeSpot`이
@@ -403,6 +445,7 @@ export function useTreeCommands(props: {
     },
     confirmRemove,
     cancelRemove: () => setConfirmingRemove(false),
+    move,
   }
 }
 
