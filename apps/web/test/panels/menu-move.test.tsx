@@ -217,3 +217,110 @@ describe('위/아래 순서 이동', () => {
     expect(api.getTree).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('메뉴 들여쓰기·내어쓰기', () => {
+  it('들여쓰기는 앞 형제 메뉴의 자식이 된다', async () => {
+    // **`sortOrder`를 주지 않는다 — 잰 값이다**(계획서 재라 #2). `PATCH {parentId}`만 주면
+    // 새 부모의 **맨 뒤**로 간다: `M1`(자식 둘)에 `M2`를 그렇게 옮기니
+    // `자식1:0 자식2:1 M2:2`였다. 들여쓰기의 정의가 *"앞 형제의 마지막 자식"*이므로 그대로 맞다.
+    const api = await open()
+
+    fireEvent.click(menuButton('등급'))
+    fireEvent.click(tool('들여쓰기'))
+
+    await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-grade', { parentId: 'm-auth' })
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+  })
+
+  it('첫 형제는 들여쓰기가 비활성이다', async () => {
+    await open()
+
+    fireEvent.click(menuButton('권한'))
+
+    expect(tool('들여쓰기').disabled).toBe(true)
+  })
+
+  it('내어쓰기는 부모의 다음 형제가 된다', async () => {
+    // **여기는 `sortOrder`를 함께 준다.** `parentId`만 주면 맨 뒤로 가는데(위 실측) 내어쓰기의
+    // 정의는 *"부모의 **다음** 형제"*라 자리를 지목해야 한다. 둘을 함께 주면 그 값이 **새
+    // 부모의 형제 배열 기준**으로 삽입된다 — 잰 값이다: `M1`(자식 둘)에
+    // `{parentId, sortOrder: 1}`을 주니 `자식1:0 M3:1 자식2:2`가 됐다.
+    const api = await open()
+
+    fireEvent.click(menuButton('등급'))
+    fireEvent.click(tool('내어쓰기'))
+
+    await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+    // 부모(`회원관리`)는 루트 배열의 0번이므로 그 다음 자리는 1이다.
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-grade', { parentId: null, sortOrder: 1 })
+  })
+
+  it('루트 메뉴는 내어쓰기가 비활성이다', async () => {
+    await open()
+
+    fireEvent.click(menuButton('주문관리'))
+
+    expect(tool('내어쓰기').disabled).toBe(true)
+  })
+
+  it('두 층 아래에서 내어쓰면 조부모의 자식이 된다', async () => {
+    // 부모가 루트가 아닌 경우 — `parentId`가 `null`이 아니라 조부모 id다.
+    const deep = (): TreeMenuNode[] => [
+      {
+        id: 'm-member',
+        title: '회원관리',
+        sortOrder: 0,
+        pages: [],
+        children: [
+          {
+            id: 'm-auth',
+            title: '권한',
+            sortOrder: 0,
+            pages: [],
+            children: [{ id: 'm-role', title: '역할', sortOrder: 0, pages: [], children: [] }],
+          },
+          { id: 'm-grade', title: '등급', sortOrder: 1, pages: [], children: [] },
+        ],
+      },
+    ]
+    const api = await open({}, '/projects/p-1', deep)
+
+    fireEvent.click(menuButton('역할'))
+    fireEvent.click(tool('내어쓰기'))
+
+    await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+    // 부모(`권한`)는 `회원관리`의 0번 자식이므로 다음 자리는 1이다.
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-role', { parentId: 'm-member', sortOrder: 1 })
+  })
+
+  it('페이지 선택에서는 둘 다 비활성이다', async () => {
+    // D5 — 트리가 페이지를 먼저 그리므로 페이지의 앞 형제는 항상 페이지이고, 페이지는
+    // 자식을 갖지 못한다.
+    await open({}, '/projects/p-1/pages/pg-detail')
+
+    expect(tool('들여쓰기').disabled).toBe(true)
+    expect(tool('내어쓰기').disabled).toBe(true)
+  })
+
+  it('내어쓴 뒤 들여쓰면 제자리가 아니다', async () => {
+    // **P2b-3에서 구조 트리가 같은 성질을 못박았고 여기서도 재서 확인했다.** 들여쓰기가
+    // 언제나 앞 형제의 **마지막** 자식으로 가기 때문이다 — 원래 자리가 마지막이 아니었으면
+    // 돌아오지 않는다.
+    //
+    // `등급`은 `권한`(0) 다음 1번이고 뒤에 `이력`(2)이 있다. 내어썼다가 다시 들여쓰면
+    // `권한`의 **마지막** 자식이 되는데, 원래는 `권한`의 형제였다.
+    const api = await open()
+
+    fireEvent.click(menuButton('등급'))
+    fireEvent.click(tool('내어쓰기'))
+    await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-grade', { parentId: null, sortOrder: 1 })
+
+    // 되돌리는 조작(들여쓰기)이 내는 본문은 그 역이 아니다 — 자리를 지목하지 않는다.
+    fireEvent.click(tool('들여쓰기'))
+    await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(2))
+    // 되돌리는 조작의 본문에는 `sortOrder`가 없다 — 자리를 지목하지 않고 맨 뒤로 간다.
+    expect(api.updateMenu).toHaveBeenLastCalledWith('p-1', 'm-grade', { parentId: 'm-auth' })
+  })
+})

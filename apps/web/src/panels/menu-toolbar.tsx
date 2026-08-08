@@ -42,9 +42,8 @@ const WHY_DISABLED: Record<keyof TreeAbilities, string> = {
 /**
  * 툴바. **판정도 조작도 갖지 않는다** — `useTreeCommands`가 준 것을 그릴 뿐이다.
  *
- * **계층 이동 둘(`들여쓰기`·`내어쓰기`)과 `옮기기`는 아직 그리지 않는다.** 판정
- * (`treeAbilities`)에는 이미 있지만 그것을 실행하는 자리가 다음 태스크다 — 눌러도 아무 일이
- * 없는 버튼을 두면 비활성과 구별되지 않는다.
+ * **`옮기기`는 아직 그리지 않는다.** 판정(`treeAbilities.reparent`)에는 이미 있지만 그것을
+ * 실행하는 자리가 다음 태스크다 — 눌러도 아무 일이 없는 버튼을 두면 비활성과 구별되지 않는다.
  */
 export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
   const { commands } = props
@@ -111,6 +110,19 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
         ability="moveDown"
         commands={commands}
         onClick={() => commands.move(1)}
+      />
+
+      <ToolButton
+        label="들여쓰기"
+        ability="indent"
+        commands={commands}
+        onClick={commands.indent}
+      />
+      <ToolButton
+        label="내어쓰기"
+        ability="outdent"
+        commands={commands}
+        onClick={commands.outdent}
       />
 
       {/* 입력은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 항목에 붙는 작업인지가

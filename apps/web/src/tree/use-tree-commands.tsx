@@ -24,7 +24,14 @@ import { useNavigate } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
 import type { TreeMenuNode } from '../api/types'
-import { treeAbilities, treeSpot, type TreeAbilities, type TreeSelection } from './tree-actions'
+import {
+  menuOutdentTarget,
+  previousMenuSibling,
+  treeAbilities,
+  treeSpot,
+  type TreeAbilities,
+  type TreeSelection,
+} from './tree-actions'
 
 /** 서버가 이유를 주지 않은 조회 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '메뉴를 불러오지 못했습니다'
@@ -73,6 +80,10 @@ export interface TreeCommands {
   cancelRemove: () => void
   /** 형제 사이에서 한 칸 옮긴다. `-1`이면 위로, `+1`이면 아래로. */
   move: (delta: -1 | 1) => void
+  /** 한 단계 안으로 — 앞 형제 메뉴의 마지막 자식이 된다. */
+  indent: () => void
+  /** 한 단계 밖으로 — 부모의 다음 형제가 된다. */
+  outdent: () => void
 }
 
 export function useTreeCommands(props: {
@@ -372,6 +383,71 @@ export function useTreeCommands(props: {
   }
 
   /**
+   * 한 단계 안으로 — **앞 형제 메뉴의 마지막 자식**이 된다(Task 8).
+   *
+   * **`sortOrder`를 주지 않는다 — 잰 값이다**(계획서 "계획이 재지 않은 것" #2. api 하네스로
+   * 재고 임시 파일을 지웠다): `PATCH {parentId}`만 주면 **새 부모의 맨 뒤**로 간다.
+   *
+   * ```
+   * M1(자식1:0 자식2:1) 에 M2를 PATCH {parentId: M1}  →  자식1:0 자식2:1 M2:2
+   * ```
+   *
+   * 들여쓰기의 정의가 *"앞 형제의 **마지막** 자식"*(P2b-3의 정의를 그대로 쓴다)이므로 그
+   * 기본 동작이 곧 목적지다 — 자리를 지목할 필요가 없다.
+   *
+   * **`previousMenuSibling`이 `null`이면 되돌아온다 — 그 가드는 0 사망이다(재 봤다).**
+   * 덮는 것은 `treeAbilities.indent`이고, 그것이 버튼의 `disabled`와 단축키의 판정 통과
+   * 둘 다에 걸린다(단축키도 `if (!abilities[…]) return`을 지난다 — Task 10). **P2b-3에서
+   * 구조 트리의 같은 자리가 같은 이유로 0 사망이었다.**
+   *
+   * 남기는 것은 그것이 벗겨졌을 때의 `TypeError` 방벽이기 때문이다 — `previous.id`를 읽는
+   * 순간 던지고, 이 트리에는 오류 경계가 없다. **닫는 케이스는 만들지 못했다:** 판정을
+   * 지나지 않고 이 함수에 닿는 경로가 화면에도 단축키에도 없다.
+   */
+  function indent(): void {
+    if (menu === null || selection === null || selection.kind !== 'menu') return
+    const previous = previousMenuSibling(menu, selection.id)
+    if (previous === null) return
+
+    const target = selection.id
+    void run(async () => {
+      await api.updateMenu(projectId, target, { parentId: previous.id })
+    })
+  }
+
+  /**
+   * 한 단계 밖으로 — **부모의 다음 형제**가 된다(Task 8).
+   *
+   * **여기는 `sortOrder`를 함께 준다.** `parentId`만 주면 맨 뒤로 가는데(위 실측) 내어쓰기는
+   * 자리를 지목해야 하기 때문이다. **둘을 함께 주면 그 값이 새 부모의 형제 배열 기준으로
+   * 삽입된다 — 그것도 쟀다:**
+   *
+   * ```
+   * M1(자식1:0 자식2:1) 에 M3을 PATCH {parentId: M1, sortOrder: 1}  →  자식1:0 M3:1 자식2:2
+   * ```
+   *
+   * **`menuOutdentTarget`이 조부모 id와 부모의 자리를 준다.** `index + 1`을 여기서 만드는
+   * 것은 그 함수가 자리만 알려 주고 `sortOrder`를 만들지 않기로 했기 때문이다.
+   *
+   * **역방향이 항등이 아니다** — 내어썼다가 들여쓰면 제자리가 아니다(들여쓰기가 언제나
+   * 마지막 자식으로 가므로). P2b-3에서 구조 트리가 같은 성질을 못박았고 여기서도 케이스로
+   * 고정했다.
+   */
+  function outdent(): void {
+    if (menu === null || selection === null || selection.kind !== 'menu') return
+    const destination = menuOutdentTarget(menu, selection.id)
+    if (destination === null) return
+
+    const target = selection.id
+    void run(async () => {
+      await api.updateMenu(projectId, target, {
+        parentId: destination.parentId,
+        sortOrder: destination.index + 1,
+      })
+    })
+  }
+
+  /**
    * 삭제를 실행한다(D7의 두 번째 클릭).
    *
    * **지우기 전에 자리를 먼저 읽는다** — 지운 뒤에는 그 노드가 트리에 없어 `treeSpot`이
@@ -446,6 +522,8 @@ export function useTreeCommands(props: {
     confirmRemove,
     cancelRemove: () => setConfirmingRemove(false),
     move,
+    indent,
+    outdent,
   }
 }
 
