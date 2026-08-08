@@ -99,7 +99,11 @@ async function open(
   const harness = stubs(overrides, treeOf)
   renderWithProviders(<App />, { client: harness.client, route })
   await screen.findByRole('heading', { name: PROJECT_NAME })
-  await screen.findByText('회원관리')
+  // **트리가 성공 대역으로 그려질 때까지 기다린다** — 첫 루트 메뉴의 제목으로 본다.
+  // 트리를 바꿔 넣는 케이스가 있으므로 고정 문자열을 쓰지 않는다.
+  const first = treeOf()[0]
+  if (first === undefined) throw new Error('트리가 비었다')
+  await screen.findByText(first.title)
   return harness
 }
 
@@ -322,5 +326,122 @@ describe('메뉴 들여쓰기·내어쓰기', () => {
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(2))
     // 되돌리는 조작의 본문에는 `sortOrder`가 없다 — 자리를 지목하지 않고 맨 뒤로 간다.
     expect(api.updateMenu).toHaveBeenLastCalledWith('p-1', 'm-grade', { parentId: 'm-auth' })
+  })
+})
+
+describe('페이지의 소속 메뉴 고르기', () => {
+  /** 트리 region 안의 활성 Tab 정지점. `<select>` vs 버튼 목록의 비용을 세는 데 쓴다. */
+  function tabStops(): number {
+    const stops = treeRegion().querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled])',
+    )
+    return stops.length
+  }
+
+  /** 트리에 있는 메뉴 수. **손으로 적지 않는다** — 목록의 분모가 이것이어야 한다. */
+  function countMenus(nodes: TreeMenuNode[]): number {
+    return nodes.reduce((total, node) => total + 1 + countMenus(node.children), 0)
+  }
+
+  function picker(): HTMLSelectElement {
+    return within(toolbar()).getByRole('combobox', { name: '소속 메뉴' }) as HTMLSelectElement
+  }
+
+  it('옮기기를 누르면 지금 소속을 뺀 모든 메뉴가 목록에 뜬다', async () => {
+    // **분모를 손으로 적지 않는다**(P2b-3의 실증: 손목록은 카탈로그가 늘 때 죽는다).
+    // 트리의 메뉴 수에서 지금 소속 하나를 뺀 것이 목록 길이다.
+    await open({}, '/projects/p-1/pages/pg-detail')
+
+    fireEvent.click(tool('옮기기'))
+
+    // **첫 항목은 자리표시(`고르세요`)다** — 그것이 없으면 목록을 여는 순간 첫 메뉴가 고른
+    // 것으로 읽힌다. 분모에서 빼고 센다.
+    const options = within(picker())
+      .getAllByRole('option')
+      .filter((option) => (option as HTMLOptionElement).value !== '')
+    expect(options).toHaveLength(countMenus(tree()) - 1)
+    // 경로에 조상 제목이 들어간다 — 제목이 같은 메뉴를 가릴 수 있어야 한다.
+    expect(options.map((o) => o.textContent)).toContain('회원관리 / 권한')
+    // **지금 소속(`회원관리`)은 없다** — 고를 이유가 없다.
+    expect(options.map((o) => o.textContent)).not.toContain('회원관리')
+  })
+
+  it('고르면 updatePage가 소속만 싣고 나간다', async () => {
+    // **`sortOrder`를 주지 않는다 — 잰 값이다**(계획서 재라 #5): `PATCH {menuNodeId}`만 주면
+    // 새 메뉴의 **맨 뒤**로 간다(`TO(T1:0 T2:1)`에 옮기니 `T1:0 T2:1 옮길것:2`). 옮기는
+    // 사람이 자리를 지목하지 않았으므로 그 기본 동작이 맞다.
+    const api = await open({}, '/projects/p-1/pages/pg-detail')
+
+    fireEvent.click(tool('옮기기'))
+    fireEvent.change(picker(), { target: { value: 'm-auth' } })
+
+    await waitFor(() => expect(api.updatePage).toHaveBeenCalledTimes(1))
+    expect(api.updatePage).toHaveBeenCalledWith('p-1', 'pg-detail', { menuNodeId: 'm-auth' })
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+  })
+
+  it('취소로 닫히고 요청이 나가지 않는다', async () => {
+    const api = await open({}, '/projects/p-1/pages/pg-detail')
+
+    fireEvent.click(tool('옮기기'))
+    fireEvent.click(within(toolbar()).getByRole('button', { name: '취소' }))
+
+    expect(within(toolbar()).queryByRole('combobox', { name: '소속 메뉴' })).toBeNull()
+    expect(api.updatePage).not.toHaveBeenCalled()
+  })
+
+  it('닫혀 있을 때 목록이 DOM에 없다', async () => {
+    // 남기면 Tab 순서에 정지점이 그대로 남는다(`StructureToolbar`가 `TypePicker`에 쓴 것과
+    // 같은 근거). **`<select>`를 고른 근거도 이 수다** — 버튼 목록이면 정지점이 메뉴 수만큼
+    // 늘고 그 수에 상한이 없다(`TypePicker`는 18로 고정이었다).
+    await open({}, '/projects/p-1/pages/pg-detail')
+
+    const closed = tabStops()
+    fireEvent.click(tool('옮기기'))
+    const opened = tabStops()
+
+    // `<select>` 하나 + `취소` 하나가 는다. 버튼 목록이었다면 메뉴 수(-1)만큼 늘었을 것이다.
+    expect(opened - closed).toBe(2)
+  })
+
+  it('메뉴 선택에서는 옮기기가 비활성이다', async () => {
+    await open()
+
+    fireEvent.click(menuButton('등급'))
+
+    expect(tool('옮기기').disabled).toBe(true)
+  })
+
+  it('메뉴가 하나뿐이면 비활성이다', async () => {
+    // 옮길 곳이 자기 소속뿐이라 고를 것이 없다(Task 2의 판정).
+    const single = (): TreeMenuNode[] => [
+      {
+        id: 'm-only',
+        title: '유일',
+        sortOrder: 0,
+        pages: [{ id: 'pg-list', title: '회원 목록', sortOrder: 0 }],
+        children: [],
+      },
+    ]
+    await open({}, '/projects/p-1/pages/pg-list', single)
+
+    expect(tool('옮기기').disabled).toBe(true)
+  })
+
+  it('실패하면 이유가 남고 트리를 다시 받지 않는다', async () => {
+    const api = await open(
+      {
+        updatePage: vi.fn(async () => {
+          throw new ApiError(404, 'not-found', '대상을 찾을 수 없습니다')
+        }),
+      },
+      '/projects/p-1/pages/pg-detail',
+    )
+
+    fireEvent.click(tool('옮기기'))
+    fireEvent.change(picker(), { target: { value: 'm-auth' } })
+
+    await within(treeRegion()).findByText('대상을 찾을 수 없습니다')
+    expect(api.getTree).toHaveBeenCalledTimes(1)
   })
 })

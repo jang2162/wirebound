@@ -13,6 +13,7 @@
 import type { KeyboardEvent, ReactElement } from 'react'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
+import { MenuPicker } from './menu-picker'
 import { TreeInput } from './tree-input'
 
 /**
@@ -42,8 +43,7 @@ const WHY_DISABLED: Record<keyof TreeAbilities, string> = {
 /**
  * 툴바. **판정도 조작도 갖지 않는다** — `useTreeCommands`가 준 것을 그릴 뿐이다.
  *
- * **`옮기기`는 아직 그리지 않는다.** 판정(`treeAbilities.reparent`)에는 이미 있지만 그것을
- * 실행하는 자리가 다음 태스크다 — 눌러도 아무 일이 없는 버튼을 두면 비활성과 구별되지 않는다.
+ * **조작 아홉이 전부 여기 있다.** 판정(`treeAbilities`)의 아홉과 짝이 맞는다.
  */
 export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
   const { commands } = props
@@ -125,9 +125,23 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
         onClick={commands.outdent}
       />
 
+      <ToolButton
+        label="옮기기"
+        ability="reparent"
+        commands={commands}
+        onClick={commands.openReparent}
+      />
+
       {/* 입력은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 항목에 붙는 작업인지가
           보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이 그대로 남는다
           (`StructureToolbar`가 `TypePicker`에 쓴 것과 같은 근거). */}
+      {commands.reparenting !== null && (
+        <MenuPicker
+          options={commands.reparenting}
+          onPick={commands.reparentTo}
+          onCancel={commands.cancelReparent}
+        />
+      )}
       {commands.editing !== null && (
         <TreeInput
           // **용도가 바뀌면 새 인스턴스를 마운트한다.** 같은 자리에 남겨 두면 앞 용도의

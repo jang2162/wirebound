@@ -25,6 +25,7 @@ import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
 import type { TreeMenuNode } from '../api/types'
 import {
+  flattenMenus,
   menuOutdentTarget,
   previousMenuSibling,
   treeAbilities,
@@ -84,6 +85,11 @@ export interface TreeCommands {
   indent: () => void
   /** 한 단계 밖으로 — 부모의 다음 형제가 된다. */
   outdent: () => void
+  /** 소속 메뉴 목록이 열려 있으면 고를 수 있는 것들. 닫혀 있으면 `null`. */
+  reparenting: { id: string; path: string }[] | null
+  openReparent: () => void
+  reparentTo: (menuId: string) => void
+  cancelReparent: () => void
 }
 
 export function useTreeCommands(props: {
@@ -124,6 +130,7 @@ export function useTreeCommands(props: {
   const [failure, setFailure] = useState<Failure | null>(null)
   const [editing, setEditing] = useState<TreeEditing | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [pickingMenu, setPickingMenu] = useState(false)
 
   /**
    * **선택은 파생값이다(D3).** `picked`가 `null`이면 주소가 말하는 페이지가 선택이다.
@@ -250,6 +257,7 @@ export function useTreeCommands(props: {
   function select(next: TreeSelection | null): void {
     setPicked(next)
     setEditing(null)
+    setPickingMenu(false)
     // **삭제 확인이 함께 풀린다**(D7의 취소 조건 셋 중 하나) — 다른 항목에 대고 두 번째
     // 클릭이 되면 사용자가 확인한 것과 지워지는 것이 달라진다.
     setConfirmingRemove(false)
@@ -272,6 +280,7 @@ export function useTreeCommands(props: {
     setFailure(null)
     // **다른 조작을 시작하면 확인이 풀린다**(D7의 셋째 조건).
     setConfirmingRemove(false)
+    setPickingMenu(false)
     setEditing({ kind, initial: kind === 'rename' ? currentTitle() : '' })
   }
 
@@ -448,6 +457,45 @@ export function useTreeCommands(props: {
   }
 
   /**
+   * 소속 메뉴 목록을 연다(Task 9). **지금 소속을 목록에서 뺀다** — 고를 이유가 없다.
+   *
+   * 목록은 `flattenMenus`가 만든다(손목록을 두지 않는다). 지금 소속은 `treeSpot`이 준
+   * `parentId`이고, 페이지의 그 값은 소속 메뉴 id다.
+   */
+  const reparenting: { id: string; path: string }[] | null = (() => {
+    if (!pickingMenu || menu === null || selection === null || selection.kind !== 'page') return null
+    const owner = treeSpot(menu, selection)?.parentId ?? null
+    return flattenMenus(menu).filter((option) => option.id !== owner)
+  })()
+
+  /**
+   * 고른 메뉴로 페이지를 옮긴다.
+   *
+   * **`sortOrder`를 주지 않는다 — 잰 값이다**(계획서 "계획이 재지 않은 것" #5. api 하네스로
+   * 재고 임시 파일을 지웠다):
+   *
+   * ```
+   * TO(T1:0 T2:1) 에 PATCH {menuNodeId: TO}               →  T1:0 T2:1 옮길것:2   (맨 뒤)
+   * TO(T1:0 T2:1) 에 PATCH {menuNodeId: TO, sortOrder: 1} →  T1:0 옮길것2:1 T2:2  (그 자리)
+   * ```
+   *
+   * 옮기는 사람이 자리를 지목하지 않았으므로 맨 뒤가 맞다 — 지목하고 싶으면 옮긴 뒤
+   * 위/아래로 옮기면 된다.
+   *
+   * **선택을 옮기지 않는다.** 페이지 선택은 주소에서만 오고(D3의 귀결) 이 조작은 주소를
+   * 건드리지 않으므로, 옮긴 뒤에도 같은 페이지가 열린 채 선택으로 남는다 — **웨이브 2가
+   * 지운 `wasOpen` 가지가 되살아나지 않는다.**
+   */
+  function reparentTo(menuId: string): void {
+    if (selection === null || selection.kind !== 'page') return
+    const target = selection.id
+    setPickingMenu(false)
+    void run(async () => {
+      await api.updatePage(projectId, target, { menuNodeId: menuId })
+    })
+  }
+
+  /**
    * 삭제를 실행한다(D7의 두 번째 클릭).
    *
    * **지우기 전에 자리를 먼저 읽는다** — 지운 뒤에는 그 노드가 트리에 없어 `treeSpot`이
@@ -524,6 +572,16 @@ export function useTreeCommands(props: {
     move,
     indent,
     outdent,
+    reparenting,
+    openReparent: () => {
+      if (inFlight.current) return
+      setFailure(null)
+      setEditing(null)
+      setConfirmingRemove(false)
+      setPickingMenu(true)
+    },
+    reparentTo,
+    cancelReparent: () => setPickingMenu(false),
   }
 }
 
