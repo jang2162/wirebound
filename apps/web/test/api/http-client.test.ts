@@ -117,6 +117,61 @@ describe('createHttpClient', () => {
     expect(result).toEqual([treeNode])
   })
 
+  // **아래 셋은 오늘 매 렌더마다 주소가 된다.** 실측(진짜 `<App />`):
+  //
+  //   `TreePage.id: ''`      → `PageLink`가 `/projects/p1/pages/`     → innerHTML 0자, `.wb-shell` 없음
+  //   `ProjectDetail.id: ''` → 같은 `PageLink`가 `/projects/pages/pg1` → 0자, 없음
+  //                            (`routes/editor.tsx`가 **조회해 온** id를 트리에 넘긴다)
+  //   목록의 `ProjectDetail.id: ''` → `<Link>`가 `/projects/`          → 0자, 없음
+  //
+  // `app.tsx`에 `*` 라우트가 없어 어느 것도 잡히지 않는다. `SHAPES.pageDetail`이 막는 것과
+  // **같은 결과**인데 이쪽이 먼저 도달한다.
+  //
+  // **갈래를 나눠 둔 것은 구분력 때문이다** — 한 `it`에 묶으면 `isTreePage`를 고쳐도
+  // `isProjectDetail`을 고쳐도 "1 사망"으로 같아 보여 어느 검사가 무엇을 지키는지 드러나지 않는다.
+  it('트리의 페이지 id가 빈 문자열이면 ApiError를 던진다', async () => {
+    const menu = [
+      { id: 'm1', title: '메뉴', sortOrder: 0, pages: [{ id: '', title: '목록', sortOrder: 0 }], children: [] },
+    ]
+    const stub = stubFetch(jsonResponse(200, { menu }))
+
+    const error = asApiError(await createHttpClient(stub.fetchImpl).getTree('p1').catch((e: unknown) => e))
+
+    expect(error.code).toBe('internal')
+  })
+
+  it('프로젝트 id가 빈 문자열이면 ApiError를 던진다', async () => {
+    const stub = stubFetch(jsonResponse(200, { ...project, id: '' }))
+
+    const error = asApiError(await createHttpClient(stub.fetchImpl).getProject('p1').catch((e: unknown) => e))
+
+    expect(error.code).toBe('internal')
+  })
+
+  it('프로젝트 목록의 id가 빈 문자열이면 ApiError를 던진다', async () => {
+    // 목록과 상세가 같은 `isProjectDetail`을 지나지만 부르는 자리가 달라 따로 본다.
+    const stub = stubFetch(jsonResponse(200, [{ ...project, id: '' }]))
+
+    const error = asApiError(await createHttpClient(stub.fetchImpl).listProjects().catch((e: unknown) => e))
+
+    expect(error.code).toBe('internal')
+  })
+
+  it('비어 있지 않은 id는 그대로 통과한다', async () => {
+    // **과도 차단을 재는 자리다.** 위 검사가 "문자열이면 통과"보다 좁아졌으므로, 정상 id가
+    // 막히지 않는지 따로 본다. 공백 한 칸은 통과해야 한다 — 실측으로 그 주소는 라우트가
+    // 잡히고 셸이 산다(`/projects/p1/pages/%20`).
+    const ids = ['pg1', ' ', '0', '한글', '../x', '/', 'a'.repeat(200), '3f2504e0-4f89-11d3-9a0c-0305e82c3301']
+
+    for (const id of ids) {
+      const treeStub = stubFetch(jsonResponse(200, { menu: [{ ...treeNode, pages: [{ id, title: '목록', sortOrder: 0 }], children: [] }] }))
+      await expect(createHttpClient(treeStub.fetchImpl).getTree('p1'), id).resolves.toBeDefined()
+
+      const projectStub = stubFetch(jsonResponse(200, { ...project, id }))
+      await expect(createHttpClient(projectStub.fetchImpl).getProject('p1'), id).resolves.toBeDefined()
+    }
+  })
+
   it("모든 요청에 credentials: 'same-origin'이 붙는다", async () => {
     // 본문이 있는 요청과 없는 요청, GET과 POST를 섞어 부른다 — 한 곳에만 붙인
     // 구현이 통과하지 못하게 하려는 것이다.

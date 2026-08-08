@@ -118,17 +118,31 @@ function isTreeMenuNode(value: unknown): boolean {
   )
 }
 
+/**
+ * 트리의 페이지 항목. **`id`가 빈 문자열이면 막는다** — `panels/menu-tree.tsx`의 `PageLink`가
+ * 그 값을 주소에 그대로 넣는다(아래 `SHAPES`의 "주소가 되는 값" 표).
+ */
 function isTreePage(value: unknown): boolean {
   return (
     isRecord(value) &&
     typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
     typeof value['title'] === 'string' &&
     typeof value['sortOrder'] === 'number'
   )
 }
 
+/**
+ * 프로젝트 하나. **`id`가 빈 문자열이면 막는다** — 목록의 `<Link>`와, 셸이 트리에 넘기는
+ * `projectId`가 둘 다 이 값을 주소에 넣는다(같은 표).
+ */
 function isProjectDetail(value: unknown): boolean {
-  return isRecord(value) && typeof value['id'] === 'string' && typeof value['name'] === 'string'
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
+    typeof value['name'] === 'string'
+  )
 }
 
 const SHAPES = {
@@ -202,10 +216,27 @@ const SHAPES = {
    * 적은 셈이다. 빈 화면은 `tree/tree-actions.ts` 머리말이 피하려는 바로 그 사고와 같은
    * 결과다.
    *
-   * **이 검사만 `typeof === 'string'`보다 깊은 이유:** 이 소비자의 하중이 *"그 값이
-   * 주소가 된다"*이기 때문이다. **다른 shape의 얕음은 그대로 둔다** —
-   * `sessionUser`·`menuNode`·`treeEnvelope`가 `id: ''`를 통과시키는 것은 그 값들이
-   * 주소가 되지 않아서다. 얕음을 일괄로 맞추는 것이 아니라 **하중이 있는 자리만** 깊게 한다.
+   * **어느 id를 빈 문자열까지 막는지는 "그 값이 주소가 되는가"로 가른다.** 주소 조립 자리를
+   * `rg`로 세니 `apps/web/src`에 **둘**이다 — `panels/menu-tree.tsx`의 `PageLink`와
+   * `routes/project-list.tsx`의 `<Link>`. 거기 들어가는 shape 값을 표로 적는다.
+   *
+   * | shape의 값 | 주소가 되는 자리 | 오늘 도달 | 빈 문자열 |
+   * |---|---|---|---|
+   * | `pageDetail.id` | D8의 이동(Task 4) | **아직 없다**(`createPage` 호출 0건) | 막는다 |
+   * | `treeEnvelope`의 `TreePage.id` | `PageLink` | **매 트리 렌더** | 막는다 |
+   * | `projectDetail.id` | 셸이 트리에 넘기는 `projectId`(`routes/editor.tsx`가 **조회해 온** id를 준다) | **매 트리 렌더** | 막는다 |
+   * | `projectList[].id` | 목록의 `<Link>` | **매 목록 렌더** | 막는다 |
+   * | `treeEnvelope`의 `TreeMenuNode.id` | (없음 — React key와 판정 키뿐) | — | 둔다 |
+   * | `sessionUser.id` · `menuNode.id` | (없음 — 읽는 자리 0건) | — | 둔다 |
+   *
+   * **앞 판은 이 규칙을 "`treeEnvelope`는 주소가 되지 않는다"로 적었고 거짓이었다.** 실측:
+   * `TreePage.id: ''`가 관문을 통과해 `PageLink`가 `/projects/p1/pages/`를 만들고, 그 주소가
+   * 위 표의 빈 화면이 된다. **`projectDetail`·`projectList`도 같다** — `id: ''`면 각각
+   * `/projects/pages/pg1`·`/projects/`가 되고 둘 다 innerHTML 0자·`.wb-shell` 없음이었다.
+   * 즉 앞 판은 **아직 도달하지 않는 자리를 막고 오늘 도달하는 셋을 열어 두었다.**
+   *
+   * **읽는 축이 둘이라는 것이 요점이다** — 그 값이 주소가 되는가(하중)와 그 경로가 지금
+   * 도달하는가(시점). 얕음을 일괄로 맞추지 않고 **이 표의 위 넷만** 깊게 한다.
    */
   pageDetail: (value) =>
     isRecord(value) &&
