@@ -150,7 +150,7 @@ const selection: TreeSelection | null =
 | 1 | **`PATCH {sortOrder: n}`의 `n`이 결과 배열의 자리인가, 원본 배열의 자리인가.** `[A,B,C]`에서 A에 `2`를 주면 `[B,C,A]`인가 `[B,A,C]`인가 | 위/아래 버튼의 목적지 계산이 여기 달렸다. **P2b-3에서 `moveNodeOps`가 정확히 이 성질로 갈렸다**(결과 기준이었다) | Task 7 |
 | 2 | **`PATCH {parentId}`만 주고 `sortOrder`를 안 주면 어디에 놓이는가** | 들여쓰기·내어쓰기가 목적지 인덱스를 줘야 하는지 갈린다 | Task 8 |
 | 3 | **트리 응답의 `sortOrder`가 배열 인덱스와 같은가**(0부터 연속인가) | 같으면 `sortOrder ± 1`이 곧 목적지다. 아니면 `byOrder` 정렬 뒤의 인덱스를 써야 한다 | Task 2 |
-| 4 | **`DELETE /menu`의 409가 자식 메뉴와 페이지 둘 다에서 나는가** | D5의 `remove` 판정이 두 배열을 다 보는 근거다. 소스는 FK 제약 둘을 같은 에러로 잡는다고 적었지만 **그것은 읽은 것이지 잰 것이 아니다** | Task 6 |
+| ~~4~~ | ~~**`DELETE /menu`의 409가 자식 메뉴와 페이지 둘 다에서 나는가**~~ **닫혔다(웨이브 1 수정).** 자식 메뉴만·페이지만 **둘 다 409**(`conflict` / `하위 메뉴나 페이지가 있어 삭제할 수 없습니다`), 둘 다 없으면 204. 잰 값은 `tree/tree-actions.ts`의 `remove` 주석과 `api/client.ts`의 `deleteMenu` 주석에 있다 | ~~Task 6~~ |
 | 5 | **`PATCH /pages`에 `menuNodeId`와 `sortOrder`를 함께 주면** 새 메뉴 안의 그 자리로 가는가 | `reparent`가 인덱스를 줄지 말지 | Task 9 |
 | 6 | **`SHAPES.treeEnvelope`가 정말 재귀로 `pages`·`children`을 검사하는가, 그 관문을 지나지 않고 트리가 화면에 닿는 경로가 있는가** | 있으면 `tree-actions.ts`가 `edit/safe-walk.ts` 같은 방어를 해야 한다. **메뉴 트리도 오류 경계 밖이다** | Task 2 |
 | 7 | **`ProjectDetail.role`을 읽는 자리가 지금 0건인가** | "이 단계가 만들지 않는 것"의 근거다. **아니면 그 절을 고쳐라** | Task 1 |
@@ -258,7 +258,8 @@ it('삭제는 204를 본문 없이 받는다', async () => {
 })
 
 it('메뉴 응답이 계약과 다른 모양이면 ApiError를 던진다', async () => {
-  // sortOrder가 문자열인 응답. 그 값이 그대로 목적지 계산에 들어간다.
+  // sortOrder가 문자열인 응답. **그 값을 읽는 자리가 생긴다고 적지 마라** — 아래 Step 3의
+  // 정정을 보라. 검사를 두는 근거는 소비자가 아니라 `request`의 필수 shape 설계다.
 })
 ```
 
@@ -275,12 +276,23 @@ Expected: FAIL — `client.updateMenu is not a function`
 
 ```ts
 /**
- * 메뉴 노드 하나. **`sortOrder`가 숫자인지까지 본다** — 그 값이 위/아래 이동의 목적지
- * 계산에 그대로 들어간다(Task 7). 문자열이 실리면 `sortOrder + 1`이 문자열 이어붙이기가 된다.
+ * 메뉴 노드 하나. `id`가 문자열인지·`sortOrder`가 숫자인지까지 본다.
+ * **근거는 소비자가 아니다** — 아래 정정을 읽어라.
  */
 menuNode: (value) =>
   isRecord(value) && typeof value['id'] === 'string' && typeof value['sortOrder'] === 'number',
 ```
+
+> **정정(웨이브 1 리뷰가 잡았다 — F1).** 이 자리에 원래 *"그 `sortOrder`가 위/아래 이동의
+> 목적지 계산에 그대로 들어간다(Task 7)"*라고 적혀 있었고 **그것은 거짓이다.** 같은 계획서의
+> **Task 7 케이스 7**이 *"`treeSpot.index`를 쓰지 `node.sortOrder`를 쓰지 않는다"*로 정반대를
+> 못박는다. 구현자가 이 산문을 그대로 코드 주석과 테스트로 옮겼고, 리뷰가 세 자리에서
+> 그것을 찾았다. **P2b-3 이월의 "산문과 표가 어긋나면 표가 옳다 — 산문은 아무도 재지 않는다"가
+> 이 계획서 안에서 다시 났다.**
+>
+> 검사 자체는 남긴다(변이 `() => true`가 2 사망). **다만 근거는 "미래의 소비자"가 아니라
+> `request`가 shape를 필수로 받는다는 설계와, F2가 보여 준 "새 소비자가 붙을 때 표를
+> 갱신하지 않는" 부류다.** 잴 수 없는 인과를 근거로 세우지 마라.
 
 본문을 만들 때 **`undefined`인 키를 만들지 않는다.** `patchOps`가 `clientOpId`에 쓴 것과 같은 형태다.
 
@@ -646,9 +658,12 @@ cancelRemove: () => void
 선택을 부모로 옮기는 것은 **지우기 전 트리에서 자리를 먼저 읽어야 한다**(지운 뒤에는 `treeSpot`이 `null`이다). `StructureToolbar`의 `removeSelected`가 같은 형태다.
 
 - [ ] **Step 4: 케이스 3~11을 채운다**
-- [ ] **Step 5: 재라 #4 — `DELETE /menu`의 409**
+- [x] ~~**Step 5: 재라 #4 — `DELETE /menu`의 409**~~ — **웨이브 1 수정에서 닫혔다.**
 
-`apps/api/test/`에서 (a) 자식 메뉴만 있는 메뉴, (b) 페이지만 있는 메뉴 각각을 지워 응답 코드를 재라. **둘 다 409가 아니면 D5의 `remove` 판정이 한쪽을 과하게 막고 있는 것이다.** 잰 값을 `tree-actions.ts`의 `remove` 주석에 적어라.
+(a) 자식 메뉴만 있는 메뉴 → **409**, (b) 페이지만 있는 메뉴 → **409** (코드·문장 같음:
+`conflict` / `하위 메뉴나 페이지가 있어 삭제할 수 없습니다`), (c) 둘 다 없는 메뉴 → **204**.
+**둘 다 409이므로 `remove`가 두 배열을 다 보는 것이 옳고, (c)가 과하게 막지도 않음을 보인다.**
+잰 값은 `tree-actions.ts`의 `remove` 주석과 `api/client.ts`의 `deleteMenu` 주석에 있다.
 
 - [ ] **Step 6: 구분력 실증**
 
