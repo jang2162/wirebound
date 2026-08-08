@@ -769,10 +769,18 @@ describe('페이지 CRUD', () => {
     //
     // 실측(가짜 소비자를 세워 `PageLink`와 같은 형태로 조립했다):
     //   `id` 키 없음 → `/projects/p1/pages/undefined`
-    //   `id: 42` → `…/42`,  `id: null` → `…/null`
-    //   `id: ''` → `/projects/p1/pages/` — `app.tsx`의 다른 라우트가 받는다
+    //   `id: 42` → `…/42`,  `id: null` → `…/null`,  `id: ''` → `/projects/p1/pages/`
+    //
+    // **빈 문자열이 가장 나쁘다** — 진짜 `<App />`을 그 주소로 렌더하면 `innerHTML`이
+    // 0자이고 `.wb-shell`이 없다(`app.tsx`에 `*` 라우트가 없어 아무 라우트도 안 잡힌다).
+    // 앞 판은 그것을 "다른 라우트가 받는다"로 적었고 거짓이었다.
     const { id: _dropped, ...withoutId } = page
-    const broken: unknown[] = [withoutId, { ...page, id: 42 }, { ...page, id: null }]
+    const broken: unknown[] = [
+      withoutId,
+      { ...page, id: 42 },
+      { ...page, id: null },
+      { ...page, id: '' },
+    ]
 
     for (const body of broken) {
       const stub = stubFetch(jsonResponse(201, body))

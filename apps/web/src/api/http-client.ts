@@ -36,9 +36,17 @@ const EMPTY_UPDATE = '바꿀 내용이 없습니다'
  * **응답을 받지 못한** `ApiError`의 `status`. 두 경우에 쓴다 — 연결 자체가 실패했을 때와,
  * 아래 `updateBody`가 보내기 전에 막았을 때다.
  *
- * **응답이 없었기 때문에 실을 상태 코드가 없다.** 0은 서버가 낼 수 있는 값이 아니므로
- * 실제 응답에서 온 상태 코드와 섞이지 않는다 — 로그에서 "서버가 0을 냈다"로 읽힐 여지가 없다.
- * **막힌 요청에 400을 싣지 않는 것도 같은 이유다:** 서버가 그 400을 낸 적이 없다.
+ * **응답이 없었기 때문에 실을 상태 코드가 없다.** 0은 HTTP 상태 코드가 아니므로 실제 응답에서
+ * 온 값과 겹치지 않는다. **막힌 요청에 400을 싣지 않는 것도 같은 이유다:** 서버가 그 400을
+ * 낸 적이 없다.
+ *
+ * **이 값을 무엇이 읽는지 세어 둔다.** `apps/web/src`에서 `ApiError.status`를 읽는 자리는
+ * **0건**이고(`client.ts`의 `ApiError` 주석이 *"`status`는 로그·디버깅용으로만 싣는다"*로
+ * 같은 사실을 적고 있다), 읽는 것은 테스트뿐이다(`test/api/` 두 파일). 즉 **지금 이 값의
+ * 분간이 손해를 막고 있다는 증거는 없다** — 앞 판은 근거를 "로그에서 서버가 0을 냈다고
+ * 읽힐 여지가 없다"로 적었는데 그것은 **읽는 사람**에 기댄 잴 수 없는 문장이었다. 두 경우를
+ * 실제로 가르는 것은 `code`다(연결 실패 `internal` / 빈 본문 차단 `bad-request`).
+ * 소비자가 생기면 그때 무엇을 읽는지 세어 이 주석을 갱신하라.
  */
 const NO_RESPONSE = 0
 
@@ -176,16 +184,33 @@ const SHAPES = {
    *
    * - `id` 키 없음 → `/projects/p1/pages/undefined`
    * - `id: 42` → `/projects/p1/pages/42`, `id: null` → `/projects/p1/pages/null`
-   * - `id: ''` → `/projects/p1/pages/` — **다른 라우트다**(`app.tsx`의
-   *   `/projects/:projectId`가 받는다). 전부 `ApiError`가 아니라 200 성공 경로였다.
+   * - `id: ''` → `/projects/p1/pages/`
    *
-   * **빈 문자열은 지금도 통과한다.** 이 표의 규칙이 "얕게 본다"이고 다른 shape
-   * (`sessionUser`·`menuNode`·`isTreeMenuNode`)도 같은 얕음을 갖는다 — 한 자리만
-   * 깊게 하면 그 불일치가 다음 사람을 헷갈리게 한다.
+   * **빈 문자열도 막는다 — 그 값만 화면을 통째로 지운다.** 진짜 `<App />`을 각 주소로
+   * 렌더해 쟀다(`api`는 가짜, 세션 통과, 컨테이너에 `<App />`만 담았다):
+   *
+   * | 주소 | `container.innerHTML` | `.wb-shell` |
+   * |---|---|---|
+   * | `/projects/p1/pages/pg1` | 2752자 | 있음 |
+   * | `/projects/p1/pages/` | **0자** | **없음** |
+   * | `/projects/p1/pages` | **0자** | **없음** |
+   * | `/projects/p1` | 1730자 | 있음 |
+   * | `/projects/p1/pages/%20`(공백 한 칸) | 2752자 | 있음 |
+   *
+   * `app.tsx`에 `*` 라우트가 없어 `<Routes>`가 아무것도 그리지 않는다. **앞 판의 이 자리는
+   * 그것을 "다른 라우트가 받는다"로 적었고 그것은 거짓이었다** — 손해를 실제보다 가볍게
+   * 적은 셈이다. 빈 화면은 `tree/tree-actions.ts` 머리말이 피하려는 바로 그 사고와 같은
+   * 결과다.
+   *
+   * **이 검사만 `typeof === 'string'`보다 깊은 이유:** 이 소비자의 하중이 *"그 값이
+   * 주소가 된다"*이기 때문이다. **다른 shape의 얕음은 그대로 둔다** —
+   * `sessionUser`·`menuNode`·`treeEnvelope`가 `id: ''`를 통과시키는 것은 그 값들이
+   * 주소가 되지 않아서다. 얕음을 일괄로 맞추는 것이 아니라 **하중이 있는 자리만** 깊게 한다.
    */
   pageDetail: (value) =>
     isRecord(value) &&
     typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
     typeof value['headSeq'] === 'number' &&
     isRecord(value['schema']) &&
     isRecord((value['schema'] as Record<string, unknown>)['root']),
