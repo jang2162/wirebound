@@ -29,10 +29,13 @@ export interface ApiClient {
    * 메뉴 노드를 만든다. **`parentId: null`이 "루트에 만든다"이고 그것을 값으로 싣는다.**
    *
    * 서버는 그 필드를 `z.uuid().nullable().optional()`로 받아 `body.parentId ?? null`로
-   * 쓴다(`apps/api/src/routes/menu.ts` — **소스를 읽은 것이고 두 본문을 실제로 보내
-   * 비교하지는 않았다**). 키를 빼도 같은 곳에 만들어질 것으로 보이지만, 부르는 쪽의 뜻이
-   * 본문에서 사라지지 않게 값으로 싣는다 — `updateMenu`의 `parentId: null`(내어쓰기로
-   * 루트에 보낸다)과 같은 모양이어야 한다.
+   * 쓴다(`apps/api/src/routes/menu.ts`). **실측**(api 하네스, 루트에 둘을 깔아 둔 뒤 두 본문을
+   * 실제로 보냈다): 키를 뺀 것과 `parentId: null`을 실은 것이 **같은 곳(루트 맨 뒤)**에
+   * 만들어진다 — 루트 배치가 `[기존1:0, 기존2:1, 키없음:2, 널명시:3]`이고 둘 다
+   * `parentId: null`로 응답한다.
+   *
+   * **그래도 값으로 싣는다.** 결과가 같아도 부르는 쪽의 뜻이 본문에서 사라지지 않게 하려는
+   * 것이고, `updateMenu`의 `parentId: null`(내어쓰기로 루트에 보낸다)과 같은 모양이어야 한다.
    *
    * **응답을 트리에 그대로 꽂을 수 없다**(`MenuNode`에 `pages`·`children`이 없다). 부르는
    * 쪽은 성공하면 `getTree`를 다시 부른다(P2b-4 D1).
@@ -51,7 +54,14 @@ export interface ApiClient {
     nodeId: string,
     body: { title?: string; parentId?: string | null; sortOrder?: number },
   ): Promise<MenuNode>
-  /** 메뉴 노드를 지운다. **자식 메뉴·페이지가 있으면 서버가 409를 낸다**(README 엔드포인트 표). */
+  /**
+   * 메뉴 노드를 지운다. **자식 메뉴·페이지가 있으면 서버가 409를 낸다.**
+   *
+   * **실측**(api 하네스): 자식 메뉴만 있는 메뉴와 페이지만 있는 메뉴가 **둘 다** 409이고
+   * 코드·문장이 같다(`conflict` / `하위 메뉴나 페이지가 있어 삭제할 수 없습니다`).
+   * 둘 다 없으면 204다. `tree/tree-actions.ts`의 `remove`가 두 배열을 다 보는 근거이고,
+   * 계획서의 재라 #4가 이것으로 닫힌다.
+   */
   deleteMenu(projectId: string, nodeId: string): Promise<void>
   /**
    * 페이지를 만든다. 서버가 빈 `Page` 문서를 기본 스키마로 채워 준다(README).
