@@ -134,10 +134,16 @@ export function StructureTree(props: {
  * 것과 같은 이유다(`packages/renderer/src/render.tsx`): 스토어에 실리는 문서는 P2b-2부터
  * 서버 검증 전의 것이라 일시적으로 타입을 만족하지 않을 수 있다.
  *
- * **노드인지부터 본다.** `children` 배열의 원소가 `null`이면 `node.id`를 읽는 것 자체가
- * 던진다 — 리뷰가 `<App />` 층에서 찾은 자리다. 웨이브 1이 `edit/` 쪽 순회를 고쳤지만
- * 그것으로 덮이지 않는다: **선택이 없는 문서에서는 `structureAbilities`가 불리지도 않고**,
- * 여기가 먼저 그린다.
+ * **노드인지부터 본다.** 값이 `null`이면 `node.id`를 읽는 것 자체가 던진다 — 리뷰가
+ * `<App />` 층에서 찾은 자리다. 웨이브 1이 `edit/` 쪽 순회를 고쳤지만 그것으로 덮이지
+ * 않는다: **선택이 없는 문서에서는 `structureAbilities`가 불리지도 않고**, 여기가 먼저
+ * 그린다.
+ *
+ * **이 검사 자체는 지금 0 사망이다 — 재 봤다.** 자식은 아래 `children.filter(isNodeShaped)`가
+ * 먼저 거르고(그 걸러내기는 죽는다 — 지우면 `children 배열 안에 …` 케이스가 죽는다),
+ * 루트가 노드가 아닌 문서는 **캔버스·렌더러가 먼저 무너져** 구조 트리까지 오지 않는다
+ * (재 봤다: 그런 문서로 열면 `구조 트리` region 자체가 화면에 없다). 그래서 루트 쪽
+ * 하중을 케이스로 만들지 못했다 — 두는 것은 걸러내기가 닿지 않는 유일한 경로가 루트라서다.
  */
 function isNodeShaped(node: WbNode): boolean {
   return typeof node === 'object' && node !== null && !Array.isArray(node)

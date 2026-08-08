@@ -43,10 +43,15 @@ interface Server {
   api: Partial<ApiClient>
 }
 
-function server(): Server {
+/**
+ * **초기 문서를 인자로 받는다.** 대역이 든 문서가 화면의 것과 다르면 `invertOps`가
+ * 엉뚱한 경로를 보고, 편집이 실패해 재조회가 **대역의 문서**로 화면을 갈아 끼운다 —
+ * 실측으로 그 사고를 한 번 냈다(트리가 갑자기 다른 문서가 됐다).
+ */
+function server(initial: ReturnType<typeof pageDoc> = doc()): Server {
   const calls: { ops: PatchOp[]; baseSeq: number }[] = []
   let seq = HEAD_SEQ
-  let held = doc()
+  let held = initial
 
   const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
     calls.push({ ops: body.ops, baseSeq: body.baseSeq })
@@ -261,36 +266,47 @@ describe('구조 트리의 키보드 단축키', () => {
     // **단축키는 연달아 누르는 자리라 이 성질이 눈에 띈다.** 적어 두지 않으면 다음
     // 사람이 이것을 결함으로 읽고 "돌아온 자리를 기억하는" 상태를 만들려 한다 — 그것은
     // 조작마다 이력을 드는 일이고 D3의 순수 판정 밖이다.
-    await openPage(
-      pageDoc({
-        id: 'n-root',
-        type: 'Page',
-        children: [
-          {
-            id: 'n-p',
-            type: 'Card',
-            children: [
-              { id: 'n-x', type: 'Text' },
-              { id: 'n-y', type: 'Link' },
-            ],
-          },
-          { id: 'n-q', type: 'Divider' },
-        ],
-      }),
-      { apiOverrides: server().api },
-    )
+    const nested = pageDoc({
+      id: 'n-root',
+      type: 'Page',
+      children: [
+        {
+          id: 'n-p',
+          type: 'Card',
+          children: [
+            { id: 'n-x', type: 'Text' },
+            { id: 'n-y', type: 'Link' },
+          ],
+        },
+        { id: 'n-q', type: 'Divider' },
+      ],
+    })
+    await openPage(nested, { apiOverrides: server(nested).api })
     select('Text')
 
-    // 내어쓰기 → 루트로 나온다.
-    fireEvent.keyDown(row('Text'), { key: 'ArrowRight', altKey: true, shiftKey: true })
-    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Card', 'Link', 'Text', 'Divider']))
+    const inCard = (): boolean => {
+      const card = within(structureRegion()).getByRole('button', { name: 'Card' }).closest('li')
+      const text = within(structureRegion()).getByRole('button', { name: 'Text' })
+      return card?.contains(text) ?? false
+    }
+    expect(inCard()).toBe(true)
 
-    // 다시 들여쓰기 → `Card`로 돌아가지만 **`Link` 뒤**다.
+    // 내어쓰기 → `Card` 밖으로 나온다.
+    fireEvent.keyDown(row('Text'), { key: 'ArrowRight', altKey: true, shiftKey: true })
+    await waitFor(() => expect(inCard()).toBe(false))
+    expect(structureTypes()).toEqual(['Page', 'Card', 'Link', 'Text', 'Divider'])
+
+    // 다시 들여쓰기 → `Card` 안으로 돌아온다.
     fireEvent.keyDown(row('Text'), { key: 'ArrowLeft', altKey: true, shiftKey: true })
-    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Card', 'Link', 'Text', 'Divider']))
-    // 전위 순회로는 같아 보이므로 중첩으로 본다 — `Text`가 `Card` 안이고 `Link` 뒤다.
-    const card = within(structureRegion()).getByRole('button', { name: 'Card' }).closest('li')
-    expect(card?.contains(within(structureRegion()).getByRole('button', { name: 'Text' }))).toBe(true)
+    await waitFor(() => expect(inCard()).toBe(true))
+
+    // **하지만 제자리가 아니다.** 원래는 `Link` **앞**이었는데 이제 뒤다 — 전위 순회로는
+    // 세 상태가 전부 같아 보이므로(`Page, Card, Link, Text, Divider`) 형제 순서를 직접 본다.
+    const cardRow = within(structureRegion()).getByRole('button', { name: 'Card' }).closest('li')
+    const siblings = [...(cardRow?.querySelectorAll('.wb-shell-structure-node') ?? [])].map(
+      (row) => row.textContent,
+    )
+    expect(siblings).toEqual(['Card', 'Link', 'Text'])
   })
 
   it('루트에서 Delete는 아무것도 하지 않는다', async () => {
