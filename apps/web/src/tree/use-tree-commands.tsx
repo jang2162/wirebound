@@ -19,7 +19,8 @@
  * `panels/menu-tree.tsx` 한 곳이고, 툴바는 그 결과를 prop으로 받는다.** 두 번째 호출자가
  * 생기면 잠금이 각자 것이 되므로, 그때는 잠금을 위로 올려야 한다.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
 import type { TreeMenuNode } from '../api/types'
@@ -27,6 +28,19 @@ import { treeAbilities, type TreeAbilities, type TreeSelection } from './tree-ac
 
 /** 서버가 이유를 주지 않은 조회 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '메뉴를 불러오지 못했습니다'
+
+/**
+ * 서버가 이유를 주지 않은 **조작** 실패에 쓸 문장. 조회와 갈라 적는 것은 사용자가 방금 한
+ * 일이 다르기 때문이다 — 조회는 화면이 스스로 한 것이고 조작은 사용자가 누른 것이다.
+ */
+const UNKNOWN_COMMAND_FAILURE = '요청을 처리하지 못했습니다'
+
+/** 인라인 입력이 무엇을 위해 열려 있는지. 닫혀 있으면 `null`. */
+export interface TreeEditing {
+  kind: 'new-menu' | 'new-page'
+  /** 입력의 초기값. 새로 만들기면 빈 문자열이다. */
+  initial: string
+}
 
 /**
  * 조회 상태. 성공과 실패를 판별 유니온으로 가른다 — `menu.length === 0`으로 판정하면
@@ -47,6 +61,11 @@ export interface TreeCommands {
   busy: boolean
   /** 마지막 조작의 실패. 다음 조작이 시작되면 `null`이 된다. */
   failure: Failure | null
+  editing: TreeEditing | null
+  openInput: (kind: TreeEditing['kind']) => void
+  /** Enter로 확정. 빈 문자열이면 아무것도 하지 않는다(D6). */
+  submitInput: (title: string) => void
+  cancelInput: () => void
 }
 
 export function useTreeCommands(props: {
@@ -54,12 +73,19 @@ export function useTreeCommands(props: {
   pageId: string | undefined
 }): TreeCommands {
   const api = useApi()
+  // **이 단계가 앱의 첫 `useNavigate`다**(D8). 지금 앱의 이동은 전부 렌더 시점 판정이고
+  // (`<Navigate>` 컴포넌트 — `api/failure.tsx`의 *"컴포넌트인 것이 요점이다"*), 그 관용구는
+  // "이 상태면 저기로 간다"를 말한다. 여기 이동은 **비동기 조작이 끝난 뒤의 명령형 이동**이라
+  // 그렇게 표현되지 않는다: 만들기가 성공한 그 순간에만 한 번 일어나고, 렌더가 다시 돌 때
+  // 같은 판정을 되풀이하면 안 된다.
+  const navigate = useNavigate()
   const { projectId, pageId } = props
 
   const [state, setState] = useState<TreeLoadState>({ status: 'loading' })
   const [picked, setPicked] = useState<TreeSelection | null>(null)
-  const [busy] = useState(false)
-  const [failure] = useState<Failure | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<Failure | null>(null)
+  const [editing, setEditing] = useState<TreeEditing | null>(null)
 
   /**
    * **선택은 파생값이다(D3).** `picked`가 `null`이면 주소가 말하는 페이지가 선택이다.
@@ -116,11 +142,111 @@ export function useTreeCommands(props: {
   }, [load])
 
   /**
+   * 화면이 사라진 뒤의 `setState`를 막는다. **이펙트의 `alive` 플래그로는 안 되는 자리다** —
+   * 조작은 버튼 클릭에서 시작해 `await` 뒤에 상태를 쓰므로, 그 사이에 화면이 사라졌는지를
+   * 알 방법이 그 클로저에 없다.
+   */
+  const unmounted = useRef(false)
+  useEffect(() => {
+    unmounted.current = false
+    return () => {
+      unmounted.current = true
+    }
+  }, [])
+
+  /**
+   * 조작 하나를 보내고 **성공하면 트리를 다시 받는다(D1). 재조회가 곧 수렴이다.**
+   *
+   * `after`는 재조회 **뒤에** 부른다 — 주소를 옮기는 것(D8)이 그 자리다. 실패하면 부르지
+   * 않는다: 만들지 못한 페이지로 가면 안 된다.
+   *
+   * **실패해도 트리를 다시 받지 않는다.** 서버가 거절했다는 것은 트리가 그대로라는 뜻이고,
+   * 재조회하면 사용자가 방금 본 실패 문장이 조회 상태에 덮인다.
+   *
+   * **`busy` 가드는 지금 0 사망이다 — 재 봤다.** 지우고 돌려도 이 파일의 케이스가 하나도
+   * 죽지 않는다. 덮는 것은 **버튼의 `disabled`**다: `MenuToolbar`의 `ToolButton`에서 `busy`를
+   * 빼면 `요청이 나가 있는 동안 툴바가 전부 비활성이다`가 죽는다(그쪽 변이는 1 사망).
+   * 화면에서 `busy`인 채로 다시 부르려면 비활성 버튼을 눌러야 하는데 그 경로가 없어
+   * **닫는 케이스를 만들지 못했다.**
+   *
+   * 그래도 남긴다. `StructureToolbar`의 `commitOps` 반환값 검사와 같은 자리다 — 지금
+   * 통과하는 이유가 "위에서 `disabled`가 지켜지고 있어서"이므로, 그것이 벗겨지는 날 이것이
+   * 마지막 방벽이다. **다음 웨이브의 키보드 단축키가 버튼을 지나지 않는다는 것은 계획서
+   * Task 10 케이스 6을 읽은 것이지 잰 것이 아니다.**
+   */
+  async function run(send: () => Promise<void>, after?: () => void): Promise<void> {
+    if (busy) return
+    setBusy(true)
+    setFailure(null)
+    try {
+      await send()
+      if (unmounted.current) return
+      await load(() => !unmounted.current, true)
+      if (unmounted.current) return
+      after?.()
+    } catch (caught) {
+      if (unmounted.current) return
+      setFailure(toFailure(caught, UNKNOWN_COMMAND_FAILURE))
+    } finally {
+      if (!unmounted.current) setBusy(false)
+    }
+  }
+
+  /**
    * 선택을 바꾼다. 메뉴를 누르면 그 메뉴가, 페이지를 누르면 `null`이 들어온다(D3) —
    * 후자는 "주소가 말하는 것으로 되돌아간다"는 뜻이다.
+   *
+   * **열려 있던 입력을 함께 닫는다.** 다른 것을 고른 뒤에도 입력이 남아 있으면 그 입력이
+   * 어느 항목에 붙는지가 화면에서 사라진다.
    */
   function select(next: TreeSelection | null): void {
     setPicked(next)
+    setEditing(null)
+  }
+
+  /** 인라인 입력을 연다. 실패 문장을 함께 지운다 — 새 조작을 시작했다는 뜻이다. */
+  function openInput(kind: TreeEditing['kind']): void {
+    setFailure(null)
+    setEditing({ kind, initial: '' })
+  }
+
+  /**
+   * 입력을 확정한다. **빈 문자열이면 아무것도 하지 않고 입력을 열어 둔다**(D6) — 서버의
+   * `Title`이 `z.string().min(1)`이라 400이 되는데 그 왕복을 만들지 않는다. 닫지 않는 것은
+   * 닫으면 사용자가 무엇이 잘못됐는지 모른 채 입력을 잃기 때문이다.
+   *
+   * **제목 중복을 검사하지 않는다.** 서버에 유일성 제약이 없다 — 같은 제목의 메뉴를 형제로도
+   * 자식으로도 만들 수 있다(웨이브 1 실측, `tree/tree-actions.ts`의 `flattenMenus` 주석).
+   */
+  function submitInput(title: string): void {
+    if (editing === null || selection === null) return
+    if (title === '') return
+
+    // 새로 만들기는 **메뉴를 고른 상태에서만** 열린다(D5의 판정) — 여기 오는 선택은 메뉴다.
+    if (selection.kind !== 'menu') return
+    const parentId = selection.id
+    const kind = editing.kind
+    setEditing(null)
+
+    if (kind === 'new-menu') {
+      void run(async () => {
+        await api.createMenu(projectId, { parentId, title })
+      })
+      return
+    }
+
+    // **만든 페이지로 이동한다(D8).** 응답의 `id`가 주소에 들어간다 — 빈 문자열은
+    // `SHAPES.pageDetail`이 이미 막았으므로(웨이브 1) 여기서 다시 보지 않는다.
+    let created: string | null = null
+    void run(
+      async () => {
+        const page = await api.createPage(projectId, { menuNodeId: parentId, title })
+        created = page.id
+      },
+      () => {
+        if (created !== null) navigate(`/projects/${projectId}/pages/${created}`)
+      },
+    )
   }
 
   return {
@@ -130,5 +256,9 @@ export function useTreeCommands(props: {
     abilities,
     busy,
     failure,
+    editing,
+    openInput,
+    submitInput,
+    cancelInput: () => setEditing(null),
   }
 }

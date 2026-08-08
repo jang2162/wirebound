@@ -1,0 +1,275 @@
+/**
+ * 메뉴·페이지 만들기·이름 변경·삭제(P2b-4 Task 4~6).
+ *
+ * **`<App />`을 라우트째 렌더한다**(`menu-tree.test.tsx` 머리말과 같은 근거). 툴바만 떼어
+ * 내면 "고른 것이 트리를 지나는지", "성공 뒤 트리를 다시 받는지", "주소가 옮겨지는지"를
+ * 재지 못하는데 이 태스크들의 하중이 정확히 그 셋이다.
+ *
+ * **낙관 적용이 없다(D1).** 화면이 갱신되는 유일한 길이 재조회이므로, 거의 모든 케이스가
+ * `getTree` 호출 수를 함께 센다 — 그 수가 곧 "수렴했는가"다.
+ */
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { ApiError, type ApiClient } from '../../src/api/client'
+import type { MenuNode, PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
+import { App } from '../../src/app'
+import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+
+const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
+const PROJECT_NAME = '설계서'
+const PROJECT: ProjectDetail = {
+  id: 'p-1',
+  name: PROJECT_NAME,
+  slug: 'proj',
+  description: null,
+  role: 'owner',
+}
+
+/**
+ * 트리 한 벌.
+ *
+ * ```
+ * 회원관리 (m-member)   페이지 둘 + 자식 메뉴 하나 — 삭제가 막히는 자리
+ * ├ 회원 목록 (pg-list)
+ * ├ 회원 상세 (pg-detail)
+ * └ 권한 (m-auth)       비었다 — 삭제가 열리는 자리
+ * 주문관리 (m-order)     비었다
+ * ```
+ *
+ * 호출마다 새로 만든다 — 구현이 응답 배열을 제자리에서 정렬해도 다음 케이스가 흔들리지 않는다.
+ */
+function tree(): TreeMenuNode[] {
+  return [
+    {
+      id: 'm-member',
+      title: '회원관리',
+      sortOrder: 0,
+      pages: [
+        { id: 'pg-list', title: '회원 목록', sortOrder: 0 },
+        { id: 'pg-detail', title: '회원 상세', sortOrder: 1 },
+      ],
+      children: [{ id: 'm-auth', title: '권한', sortOrder: 0, pages: [], children: [] }],
+    },
+    { id: 'm-order', title: '주문관리', sortOrder: 1, pages: [], children: [] },
+  ]
+}
+
+function pageDetail(id: string, title: string): PageDetail {
+  return {
+    id,
+    menuNodeId: 'm-member',
+    title,
+    description: null,
+    sortOrder: 0,
+    schemaVersion: 1,
+    headSeq: 1,
+    schema: { version: 1, root: { id: 'n_00000000000a', type: 'Page', children: [] } },
+  }
+}
+
+function menuNode(id: string, title: string): MenuNode {
+  return { id, projectId: 'p-1', parentId: 'm-member', title, sortOrder: 0 }
+}
+
+/** 스텁 묶음. 케이스가 호출 수와 인자를 직접 센다. */
+function stubs(overrides: Partial<ApiClient> = {}) {
+  const getTree = vi.fn(async () => tree())
+  const createMenu = vi.fn(async () => menuNode('m-new', '새 메뉴'))
+  const createPage = vi.fn(async () => pageDetail('pg-new', '새 페이지'))
+  const updateMenu = vi.fn(async () => menuNode('m-member', '바뀐 이름'))
+  const updatePage = vi.fn(async () => pageDetail('pg-list', '바뀐 이름'))
+  const deleteMenu = vi.fn(async () => undefined)
+  const deletePage = vi.fn(async () => undefined)
+
+  const client = fakeApi({
+    me: async () => USER,
+    getProject: async () => PROJECT,
+    getPage: async (_projectId, pageId) => pageDetail(pageId, `페이지 ${pageId}`),
+    listMyRevisions: async () => [],
+    getTree,
+    createMenu,
+    createPage,
+    updateMenu,
+    updatePage,
+    deleteMenu,
+    deletePage,
+    ...overrides,
+  })
+
+  return { client, getTree, createMenu, createPage, updateMenu, updatePage, deleteMenu, deletePage }
+}
+
+/** 셸과 트리가 **둘 다 성공 대역으로** 그려질 때까지 기다린다. */
+async function open(
+  overrides: Partial<ApiClient> = {},
+  route = '/projects/p-1',
+): Promise<ReturnType<typeof stubs>> {
+  const harness = stubs(overrides)
+  renderWithProviders(<App />, { client: harness.client, route })
+  await screen.findByRole('heading', { name: PROJECT_NAME })
+  await screen.findByText('회원관리')
+  return harness
+}
+
+function treeRegion(): HTMLElement {
+  return screen.getByRole('region', { name: '메뉴·페이지 트리' })
+}
+
+function toolbar(): HTMLElement {
+  return within(treeRegion()).getByRole('group', { name: '메뉴 편집' })
+}
+
+function tool(name: string): HTMLButtonElement {
+  return within(toolbar()).getByRole('button', { name }) as HTMLButtonElement
+}
+
+function menuButton(title: string): HTMLElement {
+  return within(treeRegion()).getByRole('button', { name: title })
+}
+
+/** 인라인 입력. 용도가 셋이지만 라벨은 하나다(D6). */
+function input(): HTMLInputElement {
+  return within(toolbar()).getByRole('textbox', { name: '이름' }) as HTMLInputElement
+}
+
+/** 값을 넣고 Enter. `fireEvent`만 쓰는 이 저장소의 관례를 따른다. */
+function typeAndEnter(value: string): void {
+  const box = input()
+  fireEvent.change(box, { target: { value } })
+  fireEvent.keyDown(box, { key: 'Enter' })
+}
+
+describe('메뉴·페이지 만들기', () => {
+  it('하위 메뉴를 만들면 고른 메뉴 아래로 들어가고 트리를 다시 받는다', async () => {
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('하위 메뉴'))
+
+    // **포커스가 입력으로 간다.** 누른 뒤 손이 키보드에 있는데 커서가 딴 데 있으면
+    // 사용자가 한 번 더 눌러야 한다.
+    expect(document.activeElement).toBe(input())
+
+    typeAndEnter('사용자')
+
+    await waitFor(() => expect(api.createMenu).toHaveBeenCalledTimes(1))
+    expect(api.createMenu).toHaveBeenCalledWith('p-1', { parentId: 'm-member', title: '사용자' })
+    // **재조회가 수렴이다(D1)** — 낙관 적용이 없으므로 이것이 화면이 갱신되는 유일한 길이다.
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+  })
+
+  it('확정하면 입력이 닫힌다', async () => {
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('하위 메뉴'))
+    typeAndEnter('사용자')
+
+    await waitFor(() => expect(api.createMenu).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(within(toolbar()).queryByRole('textbox', { name: '이름' })).toBeNull(),
+    )
+  })
+
+  it('Esc는 취소다', async () => {
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('하위 메뉴'))
+    fireEvent.change(input(), { target: { value: '사용자' } })
+    fireEvent.keyDown(input(), { key: 'Escape' })
+
+    expect(within(toolbar()).queryByRole('textbox', { name: '이름' })).toBeNull()
+    expect(api.createMenu).not.toHaveBeenCalled()
+  })
+
+  it('blur는 취소다', async () => {
+    // **P2b-2의 속성 편집과 다른 점이다**(D6). 그쪽은 blur에도 커밋했지만 undo가 받쳐
+    // 줬다. 여기는 undo가 없어 "취소하려고 다른 곳을 눌렀는데 만들어졌다"가 복구 불가다.
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('하위 메뉴'))
+    fireEvent.change(input(), { target: { value: '사용자' } })
+    fireEvent.blur(input())
+
+    expect(within(toolbar()).queryByRole('textbox', { name: '이름' })).toBeNull()
+    expect(api.createMenu).not.toHaveBeenCalled()
+  })
+
+  it('빈 문자열로 Enter를 누르면 나가지 않고 입력이 열린 채다', async () => {
+    // 서버의 `Title`이 `z.string().min(1)`이라 400이 되는데 그 왕복을 만들지 않는다(D6).
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('하위 메뉴'))
+    typeAndEnter('')
+
+    expect(api.createMenu).not.toHaveBeenCalled()
+    // **닫지 않는 것이 요점이다** — 닫으면 사용자가 무엇이 잘못됐는지 모른 채 입력을 잃는다.
+    expect(input()).toBeDefined()
+  })
+
+  it('페이지 추가는 createPage를 내고 만든 페이지로 이동한다', async () => {
+    // D8 — 응답의 `id`가 주소에 들어간다. 빈 문자열은 `SHAPES.pageDetail`이 이미 막는다.
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('페이지 추가'))
+    typeAndEnter('신규')
+
+    await waitFor(() => expect(api.createPage).toHaveBeenCalledTimes(1))
+    expect(api.createPage).toHaveBeenCalledWith('p-1', { menuNodeId: 'm-member', title: '신규' })
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-new'))
+  })
+
+  it('실패하면 서버 문장이 트리 안에 남고 트리를 다시 받지 않는다', async () => {
+    const api = await open({
+      createMenu: vi.fn(async () => {
+        throw new ApiError(409, 'conflict', '이미 있는 이름입니다')
+      }),
+    })
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('하위 메뉴'))
+    typeAndEnter('사용자')
+
+    await within(treeRegion()).findByText('이미 있는 이름입니다')
+    // 서버가 거절했다는 것은 트리가 그대로라는 뜻이다 — 재조회하면 방금 본 실패가 덮인다.
+    expect(api.getTree).toHaveBeenCalledTimes(1)
+  })
+
+  it('요청이 나가 있는 동안 툴바가 전부 비활성이다', async () => {
+    // D2 — 큐가 아니라 잠금이다. 막아야 하는 것은 같은 버튼 연타와 "재조회 중에 또 조작"이다.
+    const gate: { release: (() => void) | null } = { release: null }
+    const api = await open({
+      createMenu: vi.fn(
+        () =>
+          new Promise<MenuNode>((resolve) => {
+            gate.release = () => resolve(menuNode('m-new', '새 메뉴'))
+          }),
+      ),
+    })
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('하위 메뉴'))
+    typeAndEnter('사용자')
+
+    await waitFor(() => expect(tool('하위 메뉴').disabled).toBe(true))
+    expect(tool('이름 변경').disabled).toBe(true)
+    expect(tool('삭제').disabled).toBe(true)
+
+    gate.release?.()
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+    // 끝나면 다시 살아난다 — 잠금이지 영구 비활성이 아니다.
+    await waitFor(() => expect(tool('하위 메뉴').disabled).toBe(false))
+  })
+
+  it('페이지를 선택한 상태에서는 하위 메뉴·페이지 추가가 비활성이다', async () => {
+    // D5 — 페이지는 컨테이너가 아니다.
+    await open({}, '/projects/p-1/pages/pg-list')
+
+    expect(tool('하위 메뉴').disabled).toBe(true)
+    expect(tool('페이지 추가').disabled).toBe(true)
+  })
+})

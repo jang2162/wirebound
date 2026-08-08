@@ -13,6 +13,7 @@
 import type { ReactElement } from 'react'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
+import { TreeInput } from './tree-input'
 
 /**
  * 버튼이 비활성일 때 붙는 설명.
@@ -50,17 +51,45 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
 
   return (
     <div className="wb-shell-menu-toolbar" role="group" aria-label="메뉴 편집">
-      <ToolButton label="하위 메뉴" ability="addMenu" commands={commands} onClick={NOT_YET} />
-      <ToolButton label="페이지 추가" ability="addPage" commands={commands} onClick={NOT_YET} />
+      <ToolButton
+        label="하위 메뉴"
+        ability="addMenu"
+        commands={commands}
+        onClick={() => commands.openInput('new-menu')}
+      />
+      <ToolButton
+        label="페이지 추가"
+        ability="addPage"
+        commands={commands}
+        onClick={() => commands.openInput('new-page')}
+      />
       <ToolButton label="이름 변경" ability="rename" commands={commands} onClick={NOT_YET} />
       <ToolButton label="삭제" ability="remove" commands={commands} onClick={NOT_YET} />
+
+      {/* 입력은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 항목에 붙는 작업인지가
+          보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이 그대로 남는다
+          (`StructureToolbar`가 `TypePicker`에 쓴 것과 같은 근거). */}
+      {commands.editing !== null && (
+        <TreeInput
+          // **용도가 바뀌면 새 인스턴스를 마운트한다.** 같은 자리에 남겨 두면 앞 용도의
+          // 값이 남는다 — `key`가 그것을 갈라 준다.
+          key={commands.editing.kind}
+          label={INPUT_LABEL}
+          initial={commands.editing.initial}
+          disabled={commands.busy}
+          onSubmit={commands.submitInput}
+          onCancel={commands.cancelInput}
+        />
+      )}
     </div>
   )
 }
 
+/** 인라인 입력의 라벨. 용도가 여럿이지만 입력은 하나다(D6). */
+const INPUT_LABEL = '이름'
+
 /**
- * 아직 배선되지 않은 조작. **판정은 이미 걸려 있고 실행만 다음 태스크가 붙인다** — 버튼을
- * 먼저 두는 것은 판정이 화면에 닿는지를 이 단계에서 재기 위해서다.
+ * 아직 배선되지 않은 조작. **판정은 이미 걸려 있고 실행만 다음 태스크가 붙인다.**
  */
 const NOT_YET = (): void => undefined
 

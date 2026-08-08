@@ -59,6 +59,20 @@ export function MenuTree(props: { projectId: string; pageId: string | undefined 
 
   return (
     <div>
+      {/* **조작 실패는 트리 안에 낸다(D9).** `shell/edit-alert.tsx`와 섞지 않는 것은 그것이
+          편집 파이프라인의 상태를 읽기 때문이다 — CRUD 실패는 그 상태와 무관하므로 섞으면
+          서로 다른 두 실패가 한 문장 자리를 다툰다.
+
+          **세션 끊김만 갈라 낸다.** 그 판정은 `api/failure.tsx`가 갖고(D5) 여기서 다시
+          하지 않는다 — 조회 실패가 위에서 같은 규칙을 쓰는 것과 같은 자리다. */}
+      {commands.failure !== null &&
+        (commands.failure.kind === 'signed-out' ? (
+          <SignedOut />
+        ) : (
+          <p className="wb-shell-tree-notice" role="alert">
+            {commands.failure.message}
+          </p>
+        ))}
       <ul className="wb-shell-tree">
         {byOrder(state.menu).map((node) => (
           // 키는 노드 id다. 인덱스를 쓰면 정렬이 바뀔 때 React가 앞 노드의 상태를 다른
