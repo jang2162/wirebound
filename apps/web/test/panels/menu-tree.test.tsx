@@ -671,3 +671,116 @@ describe('메뉴·페이지 트리', () => {
     expect(screen.queryByText(/Failed to fetch/)).toBeNull()
   })
 })
+
+/**
+ * 트리 안의 **선택**과 그 아래 툴바(P2b-4 Task 3).
+ *
+ * **열림과 선택은 다른 것이다**(D3). 열림은 주소가 갖고(`pageId`), 선택은 트리 안 상태다.
+ * `picked`가 `null`이면 "열린 페이지가 선택된 것"으로 본다 — 파생값이라 이펙트가 없다.
+ */
+describe('메뉴 트리 선택', () => {
+  /** 툴바. 트리 region 안에 있다. */
+  function toolbar(): HTMLElement {
+    return within(treeRegion()).getByRole('group', { name: '메뉴 편집' })
+  }
+
+  function tool(name: string): HTMLButtonElement {
+    return within(toolbar()).getByRole('button', { name }) as HTMLButtonElement
+  }
+
+  /** 지금 눌린 것으로 표시된 메뉴 제목. 표시가 하나뿐인지 보는 데 쓴다. */
+  function pressedMenus(): string[] {
+    const pressed = treeRegion().querySelectorAll<HTMLElement>('[aria-pressed="true"]')
+    return [...pressed].map((row) => row.textContent ?? '')
+  }
+
+  /** 트리 안의 메뉴 버튼. 페이지는 링크이므로 role이 갈라 준다. */
+  function menuButton(title: string): HTMLElement {
+    return within(treeRegion()).getByRole('button', { name: title })
+  }
+
+  it('메뉴 제목을 누르면 선택된다', async () => {
+    // **`<span>`이었다면 이 조회 자체가 실패한다**(D4). 누르는 것이 "여는 것"이 아니라
+    // "가리키는 것"이 되면서 전제가 바뀌었다.
+    await openEditor()
+
+    fireEvent.click(menuButton('회원관리'))
+
+    expect(menuButton('회원관리').getAttribute('aria-pressed')).toBe('true')
+    // 표시가 하나뿐이어야 한다 — 두 메뉴가 동시에 눌린 것으로 보이면 무엇에 작동하는지
+    // 알 수 없다.
+    expect(pressedMenus()).toEqual(['회원관리'])
+  })
+
+  it('아무것도 고르지 않으면 툴바가 전부 비활성이다', async () => {
+    // 선택이 `null`이면 판정이 전부 `false`다(`treeAbilities`의 계약).
+    await openEditor()
+
+    for (const name of ['하위 메뉴', '페이지 추가', '이름 변경', '삭제']) {
+      expect(tool(name).disabled, name).toBe(true)
+    }
+  })
+
+  it('열린 페이지가 선택으로 시작한다', async () => {
+    // **아무것도 누르지 않아도 툴바가 산다**(D3) — 주소가 선택을 말한다.
+    await openEditor({}, '/projects/p-1/pages/pg-list')
+
+    expect(tool('이름 변경').disabled).toBe(false)
+    expect(tool('삭제').disabled).toBe(false)
+    // 페이지에는 하위를 만들 수 없다(D5).
+    expect(tool('하위 메뉴').disabled).toBe(true)
+    expect(tool('페이지 추가').disabled).toBe(true)
+  })
+
+  it('메뉴를 고르면 그 메뉴의 판정이 툴바에 걸린다', async () => {
+    await openEditor()
+
+    // `회원관리`는 페이지와 자식 메뉴를 둘 다 갖는다 — 서버가 409를 낼 자리라 비활성이다.
+    fireEvent.click(menuButton('회원관리'))
+    expect(tool('하위 메뉴').disabled).toBe(false)
+    expect(tool('페이지 추가').disabled).toBe(false)
+    expect(tool('삭제').disabled).toBe(true)
+
+    // `주문관리`는 둘 다 비었다 — 서버가 204를 내므로 열어 둔다.
+    fireEvent.click(menuButton('주문관리'))
+    expect(tool('삭제').disabled).toBe(false)
+  })
+
+  it('페이지를 누르면 메뉴 선택이 풀린다', async () => {
+    // 주소가 그 페이지를 말하므로 `picked`를 `null`로 되돌린다(D3). 되돌리지 않으면
+    // 주소는 페이지인데 툴바는 메뉴에 작동하는 상태가 남는다.
+    await openEditor()
+
+    fireEvent.click(menuButton('회원관리'))
+    expect(pressedMenus()).toEqual(['회원관리'])
+
+    fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 목록' }))
+
+    await waitFor(() => expect(pressedMenus()).toEqual([]))
+    // 선택이 열린 페이지로 넘어갔다 — 페이지에는 하위를 못 만든다.
+    expect(tool('하위 메뉴').disabled).toBe(true)
+    expect(tool('이름 변경').disabled).toBe(false)
+  })
+
+  it('주소가 바뀐 직후 동기적으로 읽어도 선택이 따라와 있다', async () => {
+    // 앞 케이스와 달리 **`waitFor` 없이** 읽는다 — 클릭 다음 줄에서 이미 새 선택이어야
+    // 한다.
+    //
+    // **이 케이스가 "파생 vs 이펙트 동기화"를 가르지는 못한다 — 재 봤다.** 선택을
+    // `useState` + `useEffect`로 동기화하는 판으로 바꿔도 `--project web` 전량이 0 사망이다.
+    // `fireEvent`가 `act` 안에서 돌아 이펙트를 동기적으로 flush하기 때문이다(D3의 "한
+    // 프레임"은 실제 브라우저의 페인트 사이 창이고 jsdom에는 그 사이가 없다).
+    //
+    // 그래도 두는 것은 이 단언이 **`waitFor`로 느슨해지는 것을 막기 때문이다**: 선택이
+    // 비동기로 따라오는 구현으로 바뀌면 여기서 걸린다.
+    await openEditor()
+
+    fireEvent.click(menuButton('회원관리'))
+    expect(tool('하위 메뉴').disabled).toBe(false)
+
+    // 페이지 링크를 누르면 주소가 바뀐다. `waitFor` 없이 바로 읽는다.
+    fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 목록' }))
+
+    expect(tool('하위 메뉴').disabled).toBe(true)
+  })
+})

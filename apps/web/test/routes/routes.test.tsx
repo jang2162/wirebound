@@ -74,8 +74,11 @@ describe('라우트 표', () => {
 
     await screen.findByRole('heading', { name: '설계서 p-1' })
     expect(currentPath()).toBe('/projects/p-1')
-    // 페이지 없이 들어온 것과 페이지를 연 것이 구분돼야 한다.
-    expect(screen.queryByText(/^페이지 /)).toBeNull()
+    // 페이지 없이 들어온 것과 페이지를 연 것이 구분돼야 한다. **가짜가 문서에 심어 둔
+    // 문자열(`페이지 <pageId>`)로 좁힌다** — 앞 판은 `/^페이지 /`였는데 P2b-4가 트리
+    // 툴바에 `페이지 추가` 버튼을 두면서 그 패턴에 함께 걸렸다. 재려는 것은 캔버스에
+    // 문서가 그려졌는가이지 "페이지"라는 낱말이 화면 어딘가에 있는가가 아니다.
+    expect(screen.queryByText(/^페이지 pg-/)).toBeNull()
   })
 
   it('페이지 라우트는 projectId와 pageId를 함께 넘겨준다', async () => {
