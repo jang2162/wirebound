@@ -248,10 +248,29 @@
   list-style: none;
 }
 
+/* 메뉴 제목. **버튼이 된 것은 D4다** — 누르는 것이 "여는 것"이 아니라 "가리키는 것"이고
+   그 효과(툴바가 그 메뉴에 작동한다)가 실재한다. 버튼의 기본 꼴을 벗겨 트리의 한 줄로
+   보이게 하되, 왼쪽 정렬과 전체 너비는 페이지 링크와 같은 눈금에 맞춘다. */
 .wb-shell-tree-menu {
   display: block;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
   padding: 3px 4px;
+  background: none;
+  font: inherit;
   font-weight: 600;
+  color: var(--wb-shell-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 고른 메뉴. 표시는 `aria-pressed`가 갖고 색은 여기서 나온다 — 페이지의 `aria-current`와
+   같은 방식이다. **색을 페이지의 선택과 다르게 두는 것은 둘이 다른 뜻이기 때문이다:**
+   페이지는 "지금 열려 있다", 메뉴는 "지금 가리키고 있다". */
+.wb-shell-tree-menu[aria-pressed='true'] {
+  background: var(--wb-shell-line);
 }
 
 .wb-shell-tree-page {
@@ -320,6 +339,53 @@
 .wb-shell-structure-node[aria-current='true'] {
   background: var(--wb-shell-accent);
   color: #fff;
+}
+
+/* 메뉴 편집 툴바(`panels/menu-toolbar.tsx`, P2b-4). 구조 툴바와 같은 자리 규칙이라 값이
+   겹치지만 클래스를 나눠 둔다 — 두 트리가 한 화면에 있고 조작이 다르므로, 한쪽의 여백을
+   고칠 때 다른 쪽이 따라 움직이면 안 된다. */
+.wb-shell-menu-toolbar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--wb-shell-line);
+  background: #fff;
+}
+
+.wb-shell-menu-tool {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+/* 할 수 없는 조작. 왜인지는 버튼의 `title`이 말한다 — 회색만으로는 이유를 알 수 없다. */
+.wb-shell-menu-tool:disabled {
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
+}
+
+/* 인라인 입력(`panels/tree-input.tsx`, D6). 툴바가 `flex-wrap`이라 버튼과 같은 줄에 서다가
+   좁아지면 다음 줄로 내려간다 — `flex-basis: 100%`로 **처음부터 자기 줄을 쓰게** 한다:
+   입력이 버튼 사이에 끼면 무엇을 치고 있는지가 보이지 않는다. */
+.wb-shell-tree-input {
+  flex-basis: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--wb-shell-accent);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
 }
 
 /* 구조 편집 툴바(`panels/structure-toolbar.tsx`, D4). 트리 아래에 있고 상자가 스크롤되므로
@@ -515,4 +581,34 @@
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--wb-shell-muted);
+}
+
+/* 소속 메뉴 고르기(`panels/menu-picker.tsx`, Task 9). 툴바가 `flex-wrap`이라 인라인 입력과
+   같은 이유로 자기 줄을 쓴다 — 버튼 사이에 끼면 무엇을 고르는 중인지가 보이지 않는다. */
+.wb-shell-menu-picker {
+  display: flex;
+  flex-basis: 100%;
+  gap: 4px;
+  align-items: center;
+}
+
+.wb-shell-menu-picker-label {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-menu-picker-select {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
 }
