@@ -10,7 +10,7 @@ import type { PatchOp } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiErrorCode } from '../../src/api/client'
 import { createHttpClient } from '../../src/api/http-client'
-import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
+import type { MenuNode, PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
 
 interface RecordedCall {
   url: string
@@ -489,5 +489,231 @@ describe('listMyRevisions', () => {
     await client.listMyRevisions('p 1/x', '../pg1')
 
     expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1/revisions?mine=true')
+  })
+})
+
+/**
+ * 메뉴·페이지 CRUD 여섯(P2b-4 Task 1).
+ *
+ * **이 여섯이 지켜야 하는 것은 본문 조립이다.** 서버의 `CreateMenuBody`·`UpdateMenuBody`·
+ * `CreatePageBody`·`UpdatePageBody`가 전부 `z.strictObject`이고, 갱신 둘은
+ * `.refine((body) => Object.keys(body).length > 0)`까지 걸려 있다
+ * (`apps/api/src/routes/menu.ts`·`pages.ts`). 즉 **어떤 키를 만드는가**가 그대로 200과
+ * 400을 가른다 — 화면 테스트는 가짜 `ApiClient`를 쓰므로 이 조립을 지나가지 않는다.
+ */
+describe('메뉴 CRUD', () => {
+  /** `POST /menu`·`PATCH /menu/:nodeId`의 응답. 트리 노드와 달리 `pages`·`children`이 없다(D1). */
+  const menuNode: MenuNode = { id: 'm1', projectId: 'p1', parentId: null, title: '회원관리', sortOrder: 0 }
+
+  it('createMenu는 parentId를 null로도 싣는다', async () => {
+    // 서버의 `parentId`는 `z.uuid().nullable().optional()`이라 **`null`이 유효한 값**이고
+    // "루트에 만든다"는 뜻이다. 키를 빼는 것("부모를 말하지 않는다")과 결과는 같지만,
+    // 클라이언트가 뜻을 흘리지 않도록 값으로 싣는다 — 이 계약이 `updateMenu`의
+    // `parentId: null`(내어쓰기로 루트에 보낸다)과 같은 모양이어야 한다.
+    const stub = stubFetch(jsonResponse(201, menuNode))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.createMenu('p1', { parentId: null, title: '회원관리' })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1/menu')
+    expect(stub.calls[0]?.init?.method).toBe('POST')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ parentId: null, title: '회원관리' })
+  })
+
+  it('createMenu는 하위 메뉴의 parentId를 그대로 싣는다', async () => {
+    const stub = stubFetch(jsonResponse(201, { ...menuNode, id: 'm2', parentId: 'm1' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const result = await client.createMenu('p1', { parentId: 'm1', title: '권한' })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ parentId: 'm1', title: '권한' })
+    expect(result.id).toBe('m2')
+  })
+
+  it('선언되지 않은 키를 만들지 않는다 — undefined인 필드는 본문에서 빠진다', async () => {
+    // 서버의 `UpdateMenuBody`는 `z.strictObject`다 — 선언되지 않은 키는 그 자체로 400이고,
+    // `undefined`를 실은 키가 오늘 통과하는 것은 `JSON.stringify`가 지워 주는 우연이다
+    // (`patchOps`가 같은 이유로 `clientOpId` 키를 만들지 않는다). 그 우연에 기대면
+    // 본문 조립이 바뀔 때 조용히 어긋나므로 나가는 본문을 직접 본다.
+    const stub = stubFetch(jsonResponse(200, { ...menuNode, title: '가' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateMenu('p1', 'm1', { title: '가' })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1/menu/m1')
+    expect(stub.calls[0]?.init?.method).toBe('PATCH')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ title: '가' })
+  })
+
+  it('updateMenu는 parentId: null을 싣는다 — 키 없음과 다른 뜻이다', async () => {
+    // 키가 없으면 "부모를 바꾸지 않는다", `null`이면 "루트로 옮긴다"이다(내어쓰기의
+    // 목적지가 루트 목록일 때 나가는 본문이다 — Task 8). `undefined`만 걸러야 하고
+    // falsy 전체를 걸러서는 안 된다.
+    const stub = stubFetch(jsonResponse(200, menuNode))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateMenu('p1', 'm2', { parentId: null })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ parentId: null })
+  })
+
+  it('updateMenu는 sortOrder 0을 싣는다', async () => {
+    // 0은 falsy다 — 맨 위로 올리는 이동이 정확히 이 값을 낸다(Task 7). 걸러야 하는
+    // 것은 `undefined` 하나뿐이라는 것을 이 케이스가 못박는다. 빠지면 서버의
+    // `.refine(빈 본문 금지)`에 걸려 400이 된다.
+    const stub = stubFetch(jsonResponse(200, menuNode))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateMenu('p1', 'm1', { sortOrder: 0 })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ sortOrder: 0 })
+  })
+
+  it('updateMenu는 준 키를 전부 싣는다', async () => {
+    const stub = stubFetch(jsonResponse(200, menuNode))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateMenu('p1', 'm1', { title: '가', parentId: 'm9', sortOrder: 2 })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      title: '가',
+      parentId: 'm9',
+      sortOrder: 2,
+    })
+  })
+
+  it('삭제는 204를 본문 없이 받는다', async () => {
+    // 204에서 `request`가 조기 반환하므로 shape 검사에 닿지 않는다. 본문을 읽으려
+    // 들면 거기서 죽는다(`logout`이 같은 자리를 지킨다).
+    const empty = new Response(null, { status: 204 })
+    const json = vi.spyOn(empty, 'json')
+    const stub = stubFetch(empty)
+    const client = createHttpClient(stub.fetchImpl)
+
+    await expect(client.deleteMenu('p1', 'm1')).resolves.toBeUndefined()
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1/menu/m1')
+    expect(stub.calls[0]?.init?.method).toBe('DELETE')
+    expect(json).not.toHaveBeenCalled()
+  })
+
+  it('메뉴 응답이 계약과 다른 모양이면 ApiError를 던진다', async () => {
+    // `sortOrder`가 문자열인 응답. **그 값이 그대로 위/아래 이동의 목적지 계산에
+    // 들어가므로**(Task 7) 문자열이 실리면 `sortOrder + 1`이 문자열 이어붙이기가 된다.
+    const stub = stubFetch(jsonResponse(200, { ...menuNode, sortOrder: '0' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(await client.updateMenu('p1', 'm1', { title: '가' }).catch((e: unknown) => e))
+
+    expect(error.code).toBe('internal')
+    expect(error.message).toBe('서버 응답을 이해할 수 없습니다')
+  })
+
+  it('메뉴 응답에 id가 없으면 ApiError를 던진다', async () => {
+    const stub = stubFetch(jsonResponse(201, { projectId: 'p1', parentId: null, title: '가', sortOrder: 0 }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client.createMenu('p1', { parentId: null, title: '가' }).catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('internal')
+  })
+
+  it('경로에 들어가는 id는 URL 인코딩된다', async () => {
+    const stub = stubFetch(jsonResponse(200, menuNode), new Response(null, { status: 204 }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateMenu('p 1/x', '../m1', { title: '가' })
+    await client.deleteMenu('p 1/x', '../m1')
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/menu/..%2Fm1')
+    expect(stub.calls[1]?.url).toBe('/api/projects/p%201%2Fx/menu/..%2Fm1')
+  })
+})
+
+describe('페이지 CRUD', () => {
+  it('createPage는 menuNodeId와 title을 싣는다', async () => {
+    // `description`은 이 단계가 만들지 않는다 — 설계 §9가 그것을 우측 패널의
+    // "페이지 설명" 탭에 두기로 했다. 그래서 본문에 그 키가 아예 없다.
+    const stub = stubFetch(jsonResponse(201, page))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const result = await client.createPage('p1', { menuNodeId: 'm1', title: '목록' })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1/pages')
+    expect(stub.calls[0]?.init?.method).toBe('POST')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ menuNodeId: 'm1', title: '목록' })
+    // 만든 페이지로 이동하려면 응답의 `id`가 필요하다(D8).
+    expect(result.id).toBe('pg1')
+  })
+
+  it('updatePage는 준 키만 본문에 만든다', async () => {
+    const stub = stubFetch(jsonResponse(200, page))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updatePage('p1', 'pg1', { title: '새 이름' })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1/pages/pg1')
+    expect(stub.calls[0]?.init?.method).toBe('PATCH')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ title: '새 이름' })
+  })
+
+  it('updatePage는 sortOrder 0을 싣는다', async () => {
+    const stub = stubFetch(jsonResponse(200, page))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updatePage('p1', 'pg1', { sortOrder: 0 })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ sortOrder: 0 })
+  })
+
+  it('updatePage는 소속 메뉴만 바꿀 때 다른 키를 만들지 않는다', async () => {
+    // `reparent`가 내는 본문이다(Task 9). `title`이 섞여 나가면 사용자가 바꾸지 않은
+    // 값을 덮어쓴다.
+    const stub = stubFetch(jsonResponse(200, page))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updatePage('p1', 'pg1', { menuNodeId: 'm2' })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ menuNodeId: 'm2' })
+  })
+
+  it('deletePage는 204를 본문 없이 받는다', async () => {
+    const empty = new Response(null, { status: 204 })
+    const json = vi.spyOn(empty, 'json')
+    const stub = stubFetch(empty)
+    const client = createHttpClient(stub.fetchImpl)
+
+    await expect(client.deletePage('p1', 'pg1')).resolves.toBeUndefined()
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1/pages/pg1')
+    expect(stub.calls[0]?.init?.method).toBe('DELETE')
+    expect(json).not.toHaveBeenCalled()
+  })
+
+  it('페이지 CRUD 응답도 페이지 계약을 지난다', async () => {
+    // `POST`·`PATCH`의 응답은 `GET`과 같은 여덟 키다(`apps/api/src/routes/pages.ts`의
+    // `toResponse` 하나가 셋을 다 만든다). 조회만 검사하고 쓰기를 통과시키면 같은
+    // 계약이 반쪽만 지켜진다.
+    const stub = stubFetch(jsonResponse(201, { ...page, headSeq: '0' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client.createPage('p1', { menuNodeId: 'm1', title: '목록' }).catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('internal')
+  })
+
+  it('경로에 들어가는 id는 URL 인코딩된다', async () => {
+    const stub = stubFetch(jsonResponse(200, page), new Response(null, { status: 204 }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updatePage('p 1/x', '../pg1', { title: '가' })
+    await client.deletePage('p 1/x', '../pg1')
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1')
+    expect(stub.calls[1]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1')
   })
 })

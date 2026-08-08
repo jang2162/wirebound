@@ -7,6 +7,7 @@
  */
 import { ApiError, type ApiClient, type ApiErrorCode, type ApiErrorIssue } from './client'
 import type {
+  MenuNode,
   PageDetail,
   PatchResult,
   ProjectDetail,
@@ -120,6 +121,13 @@ const SHAPES = {
   /** `{ menu }` 봉투. 서버가 이 엔드포인트에서만 쓴다(README "트리 응답 형태"). */
   treeEnvelope: (value) => isRecord(value) && isArrayOf(value['menu'], isTreeMenuNode),
   /**
+   * 메뉴 노드 하나(`POST`·`PATCH .../menu`). **`sortOrder`가 숫자인지까지 본다** — 그 값이
+   * 위/아래 이동의 목적지 계산에 그대로 들어가므로(P2b-4 Task 7), 문자열이 실리면
+   * `sortOrder + 1`이 문자열 이어붙이기가 된다.
+   */
+  menuNode: (value) =>
+    isRecord(value) && typeof value['id'] === 'string' && typeof value['sortOrder'] === 'number',
+  /**
    * `headSeq`가 숫자인지까지 본다. 그것이 P2b-2의 `baseSeq`이고, 문자열이 실리면 편집
    * 요청이 어느 revision 위에서 만들어졌는지가 조용히 어긋난다.
    */
@@ -203,6 +211,32 @@ async function toApiError(response: Response): Promise<ApiError> {
 }
 
 /**
+ * `undefined`인 키를 뺀 본문을 만든다. 갱신 요청(`PATCH .../menu`·`.../pages`)이 쓴다.
+ *
+ * **서버의 갱신 본문 스키마는 `z.strictObject`에 `.refine(빈 본문 금지)`까지 걸려 있다**
+ * (`apps/api/src/routes/menu.ts`의 `UpdateMenuBody`·`pages.ts`의 `UpdatePageBody`).
+ * `undefined`를 실은 키가 오늘 통과하는 것은 `JSON.stringify`가 그것을 지워 주는 우연이고,
+ * `patchOps`가 `clientOpId`에 같은 이유로 키를 만들지 않는다 — 그쪽은 선택 키가 하나라
+ * 삼항으로 끝나지만 여기는 셋이라 조합이 여덟이므로 한 곳으로 모은다.
+ *
+ * **거르는 것은 `undefined` 하나뿐이다.** `null`은 값이고(`parentId: null`이 "루트로
+ * 옮긴다"이다), `0`도 값이다(맨 위로 올리는 이동이 `sortOrder: 0`을 낸다) — falsy를
+ * 통째로 거르면 그 둘이 조용히 사라져 빈 본문이 되고 서버가 400을 낸다. **실측: 이 필터를
+ * `Boolean(value)`로 바꾸면 3 사망**(`parentId: null` 하나, `sortOrder: 0` 둘).
+ *
+ * **이 함수를 통째로 항등(`return body`)으로 바꾸면 0 사망이다 — 재고 적는다.** 나가는
+ * 본문이 `JSON.stringify` 하나를 지나고 그것이 값이 `undefined`인 키를 지우므로, 바이트가
+ * 같아진다. **닫는 케이스를 만들지 못했다**: 관찰 지점이 그 문자열 하나뿐이라 오늘의
+ * 동작으로는 두 구현이 구별되지 않는다. 그래도 남기는 것은 위 문단의 필터 조건이 실제로
+ * 구분되기 때문이고, 이 함수가 없으면 그 조건을 둘 자리도 없어진다.
+ */
+function definedOnly<T extends object>(body: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(body).filter(([, value]) => value !== undefined),
+  ) as Partial<T>
+}
+
+/**
  * `ApiClient`의 HTTP 구현을 만든다.
  *
  * @param fetchImpl 테스트가 가짜를 주입하는 자리. 기본값은 브라우저의 `fetch`다.
@@ -261,6 +295,9 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
   const pagePath = (projectId: string, pageId: string): string =>
     `${projectPath(projectId)}/pages/${encodeURIComponent(pageId)}`
 
+  const menuPath = (projectId: string, nodeId: string): string =>
+    `${projectPath(projectId)}/menu/${encodeURIComponent(nodeId)}`
+
   return {
     login: (email, password) =>
       request<SessionUser>('POST', '/auth/login', SHAPES.sessionUser, { email, password }),
@@ -281,6 +318,25 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
       )
       return body.menu
     },
+    // 아래 여섯이 P2b-4의 CRUD다. **생성·갱신 응답을 트리에 꽂지 않는다** — `MenuNode`에는
+    // `pages`·`children`이 없고(`api/types.ts`), 서버가 `sort_order`를 재번호하므로
+    // 부르는 쪽은 성공하면 `getTree`를 다시 부른다(D1). 그래서 여기서 응답을 가공하지 않는다.
+    createMenu: (projectId, body) =>
+      // `parentId`는 `null`이어도 그대로 싣는다 — 타입이 필수라 `undefined`가 올 수 없고,
+      // `null`은 "루트에 만든다"는 값이다. 그래서 `definedOnly`를 지나지 않는다.
+      request<MenuNode>('POST', `${projectPath(projectId)}/menu`, SHAPES.menuNode, body),
+    updateMenu: (projectId, nodeId, body) =>
+      request<MenuNode>('PATCH', menuPath(projectId, nodeId), SHAPES.menuNode, definedOnly(body)),
+    deleteMenu: (projectId, nodeId) =>
+      request<void>('DELETE', menuPath(projectId, nodeId), SHAPES.noBody),
+    createPage: (projectId, body) =>
+      // 응답은 `GET .../pages/:pageId`와 같은 여덟 키다 — 서버의 `toResponse` 하나가
+      // 조회·생성·갱신 셋을 다 만든다(`apps/api/src/routes/pages.ts`). 그래서 같은 shape다.
+      request<PageDetail>('POST', `${projectPath(projectId)}/pages`, SHAPES.pageDetail, body),
+    updatePage: (projectId, pageId, body) =>
+      request<PageDetail>('PATCH', pagePath(projectId, pageId), SHAPES.pageDetail, definedOnly(body)),
+    deletePage: (projectId, pageId) =>
+      request<void>('DELETE', pagePath(projectId, pageId), SHAPES.noBody),
     getPage: (projectId, pageId) =>
       request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail),
     patchOps: (projectId, pageId, body) =>

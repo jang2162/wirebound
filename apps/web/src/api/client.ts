@@ -7,6 +7,7 @@
  */
 import type { PatchOp } from '@wirebound/schema'
 import type {
+  MenuNode,
   PageDetail,
   PatchResult,
   ProjectDetail,
@@ -24,6 +25,49 @@ export interface ApiClient {
   getProject(projectId: string): Promise<ProjectDetail>
   /** 메뉴·페이지 통합 트리. 서버의 `{ menu }` 봉투는 구현이 벗겨 준다. */
   getTree(projectId: string): Promise<TreeMenuNode[]>
+  /**
+   * 메뉴 노드를 만든다. **`parentId: null`이 "루트에 만든다"이고 그것을 값으로 싣는다** —
+   * 서버가 `z.uuid().nullable().optional()`로 받으므로 키를 빼는 것과 결과는 같지만,
+   * 부르는 쪽의 뜻이 본문에서 사라지지 않게 한다.
+   *
+   * **응답을 트리에 그대로 꽂을 수 없다**(`MenuNode`에 `pages`·`children`이 없다). 부르는
+   * 쪽은 성공하면 `getTree`를 다시 부른다(P2b-4 D1).
+   */
+  createMenu(projectId: string, body: { parentId: string | null; title: string }): Promise<MenuNode>
+  /**
+   * 메뉴 노드를 고친다. **준 키만 본문에 실린다.** 서버의 본문 스키마가 `z.strictObject`에
+   * `.refine(빈 본문 금지)`까지 걸려 있어(`apps/api/src/routes/menu.ts`), 키를 만드는 방식이
+   * 그대로 200과 400을 가른다.
+   *
+   * `parentId: null`은 **"루트로 옮긴다"**이고 키가 없는 것("부모를 바꾸지 않는다")과
+   * 다르다 — 내어쓰기의 목적지가 루트 목록일 때 그 값이 나간다.
+   */
+  updateMenu(
+    projectId: string,
+    nodeId: string,
+    body: { title?: string; parentId?: string | null; sortOrder?: number },
+  ): Promise<MenuNode>
+  /** 메뉴 노드를 지운다. **자식 메뉴·페이지가 있으면 서버가 409를 낸다**(README 엔드포인트 표). */
+  deleteMenu(projectId: string, nodeId: string): Promise<void>
+  /**
+   * 페이지를 만든다. 서버가 빈 `Page` 문서를 기본 스키마로 채워 준다(README).
+   *
+   * **`description`을 싣지 않는다** — 설계 §9가 그 편집을 우측 패널의 "페이지 설명" 탭에
+   * 두기로 했고, 트리에서 만드는 자리는 제목만 묻는다.
+   */
+  createPage(projectId: string, body: { menuNodeId: string; title: string }): Promise<PageDetail>
+  /**
+   * 페이지의 제목·소속 메뉴·순서를 고친다. `updateMenu`와 같은 계약이다 — 준 키만 실린다.
+   *
+   * **`description`·`schema`는 여기서 못 바꾼다**(전자는 이 단계 밖, 후자는 서버가
+   * `PUT .../schema`·`PATCH .../ops`로만 받는다).
+   */
+  updatePage(
+    projectId: string,
+    pageId: string,
+    body: { title?: string; menuNodeId?: string; sortOrder?: number },
+  ): Promise<PageDetail>
+  deletePage(projectId: string, pageId: string): Promise<void>
   getPage(projectId: string, pageId: string): Promise<PageDetail>
   /**
    * 편집 하나를 보낸다. **응답의 `seq`가 다음 호출의 `baseSeq`다**(README 4단계).

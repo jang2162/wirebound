@@ -38,6 +38,22 @@ export interface ProjectDetail extends ProjectSummary {
   role: ProjectRole
 }
 
+/**
+ * `POST /api/projects/:projectId/menu`·`PATCH .../menu/:nodeId`의 응답.
+ *
+ * **트리 노드(`TreeMenuNode`)와 다른 모양이다 — `pages`·`children`이 없다.** 그래서 만든
+ * 결과를 트리에 그대로 꽂을 수 없고, 조작이 성공하면 트리를 다시 받는다(P2b-4 D1).
+ *
+ * `parentId`가 `null`이면 루트 메뉴다.
+ */
+export interface MenuNode {
+  id: string
+  projectId: string
+  parentId: string | null
+  title: string
+  sortOrder: number
+}
+
 /** 통합 트리의 페이지 항목. `schema`는 실리지 않는다(README "트리 응답 형태"). */
 export interface TreePage {
   id: string
