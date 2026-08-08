@@ -507,9 +507,9 @@ describe('메뉴 CRUD', () => {
 
   it('createMenu는 parentId를 null로도 싣는다', async () => {
     // 서버의 `parentId`는 `z.uuid().nullable().optional()`이라 **`null`이 유효한 값**이고
-    // "루트에 만든다"는 뜻이다. 키를 빼는 것("부모를 말하지 않는다")과 결과는 같지만,
-    // 클라이언트가 뜻을 흘리지 않도록 값으로 싣는다 — 이 계약이 `updateMenu`의
-    // `parentId: null`(내어쓰기로 루트에 보낸다)과 같은 모양이어야 한다.
+    // "루트에 만든다"는 뜻이다. 클라이언트가 그 뜻을 흘리지 않도록 값으로 싣는다 —
+    // 이 계약이 `updateMenu`의 `parentId: null`(내어쓰기로 루트에 보낸다)과 같은 모양이어야
+    // 한다. **키를 빼도 서버가 같은 곳에 만드는지는 재지 않았다**(소스로는 그렇게 보인다).
     const stub = stubFetch(jsonResponse(201, menuNode))
     const client = createHttpClient(stub.fetchImpl)
 

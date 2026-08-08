@@ -217,8 +217,10 @@ export function menuOutdentTarget(
  * 소속 메뉴 고르기 목록. 트리 순서(각 층 `sortOrder` 오름차순)로 평평하게, 조상 제목을
  * 이어 붙인 경로와 함께 낸다.
  *
- * **경로가 필요한 이유:** 제목이 같은 메뉴가 다른 층에 있을 수 있어(서버가 형제 안에서도
- * 제목 유일성을 강제하지 않는다) 제목만으로는 어느 것인지 가려지지 않는다.
+ * **경로가 필요한 이유:** 제목이 같은 메뉴가 여럿일 수 있어 제목만으로는 어느 것인지
+ * 가려지지 않는다. 서버 쪽에 제목 유일성 제약이 보이지 않는다 — `0003-menu-nodes.ts`의
+ * `title`은 `notNull`뿐이고 `repos/menu.ts`·`routes/menu.ts`에도 중복 판정이 없다
+ * (**소스를 읽은 것이고 같은 제목을 실제로 두 번 만들어 보지는 않았다**).
  */
 export function flattenMenus(menu: TreeMenuNode[]): { id: string; path: string }[] {
   const flat: { id: string; path: string }[] = []
