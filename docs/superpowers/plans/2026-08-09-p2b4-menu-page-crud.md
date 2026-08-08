@@ -147,11 +147,11 @@ const selection: TreeSelection | null =
 
 | # | 무엇 | 왜 중요한가 | 어느 태스크 |
 |---|---|---|---|
-| 1 | **`PATCH {sortOrder: n}`의 `n`이 결과 배열의 자리인가, 원본 배열의 자리인가.** `[A,B,C]`에서 A에 `2`를 주면 `[B,C,A]`인가 `[B,A,C]`인가 | 위/아래 버튼의 목적지 계산이 여기 달렸다. **P2b-3에서 `moveNodeOps`가 정확히 이 성질로 갈렸다**(결과 기준이었다) | Task 7 |
-| 2 | **`PATCH {parentId}`만 주고 `sortOrder`를 안 주면 어디에 놓이는가** | 들여쓰기·내어쓰기가 목적지 인덱스를 줘야 하는지 갈린다 | Task 8 |
+| ~~1~~ | ~~**`PATCH {sortOrder: n}`의 `n`이 결과 배열의 자리인가**~~ **닫혔다(웨이브 3).** **결과 배열 기준이고 메뉴·페이지가 같다** — `[A:0 B:1 C:2]`에 `{sortOrder: 2}`(A)를 주면 둘 다 `[B:0 C:1 A:2]`, 반대 방향(`{sortOrder: 0}`(B))도 `[B:0 A:1 C:2]`다. 그래서 `index ± 1`이 방향 보정 없이 목적지다. 잰 값은 `tree/use-tree-commands.tsx`의 `move` 주석에 있다 | ~~Task 7~~ |
+| ~~2~~ | ~~**`PATCH {parentId}`만 주면 어디에 놓이는가**~~ **닫혔다(웨이브 3).** **새 부모의 맨 뒤다** — `M1(자식1:0 자식2:1)`에 `{parentId: M1}`을 주면 `M2:2`. 둘을 함께 주면 그 `sortOrder`가 **새 부모의 형제 배열 기준**으로 삽입된다(`{parentId, sortOrder: 1}` → `자식1:0 M3:1 자식2:2`). 그래서 **들여쓰기는 `parentId`만**(정의가 "마지막 자식"이라 기본 동작이 곧 목적지), **내어쓰기는 둘 다**(정의가 "부모의 다음 형제"라 지목이 필요하다). 잰 값은 `indent`·`outdent` 주석에 있다 | ~~Task 8~~ |
 | 3 | **트리 응답의 `sortOrder`가 배열 인덱스와 같은가**(0부터 연속인가) | 같으면 `sortOrder ± 1`이 곧 목적지다. 아니면 `byOrder` 정렬 뒤의 인덱스를 써야 한다 | Task 2 |
 | ~~4~~ | ~~**`DELETE /menu`의 409가 자식 메뉴와 페이지 둘 다에서 나는가**~~ **닫혔다(웨이브 1 수정).** 자식 메뉴만·페이지만 **둘 다 409**(`conflict` / `하위 메뉴나 페이지가 있어 삭제할 수 없습니다`), 둘 다 없으면 204. 잰 값은 `tree/tree-actions.ts`의 `remove` 주석과 `api/client.ts`의 `deleteMenu` 주석에 있다 | ~~Task 6~~ |
-| 5 | **`PATCH /pages`에 `menuNodeId`와 `sortOrder`를 함께 주면** 새 메뉴 안의 그 자리로 가는가 | `reparent`가 인덱스를 줄지 말지 | Task 9 |
+| ~~5~~ | ~~**`PATCH /pages`에 `menuNodeId`와 `sortOrder`를 함께 주면**~~ **닫혔다(웨이브 3).** 함께 주면 **그 자리로** 가고(`TO(T1:0 T2:1)` + `{menuNodeId, sortOrder: 1}` → `T1:0 옮길것:1 T2:2`), **`menuNodeId`만 주면 맨 뒤로** 간다(`T1:0 T2:1 옮길것:2`). `reparent`는 자리를 지목하지 않으므로 **`sortOrder`를 주지 않는다** — 지목하고 싶으면 옮긴 뒤 위/아래로 옮기면 된다. 잰 값은 `reparentTo` 주석에 있다 | ~~Task 9~~ |
 | 6 | **`SHAPES.treeEnvelope`가 정말 재귀로 `pages`·`children`을 검사하는가, 그 관문을 지나지 않고 트리가 화면에 닿는 경로가 있는가** | 있으면 `tree-actions.ts`가 `edit/safe-walk.ts` 같은 방어를 해야 한다. **메뉴 트리도 오류 경계 밖이다** | Task 2 |
 | 7 | **`ProjectDetail.role`을 읽는 자리가 지금 0건인가** | "이 단계가 만들지 않는 것"의 근거다. **아니면 그 절을 고쳐라** | Task 1 |
 
