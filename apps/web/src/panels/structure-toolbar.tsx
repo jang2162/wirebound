@@ -10,9 +10,16 @@
  * 자기 조건을 따로 갖게 된다.
  *
  * **이 파일은 오류 경계 밖이다** — 구조 트리와 같은 자리다(`panels/node-shape.ts`
- * 머리말). 던지면 셸 전체가 흰 화면이므로, 여기서 부르는 것들은 전부 값으로 답한다:
- * `structureAbilities`·`nodeSpot`은 깨진 문서에도 던지지 않고, `ops` 생성기들은
- * 만들 수 없으면 `null`을 낸다.
+ * 머리말). 던지면 셸 전체가 흰 화면이므로, 여기서 부르는 것들은 값으로 답해야 한다.
+ *
+ * **"깨진 문서에도 던지지 않는다"는 처음 적었을 때 거짓이었다** — 리뷰가 `children`
+ * 배열 안의 `null` 원소로 반례를 찾았다. 웨이브 3의 정정(`edit/safe-walk.ts`)이 그것을
+ * 닫았고 재현해 확인했다. **전제는 이것이다:** `structureAbilities`·`nodeSpot`·`ops`
+ * 생성기 넷이 전부 `walkSafely`를 지나고, 그것이 노드가 아닌 값을 순회에서 뺀다.
+ * `@wirebound/schema`의 `walkNodes`를 여기서 다시 쓰면 그 전제가 깨진다.
+ *
+ * **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와
+ * 웨이브 1이 잰 여섯 형태까지다.
  */
 import { useState, type ReactElement } from 'react'
 import { useEditCommit } from '../edit/use-edit-commit'
@@ -36,7 +43,10 @@ import { TypePicker } from './type-picker'
  * `aria-describedby`로 바꿔도 같은 창에 걸리므로 더 싼 쪽을 골랐다.
  */
 const WHY_DISABLED: Record<keyof StructureAbilities, string> = {
-  addInside: '자식을 담을 수 있는 노드를 고르세요',
+  // **조건 둘을 다 말한다.** `acceptsChildren`은 카탈로그의 `many` 여부만이 아니라
+  // 문서의 `children`이 배열인지도 본다 — 앞엣것만 적으면 `Card`인데 비활성인 자리에서
+  // 사용자가 이유를 알 수 없다(리뷰 지적).
+  addInside: '자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다',
   addAfter: '루트가 아닌 노드를 고르세요',
   remove: '루트가 아닌 노드를 고르세요',
   moveUp: '앞에 형제가 있는 노드를 고르세요',
@@ -83,6 +93,12 @@ export function useStructureCommands(props: {
   // 훅은 조건부로 부를 수 없으므로 페이지가 없어도 부른다. `pageId`가 없으면 `''`를
   // 주는데, 그 값은 어느 페이지 id와도 같지 않아 `commitOps`가 그 자리에서 돌아온다
   // (속성 패널과 같은 관례).
+  //
+  // **다만 이 갈래는 지금 도달하지 않는다 — 리뷰가 지적했고 소스로 확인했다.**
+  // `StructureTree`가 `doc === null`이면 툴바를 아예 그리지 않고, 문서가 있다는 것은
+  // `useOpenDocument`가 주소와 대조를 통과했다는 뜻이라 `pageId`가 있다. 속성 패널은
+  // 그 게이트가 없어 실제로 이 갈래를 지난다 — 관례를 맞춘 것이지 여기서 쓰이는 것이
+  // 아니다.
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
 
   const abilities = structureAbilities(document, selectedNodeId)
@@ -208,7 +224,12 @@ export function useStructureCommands(props: {
     const parent = findNodeSafely(document.root, spot.parentId)
     // **첫 형제는 여기서 걸린다** — 인덱스 0의 앞은 `-1`이고 그 자리는 비어 있다
     // (`noUncheckedIndexedAccess`가 그것을 타입으로도 말해 준다). `spot.index === 0`을
-    // 따로 두지 않는 것은 그 검사가 0 사망이었기 때문이다 — 재 봤고, 이 줄이 덮는다.
+    // 따로 두지 않는 것은 그 검사가 0 사망이었기 때문이다.
+    //
+    // **다만 "이 줄이 덮는다"는 반쪽이었다 — 리뷰가 잡았고 재현했다.** 논리로는 덮지만
+    // **이 줄 자체도 0 사망**이다: 첫 형제에서는 버튼이 비활성이라 클릭이 오지 않고,
+    // 단축키는 `structureAbilities.indent`를 먼저 지난다. 둘 다 `disabled`/판정이 덮고
+    // 있고, 여기 남은 것은 그 둘이 벗겨졌을 때의 `TypeError` 방벽이다.
     const previous = parent?.children?.[spot.index - 1]
     if (previous === undefined) return
 

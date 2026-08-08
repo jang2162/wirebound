@@ -576,9 +576,15 @@ describe('구조 툴바 — 들여쓰기와 내어쓰기', () => {
     expect(structureTypes()).toEqual(['Page', 'Card', 'Section', 'Button', 'Link', 'Divider', 'Text'])
   })
 
-  it('배열을 만드는 갈래도 왕복한다', async () => {
+  it('배열을 만드는 갈래도 트리가 제자리로 돌아온다', async () => {
     // 위 왕복은 `move` 하나짜리 갈래다. `children` 키를 만드는 두 op 갈래도 제자리로
     // 돌아오는지 본다 — 그쪽은 `add`와 `move`의 경로 기준이 다르다(웨이브 1).
+    //
+    // **문서 수준의 왕복은 아니다 — 리뷰가 잡았다.** 들여쓰기가 만든 `children: []`이
+    // 내어쓴 뒤에도 남으므로 문서는 원본과 다르다(무해하다 — `children: []`은
+    // `validatePage` 이슈가 0이다). **왕복하는 것은 트리 구조이고**, 그래서 이름을
+    // 그렇게 고쳤다. `undo` 경로는 다르다: 그쪽은 서버가 만든 `inverse`가 `remove
+    // /…/children`을 함께 보내 키까지 지운다(`undo하면 들여쓰기가 되돌아간다`).
     await openPage(nestDoc(), { apiOverrides: nestServer().api })
     select('Section')
 

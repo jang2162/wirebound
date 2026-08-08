@@ -301,7 +301,9 @@ describe('타입 목록과 노드 추가', () => {
     select('Text')
 
     expect(toolButton('안에 추가').disabled).toBe(true)
-    expect(toolButton('안에 추가').title).toBe('자식을 담을 수 있는 노드를 고르세요')
+    expect(toolButton('안에 추가').title).toBe(
+      '자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다',
+    )
   })
 
   it('루트는 아래 추가가 비활성이다', async () => {
