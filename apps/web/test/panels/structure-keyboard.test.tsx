@@ -210,7 +210,7 @@ describe('구조 트리의 키보드 단축키', () => {
     select('Card')
     expect(toolButton('들여쓰기').disabled).toBe(true)
 
-    fireEvent.keyDown(row('Card'), { key: 'ArrowLeft', altKey: true, shiftKey: true })
+    fireEvent.keyDown(row('Card'), { key: 'ArrowRight', altKey: true, shiftKey: true })
 
     expect(structureTypes()).toEqual(INITIAL_TYPES)
     expect(srv.calls).toHaveLength(0)
@@ -218,10 +218,13 @@ describe('구조 트리의 키보드 단축키', () => {
 
   it('들여쓰기·내어쓰기 단축키가 실제로 옮긴다', async () => {
     // 위 케이스의 양성 대조. `n-c`(Divider)의 앞 형제는 `n-box`(Card)라 들여쓸 수 있다.
+    //
+    // **`→`가 들여쓰기다** — 깊이를 늘리는 방향이고, 메뉴 트리도 같다
+    // (`test/panels/tree-shortcuts.test.tsx`가 둘을 대조한다).
     await openPage(doc(), { apiOverrides: server().api })
     select('Divider')
 
-    fireEvent.keyDown(row('Divider'), { key: 'ArrowLeft', altKey: true, shiftKey: true })
+    fireEvent.keyDown(row('Divider'), { key: 'ArrowRight', altKey: true, shiftKey: true })
 
     await waitFor(() =>
       expect(
@@ -232,7 +235,7 @@ describe('구조 트리의 키보드 단축키', () => {
       ).toBe(true),
     )
 
-    fireEvent.keyDown(row('Divider'), { key: 'ArrowRight', altKey: true, shiftKey: true })
+    fireEvent.keyDown(row('Divider'), { key: 'ArrowLeft', altKey: true, shiftKey: true })
 
     await waitFor(() =>
       expect(
@@ -291,13 +294,13 @@ describe('구조 트리의 키보드 단축키', () => {
     }
     expect(inCard()).toBe(true)
 
-    // 내어쓰기 → `Card` 밖으로 나온다.
-    fireEvent.keyDown(row('Text'), { key: 'ArrowRight', altKey: true, shiftKey: true })
+    // 내어쓰기(`←`) → `Card` 밖으로 나온다.
+    fireEvent.keyDown(row('Text'), { key: 'ArrowLeft', altKey: true, shiftKey: true })
     await waitFor(() => expect(inCard()).toBe(false))
     expect(structureTypes()).toEqual(['Page', 'Card', 'Link', 'Text', 'Divider'])
 
-    // 다시 들여쓰기 → `Card` 안으로 돌아온다.
-    fireEvent.keyDown(row('Text'), { key: 'ArrowLeft', altKey: true, shiftKey: true })
+    // 다시 들여쓰기(`→`) → `Card` 안으로 돌아온다.
+    fireEvent.keyDown(row('Text'), { key: 'ArrowRight', altKey: true, shiftKey: true })
     await waitFor(() => expect(inCard()).toBe(true))
 
     // **하지만 제자리가 아니다.** 원래는 `Link` **앞**이었는데 이제 뒤다 — 전위 순회로는

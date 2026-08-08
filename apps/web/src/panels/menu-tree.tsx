@@ -31,14 +31,17 @@ import { MenuToolbar } from './menu-toolbar'
  * 꺼내 쓰고, `ability`가 버튼의 `disabled`와 같은 판정을 지난다.
  *
  * **표를 `structure-tree.tsx`와 따로 두는 것은 두 트리가 한 화면에 있고 조작이 다르기
- * 때문이다.** 키 자체는 같은 것을 골랐다 — 사용자가 두 트리에서 다른 키를 외워야 하면
- * 그 자체가 비용이다.
+ * 때문이다.** 키 자체는 같은 것을 골랐다 — 다만 **같은 키가 같은 방향을 뜻해야 한다**는 것이
+ * 요점이다. 앞 판은 근거를 *"다른 키를 외우면 그 자체가 비용이다"*로 적었는데, 같은 키가
+ * 반대 일을 하면 **외우는 비용이 아니라 틀리는 비용**이다(리뷰가 실제로 그 상태를 잡았다 —
+ * 구조 트리가 `←`를 들여쓰기로 쓰고 있었다). `test/panels/tree-shortcuts.test.tsx`가 두
+ * 트리를 한 자리에서 대조한다.
  *
  * | 키 | 조작 | 근거 |
  * |---|---|---|
  * | `Delete`·`Backspace` | 삭제 **확인** | 계획서가 `Delete`를 정했다. `Backspace`를 함께 받는 것은 macOS 노트북 키보드에 forward delete 키가 없기 때문이다(구조 트리와 같은 근거) |
  * | `Alt`+`↑`·`↓` | 순서 이동 | 계획서가 정했다 |
- * | `Alt`+`Shift`+`←`·`→` | 들여쓰기·내어쓰기 | `Alt`+`←`·`→`가 Windows·Linux 브라우저의 뒤로/앞으로다 — 구조 트리가 같은 이유로 `Shift`를 더했고 **그 조합에 기본 바인딩이 있는지는 거기서도 여기서도 재지 못했다** |
+ * | `Alt`+`Shift`+`→`·`←` | **들여쓰기**·내어쓰기 | 방향은 깊이를 따른다 — 들여쓰기가 깊이를 늘리고 LTR에서 `→`가 그 방향이다. `Alt`+`←`·`→`가 Windows·Linux 브라우저의 뒤로/앞으로라 `Shift`를 더했고 **그 조합에 기본 바인딩이 있는지는 재지 못했다** |
  *
  * **`Delete`가 지우지 않고 확인을 거는 것이 D7이다.** 키 하나로 사라지면 되돌릴 길이 없다.
  *
@@ -97,8 +100,13 @@ export function MenuTree(props: { projectId: string; pageId: string | undefined 
    * 온다(재 봤다: 그 가드가 없으면 제목에 친 `Backspace`가 삭제 확인을 건다). 소속 메뉴
    * 목록도 같은 자리라 함께 본다.
    *
-   * **`busy`가 아니라 판정을 먼저 본다.** 잠금은 `run` 안의 `inFlight`가 잡으므로 여기서
-   * 겹으로 두지 않는다 — 판정이 두 벌이 되는 것이 D5가 막으려는 것이다.
+   * **잠금을 여기서 겹으로 보지 않는다** — 판정이 두 벌이 되는 것이 D5가 막으려는 것이다.
+   * 잠금은 각 조작이 스스로 본다: 요청을 내는 것은 `run` 안의 `inFlight`가, **"여는" 것
+   * (`openInput`·`openReparent`·`askRemove`)은 각자의 `inFlight` 가드**가 잡는다.
+   *
+   * **앞 판은 여기 "잠금은 `run` 안의 `inFlight`가 잡으므로"라고만 적었고 그것이 `askRemove`
+   * 자리에서 거짓이었다** — 그 함수는 `run`을 지나지 않아 가드가 없었고, `busy` 중 `Delete`가
+   * 건 확인이 잠금 해제 뒤까지 살아남았다(리뷰가 잡았고 재현했다).
    */
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     if (commands.editing !== null || commands.reparenting !== null) return

@@ -27,7 +27,15 @@ import { StructureToolbar, useStructureCommands, type StructureCommands } from '
  * |---|---|---|
  * | `Delete`·`Backspace` | 삭제 | 계획서가 `Delete`를 정했다. `Backspace`를 함께 받는 것은 **macOS 노트북 키보드에 forward delete 키가 없기 때문**이다 — 그 자리의 키가 내는 것이 `Backspace`다 |
  * | `Alt`+`↑`·`↓` | 순서 이동 | 계획서가 정했다 |
- * | `Alt`+`Shift`+`←`·`→` | 들여쓰기·내어쓰기 | 아래 |
+ * | `Alt`+`Shift`+`→`·`←` | **들여쓰기**·내어쓰기 | 아래 |
+ *
+ * **방향은 깊이를 따른다 — `→`가 들여쓰기다.** 들여쓰기는 깊이를 **늘리는** 것이고 LTR에서
+ * 오른쪽이 그 방향이다. **앞 판은 반대였고(`←`가 들여쓰기), P2b-4의 메뉴 트리가 계획서대로
+ * `→`를 들여쓰기로 만들면서 같은 키가 두 트리에서 반대 일을 하게 됐다**(리뷰가 한 화면에서
+ * 양쪽 요청을 재서 잡았다). **P2b-3 계획서·이월·이 파일 어디에도 방향을 고른 근거가 없었다** —
+ * 있는 것은 아래의 "왜 `Shift`를 더했나"뿐이다. 그래서 이쪽을 계획서 쪽에 맞췄다.
+ * `test/panels/tree-shortcuts.test.tsx`가 두 트리를 한 자리에서 대조한다 — **이 결함이 다시
+ * 나는 길은 한쪽만 고치는 것이고**, 그 케이스가 그것을 막는다.
  *
  * **`Alt`+`←`·`→`를 쓰지 않은 것은 그것이 Windows·Linux의 Chrome·Firefox에서 브라우저
  * 뒤로/앞으로이기 때문이다.** `Shift`를 더한 조합에 브라우저·OS의 기본 바인딩이 있는지는
@@ -65,12 +73,12 @@ const SHORTCUTS: {
     run: (commands) => commands.moveDown(),
   },
   {
-    match: (event) => event.key === 'ArrowLeft' && event.altKey && event.shiftKey,
+    match: (event) => event.key === 'ArrowRight' && event.altKey && event.shiftKey,
     ability: 'indent',
     run: (commands) => commands.indent(),
   },
   {
-    match: (event) => event.key === 'ArrowRight' && event.altKey && event.shiftKey,
+    match: (event) => event.key === 'ArrowLeft' && event.altKey && event.shiftKey,
     ability: 'outdent',
     run: (commands) => commands.outdent(),
   },
