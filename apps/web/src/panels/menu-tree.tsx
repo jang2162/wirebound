@@ -18,13 +18,64 @@
  * `aria-current="page"`), 선택은 트리 안 상태다(`aria-pressed`). 둘이 같은 값일 때가 많지만
  * 같은 것은 아니다 — 메뉴는 열 수 없고 고르기만 할 수 있다.
  */
-import type { ReactElement } from 'react'
+import type { KeyboardEvent, ReactElement } from 'react'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
 import type { TreeMenuNode, TreePage } from '../api/types'
-import type { TreeSelection } from '../tree/tree-actions'
+import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
 import { MenuToolbar } from './menu-toolbar'
+
+/**
+ * 키보드 단축키(Task 10). **툴바 버튼과 같은 함수를 부른다** — `run`이 `TreeCommands`에서
+ * 꺼내 쓰고, `ability`가 버튼의 `disabled`와 같은 판정을 지난다.
+ *
+ * **표를 `structure-tree.tsx`와 따로 두는 것은 두 트리가 한 화면에 있고 조작이 다르기
+ * 때문이다.** 키 자체는 같은 것을 골랐다 — 사용자가 두 트리에서 다른 키를 외워야 하면
+ * 그 자체가 비용이다.
+ *
+ * | 키 | 조작 | 근거 |
+ * |---|---|---|
+ * | `Delete`·`Backspace` | 삭제 **확인** | 계획서가 `Delete`를 정했다. `Backspace`를 함께 받는 것은 macOS 노트북 키보드에 forward delete 키가 없기 때문이다(구조 트리와 같은 근거) |
+ * | `Alt`+`↑`·`↓` | 순서 이동 | 계획서가 정했다 |
+ * | `Alt`+`Shift`+`←`·`→` | 들여쓰기·내어쓰기 | `Alt`+`←`·`→`가 Windows·Linux 브라우저의 뒤로/앞으로다 — 구조 트리가 같은 이유로 `Shift`를 더했고 **그 조합에 기본 바인딩이 있는지는 거기서도 여기서도 재지 못했다** |
+ *
+ * **`Delete`가 지우지 않고 확인을 거는 것이 D7이다.** 키 하나로 사라지면 되돌릴 길이 없다.
+ *
+ * **`Tab`은 빼앗지 않는다.** 들여쓰기로 쓰고 싶어지는 자리지만 그러면 키보드 사용자가
+ * 트리를 빠져나갈 수 없다.
+ */
+const SHORTCUTS: {
+  match: (event: KeyboardEvent) => boolean
+  ability: keyof TreeAbilities
+  run: (commands: TreeCommands) => void
+}[] = [
+  {
+    match: (event) => event.key === 'Delete' || event.key === 'Backspace',
+    ability: 'remove',
+    run: (commands) => commands.askRemove(),
+  },
+  {
+    match: (event) => event.key === 'ArrowUp' && event.altKey && !event.shiftKey,
+    ability: 'moveUp',
+    run: (commands) => commands.move(-1),
+  },
+  {
+    match: (event) => event.key === 'ArrowDown' && event.altKey && !event.shiftKey,
+    ability: 'moveDown',
+    run: (commands) => commands.move(1),
+  },
+  {
+    match: (event) => event.key === 'ArrowRight' && event.altKey && event.shiftKey,
+    ability: 'indent',
+    run: (commands) => commands.indent(),
+  },
+  {
+    match: (event) => event.key === 'ArrowLeft' && event.altKey && event.shiftKey,
+    ability: 'outdent',
+    run: (commands) => commands.outdent(),
+  },
+]
 
 /**
  * `projectId`·`pageId`를 셸에서 받는다. 여기서 `useParams`를 다시 부르지 않는 것은,
@@ -36,6 +87,34 @@ export function MenuTree(props: { projectId: string; pageId: string | undefined 
   // 두 번째 호출자가 생기면 `busy` 잠금이 각자 것이 된다.
   const commands = useTreeCommands(props)
   const { state } = commands
+
+  /**
+   * 단축키를 받는다. **상자에 붙이지 전역이 아니다** — 다른 패널에서 타이핑하는 키는 다른
+   * 서브트리에서 나므로 여기로 버블되지 않는다(`structure-tree.tsx`와 같은 형태).
+   *
+   * **입력이 열려 있으면 아예 지나간다.** 구조 트리에는 인라인 입력이 없어 그 파일이 이
+   * 상황을 다루지 않는데, 여기서는 입력이 이 상자 **안**에 있어 거기서 친 키가 버블되어
+   * 온다(재 봤다: 그 가드가 없으면 제목에 친 `Backspace`가 삭제 확인을 건다). 소속 메뉴
+   * 목록도 같은 자리라 함께 본다.
+   *
+   * **`busy`가 아니라 판정을 먼저 본다.** 잠금은 `run` 안의 `inFlight`가 잡으므로 여기서
+   * 겹으로 두지 않는다 — 판정이 두 벌이 되는 것이 D5가 막으려는 것이다.
+   */
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (commands.editing !== null || commands.reparenting !== null) return
+
+    const shortcut = SHORTCUTS.find((candidate) => candidate.match(event))
+    if (shortcut === undefined) return
+
+    // **인식한 키만 막는다.** `Tab`은 위 목록에 없으므로 여기 오지 않고 브라우저의 포커스
+    // 이동이 그대로 일어난다.
+    event.preventDefault()
+    // **버튼과 같은 판정을 지난다.** 키 이벤트는 `disabled`를 지나지 않으므로 여기서 보지
+    // 않으면 비활성인 조작이 단축키로만 실행된다.
+    if (!commands.abilities[shortcut.ability]) return
+
+    shortcut.run(commands)
+  }
 
   if (state.status === 'loading') {
     return (
@@ -58,7 +137,9 @@ export function MenuTree(props: { projectId: string; pageId: string | undefined 
   }
 
   return (
-    <div>
+    // **키 핸들러가 이 상자에 붙는다.** 트리와 툴바를 함께 감싸므로 어느 쪽에 포커스가
+    // 있어도 단축키가 닿는다. 스타일이 없는 상자라 클래스는 테스트가 집을 이름 하나뿐이다.
+    <div className="wb-shell-tree-keys" onKeyDown={handleKeyDown}>
       {/* **조작 실패는 트리 안에 낸다(D9).** `shell/edit-alert.tsx`와 섞지 않는 것은 그것이
           편집 파이프라인의 상태를 읽기 때문이다 — CRUD 실패는 그 상태와 무관하므로 섞으면
           서로 다른 두 실패가 한 문장 자리를 다툰다.
