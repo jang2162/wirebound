@@ -509,7 +509,8 @@ describe('메뉴 CRUD', () => {
     // 서버의 `parentId`는 `z.uuid().nullable().optional()`이라 **`null`이 유효한 값**이고
     // "루트에 만든다"는 뜻이다. 클라이언트가 그 뜻을 흘리지 않도록 값으로 싣는다 —
     // 이 계약이 `updateMenu`의 `parentId: null`(내어쓰기로 루트에 보낸다)과 같은 모양이어야
-    // 한다. **키를 빼도 서버가 같은 곳에 만드는지는 재지 않았다**(소스로는 그렇게 보인다).
+    // 한다. **키를 빼도 서버는 같은 곳(루트 맨 뒤)에 만든다** — api 하네스로 쟀고 근거는
+    // `api/client.ts`의 `createMenu` 주석에 있다. 결과가 같아도 뜻을 값으로 남긴다.
     const stub = stubFetch(jsonResponse(201, menuNode))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -558,9 +559,9 @@ describe('메뉴 CRUD', () => {
   })
 
   it('updateMenu는 sortOrder 0을 싣는다', async () => {
-    // 0은 falsy다 — 맨 위로 올리는 이동이 정확히 이 값을 낸다(Task 7). 걸러야 하는
-    // 것은 `undefined` 하나뿐이라는 것을 이 케이스가 못박는다. 빠지면 서버의
-    // `.refine(빈 본문 금지)`에 걸려 400이 된다.
+    // 0은 falsy인데 서버의 `sortOrder`는 `z.int().min(0)`이라 **0이 유효 범위의 하한**이다.
+    // 걸러야 하는 것은 `undefined` 하나뿐이라는 것을 이 케이스가 못박는다 — 0이 빠지면
+    // 본문이 비어 서버의 `.refine(빈 본문 금지)`에 걸린다.
     const stub = stubFetch(jsonResponse(200, menuNode))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -582,6 +583,50 @@ describe('메뉴 CRUD', () => {
     })
   })
 
+  it('빈 갱신 본문은 서버에 보내지 않고 ApiError로 막는다', async () => {
+    // **서버 실측**(api 하네스, 임시 파일을 두고 지웠다): `PATCH /menu {}`·`PATCH /pages {}`가
+    // 둘 다 `400 {"code":"bad-request", …, "issues":[{"path":"","message":"변경할 값이
+    // 없습니다"}]}`다. 보내 봐야 400인 요청은 만들지 않는다 — D5·P2b-2 D7이 버튼에 쓴 정신을
+    // 이 층에 적용한 것이다.
+    //
+    // **`fetch`가 아예 불리지 않는 것까지 본다.** 던지기만 하고 요청이 나가면 서버에 쓸모없는
+    // 왕복이 남는다.
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(await client.updateMenu('p1', 'm1', {}).catch((e: unknown) => e))
+
+    expect(error.code).toBe('bad-request')
+    expect(error.status).toBe(0)
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it('undefined만 담긴 갱신 본문도 같다', async () => {
+    // `definedOnly`가 이것을 `{}`로 **만들어 낸다** — 타입이 세 키를 전부 optional로 두므로
+    // 호출부가 계산한 값이 `undefined`가 되는 경로가 실제로 열려 있다(계획서 Task 8이
+    // `previousMenuSibling`·`menuOutdentTarget`의 `null`을 다루는 자리다).
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client
+        .updateMenu('p1', 'm1', { title: undefined, parentId: undefined, sortOrder: undefined })
+        .catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it('거절은 동기 throw가 아니라 rejection이다', () => {
+    // `ApiClient`의 계약은 `Promise`를 돌려주는 것이다. 몸통에서 그냥 던지면 `await` 없이
+    // `.catch`를 붙이는 호출부가 그것을 못 잡는다.
+    const client = createHttpClient(stubFetch().fetchImpl)
+
+    expect(() => client.updateMenu('p1', 'm1', {}).catch(() => undefined)).not.toThrow()
+    expect(() => client.updatePage('p1', 'pg1', {}).catch(() => undefined)).not.toThrow()
+  })
+
   it('삭제는 204를 본문 없이 받는다', async () => {
     // 204에서 `request`가 조기 반환하므로 shape 검사에 닿지 않는다. 본문을 읽으려
     // 들면 거기서 죽는다(`logout`이 같은 자리를 지킨다).
@@ -598,8 +643,10 @@ describe('메뉴 CRUD', () => {
   })
 
   it('메뉴 응답이 계약과 다른 모양이면 ApiError를 던진다', async () => {
-    // `sortOrder`가 문자열인 응답. **그 값이 그대로 위/아래 이동의 목적지 계산에
-    // 들어가므로**(Task 7) 문자열이 실리면 `sortOrder + 1`이 문자열 이어붙이기가 된다.
+    // `sortOrder`가 문자열인 응답. **이 값을 읽는 자리는 지금 0건이다** — 앞서 여기에
+    // "위/아래 이동의 목적지 계산에 들어간다"고 적었던 것은 거짓이었다(계획서 Task 7
+    // 케이스 7이 `node.sortOrder`를 쓰지 말라고 못박는다). 그런데도 계약을 벗어난 응답을
+    // 통과시키지 않는 것은 `SHAPES.menuNode` 주석의 근거 둘 때문이다.
     const stub = stubFetch(jsonResponse(200, { ...menuNode, sortOrder: '0' }))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -692,6 +739,16 @@ describe('페이지 CRUD', () => {
     expect(json).not.toHaveBeenCalled()
   })
 
+  it('빈 갱신 본문은 페이지 쪽도 막힌다', async () => {
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(await client.updatePage('p1', 'pg1', {}).catch((e: unknown) => e))
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
+  })
+
   it('페이지 CRUD 응답도 페이지 계약을 지난다', async () => {
     // `POST`·`PATCH`의 응답은 `GET`과 같은 여덟 키다(`apps/api/src/routes/pages.ts`의
     // `toResponse` 하나가 셋을 다 만든다). 조회만 검사하고 쓰기를 통과시키면 같은
@@ -704,6 +761,29 @@ describe('페이지 CRUD', () => {
     )
 
     expect(error.code).toBe('internal')
+  })
+
+  it('만든 페이지의 id가 계약과 다르면 ApiError를 던진다', async () => {
+    // **D8이 이 값을 주소에 넣는다** — 만들고 나서 그 페이지로 이동한다. 통과시키면
+    // `ApiError`가 아니라 **200 성공 경로로** 잘못된 주소가 만들어진다.
+    //
+    // 실측(가짜 소비자를 세워 `PageLink`와 같은 형태로 조립했다):
+    //   `id` 키 없음 → `/projects/p1/pages/undefined`
+    //   `id: 42` → `…/42`,  `id: null` → `…/null`
+    //   `id: ''` → `/projects/p1/pages/` — `app.tsx`의 다른 라우트가 받는다
+    const { id: _dropped, ...withoutId } = page
+    const broken: unknown[] = [withoutId, { ...page, id: 42 }, { ...page, id: null }]
+
+    for (const body of broken) {
+      const stub = stubFetch(jsonResponse(201, body))
+      const client = createHttpClient(stub.fetchImpl)
+
+      const error = asApiError(
+        await client.createPage('p1', { menuNodeId: 'm1', title: '목록' }).catch((e: unknown) => e),
+      )
+
+      expect(error.code, JSON.stringify(body)).toBe('internal')
+    }
   })
 
   it('경로에 들어가는 id는 URL 인코딩된다', async () => {
