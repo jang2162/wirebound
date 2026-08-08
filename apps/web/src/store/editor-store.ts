@@ -162,9 +162,13 @@ export class EditorStore {
    * 전송 루프가 돌고 있는가. **관측 상태가 아니라 제어 플래그라 `#state` 밖에 있다.**
    *
    * **훅이 아니라 스토어가 드는 것이 요점이다.** 앞 판은 `use-edit-commit.tsx`의 `ref`가
-   * 이것을 들었는데, `useEditCommit`을 부르는 자리가 둘이 되면(속성 패널과 undo/redo 버튼)
-   * 각자 자기 `ref`를 갖는다 — 실측: 그 트리에서 편집을 각각 내면 `maxInFlight`가 **2**가
-   * 되어 D6가 깨진다. 스토어에 두면 인스턴스 수와 무관해진다.
+   * 이것을 들었는데, `useEditCommit`을 부르는 자리가 여럿이면 각자 자기 `ref`를 갖는다 —
+   * 실측: 그 트리에서 편집을 각각 내면 `maxInFlight`가 **2**가 되어 D6가 깨진다.
+   * 스토어에 두면 인스턴스 수와 무관해진다.
+   *
+   * **지금 그 자리는 셋이다**(세어 고쳤다 — 앞 판은 "둘"이라고 적었는데 P2b-3이 구조 툴바를
+   * 더하면서 늘었다): `routes/editor.tsx`의 undo/redo, `panels/structure-toolbar.tsx`,
+   * `panels/property-panel.tsx`.
    */
   #pumping = false
 

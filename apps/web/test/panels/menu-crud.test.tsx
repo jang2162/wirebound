@@ -634,6 +634,42 @@ describe('조작 잠금', () => {
 
     await waitFor(() => expect(api.createMenu).toHaveBeenCalledTimes(2))
   })
+
+  it('조작이 나가 있는 동안에는 입력이 열리지 않는다', async () => {
+    // **화면에서는 툴바가 비활성이라 이 경로가 없다.** 훅 API로는 열리는데, 그때 친 제목이
+    // **요청도 못 나가고 조용히 사라진다** — 앞 판은 그 상태를 입력의 `disabled`로 막으려
+    // 했지만 그것으로는 "이미 친 제목이 사라지는 것"을 막지 못한다.
+    //
+    // 다음 웨이브의 키보드 단축키가 버튼을 지나지 않으므로(계획서 Task 10 케이스 6) 이
+    // 자리가 그 방벽이다.
+    const gate: { release: (() => void) | null } = { release: null }
+    const { sink } = await mountHook({
+      createMenu: vi.fn(
+        () =>
+          new Promise<MenuNode>((resolve) => {
+            gate.release = () => resolve(menuNode('m-new', '새 메뉴'))
+          }),
+      ),
+    })
+
+    sink.latest?.openInput('new-menu')
+    await waitFor(() => expect(sink.latest?.editing).not.toBeNull())
+    sink.latest?.submitInput('가')
+    await waitFor(() => expect(sink.latest?.busy).toBe(true))
+
+    sink.latest?.openInput('new-menu')
+    // **리렌더를 기다린 뒤에 본다.** 부른 직후 읽으면 아직 앞 렌더의 값이라, 열렸는지
+    // 안 열렸는지가 구별되지 않는다.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(sink.latest?.editing).toBeNull()
+
+    gate.release?.()
+    await waitFor(() => expect(sink.latest?.busy).toBe(false))
+    // 끝나면 다시 열린다 — 잠금이지 영구 차단이 아니다.
+    sink.latest?.openInput('new-menu')
+    await waitFor(() => expect(sink.latest?.editing).not.toBeNull())
+  })
 })
 
 describe('인라인 입력의 용도 전환', () => {
@@ -644,6 +680,13 @@ describe('인라인 입력의 용도 전환', () => {
     // **리뷰는 이 케이스를 만들 수 없다고 봤다**(*"blur가 먼저 언마운트한다"*). 재 보니
     // 그렇지 않다 — `fireEvent.click`은 포커스를 옮기지 않으므로 `onBlur`가 나지 않고,
     // 입력이 그대로 있는 채로 용도만 바뀐다. `key`를 지우면 값이 `'가나'`로 남는다(실측).
+    //
+    // **그 갈림은 `fireEvent` 환경에서만 참이다.** blur를 손으로 심어 재니(실제 브라우저의
+    // 클릭이 하는 일이다) 입력이 **먼저 언마운트되고**, 그 뒤 이름 변경을 열면 `key` 없이도
+    // 값이 `'회원관리'`로 초기화된다 — 그 경로에서는 리뷰 말이 맞다. **실제 브라우저에서
+    // 버튼 클릭이 포커스를 옮기는지는 재지 못했다**(`menu-toolbar.tsx`의 Esc 주석과 같은
+    // 한계다). 그래서 이 케이스가 지키는 것은 **"blur 없이 용도가 바뀌는 경로에서 값이 남지
+    // 않는다"**까지이고, 그 경로를 만드는 것이 다음 웨이브의 단축키다.
     await open()
 
     fireEvent.click(menuButton('회원관리'))

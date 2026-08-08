@@ -102,8 +102,8 @@ export function useTreeCommands(props: {
    * 버튼의 `disabled`가 이미 막는 부류뿐이었다.
    *
    * **`editor-store.ts`의 `#pumping`과 같은 부류이되 원인이 다르다.** 그쪽이 스토어로 간
-   * 것은 `useEditCommit`을 부르는 자리가 **둘**이라 훅의 `ref`로도 부족했기 때문이고
-   * (`maxInFlight`가 2가 됐다), 여기는 훅 인스턴스가 하나이므로 훅의 `ref`로 닫힌다.
+   * 것은 `useEditCommit`을 부르는 자리가 **여럿**(지금 셋)이라 훅의 `ref`로도 부족했기
+   * 때문이고(`maxInFlight`가 2가 됐다), 여기는 훅 인스턴스가 하나이므로 훅의 `ref`로 닫힌다.
    * 공통점은 "상태로는 동기 재진입을 막지 못한다"이다.
    */
   const inFlight = useRef(false)
@@ -219,6 +219,9 @@ export function useTreeCommands(props: {
     } finally {
       // **잠금은 언마운트 여부와 무관하게 푼다.** `ref`는 렌더와 상관없는 값이라 여기서
       // 놓치면 그 인스턴스가 영구히 잠긴다. 표시(`setBusy`)만 마운트 여부를 본다.
+      //
+      // **이 줄은 케이스가 지킨다 — 지우면 1 사망이다**(`조작 잠금 > 앞 요청이 끝나면 다음
+      // 조작이 다시 나간다`). 잠금이지 영구 차단이 아니라는 것이 그 케이스의 하중이다.
       inFlight.current = false
       if (!unmounted.current) setBusy(false)
     }
@@ -245,6 +248,14 @@ export function useTreeCommands(props: {
    * **이름 변경만 초기값을 채운다.** 바꾸려는 것을 지우고 다시 치게 하면 안 된다.
    */
   function openInput(kind: TreeEditing['kind']): void {
+    // **조작이 나가 있으면 열지 않는다(D2의 잠금).** 화면에서는 툴바가 비활성이라 이 경로가
+    // 없지만 훅 API로는 열리는데, 그때 친 제목은 **요청도 못 나가고 조용히 사라진다** —
+    // `submitInput`이 `run`에 닿아도 `inFlight`가 서 있어 되돌아오기 때문이다(실측).
+    // 입력을 비활성으로 그리는 것으로는 그것을 막지 못해 여기서 막는다.
+    //
+    // **다음 웨이브의 키보드 단축키가 버튼을 지나지 않으므로 이 자리가 그 방벽이다**(계획서
+    // Task 10 케이스 6).
+    if (inFlight.current) return
     setFailure(null)
     // **다른 조작을 시작하면 확인이 풀린다**(D7의 셋째 조건).
     setConfirmingRemove(false)
