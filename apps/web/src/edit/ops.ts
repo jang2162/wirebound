@@ -166,8 +166,14 @@ export function removeNodeOps(document: PageDocument, nodeId: string): PatchOp[]
  * 으로 쪼개는 쪽이다.
  *
  * `null`을 내는 자리: 노드가 없거나 루트다 · 부모가 없다 · **자기 자신이나 자기 자손을
- * 부모로 삼는다**(트리가 끊어진다) · 인덱스가 범위 밖이다 · 목적지 `children`이 배열이
- * 아니다.
+ * 부모로 삼는다**(그 op은 `applyOps`가 던진다 — 아래) · 인덱스가 범위 밖이다 ·
+ * 목적지 `children`이 배열이 아니다.
+ *
+ * **자손 판정이 막는 것은 "끊어진 트리"가 아니다** — 처음 그렇게 적었다가 리뷰가
+ * 반증했고 나도 재현했다. `move`가 `from`을 먼저 빼므로 목적지 경로가 그 순간 문서에서
+ * 사라지고 `applyOps`가 `경로를 찾을 수 없습니다`로 던진다. 즉 이 판정의 값어치는
+ * **적용해 보기 전에 끊는 것**(D7)이고, 그마저도 `EditorStore.applyEdit`의 `try/catch`가
+ * 뒤에서 잡는다(`test/edit/ops.test.ts`의 `자손을 부모로 주면 null이다 —`).
  */
 export function moveNodeOps(
   document: PageDocument,

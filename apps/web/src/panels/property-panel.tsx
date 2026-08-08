@@ -13,13 +13,17 @@
 import type { ReactElement } from 'react'
 import {
   defaultStructure,
-  findNode,
   getComponent,
   type ComponentDef,
   type EditorField,
   type WbNode,
 } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
+// **schema의 `findNode`를 쓰지 않는다** — `children` 배열 안의 원소가 노드가 아니면
+// 던지고(`edit/safe-walk.ts` 머리말의 실측), 이 패널은 오류 경계 밖이라 그 예외가 셸을
+// 통째로 지운다. 실측: 그 문서에서 **노드를 고르는 순간** `.wb-shell`이 DOM에서 사라진다 —
+// 열기만 할 때는 여기까지 오지 않아 살아 있다.
+import { findNodeSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { ListControl } from './controls/list-control'
 import { SelectControl } from './controls/select-control'
@@ -53,7 +57,7 @@ export function PropertyPanel(props: {
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 P2b-2의 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
   const node =
-    doc !== null && selectedNodeId !== null ? findNode(doc.root, selectedNodeId) : undefined
+    doc !== null && selectedNodeId !== null ? findNodeSafely(doc.root, selectedNodeId) : undefined
 
   if (node === undefined) {
     return <p className="wb-shell-panel-notice">{NO_SELECTION}</p>
