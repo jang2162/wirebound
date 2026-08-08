@@ -574,27 +574,31 @@ describe('삭제', () => {
  * 두 번 들어올 수 있다.
  */
 describe('조작 잠금', () => {
-  function Probe(props: { sink: { latest: TreeCommands | null } }): ReactElement {
-    props.sink.latest = useTreeCommands({ projectId: 'p-1', pageId: undefined })
+  function Probe(props: { sink: { latest: TreeCommands | null }; pageId?: string }): ReactElement {
+    props.sink.latest = useTreeCommands({ projectId: 'p-1', pageId: props.pageId })
     return <div />
   }
 
   /** 훅만 태운다. 화면이 없으므로 `disabled`가 덮지 못한다. */
   async function mountHook(
     overrides: Partial<ApiClient> = {},
+    pageId?: string,
   ): Promise<{ sink: { latest: TreeCommands | null }; api: ReturnType<typeof stubs> }> {
     const api = stubs(overrides)
     const sink: { latest: TreeCommands | null } = { latest: null }
     render(
       <ApiProvider client={api.client}>
         <MemoryRouter initialEntries={['/projects/p-1']}>
-          <Probe sink={sink} />
+          <Probe sink={sink} pageId={pageId} />
         </MemoryRouter>
       </ApiProvider>,
     )
     await waitFor(() => expect(sink.latest?.state.status).toBe('ready'))
-    sink.latest?.select({ kind: 'menu', id: 'm-member' })
-    await waitFor(() => expect(sink.latest?.selection?.id).toBe('m-member'))
+    // **페이지를 열면 선택이 주소에서 온다**(D3) — 따로 고르지 않는다.
+    if (pageId === undefined) {
+      sink.latest?.select({ kind: 'menu', id: 'm-member' })
+      await waitFor(() => expect(sink.latest?.selection?.id).toBe('m-member'))
+    }
     return { sink, api }
   }
 
@@ -633,6 +637,63 @@ describe('조작 잠금', () => {
     sink.latest?.submitInput('나')
 
     await waitFor(() => expect(api.createMenu).toHaveBeenCalledTimes(2))
+  })
+
+  it('판정을 지나지 않고 불러도 범위 밖으로는 옮기지 않는다', async () => {
+    // **화면·단축키는 둘 다 판정을 지나므로 오늘 이 자리에 닿지 않는다.** 훅 API로는 닿고,
+    // 그때 `sortOrder: -1`이 나가면 서버가 400을 낸다(`SortOrder`가 `z.int().min(0)`).
+    // `indent`·`outdent`는 목적지가 없을 때 되돌아오는데 `move`만 그 가드가 없었다.
+    const { sink, api } = await mountHook()
+
+    // `m-member`는 루트의 첫째이자 막내다(트리에 루트가 둘이지만 `m-order`가 뒤).
+    sink.latest?.select({ kind: 'menu', id: 'm-member' })
+    await waitFor(() => expect(sink.latest?.selection?.id).toBe('m-member'))
+    expect(sink.latest?.abilities.moveUp).toBe(false)
+
+    sink.latest?.move(-1)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(api.updateMenu).not.toHaveBeenCalled()
+
+    // 양성 대조: 뒤 형제가 있으므로 아래로는 나간다.
+    sink.latest?.move(1)
+    await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { sortOrder: 1 })
+  })
+
+  it('조작이 나가 있는 동안에는 소속 메뉴 목록도 열리지 않는다', async () => {
+    // **입력과 같은 가드다.** 화면에서는 툴바가 비활성이라 이 경로가 없지만 훅 API로는
+    // 열리고, 그 상태에서 고르면 요청이 나가지 않은 채 목록만 닫힌다 — `openInput`과 같은
+    // 손해다. 그 자리를 재는 케이스가 없어 **가드가 0 사망이었고**, 이 케이스가 그것을 닫는다.
+    const gate: { release: (() => void) | null } = { release: null }
+    const { sink } = await mountHook(
+      {
+        updatePage: vi.fn(
+          () =>
+            new Promise<PageDetail>((resolve) => {
+              gate.release = () => resolve(pageDetail('pg-list', '회원 목록'))
+            }),
+        ),
+      },
+      'pg-list',
+    )
+
+    // 페이지를 고른 상태에서 이름 변경을 내 잠금을 세운다.
+    sink.latest?.openInput('rename')
+    await waitFor(() => expect(sink.latest?.editing).not.toBeNull())
+    sink.latest?.submitInput('바꾼 이름')
+    await waitFor(() => expect(sink.latest?.busy).toBe(true))
+
+    sink.latest?.openReparent()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(sink.latest?.reparenting).toBeNull()
+
+    gate.release?.()
+    await waitFor(() => expect(sink.latest?.busy).toBe(false))
+    // 끝나면 다시 열린다.
+    sink.latest?.openReparent()
+    await waitFor(() => expect(sink.latest?.reparenting).not.toBeNull())
   })
 
   it('조작이 나가 있는 동안에는 입력이 열리지 않는다', async () => {

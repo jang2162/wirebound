@@ -208,6 +208,43 @@ describe('메뉴 트리 단축키', () => {
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
   })
 
+  it('busy인 동안 Delete가 삭제 확인을 걸지 않는다', async () => {
+    // **D7의 두 번 누르기가 사실상 한 번이 되는 자리다.** 잠금 중에 확인이 걸리면 그 확인이
+    // **잠금이 풀린 뒤까지 살아남아** 클릭 한 번에 삭제가 나간다(재현했다: `deleteMenu` 1회).
+    // undo가 없으므로 복구 불가다.
+    //
+    // `askRemove`만 `run`을 지나지 않아 가드가 없었다 — `openInput`·`openReparent`는 갖고
+    // 있었다. "여는" 셋이 같은 가드를 갖는 것이 D2의 잠금이다.
+    const gate: { release: (() => void) | null } = { release: null }
+    const api = await open({
+      updateMenu: vi.fn(
+        () =>
+          new Promise<MenuNode>((resolve) => {
+            gate.release = () => resolve({ id: 'm-grade', projectId: 'p-1', parentId: null, title: 'x', sortOrder: 0 })
+          }),
+      ),
+    })
+
+    // 조작 하나를 붙잡아 둔다.
+    fireEvent.click(menuButton('등급'))
+    fireEvent.keyDown(keyTarget(), { key: 'ArrowUp', altKey: true })
+    await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+
+    // **잠금 중 Delete** — 확인이 걸리면 안 된다.
+    fireEvent.keyDown(keyTarget(), { key: 'Delete' })
+    expect(within(toolbar()).queryByRole('button', { name: '정말 삭제합니까?' })).toBeNull()
+
+    // 잠금이 풀린 뒤에도 살아남은 확인이 없어야 한다 — 클릭 한 번에 지워지지 않는다.
+    gate.release?.()
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+    expect(within(toolbar()).queryByRole('button', { name: '정말 삭제합니까?' })).toBeNull()
+    expect(api.deleteMenu).not.toHaveBeenCalled()
+
+    // 잠금이 풀렸으니 이제는 걸린다 — 영구 차단이 아니다.
+    fireEvent.keyDown(keyTarget(), { key: 'Delete' })
+    expect(within(toolbar()).getByRole('button', { name: '정말 삭제합니까?' })).toBeDefined()
+  })
+
   it('단축키와 버튼이 같은 요청을 만든다', async () => {
     // 두 경로가 같은 함수를 부르는 것이 계약이다 — 각자 구현을 가지면 한쪽만 고쳐지는
     // 자리가 생긴다(`structure-keyboard.test.tsx`의 같은 이름 케이스가 선례다).

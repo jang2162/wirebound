@@ -241,8 +241,10 @@ export function useTreeCommands(props: {
       // **잠금은 언마운트 여부와 무관하게 푼다.** `ref`는 렌더와 상관없는 값이라 여기서
       // 놓치면 그 인스턴스가 영구히 잠긴다. 표시(`setBusy`)만 마운트 여부를 본다.
       //
-      // **이 줄은 케이스가 지킨다 — 지우면 1 사망이다**(`조작 잠금 > 앞 요청이 끝나면 다음
-      // 조작이 다시 나간다`). 잠금이지 영구 차단이 아니라는 것이 그 케이스의 하중이다.
+      // **이 줄은 케이스가 지킨다 — 지우면 잠금이 영구히 걸려 `조작 잠금` 묶음과 "여는"
+      // 가드를 재는 케이스들이 함께 죽는다.** 앞 판은 "1 사망"이라 적었는데 그 수는 그때의
+      // 케이스 수였고 지금은 더 크다 — **수를 적으면 그 수가 틀린다**(웨이브 1의 F8과 같은
+      // 부류라 갈래만 적는다). 잠금이지 영구 차단이 아니라는 것이 그 케이스들의 하중이다.
       inFlight.current = false
       if (!unmounted.current) setBusy(false)
     }
@@ -386,6 +388,14 @@ export function useTreeCommands(props: {
 
     const target = selection.id
     const sortOrder = spot.index + delta
+    // **범위 밖이면 되돌아온다.** `indent`·`outdent`는 목적지가 없을 때 그렇게 하는데
+    // `move`만 그 가드가 없었다(리뷰가 잡았다) — 판정을 벗기고 첫째에서 `move(-1)`을 부르면
+    // `sortOrder: -1`이 나가고 서버가 400을 낸다(`SortOrder`가 `z.int().min(0)`이다).
+    //
+    // 화면·단축키는 둘 다 `treeAbilities.moveUp`/`moveDown`을 지나므로 오늘 이 자리에
+    // 닿지 않는다. 남기는 것은 그것이 벗겨졌을 때의 방벽이고, 훅을 직접 태우는 케이스가
+    // 그것을 지킨다(`조작 잠금`의 형태와 같다).
+    if (sortOrder < 0 || sortOrder >= spot.siblingCount) return
     void run(async () => {
       if (selection.kind === 'menu') await api.updateMenu(projectId, target, { sortOrder })
       else await api.updatePage(projectId, target, { sortOrder })
@@ -481,7 +491,7 @@ export function useTreeCommands(props: {
    *
    * ```
    * TO(T1:0 T2:1) 에 PATCH {menuNodeId: TO}               →  T1:0 T2:1 옮길것:2   (맨 뒤)
-   * TO(T1:0 T2:1) 에 PATCH {menuNodeId: TO, sortOrder: 1} →  T1:0 옮길것2:1 T2:2  (그 자리)
+   * TO(T1:0 T2:1) 에 PATCH {menuNodeId: TO, sortOrder: 1} →  T1:0 옮길것:1 T2:2   (그 자리)
    * ```
    *
    * 옮기는 사람이 자리를 지목하지 않았으므로 맨 뒤가 맞다 — 지목하고 싶으면 옮긴 뒤
@@ -567,6 +577,13 @@ export function useTreeCommands(props: {
     cancelInput: () => setEditing(null),
     confirmingRemove,
     askRemove: () => {
+      // **조작이 나가 있으면 확인도 걸지 않는다(D2의 잠금).** 이것이 빠져 있었고 리뷰가
+      // 잡았다 — `busy` 중 `Delete`가 확인을 걸면 그 확인이 **잠금이 풀린 뒤까지 살아남아**
+      // 클릭 한 번에 삭제가 나간다(실측). D7의 두 번 누르기가 사실상 한 번이 되고 undo가 없다.
+      //
+      // **"여는" 셋이 같은 가드를 갖는다** — `openInput`·`openReparent`·여기. `cancel*`은
+      // 반대로 **닫는** 것이라 잠금 중에도 열어 둔다: 취소를 막을 이유가 없다.
+      if (inFlight.current) return
       // 확인을 걸면서 열려 있던 입력과 앞 실패를 함께 지운다 — 한 번에 하나만 진행한다.
       setFailure(null)
       setEditing(null)
