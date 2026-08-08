@@ -8,9 +8,13 @@
  * **낙관 적용이 없다(D1).** 화면이 갱신되는 유일한 길이 재조회이므로, 거의 모든 케이스가
  * `getTree` 호출 수를 함께 센다 — 그 수가 곧 "수렴했는가"다.
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
+import { ApiProvider } from '../../src/api/context'
+import { useTreeCommands, type TreeCommands } from '../../src/tree/use-tree-commands'
 import type { MenuNode, PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
@@ -333,7 +337,8 @@ describe('이름 변경', () => {
 
   it('바꾸지 않고 Enter를 눌러도 요청이 나간다', async () => {
     // **값이 같은지 비교하지 않는다.** 비교를 넣으면 "공백만 다른 제목"에서 갈리는데,
-    // 서버가 제목을 정규화하지 않는다는 것을 쟀다(`menu-toolbar.tsx`의 이름 변경 주석).
+    // 서버가 제목을 정규화하지 않는다는 것을 쟀다(`tree/use-tree-commands.tsx`의
+    // `submitInput` 주석에 잰 값이 있다).
     // 즉 `' 회원관리'`와 `'회원관리'`는 서버에서 다른 값이고, 클라이언트가 같다고 판정해
     // 막으면 사용자가 그 공백을 지울 방법이 없어진다.
     const api = await open()
@@ -406,15 +411,41 @@ describe('삭제', () => {
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
   })
 
-  it('Esc로 확인이 풀린다', async () => {
+  it('버튼에 포커스가 있을 때 Esc로 확인이 풀린다', async () => {
+    // **이름에 전제를 적어 둔다.** 핸들러가 그 버튼에 붙어 있으므로 키가 거기로 와야 한다.
+    //
+    // **`fireEvent.click`은 포커스를 옮기지 않는다 — 재 봤다.** 클릭 뒤
+    // `document.activeElement`가 그 버튼이 아니고, 포커스를 밖에 둔 채 문서에 Escape를
+    // 보내면 확인이 풀리지 않는다. 이 저장소는 `userEvent`를 0건 쓰므로 **"실제 클릭이 그
+    // 버튼에 포커스를 준다"는 전제는 여기서 검증되지 않는다**(브라우저·OS에 따라 갈린다고
+    // 알려져 있지만 그것도 잰 것이 아니다).
+    //
+    // 그래서 이 케이스가 지키는 것은 **"포커스가 그 버튼에 있으면 Esc가 확인을 푼다"**까지다.
+    // 아래 `포커스가 버튼 밖이면 Esc가 닿지 않는다`가 그 반대편을 값으로 고정한다.
     const api = await open()
 
     fireEvent.click(menuButton('권한'))
     fireEvent.click(tool('삭제'))
+    confirmButton().focus()
     fireEvent.keyDown(confirmButton(), { key: 'Escape' })
 
     expect(tool('삭제')).toBeDefined()
     expect(api.deleteMenu).not.toHaveBeenCalled()
+  })
+
+  it('포커스가 버튼 밖이면 Esc가 닿지 않는다', async () => {
+    // **D7의 취소 조건 셋 중 Esc만 전제를 갖는다**(선택 변경·다른 조작은 갖지 않는다).
+    // 그 전제가 깨지는 모습을 값으로 적어 둔다 — 전역 리스너로 옮기고 싶어지는 날, 무엇이
+    // 달라지는지를 이 케이스가 말한다. 전역으로 두지 않은 근거는 그것이 다른 패널의 Esc까지
+    // 가로채기 때문이다.
+    await open()
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+
+    // 확인이 그대로 걸려 있다.
+    expect(within(toolbar()).queryByRole('button', { name: '정말 삭제합니까?' })).not.toBeNull()
   })
 
   it('선택을 바꾸면 확인이 풀린다', async () => {
@@ -483,22 +514,28 @@ describe('삭제', () => {
     await waitFor(() => expect(currentPath()).toBe('/projects/p-1'))
   })
 
-  it('열지 않은 페이지를 지우면 주소가 그대로다', async () => {
-    const api = await open({}, '/projects/p-1/pages/pg-detail')
+  it('페이지를 옮겨 다녀도 지워지는 것은 언제나 열려 있는 페이지다', async () => {
+    // **D3의 귀결을 못박는 자리다.** 앞 판의 이 케이스는 이름이
+    // `열지 않은 페이지를 지우면 주소가 그대로다`였는데 **본문은 열려 있던 페이지를
+    // 지우고 있었다**(리뷰가 잡았다 — 이 프로젝트가 반복해 겪은 "산문과 케이스가
+    // 어긋난다"의 테스트판이다).
+    //
+    // 그런 상태를 만들 수 없다는 것이 요점이다: 페이지 링크를 누르면 주소가 바뀌면서
+    // `select(null)`이 함께 나가므로(D3) **선택된 페이지와 열린 페이지가 갈리지 않는다.**
+    // 그래서 삭제에 `wasOpen` 조건이 없다.
+    const api = await open({}, '/projects/p-1/pages/pg-list')
 
-    // 열려 있는 것은 `pg-detail`인데 트리에서 `회원 목록`을 골라 지운다.
-    fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 목록' }))
-    await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-list'))
-    // 다시 `pg-detail`로 돌아가 그것을 연 채로 `회원 목록`을 고른다 — 주소와 선택을 가른다.
+    // 여러 번 옮겨 다녀도 마지막에 연 것이 지워진다.
     fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 상세' }))
     await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-detail'))
+    fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 목록' }))
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-list'))
 
     fireEvent.click(tool('삭제'))
     fireEvent.click(confirmButton())
 
     await waitFor(() => expect(api.deletePage).toHaveBeenCalledTimes(1))
-    expect(api.deletePage).toHaveBeenCalledWith('p-1', 'pg-detail')
-    // 연 페이지를 지웠으니 루트로 간다.
+    expect(api.deletePage).toHaveBeenCalledWith('p-1', 'pg-list')
     await waitFor(() => expect(currentPath()).toBe('/projects/p-1'))
   })
 
@@ -525,5 +562,96 @@ describe('삭제', () => {
     fireEvent.click(menuButton('회원관리'))
 
     expect(tool('삭제').disabled).toBe(true)
+  })
+})
+
+/**
+ * D2의 잠금이 **동기 재진입**을 막는가.
+ *
+ * **화면 버튼으로는 이 경로를 만들 수 없다** — `disabled`가 먼저 막고, 입력은 제출 즉시
+ * 언마운트된다. 그래서 훅을 직접 태운다. 여기가 그 잠금의 **유일한** 하중이다: 다음
+ * 웨이브의 키보드 단축키는 버튼을 지나지 않으므로(계획서 Task 10 케이스 4·6) 같은 tick에
+ * 두 번 들어올 수 있다.
+ */
+describe('조작 잠금', () => {
+  function Probe(props: { sink: { latest: TreeCommands | null } }): ReactElement {
+    props.sink.latest = useTreeCommands({ projectId: 'p-1', pageId: undefined })
+    return <div />
+  }
+
+  /** 훅만 태운다. 화면이 없으므로 `disabled`가 덮지 못한다. */
+  async function mountHook(
+    overrides: Partial<ApiClient> = {},
+  ): Promise<{ sink: { latest: TreeCommands | null }; api: ReturnType<typeof stubs> }> {
+    const api = stubs(overrides)
+    const sink: { latest: TreeCommands | null } = { latest: null }
+    render(
+      <ApiProvider client={api.client}>
+        <MemoryRouter initialEntries={['/projects/p-1']}>
+          <Probe sink={sink} />
+        </MemoryRouter>
+      </ApiProvider>,
+    )
+    await waitFor(() => expect(sink.latest?.state.status).toBe('ready'))
+    sink.latest?.select({ kind: 'menu', id: 'm-member' })
+    await waitFor(() => expect(sink.latest?.selection?.id).toBe('m-member'))
+    return { sink, api }
+  }
+
+  it('같은 tick에 두 번 확정해도 요청은 한 번이다', async () => {
+    // **`useState`로는 이것을 막지 못한다 — 재 봤다.** `run`이 매 렌더 새로 만들어지고
+    // `busy`를 그 렌더 값으로 닫으므로, 같은 클로저의 두 번째 호출은 여전히 `false`를
+    // 본다(`setBusy(true)`는 다음 렌더에야 보인다). 잠금이 `ref`여야 하는 이유다.
+    const { sink, api } = await mountHook()
+
+    sink.latest?.openInput('new-menu')
+    await waitFor(() => expect(sink.latest?.editing).not.toBeNull())
+
+    // 한 렌더의 객체를 붙잡고 연속 두 번.
+    const held = sink.latest
+    held?.submitInput('가')
+    held?.submitInput('나')
+
+    await waitFor(() => expect(api.createMenu).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(api.createMenu).toHaveBeenCalledTimes(1)
+    expect(api.createMenu).toHaveBeenCalledWith('p-1', { parentId: 'm-member', title: '가' })
+  })
+
+  it('앞 요청이 끝나면 다음 조작이 다시 나간다', async () => {
+    // 잠금이지 영구 차단이 아니다 — 이 케이스가 없으면 "아무것도 안 보낸다"도 위 케이스를
+    // 통과한다.
+    const { sink, api } = await mountHook()
+
+    sink.latest?.openInput('new-menu')
+    await waitFor(() => expect(sink.latest?.editing).not.toBeNull())
+    sink.latest?.submitInput('가')
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+
+    sink.latest?.openInput('new-menu')
+    await waitFor(() => expect(sink.latest?.editing).not.toBeNull())
+    sink.latest?.submitInput('나')
+
+    await waitFor(() => expect(api.createMenu).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('인라인 입력의 용도 전환', () => {
+  it('용도를 바꾸면 앞 용도의 값이 남지 않는다', async () => {
+    // **`TreeInput`의 `key={editing.kind}`가 지키는 것이다.** 같은 자리에 남겨 두면 React가
+    // 인스턴스를 재사용해 `useState(props.initial)`의 초기값이 다시 걸리지 않는다.
+    //
+    // **리뷰는 이 케이스를 만들 수 없다고 봤다**(*"blur가 먼저 언마운트한다"*). 재 보니
+    // 그렇지 않다 — `fireEvent.click`은 포커스를 옮기지 않으므로 `onBlur`가 나지 않고,
+    // 입력이 그대로 있는 채로 용도만 바뀐다. `key`를 지우면 값이 `'가나'`로 남는다(실측).
+    await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('하위 메뉴'))
+    fireEvent.change(input(), { target: { value: '가나' } })
+
+    fireEvent.click(tool('이름 변경'))
+
+    expect(input().value).toBe('회원관리')
   })
 })

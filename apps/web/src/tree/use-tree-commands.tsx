@@ -88,6 +88,25 @@ export function useTreeCommands(props: {
 
   const [state, setState] = useState<TreeLoadState>({ status: 'loading' })
   const [picked, setPicked] = useState<TreeSelection | null>(null)
+  /**
+   * **잠금(`inFlight`)과 표시(`busy`)를 갈라 둔다.**
+   *
+   * - `inFlight`는 **제어 플래그**다. 조작이 나가 있는 동안 두 번째 요청을 막는다.
+   * - `busy`는 **관측 상태**다. 버튼을 비활성으로 그리려면 렌더가 그것을 봐야 한다.
+   *
+   * **잠금이 `ref`여야 하는 이유는 잰 것이다.** 앞 판은 `useState`의 `busy` 하나로 둘을 다
+   * 했는데, `run`이 매 렌더 새로 만들어지고 `busy`를 **그 렌더의 값으로 닫으므로** 같은
+   * 클로저에서 오는 두 번째 호출은 여전히 `false`를 본다(`setBusy(true)`는 다음 렌더에야
+   * 보인다). 실측: 한 렌더의 `commands`를 붙잡고 같은 tick에 `submitInput`을 두 번 부르면
+   * `createMenu`가 **2회** 나갔다. 렌더를 사이에 두면 1회다 — 즉 그 가드가 막던 것은
+   * 버튼의 `disabled`가 이미 막는 부류뿐이었다.
+   *
+   * **`editor-store.ts`의 `#pumping`과 같은 부류이되 원인이 다르다.** 그쪽이 스토어로 간
+   * 것은 `useEditCommit`을 부르는 자리가 **둘**이라 훅의 `ref`로도 부족했기 때문이고
+   * (`maxInFlight`가 2가 됐다), 여기는 훅 인스턴스가 하나이므로 훅의 `ref`로 닫힌다.
+   * 공통점은 "상태로는 동기 재진입을 막지 못한다"이다.
+   */
+  const inFlight = useRef(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [editing, setEditing] = useState<TreeEditing | null>(null)
@@ -166,22 +185,26 @@ export function useTreeCommands(props: {
    * `after`는 재조회 **뒤에** 부른다 — 주소를 옮기는 것(D8)이 그 자리다. 실패하면 부르지
    * 않는다: 만들지 못한 페이지로 가면 안 된다.
    *
-   * **실패해도 트리를 다시 받지 않는다.** 서버가 거절했다는 것은 트리가 그대로라는 뜻이고,
-   * 재조회하면 사용자가 방금 본 실패 문장이 조회 상태에 덮인다.
+   * **실패해도 트리를 다시 받지 않는다.** 근거는 앞 문장 하나다 — 서버가 거절했다는 것은
+   * 트리가 그대로라는 뜻이라 받아 봐야 같은 것이 온다.
    *
-   * **`busy` 가드는 지금 0 사망이다 — 재 봤다.** 지우고 돌려도 이 파일의 케이스가 하나도
-   * 죽지 않는다. 덮는 것은 **버튼의 `disabled`**다: `MenuToolbar`의 `ToolButton`에서 `busy`를
-   * 빼면 `요청이 나가 있는 동안 툴바가 전부 비활성이다`가 죽는다(그쪽 변이는 1 사망).
-   * 화면에서 `busy`인 채로 다시 부르려면 비활성 버튼을 눌러야 하는데 그 경로가 없어
-   * **닫는 케이스를 만들지 못했다.**
+   * **앞 판은 여기에 "재조회하면 실패 문장이 조회 상태에 덮인다"를 덧붙였는데 조건이
+   * 빠져 있었다.** 실패 뒤에도 재조회하도록 바꿔 재니 **재조회가 성공하면 실패 문장이 그대로
+   * 보이고**(`getTree` 2회, 트리도 그려진다) **재조회까지 실패했을 때만** 덮인다.
+   * `failure`와 `state`가 서로 다른 상태이고 `menu-tree.tsx`가 둘을 독립적으로 그리기
+   * 때문이다 — `state`가 `failed`가 될 때만 조기 반환이 걸려 조작 실패 문장이 함께 사라진다.
    *
-   * 그래도 남긴다. `StructureToolbar`의 `commitOps` 반환값 검사와 같은 자리다 — 지금
-   * 통과하는 이유가 "위에서 `disabled`가 지켜지고 있어서"이므로, 그것이 벗겨지는 날 이것이
-   * 마지막 방벽이다. **다음 웨이브의 키보드 단축키가 버튼을 지나지 않는다는 것은 계획서
-   * Task 10 케이스 6을 읽은 것이지 잰 것이 아니다.**
+   * **재진입을 막는 것은 `inFlight`(ref)이지 `busy`(state)가 아니다** — 위 선언의 실측을
+   * 보라. 화면 버튼으로는 이 경로를 만들 수 없지만(`disabled`가 먼저 막고 입력은 제출 즉시
+   * 언마운트된다) 훅을 직접 태우면 만들어지고, `조작 잠금 > 같은 tick에 두 번 확정해도
+   * 요청은 한 번이다`가 그것을 지킨다.
+   *
+   * **다음 웨이브의 키보드 단축키가 버튼을 지나지 않는다는 것은 계획서 Task 10 케이스 4·6을
+   * 읽은 것이지 잰 것이 아니다.** 그때 이 자리가 유일한 방벽이 되는지도 그때 재야 한다.
    */
   async function run(send: () => Promise<void>, after?: () => void): Promise<void> {
-    if (busy) return
+    if (inFlight.current) return
+    inFlight.current = true
     setBusy(true)
     setFailure(null)
     try {
@@ -194,6 +217,9 @@ export function useTreeCommands(props: {
       if (unmounted.current) return
       setFailure(toFailure(caught, UNKNOWN_COMMAND_FAILURE))
     } finally {
+      // **잠금은 언마운트 여부와 무관하게 푼다.** `ref`는 렌더와 상관없는 값이라 여기서
+      // 놓치면 그 인스턴스가 영구히 잠긴다. 표시(`setBusy`)만 마운트 여부를 본다.
+      inFlight.current = false
       if (!unmounted.current) setBusy(false)
     }
   }
@@ -302,9 +328,9 @@ export function useTreeCommands(props: {
    * 작동하는 상태가 되고, `treeAbilities`가 전부 `false`를 내므로 사용자는 아무것도 못 하는
    * 채로 자기 위치를 잃는다. 루트 메뉴였으면 갈 부모가 없어 `null`이다.
    *
-   * **연 페이지를 지우면 프로젝트 루트로 `replace` 이동한다(D8).** `replace`인 것은 뒤로
-   * 가기가 지워진 페이지로 돌아가면 404를 만나기 때문이다. **열지 않은 페이지를 지운
-   * 경우에는 주소를 건드리지 않는다** — 보고 있던 것이 그대로 열려 있어야 한다.
+   * **페이지를 지우면 프로젝트 루트로 `replace` 이동한다(D8).** `replace`인 것은 뒤로
+   * 가기가 지워진 페이지로 돌아가면 404를 만나기 때문이다. **조건이 없는 이유는 아래
+   * `deletePage` 갈래의 주석에 있다** — 지울 수 있는 페이지가 곧 열려 있는 페이지다.
    */
   function confirmRemove(): void {
     if (menu === null || selection === null) return
@@ -322,13 +348,26 @@ export function useTreeCommands(props: {
       return
     }
 
+    // **페이지를 지우면 언제나 프로젝트 루트로 간다** — 조건이 없는 것이 D3의 귀결이다.
+    // 페이지 선택은 주소에서만 오기 때문이다: `select`/`setPicked`를 부르는 자리를 전수로
+    // 세니 `{kind:'menu'}`와 `null` 둘뿐이고(`apps/web/src` 실측), 그래서
+    // `selection.kind === 'page'`이면 `picked === null`이고 곧 `selection.id === pageId`다.
+    //
+    // **앞 판은 여기 `wasOpen = pageId === target` 가지를 두고 "열지 않은 페이지를 지우면
+    // 주소를 건드리지 않는다"고 적었는데, 그 조건은 거짓이 될 수 없었다** — 리뷰가 잡았고
+    // `wasOpen`을 항상 `true`로 고정해도 0 사망인 것을 재현했다. 계획서 Task 7~10을 읽어도
+    // 페이지 선택을 만드는 경로가 없다(Task 7은 *"선택은 그대로다"*, Task 9의 `reparent`는
+    // 소속만 바꾸고 주소를 두므로 선택이 파생으로 따라온다).
+    //
+    // **그래서 지운다.** 웨이브 1에서 `previousMenuSibling`의 잉여 가드를 걷어낸 것과 같은
+    // 판단이다. 다시 필요해지는 조건은 명확하다 — **누군가 `select({kind:'page', …})`를
+    // 부르는 순간**이고, 그때 이 자리에 조건이 돌아와야 한다.
     const target = selection.id
-    const wasOpen = pageId === target
     void run(
       () => api.deletePage(projectId, target),
       () => {
         setPicked(null)
-        if (wasOpen) navigate(`/projects/${projectId}`, { replace: true })
+        navigate(`/projects/${projectId}`, { replace: true })
       },
     )
   }
@@ -357,8 +396,24 @@ export function useTreeCommands(props: {
 }
 
 /**
- * 메뉴 제목 하나. **순회가 `tree-actions.ts`가 아니라 여기 있는 것은 이것이 판정이 아니라
- * 표시용이기 때문이다** — 그 파일의 계약("던지지 않는다")이 필요한 자리가 아니다.
+ * 메뉴 제목 하나. **`tree-actions.ts`의 `byOrder` 관문을 지나지 않는다** — 그 파일이 세운
+ * "던지지 않는다" 계약 밖에서 배열을 직접 돈다.
+ *
+ * **그런데도 안전한 근거는 둘이고, 둘 다 잰 것이다.** 앞 판은 *"표시용이기 때문에 그 계약이
+ * 필요한 자리가 아니다"*라고 적었는데 그것은 근거가 아니다 — 계약이 필요한지를 정하는 것은
+ * "표시용인가"가 아니라 **"렌더에서 나쁜 값에 닿는가"**다(리뷰가 잡았다).
+ *
+ * 1. **관문이 세 배열을 이미 보장한다.** `SHAPES.treeEnvelope`가 `isTreeMenuNode`로 재귀
+ *    검사하며 `pages`·`children`이 배열인지까지 본다(웨이브 1 실측). **`tree-actions.ts`가
+ *    일부러 기대지 않기로 한 바로 그 보장이다** — 그쪽은 관문과 다른 커밋에서 바뀔 수 있어
+ *    스스로 닫았고, 여기는 그 보장 위에 선다.
+ * 2. **여기는 렌더가 아니라 이벤트 핸들러다.** `currentTitle()`은 `openInput`에서만 불리고
+ *    그것은 버튼 클릭이다. 실측: 핸들러에서 던지면 `.wb-shell`이 **살아 있고** 예외가 밖으로
+ *    새지도 않는다. 대조로 렌더에서 던지면 그 렌더가 통째로 실패한다.
+ *
+ * **던지는 입력은 찾지 못했다.** 관문을 지나는 깨진 모양 둘(중복 `id`, `pages` 원소가
+ * `children`을 갖는 것)로 이름 변경을 열어 보니 둘 다 던지지 않았고 셸도 살아 있었다
+ * (중복 `id`에서는 첫 일치의 제목이 초기값이 된다 — 그 값이 틀릴 수는 있어도 던지지 않는다).
  */
 function findMenuTitle(nodes: TreeMenuNode[], menuId: string): string | null {
   for (const node of nodes) {
