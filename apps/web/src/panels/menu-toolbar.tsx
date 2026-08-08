@@ -63,7 +63,12 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
         commands={commands}
         onClick={() => commands.openInput('new-page')}
       />
-      <ToolButton label="이름 변경" ability="rename" commands={commands} onClick={NOT_YET} />
+      <ToolButton
+        label="이름 변경"
+        ability="rename"
+        commands={commands}
+        onClick={() => commands.openInput('rename')}
+      />
       <ToolButton label="삭제" ability="remove" commands={commands} onClick={NOT_YET} />
 
       {/* 입력은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 항목에 붙는 작업인지가

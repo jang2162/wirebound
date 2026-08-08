@@ -273,3 +273,103 @@ describe('메뉴·페이지 만들기', () => {
     expect(tool('페이지 추가').disabled).toBe(true)
   })
 })
+
+describe('이름 변경', () => {
+  it('지금 제목이 입력에 들어 있다', async () => {
+    // 새로 만들기와 다른 점이다 — 바꾸려는 것을 지우고 다시 치게 하면 안 된다.
+    await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+
+    expect(input().value).toBe('회원관리')
+  })
+
+  it('메뉴를 고르면 updateMenu가 제목만 싣고 나간다', async () => {
+    // **다른 키가 본문에 없다**(웨이브 1의 `updateBody` 계약). `parentId`나 `sortOrder`가
+    // 섞여 나가면 사용자가 건드리지 않은 값을 덮어쓴다.
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter('회원')
+
+    await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원' })
+    expect(api.updatePage).not.toHaveBeenCalled()
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+  })
+
+  it('페이지를 고르면 updatePage가 나간다', async () => {
+    const api = await open({}, '/projects/p-1/pages/pg-list')
+
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter('목록')
+
+    await waitFor(() => expect(api.updatePage).toHaveBeenCalledTimes(1))
+    expect(api.updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록' })
+    expect(api.updateMenu).not.toHaveBeenCalled()
+  })
+
+  it('열린 페이지의 제목이 입력에 들어 있다', async () => {
+    // 선택이 주소에서 온 경우다(D3) — 그때도 초기값을 찾아야 한다.
+    await open({}, '/projects/p-1/pages/pg-list')
+
+    fireEvent.click(tool('이름 변경'))
+
+    expect(input().value).toBe('회원 목록')
+  })
+
+  it('Esc는 취소다', async () => {
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    fireEvent.keyDown(input(), { key: 'Escape' })
+
+    expect(within(toolbar()).queryByRole('textbox', { name: '이름' })).toBeNull()
+    expect(api.updateMenu).not.toHaveBeenCalled()
+  })
+
+  it('바꾸지 않고 Enter를 눌러도 요청이 나간다', async () => {
+    // **값이 같은지 비교하지 않는다.** 비교를 넣으면 "공백만 다른 제목"에서 갈리는데,
+    // 서버가 제목을 정규화하지 않는다는 것을 쟀다(`menu-toolbar.tsx`의 이름 변경 주석).
+    // 즉 `' 회원관리'`와 `'회원관리'`는 서버에서 다른 값이고, 클라이언트가 같다고 판정해
+    // 막으면 사용자가 그 공백을 지울 방법이 없어진다.
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter('회원관리')
+
+    await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원관리' })
+  })
+
+  it('빈 문자열이면 나가지 않는다', async () => {
+    // 만들기와 같은 규칙이다(D6) — 서버의 `Title`이 `z.string().min(1)`이다.
+    const api = await open()
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter('')
+
+    expect(api.updateMenu).not.toHaveBeenCalled()
+    expect(input()).toBeDefined()
+  })
+
+  it('실패하면 이유가 남고 트리를 다시 받지 않는다', async () => {
+    const api = await open({
+      updateMenu: vi.fn(async () => {
+        throw new ApiError(403, 'forbidden', '편집 권한이 없습니다')
+      }),
+    })
+
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter('회원')
+
+    await within(treeRegion()).findByText('편집 권한이 없습니다')
+    expect(api.getTree).toHaveBeenCalledTimes(1)
+  })
+})

@@ -37,8 +37,8 @@ const UNKNOWN_COMMAND_FAILURE = '요청을 처리하지 못했습니다'
 
 /** 인라인 입력이 무엇을 위해 열려 있는지. 닫혀 있으면 `null`. */
 export interface TreeEditing {
-  kind: 'new-menu' | 'new-page'
-  /** 입력의 초기값. 새로 만들기면 빈 문자열이다. */
+  kind: 'new-menu' | 'new-page' | 'rename'
+  /** 입력의 초기값. 이름 변경이면 지금 제목, 새로 만들기면 빈 문자열이다. */
   initial: string
 }
 
@@ -204,10 +204,21 @@ export function useTreeCommands(props: {
     setEditing(null)
   }
 
-  /** 인라인 입력을 연다. 실패 문장을 함께 지운다 — 새 조작을 시작했다는 뜻이다. */
+  /**
+   * 인라인 입력을 연다. 실패 문장을 함께 지운다 — 새 조작을 시작했다는 뜻이다.
+   *
+   * **이름 변경만 초기값을 채운다.** 바꾸려는 것을 지우고 다시 치게 하면 안 된다.
+   */
   function openInput(kind: TreeEditing['kind']): void {
     setFailure(null)
-    setEditing({ kind, initial: '' })
+    setEditing({ kind, initial: kind === 'rename' ? currentTitle() : '' })
+  }
+
+  /** 선택 대상의 지금 제목. 못 찾으면 빈 문자열 — 그러면 입력이 비어 열린다. */
+  function currentTitle(): string {
+    if (menu === null || selection === null) return ''
+    if (selection.kind === 'menu') return findMenuTitle(menu, selection.id) ?? ''
+    return findPageTitle(menu, selection.id) ?? ''
   }
 
   /**
@@ -217,16 +228,37 @@ export function useTreeCommands(props: {
    *
    * **제목 중복을 검사하지 않는다.** 서버에 유일성 제약이 없다 — 같은 제목의 메뉴를 형제로도
    * 자식으로도 만들 수 있다(웨이브 1 실측, `tree/tree-actions.ts`의 `flattenMenus` 주석).
+   *
+   * **값이 바뀌었는지도 비교하지 않는다(계획서 Task 5 케이스 5).** 서버가 제목을 정규화하는지
+   * 재고 그 결과를 여기 적는다 — **정규화하지 않는다.** api 하네스 실측(임시 파일을 두고
+   * 지웠다): `' 회원관리'`·`'회원관리 '`·`'  회원  관리  '`·`'\t회원관리\n'`을 `PATCH`로
+   * 보내면 넷 다 200이고 **받은 값이 보낸 값과 글자까지 같다**(페이지도 같다). 그러므로
+   * `' 회원관리'`와 `'회원관리'`는 서버에서 다른 값이고, 클라이언트가 "같으니 보내지 않는다"로
+   * 막으면 **사용자가 그 공백을 지울 방법이 없어진다.**
+   *
+   * (부수 관찰: `'   '`처럼 공백만인 제목도 200이다 — `z.string().min(1)`이 길이만 본다.
+   * 여기서 막지 않는 것은 D6이 정한 것이 빈 문자열 하나이기 때문이고, 그 밖의 정책을 이
+   * 단계가 새로 만들지 않는다.)
    */
   function submitInput(title: string): void {
     if (editing === null || selection === null) return
     if (title === '') return
 
+    const kind = editing.kind
+    setEditing(null)
+
+    if (kind === 'rename') {
+      // **메뉴와 페이지가 다른 엔드포인트다.** 선택의 `kind`가 그것을 가른다.
+      void run(async () => {
+        if (selection.kind === 'menu') await api.updateMenu(projectId, selection.id, { title })
+        else await api.updatePage(projectId, selection.id, { title })
+      })
+      return
+    }
+
     // 새로 만들기는 **메뉴를 고른 상태에서만** 열린다(D5의 판정) — 여기 오는 선택은 메뉴다.
     if (selection.kind !== 'menu') return
     const parentId = selection.id
-    const kind = editing.kind
-    setEditing(null)
 
     if (kind === 'new-menu') {
       void run(async () => {
@@ -261,4 +293,28 @@ export function useTreeCommands(props: {
     submitInput,
     cancelInput: () => setEditing(null),
   }
+}
+
+/**
+ * 메뉴 제목 하나. **순회가 `tree-actions.ts`가 아니라 여기 있는 것은 이것이 판정이 아니라
+ * 표시용이기 때문이다** — 그 파일의 계약("던지지 않는다")이 필요한 자리가 아니다.
+ */
+function findMenuTitle(nodes: TreeMenuNode[], menuId: string): string | null {
+  for (const node of nodes) {
+    if (node.id === menuId) return node.title
+    const found = findMenuTitle(node.children, menuId)
+    if (found !== null) return found
+  }
+  return null
+}
+
+function findPageTitle(nodes: TreeMenuNode[], pageId: string): string | null {
+  for (const node of nodes) {
+    for (const page of node.pages) {
+      if (page.id === pageId) return page.title
+    }
+    const found = findPageTitle(node.children, pageId)
+    if (found !== null) return found
+  }
+  return null
 }
