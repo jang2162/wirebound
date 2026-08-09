@@ -12,7 +12,7 @@
  */
 import { installStructures, listStructureKeys, structureBaseCss } from '@wirebound/renderer'
 import { installCatalog, requireComponent, type ComponentDef } from '@wirebound/schema'
-import { SYSTEM_THEME_IDS, cssVarName, resolveTheme, systemTheme } from '@wirebound/themes'
+import { SYSTEM_THEME_IDS, TOKEN_NAMESPACES, cssVarName, resolveTheme, systemTheme } from '@wirebound/themes'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 beforeAll(() => {
@@ -71,11 +71,46 @@ describe('재라 #5 — 렌더러의 변수 이름과 테마의 변수 이름이
     expect(cssVarName('section.paddingY')).toBe('--wb-section-paddingY')
   })
 
-  it('구조 기본 CSS의 이름이 테마가 내는 이름과 하나도 겹치지 않는다', () => {
+  /**
+   * **인스턴스가 아니라 부류를 본다.**
+   *
+   * 앞서 이 케이스는 **설치된 시스템 테마가 실제로 내는 이름**만 모아 대조했다. 오늘은
+   * `admin`이 `primitives.grid.columns`를 선언해 원래 충돌 이름(`--wb-grid-columns`)을
+   * 붙잡고 있지만, **그 한 줄이 사라지면 케이스가 조용히 약해진다** — 테마가 안 쓰는
+   * 이름은 대조 대상에서 빠지기 때문이다.
+   *
+   * 그래서 대조 대상을 **규격이 만들 수 있는 첫 마디 전체**로 올린다. 두 목록이
+   * `z.strictObject`로 닫혀 있으므로(`tokens: { tree: … }`는 `Unrecognized key`가 된다)
+   * 이것이 실제로 전체다:
+   *
+   * - `TOKEN_NAMESPACES` 7: palette · semantic · space · radius · shadow · typography · motion
+   * - `primitives` 그룹 4: container · grid · section · breakpoints
+   */
+  it('규격이 만들 수 있는 첫 마디 전체와 겹치지 않는다', () => {
+    const rendererNames = [...structureBaseCss().matchAll(/--[\w-]+/g)].map((match) => match[0])
+    expect(rendererNames.length).toBeGreaterThan(0)
+
+    // 테마 쪽 이름이 시작할 수 있는 접두어 전부. 뒤에 무엇이 붙든 이 접두어로 시작한다.
+    const PRIMITIVE_GROUPS = ['container', 'grid', 'section', 'breakpoints']
+    const themePrefixes = [...TOKEN_NAMESPACES, ...PRIMITIVE_GROUPS].map(
+      (namespace) => `--wb-${namespace}-`,
+    )
+    expect(themePrefixes).toHaveLength(11)
+
+    const collisions = rendererNames.filter((name) =>
+      themePrefixes.some((prefix) => name.startsWith(prefix)),
+    )
+    expect(collisions).toEqual([])
+  })
+
+  /**
+   * 위 케이스가 부류를 보게 됐으므로, **오늘 설치된 테마가 실제로 내는 이름**과도
+   * 대조해 둔다 — 규격 목록을 내가 잘못 옮겨 적었으면 이쪽이 잡는다.
+   */
+  it('설치된 테마가 실제로 내는 이름과도 겹치지 않는다', () => {
     const rendererNames = new Set(
       [...structureBaseCss().matchAll(/--[\w-]+/g)].map((match) => match[0]),
     )
-    expect(rendererNames.size).toBeGreaterThan(0)
 
     const themeNames = new Set<string>()
     for (const id of SYSTEM_THEME_IDS) {
@@ -85,7 +120,16 @@ describe('재라 #5 — 렌더러의 변수 이름과 테마의 변수 이름이
     }
     expect(themeNames.size).toBeGreaterThan(0)
 
-    const collisions = [...rendererNames].filter((name) => themeNames.has(name))
-    expect(collisions).toEqual([])
+    expect([...rendererNames].filter((name) => themeNames.has(name))).toEqual([])
+  })
+
+  /**
+   * **`--wb-tree-indent`는 `--wb-node-` 밖에 있다.** 오늘 충돌하지 않는 이유는
+   * `tree`라는 이름공간이 규격에 **없어서**일 뿐 접두어 규칙이 지켜서가 아니다.
+   * 그래서 예외를 이름으로 적고, 그것이 실제로 쓰이는 것까지 본다 — 목록이 썩지 않게.
+   */
+  it('--wb-node- 밖의 이름은 tree-indent 하나뿐이고 실제로 쓰인다', () => {
+    const names = [...structureBaseCss().matchAll(/--[\w-]+/g)].map((match) => match[0])
+    expect(names.filter((name) => !name.startsWith('--wb-node-'))).toEqual(['--wb-tree-indent'])
   })
 })
