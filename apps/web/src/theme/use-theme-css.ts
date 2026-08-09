@@ -48,7 +48,7 @@ export const THEME_STYLE_ID = 'theme'
  * 먼저 돌아야 자리를 제대로 잰다**는 뜻이고, 그래서 이 훅을 캔버스보다 위(`App`)가 아니라
  * 캔버스 안에서 먼저 부른다.
  */
-export function useThemeCss(source: ThemeSource = defaultThemeSource): void {
+export function useThemeCss(source: ThemeSource = defaultThemeSource): ResolvedTheme | null {
   /**
    * **컴파일은 테마가 바뀔 때만 한다.** 매 렌더마다 문자열을 다시 만들면 `<style>`의
    * `textContent`가 매번 갈리고, 그때마다 브라우저가 시트를 다시 판다.
@@ -71,18 +71,29 @@ export function useThemeCss(source: ThemeSource = defaultThemeSource): void {
       theme.remove()
     }
   }, [css])
+
+  return css.resolved
 }
 
 interface CompiledCss {
   structure: string
   /** 해석이 실패했으면 빈 문자열이다. */
   theme: string
+  /**
+   * 해석 결과. **부르는 쪽이 구조 선택을 읽으려고 함께 낸다**(Task 9).
+   *
+   * 계획서는 이 훅의 시그니처를 `(): void`로 적었는데 **그대로 두면 해석을 두 번 하게
+   * 된다** — 캔버스가 `themeStructures`에 넘길 `ResolvedTheme`을 따로 얻어야 하기 때문이다.
+   * 두 번 해석하면 비용만이 아니라 **두 결과가 갈릴 수 있는 자리**가 생긴다(테마 소스가
+   * 저장소가 되는 P4a-3에서 실재한다). 그래서 한 번 해석해 CSS와 구조 선택을 함께 낸다.
+   */
+  resolved: ResolvedTheme | null
 }
 
 function compileOnce(source: ThemeSource): CompiledCss {
   const structure = structureBaseCss()
   const document_ = source()
-  if (document_ === null) return { structure, theme: '' }
+  if (document_ === null) return { structure, theme: '', resolved: null }
 
   const { theme, issues } = resolveTheme(document_)
   if (theme === null) {
@@ -99,10 +110,11 @@ function compileOnce(source: ThemeSource): CompiledCss {
       `테마를 해석하지 못해 기본 스타일로 그립니다 (이슈 ${issues.length}건)`,
       issues.map((issue) => `${issue.path}: ${issue.message}`),
     )
-    return { structure, theme: '' }
+    return { structure, theme: '', resolved: null }
   }
 
-  return { structure, theme: compileTheme(theme as ResolvedTheme) }
+  const resolved = theme as ResolvedTheme
+  return { structure, theme: compileTheme(resolved), resolved }
 }
 
 /** 이름이 같은 태그가 있으면 그것을 쓰고, 없으면 `head` 끝에 새로 붙인다. */
