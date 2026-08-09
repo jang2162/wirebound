@@ -281,6 +281,25 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
     screen.getByText(UNREADABLE)
   })
 
+  it('프로젝트 목록의 description이 객체여도 화면이 산다', async () => {
+    // **관문을 고치기 전에는 이 자리가 화면을 통째로 비웠다**(리뷰 W6). `description`이
+    // `isProjectDetail`의 검사 밖이라 목록까지 닿았고, 줄의 `<p>{project.description}</p>`가
+    // 그 값을 React 자식으로 그리다 `Objects are not valid as a React child`를 던졌다.
+    // **목록에는 오류 경계가 없다** — `apps/web/src`의 경계는 캔버스의 `CanvasBoundary` 하나다.
+    //
+    // **고치기 전 실측:** `<main>` 없음 · `innerHTML` **11자**. 고친 뒤에는 다른 계약 위반과
+    // 같은 경로(`ApiError('internal')` → D5)로 모여 **셸이 살고 문장이 남는다.**
+    renderWithProviders(<App />, {
+      client: client({ '/api/auth/me': USER, '/api/projects': [{ ...PROJECT, description: { x: 1 } }] }),
+      route: '/',
+    })
+
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', UNREADABLE)
+    // **`<main>`이 살아 있는 것이 이 케이스의 하중이다** — 문장만 보면 관문이 막았는지
+    // 화면이 죽었는지 갈리지 않는다.
+    expect(document.querySelector('main')).not.toBeNull()
+  })
+
   it('프로젝트 응답이 계약을 어기면 오류 화면이 뜬다', async () => {
     renderWithProviders(<App />, {
       client: client({ '/auth/me': USER, '/projects/p-1': null }),

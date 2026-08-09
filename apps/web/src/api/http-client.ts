@@ -146,7 +146,7 @@ function isTreePage(value: unknown): boolean {
  *
  * | 소비자 | 읽는 값 | 오늘 도달 | 어긋나면 |
  * |---|---|---|---|
- * | `listProjects` | `id`(목록 `<Link>`의 주소) · `name`(줄의 글자) | **매 목록 렌더** | 빈 문자열이면 `/projects/`가 되고 화면이 통째로 빈다 |
+ * | `listProjects` | `id`(목록 `<Link>`의 주소) · `name`(줄의 글자) · **`description`(줄의 `<p>` 자식)** | **매 목록 렌더** | 빈 문자열이면 `/projects/`가 되고 화면이 통째로 빈다 |
  * | `getProject` | `id`(셸이 트리에 넘기는 `projectId`) · `name`(셸 제목) | **매 에디터 렌더** | 같은 부류 — `/projects/pages/pg1` |
  * | `createProject`(P2b-5) | `id`가 **주소가 될 값**이다(D7 — 만든 뒤 그리로 이동한다) | **아직 없다**(호출부 0건) | 201 성공 경로로 잘못된 주소가 만들어진다 |
  * | `updateProject`(P2b-5) | (없음 — 성공 여부만 본다) | **아직 없다**(호출부 0건) | — |
@@ -163,6 +163,30 @@ function isTreePage(value: unknown): boolean {
  * `ProjectDetail` 표). 별도 shape를 두면 내용이 같은 둘이 생겨 한쪽만 고쳐지는 자리가 되고,
  * 더 약한 쪽이 같은 계약을 통과시키게 된다.
  *
+ * **무엇을 막고 무엇을 통과시키는지는 "어겼을 때 화면이 통째로 비는가"로 가른다 — 재서 정했다**
+ * (리뷰 W6). 검사 밖이던 셋을 진짜 `<App />`에 태워 보니 갈렸다:
+ *
+ * | 키 | 계약 밖 값이 닿는 곳 | 관측 | 판단 |
+ * |---|---|---|---|
+ * | `description` | 목록 줄의 `<p>` **자식** | `{}`·`{x:1}`·`[{x:1}]`·`[[{}]]`에서 **`<main>` 없음 · `innerHTML` 11자** | **막는다** |
+ * | `slug` | 수정 폼의 `<input value>` | 폼이 열리고 화면이 산다(629자) | 둔다 |
+ * | `role` | `projectAbilities`의 `!== 'owner'` 비교 | 버튼만 닫히고 화면이 산다(190자) | 둔다 |
+ *
+ * **`description`이 죽는 것은 "객체를 품었을 때"다** — `[1,2]`·`42`·`true`·키 없음은 살아남는다
+ * (277~279자). 그래도 검사를 `문자열 | null`로 두는 것은 **계약이 그 둘뿐**이고, 통과시킬 이유가
+ * 있는 값이 그 밖에 없기 때문이다.
+ *
+ * **`role`을 막지 않는 것이 특히 의도다.** `projects/project-actions.ts`가 계약 밖 값을 받아
+ * 닫도록 만들어져 있으므로, 여기서 막으면 **그 프로젝트의 버튼이 닫히는 대신 목록 전체가
+ * 막힌다** — 손해가 더 크다. 아래 `projectList` 문단의 *"보이고 복구되는 실패가 조용한 빈
+ * 화면보다 낫다"*와 같은 저울이고, 여기서는 저울이 반대로 기운다.
+ *
+ * **다른 shape에도 같은 부류가 있는지 훑었다 — 없다**(같은 하네스로 쟀다).
+ * `pageDetail.title`·`pageDetail.description`이 객체여도 셸이 살고(`.wb-shell` 있음),
+ * `sessionUser.name`도 그렇다. 에디터 셸은 프로젝트의 `description`을 그리지 않는다.
+ * 트리의 `title`들은 `isTreeMenuNode`·`isTreePage`가 이미 문자열로 막는다.
+ * **즉 계약 밖 값이 화면을 통째로 비우는 자리는 오늘 이 하나다.**
+ *
  * **`name`을 보는 것은 `createProject`에게는 넓다.** 그쪽은 오늘 `id`만 읽는다. 그래도 좁히지
  * 않는 것은 `name`이 계약이 항상 준다고 말하는 필드이고, 계약을 벗어난 응답을 **보이고
  * 복구되는 실패**로 만드는 편이 조용히 지나가는 것보다 낫기 때문이다(`projectList`가 항목
@@ -174,7 +198,9 @@ function isProjectDetail(value: unknown): boolean {
     isRecord(value) &&
     typeof value['id'] === 'string' &&
     value['id'] !== '' &&
-    typeof value['name'] === 'string'
+    typeof value['name'] === 'string' &&
+    // **`description`은 React 자식으로 그려진다** — 객체를 품으면 목록이 통째로 빈다(위 표).
+    (typeof value['description'] === 'string' || value['description'] === null)
   )
 }
 

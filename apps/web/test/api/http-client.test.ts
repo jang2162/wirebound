@@ -157,6 +157,93 @@ describe('createHttpClient', () => {
     expect(error.code).toBe('internal')
   })
 
+  it('프로젝트의 description이 문자열도 null도 아니면 ApiError를 던진다', async () => {
+    // **이것만 화면을 통째로 비운다**(리뷰 W6). 목록의 `<p>{project.description}</p>`가 그 값을
+    // React 자식으로 그리는데, **객체를 품고 있으면** React가
+    // `Objects are not valid as a React child`를 던지고 **목록에 오류 경계가 없다**
+    // (`apps/web/src`에서 경계는 캔버스의 `CanvasBoundary` 하나다).
+    //
+    // **실측(진짜 `<App />`, 계약 밖 값을 관문에 태워 목록까지 보냈다):**
+    //
+    // | `description` | `<main>` | `innerHTML` |
+    // |---|---|---|
+    // | `{}` · `{x:1}` · `[{x:1}]` · `[[{}]]` | **없음** | **11자** |
+    // | `[1,2]` · `42` · `true` · 키 없음 | 있음 | 277~279자 |
+    // | `null` · `''` · 공백 · 2000자 | 있음 | 270~2277자 |
+    //
+    // **객체를 품은 것만 죽는다** — 배열이어도 원소가 스칼라면 React가 그려 낸다. 그래서 검사는
+    // "문자열이거나 `null`"로 두고 나머지를 전부 막는다: 계약이 그 둘뿐이고, 통과시킬 이유가
+    // 있는 값이 그 밖에 없다.
+    const broken: unknown[] = [{}, { x: 1 }, [{ x: 1 }], [[{}]], [1, 2], 42, true]
+
+    for (const description of broken) {
+      const stub = stubFetch(jsonResponse(200, [{ ...project, description }]))
+
+      const error = asApiError(
+        await createHttpClient(stub.fetchImpl).listProjects().catch((e: unknown) => e),
+      )
+
+      expect(error.code, JSON.stringify(description)).toBe('internal')
+    }
+  })
+
+  it('description 키가 없어도 막는다', async () => {
+    // 키 없음은 화면을 죽이지 않지만(`undefined`는 React가 그리지 않는다) **계약은 그 키를
+    // 약속한다.** 여기서 통과시키면 `ProjectDetail.description`을 읽는 다음 소비자가
+    // `string | null`이라는 타입을 믿고 `undefined`를 받는다.
+    const { description: _dropped, ...withoutDescription } = project
+    const stub = stubFetch(jsonResponse(200, [withoutDescription]))
+
+    const error = asApiError(
+      await createHttpClient(stub.fetchImpl).listProjects().catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('internal')
+  })
+
+  it('slug와 role은 계약을 어겨도 통과시킨다', async () => {
+    // **과도 차단을 재는 자리이자 범위를 못박는 자리다.** 셋 다 검사 밖이었는데
+    // `description`만 막는다 — **그 셋이 화면에서 갈리기 때문이다**(전부 진짜 `<App />`로 쟀다):
+    //
+    // | 키 | 계약 밖 값이 닿는 곳 | 관측 |
+    // |---|---|---|
+    // | `description` | 목록의 `<p>` 자식 | **화면이 통째로 빈다**(11자) |
+    // | `slug` | 수정 폼의 `<input value>` | 폼이 열리고 화면이 산다(629자) |
+    // | `role` | `projectAbilities`의 `!== 'owner'` 비교 | 버튼만 닫히고 화면이 산다(190자) |
+    //
+    // **`role`을 막지 않는 것이 특히 의도다.** `projectAbilities`는 계약 밖 값을 받아 닫도록
+    // 만들어졌고(그쪽 케이스 `계약에 없는 역할 문자열은 아무것도 열지 않는다`), 여기서 막으면
+    // **그 프로젝트의 버튼이 닫히는 대신 목록 전체가 막힌다.** 손해가 더 크다.
+    //
+    // 즉 이 관문이 막는 기준은 "계약을 어겼는가"가 아니라 **"어겼을 때 화면이 통째로 비는가"**다
+    // — `id`의 빈 문자열(주소가 된다)·`name`(링크의 자식)이 막히는 것도 같은 기준이다.
+    const passing: Partial<ProjectDetail>[] = [
+      { slug: 42 as unknown as string },
+      { slug: { x: 1 } as unknown as string },
+      { role: 'admin' as ProjectDetail['role'] },
+      { role: { x: 1 } as unknown as ProjectDetail['role'] },
+    ]
+
+    for (const patch of passing) {
+      const stub = stubFetch(jsonResponse(200, [{ ...project, ...patch }]))
+      await expect(
+        createHttpClient(stub.fetchImpl).listProjects(),
+        JSON.stringify(patch),
+      ).resolves.toHaveLength(1)
+    }
+  })
+
+  it('정상 description은 그대로 통과한다', async () => {
+    // 음성 대조. 위 검사가 좁아졌으므로 정상값이 막히지 않는지 따로 본다.
+    for (const description of [null, '', '   ', 'ㄱ'.repeat(2000), '줄\n바꿈']) {
+      const stub = stubFetch(jsonResponse(200, [{ ...project, description }]))
+      await expect(
+        createHttpClient(stub.fetchImpl).listProjects(),
+        String(description),
+      ).resolves.toHaveLength(1)
+    }
+  })
+
   it('비어 있지 않은 id는 그대로 통과한다', async () => {
     // **과도 차단을 재는 자리다.** 위 검사가 "문자열이면 통과"보다 좁아졌으므로, 정상 id가
     // 막히지 않는지 따로 본다. 공백 한 칸은 통과해야 한다 — 실측으로 그 주소는 라우트가
