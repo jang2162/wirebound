@@ -184,6 +184,21 @@ export function styleDeclarations(
     }
   }
 
+  // `typography`를 수 갈래보다 **먼저** 가른다. 값이 단일 토큰이 아니라 스케일 항목
+  // 이름이므로 `targets`가 빈 배열인데, 수 갈래를 먼저 돌면 `targets.map`이 빈 결과를 내
+  // **선언도 이슈도 없이 사라졌다**(`typography: 700`이 그랬다 — 재서 확인했다).
+  if (prop === 'typography') {
+    if (typeof value !== 'string') {
+      return {
+        css: [],
+        issues: [
+          issue('bad-style-value', path, `typography는 타이포 스케일 항목 이름이어야 합니다`),
+        ],
+      }
+    }
+    return typographyDeclarations(value, tokens, path)
+  }
+
   if (typeof value === 'number') {
     return { css: targets.map((name) => [name, String(value)]), issues: [] }
   }
@@ -195,8 +210,6 @@ export function styleDeclarations(
       ],
     }
   }
-
-  if (prop === 'typography') return typographyDeclarations(value, tokens, path)
 
   const resolved = resolveStyleValue(value, tokens, path, own(FUNCTION_ALLOWLIST, prop) ?? [], prop)
   if (resolved.value === null) return { css: [], issues: resolved.issues }

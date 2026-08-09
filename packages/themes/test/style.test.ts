@@ -222,6 +222,26 @@ describe('styleDeclarations — typography (§6.5의 parts.title)', () => {
     expect(css.map(([name]) => name)).toEqual(['font-size', 'line-height', 'font-weight'])
   })
 
+  it('문자열이 아닌 값은 이슈다 — 조용히 사라지지 않는다', () => {
+    // 수 갈래가 `typography` 갈래보다 먼저 돌면 `STYLE_PROPERTIES.typography`가 빈 배열이라
+    // 선언도 이슈도 없이 사라진다. "css가 비면 이슈가 있다"의 역이 성립하지 않던 자리다.
+    for (const value of [700, 0, true, null, {}]) {
+      const { css, issues } = decl('typography', value)
+      expect(codes(issues), JSON.stringify(value)).toEqual(['bad-style-value'])
+      expect(css, JSON.stringify(value)).toEqual([])
+    }
+  })
+
+  it('선언이 비면 이슈가 있다 — 화이트리스트 전체에서', () => {
+    // 위 역이 다른 프로퍼티에서도 성립하는지 훑는다. 분모를 손으로 적지 않는다.
+    for (const prop of Object.keys(STYLE_PROPERTIES)) {
+      for (const value of ['h3', 1, '1px', 'nope', 'space.6']) {
+        const { css, issues } = decl(prop, value)
+        if (css.length === 0) expect(issues.length, `${prop} ← ${JSON.stringify(value)}`).toBeGreaterThan(0)
+      }
+    }
+  })
+
   it('타이포 항목이 아닌 이름은 이슈다', () => {
     // `typography.family`는 항목이 있어도 타이포 키가 하나도 없다.
     expect(codes(decl('typography', 'family').issues)).toEqual(['unknown-token'])
