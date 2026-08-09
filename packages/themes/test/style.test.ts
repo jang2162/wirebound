@@ -272,3 +272,41 @@ describe('프로토타입 키 — 규격을 통과한 입력이 검증기를 죽
     }
   })
 })
+
+describe('스타일 값은 palette를 직접 가리키지 못한다 (D3)', () => {
+  const PALETTE: TokenTable = new Map([
+    ['palette.blue.500', '#3b82f6'],
+    ['semantic.primary', '#2563eb'],
+    ['space.6', '24px'],
+  ])
+  const at = (prop: string, value: unknown) => styleDeclarations(prop, value, PALETTE)
+
+  it('통째로 가리키면 이슈다', () => {
+    const { css, issues } = at('bg', 'palette.blue.500')
+    expect(codes(issues)).toEqual(['bad-style-value'])
+    expect(css).toEqual([])
+  })
+
+  it('값 안쪽에 섞여도 이슈다', () => {
+    expect(codes(at('shadow', '1px solid palette.blue.500').issues)).toEqual(['bad-style-value'])
+    expect(codes(at('bgGradient', 'linear-gradient(palette.blue.500, #000)').issues)).toEqual([
+      'bad-style-value',
+    ])
+  })
+
+  it('이슈 문안이 무엇을 쓰라는지 말한다', () => {
+    const [first] = at('bg', 'palette.blue.500').issues
+    expect(first?.message).toContain('semantic')
+  })
+
+  it('과도 차단이 없다 — 나머지 이름공간은 그대로 통과한다', () => {
+    expect(at('bg', 'semantic.primary').issues).toEqual([])
+    expect(at('padding', 'space.6').issues).toEqual([])
+    expect(at('transition', 'opacity space.6').issues).toEqual([])
+    expect(at('bgGradient', 'linear-gradient(semantic.primary, #000)').issues).toEqual([])
+  })
+
+  it('리터럴 색은 그대로 쓸 수 있다 — 막는 것은 참조뿐이다', () => {
+    expect(at('bg', '#3b82f6').css).toEqual([['background', '#3b82f6']])
+  })
+})

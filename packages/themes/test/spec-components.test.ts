@@ -292,3 +292,17 @@ describe('프로토타입 키 — 층 축약이 조용히 사라지지 않는다
     expect(codes(checkThemeComponents(parsed.data, TOKENS, []).issues)).toEqual(['unknown-style-prop'])
   })
 })
+
+describe('primitives도 palette를 직접 가리키지 못한다 (D3)', () => {
+  const PALETTE = new Map([['palette.blue.500', '#3b82f6'], ['space.6', '24px']])
+
+  it('토큰 참조가 palette면 이슈다', () => {
+    const { values, issues } = checkPrimitives({ container: { gutter: 'palette.blue.500' } }, PALETTE)
+    expect(codes(issues)).toEqual(['bad-style-value'])
+    expect(values.has('container.gutter')).toBe(false)
+  })
+
+  it('semantic·스케일은 그대로 통과한다', () => {
+    expect(checkPrimitives({ container: { gutter: 'space.6' } }, PALETTE).issues).toEqual([])
+  })
+})

@@ -236,6 +236,26 @@ function typographyDeclarations(
   return { css, issues: [] }
 }
 
+/**
+ * 스타일 값이 가리킬 수 없는 이름공간.
+ *
+ * §6.3이 의미 계층을 두는 이유를 스스로 적었다 — *"다크 테마와 브랜드 교체 때문이다.
+ * `semantic`만 갈아끼우면 전체가 바뀐다."* 컴포넌트가 원시 팔레트를 직접 집으면 그 성질이
+ * 깨진다. 계획 D3의 표도 `primitives`·`components`·`patterns`가 볼 수 있는 것에서 `palette`를
+ * 뺐는데 코드에 그 규칙이 없었다.
+ *
+ * **설계가 이것을 금지한다고 적지는 않았다.** 대신 재서 확인했다: 설계 문서에서 `palette.`로
+ * 시작하는 참조가 나오는 자리는 §6.3의 `semantic` 블록뿐이고, §6.4·6.5·6.6의 값 자리에는
+ * 하나도 없다. 그러므로 금지가 모든 예시와 어긋나지 않는다.
+ *
+ * 반대 방향(`semantic`이 `palette`를 가리키는 것)은 그대로 열려 있다 — 그것이 3단 분리다.
+ */
+const STYLE_FORBIDDEN_NAMESPACES: readonly string[] = ['palette']
+
+function namespaceOf(reference: string): string {
+  return reference.slice(0, reference.indexOf('.'))
+}
+
 /** 값 안의 토큰 참조를 `var(--wb-…)`로 바꾼다. 통째로 참조인 경우와 섞여 있는 경우를 함께 다룬다. */
 function resolveReferences(
   value: string,
@@ -244,16 +264,32 @@ function resolveReferences(
 ): { value: string; issues: ThemeIssue[] } {
   const issues: ThemeIssue[] = []
 
-  if (isTokenReference(value)) {
-    if (!tokens.has(value)) {
-      return { value, issues: [issue('unknown-token', path, `없는 토큰을 가리킵니다: ${value}`)] }
+  const check = (reference: string): ThemeIssue | null => {
+    if (STYLE_FORBIDDEN_NAMESPACES.includes(namespaceOf(reference))) {
+      return issue(
+        'bad-style-value',
+        path,
+        `스타일 값은 ${namespaceOf(reference)}를 직접 가리킬 수 없습니다: ${reference} ` +
+          '(semantic 토큰을 쓰세요 — 의미 계층만 갈아끼워 다크 테마·브랜드 교체가 되게 하는 것이 §6.3의 3단 분리입니다)',
+      )
     }
-    return { value: `var(${cssVarName(value)})`, issues: [] }
+    if (!tokens.has(reference)) {
+      return issue('unknown-token', path, `없는 토큰을 가리킵니다: ${reference}`)
+    }
+    return null
+  }
+
+  if (isTokenReference(value)) {
+    const rejected = check(value)
+    return rejected === null
+      ? { value: `var(${cssVarName(value)})`, issues: [] }
+      : { value, issues: [rejected] }
   }
 
   const replaced = value.replace(EMBEDDED_REFERENCE, (reference) => {
-    if (!tokens.has(reference)) {
-      issues.push(issue('unknown-token', path, `없는 토큰을 가리킵니다: ${reference}`))
+    const rejected = check(reference)
+    if (rejected !== null) {
+      issues.push(rejected)
       return reference
     }
     return `var(${cssVarName(reference)})`
