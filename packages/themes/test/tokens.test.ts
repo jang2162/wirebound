@@ -186,6 +186,12 @@ describe('resolveTokens — space 파생 (§6.3)', () => {
     expect(table.has('space.6')).toBe(false)
   })
 
+  it('단위의 대소문자를 가리지 않는다 — CSS가 가리지 않는다', () => {
+    expect(resolveTokens({ scale: { space: { unit: '4PX' } } }).table.get('space.6')).toBe('24PX')
+    expect(resolveTokens({ scale: { space: { unit: '0.25REM' } } }).table.get('space.6')).toBe('1.5REM')
+    expect(resolveTokens({ scale: { space: { unit: '4Px' } } }).issues).toEqual([])
+  })
+
   it('CSS 길이 단위가 아닌 것도 이슈다', () => {
     for (const unit of ['4dp', '4 px', 'calc(4px)', '', 'space.1']) {
       expect(codes(resolveTokens({ scale: { space: { unit } } }).issues), unit).toEqual([

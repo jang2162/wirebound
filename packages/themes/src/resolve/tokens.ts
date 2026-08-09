@@ -61,8 +61,11 @@ export const SPACE_MAX = 24
  * 단위 없는 수를 받지 않는 이유는 `space.*`가 쓰이는 자리가 전부 길이(padding·gap·margin —
  * §6.8의 "간격" 부류)여서 단위 없는 파생 결과가 `padding: 24`처럼 무효한 선언이 되기
  * 때문이다. 조용히 통과시키면 화면에서만 드러난다.
+ *
+ * 단위의 대소문자를 가리지 않는다(`i`). CSS 길이 단위는 대소문자를 구분하지 않으므로
+ * `4PX`를 거부하면 유효한 입력을 막는 것이다. 파생 결과는 작성자가 쓴 철자를 그대로 잇는다.
  */
-const LENGTH = /^(\d+\.?\d*|\.\d+)(px|rem|em|%|vw|vh|vmin|vmax|ch|ex|cm|mm|in|pt|pc)$/
+const LENGTH = /^(\d+\.?\d*|\.\d+)(px|rem|em|%|vw|vh|vmin|vmax|ch|ex|cm|mm|in|pt|pc)$/i
 
 /** 참조가 하나도 남지 않은 평평한 표. 키는 `semantic.primary`·`space.6` 같은 참조 경로다. */
 export type TokenTable = ReadonlyMap<string, string>

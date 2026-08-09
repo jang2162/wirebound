@@ -1,6 +1,7 @@
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
 import { own } from '../own'
+import { rejectFunctions } from './functions'
 import type { TokenTable } from './tokens'
 import { TOKEN_NAMESPACES, isTokenReference } from './tokens'
 
@@ -195,31 +196,8 @@ export function resolveStyleValue(
     }
   }
 
-  const functions = scanFunctions(value)
-  if (!functions.balanced) {
-    return { value: null, issues: [issue('bad-style-value', path, `괄호가 맞지 않습니다: ${value}`)] }
-  }
-  if (functions.names.length > 0) {
-    if (functions.nested) {
-      return {
-        value: null,
-        issues: [issue('bad-style-value', path, `중첩된 함수는 받지 않습니다: ${value}`)],
-      }
-    }
-    const rejected = functions.names.filter((name) => !allowedFunctions.includes(name))
-    if (rejected.length > 0) {
-      return {
-        value: null,
-        issues: [
-          issue(
-            'bad-style-value',
-            path,
-            `${label}이 받지 않는 함수입니다: ${rejected.join(', ')} (값을 토큰으로 옮기세요)`,
-          ),
-        ],
-      }
-    }
-  }
+  const rejected = rejectFunctions(value, allowedFunctions, path, label)
+  if (rejected.length > 0) return { value: null, issues: rejected }
 
   const resolved = resolveReferences(value, tokens, path)
   if (resolved.issues.length > 0) return { value: null, issues: resolved.issues }
@@ -280,34 +258,4 @@ function resolveReferences(
   })
 
   return { value: replaced, issues }
-}
-
-/**
- * 값 문자열의 함수 호출을 훑는다. CSS 파서를 들이지 않는다 — **문자열을 만드는 것이지
- * 파싱하는 것이 아니다**(계획 Tech Stack). 여는 괄호 앞의 식별자를 함수 이름으로 보고,
- * 깊이가 0이 아닌 자리의 여는 괄호를 중첩으로 본다.
- */
-function scanFunctions(value: string): { names: string[]; nested: boolean; balanced: boolean } {
-  const names: string[] = []
-  let depth = 0
-  let nested = false
-  let balanced = true
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]
-    if (char === '(') {
-      if (depth > 0) nested = true
-      const name = /([A-Za-z][A-Za-z0-9-]*)$/.exec(value.slice(0, index))?.[1]
-      if (name !== undefined) names.push(name)
-      depth += 1
-    } else if (char === ')') {
-      depth -= 1
-      if (depth < 0) {
-        balanced = false
-        break
-      }
-    }
-  }
-
-  return { names, nested, balanced: balanced && depth === 0 }
 }

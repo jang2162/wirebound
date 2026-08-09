@@ -180,6 +180,25 @@ describe('styleDeclarations — 함수 (§6.8)', () => {
     expect(codes(decl('bgImage', 'url(url(/a.png))').issues)).toEqual(['bad-style-value'])
   })
 
+  it('괄호 앞에 함수 이름이 없으면 이슈다', () => {
+    // 이름을 못 찾으면 `names`가 비어 함수 검사 자체를 건너뛴다 — §6.8의 금지가
+    // 공백 하나로 지나갔다(재서 확인했다).
+    for (const value of ['calc (1px)', '(1px)', 'calc\t(1px)', 'calc\n(1px)', '  (1px)  ']) {
+      const { css, issues } = decl('width', value)
+      expect(codes(issues), JSON.stringify(value)).toEqual(['bad-style-value'])
+      expect(css, JSON.stringify(value)).toEqual([])
+    }
+  })
+
+  it('함수 이름의 대소문자를 가리지 않는다 — CSS가 가리지 않는다', () => {
+    expect(decl('bgImage', 'URL(/a.png)').issues).toEqual([])
+    expect(decl('bgImage', 'Url(/a.png)').issues).toEqual([])
+    expect(decl('bgGradient', 'LINEAR-GRADIENT(#fff,#000)').issues).toEqual([])
+    // 금지 쪽도 같은 규칙을 받는다 — 대문자로 쓴다고 통과하지 않는다.
+    expect(codes(decl('width', 'CALC(1px)').issues)).toEqual(['bad-style-value'])
+    expect(codes(decl('bgGradient', 'URL(/a.png)').issues)).toEqual(['bad-style-value'])
+  })
+
   it('괄호가 맞지 않으면 이슈다', () => {
     expect(codes(decl('bgImage', 'url(/a.png').issues)).toEqual(['bad-style-value'])
     expect(codes(decl('bgImage', '/a.png)').issues)).toEqual(['bad-style-value'])
