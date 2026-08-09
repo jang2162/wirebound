@@ -42,7 +42,7 @@ const PATTERN_NAME = new RegExp(`^(${PATTERN_CATEGORIES.join('|')})\\.[A-Za-z0-9
  *   §6.6의 예시에도 `id`가 하나도 없다.
  *
  * `marker`·`interactions`도 받지 않는다. `marker`는 코멘트 번호(§9)라 저작 중에 붙고,
- * `interactions`의 `target`은 노드 id를 가리키는데 템플릿에는 그 id가 아직 없다.
+ * `interactions`의 `target`은 노드 id를 가리키는데 템플릿에는 그 id가 없다.
  */
 export interface PatternNode {
   type: string

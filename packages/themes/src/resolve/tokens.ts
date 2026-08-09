@@ -6,8 +6,8 @@ import type { ThemeTokens } from '../spec/tokens'
  * 참조가 쓸 수 있는 이름공간.
  *
  * **`scale.` 접두어는 참조 문법에 없다.** 규격 경로는 `tokens.scale.space.unit`인데
- * 참조는 `space.6`이다 — 설계 §6.3·6.4·6.5·6.11의 모든 값 예시를 모아 대조한 결과
- * `scale.`이 붙은 참조는 **하나도 없었다**. 그리고 §6.11이 방출하는 변수 이름이
+ * 참조는 `space.6`이다 — 설계 §6.3·6.4·6.5·6.11에서 값이 나오는 자리를 모아 아래에
+ * 옮겼는데, **그중 `scale.`이 붙은 참조가 없다**. 그리고 §6.11이 방출하는 변수 이름이
  * `--wb-space-6`·`--wb-radius-lg`이지 `--wb-scale-space-6`이 아니다. 즉 `scale`은
  * **테마 문서 안의 묶음**이지 참조 경로의 마디가 아니고, 그 자식들(`space`·`radius`·
  * `shadow`·`typography`·`motion`)이 자기 이름을 이름공간으로 들어올린다.
@@ -34,7 +34,9 @@ export const TOKEN_NAMESPACES = [
 export type TokenNamespace = (typeof TOKEN_NAMESPACES)[number]
 
 /**
- * 값이 참조인지 리터럴인지를 가르는 유일한 기준.
+ * 값 통째가 참조인지 리터럴인지를 가르는 기준. 값 **안쪽**에 섞인 참조는
+ * `resolve/style.ts`의 `EMBEDDED_REFERENCE`가 따로 본다 — 그쪽은 더 큰 문자열 속에서
+ * 찾아야 해서 이름 문자 집합이 좁다.
  *
  * **리터럴이 우연히 이 모양이면 참조로 읽힌다** — 예를 들어 `"radius.lg"`를 리터럴로
  * 쓰려는 방법이 없다. 설계가 이스케이프 문법을 주지 않으므로 여기서 만들지 않는다.
