@@ -66,9 +66,12 @@ const NOTHING: ProjectAbilities = { rename: false, remove: false }
  * 전부 `NOTHING`이 된다(테스트의 `계약에 없는 역할 문자열은 아무것도 열지 않는다`).
  *
  * **`rename`과 `remove`가 같은 조건인데도 필드를 둘로 두는 이유:** 서버가 둘을 각각
- * `PATCH`·`DELETE`로 받고 화면이 두 버튼을 따로 그린다. 지금 값이 같은 것은 **오늘의
- * 관측**이지 하나로 합쳐도 된다는 뜻이 아니다 — 합치면 한쪽만 열리는 역할이 생길 때
- * 부르는 쪽을 전부 고쳐야 한다.
+ * `PATCH`·`DELETE`로 받는다. 지금 값이 같은 것은 **오늘의 관측**이지 하나로 합쳐도 된다는
+ * 뜻이 아니다 — 합치면 한쪽만 열리는 역할이 생길 때 부르는 쪽을 전부 고쳐야 한다.
+ *
+ * **두 버튼을 그리는 화면은 아직 없다**(호출부 0건 — 위 문단의 셈). 계획서 Task 5가 `수정`을,
+ * Task 6이 `삭제`를 만든다. **앞 판은 이 자리를 *"화면이 두 버튼을 따로 그린다"*로 현재형으로
+ * 적었고 그것은 아직 참이 아니었다**(리뷰 F4).
  */
 export function projectAbilities(role: ProjectRole | undefined): ProjectAbilities {
   if (role !== 'owner') return NOTHING
