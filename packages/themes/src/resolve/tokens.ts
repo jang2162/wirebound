@@ -1,6 +1,7 @@
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
 import { own } from '../own'
+import { rejectFunctions } from './functions'
 import type { ThemeTokens } from '../spec/tokens'
 
 /**
@@ -66,6 +67,29 @@ export const SPACE_MAX = 24
  * `4PX`를 거부하면 유효한 입력을 막는 것이다. 파생 결과는 작성자가 쓴 철자를 그대로 잇는다.
  */
 const LENGTH = /^(\d+\.?\d*|\.\d+)(px|rem|em|%|vw|vh|vmin|vmax|ch|ex|cm|mm|in|pt|pc)$/i
+
+/**
+ * 토큰 값이 담을 수 있는 함수.
+ *
+ * **왜 스타일 층의 프로퍼티별 allowlist로는 부족한가.** 토큰은 `:root` 변수 하나로 방출되고
+ * (§6.11) 어느 프로퍼티든 그것을 `var()`로 가리킬 수 있다. 그래서 토큰에 담긴 함수는
+ * **모든 프로퍼티에 대해 허용된 것과 같아진다** — `palette.evil`에 `url(…)`을 넣고
+ * `bgGradient`가 그것을 가리키면 `url()`을 받지 않기로 한 자리에 `url()`이 들어갔다
+ * (재서 확인했고 `bg`·`bgImage`·`width`·`radius`·`shadow`·`transition`·`typography`·
+ * `primitives`까지 같은 길로 들어갔다). 방출 뒤에는 값이 `var(--wb-…)` 문자열이라 어느
+ * 단계도 그 뒤를 따라갈 수 없으므로, **막을 수 있는 자리는 해석 시점뿐이다**(D2와 같은 이유다).
+ *
+ * **고른 선은 "표기냐 계산·참조냐"다.** 색과 이징 곡선은 값을 적는 표기라 어느 프로퍼티에
+ * 들어가도 그 프로퍼티의 의미를 바꾸지 않는다. `calc()`·`var()`·`attr()`·`env()`는 계산과
+ * 참조이고 §6.8이 이름을 들어 금지했다. `url()`과 그라디언트는 프로퍼티가 정해져 있으므로
+ * (`bgImage`·`bgGradient`) 토큰이 아니라 그 자리에 쓴다.
+ *
+ * **이 목록은 손으로 적었다.** §6.3의 예시가 주는 것은 `rgba`와 `cubic-bezier` 둘뿐이고,
+ * 나머지는 같은 표기 계열이라 넣었다 — 어느 색 표기를 골랐는지에 따라 규칙이 갈리는 것은
+ * 설계 어디에도 근거가 없다. 계열 밖의 표기(예: `oklch`)를 쓰면 이슈가 난다. 조용히
+ * 지나가는 것보다 낫다는 판단이고, 필요해지면 여기 줄을 더한다.
+ */
+const TOKEN_FUNCTIONS = ['rgb', 'rgba', 'hsl', 'hsla', 'cubic-bezier', 'steps'] as const
 
 /** 참조가 하나도 남지 않은 평평한 표. 키는 `semantic.primary`·`space.6` 같은 참조 경로다. */
 export type TokenTable = ReadonlyMap<string, string>
@@ -144,6 +168,11 @@ function collectLiteralLayer(
       )
       continue
     }
+    const rejected = rejectTokenFunctions(value, path)
+    if (rejected.length > 0) {
+      issues.push(...rejected)
+      continue
+    }
     out.set(`${namespace}.${key}`, { value, path })
   }
   return out
@@ -160,6 +189,11 @@ function putLiteral(
     issues.push(
       issue('bad-token-value', path, `스케일은 리터럴만 받습니다 (참조: ${value})`),
     )
+    return
+  }
+  const rejected = rejectTokenFunctions(value, path)
+  if (rejected.length > 0) {
+    issues.push(...rejected)
     return
   }
   table.set(tokenPath, value)
@@ -189,6 +223,17 @@ function deriveSpace(
   for (let step = 1; step <= SPACE_MAX; step += 1) {
     table.set(`space.${step}`, `${round(size * step)}${suffix}`)
   }
+}
+
+/**
+ * 토큰 값의 함수를 대조한다. 이슈 코드가 `bad-token-value`인 것은 스타일 층과 달리
+ * **그 층이 받을 수 없는 값**이라는 뜻이 같기 때문이다.
+ */
+function rejectTokenFunctions(value: string, path: string): ThemeIssue[] {
+  return rejectFunctions(value, TOKEN_FUNCTIONS, path, '토큰 값').map((entry) => ({
+    ...entry,
+    code: 'bad-token-value' as const,
+  }))
 }
 
 /** 부동소수 잔여를 없앤다 — `0.1 * 3`이 `0.30000000000000004`가 되는 부류다. */
@@ -240,6 +285,14 @@ function resolveSemantic(
       // TS7022(implicitly any)를 낸다 — 실제로 그 에러를 보고 붙였다.
       const value: string = own(semantic, cursor)!
       if (!isTokenReference(value)) {
+        // 사슬의 끝이 리터럴이다. `palette`·`scale`과 같은 함수 규칙을 여기서도 받는다 —
+        // 이 갈래를 빼면 `semantic`만 우회로가 된다(케이스가 그것을 잡았다).
+        const rejected = rejectTokenFunctions(value, pathOf(cursor))
+        if (rejected.length > 0) {
+          issues.push(...rejected)
+          markFailed(chain, done)
+          break
+        }
         resolved = value
         break
       }

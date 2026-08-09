@@ -80,7 +80,7 @@ export function rejectFunctions(
     issue(
       'bad-style-value',
       path,
-      `${label}이 받지 않는 함수입니다: ${rejected.join(', ')} (값을 토큰으로 옮기세요)`,
+      `${label}이 받지 않는 함수입니다: ${rejected.join(', ')}`,
     ),
   ]
 }

@@ -300,3 +300,57 @@ describe('프로토타입 키 — 물려받은 멤버가 표에 실리지 않는
     if (parsed.success) expect(Object.keys(parsed.data.semantic ?? {})).toEqual([])
   })
 })
+
+describe('토큰 층의 함수 (§6.8의 금지가 우회되지 않는다)', () => {
+  it('§6.3이 쓰는 표기 함수는 통과한다', () => {
+    const { table, issues } = resolveTokens({
+      scale: {
+        shadow: { sm: '0 1px 2px rgba(0,0,0,.05)' },
+        motion: { easing: 'cubic-bezier(.4,0,.2,1)', step: 'steps(4, end)' },
+      },
+      semantic: { primary: 'hsl(220 90% 56%)', muted: 'RGB(1,2,3)' },
+    })
+    expect(issues).toEqual([])
+    expect(table.get('shadow.sm')).toBe('0 1px 2px rgba(0,0,0,.05)')
+    expect(table.get('semantic.muted')).toBe('RGB(1,2,3)')
+  })
+
+  it('계산·참조·외부 자원 함수는 어느 층에서든 이슈다', () => {
+    const bad = ['calc(1px + 2px)', 'url(/a.png)', 'var(--x)', 'attr(data-x)', 'env(safe-area-inset-top)']
+    for (const value of bad) {
+      expect(codes(resolveTokens({ palette: { a: value } }).issues), `palette ${value}`).toEqual(['bad-token-value'])
+      expect(codes(resolveTokens({ semantic: { a: value } }).issues), `semantic ${value}`).toEqual(['bad-token-value'])
+      expect(codes(resolveTokens({ scale: { radius: { a: value } } }).issues), `radius ${value}`).toEqual(['bad-token-value'])
+      expect(codes(resolveTokens({ scale: { shadow: { a: value } } }).issues), `shadow ${value}`).toEqual(['bad-token-value'])
+      expect(codes(resolveTokens({ scale: { motion: { a: value } } }).issues), `motion ${value}`).toEqual(['bad-token-value'])
+      expect(
+        codes(resolveTokens({ scale: { typography: { h9: { fontSize: value } } } }).issues),
+        `typography ${value}`,
+      ).toEqual(['bad-token-value'])
+    }
+  })
+
+  it('그라디언트는 토큰이 아니라 bgGradient가 받는 값이다', () => {
+    expect(codes(resolveTokens({ palette: { a: 'linear-gradient(#fff,#000)' } }).issues)).toEqual([
+      'bad-token-value',
+    ])
+  })
+
+  it('토큰 층에서도 중첩과 이름 없는 괄호가 이슈다', () => {
+    expect(codes(resolveTokens({ semantic: { a: 'rgba(calc(1px),0,0,1)' } }).issues)).toEqual([
+      'bad-token-value',
+    ])
+    expect(codes(resolveTokens({ semantic: { a: 'rgba (0,0,0,1)' } }).issues)).toEqual([
+      'bad-token-value',
+    ])
+  })
+
+  it('이슈가 난 토큰은 표에 실리지 않는다 — 우회의 출발점이 사라진다', () => {
+    const { table } = resolveTokens({
+      palette: { evil: 'url(https://evil.example/x.png)' },
+      semantic: { bad: 'palette.evil' },
+    })
+    expect(table.has('palette.evil')).toBe(false)
+    expect(table.has('semantic.bad')).toBe(false)
+  })
+})

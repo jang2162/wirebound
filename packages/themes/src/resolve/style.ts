@@ -112,9 +112,11 @@ const TYPOGRAPHY_KEYS: readonly [string, string][] = [
  * 내보낸 번들(§11.3)에서 어떻게 다뤄지는지, CSP가 무엇을 막는지 — 어느 것도 이 함수가
  * 확인하지 않는다. **이 값이 "검증을 지났다"고 믿으면 안 된다.**
  *
- * 토큰 층(`resolveTokens`)은 이 검사를 받지 않는다. §6.3의 `shadow.sm`이
- * `rgba(0,0,0,.05)`이고 `motion.easing`이 `cubic-bezier(…)`이므로 **함수는 토큰 층에서
- * 산다.** 스타일 값에 함수를 직접 쓰려면 토큰으로 옮기라는 것이 이 배치의 뜻이다.
+ * **토큰 층도 함수를 검사한다**(`resolveTokens`의 `TOKEN_FUNCTIONS`). 규칙이 다를 뿐이다 —
+ * 토큰은 어느 프로퍼티든 `var()`로 가리킬 수 있어 프로퍼티별 표를 적용할 수 없으므로,
+ * 그 층은 **표기 함수만** 받는다(`rgba`·`cubic-bezier` 등). 그래서 `url()`을 토큰에 넣고
+ * `bgGradient`가 가리키는 길이 막힌다 — 처음에는 그 길이 열려 있었고, 여기 주석이
+ * *"함수는 토큰 층에서 산다"*고 적어 그것을 의도로 설명하고 있었다.
  */
 const FUNCTION_ALLOWLIST: Readonly<Record<string, readonly string[]>> = {
   bgGradient: ['linear-gradient', 'radial-gradient', 'conic-gradient'],
