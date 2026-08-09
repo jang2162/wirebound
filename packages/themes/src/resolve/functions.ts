@@ -53,7 +53,61 @@ export function scanFunctions(value: string): FunctionScan {
 }
 
 /**
- * 값이 담은 함수를 허용 목록과 대조한다. 통과하면 빈 배열이다.
+ * 값이 CSS 문법을 깨고 나가는 문자를 담고 있는지 본다.
+ *
+ * 방출은 값을 **그대로 CSS 문자열에 붙인다**(파서를 들이지 않는 것이 이 패키지의 결정이다).
+ * 그래서 값이 선언이나 블록을 끝낼 수 있으면 **화이트리스트가 승인하지 않은 규칙이 나간다.**
+ * 심어서 확인했다 — `bg: "red; } body{display:none"`·`"#fff }"`·`"a{b}"`·`"red;color:blue"`가
+ * 이슈 없이 선언에 실렸다.
+ *
+ * 막는 것과 이유:
+ * - `{` `}` `;` — 선언과 블록의 끝. 새 규칙을 쓸 수 있다.
+ * - `<` `>` — §6.11이 컴파일된 CSS를 `<style>`로 주입한다고 적었다. 값에 `</style>`이 들어가면
+ *   그 요소가 닫힌다. **브라우저에서 실제로 그렇게 되는지는 이 패키지가 잴 수 없다** —
+ *   막은 근거는 §6.11의 그 문장이지 관측이 아니다.
+ * - `\` — CSS 이스케이프로 위의 어느 것이든 다시 쓸 수 있다(`\7d`이 `}`다).
+ * - `/*` `*\/` — 주석이 뒤따르는 규칙을 삼킨다.
+ *
+ * **`;`만 `url(…)` 안쪽에서 예외**다. `data:image/svg+xml;base64,…`가 그것을 쓰고, `url()`의
+ * 대상은 검증하지 않는다고 이미 적어 둔 자리다. 나머지는 `url()` 안쪽에서도 막는다 —
+ * 거기 `</style>`이 들어오면 같은 사고이기 때문이다.
+ */
+export function rejectDangerousCharacters(value: string, path: string, label: string): ThemeIssue[] {
+  const spans = urlSpans(value)
+  const inUrl = (index: number) => spans.some(([start, end]) => index > start && index < end)
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]!
+    const isComment = (char === '/' || char === '*') && value[index + 1] === (char === '/' ? '*' : '/')
+    if (char === ';' && inUrl(index)) continue
+    if ('{}<>\\;'.includes(char) || isComment) {
+      return [
+        issue(
+          'bad-style-value',
+          path,
+          `${label}에 CSS 문법을 끊는 문자가 있습니다: ${JSON.stringify(char)}`,
+        ),
+      ]
+    }
+  }
+  return []
+}
+
+/** `url(…)`의 안쪽 범위. `resolve/style.ts`의 참조 치환과 같은 규칙을 쓴다. */
+function urlSpans(value: string): Array<readonly [number, number]> {
+  const spans: Array<readonly [number, number]> = []
+  const opener = /url\(/gi
+  let match: RegExpExecArray | null = opener.exec(value)
+  while (match !== null) {
+    const close = value.indexOf(')', match.index + match[0].length)
+    spans.push([match.index, close === -1 ? value.length : close] as const)
+    match = opener.exec(value)
+  }
+  return spans
+}
+
+/**
+ * 값이 담은 함수를 허용 목록과 대조하고, CSS 문법을 끊는 문자를 막는다. 통과하면 빈 배열이다.
  *
  * `allowed`는 **소문자**로 준다 — `scanFunctions`가 이름을 소문자로 정규화한다.
  */
@@ -63,6 +117,9 @@ export function rejectFunctions(
   path: string,
   label: string,
 ): ThemeIssue[] {
+  const dangerous = rejectDangerousCharacters(value, path, label)
+  if (dangerous.length > 0) return dangerous
+
   const scan = scanFunctions(value)
 
   if (!scan.balanced) return [issue('bad-style-value', path, `괄호가 맞지 않습니다: ${value}`)]

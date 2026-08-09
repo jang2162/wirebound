@@ -425,3 +425,46 @@ describe('§6.4~6.6의 값 자리에 palette 참조가 있는가 (F4 판정의 �
     }
   })
 })
+
+describe('스타일 값이 CSS 블록을 깨고 나가지 못한다', () => {
+  const BREAKS_OUT = [
+    'red; } body{display:none',
+    '#fff }',
+    'a{b}',
+    'red /* ',
+    'red */ x',
+    '</style>',
+    '<b>',
+    'red;color:blue',
+    '\\7d body{color:red}',
+  ]
+
+  it('블록·주석·태그·이스케이프 문자가 오면 이슈다', () => {
+    for (const value of BREAKS_OUT) {
+      const { css, issues } = decl('bg', value)
+      expect(codes(issues), value).toEqual(['bad-style-value'])
+      expect(css, value).toEqual([])
+    }
+  })
+
+  it('url() 안쪽의 세미콜론은 살아 있다 — data URI가 그것을 쓴다', () => {
+    expect(decl('bgImage', 'url(data:image/svg+xml;base64,AAA)').issues).toEqual([])
+    // 다만 괄호·꺾쇠는 url() 안쪽에서도 막는다 — 그 안에 `</style>`이 들어오면 같은 사고다.
+    expect(codes(decl('bgImage', 'url(/a</style>.png)').issues)).toEqual(['bad-style-value'])
+    expect(codes(decl('bgImage', 'url(/a}b.png)').issues)).toEqual(['bad-style-value'])
+  })
+
+  it('정상 값은 그대로 통과한다 — 과도 차단이 없다', () => {
+    for (const [prop, value] of [
+      ['bg', '#ffffff'],
+      ['borderWidth', '1px'],
+      ['aspectRatio', '16/9'],
+      ['objectFit', 'cover'],
+      ['transition', 'opacity 200ms'],
+      ['shadow', '0 1px 2px #0001'],
+      ['bgGradient', 'linear-gradient(#fff, #000)'],
+    ] as const) {
+      expect(codes(decl(prop, value).issues), `${prop}: ${value}`).toEqual([])
+    }
+  })
+})

@@ -421,3 +421,34 @@ describe('사슬이 실패하면 그 사슬에 기댄 키도 보인다 (F11)', (
     expect(issues.filter((i) => i.code === 'unresolved-token').length).toBe(49)
   })
 })
+
+describe('값이 CSS 블록을 깨고 나가지 못한다', () => {
+  const BREAKS_OUT = [
+    'red; } body{display:none',
+    '#fff }',
+    'a{b}',
+    'red /* ',
+    'red */ x',
+    '</style>',
+    '<b>',
+    'red;color:blue',
+    '\\7d body{color:red}',
+  ]
+
+  it('토큰 값에 블록·주석·태그·이스케이프 문자가 오면 이슈다', () => {
+    for (const value of BREAKS_OUT) {
+      const { table, issues } = resolveTokens({ semantic: { evil: value } })
+      expect(codes(issues), value).toEqual(['bad-token-value'])
+      expect(table.has('semantic.evil'), value).toBe(false)
+    }
+  })
+
+  it('정상 값은 그대로 통과한다 — 과도 차단이 없다', () => {
+    const fine = ['#ffffff', '1px', '16/9', 'cover', 'Pretendard, sans-serif', '200ms']
+    for (const value of fine) {
+      expect(codes(resolveTokens({ scale: { shadow: { ok: value } } }).issues), value).toEqual([])
+    }
+    expect(resolveTokens({ scale: { shadow: { sm: '0 1px 2px rgba(0,0,0,.05)' } } }).issues).toEqual([])
+    expect(resolveTokens({ scale: { motion: { e: 'cubic-bezier(.4,0,.2,1)' } } }).issues).toEqual([])
+  })
+})
