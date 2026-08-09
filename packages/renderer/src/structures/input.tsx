@@ -24,7 +24,10 @@ export const EntryFormLabelLeft: StructureRenderer = ({ attrs, props, part, chil
 export const FieldOutlined: StructureRenderer = ({ attrs, props, part }) => (
   <div {...attrs}>
     <label {...part('label')}>{String(props.label)}</label>
-    <div {...part('control')} data-control={String(props.control)}>
+    {/* `data-control`은 없어졌다 — `control`이 `data-wb-variant`로 루트에 나간다.
+        조각이 아니라 루트에 붙으므로 테마는 `[data-wb-variant="select"] [data-wb-part="control"]`로
+        같은 자리를 겨냥한다. */}
+    <div {...part('control')}>
       {String(props.placeholder) || ' '}
     </div>
   </div>

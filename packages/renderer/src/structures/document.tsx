@@ -14,12 +14,11 @@ const ROLE_TAG: Record<string, string> = {
   caption: 'small',
 }
 
+// `data-wb-role`은 없어졌다 — `role`이 `variantFrom`으로 `data-wb-variant`가 된다(P0 이월 #8).
+// **`ROLE_TAG`는 그대로 둔다.** 태그를 바꾸는 것은 접근성과 문서 구조의 문제이지
+// 스타일 채널이 아니다 — `<h1>`이 `<p>`가 되면 개요(outline)가 달라진다.
 export const TextDefault: StructureRenderer = ({ attrs, props }) =>
-  createElement(
-    ROLE_TAG[props.role as string] ?? 'p',
-    { ...attrs, 'data-wb-role': String(props.role) },
-    String(props.content),
-  )
+  createElement(ROLE_TAG[props.role as string] ?? 'p', attrs, String(props.content))
 
 export const MediaImage: StructureRenderer = ({ attrs, props, part }) => (
   <figure {...attrs}>
@@ -31,9 +30,8 @@ export const MediaImage: StructureRenderer = ({ attrs, props, part }) => (
   </figure>
 )
 
-export const DividerDefault: StructureRenderer = ({ attrs, props }) => (
-  <hr {...attrs} data-direction={String(props.direction)} />
-)
+// `data-direction`은 없어졌다 — `direction`이 `data-wb-variant`로 나간다.
+export const DividerDefault: StructureRenderer = ({ attrs }) => <hr {...attrs} />
 
 export const PlaceholderDefault: StructureRenderer = ({ attrs, props }) => (
   // 길이 단위를 여기서 붙인다. 기본 CSS가 `calc(var(…) * 1px)`로 붙이면 그 곱셈이

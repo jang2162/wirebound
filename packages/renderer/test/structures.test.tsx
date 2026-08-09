@@ -41,16 +41,13 @@ const CONTRACT_ATTRS = [
 ]
 
 /**
- * 계약 밖인데 지금 실제로 나오는 속성. **승인된 어휘가 아니라 남은 부채다.**
- * - `data-wb-role`: Text (structures/document.tsx)
- * - `data-control`: Field (structures/input.tsx)
- * - `data-direction`: Divider (structures/document.tsx)
+ * 계약 밖인데 지금 실제로 나오는 속성. **비었다** — P0 이월 #8이 닫혔다.
  *
- * 테마 규격을 확정하는 P4a에서 계약 어휘로 흡수하거나 없앤다.
- * 아래 검사는 이 목록과 **정확히 같을 때만** 통과한다. 새 구조가 계약 밖 속성을 내면 깨지고,
- * 셋 중 하나를 정리해도 깨진다 — 목록이 실제 상태를 계속 정직하게 가리키게 하려는 것이다.
+ * 셋(`data-wb-role`·`data-control`·`data-direction`)은 전부 `variantFrom`으로
+ * `data-wb-variant`에 접혔다. 목록을 지우지 않고 빈 채로 두는 것은 **다음에 부채가
+ * 생기면 여기 이름이 적히게** 하려는 것이다.
  */
-const DEFERRED_NON_CONTRACT_ATTRS = ['data-control', 'data-direction', 'data-wb-role']
+const DEFERRED_NON_CONTRACT_ATTRS: string[] = []
 
 function renderDefault(type: string): string {
   return renderToStaticMarkup(renderNode({ id: 'n_000000000001', type }))
@@ -72,15 +69,20 @@ describe('part 계약', () => {
     }
   })
 
-  it('계약 밖 data-* 속성은 P4a로 미뤄둔 셋뿐이다', () => {
+  it('계약 밖 data-* 속성이 하나도 없다', () => {
     const found = new Set<string>()
+    let scanned = 0
     for (const type of CATALOG_TYPES) {
       // React는 `data-wbFoo`처럼 대문자·밑줄이 섞인 이름도 그대로 내보낸다.
       // 소문자·하이픈만 훑으면 그런 속성이 검사를 그냥 빠져나간다.
       for (const attr of captures(renderDefault(type), /\s(data-[\w-]+)=/gi)) {
+        scanned += 1
         if (!CONTRACT_ATTRS.includes(attr)) found.add(attr)
       }
     }
+    // **allowlist가 비었으므로 검사가 실제로 도는지 못을 박는다.** 정규식이 아무것도
+    // 잡지 못해도 `found`는 비고, 그러면 이 케이스는 아무것도 지키지 않는 초록이 된다.
+    expect(scanned).toBeGreaterThan(0)
     expect([...found].sort()).toEqual(DEFERRED_NON_CONTRACT_ATTRS)
   })
 })

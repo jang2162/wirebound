@@ -20,7 +20,9 @@ export const TextDef = defineComponent({
   ],
   structures: ['default'],
   parts: [],
-  variants: [],
+  // `role`의 enum 값 그대로다. `variantFrom`이 그 둘이 어긋나지 않는 것을 검사한다.
+  variants: ['display', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'body', 'caption'],
+  variantFrom: 'role',
   states: [],
   children: 'none',
 })
@@ -54,7 +56,8 @@ export const DividerDef = defineComponent({
   ],
   structures: ['default'],
   parts: [],
-  variants: [],
+  variants: ['horizontal', 'vertical'],
+  variantFrom: 'direction',
   states: [],
   children: 'none',
 })
