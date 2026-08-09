@@ -48,10 +48,14 @@
 
 P2b-4와 **같은 경로다.** 근거 둘:
 
-1. **생성 응답을 목록에 그대로 꽂을 수 없다.** `POST /projects`가 주는 것은 `{id, name, slug, description}`이고 **`role`이 없다** — 목록 항목(`ProjectDetail`)과 다른 모양이다. (소스로 확인했다: `repos/projects.ts`의 `insertProject`가 `.returning(['id','name','slug','description'])`. **실측은 Task 1이 한다.**)
+1. ~~**생성 응답을 목록에 그대로 꽂을 수 없다.** `POST /projects`가 주는 것은 `{id, name, slug, description}`이고 **`role`이 없다** — 목록 항목(`ProjectDetail`)과 다른 모양이다. (소스로 확인했다: `repos/projects.ts`의 `insertProject`가 `.returning(['id','name','slug','description'])`. **실측은 Task 1이 한다.**)~~ **→ 이 근거는 실측으로 반증됐다. 아래 정정을 보라.**
 2. **undo가 없다.** 되돌릴 것이 목록 하나뿐이라 재조회가 곧 수렴이다.
 
-**이것은 P2b-4의 `MenuNode` vs `TreeMenuNode`와 같은 부류다.**
+**정정(Task 1의 재라 #1, api 하네스 실측).** `POST /projects` 201 응답의 키 집합은 **`["description","id","name","role","slug"]`이고 `role: "owner"`가 실려 온다.** `GET /projects` 항목·`GET /projects/:id`·`PATCH /projects/:id`와 **키 집합이 같다.** 원인은 `insertProject`가 `.returning([…])`으로 고른 **뒤** `{ ...project, role: 'owner' as const }`로 감싸는 것인데, 이 계획은 `.returning` 줄만 읽고 확정했다. **생성 응답은 `ProjectSummary`가 아니라 `ProjectDetail`이다.**
+
+**그래도 D1의 결론(요청 → 재조회, 낙관 적용 없음)은 선다.** 근거 2가 그대로다. 여기에 하나를 덧붙일 수 있는데 **그것은 소스로 읽은 것이지 잰 것이 아니다**(구별해 적는다 — 이 절이 반증된 원인이 정확히 그 혼동이다): `listProjectsForUser`에 `.orderBy('projects.created_at','asc')`가 있다. 그것이 참이라면 만든 것을 배열 맨 뒤에 꽂는 것이 오늘의 정렬과 맞고, **정렬이 바뀌면 화면과 서버가 갈린다** — 재조회는 그 갈림이 생기지 않는다. **재려면 프로젝트 둘을 만들어 목록의 순서를 보면 된다. 웨이브 1은 재지 않았다.** **다만 "모양이 달라서 꽂을 수 없다"는 더 이상 근거가 아니다** — 꽂을 수는 있고, 꽂지 않기로 하는 것이다. 그 판단은 이 층(`ApiClient`)이 아니라 목록 화면(Task 4)의 것이다.
+
+~~**이것은 P2b-4의 `MenuNode` vs `TreeMenuNode`와 같은 부류다.**~~ **아니다** — 그쪽은 생성 응답에 `pages`·`children`이 정말로 없어서 꽂을 수 **없었다**. 여기는 꽂을 수 있는데 안 꽂는 것이다.
 
 ### D2. 잠금은 처음부터 `ref`다
 
@@ -77,7 +81,9 @@ export function projectAbilities(role: ProjectRole | undefined): ProjectAbilitie
 
 **`role`을 읽는 자리가 여기 하나여야 한다.** P2b-4 이월이 *"`.role`을 읽는 자리 0건"*을 근거로 여러 판단을 세웠으므로, 그 수가 1이 되는 것이 이 단계의 변화다. **`apps/web/src`에서 `.role`을 읽는 자리를 세어 이 파일 하나인지 확인하라.**
 
-**서버가 낼 코드는 재야 한다** — 설계 §10은 *"멤버지만 역할이 모자라면 403"*이라 하지만 **이 계획은 그것을 재지 않았다**(아래 표 #6).
+**웨이브 1 실측:** 판정 함수를 만든 뒤에도 **코드에서 `.role`을 읽는 자리는 0건이다** — 이 함수를 부르는 자리가 아직 없기 때문이다(웨이브 1은 화면을 만들지 않는다). **"1"은 목록 화면이 이 함수를 부르는 웨이브 2에서 참이 된다.** `rg`가 히트를 내더라도 그것이 `project-actions.ts`의 머리말 주석인지 코드인지 갈라서 세라.
+
+~~**서버가 낼 코드는 재야 한다** — 설계 §10은 *"멤버지만 역할이 모자라면 403"*이라 하지만 **이 계획은 그것을 재지 않았다**(아래 표 #6).~~ **쟀다(재라 #6, Task 2):** `editor`·`viewer` 멤버는 `PATCH`·`DELETE` 둘 다 **403 `forbidden` / "이 작업을 수행할 권한이 없습니다"**, 멤버가 아닌 사용자는 둘 다 **404 `not-found` / "프로젝트를 찾을 수 없습니다"**이고 **없는 프로젝트 id와 코드·문장이 같다**(§10이 존재를 숨기려는 목적 그대로다). **설계 §10이 문서로 적은 것과 잰 것이 일치한다.** 그러므로 이 판정이 막는 것은 **403이 될 요청**이고, 404 쪽은 애초에 목록에 그 프로젝트가 실려 오지 않아 판정이 닿지 않는다.
 
 ### D4. 생성 폼은 목록 위 인라인이고 필드가 셋이다
 
@@ -125,13 +131,13 @@ export function projectAbilities(role: ProjectRole | undefined): ProjectAbilitie
 
 | # | 무엇 | 왜 중요한가 | 어느 태스크 |
 |---|---|---|---|
-| 1 | **`POST /projects` 응답에 정말 `role`이 없는가.** 키 집합을 그대로 적어라 | D1의 근거이고 타입이 갈린다 | Task 1 |
+| 1 | ~~**`POST /projects` 응답에 정말 `role`이 없는가.**~~ **닫혔다 — `role`이 있다.** 키 집합 `["description","id","name","role","slug"]`, `role: "owner"` | D1의 근거 하나가 반증됐고 타입이 `ProjectDetail`로 갈렸다 | Task 1(완료) |
 | 2 | **슬러그 중복이 409인가.** 코드·문장을 그대로 적어라 | Task 4가 그 문장을 보인다 | Task 4 |
 | 3 | **슬러그 형식 위반이 400인가.** 어떤 문장인가 | D5가 클라이언트 검사를 안 두는 근거다 | Task 4 |
-| 4 | **빈 갱신 본문이 400인가.** P2b-4의 `updateBody` 가드가 여기도 필요한가 | Task 5 | Task 5 |
+| 4 | ~~**빈 갱신 본문이 400인가.**~~ **닫혔다(Task 1이 미리 쟀다) — 400이다.** `PATCH /projects/:id {}` → `bad-request` / issues `[{"path":"","message":"변경할 값이 없습니다"}]`로 메뉴·페이지와 **같은 코드·문장**이다. `updateBody` 가드를 그대로 재사용했다 | Task 5의 케이스 8이 이 값을 쓴다 | Task 1(완료) |
 | 5 | **`DELETE /projects` 뒤 그 프로젝트의 메뉴·페이지·revision이 정말 사라지는가** | D6이 이름 입력을 요구하는 근거다. **CASCADE를 소스로만 읽었다** | Task 6 |
-| 6 | **owner가 아닌 멤버가 `PATCH`/`DELETE`를 부르면 403인가 404인가** | D3의 판정이 막는 것과 서버가 내는 것이 맞아야 한다. 설계 §10은 403이라 하지만 **재지 않았다** | Task 2 |
-| 7 | **`apps/web/src`에서 `.role`을 읽는 자리가 이 단계 뒤에 몇인가** | 이월 문서가 "0건"을 근거로 여러 판단을 세웠다. **1이 아니면 그 근거가 흩어진 것이다** | Task 2 |
+| 6 | ~~**owner가 아닌 멤버가 `PATCH`/`DELETE`를 부르면 403인가 404인가**~~ **닫혔다 — 403이다.** `editor`·`viewer` 멤버가 `PATCH`·`DELETE` 넷 다 `403 forbidden`, 멤버가 아닌 사용자는 넷 다 `404 not-found`(없는 프로젝트 id와 같은 코드·문장) | 설계 §10과 일치한다 | Task 2(완료) |
+| 7 | **`apps/web/src`에서 `.role`을 읽는 자리가 이 단계 뒤에 몇인가** — **웨이브 1 시점: 코드 0건**(`rg` 히트는 `project-actions.ts` 머리말 주석뿐). 판정 함수를 부르는 자리가 아직 없다 | 이월 문서가 "0건"을 근거로 여러 판단을 세웠다. **1이 되는 것은 목록 화면이 그 함수를 부르는 웨이브 2다 — 그때 다시 세라** | Task 2 → **웨이브 2에서 재확인** |
 
 1~6은 서버 동작이다. `apps/api/test/`의 하네스로 재는 것이 가장 싸다 — **api 테스트는 Postgres 하나(호스트 포트 5433)를 공유하므로 다른 워커와 동시에 돌리지 마라.**
 
@@ -154,9 +160,9 @@ export function projectAbilities(role: ProjectRole | undefined): ProjectAbilitie
 
 | 파일 | 무엇 |
 |---|---|
-| `apps/web/src/api/types.ts` | `ProjectSummary`를 응답 타입으로 쓴다(이미 있다 — 확인하라) |
+| `apps/web/src/api/types.ts` | **`ProjectDetail`이 생성·갱신 응답 타입이기도 하다**(실측: 재라 #1 — 네 응답의 키 집합이 같다). 원래 이 줄은 *"`ProjectSummary`를 응답 타입으로 쓴다"*였고 틀렸다 |
 | `apps/web/src/api/client.ts` | CRUD 셋 |
-| `apps/web/src/api/http-client.ts` | 구현 + `SHAPES.projectSummary` |
+| `apps/web/src/api/http-client.ts` | 구현. **새 shape를 만들지 않고 `SHAPES.projectDetail`을 지난다** — 원래 이 줄은 `SHAPES.projectSummary`였는데, 응답이 `ProjectDetail`이고 `createProject`의 하중 `id`가 그 검사가 이미 보는 것의 부분집합이라 둘로 나눌 근거가 없다(같은 내용의 shape 둘은 한쪽만 고쳐지는 자리가 된다) |
 | `apps/web/src/routes/project-list.tsx` | 훅 소비자로. 폼·확인 붙이기 |
 | `apps/web/src/shell.css` | 새 클래스(**`wb-shell-` 접두어 필수**) |
 
@@ -174,8 +180,11 @@ export function projectAbilities(role: ProjectRole | undefined): ProjectAbilitie
 
 ```ts
 // api/client.ts — ApiClient에 추가
-/** 응답에 `role`이 없다 — 목록 항목(`ProjectDetail`)과 다른 모양이다(D1). */
-createProject(body: { name: string; slug: string; description?: string | null }): Promise<ProjectSummary>
+/**
+ * **응답에 `role: "owner"`가 실려 온다 — 목록 항목과 같은 모양이다(실측: 재라 #1).**
+ * 이 자리는 원래 `Promise<ProjectSummary>`로 적혀 있었고 그것은 틀렸다.
+ */
+createProject(body: { name: string; slug: string; description?: string | null }): Promise<ProjectDetail>
 updateProject(
   projectId: string,
   body: { name?: string; slug?: string; description?: string | null },
@@ -183,7 +192,7 @@ updateProject(
 deleteProject(projectId: string): Promise<void>
 ```
 
-- [ ] **Step 1: 재라 #1 — `POST /projects` 응답의 키 집합**
+- [x] **Step 1: 재라 #1 — `POST /projects` 응답의 키 집합** — **쟀다. `role`이 있다**(위 D1의 정정).
 
 `apps/api/test/` 하네스로 프로젝트를 만들어 **응답의 키를 그대로 적어라.** `role`이 있으면 이 태스크의 타입이 틀린 것이고 **D1의 근거도 하나 없어진다** — 그렇게 보고하라.
 
@@ -205,7 +214,9 @@ it('설명을 주지 않으면 그 키를 만들지 않는다', async () => {
 })
 
 it('빈 갱신 본문은 그 자리에서 거절한다', async () => {
-  // P2b-4의 updateBody 가드와 같은 자리다. 재라 #4의 결과에 따라 근거를 적는다.
+  // P2b-4의 updateBody 가드와 같은 자리다. **재라 #4를 여기서 미리 쟀다** —
+  // `PATCH /projects/:id {}` → 400 bad-request / "변경할 값이 없습니다"로 메뉴·페이지와
+  // 코드·문장이 같다. 그래서 `updateBody`를 그대로 재사용한다.
 })
 ```
 
@@ -220,7 +231,7 @@ Expected: FAIL — `client.createProject is not a function`
 
 `SHAPES`에 한 줄을 더한다. **`request`가 shape를 필수로 받으므로 빠뜨리면 컴파일 에러다.**
 
-**`SHAPES.projectDetail`을 그대로 쓰지 마라** — 그것은 `role`을 요구하지 않지만 **읽는 필드가 다르다**(D7). 소비자별 하중을 주석에 표로 적어라: `listProjects`·`getProject` → `id`·`name`, `createProject` → **`id`가 주소가 된다**.
+~~**`SHAPES.projectDetail`을 그대로 쓰지 마라** — 그것은 `role`을 요구하지 않지만 **읽는 필드가 다르다**(D7).~~ **전제가 반증돼 반대로 갔다(코디네이터 판정).** `createProject`의 하중은 `id`(주소가 된다) 하나이고 그것은 `isProjectDetail`이 **이미 보는 것의 부분집합**이다(그 검사가 `id !== ''`를 막는다). 별도 shape를 두면 내용이 같은 둘이 생겨 한쪽만 고쳐지는 자리가 되고 더 약한 쪽이 같은 계약을 통과시키게 된다. **P2b-4가 "재사용하지 마라"고 한 근거는 "읽는 필드가 다른데 표를 갱신하지 않았다"였다 — 규칙이 아니라 그 근거를 따랐다.** 다만 **소비자별 하중은 표로 적는다**(그것이 원래 요구의 알맹이다): `listProjects`·`getProject` → `id`(주소)·`name`, `createProject` → **`id`가 주소가 된다**, `updateProject` → 읽는 필드 없음. **`name`까지 요구하는 것이 `createProject`에게는 넓다는 사실도 함께 적는다.**
 
 `updateBody`(빈 본문 가드)는 P2b-4가 만든 것을 재사용하라 — **새로 만들지 마라.**
 
@@ -276,7 +287,7 @@ describe('projectAbilities', () => {
 
 - [ ] **Step 2: 구현한다.** 머리말에 **왜 판정이 한 자리여야 하는지**(D3)를 적어라
 
-- [ ] **Step 3: 재라 #6 — owner가 아닌 멤버의 `PATCH`/`DELETE`**
+- [x] **Step 3: 재라 #6 — owner가 아닌 멤버의 `PATCH`/`DELETE`** — **쟀다. 멤버는 403, 비멤버는 404**(위 D3의 정정).
 
 `apps/api/test/` 하네스로 `editor`·`viewer` 멤버를 만들어 `PATCH`·`DELETE`를 부르고 **상태 코드와 `code`를 그대로 적어라.** 설계 §10은 403이라 하지만 **그것은 문서를 읽은 것이지 잰 것이 아니다.**
 
@@ -504,9 +515,9 @@ rg -n "0건" docs/superpowers/plans/2026-08-09-p2b4-carryforward.md
 
 ## Self-Review
 
-**Spec 대조.** 설계 §10의 권한 모델(owner만 수정·삭제)이 D3·Task 2·5·6에 있다. §10의 *"멤버지만 역할이 모자라면 403"*은 **재라 #6으로 보냈다** — 문서를 읽은 것이지 잰 것이 아니다. 멤버 초대는 "이 단계가 만들지 않는 것"에 근거와 함께 적었다.
+**Spec 대조.** 설계 §10의 권한 모델(owner만 수정·삭제)이 D3·Task 2·5·6에 있다. §10의 *"멤버지만 역할이 모자라면 403"*은 **재라 #6으로 보냈고 Task 2가 쟀다 — 문서와 실측이 일치했다**(403/404). 멤버 초대는 "이 단계가 만들지 않는 것"에 근거와 함께 적었다.
 
-**타입 일관성.** `ProjectSummary`(생성 응답)와 `ProjectDetail`(목록 항목)이 **다른 타입이고 그 사실을 D1이 근거로 쓴다** — `api/types.ts`에 둘 다 이미 있다(Task 1이 확인한다). `ProjectAbilities`(Task 2)가 Task 5·6에서 같은 이름으로 쓰인다. `ProjectCommands`는 Task 3에서 뼈대가 서고 Task 4·5·6이 필드를 더한다.
+**타입 일관성.** ~~`ProjectSummary`(생성 응답)와 `ProjectDetail`(목록 항목)이 **다른 타입이고 그 사실을 D1이 근거로 쓴다**~~ — **반증됐다(재라 #1).** 프로젝트를 내는 응답 넷(`POST`·`GET` 목록 항목·`GET :id`·`PATCH`)이 전부 `ProjectDetail`이고 키 집합이 같다. `ProjectSummary`는 `ProjectDetail`이 상속하는 공통 필드로만 남는다 — **그것만 오는 응답은 없다.** `ProjectAbilities`(Task 2)가 Task 5·6에서 같은 이름으로 쓰인다. `ProjectCommands`는 Task 3에서 뼈대가 서고 Task 4·5·6이 필드를 더한다.
 
 **산문과 케이스 대조**(P2b-4의 반복 결함에 대한 대응). 이 계획이 **확정해 적은 근거**는 D1~D8이고, 각각을 케이스와 맞대 본 결과:
 
