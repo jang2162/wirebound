@@ -109,8 +109,8 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/auth/login` | POST | (없음, 공개) | `{ email, password }` | 200 `{ id, email, name }`, 세션 쿠키 설정 |
 | `/api/auth/logout` | POST | 로그인만 | — | 204 |
 | `/api/auth/me` | GET | 로그인만 | — | 200 `{ id, email, name }` |
-| `/api/projects` | POST | 로그인만 | `{ name, slug, description? }` | 201 프로젝트(호출자가 owner) |
-| `/api/projects` | GET | 로그인만 | — | 200 호출자가 속한 프로젝트 목록 |
+| `/api/projects` | POST | 로그인만 | `{ name, slug, description? }` | 201 `{ ...프로젝트, role }` — 호출자가 owner가 되므로 `role`은 항상 `"owner"`다 |
+| `/api/projects` | GET | 로그인만 | — | 200 `{ ...프로젝트, role }[]`(호출자가 속한 것만, `created_at` 오름차순). 각 항목의 `role`은 **그 호출자의** 역할이다 |
 | `/api/projects/:projectId` | GET | viewer | — | 200 `{ ...프로젝트, role }` |
 | `/api/projects/:projectId` | PATCH | owner | `{ name?, slug?, description? }`(하나 이상) | 200 `{ ...프로젝트, role }` |
 | `/api/projects/:projectId` | DELETE | owner | — | 204 |
@@ -131,6 +131,25 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
 | `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
+
+### 프로젝트 응답 형태
+
+위 표의 **`프로젝트`는 다섯 키다.** 프로젝트를 내는 네 응답(`POST /api/projects` ·
+`GET /api/projects`의 각 항목 · `GET /api/projects/:projectId` · `PATCH /api/projects/:projectId`)이
+**전부 같은 키 집합**을 낸다 — `role`을 포함해서다.
+
+```jsonc
+{ "id": "…", "name": "…", "slug": "…", "description": null, "role": "owner" }
+```
+
+**`role`은 응답에만 있고 요청 본문에는 없다.** `CreateProjectBody`·`UpdateProjectBody`가
+`z.strictObject`라 **응답을 그대로 되보내면 400**이다
+(`{"code":"bad-request", issues:[{"path":"","message":"인식할 수 없는 키: \"id\", \"role\""}]}`).
+
+**슬러그가 형식을 어기면 400인데 문장이 하나뿐이다** — 형식·길이·빈 문자열이 전부
+`"슬러그는 소문자·숫자·하이픈만 쓸 수 있고, 하이픈으로 시작하거나 끝날 수 없습니다"`로 온다
+(길이 상한 64는 정규식 안에 있고 별도 메시지가 없다). **중복은 409
+`"이미 사용 중인 슬러그입니다"`다.**
 
 ### 트리 응답 형태 (`GET /api/projects/:projectId/tree`)
 
