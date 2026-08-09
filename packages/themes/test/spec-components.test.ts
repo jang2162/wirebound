@@ -254,10 +254,12 @@ describe('checkPrimitives', () => {
       .toEqual(['bad-style-value'])
   })
 
-  it('breakpoints가 이름과 함께 실린다', () => {
-    const { values, breakpoints } = checkPrimitives({ breakpoints: { md: 768 } }, TOKENS)
-    expect(values.get('breakpoints.md')).toBe('768')
-    expect(breakpoints).toEqual(['md'])
+  it('breakpoints는 수로 따로 실리고 :root 값에는 들어가지 않는다', () => {
+    // §6.11의 `:root` 예시에 브레이크포인트가 없고, 같은 절이 그 값을 `@media` 조건에
+    // 직접 쓴다 — 변수가 아니라 수로 필요한 자리다.
+    const { values, breakpoints } = checkPrimitives({ breakpoints: { md: 768, sm: 640 } }, TOKENS)
+    expect([...values.keys()].filter((key) => key.startsWith('breakpoints'))).toEqual([])
+    expect([...breakpoints]).toEqual([['md', 768], ['sm', 640]])
   })
 })
 

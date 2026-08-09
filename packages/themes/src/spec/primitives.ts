@@ -49,11 +49,14 @@ export const PrimitivesSchema: z.ZodType<ThemePrimitives> = z.strictObject({
  * 키는 `container.gutter`처럼 문서 안의 경로 그대로다. **그 경로에서 변수 이름을 어떻게
  * 만들지는 여기서 정하지 않는다** — §6.11의 예시(`--wb-container-max`)와 D6의 규칙
  * (경로의 `.`이 `-`가 된다 → `--wb-container-maxWidth`)이 어긋나므로 방출이 정할 일이다.
+ *
+ * **브레이크포인트는 `values`에 넣지 않고 수로 따로 낸다.** §6.11의 `:root` 예시에 그것이
+ * 없고, 같은 절이 그 값을 `@media` 조건에 직접 쓴다 — 변수가 아니라 수로 필요한 자리다.
  */
 export function checkPrimitives(
   primitives: ThemePrimitives,
   tokens: TokenTable,
-): { values: Map<string, string>; breakpoints: string[]; issues: ThemeIssue[] } {
+): { values: Map<string, string>; breakpoints: Map<string, number>; issues: ThemeIssue[] } {
   const values = new Map<string, string>()
   const issues: ThemeIssue[] = []
 
@@ -75,10 +78,9 @@ export function checkPrimitives(
   put('section', 'paddingY', primitives.section?.paddingY)
   put('section', 'paddingYCompact', primitives.section?.paddingYCompact)
 
-  const breakpoints: string[] = []
+  const breakpoints = new Map<string, number>()
   for (const [name, width] of Object.entries(primitives.breakpoints ?? {})) {
-    breakpoints.push(name)
-    values.set(`breakpoints.${name}`, String(width))
+    breakpoints.set(name, width)
   }
 
   return { values, breakpoints, issues }

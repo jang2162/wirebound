@@ -5,6 +5,7 @@ import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
 import { styleDeclarations } from '../resolve/style'
 import type { TokenTable } from '../resolve/tokens'
+import type { CssDeclaration, ResolvedComponent, ResolvedLayer } from '../resolved'
 
 /** 스타일 어휘 → 값. 이름이 §6.8 안인지는 zod가 아니라 `styleDeclarations`가 본다. */
 const StyleMapSchema = z.record(z.string(), z.union([z.string(), z.number()]))
@@ -81,8 +82,13 @@ export function checkThemeComponents(
   components: Record<string, ThemeComponent>,
   tokens: TokenTable,
   breakpoints: readonly string[],
-): { structures: Map<string, string>; issues: ThemeIssue[] } {
+): {
+  structures: Map<string, string>
+  resolved: Map<string, ResolvedComponent>
+  issues: ThemeIssue[]
+} {
   const structures = new Map<string, string>()
+  const resolved = new Map<string, ResolvedComponent>()
   const issues: ThemeIssue[] = []
 
   for (const [type, spec] of Object.entries(components)) {
@@ -107,25 +113,38 @@ export function checkThemeComponents(
       structures.set(type, spec.structure)
     }
 
-    issues.push(...checkStyleMap(spec.base, tokens, `${path}.base`))
-    issues.push(...checkParts(spec.parts, def, tokens, `${path}.parts`))
+    const base = checkStyleMap(spec.base, tokens, `${path}.base`)
+    const parts = checkParts(spec.parts, def, tokens, `${path}.parts`)
+    issues.push(...base.issues, ...parts.issues)
 
-    issues.push(...checkNamedLayers(spec.variants, def, def.variants, 'unknown-variant', tokens, `${path}.variants`, '변형'))
-    issues.push(...checkNamedLayers(spec.states, def, def.states, 'unknown-state', tokens, `${path}.states`, '상태'))
-    issues.push(
-      ...checkNamedLayers(
-        spec.responsive,
-        def,
-        breakpoints,
-        'unknown-breakpoint',
-        tokens,
-        `${path}.responsive`,
-        '브레이크포인트',
-      ),
+    const variants = checkNamedLayers(spec.variants, def, def.variants, 'unknown-variant', tokens, `${path}.variants`, '변형')
+    const states = checkNamedLayers(spec.states, def, def.states, 'unknown-state', tokens, `${path}.states`, '상태')
+    const responsive = checkNamedLayers(
+      spec.responsive,
+      def,
+      breakpoints,
+      'unknown-breakpoint',
+      tokens,
+      `${path}.responsive`,
+      '브레이크포인트',
     )
+    issues.push(...variants.issues, ...states.issues, ...responsive.issues)
+
+    // 구조가 이슈였으면 이 컴포넌트는 해석되지 않은 것이다 — 반쯤 만든 것을 싣지 않는다.
+    const structure = structures.get(type)
+    if (structure !== undefined) {
+      resolved.set(type, {
+        structure,
+        base: base.css,
+        parts: parts.css,
+        variants: variants.layers,
+        states: states.layers,
+        responsive: responsive.layers,
+      })
+    }
   }
 
-  return { structures, issues }
+  return { structures, resolved, issues }
 }
 
 function checkParts(
@@ -133,7 +152,8 @@ function checkParts(
   def: ComponentDef,
   tokens: TokenTable,
   path: string,
-): ThemeIssue[] {
+): { css: Map<string, readonly CssDeclaration[]>; issues: ThemeIssue[] } {
+  const css = new Map<string, readonly CssDeclaration[]>()
   const issues: ThemeIssue[] = []
   for (const [part, style] of Object.entries(parts ?? {})) {
     if (!def.parts.includes(part)) {
@@ -142,9 +162,11 @@ function checkParts(
       )
       continue
     }
-    issues.push(...checkStyleMap(style, tokens, `${path}.${part}`))
+    const declared = checkStyleMap(style, tokens, `${path}.${part}`)
+    issues.push(...declared.issues)
+    css.set(part, declared.css)
   }
-  return issues
+  return { css, issues }
 }
 
 function checkNamedLayers(
@@ -155,7 +177,8 @@ function checkNamedLayers(
   tokens: TokenTable,
   path: string,
   label: string,
-): ThemeIssue[] {
+): { layers: Map<string, ResolvedLayer>; issues: ThemeIssue[] } {
+  const out = new Map<string, ResolvedLayer>()
   const issues: ThemeIssue[] = []
   for (const [name, layer] of Object.entries(layers ?? {})) {
     if (!declared.includes(name)) {
@@ -163,9 +186,11 @@ function checkNamedLayers(
       issues.push(issue(code, `${path}.${name}`, `${owner} 선언하지 않은 ${label}입니다: ${name}`))
       continue
     }
-    issues.push(...checkLayer(layer, def, tokens, `${path}.${name}`))
+    const resolvedLayer = checkLayer(layer, def, tokens, `${path}.${name}`)
+    issues.push(...resolvedLayer.issues)
+    out.set(name, { base: resolvedLayer.base, parts: resolvedLayer.parts })
   }
-  return issues
+  return { layers: out, issues }
 }
 
 /** 층 하나. `base`·`parts` 밖의 키는 루트에 바로 쓴 스타일 프로퍼티로 본다. */
@@ -174,30 +199,38 @@ function checkLayer(
   def: ComponentDef,
   tokens: TokenTable,
   path: string,
-): ThemeIssue[] {
+): ResolvedLayer & { issues: ThemeIssue[] } {
   const issues: ThemeIssue[] = []
+  const base: CssDeclaration[] = []
 
   // 중간 객체에 모았다가 넘기지 않는다. `key`가 `__proto__`이면 `shorthand[key] = …`이
   // 자기 키를 만들지 않고 조용히 사라져(값이 문자열이라 프로토타입 설정도 아니다) **검증도
   // 이슈도 없이 없어진다** — 심어서 그 갈래를 봤다. 항목마다 바로 넘기면 그 자리가 없다.
   for (const [key, value] of Object.entries(layer)) {
     if (key === 'base' || key === 'parts') continue
-    issues.push(...styleDeclarations(key, value, tokens, `${path}.${key}`).issues)
+    const declared = styleDeclarations(key, value, tokens, `${path}.${key}`)
+    issues.push(...declared.issues)
+    base.push(...declared.css)
   }
 
-  issues.push(...checkStyleMap(layer.base, tokens, `${path}.base`))
-  issues.push(...checkParts(layer.parts, def, tokens, `${path}.parts`))
-  return issues
+  const explicit = checkStyleMap(layer.base, tokens, `${path}.base`)
+  const parts = checkParts(layer.parts, def, tokens, `${path}.parts`)
+  issues.push(...explicit.issues, ...parts.issues)
+  base.push(...explicit.css)
+  return { base, parts: parts.css, issues }
 }
 
 function checkStyleMap(
   style: ThemeStyleMap | undefined,
   tokens: TokenTable,
   path: string,
-): ThemeIssue[] {
+): { css: CssDeclaration[]; issues: ThemeIssue[] } {
+  const css: CssDeclaration[] = []
   const issues: ThemeIssue[] = []
   for (const [prop, value] of Object.entries(style ?? {})) {
-    issues.push(...styleDeclarations(prop, value, tokens, `${path}.${prop}`).issues)
+    const declared = styleDeclarations(prop, value, tokens, `${path}.${prop}`)
+    issues.push(...declared.issues)
+    css.push(...declared.css)
   }
-  return issues
+  return { css, issues }
 }

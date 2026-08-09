@@ -38,3 +38,11 @@ export { ThemeSchema } from './spec/theme'
 
 export type { ThemePatch } from './resolve/merge'
 export { ThemePatchSchema, mergeTheme } from './resolve/merge'
+
+export type {
+  CssDeclaration,
+  ResolvedComponent,
+  ResolvedLayer,
+  ResolvedTheme,
+} from './resolved'
+export { resolveTheme } from './resolve/index'
