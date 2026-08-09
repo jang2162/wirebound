@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { renderNode } from '../src/render'
 import { installStructures } from '../src/structures/index'
-import { getStructure } from '../src/structures/registry'
+import { getStructure, listStructureKeys } from '../src/structures/registry'
 
 beforeAll(() => {
   installCatalog()
@@ -122,6 +122,59 @@ describe('구조는 style에 커스텀 프로퍼티만 싣는다 (P0 이월 #7)'
     const declarations = styleDeclarations(html)
     expect(declarations.length).toBeGreaterThan(0)
     expect(declarations.filter((declaration) => !declaration.startsWith('--'))).toEqual([])
+  })
+
+  /**
+   * **전수 가드.** Task 2·3은 다섯 구조를 손으로 고쳤다. 이 케이스는 **P4b가 구조를 늘릴
+   * 때 같은 실수가 반복되지 않게 한다** — 등록된 모든 구조를 기본 props로 그려 `style`에
+   * 일반 선언이 하나라도 남으면 어느 구조인지와 함께 실패한다.
+   *
+   * 위의 개별 케이스들을 대신하지 않는다. 이것은 **일반 선언이 없다**만 보고, 값이 여전히
+   * 나가는 것은 `structure-css.test.ts`의 계산된 스타일 케이스가 본다.
+   */
+  it('어떤 구조도 style에 일반 선언을 내지 않는다', () => {
+    const keys = listStructureKeys()
+    // 목록이 비면 루프가 안 돌고 그냥 초록이 된다.
+    expect(keys.length).toBeGreaterThan(0)
+
+    const offenders: string[] = []
+    for (const key of keys) {
+      const [type, structure] = key.split(':') as [string, string]
+      const html = renderToStaticMarkup(
+        renderNode({ id: 'n_000000000001', type }, { structures: { [type]: structure } }),
+      )
+      for (const declaration of styleDeclarations(html)) {
+        if (!declaration.startsWith('--')) offenders.push(`${key}: ${declaration}`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  /**
+   * **재라 #3 — 폴백의 inline style은 걷어내지 않고 이름 있는 예외로 둔다.**
+   *
+   * 판정 근거 셋:
+   *
+   * 1. **테마의 대상이 아니다.** 테마가 스타일할 수 있는 것은 카탈로그가 선언한 컴포넌트와
+   *    그 `parts`뿐이고(§5.1) 폴백은 그 목록에 없다. 즉 **폴백을 겨냥하는 테마 규칙이
+   *    존재할 수 없으므로 캐스케이드에서 이길 것도 질 것도 없다** — 위 가드가 막으려는
+   *    사고(테마가 진다)가 여기서는 성립하지 않는다.
+   * 2. **걷어내면 실제로 나빠진다.** 폴백은 *"노드를 그리지 못했다"*를 **눈에 보이게**
+   *    하려고 있는 것이다(P0 이월 #6). 스타일을 빼면 테두리도 색도 없는 맨 텍스트가 되어,
+   *    이 프로젝트가 반복해 겪은 *"화면이 조용히 비었다"* 부류로 돌아간다.
+   * 3. **테마와 무관하게 같은 모습이어야 한다.** 어느 테마에서든 오류 표시는 오류 표시로
+   *    읽혀야 하고, 그것을 보장하는 방법이 inline 선언이다.
+   *
+   * 그래서 아래 케이스가 **예외를 이름으로 고정한다.** 누가 폴백의 스타일을 걷어내면
+   * 이 케이스가 깨지고, 그때 위 판정을 다시 읽게 된다.
+   */
+  it('폴백만 일반 선언을 낸다 — 이름 있는 예외', () => {
+    // 카탈로그에 없는 타입이라 폴백이 그려진다.
+    const html = renderToStaticMarkup(renderNode({ id: 'n_000000000001', type: '없는컴포넌트' }))
+    expect(html).toContain('data-wb-error')
+
+    const plain = styleDeclarations(html).filter((declaration) => !declaration.startsWith('--'))
+    expect(plain.length).toBeGreaterThan(0)
   })
 
   it('Tree·Media·Placeholder도 style에 커스텀 프로퍼티만 싣는다', () => {
