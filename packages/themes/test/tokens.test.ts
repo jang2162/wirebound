@@ -249,3 +249,48 @@ describe('resolveTokens — 이슈를 모아 낸다', () => {
     expect(issues.length).toBeGreaterThanOrEqual(4)
   })
 })
+
+describe('프로토타입 키 — 물려받은 멤버가 표에 실리지 않는다', () => {
+  // 목록을 손으로 적지 않는다. 새는 이름은 런타임이 갖고 있다.
+  const INHERITED = Object.getOwnPropertyNames(Object.prototype)
+
+  it('semantic이 물려받은 이름을 가리키면 이슈다', () => {
+    expect(INHERITED.length).toBeGreaterThan(0)
+    for (const name of INHERITED) {
+      const { table, issues } = resolveTokens({ semantic: { a: `semantic.${name}` } })
+      expect(codes(issues), name).toEqual(['unknown-token'])
+      expect(table.has('semantic.a'), name).toBe(false)
+    }
+  })
+
+  it('표의 값은 언제나 문자열이다', () => {
+    // 물려받은 멤버가 새면 함수 객체가 실린다 — 타입이 거짓말을 하게 된다.
+    for (const name of INHERITED) {
+      const { table } = resolveTokens({ semantic: { a: `semantic.${name}`, b: '#fff' } })
+      for (const [key, value] of table) {
+        expect(typeof value, `${name} → ${key}`).toBe('string')
+      }
+    }
+  })
+
+  it('물려받은 이름을 키로 선언하면 그대로 쓸 수 있다 — 과도 차단이 없다', () => {
+    for (const name of INHERITED) {
+      const { table, issues } = resolveTokens({
+        semantic: { [name]: '#fff', a: `semantic.${name}` },
+      })
+      // `__proto__`는 객체에 자기 키로 남지 않는다 — 그 갈래는 아래 케이스가 따로 잰다.
+      if (name === '__proto__') continue
+      expect(codes(issues), name).toEqual([])
+      expect(table.get('semantic.a'), name).toBe('#fff')
+    }
+  })
+
+  it('__proto__는 키가 되지 못한다 — 심어서 확인한다', () => {
+    // 리터럴에서도 zod 출력에서도 자기 키로 남지 않으므로, 그것을 가리키면 이슈여야 한다.
+    const declared = { ['__proto__' as string]: '#fff' } as Record<string, string>
+    expect(Object.hasOwn(declared, '__proto__')).toBe(true)
+    const parsed = TokensSchema.safeParse({ semantic: JSON.parse('{"__proto__":"#fff"}') })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(Object.keys(parsed.data.semantic ?? {})).toEqual([])
+  })
+})

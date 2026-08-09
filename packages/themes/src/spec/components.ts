@@ -175,14 +175,15 @@ function checkLayer(
   path: string,
 ): ThemeIssue[] {
   const issues: ThemeIssue[] = []
-  const shorthand: ThemeStyleMap = {}
 
+  // 중간 객체에 모았다가 넘기지 않는다. `key`가 `__proto__`이면 `shorthand[key] = …`이
+  // 자기 키를 만들지 않고 조용히 사라져(값이 문자열이라 프로토타입 설정도 아니다) **검증도
+  // 이슈도 없이 없어진다** — 심어서 그 갈래를 봤다. 항목마다 바로 넘기면 그 자리가 없다.
   for (const [key, value] of Object.entries(layer)) {
     if (key === 'base' || key === 'parts') continue
-    shorthand[key] = value as string | number
+    issues.push(...styleDeclarations(key, value, tokens, `${path}.${key}`).issues)
   }
 
-  issues.push(...checkStyleMap(shorthand, tokens, path))
   issues.push(...checkStyleMap(layer.base, tokens, `${path}.base`))
   issues.push(...checkParts(layer.parts, def, tokens, `${path}.parts`))
   return issues

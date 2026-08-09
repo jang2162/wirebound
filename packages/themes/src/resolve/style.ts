@@ -1,5 +1,6 @@
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
+import { own } from '../own'
 import type { TokenTable } from './tokens'
 import { TOKEN_NAMESPACES, isTokenReference } from './tokens'
 
@@ -145,7 +146,7 @@ export function styleDeclarations(
   tokens: TokenTable,
   path: string = prop,
 ): { css: Array<[string, string]>; issues: ThemeIssue[] } {
-  const targets = STYLE_PROPERTIES[prop]
+  const targets = own(STYLE_PROPERTIES, prop)
   if (targets === undefined) {
     return {
       css: [],
@@ -167,7 +168,7 @@ export function styleDeclarations(
 
   if (prop === 'typography') return typographyDeclarations(value, tokens, path)
 
-  const resolved = resolveStyleValue(value, tokens, path, FUNCTION_ALLOWLIST[prop] ?? [], prop)
+  const resolved = resolveStyleValue(value, tokens, path, own(FUNCTION_ALLOWLIST, prop) ?? [], prop)
   if (resolved.value === null) return { css: [], issues: resolved.issues }
   return { css: targets.map((name) => [name, resolved.value!]), issues: [] }
 }

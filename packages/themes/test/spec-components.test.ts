@@ -260,3 +260,35 @@ describe('checkPrimitives', () => {
     expect(breakpoints).toEqual(['md'])
   })
 })
+
+describe('프로토타입 키 — 층 축약이 조용히 사라지지 않는다', () => {
+  it('직접 만든 층 객체의 __proto__ 키가 이슈로 나온다', () => {
+    // **가르는 입력이 여기뿐인 이유를 재서 적는다.** zod는 `__proto__`를 출력에서 지운다
+    // (`ComponentsSchema.safeParse`를 지나면 그 키가 없다 — 아래 케이스가 그것을 잰다).
+    // 그래서 이 자리를 가르려면 `ThemeLayer`를 직접 만들어야 한다. 중간 객체에 모았다가
+    // 넘기면 `shorthand['__proto__'] = '1px'`이 자기 키를 만들지 않아 **이슈도 선언도 없이**
+    // 사라진다.
+    const layer = { ['__proto__' as string]: '1px' }
+    expect(Object.hasOwn(layer, '__proto__')).toBe(true)
+    const { issues } = checkThemeComponents(
+      { List: { states: { disabled: layer } } } as never,
+      TOKENS,
+      [],
+    )
+    expect(issues.map((i) => `${i.code}@${i.path}`)).toEqual([
+      'unknown-style-prop@components.List.states.disabled.__proto__',
+    ])
+  })
+
+  it('zod는 __proto__를 출력에서 지운다 — 위 케이스의 전제다', () => {
+    const source = JSON.parse('{"List":{"states":{"disabled":{"__proto__":"1px","toString":"1px"}}}}')
+    expect(Object.keys(source.List.states.disabled)).toEqual(['__proto__', 'toString'])
+    const parsed = ComponentsSchema.safeParse(source)
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    const layer = (parsed.data.List as never as { states: { disabled: object } }).states.disabled
+    expect(Object.keys(layer)).toEqual(['toString'])
+    // 남은 `toString`은 던지지 않고 이슈가 된다(own 가드).
+    expect(codes(checkThemeComponents(parsed.data, TOKENS, []).issues)).toEqual(['unknown-style-prop'])
+  })
+})

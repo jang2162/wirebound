@@ -221,3 +221,35 @@ describe('cssVarName', () => {
     expect(cssVarName('typography.h3.fontSize')).toBe('--wb-typography-h3-fontSize')
   })
 })
+
+describe('프로토타입 키 — 규격을 통과한 입력이 검증기를 죽이지 않는다', () => {
+  // 목록을 손으로 적지 않는다. 새는 이름은 `STYLE_PROPERTIES`가 객체 리터럴이라
+  // 프로토타입에서 물려받는 것들이고, 그 목록은 런타임이 갖고 있다.
+  const INHERITED = Object.getOwnPropertyNames(Object.prototype)
+
+  it('물려받은 이름은 던지지 않고 이슈가 된다', () => {
+    expect(INHERITED.length).toBeGreaterThan(0)
+    for (const name of INHERITED) {
+      const result = decl(name, '1px')
+      expect(codes(result.issues), name).toEqual(['unknown-style-prop'])
+      expect(result.css, name).toEqual([])
+    }
+  })
+
+  it('함수 allowlist 조회도 같은 자리다', () => {
+    // `FUNCTION_ALLOWLIST[prop]`이 프로토타입을 타면 `includes`가 없어 죽는다.
+    // `bgImage`가 아닌 이름으로 함수를 넣어 그 갈래를 지나가게 한다.
+    for (const name of INHERITED) {
+      expect(() => decl(name, 'url(/a.png)'), name).not.toThrow()
+    }
+  })
+
+  it('과도 차단이 없다 — §6.8의 이름은 전부 선언을 낸다', () => {
+    for (const prop of Object.keys(STYLE_PROPERTIES)) {
+      const value = prop === 'typography' ? 'h3' : '1px'
+      const result = decl(prop, value)
+      expect(codes(result.issues), prop).toEqual([])
+      expect(result.css.length, prop).toBeGreaterThan(0)
+    }
+  })
+})

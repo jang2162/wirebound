@@ -1,5 +1,6 @@
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
+import { own } from '../own'
 import type { ThemeTokens } from '../spec/tokens'
 
 /**
@@ -234,7 +235,7 @@ function resolveSemantic(
       // 타입을 명시한다. `cursor`가 루프 안에서 `name`으로 갱신되고 `name`이 다시
       // `value`(= `semantic[cursor]`)에서 나오므로, 추론에 맡기면 tsc가 순환으로 보고
       // TS7022(implicitly any)를 낸다 — 실제로 그 에러를 보고 붙였다.
-      const value: string = semantic[cursor]!
+      const value: string = own(semantic, cursor)!
       if (!isTokenReference(value)) {
         resolved = value
         break
@@ -245,7 +246,7 @@ function resolveSemantic(
       const name: string = value.slice(dot + 1)
 
       if (namespace === 'semantic') {
-        if (semantic[name] === undefined) {
+        if (own(semantic, name) === undefined) {
           issues.push(issue('unknown-token', pathOf(cursor), `없는 토큰을 가리킵니다: ${value}`))
           markFailed(chain, done)
           break
