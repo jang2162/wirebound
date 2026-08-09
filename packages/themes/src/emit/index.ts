@@ -21,6 +21,28 @@ import type { CssDeclaration, ResolvedComponent, ResolvedLayer, ResolvedTheme } 
  * 자리는 그 갈래에 걸리지 않는다: 상태·변형·컴포넌트 이름은 카탈로그가 선언한 것이고
  * 브레이크포인트 이름은 규격이 글자로 시작하기를 요구한다. 그래서 문서에 적힌 순서가
  * 그대로 남고, 브레이크포인트만 폭으로 다시 정렬한다.
+ *
+ * ---
+ *
+ * **이 계약은 메모리 안에서만 성립한다. 저장을 거치면 무너진다.**
+ *
+ * 설계 §4.2가 테마의 절을 `jsonb`로 두는데 **Postgres `jsonb`는 객체 키 순서를 보존하지
+ * 않는다.** 컨테이너에 직접 캐스팅해 쟀다(PostgreSQL 16.14):
+ *
+ * ```
+ * '{"selected":1,"disabled":2,"loading":3,"empty":4}'::jsonb
+ *   → {"empty": 4, "loading": 3, "disabled": 2, "selected": 1}
+ * '{"featured":1,"compact":2,"default":3}'::jsonb  → {"compact", "default", "featured"}
+ * '{"sm":640,"md":768,"lg":1024}' 와 '{"md":768,"sm":640,"lg":1024}'  → 둘 다 {"lg","md","sm"}
+ * ```
+ *
+ * 키가 **(길이, 바이트)로 정규화**된다. `List`의 상태를 `selected, disabled` 순으로 적어도
+ * 저장을 거치면 뒤집히므로, **둘이 같은 프로퍼티를 건드릴 때 이기는 쪽이 바뀐다.**
+ * 브레이크포인트는 여기서 폭으로 다시 정렬하므로 면역이고, 노출되는 것은 `states`·
+ * `variants`·`parts`·`components` 순서다.
+ *
+ * **오늘 테마를 저장하는 코드는 없다** — 그래서 여기서 고치지 않는다. 계약을 바꾸려면
+ * 저장의 맥락이 필요하고 **그것은 P4a-3이 재서 정한다.**
  */
 export function compileTheme(resolved: ResolvedTheme): string {
   const blocks: string[] = []

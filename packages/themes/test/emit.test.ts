@@ -133,6 +133,10 @@ describe('재라 #3 — 브레이크포인트 방향과 경계값', () => {
   })
 })
 
+/**
+ * **이 계약은 메모리 안에서만 성립한다** — §4.2의 `jsonb`가 키 순서를 정규화한다.
+ * 근거와 실측은 `src/emit/index.ts`의 `compileTheme` 주석에 있고, P4a-3이 재서 정한다.
+ */
 describe('재라 #6 — states가 여럿일 때 순서', () => {
   const twoStates = theme({
     components: {
