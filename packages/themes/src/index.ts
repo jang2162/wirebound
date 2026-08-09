@@ -13,3 +13,5 @@ export { TokensSchema } from './spec/tokens'
 
 export type { TokenNamespace, TokenTable } from './resolve/tokens'
 export { SPACE_MAX, TOKEN_NAMESPACES, isTokenReference, resolveTokens } from './resolve/tokens'
+
+export { STYLE_PROPERTIES, cssVarName, styleDeclarations } from './resolve/style'

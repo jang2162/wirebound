@@ -64,7 +64,11 @@ const LENGTH = /^(\d+\.?\d*|\.\d+)(px|rem|em|%|vw|vh|vmin|vmax|ch|ex|cm|mm|in|pt
 /** 참조가 하나도 남지 않은 평평한 표. 키는 `semantic.primary`·`space.6` 같은 참조 경로다. */
 export type TokenTable = ReadonlyMap<string, string>
 
-export function isTokenReference(value: unknown): value is string {
+/**
+ * 타입 술어(`value is string`)로 두지 않는다. 이미 `string`인 값에 쓰면 **거짓 갈래가
+ * `never`로 좁혀져** 그 뒤 문자열 연산이 컴파일되지 않는다(실제로 TS2339를 보고 고쳤다).
+ */
+export function isTokenReference(value: unknown): boolean {
   return typeof value === 'string' && REFERENCE.test(value)
 }
 
