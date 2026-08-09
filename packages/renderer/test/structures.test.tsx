@@ -117,6 +117,36 @@ function captures(html: string, pattern: RegExp): string[] {
   return [...html.matchAll(pattern)].map((match) => match[1]!)
 }
 
+/**
+ * 등록된 모든 구조를 **비기본 props로** 그려 콜백에 넘긴다. 렌더 횟수를 돌려준다.
+ *
+ * **가드 둘이 이 순회를 함께 쓴다** — `data-*` 계약과 `style` 일반 선언. 앞서 `data-*`
+ * 쪽만 이 순회로 옮기고 `style` 쪽을 기본 props로 남겨 뒀는데, **조건부 조각에 inline
+ * `color:red`를 심으니 1220 케이스가 통과했다**(재현했다). 그것은 이 계획이 닫으려던
+ * 결함(P0 이월 #7) 그 자체다. 순회를 하나로 모으면 그 자리가 생기지 않는다.
+ */
+function forEachVariation(visit: (rendered: { key: string; html: string }) => void): number {
+  const keys = listStructureKeys()
+  // 목록이 비면 순회가 안 돌고 부르는 쪽이 그냥 초록이 된다.
+  expect(keys.length).toBeGreaterThan(0)
+
+  let renders = 0
+  for (const key of keys) {
+    const [type, structure] = key.split(':') as [string, string]
+    const def = requireComponent(type)
+
+    for (const props of propVariations(def)) {
+      // 선언된 변형 전부 + 변형 없음.
+      for (const variant of [undefined, ...def.variants]) {
+        const node = { id: 'n_000000000001', type, props, ...(variant === undefined ? {} : { variant }) }
+        visit({ key, html: renderToStaticMarkup(renderNode(node, { structures: { [type]: structure } })) })
+        renders += 1
+      }
+    }
+  }
+  return renders
+}
+
 describe('part 계약', () => {
   it('모든 컴포넌트가 카탈로그에 선언된 part만 낸다', () => {
     // 검사가 전부 루프 안에 있다. part가 하나도 안 나오면 단언 없이 통과하므로 못을 박는다.
@@ -144,34 +174,21 @@ describe('part 계약', () => {
    */
   it('비기본 props로 전수 렌더해도 계약 밖 data-* 속성이 없다', () => {
     const offenders: string[] = []
-    let renders = 0
     let scanned = 0
 
-    for (const key of listStructureKeys()) {
-      const [type, structure] = key.split(':') as [string, string]
-      const def = requireComponent(type)
-
-      for (const props of propVariations(def)) {
-        // 선언된 변형 전부 + 변형 없음.
-        for (const variant of [undefined, ...def.variants]) {
-          const node = { id: 'n_000000000001', type, props, ...(variant === undefined ? {} : { variant }) }
-          const html = renderToStaticMarkup(renderNode(node, { structures: { [type]: structure } }))
-          renders += 1
-
-          // 폴백이 떴으면 그 조합은 렌더된 것이 아니다 — 조용히 지나가지 않게 잡는다.
-          if (html.includes('data-wb-error')) {
-            offenders.push(`${key}: 폴백 (${JSON.stringify(props)})`)
-            continue
-          }
-          for (const attr of captures(html, /\s(data-[\w-]+)=/gi)) {
-            scanned += 1
-            if (!CONTRACT_ATTRS.includes(attr)) offenders.push(`${key}: ${attr}`)
-          }
-        }
+    const renders = forEachVariation(({ key, html }) => {
+      // 폴백이 떴으면 그 조합은 렌더된 것이 아니다 — 조용히 지나가지 않게 잡는다.
+      if (html.includes('data-wb-error')) {
+        offenders.push(`${key}: 폴백`)
+        return
       }
-    }
+      for (const attr of captures(html, /\s(data-[\w-]+)=/gi)) {
+        scanned += 1
+        if (!CONTRACT_ATTRS.includes(attr)) offenders.push(`${key}: ${attr}`)
+      }
+    })
 
-    // 셋 다 못을 박는다 — 하나라도 0이면 위 루프가 헛돈 것이다.
+    // 셋 다 못을 박는다 — 하나라도 0이면 위 순회가 헛돈 것이다.
     expect(renders).toBeGreaterThan(100)
     expect(scanned).toBeGreaterThan(0)
     expect([...new Set(offenders)]).toEqual([])
@@ -243,21 +260,24 @@ describe('구조는 style에 커스텀 프로퍼티만 싣는다 (P0 이월 #7)'
    * 나가는 것은 `structure-css.test.ts`의 계산된 스타일 케이스가 본다.
    */
   it('어떤 구조도 style에 일반 선언을 내지 않는다', () => {
-    const keys = listStructureKeys()
-    // 목록이 비면 루프가 안 돌고 그냥 초록이 된다.
-    expect(keys.length).toBeGreaterThan(0)
-
     const offenders: string[] = []
-    for (const key of keys) {
-      const [type, structure] = key.split(':') as [string, string]
-      const html = renderToStaticMarkup(
-        renderNode({ id: 'n_000000000001', type }, { structures: { [type]: structure } }),
-      )
+    let scanned = 0
+
+    // **`data-*` 계약 가드와 같은 순회를 쓴다.** 앞서 여기만 기본 props로 남아 있었고,
+    // 조건부 조각(`Media.caption`처럼 값이 있을 때만 그려지는 자리)에 inline `color:red`를
+    // 심으면 **1220 케이스가 전부 통과했다** — 재현해서 확인했다. 그 자리가
+    // **P0 이월 #7 그 자체**이므로 순회를 갈라 둘 이유가 없다.
+    const renders = forEachVariation(({ key, html }) => {
       for (const declaration of styleDeclarations(html)) {
+        scanned += 1
         if (!declaration.startsWith('--')) offenders.push(`${key}: ${declaration}`)
       }
-    }
-    expect(offenders).toEqual([])
+    })
+
+    expect(renders).toBeGreaterThan(100)
+    // 선언을 하나도 못 모으면 위 검사가 헛돈다 — 구조가 커스텀 프로퍼티를 내는 한 0이 아니다.
+    expect(scanned).toBeGreaterThan(0)
+    expect([...new Set(offenders)]).toEqual([])
   })
 
   /**
