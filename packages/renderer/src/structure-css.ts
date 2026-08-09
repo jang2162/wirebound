@@ -76,9 +76,38 @@ function componentRule(type: string, structure: string, declarations: string[]):
   return rule(`[data-wb-component="${type}"][data-wb-structure="${structure}"]`, declarations)
 }
 
+/**
+ * 조각 규칙. **구조 이름을 넣지 않는다** — `compileTheme`의 조각 규칙이
+ * `[data-wb-component="X"] [data-wb-part="p"]`(특이도 0,2,0)이므로 구조를 더하면
+ * 0,3,0이 되어 테마가 진다.
+ *
+ * **대가:** 같은 컴포넌트의 다른 구조도 이 규칙을 받는다. 오늘은 컴포넌트마다 구현이
+ * 하나씩뿐이라 드러나지 않고, P4b가 구조를 늘릴 때 값을 안 싣는 구조는 `var()`의
+ * 기본값을 받는다.
+ */
+function partRule(type: string, part: string, declarations: string[]): string {
+  return rule(`[data-wb-component="${type}"] [data-wb-part="${part}"]`, declarations)
+}
+
 function rule(selector: string, declarations: string[]): string {
   return `${selector} {\n${declarations.map((line) => `  ${line}`).join('\n')}\n}`
 }
+
+/**
+ * 들여쓰기 한 단계의 폭. **테마의 손잡이가 될 자리인데 오늘 그 경로가 없다.**
+ *
+ * 계획서 Task 3이 *"`--wb-tree-indent`가 테마의 손잡이가 된다 — 들여쓰기 폭을 테마가
+ * 정할 수 있다"*고 적었는데 **재보니 오늘은 성립하지 않는다.** 테마가 낼 수 있는 선언은
+ * `styleDeclarations`가 `STYLE_PROPERTIES` 화이트리스트(§6.8)로 거르므로, 임의의 커스텀
+ * 프로퍼티를 내보내는 어휘가 아예 없다. 즉 이 이름에 값을 넣을 수 있는 것은 오늘
+ * 아무것도 없고 늘 기본값 `16px`이 쓰인다.
+ *
+ * 그래도 이름을 두는 이유: 폭이 `data.tsx` 본문에 박혀 있던 것보다는 **한 곳에 이름으로
+ * 있는 편**이 낫고, 테마가 조각의 `padding`을 덮는 길은 지금도 열려 있다(다만 그러면
+ * 단계별 들여쓰기가 함께 사라진다 — 다른 성질이다). 어휘를 넓혀 이 손잡이를 여는 것은
+ * §6.8을 건드리는 일이라 P4b가 판정한다.
+ */
+export const TREE_INDENT_VAR = '--wb-tree-indent'
 
 /**
  * 구조 기본 CSS 한 장.
@@ -123,6 +152,29 @@ export function structureBaseCss(): string {
     componentRule('Grid', 'default', [
       'display: grid;',
       `grid-template-columns: repeat(var(${nodeVar('grid', 'columns')}, 1), 1fr);`,
+    ]),
+  )
+
+  // ── Tree ──────────────────────────────────────────────────────────────────
+  //
+  // 노드가 아니라 **조각**에 붙는 유일한 자리다. `(index % depth)` 단계를 `<li>`가 나르고
+  // 폭을 여기서 곱한다. 곱셈이 CSS에 있는 것은 §6.8이 금지한 `calc()`와 무관하다 —
+  // 그 금지는 **테마 문서의 값**에 걸리고, 이 파일은 렌더러가 소유한 CSS다.
+  blocks.push(
+    partRule('Tree', 'node', [
+      `padding-left: calc(var(${nodeVar('tree', 'level')}, 0) * var(${TREE_INDENT_VAR}, 16px));`,
+    ]),
+  )
+
+  // ── Media ─────────────────────────────────────────────────────────────────
+  blocks.push(
+    partRule('Media', 'frame', [`aspect-ratio: var(${nodeVar('media', 'ratio')}, 16/9);`]),
+  )
+
+  // ── Placeholder ───────────────────────────────────────────────────────────
+  blocks.push(
+    componentRule('Placeholder', 'default', [
+      `height: var(${nodeVar('placeholder', 'height')}, 120px);`,
     ]),
   )
 

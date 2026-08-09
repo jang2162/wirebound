@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+import { nodeVar } from '../structure-css'
 import type { StructureRenderer } from './registry'
 
 export const ListTable: StructureRenderer = ({ attrs, props, part }) => {
@@ -44,7 +46,14 @@ export const TreeIndent: StructureRenderer = ({ attrs, props, part }) => {
   return (
     <ul {...attrs}>
       {items.map((label, index) => (
-        <li key={`${label}-${index}`} {...part('node')} style={{ paddingLeft: `${(index % depth) * 16}px` }}>
+        // 들여쓰기 **단계**만 나른다. 픽셀을 곱하는 것은 `structure-css.ts`이고, 그 곱셈의
+        // 다른 인자(`--wb-tree-indent`)가 테마의 손잡이가 될 자리다 — 오늘 그 손잡이에
+        // 값을 넣는 경로가 없다는 것은 `structure-css.ts`의 주석에 적었다.
+        <li
+          key={`${label}-${index}`}
+          {...part('node')}
+          style={{ [nodeVar('tree', 'level')]: String(index % depth) } as CSSProperties}
+        >
           <span {...part('toggle')}>▸</span>
           <span {...part('label')}>{label}</span>
         </li>

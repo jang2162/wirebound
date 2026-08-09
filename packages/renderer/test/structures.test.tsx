@@ -123,6 +123,21 @@ describe('구조는 style에 커스텀 프로퍼티만 싣는다 (P0 이월 #7)'
     expect(declarations.length).toBeGreaterThan(0)
     expect(declarations.filter((declaration) => !declaration.startsWith('--'))).toEqual([])
   })
+
+  it('Tree·Media·Placeholder도 style에 커스텀 프로퍼티만 싣는다', () => {
+    const cases: [type: string, props: Record<string, unknown>][] = [
+      ['Tree', { items: ['가', '나', '다', '라'], depth: 3 }],
+      ['Media', { ratio: '4/3' }],
+      ['Placeholder', { height: 240 }],
+    ]
+    for (const [type, props] of cases) {
+      const declarations = styleDeclarations(
+        renderToStaticMarkup(renderNode({ id: 'n_000000000001', type, props })),
+      )
+      expect(declarations.length, type).toBeGreaterThan(0)
+      expect(declarations.filter((declaration) => !declaration.startsWith('--')), type).toEqual([])
+    }
+  })
 })
 
 describe('개별 구조', () => {

@@ -2,7 +2,7 @@ import { installCatalog } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { renderNode } from '../src/render'
-import { NODE_VAR_PREFIX, nodeVar, structureBaseCss } from '../src/structure-css'
+import { NODE_VAR_PREFIX, TREE_INDENT_VAR, nodeVar, structureBaseCss } from '../src/structure-css'
 import { installStructures } from '../src/structures/index'
 import { probe } from './css-probe'
 
@@ -111,9 +111,18 @@ describe('Task 1 — structureBaseCss', () => {
    * 보지 않는다(§3.3).
    */
   it('노드가 나르는 커스텀 프로퍼티는 전부 --wb-node- 아래에 있다', () => {
+    // 노드가 나르지 **않는** 이름은 여기 적어 둔다. 이름이 있으므로 썩지 않는다 —
+    // 새 이름이 생기면 이 케이스가 깨지고, 여기 적힌 것이 사라져도 깨진다.
+    const NOT_NODE_CARRIED = [TREE_INDENT_VAR]
+
     const names = [...structureBaseCss().matchAll(/--[\w-]+/g)].map((match) => match[0])
     expect(names.length).toBeGreaterThan(0)
-    expect(names.filter((name) => !name.startsWith(NODE_VAR_PREFIX))).toEqual([])
+    const offenders = names.filter(
+      (name) => !name.startsWith(NODE_VAR_PREFIX) && !NOT_NODE_CARRIED.includes(name),
+    )
+    expect(offenders).toEqual([])
+    // 목록이 실제로 쓰이는지 — 비어 버리면 위 필터가 아무것도 안 걸러도 초록이다.
+    expect(names).toContain(TREE_INDENT_VAR)
   })
 
   it('jsdom이 파싱할 수 있는 CSS다', async () => {
@@ -211,5 +220,55 @@ describe('Task 2 — Flex·Grid의 값이 커스텀 프로퍼티로 흘러간다
     const flex = '[data-wb-component="Flex"]'
     expect(dom.computed(flex, 'display')).toBe('grid')
     expect(dom.computed(flex, nodeVar('flex', 'direction'))).toBe('column')
+  })
+})
+
+describe('Task 3 — Tree·Media·Placeholder', () => {
+  /**
+   * **Tree가 다르다.** inline style이 노드가 아니라 `part('node')`인 `<li>`마다 붙는다.
+   * 그래서 커스텀 프로퍼티도 그 `<li>`에 실리고, 기본 CSS는 조각 셀렉터로 읽는다.
+   *
+   * 조각 규칙의 셀렉터에 `[data-wb-structure]`를 넣지 **않는다** — `compileTheme`의
+   * 조각 규칙이 `[data-wb-component="X"] [data-wb-part="p"]`(특이도 0,2,0)이므로, 여기에
+   * 구조를 더하면 0,3,0이 되어 테마가 진다. 대가는 P4b의 `Tree:accordion`이 같은 규칙을
+   * 받는다는 것이고, 그때 `--wb-node-tree-level`을 안 실으면 기본값 0이 적용된다.
+   */
+  it('Tree의 들여쓰기 단계가 li마다 실린다', async () => {
+    const dom = await renderedProbe('Tree', { items: ['가', '나', '다', '라'], depth: 3 })
+    // (index % depth) — 0,1,2,0
+    const levels = ['0', '1', '2', '0']
+    for (const [index, level] of levels.entries()) {
+      expect(dom.computed(`li:nth-of-type(${index + 1})`, nodeVar('tree', 'level')), `li ${index}`).toBe(level)
+    }
+  })
+
+  it('기본 CSS가 단계와 들여쓰기 폭을 곱해 padding-left를 만든다', async () => {
+    const dom = await renderedProbe('Tree', {})
+    expect(dom.computed('li', 'padding-left')).toBe(
+      `calc(var(${nodeVar('tree', 'level')}, 0) * var(--wb-tree-indent, 16px))`,
+    )
+  })
+
+  it('Media의 비율이 frame 조각에 실리고 기본 CSS가 그것을 읽는다', async () => {
+    const dom = await renderedProbe('Media', { ratio: '4/3' })
+    const frame = '[data-wb-part="frame"]'
+    expect(dom.computed(frame, nodeVar('media', 'ratio'))).toBe('4/3')
+    expect(dom.computed(frame, 'aspect-ratio')).toBe(`var(${nodeVar('media', 'ratio')}, 16/9)`)
+  })
+
+  it('Placeholder의 높이가 노드에 실리고 기본 CSS가 그것을 읽는다', async () => {
+    const dom = await renderedProbe('Placeholder', { height: 240 })
+    const placeholder = '[data-wb-component="Placeholder"]'
+    // 길이 단위까지 렌더러가 붙인다 — 기본 CSS가 `calc(var(…) * 1px)`을 쓰면 그 곱셈이
+    // 테마가 값을 덮을 때도 남아 `height: 300px`을 준 테마가 무효한 값을 만든다.
+    expect(dom.computed(placeholder, nodeVar('placeholder', 'height'))).toBe('240px')
+    expect(dom.computed(placeholder, 'height')).toBe(`var(${nodeVar('placeholder', 'height')}, 120px)`)
+  })
+
+  it('테마가 Placeholder의 높이를 덮는다', async () => {
+    const dom = await renderedProbe('Placeholder', { height: 240 }, [
+      themeRule('Placeholder', 'default', 'height: 400px;'),
+    ])
+    expect(dom.computed('[data-wb-component="Placeholder"]', 'height')).toBe('400px')
   })
 })
