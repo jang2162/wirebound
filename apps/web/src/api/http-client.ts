@@ -193,9 +193,12 @@ const SHAPES = {
    * (P2b-5 웨이브 1 리뷰 F7 — 이 주석은 P2b-4 웨이브 1에 쓰였고 그 뒤 웨이브 2·3이 호출부를
    * 만들었다):
    *
-   * - ~~`rg`로 CRUD 여섯을 부르는 자리 **0건**~~ → **오늘 11건이다**(실측, 메서드별:
+   * - ~~`rg`로 CRUD 여섯을 부르는 자리 **0건**~~ → **오늘 코드에서 11건이다**(실측, 메서드별:
    *   `updateMenu` 4 · `updatePage` 3 · `createMenu`·`createPage`·`deleteMenu`·`deletePage` 각 1).
-   *   전부 `tree/use-tree-commands.tsx` 한 파일에 있다.
+   *   전부 `tree/use-tree-commands.tsx` 한 파일에 있다. **같은 `rg`가 내는 히트는 12다** —
+   *   열둘째는 아래 `pageDetail` 표가 `api.createPage(…)`를 인용한 것이라 코드가 아니다.
+   *   **세는 사람이 그 하나를 빼야 한다**(`project-actions.ts`의 `.role` 세기와 같은 함정이고,
+   *   이 주석을 고치면서 실제로 한 번 헛짚었다).
    * - **`MenuNode`를 값으로 읽는 자리 0건 — 이쪽은 여전히 참이다**(실측: 여섯 중 응답을 변수에
    *   받는 자리는 `createPage` 하나뿐이고 그것은 `PageDetail`이다. 나머지 열은 `await`만 하고
    *   버린다). 결론(얕게 둔다)을 떠받치는 것은 이 절이다.
@@ -263,10 +266,18 @@ const SHAPES = {
    * 결과다.
    *
    * **어느 id를 빈 문자열까지 막는지는 "그 값이 주소가 되는가"로 가른다.** 주소가 만들어지는
-   * 자리를 `rg`로 다시 세니 `apps/web/src`에 **셋**이다 — `panels/menu-tree.tsx`의 `PageLink`,
-   * `routes/project-list.tsx`의 `<Link>`, 그리고 `tree/use-tree-commands.tsx`의 `navigate`.
-   * **셋째는 P2b-4 웨이브 2가 만들었고 이 표는 그때 갱신되지 않았다**(P2b-5 리뷰 F7과 같은
-   * 부류 — "오늘 0건"류 문장이 저절로 낡은 것이다). 거기 들어가는 shape 값을 표로 적는다.
+   * 자리를 `rg`로 다시 세니 `apps/web/src`에 **넷**이다:
+   *
+   * - `panels/menu-tree.tsx`의 `PageLink` — `/projects/:projectId/pages/:pageId`
+   * - `routes/project-list.tsx`의 `<Link>` — `/projects/:projectId`
+   * - `tree/use-tree-commands.tsx`의 `navigate` — 페이지를 **만든 뒤** 그리로 간다
+   * - `tree/use-tree-commands.tsx`의 `navigate` — 페이지를 **지운 뒤** `/projects/:projectId`로 간다
+   *
+   * **뒤 둘은 P2b-4 웨이브 2가 만들었고 이 표는 그때 갱신되지 않았다**(P2b-5 리뷰 F7과 같은
+   * 부류 — "오늘 0건"류 문장이 저절로 낡은 것이다). **앞 판의 이 문단은 "셋"이라 적었고 그것도
+   * 틀렸다** — 지운 뒤의 `navigate`를 빠뜨렸다. 넷째가 주소에 넣는 값도 `projectDetail.id`다
+   * (`routes/editor.tsx`가 **조회해 온** id를 트리에 넘기고 그 훅이 그대로 쓴다). 거기 들어가는
+   * shape 값을 표로 적는다.
    *
    * | shape의 값 | 주소가 되는 자리 | 오늘 도달 | 빈 문자열 |
    * |---|---|---|---|
@@ -441,60 +452,127 @@ function updateBody<T extends object>(body: T): Partial<T> {
 }
 
 /**
- * 프로젝트 본문에 **서버가 선언한 세 키만** 담는다. `definedOnly`가 그 뒤에서 `undefined`인
- * 것을 뺀다.
+ * 본문에 **서버가 선언한 키만** 담는다. `definedOnly`가 그 뒤에서 값이 `undefined`인 것을 뺀다.
  *
  * **`definedOnly`만으로는 부족하다 — 그것이 이 함수가 있는 이유다.** `definedOnly`가 거르는
- * 것은 **값이 `undefined`인 키**뿐이고 **선언되지 않은 키는 하나도 거르지 않는다.** 반면
- * 서버의 `CreateProjectBody`·`UpdateProjectBody`는 `z.strictObject`라 **선언되지 않은 키가
- * 그 자체로 400**이다. 즉 두 장치가 막는 실패가 다르다.
+ * 것은 **값이 `undefined`인 키**뿐이고 **선언되지 않은 키는 하나도 거르지 않는다.** 반면 서버의
+ * 본문 스키마는 전부 `z.strictObject`라 **선언되지 않은 키가 그 자체로 400**이다. 두 장치가
+ * 막는 실패가 다르다.
  *
- * **실측(가짜 `fetch`로 나가는 본문을 읽었다).** 응답 객체를 그대로 넘기면 —
+ * **위험한 입력은 "응답 객체를 그대로 되보내는 것"이다.** 서버의 응답에는 요청이 받지 않는
+ * 키가 섞여 있다. 본문을 받는 자리를 전부 재서 적는다(api 하네스 — 응답을 그대로 본문으로 보냈다):
  *
- * ```
- * definedOnly만 쓸 때: {"id":"p1","name":"가","slug":"ga","description":null,"role":"owner"}
- * 이 함수를 지나면:    {"name":"가","slug":"ga","description":null}
- * ```
+ * | 자리 | 서버가 낸 것 |
+ * |---|---|
+ * | `POST`·`PATCH /projects` | `400` 인식할 수 없는 키: `"id"`, `"role"` |
+ * | `POST /menu` | `400` 인식할 수 없는 키: `"id"`, `"projectId"`, `"sortOrder"` |
+ * | `PATCH /menu/:id` | `400` 인식할 수 없는 키: `"id"`, `"projectId"` |
+ * | `POST /pages` | `400` 인식할 수 없는 키: `"id"`, `"sortOrder"`, `"schemaVersion"`, `"schema"`, `"headSeq"` |
+ * | `PATCH /pages/:id` | `400` 인식할 수 없는 키: `"id"`, `"schemaVersion"`, `"schema"`, `"headSeq"` |
  *
- * **그 첫 줄을 서버에 실제로 보내면 400이다**(api 하네스 실측):
- * `POST`·`PATCH` 둘 다 `400 bad-request` / issues `[{"path":"","message":"인식할 수 없는 키:
- * \"id\", \"role\""}]`. 선언된 셋만 담은 둘째 줄은 200이다.
+ * **같은 표의 반대편도 쟀다** — 선언된 키만 담은 본문은 그 다섯 자리 전부 200/201이다.
+ * (`patchOps`는 표에 없다 — 응답에 `baseSeq`·`ops`가 없어 되보내는 것을 타입이 이미 막는다.)
  *
- * **타입이 그것을 막지 못한다는 것도 쟀다**(`tsc` 프로브 셋, 매번 `pnpm typecheck`):
+ * **타입이 그것을 막지 못한다**(`tsc` 프로브, 매번 `pnpm typecheck`):
  *
  * | 넘기는 모양 | typecheck |
  * |---|---|
- * | `updateProject(id, created)` — 변수 | **에러 없음** |
- * | `updateProject(id, { name, slug, role: 'owner' })` — 키를 적은 리터럴 | `TS2353: … 'role' does not exist …` |
- * | `updateProject(id, { ...created })` — **스프레드 리터럴** | **에러 없음** |
+ * | `updateProject(id, created)` · `updateMenu(pid, id, node)` — 변수 | **에러 없음** |
+ * | `updateMenu(pid, id, { title, sortOrder, projectId })` — 키를 적은 리터럴 | `TS2353: … 'projectId' does not exist …` |
+ * | `updateProject(id, { ...created })` · `updateMenu(pid, id, { ...node })` — **스프레드 리터럴** | **에러 없음** |
  *
  * 초과 속성 검사는 **리터럴에 직접 적은 키**에만 걸린다. **스프레드로 들어온 키는 리터럴이어도
- * 걸리지 않는다** — 그리고 그 모양(`{ ...project, name: 새이름 }`)이 수정 폼이 쓰기 가장 쉬운
- * 형태다. 그래서 타입이 아니라 여기서 막는다.
+ * 걸리지 않는다** — 그리고 그 모양(`{ ...page, title: 새제목 }`)이 폼이 쓰기 가장 쉬운 형태다.
+ * 그래서 타입이 아니라 여기서 막는다.
  *
- * **`patchOps`가 `clientOpId`에 쓰는 것과 같은 관용구다** — 키 목록을 코드에 적어 두면 서버가
- * 받는 것과 클라이언트가 보내는 것이 한 자리에서 대조된다.
+ * **본문을 싣는 자리는 여덟이고 일곱이 이 함수를 지난다**(실측: `request`에 넷째 인자를 넘기는
+ * 줄 전수). 여덟째는 `login`인데 **인자가 문자열 둘이라 실을 객체가 애초에 없다** —
+ * `{ email, password }`를 그 자리에서 만든다. 규칙이 닿지 않는 것이 아니라 위반할 수단이 없다.
  *
- * **이 함수의 두 부분은 구분력이 다르다 — 변이를 걸어 쟀다.**
+ * **한 함수로 일곱 자리를 덮는 이유.** 자리마다 함수를 두면 **같은 위험에 대한 규칙이 일곱 벌**이
+ * 되고, 이 저장소가 반복해 겪은 *"한 곳만 고치고 다른 곳을 놓치는"* 결함이 정확히 거기서 난다
+ * (P2b-5 웨이브 1은 프로젝트 셋만 고쳐 규칙을 둘로 갈라 놨었고, 그것이 이 커밋의 계기다).
+ * `patchOps`는 원래 삼항으로 키 목록을 적고 있었다 — **규칙은 이미 같았고 표현만 달랐다.**
+ *
+ * **과도 차단을 쟀다.** 정상 본문 **48조합**(`createMenu` 6 · `updateMenu` 17 · `createPage` 6 ·
+ * `updatePage` 11 · `patchOps` 8)에서 나가는 바이트가 옛 구현과 **하나도 다르지 않았고**, 살아
+ * 있는 호출부가 쓰는 본문 모양 **열**도 전부 같았다. **다만 "바이트가 늘 같다"는 아니다** —
+ * 나가는 키 순서가 아래 `BODY_KEYS`의 순서로 정규화되므로 **호출자가 역순으로 적은 본문은
+ * 바이트가 달라진다**(재서 확인했다: `{sortOrder, title}`을 넘기면 옛 구현은
+ * `{"sortOrder":…,"title":…}`, 지금은 `{"title":…,"sortOrder":…}`). JSON 객체의 키 순서는 뜻을
+ * 바꾸지 않고 서버의 zod도 보지 않는다 — **`나가는 키 순서는 …` 케이스가 그 동작을 고정한다.**
+ *
+ * **구분력 — 변이를 걸어 쟀다**(`pnpm vitest run --project web`, 매번 복구했다):
  *
  * | 변이 | 사망 |
  * |---|---|
- * | 이 함수를 `definedOnly(body)`(=키를 고르지 않음)로 바꾼다 | **2** |
+ * | 이 함수가 `keys`를 무시하고 `definedOnly(body)`를 내게 한다 | **5** |
+ * | 자리별로 이 함수를 지운다 — `createMenu`·`updateMenu`·`createPage`·`patchOps` | 각 **1** |
+ * | 같은 변이 — `updatePage` | **2** |
  * | 안쪽 `definedOnly`를 항등으로 바꾼다(`undefined`인 키가 남는다) | **0** |
- * | `updateProject`에서 `updateBody(projectBody(…))`의 순서를 뒤집는다 | **1** |
  *
- * **키를 고르는 쪽은 닫혔고, `undefined` 필터는 여전히 닫히지 않는다.** 뒤쪽이 0인 원인은
- * `definedOnly`의 머리말이 이미 적은 것과 같다 — 나가는 본문의 유일한 관찰 지점이
- * `JSON.stringify`가 만든 문자열이고 그것이 값이 `undefined`인 키를 지워 준다(선언된 세 키의
- * **39조합**에서 `JSON.stringify(definedOnly(b))`와 `JSON.stringify(b)`를 맞대 **차이 0**을 쟀다).
- * **앞 판은 이 0을 `definedOnly` 전체의 성질로 적었는데, 실제로 닫히지 않는 것은 그 절반뿐이다.**
+ * **키를 고르는 쪽은 자리마다 닫혔고, `undefined` 필터는 여전히 닫히지 않는다.** 뒤쪽이 0인
+ * 원인은 `definedOnly` 머리말이 적은 것과 같다 — 나가는 본문의 유일한 관찰 지점이
+ * `JSON.stringify`가 만든 문자열이고 그것이 값이 `undefined`인 키를 지워 준다.
+ * **`patchOps`는 케이스를 더하기 전에 0 사망이었다** — 그 자리는 응답을 되보내는 것을 타입이
+ * 이미 막아(응답에 `baseSeq`·`ops`가 없다) 다른 여섯과 위험의 모양이 다르기 때문이다.
+ * 규칙을 한 벌로 두는 이상 그 자리도 닫는 케이스가 있어야 해서 하나 더했다.
+ *
+ * **키 목록을 `Record<keyof …, true>`로 두는 것이 요점이다** — 배열이면 목록과 타입이 컴파일러로
+ * 이어지지 않아, `ApiClient`가 키를 하나 더 받게 됐을 때 그 키가 **조용히 안 나간다.** 레코드로
+ * 두면 **빠뜨림과 오타가 양방향으로 컴파일 에러**다(이 파일의 `API_ERROR_CODES`와 같은 근거).
+ * **세 방향을 다 심어서 관측했다:**
+ *
+ * | 심은 것 | `pnpm typecheck` |
+ * |---|---|
+ * | `ApiClient`의 본문 타입에 키를 더하고 아래 목록은 그대로 | `TS1360: … does not satisfy the expected type` |
+ * | 아래 목록에서 키를 뺀다 | `TS1360`(같은 자리) |
+ * | 아래 목록에 계약에 없는 키를 더한다 | `TS2353: … 'bogus' does not exist in type …` |
+ *
+ * (앞 둘이 `TS2739`가 아니라 `TS1360`인 것은 애너테이션이 아니라 `satisfies`로 검사하기
+ * 때문이다. **그 코드는 심어서 읽은 것이다** — 처음엔 기억으로 `TS2739`를 적었고 틀렸다.)
+ *
+ * **키 목록을 `Parameters<ApiClient[…]>`에서 끌어오는 것도 요점이다.** 본문 타입을 여기 다시
+ * 적으면 인터페이스와 어긋날 수 있고, 그 어긋남은 컴파일러가 못 잡는다.
  */
-function projectBody(body: {
-  name?: string
-  slug?: string
-  description?: string | null
-}): { name?: string; slug?: string; description?: string | null } {
-  return definedOnly({ name: body.name, slug: body.slug, description: body.description })
+function declaredOnly<T extends object>(body: T, keys: Record<keyof T, true>): Partial<T> {
+  const source = body as Record<string, unknown>
+  return definedOnly(Object.fromEntries(Object.keys(keys).map((key) => [key, source[key]])) as T)
+}
+
+/**
+ * 각 요청이 서버에 보낼 수 있는 키. **`ApiClient`의 시그니처에서 끌어온다** — 그래야 인터페이스가
+ * 바뀌면 여기가 컴파일 에러로 알려 준다. 값은 `true`뿐이고 쓰이는 것은 키 이름이다.
+ */
+const BODY_KEYS = {
+  createProject: { name: true, slug: true, description: true } satisfies Record<
+    keyof Parameters<ApiClient['createProject']>[0],
+    true
+  >,
+  updateProject: { name: true, slug: true, description: true } satisfies Record<
+    keyof Parameters<ApiClient['updateProject']>[1],
+    true
+  >,
+  createMenu: { parentId: true, title: true } satisfies Record<
+    keyof Parameters<ApiClient['createMenu']>[1],
+    true
+  >,
+  updateMenu: { title: true, parentId: true, sortOrder: true } satisfies Record<
+    keyof Parameters<ApiClient['updateMenu']>[2],
+    true
+  >,
+  createPage: { menuNodeId: true, title: true } satisfies Record<
+    keyof Parameters<ApiClient['createPage']>[1],
+    true
+  >,
+  updatePage: { title: true, menuNodeId: true, sortOrder: true } satisfies Record<
+    keyof Parameters<ApiClient['updatePage']>[2],
+    true
+  >,
+  patchOps: { baseSeq: true, ops: true, clientOpId: true } satisfies Record<
+    keyof Parameters<ApiClient['patchOps']>[2],
+    true
+  >,
 }
 
 /**
@@ -572,27 +650,28 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
     // 그 근거는 "모양이 같다"가 아니라 **`createProject`의 하중 `id`가 그 검사가 이미 보는
     // 것의 부분집합**이라는 것이다(`isProjectDetail`의 소비자 표).
     createProject: (body) =>
-      // **선언된 세 키만 담는다**(`projectBody`). `description`을 주지 않으면 그 키를 만들지
-      // 않고, 응답 객체처럼 `id`·`role`이 섞인 것을 넘겨도 그 둘이 나가지 않는다 — 나가면
-      // 서버가 400을 낸다(그 머리말의 실측).
-      //
-      // **`definedOnly` 하나만으로는 그것을 못 막는다.** 앞 판은 여기에 *"서버가
-      // `z.strictObject`라 선언되지 않은 키는 그 자체로 400"*을 `definedOnly`의 근거로 적었는데
-      // **그 필터는 미선언 키를 하나도 거르지 않으므로 그 문장이 말하는 실패를 막고 있지
-      // 않았다**(리뷰 F1). 근거와 장치를 맞춘 것이 `projectBody`다.
-      request<ProjectDetail>('POST', '/projects', SHAPES.projectDetail, projectBody(body)),
+      // **선언된 키만 담는다**(`declaredOnly`). `description`을 주지 않으면 그 키를 만들지 않고,
+      // 응답 객체처럼 `id`·`role`이 섞인 것을 넘겨도 그 둘이 나가지 않는다 — 나가면 서버가
+      // 400을 낸다(그 머리말의 표).
+      request<ProjectDetail>(
+        'POST',
+        '/projects',
+        SHAPES.projectDetail,
+        declaredOnly(body, BODY_KEYS.createProject),
+      ),
     // **`async`인 것이 요점이다** — `updateBody`가 빈 본문에서 던지는데, 동기 `throw`면
     // `await` 없이 `.catch`를 붙인 호출부가 잡지 못한다(`updateMenu`와 같은 자리).
     // **실측: `async`를 지우면 3 사망**(빈 본문 · undefined만 담긴 본문 · 동기 throw 케이스).
     //
-    // **`projectBody`를 먼저 지난 뒤 `updateBody`가 센다.** 순서가 요점이다 — 미선언 키를
+    // **`declaredOnly`를 먼저 지난 뒤 `updateBody`가 센다.** 순서가 요점이다 — 미선언 키를
     // 먼저 떨어내지 않으면 `{id, role}`만 담긴 본문이 "빈 본문이 아니다"로 통과해 400이 된다.
+    // **갱신 셋이 전부 이 순서다.**
     updateProject: async (projectId, body) =>
       request<ProjectDetail>(
         'PATCH',
         projectPath(projectId),
         SHAPES.projectDetail,
-        updateBody(projectBody(body)),
+        updateBody(declaredOnly(body, BODY_KEYS.updateProject)),
       ),
     deleteProject: (projectId) => request<void>('DELETE', projectPath(projectId), SHAPES.noBody),
     // `{ menu }` 봉투를 벗기는 유일한 지점이다 — 그 관용구를 앱 안으로 들이지 않는다.
@@ -611,13 +690,24 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
     // `pages`·`children`이 없고(`api/types.ts`), 서버가 `sort_order`를 재번호하므로
     // 부르는 쪽은 성공하면 `getTree`를 다시 부른다(D1). 그래서 여기서 응답을 가공하지 않는다.
     createMenu: (projectId, body) =>
-      // `parentId`는 `null`이어도 그대로 싣는다 — 타입이 필수라 `undefined`가 올 수 없고,
-      // `null`은 "루트에 만든다"는 값이다. 그래서 `definedOnly`를 지나지 않는다.
-      request<MenuNode>('POST', `${projectPath(projectId)}/menu`, SHAPES.menuNode, body),
+      // `parentId`는 `null`이어도 그대로 싣는다 — `null`은 "루트에 만든다"는 값이다.
+      // `declaredOnly` 안의 `definedOnly`가 거르는 것은 `undefined`뿐이라 그 값은 살아남는다
+      // (`updateMenu`의 `parentId: null` 케이스가 같은 성질을 지킨다).
+      request<MenuNode>(
+        'POST',
+        `${projectPath(projectId)}/menu`,
+        SHAPES.menuNode,
+        declaredOnly(body, BODY_KEYS.createMenu),
+      ),
     // **`async`인 것이 요점이다** — `updateBody`가 빈 본문에서 던지는데, 동기 `throw`면
     // `await` 없이 `.catch`를 붙인 호출부가 잡지 못한다(`ApiClient`의 계약은 `Promise`다).
     updateMenu: async (projectId, nodeId, body) =>
-      request<MenuNode>('PATCH', menuPath(projectId, nodeId), SHAPES.menuNode, updateBody(body)),
+      request<MenuNode>(
+        'PATCH',
+        menuPath(projectId, nodeId),
+        SHAPES.menuNode,
+        updateBody(declaredOnly(body, BODY_KEYS.updateMenu)),
+      ),
     deleteMenu: (projectId, nodeId) =>
       request<void>('DELETE', menuPath(projectId, nodeId), SHAPES.noBody),
     createPage: (projectId, body) =>
@@ -625,10 +715,20 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
       // 조회·생성·갱신 셋을 다 만든다(`apps/api/src/routes/pages.ts`). **그래서 같은 shape를
       // 쓰지만, 같은 모양이 곧 같은 하중은 아니다** — 이 자리가 새 필드(`id`)를 읽으므로
       // `SHAPES.pageDetail`의 표에 그 줄을 더했다(F2의 원인이 정확히 그 구별을 놓친 것이다).
-      request<PageDetail>('POST', `${projectPath(projectId)}/pages`, SHAPES.pageDetail, body),
+      request<PageDetail>(
+        'POST',
+        `${projectPath(projectId)}/pages`,
+        SHAPES.pageDetail,
+        declaredOnly(body, BODY_KEYS.createPage),
+      ),
     // `updateMenu`와 같은 이유로 `async`다.
     updatePage: async (projectId, pageId, body) =>
-      request<PageDetail>('PATCH', pagePath(projectId, pageId), SHAPES.pageDetail, updateBody(body)),
+      request<PageDetail>(
+        'PATCH',
+        pagePath(projectId, pageId),
+        SHAPES.pageDetail,
+        updateBody(declaredOnly(body, BODY_KEYS.updatePage)),
+      ),
     deletePage: (projectId, pageId) =>
       request<void>('DELETE', pagePath(projectId, pageId), SHAPES.noBody),
     getPage: (projectId, pageId) =>
@@ -638,12 +738,13 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
         'PATCH',
         `${pagePath(projectId, pageId)}/ops`,
         SHAPES.patchResult,
-        // `clientOpId`가 없으면 **키를 만들지 않는다.** 서버의 본문 스키마는
-        // `z.strictObject`라 선언되지 않은 키가 그 자체로 400인데, `undefined`를 실은 키는
-        // `JSON.stringify`가 지워 주므로 오늘은 통과한다 — 그 우연에 기대지 않는다.
-        body.clientOpId === undefined
-          ? { baseSeq: body.baseSeq, ops: body.ops }
-          : { baseSeq: body.baseSeq, ops: body.ops, clientOpId: body.clientOpId },
+        // `clientOpId`가 없으면 **키를 만들지 않는다.** `undefined`를 실은 키는
+        // `JSON.stringify`가 지워 주므로 오늘은 통과하지만 그 우연에 기대지 않는다.
+        //
+        // **앞서 여기에 삼항으로 키 목록을 적어 두었다.** `declaredOnly`가 같은 일을 하고
+        // 목록이 `ApiClient`와 컴파일러로 이어지므로 그쪽으로 옮겼다 — **나가는 바이트가
+        // 바뀌지 않는 것을 재고 옮겼다**(선택 키 유무 두 갈래 전부).
+        declaredOnly(body, BODY_KEYS.patchOps),
       ),
     listMyRevisions: (projectId, pageId) =>
       request<RevisionSummary[]>(

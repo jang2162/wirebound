@@ -722,6 +722,31 @@ describe('메뉴 CRUD', () => {
     expect(error.code).toBe('internal')
   })
 
+  it('메뉴 응답 객체를 그대로 넘겨도 선언된 키만 나간다', async () => {
+    // **`MenuNode` 응답에는 요청이 받지 않는 키가 셋 섞여 있다**(`id`·`projectId`·`sortOrder` —
+    // `sortOrder`는 갱신에만 선언돼 있다). 서버의 본문 스키마가 `z.strictObject`라 그것이
+    // 그대로 나가면 400이다. **실측(api 하네스):**
+    //
+    //   POST  /menu     응답 그대로 → 400 인식할 수 없는 키: "id", "projectId", "sortOrder"
+    //   PATCH /menu/:id 응답 그대로 → 400 인식할 수 없는 키: "id", "projectId"
+    //   선언된 키만 담으면            → 201 / 200
+    //
+    // **타입은 막지 못한다** — 변수도 스프레드 리터럴도 `tsc` 0 에러다(`declaredOnly` 머리말의
+    // 프로브 표). 그래서 `declaredOnly`가 여기서 막는다.
+    const stub = stubFetch(jsonResponse(201, menuNode), jsonResponse(200, menuNode))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.createMenu('p1', menuNode)
+    await client.updateMenu('p1', 'm1', { ...menuNode })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ parentId: null, title: '회원관리' })
+    expect(JSON.parse(String(stub.calls[1]?.init?.body))).toEqual({
+      title: '회원관리',
+      parentId: null,
+      sortOrder: 0,
+    })
+  })
+
   it('경로에 들어가는 id는 URL 인코딩된다', async () => {
     const stub = stubFetch(jsonResponse(200, menuNode), new Response(null, { status: 204 }))
     const client = createHttpClient(stub.fetchImpl)
@@ -847,6 +872,71 @@ describe('페이지 CRUD', () => {
 
       expect(error.code, JSON.stringify(body)).toBe('internal')
     }
+  })
+
+  it('patchOps도 선언된 세 키만 보낸다', async () => {
+    // **이 자리는 다른 넷과 위험의 모양이 다르다.** 응답(`PatchResult`)에는 `baseSeq`·`ops`가
+    // 없어 그것을 되보내는 것은 타입이 이미 막는다. 그런데도 같은 관용구를 쓰는 것은
+    // **규칙을 한 벌로 두기 위해서다** — 자리마다 방식이 다르면 다음 사람이 자기가 먼저 본
+    // 쪽을 따르고, 이 저장소가 반복해 겪은 "한 곳만 고치고 다른 곳을 놓치는" 결함이 거기서 난다.
+    //
+    // **닫는 케이스가 없으면 그 관용구가 지켜지는지 알 수 없어 여기 둔다.** 오늘 부르는 자리는
+    // `edit/use-edit-commit.tsx` 하나이고 `store.nextRequest()`가 정확히 세 키를 주므로,
+    // 이 케이스가 재는 것은 **호출부가 아니라 이 층의 계약**이다.
+    const stub = stubFetch(jsonResponse(200, patchResult))
+    const client = createHttpClient(stub.fetchImpl)
+    const ops: PatchOp[] = [{ op: 'replace', path: '/root/children/0/props/title', value: '가' }]
+
+    await client.patchOps('p1', 'pg1', {
+      baseSeq: 7,
+      ops,
+      clientOpId: 'op-1',
+      seq: 9,
+      revisionId: 'rev-1',
+    } as unknown as { baseSeq: number; ops: PatchOp[]; clientOpId?: string })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ baseSeq: 7, ops, clientOpId: 'op-1' })
+  })
+
+  it('페이지 응답 객체를 그대로 넘겨도 선언된 키만 나간다', async () => {
+    // `PageDetail`은 여덟 키인데 요청이 받는 것은 그 일부다. **실측(api 하네스):**
+    //
+    //   POST  /pages     응답 그대로 → 400 인식할 수 없는 키: "id", "sortOrder", "schemaVersion", "schema", "headSeq"
+    //   PATCH /pages/:id 응답 그대로 → 400 인식할 수 없는 키: "id", "schemaVersion", "schema", "headSeq"
+    //   선언된 키만 담으면             → 201 / 200
+    //
+    // **`schema`가 섞여 나가는 것이 특히 나쁘다** — 서버는 그것을 `PUT .../schema`·
+    // `PATCH .../ops`로만 받는다(`api/client.ts`의 `updatePage` 주석).
+    const stub = stubFetch(jsonResponse(201, page), jsonResponse(200, page))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.createPage('p1', page)
+    await client.updatePage('p1', 'pg1', { ...page })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ menuNodeId: 'm1', title: '목록' })
+    expect(JSON.parse(String(stub.calls[1]?.init?.body))).toEqual({
+      title: '목록',
+      menuNodeId: 'm1',
+      sortOrder: 0,
+    })
+  })
+
+  it('나가는 키 순서는 호출자가 적은 순서가 아니라 계약의 순서다', async () => {
+    // **`declaredOnly`가 만든 동작이고 의도한 것이다.** 키 목록(`BODY_KEYS`)의 순서로
+    // 정규화되므로, 호출자가 어떤 순서로 적든 같은 바이트가 나간다. JSON 객체의 키 순서는
+    // 뜻을 바꾸지 않고 서버의 zod도 보지 않는다.
+    //
+    // **이것을 케이스로 두는 것은 "바이트가 그대로다"라고 적지 않기 위해서다** — 옛 구현은
+    // 호출자가 적은 순서를 그대로 냈다. 정상 본문 48조합에서 값과 키 집합은 하나도 바뀌지
+    // 않았지만, **역순으로 적은 본문은 바이트가 다르다**(재서 확인했다).
+    const stub = stubFetch(jsonResponse(200, page), jsonResponse(200, page))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updatePage('p1', 'pg1', { sortOrder: 2, title: '가' })
+    await client.updatePage('p1', 'pg1', { title: '가', sortOrder: 2 })
+
+    expect(stub.calls[0]?.init?.body).toBe('{"title":"가","sortOrder":2}')
+    expect(stub.calls[0]?.init?.body).toBe(String(stub.calls[1]?.init?.body))
   })
 
   it('경로에 들어가는 id는 URL 인코딩된다', async () => {
