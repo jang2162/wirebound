@@ -157,11 +157,14 @@ export interface ApiClient {
    * (`edit/use-edit-commit.tsx`) — 여기서 큐를 들면 가짜를 끼우는 테스트마다 그 큐가
    * 함께 딸려 온다.
    *
-   * `clientOpId`는 클라이언트가 붙이는 값이고 서버는 그대로 되돌려 준다. **다만 클라이언트는
-   * 그 에코를 읽지 않는다** — ack는 보낸 요청의 id와 큐의 `[0]`을 맞춘다
-   * (`store/edit-queue.ts`의 `PendingEdit.clientOpId`에 근거가 있다). 그래서
-   * `PatchResult.clientOpId`는 지금 **읽는 자리가 없는 필드**다(이월 문서의 `ApiError.status`와
-   * 같은 부류 — 계약에 있으니 타입에 두지만 소비자가 아직 없다).
+   * `clientOpId`는 클라이언트가 붙이는 값이고 서버는 그대로 되돌려 준다. **다만 ack가 그 에코를
+   * 쓰지 않는다** — 보낸 요청의 id와 큐의 `[0]`을 맞춘다(`store/edit-queue.ts`의
+   * `PendingEdit.clientOpId`에 근거가 있다). 즉 `PatchResult.clientOpId`는 **계약에 있으니 타입에
+   * 두지만 ack의 판정에는 쓰이지 않는 필드**다(`ApiError.status`와 같은 부류).
+   *
+   * **"소비자가 아직 없다"로 적지 않는다** — 그 형태가 이 저장소에서 여러 번 저절로 낡았다
+   * (`test/api-consumers.test.ts`의 머리말). 위 문장은 **무엇이 무엇을 쓰는가**를 말하므로
+   * 소비자가 생겨도 거짓이 되지 않는다.
    */
   patchOps(
     projectId: string,
