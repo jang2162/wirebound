@@ -23,8 +23,8 @@
  * | **여는 것** | `openCreate` · `openEdit` · `askDelete` | **각자 `inFlight`를 본다** |
  * | **닫는 것** | `closeForm` · `cancelDelete` | 막지 않는다 — 닫는 것은 잠금 중에도 안전하다 |
  *
- * **Task 3이 만드는 것은 `state`·`busy`·`failure`와 `run`까지다** — 위 표의 조작들은
- * Task 4·5·6이 각자 케이스와 함께 붙인다. `run`은 그때 처음 불린다.
+ * **Task 3이 만든 것은 `state`·`busy`·`failure`와 `run`까지다.** 위 표의 조작들은
+ * Task 4·5·6이 각자 케이스와 함께 붙인다.
  *
  * **닫는 것을 잠그지 않는 근거:** 잠그면 요청이 나가 있는 동안 사용자가 폼을 못 닫는다.
  * 닫아도 나간 요청은 그대로 진행되고, 성공하면 재조회가 목록을 맞춘다.
@@ -36,6 +36,7 @@
  * `projects/project-actions.ts`가 같은 계약을 갖는 이유와 같다.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
 import type { ProjectDetail } from '../api/types'
@@ -58,16 +59,39 @@ export type ProjectLoadState =
   | { status: 'ready'; projects: ProjectDetail[] }
   | { status: 'failed'; failure: Failure }
 
+/** 지금 열려 있는 폼. `project`가 `null`이면 만들기, 아니면 그 프로젝트의 수정이다. */
+export interface ProjectFormState {
+  project: ProjectDetail | null
+}
+
+/** 폼이 제출하는 값 셋. 서버가 받는 키와 같다(`ApiClient`의 본문). */
+export interface ProjectFormValues {
+  name: string
+  slug: string
+  description: string
+}
+
 export interface ProjectCommands {
   state: ProjectLoadState
   /** 조작이 나가 있는 동안 `true`. **버튼 표시용이다**(D2 — 실제로 막는 것은 `ref`다). */
   busy: boolean
   /** 마지막 조작의 실패. **조회 실패(`state.failure`)와 다른 상태다**(D8). */
   failure: Failure | null
+  /** 열려 있는 폼. 닫혀 있으면 `null`. */
+  form: ProjectFormState | null
+  openCreate: () => void
+  closeForm: () => void
+  submitForm: (values: ProjectFormValues) => void
 }
 
 export function useProjectCommands(): ProjectCommands {
   const api = useApi()
+  /**
+   * **만든 프로젝트로 가는 이동이 명령형이다**(D7). `<Navigate>` 컴포넌트는 "이 상태면 저기로
+   * 간다"를 말하는데, 이 이동은 만들기가 성공한 그 순간에만 한 번 일어나야 하고 렌더가 다시
+   * 돌 때 되풀이되면 안 된다(`tree/use-tree-commands.tsx`가 같은 근거로 같은 선택을 했다).
+   */
+  const navigate = useNavigate()
   const [state, setState] = useState<ProjectLoadState>({ status: 'loading' })
   /**
    * **잠금(`inFlight`)과 표시(`busy`)를 갈라 둔다** — P2b-4의 실측이 근거다.
@@ -83,6 +107,15 @@ export function useProjectCommands(): ProjectCommands {
   const inFlight = useRef(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
+  const [form, setForm] = useState<ProjectFormState | null>(null)
+  /**
+   * 만든 프로젝트의 id를 `run`의 `after`까지 나르는 자리.
+   *
+   * **`useState`가 아니라 `ref`인 이유:** `after`는 `run`의 클로저 안에서 불리므로 그 사이의
+   * `setState`를 보지 못한다. 그리고 이 값은 화면이 그리는 것이 아니라 **한 번 쓰고 버리는
+   * 전달값**이라 렌더를 돌릴 이유가 없다.
+   */
+  const createdId = useRef<string | null>(null)
 
   /**
    * 목록을 받는다. `reload`가 `true`면 `loading`으로 되돌리지 않는다 — 조작 뒤의 재조회에서
@@ -161,5 +194,65 @@ export function useProjectCommands(): ProjectCommands {
     }
   }
 
-  return { state, busy, failure }
+  /**
+   * 만들기 폼을 연다. **조작이 나가 있으면 열지 않는다(D2의 잠금).**
+   *
+   * 화면에서는 버튼이 비활성이라 이 경로가 없지만 **훅 API로는 열린다** — 그때 친 값은
+   * 요청도 못 나가고 조용히 사라진다(`submitForm`이 `run`에 닿아도 `inFlight`가 서 있어
+   * 되돌아온다). **P2b-4가 정확히 그 자리를 놓쳐 사고가 났다.**
+   */
+  function openCreate(): void {
+    if (inFlight.current) return
+    setFailure(null)
+    setForm({ project: null })
+  }
+
+  /**
+   * 폼을 닫는다. **잠그지 않는다** — 닫는 것은 요청이 나가 있는 동안에도 안전하고, 잠그면
+   * 사용자가 폼을 못 닫는다. 나간 요청은 그대로 진행되고 성공하면 재조회가 목록을 맞춘다.
+   */
+  function closeForm(): void {
+    setForm(null)
+  }
+
+  /**
+   * 폼을 제출한다.
+   *
+   * **이름·슬러그가 비면 보내지 않는다.** 서버의 `Name`이 `z.string().min(1)`이고 빈 슬러그도
+   * 400이라(실측: 빈 슬러그가 형식 위반과 **같은 문장**을 낸다) 그 왕복을 만들지 않는다.
+   * **폼을 닫지 않는 것이 요점이다:** 닫으면 사용자가 무엇이 잘못됐는지 모른 채 친 값을 잃는다.
+   *
+   * **슬러그 형식은 여기서 보지 않는다(D5).** 서버가 400과 함께 문장을 주고, 규칙을 두 곳에
+   * 두면 어긋난다. **그 문장은 `issues[]`에 온다** — `toFailure`가 그것을 쓴다(D5의 정정).
+   *
+   * **`description`이 빈 문자열이면 키를 만들지 않는다.** 폼의 빈 칸은 "설명 없음"이지
+   * "빈 문자열인 설명"이 아니다. `undefined`로 넘기면 `declaredOnly`가 그 키를 지운다
+   * (`api/http-client.ts` — 거르는 것은 `undefined` 하나뿐이라 `null`·`0`·`''`는 살아남는다).
+   */
+  function submitForm(values: ProjectFormValues): void {
+    if (form === null) return
+    if (values.name === '' || values.slug === '') return
+
+    const body = {
+      name: values.name,
+      slug: values.slug,
+      description: values.description === '' ? undefined : values.description,
+    }
+
+    void run(
+      async () => {
+        const created = await api.createProject(body)
+        createdId.current = created.id
+      },
+      () => {
+        setForm(null)
+        // **만든 프로젝트로 간다(D7).** `id`가 빈 문자열이면 `/projects/`가 되고 화면이
+        // 통째로 비는데, 그것은 `SHAPES.projectDetail`이 관문에서 막는다(웨이브 1 실측).
+        const id = createdId.current
+        if (id !== null) navigate(`/projects/${id}`)
+      },
+    )
+  }
+
+  return { state, busy, failure, form, openCreate, closeForm, submitForm }
 }
