@@ -6,6 +6,7 @@ import { checkPatterns } from '../spec/patterns'
 import { checkPrimitives } from '../spec/primitives'
 import { ThemeSchema, type Theme } from '../spec/theme'
 import { ThemePatchSchema, mergeTheme, type ThemePatch } from './merge'
+import { cssVarName } from './style'
 import { resolveTokens } from './tokens'
 
 /**
@@ -51,6 +52,8 @@ export function resolveTheme(
 
   const patterns = checkPatterns(theme.patterns ?? {})
   issues.push(...patterns.issues)
+
+  issues.push(...collidingVariables(tokens.table, primitives.values))
 
   if (issues.length > 0) return { theme: null, issues }
 
@@ -110,4 +113,40 @@ function specIssues(entries: readonly { path: readonly PropertyKey[]; message: s
   return entries.map((entry) =>
     issue('bad-spec', entry.path.join('.'), `테마 규격을 지키지 않습니다: ${entry.message}`),
   )
+}
+
+/**
+ * 서로 다른 경로가 같은 CSS 변수 이름으로 접히는지 본다.
+ *
+ * `cssVarName`이 경로의 `.`을 `-`로 바꾸는데(D6) **토큰 이름 자체가 `.`과 `-`를 모두 쓸 수
+ * 있다** — §6.3의 `palette` 키가 `"blue.500"`인 것이 그 예다. 그래서 `blue.500`과
+ * `blue-500`이 같은 변수가 되고, 심어 보니 이슈 없이 `:root`에 같은 이름이 두 번 나갔다.
+ * CSS는 나중 선언이 이기므로 앞의 토큰이 조용히 사라진다.
+ *
+ * 두 층을 합쳐서 본다. 토큰 경로는 이름공간(`palette`·`semantic`·…)으로 시작하고
+ * primitives는 `container`·`grid`·`section`으로 시작하므로 지금 카탈로그에서 층을 가로지르는
+ * 충돌은 만들지 못했지만, 검사를 한 층으로 좁힐 근거가 없어 합집합에서 돈다.
+ */
+function collidingVariables(
+  tokens: ReadonlyMap<string, string>,
+  primitives: ReadonlyMap<string, string>,
+): ThemeIssue[] {
+  const seen = new Map<string, string>()
+  const issues: ThemeIssue[] = []
+  for (const path of [...tokens.keys(), ...primitives.keys()]) {
+    const name = cssVarName(path)
+    const previous = seen.get(name)
+    if (previous === undefined) {
+      seen.set(name, path)
+      continue
+    }
+    issues.push(
+      issue(
+        'duplicate-variable',
+        path,
+        `${previous}와 ${path}가 같은 CSS 변수 이름 ${name}으로 접힙니다 — 둘 중 하나의 이름을 바꾸세요`,
+      ),
+    )
+  }
+  return issues
 }

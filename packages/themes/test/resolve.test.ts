@@ -183,3 +183,46 @@ describe('resolveTheme — 결정적이다', () => {
     ])
   })
 })
+
+describe('서로 다른 경로가 같은 CSS 변수 이름을 내면 이슈다', () => {
+  const meta = MINIMAL_THEME.meta
+
+  it('점과 대시가 같은 이름으로 접힌다', () => {
+    // `cssVarName`이 `.`을 `-`로 바꾸므로 `blue.500`과 `blue-500`이 같은 변수가 된다.
+    // 조용히 두면 `:root`에 같은 이름이 두 번 나가고 나중 것이 이긴다 — 아무도 모른다.
+    for (const palette of [
+      { 'blue.500': '#1', 'blue-500': '#2' },
+      { 'a.b.c': '#1', 'a-b-c': '#2' },
+    ]) {
+      const { theme, issues } = resolveTheme({ meta, tokens: { palette } })
+      expect(codes(issues), JSON.stringify(palette)).toEqual(['duplicate-variable'])
+      expect(theme, JSON.stringify(palette)).toBeNull()
+    }
+  })
+
+  it('이슈 문안이 두 경로를 다 말한다', () => {
+    const { issues } = resolveTheme({ meta, tokens: { palette: { 'blue.500': '#1', 'blue-500': '#2' } } })
+    expect(issues[0]?.message).toContain('palette.blue.500')
+    expect(issues[0]?.message).toContain('palette.blue-500')
+    expect(issues[0]?.message).toContain('--wb-palette-blue-500')
+  })
+
+  it('층이 달라도 본다', () => {
+    const { issues } = resolveTheme({
+      meta,
+      tokens: { semantic: { 'a.b': '#1' }, scale: { radius: { x: '1px' } } },
+      primitives: { container: { gutter: '2px' } },
+    })
+    // 토큰은 이름공간이 앞에 붙고 primitives는 container·grid·section으로 시작하므로
+    // 이 조합에서는 겹치지 않는다. 검사는 두 층을 합친 집합에서 돈다.
+    expect(issues).toEqual([])
+  })
+
+  it('과도 차단이 없다 — 픽스처 테마가 충돌을 내지 않는다', () => {
+    const { theme, issues } = resolveTheme(MINIMAL_THEME)
+    expect(issues).toEqual([])
+    const names = [...(theme?.tokens.keys() ?? []), ...(theme?.primitives.keys() ?? [])].map(cssVarName)
+    expect(names.length).toBeGreaterThan(0)
+    expect(new Set(names).size).toBe(names.length)
+  })
+})
