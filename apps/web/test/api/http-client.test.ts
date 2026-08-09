@@ -904,15 +904,66 @@ describe('프로젝트 CRUD', () => {
   })
 
   it('설명을 주지 않으면 그 키를 만들지 않는다', async () => {
-    // 서버의 `CreateProjectBody`는 `z.strictObject`다 — 선언되지 않은 키는 그 자체로 400이고
-    // (`role`을 실어 재니 400이었다), `undefined`를 실은 키가 통과하는 것은 `JSON.stringify`가
-    // 지워 주는 우연이다. `patchOps`·`definedOnly`가 같은 이유로 키를 만들지 않는다.
+    // `undefined`를 실은 키가 통과하는 것은 `JSON.stringify`가 지워 주는 우연이라 그것에
+    // 기대지 않는다(`patchOps`의 `clientOpId`와 같은 판단).
+    //
+    // **이 케이스만으로는 `projectBody`를 항등으로 바꿔도 죽지 않는다** — 관찰 지점이
+    // 직렬화된 문자열 하나뿐이라 두 구현의 바이트가 같아진다(선언된 세 키의 39조합에서
+    // 차이 0을 쟀다). 그것을 닫는 것은 **아래 "응답 객체를 그대로 넘겨도" 케이스**다.
     const stub = stubFetch(jsonResponse(201, project))
     const client = createHttpClient(stub.fetchImpl)
 
     await client.createProject({ name: '가', slug: 'ga' })
 
     expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ name: '가', slug: 'ga' })
+  })
+
+  it('응답 객체를 그대로 넘겨도 선언된 세 키만 나간다', async () => {
+    // **여기가 `projectBody`를 닫는 자리다.** 서버의 `CreateProjectBody`는 `z.strictObject`라
+    // 선언되지 않은 키가 그 자체로 400인데, **`definedOnly`는 미선언 키를 하나도 거르지
+    // 않는다** — 값이 `undefined`인 키만 뺀다. 두 장치가 막는 실패가 다르다(리뷰 F1).
+    //
+    // **실측(api 하네스):** `{id,name,slug,description,role}`을 실제로 보내면 `POST`·`PATCH`
+    // 둘 다 `400 bad-request` / issues `[{"path":"","message":"인식할 수 없는 키: \"id\",
+    // \"role\""}]`이고, 선언된 셋만 담은 본문은 200이다.
+    //
+    // **타입은 이것을 막지 못한다**(`tsc` 프로브): 변수로 넘기면 에러가 없고, 키를 적은
+    // 리터럴만 `TS2353`이 나며, **스프레드 리터럴(`{ ...created }`)은 에러가 없다.**
+    // 수정 폼이 쓰기 가장 쉬운 모양이 그 셋째다.
+    const stub = stubFetch(jsonResponse(201, project), jsonResponse(200, project))
+    const client = createHttpClient(stub.fetchImpl)
+    const created: ProjectDetail = { id: 'p1', name: '가', slug: 'ga', description: null, role: 'owner' }
+
+    await client.createProject(created)
+    await client.updateProject('p1', { ...created })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      name: '가',
+      slug: 'ga',
+      description: null,
+    })
+    expect(JSON.parse(String(stub.calls[1]?.init?.body))).toEqual({
+      name: '가',
+      slug: 'ga',
+      description: null,
+    })
+  })
+
+  it('선언되지 않은 키만 담긴 갱신 본문은 빈 본문으로 거절된다', async () => {
+    // **떨어내는 순서가 정하는 결과다.** 미선언 키를 먼저 떨어낸 뒤에 남은 키를 세므로
+    // `{id, role}`은 `{}`가 되어 `updateBody`가 던진다. 순서가 반대면 "두 키가 있으니 빈
+    // 본문이 아니다"로 통과해 `{}`가 서버로 나가고 400을 받는다.
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client
+        .updateProject('p1', { id: 'p1', role: 'owner' } as unknown as { name?: string })
+        .catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
   })
 
   it('설명에 null을 주면 그 값을 그대로 싣는다', async () => {

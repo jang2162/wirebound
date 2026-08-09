@@ -140,13 +140,22 @@ function isTreePage(value: unknown): boolean {
  * 것의 상위집합**이다. `pageDetail`이 같은 형식의 표를 갖는 이유와 같다: 모양이 같은 것과
  * 읽는 필드가 같은 것은 다르고, 새 소비자가 붙을 때 표를 갱신하지 않는 것이 실제로 일어난다.
  *
- * | 소비자 | 읽는 값 | 어긋나면 |
- * |---|---|---|
- * | `listProjects` | `id`(목록 `<Link>`의 주소) · `name`(줄의 글자) | 빈 문자열이면 `/projects/`가 되고 화면이 통째로 빈다 |
- * | `getProject` | `id`(셸이 트리에 넘기는 `projectId`) · `name`(셸 제목) | 같은 부류 — `/projects/pages/pg1` |
- * | `createProject`(P2b-5) | **`id`가 곧 주소가 된다**(D7 — 만든 뒤 그리로 이동한다) | 201 성공 경로로 잘못된 주소가 만들어진다 |
- * | `updateProject`(P2b-5) | (아직 없다 — 성공 여부만 본다) | — |
- * | 넷 모두 | `role`은 **여기서 보지 않는다** | `projects/project-actions.ts`가 계약 밖 값을 전부 닫는다 |
+ * **축이 둘이다 — 하중과 시점.** `pageDetail` 표가 못박은 것을 그대로 따른다: *"그 값이 주소가
+ * 되는가(하중)와 그 경로가 지금 도달하는가(시점)"*. **앞 판의 이 표에는 시점 열이 없어
+ * `createProject` 줄이 아직 없는 이동을 현재형으로 적고 있었다**(리뷰 F4).
+ *
+ * | 소비자 | 읽는 값 | 오늘 도달 | 어긋나면 |
+ * |---|---|---|---|
+ * | `listProjects` | `id`(목록 `<Link>`의 주소) · `name`(줄의 글자) | **매 목록 렌더** | 빈 문자열이면 `/projects/`가 되고 화면이 통째로 빈다 |
+ * | `getProject` | `id`(셸이 트리에 넘기는 `projectId`) · `name`(셸 제목) | **매 에디터 렌더** | 같은 부류 — `/projects/pages/pg1` |
+ * | `createProject`(P2b-5) | `id`가 **주소가 될 값**이다(D7 — 만든 뒤 그리로 이동한다) | **아직 없다**(호출부 0건) | 201 성공 경로로 잘못된 주소가 만들어진다 |
+ * | `updateProject`(P2b-5) | (없음 — 성공 여부만 본다) | **아직 없다**(호출부 0건) | — |
+ * | 넷 모두 | `role`은 **여기서 보지 않는다** | — | `projects/project-actions.ts`가 계약 밖 값을 닫는다 |
+ *
+ * **"아직 없다"의 근거를 센 방법:** `rg -n "createProject|updateProject|deleteProject" apps/web/src`의
+ * 히트가 이 파일과 `api/client.ts`의 **정의·주석뿐**이고 부르는 자리가 없다. **웨이브 2의
+ * Task 4가 그 이동을 만든다** — 그때 이 열을 갱신하라. 이 줄이 있어야 갱신할 이유가 남는다
+ * (아래 `menuNode` 주석의 *"0건"*이 웨이브 2·3에서 11건이 된 채로 남았던 것이 그 반례다).
  *
  * **`createProject`가 이 검사를 그대로 지나는 것은 "모양이 같아서"가 아니다.** 그쪽 하중
  * `id`(주소)가 이 검사가 이미 보는 것의 **부분집합**이라서다 — 실측으로 네 응답의 키 집합이
@@ -180,8 +189,21 @@ const SHAPES = {
   /**
    * 메뉴 노드 하나(`POST`·`PATCH .../menu`).
    *
-   * **이 응답의 필드를 읽는 자리는 지금 0건이다**(실측: `rg`로 CRUD 여섯을 부르는 자리 0건,
-   * `MenuNode`를 값으로 읽는 자리 0건 — 타입 참조와 `request<MenuNode>` 제네릭뿐이다).
+   * **이 응답의 필드를 읽는 자리는 지금도 0건이다.** 근거 둘 중 **하나는 낡아서 갈아 끼웠다**
+   * (P2b-5 웨이브 1 리뷰 F7 — 이 주석은 P2b-4 웨이브 1에 쓰였고 그 뒤 웨이브 2·3이 호출부를
+   * 만들었다):
+   *
+   * - ~~`rg`로 CRUD 여섯을 부르는 자리 **0건**~~ → **오늘 11건이다**(실측, 메서드별:
+   *   `updateMenu` 4 · `updatePage` 3 · `createMenu`·`createPage`·`deleteMenu`·`deletePage` 각 1).
+   *   전부 `tree/use-tree-commands.tsx` 한 파일에 있다.
+   * - **`MenuNode`를 값으로 읽는 자리 0건 — 이쪽은 여전히 참이다**(실측: 여섯 중 응답을 변수에
+   *   받는 자리는 `createPage` 하나뿐이고 그것은 `PageDetail`이다. 나머지 열은 `await`만 하고
+   *   버린다). 결론(얕게 둔다)을 떠받치는 것은 이 절이다.
+   *
+   * > **"오늘 0건"류 문장은 시간이 지나면 저절로 거짓이 된다.** 이 자리가 그 사례다 — 무엇이
+   * > 그것을 갱신하게 만드는지까지 적지 않으면 아무도 갱신하지 않는다. 위 `isProjectDetail`의
+   * > "오늘 도달" 열에 갱신 시점(웨이브 2 Task 4)을 함께 적어 둔 것이 그 대응이다.
+   *
    * **앞서 여기에 "그 `sortOrder`가 위/아래 이동의 목적지 계산에 들어간다"고 적었던 것은
    * 거짓이었다** — 계획서 Task 7 케이스 7과 `tree/tree-actions.ts`의 `treeSpot` 주석이
    * 정반대를 못박는다(목적지는 `node.sortOrder`가 아니라 `byOrder` 정렬 뒤의 `index`다).
@@ -240,13 +262,15 @@ const SHAPES = {
    * 적은 셈이다. 빈 화면은 `tree/tree-actions.ts` 머리말이 피하려는 바로 그 사고와 같은
    * 결과다.
    *
-   * **어느 id를 빈 문자열까지 막는지는 "그 값이 주소가 되는가"로 가른다.** 주소 조립 자리를
-   * `rg`로 세니 `apps/web/src`에 **둘**이다 — `panels/menu-tree.tsx`의 `PageLink`와
-   * `routes/project-list.tsx`의 `<Link>`. 거기 들어가는 shape 값을 표로 적는다.
+   * **어느 id를 빈 문자열까지 막는지는 "그 값이 주소가 되는가"로 가른다.** 주소가 만들어지는
+   * 자리를 `rg`로 다시 세니 `apps/web/src`에 **셋**이다 — `panels/menu-tree.tsx`의 `PageLink`,
+   * `routes/project-list.tsx`의 `<Link>`, 그리고 `tree/use-tree-commands.tsx`의 `navigate`.
+   * **셋째는 P2b-4 웨이브 2가 만들었고 이 표는 그때 갱신되지 않았다**(P2b-5 리뷰 F7과 같은
+   * 부류 — "오늘 0건"류 문장이 저절로 낡은 것이다). 거기 들어가는 shape 값을 표로 적는다.
    *
    * | shape의 값 | 주소가 되는 자리 | 오늘 도달 | 빈 문자열 |
    * |---|---|---|---|
-   * | `pageDetail.id` | D8의 이동(Task 4) | **아직 없다**(`createPage` 호출 0건) | 막는다 |
+   * | `pageDetail.id` | ~~D8의 이동(Task 4) — **아직 없다**~~ → **`use-tree-commands.tsx`의 `navigate`**(`const page = await api.createPage(…); created = page.id` 뒤 `` `/projects/${projectId}/pages/${created}` ``) | **페이지를 만들 때마다**(실측: `createPage` 호출 1건, 그 `id`를 읽어 주소로 쓴다) | 막는다 |
    * | `treeEnvelope`의 `TreePage.id` | `PageLink` | **매 트리 렌더** | 막는다 |
    * | `projectDetail.id` | 셸이 트리에 넘기는 `projectId`(`routes/editor.tsx`가 **조회해 온** id를 준다) | **매 트리 렌더** | 막는다 |
    * | `projectList[].id` | 목록의 `<Link>` | **매 목록 렌더** | 막는다 |
@@ -258,6 +282,8 @@ const SHAPES = {
    * 위 표의 빈 화면이 된다. **`projectDetail`·`projectList`도 같다** — `id: ''`면 각각
    * `/projects/pages/pg1`·`/projects/`가 되고 둘 다 innerHTML 0자·`.wb-shell` 없음이었다.
    * 즉 앞 판은 **아직 도달하지 않는 자리를 막고 오늘 도달하는 셋을 열어 두었다.**
+   * **그 "아직 도달하지 않는 자리"가 이제 도달한다** — 위 표 첫 줄이 그것이고, 가드는 그때
+   * 이미 있었으므로 손해는 없었다. **기록만 낡았다.**
    *
    * **읽는 축이 둘이라는 것이 요점이다** — 그 값이 주소가 되는가(하중)와 그 경로가 지금
    * 도달하는가(시점). 얕음을 일괄로 맞추지 않고 **이 표의 위 넷만** 깊게 한다.
@@ -393,13 +419,14 @@ function definedOnly<T extends object>(body: T): Partial<T> {
  * 같은 판단을 이 층에 적용한 것이다. `code`를 `bad-request`로 두는 것은 서버가 같은 본문에
  * 내는 코드와 맞추기 위해서다 — 계약 밖의 코드를 새로 만들지 않는다는 이 파일의 규칙과도 맞다.
  *
- * **도달 경로를 재서 적는다.** 오늘 이 여섯을 부르는 자리는 **0건**이다(`rg` 실측). 계획서의
- * Task 5·7·9는 키 하나를, Task 8은 둘을 넘기므로 리터럴만 보면 빈 본문이 나오지 않는다
- * — **다만 그것은 계획서를 읽은 것이지 잰 것이 아니다.** 실제 위험은 **계산된 값이
- * `undefined`가 되는 경로**다: `previousMenuSibling`·`menuOutdentTarget`이 `null`을 낼 수 있고
- * 호출부가 그것을 옵셔널 체이닝으로 흘리면 키가 통째로 사라진다. 계획서 Task 8이 바로 그
- * 자리를 *"`previousMenuSibling`이 `null`인 경우를 막는 가드가 0 사망이면 진단까지 하라"*로
- * 짚고 있다.
+ * **도달 경로를 재서 적는다.** ~~오늘 이 여섯을 부르는 자리는 **0건**이다~~ → **오늘 11건이다**
+ * (실측, 전부 `tree/use-tree-commands.tsx`: `updateMenu` 4 · `updatePage` 3 ·
+ * `createMenu`·`createPage`·`deleteMenu`·`deletePage` 각 1). **이 문장은 P2b-4 웨이브 1에
+ * 쓰였고 그 뒤 웨이브 2·3이 호출부를 만들었다** — P2b-5 리뷰 F7이 같은 부류를 잡았다.
+ * **열한 자리가 전부 리터럴로 키를 적어 넘기므로 오늘 빈 본문이 나가는 경로는 없다**(읽어서
+ * 셌다). 실제 위험은 **계산된 값이 `undefined`가 되는 경로**다:
+ * `previousMenuSibling`·`menuOutdentTarget`이 `null`을 낼 수 있고 호출부가 그것을 옵셔널
+ * 체이닝으로 흘리면 키가 통째로 사라진다.
  *
  * **조용히 삼키지 않는다.** 빈 본문이면 "성공한 척"하지 않고 던진다 — 그래야 호출부가 자기
  * 계산이 비었다는 것을 본다. 던지는 자리가 `async` 메서드 몸통인 것도 요점이다: 동기 `throw`면
@@ -411,6 +438,63 @@ function updateBody<T extends object>(body: T): Partial<T> {
     throw new ApiError(NO_RESPONSE, 'bad-request', EMPTY_UPDATE)
   }
   return built
+}
+
+/**
+ * 프로젝트 본문에 **서버가 선언한 세 키만** 담는다. `definedOnly`가 그 뒤에서 `undefined`인
+ * 것을 뺀다.
+ *
+ * **`definedOnly`만으로는 부족하다 — 그것이 이 함수가 있는 이유다.** `definedOnly`가 거르는
+ * 것은 **값이 `undefined`인 키**뿐이고 **선언되지 않은 키는 하나도 거르지 않는다.** 반면
+ * 서버의 `CreateProjectBody`·`UpdateProjectBody`는 `z.strictObject`라 **선언되지 않은 키가
+ * 그 자체로 400**이다. 즉 두 장치가 막는 실패가 다르다.
+ *
+ * **실측(가짜 `fetch`로 나가는 본문을 읽었다).** 응답 객체를 그대로 넘기면 —
+ *
+ * ```
+ * definedOnly만 쓸 때: {"id":"p1","name":"가","slug":"ga","description":null,"role":"owner"}
+ * 이 함수를 지나면:    {"name":"가","slug":"ga","description":null}
+ * ```
+ *
+ * **그 첫 줄을 서버에 실제로 보내면 400이다**(api 하네스 실측):
+ * `POST`·`PATCH` 둘 다 `400 bad-request` / issues `[{"path":"","message":"인식할 수 없는 키:
+ * \"id\", \"role\""}]`. 선언된 셋만 담은 둘째 줄은 200이다.
+ *
+ * **타입이 그것을 막지 못한다는 것도 쟀다**(`tsc` 프로브 셋, 매번 `pnpm typecheck`):
+ *
+ * | 넘기는 모양 | typecheck |
+ * |---|---|
+ * | `updateProject(id, created)` — 변수 | **에러 없음** |
+ * | `updateProject(id, { name, slug, role: 'owner' })` — 키를 적은 리터럴 | `TS2353: … 'role' does not exist …` |
+ * | `updateProject(id, { ...created })` — **스프레드 리터럴** | **에러 없음** |
+ *
+ * 초과 속성 검사는 **리터럴에 직접 적은 키**에만 걸린다. **스프레드로 들어온 키는 리터럴이어도
+ * 걸리지 않는다** — 그리고 그 모양(`{ ...project, name: 새이름 }`)이 수정 폼이 쓰기 가장 쉬운
+ * 형태다. 그래서 타입이 아니라 여기서 막는다.
+ *
+ * **`patchOps`가 `clientOpId`에 쓰는 것과 같은 관용구다** — 키 목록을 코드에 적어 두면 서버가
+ * 받는 것과 클라이언트가 보내는 것이 한 자리에서 대조된다.
+ *
+ * **이 함수의 두 부분은 구분력이 다르다 — 변이를 걸어 쟀다.**
+ *
+ * | 변이 | 사망 |
+ * |---|---|
+ * | 이 함수를 `definedOnly(body)`(=키를 고르지 않음)로 바꾼다 | **2** |
+ * | 안쪽 `definedOnly`를 항등으로 바꾼다(`undefined`인 키가 남는다) | **0** |
+ * | `updateProject`에서 `updateBody(projectBody(…))`의 순서를 뒤집는다 | **1** |
+ *
+ * **키를 고르는 쪽은 닫혔고, `undefined` 필터는 여전히 닫히지 않는다.** 뒤쪽이 0인 원인은
+ * `definedOnly`의 머리말이 이미 적은 것과 같다 — 나가는 본문의 유일한 관찰 지점이
+ * `JSON.stringify`가 만든 문자열이고 그것이 값이 `undefined`인 키를 지워 준다(선언된 세 키의
+ * **39조합**에서 `JSON.stringify(definedOnly(b))`와 `JSON.stringify(b)`를 맞대 **차이 0**을 쟀다).
+ * **앞 판은 이 0을 `definedOnly` 전체의 성질로 적었는데, 실제로 닫히지 않는 것은 그 절반뿐이다.**
+ */
+function projectBody(body: {
+  name?: string
+  slug?: string
+  description?: string | null
+}): { name?: string; slug?: string; description?: string | null } {
+  return definedOnly({ name: body.name, slug: body.slug, description: body.description })
 }
 
 /**
@@ -488,23 +572,28 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
     // 그 근거는 "모양이 같다"가 아니라 **`createProject`의 하중 `id`가 그 검사가 이미 보는
     // 것의 부분집합**이라는 것이다(`isProjectDetail`의 소비자 표).
     createProject: (body) =>
-      // `description`은 **키를 만들지 않는다**. 서버의 `CreateProjectBody`가 `z.strictObject`라
-      // 선언되지 않은 키가 그 자체로 400이고(실측: `role`을 실으면 400), `undefined`를 실은
-      // 키가 오늘 통과하는 것은 `JSON.stringify`가 지워 주는 우연이다 — 그 우연에 기대지
-      // 않는다(`patchOps`의 `clientOpId`와 같은 판단). **`null`은 값이라 그대로 지나간다**:
-      // `definedOnly`가 거르는 것은 `undefined` 하나뿐이다.
+      // **선언된 세 키만 담는다**(`projectBody`). `description`을 주지 않으면 그 키를 만들지
+      // 않고, 응답 객체처럼 `id`·`role`이 섞인 것을 넘겨도 그 둘이 나가지 않는다 — 나가면
+      // 서버가 400을 낸다(그 머리말의 실측).
       //
-      // **여기서 `definedOnly`를 항등(`body`)으로 바꾸면 0 사망이다 — 재고 적는다.**
-      // `definedOnly`의 머리말이 적은 것과 **같은 원인**이다: 나가는 본문의 유일한 관찰
-      // 지점이 `JSON.stringify`가 만든 문자열이고, 그것이 값이 `undefined`인 키를 지워 주므로
-      // 두 구현의 바이트가 같아진다. **닫는 케이스를 만들지 못했다.** 그래도 남기는 것은
-      // `updateProject` 쪽에서 같은 함수가 실제로 구분되기 때문이다 — 거기서는 `updateBody`가
-      // **남은 키를 세므로** 그 수가 관찰 지점이 되고, 가드를 지우면 2 사망이다.
-      request<ProjectDetail>('POST', '/projects', SHAPES.projectDetail, definedOnly(body)),
+      // **`definedOnly` 하나만으로는 그것을 못 막는다.** 앞 판은 여기에 *"서버가
+      // `z.strictObject`라 선언되지 않은 키는 그 자체로 400"*을 `definedOnly`의 근거로 적었는데
+      // **그 필터는 미선언 키를 하나도 거르지 않으므로 그 문장이 말하는 실패를 막고 있지
+      // 않았다**(리뷰 F1). 근거와 장치를 맞춘 것이 `projectBody`다.
+      request<ProjectDetail>('POST', '/projects', SHAPES.projectDetail, projectBody(body)),
     // **`async`인 것이 요점이다** — `updateBody`가 빈 본문에서 던지는데, 동기 `throw`면
     // `await` 없이 `.catch`를 붙인 호출부가 잡지 못한다(`updateMenu`와 같은 자리).
+    // **실측: `async`를 지우면 3 사망**(빈 본문 · undefined만 담긴 본문 · 동기 throw 케이스).
+    //
+    // **`projectBody`를 먼저 지난 뒤 `updateBody`가 센다.** 순서가 요점이다 — 미선언 키를
+    // 먼저 떨어내지 않으면 `{id, role}`만 담긴 본문이 "빈 본문이 아니다"로 통과해 400이 된다.
     updateProject: async (projectId, body) =>
-      request<ProjectDetail>('PATCH', projectPath(projectId), SHAPES.projectDetail, updateBody(body)),
+      request<ProjectDetail>(
+        'PATCH',
+        projectPath(projectId),
+        SHAPES.projectDetail,
+        updateBody(projectBody(body)),
+      ),
     deleteProject: (projectId) => request<void>('DELETE', projectPath(projectId), SHAPES.noBody),
     // `{ menu }` 봉투를 벗기는 유일한 지점이다 — 그 관용구를 앱 안으로 들이지 않는다.
     // 봉투가 계약대로인 것은 `request`가 이미 확인했다(`SHAPES.treeEnvelope`). 그래서 여기서

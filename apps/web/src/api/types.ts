@@ -52,8 +52,17 @@ export interface ProjectSummary {
  * 계획서는 앞줄만 읽고 확정했다.
  *
  * **그런데도 응답을 그대로 요청 본문으로 되보낼 수 없다.** 서버의 `CreateProjectBody`·
- * `UpdateProjectBody`가 `z.strictObject`라 `role` 키가 있으면 400이다(실측:
- * `POST {name,slug,role:'owner'}` → `400 인식할 수 없는 키: "role"`).
+ * `UpdateProjectBody`가 `z.strictObject`라 선언되지 않은 키가 있으면 400이다. 실측 둘 —
+ * 어긋난 키를 **한 issue에 모아서** 알려 준다:
+ *
+ * ```
+ * POST  {name,slug,role:'owner'}              → 400 인식할 수 없는 키: "role"
+ * POST·PATCH {id,name,slug,description,role}  → 400 인식할 수 없는 키: "id", "role"
+ * ```
+ *
+ * **타입은 그것을 막지 못한다** — 초과 속성 검사가 스프레드 리터럴에 걸리지 않는다
+ * (`http-client.ts`의 `projectBody` 머리말에 `tsc` 프로브 표가 있다). **그래서 나가는 본문을
+ * 만드는 자리에서 선언된 키만 골라 담는다.**
  */
 export interface ProjectDetail extends ProjectSummary {
   role: ProjectRole
