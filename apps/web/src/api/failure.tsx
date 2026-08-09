@@ -42,10 +42,62 @@ export function toFailure(caught: unknown, unknownMessage: string): Failure {
   if (caught instanceof ApiError && caught.code === 'unauthenticated') {
     return { kind: 'signed-out' }
   }
-  return {
-    kind: 'message',
-    message: caught instanceof ApiError ? caught.message : unknownMessage,
+  if (caught instanceof ApiError) {
+    return { kind: 'message', message: reason(caught) }
   }
+  return { kind: 'message', message: unknownMessage }
+}
+
+/**
+ * `ApiError` 하나를 사용자에게 보일 한 문장으로. **`issues`가 있으면 그것이 이유다.**
+ *
+ * **왜 봉투(`error.message`)만으로는 안 되는가 — 재서 적는다.** 서버는 무엇이 왜 틀렸는지를
+ * `issues[]`에 넣고 봉투에는 갈래만 적는다:
+ *
+ * ```
+ * POST /projects {name:'', slug:'BAD'} → 400
+ *   봉투 = "요청을 처리할 수 없습니다"
+ *   issues = [{path:'name', message:'이름을 입력하세요'},
+ *             {path:'slug', message:'슬러그는 소문자·숫자·하이픈만 …'}]
+ *
+ * PUT .../schema (카탈로그 위반) → 422
+ *   봉투 = "스키마 검증에 실패했습니다"
+ *   issues = [{code:'unknown-type', nodeId:'n_…', path:'/root/children/0',
+ *              message:'알 수 없는 컴포넌트 타입: 없는타입'}]
+ * ```
+ *
+ * **둘 다 issues 쪽이 봉투보다 낫다** — 그래서 코드로 갈래를 나누지 않고 "issues가 있으면
+ * 쓴다" 하나로 둔다. **계획서 D5가 *"서버가 400과 함께 문장을 준다"*고 적으면서 그 문장이
+ * 어디에 오는지를 빠뜨렸고**, 그 탓에 `toFailure`가 봉투만 읽는 동안 D5의 근거가 화면에
+ * 닿지 않았다(P2b-5 Task 4에서 재서 잡았다).
+ *
+ * **봉투를 앞에 붙이지 않고 대신한다.** 400의 봉투는 아무것도 더하지 않고, 앞에 두면 진짜
+ * 이유가 뒤로 밀린다. 422의 봉투는 조금 더하지만 그것 하나를 위해 갈래를 만들지 않는다.
+ *
+ * **여럿이면 전부 이어 붙인다.** 서버가 한 번에 여러 개를 낸다(실측: 폼 필드 셋을 다 어기면
+ * issues가 셋이다). 첫 항목만 보이면 사용자가 하나 고치고 다시 보내는 왕복을 필드 수만큼
+ * 하게 된다.
+ *
+ * **`path`를 필드에 붙이지는 않는다.** `issues[].path`가 `'slug'`처럼 필드 이름을 담고 있어
+ * 그 필드 옆에 문장을 놓을 수 있지만, 그것은 폼이 `path`↔필드 대응표를 갖는다는 뜻이고
+ * **규칙이 서버와 폼 두 곳에 생긴다.** 이 단계는 한 줄로 모아 보인다 — 필드별 표시가 필요해지면
+ * 그때 그 대응표를 어디에 둘지부터 정해야 한다.
+ *
+ * **던지지 않는 것이 계약이다.** `issues`는 서버가 준 값을 그대로 실은 것이고
+ * (`http-client.ts`의 `readIssues`가 배열인지만 보고 원소는 보지 않는다), 이 함수는 오류 경계
+ * 밖의 `catch` 블록에서 불린다. 그래서 원소가 `null`이거나 `message`가 문자열이 아니어도
+ * 걸러 내고 넘어간다 — **쓸 수 있는 문장이 하나도 없으면 봉투로 되돌아간다.**
+ */
+function reason(error: ApiError): string {
+  const detail = error.issues
+    .map((issue: unknown) =>
+      typeof issue === 'object' && issue !== null && typeof (issue as { message?: unknown }).message === 'string'
+        ? (issue as { message: string }).message
+        : '',
+    )
+    .filter((message) => message !== '')
+
+  return detail.length === 0 ? error.message : detail.join(' · ')
 }
 
 /**
