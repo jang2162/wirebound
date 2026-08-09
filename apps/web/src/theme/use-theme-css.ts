@@ -59,17 +59,32 @@ export function useThemeCss(source: ThemeSource = defaultThemeSource): ResolvedT
   const css = useMemo(() => compileOnce(source), [source])
 
   useLayoutEffect(() => {
-    // 순서대로 만든다. `ensure`가 없는 태그만 새로 붙이므로 두 번째 렌더에서 늘지 않는다.
+    /**
+     * 순서대로 만든다. `ensureStyle`이 **없는 태그만** 새로 붙이므로 태그가 **늘지 않고**,
+     * 아래에 정리가 없으므로 **줄지도 않는다.** 두 방향을 다 적는 것은 앞서 이 자리에
+     * 느는 쪽만 적어 두고 줄어드는 쪽에 결함을 남겼기 때문이다.
+     *
+     * ---
+     *
+     * **정리에서 태그를 지우지 않는다.** `<style>`은 `document.head`의 **전역 공유
+     * 자원**인데 이 훅은 **인스턴스마다** 돈다. 지우면 훅 하나가 언마운트될 때 **살아남은
+     * 훅의 스타일까지** 사라지고, 살아남은 쪽은 `css` 의존이 안 바뀌어 이 이펙트를 다시
+     * 돌지 않으므로 **영구히 스타일 없는 화면**이 된다(재서 확인했다 — 훅 둘을 마운트하고
+     * 하나만 언마운트하니 `document.head`의 두 태그가 **전부** 사라졌다).
+     *
+     * **참조 계수 대신 남기는 쪽을 고른 이유:** 계수는 모듈 수준 상태라 HMR·테스트 간에
+     * 새고, 이 자리에서 그것을 관리할 이유가 없다. 남겨 두는 비용은 **빈 값이 아니라
+     * 낡은 값**인데, 그 낡음이 화면에 닿지 않는 것을 쟀다 —
+     * (1) 다음 마운트가 `textContent`를 새 값으로 덮고(아래 두 줄),
+     * (2) 그 사이에는 문서가 그려지지 않으므로 이 시트의 셀렉터
+     *     (`[data-wb-component=…]` — 렌더러만 내는 속성)가 맞을 요소가 없다.
+     * 케이스가 (1)을 지킨다(*"언마운트 뒤 다른 테마로 다시 마운트하면 …"*).
+     */
     const structure = ensureStyle(STRUCTURE_STYLE_ID)
     const theme = ensureStyle(THEME_STYLE_ID)
 
     if (structure.textContent !== css.structure) structure.textContent = css.structure
     if (theme.textContent !== css.theme) theme.textContent = css.theme
-
-    return () => {
-      structure.remove()
-      theme.remove()
-    }
   }, [css])
 
   return css.resolved

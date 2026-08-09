@@ -47,12 +47,55 @@ describe('useThemeCss', () => {
     expect(styleTags()).toHaveLength(2)
   })
 
-  it('언마운트하면 걷어낸다', () => {
-    // 남겨 두면 다음 화면이 옛 테마 위에서 그려진다.
-    const view = render(<Harness />)
+  /**
+   * **`<style>`은 `document.head`의 전역 공유 자원인데 훅은 인스턴스마다 돈다.**
+   *
+   * 정리에서 태그를 지우면 **하나가 언마운트될 때 살아남은 훅의 스타일까지 사라진다.**
+   * 살아남은 훅은 `css` 의존이 안 바뀌어 레이아웃 이펙트를 다시 돌지 않으므로 **영구히
+   * 스타일 없는 화면**이 된다.
+   *
+   * **오늘 호출자는 `canvas.tsx` 하나뿐이라 도달하지 않는다** — 그래서 이것은 버그가
+   * 아니라 함정이고, P4a-3이 `ThemeSource`를 저장소로 바꾸며 훅을 다른 데서도 부르는
+   * 순간 열린다. 함정을 케이스로 닫는다.
+   */
+  it('훅 둘 중 하나만 언마운트해도 남은 쪽의 스타일이 살아 있다', () => {
+    const first = render(<Harness />)
+    const second = render(<Harness />)
     expect(styleTags()).toHaveLength(2)
+
+    first.unmount()
+
+    // 살아남은 훅이 쓰는 시트가 그대로여야 한다.
+    expect(styleTags().map((element) => element.dataset.wbStyle)).toEqual([
+      STRUCTURE_STYLE_ID,
+      THEME_STYLE_ID,
+    ])
+    expect(tag(STRUCTURE_STYLE_ID)?.textContent).toBe(structureBaseCss())
+    expect(tag(THEME_STYLE_ID)?.textContent).toContain(':root {')
+
+    second.unmount()
+  })
+
+  /**
+   * 태그를 남겨 두는 대가는 **빈 값이 아니라 낡은 값**이다. 그 낡음이 화면에 닿지 않는
+   * 근거 둘 중 하나(다음 마운트가 덮는다)를 여기서 잰다 — 나머지 하나(그 사이에는 문서가
+   * 없어 셀렉터가 맞을 요소가 없다)는 `use-theme-css.ts`의 주석에 적었다.
+   */
+  it('언마운트 뒤 다른 테마로 다시 마운트하면 낡은 CSS가 남지 않는다', () => {
+    const view = render(<Harness />)
+    expect(tag(THEME_STYLE_ID)?.textContent).toContain('--wb-semantic-primary')
     view.unmount()
-    expect(styleTags()).toHaveLength(0)
+
+    const other: ThemeSource = () => ({
+      meta: { id: 'other', name: '다른', version: '1' },
+      tokens: { semantic: { surface: '#123456' } },
+    })
+    render(<Harness source={other} />)
+
+    const themeCss = tag(THEME_STYLE_ID)?.textContent ?? ''
+    expect(themeCss).toContain('#123456')
+    // 앞 테마의 토큰이 남아 있지 않다.
+    expect(themeCss).not.toContain('--wb-semantic-primary')
   })
 
   /**
