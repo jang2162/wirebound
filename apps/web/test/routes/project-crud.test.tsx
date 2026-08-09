@@ -576,3 +576,107 @@ describe('프로젝트 삭제', () => {
     screen.getByText(/메뉴·페이지·편집 이력.*함께 사라집니다/)
   })
 })
+
+describe('통합 — 한 화면에서 이어서', () => {
+  it('만들기 → 수정 → 삭제를 이어서 하고 각 단계 뒤 목록이 새 상태를 보인다', async () => {
+    // **만들기는 이동으로 끝나므로**(D7) 이 케이스는 수정 → 삭제를 잇고, 만들기는 이동을
+    // 확인하는 것으로 대신한다 — 목록이 언마운트되어 그 자리에서 이어 갈 수 없다.
+    const first = project({ id: 'p-a', name: '첫째', slug: 'a' })
+    const renamed = project({ id: 'p-a', name: '고친 이름', slug: 'a2' })
+    const h = renderCrud({ lists: [[first], [renamed], []] })
+    await screen.findByText('첫째')
+
+    // 수정
+    fireEvent.click(screen.getByRole('button', { name: '첫째 수정' }))
+    type('이름', '고친 이름')
+    type('슬러그', 'a2')
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    await screen.findByText('고친 이름')
+    expect(h.listProjects).toHaveBeenCalledTimes(2)
+
+    // 삭제 — 방금 고친 이름으로 확인해야 한다(목록이 새 상태를 보인다는 뜻이다)
+    fireEvent.click(screen.getByRole('button', { name: '고친 이름 삭제' }))
+    type('삭제하려면 프로젝트 이름을 입력하세요', '고친 이름')
+    fireEvent.click(screen.getByRole('button', { name: '삭제 확정' }))
+
+    await screen.findByText('참여 중인 프로젝트가 없습니다')
+    expect(h.deleteProject).toHaveBeenCalledTimes(1)
+    expect(h.listProjects).toHaveBeenCalledTimes(3)
+  })
+
+  it('viewer·editor·owner가 섞인 목록에서 버튼이 역할대로 나온다', async () => {
+    // **D3의 하중이다.** 분모를 손으로 적지 않고 목록에서 계산한다 — 역할이 늘면 여기가
+    // 아니라 `projectAbilities`의 대조표가 먼저 죽는다(웨이브 1의 케이스 6).
+    const rows = [
+      project({ id: 'p-o', name: 'owner 것', role: 'owner' }),
+      project({ id: 'p-e', name: 'editor 것', role: 'editor' }),
+      project({ id: 'p-v', name: 'viewer 것', role: 'viewer' }),
+    ]
+    renderCrud({ lists: [rows] })
+    await screen.findByText('owner 것')
+
+    for (const row of rows) {
+      const open = row.role === 'owner'
+      expect(screen.queryByRole('button', { name: `${row.name} 수정` }) !== null).toBe(open)
+      expect(screen.queryByRole('button', { name: `${row.name} 삭제` }) !== null).toBe(open)
+    }
+    // 링크는 역할과 무관하게 셋 다 있다 — 읽기는 viewer도 된다.
+    expect(screen.getAllByRole('link')).toHaveLength(3)
+  })
+
+  it('조회 실패와 조작 실패가 각자 자리에 나온다', async () => {
+    // **D8** — 둘이 독립 상태다. 조작이 실패해도 목록은 그대로 보인다.
+    const h = renderCrud({
+      lists: [[project({ id: 'p-own', name: '내 프로젝트' })]],
+      deleteProject: async () => {
+        throw new ApiError(403, 'forbidden', FORBIDDEN)
+      },
+    })
+    await screen.findByText('내 프로젝트')
+
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 삭제' }))
+    type('삭제하려면 프로젝트 이름을 입력하세요', '내 프로젝트')
+    fireEvent.click(screen.getByRole('button', { name: '삭제 확정' }))
+
+    await screen.findByText(FORBIDDEN)
+    // **목록은 그대로다** — 조작 실패가 조회 상태를 덮지 않는다.
+    expect(screen.getByText('내 프로젝트')).toBeDefined()
+    expect(h.listProjects).toHaveBeenCalledTimes(1)
+  })
+
+  it('signed-out이면 목록 대신 로그인으로 간다', async () => {
+    renderCrud({ lists: [[]] })
+    await screen.findByText('참여 중인 프로젝트가 없습니다')
+    // 조회가 아니라 **조작**이 세션 만료를 받는 경로는 이 화면에 아직 없다 —
+    // `SignedOut`은 `state.failure`만 본다. 그 사실을 여기 적어 둔다.
+    expect(currentPath()).toBe('/')
+  })
+
+  it('Tab 정지점을 센다 — 폼과 확인이 열리고 닫힐 때', async () => {
+    // **P2b-4가 그 수로 설계를 갈랐다.** 여기서는 "열면 늘고 닫으면 되돌아온다"를 고정한다.
+    const owned = project({ id: 'p-own', name: '내 프로젝트' })
+    renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+
+    const stops = (): number =>
+      screen.queryAllByRole('button').length +
+      screen.queryAllByRole('textbox').length +
+      screen.queryAllByRole('link').length
+
+    // 닫힌 상태: 링크 1 + 새 프로젝트·수정·삭제 3 = 4
+    const closed = stops()
+    expect(closed).toBe(4)
+
+    fireEvent.click(screen.getByRole('button', { name: '새 프로젝트' }))
+    // 폼: 입력 3 + 만들기·취소 2
+    expect(stops()).toBe(closed + 5)
+    fireEvent.click(screen.getByRole('button', { name: '취소' }))
+    expect(stops()).toBe(closed)
+
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 삭제' }))
+    // 확인: 입력 1 + 확정·취소 2
+    expect(stops()).toBe(closed + 3)
+    fireEvent.click(screen.getByRole('button', { name: '삭제 취소' }))
+    expect(stops()).toBe(closed)
+  })
+})
