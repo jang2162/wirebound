@@ -22,3 +22,13 @@ export { PrimitivesSchema, checkPrimitives } from './spec/primitives'
 
 export type { ThemeComponent, ThemeLayer, ThemeStyleMap } from './spec/components'
 export { ComponentSchema, ComponentsSchema, checkThemeComponents } from './spec/components'
+
+export type { PatternNode, SlotType, ThemePattern } from './spec/patterns'
+export {
+  PATTERN_CATEGORIES,
+  PatternNodeSchema,
+  PatternSchema,
+  PatternsSchema,
+  SLOT_TYPES,
+  checkPatterns,
+} from './spec/patterns'
