@@ -12,7 +12,14 @@
  */
 import { installStructures, listStructureKeys, structureBaseCss } from '@wirebound/renderer'
 import { installCatalog, requireComponent, type ComponentDef } from '@wirebound/schema'
-import { SYSTEM_THEME_IDS, TOKEN_NAMESPACES, cssVarName, resolveTheme, systemTheme } from '@wirebound/themes'
+import {
+  PrimitivesSchema,
+  SYSTEM_THEME_IDS,
+  TOKEN_NAMESPACES,
+  cssVarName,
+  resolveTheme,
+  systemTheme,
+} from '@wirebound/themes'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 beforeAll(() => {
@@ -56,6 +63,26 @@ describe('내장 테마가 고른 구조를 렌더러가 구현한다 (D7)', () 
 })
 
 /**
+ * `primitives`의 그룹 이름 전부. **규격에서 끌어온다 — 손으로 적지 않는다.**
+ *
+ * `TOKEN_NAMESPACES`는 규격이 상수로 내보내는데 이쪽은 zod 객체 안에만 있어서, 앞서
+ * 배열을 손으로 적어 뒀다. 그러면 **규격에 새 그룹이 생겨도 대조가 조용히 좁아진다** —
+ * 대칭이 깨진 자리였다. zod의 `shape` 키를 읽는 방식은 `packages/schema`의 `propKeys`가
+ * 이미 쓰는 것과 같다(`define.ts`).
+ *
+ * 읽지 못하면 **빈 배열이 아니라 던진다.** 조용히 비면 위 대조가 토큰 이름공간만 보게
+ * 되어, 고치려던 "조용히 좁아진다"가 그대로 돌아온다.
+ */
+function primitiveGroups(): string[] {
+  const shape = (PrimitivesSchema as unknown as { shape?: Record<string, unknown> }).shape
+  const keys = shape === undefined ? [] : Object.keys(shape)
+  if (keys.length === 0) {
+    throw new Error('PrimitivesSchema에서 그룹 이름을 읽지 못했습니다 (zod 내부 표현이 바뀌었나?)')
+  }
+  return keys
+}
+
+/**
  * **재라 #5 — 두 이름 집합이 겹치지 않는다.**
  *
  * 렌더러는 노드가 나르는 값을 `--wb-node-*`로 내고, 테마는 토큰·primitives 경로에서
@@ -64,6 +91,12 @@ describe('내장 테마가 고른 구조를 렌더러가 구현한다 (D7)', () 
  * 그것이 계획서 D3이 `Grid` 노드에 주려던 이름과 **정확히 같았다.** 그래서 접두어를 갈랐다.
  */
 describe('재라 #5 — 렌더러의 변수 이름과 테마의 변수 이름이 겹치지 않는다', () => {
+  it('primitives 그룹 이름을 규격에서 읽는다', () => {
+    // 오늘의 값. **이 목록이 바뀌면 위 대조가 함께 넓어지는 것이 요점**이고,
+    // 이 줄은 읽어 오는 경로가 살아 있는지만 본다.
+    expect(primitiveGroups()).toEqual(['container', 'grid', 'section', 'breakpoints'])
+  })
+
   it('접두어를 가르기 전에는 실제로 겹쳤다', () => {
     // 이 케이스가 문제의 실재를 고정한다. `cssVarName`이 이 이름을 만드는 한
     // 렌더러가 같은 이름을 쓰면 안 된다.
@@ -91,11 +124,12 @@ describe('재라 #5 — 렌더러의 변수 이름과 테마의 변수 이름이
     expect(rendererNames.length).toBeGreaterThan(0)
 
     // 테마 쪽 이름이 시작할 수 있는 접두어 전부. 뒤에 무엇이 붙든 이 접두어로 시작한다.
-    const PRIMITIVE_GROUPS = ['container', 'grid', 'section', 'breakpoints']
-    const themePrefixes = [...TOKEN_NAMESPACES, ...PRIMITIVE_GROUPS].map(
+    const themePrefixes = [...TOKEN_NAMESPACES, ...primitiveGroups()].map(
       (namespace) => `--wb-${namespace}-`,
     )
-    expect(themePrefixes).toHaveLength(11)
+    // 손으로 센 수가 아니라 **두 목록이 비어 있지 않다**는 것만 본다 — 규격이 늘면
+    // 접두어도 늘어야 하고, 개수를 적으면 그때 이 줄이 거짓이 된다.
+    expect(themePrefixes.length).toBeGreaterThan(TOKEN_NAMESPACES.length)
 
     const collisions = rendererNames.filter((name) =>
       themePrefixes.some((prefix) => name.startsWith(prefix)),
