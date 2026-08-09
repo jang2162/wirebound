@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { structureBaseCss } from '@wirebound/renderer'
 import { STRUCTURE_STYLE_ID, THEME_STYLE_ID, useThemeCss } from '../../src/theme/use-theme-css'
 import type { ThemeSource } from '../../src/theme/theme-source'
+import shellCss from '../../src/shell.css?raw'
 
 function Harness(props: { source?: ThemeSource }): ReactElement {
   useThemeCss(props.source)
@@ -78,8 +79,8 @@ describe('useThemeCss', () => {
 
   /**
    * 태그를 남겨 두는 대가는 **빈 값이 아니라 낡은 값**이다. 그 낡음이 화면에 닿지 않는
-   * 근거 둘 중 하나(다음 마운트가 덮는다)를 여기서 잰다 — 나머지 하나(그 사이에는 문서가
-   * 없어 셀렉터가 맞을 요소가 없다)는 `use-theme-css.ts`의 주석에 적었다.
+   * 근거 둘 중 **하나(다음 마운트가 덮는다)를 여기서** 잰다. 나머지 하나(남은 CSS가 셸을
+   * 건드리지 않는다)는 아래 *"교집합이 0이다"*가 잰다.
    */
   it('언마운트 뒤 다른 테마로 다시 마운트하면 낡은 CSS가 남지 않는다', () => {
     const view = render(<Harness />)
@@ -145,5 +146,39 @@ describe('useThemeCss', () => {
 
     inside.remove()
     outside.remove()
+  })
+
+  /**
+   * **낡은 CSS가 셸에 닿지 않는 진짜 이유를 고정한다.**
+   *
+   * `use-theme-css.ts`의 주석이 앞서 이것을 *"셀렉터가 맞을 요소가 없다"*고 적었는데
+   * **`:root` 블록은 언제나 `html`에 맞으므로** 절반만 참이었다. 실제 방벽은 **이름 분리**다 —
+   * 셸이 읽는 것은 전부 `--wb-shell-*`이고 테마가 `:root`에 싣는 것 중 그 접두어를 쓰는 것이
+   * 없다. **교집합이 0**이라 값이 `html`에 얹혀도 읽는 쪽이 없다.
+   *
+   * 주석이 썩지 않게 그 교집합을 여기서 잰다. 어느 쪽이 접두어를 어기면 이 케이스가 깨진다.
+   */
+  it('테마가 :root에 싣는 이름과 셸이 읽는 이름의 교집합이 0이다', () => {
+    render(<Harness />)
+
+    const themeCss = tag(THEME_STYLE_ID)?.textContent ?? ''
+    const rootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('}'))
+    const themeNames = new Set(
+      rootBlock
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('--'))
+        .map((line) => line.split(':')[0]!.trim()),
+    )
+    // `:root` 블록이 실제로 이름을 담고 있어야 아래 대조가 뜻을 갖는다.
+    expect(themeNames.size).toBeGreaterThan(0)
+
+    const shellNames = new Set(shellCss.match(/--wb-[\w-]+/g) ?? [])
+    expect(shellNames.size).toBeGreaterThan(0)
+
+    // 셸은 자기 접두어만 읽는다 — 그것이 D7이 세운 분리다.
+    expect([...shellNames].filter((name) => !name.startsWith('--wb-shell-'))).toEqual([])
+    // 그래서 교집합이 비어 있다.
+    expect([...themeNames].filter((name) => shellNames.has(name))).toEqual([])
   })
 })
