@@ -23,6 +23,55 @@ export interface ApiClient {
   /** 호출자가 속한 프로젝트 목록. 각 항목에 호출자의 `role`이 실려 온다. */
   listProjects(): Promise<ProjectDetail[]>
   getProject(projectId: string): Promise<ProjectDetail>
+  /**
+   * 프로젝트를 만든다. **부른 사람이 owner가 된다**(서버가 같은 트랜잭션에서
+   * `project_members`에 넣는다 — `repos/projects.ts`).
+   *
+   * **응답이 `ProjectDetail`이다 — `role: "owner"`까지 실려 온다.** 계획서 D1이
+   * *"생성 응답에는 `role`이 없어 목록 항목과 다른 모양이다"*라고 적었던 것은 거짓이고,
+   * 그 근거는 `api/types.ts`의 `ProjectDetail` 주석에 실측 표로 있다.
+   *
+   * **그래도 응답을 목록에 그대로 꽂지 않는다**(P2b-5 D1). 되돌릴 것이 목록 하나뿐이라
+   * undo가 없고, 성공하면 목록을 다시 받는 편이 곧 수렴이기 때문이다. **모양이 같다는
+   * 것이 그 판단을 뒤집지는 않는다** — 뒤집는다면 그것은 이 층이 아니라 목록 화면의
+   * 판단이다.
+   *
+   * **`description`을 주지 않으면 그 키를 만들지 않는다.** 서버의 `CreateProjectBody`가
+   * `z.strictObject`라 선언되지 않은 키는 그 자체로 400이고(실측: `role`을 실으면 400),
+   * `undefined`를 실은 키가 통과하는 것은 `JSON.stringify`가 지워 주는 우연이다.
+   * **`null`은 다르다 — "설명 없음"이라는 값이고 그대로 싣는다**(서버가
+   * `z.string().max(2000).nullable().optional()`로 받는다).
+   *
+   * **슬러그 형식을 클라이언트가 다시 보지 않는다**(D5). 서버가 400과 함께 문장을 주고,
+   * 중복은 409다 — 규칙을 두 곳에 두면 어긋난다.
+   */
+  createProject(body: {
+    name: string
+    slug: string
+    description?: string | null
+  }): Promise<ProjectDetail>
+  /**
+   * 프로젝트의 이름·슬러그·설명을 고친다. **owner만 부를 수 있다** — 그보다 낮은 멤버는
+   * 403, 멤버가 아니면 404다(실측은 `projects/project-actions.ts` 머리말에 있다).
+   *
+   * `updateMenu`·`updatePage`와 같은 계약이다: **준 키만 실리고, 남은 키가 없으면 그
+   * 자리에서 던진다.** 서버가 같은 본문에 400을 낸다(실측: `PATCH /projects/:id {}` →
+   * `bad-request` / `변경할 값이 없습니다`).
+   *
+   * `description: null`은 **"설명을 지운다"**이고 키가 없는 것("설명을 바꾸지 않는다")과
+   * 다르다 — `updateMenu`의 `parentId: null`과 같은 자리다.
+   */
+  updateProject(
+    projectId: string,
+    body: { name?: string; slug?: string; description?: string | null },
+  ): Promise<ProjectDetail>
+  /**
+   * 프로젝트를 지운다. **owner만 부를 수 있다.**
+   *
+   * **서버가 아무것도 막지 않는다** — 메뉴 삭제가 자식이 있으면 409를 내는 것과 다르다.
+   * 딸린 것이 함께 사라지는 범위는 Task 6이 재서 `projects/delete-confirm.tsx`에 적는다.
+   */
+  deleteProject(projectId: string): Promise<void>
   /** 메뉴·페이지 통합 트리. 서버의 `{ menu }` 봉투는 구현이 벗겨 준다. */
   getTree(projectId: string): Promise<TreeMenuNode[]>
   /**

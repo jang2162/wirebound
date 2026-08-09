@@ -134,7 +134,31 @@ function isTreePage(value: unknown): boolean {
 
 /**
  * 프로젝트 하나. **`id`가 빈 문자열이면 막는다** — 목록의 `<Link>`와, 셸이 트리에 넘기는
- * `projectId`가 둘 다 이 값을 주소에 넣는다(같은 표).
+ * `projectId`가 둘 다 이 값을 주소에 넣는다(아래 `SHAPES.pageDetail`의 "주소가 되는 값" 표).
+ *
+ * **소비자가 넷이고 읽는 필드가 서로 다르다** — 이 검사는 그 합집합이 아니라 **오늘 읽는
+ * 것의 상위집합**이다. `pageDetail`이 같은 형식의 표를 갖는 이유와 같다: 모양이 같은 것과
+ * 읽는 필드가 같은 것은 다르고, 새 소비자가 붙을 때 표를 갱신하지 않는 것이 실제로 일어난다.
+ *
+ * | 소비자 | 읽는 값 | 어긋나면 |
+ * |---|---|---|
+ * | `listProjects` | `id`(목록 `<Link>`의 주소) · `name`(줄의 글자) | 빈 문자열이면 `/projects/`가 되고 화면이 통째로 빈다 |
+ * | `getProject` | `id`(셸이 트리에 넘기는 `projectId`) · `name`(셸 제목) | 같은 부류 — `/projects/pages/pg1` |
+ * | `createProject`(P2b-5) | **`id`가 곧 주소가 된다**(D7 — 만든 뒤 그리로 이동한다) | 201 성공 경로로 잘못된 주소가 만들어진다 |
+ * | `updateProject`(P2b-5) | (아직 없다 — 성공 여부만 본다) | — |
+ * | 넷 모두 | `role`은 **여기서 보지 않는다** | `projects/project-actions.ts`가 계약 밖 값을 전부 닫는다 |
+ *
+ * **`createProject`가 이 검사를 그대로 지나는 것은 "모양이 같아서"가 아니다.** 그쪽 하중
+ * `id`(주소)가 이 검사가 이미 보는 것의 **부분집합**이라서다 — 실측으로 네 응답의 키 집합이
+ * `["description","id","name","role","slug"]`로 같다는 것도 함께 쟀다(`api/types.ts`의
+ * `ProjectDetail` 표). 별도 shape를 두면 내용이 같은 둘이 생겨 한쪽만 고쳐지는 자리가 되고,
+ * 더 약한 쪽이 같은 계약을 통과시키게 된다.
+ *
+ * **`name`을 보는 것은 `createProject`에게는 넓다.** 그쪽은 오늘 `id`만 읽는다. 그래도 좁히지
+ * 않는 것은 `name`이 계약이 항상 준다고 말하는 필드이고, 계약을 벗어난 응답을 **보이고
+ * 복구되는 실패**로 만드는 편이 조용히 지나가는 것보다 낫기 때문이다(`projectList`가 항목
+ * 하나 때문에 목록 전체를 막는 것과 같은 판단). **넓다는 사실 자체를 여기 적어 둔다** —
+ * 다음 소비자가 무엇을 근거로 판단할지가 그것이다.
  */
 function isProjectDetail(value: unknown): boolean {
   return (
@@ -459,6 +483,29 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
     listProjects: () => request<ProjectDetail[]>('GET', '/projects', SHAPES.projectList),
     getProject: (projectId) =>
       request<ProjectDetail>('GET', projectPath(projectId), SHAPES.projectDetail),
+    // 아래 셋이 P2b-5의 프로젝트 CRUD다. **생성 응답은 `ProjectDetail`이다** — `role`까지
+    // 실려 온다(`api/types.ts`의 실측 표). 그래서 `SHAPES.projectDetail`을 그대로 지나는데,
+    // 그 근거는 "모양이 같다"가 아니라 **`createProject`의 하중 `id`가 그 검사가 이미 보는
+    // 것의 부분집합**이라는 것이다(`isProjectDetail`의 소비자 표).
+    createProject: (body) =>
+      // `description`은 **키를 만들지 않는다**. 서버의 `CreateProjectBody`가 `z.strictObject`라
+      // 선언되지 않은 키가 그 자체로 400이고(실측: `role`을 실으면 400), `undefined`를 실은
+      // 키가 오늘 통과하는 것은 `JSON.stringify`가 지워 주는 우연이다 — 그 우연에 기대지
+      // 않는다(`patchOps`의 `clientOpId`와 같은 판단). **`null`은 값이라 그대로 지나간다**:
+      // `definedOnly`가 거르는 것은 `undefined` 하나뿐이다.
+      //
+      // **여기서 `definedOnly`를 항등(`body`)으로 바꾸면 0 사망이다 — 재고 적는다.**
+      // `definedOnly`의 머리말이 적은 것과 **같은 원인**이다: 나가는 본문의 유일한 관찰
+      // 지점이 `JSON.stringify`가 만든 문자열이고, 그것이 값이 `undefined`인 키를 지워 주므로
+      // 두 구현의 바이트가 같아진다. **닫는 케이스를 만들지 못했다.** 그래도 남기는 것은
+      // `updateProject` 쪽에서 같은 함수가 실제로 구분되기 때문이다 — 거기서는 `updateBody`가
+      // **남은 키를 세므로** 그 수가 관찰 지점이 되고, 가드를 지우면 2 사망이다.
+      request<ProjectDetail>('POST', '/projects', SHAPES.projectDetail, definedOnly(body)),
+    // **`async`인 것이 요점이다** — `updateBody`가 빈 본문에서 던지는데, 동기 `throw`면
+    // `await` 없이 `.catch`를 붙인 호출부가 잡지 못한다(`updateMenu`와 같은 자리).
+    updateProject: async (projectId, body) =>
+      request<ProjectDetail>('PATCH', projectPath(projectId), SHAPES.projectDetail, updateBody(body)),
+    deleteProject: (projectId) => request<void>('DELETE', projectPath(projectId), SHAPES.noBody),
     // `{ menu }` 봉투를 벗기는 유일한 지점이다 — 그 관용구를 앱 안으로 들이지 않는다.
     // 봉투가 계약대로인 것은 `request`가 이미 확인했다(`SHAPES.treeEnvelope`). 그래서 여기서
     // `body.menu`를 곧장 읽어도 던지지 않는다 — 앞서는 이 줄이 본문이 `null`일 때 raw

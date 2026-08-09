@@ -860,3 +860,204 @@ describe('페이지 CRUD', () => {
     expect(stub.calls[1]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1')
   })
 })
+
+/**
+ * 프로젝트 CRUD 셋(P2b-5 Task 1).
+ *
+ * **서버 실측**(api 하네스, `apps/api/test/`에 임시 파일을 두고 재고 지웠다):
+ *
+ * ```
+ * POST   /projects {name,slug}                → 201 {"id","name","slug","description":null,"role":"owner"}
+ * POST   /projects {name,slug,description}    → 201 (같은 다섯 키)
+ * POST   /projects {name,slug,role:'owner'}   → 400 {"code":"bad-request", issues:[{"message":"인식할 수 없는 키: \"role\""}]}
+ * PATCH  /projects/:id {}                     → 400 {"code":"bad-request", issues:[{"message":"변경할 값이 없습니다"}]}
+ * PATCH  /projects/:id {description:null}     → 200 (description 이 null 로 바뀐다)
+ * PATCH  /projects/:id {name, unknownKey}     → 400 {"message":"인식할 수 없는 키: \"unknownKey\""}
+ * ```
+ *
+ * **읽어야 할 것 둘.**
+ *
+ * 1. **생성 응답에 `role`이 실려 온다** — 계획서 D1 이 *"`role`이 없어 목록 항목과 다른
+ *    모양이다"*라고 적었던 것은 거짓이다(`repos/projects.ts`의 `insertProject`가
+ *    `.returning([…])` 뒤에 `{ ...project, role: 'owner' }`로 감싼다). 그래서 반환 타입이
+ *    `ProjectSummary`가 아니라 `ProjectDetail`이고, 응답 검사도 `SHAPES.projectDetail`을
+ *    같이 쓴다.
+ * 2. **그런데도 응답을 그대로 요청 본문으로 되보낼 수 없다** — `role` 키가 있으면 서버의
+ *    `z.strictObject`가 400을 낸다(위 셋째 줄). 이 파일이 나가는 본문을 직접 보는 이유다.
+ */
+describe('프로젝트 CRUD', () => {
+  it('createProject는 이름·슬러그·설명을 POST한다', async () => {
+    const stub = stubFetch(jsonResponse(201, { ...project, description: '설명' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const result = await client.createProject({ name: '프로젝트', slug: 'proj', description: '설명' })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects')
+    expect(stub.calls[0]?.init?.method).toBe('POST')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      name: '프로젝트',
+      slug: 'proj',
+      description: '설명',
+    })
+    // 만든 프로젝트로 이동하려면 응답의 `id`가 필요하다(D7).
+    expect(result.id).toBe('p1')
+  })
+
+  it('설명을 주지 않으면 그 키를 만들지 않는다', async () => {
+    // 서버의 `CreateProjectBody`는 `z.strictObject`다 — 선언되지 않은 키는 그 자체로 400이고
+    // (`role`을 실어 재니 400이었다), `undefined`를 실은 키가 통과하는 것은 `JSON.stringify`가
+    // 지워 주는 우연이다. `patchOps`·`definedOnly`가 같은 이유로 키를 만들지 않는다.
+    const stub = stubFetch(jsonResponse(201, project))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.createProject({ name: '가', slug: 'ga' })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ name: '가', slug: 'ga' })
+  })
+
+  it('설명에 null을 주면 그 값을 그대로 싣는다', async () => {
+    // `null`은 **"설명 없음"이라는 값**이고 키가 없는 것과 다른 뜻이다 — 서버가
+    // `z.string().max(2000).nullable().optional()`로 받고 `body.description ?? null`로 쓴다.
+    // 실측으로 `POST {description:null}`이 201, `PATCH {description:null}`이 200이다.
+    // 걸러야 하는 것은 `undefined` 하나뿐이라는 것을 이 케이스가 못박는다
+    // (`updateMenu`의 `parentId: null`과 같은 자리).
+    const stub = stubFetch(jsonResponse(201, project))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.createProject({ name: '가', slug: 'ga', description: null })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      name: '가',
+      slug: 'ga',
+      description: null,
+    })
+  })
+
+  it('만든 프로젝트의 id가 계약과 다르면 ApiError를 던진다', async () => {
+    // **그 값이 곧 주소가 된다**(D7) — 만들고 나서 그 프로젝트로 이동한다. 통과시키면
+    // `ApiError`가 아니라 **201 성공 경로로** 잘못된 주소가 만들어진다.
+    //
+    // **빈 문자열이 가장 나쁘다.** P2b-4가 진짜 `<App />`으로 쟀다: `/projects/`는
+    // `innerHTML` 0자·`.wb-shell` 없음이다(`app.tsx`에 `*` 라우트가 없다). 같은 근거로
+    // `TreePage.id`·`projectDetail.id`·`projectList[].id` 셋을 이미 막고 있고,
+    // **`createProject`가 그 셋을 지키는 `isProjectDetail`을 그대로 지난다.**
+    const { id: _dropped, ...withoutId } = project
+    const broken: unknown[] = [withoutId, { ...project, id: 42 }, { ...project, id: null }, { ...project, id: '' }]
+
+    for (const body of broken) {
+      const stub = stubFetch(jsonResponse(201, body))
+      const client = createHttpClient(stub.fetchImpl)
+
+      const error = asApiError(
+        await client.createProject({ name: '가', slug: 'ga' }).catch((e: unknown) => e),
+      )
+
+      expect(error.code, JSON.stringify(body)).toBe('internal')
+    }
+  })
+
+  it('updateProject는 준 키만 본문에 만든다', async () => {
+    const stub = stubFetch(jsonResponse(200, { ...project, name: '새 이름' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateProject('p1', { name: '새 이름' })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1')
+    expect(stub.calls[0]?.init?.method).toBe('PATCH')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ name: '새 이름' })
+  })
+
+  it('updateProject는 description: null을 싣는다 — 키 없음과 다른 뜻이다', async () => {
+    // 키가 없으면 "설명을 바꾸지 않는다", `null`이면 "설명을 지운다"이다. 실측으로 그
+    // 본문이 200이고 응답의 `description`이 `null`이 된다.
+    const stub = stubFetch(jsonResponse(200, project))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateProject('p1', { description: null })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ description: null })
+  })
+
+  it('updateProject는 준 키를 전부 싣는다', async () => {
+    const stub = stubFetch(jsonResponse(200, project))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateProject('p1', { name: '가', slug: 'ga', description: '설명' })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      name: '가',
+      slug: 'ga',
+      description: '설명',
+    })
+  })
+
+  it('빈 갱신 본문은 그 자리에서 거절한다', async () => {
+    // **재라 #4를 프로젝트 쪽에서도 쟀다**: `PATCH /projects/:id {}`가
+    // `400 {"code":"bad-request", …, "issues":[{"path":"","message":"변경할 값이 없습니다"}]}`로
+    // 메뉴·페이지와 **같은 코드·문장**이다. 보내 봐야 400인 요청은 만들지 않는다 —
+    // P2b-4가 `updateBody`에 적용한 판단을 그대로 쓴다(**새로 만들지 않았다**).
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(await client.updateProject('p1', {}).catch((e: unknown) => e))
+
+    expect(error.code).toBe('bad-request')
+    expect(error.status).toBe(0)
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it('undefined만 담긴 갱신 본문도 같다', async () => {
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client
+        .updateProject('p1', { name: undefined, slug: undefined, description: undefined })
+        .catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it('프로젝트 갱신의 거절도 동기 throw가 아니라 rejection이다', () => {
+    const client = createHttpClient(stubFetch().fetchImpl)
+
+    expect(() => client.updateProject('p1', {}).catch(() => undefined)).not.toThrow()
+  })
+
+  it('갱신 응답도 프로젝트 계약을 지난다', async () => {
+    // `PATCH`의 응답은 `GET /:projectId`와 같은 다섯 키다(실측). 조회만 검사하고 쓰기를
+    // 통과시키면 같은 계약이 반쪽만 지켜진다 — `pageDetail`이 겪은 자리와 같은 부류다.
+    const stub = stubFetch(jsonResponse(200, { ...project, id: '' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(await client.updateProject('p1', { name: '가' }).catch((e: unknown) => e))
+
+    expect(error.code).toBe('internal')
+  })
+
+  it('deleteProject는 204를 본문 없이 받는다', async () => {
+    const empty = new Response(null, { status: 204 })
+    const json = vi.spyOn(empty, 'json')
+    const stub = stubFetch(empty)
+    const client = createHttpClient(stub.fetchImpl)
+
+    await expect(client.deleteProject('p1')).resolves.toBeUndefined()
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1')
+    expect(stub.calls[0]?.init?.method).toBe('DELETE')
+    expect(json).not.toHaveBeenCalled()
+  })
+
+  it('경로에 들어가는 프로젝트 id는 URL 인코딩된다', async () => {
+    const stub = stubFetch(jsonResponse(200, project), new Response(null, { status: 204 }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateProject('p 1/x', { name: '가' })
+    await client.deleteProject('p 1/x')
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx')
+    expect(stub.calls[1]?.url).toBe('/api/projects/p%201%2Fx')
+  })
+})

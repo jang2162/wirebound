@@ -21,7 +21,11 @@ export interface SessionUser {
   name: string
 }
 
-/** 프로젝트의 공통 필드. */
+/**
+ * 프로젝트의 공통 필드. **이것만 오는 응답은 없다** — 아래 `ProjectDetail`의 실측 표가
+ * 프로젝트를 내는 네 자리가 전부 `role`까지 싣는다는 것을 보인다. 여기 따로 두는 것은
+ * `ProjectDetail`이 "공통 필드 + 역할"임을 타입으로 남기기 위해서다.
+ */
 export interface ProjectSummary {
   id: string
   name: string
@@ -30,9 +34,26 @@ export interface ProjectSummary {
 }
 
 /**
- * 호출자의 역할이 실린 프로젝트. `GET /api/projects/:projectId`뿐 아니라
- * **`GET /api/projects`의 목록 항목도 이 형태다** — 서버가 멤버십 조인에서 `role`을
- * 함께 고른다(`apps/api/test/projects.test.ts` "각 항목에 내 role이 실린다").
+ * 호출자의 역할이 실린 프로젝트. **프로젝트를 내는 응답은 지금 넷이고 전부 이 형태다.**
+ *
+ * **실측**(P2b-5 웨이브 1, api 하네스에 임시 파일을 두고 재고 지웠다. 계획서의 **재라 #1**이
+ * 이것으로 닫힌다) — 네 자리의 키 집합이 `["description","id","name","role","slug"]`로 같다:
+ *
+ * | 응답 | 상태 | `role` |
+ * |---|---|---|
+ * | `POST /api/projects` | 201 | `"owner"`(만든 사람이 owner다) |
+ * | `GET /api/projects` 각 항목 | 200 | 그 사용자의 역할 |
+ * | `GET /api/projects/:projectId` | 200 | 그 사용자의 역할 |
+ * | `PATCH /api/projects/:projectId` | 200 | 그 사용자의 역할(owner만 부를 수 있다) |
+ *
+ * **계획서 D1이 *"생성 응답에는 `role`이 없다"*고 확정해 적었던 것은 거짓이다.**
+ * `apps/api/src/repos/projects.ts`의 `insertProject`가 `.returning(['id','name','slug',
+ * 'description'])`으로 고른 뒤 **`{ ...project, role: 'owner' as const }`로 감싸** 돌려준다 —
+ * 계획서는 앞줄만 읽고 확정했다.
+ *
+ * **그런데도 응답을 그대로 요청 본문으로 되보낼 수 없다.** 서버의 `CreateProjectBody`·
+ * `UpdateProjectBody`가 `z.strictObject`라 `role` 키가 있으면 400이다(실측:
+ * `POST {name,slug,role:'owner'}` → `400 인식할 수 없는 키: "role"`).
  */
 export interface ProjectDetail extends ProjectSummary {
   role: ProjectRole
