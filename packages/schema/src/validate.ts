@@ -1,3 +1,4 @@
+import type { ComponentDef } from './component/define'
 import { getComponent } from './component/registry'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN } from './envelope'
 import type { LayoutDocument, PageDocument, WbNode } from './node'
@@ -9,6 +10,14 @@ export type ValidationCode =
   | 'invalid-props'
   | 'children-not-allowed'
   | 'unknown-variant'
+  /**
+   * 노드가 `variant`를 들고 왔는데 그 컴포넌트는 **prop에서 변형을 파생한다**(`variantFrom`).
+   * **작성자가 적은 값이 버려진다.**
+   *
+   * 이름이 `redundant-`가 아닌 이유: redundant는 *"있어도 그만"*으로 읽히는데 실제로는
+   * **적은 값이 화면에 닿지 않는다.** 무엇이 대신 쓰이는지는 메시지가 말한다.
+   */
+  | 'ignored-variant'
   | 'duplicate-id'
   | 'bad-root'
   | 'slot-count'
@@ -19,6 +28,25 @@ export interface ValidationIssue {
   nodeId: string | null
   path: string
   message: string
+}
+
+/**
+ * 무시되는 `variant`를 알리는 문장. **검증 경로가 둘이라 여기 한 곳에서 만든다.**
+ *
+ * 페이지 문서는 `validatePage`가 보고 테마의 패턴 템플릿은 `checkPatterns`(themes)가
+ * 보는데, 두 곳이 문장을 따로 쓰면 사용자가 **같은 문제를 다른 문제로 읽는다.**
+ * 이슈 **코드**는 갈려 있다(여기는 전용 코드, 패턴 쪽은 catch-all `bad-pattern-node`) —
+ * 그쪽에 평행한 유니온을 만들면 둘이 따로 썩기 때문이다. 갈리지 않게 묶는 것은 **문장**이고,
+ * 두 문자열이 글자까지 같은 것을 `packages/themes/test/spec-patterns.test.ts`가 대조한다
+ * (`fallback.test.tsx`가 `invalid-props`에 쓰는 것과 같은 방식이다).
+ *
+ * 문장이 말해야 하는 것 둘: **적은 값이 버려진다**는 것과 **무엇이 대신 쓰이는가**.
+ */
+export function ignoredVariantMessage(def: ComponentDef, variant: string): string {
+  return (
+    `${def.type}의 variant는 무시됩니다: ${variant} ` +
+    `(${def.type}은 ${def.variantFrom} prop에서 변형을 파생합니다)`
+  )
 }
 
 export function validatePage(doc: PageDocument): ValidationIssue[] {
@@ -182,13 +210,30 @@ function validateTree(root: WbNode): ValidationIssue[] {
       })
     }
 
-    if (node.variant !== undefined && !def.variants.includes(node.variant)) {
-      issues.push({
-        code: 'unknown-variant',
-        nodeId: node.id,
-        path: `${path}/variant`,
-        message: `${node.type}에 정의되지 않은 variant입니다: ${node.variant}`,
-      })
+    if (node.variant !== undefined) {
+      if (def.variantFrom !== undefined) {
+        /**
+         * **`variantFrom`이 있으면 `unknown-variant`를 내지 않는다.** 그 컴포넌트에서는
+         * `node.variant`가 선언된 값이든 아니든 **똑같이 무시되므로**, "정의되지 않았다"는
+         * 문장이 원인을 잘못 가리킨다. 재서 확인한 두 입력이 그것을 보여 준다:
+         * `variant:'없는변형'`은 **아무 영향 없는 값 때문에 문서가 무효**가 됐고(거짓 양성),
+         * `variant:'caption'`은 **이슈 0건으로 조용히 사라졌다**(침묵). 이제 둘 다 같은
+         * 이슈 하나를 받고, 그 문장이 무슨 일이 일어나는지 말한다.
+         */
+        issues.push({
+          code: 'ignored-variant',
+          nodeId: node.id,
+          path: `${path}/variant`,
+          message: ignoredVariantMessage(def, node.variant),
+        })
+      } else if (!def.variants.includes(node.variant)) {
+        issues.push({
+          code: 'unknown-variant',
+          nodeId: node.id,
+          path: `${path}/variant`,
+          message: `${node.type}에 정의되지 않은 variant입니다: ${node.variant}`,
+        })
+      }
     }
   }
 

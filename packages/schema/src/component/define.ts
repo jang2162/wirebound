@@ -32,6 +32,19 @@ export interface ComponentDef {
   structures: string[]
   parts: string[]
   variants: string[]
+  /**
+   * 이 enum prop의 값이 `data-wb-variant`가 된다. **그 값들이 `variants`에 전부 선언돼
+   * 있어야 한다** — `defineComponent`가 검사한다.
+   *
+   * **왜 새 선언 채널을 만들지 않았는가** (P0 이월 #8): `data-wb-role`(Text)·
+   * `data-control`(Field)·`data-direction`(Divider)은 한 부류다 — 셋 다 *"노드의 enum
+   * prop에서 파생되는 표현 변형"*인데 계약에 채널이 없어 각자 속성을 만들었다.
+   * §5.1은 이미 같은 모양의 채널을 하나 갖고 있다(같은 이름의 boolean prop이 true면
+   * `data-wb-state`). 빠진 것은 **enum prop → `data-wb-variant`**뿐이므로 그것을 채운다.
+   * 일곱 번째 속성을 만들면 §6.11이 *"이 여섯이 전체 계약"*이라고 못박은 것이 깨지고,
+   * 테마 검증기(§12.4)와 `checkThemeComponents`가 볼 어휘가 함께 넓어진다.
+   */
+  variantFrom?: string
   /** 같은 이름의 prop이 true면 활성화되는 상태 */
   states: string[]
   children: 'none' | 'many'
@@ -67,6 +80,25 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     }
   }
 
+  if (def.variantFrom !== undefined) {
+    const prop = def.variantFrom
+    if (!known.has(prop)) {
+      throw new Error(`${type}: variantFrom이 스키마에 없는 prop을 가리킵니다: ${prop}`)
+    }
+    const values = enumValues(def.props, prop)
+    if (values === null) {
+      throw new Error(`${type}: variantFrom이 가리키는 prop이 enum이 아닙니다: ${prop}`)
+    }
+    // **이것이 핵심 검사다.** 선언되지 않은 값이 `data-wb-variant`로 나가면 테마 검증기가
+    // 대조할 선언이 없다 — `checkThemeComponents`는 `def.variants`를 어휘로 쓴다.
+    const undeclared = values.filter((value) => !def.variants.includes(value))
+    if (undeclared.length > 0) {
+      throw new Error(
+        `${type}: variantFrom(${prop})의 값이 variants에 선언돼 있지 않습니다: ${undeclared.join(', ')}`,
+      )
+    }
+  }
+
   return def
 }
 
@@ -80,4 +112,44 @@ function assertUnique(type: string, field: string, values: string[]): void {
 function propKeys(schema: z.ZodType): Set<string> {
   const shape = (schema as unknown as { shape?: Record<string, unknown> }).shape
   return new Set(shape ? Object.keys(shape) : [])
+}
+
+/** zod 내부 표현. 공개 타입에 없으므로 여기서만 쓰는 만큼 적는다(`propKeys`와 같은 계열이다). */
+interface ZodInternal {
+  def?: { type?: string; innerType?: ZodInternal }
+  options?: unknown
+}
+
+/**
+ * enum prop의 값 목록. enum이 아니면 `null`이다.
+ *
+ * **감싼 것을 벗겨야 한다.** 카탈로그의 props는 거의 전부 `.default()`가 붙어 있어
+ * 최상위의 `def.type`이 `'default'`이고 실제 enum은 `def.innerType`에 있다(`.optional()`도
+ * 같다). 재서 확인한 zod 4.4.3의 모양이다:
+ *
+ * ```
+ * z.enum(['a','b']).default('a')  →  def.type='default', def.innerType.def.type='enum'
+ * z.enum(['a','b']).optional()    →  def.type='optional', def.innerType.def.type='enum'
+ * z.string().default('x')         →  def.innerType.def.type='string' (options 없음)
+ * ```
+ *
+ * 깊이 제한을 두지 않고 `innerType`을 끝까지 따라간다 — 감싸는 것이 둘 이상 붙어도
+ * (`.optional().default()`) 같은 길로 닿는다. 순환은 zod가 만들지 않지만, 만들어지더라도
+ * `innerType`이 없어지는 순간 멈추므로 무한히 돌지 않는다.
+ *
+ * **내부 표현에 기댄다는 것을 숨기지 않는다.** zod가 이 모양을 바꾸면 `variantFrom`을
+ * 쓰는 카탈로그 셋이 *"enum이 아닙니다"*로 **던지며** 드러난다 — 조용히 검사를 건너뛰지
+ * 않는 것이 이 함수가 `null`과 빈 배열을 가르는 이유다.
+ */
+function enumValues(schema: z.ZodType, prop: string): string[] | null {
+  const shape = (schema as unknown as { shape?: Record<string, ZodInternal> }).shape
+  let cursor: ZodInternal | undefined = shape?.[prop]
+
+  while (cursor !== undefined) {
+    if (cursor.def?.type === 'enum' && Array.isArray(cursor.options)) {
+      return cursor.options.filter((value): value is string => typeof value === 'string')
+    }
+    cursor = cursor.def?.innerType
+  }
+  return null
 }

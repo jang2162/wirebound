@@ -1,4 +1,4 @@
-import { getComponent, getKoreanErrorMap } from '@wirebound/schema'
+import { getComponent, getKoreanErrorMap, ignoredVariantMessage } from '@wirebound/schema'
 import { z } from 'zod'
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
@@ -210,14 +210,29 @@ function checkNode(
     )
   }
 
-  if (node.variant !== undefined && !def.variants.includes(node.variant)) {
-    issues.push(
-      issue(
-        'bad-pattern-node',
-        `${path}.variant`,
-        `${node.type}에 정의되지 않은 variant입니다: ${node.variant}`,
-      ),
-    )
+  if (node.variant !== undefined) {
+    /**
+     * **패턴 템플릿도 페이지 문서와 같은 침묵을 갖는다.** `variantFrom`이 있는 컴포넌트에
+     * `variant`를 적으면 그 값은 렌더에서 무시된다 — 패턴은 노드를 찍어 내는 틀이므로
+     * 그 침묵이 **찍어 낸 노드마다** 퍼진다.
+     *
+     * **코드는 `bad-pattern-node`를 그대로 쓴다.** `schema`의 `ignored-variant`에
+     * 평행한 코드를 여기 만들면 유니온이 둘이 되어 따로 썩는다. **갈리지 않게 묶는 것은
+     * 문장이고**, `ignoredVariantMessage`를 함께 부르는 것이 그 방법이다.
+     */
+    if (def.variantFrom !== undefined) {
+      issues.push(
+        issue('bad-pattern-node', `${path}.variant`, ignoredVariantMessage(def, node.variant)),
+      )
+    } else if (!def.variants.includes(node.variant)) {
+      issues.push(
+        issue(
+          'bad-pattern-node',
+          `${path}.variant`,
+          `${node.type}에 정의되지 않은 variant입니다: ${node.variant}`,
+        ),
+      )
+    }
   }
 
   if (def.children === 'none' && children.length > 0) {

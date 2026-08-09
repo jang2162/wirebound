@@ -97,7 +97,8 @@ describe('렌더 실패 폴백', () => {
     expect(html).toContain('data-wb-id="n_000000000002"')
     // 형제는 폴백이 아니라 제 구조로 그려졌다.
     expect(html).toContain(
-      '<p data-wb-id="n_000000000003" data-wb-component="Text" data-wb-structure="default">살아남은 형제</p>',
+      // `data-wb-variant="body"`는 `role`의 기본값에서 파생된다(`variantFrom`).
+      '<p data-wb-id="n_000000000003" data-wb-component="Text" data-wb-structure="default" data-wb-variant="body">살아남은 형제</p>',
     )
   })
 
@@ -272,7 +273,8 @@ describe('모양이 깨진 노드', () => {
     expect(errorMessages(html)).toEqual(['노드가 객체가 아닙니다: null'])
     // 형제는 제 구조로 그대로 그려진다 — 구멍 하나가 배열 전체를 죽이지 않는다.
     expect(html).toContain(
-      '<p data-wb-id="n_000000000003" data-wb-component="Text" data-wb-structure="default">살아남은 형제</p>',
+      // `data-wb-variant="body"`는 `role`의 기본값에서 파생된다(`variantFrom`).
+      '<p data-wb-id="n_000000000003" data-wb-component="Text" data-wb-structure="default" data-wb-variant="body">살아남은 형제</p>',
     )
   })
 

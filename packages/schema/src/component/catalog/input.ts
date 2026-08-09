@@ -54,7 +54,10 @@ export const FieldDef = defineComponent({
   ],
   structures: ['outlined', 'filled', 'underlined'],
   parts: ['label', 'control', 'help'],
-  variants: [],
+  // `control`의 enum 값 그대로다. 계획서 표는 설계 §5의 문장에서 옮긴 것이었는데,
+  // 카탈로그의 실제 enum과 대조해 보니 아홉으로 일치했다.
+  variants: ['text', 'number', 'select', 'date', 'dateRange', 'checkbox', 'radio', 'textarea', 'file'],
+  variantFrom: 'control',
   states: ['required', 'disabled', 'invalid'],
   children: 'none',
 })

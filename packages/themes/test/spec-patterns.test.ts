@@ -222,3 +222,51 @@ describe('checkPatterns — schema 조각과 카탈로그 대조', () => {
     expect(issues.length).toBeGreaterThanOrEqual(2)
   })
 })
+
+describe('패턴의 variant도 무시되면 알린다 (P4a-2 수정 웨이브)', () => {
+  const pattern = (variant: string) => ({
+    'hero.x': {
+      name: '히어로',
+      schema: { type: 'Text', variant, props: { role: 'h1' } },
+    },
+  })
+
+  it('variantFrom이 있는 컴포넌트면 이슈를 낸다', () => {
+    const { issues } = checkPatterns(pattern('caption'))
+    expect(issues.map((issue) => issue.code)).toEqual(['bad-pattern-node'])
+    expect(issues[0]!.path).toBe('patterns.hero.x.schema.variant')
+  })
+
+  /**
+   * **문안이 `validatePage`와 글자까지 같다.**
+   *
+   * 검증 경로가 둘(페이지 문서·패턴 템플릿)인데 문구가 갈리면 사용자가 **같은 문제를 다른
+   * 문제로 읽는다.** 이슈 **코드**는 일부러 갈라 뒀다(여기는 catch-all `bad-pattern-node`,
+   * `schema`는 전용 `ignored-variant`) — 평행한 유니온을 만들면 둘이 따로 썩기 때문이고,
+   * 갈리지 않게 묶는 것은 문장이다. `fallback.test.tsx`가 `invalid-props`에 쓰는 방식과 같다.
+   *
+   * 어느 쪽이 바뀌어도 이 케이스가 깨진다.
+   */
+  it('문안이 validatePage의 것과 글자까지 같다', () => {
+    const fromPattern = checkPatterns(pattern('caption')).issues[0]!.message
+
+    const fromPage = validatePage({
+      version: 1,
+      root: {
+        id: 'n_000000000001',
+        type: 'Page',
+        children: [{ id: 'n_000000000002', type: 'Text', variant: 'caption', props: { role: 'h1' } }],
+      },
+    }).find((issue) => issue.code === 'ignored-variant')!.message
+
+    expect(fromPattern).toBe(fromPage)
+  })
+
+  it('variantFrom이 없는 컴포넌트는 선언된 변형이면 통과한다', () => {
+    expect(
+      checkPatterns({
+        'hero.x': { name: '히어로', schema: { type: 'Button', variant: 'primary' } },
+      }).issues,
+    ).toEqual([])
+  })
+})

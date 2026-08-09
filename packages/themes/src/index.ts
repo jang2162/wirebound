@@ -48,3 +48,6 @@ export type {
 export { resolveTheme } from './resolve/index'
 
 export { compileTheme } from './emit/index'
+
+export { SYSTEM_THEME_IDS, systemTheme } from './system/index'
+export { ADMIN_THEME } from './system/admin'

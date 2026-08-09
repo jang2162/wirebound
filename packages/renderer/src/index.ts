@@ -12,6 +12,8 @@ export {
 
 export { FallbackNode } from './fallback'
 
+export { NODE_VAR_PREFIX, nodeVar, structureBaseCss } from './structure-css'
+
 export type { NodeRenderError, RenderOptions } from './render'
 export { renderDocument, renderNode, resolveStructure } from './render'
 
