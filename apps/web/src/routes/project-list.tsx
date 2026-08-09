@@ -14,6 +14,7 @@
 import type { ReactElement } from 'react'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
+import { DeleteConfirm } from '../projects/delete-confirm'
 import { projectAbilities } from '../projects/project-actions'
 import { ProjectForm } from '../projects/project-form'
 import { useProjectCommands, type ProjectCommands } from '../projects/use-project-commands'
@@ -86,6 +87,7 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
   const { project, commands } = props
   const abilities = projectAbilities(project.role)
   const editing = commands.form !== null && commands.form.project?.id === project.id
+  const confirming = commands.confirmingDelete?.id === project.id
 
   return (
     <li>
@@ -103,6 +105,12 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
         </button>
       )}
 
+      {abilities.remove && (
+        <button type="button" disabled={commands.busy} onClick={() => commands.askDelete(project)}>
+          {`${project.name} 삭제`}
+        </button>
+      )}
+
       {/* 수정 폼은 **그 항목 자리에** 연다 — 만들기는 목록 위다(D4). */}
       {editing && (
         <ProjectForm
@@ -112,6 +120,19 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
           busy={commands.busy}
           onSubmit={commands.submitForm}
           onCancel={commands.closeForm}
+        />
+      )}
+      {/* **`key`를 주지 않는다 — 재서 걷어냈다.** 앞 판은 *"`key`가 있어야 다른 항목으로
+          옮길 때 친 이름이 사라진다"*고 적었는데 **그것은 거짓이다**: 각 `DeleteConfirm`은
+          서로 다른 `<li>`(그쪽이 `key={project.id}`를 갖는다) 안에 있어, 항목을 옮기면
+          그 서브트리째 언마운트된다. `key`를 지워도 **0 사망**이고 친 이름은 그대로 사라진다.
+          **`<li>`의 `key`가 이미 하는 일을 한 겹 더 적은 것이었다.** */}
+      {confirming && (
+        <DeleteConfirm
+          project={project}
+          busy={commands.busy}
+          onConfirm={() => commands.confirmDelete(project)}
+          onCancel={commands.cancelDelete}
         />
       )}
     </li>

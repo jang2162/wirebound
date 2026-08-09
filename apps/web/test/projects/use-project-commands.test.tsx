@@ -48,6 +48,7 @@ function Probe(): ReactElement {
           : 'none'}
       </span>
       <span data-testid="form">{commands.form === null ? 'closed' : 'open'}</span>
+      <span data-testid="confirm">{commands.confirmingDelete?.id ?? 'none'}</span>
       <span data-testid="names">
         {commands.state.status === 'ready' ? commands.state.projects.map((p) => p.name).join(',') : ''}
       </span>
@@ -202,5 +203,48 @@ describe('useProjectCommands — 뼈대', () => {
       grab().openCreate()
     })
     expect(read('form')).toBe('open')
+  })
+
+  it('조작이 나가 있는 동안에는 삭제 확인도 열리지 않는다', async () => {
+    // **P2b-4의 사고가 정확히 이 자리였다:** 여는 조작 하나가 잠기지 않아 `busy` 중에 확인이
+    // 걸리고, **잠금이 풀린 뒤 클릭 한 번에 지워졌다.**
+    //
+    // **화면 케이스로는 못 잡는다** — 버튼의 `disabled`는 `busy`(state)가 만들므로 잠금(`ref`)을
+    // 지워도 살아남는다(실측: `askDelete`의 가드를 지우면 화면 케이스 열둘이 전부 통과한다).
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    mount(
+      fakeApi({
+        listProjects: async () => [project()],
+        createProject: async () => {
+          await gate
+          return project({ id: 'p-new' })
+        },
+      }),
+    )
+    await waitFor(() => expect(read('status')).toBe('ready'))
+
+    act(() => {
+      grab().openCreate()
+    })
+    act(() => {
+      grab().submitForm({ name: '가', slug: 'ga', description: '' })
+    })
+    await waitFor(() => expect(read('busy')).toBe('true'))
+
+    act(() => {
+      grab().askDelete(project())
+    })
+    expect(read('confirm')).toBe('none')
+
+    release()
+    await waitFor(() => expect(read('busy')).toBe('false'))
+    // 잠금이 풀리면 열린다 — **영구 차단이 아니라 잠금이다.**
+    act(() => {
+      grab().askDelete(project())
+    })
+    expect(read('confirm')).toBe('p-1')
   })
 })

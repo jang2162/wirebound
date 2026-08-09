@@ -19,6 +19,7 @@ const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터
 const DUPLICATE_SLUG = '이미 사용 중인 슬러그입니다 [T4-DUP]'
 const BAD_SLUG = '슬러그는 소문자·숫자·하이픈만 쓸 수 있고, 하이픈으로 시작하거나 끝날 수 없습니다 [T4-FMT]'
 const ENVELOPE = '요청을 처리할 수 없습니다'
+const FORBIDDEN = '이 작업을 수행할 권한이 없습니다 [T6-403]'
 
 function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
   return { id: 'p-1', name: '관리자 콘솔', slug: 'admin-console', description: null, role: 'owner', ...overrides }
@@ -416,5 +417,162 @@ describe('프로젝트 수정', () => {
     const body = h.updateProject.mock.calls[0]?.[1] as Record<string, unknown>
     expect(body['name']).toBe('내 프로젝트')
     expect(body['slug']).toBe('mine')
+  })
+})
+
+describe('프로젝트 삭제', () => {
+  const owned = project({ id: 'p-own', name: '내 프로젝트', slug: 'mine' })
+  const other = project({ id: 'p-two', name: '둘째 프로젝트', slug: 'two' })
+  const asViewer = project({ id: 'p-vw', name: '뷰어 프로젝트', slug: 'vw', role: 'viewer' })
+
+  const askDelete = (name: string): void => {
+    fireEvent.click(screen.getByRole('button', { name: `${name} 삭제` }))
+  }
+  const confirmButton = (): HTMLButtonElement =>
+    screen.getByRole('button', { name: '삭제 확정' }) as HTMLButtonElement
+
+  it('owner인 항목에만 삭제 버튼이 있다', async () => {
+    renderCrud({ lists: [[owned, asViewer]] })
+    await screen.findByText('내 프로젝트')
+
+    expect(screen.getByRole('button', { name: '내 프로젝트 삭제' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: '뷰어 프로젝트 삭제' })).toBeNull()
+  })
+
+  it('누르면 입력이 열리고 요청이 나가지 않는다', async () => {
+    const h = renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    expect(screen.getByLabelText('삭제하려면 프로젝트 이름을 입력하세요')).toBeDefined()
+    expect(h.deleteProject).not.toHaveBeenCalled()
+  })
+
+  it('이름이 정확히 일치할 때만 확정 버튼이 활성이다', async () => {
+    renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    expect(confirmButton().disabled).toBe(true)
+    type('삭제하려면 프로젝트 이름을 입력하세요', '내 프로젝')
+    expect(confirmButton().disabled).toBe(true)
+    type('삭제하려면 프로젝트 이름을 입력하세요', '내 프로젝트')
+    expect(confirmButton().disabled).toBe(false)
+  })
+
+  it('앞뒤 공백이 붙으면 활성이 아니다', async () => {
+    // **재서 정했다.** 서버는 이름을 정규화하지 않는다 — `'  앞뒤 공백  '`으로 만들면 그대로
+    // 돌아온다(api 하네스 실측). 즉 **공백만 다른 두 프로젝트가 함께 있을 수 있다.**
+    // 입력을 `trim`하면 `'가 '`와 `'가'` 중 어느 것을 확인한 것인지 갈리지 않는다 —
+    // 확인의 하중이 "어느 것을 지우는지 안다"이므로 **정확히 일치**로 둔다.
+    renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    type('삭제하려면 프로젝트 이름을 입력하세요', ' 내 프로젝트')
+    expect(confirmButton().disabled).toBe(true)
+    type('삭제하려면 프로젝트 이름을 입력하세요', '내 프로젝트 ')
+    expect(confirmButton().disabled).toBe(true)
+  })
+
+  it('일치하는 이름을 넣고 확정하면 deleteProject가 나간다', async () => {
+    const h = renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    type('삭제하려면 프로젝트 이름을 입력하세요', '내 프로젝트')
+    fireEvent.click(confirmButton())
+
+    await waitFor(() => expect(h.deleteProject).toHaveBeenCalledTimes(1))
+    expect(h.deleteProject.mock.calls[0]?.[0]).toBe('p-own')
+  })
+
+  it('Esc로 닫힌다', async () => {
+    const h = renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    fireEvent.keyDown(screen.getByLabelText('삭제하려면 프로젝트 이름을 입력하세요'), { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByLabelText('삭제하려면 프로젝트 이름을 입력하세요')).toBeNull())
+    expect(h.deleteProject).not.toHaveBeenCalled()
+  })
+
+  it('취소로 닫힌다', async () => {
+    renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    fireEvent.click(screen.getByRole('button', { name: '삭제 취소' }))
+
+    await waitFor(() => expect(screen.queryByLabelText('삭제하려면 프로젝트 이름을 입력하세요')).toBeNull())
+  })
+
+  it('다른 항목의 삭제를 시작하면 앞의 확인이 닫힌다', async () => {
+    // **확인은 하나뿐이다.** 둘이 동시에 열리면 사용자가 확인한 것과 지워지는 것이 달라진다.
+    renderCrud({ lists: [[owned, other]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+    type('삭제하려면 프로젝트 이름을 입력하세요', '내 프로젝트')
+
+    askDelete('둘째 프로젝트')
+
+    expect(screen.getAllByLabelText('삭제하려면 프로젝트 이름을 입력하세요')).toHaveLength(1)
+    // **친 이름도 함께 사라진다** — 남아 있으면 앞 프로젝트의 이름으로 뒤 프로젝트가 지워진다.
+    expect((field('삭제하려면 프로젝트 이름을 입력하세요') as HTMLInputElement).value).toBe('')
+    expect(confirmButton().disabled).toBe(true)
+  })
+
+  it('다른 조작을 시작하면 확인이 닫힌다', async () => {
+    renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    fireEvent.click(screen.getByRole('button', { name: '새 프로젝트' }))
+
+    expect(screen.queryByLabelText('삭제하려면 프로젝트 이름을 입력하세요')).toBeNull()
+    expect(screen.getByLabelText('이름')).toBeDefined()
+  })
+
+  it('성공하면 목록을 다시 받는다', async () => {
+    const h = renderCrud({ lists: [[owned, other], [other]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    type('삭제하려면 프로젝트 이름을 입력하세요', '내 프로젝트')
+    fireEvent.click(confirmButton())
+
+    await waitFor(() => expect(h.listProjects).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByText('내 프로젝트')).toBeNull())
+    screen.getByText('둘째 프로젝트')
+  })
+
+  it('실패하면 서버 문장이 남고 목록을 다시 받지 않는다', async () => {
+    const h = renderCrud({
+      lists: [[owned]],
+      deleteProject: async () => {
+        throw new ApiError(403, 'forbidden', FORBIDDEN)
+      },
+    })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    type('삭제하려면 프로젝트 이름을 입력하세요', '내 프로젝트')
+    fireEvent.click(confirmButton())
+
+    await screen.findByText(FORBIDDEN)
+    expect(h.listProjects).toHaveBeenCalledTimes(1)
+  })
+
+  it('무엇이 함께 사라지는지 알린다', async () => {
+    // **D6의 근거를 화면이 말한다.** 메뉴 삭제는 자식이 있으면 서버가 409로 막지만
+    // 프로젝트는 아무것도 막지 않고 `ON DELETE CASCADE`로 딸린 것이 함께 사라진다 —
+    // 실측(api 하네스): 메뉴 2·페이지 1·멤버 1·revision 1이 있는 프로젝트를 지우면
+    // 네 표의 행이 전부 0이 된다. **수를 문안에 적지 않는다**(프로젝트마다 다르다).
+    renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    screen.getByText(/메뉴·페이지·편집 이력.*함께 사라집니다/)
   })
 })

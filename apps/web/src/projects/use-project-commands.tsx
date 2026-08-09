@@ -83,6 +83,11 @@ export interface ProjectCommands {
   openEdit: (project: ProjectDetail) => void
   closeForm: () => void
   submitForm: (values: ProjectFormValues) => void
+  /** 삭제 확인이 열린 프로젝트. 닫혀 있으면 `null`. **하나뿐이다.** */
+  confirmingDelete: ProjectDetail | null
+  askDelete: (project: ProjectDetail) => void
+  cancelDelete: () => void
+  confirmDelete: (project: ProjectDetail) => void
 }
 
 export function useProjectCommands(): ProjectCommands {
@@ -109,6 +114,12 @@ export function useProjectCommands(): ProjectCommands {
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [form, setForm] = useState<ProjectFormState | null>(null)
+  /**
+   * **확인은 하나뿐이다.** 배열이 아니라 값 하나인 것이 요점이다 — 둘이 동시에 열리면
+   * 사용자가 확인한 것과 지워지는 것이 달라진다. 다른 항목의 삭제를 시작하면 이 값이 그대로
+   * 대체되므로 앞의 확인이 저절로 닫힌다.
+   */
+  const [confirmingDelete, setConfirmingDelete] = useState<ProjectDetail | null>(null)
   /**
    * 만든 프로젝트의 id를 `run`의 `after`까지 나르는 자리.
    *
@@ -205,6 +216,9 @@ export function useProjectCommands(): ProjectCommands {
   function openCreate(): void {
     if (inFlight.current) return
     setFailure(null)
+    // **다른 조작을 시작하면 확인이 닫힌다**(D6). 열어 둔 채로 폼을 쓰면 확인이 어느 항목에
+    // 붙어 있는지가 화면에서 흐려진다.
+    setConfirmingDelete(null)
     setForm({ project: null })
   }
 
@@ -220,6 +234,7 @@ export function useProjectCommands(): ProjectCommands {
   function openEdit(project: ProjectDetail): void {
     if (inFlight.current) return
     setFailure(null)
+    setConfirmingDelete(null)
     setForm({ project })
   }
 
@@ -294,5 +309,59 @@ export function useProjectCommands(): ProjectCommands {
     )
   }
 
-  return { state, busy, failure, form, openCreate, openEdit, closeForm, submitForm }
+  /**
+   * 삭제 확인을 연다. **`openCreate`와 같은 잠금이다 — P2b-4의 사고가 정확히 이 자리였다:**
+   * 여는 조작 하나가 잠기지 않아 `busy` 중에 확인이 걸리고, **잠금이 풀린 뒤 클릭 한 번에
+   * 지워졌다.**
+   *
+   * **열려 있던 폼을 함께 닫는다**(D6). 다른 항목의 확인은 이 값이 대체되며 닫히고, **친
+   * 이름도 함께 사라진다** — 확인이 그 항목의 `<li>` 안에 있어 항목을 옮기면 서브트리째
+   * 언마운트되기 때문이다(재서 확인했다).
+   */
+  function askDelete(project: ProjectDetail): void {
+    if (inFlight.current) return
+    setFailure(null)
+    setForm(null)
+    setConfirmingDelete(project)
+  }
+
+  /** 확인을 닫는다. `closeForm`과 같은 이유로 잠그지 않는다. */
+  function cancelDelete(): void {
+    setConfirmingDelete(null)
+  }
+
+  /**
+   * 삭제를 확정한다. **확인을 지나야만 닿는다** — 화면이 `confirmingDelete`일 때만 이 버튼을
+   * 그리고, 그 버튼은 이름이 정확히 일치할 때만 활성이다(D6).
+   *
+   * **여기서 이름을 다시 대조하지 않는다.** 대조는 화면이 하고(입력값을 그쪽이 갖는다) 이
+   * 함수는 그 판정을 신뢰한다 — 훅이 입력값까지 들면 화면 상태가 두 곳에 생긴다.
+   * **그래서 훅 API로 이 함수를 직접 부르면 확인 없이 지워진다** — 화면이 그리는 경로에는
+   * 그 자리가 없다는 것을 적어 둔다.
+   */
+  function confirmDelete(project: ProjectDetail): void {
+    void run(
+      async () => {
+        await api.deleteProject(project.id)
+      },
+      () => {
+        setConfirmingDelete(null)
+      },
+    )
+  }
+
+  return {
+    state,
+    busy,
+    failure,
+    form,
+    openCreate,
+    openEdit,
+    closeForm,
+    submitForm,
+    confirmingDelete,
+    askDelete,
+    cancelDelete,
+    confirmDelete,
+  }
 }

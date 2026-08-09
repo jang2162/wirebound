@@ -629,3 +629,13 @@
   gap: 0.25rem;
   font-size: 0.875rem;
 }
+
+/* 삭제 확인(P2b-5 Task 6). 모달이 아니라 그 항목 자리에 연다 — 앱에 모달 선례가 없어
+   포커스 가두기를 이 단계가 처음부터 만들게 되기 때문이다(D6). */
+.wb-shell-project-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin: 0.5rem 0;
+}
