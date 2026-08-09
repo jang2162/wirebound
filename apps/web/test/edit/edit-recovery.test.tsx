@@ -501,6 +501,45 @@ describe('편집 실패는 재조회로 수렴한다', () => {
     await waitFor(() => expect(alertTexts()[0]).toContain('3개'))
   })
 
+  it('서버 문장과 우리 문장이 이어 붙어 명사구로 읽히지 않는다', async () => {
+    // **`toFailure`가 `issues`를 쓰기 시작하면서 드러난 자리다**(리뷰 W1). 카탈로그 위반의
+    // `issues[0].message`가 **타입 이름으로 끝난다** — `알 수 없는 컴포넌트 타입: 없는타입`.
+    // 그 뒤에 우리 문장을 공백 하나로 붙이면
+    //
+    //   `알 수 없는 컴포넌트 타입: 없는타입 페이지를 서버 상태로 다시 불러왔고, …`
+    //
+    // 가 되어 **"없는타입 페이지를"이 하나의 명사구로 읽힌다.**
+    //
+    // **이것은 `unknown-type` 하나의 문제가 아니다 — 이어 붙이는 형태가 만드는 부류다.**
+    // 이 경로가 실제로 받는 문장을 api 하네스로 재 보니 **끝에 마침표를 두는 것이 하나도 없다:**
+    // 409가 `…(요청 baseSeq 99, 현재 0)`(괄호)와 `편집을 적용할 수 없습니다: … /root/…`(**경로**),
+    // 422가 타입 이름, 400이 `…undefined입니다`. 즉 **어떤 서버 문장이 와도 두 문장이 한
+    // 문장처럼 붙는다.** 구분자가 그 부류를 닫는다.
+    const harness = await openWithFailure({
+      patch: () =>
+        Promise.reject(
+          new ApiError(422, 'validation-failed', '스키마 검증에 실패했습니다', [
+            {
+              code: 'unknown-type',
+              nodeId: 'n_1',
+              path: '/root/children/0',
+              message: '알 수 없는 컴포넌트 타입: 없는타입',
+            },
+          ]),
+        ),
+    })
+
+    commit(NEW_TEXT)
+    await waitFor(() => expect(harness.getPageCalls()).toBe(2))
+    await waitFor(() => expect(alertTexts()).toHaveLength(1))
+
+    const text = alertTexts()[0] ?? ''
+    // 서버 문장은 그대로 남는다 — 이유를 우리가 다시 쓰지 않는다.
+    expect(text).toContain('알 수 없는 컴포넌트 타입: 없는타입')
+    // **그리고 우리 문장과 붙어 읽히지 않는다.**
+    expect(text).not.toContain('없는타입 페이지를')
+  })
+
   it('재조회가 실패해도 창의 편집이 남지 않는다', async () => {
     // 재조회가 실패하면 서버 상태를 모르므로 문서를 되돌리지 못한다. 그래도 창의 편집은
     // 버린다 — 남기면 **낡은 `baseSeq` 위에서** 나가고 서버가 다시 409를 낸다

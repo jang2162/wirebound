@@ -157,6 +157,98 @@ describe('createHttpClient', () => {
     expect(error.code).toBe('internal')
   })
 
+  it('프로젝트의 description이 문자열도 null도 아니면 ApiError를 던진다', async () => {
+    // **이것만 화면을 통째로 비운다**(리뷰 W6). 목록의 `<p>{project.description}</p>`가 그 값을
+    // React 자식으로 그리는데, **React가 그리지 못하는 객체가 닿으면** React가
+    // `Objects are not valid as a React child`를 던지고 **목록에 오류 경계가 없다**
+    // (`apps/web/src`에서 경계는 캔버스의 `CanvasBoundary` 하나다).
+    //
+    // **실측(진짜 `<App />`, 계약 밖 값을 관문에 태워 목록까지 보냈다):**
+    //
+    // | `description` | `<main>` | `innerHTML` |
+    // |---|---|---|
+    // | `{}` · `{x:1}` · `[{x:1}]` · `[[{}]]` | **없음** | **11자** |
+    // | `[1,2]` · `42` · `true` · 키 없음 | 있음 | 277~279자 |
+    // | `null` · `''` · 공백 · 2000자 | 있음 | 270~2277자 |
+    //
+    // **갈리는 축은 "이터러블인가"다**(리뷰 F3에서 좁혔다). 이터러블이 아닌 객체(`{}`·`Date`·
+    // 정규식·`Object.create(null)`)와 그런 객체를 **담은** 이터러블(`[{x:1}]`·`Set([{x:1}])`)이
+    // 죽고, 원소가 그릴 수 있는 이터러블(`[1,2]`·`Map([['a',1]])`·제너레이터·빈 것들)은 산다.
+    // **함수와 Symbol도 산다** — React가 그리지 않고 지나간다. 앞 판의 *"객체를 품으면"*은
+    // 그 셋이 반례였다.
+    //
+    // 그래도 검사는 "문자열이거나 `null`"로 두고 나머지를 전부 막는다: 계약이 그 둘뿐이고,
+    // 통과시킬 이유가 있는 값이 그 밖에 없다.
+    const broken: unknown[] = [{}, { x: 1 }, [{ x: 1 }], [[{}]], [1, 2], 42, true]
+
+    for (const description of broken) {
+      const stub = stubFetch(jsonResponse(200, [{ ...project, description }]))
+
+      const error = asApiError(
+        await createHttpClient(stub.fetchImpl).listProjects().catch((e: unknown) => e),
+      )
+
+      expect(error.code, JSON.stringify(description)).toBe('internal')
+    }
+  })
+
+  it('description 키가 없어도 막는다', async () => {
+    // 키 없음은 화면을 죽이지 않지만(`undefined`는 React가 그리지 않는다) **계약은 그 키를
+    // 약속한다.** 여기서 통과시키면 `ProjectDetail.description`을 읽는 다음 소비자가
+    // `string | null`이라는 타입을 믿고 `undefined`를 받는다.
+    const { description: _dropped, ...withoutDescription } = project
+    const stub = stubFetch(jsonResponse(200, [withoutDescription]))
+
+    const error = asApiError(
+      await createHttpClient(stub.fetchImpl).listProjects().catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('internal')
+  })
+
+  it('slug와 role은 계약을 어겨도 통과시킨다', async () => {
+    // **과도 차단을 재는 자리이자 범위를 못박는 자리다.** 셋 다 검사 밖이었는데
+    // `description`만 막는다 — **그 셋이 화면에서 갈리기 때문이다**(전부 진짜 `<App />`로 쟀다):
+    //
+    // | 키 | 계약 밖 값이 닿는 곳 | 관측 |
+    // |---|---|---|
+    // | `description` | 목록의 `<p>` 자식 | **화면이 통째로 빈다**(11자) |
+    // | `slug` | 수정 폼의 `<input value>` | 폼이 열리고 화면이 산다(629자) |
+    // | `role` | `projectAbilities`의 `!== 'owner'` 비교 | 버튼만 닫히고 화면이 산다(190자) |
+    //
+    // **`role`을 막지 않는 것이 특히 의도다.** `projectAbilities`는 계약 밖 값을 받아 닫도록
+    // 만들어졌고(그쪽 케이스 `계약에 없는 역할 문자열은 아무것도 열지 않는다`), 여기서 막으면
+    // **그 프로젝트의 버튼이 닫히는 대신 목록 전체가 막힌다.** 손해가 더 크다.
+    //
+    // 즉 이 관문이 막는 기준은 "계약을 어겼는가"가 아니라 **"어겼을 때 화면이 통째로 비는가"**다
+    // — `id`의 빈 문자열(주소가 된다)·`name`(링크의 자식)이 막히는 것도 같은 기준이다.
+    const passing: Partial<ProjectDetail>[] = [
+      { slug: 42 as unknown as string },
+      { slug: { x: 1 } as unknown as string },
+      { role: 'admin' as ProjectDetail['role'] },
+      { role: { x: 1 } as unknown as ProjectDetail['role'] },
+    ]
+
+    for (const patch of passing) {
+      const stub = stubFetch(jsonResponse(200, [{ ...project, ...patch }]))
+      await expect(
+        createHttpClient(stub.fetchImpl).listProjects(),
+        JSON.stringify(patch),
+      ).resolves.toHaveLength(1)
+    }
+  })
+
+  it('정상 description은 그대로 통과한다', async () => {
+    // 음성 대조. 위 검사가 좁아졌으므로 정상값이 막히지 않는지 따로 본다.
+    for (const description of [null, '', '   ', 'ㄱ'.repeat(2000), '줄\n바꿈']) {
+      const stub = stubFetch(jsonResponse(200, [{ ...project, description }]))
+      await expect(
+        createHttpClient(stub.fetchImpl).listProjects(),
+        String(description),
+      ).resolves.toHaveLength(1)
+    }
+  })
+
   it('비어 있지 않은 id는 그대로 통과한다', async () => {
     // **과도 차단을 재는 자리다.** 위 검사가 "문자열이면 통과"보다 좁아졌으므로, 정상 id가
     // 막히지 않는지 따로 본다. 공백 한 칸은 통과해야 한다 — 실측으로 그 주소는 라우트가
@@ -722,6 +814,48 @@ describe('메뉴 CRUD', () => {
     expect(error.code).toBe('internal')
   })
 
+  it('선언되지 않은 키만 담긴 메뉴 갱신 본문은 빈 본문으로 거절된다', async () => {
+    // **떨어내는 순서가 정하는 결과다**(`updateProject`와 같은 자리). 미선언 키를 먼저
+    // 떨어낸 뒤에 남은 키를 세므로 `{id, projectId}`는 `{}`가 되어 `updateBody`가 던진다.
+    // 순서가 반대면 "두 키가 있으니 빈 본문이 아니다"로 통과해 `{}`가 나가고 400을 받는다.
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client
+        .updateMenu('p1', 'm1', { id: 'm1', projectId: 'p1' } as unknown as { title?: string })
+        .catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it('메뉴 응답 객체를 그대로 넘겨도 선언된 키만 나간다', async () => {
+    // **`MenuNode` 응답에는 요청이 받지 않는 키가 셋 섞여 있다**(`id`·`projectId`·`sortOrder` —
+    // `sortOrder`는 갱신에만 선언돼 있다). 서버의 본문 스키마가 `z.strictObject`라 그것이
+    // 그대로 나가면 400이다. **실측(api 하네스):**
+    //
+    //   POST  /menu     응답 그대로 → 400 인식할 수 없는 키: "id", "projectId", "sortOrder"
+    //   PATCH /menu/:id 응답 그대로 → 400 인식할 수 없는 키: "id", "projectId"
+    //   선언된 키만 담으면            → 201 / 200
+    //
+    // **타입은 막지 못한다** — 변수도 스프레드 리터럴도 `tsc` 0 에러다(`declaredOnly` 머리말의
+    // 프로브 표). 그래서 `declaredOnly`가 여기서 막는다.
+    const stub = stubFetch(jsonResponse(201, menuNode), jsonResponse(200, menuNode))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.createMenu('p1', menuNode)
+    await client.updateMenu('p1', 'm1', { ...menuNode })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ parentId: null, title: '회원관리' })
+    expect(JSON.parse(String(stub.calls[1]?.init?.body))).toEqual({
+      title: '회원관리',
+      parentId: null,
+      sortOrder: 0,
+    })
+  })
+
   it('경로에 들어가는 id는 URL 인코딩된다', async () => {
     const stub = stubFetch(jsonResponse(200, menuNode), new Response(null, { status: 204 }))
     const client = createHttpClient(stub.fetchImpl)
@@ -849,6 +983,87 @@ describe('페이지 CRUD', () => {
     }
   })
 
+  it('선언되지 않은 키만 담긴 페이지 갱신 본문은 빈 본문으로 거절된다', async () => {
+    // `updateProject`·`updateMenu`와 같은 자리. `PageDetail`의 `schema`는 `PATCH`가 받지
+    // 않는 키라 떨어져 나가고, 남는 것이 없으면 그 자리에서 던진다.
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client
+        .updatePage('p1', 'pg1', { id: 'pg1', headSeq: 3 } as unknown as { title?: string })
+        .catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it('patchOps도 선언된 세 키만 보낸다', async () => {
+    // **이 자리는 다른 넷과 위험의 모양이 다르다.** 응답(`PatchResult`)에는 `baseSeq`·`ops`가
+    // 없어 그것을 되보내는 것은 타입이 이미 막는다. 그런데도 같은 관용구를 쓰는 것은
+    // **규칙을 한 벌로 두기 위해서다** — 자리마다 방식이 다르면 다음 사람이 자기가 먼저 본
+    // 쪽을 따르고, 이 저장소가 반복해 겪은 "한 곳만 고치고 다른 곳을 놓치는" 결함이 거기서 난다.
+    //
+    // **닫는 케이스가 없으면 그 관용구가 지켜지는지 알 수 없어 여기 둔다.** 오늘 부르는 자리는
+    // `edit/use-edit-commit.tsx` 하나이고 `store.nextRequest()`가 정확히 세 키를 주므로,
+    // 이 케이스가 재는 것은 **호출부가 아니라 이 층의 계약**이다.
+    const stub = stubFetch(jsonResponse(200, patchResult))
+    const client = createHttpClient(stub.fetchImpl)
+    const ops: PatchOp[] = [{ op: 'replace', path: '/root/children/0/props/title', value: '가' }]
+
+    await client.patchOps('p1', 'pg1', {
+      baseSeq: 7,
+      ops,
+      clientOpId: 'op-1',
+      seq: 9,
+      revisionId: 'rev-1',
+    } as unknown as { baseSeq: number; ops: PatchOp[]; clientOpId?: string })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ baseSeq: 7, ops, clientOpId: 'op-1' })
+  })
+
+  it('페이지 응답 객체를 그대로 넘겨도 선언된 키만 나간다', async () => {
+    // `PageDetail`은 여덟 키인데 요청이 받는 것은 그 일부다. **실측(api 하네스):**
+    //
+    //   POST  /pages     응답 그대로 → 400 인식할 수 없는 키: "id", "sortOrder", "schemaVersion", "schema", "headSeq"
+    //   PATCH /pages/:id 응답 그대로 → 400 인식할 수 없는 키: "id", "schemaVersion", "schema", "headSeq"
+    //   선언된 키만 담으면             → 201 / 200
+    //
+    // **`schema`가 섞여 나가는 것이 특히 나쁘다** — 서버는 그것을 `PUT .../schema`·
+    // `PATCH .../ops`로만 받는다(`api/client.ts`의 `updatePage` 주석).
+    const stub = stubFetch(jsonResponse(201, page), jsonResponse(200, page))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.createPage('p1', page)
+    await client.updatePage('p1', 'pg1', { ...page })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ menuNodeId: 'm1', title: '목록' })
+    expect(JSON.parse(String(stub.calls[1]?.init?.body))).toEqual({
+      title: '목록',
+      menuNodeId: 'm1',
+      sortOrder: 0,
+    })
+  })
+
+  it('나가는 키 순서는 호출자가 적은 순서가 아니라 계약의 순서다', async () => {
+    // **`declaredOnly`가 만든 동작이고 의도한 것이다.** 키 목록(`BODY_KEYS`)의 순서로
+    // 정규화되므로, 호출자가 어떤 순서로 적든 같은 바이트가 나간다. JSON 객체의 키 순서는
+    // 뜻을 바꾸지 않고 서버의 zod도 보지 않는다.
+    //
+    // **이것을 케이스로 두는 것은 "바이트가 그대로다"라고 적지 않기 위해서다** — 옛 구현은
+    // 호출자가 적은 순서를 그대로 냈다. 정상 본문 48조합에서 값과 키 집합은 하나도 바뀌지
+    // 않았지만, **역순으로 적은 본문은 바이트가 다르다**(재서 확인했다).
+    const stub = stubFetch(jsonResponse(200, page), jsonResponse(200, page))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updatePage('p1', 'pg1', { sortOrder: 2, title: '가' })
+    await client.updatePage('p1', 'pg1', { title: '가', sortOrder: 2 })
+
+    expect(stub.calls[0]?.init?.body).toBe('{"title":"가","sortOrder":2}')
+    expect(stub.calls[0]?.init?.body).toBe(String(stub.calls[1]?.init?.body))
+  })
+
   it('경로에 들어가는 id는 URL 인코딩된다', async () => {
     const stub = stubFetch(jsonResponse(200, page), new Response(null, { status: 204 }))
     const client = createHttpClient(stub.fetchImpl)
@@ -858,5 +1073,257 @@ describe('페이지 CRUD', () => {
 
     expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1')
     expect(stub.calls[1]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1')
+  })
+})
+
+/**
+ * 프로젝트 CRUD 셋(P2b-5 Task 1).
+ *
+ * **서버 실측**(api 하네스, `apps/api/test/`에 임시 파일을 두고 재고 지웠다):
+ *
+ * ```
+ * POST   /projects {name,slug}                → 201 {"id","name","slug","description":null,"role":"owner"}
+ * POST   /projects {name,slug,description}    → 201 (같은 다섯 키)
+ * POST   /projects {name,slug,role:'owner'}   → 400 {"code":"bad-request", issues:[{"message":"인식할 수 없는 키: \"role\""}]}
+ * PATCH  /projects/:id {}                     → 400 {"code":"bad-request", issues:[{"message":"변경할 값이 없습니다"}]}
+ * PATCH  /projects/:id {description:null}     → 200 (description 이 null 로 바뀐다)
+ * PATCH  /projects/:id {name, unknownKey}     → 400 {"message":"인식할 수 없는 키: \"unknownKey\""}
+ * ```
+ *
+ * **읽어야 할 것 둘.**
+ *
+ * 1. **생성 응답에 `role`이 실려 온다** — 계획서 D1 이 *"`role`이 없어 목록 항목과 다른
+ *    모양이다"*라고 적었던 것은 거짓이다(`repos/projects.ts`의 `insertProject`가
+ *    `.returning([…])` 뒤에 `{ ...project, role: 'owner' }`로 감싼다). 그래서 반환 타입이
+ *    `ProjectSummary`가 아니라 `ProjectDetail`이고, 응답 검사도 `SHAPES.projectDetail`을
+ *    같이 쓴다.
+ * 2. **그런데도 응답을 그대로 요청 본문으로 되보낼 수 없다** — `role` 키가 있으면 서버의
+ *    `z.strictObject`가 400을 낸다(위 셋째 줄). 이 파일이 나가는 본문을 직접 보는 이유다.
+ */
+describe('프로젝트 CRUD', () => {
+  it('createProject는 이름·슬러그·설명을 POST한다', async () => {
+    const stub = stubFetch(jsonResponse(201, { ...project, description: '설명' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const result = await client.createProject({ name: '프로젝트', slug: 'proj', description: '설명' })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects')
+    expect(stub.calls[0]?.init?.method).toBe('POST')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      name: '프로젝트',
+      slug: 'proj',
+      description: '설명',
+    })
+    // 만든 프로젝트로 이동하려면 응답의 `id`가 필요하다(D7).
+    expect(result.id).toBe('p1')
+  })
+
+  it('설명을 주지 않으면 그 키를 만들지 않는다', async () => {
+    // `undefined`를 실은 키가 통과하는 것은 `JSON.stringify`가 지워 주는 우연이라 그것에
+    // 기대지 않는다(`patchOps`의 `clientOpId`와 같은 판단).
+    //
+    // **이 케이스만으로는 `declaredOnly`가 키를 고르지 않게 바꿔도 죽지 않는다** — 관찰 지점이
+    // 직렬화된 문자열 하나뿐이라 두 구현의 바이트가 같아진다(선언된 세 키의 39조합에서
+    // 차이 0을 쟀다). 그것을 닫는 것은 **아래 "응답 객체를 그대로 넘겨도" 케이스**다.
+    const stub = stubFetch(jsonResponse(201, project))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.createProject({ name: '가', slug: 'ga' })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ name: '가', slug: 'ga' })
+  })
+
+  it('응답 객체를 그대로 넘겨도 선언된 세 키만 나간다', async () => {
+    // **여기가 `declaredOnly`를 닫는 자리다.** 서버의 `CreateProjectBody`는 `z.strictObject`라
+    // 선언되지 않은 키가 그 자체로 400인데, **`definedOnly`는 미선언 키를 하나도 거르지
+    // 않는다** — 값이 `undefined`인 키만 뺀다. 두 장치가 막는 실패가 다르다(리뷰 F1).
+    //
+    // **실측(api 하네스):** `{id,name,slug,description,role}`을 실제로 보내면 `POST`·`PATCH`
+    // 둘 다 `400 bad-request` / issues `[{"path":"","message":"인식할 수 없는 키: \"id\",
+    // \"role\""}]`이고, 선언된 셋만 담은 본문은 200이다.
+    //
+    // **타입은 이것을 막지 못한다**(`tsc` 프로브): 변수로 넘기면 에러가 없고, 키를 적은
+    // 리터럴만 `TS2353`이 나며, **스프레드 리터럴(`{ ...created }`)은 에러가 없다.**
+    // 수정 폼이 쓰기 가장 쉬운 모양이 그 셋째다.
+    const stub = stubFetch(jsonResponse(201, project), jsonResponse(200, project))
+    const client = createHttpClient(stub.fetchImpl)
+    const created: ProjectDetail = { id: 'p1', name: '가', slug: 'ga', description: null, role: 'owner' }
+
+    await client.createProject(created)
+    await client.updateProject('p1', { ...created })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      name: '가',
+      slug: 'ga',
+      description: null,
+    })
+    expect(JSON.parse(String(stub.calls[1]?.init?.body))).toEqual({
+      name: '가',
+      slug: 'ga',
+      description: null,
+    })
+  })
+
+  it('선언되지 않은 키만 담긴 갱신 본문은 빈 본문으로 거절된다', async () => {
+    // **떨어내는 순서가 정하는 결과다.** 미선언 키를 먼저 떨어낸 뒤에 남은 키를 세므로
+    // `{id, role}`은 `{}`가 되어 `updateBody`가 던진다. 순서가 반대면 "두 키가 있으니 빈
+    // 본문이 아니다"로 통과해 `{}`가 서버로 나가고 400을 받는다.
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client
+        .updateProject('p1', { id: 'p1', role: 'owner' } as unknown as { name?: string })
+        .catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it('설명에 null을 주면 그 값을 그대로 싣는다', async () => {
+    // `null`은 **"설명 없음"이라는 값**이고 키가 없는 것과 다른 뜻이다 — 서버가
+    // `z.string().max(2000).nullable().optional()`로 받고 `body.description ?? null`로 쓴다.
+    // 실측으로 `POST {description:null}`이 201, `PATCH {description:null}`이 200이다.
+    // 걸러야 하는 것은 `undefined` 하나뿐이라는 것을 이 케이스가 못박는다
+    // (`updateMenu`의 `parentId: null`과 같은 자리).
+    const stub = stubFetch(jsonResponse(201, project))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.createProject({ name: '가', slug: 'ga', description: null })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      name: '가',
+      slug: 'ga',
+      description: null,
+    })
+  })
+
+  it('만든 프로젝트의 id가 계약과 다르면 ApiError를 던진다', async () => {
+    // **그 값이 곧 주소가 된다**(D7) — 만들고 나서 그 프로젝트로 이동한다. 통과시키면
+    // `ApiError`가 아니라 **201 성공 경로로** 잘못된 주소가 만들어진다.
+    //
+    // **빈 문자열이 가장 나쁘다.** P2b-4가 진짜 `<App />`으로 쟀다: `/projects/`는
+    // `innerHTML` 0자·`.wb-shell` 없음이다(`app.tsx`에 `*` 라우트가 없다). 같은 근거로
+    // `TreePage.id`·`projectDetail.id`·`projectList[].id` 셋을 이미 막고 있고,
+    // **`createProject`가 그 셋을 지키는 `isProjectDetail`을 그대로 지난다.**
+    const { id: _dropped, ...withoutId } = project
+    const broken: unknown[] = [withoutId, { ...project, id: 42 }, { ...project, id: null }, { ...project, id: '' }]
+
+    for (const body of broken) {
+      const stub = stubFetch(jsonResponse(201, body))
+      const client = createHttpClient(stub.fetchImpl)
+
+      const error = asApiError(
+        await client.createProject({ name: '가', slug: 'ga' }).catch((e: unknown) => e),
+      )
+
+      expect(error.code, JSON.stringify(body)).toBe('internal')
+    }
+  })
+
+  it('updateProject는 준 키만 본문에 만든다', async () => {
+    const stub = stubFetch(jsonResponse(200, { ...project, name: '새 이름' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateProject('p1', { name: '새 이름' })
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1')
+    expect(stub.calls[0]?.init?.method).toBe('PATCH')
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ name: '새 이름' })
+  })
+
+  it('updateProject는 description: null을 싣는다 — 키 없음과 다른 뜻이다', async () => {
+    // 키가 없으면 "설명을 바꾸지 않는다", `null`이면 "설명을 지운다"이다. 실측으로 그
+    // 본문이 200이고 응답의 `description`이 `null`이 된다.
+    const stub = stubFetch(jsonResponse(200, project))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateProject('p1', { description: null })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ description: null })
+  })
+
+  it('updateProject는 준 키를 전부 싣는다', async () => {
+    const stub = stubFetch(jsonResponse(200, project))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateProject('p1', { name: '가', slug: 'ga', description: '설명' })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      name: '가',
+      slug: 'ga',
+      description: '설명',
+    })
+  })
+
+  it('빈 갱신 본문은 그 자리에서 거절한다', async () => {
+    // **재라 #4를 프로젝트 쪽에서도 쟀다**: `PATCH /projects/:id {}`가
+    // `400 {"code":"bad-request", …, "issues":[{"path":"","message":"변경할 값이 없습니다"}]}`로
+    // 메뉴·페이지와 **같은 코드·문장**이다. 보내 봐야 400인 요청은 만들지 않는다 —
+    // P2b-4가 `updateBody`에 적용한 판단을 그대로 쓴다(**새로 만들지 않았다**).
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(await client.updateProject('p1', {}).catch((e: unknown) => e))
+
+    expect(error.code).toBe('bad-request')
+    expect(error.status).toBe(0)
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it('undefined만 담긴 갱신 본문도 같다', async () => {
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client
+        .updateProject('p1', { name: undefined, slug: undefined, description: undefined })
+        .catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it('프로젝트 갱신의 거절도 동기 throw가 아니라 rejection이다', () => {
+    const client = createHttpClient(stubFetch().fetchImpl)
+
+    expect(() => client.updateProject('p1', {}).catch(() => undefined)).not.toThrow()
+  })
+
+  it('갱신 응답도 프로젝트 계약을 지난다', async () => {
+    // `PATCH`의 응답은 `GET /:projectId`와 같은 다섯 키다(실측). 조회만 검사하고 쓰기를
+    // 통과시키면 같은 계약이 반쪽만 지켜진다 — `pageDetail`이 겪은 자리와 같은 부류다.
+    const stub = stubFetch(jsonResponse(200, { ...project, id: '' }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(await client.updateProject('p1', { name: '가' }).catch((e: unknown) => e))
+
+    expect(error.code).toBe('internal')
+  })
+
+  it('deleteProject는 204를 본문 없이 받는다', async () => {
+    const empty = new Response(null, { status: 204 })
+    const json = vi.spyOn(empty, 'json')
+    const stub = stubFetch(empty)
+    const client = createHttpClient(stub.fetchImpl)
+
+    await expect(client.deleteProject('p1')).resolves.toBeUndefined()
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p1')
+    expect(stub.calls[0]?.init?.method).toBe('DELETE')
+    expect(json).not.toHaveBeenCalled()
+  })
+
+  it('경로에 들어가는 프로젝트 id는 URL 인코딩된다', async () => {
+    const stub = stubFetch(jsonResponse(200, project), new Response(null, { status: 204 }))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updateProject('p 1/x', { name: '가' })
+    await client.deleteProject('p 1/x')
+
+    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx')
+    expect(stub.calls[1]?.url).toBe('/api/projects/p%201%2Fx')
   })
 })

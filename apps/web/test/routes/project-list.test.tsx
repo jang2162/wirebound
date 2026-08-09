@@ -165,8 +165,16 @@ describe('프로젝트 목록 화면', () => {
     // 양성 대조: 설명이 있는 쪽은 설명이 실제로 보인다. 이것이 없으면 설명을 아예
     // 그리지 않는 구현도 이 케이스를 통과한다.
     screen.getByText('한 줄 설명')
-    // 설명이 없는 항목에는 이름만 남는다. 'null'이나 '설명 없음' 같은 대체 문구를
-    // 끼워 넣으면 여기서 걸린다.
-    expect(named.closest('li')?.textContent).toBe('설명 없는 설계서')
+    // 설명이 없는 항목에는 **설명 자리가 아예 없다.** 'null'이나 '설명 없음' 같은 대체
+    // 문구를 끼워 넣으면 여기서 걸린다.
+    //
+    // **앞 판은 `li.textContent`가 이름과 정확히 같은지를 봤다.** P2b-5가 그 줄에 `수정`·
+    // `삭제` 버튼을 붙이면서 그 단언이 깨졌는데 **결함이 아니라 케이스가 너무 넓었던 것이다** —
+    // 재는 것은 "설명이 그려지지 않는다"이지 "줄에 이름 말고 아무것도 없다"가 아니다.
+    // 설명이 그려지는 자리(`<p>`)만 본다.
+    const row = named.closest('li')
+    expect(row?.querySelectorAll('p')).toHaveLength(0)
+    // 양성 대조: 설명이 있는 쪽에는 그 자리가 있다.
+    expect(screen.getByText('한 줄 설명').closest('li')?.querySelectorAll('p')).toHaveLength(1)
   })
 })

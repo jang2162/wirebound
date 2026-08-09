@@ -612,3 +612,30 @@
   font-size: 12px;
   color: var(--wb-shell-ink);
 }
+
+/* 프로젝트 목록의 인라인 폼(P2b-5 Task 4). 목록 화면은 셸 밖이지만 클래스 접두어는
+   `wb-shell-`로 맞춘다 — `test/shell-css.test.ts`가 그 접두어를 기계로 지킨다. */
+.wb-shell-project-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin: 0.75rem 0;
+}
+
+.wb-shell-project-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+/* 삭제 확인(P2b-5 Task 6). 모달이 아니라 그 항목 자리에 연다 — 앱에 모달 선례가 없어
+   포커스 가두기를 이 단계가 처음부터 만들게 되기 때문이다(D6). */
+.wb-shell-project-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin: 0.5rem 0;
+}
