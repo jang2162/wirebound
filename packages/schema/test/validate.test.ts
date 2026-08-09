@@ -183,3 +183,68 @@ describe('assertValidLayout', () => {
     expect(() => assertValidLayout(doc)).toThrow(/slot-count/)
   })
 })
+
+describe('variantFrom이 있는 컴포넌트의 node.variant (P4a-2 수정 웨이브)', () => {
+  const doc = (variant: string, props: Record<string, unknown>): PageDocument => ({
+    version: 1,
+    root: {
+      id: 'n_000000000001',
+      type: 'Page',
+      children: [{ id: 'n_000000000002', type: 'Text', variant, props }],
+    },
+  })
+
+  /**
+   * 리뷰가 만든 갈리는 입력 둘이다. 고치기 전에는 **하나는 거짓 양성, 하나는 침묵**이었다:
+   *
+   * | 입력 | 고치기 전 | 지금 |
+   * |---|---|---|
+   * | `variant:'없는변형'` + `role:'h1'` | `unknown-variant` (원인을 잘못 가리킨다) | `ignored-variant` |
+   * | `variant:'caption'` + `role:'h2'` | **이슈 0건** (조용히 사라진다) | `ignored-variant` |
+   *
+   * 둘 다 같은 일이 일어나므로(적은 값이 버려진다) 같은 이슈를 받는 것이 맞다.
+   */
+  it('선언되지 않은 값이어도 unknown-variant가 아니라 ignored-variant다', () => {
+    const issues = validatePage(doc('없는변형', { role: 'h1' }))
+    expect(issues.map((issue) => issue.code)).toEqual(['ignored-variant'])
+    expect(issues[0]!.path).toBe('/root/children/0/variant')
+  })
+
+  it('선언된 값이어도 조용히 사라지지 않는다', () => {
+    const issues = validatePage(doc('caption', { role: 'h2' }))
+    expect(issues.map((issue) => issue.code)).toEqual(['ignored-variant'])
+  })
+
+  it('메시지가 버려진다는 것과 무엇이 대신 쓰이는지를 말한다', () => {
+    const message = validatePage(doc('caption', { role: 'h2' }))[0]!.message
+    expect(message).toContain('무시됩니다')
+    expect(message).toContain('caption')
+    // 무엇이 대신 쓰이는가 — 이것이 없으면 사용자가 고칠 곳을 모른다.
+    expect(message).toContain('role')
+  })
+
+  it('variantFrom이 없는 컴포넌트는 그대로 unknown-variant다', () => {
+    const issues = validatePage({
+      version: 1,
+      root: {
+        id: 'n_000000000001',
+        type: 'Page',
+        children: [{ id: 'n_000000000002', type: 'Button', variant: 'rainbow' }],
+      },
+    })
+    expect(issues.map((issue) => issue.code)).toEqual(['unknown-variant'])
+  })
+
+  it('variant를 안 주면 이슈가 없다', () => {
+    expect(
+      validatePage({
+        version: 1,
+        root: {
+          id: 'n_000000000001',
+          type: 'Page',
+          children: [{ id: 'n_000000000002', type: 'Text', props: { role: 'h1' } }],
+        },
+      }),
+    ).toEqual([])
+  })
+})
