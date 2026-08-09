@@ -7,3 +7,21 @@ declare module '*.md?raw' {
   const content: string
   export default content
 }
+
+/** `?raw`로 읽는 JSON. `tsconfig`·`package.json`을 테스트가 직접 본다. */
+declare module '*.json?raw' {
+  const content: string
+  export default content
+}
+
+/**
+ * `import.meta.glob`은 vite가 넣어 주는 것이다. `apps/web`은 `types: ["vite/client"]`로
+ * 이 선언을 받지만 `themes`는 `types: []`이라 — DOM도 Node도 들이지 않는 것이 이 패키지의
+ * 제약이다 — 여기서 최소로 선언한다.
+ */
+interface ImportMeta {
+  glob(
+    pattern: string,
+    options: { query: '?raw'; eager: true; import: 'default' },
+  ): Record<string, string>
+}

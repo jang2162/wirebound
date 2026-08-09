@@ -63,7 +63,7 @@ export const ThemePatchSchema: z.ZodType<ThemePatch> = z.strictObject({
  * 지나간다** — 패턴 노드의 `props` 값이 그 자리이고, 거기서만 공유가 남는다.
  * 그 한 자리를 아래 `copy`가 막는다(케이스가 base·patch 양쪽으로 그것을 잰다).
  *
- * `structuredClone`을 부르지 않는 이유는 병합이 어차피 모든 마디를 지나 한 번 더 훑는 것이
+ * `structuredClone`을 부르지 않는 이유는 병합이 지나는 마디를 그 자리에서 복사해 한 번 더 훑는 것이
  * 잉여이고, `themes`의 tsconfig가 `lib: ["ES2022"]`·`types: []`이라 그 전역이 타입에 없어
  * `schema`처럼 `globals.d.ts`를 또 만들어야 하기 때문이다.
  */
