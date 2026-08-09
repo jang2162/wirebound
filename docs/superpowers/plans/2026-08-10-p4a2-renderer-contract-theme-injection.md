@@ -58,8 +58,16 @@ theme JSON ─resolveTheme─> ResolvedTheme ─compileTheme─> 테마 CSS
 
 ### D3. 노드마다 달라지는 값은 커스텀 프로퍼티로 넘긴다
 
-`--wb-flex-direction`·`--wb-grid-columns`·`--wb-media-ratio`·`--wb-placeholder-height`·
-`--wb-tree-level`. 이름 규칙은 `--wb-<컴포넌트 소문자>-<prop>`이다.
+~~`--wb-flex-direction`·`--wb-grid-columns`·… 이름 규칙은 `--wb-<컴포넌트 소문자>-<prop>`이다.~~
+
+> **[구현 중 반증됨 — 재라 #5]** 이 이름 규칙은 테마가 내는 변수 이름과 **실제로 충돌한다.**
+> `cssVarName('grid.columns')`가 `--wb-grid-columns`를 만드는데(`primitives.grid.columns`),
+> 그것이 `Grid` 노드에 주려던 이름과 **정확히 같다.** `primitives.section.*`도 컴포넌트
+> `Section`과 이름공간이 겹친다. 그래서 노드가 나르는 값에만 `--wb-node-` 접두어를 준다:
+> `--wb-node-flex-direction`·`--wb-node-grid-columns`·`--wb-node-media-ratio`·
+> `--wb-node-placeholder-height`·`--wb-node-tree-level`.
+> 근거는 `packages/renderer/src/structure-css.ts`의 `NODE_VAR_PREFIX` 주석,
+> 대조는 `apps/web/test/theme/system-theme.test.ts`.
 
 `GridDefault`가 이미 `--wb-grid-columns`를 내면서 바로 옆에 `grid-template-columns`를
 inline으로 박아 무력화하고 있다(P0 이월 #7이 지목한 그 세 줄). **옳은 절반이 이미 있으므로
@@ -290,8 +298,14 @@ git commit -m "fix(renderer): Flex·Grid가 선언 대신 커스텀 프로퍼티
 `--wb-tree-level: 2`. 기본 CSS는
 `padding-left: calc(var(--wb-tree-level, 0) * var(--wb-tree-indent, 16px))`으로 읽는다.
 
-**`--wb-tree-indent`가 테마의 손잡이가 된다** — 들여쓰기 폭을 테마가 정할 수 있다. 지금
-16px이 렌더러 안에 박혀 있는 것과 다른 점이다.
+~~**`--wb-tree-indent`가 테마의 손잡이가 된다** — 들여쓰기 폭을 테마가 정할 수 있다.~~
+
+> **[구현 중 반증됨]** 오늘은 성립하지 않는다. 테마가 낼 수 있는 선언은 §6.8의 화이트리스트
+> (`STYLE_PROPERTIES`)가 거르므로 **임의의 커스텀 프로퍼티를 내보내는 어휘가 아예 없다** —
+> 이 이름에 값을 넣을 수 있는 것이 오늘 아무것도 없고 늘 기본값 `16px`이 쓰인다. 그래도
+> 이름을 남긴 근거(폭이 본문에 박혀 있던 것보다 낫다)는 `structure-css.ts`의
+> `TREE_INDENT_VAR` 주석에 있다. **어휘를 넓혀 이 손잡이를 여는 것은 §6.8을 건드리는
+> 일이라 P4b가 판정한다.**
 
 - [ ] **Step 1: 세 구조에 대해 Task 2와 같은 두 케이스를 쓴다** (커스텀 프로퍼티만 · 계산된 스타일까지 간다)
 - [ ] **Step 2: 실패를 확인한다**
@@ -486,7 +500,12 @@ import하면 안 되므로**(§3.3) 이 케이스는 `packages/renderer/test/` �
 
 최소본이되 **외형이 실제로 바뀌는 것이 보여야 한다.** 담을 것:
 
-- `meta` — `id: 'system:admin'`, `extends` 없음
+- `meta` — ~~`id: 'system:admin'`~~ → **`id: 'admin'`**, `extends` 없음
+
+  > **[구현 중 반증됨]** `THEME_ID_PATTERN`이 `[A-Za-z0-9_-]`라 **콜론을 받지 않는다.**
+  > `system:`은 가리키는 쪽의 문법이고(`EXTENDS_PATTERN`) 테마 자신의 이름이 아니다.
+  > `test/fixtures/minimal.ts`가 이미 그 꼴이다(`id: 'portal'` ← `extends: 'system:portal'`).
+  > `systemTheme`이 두 꼴을 다 받아 자르기가 부르는 쪽마다 흩어지지 않게 했다.
 - `tokens` — palette 몇 개, semantic(`primary`·`surface`·`border`·`text`), `space.unit` + 스케일,
   `radius`, `shadow`, `typography`
 - `primitives` — `container`·`grid`·`section`·`breakpoints`
@@ -511,7 +530,11 @@ import하면 안 되므로**(§3.3) 이 케이스는 `packages/renderer/test/` �
 
 **Interfaces:**
 - Consumes: `systemTheme`(Task 7), `resolveTheme`·`compileTheme`(P4a-1), `structureBaseCss`(Task 1)
-- Produces: `export function useThemeCss(): void`
+- Produces: ~~`export function useThemeCss(): void`~~ → **`export function useThemeCss(source?): ResolvedTheme | null`**
+
+  > **[구현 중 바뀜]** `void`로 두면 캔버스가 Task 9의 `themeStructures`에 넘길
+  > `ResolvedTheme`을 얻으려 **해석을 한 번 더** 해야 하고, 그러면 두 결과가 갈릴 수 있는
+  > 자리가 생긴다(테마 소스가 저장소가 되는 P4a-3에서 실재한다).
 
 - [ ] **Step 1: 주입을 보는 테스트부터 쓴다**
 
@@ -592,7 +615,7 @@ git commit -m "feat(web): 구조 기본 CSS와 컴파일된 테마 CSS를 캔버
 | 무엇 | 왜 |
 |---|---|
 | `Flex`의 `flex-direction`을 테마가 덮는다 | inline 선언이 이기던 자리(P0 #7의 본체) |
-| `Grid`의 `grid-template-columns`를 테마가 덮는다 | 옳은 절반과 틀린 절반이 함께 있던 자리 |
+| ~~`Grid`의 `grid-template-columns`를 테마가 덮는다~~ → **`Grid`의 `display`를 테마가 덮는다** | 옳은 절반과 틀린 절반이 함께 있던 자리. **[반증됨]** §6.8의 화이트리스트에 트랙 목록을 적을 어휘가 **없다**(`display`·`gap`은 있고 `gridTemplateColumns` 계열은 없다). 테마가 덮을 수 있는 것은 `display`이고 그것이 P0 이월 #7이 막고 있던 자리다 |
 | `Card`의 `background`가 테마마다 다르다 | 평범한 스킨 경로 |
 | `Text[data-wb-variant="h1"]`의 `font-size`가 테마마다 다르다 | D4가 만든 채널이 실제로 쓰인다 |
 
@@ -619,14 +642,14 @@ P4a-1에서 이 표에 있던 자리는 **매번 걸렸고**, 확정해 적은 �
 
 | # | 무엇 | 어떻게 재는가 |
 |---|---|---|
-| 1 | `@layer`인가 순서인가 | jsdom이 `@layer` 안의 규칙을 계산에 반영하는지. 반영하지 않으면 순서로 간다 (Task 1) |
+| 1 | `@layer`인가 순서인가 | **잰 결과: 순서.** jsdom 25는 `@layer`가 든 **시트를 통째로 버린다**(밖의 규칙도 함께 죽고 `sheet`가 `null`). 층으로 가면 CSS가 먹히는지조차 잴 수 없다 |
 | 2 | 커스텀 프로퍼티의 기본값 자리 | `var(--x, 기본)`로 CSS가 갖는가, 렌더러가 항상 방출하는가. 노드가 값을 안 줄 때 무엇이 그려지는지로 가른다 |
 | 3 | 폴백 노드의 inline style | 걷어내는가, 가드의 이름 있는 예외로 두는가 (Task 4) |
 | 4 | `variantFrom`과 `node.variant`가 함께 올 때 | 어느 쪽이 이기는가. 지금 `node.variant`를 `variants`와 대조하는 곳이 있는지 먼저 본다 (Task 5) |
 | 5 | 커스텀 프로퍼티 이름 충돌 | `--wb-flex-direction` 같은 이름이 `cssVarName`이 만드는 토큰 변수 이름과 겹칠 수 있는가. 겹치면 접두어를 가른다 |
 | 6 | `bgGradient` + `bgImage` | 한 스타일 맵에 둘 다 있으면 `background-image` 선언이 둘 나간다. **어느 쪽이 이기는지 재고**, 이슈로 낼지 그대로 둘지 판정한다 |
 | 7 | `@media`가 `states`를 덮는다 | `pushResponsive`가 맨 뒤라 `responsive.base`가 앞의 `states`를 덮는다. **실제로 덮는지 재고**, 순서를 바꿀지 판정한다. §6.5가 이 상호작용을 말하지 않는다 |
-| 8 | **`@media`가 캔버스 폭이 아니라 창 폭을 본다** | 캔버스는 `transform: scale`과 폭 지정으로 그리므로 **뷰포트 프리셋을 바꿔도 `@media`는 브라우저 창을 본다.** §6.4는 *"뷰포트 프리셋을 바꾸면 테마가 정의한 브레이크포인트 스타일이 적용되어 확인만 가능하다"*고 적었다. **재서 어긋나는지 확인하고 보고한다 — 여기서 고치지 마라**(컨테이너 쿼리로 바꾸는 것은 §6.11의 컴파일 계약과 P5 내보내기를 함께 건드린다) |
+| 8 | **`@media`가 캔버스 폭이 아니라 창 폭을 본다** — **잰 결과: 정말 창 폭을 본다** (아래 §측정 결과) | 캔버스는 `transform: scale`과 폭 지정으로 그리므로 **뷰포트 프리셋을 바꿔도 `@media`는 브라우저 창을 본다.** §6.4는 *"뷰포트 프리셋을 바꾸면 테마가 정의한 브레이크포인트 스타일이 적용되어 확인만 가능하다"*고 적었다. **재서 어긋나는지 확인하고 보고한다 — 여기서 고치지 마라**(컨테이너 쿼리로 바꾸는 것은 §6.11의 컴파일 계약과 P5 내보내기를 함께 건드린다) |
 | 9 | 위험 문자를 실제 브라우저에서 재지 않았다 | P4a-1이 `<`·`>`를 jsdom으로만 쟀다. 캔버스에 실제로 주입되는 지금 무엇이 관측되는지 |
 | 10 | `assets.fonts` | 지금 아무 데도 안 쓰인다. 주입 시점에 `@font-face`를 낼 것인가 — **P8이 URL을 다시 쓰므로 지금 만들면 되돌려야 한다**는 것이 P4a-1의 판단이었다. 그 판단이 여전히 서는지 |
 | 11 | `url()`의 대상 | 외부 호스트·`data:` URI가 그대로 나간다. 캔버스에서 실제로 로드되는지, CSP가 무엇을 막는지 |
@@ -647,3 +670,25 @@ P4a-1에서 이 표에 있던 자리는 **매번 걸렸고**, 확정해 적은 �
 | 5 | `compileTheme`이 매번 같은 문자열을 낸다는 것(P4a-1의 결정성)이 **주입에서 실제로 재사용을 만드는지** 재지 않았다 |
 | 6 | `Text`의 `variants`가 아홉이 되면 `Text` 테마 절이 아홉 벌 나간다. CSS 크기를 재지 않았다 |
 | 7 | 카탈로그의 `variants`가 오늘 대부분 `[]`다. `Button`·`Link`·`List`·`Section`·`Card`만 갖고 있고, 그것들이 **노드의 `variant`로 실제로 도달 가능한지**(속성 패널에 있는지) 재지 않았다 — P0 이월 #9와 같은 부류일 수 있다 |
+
+---
+
+## 실제 브라우저 측정 결과 (P4a-2 구현 중)
+
+**jsdom이 못 재는 것 둘**(`var()` 치환, `@media`)을 확인하려고 Chromium에서 한 번 쟀다.
+컴파일된 `admin` 테마 + 구조 기본 CSS + 렌더된 문서를 정적 페이지로 만들어 계산된 스타일을 읽었다.
+**테스트가 아니라 일회성 측정이다** — 자동 회귀에 들어가지 않는다.
+
+| 무엇 | 관측값 |
+|---|---|
+| `var()` 치환이 끝까지 가는가 | **간다.** `flex-direction: column`·`align-items: start`·`justify-content: space-between`·`display: flex` |
+| `Grid`의 트랙 | `133.328px × 3` — `repeat(var(--wb-node-grid-columns), 1fr)`이 열 3개로 풀렸다 |
+| `Text[variant=h1]`의 `font-size` | **24px** — 토큰 → `:root` 변수 → `var()`가 끝까지 이어졌다 |
+| `Tree`의 들여쓰기 | **0px · 16px · 32px** — `calc(var(단계) * var(폭))`이 실제로 계산됐다 |
+| `Placeholder`의 높이 | **240px** |
+| `align-items: start`가 유효한가 | **유효하다** (계산값 `start`). `flex-start`로 바꾸지 않은 결정이 선다 |
+| **재라 #7** — `@media` vs `states` | **`@media`가 이긴다** (상태 0.5 · 반응형 0.9 → 계산값 **0.9**) |
+| **재라 #8** — `@media`가 무엇을 보는가 | **창 폭을 본다.** 캔버스 프레임이 `width:400px`+`scale(0.5)`인데 창이 1200px일 때 `(max-width:768px)`가 **안 맞았고**, 창만 700px로 줄이니 프레임 폭은 그대로 400px인데 **맞았다.** §6.4의 *"뷰포트 프리셋을 바꾸면 … 브레이크포인트 스타일이 적용되어 확인만 가능하다"*는 **성립하지 않는다.** `@container`도 함께 재봤는데 `container-type`을 선언한 조상이 없어 아무것도 맞지 않았다 — 컨테이너 쿼리로 가려면 컴파일 계약을 건드려야 한다는 뜻이고, 그래서 **여기서 고치지 않았다** |
+| **재라 #9** — 위험 문자 | **실제 브라우저에서도 샌다.** CSS 값에 `</style>`을 넣으니 `<span id="leaked">`가 **DOM에 실제로 생겼고** 그 시트의 규칙 수가 0이 됐다. P4a-1이 jsdom으로만 쟀던 것이 Chromium에서 확증됐다 |
+| **재라 #11** — `url()`의 대상 | 외부 호스트가 그대로 나가고 **브라우저가 실제로 요청을 보낸다**(`ERR_NAME_NOT_RESOLVED` — 막힌 것이 아니라 나갔다가 실패). `data:` URI도 적용된다. **CSP가 막는 것은 없다 — 이 앱에 CSP가 없다** |
+| **D6** — 삽입 위치가 범위를 만드는가 | **만들지 않는다.** 캔버스 안쪽 `<style>`이 캔버스 **밖** 요소에 그대로 걸렸다(jsdom·Chromium 둘 다) |
