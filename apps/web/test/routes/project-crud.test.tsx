@@ -448,6 +448,17 @@ describe('프로젝트 삭제', () => {
     expect(h.deleteProject).not.toHaveBeenCalled()
   })
 
+  it('확인이 열리면 포커스가 이름 입력으로 간다', async () => {
+    // **`project-form.tsx`와 같은 관용구인데 케이스가 없어 0 사망이었다**(리뷰 W4).
+    // 확인이 열렸는데 커서가 없으면 키보드 사용자는 Tab을 눌러 찾아야 하고, 그 사이 포커스는
+    // 방금 누른 `삭제` 버튼에 남아 있다.
+    renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    askDelete('내 프로젝트')
+
+    expect(document.activeElement).toBe(field('삭제하려면 프로젝트 이름을 입력하세요'))
+  })
+
   it('이름이 정확히 일치할 때만 확정 버튼이 활성이다', async () => {
     renderCrud({ lists: [[owned]] })
     await screen.findByText('내 프로젝트')
