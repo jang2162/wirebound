@@ -31,6 +31,19 @@ export const PATTERN_CATEGORIES = [
  */
 export const SLOT_TYPES = ['text', 'media', 'action'] as const
 
+/**
+ * **슬롯 타입은 노드 타입과 대조하지 않는다.** `image` 슬롯을 `"media"`로 선언해 두고
+ * `Text` 노드에 붙여도 이슈가 나지 않는다(재서 확인했다).
+ *
+ * 대조하지 않는 이유는 **설계가 타입과 컴포넌트의 대응을 주지 않기 때문**이다. §6.6은
+ * 슬롯 타입을 예시로만 보이고, §16이 그 체계를 *"실제 패턴을 만들며 필요한 타입을
+ * 확정한다"*로 열어 뒀다. 지금 대응표를 지어 넣으면 §16이 열어 둔 것을 이 단계가 닫는
+ * 것이고, P4b가 시스템 테마를 만들며 정할 것을 앞질러 새기는 것이다.
+ *
+ * 그래서 지금 `slots`의 타입은 **저작 UI(§6.6: "우측 속성 패널에서 채운다")를 위한 선언**일
+ * 뿐 검증에 쓰이지 않는다. 대응표가 정해지면 `checkNode`가 그것을 본다.
+ */
+
 export type SlotType = (typeof SLOT_TYPES)[number]
 
 const PATTERN_NAME = new RegExp(`^(${PATTERN_CATEGORIES.join('|')})\\.[A-Za-z0-9_-]+$`)
@@ -52,6 +65,12 @@ export interface PatternNode {
   children?: PatternNode[]
 }
 
+/**
+ * 깊이 상한은 zod의 재귀 한계다. `schema`의 `WbNodeSchema`와 **같은 구간에서** 죽는다 —
+ * 한 프로세스에서 나란히 재니 둘 다 깊이 1500을 통과하고 2000에서 `RangeError`였다
+ * (`safeParse`가 `success: false`를 내는 것이 아니라 던진다). 저장소에 들어온 패턴에
+ * 깊이 상한이 필요해지면 그 값보다 낮게 잡는다.
+ */
 export const PatternNodeSchema: z.ZodType<PatternNode> = z.strictObject({
   type: z.string().min(1),
   props: z.record(z.string(), z.unknown()).optional(),
@@ -132,6 +151,9 @@ function checkNode(
   issues: ThemeIssue[],
 ): void {
   if (node.slot !== undefined) {
+    // 한 슬롯 이름을 노드 둘이 쓰는 것을 막지 않는다 — §6.6이 그 경우를 말하지 않았고,
+    // 전개(다음 단계)가 슬롯 하나를 노드 둘에 어떻게 채우는지도 정해져 있지 않다.
+    // 여기서 막으면 그 정하지 않은 것을 이 단계가 정하는 셈이 된다.
     used.add(node.slot)
     if (!declared.has(node.slot)) {
       issues.push(
@@ -152,7 +174,7 @@ function checkNode(
     issues.push(
       issue('bad-pattern-node', path, `카탈로그에 없는 컴포넌트 타입: ${node.type}`),
     )
-    // 자식은 계속 본다. 여기서 멈추면 **타입 오타 하나가 그 밑의 이슈를 전부 가린다** —
+    // 자식은 계속 본다. 여기서 멈추면 **타입 오타 하나가 그 밑의 이슈를 가린다** —
     // `schema`의 `validateTree`도 알 수 없는 타입에서 `continue`할 뿐 순회를 멈추지 않는다.
     // (처음에 멈추도록 짰다가 "첫 이슈에서 멈추지 않는다" 케이스가 1건만 내는 것을 보고 고쳤다.)
     recurse()

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { AssetsSchema, ICON_SETS } from '../src/spec/assets'
+// 경로가 어긋나면 여기서 죽는다. 아래 `§6.7을 실제로 읽는다`가 내용까지 확인한다.
+import designDoc from '../../../docs/superpowers/specs/2026-08-03-wirebound-design.md?raw'
+import { AssetsSchema, ICON_SETS, PLACEHOLDER_STYLES } from '../src/spec/assets'
 import { MetaSchema } from '../src/spec/meta'
 
 const MINIMAL = { id: 'acme-portal', name: 'ACME 포털', version: '1.2.0' }
@@ -79,8 +81,9 @@ describe('AssetsSchema', () => {
     expect(AssetsSchema.safeParse({ icons: '' }).success).toBe(false)
   })
 
-  it('placeholder.style은 넷 중 하나다', () => {
-    for (const style of ['skeleton', 'blueprint', 'photo', 'solid']) {
+  it('placeholder.style은 고정 목록 안이다', () => {
+    // 목록을 손으로 적지 않는다 — §6.7과 같은지는 아래 `§6.7 대조`가 본다.
+    for (const style of PLACEHOLDER_STYLES) {
       expect(AssetsSchema.safeParse({ placeholder: { style } }).success, style).toBe(true)
     }
     expect(AssetsSchema.safeParse({ placeholder: { style: 'wireframe' } }).success).toBe(false)
@@ -100,5 +103,40 @@ describe('AssetsSchema', () => {
     expect(AssetsSchema.safeParse({ fonts: [{ src: 'b' }] }).success).toBe(false)
     expect(AssetsSchema.safeParse({ fonts: [{ family: 'A', src: 'b', weights: [350.5] }] }).success)
       .toBe(false)
+  })
+})
+
+/**
+ * §6.7의 예시 블록에서 설계가 실제로 쓰는 값을 뽑는다.
+ *
+ * 앞서 이 자리의 주석이 *"설계 문서 전체에서 아이콘 세트 이름은 §6.7의 `lucide` 하나뿐"*이라고
+ * **완결성을 주장**했는데 기계가 지키지 않았다. 문서가 주는 값을 읽어 대조하는 것으로 바꾼다 —
+ * 설계가 다른 세트를 쓰기 시작하면 여기서 죽는다.
+ */
+function assetsBlock(): string {
+  const section = designDoc.split('### 6.7 assets')[1] ?? ''
+  return section.split('```')[1] ?? ''
+}
+
+describe('§6.7 대조', () => {
+  it('§6.7을 실제로 읽는다', () => {
+    expect(assetsBlock()).toContain('"icons"')
+    expect(assetsBlock()).toContain('placeholder')
+  })
+
+  it('설계가 쓰는 아이콘 세트 이름이 ICON_SETS 안에 있다', () => {
+    const used = [...assetsBlock().matchAll(/"icons"\s*:\s*"([^"]+)"/g)].map((m) => m[1] as string)
+    expect(used.length).toBeGreaterThan(0)
+    for (const name of used) expect(ICON_SETS as readonly string[]).toContain(name)
+  })
+
+  it('설계가 적은 placeholder 스타일 목록과 정확히 같다', () => {
+    // §6.7이 주석으로 `skeleton | blueprint | photo | solid`를 적어 뒀다.
+    const listed = (/\/\/\s*([a-z|\s]+)$/m.exec(assetsBlock().split('placeholder')[1] ?? '')?.[1] ?? '')
+      .split('|')
+      .map((name) => name.trim())
+      .filter((name) => name.length > 0)
+    expect(listed.length).toBeGreaterThan(0)
+    expect([...listed].sort()).toEqual([...PLACEHOLDER_STYLES].sort())
   })
 })

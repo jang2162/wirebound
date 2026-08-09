@@ -402,3 +402,26 @@ describe('참조 판정이 URL 안의 경로를 삼키지 않는다 (거짓 양�
     expect(decl('transition', 'a/space.6').css).toEqual([['transition', 'a/space.6']])
   })
 })
+
+describe('§6.4~6.6의 값 자리에 palette 참조가 있는가 (F4 판정의 근거)', () => {
+  const sectionBetween = (from: string, to: string) => {
+    const after = designDoc.split(from)[1] ?? ''
+    return after.split(to)[0] ?? ''
+  }
+
+  it('§6.3에는 palette 참조가 있다 — 파싱이 살아 있는지 보는 카나리아', () => {
+    expect(sectionBetween('### 6.3 tokens', '### 6.4')).toContain('"palette.')
+  })
+
+  it('§6.4~6.6의 값 자리에는 없다', () => {
+    // 있으면 D3의 규칙(스타일 층은 의미 계층만 본다)이 설계와 어긋나는 것이므로
+    // `STYLE_FORBIDDEN_NAMESPACES`를 다시 판정해야 한다.
+    for (const [from, to] of [
+      ['### 6.4 primitives', '### 6.5'],
+      ['### 6.5 components', '### 6.6'],
+      ['### 6.6 patterns', '### 6.7'],
+    ] as const) {
+      expect(sectionBetween(from, to), from).not.toContain('"palette.')
+    }
+  })
+})

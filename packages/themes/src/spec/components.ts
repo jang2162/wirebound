@@ -74,7 +74,8 @@ export const ComponentsSchema: z.ZodType<Record<string, ThemeComponent>> = z.rec
  * 그 대조는 P4a-2 이후의 일이다.
  *
  * 카탈로그를 여기서 설치하지 않는다 — `schema`의 `validatePage`가 `getComponent`를 그냥
- * 부르는 것과 같은 자리다. 설치하지 않은 채 부르면 모든 이름이 `unknown-component`가 된다.
+ * 부르는 것과 같은 자리다. 설치하지 않은 채 부르면 이름이 `unknown-component`로 떨어진다
+ * (설치 전 `List`가 그랬고 설치 뒤 이슈 0이 되는 것을 쟀다).
  */
 export function checkThemeComponents(
   components: Record<string, ThemeComponent>,
