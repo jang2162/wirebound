@@ -66,10 +66,18 @@ export interface PatternNode {
 }
 
 /**
- * 깊이 상한은 zod의 재귀 한계다. `schema`의 `WbNodeSchema`와 **같은 구간에서** 죽는다 —
- * 한 프로세스에서 나란히 재니 둘 다 깊이 1500을 통과하고 2000에서 `RangeError`였다
- * (`safeParse`가 `success: false`를 내는 것이 아니라 던진다). 저장소에 들어온 패턴에
- * 깊이 상한이 필요해지면 그 값보다 낮게 잡는다.
+ * 깊이가 충분히 깊으면 `safeParse`가 **`success: false`를 내는 것이 아니라 던진다**
+ * (`RangeError` — zod의 재귀가 호출 스택을 쓴다).
+ *
+ * **경계가 되는 깊이는 여기 적지 않는다. 계약이 될 수 없기 때문이다.** 이분 탐색으로 재
+ * 보니 같은 코드가 실행 환경마다 다른 값을 냈고(맨 `node`로 `dist`를 부를 때와 vitest
+ * 안이 달랐다), **같은 프로세스에서 같은 측정을 한 번 더 돌리면 경계가 두 배 가까이
+ * 올라갔다** — 앞선 실행이 스택을 데운다. 그래서 `schema`의 `WbNodeSchema`와 어느 쪽이
+ * 먼저 죽는지도 측정 순서에 따라 뒤집혔다.
+ *
+ * 남는 성질은 하나다 — **깊이 상한은 이 패키지의 것이 아니라 그 순간 스택의 것이다.**
+ * 저장소에 들어온 패턴에 상한이 필요해지면 여기서 잰 수를 옮겨 적지 말고, 쓰는 쪽이
+ * 자기 환경에서 재서 여유 있게 잡아야 한다.
  */
 export const PatternNodeSchema: z.ZodType<PatternNode> = z.strictObject({
   type: z.string().min(1),
