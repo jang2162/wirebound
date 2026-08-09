@@ -63,6 +63,9 @@ describe('공개 표면이 계약이다', () => {
     'resolveTokens', 'checkPrimitives', 'checkThemeComponents', 'checkPatterns',
     // 값 헬퍼 — 규격을 쓰는 쪽이 같은 규칙으로 값을 다뤄야 해서 낸다
     'styleDeclarations', 'resolveStyleValue', 'isTokenReference', 'cssVarName',
+    // 내장 시스템 테마 (P4a-2 Task 7). `ADMIN_THEME`을 따로 내는 것은 파생 테마의 base가
+    // 될 값이 이름으로 필요하기 때문이다 — P4a-3의 병합이 그것을 쓴다.
+    'SYSTEM_THEME_IDS', 'systemTheme', 'ADMIN_THEME',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {
