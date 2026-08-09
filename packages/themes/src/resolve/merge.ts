@@ -47,11 +47,24 @@ export const ThemePatchSchema: z.ZodType<ThemePatch> = z.strictObject({
  *
  * 규칙 넷은 §6.9 그대로다. 객체는 깊은 병합, 배열은 교체, `null`은 삭제, 깊이는 1단계.
  *
- * **`meta`는 병합하지 않고 파생의 것을 그대로 쓴다.** §6.2·6.9를 대조해 정했다.
+ * **`meta`는 병합하지 않고 파생의 것을 쓰되 `extends`는 뺀다.** §6.2·6.9를 대조해 정했다.
  * (1) `MetaSchema`가 `id`·`name`·`version`을 필수로 두므로 파생 문서에 늘 있고 병합할 빈자리가
  * 없다. (2) `preview`는 *"갤러리용 썸네일(생성물)"*이라 물려받으면 **다른 테마의 그림을 자기
- * 것이라 말하게 된다.** (3) `extends`까지 병합하면 결과가 다시 파생 테마처럼 보여 깊이 1
- * 규칙이 흐려진다.
+ * 것이라 말하게 된다.**
+ *
+ * **`extends`를 빼는 이유는 §4.5다.** 그 절이 스냅샷에 테마를 함께 얼리는 이유를
+ * *"참조만 저장하면 테마가 나중에 바뀌었을 때 스냅샷이 다른 모습으로 복원된다"*로 적었는데,
+ * `extends`를 지닌 채 저장하면 **그것은 여전히 참조다** — 복원이 그때의 base를 다시
+ * 요구하므로 §4.5가 막으려던 일이 그대로 일어난다. 병합이 끝난 문서가 *"나는 아직 X와
+ * 병합되어야 한다"*고 말하는 것은 병합 후에 거짓이기도 하다.
+ *
+ * 처음에는 `extends`까지 그대로 두었고, 그 상태에서 병합 결과를 base 없이 해석하면
+ * `bad-extends`가 나는 것을 쟀다. 빼고 나니 해석이 이슈 0이고 **base+patch 경로와 바이트
+ * 동일한 CSS**가 나온다 — 유래를 뺐는데 결과가 같다는 것이 이 결정의 정당성이다.
+ *
+ * **유래를 잃는 것은 병합 결과뿐이다.** 사람이 편집하고 저장하는 **파생 테마 자체는
+ * `extends`를 그대로 지닌다.** 산출물이 둘이고 서로 다른 일을 한다 — 파생 테마는 편집용,
+ * 병합 결과는 §4.5가 얼려 두는 것이다.
  *
  * **결과가 `base`·`patch`와 구조를 공유하지 않아야 하는 이유**는 시스템 테마가 읽기
  * 전용(§6.10)이고 P4b가 그것을 모듈 상수로 둘 것이기 때문이다. 결과의 하위 객체가 base의
@@ -80,7 +93,9 @@ export function mergeTheme(
     const next = mergeValue(own(base as unknown as Record<string, unknown>, section), own(patch as unknown as Record<string, unknown>, section))
     if (next !== DELETED) merged[section] = next
   }
-  merged['meta'] = copy(patch.meta)
+  // `extends`는 결과에 싣지 않는다 — 위 주석의 §4.5 논거다.
+  const { extends: _inheritedFrom, ...standaloneMeta } = patch.meta
+  merged['meta'] = copy(standaloneMeta)
 
   const parsed = ThemeSchema.safeParse(merged)
   if (!parsed.success) {

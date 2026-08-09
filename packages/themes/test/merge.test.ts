@@ -1,8 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { installCatalog } from '@wirebound/schema'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { compileTheme } from '../src/emit/index'
+import { resolveTheme } from '../src/resolve/index'
 import { ThemePatchSchema, mergeTheme, type ThemePatch } from '../src/resolve/merge'
+import type { ResolvedTheme } from '../src/resolved'
 import { ThemeSchema, type Theme } from '../src/spec/theme'
 
 const codes = (issues: { code: string }[]) => issues.map((i) => i.code).sort()
+
+beforeAll(() => {
+  installCatalog()
+})
 
 const BASE: Theme = {
   meta: { id: 'portal', name: '포털', version: '1.0.0' },
@@ -110,14 +118,12 @@ describe('mergeTheme — §6.9의 규칙 넷', () => {
 })
 
 describe('mergeTheme — meta는 병합하지 않는다', () => {
-  it('파생의 meta가 그대로다', () => {
+  it('파생의 meta가 그대로이되 extends는 빠진다', () => {
+    // 병합 결과는 더 이상 파생 테마가 아니다 — 홀로 선다. `extends`를 지닌 채 저장하면
+    // 그것은 여전히 참조이고, 복원이 그때의 base를 다시 요구한다(§4.5가 막으려던 일이다).
     const { theme } = mergeTheme(BASE, patch())
-    expect(theme?.meta).toEqual({
-      id: 'acme-portal',
-      name: 'ACME 포털',
-      version: '2.0.0',
-      extends: 'system:portal',
-    })
+    expect(theme?.meta).toEqual({ id: 'acme-portal', name: 'ACME 포털', version: '2.0.0' })
+    expect('extends' in (theme?.meta ?? {})).toBe(false)
   })
 
   it('base의 meta 항목이 새어 들어오지 않는다', () => {
@@ -226,5 +232,47 @@ describe('mergeTheme — 결과가 규격을 지키는지 본다', () => {
       patch({ tokens: { semantic: { primary: 42, surface: 43 } } }),
     )
     expect(issues.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('§4.5 — 병합 결과가 홀로 서서 왕복한다', () => {
+  const compile = (document: unknown, base?: Theme) => {
+    const { theme, issues } = resolveTheme(document, base)
+    expect(issues, JSON.stringify(issues)).toEqual([])
+    return compileTheme(theme as ResolvedTheme)
+  }
+
+  it('병합 결과를 base 없이 해석할 수 있다', () => {
+    const { theme, issues } = mergeTheme(BASE, patch({ tokens: { semantic: { primary: '#111111' } } }))
+    expect(issues).toEqual([])
+    expect(resolveTheme(theme).issues).toEqual([])
+  })
+
+  it('직렬화 → 되읽기 → 해석 → 컴파일이 같은 CSS를 낸다', () => {
+    const { theme } = mergeTheme(BASE, patch({ tokens: { semantic: { primary: '#111111' } } }))
+    const json = JSON.stringify(theme)
+    expect(JSON.stringify(JSON.parse(json))).toBe(json)
+    expect(compile(JSON.parse(json))).toBe(compile(theme))
+  })
+
+  it('병합-단독 경로와 base+patch 경로가 같은 CSS를 낸다 — 유래를 뺐는데 결과가 같다', () => {
+    const derived = patch({ tokens: { semantic: { primary: '#111111', danger: null } } })
+    const { theme: merged } = mergeTheme(BASE, derived)
+    expect(compile(merged)).toBe(compile(derived, BASE))
+  })
+
+  it('상속 없는 평범한 테마는 영향받지 않는다', () => {
+    const back = JSON.parse(JSON.stringify(BASE)) as Theme
+    expect(compile(back)).toBe(compile(BASE))
+  })
+
+  it('ResolvedTheme은 저장 대상이 아니다 — 직렬화하면 절이 비고 컴파일이 던진다', () => {
+    // D2가 "ResolvedTheme이 그 자체로 §4.5의 산출물"이라고 적었던 자리다.
+    const { theme } = resolveTheme(BASE)
+    const back = JSON.parse(JSON.stringify(theme)) as ResolvedTheme
+    for (const section of ['tokens', 'primitives', 'breakpoints', 'components', 'patterns'] as const) {
+      expect(Object.keys(back[section] as unknown as object), section).toEqual([])
+    }
+    expect(() => compileTheme(back)).toThrow()
   })
 })
