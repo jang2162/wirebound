@@ -223,6 +223,18 @@ function deriveSpace(
   }
 
   const size = Number(matched[1])
+  if (size <= 0) {
+    // 0에서 파생하면 `space.1`~`space.24`가 전부 `0px`이 되어 **척도가 통째로 무너지는데
+    // 조용하다**(재서 확인했다). 씨앗이 0인 스케일은 스케일이 아니다.
+    issues.push(
+      issue(
+        'bad-token-value',
+        'tokens.scale.space.unit',
+        `간격 단위는 0보다 커야 합니다 (받은 값: ${JSON.stringify(unit)})`,
+      ),
+    )
+    return
+  }
   const suffix = matched[2]!
   for (let step = 1; step <= SPACE_MAX; step += 1) {
     table.set(`space.${step}`, `${round(size * step)}${suffix}`)
@@ -240,9 +252,19 @@ function rejectTokenFunctions(value: string, path: string): ThemeIssue[] {
   }))
 }
 
-/** 부동소수 잔여를 없앤다 — `0.1 * 3`이 `0.30000000000000004`가 되는 부류다. */
+/**
+ * 부동소수 잔여를 없앤다 — `0.1 * 3`이 `0.30000000000000004`가 되는 부류다.
+ *
+ * 유효숫자로 자른다. 처음에는 `toFixed(4)`였는데 **작은 단위를 0으로 접었다** —
+ * `unit: "0.00001px"`이면 `space.1`이 `0px`인데 `space.6`은 `0.0001px`이라 척도가
+ * 단조롭지도 않았다(재서 확인했다). `toPrecision(12)`은 잔여가 붙는 자리(16번째 언저리)
+ * 아래에서 자르므로 두 성질을 함께 지킨다.
+ *
+ * **1e-7보다 작은 값은 지수 표기로 나간다**(`String(1e-7)`이 `"1e-7"`이다). 그 아래를
+ * 쓰는 간격 단위는 못 봤고, 막지도 않았다.
+ */
 function round(value: number): string {
-  return String(Number(value.toFixed(4)))
+  return String(Number(value.toPrecision(12)))
 }
 
 /**

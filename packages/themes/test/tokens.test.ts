@@ -192,6 +192,22 @@ describe('resolveTokens — space 파생 (§6.3)', () => {
     expect(resolveTokens({ scale: { space: { unit: '4Px' } } }).issues).toEqual([])
   })
 
+  it('0에서 파생하지 않는다 — 척도가 통째로 무너지는데 조용했다', () => {
+    for (const unit of ['0px', '0.0px', '.0rem', '00em']) {
+      const { table, issues } = resolveTokens({ scale: { space: { unit } } })
+      expect(codes(issues), unit).toEqual(['bad-token-value'])
+      expect(table.has('space.1'), unit).toBe(false)
+    }
+  })
+
+  it('작은 단위를 0으로 접지 않는다', () => {
+    const { table } = resolveTokens({ scale: { space: { unit: '0.00001px' } } })
+    expect(table.get('space.1')).toBe('0.00001px')
+    expect(table.get('space.6')).toBe('0.00006px')
+    // 잔여를 없애는 성질은 그대로다.
+    expect(resolveTokens({ scale: { space: { unit: '0.1rem' } } }).table.get('space.3')).toBe('0.3rem')
+  })
+
   it('CSS 길이 단위가 아닌 것도 이슈다', () => {
     for (const unit of ['4dp', '4 px', 'calc(4px)', '', 'space.1']) {
       expect(codes(resolveTokens({ scale: { space: { unit } } }).issues), unit).toEqual([
