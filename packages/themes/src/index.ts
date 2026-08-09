@@ -15,3 +15,10 @@ export type { TokenNamespace, TokenTable } from './resolve/tokens'
 export { SPACE_MAX, TOKEN_NAMESPACES, isTokenReference, resolveTokens } from './resolve/tokens'
 
 export { STYLE_PROPERTIES, cssVarName, styleDeclarations } from './resolve/style'
+export { resolveStyleValue } from './resolve/style'
+
+export type { ThemePrimitives } from './spec/primitives'
+export { PrimitivesSchema, checkPrimitives } from './spec/primitives'
+
+export type { ThemeComponent, ThemeLayer, ThemeStyleMap } from './spec/components'
+export { ComponentSchema, ComponentsSchema, checkThemeComponents } from './spec/components'

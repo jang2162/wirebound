@@ -1,0 +1,201 @@
+import { defaultStructure, getComponent } from '@wirebound/schema'
+import type { ComponentDef } from '@wirebound/schema'
+import { z } from 'zod'
+import type { ThemeIssue } from '../issue'
+import { issue } from '../issue'
+import { styleDeclarations } from '../resolve/style'
+import type { TokenTable } from '../resolve/tokens'
+
+/** 스타일 어휘 → 값. 이름이 §6.8 안인지는 zod가 아니라 `styleDeclarations`가 본다. */
+const StyleMapSchema = z.record(z.string(), z.union([z.string(), z.number()]))
+
+/**
+ * `variants`·`states`·`responsive`의 항목 하나.
+ *
+ * `base`·`parts` 말고 **스타일 프로퍼티를 바로 쓰는 축약**을 받는다. §6.5의
+ * `states.disabled`가 `{ "opacity": 0.5 }`이고 `responsive.md`가 `{ "base": { … } }`이므로
+ * 둘 다 받아야 예시가 통과한다. **모호하지 않은 근거는 두 키 집합이 서로 겹치지 않는다는
+ * 것**이다 — `base`·`parts`는 §6.8의 프로퍼티 이름이 아니다(`test/spec-components.test.ts`가
+ * 그것을 잰다).
+ */
+const LayerSchema = z
+  .object({
+    base: StyleMapSchema.optional(),
+    parts: z.record(z.string(), StyleMapSchema).optional(),
+  })
+  .catchall(z.union([z.string(), z.number()]))
+
+export type ThemeStyleMap = Record<string, string | number>
+
+export interface ThemeLayer {
+  base?: ThemeStyleMap
+  parts?: Record<string, ThemeStyleMap>
+  [prop: string]: unknown
+}
+
+export interface ThemeComponent {
+  /** 생략하면 `structures[0]`이 기본이다(`ComponentDef`의 주석: *"첫 번째가 기본 구조"*). */
+  structure?: string
+  base?: ThemeStyleMap
+  parts?: Record<string, ThemeStyleMap>
+  variants?: Record<string, ThemeLayer>
+  states?: Record<string, ThemeLayer>
+  /**
+   * 브레이크포인트별 오버라이드. §6.5의 예시가 `base`만 보여 주므로 **`variants`·`states`를
+   * 안쪽에 다시 받지 않는다** — 층을 겹치는 것은 설계가 주지 않은 확장이다.
+   */
+  responsive?: Record<string, ThemeLayer>
+}
+
+export const ComponentSchema: z.ZodType<ThemeComponent> = z.strictObject({
+  structure: z.string().min(1).optional(),
+  base: StyleMapSchema.optional(),
+  parts: z.record(z.string(), StyleMapSchema).optional(),
+  variants: z.record(z.string(), LayerSchema).optional(),
+  states: z.record(z.string(), LayerSchema).optional(),
+  responsive: z.record(z.string(), LayerSchema).optional(),
+})
+
+export const ComponentsSchema: z.ZodType<Record<string, ThemeComponent>> = z.record(
+  z.string(),
+  ComponentSchema,
+)
+
+/**
+ * 테마의 `components`를 **카탈로그와 대조**한다. 이것이 D1을 실현하는 자리다.
+ *
+ * 대조 대상은 `schema`의 `ComponentDef`다 — `structures`·`parts`·`variants`·`states`를
+ * **선언**하는 것이 거기이고(§5.1: *"여기 선언된 것이 곧 테마가 쓸 수 있는 어휘다"*),
+ * 렌더러의 레지스트리는 그 선언을 구현할 뿐이다. 그래서 `themes`는 `renderer`를 보지 않고
+ * §3.3의 의존 방향(`themes` → `schema`)이 지켜진다.
+ *
+ * **선언과 구현이 어긋나는 경우는 여기서 다루지 않는다.** 테마가 `cardGrid`를 골랐는데
+ * 렌더러가 그 구조를 등록하지 않았다면 렌더 시점에 드러난다(`requireStructure`가 던진다).
+ * 그 대조는 P4a-2 이후의 일이다.
+ *
+ * 카탈로그를 여기서 설치하지 않는다 — `schema`의 `validatePage`가 `getComponent`를 그냥
+ * 부르는 것과 같은 자리다. 설치하지 않은 채 부르면 모든 이름이 `unknown-component`가 된다.
+ */
+export function checkThemeComponents(
+  components: Record<string, ThemeComponent>,
+  tokens: TokenTable,
+  breakpoints: readonly string[],
+): { structures: Map<string, string>; issues: ThemeIssue[] } {
+  const structures = new Map<string, string>()
+  const issues: ThemeIssue[] = []
+
+  for (const [type, spec] of Object.entries(components)) {
+    const path = `components.${type}`
+    const def = getComponent(type)
+    if (!def) {
+      issues.push(issue('unknown-component', path, `카탈로그에 없는 컴포넌트입니다: ${type}`))
+      continue
+    }
+
+    if (spec.structure === undefined) {
+      structures.set(type, defaultStructure(def))
+    } else if (!def.structures.includes(spec.structure)) {
+      issues.push(
+        issue(
+          'unknown-structure',
+          `${path}.structure`,
+          `${type}이 제공하지 않는 구조입니다: ${spec.structure}`,
+        ),
+      )
+    } else {
+      structures.set(type, spec.structure)
+    }
+
+    issues.push(...checkStyleMap(spec.base, tokens, `${path}.base`))
+    issues.push(...checkParts(spec.parts, def, tokens, `${path}.parts`))
+
+    issues.push(...checkNamedLayers(spec.variants, def, def.variants, 'unknown-variant', tokens, `${path}.variants`, '변형'))
+    issues.push(...checkNamedLayers(spec.states, def, def.states, 'unknown-state', tokens, `${path}.states`, '상태'))
+    issues.push(
+      ...checkNamedLayers(
+        spec.responsive,
+        def,
+        breakpoints,
+        'unknown-breakpoint',
+        tokens,
+        `${path}.responsive`,
+        '브레이크포인트',
+      ),
+    )
+  }
+
+  return { structures, issues }
+}
+
+function checkParts(
+  parts: Record<string, ThemeStyleMap> | undefined,
+  def: ComponentDef,
+  tokens: TokenTable,
+  path: string,
+): ThemeIssue[] {
+  const issues: ThemeIssue[] = []
+  for (const [part, style] of Object.entries(parts ?? {})) {
+    if (!def.parts.includes(part)) {
+      issues.push(
+        issue('unknown-part', `${path}.${part}`, `${def.type}이 선언하지 않은 조각입니다: ${part}`),
+      )
+      continue
+    }
+    issues.push(...checkStyleMap(style, tokens, `${path}.${part}`))
+  }
+  return issues
+}
+
+function checkNamedLayers(
+  layers: Record<string, ThemeLayer> | undefined,
+  def: ComponentDef,
+  declared: readonly string[],
+  code: 'unknown-variant' | 'unknown-state' | 'unknown-breakpoint',
+  tokens: TokenTable,
+  path: string,
+  label: string,
+): ThemeIssue[] {
+  const issues: ThemeIssue[] = []
+  for (const [name, layer] of Object.entries(layers ?? {})) {
+    if (!declared.includes(name)) {
+      const owner = code === 'unknown-breakpoint' ? 'primitives.breakpoints가' : `${def.type}이`
+      issues.push(issue(code, `${path}.${name}`, `${owner} 선언하지 않은 ${label}입니다: ${name}`))
+      continue
+    }
+    issues.push(...checkLayer(layer, def, tokens, `${path}.${name}`))
+  }
+  return issues
+}
+
+/** 층 하나. `base`·`parts` 밖의 키는 루트에 바로 쓴 스타일 프로퍼티로 본다. */
+function checkLayer(
+  layer: ThemeLayer,
+  def: ComponentDef,
+  tokens: TokenTable,
+  path: string,
+): ThemeIssue[] {
+  const issues: ThemeIssue[] = []
+  const shorthand: ThemeStyleMap = {}
+
+  for (const [key, value] of Object.entries(layer)) {
+    if (key === 'base' || key === 'parts') continue
+    shorthand[key] = value as string | number
+  }
+
+  issues.push(...checkStyleMap(shorthand, tokens, path))
+  issues.push(...checkStyleMap(layer.base, tokens, `${path}.base`))
+  issues.push(...checkParts(layer.parts, def, tokens, `${path}.parts`))
+  return issues
+}
+
+function checkStyleMap(
+  style: ThemeStyleMap | undefined,
+  tokens: TokenTable,
+  path: string,
+): ThemeIssue[] {
+  const issues: ThemeIssue[] = []
+  for (const [prop, value] of Object.entries(style ?? {})) {
+    issues.push(...styleDeclarations(prop, value, tokens, `${path}.${prop}`).issues)
+  }
+  return issues
+}

@@ -167,30 +167,53 @@ export function styleDeclarations(
 
   if (prop === 'typography') return typographyDeclarations(value, tokens, path)
 
-  const functions = scanFunctions(value)
-  if (!functions.balanced) {
+  const resolved = resolveStyleValue(value, tokens, path, FUNCTION_ALLOWLIST[prop] ?? [], prop)
+  if (resolved.value === null) return { css: [], issues: resolved.issues }
+  return { css: targets.map((name) => [name, resolved.value!]), issues: [] }
+}
+
+/**
+ * 값 하나를 CSS에 실을 문자열로 바꾼다. 참조를 풀고 함수를 검사한다.
+ *
+ * `primitives`(§6.4)처럼 **CSS 프로퍼티 이름이 없는 자리**도 같은 값 규칙을 받아야 해서
+ * 따로 뽑았다 — `container.gutter`가 `"space.6"`을 받는 것이 §6.4의 예시다.
+ * 실패하면 `value`가 `null`이다.
+ */
+export function resolveStyleValue(
+  value: unknown,
+  tokens: TokenTable,
+  path: string,
+  allowedFunctions: readonly string[] = [],
+  label = path,
+): { value: string | null; issues: ThemeIssue[] } {
+  if (typeof value === 'number') return { value: String(value), issues: [] }
+  if (typeof value !== 'string') {
     return {
-      css: [],
-      issues: [issue('bad-style-value', path, `괄호가 맞지 않습니다: ${value}`)],
+      value: null,
+      issues: [issue('bad-style-value', path, `값은 문자열이나 수여야 합니다: ${label}`)],
     }
   }
+
+  const functions = scanFunctions(value)
+  if (!functions.balanced) {
+    return { value: null, issues: [issue('bad-style-value', path, `괄호가 맞지 않습니다: ${value}`)] }
+  }
   if (functions.names.length > 0) {
-    const allowed = FUNCTION_ALLOWLIST[prop] ?? []
     if (functions.nested) {
       return {
-        css: [],
+        value: null,
         issues: [issue('bad-style-value', path, `중첩된 함수는 받지 않습니다: ${value}`)],
       }
     }
-    const rejected = functions.names.filter((name) => !allowed.includes(name))
+    const rejected = functions.names.filter((name) => !allowedFunctions.includes(name))
     if (rejected.length > 0) {
       return {
-        css: [],
+        value: null,
         issues: [
           issue(
             'bad-style-value',
             path,
-            `${prop}이 받지 않는 함수입니다: ${rejected.join(', ')} (값을 토큰으로 옮기세요)`,
+            `${label}이 받지 않는 함수입니다: ${rejected.join(', ')} (값을 토큰으로 옮기세요)`,
           ),
         ],
       }
@@ -198,8 +221,8 @@ export function styleDeclarations(
   }
 
   const resolved = resolveReferences(value, tokens, path)
-  if (resolved.issues.length > 0) return { css: [], issues: resolved.issues }
-  return { css: targets.map((name) => [name, resolved.value]), issues: [] }
+  if (resolved.issues.length > 0) return { value: null, issues: resolved.issues }
+  return { value: resolved.value, issues: [] }
 }
 
 /**
