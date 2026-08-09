@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".tsbuild-test",
+    "lib": ["ES2022"],
+    "types": [],
+    "composite": true
+  },
+  "include": ["test"],
+  "references": [{ "path": "./" }]
+}
