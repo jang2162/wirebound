@@ -1,4 +1,5 @@
 import { CATALOG_TYPES, defaultStructure, installCatalog, requireComponent } from '@wirebound/schema'
+import type { ComponentDef } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { renderNode } from '../src/render'
@@ -53,6 +54,65 @@ function renderDefault(type: string): string {
   return renderToStaticMarkup(renderNode({ id: 'n_000000000001', type }))
 }
 
+/** zod 내부 표현. 공개 타입에 없으므로 여기서 쓰는 만큼만 적는다. */
+interface ZodInternal {
+  def?: { type?: string; innerType?: ZodInternal }
+  options?: unknown
+}
+
+/** 감싼 것(`.default()`·`.optional()`)을 벗겨 안쪽 타입을 본다. */
+function unwrap(schema: ZodInternal | undefined): ZodInternal | undefined {
+  let cursor = schema
+  while (cursor !== undefined) {
+    const kind = cursor.def?.type
+    if (kind !== 'default' && kind !== 'optional' && kind !== 'nullable') return cursor
+    cursor = cursor.def?.innerType
+  }
+  return undefined
+}
+
+/**
+ * prop 하나가 가질 만한 값들. **기본값과 다른 가지를 지나가게 하는 것이 목적**이므로
+ * 값의 의미가 아니라 **렌더가 갈리는 지점**을 고른다.
+ *
+ * - enum → 선언된 값 전부 (구조가 값마다 다른 것을 그릴 수 있다)
+ * - boolean → 양쪽 (조건부 조각의 가장 흔한 스위치다)
+ * - string → 빈 문자열과 찬 문자열 (`props.caption ? … : null` 부류가 여기 걸린다)
+ * - array → 빈 배열과 기본값 (목록이 없을 때의 가지)
+ *
+ * 수·객체는 흔들지 않는다 — 렌더 갈래를 만들지 않고 범위 제약만 있다.
+ */
+function propCandidates(schema: ZodInternal | undefined, fallback: unknown): unknown[] {
+  const inner = unwrap(schema)
+  const kind = inner?.def?.type
+
+  if (kind === 'enum' && Array.isArray(inner?.options)) return [...inner.options]
+  if (kind === 'boolean') return [true, false]
+  if (kind === 'string') return ['', '값']
+  if (kind === 'array') return [[], fallback]
+  return [fallback]
+}
+
+/**
+ * 컴포넌트 하나가 그려질 props 조합들. **한 번에 한 prop만** 기본값에서 흔든다 —
+ * 완전 조합은 폭발하고, 여기서 필요한 것은 "그 값일 때만 그려지는 가지"를 한 번씩
+ * 지나가는 것뿐이다.
+ */
+function propVariations(def: ComponentDef): Record<string, unknown>[] {
+  const defaults = def.props.parse({}) as Record<string, unknown>
+  const shape = (def.props as unknown as { shape?: Record<string, ZodInternal> }).shape ?? {}
+
+  const out: Record<string, unknown>[] = [defaults]
+  for (const [name, schema] of Object.entries(shape)) {
+    for (const value of propCandidates(schema, defaults[name])) {
+      const candidate = { ...defaults, [name]: value }
+      // 범위 제약에 걸리는 조합은 건너뛴다(렌더러가 폴백을 그릴 뿐이다).
+      if (def.props.safeParse(candidate).success) out.push(candidate)
+    }
+  }
+  return out
+}
+
 function captures(html: string, pattern: RegExp): string[] {
   return [...html.matchAll(pattern)].map((match) => match[1]!)
 }
@@ -67,6 +127,54 @@ describe('part 계약', () => {
         expect(declared.has(part), `${type}: 카탈로그에 없는 part "${part}"`).toBe(true)
       }
     }
+  })
+
+  /**
+   * **비기본 props로도 훑는다.**
+   *
+   * 아래 기본 props 스캔은 **조건부로만 그려지는 조각을 보지 못한다**(P0 이월 #10이 지적한
+   * 한계다 — `Media.caption`·`Card.subtitle`·`Field.help` 따위는 값이 있을 때만 나온다).
+   * 원문 가드(`contract-attrs.test.ts`)가 그 사각을 덮을 것으로 기대했는데 **덮지 못한다** —
+   * 그쪽은 문자열 안의 `//`를 주석으로 보고 그 줄의 나머지를 지운다. **두 사각의 교집합이
+   * 비어 있지 않았다:** 조건부 `<figcaption>`에 `{...{ 'x://y': '', 'data-wb-bad': '1' }}`를
+   * 심으니 **두 가드가 다 통과했다**(재서 확인했다).
+   *
+   * 그래서 여기서 props를 흔든다. **완전 조합이 아니라 한 번에 한 prop만** 바꾼다 —
+   * 조합 폭발 없이 "그 값일 때만 그려지는 가지"를 전부 지나가는 것이 목적이다.
+   */
+  it('비기본 props로 전수 렌더해도 계약 밖 data-* 속성이 없다', () => {
+    const offenders: string[] = []
+    let renders = 0
+    let scanned = 0
+
+    for (const key of listStructureKeys()) {
+      const [type, structure] = key.split(':') as [string, string]
+      const def = requireComponent(type)
+
+      for (const props of propVariations(def)) {
+        // 선언된 변형 전부 + 변형 없음.
+        for (const variant of [undefined, ...def.variants]) {
+          const node = { id: 'n_000000000001', type, props, ...(variant === undefined ? {} : { variant }) }
+          const html = renderToStaticMarkup(renderNode(node, { structures: { [type]: structure } }))
+          renders += 1
+
+          // 폴백이 떴으면 그 조합은 렌더된 것이 아니다 — 조용히 지나가지 않게 잡는다.
+          if (html.includes('data-wb-error')) {
+            offenders.push(`${key}: 폴백 (${JSON.stringify(props)})`)
+            continue
+          }
+          for (const attr of captures(html, /\s(data-[\w-]+)=/gi)) {
+            scanned += 1
+            if (!CONTRACT_ATTRS.includes(attr)) offenders.push(`${key}: ${attr}`)
+          }
+        }
+      }
+    }
+
+    // 셋 다 못을 박는다 — 하나라도 0이면 위 루프가 헛돈 것이다.
+    expect(renders).toBeGreaterThan(100)
+    expect(scanned).toBeGreaterThan(0)
+    expect([...new Set(offenders)]).toEqual([])
   })
 
   it('계약 밖 data-* 속성이 하나도 없다', () => {
