@@ -32,3 +32,6 @@ export {
   SLOT_TYPES,
   checkPatterns,
 } from './spec/patterns'
+
+export type { Theme } from './spec/theme'
+export { ThemeSchema } from './spec/theme'
