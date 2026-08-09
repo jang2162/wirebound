@@ -27,6 +27,7 @@ import {
 import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
 import type { PageDocument } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { useThemeCss } from '../theme/use-theme-css'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
 // 끝난다 — 그 모듈의 주석 참고.
 import '../catalog-setup'
@@ -48,6 +49,17 @@ interface Box {
  * 겹친다.
  */
 export function Canvas(props: { pageId: string | undefined }): ReactElement | null {
+  /**
+   * 테마 CSS를 싣는다. **문서가 없어도 부른다** — 아래에서 `doc === null`이면 일찍
+   * 돌아가지만 훅은 그보다 위에 있어야 하고(훅 규칙), 그 덕에 페이지를 고르지 않은
+   * 상태에서도 시트가 자리를 지킨다.
+   *
+   * **주입은 캔버스가 한다.** 셸(`App`)이 아니라 여기인 이유는 이 시트가 겨냥하는 것이
+   * 문서 노드뿐이기 때문이다 — D7이 셸과 문서의 스타일을 가른 그 선이고,
+   * `shell.css`가 문서를 겨냥하지 않는 것과 대칭이다.
+   */
+  useThemeCss()
+
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다. 상태 객체 전체(`(s) => s`)를 고르면 어느 필드가 바뀌든
   // 다시 그린다 — `use-editor-store.tsx`의 주석 참고.
