@@ -36,7 +36,8 @@ export interface ApiClient {
    * 것이 그 판단을 뒤집지는 않는다** — 뒤집는다면 그것은 이 층이 아니라 목록 화면의
    * 판단이다.
    *
-   * **나가는 본문에는 서버가 선언한 세 키만 담긴다**(`http-client.ts`의 `projectBody`).
+   * **나가는 본문에는 서버가 선언한 세 키만 담긴다**(`http-client.ts`의 `declaredOnly` +
+   * `BODY_KEYS.createProject`).
    * 두 가지가 그 안에서 갈린다:
    *
    * - **`description`을 주지 않으면 그 키를 만들지 않는다.** `undefined`를 실은 키가
@@ -47,7 +48,7 @@ export interface ApiClient {
    *   그런 키는 그 자체로 400이다 — **응답 객체를 그대로 되보내는 것이 그 경로다**(실측:
    *   `{id,name,slug,description,role}`을 보내면 `400 인식할 수 없는 키: "id", "role"`).
    *   **타입이 그것을 막지 못한다** — 스프레드 리터럴(`{ ...project }`)은 초과 속성 검사에
-   *   걸리지 않는다(`projectBody` 머리말의 `tsc` 프로브 표).
+   *   걸리지 않는다(`declaredOnly` 머리말의 `tsc` 프로브 표).
    *
    * **슬러그 형식을 클라이언트가 다시 보지 않는다**(D5). 서버가 400과 함께 문장을 주고,
    * 중복은 409다 — 규칙을 두 곳에 두면 어긋난다. **다만 그 문장이 무엇이 틀렸는지 다

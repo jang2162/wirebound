@@ -722,6 +722,23 @@ describe('메뉴 CRUD', () => {
     expect(error.code).toBe('internal')
   })
 
+  it('선언되지 않은 키만 담긴 메뉴 갱신 본문은 빈 본문으로 거절된다', async () => {
+    // **떨어내는 순서가 정하는 결과다**(`updateProject`와 같은 자리). 미선언 키를 먼저
+    // 떨어낸 뒤에 남은 키를 세므로 `{id, projectId}`는 `{}`가 되어 `updateBody`가 던진다.
+    // 순서가 반대면 "두 키가 있으니 빈 본문이 아니다"로 통과해 `{}`가 나가고 400을 받는다.
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client
+        .updateMenu('p1', 'm1', { id: 'm1', projectId: 'p1' } as unknown as { title?: string })
+        .catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
+  })
+
   it('메뉴 응답 객체를 그대로 넘겨도 선언된 키만 나간다', async () => {
     // **`MenuNode` 응답에는 요청이 받지 않는 키가 셋 섞여 있다**(`id`·`projectId`·`sortOrder` —
     // `sortOrder`는 갱신에만 선언돼 있다). 서버의 본문 스키마가 `z.strictObject`라 그것이
@@ -874,6 +891,22 @@ describe('페이지 CRUD', () => {
     }
   })
 
+  it('선언되지 않은 키만 담긴 페이지 갱신 본문은 빈 본문으로 거절된다', async () => {
+    // `updateProject`·`updateMenu`와 같은 자리. `PageDetail`의 `schema`는 `PATCH`가 받지
+    // 않는 키라 떨어져 나가고, 남는 것이 없으면 그 자리에서 던진다.
+    const stub = stubFetch()
+    const client = createHttpClient(stub.fetchImpl)
+
+    const error = asApiError(
+      await client
+        .updatePage('p1', 'pg1', { id: 'pg1', headSeq: 3 } as unknown as { title?: string })
+        .catch((e: unknown) => e),
+    )
+
+    expect(error.code).toBe('bad-request')
+    expect(stub.calls).toHaveLength(0)
+  })
+
   it('patchOps도 선언된 세 키만 보낸다', async () => {
     // **이 자리는 다른 넷과 위험의 모양이 다르다.** 응답(`PatchResult`)에는 `baseSeq`·`ops`가
     // 없어 그것을 되보내는 것은 타입이 이미 막는다. 그런데도 같은 관용구를 쓰는 것은
@@ -997,7 +1030,7 @@ describe('프로젝트 CRUD', () => {
     // `undefined`를 실은 키가 통과하는 것은 `JSON.stringify`가 지워 주는 우연이라 그것에
     // 기대지 않는다(`patchOps`의 `clientOpId`와 같은 판단).
     //
-    // **이 케이스만으로는 `projectBody`를 항등으로 바꿔도 죽지 않는다** — 관찰 지점이
+    // **이 케이스만으로는 `declaredOnly`가 키를 고르지 않게 바꿔도 죽지 않는다** — 관찰 지점이
     // 직렬화된 문자열 하나뿐이라 두 구현의 바이트가 같아진다(선언된 세 키의 39조합에서
     // 차이 0을 쟀다). 그것을 닫는 것은 **아래 "응답 객체를 그대로 넘겨도" 케이스**다.
     const stub = stubFetch(jsonResponse(201, project))
@@ -1009,7 +1042,7 @@ describe('프로젝트 CRUD', () => {
   })
 
   it('응답 객체를 그대로 넘겨도 선언된 세 키만 나간다', async () => {
-    // **여기가 `projectBody`를 닫는 자리다.** 서버의 `CreateProjectBody`는 `z.strictObject`라
+    // **여기가 `declaredOnly`를 닫는 자리다.** 서버의 `CreateProjectBody`는 `z.strictObject`라
     // 선언되지 않은 키가 그 자체로 400인데, **`definedOnly`는 미선언 키를 하나도 거르지
     // 않는다** — 값이 `undefined`인 키만 뺀다. 두 장치가 막는 실패가 다르다(리뷰 F1).
     //

@@ -114,17 +114,17 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId` | GET | viewer | — | 200 `{ ...프로젝트, role }` |
 | `/api/projects/:projectId` | PATCH | owner | `{ name?, slug?, description? }`(하나 이상) | 200 `{ ...프로젝트, role }` |
 | `/api/projects/:projectId` | DELETE | owner | — | 204 |
-| `/api/projects/:projectId/members` | GET | viewer | — | 200 멤버 목록 |
+| `/api/projects/:projectId/members` | GET | viewer | — | 200 멤버 배열 — 항목은 `{ userId, email, name, role, invitedAt }` |
 | `/api/projects/:projectId/members` | POST | owner | `{ email, role }`(이미 가입한 사용자만 초대 가능) | 201 멤버 |
 | `/api/projects/:projectId/members/:userId` | PATCH | owner | `{ role }` | 200 멤버(마지막 owner의 강등은 409) |
 | `/api/projects/:projectId/members/:userId` | DELETE | owner | — | 204(마지막 owner 제거는 409) |
 | `/api/projects/:projectId/menu` | GET | viewer | — | 200 메뉴 트리(중첩 배열, `pages` 없음) |
-| `/api/projects/:projectId/menu` | POST | editor | `{ parentId?, title }` | 201 메뉴 노드 |
-| `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder? }`(하나 이상) | 200 메뉴 노드 |
+| `/api/projects/:projectId/menu` | POST | editor | `{ parentId?, title }` | 201 `{ id, projectId, parentId, title, sortOrder }` — **트리 응답과 다른 모양이다**(`children`·`pages`가 없다) |
+| `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder? }`(하나 이상) | 200 `{ id, projectId, parentId, title, sortOrder }`(POST와 같은 키) |
 | `/api/projects/:projectId/menu/:nodeId` | DELETE | editor | — | 204(자식 메뉴·페이지가 있으면 409) |
-| `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description? }` | 201 페이지(기본 스키마: 빈 `Page`) |
+| `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다 |
 | `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
-| `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder? }`(하나 이상, `schema`는 여기서 못 바꾼다) | 200 페이지 |
+| `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder? }`(하나 이상, `schema`는 여기서 못 바꾼다) | 200 **페이지 여덟 키**(POST·GET과 같다) |
 | `/api/projects/:projectId/pages/:pageId/schema` | PUT | editor | `{ schema }`(문서 봉투 전체) | 200 페이지(봉투 위반 400, 카탈로그 위반 422, 실패 시 기존 스키마 보존). 통째 교체도 revision을 남긴다 |
 | `/api/projects/:projectId/pages/:pageId/ops` | PATCH | editor | `{ baseSeq, ops[], clientOpId? }` | 200 `{ seq, revisionId, inverse, schemaVersion, clientOpId? }`(본문·경로 제약 위반과 지원하지 않는 문서 버전·NUL 문자는 400, 페이지 없음 404, baseSeq 불일치·패치 실패 409, 카탈로그 위반 422) |
 | `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다(D11) |
@@ -150,6 +150,33 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 `"슬러그는 소문자·숫자·하이픈만 쓸 수 있고, 하이픈으로 시작하거나 끝날 수 없습니다"`로 온다
 (길이 상한 64는 정규식 안에 있고 별도 메시지가 없다). **중복은 409
 `"이미 사용 중인 슬러그입니다"`다.**
+
+### 페이지 응답 형태
+
+위 표의 **`페이지 여덟 키`는 이것이다.** 페이지를 내는 세 응답(`POST /pages` ·
+`PATCH /pages/:pageId` · `GET /pages/:pageId`)이 **전부 같은 키 집합**을 낸다 —
+서버의 `toResponse` 하나가 셋을 다 만든다.
+
+```jsonc
+{ "id": "…", "menuNodeId": "…", "title": "…", "description": null,
+  "sortOrder": 0, "schemaVersion": 1, "headSeq": 0, "schema": { /* 문서 봉투 */ } }
+```
+
+**메뉴 노드는 다섯 키다**(`POST /menu` · `PATCH /menu/:nodeId`가 같다):
+
+```jsonc
+{ "id": "…", "projectId": "…", "parentId": null, "title": "…", "sortOrder": 0 }
+```
+
+**프로젝트와 같은 이유로 응답을 그대로 요청 본문에 되보낼 수 없다.** 넷 다 `z.strictObject`라
+요청이 받지 않는 키가 섞이면 400이다 — 실측:
+
+```
+POST  /menu        응답 그대로 → 400 인식할 수 없는 키: "id", "projectId", "sortOrder"
+PATCH /menu/:id    응답 그대로 → 400 인식할 수 없는 키: "id", "projectId"
+POST  /pages       응답 그대로 → 400 인식할 수 없는 키: "id", "sortOrder", "schemaVersion", "schema", "headSeq"
+PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "schemaVersion", "schema", "headSeq"
+```
 
 ### 트리 응답 형태 (`GET /api/projects/:projectId/tree`)
 

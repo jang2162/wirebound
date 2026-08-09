@@ -61,7 +61,7 @@ export interface ProjectSummary {
  * ```
  *
  * **타입은 그것을 막지 못한다** — 초과 속성 검사가 스프레드 리터럴에 걸리지 않는다
- * (`http-client.ts`의 `projectBody` 머리말에 `tsc` 프로브 표가 있다). **그래서 나가는 본문을
+ * (`http-client.ts`의 `declaredOnly` 머리말에 `tsc` 프로브 표가 있다). **그래서 나가는 본문을
  * 만드는 자리에서 선언된 키만 골라 담는다.**
  */
 export interface ProjectDetail extends ProjectSummary {

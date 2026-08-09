@@ -193,15 +193,20 @@ const SHAPES = {
    * (P2b-5 웨이브 1 리뷰 F7 — 이 주석은 P2b-4 웨이브 1에 쓰였고 그 뒤 웨이브 2·3이 호출부를
    * 만들었다):
    *
-   * - ~~`rg`로 CRUD 여섯을 부르는 자리 **0건**~~ → **오늘 코드에서 11건이다**(실측, 메서드별:
-   *   `updateMenu` 4 · `updatePage` 3 · `createMenu`·`createPage`·`deleteMenu`·`deletePage` 각 1).
-   *   전부 `tree/use-tree-commands.tsx` 한 파일에 있다. **같은 `rg`가 내는 히트는 12다** —
-   *   열둘째는 아래 `pageDetail` 표가 `api.createPage(…)`를 인용한 것이라 코드가 아니다.
-   *   **세는 사람이 그 하나를 빼야 한다**(`project-actions.ts`의 `.role` 세기와 같은 함정이고,
-   *   이 주석을 고치면서 실제로 한 번 헛짚었다).
+   * - ~~`rg`로 CRUD 여섯을 부르는 자리 **0건**~~ → **부르는 자리가 생겼다.** 전부
+   *   `tree/use-tree-commands.tsx` 한 파일에 있고, 메서드별로 `updateMenu` 4 · `updatePage` 3 ·
+   *   `createMenu`·`createPage`·`deleteMenu`·`deletePage` 각 1이다. 다시 세려면 **그 파일을
+   *   지목해서** 세라 — `rg -c` 에 `apps/web/src/tree/use-tree-commands.tsx` 를 준다.
    * - **`MenuNode`를 값으로 읽는 자리 0건 — 이쪽은 여전히 참이다**(실측: 여섯 중 응답을 변수에
    *   받는 자리는 `createPage` 하나뿐이고 그것은 `PageDetail`이다. 나머지 열은 `await`만 하고
    *   버린다). 결론(얕게 둔다)을 떠받치는 것은 이 절이다.
+   *
+   * > **소스 텍스트를 세는 주석은 자기 자신을 센다.** 위에서 세는 범위를 `apps/web/src` 전체가
+   * > 아니라 **한 파일로 좁힌 것이 그 대응이다.** 앞 판은 범위를 안 좁히고 *"`rg` 히트는 12"*라
+   * > 적었는데, 그 수를 고치며 *"열둘째는 인용이다"*라고 쓴 **그 문장이 심볼을 인용하는 바람에
+   * > 히트가 13이 됐다** — 수를 갱신할수록 어긋나는 형태였다. `project-actions.ts`의 `.role`
+   * > 세기가 같은 자리이고 그쪽도 같은 함정을 겪었다. **세는 수를 주석에 적어야 하면, 그 수를
+   * > 다시 낼 명령이 주석이 사는 파일을 보지 않게 하라.**
    *
    * > **"오늘 0건"류 문장은 시간이 지나면 저절로 거짓이 된다.** 이 자리가 그 사례다 — 무엇이
    * > 그것을 갱신하게 만드는지까지 적지 않으면 아무도 갱신하지 않는다. 위 `isProjectDetail`의
@@ -506,10 +511,13 @@ function updateBody<T extends object>(body: T): Partial<T> {
  *
  * | 변이 | 사망 |
  * |---|---|
- * | 이 함수가 `keys`를 무시하고 `definedOnly(body)`를 내게 한다 | **5** |
- * | 자리별로 이 함수를 지운다 — `createMenu`·`updateMenu`·`createPage`·`patchOps` | 각 **1** |
- * | 같은 변이 — `updatePage` | **2** |
+ * | 이 함수가 `keys`를 무시하고 `definedOnly(body)`를 내게 한다 | **6** |
+ * | 자리별로 이 함수를 지운다 — `createProject`·`createMenu`·`updateMenu`·`createPage`·`patchOps` | 각 **1** |
+ * | 같은 변이 — `updateProject`·`updatePage` | 각 **2** |
  * | 안쪽 `definedOnly`를 항등으로 바꾼다(`undefined`인 키가 남는다) | **0** |
+ *
+ * **일곱 자리를 다 재서 적는다.** 앞 판은 다섯만 적어 `createProject`·`updateProject`를
+ * 빠뜨렸고, 첫 줄의 **5**는 `patchOps` 케이스를 더하기 전의 수였다(케이스가 늘어 6이 됐다).
  *
  * **키를 고르는 쪽은 자리마다 닫혔고, `undefined` 필터는 여전히 닫히지 않는다.** 뒤쪽이 0인
  * 원인은 `definedOnly` 머리말이 적은 것과 같다 — 나가는 본문의 유일한 관찰 지점이
@@ -665,7 +673,10 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
     //
     // **`declaredOnly`를 먼저 지난 뒤 `updateBody`가 센다.** 순서가 요점이다 — 미선언 키를
     // 먼저 떨어내지 않으면 `{id, role}`만 담긴 본문이 "빈 본문이 아니다"로 통과해 400이 된다.
-    // **갱신 셋이 전부 이 순서다.**
+    // **갱신 셋이 같은 순서이고, 셋 다 그 순서를 케이스가 지킨다**(자리마다 "선언되지 않은 키만
+    // 담긴 갱신 본문" 케이스가 하나씩 있다 — 뒤집으면 각 1 사망이다). **앞 판은 여기에 "셋이
+    // 전부 이 순서다"라고만 적었는데, 그때는 뒤집어도 죽는 것이 `updateProject` 하나뿐이었다** —
+    // 나머지 둘은 설계가 달라서가 아니라 케이스가 없어서였다(리뷰 V5).
     updateProject: async (projectId, body) =>
       request<ProjectDetail>(
         'PATCH',
