@@ -354,3 +354,54 @@ describe('토큰 층의 함수 (§6.8의 금지가 우회되지 않는다)', () 
     expect(table.has('semantic.bad')).toBe(false)
   })
 })
+
+describe('사슬이 실패하면 그 사슬에 기댄 키도 보인다 (F11)', () => {
+  const at = (issues: { code: string; path: string }[]) =>
+    issues.map((i) => `${i.code}@${i.path.replace('tokens.semantic.', '')}`).sort()
+
+  it('전이 실패 — 근원과 그것에 기댄 키가 각각 이슈다', () => {
+    const { table, issues } = resolveTokens({
+      semantic: { a: 'semantic.missing', b: 'semantic.a' },
+    })
+    expect(at(issues)).toEqual(['unknown-token@a', 'unresolved-token@b'])
+    expect(table.has('semantic.a')).toBe(false)
+    expect(table.has('semantic.b')).toBe(false)
+  })
+
+  it('키 순서를 바꿔도 같다', () => {
+    const { issues } = resolveTokens({ semantic: { b: 'semantic.a', a: 'semantic.missing' } })
+    expect(at(issues)).toEqual(['unknown-token@a', 'unresolved-token@b'])
+  })
+
+  it('순환에 들어가기만 한 키는 순환이라고 부르지 않는다', () => {
+    // `a`는 `b`를 가리킬 뿐 순환에 속하지 않는다. 그 자리에 "순환합니다"라고 쓰면 거짓이다.
+    const { issues } = resolveTokens({
+      semantic: { a: 'semantic.b', b: 'semantic.c', c: 'semantic.b' },
+    })
+    expect(at(issues)).toEqual(['circular-token@b', 'circular-token@c', 'unresolved-token@a'])
+  })
+
+  it('순수 순환은 전원이 순환이다', () => {
+    const { issues } = resolveTokens({ semantic: { a: 'semantic.b', b: 'semantic.a' } })
+    expect(at(issues)).toEqual(['circular-token@a', 'circular-token@b'])
+  })
+
+  it('함수·이름공간 위반도 사슬 전체를 보이게 한다', () => {
+    expect(at(resolveTokens({ semantic: { a: 'calc(1px)', b: 'semantic.a' } }).issues)).toEqual([
+      'bad-token-value@a',
+      'unresolved-token@b',
+    ])
+    expect(at(resolveTokens({ semantic: { a: 'space.6', b: 'semantic.a' } }).issues)).toEqual([
+      'bad-token-value@a',
+      'unresolved-token@b',
+    ])
+  })
+
+  it('긴 사슬에서도 전원이 보인다', () => {
+    const semantic: Record<string, string> = { k0: 'semantic.missing' }
+    for (let i = 1; i < 50; i += 1) semantic[`k${i}`] = `semantic.k${i - 1}`
+    const { issues } = resolveTokens({ semantic })
+    expect(issues.length).toBe(50)
+    expect(issues.filter((i) => i.code === 'unresolved-token').length).toBe(49)
+  })
+})

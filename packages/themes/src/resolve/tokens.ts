@@ -266,14 +266,31 @@ function resolveSemantic(
 
     while (cursor !== undefined) {
       if (onChain.has(cursor)) {
-        for (const key of chain) {
-          issues.push(issue('circular-token', pathOf(key), `토큰 참조가 순환합니다: ${key}`))
+        // 사슬이 순환으로 **들어간** 것과 순환에 **속한** 것을 가른다. 다시 만난 지점부터가
+        // 순환이고, 그 앞은 순환의 일부가 아니라 그것에 기댈 뿐이다.
+        const entry = chain.indexOf(cursor)
+        chain.forEach((key, index) => {
+          if (index >= entry) {
+            issues.push(issue('circular-token', pathOf(key), `토큰 참조가 순환합니다: ${key}`))
+          } else {
+            issues.push(unresolved(key, semantic, pathOf(key)))
+          }
           done.add(key)
-        }
+        })
         break
       }
       if (done.has(cursor)) {
-        resolved = table.get(`semantic.${cursor}`) ?? null
+        // 이미 걸어 본 키다. 그것이 **풀리지 못한 키**였다면 이 사슬도 못 푼다 —
+        // 그냥 빠져나가면 여기 지나온 키들이 이슈 없이 사라진다(그 갈래를 케이스가 잡았다).
+        const known = table.get(`semantic.${cursor}`)
+        if (known === undefined) {
+          for (const key of chain) {
+            issues.push(unresolved(key, semantic, pathOf(key)))
+            done.add(key)
+          }
+          break
+        }
+        resolved = known
         break
       }
 
@@ -290,7 +307,7 @@ function resolveSemantic(
         const rejected = rejectTokenFunctions(value, pathOf(cursor))
         if (rejected.length > 0) {
           issues.push(...rejected)
-          markFailed(chain, done)
+          markFailed(chain, semantic, pathOf, issues, done)
           break
         }
         resolved = value
@@ -304,7 +321,7 @@ function resolveSemantic(
       if (namespace === 'semantic') {
         if (own(semantic, name) === undefined) {
           issues.push(issue('unknown-token', pathOf(cursor), `없는 토큰을 가리킵니다: ${value}`))
-          markFailed(chain, done)
+          markFailed(chain, semantic, pathOf, issues, done)
           break
         }
         cursor = name
@@ -319,14 +336,14 @@ function resolveSemantic(
             `semantic은 palette·semantic만 가리킬 수 있습니다 (받은 참조: ${value})`,
           ),
         )
-        markFailed(chain, done)
+        markFailed(chain, semantic, pathOf, issues, done)
         break
       }
 
       const literal = table.get(value)
       if (literal === undefined) {
         issues.push(issue('unknown-token', pathOf(cursor), `없는 토큰을 가리킵니다: ${value}`))
-        markFailed(chain, done)
+        markFailed(chain, semantic, pathOf, issues, done)
         break
       }
       resolved = literal
@@ -342,7 +359,27 @@ function resolveSemantic(
   }
 }
 
-/** 사슬 끝이 실패했으므로 지나온 키를 전부 미해결로 닫는다 — 같은 사슬을 다시 걷지 않는다. */
-function markFailed(chain: string[], done: Set<string>): void {
-  for (const key of chain) done.add(key)
+/**
+ * 사슬 끝이 실패했다. 그 끝은 이미 자기 이슈를 받았으므로, **앞서 지나온 키들에도** 각각
+ * 이슈를 내고 닫는다 — 근원 하나만 보고하면 그 사슬에 기댄 키들이 화면에서 보이지 않는다.
+ */
+function markFailed(
+  chain: string[],
+  semantic: Record<string, string>,
+  pathOf: (key: string) => string,
+  issues: ThemeIssue[],
+  done: Set<string>,
+): void {
+  chain.forEach((key, index) => {
+    if (index < chain.length - 1) issues.push(unresolved(key, semantic, pathOf(key)))
+    done.add(key)
+  })
+}
+
+function unresolved(key: string, semantic: Record<string, string>, path: string): ThemeIssue {
+  return issue(
+    'unresolved-token',
+    path,
+    `기대는 참조 사슬이 풀리지 않았습니다: ${key} → ${own(semantic, key) ?? '?'}`,
+  )
 }

@@ -269,7 +269,12 @@ function typographyDeclarations(
     return {
       css: [],
       issues: [
-        issue('unknown-token', path, `타이포 스케일 항목이 아닙니다: ${entry}`),
+        issue(
+          'unknown-token',
+          path,
+          `타이포 스케일 항목이 아닙니다: ${entry} ` +
+            `(${TYPOGRAPHY_KEYS.map(([key]) => key).join('·')} 중 하나도 없습니다)`,
+        ),
       ],
     }
   }
