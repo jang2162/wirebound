@@ -80,6 +80,7 @@ export interface ProjectCommands {
   /** 열려 있는 폼. 닫혀 있으면 `null`. */
   form: ProjectFormState | null
   openCreate: () => void
+  openEdit: (project: ProjectDetail) => void
   closeForm: () => void
   submitForm: (values: ProjectFormValues) => void
 }
@@ -208,6 +209,21 @@ export function useProjectCommands(): ProjectCommands {
   }
 
   /**
+   * 수정 폼을 연다. **`openCreate`와 같은 잠금이고**, 다른 것은 초기값이 실린다는 것뿐이다.
+   *
+   * **폼 컴포넌트를 나누지 않고 `form.project`로 가른다**(계획서 Task 5 Step 3의 판단).
+   * 묻는 것이 같고 다른 것은 초기값과 버튼 글자뿐이라, 나누면 D4의 blur 규칙과 포커스 규칙이
+   * 두 벌이 되고 한쪽만 고치는 자리가 생긴다 — `panels/tree-input.tsx`가 만들기와 이름 변경을
+   * 한 컴포넌트로 둔 것과 같은 판단이다. **분기가 느는 값은 이 함수 하나와 `submitForm`의
+   * `target === null` 하나뿐이다.**
+   */
+  function openEdit(project: ProjectDetail): void {
+    if (inFlight.current) return
+    setFailure(null)
+    setForm({ project })
+  }
+
+  /**
    * 폼을 닫는다. **잠그지 않는다** — 닫는 것은 요청이 나가 있는 동안에도 안전하고, 잠그면
    * 사용자가 폼을 못 닫는다. 나간 요청은 그대로 진행되고 성공하면 재조회가 목록을 맞춘다.
    */
@@ -239,20 +255,44 @@ export function useProjectCommands(): ProjectCommands {
       description: values.description === '' ? undefined : values.description,
     }
 
+    const target = form.project
+    if (target === null) {
+      void run(
+        async () => {
+          const created = await api.createProject(body)
+          createdId.current = created.id
+        },
+        () => {
+          setForm(null)
+          // **만든 프로젝트로 간다(D7).** `id`가 빈 문자열이면 `/projects/`가 되고 화면이
+          // 통째로 비는데, 그것은 `SHAPES.projectDetail`이 관문에서 막는다(웨이브 1 실측).
+          const id = createdId.current
+          if (id !== null) navigate(`/projects/${id}`)
+        },
+      )
+      return
+    }
+
+    // **수정은 세 필드를 함께 보낸다 — 부분 갱신이 아니다**(계획서 Task 5 케이스 4의 판단).
+    //
+    // **바꿨는지 비교하지 않는 근거는 P2b-4의 실측이다:** 서버가 제목을 정규화하지 않으므로
+    // (`' 가'`와 `'가'`가 다른 값이다) "같으니 보내지 않는다"로 막으면 사용자가 그 공백을
+    // 지울 방법이 없어진다. **필드가 셋이라 비교는 셋 다 필요해지고, 셋이 다 같으면 빈 본문이
+    // 되어 `updateBody`가 던진다** — 눌렀는데 아무 일도 안 나는 화면이 된다.
+    //
+    // **전체 갱신의 한계도 재서 적는다:** 설명을 지우면 `undefined`가 되어 그 키가 빠지므로
+    // **"바꾸지 않는다"가 되고 옛 설명이 서버에 남는다.** 지우는 뜻을 보내려면 `null`이어야
+    // 하는데, 폼이 "비움"과 "지움"을 가르지 못한다. 이 단계는 지우기를 만들지 않고
+    // 케이스로 그 사실을 고정해 둔다.
     void run(
       async () => {
-        const created = await api.createProject(body)
-        createdId.current = created.id
+        await api.updateProject(target.id, body)
       },
       () => {
         setForm(null)
-        // **만든 프로젝트로 간다(D7).** `id`가 빈 문자열이면 `/projects/`가 되고 화면이
-        // 통째로 비는데, 그것은 `SHAPES.projectDetail`이 관문에서 막는다(웨이브 1 실측).
-        const id = createdId.current
-        if (id !== null) navigate(`/projects/${id}`)
       },
     )
   }
 
-  return { state, busy, failure, form, openCreate, closeForm, submitForm }
+  return { state, busy, failure, form, openCreate, openEdit, closeForm, submitForm }
 }

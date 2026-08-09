@@ -279,3 +279,142 @@ describe('프로젝트 만들기', () => {
     await waitFor(() => expect(h.createProject).toHaveBeenCalledTimes(1))
   })
 })
+
+describe('프로젝트 수정', () => {
+  const owned = project({ id: 'p-own', name: '내 프로젝트', slug: 'mine', description: '설명' })
+  const asEditor = project({ id: 'p-ed', name: '편집자 프로젝트', slug: 'ed', role: 'editor' })
+  const asViewer = project({ id: 'p-vw', name: '뷰어 프로젝트', slug: 'vw', role: 'viewer' })
+
+  it('owner인 항목에만 수정 버튼이 있다', async () => {
+    // **D3** — `PATCH`가 owner 전용이고 그보다 낮은 멤버는 **403**이다(웨이브 1 실측).
+    // 눌러 봐야 403인 버튼을 활성으로 두지 않는다.
+    renderCrud({ lists: [[owned, asEditor, asViewer]] })
+    await screen.findByText('내 프로젝트')
+
+    expect(screen.getByRole('button', { name: '내 프로젝트 수정' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: '편집자 프로젝트 수정' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '뷰어 프로젝트 수정' })).toBeNull()
+  })
+
+  it('누르면 폼이 지금 값으로 채워져 열린다', async () => {
+    renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
+
+    expect((field('이름') as HTMLInputElement).value).toBe('내 프로젝트')
+    expect((field('슬러그') as HTMLInputElement).value).toBe('mine')
+    expect((field('설명') as HTMLInputElement).value).toBe('설명')
+  })
+
+  it('설명이 null이면 빈 칸으로 열린다', async () => {
+    // 서버의 "설명 없음"은 `null`이고 폼의 그것은 빈 문자열이다 — 그 변환이 어긋나면
+    // 화면에 `null`이라는 글자가 뜬다.
+    renderCrud({ lists: [[project({ id: 'p-own', name: '내 프로젝트', description: null })]] })
+    await screen.findByText('내 프로젝트')
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
+
+    expect((field('설명') as HTMLInputElement).value).toBe('')
+  })
+
+  it('제출하면 세 필드를 함께 보낸다', async () => {
+    // **케이스 4의 판단: 전체 갱신이다.** 바꾸지 않은 필드도 함께 보낸다 — 근거는 아래
+    // `사용자가 지운 설명을 …` 케이스가 지킨다.
+    const h = renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
+
+    type('이름', '바뀐 이름')
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(h.updateProject).toHaveBeenCalledTimes(1))
+    expect(h.updateProject.mock.calls[0]?.[0]).toBe('p-own')
+    expect(h.updateProject.mock.calls[0]?.[1]).toEqual({
+      name: '바뀐 이름',
+      slug: 'mine',
+      description: '설명',
+    })
+  })
+
+  it('사용자가 지운 설명은 빈 문자열이 아니라 없는 키로 나간다', async () => {
+    // **전체 갱신으로 정한 근거이자 그 한계다.** 설명을 지우면 `description`이 `undefined`가
+    // 되고 `declaredOnly`가 그 키를 뺀다 — 즉 **"설명을 바꾸지 않는다"가 되어 옛 설명이
+    // 서버에 남는다.** 지우는 뜻이라면 `null`을 보내야 한다.
+    //
+    // **이 단계는 지우기를 만들지 않는다.** 폼이 "비움"과 "지움"을 가르지 못하기 때문이고,
+    // 가르려면 필드에 그 뜻을 담는 장치(예: 지움 체크박스)가 필요한데 그것은 새 화면 규칙이다.
+    // **그 한계를 케이스로 고정해 둔다** — 지우기를 만들 때 여기가 먼저 죽는다.
+    const h = renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
+
+    type('설명', '')
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(h.updateProject).toHaveBeenCalledTimes(1))
+    expect((h.updateProject.mock.calls[0]?.[1] as Record<string, unknown>)['description']).toBeUndefined()
+  })
+
+  it('성공하면 목록을 다시 받고 폼이 닫힌다', async () => {
+    const h = renderCrud({
+      lists: [[owned], [project({ id: 'p-own', name: '바뀐 이름', slug: 'mine' })]],
+    })
+    await screen.findByText('내 프로젝트')
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
+
+    type('이름', '바뀐 이름')
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(h.listProjects).toHaveBeenCalledTimes(2))
+    // **수정은 목록에 남는다** — 만들기와 달리 이동이 없다.
+    await screen.findByText('바뀐 이름')
+    expect(screen.queryByLabelText('이름')).toBeNull()
+  })
+
+  it('중복 슬러그 409의 문장이 남고 폼이 열려 있다', async () => {
+    // **재라 #2 실측: `PATCH`의 중복도 409이고 문장이 `POST`와 같다.**
+    // 폼을 닫지 않는 것이 요점이다 — 닫으면 사용자가 고칠 자리를 잃는다.
+    const h = renderCrud({
+      lists: [[owned]],
+      updateProject: async () => {
+        throw new ApiError(409, 'conflict', DUPLICATE_SLUG)
+      },
+    })
+    await screen.findByText('내 프로젝트')
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
+
+    type('슬러그', 'taken')
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await screen.findByText(DUPLICATE_SLUG)
+    expect(h.listProjects).toHaveBeenCalledTimes(1)
+    expect(screen.getByLabelText('슬러그')).toBeDefined()
+  })
+
+  it('Esc로 닫힌다', async () => {
+    const h = renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
+
+    fireEvent.keyDown(field('이름'), { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByLabelText('이름')).toBeNull())
+    expect(h.updateProject).not.toHaveBeenCalled()
+  })
+
+  it('빈 본문이 만들어지는 경로가 없다', async () => {
+    // **재라 #4** — 서버는 빈 갱신 본문에 400을 낸다. 폼은 이름·슬러그가 비면 보내지 않고,
+    // 셋을 함께 보내므로 남는 키가 0이 되는 경로가 없다. **`updateProject`가 받은 본문에
+    // 이름·슬러그가 늘 있다**는 것이 그 사실이다.
+    const h = renderCrud({ lists: [[owned]] })
+    await screen.findByText('내 프로젝트')
+    fireEvent.click(screen.getByRole('button', { name: '내 프로젝트 수정' }))
+
+    type('설명', '')
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(h.updateProject).toHaveBeenCalledTimes(1))
+    const body = h.updateProject.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(body['name']).toBe('내 프로젝트')
+    expect(body['slug']).toBe('mine')
+  })
+})

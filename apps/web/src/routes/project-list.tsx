@@ -14,8 +14,10 @@
 import type { ReactElement } from 'react'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
+import { projectAbilities } from '../projects/project-actions'
 import { ProjectForm } from '../projects/project-form'
-import { useProjectCommands } from '../projects/use-project-commands'
+import { useProjectCommands, type ProjectCommands } from '../projects/use-project-commands'
+import type { ProjectDetail } from '../api/types'
 
 /** 조회가 성공했는데 결과가 비어 있을 때의 안내. */
 const EMPTY_NOTICE = '참여 중인 프로젝트가 없습니다'
@@ -68,15 +70,50 @@ export function ProjectListRoute(): ReactElement {
         ) : (
           <ul>
             {state.projects.map((project) => (
-              <li key={project.id}>
-                {/* 버튼이 아니라 링크인 것은 주소가 있는 이동이기 때문이다 — 새 탭으로
-                    열거나 주소를 공유할 수 있어야 한다. */}
-                <Link to={`/projects/${project.id}`}>{project.name}</Link>
-                {project.description !== null && <p>{project.description}</p>}
-              </li>
+              <ProjectRow key={project.id} project={project} commands={commands} />
             ))}
           </ul>
         ))}
     </main>
+  )
+}
+
+/**
+ * 목록의 한 줄. **역할 판정을 여기서 다시 하지 않는다** — `projectAbilities` 하나가 그것을
+ * 갖는다(D3). **`.role`을 읽는 자리가 이 한 곳이어야** 판정이 흩어지지 않는다.
+ */
+function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }): ReactElement {
+  const { project, commands } = props
+  const abilities = projectAbilities(project.role)
+  const editing = commands.form !== null && commands.form.project?.id === project.id
+
+  return (
+    <li>
+      {/* 버튼이 아니라 링크인 것은 주소가 있는 이동이기 때문이다 — 새 탭으로 열거나
+          주소를 공유할 수 있어야 한다. */}
+      <Link to={`/projects/${project.id}`}>{project.name}</Link>
+      {project.description !== null && <p>{project.description}</p>}
+
+      {/* **`owner`가 아니면 버튼 자체가 없다**(D3) — `editor`·`viewer`는 `PATCH`·`DELETE`
+          둘 다 403이다(웨이브 1 실측). 비활성으로 두지 않고 아예 그리지 않는 것은, 이 화면에서
+          역할이 바뀌는 길이 없어 "지금은 못 하지만 곧 될 수도 있다"가 아니기 때문이다. */}
+      {abilities.rename && (
+        <button type="button" disabled={commands.busy} onClick={() => commands.openEdit(project)}>
+          {`${project.name} 수정`}
+        </button>
+      )}
+
+      {/* 수정 폼은 **그 항목 자리에** 연다 — 만들기는 목록 위다(D4). */}
+      {editing && (
+        <ProjectForm
+          key={`edit-${project.id}`}
+          submitLabel="저장"
+          initial={project}
+          busy={commands.busy}
+          onSubmit={commands.submitForm}
+          onCancel={commands.closeForm}
+        />
+      )}
+    </li>
   )
 }
