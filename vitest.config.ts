@@ -13,6 +13,7 @@ const shared = {
     alias: {
       '@wirebound/schema': src('./packages/schema/src/index.ts'),
       '@wirebound/renderer': src('./packages/renderer/src/index.ts'),
+      '@wirebound/themes': src('./packages/themes/src/index.ts'),
     },
   },
 }
