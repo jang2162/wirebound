@@ -114,5 +114,17 @@ export function structureBaseCss(): string {
     ]),
   )
 
+  // ── Grid ──────────────────────────────────────────────────────────────────
+  //
+  // 열 수는 `repeat()` 안쪽에서만 쓰이므로 **트랙 목록 전체가 아니라 수 하나**를 나른다.
+  // `GridDefault`가 이미 `--wb-grid-columns`를 내면서 바로 옆에 `grid-template-columns`를
+  // inline으로 박아 무력화하고 있었다 — 옳은 절반이 이미 있었고 틀린 절반을 지운 것이다.
+  blocks.push(
+    componentRule('Grid', 'default', [
+      'display: grid;',
+      `grid-template-columns: repeat(var(${nodeVar('grid', 'columns')}, 1), 1fr);`,
+    ]),
+  )
+
   return blocks.join('\n')
 }

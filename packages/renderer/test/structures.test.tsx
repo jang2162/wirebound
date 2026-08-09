@@ -85,6 +85,46 @@ describe('part 계약', () => {
   })
 })
 
+/** 렌더된 HTML에서 모든 `style` 속성의 선언을 뽑는다. */
+function styleDeclarations(html: string): string[] {
+  return captures(html, /\sstyle="([^"]*)"/g)
+    .flatMap((value) => value.split(';'))
+    .map((declaration) => declaration.trim())
+    .filter((declaration) => declaration !== '')
+}
+
+describe('구조는 style에 커스텀 프로퍼티만 싣는다 (P0 이월 #7)', () => {
+  /**
+   * **일반 선언은 모든 셀렉터를 이기므로 테마가 `!important` 없이는 진다.** 그것이
+   * P0 이월 #7의 본체이고, `structure-css.test.ts`가 그 캐스케이드를 실제로 쟀다.
+   *
+   * 아래 두 케이스가 **쌍으로** 있어야 하는 이유: 이 케이스만 있으면 값을 그냥 지워도
+   * 초록이 된다. 값이 여전히 나가는 것은 `structure-css.test.ts`의 계산된 스타일
+   * 케이스가 지킨다.
+   */
+  it('Flex는 style에 커스텀 프로퍼티만 싣는다', () => {
+    const html = renderToStaticMarkup(
+      renderNode({
+        id: 'n_000000000001',
+        type: 'Flex',
+        props: { direction: 'column', align: 'center', justify: 'between', wrap: true },
+      }),
+    )
+    const declarations = styleDeclarations(html)
+    expect(declarations.length).toBeGreaterThan(0)
+    expect(declarations.filter((declaration) => !declaration.startsWith('--'))).toEqual([])
+  })
+
+  it('Grid는 style에 커스텀 프로퍼티만 싣는다', () => {
+    const html = renderToStaticMarkup(
+      renderNode({ id: 'n_000000000001', type: 'Grid', props: { columns: 3 } }),
+    )
+    const declarations = styleDeclarations(html)
+    expect(declarations.length).toBeGreaterThan(0)
+    expect(declarations.filter((declaration) => !declaration.startsWith('--'))).toEqual([])
+  })
+})
+
 describe('개별 구조', () => {
   it('Text는 role을 그대로 내려보낸다', () => {
     const html = renderToStaticMarkup(
@@ -140,7 +180,9 @@ describe('개별 구조', () => {
     const html = renderToStaticMarkup(
       renderNode({ id: 'n_000000000001', type: 'Grid', props: { columns: 3 } }),
     )
-    expect(html).toContain('--wb-grid-columns:3')
+    // 이름이 `--wb-grid-columns`에서 바뀌었다. 옛 이름은 테마가 `primitives.grid.columns`에서
+    // 만드는 변수 이름과 **정확히 같았다** — 근거는 `src/structure-css.ts`의 `NODE_VAR_PREFIX`.
+    expect(html).toContain('--wb-node-grid-columns:3')
   })
 
   it('KeyValue는 키와 값 조각을 낸다', () => {

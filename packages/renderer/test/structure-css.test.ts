@@ -1,10 +1,25 @@
-import { describe, expect, it } from 'vitest'
-import { NODE_VAR_PREFIX, structureBaseCss } from '../src/structure-css'
+import { installCatalog } from '@wirebound/schema'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { renderNode } from '../src/render'
+import { NODE_VAR_PREFIX, nodeVar, structureBaseCss } from '../src/structure-css'
+import { installStructures } from '../src/structures/index'
 import { probe } from './css-probe'
+
+beforeAll(() => {
+  installCatalog()
+  installStructures()
+})
 
 /** 테마 CSS가 낼 셀렉터 모양. `compileTheme`의 `pushComponent`가 이 꼴을 만든다. */
 function themeRule(type: string, structure: string, body: string): string {
   return `[data-wb-component="${type}"][data-wb-structure="${structure}"] { ${body} }`
+}
+
+/** 노드 하나를 실제로 그려 구조 기본 CSS 아래에 넣는다. */
+async function renderedProbe(type: string, props: Record<string, unknown>, extraSheets: string[] = []) {
+  const html = renderToStaticMarkup(renderNode({ id: 'n_000000000001', type, props }))
+  return probe([structureBaseCss(), ...extraSheets], html)
 }
 
 describe('Task 1 — 캐스케이드 층을 무엇으로 할지 잰 결과', () => {
@@ -131,5 +146,70 @@ describe('Task 1 — structureBaseCss', () => {
 
     const both = await probe([structureBaseCss(), themeRule('Flex', 'default', 'display: grid;')], html)
     expect(both.computed('[data-wb-component="Flex"]', 'display')).toBe('grid')
+  })
+})
+
+/**
+ * **값이 실제로 노드까지 흘러가는지.** 계획서가 *"계산된 스타일까지 간다"*를 요구하는데,
+ * jsdom은 `var()`를 치환하지 못한다(`css-probe.ts`의 표) — 그래서 **두 조각으로 나눠 잰다.**
+ *
+ * 1. 노드에 커스텀 프로퍼티가 그 값으로 실렸는가 (계산된 스타일로 읽는다 — jsdom이 한다)
+ * 2. 구조 기본 CSS의 선언이 그 이름을 가리키는가 (계산된 스타일이 `var(…)` 문자열로 나온다)
+ *
+ * 마지막 치환 한 걸음(브라우저가 1을 2에 꽂는 것)은 **이 저장소의 자동 테스트가 재지
+ * 못한다.** 실제 브라우저로 따로 쟀고 그 결과는 이월 문서에 적는다.
+ */
+describe('Task 2 — Flex·Grid의 값이 커스텀 프로퍼티로 흘러간다', () => {
+  it('Flex의 네 prop이 전부 노드에 실린다', async () => {
+    const dom = await renderedProbe('Flex', {
+      direction: 'column',
+      align: 'center',
+      justify: 'between',
+      wrap: true,
+    })
+    const flex = '[data-wb-component="Flex"]'
+    expect(dom.computed(flex, nodeVar('flex', 'direction'))).toBe('column')
+    expect(dom.computed(flex, nodeVar('flex', 'align'))).toBe('center')
+    // `between`은 CSS 키워드가 아니다 — 대응이 없는 유일한 값이라 렌더러가 바꾼다.
+    expect(dom.computed(flex, nodeVar('flex', 'justify'))).toBe('space-between')
+    expect(dom.computed(flex, nodeVar('flex', 'wrap'))).toBe('wrap')
+  })
+
+  it('구조 기본 CSS가 그 이름들을 읽는다', async () => {
+    const dom = await renderedProbe('Flex', { direction: 'column' })
+    const flex = '[data-wb-component="Flex"]'
+    expect(dom.computed(flex, 'display')).toBe('flex')
+    expect(dom.computed(flex, 'flex-direction')).toBe(`var(${nodeVar('flex', 'direction')}, row)`)
+    expect(dom.computed(flex, 'align-items')).toBe(`var(${nodeVar('flex', 'align')}, stretch)`)
+    expect(dom.computed(flex, 'justify-content')).toBe(`var(${nodeVar('flex', 'justify')}, start)`)
+    expect(dom.computed(flex, 'flex-wrap')).toBe(`var(${nodeVar('flex', 'wrap')}, nowrap)`)
+  })
+
+  it('Flex의 정렬 값은 flex-start가 아니라 start로 나간다', async () => {
+    // §6.0이 약속한 것 — 테마가 `display`를 grid로 덮을 수 있다. `flex-start`는 flexbox
+    // 밖에서 뜻이 흐려지고 `start`는 상자 정렬 어느 문맥에서나 같다.
+    const dom = await renderedProbe('Flex', { align: 'start', justify: 'start' })
+    const flex = '[data-wb-component="Flex"]'
+    expect(dom.computed(flex, nodeVar('flex', 'align'))).toBe('start')
+    expect(dom.computed(flex, nodeVar('flex', 'justify'))).toBe('start')
+  })
+
+  it('Grid의 열 수가 노드에 실리고 기본 CSS가 그것으로 트랙을 만든다', async () => {
+    const dom = await renderedProbe('Grid', { columns: 3 })
+    const grid = '[data-wb-component="Grid"]'
+    expect(dom.computed(grid, nodeVar('grid', 'columns'))).toBe('3')
+    expect(dom.computed(grid, 'display')).toBe('grid')
+    expect(dom.computed(grid, 'grid-template-columns')).toBe(
+      `repeat(var(${nodeVar('grid', 'columns')}, 1), 1fr)`,
+    )
+  })
+
+  it('테마가 Flex의 display를 grid로 덮어도 노드의 값은 그대로 있다', async () => {
+    const dom = await renderedProbe('Flex', { direction: 'column' }, [
+      themeRule('Flex', 'default', 'display: grid;'),
+    ])
+    const flex = '[data-wb-component="Flex"]'
+    expect(dom.computed(flex, 'display')).toBe('grid')
+    expect(dom.computed(flex, nodeVar('flex', 'direction'))).toBe('column')
   })
 })
