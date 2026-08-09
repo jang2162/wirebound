@@ -304,8 +304,11 @@ function isWholeState(selector: string): boolean {
  * 문자열을 인식하기는 하므로 그 안의 `//`가 주석으로 읽히지는 않는다(`'http://…'`).
  *
  * 걷은 자리를 공백으로 채우는 것은 앞뒤 토큰이 붙어 새 이름이 생기는 것을 막기 위해서다.
+ *
+ * **`role-access.test.ts`도 이것을 쓴다** — 소스에서 무언가를 세는 검사는 **주석을 걷지 않으면
+ * 자기 자신을 센다**(P2b-5에서 그 사고가 두 번 났다). 그래서 export 한다.
  */
-function stripComments(source: string): string {
+export function stripComments(source: string): string {
   let out = ''
   let index = 0
 
