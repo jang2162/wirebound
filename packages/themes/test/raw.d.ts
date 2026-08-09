@@ -25,3 +25,21 @@ interface ImportMeta {
     options: { query: '?raw'; eager: true; import: 'default' },
   ): Record<string, string>
 }
+
+/**
+ * `jsdom`은 저장소 루트의 devDependency다. **`themes`의 의존이 아니고 `src/`는 쓰지 않는다** —
+ * `test/emit-parse.test.ts`가 방출된 CSS를 실제로 파싱해 보는 프로브로만 동적 import한다.
+ * `@types/jsdom`을 들이지 않으려고 쓰는 만큼만 선언한다.
+ */
+declare module 'jsdom' {
+  export class JSDOM {
+    constructor(html: string)
+    readonly window: { document: Document }
+  }
+  interface Document {
+    querySelector(selectors: string): Element | null
+  }
+  interface Element {
+    readonly textContent: string | null
+  }
+}

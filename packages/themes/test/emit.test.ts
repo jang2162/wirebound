@@ -243,9 +243,13 @@ describe('compileTheme — 결정적이다 (§6.11)', () => {
 })
 
 describe('compileTheme — 얕은 성질만 본다', () => {
-  it('중괄호가 균형을 이루고 선언마다 세미콜론이 있다', () => {
+  it('중괄호가 균형을 이루고 선언마다 세미콜론이 있고 따옴표 짝이 맞는다', () => {
     // **CSS 파서를 들이지 않는다.** 여기서 보는 것은 문자열의 얕은 성질뿐이고,
     // 이것이 통과한다고 유효한 CSS라는 뜻은 아니다.
+    //
+    // 따옴표 짝을 더한 이유는 그것이 **중괄호도 세미콜론도 건드리지 않으면서** 스타일시트를
+    // 통째로 못 쓰게 만드는 것을 재서 봤기 때문이다(`test/emit-parse.test.ts`).
+    // 줄을 CSS 개행 전부로 가르는 것도 같은 이유다 — 값에 든 개행이 줄을 쪼갠다.
     const css = compile(MINIMAL_THEME)
     let depth = 0
     for (const char of css) {
@@ -254,11 +258,18 @@ describe('compileTheme — 얕은 성질만 본다', () => {
       expect(depth).toBeGreaterThanOrEqual(0)
     }
     expect(depth).toBe(0)
-    for (const line of css.split('\n')) {
+    for (const line of css.split(/[\n\r\f]/)) {
       const trimmed = line.trim()
       if (trimmed === '' || trimmed.endsWith('{') || trimmed === '}') continue
       expect(trimmed.endsWith(';'), trimmed).toBe(true)
     }
+    let open: string | null = null
+    for (const char of css) {
+      if (open === null) {
+        if (char === '"' || char === "'") open = char
+      } else if (char === open) open = null
+    }
+    expect(open).toBeNull()
   })
 
   it('!important를 쓰지 않는다 (D9)', () => {

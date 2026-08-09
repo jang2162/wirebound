@@ -62,15 +62,32 @@ export function scanFunctions(value: string): FunctionScan {
  *
  * 막는 것과 이유:
  * - `{` `}` `;` — 선언과 블록의 끝. 새 규칙을 쓸 수 있다.
- * - `<` `>` — §6.11이 컴파일된 CSS를 `<style>`로 주입한다고 적었다. 값에 `</style>`이 들어가면
- *   그 요소가 닫힌다. **브라우저에서 실제로 그렇게 되는지는 이 패키지가 잴 수 없다** —
- *   막은 근거는 §6.11의 그 문장이지 관측이 아니다.
+ * - `<` `>` — §6.11이 컴파일된 CSS를 `<style>`로 주입한다고 적었다. **jsdom에 실제로 넣어
+ *   봤다**: 값에 `</style>`이 들어가면 스타일 블록이 그 자리에서 끝나 뒤쪽 CSS가 문서 본문
+ *   텍스트로 새고 규칙 수가 줄었다(대문자·공백 변형 `</STYLE >`도 같다). `<b>`는 아무 일도
+ *   하지 않으므로 꺾쇠를 통째로 막은 것은 `</style>` 하나보다 넓다 — 변형이 많아 넓게 막았다.
  * - `\` — CSS 이스케이프로 위의 어느 것이든 다시 쓸 수 있다(`\7d`이 `}`다).
  * - `/*` `*\/` — 주석이 뒤따르는 규칙을 삼킨다.
+ * - 개행(`\n`·`\r`·`\f`) — 방출은 **선언마다 한 줄**을 쓴다. 값에 개행이 들어가면 세미콜론
+ *   없이 끝나는 줄이 생긴다(`test/emit-parse.test.ts`가 그것을 관측한다).
  *
  * **`;`만 `url(…)` 안쪽에서 예외**다. `data:image/svg+xml;base64,…`가 그것을 쓰고, `url()`의
  * 대상은 검증하지 않는다고 이미 적어 둔 자리다. 나머지는 `url()` 안쪽에서도 막는다 —
  * 거기 `</style>`이 들어오면 같은 사고이기 때문이다.
+ *
+ * **따옴표는 막지 않고 짝을 본다.** 폰트 이름처럼 따옴표가 필요한 값이 있다
+ * (`"Noto Serif KR", serif`). 짝이 맞지 않으면 이슈다 — jsdom으로 재보니 값 한 자리의
+ * 홀수 따옴표가 **선언 하나가 아니라 스타일시트 전체**를 못 만들게 했다(`style.sheet`가
+ * `null`이다). 이것은 밖으로 새는 부류가 아니라 **자기를 무효화하는 부류**라 탈출 검사에
+ * 걸리지 않았고, 얕은 유효성 검사가 중괄호와 세미콜론만 보아 함께 놓쳤다.
+ *
+ * 짝 세기가 성립하는 근거는 **`\`를 이미 막는다는 것**이다 — 이스케이프된 따옴표가 들어올
+ * 수 없으므로 여는 따옴표는 반드시 같은 따옴표로 닫힌다(`a\"b`가 이미 이슈인 것을 쟀다).
+ *
+ * **대괄호는 막지 않는다.** `red[`·`red]`를 넣어도 jsdom의 규칙 수가 줄지 않았다 — 깨지는
+ * 것을 관측하지 못한 것을 근거 없이 막지 않는다. 널 문자와 `@`도 같다(`@`는 선언 하나를
+ * 잃었지만 그것은 값이 무효인 것이지 밖으로 나가는 것이 아니고, 널 문자는 저장 경계의
+ * `apps/api/src/db/nul-guard.ts`가 막는다).
  */
 export function rejectDangerousCharacters(value: string, path: string, label: string): ThemeIssue[] {
   const spans = urlSpans(value)
@@ -80,7 +97,7 @@ export function rejectDangerousCharacters(value: string, path: string, label: st
     const char = value[index]!
     const isComment = (char === '/' || char === '*') && value[index + 1] === (char === '/' ? '*' : '/')
     if (char === ';' && inUrl(index)) continue
-    if ('{}<>\\;'.includes(char) || isComment) {
+    if ('{}<>\\;\n\r\f'.includes(char) || isComment) {
       return [
         issue(
           'bad-style-value',
@@ -90,7 +107,36 @@ export function rejectDangerousCharacters(value: string, path: string, label: st
       ]
     }
   }
+
+  const unclosed = unclosedQuote(value)
+  if (unclosed !== null) {
+    return [
+      issue(
+        'bad-style-value',
+        path,
+        `${label}의 따옴표 짝이 맞지 않습니다: ${JSON.stringify(unclosed)}`,
+      ),
+    ]
+  }
   return []
+}
+
+/**
+ * 닫히지 않은 따옴표가 있으면 그 문자를, 없으면 `null`.
+ *
+ * 여는 따옴표는 **같은** 따옴표로만 닫힌다 — CSS 문자열 안의 다른 따옴표는 그냥 글자다.
+ * 그래서 `a"b'c"d`는 짝이 맞는다.
+ */
+function unclosedQuote(value: string): string | null {
+  let open: string | null = null
+  for (const char of value) {
+    if (open === null) {
+      if (char === '"' || char === "'") open = char
+    } else if (char === open) {
+      open = null
+    }
+  }
+  return open
 }
 
 /** `url(…)`의 안쪽 범위. `resolve/style.ts`의 참조 치환과 같은 규칙을 쓴다. */
