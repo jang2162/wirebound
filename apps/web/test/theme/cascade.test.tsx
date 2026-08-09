@@ -135,10 +135,12 @@ describe('테마를 바꾸면 외형이 바뀐다', () => {
       [FLEX, 'display'],
     ])
 
-    // `admin`은 방향을 정하지 않으므로 노드가 나른 값을 기본 CSS가 읽는다.
-    expect(admin).toEqual(['var(--wb-node-flex-direction, row)', 'flex'])
-    // `loud`는 그 선언 자체를 덮는다. **`!important` 없이 덮인다는 것이 이 줄의 전부다.**
+    // **`loud`를 먼저 단언한다.** 이 줄이 이 케이스가 지키는 것("테마가 이긴다")이고,
+    // `admin` 줄은 대조군이다. 순서를 바꾸면 결함을 복원했을 때 터지는 것이 대조군이라
+    // 실패 메시지가 "테마가 졌다"가 아니라 "계산값 문자열이 달라졌다"를 가리킨다.
     expect(loud).toEqual(['column', 'grid'])
+    // 대조군 — `admin`은 방향을 정하지 않으므로 노드가 나른 값을 기본 CSS가 읽는다.
+    expect(admin).toEqual(['var(--wb-node-flex-direction, row)', 'flex'])
   })
 
   /**
@@ -155,9 +157,10 @@ describe('테마를 바꾸면 외형이 바뀐다', () => {
       [GRID, '--wb-node-grid-columns'],
     ])
 
-    expect(admin).toEqual(['grid', 'repeat(var(--wb-node-grid-columns, 1), 1fr)', '3'])
+    // 테마가 이기는 줄이 먼저다(위 케이스와 같은 이유).
     // 노드가 나르는 열 수는 테마가 바뀌어도 그대로다 — 문서의 값이지 테마의 값이 아니다.
     expect(loud).toEqual(['flex', 'repeat(var(--wb-node-grid-columns, 1), 1fr)', '3'])
+    expect(admin).toEqual(['grid', 'repeat(var(--wb-node-grid-columns, 1), 1fr)', '3'])
   })
 
   it('Card의 background가 테마마다 다르다 — 평범한 스킨 경로', () => {
