@@ -218,7 +218,7 @@ describe('재라 #7 — variants와 states가 같은 조각을 건드릴 때', (
 
   it('두 셀렉터의 특이도가 같다 — 그래서 순서가 결정한다', () => {
     // 특이도는 속성 셀렉터의 개수로 정해진다. 둘을 세어 같은지 본다.
-    // **뒤에 온 것이 이긴다는 CSS 규칙 자체는 이 패키지가 재지 못한다** — 브라우저가 없다.
+    // 뒤에 온 것이 실제로 이기는 것은 `test/emit-parse.test.ts`가 jsdom으로 잰다.
     const css = compile(both)
     const count = (selector: string) => (selector.match(/\[/g) ?? []).length
     const variant = '[data-wb-component="List"][data-wb-variant="featured"] [data-wb-part="item"]'

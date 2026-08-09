@@ -103,3 +103,47 @@ describe('H2 — 짝이 맞지 않는 따옴표가 스타일시트를 통째로 
     expect(broken).toEqual(['background: red'])
   })
 })
+
+describe('재라 #7 — 상태가 이기는 것을 실제로 잰다', () => {
+  const both = {
+    ...MINIMAL_THEME,
+    components: {
+      List: {
+        structure: 'cardGrid',
+        variants: { featured: { parts: { item: { borderColor: 'semantic.surface' } } } },
+        states: { selected: { parts: { item: { borderColor: 'semantic.primary' } } } },
+      },
+    },
+  }
+
+  /** 변형과 상태를 둘 다 켠 노드에서 실제로 이긴 값. */
+  async function winner(css: string): Promise<string> {
+    const { JSDOM } = await import('jsdom')
+    const dom = new JSDOM(
+      `<!doctype html><html><head><style>${css}</style></head><body>` +
+        `<div data-wb-component="List" data-wb-structure="cardGrid"` +
+        ` data-wb-variant="featured" data-wb-state="selected">` +
+        `<span id="probe" data-wb-part="item"></span></div></body></html>`,
+    )
+    const element = dom.window.document.getElementById('probe')!
+    return dom.window.getComputedStyle(element).getPropertyValue('border-color')
+  }
+
+  it('같은 조각을 건드리면 상태 쪽 값이 남는다', async () => {
+    // 앞 웨이브는 여기 *"뒤에 온 것이 이긴다는 CSS 규칙은 이 패키지가 재지 못한다"*고 적었다.
+    // jsdom이 캐스케이드를 계산하므로 잴 수 있었다 — 커스텀 프로퍼티는 풀지 않아 `var(…)`가
+    // 그대로 나오지만, **어느 선언이 이겼는지**를 보는 데는 그것으로 충분하다.
+    const { theme } = resolveTheme(both)
+    expect(await winner(compileTheme(theme as ResolvedTheme))).toBe('var(--wb-semantic-primary)')
+  })
+
+  it('순서를 뒤집으면 이기는 쪽도 뒤집힌다 — 특이도가 아니라 순서가 결정한다', async () => {
+    // 방출된 CSS에서 두 규칙의 자리를 맞바꾼다. 셀렉터는 그대로이므로 특이도는 같다.
+    const { theme } = resolveTheme(both)
+    const css = compileTheme(theme as ResolvedTheme)
+    const rules = css.match(/\[data-wb-component="List"\]\[data-wb-(?:variant|state~)="[^"]+"\] \[data-wb-part="item"\] \{[^}]*\}/g)
+    expect(rules?.length, css).toBe(2)
+    const swapped = css.replace(rules![0]!, '\u0000').replace(rules![1]!, rules![0]!).replace('\u0000', rules![1]!)
+    expect(await winner(swapped)).toBe('var(--wb-semantic-surface)')
+  })
+})

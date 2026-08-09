@@ -10,8 +10,10 @@ import type { CssDeclaration, ResolvedComponent, ResolvedLayer, ResolvedTheme } 
  *
  * **`!important`를 붙이지 않는다**(D9). P0 이월이 남긴 결함(구조 구현체가 inline style을
  * 방출해 테마가 캐스케이드에서 진다)은 P4a-2가 걷어낼 것이고, 여기서 `!important`를 쓰면
- * 그때 되돌려야 한다. **그래서 "컴파일된 CSS가 실제로 먹히는가"는 이 패키지가 잴 수 없다** —
- * 브라우저가 없고 jsdom은 캐스케이드를 계산하지 않는다. P4a-2가 잰다.
+ * 그때 되돌려야 한다. **P0 이월이 말한 그 결함(inline style이 테마를 이긴다)이 실제 화면에서
+ * 어떻게 나타나는지는 이 패키지가 잴 수 없다** — 렌더러가 그린 DOM이 없기 때문이고,
+ * 브라우저가 없어서가 아니다(jsdom은 캐스케이드를 계산한다 — `pushComponent` 주석을 보라).
+ * P4a-2가 잰다.
  *
  * **결정적이다.** 같은 입력이 같은 문자열을 낸다(§6.11: *"동일한 컴파일러를 쓰므로 결과가
  * 같다"*). 근거는 이 함수가 순회하는 것(`tokens`·`primitives`·`components`·`breakpoints`)이
@@ -70,8 +72,11 @@ export function compileTheme(resolved: ResolvedTheme): string {
  * 이라 그 노드에 붙박이고, `states`는 *"노드 props에서 파생되는 상태 스킨"*이라 같은 노드
  * 위에서 켜졌다 꺼진다. 같은 절이 상태의 쓸모를 *"'선택된 행 강조' 같은 서술을 목업에서
  * 실제로 보여주려면"*이라고 적었는데, 변형이 상태를 덮으면 그 서술이 보이지 않는다.
- * 두 셀렉터의 속성 개수가 같다는 것(=특이도가 같다)은 케이스가 세어 확인한다. **다만
- * "뒤에 온 것이 이긴다"는 CSS 규칙 자체는 이 패키지가 재지 못한다** — 브라우저가 없다.
+ * 두 셀렉터의 속성 개수가 같다는 것(=특이도가 같다)은 케이스가 세어 확인하고, **뒤에 온
+ * 것이 실제로 이기는 것은 jsdom으로 쟀다** — 변형과 상태를 둘 다 켠 노드의 계산된
+ * `border-color`가 상태 쪽 값이고, 방출된 CSS에서 두 규칙의 자리만 맞바꾸면(셀렉터는
+ * 그대로이므로 특이도도 그대로) 이기는 쪽이 뒤집힌다(`test/emit-parse.test.ts`).
+ * 앞서 이 자리에 *"이 패키지가 재지 못한다"*고 적었는데, 재는 수단이 워크스페이스에 있었다.
  */
 function pushComponent(blocks: string[], type: string, component: ResolvedComponent): void {
   const root = `[data-wb-component="${type}"]`

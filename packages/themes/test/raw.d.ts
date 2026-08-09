@@ -34,10 +34,14 @@ interface ImportMeta {
 declare module 'jsdom' {
   export class JSDOM {
     constructor(html: string)
-    readonly window: { document: Document }
+    readonly window: {
+      document: Document
+      getComputedStyle(element: Element): { getPropertyValue(property: string): string }
+    }
   }
   interface Document {
     querySelector(selectors: string): Element | null
+    getElementById(id: string): Element | null
   }
   interface Element {
     readonly textContent: string | null
