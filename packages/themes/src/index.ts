@@ -35,3 +35,6 @@ export {
 
 export type { Theme } from './spec/theme'
 export { ThemeSchema } from './spec/theme'
+
+export type { ThemePatch } from './resolve/merge'
+export { ThemePatchSchema, mergeTheme } from './resolve/merge'
