@@ -21,6 +21,13 @@ export type ThemeIssueCode =
    */
   | 'unresolved-token'
   /**
+   * 서로 다른 선언이 **같은 토큰 표 키**로 접힌다.
+   *
+   * `duplicate-variable`보다 한 단계 앞이다. 표 키가 하나로 합쳐지면 변수 이름 단계에서는
+   * 볼 것이 남지 않으므로 그 검사가 원리적으로 잡지 못한다.
+   */
+  | 'duplicate-token'
+  /**
    * 서로 다른 토큰·primitives 경로가 같은 CSS 변수 이름으로 접힌다.
    *
    * 변수 이름은 경로의 `.`을 `-`로 바꿔 만드는데(D6) 토큰 이름 자체가 `.`과 `-`를 모두

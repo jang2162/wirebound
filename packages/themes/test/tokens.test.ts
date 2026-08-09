@@ -452,3 +452,56 @@ describe('값이 CSS 블록을 깨고 나가지 못한다', () => {
     expect(resolveTokens({ scale: { motion: { e: 'cubic-bezier(.4,0,.2,1)' } } }).issues).toEqual([])
   })
 })
+
+describe('두 선언이 같은 토큰 표 키로 접히면 이슈다', () => {
+  it('typography는 두 마디를 점으로 잇는다 — 거기서 접힌다', () => {
+    // `typography.${항목}.${키}`라 (`h4`,`a.b`)와 (`h4.a`,`b`)가 같은 키가 된다.
+    // 앞의 선언이 뒤의 것에 덮여 **이슈 없이 사라지던** 자리다(순서를 뒤집으면 남는 값이 바뀐다).
+    const cases: Record<string, Record<string, string | number>>[] = [
+      { h4: { 'a.b': '1px' }, 'h4.a': { b: '2px' } },
+      { 'h4.a': { b: '2px' }, h4: { 'a.b': '1px' } },
+      { 'a.b': { fontSize: '1px' }, a: { 'b.fontSize': '2px' } },
+    ]
+    for (const typography of cases) {
+      const { table, issues } = resolveTokens({ scale: { typography } })
+      expect(codes(issues), JSON.stringify(typography)).toEqual(['duplicate-token'])
+      // 뒤의 선언이 앞의 것을 덮지 않는다 — 접힘을 거절하고 이슈로 낸다.
+      expect(table.size, JSON.stringify(typography)).toBe(1)
+    }
+  })
+
+  it('이슈 문안이 접힌 경로를 말한다', () => {
+    const { issues } = resolveTokens({ scale: { typography: { h4: { 'a.b': '1px' }, 'h4.a': { b: '2px' } } } })
+    expect(issues[0]?.message).toContain('typography.h4.a.b')
+    expect(issues[0]?.path).toBe('tokens.scale.typography.h4.a.b')
+  })
+
+  it('다른 층은 이 자리에서 접히지 않는다 — 키가 통째로 이름이다', () => {
+    // 이름공간 하나만 앞에 붙으므로 두 선언이 같은 표 키가 될 수 없다. 그 대신
+    // `.`과 `-`가 같은 변수 이름으로 접히는 것은 `duplicate-variable`이 잡는다(다른 층위다).
+    for (const tokens of [
+      { palette: { 'a.b': '#1', 'a-b': '#2' } },
+      { semantic: { 'a.b': '#1', 'a-b': '#2' } },
+      { scale: { radius: { 'a.b': '1px', 'a-b': '2px' } } },
+      { scale: { shadow: { 'a.b': '1px', 'a-b': '2px' } } },
+      { scale: { motion: { 'a.b': '1ms', 'a-b': '2ms' } } },
+    ]) {
+      const { table, issues } = resolveTokens(tokens)
+      expect(codes(issues), JSON.stringify(tokens)).toEqual([])
+      expect(table.size, JSON.stringify(tokens)).toBe(2)
+    }
+  })
+
+  it('과도 차단이 없다 — 픽스처의 typography가 통과한다', () => {
+    const { issues } = resolveTokens({
+      scale: {
+        typography: {
+          family: { sans: 'A', serif: 'B' },
+          h3: { fontSize: '20px', lineHeight: 1.3 },
+          body: { fontSize: '14px' },
+        },
+      },
+    })
+    expect(codes(issues)).toEqual([])
+  })
+})

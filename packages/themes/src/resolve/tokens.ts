@@ -128,7 +128,7 @@ export function resolveTokens(tokens: ThemeTokens): { table: TokenTable; issues:
   const table = new Map<string, string>()
 
   const palette = collectLiteralLayer(tokens.palette, 'palette', 'tokens.palette', issues)
-  for (const [key, entry] of palette) table.set(key, entry.value)
+  for (const [key, entry] of palette) setToken(table, issues, key, entry.value, entry.path)
 
   for (const [key, value] of Object.entries(tokens.scale?.radius ?? {})) {
     putLiteral(table, issues, `radius.${key}`, value, `tokens.scale.radius.${key}`)
@@ -200,7 +200,7 @@ function putLiteral(
     issues.push(...rejected)
     return
   }
-  table.set(tokenPath, value)
+  setToken(table, issues, tokenPath, value, path)
 }
 
 function deriveSpace(
@@ -237,7 +237,7 @@ function deriveSpace(
   }
   const suffix = matched[2]!
   for (let step = 1; step <= SPACE_MAX; step += 1) {
-    table.set(`space.${step}`, `${round(size * step)}${suffix}`)
+    setToken(table, issues, `space.${step}`, `${round(size * step)}${suffix}`, 'tokens.scale.space.unit')
   }
 }
 
@@ -250,6 +250,41 @@ function rejectTokenFunctions(value: string, path: string): ThemeIssue[] {
     ...entry,
     code: 'bad-token-value' as const,
   }))
+}
+
+/**
+ * 표에 쓰는 **하나뿐인 자리**. 이미 있는 키에 다시 쓰려 하면 이슈다.
+ *
+ * **`duplicate-variable`보다 한 단계 앞을 본다.** 그 검사는 표의 키를 훑어 변수 이름이
+ * 겹치는지 보는데, **표 키 자체가 합쳐지면 훑을 것이 하나만 남아** 원리적으로 볼 수 없다.
+ * 실제로 그 자리가 있었다 — `scale.typography`는 표 키를 `typography.<항목>.<키>`로
+ * **사용자가 정하는 마디 둘을 이어** 만들기 때문에 `(h4, "a.b")`와 `("h4.a", b)`가 같은
+ * 키가 되고, 앞의 선언이 이슈 없이 사라졌다(순서를 뒤집으면 남는 값이 바뀌는 것으로 확인했다).
+ *
+ * 다른 층은 이름공간 하나만 앞에 붙어 키가 통째로 사용자 이름이라 이 자리에서 접히지
+ * 않는다 — `palette`·`semantic`·`radius`·`shadow`·`motion`에서 `a.b`와 `a-b`를 넣어 보니
+ * 표에 둘 다 남았고, 그 겹침은 변수 이름 단계에서 잡힌다. **그럼에도 검사를 `typography`에
+ * 두지 않고 쓰기 자리 하나로 모은 것은**, 마디를 잇는 자리가 늘 때 그 검사를 다시
+ * 만들지 않아도 되게 하려는 것이다.
+ */
+function setToken(
+  table: Map<string, string>,
+  issues: ThemeIssue[],
+  tokenPath: string,
+  value: string,
+  path: string,
+): void {
+  if (table.has(tokenPath)) {
+    issues.push(
+      issue(
+        'duplicate-token',
+        path,
+        `두 선언이 같은 토큰 ${tokenPath}으로 접힙니다 — 둘 중 하나의 이름을 바꾸세요`,
+      ),
+    )
+    return
+  }
+  table.set(tokenPath, value)
 }
 
 /**
@@ -378,7 +413,7 @@ function resolveSemantic(
 
     if (resolved !== null) {
       for (const key of chain) {
-        table.set(`semantic.${key}`, resolved)
+        setToken(table, issues, `semantic.${key}`, resolved, pathOf(key))
         done.add(key)
       }
     }
