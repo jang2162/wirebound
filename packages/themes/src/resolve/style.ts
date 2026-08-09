@@ -123,11 +123,38 @@ const FUNCTION_ALLOWLIST: Readonly<Record<string, readonly string[]>> = {
   bgImage: ['url'],
 }
 
-/** 값 문자열 안에 섞여 있는 토큰 참조를 찾는다. 통째로 참조인 경우는 `isTokenReference`가 본다. */
+/**
+ * 값 문자열 안에 섞여 있는 토큰 참조를 찾는다. 통째로 참조인 경우는 `isTokenReference`가 본다.
+ *
+ * **값 토큰 하나가 통째로 참조일 때만 잡는다.** 앞뒤를 공백·쉼표·괄호로 못박은 것은
+ * `\b`가 `/`나 `-` 뒤에도 서기 때문이다 — 그 상태에서는 `url(/img/space.png)`의
+ * `space.png`가 참조로 읽혀 **실제 URL이 거부됐다**(`shadow.svg`·`typography.woff2`·
+ * `motion.gif`·`my-palette.x`도 같은 이유로 거부되는 것을 쟀다). `bgImage`는 `url()`을
+ * 담으라고 만든 어휘이므로 그 거부가 어휘를 못 쓰게 만든다.
+ */
 const EMBEDDED_REFERENCE = new RegExp(
-  `\\b(?:${TOKEN_NAMESPACES.join('|')})(?:\\.[A-Za-z0-9_-]+)+`,
+  `(?<=^|[\\s,()])(?:${TOKEN_NAMESPACES.join('|')})(?:\\.[A-Za-z0-9_-]+)+(?=$|[\\s,()])`,
   'g',
 )
+
+/**
+ * `url(…)`의 안쪽 범위. 그 안에서는 참조를 찾지 않는다.
+ *
+ * 토큰 경계만으로는 `url(space.png)`처럼 **괄호가 곧 경계인 상대 경로**가 남는다.
+ * `url()`의 대상은 어차피 이 패키지가 검증하지 않는다고 적어 둔 자리이므로, 그 안을
+ * 통째로 불투명하게 다루는 것이 규칙이 하나 더 늘지 않는 길이다.
+ */
+function urlSpans(value: string): Array<readonly [number, number]> {
+  const spans: Array<readonly [number, number]> = []
+  const opener = /url\(/gi
+  let match: RegExpExecArray | null = opener.exec(value)
+  while (match !== null) {
+    const close = value.indexOf(')', match.index + match[0].length)
+    spans.push([match.index, close === -1 ? value.length : close] as const)
+    match = opener.exec(value)
+  }
+  return spans
+}
 
 /** D6: 변수 이름은 `--wb-<경로>`이고 경로의 `.`이 `-`가 된다. */
 export function cssVarName(tokenPath: string): string {
@@ -286,7 +313,9 @@ function resolveReferences(
       : { value, issues: [rejected] }
   }
 
-  const replaced = value.replace(EMBEDDED_REFERENCE, (reference) => {
+  const opaque = urlSpans(value)
+  const replaced = value.replace(EMBEDDED_REFERENCE, (reference, offset: number) => {
+    if (opaque.some(([start, end]) => offset > start && offset < end)) return reference
     const rejected = check(reference)
     if (rejected !== null) {
       issues.push(rejected)

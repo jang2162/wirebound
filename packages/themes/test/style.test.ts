@@ -310,3 +310,75 @@ describe('스타일 값은 palette를 직접 가리키지 못한다 (D3)', () =>
     expect(at('bg', '#3b82f6').css).toEqual([['background', '#3b82f6']])
   })
 })
+
+describe('참조 판정이 URL 안의 경로를 삼키지 않는다 (거짓 양성)', () => {
+  const T: TokenTable = new Map([
+    ['space.6', '24px'],
+    ['semantic.primary', '#2563eb'],
+    ['radius.lg', '12px'],
+  ])
+
+  /** 이름공간과 같은 마디를 가진 실제 URL들. 디자인 자산에서 드물지 않은 이름이다. */
+  const URLS = [
+    '/img/space.png',
+    '/assets/shadow.svg',
+    'https://cdn.example/typography.woff2',
+    '/a/motion.gif',
+    '/img/palette.jpg',
+    '/img/semantic.webp',
+    '/img/radius.png',
+    'space.png',
+    'radius.lg.png',
+    '/my-palette.x/a.png',
+    '/img/hero.png',
+    'data:image/svg+xml;base64,AAA',
+  ]
+
+  it('url() 안의 경로는 참조로 읽지 않는다', () => {
+    for (const target of URLS) {
+      const { css, issues } = styleDeclarations('bgImage', `url(${target})`, T)
+      expect(codes(issues), target).toEqual([])
+      expect(css, target).toEqual([['background-image', `url(${target})`]])
+    }
+  })
+
+  it('URL과 진짜 참조를 조합해도 각각 제 몫을 한다', () => {
+    const REFS: Array<[string, string]> = [
+      ['space.6', 'var(--wb-space-6)'],
+      ['semantic.primary', 'var(--wb-semantic-primary)'],
+      ['radius.lg', 'var(--wb-radius-lg)'],
+    ]
+    for (const target of URLS) {
+      for (const [ref, expanded] of REFS) {
+        // 그라디언트 안의 참조는 풀리고, 같은 값에 든 URL 문자열은 그대로다.
+        const value = `linear-gradient(${ref}, #000)`
+        const gradient = styleDeclarations('bgGradient', value, T)
+        expect(codes(gradient.issues), value).toEqual([])
+        expect(gradient.css[0]?.[1], value).toBe(`linear-gradient(${expanded}, #000)`)
+
+        const image = styleDeclarations('bgImage', `url(${target})`, T)
+        expect(codes(image.issues), `${target} × ${ref}`).toEqual([])
+      }
+    }
+  })
+
+  it('진짜 참조를 놓치지 않는다 — 반대 방향', () => {
+    expect(decl('padding', 'space.6').css).toEqual([['padding', 'var(--wb-space-6)']])
+    expect(decl('transition', 'opacity space.6').css).toEqual([
+      ['transition', 'opacity var(--wb-space-6)'],
+    ])
+    expect(decl('shadow', '0 0 0 space.6 semantic.surface').css).toEqual([
+      ['box-shadow', '0 0 0 var(--wb-space-6) var(--wb-semantic-surface)'],
+    ])
+    expect(codes(decl('padding', 'space.99').issues)).toEqual(['unknown-token'])
+    expect(codes(decl('bgGradient', 'linear-gradient(semantic.missing, #000)').issues)).toEqual([
+      'unknown-token',
+    ])
+  })
+
+  it('경로 마디에 붙은 이름은 참조가 아니다 — url() 밖에서도 같다', () => {
+    // `/`·`-` 뒤는 값 토큰의 경계가 아니다.
+    expect(decl('transition', 'my-space.6').css).toEqual([['transition', 'my-space.6']])
+    expect(decl('transition', 'a/space.6').css).toEqual([['transition', 'a/space.6']])
+  })
+})
