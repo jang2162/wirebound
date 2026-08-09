@@ -46,3 +46,5 @@ export type {
   ResolvedTheme,
 } from './resolved'
 export { resolveTheme } from './resolve/index'
+
+export { compileTheme } from './emit/index'
