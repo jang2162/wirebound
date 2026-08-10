@@ -6,7 +6,7 @@
  * 있다 — 복사해 오지 마라.
  */
 import type { CSSProperties } from 'react'
-import { TREE_INDENT_VAR, nodeVar, partRule } from '../structure-css-tools'
+import { TREE_INDENT_VAR, componentRule, nodeVar, partRule } from '../structure-css-tools'
 import type { StructureEntry, StructureRenderer } from './registry'
 
 export const ListTable: StructureRenderer = ({ attrs, props, part }) => {
@@ -44,6 +44,36 @@ export const ListTable: StructureRenderer = ({ attrs, props, part }) => {
         </tfoot>
       ) : null}
     </table>
+  )
+}
+
+/**
+ * 카드 그리드. **`table`과 갈리는 지점은 조각의 어휘다** — 행·셀이 아니라 카드 하나
+ * (`item`)가 단위이고 그 안이 `media`·`title`·`meta`로 나뉜다. §6.5의 `List:cardGrid`
+ * 예시가 스타일을 거는 조각이 정확히 그 셋이다.
+ *
+ * **열 수는 이 구현체가 정하지 않는다** — 노드에 담을 자리가 없다. `List.columns`는
+ * `visibleWhen:{structure:'table'}`인 **컬럼 이름 목록**이라 뜻도 다르고 패널에 보이지도
+ * 않는다. 그래서 노드 변수를 만들지 않고, 트랙은 아래 `dataCssBlocks`의 기본값과
+ * 테마의 `gridColumns`가 정한다(그 판정의 전문은 거기 있다).
+ *
+ * `pagination`은 `table`과 같은 조건으로 그린다. **구조마다 다른 prop을 무시하면 그것이
+ * 곧 "조용히 틀린다"**이고(P4b-1이 `Media.kind`에서 겪은 부류), 이 prop에는 구조 조건이
+ * 붙어 있지 않다.
+ */
+export const ListCardGrid: StructureRenderer = ({ attrs, props, part }) => {
+  const items = props.items as number
+  return (
+    <div {...attrs}>
+      {Array.from({ length: items }, (_, index) => (
+        <div key={index} {...part('item')}>
+          <div {...part('media')} />
+          <div {...part('title')}>{`항목 ${index + 1}`}</div>
+          <div {...part('meta')}>—</div>
+        </div>
+      ))}
+      {props.pagination === true ? <div {...part('pagination')}>1 2 3</div> : null}
+    </div>
   )
 }
 
@@ -92,6 +122,32 @@ export const KeyValueTable: StructureRenderer = ({ attrs, props, part }) => {
 export function dataCssBlocks(): string[] {
   const blocks: string[] = []
 
+  // ── List:cardGrid ─────────────────────────────────────────────────────────
+  //
+  // **재라 — 열 수를 무엇이 정하는가. 답: 테마다.**
+  //
+  // 셋 다 재 봤다.
+  //
+  // | 후보 | 왜 아닌가 |
+  // |---|---|
+  // | 노드 | 담을 자리가 없다. `List.columns`는 `string[]`(컬럼 **이름** 목록)이고 `visibleWhen:{structure:'table'}`이라 카드 그리드에서는 패널에 보이지도 않는다. 길이를 열 수로 쓰면 뜻이 다른 두 값을 한 prop에 겹치는 것이다 |
+  // | 구조 기본 CSS | **트랙이 서 있게만 한다.** 안 주면 grid가 1열이 되어 `stackedList`와 구별되지 않는다 |
+  // | 테마 | **정한다.** `gridColumns` 어휘가 `repeat(N, 1fr)`을 같은 특이도로 내고, 시트 순서가 뒤라서 이긴다 |
+  //
+  // 그래서 여기 값은 **2**다 — 그리드가 목록이 아니게 되는 최소값이고, 그보다 큰 수는
+  // 취향이라 테마의 몫이다. **`var()`를 쓰지 않는 것이 요점이다**: 읽을 노드 변수를
+  // 만들어 두고 아무도 값을 안 실으면 죽은 손잡이가 하나 더 생긴다(`Media.kind` 부류).
+  blocks.push(
+    componentRule('List', 'cardGrid', ['display: grid;', 'grid-template-columns: repeat(2, 1fr);']),
+  )
+
+  // 페이지네이션은 카드가 아니다. 이 줄이 없으면 마지막 카드 옆 칸에 들어앉아 카드처럼
+  // 읽힌다. **조각 규칙에는 구조를 넣을 수 없으므로**(넣으면 특이도 0,3,0이 되어 테마가
+  // 진다 — `structure-css-tools`의 `partRule` 주석) `table`·`stackedList`·`mediaList`의
+  // `pagination`도 이 선언을 받는다. 그쪽은 grid 컨테이너의 자식이 아니라 **무효로
+  // 무시된다** — 값이 달라지는 것이 아니라 적용될 자리가 없다.
+  blocks.push(partRule('List', 'pagination', ['grid-column: 1 / -1;']))
+
   // ── Tree ──────────────────────────────────────────────────────────────────
   //
   // 노드가 아니라 **조각**에 붙는 유일한 자리다. `(index % depth)` 단계를 `<li>`가 나르고
@@ -114,6 +170,7 @@ export function dataCssBlocks(): string[] {
  */
 export const DATA_ENTRIES: StructureEntry[] = [
   ['List', 'table', ListTable],
+  ['List', 'cardGrid', ListCardGrid],
   ['Tree', 'indent', TreeIndent],
   ['KeyValue', 'table', KeyValueTable],
 ]
