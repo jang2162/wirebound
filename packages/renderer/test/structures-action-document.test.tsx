@@ -75,3 +75,63 @@ describe('Button:outline', () => {
     expect(outline.replace('"outline"', '"solid"')).toBe(solid)
   })
 })
+
+describe('Button:text', () => {
+  it('등록돼 있다', () => {
+    expect(getStructure('Button', 'text')).toBeDefined()
+  })
+
+  it('폴백이 아니라 실제 구조를 그린다', () => {
+    const html = render('Button', 'text', { label: '더 보기' })
+    expect(isFallback(html), html).toBe(false)
+    expect(html).toContain('data-wb-structure="text"')
+  })
+
+  it('라벨 조각을 낸다', () => {
+    const html = render('Button', 'text', { label: '더 보기' })
+    expect(parts(html)).toEqual(['label'])
+    expect(html).toContain('더 보기')
+  })
+
+  it('라벨 조각을 지우지 않는다 — 테마의 어휘가 구조마다 달라지면 안 된다', () => {
+    // **`text`에서 라벨 조각을 빼고 싶은 유혹이 있다** — 겹칠 것이 없어 보이니까. 그러면
+    // 테마의 `Button.parts.label` 규칙이 **`text` 구조에서만 조용히 안 걸린다.** 조각
+    // 이름은 테마의 어휘이고(§6.5) 어휘는 구조를 가로질러 같아야 한다.
+    expect(parts(render('Button', 'text', {}))).toEqual(parts(render('Button', 'solid', {})))
+  })
+})
+
+describe('Button — 구조 셋의 DOM 동일성 (계획서 재라 #7)', () => {
+  const STRUCTURES = ['solid', 'outline', 'text'] as const
+
+  it('카탈로그가 선언한 구조 셋이 전부 구현돼 있다', () => {
+    expect(requireComponent('Button').structures).toEqual([...STRUCTURES])
+    for (const structure of STRUCTURES) {
+      expect(getStructure('Button', structure), structure).toBeDefined()
+    }
+  })
+
+  it('셋의 DOM이 data-wb-structure를 빼면 글자까지 같다', () => {
+    // **W4의 판정: `Button`의 셋은 구조가 아니라 스킨이다.** 그래도 구조 채널에 남긴 이유는
+    // 그 채널이 나르는 것이 *"DOM이 다르다"*가 아니라 *"테마가 무엇을 골랐는가"*이기
+    // 때문이다(§6.11의 `data-wb-structure`). 아래 정규화는 그 한 속성만 지운다.
+    const normalize = (html: string): string => html.replace(/ data-wb-structure="[^"]*"/, '')
+    const props = { label: '저장', disabled: false, loading: false }
+
+    const rendered = STRUCTURES.map((structure) => render('Button', structure, props))
+    // 정규화가 실제로 무언가를 지웠는지 — 안 지웠으면 아래 비교가 헛돈다.
+    expect(rendered.map(normalize).every((html) => html !== rendered[0])).toBe(true)
+
+    expect([...new Set(rendered.map(normalize))]).toHaveLength(1)
+  })
+
+  it('그래도 셋은 서로 다른 문서다 — 구조 이름이 실제로 나간다', () => {
+    // 위 케이스와 쌍이다. 이것이 없으면 "셋이 다 똑같은 HTML"로도 통과한다.
+    const props = { label: '저장' }
+    const rendered = STRUCTURES.map((structure) => render('Button', structure, props))
+    expect(new Set(rendered).size).toBe(STRUCTURES.length)
+    for (const [index, structure] of STRUCTURES.entries()) {
+      expect(rendered[index], structure).toContain(`data-wb-structure="${structure}"`)
+    }
+  })
+})

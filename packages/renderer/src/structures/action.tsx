@@ -58,5 +58,6 @@ export function actionCssBlocks(): string[] {
 export const ACTION_ENTRIES: StructureEntry[] = [
   ['Button', 'solid', ButtonBase],
   ['Button', 'outline', ButtonBase],
+  ['Button', 'text', ButtonBase],
   ['Link', 'default', LinkDefault],
 ]
