@@ -14,6 +14,7 @@ import { projectRoutes } from './routes/projects'
 import { revisionRoutes } from './routes/revisions'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
+import { syncSystemThemes } from './services/system-themes'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -96,6 +97,18 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 레지스트리를 채운다. ensureCatalog는 멱등하다 — 이 스위트가 buildApp을
   // 수백 번 부르므로 필수다(schema-setup.ts 참고).
   ensureCatalog()
+
+  // 시스템 테마를 코드에서 DB로 동기화한다(계획서 D4 — 코드가 진실, DB는 사본).
+  //
+  // **`main.ts`가 아니라 여기인 이유:** 이 뒤의 경로들이 그 행의 존재에 기댄다 —
+  // 프로젝트를 만들면 기본 레이아웃이 생기고 그 `theme_id`가 시스템 `admin`을
+  // 가리켜야 한다(`repos/projects.ts`). `main.ts`에만 두면 `buildApp`으로 앱을
+  // 세우는 모든 경로(테스트 전부)에서 그 행이 없어 프로젝트 생성이 깨진다.
+  //
+  // 매 `buildApp`마다 도는 비용은 시스템 테마 수만큼의 upsert 한 문장씩이다(오늘 하나).
+  // `ensureCatalog`가 멱등한 것과 같은 이유로 이것도 멱등해야 하고, `ON CONFLICT`가
+  // 그것을 보장한다(`repos/themes.ts`의 `upsertSystemTheme`).
+  await syncSystemThemes(db)
 
   app.decorate('db', db)
   registerErrorHandler(app)

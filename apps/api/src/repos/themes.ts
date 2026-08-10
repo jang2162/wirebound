@@ -254,6 +254,34 @@ export async function updateTheme(db: DbHandle, themeId: string, theme: Theme): 
   return row ? toTheme(row as ThemeRow) : null
 }
 
+/**
+ * 시스템 테마 하나를 넣거나 **코드 값으로 덮는다**(`services/system-themes.ts`가 부른다).
+ *
+ * `ON CONFLICT (project_id, slug) DO UPDATE` 한 문장이라 원자적이다 — 조회 후 삽입이
+ * 아니므로 여러 인스턴스가 동시에 기동해도 경합 창이 없다. 그 충돌 대상이 성립하는 것은
+ * 0006의 유니크가 `NULLS NOT DISTINCT`이기 때문이다(평범한 UNIQUE면 `(NULL, slug)`가
+ * 충돌로 판정되지 않아 매 기동마다 행이 하나씩 늘어난다).
+ *
+ * **`project_id`는 언제나 `null`이다** — 이 함수가 만드는 것은 시스템 테마뿐이다.
+ * 프로젝트 테마를 여기로 넣으면 그 소유자의 테마를 코드가 덮어쓰게 된다.
+ */
+export async function upsertSystemTheme(db: DbHandle, theme: Theme): Promise<ThemeRecord> {
+  assertNoNulByte(theme)
+
+  const columns = toColumns(theme)
+  const row = await withTransaction(db, (trx) =>
+    trx
+      .insertInto('themes')
+      .values({ project_id: null, ...columns })
+      .onConflict((oc) =>
+        oc.columns(['project_id', 'slug']).doUpdateSet({ ...columns, updated_at: sql`now()` }),
+      )
+      .returning(THEME_COLUMNS)
+      .executeTakeFirstOrThrow(),
+  )
+  return toTheme(row as ThemeRow)
+}
+
 /** 지웠으면 `true`, 그 id가 없었으면 `false`. */
 export async function deleteTheme(db: DbHandle, themeId: string): Promise<boolean> {
   const result = await withTransaction(db, (trx) =>

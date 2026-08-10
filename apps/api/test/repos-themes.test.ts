@@ -140,12 +140,14 @@ describe('repos/themes — Theme ↔ 행', () => {
     it('findThemeBySlug(null, …)은 시스템 테마를 찾는다', async () => {
       await withApi(async (ctx) => {
         const { project } = await ownedProject(ctx)
-        await insertTheme(ctx.db, null, { meta: { id: 'admin', name: '관리자', version: '1.0.0' } })
+        // 시스템 쪽은 기동 동기화가 이미 넣었다(`services/system-themes.ts`) — 여기서
+        // 다시 넣으면 유니크 위반이다. 프로젝트 쪽에만 **같은 slug**를 하나 더 만든다.
         await insertTheme(ctx.db, project.id, { meta: { id: 'admin', name: '프로젝트 것', version: '1.0.0' } })
 
         // 같은 slug가 둘인데 소유자로 갈린다 — `project_id = null`을 `= NULL`로 쓰면
         // 아무것도 안 나온다(SQL의 NULL 비교). 그 갈래를 이 케이스가 잡는다.
-        expect((await findThemeBySlug(ctx.db, null, 'admin'))!.theme.meta.name).toBe('관리자')
+        expect((await findThemeBySlug(ctx.db, null, 'admin'))!.projectId).toBeNull()
+        expect((await findThemeBySlug(ctx.db, null, 'admin'))!.theme.meta.name).not.toBe('프로젝트 것')
         expect((await findThemeBySlug(ctx.db, project.id, 'admin'))!.theme.meta.name).toBe('프로젝트 것')
       })
     })
@@ -162,12 +164,14 @@ describe('repos/themes — Theme ↔ 행', () => {
         const { project } = await ownedProject(ctx)
         const other = await createProject(ctx, (await signup(ctx)).cookie)
 
-        await insertTheme(ctx.db, null, { meta: { id: 'admin', name: '관리자', version: '1.0.0' } })
+        // 시스템 `admin`은 기동 동기화가 이미 넣어 두었다.
         await insertTheme(ctx.db, project.id, { meta: { id: 'mine', name: '내 것', version: '1.0.0' } })
         await insertTheme(ctx.db, other.id, { meta: { id: 'theirs', name: '남의 것', version: '1.0.0' } })
 
         const list = await listThemes(ctx.db, project.id)
         expect(list.map((entry) => entry.theme.meta.id).sort()).toEqual(['admin', 'mine'])
+        // 정렬 계약: 시스템 테마가 먼저다.
+        expect(list[0]!.projectId).toBeNull()
       })
     })
   })
