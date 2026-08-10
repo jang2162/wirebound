@@ -1,5 +1,6 @@
 import type { ColumnType, Generated, JSONColumnType } from 'kysely'
 import type { PageDocument, PatchOp } from '@wirebound/schema'
+import type { ThemeAssets, ThemeComponent, ThemePattern, ThemePrimitives, ThemeTokens } from '@wirebound/themes'
 
 /**
  * `Database` 스키마 인터페이스. 테이블을 만드는 마이그레이션은 대응하는 인터페이스를
@@ -114,6 +115,43 @@ export interface RevisionsTable {
   created_at: Generated<Date>
 }
 
+/**
+ * 테마(`0006-themes`). 테마 문서(§6.1의 여섯 절)를 **절마다 컬럼 하나**로 쪼갠 것이다.
+ * `meta`는 컬럼으로 흩어진다 — `meta.id`는 `slug`, `meta.extends`는 `extends_ref`,
+ * 나머지는 각 컬럼이다. 다시 `Theme` 모양으로 조립하는 것은 `repos/themes.ts`다.
+ *
+ * **절 다섯은 `jsonb`가 아니라 `json` 컬럼이다.** 근거는 `0006-themes.ts`의 주석에 있다
+ * (요지: `jsonb`가 키 순서를 정규화하는데 `compileTheme`의 계약이 문서 키 순서다).
+ * TS 타입은 `JSONColumnType<…>`으로 같다 — 그 타입은 "삽입은 문자열, 조회는 파싱된
+ * 객체"라는 **비대칭**을 나타낼 뿐 컬럼이 json인지 jsonb인지를 담지 않고, `pg` 드라이버가
+ * 두 OID를 똑같이 `JSON.parse`한다.
+ *
+ * `| null`이 붙은 것은 **절이 없는 것과 빈 것을 가르기 위해서다** — `patterns`가 없는
+ * 테마와 `patterns: {}`인 테마는 서로 다른 문서이고, 그 구분이 왕복에서 살아야 한다
+ * (`repos-themes.test.ts`가 고정한다).
+ */
+export interface ThemesTable {
+  id: Generated<string>
+  /** `null`이면 시스템 테마다(§4.2·§6.10 — 읽기 전용, 코드가 진실이다). */
+  project_id: string | null
+  /** `meta.id`. `(project_id, slug)`가 유일하다(NULLS NOT DISTINCT). */
+  slug: string
+  name: string
+  description: string | null
+  /** `meta.extends`. `system:<id>` 문자열이고 FK가 아니다(0006의 주석 참고). */
+  extends_ref: string | null
+  version: string
+  /** `meta.preview`. §4.2의 컬럼 목록에는 없다(0006의 주석 참고). */
+  preview: string | null
+  tokens: JSONColumnType<ThemeTokens> | null
+  primitives: JSONColumnType<ThemePrimitives> | null
+  components: JSONColumnType<Record<string, ThemeComponent>> | null
+  patterns: JSONColumnType<Record<string, ThemePattern>> | null
+  assets: JSONColumnType<ThemeAssets> | null
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -122,4 +160,5 @@ export interface Database {
   menu_nodes: MenuNodesTable
   pages: PagesTable
   revisions: RevisionsTable
+  themes: ThemesTable
 }
