@@ -24,7 +24,15 @@ export { TokensSchema } from './spec/tokens'
 export type { TokenNamespace, TokenTable } from './resolve/tokens'
 export { SPACE_MAX, TOKEN_NAMESPACES, isTokenReference, resolveTokens } from './resolve/tokens'
 
-export { STYLE_PROPERTIES, cssVarName, styleDeclarations } from './resolve/style'
+// `STYLE_PROPERTIES_BEYOND_SPEC`은 §6.8에 없는 어휘의 목록이다(P4b-1). `apps/web`의
+// 케이스가 그중 `treeIndent`가 내는 이름과 `renderer`의 `TREE_INDENT_VAR`를 대조한다 —
+// 이 패키지는 `renderer`를 볼 수 없다(§3.3).
+export {
+  STYLE_PROPERTIES,
+  STYLE_PROPERTIES_BEYOND_SPEC,
+  cssVarName,
+  styleDeclarations,
+} from './resolve/style'
 export { resolveStyleValue } from './resolve/style'
 
 export type { ThemePrimitives } from './spec/primitives'

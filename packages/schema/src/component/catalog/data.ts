@@ -18,6 +18,11 @@ export const ListDef = defineComponent({
     { prop: 'columns', control: 'stringList', label: '컬럼', visibleWhen: { structure: 'table' } },
     { prop: 'pagination', control: 'switch', label: '페이지네이션' },
     { prop: 'selectable', control: 'switch', label: '선택 가능' },
+    // **아래 넷이 `states`와 짝이다**(P0 이월 #9). `selected`·`disabled`가 빠져 있어
+    // §6.5가 상태의 쓸모로 든 *"선택된 행 강조"*를 목업에서 켤 수 없었다 —
+    // `defineComponent`가 이제 그 빠짐을 던진다.
+    { prop: 'selected', control: 'switch', label: '선택 상태' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
     { prop: 'loading', control: 'switch', label: '로딩 상태' },
     { prop: 'empty', control: 'switch', label: '빈 상태' },
   ],
@@ -39,6 +44,9 @@ export const TreeDef = defineComponent({
   editor: [
     { prop: 'items', control: 'stringList', label: '항목' },
     { prop: 'depth', control: 'number', label: '깊이' },
+    // `states`와 짝이다(P0 이월 #9) — 둘 다 없어 트리의 선택·비활성 표현이 도달 불가였다.
+    { prop: 'selected', control: 'switch', label: '선택 상태' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
   ],
   structures: ['indent', 'accordion'],
   parts: ['node', 'label', 'toggle'],

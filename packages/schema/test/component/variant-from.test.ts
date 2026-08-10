@@ -57,27 +57,51 @@ describe('defineComponent의 variantFrom 검사', () => {
     ).toThrow(/b/)
   })
 
+  /**
+   * **통과하는 케이스에는 `editor`가 필요하다** — P4b-1이 *"`variantFrom`이 가리키는 prop은
+   * `editor`에 있어야 한다"*를 더했다(`test/component/reachability.test.ts`). 그 컴포넌트에는
+   * 패널이 변형 컨트롤을 내지 않으므로 그 prop이 유일한 길이다.
+   *
+   * **던지는 케이스는 `editor`를 주지 않는다** — 그래야 위 검사들이 **먼저** 던지는 것이
+   * 유지된다(도달성 검사가 앞서 걸리면 이 파일이 무엇을 재는지 흐려진다).
+   */
+  const roleEditor = [{ prop: 'role', control: 'select' as const, label: '역할' }]
+
   it('enum 값이 전부 variants에 있으면 통과한다', () => {
     const def = defineComponent({
       ...base,
       props: z.strictObject({ role: z.enum(['a', 'b']).default('a') }),
+      editor: roleEditor,
       variants: ['a', 'b'],
       variantFrom: 'role',
     })
     expect(def.variantFrom).toBe('role')
   })
 
-  it('variants가 enum보다 넓은 것은 막지 않는다', () => {
-    // 노드가 `variant`로 직접 고르는 값이 따로 있을 수 있다. 좁히는 것은 이 검사의 일이
-    // 아니고, **선언되지 않은 값이 나가지 않는 것**만 본다.
+  /**
+   * **뒤집었다 — 이 케이스는 틀린 것을 지키고 있었다.**
+   *
+   * 앞서 여기는 *"variants가 enum보다 넓은 것은 막지 않는다"*였고 근거가
+   * *"노드가 `variant`로 직접 고르는 값이 따로 있을 수 있다"*였다. **그 근거가 거짓이다:**
+   * `variantFrom`을 가진 컴포넌트에서 `node.variant`는 **선언된 값이든 아니든 똑같이
+   * 버려진다**(P4a-2가 `variantFrom`이 이기게 정하며 `ignored-variant`를 만든 자리다).
+   *
+   * 그리고 속성 패널도 그런 컴포넌트에는 변형 컨트롤을 내지 않는다(P4b-1의 재라 #4).
+   * **두 길이 다 막혀 있으므로 enum 밖의 이름은 고를 방법이 없다.**
+   *
+   * 리뷰가 반례로 잡았다. 이 케이스의 근거는 P0 이월 #8 시절(패널에 변형 컨트롤이 아예
+   * 없던 때)에 쓰인 것이고, 그 뒤 두 결정이 전제를 바꿨는데 함께 고쳐지지 않았다.
+   */
+  it('variants가 enum보다 넓으면 던진다 — 그 이름을 고를 길이 없다', () => {
     expect(() =>
       defineComponent({
         ...base,
         props: z.strictObject({ role: z.enum(['a']).default('a') }),
+        editor: roleEditor,
         variants: ['a', 'b'],
         variantFrom: 'role',
       }),
-    ).not.toThrow()
+    ).toThrow(/b/)
   })
 
   it('optional enum도 값 목록을 읽는다', () => {

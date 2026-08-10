@@ -17,7 +17,7 @@ import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import type { EditStatus } from '../store/editor-store'
-import { propOps } from './ops'
+import { propOps, variantOps } from './ops'
 
 /** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
 const EDIT_UNKNOWN_FAILURE = '편집을 저장하지 못했습니다'
@@ -40,6 +40,12 @@ function skippedNotice(skipped: number, applied: boolean): string {
 export interface EditCommit {
   /** 노드의 prop 하나를 바꾼다. 적용할 수 없으면 아무 일도 일어나지 않는다(D7). */
   commitProp: (nodeId: string, prop: string, value: unknown) => void
+  /**
+   * 노드의 `variant`를 바꾼다. **`commitProp`과 갈라 두는 것이 요점이다** — `variant`는
+   * props의 키가 아니라 봉투의 필드라 patch 경로가 한 단계 위다(`edit/ops.ts`의 `variantOps`).
+   * `null`이면 지운다(기본 표현으로 되돌리기).
+   */
+  commitVariant: (nodeId: string, variant: string | null) => void
   /**
    * 이미 만들어진 `ops`를 낸다. **낸 편집이 큐에 들어갔으면 `true`다.**
    *
@@ -269,5 +275,17 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
     [open, commitOps],
   )
 
-  return { commitProp, commitOps, undo, redo, canUndo, canRedo, status }
+  const commitVariant = useCallback(
+    (nodeId: string, variant: string | null): void => {
+      // `commitProp`과 같은 이유로 `open`을 본다 — `open.document`가 필요하다.
+      // 열린 페이지 대조 자체는 `commitOps`가 다시 한다.
+      if (open === null) return
+
+      // 지울 것이 없거나 노드가 문서에 없으면 `variantOps`가 `null`을 내고 그 자리에서 끝난다(D7).
+      commitOps(variantOps(open.document, nodeId, variant))
+    },
+    [open, commitOps],
+  )
+
+  return { commitProp, commitVariant, commitOps, undo, redo, canUndo, canRedo, status }
 }

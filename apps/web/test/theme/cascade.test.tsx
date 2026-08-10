@@ -16,9 +16,22 @@
  * 한 조각으로 그대로 잰다. 마지막 치환 한 걸음은 실제 브라우저의 몫이고, 그 측정은
  * 보고서에 적었다.
  */
-import { installStructures, renderNode, structureBaseCss } from '@wirebound/renderer'
+import {
+  NODE_VAR_PREFIX,
+  TREE_INDENT_VAR,
+  installStructures,
+  renderNode,
+  structureBaseCss,
+} from '@wirebound/renderer'
 import { installCatalog } from '@wirebound/schema'
-import { compileTheme, resolveTheme, systemTheme, type Theme } from '@wirebound/themes'
+import {
+  STYLE_PROPERTIES,
+  STYLE_PROPERTIES_BEYOND_SPEC,
+  compileTheme,
+  resolveTheme,
+  systemTheme,
+  type Theme,
+} from '@wirebound/themes'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -36,6 +49,8 @@ const DOC = {
     { id: 'n_000000000003', type: 'Grid', props: { columns: 3 } },
     { id: 'n_000000000004', type: 'Card', props: { title: '카드' } },
     { id: 'n_000000000005', type: 'Text', props: { content: '제목', role: 'h1' } },
+    // P4b-1이 더했다 — `--wb-tree-indent` 손잡이를 재는 자리다.
+    { id: 'n_000000000006', type: 'Tree', props: { depth: 2 } },
   ],
 }
 
@@ -144,13 +159,16 @@ describe('테마를 바꾸면 외형이 바뀐다', () => {
   })
 
   /**
-   * **계획서의 *"`Grid`의 `grid-template-columns`를 테마가 덮는다"*는 성립하지 않는다.**
-   * §6.8의 스타일 화이트리스트에 트랙 목록을 적을 어휘가 **없다**(`STYLE_PROPERTIES`를
-   * 훑어 확인했다 — `display`·`gap`은 있고 `gridTemplateColumns` 계열은 없다).
-   * 그래서 테마가 덮을 수 있는 것은 `display`이고, 그것이 P0 이월 #7이 막고 있던 바로
-   * 그 자리다(전에는 inline `display:grid`가 모든 테마 규칙을 이겼다).
+   * **P4a-2가 여기 *"트랙 목록을 적을 어휘가 없다"*고 적었다 — P4b-1이 그것을 열었다.**
+   * `gridColumns`(§6.8 밖, `STYLE_PROPERTIES_BEYOND_SPEC`)가 `repeat(N, 1fr)`을 낸다.
+   *
+   * **이 케이스는 그대로 둔다.** `LOUD_THEME`이 그 어휘를 쓰지 않으므로 여기서 재는 것은
+   * 여전히 *"테마가 `display`를 덮는다"*이고, 그것이 P0 이월 #7이 막고 있던 자리다
+   * (전에는 inline `display:grid`가 모든 테마 규칙을 이겼다). **트랙을 선언했을 때
+   * 무엇이 이기는지는 아래 `재라 #9` 절이 따로 잰다** — 두 성질을 한 케이스에 묶으면
+   * 어느 쪽이 깨졌는지 실패 메시지가 말하지 않는다.
    */
-  it('Grid의 display를 테마가 덮는다 — 트랙 목록은 테마 어휘에 없다', () => {
+  it('Grid의 display를 테마가 덮는다 — 트랙을 선언하지 않은 테마', () => {
     const { admin, loud } = compare([
       [GRID, 'display'],
       [GRID, 'grid-template-columns'],
@@ -224,6 +242,156 @@ describe('테마를 바꾸면 외형이 바뀐다', () => {
    * **시트 순서를 뒤집으면 진다.** D5가 "순서가 계약"이라고 적은 것의 실측이다 —
    * 이 케이스가 없으면 위의 전부가 "특이도 덕에 이겼다"로도 설명된다.
    */
+  /**
+   * **재라 #9 — 새 어휘가 구조 기본 CSS와 다투는 자리.**
+   *
+   * `Grid:default`의 기본 CSS가 `grid-template-columns: repeat(var(--wb-node-grid-columns, 1), 1fr)`
+   * 이고 노드가 그 변수를 인라인으로 나른다. 테마가 `gridColumns`를 선언하면 **같은
+   * 프로퍼티를 두고 둘이 다툰다.**
+   *
+   * **잰 결과: 테마가 이기고 노드가 나른 열 수는 무시된다.** 인라인으로 실리는 것은
+   * `--wb-node-grid-columns`라는 **변수 값**이지 `grid-template-columns` 선언이 아니므로,
+   * 테마가 그 프로퍼티를 직접 선언하면 변수를 읽는 규칙 자체가 지고 값이 안 읽힌다.
+   * (P4a-2의 계약 그대로다 — 같은 특이도, 테마 시트가 나중.)
+   *
+   * **그것을 알고 어휘를 열었다.** D1이 닫으려는 구멍은 `List:cardGrid`처럼 **노드가 열 수를
+   * 정할 길이 아예 없는** 자리이고, `Grid`는 노드 prop이 이미 있어 테마가 그것을 덮을
+   * 이유가 없다. 덮는 것은 테마 작성자의 선택이고 §6.5가 이미 인정하는 층이다.
+   *
+   * > **P4b-2가 알아야 할 것 — 이것은 사례가 아니라 부류다.** `Grid`에서 이 조합은
+   * > **침묵**이다(사용자가 정한 열 수가 화면에 안 나타나는데 이슈가 0건이다). **그런데
+   * > 이 자리가 처음이 아니다** — 구조 기본 CSS의 손잡이 **여덟 중 일곱이 P4b-1 이전에
+   * > 이미** §6.8 **안의** 어휘로 같은 침묵을 만들 수 있었다(`direction`·`align`·`justify`·
+   * > `wrap`·`aspectRatio`·`height`·`paddingX` — 전부 이슈 0건으로 실측했다).
+   * >
+   * > **원인은 어휘 선택이 아니라 `STYLE_PROPERTIES`에 컴포넌트 범위 개념이 없는 것이다** —
+   * > `checkStyleMap`이 전역 화이트리스트 하나를 모든 컴포넌트에 똑같이 적용하므로
+   * > `List:cardGrid`를 위해 연 어휘가 `Grid`에도 자동으로 열린다.
+   * >
+   * > 표와 후보 둘(**어휘에 컴포넌트 범위를 준다** / **노드에서 스타일 prop을 걷어낸다**)은
+   * > `docs/superpowers/plans/2026-08-10-p4b1-carryforward.md`에 있다. **P4b-2가 판정한다** —
+   * > 구조 26개가 손잡이를 더 만들 것이고 그 목록을 보고 정하는 편이 낫다.
+   */
+  describe('재라 #9 — 테마의 트랙 선언 vs 노드가 나르는 열 수', () => {
+    /** `Grid`에만 트랙을 선언한 테마. 문서의 `Grid` 노드는 `columns: 3`이다. */
+    const TRACK_THEME: Theme = {
+      meta: { id: 'track', name: '트랙', version: '1.0.0' },
+      components: { Grid: { structure: 'default', base: { gridColumns: 5 } } },
+    }
+
+    it('테마가 이기고 노드가 나른 열 수는 무시된다', () => {
+      const { values } = measure(TRACK_THEME, [
+        [GRID, 'grid-template-columns'],
+        [GRID, '--wb-node-grid-columns'],
+      ])
+
+      // 테마의 5가 이긴다. 노드의 3은 변수에 그대로 살아 있는데 **읽는 규칙이 졌다.**
+      expect(values).toEqual(['repeat(5, 1fr)', '3'])
+    })
+
+    it('대조군 — 트랙을 선언하지 않으면 노드의 열 수가 쓰인다', () => {
+      // 이것이 없으면 위 케이스가 "테마가 이겼다"인지 "원래 그 값이었다"인지 갈리지 않는다.
+      const { values } = measure(
+        { meta: { id: 'bare', name: '민', version: '1.0.0' }, components: { Grid: { structure: 'default' } } },
+        [[GRID, 'grid-template-columns'], [GRID, '--wb-node-grid-columns']],
+      )
+
+      expect(values).toEqual(['repeat(var(--wb-node-grid-columns, 1), 1fr)', '3'])
+    })
+
+    it('컴파일된 규칙이 구조 기본 CSS와 같은 셀렉터다 — 특이도가 갈리지 않는다', () => {
+      const { themeCss } = measure(TRACK_THEME, [[GRID, 'display']])
+
+      expect(themeCss).toContain(
+        '[data-wb-component="Grid"][data-wb-structure="default"] {\n  grid-template-columns: repeat(5, 1fr);\n}',
+      )
+    })
+  })
+
+  /**
+   * **재라 #5 — `--wb-tree-indent` 손잡이가 살아난다.**
+   *
+   * P4a-2가 계획서의 *"테마의 손잡이가 된다"*를 구현 중 반증했다 — 그 이름에 값을 넣는
+   * 어휘가 없어 늘 기본값 `16px`이었다. P4b-1의 `treeIndent`가 그 길을 연다.
+   *
+   * **jsdom이 마지막 한 걸음을 재지 못한다.** 실측: 테마가 낸 `--wb-tree-indent`를
+   * `Tree` **루트**에서는 읽지만 조각(`[data-wb-part="node"]`)에서는 빈 문자열이고
+   * (**커스텀 프로퍼티 상속을 계산하지 않는다**), `padding-left`도 `calc(var(…) * var(…))`
+   * 문자열 그대로 남는다. 그래서 **두 조각으로 나눠 잰다** — 테마가 그 이름에 값을 내는
+   * 것과, 구조 기본 CSS가 그 이름을 읽는 것. (P4a-2가 `var()` 치환에서 쓴 것과 같은 배치다.)
+   *
+   * **마지막 한 걸음은 Chromium으로 한 번 쟀다** — 위 두 조각으로 만든 정적 HTML을 열어
+   * `getComputedStyle(node).paddingLeft`를 읽었다:
+   *
+   * | 테마 | level 0 | level 1 | level 2 |
+   * |---|---|---|---|
+   * | `Tree.base.treeIndent: '40px'` | `0px` | **`40px`** | **`80px`** |
+   * | 그 어휘를 안 씀(대조군) | `0px` | `16px` | `32px` |
+   *
+   * **손잡이가 실제로 살아났다** — P4a-2가 *"이 이름에 값을 넣을 수 있는 것은 오늘
+   * 아무것도 없고 늘 기본값 16px이 쓰인다"*고 적은 자리다. **그 측정은 다시 돌지 않는다**
+   * (자동 회귀에 브라우저가 없다 — P4a-2·P4a-3과 같은 제약).
+   */
+  describe('재라 #5 — 커스텀 프로퍼티 채널', () => {
+    const TREE = '[data-wb-component="Tree"]'
+    const NODE_PART = '[data-wb-part="node"]'
+
+    /** `Tree`의 들여쓰기만 바꾼 테마. 값은 리터럴이다 — jsdom이 `var()`를 치환하지 못한다. */
+    const INDENT_THEME: Theme = {
+      meta: { id: 'indent', name: '들여쓰기', version: '1.0.0' },
+      components: { Tree: { structure: 'indent', base: { treeIndent: '40px' } } },
+    }
+
+    it('테마가 손잡이 이름에 값을 낸다', () => {
+      const { values } = measure(INDENT_THEME, [[TREE, TREE_INDENT_VAR]])
+
+      expect(values).toEqual(['40px'])
+    })
+
+    it('대조군 — 그 어휘를 안 쓰는 테마에서는 값이 없다', () => {
+      // 이것이 없으면 위 케이스가 "테마가 넣었다"인지 "원래 거기 있었다"인지 갈리지 않는다.
+      const { values } = measure(systemTheme('admin')!, [[TREE, TREE_INDENT_VAR]])
+
+      expect(values).toEqual([''])
+    })
+
+    it('구조 기본 CSS가 그 이름을 읽는다', () => {
+      // 둘째 조각. 값이 나가도 읽는 규칙이 다른 이름을 보면 손잡이는 여전히 죽어 있다.
+      const { values } = measure(INDENT_THEME, [[NODE_PART, 'padding-left']])
+
+      expect(values[0]).toContain(`var(${TREE_INDENT_VAR}`)
+    })
+
+    /**
+     * **소유 규칙의 대조.** 어휘가 내는 CSS 이름은 `themes`가 갖고, 그것을 읽는 규칙은
+     * `renderer`가 갖는다. **`themes`는 `renderer`를 볼 수 없으므로**(§3.3) 두 문자열이
+     * 같은지 볼 수 있는 자리가 여기뿐이다 — 어긋나면 손잡이가 조용히 죽는다.
+     */
+    it('어휘가 내는 이름과 렌더러가 읽는 이름이 같다', () => {
+      expect(STYLE_PROPERTIES['treeIndent']).toEqual([TREE_INDENT_VAR])
+    })
+
+    it('손잡이 이름이 노드 변수·토큰 이름과 겹치지 않는다', () => {
+      // P4a-2의 재라 #5가 정확히 이 부류였다 — `--wb-grid-columns`가 토큰과 노드 값
+      // 양쪽에서 만들어져 뜻이 둘이었다.
+      expect(TREE_INDENT_VAR.startsWith(NODE_VAR_PREFIX)).toBe(false)
+
+      const { themeCss } = measure(systemTheme('admin')!, [[TREE, 'display']])
+      const rootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('}'))
+      expect(rootBlock).not.toContain(TREE_INDENT_VAR)
+    })
+
+    it('§6.8 밖의 어휘가 등록된 것뿐이다 — 목록이 여기서도 보인다', () => {
+      // `themes`의 대조가 이미 있지만(그쪽 `§6.8 대조`), 이 목록이 **두 패키지를 잇는
+      // 계약**이 됐으므로 소비자 쪽에서도 이름을 못박는다.
+      expect([...STYLE_PROPERTIES_BEYOND_SPEC].sort()).toEqual([
+        'fontFamily',
+        'gridColumns',
+        'treeIndent',
+      ])
+    })
+  })
+
   it('시트 순서를 뒤집으면 테마가 진다', () => {
     const { theme: resolved } = resolveTheme(LOUD_THEME)
     const themeTag = document.createElement('style')

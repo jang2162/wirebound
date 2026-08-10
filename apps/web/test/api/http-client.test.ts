@@ -18,6 +18,7 @@ import type {
   SessionUser,
   TreeMenuNode,
 } from '../../src/api/types'
+import { stripComments } from '../store-access-guard'
 
 interface RecordedCall {
   url: string
@@ -98,12 +99,272 @@ const page: PageDetail = {
   schema: { version: 1, root: { id: 'n_000000000001', type: 'Page', children: [] } },
 }
 
+/** `POST /menu`·`PATCH /menu/:nodeId`의 응답. 트리 노드와 달리 `pages`·`children`이 없다(D1). */
+const menuNode: MenuNode = { id: 'm1', projectId: 'p1', parentId: null, title: '회원관리', sortOrder: 0 }
+
+/** `GET .../revisions?mine=true`의 항목 하나. */
+const revision = {
+  id: 'rev-1',
+  seq: 8,
+  actorType: 'user',
+  actorId: 'u1',
+  actorLabel: '홍길동',
+  ops: [{ op: 'replace', path: '/root/children/0/props/title', value: '새' }],
+  inverse: [{ op: 'replace', path: '/root/children/0/props/title', value: '옛' }],
+  createdAt: '2026-08-04T09:00:00.000Z',
+}
+
 /** `catch`로 받은 값을 `ApiError`로 좁힌다. 아니면 그 자리에서 던져 테스트를 실패시킨다. */
 function asApiError(value: unknown): ApiError {
   if (!(value instanceof ApiError)) {
     throw new Error(`ApiError가 아니라 ${String(value)}가 나왔다`)
   }
   return value
+}
+
+type Client = ReturnType<typeof createHttpClient>
+
+/**
+ * **경로·메서드 표.** 각 `ApiClient` 메서드가 어느 URL에 어느 HTTP 메서드로 가는가.
+ *
+ * `body`가 `null`이면 204(본문 없음)를 준다.
+ *
+ * **분모를 손으로 적지 않는다** — 아래 `표의 완전성`이 `api/client.ts`의 `ApiClient` 선언을
+ * 훑어 이 표와 맞댄다. 메서드가 늘면 그 케이스가 **먼저 죽는다.**
+ */
+const ENDPOINTS: Array<{
+  client: string
+  url: string
+  method: string
+  body: unknown
+  call: (c: Client) => Promise<unknown>
+}> = [
+  { client: 'login', url: '/api/auth/login', method: 'POST', body: user, call: (c) => c.login('a@b.c', 'pw') },
+  { client: 'logout', url: '/api/auth/logout', method: 'POST', body: null, call: (c) => c.logout() },
+  { client: 'me', url: '/api/auth/me', method: 'GET', body: user, call: (c) => c.me() },
+  { client: 'listProjects', url: '/api/projects', method: 'GET', body: [project], call: (c) => c.listProjects() },
+  { client: 'getProject', url: '/api/projects/p1', method: 'GET', body: project, call: (c) => c.getProject('p1') },
+  { client: 'getTree', url: '/api/projects/p1/tree', method: 'GET', body: { menu: [] }, call: (c) => c.getTree('p1') },
+  { client: 'getPage', url: '/api/projects/p1/pages/pg1', method: 'GET', body: page, call: (c) => c.getPage('p1', 'pg1') },
+  // **`/theme`(단수)이지 `/themes`(복수)가 아니다.** 둘 다 실재하는 경로라
+  // 오타가 404가 아니라 **다른 리소스의 응답**을 받는다 — 목록(배열)이 오면
+  // `SHAPES.projectTheme`이 막지만, 그 방벽 하나에 기대지 않는다.
+  { client: 'getProjectTheme', url: '/api/projects/p1/theme', method: 'GET', body: projectTheme, call: (c) => c.getProjectTheme('p1') },
+  // --- 아래 열하나는 이 표에 없었다. **각자 자기 describe에서 URL이 단언되고 있었지만
+  // 이 표에는 없었고**, 그 사실을 세는 절이 없어 아무도 몰랐다(위 `표의 완전성` 머리말). ---
+  {
+    client: 'createProject',
+    url: '/api/projects',
+    method: 'POST',
+    body: project,
+    call: (c) => c.createProject({ name: '가', slug: 'ga' }),
+  },
+  {
+    client: 'updateProject',
+    url: '/api/projects/p1',
+    method: 'PATCH',
+    body: project,
+    call: (c) => c.updateProject('p1', { name: '가' }),
+  },
+  { client: 'deleteProject', url: '/api/projects/p1', method: 'DELETE', body: null, call: (c) => c.deleteProject('p1') },
+  {
+    client: 'createMenu',
+    url: '/api/projects/p1/menu',
+    method: 'POST',
+    body: menuNode,
+    call: (c) => c.createMenu('p1', { parentId: null, title: '가' }),
+  },
+  {
+    client: 'updateMenu',
+    url: '/api/projects/p1/menu/m1',
+    method: 'PATCH',
+    body: menuNode,
+    call: (c) => c.updateMenu('p1', 'm1', { title: '가' }),
+  },
+  {
+    client: 'deleteMenu',
+    url: '/api/projects/p1/menu/m1',
+    method: 'DELETE',
+    body: null,
+    call: (c) => c.deleteMenu('p1', 'm1'),
+  },
+  {
+    client: 'createPage',
+    url: '/api/projects/p1/pages',
+    method: 'POST',
+    body: page,
+    call: (c) => c.createPage('p1', { menuNodeId: 'm1', title: '목록' }),
+  },
+  {
+    client: 'updatePage',
+    url: '/api/projects/p1/pages/pg1',
+    method: 'PATCH',
+    body: page,
+    call: (c) => c.updatePage('p1', 'pg1', { title: '가' }),
+  },
+  {
+    client: 'deletePage',
+    url: '/api/projects/p1/pages/pg1',
+    method: 'DELETE',
+    body: null,
+    call: (c) => c.deletePage('p1', 'pg1'),
+  },
+  {
+    client: 'patchOps',
+    url: '/api/projects/p1/pages/pg1/ops',
+    method: 'PATCH',
+    body: patchResult,
+    call: (c) =>
+      c.patchOps('p1', 'pg1', {
+        baseSeq: 7,
+        ops: [{ op: 'replace', path: '/root/children/0/props/title', value: '가' }],
+      }),
+  },
+  // **쿼리까지 표에 적는다.** 선언하지 않은 쿼리 키는 그 자체로 400이므로(README)
+  // `?mine=true`가 빠지거나 다른 키가 붙는 것은 경로 오타와 같은 부류의 사고다.
+  {
+    client: 'listMyRevisions',
+    url: '/api/projects/p1/pages/pg1/revisions?mine=true',
+    method: 'GET',
+    body: [revision],
+    call: (c) => c.listMyRevisions('p1', 'pg1'),
+  },
+]
+
+/**
+ * **응답 모양 케이스의 표.** `http-client.ts`의 `SHAPES` 하나마다 *"계약 밖 응답을 실제로
+ * 끊는가"*를 잰다.
+ *
+ * **분모를 손으로 적지 않는다** — 아래 `표의 완전성`이 `http-client.ts`의 `SHAPES` 선언을
+ * 훑어 이 표와 맞댄다. shape가 늘면 그 케이스가 **먼저 죽는다.**
+ */
+const SHAPE_CASES: Array<{
+  shape: string
+  /** 계약을 어긴 응답 본문. 이것을 주면 `ApiError`여야 한다. */
+  broken: unknown
+  /** 계약을 지킨 응답 본문. 이것을 주면 통과해야 한다 — 과도 차단을 재는 자리다. */
+  ok: unknown
+  call: (c: Client) => Promise<unknown>
+}> = [
+  { shape: 'projectDetail', broken: { ...project, id: '' }, ok: project, call: (c) => c.getProject('p1') },
+  { shape: 'projectList', broken: [{ ...project, id: '' }], ok: [project], call: (c) => c.listProjects() },
+  { shape: 'treeEnvelope', broken: { menu: null }, ok: { menu: [treeNode] }, call: (c) => c.getTree('p1') },
+  {
+    shape: 'menuNode',
+    broken: { ...menuNode, sortOrder: '0' },
+    ok: menuNode,
+    call: (c) => c.createMenu('p1', { parentId: null, title: '가' }),
+  },
+  { shape: 'pageDetail', broken: { ...page, headSeq: '0' }, ok: page, call: (c) => c.getPage('p1', 'pg1') },
+  {
+    shape: 'projectTheme',
+    broken: { theme: 42, issues: [] },
+    ok: projectTheme,
+    call: (c) => c.getProjectTheme('p1'),
+  },
+  // --- 아래 셋은 케이스가 **없었다.** 세는 절이 이것을 찾아냈다. ---
+  // `sessionUser.id`는 세션 문맥이 그대로 들고 다니는 값이다(`session/session-context.tsx`).
+  { shape: 'sessionUser', broken: { id: 42 }, ok: user, call: (c) => c.me() },
+  // **`inverse`가 배열이 아니면 undo가 그것을 `ops`로 보내다 죽는다**(그 shape의 주석).
+  {
+    shape: 'revisionList',
+    broken: [{ ...revision, inverse: null }],
+    ok: [revision],
+    call: (c) => c.listMyRevisions('p1', 'pg1'),
+  },
+  // **`seq`가 다음 요청의 `baseSeq`가 된다** — 문자열이 지나가면 그 값이 조용히 어긋난다.
+  {
+    shape: 'patchResult',
+    broken: { ...patchResult, seq: '8' },
+    ok: patchResult,
+    call: (c) =>
+      c.patchOps('p1', 'pg1', {
+        baseSeq: 7,
+        ops: [{ op: 'replace', path: '/root/children/0/props/title', value: '가' }],
+      }),
+  },
+]
+
+/**
+ * 계약 밖 응답을 만들 수 없는 shape. **`noBody`는 `() => true`라 어길 값이 존재하지 않는다** —
+ * 본문을 읽지 않는 요청(204·DELETE·logout)이 지나는 자리다.
+ */
+const SHAPES_WITHOUT_BROKEN_CASE = ['noBody']
+
+/** `src/api`의 소스. 표의 분모를 소스에서 만든다(`test/api-consumers.test.ts`와 같은 배치). */
+const API_SOURCES = import.meta.glob('../../src/api/*.ts', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>
+
+/**
+ * **표가 스스로 센다.**
+ *
+ * P4a-3에서 새 엔드포인트(`getProjectTheme`)가 이 파일의 두 표 어디에도 등록되지 않아
+ * **두 자리가 초록인 채로 무방비**였고, 그 사실은 리뷰가 변이를 심어서야 드러났다.
+ * *"찾은 것을 닫는"* 것으로는 매번 하나가 남는다 — 남는 개수가 리뷰의 성실함에 달려 있고
+ * 코드의 안전성과는 관계가 없기 때문이다. `permission-matrix.test.ts`가 같은 이유로
+ * 이 절을 얻었고, 여기가 그 나머지 둘이다.
+ */
+describe('표의 완전성', () => {
+  it('훑을 소스를 실제로 읽는다', () => {
+    // 글롭이 어긋나면 **빈 문자열에서 아래가 조용히 통과한다**(이 저장소가 세 번 겪은 사고다).
+    expect(Object.keys(API_SOURCES).length).toBeGreaterThan(1)
+    expect(declaredMethods().length).toBeGreaterThan(10)
+    expect(declaredShapes().length).toBeGreaterThan(5)
+  })
+
+  it('ApiClient의 모든 메서드가 경로·메서드 표에 있다', () => {
+    const registered = new Set(ENDPOINTS.map((endpoint) => endpoint.client))
+
+    expect(declaredMethods().filter((method) => !registered.has(method))).toEqual([])
+  })
+
+  it('경로·메서드 표에 ApiClient가 선언하지 않은 메서드가 없다', () => {
+    // 반대 방향. 줄은 있는데 그런 메서드가 없으면 그 줄은 **아무것도 지키지 않는다.**
+    const declared = new Set(declaredMethods())
+
+    expect(ENDPOINTS.map((endpoint) => endpoint.client).filter((name) => !declared.has(name))).toEqual([])
+  })
+
+  it('SHAPES의 모든 키가 응답 모양 케이스에 있다', () => {
+    const registered = new Set([...SHAPE_CASES.map((c) => c.shape), ...SHAPES_WITHOUT_BROKEN_CASE])
+
+    expect(declaredShapes().filter((shape) => !registered.has(shape))).toEqual([])
+  })
+
+  it('응답 모양 케이스에 SHAPES가 선언하지 않은 이름이 없다', () => {
+    const declared = new Set(declaredShapes())
+
+    expect(
+      [...SHAPE_CASES.map((c) => c.shape), ...SHAPES_WITHOUT_BROKEN_CASE].filter(
+        (shape) => !declared.has(shape),
+      ),
+    ).toEqual([])
+  })
+})
+
+/**
+ * `ApiClient` 인터페이스가 선언한 메서드 이름. **주석을 걷고 읽는다** — 이 저장소의 주석은
+ * 메서드 이름을 실제로 인용한다(`api-consumers.test.ts` 머리말).
+ *
+ * 인터페이스의 닫는 중괄호까지만 자른다 — 더 가면 아래 `class ApiError`의 `constructor`가
+ * 메서드로 세어진다.
+ */
+function declaredMethods(): string[] {
+  const body = stripComments(API_SOURCES['../../src/api/client.ts'] ?? '')
+  const start = body.indexOf('export interface ApiClient {')
+  const declaration = body.slice(start, body.indexOf('\n}', start))
+  return [...declaration.matchAll(/^ {2}(\w+)\s*[(<]/gm)].map((m) => m[1] ?? '')
+}
+
+/** `http-client.ts`의 `SHAPES` 레코드가 선언한 키. 같은 이유로 주석을 걷는다. */
+function declaredShapes(): string[] {
+  const body = stripComments(API_SOURCES['../../src/api/http-client.ts'] ?? '')
+  const start = body.indexOf('const SHAPES = {')
+  const declaration = body.slice(start, body.indexOf('\n} satisfies', start))
+  return [...declaration.matchAll(/^ {2}(\w+):/gm)].map((m) => m[1] ?? '')
 }
 
 describe('createHttpClient', () => {
@@ -368,28 +629,35 @@ describe('createHttpClient', () => {
 
   it('각 메서드는 계약된 경로와 HTTP 메서드로 요청한다', async () => {
     // 경로 오타나 메서드 뒤바뀜은 위 케이스들이 login·getTree 말고는 잡지 못한다.
-    const cases: Array<{ url: string; method: string; body: unknown; call: (c: ReturnType<typeof createHttpClient>) => Promise<unknown> }> = [
-      { url: '/api/auth/login', method: 'POST', body: user, call: (c) => c.login('a@b.c', 'pw') },
-      { url: '/api/auth/logout', method: 'POST', body: null, call: (c) => c.logout() },
-      { url: '/api/auth/me', method: 'GET', body: user, call: (c) => c.me() },
-      { url: '/api/projects', method: 'GET', body: [project], call: (c) => c.listProjects() },
-      { url: '/api/projects/p1', method: 'GET', body: project, call: (c) => c.getProject('p1') },
-      { url: '/api/projects/p1/tree', method: 'GET', body: { menu: [] }, call: (c) => c.getTree('p1') },
-      { url: '/api/projects/p1/pages/pg1', method: 'GET', body: page, call: (c) => c.getPage('p1', 'pg1') },
-      // **`/theme`(단수)이지 `/themes`(복수)가 아니다.** 둘 다 실재하는 경로라
-      // 오타가 404가 아니라 **다른 리소스의 응답**을 받는다 — 목록(배열)이 오면
-      // `SHAPES.projectTheme`이 막지만, 그 방벽 하나에 기대지 않는다.
-      { url: '/api/projects/p1/theme', method: 'GET', body: projectTheme, call: (c) => c.getProjectTheme('p1') },
-    ]
-
-    for (const testCase of cases) {
+    for (const testCase of ENDPOINTS) {
       const response = testCase.body === null ? new Response(null, { status: 204 }) : jsonResponse(200, testCase.body)
       const stub = stubFetch(response)
 
       await testCase.call(createHttpClient(stub.fetchImpl))
 
-      expect(stub.calls[0]?.url, testCase.url).toBe(testCase.url)
-      expect(stub.calls[0]?.init?.method, testCase.url).toBe(testCase.method)
+      expect(stub.calls[0]?.url, testCase.client).toBe(testCase.url)
+      expect(stub.calls[0]?.init?.method, testCase.client).toBe(testCase.method)
+    }
+  })
+
+  it('각 shape는 계약 밖 응답을 ApiError로 끊는다', async () => {
+    for (const testCase of SHAPE_CASES) {
+      const stub = stubFetch(jsonResponse(200, testCase.broken))
+
+      const error = asApiError(await testCase.call(createHttpClient(stub.fetchImpl)).catch((e: unknown) => e))
+
+      expect(error.code, testCase.shape).toBe('internal')
+      expect(error.message, testCase.shape).toBe('서버 응답을 이해할 수 없습니다')
+    }
+  })
+
+  it('각 shape는 계약을 지킨 응답을 통과시킨다', async () => {
+    // **음성 대조.** 위 케이스만으로는 shape를 `() => false`로 만들어도 초록이다 —
+    // 그러면 모든 응답이 막혀 화면이 아무것도 못 받는다.
+    for (const testCase of SHAPE_CASES) {
+      const stub = stubFetch(jsonResponse(200, testCase.ok))
+
+      await expect(testCase.call(createHttpClient(stub.fetchImpl)), testCase.shape).resolves.toBeDefined()
     }
   })
 
@@ -653,17 +921,6 @@ describe('patchOps', () => {
 })
 
 describe('listMyRevisions', () => {
-  const revision = {
-    id: 'rev-1',
-    seq: 8,
-    actorType: 'user',
-    actorId: 'u1',
-    actorLabel: '홍길동',
-    ops: [{ op: 'replace', path: '/root/children/0/props/title', value: '새' }],
-    inverse: [{ op: 'replace', path: '/root/children/0/props/title', value: '옛' }],
-    createdAt: '2026-08-04T09:00:00.000Z',
-  }
-
   it('mine=true만 붙여 GET한다', async () => {
     // **`limit`을 붙이지 않는다.** 기본값 50이 설계 §7.3의 "최근 50개"와 같고,
     // **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — 캐시 버스터도 거부된다.
@@ -708,9 +965,6 @@ describe('listMyRevisions', () => {
  * 400을 가른다 — 화면 테스트는 가짜 `ApiClient`를 쓰므로 이 조립을 지나가지 않는다.
  */
 describe('메뉴 CRUD', () => {
-  /** `POST /menu`·`PATCH /menu/:nodeId`의 응답. 트리 노드와 달리 `pages`·`children`이 없다(D1). */
-  const menuNode: MenuNode = { id: 'm1', projectId: 'p1', parentId: null, title: '회원관리', sortOrder: 0 }
-
   it('createMenu는 parentId를 null로도 싣는다', async () => {
     // 서버의 `parentId`는 `z.uuid().nullable().optional()`이라 **`null`이 유효한 값**이고
     // "루트에 만든다"는 뜻이다. 클라이언트가 그 뜻을 흘리지 않도록 값으로 싣는다 —

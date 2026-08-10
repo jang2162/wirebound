@@ -68,9 +68,14 @@ export const ADMIN_THEME: Theme = {
        * `role` 값을 `data-wb-variant`로 내보내므로 아래 `Text.variants.<이름>`이
        * `typography: '<이름>'`을 걸면 스케일이 그대로 붙는다.
        *
-       * **`family`를 넣지 않았다.** 값은 토큰 표에 남지만 그것을 CSS로 낼 어휘가 없다 —
-       * §6.8의 화이트리스트에 `fontFamily`가 없다(재서 확인했다). 쓰이지 않는 토큰을
-       * 최소본에 넣으면 "폰트가 적용된다"는 오해를 만든다.
+       * **`family`를 넣지 않았다 — 근거가 바뀌었다.**
+       *
+       * 앞서 여기 *"그것을 CSS로 낼 어휘가 없다 — §6.8에 `fontFamily`가 없다"*고 적었는데
+       * **P4b-1이 그 어휘를 열었다**(`STYLE_PROPERTIES_BEYOND_SPEC`). 이제 걸 수 있다.
+       *
+       * **그래도 이 최소본은 쓰지 않는다.** P4b-1은 *"어휘를 열 뿐 쓰는 것은 P4b-3"*이고,
+       * `admin`이 새 어휘를 하나도 쓰지 않는 것을 그 슬라이스가 확인했다. **시스템 테마
+       * 다섯을 만들 때 여기에 `family`와 `fontFamily`가 함께 온다.**
        */
       typography: {
         display: { fontSize: '32px', lineHeight: 1.2, fontWeight: 700 },

@@ -28,6 +28,7 @@ import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../stor
 import { ListControl } from './controls/list-control'
 import { SelectControl } from './controls/select-control'
 import { SwitchControl } from './controls/switch-control'
+import { VariantControl } from './controls/variant-control'
 import { TextControl } from './controls/text-control'
 import { BROKEN_TYPE_LABEL, nodeType } from './node-shape'
 // 카탈로그가 없으면 모든 노드가 "알 수 없는 타입"이 된다. 설치는 import만으로 끝난다.
@@ -52,7 +53,10 @@ export function PropertyPanel(props: {
   // 그 값은 어느 페이지 id와도 같지 않아 `useOpenPage('')`가 `null`을 내고 `commitProp`이
   // 그 자리에서 돌아온다 — 즉 페이지가 없을 때 편집이 나갈 길이 없다. (그 상태에서는 아래
   // `node === undefined` 분기가 먼저 걸려 위젯 자체가 그려지지 않는다.)
-  const { commitProp } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
+  const { commitProp, commitVariant } = useEditCommit({
+    projectId: props.projectId,
+    pageId: props.pageId ?? '',
+  })
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 P2b-2의 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
@@ -94,6 +98,7 @@ export function PropertyPanel(props: {
   }
 
   const fields = visibleFields(def)
+  const variantField = variantFieldOf(def)
 
   // **props 검증 실패는 이 패널이 말하지 않는다.** 캔버스는 그리지 못한 이유 둘(알 수 없는
   // 타입 / props 검증 실패)을 폴백과 배너로 알리는데, 여기는 앞의 하나만 안내하고 검증에
@@ -104,12 +109,33 @@ export function PropertyPanel(props: {
   return (
     <>
       <h2 className="wb-shell-panel-title">{type}</h2>
-      {fields.length === 0 ? (
+      {fields.length === 0 && variantField === null ? (
         // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
         // "아직 고르지 않았다"와 구분되지 않는다.
         <p className="wb-shell-panel-notice">이 컴포넌트에는 편집할 속성이 없습니다</p>
       ) : (
         <dl className="wb-shell-props">
+          {/* **변형이 맨 앞이다.** 개별 prop이 아니라 이 노드가 어떤 표현인가를 정하는
+              것이라 상위이고, §6.5도 `variants`를 `base`/`parts` 위의 층으로 둔다. */}
+          {variantField !== null && (
+            <div className="wb-shell-prop" key={VARIANT_FIELD}>
+              <dt className="wb-shell-prop-label">
+                <label id={`${controlId(VARIANT_FIELD)}-label`} htmlFor={controlId(VARIANT_FIELD)}>
+                  {variantField.label}
+                </label>
+              </dt>
+              <dd className="wb-shell-prop-value">
+                <VariantControl
+                  // props 컨트롤과 같은 이유로 노드가 바뀌면 위젯을 다시 만든다.
+                  key={node.id}
+                  options={variantField.options}
+                  value={node.variant}
+                  id={controlId(VARIANT_FIELD)}
+                  onCommit={(variant) => commitVariant(node.id, variant)}
+                />
+              </dd>
+            </div>
+          )}
           {fields.map((field) => (
             // `<dl>` 안의 `<div>`는 표준이 허용하는 묶음이다. 라벨과 값을 한 줄로 묶어야
             // 스타일과 테스트가 "줄"을 다룰 수 있다.
@@ -142,6 +168,46 @@ export function PropertyPanel(props: {
 /** 입력에 붙는 id. 필드는 한 패널 안에서 `prop`이 유일하므로 그것으로 충분하다. */
 function controlId(prop: string): string {
   return `wb-prop-${prop}`
+}
+
+/**
+ * 변형 줄의 키. **props의 키와 겹칠 수 없다** — 그랬다면 `defineComponent`가
+ * *"editor가 스키마에 없는 prop을 가리킵니다"*로 던졌을 이름이다.
+ */
+const VARIANT_FIELD = 'variant'
+
+/** 변형 컨트롤의 라벨. 패널이 정한다 — 카탈로그에 그 자리가 없다(아래 머리말). */
+const VARIANT_LABEL = '변형'
+
+/**
+ * **재라 #4 — 이 노드에 변형 컨트롤을 낼 것인가, 낸다면 무엇을 고르게 할 것인가.**
+ *
+ * `EditorField.prop`은 **props의 키**를 가리키는데 `variant`는 **노드 봉투의 필드**다(§4.3).
+ * 그래서 `editor`에 적을 수 없고 — 적으면 `defineComponent`가 던진다 — P4a-2 이월이
+ * *"`Button`·`Link`·`List`·`Section`·`Card`의 변형은 닿을 수 없다"*고 적은 상태였다.
+ *
+ * **패널이 특수 취급하는 쪽(A안)을 골랐다.** 대가가 계획서가 적은 것보다 작다:
+ *
+ * - **읽는 것이 전부 카탈로그의 값이다** — `def.variants`·`def.variantFrom`. 패널이 새로
+ *   갖는 지식은 *"variant는 봉투의 필드다"* 하나이고, 그것은 §4.3·§6.11이 정한 **모델의
+ *   사실**이지 컴포넌트별 지식이 아니다.
+ * - **§5.1·§9의 *"컴포넌트 정의에서 자동 생성"*이 그대로 성립한다.** 카탈로그가 늘어도 이
+ *   파일은 안 바뀐다 — `test/panels/property-panel.test.tsx`의 전수 케이스가 그것을 센다.
+ * - **B안(`ComponentDef`에 `variantField` 선언)이 담을 정보가 라벨 하나뿐이다.** 낼지 말지는
+ *   아래 조건으로 카탈로그에서 이미 유도된다. 라벨 하나를 위해 §5.1의 계약을 넓히지 않는다.
+ *
+ * **`variantFrom`이 있으면 내지 않는다.** 그쪽은 prop이 변형을 정하고 `node.variant`는
+ * 버려진다 — 컨트롤을 내면 P4a-2가 만든 `ignored-variant` 경고를 **UI가 유도하는 셈**이다.
+ * 그 컴포넌트의 변형은 이미 그 prop의 `select`로 도달한다(Text의 `역할`, Field의 `입력 종류`,
+ * Divider의 `방향`).
+ *
+ * **`unknown-variant`도 UI에서 도달할 수 없다** — 선택지가 `def.variants` 그대로다.
+ */
+export function variantFieldOf(
+  def: ComponentDef,
+): { label: string; options: readonly string[] } | null {
+  if (def.variants.length === 0 || def.variantFrom !== undefined) return null
+  return { label: VARIANT_LABEL, options: def.variants }
 }
 
 /**

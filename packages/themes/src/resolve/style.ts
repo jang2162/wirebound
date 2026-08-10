@@ -11,6 +11,9 @@ import { TOKEN_NAMESPACES, isTokenReference } from './tokens'
  * **이 표가 §6.8을 덮는지 `test/style.test.ts`가 그 절을 읽어 대조한다.** 절이 늘거나
  * 줄면 그 케이스가 죽는다 — 그래서 여기 개수를 적지 않는다.
  *
+ * **§6.8에 없는 이름을 더할 때는 `STYLE_PROPERTIES_BEYOND_SPEC`에도 등록한다.** 그 대조가
+ * 양방향이라 등록하지 않으면 케이스가 죽는다.
+ *
  * 값이 배열인 것은 **한 어휘가 CSS 선언 여럿으로 펼쳐지는 것**이다. `paddingX`를
  * 논리 프로퍼티(`padding-inline`)가 아니라 물리 프로퍼티 둘로 낸 이유: 논리 프로퍼티는
  * 쓰기 방향에 따라 뜻이 바뀌는데, §6.8의 `direction`은 flex 방향이라 이름이 겹치고
@@ -49,6 +52,9 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
 
   // 배치
   display: ['display'],
+  // **§6.8에 없다 — P4b-1이 더했다.** 값이 단일 토큰이 아니라 **열 수**라
+  // `gridColumnsDeclarations`가 따로 처리한다. 근거는 `STYLE_PROPERTIES_BEYOND_SPEC`에 있다.
+  gridColumns: ['grid-template-columns'],
   direction: ['flex-direction'],
   align: ['align-items'],
   justify: ['justify-content'],
@@ -65,6 +71,8 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
 
   // 타이포
   typography: [],
+  // **§6.8에 없다 — P4b-1이 더했다.** 근거는 `STYLE_PROPERTIES_BEYOND_SPEC`에 있다.
+  fontFamily: ['font-family'],
   fontSize: ['font-size'],
   fontWeight: ['font-weight'],
   lineHeight: ['line-height'],
@@ -77,12 +85,76 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
   objectFit: ['object-fit'],
   objectPosition: ['object-position'],
 
+  // 구조 손잡이 — 구조 기본 CSS(`renderer`)가 읽는 커스텀 프로퍼티에 값을 넣는 별칭.
+  // **§6.8에 없다 — P4b-1이 더했다.** 근거와 소유 규칙은 `STYLE_PROPERTIES_BEYOND_SPEC`에 있다.
+  treeIndent: ['--wb-tree-indent'],
+
   // 효과
   shadow: ['box-shadow'],
   opacity: ['opacity'],
   overflow: ['overflow'],
   transition: ['transition'],
 }
+
+/**
+ * **§6.8의 목록에 없는데 `STYLE_PROPERTIES`에 있는 이름과 그 근거.**
+ *
+ * **설계 문서를 고치지 않는다**(P4a-1이 세운 원칙). 대신 어긋난 자리를 여기 한 곳에 모으고,
+ * `test/style.test.ts`의 `§6.8 대조`가 이 목록과 표의 차집합이 **정확히 같은지** 본다 —
+ * 몰래 늘리면 그 케이스가 죽고, 여기 이름만 적고 표에 안 넣어도 죽는다.
+ *
+ * **더하는 기준은 하나다: 다른 규격이 이미 요구하는데 어휘가 없어 닿지 않는 것.**
+ * §6.8을 "웹 디자인이 가능한 수준"으로 넓히자는 취지대로 마음껏 늘리는 자리가 아니다.
+ *
+ * | 이름 | 무엇이 요구하는가 | 어휘가 없으면 |
+ * |---|---|---|
+ * | `fontFamily` | §6.7의 `assets.fonts` · §6.3의 `scale.typography.family` | 폰트를 선언하고 토큰까지 만들어도 **어느 테마도 컴포넌트에 걸 수 없다** |
+ * | `gridColumns` | §6.11 예시의 `List:cardGrid` | `display: grid`를 선언해도 **트랙이 없어 1열**이다. `List.columns`는 `visibleWhen:{structure:'table'}`인 **컬럼 이름 목록**이라 노드도 열 수를 못 정한다 |
+ * | `treeIndent` | 구조 기본 CSS의 `--wb-tree-indent` | 렌더러가 손잡이를 남겼는데 **그 이름에 값을 넣을 길이 없어** 늘 기본값 `16px`이다 |
+ *
+ * ---
+ *
+ * **재라 #5 — 커스텀 프로퍼티 채널을 어떻게 열었고 이름 목록을 누가 소유하는가.**
+ *
+ * **임의 커스텀 프로퍼티를 열지 않는다.** 열면 이 화이트리스트가 무의미해진다 — 무엇이든
+ * `--x`로 내보낼 수 있고, 그 이름을 읽는 규칙이 구조 기본 CSS에 있으면 §6.8을 우회해
+ * 임의 스타일을 거는 길이 된다. **손잡이마다 별칭 어휘 하나**를 여는 쪽이 그 제한을 지키고,
+ * 값 규칙(토큰 참조·리터럴·함수 금지)도 새로 만들지 않고 그대로 쓴다.
+ *
+ * **소유는 갈라져 있다 — 그것이 §3.3의 결과다.**
+ *
+ * | 무엇 | 소유 | 왜 |
+ * |---|---|---|
+ * | 어휘 이름(`treeIndent`)과 그것이 내는 CSS 이름 | **`themes`**(이 표) | 테마 문서를 검증하는 것이 이 패키지다 |
+ * | 그 CSS 이름을 **읽는 규칙** | **`renderer`**(`TREE_INDENT_VAR`) | 손잡이는 구조 구현체의 것이다 |
+ * | 두 문자열이 같은지 | **`apps/web`의 케이스** | `themes`는 `renderer`를 볼 수 없다(§3.3) — 둘 다 보는 자리가 거기뿐이다 |
+ *
+ * **`schema`로 옮기지 않았다.** 둘 다 `schema`를 보므로 목록을 거기 두면 대조가 필요 없어지지만,
+ * §5.1의 `ComponentDef`에 손잡이 필드가 없어 **계약을 넓히는 일**이 된다 — 이 슬라이스의
+ * 전역 제약이 금지하는 부류다. 손잡이가 늘어 대조가 무거워지면 그때 다시 재라.
+ *
+ * **이름 충돌은 없다 — 대조 케이스가 지킨다.** `--wb-tree-*`는 렌더러의 노드 변수
+ * 접두어(`--wb-node-`)와 겹치지 않고, `cssVarName`이 만드는 이름과도 겹치지 않는다
+ * (토큰 이름공간 일곱과 `primitives`의 넷 어디에도 `tree`가 없다).
+ *
+ * **`typography`(스케일 참조)로는 폰트를 걸 수 없다.** 그 어휘가 펼치는 것은
+ * `fontSize`·`lineHeight`·`fontWeight`·`letterSpacing` 넷이고(`TYPOGRAPHY_KEYS`),
+ * §6.3의 `typography.family`는 그 넷 중 어느 것도 아니라 **항목으로 지목하면
+ * `unknown-token`이 난다**(`test/style.test.ts`의 `타이포 항목이 아닌 이름은 이슈다`).
+ * 즉 폰트 토큰은 이미 만들어지는데 그것을 가리킬 프로퍼티가 없던 것이다.
+ *
+ * **여기 없는 것 — `Grid.props.gap`(재라 #8).** §6.6의 패턴 예시가
+ * `{ type: 'Grid', props: { columns: 2, gap: 'space.10' } }`를 쓰는데 카탈로그에 그 prop이
+ * 없어 **`bad-pattern-node`로 테마 전체가 해석되지 않는다**(실측). **예시가 틀린 것으로
+ * 본다** — `gap`은 §6.8이 이미 가진 **테마의** 어휘이고, 노드 props는 토큰 해석기를
+ * 지나지 않으므로 `"space.10"`을 통과시켜도 CSS에서 무효값이 된다. 근거와 실측은
+ * `packages/schema/test/component/catalog-vocabulary.test.ts`에 있다.
+ */
+export const STYLE_PROPERTIES_BEYOND_SPEC: readonly string[] = [
+  'fontFamily',
+  'gridColumns',
+  'treeIndent',
+]
 
 /**
  * `typography: "h3"`이 펼쳐지는 CSS 선언. 스케일 항목에 없는 키는 **선언을 내지 않는다**
@@ -199,6 +271,10 @@ export function styleDeclarations(
     return typographyDeclarations(value, tokens, path)
   }
 
+  // `typography`와 같은 이유로 수 갈래보다 **먼저** 가른다 — 그냥 두면 `gridColumns: 3`이
+  // `grid-template-columns: 3`이라는 무효 선언이 되어 조용히 나간다.
+  if (prop === 'gridColumns') return gridColumnsDeclarations(targets, value, path)
+
   if (typeof value === 'number') {
     return { css: targets.map((name) => [name, String(value)]), issues: [] }
   }
@@ -279,6 +355,39 @@ function typographyDeclarations(
     }
   }
   return { css, issues: [] }
+}
+
+/**
+ * `gridColumns: 3`을 `repeat(3, 1fr)`로 펼친다.
+ *
+ * **토큰 참조를 받지 않는다.** 열 수는 길이도 색도 아니라 토큰 층에 대응하는 이름공간이
+ * 없고(§6.3의 다섯 중 어느 것도 아니다), `primitives.grid.columns`는 **사이트 골격의
+ * 12칼럼**이지 컴포넌트의 열 수가 아니다(P4a-2가 `--wb-grid-columns` 이름 충돌로 쟀던
+ * 바로 그 구별이다).
+ *
+ * **상한을 두지 않는다.** `primitives.grid.columns`가 12라고 해서 컴포넌트의 열 수가
+ * 12를 넘을 수 없다는 근거가 설계 어디에도 없고, *"절대값을 계약에 적지 않는다"*가
+ * P4a-1의 결론이다. 막는 것은 CSS `repeat()`이 받지 못하는 값뿐이다.
+ */
+function gridColumnsDeclarations(
+  targets: readonly string[],
+  value: unknown,
+  path: string,
+): { css: Array<[string, string]>; issues: ThemeIssue[] } {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    return {
+      css: [],
+      issues: [
+        issue(
+          'bad-style-value',
+          path,
+          `gridColumns는 1 이상의 정수여야 합니다 (받은 값: ${JSON.stringify(value)}) — ` +
+            '트랙 문자열이 아니라 열 수를 적습니다',
+        ),
+      ],
+    }
+  }
+  return { css: targets.map((name) => [name, `repeat(${value}, 1fr)`]), issues: [] }
 }
 
 /**

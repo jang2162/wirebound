@@ -13,7 +13,11 @@ import {
 const Sample = defineComponent({
   type: 'Sample',
   props: z.object({ label: z.string(), disabled: z.boolean() }),
-  editor: [{ prop: 'label', control: 'text', label: '라벨' }],
+  // `disabled`가 `states`에 있으므로 `editor`에도 있어야 한다(P4b-1의 도달성 검사).
+  editor: [
+    { prop: 'label', control: 'text', label: '라벨' },
+    { prop: 'disabled', control: 'switch', label: '비활성' },
+  ],
   structures: ['plain', 'fancy'],
   parts: ['body'],
   variants: ['default'],

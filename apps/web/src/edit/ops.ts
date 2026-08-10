@@ -77,6 +77,55 @@ export function propOps(
 }
 
 /**
+ * 노드의 `variant`를 바꾸는 op. **경로를 가르는 자리는 여기 하나다.**
+ *
+ * **`/props/variant`가 아니라 `/…/variant`다.** `variant`는 props의 키가 아니라 **노드 봉투의
+ * 필드**이고(§4.3: `{ id, type, props, variant, marker, interactions, children }`), 그래서
+ * `propOps`를 재사용할 수 없다. 재사용하면 `props` 안에 `variant`라는 키가 생겨
+ * `z.strictObject`인 컴포넌트에서 `invalid-props`가 되고, 그렇지 않은 컴포넌트에서는
+ * **아무 데도 안 쓰이는 값이 조용히 저장된다.**
+ *
+ * **`variant`를 비우는 것은 `remove`다 — `replace null`이 아니다.** `WbNodeSchema.variant`가
+ * `z.string().optional()`이라 `null`은 유효한 값이 아니다. 비울 수 없으면 사용자가 한 번
+ * 고른 변형에 갇힌다.
+ *
+ * **거절되는 코드는 422다 — 400이 아니다(앞 판의 이 자리는 400이라 적었고 거짓이었다).**
+ * 실측: `validatePage`가 그 문서에 `bad-document`(severity `error`)를 내고
+ * (*"잘못된 입력: 예상 타입은 string, 받은 타입은 null입니다"*, path `/root/…/variant`),
+ * `edit-pipeline`이 그것을 `reason: 'invalid'`로 올려 라우트가 **422 `validation-failed`**로
+ * 낸다(`apps/api/src/routes/pages.ts`의 머리말). 400은 봉투 **요청 본문**이 깨졌을 때다.
+ *
+ * 갈래는 `propOps`와 같은 이유로 셋이다 — `applyOps`의 `replace`가 없는 키에서 던진다.
+ *
+ * | 노드 상태 | 주는 값 | op |
+ * |---|---|---|
+ * | `variant` 키가 있다 | 문자열 | `replace /…/variant` |
+ * | `variant` 키가 없다 | 문자열 | `add /…/variant` |
+ * | `variant` 키가 있다 | `null` | `remove /…/variant` |
+ * | `variant` 키가 없다 | `null` | **`null`** — 지울 것이 없다(D7) |
+ */
+export function variantOps(
+  document: PageDocument,
+  nodeId: string,
+  variant: string | null,
+): PatchOp[] | null {
+  const nodePath = findNodePathSafely(document.root, nodeId)
+  if (nodePath === undefined) return null
+
+  const node = findNodeSafely(document.root, nodeId)
+  if (node === undefined) return null
+
+  const path = `${nodePath}/variant`
+  // `getByPointer`로 값을 보지 않고 키의 존재를 본다 — 값이 `undefined`인 키와
+  // 키가 없는 것을 갈라야 `replace`/`add`가 갈린다(`propOps`가 같은 자리에서
+  // 봉투가 그런 키를 허용하지 않는다는 사실에 기댄 것과 대비된다).
+  const has = Object.hasOwn(node, 'variant')
+
+  if (variant === null) return has ? [{ op: 'remove', path }] : null
+  return has ? [{ op: 'replace', path, value: variant }] : [{ op: 'add', path, value: variant }]
+}
+
+/**
  * 새 노드를 부모의 `children` 안 `index` 자리에 넣는 op. 넣을 수 없으면 `null`이다.
  *
  * **`children` 키가 없는 부모에는 배열째 넣는다 — `propOps`의 첫 갈래와 같은 성질이고

@@ -79,8 +79,23 @@ function unwrap(schema: ZodInternal | undefined): ZodInternal | undefined {
  * - boolean → 양쪽 (조건부 조각의 가장 흔한 스위치다)
  * - string → 빈 문자열과 찬 문자열 (`props.caption ? … : null` 부류가 여기 걸린다)
  * - array → 빈 배열과 기본값 (목록이 없을 때의 가지)
+ * - **수 → `0`·`1`·기본값** (아래)
  *
- * 수·객체는 흔들지 않는다 — 렌더 갈래를 만들지 않고 범위 제약만 있다.
+ * **앞서 여기에 *"수·객체는 흔들지 않는다 — 렌더 갈래를 만들지 않고 범위 제약만 있다"*고
+ * 적었고 그 문장은 거짓이었다.** 리뷰가 잡았다. `ListTable`이
+ * `Array.from({ length: items })`이므로 **`items: 0`은 렌더 갈래다** — 그 값에서 `<tr>`이
+ * 하나도 안 나오고, 그때만 그려지는 조각(빈 상태 표시 따위)이 생기면 **이 순회가 통째로
+ * 지나친다.** 실측: `items === 0`일 때만 나오는 조각에 계약 밖 part 이름을 심으니 **0건이
+ * 죽었다.**
+ *
+ * **P4b-1이 셋째 가드(part 이름)를 이 순회에 얹으면서 그 거짓 문장에 기대게 됐다** —
+ * 그래서 여기서 고친다. 비용은 **+11 렌더(390 → 401, +2.8%)**이고 시간 차는 재지 못했다.
+ *
+ * `0`·`1`을 고른 이유: 대부분의 범위 하한이 그 둘이고(`min(0)`·`min(1)`), 범위를 벗어나는
+ * 후보는 `propVariations`의 `safeParse`가 거른다. **상한은 흔들지 않는다** — 큰 수는 렌더
+ * 갈래를 만들지 않고 렌더 비용만 늘린다.
+ *
+ * **객체 prop은 오늘 카탈로그에 없다**(문자열·수·불리언·문자열 배열·키-값 배열이 전부다).
  */
 function propCandidates(schema: ZodInternal | undefined, fallback: unknown): unknown[] {
   const inner = unwrap(schema)
@@ -90,24 +105,77 @@ function propCandidates(schema: ZodInternal | undefined, fallback: unknown): unk
   if (kind === 'boolean') return [true, false]
   if (kind === 'string') return ['', '값']
   if (kind === 'array') return [[], fallback]
+  if (kind === 'number') return [...new Set([0, 1, fallback])]
   return [fallback]
 }
 
 /**
- * 컴포넌트 하나가 그려질 props 조합들. **한 번에 한 prop만** 기본값에서 흔든다 —
- * 완전 조합은 폭발하고, 여기서 필요한 것은 "그 값일 때만 그려지는 가지"를 한 번씩
- * 지나가는 것뿐이다.
+ * 컴포넌트 하나가 그려질 props 조합들. **한 쌍까지** 기본값에서 흔든다.
+ *
+ * **앞서는 한 번에 하나만 흔들었고, 그것이 사각이었다** — 리뷰가 실측했다:
+ * `selectable && loading`처럼 **두 prop이 동시에** 특정 값일 때만 그려지는 조각에 계약 밖
+ * part 이름을 심으니 **0건이 죽었다.** 한 번에 하나만 흔들면 그런 가지에 절대 닿지 않는다.
+ *
+ * **비용을 재고 넓혔다**(중앙값 7회, 워밍업 뒤):
+ *
+ * | 조합 | 조합 수 × 변형 = 렌더 |
+ * |---|---|
+ * | 하나씩(옛 판) | 390 |
+ * | 하나씩 + 수를 흔든다 | 401 |
+ * | **쌍까지 + 수를 흔든다(지금)** | **1408**(3.5배) |
+ *
+ * 가드 셋이 이 순회를 쓰므로 회귀 1회에 **4224 렌더**다. **실제 케이스 시간**은
+ * part 47ms · `data-*` 26ms · `style` 13ms = **약 86ms**이고(중앙값 3회), 전체 회귀가
+ * 18초이므로 **0.5% 미만**이다. 구조가 26개 늘면(19 → 45) 그 비례로 200ms 남짓이 된다.
+ *
+ * > **이 수를 다시 잴 때는 `add`의 dedup이 켜져 있는지부터 확인하라.** 앞 판은 **dedup을
+ * > 넣기 전에 재고 다시 재지 않아** 530 / 541 / 2749(·가드 셋 *"약 8200"*)를 적었다 —
+ * > **dedup만 끄면 그 셋이 그대로 재현되고 가드 셋은 8247이다.** 조합을 넓히는 변경과
+ * > 중복을 걷는 변경이 같은 커밋에 있으면 이 실수가 난다.
+ *
+ * **렌더 시간과 케이스 시간은 다르다** — 위 표는 렌더만 센 것이고, 가드는 그 위에
+ * 정규식 스캔을 얹는다. 판정에 쓸 값은 **케이스 시간**이다.
+ *
+ * **지금 넓히는 것이 P4b-2 뒤보다 싸다** — 그쪽이 구조 26개를 만들며 두 prop 조건을
+ * 만들면 이 가드가 **조용히** 놓친다. P4a-3의 *"발견된 것만 닫으면 매번 하나가 남는다"*와
+ * 같은 판단이다.
+ *
+ * **셋 이상은 넓히지 않았다.** 쌍에서 이미 5배이고, 세 개 동시 조건은 오늘 카탈로그에
+ * 없으며 **그 사각은 열어 둔 채로 적어 둔다**(이월 문서).
+ *
+ * **중복은 걷는다** — 쌍 순회가 `(a 변화, b 기본)` 꼴로 하나씩 판을 다시 만들어서다.
  */
 function propVariations(def: ComponentDef): Record<string, unknown>[] {
   const defaults = def.props.parse({}) as Record<string, unknown>
   const shape = (def.props as unknown as { shape?: Record<string, ZodInternal> }).shape ?? {}
+  const names = Object.keys(shape)
 
-  const out: Record<string, unknown>[] = [defaults]
-  for (const [name, schema] of Object.entries(shape)) {
-    for (const value of propCandidates(schema, defaults[name])) {
-      const candidate = { ...defaults, [name]: value }
-      // 범위 제약에 걸리는 조합은 건너뛴다(렌더러가 폴백을 그릴 뿐이다).
-      if (def.props.safeParse(candidate).success) out.push(candidate)
+  const seen = new Set<string>()
+  const out: Record<string, unknown>[] = []
+  const add = (candidate: Record<string, unknown>): void => {
+    // 범위 제약에 걸리는 조합은 건너뛴다(렌더러가 폴백을 그릴 뿐이다).
+    if (!def.props.safeParse(candidate).success) return
+    const key = JSON.stringify(candidate)
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(candidate)
+  }
+
+  add(defaults)
+  for (const name of names) {
+    for (const value of propCandidates(shape[name], defaults[name])) {
+      add({ ...defaults, [name]: value })
+    }
+  }
+  for (let i = 0; i < names.length; i += 1) {
+    for (let j = i + 1; j < names.length; j += 1) {
+      const first = names[i]!
+      const second = names[j]!
+      for (const a of propCandidates(shape[first], defaults[first])) {
+        for (const b of propCandidates(shape[second], defaults[second])) {
+          add({ ...defaults, [first]: a, [second]: b })
+        }
+      }
     }
   }
   return out
@@ -120,10 +188,17 @@ function captures(html: string, pattern: RegExp): string[] {
 /**
  * 등록된 모든 구조를 **비기본 props로** 그려 콜백에 넘긴다. 렌더 횟수를 돌려준다.
  *
- * **가드 둘이 이 순회를 함께 쓴다** — `data-*` 계약과 `style` 일반 선언. 앞서 `data-*`
- * 쪽만 이 순회로 옮기고 `style` 쪽을 기본 props로 남겨 뒀는데, **조건부 조각에 inline
- * `color:red`를 심으니 1220 케이스가 통과했다**(재현했다). 그것은 이 계획이 닫으려던
- * 결함(P0 이월 #7) 그 자체다. 순회를 하나로 모으면 그 자리가 생기지 않는다.
+ * **가드 셋이 이 순회를 함께 쓴다** — `data-*` 계약, `style` 일반 선언, **part 이름 계약**.
+ * P4a-2가 앞의 둘을 옮길 때 `data-*` 쪽만 먼저 옮기고 `style` 쪽을 기본 props로 남겨 뒀는데,
+ * **조건부 조각에 inline `color:red`를 심으니 1220 케이스가 통과했다**(재현했다). 그것은
+ * 그 계획이 닫으려던 결함(P0 이월 #7) 그 자체다.
+ *
+ * **셋째(part 이름)는 P4b-1이 옮겼다 — 같은 부류가 한 번 더 남아 있었다.** 조건부 조각이
+ * 카탈로그에 없는 part 이름을 내도 **0건이 죽었다**(실측, 대조군은 2건). 그것이 P0 이월
+ * #10이고, "계획이 재지 않은 것 #5"가 *"이미 닫혔을 수 있다"*고 적은 자리다 — **절반만
+ * 닫혀 있었다.**
+ *
+ * **순회를 하나로 모으면 그 자리가 생기지 않는다.**
  */
 function forEachVariation(visit: (rendered: { key: string; html: string }) => void): number {
   const keys = listStructureKeys()
@@ -148,15 +223,42 @@ function forEachVariation(visit: (rendered: { key: string; html: string }) => vo
 }
 
 describe('part 계약', () => {
-  it('모든 컴포넌트가 카탈로그에 선언된 part만 낸다', () => {
-    // 검사가 전부 루프 안에 있다. part가 하나도 안 나오면 단언 없이 통과하므로 못을 박는다.
-    expect.hasAssertions()
-    for (const type of CATALOG_TYPES) {
+  /**
+   * **P0 이월 #10 — 이 가드가 기본 props로만 훑고 있었다. P4b-1이 닫는다.**
+   *
+   * P4a-2가 `data-*` 계약과 `style` 가드를 `forEachVariation`으로 옮기면서 **part 이름
+   * 계약은 기본 props에 남겨 두었다.** 그래서 **조건부로만 그려지는 조각**(`Media.caption`·
+   * `Card.subtitle`·`Field.help`·`List.item`/`media`/`title`/`meta`·`EntryForm.label`/`control`)이
+   * 카탈로그에 없는 이름을 내도 아무도 보지 못했다.
+   *
+   * **실측(P4b-1이 심어 확인했다):**
+   *
+   * | 심은 것 | 죽은 수 |
+   * |---|---|
+   * | 조건부 조각(`Media.caption`)이 선언되지 않은 part 이름을 낸다 | **0** |
+   * | 늘 그려지는 조각(`Media.frame`)에 같은 변조 — 대조군 | 2 |
+   *
+   * **P4b-2가 구조 26개를 만들기 직전이라 지금이 가장 싸다** — 그쪽이 만드는 구조마다
+   * 조건부 조각이 늘어난다. P0 이월이 든 `EntryFormLabelLeft`의 압력(폼의 `title`을
+   * `part('label')` 안에 렌더한다)도 같은 부류다.
+   */
+  it('모든 컴포넌트가 카탈로그에 선언된 part만 낸다 — 비기본 props로 전수', () => {
+    const offenders: string[] = []
+    let scanned = 0
+
+    const renders = forEachVariation(({ key, html }) => {
+      const [type] = key.split(':') as [string]
       const declared = new Set(requireComponent(type).parts)
-      for (const part of captures(renderDefault(type), /data-wb-part="([^"]*)"/g)) {
-        expect(declared.has(part), `${type}: 카탈로그에 없는 part "${part}"`).toBe(true)
+      for (const part of captures(html, /data-wb-part="([^"]*)"/g)) {
+        scanned += 1
+        if (!declared.has(part)) offenders.push(`${type}: ${part}`)
       }
-    }
+    })
+
+    // 셋 다 못을 박는다 — 하나라도 0이면 위 순회가 헛돈 것이다.
+    expect(renders).toBeGreaterThan(100)
+    expect(scanned).toBeGreaterThan(0)
+    expect([...new Set(offenders)]).toEqual([])
   })
 
   /**
@@ -400,5 +502,93 @@ describe('개별 구조', () => {
       renderNode({ id: 'n_000000000001', type: 'Slot' }, { slot: <span>주입됨</span> }),
     )
     expect(html).toContain('주입됨')
+  })
+})
+
+/**
+ * **재라 #6 — `Media.kind`는 오늘 죽어 있다. 지우지 않고 그 사실을 케이스로 고정한다.**
+ *
+ * `Media`의 `kind` prop과 `structures`가 **같은 이름 넷**이다(`image`·`video`·
+ * `illustration`·`chart`). 하나는 노드가 정하고 하나는 **테마가 고른다.**
+ *
+ * **실측: `MediaImage`가 `props.kind`를 한 번도 읽지 않는다**(`ratio`·`caption`만 쓴다).
+ * `kind`는 §6.11의 여섯 속성 어디에도 실리지 않으므로 **구조 구현체 안에서만 쓰일 수
+ * 있는데 쓰이지 않는다.**
+ *
+ * > **이것은 "조용히 틀린다" 부류다.** 속성 패널에 `종류` 컨트롤이 **있고**, 사용자가
+ * > `video`를 고르면 문서에 저장되고 검증도 통과하는데 **화면은 아무것도 바뀌지 않는다.**
+ * > 이슈도 0건이다.
+ *
+ * **지우지 않는 이유 둘.**
+ *
+ * 1. **P4b-2가 `Media` 구조 넷을 만든다. 그 질문의 답은 거기서 나온다** — `MediaVideo`가
+ *    `MediaImage`와 다르게 그리면 `kind`는 구조와 중복이라 지우는 것이 맞고, 구조들이
+ *    `kind`를 읽을 일이 있으면 남는다. **구조가 없는 지금 정하는 것은 근거 없이 정하는 것이다.**
+ * 2. `Media.props`가 `z.strictObject`라 prop을 빼는 것은 **문서 마이그레이션이 필요한
+ *    파괴적 변경**이다(§13.1). 스키마 버전을 올리는 일을 어휘 슬라이스에서 하지 않는다.
+ *
+ * **`variantFrom`으로 접지도 않았다** — 그러면 `data-wb-variant`와 `data-wb-structure`가
+ * **같은 값**이 되는데 설계가 그 상태를 말하지 않는다(P4a-2가 접지 않은 이유 그대로).
+ *
+ * **P4b-2가 이것을 깨면서 고치게 된다.**
+ */
+describe('재라 #6 — Media.kind는 렌더에 닿지 않는다', () => {
+  const KINDS = ['image', 'video', 'illustration', 'chart'] as const
+
+  function render(kind: string): string {
+    return renderToStaticMarkup(
+      renderNode({ id: 'n_000000000001', type: 'Media', props: { kind, ratio: '16/9', caption: '' } }),
+    )
+  }
+
+  it('카탈로그가 kind와 structures를 같은 이름 넷으로 갖는다 — 카나리아', () => {
+    const def = requireComponent('Media')
+    expect(def.structures).toEqual([...KINDS])
+    expect(def.editor.some((field) => field.prop === 'kind')).toBe(true)
+  })
+
+  it('kind를 바꿔도 렌더 결과가 글자까지 같다', () => {
+    // **이것이 "죽어 있다"의 실행 가능한 형태다.** 구조 구현체가 그 값을 읽기 시작하면
+    // 여기가 먼저 죽는다.
+    const baseline = render('image')
+    for (const kind of KINDS) {
+      expect(render(kind), kind).toBe(baseline)
+    }
+  })
+
+  it('kind가 data-wb-variant로 나가지 않는다', () => {
+    // `Media`는 `variantFrom`을 갖지 않으므로 그 속성 자체가 안 나온다. §6.11의 여섯
+    // 속성 계약을 넓히지 않았다는 것이기도 하다.
+    for (const kind of KINDS) {
+      expect(render(kind), kind).not.toContain('data-wb-variant')
+    }
+  })
+
+  it('노드가 video라고 적어도 data-wb-structure는 image다', () => {
+    // **어긋남이 가장 선명하게 보이는 자리다.** 노드가 정한 `kind`와 테마(오늘은 기본값)가
+    // 고른 구조가 **같은 이름 공간**인데 서로를 모른다. 사용자가 "동영상"을 골랐는데
+    // 그려지는 것은 이미지 구조다 — 그리고 이슈가 0건이다.
+    expect(render('video')).toContain('data-wb-structure="image"')
+  })
+
+  it('음성 대조 — ratio는 실제로 렌더에 닿는다', () => {
+    // 이 케이스가 없으면 위 둘이 "Media가 아무것도 안 그린다"로도 설명된다.
+    const wide = renderToStaticMarkup(
+      renderNode({ id: 'n_000000000001', type: 'Media', props: { ratio: '16/9' } }),
+    )
+    const square = renderToStaticMarkup(
+      renderNode({ id: 'n_000000000001', type: 'Media', props: { ratio: '1/1' } }),
+    )
+
+    expect(wide).not.toBe(square)
+    expect(square).toContain('1/1')
+  })
+
+  it('구조 넷 중 구현이 있는 것은 image 하나다 — P4b-2가 채운다', () => {
+    // **테마가 나머지 셋을 고르면 폴백이 그려진다.** `kind`의 답이 P4b-2에서 나오는
+    // 이유가 이것이다 — 그쪽이 셋을 만들 때 각자 `kind`를 읽을지 정하게 된다.
+    const implemented = KINDS.filter((structure) => getStructure('Media', structure) !== undefined)
+
+    expect(implemented).toEqual(['image'])
   })
 })
