@@ -9,7 +9,7 @@
  */
 import designDoc from '../../../../docs/superpowers/specs/2026-08-03-wirebound-design.md?raw'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { installCatalog } from '../../src/component/catalog/index'
+import { CATALOG_TYPES, installCatalog } from '../../src/component/catalog/index'
 import { getComponent } from '../../src/component/registry'
 import type { PageDocument } from '../../src/node'
 import { validatePage } from '../../src/validate'
@@ -95,5 +95,93 @@ describe('재라 #8 — §6.6 예시의 Grid.props.gap', () => {
   it('§6.8이 gap을 테마의 어휘로 갖고 있다 — 대신 쓸 길', () => {
     // 근거 3. `themes`를 import하지 않는다 — 의존 방향이 반대다(§3.3). 설계 절을 읽는다.
     expect(section('### 6.8 스타일 프로퍼티 화이트리스트')).toContain('gap')
+  })
+})
+
+/**
+ * **도달성 — §5.1이 *"속성 패널이 `editor`에서 자동 생성된다"*고 한 것의 결과.**
+ *
+ * `editor`에 없는 prop은 **UI에서 도달 불가**다. 그런데 `states`는 *"같은 이름의 prop이
+ * `true`이면 그 상태가 활성화된다"*이므로(§5.1), 그 prop이 `editor`에 없으면 **선언된 상태를
+ * 목업에서 켤 수 없다.** §6.5가 상태의 쓸모를 *"'선택된 행 강조' 같은 서술을 목업에서 실제로
+ * 보여주려면"*이라고 적었는데 그 서술이 화면에 닿지 않는다(P0 이월 #9).
+ *
+ * **분모를 손으로 적지 않는다.** 카탈로그를 훑어 센다 — P4b-2·P4b-3이 컴포넌트를 늘리면
+ * 여기가 먼저 죽는다.
+ */
+describe('states·variants 도달성 (P0 이월 #9)', () => {
+  it('훑을 카탈로그가 실제로 있다', () => {
+    // 분모가 비면 아래 케이스들이 조용히 통과한다.
+    expect(CATALOG_TYPES.length).toBeGreaterThan(10)
+    expect(CATALOG_TYPES.every((type) => getComponent(type) !== undefined)).toBe(true)
+  })
+
+  it('모든 states가 editor에서 도달 가능하다', () => {
+    const unreachable: string[] = []
+
+    for (const type of CATALOG_TYPES) {
+      const def = getComponent(type)
+      if (def === undefined) continue
+      const editable = new Set(def.editor.map((field) => field.prop))
+      for (const state of def.states) {
+        if (!editable.has(state)) unreachable.push(`${type}.${state}`)
+      }
+    }
+
+    expect(unreachable).toEqual([])
+  })
+
+  /**
+   * **`variantFrom`의 예외가 구멍이 되지 않는가** — 계획서 D2가 의심하라고 한 자리다.
+   *
+   * `variantFrom`을 가진 컴포넌트에는 속성 패널이 **변형 컨트롤을 내지 않는다**(재라 #4의
+   * A안 — 내면 `ignored-variant`를 UI가 유도하는 셈이다). 그 대신 도달하는 길은 **그 prop의
+   * 컨트롤**뿐이므로, 그 prop이 `editor`에 없으면 **변형이 통째로 도달 불가가 된다.**
+   *
+   * 오늘 셋(Text·Divider·Field)은 전부 그 prop을 `editor`에 갖고 있다 — **강제하는 것이
+   * 없었을 뿐이다.**
+   */
+  it('variantFrom이 가리키는 prop도 editor에서 도달 가능하다', () => {
+    const unreachable: string[] = []
+
+    for (const type of CATALOG_TYPES) {
+      const def = getComponent(type)
+      if (def === undefined || def.variantFrom === undefined) continue
+      const editable = new Set(def.editor.map((field) => field.prop))
+      if (!editable.has(def.variantFrom)) unreachable.push(`${type}.${def.variantFrom}`)
+    }
+
+    // 카나리아 — `variantFrom`을 가진 컴포넌트가 있어야 이 케이스가 무언가를 지킨다.
+    // **정렬해서 비교한다** — `CATALOG_TYPES`의 순서는 이 성질과 무관하고, 순서에 매이면
+    // 카탈로그를 재배치할 때 뜻 없는 실패가 난다.
+    expect(
+      [...CATALOG_TYPES.filter((type) => getComponent(type)?.variantFrom !== undefined)].sort(),
+    ).toEqual(['Divider', 'Field', 'Text'])
+    expect(unreachable).toEqual([])
+  })
+
+  /**
+   * **`variants`는 `defineComponent`가 검사할 것이 없다 — 계획서 D2의 후반은 성립하지 않는다.**
+   *
+   * D2는 *"`variants`가 비어 있지 않으면 그것도 도달 가능해야 한다"*를 `defineComponent`의
+   * 검사로 두라고 적었는데, 재라 #4를 A안으로 정하면서 **패널이 카탈로그를 보고 자동으로
+   * 여닫게 되어** 어긋날 자리 자체가 없어졌다. 검사할 것이 없는 규칙을 검사로 두면
+   * **늘 참인 단언**이 하나 늘 뿐이다.
+   *
+   * 그 대신 남는 것은 위 `variantFrom` 검사다 — 그쪽만이 실제로 구멍이 될 수 있다.
+   * 패널 쪽 전수 케이스는 `apps/web/test/panels/property-panel.test.tsx`에 있다.
+   */
+  it('variants가 비어 있지 않은 컴포넌트는 variantFrom이 있거나 패널이 자동으로 연다', () => {
+    // `schema`는 패널을 볼 수 없으므로 여기서 재는 것은 **그 조건이 카탈로그만으로
+    // 결정된다는 사실**이다 — 그것이 A안이 새 선언을 필요로 하지 않는 이유다.
+    for (const type of CATALOG_TYPES) {
+      const def = getComponent(type)
+      if (def === undefined) continue
+      const opensAutomatically = def.variants.length > 0 && def.variantFrom === undefined
+      const reachesViaProp =
+        def.variantFrom !== undefined && def.editor.some((f) => f.prop === def.variantFrom)
+
+      expect(def.variants.length === 0 || opensAutomatically || reachesViaProp, type).toBe(true)
+    }
   })
 })
