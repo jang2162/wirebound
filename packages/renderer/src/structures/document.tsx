@@ -64,6 +64,13 @@ export const MediaVideo: StructureRenderer = (ctx) => (
   mediaFigure(ctx, <span {...ctx.part('play')}>▶</span>)
 )
 
+// 일러스트는 **그린 것**이다 — 찍은 것(사진)과 갈리는 지점이 그것뿐이라 표시 하나로 낸다.
+// 빈 틀로 두면 `image`와 DOM이 글자까지 같아져 *"구조가 넷인데 셋만 다르다"*가 되고,
+// 그 상태에서는 테마가 둘을 갈라 그릴 근거가 `data-wb-structure` 하나로 줄어든다.
+export const MediaIllustration: StructureRenderer = (ctx) => (
+  mediaFigure(ctx, <span {...ctx.part('glyph')}>✎</span>)
+)
+
 // `data-direction`은 없어졌다 — `direction`이 `data-wb-variant`로 나간다.
 export const DividerDefault: StructureRenderer = ({ attrs }) => <hr {...attrs} />
 
@@ -106,6 +113,7 @@ export const DOCUMENT_ENTRIES: StructureEntry[] = [
   ['Text', 'default', TextDefault],
   ['Media', 'image', MediaImage],
   ['Media', 'video', MediaVideo],
+  ['Media', 'illustration', MediaIllustration],
   ['Divider', 'default', DividerDefault],
   ['Placeholder', 'default', PlaceholderDefault],
 ]

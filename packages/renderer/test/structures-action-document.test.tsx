@@ -167,3 +167,48 @@ describe('Media:video', () => {
     expect(render('Media', 'video', { ratio: '4/3' })).toContain('--wb-node-media-ratio:4/3')
   })
 })
+
+describe('Media:illustration', () => {
+  it('등록돼 있다', () => {
+    expect(getStructure('Media', 'illustration')).toBeDefined()
+  })
+
+  it('폴백이 아니라 실제 구조를 그린다', () => {
+    const html = render('Media', 'illustration', {})
+    expect(isFallback(html), html).toBe(false)
+    expect(html).toContain('data-wb-structure="illustration"')
+  })
+
+  it('틀 안에 표시를 낸다 — image의 빈 틀과 갈리는 자리다', () => {
+    const html = render('Media', 'illustration', {})
+    expect(parts(html)).toEqual(['frame', 'glyph'])
+  })
+
+  it('image와 DOM이 다르다 — 조각 하나가 더 있다', () => {
+    // **이 케이스가 없으면 "일러스트는 사실 이미지다"라는 판정을 그냥 지나친다.**
+    // 넷 중 둘이 같은 DOM이면 `Media.kind` 판정의 근거가 갈리므로 그 사실이 재져야 한다.
+    //
+    // > **폴백 가드가 먼저 있어야 한다.** 구현이 없을 때 이 케이스는 **구현 없이도
+    // > 초록**이었다 — 폴백 `<div data-wb-error>`가 `<figure>`와 당연히 다르기 때문이다.
+    // > 실제로 그 상태를 한 번 만들어 확인했다(구현 전 5 실패 중 이 케이스는 없었다).
+    // > *"측정이 예상과 다르면 대상이 아니라 측정 장치를 먼저 의심하라"*가 걸리는 자리다.
+    const illustration = render('Media', 'illustration', {})
+    const image = render('Media', 'image', {})
+    expect(isFallback(illustration), illustration).toBe(false)
+    expect(isFallback(image), image).toBe(false)
+
+    const normalize = (html: string): string => html.replace(/ data-wb-structure="[^"]*"/, '')
+    expect(normalize(illustration)).not.toBe(normalize(image))
+  })
+
+  it('caption은 값이 있을 때만 나온다', () => {
+    expect(parts(render('Media', 'illustration', { caption: '' }))).not.toContain('caption')
+    expect(parts(render('Media', 'illustration', { caption: '개념도' }))).toContain('caption')
+  })
+
+  it('ratio를 노드 변수로 낸다', () => {
+    expect(render('Media', 'illustration', { ratio: '1/1' })).toContain(
+      '--wb-node-media-ratio:1/1',
+    )
+  })
+})
