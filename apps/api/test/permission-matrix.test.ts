@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProjectRole } from '../src/db/types'
+import { insertTheme } from '../src/repos/themes'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 type Actor = ProjectRole | 'outsider' | 'anonymous'
@@ -69,6 +70,20 @@ const 페이지하나 = async (
   const page = await createPage(ctx, ownerCookie, projectId, menu.id, { title: '대상 페이지' })
   return { pageId: page.id }
 }
+
+/**
+ * ':themeId'가 필요한 케이스(테마 조회·수정·삭제)가 실행 전에 대상 테마를 만든다.
+ *
+ * **시스템 테마를 쓰지 않는다.** 그것은 owner도 수정할 수 없어(§6.10) 수정·삭제 행이
+ * 권한과 무관한 이유로 403이 되고, 그러면 이 매트릭스가 재려는 것(역할 판정)을 못 잰다.
+ */
+const 테마하나 = async (
+  ctx: TestContext,
+  projectId: string,
+  _ownerCookie: { wb_session: string },
+): Promise<Record<string, string>> => ({
+  themeId: (await insertTheme(ctx.db, projectId, { meta: { id: 'target', name: '대상 테마', version: '1.0.0' } })).id,
+})
 
 const CASES: Case[] = [
   { label: '프로젝트 조회', method: 'GET', url: '/api/projects/:projectId', allowed: ['owner', 'editor', 'viewer'] },
@@ -171,6 +186,37 @@ const CASES: Case[] = [
     setup: 페이지하나,
   },
   { label: '트리 조회', method: 'GET', url: '/api/projects/:projectId/tree', allowed: ['owner', 'editor', 'viewer'] },
+  { label: '테마 목록', method: 'GET', url: '/api/projects/:projectId/themes', allowed: ['owner', 'editor', 'viewer'] },
+  {
+    label: '테마 조회',
+    method: 'GET',
+    url: '/api/projects/:projectId/themes/:themeId',
+    allowed: ['owner', 'editor', 'viewer'],
+    setup: 테마하나,
+  },
+  {
+    // **테마 편집은 owner 전용이다**(§10·§6.10) — 페이지·메뉴가 editor까지 허용하는 것과 다르다.
+    label: '테마 생성',
+    method: 'POST',
+    url: '/api/projects/:projectId/themes',
+    payload: { theme: { meta: { id: 'new-theme', name: '새 테마', version: '1.0.0' } } },
+    allowed: ['owner'],
+  },
+  {
+    label: '테마 수정',
+    method: 'PUT',
+    url: '/api/projects/:projectId/themes/:themeId',
+    payload: { theme: { meta: { id: 'target', name: '바뀐 테마', version: '2.0.0' } } },
+    allowed: ['owner'],
+    setup: 테마하나,
+  },
+  {
+    label: '테마 삭제',
+    method: 'DELETE',
+    url: '/api/projects/:projectId/themes/:themeId',
+    allowed: ['owner'],
+    setup: 테마하나,
+  },
 ]
 
 const ACTORS: Actor[] = ['owner', 'editor', 'viewer', 'outsider', 'anonymous']

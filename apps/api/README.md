@@ -150,6 +150,11 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다(D11) |
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
 | `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
+| `/api/projects/:projectId/themes` | GET | viewer | — | 200 테마 배열 — **시스템 테마가 함께 나온다**(아래 "테마 응답 형태"). 시스템 테마가 먼저, 그 안에서 `slug` 순 |
+| `/api/projects/:projectId/themes` | POST | **owner** | `{ theme }` | 201 테마(봉투 위반 400, 해석 실패 422, 중복 id 409, NUL 400) |
+| `/api/projects/:projectId/themes/:themeId` | GET | viewer | — | 200 테마 — 파생 테마면 `base`가 더 붙는다. 시스템 테마는 어느 프로젝트에서나 읽힌다 |
+| `/api/projects/:projectId/themes/:themeId` | PUT | **owner** | `{ theme }`(문서 전체) | 200 테마(통째 교체). **시스템 테마는 403**, 남의 프로젝트 테마는 404 |
+| `/api/projects/:projectId/themes/:themeId` | DELETE | **owner** | — | 204. **시스템 테마는 403**, 남의 프로젝트 테마는 404 |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
 
 ### 프로젝트 응답 형태
@@ -228,6 +233,55 @@ PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "sch
 목록을 훑는 용도이고, 스키마를 포함하면 프로젝트가 커질수록 응답이 무거워진다).
 페이지 본문(스키마 포함)이 필요하면 `GET /api/projects/:projectId/pages/:pageId`를
 따로 호출한다.
+
+### 테마 응답 형태
+
+테마를 내는 응답(목록의 각 항목 · `POST` · `GET` · `PUT`)은 **네 키**다.
+
+```jsonc
+{ "id": "…", "system": false, "updatedAt": "2026-08-10T…Z",
+  "theme": { "meta": { "id": "brand", "name": "브랜드", "version": "1.0.0" }, "tokens": { … } } }
+```
+
+- **`id`는 행의 uuid, `theme.meta.id`는 slug다.** 경로에 쓰는 것은 `id`다.
+- **`system: true`면 읽기 전용이다**(§6.10). 그 테마는 `project_id IS NULL`이고,
+  수정·삭제 시도는 owner여도 **403**이다 — 목록·조회가 이미 그 존재를 보여 주므로
+  숨길 것이 없고, 말해야 하는 것은 "읽기 전용"이라는 사실이다. 반대로 **남의 프로젝트
+  테마는 404**다(설계 §10의 존재 숨김).
+- **상세 조회(`GET .../themes/:themeId`)만 다섯 번째 키 `base`를 낼 수 있다.**
+  그 테마가 `meta.extends`를 선언했을 때만 붙고, 값은 **상속 대상 시스템 테마 전문**이다.
+  `resolveTheme(document, base)`가 base 없이는 파생 문서의 해석 자체를 거부하므로,
+  base를 빼고 내면 클라이언트가 쓸 수 없는 것을 받는다. **목록에는 붙지 않는다** —
+  파생 항목마다 시스템 테마 전문이 붙어 응답이 항목 수만큼 부푼다.
+
+**저장되는 것은 파생 테마 그대로다.** `extends`를 지닌 채 왕복하고, 병합 결과(홀로
+서는 테마)는 저장하지 않는다 — 그것이 저장될 자리는 §4.5의 스냅샷 하나뿐이고 아직 없다.
+
+#### 테마 본문 검증 — 400과 422가 갈린다
+
+`PUT .../pages/:pageId/schema`의 §7.1 게이트와 같은 모양이다.
+
+| 무엇 | 상태 |
+|---|---|
+| `{ theme }` 봉투 위반(절 이름 오타, `meta` 없음, `meta.id`가 `[A-Za-z0-9_-]{1,64}` 밖, `extends`가 `system:<id>` 꼴이 아님) | **400** |
+| 테마에 NUL 문자(U+0000) | **400** |
+| 상속 대상 시스템 테마가 **없음**(꼴은 맞지만 그런 이름이 없다) | **422** `bad-extends` |
+| 토큰 참조가 안 풀림, 카탈로그에 없는 컴포넌트/구조/조각/변형/상태, 화이트리스트 밖 스타일 프로퍼티 등 | **422**, `issues`에 `ThemeIssue[]` |
+| `(project_id, meta.id)` 중복 | **409** |
+
+**상속 깊이는 1단계다**(§6.9). `extends`가 가리킬 수 있는 것은 **코드의 시스템 테마**뿐이라
+파생 테마를 다시 상속하려 하면 그런 시스템 테마가 없어 422가 된다.
+
+#### 시스템 테마는 코드가 진실이다
+
+`packages/themes/src/system/`이 시스템 테마를 갖고 있고, 서버가 **기동할 때마다**
+그것을 `themes` 테이블에 `project_id IS NULL`로 upsert한다(`services/system-themes.ts`).
+DB의 행과 코드가 갈리면 **코드가 이긴다** — 다음 기동이 되돌린다.
+
+**코드에서 사라진 시스템 테마의 행은 지우지 않는다.** `layouts.theme_id`가 그 행을
+참조하고 파생 테마의 `extends_ref`가 그 slug를 가리키므로, 코드 한 줄을 지운 결과가
+사용자 데이터에 닿아서는 안 된다. 대가로 **해석할 수 없는 낡은 행이 목록에 남을 수
+있다**(그 테마를 상속한 파생은 422가 된다).
 
 ### 편집 파이프라인 (`PATCH .../ops`)
 
