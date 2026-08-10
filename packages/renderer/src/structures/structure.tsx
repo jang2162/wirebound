@@ -9,7 +9,7 @@
  * **복사해 오지 마라** — 다섯 벌이 따로 썩는다.
  */
 import type { CSSProperties } from 'react'
-import { componentRule, nodeVar } from '../structure-css-tools'
+import { componentRule, nodeVar, partRule } from '../structure-css-tools'
 import type { StructureEntry, StructureRenderer } from './registry'
 
 /**
@@ -32,6 +32,39 @@ export const SlotDefault: StructureRenderer = ({ attrs, slot }) => <div {...attr
 
 export const SectionContained: StructureRenderer = ({ attrs, part, children }) => (
   <section {...attrs}>
+    <div {...part('inner')}>{children}</div>
+  </section>
+)
+
+/**
+ * **폭을 가두지 않는 섹션. `contained`에서 `inner`가 통째로 없다** (재라 #1 — 왜 이 DOM인가).
+ *
+ * `contained`의 `inner`는 장식이 아니라 **테마가 `maxWidth`를 거는 자리**다(§6.4의
+ * `container.max`가 그 값이다). 폭을 안 가두는 섹션에 그 자리를 남겨 두면 테마가 구조마다
+ * `max-width: none`을 되돌려 써야 하고, 그러면 *"어느 쪽이 이겼는가"*가 다시 조용해진다 —
+ * 이 저장소가 반복해 겪은 부류다(P4b-1 이월 5번의 침묵 덮어쓰기).
+ *
+ * **그래서 이것은 스킨이 아니라 구조다.** 조각 하나가 있고 없고가 갈리므로 CSS로는 흉내
+ * 낼 수 없다.
+ */
+export const SectionFullBleed: StructureRenderer = ({ attrs, children }) => (
+  <section {...attrs}>{children}</section>
+)
+
+/**
+ * **배경이 갈린 섹션. 갈린 쪽이 조각(`band`)으로 있다** (재라 #1 — 왜 이 DOM인가).
+ *
+ * *"섹션의 절반만 다른 배경"*을 테마가 그리려면 **그 절반을 겨냥할 셀렉터가 있어야 한다.**
+ * 오늘 테마가 스타일할 수 있는 것은 컴포넌트 루트와 `parts`뿐이고(§5.1) 의사 요소는 어휘에
+ * 없다 — 즉 조각 없이는 표현할 방법이 **아예 없다.** CSS로 흉내 낼 수 있는 차이가 아니라
+ * **없던 표현이 생기는 것**이므로 구조가 맞다(재라 #7).
+ *
+ * `band`는 빈 상자다. 무엇을 그릴지는 테마가 정한다(`bg`·`bgImage`·`bgGradient`가 §6.8에
+ * 이미 있다) — 구현체는 색을 정하지 않는다.
+ */
+export const SectionSplitBg: StructureRenderer = ({ attrs, part, children }) => (
+  <section {...attrs}>
+    <div {...part('band')} />
     <div {...part('inner')}>{children}</div>
   </section>
 )
@@ -69,6 +102,82 @@ export const CardPlain: StructureRenderer = ({ attrs, props, part, children }) =
   </div>
 )
 
+/**
+ * **`plain`과 DOM이 한 글자도 다르지 않다 — 이것이 발견이고, 숨기지 않고 여기 적는다**
+ * (재라 #7).
+ *
+ * `bordered`가 `plain`과 갈리는 것은 **테두리 하나**이고, 그것은 §6.8이 이미 가진 어휘다
+ * (`borderColor`·`borderWidth`·`borderStyle`). 즉 **스킨 차이이지 구조 차이가 아니다.**
+ * 조각도 태그도 순서도 같으므로 함수를 새로 쓸 것이 없다 — 별칭으로 둔다.
+ *
+ * **그래도 등록하는 이유는 하나뿐이다:** 구조 이름이 곧 `data-wb-structure` 셀렉터라,
+ * 테마가 카드 스킨 세 장을 **갈라 쓸 채널**이 여기서 생긴다. 다른 데서 얻을 수 없는 것이
+ * 그 채널이고, 그것이 이 구조의 전부다.
+ *
+ * **여기에 테두리를 그리지 않는다.** 기본 CSS에 넣으면 테마가 매번 되돌려야 하고, 그러면
+ * `bordered`가 *"테마가 고르는 스킨"*이 아니라 *"렌더러가 강요하는 모습"*이 된다 —
+ * 작성 계약의 *"구현체 안에서 색·여백을 정하지 마라"* 그대로다.
+ *
+ * **P4b-3이 알아야 할 것:** `plain`·`bordered`·`elevated` 셋은 `parts` 차이가 아니라
+ * `base` 스킨 차이로 갈라야 한다.
+ */
+export const CardBordered: StructureRenderer = CardPlain
+
+/**
+ * **`plain`·`bordered`와 DOM이 같다** (재라 #7). `elevated`가 갈리는 것은 **그림자
+ * 하나**이고 그것은 §6.8의 `shadow`다 — `bordered`와 정확히 같은 부류이므로 같은 판정을
+ * 받는다. 근거와 대가는 바로 위 `CardBordered`에 적었다.
+ *
+ * **셋이 한 덩어리다.** `Card`가 오늘 갖는 *진짜* 구조 차이는 아래 `mediaTop`·`horizontal`
+ * 둘뿐이고, 나머지 셋은 **테마가 스킨을 갈라 쓸 이름 세 개**다.
+ */
+export const CardElevated: StructureRenderer = CardPlain
+
+/**
+ * **머리에 미디어 자리가 있는 카드** (재라 #1 — 왜 이 DOM인가).
+ *
+ * `bordered`·`elevated`와 갈리는 지점이 여기다. 저 둘은 §6.8의 어휘로 표현되는 **스킨**
+ * 이지만 *"카드 위에 이미지 자리가 있다"*는 **테마가 겨냥할 상자가 없으면 표현할 수 없다** —
+ * 조각도 어휘이므로(§6.5) 없는 조각은 만들 방법이 아예 없다. **그래서 진짜 구조다.**
+ *
+ * 조각 이름은 `List`의 §5.1 예시에서 빌려 왔다(`media`). 그룹마다 새 이름을 지으면 테마
+ * 작성자가 외울 것이 는다 — "계획이 재지 않은 것 #4"가 지목한 부채다.
+ */
+export const CardMediaTop: StructureRenderer = ({ attrs, props, part, children }) => (
+  <div {...attrs}>
+    <div {...part('media')} />
+    <div {...part('header')}>
+      <div {...part('title')}>{String(props.title)}</div>
+      {props.subtitle ? <div {...part('subtitle')}>{String(props.subtitle)}</div> : null}
+    </div>
+    <div {...part('body')}>{children}</div>
+  </div>
+)
+
+/**
+ * **미디어와 본문이 나란히 서는 카드** (재라 #1 — 왜 이 DOM인가).
+ *
+ * `mediaTop`과도 DOM이 다르다. 미디어를 **옆**에 두려면 나머지(머리+본문)가 **한 덩어리로
+ * 묶여야** 한다 — 안 묶으면 루트를 가로로 세우는 순간 `media`·`header`·`body` **셋이**
+ * 나란히 서 버린다. 그 덩어리가 `content`다.
+ *
+ * **CSS로는 못 만든다.** 감싸는 상자를 만드는 선언이 CSS에 없다(`display: contents`는
+ * 반대 방향이다). 즉 스킨 차이가 아니라 DOM 차이이고, `mediaTop`과 함께 **`Card`가 가진
+ * 진짜 구조 차이 둘**이다.
+ */
+export const CardHorizontal: StructureRenderer = ({ attrs, props, part, children }) => (
+  <div {...attrs}>
+    <div {...part('media')} />
+    <div {...part('content')}>
+      <div {...part('header')}>
+        <div {...part('title')}>{String(props.title)}</div>
+        {props.subtitle ? <div {...part('subtitle')}>{String(props.subtitle)}</div> : null}
+      </div>
+      <div {...part('body')}>{children}</div>
+    </div>
+  </div>
+)
+
 export const TabsUnderline: StructureRenderer = ({ attrs, props, part, children }) => {
   const tabs = props.tabs as string[]
   const active = props.active as number
@@ -79,6 +188,68 @@ export const TabsUnderline: StructureRenderer = ({ attrs, props, part, children 
           <span key={`${label}-${index}`} {...part('tab')} aria-selected={index === active}>
             {label}
           </span>
+        ))}
+      </div>
+      <div {...part('panel')}>{children}</div>
+    </div>
+  )
+}
+
+/**
+ * **`underline`과 DOM이 한 글자도 다르지 않다** (재라 #7). `Card:bordered`와 같은 부류다.
+ *
+ * `pill`이 갈리는 것은 **탭의 둥글기와 배경**이고 둘 다 §6.8이 이미 가진 어휘다
+ * (`radius`·`bg`). 탭이 몇 개인지도, 무엇을 감싸는지도 달라지지 않으므로 **스킨 차이이지
+ * 구조 차이가 아니다.** 별칭으로 둔다.
+ *
+ * 얻는 것은 `data-wb-structure="pill"`이라는 **채널 하나**다 — 테마가 탭 스킨을 갈라 쓸
+ * 자리이고, 그것이 이 구조의 전부다.
+ */
+export const TabsPill: StructureRenderer = TabsUnderline
+
+/**
+ * **`underline`·`pill`과 DOM이 같다** (재라 #7). 갈리는 것은 **테두리**이고 그것은 §6.8의
+ * `borderColor`·`borderWidth`·`borderStyle`이다 — `pill`과 정확히 같은 부류다.
+ *
+ * **`Tabs`가 오늘 갖는 진짜 구조 차이는 아래 `vertical` 하나뿐이다.** 나머지 셋은 테마가
+ * 탭 스킨을 갈라 쓸 이름 세 개다. `Card`의 `plain`·`bordered`·`elevated`와 같은 모양이
+ * 여기서 한 번 더 나온다.
+ */
+export const TabsEnclosed: StructureRenderer = TabsUnderline
+
+/**
+ * **탭이 세로로 쌓이고 패널이 옆에 서는 탭** (재라 #7이 이름으로 지목한 구조다).
+ *
+ * 필요한 것이 둘이다. (가) 루트가 가로로 서서 목록과 패널이 나란히 놓인다,
+ * (나) 목록 안의 탭이 세로로 쌓인다.
+ *
+ * **(가)는 아래 기본 CSS가 하고, (나)는 DOM으로 한다.** 이유가 도구에 있다: `partRule`은
+ * **구조 이름을 셀렉터에 넣지 않는다** — 테마의 조각 규칙이 특이도 0,2,0인데 구조를 더하면
+ * 0,3,0이 되어 **테마가 지기 때문**이다(`structure-css-tools.ts`). 그래서 *"`vertical`의
+ * `list`만 세로"*라는 규칙을 렌더러가 낼 방법이 없고, 내면 `underline`의 `list`까지 받아
+ * **오늘 화면이 바뀐다**(D5).
+ *
+ * 그래서 탭을 `<span>`(인라인)이 아니라 `<div>`(블록)로 낸다. **선언 하나 없이 쌓인다.**
+ *
+ * ---
+ *
+ * **정직하게 적어 둘 것:** 테마는 이것을 CSS로도 할 수 있다 —
+ * `Tabs.base { display: flex }` + `Tabs.parts.list { display: flex, direction: column }`이
+ * 오늘 어휘로 전부 표현된다. 즉 이것은 *"CSS로 불가능한 구조"*가 아니라 **"렌더러가 스스로
+ * 세우려면 DOM이 갈려야 하는 구조"**다. `Section:splitBg`(조각이 없으면 표현 자체가 불가능)
+ * 와 `Card:bordered`(DOM이 같음) 사이의 **세 번째 등급**이고, P4b-3이 알아야 할 것이 그
+ * 등급 차이다.
+ */
+export const TabsVertical: StructureRenderer = ({ attrs, props, part, children }) => {
+  const tabs = props.tabs as string[]
+  const active = props.active as number
+  return (
+    <div {...attrs}>
+      <div {...part('list')}>
+        {tabs.map((label, index) => (
+          <div key={`${label}-${index}`} {...part('tab')} aria-selected={index === active}>
+            {label}
+          </div>
         ))}
       </div>
       <div {...part('panel')}>{children}</div>
@@ -153,6 +324,56 @@ export function structureCssBlocks(): string[] {
     ]),
   )
 
+  // ── Section:splitBg ───────────────────────────────────────────────────────
+  //
+  // **두 조각이 나란히 서야 "갈렸다"가 된다.** 규칙을 **루트에만** 둔다 — `partRule`은
+  // 구조 이름을 넣지 않으므로(특이도 때문이다) `band`·`inner`에 달면 `contained`의
+  // `inner`까지 받아 **오늘 화면이 바뀐다**(D5). `componentRule`은 구조 이름을 넣으므로
+  // `splitBg`에만 닿는다.
+  //
+  // **어휘를 골라 썼다.** `display`·`gridColumns` 둘 다 `STYLE_PROPERTIES`에 있어
+  // **테마가 이 두 줄을 그대로 덮을 수 있다.** `flex-grow`로 갈랐으면 대응 어휘가 없어
+  // 되돌릴 길이 없는 선언이 된다 — 그것은 구조가 아니라 강요다.
+  blocks.push(
+    componentRule('Section', 'splitBg', ['display: grid;', 'grid-template-columns: 1fr 1fr;']),
+  )
+
+  // ── Card:mediaTop ─────────────────────────────────────────────────────────
+  //
+  // **빈 상자에는 높이가 없다.** `media`는 자식이 없는 `<div>`라 선언이 없으면 높이 0이
+  // 되어 화면에서 사라지고, 그러면 *"이미지 자리가 있다"*는 구조가 서지 않는다.
+  // `Media:image`가 같은 문제를 `aspect-ratio`로 푼 자리를 그대로 따른다(`document.tsx`).
+  //
+  // **손잡이(`nodeVar`)를 만들지 않았다** (D4). `Media`는 `ratio` prop이 있어 노드가 값을
+  // 나를 수 있지만 `Card`에는 그런 prop이 없다 — 없는 값을 위해 통로만 뚫으면 아무도 값을
+  // 안 넣는 **죽은 손잡이**가 된다(P4b-1 이월의 `Media.kind`와 같은 부류다). 테마는
+  // `aspectRatio` 어휘로 이 값을 그대로 덮는다.
+  //
+  // **`partRule`이라 `horizontal`의 `media`도 이 규칙을 받는다.** `media`를 내는 구조가
+  // 그 둘뿐이고 둘 다 같은 것을 원하므로 의도한 것이다.
+
+  blocks.push(partRule('Card', 'media', ['aspect-ratio: 16 / 9;']))
+
+  // ── Card:horizontal ───────────────────────────────────────────────────────
+  //
+  // **"나란히"가 이 구조의 이름이다.** 루트가 가로로 서지 않으면 `media`와 `content`가
+  // 위아래로 쌓여 `mediaTop`과 구별되지 않는다. 규칙은 **루트에만** 둔다 —
+  // `componentRule`이 구조 이름을 넣으므로 다른 `Card` 구조 넷에는 닿지 않는다.
+  //
+  // `display`는 `STYLE_PROPERTIES`에 있어 테마가 이 줄을 덮을 수 있다.
+
+  blocks.push(componentRule('Card', 'horizontal', ['display: flex;']))
+
+  // ── Tabs:vertical ─────────────────────────────────────────────────────────
+  //
+  // **루트를 가로로 세운다** — 목록과 패널이 나란히 놓여야 세로 탭이 된다. 목록 안쪽이
+  // 세로로 쌓이는 것은 여기가 아니라 **DOM이 한다**(탭이 블록 요소다) — 조각 규칙은 구조
+  // 이름을 못 넣어 `underline`까지 받기 때문이다. 근거는 `TabsVertical`의 머리말.
+  //
+  // `display`는 `STYLE_PROPERTIES`에 있어 테마가 이 줄을 덮을 수 있다.
+
+  blocks.push(componentRule('Tabs', 'vertical', ['display: flex;']))
+
   return blocks
 }
 
@@ -160,8 +381,17 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Page', 'default', PageDefault],
   ['Slot', 'default', SlotDefault],
   ['Section', 'contained', SectionContained],
+  ['Section', 'fullBleed', SectionFullBleed],
+  ['Section', 'splitBg', SectionSplitBg],
   ['Flex', 'default', FlexDefault],
   ['Grid', 'default', GridDefault],
   ['Card', 'plain', CardPlain],
+  ['Card', 'bordered', CardBordered],
+  ['Card', 'elevated', CardElevated],
+  ['Card', 'mediaTop', CardMediaTop],
+  ['Card', 'horizontal', CardHorizontal],
   ['Tabs', 'underline', TabsUnderline],
+  ['Tabs', 'pill', TabsPill],
+  ['Tabs', 'enclosed', TabsEnclosed],
+  ['Tabs', 'vertical', TabsVertical],
 ]
