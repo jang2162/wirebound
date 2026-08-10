@@ -309,53 +309,51 @@ describe('compileTheme — 얕은 성질만 본다', () => {
  * P4b-3(시스템 테마 5종)이고, 그때 이 판정을 다시 열려면 **먼저 `src`·`family`의 값 규칙을
  * 세워야 한다** — 아래 둘째 케이스가 그 부재를 재는 자리다.
  */
-describe('P4b-1 재라 #1 — assets.fonts는 CSS로 나가지 않는다', () => {
-  it('컴파일 결과에 @font-face가 없다', () => {
+describe('P4b-1 재라 #1 — assets.fonts가 CSS로 나간다 (P4b-3 D5가 뒤집었다)', () => {
+  it('컴파일 결과에 @font-face가 있다', () => {
     // 픽스처가 `assets.fonts`를 실제로 갖고 있다 — 비어 있으면 이 케이스가 아무것도 안 지킨다.
     expect(MINIMAL_THEME.assets?.fonts?.length).toBeGreaterThan(0)
-    expect(compile(MINIMAL_THEME)).not.toContain('@font-face')
+    expect(compile(MINIMAL_THEME)).toContain('@font-face')
   })
 
-  it('폰트 이름도 src도 CSS에 새어 나가지 않는다', () => {
-    // `@font-face`라는 글자만 안 나오는 것으로는 부족하다 — 이름을 다른 규칙에 박아도
-    // 이 판정은 깨진다.
-    //
+  it('폰트 이름과 src가 그 블록 안에 실린다', () => {
     // **픽스처의 `Pretendard`로는 잴 수 없다** — 그 글자는 `assets`가 아니라
     // **토큰** `scale.typography.family.sans`에서도 나온다(`:root`의
-    // `--wb-typography-family-sans`). 두 출처가 겹치면 무엇이 새는지 구별되지 않으므로
-    // 토큰에 없는 이름을 쓴다.
+    // `--wb-typography-family-sans`). 두 출처가 겹치면 무엇이 실렸는지 구별되지 않으므로
+    // 토큰에 없는 이름을 쓴다. (앞서 *"새어 나가지 않는다"*를 잴 때와 같은 이유이고,
+    // 방향만 뒤집혔다.)
     const css = compile({
       ...MINIMAL_THEME,
-      assets: { fonts: [{ family: 'FontFaceProbe', src: 'probe-only.woff2' }] },
+      assets: { fonts: [{ family: 'FontFaceProbe', src: 'local("probe-only")' }] },
     })
 
-    expect(css).not.toContain('FontFaceProbe')
-    expect(css).not.toContain('probe-only.woff2')
+    expect(css).toContain('@font-face {\n  font-family: FontFaceProbe;\n  src: local("probe-only");\n}')
   })
 
-  it('음성 대조 — typography.family 토큰은 :root로 나간다', () => {
-    // **폰트를 거는 길이 이것이다.** `assets.fonts`가 닿지 않는 것과 폰트 어휘가 죽은 것은
-    // 다르다 — `fontFamily`가 이 변수를 가리킬 수 있다(`test/style.test.ts`).
+  it('음성 대조 — typography.family 토큰은 여전히 :root로 나간다', () => {
+    // **폰트를 거는 길은 여전히 이쪽이다.** `@font-face`는 폰트를 **싣고**, 컴포넌트에
+    // **거는** 것은 `fontFamily` 어휘가 이 변수를 가리키는 것이다(`test/style.test.ts`).
+    // 둘이 갈린 채 둘 다 있어야 폰트가 실제로 보인다 — 새 층이 이 층을 대신하지 않는다.
     expect(compile(MINIMAL_THEME)).toContain('--wb-typography-family-sans: Pretendard, sans-serif;')
   })
 
-  it('그 근거 — assets.fonts의 값이 아무 검증도 지나지 않는다', () => {
-    // **실측이다.** CSS를 통째로 깨는 문자열이 `family`·`src` 둘 다에서 이슈 0건으로
-    // 해석을 통과하고, `ResolvedTheme.assets`에 **원문 그대로** 실린다. 방출이 그것을
-    // 읽는 순간 테마 문서가 임의 CSS를 주입할 수 있다.
+  it('그 대가 — assets.fonts의 값이 이제 검증을 지난다', () => {
+    // **앞서 이 자리가 반대를 쟀다:** CSS를 통째로 깨는 문자열이 `family`·`src` 둘 다에서
+    // **이슈 0건으로** 통과하고 `ResolvedTheme.assets`에 원문 그대로 실렸다. 그때는
+    // 방출이 그것을 안 읽었으므로 무해했고, 그 케이스가 *"읽는 순간 임의 CSS 주입이
+    // 된다"*는 경고를 함께 적어 두었다.
     //
-    // **`bgImage`의 `url()`과 다른 자리다** — 그쪽은 함수 allowlist와 괄호 균형 검사를
-    // 지난다(`resolve/style.ts`의 `FUNCTION_ALLOWLIST`·`rejectFunctions`). `assets`에는
-    // 그런 층이 아예 없다.
+    // **P4b-3이 읽게 만들었으므로 그 경고가 청구됐다.** `checkAssets`가 `bgImage`와
+    // **같은 규칙**(`rejectFunctions`)으로 막는다 — 재라 #3의 답이다.
     const evil = 'a.woff2) } body { display: none } @font-face { src: url(b'
     const { theme, issues } = resolveTheme({
       ...MINIMAL_THEME,
       assets: { fonts: [{ family: 'X; } .a { b: c', src: evil }] },
     })
 
-    expect(issues).toEqual([])
-    expect(theme?.assets?.fonts?.[0]?.src).toBe(evil)
-    expect(theme?.assets?.fonts?.[0]?.family).toBe('X; } .a { b: c')
+    expect(issues.map((issue) => issue.path)).toEqual(['assets.fonts.0.family', 'assets.fonts.0.src'])
+    // 이슈가 있으면 테마가 통째로 못 쓰인다(P4a-1의 D2) — 반쯤 해석된 것이 방출로 가지 않는다.
+    expect(theme).toBeNull()
   })
 })
 

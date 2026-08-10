@@ -97,6 +97,33 @@ export async function insertLayout(
   return toRecord(row as LayoutRow)
 }
 
+/**
+ * 레이아웃이 가리키는 테마를 바꾼다. 없는 레이아웃이면 `null`이다.
+ *
+ * **이 파일에서 유일한 갱신 함수이고, 그것이 의도다**(P4b-3 계획서 D2). 위 머리말이
+ * *"편집 경로가 없으므로 쓰기 함수는 생성 하나뿐"*이라고 적어 둔 자리인데, 고르개가
+ * 필요로 하는 것은 이 테이블의 **한 필드**다. 레이아웃 CRUD를 여는 것은 §4.4의 레이아웃
+ * 에디터가 할 일이고 그쪽은 **선택 모델부터** 다시 정해야 한다(P4a-3 이월의 D6 반증).
+ *
+ * **`themeId`의 유효성은 여기서 보지 않는다.** *"이 프로젝트에서 고를 수 있는가"*는
+ * `listThemes`가 뜻하는 것이고 그 판정은 라우트가 한다 — 이 파일은 SQL만 안다.
+ * 그래도 마지막 방벽이 하나 있다: `layouts.theme_id`의 FK가 없는 테마 행을 거부한다.
+ */
+export async function updateLayoutTheme(
+  db: DbHandle,
+  layoutId: string,
+  themeId: string | null,
+): Promise<LayoutRecord | null> {
+  const row = await db
+    .updateTable('layouts')
+    .set({ theme_id: themeId })
+    .where('id', '=', layoutId)
+    .returning(LAYOUT_COLUMNS)
+    .executeTakeFirst()
+
+  return row ? toRecord(row as LayoutRow) : null
+}
+
 export async function findLayoutById(db: DbHandle, layoutId: string): Promise<LayoutRecord | null> {
   const row = await db.selectFrom('layouts').select(LAYOUT_COLUMNS).where('id', '=', layoutId).executeTakeFirst()
   return row ? toRecord(row as LayoutRow) : null

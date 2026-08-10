@@ -1,6 +1,7 @@
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
 import type { ResolvedTheme } from '../resolved'
+import { checkAssets } from '../spec/assets'
 import { checkThemeComponents } from '../spec/components'
 import { checkPatterns } from '../spec/patterns'
 import { checkPrimitives } from '../spec/primitives'
@@ -52,6 +53,12 @@ export function resolveTheme(
 
   const patterns = checkPatterns(theme.patterns ?? {})
   issues.push(...patterns.issues)
+
+  // **`assets`가 층을 하나 더 얻었다**(P4b-3 D5). P4a-1까지 `assets`는 통과만 했다 —
+  // `ResolvedTheme.assets`에 담기고 아무도 읽지 않았다. 이제 `compileTheme`이 그것으로
+  // `@font-face`를 내므로 **CSS로 나가는 문자열**이 되었고, 그 순간 다른 스타일 값과 같은
+  // 탈출 검사를 지나야 한다(`checkAssets`의 머리말).
+  issues.push(...checkAssets(theme.assets))
 
   issues.push(...collidingVariables(tokens.table, primitives.values))
 

@@ -173,6 +173,31 @@ export interface RevisionSummary {
  * 화면에 뿌리지 않고 콘솔에만 남긴다 — P4a-2의 재라 #12 결정 그대로다.
  */
 export interface ProjectTheme {
+  /**
+   * **지금 골라져 있는 테마의 행 id.** 고르지 않았거나 그 행이 사라졌으면 `null`이다.
+   *
+   * **`theme.meta.id`로 대신할 수 없다.** 그것은 slug이고 유일성 단위가
+   * `(project_id, slug)`라 **시스템 테마와 프로젝트 테마가 같은 slug를 가질 수 있다.**
+   * 게다가 파생 테마는 서버가 합쳐서 주므로 `meta`가 base의 것과 섞인다.
+   *
+   * **캔버스는 이 값을 안 읽는다** — 그리는 쪽은 유래가 필요 없다. 고르개만 쓴다.
+   */
+  themeId: string | null
   theme: Theme | null
   issues: { path: string; message: string }[]
+}
+
+/**
+ * 테마 목록의 항목 — **고르개가 고를 수 있는 것 하나**다.
+ *
+ * `theme`을 통째로 싣는 것은 서버가 그렇게 내기 때문이고(`GET /:projectId/themes`),
+ * 고르개가 실제로 읽는 것은 `id`·`system`·`theme.meta.name`이다. **목록에는 `base`가
+ * 없다** — 파생 항목마다 시스템 테마 전문이 붙어 응답이 항목 수만큼 부풀기 때문이고,
+ * 목록의 쓸모는 **고르기이지 그리기가 아니다**(서버 README).
+ */
+export interface ThemeSummary {
+  id: string
+  /** `true`면 wirebound 내장 테마다(§6.10 — 읽기 전용, 어느 프로젝트에서나 고를 수 있다). */
+  system: boolean
+  theme: Theme
 }

@@ -45,13 +45,30 @@ describe('역할을 읽는 자리', () => {
     expect(Object.values(SOURCES).every((text) => text.length > 0)).toBe(true)
   })
 
-  it('.role을 읽는 코드는 판정 함수의 호출부 하나뿐이다', () => {
-    // **D3의 하중이다.** 둘이 되는 순간 "판정이 한 곳"이라는 근거가 사라진다 —
-    // 역할 분기를 더할 때는 `.role`을 직접 읽지 말고 `projectAbilities`를 지나라.
+  /**
+   * **D3의 하중은 *"판정이 한 곳"*이지 *"읽는 자리가 하나"*가 아니다.**
+   *
+   * 앞서 이 케이스가 경로를 하나로 못박고 있었다 — 그때는 역할을 보는 화면이 프로젝트
+   * 목록 하나였으므로 두 문장이 같은 것을 뜻했다. **P4b-3이 그것을 갈랐다:** 에디터 셸이
+   * 테마 고르개를 owner에게만 열어야 하는데(§10), 그 화면도 역할을 알아야 한다.
+   *
+   * **그래서 하중 쪽을 잰다 — 모든 읽기가 `projectAbilities(…)`의 인자 자리인가.**
+   * 그것이 깨지는 순간이 *"역할 분기가 판정 함수 밖에 생겼다"*이고, 이 규칙은 화면이
+   * 몇이 되든 낡지 않는다. **경로 목록도 함께 못박는다** — 새 자리가 생기면 여전히
+   * 이 케이스가 죽어 사람이 보고, *"판정을 지나기만 하면 아무 데서나 읽어도 된다"*로
+   * 조용히 넓어지지 않는다.
+   */
+  it('.role을 읽는 코드는 전부 판정 함수의 호출부다', () => {
     const reads = roleReads()
 
-    expect(reads.map((r) => r.path)).toEqual(['../src/routes/project-list.tsx'])
-    expect(reads[0]?.line).toContain('projectAbilities(project.role)')
+    // 하중: 판정 함수를 지나지 않는 읽기가 하나도 없다.
+    expect(reads.filter((r) => !r.line.includes('projectAbilities('))).toEqual([])
+
+    // 자리: 새 화면이 역할을 보게 되면 여기가 죽는다.
+    expect([...new Set(reads.map((r) => r.path))].sort()).toEqual([
+      '../src/routes/editor.tsx',
+      '../src/routes/project-list.tsx',
+    ])
   })
 
   it('주석은 세지 않는다 — 심어서 확인한다', () => {

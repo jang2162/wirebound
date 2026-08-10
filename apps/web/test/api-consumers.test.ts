@@ -48,7 +48,7 @@ const METHODS = [
   'createMenu', 'updateMenu', 'deleteMenu',
   'createPage', 'updatePage', 'deletePage', 'getPage',
   'patchOps', 'listMyRevisions',
-  'getProjectTheme',
+  'getProjectTheme', 'listProjectThemes', 'setProjectTheme',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -103,7 +103,12 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   getPage: ['../src/routes/editor.tsx', '../src/edit/use-edit-commit.tsx'],
   patchOps: ['../src/edit/use-edit-commit.tsx'],
   listMyRevisions: ['../src/routes/editor.tsx'],
-  getProjectTheme: ['../src/theme/use-project-theme.ts'],
+  // **소비자가 둘이고 서로 다른 것을 읽는다**(P4b-3 P2). 캔버스 쪽 훅은 `theme`을
+  // 읽어 그리고, 고르개는 같은 응답의 `themeId`를 읽어 *"지금 무엇이 골라져 있는가"*를
+  // 그린다 — 목록(`listProjectThemes`)만으로는 그것을 알 수 없다.
+  getProjectTheme: ['../src/theme/use-project-theme.ts', '../src/theme/theme-picker.tsx'],
+  listProjectThemes: ['../src/theme/theme-picker.tsx'],
+  setProjectTheme: ['../src/theme/theme-picker.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {

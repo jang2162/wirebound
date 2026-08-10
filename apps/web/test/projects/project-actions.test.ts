@@ -44,12 +44,12 @@ import type { ProjectRole } from '../../src/api/types'
  * ```
  */
 const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
-  owner: { rename: true, remove: true },
-  editor: { rename: false, remove: false },
-  viewer: { rename: false, remove: false },
+  owner: { rename: true, remove: true, chooseTheme: true },
+  editor: { rename: false, remove: false, chooseTheme: false },
+  viewer: { rename: false, remove: false, chooseTheme: false },
 }
 
-const NOTHING: ProjectAbilities = { rename: false, remove: false }
+const NOTHING: ProjectAbilities = { rename: false, remove: false, chooseTheme: false }
 
 describe('projectAbilities', () => {
   it('역할을 모르면 아무것도 못 한다', () => {
@@ -68,7 +68,7 @@ describe('projectAbilities', () => {
   })
 
   it('owner만 이름을 바꾸고 지울 수 있다', () => {
-    expect(projectAbilities('owner')).toEqual({ rename: true, remove: true })
+    expect(projectAbilities('owner')).toEqual({ rename: true, remove: true, chooseTheme: true })
   })
 
   it('계약에 없는 역할 문자열은 아무것도 열지 않는다', () => {
@@ -102,6 +102,6 @@ describe('projectAbilities', () => {
     // 1이라는 값의 근거는 위 실측이다(owner 아닌 멤버 둘이 전부 403).
     const opened = Object.values(EXPECTED).filter((a) => a.rename || a.remove)
     expect(opened).toHaveLength(1)
-    expect(EXPECTED.owner).toEqual({ rename: true, remove: true })
+    expect(EXPECTED.owner).toEqual({ rename: true, remove: true, chooseTheme: true })
   })
 })

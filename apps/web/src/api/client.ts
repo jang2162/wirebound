@@ -14,6 +14,7 @@ import type {
   ProjectDetail,
   RevisionSummary,
   SessionUser,
+  ThemeSummary,
   TreeMenuNode,
 } from './types'
 
@@ -193,6 +194,23 @@ export interface ApiClient {
    * 편집용 형태(파생 문서 + `base`)는 다른 엔드포인트가 내고 이 화면은 쓰지 않는다.
    */
   getProjectTheme(projectId: string): Promise<ProjectTheme>
+  /**
+   * **이 프로젝트에서 고를 수 있는 테마 전부.** 시스템 테마가 함께 나오고 그것이 먼저다
+   * (서버가 정렬한다 — 시스템 먼저, 각 무리 안에서 `slug` 순). 여기서 다시 정렬하지
+   * 않는다: 순서가 서버의 계약이고 두 자리에서 정렬하면 갈릴 수 있다.
+   */
+  listProjectThemes(projectId: string): Promise<ThemeSummary[]>
+  /**
+   * **이 프로젝트가 쓸 테마를 고른다.** `null`은 *"테마를 벗긴다"*이고 그것은 정상 상태다 —
+   * 화면이 구조 기본 CSS만으로 그려진다.
+   *
+   * **응답이 `getProjectTheme`과 같은 꼴이다**(서버가 같은 함수로 만든다). 그래서 고른 뒤
+   * 다시 조회할 필요가 없다 — 다만 캔버스는 자기 훅으로 읽으므로 화면을 갱신하려면
+   * 그쪽에 알려야 한다(`theme/use-project-theme.ts`의 `reloadToken`).
+   *
+   * **owner만 성공한다**(§10 — 테마 편집과 같은 등급). 서버가 막지만 화면도 미리 막는다.
+   */
+  setProjectTheme(projectId: string, themeId: string | null): Promise<ProjectTheme>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

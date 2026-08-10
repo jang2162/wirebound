@@ -58,6 +58,8 @@ import type { CssDeclaration, ResolvedComponent, ResolvedLayer, ResolvedTheme } 
 export function compileTheme(resolved: ResolvedTheme): string {
   const blocks: string[] = []
 
+  pushFontFaces(blocks, resolved)
+
   const root: CssDeclaration[] = [
     ...[...resolved.tokens].map(([path, value]) => [cssVarName(path), value] as const),
     ...[...resolved.primitives].map(([path, value]) => [cssVarName(path), value] as const),
@@ -71,6 +73,76 @@ export function compileTheme(resolved: ResolvedTheme): string {
   pushResponsive(blocks, resolved)
 
   return blocks.join('\n')
+}
+
+/**
+ * `assets.fonts` → `@font-face`(P4b-3 D5). **`fonts`가 없으면 아무것도 안 낸다.**
+ *
+ * **왜 이것이 여기 생겼나.** `fontFamily` 어휘는 P4b-1이 열었지만 **폰트를 싣는 경로가
+ * 없었다** — 이 파일에 `assets`라는 글자가 0건이었고 `resolve/index.ts`는 통과시키기만
+ * 했다(`ResolvedTheme.assets`에 담기고 아무도 안 읽었다). 서체는 다섯 종의 인상 차이에서
+ * 가장 큰 몫이라 시스템 테마를 만들려면 이 경로가 먼저 있어야 한다.
+ *
+ * ---
+ *
+ * **맨 앞에 낸다.** `@font-face`는 규칙이 아니라 **선언**이라 캐스케이드로 다투지 않지만,
+ * 그것을 쓰는 규칙보다 뒤에 오면 브라우저가 폰트를 늦게 안다. 그리고 이 저장소의 캐스케이드
+ * 계약이 **순서**이므로(P4b-2 이월 §0) 순서에 뜻이 있는 시트에서 새 층의 자리를 규칙으로
+ * 못박아 두는 편이 낫다.
+ *
+ * **jsdom은 이것을 못 본다.** jsdom 25의 캐스케이드는 문서 순서 하나이고 특이도도
+ * `!important`도 안 본다(**P4b-2 ③·수정 웨이브가 대조 8건으로 쟀다 — 여기서 다시 재지
+ * 않았다**). `@font-face`가 실제로 시트에 걸리는지, `font-family`를 건 요소가 그 이름을
+ * 계산된 값으로 갖는지는 **Chromium 프로브가 오늘 유일한 확인 수단이다**(D8).
+ *
+ * **P4b-3 ①이 한 번 돌렸다 — Chrome 151.0.7922.77, 네트워크 요청 0건**(`route`로 전부
+ * 끊고 셌다). 프로브는 저장소에 두지 않는다: P4b-2 ③의 임시 프로브 6파일이 작업 트리에
+ * 남아 테스트 수 분모를 오염시킨 전례가 있다(P4b-2 이월 §0의 "1723").
+ *
+ * | 물음 | 잰 값 |
+ * |---|---|
+ * | `@font-face`가 규칙들보다 앞인가 | 첫 `CSSFontFaceRule` 인덱스 **0**, 첫 `CSSStyleRule` **2** |
+ * | 계산된 `font-family`가 선언한 이름인가 | **`WireboundProbeFont, sans-serif`**. 음성 대조(규칙이 안 맞는 요소)는 `Times` |
+ * | 가중치마다 블록이 실제로 face를 나누는가 | `document.fonts`에 **400·700 둘**이 등록됐다 |
+ * | `admin`(폰트 없음)이 안 깨지는가 | `@font-face` **0건**, 규칙 **70개**가 전부 파싱되고 계산값이 admin의 값(`color: rgb(15,23,42)`·`font-size: 14px`)이다 |
+ *
+ * **`src`는 `local()`과 data URI 둘 다 재서 둘 다 통과했다**(재라 #4) — 시트에 걸리는 것도
+ * 계산값이 이름을 갖는 것도 같았고 **둘 다 네트워크를 안 쓴다.** `local()`을 고른 이유는
+ * 폰트 바이너리를 소스에 심지 않아도 되기 때문이다. **`local()`의 한계도 쟀다:** 그 이름의
+ * 로컬 폰트가 없으면 face의 `status`가 `error`가 된다 — **등록은 되고 로드만 실패한다.**
+ *
+ * ---
+ *
+ * **가중치마다 블록 하나다 — 범위(`400 700`)로 접지 않는다.**
+ *
+ * §6.7의 예시가 `{ family, src, weights: [400, 500, 700] }` 꼴이라 `src` 하나에 가중치가
+ * 여럿인 경우가 규격에 있다. 후보 둘을 재서 골랐다:
+ *
+ * | 후보 | 왜 |
+ * |---|---|
+ * | `font-weight: 400 700` 범위 하나 | **문서에 없는 값을 만든다** — `[400,500,700]`의 범위는 600을 포함한다. 그리고 `src`가 정적 400 폰트면 브라우저가 굵게를 합성하지 않아 **말없이 얇아진다** |
+ * | **가중치마다 블록**(고른 것) | 선언한 값만 낸다. 가변 폰트에서도 맞는다 — CSS Fonts 4에서 단일 `font-weight` 서술자는 `wght` 축을 그 값으로 고정하므로 같은 `src`를 세 번 가리켜도 세 굵기가 나온다 |
+ *
+ * `weights`가 없으면 `font-weight`를 안 낸다(브라우저가 합성한다 — `AssetsSchema` 주석).
+ *
+ * **값을 검증하지 않는다 — `checkAssets`가 이미 했다.** 이 파일의 계약은 *"해석이 끝난
+ * 것을 문자열로 조립한다"*이고(머리말), `resolveTheme`이 이슈를 하나라도 내면 여기 오지
+ * 않는다.
+ */
+function pushFontFaces(blocks: string[], resolved: ResolvedTheme): void {
+  for (const font of resolved.assets?.fonts ?? []) {
+    const declarations: CssDeclaration[] = [
+      ['font-family', font.family],
+      ['src', font.src],
+    ]
+    if (font.weights === undefined || font.weights.length === 0) {
+      pushBlock(blocks, '@font-face', declarations)
+      continue
+    }
+    for (const weight of font.weights) {
+      pushBlock(blocks, '@font-face', [...declarations, ['font-weight', String(weight)]])
+    }
+  }
 }
 
 /**
@@ -148,8 +220,16 @@ function pushLayer(
 /** 선언이 하나도 없으면 규칙을 내지 않는다 — 빈 셀렉터가 CSS에 남지 않게 한다. */
 function pushRule(blocks: string[], selector: string, declarations: readonly CssDeclaration[]): void {
   if (declarations.length === 0) return
+  pushBlock(blocks, selector, declarations)
+}
+
+/**
+ * 머리 하나와 선언 목록. `pushRule`이 빈 것을 걸러 낸 뒤 이것을 부르고, `@font-face`는
+ * **선언이 반드시 둘 이상이라** 곧바로 부른다(`family`·`src`가 규격상 필수다).
+ */
+function pushBlock(blocks: string[], head: string, declarations: readonly CssDeclaration[]): void {
   const body = declarations.map(([property, value]) => `  ${property}: ${value};`).join('\n')
-  blocks.push(`${selector} {\n${body}\n}`)
+  blocks.push(`${head} {\n${body}\n}`)
 }
 
 function indent(text: string): string {

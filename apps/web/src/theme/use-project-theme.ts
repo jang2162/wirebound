@@ -55,7 +55,7 @@ import type { Theme } from '@wirebound/themes'
 import { useApi } from '../api/context'
 import type { ThemeSource } from './theme-source'
 
-export function useProjectTheme(projectId: string | undefined): ThemeSource {
+export function useProjectTheme(projectId: string | undefined, reloadToken = 0): ThemeSource {
   const api = useApi()
   const [theme, setTheme] = useState<Theme | null>(null)
 
@@ -93,7 +93,14 @@ export function useProjectTheme(projectId: string | undefined): ThemeSource {
     return () => {
       alive = false
     }
-  }, [api, projectId])
+    // **`reloadToken`이 의존성에 있는 것이 고르개가 캔버스에 닿는 경로다**(P4b-3 P2).
+    // 서버의 테마를 바꾸는 것은 이 훅 밖(`theme/theme-picker.tsx`)에서 일어나므로,
+    // 값이 바뀌었다는 신호가 없으면 이 이펙트는 다시 돌 이유를 모른다.
+    //
+    // **아래 `useMemo`의 의존성에는 넣지 않는다.** 그러면 토큰이 오를 때마다 새 참조가
+    // 나가 **조회가 끝나기도 전에** 재컴파일이 일어난다 — 안정 참조 계약이 재는 것은
+    // *"테마 **값**이 그대로면 같은 참조"*이고, 토큰은 값이 아니라 요청이다.
+  }, [api, projectId, reloadToken])
 
   // **의존성이 `theme` 하나인 것이 이 훅의 계약이다**(위 "안정 참조가 계약이다").
   return useMemo<ThemeSource>(() => () => theme, [theme])

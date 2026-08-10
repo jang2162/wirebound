@@ -112,7 +112,7 @@ describe('캔버스와 프로젝트 테마', () => {
 
   it('서버가 준 테마를 <style>에 싣는다', async () => {
     await openPage(cardPage(), {
-      apiOverrides: { getProjectTheme: async () => ({ theme: SERVER_THEME, issues: [] }) },
+      apiOverrides: { getProjectTheme: async () => ({ themeId: null, theme: SERVER_THEME, issues: [] }) },
     })
 
     await waitFor(() => expect(themeCss()).toContain(MARKER))
@@ -120,7 +120,7 @@ describe('캔버스와 프로젝트 테마', () => {
 
   it('서버가 테마를 주지 않으면 테마 CSS가 비고 문서는 그대로 그려진다', async () => {
     await openPage(cardPage(), {
-      apiOverrides: { getProjectTheme: async () => ({ theme: null, issues: [] }) },
+      apiOverrides: { getProjectTheme: async () => ({ themeId: null, theme: null, issues: [] }) },
     })
 
     await waitFor(() => expect(themeCss()).toBe(''))
@@ -136,7 +136,7 @@ describe('캔버스와 프로젝트 테마', () => {
    * 전부 통과했다(리뷰가 심어 죽은 수 **0**). 실제 id로 좁힌다.
    */
   it('셸이 조회해 온 프로젝트의 id로 테마를 요청한다', async () => {
-    const getProjectTheme = vi.fn(async () => ({ theme: SERVER_THEME, issues: [] }))
+    const getProjectTheme = vi.fn(async () => ({ themeId: null, theme: SERVER_THEME, issues: [] }))
     await openPage(cardPage(), { apiOverrides: { getProjectTheme } })
 
     await waitFor(() => expect(getProjectTheme).toHaveBeenCalled())
@@ -160,7 +160,7 @@ describe('캔버스와 프로젝트 테마', () => {
       components: { List: { structure: ALT_STRUCTURE } },
     }
     await openPage(listPage(), {
-      apiOverrides: { getProjectTheme: async () => ({ theme: themed, issues: [] }) },
+      apiOverrides: { getProjectTheme: async () => ({ themeId: null, theme: themed, issues: [] }) },
     })
 
     await waitFor(() =>
@@ -170,7 +170,7 @@ describe('캔버스와 프로젝트 테마', () => {
 
   it('테마가 구조를 고르지 않으면 카탈로그의 기본 구조로 그린다', async () => {
     await openPage(listPage(), {
-      apiOverrides: { getProjectTheme: async () => ({ theme: SERVER_THEME, issues: [] }) },
+      apiOverrides: { getProjectTheme: async () => ({ themeId: null, theme: SERVER_THEME, issues: [] }) },
     })
 
     // 위 케이스와 **같은 문서**인데 결과가 갈린다 — 그것이 테마가 실제로 고른다는 증거다.
