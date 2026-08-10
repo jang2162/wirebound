@@ -11,12 +11,19 @@ import {
   applyOps,
   collectNodeIds,
   findNode,
+  installCatalog,
   invertOps,
+  validatePage,
   type PageDocument,
   type PatchOp,
   type WbNode,
 } from '@wirebound/schema'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
+
+// `validatePage`가 카탈로그를 본다 — 설치하지 않으면 모든 노드가 `unknown-type`이 된다.
+beforeAll(() => {
+  installCatalog()
+})
 import { insertNodeOps, moveNodeOps, propOps, removeNodeOps, variantOps } from '../../src/edit/ops'
 
 function doc(root: WbNode): PageDocument {
@@ -805,6 +812,27 @@ describe('variantOps', () => {
     expect(variantOps(withVariant('featured'), 'n_a', null)).toEqual([
       { op: 'remove', path: '/root/children/0/variant' },
     ])
+  })
+
+  it('그 근거 — replace null인 문서가 실제로 거절된다', () => {
+    // **`edit/ops.ts`의 주석이 상태 코드를 적고 있다(422).** 그 근거가 되는 것은
+    // `validatePage`가 내는 **코드와 severity**다 — `error`여야 §7.1의 게이트가 편집을
+    // 막는다(`warning`이면 통과한다). 산문으로만 두면 아무도 다시 재지 않는다.
+    //
+    // **앞 판은 그 자리를 `400`이라 적었고 거짓이었다.** 리뷰가 잡았다.
+    const broken = applyOps(withVariant('default'), [
+      { op: 'replace', path: '/root/children/0/variant', value: null },
+    ])
+
+    const issues = validatePage(broken)
+    expect(issues.map((issue) => issue.code)).toEqual(['bad-document'])
+    expect(issues[0]?.severity).toBe('error')
+  })
+
+  it('음성 대조 — remove한 문서는 통과한다', () => {
+    const removed = applyOps(withVariant('default'), variantOps(withVariant('default'), 'n_a', null) ?? [])
+
+    expect(validatePage(removed)).toEqual([])
   })
 
   it('없는 것을 지우려 하면 null이다 — 요청을 만들지 않는다(D7)', () => {

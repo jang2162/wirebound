@@ -86,8 +86,14 @@ export function propOps(
  * **아무 데도 안 쓰이는 값이 조용히 저장된다.**
  *
  * **`variant`를 비우는 것은 `remove`다 — `replace null`이 아니다.** `WbNodeSchema.variant`가
- * `z.string().optional()`이라 `null`은 유효한 값이 아니다(봉투 검증에서 400). 비울 수 없으면
- * 사용자가 한 번 고른 변형에 갇힌다.
+ * `z.string().optional()`이라 `null`은 유효한 값이 아니다. 비울 수 없으면 사용자가 한 번
+ * 고른 변형에 갇힌다.
+ *
+ * **거절되는 코드는 422다 — 400이 아니다(앞 판의 이 자리는 400이라 적었고 거짓이었다).**
+ * 실측: `validatePage`가 그 문서에 `bad-document`(severity `error`)를 내고
+ * (*"잘못된 입력: 예상 타입은 string, 받은 타입은 null입니다"*, path `/root/…/variant`),
+ * `edit-pipeline`이 그것을 `reason: 'invalid'`로 올려 라우트가 **422 `validation-failed`**로
+ * 낸다(`apps/api/src/routes/pages.ts`의 머리말). 400은 봉투 **요청 본문**이 깨졌을 때다.
  *
  * 갈래는 `propOps`와 같은 이유로 셋이다 — `applyOps`의 `replace`가 없는 키에서 던진다.
  *
