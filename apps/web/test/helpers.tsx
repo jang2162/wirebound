@@ -9,6 +9,7 @@
 import { render, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
+import { systemTheme } from '@wirebound/themes'
 import { ApiError, type ApiClient } from '../src/api/client'
 import { ApiProvider } from '../src/api/context'
 import type { SessionUser } from '../src/api/types'
@@ -44,6 +45,25 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     deletePage: notStubbed('deletePage'),
     getPage: notStubbed('getPage'),
     patchOps: notStubbed('patchOps'),
+    /**
+      * **이 메서드만 `notStubbed`가 아니다 — 유일한 예외이고 근거가 있다.**
+      *
+      * 나머지는 화면이 **그 데이터를 쓰려고** 부르므로, 스텁하지 않았다는 것은 곧 그
+      * 테스트가 무엇을 그리는지 정하지 않았다는 뜻이다. 그런데 `getProjectTheme`은
+      * 캔버스가 **테스트가 요청하지 않아도** 부른다(`canvas.tsx`가 `useProjectTheme`을
+      * 쓴다). 여기서 던지면 캔버스를 지나가기만 하는 테스트 수십 개가 무관한 이유로
+      * 콘솔을 채우고(실측: 221줄), 그 소음이 진짜 오류를 가린다.
+      *
+      * **기본값이 시스템 `admin`인 것도 근거가 있다** — 서버가 프로젝트를 만들 때 기본
+      * 레이아웃을 시스템 `admin`에 걸어 두므로(`repos/projects.ts`), 새 프로젝트의
+      * **실제 상태**가 이것이다. `null`을 기본값으로 두면 테스트가 실재하지 않는 상태를
+      * 보게 된다.
+      *
+      * 테마가 판정에 걸리는 테스트는 **직접 스텁한다**
+      * (`theme/project-theme-cascade.test.tsx`가 그렇게 한다) — 그 파일들이 기본값에
+      * 기대지 않으므로 이 예외가 거짓 초록을 만들지 않는다.
+      */
+    getProjectTheme: async () => ({ theme: systemTheme('admin') ?? null, issues: [] }),
     listMyRevisions: notStubbed('listMyRevisions'),
     ...overrides,
   }

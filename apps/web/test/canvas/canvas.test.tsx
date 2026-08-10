@@ -64,6 +64,63 @@ beforeEach(() => {
   createdStores.length = 0
 })
 
+/**
+ * **캔버스가 서버가 준 테마를 싣는가 (P4a-3 Task 10).**
+ *
+ * 이 절이 없으면 캔버스의 `useThemeCss(useProjectTheme(projectId))`를 `useThemeCss()`로
+ * 되돌려도 **웹 테스트 858개가 전부 통과한다**(심어서 확인했다). 배선을 지키는 것이
+ * 아무것도 없었다는 뜻이고, 이 두 케이스가 그 자리다.
+ *
+ * 서버가 준 테마에만 있는 값을 심어 `<style>`에서 찾는다 — 내장 폴백(`defaultThemeSource`,
+ * 시스템 `admin`)에는 없는 값이라 배선이 끊기면 사라진다.
+ */
+describe('캔버스와 프로젝트 테마', () => {
+  const MARKER = '#123456'
+
+  const SERVER_THEME = {
+    meta: { id: 'server', name: '서버가 준 것', version: '1.0.0' },
+    components: { Card: { structure: 'plain', base: { bg: MARKER } } },
+  }
+
+  function cardPage() {
+    return pageDoc({
+      id: 'n_root00000001',
+      type: 'Page',
+      children: [{ id: 'n_card00000001', type: 'Card', props: { title: '카드' } }],
+    })
+  }
+
+  function themeCss(): string {
+    return document.head.querySelector('style[data-wb-style="theme"]')?.textContent ?? ''
+  }
+
+  it('서버가 준 테마를 <style>에 싣는다', async () => {
+    await openPage(cardPage(), {
+      apiOverrides: { getProjectTheme: async () => ({ theme: SERVER_THEME, issues: [] }) },
+    })
+
+    await waitFor(() => expect(themeCss()).toContain(MARKER))
+  })
+
+  it('서버가 테마를 주지 않으면 테마 CSS가 비고 문서는 그대로 그려진다', async () => {
+    await openPage(cardPage(), {
+      apiOverrides: { getProjectTheme: async () => ({ theme: null, issues: [] }) },
+    })
+
+    await waitFor(() => expect(themeCss()).toBe(''))
+    expect(requireNode('n_card00000001')).toBeTruthy()
+  })
+
+  it('테마를 프로젝트 id로 요청한다', async () => {
+    const getProjectTheme = vi.fn(async () => ({ theme: SERVER_THEME, issues: [] }))
+    await openPage(cardPage(), { apiOverrides: { getProjectTheme } })
+
+    await waitFor(() => expect(getProjectTheme).toHaveBeenCalled())
+    // 셸이 조회해 온 프로젝트의 id다(`routes/editor.tsx`가 트리·패널에 넘기는 것과 같은 값).
+    expect(getProjectTheme).toHaveBeenCalledWith(expect.any(String))
+  })
+})
+
 function shellStore(): EditorStore {
   const store = createdStores.at(-1)
   if (store === undefined) throw new Error('셸이 EditorStore를 만들지 않았습니다')

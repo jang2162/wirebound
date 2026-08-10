@@ -48,6 +48,7 @@ const METHODS = [
   'createMenu', 'updateMenu', 'deleteMenu',
   'createPage', 'updatePage', 'deletePage', 'getPage',
   'patchOps', 'listMyRevisions',
+  'getProjectTheme',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -102,6 +103,7 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   getPage: ['../src/routes/editor.tsx', '../src/edit/use-edit-commit.tsx'],
   patchOps: ['../src/edit/use-edit-commit.tsx'],
   listMyRevisions: ['../src/routes/editor.tsx'],
+  getProjectTheme: ['../src/theme/use-project-theme.ts'],
 }
 
 describe('ApiClient의 소비자', () => {

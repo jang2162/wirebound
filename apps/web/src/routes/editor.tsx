@@ -438,7 +438,7 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
         ) : (
           <p role="alert">{state.failure.message}</p>
         ))}
-      {state.status === 'ready' && <Canvas pageId={pageId} />}
+      {state.status === 'ready' && <Canvas projectId={projectId} pageId={pageId} />}
     </div>
   )
 }

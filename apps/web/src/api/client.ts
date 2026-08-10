@@ -9,6 +9,7 @@ import type { PatchOp } from '@wirebound/schema'
 import type {
   MenuNode,
   PageDetail,
+  ProjectTheme,
   PatchResult,
   ProjectDetail,
   RevisionSummary,
@@ -181,6 +182,17 @@ export interface ApiClient {
    * **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — `mine` 외에는 아무것도 붙일 수 없다.
    */
   listMyRevisions(projectId: string, pageId: string): Promise<RevisionSummary[]>
+  /**
+   * 이 프로젝트의 화면이 지금 써야 할 테마(설계 §4.2의 사슬을 서버가 따라간다).
+   *
+   * **`theme`이 `null`인 것은 실패가 아니다** — 테마를 고르지 않은 상태가 정상이고 그때
+   * 화면은 구조 기본 CSS만으로 그려진다. 그래서 이 메서드는 그 경우에도 던지지 않는다.
+   *
+   * **파생 테마는 서버가 합쳐서 준다.** 받는 쪽이 base를 따로 얻어 `resolveTheme`의 두
+   * 인자를 맞출 필요가 없다 — `ThemeSource`가 `() => Theme | null`로 남는 이유다.
+   * 편집용 형태(파생 문서 + `base`)는 다른 엔드포인트가 내고 이 화면은 쓰지 않는다.
+   */
+  getProjectTheme(projectId: string): Promise<ProjectTheme>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

@@ -28,6 +28,7 @@ import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
 import type { PageDocument } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { themeStructures } from '../theme/theme-structures'
+import { useProjectTheme } from '../theme/use-project-theme'
 import { useThemeCss } from '../theme/use-theme-css'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
 // 끝난다 — 그 모듈의 주석 참고.
@@ -49,7 +50,7 @@ interface Box {
  * 갈라 안내하는 것은 `CanvasFrame`의 몫이고, 여기서 또 문안을 내면 같은 자리에 두 개가
  * 겹친다.
  */
-export function Canvas(props: { pageId: string | undefined }): ReactElement | null {
+export function Canvas(props: { projectId: string; pageId: string | undefined }): ReactElement | null {
   /**
    * 테마 CSS를 싣는다. **문서가 없어도 부른다** — 아래에서 `doc === null`이면 일찍
    * 돌아가지만 훅은 그보다 위에 있어야 하고(훅 규칙), 그 덕에 페이지를 고르지 않은
@@ -58,8 +59,17 @@ export function Canvas(props: { pageId: string | undefined }): ReactElement | nu
    * **주입은 캔버스가 한다.** 셸(`App`)이 아니라 여기인 이유는 이 시트가 겨냥하는 것이
    * 문서 노드뿐이기 때문이다 — D7이 셸과 문서의 스타일을 가른 그 선이고,
    * `shell.css`가 문서를 겨냥하지 않는 것과 대칭이다.
+   *
+   * **테마는 서버에서 온다(P4a-3).** `useProjectTheme`이 설계 §4.2의 사슬을 따라간 결과를
+   * 안정 참조로 준다 — 그 안정성이 계약인 이유는 `useThemeCss`가 `useMemo(…, [source])`로
+   * 컴파일을 아끼기 때문이고, 그 훅의 주석에 근거가 있다.
+   *
+   * **`renderComposed`로 바꾸지 않았다.** 계획서 D6이 *"기본 레이아웃이 `Page > Slot`이라
+   * 결과가 지금과 같다"*고 적었는데 **재보니 다르다** — 합성은 레이아웃 루트와 `Slot`
+   * **두 노드를 더 그리고**, 그 id는 페이지 문서에 없어 아래 `nodeIdAt`이 유령 노드를
+   * 고르게 된다. 측정과 그 결과는 `packages/renderer/test/compose-identity.test.tsx`에 있다.
    */
-  const theme = useThemeCss()
+  const theme = useThemeCss(useProjectTheme(props.projectId))
 
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다. 상태 객체 전체(`(s) => s`)를 고르면 어느 필드가 바뀌든

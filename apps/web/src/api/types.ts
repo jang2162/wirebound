@@ -10,6 +10,7 @@
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
 import type { PageDocument, PatchOp } from '@wirebound/schema'
+import type { Theme } from '@wirebound/themes'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
 export type ProjectRole = 'owner' | 'editor' | 'viewer'
@@ -154,4 +155,24 @@ export interface RevisionSummary {
   ops: PatchOp[]
   inverse: PatchOp[]
   createdAt: string
+}
+
+/**
+ * `GET /api/projects/:projectId/theme`의 응답 — **이 프로젝트의 화면이 지금 써야 할 테마**다.
+ *
+ * `theme`이 `null`인 경우가 셋이고 **전부 정상이다**(서버 README): 기본 레이아웃이 없다 ·
+ * 레이아웃이 테마를 고르지 않았다 · 테마 행이 사라졌다. 그때 화면은 구조 기본 CSS만으로
+ * 그려진다 — `theme/theme-source.ts`가 `null`을 낼 수 있는 것과 같은 상태다.
+ *
+ * **파생 테마는 서버가 이미 합쳐서 준다**(홀로 서는 테마 하나). 그래서 이 값을
+ * `resolveTheme(theme)`에 base 없이 그대로 넣을 수 있고, `ThemeSource`가
+ * `() => Theme | null`로 남는다. 편집용 형태(파생 문서 + `base`)는 `.../themes/:themeId`가
+ * 내는 것이고 이 화면이 쓰지 않는다.
+ *
+ * `issues`는 **서버가 합치다 실패했을 때** 채워진다(그때 `theme`은 `null`이다).
+ * 화면에 뿌리지 않고 콘솔에만 남긴다 — P4a-2의 재라 #12 결정 그대로다.
+ */
+export interface ProjectTheme {
+  theme: Theme | null
+  issues: { path: string; message: string }[]
 }
