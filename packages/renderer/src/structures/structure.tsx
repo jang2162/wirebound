@@ -196,6 +196,18 @@ export const TabsUnderline: StructureRenderer = ({ attrs, props, part, children 
 }
 
 /**
+ * **`underline`과 DOM이 한 글자도 다르지 않다** (재라 #7). `Card:bordered`와 같은 부류다.
+ *
+ * `pill`이 갈리는 것은 **탭의 둥글기와 배경**이고 둘 다 §6.8이 이미 가진 어휘다
+ * (`radius`·`bg`). 탭이 몇 개인지도, 무엇을 감싸는지도 달라지지 않으므로 **스킨 차이이지
+ * 구조 차이가 아니다.** 별칭으로 둔다.
+ *
+ * 얻는 것은 `data-wb-structure="pill"`이라는 **채널 하나**다 — 테마가 탭 스킨을 갈라 쓸
+ * 자리이고, 그것이 이 구조의 전부다.
+ */
+export const TabsPill: StructureRenderer = TabsUnderline
+
+/**
  * `justify` prop 값 → CSS 값. **`between`만 바꾼다** (Task 2 Step 3이 재서 정한 것).
  *
  * 앞서 여기 `mapAlign`·`mapJustify` 둘이 있었고 `start`·`end`를 `flex-start`·`flex-end`로
@@ -319,4 +331,5 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Card', 'mediaTop', CardMediaTop],
   ['Card', 'horizontal', CardHorizontal],
   ['Tabs', 'underline', TabsUnderline],
+  ['Tabs', 'pill', TabsPill],
 ]

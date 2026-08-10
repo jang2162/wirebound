@@ -421,3 +421,43 @@ describe('Card:horizontal — 미디어와 본문이 나란히 선다', () => {
     expect(dom.computed('[data-wb-structure="mediaTop"]', 'display')).toBe('block')
   })
 })
+
+/**
+ * **`underline`과 DOM이 같은 구조 — `Card`의 셋과 같은 부류다** (재라 #7).
+ *
+ * `pill`은 알약 모양, `enclosed`는 테두리로 감싼 모양이다. 둘 다 **§6.8이 이미 가진
+ * 어휘**로 표현된다(`radius`·`bg`·`borderColor`·`borderWidth`·`borderStyle`). 탭이 몇
+ * 개인지, 무엇을 감싸는지는 하나도 달라지지 않으므로 **DOM이 한 글자도 다르지 않다.**
+ *
+ * `Card:bordered`와 다른 점은 없다 — **그래서 같은 방식으로 못박는다.**
+ */
+function expectSameDomAsUnderline(structure: string, props: Record<string, unknown>): void {
+  const mine = render('Tabs', structure, props)
+  const underline = render('Tabs', 'underline', props)
+
+  expect(mine.replace(`data-wb-structure="${structure}"`, 'data-wb-structure="underline"')).toBe(
+    underline,
+  )
+  expect(mine).toContain(`data-wb-structure="${structure}"`)
+}
+
+describe('Tabs:pill — underline과 DOM이 같다 (재라 #7)', () => {
+  it('underline과 글자까지 같다 — 구조 이름만 다르다', () => {
+    expectSameDomAsUnderline('pill', { tabs: ['가', '나', '다'], active: 1 })
+  })
+
+  it('탭이 없는 갈래에서도 같다', () => {
+    expectSameDomAsUnderline('pill', { tabs: [], active: 0 })
+  })
+
+  it('구조 기본 CSS가 알약 모양을 정하지 않는다', () => {
+    // 둥글기·배경은 스킨이다. 기본 CSS에 넣으면 테마가 되돌려야 한다.
+    expect(structureCssBlocks().join('\n')).not.toContain('data-wb-structure="pill"')
+  })
+
+  it('계약 밖 속성이 없고 조각 이름이 전부 선언돼 있다', () => {
+    const html = render('Tabs', 'pill', { tabs: ['가', '나'], active: 0 })
+    expectContractOnly(html)
+    expectDeclaredParts('Tabs', html)
+  })
+})
