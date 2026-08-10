@@ -8,7 +8,11 @@ export const SearchFormDef = defineComponent({
   }),
   editor: [{ prop: 'collapsed', control: 'switch', label: '접힌 상태' }],
   structures: ['inline', 'stacked', 'collapsible'],
-  parts: ['fields', 'actions'],
+  // `row`는 `stacked`가 자식 하나마다 내는 줄이다. **테마는 §6.5에서 `parts`만 겨냥할 수
+  // 있고 자식 컴포넌트를 직접 겨냥할 수 없으므로**, 줄이 조각으로 나오지 않으면 줄 사이
+  // 간격·구분선에 손댈 길이 아예 없다 — `flex-direction: column`으로 대신할 수 없는 것이
+  // 그 부분이고, `stacked`가 `inline`과 DOM으로 갈리는 근거다.
+  parts: ['fields', 'actions', 'row'],
   variants: [],
   states: [],
   children: 'many',
