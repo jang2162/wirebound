@@ -265,20 +265,69 @@ describe('List:mediaList', () => {
   })
 
   /**
-   * **이름 있는 판정 — 이 구조도 기본 CSS를 갖지 않는다. 이번에는 갖고 싶어도 못 갖는다.**
+   * **이 판정이 뒤집혔다 — 케이스를 지우지 않고 반대 방향으로 다시 적는다** (P4b-3 ②).
    *
-   * *"미디어 옆에 글묶음"*을 세우려면 `item` 조각에 `display:flex`를 걸어야 하는데,
-   * **조각 규칙에는 구조 이름을 넣을 수 없다** — 넣으면 특이도가 0,3,0이 되어 `compileTheme`의
-   * 조각 규칙(0,2,0)을 이기고 그 컴포넌트에서만 테마가 진다(`structure-css-tools`의
-   * `partRule` 주석). 구조 없이 걸면 `cardGrid`·`stackedList`의 `item`도 같은 선언을 받아
-   * **카드 안이 가로로 눕는다.**
+   * P4b-2 W2가 여기 *"기본 CSS를 갖지 않는다. 이번에는 갖고 싶어도 못 갖는다"*고 적었고
+   * 근거는 특이도였다: 조각 규칙에 구조 이름을 맨 셀렉터로 넣으면 (0,3,0)이 되어
+   * `compileTheme`의 조각 규칙(0,2,0)을 이기고 **그 컴포넌트에서만 테마가 진다.**
+   * 구조 없이 걸면 `cardGrid`·`stackedList`의 `item`까지 받아 카드 안이 가로로 눕는다.
    *
-   * 그래서 여기서는 DOM만 세우고 배치는 테마에 남긴다. **이것이 `partRule`의 대가가
-   * 처음으로 실제 구조를 제약한 자리다** — 통합 단계가 알아야 한다.
+   * **그 전제가 같은 슬라이스 안에서 사라졌다.** P4b-2 ③이 `partRule`에 넷째 인자를 주어
+   * `:where()`로 구조를 가리게 했고, `:where()`는 특이도가 0이라 **(0,2,0)을 지키면서**
+   * 구조를 좁힌다. 그 판정이 스스로 *"P4b-3이 그 구조를 실제로 쓸 때 만드는 것이 맞다"*고
+   * 적어 두었고, `commerce` 테마가 `mediaList`를 고르면서 만들었다.
+   *
+   * **아래 셋을 함께 본다.** 규칙이 생겼다는 것만 보면 좁히기가 풀려도 초록이다.
    */
-  it('구조 기본 CSS에 mediaList를 겨냥하는 규칙이 없다', () => {
-    expect(structureBaseCss()).not.toContain('[data-wb-structure="mediaList"]')
-    expect(structureBaseCss()).toContain('[data-wb-structure="cardGrid"]')
+  it('구조 기본 CSS가 mediaList를 :where()로 좁혀 겨냥한다', () => {
+    const css = structureBaseCss()
+    const targeting = css
+      .split('\n')
+      .filter((line) => line.endsWith('{') && line.includes('[data-wb-structure="mediaList"]'))
+      .map((line) => line.slice(0, -1).trim())
+
+    // (1) `item`(가로 분할)과 `media`(빈 상자의 크기) 둘이다.
+    expect(targeting).toEqual([
+      '[data-wb-component="List"]:where([data-wb-structure="mediaList"]) [data-wb-part="item"]',
+      '[data-wb-component="List"]:where([data-wb-structure="mediaList"]) [data-wb-part="media"]',
+    ])
+    // (2) 구조 이름이 **`:where()` 안에만** 나온다 — 맨 셀렉터로 새면 테마가 진다.
+    expect(css).not.toContain('] [data-wb-structure="mediaList"]')
+    for (const selector of targeting) {
+      expect(selector.replace(/:where\([^)]*\)/g, '').match(/\[[^\]]+\]/g)).toHaveLength(2)
+    }
+    // (3) 앞 판정이 지키던 것 — `cardGrid`를 겨냥하는 규칙은 그대로 있다.
+    expect(css).toContain('[data-wb-structure="cardGrid"]')
+  })
+
+  /**
+   * **모양이 아니라 효과를 잰다.** 위 케이스는 셀렉터 문자열을 보고, 여기는 **테마 없이**
+   * 구조 기본 CSS만 깐 화면에서 계산된 값을 본다 — *"테마가 없어도 구조가 선다"*가
+   * 이 규칙들의 존재 이유이므로 그것을 직접 확인하는 자리가 있어야 한다.
+   *
+   * **대조군이 `stackedList`다.** `mediaList`가 그것과 갈리는 지점이 정확히 가로 분할이라,
+   * 좁히기가 풀리면 여기서 `stackedList`의 줄까지 flex가 되어 죽는다.
+   */
+  it('테마 없이도 mediaList의 줄이 가로로 선다 — stackedList는 그대로다', async () => {
+    const styled = async (structure: string, selector: string, prop: string) => {
+      const html = render('List', structure, { items: 2 })
+      const { JSDOM } = await import('jsdom')
+      const dom = new JSDOM(
+        `<!doctype html><html><head><style>${structureBaseCss()}</style></head>` +
+          `<body>${html}</body></html>`,
+      )
+      const el = dom.window.document.querySelector(selector)!
+      return dom.window.getComputedStyle(el).getPropertyValue(prop)
+    }
+
+    expect(await styled('mediaList', '[data-wb-part="item"]', 'display')).toBe('flex')
+    expect(await styled('mediaList', '[data-wb-part="media"]', 'width')).toBe('25%')
+    expect(await styled('mediaList', '[data-wb-part="media"]', 'aspect-ratio')).toBe('1 / 1')
+
+    // 대조군 — 같은 이름의 조각을 내지만 이 선언을 받으면 안 된다.
+    expect(await styled('stackedList', '[data-wb-part="item"]', 'display')).not.toBe('flex')
+    expect(await styled('cardGrid', '[data-wb-part="item"]', 'display')).not.toBe('flex')
+    expect(await styled('cardGrid', '[data-wb-part="media"]', 'width')).not.toBe('25%')
   })
 })
 
