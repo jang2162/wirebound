@@ -123,6 +123,16 @@ export const CardPlain: StructureRenderer = ({ attrs, props, part, children }) =
  */
 export const CardBordered: StructureRenderer = CardPlain
 
+/**
+ * **`plain`·`bordered`와 DOM이 같다** (재라 #7). `elevated`가 갈리는 것은 **그림자
+ * 하나**이고 그것은 §6.8의 `shadow`다 — `bordered`와 정확히 같은 부류이므로 같은 판정을
+ * 받는다. 근거와 대가는 바로 위 `CardBordered`에 적었다.
+ *
+ * **셋이 한 덩어리다.** `Card`가 오늘 갖는 *진짜* 구조 차이는 아래 `mediaTop`·`horizontal`
+ * 둘뿐이고, 나머지 셋은 **테마가 스킨을 갈라 쓸 이름 세 개**다.
+ */
+export const CardElevated: StructureRenderer = CardPlain
+
 export const TabsUnderline: StructureRenderer = ({ attrs, props, part, children }) => {
   const tabs = props.tabs as string[]
   const active = props.active as number
@@ -234,5 +244,6 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Grid', 'default', GridDefault],
   ['Card', 'plain', CardPlain],
   ['Card', 'bordered', CardBordered],
+  ['Card', 'elevated', CardElevated],
   ['Tabs', 'underline', TabsUnderline],
 ]

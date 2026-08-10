@@ -250,3 +250,28 @@ describe('Card:bordered — plain과 DOM이 같다 (재라 #7)', () => {
   })
 })
 
+describe('Card:elevated — plain과 DOM이 같다 (재라 #7)', () => {
+  it('plain과 글자까지 같다 — 구조 이름만 다르다', () => {
+    expectSameDomAsPlain('elevated', { title: '제목', subtitle: '부제' })
+  })
+
+  it('bordered와도 DOM이 같다 — 셋이 한 덩어리다', () => {
+    // 셋이 같은 덩어리라는 것을 직접 못박는다. `plain`과 각각만 비교하면 이 관계가
+    // 두 케이스에 흩어져 읽히지 않는다.
+    const props = { title: '제목', subtitle: '부제' }
+    expect(render('Card', 'elevated', props).replace('elevated', 'bordered')).toBe(
+      render('Card', 'bordered', props),
+    )
+  })
+
+  it('구조 기본 CSS가 그림자를 정하지 않는다', () => {
+    expect(structureCssBlocks().join('\n')).not.toContain('data-wb-structure="elevated"')
+  })
+
+  it('계약 밖 속성이 없고 조각 이름이 전부 선언돼 있다', () => {
+    const html = render('Card', 'elevated', { title: '제목', subtitle: '부제' })
+    expectContractOnly(html)
+    expectDeclaredParts('Card', html)
+  })
+})
+
