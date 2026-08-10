@@ -12,6 +12,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
     "@wirebound/schema": "workspace:*",
+    "@wirebound/themes": "workspace:*",
     "fastify": "^5.2.0",
     "kysely": "^0.28.0",
     "pg": "^8.13.0",

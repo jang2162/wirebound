@@ -1,7 +1,14 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
 import type { LayoutDocument, PageDocument } from '../src/node'
-import { assertValidLayout, assertValidPage, validateLayout, validatePage } from '../src/validate'
+import {
+  ISSUE_SEVERITY,
+  assertValidLayout,
+  assertValidPage,
+  partitionIssues,
+  validateLayout,
+  validatePage,
+} from '../src/validate'
 
 beforeAll(() => {
   installCatalog()
@@ -246,5 +253,117 @@ describe('variantFrom이 있는 컴포넌트의 node.variant (P4a-2 수정 웨�
         },
       }),
     ).toEqual([])
+  })
+})
+
+/**
+ * **severity — 경고와 거부를 가른다(P4a-3 Task 1).**
+ *
+ * P4a-2가 대가를 실측했다: severity가 없어 **모든** 이슈가 §7.1의 게이트에서 편집을 막았고,
+ * `ignored-variant`가 한 번 들어간 문서는 **그 노드와 무관한 편집까지 422**로 거부됐다
+ * (`edit-pipeline`이 `validatePage(after)`로 문서 전체를 검증하기 때문이다).
+ */
+describe('ValidationIssue.severity', () => {
+  /**
+   * **오늘 경고가 될 자격이 있는 것은 `ignored-variant` 하나뿐이다.** 나머지는 §7.1이
+   * "편집을 막아야 한다"고 정한 것이고, 이 필드는 그 목록을 줄이는 것이 아니라 표현할 수
+   * 있게 만드는 것이다.
+   *
+   * **목록을 손으로 적지 않는다** — `ISSUE_SEVERITY`를 훑어 센다. `ValidationCode`에 코드가
+   * 늘면 `Record<ValidationCode, IssueSeverity>`가 **타입체크에서** 먼저 죽고(항목 누락),
+   * 누군가 그 자리를 `warning`으로 채우면 이 케이스가 죽는다.
+   */
+  it('경고인 코드는 ignored-variant 하나뿐이다', () => {
+    const warnings = Object.entries(ISSUE_SEVERITY)
+      .filter(([, severity]) => severity === 'warning')
+      .map(([code]) => code)
+    expect(warnings).toEqual(['ignored-variant'])
+  })
+
+  it('그 밖의 코드는 전부 error다', () => {
+    const others = Object.entries(ISSUE_SEVERITY).filter(([code]) => code !== 'ignored-variant')
+    expect(others.length).toBeGreaterThan(0)
+    expect(others.map(([, severity]) => severity)).toEqual(others.map(() => 'error'))
+  })
+
+  /**
+   * 표가 아니라 **실제로 나온 이슈**가 severity를 달고 있는지 본다. 표만 검사하면
+   * 이슈를 만드는 자리가 표를 안 보고 값을 박아도 통과한다.
+   */
+  it('validatePage가 낸 이슈의 severity가 표와 일치한다', () => {
+    const doc = page({
+      id: 'n_000000000001',
+      type: 'Page',
+      children: [
+        { id: 'n_000000000002', type: 'Text', variant: 'caption', props: { role: 'h2' } },
+        { id: 'n_000000000003', type: 'Nope' },
+      ],
+    })
+    const issues = validatePage(doc)
+    expect(issues.length).toBe(2)
+    for (const issue of issues) {
+      expect(issue.severity).toBe(ISSUE_SEVERITY[issue.code])
+    }
+    expect(issues.find((issue) => issue.code === 'ignored-variant')?.severity).toBe('warning')
+    expect(issues.find((issue) => issue.code === 'unknown-type')?.severity).toBe('error')
+  })
+
+  it('validateLayout이 낸 이슈도 severity를 단다', () => {
+    const issues = validateLayout({ version: 1, root: { id: 'n_000000000001', type: 'Page' } })
+    expect(issues.map((issue) => issue.severity)).toEqual(['error'])
+  })
+
+  it('봉투 이슈(bad-document)도 severity를 단다', () => {
+    const issues = validatePage({ version: 1, root: null } as never)
+    expect(issues.length).toBeGreaterThan(0)
+    expect(issues.every((issue) => issue.severity === 'error')).toBe(true)
+  })
+
+  describe('partitionIssues', () => {
+    it('error와 warning을 가른다 — 순서는 그대로다', () => {
+      const doc = page({
+        id: 'n_000000000001',
+        type: 'Page',
+        children: [
+          { id: 'n_000000000002', type: 'Text', variant: 'caption', props: { role: 'h2' } },
+          { id: 'n_000000000003', type: 'Nope' },
+        ],
+      })
+      const { errors, warnings } = partitionIssues(validatePage(doc))
+      expect(errors.map((issue) => issue.code)).toEqual(['unknown-type'])
+      expect(warnings.map((issue) => issue.code)).toEqual(['ignored-variant'])
+    })
+
+    it('이슈가 없으면 둘 다 빈 배열이다', () => {
+      const { errors, warnings } = partitionIssues([])
+      expect(errors).toEqual([])
+      expect(warnings).toEqual([])
+    })
+  })
+
+  /**
+   * `assertValidPage`도 같은 선을 쓴다 — **경고는 던지지 않는다.** 여기가 갈리면
+   * "저장되는 문서"와 "assert를 지나는 문서"가 서로 다른 집합이 된다.
+   */
+  it('assertValidPage는 경고만 있는 문서를 통과시킨다', () => {
+    const doc = page({
+      id: 'n_000000000001',
+      type: 'Page',
+      children: [{ id: 'n_000000000002', type: 'Text', variant: 'caption', props: { role: 'h2' } }],
+    })
+    expect(validatePage(doc).map((issue) => issue.code)).toEqual(['ignored-variant'])
+    expect(() => assertValidPage(doc)).not.toThrow()
+  })
+
+  it('assertValidPage는 경고와 오류가 섞여 있으면 오류로 던진다', () => {
+    const doc = page({
+      id: 'n_000000000001',
+      type: 'Page',
+      children: [
+        { id: 'n_000000000002', type: 'Text', variant: 'caption', props: { role: 'h2' } },
+        { id: 'n_000000000003', type: 'Nope' },
+      ],
+    })
+    expect(() => assertValidPage(doc)).toThrow(/unknown-type/)
   })
 })

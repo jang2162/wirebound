@@ -11,6 +11,7 @@ import type {
   PageDetail,
   PatchResult,
   ProjectDetail,
+  ProjectTheme,
   RevisionSummary,
   SessionUser,
   TreeMenuNode,
@@ -393,6 +394,20 @@ const SHAPES = {
     typeof value['seq'] === 'number' &&
     typeof value['revisionId'] === 'string' &&
     Array.isArray(value['inverse']),
+  /**
+   * 프로젝트의 현재 테마. **`theme`의 안쪽을 보지 않는다** — `resolveTheme`이 그것을
+   * 통째로 검증하고 이슈를 내며(`theme/use-theme-css.ts`), 여기서 한 겹 더 막으면
+   * *"해석기가 이슈로 말할 수 있는 것"*이 **읽을 수 없는 응답**으로 바뀐다.
+   * 두 층이 같은 것을 검사하면 문안이 갈리고 사용자는 원인을 두 번 다르게 듣는다.
+   *
+   * 여기서 보는 것은 **모양 하나**다: `theme`이 객체이거나 `null`인가. 그 자리에 문자열이나
+   * 배열이 오면 `resolveTheme`이 `bad-spec`을 내기는 하지만, 그건 계약 위반이지 테마
+   * 오류가 아니므로 `internal`로 끊는 편이 원인을 바로 가리킨다.
+   */
+  projectTheme: (value) =>
+    isRecord(value) &&
+    (value['theme'] === null || isRecord(value['theme'])) &&
+    Array.isArray(value['issues']),
 } satisfies Record<string, Shape>
 
 /**
@@ -802,6 +817,8 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
         // 바뀌지 않는 것을 재고 옮겼다**(선택 키 유무 두 갈래 전부).
         declaredOnly(body, BODY_KEYS.patchOps),
       ),
+    getProjectTheme: (projectId) =>
+      request<ProjectTheme>('GET', `${projectPath(projectId)}/theme`, SHAPES.projectTheme),
     listMyRevisions: (projectId, pageId) =>
       request<RevisionSummary[]>(
         'GET',

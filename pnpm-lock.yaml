@@ -26,6 +26,9 @@ importers:
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../../packages/schema
+      '@wirebound/themes':
+        specifier: workspace:*
+        version: link:../../packages/themes
       fastify:
         specifier: ^5.2.0
         version: 5.11.2

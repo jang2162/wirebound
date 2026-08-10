@@ -12,8 +12,10 @@
  * 1. 본문을 `z.strictObject({ schema: DocumentEnvelopeSchema })`로 파싱한다.
  *    실패(봉투가 깨짐) → 400 `bad-request`.
  * 2. `migrateDocument`로 최신 버전까지 올린다. 던지면(지원하지 않는 버전) → 400.
- * 3. `validatePage`를 부른다. 이슈가 있으면(봉투는 멀쩡한데 카탈로그 규칙 위반)
- *    → 422 `validation-failed`, `issues`에 `ValidationIssue[]`를 그대로 싣는다.
+ * 3. `validatePage`를 부른다. **`error` 이슈가 있으면**(봉투는 멀쩡한데 카탈로그 규칙 위반)
+ *    → 422 `validation-failed`, `issues`에 `ValidationIssue[]`를 그대로 싣는다(경고까지 함께).
+ *    **경고만 있으면 저장된다** — 응답의 `warnings`에 실린다(P4a-3 Task 1).
+ *    선을 긋는 것은 `partitionIssues` 하나이고 파이프라인 6단계도 그것을 쓴다.
  * 4. 통과한 문서만 `applyEdit`(편집 파이프라인)에 태워 저장한다 — `PATCH .../ops`와
  *    **같은 쓰기 경로**다.
  * 1·3단계가 갈리는 이유: "요청이 잘못됨"(400)과 "내용이 처리 불가함"(422)은 다른
@@ -42,7 +44,9 @@ import {
   DocumentEnvelopeSchema,
   createNodeId,
   migrateDocument,
+  partitionIssues,
   validatePage,
+  type ValidationIssue,
 } from '@wirebound/schema'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
@@ -115,6 +119,21 @@ function toApiError(outcome: Extract<EditOutcome, { ok: false }>, baseSeq: numbe
     case 'nul-byte':
       return badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
   }
+}
+
+/**
+ * 저장을 막지 않은 이슈를 응답에 얹는다. **비어 있으면 키 자체를 만들지 않는다.**
+ *
+ * 이유는 `clientOpId`를 조건부로 싣는 것과 같다 — 없던 키가 늘 붙으면 응답 형태가
+ * 통째로 바뀐 것이 되고, README가 못박은 *"페이지 여덟 키"*(세 응답이 같은 키 집합)가
+ * 경고 없는 평범한 저장에서도 깨진다. 경고가 실제로 있을 때만 아홉 번째 키가 붙는다.
+ *
+ * **삼키지 않는다.** 경고를 응답에 안 실으면 severity를 만든 이유가 사라진다 —
+ * 저장은 됐는데 *"적은 값이 버려졌다"*를 아무도 모른다.
+ */
+function withWarnings<T extends object>(body: T, warnings: ValidationIssue[]): T | (T & { warnings: ValidationIssue[] }) {
+  if (warnings.length === 0) return body
+  return { ...body, warnings }
 }
 
 /** API 계약이 노출하는 필드만 담는다 — 저장소의 `projectId`는 응답에 싣지 않는다(경로에 이미 있다). */
@@ -237,9 +256,17 @@ export function pageRoutes() {
         throw badRequest(error instanceof Error ? error.message : '지원하지 않는 문서 버전입니다')
       }
 
-      // 3단계: 카탈로그 검증. 봉투는 멀쩡하지만 내용이 처리 불가하면 422다.
+      // 3단계: 카탈로그 검증. 봉투는 멀쩡하지만 내용이 **처리 불가**하면 422다.
+      //
+      // **`error`만 422다(P4a-3 Task 1).** 경고(오늘은 `ignored-variant`뿐)는 문서를
+      // 무효로 만들지 않으므로 저장을 막지 않고 응답에 실려 나간다. 여기서 `filter`를
+      // 다시 쓰지 않고 `partitionIssues`를 부르는 이유는 파이프라인 6단계와 같은 선을
+      // 써야 하기 때문이다 — 한쪽만 고쳐지면 이 게이트가 막은 것을 파이프라인이 통과시키거나
+      // 그 반대가 된다.
+      //
+      // 거부할 때 `issues`에는 **경고까지 전부** 싣는다(파이프라인과 같다).
       const issues = validatePage(migrated)
-      if (issues.length > 0) {
+      if (partitionIssues(issues).errors.length > 0) {
         throw validationFailed('스키마 검증에 실패했습니다', issues)
       }
 
@@ -315,12 +342,15 @@ export function pageRoutes() {
       // 응답 형태는 바뀌지 않는다(페이지 객체 그대로). 바뀐 세 필드만 파이프라인
       // 결과로 덮어쓰고 나머지(제목·메뉴·순서)는 위에서 읽은 레코드를 쓴다 — 이
       // 엔드포인트는 그 필드들을 건드리지 않으므로 DB를 다시 조회할 이유가 없다.
-      return toResponse({
-        ...before,
-        schema: outcome.schema,
-        schemaVersion: outcome.schemaVersion,
-        headSeq: outcome.seq,
-      })
+      return withWarnings(
+        toResponse({
+          ...before,
+          schema: outcome.schema,
+          schemaVersion: outcome.schemaVersion,
+          headSeq: outcome.seq,
+        }),
+        outcome.warnings,
+      )
     })
 
     app.patch('/:projectId/pages/:pageId/ops', { preHandler: projectGuard('editor') }, async (request) => {
@@ -365,13 +395,16 @@ export function pageRoutes() {
       // `clientOpId`는 요청에 있었을 때만 넣는다 — 서버가 만들어 내는 값이 아니라
       // 클라이언트가 맡긴 값을 그대로 되돌려 주는 것이므로, 없던 키가 생기면
       // 클라이언트의 pending 큐 대조가 어긋난다.
-      return {
-        seq: outcome.seq,
-        revisionId: outcome.revisionId,
-        inverse: outcome.inverse,
-        schemaVersion: outcome.schemaVersion,
-        ...(body.clientOpId !== undefined ? { clientOpId: body.clientOpId } : {}),
-      }
+      return withWarnings(
+        {
+          seq: outcome.seq,
+          revisionId: outcome.revisionId,
+          inverse: outcome.inverse,
+          schemaVersion: outcome.schemaVersion,
+          ...(body.clientOpId !== undefined ? { clientOpId: body.clientOpId } : {}),
+        },
+        outcome.warnings,
+      )
     })
 
     app.delete('/:projectId/pages/:pageId', { preHandler: projectGuard('editor') }, async (request, reply) => {

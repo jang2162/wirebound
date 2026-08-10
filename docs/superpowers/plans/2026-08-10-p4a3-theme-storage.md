@@ -94,10 +94,34 @@ DB에도 두라고 한다. **둘이 갈리면 코드가 이긴다** — 시스�
 기본 레이아웃의 `schema`는 **`Page` 하나와 그 안의 `Slot` 하나**다 — 오늘 화면을 바꾸지 않는
 최소본이고, 그래야 이 슬라이스가 외형을 건드리지 않는다.
 
-### D6. 캔버스는 `renderComposed`로 그린다
+### D6. 캔버스는 `renderComposed`로 그린다 — **구현 중 반증됐다**
 
-레이아웃이 생겼으므로 합성 경로를 쓴다. 기본 레이아웃이 `Page > Slot`이라 **오늘 결과는
-지금과 같아야 한다** — 그것이 이 태스크의 판정이다.
+> **이 결정은 틀렸다.** 재보니 `renderComposed(Page>Slot 레이아웃, page)`의 결과가
+> `renderDocument(page)`와 **같지 않다.** 측정과 그 결과는
+> `packages/renderer/test/compose-identity.test.tsx`가 케이스로 들고 있다.
+>
+> **원인:** `renderComposed`는 페이지를 그려 `slot`으로 넘기고 **레이아웃 문서를 다시
+> 그린다**. 레이아웃의 루트 `Page`와 그 안의 `Slot`이 **각각 자기 엘리먼트를 낸다** —
+> `Slot`은 구멍이 아니라 그 자리에 그려지는 노드다. 즉 `Page > Slot`은 "아무것도 더하지
+> 않는 껍데기"가 아니라 **노드 둘을 더하는 껍데기**다.
+>
+> **그래서 캔버스를 합성으로 바꾸지 않았다.** 바꿨다면 결과가 셋이었다:
+>
+> 1. **`[data-wb-component="Page"]`에 맞는 엘리먼트가 1 → 2로 는다.** 그 컴포넌트를
+>    스타일하는 테마라면 여백·배경이 중첩된다. **오늘은 중첩할 규칙이 없다** —
+>    `ADMIN_THEME.components`가 17종을 정의하는데 `Page`가 그중에 없어
+>    `compileTheme(ADMIN_THEME)`의 `[data-wb-component="Page"]` 규칙이 **0개**다(재서 확인했다).
+>    즉 이 결과는 **잠재적으로 참**이고 P4b가 `Page`를 스타일하는 테마를 만들면 실재한다.
+> 2. **캔버스의 `nodeIdAt`이 페이지 문서에 없는 id**(레이아웃 루트·슬롯)를 골라 선택이
+>    유령 노드를 가리킨다. **이것은 오늘 바로 참이다.**
+> 3. **아웃라인이 그 노드를 못 찾는다**(`findNodeElement`가 페이지 문서 기준이다).
+>    이것도 오늘 바로 참이다.
+>
+> 2·3만으로도 이 슬라이스가 감당할 크기가 아니다 — 선택 모델을 다시 정해야 하고, 그것은
+> §4.4의 레이아웃 에디터가 올 때의 일이다.
+
+원래 적혀 있던 것: 레이아웃이 생겼으므로 합성 경로를 쓴다. 기본 레이아웃이 `Page > Slot`이라
+**오늘 결과는 지금과 같아야 한다** — 그것이 이 태스크의 판정이다.
 
 ### D7. 레이아웃을 편집하는 화면은 만들지 않는다
 
@@ -445,14 +469,20 @@ P4a-2가 여기에 하나 더 얹었다 — `bgGradient`/`bgImage`도 **같은 �
 - Modify: `apps/web/src/canvas/canvas.tsx`
 - Test: `apps/web/test/theme/project-theme-cascade.test.tsx`
 
-- [ ] **Step 1: 합성이 오늘 결과를 바꾸지 않는 것을 테스트로 쓴다**
+- [x] **Step 1: 합성이 오늘 결과를 바꾸지 않는 것을 테스트로 쓴다 → 결과가 달랐다**
 
-기본 레이아웃이 `Page > Slot`이므로 `renderComposed(layout, page)`의 결과가
-**`renderDocument(page)`와 같아야 한다**(D6). 다르면 그것이 발견이다.
+**다르다. 그것이 발견이다**(위 D6 참고). 캔버스는 `renderDocument`를 그대로 쓰고,
+합성이 노드 둘을 더 그린다는 사실을 `compose-identity.test.tsx`가 케이스로 고정한다.
 
-**인자 순서를 확인하라** — P0 이월 #3이 *"`renderComposed`의 인자 뒤바꿈이 컴파일되고
-조용히 렌더된다"*고 적었다. 그 뒤 판별자가 들어갔는지 확인하고, 안 들어갔으면
-**뒤바꿈이 컴파일되는지 재서 보고하라**(고치는 것은 이 슬라이스 밖일 수 있다).
+**재라 #9 — 인자 뒤바꿈은 컴파일되지 않는다.** `node.ts`의 팬텀 판별자
+(`declare const documentKind: unique symbol`)가 잡는다. `document-kind.test-d.ts`가
+재고 있던 것은 **스텁**이었고 실제 `renderComposed`는 아무도 재지 않고 있었다 —
+`compose-identity.test.tsx`의 `@ts-expect-error` 한 줄이 그 자리를 메운다.
+
+**곁들여: 판별자가 무음으로 꺼지는 경로가 있다.** `PageDocument`를 소스 경로
+(`packages/schema/src/node`)에서, `renderComposed`를 패키지(`@wirebound/renderer` → `dist`)
+에서 가져오면 **뒤바꿈이 통과한다** — `unique symbol` 선언이 둘이면 서로 다른 키가 되어
+두 문서 타입이 똑같이 `{version, root}`로 접힌다. 첫 프로브가 그 함정에 걸렸다.
 
 - [ ] **Step 2: 이 슬라이스의 판정을 쓴다**
 

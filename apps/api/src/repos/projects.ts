@@ -8,6 +8,8 @@ import { DatabaseError } from 'pg'
 import { sql } from 'kysely'
 import { withTransaction, type DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
+import { DEFAULT_LAYOUT_NAME, defaultLayoutDocument, insertLayout } from './layouts'
+import { findThemeBySlug } from './themes'
 
 export interface ProjectRecord {
   id: string
@@ -48,9 +50,48 @@ function isSlugUniqueViolation(error: unknown): boolean {
 }
 
 /**
- * 프로젝트를 만들고, 생성자를 **같은 트랜잭션 안에서** owner로 `project_members`에
- * 넣는다. 둘 중 하나만 성공하는 상태가 생기면 안 된다 — 주인 없는 프로젝트는
- * 아무도 접근할 수 없는 채로 영원히 남는다(설계 §10).
+ * 기본 레이아웃이 가리킬 시스템 테마의 slug. `packages/themes`의 `SYSTEM_THEME_IDS`에
+ * 있는 이름이고 오늘 시스템 테마는 이것 하나다(P4a-2의 D7).
+ *
+ * `apps/web`의 `DEFAULT_THEME_ID`와 같은 값인데 **두 상수를 잇지 않는다** — 서버가
+ * 고르는 것은 *"새 프로젝트의 기본값"*이고 웹의 것은 *"서버가 테마를 주지 못할 때의
+ * 폴백"*이다. 둘이 우연히 같을 뿐 다른 질문에 답한다.
+ */
+const DEFAULT_THEME_SLUG = 'admin'
+
+/**
+ * 프로젝트를 만들고, 생성자를 owner로 넣고, **기본 레이아웃을 함께 만든다** —
+ * 전부 같은 트랜잭션 안에서다.
+ *
+ * 셋 중 하나만 성공하는 상태가 생기면 안 된다. 주인 없는 프로젝트는 아무도 접근할 수
+ * 없는 채로 영원히 남고(설계 §10), 레이아웃 없는 프로젝트는 테마를 가리킬 방법이 없는데
+ * **레이아웃을 만들어 주는 다른 경로가 없다**(레이아웃 에디터는 D7로 빠졌다).
+ *
+ * ---
+ *
+ * **순환 참조를 여는 순서(계획서 D5).** `projects.default_layout_id`와
+ * `layouts.project_id`가 서로를 가리키므로 어느 쪽도 먼저 완성될 수 없다. 그래서
+ * **세 문장**으로 닫는다:
+ *
+ * 1. `projects` INSERT — `default_layout_id`를 비워 둔다(그래서 그 컬럼이 nullable이다).
+ * 2. `layouts` INSERT — 이제 `project_id`가 가리킬 행이 있다.
+ * 3. `projects` UPDATE — `default_layout_id`를 채운다.
+ *
+ * 한 트랜잭션 안이므로 밖에서는 세 문장이 보이지 않는다. 이 순서가 아니면(레이아웃을
+ * 먼저 만들려 하면) `project_id`의 NOT NULL FK를 만족시킬 수 없다.
+ *
+ * **`repos`가 `repos`를 부르는 것이 여기서 처음은 아니다.** 이 함수는 이미
+ * `project_members`를 함께 넣고 있었다 — *"프로젝트가 만들어질 때 반드시 함께 서야 하는
+ * 것"*을 한 트랜잭션에 모으는 것이 이 함수의 일이고, 기본 레이아웃이 그 목록에 하나
+ * 늘었을 뿐이다. (README의 계층 규칙은 여러 repo를 조율하는 로직을 `services/`에 두라고
+ * 하는데, 그 규칙과 이 함수의 기존 형태가 부딪힌다. 조율을 밖으로 빼면 "프로젝트 생성"이
+ * 두 자리로 갈라져 한쪽만 부르는 경로가 생길 수 있어 여기 둔다.)
+ *
+ * **기본 레이아웃의 `theme_id`는 시스템 `admin`을 가리킨다.** 그 행은 기동 동기화가
+ * 넣는다(`services/system-themes.ts`) — `buildApp`이 라우트를 세우기 전에 돌므로 이
+ * 함수가 도달할 때는 반드시 있다. 그래도 없으면 `null`로 두고 진행한다: 테마를 못 고른
+ * 프로젝트는 구조 기본 CSS로 그려질 뿐이지만(정상 경로다), 프로젝트 생성 자체가
+ * 실패하면 사용자가 할 수 있는 것이 없다.
  *
  * 조회 후 삽입하지 않는다(`repos/users.ts`의 `insertUser`와 같은 이유) — slug
  * 유니크 위반은 삽입을 시도해 보고 그 실패로 감지한다. 이 실패가 이 함수를 호출한
@@ -65,6 +106,7 @@ export async function insertProject(
 ): Promise<ProjectWithRole> {
   try {
     return await withTransaction(db, async (trx) => {
+      // 1단계: 프로젝트. `default_layout_id`는 아직 비어 있다.
       const project = await trx
         .insertInto('projects')
         .values({ name: input.name, slug: input.slug, description: input.description })
@@ -74,6 +116,24 @@ export async function insertProject(
       await trx
         .insertInto('project_members')
         .values({ project_id: project.id, user_id: ownerId, role: 'owner' })
+        .execute()
+
+      // 2단계: 기본 레이아웃. 문서는 `Page` 하나와 `Slot` 하나다(D5) — 참조(`theme_id`)를
+      // 나르는 그릇의 최소본이다. **그 `schema`를 오늘 그리는 코드는 없다**(D6 반증 —
+      // `repos/layouts.ts`의 `defaultLayoutDocument` 주석 참고).
+      const theme = await findThemeBySlug(trx, null, DEFAULT_THEME_SLUG)
+      const layout = await insertLayout(trx, {
+        projectId: project.id,
+        name: DEFAULT_LAYOUT_NAME,
+        themeId: theme?.id ?? null,
+        schema: defaultLayoutDocument(),
+      })
+
+      // 3단계: 순환을 닫는다.
+      await trx
+        .updateTable('projects')
+        .set({ default_layout_id: layout.id })
+        .where('id', '=', project.id)
         .execute()
 
       return { ...project, role: 'owner' as const }

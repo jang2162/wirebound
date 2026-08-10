@@ -17,7 +17,8 @@
  * 3. `input.baseSeq !== headSeq`면 `stale` — 현재 `headSeq`를 함께 돌려준다.
  * 4. `invertOps(before, ops)` → `PatchError`면 `patch-failed`.
  * 5. `applyOps(before, ops)` → `PatchError`면 `patch-failed`.
- * 6. `validatePage(after)` → 이슈가 있으면 `invalid`.
+ * 6. `validatePage(after)` → **`error` 이슈가 있으면** `invalid`. 경고만 있으면 통과하고
+ *    성공 결과의 `warnings`에 실린다(P4a-3 Task 1).
  * 7. `after.version !== before.version`이면 `invalid` — `ops`가 `/version`을 직접
  *    건드린 경우다(아래 "`version`은 편집 대상이 아니다" 참고).
  * 8. `containsNulByte(ops) || containsNulByte(inverse) || containsNulByte(after)` → `nul-byte`.
@@ -61,11 +62,19 @@
  * **`schemaVersion`은 `after.version`에서 파생시킨다.** 저장된 `schema_version`
  * 컬럼을 흘려보내면 마이그레이션이 버전을 올린 순간 두 값이 어긋난다
  * (`routes/pages.ts`의 GET이 같은 이유로 그렇게 한다).
+ *
+ * **성공 결과가 `warnings`를 나른다(P4a-3 Task 1).** 6단계가 `error`만 거부하므로 경고는
+ * 저장을 통과하는데, 여기서 버리면 **아무도 그것을 볼 수 없다** — severity를 만든 이유가
+ * 사라진다. `EditOutcome`의 성공 갈래가 바뀌었으므로 **P3의 WebSocket 핸들러도 이 필드를
+ * 클라이언트에 실어야 한다**: 같은 `applyEdit`을 부르는 두 진입점이 한쪽만 경고를 나르면
+ * 사용자가 보는 것이 접속 방식에 따라 갈린다.
  */
 import {
+  ISSUE_SEVERITY,
   applyOps,
   invertOps,
   migrateDocument,
+  partitionIssues,
   validatePage,
   PatchError,
   type PatchOp,
@@ -94,6 +103,12 @@ export type EditOutcome =
       inverse: PatchOp[]
       schema: PageDocument
       schemaVersion: number
+      /**
+       * 저장을 막지 않은 이슈들(`severity === 'warning'`). 비어 있을 수 있다.
+       * **호출자가 응답에 실어야 한다** — 여기서 만들어 두고 아무도 안 실으면
+       * 경고는 존재하지 않는 것과 같다.
+       */
+      warnings: ValidationIssue[]
     }
   | { ok: false; reason: 'not-found' }
   | { ok: false; reason: 'stale'; headSeq: number }
@@ -157,8 +172,18 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
 
     // 6단계: 적용 후 문서를 검증한다 — 적용 전 문서를 검증하면 항상 통과해 버려
     // 아무것도 증명하지 못한다.
+    //
+    // **`error`만 거부한다(P4a-3 Task 1).** 전에는 이슈가 하나라도 있으면 막았는데,
+    // 이 검증이 문서 **전체**를 보므로 경고 하나(오늘은 `ignored-variant`뿐이다)가
+    // 문서 어딘가에 있으면 **그 노드와 무관한 편집까지** 422로 거부됐다(P4a-2가 실측).
+    // 선을 긋는 것은 `partitionIssues` 하나다 — 여기서 `filter`를 다시 쓰면
+    // `routes/pages.ts`의 PUT 게이트와 갈린다.
+    //
+    // 거부할 때는 **경고까지 함께** 싣는다. severity가 붙었으므로 받는 쪽이 가를 수 있고,
+    // 거부 응답에서 경고를 빼면 사용자가 한 번에 고칠 수 있는 것을 두 번에 나눠 본다.
     const issues = validatePage(after)
-    if (issues.length > 0) {
+    const { errors, warnings } = partitionIssues(issues)
+    if (errors.length > 0) {
       return { ok: false, reason: 'invalid', issues }
     }
 
@@ -173,7 +198,17 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
       return {
         ok: false,
         reason: 'invalid',
-        issues: [{ code: 'bad-document', nodeId: null, path: '/version', message: 'version은 편집으로 바꿀 수 없습니다' }],
+        issues: [
+          {
+            code: 'bad-document',
+            // 표에서 파생시킨다 — 이 자리는 `schema` 밖에서 이슈를 만드는 유일한 곳이고,
+            // 값을 손으로 박으면 `ISSUE_SEVERITY`가 바뀔 때 여기만 남는다.
+            severity: ISSUE_SEVERITY['bad-document'],
+            nodeId: null,
+            path: '/version',
+            message: 'version은 편집으로 바꿀 수 없습니다',
+          },
+        ],
       }
     }
 
@@ -218,6 +253,7 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
       inverse,
       schema: after,
       schemaVersion: after.version,
+      warnings,
     }
   })
 }
