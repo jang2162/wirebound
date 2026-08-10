@@ -291,6 +291,35 @@ describe('테마 라우트', () => {
       })
     })
 
+    /**
+     * `layouts.theme_id`가 `ON DELETE RESTRICT`이므로 쓰이고 있는 테마는 지워지지 않는다.
+     * 500이 아니라 409로 나가야 사용자가 무엇을 먼저 해야 하는지 안다.
+     */
+    it('레이아웃이 쓰고 있는 테마 삭제는 409다', async () => {
+      await withApi(async (ctx) => {
+        const { owner, project } = await ownedProject(ctx)
+        const created = (await post(ctx, project.id, owner.cookie, brandTheme())).json()
+
+        // 기본 레이아웃이 이 테마를 가리키게 한다.
+        await ctx.db
+          .updateTable('layouts')
+          .set({ theme_id: created.id })
+          .where('project_id', '=', project.id)
+          .execute()
+
+        const res = await ctx.app.inject({
+          method: 'DELETE',
+          url: `/api/projects/${project.id}/themes/${created.id}`,
+          cookies: owner.cookie,
+        })
+        expect(res.statusCode).toBe(409)
+        expect(res.json().error.code).toBe('conflict')
+
+        const rows = await ctx.db.selectFrom('themes').select('id').where('id', '=', created.id).execute()
+        expect(rows).toHaveLength(1)
+      })
+    })
+
     it('남의 프로젝트 테마 수정은 404다 — 존재를 숨긴다', async () => {
       await withApi(async (ctx) => {
         const { owner, project } = await ownedProject(ctx)

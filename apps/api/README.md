@@ -150,6 +150,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다(D11) |
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
 | `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
+| `/api/projects/:projectId/theme` | GET | viewer | — | 200 `{ theme, issues }` — **이 프로젝트의 화면이 지금 써야 할 테마 하나**(아래 "프로젝트의 현재 테마"). 없으면 `theme: null` |
 | `/api/projects/:projectId/themes` | GET | viewer | — | 200 테마 배열 — **시스템 테마가 함께 나온다**(아래 "테마 응답 형태"). 시스템 테마가 먼저, 그 안에서 `slug` 순 |
 | `/api/projects/:projectId/themes` | POST | **owner** | `{ theme }` | 201 테마(봉투 위반 400, 해석 실패 422, 중복 id 409, NUL 400) |
 | `/api/projects/:projectId/themes/:themeId` | GET | viewer | — | 200 테마 — 파생 테마면 `base`가 더 붙는다. 시스템 테마는 어느 프로젝트에서나 읽힌다 |
@@ -272,6 +273,48 @@ PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "sch
 **상속 깊이는 1단계다**(§6.9). `extends`가 가리킬 수 있는 것은 **코드의 시스템 테마**뿐이라
 파생 테마를 다시 상속하려 하면 그런 시스템 테마가 없어 422가 된다.
 
+### 프로젝트의 현재 테마 (`GET /api/projects/:projectId/theme`)
+
+설계 §4.2의 사슬 `projects.default_layout_id → layouts.theme_id → themes`를 한 번에
+따라가 **캔버스가 그대로 쓸 수 있는 테마 하나**를 낸다.
+
+```jsonc
+{ "theme": { "meta": { … }, "tokens": { … }, … }, "issues": [] }
+```
+
+**`.../themes/:themeId`와 다른 것을 낸다 — 소비자가 다르기 때문이다.**
+
+| 엔드포인트 | 소비자 | 내는 것 |
+|---|---|---|
+| `.../themes/:themeId` | 테마 저작 UI | **파생 문서 그대로 + `base`** — 편집 대상은 사람이 적은 것이다 |
+| `.../theme` | 캔버스·내보내기 | **홀로 서는 테마 하나** — 파생이면 `mergeTheme`으로 합쳐 낸다 |
+
+합쳐 내는 이유: `resolveTheme(document, base)`가 base를 요구하므로 합치지 않고 내면
+받는 쪽이 두 인자를 스스로 맞춰야 한다. **합친 결과를 저장하지는 않는다** — 읽을 때
+계산할 뿐이고 저장되는 것은 파생 그대로다.
+
+**`theme`이 `null`인 경우가 셋이고 전부 정상이다:** 기본 레이아웃이 없다 · 레이아웃이
+테마를 고르지 않았다 · 테마 행이 사라졌다. 그때 화면은 **구조 기본 CSS만으로** 그려진다.
+해석 이슈가 나도 422가 아니라 `issues`에 실어 200으로 낸다 — 그리기를 막는 것보다
+테마 없이 그리는 편이 낫다.
+
+### 레이아웃
+
+**프로젝트를 만들면 기본 레이아웃이 함께 생긴다**(같은 트랜잭션). 그 문서는 `Page`
+하나와 `Slot` 하나이고, `theme_id`는 시스템 `admin`을 가리킨다.
+
+- **레이아웃을 편집하는 엔드포인트는 없다.** 이 단계의 레이아웃은 참조를 나르고 `Slot`을
+  담는 그릇이다(§4.4의 레이아웃 에디터는 뒤 단계다).
+- `projects.default_layout_id`와 `layouts.project_id`가 **서로를 가리키는 순환**이라
+  `default_layout_id`가 nullable이다. 생성은 프로젝트 → 레이아웃 → 프로젝트 UPDATE
+  세 문장으로 닫는다.
+- **`layouts.theme_id`는 `ON DELETE RESTRICT`다.** 쓰이고 있는 테마를 지우려 하면
+  **409**다. `SET NULL`로 두면 화면이 말없이 달라지므로 실패하는 쪽을 골랐다.
+- 마이그레이션 0007 **이전에 만들어진 프로젝트**는 `default_layout_id`가 `NULL`로
+  남는다(마이그레이션이 만들어 주지 않는다 — 그 시점엔 `themes`가 비어 있어 테마 없는
+  레이아웃만 만들 수 있고, 그것은 레이아웃이 없는 것과 관찰 결과가 같다). 그런 프로젝트에
+  레이아웃을 주는 경로는 아직 없다.
+
 #### 시스템 테마는 코드가 진실이다
 
 `packages/themes/src/system/`이 시스템 테마를 갖고 있고, 서버가 **기동할 때마다**
@@ -364,10 +407,16 @@ revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `
 - **실시간 동기화**: WebSocket, 브로드캐스트, 소프트 잠금(설계 §12, P3). 편집은 REST뿐이고,
   동시 편집 방어는 `baseSeq`와 행 잠금이 전부다. `baseSeq`가 어긋나면 서버가
   리베이스를 시도하지 않고 곧바로 409를 낸다.
-- **레이아웃**: 여러 페이지가 공유하는 헤더·사이드바 같은 레이아웃 문서·`Slot` 합성.
-  `@wirebound/schema`에 `validateLayout`은 있지만 이 API는 레이아웃 리소스·엔드포인트를
-  갖지 않는다.
-- **테마**: 테마 선택·적용·CSS 컴파일. `@wirebound/themes`와 연결되지 않는다.
+- **레이아웃 편집**: 레이아웃 문서를 만들고 고치는 엔드포인트. 프로젝트마다 기본
+  레이아웃(`Page` 하나 + `Slot` 하나) 하나가 자동으로 생길 뿐, 그것을 바꿀 방법이 없다.
+  `pages.layout_id`(§4.2)도 아직 없다 — 페이지가 레이아웃을 고르는 것은 뒤 단계다.
+- **테마를 고르는 UI**: 프로젝트의 레이아웃이 가리키는 테마를 바꾸는 엔드포인트가 없다.
+  파생 테마는 API로 만들 수 있지만 **그것을 화면에 거는 것은 DB를 직접 고쳐야 한다**
+  (시스템 테마가 하나뿐이라 고르개를 만들 이유가 아직 없다 — P4b가 다섯 종과 함께 연다).
+- **테마 스냅샷**(§4.5): 병합 결과를 얼려 두는 자리. `GET .../theme`가 읽을 때 합칠 뿐
+  저장하지 않는다.
+- **테마의 동시 편집 방어**: `pages`는 `head_seq`로 닫혀 있는데 `themes`에는 그런 것이
+  없다. 마지막 쓰기가 이긴다.
 - **API 토큰**: 세션 쿠키 외의 인증 수단(서비스 간 호출, CLI/MCP용 토큰 등)이 없다.
   `revisions.actor_type`은 `mcp`·`cli`를 이미 담을 수 있지만 그 행을 만드는 경로는 없다.
 

@@ -1,5 +1,5 @@
 import type { ColumnType, Generated, JSONColumnType } from 'kysely'
-import type { PageDocument, PatchOp } from '@wirebound/schema'
+import type { LayoutDocument, PageDocument, PatchOp } from '@wirebound/schema'
 import type { ThemeAssets, ThemeComponent, ThemePattern, ThemePrimitives, ThemeTokens } from '@wirebound/themes'
 
 /**
@@ -31,6 +31,13 @@ export interface ProjectsTable {
   name: string
   slug: string
   description: string | null
+  /**
+   * 이 프로젝트의 기본 레이아웃(`0007-layouts`). **nullable인 것이 요점이다** —
+   * `projects`와 `layouts`가 서로를 가리키는 순환이라 어느 쪽도 먼저 만들 수 없으므로,
+   * `insertProject`가 프로젝트를 먼저 넣고(참조 없음) 레이아웃을 만든 뒤 이 컬럼을
+   * 채운다(같은 트랜잭션). 0007 이전에 만들어진 프로젝트는 `null`로 남는다(재라 #8).
+   */
+  default_layout_id: ColumnType<string | null, string | null | undefined, string | null>
   created_at: Generated<Date>
   updated_at: Generated<Date>
 }
@@ -152,6 +159,27 @@ export interface ThemesTable {
   updated_at: Generated<Date>
 }
 
+/**
+ * 레이아웃(`0007-layouts`). **참조를 나르고 `Slot`을 담는 최소본이다**(계획서 D7) —
+ * 편집 화면이 없으므로 이 슬라이스에서 쓰기는 생성 하나뿐이다.
+ *
+ * `schema`는 `jsonb`다. **`themes`의 절이 `json`인 것과 갈리는데 근거가 있다** —
+ * 순서 계약이 걸리는 것은 테마의 절뿐이고, 노드 트리의 순서는 `children` 배열이
+ * 나르므로 `jsonb`도 보존한다(0007의 주석 참고). `pages.schema`와 같은 선택이다.
+ *
+ * `schema_version` 컬럼이 없다 — §4.2의 `layouts` 목록에 없고 버전은 봉투 안에 있다.
+ */
+export interface LayoutsTable {
+  id: Generated<string>
+  project_id: string
+  name: string
+  /** `null`이면 테마를 고르지 않았다(재라 #7). `themes.id`를 `ON DELETE RESTRICT`로 참조한다. */
+  theme_id: string | null
+  schema: JSONColumnType<LayoutDocument>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -161,4 +189,5 @@ export interface Database {
   pages: PagesTable
   revisions: RevisionsTable
   themes: ThemesTable
+  layouts: LayoutsTable
 }

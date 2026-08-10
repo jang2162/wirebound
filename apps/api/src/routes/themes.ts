@@ -46,14 +46,17 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import {
   ThemePatchSchema,
+  mergeTheme,
   resolveTheme,
   systemTheme,
   type Theme,
   type ThemeIssue,
+  type ThemePatch,
 } from '@wirebound/themes'
 import { projectGuard } from '../auth/roles'
 import { badRequest, conflict, forbidden, notFound, validationFailed } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
+import { findDefaultLayout } from '../repos/layouts'
 import {
   ThemeNulByteError,
   deleteTheme,
@@ -75,9 +78,15 @@ const ThemeBody = z.strictObject({ theme: ThemePatchSchema })
 
 /** Postgres 유니크 위반 SQLSTATE. `repos/projects.ts`와 같은 값이다. */
 const UNIQUE_VIOLATION = '23505'
+/** Postgres 외래키 위반 SQLSTATE. `layouts.theme_id`의 RESTRICT가 이것을 낸다. */
+const FOREIGN_KEY_VIOLATION = '23503'
+
+function hasSqlState(error: unknown, state: string): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === state
+}
 
 function isUniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === UNIQUE_VIOLATION
+  return hasSqlState(error, UNIQUE_VIOLATION)
 }
 
 /**
@@ -191,6 +200,56 @@ async function requireWritableTheme(
 /** `app.ts`가 `app.register(themeRoutes(), { prefix: '/api/projects' })`로 등록하는 팩토리. */
 export function themeRoutes() {
   return async function plugin(app: FastifyInstance): Promise<void> {
+    /**
+     * **이 프로젝트의 화면이 지금 써야 할 테마.** 설계 §4.2의 사슬
+     * `projects.default_layout_id → layouts.theme_id → themes`를 한 번에 따라간다.
+     *
+     * **`GET .../themes/:themeId`와 다른 것을 낸다 — 소비자가 다르기 때문이다.**
+     *
+     * | 엔드포인트 | 소비자 | 내는 것 |
+     * |---|---|---|
+     * | `.../themes/:themeId` | 저작 UI(P4c) | **파생 문서 그대로 + `base`** — 편집 대상은 사람이 적은 것이다 |
+     * | `.../theme` (여기) | 캔버스·내보내기 | **홀로 서는 테마 하나** — 그리는 쪽은 유래가 필요 없다 |
+     *
+     * 그래서 파생 테마면 여기서 `mergeTheme`으로 합쳐 낸다. `resolveTheme(document, base)`가
+     * base를 요구하므로, 합치지 않고 내면 받는 쪽이 base를 따로 얻어 두 인자를 맞춰야 한다 —
+     * `ThemeSource`가 `() => Theme | null`인 이유가 사라진다.
+     *
+     * **합친 결과를 저장하지는 않는다(계획서 D2).** 읽을 때 계산할 뿐이고, 저장되는 것은
+     * 파생 그대로다. 병합 결과가 저장될 자리는 §4.5의 스냅샷 하나뿐이고 아직 없다.
+     * P4a-1이 `base+patch` 경로와 `merge 후 해석` 경로가 **같은 CSS**를 내는 것을 쟀으므로
+     * 여기서 합쳐 내도 캔버스가 보는 결과는 같다.
+     *
+     * **`theme`이 `null`인 경우가 셋이고 전부 정상이다:** 기본 레이아웃이 없다(0007 이전
+     * 프로젝트 — 재라 #8), 레이아웃이 테마를 안 고름(재라 #7), 테마 행이 사라짐. 화면은
+     * 구조 기본 CSS만으로 그려진다 — 이미 있는 경로다(`apps/web`의 `theme-source.ts`).
+     *
+     * **해석 이슈를 여기서 422로 만들지 않는다.** 저장 경계가 이미 막았으므로 여기 오는
+     * 것은 통과한 테마뿐이고, 그래도 이슈가 난다면(코드의 시스템 테마가 바뀌어 파생이
+     * 끊긴 경우 — 재라 #5) **그리기를 막는 것보다 테마 없이 그리는 편이 낫다.**
+     * `issues`를 함께 실어 클라이언트가 콘솔에 남길 수 있게 한다(P4a-2의 재라 #12 결정).
+     */
+    app.get('/:projectId/theme', { preHandler: projectGuard('viewer') }, async (request) => {
+      const { projectId } = parseParams(ProjectIdParams, request.params)
+
+      const layout = await findDefaultLayout(app.db, projectId)
+      if (!layout || layout.themeId === null) return { theme: null, issues: [] }
+
+      const record = await findThemeById(app.db, layout.themeId)
+      if (!record) return { theme: null, issues: [] }
+
+      const stored = record.theme
+      if (stored.meta.extends === undefined) return { theme: stored, issues: [] }
+
+      const base = systemTheme(stored.meta.extends)
+      if (base === undefined) {
+        return { theme: null, issues: [resolveBase(stored).missing] }
+      }
+
+      const merged = mergeTheme(base, stored as ThemePatch)
+      return { theme: merged.theme, issues: merged.issues }
+    })
+
     app.get('/:projectId/themes', { preHandler: projectGuard('viewer') }, async (request) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
       // 시스템 테마가 함께 나온다 — 이 프로젝트에서 **고를 수 있는** 것이 목록의 뜻이다
@@ -258,7 +317,18 @@ export function themeRoutes() {
       const { projectId, themeId } = parseParams(ThemeParams, request.params)
       await requireWritableTheme(app, projectId, themeId)
 
-      if (!(await deleteTheme(app.db, themeId))) throw notFound('테마를 찾을 수 없습니다')
+      try {
+        if (!(await deleteTheme(app.db, themeId))) throw notFound('테마를 찾을 수 없습니다')
+      } catch (error) {
+        // `layouts.theme_id`가 `ON DELETE RESTRICT`다(0007) — 쓰이고 있는 테마는 지워지지
+        // 않는다. `SET NULL`로 두면 **화면이 말없이 달라지므로**(테마가 사라져 구조 기본
+        // CSS로 떨어진다) 실패하는 쪽을 골랐고, 여기서 그것을 409로 옮긴다.
+        // 자식이 있는 메뉴 삭제가 409인 것과 같은 부류다(README의 에러 표).
+        if (hasSqlState(error, FOREIGN_KEY_VIOLATION)) {
+          throw conflict('이 테마를 쓰고 있는 레이아웃이 있어 지울 수 없습니다')
+        }
+        throw error
+      }
       reply.code(204).send()
     })
   }
