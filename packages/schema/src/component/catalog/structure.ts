@@ -84,7 +84,11 @@ export const CardDef = defineComponent({
     { prop: 'subtitle', control: 'text', label: '부제' },
   ],
   structures: ['plain', 'bordered', 'elevated', 'mediaTop', 'horizontal'],
-  parts: ['header', 'title', 'subtitle', 'body'],
+  // `media`는 `mediaTop`·`horizontal`이 내는 조각이다 — *"카드에 이미지 자리가 있다"*는
+  // 테마가 겨냥할 상자 없이는 표현할 수 없다(§6.5: `parts`가 테마 매핑의 실제 지점이다).
+  // **이름은 `List`의 §5.1 예시에서 빌려 왔다** — 같은 뜻의 조각을 그쪽이 이미 `media`라
+  // 부른다. 그룹마다 새 이름을 지으면 테마 작성자가 외울 것이 는다.
+  parts: ['header', 'title', 'subtitle', 'body', 'media'],
   variants: ['default', 'featured'],
   states: [],
   children: 'many',

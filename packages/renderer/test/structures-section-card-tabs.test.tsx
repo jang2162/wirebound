@@ -275,3 +275,88 @@ describe('Card:elevated — plain과 DOM이 같다 (재라 #7)', () => {
   })
 })
 
+
+describe('Card:mediaTop — 미디어 자리가 조각으로 생긴다', () => {
+  /**
+   * **DOM이 다르다 — `plain`에 없는 조각(`media`)이 머리에 하나 더 있다.**
+   *
+   * `bordered`·`elevated`와 갈리는 지점이 정확히 여기다. 저 둘은 §6.8의 어휘로 표현되는
+   * **스킨**이지만, *"카드 위에 이미지 자리가 있다"*는 **테마가 겨냥할 상자가 없으면
+   * 표현할 수 없다** — 조각도 어휘이므로(§6.5: *"`parts`가 headless 컴포넌트를 테마에
+   * 매핑하는 실제 지점"*) 없는 조각은 만들 방법이 아예 없다.
+   *
+   * **`media`라는 이름을 골랐다.** `List`가 §5.1의 예시에서 이미
+   * `['header','row','rowAlt','cell','item','media','title','meta']`로 같은 뜻의 조각을
+   * `media`라 부른다 — 그룹마다 이름을 새로 지으면 테마 작성자가 외울 것이 는다
+   * ("계획이 재지 않은 것 #4"가 지목한 부채다). 있는 이름을 따랐다.
+   */
+  it('media·header·title·body를 그 순서로 낸다', () => {
+    expect(parts(render('Card', 'mediaTop', { title: '제목' }))).toEqual([
+      'media',
+      'header',
+      'title',
+      'body',
+    ])
+  })
+
+  it('plain은 media를 내지 않는다 — 갈리는 지점', () => {
+    expect(parts(render('Card', 'plain', { title: '제목' }))).not.toContain('media')
+  })
+
+  it('media가 header보다 앞에 온다 — "위"가 이 구조의 이름이다', () => {
+    const html = render('Card', 'mediaTop', { title: '제목' })
+    const at = (part: string): number => html.indexOf(`data-wb-part="${part}"`)
+
+    // **둘 다 실제로 있는지부터 못박는다.** 처음에는 `at('media') < at('header')`만 적었고,
+    // `media`를 통째로 지우는 변이를 심었더니 **이 케이스가 살아남았다** — `indexOf`가
+    // `-1`을 돌려주는데 `-1`은 무엇보다 작기 때문이다. **대상이 아니라 장치가 틀린 쪽**
+    // 이었고, 변이를 심어 보지 않았으면 못 봤다.
+    expect(at('media')).toBeGreaterThanOrEqual(0)
+    expect(at('header')).toBeGreaterThanOrEqual(0)
+    expect(at('media')).toBeLessThan(at('header'))
+  })
+
+  it('media는 카탈로그에 선언된 조각이다', () => {
+    expect(requireComponent('Card').parts).toContain('media')
+  })
+
+  it('부제가 있을 때도 조각이 다 나온다 — 조건부 갈래', () => {
+    expect(parts(render('Card', 'mediaTop', { title: '제목', subtitle: '부제' }))).toEqual([
+      'media',
+      'header',
+      'title',
+      'subtitle',
+      'body',
+    ])
+  })
+
+  it('계약 밖 속성이 없고 조각 이름이 전부 선언돼 있다', () => {
+    const html = render('Card', 'mediaTop', { title: '제목', subtitle: '부제' })
+    expectContractOnly(html)
+    expectDeclaredParts('Card', html)
+  })
+
+  /**
+   * **구조가 서기 위한 선언 — 빈 상자에는 높이가 없다.**
+   *
+   * `media`는 자식이 없는 `<div>`라 아무 선언도 없으면 **높이 0이 되어 화면에서 사라진다.**
+   * 그러면 *"이미지 자리가 있다"*는 구조가 서지 않는다. `Media:image`가 같은 문제를
+   * `aspect-ratio`로 푼 자리를 그대로 따른다(`document.tsx`의 `frame`).
+   *
+   * **손잡이(`nodeVar`)를 만들지 않았다.** `Media`는 `ratio` prop이 있어 노드가 값을 나를
+   * 수 있지만 `Card`에는 그런 prop이 없다 — 없는 값을 위해 통로만 뚫으면 **아무도 값을
+   * 안 넣는 죽은 손잡이**가 된다(P4b-1 이월의 `Media.kind`와 같은 부류다). 테마는
+   * `aspectRatio` 어휘로 이 값을 그대로 덮을 수 있다.
+   *
+   * **`partRule`이라 `horizontal`의 `media`도 이 규칙을 받는다.** `media`를 내는 구조가
+   * 그 둘뿐이고 둘 다 같은 것을 원하므로 의도한 것이다.
+   */
+  it('빈 media 상자가 높이를 갖는다', async () => {
+    const dom = await probe(
+      [structureCssBlocks().join('\n')],
+      '<div data-wb-component="Card" data-wb-structure="mediaTop">' +
+        '<div data-wb-part="media"></div></div>',
+    )
+    expect(dom.computed('[data-wb-part="media"]', 'aspect-ratio')).toBe('16 / 9')
+  })
+})

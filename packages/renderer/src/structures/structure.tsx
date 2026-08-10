@@ -9,7 +9,7 @@
  * **복사해 오지 마라** — 다섯 벌이 따로 썩는다.
  */
 import type { CSSProperties } from 'react'
-import { componentRule, nodeVar } from '../structure-css-tools'
+import { componentRule, nodeVar, partRule } from '../structure-css-tools'
 import type { StructureEntry, StructureRenderer } from './registry'
 
 /**
@@ -133,6 +133,27 @@ export const CardBordered: StructureRenderer = CardPlain
  */
 export const CardElevated: StructureRenderer = CardPlain
 
+/**
+ * **머리에 미디어 자리가 있는 카드** (재라 #1 — 왜 이 DOM인가).
+ *
+ * `bordered`·`elevated`와 갈리는 지점이 여기다. 저 둘은 §6.8의 어휘로 표현되는 **스킨**
+ * 이지만 *"카드 위에 이미지 자리가 있다"*는 **테마가 겨냥할 상자가 없으면 표현할 수 없다** —
+ * 조각도 어휘이므로(§6.5) 없는 조각은 만들 방법이 아예 없다. **그래서 진짜 구조다.**
+ *
+ * 조각 이름은 `List`의 §5.1 예시에서 빌려 왔다(`media`). 그룹마다 새 이름을 지으면 테마
+ * 작성자가 외울 것이 는다 — "계획이 재지 않은 것 #4"가 지목한 부채다.
+ */
+export const CardMediaTop: StructureRenderer = ({ attrs, props, part, children }) => (
+  <div {...attrs}>
+    <div {...part('media')} />
+    <div {...part('header')}>
+      <div {...part('title')}>{String(props.title)}</div>
+      {props.subtitle ? <div {...part('subtitle')}>{String(props.subtitle)}</div> : null}
+    </div>
+    <div {...part('body')}>{children}</div>
+  </div>
+)
+
 export const TabsUnderline: StructureRenderer = ({ attrs, props, part, children }) => {
   const tabs = props.tabs as string[]
   const active = props.active as number
@@ -231,6 +252,22 @@ export function structureCssBlocks(): string[] {
     componentRule('Section', 'splitBg', ['display: grid;', 'grid-template-columns: 1fr 1fr;']),
   )
 
+  // ── Card:mediaTop ─────────────────────────────────────────────────────────
+  //
+  // **빈 상자에는 높이가 없다.** `media`는 자식이 없는 `<div>`라 선언이 없으면 높이 0이
+  // 되어 화면에서 사라지고, 그러면 *"이미지 자리가 있다"*는 구조가 서지 않는다.
+  // `Media:image`가 같은 문제를 `aspect-ratio`로 푼 자리를 그대로 따른다(`document.tsx`).
+  //
+  // **손잡이(`nodeVar`)를 만들지 않았다** (D4). `Media`는 `ratio` prop이 있어 노드가 값을
+  // 나를 수 있지만 `Card`에는 그런 prop이 없다 — 없는 값을 위해 통로만 뚫으면 아무도 값을
+  // 안 넣는 **죽은 손잡이**가 된다(P4b-1 이월의 `Media.kind`와 같은 부류다). 테마는
+  // `aspectRatio` 어휘로 이 값을 그대로 덮는다.
+  //
+  // **`partRule`이라 `horizontal`의 `media`도 이 규칙을 받는다.** `media`를 내는 구조가
+  // 그 둘뿐이고 둘 다 같은 것을 원하므로 의도한 것이다.
+
+  blocks.push(partRule('Card', 'media', ['aspect-ratio: 16 / 9;']))
+
   return blocks
 }
 
@@ -245,5 +282,6 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Card', 'plain', CardPlain],
   ['Card', 'bordered', CardBordered],
   ['Card', 'elevated', CardElevated],
+  ['Card', 'mediaTop', CardMediaTop],
   ['Tabs', 'underline', TabsUnderline],
 ]
