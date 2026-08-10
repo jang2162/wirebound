@@ -23,7 +23,9 @@ import { installCatalog, requireComponent } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { renderNode } from '../src/render'
+import { structureCssBlocks } from '../src/structures/structure'
 import { installStructures } from '../src/structures/index'
+import { probe } from './css-probe'
 
 beforeAll(() => {
   installCatalog()
@@ -122,5 +124,75 @@ describe('Section:fullBleed — 안쪽 래퍼가 없다', () => {
     const html = render('Section', 'fullBleed', { compact: true })
     expectContractOnly(html)
     expectDeclaredParts('Section', html)
+  })
+})
+
+describe('Section:splitBg — 배경이 갈린 자리가 조각으로 있다', () => {
+  /**
+   * **DOM이 다르다 — `contained`에 없는 조각(`band`)이 하나 더 있다.**
+   *
+   * *"배경이 갈렸다"*를 테마가 그리려면 **갈린 쪽을 겨냥할 셀렉터가 있어야 한다.**
+   * 오늘 테마가 스타일할 수 있는 것은 컴포넌트 루트와 `parts`뿐이고(§5.1), 의사 요소는
+   * 어휘에 없다. 즉 조각 없이는 *"섹션의 절반만 다른 배경"*을 **표현할 방법이 아예 없다** —
+   * CSS 차이가 아니라 **없던 표현이 생기는 것**이므로 구조가 맞다.
+   *
+   * `band`는 비어 있는 상자다. 무엇을 그릴지는 테마가 정한다(§6.8의 `bg`·`bgImage`·
+   * `bgGradient`가 이미 있는 어휘다) — 구현체는 색을 정하지 않는다.
+   */
+  it('band와 inner를 그 순서로 낸다', () => {
+    const html = render('Section', 'splitBg')
+    expect(parts(html)).toEqual(['band', 'inner'])
+  })
+
+  it('자식은 inner 안에 들어간다 — band는 비어 있다', () => {
+    const html = render('Section', 'splitBg', {}, [
+      { id: 'n_000000000002', type: 'Divider', props: {} },
+    ])
+    // `band`가 먼저 닫히고 그 뒤 `inner` 안에 `<hr>`이 온다.
+    expect(html).toMatch(/data-wb-part="band"[^>]*><\/div><div data-wb-part="inner"><hr/)
+  })
+
+  it('band는 카탈로그에 선언된 조각이다', () => {
+    // 선언되지 않은 이름을 내면 `structures.test.tsx`의 part 계약이 죽는다(작성 계약 2).
+    expect(requireComponent('Section').parts).toContain('band')
+  })
+
+  it('계약 밖 속성이 없고 조각 이름이 전부 선언돼 있다', () => {
+    const html = render('Section', 'splitBg', { compact: true })
+    expectContractOnly(html)
+    expectDeclaredParts('Section', html)
+  })
+
+  /**
+   * **구조가 서기 위한 선언 — 두 조각이 나란히 서야 "갈렸다"가 된다.**
+   *
+   * 규칙을 **루트에만** 둔다. `band`·`inner`에 규칙을 달면 `partRule`이 구조 이름을 넣지
+   * 않으므로(특이도 때문이다 — `structure-css-tools.ts`) `contained`의 `inner`까지 받아
+   * **오늘 화면이 바뀐다**(D5). 루트 규칙은 `componentRule`이 구조 이름을 넣으므로
+   * `splitBg`에만 닿는다.
+   *
+   * **어휘를 골라 썼다.** `display`·`gridColumns` 둘 다 `STYLE_PROPERTIES`에 있으므로
+   * **테마가 이 두 줄을 그대로 덮을 수 있다.** `flex-grow` 같은 것으로 갈랐으면 테마에
+   * 대응 어휘가 없어 되돌릴 길이 없는 선언이 됐다 — 그것은 구조가 아니라 강요다.
+   */
+  it('두 조각을 나란히 세운다 — 루트에만 규칙을 둔다', async () => {
+    const dom = await probe(
+      [structureCssBlocks().join('\n')],
+      '<section data-wb-component="Section" data-wb-structure="splitBg">' +
+        '<div data-wb-part="band"></div><div data-wb-part="inner"></div></section>',
+    )
+    expect(dom.computed('[data-wb-structure="splitBg"]', 'display')).toBe('grid')
+    expect(dom.computed('[data-wb-structure="splitBg"]', 'grid-template-columns')).toBe('1fr 1fr')
+  })
+
+  it('그 규칙이 contained에는 닿지 않는다 — 음성 대조', async () => {
+    const dom = await probe(
+      [structureCssBlocks().join('\n')],
+      '<section data-wb-component="Section" data-wb-structure="contained">' +
+        '<div data-wb-part="inner"></div></section>',
+    )
+    // `''`가 아니라 `'block'`이다 — jsdom이 `<section>`에 UA 기본값을 준다. 처음에 `''`로
+    // 적었다가 여기서 갈렸고, **대상이 아니라 장치가 틀린 쪽**이었다.
+    expect(dom.computed('[data-wb-structure="contained"]', 'display')).toBe('block')
   })
 })

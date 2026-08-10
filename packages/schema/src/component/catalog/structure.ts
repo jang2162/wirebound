@@ -30,7 +30,10 @@ export const SectionDef = defineComponent({
   }),
   editor: [{ prop: 'compact', control: 'switch', label: '좁은 여백' }],
   structures: ['contained', 'fullBleed', 'splitBg'],
-  parts: ['inner'],
+  // `band`는 `splitBg`가 내는 조각이다 — *"배경이 갈린 쪽"*을 테마가 겨냥할 셀렉터가
+  // 없으면 그 구조를 표현할 방법이 아예 없다(§5.1: 테마는 `parts`에 없는 조각을 스타일링할
+  // 수 없다). 의사 요소는 테마 어휘에 없으므로 대안이 아니다.
+  parts: ['inner', 'band'],
   variants: ['default', 'hero', 'muted'],
   states: [],
   children: 'many',

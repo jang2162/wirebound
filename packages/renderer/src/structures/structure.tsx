@@ -51,6 +51,24 @@ export const SectionFullBleed: StructureRenderer = ({ attrs, children }) => (
   <section {...attrs}>{children}</section>
 )
 
+/**
+ * **배경이 갈린 섹션. 갈린 쪽이 조각(`band`)으로 있다** (재라 #1 — 왜 이 DOM인가).
+ *
+ * *"섹션의 절반만 다른 배경"*을 테마가 그리려면 **그 절반을 겨냥할 셀렉터가 있어야 한다.**
+ * 오늘 테마가 스타일할 수 있는 것은 컴포넌트 루트와 `parts`뿐이고(§5.1) 의사 요소는 어휘에
+ * 없다 — 즉 조각 없이는 표현할 방법이 **아예 없다.** CSS로 흉내 낼 수 있는 차이가 아니라
+ * **없던 표현이 생기는 것**이므로 구조가 맞다(재라 #7).
+ *
+ * `band`는 빈 상자다. 무엇을 그릴지는 테마가 정한다(`bg`·`bgImage`·`bgGradient`가 §6.8에
+ * 이미 있다) — 구현체는 색을 정하지 않는다.
+ */
+export const SectionSplitBg: StructureRenderer = ({ attrs, part, children }) => (
+  <section {...attrs}>
+    <div {...part('band')} />
+    <div {...part('inner')}>{children}</div>
+  </section>
+)
+
 export const FlexDefault: StructureRenderer = ({ attrs, props, children }) => (
   <div
     {...attrs}
@@ -168,6 +186,20 @@ export function structureCssBlocks(): string[] {
     ]),
   )
 
+  // ── Section:splitBg ───────────────────────────────────────────────────────
+  //
+  // **두 조각이 나란히 서야 "갈렸다"가 된다.** 규칙을 **루트에만** 둔다 — `partRule`은
+  // 구조 이름을 넣지 않으므로(특이도 때문이다) `band`·`inner`에 달면 `contained`의
+  // `inner`까지 받아 **오늘 화면이 바뀐다**(D5). `componentRule`은 구조 이름을 넣으므로
+  // `splitBg`에만 닿는다.
+  //
+  // **어휘를 골라 썼다.** `display`·`gridColumns` 둘 다 `STYLE_PROPERTIES`에 있어
+  // **테마가 이 두 줄을 그대로 덮을 수 있다.** `flex-grow`로 갈랐으면 대응 어휘가 없어
+  // 되돌릴 길이 없는 선언이 된다 — 그것은 구조가 아니라 강요다.
+  blocks.push(
+    componentRule('Section', 'splitBg', ['display: grid;', 'grid-template-columns: 1fr 1fr;']),
+  )
+
   return blocks
 }
 
@@ -176,6 +208,7 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Slot', 'default', SlotDefault],
   ['Section', 'contained', SectionContained],
   ['Section', 'fullBleed', SectionFullBleed],
+  ['Section', 'splitBg', SectionSplitBg],
   ['Flex', 'default', FlexDefault],
   ['Grid', 'default', GridDefault],
   ['Card', 'plain', CardPlain],
