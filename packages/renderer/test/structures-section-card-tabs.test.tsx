@@ -484,3 +484,75 @@ describe('Tabs:enclosed — underline과 DOM이 같다 (재라 #7)', () => {
     expectDeclaredParts('Tabs', html)
   })
 })
+
+describe('Tabs:vertical — 탭이 세로로 쌓이고 패널이 옆에 선다', () => {
+  /**
+   * **재라 #7이 이름으로 지목한 구조다. 재서 정한 결과를 여기 적는다.**
+   *
+   * 세로 탭에 필요한 것은 둘이다. (가) 루트가 가로로 서서 탭 목록과 패널이 나란히 놓인다,
+   * (나) 목록 안의 탭이 세로로 쌓인다.
+   *
+   * **(가)는 CSS로 되고 (나)는 안 된다 — 이 저장소에서는.** 이유가 도구에 있다:
+   * `partRule`은 **구조 이름을 셀렉터에 넣지 않는다**(`structure-css-tools.ts`). 테마의
+   * 조각 규칙이 `[data-wb-component="X"] [data-wb-part="p"]`(특이도 0,2,0)인데 구조를
+   * 더하면 0,3,0이 되어 **테마가 지기 때문**이다. 그래서 *"`vertical`의 `list`만 세로"*
+   * 라는 규칙을 렌더러가 낼 방법이 없다 — 내면 `underline`의 `list`까지 받아 **오늘 화면이
+   * 바뀐다**(D5).
+   *
+   * **그래서 (나)를 DOM으로 푼다.** `underline`의 탭은 `<span>`(인라인)이라 가로로 흐르고,
+   * `vertical`의 탭은 `<div>`(블록)이라 그냥 쌓인다. **선언 하나 없이 선다.**
+   *
+   * ---
+   *
+   * **정직하게 적어 둘 것:** 테마는 이것을 CSS로도 할 수 있다 —
+   * `Tabs.base { display: flex }` + `Tabs.parts.list { display: flex, direction: column }`
+   * 은 오늘 어휘로 전부 표현된다. 즉 `vertical`은 *"CSS로는 불가능한 구조"*가 아니라
+   * **"렌더러가 스스로 세우려면 DOM이 갈려야 하는 구조"**다. `Section:splitBg`(조각이 없으면
+   * 표현 자체가 불가능)와는 등급이 다르고, `Card:bordered`(DOM이 같음)와도 다르다.
+   * **P4b-3이 알아야 할 것이 이 등급 차이다.**
+   */
+  it('조각 이름은 underline과 같다 — 갈리는 것은 태그다', () => {
+    const props = { tabs: ['가', '나'], active: 0 }
+    expect(parts(render('Tabs', 'vertical', props))).toEqual(parts(render('Tabs', 'underline', props)))
+  })
+
+  it('탭이 블록 요소라 선언 없이 쌓인다 — underline은 인라인이다', () => {
+    const props = { tabs: ['가', '나'], active: 0 }
+    // `<div>`가 셋(루트·list·panel) 더 있는 것과 구별하려고 탭 자리의 태그만 본다.
+    const tabTags = (structure: string): string[] =>
+      [...render('Tabs', structure, props).matchAll(/<(\w+) data-wb-part="tab"/g)].map((m) => m[1]!)
+
+    expect(tabTags('vertical')).toEqual(['div', 'div'])
+    // 음성 대조 — 이것이 없으면 위 단언이 "원래 다 div였다"로도 설명된다.
+    expect(tabTags('underline')).toEqual(['span', 'span'])
+  })
+
+  it('활성 탭 표시는 underline과 같게 남는다', () => {
+    const html = render('Tabs', 'vertical', { tabs: ['가', '나', '다'], active: 2 })
+    expect(html.match(/aria-selected="true"/g)).toHaveLength(1)
+  })
+
+  it('계약 밖 속성이 없고 조각 이름이 전부 선언돼 있다', () => {
+    const html = render('Tabs', 'vertical', { tabs: ['가', '나'], active: 1 })
+    expectContractOnly(html)
+    expectDeclaredParts('Tabs', html)
+  })
+
+  it('루트를 가로로 세운다 — underline에는 닿지 않는다', async () => {
+    const box = (structure: string): string =>
+      `<div data-wb-component="Tabs" data-wb-structure="${structure}"></div>`
+    const dom = await probe([structureCssBlocks().join('\n')], box('vertical') + box('underline'))
+
+    expect(dom.computed('[data-wb-structure="vertical"]', 'display')).toBe('flex')
+    expect(dom.computed('[data-wb-structure="underline"]', 'display')).toBe('block')
+  })
+
+  it('구조 기본 CSS가 Tabs의 조각에는 규칙을 달지 않는다', () => {
+    // **이것이 위 판정을 지키는 케이스다.** `list`·`tab`에 규칙을 달면 구조 이름이 안 들어가
+    // `underline`까지 받고, 그러면 D5가 깨진다. 누가 그것을 하면 여기가 먼저 죽는다.
+    const css = structureCssBlocks().join('\n')
+    expect(css).not.toMatch(/\[data-wb-component="Tabs"\] \[data-wb-part=/)
+    // 헛돌지 않는 것 — 이 그룹은 조각 규칙을 실제로 갖고 있다(`Card`의 `media`).
+    expect(css).toMatch(/\[data-wb-component="Card"\] \[data-wb-part="media"\]/)
+  })
+})

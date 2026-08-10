@@ -218,6 +218,46 @@ export const TabsPill: StructureRenderer = TabsUnderline
 export const TabsEnclosed: StructureRenderer = TabsUnderline
 
 /**
+ * **탭이 세로로 쌓이고 패널이 옆에 서는 탭** (재라 #7이 이름으로 지목한 구조다).
+ *
+ * 필요한 것이 둘이다. (가) 루트가 가로로 서서 목록과 패널이 나란히 놓인다,
+ * (나) 목록 안의 탭이 세로로 쌓인다.
+ *
+ * **(가)는 아래 기본 CSS가 하고, (나)는 DOM으로 한다.** 이유가 도구에 있다: `partRule`은
+ * **구조 이름을 셀렉터에 넣지 않는다** — 테마의 조각 규칙이 특이도 0,2,0인데 구조를 더하면
+ * 0,3,0이 되어 **테마가 지기 때문**이다(`structure-css-tools.ts`). 그래서 *"`vertical`의
+ * `list`만 세로"*라는 규칙을 렌더러가 낼 방법이 없고, 내면 `underline`의 `list`까지 받아
+ * **오늘 화면이 바뀐다**(D5).
+ *
+ * 그래서 탭을 `<span>`(인라인)이 아니라 `<div>`(블록)로 낸다. **선언 하나 없이 쌓인다.**
+ *
+ * ---
+ *
+ * **정직하게 적어 둘 것:** 테마는 이것을 CSS로도 할 수 있다 —
+ * `Tabs.base { display: flex }` + `Tabs.parts.list { display: flex, direction: column }`이
+ * 오늘 어휘로 전부 표현된다. 즉 이것은 *"CSS로 불가능한 구조"*가 아니라 **"렌더러가 스스로
+ * 세우려면 DOM이 갈려야 하는 구조"**다. `Section:splitBg`(조각이 없으면 표현 자체가 불가능)
+ * 와 `Card:bordered`(DOM이 같음) 사이의 **세 번째 등급**이고, P4b-3이 알아야 할 것이 그
+ * 등급 차이다.
+ */
+export const TabsVertical: StructureRenderer = ({ attrs, props, part, children }) => {
+  const tabs = props.tabs as string[]
+  const active = props.active as number
+  return (
+    <div {...attrs}>
+      <div {...part('list')}>
+        {tabs.map((label, index) => (
+          <div key={`${label}-${index}`} {...part('tab')} aria-selected={index === active}>
+            {label}
+          </div>
+        ))}
+      </div>
+      <div {...part('panel')}>{children}</div>
+    </div>
+  )
+}
+
+/**
  * `justify` prop 값 → CSS 값. **`between`만 바꾼다** (Task 2 Step 3이 재서 정한 것).
  *
  * 앞서 여기 `mapAlign`·`mapJustify` 둘이 있었고 `start`·`end`를 `flex-start`·`flex-end`로
@@ -324,6 +364,16 @@ export function structureCssBlocks(): string[] {
 
   blocks.push(componentRule('Card', 'horizontal', ['display: flex;']))
 
+  // ── Tabs:vertical ─────────────────────────────────────────────────────────
+  //
+  // **루트를 가로로 세운다** — 목록과 패널이 나란히 놓여야 세로 탭이 된다. 목록 안쪽이
+  // 세로로 쌓이는 것은 여기가 아니라 **DOM이 한다**(탭이 블록 요소다) — 조각 규칙은 구조
+  // 이름을 못 넣어 `underline`까지 받기 때문이다. 근거는 `TabsVertical`의 머리말.
+  //
+  // `display`는 `STYLE_PROPERTIES`에 있어 테마가 이 줄을 덮을 수 있다.
+
+  blocks.push(componentRule('Tabs', 'vertical', ['display: flex;']))
+
   return blocks
 }
 
@@ -343,4 +393,5 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Tabs', 'underline', TabsUnderline],
   ['Tabs', 'pill', TabsPill],
   ['Tabs', 'enclosed', TabsEnclosed],
+  ['Tabs', 'vertical', TabsVertical],
 ]
