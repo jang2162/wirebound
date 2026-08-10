@@ -506,33 +506,48 @@ describe('개별 구조', () => {
 })
 
 /**
- * **재라 #6 — `Media.kind`는 오늘 죽어 있다. 지우지 않고 그 사실을 케이스로 고정한다.**
+ * **재라 #6 판정 (P4b-2 W4) — `Media.kind`는 지우지 않는다. `kind`는 구조와 중복이 아니다.**
  *
- * `Media`의 `kind` prop과 `structures`가 **같은 이름 넷**이다(`image`·`video`·
- * `illustration`·`chart`). 하나는 노드가 정하고 하나는 **테마가 고른다.**
+ * P4a-2가 이 절을 *"오늘 죽어 있다"*로 열어 두고 답을 P4b-2에 넘겼다. 계획서 D3이 판정
+ * 기준을 이렇게 적었다 — *"넷이 서로 다르게 그리면 `kind`는 구조와 중복이니 지우는 것이
+ * 맞다."* **W4가 구조 넷을 만들고 재 보니 그 전제가 서지 않는다.**
  *
- * **실측: `MediaImage`가 `props.kind`를 한 번도 읽지 않는다**(`ratio`·`caption`만 쓴다).
- * `kind`는 §6.11의 여섯 속성 어디에도 실리지 않으므로 **구조 구현체 안에서만 쓰일 수
- * 있는데 쓰이지 않는다.**
+ * ### 관찰 (전부 실측)
  *
- * > **이것은 "조용히 틀린다" 부류다.** 속성 패널에 `종류` 컨트롤이 **있고**, 사용자가
- * > `video`를 고르면 문서에 저장되고 검증도 통과하는데 **화면은 아무것도 바뀌지 않는다.**
- * > 이슈도 0건이다.
+ * | # | 무엇 | 값 |
+ * |---|---|---|
+ * | 1 | 구조 넷의 DOM이 서로 다른가 | **다르다** — 정규화 후 집합 크기 4(폴백 가드 포함). `image`=빈 틀 · `video`=+`play` · `illustration`=+`glyph` · `chart`=+`plot`+`legend` |
+ * | 2 | 넷 중 하나라도 `props.kind`를 읽는가 | **아니다** — 아래 *"`kind`를 바꿔도 …"*가 여전히 초록이다 |
+ * | 3 | 구조를 고르는 단위 | **컴포넌트 타입**이다(`resolveStructureOf`가 `options.structures[def.type]`를 읽는다) |
  *
- * **지우지 않는 이유 둘.**
+ * ### 판정
  *
- * 1. **P4b-2가 `Media` 구조 넷을 만든다. 그 질문의 답은 거기서 나온다** — `MediaVideo`가
- *    `MediaImage`와 다르게 그리면 `kind`는 구조와 중복이라 지우는 것이 맞고, 구조들이
- *    `kind`를 읽을 일이 있으면 남는다. **구조가 없는 지금 정하는 것은 근거 없이 정하는 것이다.**
- * 2. `Media.props`가 `z.strictObject`라 prop을 빼는 것은 **문서 마이그레이션이 필요한
- *    파괴적 변경**이다(§13.1). 스키마 버전을 올리는 일을 어휘 슬라이스에서 하지 않는다.
+ * **1은 D3의 전제를 만족하지만 결론이 따라 나오지 않는다.** 3 때문이다 — 지우면 **한
+ * 페이지에 이미지와 영상을 같이 놓을 수 없다.** 그러면 §5의 *"`Media` = 이미지·영상·
+ * 일러스트·차트 영역"*이 **실행 불가능해진다.** `kind`가 구조와 중복인 것이 아니라,
+ * **구조 선택이 노드 단위가 아닌 것**이 결함이다. 3은 `Media`만의 것이 아니므로
+ * `test/structure-selection.test.ts(x)`에 모델의 사실로 따로 고정했다.
  *
- * **`variantFrom`으로 접지도 않았다** — 그러면 `data-wb-variant`와 `data-wb-structure`가
- * **같은 값**이 되는데 설계가 그 상태를 말하지 않는다(P4a-2가 접지 않은 이유 그대로).
+ * **`variantFrom`으로 접지도 않는다.** `data-wb-variant="video"`가 `data-wb-structure="image"`
+ * 위에 실릴 뿐 DOM은 여전히 `image`다(`play`가 없다) — *"조용히 틀린다"*가 *"시끄럽게
+ * 어긋난다"*가 될 뿐이고, 오늘 비어 있는 `Media.variants`를 태워 없앤다.
  *
- * **P4b-2가 이것을 깨면서 고치게 된다.**
+ * ### 삭제 비용 (실측)
+ *
+ * `Media`에 모르는 키를 주면 `invalid-props` · severity `error`이고 `renderNode`는 폴백을
+ * 그린다. 즉 **저장된 문서 중 `Media` 노드가 있는 것이 전부 깨진다.** `MIGRATIONS`는 비어
+ * 있고 `CURRENT_DOCUMENT_VERSION`이 1이므로 v1→v2 한 단계 + 버전 상승 + `apps/api`의
+ * `pages.schema` 전수 재해석이 필요하다(§13.1). **능력이 줄어드는 변경에 스키마 버전
+ * 이벤트를 쓰는 셈이다.**
+ *
+ * ### 그래서 아래 케이스들이 말하는 것
+ *
+ * **"이것이 옳다"가 아니라 "오늘 이렇고 왜 그런지"다.** 수선은 `variantFrom`과 같은 꼴의
+ * 선언을 `resolveStructureOf`가 보게 하는 것이고, 그것은 `schema`의 `defineComponent`와
+ * `renderer`의 `render.tsx`를 함께 넓히는 모델 변경이라 이 슬라이스에서 하지 않는다.
+ * **누가 고치면 아래가 죽고, 그때 이 판정을 다시 읽게 된다.**
  */
-describe('재라 #6 — Media.kind는 렌더에 닿지 않는다', () => {
+describe('재라 #6 판정 — Media.kind는 오늘도 렌더에 닿지 않는다', () => {
   const KINDS = ['image', 'video', 'illustration', 'chart'] as const
 
   function render(kind: string): string {
@@ -547,9 +562,12 @@ describe('재라 #6 — Media.kind는 렌더에 닿지 않는다', () => {
     expect(def.editor.some((field) => field.prop === 'kind')).toBe(true)
   })
 
-  it('kind를 바꿔도 렌더 결과가 글자까지 같다', () => {
-    // **이것이 "죽어 있다"의 실행 가능한 형태다.** 구조 구현체가 그 값을 읽기 시작하면
-    // 여기가 먼저 죽는다.
+  it('kind를 바꿔도 렌더 결과가 글자까지 같다 — 구조 넷이 다 생긴 뒤에도', () => {
+    // **이것이 "닿지 않는다"의 실행 가능한 형태다.** 구조 구현체가 그 값을 읽기 시작하거나
+    // `kind`가 구조 선택에 닿게 되면 여기가 **먼저** 죽는다.
+    //
+    // **초록인 것이 옳다는 뜻이 아니다.** 위 판정이 그 이유를 적었다 — 노드가 자기 구조를
+    // 고를 통로가 아직 없어서이지, `kind`가 무의미해서가 아니다.
     const baseline = render('image')
     for (const kind of KINDS) {
       expect(render(kind), kind).toBe(baseline)
@@ -571,6 +589,23 @@ describe('재라 #6 — Media.kind는 렌더에 닿지 않는다', () => {
     expect(render('video')).toContain('data-wb-structure="image"')
   })
 
+  it('그 구조가 이제 진짜로 있다 — 없어서 안 그려지는 것이 아니다', () => {
+    // **위 케이스만 있으면 "video 구조가 없어서 image로 떨어졌다"로도 읽힌다.** P4b-2
+    // 전에는 실제로 그랬다. 지금은 넷이 다 있고 **DOM도 서로 다른데** 노드의 `kind`가
+    // 그중 무엇도 고르지 못한다 — 그것이 이 판정의 요점이다.
+    const rendered = KINDS.map((structure) =>
+      renderToStaticMarkup(
+        renderNode(
+          { id: 'n_000000000001', type: 'Media', props: { ratio: '16/9', caption: '' } },
+          { structures: { Media: structure } },
+        ),
+      ),
+    )
+
+    expect(rendered.filter((html) => html.includes('data-wb-error'))).toEqual([])
+    expect(new Set(rendered).size).toBe(KINDS.length)
+  })
+
   it('음성 대조 — ratio는 실제로 렌더에 닿는다', () => {
     // 이 케이스가 없으면 위 둘이 "Media가 아무것도 안 그린다"로도 설명된다.
     const wide = renderToStaticMarkup(
@@ -584,11 +619,9 @@ describe('재라 #6 — Media.kind는 렌더에 닿지 않는다', () => {
     expect(square).toContain('1/1')
   })
 
-  it('구조 넷 중 구현이 있는 것 — P4b-2 W4가 채우는 중이다', () => {
-    // **테마가 나머지를 고르면 폴백이 그려진다.** `kind`의 답이 P4b-2에서 나오는
-    // 이유가 이것이다 — 그쪽이 셋을 만들 때 각자 `kind`를 읽을지 정하게 된다.
-    //
-    // 넷이 다 차면 이 절 전체를 판정과 함께 다시 쓴다(W4의 마지막 태스크).
+  it('구조 넷이 다 구현됐다 — P4b-2 W4가 채웠다', () => {
+    // **앞서 이 케이스가 `['image']`를 단언하며 일부러 죽어 있었다.** 준비 웨이브가 그것을
+    // *"`Media.kind` 판정을 강제하는 장치"*로 남겼고, 위 판정이 그 답이다.
     const implemented = KINDS.filter((structure) => getStructure('Media', structure) !== undefined)
 
     expect(implemented).toEqual([...KINDS])
