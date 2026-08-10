@@ -253,6 +253,37 @@ export const KeyValueDefinitionList: StructureRenderer = ({ attrs, props, part }
 }
 
 /**
+ * 키-값 카드 그리드. **이름이 `List:cardGrid`와 같은데 열 수의 답이 반대다. 그것이 요점이다.**
+ *
+ * `KeyValue.columns`는 **수**(`1..4`)이고 `visibleWhen`이 없어 패널에서 늘 닿는다. 즉
+ * 여기서는 **노드가 열 수를 정할 수 있다** — 컬럼 이름 목록인 `List.columns`와 정반대이고,
+ * 그래서 여기에만 손잡이(`--wb-node-keyvalue-columns`)를 만든다.
+ *
+ * **그 손잡이는 P4b-1이 세운 부류에 그대로 들어간다** — 테마가 `gridColumns`를 쓰면
+ * 노드의 값이 **침묵으로** 무시된다(케이스로 실측했다). 원인은 `STYLE_PROPERTIES`에
+ * 컴포넌트 범위가 없다는 것이고, **여기서 고치지 않는다**(계획서 D4가 26개를 다 놓고
+ * 판정한다).
+ *
+ * 조각은 `table`·`definitionList`와 같은 `row`·`key`·`value`다 — 재는 것이 같다.
+ */
+export const KeyValueCardGrid: StructureRenderer = ({ attrs, props, part }) => {
+  const pairs = props.pairs as { key: string; value: string }[]
+  return (
+    <div
+      {...attrs}
+      style={{ [nodeVar('keyvalue', 'columns')]: String(props.columns) } as CSSProperties}
+    >
+      {pairs.map((pair, index) => (
+        <div key={`${pair.key}-${index}`} {...part('row')}>
+          <div {...part('key')}>{pair.key}</div>
+          <div {...part('value')}>{pair.value}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
  * 이 그룹의 구조가 서기 위한 최소 CSS. 규칙을 더하면 여기에 `blocks.push(…)`를 더한다.
  * 셀렉터를 손으로 쓰지 마라 — `componentRule`·`partRule`만 쓴다.
  */
@@ -296,6 +327,22 @@ export function dataCssBlocks(): string[] {
     ]),
   )
 
+  // ── KeyValue:cardGrid ─────────────────────────────────────────────────────
+  //
+  // **`List:cardGrid`와 반대다 — 여기서는 노드가 열 수를 정한다.** `KeyValue.columns`가
+  // 수(`1..4`)이고 `visibleWhen`이 없어 패널에서 늘 닿기 때문이다. 기본값 1은 `Grid`와
+  // 같은 이유로 고른 것이다(값을 안 실은 노드가 있으면 한 줄로 흐르는 것이 안전하다).
+  //
+  // **새 손잡이다: `--wb-node-keyvalue-columns`.** 테마의 `gridColumns`가 같은 특이도로
+  // 뒤에 와서 이 값을 침묵으로 덮는다 — P4b-1 이월의 손잡이 부류가 하나 는 것이고
+  // **③ 통합의 D4 판정 입력이다.** 여기서 고치지 않는다.
+  blocks.push(
+    componentRule('KeyValue', 'cardGrid', [
+      'display: grid;',
+      `grid-template-columns: repeat(var(${nodeVar('keyvalue', 'columns')}, 1), 1fr);`,
+    ]),
+  )
+
   return blocks
 }
 
@@ -314,4 +361,5 @@ export const DATA_ENTRIES: StructureEntry[] = [
   ['Tree', 'accordion', TreeAccordion],
   ['KeyValue', 'table', KeyValueTable],
   ['KeyValue', 'definitionList', KeyValueDefinitionList],
+  ['KeyValue', 'cardGrid', KeyValueCardGrid],
 ]

@@ -412,3 +412,90 @@ describe('KeyValue:definitionList', () => {
     expect(structureBaseCss()).toContain('[data-wb-structure="cardGrid"]')
   })
 })
+
+describe('KeyValue:cardGrid', () => {
+  const KV = '[data-wb-component="KeyValue"]'
+
+  it('pairs마다 row를 내고 그 안에 key·value가 들어간다', async () => {
+    const html = render('KeyValue', 'cardGrid', { pairs: PAIRS })
+    expect(html).toContain('data-wb-structure="cardGrid"')
+    expect(countOf(html, 'row')).toBe(3)
+    expect(await count(html, '[data-wb-part="row"] > [data-wb-part="key"]')).toBe(3)
+    expect(await count(html, '[data-wb-part="row"] > [data-wb-part="value"]')).toBe(3)
+  })
+
+  it('쓰는 조각 이름이 전부 카탈로그에 선언돼 있다 — 새 이름을 만들지 않았다', () => {
+    const html = render('KeyValue', 'cardGrid', { pairs: PAIRS })
+    expect(undeclared('KeyValue', html)).toEqual([])
+    expect([...new Set(parts(html))].sort()).toEqual(['key', 'row', 'value'])
+  })
+
+  /**
+   * **같은 이름의 구조인데 열 수의 답이 `List:cardGrid`와 다르다. 그것이 요점이다.**
+   *
+   * `KeyValue.columns`는 **수**(`1..4`)이고 `visibleWhen`이 없어 패널에서 늘 닿는다.
+   * 즉 여기서는 **노드가 열 수를 정할 수 있다** — `List.columns`(컬럼 **이름** 목록,
+   * `table`에서만 보임)와 정반대다.
+   *
+   * 그래서 여기에만 손잡이를 만든다: `--wb-node-keyvalue-columns`. **D4의 입력이다.**
+   */
+  it('노드가 열 수를 커스텀 프로퍼티로 싣고 기본 CSS가 그것으로 트랙을 만든다', async () => {
+    const dom = await probe([structureBaseCss()], render('KeyValue', 'cardGrid', { columns: 3 }))
+    expect(dom.computed(KV, nodeVar('keyvalue', 'columns'))).toBe('3')
+    expect(dom.computed(KV, 'display')).toBe('grid')
+    expect(dom.computed(KV, 'grid-template-columns')).toBe(
+      `repeat(var(${nodeVar('keyvalue', 'columns')}, 1), 1fr)`,
+    )
+  })
+
+  it('style에는 커스텀 프로퍼티만 싣는다', () => {
+    const declarations = [
+      ...render('KeyValue', 'cardGrid', { columns: 4 }).matchAll(/\sstyle="([^"]*)"/g),
+    ]
+      .flatMap((match) => match[1]!.split(';'))
+      .map((declaration) => declaration.trim())
+      .filter((declaration) => declaration !== '')
+
+    expect(declarations.length).toBeGreaterThan(0)
+    expect(declarations.filter((declaration) => !declaration.startsWith('--'))).toEqual([])
+  })
+
+  it('table·definitionList는 그 변수를 싣지 않는다 — 열 수는 이 구조만의 것이다', () => {
+    for (const structure of ['table', 'definitionList']) {
+      const html = render('KeyValue', structure, { pairs: PAIRS, columns: 3 })
+      expect(html, structure).toContain(`data-wb-structure="${structure}"`)
+      expect(html, structure).not.toContain(nodeVar('keyvalue', 'columns'))
+    }
+    // 대조군 — 같은 노드를 cardGrid로 그리면 실린다.
+    expect(render('KeyValue', 'cardGrid', { columns: 3 })).toContain(nodeVar('keyvalue', 'columns'))
+  })
+
+  /**
+   * **새 손잡이는 P4b-1이 세운 부류에 그대로 들어간다 — 여기가 그 실측이다(D4의 입력).**
+   *
+   * 이월 문서의 표가 *"구조 기본 CSS가 노드 변수를 읽는 손잡이는 테마 어휘로 침묵
+   * 덮어쓰기 된다"*고 여덟을 세었고, 원인은 `STYLE_PROPERTIES`에 **컴포넌트 범위 개념이
+   * 없다**는 것이다. `gridColumns`를 `List:cardGrid` 때문에 열었더니 `Grid`에도 열렸고,
+   * 이제 `KeyValue`에도 열린다.
+   *
+   * 아래가 그 결과다: 노드는 `3`을 실었는데 **화면에는 7열이 그려지고 이슈는 0건이다.**
+   * **부류를 여기서 고치지 않는다**(계획서 D4 — 26개가 다 만들어진 뒤 판정한다).
+   */
+  it('테마의 gridColumns가 노드의 열 수를 침묵으로 덮는다 — D4가 판정할 부류다', async () => {
+    const html = render('KeyValue', 'cardGrid', { columns: 3 })
+    const themeRule =
+      '[data-wb-component="KeyValue"][data-wb-structure="cardGrid"]' +
+      ' { grid-template-columns: repeat(7, 1fr); }'
+
+    const dom = await probe([structureBaseCss(), themeRule], html)
+    // 노드의 값은 그대로 실려 있다 — 지워진 것이 아니라 **읽히지 않는다.**
+    expect(dom.computed(KV, nodeVar('keyvalue', 'columns'))).toBe('3')
+    expect(dom.computed(KV, 'grid-template-columns')).toBe('repeat(7, 1fr)')
+  })
+
+  it('pairs가 비면 row가 하나도 없다', () => {
+    const html = render('KeyValue', 'cardGrid', { pairs: [] })
+    expect(html).toContain('data-wb-structure="cardGrid"')
+    expect(countOf(html, 'row')).toBe(0)
+  })
+})
