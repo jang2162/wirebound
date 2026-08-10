@@ -102,6 +102,27 @@ export const CardPlain: StructureRenderer = ({ attrs, props, part, children }) =
   </div>
 )
 
+/**
+ * **`plain`과 DOM이 한 글자도 다르지 않다 — 이것이 발견이고, 숨기지 않고 여기 적는다**
+ * (재라 #7).
+ *
+ * `bordered`가 `plain`과 갈리는 것은 **테두리 하나**이고, 그것은 §6.8이 이미 가진 어휘다
+ * (`borderColor`·`borderWidth`·`borderStyle`). 즉 **스킨 차이이지 구조 차이가 아니다.**
+ * 조각도 태그도 순서도 같으므로 함수를 새로 쓸 것이 없다 — 별칭으로 둔다.
+ *
+ * **그래도 등록하는 이유는 하나뿐이다:** 구조 이름이 곧 `data-wb-structure` 셀렉터라,
+ * 테마가 카드 스킨 세 장을 **갈라 쓸 채널**이 여기서 생긴다. 다른 데서 얻을 수 없는 것이
+ * 그 채널이고, 그것이 이 구조의 전부다.
+ *
+ * **여기에 테두리를 그리지 않는다.** 기본 CSS에 넣으면 테마가 매번 되돌려야 하고, 그러면
+ * `bordered`가 *"테마가 고르는 스킨"*이 아니라 *"렌더러가 강요하는 모습"*이 된다 —
+ * 작성 계약의 *"구현체 안에서 색·여백을 정하지 마라"* 그대로다.
+ *
+ * **P4b-3이 알아야 할 것:** `plain`·`bordered`·`elevated` 셋은 `parts` 차이가 아니라
+ * `base` 스킨 차이로 갈라야 한다.
+ */
+export const CardBordered: StructureRenderer = CardPlain
+
 export const TabsUnderline: StructureRenderer = ({ attrs, props, part, children }) => {
   const tabs = props.tabs as string[]
   const active = props.active as number
@@ -212,5 +233,6 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Flex', 'default', FlexDefault],
   ['Grid', 'default', GridDefault],
   ['Card', 'plain', CardPlain],
+  ['Card', 'bordered', CardBordered],
   ['Tabs', 'underline', TabsUnderline],
 ]

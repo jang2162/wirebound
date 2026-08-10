@@ -196,3 +196,57 @@ describe('Section:splitBg — 배경이 갈린 자리가 조각으로 있다', (
     expect(dom.computed('[data-wb-structure="contained"]', 'display')).toBe('block')
   })
 })
+
+/**
+ * **`plain`과 DOM이 같은 구조를 여기서 못박는다 — 이것이 재라 #7의 답이다.**
+ *
+ * `bordered`는 테두리, `elevated`는 그림자다. 둘 다 **§6.8이 이미 가진 어휘**로
+ * 표현된다(`borderColor`·`borderWidth`·`borderStyle`·`shadow`). 즉 `plain`과 갈리는 것이
+ * **스킨뿐이고 DOM은 한 글자도 다르지 않다.**
+ *
+ * **그래도 구현한다** — 설계 §6.5가 구조 옵션으로 열거했고, 구조 이름이 곧
+ * `data-wb-structure` 셀렉터라 **테마가 세 장의 스킨을 갈라 쓸 채널**이 된다. 다른 데서
+ * 얻을 수 없는 것은 그 채널 하나이고, 그것이 이 구조들의 전부다.
+ *
+ * **P4b-3이 알아야 할 것이 이 사실이다.** 테마를 만들 때 이 셋을 `parts` 차이로 다루면
+ * 안 된다 — 조각도 태그도 같으므로 `base`의 스킨만 갈라야 한다.
+ *
+ * 아래 케이스가 *"같다"*를 실행 가능한 형태로 고정한다. 누가 DOM을 갈라 놓으면 여기가
+ * 깨지고, 그때 이 판정을 다시 읽게 된다.
+ */
+function expectSameDomAsPlain(structure: string, props: Record<string, unknown>): void {
+  const mine = render('Card', structure, props, [{ id: 'n_000000000002', type: 'Divider', props: {} }])
+  const plain = render('Card', 'plain', props, [{ id: 'n_000000000002', type: 'Divider', props: {} }])
+
+  // 구조 이름 하나만 다르다. 그 자리를 맞춰 놓으면 나머지가 글자까지 같아야 한다.
+  expect(mine.replace(`data-wb-structure="${structure}"`, 'data-wb-structure="plain"')).toBe(plain)
+  // 위 치환이 실제로 일어났는지 — 안 일어나도 두 문자열이 같으면 초록이 된다.
+  expect(mine).toContain(`data-wb-structure="${structure}"`)
+}
+
+describe('Card:bordered — plain과 DOM이 같다 (재라 #7)', () => {
+  it('plain과 글자까지 같다 — 구조 이름만 다르다', () => {
+    expectSameDomAsPlain('bordered', { title: '제목', subtitle: '부제' })
+  })
+
+  it('부제가 없는 갈래에서도 같다', () => {
+    expectSameDomAsPlain('bordered', { title: '제목', subtitle: '' })
+  })
+
+  it('구조 기본 CSS가 테두리를 정하지 않는다', () => {
+    // **테두리는 스킨이다** — 구현체 안에서 색·여백을 정하지 말라는 작성 계약이 여기 걸린다.
+    // 기본 CSS에 테두리를 넣으면 테마가 그것을 되돌려야 하고, 그러면 `bordered`가
+    // *"테마가 고르는 스킨"*이 아니라 *"렌더러가 강요하는 모습"*이 된다.
+    const css = structureCssBlocks().join('\n')
+    expect(css).not.toContain('data-wb-structure="bordered"')
+    // 이 절이 헛돌지 않는 것 — 이 그룹은 규칙을 갖고 있다.
+    expect(css).toContain('data-wb-component="Section"')
+  })
+
+  it('계약 밖 속성이 없고 조각 이름이 전부 선언돼 있다', () => {
+    const html = render('Card', 'bordered', { title: '제목', subtitle: '부제' })
+    expectContractOnly(html)
+    expectDeclaredParts('Card', html)
+  })
+})
+
