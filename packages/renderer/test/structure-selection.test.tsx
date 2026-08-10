@@ -60,6 +60,24 @@ function countStructure(html: string, structure: string): number {
   return html.split(`data-wb-structure="${structure}"`).length - 1
 }
 
+/**
+ * prop 하나를 흔들 값들. **enum을 반드시 포함한다** — 구조 이름과 겹치는 enum(`Media.kind`)이
+ * 통로가 될 가장 유력한 후보이기 때문이다.
+ */
+function propCandidates(schema: { def?: { type?: string; innerType?: unknown }; options?: unknown[] } | undefined): unknown[] {
+  let inner = schema
+  // `.default()`·`.optional()` 등을 벗긴다.
+  while (inner?.def?.innerType !== undefined) {
+    inner = inner.def.innerType as typeof inner
+  }
+  const kind = inner?.def?.type
+  if (kind === 'enum' && Array.isArray(inner?.options)) return [...inner.options]
+  if (kind === 'boolean') return [true, false]
+  if (kind === 'string') return ['값']
+  if (kind === 'number') return [1, 3]
+  return []
+}
+
 /** 구현이 **둘 이상** 있는 타입. 하나뿐이면 "서로 다른 구조"를 물을 수 없다. */
 function implementedStructures(type: string): string[] {
   return requireComponent(type).structures.filter(
@@ -98,6 +116,61 @@ describe('구조 선택은 타입 단위다 (P4b-2 W4)', () => {
 
     expect(parsed.success).toBe(false)
     expect(JSON.stringify(parsed.error?.issues)).toContain('structure')
+  })
+
+  /**
+   * **가장 유력한 변경(`structureFrom`)을 이 파일이 못 잡고 있었다 — P4b-2 수정 웨이브가 닫는다.**
+   *
+   * 위 두 케이스는 **봉투의 `structure` 필드**만 막는다. 그런데 이월 문서가 후보로 든 수선은
+   * 봉투가 아니라 **prop**을 통로로 쓴다(`variantFrom`과 같은 꼴). 그러면 위 둘은 그대로
+   * 초록이다 — 형제 둘에게 `props: {}`를 주므로 **둘 다 기본값**이고, prop이 구조를 정하게
+   * 되어도 여전히 같은 구조가 나온다.
+   *
+   * 오늘 그 변경을 잡는 것은 `structures.test.tsx`의 `Media.kind` 카나리아뿐인데
+   * **그것은 우연이다** — `Media`가 마침 `kind`라는 이름 넷을 가졌을 뿐이고, 다른
+   * 컴포넌트에 통로가 뚫리면 아무도 안 죽는다.
+   *
+   * **그래서 prop을 흔든다.** 형제 하나는 기본 props, 다른 하나는 prop 하나를 바꾼 판으로
+   * 그리고 **둘의 `data-wb-structure`가 같은지** 본다. 어떤 prop이든 구조의 통로가 되는
+   * 순간 여기서 죽는다.
+   */
+  it('노드의 prop을 바꿔도 구조가 안 바뀐다 — prop은 구조의 통로가 아니다', () => {
+    const types = CATALOG_TYPES.filter((type) => implementedStructures(type).length >= 2)
+    expect(types.length).toBeGreaterThan(0)
+
+    let compared = 0
+    for (const type of types) {
+      const def = requireComponent(type)
+      // 테마가 고르는 것은 **첫째가 아닌 쪽**으로 둔다 — 카탈로그 기본값과 같으면
+      // *"통로가 기본값을 집어서 우연히 맞은 것"*과 구별되지 않는다.
+      const chosen = implementedStructures(type)[1] as string
+      const defaults = def.props.parse({}) as Record<string, unknown>
+      const shape = (def.props as unknown as { shape?: Record<string, { def?: { type?: string }; options?: unknown[] } > }).shape ?? {}
+
+      for (const name of Object.keys(shape)) {
+        for (const value of propCandidates(shape[name])) {
+          const candidate = { ...defaults, [name]: value }
+          if (!def.props.safeParse(candidate).success) continue
+
+          const node = {
+            id: 'n_000000000001',
+            type: 'Page',
+            children: [
+              { id: 'n_000000000002', type, props: defaults },
+              { id: 'n_000000000003', type, props: candidate },
+            ],
+          } as unknown as WbNode
+          const html = renderToStaticMarkup(renderNode(node, { structures: { [type]: chosen } }))
+
+          // 폴백이 떴으면 그 판은 그려진 것이 아니다 — 조용히 지나가지 않게 잡는다.
+          expect(html, `${type}.${name}=${String(value)}: 폴백`).not.toContain('data-wb-error')
+          expect(countStructure(html, chosen), `${type}.${name}=${String(value)}`).toBe(2)
+          compared += 1
+        }
+      }
+    }
+    // 순회가 헛돌면 위 단언이 하나도 안 돈다.
+    expect(compared).toBeGreaterThan(20)
   })
 
   it('음성 대조 — variant는 노드마다 다를 수 있다', () => {
