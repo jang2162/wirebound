@@ -40,7 +40,13 @@ export const MediaDef = defineComponent({
     { prop: 'caption', control: 'text', label: '설명' },
   ],
   structures: ['image', 'video', 'illustration', 'chart'],
-  parts: ['frame', 'caption'],
+  // `frame`·`caption`은 네 구조가 다 쓴다. 뒤의 것들은 그 구조에만 나온다 —
+  // 조각 이름은 **테마가 쓸 수 있는 어휘**이고(§5.1) 어휘에 없으면 스타일할 길이 없다.
+  //
+  // **네 구조를 갈라 그리는 것이 이 이름들이다.** 빈 상자 넷은 와이어프레임에서 전부
+  // "사진"으로 읽힌다 — `play`(영상)·`glyph`(일러스트)·`plot`+`legend`(차트)가
+  // 그 넷을 서로 다른 것으로 만든다.
+  parts: ['frame', 'caption', 'play', 'glyph', 'plot', 'legend'],
   variants: [],
   states: [],
   children: 'none',
