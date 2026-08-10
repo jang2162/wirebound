@@ -90,6 +90,26 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 | `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]` |
 | `internal` | 500 | 예상하지 못한 서버 오류 |
 
+### 이슈의 severity — 무엇이 저장을 막는가
+
+`ValidationIssue`는 `severity`를 갖는다(`"error"` 또는 `"warning"`).
+
+```jsonc
+{ "code": "ignored-variant", "severity": "warning", "nodeId": "n_…",
+  "path": "/root/children/0/variant", "message": "…" }
+```
+
+- **`error`가 하나라도 있으면 422이고 아무것도 저장되지 않는다.**
+- **`warning`만 있으면 저장된다.** 그 경고는 성공 응답의 `warnings`에 실린다(아래).
+- **422 응답의 `issues`에는 경고까지 함께 실린다** — 받는 쪽이 `severity`로 가른다.
+
+오늘 `warning`인 코드는 **`ignored-variant` 하나뿐**이다(`@wirebound/schema`의
+`ISSUE_SEVERITY`가 코드마다 정한다). `variantFrom`을 가진 컴포넌트(`Text`·`Field`·
+`Divider`)에 `node.variant`를 적으면 그 값이 버려지는데, 그것은 문서를 무효로 만드는
+사실이 아니라 알림이다. 이 구분이 없던 시절에는 그 경고 하나가 문서 어딘가에 있으면
+**그 노드와 무관한 편집까지 422로 거부**됐다 — 편집 파이프라인이 문서 **전체**를
+검증하기 때문이다.
+
 **404 vs 403의 원칙(설계 §10):** 프로젝트가 아예 없는 경우와 프로젝트는 있지만
 호출자가 멤버가 아닌 경우를 **구분하지 않고 둘 다 404**를 낸다 — 다른 프로젝트의
 id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모자란 경우에만 403이다.
@@ -125,8 +145,8 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다 |
 | `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
 | `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder? }`(하나 이상, `schema`는 여기서 못 바꾼다) | 200 **페이지 여덟 키**(POST·GET과 같다) |
-| `/api/projects/:projectId/pages/:pageId/schema` | PUT | editor | `{ schema }`(문서 봉투 전체) | 200 페이지(봉투 위반 400, 카탈로그 위반 422, 실패 시 기존 스키마 보존). 통째 교체도 revision을 남긴다 |
-| `/api/projects/:projectId/pages/:pageId/ops` | PATCH | editor | `{ baseSeq, ops[], clientOpId? }` | 200 `{ seq, revisionId, inverse, schemaVersion, clientOpId? }`(본문·경로 제약 위반과 지원하지 않는 문서 버전·NUL 문자는 400, 페이지 없음 404, baseSeq 불일치·패치 실패 409, 카탈로그 위반 422) |
+| `/api/projects/:projectId/pages/:pageId/schema` | PUT | editor | `{ schema }`(문서 봉투 전체) | 200 페이지(봉투 위반 400, 카탈로그 **오류** 422, 실패 시 기존 스키마 보존). 경고가 있으면 `warnings`가 더 붙는다. 통째 교체도 revision을 남긴다 |
+| `/api/projects/:projectId/pages/:pageId/ops` | PATCH | editor | `{ baseSeq, ops[], clientOpId? }` | 200 `{ seq, revisionId, inverse, schemaVersion, clientOpId?, warnings? }`(본문·경로 제약 위반과 지원하지 않는 문서 버전·NUL 문자는 400, 페이지 없음 404, baseSeq 불일치·패치 실패 409, 카탈로그 **오류** 422) |
 | `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다(D11) |
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
 | `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
@@ -161,6 +181,12 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 { "id": "…", "menuNodeId": "…", "title": "…", "description": null,
   "sortOrder": 0, "schemaVersion": 1, "headSeq": 0, "schema": { /* 문서 봉투 */ } }
 ```
+
+**`PUT .../schema`만 아홉 번째 키를 낼 수 있다: `warnings`.** 저장된 문서에 경고가 있을
+때만 붙고, **없으면 키 자체가 없다**(`clientOpId`를 조건부로 싣는 것과 같은 관례).
+`POST /pages`·`GET /pages/:pageId`는 검증을 돌리지 않으므로 이 키를 내지 않는다 —
+**즉 경고가 있는 페이지를 GET으로 읽어도 그 사실을 알 수 없다.** 알아야 하는 클라이언트는
+받은 `schema`에 `validatePage`를 직접 돌린다(`@wirebound/schema`가 브라우저에서도 돈다).
 
 **메뉴 노드는 다섯 키다**(`POST /menu` · `PATCH /menu/:nodeId`가 같다):
 

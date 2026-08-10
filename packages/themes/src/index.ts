@@ -7,6 +7,7 @@ export type { ThemeAssets, ThemeFont } from './spec/assets'
 export { AssetsSchema, ICON_SETS, PLACEHOLDER_STYLES } from './spec/assets'
 
 export type { ThemeIssue, ThemeIssueCode } from './issue'
+export { THEME_ISSUE_SEVERITY } from './issue'
 
 export type { ThemeTokens } from './spec/tokens'
 export { TokensSchema } from './spec/tokens'

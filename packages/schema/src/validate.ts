@@ -23,11 +23,88 @@ export type ValidationCode =
   | 'slot-count'
   | 'bad-document'
 
+/**
+ * 이슈가 편집·저장을 **막는가**.
+ *
+ * - `error` — 막는다. §7.1의 서버 게이트가 거부한다.
+ * - `warning` — 막지 않는다. 저장되고 응답에 실려 나간다.
+ *
+ * **`themes`의 `ThemeIssue`가 이 타입을 그대로 쓴다**(`packages/themes/src/issue.ts`).
+ * 코드 유니온은 일부러 갈라 두었지만(그쪽 주석 참고) severity는 갈라 둘 이유가 없다 —
+ * 둘 다 같은 API 봉투에 실려 같은 클라이언트가 읽으므로, 값 집합이 갈리면 읽는 쪽이
+ * 두 어휘를 알아야 한다.
+ */
+export type IssueSeverity = 'error' | 'warning'
+
+/**
+ * 코드마다 severity를 정하는 **표 하나**. 이슈를 만드는 자리는 이 표를 볼 뿐 값을 고르지 않는다.
+ *
+ * **`Record<ValidationCode, IssueSeverity>`인 것이 요점이다.** `ValidationCode`에 코드가
+ * 늘면 이 표에 항목이 없어 **타입체크가 먼저 죽는다** — severity를 정하지 않은 코드가
+ * 조용히 지나가는 경로가 없다. (재라 #2: severity를 `?:`로 두고 "없으면 error"로 볼지
+ * 재서 정했다. **필수로 두고 표에서 파생시킨다** — 선택으로 두면 안 적은 자리가 조용히
+ * error가 되는데, 그 안전한 기본값이 곧 "새 코드가 severity를 정하지 않았다"는 신호를
+ * 지운다. 필수로 두면 컴파일러가 그 자리를 가리킨다.)
+ *
+ * **오늘 `warning`은 하나뿐이다.** `ignored-variant`는 *"작성자가 적은 값이 버려진다"*는
+ * 알림이지 문서를 무효로 만드는 사실이 아니다 — 그 값이 없어도 문서는 그대로 그려진다.
+ * 나머지는 §7.1이 막아야 한다고 정한 것이므로 내리지 않는다.
+ */
+export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
+  'unknown-type': 'error',
+  'invalid-props': 'error',
+  'children-not-allowed': 'error',
+  'unknown-variant': 'error',
+  'ignored-variant': 'warning',
+  'duplicate-id': 'error',
+  'bad-root': 'error',
+  'slot-count': 'error',
+  'bad-document': 'error',
+}
+
 export interface ValidationIssue {
   code: ValidationCode
+  /** `ISSUE_SEVERITY[code]`와 항상 같다 — 만드는 자리가 표에서 파생시킨다. */
+  severity: IssueSeverity
   nodeId: string | null
   path: string
   message: string
+}
+
+/**
+ * 이슈 하나를 만든다. **severity를 여기서 표에서 파생시킨다** — 호출자가 직접 고르면
+ * 같은 코드가 자리마다 다른 severity를 달 수 있고, 그러면 표가 진실이 아니게 된다.
+ */
+function makeIssue(
+  code: ValidationCode,
+  nodeId: string | null,
+  path: string,
+  message: string,
+): ValidationIssue {
+  return { code, severity: ISSUE_SEVERITY[code], nodeId, path, message }
+}
+
+/**
+ * 이슈 목록을 **막는 것**과 **알릴 것**으로 가른다.
+ *
+ * **이 선을 긋는 코드는 이 함수 하나뿐이어야 한다** — `auth/roles.ts`의 `roleAtLeast`가
+ * 역할 비교의 유일한 지점인 것과 같은 이유다. 오늘 부르는 곳은 `apps/api`의
+ * `services/edit-pipeline.ts`(6단계)와 `routes/pages.ts`(`PUT .../schema` 게이트 3단계)
+ * 둘이고, 그 둘이 각자 `filter`를 다시 쓰면 한쪽만 고쳐지는 순간 갈린다.
+ *
+ * 각 배열은 **원래 순서를 지킨다** — 첫 이슈가 근원인 경우가 흔하다.
+ */
+export function partitionIssues(issues: readonly ValidationIssue[]): {
+  errors: ValidationIssue[]
+  warnings: ValidationIssue[]
+} {
+  const errors: ValidationIssue[] = []
+  const warnings: ValidationIssue[] = []
+  for (const issue of issues) {
+    if (issue.severity === 'warning') warnings.push(issue)
+    else errors.push(issue)
+  }
+  return { errors, warnings }
 }
 
 /**
@@ -56,12 +133,7 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
   const issues = validateTree(doc.root)
   const slots = countSlots(doc.root)
   if (slots > 0) {
-    issues.push({
-      code: 'slot-count',
-      nodeId: null,
-      path: '/root',
-      message: `페이지에는 Slot을 둘 수 없습니다 (${slots}개 발견)`,
-    })
+    issues.push(makeIssue('slot-count', null, '/root', `페이지에는 Slot을 둘 수 없습니다 (${slots}개 발견)`))
   }
   return issues
 }
@@ -73,12 +145,9 @@ export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
   const issues = validateTree(doc.root)
   const slots = countSlots(doc.root)
   if (slots !== 1) {
-    issues.push({
-      code: 'slot-count',
-      nodeId: null,
-      path: '/root',
-      message: `레이아웃에는 Slot이 정확히 하나여야 합니다 (${slots}개 발견)`,
-    })
+    issues.push(
+      makeIssue('slot-count', null, '/root', `레이아웃에는 Slot이 정확히 하나여야 합니다 (${slots}개 발견)`),
+    )
   }
   return issues
 }
@@ -92,12 +161,9 @@ function validateEnvelope(doc: unknown): ValidationIssue[] {
   const parsed = DocumentEnvelopeSchema.safeParse(doc, { error: getKoreanErrorMap() })
   if (parsed.success) return []
 
-  return parsed.error.issues.map((issue) => ({
-    code: 'bad-document',
-    nodeId: resolveNodeId(doc, issue.path),
-    path: `/${issue.path.join('/')}`,
-    message: issue.message,
-  }))
+  return parsed.error.issues.map((issue) =>
+    makeIssue('bad-document', resolveNodeId(doc, issue.path), `/${issue.path.join('/')}`, issue.message),
+  )
 }
 
 /**
@@ -146,9 +212,15 @@ export function assertValidLayout(doc: LayoutDocument): void {
   throwOnFirstIssue(validateLayout(doc))
 }
 
-/** 이슈 목록의 첫 항목을 메시지로 만들어 던진다. 이슈가 없으면 아무 일도 하지 않는다. */
+/**
+ * 이슈 목록의 첫 **오류**를 메시지로 만들어 던진다. 오류가 없으면 아무 일도 하지 않는다.
+ *
+ * **경고로는 던지지 않는다.** 여기가 §7.1 게이트와 다른 선을 쓰면 "저장되는 문서"와
+ * "assert를 지나는 문서"가 서로 다른 집합이 된다 — 경고만 있는 문서는 저장되므로
+ * (`partitionIssues`를 쓰는 `edit-pipeline` 6단계) assert도 통과시켜야 한다.
+ */
 function throwOnFirstIssue(issues: ValidationIssue[]): void {
-  const first = issues[0]
+  const first = partitionIssues(issues).errors[0]
   if (first) {
     throw new Error(`문서 검증 실패 [${first.code}] ${first.path}: ${first.message}`)
   }
@@ -159,55 +231,39 @@ function validateTree(root: WbNode): ValidationIssue[] {
   const seen = new Set<string>()
 
   if (root.type !== 'Page') {
-    issues.push({
-      code: 'bad-root',
-      nodeId: root.id,
-      path: '/root',
-      message: `루트는 Page여야 합니다 (현재: ${root.type})`,
-    })
+    issues.push(makeIssue('bad-root', root.id, '/root', `루트는 Page여야 합니다 (현재: ${root.type})`))
   }
 
   for (const { node, path } of walkNodes(root)) {
     if (seen.has(node.id)) {
-      issues.push({
-        code: 'duplicate-id',
-        nodeId: node.id,
-        path,
-        message: `id가 중복됩니다: ${node.id}`,
-      })
+      issues.push(makeIssue('duplicate-id', node.id, path, `id가 중복됩니다: ${node.id}`))
     }
     seen.add(node.id)
 
     const def = getComponent(node.type)
     if (!def) {
-      issues.push({
-        code: 'unknown-type',
-        nodeId: node.id,
-        path,
-        message: `알 수 없는 컴포넌트 타입: ${node.type}`,
-      })
+      issues.push(makeIssue('unknown-type', node.id, path, `알 수 없는 컴포넌트 타입: ${node.type}`))
       continue
     }
 
     const parsed = def.props.safeParse(node.props ?? {}, { error: getKoreanErrorMap() })
     if (!parsed.success) {
-      issues.push({
-        code: 'invalid-props',
-        nodeId: node.id,
-        path: `${path}/props`,
-        message: `${node.type}의 props가 올바르지 않습니다: ${parsed.error.issues
-          .map((issue) => `${issue.path.join('.')} ${issue.message}`)
-          .join(', ')}`,
-      })
+      issues.push(
+        makeIssue(
+          'invalid-props',
+          node.id,
+          `${path}/props`,
+          `${node.type}의 props가 올바르지 않습니다: ${parsed.error.issues
+            .map((issue) => `${issue.path.join('.')} ${issue.message}`)
+            .join(', ')}`,
+        ),
+      )
     }
 
     if (def.children === 'none' && (node.children?.length ?? 0) > 0) {
-      issues.push({
-        code: 'children-not-allowed',
-        nodeId: node.id,
-        path: `${path}/children`,
-        message: `${node.type}은 자식을 담을 수 없습니다`,
-      })
+      issues.push(
+        makeIssue('children-not-allowed', node.id, `${path}/children`, `${node.type}은 자식을 담을 수 없습니다`),
+      )
     }
 
     if (node.variant !== undefined) {
@@ -220,19 +276,18 @@ function validateTree(root: WbNode): ValidationIssue[] {
          * `variant:'caption'`은 **이슈 0건으로 조용히 사라졌다**(침묵). 이제 둘 다 같은
          * 이슈 하나를 받고, 그 문장이 무슨 일이 일어나는지 말한다.
          */
-        issues.push({
-          code: 'ignored-variant',
-          nodeId: node.id,
-          path: `${path}/variant`,
-          message: ignoredVariantMessage(def, node.variant),
-        })
+        issues.push(
+          makeIssue('ignored-variant', node.id, `${path}/variant`, ignoredVariantMessage(def, node.variant)),
+        )
       } else if (!def.variants.includes(node.variant)) {
-        issues.push({
-          code: 'unknown-variant',
-          nodeId: node.id,
-          path: `${path}/variant`,
-          message: `${node.type}에 정의되지 않은 variant입니다: ${node.variant}`,
-        })
+        issues.push(
+          makeIssue(
+            'unknown-variant',
+            node.id,
+            `${path}/variant`,
+            `${node.type}에 정의되지 않은 variant입니다: ${node.variant}`,
+          ),
+        )
       }
     }
   }
