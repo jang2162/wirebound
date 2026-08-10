@@ -170,7 +170,34 @@ export const EntryFormSectioned: StructureRenderer = ({ attrs, props, part, chil
   </form>
 )
 
-export const FieldOutlined: StructureRenderer = ({ attrs, props, part }) => (
+/**
+ * `Field`의 구조들이 **공유하는 몸통.**
+ *
+ * **`outlined`·`filled`·`underlined`의 DOM이 같다 — 재서 정한 결과다** (계획서
+ * *"계획이 재지 않은 것 #5"*가 의심한 그대로였다).
+ *
+ * **잰 방법은 *"같은가"*가 아니라 *"다를 수 있는가"*였다.** 셋이 그릴 만한 모습을 하나씩
+ * 놓고, 그것을 **테마가 오늘 DOM으로 만들 수 있는지**를 봤다:
+ *
+ * - **채워진 상자 안에 라벨이 든 모습**(Material filled) — 된다. 루트가 이미 라벨과
+ *   컨트롤을 함께 담은 상자이므로 루트에 배경과 여백을 주면 그것이 곧 채운 상자다.
+ * - **밑줄만 있는 모습** — 된다. `control` 조각의 아래 테두리 하나다.
+ * - **테두리에 라벨이 파고드는 홈**(Material outlined의 notch) — 조각이 더 필요하다.
+ *   그런데 그것은 **이미 있는 `outlined`가 하지 않는 것**이라 셋을 가르는 근거가 못 된다.
+ * - **떠오르는 라벨** — 상호작용이라 범위 밖이다(구조는 와이어프레임이다).
+ *
+ * 즉 셋의 차이는 테두리·배경·밑줄이고 **전부 `base`·`parts` 스킨**이다.
+ *
+ * **`SearchForm:stacked`와 갈리는 점이 정확히 여기다.** 그쪽은 줄이 조각으로 나오지
+ * 않으면 테마가 **겨냥할 대상 자체가 없었다.** 여기서는 루트·`label`·`control` 셋으로
+ * 이미 전부 겨냥된다 — 조각을 더 내도 테마가 할 수 있는 일이 늘지 않는다.
+ *
+ * **그래서 이 함수를 공유한다.** 남는 것은 `data-wb-structure` 셀렉터 하나뿐이다.
+ * **변형으로 접을 수도 없다** — `Field`는 `variantFrom: 'control'`이라 변형 채널이 이미
+ * 차 있다(`data-wb-variant`에 입력 종류가 실린다). §6.5의 구조/변형 경계를 다시 볼 때의
+ * 입력으로 보고에 남긴다.
+ */
+const FieldBox: StructureRenderer = ({ attrs, props, part }) => (
   <div {...attrs}>
     <label {...part('label')}>{String(props.label)}</label>
     {/* `data-control`은 없어졌다 — `control`이 `data-wb-variant`로 루트에 나간다.
@@ -181,6 +208,11 @@ export const FieldOutlined: StructureRenderer = ({ attrs, props, part }) => (
     </div>
   </div>
 )
+
+export const FieldOutlined: StructureRenderer = FieldBox
+
+/** `outlined`와 **같은 DOM이다.** 근거는 `FieldBox`의 주석. */
+export const FieldFilled: StructureRenderer = FieldBox
 
 /**
  * 이 그룹의 구조가 서기 위한 최소 CSS. **오늘은 비어 있다** — `SearchForm`·`EntryForm`·
@@ -203,4 +235,5 @@ export const INPUT_ENTRIES: StructureEntry[] = [
   ['EntryForm', 'labelTop', EntryFormLabelTop],
   ['EntryForm', 'sectioned', EntryFormSectioned],
   ['Field', 'outlined', FieldOutlined],
+  ['Field', 'filled', FieldFilled],
 ]

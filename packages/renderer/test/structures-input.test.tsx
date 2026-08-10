@@ -262,6 +262,79 @@ describe('EntryForm:sectioned — 자식 하나가 구획 하나다', () => {
 })
 
 /**
+ * **발견: `Field`의 셋(`outlined`·`filled`·`underlined`)은 DOM이 같다.** 계획서
+ * *"계획이 재지 않은 것 #5"*가 의심한 그대로였고, 여기서 재서 확인한다.
+ *
+ * **재는 방법은 "같은가"가 아니라 "다를 수 있는가"였다.** 후보를 하나씩 놓고 그 모습을
+ * **테마가 오늘 DOM으로 만들 수 있는지** 봤다:
+ *
+ * | 후보 | 오늘 DOM으로 되는가 |
+ * |---|---|
+ * | 채워진 상자 **안에** 라벨이 든 모습(Material filled) | **된다.** 루트가 이미 라벨과 컨트롤을 함께 담은 상자다 — 루트에 `bg`·`padding`을 주면 그것이 곧 채운 상자다 |
+ * | 밑줄만 있는 모습 | **된다.** `control` 조각에 `borderBottom` 하나다 |
+ * | 테두리에 라벨이 파고드는 홈(Material outlined의 notch) | 조각이 더 필요하다 — 그런데 그것은 **이미 있는 `outlined`**가 안 하는 것이다 |
+ * | 라벨이 떠오르는 애니메이션 | 상호작용이라 범위 밖이다(구조는 와이어프레임이다) |
+ *
+ * **즉 셋의 차이는 테두리·배경·밑줄이고 전부 `base`·`parts` 스킨이다.** `SearchForm:stacked`
+ * 와 갈리는 점이 여기다 — 그쪽은 조각이 없으면 테마가 **겨냥할 대상 자체가 없었고**,
+ * 여기서는 루트·`label`·`control` 셋으로 이미 다 겨냥된다.
+ *
+ * **그래서 셋이 함수 하나를 공유한다.** 남는 것은 `data-wb-structure` 셀렉터 하나뿐이고,
+ * `Field`는 `variantFrom: 'control'`이라 변형 채널이 이미 차 있어 **변형으로 접을 수도
+ * 없다.** §6.5의 구조/변형 경계를 다시 볼 때의 입력이다.
+ */
+describe('Field — 구조들의 DOM이 같다(발견)', () => {
+  /** 구현된 것만 든다. `underlined`는 다음 태스크가 더한다. */
+  const STRUCTURES = ['outlined', 'filled']
+
+  /** 렌더가 갈릴 만한 props. enum 전부 × 상태 셋. */
+  function fieldProps(): Record<string, unknown>[] {
+    const controls = requireComponent('Field').variants
+    return [
+      ...controls.map((control) => ({ label: '아이디', control })),
+      { label: '아이디', required: true },
+      { label: '아이디', disabled: true, invalid: true },
+      { label: '', placeholder: '입력하세요' },
+    ]
+  }
+
+  it('전부 label·control 조각을 낸다', () => {
+    for (const structure of STRUCTURES) {
+      const html = render('Field', structure, { label: '아이디' })
+      expect(html, structure).toContain(`data-wb-structure="${structure}"`)
+      expect(countOf(html, 'label'), structure).toBe(1)
+      expect(countOf(html, 'control'), structure).toBe(1)
+    }
+  })
+
+  it('렌더가 data-wb-structure 하나만 빼고 같다 — props를 흔들어도 그렇다', () => {
+    for (const props of fieldProps()) {
+      const base = render('Field', 'outlined', props)
+      for (const structure of STRUCTURES.slice(1)) {
+        const other = render('Field', structure, props)
+        // 양성 대조 — 이름을 지우기 전에는 다르다(둘 다 폴백이면 이것이 죽는다).
+        expect(other, structure).not.toBe(base)
+        expect(
+          sameDomIgnoringStructureName(other, base),
+          `${structure} ${JSON.stringify(props)}`,
+        ).toBe(true)
+      }
+    }
+  })
+
+  it('음성 대조 — props를 바꾸면 렌더가 실제로 갈린다', () => {
+    // 이 케이스가 없으면 위 동일성은 "Field가 props를 아예 안 읽는다"로도 설명된다.
+    const text = render('Field', 'filled', { label: '아이디', control: 'text' })
+    const select = render('Field', 'filled', { label: '아이디', control: 'select' })
+    expect(select).not.toBe(text)
+    expect(select).toContain('data-wb-variant="select"')
+    expect(render('Field', 'filled', { label: '아이디', invalid: true })).toContain(
+      'data-wb-state="invalid"',
+    )
+  })
+})
+
+/**
  * **자식이 있을 때의 전수 가드.** 머리말에 적은 사각을 덮는다 — `structures.test.tsx`의
  * 순회는 자식 없는 노드만 그리므로, 자식을 감싸며 나오는 조각은 거기서 스캔되지 않는다.
  *
