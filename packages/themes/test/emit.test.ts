@@ -1,6 +1,8 @@
 import { installCatalog } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
+import designDoc from '../../../docs/superpowers/specs/2026-08-03-wirebound-design.md?raw'
 import { compileTheme } from '../src/emit/index'
+import { cssVarName } from '../src/resolve/style'
 import { resolveTheme } from '../src/resolve/index'
 import type { ResolvedTheme } from '../src/resolved'
 import { MINIMAL_THEME } from './fixtures/minimal'
@@ -85,7 +87,7 @@ describe('compileTheme — 셀렉터 (§6.11)', () => {
   })
 })
 
-describe('재라 #3 — 브레이크포인트 방향과 경계값', () => {
+describe('P4a-1 재라 #3 — 브레이크포인트 방향과 경계값', () => {
   const twoBreakpoints = theme({
     primitives: { breakpoints: { sm: 640, md: 768 } },
     components: {
@@ -137,7 +139,7 @@ describe('재라 #3 — 브레이크포인트 방향과 경계값', () => {
  * **이 계약은 메모리 안에서만 성립한다** — §4.2의 `jsonb`가 키 순서를 정규화한다.
  * 근거와 실측은 `src/emit/index.ts`의 `compileTheme` 주석에 있고, P4a-3이 재서 정한다.
  */
-describe('재라 #6 — states가 여럿일 때 순서', () => {
+describe('P4a-1 재라 #6 — states가 여럿일 때 순서', () => {
   const twoStates = theme({
     components: {
       List: {
@@ -198,7 +200,7 @@ describe('재라 #6 — states가 여럿일 때 순서', () => {
   })
 })
 
-describe('재라 #7 — variants와 states가 같은 조각을 건드릴 때', () => {
+describe('P4a-1 재라 #7 — variants와 states가 같은 조각을 건드릴 때', () => {
   const both = theme({
     components: {
       List: {
@@ -307,7 +309,7 @@ describe('compileTheme — 얕은 성질만 본다', () => {
  * P4b-3(시스템 테마 5종)이고, 그때 이 판정을 다시 열려면 **먼저 `src`·`family`의 값 규칙을
  * 세워야 한다** — 아래 둘째 케이스가 그 부재를 재는 자리다.
  */
-describe('재라 #1 — assets.fonts는 CSS로 나가지 않는다', () => {
+describe('P4b-1 재라 #1 — assets.fonts는 CSS로 나가지 않는다', () => {
   it('컴파일 결과에 @font-face가 없다', () => {
     // 픽스처가 `assets.fonts`를 실제로 갖고 있다 — 비어 있으면 이 케이스가 아무것도 안 지킨다.
     expect(MINIMAL_THEME.assets?.fonts?.length).toBeGreaterThan(0)
@@ -354,5 +356,70 @@ describe('재라 #1 — assets.fonts는 CSS로 나가지 않는다', () => {
     expect(issues).toEqual([])
     expect(theme?.assets?.fonts?.[0]?.src).toBe(evil)
     expect(theme?.assets?.fonts?.[0]?.family).toBe('X; } .a { b: c')
+  })
+})
+
+/**
+ * **재라 #7 — §6.11 예시의 `--wb-container-max`.**
+ *
+ * 그 절의 컴파일 예시에 `--wb-container-max`가 있는데 **규격 경로에서 어느 규칙으로도
+ * 나오지 않는다** — §6.4가 그 값을 `container.maxWidth`라 부르고 D6의 이름 규칙
+ * (`--wb-` + 경로의 `.`을 `-`로)이 `--wb-container-maxWidth`를 만든다.
+ *
+ * **판정: 예시가 줄여 쓴 것이다. 이름 규칙에 예외를 두지 않는다.**
+ *
+ * 근거는 **같은 예시 안에서 센 것**이다(아래 첫 케이스) — 그 `:root` 블록의 변수 넷 중
+ * **셋은 규칙과 정확히 일치하고 그 하나만 어긋난다.** 규칙이 틀렸다면 넷이 다 어긋나야 한다.
+ *
+ * 예외를 두지 않는 이유 둘:
+ *
+ * 1. `cssVarName`은 **경로 → 이름의 순수 규칙**이다. 예외를 하나 두면 그것이 표가 되고,
+ *    표는 §6.4의 `primitives`가 늘 때 낡는다. P4a-1이 *"절대값을 계약에 적지 않는다"*로
+ *    같은 부류를 피했다.
+ * 2. 예외를 두면 **테마 작성자가 `container.max`를 쓸 수 있다고 읽는다** — 규격은
+ *    `maxWidth`이므로 그 문서는 `unknown-token`이 된다.
+ *
+ * **설계 문서는 고치지 않는다**(P4a-1의 원칙: 규격이 이기고 예시가 틀린 것으로 본다).
+ */
+describe('P4b-1 재라 #7 — --wb-container-max', () => {
+  /** §6.11의 `:root` 블록에서 변수 이름을 뽑는다. 손으로 인용하지 않는다. */
+  function rootVarsInSpec(): string[] {
+    const section = designDoc.split('### 6.11 컴파일')[1] ?? ''
+    const block = section.split(':root {')[1]?.split('}')[0] ?? ''
+    return [...block.matchAll(/--wb-[A-Za-z0-9-]+/g)].map((m) => m[0])
+  }
+
+  it('§6.11의 :root 예시를 실제로 읽는다 — 카나리아', () => {
+    const names = rootVarsInSpec()
+    expect(names).toContain('--wb-container-max')
+    expect(names.length).toBeGreaterThan(3)
+  })
+
+  it('예시의 변수 넷 중 셋은 규칙과 일치하고 하나만 어긋난다', () => {
+    // **이것이 "규칙이 아니라 예시가 틀렸다"의 근거다.** 규칙이 틀렸다면 넷이 다 어긋난다.
+    const css = compile(MINIMAL_THEME)
+    const missing = rootVarsInSpec().filter((name) => !css.includes(`${name}:`))
+
+    expect(missing).toEqual(['--wb-container-max'])
+  })
+
+  it('나오는 것은 --wb-container-maxWidth다', () => {
+    const css = compile(MINIMAL_THEME)
+
+    expect(css).toContain('--wb-container-maxWidth: 1200px;')
+    expect(css).not.toContain('--wb-container-max:')
+  })
+
+  it('이름 규칙에 예외가 없다 — primitives 전부가 같은 규칙을 지난다', () => {
+    // 예외를 하나 두면 그것이 표가 되고 표는 낡는다. `primitives`의 경로 전부를 훑어
+    // **`cssVarName`이 만든 이름 그대로** 나오는지 본다.
+    const { theme } = resolveTheme(MINIMAL_THEME)
+    const css = compile(MINIMAL_THEME)
+    const paths = [...(theme as ResolvedTheme).primitives.keys()]
+
+    expect(paths.length).toBeGreaterThan(3)
+    for (const path of paths) {
+      expect(css, path).toContain(`${cssVarName(path)}:`)
+    }
   })
 })
