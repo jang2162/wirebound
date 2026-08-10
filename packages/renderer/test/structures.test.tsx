@@ -79,8 +79,23 @@ function unwrap(schema: ZodInternal | undefined): ZodInternal | undefined {
  * - boolean → 양쪽 (조건부 조각의 가장 흔한 스위치다)
  * - string → 빈 문자열과 찬 문자열 (`props.caption ? … : null` 부류가 여기 걸린다)
  * - array → 빈 배열과 기본값 (목록이 없을 때의 가지)
+ * - **수 → `0`·`1`·기본값** (아래)
  *
- * 수·객체는 흔들지 않는다 — 렌더 갈래를 만들지 않고 범위 제약만 있다.
+ * **앞서 여기에 *"수·객체는 흔들지 않는다 — 렌더 갈래를 만들지 않고 범위 제약만 있다"*고
+ * 적었고 그 문장은 거짓이었다.** 리뷰가 잡았다. `ListTable`이
+ * `Array.from({ length: items })`이므로 **`items: 0`은 렌더 갈래다** — 그 값에서 `<tr>`이
+ * 하나도 안 나오고, 그때만 그려지는 조각(빈 상태 표시 따위)이 생기면 **이 순회가 통째로
+ * 지나친다.** 실측: `items === 0`일 때만 나오는 조각에 계약 밖 part 이름을 심으니 **0건이
+ * 죽었다.**
+ *
+ * **P4b-1이 셋째 가드(part 이름)를 이 순회에 얹으면서 그 거짓 문장에 기대게 됐다** —
+ * 그래서 여기서 고친다. 비용은 **+11 렌더(530 → 541, +2%)**이고 시간 차는 재지 못했다.
+ *
+ * `0`·`1`을 고른 이유: 대부분의 범위 하한이 그 둘이고(`min(0)`·`min(1)`), 범위를 벗어나는
+ * 후보는 `propVariations`의 `safeParse`가 거른다. **상한은 흔들지 않는다** — 큰 수는 렌더
+ * 갈래를 만들지 않고 렌더 비용만 늘린다.
+ *
+ * **객체 prop은 오늘 카탈로그에 없다**(문자열·수·불리언·문자열 배열·키-값 배열이 전부다).
  */
 function propCandidates(schema: ZodInternal | undefined, fallback: unknown): unknown[] {
   const inner = unwrap(schema)
@@ -90,24 +105,68 @@ function propCandidates(schema: ZodInternal | undefined, fallback: unknown): unk
   if (kind === 'boolean') return [true, false]
   if (kind === 'string') return ['', '값']
   if (kind === 'array') return [[], fallback]
+  if (kind === 'number') return [...new Set([0, 1, fallback])]
   return [fallback]
 }
 
 /**
- * 컴포넌트 하나가 그려질 props 조합들. **한 번에 한 prop만** 기본값에서 흔든다 —
- * 완전 조합은 폭발하고, 여기서 필요한 것은 "그 값일 때만 그려지는 가지"를 한 번씩
- * 지나가는 것뿐이다.
+ * 컴포넌트 하나가 그려질 props 조합들. **한 쌍까지** 기본값에서 흔든다.
+ *
+ * **앞서는 한 번에 하나만 흔들었고, 그것이 사각이었다** — 리뷰가 실측했다:
+ * `selectable && loading`처럼 **두 prop이 동시에** 특정 값일 때만 그려지는 조각에 계약 밖
+ * part 이름을 심으니 **0건이 죽었다.** 한 번에 하나만 흔들면 그런 가지에 절대 닿지 않는다.
+ *
+ * **비용을 재고 넓혔다**(중앙값 7회, 워밍업 뒤):
+ *
+ * | 조합 | 렌더 | 시간 |
+ * |---|---|---|
+ * | 하나씩(옛 판) | 530 | 5ms |
+ * | 하나씩 + 수를 흔든다 | 541 | 4ms |
+ * | **쌍까지 + 수를 흔든다(지금)** | **2749** | **26ms** |
+ *
+ * 가드 셋이 이 순회를 쓰므로 회귀 1회에 약 8200 렌더·80ms다. **전체 회귀가 18초이므로
+ * 0.4%**이고, 구조가 26개 늘어도(19 → 45) 그 비례로 200ms 남짓이다.
+ *
+ * **지금 넓히는 것이 P4b-2 뒤보다 싸다** — 그쪽이 구조 26개를 만들며 두 prop 조건을
+ * 만들면 이 가드가 **조용히** 놓친다. P4a-3의 *"발견된 것만 닫으면 매번 하나가 남는다"*와
+ * 같은 판단이다.
+ *
+ * **셋 이상은 넓히지 않았다.** 쌍에서 이미 5배이고, 세 개 동시 조건은 오늘 카탈로그에
+ * 없으며 **그 사각은 열어 둔 채로 적어 둔다**(이월 문서).
+ *
+ * **중복은 걷는다** — 쌍 순회가 `(a 변화, b 기본)` 꼴로 하나씩 판을 다시 만들어서다.
  */
 function propVariations(def: ComponentDef): Record<string, unknown>[] {
   const defaults = def.props.parse({}) as Record<string, unknown>
   const shape = (def.props as unknown as { shape?: Record<string, ZodInternal> }).shape ?? {}
+  const names = Object.keys(shape)
 
-  const out: Record<string, unknown>[] = [defaults]
-  for (const [name, schema] of Object.entries(shape)) {
-    for (const value of propCandidates(schema, defaults[name])) {
-      const candidate = { ...defaults, [name]: value }
-      // 범위 제약에 걸리는 조합은 건너뛴다(렌더러가 폴백을 그릴 뿐이다).
-      if (def.props.safeParse(candidate).success) out.push(candidate)
+  const seen = new Set<string>()
+  const out: Record<string, unknown>[] = []
+  const add = (candidate: Record<string, unknown>): void => {
+    // 범위 제약에 걸리는 조합은 건너뛴다(렌더러가 폴백을 그릴 뿐이다).
+    if (!def.props.safeParse(candidate).success) return
+    const key = JSON.stringify(candidate)
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(candidate)
+  }
+
+  add(defaults)
+  for (const name of names) {
+    for (const value of propCandidates(shape[name], defaults[name])) {
+      add({ ...defaults, [name]: value })
+    }
+  }
+  for (let i = 0; i < names.length; i += 1) {
+    for (let j = i + 1; j < names.length; j += 1) {
+      const first = names[i]!
+      const second = names[j]!
+      for (const a of propCandidates(shape[first], defaults[first])) {
+        for (const b of propCandidates(shape[second], defaults[second])) {
+          add({ ...defaults, [first]: a, [second]: b })
+        }
+      }
     }
   }
   return out
