@@ -45,9 +45,15 @@ export const DEFAULT_LAYOUT_NAME = '기본 레이아웃'
  * 기본 레이아웃의 문서 — **`Page` 하나와 그 안의 `Slot` 하나**다(계획서 D5).
  *
  * 이것이 최소본인 이유: `validateLayout`이 레이아웃에 `Slot`이 **정확히 하나**일 것을
- * 요구하고(`packages/schema/src/validate.ts`), 그 이상을 담으면 이 슬라이스가 화면의
- * 외형을 건드리게 된다. `Page > Slot`이면 `renderComposed(layout, page)`의 결과가
- * `renderDocument(page)`와 같아야 하고 **그것이 Task 10의 판정이다**(D6).
+ * 요구하고(`packages/schema/src/validate.ts`), 그 이상을 담으면 이 슬라이스가 참조를
+ * 나르는 그릇 이상이 된다(D7).
+ *
+ * **이 문서를 오늘 그리는 코드는 없다.** 계획서 D6이 *"`Page > Slot`이면
+ * `renderComposed(layout, page)`의 결과가 `renderDocument(page)`와 같다"*고 적었는데
+ * **반증됐다** — `Slot`은 구멍이 아니라 그려지는 노드라 합성이 노드 둘을 더한다
+ * (`packages/renderer/test/compose-identity.test.tsx`). 그래서 캔버스는 페이지 문서만
+ * 그리고, 이 `schema`는 저장만 되는 값이다. 그리는 코드가 생기는 것은 §4.4의 레이아웃
+ * 에디터가 올 때이고, 그쪽은 **선택 모델부터** 다시 정해야 한다.
  *
  * **호출마다 새 id를 뽑는다.** 노드 id를 상수로 박으면 모든 프로젝트의 레이아웃이 같은
  * id를 갖게 되는데, 문서 안에서 id는 노드를 가리키는 이름이므로 서로 다른 문서가 같은

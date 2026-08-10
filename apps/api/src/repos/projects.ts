@@ -118,8 +118,9 @@ export async function insertProject(
         .values({ project_id: project.id, user_id: ownerId, role: 'owner' })
         .execute()
 
-      // 2단계: 기본 레이아웃. 문서는 `Page` 하나와 `Slot` 하나다(D5) — 오늘 화면을
-      // 바꾸지 않는 최소본이고, 그래야 `renderComposed`의 결과가 `renderDocument`와 같다.
+      // 2단계: 기본 레이아웃. 문서는 `Page` 하나와 `Slot` 하나다(D5) — 참조(`theme_id`)를
+      // 나르는 그릇의 최소본이다. **그 `schema`를 오늘 그리는 코드는 없다**(D6 반증 —
+      // `repos/layouts.ts`의 `defaultLayoutDocument` 주석 참고).
       const theme = await findThemeBySlug(trx, null, DEFAULT_THEME_SLUG)
       const layout = await insertLayout(trx, {
         projectId: project.id,
