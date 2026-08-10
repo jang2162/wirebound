@@ -1,6 +1,7 @@
 import type { Theme } from '../spec/theme'
 import { ADMIN_THEME } from './admin'
 import { SAAS_MARKETING_THEME } from './saas-marketing'
+import { PORTAL_THEME } from './portal'
 
 /**
  * 내장 시스템 테마. §6.10의 표에서 *"wirebound 내장 · 읽기 전용 · 출발점"*인 층이다.
@@ -11,6 +12,7 @@ import { SAAS_MARKETING_THEME } from './saas-marketing'
 const THEMES: Readonly<Record<string, Theme>> = {
   admin: ADMIN_THEME,
   'saas-marketing': SAAS_MARKETING_THEME,
+  portal: PORTAL_THEME,
 }
 
 /** 내장 테마의 id. `meta.id`와 같은 꼴이다 — 접두어 없는 이름. */
