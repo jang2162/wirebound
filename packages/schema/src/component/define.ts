@@ -74,10 +74,34 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     }
   }
 
+  // **도달 가능한 prop 집합.** `visibleWhen`이 붙은 것도 센다 — 그것은 구조에 따라 **감출**
+  // 뿐이고, 그 구조를 고른 테마에서는 보인다. 감춰지는 것과 없는 것은 다르다.
+  const editable = new Set(def.editor.map((field) => field.prop))
+
   for (const state of def.states) {
     if (!known.has(state)) {
       throw new Error(`${type}: states와 같은 이름의 prop이 없습니다: ${state}`)
     }
+  }
+
+  /**
+   * **도달성 — §5.1이 *"속성 패널이 `editor`에서 자동 생성된다"*고 한 것의 결과**(P0 이월 #9).
+   *
+   * `editor`에 없는 prop은 **UI에서 도달 불가**다. 상태가 그렇게 되면 §6.5가 상태의 쓸모로
+   * 든 *"'선택된 행 강조' 같은 서술을 목업에서 실제로 보여주려면"*이 성립하지 않는다 —
+   * 켤 방법이 없기 때문이다. 카탈로그에 그런 자리가 **다섯** 있었다(P4b-1이 닫았다).
+   *
+   * **케이스를 하나씩 더하는 대신 여기서 던진다.** 카탈로그가 커질 때 같은 구멍이 다시
+   * 나지 않게 하려는 것이고, 걸리면 컴포넌트를 정의하는 **그 자리에서** 걸린다.
+   *
+   * **한 번에 전부 말한다** — 하나씩 고치며 다시 돌리게 하지 않는다.
+   */
+  const unreachableStates = def.states.filter((state) => !editable.has(state))
+  if (unreachableStates.length > 0) {
+    throw new Error(
+      `${type}: states가 editor에 없어 속성 패널에서 켤 수 없습니다: ${unreachableStates.join(', ')} ` +
+        '(§5.1 — 패널은 editor에서 자동 생성됩니다)',
+    )
   }
 
   if (def.variantFrom !== undefined) {
@@ -95,6 +119,23 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     if (undeclared.length > 0) {
       throw new Error(
         `${type}: variantFrom(${prop})의 값이 variants에 선언돼 있지 않습니다: ${undeclared.join(', ')}`,
+      )
+    }
+
+    /**
+     * **`variantFrom`의 예외가 구멍이 되는 자리 — 계획 D2가 의심하라고 한 것이 여기다.**
+     *
+     * 속성 패널은 `variantFrom`을 가진 컴포넌트에 **변형 컨트롤을 내지 않는다**(재라 #4의
+     * A안 — 내면 `node.variant`가 버려지는 것을 알면서 값을 넣게 되어 `ignored-variant`를
+     * UI가 유도하는 셈이다). 그러면 그 변형에 닿는 길은 **이 prop의 컨트롤 하나뿐**이고,
+     * 그것마저 `editor`에 없으면 **변형이 통째로 도달 불가**가 된다.
+     *
+     * 오늘 셋(Text·Divider·Field)은 전부 갖고 있었다 — **강제하는 것이 없었을 뿐이다.**
+     */
+    if (!editable.has(prop)) {
+      throw new Error(
+        `${type}: variantFrom(${prop})이 editor에 없어 변형에 도달할 수 없습니다 ` +
+          '(variantFrom을 가진 컴포넌트에는 패널이 변형 컨트롤을 내지 않습니다)',
       )
     }
   }

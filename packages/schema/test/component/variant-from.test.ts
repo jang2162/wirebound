@@ -57,10 +57,21 @@ describe('defineComponent의 variantFrom 검사', () => {
     ).toThrow(/b/)
   })
 
+  /**
+   * **통과하는 케이스에는 `editor`가 필요하다** — P4b-1이 *"`variantFrom`이 가리키는 prop은
+   * `editor`에 있어야 한다"*를 더했다(`test/component/reachability.test.ts`). 그 컴포넌트에는
+   * 패널이 변형 컨트롤을 내지 않으므로 그 prop이 유일한 길이다.
+   *
+   * **던지는 케이스는 `editor`를 주지 않는다** — 그래야 위 검사들이 **먼저** 던지는 것이
+   * 유지된다(도달성 검사가 앞서 걸리면 이 파일이 무엇을 재는지 흐려진다).
+   */
+  const roleEditor = [{ prop: 'role', control: 'select' as const, label: '역할' }]
+
   it('enum 값이 전부 variants에 있으면 통과한다', () => {
     const def = defineComponent({
       ...base,
       props: z.strictObject({ role: z.enum(['a', 'b']).default('a') }),
+      editor: roleEditor,
       variants: ['a', 'b'],
       variantFrom: 'role',
     })
@@ -74,6 +85,7 @@ describe('defineComponent의 variantFrom 검사', () => {
       defineComponent({
         ...base,
         props: z.strictObject({ role: z.enum(['a']).default('a') }),
+        editor: roleEditor,
         variants: ['a', 'b'],
         variantFrom: 'role',
       }),

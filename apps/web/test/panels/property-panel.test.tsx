@@ -71,6 +71,10 @@ registerComponent(
     ...ListDef,
     type: NO_OPTIONS_TYPE,
     editor: [{ prop: 'items', control: 'select', label: '선택지 없는 필드' }],
+    // **`states`를 비운다.** `ListDef`의 `editor`를 통째로 갈았으므로 그대로 두면
+    // P4b-1의 도달성 검사가 *"states가 editor에 없다"*로 던진다 — 이 프로브가 재려는 것은
+    // `options` 없는 `select`이지 상태 도달성이 아니다.
+    states: [],
   }),
 )
 registerStructure(NO_OPTIONS_TYPE, 'table', ({ attrs }) => <div {...attrs} />)
