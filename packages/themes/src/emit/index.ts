@@ -26,10 +26,10 @@ import type { CssDeclaration, ResolvedComponent, ResolvedLayer, ResolvedTheme } 
  *
  * ---
  *
- * **이 계약은 메모리 안에서만 성립한다. 저장을 거치면 무너진다.**
+ * **저장이 이 계약을 지운다 — P4a-3이 저장 쪽에서 닫았다.**
  *
- * 설계 §4.2가 테마의 절을 `jsonb`로 두는데 **Postgres `jsonb`는 객체 키 순서를 보존하지
- * 않는다.** 컨테이너에 직접 캐스팅해 쟀다(PostgreSQL 16.14):
+ * Postgres `jsonb`는 객체 키 순서를 보존하지 않는다. 컨테이너에 직접 캐스팅해 쟀다
+ * (PostgreSQL 16.14):
  *
  * ```
  * '{"selected":1,"disabled":2,"loading":3,"empty":4}'::jsonb
@@ -41,10 +41,19 @@ import type { CssDeclaration, ResolvedComponent, ResolvedLayer, ResolvedTheme } 
  * 키가 **(길이, 바이트)로 정규화**된다. `List`의 상태를 `selected, disabled` 순으로 적어도
  * 저장을 거치면 뒤집히므로, **둘이 같은 프로퍼티를 건드릴 때 이기는 쪽이 바뀐다.**
  * 브레이크포인트는 여기서 폭으로 다시 정렬하므로 면역이고, 노출되는 것은 `states`·
- * `variants`·`parts`·`components` 순서다.
+ * `variants`·`parts`·`components` 순서와 **한 스타일 맵 안의 프로퍼티 순서**다
+ * (`bgGradient`/`bgImage`가 같은 CSS 프로퍼티로 간다).
  *
- * **오늘 테마를 저장하는 코드는 없다** — 그래서 여기서 고치지 않는다. 계약을 바꾸려면
- * 저장의 맥락이 필요하고 **그것은 P4a-3이 재서 정한다.**
+ * **이 파일은 바뀌지 않았다.** 재라 #1의 답은 저장 쪽에 있다 — `apps/api`의 `themes`
+ * 테이블이 절을 `jsonb`가 아니라 **`json` 컬럼**으로 담아 원문 순서를 그대로 보관한다
+ * (근거·대가는 `apps/api/src/db/migrations/0006-themes.ts`의 주석, 왕복 판정과 구분력
+ * 실증은 `apps/api/test/theme-order.test.ts`). 그래서 **여기 적힌 "문서 순서가 곧
+ * 우선순위"가 저장을 거쳐도 참이다.**
+ *
+ * **설계 §4.2는 그 컬럼들을 `jsonb`라고 적었다 — 어긋난 자리다.** 설계 문서는 고치지
+ * 않고 그 사실을 보고한다(P4a-1이 세운 판정 원칙: 규격이 이기고 산문이 틀린 것으로 본다.
+ * 여기서는 규격끼리 부딪히므로 **`jsonb`를 고른 §4.2의 한 단어가 §6.11의 순서 계약을
+ * 실행 불가능하게 만든다**는 쪽으로 판정했다).
  */
 export function compileTheme(resolved: ResolvedTheme): string {
   const blocks: string[] = []
