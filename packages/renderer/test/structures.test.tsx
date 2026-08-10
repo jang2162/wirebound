@@ -128,6 +128,12 @@ function propCandidates(schema: ZodInternal | undefined, fallback: unknown): unk
  * part 47ms · `data-*` 26ms · `style` 13ms = **약 86ms**이고(중앙값 3회), 전체 회귀가
  * 18초이므로 **0.5% 미만**이다. 구조가 26개 늘면(19 → 45) 그 비례로 200ms 남짓이 된다.
  *
+ * > **P4b-2 ③이 다시 쟀다 — 위 예측이 맞았다.** 구조 45개 · 자식 순회까지 넣고
+ * > 순회 1회 **3902 렌더**(가드 셋이면 11706), 케이스 시간 **88 + 40 + 40 ≈ 168ms**
+ * > (중앙값 3회). 전체 회귀 19초의 **0.9%**다. 예측한 "200ms 남짓"의 범위 안이다.
+ * > **자식 순회가 더한 몫은 그중 작다** — 자식 없이 세면 3756이므로 **+146(+3.9%)**뿐이다.
+ * > 자식을 받는 컴포넌트가 8개이고 그것들이 대체로 props가 적어서다.
+ *
  * > **이 수를 다시 잴 때는 `add`의 dedup이 켜져 있는지부터 확인하라.** 앞 판은 **dedup을
  * > 넣기 전에 재고 다시 재지 않아** 530 / 541 / 2749(·가드 셋 *"약 8200"*)를 적었다 —
  * > **dedup만 끄면 그 셋이 그대로 재현되고 가드 셋은 8247이다.** 조합을 넓히는 변경과
@@ -199,23 +205,70 @@ function captures(html: string, pattern: RegExp): string[] {
  * 닫혀 있었다.**
  *
  * **순회를 하나로 모으면 그 자리가 생기지 않는다.**
+ *
+ * ---
+ *
+ * **넷째 사각 — 이 순회가 자식 있는 노드를 한 번도 그리지 않았다. P4b-2 ③이 닫는다.**
+ *
+ * P4b-2 ②의 W3이 찾았다. 여기서 만드는 노드에 `children`이 없으므로 `renderNode`가
+ * 자식을 `null`로 만들고, **자식을 감싸며 생기는 조각은 순회에 나오지 않는다.**
+ * `SearchForm:stacked`의 `row`, `EntryForm:sectioned`의 `section`·`sectionTitle`,
+ * `Card:horizontal`의 `content`가 그 부류다 — 자식이 있어야만 그려진다.
+ *
+ * **실측(③이 심어 확인했다):** `EntryFormSectioned`가 자식마다 감싸는 조각에 위반 셋을
+ * 한꺼번에 심었다 — 선언 안 된 part 이름 · 계약 밖 `data-wb-bogus` · inline `color: red`.
+ *
+ * | 자식 | 이 파일의 가드 27건 |
+ * |---|---|
+ * | 안 단다(전) | **0 죽음 — 27건 전부 초록** |
+ * | 단다(후) | 3 죽음 (가드 셋이 각각 하나씩) |
+ *
+ * W3은 자기 그룹만 덮는 케이스를 따로 뒀는데(`structures-input.test.tsx`), 그 방식은
+ * **그룹마다 같은 파일을 다시 쓰게 하고 새 그룹이 생기면 또 빠진다.** 순회 자체에 자식을
+ * 다는 편이 낫다는 그쪽 제안을 그대로 따랐다.
+ *
+ * **자식 있는 판과 없는 판을 둘 다 돈다.** 자식이 **없을 때만** 그려지는 가지(빈 상태
+ * 자리 표시자 따위)가 있으므로 없는 판을 버리면 그쪽이 사각이 된다. 자식을 받는 컴포넌트는
+ * 8개뿐이라(카탈로그: `many` 8 · `none` 11) 비용도 그만큼만 는다.
+ *
+ * **자식은 `Text`다** — 잎이라 재귀가 깊어지지 않고, 자식 자신의 조각이 부모의 조각과
+ * 섞여 오탐을 만들지 않는다(`Text`는 `parts`가 비어 있다). **둘을 다는 것은** 자식마다
+ * 조각을 내는 구조에서 `Children.map`의 인덱스 갈래(`row`/`rowAlt` 같은 교대)가 한 번은
+ * 지나가게 하려는 것이다.
  */
 function forEachVariation(visit: (rendered: { key: string; html: string }) => void): number {
   const keys = listStructureKeys()
   // 목록이 비면 순회가 안 돌고 부르는 쪽이 그냥 초록이 된다.
   expect(keys.length).toBeGreaterThan(0)
 
+  // 잎이고 `parts`가 비어 있다 — 자식이 부모의 조각 스캔을 오염시키지 않는다.
+  const kids = [
+    { id: 'n_00000000000c', type: 'Text' },
+    { id: 'n_00000000000d', type: 'Text' },
+  ]
+
   let renders = 0
   for (const key of keys) {
     const [type, structure] = key.split(':') as [string, string]
     const def = requireComponent(type)
+    // 자식을 못 받는 컴포넌트에 자식을 달면 검증이 막아 폴백이 그려진다 — 그 판은 돌지 않는다.
+    const childSets: (typeof kids | undefined)[] =
+      def.children === 'none' ? [undefined] : [undefined, kids]
 
     for (const props of propVariations(def)) {
       // 선언된 변형 전부 + 변형 없음.
       for (const variant of [undefined, ...def.variants]) {
-        const node = { id: 'n_000000000001', type, props, ...(variant === undefined ? {} : { variant }) }
-        visit({ key, html: renderToStaticMarkup(renderNode(node, { structures: { [type]: structure } })) })
-        renders += 1
+        for (const children of childSets) {
+          const node = {
+            id: 'n_000000000001',
+            type,
+            props,
+            ...(variant === undefined ? {} : { variant }),
+            ...(children === undefined ? {} : { children }),
+          }
+          visit({ key, html: renderToStaticMarkup(renderNode(node, { structures: { [type]: structure } })) })
+          renders += 1
+        }
       }
     }
   }

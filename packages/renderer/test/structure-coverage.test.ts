@@ -56,6 +56,18 @@ function unimplemented(): string[] {
 }
 
 describe('P4b-2 진척 — 구현이 없는 구조', () => {
+  /**
+   * **P4b-2가 끝났다 — ③이 이 줄을 더했다.** 선언 45 = 구현 45, 미구현 0.
+   *
+   * 위 머리말이 예고한 그 한 줄이다. 여기서부터 이것은 진척도가 아니라 **못**이다 —
+   * 카탈로그가 구조를 더하면(구현 없이) 여기서 이름이 찍히며 죽고, 있던 구현을 지워도
+   * 죽는다. 아래 케이스 넷은 그대로 둔다: 이 한 줄이 "0인가"만 보는 데 비해 그쪽은
+   * **무엇이 어긋났는지**를 이름으로 말하기 때문이다.
+   */
+  it('미구현이 하나도 없다 — 45개가 다 만들어졌다', () => {
+    expect(unimplemented()).toEqual([])
+  })
+
   it('비어 있는 구조를 이름으로 말한다 — 준비 웨이브의 26 밖으로 늘지 않는다', () => {
     const known = new Set(PREP_MISSING_KEYS)
     const unexpected = unimplemented().filter((key) => !known.has(key))
