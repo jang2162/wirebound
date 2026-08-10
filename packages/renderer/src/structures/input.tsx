@@ -53,6 +53,47 @@ export const SearchFormStacked: StructureRenderer = ({ attrs, part, children }) 
   </form>
 )
 
+/**
+ * **접을 수 있는 검색 폼.** `props.collapsed`를 읽어 접힌 모습과 펼친 모습을 갈라 그린다.
+ *
+ * **`collapsed`는 오늘 죽어 있던 prop이다** — `Media.kind`와 같은 부류(P4b-1 이월 1번).
+ * 속성 패널에 `접힌 상태` 스위치가 **있고** 켜면 문서에 저장되고 검증도 통과하는데
+ * 세 구조 중 아무도 그 값을 읽지 않아 **화면이 아무것도 바뀌지 않았다.**
+ *
+ * **그래도 `Media.kind`와 처방이 다르다.** 그쪽은 prop 이름 넷이 `structures` 이름 넷과
+ * **같아서** 구조와 중복이었다. 여기서는 겹치지 않는다 — `collapsed`는 *"지금 접혀
+ * 있는가"*(노드가 정한다)이고 `collapsible`은 *"접을 수 있는 형태인가"*(테마가 고른다)다.
+ * 지울 것이 아니라 **읽어야 하는** prop이고, 그것을 읽는 자리가 여기다.
+ *
+ * **`states`에 더하지 않았다.** 더하면 `data-wb-state="collapsed"`가 `inline`·`stacked`
+ * 에서도 나가는데 그 둘에는 접힘이라는 개념이 없다 — 켤 수는 있는데 아무 뜻도 없는 상태
+ * 스킨이 하나 생긴다. 접힘은 여기서 **DOM으로** 표현하는 것이 정확하다.
+ *
+ * **접히면 자식도 함께 사라진다.** 와이어프레임에서 접힌 폼은 내용을 보이지 않으므로
+ * 그것이 옳고, `display:none`으로 감추지 않는 것은 그 판단이 테마가 아니라 구조에
+ * 속하기 때문이다(감추기로 하면 테마가 `display`를 덮어 되살릴 수 있어 접힘이 아니게 된다).
+ */
+export const SearchFormCollapsible: StructureRenderer = ({ attrs, props, part, children }) => {
+  const collapsed = props.collapsed === true
+  return (
+    <form {...attrs}>
+      <div {...part('toggle')}>
+        <span>검색 조건</span>
+        <span>{collapsed ? '▸' : '▾'}</span>
+      </div>
+      {collapsed ? null : (
+        <>
+          <div {...part('fields')}>{children}</div>
+          <div {...part('actions')}>
+            <span>조회</span>
+            <span>초기화</span>
+          </div>
+        </>
+      )}
+    </form>
+  )
+}
+
 export const EntryFormLabelLeft: StructureRenderer = ({ attrs, props, part, children }) => (
   <form {...attrs}>
     {props.title ? <div {...part('label')}>{String(props.title)}</div> : null}
@@ -92,6 +133,7 @@ export function inputCssBlocks(): string[] {
 export const INPUT_ENTRIES: StructureEntry[] = [
   ['SearchForm', 'inline', SearchFormInline],
   ['SearchForm', 'stacked', SearchFormStacked],
+  ['SearchForm', 'collapsible', SearchFormCollapsible],
   ['EntryForm', 'labelLeft', EntryFormLabelLeft],
   ['Field', 'outlined', FieldOutlined],
 ]

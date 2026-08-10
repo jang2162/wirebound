@@ -12,7 +12,9 @@ export const SearchFormDef = defineComponent({
   // 있고 자식 컴포넌트를 직접 겨냥할 수 없으므로**, 줄이 조각으로 나오지 않으면 줄 사이
   // 간격·구분선에 손댈 길이 아예 없다 — `flex-direction: column`으로 대신할 수 없는 것이
   // 그 부분이고, `stacked`가 `inline`과 DOM으로 갈리는 근거다.
-  parts: ['fields', 'actions', 'row'],
+  // `toggle`은 `collapsible`이 내는 머리줄이다. 접혀 있을 때 화면에 남는 유일한 조각이라
+  // 테마가 그것만 따로 겨냥할 수 있어야 한다.
+  parts: ['fields', 'actions', 'row', 'toggle'],
   variants: [],
   states: [],
   children: 'many',

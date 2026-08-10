@@ -98,6 +98,61 @@ describe('SearchForm:stacked — 한 줄에 한 필드', () => {
 })
 
 /**
+ * **`SearchForm.collapsed`는 오늘 죽어 있다 — `collapsible`이 그것을 살린다.**
+ *
+ * `Media.kind`와 같은 부류였다(P4b-1 이월 1번): 속성 패널에 `접힌 상태` 스위치가 **있고**
+ * 켜면 문서에 저장되고 검증도 통과하는데 **화면은 아무것도 바뀌지 않는다.** 실측 —
+ * `SearchFormInline`이 `props`를 아예 받지 않는다(`attrs`·`part`·`children`뿐).
+ *
+ * **`Media.kind`와 갈리는 점:** 그쪽은 `kind`와 `structures`가 **같은 이름 넷**이라
+ * 구조와 중복이었다. 여기서는 이름이 겹치지 않는다 — `collapsed`는 *"지금 접혀 있는가"*
+ * 이고 `collapsible`은 *"접을 수 있는 형태인가"*다. 하나는 노드가 정하고 하나는 테마가
+ * 고른다. 그래서 **지울 것이 아니라 읽어야 하는 prop**이고, 그것이 이 구조다.
+ *
+ * **`states`에는 더하지 않았다.** 더하면 `data-wb-state="collapsed"`가 `inline`·`stacked`
+ * 에서도 나가는데, 그 둘에는 접힘이라는 개념이 없어 테마가 켤 수 없는 상태 스킨이 하나
+ * 생긴다(P4b-1이 닫은 도달성 구멍의 거울상이다). 접힘은 여기서 **DOM으로** 표현된다.
+ */
+describe('SearchForm:collapsible — 접힘을 DOM으로 표현한다', () => {
+  it('toggle 조각을 낸다 — 접혀 있어도 이것은 남는다', () => {
+    for (const collapsed of [false, true]) {
+      const html = render('SearchForm', 'collapsible', { collapsed }, fields(2))
+      expect(countOf(html, 'toggle'), `${collapsed}`).toBe(1)
+    }
+  })
+
+  it('펼쳐져 있으면 fields·actions가 나온다', () => {
+    const html = render('SearchForm', 'collapsible', { collapsed: false }, fields(2))
+    expect(countOf(html, 'fields')).toBe(1)
+    expect(countOf(html, 'actions')).toBe(1)
+    expect(html).toContain('항목1')
+  })
+
+  it('접혀 있으면 fields·actions가 사라진다', () => {
+    const html = render('SearchForm', 'collapsible', { collapsed: true }, fields(2))
+    expect(countOf(html, 'fields')).toBe(0)
+    expect(countOf(html, 'actions')).toBe(0)
+    // 자식도 함께 사라진다 — 접힌 폼은 내용을 보이지 않는다.
+    expect(html).not.toContain('항목1')
+  })
+
+  it('inline·stacked는 collapsed를 읽지 않는다 — 그것이 이 prop이 죽어 있던 모습이다', () => {
+    // **음성 대조이자 기록이다.** `collapsible`이 생기기 전에는 세 구조가 다 이랬다.
+    for (const structure of ['inline', 'stacked']) {
+      const open = render('SearchForm', structure, { collapsed: false }, fields(2))
+      const shut = render('SearchForm', structure, { collapsed: true }, fields(2))
+      expect(shut, structure).toBe(open)
+    }
+  })
+
+  it('collapsible에서는 collapsed가 렌더를 가른다 — 양성 대조', () => {
+    const open = render('SearchForm', 'collapsible', { collapsed: false }, fields(2))
+    const shut = render('SearchForm', 'collapsible', { collapsed: true }, fields(2))
+    expect(shut).not.toBe(open)
+  })
+})
+
+/**
  * **자식이 있을 때의 전수 가드.** 머리말에 적은 사각을 덮는다 — `structures.test.tsx`의
  * 순회는 자식 없는 노드만 그리므로, 자식을 감싸며 나오는 조각은 거기서 스캔되지 않는다.
  *
