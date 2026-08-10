@@ -140,3 +140,61 @@ describe('List:cardGrid', () => {
     expect(dom.computed('[data-wb-component="List"]', 'grid-template-columns')).not.toContain('var(')
   })
 })
+
+describe('List:stackedList', () => {
+  it('items 수만큼 item 조각을 내고 각 줄이 title·meta를 갖는다', () => {
+    const html = render('List', 'stackedList', { items: 3 })
+    expect(html).toContain('data-wb-structure="stackedList"')
+    expect(countOf(html, 'item')).toBe(3)
+    expect(countOf(html, 'title')).toBe(3)
+    expect(countOf(html, 'meta')).toBe(3)
+  })
+
+  it('media 조각을 내지 않는다 — cardGrid와 갈리는 지점이다', () => {
+    const stacked = parts(render('List', 'stackedList', { items: 2 }))
+    expect(stacked.length).toBeGreaterThan(0)
+    expect(stacked).not.toContain('media')
+
+    // 대조군. 없으면 위가 "아무것도 안 그린다"로도 설명된다.
+    expect(parts(render('List', 'cardGrid', { items: 2 }))).toContain('media')
+  })
+
+  it('목록 마크업으로 그린다 — cardGrid는 그렇지 않다', () => {
+    // **DOM의 차이가 구조의 차이다.** 줄 목록은 `<ul>/<li>`가 그 뜻을 그대로 나르고
+    // (읽는 도구도 그렇게 읽는다), 카드 그리드는 트랙을 CSS가 정하므로 `<div>`다.
+    expect(render('List', 'stackedList', { items: 2 })).toContain('<ul ')
+    expect(render('List', 'cardGrid', { items: 2 })).not.toContain('<ul ')
+  })
+
+  it('pagination이 켜졌을 때만 pagination 조각이 나온다 — 조건부 조각', () => {
+    expect(countOf(render('List', 'stackedList', { pagination: true }), 'pagination')).toBe(1)
+    expect(countOf(render('List', 'stackedList', { pagination: false }), 'pagination')).toBe(0)
+  })
+
+  it('items가 0이면 줄이 하나도 없다', () => {
+    const html = render('List', 'stackedList', { items: 0 })
+    // 폴백이 그려져도 `item`은 0이다 — 구조가 실제로 그려졌다는 것을 먼저 못박는다.
+    expect(html).toContain('data-wb-structure="stackedList"')
+    expect(countOf(html, 'item')).toBe(0)
+  })
+
+  it('쓰는 조각 이름이 전부 카탈로그에 선언돼 있다', () => {
+    expect(undeclared('List', render('List', 'stackedList'))).toEqual([])
+  })
+
+  /**
+   * **이름 있는 판정 — 이 구조는 기본 CSS를 갖지 않는다.**
+   *
+   * 기본 CSS의 몫은 *"구조가 서기 위한 최소 선언"*이다(계약 3). `cardGrid`는 `display:grid`가
+   * 없으면 그리드가 아니라 세로 목록이 되어 **다른 구조와 구별되지 않으므로** 규칙이 필요했다.
+   * 줄 목록은 반대다 — `<ul>/<li>`의 기본 흐름이 이미 그 구조이고, 여기서 여백·구분선을
+   * 정하면 그것은 외형이라 테마의 몫이다.
+   *
+   * 누가 여기에 규칙을 더하면 이 케이스가 깨지고 그때 위 판정을 다시 읽게 된다.
+   */
+  it('구조 기본 CSS에 stackedList를 겨냥하는 규칙이 없다', () => {
+    expect(structureBaseCss()).not.toContain('[data-wb-structure="stackedList"]')
+    // 대조군 — 같은 그룹의 `cardGrid`는 갖는다. 문자열이 안 맞아 못 찾는 것이 아니다.
+    expect(structureBaseCss()).toContain('[data-wb-structure="cardGrid"]')
+  })
+})

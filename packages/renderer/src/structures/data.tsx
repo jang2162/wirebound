@@ -77,6 +77,32 @@ export const ListCardGrid: StructureRenderer = ({ attrs, props, part }) => {
   )
 }
 
+/**
+ * 줄 목록. **카드 그리드와 같은 어휘를 쓰되 `media`가 없다** — 그것이 `mediaList`와
+ * 갈리는 지점이고, 세 구조가 셋으로 나뉘는 축이 그 하나다(그리드냐 줄이냐 · 미디어가
+ * 있냐 없냐).
+ *
+ * **`<ul>/<li>`로 그린다.** 줄 목록은 그 태그가 뜻을 그대로 나르고 읽는 도구도 그렇게
+ * 읽는다. 반대로 `cardGrid`는 트랙을 CSS가 정하므로 목록 마크업이 뜻을 더하지 못한다.
+ *
+ * **기본 CSS를 갖지 않는다** — `<ul>/<li>`의 기본 흐름이 이미 이 구조이고, 여백·구분선을
+ * 여기서 정하면 그것은 외형이라 테마의 몫이다. 그 판정은 케이스로 고정돼 있다.
+ */
+export const ListStackedList: StructureRenderer = ({ attrs, props, part }) => {
+  const items = props.items as number
+  return (
+    <ul {...attrs}>
+      {Array.from({ length: items }, (_, index) => (
+        <li key={index} {...part('item')}>
+          <div {...part('title')}>{`항목 ${index + 1}`}</div>
+          <div {...part('meta')}>—</div>
+        </li>
+      ))}
+      {props.pagination === true ? <li {...part('pagination')}>1 2 3</li> : null}
+    </ul>
+  )
+}
+
 export const TreeIndent: StructureRenderer = ({ attrs, props, part }) => {
   const items = props.items as string[]
   const depth = props.depth as number
@@ -171,6 +197,7 @@ export function dataCssBlocks(): string[] {
 export const DATA_ENTRIES: StructureEntry[] = [
   ['List', 'table', ListTable],
   ['List', 'cardGrid', ListCardGrid],
+  ['List', 'stackedList', ListStackedList],
   ['Tree', 'indent', TreeIndent],
   ['KeyValue', 'table', KeyValueTable],
 ]
