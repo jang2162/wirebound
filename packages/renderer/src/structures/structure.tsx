@@ -154,6 +154,30 @@ export const CardMediaTop: StructureRenderer = ({ attrs, props, part, children }
   </div>
 )
 
+/**
+ * **미디어와 본문이 나란히 서는 카드** (재라 #1 — 왜 이 DOM인가).
+ *
+ * `mediaTop`과도 DOM이 다르다. 미디어를 **옆**에 두려면 나머지(머리+본문)가 **한 덩어리로
+ * 묶여야** 한다 — 안 묶으면 루트를 가로로 세우는 순간 `media`·`header`·`body` **셋이**
+ * 나란히 서 버린다. 그 덩어리가 `content`다.
+ *
+ * **CSS로는 못 만든다.** 감싸는 상자를 만드는 선언이 CSS에 없다(`display: contents`는
+ * 반대 방향이다). 즉 스킨 차이가 아니라 DOM 차이이고, `mediaTop`과 함께 **`Card`가 가진
+ * 진짜 구조 차이 둘**이다.
+ */
+export const CardHorizontal: StructureRenderer = ({ attrs, props, part, children }) => (
+  <div {...attrs}>
+    <div {...part('media')} />
+    <div {...part('content')}>
+      <div {...part('header')}>
+        <div {...part('title')}>{String(props.title)}</div>
+        {props.subtitle ? <div {...part('subtitle')}>{String(props.subtitle)}</div> : null}
+      </div>
+      <div {...part('body')}>{children}</div>
+    </div>
+  </div>
+)
+
 export const TabsUnderline: StructureRenderer = ({ attrs, props, part, children }) => {
   const tabs = props.tabs as string[]
   const active = props.active as number
@@ -268,6 +292,16 @@ export function structureCssBlocks(): string[] {
 
   blocks.push(partRule('Card', 'media', ['aspect-ratio: 16 / 9;']))
 
+  // ── Card:horizontal ───────────────────────────────────────────────────────
+  //
+  // **"나란히"가 이 구조의 이름이다.** 루트가 가로로 서지 않으면 `media`와 `content`가
+  // 위아래로 쌓여 `mediaTop`과 구별되지 않는다. 규칙은 **루트에만** 둔다 —
+  // `componentRule`이 구조 이름을 넣으므로 다른 `Card` 구조 넷에는 닿지 않는다.
+  //
+  // `display`는 `STYLE_PROPERTIES`에 있어 테마가 이 줄을 덮을 수 있다.
+
+  blocks.push(componentRule('Card', 'horizontal', ['display: flex;']))
+
   return blocks
 }
 
@@ -283,5 +317,6 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Card', 'bordered', CardBordered],
   ['Card', 'elevated', CardElevated],
   ['Card', 'mediaTop', CardMediaTop],
+  ['Card', 'horizontal', CardHorizontal],
   ['Tabs', 'underline', TabsUnderline],
 ]

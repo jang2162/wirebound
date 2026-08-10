@@ -360,3 +360,64 @@ describe('Card:mediaTop — 미디어 자리가 조각으로 생긴다', () => {
     expect(dom.computed('[data-wb-part="media"]', 'aspect-ratio')).toBe('16 / 9')
   })
 })
+
+describe('Card:horizontal — 미디어와 본문이 나란히 선다', () => {
+  /**
+   * **DOM이 다르다 — 조각 둘(`media`·`content`)이 더 있고, 그중 하나는 감싸는 상자다.**
+   *
+   * `mediaTop`과도 다르다. 미디어를 **옆**에 두려면 나머지(머리+본문)가 **한 덩어리로
+   * 묶여야** 한다 — 안 묶으면 루트를 가로로 세우는 순간 `media`·`header`·`body` **셋이**
+   * 나란히 서 버린다. 그 덩어리가 `content`다.
+   *
+   * **CSS로는 안 된다.** 감싸는 상자를 만드는 선언이 CSS에 없다(`display: contents`는
+   * 반대 방향이다). 즉 이것은 스킨 차이가 아니라 **DOM 차이**이고, `Card`가 가진 진짜
+   * 구조 차이 둘 중 하나다.
+   */
+  it('media·content를 내고 머리와 본문이 content 안에 있다', () => {
+    expect(parts(render('Card', 'horizontal', { title: '제목' }))).toEqual([
+      'media',
+      'content',
+      'header',
+      'title',
+      'body',
+    ])
+  })
+
+  it('header가 content 안에 들어 있다 — mediaTop과 갈리는 지점', () => {
+    const html = render('Card', 'horizontal', { title: '제목' })
+    expect(html).toMatch(/data-wb-part="content"><div data-wb-part="header"/)
+    // 음성 대조: `mediaTop`은 감싸지 않는다.
+    expect(render('Card', 'mediaTop', { title: '제목' })).not.toContain('data-wb-part="content"')
+  })
+
+  it('content는 카탈로그에 선언된 조각이다', () => {
+    expect(requireComponent('Card').parts).toContain('content')
+  })
+
+  it('계약 밖 속성이 없고 조각 이름이 전부 선언돼 있다', () => {
+    const html = render('Card', 'horizontal', { title: '제목', subtitle: '부제' })
+    expectContractOnly(html)
+    expectDeclaredParts('Card', html)
+  })
+
+  /**
+   * **구조가 서기 위한 선언 — "나란히"가 이 구조의 이름이다.**
+   *
+   * 루트가 가로로 서지 않으면 `media`와 `content`가 위아래로 쌓여 `mediaTop`과 구별되지
+   * 않는다. 규칙은 **루트에만** 둔다(`componentRule`이 구조 이름을 넣으므로 `plain`·
+   * `bordered`·`elevated`·`mediaTop`에는 닿지 않는다).
+   *
+   * **어휘를 골라 썼다.** `display`는 `STYLE_PROPERTIES`에 있으므로 테마가 이 줄을 덮을 수
+   * 있다.
+   */
+  it('루트를 가로로 세운다 — 다른 Card 구조에는 닿지 않는다', async () => {
+    const css = structureCssBlocks().join('\n')
+    const box = (structure: string): string =>
+      `<div data-wb-component="Card" data-wb-structure="${structure}"></div>`
+    const dom = await probe([css], box('horizontal') + box('mediaTop'))
+
+    expect(dom.computed('[data-wb-structure="horizontal"]', 'display')).toBe('flex')
+    // 음성 대조. jsdom은 `<div>`에 UA 기본값 `block`을 준다.
+    expect(dom.computed('[data-wb-structure="mediaTop"]', 'display')).toBe('block')
+  })
+})

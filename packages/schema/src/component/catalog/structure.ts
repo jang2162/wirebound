@@ -88,7 +88,9 @@ export const CardDef = defineComponent({
   // 테마가 겨냥할 상자 없이는 표현할 수 없다(§6.5: `parts`가 테마 매핑의 실제 지점이다).
   // **이름은 `List`의 §5.1 예시에서 빌려 왔다** — 같은 뜻의 조각을 그쪽이 이미 `media`라
   // 부른다. 그룹마다 새 이름을 지으면 테마 작성자가 외울 것이 는다.
-  parts: ['header', 'title', 'subtitle', 'body', 'media'],
+  // `content`는 `horizontal`이 내는 조각이다 — 미디어를 옆에 두려면 나머지(머리+본문)가
+  // **한 덩어리로 묶여야** 하고, 감싸는 상자를 만드는 선언은 CSS에 없다.
+  parts: ['header', 'title', 'subtitle', 'body', 'media', 'content'],
   variants: ['default', 'featured'],
   states: [],
   children: 'many',
