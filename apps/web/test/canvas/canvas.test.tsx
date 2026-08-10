@@ -19,6 +19,7 @@ import {
   OTHER_PAGE_ROUTE,
   OTHER_PAGE_TITLE,
   PAGE_ID,
+  PROJECT_ID,
   PROJECT_NAME,
   PROJECT_ROUTE,
   canvasFrame,
@@ -82,6 +83,21 @@ describe('캔버스와 프로젝트 테마', () => {
     components: { Card: { structure: 'plain', base: { bg: MARKER } } },
   }
 
+  /**
+   * `List`의 **둘째 구현체.** 카탈로그는 `['table','cardGrid','stackedList','mediaList']`를
+   * 선언하는데 렌더러는 오늘 `table` 하나만 등록한다 — 테마가 고른 것이 실제로 쓰이는지
+   * 보려면 고를 수 있는 것이 둘이어야 한다.
+   */
+  const ALT_STRUCTURE = 'cardGrid'
+
+  function listPage() {
+    return pageDoc({
+      id: 'n_root00000001',
+      type: 'Page',
+      children: [{ id: 'n_list00000001', type: 'List', props: { items: 2 } }],
+    })
+  }
+
   function cardPage() {
     return pageDoc({
       id: 'n_root00000001',
@@ -111,13 +127,54 @@ describe('캔버스와 프로젝트 테마', () => {
     expect(requireNode('n_card00000001')).toBeTruthy()
   })
 
-  it('테마를 프로젝트 id로 요청한다', async () => {
+  /**
+   * **셸이 조회해 온 프로젝트의 id로 요청한다** — `routes/editor.tsx`가 트리·패널에
+   * 넘기는 것과 같은 값이다.
+   *
+   * 처음에 이 단언을 `expect.any(String)`으로 적었는데 **주석이 말하는 것을 지키지
+   * 못했다** — 문자열이면 무엇이든 통과하므로 셸이 엉뚱한 id를 넘겨도 웹 861케이스가
+   * 전부 통과했다(리뷰가 심어 죽은 수 **0**). 실제 id로 좁힌다.
+   */
+  it('셸이 조회해 온 프로젝트의 id로 테마를 요청한다', async () => {
     const getProjectTheme = vi.fn(async () => ({ theme: SERVER_THEME, issues: [] }))
     await openPage(cardPage(), { apiOverrides: { getProjectTheme } })
 
     await waitFor(() => expect(getProjectTheme).toHaveBeenCalled())
-    // 셸이 조회해 온 프로젝트의 id다(`routes/editor.tsx`가 트리·패널에 넘기는 것과 같은 값).
-    expect(getProjectTheme).toHaveBeenCalledWith(expect.any(String))
+    expect(getProjectTheme).toHaveBeenCalledWith(PROJECT_ID)
+  })
+
+  /**
+   * **W3 — 캔버스가 테마가 고른 구조를 렌더러에 넘기는가.**
+   *
+   * `theme-structures.test.tsx`는 **함수**(`themeStructures`)를 재고, 캔버스가 그 결과를
+   * **쓴다**는 것은 아무도 재지 않고 있었다 — `structures={themeStructures(theme)}`를
+   * `{}`로 바꿔도 웹 861케이스가 전부 통과했다(죽은 수 **0**). W1과 같은 파일 한 줄 아래다.
+   *
+   * 오늘 컴포넌트마다 구현체가 하나씩뿐이라(P4b가 채운다) 갈아 끼울 것이 없으므로,
+   * **여기서 둘째 구현체를 등록해** 테마가 그것을 고르게 한다. 배선이 끊기면 렌더러가
+   * 카탈로그의 첫 구조(`table`)로 떨어져 `data-wb-structure`가 갈린다.
+   */
+  it('테마가 고른 구조를 렌더러에 넘긴다', async () => {
+    const themed = {
+      meta: { id: 'structured', name: '구조를 고르는 테마', version: '1.0.0' },
+      components: { List: { structure: ALT_STRUCTURE } },
+    }
+    await openPage(listPage(), {
+      apiOverrides: { getProjectTheme: async () => ({ theme: themed, issues: [] }) },
+    })
+
+    await waitFor(() =>
+      expect(requireNode('n_list00000001').getAttribute('data-wb-structure')).toBe(ALT_STRUCTURE),
+    )
+  })
+
+  it('테마가 구조를 고르지 않으면 카탈로그의 기본 구조로 그린다', async () => {
+    await openPage(listPage(), {
+      apiOverrides: { getProjectTheme: async () => ({ theme: SERVER_THEME, issues: [] }) },
+    })
+
+    // 위 케이스와 **같은 문서**인데 결과가 갈린다 — 그것이 테마가 실제로 고른다는 증거다.
+    await waitFor(() => expect(requireNode('n_list00000001').getAttribute('data-wb-structure')).toBe('table'))
   })
 })
 
@@ -166,6 +223,14 @@ registerComponent(defineComponent({ ...ListDef, type: BOOM_TYPE }))
 registerStructure(BOOM_TYPE, 'table', () => {
   throw new Error(BOOM_MESSAGE)
 })
+
+/**
+ * `List`의 둘째 구현체. 렌더러는 오늘 컴포넌트마다 하나씩만 등록하므로
+ * (`packages/renderer/src/structures/index.ts`의 `DEFAULTS`), 테마가 고른 구조가 실제로
+ * 쓰이는지 보려면 여기서 하나를 더 등록해야 한다. `data-wb-structure`는 렌더러가 붙이므로
+ * 본문은 최소로 둔다.
+ */
+registerStructure('List', 'cardGrid', ({ attrs }) => <div {...attrs} />)
 
 /** 오류 경계가 도는 동안의 콘솔 출력을 막는다. React와 경계가 각각 한 번씩 찍는다. */
 function silenceConsoleError(): ReturnType<typeof vi.spyOn> {

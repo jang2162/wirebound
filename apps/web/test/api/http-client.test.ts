@@ -10,7 +10,14 @@ import type { PatchOp } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiErrorCode } from '../../src/api/client'
 import { createHttpClient } from '../../src/api/http-client'
-import type { MenuNode, PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
+import type {
+  MenuNode,
+  PageDetail,
+  ProjectDetail,
+  ProjectTheme,
+  SessionUser,
+  TreeMenuNode,
+} from '../../src/api/types'
 
 interface RecordedCall {
   url: string
@@ -58,6 +65,12 @@ function htmlResponse(status: number): Response {
 
 const user: SessionUser = { id: 'u1', email: 'a@b.c', name: '홍길동' }
 const project: ProjectDetail = { id: 'p1', name: '프로젝트', slug: 'proj', description: null, role: 'owner' }
+
+/** `GET /api/projects/:projectId/theme`의 응답. 서버는 파생 테마를 합쳐서 낸다. */
+const projectTheme: ProjectTheme = {
+  theme: { meta: { id: 'admin', name: '관리자', version: '1.0.0' } },
+  issues: [],
+}
 const treeNode: TreeMenuNode = {
   id: 'm1',
   title: '회원관리',
@@ -363,6 +376,10 @@ describe('createHttpClient', () => {
       { url: '/api/projects/p1', method: 'GET', body: project, call: (c) => c.getProject('p1') },
       { url: '/api/projects/p1/tree', method: 'GET', body: { menu: [] }, call: (c) => c.getTree('p1') },
       { url: '/api/projects/p1/pages/pg1', method: 'GET', body: page, call: (c) => c.getPage('p1', 'pg1') },
+      // **`/theme`(단수)이지 `/themes`(복수)가 아니다.** 둘 다 실재하는 경로라
+      // 오타가 404가 아니라 **다른 리소스의 응답**을 받는다 — 목록(배열)이 오면
+      // `SHAPES.projectTheme`이 막지만, 그 방벽 하나에 기대지 않는다.
+      { url: '/api/projects/p1/theme', method: 'GET', body: projectTheme, call: (c) => c.getProjectTheme('p1') },
     ]
 
     for (const testCase of cases) {
@@ -374,6 +391,48 @@ describe('createHttpClient', () => {
       expect(stub.calls[0]?.url, testCase.url).toBe(testCase.url)
       expect(stub.calls[0]?.init?.method, testCase.url).toBe(testCase.method)
     }
+  })
+
+  /**
+   * **`SHAPES.projectTheme`이 실제로 막는가.** 이 모양 검사가 `() => true`로 퇴행해도
+   * 리뷰 시점에는 **웹 861케이스가 전부 통과했다**(죽은 수 0) — 이 파일에 `theme`이라는
+   * 글자가 한 번도 나오지 않았기 때문이다.
+   *
+   * 무엇을 막는지는 좁다(그 shape의 주석 참고): `theme`이 객체이거나 `null`인가,
+   * `issues`가 배열인가. **테마 안쪽은 일부러 보지 않는다** — `resolveTheme`이 그것을
+   * 이슈로 말하고, 두 층이 같은 것을 검사하면 사용자가 원인을 두 번 다르게 듣는다.
+   */
+  describe('getProjectTheme의 응답 모양', () => {
+    it('theme이 객체이거나 null이면 통과한다', async () => {
+      for (const body of [projectTheme, { theme: null, issues: [] }]) {
+        const stub = stubFetch(jsonResponse(200, body))
+        await expect(createHttpClient(stub.fetchImpl).getProjectTheme('p1')).resolves.toEqual(body)
+      }
+    })
+
+    it('theme이 객체도 null도 아니면 ApiError를 던진다', async () => {
+      // 배열이 오는 것이 실재하는 경로다 — 경로를 `/themes`로 잘못 적으면 목록이 온다.
+      for (const theme of ['admin', 42, [], undefined]) {
+        const stub = stubFetch(jsonResponse(200, { theme, issues: [] }))
+        await expect(
+          createHttpClient(stub.fetchImpl).getProjectTheme('p1'),
+          JSON.stringify(theme),
+        ).rejects.toBeInstanceOf(ApiError)
+      }
+    })
+
+    it('issues가 배열이 아니면 ApiError를 던진다', async () => {
+      // 화면이 `issues.length`·`issues.map`을 그냥 부른다(`use-project-theme.ts`).
+      const stub = stubFetch(jsonResponse(200, { theme: null, issues: null }))
+      await expect(createHttpClient(stub.fetchImpl).getProjectTheme('p1')).rejects.toBeInstanceOf(ApiError)
+    })
+
+    it('경로에 들어가는 id는 URL 인코딩된다', async () => {
+      const stub = stubFetch(jsonResponse(200, projectTheme))
+      await createHttpClient(stub.fetchImpl).getProjectTheme('p 1/../x')
+
+      expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2F..%2Fx/theme')
+    })
   })
 
   it('본문이 있는 요청에만 content-type을 붙인다', async () => {

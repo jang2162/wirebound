@@ -305,6 +305,11 @@ PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "sch
 
 - **레이아웃을 편집하는 엔드포인트는 없다.** 이 단계의 레이아웃은 참조를 나르고 `Slot`을
   담는 그릇이다(§4.4의 레이아웃 에디터는 뒤 단계다).
+- **저장된 `schema`를 오늘 그리는 코드는 없다 — 캔버스는 페이지 문서만 그린다(D6 반증).**
+  쓰는 자리는 프로젝트 생성 하나이고, 읽는 쪽이 실제로 쓰는 것은 `theme_id`뿐이다.
+  `renderComposed`로 합치면 레이아웃의 루트 `Page`와 `Slot`이 **노드 둘을 더 그려**
+  페이지 문서에 없는 `data-wb-id`가 DOM에 섞인다(`packages/renderer/test/compose-identity.test.tsx`).
+  그리는 코드가 생기는 것은 레이아웃 에디터가 올 때이고, 그쪽은 **선택 모델부터** 정해야 한다.
 - `projects.default_layout_id`와 `layouts.project_id`가 **서로를 가리키는 순환**이라
   `default_layout_id`가 nullable이다. 생성은 프로젝트 → 레이아웃 → 프로젝트 UPDATE
   세 문장으로 닫는다.
