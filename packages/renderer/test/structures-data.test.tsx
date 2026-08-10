@@ -281,3 +281,77 @@ describe('List:mediaList', () => {
     expect(structureBaseCss()).toContain('[data-wb-structure="cardGrid"]')
   })
 })
+
+describe('Tree:accordion', () => {
+  const TREE = '[data-wb-component="Tree"]'
+
+  it('items마다 최상위 마디를 내고 마디마다 toggle·label이 있다', async () => {
+    const html = render('Tree', 'accordion', { items: ['가', '나', '다'], depth: 1 })
+    expect(html).toContain('data-wb-structure="accordion"')
+    expect(await count(html, `${TREE} > [data-wb-part="node"]`)).toBe(3)
+    expect(countOf(html, 'toggle')).toBe(3)
+    expect(countOf(html, 'label')).toBe(3)
+  })
+
+  /**
+   * **`panel`을 새로 선언한 이유.** 아코디언의 본체는 *"머리줄을 눌러 접었다 펴는 묶음"*
+   * 이고, 그 묶음이 DOM에 없으면 `indent`와 구별되는 것이 화살표 글자 하나뿐이다.
+   * 이름은 `Tabs`의 `panel`과 같다 — 조각 어휘를 컴포넌트마다 새로 만들지 않는다.
+   */
+  it('첫 마디만 펴져 있고 그 안에 panel이 있다 — 조건부 조각', async () => {
+    const html = render('Tree', 'accordion', { items: ['가', '나', '다'], depth: 2 })
+    expect(countOf(html, 'panel')).toBe(1)
+    expect(await count(html, `${TREE} > [data-wb-part="node"] > [data-wb-part="panel"]`)).toBe(1)
+    // 접힌 마디에는 없다 — 첫째에만 붙었다는 것의 다른 표현이다.
+    expect(await count(html, `${TREE} > [data-wb-part="node"]:nth-of-type(2) [data-wb-part="panel"]`))
+      .toBe(0)
+  })
+
+  it('depth가 1이면 panel이 하나도 없다 — 펼 것이 없다', () => {
+    const html = render('Tree', 'accordion', { items: ['가', '나'], depth: 1 })
+    expect(html).toContain('data-wb-structure="accordion"')
+    expect(countOf(html, 'panel')).toBe(0)
+  })
+
+  it('depth가 깊어지면 panel이 그만큼 중첩된다', async () => {
+    const html = render('Tree', 'accordion', { items: ['가'], depth: 3 })
+    expect(countOf(html, 'panel')).toBe(2)
+    // 중첩이다 — 형제로 나열된 것이 아니다.
+    expect(await count(html, '[data-wb-part="panel"] [data-wb-part="panel"]')).toBe(1)
+    expect(await count(html, '[data-wb-part="panel"] > [data-wb-part="node"]')).toBe(2)
+  })
+
+  /**
+   * **`indent`와 갈리는 지점은 깊이를 무엇이 나르는가다.**
+   *
+   * `indent`는 단계를 `--wb-node-tree-level`로 실어 보내고 구조 기본 CSS가 그것에
+   * 들여쓰기 폭을 곱한다. 아코디언은 **DOM 중첩이 깊이 그 자체**이므로 그 값을 싣지
+   * 않는다 — 실으면 중첩과 곱셈이 겹쳐 두 번 들여쓴다.
+   *
+   * `partRule('Tree','node', …)`은 구조를 가리지 않으므로 아코디언의 마디에도 걸리지만,
+   * 값을 안 실으면 `var()`의 기본값 0이 되어 **0px가 된다.** `structure-css-tools`의
+   * `partRule` 주석이 예고한 그 자리이고, 여기가 그 예고의 실측이다.
+   */
+  it('아코디언은 단계 변수를 싣지 않는다 — indent는 싣는다', () => {
+    const accordion = render('Tree', 'accordion', { items: ['가', '나'], depth: 3 })
+    // 폴백에는 어차피 변수가 없다 — 구조가 실제로 그려졌다는 것을 먼저 못박는다.
+    expect(accordion).toContain('data-wb-structure="accordion"')
+    expect(accordion).not.toContain(nodeVar('tree', 'level'))
+
+    // 대조군. 없으면 위가 "Tree가 원래 아무 변수도 안 싣는다"로도 설명된다.
+    expect(render('Tree', 'indent', { items: ['가', '나'], depth: 3 })).toContain(
+      nodeVar('tree', 'level'),
+    )
+  })
+
+  it('panel이 카탈로그에 선언돼 있다 — 쓰는 조각 전부가 그렇다', () => {
+    expect(requireComponent('Tree').parts).toContain('panel')
+    expect(undeclared('Tree', render('Tree', 'accordion', { items: ['가'], depth: 3 }))).toEqual([])
+  })
+
+  it('items가 비면 마디가 하나도 없다', async () => {
+    const html = render('Tree', 'accordion', { items: [] })
+    expect(html).toContain('data-wb-structure="accordion"')
+    expect(await count(html, '[data-wb-part="node"]')).toBe(0)
+  })
+})

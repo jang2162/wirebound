@@ -64,7 +64,10 @@ export const TreeDef = defineComponent({
     { prop: 'disabled', control: 'switch', label: '비활성' },
   ],
   structures: ['indent', 'accordion'],
-  parts: ['node', 'label', 'toggle'],
+  // `panel`은 P4b-2 W2가 더했다 — 아코디언의 본체는 *"머리줄을 눌러 접었다 펴는 묶음"*이고
+  // 그 묶음이 DOM에 없으면 `indent`와 구별되는 것이 화살표 글자 하나뿐이다.
+  // 이름은 `Tabs`의 `panel`과 같다.
+  parts: ['node', 'label', 'toggle', 'panel'],
   variants: [],
   states: ['selected', 'disabled'],
   children: 'none',

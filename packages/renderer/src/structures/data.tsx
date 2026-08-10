@@ -5,7 +5,7 @@
  * 기본 CSS(`dataCssBlocks`)를 이 파일이 소유한다. 공용 도구는 `../structure-css-tools`에
  * 있다 — 복사해 오지 마라.
  */
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { TREE_INDENT_VAR, componentRule, nodeVar, partRule } from '../structure-css-tools'
 import type { StructureEntry, StructureRenderer } from './registry'
 
@@ -158,6 +158,56 @@ export const TreeIndent: StructureRenderer = ({ attrs, props, part }) => {
   )
 }
 
+/**
+ * 아코디언. **`indent`와 갈리는 지점은 깊이를 무엇이 나르는가다.**
+ *
+ * `indent`는 단계를 `--wb-node-tree-level`로 실어 보내고 구조 기본 CSS가 거기에 들여쓰기
+ * 폭을 곱한다. 아코디언은 **DOM 중첩이 깊이 그 자체**이므로 그 값을 싣지 않는다 — 실으면
+ * 중첩과 곱셈이 겹쳐 두 번 들여쓴다. `partRule('Tree','node', …)`이 구조를 가리지 않아
+ * 여기 마디에도 걸리지만, 값을 안 실으면 `var()`의 기본값 0이 되어 0px가 된다
+ * (`structure-css-tools`의 `partRule` 주석이 예고한 자리다).
+ *
+ * **첫 마디만 펴져 있다.** 아코디언은 *"하나만 펴진 상태"*가 기본형이고, 전부 펴면
+ * `indent`와 화면이 같아져 무엇을 그린 것인지 안 보인다.
+ *
+ * `toggle`·`label`의 뜻은 `indent`와 **같게** 두었다(마디의 형제 둘) — 같은 이름이 구조마다
+ * 다른 것을 가리키면 테마가 쓸 수 없다.
+ */
+export const TreeAccordion: StructureRenderer = ({ attrs, props, part }) => {
+  const items = props.items as string[]
+  const depth = props.depth as number
+
+  // 펴진 가지 하나를 `depth` 단계만큼 **중첩해서** 만든다. 안쪽부터 감싸므로 반복문 하나로
+  // 끝난다 — 배열이 아니라 단일 자식이라 key도 필요 없다.
+  const branch = (label: string): ReactNode => {
+    let inner: ReactNode = null
+    for (let level = depth; level > 1; level -= 1) {
+      inner = (
+        <ul {...part('panel')}>
+          <li {...part('node')}>
+            <span {...part('toggle')}>{inner === null ? '▸' : '▾'}</span>
+            <span {...part('label')}>{`${label} · ${level}단계`}</span>
+            {inner}
+          </li>
+        </ul>
+      )
+    }
+    return inner
+  }
+
+  return (
+    <ul {...attrs}>
+      {items.map((label, index) => (
+        <li key={`${label}-${index}`} {...part('node')}>
+          <span {...part('toggle')}>{index === 0 ? '▾' : '▸'}</span>
+          <span {...part('label')}>{label}</span>
+          {index === 0 ? branch(label) : null}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export const KeyValueTable: StructureRenderer = ({ attrs, props, part }) => {
   const pairs = props.pairs as { key: string; value: string }[]
   return (
@@ -233,5 +283,6 @@ export const DATA_ENTRIES: StructureEntry[] = [
   ['List', 'stackedList', ListStackedList],
   ['List', 'mediaList', ListMediaList],
   ['Tree', 'indent', TreeIndent],
+  ['Tree', 'accordion', TreeAccordion],
   ['KeyValue', 'table', KeyValueTable],
 ]
