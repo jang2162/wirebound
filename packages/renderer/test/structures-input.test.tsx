@@ -284,8 +284,14 @@ describe('EntryForm:sectioned — 자식 하나가 구획 하나다', () => {
  * 없다.** §6.5의 구조/변형 경계를 다시 볼 때의 입력이다.
  */
 describe('Field — 구조들의 DOM이 같다(발견)', () => {
-  /** 구현된 것만 든다. `underlined`는 다음 태스크가 더한다. */
-  const STRUCTURES = ['outlined', 'filled']
+  /**
+   * **카탈로그에서 읽는다.** 손으로 적으면 `Field`에 구조가 늘 때 이 케이스가 조용히
+   * 새 구조를 건너뛴다 — 그러면 *"셋이 같다"*가 *"내가 적은 둘이 같다"*가 된다.
+   *
+   * **함수인 것은 `describe` 본문이 `beforeAll`보다 먼저 돌기 때문이다.** 상수로 두면
+   * 카탈로그가 아직 비어 있어 수집 단계에서 `알 수 없는 컴포넌트 타입: Field`로 죽는다.
+   */
+  const structures = (): string[] => requireComponent('Field').structures
 
   /** 렌더가 갈릴 만한 props. enum 전부 × 상태 셋. */
   function fieldProps(): Record<string, unknown>[] {
@@ -299,7 +305,7 @@ describe('Field — 구조들의 DOM이 같다(발견)', () => {
   }
 
   it('전부 label·control 조각을 낸다', () => {
-    for (const structure of STRUCTURES) {
+    for (const structure of structures()) {
       const html = render('Field', structure, { label: '아이디' })
       expect(html, structure).toContain(`data-wb-structure="${structure}"`)
       expect(countOf(html, 'label'), structure).toBe(1)
@@ -310,7 +316,7 @@ describe('Field — 구조들의 DOM이 같다(발견)', () => {
   it('렌더가 data-wb-structure 하나만 빼고 같다 — props를 흔들어도 그렇다', () => {
     for (const props of fieldProps()) {
       const base = render('Field', 'outlined', props)
-      for (const structure of STRUCTURES.slice(1)) {
+      for (const structure of structures().slice(1)) {
         const other = render('Field', structure, props)
         // 양성 대조 — 이름을 지우기 전에는 다르다(둘 다 폴백이면 이것이 죽는다).
         expect(other, structure).not.toBe(base)

@@ -214,6 +214,9 @@ export const FieldOutlined: StructureRenderer = FieldBox
 /** `outlined`와 **같은 DOM이다.** 근거는 `FieldBox`의 주석. */
 export const FieldFilled: StructureRenderer = FieldBox
 
+/** `outlined`와 **같은 DOM이다.** 근거는 `FieldBox`의 주석. */
+export const FieldUnderlined: StructureRenderer = FieldBox
+
 /**
  * 이 그룹의 구조가 서기 위한 최소 CSS. **오늘은 비어 있다** — `SearchForm`·`EntryForm`·
  * `Field`는 값을 나르는 노드 변수가 없다.
@@ -236,4 +239,5 @@ export const INPUT_ENTRIES: StructureEntry[] = [
   ['EntryForm', 'sectioned', EntryFormSectioned],
   ['Field', 'outlined', FieldOutlined],
   ['Field', 'filled', FieldFilled],
+  ['Field', 'underlined', FieldUnderlined],
 ]
