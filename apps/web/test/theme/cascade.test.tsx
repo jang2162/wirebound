@@ -144,13 +144,16 @@ describe('테마를 바꾸면 외형이 바뀐다', () => {
   })
 
   /**
-   * **계획서의 *"`Grid`의 `grid-template-columns`를 테마가 덮는다"*는 성립하지 않는다.**
-   * §6.8의 스타일 화이트리스트에 트랙 목록을 적을 어휘가 **없다**(`STYLE_PROPERTIES`를
-   * 훑어 확인했다 — `display`·`gap`은 있고 `gridTemplateColumns` 계열은 없다).
-   * 그래서 테마가 덮을 수 있는 것은 `display`이고, 그것이 P0 이월 #7이 막고 있던 바로
-   * 그 자리다(전에는 inline `display:grid`가 모든 테마 규칙을 이겼다).
+   * **P4a-2가 여기 *"트랙 목록을 적을 어휘가 없다"*고 적었다 — P4b-1이 그것을 열었다.**
+   * `gridColumns`(§6.8 밖, `STYLE_PROPERTIES_BEYOND_SPEC`)가 `repeat(N, 1fr)`을 낸다.
+   *
+   * **이 케이스는 그대로 둔다.** `LOUD_THEME`이 그 어휘를 쓰지 않으므로 여기서 재는 것은
+   * 여전히 *"테마가 `display`를 덮는다"*이고, 그것이 P0 이월 #7이 막고 있던 자리다
+   * (전에는 inline `display:grid`가 모든 테마 규칙을 이겼다). **트랙을 선언했을 때
+   * 무엇이 이기는지는 아래 `재라 #9` 절이 따로 잰다** — 두 성질을 한 케이스에 묶으면
+   * 어느 쪽이 깨졌는지 실패 메시지가 말하지 않는다.
    */
-  it('Grid의 display를 테마가 덮는다 — 트랙 목록은 테마 어휘에 없다', () => {
+  it('Grid의 display를 테마가 덮는다 — 트랙을 선언하지 않은 테마', () => {
     const { admin, loud } = compare([
       [GRID, 'display'],
       [GRID, 'grid-template-columns'],
@@ -224,6 +227,63 @@ describe('테마를 바꾸면 외형이 바뀐다', () => {
    * **시트 순서를 뒤집으면 진다.** D5가 "순서가 계약"이라고 적은 것의 실측이다 —
    * 이 케이스가 없으면 위의 전부가 "특이도 덕에 이겼다"로도 설명된다.
    */
+  /**
+   * **재라 #9 — 새 어휘가 구조 기본 CSS와 다투는 자리.**
+   *
+   * `Grid:default`의 기본 CSS가 `grid-template-columns: repeat(var(--wb-node-grid-columns, 1), 1fr)`
+   * 이고 노드가 그 변수를 인라인으로 나른다. 테마가 `gridColumns`를 선언하면 **같은
+   * 프로퍼티를 두고 둘이 다툰다.**
+   *
+   * **잰 결과: 테마가 이기고 노드가 나른 열 수는 무시된다.** 인라인으로 실리는 것은
+   * `--wb-node-grid-columns`라는 **변수 값**이지 `grid-template-columns` 선언이 아니므로,
+   * 테마가 그 프로퍼티를 직접 선언하면 변수를 읽는 규칙 자체가 지고 값이 안 읽힌다.
+   * (P4a-2의 계약 그대로다 — 같은 특이도, 테마 시트가 나중.)
+   *
+   * **그것을 알고 어휘를 열었다.** D1이 닫으려는 구멍은 `List:cardGrid`처럼 **노드가 열 수를
+   * 정할 길이 아예 없는** 자리이고, `Grid`는 노드 prop이 이미 있어 테마가 그것을 덮을
+   * 이유가 없다. 덮는 것은 테마 작성자의 선택이고 §6.5가 이미 인정하는 층이다.
+   *
+   * > **P4b-2가 알아야 할 것:** `Grid`에서 이 조합은 **침묵**이다 — 사용자가 캔버스에서
+   * > 정한 열 수가 화면에 안 나타나는데 이슈가 하나도 나지 않는다. 컴파일 시점에 노드를
+   * > 모르므로 `ignored-variant` 같은 신호를 낼 자리가 없다. 시스템 테마 다섯이
+   * > `Grid.base.gridColumns`를 쓰지 않는 것으로 피하는 것이 오늘의 답이다.
+   */
+  describe('재라 #9 — 테마의 트랙 선언 vs 노드가 나르는 열 수', () => {
+    /** `Grid`에만 트랙을 선언한 테마. 문서의 `Grid` 노드는 `columns: 3`이다. */
+    const TRACK_THEME: Theme = {
+      meta: { id: 'track', name: '트랙', version: '1.0.0' },
+      components: { Grid: { structure: 'default', base: { gridColumns: 5 } } },
+    }
+
+    it('테마가 이기고 노드가 나른 열 수는 무시된다', () => {
+      const { values } = measure(TRACK_THEME, [
+        [GRID, 'grid-template-columns'],
+        [GRID, '--wb-node-grid-columns'],
+      ])
+
+      // 테마의 5가 이긴다. 노드의 3은 변수에 그대로 살아 있는데 **읽는 규칙이 졌다.**
+      expect(values).toEqual(['repeat(5, 1fr)', '3'])
+    })
+
+    it('대조군 — 트랙을 선언하지 않으면 노드의 열 수가 쓰인다', () => {
+      // 이것이 없으면 위 케이스가 "테마가 이겼다"인지 "원래 그 값이었다"인지 갈리지 않는다.
+      const { values } = measure(
+        { meta: { id: 'bare', name: '민', version: '1.0.0' }, components: { Grid: { structure: 'default' } } },
+        [[GRID, 'grid-template-columns'], [GRID, '--wb-node-grid-columns']],
+      )
+
+      expect(values).toEqual(['repeat(var(--wb-node-grid-columns, 1), 1fr)', '3'])
+    })
+
+    it('컴파일된 규칙이 구조 기본 CSS와 같은 셀렉터다 — 특이도가 갈리지 않는다', () => {
+      const { themeCss } = measure(TRACK_THEME, [[GRID, 'display']])
+
+      expect(themeCss).toContain(
+        '[data-wb-component="Grid"][data-wb-structure="default"] {\n  grid-template-columns: repeat(5, 1fr);\n}',
+      )
+    })
+  })
+
   it('시트 순서를 뒤집으면 테마가 진다', () => {
     const { theme: resolved } = resolveTheme(LOUD_THEME)
     const themeTag = document.createElement('style')

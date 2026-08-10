@@ -52,6 +52,9 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
 
   // 배치
   display: ['display'],
+  // **§6.8에 없다 — P4b-1이 더했다.** 값이 단일 토큰이 아니라 **열 수**라
+  // `gridColumnsDeclarations`가 따로 처리한다. 근거는 `STYLE_PROPERTIES_BEYOND_SPEC`에 있다.
+  gridColumns: ['grid-template-columns'],
   direction: ['flex-direction'],
   align: ['align-items'],
   justify: ['justify-content'],
@@ -102,14 +105,22 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
  * | 이름 | 무엇이 요구하는가 | 어휘가 없으면 |
  * |---|---|---|
  * | `fontFamily` | §6.7의 `assets.fonts` · §6.3의 `scale.typography.family` | 폰트를 선언하고 토큰까지 만들어도 **어느 테마도 컴포넌트에 걸 수 없다** |
+ * | `gridColumns` | §6.11 예시의 `List:cardGrid` | `display: grid`를 선언해도 **트랙이 없어 1열**이다. `List.columns`는 `visibleWhen:{structure:'table'}`인 **컬럼 이름 목록**이라 노드도 열 수를 못 정한다 |
  *
  * **`typography`(스케일 참조)로는 폰트를 걸 수 없다.** 그 어휘가 펼치는 것은
  * `fontSize`·`lineHeight`·`fontWeight`·`letterSpacing` 넷이고(`TYPOGRAPHY_KEYS`),
  * §6.3의 `typography.family`는 그 넷 중 어느 것도 아니라 **항목으로 지목하면
  * `unknown-token`이 난다**(`test/style.test.ts`의 `타이포 항목이 아닌 이름은 이슈다`).
  * 즉 폰트 토큰은 이미 만들어지는데 그것을 가리킬 프로퍼티가 없던 것이다.
+ *
+ * **여기 없는 것 — `Grid.props.gap`(재라 #8).** §6.6의 패턴 예시가
+ * `{ type: 'Grid', props: { columns: 2, gap: 'space.10' } }`를 쓰는데 카탈로그에 그 prop이
+ * 없어 **`bad-pattern-node`로 테마 전체가 해석되지 않는다**(실측). **예시가 틀린 것으로
+ * 본다** — `gap`은 §6.8이 이미 가진 **테마의** 어휘이고, 노드 props는 토큰 해석기를
+ * 지나지 않으므로 `"space.10"`을 통과시켜도 CSS에서 무효값이 된다. 근거와 실측은
+ * `packages/schema/test/component/catalog-vocabulary.test.ts`에 있다.
  */
-export const STYLE_PROPERTIES_BEYOND_SPEC: readonly string[] = ['fontFamily']
+export const STYLE_PROPERTIES_BEYOND_SPEC: readonly string[] = ['fontFamily', 'gridColumns']
 
 /**
  * `typography: "h3"`이 펼쳐지는 CSS 선언. 스케일 항목에 없는 키는 **선언을 내지 않는다**
@@ -226,6 +237,10 @@ export function styleDeclarations(
     return typographyDeclarations(value, tokens, path)
   }
 
+  // `typography`와 같은 이유로 수 갈래보다 **먼저** 가른다 — 그냥 두면 `gridColumns: 3`이
+  // `grid-template-columns: 3`이라는 무효 선언이 되어 조용히 나간다.
+  if (prop === 'gridColumns') return gridColumnsDeclarations(targets, value, path)
+
   if (typeof value === 'number') {
     return { css: targets.map((name) => [name, String(value)]), issues: [] }
   }
@@ -306,6 +321,39 @@ function typographyDeclarations(
     }
   }
   return { css, issues: [] }
+}
+
+/**
+ * `gridColumns: 3`을 `repeat(3, 1fr)`로 펼친다.
+ *
+ * **토큰 참조를 받지 않는다.** 열 수는 길이도 색도 아니라 토큰 층에 대응하는 이름공간이
+ * 없고(§6.3의 다섯 중 어느 것도 아니다), `primitives.grid.columns`는 **사이트 골격의
+ * 12칼럼**이지 컴포넌트의 열 수가 아니다(P4a-2가 `--wb-grid-columns` 이름 충돌로 쟀던
+ * 바로 그 구별이다).
+ *
+ * **상한을 두지 않는다.** `primitives.grid.columns`가 12라고 해서 컴포넌트의 열 수가
+ * 12를 넘을 수 없다는 근거가 설계 어디에도 없고, *"절대값을 계약에 적지 않는다"*가
+ * P4a-1의 결론이다. 막는 것은 CSS `repeat()`이 받지 못하는 값뿐이다.
+ */
+function gridColumnsDeclarations(
+  targets: readonly string[],
+  value: unknown,
+  path: string,
+): { css: Array<[string, string]>; issues: ThemeIssue[] } {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    return {
+      css: [],
+      issues: [
+        issue(
+          'bad-style-value',
+          path,
+          `gridColumns는 1 이상의 정수여야 합니다 (받은 값: ${JSON.stringify(value)}) — ` +
+            '트랙 문자열이 아니라 열 수를 적습니다',
+        ),
+      ],
+    }
+  }
+  return { css: targets.map((name) => [name, `repeat(${value}, 1fr)`]), issues: [] }
 }
 
 /**

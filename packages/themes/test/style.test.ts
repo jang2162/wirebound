@@ -167,6 +167,51 @@ describe('styleDeclarations — 이름', () => {
     })
   })
 
+  /**
+   * **§6.11의 예시가 요구한다** —
+   * `[data-wb-component="List"][data-wb-structure="cardGrid"] { display: grid; gap: … }`.
+   * 트랙 선언이 없으면 그 규칙이 만드는 것은 **1열 그리드**다. `List.columns`는
+   * `visibleWhen: { structure: 'table' }`인 **컬럼 이름 목록**이지 열 수가 아니므로
+   * 노드도 그것을 못 정한다.
+   *
+   * **재라 #3 — 어휘의 모양: `gridColumns: <양의 정수>` 하나.**
+   *
+   * `grid-template-columns`를 그대로 열면 §6.8이 스스로 적은 제한 이유 둘이 **동시에**
+   * 깨진다 — 임의 문자열이라 값을 검증할 수 없고(`repeat(auto-fill, minmax(…))`부터
+   * `subgrid`까지), GUI 편집도 불가능하며, 그 자리가 곧 무제한 스타일 튜닝의 입구가 된다.
+   * 수 하나는 정수 범위로 검증되고 숫자 입력 하나로 편집된다.
+   *
+   * **`auto-fill`/`minmax`를 표현하지 못하는 것을 알고 고른다.** 반응형 카드 그리드는
+   * §6.5의 `responsive`가 브레이크포인트마다 다른 `gridColumns`를 주는 것으로 표현된다 —
+   * 어휘를 넓히지 않고도 같은 화면에 닿는 길이 이미 있다.
+   */
+  describe('gridColumns (§6.8에 없는 어휘 — P4b-1)', () => {
+    it('열 수가 repeat(N, 1fr)로 펼쳐진다', () => {
+      expect(decl('gridColumns', 3).css).toEqual([['grid-template-columns', 'repeat(3, 1fr)']])
+      expect(decl('gridColumns', 1).css).toEqual([['grid-template-columns', 'repeat(1, 1fr)']])
+    })
+
+    it('양의 정수가 아니면 이슈다', () => {
+      // **검증할 수 있다는 것이 이 어휘를 고른 이유다**(§6.8의 제한 이유 1).
+      for (const value of [0, -1, 2.5, '3', 'space.6', '', true, null, {}, [3]]) {
+        const { css, issues } = decl('gridColumns', value)
+        expect(codes(issues), JSON.stringify(value)).toEqual(['bad-style-value'])
+        expect(css, JSON.stringify(value)).toEqual([])
+      }
+    })
+
+    it('임의 트랙 문자열을 받지 않는다 — §6.8의 제한 이유 둘이 걸린다', () => {
+      for (const value of ['repeat(auto-fill, minmax(200px, 1fr))', '1fr 2fr', 'subgrid']) {
+        expect(codes(decl('gridColumns', value).issues), value).toEqual(['bad-style-value'])
+      }
+    })
+
+    it('이슈 문안이 무엇을 적어야 하는지 말한다', () => {
+      const [first] = decl('gridColumns', '3').issues
+      expect(first?.message).toContain('정수')
+    })
+  })
+
   it('X·Y 축약은 물리 프로퍼티 둘로 펼쳐진다', () => {
     expect(decl('paddingX', '8px').css).toEqual([
       ['padding-left', '8px'],
@@ -372,9 +417,13 @@ describe('프로토타입 키 — 규격을 통과한 입력이 검증기를 죽
     }
   })
 
-  it('과도 차단이 없다 — §6.8의 이름은 전부 선언을 낸다', () => {
+  it('과도 차단이 없다 — 화이트리스트의 이름은 전부 선언을 낸다', () => {
+    // 값 규칙이 특별한 어휘는 정상값을 따로 준다. **표를 손으로 유지하지 않는다** —
+    // 여기 없는 이름은 `'1px'`을 받고, 그것이 이슈면 이 케이스가 죽는다.
+    const SAMPLE: Record<string, unknown> = { typography: 'h3', gridColumns: 3 }
+
     for (const prop of Object.keys(STYLE_PROPERTIES)) {
-      const value = prop === 'typography' ? 'h3' : '1px'
+      const value = SAMPLE[prop] ?? '1px'
       const result = decl(prop, value)
       expect(codes(result.issues), prop).toEqual([])
       expect(result.css.length, prop).toBeGreaterThan(0)
