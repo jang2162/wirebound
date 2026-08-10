@@ -27,7 +27,22 @@ export const ListDef = defineComponent({
     { prop: 'empty', control: 'switch', label: '빈 상태' },
   ],
   structures: ['table', 'cardGrid', 'stackedList', 'mediaList'],
-  parts: ['header', 'row', 'rowAlt', 'cell', 'item', 'media', 'title', 'meta', 'pagination'],
+  // `body`는 P4b-2 W2가 더했다 — `mediaList`가 *"미디어 옆에 글묶음"*을 표현 가능하게
+  // 하려면 `title`·`meta`를 감싸는 것이 있어야 한다. 감싸개가 없으면 셋이 다 형제라
+  // item에 무엇을 걸어도 한 축을 나눠 갖고, 글 두 줄만 세로로 쌓을 방법이 없다.
+  // 이름은 `Card`의 `body`와 같다 — 조각 어휘를 컴포넌트마다 새로 만들지 않는다.
+  parts: [
+    'header',
+    'row',
+    'rowAlt',
+    'cell',
+    'item',
+    'media',
+    'body',
+    'title',
+    'meta',
+    'pagination',
+  ],
   variants: ['default', 'featured', 'compact'],
   states: ['selected', 'disabled', 'loading', 'empty'],
   children: 'none',

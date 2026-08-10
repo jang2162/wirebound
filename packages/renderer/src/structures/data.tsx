@@ -103,6 +103,39 @@ export const ListStackedList: StructureRenderer = ({ attrs, props, part }) => {
   )
 }
 
+/**
+ * 미디어 목록. `stackedList`에 `media`가 붙은 것이 아니라 **글묶음이 하나로 묶인 것**이
+ * 차이의 본체다.
+ *
+ * **`body`를 새로 선언했다.** `media`·`title`·`meta`가 셋 다 형제이면 item에 flex든
+ * grid든 무엇을 걸어도 셋이 한 축을 나눠 가져, *"미디어 옆에 제목 위 부가정보"*를
+ * **어떤 테마도 표현할 수 없다.** 구조가 지는 몫은 그 배치를 표현 가능하게 만드는
+ * 것까지이고 실제 배치는 테마다.
+ *
+ * **기본 CSS는 갖지 않는다 — 갖고 싶어도 못 갖는다.** 가로 분할을 세우려면 `item`
+ * 조각에 선언을 걸어야 하는데, 조각 규칙에 구조 이름을 넣으면 특이도가 0,3,0이 되어
+ * 테마가 지고(`structure-css-tools`의 `partRule`), 구조 없이 걸면 `cardGrid`·
+ * `stackedList`의 카드까지 가로로 눕는다. **`partRule`의 대가가 처음으로 구조를 제약한
+ * 자리다.**
+ */
+export const ListMediaList: StructureRenderer = ({ attrs, props, part }) => {
+  const items = props.items as number
+  return (
+    <ul {...attrs}>
+      {Array.from({ length: items }, (_, index) => (
+        <li key={index} {...part('item')}>
+          <div {...part('media')} />
+          <div {...part('body')}>
+            <div {...part('title')}>{`항목 ${index + 1}`}</div>
+            <div {...part('meta')}>—</div>
+          </div>
+        </li>
+      ))}
+      {props.pagination === true ? <li {...part('pagination')}>1 2 3</li> : null}
+    </ul>
+  )
+}
+
 export const TreeIndent: StructureRenderer = ({ attrs, props, part }) => {
   const items = props.items as string[]
   const depth = props.depth as number
@@ -198,6 +231,7 @@ export const DATA_ENTRIES: StructureEntry[] = [
   ['List', 'table', ListTable],
   ['List', 'cardGrid', ListCardGrid],
   ['List', 'stackedList', ListStackedList],
+  ['List', 'mediaList', ListMediaList],
   ['Tree', 'indent', TreeIndent],
   ['KeyValue', 'table', KeyValueTable],
 ]

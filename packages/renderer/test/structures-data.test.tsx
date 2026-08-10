@@ -30,6 +30,19 @@ function render(type: string, structure: string, props: Record<string, unknown> 
   )
 }
 
+/**
+ * 렌더된 HTML을 실제로 파싱해 셀렉터에 맞는 요소 수를 센다.
+ *
+ * **문자열 검사로는 중첩을 잴 수 없다** — `media`가 `body` **안**에 있는지 **옆**에 있는지가
+ * `mediaList`의 요점인데, 정규식은 등장 순서만 본다. `jsdom`은 저장소 루트의
+ * devDependency이고 테스트에서 동적 import로만 쓴다(`css-probe.ts`가 세운 관례).
+ */
+async function count(html: string, selector: string): Promise<number> {
+  const { JSDOM } = await import('jsdom')
+  const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`)
+  return dom.window.document.querySelectorAll(selector).length
+}
+
 /** 렌더된 HTML에 나온 조각 이름 전부(순서대로, 중복 포함). */
 function parts(html: string): string[] {
   return [...html.matchAll(/data-wb-part="([^"]*)"/g)].map((match) => match[1]!)
@@ -195,6 +208,76 @@ describe('List:stackedList', () => {
   it('구조 기본 CSS에 stackedList를 겨냥하는 규칙이 없다', () => {
     expect(structureBaseCss()).not.toContain('[data-wb-structure="stackedList"]')
     // 대조군 — 같은 그룹의 `cardGrid`는 갖는다. 문자열이 안 맞아 못 찾는 것이 아니다.
+    expect(structureBaseCss()).toContain('[data-wb-structure="cardGrid"]')
+  })
+})
+
+describe('List:mediaList', () => {
+  it('줄마다 media와 body를 내고 body 안에 title·meta가 들어간다', async () => {
+    const html = render('List', 'mediaList', { items: 3 })
+    expect(html).toContain('data-wb-structure="mediaList"')
+    expect(countOf(html, 'item')).toBe(3)
+    expect(countOf(html, 'media')).toBe(3)
+    expect(countOf(html, 'body')).toBe(3)
+    expect(await count(html, '[data-wb-part="body"] [data-wb-part="title"]')).toBe(3)
+    expect(await count(html, '[data-wb-part="body"] [data-wb-part="meta"]')).toBe(3)
+  })
+
+  /**
+   * **`body`를 새로 선언한 이유가 이 케이스다.**
+   *
+   * `media`가 `body` **밖**에 있어야 *"미디어 옆에 글묶음"*을 테마가 표현할 수 있다.
+   * 감싸는 것이 없으면 `media`·`title`·`meta`가 셋 다 형제라, item에 flex든 grid든
+   * 무엇을 걸어도 **셋이 한 축을 나눠 갖는다** — 글 두 줄만 세로로 쌓을 방법이 없다.
+   *
+   * 구조가 지는 몫은 *"그 배치를 표현 가능하게 만드는 것"*까지이고 실제 배치는 테마다
+   * (계약: *"구조는 와이어프레임이다 … 외형은 테마가 준다"*).
+   */
+  it('media는 body 밖에 있다 — item의 직계 자식 둘이 media와 body다', async () => {
+    const html = render('List', 'mediaList', { items: 2 })
+    expect(await count(html, '[data-wb-part="item"] > [data-wb-part="media"]')).toBe(2)
+    expect(await count(html, '[data-wb-part="item"] > [data-wb-part="body"]')).toBe(2)
+    // 안에 있으면 위 두 줄이 다 참이어도 배치가 안 되므로 여기서 못박는다.
+    expect(await count(html, '[data-wb-part="body"] [data-wb-part="media"]')).toBe(0)
+  })
+
+  it('cardGrid는 body를 쓰지 않는다 — 감싸개가 필요한 것은 가로 분할뿐이다', async () => {
+    const html = render('List', 'cardGrid', { items: 2 })
+    expect(countOf(html, 'body')).toBe(0)
+    // 세로로 흐르는 카드에서는 media·title·meta가 형제인 채로 충분하다.
+    expect(await count(html, '[data-wb-part="item"] > [data-wb-part="title"]')).toBe(2)
+  })
+
+  it('body가 카탈로그에 선언돼 있다 — 쓰는 조각 전부가 그렇다', () => {
+    expect(requireComponent('List').parts).toContain('body')
+    expect(undeclared('List', render('List', 'mediaList'))).toEqual([])
+  })
+
+  it('pagination이 켜졌을 때만 pagination 조각이 나온다 — 조건부 조각', () => {
+    expect(countOf(render('List', 'mediaList', { pagination: true }), 'pagination')).toBe(1)
+    expect(countOf(render('List', 'mediaList', { pagination: false }), 'pagination')).toBe(0)
+  })
+
+  it('items가 0이면 줄이 하나도 없다', () => {
+    const html = render('List', 'mediaList', { items: 0 })
+    expect(html).toContain('data-wb-structure="mediaList"')
+    expect(countOf(html, 'item')).toBe(0)
+  })
+
+  /**
+   * **이름 있는 판정 — 이 구조도 기본 CSS를 갖지 않는다. 이번에는 갖고 싶어도 못 갖는다.**
+   *
+   * *"미디어 옆에 글묶음"*을 세우려면 `item` 조각에 `display:flex`를 걸어야 하는데,
+   * **조각 규칙에는 구조 이름을 넣을 수 없다** — 넣으면 특이도가 0,3,0이 되어 `compileTheme`의
+   * 조각 규칙(0,2,0)을 이기고 그 컴포넌트에서만 테마가 진다(`structure-css-tools`의
+   * `partRule` 주석). 구조 없이 걸면 `cardGrid`·`stackedList`의 `item`도 같은 선언을 받아
+   * **카드 안이 가로로 눕는다.**
+   *
+   * 그래서 여기서는 DOM만 세우고 배치는 테마에 남긴다. **이것이 `partRule`의 대가가
+   * 처음으로 실제 구조를 제약한 자리다** — 통합 단계가 알아야 한다.
+   */
+  it('구조 기본 CSS에 mediaList를 겨냥하는 규칙이 없다', () => {
+    expect(structureBaseCss()).not.toContain('[data-wb-structure="mediaList"]')
     expect(structureBaseCss()).toContain('[data-wb-structure="cardGrid"]')
   })
 })
