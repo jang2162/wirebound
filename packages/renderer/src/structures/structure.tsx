@@ -36,6 +36,21 @@ export const SectionContained: StructureRenderer = ({ attrs, part, children }) =
   </section>
 )
 
+/**
+ * **폭을 가두지 않는 섹션. `contained`에서 `inner`가 통째로 없다** (재라 #1 — 왜 이 DOM인가).
+ *
+ * `contained`의 `inner`는 장식이 아니라 **테마가 `maxWidth`를 거는 자리**다(§6.4의
+ * `container.max`가 그 값이다). 폭을 안 가두는 섹션에 그 자리를 남겨 두면 테마가 구조마다
+ * `max-width: none`을 되돌려 써야 하고, 그러면 *"어느 쪽이 이겼는가"*가 다시 조용해진다 —
+ * 이 저장소가 반복해 겪은 부류다(P4b-1 이월 5번의 침묵 덮어쓰기).
+ *
+ * **그래서 이것은 스킨이 아니라 구조다.** 조각 하나가 있고 없고가 갈리므로 CSS로는 흉내
+ * 낼 수 없다.
+ */
+export const SectionFullBleed: StructureRenderer = ({ attrs, children }) => (
+  <section {...attrs}>{children}</section>
+)
+
 export const FlexDefault: StructureRenderer = ({ attrs, props, children }) => (
   <div
     {...attrs}
@@ -160,6 +175,7 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Page', 'default', PageDefault],
   ['Slot', 'default', SlotDefault],
   ['Section', 'contained', SectionContained],
+  ['Section', 'fullBleed', SectionFullBleed],
   ['Flex', 'default', FlexDefault],
   ['Grid', 'default', GridDefault],
   ['Card', 'plain', CardPlain],
