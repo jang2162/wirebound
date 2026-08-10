@@ -212,3 +212,44 @@ describe('Media:illustration', () => {
     )
   })
 })
+
+describe('Media:chart', () => {
+  it('등록돼 있다', () => {
+    expect(getStructure('Media', 'chart')).toBeDefined()
+  })
+
+  it('폴백이 아니라 실제 구조를 그린다', () => {
+    const html = render('Media', 'chart', {})
+    expect(isFallback(html), html).toBe(false)
+    expect(html).toContain('data-wb-structure="chart"')
+  })
+
+  it('작도 영역과 범례를 낸다 — 넷 중 유일하게 틀 안이 둘로 갈린다', () => {
+    // 차트는 나머지 셋과 달리 **틀 안이 구획된다.** 그림이 들어가는 자리와 그것을 읽는
+    // 자리가 따로 있고, 테마가 그 둘에 다른 규칙을 걸 수 있어야 §6.5의 `parts`가 뜻을 갖는다.
+    const html = render('Media', 'chart', {})
+    expect(parts(html)).toEqual(['frame', 'plot', 'legend'])
+  })
+
+  it('네 구조의 DOM이 서로 다르다', () => {
+    // **`Media.kind` 판정의 입력이다**(계획서 D3). *"넷이 서로 다르게 그리면 `kind`는
+    // 구조와 중복이다"*가 그 판정의 전제이므로, 그 전제를 여기서 실제로 잰다.
+    const normalize = (html: string): string => html.replace(/ data-wb-structure="[^"]*"/, '')
+    const rendered = ['image', 'video', 'illustration', 'chart'].map((structure) =>
+      render('Media', structure, { ratio: '16/9', caption: '' }),
+    )
+
+    // 폴백이 하나라도 섞이면 "다르다"가 구현이 아니라 오류 표시 때문이 된다.
+    expect(rendered.filter(isFallback)).toEqual([])
+    expect(new Set(rendered.map(normalize)).size).toBe(rendered.length)
+  })
+
+  it('caption은 값이 있을 때만 나온다', () => {
+    expect(parts(render('Media', 'chart', { caption: '' }))).not.toContain('caption')
+    expect(parts(render('Media', 'chart', { caption: '월별 매출' }))).toContain('caption')
+  })
+
+  it('ratio를 노드 변수로 낸다', () => {
+    expect(render('Media', 'chart', { ratio: '3/4' })).toContain('--wb-node-media-ratio:3/4')
+  })
+})

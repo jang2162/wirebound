@@ -71,6 +71,20 @@ export const MediaIllustration: StructureRenderer = (ctx) => (
   mediaFigure(ctx, <span {...ctx.part('glyph')}>✎</span>)
 )
 
+// 차트만 **틀 안이 구획된다.** 그림이 들어가는 자리(`plot`)와 그것을 읽는 자리(`legend`)가
+// 따로 있어야 §6.5의 `parts`가 뜻을 갖는다 — 테마가 축·격자와 범례에 같은 규칙을 걸 수는 없다.
+//
+// **축을 조각으로 내지 않는다.** 축선은 `plot`의 테두리로 그려지므로 조각을 더해도 테마가
+// 새로 할 수 있는 일이 없고, 계약만 는다(계획서 재라 #2 — 조각 이름은 늘리면 계약도 는다).
+export const MediaChart: StructureRenderer = (ctx) =>
+  mediaFigure(
+    ctx,
+    <>
+      <div {...ctx.part('plot')} />
+      <div {...ctx.part('legend')}>■ ■ ■</div>
+    </>,
+  )
+
 // `data-direction`은 없어졌다 — `direction`이 `data-wb-variant`로 나간다.
 export const DividerDefault: StructureRenderer = ({ attrs }) => <hr {...attrs} />
 
@@ -114,6 +128,7 @@ export const DOCUMENT_ENTRIES: StructureEntry[] = [
   ['Media', 'image', MediaImage],
   ['Media', 'video', MediaVideo],
   ['Media', 'illustration', MediaIllustration],
+  ['Media', 'chart', MediaChart],
   ['Divider', 'default', DividerDefault],
   ['Placeholder', 'default', PlaceholderDefault],
 ]

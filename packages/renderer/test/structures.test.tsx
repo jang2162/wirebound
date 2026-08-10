@@ -591,6 +591,6 @@ describe('재라 #6 — Media.kind는 렌더에 닿지 않는다', () => {
     // 넷이 다 차면 이 절 전체를 판정과 함께 다시 쓴다(W4의 마지막 태스크).
     const implemented = KINDS.filter((structure) => getStructure('Media', structure) !== undefined)
 
-    expect(implemented).toEqual(['image', 'video', 'illustration'])
+    expect(implemented).toEqual([...KINDS])
   })
 })
