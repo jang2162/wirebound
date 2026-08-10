@@ -1,4 +1,11 @@
-import type { StructureRenderer } from './registry'
+/**
+ * **입력 그룹.** `SearchForm`·`EntryForm`·`Field`.
+ *
+ * 카탈로그의 `component/catalog/input.ts`와 같은 경계다(P4b-2 D2). 등록(`INPUT_ENTRIES`)과
+ * 기본 CSS(`inputCssBlocks`)를 이 파일이 소유한다. 공용 도구는 `../structure-css-tools`에
+ * 있다 — 복사해 오지 마라.
+ */
+import type { StructureEntry, StructureRenderer } from './registry'
 
 export const SearchFormInline: StructureRenderer = ({ attrs, part, children }) => (
   <form {...attrs}>
@@ -32,3 +39,10 @@ export const FieldOutlined: StructureRenderer = ({ attrs, props, part }) => (
     </div>
   </div>
 )
+
+/** 이 그룹이 등록하는 구조. 구조를 더하면 여기에 한 줄을 더한다(파일 끝에 둔다 — TDZ). */
+export const INPUT_ENTRIES: StructureEntry[] = [
+  ['SearchForm', 'inline', SearchFormInline],
+  ['EntryForm', 'labelLeft', EntryFormLabelLeft],
+  ['Field', 'outlined', FieldOutlined],
+]

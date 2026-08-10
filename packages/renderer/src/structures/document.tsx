@@ -1,6 +1,13 @@
+/**
+ * **문서 그룹.** `Text`·`Media`·`Divider`·`Placeholder`.
+ *
+ * 카탈로그의 `component/catalog/document.ts`와 같은 경계다(P4b-2 D2).
+ * 등록(`DOCUMENT_ENTRIES`)과 기본 CSS(`documentCssBlocks`)를 이 파일이 소유한다.
+ * 공용 도구는 `../structure-css-tools`에 있다 — 복사해 오지 마라.
+ */
 import { createElement, type CSSProperties } from 'react'
 import { nodeVar } from '../structure-css'
-import type { StructureRenderer } from './registry'
+import type { StructureEntry, StructureRenderer } from './registry'
 
 const ROLE_TAG: Record<string, string> = {
   display: 'h1',
@@ -44,3 +51,11 @@ export const PlaceholderDefault: StructureRenderer = ({ attrs, props }) => (
     {String(props.label)}
   </div>
 )
+
+/** 이 그룹이 등록하는 구조. 구조를 더하면 여기에 한 줄을 더한다(파일 끝에 둔다 — TDZ). */
+export const DOCUMENT_ENTRIES: StructureEntry[] = [
+  ['Text', 'default', TextDefault],
+  ['Media', 'image', MediaImage],
+  ['Divider', 'default', DividerDefault],
+  ['Placeholder', 'default', PlaceholderDefault],
+]

@@ -1,6 +1,13 @@
+/**
+ * **데이터 그룹.** `List`·`Tree`·`KeyValue`.
+ *
+ * 카탈로그의 `component/catalog/data.ts`와 같은 경계다(P4b-2 D2). 등록(`DATA_ENTRIES`)과
+ * 기본 CSS(`dataCssBlocks`)를 이 파일이 소유한다. 공용 도구는 `../structure-css-tools`에
+ * 있다 — 복사해 오지 마라.
+ */
 import type { CSSProperties } from 'react'
 import { nodeVar } from '../structure-css'
-import type { StructureRenderer } from './registry'
+import type { StructureEntry, StructureRenderer } from './registry'
 
 export const ListTable: StructureRenderer = ({ attrs, props, part }) => {
   const columns = props.columns as string[]
@@ -77,3 +84,15 @@ export const KeyValueTable: StructureRenderer = ({ attrs, props, part }) => {
     </table>
   )
 }
+
+/**
+ * 이 그룹이 등록하는 구조. 구조를 더하면 여기에 한 줄을 더한다.
+ *
+ * **파일 끝에 둔다** — 배열 리터럴이 위의 `const`들을 모듈 평가 시점에 읽으므로,
+ * 앞에 두면 TDZ에 걸려 `ReferenceError`가 난다.
+ */
+export const DATA_ENTRIES: StructureEntry[] = [
+  ['List', 'table', ListTable],
+  ['Tree', 'indent', TreeIndent],
+  ['KeyValue', 'table', KeyValueTable],
+]

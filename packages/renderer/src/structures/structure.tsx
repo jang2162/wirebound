@@ -1,6 +1,16 @@
+/**
+ * **구조 그룹.** `Page`·`Slot`·`Section`·`Flex`·`Grid`·`Card`·`Tabs`.
+ *
+ * 카탈로그의 `component/catalog/structure.ts`와 같은 경계다(P4b-2 D2). 이 모듈이 자기
+ * 구조의 **등록**(`STRUCTURE_ENTRIES`)과 **기본 CSS**(`structureCssBlocks`)를 함께
+ * 소유하므로, 이 그룹에 구조를 더하는 워커는 이 파일 하나만 만진다.
+ *
+ * 공용 도구(`nodeVar`·`componentRule`·`partRule`)는 `../structure-css-tools`에 있다.
+ * **복사해 오지 마라** — 다섯 벌이 따로 썩는다.
+ */
 import type { CSSProperties } from 'react'
 import { nodeVar } from '../structure-css'
-import type { StructureRenderer } from './registry'
+import type { StructureEntry, StructureRenderer } from './registry'
 
 /**
  * 커스텀 프로퍼티만 담은 `style` 객체. **일반 선언은 여기 들어오지 않는다**(D2) —
@@ -95,3 +105,19 @@ export const TabsUnderline: StructureRenderer = ({ attrs, props, part, children 
 function cssJustify(value: string): string {
   return value === 'between' ? 'space-between' : value
 }
+
+/**
+ * 이 그룹이 등록하는 구조. `installStructures()`가 다섯 그룹의 것을 모은다.
+ *
+ * **구조를 더하면 여기에 한 줄을 더한다.** 다른 그룹의 파일도 `structures/index.ts`도
+ * 만지지 않는다 — 그것이 P4b-2 ①이 이 배열을 가른 이유다.
+ */
+export const STRUCTURE_ENTRIES: StructureEntry[] = [
+  ['Page', 'default', PageDefault],
+  ['Slot', 'default', SlotDefault],
+  ['Section', 'contained', SectionContained],
+  ['Flex', 'default', FlexDefault],
+  ['Grid', 'default', GridDefault],
+  ['Card', 'plain', CardPlain],
+  ['Tabs', 'underline', TabsUnderline],
+]
