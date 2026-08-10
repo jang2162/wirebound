@@ -57,6 +57,9 @@ describe('공개 표면이 계약이다', () => {
     // 상수
     'ICON_SETS', 'PLACEHOLDER_STYLES', 'PATTERN_CATEGORIES', 'SLOT_TYPES',
     'SPACE_MAX', 'TOKEN_NAMESPACES', 'STYLE_PROPERTIES',
+    // §6.8 밖의 어휘 목록. **`apps/web`이 쓴다** — `treeIndent`가 내는 CSS 이름과
+    // `renderer`의 `TREE_INDENT_VAR`를 대조하는 자리가 거기뿐이다(§3.3).
+    'STYLE_PROPERTIES_BEYOND_SPEC',
     'THEME_ID_PATTERN', 'EXTENDS_PATTERN',
     // 해석과 방출
     'resolveTheme', 'compileTheme', 'mergeTheme',

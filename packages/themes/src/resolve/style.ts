@@ -85,6 +85,10 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
   objectFit: ['object-fit'],
   objectPosition: ['object-position'],
 
+  // 구조 손잡이 — 구조 기본 CSS(`renderer`)가 읽는 커스텀 프로퍼티에 값을 넣는 별칭.
+  // **§6.8에 없다 — P4b-1이 더했다.** 근거와 소유 규칙은 `STYLE_PROPERTIES_BEYOND_SPEC`에 있다.
+  treeIndent: ['--wb-tree-indent'],
+
   // 효과
   shadow: ['box-shadow'],
   opacity: ['opacity'],
@@ -106,6 +110,32 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
  * |---|---|---|
  * | `fontFamily` | §6.7의 `assets.fonts` · §6.3의 `scale.typography.family` | 폰트를 선언하고 토큰까지 만들어도 **어느 테마도 컴포넌트에 걸 수 없다** |
  * | `gridColumns` | §6.11 예시의 `List:cardGrid` | `display: grid`를 선언해도 **트랙이 없어 1열**이다. `List.columns`는 `visibleWhen:{structure:'table'}`인 **컬럼 이름 목록**이라 노드도 열 수를 못 정한다 |
+ * | `treeIndent` | 구조 기본 CSS의 `--wb-tree-indent` | 렌더러가 손잡이를 남겼는데 **그 이름에 값을 넣을 길이 없어** 늘 기본값 `16px`이다 |
+ *
+ * ---
+ *
+ * **재라 #5 — 커스텀 프로퍼티 채널을 어떻게 열었고 이름 목록을 누가 소유하는가.**
+ *
+ * **임의 커스텀 프로퍼티를 열지 않는다.** 열면 이 화이트리스트가 무의미해진다 — 무엇이든
+ * `--x`로 내보낼 수 있고, 그 이름을 읽는 규칙이 구조 기본 CSS에 있으면 §6.8을 우회해
+ * 임의 스타일을 거는 길이 된다. **손잡이마다 별칭 어휘 하나**를 여는 쪽이 그 제한을 지키고,
+ * 값 규칙(토큰 참조·리터럴·함수 금지)도 새로 만들지 않고 그대로 쓴다.
+ *
+ * **소유는 갈라져 있다 — 그것이 §3.3의 결과다.**
+ *
+ * | 무엇 | 소유 | 왜 |
+ * |---|---|---|
+ * | 어휘 이름(`treeIndent`)과 그것이 내는 CSS 이름 | **`themes`**(이 표) | 테마 문서를 검증하는 것이 이 패키지다 |
+ * | 그 CSS 이름을 **읽는 규칙** | **`renderer`**(`TREE_INDENT_VAR`) | 손잡이는 구조 구현체의 것이다 |
+ * | 두 문자열이 같은지 | **`apps/web`의 케이스** | `themes`는 `renderer`를 볼 수 없다(§3.3) — 둘 다 보는 자리가 거기뿐이다 |
+ *
+ * **`schema`로 옮기지 않았다.** 둘 다 `schema`를 보므로 목록을 거기 두면 대조가 필요 없어지지만,
+ * §5.1의 `ComponentDef`에 손잡이 필드가 없어 **계약을 넓히는 일**이 된다 — 이 슬라이스의
+ * 전역 제약이 금지하는 부류다. 손잡이가 늘어 대조가 무거워지면 그때 다시 재라.
+ *
+ * **이름 충돌은 없다 — 대조 케이스가 지킨다.** `--wb-tree-*`는 렌더러의 노드 변수
+ * 접두어(`--wb-node-`)와 겹치지 않고, `cssVarName`이 만드는 이름과도 겹치지 않는다
+ * (토큰 이름공간 일곱과 `primitives`의 넷 어디에도 `tree`가 없다).
  *
  * **`typography`(스케일 참조)로는 폰트를 걸 수 없다.** 그 어휘가 펼치는 것은
  * `fontSize`·`lineHeight`·`fontWeight`·`letterSpacing` 넷이고(`TYPOGRAPHY_KEYS`),
@@ -120,7 +150,11 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
  * 지나지 않으므로 `"space.10"`을 통과시켜도 CSS에서 무효값이 된다. 근거와 실측은
  * `packages/schema/test/component/catalog-vocabulary.test.ts`에 있다.
  */
-export const STYLE_PROPERTIES_BEYOND_SPEC: readonly string[] = ['fontFamily', 'gridColumns']
+export const STYLE_PROPERTIES_BEYOND_SPEC: readonly string[] = [
+  'fontFamily',
+  'gridColumns',
+  'treeIndent',
+]
 
 /**
  * `typography: "h3"`이 펼쳐지는 CSS 선언. 스케일 항목에 없는 키는 **선언을 내지 않는다**

@@ -16,9 +16,22 @@
  * 한 조각으로 그대로 잰다. 마지막 치환 한 걸음은 실제 브라우저의 몫이고, 그 측정은
  * 보고서에 적었다.
  */
-import { installStructures, renderNode, structureBaseCss } from '@wirebound/renderer'
+import {
+  NODE_VAR_PREFIX,
+  TREE_INDENT_VAR,
+  installStructures,
+  renderNode,
+  structureBaseCss,
+} from '@wirebound/renderer'
 import { installCatalog } from '@wirebound/schema'
-import { compileTheme, resolveTheme, systemTheme, type Theme } from '@wirebound/themes'
+import {
+  STYLE_PROPERTIES,
+  STYLE_PROPERTIES_BEYOND_SPEC,
+  compileTheme,
+  resolveTheme,
+  systemTheme,
+  type Theme,
+} from '@wirebound/themes'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -36,6 +49,8 @@ const DOC = {
     { id: 'n_000000000003', type: 'Grid', props: { columns: 3 } },
     { id: 'n_000000000004', type: 'Card', props: { title: '카드' } },
     { id: 'n_000000000005', type: 'Text', props: { content: '제목', role: 'h1' } },
+    // P4b-1이 더했다 — `--wb-tree-indent` 손잡이를 재는 자리다.
+    { id: 'n_000000000006', type: 'Tree', props: { depth: 2 } },
   ],
 }
 
@@ -281,6 +296,90 @@ describe('테마를 바꾸면 외형이 바뀐다', () => {
       expect(themeCss).toContain(
         '[data-wb-component="Grid"][data-wb-structure="default"] {\n  grid-template-columns: repeat(5, 1fr);\n}',
       )
+    })
+  })
+
+  /**
+   * **재라 #5 — `--wb-tree-indent` 손잡이가 살아난다.**
+   *
+   * P4a-2가 계획서의 *"테마의 손잡이가 된다"*를 구현 중 반증했다 — 그 이름에 값을 넣는
+   * 어휘가 없어 늘 기본값 `16px`이었다. P4b-1의 `treeIndent`가 그 길을 연다.
+   *
+   * **jsdom이 마지막 한 걸음을 재지 못한다.** 실측: 테마가 낸 `--wb-tree-indent`를
+   * `Tree` **루트**에서는 읽지만 조각(`[data-wb-part="node"]`)에서는 빈 문자열이고
+   * (**커스텀 프로퍼티 상속을 계산하지 않는다**), `padding-left`도 `calc(var(…) * var(…))`
+   * 문자열 그대로 남는다. 그래서 **두 조각으로 나눠 잰다** — 테마가 그 이름에 값을 내는
+   * 것과, 구조 기본 CSS가 그 이름을 읽는 것. (P4a-2가 `var()` 치환에서 쓴 것과 같은 배치다.)
+   *
+   * **마지막 한 걸음은 Chromium으로 한 번 쟀다** — 위 두 조각으로 만든 정적 HTML을 열어
+   * `getComputedStyle(node).paddingLeft`를 읽었다:
+   *
+   * | 테마 | level 0 | level 1 | level 2 |
+   * |---|---|---|---|
+   * | `Tree.base.treeIndent: '40px'` | `0px` | **`40px`** | **`80px`** |
+   * | 그 어휘를 안 씀(대조군) | `0px` | `16px` | `32px` |
+   *
+   * **손잡이가 실제로 살아났다** — P4a-2가 *"이 이름에 값을 넣을 수 있는 것은 오늘
+   * 아무것도 없고 늘 기본값 16px이 쓰인다"*고 적은 자리다. **그 측정은 다시 돌지 않는다**
+   * (자동 회귀에 브라우저가 없다 — P4a-2·P4a-3과 같은 제약).
+   */
+  describe('재라 #5 — 커스텀 프로퍼티 채널', () => {
+    const TREE = '[data-wb-component="Tree"]'
+    const NODE_PART = '[data-wb-part="node"]'
+
+    /** `Tree`의 들여쓰기만 바꾼 테마. 값은 리터럴이다 — jsdom이 `var()`를 치환하지 못한다. */
+    const INDENT_THEME: Theme = {
+      meta: { id: 'indent', name: '들여쓰기', version: '1.0.0' },
+      components: { Tree: { structure: 'indent', base: { treeIndent: '40px' } } },
+    }
+
+    it('테마가 손잡이 이름에 값을 낸다', () => {
+      const { values } = measure(INDENT_THEME, [[TREE, TREE_INDENT_VAR]])
+
+      expect(values).toEqual(['40px'])
+    })
+
+    it('대조군 — 그 어휘를 안 쓰는 테마에서는 값이 없다', () => {
+      // 이것이 없으면 위 케이스가 "테마가 넣었다"인지 "원래 거기 있었다"인지 갈리지 않는다.
+      const { values } = measure(systemTheme('admin')!, [[TREE, TREE_INDENT_VAR]])
+
+      expect(values).toEqual([''])
+    })
+
+    it('구조 기본 CSS가 그 이름을 읽는다', () => {
+      // 둘째 조각. 값이 나가도 읽는 규칙이 다른 이름을 보면 손잡이는 여전히 죽어 있다.
+      const { values } = measure(INDENT_THEME, [[NODE_PART, 'padding-left']])
+
+      expect(values[0]).toContain(`var(${TREE_INDENT_VAR}`)
+    })
+
+    /**
+     * **소유 규칙의 대조.** 어휘가 내는 CSS 이름은 `themes`가 갖고, 그것을 읽는 규칙은
+     * `renderer`가 갖는다. **`themes`는 `renderer`를 볼 수 없으므로**(§3.3) 두 문자열이
+     * 같은지 볼 수 있는 자리가 여기뿐이다 — 어긋나면 손잡이가 조용히 죽는다.
+     */
+    it('어휘가 내는 이름과 렌더러가 읽는 이름이 같다', () => {
+      expect(STYLE_PROPERTIES['treeIndent']).toEqual([TREE_INDENT_VAR])
+    })
+
+    it('손잡이 이름이 노드 변수·토큰 이름과 겹치지 않는다', () => {
+      // P4a-2의 재라 #5가 정확히 이 부류였다 — `--wb-grid-columns`가 토큰과 노드 값
+      // 양쪽에서 만들어져 뜻이 둘이었다.
+      expect(TREE_INDENT_VAR.startsWith(NODE_VAR_PREFIX)).toBe(false)
+
+      const { themeCss } = measure(systemTheme('admin')!, [[TREE, 'display']])
+      const rootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('}'))
+      expect(rootBlock).not.toContain(TREE_INDENT_VAR)
+    })
+
+    it('§6.8 밖의 어휘가 등록된 것뿐이다 — 목록이 여기서도 보인다', () => {
+      // `themes`의 대조가 이미 있지만(그쪽 `§6.8 대조`), 이 목록이 **두 패키지를 잇는
+      // 계약**이 됐으므로 소비자 쪽에서도 이름을 못박는다.
+      expect([...STYLE_PROPERTIES_BEYOND_SPEC].sort()).toEqual([
+        'fontFamily',
+        'gridColumns',
+        'treeIndent',
+      ])
     })
   })
 

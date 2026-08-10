@@ -212,6 +212,42 @@ describe('styleDeclarations — 이름', () => {
     })
   })
 
+  /**
+   * **재라 #5 — 커스텀 프로퍼티 채널.**
+   *
+   * 구조 기본 CSS가 `--wb-tree-indent`를 손잡이로 남겼는데 테마가 그 이름에 값을 넣을 길이
+   * 없었다(P4a-2가 계획서의 *"테마의 손잡이가 된다"*를 구현 중 반증했다).
+   *
+   * **임의 커스텀 프로퍼티를 열지 않는다.** 열면 §6.8의 화이트리스트가 무의미해진다 —
+   * 무엇이든 `--x`로 내보낼 수 있고, 그 값을 읽는 규칙이 저쪽에 있으면 화이트리스트를
+   * 우회해 임의 스타일을 거는 길이 된다. **손잡이마다 별칭 어휘 하나**를 여는 쪽이 그
+   * 제한을 지키면서 §6.8의 관용구(camelCase 이름 → CSS 프로퍼티)를 그대로 쓴다.
+   *
+   * **값 규칙도 그대로다** — 토큰 참조와 리터럴, 함수 금지. 새 규칙을 만들지 않는다.
+   */
+  describe('treeIndent (§6.8에 없는 어휘 — P4b-1)', () => {
+    it('구조 기본 CSS가 읽는 커스텀 프로퍼티로 나간다', () => {
+      expect(decl('treeIndent', '8px').css).toEqual([['--wb-tree-indent', '8px']])
+    })
+
+    it('토큰 참조를 받는다', () => {
+      expect(decl('treeIndent', 'space.6').css).toEqual([['--wb-tree-indent', 'var(--wb-space-6)']])
+    })
+
+    it('없는 토큰과 함수는 여전히 이슈다', () => {
+      expect(codes(decl('treeIndent', 'space.없음').issues)).toEqual(['unknown-token'])
+      expect(codes(decl('treeIndent', 'calc(1px * 2)').issues)).toEqual(['bad-style-value'])
+    })
+
+    it('임의 커스텀 프로퍼티는 열리지 않는다', () => {
+      // **이것이 이 채널을 별칭으로 연 이유다.** 이름을 직접 적는 길이 있으면
+      // 화이트리스트가 무의미해진다.
+      for (const prop of ['--wb-tree-indent', '--x', '--wb-node-grid-columns']) {
+        expect(codes(decl(prop, '8px').issues), prop).toEqual(['unknown-style-prop'])
+      }
+    })
+  })
+
   it('X·Y 축약은 물리 프로퍼티 둘로 펼쳐진다', () => {
     expect(decl('paddingX', '8px').css).toEqual([
       ['padding-left', '8px'],
