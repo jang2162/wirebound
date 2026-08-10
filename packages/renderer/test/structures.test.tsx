@@ -120,10 +120,17 @@ function captures(html: string, pattern: RegExp): string[] {
 /**
  * 등록된 모든 구조를 **비기본 props로** 그려 콜백에 넘긴다. 렌더 횟수를 돌려준다.
  *
- * **가드 둘이 이 순회를 함께 쓴다** — `data-*` 계약과 `style` 일반 선언. 앞서 `data-*`
- * 쪽만 이 순회로 옮기고 `style` 쪽을 기본 props로 남겨 뒀는데, **조건부 조각에 inline
- * `color:red`를 심으니 1220 케이스가 통과했다**(재현했다). 그것은 이 계획이 닫으려던
- * 결함(P0 이월 #7) 그 자체다. 순회를 하나로 모으면 그 자리가 생기지 않는다.
+ * **가드 셋이 이 순회를 함께 쓴다** — `data-*` 계약, `style` 일반 선언, **part 이름 계약**.
+ * P4a-2가 앞의 둘을 옮길 때 `data-*` 쪽만 먼저 옮기고 `style` 쪽을 기본 props로 남겨 뒀는데,
+ * **조건부 조각에 inline `color:red`를 심으니 1220 케이스가 통과했다**(재현했다). 그것은
+ * 그 계획이 닫으려던 결함(P0 이월 #7) 그 자체다.
+ *
+ * **셋째(part 이름)는 P4b-1이 옮겼다 — 같은 부류가 한 번 더 남아 있었다.** 조건부 조각이
+ * 카탈로그에 없는 part 이름을 내도 **0건이 죽었다**(실측, 대조군은 2건). 그것이 P0 이월
+ * #10이고, "계획이 재지 않은 것 #5"가 *"이미 닫혔을 수 있다"*고 적은 자리다 — **절반만
+ * 닫혀 있었다.**
+ *
+ * **순회를 하나로 모으면 그 자리가 생기지 않는다.**
  */
 function forEachVariation(visit: (rendered: { key: string; html: string }) => void): number {
   const keys = listStructureKeys()
@@ -148,15 +155,42 @@ function forEachVariation(visit: (rendered: { key: string; html: string }) => vo
 }
 
 describe('part 계약', () => {
-  it('모든 컴포넌트가 카탈로그에 선언된 part만 낸다', () => {
-    // 검사가 전부 루프 안에 있다. part가 하나도 안 나오면 단언 없이 통과하므로 못을 박는다.
-    expect.hasAssertions()
-    for (const type of CATALOG_TYPES) {
+  /**
+   * **P0 이월 #10 — 이 가드가 기본 props로만 훑고 있었다. P4b-1이 닫는다.**
+   *
+   * P4a-2가 `data-*` 계약과 `style` 가드를 `forEachVariation`으로 옮기면서 **part 이름
+   * 계약은 기본 props에 남겨 두었다.** 그래서 **조건부로만 그려지는 조각**(`Media.caption`·
+   * `Card.subtitle`·`Field.help`·`List.item`/`media`/`title`/`meta`·`EntryForm.label`/`control`)이
+   * 카탈로그에 없는 이름을 내도 아무도 보지 못했다.
+   *
+   * **실측(P4b-1이 심어 확인했다):**
+   *
+   * | 심은 것 | 죽은 수 |
+   * |---|---|
+   * | 조건부 조각(`Media.caption`)이 선언되지 않은 part 이름을 낸다 | **0** |
+   * | 늘 그려지는 조각(`Media.frame`)에 같은 변조 — 대조군 | 2 |
+   *
+   * **P4b-2가 구조 26개를 만들기 직전이라 지금이 가장 싸다** — 그쪽이 만드는 구조마다
+   * 조건부 조각이 늘어난다. P0 이월이 든 `EntryFormLabelLeft`의 압력(폼의 `title`을
+   * `part('label')` 안에 렌더한다)도 같은 부류다.
+   */
+  it('모든 컴포넌트가 카탈로그에 선언된 part만 낸다 — 비기본 props로 전수', () => {
+    const offenders: string[] = []
+    let scanned = 0
+
+    const renders = forEachVariation(({ key, html }) => {
+      const [type] = key.split(':') as [string]
       const declared = new Set(requireComponent(type).parts)
-      for (const part of captures(renderDefault(type), /data-wb-part="([^"]*)"/g)) {
-        expect(declared.has(part), `${type}: 카탈로그에 없는 part "${part}"`).toBe(true)
+      for (const part of captures(html, /data-wb-part="([^"]*)"/g)) {
+        scanned += 1
+        if (!declared.has(part)) offenders.push(`${type}: ${part}`)
       }
-    }
+    })
+
+    // 셋 다 못을 박는다 — 하나라도 0이면 위 순회가 헛돈 것이다.
+    expect(renders).toBeGreaterThan(100)
+    expect(scanned).toBeGreaterThan(0)
+    expect([...new Set(offenders)]).toEqual([])
   })
 
   /**
