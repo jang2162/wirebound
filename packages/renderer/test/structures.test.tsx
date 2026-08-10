@@ -211,9 +211,20 @@ function captures(html: string, pattern: RegExp): string[] {
  * **넷째 사각 — 이 순회가 자식 있는 노드를 한 번도 그리지 않았다. P4b-2 ③이 닫는다.**
  *
  * P4b-2 ②의 W3이 찾았다. 여기서 만드는 노드에 `children`이 없으므로 `renderNode`가
- * 자식을 `null`로 만들고, **자식을 감싸며 생기는 조각은 순회에 나오지 않는다.**
- * `SearchForm:stacked`의 `row`, `EntryForm:sectioned`의 `section`·`sectionTitle`,
- * `Card:horizontal`의 `content`가 그 부류다 — 자식이 있어야만 그려진다.
+ * 자식을 `null`로 만들고, **자식마다 하나씩 생기는 조각은 순회에 나오지 않는다.**
+ *
+ * **그 부류는 전수로 세면 둘뿐이다** (수정 웨이브가 다시 쟀다 — 구조 45개를 자식 없이/있게
+ * 각각 그려 조각 이름 집합을 뺐다):
+ *
+ * | 구조 | 자식이 있어야만 나오는 조각 |
+ * |---|---|
+ * | `SearchForm:stacked` | `row` |
+ * | `EntryForm:sectioned` | `section` · `sectionTitle` · `row` |
+ *
+ * > **앞 판이 여기 `Card:horizontal`의 `content`를 예로 들었는데 틀렸다.** 그 조각은
+ * > `{children}`을 **담을** 뿐 `Children.map` 밖에 있어 **자식과 무관하게 늘 그려진다.**
+ * > 사각의 범위를 넓게 알려 주므로 지운다 — 갈리는 것은 *"자식을 담는가"*가 아니라
+ * > **"자식 수만큼 반복되는가"**다.
  *
  * **실측(③이 심어 확인했다):** `EntryFormSectioned`가 자식마다 감싸는 조각에 위반 셋을
  * 한꺼번에 심었다 — 선언 안 된 part 이름 · 계약 밖 `data-wb-bogus` · inline `color: red`.
