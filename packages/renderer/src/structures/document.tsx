@@ -6,7 +6,7 @@
  * 공용 도구는 `../structure-css-tools`에 있다 — 복사해 오지 마라.
  */
 import { createElement, type CSSProperties } from 'react'
-import { nodeVar } from '../structure-css'
+import { componentRule, nodeVar, partRule } from '../structure-css-tools'
 import type { StructureEntry, StructureRenderer } from './registry'
 
 const ROLE_TAG: Record<string, string> = {
@@ -51,6 +51,28 @@ export const PlaceholderDefault: StructureRenderer = ({ attrs, props }) => (
     {String(props.label)}
   </div>
 )
+
+/**
+ * 이 그룹의 구조가 서기 위한 최소 CSS. 규칙을 더하면 여기에 `blocks.push(…)`를 더한다.
+ * 셀렉터를 손으로 쓰지 마라 — `componentRule`·`partRule`만 쓴다.
+ */
+export function documentCssBlocks(): string[] {
+  const blocks: string[] = []
+
+  // ── Media ─────────────────────────────────────────────────────────────────
+  blocks.push(
+    partRule('Media', 'frame', [`aspect-ratio: var(${nodeVar('media', 'ratio')}, 16/9);`]),
+  )
+
+  // ── Placeholder ───────────────────────────────────────────────────────────
+  blocks.push(
+    componentRule('Placeholder', 'default', [
+      `height: var(${nodeVar('placeholder', 'height')}, 120px);`,
+    ]),
+  )
+
+  return blocks
+}
 
 /** 이 그룹이 등록하는 구조. 구조를 더하면 여기에 한 줄을 더한다(파일 끝에 둔다 — TDZ). */
 export const DOCUMENT_ENTRIES: StructureEntry[] = [

@@ -6,7 +6,7 @@
  * 있다 — 복사해 오지 마라.
  */
 import type { CSSProperties } from 'react'
-import { nodeVar } from '../structure-css'
+import { TREE_INDENT_VAR, nodeVar, partRule } from '../structure-css-tools'
 import type { StructureEntry, StructureRenderer } from './registry'
 
 export const ListTable: StructureRenderer = ({ attrs, props, part }) => {
@@ -83,6 +83,27 @@ export const KeyValueTable: StructureRenderer = ({ attrs, props, part }) => {
       </tbody>
     </table>
   )
+}
+
+/**
+ * 이 그룹의 구조가 서기 위한 최소 CSS. 규칙을 더하면 여기에 `blocks.push(…)`를 더한다.
+ * 셀렉터를 손으로 쓰지 마라 — `componentRule`·`partRule`만 쓴다.
+ */
+export function dataCssBlocks(): string[] {
+  const blocks: string[] = []
+
+  // ── Tree ──────────────────────────────────────────────────────────────────
+  //
+  // 노드가 아니라 **조각**에 붙는 유일한 자리다. `(index % depth)` 단계를 `<li>`가 나르고
+  // 폭을 여기서 곱한다. 곱셈이 CSS에 있는 것은 §6.8이 금지한 `calc()`와 무관하다 —
+  // 그 금지는 **테마 문서의 값**에 걸리고, 이 파일은 렌더러가 소유한 CSS다.
+  blocks.push(
+    partRule('Tree', 'node', [
+      `padding-left: calc(var(${nodeVar('tree', 'level')}, 0) * var(${TREE_INDENT_VAR}, 16px));`,
+    ]),
+  )
+
+  return blocks
 }
 
 /**

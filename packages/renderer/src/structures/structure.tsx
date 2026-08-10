@@ -9,7 +9,7 @@
  * **복사해 오지 마라** — 다섯 벌이 따로 썩는다.
  */
 import type { CSSProperties } from 'react'
-import { nodeVar } from '../structure-css'
+import { componentRule, nodeVar } from '../structure-css-tools'
 import type { StructureEntry, StructureRenderer } from './registry'
 
 /**
@@ -112,6 +112,50 @@ function cssJustify(value: string): string {
  * **구조를 더하면 여기에 한 줄을 더한다.** 다른 그룹의 파일도 `structures/index.ts`도
  * 만지지 않는다 — 그것이 P4b-2 ①이 이 배열을 가른 이유다.
  */
+/**
+ * 이 그룹의 구조가 서기 위한 최소 CSS. `structureBaseCss()`가 다섯 그룹의 것을 모은다.
+ *
+ * **규칙을 더하면 여기에 `blocks.push(…)` 한 줄을 더한다.** 다른 그룹의 CSS도
+ * `structure-css.ts`도 만지지 않는다. 셀렉터를 손으로 쓰지 마라 — `componentRule`·
+ * `partRule`만 쓴다(이유는 `structure-css.ts`의 캐스케이드 판정).
+ *
+ * **배열 안의 순서가 곧 우선순위다.** 있던 규칙 사이에 끼워 넣지 말고 뒤에 붙여라.
+ */
+export function structureCssBlocks(): string[] {
+  const blocks: string[] = []
+
+  // ── Flex ──────────────────────────────────────────────────────────────────
+  //
+  // **`start`/`end`를 그대로 싣고 `flex-start`로 바꾸지 않는다** (P4a-2 Task 2가 정한 것).
+  // 근거는 §6.0의 약속이다 — 테마가 이 규칙의 `display`를 `grid`로 덮을 수 있어야 하는데,
+  // `flex-start`는 flexbox 밖에서 뜻이 흐려지는 값이고 `start`는 상자 정렬(Box Alignment)
+  // 어느 문맥에서나 같은 뜻이다. 변환이 필요한 것은 CSS에 대응 키워드가 없는
+  // `between` → `space-between` 하나뿐이고, 그것은 아래 `cssJustify`가 한다.
+  blocks.push(
+    componentRule('Flex', 'default', [
+      'display: flex;',
+      `flex-direction: var(${nodeVar('flex', 'direction')}, row);`,
+      `align-items: var(${nodeVar('flex', 'align')}, stretch);`,
+      `justify-content: var(${nodeVar('flex', 'justify')}, start);`,
+      `flex-wrap: var(${nodeVar('flex', 'wrap')}, nowrap);`,
+    ]),
+  )
+
+  // ── Grid ──────────────────────────────────────────────────────────────────
+  //
+  // 열 수는 `repeat()` 안쪽에서만 쓰이므로 **트랙 목록 전체가 아니라 수 하나**를 나른다.
+  // `GridDefault`가 이미 `--wb-grid-columns`를 내면서 바로 옆에 `grid-template-columns`를
+  // inline으로 박아 무력화하고 있었다 — 옳은 절반이 이미 있었고 틀린 절반을 지운 것이다.
+  blocks.push(
+    componentRule('Grid', 'default', [
+      'display: grid;',
+      `grid-template-columns: repeat(var(${nodeVar('grid', 'columns')}, 1), 1fr);`,
+    ]),
+  )
+
+  return blocks
+}
+
 export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Page', 'default', PageDefault],
   ['Slot', 'default', SlotDefault],

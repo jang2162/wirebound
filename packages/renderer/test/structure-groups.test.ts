@@ -20,24 +20,25 @@
  * 그래서 수를 못박는 대신 **준비 웨이브의 것이 그대로 남아 있는지**를 본다.
  */
 import { describe, expect, it } from 'vitest'
-import { ACTION_ENTRIES } from '../src/structures/action'
-import { DATA_ENTRIES } from '../src/structures/data'
-import { DOCUMENT_ENTRIES } from '../src/structures/document'
+import { structureBaseCss } from '../src/structure-css'
+import { ACTION_ENTRIES, actionCssBlocks } from '../src/structures/action'
+import { DATA_ENTRIES, dataCssBlocks } from '../src/structures/data'
+import { DOCUMENT_ENTRIES, documentCssBlocks } from '../src/structures/document'
 import { installStructures } from '../src/structures/index'
-import { INPUT_ENTRIES } from '../src/structures/input'
+import { INPUT_ENTRIES, inputCssBlocks } from '../src/structures/input'
 import { listStructureKeys, resetStructures, type StructureEntry } from '../src/structures/registry'
-import { STRUCTURE_ENTRIES } from '../src/structures/structure'
+import { STRUCTURE_ENTRIES, structureCssBlocks } from '../src/structures/structure'
 
 /**
  * 그룹 다섯. **순서가 `installStructures()`·`structureBaseCss()`가 모으는 순서와 같아야
  * 한다** — 아래 순서 케이스가 이 배열을 기준으로 재기 때문이다.
  */
-const GROUPS: [name: string, entries: readonly StructureEntry[]][] = [
-  ['structure', STRUCTURE_ENTRIES],
-  ['data', DATA_ENTRIES],
-  ['input', INPUT_ENTRIES],
-  ['action', ACTION_ENTRIES],
-  ['document', DOCUMENT_ENTRIES],
+const GROUPS: [name: string, entries: readonly StructureEntry[], blocks: () => string[]][] = [
+  ['structure', STRUCTURE_ENTRIES, structureCssBlocks],
+  ['data', DATA_ENTRIES, dataCssBlocks],
+  ['input', INPUT_ENTRIES, inputCssBlocks],
+  ['action', ACTION_ENTRIES, actionCssBlocks],
+  ['document', DOCUMENT_ENTRIES, documentCssBlocks],
 ]
 
 function keysOf(entries: readonly StructureEntry[]): string[] {
@@ -133,5 +134,102 @@ describe('P4b-2 ① — 등록이 그룹 다섯으로 갈렸다', () => {
 
     expect(() => installStructures()).not.toThrow()
     expect(listStructureKeys()).toHaveLength(first)
+  })
+})
+
+/**
+ * **준비 웨이브가 가르기 직전의 구조 기본 CSS — 규칙 다섯이 글자까지 이대로였다.**
+ *
+ * 가르는 것이 출력을 바꾸지 않았다는 실측: 가르기 전 `structureBaseCss()`가 789바이트 ·
+ * sha256 `de5234db…`였고, 가른 뒤 같은 바이트·같은 해시였다. 그 대조는 한 번뿐이므로
+ * **여기 규칙 본문을 적어 남긴다.**
+ *
+ * **전체 문자열을 못박지 않는 이유:** 병렬 워커가 자기 그룹에 규칙을 더하면 그때마다
+ * 이 케이스가 죽고, 넷이 각자 이 상수를 고치면 **가르기가 없애려던 충돌이 이 파일에서
+ * 그대로 되살아난다.** 그래서 **"이 다섯이 이 순서로 남아 있는가"**만 본다 — 캐스케이드가
+ * 걸려 있는 것이 그 순서이지 전체 길이가 아니다(P4a-2: *"시트 순서가 곧 우선순위"*).
+ */
+const BASELINE_BLOCKS: [name: string, css: string][] = [
+  [
+    'Flex',
+    `[data-wb-component="Flex"][data-wb-structure="default"] {
+  display: flex;
+  flex-direction: var(--wb-node-flex-direction, row);
+  align-items: var(--wb-node-flex-align, stretch);
+  justify-content: var(--wb-node-flex-justify, start);
+  flex-wrap: var(--wb-node-flex-wrap, nowrap);
+}`,
+  ],
+  [
+    'Grid',
+    `[data-wb-component="Grid"][data-wb-structure="default"] {
+  display: grid;
+  grid-template-columns: repeat(var(--wb-node-grid-columns, 1), 1fr);
+}`,
+  ],
+  [
+    'Tree',
+    `[data-wb-component="Tree"] [data-wb-part="node"] {
+  padding-left: calc(var(--wb-node-tree-level, 0) * var(--wb-tree-indent, 16px));
+}`,
+  ],
+  [
+    'Media',
+    `[data-wb-component="Media"] [data-wb-part="frame"] {
+  aspect-ratio: var(--wb-node-media-ratio, 16/9);
+}`,
+  ],
+  [
+    'Placeholder',
+    `[data-wb-component="Placeholder"][data-wb-structure="default"] {
+  height: var(--wb-node-placeholder-height, 120px);
+}`,
+  ],
+]
+
+describe('P4b-2 ① — 구조 기본 CSS가 그룹 다섯으로 갈렸다', () => {
+  it('structureBaseCss()는 그룹 블록을 순서대로 이어 붙이기만 한다', () => {
+    // 모으는 쪽이 자기 규칙을 몰래 끼워 넣으면 그 규칙은 **어느 그룹도 소유하지 않는다** —
+    // 병렬 워커가 만질 수 없는 자리가 다시 생기는 것이다.
+    const joined = GROUPS.flatMap(([, , blocks]) => blocks()).join('\n')
+    expect(joined.length).toBeGreaterThan(0)
+    expect(structureBaseCss()).toBe(joined)
+  })
+
+  it('준비 웨이브의 규칙 다섯이 글자까지 그대로 있다', () => {
+    const css = structureBaseCss()
+    const missing = BASELINE_BLOCKS.filter(([, block]) => !css.includes(block)).map(([name]) => name)
+    expect(missing).toEqual([])
+  })
+
+  it('그 다섯의 순서가 그대로다 — 순서가 곧 우선순위다', () => {
+    const css = structureBaseCss()
+    const positions = BASELINE_BLOCKS.map(([name, block]) => [name, css.indexOf(block)] as const)
+
+    // `includes` 케이스와 쌍이다. 하나라도 -1이면 아래 증가 검사가 뜻을 잃는다.
+    expect(positions.filter(([, at]) => at < 0)).toEqual([])
+
+    const outOfOrder = positions
+      .filter(([, at], index) => index > 0 && at < positions[index - 1]![1])
+      .map(([name]) => name)
+    expect(outOfOrder).toEqual([])
+  })
+
+  it('그룹의 CSS는 자기 그룹의 컴포넌트만 겨냥한다', () => {
+    // **병렬 워커가 남의 컴포넌트에 규칙을 다는 것을 여기서 막는다.** 달아도 CSS는
+    // 멀쩡히 나가므로 화면으로는 안 보이고, 그러면 그 컴포넌트를 맡은 워커가 자기 규칙을
+    // 다는 순간 두 규칙이 서로를 덮는다 — 순서에 따라 결과가 갈리는데 아무도 모른다.
+    const offenders: string[] = []
+
+    for (const [name, entries, blocks] of GROUPS) {
+      const own = new Set(entries.map(([type]) => type))
+      for (const block of blocks()) {
+        for (const match of block.matchAll(/\[data-wb-component="([^"]+)"\]/g)) {
+          if (!own.has(match[1]!)) offenders.push(`${name}: ${match[1]}`)
+        }
+      }
+    }
+
+    expect([...new Set(offenders)]).toEqual([])
   })
 })
