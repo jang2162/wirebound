@@ -402,3 +402,91 @@ describe('개별 구조', () => {
     expect(html).toContain('주입됨')
   })
 })
+
+/**
+ * **재라 #6 — `Media.kind`는 오늘 죽어 있다. 지우지 않고 그 사실을 케이스로 고정한다.**
+ *
+ * `Media`의 `kind` prop과 `structures`가 **같은 이름 넷**이다(`image`·`video`·
+ * `illustration`·`chart`). 하나는 노드가 정하고 하나는 **테마가 고른다.**
+ *
+ * **실측: `MediaImage`가 `props.kind`를 한 번도 읽지 않는다**(`ratio`·`caption`만 쓴다).
+ * `kind`는 §6.11의 여섯 속성 어디에도 실리지 않으므로 **구조 구현체 안에서만 쓰일 수
+ * 있는데 쓰이지 않는다.**
+ *
+ * > **이것은 "조용히 틀린다" 부류다.** 속성 패널에 `종류` 컨트롤이 **있고**, 사용자가
+ * > `video`를 고르면 문서에 저장되고 검증도 통과하는데 **화면은 아무것도 바뀌지 않는다.**
+ * > 이슈도 0건이다.
+ *
+ * **지우지 않는 이유 둘.**
+ *
+ * 1. **P4b-2가 `Media` 구조 넷을 만든다. 그 질문의 답은 거기서 나온다** — `MediaVideo`가
+ *    `MediaImage`와 다르게 그리면 `kind`는 구조와 중복이라 지우는 것이 맞고, 구조들이
+ *    `kind`를 읽을 일이 있으면 남는다. **구조가 없는 지금 정하는 것은 근거 없이 정하는 것이다.**
+ * 2. `Media.props`가 `z.strictObject`라 prop을 빼는 것은 **문서 마이그레이션이 필요한
+ *    파괴적 변경**이다(§13.1). 스키마 버전을 올리는 일을 어휘 슬라이스에서 하지 않는다.
+ *
+ * **`variantFrom`으로 접지도 않았다** — 그러면 `data-wb-variant`와 `data-wb-structure`가
+ * **같은 값**이 되는데 설계가 그 상태를 말하지 않는다(P4a-2가 접지 않은 이유 그대로).
+ *
+ * **P4b-2가 이것을 깨면서 고치게 된다.**
+ */
+describe('재라 #6 — Media.kind는 렌더에 닿지 않는다', () => {
+  const KINDS = ['image', 'video', 'illustration', 'chart'] as const
+
+  function render(kind: string): string {
+    return renderToStaticMarkup(
+      renderNode({ id: 'n_000000000001', type: 'Media', props: { kind, ratio: '16/9', caption: '' } }),
+    )
+  }
+
+  it('카탈로그가 kind와 structures를 같은 이름 넷으로 갖는다 — 카나리아', () => {
+    const def = requireComponent('Media')
+    expect(def.structures).toEqual([...KINDS])
+    expect(def.editor.some((field) => field.prop === 'kind')).toBe(true)
+  })
+
+  it('kind를 바꿔도 렌더 결과가 글자까지 같다', () => {
+    // **이것이 "죽어 있다"의 실행 가능한 형태다.** 구조 구현체가 그 값을 읽기 시작하면
+    // 여기가 먼저 죽는다.
+    const baseline = render('image')
+    for (const kind of KINDS) {
+      expect(render(kind), kind).toBe(baseline)
+    }
+  })
+
+  it('kind가 data-wb-variant로 나가지 않는다', () => {
+    // `Media`는 `variantFrom`을 갖지 않으므로 그 속성 자체가 안 나온다. §6.11의 여섯
+    // 속성 계약을 넓히지 않았다는 것이기도 하다.
+    for (const kind of KINDS) {
+      expect(render(kind), kind).not.toContain('data-wb-variant')
+    }
+  })
+
+  it('노드가 video라고 적어도 data-wb-structure는 image다', () => {
+    // **어긋남이 가장 선명하게 보이는 자리다.** 노드가 정한 `kind`와 테마(오늘은 기본값)가
+    // 고른 구조가 **같은 이름 공간**인데 서로를 모른다. 사용자가 "동영상"을 골랐는데
+    // 그려지는 것은 이미지 구조다 — 그리고 이슈가 0건이다.
+    expect(render('video')).toContain('data-wb-structure="image"')
+  })
+
+  it('음성 대조 — ratio는 실제로 렌더에 닿는다', () => {
+    // 이 케이스가 없으면 위 둘이 "Media가 아무것도 안 그린다"로도 설명된다.
+    const wide = renderToStaticMarkup(
+      renderNode({ id: 'n_000000000001', type: 'Media', props: { ratio: '16/9' } }),
+    )
+    const square = renderToStaticMarkup(
+      renderNode({ id: 'n_000000000001', type: 'Media', props: { ratio: '1/1' } }),
+    )
+
+    expect(wide).not.toBe(square)
+    expect(square).toContain('1/1')
+  })
+
+  it('구조 넷 중 구현이 있는 것은 image 하나다 — P4b-2가 채운다', () => {
+    // **테마가 나머지 셋을 고르면 폴백이 그려진다.** `kind`의 답이 P4b-2에서 나오는
+    // 이유가 이것이다 — 그쪽이 셋을 만들 때 각자 `kind`를 읽을지 정하게 된다.
+    const implemented = KINDS.filter((structure) => getStructure('Media', structure) !== undefined)
+
+    expect(implemented).toEqual(['image'])
+  })
+})
