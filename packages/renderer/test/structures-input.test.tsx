@@ -153,6 +153,70 @@ describe('SearchForm:collapsible — 접힘을 DOM으로 표현한다', () => {
 })
 
 /**
+ * 두 구조의 렌더 결과를 **구조 이름만 지우고** 맞대 본다. 같으면 `data-wb-structure`
+ * 하나를 빼고 DOM이 글자까지 같다는 뜻이다.
+ */
+function sameDomIgnoringStructureName(html: string, other: string): boolean {
+  const strip = (value: string): string => value.replace(/ data-wb-structure="[^"]*"/g, '')
+  return strip(html) === strip(other)
+}
+
+/**
+ * **발견: `EntryForm:labelTop`은 `labelLeft`와 DOM이 같다. 케이스가 그것을 실행 가능한
+ * 형태로 고정한다** (계획서 "재라 #1"·"계획이 재지 않은 것 #5"가 `Field`에 대해 의심한
+ * 것과 같은 부류이고, 여기서도 성립했다).
+ *
+ * **원인은 소유권이다.** 라벨과 컨트롤의 짝은 `EntryForm`이 아니라 **자식 `Field` 안에**
+ * 있다. `EntryForm`의 구조 구현체가 받는 `children`은 이미 그려진 ReactNode이고, 그 안쪽을
+ * 헤집는 것은 남의 컴포넌트의 구조를 만지는 것이다. 즉 라벨을 위에 두는 것은
+ * **`Field` 루트의 `flex-direction` 하나**이고 그것은 CSS다.
+ *
+ * **더 나아가 이 구조는 테마의 `Field` 스킨과 중복이다.** 테마는 이미
+ * `components.Field.base`에 `flexDirection`을 쓸 수 있으므로, `labelTop`을 고르지 않고도
+ * 라벨을 위에 두는 폼을 만들 수 있다.
+ *
+ * **그래도 구현한다** — 설계 §6.5가 구조 옵션으로 열거했고, 등록해 두면
+ * `data-wb-structure="labelTop"`이라는 셀렉터 하나는 테마에 남는다. **판정은 P4b-3과
+ * §6.5의 구조/변형 경계 재검토로 넘긴다.**
+ *
+ * > **후보 하나를 재고 버렸다:** `EntryForm` 루트가 커스텀 프로퍼티를 싣고 `Field`의
+ * > 기본 CSS가 그것을 `var()`로 읽으면(커스텀 프로퍼티는 상속된다) DOM 없이도 부모가
+ * > 자식 배치를 정할 수 있다. 버린 이유 둘 — (1) 손잡이가 하나 늘고 그것은 D4가 판정을
+ * > 미뤄 둔 부류를 키운다, (2) `Field`의 기본 CSS에 `display:flex`를 넣게 되는데 그것은
+ * > *"구조가 서기 위한 최소 선언"*이 아니라 스킨이다(§4.3 — 스타일 값은 테마에 있다).
+ */
+describe('EntryForm:labelTop — DOM이 labelLeft와 같다(발견)', () => {
+  it('label·row·actions 조각을 낸다', () => {
+    const html = render('EntryForm', 'labelTop', { title: '회원 정보' }, fields(2))
+    expect(html).toContain('data-wb-structure="labelTop"')
+    expect(countOf(html, 'label')).toBeGreaterThan(0)
+    expect(countOf(html, 'row')).toBe(1)
+    expect(countOf(html, 'actions')).toBe(1)
+  })
+
+  it('labelLeft와 data-wb-structure 하나만 다르다', () => {
+    for (const props of [{ title: '' }, { title: '회원 정보' }]) {
+      for (const count of [0, 2]) {
+        const left = render('EntryForm', 'labelLeft', props, fields(count))
+        const top = render('EntryForm', 'labelTop', props, fields(count))
+
+        // 양성 대조: 이름을 지우기 전에는 다르다. 이것이 없으면 아래 단언이
+        // "둘 다 폴백이라 같다"로도 설명된다.
+        expect(top).not.toBe(left)
+        expect(sameDomIgnoringStructureName(top, left), JSON.stringify({ props, count })).toBe(true)
+      }
+    }
+  })
+
+  it('음성 대조 — sectioned는 labelLeft와 DOM이 다르다', () => {
+    // 비교 함수가 무엇이든 같다고 하는 것이 아님을 못박는다.
+    const left = render('EntryForm', 'labelLeft', { title: '회원 정보' }, fields(2))
+    const sectioned = render('EntryForm', 'sectioned', { title: '회원 정보' }, fields(2))
+    expect(sameDomIgnoringStructureName(sectioned, left)).toBe(false)
+  })
+})
+
+/**
  * **자식이 있을 때의 전수 가드.** 머리말에 적은 사각을 덮는다 — `structures.test.tsx`의
  * 순회는 자식 없는 노드만 그리므로, 자식을 감싸며 나오는 조각은 거기서 스캔되지 않는다.
  *

@@ -94,7 +94,35 @@ export const SearchFormCollapsible: StructureRenderer = ({ attrs, props, part, c
   )
 }
 
-export const EntryFormLabelLeft: StructureRenderer = ({ attrs, props, part, children }) => (
+/**
+ * `labelLeft`·`labelTop` 공용 몸통.
+ *
+ * **둘의 DOM이 같다 — 그것이 P4b-2 W3이 재서 얻은 결과다.** 두 함수를 따로 두고 같은
+ * 본문을 복사하는 대신 하나를 공유하는 것은, *"같다"*가 우연이 아니라 판정임을 코드에
+ * 적어 두기 위해서다(케이스는 `test/structures-input.test.tsx`가 갖는다).
+ *
+ * **원인은 소유권이다.** 라벨과 컨트롤의 짝은 `EntryForm`이 아니라 **자식 `Field` 안에**
+ * 있다. 이 함수가 받는 `children`은 이미 그려진 ReactNode이고 그 안쪽을 헤집는 것은 남의
+ * 컴포넌트의 구조를 만지는 것이다. 라벨을 위로 옮기는 것은 결국 **`Field` 루트의
+ * `flex-direction` 하나**이고 그것은 CSS다 — 그리고 테마는 이미
+ * `components.Field.base`로 그것을 할 수 있으므로 이 구조는 그 스킨과 중복이다.
+ *
+ * **그래도 등록한다** — 설계 §6.5가 구조 옵션으로 열거했고, 등록해 두면
+ * `data-wb-structure="labelTop"` 셀렉터 하나는 테마에 남는다. **구조인가 스킨인가의
+ * 판정은 §6.5의 경계 재검토로 넘긴다**(계획서 "재라 #7"과 같은 부류).
+ *
+ * > **재고 버린 후보:** 이 폼의 루트가 커스텀 프로퍼티를 싣고 `Field`의 기본 CSS가
+ * > `var()`로 읽으면(커스텀 프로퍼티는 상속된다) DOM 없이 부모가 자식 배치를 정할 수
+ * > 있다. 버린 이유 둘 — 손잡이가 하나 늘어 D4가 미뤄 둔 부류를 키우고, `Field`의 기본
+ * > CSS에 `display:flex`를 넣게 되는데 그것은 *"구조가 서기 위한 최소 선언"*이 아니라
+ * > 스킨이다(§4.3 — 스타일 값은 테마에 있다).
+ *
+ * **`part('label')`이 폼의 `title`을 담는 것은 그대로 두었다.** P0 이월이 그 이름 압력을
+ * 지적했지만(필드의 라벨과 같은 이름이다) 고치면 `admin` 테마의
+ * `EntryForm.parts.label` 스킨이 갈 곳을 잃는다 — 이 슬라이스가 화면을 바꾸지 않아야
+ * 한다는 D5에 걸린다. **이름 정리는 보고에 남긴다.**
+ */
+const EntryFormRows: StructureRenderer = ({ attrs, props, part, children }) => (
   <form {...attrs}>
     {props.title ? <div {...part('label')}>{String(props.title)}</div> : null}
     <div {...part('row')}>{children}</div>
@@ -104,6 +132,11 @@ export const EntryFormLabelLeft: StructureRenderer = ({ attrs, props, part, chil
     </div>
   </form>
 )
+
+export const EntryFormLabelLeft: StructureRenderer = EntryFormRows
+
+/** `labelLeft`와 **같은 DOM이다.** 근거는 `EntryFormRows`의 주석. */
+export const EntryFormLabelTop: StructureRenderer = EntryFormRows
 
 export const FieldOutlined: StructureRenderer = ({ attrs, props, part }) => (
   <div {...attrs}>
@@ -135,5 +168,6 @@ export const INPUT_ENTRIES: StructureEntry[] = [
   ['SearchForm', 'stacked', SearchFormStacked],
   ['SearchForm', 'collapsible', SearchFormCollapsible],
   ['EntryForm', 'labelLeft', EntryFormLabelLeft],
+  ['EntryForm', 'labelTop', EntryFormLabelTop],
   ['Field', 'outlined', FieldOutlined],
 ]
