@@ -123,6 +123,32 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     }
 
     /**
+     * **반대 방향 — `variants ⊆ enum 값`.** 위 검사만으로는 한쪽이 열려 있었다.
+     *
+     * `variants`에 enum에 없는 이름이 있으면 **그 이름은 선언돼 있는데 고를 길이 없다** —
+     * `variantFrom`이 있으므로 속성 패널이 변형 컨트롤을 내지 않고(재라 #4의 A안),
+     * `node.variant`를 적어도 `variantFrom`이 이겨 무시된다(P4a-2의 결정 — 그때
+     * `ignored-variant`가 생겼다). **두 길이 다 막혀 있다.**
+     *
+     * 테마가 그 이름에 스킨을 정의하면 **아무도 켤 수 없는 스킨**이 되어 `Media.kind`와
+     * 같은 *"선언은 있는데 화면에 닿지 않는다"* 부류가 하나 생긴다.
+     *
+     * **앞서 `test/component/variant-from.test.ts`가 정반대를 단언하고 있었다** —
+     * *"variants가 enum보다 넓은 것은 막지 않는다"*이고 근거는 *"노드가 `variant`로 직접
+     * 고르는 값이 따로 있을 수 있다"*였다. **그 근거가 거짓이다:** `variantFrom`을 가진
+     * 컴포넌트에서 `node.variant`는 선언된 값이든 아니든 똑같이 버려진다. 리뷰가 반례를
+     * 만들어 잡았고, 그 케이스는 근거와 함께 뒤집었다.
+     */
+    const unreachableVariants = def.variants.filter((value) => !values.includes(value))
+    if (unreachableVariants.length > 0) {
+      throw new Error(
+        `${type}: variants에 ${prop} enum에 없는 이름이 있어 고를 길이 없습니다: ` +
+          `${unreachableVariants.join(', ')} ` +
+          `(variantFrom을 가진 컴포넌트에서는 node.variant가 무시되고 패널도 변형 컨트롤을 내지 않습니다)`,
+      )
+    }
+
+    /**
      * **`variantFrom`의 예외가 구멍이 되는 자리 — 계획 D2가 의심하라고 한 것이 여기다.**
      *
      * 속성 패널은 `variantFrom`을 가진 컴포넌트에 **변형 컨트롤을 내지 않는다**(재라 #4의

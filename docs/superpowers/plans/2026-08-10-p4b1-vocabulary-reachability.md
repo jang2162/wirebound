@@ -61,14 +61,22 @@
 **케이스를 하나씩 더하는 것으로 끝내지 않는다.** `defineComponent`가 검사하면 P4b-2·P4b-3이
 카탈로그를 키울 때 같은 구멍이 다시 나지 않는다. **부류를 닫는다.**
 
-> **구현 중 반증 — 뒤쪽(`variants`)은 성립하지 않는다.** 재라 #4를 A안(패널이 특수 취급)으로
-> 정하면서 **패널이 `variants.length > 0 && variantFrom === undefined`를 보고 자동으로
-> 여닫게 되어** 어긋날 자리 자체가 없어졌다. 늘 참인 단언을 검사로 두면 규칙만 는다.
+> **구현 중 반증 — 뒤쪽(`variants`)은 절반만 성립하지 않는다.** (리뷰가 이 문장을 다시
+> 뒤집었다. 처음에는 *"성립하지 않는다"*라고만 적었다.)
 >
-> **대신 예외 쪽이 실제 구멍이었다** — `variantFrom`을 가진 컴포넌트에는 패널이 변형
-> 컨트롤을 내지 않으므로 **그 prop이 유일한 길**인데, 그것이 `editor`에 있어야 한다는 것을
-> 강제하는 것이 없었다. 오늘 셋(Text·Divider·Field)은 통과하지만 우연이었다.
-> 그래서 `defineComponent`가 검사하는 것은 **`states`와 `variantFrom`이 가리키는 prop** 둘이다.
+> - **`variantFrom`이 없는 가지 — 반증이 맞다.** 재라 #4를 A안으로 정하면서 패널이
+>   `variants.length > 0 && variantFrom === undefined`를 보고 **자동으로** 여닫게 되어
+>   어긋날 자리가 없다. 늘 참인 단언을 검사로 두면 규칙만 는다.
+> - **`variantFrom`이 있는 가지 — 반증이 틀렸다.** 그쪽은 패널이 컨트롤을 **안 내고**
+>   `node.variant`도 **무시된다**(P4a-2의 `ignored-variant`). 두 길이 다 막혀 있으므로
+>   `variants`에 enum 밖의 이름이 있으면 **선언돼 있는데 도달 불가**다.
+>
+> **예외 쪽이 실제 구멍이었고 구멍이 둘이었다** — `variantFrom`이 가리키는 prop이 `editor`에
+> 없는 것, 그리고 `variants`에 그 enum에 없는 이름이 있는 것. 오늘 셋(Text·Divider·Field)은
+> 둘 다 통과하지만 우연이었다.
+>
+> 그래서 `defineComponent`가 검사하는 것은 **셋**이다 — `states` · `variantFrom`이 가리키는
+> prop · **`variants ⊆ enum 값`**.
 
 ### D3. `variant`는 prop이 아니다 — 그것이 이 슬라이스의 핵심 난점이다
 

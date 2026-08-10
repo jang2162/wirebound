@@ -16,14 +16,17 @@
  * |---|---|---|
  * | `states` | **한다** | 같은 이름의 prop이 `editor`에 없으면 그 상태를 켤 길이 없다 |
  * | `variantFrom`이 가리키는 prop | **한다** | 그 컴포넌트에는 패널이 변형 컨트롤을 내지 않으므로(재라 #4) **그 prop이 유일한 길**이다 |
- * | `variants` 자체 | **안 한다** | 패널이 `variants.length > 0 && variantFrom === undefined`를 보고 **자동으로** 연다 — 어긋날 자리가 없다 |
+ * | `variants` — `variantFrom`이 **있을** 때 | **한다** | enum 밖의 이름은 **두 길이 다 막혀** 고를 방법이 없다(`variants ⊆ enum 값`) |
+ * | `variants` — `variantFrom`이 **없을** 때 | **안 한다** | 패널이 `variants.length > 0`를 보고 **자동으로** 연다 — 어긋날 자리가 없다 |
  *
- * D2는 *"`variants`가 비어 있지 않으면 그것도 도달 가능해야 한다"*를 검사로 두라고 적었는데,
- * 재라 #4를 A안으로 정하면서 그 조건이 카탈로그만으로 결정되게 됐다. 늘 참인 단언을
- * 검사로 두면 규칙이 하나 늘 뿐 지키는 것이 없다.
+ * **D2 후반의 반증은 절반만 참이다 — 리뷰가 반례로 잡았다.**
+ * `variantFrom === undefined` 가지에서는 반증이 성립한다(패널이 자동으로 여니 늘 참인
+ * 단언이 된다). **`variantFrom`이 있는 가지에서는 아니다** — 그쪽은 패널이 컨트롤을 내지
+ * 않고 `node.variant`도 무시되므로, `variants`에 enum 밖의 이름이 있으면 **선언돼 있는데
+ * 도달 불가**다. 앞 판은 그 가지를 보지 않고 *"어긋날 자리가 없어졌다"*로 뭉뚱그렸다.
  *
- * **대신 `variantFrom` 쪽이 실제 구멍이었다** — D2가 *"예외가 구멍이 되지 않는가"*를
- * 의심하라고 한 자리가 정확히 여기다. 오늘 셋은 통과하지만 강제하는 것이 없었다.
+ * **예외 쪽이 실제 구멍이었다** — D2가 *"예외가 구멍이 되지 않는가"*를 의심하라고 한 자리가
+ * 정확히 여기이고, 구멍이 **둘**이었다(그 prop의 `editor` 부재 · `variants`의 enum 밖 이름).
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -139,6 +142,61 @@ describe('defineComponent — variantFrom의 도달성', () => {
   })
 
   it('editor에 있으면 던지지 않는다 — 음성 대조', () => {
+    expect(() =>
+      defineComponent({
+        ...base,
+        props: enumProps,
+        editor: [{ prop: 'role', control: 'select', label: '역할', options: ['h1', 'body'] }],
+        variants: ['h1', 'body'],
+        variantFrom: 'role',
+      }),
+    ).not.toThrow()
+  })
+
+  /**
+   * **리뷰가 만든 반례 — 반대 방향이 열려 있었다.**
+   *
+   * 기존 검사는 **`enum 값 ⊆ variants`**만 본다(*"선언되지 않은 값이 `data-wb-variant`로
+   * 나가면 테마 검증기가 대조할 선언이 없다"*). **반대 방향은 아무도 안 봤다** —
+   * `variants`에 enum에 없는 이름이 있으면:
+   *
+   * - `defineComponent`가 **통과시키고**
+   * - 패널은 컨트롤을 **안 낸다**(`variantFrom`이 있으므로 `variantFieldOf`가 `null`)
+   * - 그래서 그 이름은 **선언돼 있는데 UI에서 도달 불가**다
+   *
+   * 테마가 그 이름에 스킨을 정의하면 **아무도 켤 수 없는 스킨**이 되어 `Media.kind`와 같은
+   * *"죽어 있다"* 부류가 하나 생긴다.
+   *
+   * **오늘 셋(Text·Divider·Field)은 `variants === enum`이라 실제 구멍은 아니었다 —
+   * 강제하는 것이 없었을 뿐이다.**
+   */
+  it('variants에 enum 값이 아닌 이름이 있으면 던진다 — 도달 불가한 변형', () => {
+    expect(() =>
+      defineComponent({
+        ...base,
+        props: enumProps,
+        editor: [{ prop: 'role', control: 'select', label: '역할', options: ['h1', 'body'] }],
+        // `role` enum은 h1·body 둘인데 여기에 셋째가 있다. 그 값을 고를 길이 없다.
+        variants: ['h1', 'body', 'featured'],
+        variantFrom: 'role',
+      }),
+    ).toThrow(/featured/)
+  })
+
+  it('여럿 남으면 전부 말한다', () => {
+    expect(() =>
+      defineComponent({
+        ...base,
+        props: enumProps,
+        editor: [{ prop: 'role', control: 'select', label: '역할', options: ['h1', 'body'] }],
+        variants: ['h1', 'body', 'featured', 'compact'],
+        variantFrom: 'role',
+      }),
+    ).toThrow(/featured.*compact|compact.*featured/)
+  })
+
+  it('variants === enum이면 던지지 않는다 — 음성 대조', () => {
+    // 오늘 카탈로그 셋이 이 모양이다. 좁히다 정상 카탈로그를 막으면 여기가 죽는다.
     expect(() =>
       defineComponent({
         ...base,
