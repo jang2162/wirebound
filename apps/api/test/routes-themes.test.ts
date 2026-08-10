@@ -4,7 +4,7 @@
  * 역할 × 엔드포인트의 전수 판정은 `permission-matrix.test.ts`에 있다 — 여기서는 그
  * 매트릭스가 다루지 못하는 것(시스템 테마의 읽기 전용, 남의 프로젝트 테마)만 본다.
  */
-import { ADMIN_THEME, type Theme } from '@wirebound/themes'
+import { ADMIN_THEME, THEME_ISSUE_SEVERITY, themeIssue, type Theme } from '@wirebound/themes'
 import { describe, expect, it } from 'vitest'
 import { insertTheme } from '../src/repos/themes'
 import { addMember, createProject, signup, withApi, type TestContext } from './helpers'
@@ -407,6 +407,28 @@ describe('파생 테마', () => {
       expect(res.statusCode).toBe(422)
       expect(res.json().error.issues[0].code).toBe('bad-extends')
       expect(res.json().error.issues[0].path).toBe('meta.extends')
+    })
+  })
+
+  /**
+   * **이 이슈는 `themes` 패키지 밖에서 만들어진다** — 저장 경계가 *"상속 대상이 코드에
+   * 없다"*를 낸다. 그래서 `severity`가 표를 지나는지 **여기서** 지켜야 한다.
+   *
+   * 처음에 객체 리터럴로 짓고 `severity: 'error'`를 손으로 박았는데, 리뷰가 그 자리를
+   * `'warning'`으로 바꿔도 **api 599케이스가 전부 통과했다**(구분력 0). 아래 단언이
+   * 그 변이를 죽인다 — 표와 실제 값을 맞대므로 어느 한쪽만 바뀌어도 갈린다.
+   */
+  it('없는 상속 대상 이슈가 severity 표를 지난다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const res = await post(ctx, project.id, owner.cookie, derived({ extends: 'system:missing' }))
+
+      expect(res.statusCode).toBe(422)
+      const [issue] = res.json().error.issues
+      // **표에서 온 값과 맞댄다.** 손으로 박은 값이 표와 갈리는 순간 죽는다.
+      expect(issue.severity).toBe(THEME_ISSUE_SEVERITY['bad-extends'])
+      // 팩토리가 지은 것과 **모양까지** 같다 — `code`와 `severity`가 어긋날 자리를 없앤다.
+      expect(issue).toEqual(themeIssue('bad-extends', 'meta.extends', issue.message))
     })
   })
 

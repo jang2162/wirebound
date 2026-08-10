@@ -49,6 +49,7 @@ import {
   mergeTheme,
   resolveTheme,
   systemTheme,
+  themeIssue,
   type Theme,
   type ThemeIssue,
   type ThemePatch,
@@ -145,12 +146,16 @@ function resolveBase(theme: Theme): { base: Theme | undefined; missing: ThemeIss
   if (base === undefined) {
     return {
       base: undefined,
-      missing: {
-        code: 'bad-extends',
-        severity: 'error',
-        path: 'meta.extends',
-        message: `상속 대상 시스템 테마를 찾을 수 없습니다: ${ref}`,
-      },
+      // **`themeIssue`를 쓴다 — 객체 리터럴로 짓지 않는다.** 리터럴은 `severity`를 손으로
+      // 박게 되고, 그러면 바로 아래 `assertResolvable`의 주석(*"오늘 테마의 이슈는 전부
+      // `error`다(`THEME_ISSUE_SEVERITY`)"*)이 **이 함수가 만드는 이슈에 대해서는 거짓**이
+      // 된다. 실제로 그렇게 짰다가 리뷰가 잡았고, `'warning'`으로 바꿔도 api 599케이스가
+      // 전부 통과했다(구분력 0). 팩토리를 지나면 `code`와 `severity`가 어긋날 자리 자체가 없다.
+      missing: themeIssue(
+        'bad-extends',
+        'meta.extends',
+        `상속 대상 시스템 테마를 찾을 수 없습니다: ${ref}`,
+      ),
     }
   }
   return { base, missing: null }

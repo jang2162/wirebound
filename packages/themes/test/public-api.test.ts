@@ -66,8 +66,9 @@ describe('공개 표면이 계약이다', () => {
     // 내장 시스템 테마 (P4a-2 Task 7). `ADMIN_THEME`을 따로 내는 것은 파생 테마의 base가
     // 될 값이 이름으로 필요하기 때문이다 — P4a-3의 병합이 그것을 쓴다.
     'SYSTEM_THEME_IDS', 'systemTheme', 'ADMIN_THEME',
-    // 이슈 severity 표 (P4a-3 Task 1). 저장 경계가 "막을 이슈"와 "알릴 이슈"를 갈라야 한다.
-    'THEME_ISSUE_SEVERITY',
+    // 이슈 severity 표와 팩토리 (P4a-3 Task 1). 저장 경계가 "막을 이슈"와 "알릴 이슈"를
+    // 갈라야 하고, 이 패키지 밖에서 테마 이슈를 만드는 자리도 표를 지나야 한다.
+    'THEME_ISSUE_SEVERITY', 'themeIssue',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {
