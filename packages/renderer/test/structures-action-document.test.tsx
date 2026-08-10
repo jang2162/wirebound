@@ -135,3 +135,35 @@ describe('Button — 구조 셋의 DOM 동일성 (계획서 재라 #7)', () => {
     }
   })
 })
+
+describe('Media:video', () => {
+  it('등록돼 있다', () => {
+    expect(getStructure('Media', 'video')).toBeDefined()
+  })
+
+  it('폴백이 아니라 실제 구조를 그린다', () => {
+    const html = render('Media', 'video', {})
+    expect(isFallback(html), html).toBe(false)
+    expect(html).toContain('data-wb-structure="video"')
+  })
+
+  it('틀 안에 재생 어포던스를 낸다', () => {
+    // **이것이 `image`와 갈리는 자리다.** 빈 회색 상자는 와이어프레임에서 "사진"으로
+    // 읽힌다 — 영상이 영상으로 읽히려면 재생 표시가 DOM에 있어야 하고, 그것이 테마가
+    // 겨냥할 조각이 된다.
+    const html = render('Media', 'video', {})
+    expect(parts(html)).toEqual(['frame', 'play'])
+  })
+
+  it('caption은 값이 있을 때만 나온다', () => {
+    expect(parts(render('Media', 'video', { caption: '' }))).not.toContain('caption')
+    expect(parts(render('Media', 'video', { caption: '제품 소개 영상' }))).toContain('caption')
+    expect(render('Media', 'video', { caption: '제품 소개 영상' })).toContain('제품 소개 영상')
+  })
+
+  it('ratio를 노드 변수로 낸다 — image와 같은 통로다', () => {
+    // `partRule('Media','frame', …)`은 구조 이름을 넣지 않으므로 네 구조가 같은 규칙을
+    // 받는다. 값을 안 싣는 구조가 하나라도 있으면 그 구조에서만 기본값 16/9로 굳는다.
+    expect(render('Media', 'video', { ratio: '4/3' })).toContain('--wb-node-media-ratio:4/3')
+  })
+})

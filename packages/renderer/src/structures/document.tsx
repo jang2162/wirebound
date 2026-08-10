@@ -5,7 +5,7 @@
  * 등록(`DOCUMENT_ENTRIES`)과 기본 CSS(`documentCssBlocks`)를 이 파일이 소유한다.
  * 공용 도구는 `../structure-css-tools`에 있다 — 복사해 오지 마라.
  */
-import { createElement, type CSSProperties } from 'react'
+import { createElement, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { componentRule, nodeVar, partRule } from '../structure-css-tools'
 import type { StructureEntry, StructureRenderer } from './registry'
 
@@ -27,14 +27,41 @@ const ROLE_TAG: Record<string, string> = {
 export const TextDefault: StructureRenderer = ({ attrs, props }) =>
   createElement(ROLE_TAG[props.role as string] ?? 'p', attrs, String(props.content))
 
-export const MediaImage: StructureRenderer = ({ attrs, props, part }) => (
-  <figure {...attrs}>
-    <div
-      {...part('frame')}
-      style={{ [nodeVar('media', 'ratio')]: String(props.ratio) } as CSSProperties}
-    />
-    {props.caption ? <figcaption {...part('caption')}>{String(props.caption)}</figcaption> : null}
-  </figure>
+/**
+ * `Media` 네 구조가 공유하는 것 — **비율을 나르는 틀 하나와 조건부 설명 하나.**
+ *
+ * 틀에 실리는 `--wb-node-media-ratio`는 `documentCssBlocks()`의 `partRule`이 읽는다.
+ * 그 규칙은 **구조 이름을 넣지 않으므로 네 구조에 다 걸린다** — 그래서 넷 중 하나라도
+ * 값을 안 실으면 그 구조에서만 조용히 기본값 `16/9`로 굳는다. 여기서 한 번에 싣는 것이
+ * 그 어긋남을 만들 자리를 없앤다.
+ *
+ * `inside`가 틀 **안**에 들어가는 내용이다. 넷을 가르는 것이 이것뿐이고, 나머지는 같다.
+ */
+function mediaFigure(
+  { attrs, props, part }: Parameters<StructureRenderer>[0],
+  inside: ReactNode,
+): ReactElement {
+  return (
+    <figure {...attrs}>
+      <div
+        {...part('frame')}
+        style={{ [nodeVar('media', 'ratio')]: String(props.ratio) } as CSSProperties}
+      >
+        {inside}
+      </div>
+      {props.caption ? <figcaption {...part('caption')}>{String(props.caption)}</figcaption> : null}
+    </figure>
+  )
+}
+
+// **빈 틀이 곧 "사진"이다.** 와이어프레임에서 아무 표시 없는 상자가 이미지를 뜻하므로
+// 안에 아무것도 넣지 않는 것이 이 구조의 내용이다 — 뒤의 셋은 여기에 표시를 더해 갈린다.
+export const MediaImage: StructureRenderer = (ctx) => mediaFigure(ctx, null)
+
+// 영상은 **재생 어포던스**로 읽힌다. 글자를 넣는 것은 이 저장소의 선례를 따른 것이다 —
+// `TreeIndent`의 `▸`, `ListTable`의 `—`·`1 2 3`처럼 테마가 없어도 무엇인지 보이게 한다.
+export const MediaVideo: StructureRenderer = (ctx) => (
+  mediaFigure(ctx, <span {...ctx.part('play')}>▶</span>)
 )
 
 // `data-direction`은 없어졌다 — `direction`이 `data-wb-variant`로 나간다.
@@ -78,6 +105,7 @@ export function documentCssBlocks(): string[] {
 export const DOCUMENT_ENTRIES: StructureEntry[] = [
   ['Text', 'default', TextDefault],
   ['Media', 'image', MediaImage],
+  ['Media', 'video', MediaVideo],
   ['Divider', 'default', DividerDefault],
   ['Placeholder', 'default', PlaceholderDefault],
 ]

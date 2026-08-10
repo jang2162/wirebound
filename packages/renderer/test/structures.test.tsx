@@ -584,11 +584,13 @@ describe('재라 #6 — Media.kind는 렌더에 닿지 않는다', () => {
     expect(square).toContain('1/1')
   })
 
-  it('구조 넷 중 구현이 있는 것은 image 하나다 — P4b-2가 채운다', () => {
-    // **테마가 나머지 셋을 고르면 폴백이 그려진다.** `kind`의 답이 P4b-2에서 나오는
+  it('구조 넷 중 구현이 있는 것 — P4b-2 W4가 채우는 중이다', () => {
+    // **테마가 나머지를 고르면 폴백이 그려진다.** `kind`의 답이 P4b-2에서 나오는
     // 이유가 이것이다 — 그쪽이 셋을 만들 때 각자 `kind`를 읽을지 정하게 된다.
+    //
+    // 넷이 다 차면 이 절 전체를 판정과 함께 다시 쓴다(W4의 마지막 태스크).
     const implemented = KINDS.filter((structure) => getStructure('Media', structure) !== undefined)
 
-    expect(implemented).toEqual(['image'])
+    expect(implemented).toEqual(['image', 'video'])
   })
 })
