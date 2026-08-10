@@ -17,7 +17,7 @@ import {
   type WbNode,
 } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
-import { insertNodeOps, moveNodeOps, propOps, removeNodeOps } from '../../src/edit/ops'
+import { insertNodeOps, moveNodeOps, propOps, removeNodeOps, variantOps } from '../../src/edit/ops'
 
 function doc(root: WbNode): PageDocument {
   return { version: 1, root }
@@ -764,5 +764,97 @@ describe('ops.ts의 방어선 — children 배열 안에 노드가 아닌 원소
     expect(moveNodeOps(document, 'n_a', 'n_root', 0)).toEqual([
       { op: 'move', from: '/root/children/1', path: '/root/children/0' },
     ])
+  })
+})
+
+/**
+ * **`variantOps` — 경로를 가르는 자리(재라 #4).**
+ *
+ * `variant`는 props의 키가 아니라 **노드 봉투의 필드**다(§4.3). `propOps`를 재사용하면
+ * `props` 안에 `variant`라는 키가 생겨 `z.strictObject`인 컴포넌트에서 `invalid-props`가
+ * 되고, 그렇지 않은 곳에서는 **아무 데도 안 쓰이는 값이 조용히 저장된다.**
+ */
+describe('variantOps', () => {
+  /** 루트 하나에 자식 하나. `variant`는 인자로 준 것만 붙인다. */
+  function withVariant(variant?: string): PageDocument {
+    return doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_a', type: 'Card', props: { title: 'x' }, ...(variant === undefined ? {} : { variant }) },
+      ],
+    })
+  }
+
+  it('키가 있으면 replace다', () => {
+    expect(variantOps(withVariant('default'), 'n_a', 'featured')).toEqual([
+      { op: 'replace', path: '/root/children/0/variant', value: 'featured' },
+    ])
+  })
+
+  it('키가 없으면 add다', () => {
+    // `replace`를 주면 `applyOps`가 `바꿀 키가 없습니다`로 던지고 D7이 편집을 삼킨다
+    // (`propOps`의 가운데 갈래와 같은 원인).
+    expect(variantOps(withVariant(), 'n_a', 'featured')).toEqual([
+      { op: 'add', path: '/root/children/0/variant', value: 'featured' },
+    ])
+  })
+
+  it('null이면 remove다 — replace null이 아니다', () => {
+    // `WbNodeSchema.variant`가 `z.string().optional()`이라 `null`은 봉투 검증을 통과하지 못한다.
+    expect(variantOps(withVariant('featured'), 'n_a', null)).toEqual([
+      { op: 'remove', path: '/root/children/0/variant' },
+    ])
+  })
+
+  it('없는 것을 지우려 하면 null이다 — 요청을 만들지 않는다(D7)', () => {
+    expect(variantOps(withVariant(), 'n_a', null)).toBeNull()
+  })
+
+  it('문서에 없는 노드면 null이다', () => {
+    expect(variantOps(withVariant('featured'), 'n_없음', 'default')).toBeNull()
+  })
+
+  it('경로가 /props/variant가 아니다 — 왕복으로 확인한다', () => {
+    // **손으로 적은 경로 단언만으로는 부족하다.** 적용해서 값이 봉투에 들어가는지,
+    // `props`가 그대로인지 함께 본다.
+    const document = withVariant()
+    const next = applyOps(document, variantOps(document, 'n_a', 'featured') ?? [])
+    const node = findNode(next.root, 'n_a')
+
+    expect(node?.variant).toBe('featured')
+    expect(node?.props).toEqual({ title: 'x' })
+  })
+
+  it('서버가 만들 inverse를 여기서 재 둔다 — undo가 이 경로를 지난다', () => {
+    // **`invertOps`가 `/variant`를 props와 다르게 다루지 않는다**(JSON Pointer 일반 처리다).
+    // 서버는 `packages/schema`의 `invertOps`를 그대로 쓰므로(`apps/api/src/services/
+    // edit-pipeline.ts`) 여기서 잰 값이 서버가 낼 값이다.
+    const bare = withVariant()
+    expect(invertOps(bare, variantOps(bare, 'n_a', 'featured') ?? [])).toEqual([
+      { op: 'remove', path: '/root/children/0/variant' },
+    ])
+
+    const had = withVariant('default')
+    expect(invertOps(had, variantOps(had, 'n_a', 'featured') ?? [])).toEqual([
+      { op: 'replace', path: '/root/children/0/variant', value: 'default' },
+    ])
+
+    // 지우기의 역은 되살리기다 — 이것이 없으면 undo가 지운 변형을 못 돌려놓는다.
+    expect(invertOps(had, variantOps(had, 'n_a', null) ?? [])).toEqual([
+      { op: 'add', path: '/root/children/0/variant', value: 'default' },
+    ])
+  })
+
+  it('inverse를 되적용하면 원래 문서로 돌아간다', () => {
+    for (const [document, value] of [
+      [withVariant(), 'featured'],
+      [withVariant('default'), 'featured'],
+      [withVariant('default'), null],
+    ] as [PageDocument, string | null][]) {
+      const ops = variantOps(document, 'n_a', value) ?? []
+      const inverse = invertOps(document, ops)
+      expect(applyOps(applyOps(document, ops), inverse)).toEqual(document)
+    }
   })
 })

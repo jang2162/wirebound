@@ -9,16 +9,19 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { describe, expect, it } from 'vitest'
 import { registerStructure } from '@wirebound/renderer'
 import {
+  CATALOG_TYPES,
   ListDef,
   defineComponent,
+  getComponent,
   listComponents,
   registerComponent,
+  validatePage,
   type EditorControl,
   type WbNode,
 } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
-import { PropertyPanel } from '../../src/panels/property-panel'
+import { PropertyPanel, variantFieldOf } from '../../src/panels/property-panel'
 import { EditorStore } from '../../src/store/editor-store'
 import { EditorStoreProvider } from '../../src/store/use-editor-store'
 import type { PatchResult } from '../../src/api/types'
@@ -310,7 +313,11 @@ describe('속성 패널', () => {
 
     // `title`만 있고 `subtitle`은 없는 노드다. 없는 값을 그대로 찍으면 "undefined"가
     // 사용자에게 보인다.
+    //
+    // **맨 앞의 `변형`은 P4b-1이 더했다**(재라 #4) — `Card`는 `variants`가 있고
+    // `variantFrom`이 없어 컨트롤이 나온다. 노드에 `variant`가 없으므로 빈 칸이다.
     expect(propRows()).toEqual([
+      { label: '변형', value: '' },
       { label: '제목', value: '회원 정보' },
       { label: '부제', value: '' },
     ])
@@ -434,6 +441,8 @@ describe('속성 패널', () => {
     // 나머지 줄이 그대로인 것이 양성 대조다 — 패널이 통째로 무너지거나 아무것도 그리지
     // 않는 구현은 이 단언을 통과할 수 없다.
     expect(propRows()).toEqual([
+      // P4b-1의 변형 줄. `Card`는 `variants`가 있고 노드에 `variant`가 없어 빈 칸이다.
+      { label: '변형', value: '' },
       { label: '제목', value: '' },
       { label: '부제', value: '부제' },
     ])
@@ -491,6 +500,8 @@ describe('속성 패널', () => {
     // 필드는 카탈로그에서 나오므로 그대로 있고, 값만 전부 빈다. **패널이 통째로 사라지는
     // 구현은 이 단언을 통과할 수 없다** — 그것이 여기 `propRows()`를 쓰는 이유다.
     expect(propRows()).toEqual([
+      // `variant`도 없는 노드다 — 봉투 필드라 `readProp`을 지나지 않고 빈 칸이 된다.
+      { label: '변형', value: '' },
       { label: '제목', value: '' },
       { label: '부제', value: '' },
     ])
@@ -855,7 +866,12 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
 
     // 위젯이 없고, 값은 `formatValue`가 그린 글자로 남는다 — 줄이 통째로 비면 사용자가
     // 값을 볼 수 없다.
-    expect(panel().querySelector('select')).toBeNull()
+    //
+    // **`select`를 세는 대신 그 줄의 위젯을 본다.** 이 프로브는 `ListDef`를 빌려 만들었고
+    // 그쪽 `variants`가 비어 있지 않아 P4b-1의 변형 컨트롤이 `<select>` 하나를 그린다 —
+    // 패널 전체에서 `select`를 세면 그것에 걸린다. 이 케이스가 지키는 것은
+    // **options 없는 필드의 위젯**이므로 그 줄만 본다.
+    expect(controlWidget('선택지 없는 필드')).toBeNull()
     expect(propRows()).toContainEqual({ label: '선택지 없는 필드', value: '2' })
 
     // 양성 대조: options가 있는 자리는 그린다.
@@ -1032,5 +1048,238 @@ describe('문서가 밖에서 바뀔 때', () => {
 
     // 두 노드의 값이 같으므로 초안 버리기는 돌지 않는다. `key`가 위젯을 새로 만든다.
     expect((screen.getByLabelText('라벨') as HTMLInputElement).value).toBe('같은 값')
+  })
+})
+
+/**
+ * 변형을 잴 문서. **`variantFrom`이 있는 것과 없는 것, 빈 것을 함께 담는다** —
+ * 셋을 한 문서에 두어야 "안 나오는 것"이 "패널이 아무것도 안 그린다"와 갈린다.
+ */
+const VARIANT_DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    // `variants: ['default','featured']`, `variantFrom` 없음 → 컨트롤이 나온다.
+    { id: 'n-card', type: 'Card', props: { title: '카드' }, variant: 'featured' },
+    // 같은 부류인데 노드에 `variant`가 없다 → 빈 칸이고, 고르면 `add`가 나간다.
+    { id: 'n-card2', type: 'Card', props: { title: '둘째' } },
+    // `variantFrom: 'role'` → 컨트롤이 **나오면 안 된다**(P4a-3의 `ignored-variant`를 UI가 유도하는 셈이다).
+    { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
+    // `variants: []` → 나올 것이 없다.
+    { id: 'n-tree', type: 'Tree', props: { depth: 2 } },
+  ],
+})
+
+/**
+ * **재라 #4 — `variant`를 패널에 여는 법: 패널이 특수 취급한다(A안).**
+ *
+ * `EditorField.prop`은 **props의 키**를 가리키는데 `variant`는 **노드 봉투의 필드**다
+ * (§4.3). 그래서 `editor`에 적을 수 없고 — 적으면 `defineComponent`가
+ * *"editor가 스키마에 없는 prop을 가리킵니다"*로 던진다 — 도달 경로가 아예 없었다.
+ * **`Button`·`Link`·`List`·`Section`·`Card`의 변형 열넷이 UI에서 하나도 닿지 않았다.**
+ *
+ * **A안의 대가는 계획서가 적은 것보다 작다.** 패널이 읽는 것은 `def.variants`·
+ * `def.variantFrom`으로 **전부 카탈로그의 값**이고, 새로 갖는 지식은 *"variant는 봉투의
+ * 필드다"* 하나인데 그것은 §4.3·§6.11이 정한 **모델의 사실**이지 컴포넌트별 지식이 아니다.
+ * §5.1·§9가 말하는 *"컴포넌트 **정의**에서 자동 생성"*은 그대로 성립한다 — 카탈로그가
+ * 늘어도 이 패널은 안 바뀐다(아래 전수 케이스가 그것을 센다).
+ *
+ * **B안(`ComponentDef`에 `variantField` 선언)을 고르지 않은 것은** 그 선언이 담을 정보가
+ * **라벨 하나**뿐이기 때문이다 — 나올지 말지는 `variants.length > 0 && variantFrom === undefined`로
+ * 카탈로그에서 이미 유도된다. 라벨 하나를 위해 §5.1의 계약을 넓히지 않는다.
+ */
+describe('속성 패널 — 변형 (재라 #4)', () => {
+  it('variants가 있는 컴포넌트에 변형 컨트롤이 나온다', async () => {
+    await openPage(VARIANT_DOC)
+
+    selectAt('Card', 0)
+
+    // **맨 앞이다.** `variant`는 이 노드가 어떤 표현인가를 정하는 것이라 개별 prop보다
+    // 상위이고, §6.5도 `variants`를 `base`/`parts` 위의 층으로 둔다.
+    expect(labels()).toEqual(['변형', '제목', '부제'])
+    expect((requireWidget('변형') as HTMLSelectElement).value).toBe('featured')
+  })
+
+  it('선택지는 카탈로그의 variants 그대로이고 비우는 자리가 있다', async () => {
+    await openPage(VARIANT_DOC)
+
+    selectAt('Card', 0)
+    const options = [...requireWidget('변형').querySelectorAll('option')].map((o) => o.value)
+
+    // 빈 값이 **항상** 있다 — 없으면 한 번 고른 변형에서 빠져나올 수 없다.
+    expect(options).toEqual(['', 'default', 'featured'])
+  })
+
+  it('variantFrom을 가진 컴포넌트에는 나오지 않는다', async () => {
+    // 나오면 `ignored-variant`(P4a-2가 만든 경고)를 **UI가 유도하는 셈**이다.
+    await openPage(VARIANT_DOC)
+
+    selectAt('Text', 0)
+
+    expect(labels()).toEqual(['내용', '역할'])
+    expect(controlWidget('변형')).toBeNull()
+  })
+
+  it('variants가 빈 컴포넌트에는 나오지 않는다', async () => {
+    await openPage(VARIANT_DOC)
+
+    selectAt('Tree', 0)
+
+    expect(controlWidget('변형')).toBeNull()
+  })
+
+  it('고르면 /variant 경로로 편집이 나간다 — props가 아니다', async () => {
+    const { calls, api } = editable()
+    await openPage(VARIANT_DOC, { apiOverrides: api })
+
+    selectAt('Card', 0)
+    fireEvent.change(requireWidget('변형'), { target: { value: 'default' } })
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    // **`/props/variant`가 아니다.** 봉투 필드이므로 경로가 한 단계 위다.
+    expect(lastOps(calls)).toEqual([
+      { op: 'replace', path: '/root/children/0/variant', value: 'default' },
+    ])
+  })
+
+  it('없던 variant를 고르면 add가 나간다', async () => {
+    const { calls, api } = editable()
+    await openPage(VARIANT_DOC, { apiOverrides: api })
+
+    selectAt('Card', 1)
+    expect((requireWidget('변형') as HTMLSelectElement).value).toBe('')
+    fireEvent.change(requireWidget('변형'), { target: { value: 'featured' } })
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([
+      { op: 'add', path: '/root/children/1/variant', value: 'featured' },
+    ])
+  })
+
+  it('비우면 remove가 나간다 — replace null이 아니다', async () => {
+    // **`replace null`은 봉투 검증을 통과하지 못한다** — `WbNodeSchema.variant`가
+    // `z.string().optional()`이라 `null`이 유효한 값이 아니다. 되돌릴 수 없으면 사용자가
+    // 한 번 고른 변형에 갇힌다.
+    const { calls, api } = editable()
+    await openPage(VARIANT_DOC, { apiOverrides: api })
+
+    selectAt('Card', 0)
+    fireEvent.change(requireWidget('변형'), { target: { value: '' } })
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([{ op: 'remove', path: '/root/children/0/variant' }])
+  })
+
+  it('없는 variant를 비우면 요청이 나가지 않는다', async () => {
+    // 지울 것이 없다. D7 — 보내 봐야 서버가 같은 자리에서 거절한다.
+    const { calls, api } = editable()
+    await openPage(VARIANT_DOC, { apiOverrides: api })
+
+    selectAt('Card', 1)
+    fireEvent.change(requireWidget('변형'), { target: { value: '' } })
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(calls).toHaveLength(0)
+  })
+
+  /**
+   * **코디네이터가 지목한 자리 — `/variant`가 편집 파이프라인의 게이트를 그대로 지나는가.**
+   *
+   * `validatePage`에는 `variant`에 걸리는 코드가 둘 있다(P4a-2·P4a-3이 만들었다):
+   *
+   * | 코드 | 조건 | severity |
+   * |---|---|---|
+   * | `unknown-variant` | `variants`에 없는 값 | **error** — §7.1의 게이트가 편집을 422로 막는다 |
+   * | `ignored-variant` | `variantFrom`이 있는데 `variant`를 적음 | warning |
+   *
+   * **패널이 낼 수 있는 값으로는 둘 다 만들 수 없어야 한다.** 앞의 것은 선택지가
+   * `def.variants` 그대로이기 때문이고, 뒤의 것은 `variantFrom`이 있으면 컨트롤 자체가
+   * 안 나오기 때문이다. **그 성질을 카탈로그 전수로 실행해 확인한다** — 산문으로 두면
+   * 카탈로그가 늘 때 아무도 다시 재지 않는다.
+   */
+  it('패널이 낼 수 있는 값은 unknown-variant도 ignored-variant도 만들지 않는다', () => {
+    let checked = 0
+
+    for (const type of CATALOG_TYPES) {
+      const def = getComponent(type)
+      if (def === undefined) continue
+
+      const field = variantFieldOf(def)
+      if (field === null) {
+        // 컨트롤이 없으므로 이 컴포넌트에는 패널이 `variant`를 실을 길이 없다.
+        // **`variantFrom`을 가진 것이 여기 걸린다** — `ignored-variant`가 도달 불가인 이유다.
+        continue
+      }
+
+      for (const variant of field.options) {
+        checked += 1
+        const issues = validatePage({
+          version: 1,
+          root: { id: 'n_000000000001', type: 'Page', children: [{ id: 'n_000000000002', type, variant }] },
+        })
+        expect(
+          issues.filter((issue) => issue.code === 'unknown-variant' || issue.code === 'ignored-variant'),
+          `${type} ← ${variant}`,
+        ).toEqual([])
+      }
+    }
+
+    // 카나리아 — 하나도 안 돌았으면 위 루프가 아무것도 지키지 않는다.
+    expect(checked).toBeGreaterThan(10)
+  })
+
+  it('음성 대조 — 선언되지 않은 값은 실제로 unknown-variant다', () => {
+    // 위 케이스가 "`validatePage`가 아무것도 안 낸다"로 통과하지 않게 못을 박는다.
+    const issues = validatePage({
+      version: 1,
+      root: {
+        id: 'n_000000000001',
+        type: 'Page',
+        children: [{ id: 'n_000000000002', type: 'Card', variant: '패널이낼수없는값' }],
+      },
+    })
+
+    expect(issues.map((issue) => issue.code)).toEqual(['unknown-variant'])
+  })
+
+  it('음성 대조 — variantFrom을 가진 컴포넌트에 variant를 적으면 ignored-variant다', () => {
+    // 컨트롤을 내지 않는 것이 막는 것이 바로 이것이다.
+    const issues = validatePage({
+      version: 1,
+      root: {
+        id: 'n_000000000001',
+        type: 'Page',
+        children: [{ id: 'n_000000000002', type: 'Text', variant: 'h1' }],
+      },
+    })
+
+    expect(issues.map((issue) => issue.code)).toEqual(['ignored-variant'])
+  })
+
+  /**
+   * **부류를 닫는 자리다.** 계획서 D2는 *"`defineComponent`가 검사하면 부류가 닫힌다"*고
+   * 적었는데, A안에서는 `defineComponent`가 검사할 것이 없다 — 패널이 카탈로그를 보고
+   * **자동으로** 여닫으므로 어긋날 자리 자체가 없다. **그 대신 이 케이스가 카탈로그를
+   * 전수로 돌아 그 성질을 확인한다.**
+   *
+   * P4b-2·P4b-3이 컴포넌트를 늘리면 여기가 분모를 다시 세므로 같은 구멍이 안 난다.
+   */
+  it('카탈로그 전수 — variants가 비어 있지 않고 variantFrom이 없으면 반드시 컨트롤이 나온다', async () => {
+    const expectedOpen = CATALOG_TYPES.filter((type) => {
+      const def = getComponent(type)
+      return def !== undefined && def.variants.length > 0 && def.variantFrom === undefined
+    })
+    // 카나리아 — 분모가 비면 아래 루프가 조용히 통과한다.
+    expect(expectedOpen).toEqual(['Section', 'Card', 'List', 'Button', 'Link'])
+
+    for (const type of CATALOG_TYPES) {
+      const def = getComponent(type)
+      if (def === undefined) continue
+      const shouldOpen = def.variants.length > 0 && def.variantFrom === undefined
+      expect(variantFieldOf(def) !== null, type).toBe(shouldOpen)
+      if (shouldOpen) {
+        expect(variantFieldOf(def)?.options, type).toEqual(def.variants)
+      }
+    }
   })
 })
