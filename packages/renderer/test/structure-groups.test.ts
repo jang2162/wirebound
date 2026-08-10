@@ -138,8 +138,15 @@ const BASELINE_BLOCKS: [name: string, css: string][] = [
 }`,
   ],
   [
+    // **셀렉터가 갈렸다 — P4b-2 ③이 `:where(indent)`로 좁혔다.** 본문은 그대로다.
+    //
+    // 이 상수의 목적은 *"병렬 워커가 준비 웨이브의 규칙을 건드리지 못하게"*이고,
+    // 이 변경은 워커가 아니라 ③의 판정이다. `accordion`이 들여쓰기를 **중첩**으로
+    // 내면서 단계 변수를 안 싣는데도 이 규칙을 받고 있었다 — P4a-2가 대가로 미리 적어
+    // 둔 자리이고, `:where()`가 특이도를 안 올리므로 이제 안 치른다. 근거는
+    // `structure-css-tools`의 `partRule` 주석(Chromium 실측표)에 있다.
     'Tree',
-    `[data-wb-component="Tree"] [data-wb-part="node"] {
+    `[data-wb-component="Tree"]:where([data-wb-structure="indent"]) [data-wb-part="node"] {
   padding-left: calc(var(--wb-node-tree-level, 0) * var(--wb-tree-indent, 16px));
 }`,
   ],

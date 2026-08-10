@@ -1,9 +1,10 @@
-import { installCatalog } from '@wirebound/schema'
+import { installCatalog, requireComponent } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { renderNode } from '../src/render'
 import { NODE_VAR_PREFIX, TREE_INDENT_VAR, nodeVar, structureBaseCss } from '../src/structure-css'
 import { installStructures } from '../src/structures/index'
+import { listStructureKeys } from '../src/structures/registry'
 import { probe } from './css-probe'
 
 beforeAll(() => {
@@ -270,5 +271,154 @@ describe('Task 3 — Tree·Media·Placeholder', () => {
       themeRule('Placeholder', 'default', 'height: 400px;'),
     ])
     expect(dom.computed('[data-wb-component="Placeholder"]', 'height')).toBe('400px')
+  })
+})
+
+/**
+ * **조각 규칙을 누가 받는가 — 수신자 표.** P4b-2 ③이 만들었다.
+ *
+ * **왜 이 표가 있어야 하는가.** 조각 규칙은 셀렉터에 구조가 안 들어가는 것이 기본이므로
+ * (특이도 (0,2,0)을 지켜야 테마가 이긴다) **그 조각을 내는 다른 구조도 규칙을 받는다.**
+ * 그 자체는 대가로 받아들인 것인데, **누가 받는지가 코드 어디에도 안 적혀 있었다.**
+ * 그래서 구조가 하나 늘어 남의 규칙을 받기 시작해도 **아무 케이스도 안 죽는다.**
+ *
+ * **P4b-2 ②가 그 부류를 실제로 만들었다.** `List:cardGrid`를 만들며 더한
+ * `pagination` 규칙이 `table`·`stackedList`·`mediaList`까지 갔고(③이 Chromium으로
+ * 재서 무해함까지 확인했다), `Tree:accordion`은 `indent`의 들여쓰기 규칙을 받았다.
+ *
+ * **③이 그 둘을 `:where()`로 좁혔고, 이 표가 그것이 되돌아가는 것을 막는다.**
+ * 표를 안 고치고 구조를 더하면 여기서 죽는다 — *"발견된 것만 닫으면 매번 하나가
+ * 남는다"*(P4a-3)에 대한 이 자리의 답이다.
+ *
+ * **재는 방법:** 실제로 그린 HTML에 실제 셀렉터를 걸어 본다. 조각 이름을 눈으로 세지
+ * 않는 것은 **자식이 있어야만 나오는 조각**이 있어서다(그래서 자식을 단다).
+ */
+describe('P4b-2 ③ — 조각 규칙의 수신자', () => {
+  /**
+   * `컴포넌트 [조각]` → 그 규칙을 **실제로 받는 구조 전부**.
+   *
+   * 늘리려면 근거가 있어야 한다: 받는 구조 전부가 그 선언을 원하는가?
+   * 아니면 `partRule`의 넷째 인자로 좁혀라.
+   */
+  const RECEIVERS: Record<string, string[]> = {
+    // 둘 다 미디어 상자를 원한다 — 좁히지 않는다.
+    'Card [media]': ['mediaTop', 'horizontal'],
+    // `:where(cardGrid)`로 좁혔다. 페이지네이션 조각 자체는 네 구조가 다 낸다.
+    'List [pagination]': ['cardGrid'],
+    // `:where(indent)`로 좁혔다. `accordion`은 중첩으로 들여쓰므로 단계 변수를 안 싣는다.
+    'Tree [node]': ['indent'],
+    // 넷 다 비율을 싣는다 — 좁히지 않는다. 하나라도 안 실으면 조용히 기본값으로 굳으므로
+    // 규칙이 넷에 다 걸려 있는 편이 그 어긋남을 만들 자리를 없앤다.
+    'Media [frame]': ['image', 'video', 'illustration', 'chart'],
+  }
+
+  it('구조 기본 CSS의 조각 규칙은 이 넷뿐이다', () => {
+    const selectors = structureBaseCss()
+      .split('\n')
+      .filter((line) => line.endsWith('{') && line.includes('[data-wb-part='))
+      .map((line) => line.slice(0, -1).trim())
+
+    const names = selectors.map((selector) => {
+      const type = /data-wb-component="(\w+)"/.exec(selector)![1]!
+      const part = /data-wb-part="(\w+)"/.exec(selector)![1]!
+      return `${type} [${part}]`
+    })
+    // 규칙이 새로 생기면 여기서 먼저 죽는다 — 수신자를 적으라는 뜻이다.
+    expect([...names].sort()).toEqual([...Object.keys(RECEIVERS)].sort())
+  })
+
+  it('각 조각 규칙을 받는 구조가 표와 같다', async () => {
+    const { JSDOM } = await import('jsdom')
+    const selectors = structureBaseCss()
+      .split('\n')
+      .filter((line) => line.endsWith('{') && line.includes('[data-wb-part='))
+      .map((line) => line.slice(0, -1).trim())
+
+    const measured: Record<string, string[]> = {}
+    for (const selector of selectors) {
+      const type = /data-wb-component="(\w+)"/.exec(selector)![1]!
+      const part = /data-wb-part="(\w+)"/.exec(selector)![1]!
+      const hits: string[] = []
+
+      for (const key of listStructureKeys().filter((k) => k.startsWith(`${type}:`))) {
+        const structure = key.slice(type.length + 1)
+        // **자식을 단다** — 자식을 감싸며 생기는 조각은 자식 없이는 안 나온다.
+        const children =
+          requireComponent(type).children === 'none'
+            ? undefined
+            : [
+                { id: 'n_00000000000c', type: 'Text' },
+                { id: 'n_00000000000d', type: 'Text' },
+              ]
+        const html = renderToStaticMarkup(
+          renderNode({ id: 'n_000000000001', type, ...(children ? { children } : {}) } as never, {
+            structures: { [type]: structure },
+          }),
+        )
+        const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`)
+        if (dom.window.document.querySelector(selector) !== null) hits.push(structure)
+      }
+      measured[`${type} [${part}]`] = hits
+    }
+
+    expect(measured).toEqual(RECEIVERS)
+  })
+})
+
+/**
+ * **특이도를 문자열로 잰다 — jsdom이 못 재는 것을 여기서 대신 막는다.** P4b-2 ③.
+ *
+ * **왜 필요한가.** 이 저장소가 캐스케이드를 두고 실측했다고 적은 모든 케이스는 계산된
+ * 스타일을 jsdom으로 읽는데, **jsdom 25는 특이도를 아예 계산하지 않고 순서만 따른다.**
+ * ③이 쟀다: `#v`(1,0,0)가 뒤에 온 `[data-wb-part]`(0,1,0)에게 진다. 대조 다섯(id vs 속성 ·
+ * 속성 셋 vs 둘 · class vs 태그, 한 시트/두 시트)이 **전부 순서대로만** 갈렸다.
+ *
+ * **그래서 이런 일이 난다 — 실측이다.** `componentRule`의 셀렉터를
+ * `[data-wb-component="X"][data-wb-component="X"][data-wb-structure="Y"]`로 바꾸면
+ * (매칭은 한 글자도 안 변하고 특이도만 (0,2,0) → (0,3,0)) **실제 브라우저에서는 테마가
+ * 진다**(Chromium 151: 테마의 `display: grid`가 구조의 `flex`에게 짐 — P4a-2 계획 전체가
+ * 무너지는 그 고장이다). 그런데 **`--project unit`·`--project web` 1723건이 전부 초록이었다.**
+ *
+ * **이 케이스가 그 변이를 잡는다.** 브라우저 없이, 셀렉터 문자열만으로 잰다 — 우리가
+ * 내는 셀렉터는 속성 선택자와 `:where()`뿐이라 특이도가 **셀 수 있다.**
+ *
+ * **`:where()`는 0으로 센다** — 그것이 `partRule`의 구조 범위가 성립하는 근거다.
+ */
+describe('P4b-2 ③ — 구조 기본 CSS의 특이도가 테마와 같다', () => {
+  /** `:where(…)`를 걷어낸 뒤 남는 속성 선택자 수. 그것이 곧 특이도의 b 자리다. */
+  function specificityB(selector: string): number {
+    // `:where()` 안은 특이도 0이다 — 통째로 지운다.
+    const bare = selector.replace(/:where\([^)]*\)/g, '')
+    return (bare.match(/\[[^\]]+\]/g) ?? []).length
+  }
+
+  const selectors = (): string[] =>
+    structureBaseCss()
+      .split('\n')
+      .filter((line) => line.endsWith('{'))
+      .map((line) => line.slice(0, -1).trim())
+
+  it('모든 규칙이 정확히 (0,2,0)이다 — 테마의 두 꼴과 같은 값', () => {
+    // 테마가 내는 것은 `[c][s]`(루트)와 `[c] [part]`(조각) 둘뿐이고 **둘 다 속성 두 개**다.
+    // 하나라도 다르면 그 컴포넌트에서 순서가 우선순위가 아니게 된다.
+    const offenders = selectors()
+      .map((selector) => [selector, specificityB(selector)] as const)
+      .filter(([, b]) => b !== 2)
+    expect(selectors().length).toBeGreaterThan(0)
+    expect(offenders).toEqual([])
+  })
+
+  it('id·class·태그 선택자를 쓰지 않는다 — b 자리만 세면 되는 근거', () => {
+    // 위 케이스가 속성 수만 세므로, 다른 종류가 섞이면 그 셈이 뜻을 잃는다.
+    const bare = selectors().map((s) => s.replace(/:where\([^)]*\)/g, '').replace(/\[[^\]]+\]/g, ''))
+    expect(bare.filter((rest) => rest.trim() !== '')).toEqual([])
+  })
+
+  it('그 셈이 진짜로 잰다 — :where()는 0이고 속성은 1이다', () => {
+    // 이 케이스가 없으면 위 둘이 `specificityB`가 늘 2를 돌려줘도 초록이다.
+    expect(specificityB('[a="1"][b="2"]')).toBe(2)
+    expect(specificityB('[a="1"] [b="2"]')).toBe(2)
+    expect(specificityB('[a="1"]:where([b="2"]) [c="3"]')).toBe(2)
+    expect(specificityB('[a="1"][b="2"][c="3"]')).toBe(3)
   })
 })

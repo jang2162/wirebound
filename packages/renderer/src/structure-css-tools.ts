@@ -68,15 +68,44 @@ export function componentRule(type: string, structure: string, declarations: str
 }
 
 /**
- * 조각 규칙. **구조 이름을 넣지 않는다** — `compileTheme`의 조각 규칙이
- * `[data-wb-component="X"] [data-wb-part="p"]`(특이도 0,2,0)이므로 구조를 더하면
- * 0,3,0이 되어 테마가 진다.
+ * 조각 규칙.
  *
- * **대가:** 같은 컴포넌트의 다른 구조도 이 규칙을 받는다. P4b-2가 구조를 늘리면서 그것이
- * 실제로 드러난다 — 값을 안 싣는 구조는 `var()`의 기본값을 받는다.
+ * **구조 이름을 맨 셀렉터로 넣지 않는다** — `compileTheme`의 조각 규칙이
+ * `[data-wb-component="X"] [data-wb-part="p"]`(특이도 0,2,0)이므로 구조를 그냥 더하면
+ * 0,3,0이 되어 **그 컴포넌트에서 테마가 진다.**
+ *
+ * **`structures`를 주면 `:where()`로 감싸 그 대가 없이 구조를 가린다** (P4b-2 ③).
+ * `:where()` 안의 것은 **특이도가 0**이므로
+ * `[data-wb-component="X"]:where([data-wb-structure="Y"]) [data-wb-part="p"]`는
+ * 여전히 **(0,2,0)**이면서 `Y`가 아닌 구조는 안 받는다.
+ *
+ * **Chromium 151로 쟀다 — jsdom으로는 못 잰다.** jsdom 25는 **특이도를 아예 계산하지
+ * 않고 순서만 따른다**(실측: `#v`(1,0,0)가 뒤에 온 `[data-wb-part]`(0,1,0)에게 진다).
+ * 그래서 아래 표는 전부 실제 브라우저의 값이다. `test/structure-css.test.ts`는 셀렉터
+ * **모양**만 문자열로 단언하고, 이기고 지는 것은 재지 않는다 — 잴 수 없기 때문이다.
+ *
+ * | 시트 | `vertical`의 `list` | `underline`의 `list` |
+ * |---|---|---|
+ * | 오늘 꼴(구조 없음)만 | 받는다 | **받는다 — 이것이 샘이다** |
+ * | `:where(vertical)`만 | 받는다 | **안 받는다** |
+ * | `:where(vertical)` + 테마 조각 규칙(나중) | **테마가 이긴다** | — |
+ * | 맨 셀렉터로 구조 + 테마 조각 규칙(나중) | **구조가 이긴다 — 고장** | — |
+ *
+ * **언제 주고 언제 안 주는가.** 그 조각을 내는 구조 **전부가** 이 선언을 원하면 주지 마라
+ * (`Media`의 `frame` — 넷 다 비율을 싣는다). 원하는 구조가 그중 일부일 때만 준다.
+ * 어느 쪽이든 **누가 받는지는 `test/structure-css.test.ts`의 수신자 표가 못박는다.**
  */
-export function partRule(type: string, part: string, declarations: string[]): string {
-  return rule(`[data-wb-component="${type}"] [data-wb-part="${part}"]`, declarations)
+export function partRule(
+  type: string,
+  part: string,
+  declarations: string[],
+  structures?: readonly string[],
+): string {
+  const scope =
+    structures === undefined || structures.length === 0
+      ? ''
+      : `:where(${structures.map((name) => `[data-wb-structure="${name}"]`).join(', ')})`
+  return rule(`[data-wb-component="${type}"]${scope} [data-wb-part="${part}"]`, declarations)
 }
 
 function rule(selector: string, declarations: string[]): string {

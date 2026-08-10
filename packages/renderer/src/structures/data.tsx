@@ -310,25 +310,39 @@ export function dataCssBlocks(): string[] {
   )
 
   // 페이지네이션은 카드가 아니다. 이 줄이 없으면 마지막 카드 옆 칸에 들어앉아 카드처럼
-  // 읽힌다. **조각 규칙에는 구조를 넣을 수 없으므로**(넣으면 특이도 0,3,0이 되어 테마가
-  // 진다 — `structure-css-tools`의 `partRule` 주석) `table`·`stackedList`·`mediaList`의
-  // `pagination`도 이 선언을 받는다.
+  // 읽힌다.
   //
-  // **그쪽에서 무해하다고 보는 근거는 CSS 규격이지 이 저장소의 측정이 아니다** —
-  // `grid-column`은 그리드 항목에만 적용되고 표 칸이나 일반 목록 항목에는 적용될 자리가
-  // 없다. **jsdom은 레이아웃을 계산하지 않으므로 그 무해함을 자동 회귀가 재지 못한다.**
-  // 실제 브라우저에서 확인해야 할 것이 생기면 여기가 그 목록의 한 줄이다.
-  blocks.push(partRule('List', 'pagination', ['grid-column: 1 / -1;']))
+  // **`cardGrid`에만 건다 — P4b-2 ③이 `:where()`로 좁혔다.** 앞서는 조각 규칙에 구조를
+  // 넣을 방법이 없어(넣으면 0,3,0이 되어 테마가 진다) `table`·`stackedList`·`mediaList`의
+  // `pagination`까지 이 선언을 받았다. `:where()`는 특이도가 0이라 **(0,2,0)을 지키면서**
+  // 구조를 가린다 — 근거는 `structure-css-tools`의 `partRule` 주석(Chromium 실측표).
+  //
+  // **좁히기 전 그 셋이 무해했던 것은 맞다 — ③이 Chromium으로 쟀다.** `List:table`의
+  // `pagination`은 `<td>`(`display: table-cell`, 부모 `table-row`)라 그리드 항목이 아니고,
+  // 규칙을 넣은 판과 뺀 판에서 요소 24개의 `getBoundingClientRect`가 **전부 같았다**
+  // (계산값만 `1 / -1` ↔ `auto`로 갈렸다). 앞 주석이 *"규격이지 측정이 아니다"*라고
+  // 남긴 자리이고, 이제 잰 값이다. **그래도 좁히는 것은** 무해함이 `List:table`이
+  // 표라는 사실에 매여 있어서다 — 테마가 `display: grid`를 걸면 그날 깨진다.
+  blocks.push(partRule('List', 'pagination', ['grid-column: 1 / -1;'], ['cardGrid']))
 
   // ── Tree ──────────────────────────────────────────────────────────────────
   //
   // 노드가 아니라 **조각**에 붙는 유일한 자리다. `(index % depth)` 단계를 `<li>`가 나르고
   // 폭을 여기서 곱한다. 곱셈이 CSS에 있는 것은 §6.8이 금지한 `calc()`와 무관하다 —
   // 그 금지는 **테마 문서의 값**에 걸리고, 이 파일은 렌더러가 소유한 CSS다.
+  //
+  // **`indent`에만 건다 — P4b-2 ③이 `:where()`로 좁혔다.** `accordion`은 들여쓰기를
+  // **중첩**(`<li>` 안에 `<ul part="panel">`)으로 내므로 단계 변수를 아예 싣지 않는다.
+  // 좁히기 전에는 그 `node`도 이 규칙을 받아 `calc(0 * 16px)` = `0`으로 떨어졌다 —
+  // 값이 우연히 무해했을 뿐 **받으라고 쓴 규칙이 아니다.** P4a-2가 이 대가를 미리 적어
+  // 두었고(*"P4b의 `Tree:accordion`이 같은 규칙을 받는다"*) 이제 안 치른다.
   blocks.push(
-    partRule('Tree', 'node', [
-      `padding-left: calc(var(${nodeVar('tree', 'level')}, 0) * var(${TREE_INDENT_VAR}, 16px));`,
-    ]),
+    partRule(
+      'Tree',
+      'node',
+      [`padding-left: calc(var(${nodeVar('tree', 'level')}, 0) * var(${TREE_INDENT_VAR}, 16px));`],
+      ['indent'],
+    ),
   )
 
   // ── KeyValue:cardGrid ─────────────────────────────────────────────────────
