@@ -208,6 +208,16 @@ export const TabsUnderline: StructureRenderer = ({ attrs, props, part, children 
 export const TabsPill: StructureRenderer = TabsUnderline
 
 /**
+ * **`underline`·`pill`과 DOM이 같다** (재라 #7). 갈리는 것은 **테두리**이고 그것은 §6.8의
+ * `borderColor`·`borderWidth`·`borderStyle`이다 — `pill`과 정확히 같은 부류다.
+ *
+ * **`Tabs`가 오늘 갖는 진짜 구조 차이는 아래 `vertical` 하나뿐이다.** 나머지 셋은 테마가
+ * 탭 스킨을 갈라 쓸 이름 세 개다. `Card`의 `plain`·`bordered`·`elevated`와 같은 모양이
+ * 여기서 한 번 더 나온다.
+ */
+export const TabsEnclosed: StructureRenderer = TabsUnderline
+
+/**
  * `justify` prop 값 → CSS 값. **`between`만 바꾼다** (Task 2 Step 3이 재서 정한 것).
  *
  * 앞서 여기 `mapAlign`·`mapJustify` 둘이 있었고 `start`·`end`를 `flex-start`·`flex-end`로
@@ -332,4 +342,5 @@ export const STRUCTURE_ENTRIES: StructureEntry[] = [
   ['Card', 'horizontal', CardHorizontal],
   ['Tabs', 'underline', TabsUnderline],
   ['Tabs', 'pill', TabsPill],
+  ['Tabs', 'enclosed', TabsEnclosed],
 ]

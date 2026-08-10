@@ -461,3 +461,26 @@ describe('Tabs:pill — underline과 DOM이 같다 (재라 #7)', () => {
     expectDeclaredParts('Tabs', html)
   })
 })
+
+describe('Tabs:enclosed — underline과 DOM이 같다 (재라 #7)', () => {
+  it('underline과 글자까지 같다 — 구조 이름만 다르다', () => {
+    expectSameDomAsUnderline('enclosed', { tabs: ['가', '나', '다'], active: 2 })
+  })
+
+  it('pill과도 DOM이 같다 — underline까지 셋이 한 덩어리다', () => {
+    const props = { tabs: ['가', '나'], active: 0 }
+    expect(render('Tabs', 'enclosed', props).replace('enclosed', 'pill')).toBe(
+      render('Tabs', 'pill', props),
+    )
+  })
+
+  it('구조 기본 CSS가 테두리를 정하지 않는다', () => {
+    expect(structureCssBlocks().join('\n')).not.toContain('data-wb-structure="enclosed"')
+  })
+
+  it('계약 밖 속성이 없고 조각 이름이 전부 선언돼 있다', () => {
+    const html = render('Tabs', 'enclosed', { tabs: ['가', '나'], active: 1 })
+    expectContractOnly(html)
+    expectDeclaredParts('Tabs', html)
+  })
+})
