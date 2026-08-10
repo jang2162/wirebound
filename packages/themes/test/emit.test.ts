@@ -286,3 +286,73 @@ describe('compileTheme — 얕은 성질만 본다', () => {
     expect(css).not.toContain('{')
   })
 })
+
+/**
+ * **재라 #1 — `@font-face`를 내지 않는다. 근거를 갈아 끼웠다.**
+ *
+ * P4a-1이 *"P8이 URL을 다시 쓰므로 지금 만들면 되돌려야 한다"*로 안 냈고, P4a-2가
+ * *"§6.8에 `fontFamily`가 없어 내도 걸 방법이 없다"*를 더했다. **P4b-1이 뒤쪽 근거를
+ * 없앴다**(`fontFamily`가 어휘가 됐다). 남은 하나를 재보니 **그것도 서지 않는다** —
+ * `compileTheme`은 순수 함수라 P8은 `Theme` **문서**의 `src`를 고쳐 다시 컴파일하면 되고,
+ * CSS 문자열을 후처리할 이유가 없다(`같은 입력이 같은 출력을 낸다`가 그 성질이다).
+ * **그 근거는 폐기한다.**
+ *
+ * **대신 이번에 잰 근거로 바꾼다: `assets.fonts`의 값이 아무 검증도 지나지 않는다.**
+ * 아래 케이스가 그것을 실측으로 고정한다. CSS로 내는 순간 그 값 규칙을 만들어야 하는데
+ * §6.7은 `family`·`src`의 모양을 한 글자도 규정하지 않고 §6.8의 값 규칙은 **스타일
+ * 프로퍼티**의 것이라 이 자리에 닿지 않는다. **어휘를 여는 것과 값 규칙을 새로 만드는 것은
+ * 다른 일이다**(P4b-1의 전역 제약).
+ *
+ * **그래서 오늘 걸 수 있는 폰트는 시스템에 이미 있는 것뿐이다.** 웹폰트가 필요해지는 시점은
+ * P4b-3(시스템 테마 5종)이고, 그때 이 판정을 다시 열려면 **먼저 `src`·`family`의 값 규칙을
+ * 세워야 한다** — 아래 둘째 케이스가 그 부재를 재는 자리다.
+ */
+describe('재라 #1 — assets.fonts는 CSS로 나가지 않는다', () => {
+  it('컴파일 결과에 @font-face가 없다', () => {
+    // 픽스처가 `assets.fonts`를 실제로 갖고 있다 — 비어 있으면 이 케이스가 아무것도 안 지킨다.
+    expect(MINIMAL_THEME.assets?.fonts?.length).toBeGreaterThan(0)
+    expect(compile(MINIMAL_THEME)).not.toContain('@font-face')
+  })
+
+  it('폰트 이름도 src도 CSS에 새어 나가지 않는다', () => {
+    // `@font-face`라는 글자만 안 나오는 것으로는 부족하다 — 이름을 다른 규칙에 박아도
+    // 이 판정은 깨진다.
+    //
+    // **픽스처의 `Pretendard`로는 잴 수 없다** — 그 글자는 `assets`가 아니라
+    // **토큰** `scale.typography.family.sans`에서도 나온다(`:root`의
+    // `--wb-typography-family-sans`). 두 출처가 겹치면 무엇이 새는지 구별되지 않으므로
+    // 토큰에 없는 이름을 쓴다.
+    const css = compile({
+      ...MINIMAL_THEME,
+      assets: { fonts: [{ family: 'FontFaceProbe', src: 'probe-only.woff2' }] },
+    })
+
+    expect(css).not.toContain('FontFaceProbe')
+    expect(css).not.toContain('probe-only.woff2')
+  })
+
+  it('음성 대조 — typography.family 토큰은 :root로 나간다', () => {
+    // **폰트를 거는 길이 이것이다.** `assets.fonts`가 닿지 않는 것과 폰트 어휘가 죽은 것은
+    // 다르다 — `fontFamily`가 이 변수를 가리킬 수 있다(`test/style.test.ts`).
+    expect(compile(MINIMAL_THEME)).toContain('--wb-typography-family-sans: Pretendard, sans-serif;')
+  })
+
+  it('그 근거 — assets.fonts의 값이 아무 검증도 지나지 않는다', () => {
+    // **실측이다.** CSS를 통째로 깨는 문자열이 `family`·`src` 둘 다에서 이슈 0건으로
+    // 해석을 통과하고, `ResolvedTheme.assets`에 **원문 그대로** 실린다. 방출이 그것을
+    // 읽는 순간 테마 문서가 임의 CSS를 주입할 수 있다.
+    //
+    // **`bgImage`의 `url()`과 다른 자리다** — 그쪽은 함수 allowlist와 괄호 균형 검사를
+    // 지난다(`resolve/style.ts`의 `FUNCTION_ALLOWLIST`·`rejectFunctions`). `assets`에는
+    // 그런 층이 아예 없다.
+    const evil = 'a.woff2) } body { display: none } @font-face { src: url(b'
+    const { theme, issues } = resolveTheme({
+      ...MINIMAL_THEME,
+      assets: { fonts: [{ family: 'X; } .a { b: c', src: evil }] },
+    })
+
+    expect(issues).toEqual([])
+    expect(theme?.assets?.fonts?.[0]?.src).toBe(evil)
+    expect(theme?.assets?.fonts?.[0]?.family).toBe('X; } .a { b: c')
+  })
+})

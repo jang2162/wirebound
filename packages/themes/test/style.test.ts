@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 // 경로가 어긋나면 여기서 죽는다. 아래 `§6.8을 실제로 읽는다`가 내용까지 확인한다.
 import designDoc from '../../../docs/superpowers/specs/2026-08-03-wirebound-design.md?raw'
-import { STYLE_PROPERTIES, cssVarName, styleDeclarations } from '../src/resolve/style'
+import {
+  STYLE_PROPERTIES,
+  STYLE_PROPERTIES_BEYOND_SPEC,
+  cssVarName,
+  styleDeclarations,
+} from '../src/resolve/style'
 import type { TokenTable } from '../src/resolve/tokens'
 
 const TOKENS: TokenTable = new Map([
@@ -17,6 +22,10 @@ const TOKENS: TokenTable = new Map([
   ['typography.body.fontSize', '14px'],
   ['typography.body.lineHeight', '1.5'],
   ['typography.body.fontWeight', '400'],
+  // §6.3의 `scale.typography.family`. `resolveTokens`가 다른 타이포 항목과 같은 규칙으로
+  // 평평하게 편다(`typography.<항목>.<키>`) — 이 표에 있는 것이 그 결과다.
+  ['typography.family.sans', 'Pretendard, sans-serif'],
+  ['typography.family.mono', 'D2Coding, monospace'],
 ])
 
 const codes = (issues: { code: string }[]) => issues.map((i) => i.code).sort()
@@ -51,16 +60,51 @@ describe('§6.8 대조', () => {
     expect(names.at(-1)).toBe('transition')
   })
 
-  it('화이트리스트가 §6.8과 정확히 같다', () => {
-    const spec = [...propertiesInSpec()].sort()
-    const table = Object.keys(STYLE_PROPERTIES).sort()
-    expect(table).toEqual(spec)
+  it('§6.8의 이름을 하나도 빠뜨리지 않는다', () => {
+    const table = new Set(Object.keys(STYLE_PROPERTIES))
+
+    expect(propertiesInSpec().filter((name) => !table.has(name))).toEqual([])
+  })
+
+  /**
+   * **§6.8을 넘어선 어휘는 등록해야 한다.**
+   *
+   * 앞서 이 자리는 *"화이트리스트가 §6.8과 정확히 같다"*였고, P4b-1이 §6.8에 **없는** 어휘를
+   * 더하면서 죽었다. **설계 문서는 고치지 않는다**(P4a-1이 세운 원칙) — 대신 대조를 둘로 가른다:
+   * 위 케이스가 *"절의 이름이 빠지지 않았는가"*를 보고, 이 케이스가 *"절에 없는 것이 몰래
+   * 들어오지 않았는가"*를 본다.
+   *
+   * **양방향이 유지된다는 것이 요점이다.** 하나로 두면 어휘를 더할 때 케이스를 지우게 되고,
+   * 그러면 §6.8과의 연결이 통째로 끊긴다. 갈라 두면 어휘를 더하는 사람이 `BEYOND_SPEC`에
+   * 이름을 적고 **근거를 함께 남겨야** 한다.
+   */
+  it('§6.8에 없는 어휘는 BEYOND_SPEC에 등록된 것뿐이다', () => {
+    const spec = new Set(propertiesInSpec())
+    const extra = Object.keys(STYLE_PROPERTIES).filter((name) => !spec.has(name))
+
+    expect([...extra].sort()).toEqual([...STYLE_PROPERTIES_BEYOND_SPEC].sort())
+  })
+
+  it('BEYOND_SPEC에 §6.8이 이미 가진 이름을 넣지 않는다', () => {
+    // 반대 방향. 절에 있는 이름을 여기 적으면 **위 케이스가 그 이름을 봐주게 된다** —
+    // 표에서 그 이름이 사라져도 조용해진다.
+    const spec = new Set(propertiesInSpec())
+
+    expect(STYLE_PROPERTIES_BEYOND_SPEC.filter((name) => spec.has(name))).toEqual([])
+  })
+
+  it('BEYOND_SPEC의 이름은 실제로 표에 있다', () => {
+    const table = new Set(Object.keys(STYLE_PROPERTIES))
+
+    expect(STYLE_PROPERTIES_BEYOND_SPEC.filter((name) => !table.has(name))).toEqual([])
   })
 })
 
 describe('styleDeclarations — 이름', () => {
   it('화이트리스트 밖의 이름은 이슈다', () => {
-    for (const prop of ['content', 'cursor', 'backdropFilter', 'fontFamily', 'maxHeight']) {
+    // **`fontFamily`가 여기 있었다.** P4b-1이 그것을 어휘로 열었다 — 아래
+    // `§6.8을 넘어선 어휘` 절이 그 이유를 든다.
+    for (const prop of ['content', 'cursor', 'backdropFilter', 'maxHeight']) {
       const { css, issues } = decl(prop, '1px')
       expect(codes(issues), prop).toEqual(['unknown-style-prop'])
       expect(css, prop).toEqual([])
@@ -76,6 +120,51 @@ describe('styleDeclarations — 이름', () => {
     expect(decl('justify', 'space-between').css).toEqual([['justify-content', 'space-between']])
     expect(decl('shadow', '0 1px 2px #0001').css).toEqual([['box-shadow', '0 1px 2px #0001']])
     expect(decl('zIndex', 10).css).toEqual([['z-index', '10']])
+  })
+
+  /**
+   * **§6.7의 `assets.fonts`가 닿는 곳이 여기다.** 그 절이 폰트를 선언하게 해 두었는데
+   * §6.8에 폰트를 **거는** 어휘가 없어 *"선언은 있는데 쓸 길이 없는"* 상태였다(P4a-2 이월).
+   *
+   * **값은 둘 다 받는다 — 토큰 참조와 리터럴.** §6.3의 `scale.typography.family`가
+   * `{ sans, serif, mono }`를 갖고 있고 `resolveTokens`가 그것을 `typography.family.sans`로
+   * 편다. 그래서 **토큰이 이미 있는데 가리킬 프로퍼티가 없던 것**이기도 하다.
+   * 리터럴을 막지 않는 이유는 §6.8이 값 규칙을 *"토큰 참조 또는 리터럴"*로 못박았고
+   * 폰트 스택은 그 자체가 CSS 리터럴 관용구이기 때문이다.
+   */
+  describe('fontFamily (§6.8에 없는 어휘 — P4b-1)', () => {
+    it('리터럴 폰트 스택이 그대로 나간다', () => {
+      expect(decl('fontFamily', 'Pretendard, sans-serif').css).toEqual([
+        ['font-family', 'Pretendard, sans-serif'],
+      ])
+    })
+
+    it('typography.family 토큰을 가리킬 수 있다', () => {
+      expect(decl('fontFamily', 'typography.family.sans').css).toEqual([
+        ['font-family', 'var(--wb-typography-family-sans)'],
+      ])
+      expect(decl('fontFamily', 'typography.family.mono').css).toEqual([
+        ['font-family', 'var(--wb-typography-family-mono)'],
+      ])
+    })
+
+    it('없는 폰트 토큰을 가리키면 이슈다', () => {
+      const { css, issues } = decl('fontFamily', 'typography.family.serif')
+      expect(codes(issues)).toEqual(['unknown-token'])
+      expect(css).toEqual([])
+    })
+
+    it('따옴표가 든 폰트 이름도 통과한다', () => {
+      // `"Pretendard Variable", sans-serif`는 CSS의 정상 표기다. 함수도 참조도 아니다.
+      expect(decl('fontFamily', '"Pretendard Variable", sans-serif').css).toEqual([
+        ['font-family', '"Pretendard Variable", sans-serif'],
+      ])
+    })
+
+    it('함수는 여전히 막는다', () => {
+      // 어휘를 여는 것과 값 규칙을 넓히는 것은 다른 일이다(전역 제약).
+      expect(codes(decl('fontFamily', 'var(--x)').issues)).toEqual(['bad-style-value'])
+    })
   })
 
   it('X·Y 축약은 물리 프로퍼티 둘로 펼쳐진다', () => {

@@ -11,6 +11,9 @@ import { TOKEN_NAMESPACES, isTokenReference } from './tokens'
  * **이 표가 §6.8을 덮는지 `test/style.test.ts`가 그 절을 읽어 대조한다.** 절이 늘거나
  * 줄면 그 케이스가 죽는다 — 그래서 여기 개수를 적지 않는다.
  *
+ * **§6.8에 없는 이름을 더할 때는 `STYLE_PROPERTIES_BEYOND_SPEC`에도 등록한다.** 그 대조가
+ * 양방향이라 등록하지 않으면 케이스가 죽는다.
+ *
  * 값이 배열인 것은 **한 어휘가 CSS 선언 여럿으로 펼쳐지는 것**이다. `paddingX`를
  * 논리 프로퍼티(`padding-inline`)가 아니라 물리 프로퍼티 둘로 낸 이유: 논리 프로퍼티는
  * 쓰기 방향에 따라 뜻이 바뀌는데, §6.8의 `direction`은 flex 방향이라 이름이 겹치고
@@ -65,6 +68,8 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
 
   // 타이포
   typography: [],
+  // **§6.8에 없다 — P4b-1이 더했다.** 근거는 `STYLE_PROPERTIES_BEYOND_SPEC`에 있다.
+  fontFamily: ['font-family'],
   fontSize: ['font-size'],
   fontWeight: ['font-weight'],
   lineHeight: ['line-height'],
@@ -83,6 +88,28 @@ export const STYLE_PROPERTIES: Readonly<Record<string, readonly string[]>> = {
   overflow: ['overflow'],
   transition: ['transition'],
 }
+
+/**
+ * **§6.8의 목록에 없는데 `STYLE_PROPERTIES`에 있는 이름과 그 근거.**
+ *
+ * **설계 문서를 고치지 않는다**(P4a-1이 세운 원칙). 대신 어긋난 자리를 여기 한 곳에 모으고,
+ * `test/style.test.ts`의 `§6.8 대조`가 이 목록과 표의 차집합이 **정확히 같은지** 본다 —
+ * 몰래 늘리면 그 케이스가 죽고, 여기 이름만 적고 표에 안 넣어도 죽는다.
+ *
+ * **더하는 기준은 하나다: 다른 규격이 이미 요구하는데 어휘가 없어 닿지 않는 것.**
+ * §6.8을 "웹 디자인이 가능한 수준"으로 넓히자는 취지대로 마음껏 늘리는 자리가 아니다.
+ *
+ * | 이름 | 무엇이 요구하는가 | 어휘가 없으면 |
+ * |---|---|---|
+ * | `fontFamily` | §6.7의 `assets.fonts` · §6.3의 `scale.typography.family` | 폰트를 선언하고 토큰까지 만들어도 **어느 테마도 컴포넌트에 걸 수 없다** |
+ *
+ * **`typography`(스케일 참조)로는 폰트를 걸 수 없다.** 그 어휘가 펼치는 것은
+ * `fontSize`·`lineHeight`·`fontWeight`·`letterSpacing` 넷이고(`TYPOGRAPHY_KEYS`),
+ * §6.3의 `typography.family`는 그 넷 중 어느 것도 아니라 **항목으로 지목하면
+ * `unknown-token`이 난다**(`test/style.test.ts`의 `타이포 항목이 아닌 이름은 이슈다`).
+ * 즉 폰트 토큰은 이미 만들어지는데 그것을 가리킬 프로퍼티가 없던 것이다.
+ */
+export const STYLE_PROPERTIES_BEYOND_SPEC: readonly string[] = ['fontFamily']
 
 /**
  * `typography: "h3"`이 펼쳐지는 CSS 선언. 스케일 항목에 없는 키는 **선언을 내지 않는다**
