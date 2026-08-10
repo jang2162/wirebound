@@ -225,6 +225,34 @@ export const KeyValueTable: StructureRenderer = ({ attrs, props, part }) => {
 }
 
 /**
+ * 정의 목록. **`table`과 갈리는 지점은 마크업의 뜻이다.**
+ *
+ * 조각 이름은 `table`과 같다(`row`·`key`·`value`) — 재는 것이 같기 때문이다. 다른 것은
+ * 그 뜻을 무엇이 나르느냐다: `table`은 행렬의 한 칸(`<th>`/`<td>`), 여기는 **용어와 그
+ * 뜻**(`<dt>`/`<dd>`)이고 읽는 도구에도 그렇게 전달된다.
+ *
+ * `<dl>` 안에서 `<div>`로 쌍을 감싸는 것은 HTML이 허용한다 — `row` 조각을 유지하면서
+ * `<dt>`/`<dd>` 짝을 묶는 유일한 방법이다.
+ *
+ * **`columns`를 읽지 않는다.** 세로로 흐르는 정의 목록에서 열 수는 뜻이 없다. 그 prop이
+ * 여기서 죽어 있는 것은 `editor` 항목에 `visibleWhen`이 없어서인데, **고치지 않고
+ * 보고한다** — 패널의 동작을 바꾸는 것은 이 태스크의 범위 밖이다.
+ */
+export const KeyValueDefinitionList: StructureRenderer = ({ attrs, props, part }) => {
+  const pairs = props.pairs as { key: string; value: string }[]
+  return (
+    <dl {...attrs}>
+      {pairs.map((pair, index) => (
+        <div key={`${pair.key}-${index}`} {...part('row')}>
+          <dt {...part('key')}>{pair.key}</dt>
+          <dd {...part('value')}>{pair.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+/**
  * 이 그룹의 구조가 서기 위한 최소 CSS. 규칙을 더하면 여기에 `blocks.push(…)`를 더한다.
  * 셀렉터를 손으로 쓰지 마라 — `componentRule`·`partRule`만 쓴다.
  */
@@ -285,4 +313,5 @@ export const DATA_ENTRIES: StructureEntry[] = [
   ['Tree', 'indent', TreeIndent],
   ['Tree', 'accordion', TreeAccordion],
   ['KeyValue', 'table', KeyValueTable],
+  ['KeyValue', 'definitionList', KeyValueDefinitionList],
 ]

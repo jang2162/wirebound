@@ -355,3 +355,60 @@ describe('Tree:accordion', () => {
     expect(await count(html, '[data-wb-part="node"]')).toBe(0)
   })
 })
+
+const PAIRS = [
+  { key: '이름', value: '홍길동' },
+  { key: '부서', value: '기획' },
+  { key: '직급', value: '팀장' },
+]
+
+describe('KeyValue:definitionList', () => {
+  it('pairs마다 row를 내고 그 안에 key·value가 들어간다', async () => {
+    const html = render('KeyValue', 'definitionList', { pairs: PAIRS })
+    expect(html).toContain('data-wb-structure="definitionList"')
+    expect(countOf(html, 'row')).toBe(3)
+    expect(await count(html, '[data-wb-part="row"] > [data-wb-part="key"]')).toBe(3)
+    expect(await count(html, '[data-wb-part="row"] > [data-wb-part="value"]')).toBe(3)
+    expect(html).toContain('홍길동')
+  })
+
+  /**
+   * **`table`과 갈리는 지점은 마크업의 뜻이다.**
+   *
+   * 둘 다 조각 이름이 `row`·`key`·`value`로 같다 — 재는 것이 같기 때문이다. 다른 것은
+   * 그 뜻을 무엇이 나르느냐다: `table`은 행렬의 한 칸(`<th>`/`<td>`), 정의 목록은
+   * **용어와 그 뜻**(`<dt>`/`<dd>`)이다. 읽는 도구에도 그렇게 전달된다.
+   *
+   * `<dl>` 안에서 `<div>`로 쌍을 감싸는 것은 HTML이 허용한다 — `row` 조각을 유지하면서
+   * `<dt>`/`<dd>` 짝을 묶는 유일한 방법이다.
+   */
+  it('dl·dt·dd로 그린다 — table은 table·th·td다', () => {
+    const definitionList = render('KeyValue', 'definitionList', { pairs: PAIRS })
+    expect(definitionList).toContain('<dl ')
+    expect(definitionList).toContain('<dt ')
+    expect(definitionList).toContain('<dd ')
+
+    // 대조군. 같은 노드를 table로 그리면 표 마크업이 나온다.
+    const table = render('KeyValue', 'table', { pairs: PAIRS })
+    expect(table).toContain('<table ')
+    expect(table).not.toContain('<dt ')
+  })
+
+  it('pairs가 비면 row가 하나도 없다', () => {
+    const html = render('KeyValue', 'definitionList', { pairs: [] })
+    expect(html).toContain('data-wb-structure="definitionList"')
+    expect(countOf(html, 'row')).toBe(0)
+  })
+
+  it('쓰는 조각 이름이 전부 카탈로그에 선언돼 있다 — 새 이름을 만들지 않았다', () => {
+    const html = render('KeyValue', 'definitionList', { pairs: PAIRS })
+    expect(undeclared('KeyValue', html)).toEqual([])
+    expect([...new Set(parts(html))].sort()).toEqual(['key', 'row', 'value'])
+  })
+
+  it('구조 기본 CSS에 definitionList를 겨냥하는 규칙이 없다', () => {
+    // `<dl>/<dt>/<dd>`의 기본 흐름이 이미 이 구조다. 여백·정렬은 외형이라 테마의 몫이다.
+    expect(structureBaseCss()).not.toContain('[data-wb-structure="definitionList"]')
+    expect(structureBaseCss()).toContain('[data-wb-structure="cardGrid"]')
+  })
+})
