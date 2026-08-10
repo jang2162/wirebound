@@ -28,6 +28,7 @@ import { installStructures } from '../src/structures/index'
 import { INPUT_ENTRIES, inputCssBlocks } from '../src/structures/input'
 import { listStructureKeys, resetStructures, type StructureEntry } from '../src/structures/registry'
 import { STRUCTURE_ENTRIES, structureCssBlocks } from '../src/structures/structure'
+import { GROUP_TYPES, PREP_IMPLEMENTED, PREP_IMPLEMENTED_KEYS } from './p4b2-baseline'
 
 /**
  * 그룹 다섯. **순서가 `installStructures()`·`structureBaseCss()`가 모으는 순서와 같아야
@@ -43,29 +44,6 @@ const GROUPS: [name: string, entries: readonly StructureEntry[], blocks: () => s
 
 function keysOf(entries: readonly StructureEntry[]): string[] {
   return entries.map(([type, structure]) => `${type}:${structure}`)
-}
-
-/**
- * **준비 웨이브가 가르기 직전의 19개.** 그룹별로 적어 둔다 — 어느 그룹이 무엇을 잃었는지
- * 실패 메시지가 바로 말하게 하려는 것이다.
- *
- * 이 목록은 **줄면 안 되고 늘 수는 있다.** 병렬 워커가 26개를 채우면 각 그룹의 배열이
- * 길어지지만, 여기 적힌 것은 그대로 있어야 한다.
- */
-const BASELINE: Record<string, string[]> = {
-  structure: [
-    'Page:default',
-    'Slot:default',
-    'Section:contained',
-    'Flex:default',
-    'Grid:default',
-    'Card:plain',
-    'Tabs:underline',
-  ],
-  data: ['List:table', 'Tree:indent', 'KeyValue:table'],
-  input: ['SearchForm:inline', 'EntryForm:labelLeft', 'Field:outlined'],
-  action: ['Button:solid', 'Link:default'],
-  document: ['Text:default', 'Media:image', 'Divider:default', 'Placeholder:default'],
 }
 
 describe('P4b-2 ① — 등록이 그룹 다섯으로 갈렸다', () => {
@@ -100,28 +78,20 @@ describe('P4b-2 ① — 등록이 그룹 다섯으로 갈렸다', () => {
   it('그룹이 가진 것을 하나도 잃지 않았다 — 준비 웨이브의 19개', () => {
     for (const [name, entries] of GROUPS) {
       const keys = new Set(keysOf(entries))
-      const lost = BASELINE[name]!.filter((key) => !keys.has(key))
+      const lost = PREP_IMPLEMENTED[name]!.filter((key) => !keys.has(key))
       expect(lost, name).toEqual([])
     }
     // 위 순회가 헛돌지 않는 것 — 목록 전체가 19다.
-    expect(Object.values(BASELINE).flat()).toHaveLength(19)
+    expect(PREP_IMPLEMENTED_KEYS).toHaveLength(19)
   })
 
   it('그룹 경계가 카탈로그 파일의 경계와 같다', () => {
     // **D2가 이 경계에 기대어 워커 넷을 나눴다.** 카탈로그 파일이 같은 경계로 갈려 있어야
     // `parts`를 넓혀야 할 때도 서로 안 겹친다. 여기서는 그 대응을 **컴포넌트 타입**으로
     // 고정한다 — 그룹이 남의 컴포넌트를 등록하기 시작하면 그 전제가 깨진다.
-    const CATALOG_GROUPS: Record<string, string[]> = {
-      structure: ['Page', 'Slot', 'Section', 'Flex', 'Grid', 'Card', 'Tabs'],
-      data: ['List', 'Tree', 'KeyValue'],
-      input: ['SearchForm', 'EntryForm', 'Field'],
-      action: ['Button', 'Link'],
-      document: ['Text', 'Media', 'Divider', 'Placeholder'],
-    }
-
     for (const [name, entries] of GROUPS) {
       const types = [...new Set(entries.map(([type]) => type))].sort()
-      expect(types, name).toEqual([...CATALOG_GROUPS[name]!].sort())
+      expect(types, name).toEqual([...GROUP_TYPES[name]!].sort())
     }
   })
 
