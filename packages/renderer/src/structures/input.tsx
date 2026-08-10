@@ -138,6 +138,38 @@ export const EntryFormLabelLeft: StructureRenderer = EntryFormRows
 /** `labelLeft`와 **같은 DOM이다.** 근거는 `EntryFormRows`의 주석. */
 export const EntryFormLabelTop: StructureRenderer = EntryFormRows
 
+/**
+ * **구획으로 나뉜 입력 폼.** 최상위 자식 하나가 구획 하나다.
+ *
+ * **왜 자식 하나 = 구획 하나인가.** 구획 수를 말해 주는 prop이 없고, 만들면 *"구획이 셋인데
+ * 자식이 다섯이면 어떻게 나누는가"*라는 답 없는 질문이 따라온다. 설계서에서 폼을 나눌 때
+ * 저자가 실제로 하는 일은 필드 묶음을 `Card`·`Flex` 같은 것으로 **묶어서** 넣는 것이므로,
+ * 최상위 자식을 그대로 구획으로 보는 것이 문서의 모양과 일치한다. **prop을 새로 만들지
+ * 않아도 되는 것이 그 덤이다**(§13.1의 마이그레이션을 부르지 않는다).
+ *
+ * 머리글의 글자는 자리 표시자다 — 구조는 와이어프레임이므로 실제 데이터가 없다
+ * (`SearchFormInline`의 `조회`·`초기화`, `ListTable`의 `—`와 같은 부류다).
+ *
+ * **`fieldset`/`legend`를 쓰지 않았다.** 의미로는 그쪽이 맞지만 브라우저 기본 스타일
+ * (테두리·`legend`의 자리 잡기)이 딸려 오고, 그것을 지우는 선언은 *"구조가 서기 위한 최소
+ * CSS"*가 아니라 스킨이다. 테마가 매번 그것부터 걷어내야 하는 구조를 만들지 않는다.
+ */
+export const EntryFormSectioned: StructureRenderer = ({ attrs, props, part, children }) => (
+  <form {...attrs}>
+    {props.title ? <div {...part('label')}>{String(props.title)}</div> : null}
+    {Children.map(children, (child, index) => (
+      <div {...part('section')}>
+        <div {...part('sectionTitle')}>구획 {index + 1}</div>
+        <div {...part('row')}>{child}</div>
+      </div>
+    ))}
+    <div {...part('actions')}>
+      <span>저장</span>
+      <span>취소</span>
+    </div>
+  </form>
+)
+
 export const FieldOutlined: StructureRenderer = ({ attrs, props, part }) => (
   <div {...attrs}>
     <label {...part('label')}>{String(props.label)}</label>
@@ -169,5 +201,6 @@ export const INPUT_ENTRIES: StructureEntry[] = [
   ['SearchForm', 'collapsible', SearchFormCollapsible],
   ['EntryForm', 'labelLeft', EntryFormLabelLeft],
   ['EntryForm', 'labelTop', EntryFormLabelTop],
+  ['EntryForm', 'sectioned', EntryFormSectioned],
   ['Field', 'outlined', FieldOutlined],
 ]

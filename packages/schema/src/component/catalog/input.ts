@@ -27,7 +27,12 @@ export const EntryFormDef = defineComponent({
   }),
   editor: [{ prop: 'title', control: 'text', label: '제목' }],
   structures: ['labelLeft', 'labelTop', 'sectioned'],
-  parts: ['row', 'label', 'control', 'actions'],
+  // `section`·`sectionTitle`은 `sectioned`가 자식 하나마다 내는 구획과 그 머리글이다.
+  //
+  // **`control`은 오늘 어느 구조도 내지 않는다.** 선언만 있고 화면에 닿지 않는 이름이라
+  // `Field.help`와 같은 부류다 — 지우는 것은 테마 어휘를 좁히는 변경이므로 여기서 하지
+  // 않고 보고에 남긴다.
+  parts: ['row', 'label', 'control', 'actions', 'section', 'sectionTitle'],
   variants: [],
   states: [],
   children: 'many',

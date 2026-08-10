@@ -217,6 +217,51 @@ describe('EntryForm:labelTop — DOM이 labelLeft와 같다(발견)', () => {
 })
 
 /**
+ * **`sectioned`는 이 그룹에서 DOM이 실제로 갈리는 셋 중 하나다.**
+ *
+ * 구획이 몇 개인지 말해 주는 prop이 없다. 그래서 **최상위 자식 하나를 구획 하나로 본다** —
+ * 설계서에서 폼을 나눌 때 저자가 실제로 하는 일(필드 묶음을 `Card`·`Flex` 같은 것으로
+ * 묶어 넣는 것)과 같은 모양이고, prop을 새로 만들지 않아도 된다.
+ */
+describe('EntryForm:sectioned — 자식 하나가 구획 하나다', () => {
+  it('자식 하나마다 section·sectionTitle을 낸다', () => {
+    for (const count of [0, 1, 3]) {
+      const html = render('EntryForm', 'sectioned', { title: '회원 정보' }, fields(count))
+      expect(countOf(html, 'section'), `${count}`).toBe(count)
+      expect(countOf(html, 'sectionTitle'), `${count}`).toBe(count)
+    }
+  })
+
+  it('구획이 자식을 감싼다 — 구획만 세고 자식을 버리지 않았다', () => {
+    const html = render('EntryForm', 'sectioned', {}, fields(2))
+    expect(html).toContain('항목1')
+    expect(html).toContain('항목2')
+    expect(html).toMatch(/data-wb-part="section"/)
+  })
+
+  it('labelLeft·labelTop은 section을 내지 않는다 — 대조군', () => {
+    for (const structure of ['labelLeft', 'labelTop']) {
+      expect(countOf(render('EntryForm', structure, {}, fields(2)), 'section'), structure).toBe(0)
+    }
+  })
+
+  it('title은 labelLeft와 같은 자리에 남는다', () => {
+    // 폼 제목은 구획과 무관하다 — `admin`이 `EntryForm.parts.label`에 스킨을 걸고 있으므로
+    // 여기서 이름을 바꾸면 그 스킨이 갈 곳을 잃는다(D5 — 화면이 바뀌면 안 된다).
+    //
+    // **자식을 달지 않는다.** 자식 `Field`도 `label` 조각을 내므로 자식이 있으면 이 수는
+    // 폼의 제목을 세는 것이 아니게 된다 — 처음에 `fields(1)`로 쓰고 `2`를 받았다.
+    // (계획서: *"측정이 예상과 다르면 대상이 아니라 측정 장치를 먼저 의심하라."*)
+    const html = render('EntryForm', 'sectioned', { title: '회원 정보' }, fields(0))
+    expect(html).toContain('회원 정보')
+    expect(countOf(html, 'label')).toBe(1)
+    expect(render('EntryForm', 'sectioned', { title: '' }, fields(0))).not.toContain(
+      'data-wb-part="label"',
+    )
+  })
+})
+
+/**
  * **자식이 있을 때의 전수 가드.** 머리말에 적은 사각을 덮는다 — `structures.test.tsx`의
  * 순회는 자식 없는 노드만 그리므로, 자식을 감싸며 나오는 조각은 거기서 스캔되지 않는다.
  *
