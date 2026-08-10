@@ -16,6 +16,15 @@ export interface StructureContext {
 
 export type StructureRenderer = (ctx: StructureContext) => ReactElement
 
+/**
+ * 그룹 모듈이 내보내는 등록 항목 하나.
+ *
+ * **타입이 여기 있는 이유:** 그룹 다섯이 이 모양을 함께 쓰는데, 그중 하나에 두면 나머지
+ * 넷이 그 그룹을 import하게 되어 **경계가 없는 것과 같아진다**(P4b-2 ①이 가른 것이 바로
+ * 그 경계다). 레지스트리는 다섯 모두가 이미 `StructureRenderer` 때문에 보는 자리다.
+ */
+export type StructureEntry = [type: string, structure: string, render: StructureRenderer]
+
 const structures = new Map<string, StructureRenderer>()
 
 function key(type: string, structure: string): string {
