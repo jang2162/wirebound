@@ -10,7 +10,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { registerStructure } from '@wirebound/renderer'
+import { getStructure, registerStructure } from '@wirebound/renderer'
 import { ListDef, defineComponent, registerComponent } from '@wirebound/schema'
 import type { EditorStore } from '../../src/store/editor-store'
 import {
@@ -225,12 +225,20 @@ registerStructure(BOOM_TYPE, 'table', () => {
 })
 
 /**
- * `List`의 둘째 구현체. 렌더러는 오늘 컴포넌트마다 하나씩만 등록하므로
- * (`packages/renderer/src/structures/index.ts`의 `DEFAULTS`), 테마가 고른 구조가 실제로
- * 쓰이는지 보려면 여기서 하나를 더 등록해야 한다. `data-wb-structure`는 렌더러가 붙이므로
- * 본문은 최소로 둔다.
+ * `List`의 둘째 구현체. 테마가 고른 구조가 실제로 쓰이는지 보려면 고를 수 있는 것이
+ * 둘이어야 하는데, 렌더러가 `List`에 `table` 하나만 등록해 두었다. `data-wb-structure`는
+ * 렌더러가 붙이므로 본문은 최소로 둔다.
+ *
+ * **이미 있으면 등록하지 않는다 (P4b-2 ① D1).** `registerStructure`는 중복 등록에
+ * **던지고**, 이 줄은 모듈 평가 시점에 돈다 — `installStructures()`가 `List:cardGrid`를
+ * 싣는 순간 이 파일이 통째로 죽는다(케이스 하나가 아니라 파일 전체다). P4b-2 ②의 W2가
+ * 바로 그 구조를 만들므로, 준비 웨이브에서 실측해 여기를 막아 둔다. **본문이 렌더러의
+ * 것으로 바뀌어도 위 케이스는 성립한다** — 재는 것이 `data-wb-structure` 속성 하나이고
+ * 그 속성은 렌더러가 붙인다.
  */
-registerStructure('List', 'cardGrid', ({ attrs }) => <div {...attrs} />)
+if (!getStructure('List', 'cardGrid')) {
+  registerStructure('List', 'cardGrid', ({ attrs }) => <div {...attrs} />)
+}
 
 /** 오류 경계가 도는 동안의 콘솔 출력을 막는다. React와 경계가 각각 한 번씩 찍는다. */
 function silenceConsoleError(): ReturnType<typeof vi.spyOn> {
