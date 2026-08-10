@@ -112,11 +112,13 @@ export const ListStackedList: StructureRenderer = ({ attrs, props, part }) => {
  * **어떤 테마도 표현할 수 없다.** 구조가 지는 몫은 그 배치를 표현 가능하게 만드는
  * 것까지이고 실제 배치는 테마다.
  *
- * **기본 CSS는 갖지 않는다 — 갖고 싶어도 못 갖는다.** 가로 분할을 세우려면 `item`
- * 조각에 선언을 걸어야 하는데, 조각 규칙에 구조 이름을 넣으면 특이도가 0,3,0이 되어
- * 테마가 지고(`structure-css-tools`의 `partRule`), 구조 없이 걸면 `cardGrid`·
- * `stackedList`의 카드까지 가로로 눕는다. **`partRule`의 대가가 처음으로 구조를 제약한
- * 자리다.**
+ * **기본 CSS를 갖는다 — 앞서 *"갖고 싶어도 못 갖는다"*고 적었고 그것이 낡았다.**
+ * P4b-2의 W2가 포기한 자리이고 이유가 특이도였다: 조각 규칙에 구조 이름을 맨 셀렉터로
+ * 넣으면 (0,3,0)이 되어 테마가 지고, 구조 없이 걸면 `cardGrid`·`stackedList`의 카드까지
+ * 가로로 눕는다. **P4b-2 ③의 `:where()`가 그 벽을 없앴다** — `partRule`의 넷째 인자가
+ * (0,2,0)을 지키면서 구조를 가린다. 그 판정이 스스로 *"P4b-3이 그 구조를 실제로 쓸 때
+ * 만드는 것이 맞다"*고 적어 두었고, `commerce`가 그 구조를 쓰면서 만들었다.
+ * 규칙과 근거는 아래 `dataCssBlocks`에 있다.
  */
 export const ListMediaList: StructureRenderer = ({ attrs, props, part }) => {
   const items = props.items as number
@@ -324,6 +326,27 @@ export function dataCssBlocks(): string[] {
   // 남긴 자리이고, 이제 잰 값이다. **그래도 좁히는 것은** 무해함이 `List:table`이
   // 표라는 사실에 매여 있어서다 — 테마가 `display: grid`를 걸면 그날 깨진다.
   blocks.push(partRule('List', 'pagination', ['grid-column: 1 / -1;'], ['cardGrid']))
+
+  // ── List:mediaList ────────────────────────────────────────────────────────
+  //
+  // **"미디어 옆에 글묶음"이 이 구조의 이름이다.** 두 줄이 없으면 `media`(빈 `<div>`)와
+  // `body`가 위아래로 쌓이고 미디어는 크기가 없어 사라진다 — 화면이 `stackedList`와
+  // 구별되지 않는다. `Card:horizontal`의 `display: flex`와 `Card [media]`의
+  // `aspect-ratio`가 같은 이유로 있는 규칙이고, 여기서 같은 판단을 한다.
+  //
+  // **`:where(mediaList)`로 좁힌다.** 안 좁히면 `cardGrid`의 카드가 가로로 눕고
+  // `stackedList`에 없는 미디어 규칙이 걸린다. 맨 셀렉터로 구조를 넣으면 (0,3,0)이 되어
+  // 테마가 지므로 `partRule`의 넷째 인자를 쓴다(근거는 `structure-css-tools`의 실측표).
+  //
+  // **어휘를 골라 썼다.** `display`·`width`·`aspectRatio` 셋 다 `STYLE_PROPERTIES`에 있어
+  // **테마가 이 세 줄을 그대로 덮는다** — `commerce`가 `width`를 실제로 덮는다.
+  // `flex-basis`·`flex-shrink`로 잡았으면 대응 어휘가 없어 되돌릴 길이 없는 선언이 된다.
+  //
+  // 값 둘의 근거: 폭 `25%`는 **줄이 목록으로 읽히는 최소**이고(그보다 크면 카드가 된다),
+  // 비율 `1 / 1`은 썸네일의 기본형이다. 둘 다 취향의 경계이므로 테마가 정하게 열어 둔다 —
+  // 여기 값은 *"테마가 없어도 구조가 선다"*까지만 책임진다.
+  blocks.push(partRule('List', 'item', ['display: flex;'], ['mediaList']))
+  blocks.push(partRule('List', 'media', ['width: 25%;', 'aspect-ratio: 1 / 1;'], ['mediaList']))
 
   // ── Tree ──────────────────────────────────────────────────────────────────
   //
