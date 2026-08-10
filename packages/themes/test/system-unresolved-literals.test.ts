@@ -68,7 +68,7 @@ describe('시스템 테마의 미해석 리터럴', () => {
    * **다섯을 손으로 적지 않는다** — 여섯째가 생기면 이 케이스가 저절로 함께 본다
    * (`repos-themes.test.ts`가 같은 이유로 `SYSTEM_THEME_IDS`에서 파생한다).
    */
-  it('전수 — 오늘 3건이고 어디인지까지 못박는다', () => {
+  it('전수 — 오늘 2건이고 어디인지까지 못박는다', () => {
     const found: Record<string, string[]> = {}
     for (const id of SYSTEM_THEME_IDS) {
       const { theme, issues } = resolveTheme(systemTheme(id)!)
@@ -79,11 +79,42 @@ describe('시스템 테마의 미해석 리터럴', () => {
     }
 
     expect(found).toEqual({
-      // `Section.parts.inner.maxWidth` · `Grid.base.gap` (admin.ts:111·119)
+      // `Section.parts.inner.maxWidth` · `Grid.base.gap` (admin.ts:111·119).
+      // **`admin`만 남았다** — D7이 이 슬라이스에서 `admin`의 CSS 불변을 요구한다.
       admin: ['max-width: container.maxWidth', 'gap: grid.gap'],
-      // `Grid.base.gap` (docs.ts:238) — `admin`에서 옮겨 온 줄이다.
-      docs: ['gap: grid.gap'],
     })
+  })
+
+  /**
+   * **③이 하나를 고쳤다 — 그리고 이 케이스가 무뎌지지 않았는지 따로 본다.**
+   *
+   * 처음 셌을 때는 **3건**이었다(`admin` 2 + `docs` 1). `docs`의 것은 `admin`에서 옮겨 온
+   * 줄이었고 — **머리말이 그 함정을 규탄하면서 같은 줄을 복사했다** — ③이 `'space.5'`로
+   * 고쳤다. `admin`은 D7이 막아 그대로다.
+   *
+   * **수를 3에서 2로 내리는 수정은 가드를 무디게 할 수 있다.** 위 케이스는 *"오늘 2건"*을
+   * 말할 뿐이라, 누군가 남은 둘까지 지우면 초록인 채로 **이 부류가 있었다는 사실이
+   * 사라진다.** 그래서 여기서 **둘이 남아 있다는 것 자체**를 따로 단언한다 — 0이 되는 날은
+   * 규격의 구멍이 닫힌 날이고, 그때는 이 파일과 이월 §A를 함께 지우는 것이 맞다.
+   */
+  it('가드가 무뎌지지 않았다 — 남은 둘이 여전히 이슈 0건으로 나간다', () => {
+    const { theme, issues } = resolveTheme(systemTheme('admin')!)
+    expect(issues).toEqual([])
+    const css = compileTheme(theme!)
+
+    // 브라우저가 버리는 두 선언이 **그대로 CSS에 실린다**(Chromium 151로 확인했다 —
+    // `Grid` 규칙은 통째로 빈 규칙이 되고 `Section [inner]`에는 max-width가 없다).
+    expect(css).toContain('max-width: container.maxWidth;')
+    expect(css).toContain('gap: grid.gap;')
+    expect(unresolved(css)).toHaveLength(2)
+
+    // 고친 쪽 — `docs`는 이제 0건이고, 그 자리가 유효한 CSS를 낸다.
+    const docs = resolveTheme(systemTheme('docs')!)
+    expect(docs.issues).toEqual([])
+    const docsCss = compileTheme(docs.theme!)
+    expect(unresolved(docsCss)).toEqual([])
+    expect(docsCss).not.toContain('gap: grid.gap;')
+    expect(docsCss).toContain('gap: var(--wb-space-5);')
   })
 
   /**

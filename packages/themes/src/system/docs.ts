@@ -235,7 +235,23 @@ export const DOCS_THEME: Theme = {
     },
 
     Flex: { structure: 'default', base: { gap: 'space.4' } },
-    Grid: { structure: 'default', base: { gap: 'grid.gap' } },
+    /**
+     * **`gap`이 `'grid.gap'`이 아니라 `'space.5'`다** (P4b-3 ③이 고쳤다).
+     *
+     * 이 자리에 `'grid.gap'`이라고 적혀 있었다 — `admin`에서 옮겨 온 줄이다. **머리말이
+     * 바로 그 함정을 규탄하면서 같은 줄을 복사했다.** `primitives`는 참조 이름공간에 없으므로
+     * (`TOKEN_NAMESPACES` 일곱) 그것은 참조로 안 풀리고 **리터럴로 통과해 `gap: grid.gap;`이
+     * CSS에 실린다.** Chromium 151이 그 선언을 버리는 것까지 확인했다 — 이 규칙이 통째로
+     * **빈 규칙(`{ }`)**이 되어 문서 격자에 간격이 하나도 없었다.
+     *
+     * `admin`의 같은 줄은 **고치지 않았다**(D7이 `admin`의 CSS 불변을 요구한다). `docs`는
+     * 이 슬라이스가 처음 만드는 테마라 지킬 이전 화면이 없으므로 여기서 고친다.
+     *
+     * 값이 `space.5`인 것은 본문 흐름(`Flex`의 `space.4`)보다 한 칸 넓히려는 것이고,
+     * **`primitives.grid.gap`을 가리키고 싶었던 원래 뜻은 규격에 문법이 없어 표현할 수 없다** —
+     * 이월 §A가 후보와 비용을 적었고 P4c의 첫 태스크다.
+     */
+    Grid: { structure: 'default', base: { gap: 'space.5' } },
 
     /**
      * **주의 상자.** 머리말의 판정 그대로다.
