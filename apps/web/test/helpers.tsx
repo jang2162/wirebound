@@ -25,6 +25,13 @@ function notStubbed(method: string): () => never {
   }
 }
 
+/**
+ * 가짜가 쓰는 시스템 `admin`의 행 id. **실제 서버에서는 uuid이고 기동 동기화가 만든다** —
+ * 값 자체에 뜻이 없고, `getProjectTheme`의 `themeId`와 `listProjectThemes`의 항목이
+ * **같은 값을 가리키는 것**이 요점이다.
+ */
+export const SYSTEM_ADMIN_THEME_ID = '00000000-0000-4000-8000-000000000001'
+
 /** 테스트가 명시적으로 스텁한 메서드만 동작하는 `ApiClient`. */
 export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
@@ -63,8 +70,32 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
       * (`theme/project-theme-cascade.test.tsx`가 그렇게 한다) — 그 파일들이 기본값에
       * 기대지 않으므로 이 예외가 거짓 초록을 만들지 않는다.
       */
-    getProjectTheme: async () => ({ theme: systemTheme('admin') ?? null, issues: [] }),
+    getProjectTheme: async () => ({
+      themeId: SYSTEM_ADMIN_THEME_ID,
+      theme: systemTheme('admin') ?? null,
+      issues: [],
+    }),
     listMyRevisions: notStubbed('listMyRevisions'),
+    /**
+     * **`getProjectTheme`과 같은 이유로 `notStubbed`가 아니다.** 에디터 셸의 테마 고르개가
+     * **테스트가 요청하지 않아도** 부른다(`routes/editor.tsx`). 여기서 던지면 셸을 지나가는
+     * 테스트마다 무관한 콘솔 오류가 쌓이고, 그 소음이 진짜 오류를 가린다.
+     *
+     * **기본값이 시스템 `admin` 하나인 것도 실재하는 상태다** — 기동 동기화가 시스템
+     * 테마를 넣고(`services/system-themes.ts`) 새 프로젝트는 파생 테마가 없다.
+     * 위 `getProjectTheme`의 `themeId`와 같은 id를 쓰므로 **고르개가 "admin이 골라져
+     * 있다"를 일관되게 그린다** — 둘이 갈리면 고르개가 실재하지 않는 상태를 보인다.
+     */
+    listProjectThemes: async () => {
+      const admin = systemTheme('admin')
+      return admin === undefined ? [] : [{ id: SYSTEM_ADMIN_THEME_ID, system: true, theme: admin }]
+    },
+    /**
+     * **이쪽은 `notStubbed`다.** 위 둘은 화면이 스스로 부르는 **조회**이지만 이것은
+     * **쓰기**이고, 테스트가 요청하지 않았는데 불릴 자리가 없다 — 불렸다면 그 테스트가
+     * 무엇을 하는지 정하지 않은 것이다.
+     */
+    setProjectTheme: notStubbed('setProjectTheme'),
     ...overrides,
   }
 }

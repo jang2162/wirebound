@@ -24,6 +24,8 @@ import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
+import { projectAbilities } from '../projects/project-actions'
+import { ThemePicker } from '../theme/theme-picker'
 import { EditorStore, VIEWPORT_PRESETS, type ViewportWidth } from '../store/editor-store'
 import {
   EditorStoreProvider,
@@ -138,6 +140,19 @@ export function EditorShellRoute(): ReactElement {
 function EditorShell(props: { project: ProjectDetail; pageId: string | undefined }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
+  /**
+   * **고르개가 테마를 바꿨다는 신호**(P4b-3 P2). 값에는 뜻이 없고 오를 때마다 캔버스가
+   * 테마를 다시 조회한다.
+   *
+   * **테마 자체를 여기 두지 않는다.** 그러면 셸이 테마를 읽는 주체가 되어
+   * `useThemeCss`의 안정 참조 계약을 셸이 지켜야 하고, 캔버스는 자기가 그리는 것의
+   * 출처를 잃는다. 신호 하나만 내려보내면 그 계약이 `useProjectTheme` 안에 그대로 남는다.
+   *
+   * **스토어에 두지 않는 이유:** `EditorState`가 드는 것은 **페이지 편집** 상태다
+   * (문서·`headSeq`·undo 스택·전송 큐). 테마 선택은 그 축이 아니고, 거기 얹으면
+   * 편집과 무관한 이유로 스토어 구독자가 다시 그린다.
+   */
+  const [themeReloadToken, setThemeReloadToken] = useState(0)
 
   return (
     <div className="wb-shell">
@@ -145,6 +160,14 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
         <h1 className="wb-shell-title">{props.project.name}</h1>
         <UndoTools projectId={props.project.id} pageId={props.pageId} />
         <ShellTools />
+        {/* **테마 고르개**(P4b-3 D2). 셸 머리에 두는 것은 이것이 화면 **전체**를 바꾸기
+            때문이다 — 페이지 하나가 아니라 이 프로젝트의 모든 화면이 갈린다.
+            `role`을 그대로 넘겨 owner가 아니면 읽기 전용으로 그린다(서버도 막는다). */}
+        <ThemePicker
+          projectId={props.project.id}
+          canChoose={projectAbilities(props.project.role).chooseTheme}
+          onChanged={() => setThemeReloadToken((token) => token + 1)}
+        />
         {/* 편집 실패 통지는 **한 자리**다(D8). 조회 실패처럼 화면마다 나누지 않는 것은,
             어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
             받고 보내지 못한 편집을 잃는다(D4). 셸 상단에 두면 어느 패널을 보고 있어도
@@ -182,7 +205,11 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
       </nav>
 
       <main className="wb-shell-canvas" aria-label="캔버스">
-        <CanvasFrame projectId={props.project.id} pageId={props.pageId} />
+        <CanvasFrame
+          projectId={props.project.id}
+          pageId={props.pageId}
+          themeReloadToken={themeReloadToken}
+        />
       </main>
 
       <aside className="wb-shell-panel" aria-label="속성 패널">
@@ -315,7 +342,12 @@ type PageLoadState =
  * "위의 성질이 지켜지고 있어서"이기 때문이다 — 그 셋에서는 스토어의 문서가 비어 있어
  * 캔버스가 아무것도 그리지 않는다. 성질이 깨지는 날 이 게이트가 마지막 방벽이다.
  */
-function CanvasFrame(props: { projectId: string; pageId: string | undefined }): ReactElement {
+function CanvasFrame(props: {
+  projectId: string
+  pageId: string | undefined
+  /** 고르개가 테마를 바꿨다는 신호. `Canvas`가 그대로 `useProjectTheme`에 넘긴다. */
+  themeReloadToken: number
+}): ReactElement {
   const api = useApi()
   const store = useEditorStoreInstance()
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
@@ -438,7 +470,9 @@ function CanvasFrame(props: { projectId: string; pageId: string | undefined }): 
         ) : (
           <p role="alert">{state.failure.message}</p>
         ))}
-      {state.status === 'ready' && <Canvas projectId={projectId} pageId={pageId} />}
+      {state.status === 'ready' && (
+        <Canvas projectId={projectId} pageId={pageId} themeReloadToken={props.themeReloadToken} />
+      )}
     </div>
   )
 }

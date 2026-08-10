@@ -69,7 +69,7 @@ afterEach(() => {
 
 describe('useProjectTheme', () => {
   it('프로젝트의 테마를 한 번 읽어 화면에 싣는다', async () => {
-    const getProjectTheme = vi.fn(async () => ({ theme: serverTheme(), issues: [] }))
+    const getProjectTheme = vi.fn(async () => ({ themeId: null, theme: serverTheme(), issues: [] }))
     withApi(<Probe projectId="p1" />, getProjectTheme)
 
     await waitFor(() => expect(themeStyleText()).toContain('--wb-'))
@@ -90,7 +90,7 @@ describe('useProjectTheme', () => {
           bump = fn
         }}
       />,
-      async () => ({ theme: serverTheme(), issues: [] }),
+      async () => ({ themeId: null, theme: serverTheme(), issues: [] }),
     )
 
     await waitFor(() => expect(compileCalls()).toBeGreaterThan(0))
@@ -108,7 +108,7 @@ describe('useProjectTheme', () => {
    * 조회가 끝나도 화면이 첫 렌더의 `null`을 영원히 쓴다.
    */
   it('테마가 도착하면 반드시 다시 컴파일한다', async () => {
-    withApi(<Probe projectId="p1" />, async () => ({ theme: serverTheme(), issues: [] }))
+    withApi(<Probe projectId="p1" />, async () => ({ themeId: null, theme: serverTheme(), issues: [] }))
 
     // 첫 렌더는 `null`이라 테마 CSS가 비어 있다.
     await waitFor(() => expect(themeStyleText()).not.toBe(''))
@@ -138,14 +138,14 @@ describe('useProjectTheme', () => {
     })
 
     it('서버가 theme: null을 주면 그대로 테마 없이 그린다', async () => {
-      withApi(<Probe projectId="p1" />, async () => ({ theme: null, issues: [] }))
+      withApi(<Probe projectId="p1" />, async () => ({ themeId: null, theme: null, issues: [] }))
 
       await waitFor(() => expect(document.head.querySelector(`style[data-wb-style="${THEME_STYLE_ID}"]`)).toBeTruthy())
       expect(themeStyleText()).toBe('')
     })
 
     it('projectId가 없으면 서버를 부르지 않는다', () => {
-      const getProjectTheme = vi.fn(async () => ({ theme: serverTheme(), issues: [] }))
+      const getProjectTheme = vi.fn(async () => ({ themeId: null, theme: serverTheme(), issues: [] }))
       withApi(<Probe projectId={undefined} />, getProjectTheme)
       expect(getProjectTheme).not.toHaveBeenCalled()
     })
@@ -157,8 +157,7 @@ describe('useProjectTheme', () => {
    */
   it('서버가 이슈를 내면 콘솔에만 남긴다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { container } = withApi(<Probe projectId="p1" />, async () => ({
-      theme: null,
+    const { container } = withApi(<Probe projectId="p1" />, async () => ({ themeId: null, theme: null,
       issues: [{ path: 'tokens.semantic.primary', message: '없는 토큰입니다' }],
     }))
 

@@ -8,7 +8,7 @@
  * 단언 다섯 개가 오류 화면 위에서 통과했다). 그래서 셸을 보는 케이스는 전부 `openShell()`로
  * 시작해 **성공한 조회에서만 나오는 프로젝트 이름**을 먼저 기다린다.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -256,7 +256,12 @@ describe('에디터 셸', () => {
     const select = screen.getByRole<HTMLSelectElement>('combobox', { name: '뷰포트 폭' })
     // 설계 §9의 여섯 값을 여기 다시 적는다. 구현이 쓰는 `VIEWPORT_PRESETS`를 테스트도
     // import하면 프리셋이 잘못 바뀌어도 테스트가 따라가 버린다.
-    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+    //
+    // **`within(select)`로 좁힌다.** 앞서 `screen.getAllByRole('option')`으로 문서 전체를
+    // 훑고 있었는데, 그때는 셸의 `<select>`가 이것 하나여서 같은 뜻이었다. P4b-3이 테마
+    // 고르개를 머리에 두면서 갈렸다 — 이 케이스가 재려는 것은 **이 `<select>`의 선택지**이지
+    // 화면에 있는 모든 선택지가 아니다.
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([
       '1920px',
       '1440px',
       '1280px',

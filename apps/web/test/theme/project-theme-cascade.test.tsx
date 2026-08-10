@@ -91,7 +91,7 @@ function styleText(id: string): string {
 /** 테마 하나를 서버가 준 것처럼 실어 화면을 그리고, 잰 값을 돌려준다. */
 async function paint(theme: Theme | null): Promise<{ cardBg: string; surfaceVar: string; css: string }> {
   const view = render(
-    <ApiProvider client={fakeApi({ getProjectTheme: async (): Promise<ProjectTheme> => ({ theme, issues: [] }) })}>
+    <ApiProvider client={fakeApi({ getProjectTheme: async (): Promise<ProjectTheme> => ({ themeId: null, theme, issues: [] }) })}>
       <Screen projectId="p1" />
     </ApiProvider>,
   )
@@ -159,7 +159,7 @@ describe('P4a-3의 판정 — 파생 테마가 화면을 바꾼다', () => {
 
   it('테마가 없으면 구조 기본 CSS만 남고 화면은 그대로 그려진다', async () => {
     const view = render(
-      <ApiProvider client={fakeApi({ getProjectTheme: async () => ({ theme: null, issues: [] }) })}>
+      <ApiProvider client={fakeApi({ getProjectTheme: async () => ({ themeId: null, theme: null, issues: [] }) })}>
         <Screen projectId="p1" />
       </ApiProvider>,
     )

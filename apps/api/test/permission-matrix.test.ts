@@ -199,6 +199,20 @@ const CASES: Case[] = [
     url: '/api/projects/:projectId/theme',
     allowed: ['owner', 'editor', 'viewer'],
   },
+  {
+    // **테마를 고르는 것은 owner 전용이다**(§10 — 테마 편집과 같은 등급). 페이지·메뉴가
+    // editor까지 허용하는 것과 다른 이유: 이 한 번의 호출이 그 프로젝트의 **모든 화면**을
+    // 바꾼다.
+    //
+    // **`{ themeId: null }`을 보낸다.** 이 행이 재는 것은 역할 판정이지 고르기의 내용이
+    // 아니다 — 실제 테마 id를 실으려면 `setup`이 필요하고, 그러면 그 픽스처가 깨질 때
+    // 권한과 무관한 이유로 이 행 전체가 무너진다(페이지 ops 행과 같은 판단이다).
+    label: '프로젝트 테마 고르기',
+    method: 'PUT',
+    url: '/api/projects/:projectId/theme',
+    payload: { themeId: null },
+    allowed: ['owner'],
+  },
   { label: '테마 목록', method: 'GET', url: '/api/projects/:projectId/themes', allowed: ['owner', 'editor', 'viewer'] },
   {
     label: '테마 조회',

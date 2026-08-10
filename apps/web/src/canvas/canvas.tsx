@@ -50,7 +50,19 @@ interface Box {
  * 갈라 안내하는 것은 `CanvasFrame`의 몫이고, 여기서 또 문안을 내면 같은 자리에 두 개가
  * 겹친다.
  */
-export function Canvas(props: { projectId: string; pageId: string | undefined }): ReactElement | null {
+export function Canvas(props: {
+  projectId: string
+  pageId: string | undefined
+  /**
+   * **고르개가 테마를 바꾸면 셸이 이 값을 올린다**(P4b-3 P2). 값 자체에는 뜻이 없고
+   * *"다시 조회하라"*는 신호다 — 캔버스는 그것을 `useProjectTheme`에 그대로 넘긴다.
+   *
+   * **테마를 여기로 내려보내지 않는 것이 요점이다.** 그러면 캔버스가 테마를 **읽는**
+   * 주체가 아니게 되고, `useThemeCss`가 기대는 안정 참조를 셸이 대신 지켜야 한다.
+   * 신호 하나만 내려보내면 그 계약이 훅 안에 그대로 남는다.
+   */
+  themeReloadToken?: number
+}): ReactElement | null {
   /**
    * 테마 CSS를 싣는다. **문서가 없어도 부른다** — 아래에서 `doc === null`이면 일찍
    * 돌아가지만 훅은 그보다 위에 있어야 하고(훅 규칙), 그 덕에 페이지를 고르지 않은
@@ -69,7 +81,7 @@ export function Canvas(props: { projectId: string; pageId: string | undefined })
    * **두 노드를 더 그리고**, 그 id는 페이지 문서에 없어 아래 `nodeIdAt`이 유령 노드를
    * 고르게 된다. 측정과 그 결과는 `packages/renderer/test/compose-identity.test.tsx`에 있다.
    */
-  const theme = useThemeCss(useProjectTheme(props.projectId))
+  const theme = useThemeCss(useProjectTheme(props.projectId, props.themeReloadToken))
 
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다. 상태 객체 전체(`(s) => s`)를 고르면 어느 필드가 바뀌든

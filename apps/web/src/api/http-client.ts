@@ -14,6 +14,7 @@ import type {
   ProjectTheme,
   RevisionSummary,
   SessionUser,
+  ThemeSummary,
   TreeMenuNode,
 } from './types'
 
@@ -406,8 +407,32 @@ const SHAPES = {
    */
   projectTheme: (value) =>
     isRecord(value) &&
+    (value['themeId'] === null || typeof value['themeId'] === 'string') &&
     (value['theme'] === null || isRecord(value['theme'])) &&
     Array.isArray(value['issues']),
+  /**
+   * 테마 목록. **`id`가 빈 문자열이면 막는다** — 그 값이 그대로
+   * `PUT /:projectId/theme`의 본문이 되고, 빈 문자열은 서버의 `z.uuid()`에서 400이 된다.
+   * 위 표(`pageDetail` 머리말)의 축으로 읽으면 *"주소가 되지는 않지만 **요청 본문이 되는**
+   * 값"*이고, 손해의 모양이 같다: 통과시키면 사용자가 고르개를 눌렀을 때 이유 없는 400을 본다.
+   *
+   * **`theme` 안쪽은 보지 않는다** — `projectTheme`과 같은 경계다. 다만 `meta.name`이
+   * 고르개의 **표시 이름**이라 그것이 문자열인지는 본다: 없으면 빈 항목이 그려져
+   * 사용자가 무엇을 고르는지 모른 채 고르게 된다.
+   */
+  themeList: (value) =>
+    isArrayOf(
+      value,
+      (item) =>
+        isRecord(item) &&
+        typeof item['id'] === 'string' &&
+        item['id'] !== '' &&
+        typeof item['system'] === 'boolean' &&
+        isRecord(item['theme']) &&
+        isRecord((item['theme'] as Record<string, unknown>)['meta']) &&
+        typeof ((item['theme'] as Record<string, unknown>)['meta'] as Record<string, unknown>)['name'] ===
+          'string',
+    ),
 } satisfies Record<string, Shape>
 
 /**
@@ -819,6 +844,18 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
       ),
     getProjectTheme: (projectId) =>
       request<ProjectTheme>('GET', `${projectPath(projectId)}/theme`, SHAPES.projectTheme),
+    listProjectThemes: (projectId) =>
+      request<ThemeSummary[]>('GET', `${projectPath(projectId)}/themes`, SHAPES.themeList),
+    setProjectTheme: (projectId, themeId) =>
+      request<ProjectTheme>(
+        'PUT',
+        `${projectPath(projectId)}/theme`,
+        SHAPES.projectTheme,
+        // **`declaredOnly`를 안 지난다.** 그것이 막는 것은 *"응답 객체를 그대로 되보내는
+        // 것"*인데(`declaredOnly` 머리말) 여기 들어오는 것은 객체가 아니라 `string | null`
+        // 하나다 — 초과 키가 생길 자리가 없다.
+        { themeId },
+      ),
     listMyRevisions: (projectId, pageId) =>
       request<RevisionSummary[]>(
         'GET',

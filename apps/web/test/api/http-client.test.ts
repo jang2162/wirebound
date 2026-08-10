@@ -15,6 +15,7 @@ import type {
   PageDetail,
   ProjectDetail,
   ProjectTheme,
+  ThemeSummary,
   SessionUser,
   TreeMenuNode,
 } from '../../src/api/types'
@@ -68,8 +69,13 @@ const user: SessionUser = { id: 'u1', email: 'a@b.c', name: '홍길동' }
 const project: ProjectDetail = { id: 'p1', name: '프로젝트', slug: 'proj', description: null, role: 'owner' }
 
 /** `GET /api/projects/:projectId/theme`의 응답. 서버는 파생 테마를 합쳐서 낸다. */
-const projectTheme: ProjectTheme = {
+const themeSummary: ThemeSummary = {
+  id: 't1',
+  system: true,
   theme: { meta: { id: 'admin', name: '관리자', version: '1.0.0' } },
+}
+
+const projectTheme: ProjectTheme = { themeId: null, theme: { meta: { id: 'admin', name: '관리자', version: '1.0.0' } },
   issues: [],
 }
 const treeNode: TreeMenuNode = {
@@ -150,6 +156,23 @@ const ENDPOINTS: Array<{
   // 오타가 404가 아니라 **다른 리소스의 응답**을 받는다 — 목록(배열)이 오면
   // `SHAPES.projectTheme`이 막지만, 그 방벽 하나에 기대지 않는다.
   { client: 'getProjectTheme', url: '/api/projects/p1/theme', method: 'GET', body: projectTheme, call: (c) => c.getProjectTheme('p1') },
+  // **고르기는 `/theme`(단수)에 `PUT`이다** — 목록(`/themes`)과 한 글자 차이라 위
+  // `getProjectTheme`의 주석과 같은 부류이고, 여기서는 오타가 **테마 생성**(`POST /themes`)이
+  // 아니라 **테마 수정**(`PUT /themes/:themeId`)으로 가므로 더 나쁘다.
+  {
+    client: 'setProjectTheme',
+    url: '/api/projects/p1/theme',
+    method: 'PUT',
+    body: projectTheme,
+    call: (c) => c.setProjectTheme('p1', 't1'),
+  },
+  {
+    client: 'listProjectThemes',
+    url: '/api/projects/p1/themes',
+    method: 'GET',
+    body: [themeSummary],
+    call: (c) => c.listProjectThemes('p1'),
+  },
   // --- 아래 열하나는 이 표에 없었다. **각자 자기 describe에서 URL이 단언되고 있었지만
   // 이 표에는 없었고**, 그 사실을 세는 절이 없어 아무도 몰랐다(위 `표의 완전성` 머리말). ---
   {
@@ -258,9 +281,17 @@ const SHAPE_CASES: Array<{
   { shape: 'pageDetail', broken: { ...page, headSeq: '0' }, ok: page, call: (c) => c.getPage('p1', 'pg1') },
   {
     shape: 'projectTheme',
-    broken: { theme: 42, issues: [] },
+    broken: { themeId: null, theme: 42, issues: [] },
     ok: projectTheme,
     call: (c) => c.getProjectTheme('p1'),
+  },
+  {
+    // **`id`가 빈 문자열이면 막는다** — 그 값이 그대로 `setProjectTheme`의 본문이 되고,
+    // 서버의 `z.uuid()`가 400을 낸다. 사용자는 고르개를 눌렀는데 이유 없는 실패를 본다.
+    shape: 'themeList',
+    broken: [{ ...themeSummary, id: '' }],
+    ok: [themeSummary],
+    call: (c) => c.listProjectThemes('p1'),
   },
   // --- 아래 셋은 케이스가 **없었다.** 세는 절이 이것을 찾아냈다. ---
   // `sessionUser.id`는 세션 문맥이 그대로 들고 다니는 값이다(`session/session-context.tsx`).
@@ -672,7 +703,7 @@ describe('createHttpClient', () => {
    */
   describe('getProjectTheme의 응답 모양', () => {
     it('theme이 객체이거나 null이면 통과한다', async () => {
-      for (const body of [projectTheme, { theme: null, issues: [] }]) {
+      for (const body of [projectTheme, { themeId: null, theme: null, issues: [] }]) {
         const stub = stubFetch(jsonResponse(200, body))
         await expect(createHttpClient(stub.fetchImpl).getProjectTheme('p1')).resolves.toEqual(body)
       }
@@ -691,7 +722,7 @@ describe('createHttpClient', () => {
 
     it('issues가 배열이 아니면 ApiError를 던진다', async () => {
       // 화면이 `issues.length`·`issues.map`을 그냥 부른다(`use-project-theme.ts`).
-      const stub = stubFetch(jsonResponse(200, { theme: null, issues: null }))
+      const stub = stubFetch(jsonResponse(200, { themeId: null, theme: null, issues: null }))
       await expect(createHttpClient(stub.fetchImpl).getProjectTheme('p1')).rejects.toBeInstanceOf(ApiError)
     })
 

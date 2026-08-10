@@ -2,7 +2,7 @@
  * 테마 저장소의 왕복. **`meta`가 컬럼으로 흩어졌다 다시 조립되므로**(계획서 D3) 이
  * 왕복이 그 조립을 지킨다 — 컬럼 하나를 빠뜨리면 그 필드가 말없이 사라진다.
  */
-import type { Theme } from '@wirebound/themes'
+import { SYSTEM_THEME_IDS, type Theme } from '@wirebound/themes'
 import { describe, expect, it } from 'vitest'
 import { withTransaction } from '../src/db/tx'
 import {
@@ -169,9 +169,18 @@ describe('repos/themes — Theme ↔ 행', () => {
         await insertTheme(ctx.db, other.id, { meta: { id: 'theirs', name: '남의 것', version: '1.0.0' } })
 
         const list = await listThemes(ctx.db, project.id)
-        expect(list.map((entry) => entry.theme.meta.id).sort()).toEqual(['admin', 'mine'])
+        // **기대값을 `SYSTEM_THEME_IDS`에서 파생한다 — 손으로 적지 않는다.**
+        // 앞서 `['admin', 'mine']`을 리터럴로 적어 두었는데, 시스템 테마가 하나 늘면
+        // 이 케이스가 **그 테마와 아무 상관 없는 이유로** 죽는다(P4b-3 ①이 스텁 넷을
+        // 밟아서 실측했다 — 눈으로 센 둘에는 이 자리가 없었다). 그러면 시스템 테마를
+        // 만드는 워커마다 남의 테스트 파일을 고치게 되고 병합에서 다시 부딪힌다.
+        expect(list.map((entry) => entry.theme.meta.id).sort()).toEqual(
+          [...SYSTEM_THEME_IDS, 'mine'].sort(),
+        )
         // 정렬 계약: 시스템 테마가 먼저다.
         expect(list[0]!.projectId).toBeNull()
+        // 남의 프로젝트 것은 안 나온다 — 위 파생이 넓어져도 이 줄은 그대로 지킨다.
+        expect(list.map((entry) => entry.theme.meta.id)).not.toContain('theirs')
       })
     })
   })

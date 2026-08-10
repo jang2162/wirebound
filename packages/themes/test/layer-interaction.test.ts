@@ -128,28 +128,37 @@ describe('재라 #7 — @media가 states보다 뒤에 온다', () => {
 })
 
 /**
- * **재라 #10 — `assets.fonts`는 여전히 아무것도 내지 않는다.**
+ * **재라 #10 — `assets.fonts`가 이제 `@font-face`를 낸다. P4b-3이 뒤집었다.**
  *
- * **잰 것:** `assets.fonts`가 있는 테마를 컴파일하면 CSS가 **빈 문자열**이다(`@font-face`가
- * 없다). P4a-1의 판단 그대로다.
+ * 앞서 이 자리가 *"내지 않는다"*를 고정하며 근거를 둘 들었다. **둘 중 하나가 이미
+ * 거짓이 되어 있었다:**
  *
- * **그 판단이 여전히 서는가 — 선다. 그리고 이유가 하나 늘었다.** P4a-1의 근거는
- * *"P8이 URL을 다시 쓰므로 지금 만들면 되돌려야 한다"*였다. 여기에 더해, **오늘은
- * `@font-face`를 내도 쓸 방법이 없다** — §6.8의 스타일 화이트리스트에 `fontFamily`가
- * **없어서** 어떤 테마도 폰트를 컴포넌트에 걸 수 없다(`STYLE_PROPERTIES`를 훑어 확인했다).
- * 즉 폰트 로딩만 만들면 **로드는 되는데 아무도 안 쓰는 CSS**가 된다.
+ * | 그때의 근거 | 오늘 |
+ * |---|---|
+ * | P8이 URL을 다시 쓰므로 지금 만들면 되돌려야 한다 | **여전히 참이다** — `@font-face`가 정적 번들에서 어떻게 나가는지는 P4b-3도 안 잰다(계획서 "계획이 재지 않은 것" 3) |
+ * | §6.8 화이트리스트에 `fontFamily`가 **없어서** 폰트를 컴포넌트에 걸 수 없다 | **거짓이다.** P4b-1이 `fontFamily`를 열었다(`STYLE_PROPERTIES`의 `fontFamily: ['font-family']`, `STYLE_PROPERTIES_BEYOND_SPEC`) |
  *
- * **P4a-1 이월의 문장 하나가 이것과 어긋난다:** *"`font-family`는 나가므로 시스템 폰트로
- * 눈에 보이게 폴백한다."* 나가지 않는다 — 낼 어휘가 없다.
+ * 즉 *"로드는 되는데 아무도 안 쓰는 CSS"*라는 판정의 전제가 사라졌고, 남은 것은
+ * **반대 방향의 구멍**이었다 — 폰트를 **가리킬 어휘는 있는데 실을 경로가 없다.** P4b-3의
+ * D5가 그것을 닫는다(서체는 시스템 테마 다섯의 인상 차이에서 가장 큰 몫이다).
+ *
+ * **P4a-1 이월의 문장** *"`font-family`는 나가므로 시스템 폰트로 눈에 보이게 폴백한다"*는
+ * 이제 참이다 — 그때는 낼 어휘가 없어 거짓이었다.
  */
-describe('재라 #10 — assets.fonts', () => {
-  it('@font-face를 내지 않는다', () => {
+describe('재라 #10 — assets.fonts가 @font-face를 낸다 (P4b-3 D5)', () => {
+  it('fonts가 있으면 @font-face가 나가고 그것뿐이다', () => {
     const out = css({
       meta: { id: 'x', name: 'x', version: '1' },
-      assets: { fonts: [{ family: 'Pretendard', src: 'https://example.test/p.woff2' }] },
+      assets: { fonts: [{ family: 'Pretendard', src: 'url(https://example.test/p.woff2)' }] },
     })
-    expect(out).not.toContain('@font-face')
-    expect(out).toBe('')
+    // 규칙이 하나도 없는 테마이므로 CSS는 `@font-face` 블록 하나가 전부다.
+    expect(out).toBe('@font-face {\n  font-family: Pretendard;\n  src: url(https://example.test/p.woff2);\n}')
+  })
+
+  it('fonts가 없으면 여전히 빈 문자열이다', () => {
+    // **D7의 근거다** — `admin`에 `assets`가 없으므로 새 층이 그 테마의 CSS를 한 글자도
+    // 바꾸지 않는다. 자세한 것은 `test/font-face.test.ts`.
+    expect(css({ meta: { id: 'x', name: 'x', version: '1' } })).toBe('')
   })
 })
 

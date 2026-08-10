@@ -4,7 +4,7 @@
  * 역할 × 엔드포인트의 전수 판정은 `permission-matrix.test.ts`에 있다 — 여기서는 그
  * 매트릭스가 다루지 못하는 것(시스템 테마의 읽기 전용, 남의 프로젝트 테마)만 본다.
  */
-import { ADMIN_THEME, THEME_ISSUE_SEVERITY, themeIssue, type Theme } from '@wirebound/themes'
+import { ADMIN_THEME, SYSTEM_THEME_IDS, THEME_ISSUE_SEVERITY, themeIssue, type Theme } from '@wirebound/themes'
 import { describe, expect, it } from 'vitest'
 import { insertTheme } from '../src/repos/themes'
 import { addMember, createProject, signup, withApi, type TestContext } from './helpers'
@@ -73,8 +73,17 @@ describe('테마 라우트', () => {
         expect(res.statusCode).toBe(200)
 
         const body: { id: string; system: boolean; theme: Theme }[] = res.json()
-        expect(body.map((entry) => entry.theme.meta.id)).toEqual(['admin', 'brand'])
-        expect(body.map((entry) => entry.system)).toEqual([true, false])
+        // **기대값을 `SYSTEM_THEME_IDS`에서 파생한다** — 이유는 `repos-themes.test.ts`의
+        // 같은 자리에 적었다. 정렬 계약이 *"시스템 테마가 먼저, 각 무리 안에서는 slug 순"*
+        // 이므로(`repos/themes.ts`의 `listThemes`) 파생한 목록도 정렬한다.
+        expect(body.map((entry) => entry.theme.meta.id)).toEqual([
+          ...[...SYSTEM_THEME_IDS].sort(),
+          'brand',
+        ])
+        expect(body.map((entry) => entry.system)).toEqual([
+          ...SYSTEM_THEME_IDS.map(() => true),
+          false,
+        ])
       })
     })
 
@@ -525,6 +534,208 @@ describe('파생 테마', () => {
       for (const entry of res.json()) {
         expect(Object.keys(entry)).not.toContain('base')
       }
+    })
+  })
+})
+
+/**
+ * **고르개 — `PUT /:projectId/theme`**(P4b-3 계획서 D2).
+ *
+ * 오늘 프로젝트의 테마를 바꾸는 경로가 **없었다**. 사슬
+ * `projects.default_layout_id → layouts.theme_id → themes` 중 가운데를 바꾸는 수단이
+ * 없어 DB를 직접 고쳐야 테마가 캔버스에 실렸다(P4a-3 이월의 *"테마를 화면에 거는 경로가
+ * 없다"*). 레이아웃 CRUD를 만들지 않고 **그 한 필드**만 여는 라우트다.
+ */
+describe('테마 고르기 (PUT /:projectId/theme)', () => {
+  function choose(
+    ctx: TestContext,
+    projectId: string,
+    cookie: { wb_session: string },
+    body: unknown,
+  ) {
+    return ctx.app.inject({
+      method: 'PUT',
+      url: `/api/projects/${projectId}/theme`,
+      cookies: cookie,
+      payload: body as never,
+    })
+  }
+
+  function derived(): Theme {
+    return {
+      meta: { id: 'derived', name: '파생', version: '1.0.0', extends: 'system:admin' },
+      tokens: { semantic: { primary: '#ff0000' } },
+    }
+  }
+
+  function currentTheme(ctx: TestContext, projectId: string, cookie: { wb_session: string }) {
+    return ctx.app.inject({
+      method: 'GET',
+      url: `/api/projects/${projectId}/theme`,
+      cookies: cookie,
+    })
+  }
+
+  it('고른 테마가 GET에 그대로 나온다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const brand = await insertTheme(ctx.db, project.id, brandTheme())
+
+      const res = await choose(ctx, project.id, owner.cookie, { themeId: brand.id })
+      expect(res.statusCode).toBe(200)
+      expect(res.json().theme.meta.id).toBe('brand')
+      // **`themeId`가 함께 나온다** — 고르개가 *"지금 무엇이 골라져 있는가"*를 알 유일한
+      // 길이다. `theme.meta.id`(slug)로는 못 맞댄다: 시스템 테마와 프로젝트 테마가 같은
+      // slug를 가질 수 있다(`(project_id, slug)`가 유일성 단위다).
+      expect(res.json().themeId).toBe(brand.id)
+
+      // **이것이 이 라우트의 쓸모다** — 고른 것이 캔버스가 읽는 자리에 실린다.
+      expect((await currentTheme(ctx, project.id, owner.cookie)).json().theme.meta.id).toBe('brand')
+    })
+  })
+
+  it('응답이 GET과 글자까지 같은 꼴이다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const brand = await insertTheme(ctx.db, project.id, brandTheme())
+
+      const put = (await choose(ctx, project.id, owner.cookie, { themeId: brand.id })).json()
+      const get = (await currentTheme(ctx, project.id, owner.cookie)).json()
+      // 꼴이 갈리면 고르개 UI가 응답을 그대로 쓸 수 없어 한 번 더 조회하게 된다.
+      expect(put).toEqual(get)
+    })
+  })
+
+  it('시스템 테마를 고를 수 있다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const adminId = await systemAdminId(ctx)
+
+      const res = await choose(ctx, project.id, owner.cookie, { themeId: adminId })
+      expect(res.statusCode).toBe(200)
+      expect(res.json().theme.meta.id).toBe('admin')
+    })
+  })
+
+  it('파생 테마를 고르면 GET이 합쳐서 낸다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const created = (await post(ctx, project.id, owner.cookie, derived())).json()
+
+      const res = await choose(ctx, project.id, owner.cookie, { themeId: created.id })
+      expect(res.statusCode).toBe(200)
+      // 파생이어도 `themeId`는 **저장된 파생 테마의 행 id**다 — base의 것이 아니다.
+      expect(res.json().themeId).toBe(created.id)
+      // base(`admin`)의 값이 실려 있다 — 합치지 않으면 파생이 더한 것만 나온다.
+      expect(res.json().theme.tokens.semantic.primary).toBeDefined()
+      expect(res.json().theme.meta.extends).toBeUndefined()
+    })
+  })
+
+  /**
+   * **`null`은 정상 상태다**(D2). `layouts.theme_id`가 `NULL`을 받고
+   * (`0007-layouts.ts`), 그때 화면은 구조 기본 CSS만으로 그려진다. 고르개에
+   * *"없음"*이 있어야 그 상태를 눈으로 확인할 수 있다.
+   */
+  it('null로 테마를 벗길 수 있다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const brand = await insertTheme(ctx.db, project.id, brandTheme())
+      await choose(ctx, project.id, owner.cookie, { themeId: brand.id })
+
+      const res = await choose(ctx, project.id, owner.cookie, { themeId: null })
+      expect(res.statusCode).toBe(200)
+      expect(res.json()).toEqual({ themeId: null, theme: null, issues: [] })
+      expect((await currentTheme(ctx, project.id, owner.cookie)).json().theme).toBeNull()
+    })
+  })
+
+  /**
+   * **목록 밖의 `themeId`는 거절한다**(D2). `GET /:projectId/themes`가 이미
+   * *"이 프로젝트에서 고를 수 있는 것"*을 뜻한다(`repos/themes.ts`의 `listThemes` 주석).
+   *
+   * **404인 것이 요점이다** — 남의 프로젝트 테마는 존재를 숨긴다(설계 §10,
+   * `requireWritableTheme`이 같은 판정을 한다). 403이면 *"그런 테마가 있다"*를 말한다.
+   */
+  it('남의 프로젝트 테마는 고를 수 없다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const other = await ownedProject(ctx)
+      const theirs = await insertTheme(ctx.db, other.project.id, brandTheme())
+
+      const res = await choose(ctx, project.id, owner.cookie, { themeId: theirs.id })
+      expect(res.statusCode).toBe(404)
+      // 고르기 전 상태가 그대로다 — 거절이 부분적으로 반영되지 않는다.
+      // 새 프로젝트의 기본 레이아웃은 시스템 `admin`을 가리킨다(`repos/projects.ts`).
+      expect((await currentTheme(ctx, project.id, owner.cookie)).json().theme.meta.id).toBe('admin')
+    })
+  })
+
+  it('없는 테마 id는 404다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const res = await choose(ctx, project.id, owner.cookie, { themeId: NONEXISTENT_UUID })
+      expect(res.statusCode).toBe(404)
+    })
+  })
+
+  /**
+   * **기본 레이아웃이 없는 프로젝트는 409다 — 재라 #1의 답.**
+   *
+   * 0007 이전에 만들어진 프로젝트가 그 상태이고 P4a-3 재라 #8이 *"만들어 주지 않는다"*로
+   * 닫았다. 그래서 이 라우트가 그 상태를 **소리 내야** 한다(D2).
+   *
+   * **404가 아닌 이유:** `projectGuard`가 outsider에게 이미 404를 낸다(§10 — 프로젝트
+   * 존재를 숨긴다). 같은 코드를 쓰면 owner가 받은 404가 *"내 프로젝트가 사라졌다"*로
+   * 읽힌다. **409인 이유:** 이 저장소에서 409는 *"요청은 옳은데 지금 상태가 그것을
+   * 허락하지 않는다"*이다(자식 있는 메뉴 삭제·쓰이고 있는 테마 삭제 — README 에러 표).
+   * 그리고 이 상태는 **고쳐질 수 있는 상태**다 — 404는 "없다"로 끝나지만 409는
+   * "지금은 안 된다"를 말한다.
+   *
+   * **GET은 조용한 채로 둔다.** 없는 것을 읽는 것은 정상이고(`{theme:null}`),
+   * 없는 것에 쓰는 것만 실패한다.
+   */
+  it('기본 레이아웃이 없는 프로젝트는 409다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const brand = await insertTheme(ctx.db, project.id, brandTheme())
+      // 0007 이전 프로젝트를 재현한다 — 그 상태를 만드는 API가 없다.
+      await ctx.db.updateTable('projects').set({ default_layout_id: null }).where('id', '=', project.id).execute()
+
+      const res = await choose(ctx, project.id, owner.cookie, { themeId: brand.id })
+      expect(res.statusCode).toBe(409)
+      // GET은 같은 상태에서 조용하다.
+      expect((await currentTheme(ctx, project.id, owner.cookie)).json()).toEqual({
+        themeId: null,
+        theme: null,
+        issues: [],
+      })
+    })
+  })
+
+  it('선언하지 않은 키와 uuid가 아닌 값은 400이다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      expect((await choose(ctx, project.id, owner.cookie, { themeId: null, extra: 1 })).statusCode).toBe(400)
+      expect((await choose(ctx, project.id, owner.cookie, { themeId: 'admin' })).statusCode).toBe(400)
+      expect((await choose(ctx, project.id, owner.cookie, {})).statusCode).toBe(400)
+    })
+  })
+
+  /**
+   * **editor는 고를 수 없다** — 테마 편집과 같은 등급이다(§10·§6.10). 역할 × 엔드포인트의
+   * 전수 판정은 `permission-matrix.test.ts`가 하고, 여기서는 *"거절이 상태를 안 바꾼다"*를
+   * 함께 본다.
+   */
+  it('editor가 고르면 403이고 상태가 안 바뀐다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await ownedProject(ctx)
+      const brand = await insertTheme(ctx.db, project.id, brandTheme())
+      const member = await signup(ctx)
+      await addMember(ctx, project.id, member.user.id, 'editor')
+
+      expect((await choose(ctx, project.id, member.cookie, { themeId: brand.id })).statusCode).toBe(403)
+      expect((await currentTheme(ctx, project.id, owner.cookie)).json().theme.meta.id).toBe('admin')
     })
   })
 })

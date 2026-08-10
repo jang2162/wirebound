@@ -57,7 +57,7 @@ import {
 import { projectGuard } from '../auth/roles'
 import { badRequest, conflict, forbidden, notFound, validationFailed } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
-import { findDefaultLayout } from '../repos/layouts'
+import { findDefaultLayout, updateLayoutTheme } from '../repos/layouts'
 import {
   ThemeNulByteError,
   deleteTheme,
@@ -76,6 +76,14 @@ const ThemeParams = z.object({ projectId: z.uuid(), themeId: z.uuid() })
  * `z.strictObject`라 선언되지 않은 키는 그 자체로 400이다.
  */
 const ThemeBody = z.strictObject({ theme: ThemePatchSchema })
+
+/**
+ * 고르개의 본문. **`themeId`가 없는 것과 `null`인 것을 가른다** — `null`은
+ * *"테마를 벗긴다"*는 지시이고, 키 자체를 빼는 것은 무엇을 원하는지 말하지 않은 것이다.
+ * `z.strictObject`라 선언되지 않은 키는 그 자체로 400이고, `optional()`을 붙이지 않았으므로
+ * 키를 빼는 것도 400이다.
+ */
+const ChooseThemeBody = z.strictObject({ themeId: z.uuid().nullable() })
 
 /** Postgres 유니크 위반 SQLSTATE. `repos/projects.ts`와 같은 값이다. */
 const UNIQUE_VIOLATION = '23505'
@@ -182,6 +190,56 @@ function assertResolvable(theme: Theme): void {
   if (issues.length > 0) themeValidationFailed(issues)
 }
 
+/**
+ * **이 프로젝트의 화면이 지금 써야 할 테마.** `GET /:projectId/theme`와
+ * `PUT /:projectId/theme`가 **둘 다 이것을 부른다** — 응답이 같은 꼴인 것이 우연이
+ * 아니라 구조다. 갈리면 고르개 UI가 PUT의 응답을 그대로 쓰지 못하고 한 번 더 조회한다.
+ *
+ * `theme`이 `null`인 경우가 셋이고 전부 정상이다: 기본 레이아웃이 없다(0007 이전
+ * 프로젝트 — P4a-3 재라 #8), 레이아웃이 테마를 안 고름, 테마 행이 사라짐. 화면은 구조
+ * 기본 CSS만으로 그려진다 — 이미 있는 경로다(`apps/web`의 `theme-source.ts`).
+ *
+ * ---
+ *
+ * **`themeId`를 함께 낸다 — P4b-3 ①이 더했다.**
+ *
+ * **고르개가 *"지금 무엇이 골라져 있는가"*를 알 방법이 없었다.** `theme`은 **합쳐진**
+ * 문서라 파생이면 `meta.extends`가 지워져 있고, `meta.id`(=slug)로 목록과 맞대는 것은
+ * **성립하지 않는다** — 시스템 테마와 프로젝트 테마가 같은 slug를 가질 수 있다
+ * (`(project_id, slug)`가 유일성 단위다. `repos-themes.test.ts`가 `admin` 슬러그를
+ * 프로젝트 쪽에도 만들어 그 경우를 이미 케이스로 들고 있다).
+ *
+ * **`theme`을 대신하지 않고 더한다.** 캔버스는 여전히 `theme` 하나만 읽고
+ * (`ThemeSource`가 `() => Theme | null`로 남는다), 고르개만 `themeId`를 본다 —
+ * *"그리는 쪽은 유래가 필요 없다"*는 이 엔드포인트의 구분이 그대로다.
+ *
+ * **`theme: null`이어도 `themeId`가 있을 수 있다** — 상속이 끊긴 파생을 고른 상태다
+ * (재라 #5). 그때 고르개는 *"이것이 골라져 있는데 그릴 수 없다"*를 보여줄 수 있어야 한다.
+ * 반대로 **테마 행 자체가 사라졌으면 `themeId`도 `null`이다** — 가리킬 것이 없다.
+ */
+async function currentTheme(
+  app: FastifyInstance,
+  projectId: string,
+): Promise<{ themeId: string | null; theme: Theme | null; issues: (ThemeIssue | null)[] }> {
+  const layout = await findDefaultLayout(app.db, projectId)
+  if (!layout || layout.themeId === null) return { themeId: null, theme: null, issues: [] }
+
+  const themeId = layout.themeId
+  const record = await findThemeById(app.db, themeId)
+  if (!record) return { themeId: null, theme: null, issues: [] }
+
+  const stored = record.theme
+  if (stored.meta.extends === undefined) return { themeId, theme: stored, issues: [] }
+
+  const base = systemTheme(stored.meta.extends)
+  if (base === undefined) {
+    return { themeId, theme: null, issues: [resolveBase(stored).missing] }
+  }
+
+  const merged = mergeTheme(base, stored as ThemePatch)
+  return { themeId, theme: merged.theme, issues: merged.issues }
+}
+
 /** 쓰기(수정·삭제) 대상 하나를 찾아 소유권을 판정한다. */
 async function requireWritableTheme(
   app: FastifyInstance,
@@ -236,23 +294,84 @@ export function themeRoutes() {
      */
     app.get('/:projectId/theme', { preHandler: projectGuard('viewer') }, async (request) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
+      return currentTheme(app, projectId)
+    })
+
+    /**
+     * **이 프로젝트가 쓸 테마를 고른다**(P4b-3 계획서 D2). 기본 레이아웃의 `theme_id`
+     * 하나를 바꾼다.
+     *
+     * **왜 이것이 필요한가.** 사슬 `projects.default_layout_id → layouts.theme_id →
+     * themes` 중 **가운데를 바꾸는 수단이 없었다** — 파생 테마를 만들 수는 있는데 그것을
+     * 화면에 거는 경로가 없어 DB를 직접 고쳐야 했다(P4a-3 이월의 *"테마를 화면에 거는
+     * 경로가 없다"*). 시스템 테마가 하나뿐일 때는 고를 것이 없어 드러나지 않았다.
+     *
+     * **레이아웃 CRUD를 만들지 않는다.** P4a-3이 의도적으로 안 만든 자리이고(D7),
+     * 고르개에 필요한 것은 그 테이블의 **한 필드**뿐이다. 레이아웃 자체의 관리는 §4.4의
+     * 레이아웃 에디터가 할 일인데 그쪽은 UI가 아니라 **선택 모델부터** 정해야 한다.
+     *
+     * **owner 전용이다**(§10 — 테마 편집과 같은 등급). 페이지·메뉴가 editor까지 허용하는
+     * 것과 다르다: 테마를 바꾸는 것은 그 프로젝트의 **모든 화면**을 한 번에 바꾼다.
+     *
+     * ---
+     *
+     * **응답이 `GET /:projectId/theme`와 같은 꼴이다.** 둘 다 `currentTheme()` 하나를
+     * 부르므로 우연이 아니라 구조다 — 고르개 UI가 응답을 그대로 쓰고 다시 조회하지 않는다.
+     *
+     * **`null`을 받는다.** *"테마를 고르지 않았다"*는 이미 정상 상태다
+     * (`layouts.theme_id`가 `NULL`을 받는다 — `0007-layouts.ts`). 화면은 그때 구조 기본
+     * CSS만으로 그려지고, 고르개에 *"없음"*이 있어야 그 상태를 눈으로 확인할 수 있다.
+     *
+     * **목록 밖의 `themeId`는 404다.** `GET /:projectId/themes`가 이미 *"이 프로젝트에서
+     * 고를 수 있는 것"*을 뜻하므로(`repos/themes.ts`의 `listThemes` 주석) 그 밖은 고를 수
+     * 없다. 403이 아니라 404인 것은 남의 프로젝트 테마의 **존재를 숨기기** 위해서다
+     * (설계 §10 — `requireWritableTheme`이 같은 판정을 한다).
+     *
+     * **기본 레이아웃이 없는 프로젝트는 409다(재라 #1).** 0007 이전에 만들어진 것이고
+     * P4a-3 재라 #8이 *"만들어 주지 않는다"*로 닫았다. 그러면 이 라우트가 그 상태를
+     * 소리 내야 한다.
+     *
+     * | 후보 | 왜 아닌가 |
+     * |---|---|
+     * | 404 | `projectGuard`가 outsider에게 이미 404를 낸다(§10). 같은 코드를 쓰면 owner가 받은 404가 *"내 프로젝트가 사라졌다"*로 읽힌다 |
+     * | 422 | 본문은 흠이 없다. 422는 *"내용이 처리 불가"*이고 여기서 처리 불가한 것은 **서버 쪽 상태**다 |
+     * | 레이아웃을 만들어 준다 | P4a-3 재라 #8을 뒤집는 판단이고, 그 근거(마이그레이션 시점에 만들 수 있는 것은 테마 없는 레이아웃뿐이라 관찰 결과가 같다)를 이 슬라이스가 반증하지 않았다 |
+     *
+     * **409인 이유:** 이 저장소에서 409는 *"요청은 옳은데 지금 상태가 그것을 허락하지
+     * 않는다"*이다(자식이 있는 메뉴 삭제·쓰이고 있는 테마 삭제 — README의 에러 표).
+     * 그리고 이 상태는 **고쳐질 수 있는 상태**다 — 404는 *"없다"*로 끝나지만 409는
+     * *"지금은 안 된다"*를 말한다.
+     *
+     * **`GET`은 같은 상태에서 조용하다.** 없는 것을 읽는 것은 정상이고(`{theme:null}`
+     * 세 갈래 중 하나다) 없는 것에 **쓰는** 것만 실패한다.
+     */
+    app.put('/:projectId/theme', { preHandler: projectGuard('owner') }, async (request) => {
+      const { projectId } = parseParams(ProjectIdParams, request.params)
+      const { themeId } = parseBody(ChooseThemeBody, request.body)
 
       const layout = await findDefaultLayout(app.db, projectId)
-      if (!layout || layout.themeId === null) return { theme: null, issues: [] }
+      if (!layout) throw conflict('이 프로젝트에는 기본 레이아웃이 없어 테마를 고를 수 없습니다')
 
-      const record = await findThemeById(app.db, layout.themeId)
-      if (!record) return { theme: null, issues: [] }
-
-      const stored = record.theme
-      if (stored.meta.extends === undefined) return { theme: stored, issues: [] }
-
-      const base = systemTheme(stored.meta.extends)
-      if (base === undefined) {
-        return { theme: null, issues: [resolveBase(stored).missing] }
+      if (themeId !== null) {
+        const record = await findThemeById(app.db, themeId)
+        // `listThemes`의 술어와 같다 — 시스템 테마이거나 이 프로젝트의 것.
+        if (!record || (record.projectId !== null && record.projectId !== projectId)) {
+          throw notFound('테마를 찾을 수 없습니다')
+        }
       }
 
-      const merged = mergeTheme(base, stored as ThemePatch)
-      return { theme: merged.theme, issues: merged.issues }
+      try {
+        // 위 확인과 이 UPDATE 사이에 테마가 지워지는 경합. FK(0007)가 마지막 방벽이고
+        // `updateTheme`의 같은 자리와 같은 취급이다 — 500이 아니라 404다.
+        if (!(await updateLayoutTheme(app.db, layout.id, themeId))) {
+          throw conflict('이 프로젝트에는 기본 레이아웃이 없어 테마를 고를 수 없습니다')
+        }
+      } catch (error) {
+        if (hasSqlState(error, FOREIGN_KEY_VIOLATION)) throw notFound('테마를 찾을 수 없습니다')
+        throw error
+      }
+
+      return currentTheme(app, projectId)
     })
 
     app.get('/:projectId/themes', { preHandler: projectGuard('viewer') }, async (request) => {

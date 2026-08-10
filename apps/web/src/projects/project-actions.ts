@@ -49,10 +49,20 @@ export interface ProjectAbilities {
   /** 이름·슬러그·설명 수정. 서버는 셋을 한 `PATCH`로 받는다(README). */
   rename: boolean
   remove: boolean
+  /**
+   * 프로젝트가 쓸 테마를 고를 수 있는가(`PUT /:projectId/theme` — P4b-3 D2).
+   *
+   * **테마는 페이지·메뉴와 등급이 다르다** — editor도 페이지를 고치지만 테마는 owner
+   * 전용이다(§10·§6.10). 이 한 번의 호출이 그 프로젝트의 **모든 화면**을 바꾸기 때문이다.
+   *
+   * 위 둘과 값이 같은데도 필드를 따로 두는 이유는 `rename`·`remove`가 그런 것과 같다 —
+   * 서버가 셋을 각각 다른 라우트로 받는다.
+   */
+  chooseTheme: boolean
 }
 
 /** 아무것도 못 하는 상태. 역할을 모르거나 계약 밖 값일 때의 답이다. */
-const NOTHING: ProjectAbilities = { rename: false, remove: false }
+const NOTHING: ProjectAbilities = { rename: false, remove: false, chooseTheme: false }
 
 /**
  * `role`이 `owner`일 때만 열린다.
@@ -92,5 +102,5 @@ const NOTHING: ProjectAbilities = { rename: false, remove: false }
  */
 export function projectAbilities(role: ProjectRole | undefined): ProjectAbilities {
   if (role !== 'owner') return NOTHING
-  return { rename: true, remove: true }
+  return { rename: true, remove: true, chooseTheme: true }
 }
