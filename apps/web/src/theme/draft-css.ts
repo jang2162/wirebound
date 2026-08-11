@@ -169,6 +169,37 @@ export function useDraftCss(draft: ResolvedDraft): void {
     if (structureTag.textContent !== structure) structureTag.textContent = structure
 
     const draftTag = ensureStyle(DRAFT_STYLE_ID)
+
+    /**
+     * **초안 시트를 `head`의 맨 끝으로 옮긴다.** 이 한 줄이 없으면 **흔한 방문 순서에서
+     * 갤러리가 초안을 못 보인다** — P4c-2 ③이 **실브라우저에서 재현했다.**
+     *
+     * | # | 방문 순서 | `head`의 DOM 순서 | 갤러리가 보이는 값 |
+     * |---|---|---|---|
+     * | 1 | 캔버스 → 테마 | `structure` · `theme` · **`theme-draft`** | 초안 ✓ |
+     * | 2 | **테마 → 캔버스 → 테마** | `structure` · **`theme-draft`** · `theme` | **저장본** ✗ |
+     *
+     * 2번에서 입력창에는 `#FF6600`이 들어가 있는데 갤러리 버튼은 저장본 `#00A86B`로
+     * 그려졌다(③이 Chromium에서 쟀다). **D5의 약속(*"고치면 오른쪽에 바로 보인다"*)이
+     * 그 세션 내내 깨진다.**
+     *
+     * 원인 셋이 겹친다.
+     *
+     * 1. `useThemeCss`가 정리에서 `theme` 시트를 **안 비운다**(전역 공유 자원이라는 판단 —
+     *    그쪽 머리말). 캔버스를 떠나도 그 시트는 내용을 그대로 들고 살아 있다.
+     * 2. `ensureStyle`이 태그를 **이름으로** 찾으므로 DOM 위치가 **최초 생성 순서**에 고정된다.
+     * 3. **실브라우저는 캐스케이드를 DOM 순서로 가른다**(③이 쟀다: DOM에서 뒤인 시트가
+     *    나중에 쓴 시트를 이겼다). jsdom은 **쓴 순서**로 가르므로(①이 쟀다) **이 결함은
+     *    계산된 스타일로는 회귀에 안 잡힌다** — 그래서 케이스가 **DOM 순서**를 단언한다
+     *    (`test/theme/draft-css.test.tsx`).
+     *
+     * **`append`는 이미 붙어 있는 노드를 옮긴다** — 지웠다 새로 만드는 것이 아니므로
+     * `use-theme-css.ts`가 금한 것(*"지웠다 새로 만들면 자리가 뒤집힌다"*)에 해당하지 않는다.
+     * 오히려 그 파일이 말한 *"순서가 계약이다"*를 초안 시트에 대해 **실제로 지키는** 자리다:
+     * 초안은 **늘 마지막**이어야 한다.
+     */
+    if (document.head.lastElementChild !== draftTag) document.head.append(draftTag)
+
     if (draftTag.textContent !== draft.css) draftTag.textContent = draft.css
 
     return () => {

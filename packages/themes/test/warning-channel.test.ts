@@ -228,6 +228,33 @@ describe('T4 — node-handle-overwrite', () => {
   })
 
   /**
+   * **문장이 조건형인지 잰다**(P4c-2 ③). 위 케이스가 *"경고가 붙는다"*까지만 보므로
+   * **문안이 현재형으로 거짓말을 해도 아무도 안 죽었다** — 실제로 그랬고 ③이 고쳤다.
+   *
+   * 오늘 `Tree:accordion`에서는 손잡이 규칙이 0개 적중하므로 *"반영되지 않습니다"*를
+   * **조건 없이** 말하면 거짓이다. 조건 절(*"그 규칙이 걸리는 자리에서는"*)이 그것을
+   * 참으로 만들고, 그것이 `spec/handles.ts` 머리말의 판정(*"'지금 죽었다'가 아니라
+   * '여기서 죽는다'"*)과 같은 말이다.
+   *
+   * **`portal`·`docs`가 이 문장을 실제로 받는다** — 아래 전수 케이스가 그 둘을 센다.
+   */
+  it('문장이 현재형이 아니라 조건형이다', () => {
+    const { issues } = resolveTheme(
+      theme({ Tree: { structure: 'accordion', parts: { node: { paddingX: 'space.4' } } } }),
+    )
+    const message = issues[0]!.message
+
+    // 무엇이 무엇을 덮는지는 그대로 말한다 — 그 부분은 조건이 아니라 사실이다.
+    expect(message).toContain('padding-left')
+    expect(message).toContain('Tree:indent의 단계별 들여쓰기')
+    // **조건 절이 있어야 한다.** 없으면 오늘 accordion인 테마에서 문장이 거짓이 된다.
+    expect(message).toContain('그 규칙이 걸리는 자리에서는')
+    expect(message).toContain('구조를 바꾸면')
+    // 조건 없는 현재형 단정이 남아 있으면 안 된다.
+    expect(message).not.toContain('덮어씁니다 — Tree:indent의 단계별 들여쓰기가 화면에')
+  })
+
+  /**
    * **변형·상태·반응형에서도 낸다.** 그 층의 셀렉터도 특이도가 같고 테마 시트가 뒤에
    * 오므로 층이 켜지는 순간 똑같이 이긴다. 층을 빼면 *"기본에는 안 적고 `hover`에만
    * 적었다"*가 침묵으로 남는다.

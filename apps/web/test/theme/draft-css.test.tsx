@@ -185,6 +185,37 @@ describe('useDraftCss — 갤러리 전용 시트', () => {
   })
 
   /**
+   * **초안 시트는 늘 `head`의 마지막이어야 한다** — P4c-2 ③이 실브라우저에서 재현한
+   * 결함의 회귀다. `draft-css.ts`의 `document.head.append(draftTag)` 머리말에 표가 있다.
+   *
+   * **계산된 스타일로 재면 안 된다.** jsdom은 캐스케이드를 **쓴 순서**로 가르므로(①이 쟀다)
+   * 초안 시트가 DOM에서 앞에 있어도 나중에 쓰면 이긴다 — 즉 **이 환경에서 `getComputedStyle`은
+   * 결함을 못 본다.** 실브라우저는 DOM 순서로 가른다(③이 쟀다). **그래서 DOM 순서를 직접
+   * 단언한다** — jsdom에서 참이면서 브라우저의 성질과 이어지는 유일한 관측이다.
+   *
+   * 순서는 **태그가 처음 만들어진 순서**로 고정된다(`ensureStyle`이 이름으로 찾으므로).
+   * 그래서 **초안 시트가 먼저 생긴 판**을 심어야 결함이 드러난다 — 아래가 그 판이다
+   * (사용자가 테마 화면을 먼저 연 세션).
+   */
+  it('갤러리를 먼저 열고 캔버스를 뒤에 열어도 초안 시트가 head의 마지막이다', () => {
+    // 1. 갤러리 먼저 — `theme-draft` 태그가 `theme`보다 앞에 생긴다.
+    const gallery = render(<Gallery theme={withPrimary('#ff00ff')} />)
+    // 2. 캔버스가 뒤에 붙어 `theme` 태그를 만든다.
+    render(<Canvas />)
+    // 3. 갤러리가 다시 그려진다(= 테마 화면으로 돌아온 것).
+    gallery.rerender(<Gallery theme={withPrimary('#ff00fe')} />)
+
+    const ids = [...document.head.querySelectorAll('style[data-wb-style]')].map(
+      (element) => (element as HTMLElement).dataset.wbStyle,
+    )
+
+    expect(ids).toContain(THEME_STYLE_ID)
+    expect(ids[ids.length - 1]).toBe(DRAFT_STYLE_ID)
+    // 그리고 그 시트가 실제로 새 초안을 들고 있어야 한다 — 자리만 옮기고 내용이 낡으면 같은 손해다.
+    expect(primaryIn(DRAFT_STYLE_ID)).toBe('#ff00fe')
+  })
+
+  /**
    * **`structure`를 다시 쓰지 않는 것이 하중이다** — jsdom에서는 나중에 쓴 시트가 이기므로
    * (`draft-css.ts` 머리말), 가드 없이 다시 쓰면 구조 기본 CSS가 테마 CSS를 이긴다.
    * 브라우저에는 없는 거짓 관측이 회귀에 섞인다.

@@ -156,11 +156,31 @@ export function overwrittenHandles(
   )
 }
 
-/** 경고 문장. **한 곳에서 만든다** — 두 자리가 따로 쓰면 같은 문제가 다르게 읽힌다. */
+/**
+ * 경고 문장. **한 곳에서 만든다** — 두 자리가 따로 쓰면 같은 문제가 다르게 읽힌다.
+ *
+ * **조건형이다. 현재형으로 쓰지 마라**(P4c-2 ③이 고쳤다). 앞 판은
+ * *"…가 화면에 반영되지 않습니다"*라고 **현재형으로** 말했는데, 그것은 이 파일 머리말의
+ * 판정(*"경고의 쓸모는 '지금 죽었다'가 아니라 '여기서 죽는다'다"*)과 **정면으로 어긋난다.**
+ * 규칙이 구조를 안 보므로 오늘 적중이 0인 자리에도 경고가 붙는데, 문장만 적중한 것처럼 말했다.
+ *
+ * **오늘 그 문장이 거짓인 자리가 실재한다**(③이 쟀다): `portal`·`docs`가
+ * `components.Tree.parts.node.paddingX`로 이 경고를 **각각 1건씩** 내는데 둘 다
+ * `Tree: accordion`을 골라 손잡이 규칙(`:where([data-wb-structure="indent"])`)이
+ * **0개 적중한다.** 반대로 `Tree: indent`를 고른 `admin`은 그 자리를 안 적어 경고가 없다 —
+ * 즉 **경고 2건 중 오늘 실제로 죽는 것은 0건이다.**
+ * 검산: `pnpm vitest run --project unit packages/themes/test/warning-channel.test.ts -t 'T4'`
+ *
+ * P4c-2의 저작 UI가 이 문장을 사용자에게 보이는 첫 화면이고, **같은 화면의 갤러리가
+ * 아코디언으로 그려진 Tree를 나란히 보인다** — 현재형이면 사용자가 서로 모순되는 둘을
+ * 한 화면에서 읽는다.
+ */
 export function handleOverwriteMessage(handle: NodeHandle, prop: string): string {
   return (
     `${prop}가 ${handle.component}${handle.part === null ? '' : `의 ${handle.part} 조각`}에서 ` +
-    `구조 기본 CSS의 ${handle.property}를 덮어씁니다 — ${handle.carries}가 화면에 반영되지 않습니다 ` +
-    '(§6.5대로 테마가 이깁니다. 의도한 것이면 그대로 두세요)'
+    `구조 기본 CSS의 ${handle.property}를 덮어씁니다 — ` +
+    `그 규칙이 걸리는 자리에서는 ${handle.carries}가 화면에 반영되지 않습니다 ` +
+    '(§6.5대로 테마가 이깁니다. 오늘 고른 구조가 그 규칙을 안 내더라도 ' +
+    '구조를 바꾸면 그렇게 됩니다 — 의도한 것이면 그대로 두세요)'
   )
 }
