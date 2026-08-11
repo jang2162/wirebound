@@ -28,7 +28,10 @@ import { createProject, signup, withApi, type TestContext } from './helpers'
 function css(theme: Parameters<typeof resolveTheme>[0]): string {
   ensureCatalog()
   const { theme: resolved, issues } = resolveTheme(theme)
-  expect(issues.map((entry) => `${entry.path}: ${entry.message}`)).toEqual([])
+  // 오류만 본다 — `portal`·`docs`는 손잡이 경고를 1건씩 낸다(P4c-1 T4). 경고는 CSS를
+  // 바꾸지 않으므로 아래 글자 대조는 그대로 유효하다.
+  const errors = issues.filter((entry) => entry.severity === 'error')
+  expect(errors.map((entry) => `${entry.path}: ${entry.message}`)).toEqual([])
   return compileTheme(resolved!)
 }
 

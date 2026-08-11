@@ -37,7 +37,8 @@ describe('내장 테마가 고른 구조를 렌더러가 구현한다 (D7)', () 
 
     for (const id of SYSTEM_THEME_IDS) {
       const { theme, issues } = resolveTheme(systemTheme(id)!)
-      expect(issues, id).toEqual([])
+      // 오류만 본다 — `portal`·`docs`는 손잡이 경고를 1건씩 낸다(P4c-1 T4).
+      expect(issues.filter((entry) => entry.severity === 'error'), id).toEqual([])
 
       const chosen = [...theme!.components].map(([type, component]) => `${type}:${component.structure}`)
       // 테마가 컴포넌트를 하나도 안 고르면 아래 검사가 헛돈다.

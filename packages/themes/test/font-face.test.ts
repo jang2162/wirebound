@@ -183,9 +183,22 @@ describe('재라 #3 — src·family의 주입 경계', () => {
     ).toEqual([])
   })
 
-  it('이슈가 있으면 테마 전체가 못 쓰인다', () => {
-    // `resolveTheme`은 이슈가 하나라도 있으면 `theme: null`이다(P4a-1의 D2) — 즉 나쁜
-    // `src` 하나가 그 테마를 통째로 막는다. 저장 경계(`assertResolvable`)가 422를 낸다.
+  /**
+   * **2026-08-11(P4c-1 수정 웨이브 F6): 이름과 주석이 *"이슈가 (하나라도) 있으면"*이었고
+   * 거짓이 됐다.** `themes`에 첫 `warning`이 생기면서 기준이 *"**`error`가** 있으면 `null`"*로
+   * 바뀌었는데(`resolve/index.ts`), **이 케이스가 쓰는 값(`src: 'a{b}'`)이 `error`라 단언은
+   * 계속 통과했다** — 그래서 테스트로는 안 잡히고 문장만 조용히 거짓이 됐다.
+   * `resolve.test.ts`·`emit.test.ts`와 **같은 부류 셋 중 하나**다.
+   *
+   * **거짓이 옛 규칙을 `P4a-1의 D2`에 귀속시켜 단정하고 있었던 것이 이 자리의 무게다** —
+   * 읽는 사람은 근거가 붙은 문장을 더 믿는다.
+   */
+  it('error가 있으면 테마 전체가 못 쓰인다', () => {
+    // `resolveTheme`은 **`error`가** 하나라도 있으면 `theme: null`이다(P4a-1의 D2 →
+    // P4c-1이 기준을 `error`로 좁혔다) — 즉 나쁜 `src` 하나가 그 테마를 통째로 막는다.
+    // 저장 경계(`assertResolvable`)가 422를 낸다. 이 값이 내는 것은 `bad-style-value`
+    // (`error`) 한 건이고(내가 쟀다) `checkAssets`는 오늘 `warning`을 낼 길이 없어
+    // 이 갈래의 결과는 그대로다 — **바뀐 것은 규칙이지 이 케이스의 값이 아니다.**
     expect(resolveTheme(themeWith({ fonts: [{ family: 'P', src: 'a{b}' }] })).theme).toBeNull()
   })
 })

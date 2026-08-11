@@ -30,7 +30,10 @@ beforeAll(() => {
 
 function portalCss(): string {
   const { theme, issues } = resolveTheme(PORTAL_THEME)
-  expect(issues.map((issue) => `${issue.path}: ${issue.message}`)).toEqual([])
+  // **오류만 본다**(P4c-1 T4). `portal`은 `Tree.parts.node.paddingX`로 노드 손잡이를 덮어
+  // **경고 1건**을 낸다 — 그것이 정상이고 수와 자리는 `warning-channel.test.ts`가 못박는다.
+  const errors = issues.filter((issue) => issue.severity === 'error')
+  expect(errors.map((issue) => `${issue.path}: ${issue.message}`)).toEqual([])
   return compileTheme(theme!)
 }
 

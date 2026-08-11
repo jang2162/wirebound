@@ -1,3 +1,4 @@
+import { partitionIssues } from '@wirebound/schema'
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
 import type { ResolvedTheme } from '../resolved'
@@ -25,8 +26,25 @@ import { resolveTokens } from './tokens'
  * 깨지면 그것을 가리키는 스타일마다 `unknown-token`이 따라 나온다.** 근원을 가리는 것이
  * 아니라 함께 보이는 쪽을 골랐다.
  *
- * 이슈가 하나라도 있으면 `theme`은 `null`이다 — 반쯤 해석된 것을 내보내면 `emit`이
+ * **`error`가 하나라도 있으면 `theme`은 `null`이다** — 반쯤 해석된 것을 내보내면 `emit`이
  * 그것을 CSS로 만든다.
+ *
+ * ---
+ *
+ * **2026-08-11(P4c-1 T2): *"이슈가 하나라도 있으면"*이 *"`error`가 하나라도 있으면"*이 됐다.
+ * 지우지 않고 무엇이 왜 바뀌었는지 남긴다.**
+ *
+ * P4a-1의 D2가 *"이슈가 하나라도 있으면 `null`"*로 정했고, `issue.ts`의 재라 #3이 그것을
+ * **경고가 하나도 없다는 사실 위에** 세워 두고 이렇게 적었다: *"`themes`에 첫 `warning`이
+ * 생기는 날 그 규칙을 `partitionIssues` 기준으로 고쳐야 한다."* 오늘 그 경고가 생겼다
+ * (`suspicious-literal`·`node-handle-overwrite`).
+ *
+ * **선을 긋는 것은 `partitionIssues` 하나다**(`schema`). 여기서 `filter`를 다시 쓰면
+ * `apps/api`의 `assertResolvable`·`edit-pipeline`과 갈릴 수 있고, 그 함수의 머리말이
+ * *"이 선을 긋는 코드는 이 함수 하나뿐이어야 한다"*고 못박아 두었다.
+ *
+ * **경고는 `issues`에 그대로 실려 나간다** — `theme`이 `null`이 아니어도 비지 않는다.
+ * 삼키면 severity를 만든 이유가 사라진다.
  */
 export function resolveTheme(
   document: unknown,
@@ -44,10 +62,15 @@ export function resolveTheme(
   const primitives = checkPrimitives(theme.primitives ?? {}, tokens.table)
   issues.push(...primitives.issues)
 
+  // **컴포넌트 스타일이 primitives를 가리킬 수 있게 하는 배선이다**(P4c-1 T1).
+  // 넘기는 것은 값이 아니라 **선언된 경로의 집합**이다 — 값을 넘기면 컴파일러가
+  // 그것을 인라인하고 싶어지는데, D2가 `var(--wb-<경로>)`로 내기로 정했다
+  // (파생 테마가 primitives만 덮어써도 컴포넌트 스타일이 따라온다).
   const components = checkThemeComponents(
     theme.components ?? {},
     tokens.table,
     [...primitives.breakpoints.keys()],
+    new Set(primitives.values.keys()),
   )
   issues.push(...components.issues)
 
@@ -62,7 +85,7 @@ export function resolveTheme(
 
   issues.push(...collidingVariables(tokens.table, primitives.values))
 
-  if (issues.length > 0) return { theme: null, issues }
+  if (partitionIssues(issues).errors.length > 0) return { theme: null, issues }
 
   return {
     theme: {

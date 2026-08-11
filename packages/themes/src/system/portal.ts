@@ -30,18 +30,20 @@ import type { Theme } from '../spec/theme'
  *
  * ---
  *
- * **여기서 `primitives`를 스타일 값으로 가리키지 않는다 — 가리킬 문법이 없다.**
+ * **`primitives`를 스타일 값이 가리킨다** (2026-08-11, P4c-1 T1이 열었다).
  *
- * `admin`이 `Section.parts.inner.maxWidth: 'container.maxWidth'`와 `Grid.base.gap: 'grid.gap'`을
- * 쓰는데, `TOKEN_NAMESPACES`에 `container`·`grid`·`section`이 **없다.** 그래서 그 값은 참조로
- * 인식되지 않고 **글자 그대로** CSS에 실린다 — 컴파일해서 봤다:
- * `max-width: container.maxWidth;` · `gap: grid.gap;` **둘 다 무효 선언이다.**
- * (`:root`에는 `--wb-container-maxWidth: 1440px`가 정상적으로 나가지만 그것을 읽는 코드가
- * 저장소에 하나도 없다.) `var()`는 §6.8이 막으므로 우회로도 없다.
+ * `Section.parts.inner.maxWidth: 'container.maxWidth'`가 `primitives`의 1280px을 가리키고,
+ * 폭은 한 곳에만 적힌다. **P4b-3까지는 반대였고, 지우지 않고 남긴다:**
  *
- * **그래서 이 테마는 폭을 리터럴로 적고 `primitives`에 같은 값을 함께 선언한다.** 값이 두
- * 곳에 적히는 것이 오늘의 대가이고, 그 대가를 없애는 것은 §6.8/§6.3을 넓히는 판단이라
- * 여기서 하지 않는다. **보고에 적었다.**
+ * > *"`TOKEN_NAMESPACES`에 `container`·`grid`·`section`이 **없다.** 그래서 그 값은 참조로
+ * > 인식되지 않고 **글자 그대로** CSS에 실린다 — 컴파일해서 봤다:
+ * > `max-width: container.maxWidth;` · `gap: grid.gap;` **둘 다 무효 선언이다.**
+ * > … **그래서 이 테마는 폭을 리터럴로 적고 `primitives`에 같은 값을 함께 선언한다.**"*
+ *
+ * T1이 스타일 전용 이름공간 셋을 열어 그 대가를 없앴다. 컴파일 결과는
+ * `max-width: 1280px` → `max-width: var(--wb-container-maxWidth)`이고 **계산값은 같다.**
+ * (`:root`의 `--wb-container-*`를 **읽는 첫 코드**가 이것이다 — P4b-3 이월이 *"읽는 쪽도
+ * 0건이다"*라고 적은 자리다.)
  *
  * **방향별 테두리 어휘도 없다.** §6.8에 `borderTop` 같은 이름이 없다. 대신 `borderWidth`가
  * `border-width`로 그대로 나가므로 **다중값 shorthand**(`'0 0 1px'`)로 적는다 — 포털의
@@ -184,7 +186,7 @@ export const PORTAL_THEME: Theme = {
       base: { bg: 'semantic.canvas', paddingY: 'space.10' },
       // **`marginX: 'auto'`가 `admin`에 없다.** 폭을 가둬도 가운데로 안 오면 가둔 것이
       // 보이지 않는다. (`admin`은 `maxWidth`가 무효 선언이라 이 문제를 만난 적이 없다.)
-      parts: { inner: { maxWidth: '1280px', marginX: 'auto', paddingX: 'space.5' } },
+      parts: { inner: { maxWidth: 'container.maxWidth', marginX: 'auto', paddingX: 'space.5' } },
       variants: {
         // 포털 첫 화면의 상단 띠. 진한 남색 바탕에 흰 글씨가 기관 사이트의 표지다.
         hero: { bg: 'semantic.primaryStrong', fg: 'semantic.surface', paddingY: 'space.14' },

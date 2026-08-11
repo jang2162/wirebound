@@ -8,7 +8,7 @@
  */
 import { render } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { structureBaseCss } from '@wirebound/renderer'
 import { STRUCTURE_STYLE_ID, THEME_STYLE_ID, useThemeCss } from '../../src/theme/use-theme-css'
 import type { ThemeSource } from '../../src/theme/theme-source'
@@ -26,6 +26,10 @@ function styleTags(): HTMLStyleElement[] {
 function tag(id: string): HTMLStyleElement | null {
   return document.head.querySelector<HTMLStyleElement>(`style[data-wb-style="${id}"]`)
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('useThemeCss', () => {
   it('구조 기본 CSS와 테마 CSS가 순서대로 head에 실린다', () => {
@@ -117,6 +121,58 @@ describe('useThemeCss', () => {
     expect(tag(STRUCTURE_STYLE_ID)?.textContent).toBe(structureBaseCss())
     // 테마 CSS는 비어 있다. 태그 자체는 자리를 지킨다(순서가 계약이므로).
     expect(tag(THEME_STYLE_ID)?.textContent).toBe('')
+  })
+
+  /**
+   * **F3 — 경고만 있는 테마는 그려지지만 조용하지 않다** (P4c-1 수정 웨이브).
+   *
+   * `themes`에 첫 `warning`이 생기면서 `resolveTheme`이 *"이슈가 있으면 `null`"*에서
+   * *"**`error`가** 있으면 `null`"*로 바뀌었다. 위 `해석이 실패해도` 케이스가 겨냥하는
+   * `theme === null` 갈래만 있으면 **경고가 붙은 테마는 아무 데도 안 남는다** —
+   * 오늘 없애려던 침묵과 같은 부류를 새로 만드는 것이다.
+   *
+   * **처음에는 그 갈래에 케이스가 없었고, 리뷰가 *"지워도 2442/2442 초록"*이라고
+   * 쟀다**(그쪽이 쟀다). 그래서 붙인다. 콘솔을 감시하는 것은 이 저장소의 형식이다
+   * (`use-project-theme.test.tsx`·`theme-picker.test.tsx`가 같은 방식을 쓴다).
+   *
+   * **`warn`과 `error`를 함께 감시하는 것이 요점이다** — `error`가 0인 것이
+   * *"경고가 오류로 새지 않았다"*이고, 그것 없이는 두 갈래가 구별되지 않는다.
+   */
+  it('경고만 있는 테마는 CSS가 실리고 console.warn이 남는다', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    // `Tree.parts.node.paddingX`는 노드 손잡이(`padding-left`)를 덮는다 — `portal`·`docs`가
+    // 실제로 쓰는 선언이고 `node-handle-overwrite` 경고 하나를 낸다.
+    const warned: ThemeSource = () => ({
+      meta: { id: 'warned', name: '경고', version: '1.0.0' },
+      tokens: { scale: { space: { unit: '4px' } } },
+      components: { Tree: { parts: { node: { paddingX: 'space.4' } } } },
+    })
+
+    render(<Harness source={warned} />)
+
+    // **테마는 그려진다** — 경고가 CSS를 막지 않는다.
+    expect(tag(THEME_STYLE_ID)?.textContent).toContain('padding-left: var(--wb-space-4);')
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]![0])).toContain('경고')
+    // 어느 자리인지까지 남아야 고칠 수 있다 — 수만 남기면 콘솔이 쓸모없다.
+    expect(String(warn.mock.calls[0]![1])).toContain('components.Tree.parts.node.paddingX')
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  /** 대조군 — 경고가 없으면 콘솔에 아무것도 안 남는다. 이것이 없으면 위 케이스가 헛돈다. */
+  it('경고가 없는 테마는 콘솔에 아무것도 안 남긴다', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    render(<Harness source={() => ({
+      meta: { id: 'clean', name: '깨끗', version: '1.0.0' },
+      tokens: { semantic: { primary: '#2563eb' } },
+    })} />)
+
+    expect(warn).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalled()
   })
 
   it('테마가 없어도 구조 기본 CSS는 실린다', () => {

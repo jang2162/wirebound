@@ -10,16 +10,28 @@ beforeAll(() => {
 /**
  * **재라 #3 — `themes`에 경고가 될 이슈가 있는가.**
  *
- * 답: **없다.** 근거는 `src/issue.ts`의 `THEME_ISSUE_SEVERITY` 주석에 적었다(후보 둘을
- * 훑어 각각 왜 `error`로 두는지). 여기서는 그 결론을 케이스로 고정한다 — 누군가
- * 값을 `warning`으로 바꾸면 `resolveTheme`의 *"이슈가 있으면 `theme`은 `null`"* 규칙
- * (P4a-1의 D2)과 충돌하므로, 그 규칙을 함께 고치라는 신호가 여기서 나야 한다.
+ * **P4b-3까지의 답은 *"없다"*였고, 이 케이스가 *"전부 error다"*를 못박고 있었다.**
+ * 그 케이스가 스스로 적어 두었다: *"누군가 값을 `warning`으로 바꾸면 `resolveTheme`의
+ * '이슈가 있으면 `theme`은 `null`' 규칙(P4a-1의 D2)과 충돌하므로, **그 규칙을 함께
+ * 고치라는 신호가 여기서 나야 한다.**"*
+ *
+ * **2026-08-11(P4c-1 T2)에 그 신호가 났고, 규칙을 함께 고쳤다.** 지우지 않고 뒤집어 적는다 —
+ * 지금 지키는 것은 *"전부 error"*가 아니라 **경고 목록이 정확히 무엇인가**다. 새 코드가
+ * 조용히 `warning`이 되면 여기가 죽고, 그러면 `resolveTheme`·`assertResolvable`이
+ * 그것을 통과시켜도 되는지 다시 묻게 된다.
  */
 describe('ThemeIssue.severity', () => {
-  it('오늘 테마 이슈는 전부 error다', () => {
+  it('경고인 코드가 정확히 이 둘이다 — 나머지는 전부 error다', () => {
     const codes = Object.keys(THEME_ISSUE_SEVERITY)
     expect(codes.length).toBeGreaterThan(0)
-    expect(Object.values(THEME_ISSUE_SEVERITY)).toEqual(codes.map(() => 'error'))
+
+    const warnings = codes.filter((code) => THEME_ISSUE_SEVERITY[code as never] === 'warning')
+    expect(warnings.sort()).toEqual(['node-handle-overwrite', 'suspicious-literal'])
+
+    // 나머지가 전부 error인 것까지 본다 — 세 번째 값이 생기면 여기가 죽는다.
+    for (const code of codes) {
+      expect(['error', 'warning']).toContain(THEME_ISSUE_SEVERITY[code as never])
+    }
   })
 
   it('issue()가 표에서 severity를 파생시킨다', () => {

@@ -4,9 +4,14 @@ import type { CssDeclaration, ResolvedComponent, ResolvedLayer, ResolvedTheme } 
 /**
  * `ResolvedTheme`을 CSS 한 장으로 만든다(§6.11).
  *
- * **여기서 검증하지 않는다.** 해석이 이미 끝났고, 이슈가 하나라도 있으면 `resolveTheme`이
- * `null`을 내므로 이 함수에 오는 것은 통과한 테마뿐이다(D2). 그래서 이 파일은 문자열을
- * 조립하기만 한다 — **CSS 파서를 들이지 않는다.**
+ * **여기서 검증하지 않는다.** 해석이 이미 끝났고, **`error`가 하나라도 있으면**
+ * `resolveTheme`이 `null`을 내므로 이 함수에 오는 것은 통과한 테마뿐이다(D2). 그래서 이
+ * 파일은 문자열을 조립하기만 한다 — **CSS 파서를 들이지 않는다.**
+ *
+ * > **2026-08-11(P4c-1 T2): 위 문장이 *"이슈가 하나라도"*였다.** `themes`에 첫 `warning`이
+ * > 생겨 그 기준이 `partitionIssues`로 바뀌었다. **그래서 이 함수는 경고가 붙은 값도
+ * > 받는다** — `suspicious-literal`이 붙은 값은 적힌 그대로 CSS에 실린다(그것이 그 코드가
+ * > `error`가 아닌 이유다). 조립만 한다는 계약은 그대로다.
  *
  * **`!important`를 붙이지 않는다**(D9). P0 이월이 남긴 결함(구조 구현체가 inline style을
  * 방출해 테마가 캐스케이드에서 진다)은 P4a-2가 걷어낼 것이고, 여기서 `!important`를 쓰면

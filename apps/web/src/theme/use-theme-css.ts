@@ -37,9 +37,16 @@ export const THEME_STYLE_ID = 'theme'
  * (`test/theme/use-theme-css.test.tsx`), 실제 브라우저에서도 같았다(보고서에 적었다).
  * 좁아지지 않을 바에는 P5 내보내기가 넣을 자리(§6.11)와 같은 곳이 낫다.
  *
- * **던지지 않는다.** `resolveTheme`이 이슈를 내면 테마 CSS를 비우고 구조 기본 CSS만
+ * **던지지 않는다.** `resolveTheme`이 **`error`를 내면** 테마 CSS를 비우고 구조 기본 CSS만
  * 남긴다 — 테마가 깨진 것과 화면이 사라지는 것은 다른 일이고, 이 프로젝트는 그
- * *"빈 화면"* 부류를 반복해 겪었다.
+ * *"빈 화면"* 부류를 반복해 겪었다. **경고만 있으면 CSS는 그대로 나가고 콘솔에 남는다**
+ * (아래 `compile`의 두 분기).
+ *
+ * > **2026-08-11(P4c-1 수정 웨이브 F6 전수 훑기): 위 문장이 *"이슈를 내면"*이었고 거짓이
+ * > 됐다.** 리뷰가 낸 다섯에는 없던 자리다 — **`resolve/style.ts`와 정확히 같은 부류**로,
+ * > 같은 파일 **안쪽**(`compile`의 경고 분기)에는 P4c-1이 새 문장을 제대로 넣어 두고
+ * > **머리말만 낡혀 두었다.** 파일 머리말이 함수 본문보다 늦게 고쳐지는 것이 이 저장소가
+ * > 반복하는 모양이다.
  *
  * **`useLayoutEffect`인 이유:** `useEffect`로 넣으면 **한 프레임이 CSS 없이 그려진다**
  * (계획서가 *"계획이 재지 않은 것 #3"*으로 남긴 자리다). 레이아웃 이펙트는 브라우저가
@@ -136,6 +143,24 @@ function compileOnce(source: ThemeSource): CompiledCss {
       issues.map((issue) => `${issue.path}: ${issue.message}`),
     )
     return { structure, theme: '', resolved: null }
+  }
+
+  /**
+   * **경고만 있는 테마는 선다 — 그러나 삼키지 않는다** (P4c-1 T2).
+   *
+   * `resolveTheme`이 *"이슈가 하나라도 있으면 `null`"*에서 *"**`error`가** 있으면 `null`"*로
+   * 바뀌었다(`themes`에 첫 `warning`이 생겼다). 위 분기만 있으면 경고가 붙은 테마는
+   * `theme !== null`이라 **아무 데도 안 남는다** — 그 침묵이 바로 `suspicious-literal`과
+   * `node-handle-overwrite`가 없애려던 것이다.
+   *
+   * `error`와 같은 채널(콘솔)을 쓰되 `warn`으로 낸다. 사용자용 표시는 저작 UI(P4c-2)의
+   * 몫이라는 재라 #12의 판정은 그대로다 — **여기서 화면을 만들지 않는다.**
+   */
+  if (issues.length > 0) {
+    console.warn(
+      `테마는 그렸지만 경고가 있습니다 (${issues.length}건)`,
+      issues.map((issue) => `${issue.path}: ${issue.message}`),
+    )
   }
 
   const resolved = theme as ResolvedTheme

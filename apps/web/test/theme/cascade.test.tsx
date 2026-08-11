@@ -93,7 +93,12 @@ type Reading = readonly [selector: string, property: string]
  */
 function measure(theme: Theme, readings: readonly Reading[]): { values: string[]; themeCss: string } {
   const { theme: resolved, issues } = resolveTheme(theme)
-  expect(issues.map((issue) => `${issue.path}: ${issue.message}`)).toEqual([])
+  // **오류만 본다**(P4c-1 T4). 이 파일의 `THEME_B`는 `Flex.base.direction`으로 **일부러**
+  // 노드 손잡이를 덮는다 — 아래 `Flex의 flex-direction을 테마가 덮는다`가 그것을 재는
+  // 케이스다. 그러므로 `node-handle-overwrite` 경고가 나는 것이 **이 파일의 취지 그대로**이고,
+  // 경고 때문에 여기서 멈추면 그 케이스를 잴 수 없다.
+  const errors = issues.filter((issue) => issue.severity === 'error')
+  expect(errors.map((issue) => `${issue.path}: ${issue.message}`)).toEqual([])
 
   const themeCss = compileTheme(resolved!)
 

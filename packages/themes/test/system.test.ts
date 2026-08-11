@@ -16,11 +16,21 @@ describe('내장 시스템 테마', () => {
     expect(SYSTEM_THEME_IDS.length).toBeGreaterThan(0)
   })
 
-  it('이슈 없이 해석된다', () => {
+  /**
+   * **2026-08-11(P4c-1 T4): *"이슈 없이"*가 *"오류 없이"*가 됐다. 지우지 않고 남긴다.**
+   *
+   * `themes`에 첫 `warning`이 생겼고(`node-handle-overwrite`), `portal`·`docs`가 실제로
+   * 그것을 하나씩 낸다 — 둘이 `Tree.parts.node.paddingX`로 손잡이와 셀렉터가 정확히 같다
+   * (P4b-3의 ③이 쟀고 P4c-1이 코드로 잡았다). **경고가 나는 것이 정상이고 그 수가
+   * 정확히 무엇인지는 `warning-channel.test.ts`가 못박는다.** 여기서 지키는 것은
+   * *"다섯 다 실제로 선다"* — `error`가 0이고 `theme`이 나온다.
+   */
+  it('오류 없이 해석된다 — 다섯 다 선다', () => {
     for (const id of SYSTEM_THEME_IDS) {
       const { theme, issues } = resolveTheme(systemTheme(id)!)
+      const errors = issues.filter((entry) => entry.severity === 'error')
       // 이슈가 있으면 무엇인지 보이게 둔다 — 개수만 비교하면 고칠 수가 없다.
-      expect(issues, `${id}: ${issues.map((i) => `${i.path} ${i.message}`).join(' | ')}`).toEqual([])
+      expect(errors, `${id}: ${errors.map((i) => `${i.path} ${i.message}`).join(' | ')}`).toEqual([])
       expect(theme).not.toBeNull()
     }
   })

@@ -72,6 +72,12 @@ describe('공개 표면이 계약이다', () => {
     // 이슈 severity 표와 팩토리 (P4a-3 Task 1). 저장 경계가 "막을 이슈"와 "알릴 이슈"를
     // 갈라야 하고, 이 패키지 밖에서 테마 이슈를 만드는 자리도 표를 지나야 한다.
     'THEME_ISSUE_SEVERITY', 'themeIssue',
+    // P4c-1 T1 — 스타일이 `primitives`를 가리키는 문법. 이름공간 목록을 내는 것은
+    // 저작 UI(P4c-2)의 값 편집기가 드롭다운으로 낼 목록이 이것이기 때문이다.
+    'STYLE_PRIMITIVE_NAMESPACES', 'isPrimitiveReference',
+    // P4c-1 T4 — 노드 손잡이 표. **`apps/web`이 렌더러의 구조 기본 CSS와 대조한다**
+    // (§3.3 — `themes`는 `renderer`를 볼 수 없다). `STYLE_PROPERTIES_BEYOND_SPEC`과 같은 부류다.
+    'NODE_HANDLES', 'coveredProperties', 'overwrittenHandles',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {

@@ -1,3 +1,4 @@
+import { partitionIssues } from '@wirebound/schema'
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
 import { own } from '../own'
@@ -196,6 +197,37 @@ const FUNCTION_ALLOWLIST: Readonly<Record<string, readonly string[]>> = {
 }
 
 /**
+ * 스타일 값이 가리킬 수 있는 **primitives 이름공간**(§6.4). **토큰 이름공간과 갈라 둔다.**
+ *
+ * **P4b-3 이월이 이 슬라이스의 첫 줄로 남긴 사실을 닫는 자리다:** `--wb-container-*`·
+ * `--wb-grid-*`·`--wb-section-*`는 §6.11대로 `:root`에 나가는데 **그 이름을 읽는 코드가
+ * 저장소 전체에 0건**이었고, 스타일이 그것을 가리킬 **문법도 없었다**. 그래서 `admin`이
+ * 적은 `maxWidth: "container.maxWidth"`가 참조로 인식되지 않고 **리터럴로 통과해**
+ * 브라우저가 그 선언을 버렸다(Chromium 151 실측 — P4b-3의 ③이 쟀다).
+ *
+ * **`TOKEN_NAMESPACES`에 더하지 않은 이유는 표가 다르기 때문이다.** primitives는
+ * `TokenTable`에 없다 — `isTokenReference`가 이 이름들에 참을 내면 토큰 해석기가 없는
+ * 표를 뒤져 `unknown-token`을 낸다. 두 이름공간은 **해석하는 표가 다른 두 문법**이고,
+ * 값이 `var(--wb-<경로>)`로 나가는 것만 같다(D2 — 값을 인라인하지 않는다).
+ *
+ * **`breakpoints`는 없다(재라 #1).** 근거는 방출이다: `compileTheme`의 `:root`는
+ * `tokens` + `primitives.values` 둘만 돌고, `checkPrimitives`는 브레이크포인트를 `values`가
+ * 아니라 **수로 따로** 낸다. 즉 `--wb-breakpoints-md`라는 변수가 **존재하지 않으므로**
+ * 열어 주면 `var()`가 빈 값으로 풀려 선언이 조용히 죽는다 — 오늘 닫는 결함과 같은 부류를
+ * 새로 만드는 셈이다. §6.4가 그 값을 `@media` **조건**으로 쓰는 것도 같은 이야기다.
+ */
+export const STYLE_PRIMITIVE_NAMESPACES = ['container', 'grid', 'section'] as const
+
+/** 값 통째가 primitives 참조인지 가르는 기준. `REFERENCE`(tokens.ts)와 같은 모양이다. */
+const PRIMITIVE_REFERENCE = new RegExp(`^(${STYLE_PRIMITIVE_NAMESPACES.join('|')})\\.\\S+$`)
+
+/**
+ * 선언된 primitives 경로의 집합. 키는 `container.maxWidth`처럼 **문서 안의 경로에서
+ * 이름공간 마디(`primitives.`)를 뗀 것**이고, `checkPrimitives`가 내는 `values`의 키와 같다.
+ */
+export type PrimitiveTable = ReadonlySet<string>
+
+/**
  * 값 문자열 안에 섞여 있는 토큰 참조를 찾는다. 통째로 참조인 경우는 `isTokenReference`가 본다.
  *
  * **값 토큰 하나가 통째로 참조일 때만 잡는다.** 앞뒤를 공백·쉼표·괄호로 못박은 것은
@@ -205,7 +237,8 @@ const FUNCTION_ALLOWLIST: Readonly<Record<string, readonly string[]>> = {
  * 담으라고 만든 어휘이므로 그 거부가 어휘를 못 쓰게 만든다.
  */
 const EMBEDDED_REFERENCE = new RegExp(
-  `(?<=^|[\\s,()])(?:${TOKEN_NAMESPACES.join('|')})(?:\\.[A-Za-z0-9_-]+)+(?=$|[\\s,()])`,
+  `(?<=^|[\\s,()])(?:${[...TOKEN_NAMESPACES, ...STYLE_PRIMITIVE_NAMESPACES].join('|')})` +
+    `(?:\\.[A-Za-z0-9_-]+)+(?=$|[\\s,()])`,
   'g',
 )
 
@@ -236,17 +269,28 @@ export function cssVarName(tokenPath: string): string {
 /**
  * 스타일 어휘 하나를 CSS 선언들로 바꾼다. **던지지 않는다** — 이슈를 모아서 낸다.
  *
- * 이슈가 하나라도 나오면 `css`는 비어 나간다. 반쯤 옳은 선언을 내보내면 화면에서만
+ * **`error`가 하나라도 나오면 `css`는 비어 나간다.** 반쯤 옳은 선언을 내보내면 화면에서만
  * 드러나기 때문이다(D2가 해석과 방출을 가른 이유와 같다).
+ *
+ * > **2026-08-11(P4c-1 수정 웨이브 F6): 위 문장이 *"이슈가 하나라도"*였고 그것이 거짓이
+ * > 됐다.** `themes`에 첫 `warning`이 생기면서 **경고가 붙은 값은 `css`를 채운 채 나간다** —
+ * > `suspicious-literal`이 값을 안 버리는 것이 그 코드가 `error`가 아닌 이유다. 리뷰가
+ * > 이 자리를 *"보고서 목록에 없는 거짓 다섯 중 가장 무겁다"*고 지목했다(**그쪽이 쟀다**):
+ * > 이 문장은 함수의 **계약**을 말하는 자리라 읽는 사람이 그대로 믿는다.
  *
  * `path`는 이슈에 실을 테마 문서 안의 자리다. 계획서의 시그니처에는 없지만, 이슈가
  * 어디서 났는지 없이는 고칠 수 없어(Task 7 케이스 5) 선택 인자로 더했다.
+ *
+ * `primitives`는 **이 자리에서 primitives 참조가 가리킬 수 있는 경로**다(P4c-1 T1).
+ * 생략하면 *"이 자리에서는 primitives를 가리킬 수 없다"*는 뜻이고 그런 값은 **이슈**가
+ * 된다 — 리터럴로 통과시키는 갈래를 남기지 않는다(그것이 오늘 닫는 결함 자체다).
  */
 export function styleDeclarations(
   prop: string,
   value: unknown,
   tokens: TokenTable,
   path: string = prop,
+  primitives?: PrimitiveTable,
 ): { css: Array<[string, string]>; issues: ThemeIssue[] } {
   const targets = own(STYLE_PROPERTIES, prop)
   if (targets === undefined) {
@@ -287,9 +331,16 @@ export function styleDeclarations(
     }
   }
 
-  const resolved = resolveStyleValue(value, tokens, path, own(FUNCTION_ALLOWLIST, prop) ?? [], prop)
+  const resolved = resolveStyleValue(
+    value,
+    tokens,
+    path,
+    own(FUNCTION_ALLOWLIST, prop) ?? [],
+    prop,
+    primitives,
+  )
   if (resolved.value === null) return { css: [], issues: resolved.issues }
-  return { css: targets.map((name) => [name, resolved.value!]), issues: [] }
+  return { css: targets.map((name) => [name, resolved.value!]), issues: resolved.issues }
 }
 
 /**
@@ -298,6 +349,10 @@ export function styleDeclarations(
  * `primitives`(§6.4)처럼 **CSS 프로퍼티 이름이 없는 자리**도 같은 값 규칙을 받아야 해서
  * 따로 뽑았다 — `container.gutter`가 `"space.6"`을 받는 것이 §6.4의 예시다.
  * 실패하면 `value`가 `null`이다.
+ *
+ * **`value`가 `null`이 아니어도 `issues`가 빌 필요는 없다**(P4c-1 T3). 경고는 값을
+ * 버리지 않는다 — `suspicious-literal`이 붙은 값은 적힌 그대로 CSS에 실린다.
+ * 선을 긋는 것은 `severity`이고 그 판정은 `THEME_ISSUE_SEVERITY` 하나가 한다.
  */
 export function resolveStyleValue(
   value: unknown,
@@ -305,6 +360,7 @@ export function resolveStyleValue(
   path: string,
   allowedFunctions: readonly string[] = [],
   label = path,
+  primitives?: PrimitiveTable,
 ): { value: string | null; issues: ThemeIssue[] } {
   if (typeof value === 'number') return { value: String(value), issues: [] }
   if (typeof value !== 'string') {
@@ -317,9 +373,16 @@ export function resolveStyleValue(
   const rejected = rejectFunctions(value, allowedFunctions, path, label)
   if (rejected.length > 0) return { value: null, issues: rejected }
 
-  const resolved = resolveReferences(value, tokens, path)
-  if (resolved.issues.length > 0) return { value: null, issues: resolved.issues }
-  return { value: resolved.value, issues: [] }
+  const resolved = resolveReferences(value, tokens, path, primitives)
+  // **선을 긋는 것은 `partitionIssues` 하나다**(수정 웨이브 F2). 여기서 `filter`를 다시 쓰면
+  // T2가 세운 규칙이 T1/T3의 자리에서 깨진다 — 그 함수의 머리말이 *"이 선을 긋는 코드는
+  // 이 함수 하나뿐이어야 한다"*고 못박아 두었고, `partitionIssues`를 제네릭으로 넓힌
+  // 이유가 정확히 **테마 쪽도 그것을 부를 수 있게** 하려는 것이었다. 손으로 그은 선은
+  // severity가 셋이 되는 날(`info` 같은 것이 생기면) **여기만 안 고쳐진다.**
+  if (partitionIssues(resolved.issues).errors.length > 0) {
+    return { value: null, issues: resolved.issues }
+  }
+  return { value: resolved.value, issues: resolved.issues }
 }
 
 /**
@@ -411,15 +474,66 @@ function namespaceOf(reference: string): string {
   return reference.slice(0, reference.indexOf('.'))
 }
 
-/** 값 안의 토큰 참조를 `var(--wb-…)`로 바꾼다. 통째로 참조인 경우와 섞여 있는 경우를 함께 다룬다. */
+/** 값 통째가 primitives 참조인가. `isTokenReference`와 **표가 다른 두 문법**이다. */
+export function isPrimitiveReference(value: unknown): boolean {
+  return typeof value === 'string' && PRIMITIVE_REFERENCE.test(value)
+}
+
+/**
+ * *"참조처럼 생겼다"*의 판정식 (P4c-1 T3 — `suspicious-literal`).
+ *
+ * **값 통째가 점으로 이어진 식별자 마디들일 때만** 참이다. `이름공간.이름`이 아닌 어느
+ * 문자도(공백·쉼표·괄호·`/`·`#`·`%`) 있으면 거짓이다.
+ *
+ * **이름 쪽을 `\\S+`가 아니라 좁은 문자 집합으로 둔 것이 `REFERENCE`(tokens.ts)와
+ * 반대 방향이다 — 그리고 그것이 의도다.** 그쪽 주석이 적었다: *"이름 쪽을 좁게 두면
+ * 선언될 수 없는 이름을 가리키는 참조가 리터럴로 조용히 통과한다 — 실제로 그 형태를
+ * 먼저 짰다가 케이스가 이슈 0건을 내는 것을 보고 넓혔다."* 그쪽은 **이름공간이 목록 안**
+ * 이라 참조라는 것이 확실하므로 넓히는 것이 옳다. **여기는 목록 밖이라 멀쩡한 CSS
+ * 리터럴일 수 있다** — 넓히면 거짓 양성이 곧바로 사용자에게 간다. 그래서 좁힌다.
+ *
+ * 이 좁힘으로 못 잡는 것: `layout.최대폭`처럼 **좁은 문자 집합 밖의 이름**과, 값 **안쪽**에
+ * 섞인 오타(`'10px spce.4'`). 후자를 열지 않은 이유는 다중값 CSS가 정확히 점 찍힌 토큰이
+ * 사는 자리이기 때문이다(그림자 `0 1px 2px rgba(15,23,42,.06)`·폰트 목록). **다섯 테마와
+ * 저장소의 모든 테마 픽스처로 두 형태를 다 재 봤고 그 값은 P4c-1 보고에 있다.**
+ */
+const REFERENCE_SHAPED = /^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)+$/
+
+/**
+ * 값 안의 참조를 `var(--wb-…)`로 바꾼다. 통째로 참조인 경우와 섞여 있는 경우를 함께 다룬다.
+ *
+ * **두 이름공간을 표로 가른다.** 토큰은 `tokens`에서, primitives는 `primitives`에서 찾는다 —
+ * 한 표로 합치면 `unknown-token`이 primitives 오타에도 붙어 문장이 거짓이 된다.
+ */
 function resolveReferences(
   value: string,
   tokens: TokenTable,
   path: string,
+  primitives: PrimitiveTable | undefined,
 ): { value: string; issues: ThemeIssue[] } {
   const issues: ThemeIssue[] = []
 
   const check = (reference: string): ThemeIssue | null => {
+    if (isPrimitiveReference(reference)) {
+      if (primitives === undefined) {
+        // `checkPrimitives`가 자기 값을 풀 때가 여기다. **리터럴로 통과시키지 않는다** —
+        // 그 침묵이 오늘 닫는 결함 그 자체이고, 한 층 아래에 같은 구멍을 다시 파는 셈이다.
+        return issue(
+          'bad-style-value',
+          path,
+          `여기서는 primitives를 가리킬 수 없습니다: ${reference} ` +
+            '(primitives 값은 토큰이나 리터럴을 씁니다 — §6.4)',
+        )
+      }
+      if (!primitives.has(reference)) {
+        return issue(
+          'unknown-primitive',
+          path,
+          `선언되지 않은 primitives 경로를 가리킵니다: ${reference}`,
+        )
+      }
+      return null
+    }
     if (STYLE_FORBIDDEN_NAMESPACES.includes(namespaceOf(reference))) {
       return issue(
         'bad-style-value',
@@ -434,11 +548,25 @@ function resolveReferences(
     return null
   }
 
-  if (isTokenReference(value)) {
+  if (isTokenReference(value) || isPrimitiveReference(value)) {
     const rejected = check(value)
     return rejected === null
       ? { value: `var(${cssVarName(value)})`, issues: [] }
       : { value, issues: [rejected] }
+  }
+
+  // **이름공간이 목록 밖인데 참조처럼 생겼다** (P4c-1 T3). 값은 버리지 않고 경고만 낸다 —
+  // `severity`가 `warning`이라 `resolveTheme`이 이것 때문에 `null`을 내지 않는다.
+  if (REFERENCE_SHAPED.test(value)) {
+    issues.push(
+      issue(
+        'suspicious-literal',
+        path,
+        `참조처럼 보이는데 이름공간이 목록 밖입니다: ${value} ` +
+          `(쓸 수 있는 이름공간: ${[...TOKEN_NAMESPACES, ...STYLE_PRIMITIVE_NAMESPACES].join('·')}). ` +
+          '리터럴로 의도한 것이면 그대로 두세요 — 값은 적힌 그대로 CSS에 실립니다',
+      ),
+    )
   }
 
   const opaque = urlSpans(value)
