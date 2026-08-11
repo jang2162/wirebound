@@ -68,7 +68,10 @@ const NESTED: WbNode = {
  */
 function readParts(part: string, property: string): Array<[owner: string, value: string]> {
   const { theme, issues } = resolveTheme(systemTheme('docs')!)
-  expect(issues.map((entry) => `${entry.path}: ${entry.message}`)).toEqual([])
+  // **오류만 본다**(P4c-1 T4). `docs`는 `Tree.parts.node.paddingX`로 노드 손잡이를 덮어
+  // 경고 1건을 낸다 — 수와 자리는 `packages/themes/test/warning-channel.test.ts`가 못박는다.
+  const errors = issues.filter((entry) => entry.severity === 'error')
+  expect(errors.map((entry) => `${entry.path}: ${entry.message}`)).toEqual([])
 
   const structures: Record<string, string> = {}
   for (const [type, component] of theme!.components) structures[type] = component.structure
@@ -132,30 +135,51 @@ describe('docs — 중첩된 컴포넌트가 남의 조각 스킨을 받지 않�
 })
 
 /**
- * **`primitives`를 스타일 값이 가리킬 수 없다 — 그래서 `docs`가 읽기 폭을 두 곳에 적었다.**
+ * **`primitives`를 스타일 값이 가리킨다 — 그래서 `docs`의 읽기 폭이 한 곳이 됐다.**
  *
- * `resolveTheme`이 `checkThemeComponents`에 **토큰 표만** 넘기고(`resolve/index.ts`)
- * 참조 문법의 이름공간에도 `container`가 없다(`TOKEN_NAMESPACES` 일곱). 그래서
- * `"container.maxWidth"`는 **참조로 인식되지 않고 리터럴 문자열로 통과한다** —
- * 이슈도 없고 `var()`도 아니다.
+ * **이 절은 뒤집힌 케이스다. 지우지 않고 무엇이 언제 왜 바뀌었는지 남긴다**
+ * (P4b-2의 `structures-data.test.tsx`가 쓴 형식이다).
  *
- * **이 케이스가 죽는 날은 그 구멍이 메워진 날이다.** 그때 `docs`의
- * `primitives.container.maxWidth`와 `Section.parts.inner.maxWidth`를 한 값으로 합쳐야 한다.
+ * **P4b-3까지 이 절이 단언하던 것:** *"`resolveTheme`이 `checkThemeComponents`에 토큰 표만
+ * 넘기고 참조 문법의 이름공간에도 `container`가 없다. 그래서 `"container.maxWidth"`는
+ * 참조로 인식되지 않고 리터럴 문자열로 통과한다 — 이슈도 없고 `var()`도 아니다."*
+ * 그리고 스스로 이렇게 적어 두었다: *"**이 케이스가 죽는 날은 그 구멍이 메워진 날이다.**
+ * 그때 `docs`의 `primitives.container.maxWidth`와 `Section.parts.inner.maxWidth`를 한 값으로
+ * 합쳐야 한다."*
+ *
+ * **2026-08-11(P4c-1 T1)에 그 날이 왔다.** 어휘를 열자 이 케이스가 죽었고, 지시대로
+ * `docs`의 두 자리를 합쳤다. 여기서는 **합쳐진 결과**를 못박는다 — 값이 한 곳에만 적히고,
+ * `:root`의 변수를 **실제로 가리키는 규칙이 있다**는 것까지.
  */
-describe('primitives 참조 — docs가 수를 두 곳에 적은 이유', () => {
-  it('container.maxWidth는 참조가 아니라 리터럴로 통과한다', () => {
-    const resolved = resolveStyleValue('container.maxWidth', new Map(), 'probe')
+describe('primitives 참조 — docs의 읽기 폭이 한 곳이 됐다', () => {
+  it('container.maxWidth가 var()로 풀린다 — 선언된 경로일 때만', () => {
+    const declared = new Set(['container.maxWidth'])
+    const resolved = resolveStyleValue(
+      'container.maxWidth',
+      new Map(),
+      'probe',
+      [],
+      'probe',
+      declared,
+    )
     expect(resolved.issues).toEqual([])
-    expect(resolved.value).toBe('container.maxWidth')
+    expect(resolved.value).toBe('var(--wb-container-maxWidth)')
+
+    // 표가 없으면(= 그 자리에서 primitives를 가리킬 수 없으면) **리터럴로 통과하지 않는다.**
+    // 침묵이 아니라 이슈가 되는 것이 T1의 요점이다.
+    const forbidden = resolveStyleValue('container.maxWidth', new Map(), 'probe')
+    expect(forbidden.value).toBeNull()
+    expect(forbidden.issues.map((issue) => issue.code)).toEqual(['bad-style-value'])
   })
 
-  it('docs의 읽기 폭은 리터럴이고 :root의 변수는 아무도 안 가리킨다', () => {
+  it('docs의 읽기 폭은 한 곳이고 규칙이 :root의 변수를 가리킨다', () => {
     const { theme } = resolveTheme(systemTheme('docs')!)
     const css = compileTheme(theme!)
 
     expect(css).toContain('--wb-container-maxWidth: 720px;')
-    expect(css).toContain('max-width: 720px;')
-    // 가리킬 문법이 없으므로 참조가 0건이다. 이 수가 늘면 위 케이스가 함께 죽는다.
-    expect(css.match(/var\(--wb-container-maxWidth\)/g)).toBeNull()
+    expect(css).toContain('max-width: var(--wb-container-maxWidth);')
+    // 손으로 맞춘 중복이 사라졌다. `Text.variants.body`의 `68ch`는 다른 축이라 그대로다.
+    expect(css).not.toContain('max-width: 720px;')
+    expect(css).toContain('max-width: 68ch;')
   })
 })

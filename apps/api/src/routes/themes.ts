@@ -35,6 +35,26 @@
  *
  * ---
  *
+ * **어느 라우트가 경고를 싣는가 — 전수로 세고 판정했다** (P4c-1 재라 #4).
+ *
+ * 이 파일의 라우트는 일곱이고 **테마 문서를 해석(`resolveTheme`)하는 것은 둘뿐이다** —
+ * `POST /:projectId/themes`와 `PUT /:projectId/themes/:themeId`. 그 둘이 `warnings`를
+ * 싣는다. `themes-warning-routes.test.ts`가 이 파일의 소스를 훑어 그 수를 센다
+ * (P4a-3이 *"형제 가드를 지나지 않은 자리"*를 여섯 번 찾고 **다섯을 닫은 뒤 여섯째가
+ * 나왔다** — 손으로 센 수는 그렇게 틀린다).
+ *
+ * **나머지 다섯에 왜 안 싣는가.**
+ *
+ * | 라우트 | 판정 |
+ * |---|---|
+ * | `GET /:projectId/themes` · `DELETE …/:themeId` | 테마 문서를 해석하지 않는다. 실을 것이 없다 |
+ * | `GET …/themes/:themeId` (상세) | **소비자가 스스로 잴 수 있다.** 응답이 파생 문서와 `base`를 **둘 다** 싣는다(`toDetailResponse`) — 저작 UI가 `resolveTheme(theme, base)`를 그대로 부를 수 있다. 서버가 한 번 더 해석해 실으면 두 결과가 갈릴 자리가 생긴다 |
+ * | `GET /:projectId/theme` · `PUT /:projectId/theme` | 같은 이유이고 근거가 더 세다 — **소비자(캔버스)가 이미 자기가 해석한다**(`apps/web`의 `use-theme-css.ts`). 그 파일 주석이 *"두 번 해석하면 비용만이 아니라 두 결과가 갈릴 수 있는 자리가 생긴다"*고 적어 두었다. 대신 그쪽이 **경고를 삼키지 않도록** 고쳤다(P4c-1) — 앞서는 `theme === null`일 때만 콘솔에 남겼다 |
+ *
+ * **그래서 재라 #7의 답은 *"응답에 실려 오는 것까지"*다.** 화면 표시는 P4c-2의 몫이다.
+ *
+ * ---
+ *
  * **시스템 테마는 owner도 못 고친다(§6.10 — 읽기 전용).**
  *
  * 수정·삭제 대상이 `project_id IS NULL`이면 **403**이다. 404가 아닌 이유: 목록과 조회가
@@ -44,6 +64,7 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { partitionIssues } from '@wirebound/schema'
 import {
   ThemePatchSchema,
   mergeTheme,
@@ -57,6 +78,7 @@ import {
 import { projectGuard } from '../auth/roles'
 import { badRequest, conflict, forbidden, notFound, validationFailed } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
+import { withWarnings } from '../http/warnings'
 import { findDefaultLayout, updateLayoutTheme } from '../repos/layouts'
 import {
   ThemeNulByteError,
@@ -170,24 +192,40 @@ function resolveBase(theme: Theme): { base: Theme | undefined; missing: ThemeIss
 }
 
 /**
- * 게이트 2·3단계. 통과하면 아무것도 하지 않고, 실패하면 422로 던진다.
+ * 게이트 2·3단계. **`error`가 있으면 422로 던지고, 경고는 통과시켜 돌려준다.**
  *
  * **저장하는 것은 해석 결과가 아니라 들어온 파생 테마 그대로다(계획서 D2).**
  * `resolveTheme`은 여기서 *"이 문서가 실제로 서는가"*를 묻는 데만 쓴다 — 병합 결과는
  * §4.5의 스냅샷이 저장할 것이고 이 슬라이스 밖이다.
  *
- * **`resolveTheme`은 이슈가 하나라도 있으면 `theme`을 `null`로 낸다**(P4a-1의 D2).
- * 그 규칙을 그대로 쓰는 근거는 재라 #3의 답이다 — **오늘 `themes`의 이슈는 전부
- * `error`다**(`THEME_ISSUE_SEVERITY`). `themes`에 첫 `warning`이 생기는 날, 저 규칙과
- * 이 분기를 **함께** 고쳐야 한다: 그때는 경고만 있는 테마가 저장돼야 하고 응답이 그
- * 경고를 실어야 한다(페이지 쪽 `withWarnings`가 그 형식이다).
+ * ---
+ *
+ * **2026-08-11(P4c-1 T2): 이 함수가 예고된 대로 고쳐졌다. 지우지 않고 남긴다.**
+ *
+ * P4b-3까지 여기 적혀 있던 것: *"`resolveTheme`은 **이슈가 하나라도** 있으면 `theme`을
+ * `null`로 낸다(P4a-1의 D2). 그 규칙을 그대로 쓰는 근거는 재라 #3의 답이다 — 오늘
+ * `themes`의 이슈는 전부 `error`다. **`themes`에 첫 `warning`이 생기는 날, 저 규칙과 이
+ * 분기를 함께 고쳐야 한다:** 그때는 경고만 있는 테마가 저장돼야 하고 응답이 그 경고를
+ * 실어야 한다(페이지 쪽 `withWarnings`가 그 형식이다)."*
+ *
+ * **오늘이 그 날이고, 둘을 함께 고쳤다.** 하나만 고치면 경고가 저장을 못 지난다:
+ *
+ * | 무엇만 고치면 | 무슨 일이 나는가 |
+ * |---|---|
+ * | `resolveTheme`만 | 여기서 `issues.length > 0`이 그대로라 **경고 하나가 422다.** `theme`이 `null`이 아닌데도 저장에 도달하지 못한다 |
+ * | 여기만 | `resolveTheme`이 `theme: null`을 내지만 이 함수는 `issues`만 본다 — 저장은 지나가지만 **캔버스가 그 테마를 못 그린다**(`use-theme-css`가 `theme === null`에서 CSS를 비운다) |
+ *
+ * **선을 긋는 것은 `partitionIssues` 하나다** — `resolveTheme`이 쓰는 것과 같은 함수이고,
+ * 그 머리말이 *"이 선을 긋는 코드는 이 함수 하나뿐이어야 한다"*고 못박아 두었다.
  */
-function assertResolvable(theme: Theme): void {
+function assertResolvable(theme: Theme): ThemeIssue[] {
   const { base, missing } = resolveBase(theme)
   if (missing !== null) themeValidationFailed([missing])
 
   const { issues } = resolveTheme(theme, base)
-  if (issues.length > 0) themeValidationFailed(issues)
+  const { errors, warnings } = partitionIssues(issues)
+  if (errors.length > 0) themeValidationFailed(issues)
+  return warnings
 }
 
 /**
@@ -396,7 +434,7 @@ export function themeRoutes() {
       const body = parseBody(ThemeBody, request.body)
       const theme = body.theme as Theme
 
-      assertResolvable(theme)
+      const warnings = assertResolvable(theme)
 
       let record
       try {
@@ -408,7 +446,7 @@ export function themeRoutes() {
       }
 
       reply.code(201)
-      return toResponse(record)
+      return withWarnings(toResponse(record), warnings)
     })
 
     app.put('/:projectId/themes/:themeId', { preHandler: projectGuard('owner') }, async (request) => {
@@ -417,7 +455,7 @@ export function themeRoutes() {
       const theme = body.theme as Theme
 
       await requireWritableTheme(app, projectId, themeId)
-      assertResolvable(theme)
+      const warnings = assertResolvable(theme)
 
       let record
       try {
@@ -434,7 +472,7 @@ export function themeRoutes() {
       // 위 확인과 이 UPDATE 사이에 지워지는 경합. `repos/projects.ts`의 `updateProject`와
       // 같은 취급이다 — 500이 아니라 404다.
       if (!record) throw notFound('테마를 찾을 수 없습니다')
-      return toResponse(record)
+      return withWarnings(toResponse(record), warnings)
     })
 
     app.delete('/:projectId/themes/:themeId', { preHandler: projectGuard('owner') }, async (request, reply) => {

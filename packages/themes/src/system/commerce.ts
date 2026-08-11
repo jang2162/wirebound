@@ -32,17 +32,18 @@ import type { Theme } from '../spec/theme'
  *
  * ---
  *
- * **`primitives`를 스타일 값에서 가리키지 않는다 — 가리킬 문법이 없다.**
+ * **`primitives`를 스타일 값이 가리킨다** (2026-08-11, P4c-1 T1이 열었다).
  *
- * `primitives.container.maxWidth`는 `:root`에 `--wb-container-maxWidth`로 나가지만,
- * **참조 이름공간 일곱(`palette`·`semantic`·`space`·`radius`·`shadow`·`typography`·`motion`)에
- * `container`가 없다.** 그래서 `maxWidth: "container.maxWidth"`라고 쓰면 참조로 인식되지
- * 않고 **리터럴 그대로** CSS에 실린다(`max-width: container.maxWidth` — 무효 선언).
- * `var(…)`로 우회하는 길도 막혀 있다(`rejectFunctions`가 스타일 값의 함수를 거부한다).
+ * `Section.parts.inner.maxWidth: 'container.maxWidth'`가 `primitives`의 1200px을 가리킨다.
+ * **P4b-3까지는 반대였고, 지우지 않고 남긴다:**
  *
- * **재서 확인했다** — `admin`의 컴파일 결과에 그 무효 선언이 실제로 들어 있다. 여기서는
- * 같은 값을 리터럴로 두 번 적는다(`primitives`에 한 번, `Section.parts.inner`에 한 번).
- * 어긋난 자리는 보고에 남긴다 — `admin`을 고치지 않는다(작성 계약 8).
+ * > *"**참조 이름공간 일곱에 `container`가 없다.** 그래서 `maxWidth: "container.maxWidth"`라고
+ * > 쓰면 참조로 인식되지 않고 **리터럴 그대로** CSS에 실린다(무효 선언). …
+ * > 여기서는 같은 값을 리터럴로 두 번 적는다(`primitives`에 한 번,
+ * > `Section.parts.inner`에 한 번)."*
+ *
+ * T1이 스타일 전용 이름공간 셋(`container`·`grid`·`section`)을 열었다. 컴파일 결과는
+ * `max-width: 1200px` → `max-width: var(--wb-container-maxWidth)`이고 **계산값은 같다.**
  */
 export const COMMERCE_THEME: Theme = {
   meta: {
@@ -227,8 +228,8 @@ export const COMMERCE_THEME: Theme = {
     Section: {
       structure: 'contained',
       base: { bg: 'semantic.canvas', paddingY: 'space.14' },
-      // `container.maxWidth`가 아니라 리터럴이다 — 파일 머리말의 이유.
-      parts: { inner: { maxWidth: '1200px', paddingX: 'space.6' } },
+      // **P4c-1 T1이 이 참조를 열었다** — 파일 머리말의 이유가 낡았다.
+      parts: { inner: { maxWidth: 'container.maxWidth', paddingX: 'space.6' } },
       variants: {
         hero: { bg: 'semantic.primarySoft', paddingY: 'space.20' },
         muted: { bg: 'semantic.surface' },

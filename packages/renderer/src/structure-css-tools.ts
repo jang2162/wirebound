@@ -33,6 +33,12 @@
  * 경로에서 나오므로 `node.`으로 시작하는 경로가 생기지 않는 한 이 이름공간에 들어올 수
  * 없고, `primitives`의 경로는 스키마가 닫아 두었다(container·grid·section·breakpoints).
  * `test/structure-css.test.ts`가 두 이름 집합이 겹치지 않는 것을 대조한다.
+ *
+ * > **2026-08-11(P4c-1 T1): `--wb-container-*`·`--wb-grid-*`·`--wb-section-*`를 읽는
+ * > 코드가 처음 생겼다** — **테마의 컴포넌트 스타일**이다(`STYLE_PRIMITIVE_NAMESPACES`).
+ * > P4b-3까지 그 이름들을 읽는 코드는 저장소 전체에 **0건**이었다. 위 경고는 그대로
+ * > 유효하다: **구조 기본 CSS가 그 이름을 읽으면 안 된다.** 읽는 순간 사이트 골격 상수
+ * > (12칼럼)를 이 노드의 열 수로 착각하게 되고, 그것이 이 접두어를 만든 이유다.
  */
 export const NODE_VAR_PREFIX = '--wb-node-'
 

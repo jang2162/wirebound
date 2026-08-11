@@ -513,23 +513,31 @@ describe('§6.0의 약속과 마케팅 골격', () => {
   })
 
   /**
-   * **`primitives`를 컴포넌트 스타일이 가리킬 수 없다 — 내가 재서 알았다.**
+   * **뒤집힌 케이스다. 지우지 않고 무엇이 언제 왜 바뀌었는지 남긴다.**
    *
-   * `TOKEN_NAMESPACES`에 `container`·`grid`·`section`이 없어 `container.maxWidth`가
-   * **참조로 인식되지 않고 리터럴로 실린다.** `admin`이 그 자리를 그렇게 적어 두었고,
-   * 컴파일 결과에 `max-width: container.maxWidth;`라는 무효 선언이 이슈 0건으로 나간다.
+   * **P4b-3까지 단언하던 것:** *"`TOKEN_NAMESPACES`에 `container`·`grid`·`section`이 없어
+   * `container.maxWidth`가 참조로 인식되지 않고 리터럴로 실린다. `admin`이 그 자리를
+   * 그렇게 적어 두었고, 컴파일 결과에 `max-width: container.maxWidth;`라는 **무효 선언이
+   * 이슈 0건으로** 나간다. **이 테마는 그래서 리터럴을 쓴다.**"*
    *
-   * **이 테마는 그래서 리터럴을 쓴다.** 이 케이스는 두 사실을 함께 못박는다 —
-   * (가) `admin`에 그 무효 선언이 실제로 있다, (나) 이 테마에는 없다. §16의 입력이다.
+   * **2026-08-11(P4c-1 T1)이 그 전제를 없앴다.** 스타일 전용 이름공간 셋이 열려
+   * `admin`의 무효 선언 둘이 `var()`가 됐고, 이 테마도 리터럴 우회를 그만두었다.
+   * 그래서 이제 **둘이 같은 문법을 쓴다** — 그것을 못박는다.
+   *
+   * 폭이 다르다는 사실은 위 `컨테이너 폭과 섹션 리듬이 admin과 다르다`가 계속 지킨다.
    */
-  it('admin은 primitives를 가리켜 무효 선언을 내고 이 테마는 안 낸다', () => {
+  it('admin과 이 테마가 같은 문법으로 primitives를 가리킨다', () => {
     const adminCss = compileTheme(resolved('admin'))
-    expect(adminCss).toContain('max-width: container.maxWidth;')
-    expect(adminCss).toContain('gap: grid.gap;')
+    expect(adminCss).toContain('max-width: var(--wb-container-maxWidth);')
+    expect(adminCss).toContain('gap: var(--wb-grid-gap);')
+    // 무효 선언이 사라졌다 — 이것이 P4c-1 T1의 산출물이다.
+    expect(adminCss).not.toContain('max-width: container.maxWidth;')
+    expect(adminCss).not.toContain('gap: grid.gap;')
 
     const css = compileTheme(resolved(MARKETING))
-    expect(css).not.toContain('container.maxWidth')
-    expect(css).not.toContain('grid.gap')
-    expect(css).toContain('max-width: 1200px;')
+    expect(css).toContain('max-width: var(--wb-container-maxWidth);')
+    expect(css).toContain('--wb-container-maxWidth: 1200px;')
+    // 손으로 맞춘 중복이 사라졌다.
+    expect(css).not.toContain('max-width: 1200px;')
   })
 })

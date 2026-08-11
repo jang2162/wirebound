@@ -93,13 +93,27 @@ function makeIssue(
  * 둘이고, 그 둘이 각자 `filter`를 다시 쓰면 한쪽만 고쳐지는 순간 갈린다.
  *
  * 각 배열은 **원래 순서를 지킨다** — 첫 이슈가 근원인 경우가 흔하다.
+ *
+ * ---
+ *
+ * **`severity`를 가진 것이면 무엇이든 받는다 — 제네릭으로 넓혔다**(2026-08-11, P4c-1 T2).
+ *
+ * `packages/themes`의 `ThemeIssue`가 **코드 유니온을 일부러 갈라 두었기 때문**이다
+ * (P4a-2의 결정: 평행 유니온을 만들면 따로 썩는다). 그래서 `ValidationIssue[]`로 못박아
+ * 두면 테마 쪽이 이 함수를 부를 수 없고, **선을 긋는 코드가 하나여야 한다**는 위 규칙이
+ * 바로 그 자리에서 깨진다 — 실제로 `themes`에 첫 `warning`이 생긴 날 그 일이 났다.
+ *
+ * 넓힌 것은 **입력의 타입뿐이고 판정은 그대로다.** `T`가 그대로 나가므로 부르는 쪽이
+ * 자기 이슈 타입을 잃지 않는다(`ThemeIssue[]`를 넣으면 `ThemeIssue[]`가 나온다).
  */
-export function partitionIssues(issues: readonly ValidationIssue[]): {
-  errors: ValidationIssue[]
-  warnings: ValidationIssue[]
+export function partitionIssues<T extends { severity: IssueSeverity }>(
+  issues: readonly T[],
+): {
+  errors: T[]
+  warnings: T[]
 } {
-  const errors: ValidationIssue[] = []
-  const warnings: ValidationIssue[] = []
+  const errors: T[] = []
+  const warnings: T[] = []
   for (const issue of issues) {
     if (issue.severity === 'warning') warnings.push(issue)
     else errors.push(issue)

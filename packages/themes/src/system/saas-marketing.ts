@@ -28,18 +28,20 @@ import type { Theme } from '../spec/theme'
  *
  * ---
  *
- * **`primitives`를 컴포넌트 스타일에서 가리키지 않는다 — 가리킬 수가 없다.**
+ * **`primitives`를 컴포넌트 스타일이 가리킨다** (2026-08-11, P4c-1 T1이 열었다).
  *
- * `admin`이 `Section.parts.inner`에 `maxWidth: 'container.maxWidth'`, `Grid.base`에
- * `gap: 'grid.gap'`을 적었는데 **둘 다 참조로 해석되지 않는다.** `TOKEN_NAMESPACES`에
- * `container`·`grid`·`section`이 없어(`resolve/tokens.ts`) `isTokenReference`가 거짓이고,
- * `EMBEDDED_REFERENCE`도 같은 목록을 쓰므로 **값이 리터럴로 그대로 실린다** — 컴파일 결과에
- * `max-width: container.maxWidth;`·`gap: grid.gap;`이라는 무효 선언이 나가고 이슈는 0건이다
- * (내가 `admin`을 컴파일해서 봤다). `var(--wb-container-maxWidth)`로 쓰는 길도 없다 —
- * `maxWidth`의 함수 허용 목록이 비어 있어 `var(`가 거부된다.
+ * `Section.parts.inner.maxWidth`가 `'container.maxWidth'`이고, 그 값은 `primitives`에
+ * 한 번만 적힌다. **P4b-3까지는 반대였고, 지우지 않고 남긴다:**
  *
- * **그래서 이 테마는 그 자리에 리터럴을 쓴다**(`maxWidth: '1200px'`). `primitives`의 같은
- * 값과 손으로 맞춰야 하는 중복이고, 그 부채는 보고에 적었다.
+ * > *"`admin`이 `Section.parts.inner`에 `maxWidth: 'container.maxWidth'`, `Grid.base`에
+ * > `gap: 'grid.gap'`을 적었는데 **둘 다 참조로 해석되지 않는다.** `TOKEN_NAMESPACES`에
+ * > `container`·`grid`·`section`이 없어 `isTokenReference`가 거짓이고 … 값이 리터럴로
+ * > 그대로 실린다 — `max-width: container.maxWidth;`라는 무효 선언이 나가고 이슈는 0건이다.
+ * > **그래서 이 테마는 그 자리에 리터럴을 쓴다**(`maxWidth: '1200px'`)."*
+ *
+ * T1이 **스타일 전용** 이름공간 셋을 열었다(`STYLE_PRIMITIVE_NAMESPACES` — 토큰 표와
+ * 표가 다르므로 `TOKEN_NAMESPACES`에 더하지 않았다). 컴파일 결과는
+ * `max-width: 1200px` → `max-width: var(--wb-container-maxWidth)`이고 **계산값은 같다.**
  */
 export const SAAS_MARKETING_THEME: Theme = {
   meta: {
@@ -259,8 +261,8 @@ export const SAAS_MARKETING_THEME: Theme = {
         inner: {
           position: 'relative',
           zIndex: 1,
-          // `container.maxWidth`를 가리킬 수 없다 — 머리말의 판정을 보라. 리터럴이다.
-          maxWidth: '1200px',
+          // **P4c-1 T1이 이 참조를 열었다.** 머리말의 판정이 낡았다 — 거기 적어 두었다.
+          maxWidth: 'container.maxWidth',
           marginX: 'auto',
           paddingX: 'space.6',
         },

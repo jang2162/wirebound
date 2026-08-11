@@ -138,6 +138,24 @@ function compileOnce(source: ThemeSource): CompiledCss {
     return { structure, theme: '', resolved: null }
   }
 
+  /**
+   * **경고만 있는 테마는 선다 — 그러나 삼키지 않는다** (P4c-1 T2).
+   *
+   * `resolveTheme`이 *"이슈가 하나라도 있으면 `null`"*에서 *"**`error`가** 있으면 `null`"*로
+   * 바뀌었다(`themes`에 첫 `warning`이 생겼다). 위 분기만 있으면 경고가 붙은 테마는
+   * `theme !== null`이라 **아무 데도 안 남는다** — 그 침묵이 바로 `suspicious-literal`과
+   * `node-handle-overwrite`가 없애려던 것이다.
+   *
+   * `error`와 같은 채널(콘솔)을 쓰되 `warn`으로 낸다. 사용자용 표시는 저작 UI(P4c-2)의
+   * 몫이라는 재라 #12의 판정은 그대로다 — **여기서 화면을 만들지 않는다.**
+   */
+  if (issues.length > 0) {
+    console.warn(
+      `테마는 그렸지만 경고가 있습니다 (${issues.length}건)`,
+      issues.map((issue) => `${issue.path}: ${issue.message}`),
+    )
+  }
+
   const resolved = theme as ResolvedTheme
   return { structure, theme: compileTheme(resolved), resolved }
 }

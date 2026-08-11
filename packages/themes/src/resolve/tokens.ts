@@ -49,6 +49,11 @@ export type TokenNamespace = (typeof TOKEN_NAMESPACES)[number]
  * 넓힌 것은 오타를 잡기 위해서다. 좁게 두면 선언될 수 없는 이름(예: 한글)을 가리키는
  * 참조가 **참조로 인식되지 않아 리터럴로 조용히 통과한다** — 실제로 그 형태를 먼저
  * 짰다가 케이스가 이슈 0건을 내는 것을 보고 넓혔다.
+ *
+ * > **반대 방향의 함정이 `resolve/style.ts`의 `REFERENCE_SHAPED`에 있다**(P4c-1 T3).
+ * > 그쪽은 **이름공간이 목록 밖**일 때 도는 판정이라 멀쩡한 CSS 리터럴이 걸릴 수 있고,
+ * > 그래서 일부러 **좁게** 두었다. 여기가 넓은 것은 이름공간이 목록 **안**이라 참조라는
+ * > 것이 모호하지 않기 때문이다 — 두 규칙이 반대인 것이 실수가 아니다.
  */
 const REFERENCE = new RegExp(`^(${TOKEN_NAMESPACES.join('|')})\\.\\S+$`)
 

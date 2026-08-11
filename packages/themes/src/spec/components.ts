@@ -3,9 +3,10 @@ import type { ComponentDef } from '@wirebound/schema'
 import { z } from 'zod'
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
-import { styleDeclarations } from '../resolve/style'
+import { styleDeclarations, type PrimitiveTable } from '../resolve/style'
 import type { TokenTable } from '../resolve/tokens'
 import type { CssDeclaration, ResolvedComponent, ResolvedLayer } from '../resolved'
+import { handleOverwriteMessage, overwrittenHandles } from './handles'
 
 /** 스타일 어휘 → 값. 이름이 §6.8 안인지는 zod가 아니라 `styleDeclarations`가 본다. */
 const StyleMapSchema = z.record(z.string(), z.union([z.string(), z.number()]))
@@ -82,6 +83,7 @@ export function checkThemeComponents(
   components: Record<string, ThemeComponent>,
   tokens: TokenTable,
   breakpoints: readonly string[],
+  primitives: PrimitiveTable = new Set(),
 ): {
   structures: Map<string, string>
   resolved: Map<string, ResolvedComponent>
@@ -113,12 +115,12 @@ export function checkThemeComponents(
       structures.set(type, spec.structure)
     }
 
-    const base = checkStyleMap(spec.base, tokens, `${path}.base`)
-    const parts = checkParts(spec.parts, def, tokens, `${path}.parts`)
+    const base = checkStyleMap(spec.base, tokens, `${path}.base`, primitives, type, null)
+    const parts = checkParts(spec.parts, def, tokens, `${path}.parts`, primitives)
     issues.push(...base.issues, ...parts.issues)
 
-    const variants = checkNamedLayers(spec.variants, def, def.variants, 'unknown-variant', tokens, `${path}.variants`, '변형')
-    const states = checkNamedLayers(spec.states, def, def.states, 'unknown-state', tokens, `${path}.states`, '상태')
+    const variants = checkNamedLayers(spec.variants, def, def.variants, 'unknown-variant', tokens, `${path}.variants`, '변형', primitives)
+    const states = checkNamedLayers(spec.states, def, def.states, 'unknown-state', tokens, `${path}.states`, '상태', primitives)
     const responsive = checkNamedLayers(
       spec.responsive,
       def,
@@ -127,6 +129,7 @@ export function checkThemeComponents(
       tokens,
       `${path}.responsive`,
       '브레이크포인트',
+      primitives,
     )
     issues.push(...variants.issues, ...states.issues, ...responsive.issues)
 
@@ -152,6 +155,7 @@ function checkParts(
   def: ComponentDef,
   tokens: TokenTable,
   path: string,
+  primitives: PrimitiveTable,
 ): { css: Map<string, readonly CssDeclaration[]>; issues: ThemeIssue[] } {
   const css = new Map<string, readonly CssDeclaration[]>()
   const issues: ThemeIssue[] = []
@@ -162,7 +166,7 @@ function checkParts(
       )
       continue
     }
-    const declared = checkStyleMap(style, tokens, `${path}.${part}`)
+    const declared = checkStyleMap(style, tokens, `${path}.${part}`, primitives, def.type, part)
     issues.push(...declared.issues)
     css.set(part, declared.css)
   }
@@ -177,6 +181,7 @@ function checkNamedLayers(
   tokens: TokenTable,
   path: string,
   label: string,
+  primitives: PrimitiveTable,
 ): { layers: Map<string, ResolvedLayer>; issues: ThemeIssue[] } {
   const out = new Map<string, ResolvedLayer>()
   const issues: ThemeIssue[] = []
@@ -186,7 +191,7 @@ function checkNamedLayers(
       issues.push(issue(code, `${path}.${name}`, `${owner} 선언하지 않은 ${label}입니다: ${name}`))
       continue
     }
-    const resolvedLayer = checkLayer(layer, def, tokens, `${path}.${name}`)
+    const resolvedLayer = checkLayer(layer, def, tokens, `${path}.${name}`, primitives)
     issues.push(...resolvedLayer.issues)
     out.set(name, { base: resolvedLayer.base, parts: resolvedLayer.parts })
   }
@@ -199,6 +204,7 @@ function checkLayer(
   def: ComponentDef,
   tokens: TokenTable,
   path: string,
+  primitives: PrimitiveTable,
 ): ResolvedLayer & { issues: ThemeIssue[] } {
   const issues: ThemeIssue[] = []
   const base: CssDeclaration[] = []
@@ -208,13 +214,13 @@ function checkLayer(
   // 이슈도 없이 없어진다** — 심어서 그 갈래를 봤다. 항목마다 바로 넘기면 그 자리가 없다.
   for (const [key, value] of Object.entries(layer)) {
     if (key === 'base' || key === 'parts') continue
-    const declared = styleDeclarations(key, value, tokens, `${path}.${key}`)
-    issues.push(...declared.issues)
+    const declared = styleDeclarations(key, value, tokens, `${path}.${key}`, primitives)
+    issues.push(...declared.issues, ...handleIssues(def.type, null, key, `${path}.${key}`))
     base.push(...declared.css)
   }
 
-  const explicit = checkStyleMap(layer.base, tokens, `${path}.base`)
-  const parts = checkParts(layer.parts, def, tokens, `${path}.parts`)
+  const explicit = checkStyleMap(layer.base, tokens, `${path}.base`, primitives, def.type, null)
+  const parts = checkParts(layer.parts, def, tokens, `${path}.parts`, primitives)
   issues.push(...explicit.issues, ...parts.issues)
   base.push(...explicit.css)
   return { base, parts: parts.css, issues }
@@ -224,13 +230,38 @@ function checkStyleMap(
   style: ThemeStyleMap | undefined,
   tokens: TokenTable,
   path: string,
+  primitives: PrimitiveTable,
+  component: string,
+  part: string | null,
 ): { css: CssDeclaration[]; issues: ThemeIssue[] } {
   const css: CssDeclaration[] = []
   const issues: ThemeIssue[] = []
   for (const [prop, value] of Object.entries(style ?? {})) {
-    const declared = styleDeclarations(prop, value, tokens, `${path}.${prop}`)
-    issues.push(...declared.issues)
+    const declared = styleDeclarations(prop, value, tokens, `${path}.${prop}`, primitives)
+    issues.push(...declared.issues, ...handleIssues(component, part, prop, `${path}.${prop}`))
     css.push(...declared.css)
   }
   return { css, issues }
+}
+
+/**
+ * **노드 손잡이를 덮어쓰는지 본다**(P4c-1 T4). 표와 판정은 `spec/handles.ts`가 소유한다.
+ *
+ * **값이 무엇인지는 보지 않는다.** 손잡이를 죽이는 것은 값이 아니라 **선언이 존재한다는
+ * 사실**이다 — `flex-direction: var(--wb-node-flex-direction, row)`를 덮는 것은 뒤에 오는
+ * 같은 프로퍼티의 아무 선언이고, 그 값이 우연히 같아도 노드의 prop은 더 이상 안 읽힌다.
+ *
+ * **`variants`·`states`·`responsive`에서도 낸다.** 그 층의 셀렉터는 속성이 하나 더 붙어도
+ * 특이도가 같고(둘 다 (0,2,0)) 테마 시트가 뒤에 오므로 **그 층이 켜지는 순간 똑같이
+ * 이긴다.** 층을 빼면 *"기본에는 안 적고 `hover`에만 적었다"*가 침묵으로 남는다.
+ */
+function handleIssues(
+  component: string,
+  part: string | null,
+  prop: string,
+  path: string,
+): ThemeIssue[] {
+  return overwrittenHandles(component, part, prop).map((handle) =>
+    issue('node-handle-overwrite', path, handleOverwriteMessage(handle, prop)),
+  )
 }

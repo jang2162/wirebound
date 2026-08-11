@@ -52,6 +52,8 @@ import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
+// **P4c-1이 `http/warnings.ts`로 옮겼다** — `routes/themes.ts`가 두 번째 소비자가 됐다.
+import { withWarnings } from '../http/warnings'
 import { OpsBody } from '../http/patch-ops'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
 import { MenuNodeNotFoundError, deletePage, findPageById, insertPage, updatePage, type PageRecord } from '../repos/pages'
@@ -119,21 +121,6 @@ function toApiError(outcome: Extract<EditOutcome, { ok: false }>, baseSeq: numbe
     case 'nul-byte':
       return badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
   }
-}
-
-/**
- * 저장을 막지 않은 이슈를 응답에 얹는다. **비어 있으면 키 자체를 만들지 않는다.**
- *
- * 이유는 `clientOpId`를 조건부로 싣는 것과 같다 — 없던 키가 늘 붙으면 응답 형태가
- * 통째로 바뀐 것이 되고, README가 못박은 *"페이지 여덟 키"*(세 응답이 같은 키 집합)가
- * 경고 없는 평범한 저장에서도 깨진다. 경고가 실제로 있을 때만 아홉 번째 키가 붙는다.
- *
- * **삼키지 않는다.** 경고를 응답에 안 실으면 severity를 만든 이유가 사라진다 —
- * 저장은 됐는데 *"적은 값이 버려졌다"*를 아무도 모른다.
- */
-function withWarnings<T extends object>(body: T, warnings: ValidationIssue[]): T | (T & { warnings: ValidationIssue[] }) {
-  if (warnings.length === 0) return body
-  return { ...body, warnings }
 }
 
 /** API 계약이 노출하는 필드만 담는다 — 저장소의 `projectId`는 응답에 싣지 않는다(경로에 이미 있다). */

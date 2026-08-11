@@ -34,6 +34,15 @@ export {
   styleDeclarations,
 } from './resolve/style'
 export { resolveStyleValue } from './resolve/style'
+// P4c-1 T1 — 스타일 값이 `primitives`를 가리키는 문법. `STYLE_PRIMITIVE_NAMESPACES`는
+// `TOKEN_NAMESPACES`와 **표가 다른 두 문법**이라 갈라 두었다.
+export type { PrimitiveTable } from './resolve/style'
+export { STYLE_PRIMITIVE_NAMESPACES, isPrimitiveReference } from './resolve/style'
+
+// P4c-1 T4 — 노드 손잡이 표. **`apps/web`의 대조 케이스가 이것을 렌더러의 구조 기본
+// CSS와 통째로 비교한다** — 이 패키지는 `renderer`를 볼 수 없다(§3.3).
+export type { NodeHandle } from './spec/handles'
+export { NODE_HANDLES, coveredProperties, overwrittenHandles } from './spec/handles'
 
 export type { ThemePrimitives } from './spec/primitives'
 export { PrimitivesSchema, checkPrimitives } from './spec/primitives'

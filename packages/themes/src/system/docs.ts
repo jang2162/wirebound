@@ -19,25 +19,30 @@ import type { Theme } from '../spec/theme'
  *
  * ---
  *
- * ## 읽기 폭을 어디에 적었는가 — **두 곳이고, 그 둘이 이어져 있지 않다**
+ * ## 읽기 폭을 어디에 적었는가 — **이제 한 곳이다** (2026-08-11, P4c-1 T1)
  *
- * `primitives.container.maxWidth: '720px'`는 §6.4가 시키는 자리다. 그런데 **그 값을 스타일이
- * 가리킬 문법이 없다.**
+ * `primitives.container.maxWidth: '720px'` 하나가 그 값의 유일한 자리이고,
+ * `Section.parts.inner.maxWidth`가 `'container.maxWidth'`로 그것을 가리킨다.
  *
- * - 토큰 참조의 이름공간은 일곱뿐이다(`palette`·`semantic`·`space`·`radius`·`shadow`·
- *   `typography`·`motion` — `resolve/tokens.ts`의 `TOKEN_NAMESPACES`). `container`는 없다.
- * - 그리고 `resolveTheme`이 `checkThemeComponents`에 **`tokens.table`만** 넘긴다
- *   (`resolve/index.ts`). 즉 `primitives`는 스타일 값이 볼 수 있는 표에 **들어가지 않는다.**
- * - `var(--wb-container-maxWidth)`로 적는 길도 막혀 있다 — `resolveStyleValue`가 허용 함수
- *   목록 밖의 함수를 이슈로 낸다(`maxWidth`의 허용 목록은 비어 있다).
+ * **P4b-3까지는 그렇지 않았다. 지우지 않고 무엇이 왜 바뀌었는지 남긴다:**
  *
- * **그래서 `Section.parts.inner.maxWidth`에 `'720px'`을 리터럴로 적었다.** 같은 수가 두 곳에
- * 있고 **어긋나도 아무것도 안 죽는다.** 이것은 이 테마의 결함이 아니라 규격의 구멍이고,
- * 아래 "재지 못한 것 / 못 한 것"에 근거와 함께 적었다.
+ * > *"`primitives.container.maxWidth: '720px'`는 §6.4가 시키는 자리다. 그런데 **그 값을
+ * > 스타일이 가리킬 문법이 없다.** 토큰 참조의 이름공간은 일곱뿐이고 `container`는 없다.
+ * > 그리고 `resolveTheme`이 `checkThemeComponents`에 `tokens.table`만 넘긴다. …
+ * > **그래서 `Section.parts.inner.maxWidth`에 `'720px'`을 리터럴로 적었다.** 같은 수가 두
+ * > 곳에 있고 **어긋나도 아무것도 안 죽는다.**"*
  *
- * > **`admin`은 그 자리에 `maxWidth: 'container.maxWidth'`라고 적어 두었다. 그것이 참조로
- * > 풀리지 않는다** — 컴파일된 CSS에 `max-width: container.maxWidth;`가 그대로 실린다
- * > (내가 쟀다). `admin`을 고치지 않는다(작성 계약 8·D7). 보고로 넘긴다.
+ * **P4b-3 이월이 바로 이 중복을 병의 증거로 지목했다** — *"`docs`가 읽기 폭 720px을 두 곳에
+ * 손으로 적은 것이 그 증거다. 문법이 있었으면 한 곳이다."* P4c-1 T1이 스타일 전용
+ * 이름공간 셋(`container`·`grid`·`section`)을 열어 그 문법을 만들었고, 여기가 그것을 쓰는
+ * 자리다. 컴파일 결과는 `max-width: 720px` → `max-width: var(--wb-container-maxWidth)`이고
+ * **계산값은 같다**(`:root`가 그 변수에 `720px`을 낸다).
+ *
+ * > **그리고 이 파일이 그 함정의 교과서였다.** 위 문단이 *"`admin`이 `container.maxWidth`를
+ * > 적었는데 풀리지 않는다"*고 규탄해 놓고, 같은 파일 200줄 아래에서 `admin`의
+ * > `gap: 'grid.gap'`을 **그대로 복사했다**(P4b-3의 ③이 찾아 `'space.5'`로 고쳤다).
+ * > *산문 경고는 복사를 막지 못한다* — 그것을 잡은 것은
+ * > `packages/themes/test/system-unresolved-literals.test.ts`의 **수 케이스**였다.
  *
  * **읽기 폭은 사실 세 층이다.** 컨테이너(720px)가 칼럼을 자르고, `Text`의 `body` 변형이
  * `maxWidth: '68ch'`로 **글자 수 기준의 행 길이**를 다시 자른다. 세리프 17px에서 68ch가
@@ -183,8 +188,8 @@ export const DOCS_THEME: Theme = {
    * (`spec/primitives.ts`가 고정 목록이 아니라고 적어 두었다).
    */
   primitives: {
-    // ⚠️ 아래 `Section.parts.inner.maxWidth`와 **손으로 맞춘 값이다.** 가리킬 문법이 없다 —
-    // 근거는 이 파일 머리말의 "읽기 폭을 어디에 적었는가".
+    // **읽기 폭 720px을 적는 자리는 이제 여기 하나다**(P4c-1 T1). `Section.parts.inner`가
+    // `'container.maxWidth'`로 이것을 가리킨다 — 아래 "읽기 폭을 어디에 적었는가"를 보라.
     container: { maxWidth: '720px', gutter: 'space.6' },
     grid: { columns: 12, gap: 'space.6' },
     section: { paddingY: 'space.10', paddingYCompact: 'space.5' },
@@ -223,7 +228,7 @@ export const DOCS_THEME: Theme = {
       parts: {
         // `marginX: 'auto'`가 없으면 좁힌 칼럼이 왼쪽에 붙는다. `admin`에는 이 줄이 없다 —
         // 1440px 컨테이너는 대개 화면을 다 쓰므로 가운데 정렬이 눈에 안 띈다.
-        inner: { maxWidth: '720px', marginX: 'auto', paddingX: 'space.6' },
+        inner: { maxWidth: 'container.maxWidth', marginX: 'auto', paddingX: 'space.6' },
       },
       variants: {
         hero: { bg: 'semantic.canvas', paddingY: 'space.16' },
