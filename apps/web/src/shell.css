@@ -872,7 +872,190 @@
    - **문서를 감싸는 상자에는 상속 속성을 걸지 마라.** 갤러리 상자가 그것이고
      `WRAPPERS`에 이미 있다. */
 
-/* W1 — 토큰 GUI. 여기에만 더해라. */
+/* W1 — 토큰 GUI. 여기에만 더해라.
+
+   **값에서 나오는 것은 전부 인라인 `style`이다** — 색 견본·간격 막대·타이포 미리보기는
+   초안의 값을 그대로 그려야 하므로 정적 CSS로 쓸 수 없다. 커스텀 프로퍼티로 우회하지
+   않은 것은 그 이름이 테마가 `:root`에 싣는 이름과 겹칠 수 있기 때문이다(`token-editor.tsx`의
+   ①이 남긴 계약: *"CSS 변수를 만들 일이 있으면 그 이름은 테마의 것이지 셸의 것이 아니다"*).
+   **그래서 이 절에는 값이 없는 껍데기만 있다.** */
+
+.wb-shell-token-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wb-shell-token-intro,
+.wb-shell-token-note,
+.wb-shell-token-empty {
+  margin: 0;
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-token-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.wb-shell-token-layer-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-token-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-shell-token-row,
+.wb-shell-token-add,
+.wb-shell-token-ref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 이름은 줄어들지 않는다 — 값 입력이 남는 폭을 가져간다. */
+.wb-shell-token-name {
+  flex: none;
+  min-width: 84px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--wb-shell-ink);
+}
+
+/* **엔진이 해석한 값을 보이는 자리**(파생). 배경색은 인라인으로 온다. */
+.wb-shell-token-swatch {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 3px;
+}
+
+.wb-shell-token-preview {
+  flex: none;
+  width: 20px;
+  height: 16px;
+  border: 1px solid var(--wb-shell-line);
+}
+
+.wb-shell-token-input {
+  flex: 1 1 90px;
+  min-width: 0;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-token-picker {
+  flex: none;
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+}
+
+.wb-shell-token-drop {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-token-kind,
+.wb-shell-token-meta {
+  font-size: 10px;
+  color: var(--wb-shell-muted);
+}
+
+/* **이슈가 아니다** — 엔진이 이 층에서 아무 말도 안 하는 자리를 화면이 말하는 것이다
+   (`token-editor.tsx`의 머리말). 그래서 `wb-shell-theme-issue-*`와 모양을 나눈다. */
+.wb-shell-token-warn {
+  flex: 1 1 100%;
+  font-size: 10px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-token-mini {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 10px;
+  color: var(--wb-shell-ink);
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-token-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--wb-shell-line);
+}
+
+.wb-shell-token-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+}
+
+.wb-shell-token-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--wb-shell-ink);
+}
+
+/* **`space.unit` 하나가 스물넷을 낳는 것을 보이는 자리**(D7). 막대의 폭이 곧 그 값이라
+   인라인으로 온다. */
+.wb-shell-token-derived {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-shell-token-derived-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wb-shell-token-bar {
+  height: 6px;
+  border-radius: 2px;
+  background: var(--wb-shell-accent);
+}
+
+/* 타이포 미리보기는 **글자 자체가 값이다** — 크기·굵기·자간이 인라인으로 온다. */
+.wb-shell-token-sample {
+  margin: 0;
+  overflow: hidden;
+  color: var(--wb-shell-ink);
+}
 
 /* W2 — JSON 에디터. 여기에만 더해라. */
 
