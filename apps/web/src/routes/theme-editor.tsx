@@ -67,6 +67,7 @@ import { ThemeIssueList, blocksSave } from '../theme/theme-issues'
 import { TokenEditor } from '../theme/token-editor'
 import { JsonEditor } from '../theme/json-editor'
 import { ThemeGallery } from '../theme/theme-gallery'
+import { ThemeIoPanel } from '../theme/theme-io-panel'
 
 /** 조회가 이유 없이 실패했을 때. 셸 쪽(`설계서를 열지 못했습니다`)과 다른 문장이다. */
 const UNKNOWN_FAILURE = '테마를 불러오지 못했습니다'
@@ -177,6 +178,8 @@ export function ThemeEditorRoute(): ReactElement {
  * 것이 아니다**(문서 노드는 `data-wb-component`를 쓴다. 렌더러만 그것을 낸다).
  */
 function ThemeEditor(props: { project: ProjectDetail; detail: ThemeDetail }): ReactElement {
+  const api = useApi()
+  const navigate = useNavigate()
   const store = useThemeDraftStore()
   const draft = useThemeDraft(store, (s) => s.draft)
   const base = useThemeDraft(store, (s) => s.base)
@@ -212,6 +215,23 @@ function ThemeEditor(props: { project: ProjectDetail; detail: ThemeDetail }): Re
         </Link>
         <ReadOnlyNotice project={props.project} detail={props.detail} canEdit={canEdit} />
         <SaveTools projectId={props.project.id} locked={locked} issues={resolved.issues} />
+        {/* **가져오기·내보내기·되돌리기**(P4c-3). **문서 전체에 대한 조작이라 저장 옆이다** —
+            왼쪽 칸은 절 단위 편집이다(`theme-io-panel.tsx`의 머리말).
+
+            **서버 호출은 여기서 준다**(D3) — 그 화면은 초안 스토어만 만진다. `DeriveButton`이
+            같은 자리에서 `createTheme`을 부르는 것과 같은 배치이고, `test/api-consumers.test.ts`가
+            *"테마 저작 셋은 이 파일에서만 불린다"*를 실행으로 지킨다. */}
+        <ThemeIoPanel
+          locked={locked}
+          // **`locked`와 다른 축이다** — 시스템 테마를 연 owner는 초안을 못 고치지만
+          // 새 테마는 만들 수 있다(`ReadOnlyNotice`가 `DeriveButton`을 그 조건으로 그린다).
+          canCreate={canEdit}
+          onImportAsNew={async (theme) => {
+            const created = await api.createTheme(props.project.id, { theme })
+            // **응답의 `id`가 주소다** — `DeriveButton`과 같다.
+            void navigate(`/projects/${props.project.id}/themes/${created.id}`)
+          }}
+        />
       </header>
 
       <section className="wb-shell-theme-edit" aria-label="테마 편집">
@@ -378,9 +398,13 @@ function DeriveButton(props: { project: ProjectDetail; detail: ThemeDetail }): R
  * 절이 하나 빠지면 **서버에서도 빠진다** — 그 사실이 D3의 *"초안 하나가 테마 문서 전체다"*를
  * 강제한다.
  *
- * **막는 조건 셋을 갈라 둔다:** 읽기 전용/권한(`locked`) · 저장할 것 없음(`beginSave`가
- * 판정한다) · `error` 있음(`blocksSave`). 셋을 한 불린으로 합치면 **왜 못 누르는지**를
- * 화면이 말할 수 없다.
+ * **막는 조건 넷을 갈라 둔다:** 읽기 전용/권한(`locked`) · 저장할 것 없음(`beginSave`가
+ * 판정한다) · `error` 있음(`blocksSave`) · **읽지 못한 JSON이 있음**(P4c-3 D6 — `beginSave`가
+ * 함께 판정한다). 넷을 한 불린으로 합치면 **왜 못 누르는지**를 화면이 말할 수 없다.
+ *
+ * **넷째가 P4c-3이 더한 것이고 W2가 남긴 공백을 닫는다.** 그 전에는 파싱 실패 중에도 버튼이
+ * 살아 있었고 눌리면 **마지막으로 읽힌 값**이 서버로 갔다 — P4c-3이 그것을 고치기 전에
+ * 재현했다(`ThemeDraftState.unreadable`의 주석).
  */
 function SaveTools(props: {
   projectId: string
@@ -393,6 +417,8 @@ function SaveTools(props: {
   const failure = useThemeDraft(store, (s) => s.saveFailure)
   const dirty = useThemeDraft(store, isDirty)
   const blocked = blocksSave(props.issues)
+  // **판정이 아니라 상태를 읽는다** — 막는 것은 `beginSave` 하나이고 화면은 *"왜"*만 말한다.
+  const unreadable = useThemeDraft(store, (s) => s.unreadable)
 
   async function save(): Promise<void> {
     // **`beginSave`가 관문이다.** 겹친 저장·읽기 전용·저장할 것 없음을 스토어가 한 번에
@@ -429,7 +455,9 @@ function SaveTools(props: {
       <button
         type="button"
         className="wb-shell-theme-action"
-        disabled={props.locked || !dirty || blocked || saveStatus === 'saving'}
+        disabled={
+          props.locked || !dirty || blocked || unreadable.length > 0 || saveStatus === 'saving'
+        }
         onClick={() => void save()}
       >
         {saveStatus === 'saving' ? '저장 중…' : '저장'}
@@ -439,6 +467,14 @@ function SaveTools(props: {
       {blocked && !props.locked && (
         <span className="wb-shell-theme-blocked" role="status">
           오류를 고쳐야 저장할 수 있습니다
+        </span>
+      )}
+      {/* **읽지 못한 절을 이름으로 말한다**(D6). 상자가 넷이라 *"어딘가 잘못됐다"*로는
+          어느 상자를 봐야 하는지 알 수 없다. 그 상자의 경보(*"JSON을 읽지 못했습니다"*)와
+          짝이 되는 문장이다. */}
+      {unreadable.length > 0 && !props.locked && (
+        <span className="wb-shell-theme-blocked" role="status">
+          읽지 못한 JSON이 있어 저장할 수 없습니다: {unreadable.join(', ')}
         </span>
       )}
       {failure !== null && failure.kind === 'signed-out' && <SignedOut />}

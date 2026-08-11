@@ -40,11 +40,14 @@
  * ---
  *
  * **`path`를 반드시 그린다**(D4 — *"그 경로로 자리를 짚어라"*). 목록만 있으면 어디를 고칠지
- * 사용자가 다시 찾는다. 오늘은 글자로만 짚는다 — **누르면 그 자리로 가는 것은 안 만들었다**
- * (토큰 GUI·JSON 에디터가 아직 없어 갈 자리가 없다. ②가 붙일 자리이고, 그때 이 컴포넌트가
- * `onSelectPath`를 받으면 된다).
+ * 사용자가 다시 찾는다. 오늘은 글자로만 짚는다 — **누르면 그 자리로 가는 것은 안 만들었다.**
+ *
+ * > **①이 적은 이유(*"토큰 GUI·JSON 에디터가 아직 없어 갈 자리가 없다"*)는 이제 거짓이다** —
+ * > ②가 둘 다 만들었고 **재료도 있다**(W1이 입력의 접근성 이름을 이슈의 `path`와 글자까지
+ * > 맞췄다). 그럼에도 P4c-3이 안 만들었다: 이 슬라이스의 본문은 가져오기/내보내기이고,
+ * > `onSelectPath`는 이월 §12.1-4에 **그대로 남는다.**
  */
-import type { ReactElement } from 'react'
+import { useId, type ReactElement } from 'react'
 import { partitionIssues } from '@wirebound/schema'
 import type { ThemeIssue, ThemeIssueCode } from '@wirebound/themes'
 
@@ -62,13 +65,36 @@ const WARNING_HINTS: Partial<Record<ThemeIssueCode, string>> = {
  * @param title 어디서 온 이슈인가. **두 채널이 있어서 필요하다**(P4c-1 이월 §2):
  *   편집 중 이슈는 **클라이언트가 계산한 것**이고 저장 응답의 `warnings`는 **서버가 판정한
  *   것**이다. 둘을 같은 상자에 뭉치면 갈릴 때 어느 쪽이 무엇인지 알 수 없다.
+ *
+ * ---
+ *
+ * **`title`이 눈에 보인다 — P4c-3이 고쳤다**(D7, 이월 §12.1-5).
+ *
+ * P4c-2 ③이 쟀다: 이 값이 **`aria-label`로만** 나가서 *"보조 기술은 가르고 눈은 못 가른다"*
+ * 였다(두 상자의 보이는 글자가 **글자까지 같았다**). ③의 판정: *"오늘 둘이 안 갈리므로
+ * 손해가 없지만, 갈리는 날 사용자는 '왜 같은 알림이 두 번 뜨지'로 읽는다."*
+ *
+ * **그 날이 이 슬라이스다.** 가져오기가 **셋째 상자**(*"가져오기가 거절한 이유"*)를 띄우고,
+ * 그것은 편집 중 검증과 **다른 문서**에 대한 판정이다 — 내가 안 고친 초안에 대한 이슈와
+ * 방금 거절된 파일에 대한 이슈가 한 화면에 함께 뜬다.
+ *
+ * **`aria-label`이 아니라 `aria-labelledby`다.** 제목이 화면에 있으면 `aria-label`은 같은
+ * 말을 두 번 하는 것이고, 보조 기술이 보이는 제목과 다른 이름을 읽게 될 자리를 만든다.
+ * `useId`를 쓰는 것은 이 상자가 한 화면에 여럿 뜨기 때문이다 — 제목 글자로 id를 만들면
+ * 같은 제목 둘이 충돌한다.
+ *
+ * **`<h2>`인 이유:** 라우트의 `<h1>`이 테마 이름이고 이 안의 `<h3>`가 severity 묶음이다.
  */
 export function ThemeIssueList(props: { title: string; issues: readonly ThemeIssue[] }): ReactElement | null {
+  const headingId = useId()
   const { errors, warnings } = partitionIssues(props.issues)
   if (errors.length === 0 && warnings.length === 0) return null
 
   return (
-    <section className="wb-shell-theme-issues" aria-label={props.title}>
+    <section className="wb-shell-theme-issues" aria-labelledby={headingId}>
+      <h2 className="wb-shell-theme-issues-title" id={headingId}>
+        {props.title}
+      </h2>
       {errors.length > 0 && (
         <IssueGroup
           className="wb-shell-theme-issue-group"

@@ -145,6 +145,18 @@ export function JsonEditor(props: { locked: boolean }): ReactElement | null {
   // **`base`를 든 것이 아니라 파생인지만 본다** — selector는 원시값을 내야 한다
   // (`use-theme-draft.tsx`의 규칙).
   const isDerived = useThemeDraft(store, (s) => s.base !== null)
+  /**
+   * **초안이 통째로 갈아 끼워진 횟수**(P4c-3 D5). 상자의 `key`에 실어 **다시 마운트**시킨다.
+   *
+   * 아래 `SectionEditor`의 교정(`editing.source !== value`)만으로는 **없는 절이 안 걸린다** —
+   * 가져오기 전후로 그 절이 둘 다 `undefined`면 참조가 같아서, 읽지 못한 글자를 든 상자가
+   * 새 문서 위에 그대로 남는다. 그러면 스토어의 `unreadable`(가져오기가 비운다)과 화면이
+   * 갈리고, **사실 2가 그 구석에서 되살아난다.**
+   *
+   * `putSection`은 이 수를 안 올리므로 **타자 중에는 다시 마운트되지 않는다** — W2가 막아
+   * 둔 것(*"내가 친 글자를 왕복으로 다시 포맷하지 않는다"*)이 그대로 산다.
+   */
+  const draftEpoch = useThemeDraft(store, (s) => s.draftEpoch)
 
   if (!hasDraft) return null
 
@@ -157,7 +169,7 @@ export function JsonEditor(props: { locked: boolean }): ReactElement | null {
         </p>
       )}
       {SECTIONS.map((spec) => (
-        <SectionEditor key={spec.section} spec={spec} locked={props.locked} />
+        <SectionEditor key={`${spec.section}:${draftEpoch}`} spec={spec} locked={props.locked} />
       ))}
     </div>
   )
@@ -194,6 +206,11 @@ function SectionEditor(props: { spec: SectionSpec; locked: boolean }): ReactElem
   // **렌더 중 상태 교정이다.** 이펙트로 하면 한 커밋 동안 낡은 텍스트가 보이고, 그 사이의
   // 입력이 앞 절의 값을 덮는다. React가 이 자리를 위해 허용하는 형태다(같은 컴포넌트의
   // 자기 상태이고, 조건이 참조 비교라 즉시 수렴한다).
+  //
+  // **여기서 `setUnreadable(section, false)`를 부르지 않는다** — 렌더 중에 스토어를 쓰면
+  // 남의 구독자를 렌더 중에 깨우게 된다. 부를 필요도 없다: 이 교정이 파싱 실패를 지우며
+  // 도는 경로가 **`ackSave` 하나뿐인데**(`replaceDraft`·`loadTheme`은 `draftEpoch`로 다시
+  // 마운트시킨다) 읽지 못한 절이 있으면 `beginSave`가 막아 **그 저장에 도달할 수 없다.**
   if (editing.source !== value) setEditing(seed(value))
 
   function change(text: string): void {
@@ -205,6 +222,9 @@ function SectionEditor(props: { spec: SectionSpec; locked: boolean }): ReactElem
      */
     if (text.trim() === '') {
       store.putSection(section, undefined)
+      // **지운 것은 읽은 것이다.** 절이 없는 문서가 정상이므로(`ThemeSchema`가 `meta`만
+      // 필수로 둔다) 여기서 저장을 막을 이유가 없다.
+      store.setUnreadable(section, false)
       setEditing({ source: undefined, text, parseError: null })
       return
     }
@@ -215,6 +235,11 @@ function SectionEditor(props: { spec: SectionSpec; locked: boolean }): ReactElem
     } catch (caught) {
       // **초안을 건드리지 않는다.** `source`를 그대로 들고 있으므로 위 교정이 이 텍스트를
       // 덮지 않는다 — 초안이 안 바뀌었기 때문이다.
+      //
+      // **그리고 스토어에 그 사실을 알린다**(P4c-3 D6). 화면에 경보를 띄우는 것만으로는
+      // 저장이 안 막힌다 — W2가 *"오늘 이 화면이 할 수 있는 것은 그렇게 말하는 것뿐"*이라고
+      // 적은 그 자리이고, 계약이 스토어에 생겼으므로 이제 여기서 그것을 채운다.
+      store.setUnreadable(section, true)
       setEditing((previous) => ({
         source: previous.source,
         text,
@@ -232,6 +257,8 @@ function SectionEditor(props: { spec: SectionSpec; locked: boolean }): ReactElem
      * `Theme[K]`인데, **틀린 값을 일부러 통과시키는 것**이 이 자리의 계약이다.
      */
     store.putSection(section, parsed as Theme[JsonSection])
+    // **다시 읽혔다.** 이 자리가 없으면 한 번 실패한 절이 영원히 저장을 막는다.
+    store.setUnreadable(section, false)
     setEditing({ source: parsed, text, parseError: null })
   }
 

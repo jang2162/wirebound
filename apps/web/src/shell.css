@@ -1223,3 +1223,79 @@
   border-radius: 3px;
   color: var(--wb-shell-muted);
 }
+
+/* ── 가져오기·내보내기(P4c-3). **문서 전체에 대한 조작이라 셸 머리, 저장 옆이다** ──────
+   자리의 근거는 `theme/theme-io-panel.tsx`의 머리말에 있다. 여기는 그 자리를 놓는 규칙만
+   든다 — 감싸는 상자가 아니다(문서 노드가 들어오지 않는다). */
+.wb-shell-theme-io {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding-top: 8px;
+  border-top: 1px solid var(--wb-shell-line);
+}
+
+/* 한 줄에 버튼 몇 개. **`flex-wrap`이다** — 머리가 좁아지면 줄이 늘어난다. */
+.wb-shell-theme-io-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 내보낼 파일 이름. **버튼 옆에 늘 보인다** — 무엇이 저장될지가 이름 하나에 다 있다. */
+.wb-shell-theme-io-file {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+/* 되돌리기의 2단계(재라 #4). **모달이 아니라 그 버튼 자리에 연다** — 프로젝트 삭제 확인과
+   같은 판단이다. */
+.wb-shell-theme-io-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+/* 붙여 넣기 상자. **입력 자체의 꼴은 JSON 상자의 클래스를 그대로 쓴다**(고정폭·resize) —
+   같은 종류의 글자라 두 벌로 두면 갈린다. */
+.wb-shell-theme-io-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+/* **경보가 아니라 늘 참인 사실이다**(파생의 대가 — 재라 #2). `json-editor`의 `caveat`과
+   같은 무게로 그린다. */
+.wb-shell-theme-io-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-theme-io-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.wb-shell-theme-io-notes {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--wb-shell-muted);
+}
+
+/* **두 이슈 상자를 눈으로 가른다**(D7 — 이월 §12.1-5). 이 한 줄이 없으면 제목이
+   `aria-label`로만 나가 보조 기술은 가르고 눈은 못 가른다(P4c-2 ③이 쟀다). */
+.wb-shell-theme-issues-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--wb-shell-muted);
+}
