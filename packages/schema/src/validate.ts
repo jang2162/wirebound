@@ -91,15 +91,36 @@ function makeIssue(
  * 역할 비교의 유일한 지점인 것과 같은 이유다. 부르는 곳이 각자 `filter`를 다시 쓰면
  * 한쪽만 고쳐지는 순간 갈린다.
  *
- * **오늘 부르는 곳은 넷이다**(2026-08-11 — P4c-1까지 **둘이라고 적혀 있었고 거짓이 됐다**.
- * 수를 여기 적는 것 자체가 낡는 자리라, 늘어난 사실을 지우지 않고 남긴다):
+ * **오늘 부르는 자리는 여섯이다.** **세는 단위는 호출 지점이고 한 줄에 하나씩 적는다** —
+ * 아래 §"이 수가 두 번 틀렸다"가 그 규칙의 이유다.
  *
- * | 어디 | 무엇을 가르는가 |
- * |---|---|
- * | `apps/api`의 `services/edit-pipeline.ts`(6단계) | 페이지 문서 저장 |
- * | `apps/api`의 `routes/pages.ts`(`PUT .../schema` 게이트 3단계) | 페이지 저장 게이트 |
- * | `packages/themes`의 `resolve/index.ts`·`resolve/style.ts` | 테마 해석이 `theme: null`을 낼지 |
- * | `apps/api`의 `routes/themes.ts`(`assertResolvable`) | 테마 저장 게이트 |
+ * | # | 어디 | 무엇을 가르는가 |
+ * |---|---|---|
+ * | 1 | **이 파일의 `throwOnFirstIssue`**(아래) | `assertValidPage`·`assertValidLayout`이 던질지 |
+ * | 2 | `apps/api`의 `services/edit-pipeline.ts`(6단계) | 페이지 문서 저장 |
+ * | 3 | `apps/api`의 `routes/pages.ts`(`PUT .../schema` 게이트 3단계) | 페이지 저장 게이트 |
+ * | 4 | `packages/themes`의 `resolve/index.ts` | 테마 해석이 `theme: null`을 낼지 |
+ * | 5 | `packages/themes`의 `resolve/style.ts` | 스타일 값 하나가 `null`이 될지 |
+ * | 6 | `apps/api`의 `routes/themes.ts`(`assertResolvable`) | 테마 저장 게이트 |
+ *
+ * ---
+ *
+ * **이 수가 두 번 틀렸다. 두 번 다 아무 테스트도 안 죽었다.**
+ *
+ * | 언제 | 적혀 있던 수 | 무엇이 빠졌나 | 누가 잡았나 |
+ * |---|---|---|---|
+ * | P4c-1까지 | **둘** | 테마 둘과 `assertResolvable`이 이 커밋에서 생겼다 | 리뷰(P4c-1) |
+ * | P4c-1 수정 웨이브 첫 판 | **넷** | ㉠ **이 파일 자신의 `throwOnFirstIssue`** ㉡ 그리고 **행 하나에 두 파일을 묶어** 적어 행 수와 호출 지점 수가 갈렸다 | 리뷰(재검증) |
+ *
+ * **㉡이 ㉠을 숨겼다.** *"부르는 곳이 넷"*이라 적고 행을 넷 그렸는데 그 안에 호출 지점이
+ * 다섯 있었으므로, **수를 검산해도 표와 맞아떨어졌다.** 그래서 *"둘 → 넷"*을 고치는
+ * 그 순간에도 빠진 것을 못 봤다 — **고치는 행위 자체가 틀린 수를 옮긴 것이다.**
+ *
+ * **그래서 세는 단위를 호출 지점으로 못박고 번호를 붙였다.** 행과 수가 갈릴 수 없게
+ * 하는 것이 이 표가 세 번째로 틀리지 않는 유일한 방법이다. 검산은
+ * `grep -rn --include="*.ts" "partitionIssues(" packages apps`이고, 그 결과에서
+ * **주석·테스트 줄을 뺀 실제 호출 지점이 이 표와 같아야 한다**(오늘 여섯. 내가 쟀다).
+ * 정의부는 `partitionIssues<T`라 이 패턴에 안 걸리고 재수출도 안 걸린다.
  *
  * 각 배열은 **원래 순서를 지킨다** — 첫 이슈가 근원인 경우가 흔하다.
  *

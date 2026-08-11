@@ -162,7 +162,23 @@ describe('validateLayout', () => {
 })
 
 describe('assertValidPage', () => {
-  it('이슈가 있으면 첫 이슈 메시지로 던진다', () => {
+  /**
+   * **2026-08-11(P4c-1 수정 웨이브 R2): 이름이 *"이슈가 있으면"*이었고 거짓이다.**
+   * `throwOnFirstIssue`는 **`error`만 본다**(`partitionIssues(issues).errors[0]`) —
+   * 경고만 있는 문서는 저장되므로 assert도 통과시켜야 하기 때문이고, 그 근거가 그 함수의
+   * 머리말에 있다. 케이스가 쓰는 값(`bad-root`)이 `error`라 **단언은 계속 통과했다.**
+   *
+   * **이것은 P4c-1이 만든 것이 아니다.** 이름은 `0fae394`에서 **참일 때** 쓰였고
+   * (그때는 이슈에 severity가 없어 전부 던졌다), `9ddf73e`(*"이슈에 severity를 두어
+   * 경고와 거부를 가른다"*)가 `throwOnFirstIssue`를 `errors[0]`으로 바꾸면서 거짓이 됐다.
+   * **내가 이력으로 확인했다.** 원인을 P4c-1에서 찾지 마라.
+   *
+   * `themes`의 `resolve.test.ts`·`font-face.test.ts`·`emit.test.ts` 셋과 **같은 부류**다 —
+   * *"이슈가 있으면"* → *"`error`가 있으면"*으로 규칙이 좁아졌는데 **케이스가 쓰는 값이
+   * `error`라 초록인 채 이름만 낡는다.** 넷 중 이것만 `schema` 쪽이고 **한 사이클 먼저
+   * 났다** — 즉 `themes`가 오늘 겪은 일을 `schema`는 이미 겪었고 아무도 못 봤다.
+   */
+  it('error가 있으면 첫 오류 메시지로 던진다', () => {
     const doc = page({ id: 'n_000000000001', type: 'Flex' })
     expect(() => assertValidPage(doc)).toThrow(/bad-root/)
   })
