@@ -105,6 +105,12 @@ function ThemeIoBody(props: PanelProps & { draft: Theme }): ReactElement {
   const saved = useThemeDraft(store, (s) => s.saved)
   const base = useThemeDraft(store, (s) => s.base)
   const dirty = useThemeDraft(store, (s) => s.draft !== null && s.draft !== s.saved)
+  /**
+   * **읽지 못한 절이 있는가**(P4c-3 리뷰 ⑤). 되돌리기의 조건이 `dirty` 하나가 아니다 —
+   * 아래 버튼의 주석 참고. selector는 원시값을 내야 하므로 배열이 아니라 불린이다
+   * (`use-theme-draft.tsx`의 규칙).
+   */
+  const hasUnreadable = useThemeDraft(store, (s) => s.unreadable.length > 0)
 
   const [text, setText] = useState('')
   const [outcome, setOutcome] = useState<Outcome | null>(null)
@@ -252,7 +258,7 @@ function ThemeIoBody(props: PanelProps & { draft: Theme }): ReactElement {
         {/* **되돌리기는 저장의 짝이라 같은 줄에 둔다.** */}
         {confirmingRevert ? (
           <span className="wb-shell-theme-io-confirm" role="status">
-            저장 안 한 변경을 버립니다.
+            저장 안 한 변경과 읽지 못한 글자를 버립니다.
             <button type="button" className="wb-shell-theme-action" onClick={revert}>
               되돌립니다
             </button>
@@ -268,7 +274,18 @@ function ThemeIoBody(props: PanelProps & { draft: Theme }): ReactElement {
           <button
             type="button"
             className="wb-shell-theme-action"
-            disabled={props.locked || !dirty}
+            /**
+             * **`dirty`만으로 가르면 못 빠져나오는 자리가 생긴다**(P4c-3 리뷰 ⑤).
+             *
+             * 파싱 실패는 초안을 안 바꾸므로 `dirty`가 아니다. 그런데 그 상태에서는
+             * **저장도 막혀 있다**(D6). 즉 *"고칠 수 없는 글자가 남았는데 되돌릴 수도
+             * 없다"*가 된다 — 손으로 원래 JSON을 다시 쳐야 빠져나온다.
+             *
+             * **되돌리기가 정확히 그 문이다.** `replaceDraft(saved)`가 스토어의
+             * `unreadable`을 비우고 상자들을 다시 마운트시키므로(스토어의 `draftEpoch`)
+             * 글자가 저장본으로 돌아온다.
+             */
+            disabled={props.locked || (!dirty && !hasUnreadable)}
             onClick={() => setConfirmingRevert(true)}
           >
             마지막 저장으로 되돌리기
@@ -301,11 +318,25 @@ function ThemeIoBody(props: PanelProps & { draft: Theme }): ReactElement {
                   setOutcome(null)
                 },
                 // 파일 자체를 못 읽는 것(권한·삭제)과 내용이 JSON이 아닌 것은 다르다.
-                (error: unknown) =>
+                (error: unknown) => {
+                  /**
+                   * **대기 글자를 비운다 — 안 비우면 사실 2와 같은 모양이 된다.**
+                   *
+                   * 화면은 *"파일을 읽지 못했습니다"*라고 말하는데 대기 글자에는 **앞에
+                   * 읽힌 것**이 그대로 남아, 그 상태로 *"초안에 넣기"*를 누르면 **고르지도
+                   * 않은 앞 문서**가 들어간다. **고치기 전에 그것이 실제로 일어나는 것을
+                   * 쟀다**(P4c-3 리뷰 ①): 대기 글자 길이 87 · 넣기 버튼 `disabled=false` ·
+                   * 누르니 초안 이름이 앞 파일의 *"앞의 것"*이 됐다.
+                   *
+                   * **이 슬라이스가 스토어에서 닫은 그 부류가 이 화면에서 다시 열려 있었다** —
+                   * *"화면이 못 읽었다고 말하는데 조작은 마지막으로 읽힌 값에 대해 일어난다."*
+                   */
+                  setText('')
                   setOutcome({
                     kind: 'unreadable',
                     message: error instanceof Error ? error.message : '파일을 읽지 못했습니다',
-                  }),
+                  })
+                },
               )
             }}
           />

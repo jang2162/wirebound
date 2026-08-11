@@ -449,3 +449,42 @@ describe('replaceDraft와 draftEpoch (D5)', () => {
     expect(store.beginSave()).toBe(false)
   })
 })
+
+/**
+ * **되돌리기가 파싱 실패에서도 상자를 다시 만들게 한다**(P4c-3 리뷰 ⑤).
+ *
+ * 파싱 실패는 초안을 안 바꾸므로 `replaceDraft(saved)`의 인자가 **지금 초안과 같은 참조**다.
+ * 참조만 보면 `draftEpoch`가 안 올라가고, `unreadable`은 비워지는데 상자는 못 읽은 글자를
+ * 그대로 들어 **둘이 갈린다.**
+ */
+describe('replaceDraft — 문서가 그대로여도 상자를 다시 만들어야 할 때 (리뷰 ⑤)', () => {
+  it('읽지 못한 절이 있으면 같은 문서로 되돌려도 epoch가 오른다', () => {
+    const store = new ThemeDraftStore()
+    const brand = theme('brand')
+    store.loadTheme('t1', brand)
+    store.setUnreadable('components', true)
+    const before = store.getState().draftEpoch
+
+    // 되돌리기 — 초안이 안 바뀌었으므로 `saved`와 같은 참조다.
+    store.replaceDraft(brand)
+
+    expect(store.getState().draftEpoch).toBe(before + 1)
+    expect(store.getState().unreadable).toEqual([])
+  })
+
+  it('읽지 못한 절이 없으면 같은 문서로 되돌려도 아무 일이 없다', () => {
+    const store = new ThemeDraftStore()
+    const brand = theme('brand')
+    store.loadTheme('t1', brand)
+    const before = store.getState().draftEpoch
+
+    let notified = 0
+    store.subscribe(() => {
+      notified += 1
+    })
+    store.replaceDraft(brand)
+
+    expect(store.getState().draftEpoch).toBe(before)
+    expect(notified).toBe(0)
+  })
+})

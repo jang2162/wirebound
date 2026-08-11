@@ -423,7 +423,7 @@ describe('되돌리기 (D5 · 재라 #4)', () => {
 
     // 아직 안 되돌렸다.
     expect(screen.getByRole('textbox', { name: '테마 이름' })).toHaveProperty('value', '고친 이름')
-    expect(screen.getByText('저장 안 한 변경을 버립니다.')).toBeTruthy()
+    expect(screen.getByText('저장 안 한 변경과 읽지 못한 글자를 버립니다.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '되돌립니다' }))
     expect(screen.getByRole('textbox', { name: '테마 이름' })).toHaveProperty('value', '브랜드')
@@ -558,6 +558,119 @@ describe('가져오기 B — 새 테마로 (T5, D3-B · D4)', () => {
 
     expect(
       (screen.getByRole('button', { name: '새 테마로 가져오기' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+  })
+})
+
+// ────────────────────────────────────────────────────────────────────────────────
+// 여기부터 리뷰가 찾은 둘(① ⑤).
+// ────────────────────────────────────────────────────────────────────────────────
+
+describe('리뷰 ① — 파일 읽기가 실패하면 대기 글자가 남지 않는다', () => {
+  /**
+   * **읽을 수 없는 파일.** `readAsText`는 Blob이 아닌 것에 던지고, 그것이
+   * `readTextFile`의 Promise를 거절시킨다 — 실제 브라우저에서 권한·삭제로 나는 거절과
+   * 같은 갈래로 들어온다.
+   */
+  function pickBrokenFile(): void {
+    fireEvent.change(screen.getByLabelText('테마 파일'), {
+      target: { files: [{ name: 'broken.json' } as unknown as File] },
+    })
+  }
+
+  it('앞에 읽힌 글자가 남아 있으면 안 된다 — 사실 2와 같은 모양이다', async () => {
+    open({ detail: standalone() })
+    await screen.findByRole('button', { name: '내보내기' })
+
+    // 1) 읽히는 글자를 먼저 넣어 둔다.
+    paste(
+      JSON.stringify({
+        wireboundVersion: '1',
+        theme: { meta: { id: 'solo', name: '앞의 것', version: '1.0.0' } },
+      }),
+    )
+    // 2) 그 뒤에 읽을 수 없는 파일을 고른다.
+    pickBrokenFile()
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: '테마 JSON' })).toHaveProperty('value', '')
+    })
+    // **넣을 것이 없으므로 버튼도 꺼진다** — 화면이 "못 읽었다"고 말하는데 조작이
+    // 마지막으로 읽힌 값에 대해 일어나는 자리를 없앤다.
+    expect((screen.getByRole('button', { name: '초안에 넣기' }) as HTMLButtonElement).disabled).toBe(true)
+    // **고치기 전에는 이 셋이 87 · false · '앞의 것'이었다**(P4c-3이 프로브로 쟀다).
+    expect(screen.getByRole('textbox', { name: '테마 이름' })).toHaveProperty('value', '홀로')
+  })
+
+  it('왜 못 읽었는지는 말한다', async () => {
+    open({ detail: standalone() })
+    await screen.findByRole('button', { name: '내보내기' })
+
+    pickBrokenFile()
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('alert').length).toBeGreaterThan(0)
+    })
+  })
+})
+
+describe('리뷰 ⑤ — 파싱 실패에서도 되돌릴 수 있다', () => {
+  /** 파싱 실패는 초안을 안 바꾸므로 `dirty`가 아니다. 그런데 저장은 막혀 있다(D6). */
+  function breakBox(): void {
+    fireEvent.change(screen.getByRole('textbox', { name: 'components' }), {
+      target: { value: '{"Button":' },
+    })
+  }
+
+  it('dirty가 아니어도 되돌리기가 눌린다 — 안 그러면 빠져나올 길이 없다', async () => {
+    open({
+      detail: standalone({
+        meta: { id: 'solo', name: '홀로', version: '1.0.0' },
+        components: { Button: { base: { bg: '#123456' } } },
+      }),
+    })
+    await screen.findByRole('button', { name: '내보내기' })
+
+    breakBox()
+
+    // 초안은 안 바뀌었다 — "저장 안 함"이 안 뜬다.
+    expect(screen.queryByText('저장 안 함')).toBeNull()
+    // 저장은 막혀 있다.
+    expect(screen.getByRole('button', { name: '저장' })).toHaveProperty('disabled', true)
+    // **그래도 되돌릴 수 있어야 한다.**
+    expect(
+      (screen.getByRole('button', { name: '마지막 저장으로 되돌리기' }) as HTMLButtonElement).disabled,
+    ).toBe(false)
+  })
+
+  it('되돌리면 글자가 저장본으로 돌아오고 저장이 다시 열린다', async () => {
+    open({
+      detail: standalone({
+        meta: { id: 'solo', name: '홀로', version: '1.0.0' },
+        components: { Button: { base: { bg: '#123456' } } },
+      }),
+    })
+    await screen.findByRole('button', { name: '내보내기' })
+
+    breakBox()
+    fireEvent.click(screen.getByRole('button', { name: '마지막 저장으로 되돌리기' }))
+    fireEvent.click(screen.getByRole('button', { name: '되돌립니다' }))
+
+    // **문서는 안 갈렸는데 상자가 다시 만들어져야 한다** — 스토어가 그 경우에도
+    // `draftEpoch`를 올리는 이유다.
+    expect(screen.getByRole('textbox', { name: 'components' })).toHaveProperty(
+      'value',
+      JSON.stringify({ Button: { base: { bg: '#123456' } } }, null, 2),
+    )
+    expect(screen.queryByText(/읽지 못한 JSON이 있어/)).toBeNull()
+  })
+
+  it('읽기 전용이면 그래도 못 누른다 — 초안을 바꾸는 조작이다', async () => {
+    open({ detail: { ...standalone(systemTheme('admin') as Theme), id: 't1', system: true } })
+    await screen.findByRole('button', { name: '내보내기' })
+
+    expect(
+      (screen.getByRole('button', { name: '마지막 저장으로 되돌리기' }) as HTMLButtonElement).disabled,
     ).toBe(true)
   })
 })

@@ -310,14 +310,21 @@ export class ThemeDraftStore {
    *    가져오기로 고친 뒤에도 저장이 막힌 채로 남는다.
    * 3. **`draftEpoch`를 올린다** — 상자들이 다시 마운트되어 새 문서에서 텍스트를 만든다.
    *    2와 3이 함께 가야 스토어와 화면이 안 갈린다(`draftEpoch`의 주석).
+   *
+   * **올리는 조건이 *"문서가 갈렸다"* 하나가 아니다**(P4c-3 리뷰 ⑤). 읽지 못한 글자만 있고
+   * 문서는 그대로인 되돌리기(`replaceDraft(saved)`인데 `draft === saved`)가 실제로 있다 —
+   * 그때 참조만 보면 안 올라가고, `unreadable`은 비워지는데 상자는 못 읽은 글자를 그대로
+   * 들어 **둘이 갈린다.** 그래서 *"상자가 텍스트를 새로 만들어야 하는가"*로 판정한다.
    */
   readonly replaceDraft = (draft: Theme): void => {
     if (this.#state.draft === null) return
+    const { unreadable } = this.#state
+    const reseed = draft !== this.#state.draft || unreadable.length > 0
     this.#apply({
       draft,
       saveFailure: null,
-      unreadable: this.#state.unreadable.length === 0 ? this.#state.unreadable : [],
-      draftEpoch: this.#nextEpoch(draft),
+      unreadable: unreadable.length === 0 ? unreadable : [],
+      draftEpoch: reseed ? this.#state.draftEpoch + 1 : this.#state.draftEpoch,
     })
   }
 
@@ -414,12 +421,14 @@ export class ThemeDraftStore {
   }
 
   /**
-   * 다음 `draftEpoch`. **문서가 실제로 갈렸을 때만 오른다.**
+   * `loadTheme`의 다음 `draftEpoch`. **문서가 실제로 갈렸을 때만 오른다.**
    *
    * 그냥 `+ 1`로 두면 *"같은 값으로 다시 불러도 알리지 않는다"*가 깨진다 — `#apply`가
    * 참조로 비교하는데 이 수만 달라져 있으면 바뀐 것이 없는데도 구독자가 깨어난다
    * (`test/store/theme-draft-store.test.ts`가 그것을 지키고 있고, 처음 판에서 실제로
-   * 죽였다). **세는 단위가 *"통째 교체를 시도한 횟수"*가 아니라 *"문서가 갈린 횟수"*다.**
+   * 죽였다). **세는 단위가 *"통째 교체를 시도한 횟수"*가 아니라 *"상자가 텍스트를 새로
+   * 만들어야 한 횟수"*다.** `loadTheme`은 `unreadable`을 어차피 비우고 문서도 새것이므로
+   * 참조 하나로 갈린다 — `replaceDraft`는 조건이 하나 더 있고 그쪽에 적어 두었다.
    */
   #nextEpoch(draft: Theme | null): number {
     return draft === this.#state.draft ? this.#state.draftEpoch : this.#state.draftEpoch + 1
