@@ -81,8 +81,8 @@ export interface Violation {
  * 자식으로 물려 내려간다 — 선택자 검사가 못 보는 누수라 속성으로 따로 본다.
  *
  * **세는 단위는 "문서 노드가 그 안에 들어오는 클래스"다.** 한 줄에 하나씩 적는다.
- * 검산 — 문서를 그리는 자리 둘(캔버스·갤러리)의 상자를 소스에서 찾는다:
- * `rg -n 'wb-shell-canvas-surface|wb-shell-theme-gallery' apps/web/src`
+ * 검산 — 문서 노드가 **바로 그 안에** 들어오는 상자 둘(캔버스·갤러리 항목)을 소스에서 찾는다:
+ * `rg -n 'wb-shell-canvas-surface|wb-shell-gallery-item' apps/web/src`
  * (검산 명령에 `*` 뒤 `/`를 쓰지 마라 — 이 주석이 거기서 끝난다. 처음에 그렇게 적었다가
  * `esbuild`가 이 파일을 통째로 못 읽었다.)
  *
@@ -92,12 +92,16 @@ export interface Violation {
  * 4. `wb-shell-canvas-surface` — 넷째. 여기 안에 페이지 문서가 들어온다
  * 5. `wb-shell-theme` — **테마 저작 화면의 루트**(P4c-2 D1). 셸 밖의 별도 라우트라
  *    사슬이 따로다
- * 6. `wb-shell-theme-gallery` — 그 사슬 둘째. **여기 안에 갤러리가 렌더러로 그린 문서
- *    노드가 들어온다**(②의 W3이 채운다 — 오늘은 빈 상자다)
+ * 6. `wb-shell-theme-gallery` — 그 사슬 둘째. 라우트가 그리는 `<main>`이다
+ * 7. `wb-shell-gallery-list` — 그 사슬 셋째. 항목 상자들이 여기 들어온다(②의 W3이 더했다)
+ * 8. `wb-shell-gallery-item` — 그 사슬 넷째. **여기 안에 갤러리가 `renderNode`로 그린 문서
+ *    노드가 들어온다.** 캡션(`wb-shell-gallery-caption`)은 그 문서 노드의 **형제**라
+ *    감싸는 상자가 아니다 — 그래서 이 목록에 없고 글자 속성을 마음대로 건다
  *
- * > **오늘 6번은 비어 있고, 그래서 이 두 줄은 지금 아무것도 못 막는 것이 아니라
- * > *미리* 막는다.** 목록을 사람이 갱신해야 하는 것이 이 검사의 알려진 사각이고
- * > (머리말), 갤러리가 채워질 때 그것을 기억할 사람이 없을 것이므로 자리를 만들 때 함께 넣는다.
+ * > **①이 자리를 만들 때 6번을 미리 넣었고, 7·8은 갤러리를 채운 W3이 넣었다.** 그것이
+ * > 이 목록의 유일한 갱신 방법이다 — 목록에 없는 상자에 상속 속성을 걸면 **0 사망**이고
+ * > 있으면 **14 사망**이다(①이 6번으로 재서 확인했다). 즉 여기 더하지 않으면 D7 위반이
+ * > 조용히 지나간다. **갤러리 안에 상자를 또 만드는 사람은 여기 한 줄을 더해야 한다.**
  */
 const WRAPPERS = new Set([
   'wb-shell',
@@ -106,6 +110,8 @@ const WRAPPERS = new Set([
   'wb-shell-canvas-surface',
   'wb-shell-theme',
   'wb-shell-theme-gallery',
+  'wb-shell-gallery-list',
+  'wb-shell-gallery-item',
 ])
 
 /**

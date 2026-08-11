@@ -1126,3 +1126,100 @@
 
 /* W3 — 테마 갤러리. 여기에만 더해라. **`.wb-shell-theme-gallery` 자체는 위에 있고
    그 상자에는 허용 목록의 속성만 걸 수 있다.** */
+
+/* **안내·오류·캡션은 감싸는 상자가 아니다.** 문서 노드를 품지 않으므로 글자 속성을 걸어도
+   D7이 깨지지 않는다 — `WRAPPERS`에 들어가는 것은 아래 `-list`와 `-item` 둘뿐이다. */
+.wb-shell-gallery-notice {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--wb-shell-muted);
+  font-size: 12px;
+}
+
+.wb-shell-gallery-error {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.wb-shell-gallery-error-title {
+  margin: 0 0 4px;
+  color: var(--wb-shell-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wb-shell-gallery-error-list {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.wb-shell-gallery-error-item {
+  margin: 0;
+  color: var(--wb-shell-muted);
+  font-size: 12px;
+}
+
+/* **감싸는 상자 1/2.** 항목 상자들이 여기 들어오고 그 안에 문서 노드가 있다. */
+.wb-shell-gallery-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+/* **감싸는 상자 2/2.** 문서 노드가 바로 이 안에 들어온다.
+   **테두리를 `border`가 아니라 `box-shadow`로 그린다** — `border`는 `WRAPPER_PROPERTIES`에
+   없다. 상속되지 않는 속성이라 목록에 더해도 되지만, 이미 허용된 `box-shadow`로 같은 선이
+   그려지므로 셋이 공유하는 목록을 늘리지 않았다.
+   `display: grid`인 것도 같은 부류의 판단이다 — `flex-direction`이 허용 목록에 없어
+   세로로 쌓으려면 그리드가 유일한 길이다(그리드의 기본 흐름이 행이다). */
+.wb-shell-gallery-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--wb-shell-line);
+}
+
+/* 캡션은 **항목 상자 안**에 있지만 감싸는 상자가 아니다 — 문서 노드는 그 형제로 들어온다.
+   상속 속성은 전부 여기에 건다. */
+.wb-shell-gallery-caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.wb-shell-gallery-type {
+  color: var(--wb-shell-ink);
+  font-weight: 600;
+}
+
+.wb-shell-gallery-structure {
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-gallery-axis {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-ink);
+}
+
+/* **테마가 이 컴포넌트를 언급하지 않았다는 표시.** 오류가 아니므로 빨갛게 하지 않는다 —
+   `theme-issues.tsx`가 경고 안에서도 모양이 아니라 문안으로 가른 것과 같은 판단이다. */
+.wb-shell-gallery-untouched {
+  padding: 0 4px;
+  border: 1px dashed var(--wb-shell-line);
+  border-radius: 3px;
+  color: var(--wb-shell-muted);
+}
