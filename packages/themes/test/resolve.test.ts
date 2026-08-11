@@ -108,7 +108,14 @@ describe('resolveTheme — D2의 성질', () => {
     }
   })
 
-  it('이슈가 하나라도 있으면 theme이 null이다 — 반쯤 해석된 것을 내보내지 않는다', () => {
+  /**
+   * **2026-08-11(P4c-1 수정 웨이브 F6): 이름이 *"이슈가 하나라도 있으면"*이었고 거짓이
+   * 됐다.** `themes`에 첫 `warning`이 생겨 기준이 `error`로 바뀌었다(`resolve/index.ts`).
+   * 케이스가 쓰는 값(`space.99` → `unknown-token`)이 `error`라 **단언은 계속 통과했고,
+   * 그래서 이름만 조용히 거짓이 됐다** — 경고만 있는 갈래는
+   * `warning-channel.test.ts`가 따로 본다.
+   */
+  it('error가 하나라도 있으면 theme이 null이다 — 반쯤 해석된 것을 내보내지 않는다', () => {
     const { theme, issues } = resolveTheme({
       ...MINIMAL_THEME,
       components: { List: { base: { gap: 'space.99' } } },

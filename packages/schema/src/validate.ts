@@ -88,9 +88,18 @@ function makeIssue(
  * 이슈 목록을 **막는 것**과 **알릴 것**으로 가른다.
  *
  * **이 선을 긋는 코드는 이 함수 하나뿐이어야 한다** — `auth/roles.ts`의 `roleAtLeast`가
- * 역할 비교의 유일한 지점인 것과 같은 이유다. 오늘 부르는 곳은 `apps/api`의
- * `services/edit-pipeline.ts`(6단계)와 `routes/pages.ts`(`PUT .../schema` 게이트 3단계)
- * 둘이고, 그 둘이 각자 `filter`를 다시 쓰면 한쪽만 고쳐지는 순간 갈린다.
+ * 역할 비교의 유일한 지점인 것과 같은 이유다. 부르는 곳이 각자 `filter`를 다시 쓰면
+ * 한쪽만 고쳐지는 순간 갈린다.
+ *
+ * **오늘 부르는 곳은 넷이다**(2026-08-11 — P4c-1까지 **둘이라고 적혀 있었고 거짓이 됐다**.
+ * 수를 여기 적는 것 자체가 낡는 자리라, 늘어난 사실을 지우지 않고 남긴다):
+ *
+ * | 어디 | 무엇을 가르는가 |
+ * |---|---|
+ * | `apps/api`의 `services/edit-pipeline.ts`(6단계) | 페이지 문서 저장 |
+ * | `apps/api`의 `routes/pages.ts`(`PUT .../schema` 게이트 3단계) | 페이지 저장 게이트 |
+ * | `packages/themes`의 `resolve/index.ts`·`resolve/style.ts` | 테마 해석이 `theme: null`을 낼지 |
+ * | `apps/api`의 `routes/themes.ts`(`assertResolvable`) | 테마 저장 게이트 |
  *
  * 각 배열은 **원래 순서를 지킨다** — 첫 이슈가 근원인 경우가 흔하다.
  *

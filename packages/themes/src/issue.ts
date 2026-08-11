@@ -182,8 +182,14 @@ export interface ThemeIssue {
    * `THEME_ISSUE_SEVERITY[code]`와 항상 같다 — `issue()`가 표에서 파생시킨다.
    *
    * **타입을 `schema`에서 가져온다.** 코드 유니온은 갈라 두었지만 severity는 갈라 둘 이유가
-   * 없다 — 테마 이슈와 문서 이슈가 같은 API 봉투(`{ error: { issues } }`)에 실려 같은
-   * 클라이언트가 읽으므로, 값 집합이 갈리면 읽는 쪽이 두 어휘를 알아야 한다.
+   * 없다 — 테마 이슈와 문서 이슈가 **같은 두 봉투**에 실려 같은 클라이언트가 읽으므로,
+   * 값 집합이 갈리면 읽는 쪽이 두 어휘를 알아야 한다. 봉투는 실패 쪽
+   * `{ error: { issues } }`와 성공 쪽 `{ …, warnings }` 둘이다.
+   *
+   * > **2026-08-11(P4c-1 수정 웨이브 F6): 위 문장이 봉투를 `{ error: { issues } }`
+   * > **하나**로 적고 있었고 거짓이 됐다.** 성공 응답에 실리는 길이 생긴 것이 이 슬라이스이고
+   * > (`apps/api`의 `http/warnings.ts`), 그 두 번째 봉투가 severity를 갈라 두지 않은
+   * > 이유를 **더 세게** 만든다 — 어느 봉투에 실릴지가 `severity` 하나로 갈린다.
    */
   severity: IssueSeverity
   /** 테마 문서 안의 자리. `tokens.semantic.primary`처럼 점으로 잇는다. */

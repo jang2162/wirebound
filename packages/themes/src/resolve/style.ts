@@ -1,3 +1,4 @@
+import { partitionIssues } from '@wirebound/schema'
 import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
 import { own } from '../own'
@@ -268,8 +269,14 @@ export function cssVarName(tokenPath: string): string {
 /**
  * 스타일 어휘 하나를 CSS 선언들로 바꾼다. **던지지 않는다** — 이슈를 모아서 낸다.
  *
- * 이슈가 하나라도 나오면 `css`는 비어 나간다. 반쯤 옳은 선언을 내보내면 화면에서만
+ * **`error`가 하나라도 나오면 `css`는 비어 나간다.** 반쯤 옳은 선언을 내보내면 화면에서만
  * 드러나기 때문이다(D2가 해석과 방출을 가른 이유와 같다).
+ *
+ * > **2026-08-11(P4c-1 수정 웨이브 F6): 위 문장이 *"이슈가 하나라도"*였고 그것이 거짓이
+ * > 됐다.** `themes`에 첫 `warning`이 생기면서 **경고가 붙은 값은 `css`를 채운 채 나간다** —
+ * > `suspicious-literal`이 값을 안 버리는 것이 그 코드가 `error`가 아닌 이유다. 리뷰가
+ * > 이 자리를 *"보고서 목록에 없는 거짓 다섯 중 가장 무겁다"*고 지목했다(**그쪽이 쟀다**):
+ * > 이 문장은 함수의 **계약**을 말하는 자리라 읽는 사람이 그대로 믿는다.
  *
  * `path`는 이슈에 실을 테마 문서 안의 자리다. 계획서의 시그니처에는 없지만, 이슈가
  * 어디서 났는지 없이는 고칠 수 없어(Task 7 케이스 5) 선택 인자로 더했다.
@@ -367,8 +374,14 @@ export function resolveStyleValue(
   if (rejected.length > 0) return { value: null, issues: rejected }
 
   const resolved = resolveReferences(value, tokens, path, primitives)
-  const blocking = resolved.issues.filter((entry) => entry.severity !== 'warning')
-  if (blocking.length > 0) return { value: null, issues: resolved.issues }
+  // **선을 긋는 것은 `partitionIssues` 하나다**(수정 웨이브 F2). 여기서 `filter`를 다시 쓰면
+  // T2가 세운 규칙이 T1/T3의 자리에서 깨진다 — 그 함수의 머리말이 *"이 선을 긋는 코드는
+  // 이 함수 하나뿐이어야 한다"*고 못박아 두었고, `partitionIssues`를 제네릭으로 넓힌
+  // 이유가 정확히 **테마 쪽도 그것을 부를 수 있게** 하려는 것이었다. 손으로 그은 선은
+  // severity가 셋이 되는 날(`info` 같은 것이 생기면) **여기만 안 고쳐진다.**
+  if (partitionIssues(resolved.issues).errors.length > 0) {
+    return { value: null, issues: resolved.issues }
+  }
   return { value: resolved.value, issues: resolved.issues }
 }
 

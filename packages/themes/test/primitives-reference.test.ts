@@ -131,6 +131,49 @@ describe('T1 — primitives 참조 문법', () => {
     expect(issues.map((entry) => entry.code)).toEqual(['bad-style-value'])
   })
 
+  /**
+   * **F1 — 이 커밋이 만든 침묵.** (P4c-1 수정 웨이브. 리뷰가 찾았다.)
+   *
+   * `checkPrimitives`가 `resolveStyleValue`의 이슈를 **`value === null`일 때만** 실었다.
+   * `suspicious-literal`은 값을 안 버리므로(그것이 `warning`인 이유다) 그 갈래를 지나지
+   * 않았고, `maxWidth: 'spce.4'`가 **이슈 0건으로** `:root`에 실렸다.
+   *
+   * **기준(`45771e9`)에서는 무해했다** — `--wb-container-*`를 읽는 코드가 저장소 전체에
+   * 0건이었기 때문이다. **T1이 그 변수를 읽는 첫 코드를 만든 순간 해로워졌다:**
+   * 그것을 가리키는 `max-width: var(--wb-container-maxWidth)`가 계산 시점에 무효가 되어
+   * **선언 하나가 아니라 그것을 가리키는 전부가 함께 죽는다.**
+   *
+   * **구분력(내가 쟀다):** 고치기 전 `checkPrimitives`의 이슈 **0건**, 고친 뒤 **1건**.
+   * severity를 `error`로 올리지 않은 근거는 `spec/primitives.ts`의 머리말에 있다.
+   */
+  it('F1 — primitives 값의 경고가 버려지지 않는다', () => {
+    const { values, issues } = checkPrimitives({ container: { maxWidth: 'spce.4' } }, TOKENS)
+
+    expect(issues.map((entry) => [entry.code, entry.severity, entry.path])).toEqual([
+      ['suspicious-literal', 'warning', 'primitives.container.maxWidth'],
+    ])
+    // **값은 그대로 실린다** — 경고라서 그렇다. 침묵이 사라진 것이 이 수정의 전부다.
+    expect([...values]).toEqual([['container.maxWidth', 'spce.4']])
+  })
+
+  it('F1 — 그 경고가 resolveTheme까지 올라온다', () => {
+    const { theme, issues } = resolveTheme({
+      meta: { id: 'p', name: '프로브', version: '1.0.0' },
+      tokens: { scale: { space: { unit: '4px' } } },
+      primitives: { container: { maxWidth: 'spce.4' } },
+      components: { Section: { parts: { inner: { maxWidth: 'container.maxWidth' } } } },
+    })
+
+    // 경고라 테마는 선다. 그러나 **더 이상 조용하지 않다.**
+    expect(theme).not.toBeNull()
+    expect(issues.map((entry) => [entry.severity, entry.code, entry.path])).toEqual([
+      ['warning', 'suspicious-literal', 'primitives.container.maxWidth'],
+    ])
+    // 그리고 이것이 왜 아픈지 — 무효한 변수를 가리키는 선언이 실제로 나간다.
+    expect(compileTheme(theme!)).toContain('--wb-container-maxWidth: spce.4;')
+    expect(compileTheme(theme!)).toContain('max-width: var(--wb-container-maxWidth);')
+  })
+
   it('primitives 값이 토큰을 가리키는 것은 그대로다', () => {
     const { values, issues } = checkPrimitives({ container: { gutter: 'space.6' } }, TOKENS)
     expect(issues).toEqual([])

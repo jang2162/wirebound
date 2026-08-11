@@ -352,7 +352,10 @@ describe('P4b-1 재라 #1 — assets.fonts가 CSS로 나간다 (P4b-3 D5가 뒤�
     })
 
     expect(issues.map((issue) => issue.path)).toEqual(['assets.fonts.0.family', 'assets.fonts.0.src'])
-    // 이슈가 있으면 테마가 통째로 못 쓰인다(P4a-1의 D2) — 반쯤 해석된 것이 방출로 가지 않는다.
+    // **`error`가 있으면** 테마가 통째로 못 쓰인다(P4a-1의 D2 → P4c-1이 기준을 `error`로
+    // 좁혔다) — 반쯤 해석된 것이 방출로 가지 않는다. 여기 둘은 `checkAssets`가 내는
+    // `error`라 그대로 `null`이다.
+    // (2026-08-11 F6: 이 줄이 *"이슈가 있으면"*이었고 거짓이 됐다.)
     expect(theme).toBeNull()
   })
 })

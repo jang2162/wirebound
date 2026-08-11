@@ -108,8 +108,13 @@ describe('Task 1 — structureBaseCss', () => {
    * 재라 #5. 노드가 나르는 값의 이름은 전부 `--wb-node-` 아래에 있어야 한다 —
    * 테마가 `cssVarName`으로 만드는 이름(`--wb-grid-columns` 등)과 겹치지 않게 하는 것이
    * 이 접두어의 전부다. **두 이름 집합이 실제로 겹치지 않는 것은 두 패키지를 함께 볼 수
-   * 있는 `apps/web/test/theme/var-names.test.ts`가 대조한다** — `renderer`는 `themes`를
-   * 보지 않는다(§3.3).
+   * 있는 `apps/web/test/theme/system-theme.test.ts`의 `재라 #5` 절이 대조한다** —
+   * `renderer`는 `themes`를 보지 않는다(§3.3).
+   *
+   * > **2026-08-11(P4c-1 수정 웨이브, 전수 훑기): 여기가 `var-names.test.ts`를 가리키고
+   * > 있었고 그런 파일은 저장소에 없다.** F4(`themes-warning-routes.test.ts`)와 **같은
+   * > 부류**이고, 이쪽은 **P4c-1이 만든 것이 아니라 `05bfd1a`부터 있던 것**이다(내가
+   * > 이력으로 확인했다). 대조 자체는 살아 있었다 — **이름만 어긋나 있었다.**
    */
   it('노드가 나르는 커스텀 프로퍼티는 전부 --wb-node- 아래에 있다', () => {
     // 노드가 나르지 **않는** 이름은 여기 적어 둔다. 이름이 있으므로 썩지 않는다 —

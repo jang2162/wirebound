@@ -11,7 +11,7 @@
  * 3. 그런데도 이슈가 **`issues`에 실려 나온다** — 삼키면 severity를 만든 이유가 사라진다
  *
  * 저장 경계(`apps/api`의 `assertResolvable`)가 같은 기준을 쓰는지는 `apps/api`의
- * `routes-themes.test.ts`·`themes-warning-routes.test.ts`가 본다. **둘을 함께 고쳐야
+ * `routes-themes.test.ts`·`theme-warnings.test.ts`가 본다. **둘을 함께 고쳐야
  * 한다** — 하나만 고쳤을 때 무엇이 죽는지는 P4c-1 보고에 실측으로 있다.
  */
 import { installCatalog } from '@wirebound/schema'
@@ -38,6 +38,53 @@ const theme = (components: Record<string, unknown>) => ({
   meta: { id: 'probe', name: '프로브', version: '1.0.0' },
   tokens: { scale: { space: { unit: '4px' } } },
   components,
+})
+
+/**
+ * **F2 — severity의 선을 손으로 긋는 자리가 0이다** (P4c-1 수정 웨이브).
+ *
+ * `partitionIssues`의 머리말이 *"이 선을 긋는 코드는 이 함수 하나뿐이어야 한다"*고
+ * 못박아 두었고, P4c-1이 그 함수를 **제네릭으로 넓힌 이유가 정확히 테마 쪽도 부를 수
+ * 있게** 하려는 것이었다. **그런데 같은 커밋의 `resolve/style.ts`가 그 자리에서
+ * `filter(entry => entry.severity !== 'warning')`로 선을 다시 그었다** — 리뷰가 찾았다
+ * (**그쪽이 쟀다**).
+ *
+ * **오늘 두 표현은 같은 값을 낸다.** 그래서 계산 결과를 재는 케이스로는 구분이 안 되고,
+ * 소스를 훑는 것이 이 규칙을 지킬 수 있는 유일한 자리다(`public-api.test.ts`가
+ * *"renderer도 react도 import하지 않는다"*를 같은 방식으로 지킨다).
+ *
+ * **무엇을 잡는가:** severity가 셋이 되는 날(`info` 같은 것이 생기면) 손으로 그은 선은
+ * **여기만 안 고쳐진다.** 그때 이 케이스가 먼저 죽는다.
+ */
+describe('F2 — 선을 긋는 코드는 partitionIssues 하나다', () => {
+  const sources = import.meta.glob('../src/**/*.ts', {
+    query: '?raw',
+    eager: true,
+    import: 'default',
+  }) as Record<string, string>
+
+  it('훑을 소스를 실제로 읽는다', () => {
+    // 글롭이 어긋나면 빈 집합에서 아래 검사가 조용히 통과한다.
+    expect(Object.keys(sources)).toContain('../src/resolve/style.ts')
+    expect(sources['../src/resolve/style.ts']).toContain('resolveStyleValue')
+  })
+
+  it('src 어디에서도 severity를 손으로 비교하지 않는다', () => {
+    const offenders: string[] = []
+    for (const [path, source] of Object.entries(sources)) {
+      // 주석 안의 인용은 규칙 위반이 아니다 — 실제 코드만 본다.
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+      for (const line of code.split('\n')) {
+        if (/severity\s*[!=]==/.test(line)) offenders.push(`${path}: ${line.trim()}`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('그리고 실제로 partitionIssues를 쓴다 — 위 검사가 "아무도 안 가른다"로도 초록이다', () => {
+    expect(sources['../src/resolve/index.ts']).toContain('partitionIssues(issues).errors')
+    expect(sources['../src/resolve/style.ts']).toContain('partitionIssues(resolved.issues).errors')
+  })
 })
 
 describe('T3 — suspicious-literal', () => {
