@@ -20,7 +20,9 @@
  *    패널의 구독자가 전부 깨어난다. `themeReloadToken`을 스토어에 두지 않은 것과 같은 판단이다
  *    (`routes/editor.tsx`).
  * 3. **되돌리기의 바탕이 다르다.** 페이지의 undo는 revision 로그 위에 서는데(§7.3)
- *    테마에는 그 로그가 없다 — **이 슬라이스는 undo를 만들지 않는다**(D3).
+ *    테마에는 그 로그가 없다 — **undo가 없다**(P4c-2 D3). **P4c-3이 더한 되돌리기는 undo가
+ *    아니다:** 한 걸음 뒤로 가는 것이 아니라 `saved` **한 점**으로 돌아가는 것이고, 그래서
+ *    로그 없이 선다(`replaceDraft`).
  *
  * ---
  *
@@ -62,6 +64,9 @@ export interface ThemeSaveFailure {
   issues: ThemeIssue[]
 }
 
+/** 테마 문서의 절 이름. `meta`를 포함한다 — 이름·설명도 편집 대상이다(재라 #7). */
+export type ThemeSection = keyof Theme
+
 export interface ThemeDraftState {
   /**
    * **이 초안이 어느 테마의 것인가.** 초안이 없으면 `null`이다.
@@ -83,9 +88,13 @@ export interface ThemeDraftState {
    * **서버가 마지막으로 확인해 준 문서.** `draft`와 **참조가 같으면 저장할 것이 없다.**
    *
    * 값 비교(깊은 비교)를 하지 않는 것이 판정이다: 이 스토어의 쓰기는 전부 새 객체를 만들고
-   * (`putSection`), 되돌리기가 없으므로 *"고쳤다가 원래 값으로 되돌린" 초안*이 참조로는
-   * 달라 보인다. **그 경우 저장 버튼이 켜져 있는 것은 손해가 아니다** — 통째 교체라 같은
-   * 문서를 다시 보내도 결과가 같다. 반대로 깊은 비교는 문서 전체를 매 입력마다 훑는다.
+   * (`putSection`) *"손으로 고쳤다가 원래 값으로 되돌린" 초안*이 참조로는 달라 보인다.
+   * **그 경우 저장 버튼이 켜져 있는 것은 손해가 아니다** — 통째 교체라 같은 문서를 다시
+   * 보내도 결과가 같다. 반대로 깊은 비교는 문서 전체를 매 입력마다 훑는다.
+   *
+   * > **P4c-3의 되돌리기 버튼은 그 경우가 아니다.** `replaceDraft(saved)`가 **같은 참조**를
+   * > 싣기 때문에 저장 버튼이 실제로 꺼진다(케이스가 그것을 단언한다). 즉 이 판정이 남긴
+   * > 여유는 *"사용자가 손으로 되돌린 경우"*에 대한 것이지 그 버튼에 대한 것이 아니다.
    */
   saved: Theme | null
   /**
@@ -116,6 +125,49 @@ export interface ThemeDraftState {
    * 여기서 한 번만 정규화한다. 키가 없는 것이 서버의 정상 응답이다(P4c-1).
    */
   serverWarnings: ThemeIssue[]
+  /**
+   * **화면의 글자 중 초안에 못 들어간 절**(P4c-3 D6 — 이월 §12.1-1의 답).
+   *
+   * W2가 남긴 사실: *"저장 버튼이 파싱 실패를 모른다. 파싱 실패 중에 저장하면 **마지막으로
+   * 읽힌 값**이 서버로 간다."* **P4c-3이 그것을 재현했다**(내가 쟀다: 상자에 읽히는 값을
+   * 넣고 이어서 읽히지 않는 글자를 친 뒤 저장을 누르니 저장 버튼이 `disabled=false`였고
+   * `updateTheme`이 **앞의 값**을 받았다).
+   *
+   * **`ThemeIssue`가 아니라 스토어의 상태다.** W2가 자리를 지목했고 P4c-2 ③이 동의했다 —
+   * *"이슈로 만들면 `ThemeIssueCode`에 **문서가 아니라 편집기의 상태**가 섞인다."*
+   * `resolveTheme`은 **읽힌 문서**만 받는데 이것은 읽히지 않은 글자다.
+   *
+   * **세는 것은 절이지 상자가 아니다.** 절 하나에 상자 하나라는 것은 오늘 JSON 에디터의
+   * 배치일 뿐이고(D6), 계약은 *"이 절의 초안 값이 화면의 글자와 어긋나 있다"*이다.
+   *
+   * **정렬해 둔다** — 값이 *"어느 절들이 어긋났는가"*라는 집합이지 어긋난 차례가 아니다.
+   * 화면이 이 배열을 그대로 문장에 싣는데, 정렬하지 않으면 같은 상태가 사용자의 타자
+   * 순서에 따라 다른 문장이 된다.
+   *
+   * > **가져오기의 읽기 실패는 여기 안 들어온다 — 판정이다.** 그쪽은 **초안을 건드리지
+   * > 않고** 화면의 글자도 초안의 어느 절에 대응하지 않는다(고르기 전의 대기 자리다).
+   * > 즉 그 상태로 저장해도 사용자가 놀랄 것이 없다. 이 필드가 막는 것은
+   * > *"내가 고친 줄 아는데 안 고쳐진 채로 저장되는 것"* 하나다.
+   */
+  unreadable: readonly ThemeSection[]
+  /**
+   * **초안을 통째로 갈아 끼운 횟수**(P4c-3 D5). `putSection`은 안 올린다.
+   *
+   * **왜 필요한가 — `unreadable`을 스토어에 두면서 생긴 거울이 어긋나는 자리가 있다.**
+   * JSON 상자는 *"내 텍스트가 대응하는 초안 값"*(`Editing.source`)을 들고 그 참조가
+   * 달라질 때만 텍스트를 새로 만든다(W2의 판정). 그런데 **없는 절은 앞뒤가 둘 다
+   * `undefined`라 그 비교가 안 걸린다** — 가져오기로 문서를 통째로 갈아 끼워도 그 상자만
+   * 읽지 못한 글자를 든 채 남고, 스토어의 `unreadable`은 비워져 **둘이 갈린다.**
+   *
+   * 그래서 JSON 에디터가 이 수를 상자의 `key`에 싣는다. 값이 바뀌면 상자가 다시 마운트되어
+   * 초안에서 텍스트를 새로 만든다 — **문이 하나라는 D5가 화면에서도 하나로 지켜지는 자리다.**
+   *
+   * **`ackSave`는 안 올린다.** 그쪽도 문서를 통째로 갈아 끼우지만, 읽지 못한 글자가 있으면
+   * `beginSave`가 막으므로 **그 상태로는 저장에 도달할 수 없다.** 올리면 저장할 때마다
+   * 상자가 다시 마운트되어 W2가 막아 둔 것(*"내가 친 글자를 왕복으로 다시 포맷하지 않는다"*)이
+   * 무너진다.
+   */
+  draftEpoch: number
 }
 
 /**
@@ -132,11 +184,10 @@ function initialState(): ThemeDraftState {
     saveStatus: 'idle',
     saveFailure: null,
     serverWarnings: [],
+    unreadable: [],
+    draftEpoch: 0,
   }
 }
-
-/** 테마 문서의 절 이름. `meta`를 포함한다 — 이름·설명도 편집 대상이다(재라 #7). */
-export type ThemeSection = keyof Theme
 
 type Listener = () => void
 
@@ -183,6 +234,11 @@ export class ThemeDraftStore {
       // 이미 비어 있으면 같은 배열을 그대로 넘긴다(`EditorStore`의 `pending`과 같은 이유) —
       // 새 빈 배열을 만들면 참조가 달라져 구독자가 테마를 열 때마다 헛일을 한다.
       serverWarnings: this.#state.serverWarnings.length === 0 ? this.#state.serverWarnings : [],
+      // **읽지 못한 글자는 앞 테마의 것이다.** 남기면 새 테마의 저장이 이유 없이 막힌다 —
+      // `saveFailure`·`saveStatus`를 여기서 함께 재설정하는 것과 같은 근거다.
+      unreadable: this.#state.unreadable.length === 0 ? this.#state.unreadable : [],
+      // **새 문서다.** 상자들이 다시 마운트되어야 앞 테마의 글자가 남지 않는다.
+      draftEpoch: this.#nextEpoch(theme),
     })
   }
 
@@ -191,7 +247,7 @@ export class ThemeDraftStore {
    * 움직여야 "초안은 없는데 어느 테마가 열려 있다고 말하는" 중간 상태가 생기지 않는다.
    */
   readonly clearTheme = (): void => {
-    const { serverWarnings } = this.#state
+    const { serverWarnings, unreadable } = this.#state
     this.#apply({
       openThemeId: null,
       draft: null,
@@ -201,6 +257,7 @@ export class ThemeDraftStore {
       saveStatus: 'idle',
       saveFailure: null,
       serverWarnings: serverWarnings.length === 0 ? serverWarnings : [],
+      unreadable: unreadable.length === 0 ? unreadable : [],
     })
   }
 
@@ -239,10 +296,48 @@ export class ThemeDraftStore {
    *
    * `putSection`이 있는데도 두는 이유: 절 이름을 모르는 채로 문서가 통째로 오는 경로가 있다
    * (붙여 넣은 JSON). 그때 절을 하나씩 넣으면 **없어진 절이 안 지워진다.**
+   *
+   * ---
+   *
+   * **P4c-3이 부르는 첫 자리를 만들었다.** W2가 *"스토어에 **있는데 부르는 자리가 없다**"*로
+   * 남긴 그것이고, **가져오기와 되돌리기가 같은 이 문을 쓴다**(D5) — *"초안을 통째로 갈아
+   * 끼우는 것"*의 규칙이 하나여야 한다.
+   *
+   * **셋을 함께 움직인다.**
+   *
+   * 1. `saveFailure`를 지운다 — 앞 문서의 실패이고, 새 문서에 대해서는 아직 아무 판정이 없다.
+   * 2. **`unreadable`을 비운다** — 읽지 못한 글자는 앞 문서의 절에 대한 것이다. 남기면
+   *    가져오기로 고친 뒤에도 저장이 막힌 채로 남는다.
+   * 3. **`draftEpoch`를 올린다** — 상자들이 다시 마운트되어 새 문서에서 텍스트를 만든다.
+   *    2와 3이 함께 가야 스토어와 화면이 안 갈린다(`draftEpoch`의 주석).
    */
   readonly replaceDraft = (draft: Theme): void => {
     if (this.#state.draft === null) return
-    this.#apply({ draft, saveFailure: null })
+    this.#apply({
+      draft,
+      saveFailure: null,
+      unreadable: this.#state.unreadable.length === 0 ? this.#state.unreadable : [],
+      draftEpoch: this.#nextEpoch(draft),
+    })
+  }
+
+  /**
+   * **이 절의 글자를 읽지 못했다고(또는 다시 읽었다고) 알린다**(D6).
+   *
+   * 쓰기 문을 `putSection` 하나로 둔 것과 어긋나 보이지만 **다른 축이다** — `putSection`은
+   * *문서*를 바꾸고 이것은 *편집기의 상태*를 바꾼다. 한 문으로 합치면 *"읽지 못했으니
+   * 문서는 그대로 두고 상태만 바꾼다"*를 표현할 수 없다.
+   *
+   * **바뀔 때만 새 배열을 만든다.** 타자 한 글자마다 같은 절이 계속 `true`로 들어오는데,
+   * 매번 새 배열을 만들면 참조가 달라져 구독자가 전부 깨어난다(`#apply`가 참조로 비교한다).
+   */
+  readonly setUnreadable = (section: ThemeSection, unreadable: boolean): void => {
+    const current = this.#state.unreadable
+    if (current.includes(section) === unreadable) return
+    const next = unreadable
+      ? [...current, section].sort()
+      : current.filter((entry) => entry !== section)
+    this.#apply({ unreadable: next })
   }
 
   /**
@@ -253,10 +348,21 @@ export class ThemeDraftStore {
    * **읽기 전용이면 `false`다.** 시스템 테마는 서버가 403으로 막지만, 여기서 먼저 막는 것은
    * *"눌러 봐야 실패할 버튼을 활성으로 두지 않는다"*는 이 저장소의 관례다.
    * **저장할 것이 없어도 `false`다** — 같은 문서를 다시 보낼 이유가 없다.
+   *
+   * **읽지 못한 절이 있어도 `false`다 — 넷째 갈래이고 P4c-3이 더했다**(D6).
+   * 앞의 셋과 성격이 다르다: 그쪽은 *"보낼 수 없다/보낼 것이 없다"*이고 이쪽은
+   * **보낼 수는 있는데 보내면 사용자가 놀란다**이다. 막지 않으면 화면에 *"JSON을 읽지
+   * 못했습니다"*가 떠 있는 채로 **마지막으로 읽힌 값**이 서버로 간다 — 통째 교체라
+   * 그 값이 서버의 문서가 된다.
+   *
+   * **왜 화면이 아니라 여기인가.** 이 관문이 이미 셋을 한 자리에서 판정하고 있고,
+   * 화면이 넷째만 따로 세면 *"왜 못 누르는가"*의 규칙이 두 곳이 된다
+   * (`SaveTools`의 주석이 그 셋을 갈라 두는 이유를 적었다).
    */
   readonly beginSave = (): boolean => {
-    const { draft, saved, readOnly, saveStatus } = this.#state
+    const { draft, saved, readOnly, saveStatus, unreadable } = this.#state
     if (draft === null || readOnly || saveStatus === 'saving' || draft === saved) return false
+    if (unreadable.length > 0) return false
     this.#apply({ saveStatus: 'saving', saveFailure: null })
     return true
   }
@@ -305,6 +411,18 @@ export class ThemeDraftStore {
   /** 프로젝트를 떠날 때. `clearTheme`이 남기는 것이 없으므로 오늘은 같은 일이지만, 짝을 맞춰 둔다. */
   readonly reset = (): void => {
     this.#apply(initialState())
+  }
+
+  /**
+   * 다음 `draftEpoch`. **문서가 실제로 갈렸을 때만 오른다.**
+   *
+   * 그냥 `+ 1`로 두면 *"같은 값으로 다시 불러도 알리지 않는다"*가 깨진다 — `#apply`가
+   * 참조로 비교하는데 이 수만 달라져 있으면 바뀐 것이 없는데도 구독자가 깨어난다
+   * (`test/store/theme-draft-store.test.ts`가 그것을 지키고 있고, 처음 판에서 실제로
+   * 죽였다). **세는 단위가 *"통째 교체를 시도한 횟수"*가 아니라 *"문서가 갈린 횟수"*다.**
+   */
+  #nextEpoch(draft: Theme | null): number {
+    return draft === this.#state.draft ? this.#state.draftEpoch : this.#state.draftEpoch + 1
   }
 
   /** 바뀐 필드가 있을 때만 상태를 교체하고 알린다. 근거는 `EditorStore.#apply`와 같다. */

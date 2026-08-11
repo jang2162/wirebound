@@ -304,3 +304,148 @@ describe('ThemeDraftStore', () => {
     expect(seen).toEqual(['a', 'b'])
   })
 })
+
+/**
+ * **파싱 실패 계약**(P4c-3 D6 — 이월 §12.1-1). W2가 남긴 사실: *"저장 버튼이 파싱 실패를
+ * 모른다. 파싱 실패 중에 저장하면 **마지막으로 읽힌 값**이 서버로 간다."*
+ *
+ * **자리가 스토어인 근거는 W2가 적고 P4c-2 ③이 동의했다** — *"이슈로 만들면
+ * `ThemeIssueCode`에 문서가 아니라 편집기의 상태가 섞인다."*
+ */
+describe('읽지 못한 절 (D6)', () => {
+  it('처음에는 아무 절도 안 어긋나 있다', () => {
+    expect(new ThemeDraftStore().getState().unreadable).toEqual([])
+  })
+
+  it('beginSave의 넷째 갈래다 — 앞의 셋과 따로 판정된다', () => {
+    const store = new ThemeDraftStore()
+    store.loadTheme('t1', theme('brand'))
+    store.putSection('tokens', {})
+    // 이 시점에는 셋 다 통과한다: 초안이 있고, 읽기 전용이 아니고, 저장할 것이 있다.
+    store.setUnreadable('components', true)
+
+    expect(store.beginSave()).toBe(false)
+    // **저장을 시작하지도 않았다** — 상태가 안 움직인다.
+    expect(store.getState().saveStatus).toBe('idle')
+
+    store.setUnreadable('components', false)
+    expect(store.beginSave()).toBe(true)
+  })
+
+  it('절마다 따로 세고 정렬해 든다 — 값이 집합이지 차례가 아니다', () => {
+    const store = new ThemeDraftStore()
+    store.loadTheme('t1', theme('brand'))
+
+    store.setUnreadable('primitives', true)
+    store.setUnreadable('components', true)
+
+    // 친 순서가 아니라 이름 순이다 — 화면이 이 배열을 문장에 그대로 싣는다.
+    expect(store.getState().unreadable).toEqual(['components', 'primitives'])
+
+    store.setUnreadable('components', false)
+    expect(store.getState().unreadable).toEqual(['primitives'])
+  })
+
+  it('같은 상태를 다시 알리면 참조가 그대로다 — 타자 한 글자마다 구독자를 안 깨운다', () => {
+    const store = new ThemeDraftStore()
+    store.loadTheme('t1', theme('brand'))
+    store.setUnreadable('components', true)
+    const before = store.getState().unreadable
+
+    let notified = 0
+    store.subscribe(() => {
+      notified += 1
+    })
+    store.setUnreadable('components', true)
+
+    expect(store.getState().unreadable).toBe(before)
+    expect(notified).toBe(0)
+  })
+
+  it('새 테마를 실으면 비운다 — 앞 테마의 글자가 새 테마의 저장을 막지 않는다', () => {
+    const store = new ThemeDraftStore()
+    store.loadTheme('t1', theme('brand'))
+    store.setUnreadable('components', true)
+
+    store.loadTheme('t2', theme('other'))
+
+    expect(store.getState().unreadable).toEqual([])
+  })
+
+  it('초안을 통째로 갈아 끼우면 비운다 — 가져오기로 고친 뒤 저장이 막혀 있으면 안 된다', () => {
+    const store = new ThemeDraftStore()
+    store.loadTheme('t1', theme('brand'))
+    store.setUnreadable('components', true)
+
+    store.replaceDraft({ ...theme('brand'), components: {} })
+
+    expect(store.getState().unreadable).toEqual([])
+    expect(store.beginSave()).toBe(true)
+  })
+})
+
+/**
+ * **초안을 통째로 갈아 끼우는 문이 하나다**(D5). `replaceDraft`가 그것이고 P4c-3이
+ * 부르는 자리를 만들었다 — 가져오기와 되돌리기가 같은 문을 쓴다.
+ */
+describe('replaceDraft와 draftEpoch (D5)', () => {
+  it('없어진 절이 실제로 지워진다 — putSection 여러 번으로는 못 하는 일이다', () => {
+    const store = new ThemeDraftStore()
+    store.loadTheme('t1', { ...theme('brand'), components: { Button: {} }, patterns: {} })
+
+    store.replaceDraft(theme('brand'))
+
+    const draft = store.getState().draft
+    expect(draft !== null && 'components' in draft).toBe(false)
+    expect(draft !== null && 'patterns' in draft).toBe(false)
+  })
+
+  it('초안이 없으면 아무것도 안 한다 — 라우트가 비운 창에서 던지지 않는다', () => {
+    const store = new ThemeDraftStore()
+    store.replaceDraft(theme('brand'))
+    expect(store.getState().draft).toBeNull()
+  })
+
+  it('문서가 갈릴 때만 epoch가 오른다', () => {
+    const store = new ThemeDraftStore()
+    const brand = theme('brand')
+    store.loadTheme('t1', brand)
+    const first = store.getState().draftEpoch
+
+    // 같은 참조로 다시 부르면 문서가 안 갈렸다.
+    store.loadTheme('t1', brand)
+    expect(store.getState().draftEpoch).toBe(first)
+
+    // 절 편집도 안 올린다 — 상자가 타자 중에 다시 마운트되면 커서가 튄다.
+    store.putSection('tokens', {})
+    expect(store.getState().draftEpoch).toBe(first)
+
+    store.replaceDraft(theme('brand'))
+    expect(store.getState().draftEpoch).toBe(first + 1)
+  })
+
+  it('ackSave는 안 올린다 — 읽지 못한 절이 있으면 그 저장에 도달할 수 없다', () => {
+    const store = new ThemeDraftStore()
+    store.loadTheme('t1', theme('brand'))
+    store.putSection('tokens', {})
+    const before = store.getState().draftEpoch
+
+    store.beginSave()
+    store.ackSave(theme('brand'))
+
+    expect(store.getState().draftEpoch).toBe(before)
+  })
+
+  it('되돌리기 — saved로 돌아가면 저장할 것이 없어진다', () => {
+    const store = new ThemeDraftStore()
+    const brand = theme('brand')
+    store.loadTheme('t1', brand)
+    store.putSection('tokens', {})
+    expect(isDirty(store.getState())).toBe(true)
+
+    store.replaceDraft(brand)
+
+    expect(isDirty(store.getState())).toBe(false)
+    expect(store.beginSave()).toBe(false)
+  })
+})

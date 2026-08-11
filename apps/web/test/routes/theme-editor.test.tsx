@@ -402,3 +402,91 @@ describe('P3 — 저장과 두 채널', () => {
     expect(field).toHaveProperty('value', '관리자')
   })
 })
+
+// ────────────────────────────────────────────────────────────────────────────────
+// 여기부터 P4c-3.
+// ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * **저장 버튼이 파싱 실패를 안다**(D6 — 이월 §12.1-1). W2가 남긴 공백이고, 그것이 실제로
+ * 열려 있었다는 것을 **고치기 전에 재현했다**(P4c-3 보고서 §3): 상자에 읽히는 값을 넣고
+ * 이어서 읽히지 않는 글자를 친 뒤 저장을 누르니 버튼이 `disabled=false`였고 `updateTheme`이
+ * **앞의 값**을 받았다.
+ */
+describe('P4c-3 — 읽지 못한 JSON이 저장을 막는다 (D6)', () => {
+  /** 상자에 값을 넣는다. `<textarea>`의 값 교체 하나가 그 화면의 유일한 입력이다. */
+  function typeJson(section: string, text: string): void {
+    fireEvent.change(screen.getByRole('textbox', { name: section }), { target: { value: text } })
+  }
+
+  it('파싱 실패 중에는 저장이 막히고 어느 절인지 이름으로 말한다', async () => {
+    const updateTheme = vi.fn<ApiClient['updateTheme']>(async () => derived())
+    open({ updateTheme })
+    await screen.findByRole('heading', { name: '브랜드' })
+
+    // 1) 읽히는 값을 하나 넣는다 — 이것이 "마지막으로 읽힌 값"이 된다.
+    typeJson('components', '{"Button":{"base":{"bg":"semantic.primary"}}}')
+    expect(screen.getByRole('button', { name: '저장' })).toHaveProperty('disabled', false)
+
+    // 2) 그 뒤에 읽히지 않는 글자를 친다.
+    typeJson('components', '{"Button":{"base":{"bg":')
+
+    expect(screen.getByRole('button', { name: '저장' })).toHaveProperty('disabled', true)
+    expect(screen.getByText('읽지 못한 JSON이 있어 저장할 수 없습니다: components')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    expect(updateTheme).toHaveBeenCalledTimes(0)
+  })
+
+  it('다시 읽히면 저장이 살아나고 그때 간 것은 새 값이다', async () => {
+    const updateTheme = vi.fn<ApiClient['updateTheme']>(async () => derived())
+    open({ updateTheme })
+    await screen.findByRole('heading', { name: '브랜드' })
+
+    typeJson('components', '{"Button":{"base":{"bg":"semantic.primary"}}}')
+    typeJson('components', '{"Button":{"base":{"bg":')
+    typeJson('components', '{"Card":{"base":{"bg":"semantic.surface"}}}')
+
+    expect(screen.getByRole('button', { name: '저장' })).toHaveProperty('disabled', false)
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => {
+      expect(updateTheme).toHaveBeenCalledTimes(1)
+    })
+    expect((updateTheme.mock.calls[0]![2] as { theme: Theme }).theme.components).toEqual({
+      Card: { base: { bg: 'semantic.surface' } },
+    })
+  })
+
+  it('읽기 전용이면 그 문장을 안 그린다 — 못 누르는 이유가 이미 다르다', async () => {
+    open({ detail: system() })
+    await screen.findByText('내장 테마는 고칠 수 없습니다.')
+
+    expect(screen.queryByText(/읽지 못한 JSON이 있어/)).toBeNull()
+  })
+})
+
+/**
+ * **두 이슈 상자를 눈으로 가른다**(D7 — 이월 §12.1-5). P4c-2 ③이 쟀다: `title`이
+ * `aria-label`로만 나가 *"보조 기술은 가르고 눈은 못 가른다"*였다(두 상자의 **보이는 글자가
+ * 글자까지 같았다**).
+ */
+describe('P4c-3 — 이슈 상자의 제목이 눈에 보인다 (D7)', () => {
+  it('제목이 heading으로 나오고 접근성 이름도 그대로다', async () => {
+    const warning = themeIssue(
+      'node-handle-overwrite',
+      'components.Tree.parts.node.paddingX',
+      '들여쓰기를 덮습니다',
+    )
+    open({ updateTheme: async () => derived({ warnings: [warning] }) })
+    await screen.findByRole('heading', { name: '브랜드' })
+
+    fireEvent.change(screen.getByLabelText('테마 이름'), { target: { value: '브랜드 2' } })
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    // **보이는 제목이다** — `aria-label`이었을 때는 `getByRole('heading')`으로 못 찾았다.
+    expect(await screen.findByRole('heading', { name: '마지막 저장에 대한 서버의 판정' })).toBeTruthy()
+    // 접근성 이름은 `aria-labelledby`로 그대로 남는다 — 기존 케이스들이 그것을 쓴다.
+    expect(screen.getByLabelText('마지막 저장에 대한 서버의 판정')).toBeTruthy()
+  })
+})

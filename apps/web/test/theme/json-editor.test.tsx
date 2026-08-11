@@ -285,3 +285,69 @@ describe('JsonEditor — 화면이 말하는 사실', () => {
     expect(screen.queryByText(/지우려면/)).toBeNull()
   })
 })
+
+// ────────────────────────────────────────────────────────────────────────────────
+// 여기부터 P4c-3 (D6) — **파싱 실패를 스토어에 알린다.**
+//
+// W2가 여기까지 왔다: 경보를 그리고 초안을 안 건드리는 것. **그런데 저장은 안 막혔다** —
+// 계약이 스토어에 없었기 때문이다(W2 §7-3: *"오늘 이 화면이 할 수 있는 것은 그렇게 말하는
+// 것뿐이다"*). 그 계약이 생겼으므로 이제 이 화면이 그것을 채운다.
+// ────────────────────────────────────────────────────────────────────────────────
+
+describe('JsonEditor — 읽지 못한 절을 스토어에 알린다 (P4c-3 D6)', () => {
+  it('파싱이 실패하면 그 절의 이름이 스토어에 실린다', () => {
+    const store = mount({ meta: META, components: { Button: {} } })
+
+    type('components', '{"Button":')
+
+    expect(store.getState().unreadable).toEqual(['components'])
+    // **초안은 그대로다** — W2의 선은 그대로 지켜진다.
+    expect(store.getState().draft?.components).toEqual({ Button: {} })
+  })
+
+  it('다시 읽히면 내려간다 — 한 번 실패한 절이 영원히 저장을 막지 않는다', () => {
+    const store = mount({ meta: META, components: { Button: {} } })
+
+    type('components', '{"Button":')
+    type('components', '{"Card":{}}')
+
+    expect(store.getState().unreadable).toEqual([])
+  })
+
+  it('상자를 비우는 것은 읽은 것이다 — 절이 없는 문서가 정상이다', () => {
+    const store = mount({ meta: META, components: { Button: {} } })
+
+    type('components', '{"Button":')
+    type('components', '   ')
+
+    expect(store.getState().unreadable).toEqual([])
+  })
+
+  it('절마다 따로 센다 — 한 상자가 실패해도 다른 상자는 계속 쓴다', () => {
+    const store = mount({ meta: META })
+
+    type('components', '{"Button":')
+    type('patterns', '{"nav.primary":')
+
+    expect(store.getState().unreadable).toEqual(['components', 'patterns'])
+
+    type('components', '{}')
+    expect(store.getState().unreadable).toEqual(['patterns'])
+  })
+
+  it('초안이 통째로 갈리면 상자가 다시 마운트된다 — 없는 절도 그렇다', () => {
+    // **이 케이스가 잡는 구석이 정확히 `draftEpoch`가 있는 이유다.** `patterns`는 앞뒤로
+    // 둘 다 `undefined`라 상자의 교정(`source !== value`)이 안 걸린다 — 다시 마운트하지
+    // 않으면 읽지 못한 글자가 새 문서 위에 그대로 남고, 스토어의 `unreadable`은 비워져
+    // **둘이 갈린다.**
+    const store = mount({ meta: META })
+    type('patterns', '{"nav.primary":')
+    expect(box('patterns').value).toBe('{"nav.primary":')
+
+    act(() => store.replaceDraft({ meta: META, components: { Card: {} } }))
+
+    expect(box('patterns').value).toBe('')
+    expect(box('patterns').getAttribute('aria-invalid')).toBe('false')
+    expect(store.getState().unreadable).toEqual([])
+  })
+})
