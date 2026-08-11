@@ -1059,5 +1059,70 @@
 
 /* W2 — JSON 에디터. 여기에만 더해라. */
 
+/* **절마다 상자 하나다**(D6). 세로로 쌓는 것은 상자가 넷이고 각각이 여러 줄 입력이라
+   가로로 나누면 넷 다 못 읽을 폭이 되기 때문이다. */
+.wb-shell-theme-json {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wb-shell-theme-json-derived {
+  margin: 0;
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-theme-json-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-shell-theme-json-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wb-shell-theme-json-gloss {
+  margin: 0;
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
+/* **경보가 아니다 — 늘 참인 사실이다.** 색으로 경보와 갈라 두지 않는 것은 셸에 경고색이
+   없기 때문이고(팔레트 여섯에 없다), 무게는 `role`이 이미 가른다. */
+.wb-shell-theme-json-caveat {
+  margin: 0;
+  font-size: 11px;
+  color: var(--wb-shell-ink);
+}
+
+/* `font-family`를 고정폭으로 두는 것은 이 상자가 **JSON 원문**이기 때문이다.
+   **문서를 감싸는 상자가 아니므로**(문서 노드가 여기 안 들어온다) `WRAPPERS`의 허용 목록과
+   무관하다 — 상속되는 속성을 걸어도 되는 자리다. */
+.wb-shell-theme-json-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 6px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.wb-shell-theme-json-error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--wb-shell-ink);
+}
+
+/* 둘째 문장을 줄을 갈라 두는 것은 앞 문장이 엔진의 문장(길이가 들쭉날쭉하다)이라
+   이어 붙이면 어디서 끝나는지 안 보이기 때문이다. */
+.wb-shell-theme-json-error-note {
+  display: block;
+  color: var(--wb-shell-muted);
+}
+
 /* W3 — 테마 갤러리. 여기에만 더해라. **`.wb-shell-theme-gallery` 자체는 위에 있고
    그 상자에는 허용 목록의 속성만 걸 수 있다.** */
