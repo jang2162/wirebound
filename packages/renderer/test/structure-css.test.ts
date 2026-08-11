@@ -305,6 +305,11 @@ describe('P4b-2 ③ — 조각 규칙의 수신자', () => {
     'Card [media]': ['mediaTop', 'horizontal'],
     // `:where(cardGrid)`로 좁혔다. 페이지네이션 조각 자체는 네 구조가 다 낸다.
     'List [pagination]': ['cardGrid'],
+    // P4b-3 ②(commerce)가 더했다. `:where(mediaList)`로 좁혔다 — `item`은 네 구조 중
+    // 셋이 내고(`table`만 안 낸다) `media`는 `cardGrid`도 낸다. 가로 분할과 썸네일 크기를
+    // 원하는 것은 `mediaList` 하나뿐이라 좁혔다.
+    'List [item]': ['mediaList'],
+    'List [media]': ['mediaList'],
     // `:where(indent)`로 좁혔다. `accordion`은 중첩으로 들여쓰므로 단계 변수를 안 싣는다.
     'Tree [node]': ['indent'],
     // 넷 다 비율을 싣는다 — 좁히지 않는다. 하나라도 안 실으면 조용히 기본값으로 굳으므로
