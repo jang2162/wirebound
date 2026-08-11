@@ -14,6 +14,7 @@ import type {
   ProjectTheme,
   RevisionSummary,
   SessionUser,
+  ThemeDetail,
   ThemeSummary,
   TreeMenuNode,
 } from './types'
@@ -433,6 +434,37 @@ const SHAPES = {
         typeof ((item['theme'] as Record<string, unknown>)['meta'] as Record<string, unknown>)['name'] ===
           'string',
     ),
+  /**
+   * 테마 하나 — 저작 UI가 편집하는 것(P4c-2). **소비자가 셋이고 읽는 값이 다르다.**
+   *
+   * | 소비자 | 읽는 값과 그 값이 되는 것 | 어긋나면 |
+   * |---|---|---|
+   * | `getTheme` | `theme`(초안 스토어에 실린다) · `base`(`resolveTheme`의 둘째 인자) · `system`(읽기 전용 판정) | 초안이 테마가 아닌 것을 들고, 파생의 검증이 `bad-extends`로 통째로 죽는다 |
+   * | `createTheme` | **`id`가 주소가 된다**(D2 — 파생을 만든 뒤 그 편집 화면으로 간다) | `/projects/p1/themes/`가 되고 그 주소는 어느 라우트도 잡지 않는다 |
+   * | `updateTheme` | `warnings`(화면에 그린다) · `theme`(저장된 것으로 초안 기준을 갱신) | 배열이 아닌 것을 `.map`하다 저장 성공 경로에서 던진다 |
+   *
+   * **`theme` 안쪽은 보지 않는다** — `projectTheme`·`themeList`와 같은 경계다.
+   * `resolveTheme`이 그것을 통째로 검증하고 이슈로 말하며, 여기서 한 겹 더 막으면
+   * *"해석기가 이슈로 말할 수 있는 것"*이 **읽을 수 없는 응답**으로 바뀐다.
+   * **다만 `meta.name`이 화면의 제목이 되므로 그것이 문자열인지는 본다**(`themeList`가
+   * 표시 이름을 보는 것과 같은 이유).
+   *
+   * **조건부 두 키는 "없거나, 있으면 그 타입"이다.** 없는 것이 정상이므로
+   * `undefined`를 통과시켜야 하고(`base`는 파생이 아닐 때, `warnings`는 경고가 없을 때),
+   * **있는데 모양이 틀린 것은 막는다** — `warnings`가 배열이 아니면 저장 성공 경로에서
+   * 화면이 던지고, `base`가 객체가 아니면 `resolveTheme`이 계약 밖 인자를 받는다.
+   */
+  themeDetail: (value) =>
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
+    typeof value['system'] === 'boolean' &&
+    isRecord(value['theme']) &&
+    isRecord((value['theme'] as Record<string, unknown>)['meta']) &&
+    typeof ((value['theme'] as Record<string, unknown>)['meta'] as Record<string, unknown>)['name'] ===
+      'string' &&
+    (value['base'] === undefined || isRecord(value['base'])) &&
+    (value['warnings'] === undefined || Array.isArray(value['warnings'])),
 } satisfies Record<string, Shape>
 
 /**
@@ -666,6 +698,14 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['patchOps']>[2],
     true
   >,
+  // 테마 쓰기 둘은 봉투 키가 `theme` 하나다(서버의 `ThemeBody`). 키가 하나뿐이라 초과
+  // 키가 생길 자리가 좁아 보이지만, **`declaredOnly`를 지나는 이유는 초과 키가 아니라
+  // 규칙의 단일성이다** — 그 함수 머리말의 *"자리마다 함수를 두면 같은 위험에 대한
+  // 규칙이 일곱 벌이 된다"*가 그것이다. 그리고 `getTheme` 응답을 그대로 되보내는 것
+  // (`{ id, system, updatedAt, theme, base }`)이 실제로 있을 법한 실수인데, 서버의
+  // `ThemeBody`가 `z.strictObject`라 그 본문은 400이다.
+  createTheme: { theme: true } satisfies Record<keyof Parameters<ApiClient['createTheme']>[1], true>,
+  updateTheme: { theme: true } satisfies Record<keyof Parameters<ApiClient['updateTheme']>[2], true>,
 }
 
 /**
@@ -729,6 +769,9 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
 
   const menuPath = (projectId: string, nodeId: string): string =>
     `${projectPath(projectId)}/menu/${encodeURIComponent(nodeId)}`
+
+  const themePath = (projectId: string, themeId: string): string =>
+    `${projectPath(projectId)}/themes/${encodeURIComponent(themeId)}`
 
   return {
     login: (email, password) =>
@@ -855,6 +898,27 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
         // 것"*인데(`declaredOnly` 머리말) 여기 들어오는 것은 객체가 아니라 `string | null`
         // 하나다 — 초과 키가 생길 자리가 없다.
         { themeId },
+      ),
+    // 아래 셋이 P4c-2의 테마 저작 경로다. **`getProjectTheme`과 경로가 한 글자 다르다**
+    // (`/theme` vs `/themes/:id`) — 소비자도 내는 것도 다르다(서버 README의 소비자 표).
+    getTheme: (projectId, themeId) =>
+      request<ThemeDetail>('GET', themePath(projectId, themeId), SHAPES.themeDetail),
+    createTheme: (projectId, body) =>
+      request<ThemeDetail>(
+        'POST',
+        `${projectPath(projectId)}/themes`,
+        SHAPES.themeDetail,
+        declaredOnly(body, BODY_KEYS.createTheme),
+      ),
+    // **`updateBody`를 안 지난다.** 그것이 막는 것은 *"바꿀 값이 하나도 없는 갱신"*인데,
+    // 이쪽은 키가 `theme` 하나이고 그 키가 없으면 바꿀 것이 없는 게 아니라 **본문이
+    // 없는 것**이다 — 서버도 그것을 400 봉투 위반으로 낸다. 갱신 셋과 위험의 모양이 다르다.
+    updateTheme: (projectId, themeId, body) =>
+      request<ThemeDetail>(
+        'PUT',
+        themePath(projectId, themeId),
+        SHAPES.themeDetail,
+        declaredOnly(body, BODY_KEYS.updateTheme),
       ),
     listMyRevisions: (projectId, pageId) =>
       request<RevisionSummary[]>(

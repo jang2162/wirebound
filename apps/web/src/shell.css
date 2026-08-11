@@ -62,14 +62,25 @@
   테스트로 옮겼고, 그 파일의 **심기 표**가 그 열넷을 하나씩 심어 잡히는 것을 함께 잰다.
 */
 
-.wb-shell {
+/* 셸의 팔레트. **화면 루트 둘이 공유한다** — 에디터 셸(§9)과 테마 저작 화면(P4c-2 D1).
+   후자는 셸 안이 아니라 별도 라우트라(`routes/theme-editor.tsx`) `.wb-shell` 아래에 있지
+   않다. 값을 두 벌 적으면 한쪽만 고쳐지는 자리가 되므로 선언을 여기 하나로 둔다.
+
+   **여섯이다.** `theme/use-theme-css.ts`가 D5의 근거로 이 수를 인용하는데(테마가 `:root`에
+   싣는 이름과 **교집합이 비어 있다**), 그쪽은 "일곱"이라 적고 있었고 거짓이었다 — 그
+   판정을 떠받치는 것은 수가 아니라 **접두어가 전부 `--wb-shell-`이라는 것**이고 그쪽은 참이다.
+   검산: `grep -oE -- "^\s*--wb-shell-[a-z-]+:" apps/web/src/shell.css | sort -u | wc -l` */
+.wb-shell,
+.wb-shell-theme {
   --wb-shell-line: #dfe3e8;
   --wb-shell-chrome: #f6f7f9;
   --wb-shell-ink: #1d2530;
   --wb-shell-muted: #6b7684;
   --wb-shell-accent: #2f6fed;
   --wb-shell-gap: 1px;
+}
 
+.wb-shell {
   /* `position: fixed`는 문서 여백을 피하려는 것이다. `body`의 기본 여백을 지우려면
      요소 선택자가 필요한데(위 2번), 셸은 창을 가득 채우는 화면이므로 흐름에서 빼는
      쪽이 더 곧다. */
@@ -663,3 +674,207 @@
   align-items: flex-end;
   margin: 0.5rem 0;
 }
+
+/* ── 테마 저작 화면(P4c-2 D1). **셸 밖의 별도 라우트다** ────────────────────────────
+   클래스 접두어를 `wb-shell-`로 맞추는 것은 프로젝트 목록과 같은 이유다 — 화면이 셸
+   안이든 밖이든 `test/shell-css.test.ts`가 그 접두어를 기계로 지킨다.
+
+   **`.wb-shell-theme-gallery`는 문서를 감싸는 상자다.** 갤러리가 카탈로그 컴포넌트를
+   렌더러로 그리므로 그 안에 문서 노드가 들어온다 — 여기 상속되는 속성을 걸면 D7이
+   깨지고, `test/shell-css-guard.ts`의 `WRAPPERS`가 그것을 막는다. */
+.wb-shell-theme {
+  display: grid;
+  grid-template-columns: minmax(320px, 30%) 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'head head'
+    'edit gallery';
+  min-height: 100vh;
+}
+
+.wb-shell-theme-header {
+  grid-area: head;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--wb-shell-line);
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-theme-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-theme-back,
+.wb-shell-theme-edit-link {
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+}
+
+/* 고르개와 편집 링크를 한 묶음으로 둔다 — 셸 머리의 `flex-wrap`이 그 묶음을 한 조각으로 본다. */
+.wb-shell-theme-picker-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-shell-theme-readonly {
+  margin: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-theme-derive {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.wb-shell-theme-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.wb-shell-theme-input {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-theme-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.wb-shell-theme-action {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-theme-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* **저장 안 한 변경은 늘 보인다**(재라 #3 — 알리되 막지 않는다). */
+.wb-shell-theme-dirty,
+.wb-shell-theme-blocked {
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-theme-save-failure {
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-theme-edit {
+  grid-area: edit;
+  overflow: auto;
+  padding: 12px;
+  border-right: 1px solid var(--wb-shell-line);
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-theme-panes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-shell-theme-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* **이슈는 severity로 갈라 그린다**(D4). 색이 아니라 자리와 문안으로 가르는 것은
+   `node-handle-overwrite`가 빨간 배지로 나오면 소음이 되기 때문이다(P4c-1 이월 §2). */
+.wb-shell-theme-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.wb-shell-theme-issue-group {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.wb-shell-theme-issue-heading {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wb-shell-theme-issue-list {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.wb-shell-theme-issue {
+  margin-bottom: 4px;
+}
+
+.wb-shell-theme-issue-path {
+  margin-right: 6px;
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-theme-issue-message {
+  font-size: 12px;
+}
+
+.wb-shell-theme-issue-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
+/* **문서를 감싸는 상자다.** 상속되는 속성을 걸지 마라 — 위 머리말과 `WRAPPERS` 참고. */
+.wb-shell-theme-gallery {
+  grid-area: gallery;
+  overflow: auto;
+  padding: 12px;
+  background: var(--wb-shell-chrome);
+}
+
+/* ── ②가 채울 세 절. **①이 자리를 미리 갈라 두었다** ──────────────────────────────────
+   셋이 병렬로 일하므로 각자 **자기 절 안에만** 규칙을 더한다. 파일 끝에 나란히 덧붙이면
+   같은 몇 줄을 셋이 고쳐 병합이 충돌하고, **그 충돌은 회귀가 못 잡는다**(①의 P5가
+   스텁으로 밟아 확인했다 — 셋을 다 등록해도 전체 회귀는 0 사망이었다).
+
+   지키는 것 둘:
+   - 클래스 접두어는 `wb-shell-`이다. `test/shell-css.test.ts`가 기계로 지킨다
+     (①이 접두어 없는 클래스를 심어 확인했다 — **14 사망**).
+   - **문서를 감싸는 상자에는 상속 속성을 걸지 마라.** 갤러리 상자가 그것이고
+     `WRAPPERS`에 이미 있다. */
+
+/* W1 — 토큰 GUI. 여기에만 더해라. */
+
+/* W2 — JSON 에디터. 여기에만 더해라. */
+
+/* W3 — 테마 갤러리. 여기에만 더해라. **`.wb-shell-theme-gallery` 자체는 위에 있고
+   그 상자에는 허용 목록의 속성만 걸 수 있다.** */

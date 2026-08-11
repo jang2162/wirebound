@@ -6,6 +6,7 @@
  * 구현은 `http-client.ts`(실제 서버)와 각 화면 테스트의 가짜 두 부류다.
  */
 import type { PatchOp } from '@wirebound/schema'
+import type { Theme } from '@wirebound/themes'
 import type {
   MenuNode,
   PageDetail,
@@ -14,6 +15,7 @@ import type {
   ProjectDetail,
   RevisionSummary,
   SessionUser,
+  ThemeDetail,
   ThemeSummary,
   TreeMenuNode,
 } from './types'
@@ -211,6 +213,43 @@ export interface ApiClient {
    * **owner만 성공한다**(§10 — 테마 편집과 같은 등급). 서버가 막지만 화면도 미리 막는다.
    */
   setProjectTheme(projectId: string, themeId: string | null): Promise<ProjectTheme>
+  /**
+   * **저작 UI가 편집할 테마 하나**(P4c-2 D1). `getProjectTheme`과 **다른 것을 낸다** —
+   * 그쪽은 캔버스가 그대로 쓸 **홀로 서는 테마**이고, 이쪽은 **사람이 적은 파생 문서
+   * 그대로 + `base`**다(서버 README의 소비자 표).
+   *
+   * **viewer도 읽을 수 있다.** 편집을 막는 것은 쓰기 둘이고(§10), 이 라우트는 `viewer`
+   * 게이트다 — 화면이 읽기 전용으로 그릴 수 있어야 하기 때문이다.
+   *
+   * **시스템 테마는 어느 프로젝트에서나 읽힌다**(`project_id IS NULL`). 남의 프로젝트
+   * 테마는 404다(설계 §10의 존재 숨김).
+   */
+  getTheme(projectId: string, themeId: string): Promise<ThemeDetail>
+  /**
+   * 테마를 만든다. **owner만 부를 수 있다**(§10 — 테마 편집은 owner).
+   *
+   * D2의 *"이 테마를 바탕으로 새 테마 만들기"*가 부르는 자리다. 그때 본문은
+   * `{ theme: { meta: { id, name, extends: 'system:<slug>' } } }`뿐이고 나머지 절은 비운다 —
+   * **파생은 덮어쓸 것만 적는 것이 §6.9의 뜻**이다.
+   *
+   * **`meta.id`(slug)가 충돌하면 409다.** 유일성 단위가 `(project_id, slug)`이므로
+   * 시스템 테마와 같은 slug는 충돌하지 않는다.
+   *
+   * **응답의 `id`가 편집 화면의 주소가 된다** — `SHAPES.themeDetail`이 빈 문자열을 막는
+   * 이유가 그것이다(`pageDetail`의 "주소가 되는 값" 축과 같다).
+   */
+  createTheme(projectId: string, body: { theme: Theme }): Promise<ThemeDetail>
+  /**
+   * **통째 교체다**(D3). 서버의 `updateTheme`이 절 다섯을 전부 쓰므로 **본문에 없는 절은
+   * 실제로 비워진다** — 부분 갱신이 아니다. **owner만 부를 수 있고 시스템 테마는 403이다.**
+   *
+   * `updateProject` 부류와 달리 `updateBody`(빈 본문 차단)를 지나지 않는다 — 키가
+   * `theme` 하나뿐이라 "바꿀 값이 없는 본문"이라는 것이 성립하지 않는다.
+   *
+   * **`error`가 있으면 422다**(`ApiError.issues`에 `ThemeIssue[]`가 실려 온다).
+   * **경고만 있으면 저장되고** 응답의 `warnings`에 실린다 — 없으면 그 키 자체가 없다.
+   */
+  updateTheme(projectId: string, themeId: string, body: { theme: Theme }): Promise<ThemeDetail>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

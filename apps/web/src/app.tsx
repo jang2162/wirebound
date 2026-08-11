@@ -9,6 +9,7 @@ import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
 import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
+import { ThemeEditorRoute } from './routes/theme-editor'
 import { SessionProvider } from './session/session-context'
 
 export function App(): ReactElement {
@@ -52,6 +53,16 @@ export function App(): ReactElement {
               그대로 이어진다. */}
           <Route path="/projects/:projectId" element={<EditorShellRoute />} />
           <Route path="/projects/:projectId/pages/:pageId" element={<EditorShellRoute />} />
+          {/* **테마 저작은 셸 밖의 별도 라우트다**(P4c-2 D1). 셸 안에 두지 않는 이유 셋은
+              `routes/theme-editor.tsx` 머리말에 있다 — 요지는 갤러리와 캔버스가 *"화면 전체를
+              쓰는 미리보기"* 자리를 다툰다는 것이다.
+
+              **`:themeId`는 행 id다**(P4b-3이 정했다). slug가 아니다 — 유일성 단위가
+              `(project_id, slug)`라 시스템 테마와 프로젝트 테마가 같은 slug를 가질 수 있다.
+
+              **문지기 안이다** — 위 `RequireAuth` 아래에 있으므로 로그인 없이는 못 온다.
+              owner인지는 화면이 판정한다(읽기는 viewer도 된다 — 그 파일의 권한 절). */}
+          <Route path="/projects/:projectId/themes/:themeId" element={<ThemeEditorRoute />} />
         </Route>
       </Routes>
     </SessionProvider>

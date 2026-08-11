@@ -96,6 +96,15 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
      * 무엇을 하는지 정하지 않은 것이다.
      */
     setProjectTheme: notStubbed('setProjectTheme'),
+    /**
+     * **셋 다 `notStubbed`다.** 위 두 예외(`getProjectTheme`·`listProjectThemes`)는
+     * *"테스트가 요청하지 않아도 화면이 부른다"*가 근거인데, 이 셋을 부르는 화면은
+     * 테마 저작 라우트 하나뿐이고 **그 주소로 가는 테스트만 그것을 지난다.**
+     * 그러므로 불렸는데 스텁이 없다면 그 테스트가 무엇을 그리는지 정하지 않은 것이다.
+     */
+    getTheme: notStubbed('getTheme'),
+    createTheme: notStubbed('createTheme'),
+    updateTheme: notStubbed('updateTheme'),
     ...overrides,
   }
 }

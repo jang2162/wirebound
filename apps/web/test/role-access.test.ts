@@ -68,6 +68,11 @@ describe('역할을 읽는 자리', () => {
     expect([...new Set(reads.map((r) => r.path))].sort()).toEqual([
       '../src/routes/editor.tsx',
       '../src/routes/project-list.tsx',
+      // **P4c-2가 셋째를 만들었다.** 테마 저작 화면이 *"고칠 수 있는가"*를 알아야 한다
+      // (§10 — 쓰기 둘은 owner 게이트다). 앞서 P4b-3이 둘째(에디터 셸)를 만들면서
+      // 이 케이스의 하중을 *"자리가 하나"*에서 *"전부 판정 함수를 지난다"*로 옮겼고,
+      // 그 판단 덕에 셋째가 늘어도 규칙이 안 넓어졌다.
+      '../src/routes/theme-editor.tsx',
     ])
   })
 
