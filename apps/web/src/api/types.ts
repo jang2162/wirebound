@@ -10,7 +10,7 @@
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
 import type { PageDocument, PatchOp } from '@wirebound/schema'
-import type { Theme } from '@wirebound/themes'
+import type { Theme, ThemeIssue } from '@wirebound/themes'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
 export type ProjectRole = 'owner' | 'editor' | 'viewer'
@@ -200,4 +200,49 @@ export interface ThemeSummary {
   /** `true`면 wirebound 내장 테마다(§6.10 — 읽기 전용, 어느 프로젝트에서나 고를 수 있다). */
   system: boolean
   theme: Theme
+}
+
+/**
+ * **테마 하나 — 저작 UI가 편집하는 대상**(`GET`·`POST`·`PUT .../themes[/:themeId]`).
+ *
+ * 서버 README가 *"바탕은 네 키 + 조건부 둘"*로 적은 그 형태다. **셋을 한 타입으로 두는
+ * 것이 판정이다** — 세 라우트가 같은 `toResponse`를 지나고 조건부 키만 갈리므로
+ * (`apps/api/src/routes/themes.ts`), 타입을 셋으로 쪼개면 내용이 같은 셋이 생겨 한쪽만
+ * 고쳐지는 자리가 된다(`http-client.ts`의 `SHAPES.pageDetail`이 같은 판단을 적어 두었다).
+ * **대신 어느 라우트가 무엇을 낼 수 있는지는 아래 두 필드가 말한다.**
+ *
+ * | 라우트 | `base` | `warnings` |
+ * |---|---|---|
+ * | `GET .../themes/:themeId` | 파생이면 붙는다 | **안 붙는다** — 이 라우트는 테마를 해석하지 않는다 |
+ * | `POST .../themes` · `PUT .../themes/:themeId` | **안 붙는다** | 경고가 있으면 붙는다 |
+ *
+ * **`ThemeSummary`와 다른 타입이다.** 목록 항목에는 `updatedAt`이 없고 조건부 둘도 없다 —
+ * 목록의 쓸모는 고르기이지 편집이 아니다(서버 README).
+ */
+export interface ThemeDetail {
+  /** **행의 uuid다**(`theme.meta.id`는 slug다). 경로에 쓰는 것이 이 값이다. */
+  id: string
+  /** `true`면 편집할 수 없다(§6.10). 서버가 `PUT`·`DELETE`를 403으로 막는다. */
+  system: boolean
+  updatedAt: string
+  /** **저장된 그대로다** — 파생이면 `meta.extends`를 지닌 채 온다(합쳐지지 않는다). */
+  theme: Theme
+  /**
+   * 상속 대상 시스템 테마 전문. **파생 테마의 상세 조회에만 붙는다.**
+   *
+   * `resolveTheme(document, base)`가 base 없이는 파생 문서의 해석 자체를 거부하므로
+   * (`bad-extends`), 편집 중 검증을 클라이언트가 돌려면 이것이 반드시 필요하다.
+   *
+   * **상속 대상이 코드에 없으면 파생인데도 키가 없다**(서버 `toDetailResponse` — 동기화가
+   * 남긴 낡은 파생). 그 상태는 *"열 수는 있지만 검증이 안 되는 테마"*이고, 화면이 그것을
+   * `theme.meta.extends`의 유무와 이 키의 유무를 함께 보고 판정해야 한다.
+   */
+  base?: Theme
+  /**
+   * 저장된 테마의 **경고**. **쓰기 둘에만, 경고가 있을 때만 붙는다 — 없으면 키 자체가
+   * 없다**(P4c-1이 그렇게 만들었다. 페이지 쪽 `warnings`·`clientOpId`와 같은 관례).
+   *
+   * `error`는 여기 오지 않는다 — 그것은 422이고 `ApiError.issues`로 온다.
+   */
+  warnings?: ThemeIssue[]
 }

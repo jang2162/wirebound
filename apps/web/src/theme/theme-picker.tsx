@@ -48,6 +48,7 @@
  * 아직 없다**(편집 실패의 `EditAlert`는 편집 파이프라인 전용이다).
  */
 import { useEffect, useState, type ReactElement } from 'react'
+import { Link } from 'react-router'
 import { useApi } from '../api/context'
 import type { ThemeSummary } from '../api/types'
 
@@ -118,21 +119,41 @@ export function ThemePicker(props: {
   }
 
   return (
-    <label className="wb-shell-theme-picker">
-      테마
-      <select
-        className="wb-shell-theme-select"
-        value={selected}
-        disabled={!props.canChoose}
-        onChange={(event) => void choose(event.target.value)}
-      >
-        <option value={NONE}>없음</option>
-        {options.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.system ? `${entry.theme.meta.name} (내장)` : entry.theme.meta.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="wb-shell-theme-picker-group">
+      <label className="wb-shell-theme-picker">
+        테마
+        <select
+          className="wb-shell-theme-select"
+          value={selected}
+          disabled={!props.canChoose}
+          onChange={(event) => void choose(event.target.value)}
+        >
+          <option value={NONE}>없음</option>
+          {options.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.system ? `${entry.theme.meta.name} (내장)` : entry.theme.meta.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {/* **저작 화면으로 가는 길**(P4c-2 D1 — *"셸 머리의 고르개에서 이 화면으로 가는 길을
+          만든다. 지금 고르개는 고르기만 한다"*).
+
+          **`canChoose`로 감추지 않는다.** 편집 화면은 읽기 전용으로도 쓸모가 있고
+          (`routes/theme-editor.tsx`의 권한 절 — 읽기는 viewer 게이트다), 감추면 owner가
+          아닌 사람이 *"이 프로젝트가 무엇을 입고 있는지"*를 볼 길이 없어진다.
+
+          **고른 것이 없으면 갈 곳이 없다.** `NONE`은 *"테마를 고르지 않았다"*는 정상
+          상태이고 그때는 편집할 대상 자체가 없다 — 목록에서 아무거나 골라 열게 하면
+          **보고 있는 것과 다른 테마의 편집 화면**으로 보내는 셈이다. */}
+      {selected !== NONE && (
+        <Link
+          className="wb-shell-theme-edit-link"
+          to={`/projects/${props.projectId}/themes/${selected}`}
+        >
+          테마 편집
+        </Link>
+      )}
+    </div>
   )
 }

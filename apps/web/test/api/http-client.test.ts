@@ -15,6 +15,7 @@ import type {
   PageDetail,
   ProjectDetail,
   ProjectTheme,
+  ThemeDetail,
   ThemeSummary,
   SessionUser,
   TreeMenuNode,
@@ -77,6 +78,18 @@ const themeSummary: ThemeSummary = {
 
 const projectTheme: ProjectTheme = { themeId: null, theme: { meta: { id: 'admin', name: '관리자', version: '1.0.0' } },
   issues: [],
+}
+
+/**
+ * `GET·POST·PUT .../themes[/:themeId]`의 응답(P4c-2). **조건부 두 키를 일부러 안 담았다** —
+ * 그것이 서버의 흔한 응답이고(`base`는 파생일 때만, `warnings`는 경고가 있을 때만),
+ * *"없는 것이 정상"*을 통과시키는 것이 `SHAPES.themeDetail`의 절반이다.
+ */
+const themeDetail: ThemeDetail = {
+  id: 't1',
+  system: false,
+  updatedAt: '2026-08-11T09:00:00.000Z',
+  theme: { meta: { id: 'brand', name: '브랜드', version: '1.0.0' } },
 }
 const treeNode: TreeMenuNode = {
   id: 'm1',
@@ -252,6 +265,30 @@ const ENDPOINTS: Array<{
     body: [revision],
     call: (c) => c.listMyRevisions('p1', 'pg1'),
   },
+  // **테마 저작 셋(P4c-2).** `getProjectTheme`의 `/theme`과 한 글자 차이인 `/themes/:id`다 —
+  // 두 줄이 나란히 있어야 그 차이가 표에서 보인다.
+  {
+    client: 'getTheme',
+    url: '/api/projects/p1/themes/t1',
+    method: 'GET',
+    body: themeDetail,
+    call: (c) => c.getTheme('p1', 't1'),
+  },
+  {
+    client: 'createTheme',
+    url: '/api/projects/p1/themes',
+    method: 'POST',
+    body: themeDetail,
+    call: (c) => c.createTheme('p1', { theme: { meta: { id: 'brand', name: '브랜드', version: '1.0.0' } } }),
+  },
+  {
+    client: 'updateTheme',
+    url: '/api/projects/p1/themes/t1',
+    method: 'PUT',
+    body: themeDetail,
+    call: (c) =>
+      c.updateTheme('p1', 't1', { theme: { meta: { id: 'brand', name: '브랜드', version: '1.0.0' } } }),
+  },
 ]
 
 /**
@@ -292,6 +329,14 @@ const SHAPE_CASES: Array<{
     broken: [{ ...themeSummary, id: '' }],
     ok: [themeSummary],
     call: (c) => c.listProjectThemes('p1'),
+  },
+  {
+    // **`warnings`가 배열이 아니면 막는다** — 그 값을 저장 성공 경로에서 화면이 `.map`한다.
+    // `id: ''`도 같은 부류지만(생성 응답의 `id`가 주소가 된다) 한 줄에 하나만 심는다.
+    shape: 'themeDetail',
+    broken: { ...themeDetail, warnings: 'none' },
+    ok: themeDetail,
+    call: (c) => c.getTheme('p1', 't1'),
   },
   // --- 아래 셋은 케이스가 **없었다.** 세는 절이 이것을 찾아냈다. ---
   // `sessionUser.id`는 세션 문맥이 그대로 들고 다니는 값이다(`session/session-context.tsx`).

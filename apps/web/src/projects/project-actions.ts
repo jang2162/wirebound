@@ -59,10 +59,28 @@ export interface ProjectAbilities {
    * 서버가 셋을 각각 다른 라우트로 받는다.
    */
   chooseTheme: boolean
+  /**
+   * 테마 **문서를 고칠** 수 있는가(`POST .../themes` · `PUT .../themes/:themeId` — P4c-2 D1).
+   *
+   * **`chooseTheme`과 값이 같은데도 따로 두는 이유는 `rename`·`remove`가 그런 것과 같다** —
+   * 서버가 둘을 다른 라우트로 받는다. 그리고 둘은 **다른 질문**이다: 고르기는
+   * *"이 프로젝트가 무엇을 입을까"*이고 편집은 *"그 옷을 고쳐도 되는가"*다. 오늘 둘 다
+   * owner인 것은 §10의 관측이지 하나로 합쳐도 된다는 뜻이 아니다.
+   *
+   * **읽기는 이것으로 막지 않는다.** `GET .../themes/:themeId`는 viewer 게이트이고
+   * (`apps/api/src/routes/themes.ts`), 화면은 owner가 아닌 사람에게 **읽기 전용**으로
+   * 보여 준다 — 못 들어오게 하면 *"무엇이 적용돼 있는지"*조차 못 본다.
+   */
+  editTheme: boolean
 }
 
 /** 아무것도 못 하는 상태. 역할을 모르거나 계약 밖 값일 때의 답이다. */
-const NOTHING: ProjectAbilities = { rename: false, remove: false, chooseTheme: false }
+const NOTHING: ProjectAbilities = {
+  rename: false,
+  remove: false,
+  chooseTheme: false,
+  editTheme: false,
+}
 
 /**
  * `role`이 `owner`일 때만 열린다.
@@ -102,5 +120,5 @@ const NOTHING: ProjectAbilities = { rename: false, remove: false, chooseTheme: f
  */
 export function projectAbilities(role: ProjectRole | undefined): ProjectAbilities {
   if (role !== 'owner') return NOTHING
-  return { rename: true, remove: true, chooseTheme: true }
+  return { rename: true, remove: true, chooseTheme: true, editTheme: true }
 }

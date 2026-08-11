@@ -49,6 +49,7 @@ const METHODS = [
   'createPage', 'updatePage', 'deletePage', 'getPage',
   'patchOps', 'listMyRevisions',
   'getProjectTheme', 'listProjectThemes', 'setProjectTheme',
+  'getTheme', 'createTheme', 'updateTheme',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -89,7 +90,9 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   logout: [],
   me: ['../src/session/session-context.tsx'],
   listProjects: ['../src/projects/use-project-commands.tsx'],
-  getProject: ['../src/routes/editor.tsx'],
+  // **소비자가 둘이고 읽는 것이 다르다.** 셸은 `name`·`id`를 그리려고 부르고, 테마 저작
+  // 화면은 **`role`** 때문에 부른다(§10 — 쓰기가 owner 게이트라 읽기 전용인지 알아야 한다).
+  getProject: ['../src/routes/editor.tsx', '../src/routes/theme-editor.tsx'],
   createProject: ['../src/projects/use-project-commands.tsx'],
   updateProject: ['../src/projects/use-project-commands.tsx'],
   deleteProject: ['../src/projects/use-project-commands.tsx'],
@@ -109,6 +112,12 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   getProjectTheme: ['../src/theme/use-project-theme.ts', '../src/theme/theme-picker.tsx'],
   listProjectThemes: ['../src/theme/theme-picker.tsx'],
   setProjectTheme: ['../src/theme/theme-picker.tsx'],
+  // 테마 저작 셋(P4c-2). **셋 다 한 파일에서만 불린다** — ②의 셋(토큰 GUI·JSON
+  // 에디터·갤러리)은 초안 스토어만 만지고 서버에는 닿지 않는다는 것이 D3의 뜻이고,
+  // **이 줄이 그것을 실행으로 지킨다:** 어느 워커가 자기 화면에서 직접 저장하면 여기가 죽는다.
+  getTheme: ['../src/routes/theme-editor.tsx'],
+  createTheme: ['../src/routes/theme-editor.tsx'],
+  updateTheme: ['../src/routes/theme-editor.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {
