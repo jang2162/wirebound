@@ -75,6 +75,42 @@
  * (3) 복원의 근거는 §4.5의 스냅샷이다 — 스냅샷을 뜬 시점의 payload가 그 코멘트를 담고
  * 있으므로 복원 경로는 이미 있다(그것을 만드는 것은 P6이다).
  *
+ * ## 쓰기 셋이 지키는 트랜잭션 규칙 둘 (리뷰 B5·B3이 찾았다)
+ *
+ * **규칙 1 — 파이프라인이 실패하면 던진다. `return`하지 않는다.**
+ *
+ * `withTransaction`의 콜백이 **정상 종료하면 그 구간은 커밋된다**(`db/tx.ts`). 그래서
+ * 실패를 `return`으로 내보내면 그 앞에서 이미 쓴 것이 **그대로 남는다.** `DELETE`가
+ * 정확히 그랬다: 행을 먼저 지우고 `applyEdit` 실패를 `return`했더니 **409를 받았는데
+ * 코멘트가 사라져 있었다**(리뷰 B5가 실측). *"실패했다고 말하는데 조작은 일어났다"* —
+ * 이 저장소가 반복해 겪은 부류를 트랜잭션 층에서 다시 만난 것이다(P4c-3 이월 2번).
+ *
+ * **`POST`는 순서가 반대라 우연히 안전했다** — 삽입이 `applyEdit` **뒤**에 있어 실패
+ * 시점에 쓴 것이 없었다. **그 순서에 기대지 않는다.** 셋 다 던지게 두면 *"순서가
+ * 계약"*이 아니게 되고, 다음 사람이 순서를 뒤집어도 이 결함이 다시 나지 않는다.
+ * (그래서 `POST`의 던지기는 **오늘 0 사망**이다 — 그 자리의 순서가 아직 지키고 있다.)
+ *
+ * **규칙 2 — 쓰기는 페이지를 먼저 잠그고, 잠그기 전에 읽은 `head_seq`가 아직 유효한지 본다.**
+ *
+ * `applyEdit`이 이미 `lockPageForEdit`을 갖고 있지만(그것이 D2가 성립한 이유다) **문서를
+ * 안 바꾸는 갈래는 그 잠금을 지나지 않는다** — 그 갈래가 *"이 노드에 코멘트가 몇 개
+ * 남았나"*를 세어 번호를 지울지 정하므로, 잠금 없이는 두 요청이 같은 답을 본다.
+ * 리뷰 B3이 실측한 것: **같은 노드의 마지막 둘을 동시에 지우면 둘 다 *"마지막이 아니다"*로
+ * 판정해 고아 번호가 남는다.**
+ *
+ * 그래서 `lockAndCheck`가 (1) 페이지 행을 `FOR UPDATE`로 잠가 **그 페이지의 코멘트 쓰기를
+ * 직렬화**하고 (2) 잠근 뒤의 `head_seq`가 요청 시작에 읽은 값과 같은지 본다. 다르면
+ * `stale`이다 — **문서를 안 바꾸는 갈래에도 낙관적 잠금을 적용하는 것이 요점이다.**
+ * 없으면 이런 일이 난다: 남이 마지막 코멘트를 지워 번호를 없앤 직후에 내 `POST`가
+ * *"번호가 이미 있으니 그대로 쓴다"*로 판단해 **번호 없는 코멘트**를 만든다.
+ *
+ * **비용은 쓰기 하나당 `SELECT … FOR UPDATE` 한 문장이다.** 코멘트 쓰기는 사람이 타이핑하는
+ * 속도로 일어나므로 재지 않았다 — 재야 할 만큼 잦은 경로가 아니다.
+ *
+ * **`baseSeq`는 여전히 잠그기 *전*에 읽는다**(재라 #1). 잠근 뒤의 값을 쓰면 비교가 항상
+ * 참이 되어 낙관적 잠금이 죽는다 — 잠금은 **직렬화**를 위한 것이고 `baseSeq`는 **충돌
+ * 감지**를 위한 것이라 둘의 시점이 달라야 한다.
+ *
  * ## 재라 #6 — 번호는 있는데 코멘트 행이 없는 노드
  *
  * **문서가 진실이다(D1).** 캔버스는 그 노드에 번호를 그리고, 코멘트 탭에는 그 번호 아래
@@ -96,7 +132,7 @@ import {
 } from '@wirebound/schema'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
-import { withTransaction } from '../db/tx'
+import { withTransaction, type DbHandle } from '../db/tx'
 import { badRequest, forbidden, notFound, unauthenticated } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
@@ -110,8 +146,68 @@ import {
   updateCommentBody,
   type CommentRecord,
 } from '../repos/comments'
-import { findPageById } from '../repos/pages'
-import { applyEdit } from '../services/edit-pipeline'
+import { findPageById, lockPageForEdit } from '../repos/pages'
+import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
+
+/**
+ * 파이프라인 실패를 **트랜잭션 밖으로 던져** 그 구간을 되돌린다(머리말의 규칙 1).
+ *
+ * **`return`이 아니라 예외인 것이 요점이다.** `withTransaction`의 콜백이 정상 종료하면
+ * 그 구간은 커밋되므로, 실패를 값으로 내보내면 그 앞에서 쓴 것이 남는다 —
+ * 리뷰 B5가 `DELETE`에서 실측한 결함이 정확히 그것이다.
+ *
+ * `edit-pipeline.ts`가 실패를 **값**으로 돌려주는 것과 어긋나지 않는다: 그쪽이 값으로
+ * 두는 이유는 *"호출자가 두 경로를 모두 다루지 않게"*이고, 여기서 던지는 이유는
+ * *"트랜잭션을 되돌리기 위해서"*다. 잡는 자리가 바로 아래 한 줄이라 두 경로가 되지 않는다.
+ */
+class EditRollback extends Error {
+  readonly outcome: Extract<EditOutcome, { ok: false }>
+
+  constructor(outcome: Extract<EditOutcome, { ok: false }>) {
+    super(`편집 파이프라인이 실패했습니다: ${outcome.reason}`)
+    this.name = 'EditRollback'
+    this.outcome = outcome
+  }
+}
+
+/**
+ * `withTransaction`을 돌리되 `EditRollback`을 HTTP 에러로 옮긴다. **쓰기 셋이 이것만 쓴다** —
+ * `try/catch`를 자리마다 쓰면 한 자리가 빠졌을 때 500이 나간다.
+ */
+async function runWrite<T>(
+  db: DbHandle,
+  baseSeq: number,
+  fn: (trx: DbHandle) => Promise<T>,
+): Promise<T> {
+  try {
+    return await withTransaction(db, fn)
+  } catch (error) {
+    if (error instanceof EditRollback) throw editOutcomeToApiError(error.outcome, baseSeq)
+    throw error
+  }
+}
+
+/**
+ * 페이지를 잠그고 **잠그기 전에 읽은 `baseSeq`가 아직 유효한지** 본다(머리말의 규칙 2).
+ *
+ * 잠금은 그 페이지의 코멘트 쓰기를 **직렬화**한다 — 문서를 안 바꾸는 갈래(코멘트 수를
+ * 세어 번호를 지울지 정하는 자리)가 그 잠금을 안 지나면 두 요청이 같은 답을 본다.
+ *
+ * 실패를 **던진다** — 이 함수를 부르는 자리는 전부 이미 트랜잭션 안이고, 그 구간에서
+ * 쓴 것이 있으면 되돌려야 하기 때문이다(규칙 1과 같은 근거).
+ */
+async function lockAndCheck(
+  trx: DbHandle,
+  projectId: string,
+  pageId: string,
+  baseSeq: number,
+): Promise<void> {
+  const locked = await lockPageForEdit(trx, projectId, pageId)
+  if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' })
+  if (locked.headSeq !== baseSeq) {
+    throw new EditRollback({ ok: false, reason: 'stale', headSeq: locked.headSeq })
+  }
+}
 
 const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
 const CommentParams = z.object({ projectId: z.uuid(), pageId: z.uuid(), commentId: z.uuid() })
@@ -285,7 +381,12 @@ export function commentRoutes() {
       // 트랜잭션 안이면 SAVEPOINT로 감싸므로(`db/tx.ts`), 안쪽의 `applyEdit`이 여는
       // 트랜잭션은 이 구간의 세이브포인트가 된다. 나누면 *"번호는 붙었는데 코멘트가
       // 없다"*(재라 #6의 상태)가 실패 경로에서 실제로 만들어진다.
-      const result = await withTransaction(app.db, async (trx) => {
+      const result = await runWrite(app.db, page.headSeq, async (trx) => {
+        // **잠그고, 그 사이 문서가 바뀌지 않았는지 본다**(규칙 2). `ops`가 비어도 지난다 —
+        // 남이 마지막 코멘트를 지워 번호를 없앤 직후라면 아래 *"이미 번호가 있다"*는
+        // 판단이 낡은 것이고, 그대로 두면 **번호 없는 코멘트**가 만들어진다.
+        await lockAndCheck(trx, projectId, pageId, page.headSeq)
+
         if (ops.length === 0) {
           // 이미 번호가 있는 노드다 — 문서를 안 바꾸므로 revision도 만들지 않는다.
           // 빈 `ops`로 `applyEdit`을 부르면 **아무것도 안 바꾼 revision**이 쌓이고
@@ -297,7 +398,7 @@ export function commentRoutes() {
             body: body.body,
             authorId: currentUser.id,
           })
-          return { ok: true as const, comment, seq: page.headSeq, marker, markerOps: [] as PatchOp[] }
+          return { comment, seq: page.headSeq, marker, markerOps: [] as PatchOp[] }
         }
 
         const outcome = await applyEdit(trx, {
@@ -307,7 +408,11 @@ export function commentRoutes() {
           ops,
           actor: { type: 'user', id: currentUser.id, label: currentUser.name },
         })
-        if (!outcome.ok) return { ok: false as const, outcome }
+        // **던진다 — `return`이 아니다**(규칙 1). 이 자리는 아직 아무것도 안 썼으므로
+        // `return`으로도 오늘은 안전하지만(그래서 이 던지기는 **0 사망**이다), 그 안전이
+        // **삽입이 아래에 있다는 순서**에만 기대고 있다. 셋이 같은 규칙을 쓰면 순서가
+        // 계약이 아니게 된다 — 리뷰 B5가 `DELETE`에서 그 순서가 뒤집혔을 때를 실측했다.
+        if (!outcome.ok) throw new EditRollback(outcome)
 
         const comment = await insertComment(trx, {
           pageId,
@@ -315,12 +420,8 @@ export function commentRoutes() {
           body: body.body,
           authorId: currentUser.id,
         })
-        return { ok: true as const, comment, seq: outcome.seq, marker, markerOps: ops }
+        return { comment, seq: outcome.seq, marker, markerOps: ops }
       })
-
-      if (!result.ok) {
-        throw editOutcomeToApiError(result.outcome, page.headSeq)
-      }
 
       reply.code(201)
       return {
@@ -409,15 +510,25 @@ export function commentRoutes() {
 
         const { document, page } = await loadDocument(app, projectId, pageId)
 
-        const result = await withTransaction(app.db, async (trx) => {
+        const result = await runWrite(app.db, page.headSeq, async (trx) => {
+          // **지우기 전에 잠그고 본다**(규칙 2). 두 가지를 함께 닫는다:
+          //
+          // - **B3** — 같은 노드의 마지막 둘을 동시에 지우면 잠금 없이는 둘 다
+          //   *"마지막이 아니다"*로 판정해 **고아 번호**가 남는다. 잠그면 뒤의 요청이
+          //   앞의 삭제를 보고 센다.
+          // - **B5** — 앞의 요청이 번호를 지워 `head_seq`가 올랐으면 여기서 `stale`로
+          //   끊긴다. **행을 지우기 전에** 끊기므로 *"409를 받았는데 코멘트가 사라져
+          //   있다"*가 성립하지 않는다.
+          await lockAndCheck(trx, projectId, pageId, page.headSeq)
+
           // **삭제와 세기가 같은 트랜잭션 안이다.** 나누면 그 사이에 들어온 새 코멘트를
           // 못 보고 번호를 지워, *"코멘트는 있는데 번호가 없는 노드"*가 만들어진다.
           const deleted = await deleteComment(trx, pageId, commentId)
-          if (deleted === 'not-found') return { ok: false as const, reason: 'not-found' as const }
+          if (deleted === 'not-found') return 'not-found' as const
 
           const remaining = await countNodeComments(trx, pageId, deleted.nodeId)
           if (remaining > 0) {
-            return { ok: true as const, seq: page.headSeq, markerOps: [] as PatchOp[] }
+            return { seq: page.headSeq, markerOps: [] as PatchOp[] }
           }
 
           // 마지막이었다. 문서에서 그 노드를 찾아 번호를 지운다. **노드가 문서에 없을 수
@@ -427,7 +538,7 @@ export function commentRoutes() {
           const node = nodePath === undefined ? undefined : nodeAt(document, deleted.nodeId)
           const ops = nodePath !== undefined && node !== undefined ? clearMarkerOps(node, nodePath) : []
           if (ops.length === 0) {
-            return { ok: true as const, seq: page.headSeq, markerOps: [] as PatchOp[] }
+            return { seq: page.headSeq, markerOps: [] as PatchOp[] }
           }
 
           const outcome = await applyEdit(trx, {
@@ -437,16 +548,16 @@ export function commentRoutes() {
             ops,
             actor: { type: 'user', id: currentUser.id, label: currentUser.name },
           })
-          if (!outcome.ok) return { ok: false as const, reason: 'edit' as const, outcome }
+          // **던진다 — `return`이 아니다**(규칙 1). 여기가 리뷰 B5의 자리다: 위에서 행을
+          // 이미 지웠으므로 `return`하면 `withTransaction`이 그 삭제를 **커밋한 채**
+          // 409를 낸다.
+          if (!outcome.ok) throw new EditRollback(outcome)
 
-          return { ok: true as const, seq: outcome.seq, markerOps: ops }
+          return { seq: outcome.seq, markerOps: ops }
         })
 
-        if (!result.ok) {
-          if (result.reason === 'not-found') throw notFound()
-          throw editOutcomeToApiError(result.outcome, page.headSeq)
-        }
-        return { seq: result.seq, markerOps: result.markerOps }
+        if (result === 'not-found') throw notFound()
+        return result
       },
     )
 

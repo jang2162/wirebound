@@ -141,6 +141,12 @@ function initialState(): EditorState {
   }
 }
 
+/**
+ * `applyMarkerChange`의 결과. **`boolean`이 아닌 것이 요점이다** — 그 함수의 머리말에
+ * 셋이 갈리는 근거가 있다.
+ */
+export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged'
+
 /** `startUndo`·`startRedo`의 결과. 건너뛴 수는 §7.3의 안내에 쓴다. */
 export interface UndoAttempt {
   /** 큐에 들어간 편집의 id. 적용할 수 있는 항목이 없었으면 `null`이다. */
@@ -284,34 +290,53 @@ export class EditorStore {
    * 둘 다 안 움직이면 **다음 편집이 409를 받고 복구 경로가 페이지를 다시 받는다** —
    * 시끄럽지만 수렴한다. 조용히 갈라지는 쪽보다 낫다.
    *
-   * 반영했으면 `true`다. `false`인 갈래 셋: 다른 페이지가 열려 있다 · 문서가 없다 ·
-   * `applyOps`가 던졌다.
+   * ## 결과가 셋인 것이 계약이다 (리뷰 ④의 판정)
+   *
+   * 앞 판은 `boolean`을 냈고 **부르는 쪽이 그것을 버렸다.** `false`의 원인 셋이 사용자에게
+   * 뜻하는 바가 서로 다른데 한 값으로 접혀 있었던 것이 문제다 — **`null`과 빈 값을 같은
+   * 것으로 접는 그 부류다**(P4c-3 이월 2번).
+   *
+   * | 결과 | 언제 | 화면이 할 일 |
+   * |---|---|---|
+   * | `'applied'` | 반영했다 | 없다 |
+   * | `'skipped'` | **다른 페이지가 열려 있거나 문서가 없다** | 없다 — 그 화면은 이미 딴 것을 보고 있다 |
+   * | `'diverged'` | **`applyOps`가 던졌다** | **말해야 한다** — 서버에는 번호가 있는데 내 화면에는 없다 |
+   *
+   * `'diverged'`를 조용히 넘기면 *"코멘트는 달렸는데 캔버스에 번호가 없고 아무도 그것을
+   * 말하지 않는"* 상태가 된다. 그것이 이 저장소가 네 번 만난 부류의 형태다.
+   *
+   * ## `markerOps`가 비면 `headSeq`도 안 건드린다
+   *
+   * 앞 판은 그때도 `headSeq`를 `seq`로 맞췄다. **틀렸다** — 그 `seq`는 서버가 요청을 받은
+   * 시점의 `head_seq`이고 **내 문서가 그 revision 위에 서 있다는 뜻이 아니다.** 내가
+   * 뒤처져 있으면 그 값을 받아 *"나는 최신이다"*라고 믿게 되고, 앞서 있으면(내 낙관적
+   * 편집이 ack된 뒤라면) 값이 **내려간다.** 서버가 아무것도 안 바꿨으면 클라이언트도
+   * 아무것도 안 바꾸는 것이 맞는다.
    */
   readonly applyMarkerChange = (
     pageId: string,
     change: { seq: number; markerOps: PatchOp[] },
-  ): boolean => {
+  ): MarkerChangeResult => {
     const { openPageId, document } = this.#state
     // 다른 페이지로 옮긴 뒤 도착한 응답이다. 여기서 `headSeq`를 건드리면 새 페이지의
     // 편집이 남의 revision 번호 위에서 만들어진다(`ackEdit`의 늦은 ack 가드와 같은 자리).
-    if (openPageId !== pageId || document === null) return false
+    if (openPageId !== pageId || document === null) return 'skipped'
 
     // 문서가 안 바뀐 요청이다(이미 번호가 있는 노드에 코멘트를 더 달았거나, 마지막이 아닌
-    // 코멘트를 지웠거나, 바꿀 것 없는 재번호). `seq`도 그대로이므로 `#apply`가 알리지 않는다.
-    if (change.markerOps.length === 0) {
-      this.#apply({ headSeq: change.seq })
-      return true
-    }
+    // 코멘트를 지웠거나, 바꿀 것 없는 재번호). **아무것도 안 건드린다**(위 머리말).
+    if (change.markerOps.length === 0) return 'applied'
 
     let next: PageDocument
     try {
       next = applyOps(document, change.markerOps)
     } catch {
-      return false
+      // 보내지 않은 구조 편집이 그 노드를 이미 지웠다. **`headSeq`도 안 올린다** —
+      // 올리면 문서와 revision 번호가 조용히 갈라진다.
+      return 'diverged'
     }
 
     this.#apply({ document: next, headSeq: change.seq })
-    return true
+    return 'applied'
   }
 
   /**

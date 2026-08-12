@@ -671,7 +671,7 @@ describe('EditorStore의 마커 반영', () => {
     const store = new EditorStore()
     store.loadPage('pg-1', withChild(), 7)
 
-    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe(true)
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('applied')
 
     expect(store.getState().document?.root.children?.[0]?.marker).toBe(1)
     expect(store.getState().headSeq).toBe(8)
@@ -708,7 +708,9 @@ describe('EditorStore의 마커 반영', () => {
     const store = new EditorStore()
     store.loadPage('pg-2', withChild(), 3)
 
-    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe(false)
+    // **`'skipped'`다 — `'diverged'`가 아니다**(리뷰 ④). 그 화면은 이미 다른 페이지를
+    // 보고 있으므로 말할 것이 없다.
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('skipped')
     expect(store.getState().headSeq).toBe(3)
     expect(store.getState().document?.root.children?.[0]?.marker).toBeUndefined()
   })
@@ -721,24 +723,31 @@ describe('EditorStore의 마커 반영', () => {
     store.loadPage('pg-1', withChild(), 7)
     store.applyEdit([{ op: 'remove', path: '/root/children/0' }])
 
-    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe(false)
+    // **`'diverged'`다 — 화면이 이것을 말해야 한다**(리뷰 ④). 서버에는 번호가 있는데
+    // 내 문서에는 없는 상태이고, 조용히 넘기면 아무도 그 어긋남을 모른다.
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('diverged')
     expect(store.getState().headSeq).toBe(7)
   })
 
-  it('문서가 안 바뀐 요청은 headSeq만 맞춘다', () => {
+  it('문서가 안 바뀐 요청은 headSeq도 안 건드린다', () => {
     // 이미 번호가 있는 노드에 코멘트를 더 달았거나, 마지막이 아닌 코멘트를 지웠거나,
-    // 바꿀 것 없는 재번호다. 서버도 `seq`를 그대로 준다.
+    // 바꿀 것 없는 재번호다.
+    //
+    // **응답의 `seq`를 받아들이지 않는 것이 요점이다**(리뷰 ④의 곁가지). 그 값은 서버가
+    // 요청을 받은 시점의 `head_seq`이고 **내 문서가 그 revision 위에 서 있다는 뜻이
+    // 아니다.** 내가 뒤처져 있으면 그것을 받아 "나는 최신이다"라고 믿게 되고, 앞서
+    // 있으면 값이 **내려간다** — 여기서는 내려가는 쪽을 잰다.
     const store = new EditorStore()
     store.loadPage('pg-1', withChild(), 7)
 
-    expect(store.applyMarkerChange('pg-1', { seq: 7, markerOps: [] })).toBe(true)
+    expect(store.applyMarkerChange('pg-1', { seq: 3, markerOps: [] })).toBe('applied')
     expect(store.getState().headSeq).toBe(7)
   })
 
   it('문서가 없으면 아무것도 안 한다', () => {
     const store = new EditorStore()
 
-    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe(false)
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('skipped')
     expect(store.getState().headSeq).toBe(0)
   })
 })

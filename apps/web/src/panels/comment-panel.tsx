@@ -11,7 +11,7 @@
  * **전부**를 보인다 — 코멘트 탭의 쓸모가 *"이 설계서에 어떤 말이 붙어 있는가"*를 훑는
  * 것이기 때문이다. 선택한 노드의 무리에는 표시를 달아 눈이 먼저 가게 한다.
  *
- * ## 무리가 셋이다
+ * ## 무리가 셋이고, **"모른다"는 그 셋 중 하나가 아니다** (리뷰 F)
  *
  * | 무리 | 언제 | 순서 |
  * |---|---|---|
@@ -21,6 +21,16 @@
  *
  * 셋째가 실재하는 이유는 `comments.node_id`에 FK가 없기 때문이다(노드는 테이블이 아니라
  * jsonb 안의 값이다). **감추지 않는다** — 감추면 사용자가 남긴 말이 소리 없이 사라진다.
+ *
+ * **그런데 문서를 아직/영영 못 읽은 상태가 따로 있다.** 앞 판은 `markersOf(null)`이 빈
+ * 표를 내고 `markers.has(nodeId)`가 전부 `false`가 되어 **모든 코멘트를 셋째 무리로
+ * 단언했다** — *"사라진 노드"*라고. **거짓말이고 사용자가 실제로 본다:** 페이지를 갈아탈
+ * 때마다 커밋 하나 동안, 그리고 문서 조회가 실패한 뒤로는 계속.
+ *
+ * **`null`(못 읽었다)과 빈 값(없다)을 같은 것으로 접는 자리 —** 이 저장소가 네 번 만난
+ * 부류다(P4c-3 이월 2번: W2의 저장 버튼 · P4c-3의 파일 읽기 · 리뷰 B5의 트랜잭션 ·
+ * 그리고 여기). **그래서 `present`가 `boolean`이 아니라 셋이다:**
+ * `'yes' | 'no' | 'unknown'`. `'unknown'`이면 무엇도 단언하지 않고 그렇다고 말한다.
  *
  * ## 문서를 바꾸는 조작 셋
  *
@@ -58,6 +68,10 @@ const LOAD_FAILED = '코멘트를 불러오지 못했습니다'
 const WRITE_FAILED = '코멘트를 저장하지 못했습니다'
 /** 문서에 없는 노드에 붙은 코멘트의 무리 이름. */
 const MISSING_NODE = '사라진 노드'
+/** 문서를 못 읽어 번호를 붙일 수 없을 때. **"사라진 노드"라고 단언하지 않는다**(리뷰 F). */
+const NO_DOCUMENT = '문서를 읽지 못해 번호를 보일 수 없습니다'
+/** 서버는 번호를 바꿨는데 내 문서에 얹지 못했을 때(리뷰 ④). */
+const DIVERGED = '번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다'
 
 type LoadState =
   | { status: 'loading' }
@@ -67,10 +81,13 @@ type LoadState =
 /** 한 노드에 붙은 코멘트 묶음. `marker`는 문서에서 읽은 값이다(표에는 없다). */
 interface Group {
   nodeId: string
-  /** 그 노드의 번호. 노드가 없거나 번호가 없으면 `null`이다. */
+  /** 그 노드의 번호. 노드가 없거나 번호가 없거나 **문서를 못 읽었으면** `null`이다. */
   marker: number | null
-  /** 노드가 문서에 있는가. `false`면 코멘트가 달린 뒤 노드가 지워졌다. */
-  present: boolean
+  /**
+   * 노드가 문서에 있는가. **`boolean`이 아닌 것이 요점이다**(리뷰 F) —
+   * `'unknown'`은 *"문서를 못 읽어서 모른다"*이고 `'no'`(*"문서에 없다"*)와 다른 말이다.
+   */
+  present: 'yes' | 'no' | 'unknown'
   comments: Comment[]
 }
 
@@ -82,9 +99,8 @@ interface Group {
  * `marker`가 정수가 아닌 값이면 없는 것으로 다룬다 — 봉투 검증이 막지만 그 문서가 여기
  * 오지 않는다는 보장은 검증 **전** 문서에 대해서는 없다.
  */
-function markersOf(document: PageDocument | null): Map<string, number | null> {
+function markersOf(document: PageDocument): Map<string, number | null> {
   const markers = new Map<string, number | null>()
-  if (document === null) return markers
 
   for (const visit of walkSafely(document.root)) {
     const marker = visit.node.marker
@@ -99,7 +115,8 @@ function markersOf(document: PageDocument | null): Map<string, number | null> {
  * 묶음 안의 순서는 서버가 준 그대로다 — `created_at` 오름차순이라 먼저 한 말이 먼저다.
  */
 export function groupComments(comments: readonly Comment[], document: PageDocument | null): Group[] {
-  const markers = markersOf(document)
+  // **문서가 없으면 `null`을 그대로 들고 간다** — 빈 표로 접으면 모든 노드가 "없다"가 된다(리뷰 F).
+  const markers = document === null ? null : markersOf(document)
   const groups = new Map<string, Group>()
 
   for (const comment of comments) {
@@ -108,10 +125,11 @@ export function groupComments(comments: readonly Comment[], document: PageDocume
       existing.comments.push(comment)
       continue
     }
-    const present = markers.has(comment.nodeId)
+    const present: Group['present'] =
+      markers === null ? 'unknown' : markers.has(comment.nodeId) ? 'yes' : 'no'
     groups.set(comment.nodeId, {
       nodeId: comment.nodeId,
-      marker: present ? (markers.get(comment.nodeId) ?? null) : null,
+      marker: present === 'yes' ? (markers?.get(comment.nodeId) ?? null) : null,
       present,
       comments: [comment],
     })
@@ -122,9 +140,16 @@ export function groupComments(comments: readonly Comment[], document: PageDocume
   return [...groups.values()].sort((a, b) => rank(a) - rank(b) || (a.marker ?? 0) - (b.marker ?? 0))
 }
 
-/** 무리의 등급. 작을수록 앞이다 — 번호 있음 → 번호 없음 → 사라진 노드. */
+/**
+ * 무리의 등급. 작을수록 앞이다 — 번호 있음 → 번호 없음 → 사라진 노드.
+ *
+ * **`'unknown'`은 뒤로 밀지 않는다.** 그것은 *"이 노드가 나쁘다"*가 아니라 *"내가 모른다"*
+ * 이고, 모르는 것을 뒤로 몰면 사용자가 그것을 문제로 읽는다. 문서를 못 읽었으면 **전부**
+ * `'unknown'`이므로 순서는 코멘트가 달린 순서 그대로 남는다.
+ */
 function rank(group: Group): number {
-  if (!group.present) return 2
+  if (group.present === 'unknown') return 1
+  if (group.present === 'no') return 2
   return group.marker === null ? 1 : 0
 }
 
@@ -143,6 +168,15 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   const [busy, setBusy] = useState(false)
   /** 마지막 쓰기 실패. **성공하면 지운다** — 남아 있으면 방금 한 조작도 실패한 것으로 읽힌다. */
   const [writeError, setWriteError] = useState<Failure | null>(null)
+  /**
+   * **서버는 번호를 바꿨는데 내 문서에 얹지 못했다**(리뷰 ④ — `applyMarkerChange`가
+   * `'diverged'`를 냈다). 보내지 않은 구조 편집이 그 노드를 이미 지운 경우다.
+   *
+   * **버리지 않고 말한다.** 버리면 *"코멘트는 달렸는데 캔버스에 번호가 없고 아무도 그것을
+   * 말하지 않는"* 상태가 되고, 그것이 이 저장소가 네 번 만난 부류의 형태다.
+   * **`'skipped'`는 말하지 않는다** — 그때는 화면이 이미 다른 페이지를 보고 있다.
+   */
+  const [diverged, setDiverged] = useState(false)
   const [draft, setDraft] = useState('')
   /** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. */
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -176,6 +210,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     setDraft('')
     setEditingId(null)
     setWriteError(null)
+    setDiverged(false)
 
     async function load(openPageId: string): Promise<void> {
       try {
@@ -221,8 +256,8 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     void write(async (client, openPageId) => {
       const created = await client.createComment(projectId, openPageId, { nodeId: selectedNodeId, body })
       // **문서 변화를 먼저 얹는다.** 목록을 다시 받아도 번호는 그 응답에 없다 —
-      // 번호는 문서의 값이다(D1).
-      store.applyMarkerChange(openPageId, created)
+      // 번호는 문서의 값이다(D1). 결과를 **버리지 않는다**(리뷰 ④).
+      setDiverged(store.applyMarkerChange(openPageId, created) === 'diverged')
       // 초안은 **성공한 뒤에** 비운다. 실패했는데 비우면 사용자가 쓴 말이 사라진다
       // (P4c-3 이월의 둘째 줄이 말하는 부류의 반대편이다).
       setDraft('')
@@ -233,7 +268,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   const remove = (commentId: string): void => {
     void write(async (client, openPageId) => {
       const change = await client.deleteComment(projectId, openPageId, commentId)
-      store.applyMarkerChange(openPageId, change)
+      setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
       await reload()
     })
   }
@@ -252,7 +287,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   const renumber = (): void => {
     void write(async (client, openPageId) => {
       const change = await client.renumberComments(projectId, openPageId)
-      store.applyMarkerChange(openPageId, change)
+      setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
       // 목록은 다시 받지 않아도 된다 — 재번호는 **표를 안 건드린다**(D4). 번호만 바뀌고
       // 그 번호는 문서에서 읽는다.
     })
@@ -328,7 +363,23 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
               {writeError.message}
             </p>
           ))}
+        {/* **실패가 아니라 어긋남이다** — 코멘트는 저장됐고 번호만 화면에 못 얹었다.
+            그래서 `alert`가 아니라 `status`이고 문안도 *"실패했다"*가 아니다. */}
+        {diverged && (
+          <p className="wb-shell-panel-notice" role="status">
+            {DIVERGED}
+          </p>
+        )}
       </form>
+
+      {/* **문서를 못 읽었으면 그렇다고 말한다**(리뷰 F). 코멘트는 그대로 보이되 번호
+          자리가 비는 이유를 화면이 스스로 설명한다 — 조용히 `–`만 두면 사용자는 번호가
+          없는 것으로 읽는다. */}
+      {document === null && state.comments.length > 0 && (
+        <p className="wb-shell-panel-notice" role="status">
+          {NO_DOCUMENT}
+        </p>
+      )}
 
       {groups.length === 0 ? (
         <p className="wb-shell-panel-notice">{NO_COMMENTS}</p>
@@ -344,7 +395,9 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
             >
               <h3 className="wb-shell-comment-group-title">
                 <span className="wb-shell-comment-marker">{group.marker ?? '–'}</span>{' '}
-                {group.present ? group.nodeId : `${MISSING_NODE} (${group.nodeId})`}
+                {/* **`'unknown'`을 `'no'`와 갈라 말한다**(리뷰 F). 문서를 못 읽었을 뿐인데
+                    *"사라진 노드"*라고 적으면 화면이 거짓을 단언한다. */}
+                {group.present === 'no' ? `${MISSING_NODE} (${group.nodeId})` : group.nodeId}
               </h3>
               <ul className="wb-shell-comment-list">
                 {group.comments.map((comment) => (

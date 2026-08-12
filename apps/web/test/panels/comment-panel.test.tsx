@@ -15,7 +15,16 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { WbNode } from '@wirebound/schema'
 import type { Comment } from '../../src/api/types'
-import { PAGE_ID, PROJECT_ID, openPage, pageDoc, waitForNode } from '../editor-harness'
+import {
+  PAGE_ID,
+  PAGE_ROUTE,
+  PROJECT_ID,
+  PROJECT_NAME,
+  openPage,
+  pageDoc,
+  renderEditor,
+  waitForNode,
+} from '../editor-harness'
 
 /** 하네스가 세션으로 내는 사용자. 내 코멘트와 남의 코멘트를 가른다. */
 const MY_ID = 'u-1'
@@ -331,6 +340,105 @@ describe('수정 — 작성자만(재라 #2)', () => {
 
     await waitFor(() => expect(screen.getByText('새 말')).toBeTruthy())
     expect(screen.queryByText('옛 말')).toBeNull()
+  })
+})
+
+describe('문서를 못 읽었을 때 — "모른다"를 "없다"로 접지 않는다 (리뷰 F)', () => {
+  /**
+   * 문서 조회는 실패하고 코멘트 조회는 성공하는 화면을 만든다. `renderEditor`에 `docs`를
+   * 주지 않으면 가짜가 `getPage`에 404를 던지므로 스토어의 문서가 `null`로 남는다.
+   */
+  async function openWithoutDocument(comments: Comment[]): Promise<void> {
+    renderEditor({ apiOverrides: { listComments: async () => comments }, route: PAGE_ROUTE })
+    await screen.findByRole('heading', { name: PROJECT_NAME })
+    await openCommentTab()
+  }
+
+  it('"사라진 노드"라고 단언하지 않는다', async () => {
+    // **앞 판은 여기서 모든 코멘트를 "사라진 노드"라고 적었다** — `markersOf(null)`이 빈
+    // 표를 내고 `has()`가 전부 `false`가 됐기 때문이다. 사용자가 실제로 보는 거짓말이다.
+    await openWithoutDocument([
+      comment({ id: 'c1', nodeId: 'n_a', body: '가에 붙은 말' }),
+      comment({ id: 'c2', nodeId: 'n_b', body: '나에 붙은 말' }),
+    ])
+
+    await waitFor(() => expect(groupTitles()).toHaveLength(2))
+    expect(groupTitles()).toEqual(['– n_a', '– n_b'])
+    expect(screen.queryByText(/사라진 노드/)).toBeNull()
+  })
+
+  it('번호를 못 보이는 이유를 화면이 말한다', async () => {
+    await openWithoutDocument([comment({ id: 'c1', nodeId: 'n_a', body: '말' })])
+
+    await waitFor(() =>
+      expect(screen.getByText('문서를 읽지 못해 번호를 보일 수 없습니다')).toBeTruthy(),
+    )
+    // 코멘트 자체는 그대로 보인다 — 번호만 못 붙일 뿐이다.
+    expect(screen.getByText('말')).toBeTruthy()
+  })
+
+  it('코멘트가 없으면 그 안내를 내지 않는다', async () => {
+    // 붙일 번호가 없는 것이 아니라 붙일 코멘트가 없는 것이다. 두 안내가 겹치면
+    // 사용자가 무엇이 문제인지 알 수 없다.
+    await openWithoutDocument([])
+
+    await waitFor(() => expect(screen.getByText('아직 코멘트가 없습니다')).toBeTruthy())
+    expect(screen.queryByText('문서를 읽지 못해 번호를 보일 수 없습니다')).toBeNull()
+  })
+})
+
+describe('문서에 얹지 못했을 때 — 버리지 않고 말한다 (리뷰 ④)', () => {
+  it('서버가 바꾼 번호를 내 문서에 못 얹으면 그렇다고 말한다', async () => {
+    // 서버가 낸 `markerOps`의 경로가 내 문서에 없다(보내지 않은 구조 편집이 그 노드를
+    // 이미 지운 상태와 같다). **조용히 넘기면 코멘트는 달렸는데 캔버스에 번호가 없고
+    // 아무도 그것을 말하지 않는다** — 이 저장소가 네 번 만난 부류의 형태다.
+    await openPage(pageDoc(three({})), {
+      apiOverrides: {
+        listComments: async () => [],
+        createComment: async () => ({
+          comment: comment({ id: 'c1', nodeId: 'n_a', body: '새 말' }),
+          marker: 1,
+          seq: 8,
+          markerOps: [{ op: 'replace' as const, path: '/root/children/9/marker', value: 1 }],
+        }),
+      },
+    })
+    await openCommentTab()
+
+    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '새 말' } })
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다'),
+      ).toBeTruthy(),
+    )
+    // **실패가 아니다** — 코멘트는 저장됐다. 그래서 `alert`가 아니라 `status`다.
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(canvasMarkers()).toEqual({})
+  })
+
+  it('정상 경로에서는 그 말을 하지 않는다 — 음성 대조', async () => {
+    await openPage(pageDoc(three({})), {
+      apiOverrides: {
+        listComments: async () => [],
+        createComment: async () => ({
+          comment: comment({ id: 'c1', nodeId: 'n_a', body: '새 말' }),
+          marker: 1,
+          seq: 8,
+          markerOps: [{ op: 'add' as const, path: '/root/children/0/marker', value: 1 }],
+        }),
+      },
+    })
+    await openCommentTab()
+
+    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '새 말' } })
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+
+    await waitFor(() => expect(canvasMarkers()).toEqual({ n_a: '1' }))
+    expect(screen.queryByText(/번호를 화면에 반영하지 못했습니다/)).toBeNull()
   })
 })
 
