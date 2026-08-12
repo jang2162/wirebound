@@ -7,7 +7,7 @@
  * 함께 죽는다(`repos-themes.test.ts`가 `resolveTheme`을 지나지 않는 것과 같은 자리).
  */
 import { describe, expect, it } from 'vitest'
-import { Kysely, PostgresDialect } from 'kysely'
+import { Kysely, PostgresDialect, sql } from 'kysely'
 import { DatabaseError } from 'pg'
 import { createPool } from '../src/db/client'
 import type { DbHandle } from '../src/db/tx'
@@ -430,12 +430,19 @@ describe('readCaptureFingerprint', () => {
    * **`now()`였다면 이 케이스가 죽는다** — 하네스가 테스트 하나를 트랜잭션 하나로 감싸므로
    * `transaction_timestamp()`는 두 호출에서 **같은 값**이다(실측: `now()` 07:16:20.160 ·
    * `clock_timestamp()` 07:16:20.295, 같은 트랜잭션).
+   *
+   * **두 호출 사이를 재우는 것이 필수다 — 재우지 않은 판이 실제로 깜빡였다.**
+   * `clock_timestamp()`는 마이크로초인데 `pg`가 주는 JS `Date`는 밀리초라, 연달아 두 번
+   * 읽으면 **같은 밀리초로 접힌다.** 그 판을 열 번 돌려 **1회 실패**를 봤다
+   * (`expected 1786521291219 to be greater than 1786521291219`). 50ms를 두면 `now()`는
+   * 여전히 **동률**이라 변이가 죽고, `clock_timestamp()`는 확실히 벌어져 깜빡이지 않는다.
    */
   it('at은 호출마다 나아간다 — 트랜잭션 시작 시각이 아니다', async () => {
     await withApi(async (ctx) => {
       const { project } = await fixture(ctx)
 
       const first = await readCaptureFingerprint(ctx.db, project.id)
+      await sql`select pg_sleep(0.05)`.execute(ctx.db)
       const second = await readCaptureFingerprint(ctx.db, project.id)
 
       expect(second.at.getTime()).toBeGreaterThan(first.at.getTime())

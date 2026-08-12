@@ -8,7 +8,8 @@
  * 3. 저장된 문서를 **마이그레이션하지 않고** 그대로 담는다(D4).
  * 4. 지문이 어긋나면 **값으로** 실패하고 **아무것도 쓰지 않는다**(D6 + 사실 5).
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { sql } from 'kysely'
 import { ThemeSchema, systemTheme } from '@wirebound/themes'
 import { CURRENT_DOCUMENT_VERSION } from '@wirebound/schema'
 import { captureSnapshot } from '../src/services/snapshot-capture'
@@ -286,6 +287,104 @@ describe('저장된 문서를 그대로 담는다 (D4)', () => {
 
       expect(res.statusCode).toBe(400)
       expect((await captureSnapshot(ctx.db, fx.project.id)).kind).toBe('captured')
+    })
+  })
+})
+
+/**
+ * # `capturedAt`은 **어느 시계의, 어느 순간인가** (델타 리뷰)
+ *
+ * 두 축이 있고 **둘 다 케이스로 갈린다.**
+ *
+ * | 축 | 무엇을 고르나 | 아래 어느 케이스가 잡나 |
+ * |---|---|---|
+ * | **시계** | Postgres(`clock_timestamp()`) vs Node(`new Date()`) | `Node의 시계를 갈아 끼워도 …` |
+ * | **순간** | 수집 **후** 지문 vs 수집 **전** 지문 | `수집 한가운데보다 뒤다` |
+ *
+ * **앞 라운드에서 이 둘을 변이로 심고 0 사망을 보고하면서 원인을 *"구조적으로 구분할 수
+ * 없다"*고 단정했다. 그것이 거짓이었다** — 구조가 아니라 **겨냥**의 문제였다. 그때 있던
+ * 케이스는 등식(`capturedAt === created_at`)과 *"지문이 증명한 구간 안"*이라는 성질을
+ * 재고 있었는데, **두 축 모두 그 두 성질을 바꾸지 않는다.** 시계를 바꿔도 등식은
+ * `insertSnapshot`이 파생시키므로 그대로이고, 구간의 어느 끝을 골라도 둘 다 구간 안이다.
+ *
+ * **겨냥을 옮기면 죽는다.** 시계는 *"두 시계를 갈라 놓고 어느 쪽을 따라가는지"*를,
+ * 순간은 *"수집 한가운데를 기준으로 앞인지 뒤인지"*를 재야 한다. 아래 둘이 그것이다.
+ */
+describe('capturedAt이 어느 시계의 어느 순간인가', () => {
+  // 가짜 시계를 쓰는 케이스가 있으므로 뒤에 반드시 되돌린다 — 남으면 같은 파일의 다른
+  // 케이스(그리고 같은 포크에서 뒤에 도는 파일 전부)가 2030년에서 돈다.
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /**
+   * **시계 축.** `toFake: ['Date']`로 **Node의 시계만** 2030으로 갈아 끼운다. Postgres의
+   * `clock_timestamp()`는 그대로이므로 **두 시계가 갈라진다** — 그 상태에서 `capturedAt`이
+   * 어느 쪽을 따라가는지가 곧 답이다.
+   *
+   * **`toFake`를 `['Date']`로 좁히는 것이 요점이다.** 통째로 가짜 타이머를 켜면
+   * `setTimeout`까지 멈춰 `pg` 드라이버가 응답을 기다리다 걸린다 — 재는 대상이 아니라
+   * 하네스가 죽는다.
+   *
+   * **등식은 이 케이스가 재는 것이 아니다.** `insertSnapshot`이 `created_at`을
+   * `capturedAt`에서 파생시키므로 시계를 무엇으로 바꾸든 둘은 같다. 그래서 등식을 보는
+   * 케이스로는 이 축이 **0 사망**이었다.
+   */
+  it('Node의 시계를 갈아 끼워도 capturedAt은 DB의 시계를 따른다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await realisticProject(ctx)
+
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2030-06-01T00:00:00.000Z'))
+      // 가짜가 실제로 걸렸는지 먼저 확인한다 — 안 걸렸으면 아래가 공허하게 통과한다.
+      expect(new Date().getUTCFullYear()).toBe(2030)
+
+      const payload = captured(await captureSnapshot(ctx.db, fx.project.id))
+
+      // `Date.parse`는 가짜 시계와 무관하다(파싱은 "지금"을 읽지 않는다).
+      expect(new Date(Date.parse(payload.capturedAt)).getUTCFullYear()).not.toBe(2030)
+
+      // 양성 대조: DB의 시계와는 가깝다. 같은 트랜잭션에서 읽되 `now()`가 아니라
+      // `clock_timestamp()`여야 한다(`now()`는 트랜잭션 시작 시각이라 얼어 있다).
+      const dbNow = await sql<{ at: Date }>`select clock_timestamp() as at`.execute(ctx.db)
+      expect(Math.abs(Date.parse(payload.capturedAt) - dbNow.rows[0]!.at.getTime())).toBeLessThan(10_000)
+    })
+  })
+
+  /**
+   * **순간 축.** 수집 **한가운데**에서 DB 시계를 읽어 기준점으로 삼는다. `capturedAt`이
+   * 수집 **후** 지문의 시각이면 그 기준점보다 **뒤**이고, 수집 **전** 지문의 시각이면
+   * **앞**이다 — 부호가 뒤집힌다.
+   *
+   * **훅이 상태를 바꾸지 않는 것이 요점이다.** `pg_sleep`과 `clock_timestamp()`는 아무것도
+   * 쓰지 않으므로 지문이 그대로이고 캡처가 **성공한다** — 그래야 `capturedAt`을 볼 수 있다.
+   * 앞 라운드의 훅들은 전부 상태를 바꿔 `fingerprint-mismatch`로 끝났고, 그래서 이 축을
+   * 잴 기회가 아예 없었다.
+   *
+   * **앞뒤로 50ms씩 재우는 이유:** `clock_timestamp()`는 마이크로초인데 JS `Date`는
+   * 밀리초라, 질의 몇 개 사이의 간격이 0ms로 접히면 부등호가 동률에서 흔들린다. 양쪽에
+   * 여유를 두면 올바른 판에서는 `+50ms`, 뒤집힌 판에서는 `-50ms` 근처가 되어 부호가
+   * 확실히 갈린다.
+   */
+  it('capturedAt은 수집 한가운데보다 뒤다 — 지문이 증명한 구간의 닫는 끝이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await realisticProject(ctx)
+      let middle: Date | undefined
+
+      const payload = captured(
+        await captureSnapshot(ctx.db, fx.project.id, {
+          afterPages: async () => {
+            // **아무것도 바꾸지 않는다** — 바꾸면 지문이 어긋나 캡처가 실패한다.
+            await sql`select pg_sleep(0.05)`.execute(ctx.db)
+            const row = await sql<{ at: Date }>`select clock_timestamp() as at`.execute(ctx.db)
+            middle = row.rows[0]!.at
+            await sql`select pg_sleep(0.05)`.execute(ctx.db)
+          },
+        }),
+      )
+
+      expect(middle).toBeDefined()
+      expect(Date.parse(payload.capturedAt)).toBeGreaterThan(middle!.getTime())
     })
   })
 })
