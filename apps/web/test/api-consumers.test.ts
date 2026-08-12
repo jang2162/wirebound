@@ -51,6 +51,7 @@ const METHODS = [
   'getProjectTheme', 'listProjectThemes', 'setProjectTheme',
   'getTheme', 'createTheme', 'updateTheme',
   'listComments', 'createComment', 'updateComment', 'deleteComment', 'renumberComments',
+  'listSnapshots', 'createSnapshot',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -93,7 +94,13 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   listProjects: ['../src/projects/use-project-commands.tsx'],
   // **소비자가 둘이고 읽는 것이 다르다.** 셸은 `name`·`id`를 그리려고 부르고, 테마 저작
   // 화면은 **`role`** 때문에 부른다(§10 — 쓰기가 owner 게이트라 읽기 전용인지 알아야 한다).
-  getProject: ['../src/routes/editor.tsx', '../src/routes/theme-editor.tsx'],
+  // **셋째가 생겼다(P6-1).** 스냅샷 화면도 `role` 때문에 부른다 — §10이 생성을 editor에게
+  // 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다).
+  getProject: [
+    '../src/routes/editor.tsx',
+    '../src/routes/snapshots.tsx',
+    '../src/routes/theme-editor.tsx',
+  ],
   createProject: ['../src/projects/use-project-commands.tsx'],
   updateProject: ['../src/projects/use-project-commands.tsx'],
   deleteProject: ['../src/projects/use-project-commands.tsx'],
@@ -138,6 +145,16 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   updateComment: ['../src/panels/comment-panel.tsx'],
   deleteComment: ['../src/panels/comment-panel.tsx'],
   renumberComments: ['../src/panels/comment-panel.tsx'],
+  // 스냅샷 둘(P6-1). **둘 다 한 파일에서만 불린다** — D10이 *"웹은 라우트 하나다"*로 정한
+  // 그것이고, **이 줄이 그것을 실행으로 지킨다:** 셸이나 다른 화면이 직접 스냅샷을 부르기
+  // 시작하면 여기가 죽는다.
+  //
+  // **`getSnapshot`(상세)이 목록에 아예 없는 것이 요점이다.** 서버에는 그 엔드포인트가
+  // 있지만 `ApiClient`에 두지 않았다 — payload를 읽을 자리가 복원(P6-2)이고 그것이 아직
+  // 없다. 부르는 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도
+  // 확인하지 않은 채 남는다.
+  listSnapshots: ['../src/routes/snapshots.tsx'],
+  createSnapshot: ['../src/routes/snapshots.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {

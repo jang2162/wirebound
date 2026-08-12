@@ -261,6 +261,49 @@ export async function listMenuRows(db: DbHandle, projectId: string): Promise<Men
 }
 
 /**
+ * 프로젝트의 메뉴 노드 전부를 **평평하게** 낸다(P6-1 스냅샷 캡처가 부른다).
+ *
+ * `listMenuRows`·`listMenuTree`와 셋이 비슷해 보이지만 내는 것이 다르다:
+ *
+ * | 함수 | 내는 것 | 소비자 |
+ * |---|---|---|
+ * | `listMenuRows` | **snake_case 행** 그대로 | `buildMenuTree`(`services/menu-tree.ts`) |
+ * | `listMenuTree` | 중첩 트리 | `GET .../menu` |
+ * | `listMenuNodes` (여기) | camelCase **평평한 목록** | 스냅샷 캡처 |
+ *
+ * 캡처가 트리를 받지 않는 이유는 payload가 트리를 접지 않기 때문이다 —
+ * `parentId`가 구조를 나른다(`services/snapshot-payload.ts`). 캡처가 `listMenuRows`를
+ * 대신 쓰지 않는 이유는 그쪽이 snake_case를 그대로 흘려 **키 변환이 repo 밖으로 새기**
+ * 때문이다(README "계층 규칙").
+ *
+ * **정렬이 결정적이어야 한다** — 같은 상태를 두 번 캡처하면 payload가 같아야 하고,
+ * 그래야 `payloadBytes`나 payload 비교가 뜻을 갖는다.
+ *
+ * **`sort_order`만으로는 결정적이지 않다 — 재서 알았다.** 그 값은 **형제 그룹 안에서만**
+ * 뜻이 있어서(`db/types.ts`의 `MenuNodesTable`) 루트 노드와 그 자식이 **둘 다 0**을 갖는다.
+ * 처음에 `ORDER BY sort_order, id`로 짰더니 `['설정', '사용자 관리']`(부모, 자식)를 넣은
+ * 프로젝트에서 `['사용자 관리', '설정']`이 나왔다 — 동률이 uuid 순으로 갈린 것이다.
+ *
+ * 그래서 `parent_id NULLS FIRST`를 앞에 둔다: **루트가 먼저, 그다음 부모별로 묶여** 각
+ * 그룹 안에서 `sort_order` 순이다. **트리 순회(깊이 우선)는 아니다** — 부모끼리의 순서는
+ * uuid 순이라 사람이 읽는 순서와 다를 수 있다. 그래도 되는 이유는 payload가 트리를 접지
+ * 않고 `parentId`가 구조를 나르기 때문이다(`services/snapshot-payload.ts`). 여기서 필요한
+ * 것은 **같은 상태면 같은 순서**이지 보기 좋은 순서가 아니다.
+ */
+export async function listMenuNodes(db: DbHandle, projectId: string): Promise<MenuNodeRecord[]> {
+  const rows = await db
+    .selectFrom('menu_nodes')
+    .select(['id', 'project_id', 'parent_id', 'title', 'sort_order'])
+    .where('project_id', '=', projectId)
+    .orderBy(sql`parent_id nulls first`)
+    .orderBy('sort_order', 'asc')
+    .orderBy('id', 'asc')
+    .execute()
+
+  return rows.map(toRecord)
+}
+
+/**
  * 프로젝트의 메뉴 트리 전체를 조회해 중첩 구조로 조립한다.
  *
  * 한 번의 평평한 SELECT를 `sort_order` 오름차순으로 받아 `parent_id`별로 묶는다.

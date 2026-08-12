@@ -72,6 +72,18 @@ export interface ProjectAbilities {
    * 보여 준다 — 못 들어오게 하면 *"무엇이 적용돼 있는지"*조차 못 본다.
    */
   editTheme: boolean
+  /**
+   * 지금 상태를 태그로 얼릴 수 있는가(`POST .../snapshots` — P6-1).
+   *
+   * **이 필드가 이 표에서 처음으로 owner가 아닌 값을 갖는다.** §10이 스냅샷 **생성**을
+   * editor에게 열었기 때문이다 — 위 넷과 갈리는 이유는 **스냅샷이 아무것도 바꾸지 않기**
+   * 때문이다. 이름을 바꾸는 것도, 옷을 갈아입히는 것도 아니고, 지금 상태를 적어 둘 뿐이다.
+   *
+   * **복원은 여기 없다.** §10이 그것만 owner로 두었고 P6-2가 만든다 — 오늘 없는 기능의
+   * 판정을 미리 두면 그것이 무엇을 지키는지 아무도 확인하지 않은 채 남는다(서버가 owner
+   * 가드를 미리 만들지 않는 것과 같은 판단이다).
+   */
+  createSnapshot: boolean
 }
 
 /** 아무것도 못 하는 상태. 역할을 모르거나 계약 밖 값일 때의 답이다. */
@@ -80,15 +92,20 @@ const NOTHING: ProjectAbilities = {
   remove: false,
   chooseTheme: false,
   editTheme: false,
+  createSnapshot: false,
 }
 
 /**
- * `role`이 `owner`일 때만 열린다.
+ * `owner`는 전부, `editor`는 **스냅샷 생성 하나**, 그 밖은 아무것도 못 한다.
  *
- * **`role === 'owner'` 하나로 가르는 것이 요점이다.** 역할별 표를 두면 서버가 역할을 더할
- * 때 그 칸을 채우게 되고, 채우는 사람이 열어 두면 조용히 열린다. 비교로 두면 **모르는
- * 값은 자동으로 닫힌다** — 새 역할이 진짜로 owner급이면 그때 이 조건을 넓히는 커밋이
- * 남는다.
+ * **앞 판은 *"`role`이 `owner`일 때만 열린다"*였고 P6-1이 그것을 거짓으로 만들었다.**
+ * §10이 스냅샷 **생성**을 editor에게 열었기 때문이다(복원만 owner다). 그때까지 이 함수가
+ * `role !== 'owner'`면 곧장 `NOTHING`이었던 것은 **오늘의 관측이 함수 모양에 박혀 있던
+ * 것**이고, editor에게 열린 첫 자리에서 깨졌다.
+ *
+ * **여전히 역할별 표를 두지 않는다.** 명시적으로 아는 역할만 비교하고 나머지는 `NOTHING`이다 —
+ * 표를 두면 서버가 역할을 더할 때 그 칸을 채우게 되고, 채우는 사람이 열어 두면 조용히
+ * 열린다. 비교로 두면 **모르는 값은 자동으로 닫힌다.**
  *
  * `role`의 타입이 `ProjectRole`이라고 해서 런타임 값이 그 셋 중 하나라는 보증은 없다.
  * 그 값은 서버 응답에서 오고, `api/http-client.ts`의 `SHAPES.projectDetail`은 `role`을 보지
@@ -119,6 +136,12 @@ const NOTHING: ProjectAbilities = {
  * > 여기서는 그 트리거가 같은 브랜치 안에 있었다.
  */
 export function projectAbilities(role: ProjectRole | undefined): ProjectAbilities {
-  if (role !== 'owner') return NOTHING
-  return { rename: true, remove: true, chooseTheme: true, editTheme: true }
+  if (role === 'owner') {
+    return { rename: true, remove: true, chooseTheme: true, editTheme: true, createSnapshot: true }
+  }
+  // **editor가 열 수 있는 것이 오늘 하나다**(§10 — 스냅샷 생성). 앞서 이 함수는
+  // `role !== 'owner'`면 곧장 `NOTHING`이었는데, 그 형태는 *"owner가 아니면 아무것도 못
+  // 한다"*를 함수 모양에 박아 둔 것이라 editor에게 열린 첫 자리에서 깨진다.
+  if (role === 'editor') return { ...NOTHING, createSnapshot: true }
+  return NOTHING
 }

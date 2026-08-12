@@ -9,6 +9,7 @@ import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
 import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
+import { SnapshotsRoute } from './routes/snapshots'
 import { ThemeEditorRoute } from './routes/theme-editor'
 import { SessionProvider } from './session/session-context'
 
@@ -63,6 +64,14 @@ export function App(): ReactElement {
               **문지기 안이다** — 위 `RequireAuth` 아래에 있으므로 로그인 없이는 못 온다.
               owner인지는 화면이 판정한다(읽기는 viewer도 된다 — 그 파일의 권한 절). */}
           <Route path="/projects/:projectId/themes/:themeId" element={<ThemeEditorRoute />} />
+          {/* **스냅샷도 셸 밖의 별도 라우트다**(P6-1 D10) — 테마 저작과 같은 판단이고
+              근거도 같다: §9의 3분할에 이 화면이 들어갈 자리가 없다.
+
+              **문지기 안이다.** 목록은 viewer도 보고(§10 — 막는 것은 생성 하나다) 그
+              판정은 화면이 한다(`routes/snapshots.tsx`의 권한 절).
+
+              **복원 라우트는 없다**(D1) — P6-2가 만든다. */}
+          <Route path="/projects/:projectId/snapshots" element={<SnapshotsRoute />} />
         </Route>
       </Routes>
     </SessionProvider>

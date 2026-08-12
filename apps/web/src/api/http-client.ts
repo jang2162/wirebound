@@ -17,6 +17,7 @@ import type {
   ProjectTheme,
   RevisionSummary,
   SessionUser,
+  SnapshotSummary,
   ThemeDetail,
   ThemeSummary,
   TreeMenuNode,
@@ -501,6 +502,26 @@ const SHAPES = {
     isMarkerChange(value),
   /** 삭제·재번호의 결과. 문서 변화만 온다. */
   markerChange: isMarkerChange,
+  /**
+   * 스냅샷 하나(P6-1). **읽는 자리가 무엇을 하는지로 무엇을 볼지 정한다** —
+   * `test/api-consumers.test.ts`가 그 자리를 실행으로 센다.
+   *
+   * | 필드 | 화면이 무엇을 하는가 | 어긋나면 |
+   * |---|---|---|
+   * | `id` | **React 목록의 `key`** | 중복·`undefined`면 목록이 뒤섞이거나 경고가 난다 |
+   * | `tag` · `createdByName` | 그대로 그려진다 | React가 객체를 그리다 렌더 도중 던진다 |
+   * | `description` | 그대로 그려진다(`null`이면 자리를 비운다) | 〃 |
+   * | `payloadBytes` | **숫자 포맷을 지난다**(`toLocaleString`) | 문자열이 오면 그 메서드가 없어 던진다 |
+   *
+   * **`createdAt`은 보지 않는다** — 화면이 문자열로만 다루고(`toLocaleString`이 아니라
+   * 그대로 그린다) 어긋나도 던지지 않는다. `comment`가 같은 자리에서 같은 판단을 했다:
+   * *"가설적인 경로에 가드를 달고 살아 있는 경로를 열어 두지 않는다."*
+   *
+   * **`payload`를 보지 않는 것도 같은 이유다** — 목록 응답에는 애초에 없고(서버 D9),
+   * 생성 응답에는 있지만 **이 화면이 읽지 않는다**(복원이 없다 — 계획서 D1).
+   */
+  snapshot: isSnapshot,
+  snapshotList: (value) => isArrayOf(value, isSnapshot),
 } satisfies Record<string, Shape>
 
 /**
@@ -516,6 +537,19 @@ function isComment(value: unknown): boolean {
     typeof value['nodeId'] === 'string' &&
     typeof value['body'] === 'string' &&
     typeof value['authorName'] === 'string'
+  )
+}
+
+/** 스냅샷 하나의 모양. 목록·생성이 같은 것을 쓴다 — 서버의 `toSummaryResponse` 하나가 둘을 만든다. */
+function isSnapshot(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
+    typeof value['tag'] === 'string' &&
+    (typeof value['description'] === 'string' || value['description'] === null) &&
+    typeof value['createdByName'] === 'string' &&
+    typeof value['payloadBytes'] === 'number'
   )
 }
 
@@ -772,6 +806,13 @@ const BODY_KEYS = {
     true
   >,
   updateComment: { body: true } satisfies Record<keyof Parameters<ApiClient['updateComment']>[3], true>,
+  // 스냅샷 생성(P6-1). 서버의 `SnapshotBody`가 `z.strictObject`라 선언되지 않은 키는 그
+  // 자체로 400이고, **`payload`가 그 자리다** — 생성 응답에 그 키가 실려 오므로 응답 객체를
+  // 그대로 되보내는 실수가 실제로 있을 법하다(`createTheme`이 같은 자리에서 같은 판단).
+  createSnapshot: { tag: true, description: true } satisfies Record<
+    keyof Parameters<ApiClient['createSnapshot']>[1],
+    true
+  >,
 }
 
 /**
@@ -1021,6 +1062,17 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
     // 같은 메서드로 두 패턴이 맞붙는 자리가 없다(서버가 정적 세그먼트를 먼저 잡기도 한다).
     renumberComments: (projectId, pageId) =>
       request<MarkerChange>('POST', `${commentsPath(projectId, pageId)}/renumber`, SHAPES.markerChange),
+    listSnapshots: (projectId) =>
+      request<SnapshotSummary[]>('GET', `${projectPath(projectId)}/snapshots`, SHAPES.snapshotList),
+    // **응답이 더 넓다(`payload`가 붙는다).** `SHAPES.snapshot`은 그것을 보지 않고 통과시킨다 —
+    // 이 화면이 payload를 읽지 않기 때문이다(`api/client.ts`의 `createSnapshot` 주석).
+    createSnapshot: (projectId, body) =>
+      request<SnapshotSummary>(
+        'POST',
+        `${projectPath(projectId)}/snapshots`,
+        SHAPES.snapshot,
+        declaredOnly(body, BODY_KEYS.createSnapshot),
+      ),
     listMyRevisions: (projectId, pageId) =>
       request<RevisionSummary[]>(
         'GET',

@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { roleAtLeast } from '../src/auth/roles'
 import type { ProjectRole } from '../src/db/types'
+import { insertSnapshot } from '../src/repos/snapshots'
 import { insertTheme } from '../src/repos/themes'
+import { SNAPSHOT_PAYLOAD_VERSION } from '../src/services/snapshot-payload'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 type Actor = ProjectRole | 'outsider' | 'anonymous'
@@ -143,6 +145,38 @@ const 테마하나 = async (
   _ownerCookie: { wb_session: string },
 ): Promise<Record<string, string>> => ({
   themeId: (await insertTheme(ctx.db, projectId, { meta: { id: 'target', name: '대상 테마', version: '1.0.0' } })).id,
+})
+
+/**
+ * ':snapshotId'가 필요한 케이스(스냅샷 조회)가 실행 전에 대상 스냅샷을 만든다.
+ *
+ * **API가 아니라 repo로 넣는다** — `코멘트하나`와 같은 이유다: 픽스처가 검사 대상
+ * API(`POST .../snapshots`)에 의존하면 그쪽이 깨졌을 때 조회 행까지 함께 무너진다.
+ * payload는 규격을 만족하는 최소본이면 된다 — 이 행이 재는 것은 역할 판정이다.
+ */
+const 스냅샷하나 = async (
+  ctx: TestContext,
+  projectId: string,
+  _ownerCookie: { wb_session: string },
+  actorUserId: string,
+): Promise<Record<string, string>> => ({
+  snapshotId: (
+    await insertSnapshot(ctx.db, {
+      projectId,
+      tag: '대상 스냅샷',
+      description: null,
+      payload: {
+        payloadVersion: SNAPSHOT_PAYLOAD_VERSION,
+        capturedAt: '2026-08-12T00:00:00.000Z',
+        menu: [],
+        pages: [],
+        layouts: [],
+        themes: [],
+        comments: [],
+      },
+      createdBy: actorUserId,
+    })
+  ).id,
 })
 
 const CASES: Case[] = [
@@ -340,6 +374,38 @@ const CASES: Case[] = [
     url: '/api/projects/:projectId/themes/:themeId',
     allowed: ['owner'],
     setup: 테마하나,
+  },
+  {
+    // **스냅샷 생성은 editor다**(§10 — *"editor: … 스냅샷 생성 (복원 불가)"*). 테마 고르기가
+    // owner인 것과 갈리는 이유: 스냅샷은 아무것도 바꾸지 않는다. 지금 상태를 적어 둘 뿐이다.
+    //
+    // **태그를 행마다 다르게 하지 않는다.** 각 행이 `withApi`로 새 프로젝트를 만들고
+    // 유일성 단위가 `(project_id, tag)`라 충돌할 자리가 없다.
+    label: '스냅샷 생성',
+    method: 'POST',
+    url: '/api/projects/:projectId/snapshots',
+    payload: { tag: 'v1' },
+    allowed: ['owner', 'editor'],
+  },
+  {
+    label: '스냅샷 목록',
+    method: 'GET',
+    url: '/api/projects/:projectId/snapshots',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    // **`setup`이 없다 — 없는 id로 친다.** 이 행이 재는 것은 역할 판정이고, 가드는
+    // 핸들러보다 **먼저** 돈다(preHandler). 거부는 401/403/404로 갈리고, 허용된 역할은
+    // 핸들러에 도달해 404를 받는데 그것도 4xx가 아님을 보는 판정에는 걸리지 않는다 —
+    // 그래서 실제 스냅샷을 만드는 픽스처가 필요 없다.
+    //
+    // **다만 그 404가 outsider의 404와 겹친다.** 아래 `허용된 역할이 4xx가 아니다`가
+    // 그 겹침을 그냥 넘기지 않도록 실제 스냅샷을 만들어 둔다.
+    label: '스냅샷 조회',
+    method: 'GET',
+    url: '/api/projects/:projectId/snapshots/:snapshotId',
+    allowed: ['owner', 'editor', 'viewer'],
+    setup: 스냅샷하나,
   },
 ]
 

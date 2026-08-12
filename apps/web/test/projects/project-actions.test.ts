@@ -44,12 +44,20 @@ import type { ProjectRole } from '../../src/api/types'
  * ```
  */
 const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
-  owner: { rename: true, remove: true, chooseTheme: true, editTheme: true },
-  editor: { rename: false, remove: false, chooseTheme: false, editTheme: false },
-  viewer: { rename: false, remove: false, chooseTheme: false, editTheme: false },
+  owner: { rename: true, remove: true, chooseTheme: true, editTheme: true, createSnapshot: true },
+  // **editor의 칸이 처음으로 전부 `false`가 아니게 됐다**(P6-1). §10이 스냅샷 **생성**을
+  // editor에게 열었기 때문이다 — 스냅샷은 아무것도 바꾸지 않는다.
+  editor: { rename: false, remove: false, chooseTheme: false, editTheme: false, createSnapshot: true },
+  viewer: { rename: false, remove: false, chooseTheme: false, editTheme: false, createSnapshot: false },
 }
 
-const NOTHING: ProjectAbilities = { rename: false, remove: false, chooseTheme: false, editTheme: false }
+const NOTHING: ProjectAbilities = {
+  rename: false,
+  remove: false,
+  chooseTheme: false,
+  editTheme: false,
+  createSnapshot: false,
+}
 
 describe('projectAbilities', () => {
   it('역할을 모르면 아무것도 못 한다', () => {
@@ -61,14 +69,24 @@ describe('projectAbilities', () => {
     expect(projectAbilities('viewer')).toEqual(NOTHING)
   })
 
-  it('editor도 이름을 바꾸거나 지우지 못한다', () => {
+  it('editor는 스냅샷만 만들 수 있다 — 이름을 바꾸거나 지우지는 못한다', () => {
     // **editor는 메뉴·페이지를 만들고 지울 수 있다**(P2b-4). 그런데도 프로젝트 자체는
     // 못 건드린다 — 이 둘을 한 판정으로 묶지 않는 근거다.
-    expect(projectAbilities('editor')).toEqual(NOTHING)
+    //
+    // **P6-1이 이 케이스를 갈랐다.** 앞 판은 `toEqual(NOTHING)`이었고 그것은 *"owner가
+    // 아니면 아무것도 못 한다"*가 참인 동안만 맞았다. §10이 스냅샷 생성을 editor에게
+    // 열면서 거짓이 됐다.
+    expect(projectAbilities('editor')).toEqual({ ...NOTHING, createSnapshot: true })
   })
 
   it('owner만 이름을 바꾸고 지울 수 있다', () => {
-    expect(projectAbilities('owner')).toEqual({ rename: true, remove: true, chooseTheme: true, editTheme: true })
+    expect(projectAbilities('owner')).toEqual({
+      rename: true,
+      remove: true,
+      chooseTheme: true,
+      editTheme: true,
+      createSnapshot: true,
+    })
   })
 
   it('계약에 없는 역할 문자열은 아무것도 열지 않는다', () => {
@@ -102,6 +120,17 @@ describe('projectAbilities', () => {
     // 1이라는 값의 근거는 위 실측이다(owner 아닌 멤버 둘이 전부 403).
     const opened = Object.values(EXPECTED).filter((a) => a.rename || a.remove)
     expect(opened).toHaveLength(1)
-    expect(EXPECTED.owner).toEqual({ rename: true, remove: true, chooseTheme: true, editTheme: true })
+    expect(EXPECTED.owner).toEqual({
+      rename: true,
+      remove: true,
+      chooseTheme: true,
+      editTheme: true,
+      createSnapshot: true,
+    })
+
+    // **스냅샷 생성은 둘이 열린다**(owner·editor — §10). 위 `opened`가 `rename || remove`를
+    // 보므로 그 수에 잡히지 않는다 — 등급이 다른 조작이 늘면 그 조작의 수를 따로 못박는다.
+    // 이 값이 3이 되는 날(viewer까지 열리는 날)은 §10이 바뀐 날이다.
+    expect(Object.values(EXPECTED).filter((a) => a.createSnapshot)).toHaveLength(2)
   })
 })

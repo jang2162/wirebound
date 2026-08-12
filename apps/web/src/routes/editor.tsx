@@ -14,7 +14,7 @@
  * 화면 없이 단위 테스트할 수 있어야 하고, 컴포넌트 안에 있으면 그럴 수 없다.
  */
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
-import { useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ProjectDetail } from '../api/types'
@@ -232,6 +232,15 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
           canChoose={projectAbilities(props.project.role).chooseTheme}
           onChanged={() => setThemeReloadToken((token) => token + 1)}
         />
+        {/* **스냅샷 화면으로 가는 길**(P6-1 D10). 그 화면은 셸 밖의 별도 라우트라
+            여기 링크가 없으면 주소를 직접 치는 수밖에 없다.
+
+            **역할로 감추지 않는다** — 목록은 viewer도 본다(§10 — 막는 것은 생성 하나이고,
+            그 판정은 저쪽 화면이 한다). 감추면 viewer가 *"이 프로젝트에 어떤 기록이
+            있는지"*조차 못 본다. */}
+        <Link className="wb-shell-snapshots-link" to={`/projects/${props.project.id}/snapshots`}>
+          스냅샷
+        </Link>
         {/* 편집 실패 통지는 **한 자리**다(D8). 조회 실패처럼 화면마다 나누지 않는 것은,
             어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
             받고 보내지 못한 편집을 잃는다(D4). 셸 상단에 두면 어느 패널을 보고 있어도

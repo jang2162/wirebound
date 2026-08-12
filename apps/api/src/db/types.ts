@@ -1,6 +1,7 @@
 import type { ColumnType, Generated, JSONColumnType } from 'kysely'
 import type { LayoutDocument, PageDocument, PatchOp } from '@wirebound/schema'
 import type { ThemeAssets, ThemeComponent, ThemePattern, ThemePrimitives, ThemeTokens } from '@wirebound/themes'
+import type { SnapshotPayload } from '../services/snapshot-payload'
 
 /**
  * `Database` 스키마 인터페이스. 테이블을 만드는 마이그레이션은 대응하는 인터페이스를
@@ -206,6 +207,26 @@ export interface CommentsTable {
   updated_at: ColumnType<Date, Date | undefined, Date>
 }
 
+/**
+ * 스냅샷(`0009-snapshots`). 설계 §4.5의 **삭제 없는 태그**다.
+ *
+ * `payload`는 `JSONColumnType<SnapshotPayload>` — `PagesTable.schema`와 **같은 비대칭**이다:
+ * 삽입 시엔 `JSON.stringify`한 문자열, 조회 시엔 파싱된 객체. 그 규격을 소유하는 것은
+ * `services/snapshot-payload.ts`이고(계획서 D2), 이 파일은 컬럼 타입만 안다.
+ *
+ * `tag`는 `(project_id, tag)`가 유일하다(D7). `description`은 `NULL`이면 적지 않은 것이다.
+ * `created_by`는 `ON DELETE RESTRICT`이고 이유는 0009의 주석에 있다.
+ */
+export interface SnapshotsTable {
+  id: Generated<string>
+  project_id: string
+  tag: string
+  description: string | null
+  payload: JSONColumnType<SnapshotPayload>
+  created_by: string
+  created_at: Generated<Date>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -217,4 +238,5 @@ export interface Database {
   themes: ThemesTable
   layouts: LayoutsTable
   comments: CommentsTable
+  snapshots: SnapshotsTable
 }
