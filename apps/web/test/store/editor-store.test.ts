@@ -644,3 +644,110 @@ describe('EditorStore의 편집 상태', () => {
     expect(store.beginPump()).toBe(true)
   })
 })
+
+/**
+ * **코멘트가 낸 문서 변화를 받는 자리**(P5-1, 계획서 D2).
+ *
+ * 코멘트를 달거나 지우거나 재번호하면 서버가 노드의 `marker`를 바꾸고 revision을 남긴다.
+ * 그 변화는 `PATCH .../ops`의 ack가 아니라 코멘트 응답으로 오므로 `ackEdit`이 아니라
+ * 이 메서드가 받는다.
+ *
+ * **재는 축이 하나다: 문서와 `headSeq`가 함께 움직이거나 둘 다 안 움직인다.**
+ * 한쪽만 움직이면 *"화면에는 번호가 없는데 다음 편집은 번호가 있는 revision 위에서
+ * 만들어지는"* 상태가 되고, 그 어긋남은 아무도 모르는 채 남는다.
+ */
+describe('EditorStore의 마커 반영', () => {
+  /** `n_root` 아래 자식 하나를 둔 문서. 마커를 붙일 자리가 필요하다. */
+  function withChild(): PageDocument {
+    return {
+      version: CURRENT_DOCUMENT_VERSION,
+      root: { id: 'n_root', type: 'Container', children: [{ id: 'n_a', type: 'Text' }] },
+    }
+  }
+
+  const ADD_MARKER: PatchOp[] = [{ op: 'add', path: '/root/children/0/marker', value: 1 }]
+
+  it('ops를 문서에 얹고 headSeq를 올린다', () => {
+    const store = new EditorStore()
+    store.loadPage('pg-1', withChild(), 7)
+
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('applied')
+
+    expect(store.getState().document?.root.children?.[0]?.marker).toBe(1)
+    expect(store.getState().headSeq).toBe(8)
+  })
+
+  it('낙관적 편집을 지우지 않는다 — 문서를 통째로 갈아 끼우지 않는 이유다', () => {
+    // **`loadPage`로 서버 문서를 놓으면 아직 보내지 않은 편집이 화면에서 사라진다.**
+    // 여기서는 그 편집이 얹힌 문서 **위에** 마커만 더한다.
+    const store = new EditorStore()
+    store.loadPage('pg-1', withChild(), 7)
+    store.applyEdit([{ op: 'add', path: '/root/children/0/props', value: { content: '타이핑 중' } }])
+
+    store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })
+
+    expect(store.getState().document?.root.children?.[0]?.props).toEqual({ content: '타이핑 중' })
+    expect(store.getState().document?.root.children?.[0]?.marker).toBe(1)
+    // 큐도 그대로다 — 보내지 않은 편집이 살아 있다.
+    expect(store.getState().pending).toHaveLength(1)
+  })
+
+  it('undo 스택을 비우지 않는다 — 코멘트를 달 때마다 되돌리기가 사라지면 안 된다', () => {
+    const store = new EditorStore()
+    store.loadPage('pg-1', withChild(), 7)
+    store.restoreUndoStack([{ revisionId: 'rev-1', inverse: [] }])
+
+    store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })
+
+    expect(store.getState().undoStack).toHaveLength(1)
+  })
+
+  it('다른 페이지가 열려 있으면 아무것도 안 한다', () => {
+    // 옮긴 뒤 늦게 도착한 응답이다. `headSeq`를 건드리면 새 페이지의 편집이 남의
+    // revision 번호 위에서 만들어진다(`ackEdit`의 늦은 ack 가드와 같은 자리).
+    const store = new EditorStore()
+    store.loadPage('pg-2', withChild(), 3)
+
+    // **`'skipped'`다 — `'diverged'`가 아니다**(리뷰 ④). 그 화면은 이미 다른 페이지를
+    // 보고 있으므로 말할 것이 없다.
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('skipped')
+    expect(store.getState().headSeq).toBe(3)
+    expect(store.getState().document?.root.children?.[0]?.marker).toBeUndefined()
+  })
+
+  it('ops를 적용할 수 없으면 headSeq도 안 올린다', () => {
+    // **이 케이스가 이 메서드의 중심이다.** 보내지 않은 구조 편집이 그 노드를 이미
+    // 지웠으면 경로가 없다. 그때 `headSeq`만 올리면 문서와 revision 번호가 조용히
+    // 갈라진다 — 둘 다 안 움직이면 다음 편집이 409를 받고 복구가 페이지를 다시 받는다.
+    const store = new EditorStore()
+    store.loadPage('pg-1', withChild(), 7)
+    store.applyEdit([{ op: 'remove', path: '/root/children/0' }])
+
+    // **`'diverged'`다 — 화면이 이것을 말해야 한다**(리뷰 ④). 서버에는 번호가 있는데
+    // 내 문서에는 없는 상태이고, 조용히 넘기면 아무도 그 어긋남을 모른다.
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('diverged')
+    expect(store.getState().headSeq).toBe(7)
+  })
+
+  it('문서가 안 바뀐 요청은 headSeq도 안 건드린다', () => {
+    // 이미 번호가 있는 노드에 코멘트를 더 달았거나, 마지막이 아닌 코멘트를 지웠거나,
+    // 바꿀 것 없는 재번호다.
+    //
+    // **응답의 `seq`를 받아들이지 않는 것이 요점이다**(리뷰 ④의 곁가지). 그 값은 서버가
+    // 요청을 받은 시점의 `head_seq`이고 **내 문서가 그 revision 위에 서 있다는 뜻이
+    // 아니다.** 내가 뒤처져 있으면 그것을 받아 "나는 최신이다"라고 믿게 되고, 앞서
+    // 있으면 값이 **내려간다** — 여기서는 내려가는 쪽을 잰다.
+    const store = new EditorStore()
+    store.loadPage('pg-1', withChild(), 7)
+
+    expect(store.applyMarkerChange('pg-1', { seq: 3, markerOps: [] })).toBe('applied')
+    expect(store.getState().headSeq).toBe(7)
+  })
+
+  it('문서가 없으면 아무것도 안 한다', () => {
+    const store = new EditorStore()
+
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('skipped')
+    expect(store.getState().headSeq).toBe(0)
+  })
+})

@@ -8,6 +8,9 @@
 import type { PatchOp } from '@wirebound/schema'
 import type { Theme } from '@wirebound/themes'
 import type {
+  Comment,
+  CommentCreated,
+  MarkerChange,
   MenuNode,
   PageDetail,
   ProjectTheme,
@@ -250,6 +253,52 @@ export interface ApiClient {
    * **경고만 있으면 저장되고** 응답의 `warnings`에 실린다 — 없으면 그 키 자체가 없다.
    */
   updateTheme(projectId: string, themeId: string, body: { theme: Theme }): Promise<ThemeDetail>
+  /**
+   * 이 페이지의 코멘트 전부(P5-1). **선택한 노드의 것만이 아니다** — 설계 §9의 우측
+   * 목록이 *"① 검색폼 - … / ② 목록 - …"*로 **전부**를 보인다.
+   *
+   * **번호 순이 아니라 `createdAt` 오름차순으로 온다.** 서버는 번호를 모른다(번호는
+   * 문서의 값이다). 번호로 묶고 늘어놓는 것은 문서를 든 화면의 일이다.
+   *
+   * `viewer`도 읽는다 — 막는 것은 쓰기 넷이다(§10).
+   */
+  listComments(projectId: string, pageId: string): Promise<Comment[]>
+  /**
+   * 코멘트를 단다. **그 노드에 번호가 없으면 서버가 번호를 붙이고 revision을 남긴다**
+   * (계획서 D2 — `marker`는 페이지 문서의 값이므로 편집 파이프라인을 지나야 한다).
+   *
+   * **`markerOps`를 화면이 자기 문서에 적용해야 한다.** 그러지 않으면 캔버스에 번호가
+   * 뜨지 않고 `headSeq`가 서버보다 뒤처져 다음 편집이 409를 받는다. 그 적용은
+   * `EditorStore.applyMarkerChange` 하나가 한다.
+   *
+   * **문서에 없는 노드는 404다.** 본문은 1~2000자이고 그 밖은 400이다.
+   * **그 사이 남이 페이지를 고쳤으면 409다** — 서버가 `head_seq`를 잠그기 전에 읽어
+   * 낙관적 잠금으로 쓰기 때문이고, 그래야 두 노드의 첫 코멘트가 같은 번호를 받지 않는다.
+   */
+  createComment(projectId: string, pageId: string, body: { nodeId: string; body: string }): Promise<CommentCreated>
+  /**
+   * 본문을 고친다. **작성자만 부를 수 있다** — 남의 것이면 403이다(서버 재라 #2:
+   * 남의 이름이 붙은 채 내용이 바뀌면 말을 지어내는 일이 된다).
+   *
+   * **문서를 안 바꾸므로 `seq`가 없다.** 응답은 코멘트 하나뿐이다.
+   */
+  updateComment(projectId: string, pageId: string, commentId: string, body: { body: string }): Promise<Comment>
+  /**
+   * 코멘트를 지운다. **그 노드의 마지막이었으면 번호도 함께 사라진다**(§4.3의
+   * *"없으면 코멘트 없음"*) — 그때 `markerOps`에 `remove`가 실려 온다.
+   *
+   * **204가 아니라 200에 본문이 온다** — 다른 `DELETE` 셋과 갈리는 이유는 이것이 문서를
+   * 바꿀 수 있기 때문이다. **남의 코멘트도 지울 수 있다**(수정과 갈린다).
+   */
+  deleteComment(projectId: string, pageId: string, commentId: string): Promise<MarkerChange>
+  /**
+   * **문서 순서대로 재번호**(§9의 버튼). 번호가 **있는** 노드만 1부터 다시 매긴다 —
+   * 번호가 없는 노드에 새로 주지 않는다.
+   *
+   * **한 revision이다.** 노드마다 따로 부르면 중간 상태에 번호가 겹친다.
+   * 바꿀 것이 없으면 `markerOps: []`이고 문서도 revision도 안 건드린다.
+   */
+  renumberComments(projectId: string, pageId: string): Promise<MarkerChange>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

@@ -149,6 +149,11 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId/ops` | PATCH | editor | `{ baseSeq, ops[], clientOpId? }` | 200 `{ seq, revisionId, inverse, schemaVersion, clientOpId?, warnings? }`(본문·경로 제약 위반과 지원하지 않는 문서 버전·NUL 문자는 400, 페이지 없음 404, baseSeq 불일치·패치 실패 409, 카탈로그 **오류** 422) |
 | `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다(D11) |
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
+| `/api/projects/:projectId/pages/:pageId/comments` | GET | viewer | — | 200 코멘트 배열(`created_at` 오름차순). 항목은 `{ id, nodeId, body, authorId, authorName, createdAt, updatedAt }` |
+| `/api/projects/:projectId/pages/:pageId/comments` | POST | editor | `{ nodeId, body }` | 201 `{ comment, marker, seq, markerOps }` — **번호가 없는 노드면 문서에 `marker`를 붙이고 revision을 남긴다**(아래 "코멘트와 번호"). 문서에 없는 노드는 404, 본문 1~2000자 밖·NUL은 400, 그 사이 남이 고쳤으면 409 |
+| `/api/projects/:projectId/pages/:pageId/comments/:commentId` | PATCH | editor | `{ body }` | 200 코멘트. **작성자만 고칠 수 있다 — 남의 것은 403.** 문서를 안 바꾸므로 `seq`가 없다 |
+| `/api/projects/:projectId/pages/:pageId/comments/:commentId` | DELETE | editor | — | 200 `{ seq, markerOps }`(**204가 아니다** — 문서 변화를 실어야 한다). **그 노드의 마지막이면 `marker`도 지운다.** 남의 코멘트도 지울 수 있다 |
+| `/api/projects/:projectId/pages/:pageId/comments/renumber` | POST | editor | — | 200 `{ seq, markerOps }` — 문서 순서대로 1부터 재번호(§9). **한 revision이다.** 바꿀 것이 없으면 `markerOps: []`이고 revision도 안 쌓인다 |
 | `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
 | `/api/projects/:projectId/theme` | GET | viewer | — | 200 `{ themeId, theme, issues }` — **이 프로젝트의 화면이 지금 써야 할 테마 하나**(아래 "프로젝트의 현재 테마"). 없으면 `theme: null` |
 | `/api/projects/:projectId/theme` | PUT | **owner** | `{ themeId: string \| null }` | 200 `{ themeId, theme, issues }` — **GET과 같은 꼴**(같은 함수가 만든다). 기본 레이아웃의 `theme_id`를 바꾼다. `null`은 *"테마를 벗긴다"*. **목록 밖 `themeId`는 404**(남의 프로젝트 테마의 존재를 숨긴다), **기본 레이아웃이 없는 프로젝트는 409**, 봉투 위반 400 |
@@ -210,6 +215,39 @@ PATCH /menu/:id    응답 그대로 → 400 인식할 수 없는 키: "id", "pro
 POST  /pages       응답 그대로 → 400 인식할 수 없는 키: "id", "sortOrder", "schemaVersion", "schema", "headSeq"
 PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "schemaVersion", "schema", "headSeq"
 ```
+
+### 코멘트와 번호 (P5-1)
+
+**번호(`marker`)는 코멘트 표가 아니라 페이지 문서의 노드가 든다.** 설계 §4.3이
+`"marker": 2, // 우측 코멘트 번호 (없으면 코멘트 없음)`이라 적었고, 그래야 내보낸 HTML
+번들(§11.3)이 문서만 들고 마커를 그린다. 본문·작성자·시각은 `comments` 표다.
+
+| 규칙 | 어디서 |
+|---|---|
+| 한 노드의 코멘트들이 **같은 번호를 공유**한다(스레드) | `POST`가 노드에 번호가 있으면 그대로 쓴다 |
+| **첫 코멘트가 번호를 만들고**, 새 번호는 문서에서 쓰이는 **최댓값 + 1**이다 | 지운 번호를 재사용하지 않는다 — 옛 번호를 가리키던 말이 다른 노드를 가리키게 되기 때문이다 |
+| **마지막 코멘트를 지우면 번호가 사라진다** | §4.3의 *"없으면 코멘트 없음"* |
+| 번호를 바꾸는 셋이 **전부 편집 파이프라인을 지난다** | 그래야 revision이 남아 undo가 되고(§7.3), `head_seq`가 올라 그 뒤 편집의 `baseSeq`가 안 틀어진다 |
+
+**`markerOps`는 그 요청이 문서에 낸 변화다**(`PatchOp[]`). 클라이언트는 자기 문서에 같은
+ops를 적용하고 `headSeq`를 `seq`로 맞춘다 — **문서를 통째로 돌려주지 않는 이유는 아직
+보내지 않은 낙관적 편집이 화면에서 사라지기 때문이다.** 문서가 안 바뀐 경우(이미 번호가
+있는 노드에 코멘트를 더 다는 것, 마지막이 아닌 코멘트를 지우는 것, 바꿀 것 없는 재번호)에는
+`markerOps: []`이고 `seq`는 현재 `head_seq` 그대로다.
+
+**`baseSeq`는 서버가 읽는다** — 요청이 도착한 시점에 `head_seq`를 읽어 파이프라인에
+넘긴다(**잠근 뒤가 아니다**). 그래서 그 사이 다른 편집이 커밋되면 409가 나가고,
+*"남이 고쳤어도 밀어붙이는"* 일이 없다. 낙관적 잠금이 필요한 이유는 번호의 유일성이다 —
+없으면 서로 다른 두 노드에 동시에 달린 첫 코멘트가 둘 다 1번을 받는다.
+
+**성립하는 어긋난 상태 둘.** 서버는 이것을 고쳐 주지 않는다.
+
+- **번호는 있는데 코멘트 행이 없는 노드.** undo가 번호 부여를 되돌렸거나, JSON을
+  가져왔거나(§11.2), 사람이 `marker`를 직접 편집한 경우다. **문서가 진실이므로 캔버스는
+  그 번호를 그린다.** 그 노드에 코멘트를 달면 **있던 번호를 그대로 쓴다.**
+- **코멘트 행은 있는데 노드가 문서에 없는 경우.** 코멘트가 달린 노드를 지우면 그 행이
+  남는다(`comments.node_id`에 FK가 없다 — 노드는 테이블이 아니라 jsonb 안의 값이다).
+  그 행은 GET에 그대로 실려 나간다.
 
 ### 트리 응답 형태 (`GET /api/projects/:projectId/tree`)
 

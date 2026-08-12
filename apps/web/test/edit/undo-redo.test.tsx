@@ -75,7 +75,7 @@ function server(options: { failAt?: number } = {}): Server {
 }
 
 function panel(): HTMLElement {
-  return screen.getByRole('complementary', { name: '속성 패널' })
+  return screen.getByRole('complementary', { name: '우측 패널' })
 }
 
 function select(type: string): void {

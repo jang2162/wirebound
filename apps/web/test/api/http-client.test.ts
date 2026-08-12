@@ -121,6 +121,28 @@ const page: PageDetail = {
 /** `POST /menu`·`PATCH /menu/:nodeId`의 응답. 트리 노드와 달리 `pages`·`children`이 없다(D1). */
 const menuNode: MenuNode = { id: 'm1', projectId: 'p1', parentId: null, title: '회원관리', sortOrder: 0 }
 
+/** 코멘트 하나. `marker`가 **없는 것이 요점이다** — 번호는 노드의 값이다(§4.3). */
+const comment = {
+  id: 'c1',
+  nodeId: 'n_000000000001',
+  body: '검색 조건은 AND 결합',
+  authorId: 'u1',
+  authorName: '홍길동',
+  createdAt: '2026-08-12T09:00:00.000Z',
+  updatedAt: '2026-08-12T09:00:00.000Z',
+}
+
+/** `POST .../comments`의 응답. `markerOps`가 이 요청이 문서에 낸 변화다. */
+const commentCreated = {
+  comment,
+  marker: 1,
+  seq: 8,
+  markerOps: [{ op: 'add', path: '/root/children/0/marker', value: 1 }],
+}
+
+/** `DELETE .../comments/:id`·`POST .../comments/renumber`의 응답. */
+const markerChange = { seq: 9, markerOps: [{ op: 'remove', path: '/root/children/0/marker' }] }
+
 /** `GET .../revisions?mine=true`의 항목 하나. */
 const revision = {
   id: 'rev-1',
@@ -289,6 +311,47 @@ const ENDPOINTS: Array<{
     call: (c) =>
       c.updateTheme('p1', 't1', { theme: { meta: { id: 'brand', name: '브랜드', version: '1.0.0' } } }),
   },
+  // **코멘트 다섯(P5-1).** 전부 `.../pages/:pageId/comments` 아래다 — 코멘트는 프로젝트가
+  // 아니라 **페이지의 노드**에 붙는다. 이 다섯 줄이 없어서 `표의 완전성`의 두 케이스가
+  // 죽는 것을 먼저 봤다(P5-1이 쟀다).
+  {
+    client: 'listComments',
+    url: '/api/projects/p1/pages/pg1/comments',
+    method: 'GET',
+    body: [comment],
+    call: (c) => c.listComments('p1', 'pg1'),
+  },
+  {
+    client: 'createComment',
+    url: '/api/projects/p1/pages/pg1/comments',
+    method: 'POST',
+    body: commentCreated,
+    call: (c) => c.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' }),
+  },
+  {
+    client: 'updateComment',
+    url: '/api/projects/p1/pages/pg1/comments/c1',
+    method: 'PATCH',
+    body: comment,
+    call: (c) => c.updateComment('p1', 'pg1', 'c1', { body: '가' }),
+  },
+  // **`DELETE`인데 `body`가 `null`이 아니다** — 다른 삭제 셋과 갈린다. 이 삭제는 문서를
+  // 바꿀 수 있어 200에 `{ seq, markerOps }`를 싣는다(서버 README).
+  {
+    client: 'deleteComment',
+    url: '/api/projects/p1/pages/pg1/comments/c1',
+    method: 'DELETE',
+    body: markerChange,
+    call: (c) => c.deleteComment('p1', 'pg1', 'c1'),
+  },
+  // **`/renumber`는 정적 세그먼트다** — `:commentId` 자리와 한 칸 차이라 나란히 둔다.
+  {
+    client: 'renumberComments',
+    url: '/api/projects/p1/pages/pg1/comments/renumber',
+    method: 'POST',
+    body: markerChange,
+    call: (c) => c.renumberComments('p1', 'pg1'),
+  },
 ]
 
 /**
@@ -358,6 +421,28 @@ const SHAPE_CASES: Array<{
         baseSeq: 7,
         ops: [{ op: 'replace', path: '/root/children/0/props/title', value: '가' }],
       }),
+  },
+  // --- 코멘트 넷(P5-1). ---
+  // **`nodeId`가 문자열이 아니면 막는다** — 그 값이 문서에서 노드를 찾는 키이고, 어긋나면
+  // 모든 코멘트가 "사라진 노드" 무리로 떨어져 번호가 하나도 안 붙는다.
+  { shape: 'comment', broken: { ...comment, nodeId: 42 }, ok: comment, call: (c) => c.updateComment('p1', 'pg1', 'c1', { body: '가' }) },
+  // **`id`가 빈 문자열이면 막는다** — 그 값이 수정·삭제 요청의 경로가 된다
+  // (`themeList`의 `id`와 같은 축: 주소가 되지는 않지만 **요청 경로가 되는** 값).
+  { shape: 'commentList', broken: [{ ...comment, id: '' }], ok: [comment], call: (c) => c.listComments('p1', 'pg1') },
+  // **`markerOps`가 배열이 아니면 막는다** — 그 값이 그대로 `applyOps`에 들어간다
+  // (`patchResult.inverse`와 같은 하중).
+  {
+    shape: 'commentCreated',
+    broken: { ...commentCreated, markerOps: null },
+    ok: commentCreated,
+    call: (c) => c.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' }),
+  },
+  // **`seq`가 문자열이면 막는다** — 그 값이 `headSeq`가 되고 다음 편집의 `baseSeq`가 된다.
+  {
+    shape: 'markerChange',
+    broken: { ...markerChange, seq: '9' },
+    ok: markerChange,
+    call: (c) => c.deleteComment('p1', 'pg1', 'c1'),
   },
 ]
 

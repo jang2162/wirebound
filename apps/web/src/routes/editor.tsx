@@ -19,6 +19,7 @@ import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
+import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
@@ -44,6 +45,15 @@ const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 
 /** 줌 한 칸. 한계(0.25~2)는 스토어가 클램프하므로 여기서 다시 알 필요가 없다. */
 const ZOOM_STEP = 0.25
+
+/** 우측 패널의 탭. **오늘은 둘뿐이다** — 근거는 아래 `RightPanel`의 머리말에 있다. */
+type PanelTab = 'props' | 'comments'
+
+/** 탭의 순서와 이름. 표를 상수로 두면 탭이 늘 때 고칠 자리가 하나다. */
+const PANEL_TABS: readonly { id: PanelTab; label: string }[] = [
+  { id: 'props', label: '속성' },
+  { id: 'comments', label: '코멘트' },
+]
 
 /**
  * 조회 상태. 성공과 실패를 판별 유니온으로 가른다 — `project === null`로 실패를 판정하면
@@ -212,10 +222,73 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
         />
       </main>
 
-      <aside className="wb-shell-panel" aria-label="속성 패널">
-        <PropertyPanel projectId={props.project.id} pageId={props.pageId} />
+      <aside className="wb-shell-panel" aria-label="우측 패널">
+        <RightPanel projectId={props.project.id} pageId={props.pageId} />
       </aside>
     </div>
+  )
+}
+
+/**
+ * 우측 패널의 탭(설계 §9, P5-1 계획서 D6).
+ *
+ * **오늘은 둘뿐이다.** §9의 편집 모드 탭은 **속성 / 코멘트 / 상호작용** 셋이고 뷰 모드는
+ * **페이지 설명 / 코멘트 / 상호작용**인데, 상호작용 탭은 P5-2가, 뷰 모드의 탭 구성 변화는
+ * P5-3이 채운다. **없는 것을 흉내 내지 않는다** — 비활성 탭이나 "준비 중" 자리를 미리
+ * 만들지 않는다.
+ *
+ * **모드에 따라 탭을 가르지 않는 것이 오늘의 선택이다.** 뷰 모드에서 속성 대신 페이지
+ * 설명을 놓는 것은 P5-3의 일이고, 그 전까지 두 모드가 같은 둘을 쓴다. 그래서 이 컴포넌트는
+ * `mode`를 읽지 않는다 — 읽으면 P5-3이 고칠 자리가 여기와 그쪽 둘이 된다.
+ *
+ * **탭 상태를 스토어에 두지 않는다.** `EditorState`가 드는 것은 **페이지 편집** 상태다
+ * (문서·`headSeq`·undo 스택·전송 큐). 어느 탭을 보고 있는가는 그 축이 아니고, 거기 얹으면
+ * 편집과 무관한 이유로 스토어 구독자가 다시 그린다 — `themeReloadToken`을 셸의 `useState`로
+ * 둔 것과 같은 근거다.
+ *
+ * **`role="tab"`·`aria-selected`·`role="tabpanel"`을 다는 것이 계약이다.** 보조 기술이
+ * "탭 중 하나"를 알아야 나머지 탭이 있다는 것을 알린다 — `ShellTools`의 모드 토글이
+ * 눌리지 않은 쪽에도 `aria-pressed`를 다는 것과 같은 이유다.
+ */
+function RightPanel(props: { projectId: string; pageId: string | undefined }): ReactElement {
+  const [tab, setTab] = useState<PanelTab>('props')
+
+  return (
+    <>
+      <div className="wb-shell-tabs" role="tablist" aria-label="우측 패널 탭">
+        {PANEL_TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            id={`wb-tab-${item.id}`}
+            className="wb-shell-tab"
+            aria-selected={tab === item.id}
+            aria-controls={`wb-tabpanel-${item.id}`}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {/* **보이지 않는 탭은 DOM에서 뺀다** — `hidden`으로 두지 않는다. 코멘트 탭은
+          마운트될 때 `listComments`를 부르므로, 감춰 둔 채 살려 두면 보지도 않는 목록을
+          위해 페이지를 열 때마다 요청이 나간다. 구조 트리를 뷰 모드에서 DOM에서 빼는 것과
+          같은 판단이고, 근거도 같다(그쪽 주석). */}
+      <div
+        className="wb-shell-tabpanel"
+        role="tabpanel"
+        id={`wb-tabpanel-${tab}`}
+        aria-labelledby={`wb-tab-${tab}`}
+      >
+        {tab === 'props' ? (
+          <PropertyPanel projectId={props.projectId} pageId={props.pageId} />
+        ) : (
+          <CommentPanel projectId={props.projectId} pageId={props.pageId} />
+        )}
+      </div>
+    </>
   )
 }
 

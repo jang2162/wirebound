@@ -275,7 +275,7 @@ describe('타입 목록과 노드 추가', () => {
     fireEvent.click(toolButton('안에 추가'))
     pick('Link')
 
-    const panel = screen.getByRole('complementary', { name: '속성 패널' })
+    const panel = screen.getByRole('complementary', { name: '우측 패널' })
     await waitFor(() => expect(within(panel).getByRole('heading').textContent).toBe('Link'))
     expect(within(panel).getByLabelText('라벨')).toBeTruthy()
   })

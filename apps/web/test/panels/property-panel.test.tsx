@@ -216,7 +216,7 @@ const CONTROLS_DOC = pageDoc({
 })
 
 function panel(): HTMLElement {
-  return screen.getByRole('complementary', { name: '속성 패널' })
+  return screen.getByRole('complementary', { name: '우측 패널' })
 }
 
 /** 라벨이 가리키는 위젯. 위젯이 아직 없는 자리는 `null`이다. */

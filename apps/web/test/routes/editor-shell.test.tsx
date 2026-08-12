@@ -134,7 +134,7 @@ describe('에디터 셸', () => {
 
     screen.getByRole('navigation', { name: '메뉴와 구조' })
     screen.getByRole('main', { name: '캔버스' })
-    screen.getByRole('complementary', { name: '속성 패널' })
+    screen.getByRole('complementary', { name: '우측 패널' })
   })
 
   it('편집 모드에서는 구조 트리 자리가 보인다', async () => {
@@ -215,7 +215,7 @@ describe('에디터 셸', () => {
     // 조회에서도 통과한다.
     expect(screen.queryByRole('navigation', { name: '메뉴와 구조' })).toBeNull()
     expect(screen.queryByRole('main', { name: '캔버스' })).toBeNull()
-    expect(screen.queryByRole('complementary', { name: '속성 패널' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: '우측 패널' })).toBeNull()
     expect(screen.queryByText(PROJECT_NAME)).toBeNull()
   })
 

@@ -470,6 +470,151 @@
   pointer-events: none;
 }
 
+/* 번호 마커(설계 §9, P5-1). 선택 아웃라인과 **같은 자리에 산다** — 문서 노드 위에 겹쳐
+   그리되 노드를 건드리지 않는다(머리말 5번). 자리는 자바스크립트가 인라인 style로 넣는다.
+
+   아웃라인과 다른 점 둘: **한 번에 여럿이 그려지고**, **두 모드에 다 있다**(계획서 D8 —
+   §9의 뷰 모드 탭에도 코멘트가 있다).
+
+   `translate`로 좌상단 밖으로 조금 빼는 것은 노드의 첫 글자를 가리지 않기 위해서다.
+   `pointer-events: none`은 아웃라인과 같은 이유다 — 마커 아래의 노드가 그대로 눌려야 한다. */
+.wb-shell-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--wb-shell-accent);
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* 우측 패널의 탭 줄(§9, P5-1). 셸이 그리는 조각이라 상속되는 속성을 걸어도 된다 —
+   감싸는 상자가 아니다(`test/shell-css-guard.ts`의 `WRAPPERS`에 없다). */
+.wb-shell-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--wb-shell-line);
+  margin-bottom: 8px;
+}
+
+.wb-shell-tab {
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-tab[aria-selected='true'] {
+  border-bottom-color: var(--wb-shell-accent);
+  color: var(--wb-shell-ink);
+  font-weight: 600;
+}
+
+/* 코멘트 탭. 새 코멘트 폼과 무리 목록이 세로로 쌓인다. */
+.wb-shell-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wb-shell-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wb-shell-comment-label {
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-comment-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 6px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 3px;
+  resize: vertical;
+}
+
+.wb-shell-comment-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wb-shell-comment-groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 고른 노드의 무리. `aria-current`가 그 표시이므로 선택자도 그것을 본다 — 클래스를
+   따로 두면 접근성 속성과 화면 표시가 갈릴 자리가 생긴다. */
+.wb-shell-comment-group[aria-current='true'] {
+  border-left: 2px solid var(--wb-shell-accent);
+  padding-left: 6px;
+}
+
+.wb-shell-comment-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--wb-shell-muted);
+}
+
+/* 목록 안의 번호. 캔버스의 마커와 같은 값을 보이지만 자리가 달라 규칙을 나눈다. */
+.wb-shell-comment-marker {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--wb-shell-accent);
+  color: #fff;
+  text-align: center;
+}
+
+.wb-shell-comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wb-shell-comment {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 3px;
+  padding: 6px;
+}
+
+.wb-shell-comment-author {
+  margin: 0 0 2px;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-comment-body {
+  margin: 0 0 4px;
+  /* 사용자가 친 줄바꿈이 그대로 보여야 한다. */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* 그리지 못한 노드를 알리는 배너. 프레임 안(문서 위)에 둔 것은 어느 문서의 이야기인지가
    자리로 보이기 때문이다. 문서의 형제라 아래 글꼴·글자색이 문서로 새지 않는다. */
 .wb-shell-canvas-error {

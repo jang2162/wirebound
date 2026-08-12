@@ -46,7 +46,7 @@ const BROKEN_DOC = pageDoc({
 })
 
 function panel(): HTMLElement {
-  return screen.getByRole('complementary', { name: '속성 패널' })
+  return screen.getByRole('complementary', { name: '우측 패널' })
 }
 
 function selectAt(type: string, index = 0): void {

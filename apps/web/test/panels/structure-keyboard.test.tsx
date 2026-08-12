@@ -99,7 +99,7 @@ function toolButton(name: string): HTMLButtonElement {
 
 /** 속성 패널의 컨트롤. Delete가 여기서는 노드를 지우면 안 된다. */
 function panelInput(label: string): HTMLElement {
-  return within(screen.getByRole('complementary', { name: '속성 패널' })).getByLabelText(label)
+  return within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText(label)
 }
 
 describe('구조 트리의 키보드 단축키', () => {

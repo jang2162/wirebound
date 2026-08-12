@@ -74,11 +74,17 @@ function InvalidateButton(): ReactElement {
   )
 }
 
-/** 무효화의 짝. 확정이 멱등인지 재는 케이스가 쓴다. */
+/**
+ * 무효화의 짝. 확정이 멱등인지 재는 케이스가 쓴다.
+ *
+ * **`onClick={confirm}`으로 바로 넘기지 못한다** — P5-1이 `confirm`을 넓혀 `SessionUser`를
+ * 받게 했기 때문이다(그래야 갓 로그인한 사람이 자기가 누구인지 안다). 클릭 이벤트가
+ * 사용자로 흘러들지 않게 감싼다.
+ */
 function ConfirmButton(): ReactElement {
   const confirm = useConfirmSession()
   return (
-    <button type="button" onClick={confirm}>
+    <button type="button" onClick={() => confirm(USER)}>
       확정
     </button>
   )
@@ -316,7 +322,7 @@ describe('SessionProvider', () => {
     function Orphan(): ReactElement {
       const confirm = useConfirmSession()
       return (
-        <button type="button" onClick={confirm}>
+        <button type="button" onClick={() => confirm(USER)}>
           확정
         </button>
       )

@@ -37,7 +37,7 @@ export function LoginRoute(): ReactElement {
     setSubmitting(true)
     setError(null)
     try {
-      await api.login(email, password)
+      const user = await api.login(email, password)
       // **여기서 주소를 옮기지 않는다.** 상태가 `authenticated`가 되면 이 화면을 감싼
       // `RedirectWhenAuthenticated`가 목록으로 보낸다 — "로그인한 사람은 `/login`에
       // 머물지 않는다"는 규칙이 그 한 곳에만 남는다. `navigate('/')`를 여기 함께 두면
@@ -57,7 +57,9 @@ export function LoginRoute(): ReactElement {
       //
       // 세션을 다시 묻지 않는 것이 요점이다. 앞 판은 `RequireAuth`가 마운트마다 `me()`를
       // 새로 불러 이 일이 저절로 됐고, 그것이 이월 문서 §1 순환의 엔진이었다.
-      confirmSession()
+      // **응답의 사용자를 그대로 넘긴다**(P5-1이 넓혔다). 마운트의 `me()`는 그때 401이었으므로
+      // 이것을 안 넘기면 갓 로그인한 사람은 자기가 누구인지 모르는 채로 화면에 들어간다.
+      confirmSession(user)
     } catch (caught) {
       // 서버가 준 문장을 그대로 보여준다. 화면이 문안을 다시 쓰면 서버가 거절 이유를
       // 바꿔도 사용자는 옛 이유를 듣게 된다.
