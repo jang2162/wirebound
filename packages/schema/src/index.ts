@@ -34,6 +34,14 @@ export { assertValidLayout, assertValidPage, validateLayout, validatePage } from
 
 export { DocumentEnvelopeSchema, InteractionSchema, NODE_ID_PATTERN, WbNodeSchema } from './envelope'
 
+export type { ComponentNoun, InteractionSentence } from './interaction/describe'
+export {
+  COMPONENT_NOUNS,
+  describeInteraction,
+  describeNode,
+  listInteractionSentences,
+} from './interaction/describe'
+
 export { getKoreanErrorMap } from './locale'
 
 export type { PatchOp } from './patch/types'

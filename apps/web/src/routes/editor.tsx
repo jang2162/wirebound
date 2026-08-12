@@ -21,6 +21,7 @@ import type { ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
+import { InteractionPanel } from '../panels/interaction-panel'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
 import { useEditCommit } from '../edit/use-edit-commit'
@@ -46,14 +47,25 @@ const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 /** 줌 한 칸. 한계(0.25~2)는 스토어가 클램프하므로 여기서 다시 알 필요가 없다. */
 const ZOOM_STEP = 0.25
 
-/** 우측 패널의 탭. **오늘은 둘뿐이다** — 근거는 아래 `RightPanel`의 머리말에 있다. */
-type PanelTab = 'props' | 'comments'
+/** 우측 패널의 탭. **셋이다** — 근거는 아래 `RightPanel`의 머리말에 있다. */
+type PanelTab = 'props' | 'comments' | 'interactions'
 
 /** 탭의 순서와 이름. 표를 상수로 두면 탭이 늘 때 고칠 자리가 하나다. */
 const PANEL_TABS: readonly { id: PanelTab; label: string }[] = [
   { id: 'props', label: '속성' },
   { id: 'comments', label: '코멘트' },
+  { id: 'interactions', label: '상호작용' },
 ]
+
+/** 탭 하나의 본문. **표 기반이라 탭이 늘어도 삼항이 깊어지지 않는다**(P5-1 이월 §5). */
+const PANEL_BODIES: Record<
+  PanelTab,
+  (props: { projectId: string; pageId: string | undefined }) => ReactElement
+> = {
+  props: PropertyPanel,
+  comments: CommentPanel,
+  interactions: InteractionPanel,
+}
 
 /**
  * 조회 상태. 성공과 실패를 판별 유니온으로 가른다 — `project === null`로 실패를 판정하면
@@ -232,10 +244,13 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
 /**
  * 우측 패널의 탭(설계 §9, P5-1 계획서 D6).
  *
- * **오늘은 둘뿐이다.** §9의 편집 모드 탭은 **속성 / 코멘트 / 상호작용** 셋이고 뷰 모드는
- * **페이지 설명 / 코멘트 / 상호작용**인데, 상호작용 탭은 P5-2가, 뷰 모드의 탭 구성 변화는
- * P5-3이 채운다. **없는 것을 흉내 내지 않는다** — 비활성 탭이나 "준비 중" 자리를 미리
+ * **셋이다 — P5-2가 상호작용을 채웠다.** §9의 편집 모드 탭은 **속성 / 코멘트 / 상호작용**
+ * 셋이고 뷰 모드는 **페이지 설명 / 코멘트 / 상호작용**인데, **뷰 모드의 탭 구성 변화는
+ * P5-3이 채운다.** **없는 것을 흉내 내지 않는다** — 비활성 탭이나 "준비 중" 자리를 미리
  * 만들지 않는다.
+ *
+ * **본문이 삼항에서 표로 바뀌었다**(P5-1 이월 §5가 예고한 자리). 탭이 셋이 되면 삼항이
+ * 겹치는데, 그러면 탭이 늘 때마다 중첩이 깊어지고 어느 탭이 어느 본문인지 읽기 어렵다.
  *
  * **모드에 따라 탭을 가르지 않는 것이 오늘의 선택이다.** 뷰 모드에서 속성 대신 페이지
  * 설명을 놓는 것은 P5-3의 일이고, 그 전까지 두 모드가 같은 둘을 쓴다. 그래서 이 컴포넌트는
@@ -282,11 +297,10 @@ function RightPanel(props: { projectId: string; pageId: string | undefined }): R
         id={`wb-tabpanel-${tab}`}
         aria-labelledby={`wb-tab-${tab}`}
       >
-        {tab === 'props' ? (
-          <PropertyPanel projectId={props.projectId} pageId={props.pageId} />
-        ) : (
-          <CommentPanel projectId={props.projectId} pageId={props.pageId} />
-        )}
+        {(() => {
+          const Body = PANEL_BODIES[tab]
+          return <Body projectId={props.projectId} pageId={props.pageId} />
+        })()}
       </div>
     </>
   )

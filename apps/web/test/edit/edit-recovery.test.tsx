@@ -319,6 +319,32 @@ describe('편집 실패는 재조회로 수렴한다', () => {
     expect(screen.getByTestId('edit-status').textContent).toBe('idle')
   })
 
+  /**
+   * **이 갈래는 화면을 되돌리지 않는다 — 그러니 그렇다고 말해야 한다**(P5-2 리뷰가 찾았다.
+   * *"실패했다고 말하는데 조작은 일어났다"* 부류의 **다섯째**).
+   *
+   * 재조회가 **성공**하면 `loadPage`가 문서·선택·큐를 서버 것으로 놓는다. **실패하면 그
+   * 셋을 아무것도 안 놓는다** — `failEdits`는 큐만 비우므로 **낙관적으로 적용된 편집이
+   * 문서에 그대로 남고 화면이 그것을 계속 그린다.** 되돌릴 서버 상태를 못 읽었으므로
+   * 화면을 고칠 수는 없고, **할 수 있는 정직한 일은 그 상태를 말하는 것뿐이다.**
+   *
+   * **위 케이스는 이 사실을 못 잡는다** — `toContain('[T6-refetch]')`이라 우리 문장을
+   * 덧붙이든 말든 통과한다(P5-2가 쟀다: 문구를 더해도 `--project web` 전량이 그대로 통과).
+   */
+  it('재조회마저 실패하면 화면에 남은 편집이 저장되지 않았다고 말한다', async () => {
+    const harness = await openWithFailure({ patch: CONFLICT, refetchFails: true })
+
+    commit(NEW_TEXT)
+    await waitFor(() => expect(alertTexts()).toHaveLength(1))
+
+    const alert = alertTexts()[0] ?? ''
+    // 서버가 준 이유는 그대로 싣는다(`api/failure.tsx`의 경계).
+    expect(alert).toContain('[T6-refetch]')
+    // **그리고 우리 문장이 화면 상태를 말한다.**
+    expect(alert).toContain('저장되지 않았습니다')
+    expect(alert).toContain('새로고침')
+  })
+
   it('실패한 뒤 새 편집을 내면 앞 알림이 사라진다', async () => {
     // 알림이 남아 있으면 사용자는 방금 낸 편집도 실패했다고 읽는다.
     let fail = true

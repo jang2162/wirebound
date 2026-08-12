@@ -213,3 +213,91 @@ describe('경고는 편집을 막지 않는다 (P4a-2 이월)', () => {
     })
   })
 })
+
+/**
+ * **상호작용 이슈가 `warning`인 것이 여기서 값을 갖는다 (P5-2 재라 #2).**
+ *
+ * 상호작용의 `target`은 **다른 노드를 가리키는 참조**라 그 노드가 사라지는 순간 이슈가
+ * 된다(계획 D2 — *"노드를 지우면 그것을 가리키는 상호작용은 다른 노드에 그대로 남고
+ * 타겟만 끊긴다"*). 그것을 `error`로 두면 **노드를 지우는 편집 자체가 422가 되어 사용자가
+ * 자기 문서를 못 고친다** — 위 `docWithWarning`이 잰 것과 같은 부류이고, 이쪽은 경고를
+ * **편집이 만들어 낸다**는 점이 다르다.
+ *
+ * **이 파일이 그 인과를 재는 자리다.** `packages/schema`의 케이스는 `partitionIssues`의
+ * 결과를 보지만, 실제로 편집을 거부하는 것은 `edit-pipeline`의 6단계다.
+ */
+describe('상호작용 타겟이 끊겨도 편집을 막지 않는다 (P5-2)', () => {
+  /** `n_button`이 `n_list`를 가리킨다. 둘째 자식을 지우면 그 참조가 끊긴다. */
+  function docWithInteraction() {
+    return {
+      version: 1,
+      root: {
+        id: 'n_root',
+        type: 'Page',
+        children: [
+          {
+            id: 'n_button',
+            type: 'Button',
+            props: { label: '검색' },
+            interactions: [
+              { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
+            ],
+          },
+          { id: 'n_list', type: 'List' },
+        ],
+      },
+    }
+  }
+
+  it('타겟이 된 노드를 지우는 편집이 200이다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+
+      const put = await putSchema(ctx, project.id, page.id, owner.cookie, docWithInteraction())
+      expect(put.statusCode).toBe(200)
+      // 타겟이 살아 있는 동안에는 경고도 없다.
+      expect(Object.keys(put.json())).not.toContain('warnings')
+
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${project.id}/pages/${page.id}/ops`,
+        cookies: owner.cookie,
+        payload: { baseSeq: put.json().headSeq, ops: [{ op: 'remove', path: '/root/children/1' }] },
+      })
+
+      expect(res.statusCode).toBe(200)
+      // **삭제가 실제로 저장됐는가** — 200만 보면 "게이트는 통과했는데 안 썼다"와 갈리지 않는다.
+      const stored = await ctx.db
+        .selectFrom('pages')
+        .select('schema')
+        .where('id', '=', page.id)
+        .executeTakeFirstOrThrow()
+      expect((stored.schema as { root: { children: unknown[] } }).root.children).toHaveLength(1)
+    })
+  })
+
+  it('그 응답이 끊긴 타겟을 경고로 싣는다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+
+      const put = await putSchema(ctx, project.id, page.id, owner.cookie, docWithInteraction())
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${project.id}/pages/${page.id}/ops`,
+        cookies: owner.cookie,
+        payload: { baseSeq: put.json().headSeq, ops: [{ op: 'remove', path: '/root/children/1' }] },
+      })
+
+      // **막지 않는 것과 말하지 않는 것은 다르다.** 조용히 지나가면 사용자는 자기 문서에
+      // 끊긴 규칙이 생긴 것을 모른다.
+      expect(res.json().warnings).toHaveLength(1)
+      expect(res.json().warnings[0]).toMatchObject({
+        code: 'missing-interaction-target',
+        severity: 'warning',
+        nodeId: 'n_button',
+      })
+    })
+  })
+})
