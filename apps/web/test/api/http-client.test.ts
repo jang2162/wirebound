@@ -143,6 +143,21 @@ const commentCreated = {
 /** `DELETE .../comments/:id`·`POST .../comments/renumber`의 응답. */
 const markerChange = { seq: 9, markerOps: [{ op: 'remove', path: '/root/children/0/marker' }] }
 
+/**
+ * `GET .../snapshots`의 항목 하나(P6-1). **`payload`가 없다** — 목록은 크기만 낸다(서버 D9).
+ * 생성 응답에는 `payload`가 더 붙지만 `SHAPES.snapshot`이 그것을 보지 않고 통과시킨다:
+ * 이 화면은 payload를 읽지 않는다(복원이 없다 — 계획서 D1).
+ */
+const snapshot = {
+  id: 's1',
+  tag: 'v1',
+  description: '첫 릴리스 직전',
+  createdBy: 'u1',
+  createdByName: '홍길동',
+  createdAt: '2026-08-12T09:00:00.000Z',
+  payloadBytes: 8123,
+}
+
 /** `GET .../revisions?mine=true`의 항목 하나. */
 const revision = {
   id: 'rev-1',
@@ -352,6 +367,22 @@ const ENDPOINTS: Array<{
     body: markerChange,
     call: (c) => c.renumberComments('p1', 'pg1'),
   },
+  // **스냅샷 둘(P6-1).** 프로젝트 아래이고 페이지를 지나지 않는다 — 스냅샷은 프로젝트
+  // **전체** 상태를 얼린다(§4.5).
+  {
+    client: 'listSnapshots',
+    url: '/api/projects/p1/snapshots',
+    method: 'GET',
+    body: [snapshot],
+    call: (c) => c.listSnapshots('p1'),
+  },
+  {
+    client: 'createSnapshot',
+    url: '/api/projects/p1/snapshots',
+    method: 'POST',
+    body: snapshot,
+    call: (c) => c.createSnapshot('p1', { tag: 'v1', description: '첫 릴리스 직전' }),
+  },
 ]
 
 /**
@@ -443,6 +474,22 @@ const SHAPE_CASES: Array<{
     broken: { ...markerChange, seq: '9' },
     ok: markerChange,
     call: (c) => c.deleteComment('p1', 'pg1', 'c1'),
+  },
+  // --- 스냅샷 둘(P6-1). ---
+  // **`payloadBytes`가 숫자가 아니면 막는다** — 화면이 그 값에 `toLocaleString`을 부르므로
+  // 문자열이 오면 그 자리에서 던진다(이 화면은 오류 경계 밖이다).
+  {
+    shape: 'snapshot',
+    broken: { ...snapshot, payloadBytes: '8123' },
+    ok: snapshot,
+    call: (c) => c.createSnapshot('p1', { tag: 'v1' }),
+  },
+  // **`id`가 빈 문자열이면 막는다** — 그 값이 React 목록의 `key`다(`commentList`와 같은 축).
+  {
+    shape: 'snapshotList',
+    broken: [{ ...snapshot, id: '' }],
+    ok: [snapshot],
+    call: (c) => c.listSnapshots('p1'),
   },
 ]
 

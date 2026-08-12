@@ -18,6 +18,7 @@ import type {
   ProjectDetail,
   RevisionSummary,
   SessionUser,
+  SnapshotSummary,
   ThemeDetail,
   ThemeSummary,
   TreeMenuNode,
@@ -299,6 +300,36 @@ export interface ApiClient {
    * 바꿀 것이 없으면 `markerOps: []`이고 문서도 revision도 안 건드린다.
    */
   renumberComments(projectId: string, pageId: string): Promise<MarkerChange>
+  /**
+   * 이 프로젝트의 스냅샷 전부(P6-1). **최근 것이 먼저** 오고 동률이면 태그 순이다 —
+   * 순서가 서버의 계약이므로 여기서 다시 정렬하지 않는다(`listProjectThemes`와 같은 판단).
+   *
+   * **`payload`가 실려 오지 않는다**(서버 D9) — 목록이 payload 전부를 나르면 프로젝트가
+   * 커질수록 목록만으로 무거워진다. 크기(`payloadBytes`)만 온다.
+   *
+   * `viewer`도 읽는다 — 막는 것은 생성 하나다(§10).
+   */
+  listSnapshots(projectId: string): Promise<SnapshotSummary[]>
+  /**
+   * **지금 상태를 태그 하나로 얼린다.** §10이 **editor**에게 연 자리다 — 테마 고르기가
+   * owner인 것과 갈리는 이유는 스냅샷이 **아무것도 바꾸지 않기** 때문이다.
+   *
+   * **409가 둘이고 서로 다른 문장이 온다.** 코드는 둘 다 `conflict`이라 화면은 `code`로
+   * 가를 수 없다:
+   *
+   * | 사유 | 서버 문장 | 사용자가 할 일 |
+   * |---|---|---|
+   * | 태그 중복 | *"같은 태그의 스냅샷이 이미 있습니다"* | 이름을 바꾼다 |
+   * | 수집 중 프로젝트 변경 | *"스냅샷을 뜨는 동안 프로젝트가 바뀌었습니다. 다시 시도해 주세요"* | 그대로 다시 보낸다 |
+   *
+   * 태그는 1~60자, 설명은 0~2000자이고 그 밖은 400이다. NUL(U+0000)도 400이다.
+   *
+   * **응답이 목록 항목보다 넓다**(`payload`가 붙는다). 그래도 `SnapshotSummary`로 받는 것은
+   * **이 화면이 그것을 읽지 않기** 때문이다 — 저장하면 목록을 다시 받는다(`createProject`가
+   * 응답을 목록에 그대로 꽂지 않는 것과 같은 판단이고, 근거도 같다: 되돌릴 것이 목록
+   * 하나뿐이라 다시 받는 편이 곧 수렴이다).
+   */
+  createSnapshot(projectId: string, body: { tag: string; description?: string | null }): Promise<SnapshotSummary>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

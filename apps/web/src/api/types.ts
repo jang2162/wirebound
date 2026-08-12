@@ -298,3 +298,25 @@ export interface CommentCreated extends MarkerChange {
   comment: Comment
   marker: number
 }
+
+/**
+ * 스냅샷 하나 — 설계 §4.5의 **삭제 없는 태그**(P6-1).
+ *
+ * **`payload`가 없다.** 목록 응답이 애초에 그것을 싣지 않고(서버 README의 D9), **이 화면은
+ * 상세를 부르지 않는다** — 이 슬라이스가 만드는 것은 목록과 저장 폼뿐이고 **복원 버튼은
+ * 없다**(계획서 D1: *"없는 기능을 UI에 그려 두지 않는다"*). payload를 읽을 자리가 생기는
+ * 것은 복원(P6-2)이 올 때다.
+ *
+ * `payloadBytes`는 `octet_length(payload::text)`다 — DB가 들고 있는 문서의 옥텟 수이고,
+ * §16의 열린 항목(보관 정책)을 닫을 관측이다. 상한은 없다.
+ */
+export interface SnapshotSummary {
+  id: string
+  tag: string
+  description: string | null
+  createdBy: string
+  /** 만든 사람의 **지금** 이름. 서버가 조인해서 낸다(`repos/snapshots.ts`). */
+  createdByName: string
+  createdAt: string
+  payloadBytes: number
+}

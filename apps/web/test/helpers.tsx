@@ -110,6 +110,13 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     getTheme: notStubbed('getTheme'),
     createTheme: notStubbed('createTheme'),
     updateTheme: notStubbed('updateTheme'),
+    /**
+     * **둘 다 `notStubbed`다.** 위 두 예외(`getProjectTheme`·`listProjectThemes`)의 근거는
+     * *"테스트가 요청하지 않아도 화면이 부른다"*인데, 스냅샷 둘을 부르는 화면은 스냅샷
+     * 라우트 하나뿐이고 **그 주소로 가는 테스트만 그것을 지난다**(테마 저작 셋과 같다).
+     */
+    listSnapshots: notStubbed('listSnapshots'),
+    createSnapshot: notStubbed('createSnapshot'),
     ...overrides,
   }
 }

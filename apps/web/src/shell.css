@@ -1502,3 +1502,110 @@
   margin: 0;
   white-space: pre-wrap;
 }
+
+/* ── 스냅샷 화면(P6-1 D10) ─────────────────────────────────────────────
+   **셸 밖의 별도 라우트다.** 캔버스를 감싸지 않으므로 D7의 "셸 CSS가 문서 안으로 새지
+   않는다" 규칙에서 이 블록이 다루는 것은 접두어 하나뿐이다 — 여기 선택자는 전부
+   `.wb-shell-`로 시작하고 문서 노드를 겨냥하는 결합자가 없다. */
+
+/* 셸 머리의 링크. 도구 묶음과 같은 크기 규칙을 쓴다. */
+.wb-shell-snapshots-link {
+  font-size: 13px;
+  color: var(--wb-shell-accent);
+}
+
+.wb-shell-snapshots {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.wb-shell-snapshots-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.wb-shell-snapshots-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.wb-shell-snapshots-back {
+  font-size: 13px;
+  color: var(--wb-shell-accent);
+}
+
+.wb-shell-snapshots-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.wb-shell-snapshots-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-shell-snapshots-readonly {
+  margin: 0;
+  color: var(--wb-shell-muted);
+}
+
+/* 저장 결과는 **한 자리**다(`routes/snapshots.tsx`의 `Notice`) — 성공과 실패를 각각의
+   상태로 두면 "저장됨"과 오류가 함께 보이는 조합이 생긴다. 두 규칙이 색만 다르다. */
+.wb-shell-snapshots-saved {
+  margin: 0;
+  color: var(--wb-shell-accent);
+}
+
+.wb-shell-snapshots-error {
+  margin: 0;
+  color: #b42318;
+}
+
+.wb-shell-snapshots-empty {
+  margin: 0;
+  color: var(--wb-shell-muted);
+  font-size: 13px;
+}
+
+.wb-shell-snapshots-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--wb-shell-line);
+  font-size: 13px;
+}
+
+.wb-shell-snapshots-tag {
+  font-weight: 600;
+}
+
+.wb-shell-snapshots-desc {
+  flex: 1;
+  color: var(--wb-shell-muted);
+  word-break: break-word;
+}
+
+.wb-shell-snapshots-author {
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-snapshots-time {
+  color: var(--wb-shell-muted);
+  white-space: nowrap;
+}
+
+/* **바이트 수를 접지 않는다**(§16의 관측). 자릿수가 길어져도 줄바꿈하지 않는다. */
+.wb-shell-snapshots-bytes {
+  color: var(--wb-shell-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
