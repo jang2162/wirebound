@@ -1,4 +1,5 @@
-import { propSchema, type ComponentDef } from './component/define'
+import type { ComponentDef } from './component/define'
+import { checkNodeAction, isPageTargetAction } from './interaction/check'
 import { getComponent } from './component/registry'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN } from './envelope'
 import type { LayoutDocument, PageDocument, WbNode } from './node'
@@ -435,6 +436,16 @@ function validateTree(root: WbNode): ValidationIssue[] {
  * 막지 않는다. `Tabs.active`(같은 뜻의 값)가 카탈로그에서 `z.number().int().min(0)`뿐이라
  * **상한이 없기 때문이다** — 상호작용에만 상한을 두면 같은 값이 노드의 prop 자리에서는
  * 유효하고 액션 자리에서는 무효가 된다. 카탈로그가 상한을 정하는 것이 먼저다.
+ *
+ * ---
+ *
+ * **판정 자체는 이제 `interaction/check.ts`에 있다**(P5-3). 여기서 하는 일은 그 판정을
+ * **이슈로 감싸는 것**뿐이다 — 경로·nodeId·severity가 붙는 자리가 여기이기 때문이다.
+ * 갈라 낸 이유는 그 모듈의 머리말에 있다: **뷰 모드의 런타임이 같은 물음을 묻는다.**
+ *
+ * **`checkPageAction`은 여기서 부르지 않는다.** 부르면 위 재라 #1의 판정이 뒤집힌다 —
+ * 빈 페이지 타겟이 저장 경로에서 경고가 되기 시작한다. 런타임만 그것을 본다(그쪽은
+ * *"눌렀는데 아무 일도 안 일어난다"*를 막아야 한다).
  */
 function checkInteractions(
   node: WbNode,
@@ -446,113 +457,24 @@ function checkInteractions(
 
   for (const [index, interaction] of interactions.entries()) {
     for (const [actionIndex, action] of (interaction.actions ?? []).entries()) {
-      const actionPath = `${path}/interactions/${index}/actions/${actionIndex}`
-
       // 재라 #1 — 페이지 경로를 받는 둘은 여기서 끝난다.
-      if (action.type === 'navigate' || action.type === 'openModal') continue
+      if (isPageTargetAction(action)) continue
 
-      const target = seen.get(action.target)
-      if (target === undefined) {
-        // **아직 안 고른 것과 사라진 것을 갈라 말한다.** 코드와 severity는 같다(할 일이
-        // 같다 — 타겟을 고른다) but 문장이 다르다: 액션을 막 더한 사용자에게
-        // *"문서에 없습니다"*라고 하면 무엇이 없어진 줄 안다. 문장화도 같은 자리에서
-        // 같은 구분을 한다(`interaction/describe.ts`의 `targetName`).
-        const empty = action.target.trim().length === 0
-        issues.push(
-          makeIssue(
-            'missing-interaction-target',
-            node.id,
-            actionPath,
-            empty
-              ? `${action.type}의 타겟을 아직 고르지 않았습니다`
-              : `${action.type}의 타겟 노드가 문서에 없습니다: ${action.target}`,
-          ),
-        )
-        continue
-      }
+      const problem = checkNodeAction(seen, action)
+      if (problem === null) continue
 
-      if (action.type === 'switchTab') {
-        if (target.type !== 'Tabs') {
-          issues.push(
-            makeIssue(
-              'invalid-interaction-target',
-              node.id,
-              actionPath,
-              `switchTab의 타겟은 Tabs여야 합니다 (현재: ${target.type})`,
-            ),
-          )
-          continue
-        }
-        // **`tab`은 `Tabs.active`와 같은 축의 값이므로 같은 규칙으로 본다**(리뷰가 찾은
-        // 비대칭). 규칙을 여기 베껴 적지 않고 카탈로그의 zod를 그대로 쓴다 — 베끼면 둘이
-        // 따로 썩는다. **상한은 여전히 없다**(카탈로그가 `min(0)`만 정했다).
-        issues.push(
-          ...checkPropValue(node.id, actionPath, target, 'active', action.tab, 'switchTab의 탭 번호'),
-        )
-        continue
-      }
-
-      if (action.type === 'setProp') {
-        issues.push(...checkPropValue(node.id, actionPath, target, action.prop, action.value))
-      }
+      issues.push(
+        makeIssue(
+          problem.code,
+          node.id,
+          `${path}/interactions/${index}/actions/${actionIndex}`,
+          problem.message,
+        ),
+      )
     }
   }
 
   return issues
-}
-
-/**
- * 액션이 넣으려는 값을 타겟 컴포넌트의 **그 prop 계약**과 대조한다.
- *
- * **`setProp`과 `switchTab`이 함께 쓴다.** `switchTab.tab`은 이름만 다를 뿐 `Tabs.active`에
- * 넣는 값이라 같은 규칙을 받아야 한다 — 앞 판은 그 자리를 안 봤고, 같은 값(`-3`·`1.5`)이
- * **prop 자리에서는 `invalid-props`(error)인데 액션 자리에서는 이슈 0건**이었다(리뷰가 쟀다).
- *
- * `label`은 메시지에 쓸 이름이다. 사용자가 적은 것은 `tab`이지 `active`가 아니므로,
- * 그쪽은 *"switchTab의 탭 번호"*라고 불러야 무엇을 고쳐야 하는지가 맞는다.
- *
- * **값을 `def.props` 통째로 파싱하지 않는다** — 그러면 타겟 노드에 없는 **다른** prop
- * 때문에 실패가 난다. `propSchema`가 그 prop 하나만 떼어 준다.
- *
- * **카탈로그에 없는 타입은 판정하지 않는다.** 대조할 계약이 없고, *"알 수 없는 타입"*은
- * `unknown-type`이 이미 말한다 — 같은 사실을 두 이슈로 말하면 사용자는 문제가 둘인 줄 안다.
- */
-function checkPropValue(
-  nodeId: string,
-  actionPath: string,
-  target: WbNode,
-  prop: string,
-  value: unknown,
-  label = `${target.type}.${prop}`,
-): ValidationIssue[] {
-  const def = getComponent(target.type)
-  if (!def) return []
-
-  const schema = propSchema(def, prop)
-  if (schema === undefined) {
-    return [
-      makeIssue(
-        'invalid-interaction-prop',
-        nodeId,
-        actionPath,
-        `${target.type}에 없는 prop입니다: ${prop}`,
-      ),
-    ]
-  }
-
-  const parsed = schema.safeParse(value, { error: getKoreanErrorMap() })
-  if (parsed.success) return []
-
-  return [
-    makeIssue(
-      'invalid-interaction-prop',
-      nodeId,
-      actionPath,
-      `${label}에 넣을 수 없는 값입니다: ${parsed.error.issues
-        .map((issue) => issue.message)
-        .join(', ')}`,
-    ),
-  ]
 }
 
 function countSlots(root: WbNode): number {

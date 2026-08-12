@@ -22,13 +22,20 @@ import { Canvas } from '../canvas/canvas'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { InteractionPanel } from '../panels/interaction-panel'
+import { PageDescriptionPanel } from '../panels/page-description'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
+import { EditWarnings } from '../shell/edit-warnings'
 import { projectAbilities } from '../projects/project-actions'
 import { ThemePicker } from '../theme/theme-picker'
-import { EditorStore, VIEWPORT_PRESETS, type ViewportWidth } from '../store/editor-store'
+import {
+  EditorStore,
+  VIEWPORT_PRESETS,
+  type EditorMode,
+  type ViewportWidth,
+} from '../store/editor-store'
 import {
   EditorStoreProvider,
   useEditorStore,
@@ -47,15 +54,36 @@ const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 /** 줌 한 칸. 한계(0.25~2)는 스토어가 클램프하므로 여기서 다시 알 필요가 없다. */
 const ZOOM_STEP = 0.25
 
-/** 우측 패널의 탭. **셋이다** — 근거는 아래 `RightPanel`의 머리말에 있다. */
-type PanelTab = 'props' | 'comments' | 'interactions'
+/** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
+type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
 
-/** 탭의 순서와 이름. 표를 상수로 두면 탭이 늘 때 고칠 자리가 하나다. */
-const PANEL_TABS: readonly { id: PanelTab; label: string }[] = [
-  { id: 'props', label: '속성' },
-  { id: 'comments', label: '코멘트' },
-  { id: 'interactions', label: '상호작용' },
-]
+/**
+ * 모드별 탭 구성. **설계 §9의 표를 그대로 옮긴 것이다.**
+ *
+ * | 모드 | 탭 |
+ * |---|---|
+ * | 편집 | **속성**(선택 노드) / 코멘트 / 상호작용 |
+ * | 뷰 | **페이지 설명** / 코멘트 / 상호작용 |
+ *
+ * **첫째만 갈린다.** 코멘트·상호작용이 두 모드에 다 있는 것은 §9의 표가 그렇고, 캔버스의
+ * 번호 마커가 두 모드에 다 있는 것(P5-1 D8)과도 짝이 맞는다 — 뷰 모드에서 설계서를 읽는
+ * 사람이 보는 것이 바로 그 둘이다.
+ *
+ * **표를 모드로 키를 잡는 것이 요점이다.** 삼항으로 갈면 *"뷰 모드면 첫 탭만 바꾼다"*가
+ * 코드에 안 보이고, 탭이 하나 더 갈리는 날 조건이 둘이 된다.
+ */
+const PANEL_TABS: Record<EditorMode, readonly { id: PanelTab; label: string }[]> = {
+  edit: [
+    { id: 'props', label: '속성' },
+    { id: 'comments', label: '코멘트' },
+    { id: 'interactions', label: '상호작용' },
+  ],
+  view: [
+    { id: 'page', label: '페이지 설명' },
+    { id: 'comments', label: '코멘트' },
+    { id: 'interactions', label: '상호작용' },
+  ],
+}
 
 /** 탭 하나의 본문. **표 기반이라 탭이 늘어도 삼항이 깊어지지 않는다**(P5-1 이월 §5). */
 const PANEL_BODIES: Record<
@@ -63,6 +91,7 @@ const PANEL_BODIES: Record<
   (props: { projectId: string; pageId: string | undefined }) => ReactElement
 > = {
   props: PropertyPanel,
+  page: PageDescriptionPanel,
   comments: CommentPanel,
   interactions: InteractionPanel,
 }
@@ -180,7 +209,20 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
     <div className="wb-shell">
       <header className="wb-shell-header">
         <h1 className="wb-shell-title">{props.project.name}</h1>
-        <UndoTools projectId={props.project.id} pageId={props.pageId} />
+        {/* **되돌리기·다시 실행은 편집 모드에만 있다**(P5-3 리뷰가 찾았다).
+            §9가 뷰 모드에서 구조 트리를 접고 속성 탭을 페이지 설명으로 바꾸는 것과 같은
+            선이다 — **편집 도구는 편집 모드에 있다.**
+
+            **이 자리가 실제로 무언가를 깨고 있었다.** 뷰 모드에서 undo를 누르면 문서는
+            되돌아가는데 **겹layer가 그 위에 그대로 얹혀 있어 화면이 안 바뀐다** — 눌렀는데
+            아무 일도 안 일어나는 그 부류다(P5-1 이월 §1). 그리고 그 존재 자체가 캔버스의
+            리셋 판정(재라 #4)이 딛고 선 *"뷰 모드에서 사용자는 편집하지 않는다"*를
+            거짓으로 만들고 있었다.
+
+            **겹layer를 함께 되돌리는 쪽을 고르지 않았다:** 되돌릴 대상이 문서가 아니라
+            시연 상태라 *"어디까지"*가 정의되지 않는다(undo 한 칸이 겹layer 몇 칸인가).
+            **원인을 없애는 쪽이 정의가 필요 없다.** */}
+        {mode === 'edit' && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
         <ShellTools />
         {/* **테마 고르개**(P4b-3 D2). 셸 머리에 두는 것은 이것이 화면 **전체**를 바꾸기
             때문이다 — 페이지 하나가 아니라 이 프로젝트의 모든 화면이 갈린다.
@@ -195,6 +237,9 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             받고 보내지 못한 편집을 잃는다(D4). 셸 상단에 두면 어느 패널을 보고 있어도
             눈에 들어온다. */}
         <EditAlert />
+        {/* **경고는 실패가 아니다**(P5-3 D6). 실패 통지 바로 옆에 두되 `role`이 다르다 —
+            근거는 `shell/edit-warnings.tsx`의 머리말에 있다. */}
+        <EditWarnings />
       </header>
 
       <nav className="wb-shell-side" aria-label="메뉴와 구조">
@@ -244,17 +289,24 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
 /**
  * 우측 패널의 탭(설계 §9, P5-1 계획서 D6).
  *
- * **셋이다 — P5-2가 상호작용을 채웠다.** §9의 편집 모드 탭은 **속성 / 코멘트 / 상호작용**
- * 셋이고 뷰 모드는 **페이지 설명 / 코멘트 / 상호작용**인데, **뷰 모드의 탭 구성 변화는
- * P5-3이 채운다.** **없는 것을 흉내 내지 않는다** — 비활성 탭이나 "준비 중" 자리를 미리
- * 만들지 않는다.
+ * **P5-3이 `mode`를 읽게 했다 — P5-1 이월 §5가 지목하고 P5-2가 안 고친 그 자리다.**
+ * §9의 표대로 편집 모드는 **속성** / 코멘트 / 상호작용, 뷰 모드는 **페이지 설명** /
+ * 코멘트 / 상호작용이다(위 `PANEL_TABS`).
  *
- * **본문이 삼항에서 표로 바뀌었다**(P5-1 이월 §5가 예고한 자리). 탭이 셋이 되면 삼항이
- * 겹치는데, 그러면 탭이 늘 때마다 중첩이 깊어지고 어느 탭이 어느 본문인지 읽기 어렵다.
+ * **본문이 삼항에서 표로 바뀐 것은 P5-2다**(P5-1 이월 §5가 예고한 자리). 탭이 셋이 되면
+ * 삼항이 겹치는데, 그러면 탭이 늘 때마다 중첩이 깊어지고 어느 탭이 어느 본문인지 읽기
+ * 어렵다. **P5-3은 그 표에 키를 하나 더 얹었을 뿐이다** — 모드로 갈리는 것은 *목록*이지
+ * 본문이 아니다.
  *
- * **모드에 따라 탭을 가르지 않는 것이 오늘의 선택이다.** 뷰 모드에서 속성 대신 페이지
- * 설명을 놓는 것은 P5-3의 일이고, 그 전까지 두 모드가 같은 둘을 쓴다. 그래서 이 컴포넌트는
- * `mode`를 읽지 않는다 — 읽으면 P5-3이 고칠 자리가 여기와 그쪽 둘이 된다.
+ * **모드를 바꿀 때 탭이 어떻게 되는가 — 판정.** 지금 보던 탭이 새 모드에도 있으면 **그대로
+ * 둔다**(코멘트를 보다 뷰 모드로 가면 코멘트가 그대로 보인다). 없으면(속성 ↔ 페이지 설명)
+ * **그 모드의 첫 탭으로 간다.** 무조건 첫 탭으로 되돌리는 판을 고르지 않은 것은, 모드 토글이
+ * *"같은 것을 다르게 본다"*이지 *"다른 것을 본다"*가 아니기 때문이다 — 캔버스가 문서를,
+ * 좌측이 트리를 그대로 두는 것과 같은 결이다.
+ *
+ * **그 판정을 `useState` 대신 렌더 중 대조로 구현한다.** 이펙트로 고치면 **모드가 바뀐 첫
+ * 커밋 하나 동안 없는 탭을 그린다** — `props` 탭 본문이 뷰 모드에서 한 번 그려지는 창이고,
+ * 그 창은 이 저장소가 `openPageId`로 닫은 것과 같은 부류다(`CanvasFrame`의 주석).
  *
  * **탭 상태를 스토어에 두지 않는다.** `EditorState`가 드는 것은 **페이지 편집** 상태다
  * (문서·`headSeq`·undo 스택·전송 큐). 어느 탭을 보고 있는가는 그 축이 아니고, 거기 얹으면
@@ -266,12 +318,19 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
  * 눌리지 않은 쪽에도 `aria-pressed`를 다는 것과 같은 이유다.
  */
 function RightPanel(props: { projectId: string; pageId: string | undefined }): ReactElement {
-  const [tab, setTab] = useState<PanelTab>('props')
+  const store = useEditorStoreInstance()
+  const mode = useEditorStore(store, (s) => s.mode)
+  const [chosen, setChosen] = useState<PanelTab>('props')
+
+  const tabs = PANEL_TABS[mode]
+  // 고른 탭이 이 모드에 없으면 첫 탭이다(위 머리말의 판정). **`chosen`을 고치지 않는다** —
+  // 뷰 모드에서 속성을 보고 있었다는 사실이 남아 있어야 편집 모드로 돌아갈 때 되살아난다.
+  const tab = tabs.some((item) => item.id === chosen) ? chosen : (tabs[0]?.id ?? 'comments')
 
   return (
     <>
       <div className="wb-shell-tabs" role="tablist" aria-label="우측 패널 탭">
-        {PANEL_TABS.map((item) => (
+        {tabs.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -280,7 +339,7 @@ function RightPanel(props: { projectId: string; pageId: string | undefined }): R
             className="wb-shell-tab"
             aria-selected={tab === item.id}
             aria-controls={`wb-tabpanel-${item.id}`}
-            onClick={() => setTab(item.id)}
+            onClick={() => setChosen(item.id)}
           >
             {item.label}
           </button>

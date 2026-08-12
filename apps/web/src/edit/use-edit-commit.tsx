@@ -215,6 +215,10 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         store.setEditStatus('sending')
         try {
           const result = await api.patchOps(projectId, pageId, request)
+          // **응답의 `warnings`가 여기로 함께 들어간다**(P5-3 D6). 서버는 P4c-1부터
+          // 그것을 싣고 있었는데 P5-2까지 클라이언트가 그 필드를 몰라 **읽는 코드가 0건**
+          // 이었다(P5-2 이월 §3). 스토어가 ack와 **함께** 싣는 것이 요점이다 — 늦게 도착한
+          // 응답의 경고가 지금 문서의 것으로 실리지 않는다(`ackEdit`의 가드 뒤에 있다).
           store.ackEdit(request.clientOpId, result)
         } catch (caught) {
           // 루프를 여기서 끝낸다. `recover`가 큐를 비우므로 남은 편집이 다시 나가지 않고,

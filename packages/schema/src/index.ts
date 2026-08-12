@@ -34,11 +34,20 @@ export { assertValidLayout, assertValidPage, validateLayout, validatePage } from
 
 export { DocumentEnvelopeSchema, InteractionSchema, NODE_ID_PATTERN, WbNodeSchema } from './envelope'
 
+export type {
+  ActionProblem,
+  InteractionIssueCode,
+  NodeTargetAction,
+  PageTargetAction,
+} from './interaction/check'
+export { checkNodeAction, checkPageAction, isPageTargetAction } from './interaction/check'
+
 export type { ComponentNoun, InteractionSentence } from './interaction/describe'
 export {
   COMPONENT_NOUNS,
   describeInteraction,
   describeNode,
+  describePageTarget,
   listInteractionSentences,
 } from './interaction/describe'
 

@@ -1444,3 +1444,61 @@
   font-weight: 700;
   color: var(--wb-shell-muted);
 }
+
+/* **상호작용 런타임의 알림**(설계 §8.3, P5-3). 뷰 모드에서 방금 누른 것이 무엇을 못
+   했는지(끊긴 규칙)와 여기서 일어나지 않는 것(페이지 이동·모달)을 말한다.
+
+   렌더 실패 배너(`.wb-shell-canvas-error*`)와 **자리는 같고 색이 다르다** — 그쪽은
+   `role="alert"`인 실패이고 이쪽은 `role="status"`다. 문서의 형제라 글꼴·글자색이
+   문서로 새지 않는다(D7). */
+.wb-shell-canvas-runtime {
+  padding: 8px 10px;
+  border-bottom: 1px solid #cfe0f5;
+  background: #f4f8ff;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #234;
+}
+
+.wb-shell-canvas-runtime-list {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.wb-shell-canvas-runtime-item {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* 페이지 설명 탭의 본문(`panels/page-description.tsx`). 줄바꿈이 뜻을 갖는 글이라
+   그대로 보인다 — 코멘트 본문과 같은 취급이다. */
+.wb-shell-page-description {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 문서 경고(`shell/edit-warnings.tsx`). 실패 통지(`.wb-shell-edit-alert`)와 같은 줄 자리를
+   쓰되 `role`이 다르다 — 저장은 성공했다. 색을 주는 것은 실패와 갈라 보이게 하기 위해서다. */
+.wb-shell-edit-warnings {
+  flex-basis: 100%;
+  font-size: 13px;
+  color: #7a4a00;
+}
+
+.wb-shell-edit-warnings-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.wb-shell-edit-warnings-list {
+  margin: 2px 0 0;
+  padding-left: 16px;
+}
+
+.wb-shell-edit-warnings-item {
+  margin: 0;
+  white-space: pre-wrap;
+}
