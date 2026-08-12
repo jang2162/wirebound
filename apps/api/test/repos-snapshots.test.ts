@@ -384,13 +384,17 @@ describe('readCaptureFingerprint', () => {
     })
   })
 
-  it('빈 프로젝트라도 여섯 항목을 전부 낸다', async () => {
+  /**
+   * **지문이 덮는 테이블은 payload가 담는 자원과 하나씩 맞물린다.** 하나라도 빠지면 그
+   * 자원의 변화가 수집 도중에 일어나도 지문이 침묵한다.
+   */
+  it('빈 프로젝트라도 다섯 테이블을 전부 낸다', async () => {
     await withApi(async (ctx) => {
       const { project } = await fixture(ctx)
 
       const parsed = JSON.parse(await readCaptureFingerprint(ctx.db, project.id)) as Record<string, unknown>
 
-      expect(Object.keys(parsed).sort()).toEqual(['comments', 'layouts', 'menu', 'pages', 'pages_head', 'themes'])
+      expect(Object.keys(parsed).sort()).toEqual(['comments', 'layouts', 'menu_nodes', 'pages', 'themes'])
     })
   })
 })

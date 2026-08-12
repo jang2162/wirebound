@@ -239,22 +239,49 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  * SELECT마다 스냅샷이 새로 잡히므로 **한 번도 함께 존재한 적 없는 조합**이 payload에 담길 수
  * 있다: 페이지 A는 seq 5, 페이지 B는 seq 3인데 그 둘이 동시에 그랬던 적은 없는 상태.
  *
+ * ## 계획서 D6의 지문(개수 + 시각)을 **내용 지문으로 바꿨다 — 재서 구멍 둘을 찾았다**
+ *
+ * D6은 지문을 *"`count` + `max(updated_at)`"* 꼴로 적었다. 그대로 짜서 재 보니 **변화를
+ * 못 보는 자리가 둘** 나왔다.
+ *
+ * | 구멍 | 관찰된 값 | 원인 | 운영에서도 참인가 |
+ * |---|---|---|---|
+ * | 수집 도중 **테마를 고쳐도** 지문이 같다 | `captureSnapshot` → `'captured'`(기대: `'fingerprint-mismatch'`) | `updateTheme`이 `updated_at`을 **`now()`**(=트랜잭션 시작 시각)로 쓴다. api 테스트 하네스는 테스트 하나를 트랜잭션 하나로 감싸므로 그 값이 **얼어 있다** | **아니다** — 요청마다 트랜잭션이 갈리는 운영에서는 값이 움직인다. 이것은 **측정 장치(하네스)의 성질**이다 |
+ * | 수집 도중 **메뉴 제목을 고쳐도** 지문이 같다 | 〃 | `menu_nodes`에 **`updated_at` 컬럼이 아예 없다**(`0003-menu-nodes.ts`). `count`도 `max(created_at)`도 제목 변경에 반응하지 않는다 | **그렇다** — 하네스와 무관한 D6의 실제 구멍이다 |
+ *
+ * 앞쪽은 하네스의 성질이지만 **그 성질 때문에 케이스로 고정할 수 없다**는 점이 그대로
+ * 대가다(잴 수 없는 방어는 다음 사람이 지우기 쉽다). 뒤쪽은 운영에서도 참인 구멍이다.
+ * 그래서 시각에 기대는 것을 그만두고 **payload에 실릴 내용 자체를 지문으로 삼는다.**
+ *
+ * 그러면 지문의 뜻이 한 문장이 된다: **"payload에 들어갈 값 중 무엇도 바뀌지 않았다."**
+ * `count`+시각은 그 명제의 **근사**였고, 근사이므로 구멍이 있었다.
+ *
  * **지문에 들어가는 것(세는 단위: 테이블 하나당 한 줄):**
  *
- * | # | 테이블 | 담는 것 |
- * |---|---|---|
- * | 1 | `pages` | `(id, head_seq)` 전체 목록 |
- * | 2 | `menu_nodes` | `count` + `max(created_at)` |
- * | 3 | `pages` | `count` + `max(updated_at)` |
- * | 4 | `layouts` | 레이아웃별 `(id, theme_id)` 목록 |
- * | 5 | `themes` | **담기는 테마들**의 `(id, updated_at)` 목록 |
- * | 6 | `comments` | `count` + `max(updated_at)` |
+ * | # | 테이블 | 담는 것 | payload의 어느 필드를 덮는가 |
+ * |---|---|---|---|
+ * | 1 | `menu_nodes` | `(id, parent_id, title, sort_order)` 목록 | `menu[]` 전부 |
+ * | 2 | `pages` | `(id, menu_node_id, title, description, sort_order, schema_version, head_seq, md5(schema))` 목록 | `pages[]` 전부 |
+ * | 3 | `layouts` | `(id, name, theme_id, md5(schema))` 목록 | `layouts[]` 전부 |
+ * | 4 | `themes` | **담기는 테마들**의 `(id, md5(행 전체))` 목록 | `themes[].theme` |
+ * | 5 | `comments` | `(id, md5(행 전체), 작성자 이름)` 목록 | `comments[]` 전부 |
  *
- * **5가 "프로젝트의 테마 전부"가 아니라 "담기는 테마"인 것이 요점이다.** payload에 얼리는
+ * **4가 "프로젝트의 테마 전부"가 아니라 "담기는 테마"인 것이 요점이다.** payload에 얼리는
  * 것은 레이아웃이 가리키는 테마뿐이므로(D5), 그 조인을 지문이 그대로 쓴다. 프로젝트의 다른
  * 테마를 함께 넣으면 캡처와 무관한 편집이 409를 만든다. 반대로 **파생 테마의 base는 넣지
  * 않는다** — base는 DB 행이 아니라 **코드의 시스템 테마**이고(`systemTheme()`), 코드는 한
  * 요청 동안 바뀌지 않는다.
+ *
+ * **5가 `users.name`을 조인해 넣는 이유:** payload의 `comments[].authorName`이 코멘트 행이
+ * 아니라 **`users` 행**에서 온다(`repos/comments.ts` — *"조인해서 낸다, 스냅샷이 아니다"*).
+ * 넣지 않으면 이름을 바꾸는 경로가 생기는 날 payload는 달라지는데 지문은 그대로다.
+ *
+ * **`md5`를 쓰는 자리와 안 쓰는 자리가 갈린다.** 값이 짧고 개수가 적은 컬럼은 그대로 담고,
+ * 문서(`pages.schema`·`layouts.schema`)와 행 전체(`themes`·`comments`)는 해시로 접는다 —
+ * 지문 문자열이 payload만큼 커지면 지문을 두 번 읽는 비용이 캡처 자체와 같아진다.
+ * `pages.schema`를 **해시로라도 담는 것**은, 담지 않으면 *"`schema`는 `head_seq` 없이 바뀔
+ * 수 없다"*는 다른 파일의 불변식(`repos/pages.ts`의 머리말)에 기대게 되기 때문이다 —
+ * 그 파일이 바뀌면 여기가 조용히 헐거워진다.
  *
  * **전후가 다르면 409로 끝낸다. 재시도 루프를 넣지 않는다** — `PUT .../schema`가 같은
  * 자리에서 같은 판단을 했다(*"`stale`을 조용히 삼켜 덮어쓰면 무엇을 덮어썼는지 모르는
@@ -267,32 +294,43 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
 export async function readCaptureFingerprint(db: DbHandle, projectId: string): Promise<string> {
   const row = await sql<{ fingerprint: string }>`
     select json_build_object(
-      'pages_head', (
-        select coalesce(json_agg(json_build_array(p.id, p.head_seq) order by p.id), '[]'::json)
-        from pages p where p.project_id = ${projectId}
-      ),
-      'menu', (
-        select json_build_array(count(*), max(m.created_at))
+      'menu_nodes', (
+        select coalesce(
+          json_agg(json_build_array(m.id, m.parent_id, m.title, m.sort_order) order by m.id),
+          '[]'::json
+        )
         from menu_nodes m where m.project_id = ${projectId}
       ),
       'pages', (
-        select json_build_array(count(*), max(p.updated_at))
+        select coalesce(
+          json_agg(
+            json_build_array(
+              p.id, p.menu_node_id, p.title, p.description, p.sort_order,
+              p.schema_version, p.head_seq, md5(p.schema::text)
+            ) order by p.id
+          ),
+          '[]'::json
+        )
         from pages p where p.project_id = ${projectId}
       ),
       'layouts', (
-        select coalesce(json_agg(json_build_array(l.id, l.theme_id) order by l.id), '[]'::json)
+        select coalesce(
+          json_agg(json_build_array(l.id, l.name, l.theme_id, md5(l.schema::text)) order by l.id),
+          '[]'::json
+        )
         from layouts l where l.project_id = ${projectId}
       ),
       'themes', (
-        select coalesce(json_agg(json_build_array(t.id, t.updated_at) order by t.id), '[]'::json)
+        select coalesce(json_agg(json_build_array(t.id, md5(t::text)) order by t.id), '[]'::json)
         from themes t
         join layouts l on l.theme_id = t.id
         where l.project_id = ${projectId}
       ),
       'comments', (
-        select json_build_array(count(*), max(c.updated_at))
+        select coalesce(json_agg(json_build_array(c.id, md5(c::text), u.name) order by c.id), '[]'::json)
         from comments c
         join pages p on p.id = c.page_id
+        join users u on u.id = c.author_id
         where p.project_id = ${projectId}
       )
     )::text as fingerprint
