@@ -128,6 +128,26 @@ export async function listComments(db: DbHandle, pageId: string): Promise<Commen
 }
 
 /**
+ * 프로젝트의 코멘트 **전부**(P6-1 스냅샷 캡처가 부른다). 페이지를 조인해 프로젝트로 좁힌다 —
+ * `comments`는 `page_id`만 알고 `project_id`를 모른다(0008의 머리말: 코멘트는 페이지의
+ * **노드**에 붙는다).
+ *
+ * **`listComments`를 페이지마다 부르지 않는 이유**는 그 형태가 페이지 수만큼 왕복을 만들고,
+ * 그 왕복 사이에 다른 페이지가 바뀌면 **한 시점에 존재한 적 없는 조합**이 담기기 때문이다 —
+ * 캡처가 막으려는 바로 그것이다(계획서 D6). 한 문장이면 그 창이 이 질의 안으로 줄어든다.
+ *
+ * 정렬은 `selectComments`의 계약(`created_at` 오름차순, 동률은 `id`)을 그대로 쓴다.
+ */
+export async function listProjectComments(db: DbHandle, projectId: string): Promise<CommentRecord[]> {
+  const rows = await selectComments(db)
+    .innerJoin('pages', 'pages.id', 'comments.page_id')
+    .where('pages.project_id', '=', projectId)
+    .execute()
+
+  return rows.map((row) => toRecord(row as CommentRow))
+}
+
+/**
  * 코멘트 하나. **`pageId`를 함께 받는다** — 경로가 `.../pages/:pageId/comments/:commentId`라
  * 남의 페이지의 코멘트 id를 실은 요청이 통하면 안 된다. id만으로 찾고 나서 비교하는 대신
  * 질의 조건에 두는 것은, 비교를 빠뜨린 판이 조용히 통과하기 때문이다.

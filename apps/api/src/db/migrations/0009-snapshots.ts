@@ -1,0 +1,87 @@
+import type { Kysely, Migration } from 'kysely'
+import { sql } from 'kysely'
+
+/**
+ * `snapshots` 테이블 — 설계 §4.5의 *"삭제 없는 태그"*다.
+ *
+ * ---
+ *
+ * **`payload`가 jsonb 하나다 — 자원마다 테이블을 만들지 않는다.**
+ *
+ * §4.5가 *"현재 프로젝트 전체 상태(메뉴·페이지·레이아웃·테마·코멘트)를 `payload`에 압축
+ * 저장한다"*고 적은 그대로다. 다섯 자원을 각각 `snapshot_pages`·`snapshot_menu_nodes`…로
+ * 쪼개면 **스냅샷이 그 자원들의 스키마 변경을 따라다녀야 한다** — 페이지에 컬럼이 하나
+ * 늘 때마다 그 사본 테이블도 함께 늘려야 하고, 늘리지 않으면 옛 스냅샷과 새 스냅샷이
+ * 서로 다른 것을 담게 된다. jsonb 하나면 그 결합이 없고, 대신 **payload 형식 자체가
+ * 자기 버전을 든다**(`payloadVersion` — 계획서 D3, `services/snapshot-payload.ts`).
+ *
+ * **`json`이 아니라 `jsonb`인 것은 `pages.schema`와 같은 이유다.** 키 순서 계약이 걸리는
+ * 것은 테마의 **절**뿐인데(0006의 주석), 그 절들은 payload 안에서 이미 **값**으로 들어가
+ * 있고 우리가 그 순서를 다시 읽지 않는다 — 복원은 문서를 통째로 다시 쓴다. 반대로 `jsonb`가
+ * 주는 것이 둘 있다: NUL(U+0000)이 든 값을 **삽입 시점에** 거부하고(`22P05`), payload의
+ * 실제 바이트 크기를 `octet_length(payload::text)`로 한 문장에 잴 수 있다(계획서 D9).
+ *
+ * ---
+ *
+ * **`UNIQUE (project_id, tag)` — 계획서 D7.**
+ *
+ * 태그는 이름이다. 같은 프로젝트에 같은 이름이 둘이면 *"그때 그 화면"*을 지목할 수 없다.
+ * 충돌은 `routes/snapshots.ts`가 **409**로 옮긴다.
+ *
+ * **인덱스를 따로 만들지 않는다.** 목록 조회(`WHERE project_id = ?`)는 이 UNIQUE가 만드는
+ * B-tree 복합 인덱스의 **선두 컬럼만으로 만족된다** — 0008이 `(page_id, node_id)` 하나로
+ * `(page_id)` 조회를 덮은 것과 같은 판단이고, 따로 만들면 쓰기마다 갱신 비용만 늘린다.
+ *
+ * ---
+ *
+ * **DELETE 경로가 없다(§4.5 — *"삭제 없는 태그"*).**
+ *
+ * 라우트를 만들지 않는 것으로 그 성질을 지킨다. 다만 **행이 절대 사라지지 않는다는 뜻은
+ * 아니다** — `project_id`가 `ON DELETE CASCADE`라 프로젝트를 지우면 그 스냅샷도 함께 간다.
+ * 그것이 옳은 이유는 `revisions`·`comments`와 같다: 프로젝트가 사라지면 스냅샷이 가리키는
+ * 대상 자체가 없다. §4.5가 막는 것은 *"기록을 골라서 지우는 것"*이지 프로젝트 삭제가 아니다.
+ *
+ * **`created_by`는 `ON DELETE RESTRICT`다** — `comments.author_id`와 같은 이유다. 오늘
+ * 사용자를 지우는 경로가 없어 도달하지 않지만, 그 경로를 만드는 사람에게 *"그 사람이 얼린
+ * 기록을 어떻게 할 것인가"*를 묻게 만든다. `CASCADE`면 삭제 없는 태그가 사람 하나를 지우는
+ * 것으로 사라지고, `SET NULL`이면 *"누가 얼렸는지"*를 목록이 그릴 수 없다.
+ *
+ * ---
+ *
+ * **`created_at`이 `clock_timestamp()`가 아니라 `now()`다 — 0008과 갈린다.**
+ *
+ * 0008이 `clock_timestamp()`를 고른 이유는 **스레드 순서를 정하는 것이 시각뿐**이라 한
+ * 트랜잭션 안에서 만든 행이 같은 값을 가지면 안 되기 때문이었다. 스냅샷은 다르다:
+ * 정렬 동률을 가르는 2차 키가 있고(`tag`가 프로젝트 안에서 유일하다), 무엇보다 **한
+ * 요청이 스냅샷을 하나만 만든다.** `now()`(=트랜잭션 시작 시각)면 payload 안의
+ * `capturedAt`과 이 컬럼이 같은 트랜잭션의 같은 시점을 가리켜 **둘이 어긋나지 않는다.**
+ */
+export const migration: Migration = {
+  async up(db: Kysely<unknown>): Promise<void> {
+    await db.schema
+      .createTable('snapshots')
+      .addColumn('id', 'uuid', (col) => col.primaryKey().defaultTo(sql`gen_random_uuid()`))
+      .addColumn('project_id', 'uuid', (col) => col.notNull().references('projects.id').onDelete('cascade'))
+      .addColumn('tag', 'text', (col) => col.notNull())
+      // `NULL`이면 설명을 적지 않았다. 빈 문자열과 가르는 것은 `projects.description`과 같다.
+      .addColumn('description', 'text')
+      .addColumn('payload', 'jsonb', (col) => col.notNull())
+      .addColumn('created_by', 'uuid', (col) => col.notNull().references('users.id').onDelete('restrict'))
+      .addColumn('created_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
+      .execute()
+
+    await db.schema
+      .createIndex('snapshots_project_tag_key')
+      .on('snapshots')
+      .columns(['project_id', 'tag'])
+      .unique()
+      .execute()
+  },
+
+  // 테이블을 지우면 그 인덱스도 함께 간다. 다른 테이블에 컬럼을 더하지 않았으므로
+  // 0007처럼 순서를 지킬 것이 없다 — 그래도 `test/global-setup.ts`가 매 실행
+  // latest → none → latest를 왕복하므로 이 `down`이 실제로 도는 것은 확인된다.
+  async down(db: Kysely<unknown>): Promise<void> {
+    await db.schema.dropTable('snapshots').execute()
+  },
+}

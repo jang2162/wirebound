@@ -124,6 +124,30 @@ export async function updateLayoutTheme(
   return row ? toRecord(row as LayoutRow) : null
 }
 
+/**
+ * 프로젝트의 레이아웃 **전부**(P6-1 스냅샷 캡처가 부른다).
+ *
+ * **`findDefaultLayout` 하나로 대신하지 않는다 — 재라 #2가 거짓이기 때문이다.**
+ * 계획서는 *"레이아웃은 프로젝트당 하나다"*를 `findDefaultLayout`만 있고 CRUD가 없다는 데서
+ * **추론**했는데, 재 보니 `layouts`에는 `project_id` 유니크가 없고(`0007-layouts.ts`) 같은
+ * 프로젝트에 두 번째 레이아웃을 실제로 넣으면 **들어간다**(프로젝트 생성 직후 1건 →
+ * `insertLayout` 후 2건). 오늘 그것을 만드는 코드 경로가 없을 뿐이다.
+ *
+ * 캡처가 기본 레이아웃 하나만 담으면, 그런 행이 생기는 날 **스냅샷이 조용히 일부만 얼린다.**
+ * 전부 담는 쪽은 그 날에도 규격이 바뀌지 않는다(§4.4의 레이아웃 에디터가 붙는 자리다).
+ */
+export async function listLayouts(db: DbHandle, projectId: string): Promise<LayoutRecord[]> {
+  const rows = await db
+    .selectFrom('layouts')
+    .select(LAYOUT_COLUMNS)
+    .where('project_id', '=', projectId)
+    // 정렬이 결정적이어야 같은 상태를 두 번 캡처했을 때 payload가 같다.
+    .orderBy('id', 'asc')
+    .execute()
+
+  return (rows as LayoutRow[]).map(toRecord)
+}
+
 export async function findLayoutById(db: DbHandle, layoutId: string): Promise<LayoutRecord | null> {
   const row = await db.selectFrom('layouts').select(LAYOUT_COLUMNS).where('id', '=', layoutId).executeTakeFirst()
   return row ? toRecord(row as LayoutRow) : null

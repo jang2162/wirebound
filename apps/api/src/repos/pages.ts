@@ -247,6 +247,35 @@ export async function listPageRows(
 }
 
 /**
+ * 프로젝트의 페이지 전부를 **`schema`까지 담아** 낸다(P6-1 스냅샷 캡처가 부른다).
+ *
+ * **`listPageRows`와 갈리는 지점이 `schema` 하나다.** 그쪽은 트리 응답용이라 스키마를
+ * 애초에 select하지 않는다(*"통합 트리 응답에 스키마가 실리면 프로젝트가 커질수록
+ * 무거워진다"*). 캡처는 반대로 **문서 자체가 담을 것**이라 빼면 스냅샷이 아무것도 얼리지
+ * 못한다.
+ *
+ * **마이그레이션하지 않는다 — 계획서 D4.** 이 파일의 다른 읽기와 마찬가지로 `schema`를
+ * DB에 있는 그대로 낸다. 저장된 버전이 `CURRENT_DOCUMENT_VERSION`보다 큰 페이지가 하나만
+ * 있어도 캡처 전체가 실패하는 일이 없어야 하기 때문이고, 그 성질은 이 파일이 애초에
+ * `@wirebound/schema`의 `migrateDocument`를 부르지 않는 데서 나온다(재라 #5를 재서 확인했다:
+ * `schema_version`을 999로 심으면 `findPageById`는 999를 그대로 내고 `GET` 라우트만 400이다).
+ *
+ * **정렬이 결정적이어야 한다** — `listMenuNodes`와 같은 이유다.
+ */
+export async function listPages(db: DbHandle, projectId: string): Promise<PageRecord[]> {
+  const rows = await db
+    .selectFrom('pages')
+    .select(PAGE_COLUMNS)
+    .where('project_id', '=', projectId)
+    .orderBy('menu_node_id', 'asc')
+    .orderBy('sort_order', 'asc')
+    .orderBy('id', 'asc')
+    .execute()
+
+  return rows.map(toRecord)
+}
+
+/**
  * 페이지의 제목·설명·소속 메뉴·순서를 갱신한다. `schema`는 이 함수의 책임이
  * 아니다 — 문서를 바꾸는 유일한 경로는 편집 파이프라인(`services/edit-pipeline.ts`)이고,
  * 이 파일에서 그 경로가 쓰는 함수는 `lockPageForEdit`·`writePageSchemaAtSeq` 둘뿐이다.
