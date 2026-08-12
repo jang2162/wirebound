@@ -266,25 +266,64 @@ describe('listSnapshots', () => {
   })
 
   /**
-   * 정렬 계약: `created_at` 내림차순, 동률이면 `tag` 오름차순. **하네스가 테스트 하나를
-   * 트랜잭션 하나로 감싸므로 `now()`인 `created_at`이 전부 같아진다** — 그래서 이 케이스가
-   * 실제로 재는 것은 2차 키다. `id`(랜덤 uuid)를 2차 키로 두었다면 순서가 매번 달라진다.
+   * 정렬 계약: `created_at` 내림차순, 동률이면 `tag` 오름차순.
+   *
+   * **동률을 손으로 만든다 — G-1 이후로는 그것이 유일한 방법이다.** `created_at`이 이제
+   * `payload.capturedAt`에서 오고 그 값은 캡처가 읽은 `clock_timestamp()`라 요청마다
+   * 다르다. 앞 판은 컬럼 기본값 `now()`가 트랜잭션 안에서 얼어 있는 것에 기대 동률을
+   * **우연히** 얻고 있었는데, 그 형태는 *"무엇이 동률을 만드는가"*가 케이스에 안 보인다.
    */
   it('같은 시각이면 태그 오름차순이다', async () => {
     await withApi(async (ctx) => {
       const { owner, project } = await fixture(ctx)
+      const sameMoment = '2026-08-12T00:00:00.000Z'
       for (const tag of ['c', 'a', 'b']) {
         await insertSnapshot(ctx.db, {
           projectId: project.id,
           tag,
           description: null,
-          payload: emptyPayload(),
+          payload: emptyPayload({ capturedAt: sameMoment }),
           createdBy: owner.user.id,
         })
       }
 
       expect((await listSnapshots(ctx.db, project.id)).map((row) => row.tag)).toEqual(['a', 'b', 'c'])
     })
+  })
+
+  /**
+   * **G-1 — `created_at`은 `payload.capturedAt`의 사본이다.** 앞 판은 그 둘이 *"같은
+   * 트랜잭션의 같은 시점"*이라고 적어 두었고 **실측 +103ms로 거짓**이었다. 이제 값이
+   * 하나이므로 그 문장이 참이고, 이 케이스가 그것을 지킨다.
+   */
+  it('created_at이 payload.capturedAt과 같은 값이다', async () => {
+    await withApi(async (ctx) => {
+      const { owner, project } = await fixture(ctx)
+      const capturedAt = '2026-03-04T05:06:07.008Z'
+
+      const record = await insertSnapshot(ctx.db, {
+        projectId: project.id,
+        tag: 'v1',
+        description: null,
+        payload: emptyPayload({ capturedAt }),
+        createdBy: owner.user.id,
+      })
+
+      expect(record.createdAt.toISOString()).toBe(capturedAt)
+      // 응답만이 아니라 **행**이 그렇다 — 컬럼 기본값(`now()`)이 이겼다면 여기서 갈린다.
+      const row = await ctx.db
+        .selectFrom('snapshots')
+        .select('created_at')
+        .where('id', '=', record.id)
+        .executeTakeFirstOrThrow()
+      expect(row.created_at.toISOString()).toBe(capturedAt)
+    })
+  })
+
+  /** 규격이 `capturedAt`을 ISO datetime으로 강제한다 — 깨진 값이 `Invalid Date`로 내려가지 않는다. */
+  it('capturedAt이 ISO datetime이 아니면 규격이 거부한다', () => {
+    expect(SnapshotPayloadSchema.safeParse(emptyPayload({ capturedAt: '2026-08-12' })).success).toBe(false)
+    expect(SnapshotPayloadSchema.safeParse(emptyPayload({ capturedAt: '' })).success).toBe(false)
   })
 })
 
@@ -380,7 +419,26 @@ describe('readCaptureFingerprint', () => {
       const first = await readCaptureFingerprint(ctx.db, project.id)
       const second = await readCaptureFingerprint(ctx.db, project.id)
 
-      expect(second).toBe(first)
+      expect(second.fingerprint).toBe(first.fingerprint)
+    })
+  })
+
+  /**
+   * **`at`은 지문과 **같은 문장**에서 읽은 `clock_timestamp()`다**(G-1). 그것이
+   * `capturedAt`이 되고, `insertSnapshot`이 그 값을 `created_at`에 심는다.
+   *
+   * **`now()`였다면 이 케이스가 죽는다** — 하네스가 테스트 하나를 트랜잭션 하나로 감싸므로
+   * `transaction_timestamp()`는 두 호출에서 **같은 값**이다(실측: `now()` 07:16:20.160 ·
+   * `clock_timestamp()` 07:16:20.295, 같은 트랜잭션).
+   */
+  it('at은 호출마다 나아간다 — 트랜잭션 시작 시각이 아니다', async () => {
+    await withApi(async (ctx) => {
+      const { project } = await fixture(ctx)
+
+      const first = await readCaptureFingerprint(ctx.db, project.id)
+      const second = await readCaptureFingerprint(ctx.db, project.id)
+
+      expect(second.at.getTime()).toBeGreaterThan(first.at.getTime())
     })
   })
 
@@ -392,7 +450,10 @@ describe('readCaptureFingerprint', () => {
     await withApi(async (ctx) => {
       const { project } = await fixture(ctx)
 
-      const parsed = JSON.parse(await readCaptureFingerprint(ctx.db, project.id)) as Record<string, unknown>
+      const parsed = JSON.parse((await readCaptureFingerprint(ctx.db, project.id)).fingerprint) as Record<
+        string,
+        unknown
+      >
 
       expect(Object.keys(parsed).sort()).toEqual(['comments', 'layouts', 'menu_nodes', 'pages', 'themes'])
     })

@@ -365,6 +365,140 @@ describe('저장이 실패했을 때 화면에 남는 것', () => {
   })
 })
 
+/**
+ * # 일곱째 — **저장은 성공했는데 목록 재조회가 실패하는** 갈래
+ *
+ * 위 셋은 *"저장이 실패했을 때"*를 다룬다. 이 블록은 그 반대편이다. **리뷰가 찾았고
+ * 이월이 아니라 고치는 쪽으로 판정했다** — 성공했는데 실패만 보이면 사용자는 같은 태그로
+ * 다시 시도해 409를 받고, 스냅샷은 지울 수 없으므로(§4.5) 그 태그는 영영 그 이름이다.
+ *
+ * 고치기 전 실측: 화면 전문이 `"스냅샷을 열지 못했습니다서버 오류가 발생했습니다…"`이고
+ * `role=status`가 **빈 배열**이었다 — *"저장됨"*이 통째로 사라졌다.
+ */
+describe('저장은 됐는데 목록만 못 받았을 때', () => {
+  /** 두 번째 조회부터 실패하는 `listSnapshots`. 첫 조회(화면 진입)는 성공해야 한다. */
+  function listThenFail(): ReturnType<typeof vi.fn<() => Promise<SnapshotSummary[]>>> {
+    return vi
+      .fn<() => Promise<SnapshotSummary[]>>()
+      .mockResolvedValueOnce([])
+      .mockRejectedValue(new ApiError(500, 'internal', '서버 오류가 발생했습니다'))
+  }
+
+  function savedThenFailingReload() {
+    return fakeApi({
+      me: async () => user,
+      getProject: async () => project('owner'),
+      listSnapshots: listThenFail(),
+      createSnapshot: async () => snapshot({ tag: 'v2' }),
+    })
+  }
+
+  it('"저장됨"이 그대로 남는다', async () => {
+    renderWithProviders(<App />, { client: savedThenFailingReload(), route: ROUTE })
+    await screen.findByText('아직 스냅샷이 없습니다.')
+    saveWith('v2')
+
+    // 목록 갱신 실패가 화면에 뜬 **뒤에도** 성공 알림이 살아 있어야 한다.
+    await screen.findByRole('alert')
+    expect(screen.getByRole('status').textContent).toContain('v2 저장됨')
+  })
+
+  it('목록을 못 갱신했다는 것도 함께 보인다 — 서버 문장을 그대로 싣는다', async () => {
+    renderWithProviders(<App />, { client: savedThenFailingReload(), route: ROUTE })
+    await screen.findByText('아직 스냅샷이 없습니다.')
+    saveWith('v2')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('저장은 됐지만 목록을 갱신하지 못했습니다')
+    expect(alert.textContent).toContain('서버 오류가 발생했습니다')
+  })
+
+  it('오류 화면으로 갈아엎지 않는다 — 목록이 그대로 있다', async () => {
+    const client = fakeApi({
+      me: async () => user,
+      getProject: async () => project('owner'),
+      listSnapshots: vi
+        .fn<() => Promise<SnapshotSummary[]>>()
+        .mockResolvedValueOnce([snapshot({ tag: 'v1' })])
+        .mockRejectedValue(new ApiError(500, 'internal', '서버 오류가 발생했습니다')),
+      createSnapshot: async () => snapshot({ tag: 'v2' }),
+    })
+
+    renderWithProviders(<App />, { client, route: ROUTE })
+    await screen.findByText('v1')
+    saveWith('v2')
+
+    await screen.findByRole('alert')
+    // 앞서 받은 목록이 살아 있다. 갈아엎었다면 `FAILURE_TITLE` 화면만 남는다.
+    expect(screen.getByText('v1')).toBeTruthy()
+    expect(screen.queryByText('스냅샷을 열지 못했습니다')).toBeNull()
+    // 폼도 살아 있어야 다시 시도할 수 있다.
+    expect(screen.getByRole('button', { name: '지금 상태를 태그로 저장' })).toBeTruthy()
+  })
+
+  /**
+   * **`signed-out`만 예외다.** 세션이 끊긴 것은 *"목록만 못 받았다"*가 아니다 — 낡은 목록을
+   * 계속 보여 주면 사용자가 아직 로그인해 있다고 믿는다.
+   */
+  it('세션이 끊겼으면 목록을 붙들지 않고 로그인으로 보낸다', async () => {
+    const client = fakeApi({
+      me: expiringSession(user),
+      getProject: async () => project('owner'),
+      listSnapshots: vi
+        .fn<() => Promise<SnapshotSummary[]>>()
+        .mockResolvedValueOnce([])
+        .mockRejectedValue(new ApiError(401, 'unauthenticated', '로그인이 필요합니다')),
+      createSnapshot: async () => snapshot({ tag: 'v2' }),
+    })
+
+    renderWithProviders(<App />, { client, route: ROUTE })
+    await screen.findByText('아직 스냅샷이 없습니다.')
+    saveWith('v2')
+
+    await waitFor(() => expect(currentPath()).toBe('/login'))
+  })
+
+  /** **첫 조회 실패는 그대로 오류 화면이다** — 붙들 화면이 아직 없다. 음성 대조. */
+  it('첫 조회가 실패하면 여전히 오류 화면이다', async () => {
+    const client = fakeApi({
+      me: async () => user,
+      getProject: async () => project('owner'),
+      listSnapshots: async () => {
+        throw new ApiError(500, 'internal', '서버 오류가 발생했습니다')
+      },
+    })
+
+    renderWithProviders(<App />, { client, route: ROUTE })
+
+    expect(await screen.findByText('스냅샷을 열지 못했습니다')).toBeTruthy()
+  })
+
+  /** 재조회가 성공하면 그 문장이 사라진다 — 남아 있으면 낫지 않은 실패를 계속 말한다. */
+  it('다음 저장이 목록까지 성공하면 그 문장이 사라진다', async () => {
+    const client = fakeApi({
+      me: async () => user,
+      getProject: async () => project('owner'),
+      listSnapshots: vi
+        .fn<() => Promise<SnapshotSummary[]>>()
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new ApiError(500, 'internal', '서버 오류가 발생했습니다'))
+        .mockResolvedValue([snapshot({ tag: 'v3' })]),
+      createSnapshot: async () => snapshot({ tag: 'v3' }),
+    })
+
+    renderWithProviders(<App />, { client, route: ROUTE })
+    await screen.findByText('아직 스냅샷이 없습니다.')
+    saveWith('v2')
+    await screen.findByRole('alert')
+
+    saveWith('v3')
+
+    expect(await screen.findByText('v3')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+    expect(screen.getByRole('status').textContent).toContain('v3 저장됨')
+  })
+})
+
 describe('조회 실패', () => {
   it('세션이 끊겼으면 로그인으로 보낸다', async () => {
     // **문지기는 통과시키고 그다음 조회부터 401이다.** 재현하는 상황은 *"화면에 들어와

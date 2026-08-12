@@ -43,6 +43,37 @@
  *
  * 셋째가 요점이다 — 성공과 실패 표시를 **각각의 상태**로 두면 그 조합이 생긴다. 그래서
  * 아래 `notice`는 **하나이고 판별 유니온**이다.
+ *
+ * ---
+ *
+ * # 일곱째 — **저장은 성공했는데 목록 재조회가 실패하는** 갈래
+ *
+ * 앞의 셋은 *"저장이 실패했을 때"*를 다룬다. 그 반대편이 하나 더 있었고 **리뷰가 찾았다.**
+ *
+ * 재현(가짜 `listSnapshots`를 두 번째 호출부터 500으로 두고 쟀다):
+ *
+ * ```
+ * 화면 전문 = "스냅샷을 열지 못했습니다서버 오류가 발생했습니다설계서로 돌아가기"
+ * role=status → []            ← "저장됨"이 사라졌다
+ * role=alert  → ["서버 오류가 발생했습니다"]
+ * ```
+ *
+ * **성공했는데 실패만 보인다.** 그러면 사용자는 같은 태그로 다시 시도하고 **409**를 받는데,
+ * §4.5가 스냅샷을 지울 수 없게 했으므로 **그 태그는 영영 그 이름이다.** 되돌릴 수 없는
+ * 자원에서 *"성공을 실패로 보이게 하는 것"*은 이월로 두기에 값이 너무 크다.
+ *
+ * **원인은 재조회가 화면 전체를 갈아엎는 것이었다.** 조회 이펙트가 무조건
+ * `setState({status:'loading'})`으로 시작하고 실패하면 `{status:'failed'}`로 끝나, **이미
+ * 그려져 있던 목록과 자식의 `notice`가 함께 사라졌다.**
+ *
+ * **고친 방식은 분기 하나다:** *"같은 프로젝트를 이미 그리고 있으면 재조회가 화면을 비우지도
+ * 갈아엎지도 않는다."* 대신 `reloadFailure`를 세워 **저장 성공 알림과 나란히** 보인다.
+ * 부수적으로 **성공 경로도 고쳐진다** — 앞 판은 재조회가 느리면 그 사이 화면이 `loading`으로
+ * 떨어져 *"저장됨"*이 사라졌다(가짜가 마이크로태스크로 즉시 응답해 테스트에서 안 보였을
+ * 뿐이다).
+ *
+ * **`signed-out`만 예외다.** 세션이 끊긴 것은 *"목록만 못 받았다"*가 아니므로 그때는 그대로
+ * 로그인으로 보낸다 — 낡은 목록을 계속 보여 주면 사용자가 아직 로그인해 있다고 믿는다.
  */
 import { useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import { Link, useParams } from 'react-router'
@@ -57,6 +88,12 @@ const UNKNOWN_FAILURE = '스냅샷을 불러오지 못했습니다'
 const FAILURE_TITLE = '스냅샷을 열지 못했습니다'
 /** 저장이 이유 없이 실패했을 때(서버가 `ApiError`를 주지 않은 경우). */
 const SAVE_FAILURE = '스냅샷을 저장하지 못했습니다'
+/**
+ * **저장은 됐는데 목록만 못 받았을 때의 앞머리.** 이 문장이 없으면 화면이 *"실패"*만
+ * 말하고, 사용자는 같은 태그로 다시 시도해 **409**를 받는다 — 그리고 스냅샷은 지울 수
+ * 없으므로(§4.5) 그 태그는 영영 그 이름이다(아래 머리말의 일곱째).
+ */
+const RELOAD_FAILURE_PREFIX = '저장은 됐지만 목록을 갱신하지 못했습니다'
 
 /**
  * 조회 상태. 성공·실패를 판별 유니온으로 가르는 것은 `routes/theme-editor.tsx`와 같은
@@ -85,11 +122,20 @@ export function SnapshotsRoute(): ReactElement {
 
   /** 목록을 다시 받게 하는 값. 저장이 **성공했을 때만** 올린다. */
   const [reloadToken, setReloadToken] = useState(0)
+  /**
+   * **저장은 됐는데 목록만 못 받았을 때의 문장.** `null`이면 그런 일이 없었다는 뜻이다.
+   * 위 머리말의 일곱째가 이 상태의 존재 이유다.
+   */
+  const [reloadFailure, setReloadFailure] = useState<string | null>(null)
 
   useEffect(() => {
     // 응답이 오기 전에 화면이 바뀌면 결과를 버린다(이 저장소의 조회들이 쓰는 형식).
     let alive = true
-    setState({ status: 'loading' })
+
+    // **이미 같은 프로젝트를 그리고 있으면 비우지 않는다**(머리말의 일곱째). 프로젝트가
+    // 바뀌는 것은 다른 화면이므로 그때는 비운다 — `prev.project.id`를 보는 것이 그 갈림이다.
+    setState((prev) => (prev.status === 'ready' && prev.project.id === projectId ? prev : { status: 'loading' }))
+    setReloadFailure(null)
 
     async function load(): Promise<void> {
       try {
@@ -98,9 +144,21 @@ export function SnapshotsRoute(): ReactElement {
         const [project, snapshots] = await Promise.all([api.getProject(projectId), api.listSnapshots(projectId)])
         if (!alive) return
         setState({ status: 'ready', project, snapshots })
+        setReloadFailure(null)
       } catch (caught) {
         if (!alive) return
-        setState({ status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) })
+        const failure = toFailure(caught, UNKNOWN_FAILURE)
+
+        // 세션이 끊긴 것은 *"목록만 못 받았다"*가 아니다 — 낡은 목록을 계속 보여 주면
+        // 사용자가 아직 로그인해 있다고 믿는다.
+        if (failure.kind === 'signed-out') {
+          setState({ status: 'failed', failure })
+          return
+        }
+
+        // **이미 그리고 있던 화면은 갈아엎지 않는다.** 첫 조회가 실패한 경우에만 오류 화면이다.
+        setState((prev) => (prev.status === 'ready' ? prev : { status: 'failed', failure }))
+        setReloadFailure(failure.message)
       }
     }
 
@@ -134,6 +192,7 @@ export function SnapshotsRoute(): ReactElement {
     <SnapshotsScreen
       project={state.project}
       snapshots={state.snapshots}
+      reloadFailure={reloadFailure}
       onSaved={() => setReloadToken((token) => token + 1)}
     />
   )
@@ -142,6 +201,8 @@ export function SnapshotsRoute(): ReactElement {
 function SnapshotsScreen(props: {
   project: ProjectDetail
   snapshots: SnapshotSummary[]
+  /** 저장은 됐는데 목록만 못 받았을 때의 서버 문장. 없으면 `null`. */
+  reloadFailure: string | null
   onSaved: () => void
 }): ReactElement {
   const api = useApi()
@@ -232,6 +293,14 @@ function SnapshotsScreen(props: {
         ) : (
           <p className="wb-shell-snapshots-error" role="alert">
             {notice.message}
+          </p>
+        )}
+
+        {/* **`notice`와 나란히 선다 — 대신하지 않는다**(머리말의 일곱째). 저장 성공과 목록
+            갱신 실패는 **서로 다른 사실**이고, 하나로 접으면 둘 중 하나가 사라진다. */}
+        {props.reloadFailure === null ? null : (
+          <p className="wb-shell-snapshots-error" role="alert">
+            {RELOAD_FAILURE_PREFIX}: {props.reloadFailure}
           </p>
         )}
       </section>

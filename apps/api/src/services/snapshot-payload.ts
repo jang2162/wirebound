@@ -150,7 +150,18 @@ export interface SnapshotComment {
 
 export interface SnapshotPayload {
   payloadVersion: number
-  /** 캡처 시각(ISO 8601). `snapshots.created_at`과 같은 트랜잭션의 같은 시점이다(0009의 주석). */
+  /**
+   * 캡처 시각(ISO 8601) — **Postgres의 `clock_timestamp()`이고 Node의 시계가 아니다.**
+   *
+   * 뜻은 *"캡처가 payload의 내용을 그대로임을 마지막으로 확인한 순간"*이다(수집 **후**
+   * 지문을 읽은 그 문장에서 함께 읽는다 — `services/snapshot-capture.ts`).
+   *
+   * **`snapshots.created_at`과 같은 값이다** — `insertSnapshot`이 이 값을 그 컬럼에 심는다.
+   * **앞 판은 그 둘을 *"같은 트랜잭션의 같은 시점"*이라 적었고 거짓이었다**(실측 +103ms).
+   * 근거와 원인 셋은 `repos/snapshots.ts`의 `insertSnapshot` 머리말에 있다.
+   *
+   * **P6-2에게:** 복원이 *"그때"*로 읽어야 하는 값이 이것이다.
+   */
   capturedAt: string
   menu: SnapshotMenuNode[]
   pages: SnapshotPage[]
@@ -211,7 +222,10 @@ const CommentSchema = z.strictObject({
 export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.strictObject({
   // 리터럴이 아닌 이유는 위 D3 절에 있다 — 읽는 쪽이 값을 보고 판정한다.
   payloadVersion: z.int().positive(),
-  capturedAt: z.string(),
+  // **`z.string()`이 아니라 ISO datetime이다.** `insertSnapshot`이 이 값을
+  // `new Date(...)`로 바꿔 `created_at`에 심으므로, 형식이 깨지면 `Invalid Date`가
+  // Postgres까지 내려가 500이 된다. 규격이 그 자리를 막는다.
+  capturedAt: z.iso.datetime(),
   menu: z.array(MenuNodeSchema),
   pages: z.array(PageSchema),
   layouts: z.array(LayoutSchema),

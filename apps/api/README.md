@@ -409,7 +409,7 @@ ops를 적용하고 `headSeq`를 `seq`로 맞춘다 — **문서를 통째로 �
 | 절 | 담는 것 |
 |---|---|
 | `payloadVersion` | payload **형식**의 버전. `PageDocument.version`과 **다른 축**이다 |
-| `capturedAt` | 캡처 시각(ISO). `snapshots.created_at`과 같은 트랜잭션의 같은 시점 |
+| `capturedAt` | 캡처 시각(ISO) — **Postgres의 `clock_timestamp()`**이고, 뜻은 *"캡처가 payload의 내용을 그대로임을 마지막으로 확인한 순간"*이다. **`snapshots.created_at`과 같은 값이다**(서버가 이 값을 그 컬럼에 심는다) |
 | `menu` | 메뉴 노드 평평한 목록(`parentId`가 구조를 나른다) |
 | `pages` | 페이지 + **저장된 문서 그대로** + `headSeq`(§4.5의 요구) |
 | `layouts` | 레이아웃 **전부**(프로젝트당 하나라고 가정하지 않는다) |
@@ -446,6 +446,18 @@ ops를 적용하고 `headSeq`를 `seq`로 맞춘다 — **문서를 통째로 �
 `themes.updated_at`은 `now()`(트랜잭션 시작 시각)라 한 트랜잭션 안에서는 얼어 있다.
 
 **실패해도 아무것도 쓰지 않는다** — 캡처는 읽기뿐이고 삽입은 그 결과를 받은 뒤에 한다.
+
+#### `capturedAt`과 `created_at`은 **같은 값**이다
+
+수집 **후** 지문을 읽는 그 문장에서 `clock_timestamp()`를 함께 읽어 `capturedAt`에 담고,
+삽입이 그 값을 `created_at`에 심는다. **따로 두면 어긋난다 — 재서 알았다:** 앞 판은
+`capturedAt`을 Node의 `new Date()`로, `created_at`을 컬럼 기본값 `now()`로 두었고 실측
+**+103ms**(api 하네스)·**+25ms**(라우트 경로, 리뷰어 실측) 어긋났다. `now()`는
+`transaction_timestamp()`라 트랜잭션 안에서 얼어 있고, 두 값은 애초에 다른 순간(수집 끝 vs
+삽입 트랜잭션 시작)이며, 시계도 둘(Node·Postgres)이었다.
+
+**복원(P6-2)이 *"그때"*로 읽어야 하는 값은 `payload.capturedAt`이다.** `created_at`은 그
+값의 사본이고, 목록 정렬이 쓰는 것이 그쪽이다.
 
 #### 시스템 테마는 코드가 진실이다
 

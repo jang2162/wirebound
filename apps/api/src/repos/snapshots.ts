@@ -38,17 +38,50 @@
  * 500(서버가 잘못했다)이 아니라 400이어야 하므로 그 예외가 나기 전에 여기서 끊는다 —
  * `repos/comments.ts`와 같은 판단이다.
  *
- * **재라 #3을 재서 알게 된 것:** 페이지 제목·페이지 설명·메뉴 제목·프로젝트 이름·프로젝트
- * 설명·사용자 이름은 **아무도 막지 않는다.** NUL을 넣으면 전부 **500**이다(일곱 경로를
- * 실제로 쳐서 쟀다). 그 결과 **NUL이 든 값은 애초에 DB에 들어가지 못하고**, 그러므로
- * payload가 DB에서 읽어 조립되는 한 그 안에 NUL이 있을 수 없다. 즉 이 파일의 payload
- * NUL 검사는 **오늘 도달 경로가 0이다.** 그래도 남기는 이유는 `PUT .../schema`가
- * 파이프라인과 중복해서 같은 검사를 남긴 것과 같다: 여기서 걸러야 그 요청이 큰 jsonb를
- * 만들기 전에 끝나고, 위 여섯 경로 중 하나라도 400으로 고쳐지는 날(=NUL이 저장 가능해지는
- * 날이 아니라, 저장 경로가 바뀌는 날) 이 방벽이 이미 서 있다.
+ * ## payload 검사는 **죽은 코드가 아니다** — 도달 경로가 실재한다 (G-2)
  *
- * **반대로 `tag`·`description`은 도달 경로가 열려 있다** — 요청 본문에서 곧장 온다. 그
- * 둘에 대해서는 이 검사가 500을 400으로 바꾸는 구분력을 실제로 갖는다.
+ * **앞 판은 여기에 *"DB가 삽입 시점에 막으니 payload의 도달 경로는 0"*이라고 적어 두었고,
+ * 그것은 거짓 근거였다.** 그 문장대로면 이 검사는 지워도 되는 줄이 되고, 다음 사람이
+ * 지운다. **리뷰어가 도달 경로를 지목했고 내가 재현했다.**
+ *
+ * 구멍은 `themes`다. 그 표의 절 다섯은 `jsonb`가 아니라 **`json`** 컬럼이고(0006 — 키 순서
+ * 계약 때문에 그렇게 골랐다), **`json`은 NUL을 받는다.** 같은 값으로 두 캐스팅을 나란히 쳐
+ * 갈랐다:
+ *
+ * | 대상 | 결과 |
+ * |---|---|
+ * | `'{"semantic":{"primary":"#fff\u0000"}}'::json` | **들어간다** |
+ * | 같은 값 `::jsonb` | **`22P05 unsupported Unicode escape sequence`** |
+ *
+ * **왜 들어가는가:** 저장되는 것은 `JSON.stringify`가 만든 텍스트이고 거기서 NUL은 여섯
+ * 글자 이스케이프(`\u0000`)다 — **날 NUL 바이트가 아니다.** `json`은 원문을 그대로 두므로
+ * 통과하고, `jsonb`는 파싱하면서 그 이스케이프를 실제 문자로 풀기 때문에 죽는다.
+ *
+ * **그래서 그 절을 막는 것은 DB가 아니라 `repos/themes.ts`의 `assertNoNulByte` 한 줄뿐이다.**
+ * 그 줄을 꺼서 전체 사슬을 재현했다(변이로 심고 복구했다):
+ *
+ * ```
+ * POST /themes            → 201            (가드가 켜져 있으면 400)
+ * findThemeById 되읽기    → NUL 있음 = true
+ * captureSnapshot         → 'captured', payload에 NUL 있음 = true
+ * POST /snapshots         → 400 "스냅샷에 NUL 문자(U+0000)를 포함할 수 없습니다"
+ * 남은 snapshots 행       → 0
+ * ```
+ *
+ * **마지막 400을 내는 것이 이 검사다.** 없으면 그 요청은 `payload::jsonb` 캐스팅에서
+ * `22P05`로 죽어 **500**이 된다 — 사용자가 보낸 글자 때문에 서버가 잘못했다고 말하는 그
+ * 형태다. `test/snapshots.test.ts`의 `payload에 NUL이 실리면 400이다`가 **프로덕션을 고치지
+ * 않고** 같은 상태를 만든다(raw SQL로 `json` 컬럼에 넣는다 — DB가 실제로 허용하는 일이다).
+ *
+ * **`tag`·`description`은 더 짧은 경로다** — 요청 본문에서 곧장 온다. 그 둘은 `text`라
+ * DB가 삽입 시점에 막지만, 그 실패도 `pg`의 raw 예외라 500이다. 여기서 끊어 400으로 만든다.
+ *
+ * ---
+ *
+ * **재라 #3에서 함께 쟀던 것(관련은 있으나 다른 이야기):** 페이지 제목·페이지 설명·메뉴
+ * 제목·프로젝트 이름·프로젝트 설명·사용자 이름 여섯은 **아무도 막지 않아** NUL을 넣으면
+ * **500**이다. 그쪽은 `text`·`jsonb` 컬럼이라 값이 저장되지 못하므로 payload로는 못 오지만,
+ * *"사용자 입력 때문에 500"*이라는 문제는 그대로 남아 있다(P6-1 이월 문서에 적었다).
  */
 import { sql } from 'kysely'
 import { containsNulByte } from '../db/nul-guard'
@@ -128,11 +161,15 @@ function toSummary(row: SummaryRow): SnapshotSummary {
  * 만든 사람을 조인한 기본 질의. **정렬이 계약이다** — `created_at` 내림차순(최근 것이
  * 먼저)이고, 같은 시각이면 `tag`로 가른다.
  *
- * **2차 키가 `id`가 아니라 `tag`인 것이 요점이다.** `created_at`의 기본값이 `now()`
- * (=트랜잭션 시작 시각)라 한 트랜잭션 안에서 만든 행이 같은 값을 갖는데, `id`는 랜덤
- * uuid라 그때 순서가 매번 달라진다. `tag`는 `(project_id, tag)`가 유일하므로 **동률을
- * 완전히 가른다** — `repos/comments.ts`가 `id`로 가르는 것과 갈리는 이유는 그쪽 표에는
- * 유일한 2차 키가 없기 때문이다.
+ * **2차 키가 `id`가 아니라 `tag`인 것이 요점이다.** `id`는 랜덤 uuid라 동률에서 순서가
+ * 매번 달라지는데, `tag`는 `(project_id, tag)`가 유일하므로 **동률을 완전히 가른다** —
+ * `repos/comments.ts`가 `id`로 가르는 것과 갈리는 이유는 그쪽 표에는 유일한 2차 키가
+ * 없기 때문이다.
+ *
+ * **동률은 오늘 자연히 생기지 않는다.** `created_at`이 `insertSnapshot`이 심는
+ * `payload.capturedAt`이고 그 값은 `clock_timestamp()`라 요청마다 다르다(아래 머리말).
+ * 그래도 2차 키를 두는 것은 **정렬이 결정적이어야 하기 때문**이고, 케이스가 두 행에 같은
+ * `capturedAt`을 심어 그 자리를 실제로 잰다.
  */
 function selectSnapshots(db: DbHandle) {
   return db
@@ -150,6 +187,37 @@ function selectSnapshots(db: DbHandle) {
  *
  * **삽입과 조회가 두 문장인 것은 조인 때문이다** — `RETURNING`은 삽입한 테이블의 컬럼만
  * 낼 수 있어 `users.name`을 함께 받을 수 없다(`repos/comments.ts`의 `insertComment`와 같다).
+ *
+ * ---
+ *
+ * # `created_at`을 컬럼 기본값에 맡기지 않고 **`payload.capturedAt`에서 심는다**
+ *
+ * **앞 판은 그 둘이 *"같은 트랜잭션의 같은 시점"*이라고 적어 두었고 거짓이었다.** 재 보니
+ * `capturedAt - created_at = +103ms`였다(api 하네스. 리뷰어는 같은 어긋남을 라우트 경로에서
+ * **+25ms**로 쟀다 — 부호와 크기가 경로마다 다르다는 것이 오히려 요점이다). 원인은 셋이
+ * 겹친 것이다:
+ *
+ * 1. `capturedAt`은 **수집이 끝난 시각**이고 `created_at`은 **삽입 트랜잭션이 시작한
+ *    시각**이다. 그 사이에 수집 여섯 질의와 payload 조립이 들어간다.
+ * 2. 컬럼 기본값이 `now()`, 즉 **`transaction_timestamp()`**다. 한 트랜잭션 안에서는 얼어
+ *    있으므로 *"삽입 시각"*조차 아니다 — api 하네스처럼 테스트 하나를 트랜잭션 하나로
+ *    감싸면 **테스트가 시작한 시각**이 박힌다(위 +103ms가 그것이다).
+ * 3. 앞 판의 `capturedAt`은 **Node의 시계**(`new Date()`)였고 `created_at`은 **Postgres의
+ *    시계**였다. 두 시계가 같다는 보장이 없다.
+ *
+ * **그래서 값을 하나로 만든다.** `capturedAt`은 캡처가 `clock_timestamp()`로 읽고
+ * (`services/snapshot-capture.ts`), 이 함수가 **그 값을 `created_at`에 그대로 심는다.**
+ * 셋이 한꺼번에 닫힌다: 시점이 하나이고, 시계가 하나이고, 트랜잭션 시작 시각이 끼어들지
+ * 않는다. **컬럼 기본값(`now()`)은 오늘 도달하지 않는다** — 이 함수가 `snapshots`에 쓰는
+ * 유일한 경로이고 언제나 값을 싣는다.
+ *
+ * **왜 반대 방향(= `created_at`을 읽어 `capturedAt`에 넣기)이 아닌가.** payload는 삽입
+ * **전에** 완성돼야 한다(그것이 `insertSnapshot`의 인자다). 삽입 뒤에 payload를 고치면
+ * 저장된 jsonb와 응답이 갈릴 자리가 생긴다.
+ *
+ * **P6-2에게:** *"그때"*로 읽어야 하는 값은 **`payload.capturedAt`**이다. `created_at`은
+ * 이제 그것의 사본이고, 둘이 갈리는 유일한 경로는 누군가 이 함수를 지나지 않고 행을
+ * 넣는 것이다.
  */
 export async function insertSnapshot(
   db: DbHandle,
@@ -172,6 +240,10 @@ export async function insertSnapshot(
         description: input.description,
         payload: JSON.stringify(input.payload),
         created_by: input.createdBy,
+        // **`capturedAt`과 같은 값이다 — 사본이 아니라 같은 값이다**(위 머리말).
+        // `SnapshotPayloadSchema`가 `capturedAt`을 ISO datetime으로 강제하므로 여기서
+        // `Invalid Date`가 나올 수 없다.
+        created_at: new Date(input.payload.capturedAt),
       })
       .returning('id')
       .executeTakeFirstOrThrow()
@@ -287,13 +359,33 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  * 자리에서 같은 판단을 했다(*"`stale`을 조용히 삼켜 덮어쓰면 무엇을 덮어썼는지 모르는
  * 상황이 된다"*).
  *
- * **문자열 하나로 낸다.** 구조체로 내면 비교가 호출자마다 갈릴 수 있고(깊은 비교를 손으로
- * 짜야 한다), 여기서 필요한 것은 *"같은가"* 하나뿐이다. `json_agg` + `ORDER BY`로 SQL이
- * 결정적인 텍스트를 만들므로 행 순서가 비교에 새어 들지 않는다.
+ * **지문 자체는 문자열 하나다.** 구조체로 내면 비교가 호출자마다 갈릴 수 있고(깊은 비교를
+ * 손으로 짜야 한다), 여기서 필요한 것은 *"같은가"* 하나뿐이다. `json_agg` + `ORDER BY`로
+ * SQL이 결정적인 텍스트를 만들므로 행 순서가 비교에 새어 들지 않는다.
+ *
+ * ---
+ *
+ * # `at`을 **같은 문장 안에서** 함께 낸다 — 그것이 `capturedAt`이 된다
+ *
+ * `clock_timestamp()`를 지문과 **한 문장**으로 읽는다. 따로 읽으면 그 값이 *"상태가
+ * 그대로였음을 증명한 마지막 관찰"* 바깥으로 나간다 — 두 문장 사이에 무언가 바뀌었을 수
+ * 있고, 그러면 `capturedAt`이 가리키는 순간에 payload가 참이었다고 말할 수 없다.
+ *
+ * **`now()`가 아니라 `clock_timestamp()`인 것이 요점이다.** `now()`는
+ * `transaction_timestamp()`라 트랜잭션 안에서 얼어 있고, api 테스트 하네스는 테스트 하나를
+ * 트랜잭션 하나로 감싸므로 그 값이 **테스트 시작 시각**이 된다(실측: `now()` 07:16:20.160 vs
+ * `clock_timestamp()` 07:16:20.295 — 같은 트랜잭션의 같은 순간에 읽은 두 값이다).
+ *
+ * **그래서 `capturedAt`의 뜻이 정확히 이것이다:** *"캡처가 payload의 내용을 마지막으로
+ * 확인한 순간(Postgres의 시계)."* `insertSnapshot`이 그 값을 `created_at`에 그대로 심으므로
+ * 두 값이 같다.
  */
-export async function readCaptureFingerprint(db: DbHandle, projectId: string): Promise<string> {
-  const row = await sql<{ fingerprint: string }>`
-    select json_build_object(
+export async function readCaptureFingerprint(
+  db: DbHandle,
+  projectId: string,
+): Promise<{ fingerprint: string; at: Date }> {
+  const row = await sql<{ fingerprint: string; at: Date }>`
+    select clock_timestamp() as at, json_build_object(
       'menu_nodes', (
         select coalesce(
           json_agg(json_build_array(m.id, m.parent_id, m.title, m.sort_order) order by m.id),
@@ -337,5 +429,5 @@ export async function readCaptureFingerprint(db: DbHandle, projectId: string): P
   `.execute(db)
 
   // 서브쿼리 하나짜리 SELECT라 행이 반드시 하나다.
-  return row.rows[0]!.fingerprint
+  return { fingerprint: row.rows[0]!.fingerprint, at: row.rows[0]!.at }
 }

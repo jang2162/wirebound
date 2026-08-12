@@ -8,7 +8,10 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { sql } from 'kysely'
+import { containsNulByte } from '../src/db/nul-guard'
 import { listSnapshots } from '../src/repos/snapshots'
+import { captureSnapshot } from '../src/services/snapshot-capture'
 import { snapshotRoutes } from '../src/routes/snapshots'
 import { createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
@@ -179,6 +182,69 @@ describe('POST /:projectId/snapshots', () => {
       const fx = await fixture(ctx)
 
       const res = await post(ctx, fx, { tag: `v${NUL}1` })
+
+      expect(res.statusCode).toBe(400)
+      expect((res.json() as { error: { message: string } }).error.message).toContain('NUL')
+      expect(await listSnapshots(ctx.db, fx.project.id)).toHaveLength(0)
+    })
+  })
+
+  /**
+   * # payload의 NUL 가드는 **죽은 코드가 아니다** (G-2)
+   *
+   * 앞 판의 머리말은 이 가드를 *"DB가 삽입 시점에 막으니 도달 경로 0"*이라는 **거짓 근거**로
+   * 적어 두었다. 다음 사람이 지울 자리다. **리뷰어가 도달 경로를 냈고 내가 재현했다:**
+   * `themes`의 절 다섯은 `jsonb`가 아니라 **`json`** 컬럼이라(0006) DB가 NUL을 **받는다.**
+   *
+   * 실측(같은 값으로 두 캐스팅을 나란히 쳤다):
+   *
+   * | 대상 | 결과 |
+   * |---|---|
+   * | `'{"semantic":{"primary":"#fff\u0000"}}'::json` | **들어간다** |
+   * | 같은 값 `::jsonb` | **`22P05 unsupported Unicode escape sequence`** |
+   *
+   * 즉 그 절을 막는 것은 DB가 아니라 `repos/themes.ts`의 `assertNoNulByte` **한 줄뿐**이고,
+   * 그 줄을 끄면 `POST /themes`가 **201**을 내고 → 되읽은 테마에 NUL이 있고 → 캡처가
+   * `'captured'`로 **NUL이 든 payload**를 만들고 → `POST /snapshots`가 **400**을 낸다
+   * (그 400을 내는 것이 바로 이 가드다. 행은 0개 남는다).
+   *
+   * **이 케이스는 프로덕션을 고치지 않고 같은 상태를 만든다** — `json` 컬럼에 raw SQL로
+   * NUL을 넣는다. 그것이 DB가 실제로 허용하는 일이므로 가짜 상태가 아니다.
+   */
+  it('payload에 NUL이 실리면 400이다 — themes의 json 컬럼이 그 경로다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+
+      // **`JSON.stringify`를 지나야 한다 — 재서 알았다.** 템플릿 리터럴로 NUL을 그대로
+      // 심으면 파라미터에 **날 NUL 바이트**가 실려 Postgres가 프로토콜 층에서
+      // `22021 invalid byte sequence for encoding "UTF8": 0x00`으로 끊는다(그 형태로
+      // 먼저 짰다가 이 케이스가 죽었다). `JSON.stringify`는 그것을 여섯 글자 이스케이프
+      // `\u0000`으로 바꾸므로 날 바이트가 없고, **그것이 `repos/themes.ts`의 `section()`이
+      // 실제로 하는 일이다** — 즉 이 문장이 그 경로를 그대로 재현한다.
+      const tokens = JSON.stringify({ semantic: { primary: `#fff${NUL}` } })
+
+      // `json` 컬럼이라 들어간다. `jsonb`였다면 이 문장이 `22P05`로 죽는다.
+      const themeRow = await sql<{ id: string }>`
+        insert into themes (project_id, slug, name, version, tokens)
+        values (${fx.project.id}, 'raw-nul', '원시', '1.0.0', ${tokens}::json)
+        returning id
+      `.execute(ctx.db)
+      const themeId = themeRow.rows[0]!.id
+
+      const chosen = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${fx.project.id}/theme`,
+        cookies: fx.owner.cookie,
+        payload: { themeId },
+      })
+      expect(chosen.statusCode).toBe(200)
+
+      // 캡처는 성공한다 — NUL은 캡처가 아니라 **저장**이 막는다.
+      const outcome = await captureSnapshot(ctx.db, fx.project.id)
+      expect(outcome.kind).toBe('captured')
+      expect(containsNulByte(outcome.kind === 'captured' ? outcome.payload : null)).toBe(true)
+
+      const res = await post(ctx, fx, { tag: 'v1' })
 
       expect(res.statusCode).toBe(400)
       expect((res.json() as { error: { message: string } }).error.message).toContain('NUL')

@@ -48,13 +48,26 @@ import { sql } from 'kysely'
  *
  * ---
  *
- * **`created_at`이 `clock_timestamp()`가 아니라 `now()`다 — 0008과 갈린다.**
+ * **`created_at`의 기본값(`now()`)은 오늘 도달하지 않는다 — 값을 애플리케이션이 심는다.**
  *
- * 0008이 `clock_timestamp()`를 고른 이유는 **스레드 순서를 정하는 것이 시각뿐**이라 한
- * 트랜잭션 안에서 만든 행이 같은 값을 가지면 안 되기 때문이었다. 스냅샷은 다르다:
- * 정렬 동률을 가르는 2차 키가 있고(`tag`가 프로젝트 안에서 유일하다), 무엇보다 **한
- * 요청이 스냅샷을 하나만 만든다.** `now()`(=트랜잭션 시작 시각)면 payload 안의
- * `capturedAt`과 이 컬럼이 같은 트랜잭션의 같은 시점을 가리켜 **둘이 어긋나지 않는다.**
+ * `repos/snapshots.ts`의 `insertSnapshot`이 **언제나 `payload.capturedAt`을 이 컬럼에
+ * 싣는다.** 그것이 `snapshots`에 행을 넣는 유일한 경로이므로 이 `defaultTo`는 도달하지
+ * 않는 자리이고, 그래도 남겨 두는 것은 `NOT NULL` 컬럼의 기본값을 지우면 그 경로 밖에서
+ * 넣는 문장이 생겼을 때 **행이 안 들어가는 것이 아니라 에러가 나기** 때문이다.
+ *
+ * **앞 판이 여기에 거짓을 적어 두었다.** *"`now()`면 payload 안의 `capturedAt`과 이 컬럼이
+ * 같은 트랜잭션의 같은 시점을 가리켜 둘이 어긋나지 않는다"*였는데, 재 보니 **`+103ms`**
+ * 어긋났다(api 하네스. 리뷰어는 라우트 경로에서 **+25ms**를 쟀다). 세 가지가 겹쳤다:
+ * ㉠ 두 값이 애초에 **다른 순간**이고(수집 끝 vs 삽입 트랜잭션 시작), ㉡ `now()`는
+ * `transaction_timestamp()`라 트랜잭션 안에서 **얼어 있으며**, ㉢ 앞 판의 `capturedAt`은
+ * **Node의 시계**였다.
+ *
+ * **그래서 문장을 참으로 만드는 쪽을 골랐다** — 값을 하나로 만든다. 근거와 대안 비교는
+ * `repos/snapshots.ts`의 `insertSnapshot` 머리말에 있다.
+ *
+ * **0008과 갈리는 지점도 이제 다르다.** 그쪽은 컬럼 기본값으로 `clock_timestamp()`를 골라
+ * 스레드 순서를 만들었고, 여기는 **기본값을 쓰지 않고** 캡처가 읽은 `clock_timestamp()`를
+ * 심는다 — 결과적으로 두 표 다 트랜잭션 시작 시각에 기대지 않는다.
  */
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
@@ -67,6 +80,7 @@ export const migration: Migration = {
       .addColumn('description', 'text')
       .addColumn('payload', 'jsonb', (col) => col.notNull())
       .addColumn('created_by', 'uuid', (col) => col.notNull().references('users.id').onDelete('restrict'))
+      // 기본값은 도달하지 않는다 — `insertSnapshot`이 언제나 값을 싣는다(위 머리말).
       .addColumn('created_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
       .execute()
 

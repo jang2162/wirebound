@@ -14,7 +14,8 @@
  * 3. `listLayouts` — 레이아웃 **전부**(재라 #2가 거짓이므로 하나가 아니다).
  * 4. 레이아웃마다 `findThemeById` → 파생이면 `mergeTheme`으로 **얼린다**(D5).
  * 5. `listProjectComments` — 코멘트.
- * 6. `readCaptureFingerprint` — **수집 후** 지문.
+ * 6. `readCaptureFingerprint` — **수집 후** 지문. **그 문장의 `clock_timestamp()`가
+ *    `capturedAt`이 된다**(아래 "시각" 절).
  * 7. 두 지문이 다르면 `'fingerprint-mismatch'`. **여기서 끝난다.**
  * 8. payload를 조립하고 `SnapshotPayloadSchema`로 파싱해 규격을 확인한다.
  *
@@ -51,6 +52,20 @@
  * `meta`가 `{id, name, version}`뿐이고 문서 전체를 `JSON.stringify`해도 `"extends"` 문자열이
  * 없다. 그것이 D5가 성립하는 조건이다 — 남아 있으면 payload가 자기완결이 아니고, 복원이
  * 그때의 base를 다시 요구하므로 §4.5가 막으려던 일이 그대로 일어난다.
+ *
+ * ---
+ *
+ * # 시각 — `capturedAt`은 **수집 후 지문을 읽은 그 순간**이다
+ *
+ * **앞 판은 `new Date()`(Node의 시계)를 썼고, `snapshots.created_at`과 *"같은 트랜잭션의
+ * 같은 시점"*이라고 적었다. 거짓이었다** — 실측 `+103ms`(api 하네스), 리뷰어는 라우트
+ * 경로에서 `+25ms`를 쟀다. 원인 셋은 `repos/snapshots.ts`의 `insertSnapshot` 머리말에 있다.
+ *
+ * 이제 그 값은 **6단계 문장의 `clock_timestamp()`**이고 `insertSnapshot`이 그것을
+ * `created_at`에 그대로 심는다. **왜 6단계인가:** 그 순간이 *"payload의 내용이 그대로임을
+ * 마지막으로 확인한"* 시점이다. 0단계(수집 전)를 쓰면 그 뒤 수집 동안 상태가 그대로였다는
+ * 것만 알 뿐, 그 시각의 상태가 payload와 같다는 보장을 **앞쪽 끝**에서 주장하게 된다 —
+ * 둘 다 참이지만 뒤쪽이 더 강한 진술이고, 지문이 증명하는 구간의 **닫는 끝**이다.
  *
  * **`theme: null`이 되는 갈래가 셋이다.** 레이아웃이 테마를 안 골랐거나, 그 행이
  * 사라졌거나, 파생의 상속 대상이 코드에 없다(`systemTheme()`이 `undefined`). 셋 다
@@ -117,13 +132,16 @@ export async function captureSnapshot(
   const comments = await listProjectComments(db, projectId)
 
   const after = await readCaptureFingerprint(db, projectId)
-  if (after !== before) return { kind: 'fingerprint-mismatch' }
+  if (after.fingerprint !== before.fingerprint) return { kind: 'fingerprint-mismatch' }
 
   const payload: SnapshotPayload = {
     payloadVersion: SNAPSHOT_PAYLOAD_VERSION,
-    // `snapshots.created_at`의 기본값이 `now()`(=트랜잭션 시작 시각)이므로 이 값과
-    // 그 컬럼이 같은 트랜잭션의 같은 시점을 가리킨다(0009의 주석).
-    capturedAt: new Date().toISOString(),
+    // **수집 후 지문을 읽은 그 문장의 `clock_timestamp()`다** — Node의 시계가 아니다.
+    // 뜻은 *"캡처가 payload의 내용을 마지막으로 확인한 순간"*이고, `insertSnapshot`이
+    // 이 값을 `snapshots.created_at`에 그대로 심어 **둘이 같은 값이 된다**
+    // (`repos/snapshots.ts`의 두 머리말. 앞 판은 그 둘을 *"같은 트랜잭션의 같은 시점"*이라
+    // 적었고 실측 +103ms로 거짓이었다).
+    capturedAt: after.at.toISOString(),
     menu: menu.map((node) => ({
       id: node.id,
       parentId: node.parentId,
