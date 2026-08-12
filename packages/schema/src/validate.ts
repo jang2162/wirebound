@@ -1,4 +1,4 @@
-import type { ComponentDef } from './component/define'
+import { propSchema, type ComponentDef } from './component/define'
 import { getComponent } from './component/registry'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN } from './envelope'
 import type { LayoutDocument, PageDocument, WbNode } from './node'
@@ -22,6 +22,28 @@ export type ValidationCode =
   | 'bad-root'
   | 'slot-count'
   | 'bad-document'
+  /**
+   * 상호작용의 `target`이 가리키는 노드가 **문서에 없다**(§8.1의 *"타겟 존재 여부"*).
+   *
+   * **`navigate`·`openModal`은 여기 오지 않는다** — 그 둘의 `target`은 노드 id가 아니라
+   * 페이지 경로(`"page:관리자/회원/상세"`)이고 그 페이지는 이 문서 안에 없다. 재라 #1의
+   * 판정과 근거는 `checkInteractions`의 머리말에 있다.
+   */
+  | 'missing-interaction-target'
+  /**
+   * 타겟 노드는 있는데 **그 액션을 받을 수 없는 종류**다. 오늘 이것을 내는 자리는
+   * `switchTab`의 대상이 `Tabs`가 아닐 때 하나뿐이다.
+   *
+   * `missing-interaction-target`과 갈라 둔 이유: 사용자가 할 일이 다르다. 없는 노드는
+   * **타겟을 다시 고르거나 규칙을 지우는** 일이고, 종류가 안 맞는 것은 **액션 타입이
+   * 잘못 골렸다**는 뜻이라 대개 규칙 쪽을 고친다.
+   */
+  | 'invalid-interaction-target'
+  /**
+   * `setProp`의 `prop`이 그 컴포넌트의 prop이 아니거나 `value`가 그 prop의 타입이 아니다
+   * (§8.1의 *"prop 유효성"*).
+   */
+  | 'invalid-interaction-prop'
 
 /**
  * 이슈가 편집·저장을 **막는가**.
@@ -46,9 +68,31 @@ export type IssueSeverity = 'error' | 'warning'
  * error가 되는데, 그 안전한 기본값이 곧 "새 코드가 severity를 정하지 않았다"는 신호를
  * 지운다. 필수로 두면 컴파일러가 그 자리를 가리킨다.)
  *
- * **오늘 `warning`은 하나뿐이다.** `ignored-variant`는 *"작성자가 적은 값이 버려진다"*는
- * 알림이지 문서를 무효로 만드는 사실이 아니다 — 그 값이 없어도 문서는 그대로 그려진다.
- * 나머지는 §7.1이 막아야 한다고 정한 것이므로 내리지 않는다.
+ * **`warning`이 넷이다.** `ignored-variant`는 *"작성자가 적은 값이 버려진다"*는 알림이지
+ * 문서를 무효로 만드는 사실이 아니다 — 그 값이 없어도 문서는 그대로 그려진다. 상호작용
+ * 셋이 `warning`인 근거는 아래 따로 적는다. 나머지는 §7.1이 막아야 한다고 정한 것이므로
+ * 내리지 않는다.
+ *
+ * ---
+ *
+ * **재라 #2 — 상호작용 이슈 셋의 severity를 `warning`으로 정했다.** 축은 계획서가 준
+ * 것 하나다: ***"그 규칙이 저장을 막을 만큼 문서를 못 쓰게 만드는가."*** 근거 둘이고
+ * **둘째가 결정적이다.**
+ *
+ * 1. **깨진 규칙이 있어도 편집 화면은 멀쩡하다.** 상호작용은 뷰 모드에서만 돈다(§8.3).
+ *    끊긴 타겟이 오늘 화면에 하는 일은 없다.
+ * 2. **`error`로 두면 타겟이 된 노드를 지우는 편집이 서버에서 거부된다.** 상호작용은
+ *    **다른 노드를 가리키는 참조**라 그 노드가 사라지는 순간 이슈가 되는데, 그 이슈를
+ *    `error`로 두면 `edit-pipeline`의 6단계가 편집을 `invalid`로 되돌린다(422). 즉
+ *    **노드를 지우려는 사용자가 자기 문서를 편집할 수 없게 된다** — 지우려면 그 노드를
+ *    가리키는 상호작용을 먼저 전부 찾아 지워야 하는데, 화면에는 그것을 찾아 주는 장치가
+ *    없다. **실측했다**(P5-2가 쟀다): 셋을 `error`로 바꾸면 `edit-pipeline`이 삭제 편집을
+ *    `reason: 'invalid'`로 거부한다(`test/interaction-validate.test.ts`의
+ *    `타겟이 된 노드를 지우는 편집이 막히지 않는다`가 그 성질을 고정한다).
+ *
+ * **`unknown-variant`가 `error`인 것과 어긋나지 않는다.** 그쪽은 **그 노드 자신의 필드**가
+ * 렌더러에 닿는 값이라 남의 생사에 따라 유효성이 바뀌지 않는다. *"저장을 막으면 다른
+ * 정당한 편집이 함께 막힌다"*는 성질은 **참조**에만 있다.
  */
 export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'unknown-type': 'error',
@@ -60,6 +104,9 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'bad-root': 'error',
   'slot-count': 'error',
   'bad-document': 'error',
+  'missing-interaction-target': 'warning',
+  'invalid-interaction-target': 'warning',
+  'invalid-interaction-prop': 'warning',
 }
 
 export interface ValidationIssue {
@@ -272,7 +319,20 @@ function throwOnFirstIssue(issues: ValidationIssue[]): void {
 
 function validateTree(root: WbNode): ValidationIssue[] {
   const issues: ValidationIssue[] = []
-  const seen = new Set<string>()
+  /**
+   * 지나온 노드를 id로 든다. **`Set`이 아니라 `Map`인 것은 상호작용 검사 때문이다** —
+   * 타겟이 **있는지**만이 아니라 그 노드의 **타입**까지 봐야 `switchTab`의 대상이 `Tabs`인지,
+   * `setProp`의 prop이 그 컴포넌트의 것인지 판정할 수 있다. `duplicate-id` 쪽은 `has`만
+   * 쓰므로 그대로다.
+   */
+  const seen = new Map<string, WbNode>()
+  /**
+   * 상호작용을 가진 노드. **순회 중에 판정할 수 없다** — 타겟이 문서 뒤쪽에 있으면
+   * 아직 못 본 노드를 *"없다"*고 말하게 된다. 그래서 자리만 모아 두고 순회가 끝난 뒤
+   * 같은 `seen`을 다시 쓴다(계획 T1: *"`duplicate-id`가 이미 id를 모으고 있으면 그것을
+   * 다시 쓰라"*).
+   */
+  const withInteractions: { node: WbNode; path: string }[] = []
 
   if (root.type !== 'Page') {
     issues.push(makeIssue('bad-root', root.id, '/root', `루트는 Page여야 합니다 (현재: ${root.type})`))
@@ -282,7 +342,12 @@ function validateTree(root: WbNode): ValidationIssue[] {
     if (seen.has(node.id)) {
       issues.push(makeIssue('duplicate-id', node.id, path, `id가 중복됩니다: ${node.id}`))
     }
-    seen.add(node.id)
+    // 중복이면 나중 것이 남는다. `duplicate-id`가 이미 error라 그 문서는 저장되지 않으므로
+    // 어느 쪽이 남는지가 다른 판정을 바꾸지 않는다.
+    seen.set(node.id, node)
+    if (Array.isArray(node.interactions) && node.interactions.length > 0) {
+      withInteractions.push({ node, path })
+    }
 
     const def = getComponent(node.type)
     if (!def) {
@@ -336,7 +401,141 @@ function validateTree(root: WbNode): ValidationIssue[] {
     }
   }
 
+  for (const { node, path } of withInteractions) {
+    issues.push(...checkInteractions(node, path, seen))
+  }
+
   return issues
+}
+
+/**
+ * 노드 하나에 걸린 상호작용을 검사한다(설계 §8.1 — *"그래서 규칙을 정적으로 검증할 수
+ * 있고(타겟 존재 여부, prop 유효성)"*). **P5-2 전까지 이 검사가 0건이었다.**
+ *
+ * ---
+ *
+ * **재라 #1 — `navigate`·`openModal`의 `target`은 검사하지 않는다.**
+ *
+ * §8.1의 예가 `"page:관리자/회원/상세"`다. **노드 id가 아니라 페이지 경로**이고 그 페이지는
+ * **이 문서 안에 없다** — 검증기가 받는 것은 문서 하나이므로 여기서 풀 수 없다. 계획서가
+ * *"아무것도 안 하는 것도 답이다"*로 열어 둔 쪽을 골랐고, 근거는 둘이다:
+ *
+ * 1. **형식(`page:` 접두)을 강제하는 것은 규격에 없는 규칙을 만드는 것이다.** §8.1은 예를
+ *    하나 보였을 뿐 형식을 정하지 않았고, 같은 저장소의 `Link.target`도 자유 문자열이다.
+ * 2. **형식을 맞춰도 그 페이지가 있다는 보장이 아니다.** 즉 *"검증했다"*는 인상만 주고
+ *    실제 끊김(지워진 페이지)은 그대로 지난다 — 프로젝트 전체를 보는 검사(P8의
+ *    `exporter`나 §12.4의 lint가 그 자리다)가 생길 때 거기서 할 일이다.
+ *
+ * **그래서 노드 id처럼 생긴 값을 줘도 노드로 보지 않는다.** 그 둘의 `target`은 노드 id
+ * 공간이 아니므로 *"문서에 없는 노드"*라고 말하면 거짓 경고가 된다.
+ *
+ * ---
+ *
+ * **재지 않고 남긴 것 — `switchTab`의 `tab` 범위.** `tabs` 배열 길이 밖의 번호를 여기서
+ * 막지 않는다. `Tabs.active`(같은 뜻의 값)가 카탈로그에서 `z.number().int().min(0)`뿐이라
+ * **상한이 없기 때문이다** — 상호작용에만 상한을 두면 같은 값이 노드의 prop 자리에서는
+ * 유효하고 액션 자리에서는 무효가 된다. 카탈로그가 상한을 정하는 것이 먼저다.
+ */
+function checkInteractions(
+  node: WbNode,
+  path: string,
+  seen: ReadonlyMap<string, WbNode>,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  const interactions = node.interactions ?? []
+
+  for (const [index, interaction] of interactions.entries()) {
+    for (const [actionIndex, action] of (interaction.actions ?? []).entries()) {
+      const actionPath = `${path}/interactions/${index}/actions/${actionIndex}`
+
+      // 재라 #1 — 페이지 경로를 받는 둘은 여기서 끝난다.
+      if (action.type === 'navigate' || action.type === 'openModal') continue
+
+      const target = seen.get(action.target)
+      if (target === undefined) {
+        // **아직 안 고른 것과 사라진 것을 갈라 말한다.** 코드와 severity는 같다(할 일이
+        // 같다 — 타겟을 고른다) but 문장이 다르다: 액션을 막 더한 사용자에게
+        // *"문서에 없습니다"*라고 하면 무엇이 없어진 줄 안다. 문장화도 같은 자리에서
+        // 같은 구분을 한다(`interaction/describe.ts`의 `targetName`).
+        const empty = action.target.trim().length === 0
+        issues.push(
+          makeIssue(
+            'missing-interaction-target',
+            node.id,
+            actionPath,
+            empty
+              ? `${action.type}의 타겟을 아직 고르지 않았습니다`
+              : `${action.type}의 타겟 노드가 문서에 없습니다: ${action.target}`,
+          ),
+        )
+        continue
+      }
+
+      if (action.type === 'switchTab' && target.type !== 'Tabs') {
+        issues.push(
+          makeIssue(
+            'invalid-interaction-target',
+            node.id,
+            actionPath,
+            `switchTab의 타겟은 Tabs여야 합니다 (현재: ${target.type})`,
+          ),
+        )
+        continue
+      }
+
+      if (action.type === 'setProp') {
+        issues.push(...checkSetPropValue(node.id, actionPath, target, action.prop, action.value))
+      }
+    }
+  }
+
+  return issues
+}
+
+/**
+ * `setProp`의 `prop`과 `value`를 타겟 컴포넌트의 계약과 대조한다.
+ *
+ * **값을 `def.props` 통째로 파싱하지 않는다** — 그러면 타겟 노드에 없는 **다른** prop
+ * 때문에 실패가 난다. `propSchema`가 그 prop 하나만 떼어 준다.
+ *
+ * **카탈로그에 없는 타입은 판정하지 않는다.** 대조할 계약이 없고, *"알 수 없는 타입"*은
+ * `unknown-type`이 이미 말한다 — 같은 사실을 두 이슈로 말하면 사용자는 문제가 둘인 줄 안다.
+ */
+function checkSetPropValue(
+  nodeId: string,
+  actionPath: string,
+  target: WbNode,
+  prop: string,
+  value: unknown,
+): ValidationIssue[] {
+  const def = getComponent(target.type)
+  if (!def) return []
+
+  const schema = propSchema(def, prop)
+  if (schema === undefined) {
+    return [
+      makeIssue(
+        'invalid-interaction-prop',
+        nodeId,
+        actionPath,
+        `${target.type}에 없는 prop입니다: ${prop}`,
+      ),
+    ]
+  }
+
+  const parsed = schema.safeParse(value, { error: getKoreanErrorMap() })
+  if (parsed.success) return []
+
+  return [
+    makeIssue(
+      'invalid-interaction-prop',
+      nodeId,
+      actionPath,
+      `${target.type}.${prop}에 넣을 수 없는 값입니다: ${parsed.error.issues
+        .map((issue) => issue.message)
+        .join(', ')}`,
+    ),
+  ]
 }
 
 function countSlots(root: WbNode): number {

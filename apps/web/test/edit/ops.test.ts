@@ -14,6 +14,7 @@ import {
   installCatalog,
   invertOps,
   validatePage,
+  type Interaction,
   type PageDocument,
   type PatchOp,
   type WbNode,
@@ -24,7 +25,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 beforeAll(() => {
   installCatalog()
 })
-import { insertNodeOps, moveNodeOps, propOps, removeNodeOps, variantOps } from '../../src/edit/ops'
+import { insertNodeOps, interactionsOps, moveNodeOps, propOps, removeNodeOps, variantOps } from '../../src/edit/ops'
 
 function doc(root: WbNode): PageDocument {
   return { version: 1, root }
@@ -881,6 +882,94 @@ describe('variantOps', () => {
       [withVariant('default'), null],
     ] as [PageDocument, string | null][]) {
       const ops = variantOps(document, 'n_a', value) ?? []
+      const inverse = invertOps(document, ops)
+      expect(applyOps(applyOps(document, ops), inverse)).toEqual(document)
+    }
+  })
+})
+
+/**
+ * **`interactionsOps` — 상호작용은 노드 봉투의 필드다**(§4.3의
+ * `{ id, type, props, variant, marker, interactions, children }`). 그래서 `variantOps`와
+ * **같은 층**이고 경로도 한 단계 위다(`/…/interactions`, `/…/props/…`가 아니다).
+ *
+ * **P5-1과 다른 점**(계획 D6): 코멘트는 서버가 문서를 바꿔야 해서 새 계약(`markerOps`)이
+ * 필요했지만, **상호작용은 클라이언트가 바꾼다** — 이미 있는 낙관적 편집 경로를 그대로 탄다.
+ *
+ * **한 노드의 배열을 통째로 갈아 끼운다.** 액션 하나만 겨냥한 세밀한 op(`/…/interactions/0/
+ * actions/1/prop`)을 만들지 않는 이유: 저작 UI가 하는 일이 *"이 노드의 규칙 목록을 이렇게
+ * 바꾼다"*이고, 통째 `replace`의 `inverse`는 **앞 배열 하나**라 undo가 정확하다. 남의 편집을
+ * 덮는 문제는 `baseSeq`의 낙관적 잠금이 409로 막는다.
+ */
+describe('interactionsOps', () => {
+  /** 루트 하나에 자식 하나. `interactions`는 인자로 준 것만 붙인다. */
+  function withInteractions(interactions?: Interaction[]): PageDocument {
+    return doc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_a', type: 'Button', props: { label: '가' }, ...(interactions === undefined ? {} : { interactions }) },
+      ],
+    })
+  }
+
+  const RULE: Interaction = { on: 'click', actions: [{ type: 'setVisible', target: 'n_root', value: false }] }
+  const OTHER: Interaction = { on: 'change', actions: [] }
+
+  it('키가 있으면 replace다', () => {
+    expect(interactionsOps(withInteractions([RULE]), 'n_a', [RULE, OTHER])).toEqual([
+      { op: 'replace', path: '/root/children/0/interactions', value: [RULE, OTHER] },
+    ])
+  })
+
+  it('키가 없으면 add다', () => {
+    // `variantOps`와 같은 원인 — `replace`를 주면 `applyOps`가 `바꿀 키가 없습니다`로
+    // 던지고 D7이 편집을 삼킨다.
+    expect(interactionsOps(withInteractions(), 'n_a', [RULE])).toEqual([
+      { op: 'add', path: '/root/children/0/interactions', value: [RULE] },
+    ])
+  })
+
+  /**
+   * **빈 배열은 `remove`다.** 남기면 *"상호작용 없음"*의 표현이 두 벌(키 없음 / 빈 배열)이
+   * 되고, 문서를 비교하는 자리마다 둘을 같게 다뤄야 한다. `WbNodeSchema.interactions`가
+   * `.optional()`이라 키가 없는 것이 정상 상태다.
+   */
+  it('빈 배열을 주면 키를 지운다', () => {
+    expect(interactionsOps(withInteractions([RULE]), 'n_a', [])).toEqual([
+      { op: 'remove', path: '/root/children/0/interactions' },
+    ])
+  })
+
+  it('지울 것이 없으면 null이다', () => {
+    expect(interactionsOps(withInteractions(), 'n_a', [])).toBeNull()
+  })
+
+  it('문서에 없는 노드면 null이다', () => {
+    expect(interactionsOps(withInteractions([RULE]), 'n_없음', [RULE])).toBeNull()
+  })
+
+  it('왕복 — 만든 ops를 적용하면 그 값이 실제로 들어간다', () => {
+    const document = withInteractions()
+    const next = applyOps(document, interactionsOps(document, 'n_a', [RULE]) ?? [])
+    expect(findNode(next.root, 'n_a')?.interactions).toEqual([RULE])
+    // 그 문서가 봉투 검증을 통과한다 — 통과하지 못하면 서버가 422로 거절한다.
+    expect(validatePage(next).filter((issue) => issue.code === 'bad-document')).toEqual([])
+  })
+
+  it('지우면 키 자체가 사라진다', () => {
+    const document = withInteractions([RULE])
+    const next = applyOps(document, interactionsOps(document, 'n_a', []) ?? [])
+    expect(Object.hasOwn(findNode(next.root, 'n_a') as object, 'interactions')).toBe(false)
+  })
+
+  it('inverse를 되적용하면 원래 문서로 돌아간다', () => {
+    for (const [document, value] of [
+      [withInteractions(), [RULE]],
+      [withInteractions([RULE]), [RULE, OTHER]],
+      [withInteractions([RULE]), []],
+    ] as [PageDocument, Interaction[]][]) {
+      const ops = interactionsOps(document, 'n_a', value) ?? []
       const inverse = invertOps(document, ops)
       expect(applyOps(applyOps(document, ops), inverse)).toEqual(document)
     }

@@ -10,7 +10,14 @@
  * 던지지 않는 것도 같은 이유다 — 이 함수들은 렌더 도중에도 불릴 수 있고, 속성 패널과
  * 구조 트리는 오류 경계 밖이라 던지면 셸 전체가 흰 화면이 된다.
  */
-import { applyOps, getByPointer, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import {
+  applyOps,
+  getByPointer,
+  type Interaction,
+  type PageDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
 // **schema의 `findNodePath`·`findNode`·`walkNodes`를 쓰지 않는다.** 셋 다 `walkNodes`를
 // 지나고 그것이 `children` 배열 안의 `null` 원소에서 던진다 — 이 파일의 계약("던지지
 // 않는다")이 거기서 깨졌다(리뷰가 찾았고 나도 재현했다. `./safe-walk.ts` 머리말에 실측).
@@ -123,6 +130,52 @@ export function variantOps(
 
   if (variant === null) return has ? [{ op: 'remove', path }] : null
   return has ? [{ op: 'replace', path, value: variant }] : [{ op: 'add', path, value: variant }]
+}
+
+/**
+ * 노드의 `interactions`를 통째로 갈아 끼우는 op(설계 §8.1). **`variantOps`와 같은 층이다** —
+ * `interactions`도 props의 키가 아니라 **노드 봉투의 필드**라 경로가 한 단계 위다(§4.3).
+ *
+ * **P5-1과 다른 점**(계획 D6): 코멘트는 **서버가** 문서의 `marker`를 바꿔야 해서 새 계약
+ * (`markerOps`)이 필요했다. **상호작용은 클라이언트가 바꾸므로 그것이 필요 없다** —
+ * 이미 있는 낙관적 편집 경로(`useEditCommit` → `PATCH .../ops`)를 그대로 탄다.
+ *
+ * **배열을 통째로 다루는 것은 의도다.** 액션 하나만 겨냥한 세밀한 op을 만들면 저작 UI의
+ * 조작 하나가 op 여럿이 되고, 그 조합마다 `applyOps`의 갈래(있는 키/없는 키/배열 범위)를
+ * 다시 다뤄야 한다. 통째 `replace`의 `inverse`는 **앞 배열 하나**라 undo가 정확하고,
+ * 남의 편집을 덮는 문제는 `baseSeq`의 낙관적 잠금이 409로 막는다.
+ *
+ * 갈래는 `variantOps`와 같은 이유로 넷이다:
+ *
+ * | 노드 상태 | 주는 값 | op |
+ * |---|---|---|
+ * | `interactions` 키가 있다 | 비어 있지 않은 배열 | `replace /…/interactions` |
+ * | 키가 없다 | 비어 있지 않은 배열 | `add /…/interactions` |
+ * | 키가 있다 | **빈 배열** | `remove /…/interactions` |
+ * | 키가 없다 | 빈 배열 | **`null`** — 지울 것이 없다(D7) |
+ *
+ * **빈 배열을 `remove`로 옮기는 이유:** 남기면 *"상호작용 없음"*의 표현이 두 벌(키 없음 /
+ * 빈 배열)이 된다. `WbNodeSchema.interactions`가 `.optional()`이라 키가 없는 것이 정상이다.
+ */
+export function interactionsOps(
+  document: PageDocument,
+  nodeId: string,
+  interactions: readonly Interaction[],
+): PatchOp[] | null {
+  const nodePath = findNodePathSafely(document.root, nodeId)
+  if (nodePath === undefined) return null
+
+  const node = findNodeSafely(document.root, nodeId)
+  if (node === undefined) return null
+
+  const path = `${nodePath}/interactions`
+  // 값이 아니라 **키의 존재**를 본다(`variantOps`와 같은 이유) — `replace`/`add`가 그것으로 갈린다.
+  const has = Object.hasOwn(node, 'interactions')
+
+  if (interactions.length === 0) return has ? [{ op: 'remove', path }] : null
+  return has
+    ? [{ op: 'replace', path, value: interactions }]
+    : [{ op: 'add', path, value: interactions }]
 }
 
 /**

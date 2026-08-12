@@ -281,23 +281,34 @@ describe('variantFrom이 있는 컴포넌트의 node.variant (P4a-2 수정 웨�
  */
 describe('ValidationIssue.severity', () => {
   /**
-   * **오늘 경고가 될 자격이 있는 것은 `ignored-variant` 하나뿐이다.** 나머지는 §7.1이
-   * "편집을 막아야 한다"고 정한 것이고, 이 필드는 그 목록을 줄이는 것이 아니라 표현할 수
-   * 있게 만드는 것이다.
+   * **경고가 넷이다.** P4a-2까지는 `ignored-variant` 하나였고 **P5-2가 상호작용 셋을
+   * 더했다** — *"경고인 코드는 ignored-variant 하나뿐이다"*는 그때 거짓이 됐다.
+   * 나머지는 §7.1이 "편집을 막아야 한다"고 정한 것이고, 이 필드는 그 목록을 줄이는 것이
+   * 아니라 표현할 수 있게 만드는 것이다.
    *
    * **목록을 손으로 적지 않는다** — `ISSUE_SEVERITY`를 훑어 센다. `ValidationCode`에 코드가
    * 늘면 `Record<ValidationCode, IssueSeverity>`가 **타입체크에서** 먼저 죽고(항목 누락),
-   * 누군가 그 자리를 `warning`으로 채우면 이 케이스가 죽는다.
+   * 누군가 그 자리를 `warning`으로 채우면 이 케이스가 죽는다. **그것이 이 케이스가 사는
+   * 이유다:** 새 경고는 근거를 적고 이 목록을 고쳐야 지나간다.
+   *
+   * 상호작용 셋이 경고인 근거는 `validate.ts`의 `ISSUE_SEVERITY` 머리말에 있다 —
+   * 요지는 *"`error`로 두면 타겟이 된 노드를 지우는 편집이 막힌다"*이고,
+   * `test/interaction-validate.test.ts`가 그 성질을 잰다.
    */
-  it('경고인 코드는 ignored-variant 하나뿐이다', () => {
+  it('경고인 코드는 넷이다 — ignored-variant와 상호작용 셋', () => {
     const warnings = Object.entries(ISSUE_SEVERITY)
       .filter(([, severity]) => severity === 'warning')
       .map(([code]) => code)
-    expect(warnings).toEqual(['ignored-variant'])
+    expect(warnings).toEqual([
+      'ignored-variant',
+      'missing-interaction-target',
+      'invalid-interaction-target',
+      'invalid-interaction-prop',
+    ])
   })
 
   it('그 밖의 코드는 전부 error다', () => {
-    const others = Object.entries(ISSUE_SEVERITY).filter(([code]) => code !== 'ignored-variant')
+    const others = Object.entries(ISSUE_SEVERITY).filter(([, severity]) => severity !== 'warning')
     expect(others.length).toBeGreaterThan(0)
     expect(others.map(([, severity]) => severity)).toEqual(others.map(() => 'error'))
   })

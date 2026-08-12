@@ -175,6 +175,23 @@ function assertUnique(type: string, field: string, values: string[]): void {
   }
 }
 
+/**
+ * prop **하나**의 스키마. 그 컴포넌트에 없는 prop이면 `undefined`다.
+ *
+ * **`setProp` 상호작용의 값 검사가 이것을 쓴다**(§8.1의 *"prop 유효성"*). 노드 전체를
+ * `def.props.safeParse`로 보는 것과 다른 이유: 상호작용이 바꾸는 것은 **prop 하나**이고,
+ * 통째로 파싱하면 그 노드에 없는 **다른** 필수 prop 때문에 실패가 난다.
+ *
+ * **`propKeys`와 같은 계열로 zod 내부 표현(`shape`)에 기댄다.** 카탈로그의 props는 전부
+ * `z.strictObject`라 `shape`가 있고, 없으면 `undefined`를 내 *"모르는 prop"*과 같은 답이
+ * 된다 — 그쪽은 조용히 통과하는 것이 아니라 `invalid-interaction-prop`이 된다.
+ */
+export function propSchema(def: ComponentDef, prop: string): z.ZodType | undefined {
+  const shape = (def.props as unknown as { shape?: Record<string, z.ZodType> }).shape
+  if (shape === undefined) return undefined
+  return Object.hasOwn(shape, prop) ? shape[prop] : undefined
+}
+
 /** zod 객체 스키마에서 최상위 prop 이름을 뽑는다. */
 function propKeys(schema: z.ZodType): Set<string> {
   const shape = (schema as unknown as { shape?: Record<string, unknown> }).shape

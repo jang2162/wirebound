@@ -1,0 +1,343 @@
+/**
+ * 우측의 상호작용 탭(설계 §9의 셋째 · §8.1의 저작 · §8.2의 문장).
+ *
+ * **노드를 고르는 일은 구조 트리를 눌러서 한다** — 스토어를 직접 건드리지 않는 것은
+ * 의도다(속성 패널 케이스와 같은 근거). 사용자가 실제로 지나는 길이 이어져 있는지 함께 본다.
+ */
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import { validatePage, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { ApiError, type ApiClient } from '../../src/api/client'
+import type { PatchResult } from '../../src/api/types'
+import { openPage, pageDetail, pageDoc, PAGE_ID } from '../editor-harness'
+import '../../src/catalog-setup'
+
+/** 버튼 하나와 목록 하나. 버튼이 트리거, 목록이 타겟이다. */
+const DOC = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    { id: 'n-btn', type: 'Button', props: { label: '검색' }, marker: 1 },
+    { id: 'n-list', type: 'List', marker: 2 },
+    { id: 'n-tabs', type: 'Tabs', props: { tabs: ['기본정보', '상세정보'] } },
+  ],
+})
+
+/** 이미 규칙이 하나 걸려 있는 문서. §8.2의 첫째 예와 같은 모양이다. */
+const DOC_WITH_RULE = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    {
+      id: 'n-btn',
+      type: 'Button',
+      props: { label: '검색' },
+      marker: 1,
+      interactions: [
+        { on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] },
+      ],
+    },
+    { id: 'n-list', type: 'List', marker: 2 },
+  ],
+})
+
+/** 편집이 실제로 나가는지 보는 자리 — 속성 패널 케이스의 같은 이름 헬퍼와 같다. */
+function editable(): { calls: { ops: PatchOp[] }[]; api: Partial<ApiClient> } {
+  const calls: { ops: PatchOp[] }[] = []
+  let seq = 7
+  const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
+    calls.push({ ops: body.ops })
+    seq += 1
+    const result: PatchResult = {
+      seq,
+      revisionId: `rev-${seq}`,
+      inverse: [],
+      schemaVersion: 1,
+      ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+    }
+    return result
+  }
+  return { calls, api: { patchOps } }
+}
+
+async function openInteractionTab(): Promise<void> {
+  fireEvent.click(screen.getByRole('tab', { name: '상호작용' }))
+  await waitFor(() =>
+    expect(screen.getByRole('tab', { name: '상호작용' }).getAttribute('aria-selected')).toBe('true'),
+  )
+}
+
+/** 구조 트리에서 노드를 고른다. */
+function selectNode(type: string): void {
+  const list = document.body.querySelector('.wb-shell-structure-list')
+  if (list === null) throw new Error('구조 트리 목록이 없습니다')
+  fireEvent.click(within(list as HTMLElement).getByRole('button', { name: type }))
+}
+
+/** 패널이 그린 문장들. 저작 자리의 문장과 목록의 문장이 모두 들어온다. */
+function sentences(): string[] {
+  return [...document.body.querySelectorAll('.wb-shell-interaction-sentence')].map(
+    (element) => element.textContent?.trim() ?? '',
+  )
+}
+
+describe('상호작용 탭 — 자리', () => {
+  it('노드를 고르지 않으면 그렇다고 말한다', async () => {
+    await openPage(DOC)
+    await openInteractionTab()
+
+    expect(screen.getByText('상호작용을 걸 노드를 캔버스나 구조 트리에서 고르세요')).toBeTruthy()
+  })
+
+  /**
+   * **규칙 목록은 노드를 고르지 않아도 보인다** — 코멘트 탭이 같은 판정을 했다(그쪽 재라 #3).
+   * 탭의 쓸모가 *"이 설계서에 어떤 규칙이 걸려 있는가"*를 훑는 것이기 때문이다.
+   */
+  it('노드를 고르지 않아도 이 페이지의 규칙이 보인다', async () => {
+    await openPage(DOC_WITH_RULE)
+    await openInteractionTab()
+
+    expect(sentences()).toContain('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+  })
+
+  it('규칙이 하나도 없으면 그렇다고 말한다', async () => {
+    await openPage(DOC)
+    await openInteractionTab()
+
+    expect(screen.getByText('아직 상호작용이 없습니다')).toBeTruthy()
+  })
+})
+
+/**
+ * **§8.1의 고정 5종을 화면이 그대로 보인다**(계획 D5). *"스크립트나 표현식은 허용하지
+ * 않는다"*를 화면에서 지키는 자리다 — 자유 입력으로 규칙을 적을 길이 없어야 한다.
+ */
+describe('상호작용 탭 — 고정 5종 · 4종을 화면이 보인다', () => {
+  async function openWithRule(): Promise<void> {
+    await openPage(DOC_WITH_RULE)
+    await openInteractionTab()
+    selectNode('Button')
+  }
+
+  it('트리거 선택지가 §8.1의 4종이다', async () => {
+    await openWithRule()
+
+    const select = screen.getByLabelText('트리거') as HTMLSelectElement
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      '클릭',
+      '변경',
+      '선택',
+      '제출',
+    ])
+  })
+
+  it('액션 선택지가 §8.1의 5종이다', async () => {
+    await openWithRule()
+
+    const group = screen.getByRole('group', { name: '액션 1' })
+    const select = within(group).getByLabelText('종류') as HTMLSelectElement
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      '속성 바꾸기',
+      '보이기·숨기기',
+      '탭 전환',
+      '페이지 이동',
+      '모달 열기',
+    ])
+  })
+
+  /**
+   * **노드 타겟은 목록에서 고른다**(재라 #5). 자유 입력이면 사용자가 노드 id를 손으로
+   * 적어야 하고, 그러면 오타가 곧 끊긴 규칙이 된다.
+   */
+  it('노드 타겟은 문서의 노드 목록에서 고른다', async () => {
+    await openWithRule()
+
+    const select = screen.getByLabelText('대상') as HTMLSelectElement
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      '— 대상을 고르세요 —',
+      '페이지',
+      '① 검색 버튼',
+      '② 목록',
+    ])
+  })
+
+  /** **`setProp`의 속성도 목록이다** — 카탈로그의 `editor`에서 온다(속성 패널과 같은 출처). */
+  it('setProp의 속성은 타겟 컴포넌트의 editor 목록이다', async () => {
+    await openWithRule()
+
+    const select = screen.getByLabelText('속성') as HTMLSelectElement
+    expect([...select.options].map((option) => option.textContent)).toContain('로딩 상태')
+    expect([...select.options].map((option) => option.textContent)).toContain('항목 수')
+  })
+})
+
+/**
+ * **§8.2의 문장이 저작 자리에 함께 있다.** 규칙을 만드는 사람이 그것이 설계서에서 어떻게
+ * 읽히는지를 그 자리에서 본다.
+ */
+describe('상호작용 탭 — 문장(§8.2)', () => {
+  it('저작 중인 규칙의 문장이 보인다', async () => {
+    await openPage(DOC_WITH_RULE)
+    await openInteractionTab()
+    selectNode('Button')
+
+    // 저작 자리와 목록 둘 다 같은 문장을 낸다 — 만드는 함수가 하나이기 때문이다.
+    expect(sentences().filter((text) => text === '① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')).toHaveLength(2)
+  })
+
+  /**
+   * **아직 타겟을 안 고른 액션을 *"사라진 노드"*라고 말하지 않는다**(P5-1 이월 §1의 부류).
+   * 액션을 막 더한 상태이지 무엇이 없어진 것이 아니다.
+   */
+  it('액션을 막 더하면 "아직 고르지 않은 대상"이라고 말한다', async () => {
+    const { api } = editable()
+    await openPage(DOC, { apiOverrides: api })
+    await openInteractionTab()
+    selectNode('Button')
+
+    fireEvent.click(screen.getByRole('button', { name: '상호작용 추가' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '규칙 1에 액션 추가' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: '규칙 1에 액션 추가' }))
+
+    await waitFor(() =>
+      expect(sentences()).toContain('① 검색 버튼 클릭 시 아직 고르지 않은 대상이 숨겨집니다'),
+    )
+  })
+})
+
+/**
+ * **저작이 편집 파이프라인을 지난다**(계획 D6). 새 계약을 만들지 않았다는 것을
+ * **나가는 요청으로** 확인한다 — `PATCH .../ops`이고 경로가 노드 봉투의 `interactions`다.
+ */
+describe('상호작용 탭 — 편집 파이프라인(D6)', () => {
+  it('상호작용을 더하면 ops가 나간다', async () => {
+    const { calls, api } = editable()
+    await openPage(DOC, { apiOverrides: api })
+    await openInteractionTab()
+    selectNode('Button')
+
+    fireEvent.click(screen.getByRole('button', { name: '상호작용 추가' }))
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]!.ops).toEqual([
+      { op: 'add', path: '/root/children/0/interactions', value: [{ on: 'click', actions: [] }] },
+    ])
+  })
+
+  it('규칙을 지우면 키째 사라진다', async () => {
+    const { calls, api } = editable()
+    await openPage(DOC_WITH_RULE, { apiOverrides: api })
+    await openInteractionTab()
+    selectNode('Button')
+
+    fireEvent.click(screen.getByRole('button', { name: '규칙 1 삭제' }))
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]!.ops).toEqual([{ op: 'remove', path: '/root/children/0/interactions' }])
+  })
+
+  it('트리거를 바꾸면 그 규칙만 갈린다', async () => {
+    const { calls, api } = editable()
+    await openPage(DOC_WITH_RULE, { apiOverrides: api })
+    await openInteractionTab()
+    selectNode('Button')
+
+    fireEvent.change(screen.getByLabelText('트리거'), { target: { value: 'submit' } })
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]!.ops).toEqual([
+      {
+        op: 'replace',
+        path: '/root/children/0/interactions',
+        value: [
+          { on: 'submit', actions: [{ type: 'setProp', target: 'n-list', prop: 'loading', value: true }] },
+        ],
+      },
+    ])
+  })
+
+  /**
+   * **액션 타입을 바꾸면 앞 타입의 필드가 남지 않는다.** 남으면 `InteractionActionSchema`가
+   * `strictObject`라 서버가 그 문서를 400/422로 거절한다 — 그 문서로 검증을 돌려 확인한다.
+   */
+  it('액션 타입을 바꾸면 앞 타입의 필드가 남지 않는다', async () => {
+    const { calls, api } = editable()
+    await openPage(DOC_WITH_RULE, { apiOverrides: api })
+    await openInteractionTab()
+    selectNode('Button')
+
+    const group = screen.getByRole('group', { name: '액션 1' })
+    fireEvent.change(within(group).getByLabelText('종류'), { target: { value: 'navigate' } })
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    const value = (calls[0]!.ops[0] as { value: unknown[] }).value
+    expect(value).toEqual([{ on: 'click', actions: [{ type: 'navigate', target: '' }] }])
+
+    // 그 문서가 실제로 봉투 검증을 통과하는가 — `prop`이 남아 있으면 `bad-document`다.
+    const next: PageDocument = {
+      version: 1,
+      root: {
+        ...DOC_WITH_RULE.root,
+        children: [
+          { ...DOC_WITH_RULE.root.children![0]!, interactions: value as never },
+          DOC_WITH_RULE.root.children![1]!,
+        ],
+      },
+    }
+    expect(validatePage(next).filter((issue) => issue.code === 'bad-document')).toEqual([])
+  })
+})
+
+/**
+ * **P5-1 이월 §1의 물음을 여기서도 던진다** — *"실패했다고 말하는데 조작은 일어났다."*
+ * 상호작용 저작에서 그 부류의 거울상은 **저장에 실패했는데 화면에는 내 규칙이 남아 있는
+ * 것**이다.
+ *
+ * ---
+ *
+ * **여기 처음 적었던 인과는 거짓이었다.** *"패널이 초안을 들지 않는 것이 그 자리를
+ * 닫는다"*고 적었는데, **재 보니 그것이 아니다**(P5-2가 쟀다):
+ *
+ * | 심은 것 | 이 케이스 |
+ * |---|---|
+ * | `NodeRules`가 규칙 목록을 `useState`로 들게 한다(초안을 든다) | **죽지 않는다** |
+ *
+ * **다른 장치로 원인을 쟀다.** 실패 직후 화면을 찍어 보니 저작 자리가 통째로 사라지고
+ * *"상호작용을 걸 노드를 고르세요"*가 떠 있다 — **선택이 풀린 것이다.** `recover`가
+ * `loadPage`를 지나고 그것이 `selectedNodeId`를 `null`로 놓기 때문에(P2b-2의 그 자리는
+ * *"다른 페이지의 id가 남으면 안 된다"*는 다른 이유로 있다) `NodeRules`가 언마운트되고,
+ * 초안을 들었더라도 함께 사라진다.
+ *
+ * **그래서 초안을 안 드는 설계의 하중은 오늘 0이다.** 실패 경로 셋이 전부 저작 자리를
+ * 먼저 없앤다: 409·422·네트워크는 위의 재설정, 세션 만료는 `EditAlert`이 `<SignedOut />`으로
+ * 화면을 갈아 끼운다, 로컬 적용 실패는 정상 경로에서 나지 않는다.
+ *
+ * **그래도 초안을 두지 않는다.** 이 성질을 지탱하는 것이 *"다른 이유로 있는 장치"*이므로,
+ * 재조회 뒤 선택을 되살리는 판(사용자가 원할 만한 개선이다)이 생기면 바로 깨진다 —
+ * P5-1이 `throw`의 하중 0을 두고 같은 판단을 했다(그쪽 이월 §1.1).
+ */
+describe('상호작용 탭 — 저장에 실패하면', () => {
+  it('실패를 말하고, 저작 자리가 사라진다(선택이 풀린다)', async () => {
+    const patchOps: ApiClient['patchOps'] = async () => {
+      // 서버는 낡은 `baseSeq`에 **409 `conflict`**를 낸다(`ApiErrorCode`에 `stale`은 없다 —
+      // 그렇게 적었다가 타입체크가 잡았다).
+      throw new ApiError(409, 'conflict', '페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 9)')
+    }
+    // 재조회는 원래 문서를 그대로 준다 — 서버에는 내 편집이 없다.
+    const getPage: ApiClient['getPage'] = async () => pageDetail(PAGE_ID, DOC)
+
+    await openPage(DOC, { apiOverrides: { patchOps, getPage } })
+    await openInteractionTab()
+    selectNode('Button')
+
+    fireEvent.click(screen.getByRole('button', { name: '상호작용 추가' }))
+
+    // 실패를 말한다(D8의 한 자리).
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('페이지가 이미 변경되었습니다'))
+    // **저작 자리가 사라진다 — 선택이 풀렸기 때문이다**(위 머리말의 실측).
+    expect(screen.getByText('상호작용을 걸 노드를 캔버스나 구조 트리에서 고르세요')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '상호작용 추가' })).toBeNull()
+    // **그리고 조작이 문서에 남아 있지 않다** — 목록이 서버 상태를 보인다.
+    expect(screen.getByText('아직 상호작용이 없습니다')).toBeTruthy()
+  })
+})

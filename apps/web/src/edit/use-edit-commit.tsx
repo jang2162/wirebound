@@ -12,12 +12,12 @@
  * 큐에 쌓이고, 앞 요청이 끝난 뒤 같은 루프가 그것을 집는다.
  */
 import { useCallback } from 'react'
-import type { PatchOp } from '@wirebound/schema'
+import type { Interaction, PatchOp } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import type { EditStatus } from '../store/editor-store'
-import { propOps, variantOps } from './ops'
+import { interactionsOps, propOps, variantOps } from './ops'
 
 /** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
 const EDIT_UNKNOWN_FAILURE = '편집을 저장하지 못했습니다'
@@ -46,6 +46,15 @@ export interface EditCommit {
    * `null`이면 지운다(기본 표현으로 되돌리기).
    */
   commitVariant: (nodeId: string, variant: string | null) => void
+  /**
+   * 노드의 `interactions`를 통째로 갈아 끼운다(설계 §8.1). **`commitVariant`와 같은 층이다** —
+   * `interactions`도 props의 키가 아니라 봉투의 필드라 patch 경로가 한 단계 위다.
+   * 빈 배열이면 키를 지운다(`edit/ops.ts`의 `interactionsOps`).
+   *
+   * **새 계약이 아니다**(P5-2 D6). 상호작용은 **클라이언트가** 문서를 바꾸므로 P5-1의
+   * `markerOps` 같은 서버 왕복이 필요 없고, 이미 있는 낙관적 편집 경로를 그대로 탄다.
+   */
+  commitInteractions: (nodeId: string, interactions: readonly Interaction[]) => void
   /**
    * 이미 만들어진 `ops`를 낸다. **낸 편집이 큐에 들어갔으면 `true`다.**
    *
@@ -287,5 +296,27 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
     [open, commitOps],
   )
 
-  return { commitProp, commitVariant, commitOps, undo, redo, canUndo, canRedo, status }
+  const commitInteractions = useCallback(
+    (nodeId: string, interactions: readonly Interaction[]): void => {
+      // `commitProp`·`commitVariant`와 같은 이유로 `open`을 본다 — `open.document`가 필요하다.
+      // 열린 페이지 대조 자체는 `commitOps`가 다시 한다.
+      if (open === null) return
+
+      // 지울 것이 없거나 노드가 문서에 없으면 `interactionsOps`가 `null`을 내고 그 자리에서 끝난다(D7).
+      commitOps(interactionsOps(open.document, nodeId, interactions))
+    },
+    [open, commitOps],
+  )
+
+  return {
+    commitProp,
+    commitVariant,
+    commitInteractions,
+    commitOps,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    status,
+  }
 }
