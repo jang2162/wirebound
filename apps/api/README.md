@@ -86,7 +86,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 | `unauthenticated` | 401 | 로그인이 필요함(세션 쿠키 없음/만료) |
 | `forbidden` | 403 | 로그인은 했지만 이 작업에 필요한 역할이 아님 |
 | `not-found` | 404 | 대상이 없음, **또는 프로젝트 멤버가 아님**(설계 §10 — 비멤버에게 프로젝트 존재 여부를 숨긴다) |
-| `conflict` | 409 | 유니크 제약 위반, 마지막 owner 제거 시도, 자식이 있는 메뉴 삭제 시도 등 |
+| `conflict` | 409 | 유니크 제약 위반, 마지막 owner 제거 시도, 자식이 있는 메뉴 삭제 시도, **스냅샷 태그 중복**, **스냅샷 수집 중 프로젝트 변경** 등 |
 | `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]` |
 | `internal` | 500 | 예상하지 못한 서버 오류 |
 
@@ -162,6 +162,9 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/themes/:themeId` | GET | viewer | — | 200 테마 — 파생 테마면 `base`가 더 붙는다. 시스템 테마는 어느 프로젝트에서나 읽힌다 |
 | `/api/projects/:projectId/themes/:themeId` | PUT | **owner** | `{ theme }`(문서 전체) | 200 테마(통째 교체). 경고가 있으면 `warnings`가 더 붙는다. **시스템 테마는 403**, 남의 프로젝트 테마는 404 |
 | `/api/projects/:projectId/themes/:themeId` | DELETE | **owner** | — | 204. **시스템 테마는 403**, 남의 프로젝트 테마는 404 |
+| `/api/projects/:projectId/snapshots` | POST | **editor** | `{ tag, description? }` | 201 스냅샷(아래 "스냅샷 응답 형태"). **지금 상태를 태그 하나로 얼린다**(§4.5). 태그 중복 409, 수집 도중 프로젝트가 바뀌면 409(**문장이 다르다**), NUL 400, 태그 1~60자·설명 0~2000자 밖은 400 |
+| `/api/projects/:projectId/snapshots` | GET | viewer | — | 200 스냅샷 배열(`created_at` 내림차순, 동률은 `tag` 오름차순). **`payload`가 없다** — 크기(`payloadBytes`)만 실린다 |
+| `/api/projects/:projectId/snapshots/:snapshotId` | GET | viewer | — | 200 스냅샷 + `payload`. 남의 프로젝트의 id는 404(존재를 숨긴다) |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
 
 ### 프로젝트 응답 형태
@@ -389,6 +392,61 @@ ops를 적용하고 `headSeq`를 `seq`로 맞춘다 — **문서를 통째로 �
   레이아웃만 만들 수 있고, 그것은 레이아웃이 없는 것과 관찰 결과가 같다). 그런 프로젝트에
   레이아웃을 주는 경로는 아직 없다.
 
+### 스냅샷 응답 형태 (§4.5 — P6-1)
+
+**스냅샷은 삭제 없는 태그다.** 이 단계는 **얼리는 쪽만** 만든다 — 복원은 P6-2다.
+
+응답은 **일곱 키**이고, 상세·생성에만 여덟째(`payload`)가 붙는다.
+
+```jsonc
+{ "id": "…", "tag": "v1", "description": "첫 릴리스 직전", "createdBy": "…",
+  "createdByName": "장병현", "createdAt": "2026-08-12T…", "payloadBytes": 8123,
+  "payload": { /* 상세·생성에만 */ } }
+```
+
+`payload`가 담는 것(규격은 `src/services/snapshot-payload.ts`가 소유한다):
+
+| 절 | 담는 것 |
+|---|---|
+| `payloadVersion` | payload **형식**의 버전. `PageDocument.version`과 **다른 축**이다 |
+| `capturedAt` | 캡처 시각(ISO). `snapshots.created_at`과 같은 트랜잭션의 같은 시점 |
+| `menu` | 메뉴 노드 평평한 목록(`parentId`가 구조를 나른다) |
+| `pages` | 페이지 + **저장된 문서 그대로** + `headSeq`(§4.5의 요구) |
+| `layouts` | 레이아웃 **전부**(프로젝트당 하나라고 가정하지 않는다) |
+| `themes` | 레이아웃별 **병합이 끝난 홀로 서는 테마**. 고르지 않았으면 `null` |
+| `comments` | 코멘트 + 그 시점의 작성자 이름 |
+
+**겹layer(런타임 상태)는 담지 않는다.** payload 규격이 `z.strictObject`라 선언되지 않은
+절이 실리면 그 자리에서 파싱이 죽는다.
+
+**저장된 문서를 마이그레이션하지 않는다.** `CURRENT_DOCUMENT_VERSION`보다 큰 버전의
+페이지가 하나 있어도 캡처는 성공한다 — 캡처는 읽기이고, 읽기가 실패하면 사용자는 얼릴
+수단 자체를 잃는다(그 페이지의 `GET`은 여전히 400이다).
+
+**테마는 병합된 결과로 얼린다.** 참조만 저장하면 테마가 나중에 바뀌었을 때 스냅샷이 다른
+모습으로 복원된다(§4.5). `mergeTheme` 결과에는 `extends`가 남지 않는다.
+
+**`payloadBytes`는 `octet_length(payload::text)`다** — DB가 들고 있는 문서의 옥텟 수이고,
+생성·목록·상세 셋이 같은 식을 쓴다. §16의 열린 항목(보관 정책)을 닫을 관측이라 **상한은
+두지 않는다.**
+
+**두 409의 문장이 다르다.** 태그 중복은 *"같은 태그의 스냅샷이 이미 있습니다"*(할 일:
+이름을 바꾼다), 지문 불일치는 *"스냅샷을 뜨는 동안 프로젝트가 바뀌었습니다. 다시 시도해
+주세요"*(할 일: 다시 시도한다). 코드는 둘 다 `conflict`이므로 **문장이 갈라야** 화면이
+가른다.
+
+#### 캡처는 자기가 본 것이 한 시점인지 확인한다
+
+수집 **전후로 지문을 읽어** 다르면 409다. 지문은 payload에 실릴 내용 자체이고
+(`readCaptureFingerprint`), 다섯 테이블을 덮는다. **재시도 루프는 없다** —
+`PUT .../schema`가 `stale`에서 한 판단과 같다.
+
+**개수 + `max(updated_at)` 꼴로는 못 잡는 자리가 둘 있어서 내용 지문으로 바꿨다:**
+`menu_nodes`에는 `updated_at` 컬럼이 아예 없어 제목만 바뀌면 아무 값도 안 움직이고,
+`themes.updated_at`은 `now()`(트랜잭션 시작 시각)라 한 트랜잭션 안에서는 얼어 있다.
+
+**실패해도 아무것도 쓰지 않는다** — 캡처는 읽기뿐이고 삽입은 그 결과를 받은 뒤에 한다.
+
 #### 시스템 테마는 코드가 진실이다
 
 `packages/themes/src/system/`이 시스템 테마를 갖고 있고, 서버가 **기동할 때마다**
@@ -487,8 +545,9 @@ revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `
 - **테마를 고르는 UI**: 프로젝트의 레이아웃이 가리키는 테마를 바꾸는 엔드포인트가 없다.
   파생 테마는 API로 만들 수 있지만 **그것을 화면에 거는 것은 DB를 직접 고쳐야 한다**
   (시스템 테마가 하나뿐이라 고르개를 만들 이유가 아직 없다 — P4b가 다섯 종과 함께 연다).
-- **테마 스냅샷**(§4.5): 병합 결과를 얼려 두는 자리. `GET .../theme`가 읽을 때 합칠 뿐
-  저장하지 않는다.
+- ~~**테마 스냅샷**(§4.5)~~ — **P6-1이 만들었다.** `POST .../snapshots`가 병합 결과를
+  payload에 얼린다(위 "스냅샷 응답 형태"). **복원은 아직 없다** — P6-2다. 그래서
+  `payloadVersion` 게이트, §13.1의 미지원 버전 탈출구 판정, owner 가드도 아직 없다.
 - **테마의 동시 편집 방어**: `pages`는 `head_seq`로 닫혀 있는데 `themes`에는 그런 것이
   없다. 마지막 쓰기가 이긴다.
 - **API 토큰**: 세션 쿠키 외의 인증 수단(서비스 간 호출, CLI/MCP용 토큰 등)이 없다.

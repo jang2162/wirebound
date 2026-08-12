@@ -13,6 +13,7 @@ import { menuRoutes } from './routes/menu'
 import { pageRoutes } from './routes/pages'
 import { projectRoutes } from './routes/projects'
 import { revisionRoutes } from './routes/revisions'
+import { snapshotRoutes } from './routes/snapshots'
 import { themeRoutes } from './routes/themes'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
@@ -127,6 +128,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // URL 네임스페이스는 `pageRoutes`와 공유한다(P5-1).
   await app.register(commentRoutes(), { prefix: '/api/projects' })
   await app.register(themeRoutes(), { prefix: '/api/projects' })
+  // 스냅샷도 프로젝트 아래에 산다(`/:projectId/snapshots`). **인자 없이 부른다** — 그
+  // 팩토리의 `captureHooks`는 테스트 전용 이음매다(`routes/snapshots.ts`의 머리말).
+  await app.register(snapshotRoutes(), { prefix: '/api/projects' })
   await app.register(healthRoutes)
 
   return app
