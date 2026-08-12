@@ -104,7 +104,15 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   createPage: ['../src/tree/use-tree-commands.tsx'],
   updatePage: ['../src/tree/use-tree-commands.tsx'],
   deletePage: ['../src/tree/use-tree-commands.tsx'],
-  getPage: ['../src/routes/editor.tsx', '../src/edit/use-edit-commit.tsx'],
+  // **셋이고 서로 다른 것을 읽는다.** 셸(`routes/editor.tsx`)은 `schema`·`headSeq`를
+  // 스토어에 싣고, 편집 훅은 실패 뒤 재조회로 같은 둘을 다시 받고, **뷰 모드의 페이지
+  // 설명 탭은 `title`·`description`을 읽는다**(P5-3). 셋째가 자기 조회를 갖는 근거는
+  // `panels/page-description.tsx`의 머리말에 있다 — 요지는 앞 둘이 그 두 키를 버린다는 것이다.
+  getPage: [
+    '../src/routes/editor.tsx',
+    '../src/edit/use-edit-commit.tsx',
+    '../src/panels/page-description.tsx',
+  ],
   patchOps: ['../src/edit/use-edit-commit.tsx'],
   listMyRevisions: ['../src/routes/editor.tsx'],
   // **소비자가 둘이고 서로 다른 것을 읽는다**(P4b-3 P2). 캔버스 쪽 훅은 `theme`을

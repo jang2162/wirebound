@@ -398,7 +398,12 @@ const SHAPES = {
     isRecord(value) &&
     typeof value['seq'] === 'number' &&
     typeof value['revisionId'] === 'string' &&
-    Array.isArray(value['inverse']),
+    Array.isArray(value['inverse']) &&
+    // **`warnings`는 없을 수 있고, 있으면 배열이어야 한다**(P5-3 D6 — 테마 쪽 `themeDetail`과
+    // 같은 관례). 서버는 경고가 없으면 키를 만들지 않으므로 `undefined`를 통과시켜야 하고,
+    // 배열이 아닌 것을 통과시키면 셸 머리의 통지가 `.map`을 부르다 던진다 — 그 자리는
+    // 오류 경계 **밖**이라 셸 전체가 흰 화면이 된다(`shell/edit-warnings.tsx`).
+    (value['warnings'] === undefined || Array.isArray(value['warnings'])),
   /**
    * 프로젝트의 현재 테마. **`theme`의 안쪽을 보지 않는다** — `resolveTheme`이 그것을
    * 통째로 검증하고 이슈를 내며(`theme/use-theme-css.ts`), 여기서 한 겹 더 막으면

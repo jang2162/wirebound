@@ -1,5 +1,21 @@
-export type { WbAttrs } from './attrs'
+export type { WbAttrs, WbHandlers } from './attrs'
 export { activeStates, nodeAttrs, partAttrs } from './attrs'
+
+// **상호작용 런타임**(설계 §8.3). `RenderOptions.interaction`으로 켜고, 상태는 호출자가
+// 든다 — 근거는 `interaction/runtime.ts`의 머리말에 있다.
+export type {
+  InteractionIssue,
+  InteractionOverlay,
+  InteractionRequest,
+  InteractionResult,
+} from './interaction/runtime'
+export {
+  EMPTY_OVERLAY,
+  hiddenByOverlay,
+  overlayProps,
+  runInteraction,
+  VISIBLE_KEY,
+} from './interaction/runtime'
 
 export type { StructureContext, StructureRenderer } from './structures/registry'
 export {
@@ -17,7 +33,12 @@ export { FallbackNode } from './fallback'
 // 그 케이스가 이 export를 쓴다.
 export { NODE_VAR_PREFIX, TREE_INDENT_VAR, nodeVar, structureBaseCss } from './structure-css'
 
-export type { NodeRenderError, RenderOptions } from './render'
+export type {
+  InteractionEvent,
+  InteractionOptions,
+  NodeRenderError,
+  RenderOptions,
+} from './render'
 export { renderDocument, renderNode, resolveStructure } from './render'
 
 export { installStructures } from './structures/index'

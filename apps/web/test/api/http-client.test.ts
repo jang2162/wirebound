@@ -1024,6 +1024,32 @@ describe('patchOps', () => {
     expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ baseSeq: 7, ops: OPS })
   })
 
+  /**
+   * **`warnings`는 없을 수 있고, 있으면 배열이어야 한다**(P5-3 D6 — 테마 쪽과 같은 관례).
+   *
+   * **왜 이 가드가 필요한가:** 그 값이 스토어를 지나 셸 머리의 통지로 가고, 거기서
+   * `.map`이 불린다. 그 자리는 오류 경계 **밖**이라 배열이 아닌 것이 지나가면 셸 전체가
+   * 흰 화면이 된다(`shell/edit-warnings.tsx`). **실측**: 이 가드를 걷고 화면 케이스에서
+   * `warnings: { nope: 1 }`을 흘리면 `TypeError: warnings.map is not a function`이
+   * 렌더 도중 난다.
+   */
+  it('warnings가 배열이 아니면 막는다 — 없는 것은 통과시킨다', async () => {
+    const client = (body: unknown) => createHttpClient(stubFetch(jsonResponse(200, body)).fetchImpl)
+
+    await expect(
+      client({ ...patchResult, warnings: { nope: 1 } }).patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS }),
+    ).rejects.toThrow()
+
+    // 양성 대조 둘: 키가 없는 응답(서버가 경고 없을 때 내는 모양)과 배열인 응답.
+    await expect(
+      client(patchResult).patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS }),
+    ).resolves.toEqual(patchResult)
+    const withWarnings = { ...patchResult, warnings: [{ code: 'missing-interaction-target' }] }
+    await expect(
+      client(withWarnings).patchOps('p-1', 'pg-1', { baseSeq: 7, ops: OPS }),
+    ).resolves.toEqual(withWarnings)
+  })
+
   it('응답의 seq와 inverse를 그대로 낸다', async () => {
     // **봉투를 벗기지 않는다** — 서버 응답이 곧 `PatchResult`다. `inverse`는 서버가 적용
     // 직전 상태를 보고 만든 것이고(설계 §7.1), 클라이언트는 그것을 그대로 되보내는 것

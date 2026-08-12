@@ -1,4 +1,5 @@
 import type { ComponentDef, WbNode } from '@wirebound/schema'
+import type { SyntheticEvent } from 'react'
 
 /** 렌더러와 테마 사이의 전체 계약. 설계 문서 §6.11 */
 export interface WbAttrs {
@@ -7,6 +8,27 @@ export interface WbAttrs {
   'data-wb-structure': string
   'data-wb-variant'?: string
   'data-wb-state'?: string
+}
+
+/**
+ * 상호작용 런타임이 노드 루트에 얹는 이벤트 핸들러(§8.3, P5-3).
+ *
+ * **§6.11의 속성 계약이 아니다 — 갈라 둔 이유가 그것이다.** 여섯 속성은 *"테마가 쓸 수
+ * 있는 어휘"*이고 DOM에 `data-*`로 나가 셀렉터가 된다. 이쪽은 DOM 속성이 아니라 React의
+ * 이벤트 prop이라 **셀렉터로 겨냥할 수 없고 테마가 볼 일이 없다.** 한 인터페이스에 섞으면
+ * *"여섯이 전체 계약"*이라는 §6.11의 문장이 읽는 사람에게 거짓으로 보인다.
+ *
+ * **꺼져 있으면 키가 하나도 없다**(`render.tsx`의 `NO_HANDLERS`) — 상호작용을 켜지 않은
+ * 렌더는 `nodeAttrs`가 낸 객체를 그대로 받는다.
+ *
+ * 이벤트 타입이 `SyntheticEvent`인 것은 이 객체가 `<div>`·`<form>`·`<section>` 등 **아무
+ * 태그에나** 펼쳐지기 때문이다. 더 좁은 타입(`MouseEvent<HTMLDivElement>`)을 쓰면 그 태그로
+ * 좁혀지고, 그것은 구조 구현체가 무엇을 그리는지에 렌더러가 매이는 것이다.
+ */
+export interface WbHandlers {
+  onClick?: (event: SyntheticEvent) => void
+  onChange?: (event: SyntheticEvent) => void
+  onSubmit?: (event: SyntheticEvent) => void
 }
 
 /** 선언된 상태 중 같은 이름의 prop이 true인 것을 선언 순서대로 고른다. */

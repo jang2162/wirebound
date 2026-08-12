@@ -321,7 +321,15 @@ function tabLabel(target: WbNode | undefined, index: number): string | null {
  * §8.1의 예가 `"page:관리자/회원/상세"`다 — **노드 id가 아니라 페이지 경로**이고 그 페이지는
  * 이 문서 안에 없다. 접두를 벗기고 *"페이지"*를 붙여 그것이 페이지라는 것을 말한다.
  * **비어 있으면 그렇다고 말한다** — 빈 문자열을 그대로 흘리면 대상이 있는 것처럼 읽힌다.
+ *
+ * **P5-3이 내보냈다.** 뷰 모드의 런타임이 그 둘을 실행하지 않고 알리는데(D4), 그 알림도
+ * 페이지를 이름으로 불러야 한다. 거기서 접두를 다시 벗기면 **같은 이름을 만드는 자리가
+ * 둘**이 되고, 그것이 `사라진 노드`가 두 곳에 있는 것과 같은 부류다(P5-2 이월 §8-6).
  */
+export function describePageTarget(target: string): string {
+  return pageName(target)
+}
+
 function pageName(target: string): string {
   const trimmed = typeof target === 'string' ? target.trim() : ''
   if (trimmed.length === 0) return UNSET_PAGE

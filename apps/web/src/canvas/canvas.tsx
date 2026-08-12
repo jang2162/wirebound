@@ -24,8 +24,14 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
-import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
-import type { PageDocument } from '@wirebound/schema'
+import {
+  EMPTY_OVERLAY,
+  renderDocument,
+  type InteractionEvent,
+  type InteractionOverlay,
+  type NodeRenderError,
+} from '@wirebound/renderer'
+import { describePageTarget, type PageDocument } from '@wirebound/schema'
 import { walkSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { themeStructures } from '../theme/theme-structures'
@@ -61,6 +67,55 @@ interface MarkerBox extends Box {
  * 빈 배열의 참조를 유지하는 것과 같은 이유).
  */
 const NO_MARKERS: MarkerBox[] = []
+
+/**
+ * 상호작용 런타임이 캔버스에 남기는 상태(P5-3 D1).
+ *
+ * `key`는 **리셋 축**이다 — `{모드}:{페이지}`. 근거는 `Canvas` 안의 `runtimeKey` 주석.
+ */
+interface RuntimeState {
+  key: string
+  overlay: InteractionOverlay
+  /** 이번 트리거가 남긴 말. **쌓지 않는다** — 다음 트리거가 덮는다. */
+  notices: string[]
+}
+
+/** 쓰이지 않는 알림 배열. `NO_MARKERS`와 같은 이유로 참조를 고정한다. */
+const NO_NOTICES: string[] = []
+
+function emptyRuntime(key: string): RuntimeState {
+  return { key, overlay: EMPTY_OVERLAY, notices: NO_NOTICES }
+}
+
+/**
+ * 이번 트리거가 사용자에게 할 말.
+ *
+ * **둘을 함께 낸다 — 성질이 다르지만 시점이 같다.**
+ *
+ * - `issues` — **일어나지 않은 것**(D3). 조용히 지나가면 *"눌렀는데 아무 일도 안
+ *   일어난다"*가 되고, 그것이 이 저장소가 다섯 번 만난 부류다(P5-2 이월 §1).
+ * - `requests` — **여기서 일어나지 않는 것**(D4). 규칙은 옳은데 렌더러 밖의 일이다.
+ *   재라 #2의 판정: **알리기만 하고 안 움직인다.** 오늘 `"page:관리자/회원/상세"`를
+ *   페이지 id로 풀 수단이 없다 — 트리(`getTree`)가 주는 것은 메뉴·페이지의 **제목**이고
+ *   경로 형식은 규격이 정한 적이 없다(P5-2 재라 #1이 형식 강제를 거부한 그 자리다).
+ *   제목으로 어림잡아 옮기면 **틀린 페이지로 옮겨 놓고 맞다고 말하는** 화면이 된다.
+ *
+ * **문장에 조사를 계산하지 않는다.** `{이름} 이동 규칙입니다` 꼴이라 받침을 따질 자리가
+ * 없다 — 문장화(`schema`)가 조사를 계산하는 것은 그쪽 형태가 필요로 해서다.
+ */
+function noticesOf(event: InteractionEvent): string[] {
+  const out: string[] = []
+  for (const issue of event.issues) out.push(issue.message)
+  for (const request of event.requests) {
+    const page = describePageTarget(request.target)
+    out.push(
+      request.type === 'navigate'
+        ? `${page} 이동 규칙입니다. 이 화면에서는 페이지를 옮기지 않습니다.`
+        : `${page} 모달 열기 규칙입니다. 이 화면에서는 모달을 열지 않습니다.`,
+    )
+  }
+  return out.length === 0 ? NO_NOTICES : out
+}
 
 /**
  * 스토어의 문서를 그린다. **`CanvasFrame`의 `ready` 분기에서만 쓴다** — 조회 중·실패
@@ -116,6 +171,53 @@ export function Canvas(props: {
   const [box, setBox] = useState<Box | null>(null)
   const [markers, setMarkers] = useState<MarkerBox[]>(NO_MARKERS)
 
+  /**
+   * **상호작용 런타임의 상태**(설계 §8.3, P5-3 D1). 문서가 아니라 **문서 옆**이다 —
+   * 뷰 모드에서 버튼을 눌러 일어나는 것은 시연이지 편집이 아니고, 문서를 건드리면
+   * revision이 쌓이고 남의 화면이 바뀌고 undo 스택에 섞인다.
+   *
+   * **`key`가 리셋 장치다**(재라 #4). 모드를 나가거나 페이지를 옮기면 겹layer가 사라져야
+   * 하는데, 그것을 `useEffect`로 하면 **키가 바뀐 첫 커밋 하나 동안 옛 겹layer로 그려진다** —
+   * 이 저장소가 `openPageId`로 닫은 것과 같은 창이다(`routes/editor.tsx`의 `CanvasFrame`
+   * 주석). 렌더 중에 키를 대조하면 그 창이 없다.
+   *
+   * **리셋의 축을 둘로 둔 근거:** 모드는 §8.3이 정한 경계이고(편집 모드에서는 안 돈다),
+   * 페이지는 노드 id의 유효 범위다 — 겹layer의 키가 노드 id라 다른 페이지에서는 뜻이 없다.
+   * **문서가 바뀌는 것은 축이 아니다:** 뷰 모드에서 사용자는 편집하지 않고, 남의 편집이
+   * 실시간으로 오는 경로는 오늘 0건이다(P3의 WS — P5-1 이월 §3이 쟀다). 그 경로가 생기면
+   * 여기서 다시 정할 일이다.
+   */
+  const runtimeKey = `${mode}:${props.pageId ?? ''}`
+  const [runtime, setRuntime] = useState<RuntimeState>(() => emptyRuntime(runtimeKey))
+  // **버리는 것까지 해야 리셋이다.** 앞 판은 아래 `live`처럼 렌더 중에 대조만 하고 상태는
+  // 그대로 뒀는데, **키가 되돌아오는 축이라 그것으로는 안 닫힌다** — 뷰 → 편집 → 뷰로
+  // 오가면 키가 다시 `view:pg-1`이 되어 **버렸어야 할 겹layer가 되살아난다**(실측: 그
+  // 판에서 `모드를 나가면 사라진다`와 `알림도 함께 사라진다` 둘이 죽었다). 페이지 축은
+  // 되돌아오는 일이 흔하지 않아 이 결함이 모드 축에서만 보였다.
+  //
+  // **렌더 중 상태 조정이다** — React가 커밋 전에 이 컴포넌트를 다시 그리므로 이펙트로
+  // 하는 것과 달리 옛 겹layer로 그려진 커밋이 남지 않는다. 조건이 곧바로 거짓이 되어
+  // 루프가 되지 않는다.
+  if (runtime.key !== runtimeKey) setRuntime(emptyRuntime(runtimeKey))
+  // 위 조정이 반영되기 전의 이 렌더에서도 옛 값을 쓰지 않는다.
+  const live = runtime.key === runtimeKey ? runtime : emptyRuntime(runtimeKey)
+
+  /**
+   * **상호작용은 뷰 모드에서만 돈다**(§8.3: *"편집 모드에서는 상호작용이 동작하지 않는다"*).
+   * 편집 모드에서는 이 값이 `undefined`라 렌더러가 **오늘과 한 글자도 다르지 않게** 그린다(D7).
+   */
+  const interaction =
+    mode === 'view'
+      ? {
+          overlay: live.overlay,
+          onEvent: (event: InteractionEvent) => {
+            // **렌더 중이 아니라 이벤트 핸들러 안이다** — `onNodeError`와 달리 여기서
+            // `setState`를 불러도 된다(`render.tsx`의 `onEvent` 주석).
+            setRuntime({ key: runtimeKey, overlay: event.overlay, notices: noticesOf(event) })
+          },
+        }
+      : undefined
+
   // 아웃라인은 편집 모드에만 있다(설계 §9 — 뷰 모드는 결과만 보여 준다). 선택 자체는
   // 남는다. 뷰 모드에서 선택을 지우면 모드를 오갈 때마다 고른 것이 사라진다.
   const outlinedNodeId = mode === 'edit' ? selectedNodeId : null
@@ -148,7 +250,9 @@ export function Canvas(props: {
     setBox((prev) => (sameBox(prev, next) ? prev : next))
     // `doc`·`viewportWidth`가 의존성에 있는 것은 둘이 바뀌면 노드의 자리가 바뀌기
     // 때문이다. `zoom`은 자리를 바꾸지는 않지만 아래 계산이 그 값을 쓴다.
-  }, [outlinedNodeId, doc, zoom, viewportWidth])
+    // **겹layer도 자리를 바꾼다** — `setVisible`이 노드를 통째로 빼고 `setProp`이 크기를
+    // 바꾼다. 빠뜨리면 아웃라인이 사라진 노드의 옛 자리에 남는다.
+  }, [outlinedNodeId, doc, zoom, viewportWidth, live.overlay])
 
   /**
    * **번호 마커의 자리를 잰다**(P5-1, 설계 §9). 위 아웃라인 이펙트와 같은 장치이고
@@ -191,7 +295,9 @@ export function Canvas(props: {
     }
 
     setMarkers((prev) => (sameMarkers(prev, next) ? prev : next))
-  }, [doc, zoom, viewportWidth])
+    // 아웃라인 쪽과 같은 이유로 `live.overlay`가 있다 — 숨겨진 노드의 마커는 사라져야 한다
+    // (`findNodeElement`가 `null`을 내므로 아래 루프가 건너뛴다).
+  }, [doc, zoom, viewportWidth, live.overlay])
 
   if (doc === null) return null
 
@@ -203,12 +309,35 @@ export function Canvas(props: {
       // 끼워 넣을 자리가 없고(구조 구현체가 그리는 것은 평범한 태그다), 있더라도 노드
       // 수만큼 핸들러가 생긴다. 누른 자리에서 가장 가까운 노드를 찾는 일은
       // `nodeIdAt`이 한다.
-      onClick={(event: MouseEvent<HTMLDivElement>) =>
+      // **뷰 모드에서는 선택을 바꾸지 않는다**(재라 #6). §8.3은 *"편집 모드에서는
+      // 상호작용이 동작하지 않는다(노드 선택이 우선)"*까지만 적었는데, 뒤집으면 뷰 모드의
+      // 우선순위는 상호작용이다. 그런데 선택은 뷰 모드에서 **아무것도 그리지 않으므로**
+      // (아웃라인이 없다) 바뀌어도 화면에 안 보인다 — 즉 편집 모드로 돌아왔을 때 떠날 때와
+      // 다른 노드가 골라져 있게 된다. **조용히 바뀌는 화면 상태**이고, 그것이 P5-2 이월 §1이
+      // 다섯째로 센 부류다. 선택을 남기는 판정(아래 `outlinedNodeId` 주석)과도 이쪽이 맞다.
+      onClick={(event: MouseEvent<HTMLDivElement>) => {
+        if (mode !== 'edit') return
         store.selectNode(nodeIdAt(event.target, event.currentTarget))
-      }
+      }}
     >
+      {/* **이번 클릭이 무엇을 했고 무엇을 못 했는가**(D3·D4). 배너가 아니라 `status`인 것은
+          실패가 아니기 때문이다 — 깨진 규칙은 저장을 막지 않고(severity가 `warning`)
+          `navigate`는 규칙이 옳은데도 여기서 안 도는 것이다. 다음 클릭이 이 자리를 덮어쓴다:
+          쌓으면 무엇이 방금 일어난 일인지 알 수 없다. */}
+      {live.notices.length > 0 && (
+        <div className="wb-shell-canvas-runtime" role="status">
+          <ul className="wb-shell-canvas-runtime-list">
+            {live.notices.map((notice, index) => (
+              <li key={index} className="wb-shell-canvas-runtime-item">
+                {notice}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <CanvasBoundary resetKey={doc}>
-        <CanvasDocument doc={doc} structures={themeStructures(theme)} />
+        <CanvasDocument doc={doc} structures={themeStructures(theme)} interaction={interaction} />
       </CanvasBoundary>
 
       {/* 아웃라인은 문서 **옆에** 그린다. 노드에 클래스나 스타일을 얹으면 셸이 테마의
@@ -259,6 +388,11 @@ export function Canvas(props: {
 function CanvasDocument(props: {
   doc: PageDocument
   /**
+   * 상호작용 런타임(§8.3). **`undefined`면 꺼진 것이고 편집 모드가 그렇다.**
+   * 켜고 끄는 판단은 `Canvas`가 하고 여기는 그대로 넘긴다.
+   */
+  interaction?: { overlay: InteractionOverlay; onEvent: (event: InteractionEvent) => void }
+  /**
    * 테마가 고른 구조. **없는 구조를 고르면 렌더러가 폴백을 그리고 무엇이 없는지 말한다** —
    * 조용히 기본 구조로 바꿔 그리지 않는 이유는 `apps/web/test/theme/theme-structures.test.tsx`의
    * 판정에 적었다(요지: 그러면 테마 작성자가 자기 설정이 먹혔다고 믿는다).
@@ -274,6 +408,10 @@ function CanvasDocument(props: {
   const tree = renderDocument(props.doc, {
     structures: props.structures,
     onNodeError: (error) => errors.push(error),
+    // **키를 조건부로 넣는다.** `interaction: undefined`를 그냥 실어도 렌더러는 같게
+    // 다루지만(`options.interaction === undefined` 검사), 켜지지 않았다는 것이 호출부에서
+    // 보이는 편이 낫다.
+    ...(props.interaction === undefined ? {} : { interaction: props.interaction }),
   })
 
   return (

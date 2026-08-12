@@ -9,7 +9,7 @@
  * 예외는 `PageDetail.schema`다. 문서 스키마는 서버가 아니라 `@wirebound/schema`가
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
-import type { PageDocument, PatchOp } from '@wirebound/schema'
+import type { PageDocument, PatchOp, ValidationIssue } from '@wirebound/schema'
 import type { Theme, ThemeIssue } from '@wirebound/themes'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
@@ -137,6 +137,19 @@ export interface PatchResult {
   inverse: PatchOp[]
   schemaVersion: number
   clientOpId?: string
+  /**
+   * 저장된 문서의 **경고**(P5-3 D6). **경고가 있을 때만 붙는다 — 없으면 키 자체가 없다**
+   * (`apps/api/src/http/warnings.ts`의 `withWarnings`. 테마 쪽 `warnings`와 같은 관례).
+   *
+   * `error`는 여기 오지 않는다 — 그것은 422이고 `ApiError.issues`로 온다.
+   *
+   * **P5-2까지 이 키가 선언조차 없었다.** 서버는 P4c-1부터 싣고 있었는데
+   * (`routes/pages.ts`의 두 자리) 클라이언트가 그 필드를 모르는 상태였고, 그래서
+   * P5-2가 만든 상호작용 이슈 셋(`missing-interaction-target`·`invalid-interaction-target`·
+   * `invalid-interaction-prop`)이 **전부 `warning`인데 오늘 아무도 볼 수 없었다**
+   * (P5-2 이월 §3이 셋 다 0건으로 쟀다). **읽는 자리는 `edit/use-edit-commit.tsx`다.**
+   */
+  warnings?: ValidationIssue[]
 }
 
 /**

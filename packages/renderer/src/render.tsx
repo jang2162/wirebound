@@ -5,11 +5,19 @@ import {
   requireComponent,
   type AnyDocument,
   type ComponentDef,
+  type InteractionTrigger,
   type WbNode,
 } from '@wirebound/schema'
 import { Fragment, type ReactElement, type ReactNode } from 'react'
-import { nodeAttrs, partAttrs } from './attrs'
+import { nodeAttrs, partAttrs, type WbHandlers } from './attrs'
 import { FallbackNode } from './fallback'
+import {
+  hiddenByOverlay,
+  overlayProps,
+  runInteraction,
+  type InteractionOverlay,
+  type InteractionResult,
+} from './interaction/runtime'
 import { getStructure } from './structures/registry'
 
 export interface RenderOptions {
@@ -47,6 +55,53 @@ export interface RenderOptions {
    * 새 배열에 모으면 저절로 해결되지만, 렌더를 넘겨 누적한다면 nodeId로 중복을 걸러라.
    */
   onNodeError?: (error: NodeRenderError) => void
+  /**
+   * **상호작용 런타임을 켠다**(설계 §8.3, P5-3 D2). **없으면 꺼진 것이고 그것이 기본이다** —
+   * 이 키를 주지 않은 호출(편집 모드의 캔버스·테마 갤러리·기존 케이스 전부)은 **한 글자도
+   * 다르지 않게** 그려진다(D7).
+   *
+   * `renderer`가 이것을 소유하는 이유는 `interaction/runtime.ts`의 머리말에 있다 — 요지는
+   * §11.3의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*이고, `apps/web`에 두면 P8의
+   * 정적 번들이 다른 런타임을 갖는다.
+   */
+  interaction?: InteractionOptions
+}
+
+/**
+ * 상호작용 런타임의 입출력. **상태는 호출자가 든다** — 이 렌더러는 함수이지 컴포넌트가
+ * 아니라 상태를 들 자리가 없고, §11.3의 정적 번들에는 React가 없을 수도 있다.
+ */
+export interface InteractionOptions {
+  /**
+   * 지금 겹layer. **문서를 바꾸지 않고 그 위에 얹는다**(D1) — 뷰 모드에서 일어나는 것은
+   * 시연이지 편집이 아니다.
+   *
+   * **모드를 나가거나 페이지를 옮기면 비우는 것은 호출자의 일이다**(재라 #4). 런타임은
+   * 상태를 들지 않으므로 언제 리셋할지도 알 수 없다.
+   */
+  overlay?: InteractionOverlay
+  /**
+   * 노드에서 트리거가 일어났다. **`runInteraction`은 이미 여기서 돌았고, 그 결과가 인자다** —
+   * 호출자가 할 일은 `result.overlay`를 다음 렌더에 되돌려 주고, `requests`를 처리하고
+   * (D4 — 라우팅은 렌더러 밖이다), `issues`를 말하는 것뿐이다(D3).
+   *
+   * **판정을 호출자에게 넘기지 않는 것이 요점이다.** 앱이 `runInteraction`을 직접 부르게
+   * 하면 웹 앱과 P8의 번들이 각자 부르는 자리를 갖고, 순서·리셋·오류 처리가 갈릴 수 있다.
+   * 렌더러가 부르면 그 셋이 한 벌이다.
+   *
+   * **`onNodeError`와 달리 이 콜백 안에서는 `setState`를 불러도 된다.** 그쪽은 엘리먼트
+   * 트리를 만드는 **렌더 도중**에 불려 호출자의 렌더 중 상태 갱신이 되지만(그래서 무한
+   * 루프가 난다), 이쪽은 **DOM 이벤트 핸들러 안**이라 렌더가 끝난 뒤다. 두 콜백이 같은
+   * 모양이라 같은 규칙이 걸린다고 오해하기 쉬워 여기 적어 둔다.
+   */
+  onEvent?: (event: InteractionEvent) => void
+}
+
+/** `onEvent`가 받는 것. `runInteraction`의 결과에 *"어디서 무엇이 일어났나"*를 더한 것이다. */
+export interface InteractionEvent extends InteractionResult {
+  /** 트리거가 일어난 노드. 규칙이 걸린 노드이기도 하다. */
+  nodeId: string
+  trigger: InteractionTrigger
 }
 
 export interface NodeRenderError {
@@ -130,7 +185,32 @@ function childKey(child: unknown, index: number): string {
  * 구조 구현체 하나의 버그가 캔버스 전체를 흰 화면으로 만든다.
  */
 export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElement {
+  // 상호작용 타겟을 풀려면 **트리 전체**가 필요한데(다른 노드를 가리킨다) 이 진입점이 받는
+  // 것은 노드 하나다. 그 노드를 뿌리로 삼는다 — 부분 트리를 그리는 호출자에게는 그 부분이
+  // 곧 세계이고, 밖을 가리키는 타겟은 `사라진 노드`가 되어 D3의 경로로 간다.
+  return renderNodeIn(node, node, options)
+}
+
+/**
+ * 재귀 본체. `root`는 **상호작용 타겟을 푸는 세계**이고 재귀 내내 같다.
+ *
+ * 공개 API에 `root`를 노출하지 않는 이유: 호출자가 문서와 다른 뿌리를 줄 수 있게 되면
+ * *"이 액션의 타겟이 무엇인가"*가 호출자마다 갈린다 — §11.3의 *"렌더러가 하나뿐이라
+ * 결과가 어긋날 수 없다"*가 그 자리에서 깨진다.
+ */
+function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): ReactElement {
   const raw = node as unknown as { id?: unknown; type?: unknown; children?: unknown } | null
+  const nodeId = readString(raw?.id)
+
+  // **숨긴 노드는 자식까지 함께 사라진다**(`setVisible { value: false }`). 자식을 그리기
+  // **전에** 걸러야 하는 것이 요점이다: 뒤에 두면 보이지도 않는 서브트리의 폴백이
+  // `onNodeError`로 보고되어, 화면에 없는 노드 때문에 배너가 뜬다.
+  //
+  // 감추지 않고 **DOM에서 빼는** 것은 `apps/web`이 뷰 모드에서 구조 트리를 빼는 것과 같은
+  // 판단이다 — `display:none`으로 두면 테마가 그것을 덮어 되살릴 수 있어 *"숨겨졌다"*가
+  // 아니게 된다(`structures/input.tsx`의 `SearchFormCollapsible`이 같은 근거를 적었다).
+  if (nodeId !== '' && hiddenByOverlay(options.interaction?.overlay, nodeId)) return <></>
+
   const rawChildren = raw?.children
 
   // 자식을 먼저 그린다. 이 노드가 실패해도 자식은 폴백 안에 그대로 들어간다 —
@@ -142,11 +222,12 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
   const children: ReactNode =
     childNodes.length > 0
       ? childNodes.map((child, index) => (
-          <Fragment key={childKey(child, index)}>{renderNode(child as WbNode, options)}</Fragment>
+          <Fragment key={childKey(child, index)}>
+            {renderNodeIn(root, child as WbNode, options)}
+          </Fragment>
         ))
       : null
 
-  const nodeId = readString(raw?.id)
   const type = readString(raw?.type)
 
   const fallback = (message: string): ReactElement => {
@@ -168,9 +249,18 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
   const def = getComponent(type)
   if (!def) return fallback(`알 수 없는 컴포넌트 타입: ${type}`)
 
+  // **겹layer가 문서의 props를 덮는다**(D1). 겹layer에 이 노드가 없으면 `node.props`가
+  // 그대로 돌아오므로 꺼진 렌더는 이 줄을 지나도 같은 값이다.
+  //
+  // **덮은 값도 검증을 지난다.** 통과하지 못하면 이 노드는 폴백이 되는데, 그 상태는
+  // 겹layer에 닿기 전에 D3의 판정이 먼저 걸러 낸다 — `checkNodeAction`이 같은 카탈로그
+  // 스키마로 값을 보고 `invalid-interaction-prop`을 낸다. 즉 여기까지 오는 겹layer 값은
+  // 이미 그 prop의 계약을 만족한다.
+  const nodeProps = overlayProps(options.interaction?.overlay, nodeId, node.props)
+
   // 로케일을 넘기는 이유: 이 경로가 내는 메시지도 사용자가 그대로 읽는다.
   // 넘기지 않으면 서버 검증은 한국어, 렌더는 영문이 되어 같은 문제가 둘로 보인다.
-  const parsed = def.props.safeParse(node.props ?? {}, { error: getKoreanErrorMap() })
+  const parsed = def.props.safeParse(nodeProps ?? {}, { error: getKoreanErrorMap() })
   if (!parsed.success) {
     // 문안은 validate.ts의 `invalid-props` 이슈와 같아야 한다.
     // fallback.test.tsx가 두 문자열이 같은지 직접 비교해 갈라지는 것을 막는다.
@@ -188,16 +278,117 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
   if (!render) return fallback(`구현되지 않은 구조: ${node.type}:${resolved.structure}`)
 
   const props = parsed.data as Record<string, unknown>
+  const attrs = nodeAttrs(node, def, resolved.structure, props)
 
   return render({
     node,
     props,
-    attrs: nodeAttrs(node, def, resolved.structure, props),
+    // **꺼져 있으면 `nodeAttrs`가 낸 객체 그대로 넘어간다** — 스프레드로 새 객체를 만들지도
+    // 않는다(D7: 끈 렌더는 오늘과 같아야 한다).
+    attrs: options.interaction === undefined ? attrs : { ...attrs, ...handlersFor(root, node, options) },
     part: partAttrs,
     children,
     slot: options.slot ?? null,
   })
 }
+
+/**
+ * 트리거 4종 → DOM 이벤트.
+ *
+ * **`attrs`에 얹는 것이 요점이다.** 구조 구현체는 전부 `{...attrs}`를 자기 루트 태그에
+ * 편다(19종 전수 — `structures/*.tsx`). 그래서 여기 핸들러를 넣으면 **구조 구현체를 한
+ * 글자도 안 고치고** 모든 컴포넌트가 상호작용을 받는다.
+ *
+ * **§6.11의 여섯 속성 계약을 넓히지 않는다.** 이것들은 `data-*` 속성이 아니라 React의
+ * 이벤트 prop이라 DOM에 속성으로 나가지 않고, 테마의 셀렉터 어휘에 아무것도 더하지
+ * 않는다(`test/contract-attrs.test.ts`가 세는 것도 `data-wb-*`다). **일곱째 데이터 속성을
+ * 만들어야 했다면 멈추고 물어야 했다** — 만들지 않았다.
+ *
+ * **`select`가 `onClick`인 것은 판정이다.** 와이어프레임 DOM에는 *"선택"*을 내는 네이티브
+ * 이벤트원이 없다 — `Tabs`는 탭마다 `<span>`을 그리고(`structures/structure.tsx`) `List`도
+ * 행이 `<div>`다. §8.2의 표본(*"③ 상세정보 탭 선택 시"*)이 실제로 뜻하는 조작은 **그 노드
+ * 안을 누르는 것**이고, 그것이 루트로 버블링해 여기 닿는다. React의 `onSelect`(텍스트
+ * 선택)는 그 조작이 아니다.
+ *
+ * **`change`·`submit`은 오늘 사용자 조작으로는 닿지 않는다** — `Field`가 `<input>`이 아니라
+ * `<div>`를 그리고(와이어프레임이므로), 폼에는 제출 버튼이 없어 `<span>조회</span>`가
+ * 아무것도 제출하지 않는다. **그래도 다는 것은** 그 이벤트가 나면 규칙이 돌아야 하고
+ * (프로그램적 제출·미래의 실제 컨트롤), 달지 않으면 *"트리거 4종"*이라는 §8.1의 계약이
+ * 화면에서 반만 참이 되기 때문이다. **재서 보고에 적었다.**
+ */
+function handlersFor(root: WbNode, node: WbNode, options: RenderOptions): WbHandlers {
+  const interactions = node.interactions
+  if (!Array.isArray(interactions) || interactions.length === 0) return NO_HANDLERS
+
+  const handlers: WbHandlers = {}
+  for (const interaction of interactions) {
+    const dom = DOM_EVENT[interaction?.on as InteractionTrigger]
+    // 트리거 이름이 4종 밖이면 붙일 자리가 없다. 검증 전 문서가 그럴 수 있다.
+    if (dom === undefined || handlers[dom] !== undefined) continue
+    handlers[dom] = (event) => {
+      // 폼 제출이 페이지를 다시 부르지 않게 한다. 와이어프레임에는 보낼 곳이 없다.
+      //
+      // **하중이 0이다 — 실브라우저에서 쟀다**(P5-3). 이 줄을 걷어 낸 번들을 실제 브라우저에
+      // 띄우고 렌더된 `<form>` 안에 `<button type="submit">`을 꽂아 눌러도 **이동하지 않는다.**
+      // 원인은 React다: 같은 제출 이벤트의 `defaultPrevented`가 document 캡처 단계에서는
+      // `false`인데 window 버블 단계에서는 **`true`**였다 — 그 사이에 있는 것이 React의 루트
+      // 리스너다. **양성 대조로 측정 장치를 확인했다:** 같은 페이지에 만든 순수 `<form>`은
+      // 제출 버튼 클릭으로 실제로 이동했다(문맥이 파괴됐다).
+      //
+      // **그래도 남긴다.** 우리가 기대는 것이 React의 내부 동작이라 그쪽이 바뀌면 그날로
+      // 페이지가 리로드되고 겹layer가 통째로 사라진다(§11.3의 정적 번들은 React가 아닐 수도
+      // 있다). **jsdom으로는 이 갈래를 잴 수 없다** — 거기서는 제출이 이동을 만들지 않는다.
+      if (dom === 'onSubmit') event.preventDefault()
+      fire(root, node, dom, options)
+    }
+  }
+  return handlers
+}
+
+/**
+ * 한 DOM 이벤트가 도맡는 트리거 전부를 돌린다.
+ *
+ * **`click`과 `select`가 같은 `onClick`을 쓰므로 둘을 함께 돌린다.** 하나만 돌리면 같은
+ * 노드에 둘을 건 사용자가 *"하나는 되고 하나는 안 되는"* 화면을 본다.
+ *
+ * **결과를 합칠 때 겹layer를 이어 붙인다** — 앞 트리거가 만든 겹layer 위에서 뒤 트리거가
+ * 돌아야 순서(재라 #5)가 한 벌로 남는다.
+ */
+function fire(root: WbNode, node: WbNode, dom: keyof WbHandlers, options: RenderOptions): void {
+  const onEvent = options.interaction?.onEvent
+  let overlay = options.interaction?.overlay
+  for (const trigger of TRIGGERS_OF[dom] ?? []) {
+    const result = runInteraction(root, node.id, trigger, overlay)
+    overlay = result.overlay
+    // **아무 규칙도 없으면 알리지 않는다.** 노드마다 트리거가 하나뿐인 것이 보통이라
+    // 그러지 않으면 빈 결과가 늘 하나씩 따라 나간다.
+    if (result.matched === 0) continue
+    onEvent?.({ ...result, nodeId: node.id, trigger })
+  }
+}
+
+/** 핸들러가 없을 때. **참조를 고정한다** — 매번 `{}`를 만들면 `attrs`가 렌더마다 새 것이 된다. */
+const NO_HANDLERS: WbHandlers = Object.freeze({})
+
+/** 트리거 → 그것을 받는 DOM 이벤트. 근거는 `handlersFor`의 머리말. */
+const DOM_EVENT: Record<InteractionTrigger, keyof WbHandlers> = {
+  click: 'onClick',
+  select: 'onClick',
+  change: 'onChange',
+  submit: 'onSubmit',
+}
+
+/**
+ * 위 표의 역방향. **한 이벤트가 트리거 둘을 도맡을 수 있다**(`onClick` ← `click`·`select`).
+ * 표에서 유도하는 것이 요점이다 — 손으로 적으면 위 표를 고친 날 둘이 갈린다.
+ */
+const TRIGGERS_OF: Record<string, InteractionTrigger[]> = (() => {
+  const out: Record<string, InteractionTrigger[]> = {}
+  for (const [trigger, dom] of Object.entries(DOM_EVENT) as [InteractionTrigger, keyof WbHandlers][]) {
+    ;(out[dom] ??= []).push(trigger)
+  }
+  return out
+})()
 
 /**
  * 문서 하나를 그린다. 보증은 `renderNode`와 같다 — 구조 구현체 본문의 예외를 빼면 던지지
@@ -208,5 +399,6 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
  * `renderNode`의 모양 가드가 루트 자리에 폴백을 그린다.
  */
 export function renderDocument(doc: AnyDocument, options: RenderOptions = {}): ReactElement {
-  return renderNode(doc?.root as WbNode, options)
+  const root = doc?.root as WbNode
+  return renderNodeIn(root, root, options)
 }

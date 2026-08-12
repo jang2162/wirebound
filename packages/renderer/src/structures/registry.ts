@@ -1,12 +1,17 @@
 import type { WbNode } from '@wirebound/schema'
 import type { ReactElement, ReactNode } from 'react'
-import type { WbAttrs } from '../attrs'
+import type { WbAttrs, WbHandlers } from '../attrs'
 
 export interface StructureContext {
   node: WbNode
   /** 기본값이 채워진 props */
   props: Record<string, unknown>
-  attrs: WbAttrs
+  /**
+   * 노드 루트에 펼칠 것. **여섯 속성(§6.11)에 상호작용 핸들러가 얹힐 수 있다** — 뒤엣것은
+   * 상호작용 런타임이 켜졌고 이 노드에 규칙이 있을 때만 있다(`attrs.ts`의 `WbHandlers`).
+   * 구조 구현체는 둘을 가르지 않고 그대로 편다.
+   */
+  attrs: WbAttrs & WbHandlers
   part: (name: string) => { 'data-wb-part': string }
   /** 이미 렌더된 자식들 */
   children: ReactNode

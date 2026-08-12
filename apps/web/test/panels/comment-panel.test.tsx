@@ -102,9 +102,11 @@ describe('코멘트 탭 — 자리', () => {
   /**
    * **탭이 셋이 됐다 — P5-2가 상호작용을 채웠다.** 앞 판의 이 케이스는
    * *"탭이 둘뿐이다 — 상호작용은 P5-2가 만든다"*였고, 그 문장은 이제 거짓이다.
-   * **뷰 모드의 탭 구성(페이지 설명 / 코멘트 / 상호작용)은 아직 없다** — P5-3이다.
+   *
+   * **여기가 재는 것은 편집 모드의 셋이다.** 뷰 모드가 첫 탭을 *페이지 설명*으로 바꾼 것은
+   * P5-3이고, 그 표는 `test/routes/view-mode.test.tsx`가 두 모드를 나란히 잰다.
    */
-  it('탭이 셋이다 — 뷰 모드의 탭 구성은 P5-3이 만든다', async () => {
+  it('편집 모드의 탭이 셋이다', async () => {
     await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
 
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([

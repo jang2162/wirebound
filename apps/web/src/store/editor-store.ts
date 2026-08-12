@@ -14,7 +14,7 @@
  * `getState()`가 돌려준 객체를 **바꾸지 마라.** 스토어는 그 객체를 다음 비교의
  * 기준으로 들고 있으므로, 밖에서 고치면 변경이 알림 없이 새어 들어간다.
  */
-import { applyOps, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { applyOps, type PageDocument, type PatchOp, type ValidationIssue } from '@wirebound/schema'
 import {
   ackPending,
   clearPending,
@@ -118,6 +118,19 @@ export interface EditorState {
   editStatus: EditStatus
   /** 마지막 편집 실패. 새 편집을 내면 지워진다 — 남아 있으면 방금 낸 편집도 실패한 것으로 읽힌다. */
   editFailure: EditFailure | null
+  /**
+   * **서버가 마지막 편집 응답에 실어 보낸 문서 경고**(P5-3 D6, 설계 §7.1).
+   *
+   * **실패가 아니다.** severity가 `warning`인 이슈는 저장을 막지 않고 문서에 남는다 —
+   * 끊긴 상호작용 타겟이 그렇다(P5-2 재라 #2가 실측으로 정했다). 그래서 `editFailure`와
+   * 갈라 둔다: 한 필드에 접으면 *"저장됐다"*와 *"저장되지 않았다"*가 같은 값이 되고,
+   * 그것이 이 저장소가 다섯 번 만난 부류다(P5-2 이월 §1).
+   *
+   * **성공한 ack마다 통째로 갈아 끼운다.** 서버가 보내는 것은 *"이 편집 뒤 문서에 남은
+   * 경고 전부"*이므로 누적하면 이미 고친 경고가 화면에 남는다. **경고가 없어졌으면 빈
+   * 배열이 오고 화면에서 사라진다** — 그것이 사용자가 고쳤다는 신호다.
+   */
+  editWarnings: ValidationIssue[]
 }
 
 /**
@@ -138,8 +151,15 @@ function initialState(): EditorState {
     redoStack: [],
     editStatus: 'idle',
     editFailure: null,
+    editWarnings: NO_WARNINGS,
   }
 }
+
+/**
+ * 경고가 없을 때 쓰는 배열. **참조를 고정한다** — 매번 `[]`를 새로 만들면 경고 없는 편집이
+ * 이어질 때마다 `#apply`가 변경으로 보고 구독자가 헛일을 한다(`clearPage`의 빈 큐와 같은 이유).
+ */
+const NO_WARNINGS: ValidationIssue[] = []
 
 /**
  * `applyMarkerChange`의 결과. **`boolean`이 아닌 것이 요점이다** — 그 함수의 머리말에
@@ -242,6 +262,10 @@ export class EditorStore {
       // 방금 채운 스택을 이것이 지운다(`routes/editor.tsx`에 그 순서가 있다).
       undoStack: undoStack.length === 0 ? undoStack : [],
       redoStack: redoStack.length === 0 ? redoStack : [],
+      // **경고도 함께 버린다.** 문서가 서버 것으로 되돌아갔으므로 앞 편집의 경고는 지금
+      // 문서의 것이 아니다. `getPage`는 경고를 싣지 않으므로 **다음 편집까지 모른다** —
+      // 모르는 것을 "없다"로 두는 쪽을 골랐다: 남겨 두면 이미 사라진 문제를 말하게 된다.
+      editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
     })
     return pending
   }
@@ -368,6 +392,7 @@ export class EditorStore {
       redoStack: redoStack.length === 0 ? redoStack : [],
       editStatus: 'idle',
       editFailure: null,
+      editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
     })
   }
 
@@ -516,7 +541,7 @@ export class EditorStore {
    */
   readonly ackEdit = (
     clientOpId: string,
-    result: { seq: number; revisionId: string; inverse: PatchOp[] },
+    result: { seq: number; revisionId: string; inverse: PatchOp[]; warnings?: ValidationIssue[] },
   ): void => {
     const { pending, undoStack, redoStack } = this.#state
     // 큐에서 빼기 **전에** 종류를 읽는다 — 어느 스택에 쌓을지가 그것으로 갈린다.
@@ -533,11 +558,20 @@ export class EditorStore {
     // redo가 만든 것은 반대로 다시 undo 스택으로 간다.
     const undone = head?.kind === 'undo'
 
+    // **경고는 ack와 함께 움직인다.** 맞지 않는 ack에서 돌아간 위쪽 `return` 뒤이므로,
+    // 늦게 도착한 응답의 경고가 지금 문서의 것으로 실리지 않는다 — `headSeq`를 그 자리에서
+    // 막는 것과 같은 근거다.
+    const warnings = result.warnings ?? NO_WARNINGS
     this.#apply({
       pending: nextPendingQueue,
       headSeq: result.seq,
       undoStack: undone ? undoStack : [...undoStack, ref],
       redoStack: undone ? [...redoStack, ref] : redoStack,
+      // 둘 다 비어 있으면 참조를 유지한다(위 `NO_WARNINGS`).
+      editWarnings:
+        warnings.length === 0 && this.#state.editWarnings.length === 0
+          ? this.#state.editWarnings
+          : warnings,
     })
   }
 

@@ -15,7 +15,12 @@
  * 토큰을 찾는다(파일 끝 줄 주석으로도 먹히는 것을 실측했다). 산문에 한 번 더 적으면
  * 맨 윗줄을 지워도 환경이 그대로라, 아래 첫 테스트가 그 사고를 잡지 못한다.
  */
-import { CURRENT_DOCUMENT_VERSION, type PageDocument, type PatchOp } from '@wirebound/schema'
+import {
+  CURRENT_DOCUMENT_VERSION,
+  type PageDocument,
+  type PatchOp,
+  type ValidationIssue,
+} from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import { EditorStore, VIEWPORT_PRESETS, type ViewportWidth } from '../../src/store/editor-store'
 
@@ -298,6 +303,18 @@ function ack(
   return { seq, revisionId: `rev-${seq}`, inverse }
 }
 
+/**
+ * 서버가 편집 응답에 실어 보내는 경고 하나(P5-3 D6). **저장은 성공했다** — severity가
+ * `warning`인 이슈는 저장을 막지 않고 문서에 남는다(P5-2 재라 #2).
+ */
+const WARNING: ValidationIssue = {
+  code: 'missing-interaction-target',
+  severity: 'warning',
+  nodeId: 'n_000000000001',
+  path: '/root/interactions/0/actions/0',
+  message: 'setProp의 타겟 노드가 문서에 없습니다: n_없음',
+}
+
 /** undo가 만든 revision의 `inverse` — 지워진 `props`를 도로 넣는다. */
 const REDO_INVERSE: PatchOp[] = [{ op: 'add', path: '/root/props', value: { title: '새 제목' } }]
 
@@ -382,6 +399,55 @@ describe('EditorStore의 편집 상태', () => {
     expect(store.getState().undoStack).toEqual([
       { revisionId: 'rev-8', inverse: [{ op: 'remove', path: '/root/props' }] },
     ])
+  })
+
+  /**
+   * **경고는 ack와 함께 움직인다**(P5-3 D6). 서버가 편집 응답에 실어 보내는
+   * `warnings`가 여기로 들어오고, 그것을 그리는 자리는 셸 머리다
+   * (`shell/edit-warnings.tsx`).
+   */
+  it('ack의 warnings가 상태로 들어간다', () => {
+    const store = loaded()
+    store.applyEdit(TITLE_OPS)
+    expect(store.getState().editWarnings).toEqual([])
+
+    store.ackEdit('op-1', { ...ack(8), warnings: [WARNING] })
+
+    expect(store.getState().editWarnings).toEqual([WARNING])
+  })
+
+  it('경고 없는 ack는 앞 경고를 지운다 — 쌓지 않는다', () => {
+    // 서버가 보내는 것은 *"이 편집 뒤 문서에 남은 경고 전부"*다. 누적하면 이미 고친
+    // 경고가 화면에 남는다.
+    const store = loaded()
+    store.applyEdit(TITLE_OPS)
+    store.ackEdit('op-1', { ...ack(8), warnings: [WARNING] })
+    store.applyEdit(TITLE_OPS)
+
+    store.ackEdit('op-2', ack(9))
+
+    expect(store.getState().editWarnings).toEqual([])
+  })
+
+  it('페이지를 옮기면 경고가 사라진다', () => {
+    // 문서가 갈렸으므로 앞 페이지의 경고는 지금 문서의 것이 아니다.
+    const store = loaded()
+    store.applyEdit(TITLE_OPS)
+    store.ackEdit('op-1', { ...ack(8), warnings: [WARNING] })
+
+    store.clearPage()
+
+    expect(store.getState().editWarnings).toEqual([])
+  })
+
+  it('모르는 clientOpId의 ack는 경고도 싣지 않는다', () => {
+    // 늦게 도착한 응답의 경고가 지금 문서의 것으로 실리면, 이미 사라진 문제를 말하게 된다.
+    const store = loaded()
+    store.applyEdit(TITLE_OPS)
+
+    store.ackEdit('op-없음', { ...ack(8), warnings: [WARNING] })
+
+    expect(store.getState().editWarnings).toEqual([])
   })
 
   it('모르는 clientOpId의 ack는 아무것도 바꾸지 않는다', () => {
