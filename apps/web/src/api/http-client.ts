@@ -7,6 +7,9 @@
  */
 import { ApiError, type ApiClient, type ApiErrorCode, type ApiErrorIssue } from './client'
 import type {
+  Comment,
+  CommentCreated,
+  MarkerChange,
   MenuNode,
   PageDetail,
   PatchResult,
@@ -465,7 +468,56 @@ const SHAPES = {
       'string' &&
     (value['base'] === undefined || isRecord(value['base'])) &&
     (value['warnings'] === undefined || Array.isArray(value['warnings'])),
+  /**
+   * 코멘트 하나(P5-1). 넷을 본다.
+   *
+   * | 값 | 그 값이 되는 것 | 어긋나면 |
+   * |---|---|---|
+   * | `id`(빈 문자열 금지) | 수정·삭제 요청의 **경로** | `.../comments/`가 되어 그 요청이 다른 라우트(재번호는 POST라 안 걸린다)를 지나거나 404가 된다 |
+   * | `nodeId` | **문서에서 노드를 찾는 키** — 그 노드의 `marker`가 이 코멘트의 번호다 | 묶기가 통째로 어긋나 모든 코멘트가 "사라진 노드"로 떨어진다 |
+   * | `body` · `authorName` | 화면에 그대로 그려진다 | `React`가 객체를 그리다 렌더 도중 던진다(이 패널은 오류 경계 밖이다) |
+   *
+   * **`createdAt`은 보지 않는다.** 화면이 그것을 문자열로만 다루고(그대로 그린다) 어긋나도
+   * 던지지 않는다 — *"가설적인 경로에 가드를 달고 살아 있는 경로를 열어 두지 않는다"*.
+   */
+  comment: isComment,
+  commentList: (value) => isArrayOf(value, isComment),
+  /**
+   * 코멘트를 만든 결과. `comment` 하나에 **문서 변화 둘**이 더 붙는다.
+   *
+   * **`seq`와 `markerOps`가 `patchResult.seq`·`inverse`와 같은 하중이다** — 전자는 다음
+   * 요청의 `baseSeq`가 되고 후자는 그대로 `applyOps`에 들어간다. 배열이 아닌 것을 넘기면
+   * 스토어가 그 자리에서 던진다.
+   */
+  commentCreated: (value) =>
+    isRecord(value) &&
+    isComment(value['comment']) &&
+    typeof value['marker'] === 'number' &&
+    isMarkerChange(value),
+  /** 삭제·재번호의 결과. 문서 변화만 온다. */
+  markerChange: isMarkerChange,
 } satisfies Record<string, Shape>
+
+/**
+ * 코멘트 하나의 모양. 목록·생성·수정 셋이 같은 것을 쓴다 — 서버의 `toResponse` 하나가
+ * 셋을 다 만들기 때문이다(api README). **같은 모양이 곧 같은 하중은 아니지만**, 여기서
+ * 보는 넷은 세 자리 모두가 읽는 값이다.
+ */
+function isComment(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
+    typeof value['nodeId'] === 'string' &&
+    typeof value['body'] === 'string' &&
+    typeof value['authorName'] === 'string'
+  )
+}
+
+/** 문서 변화 둘. `seq`는 다음 `baseSeq`가 되고 `markerOps`는 `applyOps`에 들어간다. */
+function isMarkerChange(value: unknown): boolean {
+  return isRecord(value) && typeof value['seq'] === 'number' && Array.isArray(value['markerOps'])
+}
 
 /**
  * 본문을 JSON으로 읽는다. **읽지 못하면 던지지 않고 `undefined`를 돌려준다** —
@@ -706,6 +758,15 @@ const BODY_KEYS = {
   // `ThemeBody`가 `z.strictObject`라 그 본문은 400이다.
   createTheme: { theme: true } satisfies Record<keyof Parameters<ApiClient['createTheme']>[1], true>,
   updateTheme: { theme: true } satisfies Record<keyof Parameters<ApiClient['updateTheme']>[2], true>,
+  // 코멘트 쓰기 둘(P5-1). 서버의 본문 스키마가 `z.strictObject`라 선언되지 않은 키는
+  // 그 자체로 400이고, **`marker`가 그 자리다** — 번호를 정하는 것은 서버이므로
+  // 코멘트 응답(`{ id, nodeId, body, authorId, authorName, … }`)을 그대로 되보내면
+  // `id`·`authorId` 따위가 400을 부른다.
+  createComment: { nodeId: true, body: true } satisfies Record<
+    keyof Parameters<ApiClient['createComment']>[2],
+    true
+  >,
+  updateComment: { body: true } satisfies Record<keyof Parameters<ApiClient['updateComment']>[3], true>,
 }
 
 /**
@@ -772,6 +833,9 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
 
   const themePath = (projectId: string, themeId: string): string =>
     `${projectPath(projectId)}/themes/${encodeURIComponent(themeId)}`
+
+  const commentsPath = (projectId: string, pageId: string): string =>
+    `${pagePath(projectId, pageId)}/comments`
 
   return {
     login: (email, password) =>
@@ -920,6 +984,38 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
         SHAPES.themeDetail,
         declaredOnly(body, BODY_KEYS.updateTheme),
       ),
+    // 코멘트 다섯(P5-1). **경로가 전부 `.../pages/:pageId/comments` 아래다** — 코멘트는
+    // 프로젝트가 아니라 **페이지의 노드**에 붙는다(노드 id는 그 문서 안에서만 뜻이 있다).
+    listComments: (projectId, pageId) =>
+      request<Comment[]>('GET', commentsPath(projectId, pageId), SHAPES.commentList),
+    createComment: (projectId, pageId, body) =>
+      request<CommentCreated>(
+        'POST',
+        commentsPath(projectId, pageId),
+        SHAPES.commentCreated,
+        declaredOnly(body, BODY_KEYS.createComment),
+      ),
+    // **`updateBody`를 안 지난다.** 키가 `body` 하나뿐이라 *"바꿀 값이 하나도 없는 갱신"*이
+    // 성립하지 않는다 — 그 키가 없는 것은 본문이 없는 것이고 서버가 봉투 위반 400을 낸다
+    // (`updateTheme`과 같은 자리).
+    updateComment: (projectId, pageId, commentId, body) =>
+      request<Comment>(
+        'PATCH',
+        `${commentsPath(projectId, pageId)}/${encodeURIComponent(commentId)}`,
+        SHAPES.comment,
+        declaredOnly(body, BODY_KEYS.updateComment),
+      ),
+    // **`SHAPES.noBody`가 아니다** — 204가 아니라 200에 문서 변화가 실려 온다(서버 README).
+    deleteComment: (projectId, pageId, commentId) =>
+      request<MarkerChange>(
+        'DELETE',
+        `${commentsPath(projectId, pageId)}/${encodeURIComponent(commentId)}`,
+        SHAPES.markerChange,
+      ),
+    // **`:commentId` 자리와 겹치지 않는다** — 그쪽에 오는 메서드는 `PATCH`·`DELETE`뿐이라
+    // 같은 메서드로 두 패턴이 맞붙는 자리가 없다(서버가 정적 세그먼트를 먼저 잡기도 한다).
+    renumberComments: (projectId, pageId) =>
+      request<MarkerChange>('POST', `${commentsPath(projectId, pageId)}/renumber`, SHAPES.markerChange),
     listMyRevisions: (projectId, pageId) =>
       request<RevisionSummary[]>(
         'GET',

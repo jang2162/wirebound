@@ -50,6 +50,7 @@ const METHODS = [
   'patchOps', 'listMyRevisions',
   'getProjectTheme', 'listProjectThemes', 'setProjectTheme',
   'getTheme', 'createTheme', 'updateTheme',
+  'listComments', 'createComment', 'updateComment', 'deleteComment', 'renumberComments',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -118,6 +119,17 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   getTheme: ['../src/routes/theme-editor.tsx'],
   createTheme: ['../src/routes/theme-editor.tsx'],
   updateTheme: ['../src/routes/theme-editor.tsx'],
+  // 코멘트 다섯(P5-1). **다섯 다 한 파일에서만 불린다** — 코멘트 탭이 표(본문)와
+  // 문서(번호)를 잇는 유일한 자리라는 것이 D1의 뜻이고, **이 줄이 그것을 실행으로 지킨다:**
+  // 캔버스나 구조 트리가 직접 코멘트를 부르기 시작하면 여기가 죽는다.
+  //
+  // **캔버스가 `listComments`를 부르지 않는 것이 요점이다.** 마커는 코멘트 목록이 아니라
+  // **문서의 `marker`**에서 나온다(D1) — 그래야 내보낸 HTML 번들(§11.3)도 같은 것을 그린다.
+  listComments: ['../src/panels/comment-panel.tsx'],
+  createComment: ['../src/panels/comment-panel.tsx'],
+  updateComment: ['../src/panels/comment-panel.tsx'],
+  deleteComment: ['../src/panels/comment-panel.tsx'],
+  renumberComments: ['../src/panels/comment-panel.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {

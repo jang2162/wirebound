@@ -26,8 +26,22 @@ interface Case {
    * 케이스 실행 전에 owner 권한으로 리소스를 만든다.
    * 반환한 맵의 키가 url의 `:키` 자리에 치환된다(projectId는 하네스가 이미 넣는다).
    * `payload`가 함수면 같은 맵을 받는다.
+   *
+   * **넷째 인자가 지금 요청을 보낼 주체의 `userId`다**(P5-1이 더했다). 소유권이 걸린
+   * 리소스를 그 주체의 것으로 만들어야 하는 케이스가 생겼기 때문이다 — 코멘트 수정은
+   * **작성자만** 할 수 있어서(`routes/comments.ts`의 재라 #2), owner가 만든 코멘트를
+   * editor가 고치려 하면 **권한과 무관한 이유로** 403이 된다. 그러면 이 매트릭스가
+   * 재려는 것(역할 판정)을 못 잰다 — `테마하나`가 시스템 테마를 피하는 것과 같은 이유다.
+   *
+   * `anonymous`에게는 주체가 없으므로 owner의 id가 온다. 그 행은 어차피 인증 훅에서
+   * 끝나므로(401) 누구의 것인지가 결과를 바꾸지 않는다.
    */
-  setup?: (ctx: TestContext, projectId: string, ownerCookie: { wb_session: string }) => Promise<Record<string, string>>
+  setup?: (
+    ctx: TestContext,
+    projectId: string,
+    ownerCookie: { wb_session: string },
+    actorUserId: string,
+  ) => Promise<Record<string, string>>
 }
 
 /** ':nodeId'가 필요한 케이스(메뉴 수정·삭제)가 실행 전에 대상 메뉴 노드를 만든다. */
@@ -73,6 +87,48 @@ const 페이지하나 = async (
   const menu = await createMenuNode(ctx, ownerCookie, projectId, { title: '대상 메뉴' })
   const page = await createPage(ctx, ownerCookie, projectId, menu.id, { title: '대상 페이지' })
   return { pageId: page.id }
+}
+
+/**
+ * ':nodeId'가 필요한 케이스(코멘트 생성)가 실행 전에 페이지와 그 루트 노드를 잡는다.
+ * 서버가 빈 페이지를 만들 때 `Page` 루트 하나를 넣으므로 그 id가 코멘트를 달 대상이다.
+ */
+const 코멘트용페이지 = async (
+  ctx: TestContext,
+  projectId: string,
+  ownerCookie: { wb_session: string },
+): Promise<Record<string, string>> => {
+  const menu = await createMenuNode(ctx, ownerCookie, projectId, { title: '대상 메뉴' })
+  const page = await createPage(ctx, ownerCookie, projectId, menu.id, { title: '대상 페이지' })
+  return { pageId: page.id, nodeId: (page.schema as { root: { id: string } }).root.id }
+}
+
+/**
+ * ':commentId'가 필요한 케이스(코멘트 수정·삭제)가 실행 전에 대상 코멘트를 만든다.
+ *
+ * **작성자를 `actorUserId`로 둔다** — 위 `setup` 주석의 이유(수정이 작성자 전용이라
+ * 남의 것이면 역할과 무관한 403이 된다).
+ *
+ * **API가 아니라 DB에 직접 넣는다.** `addMember`와 같은 이유다 — 픽스처가 검사 대상
+ * API(`POST .../comments`)에 의존하면 그 API가 깨졌을 때 수정·삭제 행까지 함께 무너져
+ * 원인을 가릴 수 없다. 그리고 그 경로로 만들면 작성자를 고를 수 없다.
+ */
+const 코멘트하나 = async (
+  ctx: TestContext,
+  projectId: string,
+  ownerCookie: { wb_session: string },
+  actorUserId: string,
+): Promise<Record<string, string>> => {
+  const menu = await createMenuNode(ctx, ownerCookie, projectId, { title: '대상 메뉴' })
+  const page = await createPage(ctx, ownerCookie, projectId, menu.id, { title: '대상 페이지' })
+  const nodeId = (page.schema as { root: { id: string } }).root.id
+  const comment = await ctx.db
+    .insertInto('comments')
+    .values({ page_id: page.id, node_id: nodeId, body: '대상 코멘트', author_id: actorUserId })
+    .returning('id')
+    .executeTakeFirstOrThrow()
+
+  return { pageId: page.id, nodeId, commentId: comment.id }
 }
 
 /**
@@ -186,6 +242,47 @@ const CASES: Case[] = [
     label: '페이지 삭제',
     method: 'DELETE',
     url: '/api/projects/:projectId/pages/:pageId',
+    allowed: ['owner', 'editor'],
+    setup: 페이지하나,
+  },
+  // --- 코멘트 다섯(P5-1). **이 다섯 줄이 없어서 `표의 완전성`이 죽는 것을 먼저 봤다** —
+  // `projectGuard가 걸린 라우트가 전부 표에 있다` 한 케이스가 `[…(5)]`를 냈다(P5-1이 쟀다).
+  {
+    label: '코멘트 조회',
+    method: 'GET',
+    url: '/api/projects/:projectId/pages/:pageId/comments',
+    allowed: ['owner', 'editor', 'viewer'],
+    setup: 페이지하나,
+  },
+  {
+    label: '코멘트 작성',
+    method: 'POST',
+    url: '/api/projects/:projectId/pages/:pageId/comments',
+    // `nodeId`는 setup이 만든 페이지의 실제 루트 id다 — 없는 노드를 주면 404가 되어
+    // 이 행이 권한과 무관한 이유로 무너진다(페이지 생성 행이 `menuNodeId`를 그렇게 넘긴다).
+    payload: (subs: Record<string, string>) => ({ nodeId: subs.nodeId, body: '새 코멘트' }),
+    allowed: ['owner', 'editor'],
+    setup: 코멘트용페이지,
+  },
+  {
+    label: '코멘트 수정',
+    method: 'PATCH',
+    url: '/api/projects/:projectId/pages/:pageId/comments/:commentId',
+    payload: { body: '바뀐 코멘트' },
+    allowed: ['owner', 'editor'],
+    setup: 코멘트하나,
+  },
+  {
+    label: '코멘트 삭제',
+    method: 'DELETE',
+    url: '/api/projects/:projectId/pages/:pageId/comments/:commentId',
+    allowed: ['owner', 'editor'],
+    setup: 코멘트하나,
+  },
+  {
+    label: '코멘트 재번호',
+    method: 'POST',
+    url: '/api/projects/:projectId/pages/:pageId/comments/renumber',
     allowed: ['owner', 'editor'],
     setup: 페이지하나,
   },
@@ -371,19 +468,28 @@ describe('권한 매트릭스 (역할 × 엔드포인트)', () => {
           await signup(ctx, { email: 'invitee@example.com' })
 
           let cookie: { wb_session: string } | undefined
+          // **주체의 `userId`도 함께 든다** — 소유권이 걸린 리소스를 그 주체의 것으로
+          // 만들어야 하는 setup이 있다(`코멘트하나`). `anonymous`에는 주체가 없으므로
+          // owner의 id가 그대로 남는다.
+          let actorUserId = owner.user.id
           if (actor === 'owner') {
             cookie = owner.cookie
           } else if (actor === 'editor' || actor === 'viewer') {
             const member = await signup(ctx)
             await addMember(ctx, project.id, member.user.id, actor)
             cookie = member.cookie
+            actorUserId = member.user.id
           } else if (actor === 'outsider') {
-            cookie = (await signup(ctx)).cookie
+            const outsider = await signup(ctx)
+            cookie = outsider.cookie
+            actorUserId = outsider.user.id
           }
 
           // setup은 항상 owner 권한으로 돈다 — 어떤 actor가 실제로 호출하든
           // 대상 리소스는 미리 존재해야 한다(브리프 "Step 2" 하네스 확장).
-          const substitutions = testCase.setup ? await testCase.setup(ctx, project.id, owner.cookie) : {}
+          const substitutions = testCase.setup
+            ? await testCase.setup(ctx, project.id, owner.cookie, actorUserId)
+            : {}
           let url = testCase.url.replace(':projectId', project.id)
           for (const [key, value] of Object.entries(substitutions)) {
             url = url.replace(':' + key, value)

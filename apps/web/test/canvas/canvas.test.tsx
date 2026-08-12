@@ -515,7 +515,7 @@ describe('캔버스의 오류 경계', () => {
       expect(alert.textContent).toContain(BOOM_MESSAGE)
       // 셸의 나머지가 살아 있다. 경계가 없으면 여기까지 함께 사라진다.
       screen.getByRole('navigation', { name: '메뉴와 구조' })
-      screen.getByRole('complementary', { name: '속성 패널' })
+      screen.getByRole('complementary', { name: '우측 패널' })
       expect(logged.mock.calls.length).toBeGreaterThan(0)
     } finally {
       logged.mockRestore()

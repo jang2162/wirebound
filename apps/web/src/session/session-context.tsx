@@ -16,8 +16,22 @@
  * 있으면 서버가 계속 실패하는 동안 요청이 쌓인다.
  *
  * **바깥에서 상태를 바꾸는 길은 둘뿐이다:** `useInvalidateSession()`(끊긴 것을 알았다)과
- * `useConfirmSession()`(로그인이 성공했다). 둘 다 인자를 받지 않는다 — `login()`이
- * `SessionUser`를 돌려주지만 그 값을 쓰는 화면이 아직 없고, 필요해지면 그때 넓힌다.
+ * `useConfirmSession()`(로그인이 성공했다).
+ *
+ * **P5-1이 `confirm`을 넓혔다 — 이제 `SessionUser`를 받는다.** 앞 판의 주석이
+ * *"`login()`이 `SessionUser`를 돌려주지만 그 값을 쓰는 화면이 아직 없고, 필요해지면 그때
+ * 넓힌다"*로 이 자리를 남겨 두었고, 코멘트 탭이 그 화면이다 — **남의 코멘트는 고칠 수
+ * 없으므로**(서버의 재라 #2) 수정 단추를 낼지 말지가 *"내가 누구인가"*에 달려 있다.
+ *
+ * **넓히지 않았다면 갓 로그인한 사람의 화면에 수정 단추가 하나도 없었다.** 마운트의
+ * `me()`는 그때 401이었으므로 사용자가 `null`이고, `confirm()`이 인자를 안 받으면 그것을
+ * 채울 길이 새로고침뿐이다.
+ *
+ * **`state`와 `user`를 따로 든다.** `state`의 세 값은 모듈 상수라 참조가 안정해야 하는데
+ * (아래 `PENDING`·`AUTHENTICATED`·`ANONYMOUS`의 주석), 사용자를 그 안에 넣으면 상수로 둘
+ * 수 없다. 두 상태가 어긋날 자리는 **`authenticated`인데 `user`가 `null`인 것** 하나이고,
+ * 그것은 실패가 아니라 *"아직 누구인지 모른다"*이다 — 읽는 쪽(`useSessionUser`)이
+ * `null`을 받아 수정 단추를 안 내면 된다(서버가 어차피 403으로 막는다).
  */
 import {
   createContext,
@@ -31,6 +45,7 @@ import {
 } from 'react'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
+import type { SessionUser } from './../api/types'
 
 export type SessionState =
   | { status: 'pending' }
@@ -58,8 +73,10 @@ const ANONYMOUS: SessionState = { status: 'anonymous' }
 
 interface SessionContextValue {
   state: SessionState
+  /** 지금 로그인한 사람. `state`가 `authenticated`여도 아직 `null`일 수 있다(위 머리말). */
+  user: SessionUser | null
   invalidate: () => void
-  confirm: () => void
+  confirm: (user: SessionUser) => void
 }
 
 /**
@@ -72,14 +89,17 @@ const SessionContext = createContext<SessionContextValue | null>(null)
 export function SessionProvider(props: { children: ReactNode }): ReactElement {
   const api = useApi()
   const [state, setState] = useState<SessionState>(PENDING)
+  const [user, setUser] = useState<SessionUser | null>(null)
 
   useEffect(() => {
     // 응답이 오기 전에 Provider가 사라지면 결과를 버린다. 사라진 컴포넌트의 상태를
     // 갱신하면 아무 일도 일어나지 않는다.
     let alive = true
     api.me().then(
-      () => {
-        if (alive) setState(AUTHENTICATED)
+      (sessionUser) => {
+        if (!alive) return
+        setUser(sessionUser)
+        setState(AUTHENTICATED)
       },
       (caught: unknown) => {
         if (!alive) return
@@ -90,6 +110,9 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
         // `status`가 아니라 `code`로 가른다. 서버는 같은 401을 여러 이유로 낼 수 있으므로
         // `unauthenticated`가 아닌 실패는 "로그아웃됨"이 아니라 `failed`다.
         const failure = toFailure(caught, UNKNOWN_SESSION_FAILURE)
+        // 누구인지 모르는 상태로 되돌린다. 실패한 뒤에도 앞 사람이 남아 있으면 화면이
+        // 그 사람의 권리로 단추를 낸다 — P4c-3 이월의 둘째 줄이 말하는 부류다.
+        setUser(null)
         setState(
           failure.kind === 'signed-out' ? ANONYMOUS : { status: 'failed', message: failure.message },
         )
@@ -110,14 +133,20 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
   // `SignedOut`이 `useEffect(invalidate, [invalidate])`로 부르기 때문이다 — 참조가 렌더마다
   // 바뀌면 그 이펙트가 커밋마다 다시 돈다. 즉 헛일을 줄이는 것이지 순환을 막는 것이 아니다.
   const invalidate = useCallback(() => {
+    // 세션이 끊겼으면 누구인지도 잊는다.
+    setUser(null)
     setState((current) => (current.status === 'anonymous' ? current : ANONYMOUS))
   }, [])
 
-  const confirm = useCallback(() => {
+  const confirm = useCallback((sessionUser: SessionUser) => {
+    setUser(sessionUser)
     setState((current) => (current.status === 'authenticated' ? current : AUTHENTICATED))
   }, [])
 
-  const value = useMemo(() => ({ state, invalidate, confirm }), [state, invalidate, confirm])
+  const value = useMemo(
+    () => ({ state, user, invalidate, confirm }),
+    [state, user, invalidate, confirm],
+  )
 
   return <SessionContext.Provider value={value}>{props.children}</SessionContext.Provider>
 }
@@ -145,6 +174,18 @@ export function useInvalidateSession(): () => void {
  * 일이 없어졌으므로, 로그인 성공을 알리는 길이 따로 필요하다. 앞 판에서는 `RequireAuth`가
  * 마운트마다 `me()`를 새로 불러 그 일이 저절로 됐고, 그것이 바로 이 커밋이 없앤 것이다.
  */
-export function useConfirmSession(): () => void {
+/**
+ * 지금 로그인한 사람. **`null`은 *"아직 누구인지 모른다"*이고 실패가 아니다** — 세션 확인이
+ * 아직 안 끝났거나, 익명이거나, 확인이 실패한 경우다.
+ *
+ * 오늘 이것을 읽는 자리는 코멘트 탭 하나이고, 쓰는 곳은 *"이 코멘트를 내가 썼는가"* 판정이다.
+ * **권한의 진실은 서버다** — 여기서 `null`을 받아 단추를 안 내는 것은 눌러 봐야 실패할
+ * 자리를 없애는 것이지 보안 장치가 아니다.
+ */
+export function useSessionUser(): SessionUser | null {
+  return useSessionContext().user
+}
+
+export function useConfirmSession(): (user: SessionUser) => void {
   return useSessionContext().confirm
 }

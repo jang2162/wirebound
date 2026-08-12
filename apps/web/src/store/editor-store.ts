@@ -261,6 +261,60 @@ export class EditorStore {
   }
 
   /**
+   * **서버가 코멘트 경로에서 낸 문서 변화를 내 문서에 반영한다**(P5-1).
+   *
+   * 코멘트를 달거나 지우거나 재번호하면 서버가 노드의 `marker`를 바꾸고 revision을
+   * 남긴다(계획서 D2). 그 변화를 여기서 받아야 캔버스에 번호가 뜨고, `headSeq`가 서버와
+   * 맞아 다음 편집의 `baseSeq`가 어긋나지 않는다.
+   *
+   * **문서를 통째로 받지 않고 `ops`를 받는 것이 요점이다.** 서버가 낸 문서에는 아직 보내지
+   * 않은 낙관적 편집이 없으므로, 그것으로 갈아 끼우면 **사용자가 방금 친 값이 화면에서
+   * 사라진다.** 같은 ops를 내 문서 위에 얹으면 그 편집이 그대로 남는다.
+   *
+   * **`loadPage`가 아닌 이유도 같다** — 그쪽은 페이지 상태를 서버 것으로 **놓는** 자리라
+   * 큐와 undo·redo 스택을 함께 비운다. 코멘트를 달 때마다 undo가 사라지면 안 된다.
+   *
+   * ## 문서와 `headSeq`는 함께 움직이거나 둘 다 안 움직인다
+   *
+   * `applyOps`가 던질 수 있다 — 보내지 않은 구조 편집이 그 노드를 이미 지웠으면 경로가
+   * 없다. **그때 `headSeq`만 올리지 않는다.** 올리면 *"화면에는 번호가 없는데 다음 편집은
+   * 번호가 있는 revision 위에서 만들어지는"* 상태가 되고, 그 어긋남은 아무도 모르는 채
+   * 남는다 — 이 저장소가 반복해 겪은 부류다(P4c-3 이월의 둘째 줄).
+   *
+   * 둘 다 안 움직이면 **다음 편집이 409를 받고 복구 경로가 페이지를 다시 받는다** —
+   * 시끄럽지만 수렴한다. 조용히 갈라지는 쪽보다 낫다.
+   *
+   * 반영했으면 `true`다. `false`인 갈래 셋: 다른 페이지가 열려 있다 · 문서가 없다 ·
+   * `applyOps`가 던졌다.
+   */
+  readonly applyMarkerChange = (
+    pageId: string,
+    change: { seq: number; markerOps: PatchOp[] },
+  ): boolean => {
+    const { openPageId, document } = this.#state
+    // 다른 페이지로 옮긴 뒤 도착한 응답이다. 여기서 `headSeq`를 건드리면 새 페이지의
+    // 편집이 남의 revision 번호 위에서 만들어진다(`ackEdit`의 늦은 ack 가드와 같은 자리).
+    if (openPageId !== pageId || document === null) return false
+
+    // 문서가 안 바뀐 요청이다(이미 번호가 있는 노드에 코멘트를 더 달았거나, 마지막이 아닌
+    // 코멘트를 지웠거나, 바꿀 것 없는 재번호). `seq`도 그대로이므로 `#apply`가 알리지 않는다.
+    if (change.markerOps.length === 0) {
+      this.#apply({ headSeq: change.seq })
+      return true
+    }
+
+    let next: PageDocument
+    try {
+      next = applyOps(document, change.markerOps)
+    } catch {
+      return false
+    }
+
+    this.#apply({ document: next, headSeq: change.seq })
+    return true
+  }
+
+  /**
    * 열린 페이지가 없어졌을 때. `loadPage`의 짝이다 — `openPageId`·문서·`headSeq`·선택을
    * 함께 비운다. 넷이 한 번에 움직여야 "문서는 없는데 어느 페이지가 열려 있다고 말하는"
    * 중간 상태가 생기지 않는다.

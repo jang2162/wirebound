@@ -6,6 +6,7 @@ import { migration as m0004 } from './0004-pages'
 import { migration as m0005 } from './0005-revisions'
 import { migration as m0006 } from './0006-themes'
 import { migration as m0007 } from './0007-layouts'
+import { migration as m0008 } from './0008-comments'
 
 /**
  * 정적 마이그레이션 레지스트리.
@@ -27,6 +28,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '0005-revisions': m0005,
   '0006-themes': m0006,
   '0007-layouts': m0007,
+  '0008-comments': m0008,
 }
 
 export const migrationProvider: MigrationProvider = {

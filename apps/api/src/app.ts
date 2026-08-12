@@ -6,6 +6,7 @@ import type { ApiConfig } from './config'
 import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
 import { authRoutes } from './routes/auth'
+import { commentRoutes } from './routes/comments'
 import { healthRoutes } from './routes/health'
 import { memberRoutes } from './routes/members'
 import { menuRoutes } from './routes/menu'
@@ -122,6 +123,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(pageRoutes(), { prefix: '/api/projects' })
   await app.register(treeRoutes(), { prefix: '/api/projects' })
   await app.register(revisionRoutes(), { prefix: '/api/projects' })
+  // 코멘트도 페이지 아래에 산다(`/:projectId/pages/:pageId/comments`) — 파일은 분리하되
+  // URL 네임스페이스는 `pageRoutes`와 공유한다(P5-1).
+  await app.register(commentRoutes(), { prefix: '/api/projects' })
   await app.register(themeRoutes(), { prefix: '/api/projects' })
   await app.register(healthRoutes)
 

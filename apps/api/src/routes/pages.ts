@@ -35,7 +35,8 @@
  * 하나에 맡긴다 — P3의 WebSocket 핸들러가 같은 함수를 부르므로, 규칙이 이 파일에
  * 있으면 두 진입점이 갈라진다. **같은 이유로 그 본문의 zod 경계(모양·경로 제약·ops
  * 상한)도 이 파일에 두지 않는다** — `http/patch-ops.ts`에 있고 P3가 그것을 그대로
- * import한다. 여기 남는 것은 `EditOutcome`의 실패 사유를 상태 코드로 옮기는 일뿐이다.
+ * import한다. **실패 사유를 상태 코드로 옮기는 표도 이 파일에 없다** — P5-1이
+ * `http/edit-outcome.ts`로 옮겼고, `routes/comments.ts`가 그 두 번째 소비자다.
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
@@ -46,16 +47,19 @@ import {
   migrateDocument,
   partitionIssues,
   validatePage,
-  type ValidationIssue,
 } from '@wirebound/schema'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
-import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
+import { badRequest, notFound, unauthenticated, validationFailed } from '../errors'
+// **P5-1이 `http/edit-outcome.ts`로 옮겼다** — `routes/comments.ts`가 두 번째 소비자가
+// 됐다(코멘트가 번호를 부여하려고 같은 파이프라인을 부른다). `withWarnings`가 P4c-1에서
+// 같은 이유로 옮겨 간 것과 같은 자리다.
+import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
 // **P4c-1이 `http/warnings.ts`로 옮겼다** — `routes/themes.ts`가 두 번째 소비자가 됐다.
 import { withWarnings } from '../http/warnings'
 import { OpsBody } from '../http/patch-ops'
-import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
+import { applyEdit } from '../services/edit-pipeline'
 import { MenuNodeNotFoundError, deletePage, findPageById, insertPage, updatePage, type PageRecord } from '../repos/pages'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
@@ -91,37 +95,6 @@ const UpdatePageBody = z
  * 갖고 선언되지 않은 키(예: `style`)를 갖지 않는다.
  */
 const PutSchemaBody = z.strictObject({ schema: DocumentEnvelopeSchema })
-
-/**
- * 파이프라인의 실패 사유를 HTTP 에러로 옮긴다. 매핑 표가 곧 이 함수다.
- *
- * **`default` 절을 두지 않는다.** 반환 타입을 `ApiError`로 못박아 두면 `EditOutcome`에
- * 새 사유가 생기는 순간 "값을 반환하지 않고 끝나는 경로가 있다"로 컴파일이 깨진다.
- * `default`를 두면 그 신호가 사라지고, 새 사유가 조용히 엉뚱한 상태 코드로 나간다.
- */
-function toApiError(outcome: Extract<EditOutcome, { ok: false }>, baseSeq: number): ApiError {
-  switch (outcome.reason) {
-    case 'not-found':
-      return notFound()
-    case 'stale':
-      // 현재 headSeq를 에러 봉투의 새 필드가 아니라 **메시지에** 싣는다: 봉투는
-      // `{ error: { code, message, issues? } }` 하나뿐이고, 409를 받은 클라이언트는
-      // 어차피 페이지를 재조회한다 — 권위 있는 값은 그 재조회 응답의 headSeq다.
-      // 여기 숫자는 사람이 로그를 읽을 때를 위한 것이다.
-      return conflict(`페이지가 이미 변경되었습니다 (요청 baseSeq ${baseSeq}, 현재 ${outcome.headSeq})`)
-    case 'patch-failed':
-      // 400이 아니라 409인 이유: 본문 자체는 계약을 지켰다(zod를 통과했다). 서버
-      // 문서의 현재 모양과 맞지 않을 뿐이라 stale과 같은 성질의 충돌이고, 클라이언트의
-      // 대응도 같다 — 재조회 후 다시 시도한다.
-      return conflict(`편집을 적용할 수 없습니다: ${outcome.message}`)
-    case 'invalid':
-      return validationFailed('스키마 검증에 실패했습니다', outcome.issues)
-    case 'unsupported-version':
-      return badRequest(outcome.message)
-    case 'nul-byte':
-      return badRequest('문서에 NUL 문자(U+0000)를 포함할 수 없습니다')
-  }
-}
 
 /** API 계약이 노출하는 필드만 담는다 — 저장소의 `projectId`는 응답에 싣지 않는다(경로에 이미 있다). */
 function toResponse(page: PageRecord) {
@@ -323,7 +296,7 @@ export function pageRoutes() {
       })
 
       if (!outcome.ok) {
-        throw toApiError(outcome, before.headSeq)
+        throw editOutcomeToApiError(outcome, before.headSeq)
       }
 
       // 응답 형태는 바뀌지 않는다(페이지 객체 그대로). 바뀐 세 필드만 파이프라인
@@ -373,7 +346,7 @@ export function pageRoutes() {
       })
 
       if (!outcome.ok) {
-        throw toApiError(outcome, body.baseSeq)
+        throw editOutcomeToApiError(outcome, body.baseSeq)
       }
 
       // 성공 결과의 `schema`(적용 후 문서 전체)는 응답에 싣지 않는다 — 클라이언트는

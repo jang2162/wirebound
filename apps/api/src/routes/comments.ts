@@ -1,0 +1,535 @@
+/**
+ * 코멘트 라우트 — 설계 §9의 *"우측 코멘트 탭 + 캔버스 번호 마커"*의 서버 쪽이다.
+ * `pageRoutes`와 같은 `/api/projects` prefix로 등록한다(`app.ts`) — 파일은 분리하되
+ * URL 네임스페이스는 공유한다(`routes/menu.ts`·`routes/revisions.ts`와 같은 관례).
+ *
+ * HTTP·zod 검증과 **번호 부여 규칙**만 다룬다. SQL은 `repos/comments.ts`, 문서를 실제로
+ * 바꾸는 일은 `services/edit-pipeline.ts`가 한다. 권한 판정은 `projectGuard` 하나가
+ * 전담한다 — 이 파일이 역할을 비교하는 자리는 **작성자 판정 하나뿐**이고 그것은
+ * 역할이 아니라 소유권이다(아래 재라 #2).
+ *
+ * ---
+ *
+ * ## D1 — 번호는 문서가 들고 본문은 표가 든다
+ *
+ * §4.3: `"marker": 2, // 우측 코멘트 번호 (없으면 코멘트 없음)`. 문서만 봐도 마커를
+ * 그릴 수 있어야 내보낸 HTML 번들(§11.3)이 그것을 그린다. 본문·작성자·시각은
+ * `comments` 표다 — 문서에 넣으면 코멘트 한 줄이 revision을 만들고 undo 스택에 섞인다.
+ *
+ * **§11.2의 `comments: [{ marker, nodeId, body }]`와 함께 참이려면 같은 노드의 코멘트가
+ * 같은 번호를 공유해야 한다**(D3). 그래서 번호는 *"이 노드에 말이 붙어 있다"*는 표시이고
+ * 스레드가 그 아래 쌓인다.
+ *
+ * ## D2 — 번호 부여가 편집 파이프라인을 지난다 (이 슬라이스의 핵심 결정)
+ *
+ * `marker`는 페이지 문서의 일부다. 파이프라인 밖에서 바꾸면 셋이 깨진다:
+ * revision이 안 남아 undo가 못 되돌리고(§7.3), P3의 WS가 그 변화를 안 알리고,
+ * `head_seq`가 안 올라 **그 뒤 편집의 `baseSeq`가 틀어진다.** 그래서 `POST`·`DELETE`·
+ * `renumber` 셋이 `applyEdit`을 부른다.
+ *
+ * **대가 1 — 코멘트를 달았을 뿐인데 undo가 그것을 되돌린다. 그래도 옳다.**
+ * 번호는 문서의 값이므로 그것을 바꾼 사람의 이력에 남는 것이 §7.3과 일관된다. 대가의
+ * 모양을 정확히 적으면 이렇다: undo가 `remove /…/marker`를 적용하면 **번호는 사라지고
+ * 코멘트 행은 남는다**(재라 #6의 반대쪽 상태). 빠져나오는 길이 있다 — 그 노드에 코멘트를
+ * 하나 더 달면 아래 규칙이 *"번호가 없으니 새로 준다"*로 번호를 되살린다.
+ * **재번호(D4)로는 못 되살린다** — 그쪽은 번호가 **있는** 노드만 다시 매기기 때문이다.
+ * 반대쪽(파이프라인을 안 타는 판)의 대가는 *"다음 편집이 전부 409"*라 성질이 다르다 —
+ * 하나는 눈에 보이고 되돌릴 수 있는 어긋남이고, 하나는 편집 자체가 멈추는 고장이다.
+ *
+ * **대가 2 — `baseSeq`를 누가 주는가(재라 #1). 서버가 읽는다. 다만 잠그기 *전*에 읽는다.**
+ *
+ * 계획서는 *"서버가 읽으면 그 사이 남이 고쳤어도 밀어붙인다"*로 적었는데, 그것이 참인
+ * 것은 **잠근 뒤에 읽을 때**다(그러면 `baseSeq === headSeq`가 항상 참이라 3단계가 죽는다).
+ * 여기서는 요청이 도착한 시점에 `findPageById`로 읽어 그 값을 `baseSeq`로 넘기므로,
+ * 그 사이 다른 편집이 커밋되면 파이프라인이 `stale`을 내고 **409가 나간다.**
+ * `PUT .../schema`가 같은 모양이고(그 라우트의 주석에 경합 창이 적혀 있다), 재시도 루프를
+ * 넣지 않는 것도 같다.
+ *
+ * **클라이언트가 주게 하지 않는 이유:** 클라이언트의 `baseSeq`는 *"내 낙관적 문서가 어느
+ * revision 위에 서 있는가"*인데, 코멘트는 낙관적으로 앞서지 않는다 — 번호 값도 노드
+ * 경로도 **서버가 자기 문서에서** 계산한다. 클라이언트가 주면 코멘트와 무관한 이유
+ * (내 화면이 조금 뒤처졌다)로 코멘트가 거절된다.
+ *
+ * **그래도 낙관적 잠금이 필요한 이유는 번호의 유일성이다.** 없으면 서로 다른 두 노드에
+ * 동시에 달린 첫 코멘트가 **둘 다 1번**을 받는다.
+ *
+ * ## 재라 #2 — 남의 코멘트를 고칠 수 있는가: 수정은 못 하고 삭제는 한다
+ *
+ * §10은 역할만 말하고 소유권을 말하지 않는다. 가른 근거는 **두 조작이 하는 일이 다르다**는
+ * 것이다. 본문 수정은 남의 이름이 붙은 채로 내용이 바뀌는 것이라 **말을 지어내는 일**이
+ * 된다(응답이 `authorName`을 싣는다 — 화면이 그것을 보인다). 삭제는 말을 없앨 뿐 없던
+ * 말을 만들지 않는다. 그리고 D3 때문에 **삭제는 문서 위생의 일부**다 — 스레드를 정리해야
+ * 번호가 사라진다. 그래서 `PATCH`는 작성자만(403), `DELETE`는 editor면 누구나다.
+ *
+ * ## 재라 #4 — 본문 길이 상한 2000자
+ *
+ * `pages.description`과 같은 값으로 둔다(같은 결의 산문이다). 상한이 없으면 요청 하나가
+ * 임의 크기의 텍스트를 실을 수 있고, §4.5의 스냅샷이 코멘트를 담게 되면(P6) 그 비용이
+ * payload로 그대로 옮겨 간다. 하한은 1이다 — 빈 코멘트는 코멘트가 아니다.
+ *
+ * ## 재라 #5 — 하드 삭제
+ *
+ * 소프트 삭제를 두지 않는다. (1) D3의 *"마지막 코멘트를 지우면 번호가 사라진다"*가
+ * **살아 있는 행의 수**를 세는데, 소프트면 *"마지막"*의 뜻이 두 벌(전체 행 / 산 행)이 되고
+ * 둘이 갈리는 날 번호가 유령처럼 남는다. (2) 지운 코멘트를 보는 화면이 설계에 없다.
+ * (3) 복원의 근거는 §4.5의 스냅샷이다 — 스냅샷을 뜬 시점의 payload가 그 코멘트를 담고
+ * 있으므로 복원 경로는 이미 있다(그것을 만드는 것은 P6이다).
+ *
+ * ## 재라 #6 — 번호는 있는데 코멘트 행이 없는 노드
+ *
+ * **문서가 진실이다(D1).** 캔버스는 그 노드에 번호를 그리고, 코멘트 탭에는 그 번호 아래
+ * 아무것도 없다. 흉내 내지 않는다 — 화면이 문서를 고쳐 주지도, 없는 행을 만들어 내지도
+ * 않는다. 도달 경로 셋: 위 대가 1의 undo, JSON 가져오기(§11.2, P7), 사람이 `marker`를
+ * 직접 편집하는 경우. **반대쪽(행은 있는데 노드가 문서에 없다)도 실재한다** — 코멘트가
+ * 달린 노드를 지우면 그 행이 남는다(`node_id`에 FK가 없다 — 0008의 주석). 그 행은 GET에
+ * 그대로 실려 나가고 화면이 *"사라진 노드"* 무리로 묶는다.
+ */
+import type { FastifyInstance } from 'fastify'
+import { z } from 'zod'
+import {
+  findNodePath,
+  migrateDocument,
+  walkNodes,
+  type PageDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
+import { projectGuard } from '../auth/roles'
+import { containsNulByte } from '../db/nul-guard'
+import { withTransaction } from '../db/tx'
+import { badRequest, forbidden, notFound, unauthenticated } from '../errors'
+import { editOutcomeToApiError } from '../http/edit-outcome'
+import { parseBody, parseParams } from '../http/parse'
+import {
+  CommentNulByteError,
+  countNodeComments,
+  deleteComment,
+  findCommentById,
+  insertComment,
+  listComments,
+  updateCommentBody,
+  type CommentRecord,
+} from '../repos/comments'
+import { findPageById } from '../repos/pages'
+import { applyEdit } from '../services/edit-pipeline'
+
+const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
+const CommentParams = z.object({ projectId: z.uuid(), pageId: z.uuid(), commentId: z.uuid() })
+
+/**
+ * 코멘트 본문. 상한 근거는 머리말의 재라 #4에 있다.
+ *
+ * **`node_id`에 형식 제약을 걸지 않는다.** 노드 id의 진짜 관문은 *"이 문서에 그 노드가
+ * 있는가"*이고 아래 핸들러가 그것을 본다 — 패턴을 여기 한 번 더 적으면
+ * `@wirebound/schema`의 `NODE_ID_PATTERN`과 갈릴 자리가 생기고, 갈려도 결과가 같아
+ * (둘 다 거절) 아무도 모른다.
+ */
+const Body = z.string().min(1, '코멘트를 입력하세요').max(2000, '코멘트는 2000자 이하여야 합니다')
+
+/** `z.strictObject`라 선언되지 않은 키가 오면 그 자체로 400이다(이 저장소의 관례). */
+const CreateCommentBody = z.strictObject({ nodeId: z.string().min(1), body: Body })
+
+/**
+ * 키가 `body` 하나라 `.refine(빈 본문 금지)`를 걸지 않는다 — 그 키가 없는 것은
+ * *"바꿀 값이 없다"*가 아니라 **본문이 없는 것**이고, zod가 그것을 이미 400으로 낸다
+ * (`routes/themes.ts`의 `ThemeBody`와 같은 자리).
+ */
+const UpdateCommentBody = z.strictObject({ body: Body })
+
+/** API 계약이 노출하는 필드만 담는다 — `pageId`는 응답에 싣지 않는다(경로에 이미 있다). */
+function toResponse(comment: CommentRecord) {
+  return {
+    id: comment.id,
+    nodeId: comment.nodeId,
+    body: comment.body,
+    authorId: comment.authorId,
+    authorName: comment.authorName,
+    createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt,
+  }
+}
+
+/**
+ * 문서에서 쓰이고 있는 가장 큰 번호 + 1. 하나도 없으면 1이다(§9: 번호는 1부터).
+ *
+ * **최댓값 + 1이지 개수 + 1이 아니다.** 개수로 매기면 3번만 지운 뒤 새 코멘트가 3번을
+ * 다시 받아 **옛 번호를 가리키던 말이 다른 노드를 가리키게 된다.** 번호를 촘촘하게
+ * 만드는 일은 사용자가 명시적으로 누르는 재번호(D4)의 몫이다.
+ *
+ * `marker`가 정수가 아닌 값인 노드는 세지 않는다 — 봉투 검증(`z.int().positive()`)이
+ * 막으므로 정상 경로에는 없지만, 여기서 `NaN`이 최댓값이 되면 그 뒤 모든 번호가 `NaN`이 된다.
+ */
+function nextMarker(document: PageDocument): number {
+  let max = 0
+  for (const visit of walkNodes(document.root)) {
+    const marker = visit.node.marker
+    if (typeof marker === 'number' && Number.isInteger(marker) && marker > max) {
+      max = marker
+    }
+  }
+  return max + 1
+}
+
+/**
+ * 그 노드의 번호를 `marker`로 놓는 op. 이미 그 값이면 빈 배열이다.
+ *
+ * **`add`와 `replace`가 갈리는 이유는 `applyOps`가 그렇게 던지기 때문이다** —
+ * 없는 키를 `replace`하면 `바꿀 키가 없습니다`로 던진다(`apps/web/src/edit/ops.ts`의
+ * `variantOps`가 같은 자리에서 같은 표를 들고 있다).
+ */
+function setMarkerOps(node: WbNode, nodePath: string, marker: number): PatchOp[] {
+  const path = `${nodePath}/marker`
+  if (!Object.hasOwn(node, 'marker')) return [{ op: 'add', path, value: marker }]
+  if (node.marker === marker) return []
+  return [{ op: 'replace', path, value: marker }]
+}
+
+/** 그 노드의 번호를 지우는 op. 번호가 없으면 빈 배열이다(`remove`는 없는 키에서 던진다). */
+function clearMarkerOps(node: WbNode, nodePath: string): PatchOp[] {
+  return Object.hasOwn(node, 'marker') ? [{ op: 'remove', path: `${nodePath}/marker` }] : []
+}
+
+/**
+ * **D4 — 문서 순서대로 재번호.** 전위 순회하며 `marker`가 있는 노드에 1부터 다시 매긴다.
+ *
+ * **여러 노드를 한 patch로 바꾼다.** 노드마다 따로 부르면 중간 상태에 번호가 겹치고
+ * (2번을 1번으로 바꾼 순간 1번이 둘이다), revision도 노드 수만큼 쌓여 undo가 한 번의
+ * 재번호를 여러 번 눌러야 되돌리게 된다.
+ *
+ * **표는 안 건드린다.** 코멘트 행은 `nodeId`로만 매여 있어 번호를 모른다(D1) —
+ * 번호가 바뀌어도 어느 코멘트가 어느 노드에 붙었는지는 그대로다.
+ *
+ * **번호가 없는 노드에 새로 주지 않는다.** *"코멘트가 있는데 번호가 없는 노드"*(대가 1의
+ * undo가 만드는 상태)를 여기서 채우려면 이 함수가 표를 읽어야 하고, 그러면 같은 버튼이
+ * 가져온 문서(§11.2, 표가 아직 없다)와 편집 중인 문서에서 다르게 동작한다.
+ */
+function renumberOps(document: PageDocument): PatchOp[] {
+  const ops: PatchOp[] = []
+  let next = 1
+
+  for (const visit of walkNodes(document.root)) {
+    if (!Object.hasOwn(visit.node, 'marker')) continue
+    if (visit.node.marker !== next) {
+      ops.push({ op: 'replace', path: `${visit.path}/marker`, value: next })
+    }
+    next += 1
+  }
+
+  return ops
+}
+
+/** `app.ts`가 `app.register(commentRoutes(), { prefix: '/api/projects' })`로 등록하는 팩토리. */
+export function commentRoutes() {
+  return async function plugin(app: FastifyInstance): Promise<void> {
+    /**
+     * 그 페이지의 코멘트 전부(설계 §9의 목록이 **전부**를 보인다 — 재라 #3).
+     * 정렬은 저장소의 계약이다(`created_at` 오름차순). 번호 순으로 묶는 것은 문서를
+     * 든 화면의 일이다 — 이 표는 번호를 모른다(D1).
+     */
+    app.get('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('viewer') }, async (request) => {
+      const { projectId, pageId } = parseParams(PageParams, request.params)
+
+      // **페이지 존재를 먼저 확인한다.** `comments`에는 `project_id`가 없어 `page_id`만으로
+      // 좁히므로, 이 확인이 없으면 남의 프로젝트 페이지 id로 그 페이지의 코멘트가 그대로
+      // 나간다 — `routes/revisions.ts`가 같은 이유로 같은 확인을 한다(설계 §10).
+      const page = await findPageById(app.db, projectId, pageId)
+      if (!page) {
+        throw notFound()
+      }
+
+      // 배열을 그대로 낸다 — `/members`·`/menu`·`/revisions`가 전부 그렇다.
+      return (await listComments(app.db, pageId)).map(toResponse)
+    })
+
+    /**
+     * 코멘트를 만든다. **번호가 없는 노드면 번호도 함께 부여한다**(D2·D3).
+     *
+     * 응답의 `markerOps`가 **이 요청이 문서에 낸 변화**다. 클라이언트는 자기 문서(낙관적
+     * 편집이 이미 얹혀 있을 수 있다)에 같은 ops를 적용하고 `headSeq`를 `seq`로 맞춘다 —
+     * 문서를 통째로 돌려주면 아직 보내지 않은 낙관적 편집이 화면에서 사라진다.
+     * 문서가 안 바뀐 경우(이미 번호가 있는 노드)에는 빈 배열이고 `seq`는 그대로다.
+     */
+    app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('editor') }, async (request, reply) => {
+      const { projectId, pageId } = parseParams(PageParams, request.params)
+      const body = parseBody(CreateCommentBody, request.body)
+
+      // **NUL을 잠그기 전에 끊는다.** `repos/comments.ts`도 같은 검사를 하지만(마지막
+      // 방벽), 여기서 걸러야 이 요청이 페이지 잠금도 트랜잭션도 열지 않고 끝난다 —
+      // `routes/pages.ts`의 `PUT .../schema` 3.5단계와 같은 판단이다.
+      if (containsNulByte(body.body)) {
+        throw badRequest('코멘트에 NUL 문자(U+0000)를 포함할 수 없습니다')
+      }
+
+      // `projectGuard('editor')`가 이미 인증을 요구하므로 여기 도달했다면 `currentUser`는
+      // 있다. `as`로 좁히지 않고 던지는 것은 아래에서 `.id`를 **반드시** 읽기 때문이다 —
+      // 가드가 빠지는 순간 `as` 버전은 미인증 요청에 `null` 역참조로 500을 낸다
+      // (`routes/pages.ts`의 같은 자리와 같은 근거).
+      const currentUser = request.currentUser
+      if (!currentUser) {
+        throw unauthenticated()
+      }
+
+      const { document, page } = await loadDocument(app, projectId, pageId)
+      const nodePath = findNodePath(document.root, body.nodeId)
+      const node = nodePath === undefined ? undefined : nodeAt(document, body.nodeId)
+      if (nodePath === undefined || node === undefined) {
+        // 페이지가 없는 것과 같은 404다 — 둘 다 *"가리킨 것이 없다"*이고, 코멘트를 달
+        // 대상이 없다는 점에서 사용자가 할 일도 같다(다시 고른다).
+        throw notFound('그 노드가 이 페이지에 없습니다')
+      }
+
+      const marker = node.marker ?? nextMarker(document)
+      const ops = setMarkerOps(node, nodePath, marker)
+
+      // **문서 변경과 행 삽입이 한 트랜잭션 안에서 일어난다.** `withTransaction`은 이미
+      // 트랜잭션 안이면 SAVEPOINT로 감싸므로(`db/tx.ts`), 안쪽의 `applyEdit`이 여는
+      // 트랜잭션은 이 구간의 세이브포인트가 된다. 나누면 *"번호는 붙었는데 코멘트가
+      // 없다"*(재라 #6의 상태)가 실패 경로에서 실제로 만들어진다.
+      const result = await withTransaction(app.db, async (trx) => {
+        if (ops.length === 0) {
+          // 이미 번호가 있는 노드다 — 문서를 안 바꾸므로 revision도 만들지 않는다.
+          // 빈 `ops`로 `applyEdit`을 부르면 **아무것도 안 바꾼 revision**이 쌓이고
+          // `head_seq`가 올라, 이력이 코멘트 수만큼 부풀고 다른 클라이언트가 이유 없이
+          // 재조회하게 된다.
+          const comment = await insertComment(trx, {
+            pageId,
+            nodeId: body.nodeId,
+            body: body.body,
+            authorId: currentUser.id,
+          })
+          return { ok: true as const, comment, seq: page.headSeq, marker, markerOps: [] as PatchOp[] }
+        }
+
+        const outcome = await applyEdit(trx, {
+          projectId,
+          pageId,
+          baseSeq: page.headSeq,
+          ops,
+          actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+        })
+        if (!outcome.ok) return { ok: false as const, outcome }
+
+        const comment = await insertComment(trx, {
+          pageId,
+          nodeId: body.nodeId,
+          body: body.body,
+          authorId: currentUser.id,
+        })
+        return { ok: true as const, comment, seq: outcome.seq, marker, markerOps: ops }
+      })
+
+      if (!result.ok) {
+        throw editOutcomeToApiError(result.outcome, page.headSeq)
+      }
+
+      reply.code(201)
+      return {
+        comment: toResponse(result.comment),
+        marker: result.marker,
+        seq: result.seq,
+        markerOps: result.markerOps,
+      }
+    })
+
+    /**
+     * 본문을 고친다. **문서를 안 바꾼다** — 번호는 노드에 매여 있고 본문 수정은 그것을
+     * 건드리지 않으므로 revision도 `seq`도 없다. 그래서 응답이 코멘트 하나뿐이다
+     * (*"없는 것을 흉내 내지 마라"* — `seq: 그대로`를 실으면 읽는 쪽이 그것을 변화로 읽는다).
+     *
+     * **작성자만 고칠 수 있다**(재라 #2). 남이면 403이다 — 프로젝트 멤버인 것은 맞고
+     * 이 조작에 대한 권리가 없는 것이므로 §10의 403 자리다(404는 존재를 숨길 때다).
+     */
+    app.patch(
+      '/:projectId/pages/:pageId/comments/:commentId',
+      { preHandler: projectGuard('editor') },
+      async (request) => {
+        const { projectId, pageId, commentId } = parseParams(CommentParams, request.params)
+        const body = parseBody(UpdateCommentBody, request.body)
+
+        if (containsNulByte(body.body)) {
+          throw badRequest('코멘트에 NUL 문자(U+0000)를 포함할 수 없습니다')
+        }
+
+        const currentUser = request.currentUser
+        if (!currentUser) {
+          throw unauthenticated()
+        }
+
+        const page = await findPageById(app.db, projectId, pageId)
+        if (!page) {
+          throw notFound()
+        }
+
+        const existing = await findCommentById(app.db, pageId, commentId)
+        if (!existing) {
+          throw notFound()
+        }
+        if (existing.authorId !== currentUser.id) {
+          throw forbidden('다른 사람의 코멘트는 고칠 수 없습니다')
+        }
+
+        // 저장소도 NUL을 막으므로 던질 수 있다. 위에서 이미 걸렀지만 그 검사가 빠지는
+        // 날 500이 되지 않도록 여기서 400으로 옮긴다(`routes/themes.ts`와 같은 관례).
+        let updated
+        try {
+          updated = await updateCommentBody(app.db, pageId, commentId, body.body)
+        } catch (error) {
+          if (error instanceof CommentNulByteError) throw badRequest(error.message)
+          throw error
+        }
+
+        if (!updated) {
+          // 위에서 찾았는데 갱신에서 사라졌다면 그 사이에 지워진 것이다.
+          throw notFound()
+        }
+        return toResponse(updated)
+      },
+    )
+
+    /**
+     * 코멘트를 지운다. **그 노드의 마지막 코멘트였으면 번호도 함께 지운다**(D3 — §4.3의
+     * *"없으면 코멘트 없음"*).
+     *
+     * **204가 아니라 200이다.** 다른 `DELETE` 셋(프로젝트·메뉴·페이지)은 204인데 여기만
+     * 갈리는 이유는 이 삭제가 **문서를 바꿀 수 있기** 때문이다 — 클라이언트가 자기 문서와
+     * `headSeq`를 맞추려면 `markerOps`·`seq`를 받아야 하고, 204에는 그것을 실을 자리가
+     * 없다. 마지막이 아니어서 문서가 안 바뀐 경우에도 같은 모양을 낸다(`markerOps: []`) —
+     * 갈래마다 상태 코드가 다르면 클라이언트가 두 경로를 갖게 된다.
+     */
+    app.delete(
+      '/:projectId/pages/:pageId/comments/:commentId',
+      { preHandler: projectGuard('editor') },
+      async (request) => {
+        const { projectId, pageId, commentId } = parseParams(CommentParams, request.params)
+
+        const currentUser = request.currentUser
+        if (!currentUser) {
+          throw unauthenticated()
+        }
+
+        const { document, page } = await loadDocument(app, projectId, pageId)
+
+        const result = await withTransaction(app.db, async (trx) => {
+          // **삭제와 세기가 같은 트랜잭션 안이다.** 나누면 그 사이에 들어온 새 코멘트를
+          // 못 보고 번호를 지워, *"코멘트는 있는데 번호가 없는 노드"*가 만들어진다.
+          const deleted = await deleteComment(trx, pageId, commentId)
+          if (deleted === 'not-found') return { ok: false as const, reason: 'not-found' as const }
+
+          const remaining = await countNodeComments(trx, pageId, deleted.nodeId)
+          if (remaining > 0) {
+            return { ok: true as const, seq: page.headSeq, markerOps: [] as PatchOp[] }
+          }
+
+          // 마지막이었다. 문서에서 그 노드를 찾아 번호를 지운다. **노드가 문서에 없을 수
+          // 있다** — 코멘트가 달린 노드를 지우면 행이 남기 때문이다(머리말의 재라 #6).
+          // 그때는 지울 번호도 없으므로 문서를 안 바꾼다.
+          const nodePath = findNodePath(document.root, deleted.nodeId)
+          const node = nodePath === undefined ? undefined : nodeAt(document, deleted.nodeId)
+          const ops = nodePath !== undefined && node !== undefined ? clearMarkerOps(node, nodePath) : []
+          if (ops.length === 0) {
+            return { ok: true as const, seq: page.headSeq, markerOps: [] as PatchOp[] }
+          }
+
+          const outcome = await applyEdit(trx, {
+            projectId,
+            pageId,
+            baseSeq: page.headSeq,
+            ops,
+            actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+          })
+          if (!outcome.ok) return { ok: false as const, reason: 'edit' as const, outcome }
+
+          return { ok: true as const, seq: outcome.seq, markerOps: ops }
+        })
+
+        if (!result.ok) {
+          if (result.reason === 'not-found') throw notFound()
+          throw editOutcomeToApiError(result.outcome, page.headSeq)
+        }
+        return { seq: result.seq, markerOps: result.markerOps }
+      },
+    )
+
+    /**
+     * **문서 순서대로 재번호**(§9의 버튼, D4). 바꿀 것이 없으면 문서를 안 건드리고
+     * `markerOps: []`를 낸다 — 눌러도 revision이 안 쌓인다.
+     *
+     * **경로가 `.../comments/renumber`인데 `:commentId`와 겹치지 않는다.** `renumber`에
+     * 오는 메서드는 `POST`뿐이고 `:commentId` 쪽은 `PATCH`·`DELETE`뿐이라, 같은 메서드로
+     * 두 패턴이 맞붙는 자리가 애초에 없다.
+     */
+    app.post(
+      '/:projectId/pages/:pageId/comments/renumber',
+      { preHandler: projectGuard('editor') },
+      async (request) => {
+        const { projectId, pageId } = parseParams(PageParams, request.params)
+
+        const currentUser = request.currentUser
+        if (!currentUser) {
+          throw unauthenticated()
+        }
+
+        const { document, page } = await loadDocument(app, projectId, pageId)
+        const ops = renumberOps(document)
+        if (ops.length === 0) {
+          return { seq: page.headSeq, markerOps: [] as PatchOp[] }
+        }
+
+        const outcome = await applyEdit(app.db, {
+          projectId,
+          pageId,
+          baseSeq: page.headSeq,
+          ops,
+          actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+        })
+        if (!outcome.ok) {
+          throw editOutcomeToApiError(outcome, page.headSeq)
+        }
+
+        return { seq: outcome.seq, markerOps: ops }
+      },
+    )
+  }
+}
+
+/**
+ * 페이지와 **최신 버전으로 올린 문서**를 함께 읽는다. 없으면 404, 지원하지 않는 버전이면
+ * 400이다 — `routes/pages.ts`의 GET이 같은 두 갈래를 갖고 근거도 같다.
+ *
+ * **파이프라인과 같은 기준으로 올려야 경로가 맞는다.** `applyEdit` 2단계가 저장된 문서를
+ * `migrateDocument`에 태우므로, 여기서 안 올린 문서로 `findNodePath`를 하면 마이그레이션이
+ * 트리 모양을 바꾸는 날 두 경로가 갈린다.
+ *
+ * **읽기와 잠금 사이에 경합 창이 있다** — 그 사이 다른 편집이 커밋되면 `applyEdit`이
+ * `stale`을 내고 409가 된다(머리말의 대가 2).
+ */
+async function loadDocument(
+  app: FastifyInstance,
+  projectId: string,
+  pageId: string,
+): Promise<{ document: PageDocument; page: { headSeq: number } }> {
+  const page = await findPageById(app.db, projectId, pageId)
+  if (!page) {
+    throw notFound()
+  }
+
+  try {
+    return { document: migrateDocument(page.schema), page: { headSeq: page.headSeq } }
+  } catch (error) {
+    throw badRequest(error instanceof Error ? error.message : '지원하지 않는 문서 버전입니다')
+  }
+}
+
+/**
+ * 문서에서 id로 노드를 찾는다.
+ *
+ * **`findNode`가 아니라 `walkNodes`를 직접 도는 이유는 없다** — 같은 것이다. 여기서
+ * 따로 감싸는 것은 `findNodePath`와 **같은 순회를 두 번 도는 것**을 한 자리에 모아
+ * 두기 위해서다(호출부가 둘 다 필요로 한다).
+ */
+function nodeAt(document: PageDocument, nodeId: string): WbNode | undefined {
+  for (const visit of walkNodes(document.root)) {
+    if (visit.node.id === nodeId) return visit.node
+  }
+  return undefined
+}

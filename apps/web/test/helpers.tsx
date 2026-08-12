@@ -52,6 +52,11 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     deletePage: notStubbed('deletePage'),
     getPage: notStubbed('getPage'),
     patchOps: notStubbed('patchOps'),
+    listComments: notStubbed('listComments'),
+    createComment: notStubbed('createComment'),
+    updateComment: notStubbed('updateComment'),
+    deleteComment: notStubbed('deleteComment'),
+    renumberComments: notStubbed('renumberComments'),
     /**
       * **이 메서드만 `notStubbed`가 아니다 — 유일한 예외이고 근거가 있다.**
       *

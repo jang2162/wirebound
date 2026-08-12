@@ -26,6 +26,7 @@ import {
 } from 'react'
 import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
 import type { PageDocument } from '@wirebound/schema'
+import { walkSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { themeStructures } from '../theme/theme-structures'
 import { useProjectTheme } from '../theme/use-project-theme'
@@ -41,6 +42,25 @@ interface Box {
   width: number
   height: number
 }
+
+/**
+ * 번호 마커 하나가 앉을 자리(P5-1, 설계 §9의 *"캔버스 번호 마커"*).
+ *
+ * **아웃라인과 같은 장치를 쓴다**(계획서 D7) — `findNodeElement`로 상자를 잡아 배율을
+ * 걷어 낸 문서 좌표로 옮긴다. 다른 것은 **한 번에 여럿**이라는 점뿐이고, 그 차이가
+ * 비용이다(아웃라인은 늘 하나였다).
+ */
+interface MarkerBox extends Box {
+  nodeId: string
+  marker: number
+}
+
+/**
+ * 마커가 하나도 없을 때 쓰는 배열. **매번 `[]`를 새로 만들면 참조가 달라져** 문서에
+ * 마커가 없는 페이지에서 레이아웃 이펙트가 돌 때마다 리렌더가 난다(스토어의 `#apply`가
+ * 빈 배열의 참조를 유지하는 것과 같은 이유).
+ */
+const NO_MARKERS: MarkerBox[] = []
 
 /**
  * 스토어의 문서를 그린다. **`CanvasFrame`의 `ready` 분기에서만 쓴다** — 조회 중·실패
@@ -94,6 +114,7 @@ export function Canvas(props: {
 
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const [box, setBox] = useState<Box | null>(null)
+  const [markers, setMarkers] = useState<MarkerBox[]>(NO_MARKERS)
 
   // 아웃라인은 편집 모드에만 있다(설계 §9 — 뷰 모드는 결과만 보여 준다). 선택 자체는
   // 남는다. 뷰 모드에서 선택을 지우면 모드를 오갈 때마다 고른 것이 사라진다.
@@ -129,6 +150,49 @@ export function Canvas(props: {
     // 때문이다. `zoom`은 자리를 바꾸지는 않지만 아래 계산이 그 값을 쓴다.
   }, [outlinedNodeId, doc, zoom, viewportWidth])
 
+  /**
+   * **번호 마커의 자리를 잰다**(P5-1, 설계 §9). 위 아웃라인 이펙트와 같은 장치이고
+   * 의존성도 같다 — 문서·줌·뷰포트 폭이 바뀌면 노드의 자리가 바뀐다.
+   *
+   * **`outlinedNodeId`가 의존성에 없고 `mode`도 안 본다**(계획서 D8). §9의 탭 구성은
+   * 뷰 모드에도 코멘트를 두므로 **마커는 두 모드에 다 있다** — 아웃라인이 편집 모드
+   * 전용인 것과 갈리는 자리이고, 그것이 이 이펙트를 따로 둔 이유이기도 하다(합치면 선택이
+   * 바뀔 때마다 마커 전부를 다시 재게 된다).
+   *
+   * **이펙트를 나눈 대가는 순회 하나다.** 문서의 노드 수만큼 도는 순회가 렌더당 한 번
+   * 늘지만, 그 순회는 `findNodeElement`(마커 하나마다 `querySelectorAll` 한 번)에 비하면
+   * 작다. 최적화하지 않는다 — 페이지 문서는 작고 편집 빈도는 사람의 속도다.
+   *
+   * **`walkSafely`를 쓴다.** 검증 전 문서가 스토어에 실릴 수 있고(P2b-2), `walkNodes`는
+   * `children` 안의 노드 아닌 원소에서 던진다(`edit/safe-walk.ts`의 실측). 여기는 오류
+   * 경계 **안**이라 셸까지 지우지는 않지만, 캔버스가 통째로 오류 문장이 되는 것도
+   * 마커 때문에 일어날 일이 아니다.
+   */
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current
+    if (surface === null || doc === null) {
+      setMarkers((prev) => (prev.length === 0 ? prev : NO_MARKERS))
+      return
+    }
+
+    const next: MarkerBox[] = []
+    for (const visit of walkSafely(doc.root)) {
+      const marker = visit.node.marker
+      // 정수가 아닌 값은 없는 것으로 다룬다 — 봉투 검증(`z.int().positive()`)이 막지만
+      // 검증 **전** 문서에 대해서는 그 보장이 없다.
+      if (typeof marker !== 'number' || !Number.isInteger(marker)) continue
+
+      const target = findNodeElement(surface, visit.node.id)
+      // **그려지지 않은 노드는 건너뛴다.** 렌더러가 흡수한 폴백은 id가 빈 문자열이라
+      // 찾을 수 없고(`fallback.tsx`), 구조 구현체가 자식을 안 그리는 경우도 있다.
+      if (target === null) continue
+
+      next.push({ nodeId: visit.node.id, marker, ...measure(target, surface, zoom) })
+    }
+
+    setMarkers((prev) => (sameMarkers(prev, next) ? prev : next))
+  }, [doc, zoom, viewportWidth])
+
   if (doc === null) return null
 
   return (
@@ -161,6 +225,26 @@ export function Canvas(props: {
           style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
         />
       )}
+
+      {/* **번호 마커**(설계 §9). 아웃라인과 같은 자리·같은 근거로 문서 **옆에** 그린다 —
+          노드에 클래스나 스타일을 얹으면 셸이 테마의 자리를 침범한다(D7). 인라인 `style`이
+          자리·크기를 코드가 계산하는 부류(`test/shell-css-guard.ts`의 ㉠)라는 것도 같다.
+
+          **`mode`를 안 본다**(D8) — §9의 뷰 모드 탭에도 코멘트가 있으므로 마커는 두 모드에
+          다 있다. 아웃라인만 `mode === 'edit'`으로 갈린다.
+
+          `title`을 다는 것은 숫자 하나만으로는 그것이 무엇인지 알 수 없기 때문이다. */}
+      {markers.map((item) => (
+        <span
+          key={item.nodeId}
+          className="wb-shell-marker"
+          data-wb-marker-for={item.nodeId}
+          title={`코멘트 ${item.marker}번`}
+          style={{ left: item.left, top: item.top }}
+        >
+          {item.marker}
+        </span>
+      ))}
     </div>
   )
 }
@@ -317,6 +401,21 @@ function measure(target: HTMLElement, surface: HTMLElement, zoom: number): Box {
     width: node.width / zoom,
     height: node.height / zoom,
   }
+}
+
+/**
+ * 두 마커 목록이 같은가. **자리까지 본다** — 노드가 그대로여도 문서가 바뀌면 상자가
+ * 움직이고, 그때 갱신하지 않으면 마커가 옛 자리에 남는다.
+ *
+ * `sameBox`와 같은 이유로 있다: 값이 같으면 `prev`를 그대로 돌려줘 React가 뒤이은 렌더를
+ * 건너뛸 수 있게 한다. **무한 루프를 막는 장치가 아니다** — 의존성 배열에 `markers`가 없다.
+ */
+function sameMarkers(a: readonly MarkerBox[], b: readonly MarkerBox[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((item, index) => {
+    const other = b[index]
+    return other !== undefined && item.nodeId === other.nodeId && item.marker === other.marker && sameBox(item, other)
+  })
 }
 
 function sameBox(a: Box | null, b: Box): boolean {

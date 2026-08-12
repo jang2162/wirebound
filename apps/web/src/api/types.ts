@@ -246,3 +246,42 @@ export interface ThemeDetail {
    */
   warnings?: ThemeIssue[]
 }
+
+/**
+ * 코멘트 하나(P5-1). 근거는 `apps/api/README.md`의 엔드포인트 표와 "코멘트와 번호"다.
+ *
+ * **`marker`가 없는 것이 요점이다.** 번호는 코멘트가 아니라 **노드**의 값이라
+ * (설계 §4.3) 문서에서 읽는다 — 화면이 `nodeId`로 문서의 노드를 찾아 `marker`를 얻는다.
+ * 여기 번호를 실으면 같은 노드의 코멘트 셋이 번호를 세 벌 들게 되고, 그중 하나가 낡는
+ * 날 화면이 어느 것을 믿을지 알 수 없다.
+ *
+ * `authorName`은 **지금** 그 사람의 이름이다(서버가 조인해서 낸다) — `RevisionSummary`의
+ * `actorLabel`이 편집 시점의 스냅샷인 것과 갈린다.
+ */
+export interface Comment {
+  id: string
+  nodeId: string
+  body: string
+  authorId: string
+  authorName: string
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * **그 요청이 문서에 낸 변화.** 코멘트를 만들고 지우고 재번호하는 셋이 이것을 낸다.
+ *
+ * `markerOps`는 서버가 실제로 적용한 `PatchOp[]`이고, 화면은 **자기 문서에 같은 ops를
+ * 적용한다** — 문서를 통째로 받으면 아직 보내지 않은 낙관적 편집이 사라지기 때문이다
+ * (서버 README의 "코멘트와 번호"). 문서가 안 바뀌었으면 빈 배열이고 `seq`는 그대로다.
+ */
+export interface MarkerChange {
+  seq: number
+  markerOps: PatchOp[]
+}
+
+/** 코멘트를 만든 결과. `marker`는 그 노드가 갖게 된(또는 이미 갖고 있던) 번호다. */
+export interface CommentCreated extends MarkerChange {
+  comment: Comment
+  marker: number
+}

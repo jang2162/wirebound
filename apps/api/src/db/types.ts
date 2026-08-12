@@ -180,6 +180,32 @@ export interface LayoutsTable {
   updated_at: Generated<Date>
 }
 
+/**
+ * 코멘트(`0008-comments`). 설계 §9의 우측 코멘트 탭이 담는 말이다.
+ *
+ * **`marker` 컬럼이 없는 것이 요점이다**(P5-1 계획서 D1) — 번호는 페이지 문서의 노드가
+ * 든다(`WbNode.marker`). 근거는 0008의 주석에 있다(요지: §4.3의 *"없으면 코멘트 없음"*
+ * 때문에 문서만 봐도 마커를 그릴 수 있어야 한다).
+ *
+ * `node_id`는 `pages.schema` 안의 노드 id다 — **테이블이 아니라 jsonb 문서 안의 값이라
+ * FK가 없다.** 그래서 "문서에 없는 `node_id`를 가진 행"이 존재할 수 있고, 그것을 만드는
+ * 것을 막는 자리는 라우트다(`routes/comments.ts`).
+ *
+ * `created_at`·`updated_at`의 기본값이 `now()`가 아니라 `clock_timestamp()`다 —
+ * **이 테이블만 갈린다.** 스레드 순서를 정하는 것이 시각뿐이라 한 트랜잭션 안에서
+ * 만든 행이 같은 값을 가지면 안 되기 때문이다(0008의 주석에 실측 조건이 있다).
+ */
+export interface CommentsTable {
+  id: Generated<string>
+  page_id: string
+  node_id: string
+  body: string
+  author_id: string
+  created_at: Generated<Date>
+  /** 본문을 고치면 `repos/comments.ts`가 `clock_timestamp()`로 함께 갱신한다. */
+  updated_at: ColumnType<Date, Date | undefined, Date>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -190,4 +216,5 @@ export interface Database {
   revisions: RevisionsTable
   themes: ThemesTable
   layouts: LayoutsTable
+  comments: CommentsTable
 }
