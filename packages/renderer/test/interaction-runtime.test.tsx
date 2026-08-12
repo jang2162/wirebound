@@ -273,6 +273,37 @@ describe('T1 — 트리거 4종이 DOM 이벤트에 붙는다', () => {
     expect(attached('submit', 'onSubmit')).toBe(true)
   })
 
+  /**
+   * **이 케이스가 지키는 것은 절반뿐이다.** 재는 것은 *"핸들러가 `preventDefault`를
+   * 부르는가"*이고, **그 결과(폼 제출이 페이지를 떠나지 않는다)는 jsdom에서 잴 수 없다** —
+   * 거기서는 제출이 이동을 만들지 않는다.
+   *
+   * **나머지 절반은 실브라우저에서 A/B/A로 쟀다**(P5-3 리뷰가 반증했고 다시 쟀다):
+   * 그 줄을 걷어 낸 번들은 실제로 `/landed.html`로 **이동한다.** 값과 장치는
+   * `render.tsx`의 그 자리 주석에 있다. **회귀가 그 갈래를 지키지 않는다.**
+   */
+  it('submit 규칙은 기본 동작을 막는다 — 이동까지는 여기서 못 잰다', () => {
+    const doc = example([{ on: 'submit', actions: [] }])
+    const tree = renderDocument(doc, { interaction: {} })
+    let prevented = false
+    const event = { preventDefault: () => { prevented = true } }
+
+    handlerOf(tree, 'n_btn', 'onSubmit')?.(event)
+
+    expect(prevented).toBe(true)
+  })
+
+  it('click 규칙은 기본 동작을 막지 않는다 — 음성 대조', () => {
+    // 막으면 캔버스의 선택 클릭·링크가 함께 죽는다. `onSubmit`만 갈리는 자리다.
+    const doc = example(CLICK_SETS_LOADING)
+    const tree = renderDocument(doc, { interaction: {} })
+    let prevented = false
+
+    handlerOf(tree, 'n_btn', 'onClick')?.({ preventDefault: () => { prevented = true } })
+
+    expect(prevented).toBe(false)
+  })
+
   it('한 노드에 click과 select가 함께 걸리면 한 번 눌러 둘 다 돈다', () => {
     const doc = example([
       { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'items', value: 3 }] },

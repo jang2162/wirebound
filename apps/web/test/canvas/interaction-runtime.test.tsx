@@ -12,7 +12,7 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { EditorStore } from '../../src/store/editor-store'
-import { PAGE_ID, nodeElement, openPage, pageDoc, requireNode } from '../editor-harness'
+import { PAGE_ID, canvasSurface, nodeElement, openPage, pageDoc, requireNode } from '../editor-harness'
 
 /** 셸이 만든 스토어를 쥔다. 근거는 `canvas.test.tsx`의 같은 장치 주석. */
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
@@ -460,6 +460,141 @@ describe('T1 — navigate·openModal은 알리고 움직이지 않는다 (D4·�
     expect(notices()).toEqual([
       '관리자/회원/등록 페이지 모달 열기 규칙입니다. 이 화면에서는 모달을 열지 않습니다.',
     ])
+  })
+})
+
+describe('알림은 "마지막 조작이 만든 것"이다 (리뷰 ②)', () => {
+  /** 깨진 규칙 하나와 멀쩡한 규칙 하나, 그리고 **규칙이 없는 노드** 하나. */
+  const DOC_MIX = pageDoc({
+    id: 'n-root',
+    type: 'Page',
+    children: [
+      {
+        id: 'n-bad',
+        type: 'Button',
+        props: { label: '깨진' },
+        interactions: [
+          { on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] },
+        ],
+      },
+      { id: 'n-plain', type: 'Text', props: { content: '규칙 없는 글' } },
+      { id: 'n-list', type: 'List', props: {} },
+    ],
+  })
+
+  it('규칙이 없는 노드를 누르면 앞 알림이 사라진다', async () => {
+    // **앞 판은 여기서 알림이 남았다**(`matched === 0`이라 `onEvent`가 안 불린다) —
+    // 사용자는 방금 누른 것과 아무 상관 없는 말을 계속 본다.
+    await openPage(DOC_MIX)
+    toView()
+    fireEvent.click(requireNode('n-bad'))
+    expect(notices()).toHaveLength(1)
+
+    fireEvent.click(requireNode('n-plain'))
+
+    expect(notices()).toEqual([])
+  })
+
+  it('빈 자리를 눌러도 사라진다', async () => {
+    await openPage(DOC_MIX)
+    toView()
+    fireEvent.click(requireNode('n-bad'))
+    expect(notices()).toHaveLength(1)
+
+    // 문서 밖(표면)을 누른다 — 노드 위가 아니다.
+    fireEvent.click(canvasSurface())
+
+    expect(notices()).toEqual([])
+  })
+
+  it('한 클릭에 트리거 둘이 걸리면 둘의 말이 다 남는다', async () => {
+    // **앞 판은 뒤 트리거가 앞 것을 덮어** `click`의 이슈 문장이 사라졌다.
+    await openPage(
+      pageDoc({
+        id: 'n-root',
+        type: 'Page',
+        children: [
+          {
+            id: 'n-both',
+            type: 'Button',
+            props: { label: '둘' },
+            interactions: [
+              { on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] },
+              { on: 'select', actions: [{ type: 'switchTab', target: 'n-gone2', tab: 1 }] },
+            ],
+          },
+        ],
+      }),
+    )
+    toView()
+
+    fireEvent.click(requireNode('n-both'))
+
+    expect(notices()).toEqual([
+      'setProp의 타겟 노드가 문서에 없습니다: n-gone',
+      'switchTab의 타겟 노드가 문서에 없습니다: n-gone2',
+    ])
+  })
+
+  it('두 번 누르면 쌓이지 않는다 — 조작마다 새로 시작한다', async () => {
+    await openPage(DOC_MIX)
+    toView()
+
+    fireEvent.click(requireNode('n-bad'))
+    fireEvent.click(requireNode('n-bad'))
+
+    expect(notices()).toHaveLength(1)
+  })
+})
+
+describe('겹layer가 안 바뀐 조작도 자리를 다시 잰다 (리뷰 ②-1)', () => {
+  it('알림 줄이 뜨면 마커를 다시 잰다', async () => {
+    // **알림 줄은 문서 위에 그려져 문서를 아래로 민다.** 겹layer가 안 바뀐 조작
+    // (`applied === 0`)에서는 참조가 그대로라, 의존성에 `notices`가 없으면 이 이펙트가
+    // 안 돌고 **마커가 옛 자리에 남는다.**
+    //
+    // jsdom의 `getBoundingClientRect`는 전부 0이라 자리를 그대로는 잴 수 없다 —
+    // **알림 줄이 있는지에 따라 다른 값을 내는 가짜 상자**를 심어 잰다(리뷰가 쓴 장치와
+    // 같은 형식이다).
+    const rect = (top: number): DOMRect => ({ top, left: 0, width: 10, height: 10, right: 10, bottom: top + 10, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+    const original = Element.prototype.getBoundingClientRect
+    Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
+      if (this.classList.contains('wb-shell-canvas-surface')) return rect(0)
+      // 알림 줄이 떠 있으면 문서가 밀려 내려간다.
+      const pushed = document.body.querySelector('.wb-shell-canvas-runtime') !== null
+      return rect(pushed ? 40 : 0)
+    }
+
+    try {
+      await openPage(
+        pageDoc({
+          id: 'n-root',
+          type: 'Page',
+          children: [
+            {
+              id: 'n-bad',
+              type: 'Button',
+              props: { label: '깨진' },
+              marker: 1,
+              interactions: [
+                { on: 'click', actions: [{ type: 'setProp', target: 'n-gone', prop: 'x', value: 1 }] },
+              ],
+            },
+          ],
+        }),
+      )
+      toView()
+      const marker = (): string | undefined =>
+        document.body.querySelector<HTMLElement>('[data-wb-marker-for="n-bad"]')?.style.top
+      expect(marker()).toBe('0px')
+
+      fireEvent.click(requireNode('n-bad'))
+
+      expect(notices()).toHaveLength(1)
+      expect(marker()).toBe('40px')
+    } finally {
+      Element.prototype.getBoundingClientRect = original
+    }
   })
 })
 

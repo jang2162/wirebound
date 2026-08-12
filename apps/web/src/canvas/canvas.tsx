@@ -183,9 +183,14 @@ export function Canvas(props: {
    *
    * **리셋의 축을 둘로 둔 근거:** 모드는 §8.3이 정한 경계이고(편집 모드에서는 안 돈다),
    * 페이지는 노드 id의 유효 범위다 — 겹layer의 키가 노드 id라 다른 페이지에서는 뜻이 없다.
-   * **문서가 바뀌는 것은 축이 아니다:** 뷰 모드에서 사용자는 편집하지 않고, 남의 편집이
-   * 실시간으로 오는 경로는 오늘 0건이다(P3의 WS — P5-1 이월 §3이 쟀다). 그 경로가 생기면
-   * 여기서 다시 정할 일이다.
+   * **문서가 바뀌는 것은 축이 아니다 — 그러나 그 근거의 절반이 거짓이었다.**
+   * 앞 판은 *"뷰 모드에서 사용자는 편집하지 않는다"*고 적었는데 **되돌리기·다시 실행이
+   * 뷰 모드에서 살아 있었다**(리뷰가 찾았다). 그 자리는 셸에서 없앴다 — 편집 도구는 편집
+   * 모드에 있다(`routes/editor.tsx`). **원인을 없앴으므로 전제가 이제 참이다.**
+   *
+   * **남는 절반은 그대로다:** 남의 편집이 실시간으로 오는 경로는 오늘 0건이고(P3의 WS —
+   * P5-1 이월 §3이 쟀다), 코멘트가 바꾸는 것은 `marker`뿐이라 겹layer가 덮는 값과 겹치지
+   * 않는다. **P3가 오면 여기서 다시 정할 일이다** — 그때는 문서 동일성도 축이 된다.
    */
   const runtimeKey = `${mode}:${props.pageId ?? ''}`
   const [runtime, setRuntime] = useState<RuntimeState>(() => emptyRuntime(runtimeKey))
@@ -206,6 +211,42 @@ export function Canvas(props: {
    * **상호작용은 뷰 모드에서만 돈다**(§8.3: *"편집 모드에서는 상호작용이 동작하지 않는다"*).
    * 편집 모드에서는 이 값이 `undefined`라 렌더러가 **오늘과 한 글자도 다르지 않게** 그린다(D7).
    */
+  /**
+   * 지금 키의 상태로 맞춘 것. **갱신 함수 안에서 옛 키의 상태에 얹지 않기 위해서다** —
+   * 모드를 바꾼 뒤 첫 이벤트가 앞 모드의 알림에 덧붙는 것을 막는다.
+   */
+  const normalize = (prev: RuntimeState): RuntimeState =>
+    prev.key === runtimeKey ? prev : emptyRuntime(runtimeKey)
+
+  /**
+   * **알림은 "마지막 조작이 만든 것"이다** — 이 규칙 하나가 리뷰가 찾은 갈래 둘을 함께 닫는다.
+   *
+   * | 갈래 | 앞 판에서 일어난 일 |
+   * |---|---|
+   * | 규칙이 **없는** 노드를 누른다 | `matched === 0`이라 `onEvent`가 안 불려 **앞 알림이 그대로 남는다** |
+   * | 한 클릭에 `click`·`select`가 함께 걸린다 | 뒤 트리거의 결과가 앞 것을 **덮어** 앞 이슈 문장이 사라진다 |
+   *
+   * 둘 다 *"화면이 낡은 채로 남는다"*는 한 부류다(P5-1 이월 §1의 여섯째 형태). 그래서 규칙도
+   * 하나다: **조작이 시작될 때 비우고, 그 조작 동안 일어난 것을 쌓는다.**
+   *
+   * **캡처 단계가 그 "시작"이다.** 캡처는 뿌리에서 타겟으로 내려가므로 **노드의 핸들러보다
+   * 먼저** 돈다. 같은 이벤트 안의 두 `setRuntime`은 React가 한 번에 처리하고 갱신 함수는
+   * 부른 순서대로 쌓이므로, 비우기가 반드시 앞선다.
+   *
+   * **`onClick`(버블)로는 안 된다** — 그쪽은 노드 핸들러보다 **뒤에** 돌아 방금 만든 알림을
+   * 지운다. 선택을 그 자리에서 처리하는 것(아래 표면의 `onClick`)과 단계가 갈리는 이유다.
+   */
+  const beginGesture = (): void => {
+    setRuntime((prev) => {
+      const base = normalize(prev)
+      return base.notices.length === 0 ? base : { ...base, notices: NO_NOTICES }
+    })
+  }
+
+  /**
+   * **상호작용은 뷰 모드에서만 돈다**(§8.3: *"편집 모드에서는 상호작용이 동작하지 않는다"*).
+   * 편집 모드에서는 이 값이 `undefined`라 렌더러가 **오늘과 한 글자도 다르지 않게** 그린다(D7).
+   */
   const interaction =
     mode === 'view'
       ? {
@@ -213,7 +254,16 @@ export function Canvas(props: {
           onEvent: (event: InteractionEvent) => {
             // **렌더 중이 아니라 이벤트 핸들러 안이다** — `onNodeError`와 달리 여기서
             // `setState`를 불러도 된다(`render.tsx`의 `onEvent` 주석).
-            setRuntime({ key: runtimeKey, overlay: event.overlay, notices: noticesOf(event) })
+            setRuntime((prev) => {
+              const base = normalize(prev)
+              const added = noticesOf(event)
+              return {
+                key: runtimeKey,
+                overlay: event.overlay,
+                // **쌓는다**(위 `beginGesture`). 한 조작에 트리거가 둘이면 둘의 말이 다 남는다.
+                notices: added.length === 0 ? base.notices : [...base.notices, ...added],
+              }
+            })
           },
         }
       : undefined
@@ -252,7 +302,11 @@ export function Canvas(props: {
     // 때문이다. `zoom`은 자리를 바꾸지는 않지만 아래 계산이 그 값을 쓴다.
     // **겹layer도 자리를 바꾼다** — `setVisible`이 노드를 통째로 빼고 `setProp`이 크기를
     // 바꾼다. 빠뜨리면 아웃라인이 사라진 노드의 옛 자리에 남는다.
-  }, [outlinedNodeId, doc, zoom, viewportWidth, live.overlay])
+    // **`live.notices`도 자리를 바꾼다.** 알림 줄이 문서 **위에** 그려져 문서를 아래로
+    // 밀기 때문이다 — 겹layer가 안 바뀐 조작(`applied === 0`, 즉 깨진 규칙만 만난 클릭)에서는
+    // `live.overlay`의 참조가 그대로라 이 이펙트가 안 돌고, **아웃라인이 옛 자리에 남는다**
+    // (리뷰가 100px→140px 이동으로 실측했다).
+  }, [outlinedNodeId, doc, zoom, viewportWidth, live.overlay, live.notices])
 
   /**
    * **번호 마커의 자리를 잰다**(P5-1, 설계 §9). 위 아웃라인 이펙트와 같은 장치이고
@@ -296,8 +350,10 @@ export function Canvas(props: {
 
     setMarkers((prev) => (sameMarkers(prev, next) ? prev : next))
     // 아웃라인 쪽과 같은 이유로 `live.overlay`가 있다 — 숨겨진 노드의 마커는 사라져야 한다
-    // (`findNodeElement`가 `null`을 내므로 아래 루프가 건너뛴다).
-  }, [doc, zoom, viewportWidth, live.overlay])
+    // (`findNodeElement`가 `null`을 내므로 아래 루프가 건너뛴다). `live.notices`도 같은
+    // 이유다: 알림 줄이 문서를 아래로 민다. **마커가 옛 자리에 남는 것은 P5-1이 만든 것을
+    // 이 슬라이스가 깨는 것이라 함께 고쳤다.**
+  }, [doc, zoom, viewportWidth, live.overlay, live.notices])
 
   if (doc === null) return null
 
@@ -319,6 +375,12 @@ export function Canvas(props: {
         if (mode !== 'edit') return
         store.selectNode(nodeIdAt(event.target, event.currentTarget))
       }}
+      // **조작이 시작되는 자리**(위 `beginGesture`). 셋을 다는 것은 트리거 4종이 도는 DOM
+      // 이벤트가 셋이기 때문이다(`render.tsx`의 `DOM_EVENT`) — 하나라도 빠뜨리면 그
+      // 트리거로 시작한 조작에서 앞 알림이 남는다.
+      onClickCapture={mode === 'view' ? beginGesture : undefined}
+      onSubmitCapture={mode === 'view' ? beginGesture : undefined}
+      onChangeCapture={mode === 'view' ? beginGesture : undefined}
     >
       {/* **이번 클릭이 무엇을 했고 무엇을 못 했는가**(D3·D4). 배너가 아니라 `status`인 것은
           실패가 아니기 때문이다 — 깨진 규칙은 저장을 막지 않고(severity가 `warning`)

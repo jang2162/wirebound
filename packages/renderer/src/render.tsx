@@ -326,18 +326,30 @@ function handlersFor(root: WbNode, node: WbNode, options: RenderOptions): WbHand
     // 트리거 이름이 4종 밖이면 붙일 자리가 없다. 검증 전 문서가 그럴 수 있다.
     if (dom === undefined || handlers[dom] !== undefined) continue
     handlers[dom] = (event) => {
-      // 폼 제출이 페이지를 다시 부르지 않게 한다. 와이어프레임에는 보낼 곳이 없다.
+      // **이 줄을 지우면 폼 제출이 페이지를 떠난다. 지우지 마라.**
       //
-      // **하중이 0이다 — 실브라우저에서 쟀다**(P5-3). 이 줄을 걷어 낸 번들을 실제 브라우저에
-      // 띄우고 렌더된 `<form>` 안에 `<button type="submit">`을 꽂아 눌러도 **이동하지 않는다.**
-      // 원인은 React다: 같은 제출 이벤트의 `defaultPrevented`가 document 캡처 단계에서는
-      // `false`인데 window 버블 단계에서는 **`true`**였다 — 그 사이에 있는 것이 React의 루트
-      // 리스너다. **양성 대조로 측정 장치를 확인했다:** 같은 페이지에 만든 순수 `<form>`은
-      // 제출 버튼 클릭으로 실제로 이동했다(문맥이 파괴됐다).
+      // 와이어프레임에는 제출을 보낼 곳이 없는데, `<form>`은 막지 않으면 기본 동작으로
+      // **문서를 떠난다** — 그러면 겹layer(뷰 모드에서 눌러 만든 화면 상태)가 통째로 사라지고
+      // 사용자는 *"눌렀더니 페이지가 리로드됐다"*를 본다.
       //
-      // **그래도 남긴다.** 우리가 기대는 것이 React의 내부 동작이라 그쪽이 바뀌면 그날로
-      // 페이지가 리로드되고 겹layer가 통째로 사라진다(§11.3의 정적 번들은 React가 아닐 수도
-      // 있다). **jsdom으로는 이 갈래를 잴 수 없다** — 거기서는 제출이 이동을 만들지 않는다.
+      // **실브라우저에서 A/B/A로 쟀다**(P5-3 리뷰가 반증했고 다시 재서 확인했다).
+      // 렌더된 `<form>`에 `action`을 걸고 `<button type="submit">`을 꽂아 눌렀다:
+      //
+      // | 번들 | 이동했나 | window 버블의 `defaultPrevented` |
+      // |---|---|---|
+      // | A — 이 줄 있음 | **안 한다** | `true` |
+      // | B — 이 줄 없음 | **`/landed.html`로 이동한다**(JS 문맥이 파괴됐다) | `false` |
+      // | A′ — 되돌림 | 안 한다 | `true` |
+      //
+      // **앞 판의 주석은 이 자리에 *"하중 0 · React가 이미 막는다"*고 적었는데 거짓이었다.**
+      // 그때 잰 A/B 두 번들은 **바이트까지 같았다**(둘 다 1,243,664B) — 심은 것은
+      // `src/render.tsx`인데 번들러가 `package.json`의 `exports`를 따라 **`dist/`를**
+      // 봤기 때문이다. `--alias`로 `src`를 보게 하고 다시 재니 뒤집혔다. 즉 window 버블에서
+      // `true`였던 것은 React가 아니라 **React의 루트 리스너가 부른 이 핸들러**였다.
+      //
+      // **jsdom으로는 이 갈래를 잴 수 없다** — 거기서는 제출이 이동을 만들지 않는다.
+      // 그래서 회귀가 이 줄을 지키지 못한다(`test/interaction-runtime.test.tsx`의
+      // `submit 규칙은 기본 동작을 막는다`가 **`defaultPrevented`만** 본다).
       if (dom === 'onSubmit') event.preventDefault()
       fire(root, node, dom, options)
     }

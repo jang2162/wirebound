@@ -209,7 +209,20 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
     <div className="wb-shell">
       <header className="wb-shell-header">
         <h1 className="wb-shell-title">{props.project.name}</h1>
-        <UndoTools projectId={props.project.id} pageId={props.pageId} />
+        {/* **되돌리기·다시 실행은 편집 모드에만 있다**(P5-3 리뷰가 찾았다).
+            §9가 뷰 모드에서 구조 트리를 접고 속성 탭을 페이지 설명으로 바꾸는 것과 같은
+            선이다 — **편집 도구는 편집 모드에 있다.**
+
+            **이 자리가 실제로 무언가를 깨고 있었다.** 뷰 모드에서 undo를 누르면 문서는
+            되돌아가는데 **겹layer가 그 위에 그대로 얹혀 있어 화면이 안 바뀐다** — 눌렀는데
+            아무 일도 안 일어나는 그 부류다(P5-1 이월 §1). 그리고 그 존재 자체가 캔버스의
+            리셋 판정(재라 #4)이 딛고 선 *"뷰 모드에서 사용자는 편집하지 않는다"*를
+            거짓으로 만들고 있었다.
+
+            **겹layer를 함께 되돌리는 쪽을 고르지 않았다:** 되돌릴 대상이 문서가 아니라
+            시연 상태라 *"어디까지"*가 정의되지 않는다(undo 한 칸이 겹layer 몇 칸인가).
+            **원인을 없애는 쪽이 정의가 필요 없다.** */}
+        {mode === 'edit' && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
         <ShellTools />
         {/* **테마 고르개**(P4b-3 D2). 셸 머리에 두는 것은 이것이 화면 **전체**를 바꾸기
             때문이다 — 페이지 하나가 아니라 이 프로젝트의 모든 화면이 갈린다.

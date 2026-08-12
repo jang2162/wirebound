@@ -124,6 +124,27 @@ describe('§9 — 모드를 바꿀 때 보던 탭', () => {
   })
 })
 
+describe('§9 — 편집 도구는 편집 모드에 있다 (리뷰 ②-4)', () => {
+  it('뷰 모드에서는 되돌리기·다시 실행이 없다', async () => {
+    await openPage(DOC)
+    // 양성 대조: 편집 모드에는 있다. 이것이 없으면 아예 안 그리는 구현도 아래를 통과한다.
+    expect(screen.getByRole('group', { name: '편집 이력' })).toBeTruthy()
+
+    toView()
+
+    expect(screen.queryByRole('group', { name: '편집 이력' })).toBeNull()
+  })
+
+  it('편집 모드로 돌아오면 되살아난다', async () => {
+    await openPage(DOC)
+    toView()
+
+    toEdit()
+
+    expect(screen.getByRole('group', { name: '편집 이력' })).toBeTruthy()
+  })
+})
+
 describe('§9 — 페이지 설명 탭', () => {
   it('서버가 준 제목과 설명을 보인다', async () => {
     await openPage(DOC, { apiOverrides: withDescription('회원을 찾고 고치는 화면') })
