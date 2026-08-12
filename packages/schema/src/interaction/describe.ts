@@ -107,6 +107,13 @@ const MISSING_NODE = '사라진 노드'
 const UNSET_NODE = '아직 고르지 않은 대상'
 /** 아직 대상을 안 고른 `navigate`·`openModal`. */
 const UNSET_PAGE = '아직 정해지지 않은 페이지'
+/**
+ * **아직 `prop`을 안 고른 `setProp`.** 앞 판은 라벨이 빈 문자열이라 문장이 통째로 깨졌다
+ * (`목록이 로 바뀝니다`) — 미확정을 **아무 말도 하지 않는 것으로 접은** 형태다.
+ */
+const UNSET_PROP = '아직 고르지 않은 속성'
+/** 뜻이 없는 탭 번호(음수·비정수). **번호로 읽어 주지 않는다** — `-2번째 탭`은 뜻이 없다. */
+const BAD_TAB = '올바르지 않은 탭 번호'
 /** 라벨을 문장에 실을 때의 상한. 넘으면 잘리고 `…`가 붙는다. */
 const LABEL_MAX = 20
 
@@ -188,9 +195,18 @@ function actionClause(nodes: ReadonlyMap<string, WbNode>, action: InteractionAct
     case 'setProp': {
       const target = nodes.get(action.target)
       const name = targetName(nodes, action.target)
-      const label = propLabel(target, action.prop)
+      const known = typeof action.prop === 'string' && action.prop.trim().length > 0
+      const label = known ? propLabel(target, action.prop) : UNSET_PROP
       // §8.2의 표본이 참인 경우다: *"② 목록이 로딩 상태로 바뀝니다"*.
-      if (action.value === true) return `${name}${subjectParticle(name)} ${label}${directionParticle(label)} 바뀝니다`
+      //
+      // **속성이 미확정이면 그 형태를 못 쓴다.** `{라벨}로 바뀝니다`는 라벨이 **상태 이름**일
+      // 때만 뜻이 통하는데(`로딩 상태`), 미확정이면 *"아직 고르지 않은 속성으로 바뀝니다"*가
+      // 되어 무엇이 일어나는지 말하지 못한다. 그때는 거짓 쪽과 같은 형태를 쓴다.
+      if (action.value === true) {
+        return known
+          ? `${name}${subjectParticle(name)} ${label}${directionParticle(label)} 바뀝니다`
+          : `${name}의 ${label}${subjectParticle(label)} 켜집니다`
+      }
       // 거짓은 대칭으로 적을 수 없다 — *"로딩 상태가 아니게 됩니다"*는 어색하고,
       // 카탈로그의 그 prop들은 전부 스위치라 **꺼진다**는 말이 그대로 맞다.
       if (action.value === false) return `${name}의 ${label}${subjectParticle(label)} 꺼집니다`
@@ -208,10 +224,15 @@ function actionClause(nodes: ReadonlyMap<string, WbNode>, action: InteractionAct
       const target = nodes.get(action.target)
       const name = targetName(nodes, action.target)
       const tabName = tabLabel(target, action.tab)
+      // **뜻이 없는 번호는 번호로 읽어 주지 않는다** — `tab: -3`을 `-2번째 탭`으로 내던
+      // 자리다(리뷰가 찾았다). 검증도 같은 값을 `invalid-interaction-prop`으로 잡는다.
+      const usable = typeof action.tab === 'number' && Number.isInteger(action.tab) && action.tab >= 0
       // 이름을 못 읽으면 번호로 말한다 — `tab`은 0부터이고 사람이 세는 것은 1부터다.
-      // 둘 다 `탭`으로 끝나므로 `으로`가 맞다 — 조사를 계산할 필요가 없는 자리다.
-      const which = tabName === null ? `${action.tab + 1}번째 탭` : `"${tabName}" 탭`
-      return `${name}${subjectParticle(name)} ${which}으로 바뀝니다`
+      const which = !usable ? BAD_TAB : tabName === null ? `${action.tab + 1}번째 탭` : `"${tabName}" 탭`
+      // **조사를 계산한다.** 앞 판은 `으로`를 박아 두고 *"셋 다 `탭`으로 끝나므로 계산할
+      // 필요가 없다"*고 적었는데, `올바르지 않은 탭 번호`가 생기면서 그 문장이 거짓이 됐다
+      // (`번호`는 받침이 없어 `로`다 — 케이스가 `번호으로`를 잡았다).
+      return `${name}${subjectParticle(name)} ${which}${directionParticle(which)} 바뀝니다`
     }
     case 'navigate':
       return `${pageName(action.target)}${directionParticle(pageName(action.target))} 이동합니다`

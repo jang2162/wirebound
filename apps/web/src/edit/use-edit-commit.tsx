@@ -25,6 +25,26 @@ const EDIT_UNKNOWN_FAILURE = '편집을 저장하지 못했습니다'
 const RECOVER_UNKNOWN_FAILURE = '편집에 실패한 뒤 페이지를 다시 불러오지도 못했습니다'
 
 /**
+ * **재조회까지 실패한 갈래에서 덧붙이는 문장** — *"실패했다고 말하는데 조작은 화면에
+ * 남는다"*를 닫는 자리다(P5-2 리뷰가 찾았다. 이 저장소가 만난 그 부류의 **다섯째**).
+ *
+ * **이 갈래는 `loadPage`를 지나지 않는다.** 그래서 낙관적으로 적용된 편집이 문서에 그대로
+ * 남고, 선택도 유지되어 화면이 아무것도 되돌리지 않는다 — 재조회가 **성공한** 갈래가
+ * 문서·선택·큐를 서버 상태로 놓는 것과 정반대다. 사용자는 실패 알림을 보면서 **자기가
+ * 방금 만든 것이 화면에 그대로 있는 것**을 본다.
+ *
+ * **되돌릴 문서가 없다 — 그것이 이 갈래의 성질이다.** 서버 상태를 못 읽었으므로 무엇으로
+ * 되돌릴지 모른다. **문서를 비우는 쪽은 고르지 않았다:** 그러면 사용자가 보고 있던 것을
+ * 통째로 잃고, 그 손실은 *"서버가 잠깐 답을 못 했다"*는 사유에 비해 너무 크다. **할 수
+ * 있는 정직한 일은 그 상태를 말하는 것뿐이고**, 그것이 P5-1이 `'diverged'`에 내린 판정과
+ * 같은 형태다(*"서버엔 번호가 있는데 내 화면엔 없다 — 새로고침하면 맞춰집니다"*).
+ *
+ * **우리 쪽 문장에만 붙인다.** 서버 문장을 고치지 않는 경계(`api/failure.tsx`)는 그대로다.
+ */
+const UNRECOVERED_NOTICE =
+  '화면에 남아 있는 편집은 저장되지 않았습니다. 새로고침해 서버 상태를 확인하세요.'
+
+/**
  * 되돌릴 수 없는 항목을 건너뛰었을 때의 안내(설계 §7.3).
  *
  * **에러가 아니라 정상 흐름이다** — 다른 사람이 그 노드를 지웠으면 내 `inverse`가 적용되지
@@ -161,8 +181,13 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         const recoverFailure = toFailure(recoverCaught, RECOVER_UNKNOWN_FAILURE)
         store.setEditFailure(
           recoverFailure.kind === 'signed-out'
-            ? recoverFailure
-            : { kind: 'message', message: recoverFailure.message },
+            ? // 세션이 끊긴 것은 여기서 말하지 않는다 — `EditAlert`이 `<SignedOut />`으로
+              // 화면을 갈아 끼우므로 남아 있는 화면 자체가 없다.
+              recoverFailure
+            : // **성공 갈래와 같은 형식으로 우리 문장을 덧붙인다**(구분자 `—`도 같다).
+              // 서버 문장은 끝에 마침표를 두지 않으므로 그대로 이어 붙이면 두 문장이 한
+              // 문장처럼 읽힌다(성공 갈래 주석의 실측).
+              { kind: 'message', message: `${recoverFailure.message} — ${UNRECOVERED_NOTICE}` },
         )
       } finally {
         store.setEditStatus('idle')

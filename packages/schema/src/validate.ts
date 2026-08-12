@@ -471,20 +471,29 @@ function checkInteractions(
         continue
       }
 
-      if (action.type === 'switchTab' && target.type !== 'Tabs') {
+      if (action.type === 'switchTab') {
+        if (target.type !== 'Tabs') {
+          issues.push(
+            makeIssue(
+              'invalid-interaction-target',
+              node.id,
+              actionPath,
+              `switchTab의 타겟은 Tabs여야 합니다 (현재: ${target.type})`,
+            ),
+          )
+          continue
+        }
+        // **`tab`은 `Tabs.active`와 같은 축의 값이므로 같은 규칙으로 본다**(리뷰가 찾은
+        // 비대칭). 규칙을 여기 베껴 적지 않고 카탈로그의 zod를 그대로 쓴다 — 베끼면 둘이
+        // 따로 썩는다. **상한은 여전히 없다**(카탈로그가 `min(0)`만 정했다).
         issues.push(
-          makeIssue(
-            'invalid-interaction-target',
-            node.id,
-            actionPath,
-            `switchTab의 타겟은 Tabs여야 합니다 (현재: ${target.type})`,
-          ),
+          ...checkPropValue(node.id, actionPath, target, 'active', action.tab, 'switchTab의 탭 번호'),
         )
         continue
       }
 
       if (action.type === 'setProp') {
-        issues.push(...checkSetPropValue(node.id, actionPath, target, action.prop, action.value))
+        issues.push(...checkPropValue(node.id, actionPath, target, action.prop, action.value))
       }
     }
   }
@@ -493,7 +502,14 @@ function checkInteractions(
 }
 
 /**
- * `setProp`의 `prop`과 `value`를 타겟 컴포넌트의 계약과 대조한다.
+ * 액션이 넣으려는 값을 타겟 컴포넌트의 **그 prop 계약**과 대조한다.
+ *
+ * **`setProp`과 `switchTab`이 함께 쓴다.** `switchTab.tab`은 이름만 다를 뿐 `Tabs.active`에
+ * 넣는 값이라 같은 규칙을 받아야 한다 — 앞 판은 그 자리를 안 봤고, 같은 값(`-3`·`1.5`)이
+ * **prop 자리에서는 `invalid-props`(error)인데 액션 자리에서는 이슈 0건**이었다(리뷰가 쟀다).
+ *
+ * `label`은 메시지에 쓸 이름이다. 사용자가 적은 것은 `tab`이지 `active`가 아니므로,
+ * 그쪽은 *"switchTab의 탭 번호"*라고 불러야 무엇을 고쳐야 하는지가 맞는다.
  *
  * **값을 `def.props` 통째로 파싱하지 않는다** — 그러면 타겟 노드에 없는 **다른** prop
  * 때문에 실패가 난다. `propSchema`가 그 prop 하나만 떼어 준다.
@@ -501,12 +517,13 @@ function checkInteractions(
  * **카탈로그에 없는 타입은 판정하지 않는다.** 대조할 계약이 없고, *"알 수 없는 타입"*은
  * `unknown-type`이 이미 말한다 — 같은 사실을 두 이슈로 말하면 사용자는 문제가 둘인 줄 안다.
  */
-function checkSetPropValue(
+function checkPropValue(
   nodeId: string,
   actionPath: string,
   target: WbNode,
   prop: string,
   value: unknown,
+  label = `${target.type}.${prop}`,
 ): ValidationIssue[] {
   const def = getComponent(target.type)
   if (!def) return []
@@ -531,7 +548,7 @@ function checkSetPropValue(
       'invalid-interaction-prop',
       nodeId,
       actionPath,
-      `${target.type}.${prop}에 넣을 수 없는 값입니다: ${parsed.error.issues
+      `${label}에 넣을 수 없는 값입니다: ${parsed.error.issues
         .map((issue) => issue.message)
         .join(', ')}`,
     ),

@@ -294,6 +294,34 @@ describe('액션 5종', () => {
     ).toBe('실행 버튼 클릭 시 탭이 "상세정보" 탭으로 바뀝니다')
   })
 
+  /**
+   * **뜻이 없는 번호는 번호로 읽어 주지 않는다**(리뷰가 찾았다). 앞 판은 `tab: -3`을
+   * `-2번째 탭`으로, `1.5`를 `2.5번째 탭`으로 냈다 — **검증이 못 잡으면 문장화가 그것을
+   * 그대로 읽어 주는** 형태였다(검증 쪽도 함께 닫았다).
+   */
+  it('switchTab — 음수·비정수 번호는 그렇다고 말한다', () => {
+    expect(withAction({ type: 'switchTab', target: 'n_tgt', tab: -3 }, 'Tabs', { tabs: ['하나'] })).toBe(
+      '실행 버튼 클릭 시 탭이 올바르지 않은 탭 번호로 바뀝니다',
+    )
+    expect(withAction({ type: 'switchTab', target: 'n_tgt', tab: 1.5 }, 'Tabs', { tabs: ['하나'] })).toBe(
+      '실행 버튼 클릭 시 탭이 올바르지 않은 탭 번호로 바뀝니다',
+    )
+  })
+
+  /**
+   * **아직 속성을 안 고른 `setProp`.** 앞 판은 라벨이 빈 문자열이라 문장이 통째로
+   * 깨졌다(`목록이 로 바뀝니다` · `목록의 가 "가"로 바뀝니다`) — 미확정을 **아무 말도 하지
+   * 않는 것으로 접은** 형태다. 타겟의 `아직 고르지 않은 대상`과 같은 부류다.
+   */
+  it('setProp — 속성을 아직 안 골랐으면 그렇다고 말한다', () => {
+    expect(withAction({ type: 'setProp', target: 'n_tgt', prop: '', value: true })).toBe(
+      '실행 버튼 클릭 시 목록의 아직 고르지 않은 속성이 켜집니다',
+    )
+    expect(withAction({ type: 'setProp', target: 'n_tgt', prop: '', value: '가' })).toBe(
+      '실행 버튼 클릭 시 목록의 아직 고르지 않은 속성이 "가"로 바뀝니다',
+    )
+  })
+
   it('switchTab — 이름을 못 읽으면 번호로 말한다', () => {
     expect(withAction({ type: 'switchTab', target: 'n_tgt', tab: 5 }, 'Tabs', { tabs: ['하나'] })).toBe(
       '실행 버튼 클릭 시 탭이 6번째 탭으로 바뀝니다',

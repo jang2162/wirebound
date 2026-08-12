@@ -178,6 +178,57 @@ describe('대상 종류 (D1의 검사 3)', () => {
   })
 
   /**
+   * **`switchTab`의 `tab`은 `Tabs.active`와 같은 축의 값이다 — 같은 규칙으로 본다**
+   * (리뷰가 찾은 비대칭). 앞 판은 *"상한이 없어서 검사하지 않는다"*고 적었는데, **그 근거는
+   * 상한에만 해당한다** — `Tabs.active`의 zod는 `z.number().int().min(0)`이라 **하한과
+   * 정수성은 이미 규칙이 있고**, 같은 값이 prop 자리에서는 `invalid-props`(error)인데 액션
+   * 자리에서는 이슈 0건이었다.
+   *
+   * **그 zod를 그대로 재사용한다** — 규칙을 베껴 적으면 둘이 따로 썩는다.
+   * **상한은 여전히 없다**(카탈로그가 안 정했다) — 그 자리만 앞 판의 근거가 그대로 산다.
+   */
+  it('switchTab의 탭 번호가 음수면 invalid-interaction-prop', () => {
+    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: -3 }] }, 'Tabs')
+    expect(interactionIssues(doc)).toContainEqual(
+      expect.objectContaining({ code: 'invalid-interaction-prop' }),
+    )
+  })
+
+  it('탭 번호가 정수가 아니어도 잡는다', () => {
+    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 1.5 }] }, 'Tabs')
+    expect(interactionIssues(doc)).toContainEqual(
+      expect.objectContaining({ code: 'invalid-interaction-prop' }),
+    )
+  })
+
+  it('메시지가 탭 번호에 대한 것임을 말한다', () => {
+    const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: -3 }] }, 'Tabs')
+    expect(interactionIssues(doc)[0]?.message).toContain('탭 번호')
+  })
+
+  /**
+   * **`Tabs.active`와 같은 값을 넣으면 같은 판정이 나온다** — 두 자리의 비대칭이 닫혔다는
+   * 것을 값으로 고정한다. 상한은 둘 다 없으므로 큰 수는 둘 다 통과한다.
+   */
+  it('prop 자리와 액션 자리가 같은 값에 같은 판정을 낸다', () => {
+    for (const tab of [-3, 1.5]) {
+      const asProp = pageWith(
+        { on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: true }] },
+        'Tabs',
+        { active: tab },
+      )
+      const asAction = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab }] }, 'Tabs')
+      // prop 자리: invalid-props(error) · 액션 자리: invalid-interaction-prop(warning)
+      expect(validatePage(asProp).some((issue) => issue.code === 'invalid-props')).toBe(true)
+      expect(interactionIssues(asAction)).toHaveLength(1)
+    }
+
+    // 상한은 어느 쪽도 없다 — 큰 수는 둘 다 통과한다.
+    const big = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 99 }] }, 'Tabs')
+    expect(interactionIssues(big)).toEqual([])
+  })
+
+  /**
    * **`setVisible`은 대상 종류를 가리지 않는다**(D1의 검사 4에 대한 판정). 숨기고 보이는
    * 것은 **모든 노드가 갖는 성질**이라 그것을 받을 자격을 따로 선언하는 자리가 카탈로그에
    * 없다 — `visible`이라는 prop도 상태도 어느 컴포넌트에 없다. 종류를 가리려면 그

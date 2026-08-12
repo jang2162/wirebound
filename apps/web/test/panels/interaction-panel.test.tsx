@@ -340,4 +340,51 @@ describe('상호작용 탭 — 저장에 실패하면', () => {
     // **그리고 조작이 문서에 남아 있지 않다** — 목록이 서버 상태를 보인다.
     expect(screen.getByText('아직 상호작용이 없습니다')).toBeTruthy()
   })
+
+  /**
+   * **재조회까지 실패하는 갈래에서는 화면이 되돌아가지 않는다 — 이것이 §1 부류의 다섯째다**
+   * (리뷰가 찾았다).
+   *
+   * `recover`의 `catch`는 **`loadPage`를 지나지 않는다.** 그러면 선택도 유지되고
+   * (`NodeRules`가 언마운트되지 않는다) `failEdits`는 큐만 비우므로 **낙관적으로 적용된 내
+   * 규칙이 문서에 그대로 남는다.** 위 케이스가 재는 갈래와 정반대다.
+   *
+   * **되돌릴 문서가 없다 — 그것이 이 갈래의 성질이다.** 서버 상태를 못 읽었으므로 무엇으로
+   * 되돌릴지 모른다. 문서를 비우는 쪽은 고르지 않았다(사용자가 보고 있던 것을 통째로
+   * 잃는다). **할 수 있는 정직한 일은 그 상태를 말하는 것뿐이고**, 그것이 P5-1이
+   * `'diverged'`에 내린 판정과 같은 형태다(*"서버엔 있는데 내 화면엔 없다 — 새로고침하면
+   * 맞춰집니다"*).
+   */
+  it('재조회까지 실패하면 규칙이 화면에 남고, 저장되지 않았다고 말한다', async () => {
+    const patchOps: ApiClient['patchOps'] = async () => {
+      throw new ApiError(409, 'conflict', '페이지가 이미 변경되었습니다')
+    }
+    // **첫 호출은 페이지를 여는 것이다** — 그것까지 실패시키면 화면이 아예 안 뜬다
+    // (처음 그렇게 적었다가 `캔버스에 노드가 없습니다`로 걸렸다). 재조회만 실패시킨다.
+    let opened = false
+    const getPage: ApiClient['getPage'] = async () => {
+      if (!opened) {
+        opened = true
+        return pageDetail(PAGE_ID, DOC)
+      }
+      throw new ApiError(500, 'internal', '서버 오류')
+    }
+
+    await openPage(DOC, { apiOverrides: { patchOps, getPage } })
+    await openInteractionTab()
+    selectNode('Button')
+
+    fireEvent.click(screen.getByRole('button', { name: '상호작용 추가' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+
+    // **오늘의 사실: 저작 자리도 규칙도 남아 있다.** 선택이 풀리지 않았다.
+    expect(screen.getByRole('button', { name: '규칙 1 삭제' })).toBeTruthy()
+
+    // **그래서 화면이 그 사실을 말해야 한다** — 말하지 않으면 사용자는 저장된 줄 안다.
+    const alert = screen.getByRole('alert').textContent ?? ''
+    expect(alert).toContain('서버 오류')
+    expect(alert).toContain('저장되지 않았습니다')
+    expect(alert).toContain('새로고침')
+  })
 })
