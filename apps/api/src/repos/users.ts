@@ -93,3 +93,23 @@ export async function insertUser(
     throw error
   }
 }
+
+/**
+ * 주어진 id 중 **실제로 있는 것**만 낸다(P6-2의 복원이 부른다).
+ *
+ * 복원은 payload의 코멘트를 되살릴 때 `author_id`를 그대로 쓰는데, 그 컬럼이
+ * `ON DELETE RESTRICT`라(0008) 없는 사용자로 삽입하면 `23503`이고 그것은 `pg`의 raw
+ * 예외이므로 **500**이 된다. 먼저 세어 400/409로 옮기는 것이 이 함수의 쓸모다.
+ *
+ * **오늘 그 상태에 도달하는 경로는 0건이다** — `deleteFrom('users')`가 `src/` 전체에
+ * 없다(이 파일에도 없다: `findUserByEmail`·`insertUser`뿐이다). 그래도 두는 이유는
+ * `services/restore.ts`의 6단계 주석에 있다: **payload는 이 표의 오늘 보장보다 오래 산다.**
+ *
+ * `ids`가 비어 있으면 질의를 돌지 않는다 — Kysely의 `in []`은 `false`로 컴파일되어
+ * 결과는 같지만, 왕복을 하나 아끼고 *"물어볼 것이 없다"*를 코드가 말하게 한다.
+ */
+export async function countExistingUsers(db: DbHandle, ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return []
+  const rows = await db.selectFrom('users').select('id').where('id', 'in', ids).execute()
+  return rows.map((row) => row.id)
+}

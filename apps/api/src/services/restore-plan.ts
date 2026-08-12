@@ -76,6 +76,7 @@ import {
   type PageDocument,
   type ValidationIssue,
 } from '@wirebound/schema'
+import { canonicalJson } from '../canonical-json'
 import type { SnapshotComment, SnapshotMenuNode, SnapshotPage, SnapshotPayload } from './snapshot-payload'
 
 /**
@@ -99,7 +100,9 @@ export interface RestoreCurrentState {
 }
 
 export type RestoreStep =
-  | { kind: 'delete-comment'; id: string }
+  // `pageId`를 함께 든다 — `deleteComment`가 `(pageId, commentId)`로 지운다(남의 페이지의
+  // 코멘트 id를 실은 요청이 통하지 않게 하는 그 repo의 계약).
+  | { kind: 'delete-comment'; id: string; pageId: string }
   | { kind: 'delete-page'; id: string }
   | { kind: 'create-menu'; node: SnapshotMenuNode }
   | { kind: 'update-menu'; node: SnapshotMenuNode }
@@ -146,14 +149,16 @@ export type RestorePlanOutcome =
  * 문서 두 개가 **내용으로** 같은가. `headSeq`가 아니라 이것으로 비교하는 이유는 D4에 있다 —
  * 편집했다가 되돌리면 `headSeq`는 달라져 있는데 문서는 같다.
  *
- * **`JSON.stringify` 비교이므로 키 순서가 다르면 "다르다"로 본다.** 그래도 되는 이유:
- * 양쪽 다 같은 `jsonb` 컬럼에서 왔고 Postgres가 `jsonb`의 키를 정규화한다 — 같은 문서면
- * 같은 순서다. (payload는 `snapshots.payload`가, 저장된 문서는 `pages.schema`가 `jsonb`다.)
- * 틀리는 방향도 안전하다: **다르다고 잘못 보면 revision이 하나 더 생길 뿐**이고, 같다고
- * 잘못 보는(= 복원이 조용히 빠지는) 방향으로는 틀리지 않는다.
+ * **`JSON.stringify`가 아니라 `canonicalJson`이다 — 처음엔 전자로 짰고 틀렸다.** 같은 상태를
+ * 재는데 매번 *"다르다"*가 나왔다: payload 쪽은 `jsonb`가 정렬한 키 순서(`root`→`version`)를
+ * 들고 있고, 지금 쪽은 `SnapshotPayloadSchema.parse`가 만든 zod 선언 순서(`version`→`root`)를
+ * 들고 있다. 실측과 두 경계의 표는 `src/canonical-json.ts`에 있다.
+ *
+ * **문서는 이 비교로 잃는 것이 없다** — 문서에서 순서를 나르는 것은 `children` 배열이고
+ * 배열 순서는 정규화가 건드리지 않는다.
  */
 function sameDocument(a: PageDocument, b: PageDocument): boolean {
-  return JSON.stringify(a) === JSON.stringify(b)
+  return canonicalJson(a) === canonicalJson(b)
 }
 
 /**
@@ -249,7 +254,7 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
   const snapshotCommentIds = new Set(payload.comments.map((comment) => comment.id))
   for (const comment of current.comments) {
     if (!snapshotCommentIds.has(comment.id)) {
-      steps.push({ kind: 'delete-comment', id: comment.id })
+      steps.push({ kind: 'delete-comment', id: comment.id, pageId: comment.pageId })
       summary.comments.deleted += 1
     }
   }

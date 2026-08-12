@@ -84,8 +84,13 @@
  * *"사용자 입력 때문에 500"*이라는 문제는 그대로 남아 있다(P6-1 이월 문서에 적었다).
  */
 import { sql } from 'kysely'
+import { assertLocking } from '../db/locking'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
+import { lockProjectComments } from './comments'
+import { lockProjectLayouts } from './layouts'
+import { lockProjectMenuNodes } from './menu'
+import { lockProjectPages } from './pages'
 import type { SnapshotPayload } from '../services/snapshot-payload'
 
 /** 스냅샷 어딘가에 NUL(U+0000)이 있을 때 던진다. 호출자가 400으로 매핑한다. */
@@ -430,4 +435,73 @@ export async function readCaptureFingerprint(
 
   // 서브쿼리 하나짜리 SELECT라 행이 반드시 하나다.
   return { fingerprint: row.rows[0]!.fingerprint, at: row.rows[0]!.at }
+}
+
+/**
+ * # 복원이 쓰는 동안 남이 못 고치게 잠근다 (P6-2 D8)
+ *
+ * 캡처는 **아무것도 쓰지 않아서** 지문 확인만으로 버텼다. 복원은 쓴다 — 확인과 쓰기
+ * 사이가 또 열려 있으므로 잠금이 필요하다.
+ *
+ * ## 실측 — 무엇이 막히고 무엇이 안 막히나
+ *
+ * **계획서 재라 #5는 *"막지 못할 가능성이 높다"*고 봤다. 재 보니 반대였다** — 다만
+ * **`projects` 행을 함께 잠글 때만** 그렇다. 오늘의 쓰기 라우트 아홉을 각각 재고
+ * (실제 커밋하는 두 커넥션, 잠금을 쥔 채 요청을 쏘고 700ms 안에 끝나는지 본다), 같은
+ * 요청을 잠금 없이 한 번 더 재서 **음성 대조**로 뒀다(그것이 없으면 *"막힌다"*와
+ * *"그냥 느리다"*가 구분되지 않는다).
+ *
+ * | 라우트 | 다섯 표만 잠갔을 때 | **+ `projects` 행** |
+ * |---|---|---|
+ * | `POST .../menu` (parentId 없음) | **안 막힌다** | **막힌다** |
+ * | `POST .../menu` (parentId 있음) | 막힌다 | 막힌다 |
+ * | `PATCH .../menu/:nodeId` | 막힌다 | 막힌다 |
+ * | `DELETE .../menu/:nodeId` | 막힌다 | 막힌다 |
+ * | `POST .../pages` | 막힌다 | 막힌다 |
+ * | `PATCH .../pages/:pageId` | 막힌다 | 막힌다 |
+ * | `POST .../comments` | 막힌다 | 막힌다 |
+ * | `PATCH .../comments/:commentId` | 막힌다 | 막힌다 |
+ * | `DELETE .../comments/:commentId` | 막힌다 | 막힌다 |
+ *
+ * (음성 대조는 아홉 전부 창 안에 끝났다 — 2xx.)
+ *
+ * ## 왜 그렇게 갈리나
+ *
+ * `FOR UPDATE`는 **이미 있는 행**에만 걸리고 Postgres에는 술어 잠금이 없다. 그래서
+ * *"새 행 삽입"*은 원래 막히지 않아야 하는데, 표의 대부분이 막힌 것은 **FK 때문**이다:
+ * 자식 행을 넣으면 Postgres가 **참조되는 부모 행에 `FOR KEY SHARE`를 건다.**
+ * `FOR UPDATE`는 그것과 충돌한다.
+ *
+ * 그러므로 남는 구멍은 **잠긴 어떤 행도 참조하지 않는 삽입** 하나였고, 오늘 그 모양은
+ * `parent_id`가 `NULL`인 메뉴 노드 하나뿐이다. `projects` 행을 잠그면 그것도 막힌다 —
+ * `menu_nodes.project_id`가 `projects(id)`를 참조하므로 그 삽입도 `projects` 행에
+ * `FOR KEY SHARE`를 걸기 때문이다. `pages`·`layouts`·`snapshots`도 같은 컬럼을 갖는다.
+ *
+ * **그러니 "다섯 표를 잠근다"가 아니라 "프로젝트를 잠근다"가 이 함수의 뜻이다.**
+ * 다섯 표의 행 잠금은 여전히 필요하다 — `projects` 행 잠금은 **UPDATE·DELETE를 막지
+ * 못한다**(그 문장들은 `project_id`를 건드리지 않으므로 부모 행에 잠금을 걸지 않는다).
+ * 둘이 서로 다른 절반을 막는다.
+ *
+ * ## 남는 구멍 — 정직하게
+ *
+ * - **테마 표는 잠그지 않는다.** 복원이 테마 **행**을 쓰지 않기 때문이다(D6). 복원이
+ *   도는 동안 누가 테마 문서를 고치면 그 편집이 이긴다 — 복원은 참조만 되돌리므로
+ *   충돌이 아니다. 다만 응답의 *"테마가 다르다"* 판정은 그 순간의 값으로 내려진다.
+ * - **다른 프로젝트는 잠그지 않는다.** 복원의 단위가 프로젝트다.
+ * - **`projects` 행 자체의 UPDATE**(`PATCH /:projectId` — 이름·슬러그)는 이 잠금이
+ *   막지만, 그것은 복원이 되돌리는 대상이 아니다(payload에 프로젝트 메타가 없다).
+ *   막히는 것이 손해는 아니다 — 잠깐 기다렸다 통과한다.
+ *
+ * ## 순서
+ *
+ * `projects`를 **먼저** 잠근다. 다른 순서로 잠그는 경로가 오늘 없으므로 교착이 날 자리는
+ * 아니지만, 순서를 한 자리에 고정해 두면 두 번째 잠금 경로가 생길 때 맞출 기준이 생긴다.
+ */
+export async function lockProjectForRestore(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectForRestore')
+  await trx.selectFrom('projects').select('id').where('id', '=', projectId).forUpdate().execute()
+  await lockProjectMenuNodes(trx, projectId)
+  await lockProjectPages(trx, projectId)
+  await lockProjectLayouts(trx, projectId)
+  await lockProjectComments(trx, projectId)
 }

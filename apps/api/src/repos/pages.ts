@@ -32,6 +32,7 @@
 import { sql } from 'kysely'
 import type { PageDocument } from '@wirebound/schema'
 import { withTransaction, type DbHandle } from '../db/tx'
+import { assertLocking } from '../db/locking'
 
 export interface PageRecord {
   id: string
@@ -386,11 +387,7 @@ export interface LockedPage {
  * 핸들이 오면 즉시 크게 실패시킨다(아래 `if (!trx.isTransaction)`).
  */
 export async function lockPageForEdit(trx: DbHandle, projectId: string, pageId: string): Promise<LockedPage | null> {
-  if (!trx.isTransaction) {
-    throw new Error(
-      'lockPageForEdit은 트랜잭션 핸들(trx)로만 불러야 합니다 — 그렇지 않으면 FOR UPDATE 잠금이 이 문장 직후 즉시 풀립니다.',
-    )
-  }
+  assertLocking(trx, 'lockPageForEdit')
 
   const row = await trx
     .selectFrom('pages')
@@ -474,4 +471,95 @@ export async function deletePage(db: DbHandle, projectId: string, pageId: string
 
     return 'deleted'
   })
+}
+
+/**
+ * 프로젝트의 페이지 행 전부를 `FOR UPDATE`로 잠근다(P6-2 D8). **복원 전용이다.**
+ * 근거와 실측표는 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말에 있다.
+ */
+export async function lockProjectPages(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectPages')
+  await trx.selectFrom('pages').select('id').where('project_id', '=', projectId).forUpdate().execute()
+}
+
+/**
+ * **id와 문서를 함께 받아** 페이지를 만든다(P6-2 D3 — id를 보존한다).
+ *
+ * `insertPage`와 갈리는 지점 셋: id를 발급하지 않고, `sort_order`를 계산하지 않고,
+ * `menu_node_id`의 유효성을 확인하지 않는다(계획이 판정했고 FK가 마지막 방벽이다).
+ *
+ * **`head_seq`를 심지 않는다 — 컬럼 기본값 0이다.** payload의 `headSeq`(예: 7)를 심으면
+ * **행이 없는 seq를 가리키는 페이지**가 된다: 그 페이지가 지워질 때 `revisions.page_id`의
+ * CASCADE가 이력을 함께 데려갔기 때문이다(재라 #3을 재서 확인했다 — 삭제 전 1 → 삭제 후 0).
+ * 그 상태에서는 그 페이지의 undo가 빈 이력 위에서 돈다. **복원이 되살릴 수 있는 것은
+ * 문서이지 이력이 아니다.**
+ *
+ * **그래서 이 경로는 revision을 남기지 않는다.** D1(*"모든 스키마 변경이 revision을
+ * 남긴다"*)과 어긋나지 않는다 — `POST .../pages`가 이미 문서를 들고 태어나며 revision을
+ * 만들지 않는다. 생성은 *"변경"*이 아니다. 대신 그 문서는 아무도 검증하지 않는 유일한
+ * 쓰기가 되므로 `services/restore-plan.ts`가 `validatePage`로 본다.
+ */
+export async function insertPageWithId(
+  trx: DbHandle,
+  projectId: string,
+  input: {
+    id: string
+    menuNodeId: string
+    title: string
+    description: string | null
+    sortOrder: number
+    schema: PageDocument
+    schemaVersion: number
+  },
+): Promise<void> {
+  await trx
+    .insertInto('pages')
+    .values({
+      id: input.id,
+      project_id: projectId,
+      menu_node_id: input.menuNodeId,
+      title: input.title,
+      description: input.description,
+      sort_order: input.sortOrder,
+      schema: JSON.stringify(input.schema),
+      schema_version: input.schemaVersion,
+    })
+    .execute()
+}
+
+/**
+ * 페이지의 메뉴·제목·설명·순서를 **주어진 값 그대로** 쓴다(복원 전용). `schema`는 건드리지
+ * 않는다 — 문서를 바꾸는 경로는 편집 파이프라인 하나다(이 파일의 머리말).
+ *
+ * `updatePage`와 갈리는 지점은 `repos/menu.ts`의 `writeMenuNodePlacement`와 같다:
+ * **재번호를 하지 않는다.** payload의 `sort_order`는 캡처 시점에 이미 불변식을 만족했다.
+ */
+export async function writePagePlacement(
+  trx: DbHandle,
+  projectId: string,
+  input: { id: string; menuNodeId: string; title: string; description: string | null; sortOrder: number },
+): Promise<void> {
+  await trx
+    .updateTable('pages')
+    .set({
+      menu_node_id: input.menuNodeId,
+      title: input.title,
+      description: input.description,
+      sort_order: input.sortOrder,
+      updated_at: sql`now()`,
+    })
+    .where('id', '=', input.id)
+    .where('project_id', '=', projectId)
+    .execute()
+}
+
+/**
+ * 페이지 행 하나를 **재번호 없이** 지운다(복원 전용). `deletePage`의 `closeGap`을 피하는
+ * 이유는 `repos/menu.ts`의 `deleteMenuNodeRow`와 같다.
+ *
+ * **`revisions`·`comments`는 CASCADE로 함께 사라진다**(0005·0008). 복원은 그것에 순서를
+ * 맡기지 않고 코멘트를 먼저 지우지만(계획의 1단계), 이력은 되살릴 수 없으므로 그대로 간다.
+ */
+export async function deletePageRow(trx: DbHandle, projectId: string, pageId: string): Promise<void> {
+  await trx.deleteFrom('pages').where('id', '=', pageId).where('project_id', '=', projectId).execute()
 }

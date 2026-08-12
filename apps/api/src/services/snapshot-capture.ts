@@ -188,8 +188,13 @@ export async function captureSnapshot(
 /**
  * 레이아웃이 가리키는 테마를 **홀로 서는 문서**로 얼린다. `routes/themes.ts`의
  * `currentTheme`이 기본 레이아웃 하나에 대해 하는 일과 같다.
+ *
+ * **export하는 것은 복원 때문이다(P6-2 D6).** 복원은 테마 **행**을 되돌리지 않고 참조만
+ * 되돌린 뒤, *"그 참조가 가리키는 지금 테마가 payload의 동결본과 같은가"*를 응답에 싣는다.
+ * 그 판정을 복원이 따로 짜면 **얼리는 규칙이 두 벌이 되어** 한쪽만 고쳐지는 날 화면이
+ * 없는 차이를 말하거나 있는 차이를 놓친다.
  */
-async function freezeTheme(db: DbHandle, themeId: string | null): Promise<Theme | null> {
+export async function freezeTheme(db: DbHandle, themeId: string | null): Promise<Theme | null> {
   if (themeId === null) return null
 
   const record = await findThemeById(db, themeId)

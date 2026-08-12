@@ -9,16 +9,20 @@
  *
  * ---
  *
- * # 엔드포인트 셋이고 **복원도 삭제도 없다**
+ * # 엔드포인트 넷이고 **삭제는 없다**
  *
  * | 경로 | 가드 | 근거 |
  * |---|---|---|
  * | `POST /:projectId/snapshots` | **editor** | §10 — *"editor: … 스냅샷 생성 (복원 불가)"* |
  * | `GET /:projectId/snapshots` | viewer | 조회 |
  * | `GET /:projectId/snapshots/:snapshotId` | viewer | 조회 |
+ * | `POST /:projectId/snapshots/:snapshotId/restore` | **owner** | §10 — 복원은 owner뿐이다 (P6-2 D9) |
  *
- * **복원(owner)은 P6-2다. owner 가드를 미리 만들어 두지 않는다**(계획서 D8) — 쓰이지 않는
- * 가드는 그것이 무엇을 지키는지 아무도 확인하지 않은 채 남는다.
+ * **P6-1은 owner 가드를 미리 만들어 두지 않았다**(*"쓰이지 않는 가드는 그것이 무엇을
+ * 지키는지 아무도 확인하지 않은 채 남는다"*). 그것을 실행으로 지키던 케이스
+ * (`복원 라우트도 없다`)가 이 라우트를 만들면서 **먼저 죽었고**, 지우지 않고 갱신했다 —
+ * 그 케이스가 지키던 명제 둘(*"DELETE가 없다"*·*"owner 가드가 쓰이는 자리에만 있다"*)을
+ * 새 케이스가 이어받는다.
  *
  * **DELETE를 만들지 않는다**(§4.5 — *"삭제 없는"*). 스키마에는 그것을 막는 장치가 없으므로
  * (테이블은 평범하다) **라우트가 없다는 것이 곧 그 규칙이다.** `test/snapshots.test.ts`가
@@ -28,16 +32,35 @@
  *
  * # 오류 표
  *
+ * ## 생성
+ *
  * | 상황 | 상태 | 어디서 |
  * |---|---|---|
  * | 태그 중복 | **409** | `insertSnapshot`의 `23505`를 잡아 옮긴다 |
- * | 지문 불일치(수집 도중 남이 고쳤다) | **409** | 캡처가 값으로 알려 준다(D6) |
+ * | 지문 불일치(수집 도중 남이 고쳤다) | **409** | 캡처가 값으로 알려 준다(P6-1 D6) |
  * | NUL(U+0000) | **400** | 아래 `containsNulByte` + `SnapshotNulByteError` |
  * | 태그·설명 길이 위반 | **400** | 본문 zod(`SnapshotBody`) |
  *
- * **두 409의 문장이 서로 다르다.** 사용자가 할 일이 다르기 때문이다 — 태그 중복은 *"이름을
- * 바꾼다"*이고 지문 불일치는 *"다시 시도한다"*이다. 화면이 그 둘을 갈라 보여야 하므로
- * (계획서 T4) 여기서 같은 문장을 쓰면 화면이 코드로는 가를 수 없다.
+ * ## 복원 — 갈래마다 한 줄 (P6-2 T6)
+ *
+ * | 상황 | 상태 | 왜 그 상태인가 |
+ * |---|---|---|
+ * | 없는 스냅샷 / 남의 프로젝트의 스냅샷 | **404** | `findSnapshotById`가 `projectId`를 함께 받는다(존재를 숨긴다) |
+ * | `payloadVersion`이 이 프로세스보다 크다 | **400** | 이월 §3의 게이트가 서는 자리. 재시도로 풀리지 않는다 |
+ * | 복원 도중 프로젝트가 바뀌었다(지문 불일치) | **409** | 그대로 다시 보내면 된다 |
+ * | 안전망 스냅샷의 태그가 이미 있다 | **409** | 같은 밀리초에 두 번 복원했다. 다시 보내면 된다 |
+ * | 레이아웃 id 집합이 다르다 | **409** | D7 — 조용히 맞추지 않는다. 프로젝트를 고쳐야 풀린다 |
+ * | 코멘트 작성자가 없다 | **409** | `comments.author_id`가 RESTRICT다. 그 사용자를 되살려야 풀린다 |
+ * | 미지원 문서 버전 | **400** + 어느 페이지가 어떤 버전인지 | D5 — **클라이언트가 풀 수 없다.** 배포가 바뀌어야 한다 |
+ * | payload 안의 참조가 끊겼다 | **400** | 그 payload로는 영영 못 쓴다 |
+ * | 만들 페이지의 문서가 카탈로그 검증에 걸렸다 | **422** | `PUT .../schema`가 같은 자리에서 쓰는 상태다 |
+ * | `applyEdit` 실패 | 파이프라인 표 | `http/edit-outcome.ts` 하나가 옮긴다 — 두 벌로 두지 않는다 |
+ *
+ * **400과 409를 가르는 선은 *"다시 보내면 풀리는가"*다.** 409 넷은 전부 지금 상태와의
+ * 충돌이라 재시도나 프로젝트 수정으로 풀리고, 400 셋은 그 스냅샷·그 배포로는 풀리지 않는다.
+ *
+ * **문장이 서로 달라야 한다.** 코드가 같은 409 넷을 화면은 `code`로 가를 수 없으므로
+ * (P6-1이 두 409에서 이미 겪었다) 서버가 문장을 갈라 준다.
  *
  * **NUL을 잠그기 전에 끊는다.** `repos/snapshots.ts`도 같은 검사를 하지만(마지막 방벽),
  * 여기서 걸러야 이 요청이 **큰 jsonb를 만들기 전에** 끝난다 — `routes/comments.ts`가 같은
@@ -49,7 +72,8 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
-import { badRequest, conflict, notFound, unauthenticated } from '../errors'
+import { badRequest, conflict, notFound, unauthenticated, validationFailed } from '../errors'
+import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
 import {
   SnapshotNulByteError,
@@ -60,6 +84,7 @@ import {
   type SnapshotSummary,
 } from '../repos/snapshots'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
+import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const SnapshotParams = z.object({ projectId: z.uuid(), snapshotId: z.uuid() })
@@ -200,5 +225,97 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
       }
       return toDetailResponse(record)
     })
+
+    /**
+     * **그때로 되돌린다.** §10이 owner에게만 연 자리다 — editor는 생성만 한다.
+     *
+     * **본문이 없다.** 되돌릴 대상은 경로가 다 말하고, 안전망 스냅샷의 태그는 서버가 짓는다
+     * (D2 — 사람이 지으면 그 이름을 짓느라 복원이 멈추고, 지울 수 없는 자원에 사람 손으로
+     * 지은 이름이 하나 더 쌓인다). 그래서 `parseBody`가 없다.
+     *
+     * **판정과 쓰기는 전부 `services/restore.ts`가 한 트랜잭션 안에서 한다**(D1). 이
+     * 핸들러가 하는 일은 그 결과를 HTTP로 옮기는 것 하나다 — 위 오류 표가 곧 아래
+     * `toApiError`다.
+     */
+    app.post(
+      '/:projectId/snapshots/:snapshotId/restore',
+      { preHandler: projectGuard('owner') },
+      async (request) => {
+        const { projectId, snapshotId } = parseParams(SnapshotParams, request.params)
+
+        // `projectGuard('owner')`가 이미 인증을 요구하므로 여기 도달했다면 `currentUser`는
+        // 있다. `as`로 좁히지 않는 이유는 생성 핸들러와 같다 — 아래에서 `.id`를 반드시 읽으므로
+        // 가드가 빠지는 순간 `as` 버전은 미인증 요청에 `null` 역참조로 500을 낸다.
+        const currentUser = request.currentUser
+        if (!currentUser) {
+          throw unauthenticated()
+        }
+
+        const outcome = await restoreSnapshot(app.db, { projectId, snapshotId, actorId: currentUser.id })
+        if (outcome.kind !== 'restored') {
+          throw restoreOutcomeToApiError(outcome)
+        }
+        return toRestoreResponse(outcome.result)
+      },
+    )
+  }
+}
+
+/** 복원 응답. D11이 화면에 요구한 넷(바뀐 수·그대로인 수·안전망 태그·테마 차이)이 전부 여기 있다. */
+function toRestoreResponse(result: RestoreResult) {
+  return {
+    summary: result.summary,
+    /** *"되돌리려면 이것"*을 화면이 가리킬 수 있어야 한다(D2). */
+    safetySnapshot: result.safety,
+    /**
+     * **되돌리지 않은 것에 대한 보고다**(D6). payload의 테마는 병합 결과라 그것을 `themes`
+     * 행에 쓰면 파생 테마가 평탄화되어 상속이 영구히 사라진다 — 그래서 참조만 되돌리고,
+     * 지금 그 참조가 내는 모습이 그때와 다르면 여기서 말한다.
+     */
+    themes: result.themes,
+  }
+}
+
+/**
+ * 복원 실패를 HTTP 에러로 옮긴다. **매핑 표가 곧 이 함수다**(`http/edit-outcome.ts`와 같은
+ * 관례). `default` 절을 두지 않는 이유도 같다 — `RestoreOutcome`에 갈래가 늘면
+ * "값을 반환하지 않고 끝나는 경로가 있다"로 컴파일이 깨진다.
+ *
+ * `edit-failed`만 다른 표로 넘긴다. 그 실패는 편집 파이프라인의 것이고, 같은 위험에 대한
+ * 규칙을 두 벌로 두면 한쪽만 고쳐진다.
+ */
+function restoreOutcomeToApiError(outcome: Exclude<RestoreOutcome, { kind: 'restored' }>) {
+  switch (outcome.kind) {
+    case 'not-found':
+      return notFound('스냅샷을 찾을 수 없습니다')
+    case 'payload-version':
+      return badRequest(
+        `이 서버가 읽을 수 없는 스냅샷 형식입니다 (형식 ${outcome.payloadVersion}, 지원 ${outcome.supported})`,
+      )
+    case 'fingerprint-mismatch':
+      // 생성 쪽의 같은 갈래와 **문장을 맞춘다** — 사용자가 할 일이 같다(그대로 다시 보낸다).
+      return conflict('복원하는 동안 프로젝트가 바뀌었습니다. 다시 시도해 주세요')
+    case 'safety-tag-taken':
+      return conflict(`복원 전 상태를 저장할 태그(${outcome.tag})가 이미 있습니다. 다시 시도해 주세요`)
+    case 'layout-mismatch':
+      return conflict(
+        `레이아웃 구성이 스냅샷과 다릅니다 (스냅샷 ${outcome.snapshot.length}개, 현재 ${outcome.current.length}개). 복원하지 않았습니다`,
+      )
+    case 'missing-author':
+      return conflict(`스냅샷의 코멘트를 남긴 사용자가 더 이상 없습니다 (${outcome.authorIds.length}명)`)
+    case 'unsupported-version':
+      // **어느 페이지가 어떤 버전이라 막혔는지**를 싣는다(D5 — §13.1이 *"400 응답이 최소한
+      // 원인을 말해 주는 상태로 둔다"*고 한 것을 한 단계 민다).
+      return badRequest(
+        `지원하지 않는 문서 버전이라 복원할 수 없습니다: ${outcome.pages
+          .map((page) => `${page.title}(${page.source === 'stored' ? '현재' : '스냅샷'} 버전 ${page.version})`)
+          .join(', ')}`,
+      )
+    case 'dangling-reference':
+      return badRequest(`스냅샷 안의 참조가 끊겨 있습니다: ${outcome.references.join(', ')}`)
+    case 'invalid-document':
+      return validationFailed(`복원할 페이지의 스키마 검증에 실패했습니다: ${outcome.title}`, outcome.issues)
+    case 'edit-failed':
+      return editOutcomeToApiError(outcome.outcome, 0)
   }
 }

@@ -32,6 +32,7 @@
  * `본문의 NUL 문자를 400으로 막는다`가 그 구분력을 지킨다).
  */
 import { sql } from 'kysely'
+import { assertLocking } from '../db/locking'
 import { containsNulByte } from '../db/nul-guard'
 import type { DbHandle } from '../db/tx'
 
@@ -264,4 +265,80 @@ export async function deleteComment(
     .executeTakeFirst()
 
   return row ? { nodeId: row.node_id } : 'not-found'
+}
+
+/**
+ * 프로젝트의 코멘트 행 전부를 `FOR UPDATE`로 잠근다(P6-2 D8). **복원 전용이다.**
+ *
+ * `pages`를 조인해 프로젝트로 좁히되 **`for update of c`**로 코멘트 행만 잠근다 —
+ * `for update`만 쓰면 조인한 `pages` 행까지 잠그는데, 그것은 `lockProjectPages`가
+ * 이미 하는 일이라 같은 잠금을 두 번 거는 셈이다.
+ *
+ * 근거와 실측표는 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말에 있다.
+ */
+export async function lockProjectComments(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectComments')
+  await sql`
+    select c.id from comments c
+    join pages p on p.id = c.page_id
+    where p.project_id = ${projectId}
+    for update of c
+  `.execute(trx)
+}
+
+/**
+ * **id와 시각을 함께 받아** 코멘트를 만든다(P6-2 D3 — id를 보존한다).
+ *
+ * **`created_at`·`updated_at`을 payload의 값으로 심는 것이 요점이다.** 컬럼 기본값
+ * (`clock_timestamp()`)에 맡기면 복원된 코멘트가 **전부 복원 시각**을 갖게 되고, 이 표의
+ * 스레드 순서는 시각뿐이므로(0008의 머리말) *"먼저 단 말이 먼저 나온다"*가 깨진다 —
+ * 복원이 되돌리는 것은 내용만이 아니라 **그때의 순서**다.
+ *
+ * `assertNoNulByte`를 부르지 않는다: 이 함수의 유일한 호출자는 복원이고, 그 `body`는
+ * `snapshots.payload`(**jsonb**)에서 온다. jsonb는 NUL을 **삽입 시점에** 거부하므로
+ * (`22P05`) 그 컬럼에 든 값에는 NUL이 있을 수 없다. 근거는 `services/restore.ts`의
+ * "NUL" 절에 실측과 함께 있다.
+ */
+export async function insertCommentWithId(
+  trx: DbHandle,
+  input: {
+    id: string
+    pageId: string
+    nodeId: string
+    body: string
+    authorId: string
+    createdAt: Date
+    updatedAt: Date
+  },
+): Promise<void> {
+  await trx
+    .insertInto('comments')
+    .values({
+      id: input.id,
+      page_id: input.pageId,
+      node_id: input.nodeId,
+      body: input.body,
+      author_id: input.authorId,
+      created_at: input.createdAt,
+      updated_at: input.updatedAt,
+    })
+    .execute()
+}
+
+/**
+ * 코멘트의 본문과 `updated_at`을 **주어진 값 그대로** 쓴다(복원 전용).
+ *
+ * `updateCommentBody`와 갈리는 지점은 `updated_at`이다 — 그쪽은 `clock_timestamp()`(지금)를
+ * 쓰고 여기는 payload의 값(그때)을 쓴다. 복원은 *"그때의 사실"*을 되돌리는 일이다.
+ */
+export async function writeCommentBody(
+  trx: DbHandle,
+  input: { id: string; pageId: string; body: string; updatedAt: Date },
+): Promise<void> {
+  await trx
+    .updateTable('comments')
+    .set({ body: input.body, updated_at: input.updatedAt })
+    .where('id', '=', input.id)
+    .where('page_id', '=', input.pageId)
+    .execute()
 }

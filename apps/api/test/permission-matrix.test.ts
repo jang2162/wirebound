@@ -6,6 +6,7 @@ import { roleAtLeast } from '../src/auth/roles'
 import type { ProjectRole } from '../src/db/types'
 import { insertSnapshot } from '../src/repos/snapshots'
 import { insertTheme } from '../src/repos/themes'
+import { captureSnapshot } from '../src/services/snapshot-capture'
 import { SNAPSHOT_PAYLOAD_VERSION } from '../src/services/snapshot-payload'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
@@ -178,6 +179,35 @@ const 스냅샷하나 = async (
     })
   ).id,
 })
+
+/**
+ * ':snapshotId'가 필요한 **복원** 케이스가 실행 전에 대상 스냅샷을 만든다.
+ *
+ * **`스냅샷하나`를 재사용하지 않는다 — 그것으로는 이 행이 못 선다.** 그쪽 payload는 다섯
+ * 절이 전부 빈 최소본인데, 프로젝트를 만들면 **기본 레이아웃이 하나 생긴다**(`insertProject`).
+ * 그래서 복원이 D7의 레이아웃 불일치로 **409**를 내고, 허용된 역할(owner)이 4xx가 아님을
+ * 보는 판정이 **권한과 무관한 이유로** 무너진다(`테마하나`가 시스템 테마를 피하는 것과 같은 자리).
+ *
+ * 그래서 **지금 상태를 실제로 캡처해** 넣는다 — 복원이 아무것도 바꾸지 않는 판이 되어
+ * 이 행이 재려는 것(역할 판정)만 남는다.
+ */
+const 복원할스냅샷 = async (
+  ctx: TestContext,
+  projectId: string,
+  _ownerCookie: { wb_session: string },
+  actorUserId: string,
+): Promise<Record<string, string>> => {
+  const outcome = await captureSnapshot(ctx.db, projectId)
+  if (outcome.kind !== 'captured') throw new Error(`복원할스냅샷 픽스처 실패: ${outcome.kind}`)
+  const record = await insertSnapshot(ctx.db, {
+    projectId,
+    tag: '복원 대상',
+    description: null,
+    payload: outcome.payload,
+    createdBy: actorUserId,
+  })
+  return { snapshotId: record.id }
+}
 
 const CASES: Case[] = [
   { label: '프로젝트 조회', method: 'GET', url: '/api/projects/:projectId', allowed: ['owner', 'editor', 'viewer'] },
@@ -406,6 +436,19 @@ const CASES: Case[] = [
     url: '/api/projects/:projectId/snapshots/:snapshotId',
     allowed: ['owner', 'editor', 'viewer'],
     setup: 스냅샷하나,
+  },
+  {
+    // **복원은 owner 전용이다**(§10 — *"editor: … 스냅샷 생성 (복원 불가)"*). 같은 표의
+    // *"스냅샷 생성"*이 editor까지 여는 것과 갈리는 이유: 생성은 아무것도 바꾸지 않고
+    // 복원은 **프로젝트 전체를 바꾼다.**
+    //
+    // **`setup`이 필요하다** — 이 라우트는 허용된 역할이 실제로 핸들러까지 가서 성공해야
+    // 4xx가 아니다. 없는 id로 치면 owner도 404를 받아 `허용`을 못 보인다.
+    label: '스냅샷 복원',
+    method: 'POST',
+    url: '/api/projects/:projectId/snapshots/:snapshotId/restore',
+    allowed: ['owner'],
+    setup: 복원할스냅샷,
   },
 ]
 

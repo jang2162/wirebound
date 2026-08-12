@@ -16,6 +16,7 @@
 import { DatabaseError } from 'pg'
 import { sql } from 'kysely'
 import { withTransaction, type DbHandle } from '../db/tx'
+import { assertLocking } from '../db/locking'
 import type { MenuRow } from '../services/menu-tree'
 
 export interface MenuNodeRecord {
@@ -478,4 +479,90 @@ export async function deleteMenuNode(db: DbHandle, projectId: string, nodeId: st
 
     return 'deleted'
   })
+}
+
+/**
+ * 프로젝트의 메뉴 행 전부를 `FOR UPDATE`로 잠근다(P6-2 D8). **복원 전용이다.**
+ *
+ * 잠금이 실제로 무엇을 막는지는 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말에
+ * 실측표로 있다 — 이 함수 하나만으로는 **새 루트 메뉴 삽입을 못 막는다**(잠금은 이미
+ * 있는 행에만 걸리고 Postgres에 술어 잠금이 없다). 그 구멍은 `projects` 행을 함께
+ * 잠그는 것으로 닫힌다.
+ *
+ * `trx.isTransaction`을 확인하는 이유는 `lockPageForEdit`과 같다 — 트랜잭션 밖에서
+ * 부르면 문장이 끝나는 순간 잠금이 함께 풀려, **잠갔다고 믿는 코드가 아무것도 안 잠근
+ * 채로 돈다.**
+ */
+export async function lockProjectMenuNodes(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectMenuNodes')
+  await trx.selectFrom('menu_nodes').select('id').where('project_id', '=', projectId).forUpdate().execute()
+}
+
+/**
+ * **id를 받아** 메뉴 노드를 만든다(P6-2 D3 — *"복원이지 복제가 아니다"*).
+ *
+ * `insertMenuNode`와 갈리는 지점이 둘이다: (ㄱ) id를 발급하지 않고 **payload의 것을 그대로
+ * 쓴다**, (ㄴ) `sort_order`를 형제 수로 계산하지 않고 **주어진 값을 그대로 쓴다.** 둘 다
+ * 복원이 *"그때의 그 값"*을 되돌리는 일이기 때문이다 — 계산하면 payload와 어긋난다.
+ *
+ * **`assertParentValid`를 부르지 않는다.** 부모의 유효성은 `services/restore-plan.ts`가
+ * 이미 판정했고(`dangling-reference`), 순서도 그쪽이 정한다(부모가 자식보다 먼저).
+ * 마지막 방벽은 `menu_nodes_parent_id_fkey`다.
+ *
+ * **기존 `insertMenuNode`를 고치지 않았다** — 그쪽이 id를 만들어 내고 맨 끝에 붙이는
+ * 성질은 `POST .../menu`의 계약이다(계획서 D3: *"기존 호출자가 id를 만들어 내는 성질은
+ * 그대로 둔다"*).
+ */
+export async function insertMenuNodeWithId(
+  trx: DbHandle,
+  projectId: string,
+  input: { id: string; parentId: string | null; title: string; sortOrder: number },
+): Promise<void> {
+  await trx
+    .insertInto('menu_nodes')
+    .values({
+      id: input.id,
+      project_id: projectId,
+      parent_id: input.parentId,
+      title: input.title,
+      sort_order: input.sortOrder,
+    })
+    .execute()
+}
+
+/**
+ * 메뉴 노드의 부모·제목·순서를 **주어진 값 그대로** 쓴다(복원 전용).
+ *
+ * `updateMenuNode`와 갈리는 지점은 **재번호를 하지 않는 것**이다. 그쪽은 형제 그룹의
+ * 빈틈을 메우고 자리를 밀어 0부터 연속하게 만드는데, 복원은 payload의 값 전부를 그대로
+ * 쓰므로 그 계산이 **payload를 덮어쓴다.** payload의 값들은 캡처 시점에 이미 그 불변식을
+ * 만족했으므로(캡처 대상 DB가 이 파일의 규칙으로 유지됐다), 그대로 쓰는 것이 곧 불변식이다.
+ */
+export async function writeMenuNodePlacement(
+  trx: DbHandle,
+  projectId: string,
+  input: { id: string; parentId: string | null; title: string; sortOrder: number },
+): Promise<void> {
+  await trx
+    .updateTable('menu_nodes')
+    .set({ parent_id: input.parentId, title: input.title, sort_order: input.sortOrder })
+    .where('id', '=', input.id)
+    .where('project_id', '=', projectId)
+    .execute()
+}
+
+/**
+ * 메뉴 노드 행 하나를 **재번호 없이** 지운다(복원 전용).
+ *
+ * `deleteMenuNode`를 쓰지 않는 이유가 `closeGap`이다 — 그쪽은 남은 형제의 `sort_order`를
+ * 당기는데, 복원은 **계획을 세운 뒤에** 지우므로 그 당김이 계획이 본 값을 바꿔 버린다
+ * (계획이 *"이 페이지는 순서가 그대로다"*라고 판정한 뒤 값이 움직인다).
+ *
+ * **자식·페이지 확인도 하지 않는다.** 순서는 계획이 정한다(자식이 부모보다 먼저, 살아남는
+ * 자식은 먼저 옮긴다). 그래도 `menu_nodes_parent_id_fkey`·`pages_menu_node_id_fkey`가
+ * 남아 있어, 계획이 틀렸다면 **조용히 통과하지 않고 FK 위반으로 크게 죽는다** — 그리고
+ * 복원 전체가 한 트랜잭션이라(D1) 아무것도 남지 않는다.
+ */
+export async function deleteMenuNodeRow(trx: DbHandle, projectId: string, nodeId: string): Promise<void> {
+  await trx.deleteFrom('menu_nodes').where('id', '=', nodeId).where('project_id', '=', projectId).execute()
 }

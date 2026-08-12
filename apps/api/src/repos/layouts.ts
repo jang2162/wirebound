@@ -7,6 +7,7 @@
  */
 import type { LayoutDocument } from '@wirebound/schema'
 import { CURRENT_DOCUMENT_VERSION, createNodeId } from '@wirebound/schema'
+import { assertLocking } from '../db/locking'
 import type { DbHandle } from '../db/tx'
 
 export interface LayoutRecord {
@@ -169,4 +170,13 @@ export async function findDefaultLayout(db: DbHandle, projectId: string): Promis
     .executeTakeFirst()
 
   return row ? toRecord(row as LayoutRow) : null
+}
+
+/**
+ * 프로젝트의 레이아웃 행 전부를 `FOR UPDATE`로 잠근다(P6-2 D8). **복원 전용이다.**
+ * 근거와 실측표는 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말에 있다.
+ */
+export async function lockProjectLayouts(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectLayouts')
+  await trx.selectFrom('layouts').select('id').where('project_id', '=', projectId).forUpdate().execute()
 }
