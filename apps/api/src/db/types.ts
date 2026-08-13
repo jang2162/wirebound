@@ -1,5 +1,5 @@
 import type { ColumnType, Generated, JSONColumnType } from 'kysely'
-import type { LayoutDocument, PageDocument, PatchOp } from '@wirebound/schema'
+import type { LayoutDocument, PageDocument, PatchOp, WbNode } from '@wirebound/schema'
 import type { ThemeAssets, ThemeComponent, ThemePattern, ThemePrimitives, ThemeTokens } from '@wirebound/themes'
 import type { SnapshotPayload } from '../services/snapshot-payload'
 
@@ -227,6 +227,30 @@ export interface SnapshotsTable {
   created_at: Generated<Date>
 }
 
+/**
+ * 페이지 프리셋(`0010-presets`). 설계 §11.1의 *"프로젝트가 소유한 페이지 통째 템플릿"*이다.
+ *
+ * `schema`는 `JSONColumnType<WbNode[]>` — `PagesTable.schema`와 **같은 비대칭**이다:
+ * 삽입 시엔 `JSON.stringify`한 문자열, 조회 시엔 파싱된 배열.
+ *
+ * **담기는 것이 `PageDocument`가 아니라 `WbNode[]`인 것이 이 테이블의 규격이다**(P7-2 D2) —
+ * 적용이 root의 `children`만 바꾸므로(D3) 봉투는 프리셋의 것이 아니다.
+ *
+ * **`name`에 유일 제약이 없다**(D2) — `snapshots.tag`와 갈리는 자리이고 근거는 0010의
+ * 주석에 있다. `description`은 `NULL`이면 적지 않은 것이다.
+ */
+export interface PresetsTable {
+  id: Generated<string>
+  project_id: string
+  name: string
+  description: string | null
+  schema: JSONColumnType<WbNode[]>
+  created_by: string
+  created_at: Generated<Date>
+  /** 오늘 이 값을 바꾸는 경로가 없다(수정 라우트가 없다). 근거는 0010의 주석에 있다. */
+  updated_at: Generated<Date>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -239,4 +263,5 @@ export interface Database {
   layouts: LayoutsTable
   comments: CommentsTable
   snapshots: SnapshotsTable
+  presets: PresetsTable
 }

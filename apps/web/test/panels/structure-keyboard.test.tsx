@@ -139,6 +139,89 @@ describe('구조 트리의 키보드 단축키', () => {
     expect(srv.calls).toHaveLength(0)
   })
 
+  /**
+   * **속성 패널 케이스만으로는 부족했다 — 리뷰가 실증했다.** 그쪽은 **다른 서브트리**라
+   * 키가 여기로 버블되지 않아 저절로 안전했고, 그래서 *"이 상자 안에서 타이핑하면
+   * 어떻게 되는가"*는 재지지 않은 채였다. 고르개는 **이 상자 안**에 그려지므로 거기서
+   * 난 키는 그대로 핸들러에 온다.
+   *
+   * **`<select>`가 그 부류의 첫 자리다.** `Alt`+`↑`는 브라우저에서 목록을 여는 조합이라
+   * 사용자는 **고르려고** 누르는데, 문서에서는 노드가 움직인다.
+   */
+  it('고르개에서 친 키가 구조 조작으로 새지 않는다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+    const picker = await screen.findByLabelText('타입')
+
+    fireEvent.keyDown(picker, { key: 'ArrowUp', altKey: true })
+    fireEvent.keyDown(picker, { key: 'Delete' })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  /**
+   * **표면을 태그 이름으로 가르면 구멍이 남는다**(델타 리뷰 N1). 아래 둘은 오늘
+   * `apps/web`에 없지만 **리뷰어가 재현해 노드를 지웠다** — 재현됐다는 것은 케이스를
+   * 쓸 수 있다는 뜻이다.
+   *
+   * **상자 안에 진짜 DOM 노드를 넣어 잰다.** 이 화면이 그런 표면을 아직 그리지 않으므로
+   * 그리는 척하는 대신 **핸들러가 붙은 상자에 직접 붙이고 네이티브 이벤트를 올린다** —
+   * React는 루트에서 위임받으므로 자기가 그리지 않은 노드에서 난 이벤트도 그대로 지난다.
+   */
+  function handlerBox(): HTMLElement {
+    const list = document.body.querySelector('.wb-shell-structure')
+    const box = list?.parentElement
+    if (!box) throw new Error('키 핸들러가 붙은 상자를 찾지 못했습니다')
+    return box
+  }
+
+  /** 상자 안에 붙인 요소에서 키를 올린다. 붙인 것은 케이스가 끝나면 함께 사라진다. */
+  function keyFrom(element: HTMLElement, init: KeyboardEventInit): void {
+    handlerBox().appendChild(element)
+    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...init }))
+  }
+
+  it('shadow root를 든 요소에서 난 키는 구조 조작이 아니다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Card')
+
+    // **이벤트가 호스트로 리타게팅된다** — 안에서 무엇이 났는지(입력 칸인지 버튼인지)
+    // 밖에서는 볼 수 없다. 그래서 호스트를 열어 보지 않고 통째로 물러선다.
+    const host = document.createElement('div')
+    host.attachShadow({ mode: 'open' })
+    keyFrom(host, { key: 'Delete' })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('role이 편집 표면이라고 말하는 요소도 마찬가지다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Card')
+
+    const textbox = document.createElement('div')
+    textbox.setAttribute('role', 'textbox')
+    keyFrom(textbox, { key: 'Backspace' })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
+  it('평범한 상자에서 난 키는 그대로 단축키다 — 반대편', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Card')
+
+    keyFrom(document.createElement('div'), { key: 'Delete' })
+
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+  })
+
   it('Alt+위/아래가 순서를 바꾼다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')

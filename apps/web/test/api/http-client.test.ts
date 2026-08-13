@@ -162,6 +162,15 @@ const snapshot = {
  * 복원 결과(P6-2). **화면이 읽는 것만 담지 않는다** — 서버가 실제로 내는 모양 그대로여야
  * `ok` 판이 *"과도 차단을 재는 자리"*가 된다.
  */
+/** 프리셋 하나(P7-2). 목록·생성이 같은 모양이다 — 서버의 응답 두 벌이 같은 키를 낸다. */
+const preset = {
+  id: 'builtin:search-list',
+  source: 'builtin',
+  name: '검색 + 목록형',
+  description: '검색 조건을 위에 두고 결과를 목록으로 보이는 화면',
+  nodes: [{ id: 'sl_list', type: 'List' }],
+}
+
 const restoreResult = {
   summary: {
     menu: { created: 0, updated: 1, deleted: 0 },
@@ -398,6 +407,22 @@ const ENDPOINTS: Array<{
     body: snapshot,
     call: (c) => c.createSnapshot('p1', { tag: 'v1', description: '첫 릴리스 직전' }),
   },
+  // **프리셋 둘(P7-2).** 스냅샷과 같은 자리(프로젝트 아래, 페이지를 지나지 않는다)이고
+  // 이유도 같다 — 프리셋은 **페이지를 건너 다니는** 템플릿이라 특정 페이지에 매이지 않는다.
+  {
+    client: 'listPresets',
+    url: '/api/projects/p1/presets',
+    method: 'GET',
+    body: [preset],
+    call: (c) => c.listPresets('p1'),
+  },
+  {
+    client: 'createPreset',
+    url: '/api/projects/p1/presets',
+    method: 'POST',
+    body: preset,
+    call: (c) => c.createPreset('p1', { name: '내 프리셋', schema: [{ id: 'a', type: 'List' }] }),
+  },
   // **복원(P6-2)은 `:snapshotId` 아래의 정적 세그먼트다** — `GET .../snapshots/:id`(상세)와
   // 한 칸 차이인데 그쪽은 `ApiClient`에 없다(payload를 읽는 것은 서버다).
   {
@@ -514,6 +539,23 @@ const SHAPE_CASES: Array<{
     broken: [{ ...snapshot, id: '' }],
     ok: [snapshot],
     call: (c) => c.listSnapshots('p1'),
+  },
+  // --- 프리셋 둘(P7-2). ---
+  // **`nodes`가 배열이 아니면 막는다** — 그 값이 `presetApply`에 그대로 들어가고 그
+  // 함수가 `[...nodes]`에서 던진다(구조 트리는 오류 경계 밖이다).
+  {
+    shape: 'preset',
+    broken: { ...preset, nodes: null },
+    ok: preset,
+    call: (c) => c.createPreset('p1', { name: '내 프리셋', schema: [] }),
+  },
+  // **`id`가 빈 문자열이면 막는다** — 그 값이 `<option>`의 값이자 React 목록의 `key`다
+  // (`snapshotList`와 같은 축).
+  {
+    shape: 'presetList',
+    broken: [{ ...preset, id: '' }],
+    ok: [preset],
+    call: (c) => c.listPresets('p1'),
   },
   // --- 복원(P6-2). ---
   // **`themes`가 배열이 아니면 막는다** — 결과 알림이 `.some(...)`으로 훑으므로 배열이

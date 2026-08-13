@@ -97,6 +97,7 @@ interface Ids {
   nodeId: string
   commentId: string
   themeId: string
+  presetId: string
   otherUserId: string
   memberUserId: string
   cookie: { wb_session: string }
@@ -355,6 +356,32 @@ const PROBES: Probe[] = [
     restoreWrites: false,
     blocked: false,
   },
+  {
+    // **P7-2가 더한 둘. 이 파일이 그것을 강제했다** — 라우트를 만든 커밋에서 이
+    // 케이스가 먼저 죽었고, 그래서 *"프리셋 쓰기가 복원 중에 어떻게 되는가"*를 재게 됐다.
+    //
+    // **막힌다 — `POST .../themes`와 같은 이유다.** `presets.project_id`가 `projects(id)`를
+    // 참조하므로 삽입이 그 행에 `FOR KEY SHARE`를 걸고 그것이 `FOR UPDATE`와 충돌한다.
+    // **복원이 프리셋 행을 쓰지 않는데도 막히는 것**이라 부수 효과다.
+    route: 'POST /:projectId/presets',
+    label: '프리셋 저장 — 복원은 프리셋을 되돌리지 않지만 `project_id` FK 때문에 막힌다',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/presets`,
+    payload: () => ({ name: '끼어든 프리셋', schema: [] }),
+    restoreWrites: false,
+    blocked: true,
+  },
+  {
+    // **안 막힌다 — `DELETE .../themes`와 같은 이유다.** 자식 행을 지우는 것은 부모 행의
+    // FK 검사를 부르지 않는다. **복원이 프리셋을 되돌리지 않으므로 해롭지 않다** —
+    // 복원 도중 지운 프리셋은 복원 뒤에도 없는 것이 맞다.
+    route: 'DELETE /:projectId/presets/:presetId',
+    label: '프리셋 삭제 — 자식 행 삭제라 부모를 잡지 않는다',
+    method: 'DELETE',
+    url: (ids) => `/api/projects/${ids.projectId}/presets/${ids.presetId}`,
+    restoreWrites: false,
+    blocked: false,
+  },
 ]
 
 /** `src/routes/`의 원문. 분모를 여기서 만든다(`permission-matrix.test.ts`와 같은 배치). */
@@ -427,6 +454,14 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
   })
   if (themeRes.statusCode !== 201) throw new Error(`테마 픽스처 실패: ${themeRes.body}`)
 
+  const presetRes = await app.inject({
+    method: 'POST',
+    url: `/api/projects/${project.id}/presets`,
+    cookies: owner.cookie,
+    payload: { name: '대상 프리셋', schema: [] },
+  })
+  if (presetRes.statusCode !== 201) throw new Error(`프리셋 픽스처 실패: ${presetRes.body}`)
+
   const invitee = await signup(ctx, { email: 'census-invitee@example.com' })
   const member = await signup(ctx)
   await db
@@ -463,6 +498,7 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
     nodeId,
     commentId: (commentRes.json() as { comment: { id: string } }).comment.id,
     themeId: (themeRes.json() as { id: string }).id,
+    presetId: (presetRes.json() as { id: string }).id,
     otherUserId: invitee.user.id,
     memberUserId: member.user.id,
     cookie: owner.cookie,
@@ -573,6 +609,9 @@ describe('표가 스스로 세는 것', () => {
   it('막히지 않는 줄의 목록이 고정돼 있다', () => {
     expect(PROBES.filter((probe) => !probe.blocked).map((probe) => probe.route).sort()).toEqual([
       'DELETE /:projectId/members/:userId',
+      // **P7-2가 여섯째를 더했다.** 프리셋 삭제는 자식 행 삭제라 부모를 잡지 않는다 —
+      // 복원이 프리셋을 되돌리지 않으므로(payload에 프리셋 절이 없다) 해롭지 않다.
+      'DELETE /:projectId/presets/:presetId',
       'DELETE /:projectId/themes/:themeId',
       'PATCH /:projectId/members/:userId',
       'POST /:projectId/pages/:pageId/comments/renumber',

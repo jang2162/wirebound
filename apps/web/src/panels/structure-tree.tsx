@@ -15,6 +15,7 @@ import type { WbNode } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import type { StructureAbilities } from '../edit/structure-actions'
 import { nodeTypeLabel } from './node-shape'
+import { isTypingSurface } from './typing-surface'
 import { StructureToolbar, useStructureCommands, type StructureCommands } from './structure-toolbar'
 
 /**
@@ -54,7 +55,21 @@ import { StructureToolbar, useStructureCommands, type StructureCommands } from '
  */
 const SHORTCUTS: {
   match: (event: KeyboardEvent) => boolean
-  ability: keyof StructureAbilities
+  /**
+   * 이 조작이 지나야 하는 판정. **`null`이면 판정이 없다**(P7-2 D9).
+   *
+   * **`StructureAbilities`에 자리를 만들 수 없어서 여기에 만들었다 — 재라 #6을 재서
+   * 알았다.** 그 표에 `openPattern: true` 같은 키를 더하면 `structureAbilities`가
+   * *"고른 노드가 없다"*에서 내는 `NOTHING`(전부 `false`)에 그 키도 `false`로 들어간다.
+   * **그런데 이 둘은 선택이 없어도 되는 조작이다** — 패턴은 선택이 없으면 root의 자식
+   * 끝에 꽂고(P7-1 D5), 프리셋은 페이지 통째라 자리를 아예 고르지 않는다. 즉 표에 넣는
+   * 순간 **정확히 그 상태에서만 단축키가 죽는다.** `WHY_DISABLED`도 절대 보이지 않을
+   * 문장을 하나씩 갖게 된다(그 표는 `Record<keyof StructureAbilities, string>`이다).
+   *
+   * 그래서 자리를 **단축키 표**에 만들었다. 판정 없는 조작이라는 성질이 툴바 쪽에서도
+   * 같다 — 그 둘만 `ToolButton`이 아니다(`structure-toolbar.tsx`).
+   */
+  ability: keyof StructureAbilities | null
   run: (commands: StructureCommands) => void
 }[] = [
   {
@@ -82,6 +97,28 @@ const SHORTCUTS: {
     ability: 'outdent',
     run: (commands) => commands.outdent(),
   },
+  {
+    // **`code`를 본다 — `key`가 아니다.** macOS에서 `Alt`(Option)를 누른 채 글자 키를
+    // 치면 `event.key`가 그 조합의 **특수문자**가 된다(`Alt`+`P`는 `π`). 지금까지의
+    // 단축키가 전부 화살표·`Delete`라 그 축을 만난 적이 없었다. `code`는 물리 키를
+    // 가리키므로 그 변환을 지나지 않는다.
+    //
+    // **jsdom으로는 그 변환을 재현할 수 없다** — `key`도 `code`도 테스트가 직접 넣는
+    // 값이다. 그래서 이것은 **잰 것이 아니라 플랫폼 동작을 근거로 고른 것**이고,
+    // `Alt`+`Shift` 조합에 브라우저·OS 기본 바인딩이 있는지도 위의 화살표 단축키와 같은
+    // 이유로 재지 못했다.
+    match: (event) => event.code === 'KeyI' && event.altKey && event.shiftKey,
+    ability: null,
+    run: (commands) => commands.openAdd('pattern'),
+  },
+  {
+    // **`I`(넣기)와 `P`(페이지 통째)로 갈랐다.** 둘 다 `P`로 시작하는 낱말이라
+    // (Pattern·Preset) 첫 글자로는 못 가른다 — 툴바 라벨이 *"패턴 **넣기**"*이고
+    // 프리셋은 **페이지** 통째를 바꾸는 것이라 그 축으로 골랐다.
+    match: (event) => event.code === 'KeyP' && event.altKey && event.shiftKey,
+    ability: null,
+    run: (commands) => commands.openAdd('preset'),
+  },
 ]
 
 export function StructureTree(props: {
@@ -98,6 +135,12 @@ export function StructureTree(props: {
   const commands = useStructureCommands({ projectId: props.projectId, pageId: props.pageId })
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    // **값을 넣거나 고르는 표면에서 난 키는 구조 조작이 아니다.** 판정과 실측은
+    // `./typing-surface.ts`에 있다(그 상자 밖의 패널도 같은 것을 쓸 수 있게 갈라 두었다).
+    // **단축키를 찾기 전에** 걸러야 `preventDefault`가 걸리지 않는다 — 걸리면 글자가
+    // 지워지지 않는다(그 순서를 뒤집는 변이가 죽는다).
+    if (isTypingSurface(event.target)) return
+
     const shortcut = SHORTCUTS.find((candidate) => candidate.match(event))
     if (shortcut === undefined) return
 
@@ -106,7 +149,11 @@ export function StructureTree(props: {
     event.preventDefault()
     // **버튼과 같은 판정을 지난다**(D8). 키 이벤트는 `disabled`를 지나지 않으므로
     // 여기서 보지 않으면 비활성인 조작이 단축키로만 실행된다.
-    if (!commands.abilities[shortcut.ability]) return
+    //
+    // **`ability`가 `null`이면 지날 판정이 없다**(P7-2 D9) — 고르개를 여는 것뿐이고
+    // 그것은 선택이 없어도 되는 조작이다. 위 표의 주석에 왜 `StructureAbilities`에
+    // 넣지 않았는지가 있다.
+    if (shortcut.ability !== null && !commands.abilities[shortcut.ability]) return
 
     shortcut.run(commands)
   }
@@ -132,7 +179,15 @@ export function StructureTree(props: {
       </ul>
       {/* 툴바가 트리 **아래**인 것은 D4다. 스크롤되는 상자 안이라 `sticky`로 바닥에
           붙여 둔다 — 트리가 길어지면 조작 버튼이 화면 밖으로 밀려난다. */}
-      <StructureToolbar commands={commands} projectId={props.projectId} />
+      <StructureToolbar
+        commands={commands}
+        projectId={props.projectId}
+        pageId={props.pageId}
+        // **문서를 여기서 이미 읽었으므로 그대로 내려 준다**(D7). 툴바가 다시 구독하면
+        // 같은 값을 두 번 읽는다. `children`이 배열이 아닌 문서에서는 `null`이다 —
+        // 그때 저장할 것이 없고, 고르개의 저장 버튼이 비활성이 된다.
+        currentNodes={Array.isArray(doc.root?.children) ? doc.root.children : null}
+      />
     </div>
   )
 }
