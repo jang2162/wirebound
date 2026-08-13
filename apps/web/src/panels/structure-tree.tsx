@@ -132,7 +132,7 @@ export function StructureTree(props: {
       </ul>
       {/* 툴바가 트리 **아래**인 것은 D4다. 스크롤되는 상자 안이라 `sticky`로 바닥에
           붙여 둔다 — 트리가 길어지면 조작 버튼이 화면 밖으로 밀려난다. */}
-      <StructureToolbar commands={commands} />
+      <StructureToolbar commands={commands} projectId={props.projectId} />
     </div>
   )
 }

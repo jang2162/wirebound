@@ -78,6 +78,8 @@ describe('공개 표면이 계약이다', () => {
     // P4c-1 T4 — 노드 손잡이 표. **`apps/web`이 렌더러의 구조 기본 CSS와 대조한다**
     // (§3.3 — `themes`는 `renderer`를 볼 수 없다). `STYLE_PROPERTIES_BEYOND_SPEC`과 같은 부류다.
     'NODE_HANDLES', 'coveredProperties', 'overwrittenHandles',
+    // P7-1 T1 — 패턴 전개(§6.6). `apps/web`의 삽입 경로가 부르고, P8·P9도 같은 이름을 쓴다.
+    'expandPattern',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {

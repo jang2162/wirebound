@@ -234,6 +234,148 @@ describe('테마 라우트', () => {
     })
   })
 
+  /**
+   * **P7-1 재라 #7 — *"저장된 프로젝트 테마의 패턴도 검증을 통과한 것이다"*를 잰다.**
+   *
+   * 계획서는 시스템 테마만 보고 그 문장을 썼다. 저장 경계가 실제로 무엇을 막는지는
+   * 여기서 재고, 그 결과가 P7-1 D9(*"패턴이 카탈로그에 없는 타입을 담고 있으면 그 순간
+   * 사용자는 아무것도 못 꽂는다"*)의 전제다.
+   *
+   * **경로: `assertResolvable` → `resolveTheme` → `checkPatterns`.** 계획서가
+   * `checkThemePatterns`라고 적은 이름은 존재하지 않는다 — 실제 이름은 `checkPatterns`다.
+   */
+  describe('재라 #7 — 패턴도 저장 게이트를 지난다', () => {
+    /** `patterns` 한 벌을 얹은 테마. 나머지는 최소 문서 그대로다. */
+    function withPatterns(patterns: unknown): unknown {
+      return { ...brandTheme(), patterns }
+    }
+
+    it('카탈로그에 없는 타입을 담은 패턴은 422다', async () => {
+      await withApi(async (ctx) => {
+        const { owner, project } = await ownedProject(ctx)
+        const res = await post(
+          ctx,
+          project.id,
+          owner.cookie,
+          withPatterns({ 'content.bad': { name: '나쁨', schema: { type: '없는타입' } } }),
+        )
+        expect(res.statusCode).toBe(422)
+        const issues: { code: string }[] = res.json().error.issues
+        expect(issues.map((issue) => issue.code)).toContain('bad-pattern-node')
+      })
+    })
+
+    it('선언되지 않은 슬롯을 쓰는 패턴은 422다', async () => {
+      await withApi(async (ctx) => {
+        const { owner, project } = await ownedProject(ctx)
+        const res = await post(
+          ctx,
+          project.id,
+          owner.cookie,
+          withPatterns({
+            'content.bad': {
+              name: '슬롯 오타',
+              slots: { title: 'text' },
+              schema: { type: 'Section', children: [{ type: 'Text', slot: 'titel' }] },
+            },
+          }),
+        )
+        expect(res.statusCode).toBe(422)
+        const issues: { code: string }[] = res.json().error.issues
+        // 쓰이지 않은 `title`과 선언되지 않은 `titel`이 **둘 다** 나온다.
+        expect(issues.map((issue) => issue.code).sort()).toEqual(['unknown-slot', 'unused-slot'])
+      })
+    })
+
+    it('범주가 고정 목록 밖이면 422다', async () => {
+      await withApi(async (ctx) => {
+        const { owner, project } = await ownedProject(ctx)
+        const res = await post(
+          ctx,
+          project.id,
+          owner.cookie,
+          withPatterns({ '없는범주.x': { name: '나쁨', schema: { type: 'Section' } } }),
+        )
+        expect(res.statusCode).toBe(422)
+        const issues: { code: string }[] = res.json().error.issues
+        expect(issues.map((issue) => issue.code)).toContain('bad-pattern-name')
+      })
+    })
+
+    /**
+     * **처음 이 케이스를 `400`으로 적었고 거짓이었다 — 재서 고쳤다.**
+     *
+     * `PatternNodeSchema`가 `z.strictObject`라 규격에서 걸리는 것은 맞지만, **그 규격을
+     * 보는 자리가 라우트의 본문 검증이 아니다.** 라우트는 `ThemePatchSchema`로 본문을
+     * 보는데 그것은 절 안쪽을 `unknown`으로 두므로(§6.9의 삭제 지시 `null`을 받기 위해)
+     * `patterns` 내부가 그대로 통과하고, `resolveTheme`의 `prepare`가 `ThemeSchema`로
+     * 다시 파싱할 때야 걸린다. 그 결과는 **이슈**이므로 422다.
+     *
+     * 실측한 응답: `422` · `bad-spec` · path `patterns.content.x.schema` ·
+     * `테마 규격을 지키지 않습니다: Unrecognized key: "id"` (셋 다 같은 모양).
+     *
+     * **이것이 P7-1 재라 #5의 두 번째 근거다** — 저장 경계가 `interactions`를 막으므로
+     * 전개가 리매핑할 `target`이 실재하지 않는다.
+     */
+    it('PatternNode에 없는 키(id·marker·interactions)는 422 bad-spec이다', async () => {
+      await withApi(async (ctx) => {
+        const { owner, project } = await ownedProject(ctx)
+        for (const extra of [{ id: 'n_a' }, { marker: 1 }, { interactions: [] }]) {
+          const res = await post(
+            ctx,
+            project.id,
+            owner.cookie,
+            withPatterns({ 'content.x': { name: '가', schema: { type: 'Section', ...extra } } }),
+          )
+          const label = JSON.stringify(extra)
+          expect(res.statusCode, label).toBe(422)
+          const issues: { code: string; path: string; message: string }[] = res.json().error.issues
+          expect(issues.map((issue) => issue.code), label).toEqual(['bad-spec'])
+          expect(issues[0]!.path, label).toBe('patterns.content.x.schema')
+          expect(issues[0]!.message, label).toContain(Object.keys(extra)[0]!)
+        }
+      })
+    })
+
+    it('멀쩡한 패턴은 저장되고 되읽어도 그대로다', async () => {
+      await withApi(async (ctx) => {
+        const { owner, project } = await ownedProject(ctx)
+        const patterns = {
+          'content.ok': {
+            name: '괜찮음',
+            slots: { title: 'text' },
+            schema: { type: 'Section', children: [{ type: 'Text', slot: 'title' }] },
+          },
+        }
+        const res = await post(ctx, project.id, owner.cookie, withPatterns(patterns))
+        expect(res.statusCode).toBe(201)
+
+        const read = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/projects/${project.id}/themes/${res.json().id}`,
+          cookies: owner.cookie,
+        })
+        expect(read.json().theme.patterns).toEqual(patterns)
+      })
+    })
+
+    it('PUT도 같은 게이트를 지난다 — 나중에 깨진 패턴을 밀어 넣을 수 없다', async () => {
+      await withApi(async (ctx) => {
+        const { owner, project } = await ownedProject(ctx)
+        const created = (await post(ctx, project.id, owner.cookie, brandTheme())).json()
+
+        const res = await put(
+          ctx,
+          project.id,
+          created.id,
+          owner.cookie,
+          withPatterns({ 'content.bad': { name: '나쁨', schema: { type: '없는타입' } } }),
+        )
+        expect(res.statusCode).toBe(422)
+      })
+    })
+  })
+
   describe('수정·삭제', () => {
     it('PUT은 문서를 통째로 갈아 끼운다', async () => {
       await withApi(async (ctx) => {

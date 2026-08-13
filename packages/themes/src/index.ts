@@ -60,6 +60,12 @@ export {
   checkPatterns,
 } from './spec/patterns'
 
+// P7-1 T1 — 패턴 전개(§6.6). `spec/patterns.ts`가 *"전개는 만들지 않는다(D7)"*로 미뤄 둔
+// 자리다. **`apps/web`뿐 아니라 P8(exporter)·P9(MCP)도 이 이름을 부른다** — 패턴 삽입은
+// 에이전트가 할 일이기도 하다(§12).
+export type { ExpandedPattern } from './pattern/expand'
+export { expandPattern } from './pattern/expand'
+
 export type { Theme } from './spec/theme'
 export { ThemeSchema } from './spec/theme'
 
