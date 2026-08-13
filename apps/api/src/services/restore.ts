@@ -70,6 +70,22 @@
  *
  * ---
  *
+ * # `fingerprint-mismatch`는 **죽은 갈래가 아니다** — 잠금의 구멍이 그것을 살려 둔다
+ *
+ * 1단계에서 잠그고 4단계에서 캡처하므로 *"수집 도중 남이 커밋한다"*가 대부분 막힌다.
+ * **그런데 하나가 남는다:** 복원은 테마 **행**을 쓰지 않아 그 표를 잠그지 않는데(D6),
+ * 지문에는 **담기는 테마가 들어 있다**(`readCaptureFingerprint`의 4번 절). 그래서
+ * *"복원이 도는 동안 누가 테마 문서를 고친다"*가 이 갈래를 실제로 낸다.
+ *
+ * **재서 확인했다:** 복원을 쏘고 수집 중간에 테마를 커밋하는 레이스를 12판 돌려
+ * **2판이 `fingerprint-mismatch`**였다. 레이스라 케이스로 쓸 수 없어 `captureHooks`로
+ * 결정적으로 만들었다(`test/restore.test.ts`의 `복원 도중 테마가 바뀌면 409다`).
+ *
+ * **그러니 이 갈래를 지우지 마라.** *"잠갔으니 안 난다"*는 테마를 함께 잠그기 전까지 거짓이고,
+ * 테마를 잠그는 것은 D6이 막은 일이 아니라 **하지 않기로 한 일**이다(복원이 안 쓰므로).
+ *
+ * ---
+ *
  * # NUL(U+0000) — 검사를 두지 않는다. 이유가 있다
  *
  * P6-1 이월 §7이 *"복원도 같은 자리를 갖는다 … 400으로 옮기지 않으면 500이 된다"*고
@@ -97,7 +113,7 @@ import { deletePageRow, insertPageWithId, writePagePlacement } from '../repos/pa
 import { findSnapshotById, insertSnapshot, lockProjectForRestore } from '../repos/snapshots'
 import { countExistingUsers } from '../repos/users'
 import { applyEdit, type EditOutcome } from './edit-pipeline'
-import { captureSnapshot, freezeTheme } from './snapshot-capture'
+import { captureSnapshot, freezeTheme, type CaptureHooks } from './snapshot-capture'
 import { planRestore, type RestoreSummary } from './restore-plan'
 import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from './snapshot-payload'
 import type { UnsupportedVersionPage } from './restore-plan'
@@ -187,6 +203,16 @@ export interface RestoreInput {
   snapshotId: string
   /** 복원을 부른 사람. revision의 actor이자 안전망 스냅샷의 `created_by`다. */
   actorId: string
+  /**
+   * 4단계 캡처의 수집 도중에 끼어들 자리. **테스트 전용이다** — 라우트는 채우지 않는다.
+   * `services/snapshot-capture.ts`의 `CaptureHooks`가 P6-1에서 같은 이유로 생긴 이음매이고,
+   * 여기는 그것을 **그대로 통과시킬 뿐** 새 개념을 만들지 않는다.
+   *
+   * **없으면 `fingerprint-mismatch` 갈래를 결정적으로 잴 수 없다.** 복원은 잠그고 나서
+   * 캡처하므로 그 창에 끼어들 수 있는 것이 하나뿐인데(아래), 그 하나를 정확한 지점에 밀어
+   * 넣는 타이밍은 바깥에서 만들 수 없다 — 레이스로 재면 12판 중 2판만 걸렸다(실측).
+   */
+  captureHooks?: CaptureHooks
 }
 
 export async function restoreSnapshot(db: DbHandle, input: RestoreInput): Promise<RestoreOutcome> {
@@ -219,7 +245,7 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
   }
 
   // 4단계. 안전망의 payload이자 계획이 견줄 "지금"이다(위 머리말).
-  const captured = await captureSnapshot(trx, input.projectId)
+  const captured = await captureSnapshot(trx, input.projectId, input.captureHooks)
   if (captured.kind === 'fingerprint-mismatch') throw new RestoreAbort({ kind: 'fingerprint-mismatch' })
   const now: SnapshotPayload = captured.payload
 

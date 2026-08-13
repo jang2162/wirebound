@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
 import type { PageDocument } from '@wirebound/schema'
 import { listSnapshots } from '../src/repos/snapshots'
-import { SAFETY_TAG_PREFIX, restoreActorLabel } from '../src/services/restore'
+import { SAFETY_TAG_PREFIX, restoreActorLabel, restoreSnapshot } from '../src/services/restore'
 import { ensureCatalog } from '../src/schema-setup'
 import {
   addMember,
@@ -226,6 +226,74 @@ describe('되돌아가는 것들', () => {
   })
 
   /**
+   * **메타 갱신이 `description`을 실제로 쓰는가.** 계획 층에는 케이스가 있었지만
+   * (`페이지 설명만 달라도 메타를 갱신한다`) **repo가 그 값을 썼는지는 아무도 재지
+   * 않았다** — 리뷰가 지목한 0 사망 축이다. *"갱신한다고 계획했다"*와 *"그 값이 DB에
+   * 들어갔다"*는 다른 명제다.
+   */
+  it('페이지 설명이 되돌아온다 — 계획이 아니라 DB에서 잰다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.project.id}/pages/${fx.page.id}`,
+        cookies: fx.owner.cookie,
+        payload: { description: '그때 설명' },
+      })
+      const id = await snapshot(ctx, fx, 'v1')
+      await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.project.id}/pages/${fx.page.id}`,
+        cookies: fx.owner.cookie,
+        payload: { description: '지금 설명' },
+      })
+
+      const body = (await restore(ctx, fx, id)).json() as RestoreBody
+
+      expect(body.summary.pages.metaUpdated).toBe(1)
+      expect((await readPage(ctx, fx.page.id))?.description).toBe('그때 설명')
+    })
+  })
+
+  /**
+   * **부활한 메뉴의 `sort_order`.** 갱신 쪽은 `메뉴 순서가 되돌아온다`가 잡지만 **생성
+   * 쪽은 비어 있었다** — 리뷰가 지목한 축이다. 지운 메뉴가 되살아날 때 순서를 함께
+   * 되돌리지 않으면 형제 그룹의 불변식(0부터 연속)이 깨진다.
+   */
+  it('되살아난 메뉴가 그때의 순서로 돌아온다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const second = await createMenuNode(ctx, fx.owner.cookie, fx.project.id, { title: '두 번째' })
+      const third = await createMenuNode(ctx, fx.owner.cookie, fx.project.id, { title: '셋째' })
+      const id = await snapshot(ctx, fx, 'v1')
+
+      // 가운데를 지운다 — 라우트가 뒤를 당겨 셋째가 1이 된다.
+      await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/projects/${fx.project.id}/menu/${second.id}`,
+        cookies: fx.owner.cookie,
+      })
+      const shifted = await ctx.db
+        .selectFrom('menu_nodes')
+        .select(['id', 'sort_order'])
+        .where('id', '=', third.id)
+        .executeTakeFirstOrThrow()
+      expect(shifted.sort_order).toBe(1)
+
+      await restore(ctx, fx, id)
+
+      const rows = await ctx.db
+        .selectFrom('menu_nodes')
+        .select(['id', 'sort_order'])
+        .where('project_id', '=', fx.project.id)
+        .orderBy('sort_order', 'asc')
+        .execute()
+      expect(rows.map((row) => row.id)).toEqual([fx.menu.id, second.id, third.id])
+      expect(rows.map((row) => row.sort_order)).toEqual([0, 1, 2])
+    })
+  })
+
+  /**
    * **제목만 재면 `sort_order`를 쓰는지 알 수 없다** — 그 컬럼을 안 쓰는 변이가 **0 사망**
    * 이었다. 겨냥을 옮겨 순서 자체를 잰다.
    */
@@ -280,6 +348,15 @@ describe('되돌아가는 것들', () => {
   it('스냅샷 뒤에 지운 페이지가 **같은 id로** 되살아난다 — D3(복원이지 복제가 아니다)', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
+      // **설명과 순서를 기본값에서 벗겨 둔다** — 둘 다 기본값이면 되살리지 않아도 우연히
+      // 맞는다(리뷰가 잰 0 사망 둘이 정확히 그 형태였다).
+      await createPage(ctx, fx.owner.cookie, fx.project.id, fx.menu.id, { title: '앞자리 페이지' })
+      await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.project.id}/pages/${fx.page.id}`,
+        cookies: fx.owner.cookie,
+        payload: { description: '되살아나야 하는 설명', sortOrder: 1 },
+      })
       const id = await snapshot(ctx, fx, 'v1')
       await ctx.app.inject({
         method: 'DELETE',
@@ -294,7 +371,19 @@ describe('되돌아가는 것들', () => {
       const page = await readPage(ctx, fx.page.id)
       // **id가 같다.** 새 id를 발급하면 사람이 공유한 URL이 죽는다(D3).
       expect(page?.id).toBe(fx.page.id)
-      expect(page?.title).toBe('사용자 목록')
+      // **제목만 재면 나머지 필드를 되살리는지 알 수 없다** — 리뷰가 그 축 셋이 0 사망임을
+      // 지목했다(설명·순서·메뉴). 부활한 행 **전체**를 그때 값과 맞댄다.
+      expect({
+        title: page?.title,
+        description: page?.description,
+        sortOrder: page?.sort_order,
+        menuNodeId: page?.menu_node_id,
+      }).toEqual({
+        title: '사용자 목록',
+        description: '되살아나야 하는 설명',
+        sortOrder: 1,
+        menuNodeId: fx.menu.id,
+      })
     })
   })
 
@@ -822,6 +911,63 @@ describe('막는 갈래 — 오류 표', () => {
 
       expect(res.statusCode).toBe(400)
       expect(res.body).toContain('사용자 목록')
+    })
+  })
+
+  /**
+   * **`fingerprint-mismatch` 갈래 — 리뷰가 지목한 마지막 0 사망 축이다.**
+   *
+   * 잠금이 대부분을 막는데도 이 갈래가 살아 있는 이유는 **복원이 테마 표를 잠그지 않기**
+   * 때문이다(D6 — 테마 **행**을 쓰지 않으므로). 그런데 지문에는 담기는 테마가 들어 있다.
+   * 그래서 *"복원이 도는 동안 누가 테마를 고친다"*가 실제로 이 갈래를 낸다 — 레이스로
+   * 12판 돌려 2판이 걸렸고, `captureHooks`로 그것을 결정적으로 만들었다.
+   *
+   * **끼어드는 자리가 `afterPages`인 것이 요점이다** — 수집의 한가운데여야 두 지문이 갈린다.
+   */
+  it('복원 도중 테마가 바뀌면 409다 — 잠금이 막지 못하는 유일한 창', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const id = await snapshot(ctx, fx, 'v1')
+      const layout = await ctx.db
+        .selectFrom('layouts')
+        .select(['id', 'theme_id'])
+        .where('project_id', '=', fx.project.id)
+        .executeTakeFirstOrThrow()
+
+      const outcome = await restoreSnapshot(ctx.db, {
+        projectId: fx.project.id,
+        snapshotId: id,
+        actorId: fx.owner.user.id,
+        captureHooks: {
+          afterPages: async () => {
+            await ctx.db
+              .updateTable('themes')
+              .set({ tokens: sql`'{"semantic":{"primary":"#123456"}}'::json` })
+              .where('id', '=', layout.theme_id)
+              .execute()
+          },
+        },
+      })
+
+      expect(outcome.kind).toBe('fingerprint-mismatch')
+      // **되돌릴 것이 없다** — 이 갈래는 첫 쓰기(안전망 삽입)보다 앞이다.
+      expect(await listSnapshots(ctx.db, fx.project.id)).toHaveLength(1)
+    })
+  })
+
+  it('아무도 끼어들지 않으면 복원된다 — 음성 대조', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const id = await snapshot(ctx, fx, 'v1')
+
+      const outcome = await restoreSnapshot(ctx.db, {
+        projectId: fx.project.id,
+        snapshotId: id,
+        actorId: fx.owner.user.id,
+        captureHooks: { afterPages: async () => {} },
+      })
+
+      expect(outcome.kind).toBe('restored')
     })
   })
 

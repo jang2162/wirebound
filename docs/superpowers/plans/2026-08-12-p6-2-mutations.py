@@ -196,6 +196,36 @@ MUTATIONS = [
      "  await lockProjectComments(trx, projectId)",
      "  void lockProjectComments // [변이]", "lock"),
 
+    ("R8 부활 페이지의 description·sortOrder를 안 되살린다", "apps/api/src/repos/pages.ts",
+     """      title: input.title,
+      description: input.description,
+      sort_order: input.sortOrder,
+      schema: JSON.stringify(input.schema),
+      schema_version: input.schemaVersion,
+    })
+    .execute()
+}""",
+     """      title: input.title,
+      description: null, // [변이]
+      sort_order: 0, // [변이]
+      schema: JSON.stringify(input.schema),
+      schema_version: input.schemaVersion,
+    })
+    .execute()
+}""", "api"),
+
+    ("R9 메타 갱신이 description을 안 쓴다", "apps/api/src/repos/pages.ts",
+     "      description: input.description,\n      sort_order: input.sortOrder,\n      updated_at: sql`now()`,",
+     "      sort_order: input.sortOrder,\n      updated_at: sql`now()`, // [변이] description을 안 쓴다", "api"),
+
+    ("R10 부활 메뉴의 sort_order를 안 되살린다", "apps/api/src/repos/menu.ts",
+     "      title: input.title,\n      sort_order: input.sortOrder,\n    })\n    .execute()",
+     "      title: input.title,\n      sort_order: 0, // [변이]\n    })\n    .execute()", "api"),
+
+    ("R11 지문 불일치를 무시하고 진행한다", "apps/api/src/services/restore.ts",
+     "  if (captured.kind === 'fingerprint-mismatch') throw new RestoreAbort({ kind: 'fingerprint-mismatch' })",
+     "  if (captured.kind !== 'captured') throw new Error('unreachable') // [변이]", "api"),
+
     # ── web
     ("M25 확인 단계를 건너뛴다 (D11)", "apps/web/src/routes/snapshots.tsx",
      "                      onClick={() => setConfirming(snapshot.id)}",
