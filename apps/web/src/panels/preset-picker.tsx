@@ -1,0 +1,292 @@
+/**
+ * 페이지 프리셋을 고르고 지금 페이지를 프리셋으로 남기는 자리(§11.1 — P7-2 T4).
+ * 구조 툴바의 `프리셋`이 연다.
+ *
+ * **`PatternPicker` 옆에 둔다** — 둘 다 *"무엇을 넣을까"*를 고르는 자리이고, 새 패널을
+ * 만들면 좁은 좌측에 목록이 하나 더 쌓인다. 고르개 상태가 툴바에 하나뿐인 것도 같은 이유다.
+ *
+ * ---
+ *
+ * # 여는 순간 조회하고, 둘을 함께 받는다
+ *
+ * 프리셋 목록과 **이 페이지의 코멘트 수**다. 후자는 D6이 요구한 확인 문장의 재료다 —
+ * 적용은 페이지 내용을 통째로 치우고, 그러면 코멘트 행이 가리키던 노드가 사라진다.
+ *
+ * **확인 단계에 와서야 코멘트를 읽는 판을 고르지 않았다.** 그러면 확인 문장이 *"읽는
+ * 중"*으로 시작하고, **사용자가 되돌릴 수 없다고 생각하는 순간에 로딩을 보게 된다.**
+ * 여는 순간 둘을 함께 받으면 확인 문장이 뜰 때 이미 준비돼 있다.
+ *
+ * **코멘트 수를 읽지 못하면 `null`이고, 그때 0이라고 말하지 않는다.** *"못 읽었다"*와
+ * *"없다"*를 접는 것은 이 저장소가 여러 번 만난 부류다(`comment-panel.tsx`의 `present`가
+ * `'unknown'`을 가진 이유와 같다).
+ *
+ * **그래도 적용을 막지는 않는다.** 코멘트 조회가 실패했다고 페이지 편집이 막히면, 아무
+ * 상관없는 서비스의 장애가 편집을 세운다 — 화면이 서버보다 엄격해지는 부류다(P7-1 이월 §7).
+ * 대신 **모른다고 말한 채** 사용자가 고르게 한다.
+ *
+ * ---
+ *
+ * # 코멘트를 지우지 않는다 (D6)
+ *
+ * 코멘트는 사람의 글이고 지우는 것은 되돌릴 수 없다(P5-1의 삭제 경로가 따로 있다).
+ * 적용은 문서만 바꾸므로 **행은 남고 문서에서만 사라진다** — 코멘트 탭이 그것을
+ * *"사라진 노드"* 무리로 갈라 보인다(재라 #2를 그 파일의 케이스로 확인했다).
+ *
+ * ---
+ *
+ * # 이 파일은 오류 경계 밖이다
+ *
+ * 구조 트리와 같은 자리다. 그리는 값이 전부 문자열이고(`SHAPES.preset`이 `name`을 이미
+ * 끊는다) 편집을 만드는 일은 툴바가 한다 — 여기서 하는 것은 고르는 것과 저장 요청뿐이다.
+ */
+import { useEffect, useState, type ReactElement } from 'react'
+import type { WbNode } from '@wirebound/schema'
+import { useApi } from '../api/context'
+import { SignedOut, toFailure, type Failure } from '../api/failure'
+import type { Preset } from '../api/types'
+
+/** 목록·코멘트 조회의 상태. */
+type LoadState =
+  | { status: 'loading' }
+  /** `comments`가 `null`이면 **코멘트 수를 읽지 못했다** — 0이 아니다. */
+  | { status: 'ready'; presets: Preset[]; comments: number | null }
+  | { status: 'failed'; failure: Failure }
+
+const LOADING = '프리셋을 읽는 중입니다'
+/** 목록 조회가 실패했을 때. 서버 문장이 없으면 이것을 쓴다. */
+const LOAD_FAILED = '프리셋을 불러오지 못했습니다'
+/** 저장이 이유 없이 실패했을 때. */
+const SAVE_FAILED = '프리셋을 저장하지 못했습니다'
+/** 문서를 아직 못 읽어 저장할 것이 없을 때. */
+const NO_DOCUMENT = '페이지를 읽지 못해 저장할 수 없습니다'
+
+export function PresetPicker(props: {
+  projectId: string
+  /** 코멘트 수를 세는 대상. 없으면 세지 않는다(그때 확인 문장은 *"모른다"* 쪽이다). */
+  pageId: string | undefined
+  /**
+   * 지금 페이지의 root `children`. **문서 봉투가 아니다**(D3·D7). 문서를 못 읽었으면
+   * `null`이고 그때 저장 버튼이 비활성이다.
+   */
+  currentNodes: readonly WbNode[] | null
+  /** 고른 프리셋을 놓는다. 편집을 만드는 것은 툴바다(판정이 컴포넌트로 들어오지 않는다). */
+  onApply: (nodes: WbNode[]) => void
+  onCancel: () => void
+}): ReactElement {
+  const api = useApi()
+  const { projectId, pageId } = props
+  const [load, setLoad] = useState<LoadState>({ status: 'loading' })
+  const [picked, setPicked] = useState('')
+  /** 덮는다는 확인을 받는 중인가(D6). */
+  const [confirming, setConfirming] = useState(false)
+  const [name, setName] = useState('')
+  /** 저장 결과 한 줄. 성공도 실패도 여기 실린다. */
+  const [saveFailure, setSaveFailure] = useState<Failure | null>(null)
+  /** 저장 성공 한 줄. 실패는 `saveFailure`가 든다 — 세션이 끊긴 갈래를 갈라야 하기 때문이다. */
+  const [saved, setSaved] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  /** 저장 뒤 목록을 다시 읽게 하는 값. */
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    // 앞 프로젝트의 응답이 늦게 도착해 새 프로젝트의 목록을 덮는 것을 막는다
+    // (`theme-picker.tsx`·`use-project-theme.ts`의 조회들과 같은 형식이다).
+    let alive = true
+    setLoad({ status: 'loading' })
+    void (async () => {
+      try {
+        const presets = await api.listPresets(projectId)
+        // **코멘트 조회의 실패는 프리셋 조회의 실패와 다르다.** 앞엣것이 없으면 고를 것이
+        // 없지만, 뒤엣것이 없어도 고르고 적용할 수 있다 — 그래서 갈래를 갈라 잡는다.
+        let comments: number | null = null
+        if (pageId !== undefined) {
+          try {
+            comments = (await api.listComments(projectId, pageId)).length
+          } catch {
+            comments = null
+          }
+        }
+        if (alive) setLoad({ status: 'ready', presets, comments })
+      } catch (caught) {
+        if (alive) setLoad({ status: 'failed', failure: toFailure(caught, LOAD_FAILED) })
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [api, projectId, pageId, reload])
+
+  // **세션이 끊긴 갈래는 문장으로 말하지 않는다** — 화면을 로그인으로 갈아 끼운다
+  // (`comment-panel.tsx`가 같은 판단을 적었다: 남아 있는 화면 자체가 없다).
+  const signedOut =
+    (load.status === 'failed' && load.failure.kind === 'signed-out') ||
+    saveFailure?.kind === 'signed-out'
+  if (signedOut) return <SignedOut />
+
+  if (load.status !== 'ready') {
+    // **어느 갈래든 같은 상자에 담는다** — 취소가 사라지면 사용자가 목록을 닫는 방법이
+    // 상태에 따라 달라진다(`PatternPicker`가 같은 판단을 적었다).
+    return (
+      <div className="wb-shell-picker" role="group" aria-label="프리셋 고르기">
+        <p className="wb-shell-picker-notice">
+          {load.status === 'loading' ? LOADING : failureMessage(load.failure)}
+        </p>
+        <button type="button" className="wb-shell-picker-action" onClick={props.onCancel}>
+          프리셋 취소
+        </button>
+      </div>
+    )
+  }
+
+  // 첫 항목을 기본값으로 삼되 **`useState`의 초기값으로 두지 않는다** — 조회가 끝나기
+  // 전에 마운트되므로 초기값이 영원히 빈 문자열로 굳는다(`PatternPicker`의 실측).
+  const current = load.presets.some((preset) => preset.id === picked)
+    ? picked
+    : (load.presets[0]?.id ?? '')
+  const selected = load.presets.find((preset) => preset.id === current)
+
+  function apply(): void {
+    if (selected === undefined) return
+    setConfirming(false)
+    props.onApply(selected.nodes)
+  }
+
+  async function save(): Promise<void> {
+    if (props.currentNodes === null) return
+    setSaving(true)
+    setSaved(null)
+    setSaveFailure(null)
+    try {
+      const created = await api.createPreset(projectId, {
+        name: name.trim(),
+        // **`marker`를 여기서 지우지 않는다**(D4) — 버리는 자리는 서버다. 규칙의 자리가
+        // 하나여야 P9의 다른 저장 경로에도 같은 것이 걸린다.
+        schema: [...props.currentNodes],
+      })
+      setSaved(`프리셋으로 저장했습니다: ${created.name}`)
+      setName('')
+      // 방금 저장한 것이 목록에 있어야 바로 다른 페이지에 놓을 수 있다.
+      setReload((value) => value + 1)
+    } catch (caught) {
+      setSaveFailure(toFailure(caught, SAVE_FAILED))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="wb-shell-picker" role="group" aria-label="프리셋 고르기">
+      <label className="wb-shell-picker-label" htmlFor="wb-shell-preset-picker">
+        프리셋
+      </label>
+      <select
+        id="wb-shell-preset-picker"
+        className="wb-shell-picker-select"
+        value={current}
+        onChange={(event) => {
+          setPicked(event.target.value)
+          // 고른 것이 바뀌면 확인은 무효다 — 확인 문장이 가리키던 프리셋이 아니다.
+          setConfirming(false)
+        }}
+      >
+        {load.presets.map((preset) => (
+          <option key={preset.id} value={preset.id}>
+            {optionLabel(preset)}
+          </option>
+        ))}
+      </select>
+
+      {confirming ? (
+        <>
+          {/* **덮는다는 것을 먼저 말한다**(D6). `role="alert"`이 아닌 것은 이것이 실패
+              통지가 아니라 **묻는 말**이기 때문이다 — 편집 실패의 알림 자리
+              (`EditAlert`)와 섞이면 그 하나뿐인 통지 규칙이 흩어진다. */}
+          <p className="wb-shell-picker-notice">{overwriteNotice(load.comments)}</p>
+          <button type="button" className="wb-shell-picker-action" onClick={apply}>
+            덮고 적용
+          </button>
+          <button
+            type="button"
+            className="wb-shell-picker-action"
+            onClick={() => setConfirming(false)}
+          >
+            적용 취소
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="wb-shell-picker-action"
+          disabled={selected === undefined}
+          onClick={() => setConfirming(true)}
+        >
+          프리셋 적용
+        </button>
+      )}
+
+      <label className="wb-shell-picker-label" htmlFor="wb-shell-preset-name">
+        프리셋 이름
+      </label>
+      <input
+        id="wb-shell-preset-name"
+        className="wb-shell-picker-input"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <button
+        type="button"
+        className="wb-shell-picker-action"
+        // **이름이 비어 있으면 서버가 400이다**(1~60자). 보내 봐야 거절될 요청을 막는 것은
+        // 구조 툴바의 `disabled`와 같은 판단이다(P2b-2 D7).
+        disabled={saving || props.currentNodes === null || name.trim() === ''}
+        title={props.currentNodes === null ? NO_DOCUMENT : ''}
+        onClick={() => void save()}
+      >
+        현재 페이지를 프리셋으로 저장
+      </button>
+      {saved !== null && <p className="wb-shell-picker-notice">{saved}</p>}
+      {saveFailure !== null && (
+        <p className="wb-shell-picker-notice">{failureMessage(saveFailure)}</p>
+      )}
+
+      <button type="button" className="wb-shell-picker-action" onClick={props.onCancel}>
+        프리셋 취소
+      </button>
+    </div>
+  )
+}
+
+/**
+ * `Failure`에서 보일 문장. **`signed-out`은 여기 오지 않는다** — 그 갈래는 화면을 통째로
+ * 갈아 끼우므로 위에서 먼저 걸린다. 그래도 값을 하나 내는 것은 이 층의 계약이
+ * *"던지지 않는다"*이기 때문이다.
+ */
+function failureMessage(failure: Failure): string {
+  return failure.kind === 'message' ? failure.message : LOAD_FAILED
+}
+
+/**
+ * 목록 한 줄. **내장인지 프로젝트 것인지 말한다** — 이름은 사용자가 지을 수 있어
+ * 내장과 같은 이름이 될 수 있고(유일 제약이 없다 — D2), 그러면 이름만으로는 갈리지
+ * 않는다. `ThemePicker`가 시스템 테마에 표시를 붙이는 것과 같은 자리다.
+ */
+function optionLabel(preset: Preset): string {
+  const source = preset.source === 'builtin' ? '내장' : '프로젝트'
+  return preset.description === null || preset.description === ''
+    ? `${preset.name} (${source})`
+    : `${preset.name} (${source}) — ${preset.description}`
+}
+
+/**
+ * 덮기 전에 보이는 문장(D6). **코멘트를 세어 싣는다.**
+ *
+ * 세 갈래인 것은 *"모른다"*가 *"없다"*와 다른 말이기 때문이다. 그리고 **코멘트가 지워지지
+ * 않는다는 것을 함께 말한다** — 사용자가 *"코멘트도 날아간다"*고 오해하면 되돌릴 수 있는
+ * 조작을 되돌릴 수 없는 것으로 읽는다.
+ */
+function overwriteNotice(comments: number | null): string {
+  const head = '이 페이지의 내용을 프리셋으로 통째로 바꿉니다. 되돌리기로 한 번에 되돌릴 수 있습니다.'
+  if (comments === null) return `${head} 코멘트 수를 읽지 못했습니다 — 가리키던 노드가 사라지는 코멘트가 있을 수 있습니다.`
+  if (comments === 0) return `${head} 이 페이지에는 코멘트가 없습니다.`
+  return `${head} 코멘트 ${comments}개는 지워지지 않지만 가리키던 노드가 사라집니다.`
+}

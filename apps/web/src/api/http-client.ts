@@ -13,6 +13,7 @@ import type {
   MenuNode,
   PageDetail,
   PatchResult,
+  Preset,
   ProjectDetail,
   ProjectTheme,
   RestoreResult,
@@ -523,6 +524,22 @@ const SHAPES = {
    */
   snapshot: isSnapshot,
   snapshotList: (value) => isArrayOf(value, isSnapshot),
+  /**
+   * 프리셋 하나(P7-2). **읽는 자리가 무엇을 하는지로 무엇을 볼지 정한다** —
+   * `test/api-consumers.test.ts`가 그 자리를 실행으로 센다.
+   *
+   * | 필드 | 화면이 무엇을 하는가 | 어긋나면 |
+   * |---|---|---|
+   * | `id`(빈 문자열 금지) | **`<option>`의 값이자 React 목록의 `key`** | 빈 값이면 고른 것을 되찾지 못해 목록이 첫 항목으로 되돌아간다 |
+   * | `name` | 그대로 그려진다 | React가 객체를 그리다 렌더 도중 던진다(고르개는 오류 경계 밖이다) |
+   * | `nodes` | **`presetApply`에 그대로 들어간다** | 배열이 아니면 그 함수가 `[...nodes]`에서 던진다 |
+   *
+   * **`description`·`source`는 보지 않는다.** 둘 다 그리기만 하고(`null`이면 자리를
+   * 비운다) 어긋나도 던지지 않는다 — `snapshot`·`comment`가 `createdAt`에 대해 같은
+   * 판단을 했다: *"가설적인 경로에 가드를 달고 살아 있는 경로를 열어 두지 않는다."*
+   */
+  preset: isPreset,
+  presetList: (value) => isArrayOf(value, isPreset),
   restoreResult: isRestoreResult,
 } satisfies Record<string, Shape>
 
@@ -584,6 +601,17 @@ function isSnapshot(value: unknown): boolean {
     (typeof value['description'] === 'string' || value['description'] === null) &&
     typeof value['createdByName'] === 'string' &&
     typeof value['payloadBytes'] === 'number'
+  )
+}
+
+/** 프리셋 하나의 모양. 목록·생성이 같은 것을 쓴다 — 서버의 응답 두 벌이 같은 키를 낸다. */
+function isPreset(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
+    typeof value['name'] === 'string' &&
+    Array.isArray(value['nodes'])
   )
 }
 
@@ -847,6 +875,13 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['createSnapshot']>[1],
     true
   >,
+  // 프리셋 저장(P7-2). 서버의 `PresetBody`가 `z.strictObject`라 선언되지 않은 키는 그
+  // 자체로 400이고, **`id`·`source`·`nodes`가 그 자리다** — 목록 항목을 그대로 되보내는
+  // 실수가 실제로 있을 법하다(`createSnapshot`이 같은 자리에서 같은 판단).
+  createPreset: { name: true, description: true, schema: true } satisfies Record<
+    keyof Parameters<ApiClient['createPreset']>[1],
+    true
+  >,
 }
 
 /**
@@ -1096,6 +1131,15 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
     // 같은 메서드로 두 패턴이 맞붙는 자리가 없다(서버가 정적 세그먼트를 먼저 잡기도 한다).
     renumberComments: (projectId, pageId) =>
       request<MarkerChange>('POST', `${commentsPath(projectId, pageId)}/renumber`, SHAPES.markerChange),
+    listPresets: (projectId) =>
+      request<Preset[]>('GET', `${projectPath(projectId)}/presets`, SHAPES.presetList),
+    createPreset: (projectId, body) =>
+      request<Preset>(
+        'POST',
+        `${projectPath(projectId)}/presets`,
+        SHAPES.preset,
+        declaredOnly(body, BODY_KEYS.createPreset),
+      ),
     listSnapshots: (projectId) =>
       request<SnapshotSummary[]>('GET', `${projectPath(projectId)}/snapshots`, SHAPES.snapshotList),
     // **응답이 더 넓다(`payload`가 붙는다).** `SHAPES.snapshot`은 그것을 보지 않고 통과시킨다 —

@@ -731,6 +731,15 @@
   cursor: pointer;
 }
 
+/* 프리셋 이름 입력(`panels/preset-picker.tsx`, P7-2 T4). 고르개가 `flex-wrap`이 아니라
+   한 줄이므로 `<select>`와 같은 규칙으로 늘어난다 — 좁은 좌측에서 이름이 잘리지 않게. */
+.wb-shell-picker-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+}
+
 /* 고를 것이 없을 때. 카탈로그가 비어 있는 판이라 정상 경로에서는 오지 않는다. */
 .wb-shell-picker-notice {
   flex-basis: 100%;

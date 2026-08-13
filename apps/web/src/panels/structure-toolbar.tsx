@@ -22,15 +22,18 @@
  * 웨이브 1이 잰 여섯 형태까지다.
  */
 import { useState, type ReactElement } from 'react'
+import type { WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { createNode } from '../edit/create-node'
 import { insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { patternInsert } from '../edit/pattern-insert'
+import { presetApply, presetFailureNotice } from '../edit/preset-apply'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, structureAbilities, type StructureAbilities } from '../edit/structure-actions'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { PatternPicker } from './pattern-picker'
+import { PresetPicker } from './preset-picker'
 import { TypePicker } from './type-picker'
 
 /**
@@ -83,17 +86,30 @@ export interface StructureCommands {
    * 동시에 열리면 좁은 좌측 패널에 목록 두 개가 쌓이고, 어느 쪽 `추가`를 눌렀는지가
    * 흐려진다. 상태가 하나면 그 경우가 성립하지 않는다.
    */
-  openAdd: (where: 'inside' | 'after' | 'pattern') => void
+  openAdd: (where: OpenPicker) => void
   /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`. */
-  adding: 'inside' | 'after' | 'pattern' | null
+  adding: OpenPicker | null
   pick: (type: string) => void
   /**
    * 고른 패턴을 전개해 꽂는다(D5). **자리 규칙과 검증은 `edit/pattern-insert.ts`가 갖는다** —
    * 판정이 컴포넌트 안으로 들어오면 케이스가 화면을 지나야만 재진다(D3과 같은 이유).
    */
   pickPattern: (key: string, pattern: ThemePattern) => void
+  /**
+   * 고른 프리셋을 놓는다(P7-2 D3·D4·D5). **자리 규칙이 없다** — 페이지 통째라 답이
+   * *"어디에 꽂나"*가 아니라 *"무엇을 치우고 놓나"*다. 판정과 op 만들기는
+   * `edit/preset-apply.ts`가 갖는다(`pickPattern`과 같은 이유).
+   */
+  applyPreset: (nodes: WbNode[]) => void
   cancelAdd: () => void
 }
+
+/**
+ * 열려 있는 고르개. **넷이 한 상태에 있는 것이 의도다** — 고르개 둘이 동시에 열리면 좁은
+ * 좌측 패널에 목록이 쌓이고 어느 쪽 버튼을 눌렀는지가 흐려진다(P7-1이 `'pattern'`을
+ * 더하며 적은 것과 같은 근거).
+ */
+export type OpenPicker = 'inside' | 'after' | 'pattern' | 'preset'
 
 export function useStructureCommands(props: {
   projectId: string
@@ -117,7 +133,7 @@ export function useStructureCommands(props: {
 
   const abilities = structureAbilities(document, selectedNodeId)
   /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`이다. */
-  const [adding, setAdding] = useState<'inside' | 'after' | 'pattern' | null>(null)
+  const [adding, setAdding] = useState<OpenPicker | null>(null)
 
   /**
    * 고른 타입으로 새 노드를 만들어 넣는다. 편집이 실제로 들어갔을 때만 선택을 옮긴다.
@@ -202,6 +218,37 @@ export function useStructureCommands(props: {
 
     // **여기부터는 평범한 편집이다**(D4) — undo·낙관적 적용·경고 표시가 그대로 따라온다.
     if (commitOps(attempt.insert.ops)) store.selectNode(attempt.insert.selectId)
+  }
+
+  /**
+   * 고른 프리셋을 놓는다(D3·D4·D5).
+   *
+   * **`addPattern`과 갈리는 것 셋.** 자리를 고르지 않고(페이지 통째다), 판정을 결과 문서
+   * 전체로 하며(D5), **선택을 비울 수 있다** — 빈 프리셋은 놓을 노드가 없으므로 고를
+   * 것도 없다(그때 선택을 그대로 두면 사라진 노드를 가리킨다).
+   *
+   * | 갈래 | 문장이 말하는 것 | 되돌리는 것 |
+   * |---|---|---|
+   * | `'no-root'` | 문서를 읽지 못했다 — 새로고침 | 없음(편집 0건) |
+   * | `'invalid'` | 프리셋이 잘못됐다 — 프리셋을 고친다 | 없음(편집 0건) |
+   * | 성공 | — | **undo 하나가 페이지 전체를 되돌린다** |
+   *
+   * **문장은 순수 함수가 만든다**(`presetFailureNotice`) — P7-1 이월 §3이 지목한
+   * *"콜론 뒤가 빈 문장"*이 화면을 지나야만 도달해 케이스를 쓸 수 없었던 자리이고,
+   * 그 이월이 제안한 방식이 이것이다.
+   */
+  function applyPreset(nodes: WbNode[]): void {
+    setAdding(null)
+    if (document === null) return
+
+    const attempt = presetApply(document, nodes)
+    if (attempt.apply === null) {
+      store.setEditFailure({ kind: 'message', message: presetFailureNotice(attempt) })
+      return
+    }
+
+    // **여기부터는 평범한 편집이다**(D3) — undo·낙관적 적용·경고 표시가 그대로 따라온다.
+    if (commitOps(attempt.apply.ops)) store.selectNode(attempt.apply.selectId)
   }
 
   /** 선택 노드의 **마지막 자식**으로. `children`이 없으면 0이고 `insertNodeOps`가 배열째 만든다. */
@@ -348,6 +395,7 @@ export function useStructureCommands(props: {
     adding,
     pick: addNode,
     pickPattern: addPattern,
+    applyPreset,
     cancelAdd: () => setAdding(null),
   }
 }
@@ -379,6 +427,16 @@ const NO_SPOT_NOTICE = '고른 자리에는 패턴을 꽂을 수 없습니다. �
 export function StructureToolbar(props: {
   commands: StructureCommands
   projectId: string
+  /** 코멘트 수를 세는 대상(D6). 프리셋 고르개가 쓴다. */
+  pageId: string | undefined
+  /**
+   * 지금 페이지의 root `children`(D7). *"현재 페이지를 프리셋으로 저장"*이 담는 것이고,
+   * **문서 봉투가 아니다**(D3). 문서를 못 읽었으면 `null`이다.
+   *
+   * **툴바가 문서를 다시 읽지 않고 받는다** — 트리가 이미 스토어에서 읽어 그리고 있고,
+   * 여기서 또 읽으면 같은 값을 두 번 구독한다.
+   */
+  currentNodes: readonly WbNode[] | null
 }): ReactElement {
   const { commands } = props
   const { abilities } = commands
@@ -429,6 +487,16 @@ export function StructureToolbar(props: {
       >
         패턴 넣기
       </button>
+      {/* **프리셋도 `ToolButton`이 아니다 — 패턴과 같은 이유다.** 선택이 없어도 할 수
+          있고(페이지 통째라 자리를 고르지 않는다) 판정이 없으므로 걸 `ability`가 없다.
+          그 성질이 단축키 쪽에도 그대로 걸린다(`structure-tree.tsx`의 `ability: null`). */}
+      <button
+        type="button"
+        className="wb-shell-structure-tool"
+        onClick={() => commands.openAdd('preset')}
+      >
+        프리셋
+      </button>
       {/* 목록은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 노드에 붙는
           작업인지가 보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이
           그대로 남는다. */}
@@ -439,6 +507,15 @@ export function StructureToolbar(props: {
         <PatternPicker
           projectId={props.projectId}
           onPick={commands.pickPattern}
+          onCancel={commands.cancelAdd}
+        />
+      )}
+      {commands.adding === 'preset' && (
+        <PresetPicker
+          projectId={props.projectId}
+          pageId={props.pageId}
+          currentNodes={props.currentNodes}
+          onApply={commands.applyPreset}
           onCancel={commands.cancelAdd}
         />
       )}

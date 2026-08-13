@@ -192,20 +192,38 @@ export function getBuiltinPreset(key: string): PagePreset | undefined {
  * (봉투가 `strictObject`라 그런 키는 어차피 저장 경계에서 거부된다).
  */
 export function stripMarkers(nodes: readonly WbNode[]): WbNode[] {
-  return nodes.map((node) => stripNode(node))
+  return nodes.map((node) => copyNode(node, { keepMarker: false }))
 }
 
-function stripNode(node: WbNode): WbNode {
+/**
+ * 트리를 값으로 복사한다. **`marker`를 그대로 둔다** — 버리는 것은 `stripMarkers`의 일이고
+ * (D4: 버리는 자리는 **저장**이다), 이 함수는 *"값을 공유하지 않는다"*만 책임진다.
+ *
+ * **적용 경로가 이것을 쓴다.** `remapNodeIds`는 노드를 새 객체로 만들지만 **`props`는 참조
+ * 그대로 옮긴다**(`{ ...node }`) — 그래서 내장 프리셋을 그대로 리매핑하면 놓인 문서의
+ * `props`가 `BUILTIN_PRESETS`의 객체와 **같은 것**이 된다. P7-1 리뷰가 `expandPattern`에서
+ * 실증한 결함과 같은 부류이고(그쪽은 `structuredClone`으로 닫았다), 그 이월이 *"프리셋을
+ * 같은 방식으로 복사하면 같은 예외를 물려받는다"*고 적어 둔 자리다 — 그래서 여기서는
+ * `structuredClone`을 쓰지 않고 아는 키만 옮긴다.
+ */
+export function cloneNodes(nodes: readonly WbNode[]): WbNode[] {
+  return nodes.map((node) => copyNode(node, { keepMarker: true }))
+}
+
+function copyNode(node: WbNode, options: { keepMarker: boolean }): WbNode {
   const next: WbNode = { id: node.id, type: node.type }
-  if (node.props !== undefined) next.props = structuredCloneProps(node.props)
+  if (node.props !== undefined) next.props = clonePropsValue(node.props)
   if (node.variant !== undefined) next.variant = node.variant
+  if (options.keepMarker && node.marker !== undefined) next.marker = node.marker
   if (node.interactions !== undefined) {
     next.interactions = node.interactions.map((interaction) => ({
       on: interaction.on,
       actions: interaction.actions.map((action) => ({ ...action })),
     }))
   }
-  if (node.children !== undefined) next.children = node.children.map((child) => stripNode(child))
+  if (node.children !== undefined) {
+    next.children = node.children.map((child) => copyNode(child, options))
+  }
   return next
 }
 
@@ -215,7 +233,7 @@ function stripNode(node: WbNode): WbNode {
  * 경계 **앞**에서 던지면 사용자는 이유를 못 듣는다. `JSON.parse(JSON.stringify(...))`는
  * 함수를 조용히 버리고, 버려진 자리는 저장 경계의 `invalid-props`가 말한다.
  */
-function structuredCloneProps(props: Record<string, unknown>): Record<string, unknown> {
+function clonePropsValue(props: Record<string, unknown>): Record<string, unknown> {
   return JSON.parse(JSON.stringify(props)) as Record<string, unknown>
 }
 

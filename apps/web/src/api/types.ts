@@ -9,7 +9,7 @@
  * 예외는 `PageDetail.schema`다. 문서 스키마는 서버가 아니라 `@wirebound/schema`가
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
-import type { PageDocument, PatchOp, ValidationIssue } from '@wirebound/schema'
+import type { PageDocument, PatchOp, ValidationIssue, WbNode } from '@wirebound/schema'
 import type { Theme, ThemeIssue } from '@wirebound/themes'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
@@ -310,6 +310,27 @@ export interface CommentCreated extends MarkerChange {
  * `payloadBytes`는 `octet_length(payload::text)`다 — DB가 들고 있는 문서의 옥텟 수이고,
  * §16의 열린 항목(보관 정책)을 닫을 관측이다. 상한은 없다.
  */
+/**
+ * 이 프로젝트에서 **고를 수 있는** 프리셋 하나(§11.1 — P7-2). 목록이 내장과 프로젝트
+ * 것을 함께 내고 `source`가 그 둘을 가른다.
+ *
+ * **`nodes`가 목록에 실려 온다.** 스냅샷의 `payload`와 갈리는 자리다 — 크기가 페이지
+ * 하나의 트리라 목록이 이미 나르는 것과 같고, 고른 직후 적용하는 화면이 그것을 반드시
+ * 쓴다(빼면 왕복이 하나 늘고 그 실패 갈래가 하나 더 생긴다).
+ *
+ * **문서 봉투가 아니라 root의 `children`이다**(P7-2 D3) — 적용이 root를 바꾸지 않는다.
+ *
+ * 서버는 `source === 'project'`인 항목에 `createdBy`·`createdByName`·`createdAt`도
+ * 싣지만(api README) **이 타입은 그것을 담지 않는다** — 고르개가 읽지 않는 값이다.
+ */
+export interface Preset {
+  id: string
+  source: 'builtin' | 'project'
+  name: string
+  description: string | null
+  nodes: WbNode[]
+}
+
 export interface SnapshotSummary {
   id: string
   tag: string

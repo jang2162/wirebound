@@ -52,6 +52,7 @@ const METHODS = [
   'getTheme', 'createTheme', 'updateTheme',
   'listComments', 'createComment', 'updateComment', 'deleteComment', 'renumberComments',
   'listSnapshots', 'createSnapshot', 'restoreSnapshot',
+  'listPresets', 'createPreset',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -140,7 +141,14 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   //
   // **캔버스가 `listComments`를 부르지 않는 것이 요점이다.** 마커는 코멘트 목록이 아니라
   // **문서의 `marker`**에서 나온다(D1) — 그래야 내보낸 HTML 번들(§11.3)도 같은 것을 그린다.
-  listComments: ['../src/panels/comment-panel.tsx'],
+  // **P7-2가 둘째 소비자를 만들었다 — 이 줄이 먼저 죽어서 알았다.** 프리셋 고르개가
+  // 적용 전에 *"코멘트 몇 개가 고아가 되는가"*를 세려고 부른다(D6). **위 문장(*"다섯 다
+  // 한 파일"*)은 이제 넷에만 참이다.**
+  //
+  // **D1을 어기지 않는다.** 그 결정이 막는 것은 *"번호와 본문을 잇는 자리가 둘이 되는
+  // 것"*이고, 고르개는 **세기만 한다** — 노드를 찾지도, `marker`를 읽지도, 코멘트를
+  // 만들거나 지우지도 않는다. 쓰기 넷은 여전히 코멘트 탭 하나다.
+  listComments: ['../src/panels/comment-panel.tsx', '../src/panels/preset-picker.tsx'],
   createComment: ['../src/panels/comment-panel.tsx'],
   updateComment: ['../src/panels/comment-panel.tsx'],
   deleteComment: ['../src/panels/comment-panel.tsx'],
@@ -162,6 +170,16 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 것은 **서버**이고(라우트가 스냅샷 id만 받는다), 화면은 그 결과 요약만 본다. 부르는
   // 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도 확인하지 않은 채 남는다.
   restoreSnapshot: ['../src/routes/snapshots.tsx'],
+  // 프리셋 둘(P7-2). **둘 다 고르개 하나에서만 불린다** — 고를 목록과 저장이 한 자리에
+  // 있는 것이 T4의 꼴이고, **이 줄이 그것을 실행으로 지킨다:** 툴바나 셸이 직접 프리셋을
+  // 부르기 시작하면 여기가 죽는다.
+  //
+  // **`deletePreset`이 목록에 아예 없는 것이 요점이다.** 서버에는 그 라우트가 있지만
+  // (D2가 *"프리셋은 지울 수 있다"*로 이름의 유일 제약을 뺐다) 화면에 지우는 자리가 아직
+  // 없다 — 부르는 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도
+  // 확인하지 않은 채 남는다(`getSnapshot`이 같은 자리에서 같은 판단).
+  listPresets: ['../src/panels/preset-picker.tsx'],
+  createPreset: ['../src/panels/preset-picker.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {
