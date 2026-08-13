@@ -139,6 +139,29 @@ describe('구조 트리의 키보드 단축키', () => {
     expect(srv.calls).toHaveLength(0)
   })
 
+  /**
+   * **속성 패널 케이스만으로는 부족했다 — 리뷰가 실증했다.** 그쪽은 **다른 서브트리**라
+   * 키가 여기로 버블되지 않아 저절로 안전했고, 그래서 *"이 상자 안에서 타이핑하면
+   * 어떻게 되는가"*는 재지지 않은 채였다. 고르개는 **이 상자 안**에 그려지므로 거기서
+   * 난 키는 그대로 핸들러에 온다.
+   *
+   * **`<select>`가 그 부류의 첫 자리다.** `Alt`+`↑`는 브라우저에서 목록을 여는 조합이라
+   * 사용자는 **고르려고** 누르는데, 문서에서는 노드가 움직인다.
+   */
+  it('고르개에서 친 키가 구조 조작으로 새지 않는다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+    const picker = await screen.findByLabelText('타입')
+
+    fireEvent.keyDown(picker, { key: 'ArrowUp', altKey: true })
+    fireEvent.keyDown(picker, { key: 'Delete' })
+
+    expect(structureTypes()).toEqual(INITIAL_TYPES)
+    expect(srv.calls).toHaveLength(0)
+  })
+
   it('Alt+위/아래가 순서를 바꾼다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')

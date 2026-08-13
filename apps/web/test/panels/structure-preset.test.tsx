@@ -552,6 +552,59 @@ describe('저장 — D7', () => {
   })
 })
 
+/**
+ * **리뷰가 막는 결함으로 잡은 자리다.** 키 핸들러는 트리와 툴바를 **함께** 감싸는 상자에
+ * 붙어 있는데(`structure-tree.tsx`), 이 슬라이스가 그 상자 안에 **처음으로 타이핑하는
+ * 칸**을 넣었다. 첫 단축키가 수식 키 없는 `Delete`·`Backspace`를 삭제로 받으므로,
+ * 이름을 고치다 오타를 지우면 **고른 노드가 지워지고 그 편집이 서버로 나간다.**
+ *
+ * **이름 칸 하나를 예외로 두지 않는다.** 같은 상자에 앞으로 들어올 입력 칸이 전부
+ * 지켜져야 하므로, 규칙은 *"타이핑하는 표면에서 난 키는 구조 조작이 아니다"*다 —
+ * 아래 `structure-keyboard.test.tsx`가 그 규칙을 고르개의 `<select>`로도 잰다.
+ */
+describe('입력 칸에서 친 키는 구조 조작으로 새지 않는다', () => {
+  it('프리셋 이름 칸의 Backspace가 노드를 지우지 않는다', async () => {
+    const backend = server()
+    await openPage(doc(), { apiOverrides: backend.api })
+
+    fireEvent.click(within(structureRegion()).getByRole('button', { name: 'Text' }))
+    await openPicker()
+    const input = screen.getByLabelText('프리셋 이름')
+    fireEvent.change(input, { target: { value: '이름' } })
+
+    fireEvent.keyDown(input, { key: 'Backspace' })
+    fireEvent.keyDown(input, { key: 'Delete' })
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Card'])
+    expect(backend.calls).toEqual([])
+  })
+
+  it('프리셋 이름 칸의 기본 동작을 막지 않는다 — 글자가 지워져야 한다', async () => {
+    const backend = server()
+    await openPage(doc(), { apiOverrides: backend.api })
+
+    await openPicker()
+    const input = screen.getByLabelText('프리셋 이름')
+
+    // `fireEvent`는 기본 동작이 막히지 않았을 때 `true`를 낸다(`Tab` 케이스와 같은 방식).
+    expect(fireEvent.keyDown(input, { key: 'Backspace' })).toBe(true)
+  })
+
+  it('이름 칸에서는 고르개 단축키도 돌지 않는다 — 타이핑이 우선이다', async () => {
+    const backend = server()
+    await openPage(doc(), { apiOverrides: backend.api })
+
+    await openPicker()
+    fireEvent.keyDown(screen.getByLabelText('프리셋 이름'), {
+      code: 'KeyI',
+      altKey: true,
+      shiftKey: true,
+    })
+
+    expect(screen.queryByRole('group', { name: '패턴 고르기' })).toBeNull()
+  })
+})
+
 describe('단축키 — D9: 판정 없는 조작', () => {
   it('Alt+Shift+P가 프리셋 고르개를 연다', async () => {
     const backend = server()
