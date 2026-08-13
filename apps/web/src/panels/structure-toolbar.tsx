@@ -28,6 +28,7 @@ import { insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, structureAbilities, type StructureAbilities } from '../edit/structure-actions'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { PatternPicker } from './pattern-picker'
 import { TypePicker } from './type-picker'
 
 /**
@@ -73,10 +74,16 @@ export interface StructureCommands {
   moveDown: () => void
   indent: () => void
   outdent: () => void
-  /** 타입 목록을 연다. 실제 추가는 `pick`이 한다. */
-  openAdd: (where: 'inside' | 'after') => void
-  /** 목록이 열려 있으면 어디에 넣을지. 닫혀 있으면 `null`. */
-  adding: 'inside' | 'after' | null
+  /**
+   * 고르개를 연다. 실제 추가는 `pick`(타입)·`pickPattern`(패턴)이 한다.
+   *
+   * **`'pattern'`이 `'inside'`·`'after'`와 같은 상태에 있는 것이 의도다** — 고르개 둘이
+   * 동시에 열리면 좁은 좌측 패널에 목록 두 개가 쌓이고, 어느 쪽 `추가`를 눌렀는지가
+   * 흐려진다. 상태가 하나면 그 경우가 성립하지 않는다.
+   */
+  openAdd: (where: 'inside' | 'after' | 'pattern') => void
+  /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`. */
+  adding: 'inside' | 'after' | 'pattern' | null
   pick: (type: string) => void
   cancelAdd: () => void
 }
@@ -102,8 +109,8 @@ export function useStructureCommands(props: {
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
 
   const abilities = structureAbilities(document, selectedNodeId)
-  /** 타입 목록이 열려 있으면 어디에 넣을지. 닫혀 있으면 `null`이다. */
-  const [adding, setAdding] = useState<'inside' | 'after' | null>(null)
+  /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`이다. */
+  const [adding, setAdding] = useState<'inside' | 'after' | 'pattern' | null>(null)
 
   /**
    * 고른 타입으로 새 노드를 만들어 넣는다. 편집이 실제로 들어갔을 때만 선택을 옮긴다.
@@ -124,7 +131,11 @@ export function useStructureCommands(props: {
    */
   function addNode(type: string): void {
     setAdding(null)
-    if (document === null || selectedNodeId === null || adding === null) return
+    // **`adding`이 `'pattern'`이면 여기 오지 않는다** — 그때 그려지는 것은 `PatternPicker`
+    // 이고 이 함수는 `TypePicker.onPick`에만 걸려 있다. 그래도 자리를 좁혀 두는 것은
+    // 아래 두 갈래가 `'inside' | 'after'`를 전제하기 때문이다.
+    if (document === null || selectedNodeId === null) return
+    if (adding !== 'inside' && adding !== 'after') return
 
     const node = createNode(type)
     if (node === null) return
@@ -282,8 +293,17 @@ export function useStructureCommands(props: {
   }
 }
 
-/** 툴바. **판정도 조작도 갖지 않는다** — `useStructureCommands`가 준 것을 그릴 뿐이다. */
-export function StructureToolbar(props: { commands: StructureCommands }): ReactElement {
+/**
+ * 툴바. **판정도 조작도 갖지 않는다** — `useStructureCommands`가 준 것을 그릴 뿐이다.
+ *
+ * **`projectId`를 받는 것은 패턴 고르개 때문이다**(D8). 패턴은 테마가 소유하므로
+ * (§11.1) 목록을 만들려면 그 프로젝트의 테마를 읽어야 하고, 그 조회는 고르개가 열렸을
+ * 때만 일어난다 — `PatternPicker`가 닫혀 있을 때 DOM에 없기 때문이다.
+ */
+export function StructureToolbar(props: {
+  commands: StructureCommands
+  projectId: string
+}): ReactElement {
   const { commands } = props
   const { abilities } = commands
 
@@ -321,11 +341,30 @@ export function StructureToolbar(props: { commands: StructureCommands }): ReactE
         abilities={abilities}
         onClick={commands.outdent}
       />
+      {/* **패턴은 `ToolButton`이 아니다.** 그 버튼은 `StructureAbilities`의 키 하나에
+          묶여 있는데(비활성 여부와 이유가 같은 곳에서 나온다), 패턴 넣기는 **선택이
+          없어도 할 수 있다**(D5 — 선택이 없으면 root의 자식 끝). 판정이 없으므로 걸
+          `ability`도 없다. 패턴이 0개인 테마에서도 활성인 것은 D7이다 — *"없다"*를
+          보여 주는 것이 회색 버튼보다 낫다. */}
+      <button
+        type="button"
+        className="wb-shell-structure-tool"
+        onClick={() => commands.openAdd('pattern')}
+      >
+        패턴 넣기
+      </button>
       {/* 목록은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 노드에 붙는
           작업인지가 보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이
           그대로 남는다. */}
-      {commands.adding !== null && (
+      {(commands.adding === 'inside' || commands.adding === 'after') && (
         <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />
+      )}
+      {commands.adding === 'pattern' && (
+        <PatternPicker
+          projectId={props.projectId}
+          onPick={commands.cancelAdd}
+          onCancel={commands.cancelAdd}
+        />
       )}
     </div>
   )
