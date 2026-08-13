@@ -287,6 +287,39 @@ describe('패턴 삽입 — D9: 실패 갈래마다 무엇이 되돌아가는가
     expect(backend.calls.length).toBe(0)
   })
 
+  /**
+   * **이 케이스는 겨냥을 바꿔 두 번째로 잰 것이다.** 첫 판에는 `'no-spot'` 문장을 재는
+   * 화면 케이스가 없었고, 그래서 *"`no-spot`과 `invalid`를 같은 문장으로 합친다"*는 변이가
+   * **0 사망**이었다 — D9가 요구한 *"패턴이 잘못됐다"*와 *"내가 잘못 눌렀다"*의 구분 중
+   * **뒤엣것이 케이스 밖**이었다는 뜻이다.
+   *
+   * 화면에서 그 갈래에 닿는 길: **`children`이 배열이 아닌 문서.** `insertNodeOps`가
+   * 그 부모를 `null`로 막으므로(*"깨진 문서를 조용히 덮지 않는다"* — 그쪽 실측)
+   * `patternInsert`가 `'no-spot'`을 낸다. 서버가 검증한 문서에는 오지 않지만 스토어에는
+   * 실린다 — `structure-actions.ts`가 같은 부류를 값으로 다루는 이유와 같다.
+   */
+  it('꽂을 자리가 없으면 자리 문제라고 말한다 — 패턴 탓으로 돌리지 않는다', async () => {
+    const backend = server()
+    const brokenDoc = pageDoc({ id: 'n-root', type: 'Page', children: '배열이아니다' } as never)
+    // **`backend.api`를 통째로 펼치지 않는다 — 처음에 그렇게 짰고 케이스가 거짓 초록이
+    // 됐다.** `server()`의 `getPage`는 자기 `held`(정상 문서)를 돌려주므로 여기서 준
+    // 깨진 문서를 덮는다. 실측: 그때 구조 트리에 패턴이 **정상적으로 꽂혔고**
+    // (`Section`·`SearchForm`·`List`가 보였다) 알림은 `null`이었다.
+    await openPage(brokenDoc, {
+      apiOverrides: { patchOps: backend.api.patchOps!, ...themeApi(systemTheme('portal')!) },
+    })
+
+    await insertPattern()
+
+    await waitFor(() => {
+      expect(alertText()).toContain('고른 자리에는')
+    })
+    // **패턴 쪽 문장이 아니다** — 이름도 테마도 말하지 않는다.
+    expect(alertText()).not.toContain('공지 목록')
+    expect(alertText()).not.toContain('테마')
+    expect(backend.calls.length).toBe(0)
+  })
+
   it('서버가 거절하면 문서가 서버 상태로 되돌아가고 알림이 남는다', async () => {
     const backend = server({ failPatch: true })
     await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
