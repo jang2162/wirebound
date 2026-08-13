@@ -192,6 +192,45 @@ describe('되돌아가는 것들', () => {
     })
   })
 
+  /**
+   * **제목만 재면 `sort_order`를 쓰는지 알 수 없다** — 그 컬럼을 안 쓰는 변이가 **0 사망**
+   * 이었다. 겨냥을 옮겨 순서 자체를 잰다.
+   */
+  it('메뉴 순서가 되돌아온다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const second = await createMenuNode(ctx, fx.owner.cookie, fx.project.id, { title: '두 번째' })
+      const id = await snapshot(ctx, fx, 'v1')
+
+      // 두 번째를 맨 앞으로 옮긴다 — 제목은 아무것도 안 바뀐다.
+      await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.project.id}/menu/${second.id}`,
+        cookies: fx.owner.cookie,
+        payload: { sortOrder: 0 },
+      })
+      const moved = await ctx.db
+        .selectFrom('menu_nodes')
+        .select(['id', 'sort_order'])
+        .where('project_id', '=', fx.project.id)
+        .orderBy('sort_order', 'asc')
+        .execute()
+      expect(moved.map((row) => row.id)).toEqual([second.id, fx.menu.id])
+
+      const body = (await restore(ctx, fx, id)).json() as RestoreBody
+
+      expect(body.summary.menu.updated).toBe(2)
+      const rows = await ctx.db
+        .selectFrom('menu_nodes')
+        .select(['id', 'sort_order'])
+        .where('project_id', '=', fx.project.id)
+        .orderBy('sort_order', 'asc')
+        .execute()
+      expect(rows.map((row) => row.id)).toEqual([fx.menu.id, second.id])
+      expect(rows.map((row) => row.sort_order)).toEqual([0, 1])
+    })
+  })
+
   it('스냅샷 뒤에 만든 페이지가 지워진다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -287,7 +326,13 @@ describe('되돌아가는 것들', () => {
         .orderBy('seq', 'asc')
         .execute()
 
-      expect(rows.map((row) => row.actor_label)).toEqual([fx.owner.user.name, restoreActorLabel('v1')])
+      // **형식을 리터럴로 적는다 — `restoreActorLabel('v1')`로 적으면 이 케이스가 죽지 않는다.**
+      // 재서 알았다: 그 함수가 `tag`를 그대로 내도록 변이를 심었더니 **0 사망**이었다.
+      // 케이스가 구현과 같은 함수를 불러 양쪽이 함께 움직였기 때문이다 — P6-1 이월 §2의
+      // *"불변량을 재는 케이스는 그 불변량이 고정하지 않는 축을 잴 수 없다"*와 같은 부류다.
+      expect(rows.map((row) => row.actor_label)).toEqual([fx.owner.user.name, '복원: v1'])
+      // 형식을 만드는 쪽과 케이스가 같은 값을 뜻하는지도 함께 본다(둘이 갈리면 여기가 죽는다).
+      expect(restoreActorLabel('v1')).toBe('복원: v1')
       expect(rows.at(-1)?.actor_type).toBe('user')
       expect(rows.at(-1)?.actor_id).toBe(fx.owner.user.id)
     })
@@ -367,7 +412,18 @@ describe('코멘트 — T4', () => {
         .orderBy('id', 'asc')
         .execute()
       expect(rows.map((row) => row.body)).toEqual(['첫째', '둘째'])
-      expect(rows[0]!.created_at.getTime()).toBeLessThan(rows[1]!.created_at.getTime())
+
+      // **순서만 재면 이 케이스는 아무것도 고정하지 못한다 — 재서 알았다.** 시각을 심지
+      // 않는 변이(컬럼 기본값 `clock_timestamp()`에 맡긴다)를 심었더니 **0 사망**이었다:
+      // 복원이 payload 순서대로 넣으므로 기본값도 같은 순서를 만든다. 순서는 두 선택지가
+      // **동시에 만족하는 불변량**이라 선택을 고정하지 못한다(P6-1 이월 §2).
+      //
+      // **겨냥을 옮긴다 — 값 자체를 본다.** 복원된 `created_at`이 payload의 그 값이어야 한다.
+      const payload = (
+        await ctx.db.selectFrom('snapshots').select('payload').where('id', '=', id).executeTakeFirstOrThrow()
+      ).payload as { comments: Array<{ id: string; createdAt: string }> }
+      const wantById = new Map(payload.comments.map((entry) => [entry.id, entry.createdAt]))
+      expect(rows.map((row) => row.created_at.toISOString())).toEqual(rows.map((row) => wantById.get(row.id)))
     })
   })
 
@@ -631,6 +687,40 @@ describe('막는 갈래 — 오류 표', () => {
       expect(res.statusCode).toBe(400)
       expect(res.body).toContain('사용자 목록')
       expect(res.body).toContain('스냅샷')
+    })
+  })
+
+  /**
+   * **만들어지는 페이지의 문서는 아무도 검증하지 않는 유일한 쓰기다** — 갱신 쪽은
+   * `applyEdit` 6단계가 본다. 계획이 그 구멍을 `validatePage`로 막고, 이 케이스가 그것을
+   * 고정한다(그 검사를 지우는 변이는 이 케이스가 없으면 **0 사망**이었다).
+   *
+   * **`applyEdit`이 내는 422와 문장이 다르다** — 어느 경로가 막았는지 화면이 알 수 있어야 한다.
+   */
+  it('되살릴 페이지의 문서가 카탈로그 검증에 걸리면 422다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await editPage(ctx, fx, 'n_sec1')
+      const id = await snapshot(ctx, fx, 'v1')
+      // **지운다** — 그래야 복원이 `create-page`를 타고 `validatePage`에 닿는다.
+      await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/projects/${fx.project.id}/pages/${fx.page.id}`,
+        cookies: fx.owner.cookie,
+      })
+      await ctx.db
+        .updateTable('snapshots')
+        .set({ payload: sql`jsonb_set(payload, '{pages,0,schema,root,children,0,type}', '"없는타입"')` })
+        .where('id', '=', id)
+        .execute()
+
+      const res = await restore(ctx, fx, id)
+
+      expect(res.statusCode).toBe(422)
+      expect(res.body).toContain('복원할 페이지의 스키마 검증에 실패했습니다')
+      expect(res.body).toContain('사용자 목록')
+      // 아무것도 쓰지 않았다 — 페이지는 여전히 없다.
+      expect(await readPage(ctx, fx.page.id)).toBeUndefined()
     })
   })
 
