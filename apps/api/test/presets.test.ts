@@ -6,6 +6,9 @@
  * 목록이 내장과 프로젝트 것을 함께 내는가(D2), 저장이 `marker`를 버리고 id를 그대로
  * 담는가(D4·D7), 그리고 NUL이 **어디서** 막히는가(계획서 T2가 요구한 관측).
  */
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { BUILTIN_PRESETS, type WbNode } from '@wirebound/schema'
 import { listPresets } from '../src/repos/presets'
@@ -346,5 +349,59 @@ describe('프로젝트가 사라지면 프리셋도 간다', () => {
       expect(res.statusCode).toBe(204)
       expect(await listPresets(ctx.db, fx.project.id)).toEqual([])
     })
+  })
+})
+
+/**
+ * **`marker`를 버리는 자리가 하나인 것을 실행으로 지킨다**(리뷰 (4)).
+ *
+ * # 왜 NUL처럼 repo에 겹으로 두지 않는가
+ *
+ * **NUL이 겹인 이유는 저장 제약이기 때문이다.** 그 검사가 없으면 Postgres가 `22P05`로
+ * 죽어 **500**이 된다(T5에서 세 판을 돌려 쟀다: 400 · 400 · 500). repo의 검사는 그
+ * 500을 400으로 바꾸는 마지막 방벽이고, `db/nul-guard.ts`가 `db/`에 사는 것도 그것이
+ * 순전히 Postgres의 제약이기 때문이다.
+ *
+ * **`marker`에는 그런 바닥이 없다.** 그것은 저장 제약이 아니라 **도메인 규칙**이고
+ * (D4 — 고아 marker를 만들지 않는다), 담겨도 DB는 아무 말도 하지 않는다. 그래서
+ * `repos/presets.ts`는 *"값의 뜻을 모르고 컬럼으로만 다룬다"*를 지키고, 규칙은 라우트
+ * 하나가 갖는다 — README의 계층 규칙이 그은 선이다.
+ *
+ * **대신 그 "하나"가 진짜 하나인지를 이 케이스가 센다.** 겹으로 두는 대신 **자리가 늘면
+ * 죽는 것**을 골랐다: P9의 MCP·CLI가 두 번째 쓰기 경로를 만들면 여기가 먼저 죽고, 그때
+ * 사람이 *"`stripMarkers`를 어디에 둘 것인가"*를 다시 판정하게 된다.
+ */
+const SRC_DIR = fileURLToPath(new URL('../src', import.meta.url))
+
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+}
+
+/** `src` 아래의 `.ts` 전부(정의 파일 제외). 경로는 `src` 기준 상대다. */
+function sourceFiles(): string[] {
+  return readdirSync(SRC_DIR, { recursive: true })
+    .map((entry) => String(entry))
+    .filter((name) => name.endsWith('.ts'))
+}
+
+describe('marker 규칙의 자리가 하나다', () => {
+  it('훑을 소스를 실제로 읽는다', () => {
+    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**(이 저장소가 여러 번 겪은 사고다).
+    expect(sourceFiles().length).toBeGreaterThan(20)
+  })
+
+  it('프리셋을 쓰는 자리가 라우트 하나다 — 늘면 marker 규칙을 다시 판정해야 한다', () => {
+    const callers = sourceFiles().filter((name) => {
+      if (name === 'repos/presets.ts') return false
+      return /\binsertPreset\s*\(/.test(stripComments(readFileSync(join(SRC_DIR, name), 'utf8')))
+    })
+
+    expect(callers).toEqual(['routes/presets.ts'])
+  })
+
+  it('그 자리가 stripMarkers를 지난다', () => {
+    const source = stripComments(readFileSync(join(SRC_DIR, 'routes/presets.ts'), 'utf8'))
+
+    expect(/stripMarkers\s*\(/.test(source)).toBe(true)
   })
 })

@@ -46,7 +46,6 @@
  * (`invertOps` → `applyOps`)를 지나야 하고, 케이스가 그 왕복을 잰다.
  */
 import {
-  cloneNodes,
   partitionIssues,
   remapNodeIds,
   validatePage,
@@ -64,7 +63,15 @@ import { isNodeLike } from './safe-walk'
  * | 값 | 무엇이 잘못됐나 | 되돌리는 것 |
  * |---|---|---|
  * | `'no-root'` | 문서의 root가 노드가 아니다(깨진 문서) | 없음 — 편집 0건 |
+ * | `'broken-page'` | **root 자체가** 저장될 수 없는 상태다 — 프리셋과 무관하다 | 없음 — 편집 0건 |
  * | `'invalid'` | 놓고 나면 문서가 저장될 수 없다(`error` 이슈) | 없음 — 편집 0건 |
+ *
+ * **`'broken-page'`는 D5 근거의 경계다(리뷰 (1)).** D5는 *"교체하면 깨진 부분이 결과에
+ * 남지 않는다"*를 근거로 결과 문서 전체를 판정하게 했는데, **root는 교체 대상이 아니므로
+ * 그 근거가 root에는 미치지 않는다.** 그래서 root가 깨진 문서에서는 멀쩡한 프리셋이
+ * 막히고, 갈래를 가르지 않으면 **문장이 프리셋을 탓한다**(실측: `루트는 Page여야 합니다`가
+ * *"프리셋을 놓지 못했습니다"* 뒤에 붙었다). **판정 자체는 바꾸지 않는다 — 무엇 때문에
+ * 막혔는지를 갈라 말할 뿐이다.**
  *
  * **성공 갈래가 되돌리는 것은 편집 하나다** — undo 하나가 페이지 전체를 되돌린다(D3).
  *
@@ -72,7 +79,7 @@ import { isNodeLike } from './safe-walk'
  * P7-1 이월 §3의 예측(*"P7-2가 `'empty'` 갈래를 도달시킨다"*)이 여기서 갈린다. 그 판정은
  * 보고서에 있다.
  */
-export type PresetApplyReason = 'no-root' | 'invalid'
+export type PresetApplyReason = 'no-root' | 'broken-page' | 'invalid'
 
 export interface PresetApply {
   ops: PatchOp[]
@@ -104,6 +111,10 @@ export interface PresetApplyResult {
  * 없다. 케이스가 그 결정을 값으로 고정한다 — 여기서 몰래 버리기 시작하면 저장 쪽 규칙이
  * 느슨해져도 아무도 모른다.
  *
+ * **값 공유를 끊는 것도 여기서 하지 않는다**(리뷰 (3)). `remapNodeIds`의 계약이 그것을
+ * 보장한다 — 규칙을 여기 한 번 더 두면 그 함수를 쓰는 다음 소비자(§11.2의 가져오기)가
+ * 여전히 공유를 물려받는다.
+ *
  * `generate`는 케이스가 id를 결정적으로 만들기 위한 이음매다. 운영은 기본값
  * (`createNodeId`)을 쓴다.
  */
@@ -124,7 +135,15 @@ export function presetApply(
   // **`error`만 본다**(P7-1 이월 §7). `warning`은 편집 파이프라인도 막지 않으므로 여기서
   // 막으면 화면만 서버보다 엄격해진다 — 끊긴 상호작용 `target`이 그 자리다(P5-2).
   const { errors } = partitionIssues(validatePage(after))
-  if (errors.length > 0) return { apply: null, reason: 'invalid', issues: errors }
+  if (errors.length > 0) {
+    // **누구 탓인지 가른다**(리뷰 (1)). 같은 문서에서 **children을 비운 판**이 이미
+    // `error`를 내면 그것은 root의 문제이지 프리셋의 문제가 아니다 — 프리셋을 무엇으로
+    // 바꿔도 그 이슈가 남는다. 이슈가 있을 때만 한 번 더 도므로 평소 비용이 없다.
+    const pageOnly: PageDocument = { version: document.version, root: { ...root, children: [] } }
+    const pageErrors = partitionIssues(validatePage(pageOnly)).errors
+    if (pageErrors.length > 0) return { apply: null, reason: 'broken-page', issues: pageErrors }
+    return { apply: null, reason: 'invalid', issues: errors }
+  }
 
   return {
     apply: { ops: [childrenOp(root, placed)], selectId: placed[0]?.id ?? null },
@@ -145,11 +164,11 @@ export function presetApply(
  * 한 번을 감안해야 한다 — 감추는 것보다 적어 두는 편이 싸다.
  */
 function remapForPage(nodes: readonly WbNode[], generate?: () => string): WbNode[] {
-  // **`cloneNodes`를 먼저 지난다.** `remapNodeIds`는 노드를 새 객체로 만들지만 `props`는
-  // 참조 그대로 옮기므로(`{ ...node }`), 그대로 놓으면 문서의 `props`가 프리셋 원본
-  // (내장이면 모듈 상수)과 **같은 객체**가 된다 — P7-1 리뷰가 `expandPattern`에서 실증한
-  // 결함과 같은 부류다. 케이스가 원본을 고쳐 그 공유를 잰다.
-  const wrapper: WbNode = { id: 'wb-preset-wrapper', type: 'Page', children: cloneNodes(nodes) }
+  // **값 공유를 끊는 것은 `remapNodeIds`의 계약이다**(리뷰 (3)). 앞 판은 여기서 `cloneNodes`를
+  // 한 번 더 불렀는데, 그러면 같은 규칙이 두 곳에 생기고 **그 함수를 쓰는 다음 소비자
+  // (§11.2의 가져오기)는 여전히 공유를 물려받는다.** 그래서 규칙을 아래층으로 내렸고,
+  // `packages/schema`의 케이스가 그것을 잰다. 여기 케이스는 그 계약이 화면까지 닿는지를 잰다.
+  const wrapper: WbNode = { id: 'wb-preset-wrapper', type: 'Page', children: [...nodes] }
   const remapped = remapNodeIds(wrapper, generate)
   return remapped.root.children ?? []
 }
@@ -185,7 +204,8 @@ function childrenOp(root: WbNode, placed: WbNode[]): PatchOp {
 export function presetFailureNotice(result: PresetApplyResult): string {
   if (result.reason === null) return ''
   if (result.reason === 'no-root') return BROKEN_DOCUMENT_NOTICE
-  return withReasons(BROKEN_PRESET_NOTICE, result.issues.map((issue) => issue.message))
+  const head = result.reason === 'broken-page' ? BROKEN_PAGE_NOTICE : BROKEN_PRESET_NOTICE
+  return withReasons(head, result.issues.map((issue) => issue.message))
 }
 
 /**
@@ -197,6 +217,12 @@ const BROKEN_DOCUMENT_NOTICE =
 
 /** *"프리셋이 잘못됐다"* — 뒤에 이유가 붙는다. 없으면 안 붙는다(위 머리말). */
 const BROKEN_PRESET_NOTICE = '프리셋을 놓지 못했습니다'
+
+/**
+ * *"이 페이지가 먼저 잘못됐다"*(리뷰 (1)) — 사용자가 할 일이 **프리셋을 바꾸는 것이
+ * 아니라 페이지를 고치는 것**이다. 이유는 그대로 싣는다: 무엇을 고쳐야 하는지가 거기 있다.
+ */
+const BROKEN_PAGE_NOTICE = '이 페이지를 먼저 고쳐야 프리셋을 놓을 수 있습니다'
 
 /**
  * 머리말에 이유를 잇는다. **비면 구분자도 없다** — 이월 §3의 *"콜론 뒤가 빈 문장"*이

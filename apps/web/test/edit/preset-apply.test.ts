@@ -203,6 +203,36 @@ describe('presetApply', () => {
     expect(validatePage(applyOps(before, result.apply!.ops))).toEqual([])
   })
 
+  /**
+   * **리뷰 (1) — D5 근거의 경계.** 계획 D5는 *"교체하면 깨진 부분이 결과에 남지 않는다"*를
+   * 근거로 결과 문서 전체를 판정하게 했는데, **root는 교체 대상이 아니다.** 그래서 root가
+   * 깨진 문서에서는 멀쩡한 프리셋이 막히고, 문장이 프리셋을 탓한다.
+   */
+  it('root가 깨진 문서는 프리셋을 탓하지 않는다 — 갈래가 다르다', () => {
+    const before = doc({ id: 'n_root00000001', type: 'Card', children: [] })
+
+    const result = presetApply(before, [LIST], counter())
+
+    expect(result.reason).toBe('broken-page')
+    expect(result.issues.map((issue) => issue.code)).toEqual(['bad-root'])
+    expect(result.apply).toBeNull()
+  })
+
+  it('root의 봉투가 깨져도 같은 갈래다', () => {
+    // id가 `NODE_ID_PATTERN`을 어긴다 — 봉투 검증에 걸린다.
+    const before = doc({ id: '루트 아이디', type: 'Page', children: [] })
+
+    const result = presetApply(before, [LIST], counter())
+
+    expect(result.reason).toBe('broken-page')
+  })
+
+  it('root가 멀쩡하면 프리셋의 이슈는 프리셋 갈래로 남는다 — 반대편', () => {
+    const result = presetApply(page(), [{ id: 'x', type: '없는타입' }], counter())
+
+    expect(result.reason).toBe('invalid')
+  })
+
   it('프리셋에 알 수 없는 타입이 있으면 invalid이고 편집이 0건이다', () => {
     const result = presetApply(page(), [{ id: 'x', type: '없는타입' }], counter())
 
@@ -307,6 +337,17 @@ describe('presetFailureNotice', () => {
 
     expect(notice).toBe('프리셋을 놓지 못했습니다.')
     expect(notice.endsWith(':')).toBe(false)
+  })
+
+  it('root가 깨진 갈래는 페이지를 고치라고 말한다 — 프리셋을 탓하지 않는다', () => {
+    const before = doc({ id: 'n_root00000001', type: 'Card', children: [] })
+
+    const notice = presetFailureNotice(presetApply(before, [LIST], counter()))
+
+    expect(notice).toContain('페이지')
+    expect(notice).not.toContain('프리셋을 놓지 못했습니다')
+    // 이유는 그대로 싣는다 — 무엇을 고쳐야 하는지가 거기 있다.
+    expect(notice).toContain('루트는 Page여야 합니다')
   })
 
   it('문서가 깨진 갈래는 다른 문장이다 — 사용자가 할 일이 다르다', () => {

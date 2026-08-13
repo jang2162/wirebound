@@ -83,11 +83,28 @@ function comment(nodeId: string, id: string): Comment {
  * 프리셋 셋(목록·저장·코멘트)이 더 붙는다.
  */
 function server(
-  options: { presets?: Preset[]; comments?: Comment[] | 'fail'; failPresets?: boolean } = {},
+  options: {
+    presets?: Preset[]
+    comments?: Comment[] | 'fail'
+    failPresets?: boolean
+    /**
+     * 대역이 들 초기 문서. **`openPage`에 준 것과 같아야 한다** — 다르면 `invertOps`가
+     * 엉뚱한 경로를 보고, 편집이 실패해 재조회가 **대역의 문서**로 화면을 갈아 끼운다
+     * (`structure-keyboard.test.tsx`가 같은 함정을 겪고 적어 두었다. 여기서도 걸렸다:
+     * `children` 키가 없는 문서를 `openPage`에만 줬더니 화면에는 대역이 든 기본 문서가
+     * 떴고, 그래서 재려던 갈래에 닿지 못했다).
+     */
+    document?: PageDocument
+  } = {},
 ): Server {
   const calls: { ops: PatchOp[]; baseSeq: number }[] = []
   const created: { name: string; schema: unknown }[] = []
-  const state = { seq: HEAD_SEQ, held: doc(), listCalls: 0, presets: options.presets ?? [] }
+  const state = {
+    seq: HEAD_SEQ,
+    held: options.document ?? doc(),
+    listCalls: 0,
+    presets: options.presets ?? [],
+  }
 
   const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
     calls.push({ ops: body.ops, baseSeq: body.baseSeq })
@@ -268,14 +285,70 @@ describe('적용 — D6: 덮는 것을 먼저 말한다', () => {
     await screen.findByText(/코멘트 2개는 지워지지 않지만/)
   })
 
-  it('코멘트가 없으면 없다고 말한다', async () => {
-    const backend = server({ comments: [] })
+  /**
+   * **리뷰 (6) — 세는 단위.** D6은 *"적용 전에 그 페이지의 코멘트 수를 세어 확인 문장에
+   * 싣는다"*인데, 페이지의 코멘트를 통째로 세면 **실제보다 많다.** 둘이 새어 든다:
+   *
+   * - **root를 가리키는 코멘트** — root는 교체 대상이 아니라 그대로 남는다(D3).
+   * - **이미 고아인 코멘트** — 그 상태가 이 적용으로 변하지 않는다.
+   *
+   * 세는 단위는 **"이 적용이 문서에서 없애는 노드를 가리키는 코멘트"**다.
+   */
+  it('root를 가리키는 코멘트와 이미 고아인 코멘트를 세지 않는다', async () => {
+    const backend = server({
+      comments: [
+        comment('n-a', 'c1'),
+        comment('n-root', 'c2'),
+        comment('사라진노드', 'c3'),
+      ],
+    })
     await openPage(doc(), { apiOverrides: backend.api })
 
     await openPicker()
     fireEvent.click(pickerButton('프리셋 적용'))
 
-    await screen.findByText(/코멘트가 없습니다/)
+    await screen.findByText(/코멘트 1개는 지워지지 않지만/)
+  })
+
+  it('고아가 될 코멘트가 없으면 없다고 말한다 — "페이지에 코멘트가 없다"와 다른 말이다', async () => {
+    // **root에만 코멘트가 있는 페이지.** 적용해도 그 노드는 그대로이므로 고아가 0이다 —
+    // 그런데 페이지의 코멘트는 0이 아니다. 세는 단위가 갈라 말한다(리뷰 (6)).
+    const backend = server({ comments: [comment('n-root', 'c1')] })
+    await openPage(doc(), { apiOverrides: backend.api })
+
+    await openPicker()
+    fireEvent.click(pickerButton('프리셋 적용'))
+
+    await screen.findByText(/가리키던 노드가 사라지는 코멘트는 없습니다/)
+  })
+
+  /**
+   * **겨냥을 바꿔 다시 잰 자리다.** 처음에는 *"문서를 못 읽었는데 0이라고 말한다"* 변이가
+   * 0 사망이었다 — 그 갈래(`currentNodes === null`)에 닿는 케이스가 없었다. **원인을
+   * 단정하지 않고 그 상태를 실제로 만들어 왔다:** root에 `children` 키가 없는 문서다.
+   * 도달 가능한 상태이고(`WbNodeSchema`가 `children`을 optional로 두고 `PUT .../schema`가
+   * 그런 문서를 받는다 — 재라 #1에서 쟀다) 그때 툴바가 `currentNodes`를 `null`로 내린다.
+   */
+  it('문서에서 무엇이 없어지는지 모르면 0이라고 말하지 않는다', async () => {
+    const childless = pageDoc({ id: 'n-root', type: 'Page' })
+    const backend = server({ comments: [comment('n-a', 'c1')], document: childless })
+    await openPage(childless, { apiOverrides: backend.api })
+
+    await openPicker()
+    fireEvent.click(pickerButton('프리셋 적용'))
+
+    await screen.findByText(/코멘트 수를 읽지 못했습니다/)
+  })
+
+  it('그 문서에서는 저장 버튼이 비활성이다 — 담을 것을 모른다', async () => {
+    const childless = pageDoc({ id: 'n-root', type: 'Page' })
+    const backend = server({ document: childless })
+    await openPage(childless, { apiOverrides: backend.api })
+
+    await openPicker()
+    fireEvent.change(screen.getByLabelText('프리셋 이름'), { target: { value: '이름' } })
+
+    expect(pickerButton('현재 페이지를 프리셋으로 저장').disabled).toBe(true)
   })
 
   it('코멘트 수를 읽지 못하면 0이라고 말하지 않는다', async () => {

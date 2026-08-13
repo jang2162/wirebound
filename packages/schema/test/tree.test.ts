@@ -140,6 +140,56 @@ describe('remapNodeIds', () => {
     expect(action.type === 'setVisible' && action.target).toBe('n_new000000002')
   })
 
+  /**
+   * **리뷰 (3) — 이 함수의 계약이 어디까지인가.** P7-1 리뷰가 `expandPattern`에서 실증한
+   * 부류(참조 공유)가 여기에도 있었다. 이 함수는 §11.2의 가져오기와 프리셋 적용이 쓰므로
+   * **입력이 오래 사는 객체(모듈 상수·초안 스토어)일 수 있고**, 그때 결과 문서를 고치면
+   * 원본이 함께 바뀐다.
+   *
+   * **계약은 "`WbNode`가 선언한 키에 대해 값을 공유하지 않는다"이다.** 선언되지 않은 키는
+   * 참조로 남고, 그것은 봉투(`WbNodeSchema`가 strictObject다)가 저장 경계에서 거부한다.
+   */
+  it('돌려받은 트리가 입력과 props를 공유하지 않는다', () => {
+    const tree: WbNode = {
+      id: 'n_000000000001',
+      type: 'Page',
+      children: [{ id: 'n_000000000002', type: 'List', props: { columns: ['하나'] } }],
+    }
+
+    const { root } = remapNodeIds(tree, () => 'n_aaaaaaaaaaaa')
+    ;(tree.children![0]!.props!['columns'] as string[]).push('둘')
+
+    expect(root.children![0]!.props!['columns']).toEqual(['하나'])
+  })
+
+  it('상호작용 액션의 value도 공유하지 않는다', () => {
+    const tree: WbNode = {
+      id: 'n_000000000001',
+      type: 'Page',
+      children: [
+        {
+          id: 'n_000000000002',
+          type: 'Button',
+          interactions: [
+            {
+              on: 'click',
+              actions: [
+                { type: 'setProp', target: 'n_000000000002', prop: 'columns', value: { list: ['하나'] } },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    const { root } = remapNodeIds(tree, () => 'n_aaaaaaaaaaaa')
+    const source = tree.children![0]!.interactions![0]!.actions[0]!
+    ;((source as { value: { list: string[] } }).value.list).push('둘')
+
+    const copied = root.children![0]!.interactions![0]!.actions[0]!
+    expect((copied as { value: { list: string[] } }).value.list).toEqual(['하나'])
+  })
+
   it('트리 밖을 가리키는 target은 그대로 둔다', () => {
     const tree: WbNode = {
       id: 'n_000000000001',

@@ -8,7 +8,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
 import { CATALOG_TYPES } from '../src/component/catalog/index'
-import { BUILTIN_PRESETS, getBuiltinPreset, hasMarker, stripMarkers } from '../src/preset/builtin'
+import { BUILTIN_PRESETS, stripMarkers } from '../src/preset/builtin'
 import type { PageDocument, WbNode } from '../src/node'
 import { collectNodeIds, walkNodes } from '../src/tree'
 import { validatePage } from '../src/validate'
@@ -34,6 +34,22 @@ function typesOf(nodes: readonly WbNode[]): string[] {
   return allNodes(nodes).map((node) => node.type)
 }
 
+/**
+ * 키로 하나 고른다. **케이스 안의 헬퍼다** — 앞 판은 이것을 `getBuiltinPreset`으로 내보냈는데
+ * 부르는 자리가 케이스뿐이었다(리뷰 (7)). 공개 표면에 두면 그것이 무엇을 지키는지 아무도
+ * 확인하지 않은 채 남는다.
+ */
+function builtin(key: string) {
+  const found = BUILTIN_PRESETS.find((entry) => entry.key === key)
+  if (found === undefined) throw new Error(`내장 프리셋이 없습니다: ${key}`)
+  return found
+}
+
+/** 이 트리에 `marker`가 하나라도 있는가. 같은 이유로 케이스 안에 둔다(앞 판은 `hasMarker`였다). */
+function hasMarker(nodes: readonly WbNode[]): boolean {
+  return allNodes(nodes).some((node) => node.marker !== undefined)
+}
+
 describe('내장 프리셋', () => {
   it('§11.1이 든 셋이 키로 있다', () => {
     // 계획서가 §11.1에서 옮긴 이름 셋. **수를 적지 않고 키를 적는다** —
@@ -50,9 +66,8 @@ describe('내장 프리셋', () => {
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  it('키로 고를 수 있고 없는 키는 undefined다', () => {
-    expect(getBuiltinPreset('detail')?.name).toBe('상세 조회형')
-    expect(getBuiltinPreset('없는키')).toBeUndefined()
+  it('키가 이름과 짝이다', () => {
+    expect(builtin('detail').name).toBe('상세 조회형')
   })
 
   // **케이스가 프리셋마다 돈다.** 목록에서 만들므로 프리셋을 더해도 이 파일의 수가
@@ -93,28 +108,28 @@ describe('내장 프리셋', () => {
    * `Button` 여럿이다. 그 둘이 여기서 값으로 확인된다.
    */
   it('검색 + 목록형은 SearchForm·List를 쓰고 페이지네이션이 켜져 있다', () => {
-    const preset = getBuiltinPreset('search-list')!
-    expect(typesOf(preset.nodes)).toContain('SearchForm')
-    const list = allNodes(preset.nodes).find((node) => node.type === 'List')
+    const found = builtin('search-list')
+    expect(typesOf(found.nodes)).toContain('SearchForm')
+    const list = allNodes(found.nodes).find((node) => node.type === 'List')
     expect(list?.props?.['pagination']).toBe(true)
   })
 
   it('상세 조회형은 Card·KeyValue와 버튼 묶음을 쓴다', () => {
-    const preset = getBuiltinPreset('detail')!
-    const types = typesOf(preset.nodes)
+    const found = builtin('detail')
+    const types = typesOf(found.nodes)
     expect(types).toContain('Card')
     expect(types).toContain('KeyValue')
     // *"액션 버튼 그룹"* — 버튼 하나가 아니라 묶음이고, 묶는 것이 `Flex`다.
-    const group = allNodes(preset.nodes).find((node) => node.type === 'Flex')
+    const group = allNodes(found.nodes).find((node) => node.type === 'Flex')
     expect(group?.children?.map((child) => child.type)).toEqual(['Button', 'Button', 'Button'])
   })
 
   it('등록/수정 폼형은 EntryForm과 필드 묶음을 쓰고 저장·취소가 있다', () => {
-    const preset = getBuiltinPreset('entry-form')!
-    const form = allNodes(preset.nodes).find((node) => node.type === 'EntryForm')
+    const found = builtin('entry-form')
+    const form = allNodes(found.nodes).find((node) => node.type === 'EntryForm')
     expect(form?.children?.every((child) => child.type === 'Field')).toBe(true)
     expect(form?.children?.length).toBeGreaterThan(1)
-    const labels = allNodes(preset.nodes)
+    const labels = allNodes(found.nodes)
       .filter((node) => node.type === 'Button')
       .map((node) => node.props?.['label'])
     expect(labels).toEqual(['저장', '취소'])
@@ -166,6 +181,28 @@ describe('stripMarkers', () => {
     const stripped = stripMarkers(nodes)
     ;(nodes[0]!.props!['columns'] as string[]).push('둘')
     expect(stripped[0]!.props!['columns']).toEqual(['하나'])
+  })
+
+  it('상호작용 액션의 value도 공유하지 않는다(리뷰 (2))', () => {
+    const nodes: WbNode[] = [
+      {
+        id: 'a',
+        type: 'Button',
+        interactions: [
+          {
+            on: 'click',
+            actions: [{ type: 'setProp', target: 'b', prop: 'columns', value: { list: ['하나'] } }],
+          },
+        ],
+      },
+    ]
+
+    const stripped = stripMarkers(nodes)
+    const source = nodes[0]!.interactions![0]!.actions[0]! as { value: { list: string[] } }
+    source.value.list.push('둘')
+
+    const copied = stripped[0]!.interactions![0]!.actions[0]! as { value: { list: string[] } }
+    expect(copied.value.list).toEqual(['하나'])
   })
 
   /**

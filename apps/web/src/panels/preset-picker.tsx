@@ -42,14 +42,21 @@
 import { useEffect, useState, type ReactElement } from 'react'
 import type { WbNode } from '@wirebound/schema'
 import { useApi } from '../api/context'
+import { walkSafely } from '../edit/safe-walk'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { Preset } from '../api/types'
 
 /** 목록·코멘트 조회의 상태. */
 type LoadState =
   | { status: 'loading' }
-  /** `comments`가 `null`이면 **코멘트 수를 읽지 못했다** — 0이 아니다. */
-  | { status: 'ready'; presets: Preset[]; comments: number | null }
+  /**
+   * `commentNodes`가 `null`이면 **코멘트를 읽지 못했다** — 0건과 다른 말이다.
+   *
+   * **수가 아니라 `nodeId` 목록을 든다**(리뷰 (6)). 세는 단위가 *"이 적용이 문서에서
+   * 없애는 노드를 가리키는 코멘트"*이므로, 세려면 **지금 문서**와 맞대야 한다 —
+   * 조회 시점에 세어 두면 그 사이 문서가 바뀌었을 때 낡은 수를 말한다.
+   */
+  | { status: 'ready'; presets: Preset[]; commentNodes: string[] | null }
   | { status: 'failed'; failure: Failure }
 
 const LOADING = '프리셋을 읽는 중입니다'
@@ -98,15 +105,15 @@ export function PresetPicker(props: {
         const presets = await api.listPresets(projectId)
         // **코멘트 조회의 실패는 프리셋 조회의 실패와 다르다.** 앞엣것이 없으면 고를 것이
         // 없지만, 뒤엣것이 없어도 고르고 적용할 수 있다 — 그래서 갈래를 갈라 잡는다.
-        let comments: number | null = null
+        let commentNodes: string[] | null = null
         if (pageId !== undefined) {
           try {
-            comments = (await api.listComments(projectId, pageId)).length
+            commentNodes = (await api.listComments(projectId, pageId)).map((entry) => entry.nodeId)
           } catch {
-            comments = null
+            commentNodes = null
           }
         }
-        if (alive) setLoad({ status: 'ready', presets, comments })
+        if (alive) setLoad({ status: 'ready', presets, commentNodes })
       } catch (caught) {
         if (alive) setLoad({ status: 'failed', failure: toFailure(caught, LOAD_FAILED) })
       }
@@ -201,7 +208,9 @@ export function PresetPicker(props: {
           {/* **덮는다는 것을 먼저 말한다**(D6). `role="alert"`이 아닌 것은 이것이 실패
               통지가 아니라 **묻는 말**이기 때문이다 — 편집 실패의 알림 자리
               (`EditAlert`)와 섞이면 그 하나뿐인 통지 규칙이 흩어진다. */}
-          <p className="wb-shell-picker-notice">{overwriteNotice(load.comments)}</p>
+          <p className="wb-shell-picker-notice">
+            {overwriteNotice(orphanedCount(load.commentNodes, props.currentNodes))}
+          </p>
           <button type="button" className="wb-shell-picker-action" onClick={apply}>
             덮고 적용
           </button>
@@ -278,7 +287,47 @@ function optionLabel(preset: Preset): string {
 }
 
 /**
- * 덮기 전에 보이는 문장(D6). **코멘트를 세어 싣는다.**
+ * **이 적용이 고아로 만드는 코멘트의 수**(D6, 리뷰 (6)). 못 세면 `null`이다.
+ *
+ * # 세는 단위
+ *
+ * > **적용이 문서에서 없애는 노드를 가리키는 코멘트 하나당 하나.**
+ *
+ * 없애는 것은 root의 `children`이므로(D3 — root 자체는 안 바꾼다) 세는 대상은 **그 트리
+ * 안의 노드를 가리키는 코멘트**다. 그래서 둘이 빠진다:
+ *
+ * - **root를 가리키는 코멘트** — 그 노드는 적용 뒤에도 그대로 있다.
+ * - **이미 고아인 코멘트**(가리키는 노드가 지금 문서에 없다) — 이 적용이 그 상태를
+ *   바꾸지 않는다. *"이 조작이 무엇을 하는가"*를 말하는 문장에 넣으면 남 탓을 싣는 것이다.
+ *
+ * **앞 판은 페이지의 코멘트를 통째로 셌고 그래서 실제보다 많았다**(리뷰가 잡았다).
+ * 새 id는 적용마다 새로 발급되므로(§11.1) **놓인 뒤의 노드를 가리키는 옛 코멘트는 있을 수
+ * 없다** — 즉 "없애는 노드를 가리킨다"가 곧 "적용 뒤 고아가 된다"이다.
+ *
+ * **문서를 못 읽었으면(`currentNodes === null`) `null`이다.** 무엇이 없어지는지 모르는
+ * 채로 수를 말할 수 없다 — 0으로 접으면 *"고아가 없다"*는 거짓을 말하게 된다.
+ *
+ * **`walkSafely`로 훑는다.** 검증 전 문서에는 노드가 아닌 원소가 있을 수 있고
+ * (`edit/safe-walk.ts`), 이 컴포넌트는 오류 경계 밖이라 순회가 던지면 셸이 사라진다.
+ */
+function orphanedCount(
+  commentNodes: string[] | null,
+  currentNodes: readonly WbNode[] | null,
+): number | null {
+  if (commentNodes === null || currentNodes === null) return null
+
+  const removed = new Set<string>()
+  for (const node of currentNodes) {
+    for (const visit of walkSafely(node)) {
+      if (typeof visit.node.id === 'string') removed.add(visit.node.id)
+    }
+  }
+
+  return commentNodes.filter((nodeId) => removed.has(nodeId)).length
+}
+
+/**
+ * 덮기 전에 보이는 문장(D6). **위에서 센 수를 싣는다.**
  *
  * 세 갈래인 것은 *"모른다"*가 *"없다"*와 다른 말이기 때문이다. 그리고 **코멘트가 지워지지
  * 않는다는 것을 함께 말한다** — 사용자가 *"코멘트도 날아간다"*고 오해하면 되돌릴 수 있는
@@ -287,6 +336,6 @@ function optionLabel(preset: Preset): string {
 function overwriteNotice(comments: number | null): string {
   const head = '이 페이지의 내용을 프리셋으로 통째로 바꿉니다. 되돌리기로 한 번에 되돌릴 수 있습니다.'
   if (comments === null) return `${head} 코멘트 수를 읽지 못했습니다 — 가리키던 노드가 사라지는 코멘트가 있을 수 있습니다.`
-  if (comments === 0) return `${head} 이 페이지에는 코멘트가 없습니다.`
+  if (comments === 0) return `${head} 가리키던 노드가 사라지는 코멘트는 없습니다.`
   return `${head} 코멘트 ${comments}개는 지워지지 않지만 가리키던 노드가 사라집니다.`
 }

@@ -32,8 +32,8 @@
  * 노드가 든 `variant`가 **버려지고** `validatePage`가 `ignored-variant`(warning)를 낸다 —
  * 내장 프리셋이 경고를 달고 다니면 그것을 적용한 문서가 매번 경고를 낸다.
  */
+import { cloneJsonValue } from '../clone'
 import type { WbNode } from '../node'
-import { walkNodes } from '../tree'
 
 /**
  * 프리셋 하나. **프로젝트 프리셋(`presets` 테이블)과 같은 모양이 아니다** — 그쪽은
@@ -167,11 +167,6 @@ const ENTRY_FORM: PagePreset = {
 /** 내장 프리셋 전부(§11.1의 셋). 목록의 순서가 곧 화면의 순서다. */
 export const BUILTIN_PRESETS: readonly PagePreset[] = [SEARCH_LIST, DETAIL, ENTRY_FORM]
 
-/** 키로 하나 고른다. 없으면 `undefined`. */
-export function getBuiltinPreset(key: string): PagePreset | undefined {
-  return BUILTIN_PRESETS.find((preset) => preset.key === key)
-}
-
 /**
  * 프리셋에 담을 노드에서 `marker`를 버린다(D4·D7).
  *
@@ -185,64 +180,35 @@ export function getBuiltinPreset(key: string): PagePreset | undefined {
  *
  * **깊은 복사를 겸한다.** 저장 경계가 받은 값을 그대로 들고 있으면 부르는 쪽이 나중에
  * 그 트리를 만졌을 때 저장된 것이 함께 바뀐다 — `expandPattern`이 `structuredClone`으로
- * 닫은 것과 같은 부류다(P7-1 이월 §1). **`structuredClone`을 쓰지 않는 것은 그것이
- * 함수·심볼을 담은 값에서 `DOMException`을 던지기 때문이다**(같은 이월 ㉡) — 여기서
- * 던지면 *"프리셋으로 저장"*이 저장 경계 앞에서 통째로 실패한다. 이 함수는 자기가 아는
- * 키만 옮기므로 그 예외를 물려받지 않고, 대신 **`WbNode`가 아닌 키는 옮기지 않는다**
- * (봉투가 `strictObject`라 그런 키는 어차피 저장 경계에서 거부된다).
+ * 닫은 것과 같은 부류다(P7-1 이월 §1). 임의 JSON을 복사하는 규칙은 `../clone.ts` 하나가
+ * 갖는다(`structuredClone`을 왜 안 쓰는지도 거기 있다).
+ *
+ * **`WbNode`가 아닌 키는 옮기지 않는다.** `remapNodeIds`가 `{ ...node }`로 그것을 남기는
+ * 것과 갈리는 자리다 — 이쪽은 **저장할 값을 만드는 함수**라 선언되지 않은 키를 담으면
+ * 봉투가 거부할 값을 DB에 넣게 된다.
  */
 export function stripMarkers(nodes: readonly WbNode[]): WbNode[] {
-  return nodes.map((node) => copyNode(node, { keepMarker: false }))
+  return nodes.map((node) => copyNode(node))
 }
 
-/**
- * 트리를 값으로 복사한다. **`marker`를 그대로 둔다** — 버리는 것은 `stripMarkers`의 일이고
- * (D4: 버리는 자리는 **저장**이다), 이 함수는 *"값을 공유하지 않는다"*만 책임진다.
- *
- * **적용 경로가 이것을 쓴다.** `remapNodeIds`는 노드를 새 객체로 만들지만 **`props`는 참조
- * 그대로 옮긴다**(`{ ...node }`) — 그래서 내장 프리셋을 그대로 리매핑하면 놓인 문서의
- * `props`가 `BUILTIN_PRESETS`의 객체와 **같은 것**이 된다. P7-1 리뷰가 `expandPattern`에서
- * 실증한 결함과 같은 부류이고(그쪽은 `structuredClone`으로 닫았다), 그 이월이 *"프리셋을
- * 같은 방식으로 복사하면 같은 예외를 물려받는다"*고 적어 둔 자리다 — 그래서 여기서는
- * `structuredClone`을 쓰지 않고 아는 키만 옮긴다.
- */
-export function cloneNodes(nodes: readonly WbNode[]): WbNode[] {
-  return nodes.map((node) => copyNode(node, { keepMarker: true }))
-}
-
-function copyNode(node: WbNode, options: { keepMarker: boolean }): WbNode {
+function copyNode(node: WbNode): WbNode {
   const next: WbNode = { id: node.id, type: node.type }
-  if (node.props !== undefined) next.props = clonePropsValue(node.props)
+  if (node.props !== undefined) next.props = cloneJsonValue(node.props)
   if (node.variant !== undefined) next.variant = node.variant
-  if (options.keepMarker && node.marker !== undefined) next.marker = node.marker
   if (node.interactions !== undefined) {
     next.interactions = node.interactions.map((interaction) => ({
       on: interaction.on,
-      actions: interaction.actions.map((action) => ({ ...action })),
+      actions: interaction.actions.map((action) => {
+        const copied = { ...action }
+        // `props`와 같은 이유로 깊이 복사한다(`../clone.ts`) — 리뷰 (2)가 잡은 자리다.
+        if ('value' in copied) copied.value = cloneJsonValue(copied.value)
+        return copied
+      }),
     }))
   }
   if (node.children !== undefined) {
-    next.children = node.children.map((child) => copyNode(child, options))
+    next.children = node.children.map((child) => copyNode(child))
   }
   return next
 }
 
-/**
- * props만 JSON 왕복으로 복사한다. **`structuredClone`을 쓰지 않는 이유는 위와 같다** —
- * props에 함수가 든 노드는 카탈로그 검증을 통과하지 못하지만(P7-1이 그것을 쟀다) 저장
- * 경계 **앞**에서 던지면 사용자는 이유를 못 듣는다. `JSON.parse(JSON.stringify(...))`는
- * 함수를 조용히 버리고, 버려진 자리는 저장 경계의 `invalid-props`가 말한다.
- */
-function clonePropsValue(props: Record<string, unknown>): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(props)) as Record<string, unknown>
-}
-
-/** 이 트리에 `marker`가 하나라도 있는가. 케이스와 저장 경계가 같은 물음을 쓴다. */
-export function hasMarker(nodes: readonly WbNode[]): boolean {
-  for (const node of nodes) {
-    for (const visit of walkNodes(node)) {
-      if (visit.node.marker !== undefined) return true
-    }
-  }
-  return false
-}
