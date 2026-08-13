@@ -329,7 +329,13 @@ describe('적용 — D6: 덮는 것을 먼저 말한다', () => {
    * 도달 가능한 상태이고(`WbNodeSchema`가 `children`을 optional로 두고 `PUT .../schema`가
    * 그런 문서를 받는다 — 재라 #1에서 쟀다) 그때 툴바가 `currentNodes`를 `null`로 내린다.
    */
-  it('문서에서 무엇이 없어지는지 모르면 0이라고 말하지 않는다', async () => {
+  /**
+   * **모르는 것이 둘이고 둘은 다른 말이다**(델타 리뷰 N2). 앞 판은 **코멘트를 실제로
+   * 읽었는데도** *"코멘트 수를 읽지 못했습니다"*라고 말했다 — 화면이 사실과 다른 것을
+   * 말하는 부류이고, 이 저장소가 반복해서 닫아 온 자리다(`comment-panel.tsx`의 `present`가
+   * `'unknown'`을 가진 이유와 같다).
+   */
+  it('문서에서 무엇이 없어지는지 모를 때 코멘트를 못 읽었다고 말하지 않는다', async () => {
     const childless = pageDoc({ id: 'n-root', type: 'Page' })
     const backend = server({ comments: [comment('n-a', 'c1')], document: childless })
     await openPage(childless, { apiOverrides: backend.api })
@@ -337,7 +343,11 @@ describe('적용 — D6: 덮는 것을 먼저 말한다', () => {
     await openPicker()
     fireEvent.click(pickerButton('프리셋 적용'))
 
-    await screen.findByText(/코멘트 수를 읽지 못했습니다/)
+    await screen.findByText(/이 페이지의 구조를 읽지 못해/)
+    // **코멘트는 읽었다** — 그 조회는 성공했고, 못 읽은 것은 문서 쪽이다.
+    expect(screen.queryByText(/코멘트 수를 읽지 못했습니다/)).toBeNull()
+    // 0이라고도 말하지 않는다.
+    expect(screen.queryByText(/코멘트는 없습니다/)).toBeNull()
   })
 
   it('그 문서에서는 저장 버튼이 비활성이다 — 담을 것을 모른다', async () => {

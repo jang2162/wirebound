@@ -353,7 +353,24 @@ describe('프로젝트가 사라지면 프리셋도 간다', () => {
 })
 
 /**
- * **`marker`를 버리는 자리가 하나인 것을 실행으로 지킨다**(리뷰 (4)).
+ * **`marker`를 버리는 자리가 하나인 것을 실행으로 지킨다**(P7-2 리뷰 (4) · 델타 리뷰 N4).
+ *
+ * # 세는 단위
+ *
+ * > **`presets` 테이블에 행을 넣는 자리 하나당 하나.**
+ *
+ * **앞 판은 `insertPreset(` 호출만 셌고 그것은 단위보다 좁았다** — repo 함수를 지나지 않고
+ * `insertInto('presets')`로 직접 쓰는 자리를 못 봤다(재현했다: 그런 파일을 하나 만들어
+ * 두어도 케이스가 초록이었다). 지금은 **두 형태를 모두 센다.**
+ *
+ * # 분모 밖에 남는 것 — 이름으로 찾을 수 없는 쓰기
+ *
+ * - **원시 SQL**(`` sql`insert into presets …` ``)과 **동적 테이블 이름**. 문자열을 조립하면
+ *   어떤 grep도 못 잡는다.
+ * - **DB 안의 쓰기** — 트리거·기본값·다른 테이블의 CASCADE. 오늘 `presets`에는 없다.
+ *
+ * 즉 이 케이스가 지키는 것은 *"코드에서 이름으로 드러나는 쓰기"*까지다. 그 밖의 경로를
+ * 만드는 사람에게까지 신호를 주지는 못한다.
  *
  * # 왜 NUL처럼 repo에 겹으로 두지 않는가
  *
@@ -373,11 +390,17 @@ describe('프로젝트가 사라지면 프리셋도 간다', () => {
  */
 const SRC_DIR = fileURLToPath(new URL('../src', import.meta.url))
 
+/** `presets`에 행을 넣는 **이름으로 드러나는** 두 형태. 전역 플래그를 쓰지 않는다(`lastIndex`). */
+const WRITE_FORMS: { label: string; pattern: RegExp }[] = [
+  { label: 'repo 함수', pattern: /\binsertPreset\s*\(/ },
+  { label: '테이블 직접', pattern: /\binsertInto\s*\(\s*['"`]presets['"`]\s*\)/ },
+]
+
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 }
 
-/** `src` 아래의 `.ts` 전부(정의 파일 제외). 경로는 `src` 기준 상대다. */
+/** `src` 아래의 `.ts` 전부. 경로는 `src` 기준 상대다. */
 function sourceFiles(): string[] {
   return readdirSync(SRC_DIR, { recursive: true })
     .map((entry) => String(entry))
@@ -390,13 +413,26 @@ describe('marker 규칙의 자리가 하나다', () => {
     expect(sourceFiles().length).toBeGreaterThan(20)
   })
 
+  it('두 형태를 실제로 알아본다 — 정규식이 아무것도 못 찾는 판을 막는다', () => {
+    // **저장소의 소스가 아니라 표본으로 잰다.** 소스로 재면 그 소스가 바뀔 때 무엇이
+    // 깨졌는지(형태를 못 알아보는가, 자리가 늘었는가) 갈리지 않는다.
+    const samples = ["await insertPreset(db, input)", "db.insertInto('presets').values(row)"]
+
+    expect(samples.map((sample) => WRITE_FORMS.some(({ pattern }) => pattern.test(sample)))).toEqual([
+      true,
+      true,
+    ])
+  })
+
   it('프리셋을 쓰는 자리가 라우트 하나다 — 늘면 marker 규칙을 다시 판정해야 한다', () => {
-    const callers = sourceFiles().filter((name) => {
+    const writers = sourceFiles().filter((name) => {
+      // repo 자신은 **쓰는 자리를 제공하는 쪽**이다 — 세는 것은 그것을 부르는 자리다.
       if (name === 'repos/presets.ts') return false
-      return /\binsertPreset\s*\(/.test(stripComments(readFileSync(join(SRC_DIR, name), 'utf8')))
+      const source = stripComments(readFileSync(join(SRC_DIR, name), 'utf8'))
+      return WRITE_FORMS.some(({ pattern }) => pattern.test(source))
     })
 
-    expect(callers).toEqual(['routes/presets.ts'])
+    expect(writers).toEqual(['routes/presets.ts'])
   })
 
   it('그 자리가 stripMarkers를 지난다', () => {

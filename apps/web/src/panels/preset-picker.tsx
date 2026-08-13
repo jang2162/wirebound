@@ -287,7 +287,18 @@ function optionLabel(preset: Preset): string {
 }
 
 /**
- * **이 적용이 고아로 만드는 코멘트의 수**(D6, 리뷰 (6)). 못 세면 `null`이다.
+ * 셀 수 있으면 수, 못 세면 **왜 못 세는지**(리뷰 N2). 셋을 가르는 이유는 각각 사용자에게
+ * 다른 것을 말하기 때문이다 — 하나로 접으면 화면이 겪지 않은 실패를 말하게 된다.
+ */
+type OrphanCount =
+  | { kind: 'counted'; count: number }
+  /** 코멘트 목록 조회가 실패했다. */
+  | { kind: 'comments-unknown' }
+  /** 코멘트는 읽었는데 **무엇이 없어지는지**를 모른다 — 문서의 `children`이 배열이 아니다. */
+  | { kind: 'document-unknown' }
+
+/**
+ * **이 적용이 고아로 만드는 코멘트의 수**(D6, 리뷰 (6)). 못 세면 왜 못 세는지 말한다.
  *
  * # 세는 단위
  *
@@ -304,8 +315,9 @@ function optionLabel(preset: Preset): string {
  * 새 id는 적용마다 새로 발급되므로(§11.1) **놓인 뒤의 노드를 가리키는 옛 코멘트는 있을 수
  * 없다** — 즉 "없애는 노드를 가리킨다"가 곧 "적용 뒤 고아가 된다"이다.
  *
- * **문서를 못 읽었으면(`currentNodes === null`) `null`이다.** 무엇이 없어지는지 모르는
- * 채로 수를 말할 수 없다 — 0으로 접으면 *"고아가 없다"*는 거짓을 말하게 된다.
+ * **문서를 못 읽었으면(`currentNodes === null`) `'document-unknown'`이다.** 무엇이
+ * 없어지는지 모르는 채로 수를 말할 수 없다 — 0으로 접으면 *"고아가 없다"*는 거짓이 되고,
+ * 코멘트 쪽 실패로 접으면 **읽은 것을 못 읽었다고** 말하게 된다(리뷰 N2).
  *
  * **`walkSafely`로 훑는다.** 검증 전 문서에는 노드가 아닌 원소가 있을 수 있고
  * (`edit/safe-walk.ts`), 이 컴포넌트는 오류 경계 밖이라 순회가 던지면 셸이 사라진다.
@@ -313,8 +325,13 @@ function optionLabel(preset: Preset): string {
 function orphanedCount(
   commentNodes: string[] | null,
   currentNodes: readonly WbNode[] | null,
-): number | null {
-  if (commentNodes === null || currentNodes === null) return null
+): OrphanCount {
+  // **모르는 것이 둘이고 둘은 다른 말이다**(리뷰 N2). 앞 판은 둘을 `null` 하나로 접어
+  // **코멘트를 읽었는데도** *"코멘트 수를 읽지 못했습니다"*라고 말했다 — 화면이 사실과
+  // 다른 것을 말하는 부류다. 코멘트 쪽을 먼저 보는 것은 **둘 다 모를 때** 그쪽이 더 앞선
+  // 실패이기 때문이다(코멘트를 못 읽었으면 무엇을 세는지와 무관하게 셀 것이 없다).
+  if (commentNodes === null) return { kind: 'comments-unknown' }
+  if (currentNodes === null) return { kind: 'document-unknown' }
 
   const removed = new Set<string>()
   for (const node of currentNodes) {
@@ -323,7 +340,7 @@ function orphanedCount(
     }
   }
 
-  return commentNodes.filter((nodeId) => removed.has(nodeId)).length
+  return { kind: 'counted', count: commentNodes.filter((nodeId) => removed.has(nodeId)).length }
 }
 
 /**
@@ -333,9 +350,18 @@ function orphanedCount(
  * 않는다는 것을 함께 말한다** — 사용자가 *"코멘트도 날아간다"*고 오해하면 되돌릴 수 있는
  * 조작을 되돌릴 수 없는 것으로 읽는다.
  */
-function overwriteNotice(comments: number | null): string {
+function overwriteNotice(orphaned: OrphanCount): string {
   const head = '이 페이지의 내용을 프리셋으로 통째로 바꿉니다. 되돌리기로 한 번에 되돌릴 수 있습니다.'
-  if (comments === null) return `${head} 코멘트 수를 읽지 못했습니다 — 가리키던 노드가 사라지는 코멘트가 있을 수 있습니다.`
-  if (comments === 0) return `${head} 가리키던 노드가 사라지는 코멘트는 없습니다.`
-  return `${head} 코멘트 ${comments}개는 지워지지 않지만 가리키던 노드가 사라집니다.`
+  switch (orphaned.kind) {
+    case 'comments-unknown':
+      return `${head} 코멘트 수를 읽지 못했습니다 — 가리키던 노드가 사라지는 코멘트가 있을 수 있습니다.`
+    case 'document-unknown':
+      // **코멘트는 읽었다.** 못 읽은 것은 문서 쪽이라고 그대로 말한다 — 그리고 코멘트가
+      // 지워지지 않는다는 것은 이 갈래에서도 참이므로 함께 말한다.
+      return `${head} 이 페이지의 구조를 읽지 못해 어떤 코멘트가 고아가 되는지 셀 수 없습니다. 코멘트 자체는 지워지지 않습니다.`
+    case 'counted':
+      return orphaned.count === 0
+        ? `${head} 가리키던 노드가 사라지는 코멘트는 없습니다.`
+        : `${head} 코멘트 ${orphaned.count}개는 지워지지 않지만 가리키던 노드가 사라집니다.`
+  }
 }

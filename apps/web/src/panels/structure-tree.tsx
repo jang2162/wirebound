@@ -15,6 +15,7 @@ import type { WbNode } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import type { StructureAbilities } from '../edit/structure-actions'
 import { nodeTypeLabel } from './node-shape'
+import { isTypingSurface } from './typing-surface'
 import { StructureToolbar, useStructureCommands, type StructureCommands } from './structure-toolbar'
 
 /**
@@ -120,38 +121,6 @@ const SHORTCUTS: {
   },
 ]
 
-/**
- * 이 키 이벤트가 **타이핑하거나 고르는 표면**에서 났는가.
- *
- * **핸들러가 트리와 툴바를 함께 감싸는 상자에 붙어 있다**(아래 `handleKeyDown`의 자리).
- * 그 상자 안에는 고르개가 그려지고, 고르개에는 `<select>`와 — P7-2부터 — **타이핑하는
- * 칸**이 있다. 출처를 보지 않으면 거기서 친 키가 그대로 구조 조작이 된다.
- *
- * **재현했다(리뷰가 잡았고 케이스로 남겼다):**
- *
- * | 어디서 | 무엇을 쳤나 | 무엇이 일어났나 |
- * |---|---|---|
- * | 프리셋 이름 칸 | `Backspace` | `preventDefault`로 **글자가 안 지워지고**, 고른 노드가 지워져 `remove /root/children/0`이 서버로 나갔다 |
- * | 타입 고르개의 `<select>` | `Delete` · `Alt`+`↑` | 고른 노드가 지워지거나 움직였다 — 사용자는 목록을 열려고 눌렀다 |
- *
- * **둘째가 이 슬라이스보다 먼저 있던 것이다.** 이름 칸이 상자 안의 첫 타이핑 표면이지만,
- * `<select>`는 P2b-3부터 있었고 아무도 그 축을 재지 않았다 — 속성 패널의 케이스
- * (*"타이핑 중에는 Delete가 노드를 지우지 않는다"*)가 그것을 덮는 것처럼 보였지만
- * **그쪽은 다른 서브트리라 키가 여기로 버블되지 않아** 저절로 안전했을 뿐이다.
- *
- * **표면을 목록으로 가른다 — 특정 칸을 예외로 두지 않는다.** 이름 칸 하나만 막으면 이
- * 상자에 다음 입력이 들어오는 날 같은 사고가 다시 난다. `contentEditable`까지 보는 것은
- * 그것이 `<input>`이 아니면서 타이핑하는 유일한 표면이기 때문이다(오늘 이 앱에는 없다).
- *
- * **`<button>`은 목록에 없다.** 툴바 버튼에 포커스가 있을 때 `Delete`는 타이핑이 아니고,
- * 버튼을 지나는 조작은 어차피 같은 판정(`abilities`)을 지난다.
- */
-function fromTypingSurface(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable) return true
-  return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
-}
-
 export function StructureTree(props: {
   projectId: string
   pageId: string | undefined
@@ -166,10 +135,11 @@ export function StructureTree(props: {
   const commands = useStructureCommands({ projectId: props.projectId, pageId: props.pageId })
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    // **타이핑·고르기 표면에서 난 키는 구조 조작이 아니다.** 아래 `fromTypingSurface`의
-    // 머리말에 실측이 있다. **단축키를 찾기 전에** 걸러야 `preventDefault`가 걸리지 않는다 —
-    // 걸리면 글자가 지워지지 않는다.
-    if (fromTypingSurface(event.target)) return
+    // **값을 넣거나 고르는 표면에서 난 키는 구조 조작이 아니다.** 판정과 실측은
+    // `./typing-surface.ts`에 있다(그 상자 밖의 패널도 같은 것을 쓸 수 있게 갈라 두었다).
+    // **단축키를 찾기 전에** 걸러야 `preventDefault`가 걸리지 않는다 — 걸리면 글자가
+    // 지워지지 않는다(그 순서를 뒤집는 변이가 죽는다).
+    if (isTypingSurface(event.target)) return
 
     const shortcut = SHORTCUTS.find((candidate) => candidate.match(event))
     if (shortcut === undefined) return
