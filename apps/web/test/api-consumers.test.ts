@@ -51,7 +51,7 @@ const METHODS = [
   'getProjectTheme', 'listProjectThemes', 'setProjectTheme',
   'getTheme', 'createTheme', 'updateTheme',
   'listComments', 'createComment', 'updateComment', 'deleteComment', 'renumberComments',
-  'listSnapshots', 'createSnapshot',
+  'listSnapshots', 'createSnapshot', 'restoreSnapshot',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -155,6 +155,13 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 확인하지 않은 채 남는다.
   listSnapshots: ['../src/routes/snapshots.tsx'],
   createSnapshot: ['../src/routes/snapshots.tsx'],
+  // **복원도 같은 한 파일이다**(P6-2). 셋이 한 화면에 모여 있는 것이 D10의 *"웹은 라우트
+  // 하나다"*이고, 이 줄이 그것을 실행으로 지킨다.
+  //
+  // **`getSnapshot`(상세)은 여전히 목록에 없다.** 복원이 왔는데도 그렇다 — payload를 읽는
+  // 것은 **서버**이고(라우트가 스냅샷 id만 받는다), 화면은 그 결과 요약만 본다. 부르는
+  // 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도 확인하지 않은 채 남는다.
+  restoreSnapshot: ['../src/routes/snapshots.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {

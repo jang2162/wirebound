@@ -44,11 +44,35 @@ import type { ProjectRole } from '../../src/api/types'
  * ```
  */
 const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
-  owner: { rename: true, remove: true, chooseTheme: true, editTheme: true, createSnapshot: true },
+  owner: {
+    rename: true,
+    remove: true,
+    chooseTheme: true,
+    editTheme: true,
+    createSnapshot: true,
+    restoreSnapshot: true,
+  },
   // **editor의 칸이 처음으로 전부 `false`가 아니게 됐다**(P6-1). §10이 스냅샷 **생성**을
   // editor에게 열었기 때문이다 — 스냅샷은 아무것도 바꾸지 않는다.
-  editor: { rename: false, remove: false, chooseTheme: false, editTheme: false, createSnapshot: true },
-  viewer: { rename: false, remove: false, chooseTheme: false, editTheme: false, createSnapshot: false },
+  //
+  // **`createSnapshot`과 `restoreSnapshot`이 갈리는 유일한 칸이 여기다**(P6-2). 그 둘을
+  // 한 필드로 묶었다면 editor가 복원까지 하거나 editor가 생성까지 잃었을 것이다.
+  editor: {
+    rename: false,
+    remove: false,
+    chooseTheme: false,
+    editTheme: false,
+    createSnapshot: true,
+    restoreSnapshot: false,
+  },
+  viewer: {
+    rename: false,
+    remove: false,
+    chooseTheme: false,
+    editTheme: false,
+    createSnapshot: false,
+    restoreSnapshot: false,
+  },
 }
 
 const NOTHING: ProjectAbilities = {
@@ -57,6 +81,7 @@ const NOTHING: ProjectAbilities = {
   chooseTheme: false,
   editTheme: false,
   createSnapshot: false,
+  restoreSnapshot: false,
 }
 
 describe('projectAbilities', () => {
@@ -86,6 +111,7 @@ describe('projectAbilities', () => {
       chooseTheme: true,
       editTheme: true,
       createSnapshot: true,
+      restoreSnapshot: true,
     })
   })
 
@@ -126,11 +152,17 @@ describe('projectAbilities', () => {
       chooseTheme: true,
       editTheme: true,
       createSnapshot: true,
+      restoreSnapshot: true,
     })
 
     // **스냅샷 생성은 둘이 열린다**(owner·editor — §10). 위 `opened`가 `rename || remove`를
     // 보므로 그 수에 잡히지 않는다 — 등급이 다른 조작이 늘면 그 조작의 수를 따로 못박는다.
     // 이 값이 3이 되는 날(viewer까지 열리는 날)은 §10이 바뀐 날이다.
     expect(Object.values(EXPECTED).filter((a) => a.createSnapshot)).toHaveLength(2)
+
+    // **복원은 하나만 열린다**(owner — §10: *"editor: … 스냅샷 생성 (복원 불가)"*). 위
+    // `createSnapshot`의 2와 여기 1이 **다른 것이 이 표에서 유일하게 갈리는 칸**이다 —
+    // 두 수가 같아지는 날은 editor가 복원을 얻거나 잃은 날이고, 그때 §10을 다시 읽어야 한다.
+    expect(Object.values(EXPECTED).filter((a) => a.restoreSnapshot)).toHaveLength(1)
   })
 })

@@ -368,11 +368,34 @@ describe('삭제 없는 태그 (§4.5)', () => {
     expect(stripComments(SOURCE)).not.toMatch(/app\.delete\s*\(/)
   })
 
-  it('복원 라우트도 없다 — P6-2의 몫이다 (D1)', () => {
+  /**
+   * **P6-1의 `복원 라우트도 없다`를 갱신한 자리다.** 그 케이스는 명제 둘을 지키고 있었다:
+   * *"복원이 아직 없다"*와 *"쓰이지 않는 `owner` 가드를 미리 만들어 두지 않는다"*.
+   * P6-2가 복원을 만들면서 앞의 것은 참이 아니게 됐지만 **뒤의 것은 그대로 살아 있다** —
+   * 형태가 *"0건이다"*에서 *"쓰이는 그 한 자리에만 있다"*로 바뀌었을 뿐이다. 지우지 않고
+   * 이어받는다.
+   */
+  it('owner 가드는 복원 하나에만 걸려 있다 (P6-2 D9)', () => {
     const code = stripComments(SOURCE)
-    expect(code).not.toContain('restore')
-    // owner 가드를 미리 만들어 두지 않는다(D8).
-    expect(code).not.toContain("projectGuard('owner')")
+    const guarded = [...code.matchAll(/app\.(get|post|patch|put|delete)\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\('(\w+)'\)/g)]
+
+    expect(guarded.filter((match) => match[3] === 'owner').map((match) => match[2])).toEqual([
+      '/:projectId/snapshots/:snapshotId/restore',
+    ])
+  })
+
+  it('복원은 POST 하나이고 라우트가 넷이다', () => {
+    const code = stripComments(SOURCE)
+    const routes = [...code.matchAll(/app\.(get|post|patch|put|delete)\(\s*'([^']+)'/g)].map(
+      (match) => `${match[1]!.toUpperCase()} ${match[2]}`,
+    )
+
+    expect(routes).toEqual([
+      'POST /:projectId/snapshots',
+      'GET /:projectId/snapshots',
+      'GET /:projectId/snapshots/:snapshotId',
+      'POST /:projectId/snapshots/:snapshotId/restore',
+    ])
   })
 
   it('심으면 잡는다 — 구분력', () => {
