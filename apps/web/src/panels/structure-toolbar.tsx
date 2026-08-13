@@ -22,9 +22,11 @@
  * 웨이브 1이 잰 여섯 형태까지다.
  */
 import { useState, type ReactElement } from 'react'
+import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { createNode } from '../edit/create-node'
 import { insertNodeOps, moveNodeOps, removeNodeOps } from '../edit/ops'
+import { patternInsert } from '../edit/pattern-insert'
 import { findNodeSafely } from '../edit/safe-walk'
 import { nodeSpot, structureAbilities, type StructureAbilities } from '../edit/structure-actions'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -85,6 +87,11 @@ export interface StructureCommands {
   /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`. */
   adding: 'inside' | 'after' | 'pattern' | null
   pick: (type: string) => void
+  /**
+   * 고른 패턴을 전개해 꽂는다(D5). **자리 규칙과 검증은 `edit/pattern-insert.ts`가 갖는다** —
+   * 판정이 컴포넌트 안으로 들어오면 케이스가 화면을 지나야만 재진다(D3과 같은 이유).
+   */
+  pickPattern: (key: string, pattern: ThemePattern) => void
   cancelAdd: () => void
 }
 
@@ -144,6 +151,57 @@ export function useStructureCommands(props: {
       adding === 'inside' ? insertInside(selectedNodeId, node) : insertAfter(selectedNodeId, node)
 
     if (commitOps(ops)) store.selectNode(node.id)
+  }
+
+  /**
+   * 고른 패턴을 전개해 꽂는다(D4·D5·D9).
+   *
+   * **실패 갈래가 셋이고 각각 다른 것을 말한다** — D9가 요구한 *"패턴이 잘못됐다"*와
+   * *"내가 잘못 눌렀다"*의 구분이다. 어느 갈래에서도 **편집을 만들지 않으므로 되돌릴
+   * 문서가 없다**: 화면의 문서는 손대지 않은 그대로이고 알림만 남는다.
+   *
+   * | 갈래 | 문장이 말하는 것 | 되돌리는 것 |
+   * |---|---|---|
+   * | 전개 실패(선언 안 된 슬롯) | 패턴이 잘못됐다 — 테마를 고쳐야 한다 | 없음(편집 0건) |
+   * | `'invalid'`·`'empty'` | 같음 | 없음 |
+   * | `'no-spot'` | 고른 자리에 못 꽂는다 — 다른 노드를 고른다 | 없음 |
+   *
+   * **서버가 거절하는 갈래는 여기 없다.** 그것은 `commitOps`가 `true`를 낸 뒤의 일이고
+   * (`use-edit-commit.tsx`의 `recover`), 그때는 재조회가 문서를 서버 상태로 놓고 선택도
+   * `null`로 재설정한다 — 케이스가 그 값을 고정한다.
+   *
+   * **알림은 편집 실패와 같은 `role="alert"` 하나를 쓴다.** 자리를 나누면 그 하나뿐인
+   * 통지 규칙이 흩어진다(`use-edit-commit.tsx`의 `skippedNotice`가 같은 판단을 적었다).
+   */
+  function addPattern(key: string, pattern: ThemePattern): void {
+    setAdding(null)
+    if (document === null) return
+
+    const { expanded, issues } = expandPattern(pattern)
+    if (expanded === null) {
+      store.setEditFailure({
+        kind: 'message',
+        message: `${brokenPattern(pattern, key)} ${issues.map((entry) => entry.message).join(' / ')}`,
+      })
+      return
+    }
+
+    const attempt = patternInsert(document, selectedNodeId, expanded)
+    if (attempt.insert === null) {
+      store.setEditFailure({
+        kind: 'message',
+        message:
+          attempt.reason === 'no-spot'
+            ? NO_SPOT_NOTICE
+            : `${brokenPattern(pattern, key)} ${attempt.issues
+                .map((entry) => entry.message)
+                .join(' / ')}`,
+      })
+      return
+    }
+
+    // **여기부터는 평범한 편집이다**(D4) — undo·낙관적 적용·경고 표시가 그대로 따라온다.
+    if (commitOps(attempt.insert.ops)) store.selectNode(attempt.insert.selectId)
   }
 
   /** 선택 노드의 **마지막 자식**으로. `children`이 없으면 0이고 `insertNodeOps`가 배열째 만든다. */
@@ -289,9 +347,27 @@ export function useStructureCommands(props: {
     openAdd: setAdding,
     adding,
     pick: addNode,
+    pickPattern: addPattern,
     cancelAdd: () => setAdding(null),
   }
 }
+
+/**
+ * *"이 패턴을 못 쓴다"*의 머리말. **패턴 이름과 키를 둘 다 말한다** — 이름은 사용자가
+ * 목록에서 본 것이고, 키는 테마 JSON에서 그 자리를 찾을 때 필요하다(§6.10의 저작 화면).
+ *
+ * **구분자를 두는 것은 뒤에 붙는 이슈 문장이 마침표로 끝나지 않기 때문이다** —
+ * `use-edit-commit.tsx`가 서버 문장에 대해 잰 것과 같은 부류다.
+ */
+function brokenPattern(pattern: ThemePattern, key: string): string {
+  return `패턴을 꽂지 못했습니다 — ${pattern.name}(${key}). 테마의 패턴을 고쳐야 합니다:`
+}
+
+/**
+ * 자리를 못 찾은 갈래. **위 문장과 갈라 적는 것이 D9다** — 이쪽은 테마가 아니라 **고른
+ * 자리**의 문제이므로 사용자가 할 일이 다르다.
+ */
+const NO_SPOT_NOTICE = '고른 자리에는 패턴을 꽂을 수 없습니다. 다른 노드를 고르세요.'
 
 /**
  * 툴바. **판정도 조작도 갖지 않는다** — `useStructureCommands`가 준 것을 그릴 뿐이다.
@@ -362,7 +438,7 @@ export function StructureToolbar(props: {
       {commands.adding === 'pattern' && (
         <PatternPicker
           projectId={props.projectId}
-          onPick={commands.cancelAdd}
+          onPick={commands.pickPattern}
           onCancel={commands.cancelAdd}
         />
       )}
