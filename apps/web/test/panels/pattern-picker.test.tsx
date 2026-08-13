@@ -11,6 +11,7 @@ import type { PageDocument } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import { SYSTEM_ADMIN_THEME_ID } from '../helpers'
 import { openPage, pageDoc } from '../editor-harness'
+import { NOTICE } from '../../src/panels/pattern-picker'
 
 function doc(): PageDocument {
   return pageDoc({
@@ -155,10 +156,10 @@ describe('패턴 고르개 — 목록이 보이는 것 (D8)', () => {
  * 덮었고, 그중 `theme: null`은 **서버가 낸 답**(*"테마를 고르지 않았다"*)이지 정보의
  * 부재가 아니었다 — D7이 세운 구분을 한 층 위에서 되살린 형태다.
  *
- * **다섯 문장이 서로를 덮지 않는 것을 케이스가 잰다.** `noticeOf`가 그 다섯을 한 표로
- * 모으므로, 두 상태가 같은 문장을 내면 아래 `서로 다른 문장이다`가 죽는다.
+ * **문장이 서로를 덮지 않는 것을 케이스가 잰다.** 화면을 지나는 것은 `noticeOf`가 모으고,
+ * 화면에서 만들 수 없는 상태(`no-project`)까지는 `NOTICE` 표를 직접 보는 케이스가 잰다.
  */
-describe('패턴 고르개 — D7: 다섯 상태를 갈라 말한다', () => {
+describe('패턴 고르개 — D7: 상태마다 갈라 말한다', () => {
   /** 서버 응답 하나를 주고, 고르개가 낸 안내 문장을 돌려준다. */
   async function noticeOf(overrides: Partial<ApiClient>): Promise<string> {
     await openPicker(overrides)
@@ -252,6 +253,31 @@ describe('패턴 고르개 — D7: 다섯 상태를 갈라 말한다', () => {
       cleanup()
     }
     expect(new Set(notices).size).toBe(notices.length)
+  })
+
+  /**
+   * **화면에서 못 만드는 상태까지 포함해 표를 직접 잰다.** 위 케이스는 화면을 지나므로
+   * `no-project`(프로젝트가 없다)를 만들 수 없다 — 셸이 조회해 온 `project.id`만 넘기고
+   * 그 응답 가드가 빈 문자열을 거부한다(`isProjectDetail`). 그 상태의 문장이 실재하고
+   * 남과 겹치지 않는 것은 **표에서** 재야 한다.
+   *
+   * **세는 단위: `NOTICE`의 키 하나** = `ready`가 아닌 상태 하나.
+   */
+  it('안내 문장 표에 겹치는 것이 없다 — 화면에서 못 만드는 상태까지', () => {
+    const keys = Object.keys(NOTICE).sort()
+    expect(keys).toEqual(['failed', 'loading', 'no-project', 'unresolved', 'unset'])
+
+    const values = Object.values(NOTICE)
+    expect(new Set(values).size).toBe(values.length)
+    // 화면이 내는 여섯째 문장(패턴 0개)과도 겹치지 않는다.
+    expect(values).not.toContain('이 테마에는 패턴이 없습니다')
+  })
+
+  it('프로젝트가 없을 때의 문장은 프로젝트를 가리켜 말하지 않는다', () => {
+    // **델타 리뷰가 지목한 자리.** 앞 판은 이 상태가 `unset`이라
+    // *"이 **프로젝트는** 테마를 고르지 않았습니다"*가 나갔다.
+    expect(NOTICE['no-project']).not.toContain('이 프로젝트')
+    expect(NOTICE['no-project']).not.toBe(NOTICE.unset)
   })
 
   it('테마가 없는 어느 상태에서도 목록을 닫을 수 있다', async () => {

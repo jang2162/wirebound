@@ -65,12 +65,13 @@ import type { ThemeSource } from './theme-source'
  * 층 위에서 되살린 형태이고, 이 파일이 이미 적어 둔 것(*"그것은 「테마를 고르지 않았다」는
  * **답**이지 정보의 부재가 아니다"*)과도 어긋났다.
  *
- * **다섯인 것은 서버가 다섯을 구분해 주기 때문이다** — 지어낸 갈래가 아니다.
- * `apps/api/src/routes/themes.ts`의 `currentTheme`이 내는 값으로 갈린다:
+ * **넷은 서버가 구분해 주는 것이고 하나는 요청을 보내기 전이다** — 지어낸 갈래가 아니다.
+ * 서버 쪽 넷은 `apps/api/src/routes/themes.ts`의 `currentTheme`이 내는 값으로 갈린다:
  *
- * | 상태 | 서버 응답 | 사용자가 할 일 |
+ * | 상태 | 언제 | 사용자가 할 일 |
  * |---|---|---|
- * | `loading` | 아직 안 왔다 | 기다린다 |
+ * | `no-project` | **부를 프로젝트가 없다**(`projectId`가 없거나 빈 문자열) | 주소를 확인한다 |
+ * | `loading` | 요청을 보냈고 아직 안 왔다 | 기다린다 |
  * | `failed` | 요청이 던졌다 | 새로고침한다 |
  * | `unset` | `themeId: null` · `theme: null` | 테마를 고른다 |
  * | `unresolved` | `themeId` 있음 · `theme: null` · `issues` 있음 | **테마를 고친다** |
@@ -79,8 +80,22 @@ import type { ThemeSource } from './theme-source'
  * `unresolved`는 *"상속 대상 시스템 테마가 코드에서 사라졌다"*가 만든다(그쪽 재라 #5).
  * `unset`의 세 원인(기본 레이아웃 없음·테마 안 고름·테마 행 사라짐)을 서버가 이미 하나로
  * 묶어 주므로 **여기서 다시 가르지 않는다.**
+ *
+ * **`no-project`를 `unset`에서 갈라낸 것은 델타 리뷰가 지목한 자리다.** 앞 판은 `projectId`가
+ * 없을 때도 `unset`을 냈고, 그러면 화면이 *"이 **프로젝트는** 테마를 고르지 않았습니다"*로
+ * **없는 프로젝트를 가리켜 말한다.** 이것은 요청을 **보내지도 않은** 상태이므로 서버가
+ * 가르는 넷 중 어디에도 속하지 않는다.
+ *
+ * **오늘 도달하지 않는다 — 두 겹으로 확인했다.** ① 이 값을 쓰는 화면이 받는 `projectId`는
+ * 전부 조회해 온 `ProjectDetail.id`이고(`routes/editor.tsx`가 `status === 'ready'`일 때만
+ * 셸을 그린다), ② 그 응답 가드 `isProjectDetail`이 **`value['id'] !== ''`를 명시적으로
+ * 검사한다**(`api/http-client.ts`). **그래도 고친 것은 여기가 케이스를 쓸 수 있는
+ * 자리이기 때문이다** — 훅은 화면 없이 부를 수 있고(`test/theme/use-project-theme.test.tsx`의
+ * `Probe`가 이미 그렇게 한다), 케이스를 쓸 수 있으면 도달 불가라도 고정할 수 있다.
+ * (도달 불가인데 **케이스도 못 쓰는** 갈래는 고치지 않고 이월했다 — 이월 문서 §3.)
  */
 export type ProjectThemeState =
+  | { status: 'no-project' }
   | { status: 'loading' }
   | { status: 'failed' }
   | { status: 'unset' }
@@ -100,8 +115,9 @@ export function useProjectThemeState(
 
   useEffect(() => {
     if (projectId === undefined || projectId === '') {
-      // **`loading`이 아니라 `unset`이다.** 프로젝트가 없으면 기다려도 오지 않는다.
-      setState({ status: 'unset' })
+      // **`loading`도 `unset`도 아니다.** 기다려도 오지 않으므로 `loading`이 아니고,
+      // 요청을 보내지도 않았으므로 *"테마를 고르지 않았다"*는 서버의 답이 아니다.
+      setState({ status: 'no-project' })
       return
     }
 

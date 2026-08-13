@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../src/api/context'
 import type { ProjectTheme } from '../../src/api/types'
 import { STRUCTURE_STYLE_ID, THEME_STYLE_ID, useThemeCss } from '../../src/theme/use-theme-css'
-import { useProjectTheme } from '../../src/theme/use-project-theme'
+import { useProjectTheme, useProjectThemeState } from '../../src/theme/use-project-theme'
 import { fakeApi } from '../helpers'
 
 vi.mock('@wirebound/themes', async (importOriginal) => {
@@ -148,6 +148,76 @@ describe('useProjectTheme', () => {
       const getProjectTheme = vi.fn(async () => ({ themeId: null, theme: serverTheme(), issues: [] }))
       withApi(<Probe projectId={undefined} />, getProjectTheme)
       expect(getProjectTheme).not.toHaveBeenCalled()
+    })
+  })
+
+  /**
+   * **상태를 문장으로 옮기는 쪽(P7-1의 패턴 고르개)이 이 갈래를 필요로 한다.**
+   * `ThemeSource`는 `ready`가 아닌 상태를 전부 `null` 하나로 좁히므로 여기서만 잴 수 있다.
+   *
+   * **`no-project`가 `unset`에서 갈라진 것이 델타 리뷰의 지적이다.** 앞 판은 `projectId`가
+   * 없을 때도 `unset`을 냈고, 그러면 화면이 *"이 **프로젝트는** 테마를 고르지 않았습니다"*로
+   * 없는 프로젝트를 가리켜 말한다. **오늘 도달하지 않지만**(화면이 받는 `projectId`는 전부
+   * 조회해 온 `ProjectDetail.id`이고 `isProjectDetail`이 `id !== ''`를 검사한다)
+   * **훅은 화면 없이 부를 수 있으므로 케이스로 고정할 수 있다.**
+   */
+  describe('useProjectThemeState — 상태를 갈라 낸다', () => {
+    function StateProbe(props: { projectId: string | undefined }): ReactElement {
+      const state = useProjectThemeState(props.projectId)
+      return <div data-testid="state">{state.status}</div>
+    }
+
+    const statusOf = (): string =>
+      document.body.querySelector('[data-testid="state"]')?.textContent ?? ''
+
+    it('projectId가 undefined면 no-project다 — unset이 아니다', () => {
+      withApi(<StateProbe projectId={undefined} />, async () => {
+        throw new Error('불리면 안 된다')
+      })
+      expect(statusOf()).toBe('no-project')
+    })
+
+    it('projectId가 빈 문자열이어도 no-project다', () => {
+      withApi(<StateProbe projectId="" />, async () => {
+        throw new Error('불리면 안 된다')
+      })
+      expect(statusOf()).toBe('no-project')
+    })
+
+    it('서버가 themeId도 theme도 null로 답하면 unset이다', async () => {
+      withApi(<StateProbe projectId="p1" />, async () => ({
+        themeId: null,
+        theme: null,
+        issues: [],
+      }))
+      await waitFor(() => expect(statusOf()).toBe('unset'))
+    })
+
+    it('themeId가 있고 theme만 null이면 unresolved다', async () => {
+      withApi(<StateProbe projectId="p1" />, async () => ({
+        themeId: 'th-1',
+        theme: null,
+        issues: [],
+      }))
+      await waitFor(() => expect(statusOf()).toBe('unresolved'))
+    })
+
+    it('요청이 던지면 failed다', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      withApi(<StateProbe projectId="p1" />, async () => {
+        throw new Error('서버가 답하지 않았다')
+      })
+      await waitFor(() => expect(statusOf()).toBe('failed'))
+      spy.mockRestore()
+    })
+
+    it('theme이 오면 ready다', async () => {
+      withApi(<StateProbe projectId="p1" />, async () => ({
+        themeId: 'th-1',
+        theme: serverTheme(),
+        issues: [],
+      }))
+      await waitFor(() => expect(statusOf()).toBe('ready'))
     })
   })
 

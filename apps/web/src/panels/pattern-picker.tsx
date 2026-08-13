@@ -29,7 +29,7 @@ import { useProjectThemeState, type ProjectThemeState } from '../theme/use-proje
 const EMPTY_NOTICE = '이 테마에는 패턴이 없습니다'
 
 /**
- * 테마를 손에 넣지 못한 상태들. **넷을 한 문장으로 합치지 않는 것이 D7의 요구다** —
+ * 테마를 손에 넣지 못한 상태들. **이것들을 한 문장으로 합치지 않는 것이 D7의 요구다** —
  * 사용자가 할 일이 각각 다르다.
  *
  * **앞 판은 이 자리에 문장 하나(`테마를 아직 읽지 못했습니다`)만 두었고, 리뷰가 그것이
@@ -37,10 +37,15 @@ const EMPTY_NOTICE = '이 테마에는 패턴이 없습니다'
  * D7이 *"없다는 것과 고장난 것을 사용자가 가른다"*로 세운 것을 **한 층 위에서 되살린**
  * 형태이고, `theme/use-project-theme.ts`가 이미 적어 둔 것과도 어긋났다.
  *
- * **다섯으로 가른 것은 서버가 다섯을 구분해 주기 때문이다** — 지어낸 갈래가 아니다.
- * 그 표는 `ProjectThemeState`에 있다.
+ * **여기서 가르는 수를 산문에 적지 않는다** — `NOTICE`가 `Record<Exclude<…,'ready'>, string>`
+ * 이라 **타입이 상태마다 문장 하나를 요구하고**, 그 키 목록은 케이스가 센다
+ * (`test/panels/pattern-picker.test.tsx`의 `안내 문장 표에 겹치는 것이 없다`).
+ * 상태를 왜 그렇게 갈랐는지는 `ProjectThemeState`의 표에 있다.
  */
-const NOTICE: Record<Exclude<ProjectThemeState['status'], 'ready'>, string> = {
+export const NOTICE: Record<Exclude<ProjectThemeState['status'], 'ready'>, string> = {
+  // **`unset`과 갈라 적는다** — 델타 리뷰가 지목한 자리다. 프로젝트가 없는데
+  // *"이 프로젝트는"*으로 시작하면 없는 것을 가리켜 말하게 된다.
+  'no-project': '프로젝트를 아직 읽지 못했습니다',
   loading: '테마를 읽는 중입니다',
   failed: '테마를 읽지 못했습니다. 새로고침해 보세요.',
   unset: '이 프로젝트는 테마를 고르지 않았습니다. 상단에서 테마를 고르세요.',
@@ -57,8 +62,8 @@ export function PatternPicker(props: {
   onPick: (key: string, pattern: ThemePattern) => void
   onCancel: () => void
 }): ReactElement {
-  // **`useProjectTheme`이 아니라 상태 훅을 쓴다** — `ThemeSource`는 넷을 `null` 하나로
-  // 좁히므로 무엇을 말할지 고를 수 없다.
+  // **`useProjectTheme`이 아니라 상태 훅을 쓴다** — `ThemeSource`는 `ready`가 아닌 상태를
+  // 전부 `null` 하나로 좁히므로 무엇을 말할지 고를 수 없다.
   const state = useProjectThemeState(props.projectId)
   const theme = state.status === 'ready' ? state.theme : null
 

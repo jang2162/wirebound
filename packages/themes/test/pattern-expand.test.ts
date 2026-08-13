@@ -8,7 +8,9 @@
  */
 import {
   WbNodeSchema,
+  getComponent,
   installCatalog,
+  listComponents,
   validatePage,
   type PageDocument,
   type WbNode,
@@ -104,6 +106,113 @@ describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다
       props: { table: { columns: ['가', '나'], meta: { tags: ['x'] } } },
     },
   } as unknown as ThemePattern
+
+  /**
+   * **얕은 복사가 못 끊는 자리를 카탈로그에서 센다 — 이 목록을 주석에 손으로 적지 않는다.**
+   *
+   * **세는 단위: `<컴포넌트>.<prop>` 하나.** 조건은 *"`def.props.safeParse({})`가 낸
+   * 기본값이 객체이거나 배열인 prop"*이다 — 그 값이 곧 `{ ...props }`가 참조를 그대로
+   * 남기는 자리다.
+   *
+   * **앞 판은 이것을 `grep -n 'z.array'`로 세고 컴포넌트 이름을 줄 번호에서 추측해
+   * 셋을 적었다(`Table.columns`·`List.items`·`Tabs.tabs`). 셋 다 문제가 있었다:**
+   * `Table`은 카탈로그에 아예 없고, `List.items`는 `z.number()`이며(같은 파일의 다른
+   * 컴포넌트가 `items: z.array`를 갖는다), 수도 셋이 아니라 넷이다. **grep은 어느
+   * 컴포넌트의 prop인지 말해 주지 않는다** — 그 침묵을 추측으로 메운 것이 원인이다.
+   *
+   * 검산: `pnpm vitest run packages/themes/test/pattern-expand.test.ts -t '얕은 복사가'`
+   */
+  it('얕은 복사가 못 끊는 prop을 카탈로그가 넷 갖는다', () => {
+    const shared: string[] = []
+    for (const def of listComponents()) {
+      const parsed = def.props.safeParse({})
+      if (!parsed.success) continue
+      for (const [prop, value] of Object.entries(parsed.data as Record<string, unknown>)) {
+        if (typeof value === 'object' && value !== null) shared.push(`${def.type}.${prop}`)
+      }
+    }
+    expect(shared.sort()).toEqual([
+      'KeyValue.pairs',
+      'List.columns',
+      'Tabs.tabs',
+      'Tree.items',
+    ])
+  })
+
+  /**
+   * **`expandPattern`의 *"던지지 않는다"* 계약에 예외가 하나 있다 — 여기서 고정한다.**
+   *
+   * `structuredClone`은 구조적 복제가 불가능한 값(함수·심볼 등)에서 `DOMException`을
+   * 던진다. 머리말이 그 사실과 *"오늘 그 입력이 오는 경로가 0건"*을 함께 적는데, 뒤엣것을
+   * 케이스가 잰다.
+   *
+   * **세는 단위: `<컴포넌트>.<prop>` 하나에 함수를 넣고 `def.props.safeParse`를 돌린
+   * 시도.** prop 이름은 `safeParse({})`가 낸 기본값의 키와 `def.editor`가 가리키는
+   * prop을 합친 것이다 — 어느 한쪽만 보면 기본값 없는 prop이나 editor에 없는 prop을
+   * 놓친다.
+   *
+   * 검산: `pnpm vitest run packages/themes/test/pattern-expand.test.ts -t '카탈로그를 통과하지'`
+   */
+  it('structuredClone이 던지는 값은 카탈로그를 통과하지 못한다 — 통과 0건', () => {
+    const accepted: string[] = []
+    let probes = 0
+
+    for (const def of listComponents()) {
+      const defaults = def.props.safeParse({})
+      const names = new Set<string>(def.editor.map((field) => field.prop))
+      if (defaults.success) {
+        for (const key of Object.keys(defaults.data as Record<string, unknown>)) names.add(key)
+      }
+      for (const prop of names) {
+        probes += 1
+        if (def.props.safeParse({ [prop]: () => 1 }).success) accepted.push(`${def.type}.${prop}`)
+      }
+    }
+
+    // **분모를 먼저 본다.** 시도가 0이면 아래 단언이 조용히 통과한다 — 앞 슬라이스에서
+    // 계수 스크립트가 0을 내고도 초록이던 부류다.
+    expect(probes).toBeGreaterThan(0)
+    expect(accepted).toEqual([])
+  })
+
+  it('그래도 던지는 것은 사실이다 — 계약의 예외를 값으로 고정한다', () => {
+    // 이 저장소의 관례대로 **환경이 정하는 수는 계약으로 삼지 않는다**
+    // (`spec/patterns.ts`의 깊이 상한 주석). 던진다는 **성질**은 구조적 복제
+    // 알고리즘이 정하는 것이라 환경에 따라 갈리지 않는다.
+    expect(() => structuredClone({ f: () => 1 })).toThrow()
+
+    const smuggled = {
+      name: '함수 밀반입',
+      schema: { type: 'Section', props: { onClick: () => 1 } },
+    } as unknown as ThemePattern
+    // **`expandPattern`이 그것을 삼키지 않는다.** 삼키려면 조용히 다른 값을 만들어야 한다.
+    expect(() => expandPattern(smuggled, counter())).toThrow()
+  })
+
+  it('KeyValue.pairs는 배열 안에 객체가 든다 — 두 겹이 실재한다', () => {
+    // **위 케이스의 넷 중 이것만 두 겹이다.** 아래 `두 겹 아래까지 끊긴다`가 지어낸
+    // 모양으로 재는 축이 **카탈로그에 실제로 있다는 것**을 여기서 못박는다.
+    const pairs = (getComponent('KeyValue')!.props.safeParse({}) as { data: { pairs: unknown[] } })
+      .data.pairs
+    expect(Array.isArray(pairs)).toBe(true)
+    expect(typeof pairs[0]).toBe('object')
+  })
+
+  it('실재하는 두 겹으로도 참조가 끊긴다 — KeyValue.pairs', () => {
+    const pattern: ThemePattern = {
+      name: '항목표',
+      schema: { type: 'KeyValue', props: { pairs: [{ key: '이름', value: '홍길동' }] } },
+    }
+    const source = pattern.schema.props!['pairs'] as { key: string }[]
+
+    const { expanded } = expandPattern(pattern, counter())
+    const copied = expanded!.nodes[0]!.props!['pairs'] as { key: string }[]
+
+    expect(copied).not.toBe(source)
+    expect(copied[0]).not.toBe(source[0])
+    copied[0]!.key = '고친 값'
+    expect(source[0]!.key).toBe('이름')
+  })
 
   it('props 객체가 다른 참조다', () => {
     const { expanded } = expandPattern(NOTICE, counter())
