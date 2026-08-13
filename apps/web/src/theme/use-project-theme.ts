@@ -55,13 +55,53 @@ import type { Theme } from '@wirebound/themes'
 import { useApi } from '../api/context'
 import type { ThemeSource } from './theme-source'
 
-export function useProjectTheme(projectId: string | undefined, reloadToken = 0): ThemeSource {
+/**
+ * 서버가 **갈라서 주는** 테마 상태. `ThemeSource`는 이것을 `Theme | null`로 좁혀 내므로
+ * 그리는 쪽에는 충분하지만 **말하는 쪽에는 모자란다.**
+ *
+ * **P7-1 리뷰가 그 자리를 찾았다.** 패턴 고르개가 `null` 하나를 *"테마를 아직 읽지
+ * 못했습니다"*로 옮겼는데, 그 문장이 **서버가 답으로 낸 `theme: null`**(=테마를 고르지
+ * 않았다)까지 덮었다 — D7이 *"없다는 것과 고장난 것을 사용자가 가른다"*로 세운 것을 한
+ * 층 위에서 되살린 형태이고, 이 파일이 이미 적어 둔 것(*"그것은 「테마를 고르지 않았다」는
+ * **답**이지 정보의 부재가 아니다"*)과도 어긋났다.
+ *
+ * **다섯인 것은 서버가 다섯을 구분해 주기 때문이다** — 지어낸 갈래가 아니다.
+ * `apps/api/src/routes/themes.ts`의 `currentTheme`이 내는 값으로 갈린다:
+ *
+ * | 상태 | 서버 응답 | 사용자가 할 일 |
+ * |---|---|---|
+ * | `loading` | 아직 안 왔다 | 기다린다 |
+ * | `failed` | 요청이 던졌다 | 새로고침한다 |
+ * | `unset` | `themeId: null` · `theme: null` | 테마를 고른다 |
+ * | `unresolved` | `themeId` 있음 · `theme: null` · `issues` 있음 | **테마를 고친다** |
+ * | `ready` | `theme` 있음 | — |
+ *
+ * `unresolved`는 *"상속 대상 시스템 테마가 코드에서 사라졌다"*가 만든다(그쪽 재라 #5).
+ * `unset`의 세 원인(기본 레이아웃 없음·테마 안 고름·테마 행 사라짐)을 서버가 이미 하나로
+ * 묶어 주므로 **여기서 다시 가르지 않는다.**
+ */
+export type ProjectThemeState =
+  | { status: 'loading' }
+  | { status: 'failed' }
+  | { status: 'unset' }
+  | { status: 'unresolved' }
+  | { status: 'ready'; theme: Theme }
+
+/**
+ * 조회 하나가 내는 **상태**. `useProjectTheme`이 이것을 좁혀 `ThemeSource`로 만든다 —
+ * 조회 로직이 두 벌이 되지 않도록 여기 한 곳에 둔다.
+ */
+export function useProjectThemeState(
+  projectId: string | undefined,
+  reloadToken = 0,
+): ProjectThemeState {
   const api = useApi()
-  const [theme, setTheme] = useState<Theme | null>(null)
+  const [state, setState] = useState<ProjectThemeState>({ status: 'loading' })
 
   useEffect(() => {
     if (projectId === undefined || projectId === '') {
-      setTheme(null)
+      // **`loading`이 아니라 `unset`이다.** 프로젝트가 없으면 기다려도 오지 않는다.
+      setState({ status: 'unset' })
       return
     }
 
@@ -80,13 +120,20 @@ export function useProjectTheme(projectId: string | undefined, reloadToken = 0):
             result.issues.map((issue) => `${issue.path}: ${issue.message}`),
           )
         }
-        setTheme(result.theme)
+        if (result.theme !== null) {
+          setState({ status: 'ready', theme: result.theme })
+          return
+        }
+        // **`themeId`가 갈림길이다.** 서버가 테마를 고르지 않은 프로젝트에는 둘 다
+        // `null`을 주고, 고른 테마를 해석하지 못했을 때만 `themeId`를 남긴다.
+        setState({ status: result.themeId === null ? 'unset' : 'unresolved' })
       } catch (error) {
         if (!alive) return
-        // 조회 실패도 `null`이다 — 화면은 구조 기본 CSS로 그려진다. 사용자에게 문안을
-        // 띄우지 않는 것은 이슈와 같은 이유이고, 여기서 던지면 캔버스가 통째로 사라진다.
+        // 조회 실패에서도 **그리기는 계속된다** — 화면은 구조 기본 CSS로 그려진다.
+        // 여기서 던지면 캔버스가 통째로 사라진다. 이 상태를 문장으로 옮길지는 읽는
+        // 쪽이 정한다(캔버스는 말하지 않고, 패턴 고르개는 말한다).
         console.error('테마를 읽지 못해 기본 스타일로 그립니다', error)
-        setTheme(null)
+        setState({ status: 'failed' })
       }
     })()
 
@@ -102,6 +149,17 @@ export function useProjectTheme(projectId: string | undefined, reloadToken = 0):
     // *"테마 **값**이 그대로면 같은 참조"*이고, 토큰은 값이 아니라 요청이다.
   }, [api, projectId, reloadToken])
 
+  return state
+}
+
+export function useProjectTheme(projectId: string | undefined, reloadToken = 0): ThemeSource {
+  const state = useProjectThemeState(projectId, reloadToken)
+  // **넷을 `null` 하나로 좁힌다.** 그리는 쪽은 *"무엇을 그리나"*만 물으므로 이유가
+  // 필요 없다 — 이유가 필요한 쪽(패턴 고르개)이 위 훅을 직접 쓴다.
+  const theme = state.status === 'ready' ? state.theme : null
+
   // **의존성이 `theme` 하나인 것이 이 훅의 계약이다**(위 "안정 참조가 계약이다").
+  // `state`는 매 조회마다 새 객체지만 그 안의 `theme`은 서버가 준 그 객체이므로,
+  // 값이 그대로면 같은 참조이고 값이 바뀌면 반드시 새 참조다 — 두 방향이 그대로 산다.
   return useMemo<ThemeSource>(() => () => theme, [theme])
 }

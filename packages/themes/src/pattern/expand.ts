@@ -106,7 +106,28 @@ function expandNode(
     }
   }
 
-  if (template.props !== undefined) node.props = template.props
+  /**
+   * **`props`는 깊은 복사로 넘긴다 — 리뷰가 실증한 결함을 닫는 자리다.**
+   *
+   * 참조로 넘기면 전개된 노드의 props를 고치는 순간 **템플릿이 함께 바뀐다.** 시스템
+   * 테마는 모듈 상수라 그 오염이 프로세스가 사는 동안 남고, 다음에 같은 패턴을 꽂는
+   * 사람이 남이 고친 값을 받는다. 실측: 이 줄을 참조 대입으로 되돌리면 케이스 다섯이
+   * 죽는데 그중 **둘은 이 결함을 겨냥하지 않은 케이스**다 — 앞 케이스가 오염시킨
+   * `systemTheme('portal')`을 뒤 케이스가 읽어 `validatePage`가 이슈 셋을 낸다.
+   *
+   * **얕은 복사(`{ ...props }`)로는 부족하다.** 카탈로그에 이미 배열 prop이 셋 있고
+   * (`Table.columns`·`List.items`·`Tabs.tabs`) 그 배열은 얕은 복사가 참조를 그대로
+   * 남긴다 — 케이스가 한 겹·두 겹 아래를 따로 잰다.
+   *
+   * **오늘 이것이 잠재인 이유:** `apps/web`은 편집을 JSON Patch로만 하고(`edit/ops.ts`)
+   * `applyOps`가 문서를 통째로 `structuredClone`한 뒤 바꾸므로 전개된 노드를 제자리에서
+   * 만지는 경로가 없다. **P7-2·P7-3이 그 전제를 물려받지 않는다** — 이월 문서에 적었다.
+   *
+   * **`structuredClone`은 함수·심볼을 담은 값에서 던진다.** 그 값이 여기 오는 경로는
+   * 재지 못했다(저장 경계는 JSON 왕복을 지나고 시스템 테마는 코드 상수다). 막지 않는
+   * 것은 **막을 방법이 조용히 다른 값을 만드는 것뿐**이기 때문이다 — 이월에 적었다.
+   */
+  if (template.props !== undefined) node.props = structuredClone(template.props)
   if (template.variant !== undefined) node.variant = template.variant
   if (template.children !== undefined) {
     node.children = template.children.map((child, index) =>

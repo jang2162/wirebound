@@ -88,6 +88,79 @@ describe('expandPattern — D2: slot이 결과에 남지 않는다', () => {
   })
 })
 
+describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다 (리뷰 D1)', () => {
+  /**
+   * **리뷰가 실증한 결함이다.** 전개가 `props`를 참조로 넘기면 전개된 노드의 props를
+   * 고치는 순간 **`systemTheme('portal')`이 영구히 오염된다** — 시스템 테마는 모듈
+   * 상수라 그 프로세스가 사는 동안 같은 객체를 계속 돌려준다.
+   *
+   * 오늘 `apps/web`에 제자리 변형 경로가 없어 잠재이지만, **P7-2(프리셋)·P7-3(JSON
+   * 가져오기)이 이 전개 경로를 재사용하고 그쪽은 값을 만질 이유가 훨씬 많다.**
+   */
+  const NESTED = {
+    name: '중첩 props',
+    schema: {
+      type: 'Section',
+      props: { table: { columns: ['가', '나'], meta: { tags: ['x'] } } },
+    },
+  } as unknown as ThemePattern
+
+  it('props 객체가 다른 참조다', () => {
+    const { expanded } = expandPattern(NOTICE, counter())
+    const title = flatten(expanded!.nodes).find((node) => node.type === 'Text')!
+    expect(title.props).not.toBe(NOTICE.schema.children![0]!.props)
+    // 값은 같다 — 끊는 것은 참조뿐이다.
+    expect(title.props).toEqual(NOTICE.schema.children![0]!.props)
+  })
+
+  it('한 겹 아래의 배열도 다른 참조다 — 얕은 복사로는 끊기지 않는다', () => {
+    const { expanded } = expandPattern(NESTED, counter())
+    const props = expanded!.nodes[0]!.props as { table: { columns: string[] } }
+    const source = (NESTED.schema.props as { table: { columns: string[] } }).table
+
+    expect(props.table).not.toBe(source)
+    expect(props.table.columns).not.toBe(source.columns)
+  })
+
+  it('두 겹 아래까지 끊긴다', () => {
+    const { expanded } = expandPattern(NESTED, counter())
+    const props = expanded!.nodes[0]!.props as { table: { meta: { tags: string[] } } }
+    const source = (NESTED.schema.props as { table: { meta: { tags: string[] } } }).table
+
+    expect(props.table.meta).not.toBe(source.meta)
+    expect(props.table.meta.tags).not.toBe(source.meta.tags)
+  })
+
+  it('전개된 노드의 props를 고쳐도 시스템 테마가 오염되지 않는다', () => {
+    // **실제 테마로 잰다.** 위 케이스들은 참조를 보지만 이것은 **결과**를 본다 —
+    // 리뷰가 지목한 것이 이 형태다.
+    const pattern = systemTheme('portal')!.patterns!['content.noticeBoard']!
+    const before = JSON.stringify(pattern)
+
+    const { expanded } = expandPattern(pattern, counter())
+    for (const node of flatten(expanded!.nodes)) {
+      if (node.props === undefined) continue
+      node.props['content'] = '사용자가 고친 값'
+      for (const value of Object.values(node.props)) {
+        if (Array.isArray(value)) value.push('밀어 넣은 항목')
+      }
+    }
+
+    expect(JSON.stringify(systemTheme('portal')!.patterns!['content.noticeBoard'])).toBe(before)
+  })
+
+  it('같은 패턴을 두 번 전개하면 서로 독립이다', () => {
+    const first = expandPattern(NOTICE, counter()).expanded!
+    const second = expandPattern(NOTICE, counter()).expanded!
+
+    const firstTitle = flatten(first.nodes).find((node) => node.type === 'Text')!
+    const secondTitle = flatten(second.nodes).find((node) => node.type === 'Text')!
+
+    firstTitle.props!['content'] = '첫 번째만 바꾼다'
+    expect(secondTitle.props!['content']).toBe('공지사항')
+  })
+})
+
 describe('expandPattern — id 발급', () => {
   it('새 id가 매번 다르다', () => {
     const first = expandPattern(NOTICE).expanded!
@@ -186,6 +259,57 @@ describe('expandPattern — D3: 슬롯은 채우지 않고 어느 노드인지�
     expect(issues).toEqual([])
     // 매핑에는 실제로 쓰인 것만 실린다.
     expect([...expanded!.slots.keys()]).toEqual(['title'])
+  })
+
+  /**
+   * **리뷰가 지목한 사각 ㉠을 닫는다.** `slots` 맵의 순서는 **트리 순서**여야 한다 —
+   * `patternInsert`의 `selectId`가 *"첫 슬롯"*으로 그 맵의 첫 값을 쓰므로, 순서가
+   * 선언 순서로 바뀌면 **사용자가 다른 노드를 골라 놓은 채 시작한다.**
+   *
+   * **실제 패턴 둘로는 이 축을 못 가른다** — `portal`·`commerce` 둘 다 선언 순서와
+   * 트리 순서가 같아서, 구현이 어느 쪽을 따르든 같은 결과가 나온다. 그래서 **두
+   * 순서가 갈리는 패턴을 여기서 만들어** 쓴다.
+   */
+  it('slots 매핑의 순서는 트리 순서다 — 선언 순서가 아니다', () => {
+    const crossed: ThemePattern = {
+      name: '순서가 갈리는 패턴',
+      // 선언 순서: 아래 · 위 · 가운데
+      slots: { 아래: 'text', 위: 'text', 가운데: 'text' },
+      schema: {
+        // 트리 순서: 위 · 가운데 · 아래
+        type: 'Section',
+        children: [
+          { type: 'Text', slot: '위' },
+          { type: 'Text', slot: '가운데' },
+          { type: 'Text', slot: '아래' },
+        ],
+      },
+    }
+
+    const { expanded, issues } = expandPattern(crossed, counter())
+    expect(issues).toEqual([])
+    expect([...expanded!.slots.keys()]).toEqual(['위', '가운데', '아래'])
+    expect([...expanded!.slots.keys()]).not.toEqual(Object.keys(crossed.slots!))
+    // 첫 슬롯이 가리키는 것은 **트리의 첫 슬롯 노드**다(전개된 id로 대조한다).
+    expect([...expanded!.slots.values()][0]).toBe(expanded!.nodes[0]!.children![0]!.id)
+  })
+
+  it('깊이가 다른 슬롯도 전위 순회 순서로 실린다', () => {
+    // 형제 순서만이 아니라 **깊이가 섞여도** 전위 순회여야 한다 — 사용자가 트리에서
+    // 위에서부터 보는 순서가 그것이다.
+    const deep: ThemePattern = {
+      name: '깊이가 섞인 패턴',
+      slots: { 깊은것: 'text', 얕은것: 'text' },
+      schema: {
+        type: 'Section',
+        children: [
+          { type: 'Card', children: [{ type: 'Text', slot: '깊은것' }] },
+          { type: 'Text', slot: '얕은것' },
+        ],
+      },
+    }
+    const { expanded } = expandPattern(deep, counter())
+    expect([...expanded!.slots.keys()]).toEqual(['깊은것', '얕은것'])
   })
 
   it('한 슬롯 이름을 노드 둘이 쓰면 처음 만난 노드가 실린다', () => {

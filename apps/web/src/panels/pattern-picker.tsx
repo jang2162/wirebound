@@ -19,7 +19,7 @@
  */
 import { useMemo, useState, type ReactElement } from 'react'
 import type { ThemePattern } from '@wirebound/themes'
-import { useProjectTheme } from '../theme/use-project-theme'
+import { useProjectThemeState, type ProjectThemeState } from '../theme/use-project-theme'
 
 /**
  * 패턴이 하나도 없는 테마일 때(D7). **버튼을 회색으로 만들어 두지 않는다** — 시스템 테마
@@ -29,11 +29,25 @@ import { useProjectTheme } from '../theme/use-project-theme'
 const EMPTY_NOTICE = '이 테마에는 패턴이 없습니다'
 
 /**
- * 테마 자체를 아직 손에 넣지 못했을 때. **위 문장과 갈라 적는 것이 D7의 요구다** —
- * `useProjectTheme`은 조회 중과 실패를 **둘 다** `null`로 내므로(그쪽 주석), 한 문장으로
- * 합치면 *"패턴이 없는 테마"*와 *"테마를 못 읽었다"*가 사용자에게 같은 것으로 보인다.
+ * 테마를 손에 넣지 못한 상태들. **넷을 한 문장으로 합치지 않는 것이 D7의 요구다** —
+ * 사용자가 할 일이 각각 다르다.
+ *
+ * **앞 판은 이 자리에 문장 하나(`테마를 아직 읽지 못했습니다`)만 두었고, 리뷰가 그것이
+ * 서버가 답으로 낸 `theme: null`(=테마를 고르지 않았다)까지 덮는다고 판정했다.**
+ * D7이 *"없다는 것과 고장난 것을 사용자가 가른다"*로 세운 것을 **한 층 위에서 되살린**
+ * 형태이고, `theme/use-project-theme.ts`가 이미 적어 둔 것과도 어긋났다.
+ *
+ * **다섯으로 가른 것은 서버가 다섯을 구분해 주기 때문이다** — 지어낸 갈래가 아니다.
+ * 그 표는 `ProjectThemeState`에 있다.
  */
-const UNREAD_NOTICE = '테마를 아직 읽지 못했습니다'
+const NOTICE: Record<Exclude<ProjectThemeState['status'], 'ready'>, string> = {
+  loading: '테마를 읽는 중입니다',
+  failed: '테마를 읽지 못했습니다. 새로고침해 보세요.',
+  unset: '이 프로젝트는 테마를 고르지 않았습니다. 상단에서 테마를 고르세요.',
+  // **`unset`과 갈라 적는다.** 이쪽은 고르기는 골랐는데 그 테마가 서지 않는 것이라
+  // 할 일이 *"고르기"*가 아니라 *"고치기"*다(§6.10의 테마 저작).
+  unresolved: '이 프로젝트의 테마를 해석하지 못했습니다. 테마를 고쳐야 합니다.',
+}
 
 /** 슬롯을 선언하지 않은 패턴의 표시. 빈칸으로 두면 목록이 잘린 것처럼 읽힌다. */
 const NO_SLOTS = '슬롯 없음'
@@ -43,21 +57,23 @@ export function PatternPicker(props: {
   onPick: (key: string, pattern: ThemePattern) => void
   onCancel: () => void
 }): ReactElement {
-  const source = useProjectTheme(props.projectId)
-  const theme = source()
+  // **`useProjectTheme`이 아니라 상태 훅을 쓴다** — `ThemeSource`는 넷을 `null` 하나로
+  // 좁히므로 무엇을 말할지 고를 수 없다.
+  const state = useProjectThemeState(props.projectId)
+  const theme = state.status === 'ready' ? state.theme : null
 
-  // 목록은 테마가 바뀔 때만 다시 만든다. `theme`은 `useProjectTheme`이 값이 그대로면
-  // 같은 참조를 주는 계약을 갖는다(그쪽 "안정 참조가 계약이다").
+  // 목록은 테마가 바뀔 때만 다시 만든다.
   const entries = useMemo(() => Object.entries(theme?.patterns ?? {}), [theme])
   const [picked, setPicked] = useState('')
 
-  if (theme === null) {
-    return <p className="wb-shell-picker-notice">{UNREAD_NOTICE}</p>
-  }
-  if (entries.length === 0) {
+  // **어느 갈래든 같은 상자에 담는다.** 앞 판은 테마가 없을 때만 `<p>` 하나를 냈는데,
+  // 그러면 그 상태에서만 `패턴 취소`가 사라져 사용자가 목록을 닫을 방법이 달라진다.
+  if (state.status !== 'ready' || entries.length === 0) {
     return (
       <div className="wb-shell-picker" role="group" aria-label="패턴 고르기">
-        <p className="wb-shell-picker-notice">{EMPTY_NOTICE}</p>
+        <p className="wb-shell-picker-notice">
+          {state.status === 'ready' ? EMPTY_NOTICE : NOTICE[state.status]}
+        </p>
         <button type="button" className="wb-shell-picker-action" onClick={props.onCancel}>
           패턴 취소
         </button>
