@@ -148,7 +148,19 @@ export type RestoreOutcome =
   | { kind: 'invalid-document'; pageId: string; title: string; issues: ValidationIssue[] }
   | { kind: 'dangling-reference'; references: string[] }
   | { kind: 'missing-author'; authorIds: string[] }
-  | { kind: 'edit-failed'; pageId: string; outcome: Extract<EditOutcome, { ok: false }> }
+  /**
+   * 페이지 문서를 되돌리다 편집 파이프라인이 거절했다. **`title`·`baseSeq`를 함께 든다** —
+   * 라우트가 응답에 *"어느 페이지"*를 실어야 하기 때문이다(D5가 400에서 그렇게 하는 것과
+   * 같은 이유: 프로젝트 전체를 막은 응답이 어느 페이지 때문인지 말하지 않으면 사용자가
+   * 고칠 자리를 찾지 못한다).
+   */
+  | {
+      kind: 'edit-failed'
+      pageId: string
+      title: string
+      baseSeq: number
+      outcome: Extract<EditOutcome, { ok: false }>
+    }
 
 type RestoreFailure = Exclude<RestoreOutcome, { kind: 'restored' }>
 
@@ -303,10 +315,11 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
         // `baseSeq`는 4단계가 읽은 그 페이지의 `head_seq`다. 1단계에서 잠갔으므로 그 사이
         // 바뀔 수 없고, 그래도 바뀌었다면 `stale`이 나 복원 전체가 되돌아간다 —
         // **조용히 덮어쓰지 않는다.**
+        const baseSeq = headSeqByPage.get(step.page.id) ?? 0
         const outcome = await applyEdit(trx, {
           projectId: input.projectId,
           pageId: step.page.id,
-          baseSeq: headSeqByPage.get(step.page.id) ?? 0,
+          baseSeq,
           ops: [
             { op: 'replace', path: '/root', value: step.page.schema.root },
             { op: 'replace', path: '/version', value: step.page.schema.version },
@@ -317,7 +330,13 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
         })
         if (!outcome.ok) {
           // **던진다.** 값으로 돌려주면 트랜잭션이 커밋된다(위 머리말).
-          throw new RestoreAbort({ kind: 'edit-failed', pageId: step.page.id, outcome })
+          throw new RestoreAbort({
+            kind: 'edit-failed',
+            pageId: step.page.id,
+            title: step.page.title,
+            baseSeq,
+            outcome,
+          })
         }
         break
       }

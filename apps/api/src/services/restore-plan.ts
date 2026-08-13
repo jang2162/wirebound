@@ -228,10 +228,40 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
     return { kind: 'layout-mismatch', snapshot: snapshotLayoutIds, current: currentLayoutIds }
   }
 
-  // ── 문서 버전(D5). **살아남는 페이지만 본다** — 지우는 데는 마이그레이션이 필요 없다.
+  // ── 페이지의 문서를 **쓸 것인가**부터 정한다. 아래 버전 검사(D5)와 7·8단계가 이 판정
+  //    하나를 공유한다 — 두 번 판정하면 *"막는 기준"*과 *"쓰는 기준"*이 갈린다.
   const currentPageById = new Map(current.pages.map((page) => [page.id, page]))
+  type PageWrite = 'create' | 'rewrite' | 'skip'
+  const writeByPage = new Map<string, PageWrite>()
+  for (const page of payload.pages) {
+    const stored = currentPageById.get(page.id)
+    if (!stored) {
+      writeByPage.set(page.id, 'create')
+    } else {
+      // **내용으로 비교한다 — `headSeq`가 아니다**(D4).
+      writeByPage.set(page.id, sameDocument(stored.schema, page.schema) ? 'skip' : 'rewrite')
+    }
+  }
+
+  // ── 문서 버전(D5). **문서를 실제로 쓰는 페이지만 본다.**
+  //
+  // 좁힘이 두 칸이다. 첫째, **지워질 페이지는 안 본다** — 지우는 데 마이그레이션이 필요 없다.
+  // 둘째(리뷰가 잡았다), **양쪽 문서가 같아 쓸 것이 없는 페이지도 안 본다.**
+  //
+  // 둘째를 빠뜨렸을 때 무엇이 나빴나: 미지원 버전 페이지가 하나 생긴 프로젝트는 그 페이지가
+  // 스냅샷과 **똑같아서 아무도 그것을 건드리지 않는데도** 모든 복원이 400으로 막혔다. 즉
+  // **그 프로젝트는 어떤 스냅샷으로도 되돌아갈 수 없게** 된다 — §13.1이 걱정하는 것은
+  // *"그 페이지를 복구하려는 순간"*이지 *"그 페이지와 무관한 복원"*이 아니다.
+  //
+  // 그리고 D4가 이미 *"내용이 같으면 아무것도 쓰지 않는다"*이므로, **쓰지 않는 페이지를
+  // 버전 때문에 막는 것은 그 결정과 일관되지 않는다.**
+  //
+  // **여기서 막는 것이 무엇을 대신하는지는 그대로다** — 이 검사가 없어도 파이프라인이
+  // 두 방향 모두 거부한다(`unsupported-version` / 7단계 `invalid`). 이 검사는 그 거절을
+  // **쓰기 전으로 당기고 어느 페이지가 어떤 버전인지 말하게** 할 뿐이다.
   const unsupported: UnsupportedVersionPage[] = []
   for (const page of payload.pages) {
+    if (writeByPage.get(page.id) === 'skip') continue
     if (page.schema.version > CURRENT_DOCUMENT_VERSION) {
       unsupported.push({ id: page.id, title: page.title, version: page.schema.version, source: 'snapshot' })
     }
@@ -306,25 +336,26 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
     summary.menu.deleted += 1
   }
 
-  // 7·8. 페이지 생성과 스키마 쓰기.
+  // 7·8. 페이지 생성과 스키마 쓰기. **판정은 위 `writeByPage`가 이미 했다.**
   for (const page of payload.pages) {
-    const stored = currentPageById.get(page.id)
-    if (!stored) {
-      // 만들어지는 문서는 아무도 검증하지 않는 유일한 쓰기다(머리말) — 여기서 본다.
-      const { errors } = partitionIssues(validatePage(page.schema))
-      if (errors.length > 0) {
-        return { kind: 'invalid-document', pageId: page.id, title: page.title, issues: errors }
+    switch (writeByPage.get(page.id)) {
+      case 'create': {
+        // 만들어지는 문서는 아무도 검증하지 않는 유일한 쓰기다(머리말) — 여기서 본다.
+        const { errors } = partitionIssues(validatePage(page.schema))
+        if (errors.length > 0) {
+          return { kind: 'invalid-document', pageId: page.id, title: page.title, issues: errors }
+        }
+        steps.push({ kind: 'create-page', page })
+        summary.pages.created += 1
+        break
       }
-      steps.push({ kind: 'create-page', page })
-      summary.pages.created += 1
-      continue
-    }
-    // **내용으로 비교한다 — `headSeq`가 아니다**(D4).
-    if (sameDocument(stored.schema, page.schema)) {
-      summary.pages.schemaUnchanged += 1
-    } else {
-      steps.push({ kind: 'write-page-schema', page })
-      summary.pages.schemaChanged += 1
+      case 'rewrite':
+        steps.push({ kind: 'write-page-schema', page })
+        summary.pages.schemaChanged += 1
+        break
+      default:
+        summary.pages.schemaUnchanged += 1
+        break
     }
   }
 

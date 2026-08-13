@@ -18,6 +18,9 @@ API_SUITE = [
     "apps/api/test/snapshot-capture.test.ts",
     "apps/api/test/restore-concurrency.test.ts",
 ]
+
+# 잠금 census는 느리다(라우트마다 실제 커밋 + 대기 창). 잠금을 건드리는 변이에만 붙인다.
+LOCK_SUITE = API_SUITE + ["apps/api/test/restore-lock-census.test.ts"]
 WEB_SUITE = [
     "apps/web/test/routes/snapshots.test.tsx",
     "apps/web/test/projects/project-actions.test.ts",
@@ -83,8 +86,17 @@ MUTATIONS = [
      "      if (false) { // [변이]", "api"),
 
     # ── services/restore.ts
+    # **변이의 find 문자열이 프로덕션 코드와 함께 낡는다.** 리뷰 뒤 `edit-failed`가 필드를
+    # 더 들게 되면서 이 변이가 "심지 못했다"로 나왔다 — 하네스가 조용히 0 사망을 내지 않고
+    # 그렇게 말해 주는 것이 이 스크립트의 성질이다(찾는 문자열이 없으면 보고한다).
     ("M12 applyEdit 실패를 던지지 않고 넘어간다 (D1)", "apps/api/src/services/restore.ts",
-     "          throw new RestoreAbort({ kind: 'edit-failed', pageId: step.page.id, outcome })",
+     """          throw new RestoreAbort({
+            kind: 'edit-failed',
+            pageId: step.page.id,
+            title: step.page.title,
+            baseSeq,
+            outcome,
+          })""",
      "          break // [변이] 던지지 않는다", "api"),
 
     ("M13 안전망 스냅샷을 만들지 않는다 (D2)", "apps/api/src/services/restore.ts",
@@ -116,7 +128,7 @@ MUTATIONS = [
 
     ("M19 프로젝트 잠금 제거 (D8)", "apps/api/src/services/restore.ts",
      "  await lockProjectForRestore(trx, input.projectId)",
-     "  void lockProjectForRestore // [변이] 잠그지 않는다", "api"),
+     "  void lockProjectForRestore // [변이] 잠그지 않는다", "lock"),
 
     # ── repos
     ("M20 페이지를 payload의 headSeq로 되살린다", "apps/api/src/repos/pages.ts",
@@ -155,6 +167,35 @@ MUTATIONS = [
           .join(', ')}`,""",
      """        '지원하지 않는 문서 버전이라 복원할 수 없습니다', // [변이]""", "api"),
 
+    # ── 리뷰 뒤에 더한 것들 (R로 매긴다)
+    ("R1 안전망 태그 앞머리를 바꾼다 (D2 형식)", "apps/api/src/services/restore.ts",
+     "export const SAFETY_TAG_PREFIX = '복원 전 '",
+     "export const SAFETY_TAG_PREFIX = 'before-restore '", "api"),
+
+    ("R2 안전망 태그의 시각을 지금 시각으로", "apps/api/src/services/restore.ts",
+     "  const safetyTag = `${SAFETY_TAG_PREFIX}${now.capturedAt}`",
+     "  const safetyTag = `${SAFETY_TAG_PREFIX}${new Date(0).toISOString()}` // [변이]", "api"),
+
+    ("R3 D5 좁힘을 되돌린다 (쓰지 않는 페이지도 막는다)", "apps/api/src/services/restore-plan.ts",
+     "    if (writeByPage.get(page.id) === 'skip') continue",
+     "    // [변이] 좁힘 제거", "api"),
+
+    ("R4 D5 좁힘을 지나치게 넓힌다 (만들 페이지도 안 막는다)", "apps/api/src/services/restore-plan.ts",
+     "    if (writeByPage.get(page.id) === 'skip') continue",
+     "    if (writeByPage.get(page.id) !== 'rewrite') continue // [변이]", "api"),
+
+    ("R5 edit-failed가 페이지를 안 싣는다", "apps/api/src/routes/snapshots.ts",
+     "      return new ApiError(mapped.code, `${outcome.title}: ${mapped.message}`, mapped.issues)",
+     "      return mapped // [변이]", "api"),
+
+    ("R6 잠금에서 projects 행을 뺀다 (census)", "apps/api/src/repos/snapshots.ts",
+     "  await trx.selectFrom('projects').select('id').where('id', '=', projectId).forUpdate().execute()",
+     "  // [변이] projects 행을 잠그지 않는다", "lock"),
+
+    ("R7 잠금에서 코멘트 표를 뺀다 (census)", "apps/api/src/repos/snapshots.ts",
+     "  await lockProjectComments(trx, projectId)",
+     "  void lockProjectComments // [변이]", "lock"),
+
     # ── web
     ("M25 확인 단계를 건너뛴다 (D11)", "apps/web/src/routes/snapshots.tsx",
      "                      onClick={() => setConfirming(snapshot.id)}",
@@ -188,9 +229,10 @@ MUTATIONS = [
 
 
 def run_suite(kind):
-    files = API_SUITE if kind == "api" else WEB_SUITE
+    files = {"api": API_SUITE, "lock": LOCK_SUITE, "web": WEB_SUITE}[kind]
+    project = "web" if kind == "web" else "api"
     proc = subprocess.run(
-        ["pnpm", "vitest", "run", *files, "--project", kind, "--reporter", "dot"],
+        ["pnpm", "vitest", "run", *files, "--project", project, "--reporter", "dot"],
         cwd=ROOT, capture_output=True, text=True,
     )
     out = proc.stdout + proc.stderr

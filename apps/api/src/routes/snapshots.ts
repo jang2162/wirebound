@@ -72,7 +72,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
-import { badRequest, conflict, notFound, unauthenticated, validationFailed } from '../errors'
+import { ApiError, badRequest, conflict, notFound, unauthenticated, validationFailed } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
 import {
@@ -315,7 +315,16 @@ function restoreOutcomeToApiError(outcome: Exclude<RestoreOutcome, { kind: 'rest
       return badRequest(`스냅샷 안의 참조가 끊겨 있습니다: ${outcome.references.join(', ')}`)
     case 'invalid-document':
       return validationFailed(`복원할 페이지의 스키마 검증에 실패했습니다: ${outcome.title}`, outcome.issues)
-    case 'edit-failed':
-      return editOutcomeToApiError(outcome.outcome, 0)
+    case 'edit-failed': {
+      // **파이프라인의 표를 그대로 쓰고 앞에 페이지만 붙인다**(`http/edit-outcome.ts` 하나가
+      // 상태 코드를 소유한다 — 여기서 다시 매핑하면 두 벌이 된다).
+      //
+      // **앞 판은 `pageId`를 들고도 버렸다.** 갱신되는 페이지에서 파이프라인이 거절하면
+      // 응답이 *"스키마 검증에 실패했습니다"*라고만 말해, 프로젝트 전체가 막혔는데 **어느
+      // 페이지 때문인지 알 수 없었다.** D5가 400에서 어느 페이지가 어떤 버전인지 싣는 것과
+      // 같은 이유로 여기도 싣는다.
+      const mapped = editOutcomeToApiError(outcome.outcome, outcome.baseSeq)
+      return new ApiError(mapped.code, `${outcome.title}: ${mapped.message}`, mapped.issues)
+    }
   }
 }

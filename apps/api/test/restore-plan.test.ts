@@ -312,6 +312,83 @@ describe('미지원 문서 버전 — D5(§13.1 판정)', () => {
 
     expect(planRestore(p, c).kind).toBe('plan')
   })
+
+  /**
+   * **좁힘의 둘째 칸(리뷰가 잡았다).** 양쪽 문서가 **같아서 쓸 것이 없는** 페이지는 막지
+   * 않는다. 막으면 그런 페이지가 하나 생긴 프로젝트는 **어떤 스냅샷으로도 되돌아갈 수 없게**
+   * 된다 — 그 페이지와 무관한 복원까지 전부 400이다.
+   *
+   * D4가 이미 *"내용이 같으면 아무것도 쓰지 않는다"*이므로, 쓰지 않는 페이지를 버전 때문에
+   * 막는 것은 그 결정과 일관되지 않는다.
+   */
+  it('양쪽이 같아 쓸 것이 없으면 미지원 버전이어도 막지 않는다', () => {
+    const same = doc('x', 999)
+    const p = payload({ menu: [menuNode(MENU_A)], pages: [page(PAGE_A, { schemaVersion: 999, schema: same })] })
+    const c = current({ menu: [menuNode(MENU_A)], pages: [page(PAGE_A, { schemaVersion: 999, schema: same })] })
+
+    const outcome = planRestore(p, c)
+    expect(outcome.kind).toBe('plan')
+    if (outcome.kind !== 'plan') return
+    // **쓰지 않는다** — 그대로인 페이지로 세어진다.
+    expect(kinds(outcome.plan.steps)).toEqual([])
+    expect(outcome.plan.summary.pages.schemaUnchanged).toBe(1)
+  })
+
+  /**
+   * **좁힘이 다른 갈래를 흔들지 않는다 — 같은 판에서 내용만 달라지면 다시 막힌다.**
+   * 이것이 없으면 위 케이스가 *"999면 늘 통과한다"*로도 통과한다.
+   */
+  it('같은 999라도 내용이 다르면 막는다 — 그때는 쓰기 때문이다', () => {
+    const p = payload({ menu: [menuNode(MENU_A)], pages: [page(PAGE_A, { schemaVersion: 999, schema: doc('그때', 999) })] })
+    const c = current({ menu: [menuNode(MENU_A)], pages: [page(PAGE_A, { schemaVersion: 999, schema: doc('지금', 999) })] })
+
+    const outcome = planRestore(p, c)
+    expect(outcome.kind).toBe('unsupported-version')
+    if (outcome.kind !== 'unsupported-version') return
+    // 두 방향이 **함께** 잡힌다 — 저장된 것도 999이고 payload의 것도 999다.
+    expect(outcome.pages.map((entry) => entry.source).sort()).toEqual(['snapshot', 'stored'])
+  })
+
+  /**
+   * **만들어지는 페이지는 여전히 막는다.** 그것은 쓰기이고, 999 문서를 새로 심으면
+   * **열 수 없는 페이지를 복원이 만들어 내는** 셈이 된다.
+   */
+  it('되살아날 페이지가 미지원 버전이면 막는다 — 그것은 쓰기다', () => {
+    const p = payload({ menu: [menuNode(MENU_A)], pages: [page(PAGE_A, { schemaVersion: 999, schema: doc('x', 999) })] })
+
+    const outcome = planRestore(p, current({ menu: [menuNode(MENU_A)] }))
+    expect(outcome.kind).toBe('unsupported-version')
+    if (outcome.kind !== 'unsupported-version') return
+    expect(outcome.pages.map((entry) => entry.source)).toEqual(['snapshot'])
+  })
+
+  /**
+   * **좁힘이 페이지 단위인지 프로젝트 단위인지 가른다.** 건드리지 않는 999 페이지가 하나
+   * 있어도, **다른 페이지의 복원은 그대로 일어나야 한다** — 그것이 이 좁힘의 목적이다.
+   */
+  it('건드리지 않는 999 페이지가 있어도 다른 페이지는 되돌아간다', () => {
+    const frozen = doc('그대로', 999)
+    const p = payload({
+      menu: [menuNode(MENU_A)],
+      pages: [
+        page(PAGE_A, { schemaVersion: 999, schema: frozen }),
+        page(PAGE_B, { schema: doc('그때') }),
+      ],
+    })
+    const c = current({
+      menu: [menuNode(MENU_A)],
+      pages: [
+        page(PAGE_A, { schemaVersion: 999, schema: frozen }),
+        page(PAGE_B, { schema: doc('지금') }),
+      ],
+    })
+
+    const outcome = planRestore(p, c)
+    expect(outcome.kind).toBe('plan')
+    if (outcome.kind !== 'plan') return
+    expect(kinds(outcome.plan.steps)).toEqual(['write-page-schema'])
+    expect(outcome.plan.summary.pages).toMatchObject({ schemaChanged: 1, schemaUnchanged: 1 })
+  })
 })
 
 describe('payload 자체가 어긋나 있으면 쓰기 전에 막는다', () => {

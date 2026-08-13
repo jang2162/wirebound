@@ -137,9 +137,42 @@ describe('아무것도 바뀌지 않았으면 아무것도 쓰지 않는다 — 
 
       const body = (await restore(ctx, fx, id)).json() as RestoreBody
 
-      expect(body.safetySnapshot.tag.startsWith(SAFETY_TAG_PREFIX)).toBe(true)
       const rows = await listSnapshots(ctx.db, fx.project.id)
       expect(rows.map((row) => row.tag).sort()).toEqual([body.safetySnapshot.tag, 'v1'].sort())
+    })
+  })
+
+  /**
+   * **안전망 태그의 형식을 고정한다.**
+   *
+   * 앞 판은 이 자리를 `tag.startsWith(SAFETY_TAG_PREFIX)`로 쟀고 **앞머리를 바꾸는 변이가
+   * 0 사망이었다** — 케이스가 구현과 같은 상수를 읽어 변이가 양쪽을 함께 움직였다. M14
+   * (`restoreActorLabel`)와 **같은 부류가 하나 더 남아 있던 것**이고, 리뷰가 잡았다.
+   *
+   * 그래서 형식을 **리터럴로** 적는다. 그 명제 자체는 옳다 — 화면이 *"되돌리려면 이것"*을
+   * 가리키려면(D2·D11) 사람이 목록에서 그 줄을 알아볼 수 있어야 하고, 그러려면 앞머리가
+   * 고정돼 있어야 한다.
+   */
+  it('안전망 태그의 형식이 고정돼 있다 — `복원 전 <capturedAt>`', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const id = await snapshot(ctx, fx, 'v1')
+
+      const body = (await restore(ctx, fx, id)).json() as RestoreBody
+
+      // 앞머리와 시각 형식을 **리터럴로** 못박는다. 상수를 읽지 않는다.
+      expect(body.safetySnapshot.tag).toMatch(/^복원 전 \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      // 상수와 케이스가 같은 것을 뜻하는지도 본다 — 둘이 갈리면 여기가 죽는다.
+      expect(SAFETY_TAG_PREFIX).toBe('복원 전 ')
+
+      // **그 시각이 안전망 payload의 `capturedAt`이다** — 아무 시각이 아니라 그 스냅샷이
+      // *"내용을 마지막으로 확인한 순간"*이어야 목록에서 그 줄이 무엇인지 읽힌다.
+      const saved = await ctx.db
+        .selectFrom('snapshots')
+        .select(['tag', 'payload'])
+        .where('id', '=', body.safetySnapshot.id)
+        .executeTakeFirstOrThrow()
+      expect(saved.tag).toBe(`복원 전 ${(saved.payload as { capturedAt: string }).capturedAt}`)
     })
   })
 
@@ -724,6 +757,74 @@ describe('막는 갈래 — 오류 표', () => {
     })
   })
 
+  /**
+   * **좁힘의 둘째 칸을 DB에서 잰다**(계획 케이스가 값으로 잰 것을 라우트로 다시 잰다).
+   *
+   * 저장된 문서와 payload의 문서가 **둘 다 999이고 내용이 같다** — 복원이 그 페이지에
+   * 아무것도 쓰지 않으므로 막지 않는다. 막으면 그 프로젝트는 **어떤 복원도 못 하게 된다.**
+   */
+  it('양쪽이 같아 쓸 것이 없는 999 페이지는 복원을 막지 않는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const id = await snapshot(ctx, fx, 'v1')
+
+      // 저장된 문서와 payload의 문서를 **함께** 999로 심는다 — 둘이 같은 상태를 만든다.
+      await ctx.db
+        .updateTable('pages')
+        .set({ schema_version: 999, schema: sql`jsonb_set(schema, '{version}', '999')` })
+        .where('id', '=', fx.page.id)
+        .execute()
+      await ctx.db
+        .updateTable('snapshots')
+        .set({
+          payload: sql`jsonb_set(jsonb_set(payload, '{pages,0,schema,version}', '999'), '{pages,0,schemaVersion}', '999')`,
+        })
+        .where('id', '=', id)
+        .execute()
+
+      const res = await restore(ctx, fx, id)
+
+      expect(res.statusCode).toBe(200)
+      const body = res.json() as RestoreBody
+      expect(body.summary.pages.schemaUnchanged).toBe(1)
+      expect(body.summary.pages.schemaChanged).toBe(0)
+      // 그 페이지는 여전히 999다 — 복원이 고쳐 주지 않는다. 다만 **막지도 않는다.**
+      const page = await readPage(ctx, fx.page.id)
+      expect((page?.schema as PageDocument).version).toBe(999)
+    })
+  })
+
+  /**
+   * **좁힘이 다른 갈래를 흔들지 않는다.** 같은 판에서 payload만 되돌려 내용이 갈리게 하면
+   * 다시 400이다 — 그때는 복원이 그 페이지를 **쓰기** 때문이다.
+   */
+  it('같은 999라도 복원이 그 페이지를 쓰면 다시 막는다 — 음성 대조', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await editPage(ctx, fx, 'n_sec1')
+      const id = await snapshot(ctx, fx, 'v1')
+      await editPage(ctx, fx, 'n_sec2')
+
+      await ctx.db
+        .updateTable('pages')
+        .set({ schema_version: 999, schema: sql`jsonb_set(schema, '{version}', '999')` })
+        .where('id', '=', fx.page.id)
+        .execute()
+      await ctx.db
+        .updateTable('snapshots')
+        .set({
+          payload: sql`jsonb_set(jsonb_set(payload, '{pages,0,schema,version}', '999'), '{pages,0,schemaVersion}', '999')`,
+        })
+        .where('id', '=', id)
+        .execute()
+
+      const res = await restore(ctx, fx, id)
+
+      expect(res.statusCode).toBe(400)
+      expect(res.body).toContain('사용자 목록')
+    })
+  })
+
   it('payload 안의 참조가 끊겨 있으면 400이다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -800,6 +901,9 @@ describe('부분 성공을 만들지 않는다 — D1', () => {
       const res = await restore(ctx, fx, id)
 
       expect(res.statusCode).toBe(422)
+      // **어느 페이지인지 말한다.** 앞 판은 `pageId`를 들고도 문장에서 버려, 프로젝트 전체가
+      // 막혔는데 어느 페이지 때문인지 알 수 없었다(리뷰가 잡았다).
+      expect(res.body).toContain('사용자 목록')
       // **안전망 스냅샷이 남지 않았다** — 그것이 첫 쓰기였는데 트랜잭션이 되돌렸다.
       const after = await listSnapshots(ctx.db, fx.project.id)
       expect(after.map((row) => row.tag)).toEqual(before.map((row) => row.tag))

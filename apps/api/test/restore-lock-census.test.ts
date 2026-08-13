@@ -1,0 +1,582 @@
+/**
+ * ⚠️ 이 파일은 테스트 DB에 **실제로 커밋한다.** `restore-concurrency.test.ts`·
+ * `snapshots-concurrency.test.ts`와 같은 부류다.
+ *
+ * ---
+ *
+ * # 왜 이 파일이 생겼나 — **숫자가 맞아 보이는 채로 항목이 숨었다**
+ *
+ * P6-2 보고서가 D8의 잠금을 *"오늘 쓰기 라우트 **아홉**"*에 대해 쟀다고 적었다. **그 아홉은
+ * census가 아니었다** — 손으로 고른 아홉이었고, 리뷰가 세어 보니 실제로는 그보다 많았다.
+ * 빠진 것들(`PUT .../schema` · `PATCH .../ops` · `DELETE .../pages` · `renumber` ·
+ * `PUT /:projectId/theme` · `POST .../snapshots`)은 재 보니 **전부 막혀서** 결론은 오히려
+ * 강해졌지만, 그것은 운이다. **분모를 손으로 적으면 빠진 항목이 결과를 바꿔도 아무도 모른다.**
+ *
+ * 이 저장소가 같은 부류를 반복해서 만났다 — `permission-matrix.test.ts`의 *"표가 라우트를
+ * 하나도 빠뜨리지 않는다"*가 그 대응이었고(`GET /:projectId/theme`가 표에 빠져 가드를 아예
+ * 없애도 0건이 죽었다), 여기가 그 두 번째다. **그래서 분모를 소스에서 만든다.**
+ *
+ * ---
+ *
+ * # 세는 단위 — 한 문장으로 못박는다
+ *
+ * > **이 표가 세는 것은 `apps/api/src/routes/`에 선언된 라우트 중 `projectGuard`가 걸린
+ * > 비-`GET` 라우트 하나당 한 줄이다.** 한 라우트가 **본문에 따라 잠금과 다르게 만나면**
+ * > 그 갈래마다 한 줄을 더 둔다. **본문뿐 아니라 대상의 상태도 갈래를 만든다** — 재서 알았다:
+ * > `POST .../menu`는 `parentId`가 `null`이냐로 갈리고, `renumber`는 **바꿀 번호가 있느냐**로
+ * > 갈린다(없으면 `ops.length === 0`에서 조기 반환해 **아무것도 쓰지 않고 아무것도 잠그지
+ * > 않는다**).
+ *
+ * `projectGuard`가 없는 비-`GET` 라우트(`/signup`·`/login`·`/logout`·`POST /` 프로젝트
+ * 생성)는 **프로젝트 자원을 만지지 않으므로** 이 질문의 대상이 아니다. `GET`은 잠금과
+ * 무관하다(`FOR UPDATE`는 읽기를 막지 않는다).
+ *
+ * **아래 `분모를 소스에서 만든다` 케이스가 그 문장을 실행으로 지킨다.** 새 쓰기 라우트가
+ * 생기면 이 파일이 **먼저 죽는다.**
+ *
+ * ---
+ *
+ * # 재는 방식
+ *
+ * 한 커넥션이 **`lockProjectForRestore`를 그대로 불러** 잠금을 쥔 채, 다른 커넥션에서 그
+ * 라우트를 쏘고 `WAIT_MS` 안에 끝나는지 본다. 잠금 SQL을 이 파일에 베끼지 않는다 — 베끼면
+ * 사본이 진짜 잠금과 갈린다.
+ *
+ * **판정마다 대조가 둘 붙는다:**
+ *
+ * | 대조 | 무엇을 배제하나 |
+ * |---|---|
+ * | 잠금을 놓은 **뒤** 그 요청이 2xx로 끝나는가 | *"막힌 게 아니라 원래 실패하는 요청"* |
+ * | 잠금 **없이** 같은 요청이 창 안에 끝나는가 | *"막힌 게 아니라 그냥 느리다"* |
+ *
+ * 앞 판에서 이 둘 중 하나가 없어 **거짓 두 줄**이 나올 뻔했다 — 코멘트 수정·삭제가
+ * *"안 막힌다"*로 나왔는데 실은 픽스처가 `commentId`를 잘못 읽어 400이던 것이었다.
+ */
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { sql } from 'kysely'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { FastifyInstance } from 'fastify'
+import { buildApp } from '../src/app'
+import { withTransaction } from '../src/db/tx'
+import { lockProjectForRestore } from '../src/repos/snapshots'
+import {
+  createMenuNode,
+  createPage,
+  createProject,
+  getTestDb,
+  signup,
+  testConfig,
+  type TestContext,
+} from './helpers'
+
+const db = getTestDb()
+
+async function reset(): Promise<void> {
+  await db.deleteFrom('projects').execute()
+  await db.deleteFrom('users').execute()
+  // 이 파일이 만드는 프로젝트 테마는 프로젝트와 함께 CASCADE로 간다(0006).
+}
+
+beforeEach(reset)
+afterEach(reset)
+
+/** 잠금 판정 창. 아래 *"잠금이 없으면 창 안에 끝난다"*가 이 창이 넉넉한지 함께 잰다. */
+const WAIT_MS = 700
+
+interface Ids {
+  projectId: string
+  menuId: string
+  spareMenuId: string
+  pageId: string
+  sparePageId: string
+  /** 문서의 `marker`가 어긋나 있는 페이지 — `renumber`가 실제로 쓰는 판을 만든다. */
+  misnumberedPageId: string
+  snapshotId: string
+  nodeId: string
+  commentId: string
+  themeId: string
+  otherUserId: string
+  memberUserId: string
+  cookie: { wb_session: string }
+}
+
+interface Probe {
+  /** 소스에서 뽑은 키(`METHOD /경로`)와 맞대는 값. 갈래가 둘인 라우트는 같은 키를 공유한다. */
+  route: string
+  label: string
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE'
+  url: (ids: Ids) => string
+  payload?: (ids: Ids) => Record<string, unknown>
+  /** 복원이 그 행을 쓰는가. `false`면 아래 "복원이 만지지 않는 자원" 절의 대상이다. */
+  restoreWrites: boolean
+  /** 기대: 잠금이 이 요청을 막는가. */
+  blocked: boolean
+}
+
+/**
+ * **표 본체.** 위 "세는 단위" 문장이 정하는 모집단 전부가 여기 있어야 한다 — 아래
+ * `분모를 소스에서 만든다`가 그것을 센다.
+ */
+const PROBES: Probe[] = [
+  // ── 복원이 쓰는 다섯 자원 ────────────────────────────────────────────────
+  {
+    route: 'POST /:projectId/menu',
+    label: '메뉴 생성 (parentId 없음) — 잠긴 어떤 행도 참조하지 않는 유일한 삽입',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/menu`,
+    payload: () => ({ title: '끼어든 메뉴' }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'POST /:projectId/menu',
+    label: '메뉴 생성 (parentId 있음) — 잠긴 부모 행을 FK로 참조한다',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/menu`,
+    payload: (ids) => ({ title: '끼어든 하위 메뉴', parentId: ids.menuId }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'PATCH /:projectId/menu/:nodeId',
+    label: '메뉴 수정',
+    method: 'PATCH',
+    url: (ids) => `/api/projects/${ids.projectId}/menu/${ids.menuId}`,
+    payload: () => ({ title: '끼어든 제목' }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'DELETE /:projectId/menu/:nodeId',
+    label: '메뉴 삭제',
+    method: 'DELETE',
+    url: (ids) => `/api/projects/${ids.projectId}/menu/${ids.spareMenuId}`,
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'POST /:projectId/pages',
+    label: '페이지 생성',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/pages`,
+    payload: (ids) => ({ menuNodeId: ids.menuId, title: '끼어든 페이지' }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'PATCH /:projectId/pages/:pageId',
+    label: '페이지 메타 수정',
+    method: 'PATCH',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.pageId}`,
+    payload: () => ({ title: '끼어든 페이지 제목' }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'DELETE /:projectId/pages/:pageId',
+    label: '페이지 삭제 — revisions·comments가 CASCADE로 함께 간다',
+    method: 'DELETE',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.sparePageId}`,
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    // **앞 판의 표에서 빠져 있던 여섯 중 하나.** 복원이 페이지 문서를 되돌릴 때 타는
+    // 바로 그 경로이므로, 빠져 있었다는 것 자체가 가장 아픈 자리였다.
+    route: 'PUT /:projectId/pages/:pageId/schema',
+    label: '페이지 스키마 저장 — 복원이 되돌릴 때 타는 그 경로다',
+    method: 'PUT',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.pageId}/schema`,
+    payload: (ids) => ({
+      schema: { version: 1, root: { id: ids.nodeId, type: 'Page', children: [] } },
+    }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'PATCH /:projectId/pages/:pageId/ops',
+    label: '페이지 ops 편집',
+    method: 'PATCH',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.pageId}/ops`,
+    // 빈 ops다 — 재는 것은 잠금이지 편집 내용이 아니다(`permission-matrix.test.ts`와 같은 판단).
+    payload: () => ({ baseSeq: 1, ops: [] }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'POST /:projectId/pages/:pageId/comments',
+    label: '코멘트 작성',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.pageId}/comments`,
+    payload: (ids) => ({ nodeId: ids.nodeId, body: '끼어든 코멘트' }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'PATCH /:projectId/pages/:pageId/comments/:commentId',
+    label: '코멘트 수정',
+    method: 'PATCH',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.pageId}/comments/${ids.commentId}`,
+    payload: () => ({ body: '끼어든 본문' }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'DELETE /:projectId/pages/:pageId/comments/:commentId',
+    label: '코멘트 삭제',
+    method: 'DELETE',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.pageId}/comments/${ids.commentId}`,
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    // **바꿀 번호가 없으면 `ops.length === 0`에서 조기 반환한다** — `applyEdit`을 아예 부르지
+    // 않으므로 잠금도 안 잡는다. 재서 알았다(기대는 *"막힌다"*였고 틀렸다).
+    // **그래도 안전하다:** 쓰지 않는 요청이 통과하는 것은 복원이 되돌릴 것을 만들지 않는다.
+    route: 'POST /:projectId/pages/:pageId/comments/renumber',
+    label: '코멘트 재번호 (바꿀 번호가 없다 — 아무것도 쓰지 않는다)',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.pageId}/comments/renumber`,
+    restoreWrites: false,
+    blocked: false,
+  },
+  {
+    route: 'POST /:projectId/pages/:pageId/comments/renumber',
+    label: '코멘트 재번호 (바꿀 번호가 있다 — 문서를 쓴다)',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/${ids.misnumberedPageId}/comments/renumber`,
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    // **`layouts.theme_id`를 쓰는 유일한 라우트이고, 복원이 되돌리는 바로 그 컬럼이다**(D6).
+    // 앞 판의 표에 없었다 — *"테마 라우트"*로 묶여 *"복원이 안 건드리는 것"* 쪽으로 새어 있었다.
+    route: 'PUT /:projectId/theme',
+    label: '프로젝트 테마 고르기 — 복원이 되돌리는 layouts.theme_id를 쓴다',
+    method: 'PUT',
+    url: (ids) => `/api/projects/${ids.projectId}/theme`,
+    payload: (ids) => ({ themeId: ids.themeId }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'POST /:projectId/snapshots',
+    label: '스냅샷 생성 — 복원이 안전망을 넣는 그 표다',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/snapshots`,
+    payload: () => ({ tag: '끼어든 스냅샷' }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
+    route: 'POST /:projectId/snapshots/:snapshotId/restore',
+    label: '복원 자신 — 두 복원이 겹치면 뒤엣것이 기다린다',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/snapshots/${ids.snapshotId}/restore`,
+    // **진짜 스냅샷이어야 한다.** 처음엔 없는 id를 줬는데(잠금이 404보다 먼저 걸리므로
+    // 판정은 옳게 나왔다) **놓은 뒤 2xx** 대조가 404로 죽었다 — 그 대조가 없었다면 이 줄은
+    // 초록인 채로 *"막힌다"*를 잘못된 근거로 주장했을 것이다.
+    restoreWrites: true,
+    blocked: true,
+  },
+
+  // ── 복원이 **쓰지 않는** 자원 — 막히지만, 그것은 부수 효과다 ────────────────
+  {
+    route: 'PATCH /:projectId',
+    label: '프로젝트 수정 — 복원이 되돌리지 않는다(payload에 프로젝트 메타가 없다)',
+    method: 'PATCH',
+    url: (ids) => `/api/projects/${ids.projectId}`,
+    payload: () => ({ name: '끼어든 이름' }),
+    restoreWrites: false,
+    blocked: true,
+  },
+  {
+    route: 'DELETE /:projectId',
+    label: '프로젝트 삭제',
+    method: 'DELETE',
+    url: (ids) => `/api/projects/${ids.projectId}`,
+    restoreWrites: false,
+    blocked: true,
+  },
+  {
+    route: 'POST /:projectId/members',
+    label: '멤버 초대',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/members`,
+    payload: () => ({ email: 'census-invitee@example.com', role: 'viewer' }),
+    restoreWrites: false,
+    blocked: true,
+  },
+  {
+    route: 'PATCH /:projectId/members/:userId',
+    label: '멤버 수정 — `project_members`는 `projects`를 참조하지만 **UPDATE는 부모 행을 안 잡는다**',
+    method: 'PATCH',
+    url: (ids) => `/api/projects/${ids.projectId}/members/${ids.memberUserId}`,
+    payload: () => ({ role: 'editor' }),
+    restoreWrites: false,
+    blocked: false,
+  },
+  {
+    route: 'DELETE /:projectId/members/:userId',
+    label: '멤버 삭제 — 같은 이유로 안 막힌다',
+    method: 'DELETE',
+    url: (ids) => `/api/projects/${ids.projectId}/members/${ids.memberUserId}`,
+    restoreWrites: false,
+    blocked: false,
+  },
+  {
+    // **막힌다 — 기대는 "안 막힌다"였고 틀렸다.** `themes.project_id`가 `projects(id)`를
+    // 참조하므로 삽입이 그 행에 `FOR KEY SHARE`를 걸고, 그것이 `FOR UPDATE`와 충돌한다.
+    // **복원이 테마 행을 쓰지 않는데도 막힌다** — 부수 효과다(아래 `표가 스스로 세는 것`).
+    route: 'POST /:projectId/themes',
+    label: '테마 생성 — 복원은 테마 행을 쓰지 않지만 `project_id` FK 때문에 막힌다',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/themes`,
+    payload: () => ({ theme: { meta: { id: 'census-new', name: '끼어든 테마', version: '1.0.0' } } }),
+    restoreWrites: false,
+    blocked: true,
+  },
+  {
+    route: 'PUT /:projectId/themes/:themeId',
+    label: '테마 수정 — 복원이 도는 동안 고치면 **그 편집이 이긴다**',
+    method: 'PUT',
+    url: (ids) => `/api/projects/${ids.projectId}/themes/${ids.themeId}`,
+    payload: () => ({ theme: { meta: { id: 'census-target', name: '바뀐 테마', version: '2.0.0' } } }),
+    restoreWrites: false,
+    blocked: false,
+  },
+  {
+    route: 'DELETE /:projectId/themes/:themeId',
+    label: '테마 삭제',
+    method: 'DELETE',
+    url: (ids) => `/api/projects/${ids.projectId}/themes/${ids.themeId}`,
+    restoreWrites: false,
+    blocked: false,
+  },
+]
+
+/** `src/routes/`의 원문. 분모를 여기서 만든다(`permission-matrix.test.ts`와 같은 배치). */
+const ROUTES_DIR = fileURLToPath(new URL('../src/routes', import.meta.url))
+
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+}
+
+/** 소스에 선언된 **`projectGuard`가 걸린 비-`GET`** 라우트 전부(위 "세는 단위"). */
+function declaredWriteRoutes(): string[] {
+  const found: string[] = []
+  for (const name of readdirSync(ROUTES_DIR).filter((file) => file.endsWith('.ts'))) {
+    const source = stripComments(readFileSync(join(ROUTES_DIR, name), 'utf8'))
+    const pattern = /app\.(post|patch|put|delete)\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\('\w+'\)/g
+    for (const match of source.matchAll(pattern)) {
+      found.push(`${match[1]!.toUpperCase()} ${match[2]}`)
+    }
+  }
+  return found
+}
+
+describe('분모를 소스에서 만든다', () => {
+  it('훑을 소스를 실제로 읽는다', () => {
+    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**(이 저장소가 세 번 겪은 사고다).
+    expect(readdirSync(ROUTES_DIR).filter((file) => file.endsWith('.ts')).length).toBeGreaterThan(5)
+    expect(declaredWriteRoutes().length).toBeGreaterThan(15)
+  })
+
+  it('쓰기 라우트가 하나도 빠지지 않았다 — 이 파일이 생긴 이유다', () => {
+    const covered = new Set(PROBES.map((probe) => probe.route))
+    const missing = [...new Set(declaredWriteRoutes())].filter((route) => !covered.has(route))
+
+    expect(missing).toEqual([])
+  })
+
+  it('표에 소스에 없는 라우트를 적어 두지 않았다 — 반대편', () => {
+    const declared = new Set(declaredWriteRoutes())
+    const extra = [...new Set(PROBES.map((probe) => probe.route))].filter((route) => !declared.has(route))
+
+    expect(extra).toEqual([])
+  })
+})
+
+async function fixture(app: FastifyInstance): Promise<Ids> {
+  await reset()
+  const ctx: TestContext = { app, db }
+  const owner = await signup(ctx)
+  const project = await createProject(ctx, owner.cookie)
+  const menu = await createMenuNode(ctx, owner.cookie, project.id, { title: '설정' })
+  const spareMenu = await createMenuNode(ctx, owner.cookie, project.id, { title: '지울 메뉴' })
+  const page = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '사용자 목록' })
+  const sparePage = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '지울 페이지' })
+  const nodeId = (page.schema as { root: { id: string } }).root.id
+
+  const commentRes = await app.inject({
+    method: 'POST',
+    url: `/api/projects/${project.id}/pages/${page.id}/comments`,
+    cookies: owner.cookie,
+    payload: { nodeId, body: '기존 코멘트' },
+  })
+  if (commentRes.statusCode !== 201) throw new Error(`코멘트 픽스처 실패: ${commentRes.body}`)
+
+  // 시스템 테마는 쓸 수 없으므로(§6.10) 프로젝트 테마를 하나 만든다.
+  const themeRes = await app.inject({
+    method: 'POST',
+    url: `/api/projects/${project.id}/themes`,
+    cookies: owner.cookie,
+    payload: { theme: { meta: { id: 'census-target', name: '대상 테마', version: '1.0.0' } } },
+  })
+  if (themeRes.statusCode !== 201) throw new Error(`테마 픽스처 실패: ${themeRes.body}`)
+
+  const invitee = await signup(ctx, { email: 'census-invitee@example.com' })
+  const member = await signup(ctx)
+  await db
+    .insertInto('project_members')
+    .values({ project_id: project.id, user_id: member.user.id, role: 'viewer' })
+    .execute()
+
+  // **재번호가 실제로 쓰는 판.** 문서의 `marker`를 어긋난 값으로 심는다 — 프로덕션을
+  // 고치지 않고 상태만 만든다(`snapshots.test.ts`가 raw SQL로 같은 일을 한다).
+  const misnumbered = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '번호가 어긋난 페이지' })
+  const misNodeId = (misnumbered.schema as { root: { id: string } }).root.id
+  await db
+    .updateTable('pages')
+    .set({ schema: sql`jsonb_set(schema, '{root,marker}', '5')` })
+    .where('id', '=', misnumbered.id)
+    .execute()
+
+  const snapshotRes = await app.inject({
+    method: 'POST',
+    url: `/api/projects/${project.id}/snapshots`,
+    cookies: owner.cookie,
+    payload: { tag: '복원 대상' },
+  })
+  if (snapshotRes.statusCode !== 201) throw new Error(`스냅샷 픽스처 실패: ${snapshotRes.body}`)
+
+  return {
+    projectId: project.id,
+    menuId: menu.id,
+    spareMenuId: spareMenu.id,
+    pageId: page.id,
+    sparePageId: sparePage.id,
+    misnumberedPageId: misnumbered.id,
+    snapshotId: (snapshotRes.json() as { id: string }).id,
+    nodeId,
+    commentId: (commentRes.json() as { comment: { id: string } }).comment.id,
+    themeId: (themeRes.json() as { id: string }).id,
+    otherUserId: invitee.user.id,
+    memberUserId: member.user.id,
+    cookie: owner.cookie,
+  }
+}
+
+function fire(app: FastifyInstance, probe: Probe, ids: Ids) {
+  let settled = false
+  const promise = app
+    .inject({
+      method: probe.method,
+      url: probe.url(ids),
+      cookies: ids.cookie,
+      payload: probe.payload ? (probe.payload(ids) as never) : undefined,
+    })
+    .then((res) => {
+      settled = true
+      return { statusCode: res.statusCode, body: res.body }
+    })
+  return { done: () => settled, promise }
+}
+
+describe('복원 잠금이 무엇을 막는가 (D8)', () => {
+  it('잠금이 없으면 표의 모든 요청이 창 안에 끝난다 — 음성 대조', async () => {
+    const app = await buildApp({ db, config: testConfig() })
+    const slow: string[] = []
+    try {
+      for (const probe of PROBES) {
+        const ids = await fixture(app)
+        const request = fire(app, probe, ids)
+        await new Promise((resolve) => setTimeout(resolve, WAIT_MS))
+        if (!request.done()) slow.push(probe.label)
+        await request.promise
+      }
+    } finally {
+      await app.close()
+    }
+    // 이것이 없으면 아래의 *"막힌다"*가 *"그냥 느리다"*와 구분되지 않는다.
+    expect(slow).toEqual([])
+  }, 300_000)
+
+  for (const probe of PROBES) {
+    it(`${probe.blocked ? '막힌다' : '안 막힌다'} — ${probe.label}`, async () => {
+      const app = await buildApp({ db, config: testConfig() })
+      try {
+        const ids = await fixture(app)
+
+        let release: () => void = () => {}
+        const held = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        let locked = false
+        // **잠금 SQL을 베끼지 않는다** — 진짜 함수를 부른다. 베끼면 사본이 갈린다.
+        const holder = withTransaction(db, async (trx) => {
+          await lockProjectForRestore(trx, ids.projectId)
+          locked = true
+          await held
+        })
+        while (!locked) await new Promise((resolve) => setTimeout(resolve, 20))
+
+        let blocked: boolean
+        let request: ReturnType<typeof fire>
+        try {
+          request = fire(app, probe, ids)
+          await new Promise((resolve) => setTimeout(resolve, WAIT_MS))
+          blocked = !request.done()
+        } finally {
+          // **놓아 주는 것이 `finally`에 있어야 한다** — 실패 경로에서 안 놓으면 `afterEach`의
+          // `deleteFrom('projects')`가 그 잠금을 기다리며 스위트 전체가 멈춘다(겪었다).
+          release()
+          await holder
+        }
+
+        expect(blocked).toBe(probe.blocked)
+
+        // **놓은 뒤에는 성공해야 한다.** 이것이 없으면 *"막혔다"*가 *"원래 실패하는 요청"*과
+        // 구분되지 않는다 — 앞 판에서 픽스처가 `commentId`를 잘못 읽어 400이던 것을 두 줄
+        // *"안 막힌다"*로 보고할 뻔했다.
+        const res = await request.promise
+        expect(res.statusCode, `${probe.label}: ${res.body}`).toBeLessThan(400)
+      } finally {
+        await app.close()
+      }
+    }, 120_000)
+  }
+})
+
+describe('표가 스스로 세는 것', () => {
+  /**
+   * **이것이 D8이 실제로 주장하는 명제다.** *"쓰기 라우트 전부가 막힌다"*가 아니다 —
+   * 그것은 참이 아니고(재번호의 무-op 갈래가 안 막힌다) 참일 필요도 없다.
+   *
+   * 주장은 **"복원이 되돌리는 행을 쓰는 라우트는 하나도 빠짐없이 막힌다"**이고, 그 분모는
+   * 위 census에서 `restoreWrites`가 `true`인 줄이다.
+   */
+  it('복원이 쓰는 행을 쓰는 라우트는 하나도 빠짐없이 막힌다', () => {
+    const leaks = PROBES.filter((probe) => probe.restoreWrites && !probe.blocked).map((probe) => probe.label)
+    expect(leaks).toEqual([])
+    // 분모가 0이면 위 줄이 공허하게 통과한다.
+    expect(PROBES.filter((probe) => probe.restoreWrites).length).toBeGreaterThan(10)
+  })
+
+  /**
+   * **막히지 않는 줄은 전부 "아무것도 쓰지 않거나, 복원이 되돌리지 않는 것을 쓰는" 줄이다.**
+   * 그 목록을 손으로 적는다 — 새 줄이 여기 들어오면 사람이 *"이것이 정말 안 막혀도 되나"*를
+   * 다시 판정하게 된다.
+   */
+  it('막히지 않는 줄의 목록이 고정돼 있다', () => {
+    expect(PROBES.filter((probe) => !probe.blocked).map((probe) => probe.route).sort()).toEqual([
+      'DELETE /:projectId/members/:userId',
+      'DELETE /:projectId/themes/:themeId',
+      'PATCH /:projectId/members/:userId',
+      'POST /:projectId/pages/:pageId/comments/renumber',
+      'PUT /:projectId/themes/:themeId',
+    ])
+  })
+})
