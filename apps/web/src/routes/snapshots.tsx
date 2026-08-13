@@ -5,22 +5,35 @@
  *
  * ---
  *
- * # **복원 버튼은 없다 — 회색으로 비활성해 두지도 않는다**(계획서 D1)
+ * # 복원 — **확인을 받고, 결과를 말한다**(P6-2 D11)
  *
- * 복원은 P6-2다. **없는 기능을 UI에 그려 두지 않는다** — 비활성 버튼은 *"곧 된다"*가 아니라
- * *"지금 안 된다"*로 읽히고, 그 상태로 남으면 무엇이 미완인지 화면이 말해 주지 않는다.
- * 목록의 각 줄이 하는 일은 **무엇이 언제 얼려졌는지 보여 주는 것 하나**다.
+ * P6-1은 *"없는 기능을 UI에 그려 두지 않는다"*며 복원 버튼을 두지 않았다. P6-2가 그 기능을
+ * 만들었으므로 줄마다 버튼이 선다.
+ *
+ * **확인 단계를 둔다.** 되돌릴 수 없는 조작은 아니지만(서버가 복원 **직전** 상태를 스냅샷으로
+ * 떠 준다) **프로젝트 전체가 바뀐다.** 확인은 그 줄 안에서 받는다 — `window.confirm`을 쓰지
+ * 않는 이유는 그것이 브라우저 모달이라 케이스가 그 문장을 읽지 못하고, 무엇을 되돌리는지
+ * (어느 태그인지)를 화면에 붙여 보여 줄 수도 없기 때문이다.
+ *
+ * **결과가 말할 것 넷:** 바뀐 페이지 수 · **그대로인 페이지 수** · 안전망 스냅샷의 태그 ·
+ * 테마가 다르면 그 사실. 둘째가 빠지면 *"0개가 바뀌었습니다"*가 **아무 일도 안 일어난 것**과
+ * **전부 그대로였던 것**을 구분하지 못한다.
  *
  * ---
  *
- * # 권한 — 읽기는 열고 쓰기는 editor다
+ * # 권한 — 읽기는 열고, 생성은 editor, 복원은 owner다
  *
- * §10이 스냅샷 **생성**을 editor에게 열었다(복원만 owner다). 그래서 이 화면은 viewer에게도
- * 목록을 보여 주고 **폼만 닫는다** — 막으면 viewer가 *"이 프로젝트에 어떤 기록이 있는지"*조차
- * 못 본다(테마 저작 화면이 같은 자리에서 같은 판단을 했다).
+ * §10이 스냅샷 **생성**을 editor에게 열고 **복원만 owner**로 두었다. 그래서 이 화면은
+ * viewer에게도 목록을 보여 주고 **폼과 복원 버튼만 닫는다** — 막으면 viewer가 *"이 프로젝트에
+ * 어떤 기록이 있는지"*조차 못 본다(테마 저작 화면이 같은 자리에서 같은 판단을 했다).
  *
- * 판정은 여기서 하지 않는다 — `projectAbilities(project.role).createSnapshot` 하나를 본다
- * (`test/role-access.test.ts`가 `.role`을 읽는 자리가 전부 그 함수의 인자 자리인지 실행으로 센다).
+ * **owner가 아니면 복원 버튼이 아예 없다 — 회색으로 만들어 두지 않는다**(D11). 비활성 버튼은
+ * *"권한이 없다"*가 아니라 *"지금은 안 된다"*로 읽힌다.
+ *
+ * 판정은 여기서 하지 않는다 — `projectAbilities(project.role)`의 `createSnapshot`·
+ * `restoreSnapshot` 둘을 본다(`test/role-access.test.ts`가 `.role`을 읽는 자리가 전부 그
+ * 함수의 인자 자리인지 실행으로 센다). **그 둘은 값이 실제로 갈린다** — editor는 만들 수
+ * 있고 되돌릴 수 없다.
  *
  * ---
  *
@@ -74,12 +87,18 @@
  *
  * **`signed-out`만 예외다.** 세션이 끊긴 것은 *"목록만 못 받았다"*가 아니므로 그때는 그대로
  * 로그인으로 보낸다 — 낡은 목록을 계속 보여 주면 사용자가 아직 로그인해 있다고 믿는다.
+ *
+ * > **복원이 이 구조를 그대로 쓴다(P6-2 D11).** 복원도 성공 뒤 목록을 다시 받아야 하고
+ * > (프로젝트가 바뀌었고 안전망 스냅샷이 하나 생겼다), 그 재조회가 실패해도 **복원 성공
+ * > 알림이 남아야 한다.** 복원은 저장보다 더 그렇다 — 사용자가 실패한 줄 알고 다시 누르면
+ * > 이미 되돌아간 상태 위에 안전망 스냅샷이 하나 더 쌓이고, **스냅샷은 지울 수 없다**(§4.5).
+ * > 같은 `onSaved`·`reloadFailure` 경로를 타므로 분기를 새로 만들지 않는다.
  */
 import { useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import { Link, useParams } from 'react-router'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import type { ProjectDetail, SnapshotSummary } from '../api/types'
+import type { ProjectDetail, RestoreResult, SnapshotSummary } from '../api/types'
 import { projectAbilities } from '../projects/project-actions'
 
 /** 조회가 이유 없이 실패했을 때. 셸·테마 화면과 다른 문장이다 — 무엇을 못 불러왔는지가 다르다. */
@@ -88,6 +107,8 @@ const UNKNOWN_FAILURE = '스냅샷을 불러오지 못했습니다'
 const FAILURE_TITLE = '스냅샷을 열지 못했습니다'
 /** 저장이 이유 없이 실패했을 때(서버가 `ApiError`를 주지 않은 경우). */
 const SAVE_FAILURE = '스냅샷을 저장하지 못했습니다'
+/** 복원이 이유 없이 실패했을 때. **저장과 다른 문장이다** — 무엇이 실패했는지가 다르다. */
+const RESTORE_FAILURE = '복원하지 못했습니다'
 /**
  * **저장은 됐는데 목록만 못 받았을 때의 앞머리.** 이 문장이 없으면 화면이 *"실패"*만
  * 말하고, 사용자는 같은 태그로 다시 시도해 **409**를 받는다 — 그리고 스냅샷은 지울 수
@@ -112,7 +133,14 @@ type LoadState =
  * 저장 결과 알림. **하나이고 판별 유니온이다** — 성공과 실패를 각각의 상태로 두면
  * *"저장됨"*과 오류가 함께 보이는 조합이 생긴다(위 머리말).
  */
-type Notice = { kind: 'saved'; tag: string } | { kind: 'error'; message: string }
+type Notice =
+  | { kind: 'saved'; tag: string }
+  | { kind: 'error'; message: string }
+  /**
+   * 복원이 성공했다. **`saved`와 같은 유니온에 두는 것이 요점이다** — 따로 두면 *"저장됨"*과
+   * *"되돌렸습니다"*가 함께 보이는 조합이 생긴다(위 머리말의 셋째 줄과 같은 이유).
+   */
+  | { kind: 'restored'; tag: string; result: RestoreResult }
 
 export function SnapshotsRoute(): ReactElement {
   const params = useParams()
@@ -198,6 +226,38 @@ export function SnapshotsRoute(): ReactElement {
   )
 }
 
+/**
+ * 복원 결과. **D11이 요구한 넷을 한 자리에서 말한다.**
+ *
+ * `role="status"`다 — 실패가 아니므로 `alert`이 아니고, 그래도 스크린리더가 읽어야 한다
+ * (프로젝트 전체가 방금 바뀌었다).
+ *
+ * **테마는 다를 때만 말한다.** 같을 때도 *"테마는 그대로입니다"*를 붙이면 매번 보이는 줄이
+ * 되어 다를 때의 신호가 묻힌다 — 복원이 되돌리지 **않은** 것을 알리는 자리이기 때문이다.
+ */
+function RestoreNotice(props: { tag: string; result: RestoreResult }): ReactElement {
+  const { pages } = props.result.summary
+  const themesDiffer = props.result.themes.some((theme) => theme.differs)
+
+  return (
+    <div className="wb-shell-snapshots-restored" role="status">
+      <p className="wb-shell-snapshots-restored-line">
+        {props.tag}(으)로 되돌렸습니다. 페이지 {pages.schemaChanged}개가 바뀌고 {pages.schemaUnchanged}개는
+        그대로입니다.
+      </p>
+      {/* **되돌리려면 이것** — 서버가 복원 직전 상태를 자동으로 얼려 준다(서버 D2). */}
+      <p className="wb-shell-snapshots-restored-line">
+        되돌리기 전 상태는 “{props.result.safetySnapshot.tag}”에 저장했습니다.
+      </p>
+      {themesDiffer ? (
+        <p className="wb-shell-snapshots-restored-line">
+          테마는 스냅샷 당시와 다릅니다. 복원은 테마 문서를 되돌리지 않습니다.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function SnapshotsScreen(props: {
   project: ProjectDetail
   snapshots: SnapshotSummary[]
@@ -206,12 +266,38 @@ function SnapshotsScreen(props: {
   onSaved: () => void
 }): ReactElement {
   const api = useApi()
-  const canCreate = projectAbilities(props.project.role).createSnapshot
+  const abilities = projectAbilities(props.project.role)
 
   const [tag, setTag] = useState('')
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
+  /** 확인을 기다리는 스냅샷의 id. `null`이면 아무것도 안 물어보고 있다(D11의 확인 단계). */
+  const [confirming, setConfirming] = useState<string | null>(null)
+  /** 지금 되돌리는 중인 스냅샷의 id. 두 번 눌리는 것을 막는다 — 스냅샷은 지울 수 없다(§4.5). */
+  const [restoring, setRestoring] = useState<string | null>(null)
+
+  async function runRestore(snapshot: SnapshotSummary): Promise<void> {
+    if (restoring !== null) return
+
+    // 저장과 같은 규칙 — **앞의 알림을 먼저 지운다**(위 머리말의 셋째 줄).
+    setNotice(null)
+    setConfirming(null)
+    setRestoring(snapshot.id)
+    try {
+      const result = await api.restoreSnapshot(props.project.id, snapshot.id)
+      setNotice({ kind: 'restored', tag: snapshot.tag, result })
+      // **성공했을 때만** 목록을 다시 받는다. 프로젝트가 바뀌었고 안전망 스냅샷이 하나 생겼다.
+      props.onSaved()
+    } catch (caught) {
+      const failure = toFailure(caught, RESTORE_FAILURE)
+      // 저장 쪽과 같은 판단이다 — 세션이 끊긴 것은 다음 조회가 `SignedOut`으로 보낸다.
+      // 그 밖에는 **서버 문장을 그대로 그린다**: 409 넷과 400 셋을 화면은 `code`로 가를 수 없다.
+      setNotice({ kind: 'error', message: failure.kind === 'signed-out' ? RESTORE_FAILURE : failure.message })
+    } finally {
+      setRestoring(null)
+    }
+  }
 
   async function save(event: FormEvent): Promise<void> {
     event.preventDefault()
@@ -256,7 +342,7 @@ function SnapshotsScreen(props: {
       </header>
 
       <section className="wb-shell-snapshots-form" aria-label="스냅샷 저장">
-        {canCreate ? (
+        {abilities.createSnapshot ? (
           <form onSubmit={(event) => void save(event)}>
             <label className="wb-shell-snapshots-field">
               <span>태그</span>
@@ -290,6 +376,8 @@ function SnapshotsScreen(props: {
           <p className="wb-shell-snapshots-saved" role="status">
             {notice.tag} 저장됨
           </p>
+        ) : notice.kind === 'restored' ? (
+          <RestoreNotice tag={notice.tag} result={notice.result} />
         ) : (
           <p className="wb-shell-snapshots-error" role="alert">
             {notice.message}
@@ -320,6 +408,31 @@ function SnapshotsScreen(props: {
                     `toLocaleString`은 자릿수 구분만 하고 단위를 바꾸지 않는다 — KB로 접으면
                     작은 스냅샷들이 전부 `0KB`가 되어 관측이 사라진다. */}
                 <span className="wb-shell-snapshots-bytes">{snapshot.payloadBytes.toLocaleString()}B</span>
+                {/* **owner가 아니면 이 자리가 아예 비어 있다** — 회색 버튼을 두지 않는다(D11). */}
+                {abilities.restoreSnapshot ? (
+                  confirming === snapshot.id ? (
+                    <span className="wb-shell-snapshots-confirm">
+                      {/* **무엇을 되돌리는지 문장에 태그가 들어간다.** 줄이 여럿인 목록에서
+                          "정말 되돌립니까?"만으로는 어느 줄에 답하는지 알 수 없다. */}
+                      <span role="alert">{snapshot.tag}(으)로 되돌립니다. 프로젝트 전체가 바뀝니다.</span>
+                      <button type="button" disabled={restoring !== null} onClick={() => void runRestore(snapshot)}>
+                        되돌린다
+                      </button>
+                      <button type="button" onClick={() => setConfirming(null)}>
+                        취소
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="wb-shell-snapshots-restore"
+                      disabled={restoring !== null}
+                      onClick={() => setConfirming(snapshot.id)}
+                    >
+                      이 상태로 되돌리기
+                    </button>
+                  )
+                ) : null}
               </li>
             ))}
           </ul>

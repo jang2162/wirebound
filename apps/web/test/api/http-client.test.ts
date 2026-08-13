@@ -158,6 +158,21 @@ const snapshot = {
   payloadBytes: 8123,
 }
 
+/**
+ * 복원 결과(P6-2). **화면이 읽는 것만 담지 않는다** — 서버가 실제로 내는 모양 그대로여야
+ * `ok` 판이 *"과도 차단을 재는 자리"*가 된다.
+ */
+const restoreResult = {
+  summary: {
+    menu: { created: 0, updated: 1, deleted: 0 },
+    pages: { created: 0, metaUpdated: 0, schemaChanged: 2, schemaUnchanged: 3, deleted: 1 },
+    comments: { created: 0, updated: 0, deleted: 0 },
+    layouts: { themeRefChanged: 0 },
+  },
+  safetySnapshot: { id: 's2', tag: '복원 전 2026-08-12T09:24:30.443Z' },
+  themes: [{ layoutId: 'l1', themeId: 't1', differs: false }],
+}
+
 /** `GET .../revisions?mine=true`의 항목 하나. */
 const revision = {
   id: 'rev-1',
@@ -383,6 +398,15 @@ const ENDPOINTS: Array<{
     body: snapshot,
     call: (c) => c.createSnapshot('p1', { tag: 'v1', description: '첫 릴리스 직전' }),
   },
+  // **복원(P6-2)은 `:snapshotId` 아래의 정적 세그먼트다** — `GET .../snapshots/:id`(상세)와
+  // 한 칸 차이인데 그쪽은 `ApiClient`에 없다(payload를 읽는 것은 서버다).
+  {
+    client: 'restoreSnapshot',
+    url: '/api/projects/p1/snapshots/s1/restore',
+    method: 'POST',
+    body: restoreResult,
+    call: (c) => c.restoreSnapshot('p1', 's1'),
+  },
 ]
 
 /**
@@ -490,6 +514,16 @@ const SHAPE_CASES: Array<{
     broken: [{ ...snapshot, id: '' }],
     ok: [snapshot],
     call: (c) => c.listSnapshots('p1'),
+  },
+  // --- 복원(P6-2). ---
+  // **`themes`가 배열이 아니면 막는다** — 결과 알림이 `.some(...)`으로 훑으므로 배열이
+  // 아니면 **렌더 도중 던진다.** 다른 두 값(바뀐 수·안전망 태그)은 이상한 글자가 보일 뿐이라
+  // 손해의 등급이 다르다(`pageDetail`의 `schema.root`가 같은 부류다).
+  {
+    shape: 'restoreResult',
+    broken: { ...restoreResult, themes: null },
+    ok: restoreResult,
+    call: (c) => c.restoreSnapshot('p1', 's1'),
   },
 ]
 

@@ -18,6 +18,7 @@ import type {
   ProjectDetail,
   RevisionSummary,
   SessionUser,
+  RestoreResult,
   SnapshotSummary,
   ThemeDetail,
   ThemeSummary,
@@ -330,6 +331,30 @@ export interface ApiClient {
    * 하나뿐이라 다시 받는 편이 곧 수렴이다).
    */
   createSnapshot(projectId: string, body: { tag: string; description?: string | null }): Promise<SnapshotSummary>
+  /**
+   * **그때로 되돌린다**(P6-2). §10이 **owner**에게만 연 자리다 — 생성이 editor까지 열린 것과
+   * 갈리는 이유는 복원이 **프로젝트 전체를 바꾸기** 때문이다.
+   *
+   * **본문이 없다.** 되돌릴 대상은 주소가 다 말하고, 복원 직전 상태를 담는 안전망 스냅샷의
+   * 태그는 서버가 짓는다.
+   *
+   * **되돌릴 수 없는 조작은 아니다** — 서버가 복원 **직전** 상태를 스냅샷으로 떠서
+   * `safetySnapshot`으로 돌려준다. 그것으로 다시 복원하면 되돌아간다.
+   *
+   * **실패가 여덟 갈래이고 코드로는 넷으로만 갈린다**(서버 README "복원의 오류 표"). 화면은
+   * `code`로 가를 수 없으므로 **서버 문장을 그대로 그린다**:
+   *
+   * | 코드 | 갈래 | 사용자가 할 일 |
+   * |---|---|---|
+   * | `conflict`(409) | 지문 불일치 · 안전망 태그 중복 | 그대로 다시 보낸다 |
+   * | `conflict`(409) | 레이아웃 불일치 · 코멘트 작성자 없음 | 프로젝트를 고쳐야 한다 |
+   * | `bad-request`(400) | 모르는 payload 형식 · 미지원 문서 버전 · 끊긴 참조 | 그 스냅샷으로는 못 한다 |
+   * | `validation-failed`(422) | 되살릴 페이지의 문서가 카탈로그 검증에 걸렸다 | 〃 |
+   * | `not-found`(404) | 없는 스냅샷 | 목록을 다시 받는다 |
+   *
+   * **어느 갈래에서 끊기든 아무것도 바뀌지 않는다** — 서버가 한 트랜잭션으로 묶는다.
+   */
+  restoreSnapshot(projectId: string, snapshotId: string): Promise<RestoreResult>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

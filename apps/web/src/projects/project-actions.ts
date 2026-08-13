@@ -79,11 +79,20 @@ export interface ProjectAbilities {
    * editor에게 열었기 때문이다 — 위 넷과 갈리는 이유는 **스냅샷이 아무것도 바꾸지 않기**
    * 때문이다. 이름을 바꾸는 것도, 옷을 갈아입히는 것도 아니고, 지금 상태를 적어 둘 뿐이다.
    *
-   * **복원은 여기 없다.** §10이 그것만 owner로 두었고 P6-2가 만든다 — 오늘 없는 기능의
-   * 판정을 미리 두면 그것이 무엇을 지키는지 아무도 확인하지 않은 채 남는다(서버가 owner
-   * 가드를 미리 만들지 않는 것과 같은 판단이다).
+   * **복원은 이것이 아니다** — `restoreSnapshot`이 따로 있다. §10이 그것만 owner로 두었다.
    */
   createSnapshot: boolean
+  /**
+   * 스냅샷으로 **되돌릴** 수 있는가(`POST .../snapshots/:snapshotId/restore` — P6-2).
+   *
+   * **`createSnapshot`과 값이 갈리는 첫 자리다.** 위의 `rename`·`remove`처럼 *"오늘 값이
+   * 같은데 필드를 따로 둔다"*가 아니라 **실제로 다르다**: editor는 만들 수 있고 되돌릴 수
+   * 없다(§10 — *"editor: … 스냅샷 생성 (복원 불가)"*). 갈리는 이유는 **복원이 프로젝트
+   * 전체를 바꾸기** 때문이다 — 생성은 지금 상태를 적어 둘 뿐이다.
+   *
+   * **owner가 아니면 버튼이 아예 없다**(계획서 D11 — 회색으로 만들어 두지 않는다).
+   */
+  restoreSnapshot: boolean
 }
 
 /** 아무것도 못 하는 상태. 역할을 모르거나 계약 밖 값일 때의 답이다. */
@@ -93,6 +102,7 @@ const NOTHING: ProjectAbilities = {
   chooseTheme: false,
   editTheme: false,
   createSnapshot: false,
+  restoreSnapshot: false,
 }
 
 /**
@@ -137,7 +147,14 @@ const NOTHING: ProjectAbilities = {
  */
 export function projectAbilities(role: ProjectRole | undefined): ProjectAbilities {
   if (role === 'owner') {
-    return { rename: true, remove: true, chooseTheme: true, editTheme: true, createSnapshot: true }
+    return {
+      rename: true,
+      remove: true,
+      chooseTheme: true,
+      editTheme: true,
+      createSnapshot: true,
+      restoreSnapshot: true,
+    }
   }
   // **editor가 열 수 있는 것이 오늘 하나다**(§10 — 스냅샷 생성). 앞서 이 함수는
   // `role !== 'owner'`면 곧장 `NOTHING`이었는데, 그 형태는 *"owner가 아니면 아무것도 못
