@@ -28,6 +28,9 @@ export {
 export { CATALOG_TYPES, installCatalog } from './component/catalog/index'
 export * from './component/catalog/index'
 
+export type { PagePreset } from './preset/builtin'
+export { BUILTIN_PRESETS, getBuiltinPreset, hasMarker, stripMarkers } from './preset/builtin'
+
 export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, ignoredVariantMessage, partitionIssues } from './validate'
 export { assertValidLayout, assertValidPage, validateLayout, validatePage } from './validate'
