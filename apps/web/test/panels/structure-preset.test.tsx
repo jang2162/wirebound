@@ -383,6 +383,25 @@ describe('적용 — D3: 기존 커밋 경로를 탄다', () => {
     })
   })
 
+  /**
+   * **D8 — P7-1 이월 §3의 예측을 재는 자리다.** 그 이월은 *"P7-2가 `'empty'` 갈래를
+   * 도달시킨다"*고 봤다(빈 프리셋이 정상 입력이므로). **재 보니 빗나갔다:** 빈 프리셋은
+   * 실패가 아니라 **성공하는 조작**이고(치우기 — D7), 프리셋은 `patternInsert`를 아예
+   * 지나지 않는다(D3의 별도 경로). 그래서 알림이 뜨지 않는다.
+   */
+  it('빈 프리셋은 실패 문장을 내지 않는다 — 이월 §3의 갈래에 닿지 않는다(D8)', async () => {
+    const backend = server({ presets: [EMPTY_PRESET] })
+    await openPage(doc(), { apiOverrides: backend.api })
+
+    await openPicker()
+    await applyPreset(EMPTY_PRESET.id)
+
+    await waitFor(() => {
+      expect(backend.calls.length).toBe(1)
+    })
+    expect(alertText()).toBeNull()
+  })
+
   it('빈 프리셋은 페이지를 비우고 선택도 비운다(D7)', async () => {
     const backend = server({ presets: [EMPTY_PRESET] })
     await openPage(doc(), { apiOverrides: backend.api })
@@ -422,6 +441,43 @@ describe('적용 — D3: 기존 커밋 경로를 탄다', () => {
     expect(backend.calls).toEqual([])
     // 문서는 손대지 않은 그대로다 — 되돌릴 것이 없다.
     expect(structureTypes()).toContain('Text')
+  })
+})
+
+/**
+ * **재라 #2 — *"고아 코멘트가 오늘 화면에서 무해하다"*를 실제로 잰다.** 계획서가
+ * *"아무도 안 쟀다"*고 적은 자리이고, D6이 그것에 걸려 있다.
+ *
+ * 여기서 재는 것은 **적용 뒤의 화면**이다. 코멘트 탭 자체가 사라진 노드를 갈라 보이는
+ * 것은 `comment-panel.test.tsx`가 이미 재고 있지만(P5-1의 무리 셋), **프리셋 적용이
+ * 그 상태를 만든다는 것**은 이 슬라이스가 처음 만드는 사실이다.
+ */
+describe('적용 — D6: 코멘트는 남는다', () => {
+  it('적용 뒤 코멘트가 "사라진 노드" 무리로 남는다 — 지워지지 않는다', async () => {
+    const backend = server({
+      presets: [PROJECT_PRESET],
+      comments: [comment('n-a', 'c1'), comment('n-box', 'c2')],
+    })
+    await openPage(doc(), { apiOverrides: backend.api })
+
+    await openPicker()
+    await applyPreset(PROJECT_PRESET.id)
+    await waitFor(() => {
+      expect(structureTypes()).toContain('List')
+    })
+
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: '코멘트' }).getAttribute('aria-selected')).toBe('true'),
+    )
+
+    // **본문이 그대로 있다** — 행은 서버에 남고 문서에서만 사라진다.
+    const titles = [...document.body.querySelectorAll('.wb-shell-comment-group-title')].map(
+      (element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    )
+    expect(titles).toEqual(['– 사라진 노드 (n-a)', '– 사라진 노드 (n-box)'])
+    // **던지지 않는다** — 셸이 그대로 서 있다(이 패널은 오류 경계 밖이다).
+    expect(screen.getByRole('region', { name: '구조 트리' })).toBeTruthy()
   })
 })
 

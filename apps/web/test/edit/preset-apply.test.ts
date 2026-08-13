@@ -19,7 +19,7 @@ import {
   type PageDocument,
   type WbNode,
 } from '@wirebound/schema'
-import { presetApply } from '../../src/edit/preset-apply'
+import { presetApply, presetFailureNotice } from '../../src/edit/preset-apply'
 
 beforeAll(() => {
   installCatalog()
@@ -285,5 +285,40 @@ describe('presetApply', () => {
       expect(result.reason).toBeNull()
       expect(validatePage(applyOps(before, result.apply!.ops))).toEqual([])
     }
+  })
+})
+
+/**
+ * **P7-1 이월 §3이 지목한 모양을 재는 자리다.** 그쪽은 툴바가 문장을 만들어 화면을
+ * 지나야만 도달했고, 그래서 *"케이스를 쓸 수 없다"*가 이월의 이유였다. 여기서는 문장
+ * 생성이 순수 함수라 **빈 이유 목록을 직접 넣어** 잴 수 있다.
+ */
+describe('presetFailureNotice', () => {
+  it('이유가 있으면 콜론 뒤에 잇는다', () => {
+    const result = presetApply(page(), [{ id: 'x', type: '없는타입' }], counter())
+
+    const notice = presetFailureNotice(result)
+    expect(notice).toContain('프리셋을 놓지 못했습니다: ')
+    expect(notice).toContain('알 수 없는 컴포넌트 타입')
+  })
+
+  it('이유가 없으면 콜론도 없다 — 뒤가 빈 문장이 되지 않는다', () => {
+    const notice = presetFailureNotice({ apply: null, reason: 'invalid', issues: [] })
+
+    expect(notice).toBe('프리셋을 놓지 못했습니다.')
+    expect(notice.endsWith(':')).toBe(false)
+  })
+
+  it('문서가 깨진 갈래는 다른 문장이다 — 사용자가 할 일이 다르다', () => {
+    const broken = { version: 1, root: null } as unknown as PageDocument
+
+    const notice = presetFailureNotice(presetApply(broken, [LIST], counter()))
+
+    expect(notice).toContain('새로고침')
+    expect(notice).not.toContain('프리셋을 놓지 못했습니다')
+  })
+
+  it('성공한 결과에는 문장이 없다 — 던지지 않는다', () => {
+    expect(presetFailureNotice(presetApply(page(), [LIST], counter()))).toBe('')
   })
 })
