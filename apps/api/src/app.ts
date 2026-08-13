@@ -11,6 +11,7 @@ import { healthRoutes } from './routes/health'
 import { memberRoutes } from './routes/members'
 import { menuRoutes } from './routes/menu'
 import { pageRoutes } from './routes/pages'
+import { presetRoutes } from './routes/presets'
 import { projectRoutes } from './routes/projects'
 import { revisionRoutes } from './routes/revisions'
 import { snapshotRoutes } from './routes/snapshots'
@@ -131,6 +132,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 스냅샷도 프로젝트 아래에 산다(`/:projectId/snapshots`). **인자 없이 부른다** — 그
   // 팩토리의 `captureHooks`는 테스트 전용 이음매다(`routes/snapshots.ts`의 머리말).
   await app.register(snapshotRoutes(), { prefix: '/api/projects' })
+  // 프리셋도 프로젝트 아래에 산다(`/:projectId/presets`) — 프리셋은 프로젝트가 소유한다
+  // (§11.1). 내장 3종은 `@wirebound/schema`에 있고 목록이 그것을 함께 낸다(P7-2 D2).
+  await app.register(presetRoutes(), { prefix: '/api/projects' })
   await app.register(healthRoutes)
 
   return app

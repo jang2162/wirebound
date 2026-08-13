@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { roleAtLeast } from '../src/auth/roles'
 import type { ProjectRole } from '../src/db/types'
+import { insertPreset } from '../src/repos/presets'
 import { insertSnapshot } from '../src/repos/snapshots'
 import { insertTheme } from '../src/repos/themes'
 import { captureSnapshot } from '../src/services/snapshot-capture'
@@ -175,6 +176,29 @@ const 스냅샷하나 = async (
         themes: [],
         comments: [],
       },
+      createdBy: actorUserId,
+    })
+  ).id,
+})
+
+/**
+ * ':presetId'가 필요한 케이스(프리셋 삭제)가 실행 전에 대상 프리셋을 만든다.
+ *
+ * **API가 아니라 repo로 넣는다** — `스냅샷하나`와 같은 이유다: 픽스처가 검사 대상
+ * API(`POST .../presets`)에 의존하면 그쪽이 깨졌을 때 삭제 행까지 함께 무너진다.
+ */
+const 프리셋하나 = async (
+  ctx: TestContext,
+  projectId: string,
+  _ownerCookie: { wb_session: string },
+  actorUserId: string,
+): Promise<Record<string, string>> => ({
+  presetId: (
+    await insertPreset(ctx.db, {
+      projectId,
+      name: '대상 프리셋',
+      description: null,
+      nodes: [],
       createdBy: actorUserId,
     })
   ).id,
@@ -449,6 +473,33 @@ const CASES: Case[] = [
     url: '/api/projects/:projectId/snapshots/:snapshotId/restore',
     allowed: ['owner'],
     setup: 복원할스냅샷,
+  },
+  {
+    // **§10의 표에 프리셋이 없다.** P7-2 D10이 판정한 자리이고 근거는
+    // `routes/presets.ts`의 머리말에 있다 — editor의 *"페이지 편집"*을 돕는 도구이지
+    // 테마·레이아웃처럼 프로젝트 전체 외형을 한 번에 바꾸는 것이 아니다.
+    label: '프리셋 목록',
+    method: 'GET',
+    url: '/api/projects/:projectId/presets',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    // **빈 배열을 보내는 것이 유효한 본문이다**(D7 — 빈 페이지도 프리셋이 된다).
+    // 이 행이 재는 것은 역할 판정이므로 내용이 가벼운 편이 낫다.
+    label: '프리셋 저장',
+    method: 'POST',
+    url: '/api/projects/:projectId/presets',
+    payload: { name: '대상', schema: [] },
+    allowed: ['owner', 'editor'],
+  },
+  {
+    // **`setup`이 필요하다** — 없는 id로 치면 허용된 역할도 404를 받아 `허용`을 못
+    // 보인다(`스냅샷 복원`과 같은 자리).
+    label: '프리셋 삭제',
+    method: 'DELETE',
+    url: '/api/projects/:projectId/presets/:presetId',
+    allowed: ['owner', 'editor'],
+    setup: 프리셋하나,
   },
 ]
 
