@@ -8,7 +8,8 @@
 
 먼저 읽어야 하는 것:
 
-- **P8-1 보고서** `2026-08-14-p8-1-report.md` — 갈림 둘의 원문과 판정, 변이 열넷의 사망표.
+- **P8-1 보고서** `2026-08-14-p8-1-report.md` — **갈림 셋**의 원문과 판정, 변이 사망표,
+  리뷰가 남긴 일곱을 어떻게 반영했는지(§9).
 - **P7-3 이월 §5**(`layoutRef`가 가리킬 자리가 없다) — 아래 §4가 그 위에 선다. 그 절이
   *"번들이 첫 소비자"*라고 적어 둔 자리를 **P8-1이 지나지 않았다**(D3). 그대로 P8-2의 것이다.
 - **P7-3 이월 §1**(코멘트 본문의 출처가 셋이고 성질이 다르다) — P8-1은 코멘트를 아예 안
@@ -66,25 +67,58 @@ packages/themes/src/resolve/structures.ts:38
 
 ---
 
-## 3. **갈림 둘** — P8-2가 셸을 만들면 다시 만난다
+## 3. **갈림 셋** — P8-2가 셸을 만들면 다시 만난다
 
 보고서 §1에 원문과 판정이 있다. 요지:
 
 | 갈림 | 화면 | 번들 | 원인 |
 |---|---|---|---|
-| `style` 속성의 적는 꼴 | `--wb-node-grid-columns: 3;` | `--wb-node-grid-columns:3` | React 클라이언트는 CSSOM에 얹고, 파서는 원문을 보관한다. **선언은 같다** |
-| 텍스트 노드 경계 | `"구획 "` + `"1"` | `"구획 1"` | HTML이 경계를 적을 수 없다. `renderToStaticMarkup`은 `<!-- -->`를 안 넣는다 |
+| ㉠ `style` 속성의 적는 꼴 | `--wb-node-grid-columns: 3;` | `--wb-node-grid-columns:3` | React 클라이언트는 CSSOM에 얹고, 파서는 원문을 보관한다. **선언은 같다** |
+| ㉡ 텍스트 노드 경계 | `"구획 "` + `"1"` | `"구획 1"` | HTML이 경계를 적을 수 없다. `renderToStaticMarkup`은 `<!-- -->`를 안 넣는다 |
+| ㉢ **선언 없는 `style` 속성** | `style=""` | 속성이 **없다** | **React의 재조정.** 구조가 바뀌면 같은 원소를 재사용하고 선언만 지운다 |
 
 **P8-2에게 이것이 왜 중요한가.**
 
-1. **번들과 화면을 다시 견주는 검사를 만들면 같은 두 축을 만난다.** `parity.test.tsx`의
-   `describeTree`가 그 둘만 접고, **접는 축만 접는지 양방향으로 재는 케이스**가 옆에 있다.
-   새로 짜지 말고 그것을 봐라.
-2. **둘째 갈림은 다섯 테마 중 `portal` 하나에서만 났다.** 그 테마만
-   `EntryForm:sectioned`를 고른다. **테마 하나·문서 하나로 재면 못 본다.**
-3. **`admin`은 카탈로그의 첫 구조와 다른 것을 하나도 고르지 않는다**(보고서 §7.2에 다섯
+1. **번들과 화면을 다시 견주는 검사를 만들면 같은 세 축을 만난다.**
+   `@wirebound/exporter/test-support`의 `describeTree`가 그 셋만 접고, **접는 축만 접는지
+   양방향으로 재는 케이스**가 옆에 있다. **새로 짜지 말고 그것을 불러라**(§3.1).
+2. **㉡은 다섯 테마 중 `portal` 하나에서만 났다.** 그 테마만 `EntryForm:sectioned`를
+   고른다. **테마 하나·문서 하나로 재면 못 본다.**
+3. **㉢은 진짜 캔버스에서만 난다.** 한 번만 그리는 견주기로는 그 상태를 만들 수 없다 —
+   캔버스는 테마를 **서버에서 늦게** 받아 구조가 한 번 갈아엎인다. **셸이 무엇을 언제
+   그리는지 바뀌면 이 축이 다시 흔들린다.**
+4. **`admin`은 카탈로그의 첫 구조와 다른 것을 하나도 고르지 않는다**(보고서 §7.2에 다섯
    테마의 표가 있다). 그래서 **구조 배선이 끊겨도 `admin`으로는 안 죽는다.** 테마를 하나만
-   골라 재려거든 `admin`을 고르지 마라.
+   골라 재려거든 `admin`을 고르지 마라 — 캔버스 견주기가 `portal`을 쓰는 이유다.
+
+### 3.1 견주는 자와 픽스처는 **패키지가 낸다**
+
+```ts
+import { describeTree, broadFixture, variantFixture } from '@wirebound/exporter/test-support'
+```
+
+`packages/exporter/test-support/`에 있고 패키지의 `exports` 서브패스로 나간다. `dist`에는
+안 들어간다(`files`가 `dist` 하나다 — 케이스가 그것을 지킨다).
+
+**왜 `test/`가 아닌가.** `apps/web`이 import해야 하기 때문이다 — 캔버스↔번들 견주기가
+거기 산다. **`apps/web`만 캔버스·렌더러·exporter를 동시에 본다**(`themes`의 어휘를
+`renderer`와 대조하는 케이스가 이미 같은 이유로 거기 있다).
+
+**루트 `vitest.config.ts`의 alias에서 더 좁은 것이 먼저 온다** — rollup의 alias는
+`id === find || id.startsWith(find + '/')`로 맞추고 앞의 것이 이기므로, 순서를 뒤집으면
+서브패스가 `…/src/index.ts/test-support`로 바뀐다.
+
+### 3.2 화면 경로가 둘이고 **재는 것이 다르다**
+
+| 어디 | 화면 경로 | 무엇을 재나 |
+|---|---|---|
+| `packages/exporter/test/parity.test.tsx` | `renderDocument`를 직접 부른다 | exporter가 렌더 경로에 무엇을 더하거나 뺐는가 |
+| `apps/web/test/canvas/bundle-parity.test.tsx` | **진짜 `<App/>`** | 캔버스가 그 경로에서 벗어났는가 |
+
+**뒤쪽이 없으면 캔버스 변이가 안 죽는다** — P8-1 리뷰가 그 구멍을 짚었고, 그것을 메우다
+㉢이 나왔다. **그리고 감싸개는 견주기로 안 잡힌다**(견주기는 문서 뿌리 **아래**만 잰다).
+그래서 *"문서 뿌리를 아무것도 감싸지 않는다"*를 따로 든다 — **P8-2가 셸을 문서 위에 두면
+그 케이스가 먼저 죽는다. 그것이 알림이지 사고가 아니다.**
 
 ---
 
@@ -145,9 +179,15 @@ D3대로 `renderDocument`만 썼고 `exportPage`의 인자 타입이 `PageDocume
 등록된 것을 건너뛴다). **P8-2·P8-3이 그것을 따로 부를 필요가 없고, 불러도 해가 없다.**
 
 **설치 없이 부르면 무엇이 관찰되는지 케이스가 값으로 든다**(보고서 §3의 표). 요지: 렌더
-경로는 **시끄럽다** — 노드마다 폴백이 뜨고 `errors`가 찬다. 사실 5(P5-3 이월 §3.2)가 잰
-*침묵*은 상호작용 판정과 `validatePage`의 것이고, **P8-3이 상호작용 런타임을 붙이면 그
-침묵이 그때 돌아온다.**
+경로는 **시끄럽다** — 노드마다 폴백이 뜨고 `errors`가 찬다.
+
+**`validatePage`도 시끄럽다** — 카탈로그가 없으면 **노드마다 `unknown-type`**을 낸다.
+조용해지는 것은 **`invalid-props` 한 종뿐이고**, 그것도 사라지는 이유가 *"props 스키마를
+아는 것이 카탈로그"*라 물음 자체가 성립하지 않아서다. (앞 판이 그것을 침묵 쪽에 넣었는데
+거짓이었다 — P8-1 리뷰가 잡았고 케이스가 두 방향의 차집합을 든다.)
+
+**사실 5(P5-3 이월 §3.2)가 잰 진짜 침묵은 상호작용 판정(`checkNodeAction`)의 것이고,
+P8-3이 상호작용 런타임을 붙이면 그때 돌아온다.**
 
 ---
 
@@ -165,18 +205,49 @@ D3대로 `renderDocument`만 썼고 `exportPage`의 인자 타입이 `PageDocume
 - **api 테스트를 도는 워커는 동시에 하나만.** P7-3 이월 §10의 실측이고 이번에도 게이트
   전에 `ps`로 확인하고 돌렸다.
 
+### 7.1 **`runtime.js`에 문자열을 심을 때 — U+2028·U+2029를 이스케이프하라**
+
+`exportPage`는 이 둘을 **그대로 실어 보낸다**(HTML에서는 무해하다). 깨지는 자리는 **JS
+문자열 리터럴**이고 번들에서 그 자리를 만드는 것이 **너다.**
+
+**`JSON.stringify`가 그 둘을 이스케이프하지 않는다** — 케이스가 값으로 든다
+(`packages/exporter/test/escape.test.ts`). 같은 함수가 NUL은 이스케이프하므로 빠뜨린 것이
+아니라 규격이 그렇다.
+
+```js
+// 데이터를 <script>에 심을 때
+const literal = JSON.stringify(data)
+  .replace(/\u2028/g, '\\u2028')
+  .replace(/\u2029/g, '\\u2029')
+```
+
+**막을 자리를 여기로 고른 판정이다** — 문서에서 그 글자를 금지하면 사용자가 적을 수 있는
+것을 우리가 줄이는 것이고, 고쳐야 할 것은 *"문자열을 스크립트에 심는 방법"*이다.
+`</script>`도 같은 자리의 물음이다(오늘 번들에 `<script>`가 0개인 것을 케이스가 지킨다).
+
+### 7.2 **NUL은 저장 경계가 막는다 — 저장을 안 지나는 경로가 그 밖이다**
+
+`apps/api/src/db/nul-guard.ts`가 문서 트리를 훑어 막고, 그 자리를 고른 근거가 그 파일에
+있다(Postgres 제약이라 브라우저에서도 도는 `schema`가 아니라 Postgres를 아는 계층에 뒀다).
+**exporter는 통과시킨다 — 두 벌로 두지 않으려고 그렇게 뒀다.**
+
+**P9의 CLI가 파일에서 읽은 문서를 바로 내보내면 그 방벽을 지나지 않는다.** 그 경로를
+만드는 쪽이 *"어디서 막을 것인가"*를 판정할 자리다.
+
 ---
 
 ## 8. 열린 자리 — 이번에 안 닫은 것
 
 | 것 | 상태 |
 |---|---|
-| **`dist`가 로드되는지 지키는 케이스** | **없다.** 손으로는 확인했다 — 순수 Node가 `packages/exporter/dist/index.js`를 import해 `exportPage`를 부르면 HTML이 나온다(vitest의 alias 없이 실제 `exports`를 지난다). `packages/schema/build-test/dist-loadable.test.ts`가 선례인데 그 파일은 `apps/playground`를 cwd로 돌고 playground가 exporter를 의존하지 않는다. **`renderer`·`themes`도 그런 케이스가 없다** — 새 관례를 이 슬라이스에서 세우지 않았다. P9의 CLI가 `dist`를 부르는 첫 소비자가 된다 |
+| **`dist`가 로드되는지 지키는 케이스** | **exporter에는 없다.** 손으로는 확인했다 — 순수 Node가 `packages/exporter/dist/index.js`를 import해 `exportPage`를 부르면 HTML이 나온다(vitest의 alias 없이 실제 `exports`를 지난다). `packages/schema/build-test/dist-loadable.test.ts`가 선례이고 **거기에 `schema`와 `renderer` 케이스가 각각 있다**(앞 판이 *"renderer도 그런 케이스가 없다"*고 적었는데 거짓이었다 — P8-1 리뷰가 잡았다). `themes`에는 없다. 그 파일이 `apps/playground`를 cwd로 돌고 playground가 exporter를 의존하지 않아 **줄을 하나 더하려면 그 의존을 세워야 한다** — 이 슬라이스에서 세우지 않았다. P9의 CLI가 `dist`를 부르는 첫 소비자가 된다 |
 | **`exportPage`가 `validatePage`를 부르는가** | **안 부른다.** 그래서 *"이 페이지를 그릴 수 있는가"*의 판정이 exporter에 없다 — 그것이 D3의 *"판정을 두 벌 두지 마라"*와 같은 방향이지만, **번들이 깨진 문서를 통과시키는가**는 아직 아무도 판정하지 않았다. `errors`가 값으로 나가는 것이 오늘의 전부다 |
 | **폰트 리소스가 받는 쪽에 있는가** | 안 쟀다. P7-3 이월 §8.2 규칙 2가 *"번들도 그런 목록을 갖게 된다"*고 예고한 자리다. `compileTheme`이 `@font-face`를 내고 그 `src`가 URL이므로, **번들을 오프라인으로 열면 서체가 빠진다.** P8-2가 자산을 다룰 때의 물음 |
 | **코멘트·번호 마커** | 손대지 않았다. P7-3 이월 §1·§3이 열어 둔 판정 그대로다 |
 | **`Slot`·레이아웃** | §4 |
 | **여러 페이지·파일 이름** | P8-2. §11.3의 예시가 한글 파일명이다 |
+| **저장을 안 지나는 문서의 NUL** | §7.2. P9의 CLI가 첫 손님이다 |
+| **`<script>`에 심는 문자열** | §7.1. P8-3의 것이다 — 오늘 번들에 `<script>`가 0개인 것을 케이스가 지킨다 |
 
 ---
 
@@ -184,13 +255,24 @@ D3대로 `renderDocument`만 썼고 `exportPage`의 인자 타입이 `PageDocume
 
 - **`tsconfig.json`(src)에 `DOM` lib이 없다.** 일부러다 — 이 패키지의 본체는 서버에서
   돌고, DOM 타입이 보이면 브라우저 API를 쓰고도 컴파일이 통과한다. **케이스 쪽
-  (`tsconfig.test.json`)만 `DOM`·`DOM.Iterable`을 받는다.**
+  (`tsconfig.test.json`)만 `DOM`·`DOM.Iterable`을 받고, 거기에 `test-support`도 들어간다.**
+  **`test/public-api.test.ts`가 그 설정과 경계 여섯을 지킨다** — 그 설정이 실제로 막는
+  것도 양방향으로 쟀다(`document.title`을 적으면 `TS2584`, `lib`에 `"DOM"`을 되넣으면
+  그 줄의 오류가 사라진다).
 - **`unit` 프로젝트에는 DOM 환경이 없다.** `page.test.ts`가 그 전제를 **카나리아로**
   지킨다(`typeof document === 'undefined'`) — 누가 `unit`에 jsdom을 걸면 거기가 먼저 죽는다.
   DOM이 필요한 파일은 `// @vitest-environment jsdom` 도크블록을 자기 머리에 단다
   (`parity.test.tsx`·`escape.test.ts`).
-- **루트 `vitest.config.ts`의 alias에 `@wirebound/exporter`를 더했다.** include는 안 고쳐도
-  됐다(`packages/*/test/**`).
+- **루트 `vitest.config.ts`의 alias에 둘을 더했다** — `@wirebound/exporter`와
+  `@wirebound/exporter/test-support`이고 **좁은 것이 먼저다**(§3.1). include는 안 고쳐도
+  됐다 — `unit` 프로젝트가 각 패키지의 `test` 디렉터리를 이미 본다.
+
+  > **그 include 패턴을 블록 주석에 그대로 적지 마라.** `packages` 뒤의 별표와 빗금이
+  > 주석을 거기서 닫고 뒤따르는 글자가 코드가 된다 — 실제로 `ReferenceError`로 죽었다.
+  > 요란하게 죽으므로 검사를 세울 자리는 아니다.
+
+- **`apps/web`이 `@wirebound/exporter`를 devDependency로 든다.** 캔버스↔번들 견주기 때문이고
+  **런타임 의존이 아니다** — 웹 번들에 `react-dom/server`가 실리지 않는다.
 - **루트 `tsconfig.json`의 references에 둘을 더했다**(`./packages/exporter`와 그 test).
   `pnpm typecheck`는 글롭(`packages/*/tsconfig*.json`)으로 집으므로 없어도 돌지만,
   솔루션 파일의 목록을 실제와 맞춰 둔다.
