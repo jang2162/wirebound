@@ -183,6 +183,34 @@ describe('페이지 JSON 가져오기', () => {
     })
   })
 
+  it('재라 #3 — 번호 없는 노드를 가리킨 코멘트는 번호 없이 들어간다', async () => {
+    // **번호를 새로 매기지 않는다.** 매기면 *"번호를 부여하는 자리"*가 `routes/comments.ts`
+    // 말고 하나 더 생긴다(P5-1 D1·D2가 그 자리를 하나로 묶어 뒀다). 그 상태는 화면이 이미
+    // 갈라 보이는 정상 상태다 — 코멘트 탭의 무리 셋 중 *"번호가 없는 노드"*.
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const res = await importPage(ctx, fx, {
+        menuNodeId: fx.menuNodeId,
+        file: file({
+          schema: {
+            version: 1,
+            root: { id: 'file_root', type: 'Page', children: [{ id: 'file_list', type: 'List' }] },
+          },
+          comments: [{ nodeId: 'file_list', body: '번호 없는 말' }],
+        }),
+      })
+
+      expect(res.statusCode, res.body).toBe(201)
+      const body = res.json() as {
+        page: { schema: { root: { children: { marker?: number }[] } } }
+        comments: { inserted: number; dangling: number }
+      }
+      expect(body.comments).toEqual({ inserted: 1, dangling: 0 })
+      expect(body.page.schema.root.children[0]?.marker).toBeUndefined()
+      expect((await commentRows(ctx, fx.projectId)).map((row) => row.body)).toEqual(['번호 없는 말'])
+    })
+  })
+
   it('D4 — layoutRef를 쓰지 않고, 쓰지 않았다고 말한다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -290,6 +318,71 @@ describe('가져오기가 거절하는 것', () => {
       const res = await importPage(ctx, fx, { menuNodeId: fx.menuNodeId, file: file(), 알수없는키: 1 })
 
       expect(res.statusCode, res.body).toBe(400)
+    })
+  })
+})
+
+describe('파일 크기 — 상한은 이미 하나 있다', () => {
+  /**
+   * **P7-2 이월 §8이 지목한 축이다** — *"가져오기는 그 축이 더 세다(파일 크기를 사용자가
+   * 정한다)"*. **재고 나서 판정했다**: 우리 상한을 새로 두지 않는다. Fastify의 기본 본문
+   * 상한(1MiB)이 이미 있고 **우리 코드에 닿기 전에** 끊는다 — 두 벌이 되면 어느 쪽이
+   * 끊었는지가 응답에서 갈리지 않는다.
+   *
+   * **실측한 경계**(임시 프로브로 쟀고 지웠다): 노드 1000개(657KB)는 201, 5000개(3.3MB)는
+   * 413. 대신 **문장을 고쳤다** — 그전에는 413에도 *"요청 형식이 올바르지 않습니다"*가
+   * 나갔는데, 형식은 멀쩡하고 크기가 넘은 것이라 그 문장이 거짓이다.
+   */
+  it('1MiB를 넘는 본문은 413이고 **크기 때문이라고 말한다**', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const huge = file({
+        schema: {
+          version: 1,
+          root: {
+            id: 'file_root',
+            type: 'Page',
+            children: Array.from({ length: 5000 }, (_unused, index) => ({
+              id: `file_${index}`,
+              type: 'List',
+              props: { columns: ['ㄱ'.repeat(200)] },
+            })),
+          },
+        },
+        comments: [],
+      })
+
+      const res = await importPage(ctx, fx, { menuNodeId: fx.menuNodeId, file: huge })
+
+      expect(res.statusCode).toBe(413)
+      expect((res.json() as { error: { message: string } }).error.message).toContain('너무 큽니다')
+      // **끊긴 자리가 우리 코드보다 앞이므로 아무것도 남지 않는다.**
+      expect(await pageRows(ctx, fx.projectId)).toEqual([])
+    })
+  })
+
+  it('상한 아래는 그대로 들어간다 — 음성 대조', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const big = file({
+        schema: {
+          version: 1,
+          root: {
+            id: 'file_root',
+            type: 'Page',
+            children: Array.from({ length: 1000 }, (_unused, index) => ({
+              id: `file_${index}`,
+              type: 'List',
+              props: { columns: ['ㄱ'.repeat(200)] },
+            })),
+          },
+        },
+        comments: [],
+      })
+
+      const res = await importPage(ctx, fx, { menuNodeId: fx.menuNodeId, file: big })
+
+      expect(res.statusCode, res.body.slice(0, 200)).toBe(201)
     })
   })
 })
