@@ -1,9 +1,10 @@
 import {
+  installStructures,
   renderDocument,
   structureBaseCss,
   type NodeRenderError,
 } from '@wirebound/renderer'
-import type { PageDocument } from '@wirebound/schema'
+import { installCatalog, type PageDocument } from '@wirebound/schema'
 import { compileTheme, themeStructures, type ResolvedTheme } from '@wirebound/themes'
 import { renderToStaticMarkup } from 'react-dom/server'
 
@@ -86,6 +87,8 @@ export interface ExportedPage {
  * `<!doctype html>`만 앞에 붙인다 — React가 그것을 내지 않는다.
  */
 export function exportPage(options: ExportPageOptions): ExportedPage {
+  installRegistries()
+
   const theme = options.theme ?? null
   const errors: NodeRenderError[] = []
 
@@ -115,6 +118,33 @@ export function exportPage(options: ExportPageOptions): ExportedPage {
 const DOCTYPE = '<!doctype html>'
 
 const DEFAULT_LANG = 'ko'
+
+/**
+ * **카탈로그 설치를 번들의 계약으로 든다**(D4). P5-3 이월 §3.2가 이름을 붙여 넘긴 자리다.
+ *
+ * ---
+ *
+ * **확인이 아니라 설치를 고른 이유 셋.**
+ *
+ * 1. **둘 다 멱등이고 이미 등록된 것을 건너뛴다**(`catalog/index.ts`·`structures/index.ts`).
+ *    그래서 여기서 부르는 것이 **호출자가 등록한 것을 덮지 않는다** — 값을 잃을 위험이
+ *    없는 쪽에서 잊을 수 있는 자리를 없앨 수 있다. `apps/web`의 `catalog-setup`과
+ *    `apps/api`의 `schema-setup`도 이미 그 멱등성에 기대고 있다.
+ * 2. **던지는 쪽을 골라도 새 정보가 없다.** 설치 없이 그리면 렌더러의 모양 가드가 노드마다
+ *    폴백을 그리고 `errors`에 담는다 — 관찰값이 이미 시끄럽다(`test/catalog.test.ts`가 그
+ *    값을 든다). 던지면 소비자 셋이 같은 두 줄을 각자 쓰게 될 뿐이다.
+ * 3. **막으려는 것은 침묵이 아니라 산출물이다.** 폴백이 든 HTML도 **눈으로는 그럴듯한 한
+ *    장**이고, 번들은 그것을 남에게 전달한다.
+ *
+ * **import 부작용으로 두지 않는다.** `apps/web`은 `catalog-setup` 모듈을 import하는 것만으로
+ * 설치가 끝나게 두었는데(*"부르는 것을 잊을 수 있는 자리를 만들지 않기 위해서"*), 그쪽은
+ * 앱이고 이쪽은 라이브러리다 — 패키지를 import했을 뿐인데 전역 레지스트리가 채워지면
+ * 그 부작용을 호출자가 예상할 수 없다. 부르는 순간에 채우면 자리는 여전히 하나다.
+ */
+function installRegistries(): void {
+  installCatalog()
+  installStructures()
+}
 
 /**
  * 시트 **한 장**을 만든다. 순서는 구조 기본 CSS → 테마다.
