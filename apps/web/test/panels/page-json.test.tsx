@@ -371,12 +371,34 @@ describe('③ 미리보기가 서버와 같은 게이트를 지난다', () => {
     expect(importButton().disabled).toBe(false)
   })
 
-  it('서버만 아는 것을 미리 말한다', async () => {
+  /**
+   * **넷을 하나씩 잰다(델타 리뷰 (4)).** 앞 판은 접두(*"보내 봐야 아는 것"*) 하나만 봐서,
+   * 뒤의 목록을 통째로 지워도 통과했다 — 문장이 있다는 것과 **무엇을 말한다는 것**은 다르다.
+   *
+   * **목록을 여기 손으로 적는 것이 의도다.** 화면 쪽 상수에서 끌어오면 거기서 하나를
+   * 지울 때 이 케이스의 분모도 함께 줄어 **또 0 사망**이 된다(M14가 그 모양이었다).
+   * 여기 있는 넷이 **규격**이고 화면이 구현이다 — 갈리면 죽는다.
+   *
+   * 넷의 근거는 `previewPageJson`의 *"서버만 아는 것"* 표다.
+   */
+  it('서버만 아는 것 넷을 하나씩 말한다', async () => {
     await open()
     paste(JSON.stringify(file()))
 
+    const shown = panel().textContent ?? ''
     // 미리보기가 **모두** 걸러 준다고 말하면 그것이 다시 거짓이 된다.
-    expect(panel().textContent).toContain('보내 봐야 아는 것')
+    expect(shown).toContain('보내 봐야 아는 것')
+    for (const known of ['대상 메뉴가 아직 있는지', 'NUL 문자', '본문 크기', '권한']) {
+      expect(shown, known).toContain(known)
+    }
+  })
+
+  it('막힌 파일에는 그 줄을 그리지 않는다 — 음성 대조', async () => {
+    // 보낼 수 없는 파일에 *"보내 봐야 안다"*를 붙이면 사용자가 누를 수 있다고 읽는다.
+    await open()
+    paste('{ 이건 JSON이 아니다')
+
+    expect(panel().textContent ?? '').not.toContain('보내 봐야 아는 것')
   })
 })
 
