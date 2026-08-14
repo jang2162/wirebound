@@ -64,3 +64,23 @@ export { invertOps } from './patch/inverse'
 
 export type { Migration } from './migrate'
 export { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument } from './migrate'
+
+export type {
+  PageJson,
+  PageJsonComment,
+  PageJsonFailure,
+  PageJsonIssue,
+  PageJsonPage,
+  PageJsonResult,
+} from './page-json/envelope'
+export {
+  COMMENT_BODY_MAX_LENGTH,
+  COMMENT_BODY_MIN_LENGTH,
+  PAGE_JSON_FILE_SUFFIX,
+  PageJsonSchema,
+  WIREBOUND_PAGE_VERSION,
+  pageJsonFileName,
+  pageJsonText,
+  readPageJson,
+  toPageJson,
+} from './page-json/envelope'
