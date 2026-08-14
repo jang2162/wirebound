@@ -107,7 +107,7 @@ describe('공개 표면이 계약이다', () => {
    * `src/index.ts`가 내는 것 전부. **여기 손으로 적은 목록이 계약이고, 이것을 고치는 것은
    * 밖으로 나가는 약속을 고치는 것이다.** 새 이름이 실수로 새면 이 케이스가 죽는다.
    */
-  const CONTRACT = ['PACKAGE_NAME', 'exportPage', 'scriptJson'].sort()
+  const CONTRACT = ['PACKAGE_NAME', 'exportBundle', 'exportPage', 'scriptJson'].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {
     expect(Object.keys(api).sort()).toEqual(CONTRACT)
