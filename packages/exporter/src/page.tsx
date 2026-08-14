@@ -6,6 +6,7 @@ import {
 } from '@wirebound/renderer'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
 import { compileTheme, themeStructures, type ResolvedTheme } from '@wirebound/themes'
+import type { ReactElement, ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 export interface ExportPageOptions {
@@ -87,37 +88,73 @@ export interface ExportedPage {
  * `<!doctype html>`만 앞에 붙인다 — React가 그것을 내지 않는다.
  */
 export function exportPage(options: ExportPageOptions): ExportedPage {
-  installRegistries()
-
   const theme = options.theme ?? null
-  const errors: NodeRenderError[] = []
+  const { tree, errors } = renderPageTree(options.document, theme)
+  const html = renderHtmlDocument({
+    lang: options.lang ?? DEFAULT_LANG,
+    title: options.title,
+    head: null,
+    body: tree,
+  })
+  return { html, css: pageCss(theme), errors }
+}
 
+/**
+ * 문서 하나를 그린다. **`exportPage`와 번들이 같은 이 함수를 쓴다**(D3).
+ *
+ * **패키지 밖으로 내지 않는다** — `src/index.ts`가 수출하지 않으므로 소비자의 표면에 없다.
+ * 안에서 나눠 둔 것은 번들이 셸을 씌우면서도 **렌더 경로를 새로 만들지 않게** 하기
+ * 위해서다. 경로가 둘이면 §11.3의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*가
+ * exporter 안에서부터 거짓이 된다.
+ */
+export function renderPageTree(
+  page: PageDocument,
+  theme: ResolvedTheme | null,
+): { tree: ReactElement; errors: NodeRenderError[] } {
+  installRegistries()
+  const errors: NodeRenderError[] = []
   /**
    * **구조 선택을 화면과 같은 함수에서 얻는다**(P7-3 이월 §8.2 규칙 1). 이 함수는 P8-1이
    * `apps/web`에서 `packages/themes`로 옮긴 것이고, 캔버스도 같은 이름을 부른다 —
    * 사본을 두면 §11.3의 *"결과가 어긋날 수 없다"*가 바로 그 자리에서 거짓이 된다.
    */
-  const tree = renderDocument(options.document, {
+  const tree = renderDocument(page, {
     structures: themeStructures(theme),
     onNodeError: (error) => errors.push(error),
   })
+  return { tree, errors }
+}
 
+/**
+ * `<html>` 한 장을 짓는다. **`exportPage`와 번들이 같은 이 함수를 쓴다.**
+ *
+ * `<head>`와 `<body>`를 둘 다 React가 그린다 — **이스케이프를 두 벌 두지 않기 위해서다**
+ * (P8-1의 D8). 제목·`lang`·링크의 `href`가 전부 사용자가 적은 값에서 오고, 우리가 따로
+ * escape 함수를 쓰면 React의 것과 규칙이 갈린다. `test/escape.test.ts`가 그 표를 든다.
+ */
+export function renderHtmlDocument(parts: {
+  lang: string
+  title: string
+  /** `<head>`에 더 얹을 것. **`exportPage`는 아무것도 얹지 않는다**(P8-1의 계약). */
+  head: ReactNode
+  body: ReactNode
+}): string {
   const html = renderToStaticMarkup(
-    <html lang={options.lang ?? DEFAULT_LANG}>
+    <html lang={parts.lang}>
       <head>
         <meta charSet="utf-8" />
-        <title>{options.title}</title>
+        <title>{parts.title}</title>
+        {parts.head}
       </head>
-      <body>{tree}</body>
+      <body>{parts.body}</body>
     </html>,
   )
-
-  return { html: `${DOCTYPE}${html}`, css: pageCss(theme), errors }
+  return `${DOCTYPE}${html}`
 }
 
 const DOCTYPE = '<!doctype html>'
 
-const DEFAULT_LANG = 'ko'
+export const DEFAULT_LANG = 'ko'
 
 /**
  * **카탈로그 설치를 번들의 계약으로 든다**(D4). P5-3 이월 §3.2가 이름을 붙여 넘긴 자리다.
@@ -158,7 +195,7 @@ function installRegistries(): void {
  * **테마가 없으면 구조 기본 CSS만이다 — 빈 문자열이 아니다.** 그것이 없으면 테마 없는
  * 프로젝트의 번들이 아무 스타일도 없이 나간다.
  */
-function pageCss(theme: ResolvedTheme | null): string {
+export function pageCss(theme: ResolvedTheme | null): string {
   const base = structureBaseCss()
   return theme === null ? base : `${base}\n${compileTheme(theme)}`
 }
