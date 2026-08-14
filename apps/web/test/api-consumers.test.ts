@@ -46,7 +46,7 @@ const METHODS = [
   'listProjects', 'getProject', 'createProject', 'updateProject', 'deleteProject',
   'getTree',
   'createMenu', 'updateMenu', 'deleteMenu',
-  'createPage', 'updatePage', 'deletePage', 'getPage',
+  'createPage', 'updatePage', 'deletePage', 'getPage', 'importPage',
   'patchOps', 'listMyRevisions',
   'getProjectTheme', 'listProjectThemes', 'setProjectTheme',
   'getTheme', 'createTheme', 'updateTheme',
@@ -112,14 +112,24 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   createPage: ['../src/tree/use-tree-commands.tsx'],
   updatePage: ['../src/tree/use-tree-commands.tsx'],
   deletePage: ['../src/tree/use-tree-commands.tsx'],
+  // 페이지 가져오기(P7-3). **트리 훅 하나에서만 불린다** — 가져오기는 트리를 바꾸는
+  // 조작이므로 `createPage`와 같은 잠금·재조회·이동을 지나야 하고(D2·D8), 그 셋이 그 훅에
+  // 있다. **화면(`panels/page-json-panel.tsx`)이 직접 부르기 시작하면 여기가 죽는다** —
+  // 그때는 그 셋이 두 벌이 된 것이다.
+  importPage: ['../src/tree/use-tree-commands.tsx'],
   // **셋이고 서로 다른 것을 읽는다.** 셸(`routes/editor.tsx`)은 `schema`·`headSeq`를
   // 스토어에 싣고, 편집 훅은 실패 뒤 재조회로 같은 둘을 다시 받고, **뷰 모드의 페이지
   // 설명 탭은 `title`·`description`을 읽는다**(P5-3). 셋째가 자기 조회를 갖는 근거는
   // `panels/page-description.tsx`의 머리말에 있다 — 요지는 앞 둘이 그 두 키를 버린다는 것이다.
+  // **넷째가 생겼다(P7-3).** 페이지 JSON 내보내기가 `title`·`description`·`schema`를 읽는다 —
+  // 파일의 `page` 절과 `schema` 절이 그 셋이다. **스토어의 문서를 쓰지 않는 근거**는
+  // `edit/page-export.ts`의 머리말에 있다: 코멘트와 문서를 **같은 순간의 서버 상태**에서
+  // 읽어야 파일이 끊긴 참조를 담지 않는다.
   getPage: [
     '../src/routes/editor.tsx',
     '../src/edit/use-edit-commit.tsx',
     '../src/panels/page-description.tsx',
+    '../src/panels/page-json-panel.tsx',
   ],
   patchOps: ['../src/edit/use-edit-commit.tsx'],
   listMyRevisions: ['../src/routes/editor.tsx'],
@@ -148,7 +158,16 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // **D1을 어기지 않는다.** 그 결정이 막는 것은 *"번호와 본문을 잇는 자리가 둘이 되는
   // 것"*이고, 고르개는 **세기만 한다** — 노드를 찾지도, `marker`를 읽지도, 코멘트를
   // 만들거나 지우지도 않는다. 쓰기 넷은 여전히 코멘트 탭 하나다.
-  listComments: ['../src/panels/comment-panel.tsx', '../src/panels/preset-picker.tsx'],
+  //
+  // **셋째가 생겼다(P7-3).** 페이지 JSON 내보내기가 파일의 `comments` 절을 채우려고 부른다.
+  // **D1을 어기지 않는 이유는 프리셋 고르개와 같다** — 내보내기는 `nodeId`·`body`만 실어
+  // 내고 번호를 읽지도 잇지도 않는다(번호는 `schema` 안의 노드가 나른다 — P7-3 D6).
+  // 쓰기 넷은 여전히 코멘트 탭 하나다.
+  listComments: [
+    '../src/panels/comment-panel.tsx',
+    '../src/panels/preset-picker.tsx',
+    '../src/panels/page-json-panel.tsx',
+  ],
   createComment: ['../src/panels/comment-panel.tsx'],
   updateComment: ['../src/panels/comment-panel.tsx'],
   deleteComment: ['../src/panels/comment-panel.tsx'],

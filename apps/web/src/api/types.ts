@@ -120,6 +120,27 @@ export interface PageDetail {
 }
 
 /**
+ * `POST /api/projects/:projectId/pages/import`의 응답(§11.2 — P7-3).
+ *
+ * **`page`는 `PageDetail`과 같은 여덟 키다** — 서버가 같은 `toResponse`로 만든다. 그래서
+ * 화면은 만들어진 페이지로 곧바로 옮길 수 있다.
+ *
+ * **`comments`가 둘을 갈라 센다.** `dangling`은 *"파일의 트리에 없는 노드를 가리키던
+ * 코멘트"*이고 **그것도 들어간다**(D5) — 들어간 뒤 코멘트 탭이 *"사라진 노드"* 무리로
+ * 보인다. 수를 말하지 않으면 사용자는 자기가 고아를 만든 줄 모른다.
+ *
+ * **`ignoredLayoutRef`는 파일이 그 값을 들었을 때만 온다** — 없으면 **키 자체가 없다**
+ * (`clientOpId`·`warnings`와 같은 관례). 오늘 페이지가 레이아웃을 고르는 경로가 없어
+ * 서버가 그 값을 쓰지 않고, 조용히 버리는 대신 말한다(D4).
+ */
+export interface PageImported {
+  page: PageDetail
+  comments: { inserted: number; dangling: number }
+  ignoredLayoutRef?: string
+  warnings?: ValidationIssue[]
+}
+
+/**
  * `PATCH /api/projects/:projectId/pages/:pageId/ops`의 응답.
  *
  * **`inverse`는 서버가 만든다.** 설계 §7.1이 못박은 것: *"`inverse`는 서버가 적용 직전

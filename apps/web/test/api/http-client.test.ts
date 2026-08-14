@@ -13,6 +13,7 @@ import { createHttpClient } from '../../src/api/http-client'
 import type {
   MenuNode,
   PageDetail,
+  PageImported,
   ProjectDetail,
   ProjectTheme,
   ThemeDetail,
@@ -117,6 +118,12 @@ const page: PageDetail = {
   headSeq: 7,
   schema: { version: 1, root: { id: 'n_000000000001', type: 'Page', children: [] } },
 }
+
+/**
+ * `POST /pages/import`의 응답(P7-3). **`page`가 위 `page`와 같은 여덟 키다** — 서버의 같은
+ * `toResponse`가 만든다.
+ */
+const pageImported: PageImported = { page, comments: { inserted: 2, dangling: 1 } }
 
 /** `POST /menu`·`PATCH /menu/:nodeId`의 응답. 트리 노드와 달리 `pages`·`children`이 없다(D1). */
 const menuNode: MenuNode = { id: 'm1', projectId: 'p1', parentId: null, title: '회원관리', sortOrder: 0 }
@@ -293,6 +300,17 @@ const ENDPOINTS: Array<{
     call: (c) => c.createPage('p1', { menuNodeId: 'm1', title: '목록' }),
   },
   {
+    // **`/pages/import`가 `/pages/:pageId`와 한 글자 차이가 아니다** — `import`는 uuid가
+    // 아니므로 서버의 `:pageId` 라우트와 겹칠 수 없고, 오타가 나면 404다(`getProjectTheme`의
+    // 주석이 말한 부류와 반대로 안전한 자리다). 그래도 표에 두는 것은 **메서드**가 틀리면
+    // (`PUT`으로 보내면) 페이지 생성이 아니라 아무것도 아닌 곳으로 가기 때문이다.
+    client: 'importPage',
+    url: '/api/projects/p1/pages/import',
+    method: 'POST',
+    body: pageImported,
+    call: (c) => c.importPage('p1', { menuNodeId: 'm1', file: {} }),
+  },
+  {
     client: 'updatePage',
     url: '/api/projects/p1/pages/pg1',
     method: 'PATCH',
@@ -459,6 +477,15 @@ const SHAPE_CASES: Array<{
     call: (c) => c.createMenu('p1', { parentId: null, title: '가' }),
   },
   { shape: 'pageDetail', broken: { ...page, headSeq: '0' }, ok: page, call: (c) => c.getPage('p1', 'pg1') },
+  {
+    // **`page.id`가 빈 문자열이면 막는다** — 가져오기가 성공하면 그 값이 그대로 주소가
+    // 되고(`use-tree-commands.tsx`의 `importJson`), `/projects/p1/pages/`는 어느 라우트도
+    // 잡지 않아 **화면이 통째로 빈다**(`pageDetail`의 실측 표).
+    shape: 'pageImported',
+    broken: { ...pageImported, page: { ...page, id: '' } },
+    ok: pageImported,
+    call: (c) => c.importPage('p1', { menuNodeId: 'm1', file: {} }),
+  },
   {
     shape: 'projectTheme',
     broken: { themeId: null, theme: 42, issues: [] },
