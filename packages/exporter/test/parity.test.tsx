@@ -31,8 +31,11 @@
  * **조용히 맞추지 않았다는 근거가 그 절이다** — 정규화를 지우면 본론이 죽고, 정규화가
  * 지나치면 구분력 케이스가 죽는다.
  *
- * 보지 않는 것: 계산된 스타일(시트를 안 걸었다) · 이벤트 핸들러(상호작용은 P8-3이다) ·
- * `<head>`(화면 쪽에 견줄 것이 없다 — 번들의 머리는 `page.test.ts`가 본다).
+ * 보지 않는 것: 계산된 스타일(시트를 안 걸었다) · 이벤트 핸들러(상호작용은 P8-3이다).
+ *
+ * **`<head>`는 견주지 않는다 — 화면 쪽에 견줄 것이 없다.** 그래도 파서가 그것을 무엇으로
+ * 읽는지는 여기서 잰다(아래 *"번들의 머리"* 절). 문자열 단언은 `page.test.ts`가 들고,
+ * 그것만으로는 *"브라우저가 이대로 읽는다"*가 안 되기 때문이다.
  *
  * ## 이 파일이 무엇을 재고 무엇을 못 재는가
  *
@@ -479,6 +482,39 @@ describe('갈렸던 자리 ㉡ — 텍스트 노드 경계', () => {
       theme: resolvedSystemTheme('portal'),
     })
     expect(html).not.toContain('<!--')
+  })
+})
+
+/* ------------------------------------------------------------------ 번들의 머리 */
+
+describe('번들의 머리를 파서가 무엇으로 읽나 (D7)', () => {
+  function parsed(): Document {
+    const { html } = exportPage({ document: fixture(), title: '회원 <목록>', lang: 'ko' })
+    return new DOMParser().parseFromString(html, 'text/html')
+  }
+
+  /**
+   * **원문은 `<meta charSet="utf-8"/>`이다** — React가 JSX prop 이름을 그대로 낸다
+   * (`page.test.ts`가 그 문자열을 든다). HTML의 속성 이름은 대소문자를 가리지 않으므로
+   * 파서가 `charset`으로 읽는다. **그 왕복을 여기서 잰다** — 원문만 보고 *"인코딩이
+   * 선언돼 있다"*고 말하면 그것은 단언이지 측정이 아니다.
+   */
+  it('charSet이 charset으로 읽힌다', () => {
+    const meta = parsed().querySelector('meta')
+    expect([...meta!.attributes].map((attr) => attr.name)).toEqual(['charset'])
+    expect(meta!.getAttribute('charset')).toBe('utf-8')
+    expect(parsed().querySelector('meta[charset]')).not.toBeNull()
+  })
+
+  it('lang과 title이 문서의 것으로 읽힌다', () => {
+    expect(parsed().documentElement.lang).toBe('ko')
+    expect(parsed().title).toBe('회원 <목록>')
+  })
+
+  /** 머리에 셸이 없다(D7) — 스타일도 스크립트도 P8-2·P8-3의 것이다. */
+  it('머리에 style도 script도 link도 없다', () => {
+    const head = parsed().head
+    expect(head.querySelectorAll('style, script, link')).toHaveLength(0)
   })
 })
 
