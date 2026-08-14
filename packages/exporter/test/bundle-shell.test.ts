@@ -4,7 +4,12 @@
  * DOM 없이 돈다 — CSS는 글자로 훑고 코멘트 줄은 순수 함수다. 셸이 **그린 것**을 재는 것은
  * `bundle.test.tsx`이고 그 파일만 jsdom을 쓴다.
  */
-import { describeNode, type PageDocument, type WbNode } from '@wirebound/schema'
+import {
+  describeInteraction,
+  describeNode,
+  type PageDocument,
+  type WbNode,
+} from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { commentEntries, MISSING_NODE_LABEL, type BundleComment } from '../src/bundle/comments'
 import { SHELL_CSS, SHELL_PREFIX, SHELL_WRAPPERS } from '../src/bundle/shell-css'
@@ -226,6 +231,23 @@ describe('commentEntries — 번호와 코멘트를 맞춘다 (D4)', () => {
         marker: 1,
       },
     ])
+  })
+
+  /**
+   * **`schema`가 같은 상태를 부르는 말과 같은지 잰다.**
+   *
+   * `MISSING_NODE_LABEL`은 우리 쪽 상수이고 위 케이스들이 그것을 import해 견주므로,
+   * **그 상수를 바꾸면 케이스가 함께 움직인다.** 그래서 여기서는 상수가 아니라
+   * `schema`의 문장에서 그 말을 **꺼내** 견준다 — 두 탭이 같은 노드를 다르게 부르는 날
+   * 여기가 죽는다.
+   */
+  it('사라진 노드를 부르는 말이 상호작용 문장의 것과 같다', () => {
+    const source: WbNode = { id: 'n_000000000002', type: 'Button', props: { label: '검색' } }
+    const sentence = describeInteraction(documentOf([source]), source, {
+      on: 'click',
+      actions: [{ type: 'setProp', target: 'n_000000000099', prop: 'loading', value: true }],
+    })
+    expect(sentence).toContain(MISSING_NODE_LABEL)
   })
 
   /** 고아 코멘트 — 노드가 사라진 상태. **버리지 않고 그 말을 쓴다.** */

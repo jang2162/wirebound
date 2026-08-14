@@ -325,6 +325,37 @@ describe('exportBundle — 코멘트 탭 (D4)', () => {
     expect(entries('pages/회원-목록.html')[1]?.textContent).toContain('기본 정렬은 가입일 역순')
   })
 
+  /**
+   * **D4의 *"안 오면 안 그린다"*를 그린 것에서 잰다.** 값만 재면(`authorName === null`)
+   * 셸이 그 `null`로 **빈 줄을 그려도** 안 죽는다 — 실제로 변이 *"작성자가 없어도 자리를
+   * 그린다"*가 사망 0이었고, 이 케이스가 그 자리를 메운다.
+   */
+  it('작성자·시각이 안 오면 그 줄을 그리지 않는다', () => {
+    const line = entries('pages/회원-목록.html')[1]!
+    expect(line.querySelectorAll('.wb-export-entry-meta')).toHaveLength(0)
+  })
+
+  it('작성자가 오면 그 줄을 그린다', () => {
+    const bundle = exportBundle({
+      pages: [
+        {
+          title: '회원 목록',
+          document: LIST_PAGE,
+          comments: [
+            { nodeId: 'n_000000000003', body: '본문', authorName: '장병현', createdAt: '2026-08-14' },
+          ],
+        },
+      ],
+    })
+    const line = [
+      ...parse(fileAt(bundle, 'pages/회원-목록.html')).querySelectorAll(
+        '#wb-export-panel-comments .wb-export-entry',
+      ),
+    ][1]!
+    const meta = [...line.querySelectorAll('.wb-export-entry-meta')]
+    expect(meta.map((element) => element.textContent)).toEqual(['장병현 · 2026-08-14'])
+  })
+
   it('코멘트도 마커도 없으면 없다고 말한다', () => {
     expect(
       parse(fileAt(twoPages(), 'pages/회원-상세.html')).querySelector('#wb-export-panel-comments')
@@ -392,5 +423,30 @@ describe('exportBundle — errors를 삼키지 않는다 (D9)', () => {
 
   it('오류가 없으면 빈 목록이다', () => {
     expect(twoPages().errors).toEqual([])
+  })
+
+  /**
+   * **그릴 수 있는 문서면 번들이 나온다.** 노드가 아닌 자식은 렌더 경로가 폴백으로 그리고
+   * `errors`로 이름 붙이는데, 문장화(`listInteractionSentences` → `walkNodes`)는 노드가
+   * 객체라고 믿고 거기서 던진다. 그것 때문에 **그린 페이지가 통째로 사라지면** D9가 지키려던
+   * 것이 반대로 뒤집힌다.
+   */
+  it('노드가 아닌 자식이 있어도 번들이 나온다 — 그 노드는 errors가 이름을 든다', () => {
+    const withNull: PageDocument = {
+      version: 1,
+      root: {
+        id: 'n_000000000031',
+        type: 'Page',
+        children: [null as unknown as never, { id: 'n_000000000032', type: 'Text' }],
+      },
+    }
+    const bundle = exportBundle({ pages: [{ title: '노드 아님', document: withNull }] })
+    expect(bundle.errors.map((item) => item.error.message)).toEqual([
+      '노드가 객체가 아닙니다: null',
+    ])
+    expect(
+      parse(fileAt(bundle, 'pages/노드-아님.html')).querySelector('#wb-export-panel-interactions')
+        ?.textContent,
+    ).toBe('상호작용이 없습니다')
   })
 })
