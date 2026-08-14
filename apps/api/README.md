@@ -143,6 +143,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder? }`(하나 이상) | 200 `{ id, projectId, parentId, title, sortOrder }`(POST와 같은 키) |
 | `/api/projects/:projectId/menu/:nodeId` | DELETE | editor | — | 204(자식 메뉴·페이지가 있으면 409) |
 | `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다 |
+| `/api/projects/:projectId/pages/import` | POST | editor | `{ menuNodeId, file, title? }` | 201 `{ page, comments: { inserted, dangling }, ignoredLayoutRef?, warnings? }` — **§11.2의 페이지 JSON으로 새 페이지를 만든다**(아래 "페이지 JSON 가져오기"). 봉투 위반·모르는 버전·NUL 400, 메뉴 없음 404, 카탈로그 **오류** 422 |
 | `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
 | `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder? }`(하나 이상, `schema`는 여기서 못 바꾼다) | 200 **페이지 여덟 키**(POST·GET과 같다) |
 | `/api/projects/:projectId/pages/:pageId/schema` | PUT | editor | `{ schema }`(문서 봉투 전체) | 200 페이지(봉투 위반 400, 카탈로그 **오류** 422, 실패 시 기존 스키마 보존). 경고가 있으면 `warnings`가 더 붙는다. 통째 교체도 revision을 남긴다 |
@@ -222,6 +223,38 @@ PATCH /menu/:id    응답 그대로 → 400 인식할 수 없는 키: "id", "pro
 POST  /pages       응답 그대로 → 400 인식할 수 없는 키: "id", "sortOrder", "schemaVersion", "schema", "headSeq"
 PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "schemaVersion", "schema", "headSeq"
 ```
+
+### 페이지 JSON 가져오기 (P7-3 — §11.2)
+
+`POST .../pages/import`는 **파일 한 벌로 새 페이지를 만든다.** 절대 덮지 않는다 —
+대상은 **메뉴 노드**이고 페이지는 그 형제 그룹의 맨 끝에 붙는다.
+
+본문의 `file`이 §11.2의 봉투다. **구현이 §11.2의 예시와 갈리는 자리 둘**은
+`packages/schema/src/page-json/envelope.ts`의 머리말에 근거와 함께 있다:
+
+```jsonc
+{
+  "wireboundVersion": "1",
+  "page": { "title": "회원 목록", "layoutRef": "admin-lnb", "description": null },
+  // ① 예시는 root 노드를 싣지만 여기는 **문서 봉투**다 — 문서 버전을 적을 자리가 필요하다
+  "schema": { "version": 1, "root": { "id": "n_root", "type": "Page", "children": [] } },
+  // ② 예시의 `marker`는 받지 않는다 — 번호는 `schema` 안의 노드가 든다(P5-1 D1)
+  "comments": [{ "nodeId": "n_7f3a", "body": "검색 조건은 AND 결합" }]
+}
+```
+
+- **id를 전부 재발급하고 참조 둘을 함께 옮긴다** — 코멘트의 `nodeId`와 상호작용 `target`.
+  트리 밖 참조(`page:…`)는 그대로 둔다.
+- **파일의 트리에 없는 노드를 가리키는 코멘트는 버리지 않고 넣는다.** 그 수가 응답의
+  `comments.dangling`이고, 들어간 뒤 화면은 그것을 *"사라진 노드"* 무리로 보인다.
+- **`layoutRef`는 쓰지 않는다** — 오늘 페이지가 레이아웃을 고르는 경로가 없다
+  (`pages`에 레이아웃 컬럼이 없다). 조용히 버리지 않고 응답의 `ignoredLayoutRef`로 말한다.
+- **문서 쓰기는 편집 파이프라인을 지난다**(D1) — 가져오기 하나가 revision 하나를 남기고,
+  그 역은 **빈 페이지**로 되돌린다.
+- **한 트랜잭션이다.** 어느 갈래에서 끊기든 페이지도 문서도 코멘트도 남지 않는다 —
+  갈래별로 *"무엇을 되돌리는가"*는 `services/page-import.ts`의 머리말에 표로 있다.
+- **코멘트 작성자는 가져온 사람이다.** 파일에 작성자가 없고, 있어도 `comments.author_id`가
+  `users`를 참조하므로 남의 서버의 id는 쓸 수 없다.
 
 ### 코멘트와 번호 (P5-1)
 

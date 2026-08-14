@@ -12,6 +12,14 @@ function send(reply: FastifyReply, status: number, body: ErrorBody): void {
   reply.status(status).send({ error: body })
 }
 
+/**
+ * 본문이 상한을 넘었을 때 Fastify가 붙이는 상태 코드.
+ *
+ * **`errors.ts`의 `ERROR_STATUS`에 두지 않는다** — 그 표는 **우리가 던지는** 코드의 표이고
+ * 413에 대응하는 `ApiErrorCode`가 없다. 여기 있는 것은 *"남이 던진 상태를 알아보는"* 값이다.
+ */
+const ERROR_STATUS_PAYLOAD_TOO_LARGE = 413
+
 /** Fastify 내부 오류(잘못된 JSON 등)가 갖는 `statusCode`를 안전하게 읽는다. */
 function statusCodeOf(error: unknown): number | undefined {
   if (typeof error !== 'object' || error === null || !('statusCode' in error)) return undefined
@@ -40,7 +48,19 @@ export function registerErrorHandler(app: FastifyInstance): void {
 
     const statusCode = statusCodeOf(error)
     if (statusCode !== undefined && statusCode >= 400 && statusCode < 500) {
-      send(reply, statusCode, { code: 'bad-request', message: '요청 형식이 올바르지 않습니다' })
+      // **413만 문장을 갈라 적는다(P7-3).** 나머지 4xx는 *"형식이 올바르지 않다"*가 참인데
+      // 본문이 너무 큰 것은 **형식이 멀쩡한데 크기가 넘은 것**이라 그 문장이 거짓이다.
+      //
+      // **가져오기가 그 갈래를 흔한 것으로 만든다** — 파일 크기를 사용자가 정하기 때문이고
+      // (P7-2 이월 §8이 지목한 축), 실측한 경계는 Fastify의 기본 본문 상한 1MiB다:
+      // 노드 1000개(657KB)는 201, 5000개(3.3MB)는 413이다. 우리 상한을 새로 두지 않는 것은
+      // 이미 상한이 하나 있고 그것이 **우리 코드에 닿기 전에** 끊기 때문이다 — 두 벌이 되면
+      // 어느 쪽이 끊었는지가 응답에서 갈리지 않는다.
+      const message =
+        statusCode === ERROR_STATUS_PAYLOAD_TOO_LARGE
+          ? '요청 본문이 너무 큽니다'
+          : '요청 형식이 올바르지 않습니다'
+      send(reply, statusCode, { code: 'bad-request', message })
       return
     }
 

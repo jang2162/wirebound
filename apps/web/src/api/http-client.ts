@@ -12,6 +12,7 @@ import type {
   MarkerChange,
   MenuNode,
   PageDetail,
+  PageImported,
   PatchResult,
   Preset,
   ProjectDetail,
@@ -220,6 +221,22 @@ function isTreePage(value: unknown): boolean {
  * 하나 때문에 목록 전체를 막는 것과 같은 판단). **넓다는 사실 자체를 여기 적어 둔다** —
  * 다음 소비자가 무엇을 근거로 판단할지가 그것이다.
  */
+/**
+ * 페이지 하나. **`SHAPES.pageDetail`과 `SHAPES.pageImported`가 같이 쓴다** — 뒤엣것의
+ * `page`가 서버의 같은 `toResponse`에서 나오므로, 검사를 베끼면 한쪽만 고쳐진다
+ * (`isProjectDetail`이 목록·상세에 같이 쓰이는 것과 같은 자리).
+ */
+function isPageDetail(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
+    typeof value['headSeq'] === 'number' &&
+    isRecord(value['schema']) &&
+    isRecord((value['schema'] as Record<string, unknown>)['root'])
+  )
+}
+
 function isProjectDetail(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -367,13 +384,28 @@ const SHAPES = {
    * 새로고침으로 복구되지만, 빈 화면은 사용자가 무엇이 잘못됐는지 알 수도 되돌릴 수도 없다.
    * **보이고 복구되는 실패가 조용한 빈 화면보다 낫다.**
    */
-  pageDetail: (value) =>
+  pageDetail: isPageDetail,
+  /**
+   * 가져오기 응답(P7-3 — §11.2). **`page`에 같은 검사를 다시 건다** — 그 값이 `pageDetail`과
+   * 같은 여덟 키이고(서버의 `toResponse` 하나가 만든다) **주소가 되는 값**(`page.id`)이
+   * 여기서도 그대로 주소로 들어간다: 가져오기가 성공하면 화면이 그 페이지로 옮긴다.
+   * 그래서 검사를 얕게 두면 `/projects/p1/pages/`로 옮겨 **화면이 통째로 빈다**(위
+   * `pageDetail`의 실측 표).
+   *
+   * **`comments`의 두 수도 본다.** 화면이 *"코멘트 N개는 가리키던 노드가 없습니다"*를
+   * 그리는 재료이고, 숫자가 아니면 `undefined`가 문장에 실려 나간다 — 그 문장은 사용자가
+   * **되돌릴 수 없는 상태**(고아 코멘트를 이미 만들었다)를 설명하는 유일한 자리다.
+   *
+   * **`ignoredLayoutRef`는 보지 않는다.** 없는 것이 정상이고(파일이 그 값을 안 들면 키가
+   * 없다), 이상한 값이 오면 문장에 이상한 글자가 보일 뿐이다 — 손해의 등급이 다르다
+   * (`restoreResult`가 같은 자리에서 같은 판단).
+   */
+  pageImported: (value) =>
     isRecord(value) &&
-    typeof value['id'] === 'string' &&
-    value['id'] !== '' &&
-    typeof value['headSeq'] === 'number' &&
-    isRecord(value['schema']) &&
-    isRecord((value['schema'] as Record<string, unknown>)['root']),
+    isPageDetail(value['page']) &&
+    isRecord(value['comments']) &&
+    typeof (value['comments'] as Record<string, unknown>)['inserted'] === 'number' &&
+    typeof (value['comments'] as Record<string, unknown>)['dangling'] === 'number',
   /**
    * 편집 응답. **`seq`가 다음 요청의 `baseSeq`이고 `inverse`가 undo가 되보낼 ops다** —
    * 둘 다 값이 그대로 큐와 undo 스택에 실리므로, 계약을 어긴 값이 지나가면 `baseSeq`가
@@ -851,6 +883,15 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['patchOps']>[2],
     true
   >,
+  // 페이지 가져오기(P7-3). 서버의 `ImportPageBody`가 `z.strictObject`라 선언되지 않은 키는
+  // 그 자체로 400이다. **`title`이 없으면 키를 만들지 않는 것이 요점이다** — `undefined`를
+  // 실은 키는 `JSON.stringify`가 지워 주지만 그 우연에 기대지 않는다(`patchOps`와 같은 자리).
+  // **`file` 안쪽은 걸러지지 않는다** — 그것은 봉투 하나이고, 그 안의 초과 키를 거부하는
+  // 것은 `parsePageJson`(양쪽이 같이 쓰는 함수)의 일이다.
+  importPage: { menuNodeId: true, file: true, title: true } satisfies Record<
+    keyof Parameters<ApiClient['importPage']>[1],
+    true
+  >,
   // 테마 쓰기 둘은 봉투 키가 `theme` 하나다(서버의 `ThemeBody`). 키가 하나뿐이라 초과
   // 키가 생길 자리가 좁아 보이지만, **`declaredOnly`를 지나는 이유는 초과 키가 아니라
   // 규칙의 단일성이다** — 그 함수 머리말의 *"자리마다 함수를 두면 같은 위험에 대한
@@ -1049,6 +1090,14 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
       ),
     deletePage: (projectId, pageId) =>
       request<void>('DELETE', pagePath(projectId, pageId), SHAPES.noBody),
+    // `updateMenu`와 같은 이유로 `async`다.
+    importPage: async (projectId, body) =>
+      request<PageImported>(
+        'POST',
+        `${projectPath(projectId)}/pages/import`,
+        SHAPES.pageImported,
+        declaredOnly(body, BODY_KEYS.importPage),
+      ),
     getPage: (projectId, pageId) =>
       request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail),
     patchOps: (projectId, pageId, body) =>

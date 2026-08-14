@@ -4,7 +4,7 @@
  * 프로젝트마다 재사용한다."*
  *
  * **순수 함수다.** React도 DOM도 `fetch`도 모른다 — 파일을 내려받고 읽는 것은
- * `file-io.ts`, 화면은 `theme-io-panel.tsx`다. 셋을 가른 이유는 **이 파일이 화면 없이
+ * `../files/file-io.ts`, 화면은 `theme-io-panel.tsx`다. 셋을 가른 이유는 **이 파일이 화면 없이
  * 단위 테스트되어야** 하기 때문이고(계획서 T1), 그 선이 지켜지는지는
  * `test/theme/theme-io.test.ts`가 DOM 없이 도는 것으로 확인된다.
  *

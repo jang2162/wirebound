@@ -9,7 +9,7 @@
  *    트랜잭션 안에서** 움직이는지까지 본다.
  */
 import { describe, expect, it } from 'vitest'
-import type { PageDocument } from '@wirebound/schema'
+import { COMMENT_BODY_MAX_LENGTH, COMMENT_BODY_MIN_LENGTH, type PageDocument } from '@wirebound/schema'
 import {
   addMember,
   createMenuNode,
@@ -293,17 +293,30 @@ describe('POST .../comments — 번호 부여(D2·D3)', () => {
     })
   })
 
-  it('빈 본문과 2001자를 막고 2000자는 받는다(재라 #4)', async () => {
+  /**
+   * **경계를 숫자로 박지 않고 상수에서 만든다(P7-3 리뷰가 잡았다).**
+   *
+   * 같은 상한을 §11.2의 봉투도 걸어야 하는데(가져오기가 이 라우트를 지나지 않는다), 앞 판은
+   * 봉투에 상수를 두고 이 라우트는 `2000`을 그대로 박아 **값이 두 자리**였다. 그런데 이
+   * 케이스도 숫자를 박고 있어 그 갈림을 **잴 수 없었다** — 봉투의 상수를 3000으로 바꿔도
+   * 이 파일이 전부 통과했다(리뷰가 재현했고 나도 다시 쟀다).
+   *
+   * **상수에서 만들면 그 변이가 죽는다:** 라우트가 이어져 있으면 경계가 함께 움직여 통과하고,
+   * 누가 다시 박아 두면 두 값이 갈리는 순간 여기가 죽는다.
+   */
+  it('빈 본문과 상한+1을 막고 상한은 받는다(재라 #4)', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
       const empty = await postComment(ctx, fx, fx.rootNodeId, '')
-      const tooLong = await postComment(ctx, fx, fx.rootNodeId, '가'.repeat(2001))
-      const atLimit = await postComment(ctx, fx, fx.rootNodeId, '가'.repeat(2000))
+      const tooLong = await postComment(ctx, fx, fx.rootNodeId, '가'.repeat(COMMENT_BODY_MAX_LENGTH + 1))
+      const atLimit = await postComment(ctx, fx, fx.rootNodeId, '가'.repeat(COMMENT_BODY_MAX_LENGTH))
+      const atMin = await postComment(ctx, fx, fx.rootNodeId, '가'.repeat(COMMENT_BODY_MIN_LENGTH))
 
       expect(empty.statusCode).toBe(400)
       expect(tooLong.statusCode).toBe(400)
       expect(atLimit.statusCode).toBe(201)
+      expect(atMin.statusCode).toBe(201)
     })
   })
 

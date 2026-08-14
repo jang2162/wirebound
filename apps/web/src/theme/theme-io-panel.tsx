@@ -62,7 +62,7 @@ import { useState, type ReactElement } from 'react'
 import type { Theme, ThemeIssue } from '@wirebound/themes'
 import { useThemeDraft, useThemeDraftStore } from '../store/use-theme-draft'
 import { resolveDraft } from './draft-css'
-import { downloadTextFile, readTextFile } from './file-io'
+import { downloadTextFile, readTextFile } from '../files/file-io'
 import { ThemeIssueList, blocksSave } from './theme-issues'
 import { exportFileName, exportText, fromImport } from './theme-io'
 

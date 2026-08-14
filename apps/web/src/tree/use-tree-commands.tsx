@@ -23,7 +23,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
-import type { TreeMenuNode } from '../api/types'
+import type { PageImported, TreeMenuNode } from '../api/types'
 import {
   flattenMenus,
   menuOutdentTarget,
@@ -85,6 +85,20 @@ export interface TreeCommands {
   indent: () => void
   /** 한 단계 밖으로 — 부모의 다음 형제가 된다. */
   outdent: () => void
+  /**
+   * **파일 한 벌로 페이지를 만든다**(§11.2 — P7-3 T5). 고른 **메뉴** 밑에 붙는다.
+   *
+   * **`submitInput('new-page')`와 같은 잠금·재조회·이동을 지난다** — 가져오기도 트리를
+   * 바꾸는 조작이고, 여기에 자기 잠금을 따로 두면 트리 조작 하나가 나가 있는 동안 가져오기가
+   * 겹쳐 나간다(D2가 막는 그것).
+   */
+  importJson: (file: unknown, title?: string) => void
+  /**
+   * 마지막 가져오기의 결과. **`failure`와 다른 축이다** — 성공했는데도 **말해야 하는
+   * 것**(고아가 된 코멘트 수 · 쓰지 않은 `layoutRef`)이 있기 때문이다. 다음 조작이
+   * 시작되면 `null`이 된다.
+   */
+  imported: PageImported | null
   /** 소속 메뉴 목록이 열려 있으면 고를 수 있는 것들. 닫혀 있으면 `null`. */
   reparenting: { id: string; path: string }[] | null
   openReparent: () => void
@@ -131,6 +145,12 @@ export function useTreeCommands(props: {
   const [editing, setEditing] = useState<TreeEditing | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [pickingMenu, setPickingMenu] = useState(false)
+  /**
+   * 마지막 가져오기의 결과(P7-3). **`failure`와 다른 축이라 상태가 따로다** — 성공했는데도
+   * 말해야 하는 것이 있고(고아가 된 코멘트 · 쓰지 않은 `layoutRef`), 그것을 `failure`에
+   * 실으면 성공이 실패처럼 보인다.
+   */
+  const [imported, setImported] = useState<PageImported | null>(null)
 
   /**
    * **선택은 파생값이다(D3).** `picked`가 `null`이면 주소가 말하는 페이지가 선택이다.
@@ -350,6 +370,47 @@ export function useTreeCommands(props: {
       },
       () => {
         if (created !== null) navigate(`/projects/${projectId}/pages/${created}`)
+      },
+    )
+  }
+
+  /**
+   * **파일 한 벌로 페이지를 만든다**(§11.2 — P7-3 T5).
+   *
+   * **`submitInput`의 `new-page` 갈래와 같은 모양이다** — `run`을 지나므로 잠금·재조회·
+   * 이동이 그대로 따라온다. 그 셋을 여기서 다시 짜지 않는 것이 요점이다: 가져오기가 자기
+   * 잠금을 가지면 트리 조작과 겹쳐 나가고(D2), 재조회를 빠뜨리면 만든 페이지가 트리에
+   * 안 보인다.
+   *
+   * **`abilities.addPage`를 지난다.** 가져오기는 **페이지를 만드는 것**이므로 판정이
+   * `페이지 추가`와 같다 — 메뉴를 고르지 않았으면 할 수 없다. 판정을 여기서 새로 짜면
+   * 그 표가 두 벌이 된다(D5가 막는 것).
+   *
+   * **봉투를 여기서 읽지 않는다.** 화면이 미리보기를 그리느라 이미 읽었고(`parsePageJson`),
+   * 여기서 다시 읽으면 같은 판정이 두 자리가 된다. 서버도 같은 함수를 쓴다.
+   */
+  function importJson(file: unknown, title?: string): void {
+    if (selection === null || selection.kind !== 'menu') return
+    if (!abilities.addPage) return
+    const menuNodeId = selection.id
+
+    setImported(null)
+    let result: PageImported | null = null
+    void run(
+      async () => {
+        result = await api.importPage(projectId, {
+          menuNodeId,
+          file,
+          // **없으면 키를 만들지 않는다** — 서버가 `title`을 파일의 제목으로 대신한다.
+          ...(title !== undefined && title !== '' ? { title } : {}),
+        })
+      },
+      () => {
+        if (result === null) return
+        setImported(result)
+        // **만든 페이지로 이동한다** — `submitInput`의 `new-page`와 같다. 빈 문자열 id는
+        // `SHAPES.pageImported`가 이미 막았다.
+        navigate(`/projects/${projectId}/pages/${result.page.id}`)
       },
     )
   }
@@ -604,6 +665,8 @@ export function useTreeCommands(props: {
     },
     reparentTo,
     cancelReparent: () => setPickingMenu(false),
+    importJson,
+    imported,
   }
 }
 

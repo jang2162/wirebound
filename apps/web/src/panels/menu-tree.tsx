@@ -25,6 +25,8 @@ import type { TreeMenuNode, TreePage } from '../api/types'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
 import { MenuToolbar } from './menu-toolbar'
+import { PageJsonPanel } from './page-json-panel'
+import { isTypingSurface } from './typing-surface'
 
 /**
  * 키보드 단축키(Task 10). **툴바 버튼과 같은 함수를 부른다** — `run`이 `TreeCommands`에서
@@ -109,6 +111,22 @@ export function MenuTree(props: { projectId: string; pageId: string | undefined 
    * 건 확인이 잠금 해제 뒤까지 살아남았다(리뷰가 잡았고 재현했다).
    */
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    /**
+     * **값을 넣거나 고르는 표면에서 난 키는 단축키를 찾기 전에 돌려보낸다**(P7-2 이월 §2,
+     * P7-3 D11).
+     *
+     * 바로 아래 상태 가드(`editing`·`reparenting`)로는 부족하다 — 그것은 **인라인 입력**이
+     * 열려 있을 때만 참인데, 이 상자 안에는 그 둘이 아닌 입력 칸이 더 있다
+     * (`PageJsonPanel`의 파일·붙여 넣기·제목). 그 칸에서 친 `Backspace`가 여기까지 버블되면
+     * **글자가 안 지워지고 메뉴 삭제 확인이 걸린다** — 구조 트리에서 실측한 그 사고와 같다.
+     *
+     * **찾기 전에 거르는 순서가 규격이다.** 찾은 뒤에 거르면 `preventDefault`가 이미 걸려
+     * 글자가 안 지워진다(그 순서를 뒤집는 변이가 죽는다).
+     *
+     * **칸을 하나씩 예외 처리하지 않는다** — 규칙은 `panels/typing-surface.ts` 하나가 갖고,
+     * 그것이 편집 가능성·폼 컨트롤·ARIA 역할·shadow 호스트 넷으로 가른다.
+     */
+    if (isTypingSurface(event.target)) return
     if (commands.editing !== null || commands.reparenting !== null) return
 
     const shortcut = SHORTCUTS.find((candidate) => candidate.match(event))
@@ -191,6 +209,9 @@ export function MenuTree(props: { projectId: string; pageId: string | undefined 
       </ul>
       {/* 툴바가 트리 **아래**인 것은 `StructureToolbar`와 같은 자리 규칙이다. */}
       <MenuToolbar commands={commands} />
+      {/* **페이지 JSON은 툴바 아래다**(P7-3 T5). 같은 상자 안인 것이 요점이고, 그래서 위
+          `handleKeyDown`이 `isTypingSurface`를 지난다(D11). */}
+      <PageJsonPanel projectId={props.projectId} pageId={props.pageId} commands={commands} />
     </div>
   )
 }

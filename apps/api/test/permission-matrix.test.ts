@@ -286,6 +286,29 @@ const CASES: Case[] = [
     setup: 페이지용메뉴,
   },
   {
+    // **§10의 표에 가져오기가 없다.** P7-3 D9가 판정한 자리이고 근거는 `routes/pages.ts`의
+    // 그 핸들러 주석에 있다 — 가져오기는 **페이지를 만드는 것**이므로 바로 위
+    // `페이지 생성`과 같은 등급이다. 테마·레이아웃처럼 프로젝트 전체를 한 번에 바꾸지 않는다.
+    //
+    // **허용된 역할이 실제로 성공해야 한다** — `menuNodeId`가 진짜여야 하고(아니면 404),
+    // 파일이 봉투·카탈로그를 지나야 한다(아니면 400/422). 그래서 `setup`이 만든 메뉴 id를
+    // 실은 최소 봉투를 보낸다: 이 행이 재는 것은 역할 판정이므로 내용이 가벼운 편이 낫다.
+    label: '페이지 가져오기',
+    method: 'POST',
+    url: '/api/projects/:projectId/pages/import',
+    payload: (subs: Record<string, string>) => ({
+      menuNodeId: subs.menuNodeId,
+      file: {
+        wireboundVersion: '1',
+        page: { title: '가져온 페이지' },
+        schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [] } },
+        comments: [],
+      },
+    }),
+    allowed: ['owner', 'editor'],
+    setup: 페이지용메뉴,
+  },
+  {
     label: '페이지 조회',
     method: 'GET',
     url: '/api/projects/:projectId/pages/:pageId',

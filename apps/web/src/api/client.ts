@@ -13,6 +13,7 @@ import type {
   MarkerChange,
   MenuNode,
   PageDetail,
+  PageImported,
   PatchResult,
   Preset,
   ProjectDetail,
@@ -157,6 +158,38 @@ export interface ApiClient {
     body: { title?: string; menuNodeId?: string; sortOrder?: number },
   ): Promise<PageDetail>
   deletePage(projectId: string, pageId: string): Promise<void>
+  /**
+   * **페이지 JSON 파일 한 벌로 새 페이지를 만든다**(§11.2 — P7-3). **덮지 않는다** —
+   * `menuNodeId`가 가리키는 메뉴의 맨 끝에 붙는다.
+   *
+   * `file`이 봉투 전체다. **화면이 보내기 전에 서버와 같은 게이트 셋을 지난다** —
+   * 봉투(`readPageJson`) · 문서 버전(`migrateDocument`) · 카탈로그(`validatePage`)이고
+   * 셋 다 `@wirebound/schema`의 같은 함수다(`panels/page-json-panel.tsx`의
+   * `previewPageJson`).
+   *
+   * **그래도 서버만 아는 것이 남는다** — 대상 메뉴가 아직 있는지 · NUL · 본문 크기 ·
+   * 권한, 그리고 배포 편차. 아래 표의 실패는 **미리보기를 지나고도 올 수 있다.**
+   *
+   * > **앞 판은 여기에 *"그래야 화면이 통과시킨 파일을 서버가 다른 이유로 거절하는 일이
+   * > 없다"*고 적었고 그것은 거짓이었다**(리뷰가 셋을 실측했다 — 그때 미리보기는 봉투만
+   * > 봤다). P7-1 이월 §2가 이름 붙인 부류를 **이 주석 자신이 만들고 있었다.**
+   *
+   * `title`은 파일의 제목을 덮는다. **없으면 키를 만들지 않는다** — 페이지 제목에 유일
+   * 제약이 없어 같은 파일을 두 번 가져오면 같은 이름 둘이 생기고, 그것을 가르는 것이
+   * 이 필드다.
+   *
+   * | 실패 | 코드 | 무엇 |
+   * |---|---|---|
+   * | 봉투 위반 · 모르는 `wireboundVersion` · 지원하지 않는 문서 버전 · NUL | `bad-request`(400) | `issues[].path`가 **파일의 자리**를 가리킨다 |
+   * | 없는 메뉴 노드 | `not-found`(404) | |
+   * | 카탈로그 **오류** | `validation-failed`(422) | `issues[].nodeId`가 **파일의 노드 id**다 |
+   *
+   * **어느 갈래에서 끊기든 아무것도 만들어지지 않는다** — 서버가 한 트랜잭션으로 묶는다.
+   */
+  importPage(
+    projectId: string,
+    body: { menuNodeId: string; file: unknown; title?: string },
+  ): Promise<PageImported>
   getPage(projectId: string, pageId: string): Promise<PageDetail>
   /**
    * 편집 하나를 보낸다. **응답의 `seq`가 다음 호출의 `baseSeq`다**(README 4단계).

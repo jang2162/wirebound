@@ -167,6 +167,28 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
+    // **P7-3이 더한 하나. 이 파일이 그것을 강제했다** — 라우트를 만든 커밋에서 이 케이스가
+    // 먼저 죽었고, 그래서 *"가져오기가 복원 중에 어떻게 되는가"*를 재게 됐다.
+    //
+    // 복원이 되돌리는 행 셋(`pages`·`revisions`·`comments`)을 전부 쓰므로 `restoreWrites`가
+    // 참이다. 막히지 않으면 **복원이 얼린 상태 옆에 새 페이지가 끼어든다.**
+    route: 'POST /:projectId/pages/import',
+    label: '페이지 가져오기 — 페이지·문서·코멘트 셋을 한 트랜잭션에 쓴다',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/pages/import`,
+    payload: (ids) => ({
+      menuNodeId: ids.menuId,
+      file: {
+        wireboundVersion: '1',
+        page: { title: '끼어든 가져오기' },
+        schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [] } },
+        comments: [],
+      },
+    }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
     route: 'PATCH /:projectId/pages/:pageId',
     label: '페이지 메타 수정',
     method: 'PATCH',
