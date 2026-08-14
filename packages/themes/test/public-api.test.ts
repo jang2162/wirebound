@@ -80,6 +80,10 @@ describe('공개 표면이 계약이다', () => {
     'NODE_HANDLES', 'coveredProperties', 'overwrittenHandles',
     // P7-1 T1 — 패턴 전개(§6.6). `apps/web`의 삽입 경로가 부르고, P8·P9도 같은 이름을 쓴다.
     'expandPattern',
+    // P8-1 — 테마가 고른 구조를 렌더러의 옵션 꼴로 내는 투영. **`apps/web`에서 옮겨 왔다** —
+    // 화면·정적 번들·P8-3의 api 라우트가 같은 표를 써야 §11.3의 *"결과가 어긋날 수 없다"*가
+    // 참이 된다(P7-3 이월 §8.2 규칙 1).
+    'themeStructures',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {

@@ -32,9 +32,9 @@ import {
   type NodeRenderError,
 } from '@wirebound/renderer'
 import { describePageTarget, type PageDocument } from '@wirebound/schema'
+import { themeStructures } from '@wirebound/themes'
 import { walkSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { themeStructures } from '../theme/theme-structures'
 import { useProjectTheme } from '../theme/use-project-theme'
 import { useThemeCss } from '../theme/use-theme-css'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로

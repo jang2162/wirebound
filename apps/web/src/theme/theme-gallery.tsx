@@ -59,9 +59,8 @@
  */
 import { Component, type ErrorInfo, type ReactElement, type ReactNode } from 'react'
 import { renderNode, type NodeRenderError, type RenderOptions } from '@wirebound/renderer'
-import type { ResolvedTheme } from '@wirebound/themes'
+import { themeStructures, type ResolvedTheme } from '@wirebound/themes'
 import { galleryItems, structureCount, structureKey, type GalleryItem } from './gallery-document'
-import { themeStructures } from './theme-structures'
 /**
  * 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다(`canvas/canvas.tsx`가 같은
  * 줄을 같은 이유로 갖고 있다).
