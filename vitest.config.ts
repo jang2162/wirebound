@@ -14,6 +14,10 @@ const shared = {
       '@wirebound/schema': src('./packages/schema/src/index.ts'),
       '@wirebound/renderer': src('./packages/renderer/src/index.ts'),
       '@wirebound/themes': src('./packages/themes/src/index.ts'),
+      // **더 좁은 것을 먼저 둔다.** rollup의 alias는 `id === find || id.startsWith(find + '/')`로
+      // 맞추고 **앞의 것이 이기므로**, 순서를 뒤집으면 `@wirebound/exporter/test-support`가
+      // `…/src/index.ts/test-support`로 바뀐다.
+      '@wirebound/exporter/test-support': src('./packages/exporter/test-support/index.ts'),
       '@wirebound/exporter': src('./packages/exporter/src/index.ts'),
     },
   },

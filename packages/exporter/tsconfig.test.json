@@ -7,6 +7,6 @@
     "jsx": "react-jsx",
     "composite": true
   },
-  "include": ["test"],
+  "include": ["test", "test-support"],
   "references": [{ "path": "./" }]
 }
