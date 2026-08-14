@@ -9,10 +9,9 @@
 import { getStructure, renderNode } from '@wirebound/renderer'
 import { installStructures } from '@wirebound/renderer'
 import { ListDef, defineComponent, installCatalog, registerComponent } from '@wirebound/schema'
-import { resolveTheme, systemTheme, type Theme } from '@wirebound/themes'
+import { resolveTheme, systemTheme, themeStructures, type Theme } from '@wirebound/themes'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { themeStructures } from '../../src/theme/theme-structures'
 
 beforeAll(() => {
   installCatalog()

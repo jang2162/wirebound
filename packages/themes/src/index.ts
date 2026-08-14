@@ -80,6 +80,11 @@ export type {
 } from './resolved'
 export { resolveTheme } from './resolve/index'
 
+// P8-1 — 테마가 고른 구조를 렌더러의 `RenderOptions.structures` 꼴로 낸다. **`apps/web`에
+// 있던 것을 옮겼다**: 화면·번들(`packages/exporter`)·P8-3의 api 라우트가 같은 표를 써야
+// 한다(P7-3 이월 §8.2 규칙 1). 근거는 그 파일의 머리말에 있다.
+export { themeStructures } from './resolve/structures'
+
 export { compileTheme } from './emit/index'
 
 export { SYSTEM_THEME_IDS, systemTheme } from './system/index'

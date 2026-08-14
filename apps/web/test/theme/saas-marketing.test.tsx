@@ -26,10 +26,15 @@
  */
 import { installStructures, renderNode, structureBaseCss } from '@wirebound/renderer'
 import { installCatalog } from '@wirebound/schema'
-import { compileTheme, resolveTheme, systemTheme, type ResolvedTheme } from '@wirebound/themes'
+import {
+  compileTheme,
+  resolveTheme,
+  systemTheme,
+  themeStructures,
+  type ResolvedTheme,
+} from '@wirebound/themes'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { themeStructures } from '../../src/theme/theme-structures'
 
 beforeAll(() => {
   installCatalog()
