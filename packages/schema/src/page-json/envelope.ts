@@ -243,6 +243,18 @@ export function readPageJson(text: string): PageJsonResult {
     }
   }
 
+  return parsePageJson(parsed)
+}
+
+/**
+ * **이미 파싱된 값**에서 봉투를 읽는다. `readPageJson`의 2단계 뒤가 그대로 이 함수다.
+ *
+ * **자리가 둘인 것이 아니라 입구가 둘이다.** 웹은 파일에서 **글자**를 받고(`readPageJson`),
+ * 서버는 요청 본문에서 이미 **객체**를 받는다 — 서버가 그것을 다시 `JSON.stringify`해서
+ * 글자 입구로 넣으면 왕복 한 번이 공짜로 늘고, 그 왕복이 값을 바꾸는 날(예: `undefined`)
+ * 두 입구의 판정이 갈린다. **규칙은 여기 하나다** — `unreadable`만 글자 입구의 것이다.
+ */
+export function parsePageJson(parsed: unknown): PageJsonResult {
   if (!isPlainObject(parsed) || typeof parsed.wireboundVersion !== 'string') {
     return { status: 'failed', reason: 'not-envelope', message: NOT_ENVELOPE_MESSAGE, issues: [] }
   }

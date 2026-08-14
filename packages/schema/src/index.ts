@@ -81,6 +81,7 @@ export {
   WIREBOUND_PAGE_VERSION,
   pageJsonFileName,
   pageJsonText,
+  parsePageJson,
   readPageJson,
   toPageJson,
 } from './page-json/envelope'

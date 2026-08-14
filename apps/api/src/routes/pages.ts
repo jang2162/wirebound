@@ -30,6 +30,17 @@
  * `schema`를 쓰는 함수를 남겨 두지 않는 것도(이 태스크가 그런 함수 하나를 지웠다)
  * 같은 이유다 — 두 번째 쓰기 경로가 있으면 그것을 부르는 순간 같은 구멍이 다시 난다.
  *
+ * **`POST .../pages/import`가 §11.2의 페이지 JSON 가져오기다(P7-3 D7).** P7-1 D4는
+ * *"새 엔드포인트를 만들지 않는다"*였는데 **그것은 문서 편집 하나였고 여기는 다르다** —
+ * 가져오기는 **페이지 생성 · 문서 쓰기 · 코멘트 넣기** 세 자원을 만진다. 두 요청으로 나누면
+ * 중간 실패에서 **빈 페이지가 남는다**(P6-2 이월 §8). 조율은 `services/page-import.ts`가
+ * 한 트랜잭션 안에서 하고, 이 파일은 봉투를 읽어 넘기고 결과를 HTTP로 옮기기만 한다
+ * (`routes/snapshots.ts`가 `services/restore.ts`에 대해 하는 것과 같은 배치).
+ *
+ * **`:pageId`와 겹치지 않는다.** `import`에 오는 메서드는 `POST`뿐이고 `/:projectId/pages`
+ * 아래의 `POST`는 생성 하나라, 같은 메서드로 두 패턴이 맞붙는 자리가 없다
+ * (`routes/comments.ts`의 `renumber`와 같은 근거).
+ *
  * **`PATCH .../ops`는 같은 게이트를 부분 편집에 대해 수행한다.** 다만 검증·적용·
  * 이력 기록을 이 파일이 직접 하지 않고 `services/edit-pipeline.ts`의 `applyEdit`
  * 하나에 맡긴다 — P3의 WebSocket 핸들러가 같은 함수를 부르므로, 규칙이 이 파일에
@@ -45,12 +56,13 @@ import {
   DocumentEnvelopeSchema,
   createNodeId,
   migrateDocument,
+  parsePageJson,
   partitionIssues,
   validatePage,
 } from '@wirebound/schema'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
-import { badRequest, notFound, unauthenticated, validationFailed } from '../errors'
+import { badRequest, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
 // **P5-1이 `http/edit-outcome.ts`로 옮겼다** — `routes/comments.ts`가 두 번째 소비자가
 // 됐다(코멘트가 번호를 부여하려고 같은 파이프라인을 부른다). `withWarnings`가 P4c-1에서
 // 같은 이유로 옮겨 간 것과 같은 자리다.
@@ -60,6 +72,7 @@ import { parseBody, parseParams } from '../http/parse'
 import { withWarnings } from '../http/warnings'
 import { OpsBody } from '../http/patch-ops'
 import { applyEdit } from '../services/edit-pipeline'
+import { importPage, type PageImportOutcome } from '../services/page-import'
 import { MenuNodeNotFoundError, deletePage, findPageById, insertPage, updatePage, type PageRecord } from '../repos/pages'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
@@ -95,6 +108,53 @@ const UpdatePageBody = z
  * 갖고 선언되지 않은 키(예: `style`)를 갖지 않는다.
  */
 const PutSchemaBody = z.strictObject({ schema: DocumentEnvelopeSchema })
+
+/**
+ * `POST .../pages/import`의 본문(P7-3 D7).
+ *
+ * **`file`을 `z.unknown()`으로 받는 것이 의도다.** 봉투를 zod로 여기서 다시 선언하면
+ * *"모르는 `wireboundVersion`은 그 값을 말한다"*·*"`comments[].marker`는 `schema`의 노드로
+ * 가라"*(D6) 같은 문장이 사라지고 일반 zod 오류가 나간다. 그 판정은 `@wirebound/schema`의
+ * `parsePageJson` 하나가 갖고 **웹의 미리보기가 같은 함수를 쓴다** — 그래야 화면이 통과시킨
+ * 파일을 서버가 다른 이유로 거절하는 일이 없다(P7-1 이월 §2가 지목한 부류의 반대편).
+ *
+ * **`title`은 파일의 제목을 덮는다.** 없으면 파일의 것을 쓴다 — `services/page-import.ts`의
+ * `PageImportInput.title`에 근거가 있다.
+ */
+const ImportPageBody = z.strictObject({
+  menuNodeId: z.uuid(),
+  file: z.unknown(),
+  title: Title.optional(),
+})
+
+/**
+ * 가져오기 실패를 HTTP 에러로 옮긴다. **매핑 표가 곧 이 함수다**(`http/edit-outcome.ts`·
+ * `routes/snapshots.ts`의 `restoreOutcomeToApiError`와 같은 관례).
+ *
+ * **`default` 절을 두지 않는다** — `PageImportOutcome`에 갈래가 늘면 "값을 반환하지 않고
+ * 끝나는 경로가 있다"로 컴파일이 깨진다. `default`를 두면 새 갈래가 조용히 엉뚱한 상태
+ * 코드로 나간다.
+ *
+ * **`edit-failed`만 다른 표로 넘긴다.** 그 실패는 편집 파이프라인의 것이고, 같은 위험에
+ * 대한 규칙을 두 벌로 두면 한쪽만 고쳐진다.
+ */
+function pageImportOutcomeToApiError(outcome: Exclude<PageImportOutcome, { kind: 'imported' }>): ApiError {
+  switch (outcome.kind) {
+    case 'unsupported-version':
+      return badRequest(outcome.message)
+    case 'invalid-document':
+      // 이슈의 `nodeId`가 **파일의 id**다(D8) — 사용자에게 남는 것이 파일뿐이므로.
+      return validationFailed('가져올 문서의 스키마 검증에 실패했습니다', outcome.issues)
+    case 'nul-byte':
+      return badRequest('페이지 제목·설명에 NUL 문자(U+0000)를 포함할 수 없습니다')
+    case 'menu-not-found':
+      return notFound('메뉴를 찾을 수 없습니다')
+    case 'comment-nul-byte':
+      return badRequest('코멘트에 NUL 문자(U+0000)를 포함할 수 없습니다')
+    case 'edit-failed':
+      return editOutcomeToApiError(outcome.outcome, outcome.baseSeq)
+  }
+}
 
 /** API 계약이 노출하는 필드만 담는다 — 저장소의 `projectId`는 응답에 싣지 않는다(경로에 이미 있다). */
 function toResponse(page: PageRecord) {
@@ -178,6 +238,65 @@ export function pageRoutes() {
 
       reply.code(201)
       return toResponse(page)
+    })
+
+    /**
+     * **파일 한 벌로 페이지를 만든다**(§11.2 — P7-3 D7·D8·D9).
+     *
+     * **`editor`다**(D9). §10이 editor에게 *"메뉴·페이지·컴포넌트·코멘트·상호작용 편집"*을
+     * 열었고 가져오기는 **페이지를 만드는 것**이므로 `POST .../pages`와 같은 등급이다.
+     * 테마·레이아웃처럼 프로젝트 전체를 한 번에 바꾸지 않는다.
+     *
+     * **덮지 않는다**(D4) — 언제나 **새 페이지**다. P6-2 이월 §1이 그은 선이다:
+     * *"`planRestore`는 payload 상태로 수렴시키고 가져오기는 삽입이다."*
+     *
+     * 응답이 나르는 것 셋:
+     *
+     * | 키 | 무엇 | 왜 |
+     * |---|---|---|
+     * | `page` | 만들어진 페이지(문서까지) | 화면이 곧바로 그 주소로 옮긴다 |
+     * | `comments` | `{ inserted, dangling }` | **고아를 만들면서 들어간다**(D5) — 몇 개인지 말하지 않으면 사용자가 모른다 |
+     * | `ignoredLayoutRef` | 파일이 든 `layoutRef` | **쓰지 않았다고 말한다**(D4). 없으면 **키 자체가 없다** — 없는 것을 `null`로 흉내 내지 않는다 |
+     */
+    app.post('/:projectId/pages/import', { preHandler: projectGuard('editor') }, async (request, reply) => {
+      const { projectId } = parseParams(ProjectIdParams, request.params)
+      const body = parseBody(ImportPageBody, request.body)
+
+      // 1단계: 봉투. 실패 문장과 **파일의 자리**(`issues[].path`)는 봉투가 만든다(D8).
+      const read = parsePageJson(body.file)
+      if (read.status === 'failed') {
+        throw badRequest(read.message, read.issues.length > 0 ? read.issues : undefined)
+      }
+
+      // `projectGuard('editor')`가 이미 인증을 요구하므로 여기 도달했다면 `currentUser`는
+      // 있다. `as`로 좁히지 않고 던지는 것은 아래에서 `.id`·`.name`을 **반드시** 읽기
+      // 때문이다(이 파일의 다른 쓰기 라우트와 같은 근거).
+      const currentUser = request.currentUser
+      if (!currentUser) {
+        throw unauthenticated()
+      }
+
+      const outcome = await importPage(app.db, {
+        projectId,
+        menuNodeId: body.menuNodeId,
+        file: read.file,
+        ...(body.title !== undefined ? { title: body.title } : {}),
+        actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+        authorId: currentUser.id,
+      })
+      if (outcome.kind !== 'imported') {
+        throw pageImportOutcomeToApiError(outcome)
+      }
+
+      reply.code(201)
+      return withWarnings(
+        {
+          page: toResponse(outcome.page),
+          comments: { inserted: outcome.inserted, dangling: outcome.dangling },
+          ...(read.file.page.layoutRef !== undefined ? { ignoredLayoutRef: read.file.page.layoutRef } : {}),
+        },
+        outcome.warnings,
+      )
     })
 
     app.patch('/:projectId/pages/:pageId', { preHandler: projectGuard('editor') }, async (request) => {
