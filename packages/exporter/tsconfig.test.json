@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".tsbuild-test",
+    "lib": ["ES2022", "DOM"],
+    "jsx": "react-jsx",
+    "composite": true
+  },
+  "include": ["test"],
+  "references": [{ "path": "./" }]
+}

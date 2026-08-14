@@ -10,6 +10,8 @@
     { "path": "./packages/renderer" },
     { "path": "./packages/themes" },
     { "path": "./packages/themes/tsconfig.test.json" },
+    { "path": "./packages/exporter" },
+    { "path": "./packages/exporter/tsconfig.test.json" },
     { "path": "./apps/playground" },
     { "path": "./apps/api" },
     { "path": "./apps/web" }

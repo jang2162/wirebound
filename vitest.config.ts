@@ -14,6 +14,7 @@ const shared = {
       '@wirebound/schema': src('./packages/schema/src/index.ts'),
       '@wirebound/renderer': src('./packages/renderer/src/index.ts'),
       '@wirebound/themes': src('./packages/themes/src/index.ts'),
+      '@wirebound/exporter': src('./packages/exporter/src/index.ts'),
     },
   },
 }
