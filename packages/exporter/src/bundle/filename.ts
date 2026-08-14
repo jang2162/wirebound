@@ -61,10 +61,21 @@ const RESERVED_STEM = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/iu
 /** 예약어를 피하는 방법. 이름을 바꾸지 않고 한 글자만 더한다. */
 const RESERVED_ESCAPE = '_'
 
-const encoder = new TextEncoder()
-
+/**
+ * UTF-8 바이트 수.
+ *
+ * **`TextEncoder`를 부르지 않는다.** 이 패키지의 `src`는 `tsconfig`가 `DOM` lib을 주지
+ * 않아(P8-1 이월 §9) 그 전역이 **타입으로 보이지 않는다** — 그 설정은 브라우저 API를 쓰고도
+ * 컴파일이 통과하는 것을 막으려고 일부러 그렇게 뒀다. 코드 포인트마다 자릿수를 세는 것은
+ * 여섯 줄이고, 덤으로 **케이스가 `TextEncoder`로 재므로 자와 대상이 서로 다른 길**이 된다.
+ */
 function byteLength(value: string): number {
-  return encoder.encode(value).length
+  let bytes = 0
+  for (const char of value) {
+    const code = char.codePointAt(0)!
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4
+  }
+  return bytes
 }
 
 /**
