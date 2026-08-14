@@ -285,6 +285,101 @@ describe('미리보기', () => {
   })
 })
 
+describe('③ 미리보기가 서버와 같은 게이트를 지난다', () => {
+  /**
+   * **P7-1 이월 §2가 경고한 그 부류다** — *"화면은 괜찮다고 했는데 저장이 거부됐다."*
+   * 리뷰가 셋을 실측했다: 미리보기는 `ready`인데 서버가 400/422를 낸다.
+   *
+   * 고칠 수 있는 이유는 **셋 다 순수 함수이고 같은 패키지에 있기** 때문이다 —
+   * `migrateDocument`·`validatePage`가 브라우저에서도 돌고 카탈로그도 같은 것이다.
+   */
+  it('지원하지 않는 문서 버전을 미리 막는다 — 서버는 400이다', async () => {
+    await open()
+    paste(JSON.stringify(file({ schema: { version: 999, root: { id: 'file_root', type: 'Page' } } })))
+
+    expect(within(panel()).getByRole('alert').textContent).toContain('999')
+    expect(importButton().disabled).toBe(true)
+  })
+
+  it('카탈로그에 없는 타입을 미리 막고 **파일의 노드 id**를 보인다 — 서버는 422다', async () => {
+    await open()
+    paste(
+      JSON.stringify(
+        file({
+          schema: {
+            version: 1,
+            root: { id: 'file_root', type: 'Page', children: [{ id: 'file_odd', type: '없는타입' }] },
+          },
+          comments: [],
+        }),
+      ),
+    )
+
+    expect(within(panel()).getByRole('alert')).toBeDefined()
+    // 사용자에게 남는 것은 파일뿐이므로 파일에서 찾을 수 있는 id여야 한다(D8).
+    expect(panel().textContent).toContain('file_odd')
+    expect(importButton().disabled).toBe(true)
+  })
+
+  it('duplicate-id를 미리 막는다 — 프로브가 원리적으로 못 보던 축이다', async () => {
+    await open()
+    paste(
+      JSON.stringify(
+        file({
+          schema: {
+            version: 1,
+            root: {
+              id: 'file_root',
+              type: 'Page',
+              children: [
+                { id: 'same', type: 'List' },
+                { id: 'same', type: 'List' },
+              ],
+            },
+          },
+          comments: [],
+        }),
+      ),
+    )
+
+    expect(within(panel()).getByRole('alert')).toBeDefined()
+    expect(importButton().disabled).toBe(true)
+  })
+
+  it('경고만 있으면 막지 않는다 — 화면이 서버보다 엄격해지면 안 된다', async () => {
+    // `Field`는 `variantFrom: 'control'`이라 노드가 든 `variant`가 버려지고
+    // `ignored-variant`(warning)가 난다. 서버는 그것으로 막지 않는다(P7-1 이월 §7).
+    await open()
+    fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('button', { name: '주문관리' }))
+    paste(
+      JSON.stringify(
+        file({
+          schema: {
+            version: 1,
+            root: {
+              id: 'file_root',
+              type: 'Page',
+              children: [{ id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' }],
+            },
+          },
+          comments: [],
+        }),
+      ),
+    )
+
+    expect(within(panel()).queryByRole('alert')).toBeNull()
+    expect(importButton().disabled).toBe(false)
+  })
+
+  it('서버만 아는 것을 미리 말한다', async () => {
+    await open()
+    paste(JSON.stringify(file()))
+
+    // 미리보기가 **모두** 걸러 준다고 말하면 그것이 다시 거짓이 된다.
+    expect(panel().textContent).toContain('보내 봐야 아는 것')
+  })
+})
+
 describe('읽기 실패를 갈라 말한다', () => {
   it('JSON이 아니면 그렇게 말한다', async () => {
     await open()

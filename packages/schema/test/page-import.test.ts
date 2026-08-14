@@ -6,8 +6,8 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
-import { pageJsonText, readPageJson, toPageJson } from '../src/page-json/envelope'
-import { planPageImport } from '../src/page-json/import'
+import { WIREBOUND_PAGE_VERSION, pageJsonText, readPageJson, toPageJson } from '../src/page-json/envelope'
+import { gatePageImport, planPageImport } from '../src/page-json/import'
 import type { PageDocument } from '../src/node'
 import { collectNodeIds, walkNodes } from '../src/tree'
 import { partitionIssues, validatePage } from '../src/validate'
@@ -195,6 +195,115 @@ describe('가져오기 계획', () => {
     )
     expect(before.map((issue) => issue.nodeId)).toContain('file_odd')
     expect(after.map((issue) => issue.nodeId)).not.toContain('file_odd')
+  })
+})
+
+describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른다 (리뷰 ③)', () => {
+  /**
+   * **이 함수가 하나여야 하는 이유는 실측된 사고다.** 앞 판은 서버만 이 둘을 돌렸고
+   * 미리보기는 봉투에서 멈췄다 — 리뷰가 셋을 실측했다(미리보기 `ready` / 서버 400·422).
+   * 아래 셋이 그 셋이고, **같은 파일로 세 층의 케이스가 선다:** 여기(게이트) ·
+   * `apps/api/test/page-import.test.ts`(서버 상태) · `apps/web/…/page-json.test.tsx`(미리보기).
+   */
+  function envelopeOf(schema: PageDocument) {
+    return {
+      wireboundVersion: WIREBOUND_PAGE_VERSION,
+      page: { title: '가져온 목록', description: null },
+      schema,
+      comments: [],
+    }
+  }
+
+  it('지원하지 않는 문서 버전을 막고 그 값을 말한다', () => {
+    const gate = gatePageImport(envelopeOf({ version: 999, root: { id: 'file_root', type: 'Page' } }))
+
+    expect(gate.ok).toBe(false)
+    if (gate.ok || gate.reason !== 'unsupported-version') return
+    expect(gate.message).toContain('999')
+  })
+
+  it('카탈로그에 없는 타입을 막고 **파일의 노드 id**를 가리킨다 (D8)', () => {
+    const gate = gatePageImport(
+      envelopeOf({
+        version: 1,
+        root: { id: 'file_root', type: 'Page', children: [{ id: 'file_odd', type: '없는타입' }] },
+      }),
+    )
+
+    expect(gate.ok).toBe(false)
+    if (gate.ok || gate.reason !== 'invalid-document') return
+    expect(gate.issues.map((issue) => issue.nodeId)).toContain('file_odd')
+  })
+
+  it('duplicate-id를 막는다', () => {
+    const gate = gatePageImport(
+      envelopeOf({
+        version: 1,
+        root: {
+          id: 'file_root',
+          type: 'Page',
+          children: [
+            { id: 'same', type: 'List' },
+            { id: 'same', type: 'List' },
+          ],
+        },
+      }),
+    )
+
+    expect(gate.ok).toBe(false)
+    if (gate.ok || gate.reason !== 'invalid-document') return
+    expect(gate.issues.map((issue) => issue.code)).toContain('duplicate-id')
+  })
+
+  it('경고만 있으면 막지 않고 실어 낸다 — 화면도 서버도 이것으로 막지 않는다', () => {
+    // `Field`는 `variantFrom: 'control'`이라 노드가 든 `variant`가 버려지고 경고가 난다.
+    const gate = gatePageImport(
+      envelopeOf({
+        version: 1,
+        root: {
+          id: 'file_root',
+          type: 'Page',
+          children: [
+            { id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' },
+          ],
+        },
+      }),
+    )
+
+    expect(gate.ok).toBe(true)
+    if (!gate.ok) return
+    expect(gate.warnings.map((issue) => issue.code)).toContain('ignored-variant')
+    expect(gate.warnings.every((issue) => issue.severity === 'warning')).toBe(true)
+  })
+
+  it('막을 때 **경고까지 함께** 싣는다 — 서버 응답과 같은 관례다', () => {
+    const gate = gatePageImport(
+      envelopeOf({
+        version: 1,
+        root: {
+          id: 'file_root',
+          type: 'Page',
+          children: [
+            { id: 'file_odd', type: '없는타입' },
+            { id: 'file_field', type: 'Field', props: { label: '이름', control: 'text' }, variant: 'x' },
+          ],
+        },
+      }),
+    )
+
+    expect(gate.ok).toBe(false)
+    if (gate.ok || gate.reason !== 'invalid-document') return
+    expect(gate.issues.some((issue) => issue.severity === 'warning')).toBe(true)
+    expect(gate.issues.some((issue) => issue.severity === 'error')).toBe(true)
+  })
+
+  it('멀쩡한 파일은 올린 문서를 낸다', () => {
+    const gate = gatePageImport(envelopeOf(DOCUMENT))
+
+    expect(gate.ok).toBe(true)
+    if (!gate.ok) return
+    expect(gate.document.version).toBe(DOCUMENT.version)
+    expect(collectNodeIds(gate.document.root)).toEqual(collectNodeIds(DOCUMENT.root))
   })
 })
 

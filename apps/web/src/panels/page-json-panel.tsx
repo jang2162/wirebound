@@ -48,8 +48,15 @@
  * | `unknown-version` | 봉투는 맞는데 모르는 버전이다 | **wirebound를 올린다** |
  * | `bad-shape` | 봉투인데 **그 안의 내용**이 규격이 아니다 | **파일의 그 자리를 고친다**(자리를 보인다) |
  *
- * 뒤 넷은 `@wirebound/schema`의 `readPageJson`이 가르고 **서버도 같은 함수를 쓴다** —
- * 화면이 통과시킨 파일을 서버가 다른 이유로 거절하는 일이 없다(P7-1 이월 §2의 반대편).
+ * 뒤 넷은 `@wirebound/schema`의 `readPageJson`이 가르고 **서버도 같은 함수를 쓴다.**
+ *
+ * > **여기 있던 *"화면이 통과시킨 파일을 서버가 다른 이유로 거절하는 일이 없다"*는
+ * > 거짓이었다 — 리뷰가 셋을 실측했다**(문서 버전 999 · 카탈로그에 없는 타입 ·
+ * > `duplicate-id`: 미리보기는 `ready`인데 서버가 400/422). 그 문장은 **봉투 게이트
+ * > 하나만 보고** 전체를 단언한 것이다. 미리보기가 게이트 셋을 다 지나게 고쳤고
+ * > (`previewPageJson`의 표), **그래도 서버만 아는 것 넷이 남는다** — 그것을 화면이
+ * > 말한다(`SERVER_ONLY`). 단언을 줄이고 남는 것을 적는 것이 P7-1 이월 §2에 대한
+ * > 정직한 답이다.
  *
  * **파일 읽기가 실패하면 대기 글자를 비운다.** P4c-3이 닫은 사고를 되풀이하지 않는다 —
  * 화면은 *"파일을 읽지 못했습니다"*라고 말하는데 앞서 읽힌 글자가 남아 있어, 그 상태로
@@ -65,10 +72,16 @@
 import { useState, type ReactElement } from 'react'
 import {
   collectNodeIds,
+  gatePageImport,
+  partitionIssues,
   readPageJson,
   type PageJson,
-  type PageJsonIssue,
+  type ValidationIssue,
 } from '@wirebound/schema'
+// **카탈로그가 실려 있어야 `validatePage`가 참말을 한다.** import만으로 설치된다
+// (`catalog-setup.ts`의 머리말) — 안 싣고 부르면 모든 타입이 *"없는 타입"*이 되어
+// **미리보기가 멀쩡한 파일을 전부 막는다.**
+import '../catalog-setup'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
 import { pageExport } from '../edit/page-export'
@@ -85,15 +98,74 @@ const NO_MENU = '가져올 메뉴를 트리에서 고르세요'
 const EXPORT_FAILED = '페이지를 내보내지 못했습니다'
 /** 파일 자체를 못 읽었을 때(내용이 JSON이 아닌 것과 **다른 말이다**). */
 const FILE_FAILED = '파일을 읽지 못했습니다'
+/** 봉투는 맞는데 그 안의 **문서 버전**을 이 wirebound가 모를 때. 서버도 같은 이유로 400이다. */
+const UNSUPPORTED_VERSION = '이 파일의 문서 버전을 읽을 수 없습니다 —'
+/** 봉투도 버전도 맞는데 **카탈로그 규칙**을 어겼을 때. 서버는 같은 이유로 422다. */
+const INVALID_DOCUMENT = '이 문서는 페이지로 서지 않습니다 — 파일의 아래 자리를 고치세요.'
+/**
+ * 미리보기가 **볼 수 없는 것**. 위 `previewPageJson`의 표를 한 줄로 옮긴 것이고,
+ * *"미리보기가 다 걸러 준다"*는 거짓을 화면이 말하지 않게 하는 자리다.
+ */
+const SERVER_ONLY = '보내 봐야 아는 것: 대상 메뉴가 아직 있는지 · NUL 문자 · 본문 크기 · 권한.'
 
-/** 대기 글자를 읽은 결과. **`readPageJson`의 갈래를 그대로 쓴다** — 여기서 다시 가르지 않는다. */
+/** 미리보기가 가리키는 파일의 한 자리. 봉투 이슈와 카탈로그 이슈를 같은 모양으로 담는다. */
+interface PreviewIssue {
+  path: string
+  message: string
+  /** 카탈로그 이슈에만 있다. **파일의 id다** — 리매핑 전 문서로 보기 때문이다(D8). */
+  nodeId?: string | null
+}
+
+/** 대기 글자를 읽은 결과. */
 type Preview =
   | { kind: 'none' }
-  | { kind: 'failed'; message: string; issues: readonly PageJsonIssue[] }
-  | { kind: 'ready'; file: PageJson; nodes: number; comments: number; dangling: number }
+  | { kind: 'failed'; message: string; issues: readonly PreviewIssue[] }
+  | {
+      kind: 'ready'
+      file: PageJson
+      nodes: number
+      comments: number
+      dangling: number
+      /** 막지 않는 이슈. **알리되 막지 않는다** — 서버도 이것으로 막지 않는다. */
+      warnings: readonly PreviewIssue[]
+    }
 
 /**
  * 대기 글자를 미리보기로 옮긴다. **순수하고 던지지 않는다.**
+ *
+ * ---
+ *
+ * # 서버와 **같은 함수**로 게이트 셋을 지난다 (P7-3 리뷰 ③)
+ *
+ * **앞 판은 봉투만 봤고, 그래서 미리보기가 통과시킨 파일을 서버가 거절했다** — 리뷰가 셋을
+ * 실측했다(문서 버전 999 · 카탈로그에 없는 타입 · `duplicate-id`). 그것이 P7-1 이월 §2가
+ * 이름 붙인 부류다: *"화면은 괜찮다고 했는데 저장이 거부됐다."*
+ *
+ * | 게이트 | 서버 | 여기 | 왜 같을 수 있나 |
+ * |---|---|---|---|
+ * | 봉투 | `parsePageJson` | `readPageJson` | 같은 모듈의 두 입구 |
+ * | 문서 버전 | `migrateDocument` | 같은 함수 | 순수하고 브라우저에서 돈다 |
+ * | 카탈로그 | `validatePage` | 같은 함수 | 〃. 카탈로그도 같은 패키지가 싣는다(`catalog-setup`) |
+ *
+ * **`error`만 막는다.** 경고는 서버도 막지 않으므로 여기서 막으면 **화면이 서버보다
+ * 엄격해진다**(P7-1 이월 §7) — 그쪽 손해가 더 크다: 할 수 있는 일을 못 하게 된다.
+ *
+ * **검증을 리매핑 전 문서로 하는 것도 서버와 같다**(D8). 사용자에게 남는 것은 파일뿐이라
+ * 이슈의 `nodeId`가 **파일에서 찾을 수 있는 값**이어야 한다.
+ *
+ * # 서버만 아는 것 넷 — **미리보기가 다 걸러 준다고 말하지 않는다**
+ *
+ * | 무엇 | 왜 여기서 못 보나 |
+ * |---|---|
+ * | 대상 메뉴가 아직 있는가 | 트리가 낡았을 수 있다(고른 뒤 남이 지운다) |
+ * | NUL(U+0000) | 그 규칙은 **Postgres를 아는 계층**의 것이다(`db/nul-guard.ts`) — 여기로 옮기면 브라우저에서도 도는 패키지가 DB 제약을 알게 된다 |
+ * | 본문 크기 | 상한이 **서버 설정**이다(Fastify 기본 1MiB) |
+ * | 권한 | 서버만 판정한다(§10) |
+ *
+ * **그리고 배포 편차가 있다** — 서버가 다른 판의 `@wirebound/schema`를 돌리면 위 셋도
+ * 갈릴 수 있다. 그래서 화면은 *"보내 봐야 아는 것"*이 남아 있다고 **말한다.**
+ *
+ * ---
  *
  * **끊긴 코멘트를 여기서 센다**(D5). 세는 단위는 *"파일의 트리에 없는 노드를 가리키는
  * 코멘트 하나당 하나"*이고, 그것이 서버가 내는 `comments.dangling`과 같은 값이어야 한다 —
@@ -111,6 +183,22 @@ export function previewPageJson(text: string): Preview {
     return { kind: 'failed', message: result.message, issues: result.issues }
   }
 
+  // **게이트 둘을 여기서 짜지 않는다 — 서버와 같은 함수를 부른다**(P7-3 리뷰 ③).
+  // 한 벌 더 짜면 같은 물음에 답하는 자리가 둘이 되고, 갈리는 날 이 미리보기가 다시
+  // *"괜찮다"*고 거짓을 말한다. 순서·판정의 근거는 `gatePageImport`의 머리말에 있다.
+  const gate = gatePageImport(result.file)
+  if (!gate.ok) {
+    return gate.reason === 'unsupported-version'
+      ? { kind: 'failed', message: `${UNSUPPORTED_VERSION} ${gate.message}`.trim(), issues: [] }
+      : {
+          kind: 'failed',
+          message: INVALID_DOCUMENT,
+          // **막은 것만 보인다** — 게이트는 경고까지 함께 싣는데(서버 응답과 같은 관례),
+          // 화면에서 둘을 섞으면 사용자가 무엇을 고쳐야 막힘이 풀리는지 모른다.
+          issues: partitionIssues(gate.issues).errors.map(toPreviewIssue),
+        }
+  }
+
   const ids = new Set(collectNodeIds(result.file.schema.root))
   return {
     kind: 'ready',
@@ -118,7 +206,12 @@ export function previewPageJson(text: string): Preview {
     nodes: ids.size,
     comments: result.file.comments.length,
     dangling: result.file.comments.filter((comment) => !ids.has(comment.nodeId)).length,
+    warnings: gate.warnings.map(toPreviewIssue),
   }
+}
+
+function toPreviewIssue(issue: ValidationIssue): PreviewIssue {
+  return { path: issue.path, message: issue.message, nodeId: issue.nodeId }
 }
 
 export function PageJsonPanel(props: {
@@ -272,15 +365,7 @@ function PreviewView(props: { preview: Preview }): ReactElement {
         <p role="alert">{preview.message}</p>
         {/* **파일의 자리를 보인다**(D8). 가져오기가 실패하면 사용자에게 남는 것이 파일뿐이라
             *"규격이 아닙니다"* 하나로는 어디를 고칠지 알 수 없다. */}
-        {preview.issues.length > 0 && (
-          <ul className="wb-shell-pagejson-issues">
-            {preview.issues.map((issue) => (
-              <li key={`${issue.path}:${issue.message}`}>
-                <code>{issue.path === '' ? '(파일 전체)' : issue.path}</code> {issue.message}
-              </li>
-            ))}
-          </ul>
-        )}
+        {preview.issues.length > 0 && <IssueList issues={preview.issues} />}
       </div>
     )
   }
@@ -292,6 +377,14 @@ function PreviewView(props: { preview: Preview }): ReactElement {
       <p role="status">
         {preview.file.page.title} — 노드 {preview.nodes}개, 코멘트 {preview.comments}개
       </p>
+      {/* **경고는 막지 않는다**(P7-1 이월 §7) — 서버도 막지 않으므로 여기서 막으면 화면만
+          엄격해진다. 대신 보인다: 들어간 뒤에야 알면 고칠 자리를 다시 찾아야 한다. */}
+      {preview.warnings.length > 0 && (
+        <>
+          <p>경고 {preview.warnings.length}개는 저장을 막지 않습니다.</p>
+          <IssueList issues={preview.warnings} />
+        </>
+      )}
       {preview.dangling > 0 && (
         <p>
           코멘트 {preview.dangling}개는 이 파일의 트리에 없는 노드를 가리킵니다 — 들어가되
@@ -306,7 +399,30 @@ function PreviewView(props: { preview: Preview }): ReactElement {
           페이지가 레이아웃을 고르는 경로가 없어 <strong>쓰지 않습니다.</strong>
         </p>
       )}
+      {/* **미리보기가 다 걸러 준다고 말하지 않는다.** 위 `previewPageJson`의 표가 무엇을
+          못 보는지 적어 뒀고, 이 줄이 그것을 사용자에게 옮긴다 — 없으면 화면이 다시
+          *"괜찮다"*고 단언하게 된다. */}
+      <p>{SERVER_ONLY}</p>
     </div>
+  )
+}
+
+/**
+ * 파일의 자리 목록. **막은 이유와 경고가 같은 모양으로 보인다** — 둘 다 *"파일의 어디"*를
+ * 말하는 것이고, 모양을 나누면 같은 것을 두 벌로 그리게 된다.
+ *
+ * **`nodeId`는 있을 때만 붙인다.** 봉투 이슈에는 없다(그 층은 노드를 모른다).
+ */
+function IssueList(props: { issues: readonly PreviewIssue[] }): ReactElement {
+  return (
+    <ul className="wb-shell-pagejson-issues">
+      {props.issues.map((issue) => (
+        <li key={`${issue.path}:${issue.nodeId ?? ''}:${issue.message}`}>
+          <code>{issue.path === '' ? '(파일 전체)' : issue.path}</code>{' '}
+          {issue.nodeId != null && <code>{issue.nodeId}</code>} {issue.message}
+        </li>
+      ))}
+    </ul>
   )
 }
 

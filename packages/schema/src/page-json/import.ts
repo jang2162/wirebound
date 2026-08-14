@@ -55,9 +55,68 @@
  * 리매핑 전 문서로 판정한다.** 이 파일이 판정을 들지 않는 것은 그 선택을 부르는 쪽에
  * 남겨 두기 위해서다.
  */
+import { migrateDocument } from '../migrate'
 import type { PageDocument } from '../node'
 import { remapNodeIds } from '../tree'
-import type { PageJsonComment } from './envelope'
+import { partitionIssues, validatePage, type ValidationIssue } from '../validate'
+import type { PageJson, PageJsonComment } from './envelope'
+
+/**
+ * 봉투를 지난 파일이 **저장될 수 있는가**. 봉투 다음의 게이트 둘을 한 함수로 묶는다.
+ *
+ * ---
+ *
+ * # 왜 함수가 하나여야 하나 (P7-3 리뷰 ③)
+ *
+ * 서버(`services/page-import.ts`)와 화면의 미리보기가 **같은 물음에 답한다.** 앞 판은
+ * 서버만 이 둘을 돌렸고 미리보기는 봉투에서 멈췄다 — 그래서 **미리보기가 통과시킨 파일을
+ * 서버가 거절했다**(리뷰가 셋을 실측했다: 문서 버전 999 · 카탈로그에 없는 타입 ·
+ * `duplicate-id`). P7-1 이월 §2가 이름 붙인 *"화면은 괜찮다고 했는데 저장이 거부됐다"*이다.
+ *
+ * **미리보기 쪽에 같은 순서를 한 벌 더 짜는 것으로 고치지 않았다.** 그러면 같은 물음에
+ * 답하는 자리가 둘이 되고 언젠가 갈린다 — 이 저장소가 반복해 닫아 온 모양이다
+ * (`partitionIssues` 하나가 severity의 선을 긋는 것과 같은 근거). **여기 하나를 양쪽이
+ * 부른다.**
+ *
+ * # 순서가 규격이다
+ *
+ * 1. `migrateDocument` — §13.1이 *"가져오기와 스냅샷 복원도 같은 경로를 탄다"*고 적은 자리.
+ *    지원하지 않는 버전이면 **던지는 것을 여기서 잡아** 값으로 바꾼다(이 층은 던지지 않는다).
+ * 2. `validatePage` — **`error`만 막는다.** 경고는 편집 파이프라인도 막지 않으므로 그것으로
+ *    막으면 가져오기만 다른 쓰기 경로보다 엄격해진다(P7-1 이월 §7).
+ *
+ * **리매핑 *전* 문서로 본다**(D8). 두 판의 이슈는 `code`·`path`가 같고 `nodeId`만 다른데,
+ * 사용자에게 남는 것은 파일뿐이라 **파일에서 찾을 수 있는 id**를 말해야 한다.
+ *
+ * # 이 게이트가 **보지 않는** 것
+ *
+ * 대상 메뉴의 존재 · NUL(U+0000) · 본문 크기 · 권한. 넷 다 **서버만 아는 것**이고, 그래서
+ * 미리보기를 지난 파일도 서버에서 거절될 수 있다 — 화면은 그것을 단언하지 않고 말한다.
+ */
+export type PageImportGate =
+  | { ok: true; document: PageDocument; warnings: ValidationIssue[] }
+  | { ok: false; reason: 'unsupported-version'; message: string }
+  /** **경고까지 함께 싣는다** — `PUT .../schema`·파이프라인과 같은 관례다. */
+  | { ok: false; reason: 'invalid-document'; issues: ValidationIssue[] }
+
+export function gatePageImport(file: PageJson): PageImportGate {
+  let document: PageDocument
+  try {
+    document = migrateDocument(file.schema)
+  } catch (error) {
+    return {
+      ok: false,
+      reason: 'unsupported-version',
+      message: error instanceof Error ? error.message : '지원하지 않는 문서 버전입니다',
+    }
+  }
+
+  const issues = validatePage(document)
+  const { errors, warnings } = partitionIssues(issues)
+  if (errors.length > 0) return { ok: false, reason: 'invalid-document', issues }
+
+  return { ok: true, document, warnings }
+}
 
 export interface PageImportPlan {
   /** 저장할 문서. 모든 노드가 새 id를 갖는다. */

@@ -300,6 +300,36 @@ describe('가져오기가 거절하는 것', () => {
     })
   })
 
+  it('duplicate-id도 422다 — 미리보기가 막는 셋 중 하나 (리뷰 ③)', async () => {
+    // **세 층이 같은 파일을 본다:** 게이트(`packages/schema`) · 여기(서버 상태) ·
+    // 미리보기(`apps/web`). 셋이 같은 함수를 부르므로 갈릴 자리가 없다.
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const res = await importPage(ctx, fx, {
+        menuNodeId: fx.menuNodeId,
+        file: file({
+          schema: {
+            version: 1,
+            root: {
+              id: 'file_root',
+              type: 'Page',
+              children: [
+                { id: 'same', type: 'List' },
+                { id: 'same', type: 'List' },
+              ],
+            },
+          },
+          comments: [],
+        }),
+      })
+
+      expect(res.statusCode, res.body).toBe(422)
+      const error = (res.json() as { error: { issues?: { code?: string }[] } }).error
+      expect(error.issues?.map((issue) => issue.code)).toContain('duplicate-id')
+      expect(await pageRows(ctx, fx.projectId)).toEqual([])
+    })
+  })
+
   it('없는 메뉴 노드는 404다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)

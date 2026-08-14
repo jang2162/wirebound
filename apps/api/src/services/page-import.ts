@@ -68,10 +68,8 @@
 import {
   CURRENT_DOCUMENT_VERSION,
   createNodeId,
-  migrateDocument,
-  partitionIssues,
+  gatePageImport,
   planPageImport,
-  validatePage,
   type PageJson,
   type ValidationIssue,
 } from '@wirebound/schema'
@@ -136,34 +134,27 @@ class PageImportAbort extends Error {
  *
  * 순서가 규격이다:
  *
- * 1. `migrateDocument` — §13.1이 *"가져오기와 스냅샷 복원도 같은 경로를 탄다"*고 적은 자리.
- * 2. `validatePage` — **리매핑 *전* 문서로 본다**(D8). 이슈의 `nodeId`가 사용자의 파일에서
- *    찾을 수 있는 값이어야 하기 때문이고, 두 판의 이슈가 `code`·`path`는 같고 `nodeId`만
- *    다르다는 것은 `packages/schema`의 케이스가 잰다.
- *    **전부에 건다** — P6-2 이월 §7: 복원은 *만드는* 페이지에만 걸지만 가져오기는 전부 만든다.
- * 3. 제목·설명의 NUL(위 표).
- * 4. `planPageImport` — id 재발급과 참조 옮기기(D5).
- * 5. 한 트랜잭션: 페이지 → 문서(`applyEdit`) → 코멘트.
+ * 1. **`gatePageImport`** — 문서 버전(`migrateDocument`)과 카탈로그(`validatePage`) 둘.
+ *    **화면의 미리보기가 부르는 것과 같은 함수다**(P7-3 리뷰 ③) — 한 벌 더 짜면 미리보기가
+ *    통과시킨 파일을 서버가 거절하는 자리가 다시 열린다. 순서·판정의 근거는 그 함수의
+ *    머리말에 있고, **리매핑 전 문서로 보는 것**(D8)과 **`error`만 막는 것**(P7-1 이월 §7)이
+ *    거기 적혀 있다. **전부에 건다** — P6-2 이월 §7: 복원은 *만드는* 페이지에만 걸지만
+ *    가져오기는 전부 만든다.
+ * 2. 제목·설명의 NUL(위 표).
+ * 3. `planPageImport` — id 재발급과 참조 옮기기(D5).
+ * 4. 한 트랜잭션: 페이지 → 문서(`applyEdit`) → 코멘트.
  */
 export async function importPage(db: DbHandle, input: PageImportInput): Promise<PageImportOutcome> {
-  let migrated
-  try {
-    migrated = migrateDocument(input.file.schema)
-  } catch (error) {
-    return {
-      kind: 'unsupported-version',
-      message: error instanceof Error ? error.message : '지원하지 않는 문서 버전입니다',
-    }
+  // **게이트 둘을 여기서 짜지 않는다 — 화면의 미리보기와 같은 함수를 부른다**(P7-3 리뷰 ③).
+  // 순서·판정의 근거는 `gatePageImport`의 머리말에 있다. 한 벌 더 짜면 같은 물음에 답하는
+  // 자리가 둘이 되고, 그 둘이 갈리는 날 **미리보기가 통과시킨 파일을 서버가 거절한다**.
+  const gate = gatePageImport(input.file)
+  if (!gate.ok) {
+    return gate.reason === 'unsupported-version'
+      ? { kind: 'unsupported-version', message: gate.message }
+      : { kind: 'invalid-document', issues: gate.issues }
   }
-
-  // **`error`만 막는다**(P7-1 이월 §7). 경고는 편집 파이프라인도 막지 않으므로 여기서
-  // 막으면 가져오기만 서버의 다른 쓰기 경로보다 엄격해진다 — 끊긴 상호작용 `target`이
-  // 그 자리다(P5-2).
-  const issues = validatePage(migrated)
-  if (partitionIssues(issues).errors.length > 0) {
-    // **경고까지 함께 싣는다** — `PUT .../schema`·파이프라인과 같다.
-    return { kind: 'invalid-document', issues }
-  }
+  const migrated = gate.document
 
   const title = input.title ?? input.file.page.title
   const description = input.file.page.description ?? null

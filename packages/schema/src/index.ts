@@ -86,5 +86,5 @@ export {
   toPageJson,
 } from './page-json/envelope'
 
-export type { PageImportPlan } from './page-json/import'
-export { planPageImport } from './page-json/import'
+export type { PageImportGate, PageImportPlan } from './page-json/import'
+export { gatePageImport, planPageImport } from './page-json/import'
