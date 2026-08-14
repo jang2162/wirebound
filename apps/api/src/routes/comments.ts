@@ -61,8 +61,10 @@
  * 말을 만들지 않는다. 그리고 D3 때문에 **삭제는 문서 위생의 일부**다 — 스레드를 정리해야
  * 번호가 사라진다. 그래서 `PATCH`는 작성자만(403), `DELETE`는 editor면 누구나다.
  *
- * ## 재라 #4 — 본문 길이 상한 2000자
+ * ## 재라 #4 — 본문 길이 상한
  *
+ * **수를 여기 적지 않는다** — 값은 `@wirebound/schema`의 `COMMENT_BODY_MAX_LENGTH` 하나이고
+ * (아래 `Body`), 여기 적으면 그 상수가 바뀌는 날 이 문장만 낡는다.
  * `pages.description`과 같은 값으로 둔다(같은 결의 산문이다). 상한이 없으면 요청 하나가
  * 임의 크기의 텍스트를 실을 수 있고, §4.5의 스냅샷이 코멘트를 담게 되면(P6) 그 비용이
  * payload로 그대로 옮겨 간다. 하한은 1이다 — 빈 코멘트는 코멘트가 아니다.
@@ -123,6 +125,8 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import {
+  COMMENT_BODY_MAX_LENGTH,
+  COMMENT_BODY_MIN_LENGTH,
   findNodePath,
   migrateDocument,
   walkNodes,
@@ -215,12 +219,25 @@ const CommentParams = z.object({ projectId: z.uuid(), pageId: z.uuid(), commentI
 /**
  * 코멘트 본문. 상한 근거는 머리말의 재라 #4에 있다.
  *
+ * **경계를 `@wirebound/schema`에서 가져온다(P7-3 리뷰가 잡았다).** §11.2의 봉투가 같은
+ * 상한을 걸어야 하는데(가져오기가 이 라우트를 지나지 않으므로 — P7-3 재라 #7), 앞 판은
+ * 그쪽에 상수를 두고 **여기는 `2000`을 그대로 박아** 값이 두 자리였다. 실측: 봉투의
+ * 상수를 3000으로 바꿔도 이 파일의 케이스가 전부 통과했다.
+ *
+ * **이 라우트가 `schema`를 참조하는 것이 방향에 맞는다** — `apps/api`는 이미 그 패키지에
+ * 의존하고(반대는 금지다), 봉투는 브라우저에서도 도는 순수 층이라 **웹의 미리보기와
+ * 서버가 같은 값을 본다.** 값이 한 자리라는 것은 아래 두 문장이 아니라
+ * `comments.test.ts`의 경계 케이스가 지킨다(그 케이스가 숫자를 박지 않고 상수에서 만든다).
+ *
  * **`node_id`에 형식 제약을 걸지 않는다.** 노드 id의 진짜 관문은 *"이 문서에 그 노드가
  * 있는가"*이고 아래 핸들러가 그것을 본다 — 패턴을 여기 한 번 더 적으면
  * `@wirebound/schema`의 `NODE_ID_PATTERN`과 갈릴 자리가 생기고, 갈려도 결과가 같아
  * (둘 다 거절) 아무도 모른다.
  */
-const Body = z.string().min(1, '코멘트를 입력하세요').max(2000, '코멘트는 2000자 이하여야 합니다')
+const Body = z
+  .string()
+  .min(COMMENT_BODY_MIN_LENGTH, '코멘트를 입력하세요')
+  .max(COMMENT_BODY_MAX_LENGTH, `코멘트는 ${COMMENT_BODY_MAX_LENGTH}자 이하여야 합니다`)
 
 /** `z.strictObject`라 선언되지 않은 키가 오면 그 자체로 400이다(이 저장소의 관례). */
 const CreateCommentBody = z.strictObject({ nodeId: z.string().min(1), body: Body })
