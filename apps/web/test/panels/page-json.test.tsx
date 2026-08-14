@@ -267,6 +267,15 @@ describe('미리보기', () => {
     expect(panel().textContent).toContain('코멘트 1개는 이 파일의 트리에 없는 노드를 가리킵니다')
   })
 
+  it('끊긴 것이 없으면 그 문장을 그리지 않는다 — 음성 대조', async () => {
+    // **이 줄이 없으면 "끊긴 수 = 코멘트 수"로 세는 변이가 살아남는다**(재서 알았다).
+    // 앞 케이스의 파일은 코멘트가 전부 끊겨 있어 두 수가 같았다.
+    await open()
+    paste(JSON.stringify(file()))
+
+    expect(panel().textContent).not.toContain('이 파일의 트리에 없는 노드를 가리킵니다')
+  })
+
   it('D4 — layoutRef를 쓰지 않는다고 미리 말한다', async () => {
     await open()
     paste(JSON.stringify(file({ page: { title: '가져온 목록', layoutRef: 'admin-lnb' } })))
