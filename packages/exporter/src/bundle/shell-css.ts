@@ -45,22 +45,17 @@
  */
 
 /**
- * 셸의 이름 접두어. **클래스와 id가 전부 이것으로 시작한다** — 테마가 쓸 수 있는 이름과
- * 겹칠 수 없다는 것이 이 접두어의 목적이다.
+ * **이 파일에 자를 두지 않는다.**
+ *
+ * 앞 판은 접두어(`wb-export`)와 감싸개 목록을 여기서 수출해 케이스가 그것으로 시트를
+ * 검사했다. **자가 자기가 재는 것과 같은 곳에 살면 함께 움직인다** — 리뷰가 실측했다:
+ * 접두어를 `wb`로 느슨하게 해도 **아무것도 안 죽었다.** 구현을 고치는 손이 자까지 같이
+ * 고칠 수 있으면 그 자는 아무것도 안 재는 것이다(P7-3 이월 §9가 두 방향으로 적어 둔 부류).
+ *
+ * 그래서 접두어와 감싸개 목록은 **`test/bundle-shell.test.ts`에 글자로** 산다. 아래
+ * `SHELL_CSS_PATH`는 자가 아니라 **구현이 쓰는 값**이다(`bundle/index.ts`가 파일 경로로
+ * 쓴다) — 그래서 여기 남는다.
  */
-export const SHELL_PREFIX = 'wb-export'
-
-/**
- * 문서를 **감싸는** 상자들. 여기 걸린 상속 속성은 셀렉터가 문서 노드를 겨냥하지 않아도
- * 문서 안으로 흘러 들어간다. `test/bundle-shell.test.ts`가 이 목록으로 검사를 돌린다.
- */
-export const SHELL_WRAPPERS = [
-  'html',
-  'body',
-  '.wb-export',
-  '.wb-export-mockup',
-  '.wb-export-canvas',
-] as const
 
 /** 번들 안에서 이 시트가 사는 자리. */
 export const SHELL_CSS_PATH = 'assets/shell.css'

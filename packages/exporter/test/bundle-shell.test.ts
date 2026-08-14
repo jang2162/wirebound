@@ -12,7 +12,35 @@ import {
 } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { commentEntries, MISSING_NODE_LABEL, type BundleComment } from '../src/bundle/comments'
-import { SHELL_CSS, SHELL_PREFIX, SHELL_WRAPPERS } from '../src/bundle/shell-css'
+import { SHELL_CSS } from '../src/bundle/shell-css'
+
+/* ------------------------------------------------------------------ 자 둘 */
+
+/**
+ * **자는 여기 산다. 구현에서 import하지 않는다.**
+ *
+ * 앞 판은 이 둘을 `shell-css.ts`가 수출하고 여기서 import했는데, 리뷰가 실측으로 짚었다:
+ * 구현의 접두어를 `wb`로 느슨하게 하면 **자도 함께 느슨해져 아무것도 안 죽는다.** 자와
+ * 대상이 같은 파일에 있으면 한 손이 둘을 같이 고칠 수 있고, 그러면 재는 것이 없다.
+ *
+ * 글자로 적혀 있으므로 시트의 이름이 바뀌면 **여기가 먼저 죽는다** — 그것이 의도다.
+ * 이름을 바꾸려면 사람이 이 줄을 함께 고쳐야 한다.
+ */
+const PREFIX = 'wb-export'
+
+/**
+ * 문서를 **감싸는** 상자들. 여기 걸린 상속 속성은 셀렉터가 문서 노드를 겨냥하지 않아도
+ * 문서 안으로 흘러 들어간다. 목록은 `shell.tsx`가 문서를 어디에 두는지에 매여 있고,
+ * 상자가 하나 늘면 **사람이 여기 더해야 한다** — 아래 카나리아가 이 목록이 실제로 시트의
+ * 규칙에 걸리는지만 지킨다.
+ */
+const WRAPPERS: readonly string[] = [
+  'html',
+  'body',
+  '.wb-export',
+  '.wb-export-mockup',
+  '.wb-export-canvas',
+]
 
 /* ------------------------------------------------------------------ CSS 훑기 */
 
@@ -80,12 +108,15 @@ describe('셸 CSS — 문서에 못 닿는다 (D6)', () => {
   })
 
   it('클래스와 id가 전부 셸의 접두어로 시작한다', () => {
-    for (const rule of RULES) {
-      for (const selector of rule.selectors) {
-        for (const token of selector.match(/[.#][A-Za-z][\w-]*/gu) ?? []) {
-          expect(token.slice(1), selector).toMatch(new RegExp(`^${SHELL_PREFIX}`, 'u'))
-        }
-      }
+    const tokens = RULES.flatMap((rule) =>
+      rule.selectors.flatMap((selector) =>
+        (selector.match(/[.#][A-Za-z][\w-]*/gu) ?? []).map((token) => [selector, token] as const),
+      ),
+    )
+    // 카나리아. 정규식이 아무것도 못 집으면 아래 반복이 공허하게 통과한다.
+    expect(tokens.length).toBeGreaterThan(20)
+    for (const [selector, token] of tokens) {
+      expect(token.slice(1), selector).toMatch(new RegExp(`^${PREFIX}(-|$)`, 'u'))
     }
   })
 
@@ -132,7 +163,7 @@ describe('셸 CSS — 감싸는 상자에 상속되는 속성을 걸지 않는�
   it('감싸는 상자를 실제로 찾는다', () => {
     // 카나리아. 이름이 바뀌어 하나도 못 찾으면 아래 검사가 공허해진다.
     const found = RULES.filter((rule) =>
-      rule.selectors.some((selector) => (SHELL_WRAPPERS as readonly string[]).includes(selector)),
+      rule.selectors.some((selector) => WRAPPERS.includes(selector)),
     )
     expect(found.length).toBeGreaterThan(0)
     expect(found.flatMap((rule) => rule.selectors)).toContain('.wb-export-canvas')
@@ -140,7 +171,7 @@ describe('셸 CSS — 감싸는 상자에 상속되는 속성을 걸지 않는�
 
   it('허용 목록 밖의 속성이 없다', () => {
     for (const rule of RULES) {
-      if (!rule.selectors.some((s) => (SHELL_WRAPPERS as readonly string[]).includes(s))) continue
+      if (!rule.selectors.some((selector) => WRAPPERS.includes(selector))) continue
       for (const property of rule.properties) {
         expect(WRAPPER_PROPERTIES.has(property), `${rule.selectors.join(',')} → ${property}`).toBe(
           true,

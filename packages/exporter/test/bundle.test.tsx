@@ -221,6 +221,26 @@ describe('exportBundle — 좌측 트리 (D2·D3)', () => {
     expect(documentRoot(index).getAttribute('data-wb-id')).toBe('n_000000000001')
   })
 
+  /**
+   * **페이지 파일마다 그 페이지가 그려져 있다.** 리뷰가 실측으로 짚은 구멍이다 — 셸에
+   * 넘기는 트리를 `rendered[index]`에서 `rendered[0]`으로 바꿔도 아무것도 안 죽었다.
+   *
+   * **세는 단위를 HTML 파일 전부로 못박는다** — 자리마다 어느 문서의 뿌리인지를 한 목록으로
+   * 견주므로 파일이 빠지거나 늘어도, 자리가 섞여도 죽는다. 그림 전체를 견주는 것은
+   * `bundle-parity.test.tsx`가 한다.
+   */
+  it('HTML 파일마다 그 페이지의 문서 뿌리가 있다', () => {
+    expect(
+      twoPages()
+        .files.filter((file) => file.path.endsWith('.html'))
+        .map((file) => [file.path, documentRoot(file.content).getAttribute('data-wb-id')]),
+    ).toEqual([
+      ['index.html', 'n_000000000001'],
+      ['pages/회원-목록.html', 'n_000000000001'],
+      ['pages/회원-상세.html', 'n_000000000011'],
+    ])
+  })
+
   it('index.html의 링크가 pages/ 아래를 가리킨다', () => {
     const links = [...parse(fileAt(twoPages(), 'index.html')).querySelectorAll('.wb-export-nav-link')]
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
