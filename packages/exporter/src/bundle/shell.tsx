@@ -41,6 +41,7 @@ import { listInteractionSentences, type InteractionSentence } from '@wirebound/s
 import type { ReactElement, ReactNode } from 'react'
 import type { PageDocument } from '@wirebound/schema'
 import type { CommentEntry } from './comments'
+import { nodesOnly } from '../nodes'
 
 /** 좌측 트리의 한 줄. */
 export interface ShellNavItem {
@@ -125,26 +126,28 @@ function panelId(tab: TabId): string {
 }
 
 /**
- * 노드가 아닌 것이 트리에 있나.
+ * 문장화에 넘길 문서.
  *
  * **`listInteractionSentences`가 `walkNodes`를 쓰고 그 함수는 노드가 객체라고 믿는다** —
  * 자식이 `null`이면 거기서 던진다. 렌더 경로는 그 노드를 **폴백 상자로 그리고** `errors`에
- * 담으므로(그래서 `brokenFixture`가 있다), 문장화만 던지면 **그리는 데 성공한 페이지가
- * 번들에서 통째로 사라진다.** 미리 보고 문장 목록을 비운다.
+ * 담으므로, 문장화만 던지면 **그리는 데 성공한 페이지가 번들에서 통째로 사라진다.**
  *
- * **그 노드를 조용히 넘기는 것이 아니다** — 같은 노드를 `exportPage`가 이미 `errors`로
- * 이름 붙여 냈고, 번들이 그것을 그대로 든다(D9).
+ * **앞 판은 그때 문장 목록을 통째로 비웠는데 그것이 D9를 깼다**(P8-3 리뷰 발견 4):
+ * 깨진 자식 **하나**가 멀쩡한 규칙들의 문장까지 지우는데 **버튼은 그대로 눌린다** —
+ * 런타임 쪽은 견디는 순회를 쓰기 때문이다. 화면이 *"상호작용이 없습니다"*라고 말하면서
+ * 실제로는 동작하는 것이고, 그것이 이 저장소가 여섯 번 만난 부류다.
+ *
+ * **그래서 던지는 원인만 걷어 낸다**(`nodesOnly`). 근거는 그 함수의 머리말에 있다.
  */
-function hasNonNodeChild(node: unknown): boolean {
-  if (node === null || typeof node !== 'object') return true
-  const children = (node as { children?: unknown }).children
-  if (!Array.isArray(children)) return false
-  return children.some(hasNonNodeChild)
+function sentencesOf(page: PageDocument): InteractionSentence[] {
+  const tree = nodesOnly(page.root)
+  if (tree === null) return []
+  return listInteractionSentences({ ...page, root: tree })
 }
 
 /** `<body>` 안 전부. */
 export function shellBody(input: ShellInput): ReactElement {
-  const sentences = hasNonNodeChild(input.page.root) ? [] : listInteractionSentences(input.page)
+  const sentences = sentencesOf(input.page)
   return (
     <>
     <div className="wb-export">

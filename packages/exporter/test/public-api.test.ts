@@ -77,7 +77,7 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
       include: string[]
     }
     expect(parsed.compilerOptions.lib).toEqual(['ES2022', 'DOM', 'DOM.Iterable'])
-    expect(parsed.include).toEqual(['test', 'test-support'])
+    expect(parsed.include).toEqual(['test', 'test-support', 'build-test'])
   })
 
   /**

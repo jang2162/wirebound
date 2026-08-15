@@ -69,6 +69,22 @@ const LIST_PAGE: PageDocument = {
         props: { label: '빈 규칙' },
         interactions: [{ on: 'click', actions: [] }],
       },
+      // **한 규칙이 같은 노드의 prop 둘을 건드린다.** 겹layer가 노드마다 기록을 **쌓지**
+      // 않고 갈아 끼우면 앞의 것이 사라진다 — 그 축이 통째로 비어 있었다(리뷰 발견 3).
+      {
+        id: 'n_multi',
+        type: 'Button',
+        props: { label: '둘' },
+        interactions: [
+          {
+            on: 'click',
+            actions: [
+              { type: 'setProp', target: 'n_list', prop: 'items', value: 9 },
+              { type: 'setProp', target: 'n_list', prop: 'empty', value: true },
+            ],
+          },
+        ],
+      },
       {
         id: 'n_show',
         type: 'Button',
@@ -364,6 +380,48 @@ describe('누르면 웹 앱에서 누른 것과 같은 화면이 된다 (§11.3)
     expect(event.defaultPrevented).toBe(false)
   })
 
+  /**
+   * **겹layer는 노드마다 기록을 쌓는다 — 갈아 끼우지 않는다**(리뷰 발견 3).
+   *
+   * 축이 둘이다: **한 규칙 안에서** 같은 노드의 prop 둘을 건드리는 것과, **누름을 건너** 그
+   * 노드에 다른 prop이 더해지는 것. 갈아 끼우면 앞의 것이 조용히 사라지고, 화면에서는
+   * *"어떤 것은 되고 어떤 것은 안 된다"*로만 보인다.
+   */
+  it('한 규칙이 같은 노드의 prop 둘을 건드리면 둘 다 남는다', () => {
+    load('pages/회원-목록.html')
+    run()
+    press('n_multi')
+    expect(drawn()).toBe(expected({ n_list: { items: 9, empty: true } }))
+  })
+
+  it('누름을 건너서도 같은 노드의 prop이 쌓인다', () => {
+    load('pages/회원-목록.html')
+    run()
+    press('n_multi')
+    press('n_btn')
+    expect(drawn()).toBe(
+      expected({
+        n_list: { items: 9, empty: true, loading: true },
+        n_tabs: { active: 1 },
+        n_card: { visible: false },
+      }),
+    )
+  })
+
+  /** 순서가 반대여도 같은 자리에 닿는다 — 쌓기는 순서에 매이지 않는다. */
+  it('반대 순서로 눌러도 같은 화면이다', () => {
+    load('pages/회원-목록.html')
+    run()
+    press('n_btn')
+    press('n_multi')
+    const after = drawn()
+    load('pages/회원-목록.html')
+    run()
+    press('n_multi')
+    press('n_btn')
+    expect(drawn()).toBe(after)
+  })
+
   it('규칙이 없는 노드를 눌러도 아무 일도 없다', () => {
     load('pages/회원-목록.html')
     run()
@@ -558,11 +616,33 @@ describe('자리마다 제 것이 실렸는가', () => {
     expect(plans).toEqual([
       [
         'index.html',
-        ['n_btn', 'n_go', 'n_nowhere', 'n_broken', 'n_empty', 'n_show', 'n_submit', 'n_outer', 'n_inner'],
+        [
+          'n_btn',
+          'n_go',
+          'n_nowhere',
+          'n_broken',
+          'n_empty',
+          'n_multi',
+          'n_show',
+          'n_submit',
+          'n_outer',
+          'n_inner',
+        ],
       ],
       [
         'pages/회원-목록.html',
-        ['n_btn', 'n_go', 'n_nowhere', 'n_broken', 'n_empty', 'n_show', 'n_submit', 'n_outer', 'n_inner'],
+        [
+          'n_btn',
+          'n_go',
+          'n_nowhere',
+          'n_broken',
+          'n_empty',
+          'n_multi',
+          'n_show',
+          'n_submit',
+          'n_outer',
+          'n_inner',
+        ],
       ],
       ['pages/회원-상세.html', []],
     ])

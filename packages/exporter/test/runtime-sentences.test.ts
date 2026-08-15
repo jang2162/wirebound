@@ -21,6 +21,7 @@ import {
 } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { exportBundle } from '../src/bundle/index'
+import { nodesOnly } from '../src/nodes'
 import { buildRuntimePlan } from '../src/runtime/plan'
 
 beforeAll(() => {
@@ -135,6 +136,51 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다 (D9)', () => 
     const plan = JSON.parse(data?.textContent ?? '{}') as { events: { nodeId: string }[] }
     expect([...new Set(plan.events.map((event) => event.nodeId))]).toEqual([...new Set(written)])
     expect(written.length).toBeGreaterThan(1)
+  })
+
+  /**
+   * **깨진 자식 하나가 멀쩡한 규칙의 문장을 지우면 안 된다**(리뷰 발견 4).
+   *
+   * 앞 판은 문장화가 던지는 것을 막으려고 **목록을 통째로 비웠다.** 그러면 화면이
+   * *"상호작용이 없습니다"*라고 말하는데 **버튼은 그대로 눌린다** — 런타임은 견디는 순회를
+   * 쓰기 때문이다. D9가 겨냥한 바로 그 자리다.
+   */
+  it('노드가 아닌 자식이 있어도 멀쩡한 규칙의 문장이 남는다', () => {
+    const page = documentWith(RULES)
+    const broken: PageDocument = {
+      ...page,
+      root: { ...page.root, children: [...(page.root.children ?? []), null as unknown as never] },
+    }
+    const { plan } = buildRuntimePlan({ page: broken, theme: null, hrefs: new Map(), baseErrors: [] })
+    const pressed = plan.events
+      .flatMap((event) => event.rules.map((index) => `${event.nodeId}#${index}`))
+      .sort()
+    const written = listInteractionSentences({ ...broken, root: nodesOnly(broken.root)! })
+      .map((sentence) => `${sentence.nodeId}#${sentence.index}`)
+      .sort()
+    expect(pressed).toEqual(written)
+    expect(written.length).toBe(RULES.length)
+  })
+
+  /** 번들이 실제로 그린 탭에서도 같은지. 자와 대상이 갈리지 않게 그린 것에서 잰다. */
+  it('깨진 자식이 있는 번들의 상호작용 탭이 비어 있지 않다', () => {
+    const page = documentWith(RULES)
+    const broken: PageDocument = {
+      ...page,
+      root: { ...page.root, children: [...(page.root.children ?? []), null as unknown as never] },
+    }
+    const bundle = exportBundle({ pages: [{ title: '깨짐', document: broken }] })
+    const html = bundle.files.find((file) => file.path === 'pages/깨짐.html')!.content
+    const parsed = new DOMParser().parseFromString(html, 'text/html')
+    const written = [
+      ...parsed.querySelectorAll('#wb-export-panel-interactions [data-wb-interaction-for]'),
+    ].map((line) => line.getAttribute('data-wb-interaction-for'))
+    const data = parsed.getElementById('wb-export-runtime-data')
+    const plan = JSON.parse(data?.textContent ?? '{}') as { events: { nodeId: string }[] }
+    expect(written).toHaveLength(RULES.length)
+    expect([...new Set(plan.events.map((event) => event.nodeId))]).toEqual([...new Set(written)])
+    // 그 노드는 여전히 errors가 이름을 든다 — 조용히 넘기는 것이 아니다.
+    expect(bundle.errors.map((item) => item.error.message)).toEqual(['노드가 객체가 아닙니다: null'])
   })
 
   /**

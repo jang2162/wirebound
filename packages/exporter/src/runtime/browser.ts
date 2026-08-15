@@ -198,7 +198,9 @@ export function installRuntime(): void {
     const old = canvas.querySelector('.wb-export-markers')
     if (old !== null) old.remove()
 
-    const lines = document.querySelectorAll('[data-wb-marker-for][data-wb-marker]')
+    // **코멘트 탭의 줄만 본다.** 겹layer의 배지도 `data-wb-marker-for`를 들므로 문서 전체를
+    // 훑으면 자기가 그린 것을 다시 읽을 수 있다.
+    const lines = document.querySelectorAll('#wb-export-panel-comments [data-wb-marker-for]')
     if (lines.length === 0) return
 
     const nodes = indexNodes()
@@ -211,6 +213,11 @@ export function installRuntime(): void {
     for (const line of lines) {
       const nodeId = line.getAttribute('data-wb-marker-for')
       const marker = line.getAttribute('data-wb-marker')
+      // **`marker`가 없으면 번호가 아니다 — 그것이 D4의 기준이고 자리가 여기 하나다.**
+      // 앞 판은 셀렉터에도 `[data-wb-marker]`를 넣어 이 줄과 **둘 다** 걸렀는데, 둘이
+      // 서로의 잉여라 어느 하나를 지워도 아무것도 안 죽었다(리뷰 발견 5). 타입이 이 줄을
+      // 요구하는 것도 아니다 — `textContent`가 `string | null`을 받고 템플릿 리터럴도
+      // `null`을 삼킨다(가드를 지우고 typecheck를 돌려 확인했다). **기준을 한 자리에 둔다.**
       if (nodeId === null || marker === null || drawn.has(nodeId)) continue
       const target = nodes.get(nodeId)
       // 숨겨진 노드·그리지 못한 노드에는 마커가 없다. 캔버스도 같다.
