@@ -181,7 +181,13 @@ describe('프레임이 스토어에 닿는다', () => {
     expect(screen.getByRole('status').textContent).toContain('스냅샷을 복원')
   })
 
-  it('미룬 것을 화면이 말한다 — 조용히 낡지 않는다 (D6)', () => {
+  /**
+   * **P3-1의 `미룬 것을 화면이 말한다`가 있던 자리다.** 그 명제는 *"보내지 않은 편집이
+   * 있으면 미루고 낡았다고 말한다"*였고, P3-2가 그것을 리베이스로 갈아 끼웠다(D3) —
+   * **미루지 않으므로 말할 낡음이 없다.** 갈래 자체는 `test/store/remote-change.test.ts`가
+   * 재고, 여기는 그것이 **화면까지** 닿는 것을 잰다.
+   */
+  it('pending이 있어도 얹고 아무 말도 안 한다 — 미루던 자리다', () => {
     const board = mount()
     act(() => {
       board.store.applyEdit([{ op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } }])
@@ -189,7 +195,47 @@ describe('프레임이 스토어에 닿는다', () => {
 
     board.push(PAGE_CHANGED)
 
-    expect(screen.getByRole('status').textContent).toContain('아직 화면에 반영하지 않았습니다')
+    expect(board.store.getState().document?.root.children?.map((node) => node.id)).toEqual(['n_remote', 'n_mine'])
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  /**
+   * **버린 편집은 말한다**(§7.3의 *"적용 불가"*와 같은 성질 — 스토어는 무엇이 버려졌는지만
+   * 돌려주고 문안은 이 훅이 만든다). 조용히 버리면 사용자가 친 값이 말없이 사라진다.
+   */
+  it('리베이스가 버린 편집을 통지에 싣는다', () => {
+    const board = mount()
+    act(() => {
+      board.store.applyEdit([{ op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } }])
+    })
+    // 내 편집이 선 자리를 남이 지운 판을 만든다 — 먼저 노드 하나를 두고, 그것을 가리키는
+    // 내 편집을 낸 뒤, 남이 그것을 지운다.
+    act(() => {
+      board.store.loadPage(
+        'page_1',
+        { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Container', children: [{ id: 'n_a', type: 'Container' }] } },
+        4,
+      )
+      board.store.applyEdit([{ op: 'replace', path: '/root/children/0/type', value: 'Text' }])
+    })
+
+    board.push({ ...PAGE_CHANGED, ops: [{ op: 'remove', path: '/root/children/0' }] })
+
+    expect(board.store.getState().editFailure).toEqual({
+      kind: 'message',
+      message: '다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 1개를 버렸습니다.',
+    })
+  })
+
+  it('버릴 것이 없으면 통지도 없다 — 음성 대조', () => {
+    const board = mount()
+    act(() => {
+      board.store.applyEdit([{ op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } }])
+    })
+
+    board.push(PAGE_CHANGED)
+
+    expect(board.store.getState().editFailure).toBeNull()
   })
 
   /**

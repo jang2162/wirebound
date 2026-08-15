@@ -13,6 +13,7 @@
  */
 import { useCallback } from 'react'
 import type { Interaction, PatchOp } from '@wirebound/schema'
+import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import { useEditChannel } from '../realtime/context'
@@ -233,6 +234,32 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // 응답의 경고가 지금 문서의 것으로 실리지 않는다(`ackEdit`의 가드 뒤에 있다).
           store.ackEdit(request.clientOpId, result)
         } catch (caught) {
+          // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다**(P3-2 D3).
+          //
+          // **이것이 없으면 리베이스가 서버에 닿지 않는다 — 재서 알았다.** 서버는 `baseSeq`가
+          // `head_seq`와 정확히 같을 때만 받으므로, 내 편집이 떠 있는 동안 남의 편집이
+          // 기록되면 내 것은 **반드시** 409를 받는다. 그 409를 곧바로 `recover`에 넘기면
+          // 재조회가 큐를 통째로 비우므로, 방금 리베이스한 편집도 함께 사라진다. 즉
+          // **리베이스의 결과가 한 왕복 뒤에 지워진다.**
+          //
+          // 다시 내는 조건은 둘이다 — 큐의 머리가 **여전히 이 편집**이고(리베이스가 그것을
+          // 버리지 않았다), 그 사이 `headSeq`가 **움직였다**(다른 revision이 기록됐다).
+          // 조건이 `headSeq`의 이동이므로 **끝난다:** 서버가 새 revision을 만들어야만 한 번
+          // 더 시도하고, 아니면 그대로 `recover`로 간다.
+          //
+          // **409로 좁히는 것은 판정이다.** *"문서가 내 밑에서 움직였다"*는 부류가 그것뿐이고
+          // (`http/edit-outcome.ts`의 표), 401·422까지 다시 내면 고쳐지지 않는 실패에 왕복을
+          // 하나 더 쓴다.
+          const head = store.nextRequest()
+          if (
+            caught instanceof ApiError &&
+            caught.status === 409 &&
+            head !== null &&
+            head.clientOpId === request.clientOpId &&
+            head.baseSeq !== request.baseSeq
+          ) {
+            continue
+          }
           // 루프를 여기서 끝낸다. `recover`가 큐를 비우므로 남은 편집이 다시 나가지 않고,
           // 재조회가 문서를 서버 것으로 맞춘다.
           await recover(caught)

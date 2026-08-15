@@ -94,6 +94,26 @@ export interface EditorState {
   openPageId: string | null
   /** 서버에서 받은 문서. P2b-2가 여기에 낙관적 패치를 적용한다. */
   document: PageDocument | null
+  /**
+   * **서버가 확인해 준 문서** — `headSeq` revision의 것이고, 위 `document`는 이것 위에
+   * `pending`을 순서대로 얹은 결과다(P3-2 D3).
+   *
+   * ## 왜 문서를 둘 드는가 — 리베이스가 그것을 요구한다
+   *
+   * §7.1은 남의 변경을 *"자기 pending 위에 리베이스 적용"*하라고 적었다. **낙관 문서 위에
+   * 남의 `ops`를 그냥 얹는 것은 리베이스가 아니다** — 서버는 남의 것을 **먼저** 기록하고 내
+   * pending을 그 위에 적용하므로, 내가 반대 순서로 얹으면 두 문서가 갈린다(실측: 양쪽이
+   * `-`로 배열에 더하면 순서가 뒤집힌다). 서버와 같은 순서로 만들려면 **남의 것을 얹을
+   * 바탕**, 즉 내 낙관적 편집이 섞이지 않은 문서가 있어야 한다.
+   *
+   * **`document`에서 이것을 되계산할 수는 없다.** 되돌리려면 pending의 역패치가 필요한데,
+   * 그것을 클라이언트가 만드는 것을 §7.1이 막았다(*"`inverse`는 서버가 적용 직전 상태를
+   * 보고 생성한다"*). 그래서 되계산 대신 **들고 있는다.**
+   *
+   * **`document`와 함께 실리고 함께 비워진다**(`loadPage`·`clearPage`). 둘 중 하나만 움직이는
+   * 자리를 만들지 마라 — 그 순간 리베이스의 바탕이 조용히 틀려진다.
+   */
+  baseDocument: PageDocument | null
   /** 이 문서의 최신 revision seq. P2b-2가 baseSeq로 쓴다. */
   headSeq: number
   selectedNodeId: string | null
@@ -153,6 +173,7 @@ function initialState(): EditorState {
   return {
     openPageId: null,
     document: null,
+    baseDocument: null,
     headSeq: 0,
     selectedNodeId: null,
     mode: 'edit',
@@ -181,14 +202,18 @@ const NO_WARNINGS: ValidationIssue[] = []
 export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged'
 
 /**
- * 화면이 낡은 이유(P3-1 D6). **넷을 가른다 — 사용자가 할 일이 다르고, 무엇이 일어났는지도 다르다.**
+ * 화면이 낡은 이유(P3-1 D6). **셋을 가른다 — 사용자가 할 일이 다르고, 무엇이 일어났는지도 다르다.**
  *
  * | `reason` | 무엇이 일어났나 | 사용자가 할 일 |
  * |---|---|---|
- * | `'pending'` | 보내지 않은 편집이 있어 남의 변경을 **미뤘다** | 편집이 저장되면 저절로 풀린다. 안 풀리면 새로고침 |
- * | `'gap'` | **프레임을 놓쳤다** — 온 `seq`가 내 다음 번호가 아니다 | 편집을 내면 저절로 풀린다(409 → 재조회). 안 내면 새로고침 |
+ * | `'gap'` | **프레임을 놓쳤다** — 온 `seq`가 내 다음 번호가 아니다 | 다시 붙으면 화면이 스스로 다시 읽는다(P3-2 D6). 안 풀리면 새로고침 |
  * | `'diverged'` | 얹으려다 `applyOps`가 던졌다 | 새로고침 |
  * | `'restored'` | 남이 **스냅샷을 복원했다** — 판이 통째로 갈렸다 | 새로고침 |
+ *
+ * **`'pending'`이 있었다 — P3-2가 지웠다.** *"보내지 않은 편집이 있어 미뤘다"*는 상태가
+ * 리베이스와 함께 없어졌다(D3). 그 갈래가 남긴 자리도 함께 닫혔다: 자기 편집을 되받아 선
+ * 낡음이 `ackEdit`으로 안 풀리던 것(P3-1 이월 §4.5)은 **풀 낡음 자체가 안 서므로** 성립하지
+ * 않는다.
  *
  * **`'gap'`과 `'diverged'`를 접지 마라.** 둘 다 *"못 얹었다"*지만 원인이 정반대다 —
  * `'gap'`은 **못 받은 것이 있다**(연결이 끊겼다)이고 `'diverged'`는 **받은 것을 내 문서가
@@ -208,16 +233,15 @@ export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged'
  * | 세기 | `reason` | 왜 그 자리인가 |
  * |---|---|---|
  * | 3 | `'restored'` | **판이 통째로 갈렸다.** 갭도 갈라짐도 그것의 결과다 — 원인이 증상을 덮으면 안 된다 |
- * | 2 | `'diverged'` | 지금 이 프레임을 내 문서가 못 받아들인다. 가장 좁고 구체적인 실패다 |
+ * | 2 | `'diverged'` | 지금 이 프레임을 내 바탕이 못 받아들인다. 가장 좁고 구체적인 실패다 |
  * | 1 | `'gap'` | 못 받은 것이 있다 |
- * | 0 | `'pending'` | **유일하게 *"할 일이 없다"*고 말하는 갈래다** |
  *
- * **경계는 3-2-1과 0 사이다.** 위 셋은 *"새로고침하세요"*이고 `'pending'`은 *"기다리세요"*다.
- * **할 일이 없다는 진단이 할 일이 있다는 진단을 덮으면** 화면이 요구를 거둬들이고, 그것이
- * *"성공했다고 말하면서 실패한"* 그 부류의 거울상이다.
+ * **숫자에 빈자리(0)가 있는 것은 `'pending'`이 있던 자리다**(P3-2가 지웠다). 값을 당겨
+ * 메우지 않는 것은 세기가 **서로의 상대 순서**로만 뜻이 있고, 당기면 diff가 이유 없이
+ * 세 줄이 되기 때문이다.
  */
 export interface RemoteStale {
-  reason: 'pending' | 'gap' | 'diverged' | 'restored'
+  reason: 'gap' | 'diverged' | 'restored'
 }
 
 /**
@@ -229,14 +253,37 @@ export interface RemoteStale {
  * 그 갈래는 **무엇이든 덮는다.**
  */
 const STALE_RANK: Record<RemoteStale['reason'], number> = {
-  pending: 0,
   gap: 1,
   diverged: 2,
   restored: 3,
 }
 
-/** `applyRemoteChange`의 결과. `MarkerChangeResult`에 `'deferred'`·`'gap'`이 더 있다. */
-export type RemoteChangeResult = 'applied' | 'skipped' | 'deferred' | 'gap' | 'diverged'
+/** `applyRemoteChange`의 결과. `MarkerChangeResult`에 `'rebased'`·`'gap'`이 더 있다. */
+export type RemoteChangeResult = 'applied' | 'skipped' | 'rebased' | 'gap' | 'diverged'
+
+/**
+ * `applyRemoteChange`가 돌려주는 것. **버린 것을 함께 낸다** — `loadPage`·`failEdits`가
+ * 같은 모양이고 이유도 같다(P2b-2 D8): 사용자는 자기 편집이 사라졌다는 것을 알아야 하고,
+ * 그것을 **말하는 자리는 스토어가 아니라 부르는 쪽**이다(문안은 화면의 몫이다).
+ */
+export interface RemoteChange {
+  result: RemoteChangeResult
+  /**
+   * 리베이스가 얹지 못해 버린 편집. **`'rebased'`가 아니면 항상 비어 있다.**
+   *
+   * 남이 내 pending의 경로를 지웠을 때다. **에러가 아니라 정상 흐름으로 다룬다** — §7.3이
+   * undo의 같은 상태에 내린 판정과 **같은 성질**이라고 판정했다(P3-2 재라 #4). 근거는
+   * `applyRemoteChange`의 머리말에 있다.
+   */
+  dropped: PendingEdit[]
+}
+
+/** 아무것도 안 버린 결과. **참조를 고정한다** — `NO_WARNINGS`와 같은 이유다. */
+const NO_DROPPED: PendingEdit[] = []
+
+function unchanged(result: RemoteChangeResult): RemoteChange {
+  return { result, dropped: NO_DROPPED }
+}
 
 /** `startUndo`·`startRedo`의 결과. 건너뛴 수는 §7.3의 안내에 쓴다. */
 export interface UndoAttempt {
@@ -322,6 +369,9 @@ export class EditorStore {
     this.#apply({
       openPageId: pageId,
       document,
+      // **바탕도 서버 문서다.** 여기를 지나온 순간 낙관적 편집은 하나도 안 얹혀 있다 —
+      // 아래에서 `pending`을 함께 비우는 것과 같은 사실의 다른 면이다.
+      baseDocument: document,
       headSeq,
       selectedNodeId: null,
       // **이미 비어 있으면 같은 배열을 그대로 넘긴다**(`clearPage`와 같은 이유) — 빈 배열을
@@ -416,144 +466,181 @@ export class EditorStore {
     pageId: string,
     change: { seq: number; markerOps: PatchOp[] },
   ): MarkerChangeResult => {
-    const { openPageId, document } = this.#state
+    const { openPageId, document, baseDocument } = this.#state
     // 다른 페이지로 옮긴 뒤 도착한 응답이다. 여기서 `headSeq`를 건드리면 새 페이지의
     // 편집이 남의 revision 번호 위에서 만들어진다(`ackEdit`의 늦은 ack 가드와 같은 자리).
-    if (openPageId !== pageId || document === null) return 'skipped'
+    if (openPageId !== pageId || document === null || baseDocument === null) return 'skipped'
 
     // 문서가 안 바뀐 요청이다(이미 번호가 있는 노드에 코멘트를 더 달았거나, 마지막이 아닌
     // 코멘트를 지웠거나, 바꿀 것 없는 재번호). **아무것도 안 건드린다**(위 머리말).
     if (change.markerOps.length === 0) return 'applied'
 
     let next: PageDocument
+    let nextBase: PageDocument
     try {
       next = applyOps(document, change.markerOps)
+      // **바탕에도 같이 얹는다**(P3-2 D3). 이 변경은 서버가 이미 기록한 것이므로 바탕이
+      // 그것을 모르면 다음 리베이스가 **번호 없는 문서** 위에서 만들어진다. 둘 중 하나만
+      // 던지면 아무것도 안 움직인다 — 셋(문서·바탕·`headSeq`)이 함께 가는 자리다.
+      nextBase = applyOps(baseDocument, change.markerOps)
     } catch {
       // 보내지 않은 구조 편집이 그 노드를 이미 지웠다. **`headSeq`도 안 올린다** —
       // 올리면 문서와 revision 번호가 조용히 갈라진다.
       return 'diverged'
     }
 
-    this.#apply({ document: next, headSeq: change.seq })
+    this.#apply({ document: next, baseDocument: nextBase, headSeq: change.seq })
     return 'applied'
   }
 
   /**
-   * **남이 낸 문서 변경을 내 문서에 얹는다**(P3-1 D6 · §7.1의 *"[타인] ops 수신"*).
+   * **남이 낸 문서 변경을 내 문서에 얹는다**(§7.1의 *"[타인] ops 수신 → 자기 pending 위에
+   * 리베이스 적용"*).
    *
-   * `applyMarkerChange`와 **같은 모양이지만 갈래가 하나 더 있다.** 그쪽은 코멘트 응답을
-   * 받는 자리이고 이쪽은 WebSocket 프레임을 받는 자리인데, 결정적으로 다른 것은
-   * **내가 그 사이에 보내지 않은 편집을 들고 있을 수 있다**는 점이다.
+   * `applyMarkerChange`와 같은 모양이지만 갈래가 더 있다. 그쪽은 코멘트 응답을 받는
+   * 자리이고 이쪽은 WebSocket 프레임을 받는 자리인데, 결정적으로 다른 것은 **내가 그 사이에
+   * 보내지 않은 편집을 들고 있을 수 있다**는 점이다.
    *
-   * ## pending이 비어 있지 않으면 미룬다 — 그리고 말한다
+   * ## 리베이스는 바탕을 갈아 끼우고 내 pending을 다시 얹는 것이다 (P3-2 D3)
    *
-   * §7.1은 *"자기 pending 위에 리베이스 적용"*이라고 적었고 **그것은 P3-2다.** 지금 얹으면
-   * 내 낙관적 편집이 만든 경로 위에 남의 ops가 얹혀 두 문서가 **조용히** 갈라진다. 그래서
-   * 미룬다. 미루면 화면이 낡고, **낡았다는 것을 `remoteStale`이 말한다** — 조용히 덮는 쪽은
-   * 이 저장소가 여섯 번 만난 부류다.
+   * ```
+   * baseDocument ← baseDocument + 남의 ops      // 서버가 기록한 순서 그대로
+   * document     ← baseDocument + pending…      // 내 낙관적 편집을 그 위에 다시
+   * ```
    *
-   * **미룬 ops를 쌓아 두지 않는다.** 이 슬라이스의 전송은 REST이고 서버는 `baseSeq`가
-   * `head_seq`와 **정확히 같을 때만** 받는다 — 남의 변경이 먼저 기록됐으면 내 pending은
-   * 반드시 409를 받고, 그 복구 경로가 페이지를 다시 받아 `loadPage`로 놓는다. 즉 미룬 것은
-   * **저절로 수렴한다.** 쌓아 두면 그 큐가 두 번째 진실이 되고, 수렴한 뒤 그것을 또 얹는다.
+   * **낙관 문서에 남의 `ops`를 그냥 얹는 것이 아니다.** 그러면 순서가 서버와 반대가 되어 두
+   * 문서가 **조용히** 갈린다(P3-1이 그래서 미뤘다). 바탕을 따로 드는 이유가 그것이고, 근거는
+   * `baseDocument`의 머리말에 있다.
    *
-   * ## `seq`가 내 다음 번호가 아니면 얹지 않는다 — 리뷰가 뚫은 자리
+   * **`@wirebound/schema`의 `applyOps` 하나면 된다** — 변환(OT) 함수가 필요하지 않다.
+   * 재서 확인한 것 둘: `applyOps`는 입력 문서를 건드리지 않고(바탕을 그대로 들고 있어도
+   * 된다), 이렇게 만든 문서는 **서버가 내 pending을 적용했을 때의 문서와 같다**(같은 바탕에
+   * 같은 순서로 같은 ops를 적용하기 때문이다).
    *
-   * 앞 판은 `change.seq > headSeq`이기만 하면 얹었다. **`seq === headSeq + 1`인지는 아무도
-   * 안 봤고**, 그래서 프레임을 하나라도 놓치면 이렇게 됐다(리뷰가 실증했다):
+   * **그 등식이 지켜지는 조건이 갭 검사다.** 바탕이 서버 문서와 같아야 하므로, 이 프레임이
+   * 내 다음 번호일 때만 얹는다. **그 전제를 `remoteStale === null`로 읽으면 안 된다**
+   * (P3-1 델타 리뷰 O1) — 낡음이 풀렸다는 것은 *"바로 다음 번호를 얹었다"*는 뜻일 뿐이고,
+   * 서버가 가진 것을 내가 다 받았다는 뜻이 아니다. 그래서 검사하는 것은 낡음이 아니라
+   * `change.seq === headSeq + 1`이다.
    *
-   * - 놓친 revision의 ops가 내 문서에 **영영 안 들어온다** — 뒤늦게 와도 `seq <= headSeq`라
-   *   건너뛴다.
-   * - 그런데 **`headSeq`는 서버와 같아진다.** 그러면 다음 편집이 `stale` 409조차 안 받고,
-   *   **틀린 문서 위에서 만든 `ops`가 서버의 옳은 문서에 그대로 적용된다.**
-   *   `add /root/children/-`는 조용히 성공하고, 인덱스를 쓰는 `remove`는 **남의 노드를 지운다.**
-   * - `applyOps`가 던지는 모양이면 `'diverged'`로 잡히지만 **가장 흔한 추가에서는 안 던진다.**
-   *   그래서 *가끔* 조용하다 — 이 저장소가 여러 번 만난 부류의 새 얼굴이다.
+   * **갭 검사가 pending 검사보다 앞으로 왔다.** 앞 슬라이스는 pending이 있으면 어차피 안
+   * 얹었으므로 갭인지가 뜻이 없었다. 리베이스는 다르다 — **갭이 난 바탕 위에 내 pending을
+   * 다시 얹으면 서버와 다른 문서가 나오고, 그것은 조용하다.**
    *
-   * **프레임 유실은 사고가 아니라 설계다.** 이 슬라이스가 재연결을 얹었고(브라우저가 그것을
-   * 안 주므로 — 재라 #5), 끊긴 동안 남이 낸 편집의 프레임은 사라진다. 다시 붙어도 페이지를
-   * 다시 읽지 않는다. **재연결마다 이 창이 열린다.**
+   * ## 얹지 못하는 pending은 버린다 — 에러가 아니다 (재라 #4의 판정)
    *
-   * **판정: 얹지 않고 `headSeq`도 안 올린다.** 그러면 둘이 동시에 성립한다 —
+   * 남이 내 pending이 가리키는 노드를 지웠으면 그 편집은 새 바탕에 얹히지 않는다. §7.3이
+   * undo의 같은 상태를 이렇게 정했다: *"적용 불가는 에러가 아니라 **정상 흐름으로
+   * 처리한다** — 스택에서 제거하고 안내한 뒤 다음으로 넘어간다."*
    *
-   * 1. **화면이 말한다**(`remoteStale.reason === 'gap'`).
-   * 2. **저절로 수렴한다.** `headSeq`가 뒤처진 채 남으므로 다음 편집이 `stale` 409를 받고,
-   *    `edit/use-edit-commit.tsx`의 복구 경로가 페이지를 다시 받아 `loadPage`로 놓는다.
-   *    `'pending'` 갈래가 기대는 것과 **같은 수렴 장치**다.
+   * **판정: 같은 성질이다.** 셋이 같다 — (1) 원인이 같다(남이 그 노드를 지웠다), (2) 내가
+   * 되돌리거나 다시 시도할 방법이 없다, (3) 멈추는 것이 답이 아니다(나머지 항목은 그대로
+   * 얹힌다). **다른 것은 무엇이 버려지는가뿐이다** — §7.3은 되돌릴 기회를, 여기서는 보내지
+   * 않은 편집을 잃는다. 그래서 **버린 것을 돌려주고**(위 `RemoteChange`) 부르는 쪽이
+   * 말한다. 버렸다는 것을 말하지 않으면 사용자가 친 값이 조용히 사라진다.
    *
-   * **여기서 스스로 다시 읽지 않는 것도 판정이다.** 페이지 상태를 서버 것으로 놓는 자리는
-   * `loadPage` 하나이고 그 앞뒤 순서(undo 스택 복원이 뒤에 온다 — D10)를 아는 것은
-   * `routes/editor.tsx`다. 스토어가 자기 조회를 갖게 하면 페이지를 여는 경로가 둘이 된다.
-   * **자동 재조회는 P3-2의 것이다** — 리베이스가 어차피 *"내가 seq n까지 전부 받았다"*를
-   * 전제하므로 그때 같은 자리를 손봐야 한다.
+   * ## 미룬 것을 쌓아 두지 않는다 — 근거가 바뀌었다 (사실 5의 재판정)
+   *
+   * P3-1은 *"미룬 ops를 쌓아 두지 않는다"*를 REST 전송이 `baseSeq` 일치를 요구해 저절로
+   * 수렴한다는 근거로 정했다. **WS 전송도 같은 `applyEdit`을 지나므로 그 일치 요구는 그대로
+   * 다**(`ws/patch.ts`). **다만 근거가 필요 없어졌다** — 리베이스는 프레임을 **미루지
+   * 않으므로** 쌓아 둘 것 자체가 생기지 않는다. 남는 것은 `'gap'` 갈래뿐이고 그쪽은 여전히
+   * 안 쌓는다(모르는 번호의 ops는 애초에 받은 적이 없다).
    *
    * ## 갈래 표
    *
    * | 결과 | 언제 | `remoteStale` |
    * |---|---|---|
    * | `'skipped'` | 다른 페이지가 열려 있거나 문서가 없거나 **이미 아는 seq**다 | 그대로 |
-   * | `'deferred'` | 보내지 않은 편집이 있다 | `'pending'` |
    * | `'gap'` | **`seq`가 내 다음 번호가 아니다** | `'gap'` |
-   * | `'diverged'` | `applyOps`가 던졌다 | `'diverged'` |
-   * | `'applied'` | 얹었다. `headSeq`가 `seq`가 된다 | `null`로 푼다 |
+   * | `'diverged'` | 바탕에 `applyOps`가 던졌다 | `'diverged'` |
+   * | `'applied'` | 얹었다. pending이 없었다 | `null`로 푼다 |
+   * | `'rebased'` | 얹고 내 pending을 그 위에 다시 올렸다 | `null`로 푼다 |
    *
-   * **`seq <= headSeq`가 `'skipped'`인 것이 요점이다.** 발신자 제외 헤더를 안 실은 클라이언트는
+   * **`seq <= headSeq`가 `'skipped'`인 것이 요점이다.** 발신자 제외가 없는 클라이언트는
    * **자기 편집을 자기가 되받는다**(`ws/notify.ts`). 그때 그 ops를 한 번 더 얹으면 문서가
    * 두 번 바뀐다.
    *
-   * **갭 검사가 pending 검사보다 뒤에 있다.** pending이 차 있으면 어차피 안 얹으므로 갭인지
-   * 아닌지는 그 판에서 뜻이 없고, `'pending'`이 *"내가 낸 편집이 끝나면 풀린다"*는 더 좁고
-   * 더 정확한 진단이다.
-   *
-   * **`headSeq`와 문서는 함께 움직이거나 둘 다 안 움직인다** — `applyMarkerChange`의 그 문단이
-   * 여기에도 그대로 적용된다.
+   * **`headSeq`와 두 문서는 함께 움직이거나 셋 다 안 움직인다** — `applyMarkerChange`의
+   * 그 문단이 여기에도 그대로 적용된다.
    */
   readonly applyRemoteChange = (
     pageId: string,
     change: { seq: number; ops: PatchOp[]; warnings: ValidationIssue[] },
-  ): RemoteChangeResult => {
-    const { openPageId, document, headSeq, pending } = this.#state
-    if (openPageId !== pageId || document === null) return 'skipped'
+  ): RemoteChange => {
+    const { openPageId, document, baseDocument, headSeq, pending } = this.#state
+    if (openPageId !== pageId || document === null || baseDocument === null) return unchanged('skipped')
     // 이미 아는 revision이다(내 편집이 되돌아온 경우를 포함한다).
-    if (change.seq <= headSeq) return 'skipped'
-
-    if (pending.length > 0) {
-      this.#markStale('pending')
-      return 'deferred'
-    }
+    if (change.seq <= headSeq) return unchanged('skipped')
 
     // 놓친 revision이 있다. **얹지도 `headSeq`를 올리지도 않는다**(위 머리말).
     if (change.seq !== headSeq + 1) {
       this.#markStale('gap')
-      return 'gap'
+      return unchanged('gap')
     }
 
-    let next: PageDocument
+    let nextBase: PageDocument
     try {
-      next = applyOps(document, change.ops)
+      nextBase = applyOps(baseDocument, change.ops)
     } catch {
       this.#markStale('diverged')
-      return 'diverged'
+      return unchanged('diverged')
     }
 
     // **경고도 갈아 끼운다.** 서버가 보내는 것은 *"이 편집 뒤 문서에 남은 경고 전부"*이고
-    // (`editWarnings`의 계약), 얹었다는 것은 내 문서가 그 문서가 됐다는 뜻이다. 안 갈면
-    // 남이 만든 경고를 **편집을 낸 사람만** 보게 되어, 사실 2가 막으려던 그 갈라짐이
-    // 접속 방식 대신 *"누가 냈느냐"*로 되살아난다.
-    // **`'restored'`는 얹었다고 풀리지 않는다**(델타 리뷰 O3의 뒷면). 복원은 **프로젝트**
-    // 사건이라 페이지 다섯 자원이 한꺼번에 갈렸다는 뜻이고, 이 페이지의 프레임 하나를 잘
-    // 얹은 것이 그것을 해결하지 않는다. 푸는 것은 `loadPage`·`clearPage` 둘 — 즉 사용자가
-    // 실제로 다시 읽었을 때다.
+    // (`editWarnings`의 계약), 얹었다는 것은 내 바탕이 그 문서가 됐다는 뜻이다. 안 갈면
+    // 남이 만든 경고를 **편집을 낸 사람만** 보게 되어, 접속 방식 대신 *"누가 냈느냐"*로
+    // 갈라짐이 되살아난다.
+    // **`'restored'`는 얹었다고 풀리지 않는다**(P3-1 델타 리뷰 O3의 뒷면). 복원은
+    // **프로젝트** 사건이라 페이지 다섯 자원이 한꺼번에 갈렸다는 뜻이고, 이 페이지의 프레임
+    // 하나를 잘 얹은 것이 그것을 해결하지 않는다. 푸는 것은 `loadPage`·`clearPage` 둘이다.
     //
     // **같은 객체를 그대로 넘긴다** — 새로 만들면 참조가 달라져 구독자가 헛일을 한다.
     const stale = this.#state.remoteStale
-    this.#apply({
-      document: next,
-      headSeq: change.seq,
+    const dropped = this.#rebaseOnto(nextBase, change.seq, {
       remoteStale: stale !== null && stale.reason === 'restored' ? stale : null,
       editWarnings: change.warnings.length === 0 ? NO_WARNINGS : change.warnings,
     })
-    return 'applied'
+    return { result: pending.length === 0 ? 'applied' : 'rebased', dropped }
+  }
+
+  /**
+   * 바탕을 갈아 끼우고 그 위에 `pending`을 **순서대로 다시 얹는다.** 얹히지 않는 것은
+   * 버리고 돌려준다.
+   *
+   * **셋이 한 번의 `#apply`로 움직인다**(바탕·문서·`headSeq`). 나눠 쓰면 그 사이 커밋에서
+   * 문서와 revision 번호가 어긋난 상태가 화면에 보인다 — `applyMarkerChange`가 *"둘 다
+   * 움직이거나 둘 다 안 움직인다"*로 못박은 것과 같은 자리다.
+   *
+   * **버린 것이 없으면 `pending` 배열의 참조를 그대로 둔다** — 새 배열을 만들면 `#apply`가
+   * 변경으로 보고 큐를 구독하는 쪽이 프레임마다 헛일을 한다(`NO_WARNINGS`와 같은 이유).
+   */
+  #rebaseOnto(nextBase: PageDocument, seq: number, extra: Partial<EditorState>): PendingEdit[] {
+    const { pending } = this.#state
+    const kept: PendingEdit[] = []
+    const dropped: PendingEdit[] = []
+    let document = nextBase
+
+    for (const edit of pending) {
+      let next: PageDocument
+      try {
+        next = applyOps(document, edit.ops)
+      } catch {
+        dropped.push(edit)
+        continue
+      }
+      document = next
+      kept.push(edit)
+    }
+
+    this.#apply({
+      ...extra,
+      baseDocument: nextBase,
+      document,
+      headSeq: seq,
+      pending: dropped.length === 0 ? pending : kept,
+    })
+    return dropped
   }
 
   /**
@@ -592,6 +679,7 @@ export class EditorStore {
     this.#apply({
       openPageId: null,
       document: null,
+      baseDocument: null,
       headSeq: 0,
       selectedNodeId: null,
       // **편집 상태도 함께 비운다.** 빠뜨리면 페이지를 옮긴 뒤 앞 페이지의 pending이 새
@@ -767,6 +855,22 @@ export class EditorStore {
     // 모르는 응답이 상태를 바꾸게 된다.
     if (nextPendingQueue === pending) return
 
+    // **ack된 편집은 이제 서버의 것이다 — 바탕에 접어 넣는다**(P3-2 D3). 안 접으면 바탕이
+    // `headSeq`보다 뒤처지고, 다음 리베이스가 낡은 문서 위에서 만들어진다.
+    //
+    // **여기서 던지지 않는 것은 큐의 불변식이 지킨다:** `pending[0]`은 항상 바탕에 그대로
+    // 얹히는 편집이다(리베이스가 얹히지 않는 것을 버리므로). 그래도 값으로 받는 것은,
+    // 불변식이 깨진 판에서 **문서와 바탕이 조용히 갈라지는 것**보다 화면이 낡았다고 말하는
+    // 편이 낫기 때문이다.
+    let nextBase = this.#state.baseDocument
+    if (nextBase !== null && head !== null) {
+      try {
+        nextBase = applyOps(nextBase, head.ops)
+      } catch {
+        this.#markStale('diverged')
+      }
+    }
+
     // 서버가 준 `inverse`를 **그대로** 싣는다(설계 §7.1).
     const ref: RevisionRef = { revisionId: result.revisionId, inverse: result.inverse }
     // **undo가 만든 revision은 redo 스택으로 간다.** 그 revision의 `inverse`는 원래 편집을
@@ -780,6 +884,7 @@ export class EditorStore {
     const warnings = result.warnings ?? NO_WARNINGS
     this.#apply({
       pending: nextPendingQueue,
+      baseDocument: nextBase,
       headSeq: result.seq,
       undoStack: undone ? undoStack : [...undoStack, ref],
       redoStack: undone ? [...redoStack, ref] : redoStack,

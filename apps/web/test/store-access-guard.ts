@@ -93,8 +93,12 @@ export interface FileViolation extends Violation {
  * `selectedNodeId`도 같은 호출로 움직이지만 여기 넣지 않는다 — 그 값은 문서 안에서만
  * 뜻이 있어서 앞 페이지의 id가 남아도 `findNode`가 못 찾고 끝난다(`property-panel.tsx`).
  * 대조 없이 읽어도 앞 페이지의 **내용이 그려지지는** 않는다.
+ *
+ * **`baseDocument`는 P3-2가 더했다**(리베이스의 바탕 — `editor-store.ts`). 같은 호출로
+ * 실리고 비워지고, 그리고 **더 위험하다**: 그것은 서버가 확인해 준 문서라 화면이 그리면
+ * 사용자가 방금 친 값이 빠진 문서를 보게 된다. 오늘 스토어 밖에서 그것을 읽는 자리는 없다.
  */
-const PAGE_FIELDS = new Set(['openPageId', 'document', 'headSeq'])
+const PAGE_FIELDS = new Set(['openPageId', 'document', 'baseDocument', 'headSeq'])
 
 /**
  * 검사 대상이 아닌 파일. **규칙을 정의하는 곳 둘**이다 — 스토어 자신과, 대조가 들어 있는

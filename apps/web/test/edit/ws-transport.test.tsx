@@ -259,6 +259,113 @@ describe('WS가 붙어 있으면 편집이 그리로 나간다', () => {
   })
 })
 
+/**
+ * **리베이스가 서버에 닿는 길**(P3-2 D3). 스토어 안의 리베이스는
+ * `test/store/remote-change.test.ts`가 재고, 여기는 그것이 **전송까지 살아남는지**를 잰다.
+ *
+ * **이 판이 없으면 리베이스는 이름뿐이다 — 재서 알았다.** 서버는 `baseSeq`가 `head_seq`와
+ * 정확히 같을 때만 받으므로, 내 편집이 떠 있는 동안 남의 편집이 기록되면 내 것은 **반드시**
+ * 409를 받는다. 그 409를 곧바로 재조회로 넘기면 큐가 통째로 비므로 **방금 리베이스한 편집도
+ * 함께 사라진다.**
+ */
+describe('리베이스한 편집을 다시 낸다 (D3)', () => {
+  it('남의 편집이 먼저 들어와 409를 받으면 새 baseSeq로 다시 낸다', async () => {
+    const board = mount()
+    board.commit('내 값')
+
+    // 남의 편집이 먼저 기록됐다 — 내 pending이 그 위로 옮겨 앉는다.
+    board.push({
+      type: 'page-changed',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      seq: HEAD_SEQ + 1,
+      ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_theirs', type: 'Text', props: {} } }],
+      warnings: [],
+      actor: { type: 'user', label: '남' },
+    })
+    // 그 사이 떠 있던 내 프레임은 낡은 `baseSeq`로 갔으므로 409다.
+    board.push({
+      type: 'patch-error',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      clientOpId: 'op_1',
+      status: 409,
+      code: 'conflict',
+      message: '페이지가 이미 변경되었습니다 (요청 baseSeq 4, 현재 5)',
+      issues: [],
+    })
+
+    await act(async () => {})
+    expect(board.patchFrames().map((frame) => [frame.clientOpId, frame.baseSeq])).toEqual([
+      ['op_1', HEAD_SEQ],
+      ['op_1', HEAD_SEQ + 1],
+    ])
+    // **재조회로 가지 않았다** — 그쪽으로 가면 이 편집이 버려진다.
+    expect(board.getPage).not.toHaveBeenCalled()
+  })
+
+  it('다시 낸 것이 ack되면 내 편집이 남의 편집 위에 저장된다', async () => {
+    const board = mount()
+    board.commit('내 값')
+    board.push({
+      type: 'page-changed',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      seq: HEAD_SEQ + 1,
+      ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_theirs', type: 'Text', props: {} } }],
+      warnings: [],
+      actor: { type: 'user', label: '남' },
+    })
+    board.push({
+      type: 'patch-error',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      clientOpId: 'op_1',
+      status: 409,
+      code: 'conflict',
+      message: '페이지가 이미 변경되었습니다 (요청 baseSeq 4, 현재 5)',
+      issues: [],
+    })
+    await act(async () => {})
+
+    board.push(ackFrame('op_1', HEAD_SEQ + 2))
+
+    await act(async () => {})
+    expect(board.store.getState().pending).toEqual([])
+    expect(board.store.getState().headSeq).toBe(HEAD_SEQ + 2)
+    expect(board.store.getState().editFailure).toBeNull()
+    // 남의 노드와 내 값이 함께 남는다.
+    const children = board.store.getState().document?.root.children ?? []
+    expect(children.map((node) => node.id)).toEqual(['n_text', 'n_theirs'])
+    expect(children[0]?.props).toEqual({ content: '내 값' })
+  })
+
+  /**
+   * **음성 대조.** 그 사이 아무 revision도 기록되지 않았으면 다시 내도 같은 `baseSeq`다 —
+   * 그때는 재조회로 간다. 이것이 없으면 위 판이 *"409는 항상 다시 낸다"*로도 통과하고,
+   * 그 구현은 **고쳐지지 않는 실패에 무한히 왕복한다.**
+   */
+  it('headSeq가 안 움직였으면 다시 내지 않고 재조회로 간다', async () => {
+    const board = mount()
+    board.commit('내 값')
+
+    board.push({
+      type: 'patch-error',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      clientOpId: 'op_1',
+      status: 409,
+      code: 'conflict',
+      message: '편집을 적용할 수 없습니다: 바꿀 값을 찾을 수 없습니다: /root/children/0',
+      issues: [],
+    })
+
+    await act(async () => {})
+    expect(board.patchFrames()).toHaveLength(1)
+    expect(board.getPage).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('WS가 없으면 REST로 나간다 (D5)', () => {
   it('Provider가 없으면 patchOps를 부른다 — 음성 대조', () => {
     const board = mount({ realtime: false })

@@ -30,6 +30,17 @@ import { realtimeUrl } from './protocol'
 import { useEditorStoreInstance } from '../store/use-editor-store'
 
 /**
+ * 리베이스가 얹지 못해 버린 편집을 말하는 문장(설계 §7.3의 *"적용 불가"*와 같은 성질).
+ *
+ * **에러가 아니다 — 그래도 말한다.** 남이 그 자리를 지웠으면 내 편집이 얹히지 않는 것이
+ * 당연하지만, 사용자가 친 값이 사라졌다는 사실은 남는다. 자리는 편집 실패와 같은 통지
+ * 하나를 쓴다(D8) — 사용자가 낸 편집의 운명이라는 점이 같다.
+ */
+function droppedNotice(dropped: number): string {
+  return `다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 ${dropped}개를 버렸습니다.`
+}
+
+/**
  * 프로젝트 룸에 붙어 있는다. **Provider가 없으면 아무것도 안 한다**(`context.tsx`의 머리말).
  *
  * 정리 함수가 `close()`를 부르는 것이 계약이다 — 안 부르면 프로젝트를 옮길 때마다 연결이
@@ -61,13 +72,20 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
           case 'joined':
             setup.holder.set(frame.connectionId)
             break
-          case 'page-changed':
-            store.applyRemoteChange(frame.pageId, {
+          case 'page-changed': {
+            const change = store.applyRemoteChange(frame.pageId, {
               seq: frame.seq,
               ops: frame.ops,
               warnings: frame.warnings,
             })
+            // **리베이스가 버린 편집을 말한다**(D3 · §7.3의 *"적용 불가"*와 같은 성질).
+            // 스토어는 무엇이 버려졌는지만 돌려주고 문안은 여기서 만든다 — `startUndo`의
+            // `skipped`를 화면이 문장으로 바꾸는 것과 같은 배치다.
+            if (change.dropped.length > 0) {
+              store.setEditFailure({ kind: 'message', message: droppedNotice(change.dropped.length) })
+            }
             break
+          }
           case 'restored':
             store.markRestored()
             break
