@@ -23,6 +23,9 @@ importers:
       '@fastify/cookie':
         specifier: ^11.0.0
         version: 11.1.2
+      '@wirebound/exporter':
+        specifier: workspace:*
+        version: link:../../packages/exporter
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../../packages/schema
