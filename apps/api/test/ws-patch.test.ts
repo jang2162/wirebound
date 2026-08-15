@@ -112,6 +112,32 @@ function addNode(id: string): PatchOp[] {
   return [{ op: 'add', path: '/root/children/-', value: { id, type: 'Text', props: {} } }]
 }
 
+/**
+ * **참가 알림이 끝나기를 기다린다.** `joinRoom`은 `joined`까지만 기다리는데 그 뒤에
+ * `announcePresence`가 따로 돌고, 그 브로드캐스트도 연결마다 자격을 **다시 본다**
+ * (`ws/broadcast.ts`). 그것이 도는 **동안** 권한을 지우면 그 자리에서 연결이 닫혀
+ * `4403`이 오는데, **그것은 patch 프레임이 만든 회수가 아니다.**
+ *
+ * 리뷰가 그 창을 값으로 잡았다 — 회수/거절 가르기를 지운 변이가 3회 중 1회 살아남았다.
+ * `presence`를 받으면 그 브로드캐스트의 자격 확인이 이 연결에 대해 이미 끝난 것이므로,
+ * 그 뒤의 `4403`은 **프레임이 만든 것**이다.
+ */
+async function settleJoin(probe: WsProbe): Promise<void> {
+  await probe.waitFor('presence')
+}
+
+/**
+ * **회수는 답하지 않는다 — 거절은 닫지 않는다.** 두 갈래가 서로 배타적이라는 것을 회수 판이
+ * 양쪽으로 단언한다.
+ *
+ * **닫힘만 보면 구분력이 창에 매인다**(리뷰가 쟀다: 가르기를 지운 변이가 3회 중 1회 살아남았고,
+ * 그 케이스는 `waitClosed`의 3초 창에 걸려 있었다). 거절 구현에서는 `patch-error`가 반드시
+ * 오므로, **그 프레임이 없다는 것**이 창과 무관한 판정이다.
+ */
+function expectRevokedNotRefused(probe: WsProbe): void {
+  expect(probe.received.filter((frame) => frame.type === 'patch-error')).toEqual([])
+}
+
 /** `patch` 프레임 하나를 보낸다. */
 function sendPatch(
   probe: WsProbe,
@@ -199,6 +225,7 @@ describe('patch 프레임에는 editor 이상이 필요하다 (D1 · §10)', () 
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const probe = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+      await settleJoin(probe)
 
       await db
         .deleteFrom('project_members')
@@ -213,6 +240,7 @@ describe('patch 프레임에는 editor 이상이 필요하다 (D1 · §10)', () 
       })
 
       expect((await probe.waitClosed()).code).toBe(4403)
+      expectRevokedNotRefused(probe)
     })
   })
 
@@ -221,6 +249,7 @@ describe('patch 프레임에는 editor 이상이 필요하다 (D1 · §10)', () 
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const probe = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+      await settleJoin(probe)
 
       await ctx.db.deleteFrom('sessions').where('user_id', '=', fx.editor.user.id).execute()
       sendPatch(probe, {
@@ -231,6 +260,7 @@ describe('patch 프레임에는 editor 이상이 필요하다 (D1 · §10)', () 
       })
 
       expect((await probe.waitClosed()).code).toBe(4403)
+      expectRevokedNotRefused(probe)
     })
   })
 

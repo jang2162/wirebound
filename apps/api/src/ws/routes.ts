@@ -120,6 +120,11 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
       socket.on('message', (raw: unknown) => {
         // **읽기는 동기이므로 IIFE 밖에서 한다.** 아래 `catch`가 *"어느 편집이 실패했나"*를
         // 알려면 프레임을 손에 쥐고 있어야 한다.
+        //
+        // **여기서 던지면 감싸는 `catch`가 없어 unhandled가 된다** — 리뷰가 지적한 자리다.
+        // 재현 가능한 입력을 못 찾았다: `JSON.parse`는 `parseClientFrame` 안에서 막혀 있고
+        // `ClientFrameSchema`에 재귀 멤버가 없어 zod가 스택으로 던질 자리도 없다.
+        // **프레임 갈래에 재귀 스키마를 더하면 그 전제가 깨진다.**
         const frame = parseClientFrame(String(raw))
         if (!frame) {
           socket.close(WS_CLOSE.badFrame, '읽을 수 없는 프레임입니다')
@@ -169,6 +174,12 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
             push(patchErrorFrame(projectId, frame, internal()))
           } catch (pushError: unknown) {
             // 소켓이 이미 죽었으면 보낼 수 없다. 여기서 던지면 unhandled가 된다.
+            //
+            // **이 안쪽 `catch`는 0 사망이다(리뷰 변이 M-N9).** 그것이 도는 판은 *"핸들러가
+            // 던졌고 **그 순간 소켓도 이미 죽어** `push`까지 던진다"*인데, 그 둘을 함께
+            // 만드는 케이스가 없다. `connection.ts`의 `stopped`·`ackEdit`의 접기 실패와 같은
+            // 부류다 — **지워도 되는 신호로 읽지 마라.** 지금 안 죽는 이유는 두 사건이 겹치는
+            // 판을 아무도 안 만들기 때문이지 겹칠 수 없어서가 아니다.
             app.log.error({ err: pushError, projectId }, 'WS 실패 통지 실패')
           }
         })
