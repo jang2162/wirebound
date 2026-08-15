@@ -129,13 +129,62 @@ body {
   min-width: 0;
 }
 
+/* **\`position: relative\`는 겹layer의 자리다**(P8-3 D4). 번호 마커는 문서 **옆에** 절대
+   좌표로 놓이고, 그 좌표의 기준이 이 상자다. 상속되는 속성이 아니므로 문서 안으로 흘러
+   들어가지 않는다 — 위 규율의 허용 목록에 \`position\`이 있는 이유가 그것이다.
+   **스크립트가 없으면 겹layer 자체가 없다**(런타임이 만든다) — 그때 이 줄은 아무것도 안 한다. */
 .wb-export-canvas {
+  position: relative;
   box-sizing: border-box;
   min-height: 100%;
   padding: 1.25rem;
   background: #ffffff;
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
+}
+
+/* 번호 마커 겹layer(P8-3 D4). 런타임이 만들고 자리를 잰다.
+   **문서를 가리지 않는다** — \`pointer-events: none\`이라 누르는 것은 그대로 문서로 간다. */
+.wb-export-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wb-export-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 1.25rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-align: center;
+}
+
+/* 못 한 것을 말하는 줄(P8-3 D1·D6). **런타임이 없으면 비어 있고 \`hidden\`이라 안 보인다.** */
+.wb-export-status {
+  margin-top: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 6px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 0.8125rem;
+  color: #7c2d12;
+  line-height: 1.6;
+}
+
+.wb-export-status[hidden] {
+  display: none;
+}
+
+.wb-export-status-line {
+  margin: 0;
 }
 
 /* -------------------------------------------------------------- 우: 탭 */

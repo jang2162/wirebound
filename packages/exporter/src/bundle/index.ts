@@ -34,10 +34,12 @@ import type { NodeRenderError } from '@wirebound/renderer'
 import type { PageDocument } from '@wirebound/schema'
 import type { ResolvedTheme } from '@wirebound/themes'
 import { DEFAULT_LANG, pageCss, renderHtmlDocument, renderPageTree } from '../page'
+import { buildRuntimePlan, RUNTIME_JS, RUNTIME_JS_PATH, type RuntimePlan } from '../runtime/plan'
+import { scriptJson } from '../script-json'
 import { commentEntries, type BundleComment } from './comments'
 import { bundleHref, pageFileNames } from './filename'
 import { SHELL_CSS, SHELL_CSS_PATH } from './shell-css'
-import { shellBody, shellHead, type ShellNavItem } from './shell'
+import { shellBody, shellHead, shellScripts, type ShellNavItem } from './shell'
 
 /** 번들에 실을 페이지 하나. */
 export interface BundlePage {
@@ -55,6 +57,18 @@ export interface BundlePage {
    * 셋으로 갈라 두었고 성질이 다르다.
    */
   comments?: readonly BundleComment[]
+  /**
+   * 이 페이지를 가리키는 **상호작용 타겟**(§8.1의 `navigate`·`openModal`의 `target`).
+   * 예: `'page:관리자/회원/상세'`.
+   *
+   * **없으면 이 페이지로 오는 링크가 안 생긴다** — 그것도 정상이다. 타겟은 페이지 경로이고
+   * (P5-2 재라 #1이 형식을 강제하지 않기로 판정했다) 번들이 드는 것은 제목뿐이라, **어느
+   * 문자열이 이 페이지를 가리키는지는 번들이 알 수 없다.** 제목으로 짐작하지 않는다 —
+   * 짐작이 맞으면 링크가 되고 틀리면 조용히 아무 데도 안 가는데, 그 둘이 화면에서 같다.
+   *
+   * 링크가 안 생기면 **런타임이 그렇게 말한다**(D6) — 조용히 아무 일도 안 일어나지 않는다.
+   */
+  target?: string
 }
 
 export interface ExportBundleOptions {
@@ -114,21 +128,65 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
    */
   const rendered = pages.map((page) => renderPageTree(page.document, theme))
 
+  /**
+   * **상호작용 타겟 → 번들 안의 경로.** 자리마다 다른 상대 링크로 바꾸는 것은 아래
+   * `localized`가 한다 — 계획은 페이지마다 **한 번만** 만든다(판을 미리 그리는 것이
+   * 비싸고, 두 번 만들면 오류도 두 벌이 된다).
+   */
+  const targets = new Map<string, string>()
+  for (const [index, page] of pages.entries()) {
+    if (page.target !== undefined && !targets.has(page.target)) targets.set(page.target, paths[index]!)
+  }
+
+  /** **판정과 실행이 여기서 일어난다**(D1). 브라우저로 나가는 것은 그 답이다. */
+  const plans = pages.map((page, index) =>
+    buildRuntimePlan({
+      page: page.document,
+      theme,
+      hrefs: targets,
+      baseErrors: rendered[index]!.errors,
+    }),
+  )
+
   const errors = pages.flatMap((page, index) =>
-    rendered[index]!.errors.map((error) => ({ path: paths[index]!, title: page.title, error })),
+    [...rendered[index]!.errors, ...plans[index]!.errors].map((error) => ({
+      path: paths[index]!,
+      title: page.title,
+      error,
+    })),
   )
 
   const files: BundleFile[] = [
-    { path: INDEX_PATH, content: pageHtml(options, paths, rendered, 0, INDEX_PATH, lang) },
+    { path: INDEX_PATH, content: pageHtml(options, paths, rendered, plans, 0, INDEX_PATH, lang) },
     ...pages.map((_page, index) => ({
       path: paths[index]!,
-      content: pageHtml(options, paths, rendered, index, paths[index]!, lang),
+      content: pageHtml(options, paths, rendered, plans, index, paths[index]!, lang),
     })),
     { path: SHELL_CSS_PATH, content: SHELL_CSS },
     { path: THEME_CSS_PATH, content: pageCss(theme) },
+    { path: RUNTIME_JS_PATH, content: RUNTIME_JS },
   ]
 
   return { files, errors }
+}
+
+/**
+ * 계획의 링크를 **이 파일에서 보는 상대 경로**로 바꾼다.
+ *
+ * 계획은 번들 뿌리 기준의 경로를 든다. `index.html`과 `pages/….html`이 같은 페이지를 다른
+ * 자리에서 가리키므로 링크는 파일마다 다르다 — 시트 링크가 그런 것과 같다(D6).
+ */
+function localized(plan: RuntimePlan, at: string): RuntimePlan {
+  return {
+    ...plan,
+    events: plan.events.map((event) => ({
+      ...event,
+      requests: event.requests.map((request) => ({
+        ...request,
+        href: request.href === null ? null : bundleHref(at, request.href),
+      })),
+    })),
+  }
 }
 
 /**
@@ -139,6 +197,7 @@ function pageHtml(
   options: ExportBundleOptions,
   paths: readonly string[],
   rendered: readonly { tree: ReturnType<typeof renderPageTree>['tree'] }[],
+  plans: readonly { plan: RuntimePlan }[],
   index: number,
   at: string,
   lang: string,
@@ -160,6 +219,10 @@ function pageHtml(
       comments: commentEntries(page.document, page.comments ?? []),
       page: page.document,
       documentTree: rendered[index]!.tree,
+      scripts: shellScripts({
+        dataJson: scriptJson(localized(plans[index]!.plan, at)),
+        runtimeHref: bundleHref(at, RUNTIME_JS_PATH),
+      }),
     }),
   })
 }

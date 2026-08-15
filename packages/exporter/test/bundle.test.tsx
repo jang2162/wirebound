@@ -106,6 +106,7 @@ describe('exportBundle — 파일 트리 (D1 · §11.3)', () => {
       'pages/회원-상세.html',
       'assets/shell.css',
       'assets/theme.css',
+      'assets/runtime.js',
     ])
   })
 
@@ -178,8 +179,49 @@ describe('exportBundle — <head> (D6 · D8)', () => {
     expect(parse(fileAt(twoPages(), 'pages/회원-상세.html')).title).toBe('회원 상세')
   })
 
-  it('스크립트를 하나도 싣지 않는다 — runtime.js는 P8-3이다', () => {
-    for (const file of twoPages().files) expect(file.content).not.toContain('<script')
+  /**
+   * **P8-2는 *"`<script>`를 하나도 안 낸다"*를 지켰다.** P8-3이 런타임을 붙이면서 그
+   * 명제가 **거짓이 되는 것이 아니라 좁아진다** — *"정확히 이 둘을 낸다"*로 바꾼다
+   * (P8-2가 P8-1의 케이스 둘에 한 것과 같다).
+   *
+   * **개수와 정체를 함께 센다.** *"스크립트가 있다"*만 재면 셋째가 새어도 안 죽는다.
+   * 하나는 **실행되지 않는 데이터**(`application/json`)이고 하나는 **자산을 가리키는
+   * 고전 스크립트**다 — `type="module"`이면 `file://`에서 통째로 죽는다(T1의 실측).
+   */
+  it.each(['index.html', 'pages/회원-목록.html', 'pages/회원-상세.html'])(
+    '%s가 스크립트를 정확히 둘 낸다 — 데이터 하나와 runtime.js 하나',
+    (path) => {
+      const scripts = [...parse(fileAt(twoPages(), path)).querySelectorAll('script')]
+      expect(
+        scripts.map((script) => [
+          script.getAttribute('type'),
+          script.getAttribute('id'),
+          script.getAttribute('src'),
+          script.hasAttribute('defer'),
+        ]),
+      ).toEqual([
+        ['application/json', 'wb-export-runtime-data', null, false],
+        [null, null, path === 'index.html' ? 'assets/runtime.js' : '../assets/runtime.js', true],
+      ])
+    },
+  )
+
+  it('자산 파일에는 스크립트 태그가 없다', () => {
+    for (const file of twoPages().files) {
+      if (file.path.endsWith('.html')) continue
+      expect(file.content, file.path).not.toContain('<script')
+    }
+  })
+
+  /** 데이터가 스크립트를 끊지 않는다 — `scriptJson`이 든 규칙이다(D8). */
+  it('데이터가 <를 이스케이프해 실린다', () => {
+    const bundle = exportBundle({
+      pages: [{ title: '주입', document: LIST_PAGE, comments: [] }],
+    })
+    const html = fileAt(bundle, 'pages/주입.html')
+    const data = parse(html).getElementById('wb-export-runtime-data')
+    expect(data?.textContent).not.toContain('<')
+    expect(() => JSON.parse(data?.textContent ?? '')).not.toThrow()
   })
 })
 

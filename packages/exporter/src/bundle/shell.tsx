@@ -60,6 +60,38 @@ export interface ShellInput {
   page: PageDocument
   /** 가운데에 놓을 그려진 문서. `exportPage`와 **같은 렌더 경로**에서 온 것이다. */
   documentTree: ReactNode
+  /** `<body>` 끝에 얹을 `<script>` 둘(P8-3 D7). `shellScripts`가 만든다. */
+  scripts: ReactNode
+}
+
+/**
+ * `<body>` 끝에 얹는 **`<script>` 정확히 둘**(P8-3 D7·D8).
+ *
+ * 앞 슬라이스는 *"`<script>`를 하나도 안 낸다"*를 지켰다. 상호작용 런타임이 오면서 그
+ * 명제가 **거짓이 되는 것이 아니라 좁아진다** — *"정확히 이 둘을 낸다"*로 바꾼다.
+ *
+ * | 무엇 | 왜 |
+ * |---|---|
+ * | `type="application/json"`인 데이터 | **실행되지 않는다.** 판정 결과와 미리 그린 판이 값이므로 코드일 이유가 없다 |
+ * | `assets/runtime.js`를 가리키는 고전 스크립트 | `file://`에서 **외부 모듈 스크립트가 CORS로 막힌다**(T1의 실측). `type="module"`을 쓰지 않는다 |
+ *
+ * **데이터를 `scriptJson`으로 심는다**(D8). `<script>`는 raw text 요소라 파서가 문자열
+ * 안을 안 보고 `</script>`에서 그대로 끊긴다 — 그 규칙은 이월의 스니펫이 아니라 그 함수가
+ * 든다. `type="application/json"`이어도 파서에게는 같은 raw text다.
+ */
+export function shellScripts(input: { dataJson: string; runtimeHref: string }): ReactElement {
+  return (
+    <>
+      <script
+        type="application/json"
+        id="wb-export-runtime-data"
+        // React는 `<script>`의 텍스트 자식도 이스케이프한다(`&lt;`). 그러면 JSON이 아니게
+        // 되므로 raw로 넣고, 안전은 `scriptJson`이 낸 리터럴이 든다.
+        dangerouslySetInnerHTML={{ __html: input.dataJson }}
+      />
+      <script src={input.runtimeHref} defer />
+    </>
+  )
 }
 
 /** `<head>`에 얹는 것. **오늘은 스타일시트 링크뿐이다**(D6 — CSS를 인라인하지 않는다). */
@@ -114,6 +146,7 @@ function hasNonNodeChild(node: unknown): boolean {
 export function shellBody(input: ShellInput): ReactElement {
   const sentences = hasNonNodeChild(input.page.root) ? [] : listInteractionSentences(input.page)
   return (
+    <>
     <div className="wb-export">
       <nav className="wb-export-nav" aria-label="페이지">
         <p className="wb-export-nav-heading">페이지</p>
@@ -133,6 +166,9 @@ export function shellBody(input: ShellInput): ReactElement {
       </nav>
       <main className="wb-export-mockup">
         <div className="wb-export-canvas">{input.documentTree}</div>
+        {/* **런타임이 못 한 것을 말하는 자리**(P8-3 D1·D6). 비어 있고 `hidden`이므로
+            스크립트가 없으면 아무것도 아니다 — 그것이 D5다. */}
+        <div className="wb-export-status" role="status" aria-live="polite" hidden />
       </main>
       <aside className="wb-export-panel">
         {TABS.map((tab, index) => (
@@ -167,6 +203,8 @@ export function shellBody(input: ShellInput): ReactElement {
         </section>
       </aside>
     </div>
+    {input.scripts}
+    </>
   )
 }
 
