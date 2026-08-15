@@ -1,15 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { FastifyInstance } from 'fastify'
 import { sql } from 'kysely'
 import type { PatchOp } from '@wirebound/schema'
-import { buildApp } from '../src/app'
 import {
   createMenuNode,
   createPage,
   createProject,
   getTestDb,
+  resetRealData,
   signup,
-  testConfig,
+  withRealApi,
   type CreatedPage,
   type CreatedProject,
   type SignedUpUser,
@@ -53,28 +52,13 @@ import {
 /** 이 파일은 하네스가 아니라 풀 핸들을 직접 쓴다. 파일이 끝나면 `setup.ts`의 `afterAll`이 닫는다. */
 const db = getTestDb()
 
-async function reset(): Promise<void> {
-  await db.deleteFrom('projects').execute()
-  await db.deleteFrom('users').execute()
-}
-
 // `beforeEach`와 `afterEach` 양쪽에서 지운다. 테스트가 중간에 죽으면 `afterEach`가
 // 안 돌 수 있고, 그 잔여 데이터가 다음 테스트를 오염시킨다.
-beforeEach(reset)
-afterEach(reset)
-
-/**
- * 앱을 만들고 테스트가 끝나면 닫는다. `buildApp`에 **트랜잭션이 아니라 풀 핸들**을
- * 넘기는 것이 이 파일의 존재 이유다 — 요청마다 서로 다른 커넥션을 잡고 각자 커밋한다.
- */
-async function withRealApi(fn: (ctx: TestContext) => Promise<void>): Promise<void> {
-  const app: FastifyInstance = await buildApp({ db, config: testConfig() })
-  try {
-    await fn({ app, db })
-  } finally {
-    await app.close()
-  }
-}
+//
+// **청소도 하네스도 `helpers.ts`에 있다(P3-1 D1).** 앞 판은 이 파일이 자기 사본을
+// 들고 있었고, 같은 사본이 다섯 파일에 있었다.
+beforeEach(resetRealData)
+afterEach(resetRealData)
 
 interface Fixture {
   owner: SignedUpUser

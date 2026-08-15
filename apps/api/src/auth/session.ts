@@ -84,6 +84,28 @@ export async function resolveSession(db: DbHandle, token: string): Promise<Sessi
   return { id: row.id, email: row.email, name: row.name }
 }
 
+/**
+ * 세션 행이 아직 살아 있는지만 본다. **토큰 원문이 아니라 그 해시(=`sessions.id`)를 받는다.**
+ *
+ * 열려 있는 WebSocket 연결이 §10의 *"세션 행을 지우면 권한도 즉시 회수된다"*를 지키려면
+ * 그 연결이 자기 세션을 다시 확인할 수 있어야 하는데, **원문 토큰을 프로세스 메모리에
+ * 연결 수명만큼 들고 있지 않으려고** 해시만 들고 이 함수를 부른다(`ws/routes.ts`).
+ *
+ * `resolveSession`과 달리 `last_seen_at`을 건드리지 않는다 — 브로드캐스트가 나가는 것은
+ * 사용자의 활동이 아니다. 그것을 활동으로 세면 아무도 안 만지는 화면의 세션이 남의 편집만으로
+ * 계속 살아난다.
+ */
+export async function sessionIsLive(db: DbHandle, sessionId: string): Promise<boolean> {
+  const row = await db
+    .selectFrom('sessions')
+    .select('id')
+    .where('id', '=', sessionId)
+    .where('expires_at', '>', sql<Date>`now()`)
+    .executeTakeFirst()
+
+  return row !== undefined
+}
+
 /** 세션 하나를 폐기한다(로그아웃). 존재하지 않는 토큰이어도 조용히 끝난다. */
 export async function destroySession(db: DbHandle, token: string): Promise<void> {
   await db.deleteFrom('sessions').where('id', '=', hashSessionToken(token)).execute()

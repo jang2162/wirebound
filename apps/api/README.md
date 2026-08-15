@@ -172,6 +172,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/presets/:presetId` | DELETE | **editor** | — | 204. 없는 id·남의 프로젝트의 id는 404, **내장 id(`builtin:…`)는 400**(경로가 uuid를 요구한다) |
 | `/api/projects/:projectId/export/preview` | GET | viewer | — | 200 `{ pages, duplicateTargets, brokenLinks, errors, themeId, fileName }` — **내려받기 전에 화면이 말할 것**(아래 "HTML 정적 번들 내보내기"). 페이지가 없으면 409 |
 | `/api/projects/:projectId/export` | GET | viewer | — | 200 `application/zip` — §11.3의 번들. 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409 |
+| `/api/projects/:projectId/ws` | GET(업그레이드) | viewer | — | **101** — WebSocket. 아래 "실시간(WebSocket)" 참고. 업그레이드가 아닌 평범한 GET에도 같은 가드가 먼저 돈다(비멤버 404) |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
 
 ### HTML 정적 번들 내보내기 (§11.3 — P8-4)
@@ -815,6 +816,44 @@ revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `
 **복구는 스냅샷 복원의 몫도 아니다 — P6-2가 그렇게 판정했다.** 복원도 같은 파이프라인을
 타므로 미지원 버전 문서를 되살리지 못하고, 오히려 **쓰기 전에 400으로 끊으며 어느 페이지가
 어떤 버전인지 말한다**(아래 "복원"). 근거와 실측은 그 절에 있다.
+
+### 실시간 (WebSocket) — §7.1 · P3-1
+
+`GET /api/projects/:projectId/ws` 하나다. **룸은 프로젝트 단위 하나**이고, 페이지 사건은
+프레임에 `pageId`를 실어 받는 쪽이 거른다.
+
+**인증은 REST와 같은 경로다(§10).** 핸드셰이크가 같은 세션 쿠키를 읽고 같은
+`projectGuard('viewer')`를 통과한다 — 로그인하지 않았거나 멤버가 아니면 101이 오지 않는다.
+**뷰어도 붙는다**: 조회 전용 사용자도 남이 고친 화면을 봐야 한다.
+
+**서버 → 클라이언트**
+
+| `type` | 언제 | 실리는 것 |
+|---|---|---|
+| `joined` | 붙은 직후, **그 연결에게만** | `projectId` · `connectionId` · `userId` · `role` |
+| `presence` | 누가 들어오거나 나갈 때, 룸 전체에 | `projectId` · `participants[{ connectionId, userId, userName }]` |
+| `page-changed` | `applyEdit`이 성공했을 때 | `projectId` · `pageId` · `seq` · `ops` · `warnings` · `actor` |
+| `restored` | 스냅샷 복원이 성공했을 때 | `projectId` · `snapshotId` · `actor` |
+| `pong` | `ping`에 대한 답 | — |
+
+**클라이언트 → 서버**는 `{ "type": "ping" }` 하나다. 편집 전송·ack·리베이스는 P3-2다 —
+**이 슬라이스에서 편집을 보내는 것은 여전히 REST다.**
+
+**`page-changed`는 문서 전체가 아니라 `ops`를 싣는다.** 받는 쪽에 아직 보내지 않은 낙관적
+편집이 있을 수 있고, 서버 문서로 갈아 끼우면 그것이 화면에서 사라진다. `seq`가 받는 쪽의
+새 `headSeq`이고, 그 값이 다음 편집의 `baseSeq`가 된다.
+
+**자기 편집은 자기에게 돌아오지 않는다 — 헤더로 가른다.** 편집 요청에
+`x-wb-connection-id: <joined의 connectionId>`를 실으면 그 연결만 브로드캐스트에서 빠진다.
+안 실어도 동작한다 — 그때는 자기 편집이 한 번 더 오고, 그 프레임이 HTTP 응답보다 먼저
+도착할 수 있다.
+
+**연결 도중 권한이 사라지면 그 연결이 닫힌다**(코드 `4403`). 확인 지점은 둘이다: 클라이언트가
+프레임을 보낼 때, 그리고 서버가 브로드캐스트를 흘릴 때. 읽을 수 없는 프레임은 `4400`이다.
+
+**하트비트는 앱 수준이다.** 브라우저 `WebSocket`은 프로토콜 ping을 보낼 수 없으므로, 연결이
+살아 있는지 재려면 `{"type":"ping"}`을 보내고 `pong`을 기다린다. **재연결도 클라이언트
+몫이다** — 브라우저 `WebSocket`은 스스로 다시 붙지 않는다.
 
 ## DB 계층
 

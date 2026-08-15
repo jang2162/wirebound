@@ -27,27 +27,23 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
 import type { FastifyInstance } from 'fastify'
-import { buildApp } from '../src/app'
 import { restoreSnapshot } from '../src/services/restore'
 import {
   createMenuNode,
   createPage,
   createProject,
   getTestDb,
+  resetRealData,
   signup,
-  testConfig,
+  withRealApi,
   type TestContext,
 } from './helpers'
 
 const db = getTestDb()
 
-async function reset(): Promise<void> {
-  await db.deleteFrom('projects').execute()
-  await db.deleteFrom('users').execute()
-}
-
-beforeEach(reset)
-afterEach(reset)
+// 청소도 하네스도 `helpers.ts`에 있다(P3-1 D1).
+beforeEach(resetRealData)
+afterEach(resetRealData)
 
 /** 잠금이 걸렸는지 판정하는 창. 아래 음성 대조가 같은 창에서 끝나는 것을 함께 잰다. */
 const WAIT_MS = 700
@@ -92,8 +88,7 @@ function fireRestore(fx: Fixture): { done: () => boolean; promise: Promise<unkno
 
 describe('복원은 프로젝트를 잠근다 (D8)', () => {
   it('아무도 잡고 있지 않으면 창 안에 끝난다 — 음성 대조', async () => {
-    const app = await buildApp({ db, config: testConfig() })
-    try {
+    await withRealApi(async ({ app }) => {
       const fx = await setup(app)
 
       const restore = fireRestore(fx)
@@ -102,14 +97,11 @@ describe('복원은 프로젝트를 잠근다 (D8)', () => {
       // 이것이 없으면 아래 케이스의 *"막힌다"*가 *"그냥 느리다"*와 구분되지 않는다.
       expect(restore.done()).toBe(true)
       expect(await restore.promise).toMatchObject({ kind: 'restored' })
-    } finally {
-      await app.close()
-    }
+    })
   }, 60_000)
 
   it('남이 메뉴 행을 잡고 있으면 복원이 기다린다', async () => {
-    const app = await buildApp({ db, config: testConfig() })
-    try {
+    await withRealApi(async ({ app }) => {
       const fx = await setup(app)
 
       let release: () => void = () => {}
@@ -142,8 +134,6 @@ describe('복원은 프로젝트를 잠근다 (D8)', () => {
       // **여기가 이 파일의 요점이다.** 잠금 문장을 지우면 이 판이 위 음성 대조와 같아진다 —
       // 바뀔 것이 없는 복원은 `menu_nodes`에 아무것도 쓰지 않기 때문이다.
       expect(blocked).toBe(true)
-    } finally {
-      await app.close()
-    }
+    })
   }, 60_000)
 })

@@ -131,6 +131,18 @@ export interface EditorState {
    * 배열이 오고 화면에서 사라진다** — 그것이 사용자가 고쳤다는 신호다.
    */
   editWarnings: ValidationIssue[]
+  /**
+   * **남의 변경을 받았는데 화면에 못 얹었다**(P3-1 D6). 얹은 경우엔 `null`이다.
+   *
+   * 이 슬라이스의 클라이언트는 **받기만 한다** — 편집은 여전히 REST로 나간다. 그래서
+   * *"내 낙관적 편집이 pending인데 남의 ops가 오는"* 자리가 생기고, §7.1의 답
+   * (*"자기 pending 위에 리베이스 적용"*)은 **P3-2다.** 그때까지 할 수 있는 정직한 일은
+   * **미루고 그 사실을 말하는 것**이다 — `applyRemoteChange`의 머리말에 갈래 표가 있다.
+   *
+   * **`null`과 `{reason}`을 접지 마라.** 접으면 *"낡지 않았다"*와 *"낡았는데 왜인지 모른다"*가
+   * 같은 값이 된다.
+   */
+  remoteStale: RemoteStale | null
 }
 
 /**
@@ -152,6 +164,7 @@ function initialState(): EditorState {
     editStatus: 'idle',
     editFailure: null,
     editWarnings: NO_WARNINGS,
+    remoteStale: null,
   }
 }
 
@@ -166,6 +179,64 @@ const NO_WARNINGS: ValidationIssue[] = []
  * 셋이 갈리는 근거가 있다.
  */
 export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged'
+
+/**
+ * 화면이 낡은 이유(P3-1 D6). **넷을 가른다 — 사용자가 할 일이 다르고, 무엇이 일어났는지도 다르다.**
+ *
+ * | `reason` | 무엇이 일어났나 | 사용자가 할 일 |
+ * |---|---|---|
+ * | `'pending'` | 보내지 않은 편집이 있어 남의 변경을 **미뤘다** | 편집이 저장되면 저절로 풀린다. 안 풀리면 새로고침 |
+ * | `'gap'` | **프레임을 놓쳤다** — 온 `seq`가 내 다음 번호가 아니다 | 편집을 내면 저절로 풀린다(409 → 재조회). 안 내면 새로고침 |
+ * | `'diverged'` | 얹으려다 `applyOps`가 던졌다 | 새로고침 |
+ * | `'restored'` | 남이 **스냅샷을 복원했다** — 판이 통째로 갈렸다 | 새로고침 |
+ *
+ * **`'gap'`과 `'diverged'`를 접지 마라.** 둘 다 *"못 얹었다"*지만 원인이 정반대다 —
+ * `'gap'`은 **못 받은 것이 있다**(연결이 끊겼다)이고 `'diverged'`는 **받은 것을 내 문서가
+ * 못 받아들인다**(보내지 않은 구조 편집과 부딪쳤다)이다. 진단이 다르면 다음 사람이 보는
+ * 것도 달라야 한다.
+ *
+ * ## 세기가 있다 — 약한 진단이 센 진단을 덮지 않는다 (델타 리뷰 O3)
+ *
+ * 앞 판은 `#markStale`이 **같은 이유일 때만** 건너뛰었고 이유 사이에 순위가 없었다. 그래서
+ * 복원 뒤 첫 편집 프레임 하나가 `'restored'`를 `'gap'`으로 덮었다 — 복원이 `head_seq`를
+ * 밀어 올렸으므로 그 프레임의 `seq`는 당연히 내 `headSeq + 1`이 아니다. **화면이
+ * *"연결이 끊긴 사이의 변경을 놓쳐"*라고 말하는데 끊긴 적이 없다.** 겪지 않은 실패를
+ * 말하는 부류이고, 이 저장소가 반복해서 닫아 온 자리다.
+ *
+ * **세기는 *"무엇이 무엇을 설명하는가"*로 정한다.**
+ *
+ * | 세기 | `reason` | 왜 그 자리인가 |
+ * |---|---|---|
+ * | 3 | `'restored'` | **판이 통째로 갈렸다.** 갭도 갈라짐도 그것의 결과다 — 원인이 증상을 덮으면 안 된다 |
+ * | 2 | `'diverged'` | 지금 이 프레임을 내 문서가 못 받아들인다. 가장 좁고 구체적인 실패다 |
+ * | 1 | `'gap'` | 못 받은 것이 있다 |
+ * | 0 | `'pending'` | **유일하게 *"할 일이 없다"*고 말하는 갈래다** |
+ *
+ * **경계는 3-2-1과 0 사이다.** 위 셋은 *"새로고침하세요"*이고 `'pending'`은 *"기다리세요"*다.
+ * **할 일이 없다는 진단이 할 일이 있다는 진단을 덮으면** 화면이 요구를 거둬들이고, 그것이
+ * *"성공했다고 말하면서 실패한"* 그 부류의 거울상이다.
+ */
+export interface RemoteStale {
+  reason: 'pending' | 'gap' | 'diverged' | 'restored'
+}
+
+/**
+ * 낡음 이유의 세기(위 표). **`#markStale`이 이것으로만 덮어쓸지 정한다** — 자리마다 조건을
+ * 다시 쓰면 갈래가 늘 때 한 자리가 빠진다.
+ *
+ * **`Record<RemoteStale['reason'], number>`인 것이 계약이다** — 갈래를 하나 더하면 여기서
+ * 컴파일이 막힌다. 세기를 안 정한 갈래가 `undefined`로 새어 나가면 비교가 조용히 거짓이 되고,
+ * 그 갈래는 **무엇이든 덮는다.**
+ */
+const STALE_RANK: Record<RemoteStale['reason'], number> = {
+  pending: 0,
+  gap: 1,
+  diverged: 2,
+  restored: 3,
+}
+
+/** `applyRemoteChange`의 결과. `MarkerChangeResult`에 `'deferred'`·`'gap'`이 더 있다. */
+export type RemoteChangeResult = 'applied' | 'skipped' | 'deferred' | 'gap' | 'diverged'
 
 /** `startUndo`·`startRedo`의 결과. 건너뛴 수는 §7.3의 안내에 쓴다. */
 export interface UndoAttempt {
@@ -266,6 +337,10 @@ export class EditorStore {
       // 문서의 것이 아니다. `getPage`는 경고를 싣지 않으므로 **다음 편집까지 모른다** —
       // 모르는 것을 "없다"로 두는 쪽을 골랐다: 남겨 두면 이미 사라진 문제를 말하게 된다.
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
+      // **낡음도 함께 푼다.** 이 자리가 페이지 상태를 서버 것으로 **놓는** 곳이므로, 여기를
+      // 지나온 문서는 정의상 낡지 않았다. 안 풀면 *"새로고침하세요"*가 새로고침한 뒤에도
+      // 남는다 — 이 저장소가 만난 *"고쳤는데 고쳤다고 말하지 않는"* 부류다.
+      remoteStale: null,
     })
     return pending
   }
@@ -364,6 +439,146 @@ export class EditorStore {
   }
 
   /**
+   * **남이 낸 문서 변경을 내 문서에 얹는다**(P3-1 D6 · §7.1의 *"[타인] ops 수신"*).
+   *
+   * `applyMarkerChange`와 **같은 모양이지만 갈래가 하나 더 있다.** 그쪽은 코멘트 응답을
+   * 받는 자리이고 이쪽은 WebSocket 프레임을 받는 자리인데, 결정적으로 다른 것은
+   * **내가 그 사이에 보내지 않은 편집을 들고 있을 수 있다**는 점이다.
+   *
+   * ## pending이 비어 있지 않으면 미룬다 — 그리고 말한다
+   *
+   * §7.1은 *"자기 pending 위에 리베이스 적용"*이라고 적었고 **그것은 P3-2다.** 지금 얹으면
+   * 내 낙관적 편집이 만든 경로 위에 남의 ops가 얹혀 두 문서가 **조용히** 갈라진다. 그래서
+   * 미룬다. 미루면 화면이 낡고, **낡았다는 것을 `remoteStale`이 말한다** — 조용히 덮는 쪽은
+   * 이 저장소가 여섯 번 만난 부류다.
+   *
+   * **미룬 ops를 쌓아 두지 않는다.** 이 슬라이스의 전송은 REST이고 서버는 `baseSeq`가
+   * `head_seq`와 **정확히 같을 때만** 받는다 — 남의 변경이 먼저 기록됐으면 내 pending은
+   * 반드시 409를 받고, 그 복구 경로가 페이지를 다시 받아 `loadPage`로 놓는다. 즉 미룬 것은
+   * **저절로 수렴한다.** 쌓아 두면 그 큐가 두 번째 진실이 되고, 수렴한 뒤 그것을 또 얹는다.
+   *
+   * ## `seq`가 내 다음 번호가 아니면 얹지 않는다 — 리뷰가 뚫은 자리
+   *
+   * 앞 판은 `change.seq > headSeq`이기만 하면 얹었다. **`seq === headSeq + 1`인지는 아무도
+   * 안 봤고**, 그래서 프레임을 하나라도 놓치면 이렇게 됐다(리뷰가 실증했다):
+   *
+   * - 놓친 revision의 ops가 내 문서에 **영영 안 들어온다** — 뒤늦게 와도 `seq <= headSeq`라
+   *   건너뛴다.
+   * - 그런데 **`headSeq`는 서버와 같아진다.** 그러면 다음 편집이 `stale` 409조차 안 받고,
+   *   **틀린 문서 위에서 만든 `ops`가 서버의 옳은 문서에 그대로 적용된다.**
+   *   `add /root/children/-`는 조용히 성공하고, 인덱스를 쓰는 `remove`는 **남의 노드를 지운다.**
+   * - `applyOps`가 던지는 모양이면 `'diverged'`로 잡히지만 **가장 흔한 추가에서는 안 던진다.**
+   *   그래서 *가끔* 조용하다 — 이 저장소가 여러 번 만난 부류의 새 얼굴이다.
+   *
+   * **프레임 유실은 사고가 아니라 설계다.** 이 슬라이스가 재연결을 얹었고(브라우저가 그것을
+   * 안 주므로 — 재라 #5), 끊긴 동안 남이 낸 편집의 프레임은 사라진다. 다시 붙어도 페이지를
+   * 다시 읽지 않는다. **재연결마다 이 창이 열린다.**
+   *
+   * **판정: 얹지 않고 `headSeq`도 안 올린다.** 그러면 둘이 동시에 성립한다 —
+   *
+   * 1. **화면이 말한다**(`remoteStale.reason === 'gap'`).
+   * 2. **저절로 수렴한다.** `headSeq`가 뒤처진 채 남으므로 다음 편집이 `stale` 409를 받고,
+   *    `edit/use-edit-commit.tsx`의 복구 경로가 페이지를 다시 받아 `loadPage`로 놓는다.
+   *    `'pending'` 갈래가 기대는 것과 **같은 수렴 장치**다.
+   *
+   * **여기서 스스로 다시 읽지 않는 것도 판정이다.** 페이지 상태를 서버 것으로 놓는 자리는
+   * `loadPage` 하나이고 그 앞뒤 순서(undo 스택 복원이 뒤에 온다 — D10)를 아는 것은
+   * `routes/editor.tsx`다. 스토어가 자기 조회를 갖게 하면 페이지를 여는 경로가 둘이 된다.
+   * **자동 재조회는 P3-2의 것이다** — 리베이스가 어차피 *"내가 seq n까지 전부 받았다"*를
+   * 전제하므로 그때 같은 자리를 손봐야 한다.
+   *
+   * ## 갈래 표
+   *
+   * | 결과 | 언제 | `remoteStale` |
+   * |---|---|---|
+   * | `'skipped'` | 다른 페이지가 열려 있거나 문서가 없거나 **이미 아는 seq**다 | 그대로 |
+   * | `'deferred'` | 보내지 않은 편집이 있다 | `'pending'` |
+   * | `'gap'` | **`seq`가 내 다음 번호가 아니다** | `'gap'` |
+   * | `'diverged'` | `applyOps`가 던졌다 | `'diverged'` |
+   * | `'applied'` | 얹었다. `headSeq`가 `seq`가 된다 | `null`로 푼다 |
+   *
+   * **`seq <= headSeq`가 `'skipped'`인 것이 요점이다.** 발신자 제외 헤더를 안 실은 클라이언트는
+   * **자기 편집을 자기가 되받는다**(`ws/notify.ts`). 그때 그 ops를 한 번 더 얹으면 문서가
+   * 두 번 바뀐다.
+   *
+   * **갭 검사가 pending 검사보다 뒤에 있다.** pending이 차 있으면 어차피 안 얹으므로 갭인지
+   * 아닌지는 그 판에서 뜻이 없고, `'pending'`이 *"내가 낸 편집이 끝나면 풀린다"*는 더 좁고
+   * 더 정확한 진단이다.
+   *
+   * **`headSeq`와 문서는 함께 움직이거나 둘 다 안 움직인다** — `applyMarkerChange`의 그 문단이
+   * 여기에도 그대로 적용된다.
+   */
+  readonly applyRemoteChange = (
+    pageId: string,
+    change: { seq: number; ops: PatchOp[]; warnings: ValidationIssue[] },
+  ): RemoteChangeResult => {
+    const { openPageId, document, headSeq, pending } = this.#state
+    if (openPageId !== pageId || document === null) return 'skipped'
+    // 이미 아는 revision이다(내 편집이 되돌아온 경우를 포함한다).
+    if (change.seq <= headSeq) return 'skipped'
+
+    if (pending.length > 0) {
+      this.#markStale('pending')
+      return 'deferred'
+    }
+
+    // 놓친 revision이 있다. **얹지도 `headSeq`를 올리지도 않는다**(위 머리말).
+    if (change.seq !== headSeq + 1) {
+      this.#markStale('gap')
+      return 'gap'
+    }
+
+    let next: PageDocument
+    try {
+      next = applyOps(document, change.ops)
+    } catch {
+      this.#markStale('diverged')
+      return 'diverged'
+    }
+
+    // **경고도 갈아 끼운다.** 서버가 보내는 것은 *"이 편집 뒤 문서에 남은 경고 전부"*이고
+    // (`editWarnings`의 계약), 얹었다는 것은 내 문서가 그 문서가 됐다는 뜻이다. 안 갈면
+    // 남이 만든 경고를 **편집을 낸 사람만** 보게 되어, 사실 2가 막으려던 그 갈라짐이
+    // 접속 방식 대신 *"누가 냈느냐"*로 되살아난다.
+    // **`'restored'`는 얹었다고 풀리지 않는다**(델타 리뷰 O3의 뒷면). 복원은 **프로젝트**
+    // 사건이라 페이지 다섯 자원이 한꺼번에 갈렸다는 뜻이고, 이 페이지의 프레임 하나를 잘
+    // 얹은 것이 그것을 해결하지 않는다. 푸는 것은 `loadPage`·`clearPage` 둘 — 즉 사용자가
+    // 실제로 다시 읽었을 때다.
+    //
+    // **같은 객체를 그대로 넘긴다** — 새로 만들면 참조가 달라져 구독자가 헛일을 한다.
+    const stale = this.#state.remoteStale
+    this.#apply({
+      document: next,
+      headSeq: change.seq,
+      remoteStale: stale !== null && stale.reason === 'restored' ? stale : null,
+      editWarnings: change.warnings.length === 0 ? NO_WARNINGS : change.warnings,
+    })
+    return 'applied'
+  }
+
+  /**
+   * **판이 통째로 갈렸다고 표시한다.** 남이 스냅샷을 복원하면 페이지가 사라지거나 생기고
+   * 문서가 통째로 바뀌므로 `ops`로 표현되지 않는다 — 얹을 것이 없고, 할 수 있는 정직한
+   * 일은 그 사실을 말하는 것뿐이다(P6-2 이월 §9가 지목한 자리).
+   */
+  readonly markRestored = (): void => {
+    this.#markStale('restored')
+  }
+
+  /**
+   * 낡음을 표시한다. **자기보다 센 진단은 덮지 않는다**(`RemoteStale`의 세기 표 — 델타
+   * 리뷰 O3).
+   *
+   * **같은 이유면 아무것도 안 하는 것도 이 비교가 함께 한다**(`>=`) — 같은 값을 다시 넣으면
+   * 참조가 달라져 구독자가 프레임마다 헛일을 한다(`NO_WARNINGS`와 같은 이유).
+   */
+  #markStale(reason: RemoteStale['reason']): void {
+    const current = this.#state.remoteStale
+    if (current !== null && STALE_RANK[current.reason] >= STALE_RANK[reason]) return
+    this.#apply({ remoteStale: { reason } })
+  }
+
+  /**
    * 열린 페이지가 없어졌을 때. `loadPage`의 짝이다 — `openPageId`·문서·`headSeq`·선택을
    * 함께 비운다. 넷이 한 번에 움직여야 "문서는 없는데 어느 페이지가 열려 있다고 말하는"
    * 중간 상태가 생기지 않는다.
@@ -393,6 +608,7 @@ export class EditorStore {
       editStatus: 'idle',
       editFailure: null,
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
+      remoteStale: null,
     })
   }
 

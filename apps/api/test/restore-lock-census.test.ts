@@ -64,7 +64,6 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { FastifyInstance } from 'fastify'
-import { buildApp } from '../src/app'
 import { withTransaction } from '../src/db/tx'
 import { lockProjectForRestore } from '../src/repos/snapshots'
 import {
@@ -72,21 +71,18 @@ import {
   createPage,
   createProject,
   getTestDb,
+  resetRealData,
   signup,
-  testConfig,
+  withRealApi,
   type TestContext,
 } from './helpers'
 
 const db = getTestDb()
 
-async function reset(): Promise<void> {
-  await db.deleteFrom('projects').execute()
-  await db.deleteFrom('users').execute()
-  // 이 파일이 만드는 프로젝트 테마는 프로젝트와 함께 CASCADE로 간다(0006).
-}
-
-beforeEach(reset)
-afterEach(reset)
+// 청소도 하네스도 `helpers.ts`에 있다(P3-1 D1). 이 파일이 만드는 프로젝트 테마는
+// 프로젝트와 함께 CASCADE로 간다(0006).
+beforeEach(resetRealData)
+afterEach(resetRealData)
 
 /** 잠금 판정 창. 아래 *"잠금이 없으면 창 안에 끝난다"*가 이 창이 넉넉한지 함께 잰다. */
 const WAIT_MS = 700
@@ -455,7 +451,7 @@ describe('분모를 소스에서 만든다', () => {
 })
 
 async function fixture(app: FastifyInstance): Promise<Ids> {
-  await reset()
+  await resetRealData()
   const ctx: TestContext = { app, db }
   const owner = await signup(ctx)
   const project = await createProject(ctx, owner.cookie)
@@ -551,9 +547,8 @@ function fire(app: FastifyInstance, probe: Probe, ids: Ids) {
 
 describe('복원 잠금이 무엇을 막는가 (D8)', () => {
   it('잠금이 없으면 표의 모든 요청이 창 안에 끝난다 — 음성 대조', async () => {
-    const app = await buildApp({ db, config: testConfig() })
     const slow: string[] = []
-    try {
+    await withRealApi(async ({ app }) => {
       for (const probe of PROBES) {
         const ids = await fixture(app)
         const request = fire(app, probe, ids)
@@ -561,17 +556,14 @@ describe('복원 잠금이 무엇을 막는가 (D8)', () => {
         if (!request.done()) slow.push(probe.label)
         await request.promise
       }
-    } finally {
-      await app.close()
-    }
+    })
     // 이것이 없으면 아래의 *"막힌다"*가 *"그냥 느리다"*와 구분되지 않는다.
     expect(slow).toEqual([])
   }, 300_000)
 
   for (const probe of PROBES) {
     it(`${probe.blocked ? '막힌다' : '안 막힌다'} — ${probe.label}`, async () => {
-      const app = await buildApp({ db, config: testConfig() })
-      try {
+      await withRealApi(async ({ app }) => {
         const ids = await fixture(app)
 
         let release: () => void = () => {}
@@ -607,9 +599,7 @@ describe('복원 잠금이 무엇을 막는가 (D8)', () => {
         // *"안 막힌다"*로 보고할 뻔했다.
         const res = await request.promise
         expect(res.statusCode, `${probe.label}: ${res.body}`).toBeLessThan(400)
-      } finally {
-        await app.close()
-      }
+      })
     }, 120_000)
   }
 })

@@ -3,9 +3,17 @@
  *
  * `requireProjectRole`은 Fastify를 전혀 모른다 — `db` 핸들과 `projectId`·`userId`·
  * 최소 역할 네 값만 받고 `ApiError`를 던진다. `projectGuard`는 그 위에 얹은 얇은
- * Fastify preHandler 껍데기일 뿐이다. P3의 WebSocket은 방 입장·패치별 권한 확인에
- * 다른 껍데기를 새로 만들되, 안쪽의 `requireProjectRole`은 그대로 재사용한다 —
- * REST와 WebSocket이 같은 권한 판정을 공유해야 하기 때문이다(설계 §10).
+ * Fastify preHandler 껍데기일 뿐이다.
+ *
+ * **P3의 WebSocket은 껍데기를 새로 만들지 않았다 — 이 문단이 그렇게 예상했지만 거짓이었다
+ * (P3-1이 재서 고쳐 적는다).** `@fastify/websocket`은 업그레이드 요청을 평범한 라우트로
+ * 태우고 훅을 전부 돌린 뒤에야 소켓을 넘기므로, `ws/routes.ts`가 **`projectGuard('viewer')`를
+ * 그대로 preHandler로 쓴다.** 설계 §10의 *"REST와 WebSocket이 동일한 가드 함수를 쓴다"*가
+ * 글자 그대로 지켜진다.
+ *
+ * **연결 도중의 재확인은 다른 자리다.** §10의 *"각 patch 수신 시 한 번"*은 preHandler가
+ * 닿지 않는 곳이므로 `ws/broadcast.ts`의 `stillAllowed`가 `findMembership`·`roleAtLeast`를
+ * 직접 조합한다 — 그쪽도 이 파일의 함수를 쓰지 자기 판정을 만들지 않는다.
  *
  * **역할을 비교하는 코드는 이 파일의 `roleAtLeast` 하나뿐이어야 한다.** 다른 곳에서
  * 역할 순위를 다시 비교하는 코드를 쓰면 이 가드의 판정과 갈라질 수 있다.
@@ -107,8 +115,20 @@ const ProjectParams = z.object({ projectId: z.uuid() })
  * - `requireProjectRole`의 결과(사용자의 실제 역할)를 `request.projectRole`에 담는다.
  *
  * 이 함수 자체는 얇은 껍데기일 뿐 판정 로직을 갖지 않는다 — 전부 `requireProjectRole`이
- * 한다. P3의 WebSocket은 이 함수가 아니라 `requireProjectRole`을 직접 재사용해
- * 자신만의 껍데기(방 입장, 패치별 확인)를 만든다.
+ * 한다.
+ *
+ * **WebSocket의 방 입장이 이 함수를 그대로 쓴다**(P3-1 — 이 자리에 *"자신만의 껍데기를
+ * 만든다"*고 적혀 있던 예상은 거짓이었고, 리뷰가 이 사본이 남은 것을 찾았다).
+ * `ws/routes.ts`가 `{ websocket: true, preHandler: projectGuard('viewer') }`로 단다 —
+ * `@fastify/websocket`이 업그레이드 요청을 평범한 라우트로 태우고 훅을 전부 돌린 뒤에야
+ * 소켓을 넘기기 때문이다.
+ *
+ * **연결 도중의 재확인만 다른 자리다.** §10의 *"각 patch 수신 시 한 번"*은 preHandler가
+ * 닿지 않으므로 `ws/broadcast.ts`의 `stillAllowed`가 `findMembership`·`roleAtLeast`를 직접
+ * 조합한다. **그 함수의 최소 역할은 `viewer`이고 그것이 옳다 — 받는 기준이기 때문이다.**
+ * **보내는 것(patch)에 그것을 그대로 쓰면 안 된다:** §10이 viewer를 *"조회 전용 — 편집·
+ * 코멘트 모두 불가"*로 못박았으므로, WS로 편집을 받는 경로(P3-2)는 `editor` 이상을 따로
+ * 요구해야 한다.
  */
 export function projectGuard(min: ProjectRole): preHandlerHookHandler {
   return async (request: FastifyRequest, _reply: FastifyReply) => {

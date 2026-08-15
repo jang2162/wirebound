@@ -20,6 +20,7 @@ import { themeRoutes } from './routes/themes'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
 import { syncSystemThemes } from './services/system-themes'
+import { registerRealtime } from './ws'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -119,6 +120,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   registerErrorHandler(app)
   await registerAuthPlugin(app, config)
   registerProjectRoleDecorator(app)
+  // 실시간 층(P3-1). **인증·역할 데코레이터 뒤여야 한다** — WS 라우트가
+  // `projectGuard`를 preHandler로 달고, 그 가드가 `request.currentUser`·
+  // `request.projectRole`을 쓴다. 라우트보다 **앞**인 것은 `app.realtime`을
+  // 데코레이트해야 라우트 핸들러가 그것으로 알릴 수 있기 때문이다(D3).
+  await registerRealtime(app, config)
   await app.register(authRoutes(config), { prefix: '/api/auth' })
   await app.register(projectRoutes(), { prefix: '/api/projects' })
   await app.register(memberRoutes(), { prefix: '/api/projects' })

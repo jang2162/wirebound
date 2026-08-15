@@ -15,16 +15,15 @@
  * 성립하기 때문이고, 그것이 이 저장소가 반복해 겪은 부류다(P4c-3 이월 2번).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { FastifyInstance } from 'fastify'
 import { migrateDocument, type PageDocument } from '@wirebound/schema'
-import { buildApp } from '../src/app'
 import {
   createMenuNode,
   createPage,
   createProject,
   getTestDb,
+  resetRealData,
   signup,
-  testConfig,
+  withRealApi,
   type CreatedProject,
   type SignedUpUser,
   type TestContext,
@@ -32,22 +31,9 @@ import {
 
 const db = getTestDb()
 
-async function reset(): Promise<void> {
-  await db.deleteFrom('projects').execute()
-  await db.deleteFrom('users').execute()
-}
-
-beforeEach(reset)
-afterEach(reset)
-
-async function withRealApi(fn: (ctx: TestContext) => Promise<void>): Promise<void> {
-  const app: FastifyInstance = await buildApp({ db, config: testConfig() })
-  try {
-    await fn({ app, db })
-  } finally {
-    await app.close()
-  }
-}
+// 청소도 하네스도 `helpers.ts`에 있다(P3-1 D1).
+beforeEach(resetRealData)
+afterEach(resetRealData)
 
 interface Fixture {
   owner: SignedUpUser

@@ -132,6 +132,86 @@ export async function withApi(fn: (ctx: TestContext) => Promise<void>, options?:
   }
 }
 
+/**
+ * `withRealApi`가 여는 앱과 그 앱이 실제로 듣고 있는 포트.
+ *
+ * `TestContext`를 넓히므로 `(ctx: TestContext) => …`를 받던 기존 호출자는 그대로 통과한다.
+ */
+export interface RealApiContext extends TestContext {
+  /** `127.0.0.1`의 포트. WebSocket 케이스가 여기로 붙는다. */
+  port: number
+}
+
+export interface WithRealApiOptions {
+  config?: ApiConfig
+  /**
+   * 부팅 **전에** 라우트를 더 얹는 이음매. `snapshots-concurrency.test.ts`의 프로브
+   * 라우트가 이것을 쓴다 — Fastify 5는 부팅 뒤의 라우트 등록을 거부하는데
+   * (`Root plugin has already booted`) 이 하네스는 `listen`으로 부팅까지 하기 때문이다.
+   */
+  register?: (app: FastifyInstance) => Promise<void>
+}
+
+/**
+ * 실커밋 하네스가 쓰는 청소. **`withApi`(롤백 하네스)를 쓰는 파일은 부르지 않는다.**
+ *
+ * `projects` 삭제가 `menu_nodes`·`pages`·`revisions`·`comments`·`snapshots`·`presets`·
+ * 프로젝트 테마까지 CASCADE로 데려가고, `users` 삭제가 `sessions`를 데려간다.
+ * **TRUNCATE가 아니다** — 그 명령은 테이블 전체에 ACCESS EXCLUSIVE 잠금을 잡으므로
+ * 시스템 테마처럼 프로젝트에 매이지 않은 행까지 지우거나(`themes`), 같은 DB를 보는 다른
+ * 커넥션을 이유 없이 세운다. 두 줄의 DELETE로 이 부류의 파일이 만드는 것이 전부 가고
+ * 시스템 테마만 남는다는 것은 `real-api-harness.test.ts`가 실제로 세어 고정한다 —
+ * 그 파일에 후보 셋을 가른 표도 있다.
+ */
+export async function resetRealData(): Promise<void> {
+  const db = getTestDb()
+  await db.deleteFrom('projects').execute()
+  await db.deleteFrom('users').execute()
+}
+
+/**
+ * **실제로 커밋하는 하네스.** `withApi`와 달리 앱을 트랜잭션이 아니라 **풀 핸들** 위에
+ * 세우므로 요청마다 서로 다른 커넥션을 잡고 각자 커밋한다. 그리고 **진짜 포트를 연다** —
+ * `inject()`는 소켓을 만들지 않아 WebSocket 업그레이드를 태울 수 없다.
+ *
+ * **두 벌을 만들지 않는다(P3-1 D1).** 앞선 슬라이스들이 같은 것을 파일마다 복사해 두었고
+ * (`revisions-concurrency`·`comments-concurrency`·`restore-concurrency`·
+ * `restore-lock-census`의 지역 `withRealApi`, `snapshots-concurrency`의 `withProbeApi`),
+ * P3의 WS 케이스가 여섯 번째 사본을 만들 자리였다. 그 사본들이 갈리면 *"어느 하네스에서
+ * 잰 값인가"*가 매번 물음이 된다.
+ *
+ * **`withApi`를 갈아엎지 않는다.** `db/tx.ts`가 P1 때 *"테스트마다 관련 테이블을
+ * TRUNCATE하는 방식으로 격리 전략을 바꿔야 한다"*고 적었지만, 그 파일의 그 문단이 지금
+ * 적고 있듯 실제로 선 것은 **두 번째 하네스**다.
+ *
+ * 청소는 호출자가 `resetRealData`를 `beforeEach`·`afterEach`에 걸어 한다 — 하네스가
+ * 스스로 지우면 한 케이스가 하네스를 두 번 여는 시나리오(연결 둘)에서 중간에 판이 지워진다.
+ */
+export async function withRealApi(
+  fn: (ctx: RealApiContext) => Promise<void>,
+  options?: WithRealApiOptions,
+): Promise<void> {
+  const db = getTestDb()
+  const app = await buildApp({ db, config: options?.config ?? testConfig() })
+  if (options?.register) {
+    await options.register(app)
+  }
+
+  // 포트 0은 커널이 빈 포트를 고르게 한다. 고정 포트를 쓰면 같은 포크에서 앞 케이스의
+  // 소켓이 TIME_WAIT으로 남아 있을 때 다음 케이스가 EADDRINUSE로 죽는다.
+  await app.listen({ port: 0, host: '127.0.0.1' })
+  const address = app.server.address()
+  if (address === null || typeof address === 'string') {
+    throw new Error('withRealApi: 포트를 열지 못했습니다')
+  }
+
+  try {
+    await fn({ app, db, port: address.port })
+  } finally {
+    await app.close()
+  }
+}
+
 /** 세션 쿠키 이름. 운영·테스트 설정 모두 기본값(`wb_session`)을 바꾸지 않으므로 여기서 고정한다. */
 const SESSION_COOKIE_NAME = 'wb_session'
 
