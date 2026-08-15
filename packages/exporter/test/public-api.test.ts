@@ -9,8 +9,19 @@
 import { describe, expect, it } from 'vitest'
 import packageJson from '../package.json?raw'
 import tsconfigJson from '../tsconfig.json?raw'
+import tsconfigRuntimeJson from '../tsconfig.runtime.json?raw'
 import tsconfigTestJson from '../tsconfig.test.json?raw'
 import * as api from '../src/index'
+
+/**
+ * **DOM을 봐도 되는 자리. 목록이 여기 사는 것이 요점이다**(P8-2 이월 §11).
+ *
+ * P8-3이 `assets/runtime.js`를 붙이며 브라우저에서 도는 파일 하나가 생겼다. 그 파일은
+ * `src`에 살지만 **Node에서는 한 줄도 돌지 않고**(글자로 나가 브라우저가 판다) 자기
+ * `tsconfig`가 따로 검사한다. 명제를 지우지 않고 *"정확히 이것 하나가 예외다"*로 바꾼다 —
+ * 목록이 `src`에 있으면 파일을 더하는 손이 목록도 함께 고쳐 아무것도 안 재게 된다.
+ */
+const BROWSER_SOURCES = ['../src/runtime/browser.ts']
 
 /** `src/`의 모든 파일. */
 const sources = import.meta.glob('../src/**/*.{ts,tsx}', {
@@ -37,9 +48,27 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
    * **케이스 쪽(`tsconfig.test.json`)은 DOM을 받는다.** 견주기가 jsdom의 DOM을 다루기
    * 때문이고, 그 갈림이 이 패키지가 `tsconfig`를 둘로 가른 이유다.
    */
-  it('src의 tsconfig가 DOM을 들이지 않는다', () => {
-    const parsed = JSON.parse(tsconfigJson) as { compilerOptions: { lib: string[] } }
+  it('src의 tsconfig가 DOM을 들이지 않고 브라우저 파일을 뺀다', () => {
+    const parsed = JSON.parse(tsconfigJson) as {
+      compilerOptions: { lib: string[] }
+      exclude: string[]
+    }
     expect(parsed.compilerOptions.lib).toEqual(['ES2022'])
+    expect(parsed.exclude).toEqual(BROWSER_SOURCES.map((path) => path.replace('../', '')))
+  })
+
+  /**
+   * **브라우저로 나가는 파일만 DOM을 받는다**(D2·D3). `src`의 금지를 그 한 파일이 깨는
+   * 것이 아니라 **다른 프로젝트가 그 파일을 맡는다** — 그래서 나머지 `src`는 여전히
+   * `document`라는 이름조차 컴파일할 수 없다.
+   */
+  it('브라우저 파일만 DOM을 받는 별도 tsconfig가 든다', () => {
+    const parsed = JSON.parse(tsconfigRuntimeJson) as {
+      compilerOptions: { lib: string[] }
+      include: string[]
+    }
+    expect(parsed.compilerOptions.lib).toEqual(['ES2022', 'DOM', 'DOM.Iterable'])
+    expect(parsed.include).toEqual(BROWSER_SOURCES.map((path) => path.replace('../', '')))
   })
 
   it('케이스의 tsconfig만 DOM을 받는다', () => {
@@ -48,17 +77,26 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
       include: string[]
     }
     expect(parsed.compilerOptions.lib).toEqual(['ES2022', 'DOM', 'DOM.Iterable'])
-    expect(parsed.include).toEqual(['test', 'test-support'])
+    expect(parsed.include).toEqual(['test', 'test-support', 'build-test'])
   })
 
   /**
-   * **`src`가 브라우저 전역을 부르지 않는다.** 위 `lib` 설정이 컴파일 시점에 막지만,
-   * 그 설정을 되돌리는 변경과 전역을 쓰는 변경이 **같은 커밋에** 오면 컴파일러는 조용하다.
-   * 여기서 이름으로 한 번 더 본다.
+   * **`src`가 브라우저 전역을 부르지 않는다 — 브라우저로 나가는 그 하나만 빼고.** 위 `lib`
+   * 설정이 컴파일 시점에 막지만, 그 설정을 되돌리는 변경과 전역을 쓰는 변경이 **같은
+   * 커밋에** 오면 컴파일러는 조용하다. 여기서 이름으로 한 번 더 본다.
    */
   it('src가 DOM 전역을 이름으로 부르지 않는다', () => {
     for (const [path, source] of Object.entries(sources)) {
+      if (BROWSER_SOURCES.includes(path)) continue
       expect(source as string, path).not.toMatch(/\b(document|window|navigator|localStorage)\./)
+    }
+  })
+
+  /** 예외 목록이 **실재하는 파일**을 가리키는지 본다. 오타면 위 검사가 아무것도 안 뺀다. */
+  it('예외로 적은 파일이 실제로 있고 실제로 DOM을 부른다', () => {
+    for (const path of BROWSER_SOURCES) {
+      expect(Object.keys(sources), path).toContain(path)
+      expect(sources[path] as string, path).toMatch(/\bdocument\./)
     }
   })
 

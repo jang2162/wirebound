@@ -8,5 +8,11 @@
     "composite": true
   },
   "include": ["src"],
-  "references": [{ "path": "../schema" }, { "path": "../renderer" }, { "path": "../themes" }]
+  "exclude": ["src/runtime/browser.ts"],
+  "references": [
+    { "path": "../schema" },
+    { "path": "../renderer" },
+    { "path": "../themes" },
+    { "path": "./tsconfig.runtime.json" }
+  ]
 }

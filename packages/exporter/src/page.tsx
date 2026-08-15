@@ -178,7 +178,7 @@ export const DEFAULT_LANG = 'ko'
  * 앱이고 이쪽은 라이브러리다 — 패키지를 import했을 뿐인데 전역 레지스트리가 채워지면
  * 그 부작용을 호출자가 예상할 수 없다. 부르는 순간에 채우면 자리는 여전히 하나다.
  */
-function installRegistries(): void {
+export function installRegistries(): void {
   installCatalog()
   installStructures()
 }
