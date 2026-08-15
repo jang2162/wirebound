@@ -148,7 +148,13 @@ export async function exportProjectBundle(db: DbHandle, projectId: string): Prom
   const { themeId, theme } = await currentProjectTheme(db, projectId)
 
   const bundlePages: BundlePage[] = ordered.map((page) => ({
-    title: page.title,
+    /**
+     * **조상 메뉴가 붙은 이름을 넘긴다**(P8-2 이월 §2의 판정 ②). `BundlePage.title`은
+     * `<title>`·좌측 트리의 이름·파일 이름 셋의 재료이고, 조상을 안 붙이면 서로 다른
+     * 메뉴의 같은 제목이 좌측 트리에서 **똑같은 두 줄**이 된다(D8 스모크에서 실측했다).
+     * 붙이면 §11.3의 예시 파일 이름(`관리자-회원-목록.html`)과도 같아진다.
+     */
+    title: page.bundleTitle,
     document: documentById.get(page.id)!,
     description: descriptionOf(pageRecords, page.id),
     comments: commentsById.get(page.id) ?? [],

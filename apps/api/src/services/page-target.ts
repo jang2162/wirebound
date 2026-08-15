@@ -37,29 +37,64 @@ import type { TreeMenuNode } from './menu-tree'
 /** §8.1의 접두. 렌더러도 문장화도 이 문자열을 안다(`packages/schema`의 `describePageTarget`). */
 export const PAGE_TARGET_PREFIX = 'page:'
 
-/** 조상 메뉴와 페이지 제목을 잇는 마디 구분자. §8.1의 예가 이 글자다. */
-const SEGMENT_SEPARATOR = '/'
+/** 타겟 문자열이 마디를 잇는 글자. §8.1의 예가 이 글자다. */
+const TARGET_SEPARATOR = '/'
+
+/**
+ * 번들이 부르는 이름이 마디를 잇는 글자.
+ *
+ * **`/`가 아닌 이유:** 그 이름은 `<title>`·좌측 트리·파일 이름이 되는데, `pageFileNames`가
+ * 위험한 글자를 `-`로 접으므로 `/`를 쓰면 `관리자-회원-목록`이 되고 화면에서는 `관리자/회원/목록`이
+ * 되어 **두 자리가 다르게 읽힌다.** 공백이면 파일 이름에서만 `-`가 되고 화면은 자연스럽다
+ * (§11.3의 예시 파일 이름이 `관리자-회원-목록.html`이다).
+ */
+const TITLE_SEPARATOR = ' '
 
 /** 트리 순서로 펼친 페이지 하나와 그것을 가리키는 타겟. */
 export interface TargetedPage {
   id: string
+  /** 사람이 저작 화면에서 준 제목. 조상이 안 붙어 있다. */
   title: string
   /** 조상 메뉴의 이름들. 뿌리가 앞이다. 메뉴 바로 밑이면 하나다. */
   menuPath: readonly string[]
   /** 이 페이지를 가리키는 §8.1의 타겟 문자열. */
   target: string
+  /**
+   * **번들이 부르는 이름.** `<title>`·좌측 트리의 이름·파일 이름 셋이 전부 이것이다
+   * (`BundlePage.title`이 그 셋의 재료다 — P8-2 이월 §1).
+   *
+   * P8-2 이월 §2가 넘긴 판정 ②(*"셋이 같은 문자열이어야 하는가"*)에 **그렇다**로 답한
+   * 결과다. 근거는 실측이다: 조상을 안 붙이면 서로 다른 메뉴의 같은 제목이 좌측 트리에서
+   * **똑같은 두 줄**이 되어 읽는 사람이 구분할 수 없다(`관리자/회원/목록`과
+   * `관리자/권한/목록`이 둘 다 *"목록"*이었다).
+   */
+  bundleTitle: string
 }
 
 /**
- * 조상 메뉴 이름들과 페이지 제목을 이어 타겟 문자열을 만든다.
+ * 조상 메뉴 이름들과 페이지 제목을 이은 마디들.
+ *
+ * **타겟과 이름이 둘 다 여기서 나온다.** 경로를 만드는 자리가 둘이면 링크가 가리키는 것과
+ * 화면에 보이는 것이 갈릴 수 있고, 그것이 이 저장소가 반복해서 닫아 온 자리다.
  *
  * **마디마다 앞뒤 공백을 걷는다.** 제목은 `z.string().min(1)`이라 서버가 공백을 안 걷고
  * (`routes/pages.ts`의 `Title`), 걷지 않으면 화면에 `관리자`로 보이는 메뉴가 타겟에서는
  * ` 관리자 `가 되어 **사람이 적을 수 없는 문자열**이 된다.
  */
+function pathSegments(menuPath: readonly string[], title: string): string[] {
+  return [...menuPath, title].map((segment) => segment.trim())
+}
+
+/** 조상 메뉴 이름들과 페이지 제목을 이어 §8.1의 타겟 문자열을 만든다. */
 export function pageTarget(menuPath: readonly string[], title: string): string {
-  const segments = [...menuPath, title].map((segment) => segment.trim())
-  return `${PAGE_TARGET_PREFIX}${segments.join(SEGMENT_SEPARATOR)}`
+  return `${PAGE_TARGET_PREFIX}${pathSegments(menuPath, title).join(TARGET_SEPARATOR)}`
+}
+
+/**
+ * 번들이 이 페이지를 부를 이름. `pageTarget`과 **같은 마디**를 쓰고 잇는 글자만 다르다.
+ */
+export function pageBundleTitle(menuPath: readonly string[], title: string): string {
+  return pathSegments(menuPath, title).join(TITLE_SEPARATOR)
 }
 
 /**
@@ -86,6 +121,7 @@ export function targetedPages(tree: readonly TreeMenuNode[]): TargetedPage[] {
           title: page.title,
           menuPath,
           target: pageTarget(menuPath, page.title),
+          bundleTitle: pageBundleTitle(menuPath, page.title),
         })
       }
       visit(node.children, menuPath)

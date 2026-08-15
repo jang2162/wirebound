@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { TreeMenuNode } from '../src/services/menu-tree'
-import { duplicateTargets, pageTarget, targetedPages } from '../src/services/page-target'
+import { duplicateTargets, pageBundleTitle, pageTarget, targetedPages } from '../src/services/page-target'
 
 /** 메뉴 노드 하나를 짓는 지름길. `sortOrder`는 형제 안에서만 뜻이 있다. */
 function menu(
@@ -87,6 +87,41 @@ describe('pageTarget', () => {
   })
 })
 
+describe('pageBundleTitle', () => {
+  /**
+   * **번들이 부르는 이름**(P8-2 이월 §2의 판정 ②). `<title>`·좌측 트리의 이름·파일 이름
+   * 셋이 전부 이것이다. 조상을 안 붙이면 서로 다른 메뉴의 같은 제목이 트리에서 **똑같은
+   * 두 줄**이 된다.
+   */
+  it('조상 메뉴와 페이지 제목을 공백으로 잇는다', () => {
+    expect(pageBundleTitle(['관리자', '회원'], '상세')).toBe('관리자 회원 상세')
+  })
+
+  /**
+   * **`/`로 이으면 안 된다.** 이 문자열은 파일 이름의 재료이고 `pageFileNames`가 위험한
+   * 글자를 `-`로 접는다 — `/`를 쓰면 화면에는 `관리자/회원/목록`, 파일에는
+   * `관리자-회원-목록`이 되어 **두 자리가 다르게 읽힌다.** 공백이면 파일에서만 `-`가 된다.
+   */
+  it('타겟의 구분자를 쓰지 않는다', () => {
+    expect(pageBundleTitle(['관리자', '회원'], '상세')).not.toContain('/')
+  })
+
+  /**
+   * **타겟과 같은 마디에서 나온다.** 마디를 만드는 자리가 둘이면 링크가 가리키는 것과
+   * 화면에 보이는 것이 갈린다 — 여기서는 **같은 공백 걷기**를 두 함수가 함께 받는지로 잰다.
+   */
+  it('타겟과 같은 방식으로 마디를 다듬는다', () => {
+    const menuPath = ['  관리자  ', '회원 ']
+    const title = ' 상세'
+    expect(pageTarget(menuPath, title)).toBe('page:관리자/회원/상세')
+    expect(pageBundleTitle(menuPath, title)).toBe('관리자 회원 상세')
+  })
+
+  it('메뉴 없이 붙은 페이지는 제목 하나가 이름이다', () => {
+    expect(pageBundleTitle([], '상세')).toBe('상세')
+  })
+})
+
 describe('targetedPages', () => {
   it('트리 순서대로 낸다 — 그 메뉴의 페이지가 먼저이고 하위 메뉴가 뒤다', () => {
     expect(targetedPages(트리()).map((page) => page.id)).toEqual(['p1', 'p2', 'p3', 'p4', 'p5'])
@@ -99,6 +134,28 @@ describe('targetedPages', () => {
     expect(byId.get('p3')).toEqual(['관리자', '회원'])
     expect(byId.get('p4')).toEqual(['마케팅'])
     expect(byId.get('p5')).toEqual(['마케팅', '회원'])
+  })
+
+  it('페이지마다 **제 번들 이름**을 든다 — 조상이 붙어 있다', () => {
+    expect(targetedPages(트리()).map((page) => page.bundleTitle)).toEqual([
+      '관리자 대시보드',
+      '관리자 회원 목록',
+      '관리자 회원 상세',
+      '마케팅 랜딩',
+      '마케팅 회원 목록',
+    ])
+  })
+
+  /**
+   * **이것이 B를 고른 이유다.** 제목만 쓰면 이 둘이 좌측 트리에서 똑같은 두 줄이 된다
+   * (D8 스모크에서 실측했다 — `['목록','목록']`).
+   */
+  it('제목이 같아도 조상이 다르면 번들 이름이 다르다', () => {
+    const names = targetedPages(트리())
+      .filter((page) => page.title === '목록')
+      .map((page) => page.bundleTitle)
+    expect(names).toHaveLength(2)
+    expect(new Set(names).size).toBe(2)
   })
 
   it('페이지마다 **제 타겟**을 든다', () => {

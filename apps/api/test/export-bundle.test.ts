@@ -196,6 +196,85 @@ describe('exportProjectBundle', () => {
     })
   })
 
+  /**
+   * **번들의 파일 이름이 §11.3의 예시 꼴이다**(P8-2 이월 §2의 판정 ②). `BundlePage.title`이
+   * `<title>`·좌측 트리의 이름·파일 이름 셋의 재료이므로 조상이 붙으면 셋이 함께 붙는다.
+   */
+  it('파일 이름에 조상 메뉴가 붙는다', async () => {
+    await withApi(async (ctx) => {
+      const fixture = await 설계서(ctx, '설계서 하나', 'one')
+      const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
+
+      expect(pageFiles(bundle.files).map((file) => file.path)).toEqual([
+        'pages/관리자-대시보드.html',
+        'pages/관리자-회원-목록.html',
+        'pages/관리자-회원-상세.html',
+        'pages/마케팅-랜딩.html',
+      ])
+    })
+  })
+
+  it('좌측 트리와 <title>에도 조상이 붙는다', async () => {
+    await withApi(async (ctx) => {
+      const fixture = await 설계서(ctx, '설계서 하나', 'one')
+      const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
+      const index = bundle.files.find((file) => file.path === 'index.html')!
+
+      expect(index.content).toContain('<title>관리자 대시보드</title>')
+      for (const name of ['관리자 대시보드', '관리자 회원 목록', '관리자 회원 상세', '마케팅 랜딩']) {
+        expect(index.content, name).toContain(`>${name}</a>`)
+      }
+    })
+  })
+
+  /**
+   * **이것이 조상을 붙인 이유다.** D8 스모크에서 잰 것: 조상 없이는 좌측 트리가
+   * `['목록','목록']`이 되어 읽는 사람이 둘을 구분할 수 없었다.
+   */
+  it('다른 메뉴의 같은 제목이 트리에서 갈린다', async () => {
+    await withApi(async (ctx) => {
+      const user = await signup(ctx)
+      const project = await createProject(ctx, user.cookie, { name: '중복', slug: 'same-title' })
+      const 관리자 = await createMenuNode(ctx, user.cookie, project.id, { title: '관리자' })
+      const 회원 = await createMenuNode(ctx, user.cookie, project.id, { parentId: 관리자.id, title: '회원' })
+      const 권한 = await createMenuNode(ctx, user.cookie, project.id, { parentId: 관리자.id, title: '권한' })
+      await createPage(ctx, user.cookie, project.id, 회원.id, { title: '목록' })
+      await createPage(ctx, user.cookie, project.id, 권한.id, { title: '목록' })
+
+      const bundle = await exportProjectBundle(ctx.db, project.id)
+
+      // 파일 이름이 자리 순서 접미사(`-2`)로 갈리는 것이 아니라 **이름 자체로** 갈린다.
+      expect(pageFiles(bundle.files).map((file) => file.path)).toEqual([
+        'pages/관리자-회원-목록.html',
+        'pages/관리자-권한-목록.html',
+      ])
+      expect(bundle.duplicateTargets).toEqual([])
+    })
+  })
+
+  /**
+   * **경로까지 같으면 두 자리가 함께 무너진다.** 같은 메뉴 아래 같은 제목이면 타겟이 겹쳐
+   * **둘 다 링크를 잃고**, 이름도 겹쳐 파일 이름이 자리 순서로 갈린다(`-2`). **원인이
+   * 하나**이므로 화면이 그 하나(겹친 경로)를 말하면 된다.
+   */
+  it('경로까지 같으면 타겟이 겹치고 파일 이름만 자리 순서로 갈린다', async () => {
+    await withApi(async (ctx) => {
+      const user = await signup(ctx)
+      const project = await createProject(ctx, user.cookie, { name: '완전중복', slug: 'same-path' })
+      const 메뉴 = await createMenuNode(ctx, user.cookie, project.id, { title: '관리자' })
+      await createPage(ctx, user.cookie, project.id, 메뉴.id, { title: '목록' })
+      await createPage(ctx, user.cookie, project.id, 메뉴.id, { title: '목록' })
+
+      const bundle = await exportProjectBundle(ctx.db, project.id)
+
+      expect(bundle.duplicateTargets).toEqual(['page:관리자/목록'])
+      expect(pageFiles(bundle.files).map((file) => file.path)).toEqual([
+        'pages/관리자-목록.html',
+        'pages/관리자-목록-2.html',
+      ])
+    })
+  })
+
   it('페이지마다 §8.1의 제 타겟을 든다', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, '설계서 하나', 'one')
