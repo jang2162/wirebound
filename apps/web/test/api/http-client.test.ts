@@ -189,6 +189,16 @@ const restoreResult = {
   themes: [{ layoutId: 'l1', themeId: 't1', differs: false }],
 }
 
+/** `GET .../export/preview`의 응답(P8-4). */
+const exportPreview = {
+  pages: [{ id: 'pg1', title: '회원 목록', target: 'page:관리자/회원/목록' }],
+  duplicateTargets: [],
+  brokenLinks: [],
+  errors: [],
+  themeId: 't1',
+  fileName: 'wirebound-export-proj.zip',
+}
+
 /** `GET .../revisions?mine=true`의 항목 하나. */
 const revision = {
   id: 'rev-1',
@@ -450,6 +460,13 @@ const ENDPOINTS: Array<{
     body: restoreResult,
     call: (c) => c.restoreSnapshot('p1', 's1'),
   },
+  {
+    client: 'getExportPreview',
+    url: '/api/projects/p1/export/preview',
+    method: 'GET',
+    body: exportPreview,
+    call: (c) => c.getExportPreview('p1'),
+  },
 ]
 
 /**
@@ -594,6 +611,14 @@ const SHAPE_CASES: Array<{
     ok: restoreResult,
     call: (c) => c.restoreSnapshot('p1', 's1'),
   },
+  {
+    // **`brokenLinks`가 배열이 아니면 화면이 전개하다 던진다** — 이 화면을 감싸는 오류
+    // 경계가 없다(`apps/web`의 경계는 캔버스 하나다).
+    shape: 'exportPreview',
+    broken: { ...exportPreview, brokenLinks: null },
+    ok: exportPreview,
+    call: (c) => c.getExportPreview('p1'),
+  },
 ]
 
 /**
@@ -601,6 +626,13 @@ const SHAPE_CASES: Array<{
  * 본문을 읽지 않는 요청(204·DELETE·logout)이 지나는 자리다.
  */
 const SHAPES_WITHOUT_BROKEN_CASE = ['noBody']
+
+/**
+ * 요청을 보내지 않는 `ApiClient` 메서드. **주소를 만들 뿐이다** — 위 경로·메서드 표는
+ * *"부르면 이 URL로 간다"*를 재므로 이런 것이 들 자리가 없다. 대신
+ * `요청을 보내지 않는 메서드도 주소가 못박혀 있다`가 그 주소를 잰다.
+ */
+const METHODS_WITHOUT_REQUEST = ['exportUrl']
 
 /** `src/api`의 소스. 표의 분모를 소스에서 만든다(`test/api-consumers.test.ts`와 같은 배치). */
 const API_SOURCES = import.meta.glob('../../src/api/*.ts', {
@@ -627,7 +659,10 @@ describe('표의 완전성', () => {
   })
 
   it('ApiClient의 모든 메서드가 경로·메서드 표에 있다', () => {
-    const registered = new Set(ENDPOINTS.map((endpoint) => endpoint.client))
+    const registered = new Set([
+      ...ENDPOINTS.map((endpoint) => endpoint.client),
+      ...METHODS_WITHOUT_REQUEST,
+    ])
 
     expect(declaredMethods().filter((method) => !registered.has(method))).toEqual([])
   })
@@ -637,6 +672,20 @@ describe('표의 완전성', () => {
     const declared = new Set(declaredMethods())
 
     expect(ENDPOINTS.map((endpoint) => endpoint.client).filter((name) => !declared.has(name))).toEqual([])
+  })
+
+  /**
+   * **빠진 것들이 그냥 안 세어지지 않게, 그 자리에서 잰다.** 위 표는 *"부르면 이 URL로
+   * 간다"*를 재는데 `exportUrl`은 아무 데도 가지 않으므로 그 표에 들 수 없다. 대신 그것이
+   * 내는 주소를 여기서 못박는다 — 예외로 빼기만 하면 그 메서드는 아무것도 안 지킨다.
+   */
+  it('요청을 보내지 않는 메서드도 주소가 못박혀 있다', () => {
+    const stub = stubFetch(jsonResponse(200, exportPreview))
+    const client = createHttpClient(stub.fetchImpl)
+
+    expect(client.exportUrl('p1')).toBe('/api/projects/p1/export')
+    // **요청이 아니다** — 부르는 것만으로 서버에 가면 이 함수의 존재 이유가 사라진다.
+    expect(stub.calls).toHaveLength(0)
   })
 
   it('SHAPES의 모든 키가 응답 모양 케이스에 있다', () => {

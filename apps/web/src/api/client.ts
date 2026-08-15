@@ -9,6 +9,7 @@ import type { PatchOp, WbNode } from '@wirebound/schema'
 import type { Theme } from '@wirebound/themes'
 import type {
   Comment,
+  ExportPreview,
   CommentCreated,
   MarkerChange,
   MenuNode,
@@ -410,6 +411,28 @@ export interface ApiClient {
    * **어느 갈래에서 끊기든 아무것도 바뀌지 않는다** — 서버가 한 트랜잭션으로 묶는다.
    */
   restoreSnapshot(projectId: string, snapshotId: string): Promise<RestoreResult>
+  /**
+   * **내려받기 전에 화면이 말할 것**(§11.3 — P8-4). 번들을 실제로 만들어 보고 그 결과를
+   * 값으로 낸다 — 그래서 **싸지 않다.** 화면을 열 때가 아니라 사람이 내보내기를 누를 때
+   * 부른다.
+   *
+   * **페이지가 하나도 없으면 409다.** 빈 번들을 내면 받는 사람이 푼 뒤에야 비었다는 것을
+   * 안다.
+   */
+  getExportPreview(projectId: string): Promise<ExportPreview>
+  /**
+   * zip을 받는 **주소**. 요청을 보내지 않는다 — 반환한 것을 `<a download href>`에 그대로
+   * 건다.
+   *
+   * **`fetch`로 받아 blob으로 넘기지 않는 이유 둘.** 번들 전체가 페이지 수의 제곱이라
+   * (P8-2 이월 §4) 다 받아 메모리에 드는 것이 그대로 비용이 되고, `URL.createObjectURL`은
+   * 이 저장소의 테스트 환경(jsdom)에 없어서 그 경로는 케이스가 닿지 못한다. 앵커는 브라우저가
+   * 곧장 디스크로 흘려보내고 세션 쿠키도 그대로 실린다.
+   *
+   * **그래도 이 함수가 `ApiClient`에 있는 이유:** 주소를 아는 자리가 하나여야 한다.
+   * 화면이 `/api/…`를 직접 적기 시작하면 경로가 두 곳이 된다.
+   */
+  exportUrl(projectId: string): string
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */

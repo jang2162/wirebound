@@ -9,6 +9,7 @@ import { ApiError, type ApiClient, type ApiErrorCode, type ApiErrorIssue } from 
 import type {
   Comment,
   CommentCreated,
+  ExportPreview,
   MarkerChange,
   MenuNode,
   PageDetail,
@@ -246,6 +247,26 @@ function isProjectDetail(value: unknown): boolean {
     // **`description`은 React 자식으로 그려진다** — 이터러블이 아닌 객체가 닿으면 목록이
     // 통째로 빈다(위 표).
     (typeof value['description'] === 'string' || value['description'] === null)
+  )
+}
+
+/**
+ * 내보내기 미리보기(P8-4). **네 배열과 `fileName`이 실제로 그 모양인지 본다.**
+ *
+ * 화면이 넷을 전부 전개하고 `fileName`을 `<a download>`에 그대로 건다 — 배열이 아니면
+ * 그 자리에서 던지고 이 화면을 감싸는 오류 경계가 없다(`apps/web`의 경계는 캔버스 하나다).
+ * 항목의 속 내용까지 보지 않는 것은 `restoreResult`가 같은 자리에서 한 판단과 같다:
+ * 빠진 필드는 문장에 `undefined`가 보일 뿐이고, **전개가 던지는 것과 손해의 등급이 다르다.**
+ */
+function isExportPreview(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Array.isArray(value['pages']) &&
+    Array.isArray(value['duplicateTargets']) &&
+    Array.isArray(value['brokenLinks']) &&
+    Array.isArray(value['errors']) &&
+    typeof value['fileName'] === 'string' &&
+    value['fileName'] !== ''
   )
 }
 
@@ -573,6 +594,7 @@ const SHAPES = {
   preset: isPreset,
   presetList: (value) => isArrayOf(value, isPreset),
   restoreResult: isRestoreResult,
+  exportPreview: isExportPreview,
 } satisfies Record<string, Shape>
 
 /**
@@ -1208,6 +1230,11 @@ export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): Ap
         `${projectPath(projectId)}/snapshots/${snapshotId}/restore`,
         SHAPES.restoreResult,
       ),
+    getExportPreview: (projectId) =>
+      request<ExportPreview>('GET', `${projectPath(projectId)}/export/preview`, SHAPES.exportPreview),
+    // **요청을 보내지 않는다** — 앵커에 걸 주소를 만들 뿐이다. 그래도 여기 있는 것은
+    // 주소를 아는 자리가 하나여야 하기 때문이다(`api/client.ts`의 머리말).
+    exportUrl: (projectId) => `${API_PREFIX}${projectPath(projectId)}/export`,
     listMyRevisions: (projectId, pageId) =>
       request<RevisionSummary[]>(
         'GET',
