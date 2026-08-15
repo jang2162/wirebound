@@ -218,11 +218,24 @@ describe('dist가 낸 번들 (받는 쪽이 받는 글자다)', () => {
 
   /**
    * **한국어가 들었으므로 바이트가 유닛보다 크다.** 이 케이스가 있어야 누가 상한을
-   * `String.length`로 되돌렸을 때 죽는다 — 그것이 이월의 수를 틀리게 만든 함정이다.
+   * `String.length`로 되돌렸을 때 죽는다 — 그것이 이월의 수를 틀리게 만든 함정이고,
+   * 보고서 §13이 *"케이스가 그 부등호를 든다"*고 적은 자리다.
+   *
+   * **자산마다 따로 잰다** — 한 파일에서만 재면 다른 자산에서 같은 함정을 못 잡는다
+   * (실제로 `shell.css`의 수가 유닛인 채로 문서에 남아 있었다: 델타 리뷰 발견 B).
    */
-  it('바이트가 UTF-16 유닛보다 크다 — 단위가 실제로 갈린다', () => {
-    const js = fileAt('assets/runtime.js')
-    expect(utf8Bytes(js)).toBeGreaterThan(js.length)
+  it.each(['assets/runtime.js', 'assets/shell.css'])(
+    '%s — 바이트가 UTF-16 유닛보다 크다',
+    (path) => {
+      const text = fileAt(path)
+      expect(utf8Bytes(text)).toBeGreaterThan(text.length)
+    },
+  )
+
+  /** **`theme.css`는 오늘 두 단위가 같다** — ASCII 밖 글자가 없다. 그것도 사실이므로 잰다. */
+  it('assets/theme.css는 두 단위가 같다', () => {
+    const text = fileAt('assets/theme.css')
+    expect(utf8Bytes(text)).toBe(text.length)
   })
 
   /**
