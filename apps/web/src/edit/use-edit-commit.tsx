@@ -15,6 +15,7 @@ import { useCallback } from 'react'
 import type { Interaction, PatchOp } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
+import { useEditChannel } from '../realtime/context'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import type { EditStatus } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
@@ -108,6 +109,7 @@ export interface EditCommit {
 export function useEditCommit(props: { projectId: string; pageId: string }): EditCommit {
   const { projectId, pageId } = props
   const api = useApi()
+  const channel = useEditChannel()
   const store = useEditorStoreInstance()
   const open = useOpenPage(pageId)
   const status = useEditorStore(store, (s) => s.editStatus)
@@ -214,7 +216,17 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
 
         store.setEditStatus('sending')
         try {
-          const result = await api.patchOps(projectId, pageId, request)
+          // **WS가 붙어 있으면 그리로 낸다**(§7.1 — P3-2 T3). 없으면 REST다: D5가 그 경로를
+          // 남겨 두었고(§7.4의 MCP가 REST로 들어온다), `RealtimeProvider` 없이 도는 화면은
+          // 여전히 그쪽으로 편집한다.
+          //
+          // **갈리는 것은 전송뿐이다.** 두 경로가 같은 `applyEdit`을 지나고(`ws/patch.ts`),
+          // 같은 모양의 실패를 내며(`patch-error`가 REST 봉투를 그대로 싣는다), 여기 아래의
+          // `ackEdit`·`recover`도 같은 것을 받는다.
+          const result =
+            channel !== null && channel.ready()
+              ? await channel.send({ pageId, ...request })
+              : await api.patchOps(projectId, pageId, request)
           // **응답의 `warnings`가 여기로 함께 들어간다**(P5-3 D6). 서버는 P4c-1부터
           // 그것을 싣고 있었는데 P5-2까지 클라이언트가 그 필드를 몰라 **읽는 코드가 0건**
           // 이었다(P5-2 이월 §3). 스토어가 ack와 **함께** 싣는 것이 요점이다 — 늦게 도착한
@@ -230,7 +242,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
     } finally {
       store.endPump()
     }
-  }, [api, projectId, pageId, store, recover])
+  }, [api, channel, projectId, pageId, store, recover])
 
   /**
    * 스택에서 한 단계 꺼내 보낸다. undo와 redo가 같은 규칙을 쓰므로 한 곳에 둔다 —
