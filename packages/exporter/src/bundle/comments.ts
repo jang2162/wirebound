@@ -24,6 +24,7 @@
  * **화면이 못 보는 것을 세어 적고 화면이 그것을 말하게 한다.**
  */
 import { describeNode, type PageDocument, type WbNode } from '@wirebound/schema'
+import { eachNode } from '../nodes'
 
 /**
  * 번들이 받는 코멘트 하나.
@@ -77,23 +78,6 @@ function markerOf(node: WbNode): number | null {
   const marker = node.marker
   if (typeof marker !== 'number' || !Number.isInteger(marker) || marker < 1) return null
   return marker
-}
-
-/**
- * 문서를 훑어 노드를 순서대로 낸다.
- *
- * **`walkNodes`를 쓰지 않는다.** 그 함수는 `children`이 노드 배열인 트리를 전제하고,
- * 자식이 `null`이면 던진다. 번들은 **그리지 못하는 문서도 통과시킨다** — 렌더러가 폴백
- * 상자를 그리고 `errors`로 알리는 것이 계약이므로(D9), 코멘트 목록만 던지면 그 문서는
- * 번들이 아예 안 나온다. `test-support`의 `typesIn`이 같은 이유로 같은 모양이다.
- */
-function* eachNode(node: unknown): Generator<WbNode> {
-  if (node === null || typeof node !== 'object') return
-  const shaped = node as WbNode
-  yield shaped
-  const children = (node as { children?: unknown }).children
-  if (!Array.isArray(children)) return
-  for (const child of children) yield* eachNode(child)
 }
 
 /**

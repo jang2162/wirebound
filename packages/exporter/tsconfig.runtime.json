@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".tsbuild-runtime",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "composite": true
+  },
+  "include": ["src/runtime/browser.ts"]
+}
