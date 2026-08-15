@@ -33,8 +33,6 @@
  * 지우면 그 payload가 **실제로 저장된다**(아래 케이스가 그 값을 확인한다).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { FastifyInstance } from 'fastify'
-import { buildApp } from '../src/app'
 import { snapshotRoutes } from '../src/routes/snapshots'
 import { captureSnapshot } from '../src/services/snapshot-capture'
 import {
@@ -42,8 +40,9 @@ import {
   createPage,
   createProject,
   getTestDb,
+  resetRealData,
   signup,
-  testConfig,
+  withRealApi,
   type CreatedMenuNode,
   type CreatedPage,
   type CreatedProject,
@@ -54,14 +53,10 @@ import {
 /** 이 파일은 하네스가 아니라 풀 핸들을 직접 쓴다. 파일이 끝나면 `setup.ts`의 `afterAll`이 닫는다. */
 const db = getTestDb()
 
-async function reset(): Promise<void> {
-  // `projects` 삭제가 `snapshots`(CASCADE)·`menu_nodes`·`pages`·`comments`까지 데려간다.
-  await db.deleteFrom('projects').execute()
-  await db.deleteFrom('users').execute()
-}
-
-beforeEach(reset)
-afterEach(reset)
+// 청소도 하네스도 `helpers.ts`에 있다(P3-1 D1). `projects` 삭제가 `snapshots`(CASCADE)·
+// `menu_nodes`·`pages`·`comments`까지 데려간다.
+beforeEach(resetRealData)
+afterEach(resetRealData)
 
 interface Fixture {
   owner: SignedUpUser
@@ -80,30 +75,33 @@ async function setup(ctx: TestContext): Promise<Fixture> {
 }
 
 /**
- * 앱을 세우고, **수집 한가운데에서 끼어들 훅을 문 라우트**를 다른 prefix로 함께 등록한다.
+ * **수집 한가운데에서 끼어들 훅을 문 라우트**를 다른 prefix로 함께 등록한 실커밋 앱.
  *
- * `buildApp`에 **트랜잭션이 아니라 풀 핸들**을 넘기는 것이 이 파일의 존재 이유다 —
- * 요청마다 서로 다른 커넥션을 잡고 각자 커밋한다.
+ * 앱을 세우고 닫는 부분은 `helpers.ts`의 `withRealApi`가 한다(P3-1 D1) — 이 파일이 갖고
+ * 있던 것은 **프로브 라우트를 얹는 이음매**뿐이고, 그것은 하네스가 아니라 이 파일의 것이다.
  *
- * **훅을 참조로 늦게 채운다.** Fastify 5는 부팅(첫 `inject`) 뒤의 라우트 등록을 거부하므로
+ * **훅을 참조로 늦게 채운다.** Fastify 5는 부팅 뒤의 라우트 등록을 거부하므로
  * (`Root plugin has already booted`) 등록이 픽스처보다 먼저여야 하는데, 훅이 필요로 하는
  * 값은 그 픽스처가 만든다.
  */
 async function withProbeApi(
   fn: (ctx: TestContext, setInterrupt: (run: () => Promise<void>) => void) => Promise<void>,
 ): Promise<void> {
-  const app: FastifyInstance = await buildApp({ db, config: testConfig() })
   let interrupt: (() => Promise<void>) | undefined
-  await app.register(snapshotRoutes({ captureHooks: { afterPages: async () => interrupt?.() } }), {
-    prefix: '/probe/projects',
-  })
-  try {
-    await fn({ app, db }, (run) => {
-      interrupt = run
-    })
-  } finally {
-    await app.close()
-  }
+  await withRealApi(
+    async (ctx) => {
+      await fn(ctx, (run) => {
+        interrupt = run
+      })
+    },
+    {
+      register: async (app) => {
+        await app.register(snapshotRoutes({ captureHooks: { afterPages: async () => interrupt?.() } }), {
+          prefix: '/probe/projects',
+        })
+      },
+    },
+  )
 }
 
 /** 페이지의 루트 노드에 코멘트를 단다. **실제로 커밋된다** — 이 파일의 앱은 풀 핸들 위에 산다. */
