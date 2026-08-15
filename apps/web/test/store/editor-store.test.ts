@@ -816,4 +816,25 @@ describe('EditorStore의 마커 반영', () => {
     expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('skipped')
     expect(store.getState().headSeq).toBe(0)
   })
+
+  /**
+   * **번호를 바탕에도 남긴다**(P3-2 D3). 이 변경은 서버가 이미 기록한 것이므로, 바탕이
+   * 그것을 모르면 **다음 리베이스가 번호 없는 문서 위에서 만들어져** 캔버스에서 번호가
+   * 사라진다. 바탕은 스토어 밖에서 읽지 않으므로(`test/store-access-guard.ts`), 재는 것은
+   * 그 값이 아니라 **다음 리베이스의 결과**다.
+   */
+  it('붙인 번호가 다음 리베이스 뒤에도 남는다 — 바탕에도 얹혔다는 뜻이다', () => {
+    const store = new EditorStore()
+    store.loadPage('pg-1', withChild(), 7)
+    store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })
+
+    store.applyRemoteChange('pg-1', {
+      seq: 9,
+      ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_theirs', type: 'Text' } }],
+      warnings: [],
+    })
+
+    expect(store.getState().document?.root.children?.[0]?.marker).toBe(1)
+    expect(store.getState().document?.root.children?.map((node) => node.id)).toEqual(['n_a', 'n_theirs'])
+  })
 })

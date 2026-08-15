@@ -199,6 +199,68 @@ describe('patch 프레임에는 editor 이상이 필요하다 (D1 · §10)', () 
   })
 })
 
+describe('프레임 규격은 REST 본문에서 온다 (D2)', () => {
+  /**
+   * **`clientOpId`가 필수인 것이 두 진입점이 갈리는 유일한 자리다.** REST에서는 없어도 되지만
+   * (서버가 응답에 되돌려 줄 뿐이다) 여기서는 ack가 프레임이라 **짝지을 것이 이 값뿐**이다.
+   * 없으면 되돌려 줄 `patch-error`조차 어느 편집의 것인지 말할 수 없어 연결을 닫는다.
+   */
+  it('clientOpId가 없으면 프레임을 못 읽는다 — 나머지가 다 맞아도', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const before = await headSeqOf(fx.page.id)
+
+      probe.send(
+        JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: before, ops: addNode('n_no_id') }),
+      )
+
+      expect((await probe.waitClosed()).code).toBe(4400)
+      expect(await headSeqOf(fx.page.id)).toBe(before)
+    })
+  })
+
+  /**
+   * **REST의 상한을 그대로 쓴다**(`http/patch-ops.ts`의 `ops는 200개 이하`). 두 벌을 만들면
+   * *"REST로는 되는데 WS로는 안 되는"* 입력이 생기고, 그 어긋남은 **접속 방식에 따라 갈린다.**
+   */
+  it('ops 상한이 REST와 같다 — 넘으면 프레임을 못 읽는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: await headSeqOf(fx.page.id),
+        ops: Array.from({ length: 201 }, (_unused, index) => addNode(`n_${index}`)[0]!),
+        clientOpId: 'op_too_many',
+      })
+
+      expect((await probe.waitClosed()).code).toBe(4400)
+    })
+  })
+
+  /**
+   * **음성 대조.** 상한 안이면 통과한다 — 위 케이스가 *"ops가 여럿이면 못 읽는다"*로
+   * 통과하지 않는다.
+   */
+  it('상한 안의 여러 ops는 그대로 통과한다 — 음성 대조', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: await headSeqOf(fx.page.id),
+        ops: Array.from({ length: 200 }, (_unused, index) => addNode(`n_${index}`)[0]!),
+        clientOpId: 'op_many',
+      })
+
+      await probe.waitFor('patch-ack')
+    })
+  })
+})
+
 describe('ack가 되돌려 주는 것 (D4 · §7.1)', () => {
   it('undo가 필요로 하는 것을 전부 싣는다 — REST 응답과 같은 값이다', async () => {
     await withRealApi(async (ctx) => {
