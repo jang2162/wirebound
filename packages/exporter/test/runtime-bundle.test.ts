@@ -63,6 +63,12 @@ const LIST_PAGE: PageDocument = {
           { on: 'click', actions: [{ type: 'setProp', target: 'n_사라짐', prop: 'loading', value: true }] },
         ],
       },
+      {
+        id: 'n_empty',
+        type: 'Button',
+        props: { label: '빈 규칙' },
+        interactions: [{ on: 'click', actions: [] }],
+      },
       { id: 'n_list', type: 'List', props: {}, marker: 2 },
       { id: 'n_tabs', type: 'Tabs', props: { tabs: ['기본정보', '상세정보'], active: 0 } },
       { id: 'n_card', type: 'Card', props: { title: '회원' }, marker: 3 },
@@ -271,6 +277,18 @@ describe('못 한 것을 조용히 넘기지 않는다 (D1·D6)', () => {
     expect(statusLines()).toEqual(['이 번들에 없는 페이지입니다: page:없음'])
   })
 
+  /**
+   * **액션이 없는 규칙도 말한다.** 문장화는 *"아무 일도 일어나지 않습니다"*라고 적는데
+   * 화면이 아무 말도 안 하면 *"눌렀는데 아무 일도 안 일어난다"*와 구분되지 않는다 —
+   * 이 저장소가 여섯 번 만난 부류다.
+   */
+  it('액션이 없는 규칙을 누르면 그 사실을 말한다', () => {
+    load('pages/회원-목록.html')
+    run()
+    press('n_empty')
+    expect(statusLines()).toEqual(['이 규칙에는 실행할 액션이 없습니다'])
+  })
+
   it('말할 것이 없으면 줄을 감춘다', () => {
     load('pages/회원-목록.html')
     run()
@@ -346,8 +364,8 @@ describe('자리마다 제 것이 실렸는가', () => {
         return [file.path, (JSON.parse(data?.textContent ?? '{}') as { events: { nodeId: string }[] }).events.map((event) => event.nodeId)]
       })
     expect(plans).toEqual([
-      ['index.html', ['n_btn', 'n_go', 'n_nowhere', 'n_broken']],
-      ['pages/회원-목록.html', ['n_btn', 'n_go', 'n_nowhere', 'n_broken']],
+      ['index.html', ['n_btn', 'n_go', 'n_nowhere', 'n_broken', 'n_empty']],
+      ['pages/회원-목록.html', ['n_btn', 'n_go', 'n_nowhere', 'n_broken', 'n_empty']],
       ['pages/회원-상세.html', []],
     ])
   })
