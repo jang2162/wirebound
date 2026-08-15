@@ -2,6 +2,7 @@ node_modules/
 dist/
 .tsbuild/
 .tsbuild-test/
+.tsbuild-runtime/
 *.tsbuildinfo
 .DS_Store
 .worktrees/
