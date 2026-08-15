@@ -158,6 +158,23 @@ async function 설계서(ctx: TestContext, name: string, slug: string): Promise<
   }
 }
 
+/**
+ * 번들이 **실제로 이은 링크.** 페이지 HTML의 `<script>`에 심긴 런타임 계획에서 읽는다.
+ *
+ * **왜 이것을 따로 재는가:** 미리보기의 `brokenLinks`는 `targetedPages`가 낸 값으로
+ * 세지만, 번들의 링크는 `exportBundle`에 넘긴 `BundlePage.target`으로 만들어진다.
+ * **둘이 다른 값에서 나오므로 갈릴 수 있다** — 변이 M8(모든 페이지가 첫 페이지의 타겟을
+ * 든다)이 살아남은 것이 그 증거였다. 미리보기는 멀쩡한데 번들의 링크가 전부 죽어 있었다.
+ */
+function runtimeRequests(
+  content: string,
+): { type: string; target: string; href: string | null; problem: string | null }[] {
+  const match = /<script type="application\/json" id="wb-export-runtime-data">(.*?)<\/script>/s.exec(content)
+  if (!match) throw new Error('페이지에 런타임 데이터가 없습니다')
+  const plan = JSON.parse(match[1]!) as { events?: { requests?: unknown[] }[] }
+  return (plan.events ?? []).flatMap((event) => (event.requests ?? []) as never[])
+}
+
 /** `pages/….html` 파일들만, 번들이 낸 순서 그대로. */
 function pageFiles(files: readonly { path: string; content: string }[]): { path: string; content: string }[] {
   return files.filter((file) => file.path.startsWith('pages/'))
@@ -365,6 +382,40 @@ describe('exportProjectBundle', () => {
     })
   })
 
+  /**
+   * **번들이 실제로 링크를 이었는가.** 위 `brokenLinks` 검사들은 미리보기의 값을 재는데,
+   * 그 값과 번들의 링크는 **서로 다른 자리에서** 나온다. 여기서 번들 쪽을 잰다.
+   */
+  it('이어진 타겟이 번들 안에서 그 페이지 파일을 가리킨다', async () => {
+    await withApi(async (ctx) => {
+      const fixture = await 설계서(ctx, '설계서 하나', 'one')
+      const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
+
+      // 0=대시보드 1=목록 2=상세 3=랜딩
+      const 목록 = runtimeRequests(pageFiles(bundle.files)[1]!.content)
+      const 상세로 = 목록.find((request) => request.target === 'page:관리자/회원/상세')
+
+      expect(상세로).toBeDefined()
+      expect(상세로!.href).not.toBeNull()
+      expect(decodeURIComponent(상세로!.href!)).toBe('관리자-회원-상세.html')
+      expect(상세로!.problem).toBeNull()
+    })
+  })
+
+  it('못 이은 타겟은 번들 안에서 링크가 없고 이유가 실린다', async () => {
+    await withApi(async (ctx) => {
+      const fixture = await 설계서(ctx, '설계서 하나', 'one')
+      const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
+
+      const 상세 = runtimeRequests(pageFiles(bundle.files)[2]!.content)
+      const 없는곳으로 = 상세.find((request) => request.target === 'page:없는/페이지')
+
+      expect(없는곳으로).toBeDefined()
+      expect(없는곳으로!.href).toBeNull()
+      expect(없는곳으로!.problem).not.toBeNull()
+    })
+  })
+
   describe('못 이은 링크', () => {
     it('번들에 없는 타겟을 겨눈 링크를 이름으로 말한다', async () => {
       await withApi(async (ctx) => {
@@ -449,6 +500,35 @@ describe('exportProjectBundle', () => {
       // **수를 여기 적지 않는다** — 시트가 비어 있지 않다는 것만 잰다.
       expect(themeCss!.content.length).toBeGreaterThan(0)
       expect(bundle.themeId).not.toBeNull()
+    })
+  })
+
+  /**
+   * **테마가 실제로 실렸는가.** `assets/theme.css`가 비어 있지 않은 것으로는 못 잰다 —
+   * 그 파일에는 **구조 기본 CSS**가 늘 들어 있어서 테마가 없어도 길이가 0이 아니다
+   * (변이 M14가 그 자리를 뚫고 살아남았다). 그래서 **테마를 벗긴 같은 프로젝트와 견준다.**
+   */
+  it('테마를 벗기면 assets/theme.css가 달라진다', async () => {
+    await withApi(async (ctx) => {
+      const fixture = await 설계서(ctx, '설계서 하나', 'one')
+      const 테마있음 = await exportProjectBundle(ctx.db, fixture.projectId)
+
+      const res = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${fixture.projectId}/theme`,
+        cookies: fixture.cookie,
+        payload: { themeId: null },
+      })
+      expect(res.statusCode).toBe(200)
+      const 테마없음 = await exportProjectBundle(ctx.db, fixture.projectId)
+
+      const css = (bundle: { files: { path: string; content: string }[] }) =>
+        bundle.files.find((file) => file.path === 'assets/theme.css')!.content
+
+      expect(css(테마있음)).not.toBe(css(테마없음))
+      // 카나리아: 둘 다 비어 있으면 위 견주기가 아무것도 안 지킨다.
+      expect(css(테마있음).length).toBeGreaterThan(0)
+      expect(css(테마없음).length).toBeGreaterThan(0)
     })
   })
 
