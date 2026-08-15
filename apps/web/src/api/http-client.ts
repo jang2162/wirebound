@@ -948,21 +948,47 @@ const BODY_KEYS = {
 }
 
 /**
+ * 편집을 낸 클라이언트가 자기 WebSocket 연결을 가리키는 헤더(P3-1).
+ *
+ * **서버가 이 연결을 브로드캐스트에서 뺀다** — §7.1의 *"[본인] ack / [타인] ops"*다. 이
+ * 슬라이스의 편집은 REST로 나가므로 서버는 그 요청이 어느 연결의 주인이 낸 것인지 달리 알
+ * 방법이 없다. **안 실어도 동작한다**: 그때는 자기 편집이 한 번 더 돌아오고, 그 프레임이
+ * HTTP 응답보다 먼저 도착하면 화면이 낡았다고 잘못 말한다.
+ *
+ * 이름은 `apps/api/src/ws/notify.ts`의 `CONNECTION_ID_HEADER`와 같아야 한다.
+ */
+const CONNECTION_ID_HEADER = 'x-wb-connection-id'
+
+/**
  * `ApiClient`의 HTTP 구현을 만든다.
  *
  * @param fetchImpl 테스트가 가짜를 주입하는 자리. 기본값은 브라우저의 `fetch`다.
+ * @param connectionId 지금 붙어 있는 WebSocket 연결의 id를 읽는 함수. 기본은 *"없다"*이고,
+ *   그때는 헤더가 아예 붙지 않는다(위 상수 주석).
  */
-export function createHttpClient(fetchImpl: typeof fetch = globalThis.fetch): ApiClient {
+export function createHttpClient(
+  fetchImpl: typeof fetch = globalThis.fetch,
+  connectionId: () => string | undefined = () => undefined,
+): ApiClient {
   async function request<T>(method: string, path: string, shape: Shape, body?: unknown): Promise<T> {
+    // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
+    // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`originConnectionId`가 길이를 본다).
+    const connection = connectionId()
+    const headers: Record<string, string> = {
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(connection === undefined ? {} : { [CONNECTION_ID_HEADER]: connection }),
+    }
+
     const init: RequestInit = {
       method,
       // 인증은 세션 쿠키(`wb_session`, httpOnly)로 한다 — 이 옵션이 없으면 쿠키가
       // 실리지 않아 모든 요청이 401이 된다. jsdom에서는 지워도 아무것도 깨지지
       // 않으므로 테스트가 이 `init` 객체를 직접 단언한다.
       credentials: 'same-origin',
-      ...(body === undefined
-        ? {}
-        : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+      // **헤더가 하나도 없으면 키를 만들지 않는다** — 기존 케이스가 `init` 객체를 그대로
+      // 단언하므로(위 `credentials` 주석), 빈 `headers`를 늘 붙이면 그것들이 죽는다.
+      ...(Object.keys(headers).length === 0 ? {} : { headers }),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }
 
     // `fetch`는 응답을 받지 못하면(네트워크 단절·DNS 실패·CORS 차단) 실패 응답이

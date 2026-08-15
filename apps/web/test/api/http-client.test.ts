@@ -1063,6 +1063,50 @@ describe('createHttpClient', () => {
     })
   })
 
+  /**
+   * **자기 편집을 자기가 되받지 않게 하는 값**(P3-1 · §7.1의 *"[본인] ack / [타인] ops"*).
+   * 이 슬라이스의 편집은 REST로 나가므로 서버는 그 요청이 어느 WebSocket 연결의 주인이
+   * 낸 것인지 달리 알 방법이 없다.
+   */
+  it('연결 id가 있으면 모든 요청에 헤더로 붙는다', async () => {
+    // 본문이 있는 요청과 없는 요청을 섞는다 — 한 갈래에만 붙인 구현이 통과하지 못하게.
+    const stub = stubFetch(jsonResponse(200, user), jsonResponse(200, user))
+    const client = createHttpClient(stub.fetchImpl, () => 'wsc_7')
+
+    await client.login('a@b.c', 'pw')
+    await client.me()
+
+    expect(stub.calls[0]?.init?.headers).toEqual({
+      'content-type': 'application/json',
+      'x-wb-connection-id': 'wsc_7',
+    })
+    expect(stub.calls[1]?.init?.headers).toEqual({ 'x-wb-connection-id': 'wsc_7' })
+  })
+
+  it('요청마다 다시 읽는다 — 다시 붙어 id가 바뀌면 그 값이 나간다', async () => {
+    const stub = stubFetch(jsonResponse(200, user), jsonResponse(200, user))
+    let current: string | undefined = 'wsc_1'
+    const client = createHttpClient(stub.fetchImpl, () => current)
+
+    await client.me()
+    current = 'wsc_2'
+    await client.me()
+
+    expect(stub.calls.map((call) => (call.init?.headers as Record<string, string>)['x-wb-connection-id'])).toEqual([
+      'wsc_1',
+      'wsc_2',
+    ])
+  })
+
+  it('연결이 없으면 헤더를 아예 안 만든다 — 빈 문자열을 보내지 않는다', async () => {
+    const stub = stubFetch(jsonResponse(200, user))
+    const client = createHttpClient(stub.fetchImpl, () => undefined)
+
+    await client.me()
+
+    expect(stub.calls[0]?.init?.headers).toBeUndefined()
+  })
+
   it('본문이 있는 요청에만 content-type을 붙인다', async () => {
     const stub = stubFetch(jsonResponse(200, user), jsonResponse(200, user))
     const client = createHttpClient(stub.fetchImpl)

@@ -1,0 +1,235 @@
+/**
+ * **프레임이 스토어에 닿는가**(P3-1 T5). 소켓은 가짜다 — 이 파일이 재는 것은 네트워크가
+ * 아니라 **배선**이고, jsdom에서 진짜 `WebSocket`을 열면 재연결 타이머만 남는다.
+ *
+ * 여기가 재지 않는 것: 서버가 그 프레임을 실제로 보낸다는 사실(`apps/api`의
+ * `ws-broadcast.test.ts`가 잰다)과, 얹기·미루기의 갈래(`test/store/remote-change.test.ts`).
+ * 이 파일은 **그 둘 사이를 잇는 줄**만 본다.
+ */
+import { act, render, screen } from '@testing-library/react'
+import { CURRENT_DOCUMENT_VERSION, type PageDocument } from '@wirebound/schema'
+import type { ReactElement } from 'react'
+import { describe, expect, it } from 'vitest'
+import { RealtimeProvider, createConnectionIdHolder, type ConnectionIdHolder } from '../../src/realtime/context'
+import type { RealtimeSocket } from '../../src/realtime/connection'
+import { useRealtime } from '../../src/realtime/use-realtime'
+import { RemoteAlert } from '../../src/shell/remote-alert'
+import { EditorStore } from '../../src/store/editor-store'
+import { EditorStoreProvider } from '../../src/store/use-editor-store'
+
+class FakeSocket implements RealtimeSocket {
+  onopen: (() => void) | null = null
+
+  onmessage: ((event: { data: unknown }) => void) | null = null
+
+  onclose: (() => void) | null = null
+
+  onerror: (() => void) | null = null
+
+  readonly sent: string[] = []
+
+  closed = false
+
+  send(data: string): void {
+    this.sent.push(data)
+  }
+
+  close(): void {
+    this.closed = true
+    this.onclose?.()
+  }
+}
+
+function doc(): PageDocument {
+  return { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Container', children: [] } }
+}
+
+interface Board {
+  store: EditorStore
+  holder: ConnectionIdHolder
+  sockets: FakeSocket[]
+  unmount: () => void
+  push: (frame: unknown) => void
+}
+
+function mount(options?: { projectId?: string; withProvider?: boolean }): Board {
+  const store = new EditorStore()
+  store.loadPage('page_1', doc(), 4)
+  const holder = createConnectionIdHolder()
+  const sockets: FakeSocket[] = []
+
+  function Screen(): ReactElement {
+    useRealtime(options?.projectId ?? 'project_1')
+    return <RemoteAlert />
+  }
+
+  const tree = (
+    <EditorStoreProvider store={store}>
+      <Screen />
+    </EditorStoreProvider>
+  )
+
+  const { unmount } = render(
+    options?.withProvider === false ? (
+      tree
+    ) : (
+      <RealtimeProvider
+        setup={{
+          holder,
+          origin: 'http://localhost:5173',
+          connection: {
+            createSocket: () => {
+              const socket = new FakeSocket()
+              sockets.push(socket)
+              return socket
+            },
+            // 타이머를 아예 안 걸리게 한다 — 이 파일은 하트비트를 재지 않는다
+            // (`connection.test.ts`가 잰다). 걸리면 테스트가 끝난 뒤 타이머가 남는다.
+            schedule: () => 0,
+            cancel: () => {},
+          },
+        }}
+      >
+        {tree}
+      </RealtimeProvider>
+    ),
+  )
+
+  // **`act`로 감싼다.** 프레임은 React 밖에서 오므로, 감싸지 않으면 스토어는 바뀌었는데
+  // 화면이 아직 그 커밋을 안 한 상태에서 단언하게 된다(실측: `role="status"`를 못 찾는다).
+  const push = (frame: unknown): void => {
+    act(() => {
+      sockets[0]?.onmessage?.({ data: JSON.stringify(frame) })
+    })
+  }
+
+  return { store, holder, sockets, unmount, push }
+}
+
+const PAGE_CHANGED = {
+  type: 'page-changed',
+  projectId: 'project_1',
+  pageId: 'page_1',
+  seq: 5,
+  ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_remote', type: 'Container' } }],
+  warnings: [],
+  actor: { type: 'user', label: '홍길동' },
+}
+
+describe('붙는 자리', () => {
+  it('Provider가 있으면 룸에 붙는다 — 주소가 프로젝트를 가리킨다', () => {
+    const board = mount()
+
+    expect(board.sockets).toHaveLength(1)
+  })
+
+  it('Provider가 없으면 아무것도 안 붙는다 — 기존 화면 테스트가 소켓을 열지 않는 이유다', () => {
+    const board = mount({ withProvider: false })
+
+    expect(board.sockets).toHaveLength(0)
+  })
+
+  it('화면을 떠나면 닫는다 — 프로젝트를 옮길 때마다 쌓이지 않는다', () => {
+    const board = mount()
+
+    board.unmount()
+
+    expect(board.sockets[0]?.closed).toBe(true)
+  })
+})
+
+describe('프레임이 스토어에 닿는다', () => {
+  it('joined의 연결 id를 홀더에 넣는다 — 편집 요청이 그것을 싣는다', () => {
+    const board = mount()
+
+    board.push({ type: 'joined', projectId: 'project_1', connectionId: 'wsc_9', userId: 'u1', role: 'owner' })
+
+    expect(board.holder.get()).toBe('wsc_9')
+  })
+
+  it('연결이 끊기면 홀더를 비운다 — 낡은 id를 계속 싣지 않는다', () => {
+    const board = mount()
+    board.push({ type: 'joined', projectId: 'project_1', connectionId: 'wsc_9', userId: 'u1', role: 'owner' })
+
+    act(() => {
+      board.sockets[0]!.onclose?.()
+    })
+
+    expect(board.holder.get()).toBeUndefined()
+  })
+
+  it('page-changed를 문서에 얹는다', () => {
+    const board = mount()
+
+    board.push(PAGE_CHANGED)
+
+    expect(board.store.getState().headSeq).toBe(5)
+    expect(board.store.getState().document?.root.children?.map((node) => node.id)).toEqual(['n_remote'])
+  })
+
+  it('restored는 판이 갈렸다고 말한다 — 얹지 않는다', () => {
+    const board = mount()
+
+    board.push({
+      type: 'restored',
+      projectId: 'project_1',
+      snapshotId: 's1',
+      actor: { type: 'user', label: '홍길동' },
+    })
+
+    expect(board.store.getState().headSeq).toBe(4)
+    expect(screen.getByRole('status').textContent).toContain('스냅샷을 복원')
+  })
+
+  it('미룬 것을 화면이 말한다 — 조용히 낡지 않는다 (D6)', () => {
+    const board = mount()
+    act(() => {
+      board.store.applyEdit([{ op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } }])
+    })
+
+    board.push(PAGE_CHANGED)
+
+    expect(screen.getByRole('status').textContent).toContain('아직 화면에 반영하지 않았습니다')
+  })
+
+  it('얹히면 아무 말도 안 한다 — 음성 대조', () => {
+    const board = mount()
+
+    board.push(PAGE_CHANGED)
+
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+})
+
+describe('RemoteAlert', () => {
+  it('낡지 않았으면 아무것도 안 그린다', () => {
+    const store = new EditorStore()
+    render(
+      <EditorStoreProvider store={store}>
+        <RemoteAlert />
+      </EditorStoreProvider>,
+    )
+
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('갈래마다 다른 문장을 낸다 — 사용자가 할 일이 다르다', () => {
+    const store = new EditorStore()
+    store.loadPage('page_1', doc(), 4)
+    render(
+      <EditorStoreProvider store={store}>
+        <RemoteAlert />
+      </EditorStoreProvider>,
+    )
+
+    act(() => {
+      store.applyRemoteChange('page_1', {
+        seq: 5,
+        ops: [{ op: 'replace', path: '/root/children/9/type', value: 'Text' }],
+        warnings: [],
+      })
+    })
+
+    expect(screen.getByRole('status').textContent).toContain('새로고침하면 맞춰집니다')
+  })
+})

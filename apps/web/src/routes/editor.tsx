@@ -28,6 +28,8 @@ import { StructureTree } from '../panels/structure-tree'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
+import { RemoteAlert } from '../shell/remote-alert'
+import { useRealtime } from '../realtime/use-realtime'
 import { ExportPanel } from '../shell/export-panel'
 import { projectAbilities } from '../projects/project-actions'
 import { ThemePicker } from '../theme/theme-picker'
@@ -206,6 +208,15 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
    */
   const [themeReloadToken, setThemeReloadToken] = useState(0)
 
+  /**
+   * **룸에 붙어 있는다**(P3-1 D2 — 룸은 프로젝트 단위 하나다). 페이지를 옮겨도 연결은
+   * 그대로다: 페이지마다 다시 붙으면 옮기는 동안 남의 변경을 놓친다.
+   *
+   * **`RealtimeProvider`가 없으면 아무것도 안 한다**(`realtime/context.tsx`) — 그래서 이 줄이
+   * 에디터를 렌더하는 기존 화면 테스트를 건드리지 않는다.
+   */
+  useRealtime(props.project.id)
+
   return (
     <div className="wb-shell">
       <header className="wb-shell-header">
@@ -257,6 +268,10 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
         {/* **경고는 실패가 아니다**(P5-3 D6). 실패 통지 바로 옆에 두되 `role`이 다르다 —
             근거는 `shell/edit-warnings.tsx`의 머리말에 있다. */}
         <EditWarnings />
+        {/* **남의 변경 때문에 화면이 낡았다는 통지**(P3-1 D6). `EditAlert`와 자리는 같고
+            `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
+            근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
+        <RemoteAlert />
       </header>
 
       <nav className="wb-shell-side" aria-label="메뉴와 구조">
