@@ -51,6 +51,14 @@ export interface PageChangedInput {
   warnings: ValidationIssue[]
   actor: EventActor
   originConnectionId?: string
+  /**
+   * 낸 사람이 붙인 id. **있을 때만 프레임에 실린다** — 서버가 만들어 내는 값이 아니다
+   * (`routes/pages.ts`의 응답이 같은 관례를 쓴다).
+   *
+   * 무엇에 쓰는지는 `protocol.ts`의 그 필드에 적혀 있다: **발신자 제외가 성립하지 않는
+   * 창에서 받는 쪽이 자기 편집을 알아보는 수단**이다.
+   */
+  clientOpId?: string
 }
 
 /** 페이지 문서가 바뀌었다(D4의 첫째). `applyEdit` 성공 하나당 한 번. */

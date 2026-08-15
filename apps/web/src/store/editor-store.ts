@@ -551,27 +551,45 @@ export class EditorStore {
    *
    * | 결과 | 언제 | `remoteStale` |
    * |---|---|---|
-   * | `'skipped'` | 다른 페이지가 열려 있거나 문서가 없거나 **이미 아는 seq**다 | 그대로 |
+   * | `'skipped'` | 다른 페이지가 열려 있거나 문서가 없거나 **이미 아는 seq**이거나 **내가 낸 편집이 되돌아왔다** | 그대로 |
    * | `'gap'` | **`seq`가 내 다음 번호가 아니다** | `'gap'` |
    * | `'diverged'` | 바탕에 `applyOps`가 던졌다 | `'diverged'` |
    * | `'applied'` | 얹었다. pending이 없었다 | `null`로 푼다 |
    * | `'rebased'` | 얹고 내 pending을 그 위에 다시 올렸다 | `null`로 푼다 |
    *
-   * **`seq <= headSeq`가 `'skipped'`인 것이 요점이다.** 발신자 제외가 없는 클라이언트는
-   * **자기 편집을 자기가 되받는다**(`ws/notify.ts`). 그때 그 ops를 한 번 더 얹으면 문서가
-   * 두 번 바뀐다.
+   * ## 자기 편집이 되돌아오는 창 — 리베이스가 그것을 두 배로 만든다
+   *
+   * 보통은 서버가 발신자를 제외한다(`ws/notify.ts`의 `exceptConnectionId`). **성립하지 않는
+   * 창이 있다:** 편집이 REST로 나가는 동안(소켓이 아직 안 열려 `x-wb-connection-id`가 없다)
+   * 그 소켓이 열려 룸에 들어오면, 뒤이어 나가는 브로드캐스트를 **낸 사람이 되받는다.**
+   *
+   * 앞 슬라이스에서는 그 프레임이 미뤄지기만 해서 무해했다. **리베이스는 그것을 바탕에 얹고
+   * 내 pending을 그 위에 다시 올리므로 같은 편집이 두 번 들어간다** — 바탕과 문서 둘 다
+   * 서버와 갈라지고, 그 갈라짐은 조용하다. 그래서 갈래가 둘이다:
+   *
+   * | 언제 | 무엇이 막나 |
+   * |---|---|
+   * | 이미 ack된 내 편집 | `seq <= headSeq` |
+   * | **아직 ack 안 된 내 편집** | **`clientOpId`가 내 pending에 있다** |
+   *
+   * 뒤의 것을 위해 서버가 그 값을 프레임에 싣는다(`ws/protocol.ts`).
    *
    * **`headSeq`와 두 문서는 함께 움직이거나 셋 다 안 움직인다** — `applyMarkerChange`의
    * 그 문단이 여기에도 그대로 적용된다.
    */
   readonly applyRemoteChange = (
     pageId: string,
-    change: { seq: number; ops: PatchOp[]; warnings: ValidationIssue[] },
+    change: { seq: number; ops: PatchOp[]; warnings: ValidationIssue[]; clientOpId?: string },
   ): RemoteChange => {
     const { openPageId, document, baseDocument, headSeq, pending } = this.#state
     if (openPageId !== pageId || document === null || baseDocument === null) return unchanged('skipped')
-    // 이미 아는 revision이다(내 편집이 되돌아온 경우를 포함한다).
+    // 이미 아는 revision이다(ack이 이미 지나간 내 편집을 포함한다).
     if (change.seq <= headSeq) return unchanged('skipped')
+    // **아직 ack되지 않은 내 편집이 되돌아온 것이다**(위 머리말의 되받기 창). 얹으면 같은
+    // 편집이 바탕과 문서에 두 번 들어간다 — 그 갈라짐은 조용하다.
+    if (change.clientOpId !== undefined && pending.some((edit) => edit.clientOpId === change.clientOpId)) {
+      return unchanged('skipped')
+    }
 
     // 놓친 revision이 있다. **얹지도 `headSeq`를 올리지도 않는다**(위 머리말).
     if (change.seq !== headSeq + 1) {

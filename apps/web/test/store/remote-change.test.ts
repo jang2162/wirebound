@@ -260,6 +260,70 @@ describe('applyRemoteChange — 안 얹는 갈래', () => {
     expect(change.result).toBe('skipped')
     expect(ids(store)).toEqual([])
   })
+
+  /**
+   * **아직 ack 안 된 내 편집이 되돌아온 판이다.** 서버가 발신자를 제외하지 못하는 창이
+   * 있다 — 편집이 REST로 나가는 동안 소켓이 열려 룸에 들어오면 뒤이은 브로드캐스트를 낸
+   * 사람이 받는다.
+   *
+   * **`seq <= headSeq`로는 못 막는다** — 아직 ack를 못 받아 `headSeq`가 안 올랐다. 얹으면
+   * 바탕과 문서에 같은 편집이 **두 번** 들어가고 그것은 조용하다.
+   */
+  it('아직 ack 안 된 내 편집이 되돌아오면 건너뛴다 — 두 번 얹지 않는다', () => {
+    const store = opened()
+    const opId = store.applyEdit(append('n_mine'))
+
+    const change = store.applyRemoteChange('page_1', {
+      seq: 5,
+      ops: append('n_mine'),
+      warnings: NO_WARNINGS,
+      clientOpId: opId!,
+    })
+
+    expect(change.result).toBe('skipped')
+    expect(ids(store)).toEqual(['n_mine'])
+    expect(store.getState().headSeq).toBe(4)
+    // 큐도 그대로다 — REST 응답이 아직 오지 않았고 그것이 ack를 한다.
+    expect(store.getState().pending).toHaveLength(1)
+  })
+
+  /**
+   * **음성 대조.** 남이 낸 편집은 `clientOpId`가 실려 있어도 그대로 리베이스된다 — 위
+   * 케이스가 *"`clientOpId`가 있으면 다 건너뛴다"*로 통과하지 않는다.
+   */
+  it('남의 clientOpId가 실린 프레임은 그대로 얹는다 — 음성 대조', () => {
+    const store = opened()
+    store.applyEdit(append('n_mine'))
+
+    const change = store.applyRemoteChange('page_1', {
+      seq: 5,
+      ops: append('n_theirs'),
+      warnings: NO_WARNINGS,
+      clientOpId: 'op_남의것',
+    })
+
+    expect(change.result).toBe('rebased')
+    expect(ids(store)).toEqual(['n_theirs', 'n_mine'])
+  })
+
+  /**
+   * **ack가 지나간 뒤에는 같은 id가 와도 앞의 검사가 잡는다** — 두 갈래가 겹치지 않는다.
+   */
+  it('ack 뒤에 되돌아온 것은 seq가 잡는다', () => {
+    const store = opened()
+    const opId = store.applyEdit(append('n_mine'))
+    store.ackEdit(opId!, { seq: 5, revisionId: 'rev_5', inverse: [] })
+
+    const change = store.applyRemoteChange('page_1', {
+      seq: 5,
+      ops: append('n_mine'),
+      warnings: NO_WARNINGS,
+      clientOpId: opId!,
+    })
+
+    expect(change.result).toBe('skipped')
+    expect(ids(store)).toEqual(['n_mine'])
+  })
 })
 
 /**

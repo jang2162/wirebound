@@ -227,6 +227,30 @@ describe('프레임이 스토어에 닿는다', () => {
     })
   })
 
+  /**
+   * **자기 편집이 되돌아온 판이다.** 편집이 REST로 나가는 동안 소켓이 열려 룸에 들어오면
+   * 서버가 발신자를 제외하지 못해 그 프레임을 낸 사람이 받는다. **리베이스는 그것을 바탕에
+   * 얹고 내 pending을 그 위에 다시 올리므로 같은 편집이 두 번 들어간다.**
+   */
+  it('내 pending의 clientOpId가 실린 프레임은 두 번 얹지 않는다', () => {
+    const board = mount()
+    let opId: string | null = null
+    act(() => {
+      opId = board.store.applyEdit([
+        { op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } },
+      ])
+    })
+
+    board.push({
+      ...PAGE_CHANGED,
+      ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } }],
+      clientOpId: opId,
+    })
+
+    expect(board.store.getState().document?.root.children?.map((node) => node.id)).toEqual(['n_mine'])
+    expect(board.store.getState().headSeq).toBe(4)
+  })
+
   it('버릴 것이 없으면 통지도 없다 — 음성 대조', () => {
     const board = mount()
     act(() => {

@@ -74,6 +74,19 @@ describe('읽는 것', () => {
     expect(parseServerFrame(JSON.stringify(PAGE_CHANGED))).toEqual(PAGE_CHANGED)
   })
 
+  /**
+   * **`clientOpId`는 있을 때만 온다.** 이것을 안 읽으면 자기 편집이 되돌아온 것을 알아볼 수
+   * 없고, 리베이스가 그것을 두 번 얹는다(`store/editor-store.ts`의 되받기 창).
+   */
+  it('page-changed의 clientOpId를 읽는다 — 있을 때만', () => {
+    expect(parseServerFrame(JSON.stringify({ ...PAGE_CHANGED, clientOpId: 'op_1' }))).toEqual({
+      ...PAGE_CHANGED,
+      clientOpId: 'op_1',
+    })
+    // **없으면 키 자체가 없다** — `undefined`가 담기면 받는 쪽의 대조가 흔들린다.
+    expect(Object.keys(parseServerFrame(JSON.stringify(PAGE_CHANGED)) ?? {})).not.toContain('clientOpId')
+  })
+
   it('joined에서 role은 읽지 않는다 — 역할 판정은 한 자리다', () => {
     const frame = parseServerFrame(
       JSON.stringify({ type: 'joined', projectId: 'p', connectionId: 'wsc_1', userId: 'u', role: 'owner' }),

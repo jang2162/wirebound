@@ -462,6 +462,53 @@ describe('WS로 들어온 편집도 룸에 나간다 (D5)', () => {
     })
   })
 
+  /**
+   * **되받기 창을 닫는 값**(P3-2). 서버가 발신자를 제외하지 못하는 판이 있다 — 편집이 REST로
+   * 나가는데 `x-wb-connection-id`가 없을 때다(소켓이 아직 안 열렸다). 그때 그 사람의 소켓이
+   * 열려 룸에 들어오면 **자기 편집을 되받고**, 받는 쪽의 리베이스가 그것을 두 번 얹는다.
+   *
+   * **여기서 재는 것은 그 프레임에 `clientOpId`가 실린다는 것**이다 — 받는 쪽이 그것으로
+   * 자기 편집을 알아본다(`apps/web`의 `store/editor-store.ts`).
+   */
+  it('REST로 낸 편집의 프레임도 clientOpId를 나른다 — 헤더가 없어도', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/ops`,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: await headSeqOf(fx.page.id), ops: addNode('n_rest'), clientOpId: 'op_rest' },
+      })
+      expect(res.statusCode).toBe(200)
+
+      const frame = await watcher.waitFor('page-changed')
+      expect(frame.clientOpId).toBe('op_rest')
+    })
+  })
+
+  /**
+   * **음성 대조.** 안 보낸 편집의 프레임에는 그 키가 없다 — 서버가 만들어 내는 값이 아니다.
+   */
+  it('clientOpId 없이 낸 편집의 프레임에는 그 키가 없다 — 음성 대조', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/ops`,
+        cookies: fx.owner.cookie,
+        payload: { baseSeq: await headSeqOf(fx.page.id), ops: addNode('n_rest') },
+      })
+      expect(res.statusCode).toBe(200)
+
+      const frame = await watcher.waitFor('page-changed')
+      expect(Object.keys(frame)).not.toContain('clientOpId')
+    })
+  })
+
   it('ack는 낸 사람에게만 간다 — 룸에 흘리지 않는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)

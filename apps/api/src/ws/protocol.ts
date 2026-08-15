@@ -67,6 +67,21 @@ export type ServerFrame =
        */
       warnings: ValidationIssue[]
       actor: EventActor
+      /**
+       * **낸 사람이 붙인 id. 있을 때만 실린다**(REST 본문이나 `patch` 프레임에 있었을 때).
+       *
+       * **받는 쪽이 *"이건 내가 낸 것"*을 알아보는 유일한 수단이다.** 보통은 서버가 발신자를
+       * 제외하므로(`exceptConnectionId`) 그럴 일이 없지만, **제외가 성립하지 않는 창이 있다:**
+       * 편집이 REST로 나가는 동안(소켓이 아직 안 열려 `x-wb-connection-id`가 없다) 그 소켓이
+       * 열려 룸에 들어오면, 그 뒤에 나가는 브로드캐스트를 **낸 사람이 되받는다.**
+       *
+       * 앞 슬라이스에서는 그 프레임이 미뤄지기만 해서 무해했다. **P3-2의 리베이스는 그것을
+       * 바탕에 얹고 내 pending을 그 위에 다시 올리므로 같은 편집이 두 번 들어간다** — 그리고
+       * 조용하다. 그래서 받는 쪽이 그 프레임을 알아보고 건너뛸 수 있게 이 값을 싣는다.
+       *
+       * **멱등 키가 아니다**(D4). 서버는 저장하지 않고 되돌려 줄 뿐이다.
+       */
+      clientOpId?: string
     }
   | { type: 'restored'; projectId: string; snapshotId: string; actor: EventActor }
   | { type: 'pong' }

@@ -45,6 +45,12 @@ export type ServerFrame =
       ops: PatchOp[]
       warnings: ValidationIssue[]
       actor: EventActor
+      /**
+       * 낸 사람이 붙인 id. **있을 때만 온다.** 이것이 내 pending에 있으면 그 프레임은
+       * **내가 낸 편집이 되돌아온 것**이고, 리베이스가 그것을 얹으면 같은 편집이 두 번
+       * 들어간다(서버 `ws/protocol.ts`의 그 필드에 창이 적혀 있다).
+       */
+      clientOpId?: string
     }
   | { type: 'restored'; projectId: string; snapshotId: string; actor: EventActor }
   | { type: 'pong' }
@@ -157,6 +163,9 @@ export function parseServerFrame(raw: string): ServerFrame | null {
             ops: value.ops as PatchOp[],
             warnings: value.warnings as ValidationIssue[],
             actor: value.actor as unknown as EventActor,
+            // **없으면 키 자체를 안 만든다** — `undefined`를 담아 두면 스토어의 대조가
+            // *"id 없는 pending"*과 우연히 맞을 여지가 생긴다.
+            ...(str(value.clientOpId) ? { clientOpId: value.clientOpId } : {}),
           }
         : null
     case 'restored':

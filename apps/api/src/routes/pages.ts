@@ -492,6 +492,10 @@ export function pageRoutes() {
         warnings: outcome.warnings,
         actor: { type: 'user', label: currentUser.name },
         originConnectionId: originConnectionId(request),
+        // **헤더가 없을 때의 두 번째 방벽이다**(P3-2). 소켓이 아직 안 열려 발신자 제외가
+        // 성립하지 않으면 낸 사람이 자기 편집을 되받는데, 받는 쪽의 리베이스가 그것을 두 번
+        // 얹는다 — 이 값이 있으면 그 자리에서 건너뛴다(`ws/protocol.ts`의 그 필드).
+        ...(body.clientOpId !== undefined ? { clientOpId: body.clientOpId } : {}),
       })
 
       // 성공 결과의 `schema`(적용 후 문서 전체)는 응답에 싣지 않는다 — 클라이언트는

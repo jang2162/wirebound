@@ -77,6 +77,7 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
               seq: frame.seq,
               ops: frame.ops,
               warnings: frame.warnings,
+              ...(frame.clientOpId === undefined ? {} : { clientOpId: frame.clientOpId }),
             })
             // **리베이스가 버린 편집을 말한다**(D3 · §7.3의 *"적용 불가"*와 같은 성질).
             // 스토어는 무엇이 버려졌는지만 돌려주고 문안은 여기서 만든다 — `startUndo`의
