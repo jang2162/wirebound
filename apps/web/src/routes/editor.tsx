@@ -13,7 +13,7 @@
  * 들고 내려보내지 않는 이유는 P2b-2 때문이다 — 낙관적 적용·롤백·undo가 붙으면 그 상태는
  * 화면 없이 단위 테스트할 수 있어야 하고, 컴포넌트 안에 있으면 그럴 수 없다.
  */
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -56,6 +56,24 @@ const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 
 /** 줌 한 칸. 한계(0.25~2)는 스토어가 클램프하므로 여기서 다시 알 필요가 없다. */
 const ZOOM_STEP = 0.25
+
+/**
+ * 재연결 재조회가 무언가를 잃었을 때의 안내(P3-2 D6).
+ *
+ * **두 조각을 따로 붙인다.** 보내지 못한 편집과 되돌리기 이력은 **다른 것**이고, 둘 중
+ * 하나만 잃는 판이 실제로 있다(편집을 낸 적 없이 undo 스택만 있는 판, 그 반대의 판).
+ * 한 문장으로 뭉뚱그리면 사용자가 무엇을 잃었는지 모른다.
+ *
+ * **`recover`의 문안을 건드리지 않는다**(P3-1 이월 §2.5의 마지막 문단). 그쪽 문장은
+ * `edit/edit-recovery.test.tsx`의 여러 케이스가 글자로 재고 있고, 이것은 **다른 사건**이다 —
+ * 사용자가 낸 편집이 실패한 것이 아니라 연결이 끊겼다 붙은 것이다.
+ */
+function resyncNotice(dropped: number, hadUndo: boolean): string {
+  const parts = ['연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다.']
+  if (dropped > 0) parts.push(`아직 저장되지 않은 편집 ${dropped}개가 취소됐습니다.`)
+  if (hadUndo) parts.push('되돌리기 이력이 초기화됐습니다.')
+  return parts.join(' ')
+}
 
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
@@ -207,6 +225,11 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
    * 편집과 무관한 이유로 스토어 구독자가 다시 그린다.
    */
   const [themeReloadToken, setThemeReloadToken] = useState(0)
+  /**
+   * **연결이 다시 붙었다는 신호**(P3-2 D6). 값에는 뜻이 없고 오를 때마다 캔버스가 페이지를
+   * 다시 읽는다 — `themeReloadToken`과 같은 모양이고 같은 이유로 스토어에 두지 않는다.
+   */
+  const [resyncToken, setResyncToken] = useState(0)
 
   /**
    * **룸에 붙어 있는다**(P3-1 D2 — 룸은 프로젝트 단위 하나다). 페이지를 옮겨도 연결은
@@ -214,8 +237,16 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
    *
    * **`RealtimeProvider`가 없으면 아무것도 안 한다**(`realtime/context.tsx`) — 그래서 이 줄이
    * 에디터를 렌더하는 기존 화면 테스트를 건드리지 않는다.
+   *
+   * **두 번째 이후의 연결에서 신호가 온다**(D6). 끊긴 동안 남이 낸 편집의 프레임은 사라졌고,
+   * 그것을 갭으로 알아채려면 누군가 다음 편집을 내야 한다 — **아무것도 안 내고 보고만 있는
+   * 사람은 스스로 수렴하지 않는다**(P3-1 이월 §2.4). 다시 붙은 것 자체를 신호로 삼으면 그
+   * 사람의 화면도 맞춰진다.
    */
-  useRealtime(props.project.id)
+  useRealtime(
+    props.project.id,
+    useCallback(() => setResyncToken((token) => token + 1), []),
+  )
 
   return (
     <div className="wb-shell">
@@ -308,6 +339,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
           projectId={props.project.id}
           pageId={props.pageId}
           themeReloadToken={themeReloadToken}
+          resyncToken={resyncToken}
         />
       </main>
 
@@ -525,13 +557,15 @@ function CanvasFrame(props: {
   pageId: string | undefined
   /** 고르개가 테마를 바꿨다는 신호. `Canvas`가 그대로 `useProjectTheme`에 넘긴다. */
   themeReloadToken: number
+  /** 연결이 다시 붙었다는 신호(P3-2 D6). 오를 때마다 아래 재조회 이펙트가 돈다. */
+  resyncToken: number
 }): ReactElement {
   const api = useApi()
   const store = useEditorStoreInstance()
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
   const zoom = useEditorStore(store, (s) => s.zoom)
   const [state, setState] = useState<PageLoadState>({ status: 'empty' })
-  const { projectId, pageId } = props
+  const { projectId, pageId, resyncToken } = props
 
   useEffect(() => {
     if (pageId === undefined) {
@@ -629,6 +663,61 @@ function CanvasFrame(props: {
       alive = false
     }
   }, [api, projectId, pageId, store])
+
+  /**
+   * **연결이 다시 붙었으므로 페이지를 다시 읽는다**(P3-2 D6 · P3-1 이월 §2.4가 이 자리를
+   * 지목했다).
+   *
+   * ## 왜 위 이펙트에 얹지 않았나
+   *
+   * 위쪽은 **페이지를 여는** 경로다. 조회를 시작할 때 `clearPage()`로 캔버스를 비우고
+   * `'loading'`을 그리는데, 재연결마다 그러면 **화면이 깜빡인다** — 사용자는 아무것도 안
+   * 했고 문서는 대개 그대로다. 그리고 그쪽은 뒤이어 undo 스택을 복원하는데 **여기서는 그러면
+   * 안 된다**(아래).
+   *
+   * **그래도 페이지 상태를 놓는 자리는 `loadPage` 하나다.** D6이 요구한 것이 그것이고,
+   * 스토어가 자기 조회를 갖지 않는 것도 그대로다.
+   *
+   * ## undo 스택을 다시 채우지 않는다 — 그리고 그것을 말한다
+   *
+   * `loadPage`가 두 스택을 비우는데 여기서 `restoreUndo`를 부르지 않는다. 근거는 위
+   * `restoreUndo`의 독블록에 있는 실측이다: 서버가 내 것과 갈라진 뒤에 옛 `inverse`를
+   * 되살리면 **남의 편집을 조용히 덮는다.** 재연결로 들어온 재조회도 전제가 같다 — 끊긴
+   * 동안 남이 편집했을 수 있다는 뜻이다.
+   *
+   * **P3-1 이월 §2.5가 남긴 갈래 둘 중 둘째를 골랐다.** 그쪽은 *"리베이스가 서면 이 경로가
+   * 드물어진다"*(1)와 *"남긴다면 통지에 한 조각을 더한다"*(2)를 뒀는데, **1은 성립하지
+   * 않는다:** 리베이스는 갭을 고치지 못하고(바탕이 서버 문서와 같아야 한다), 오히려 이
+   * 슬라이스가 재연결마다 재조회를 **더한다.** 그래서 2다 — 되돌리기 이력이 사라졌으면
+   * 그렇다고 말한다.
+   *
+   * **말할 것이 없으면 말하지 않는다.** 버린 편집도 없고 스택도 비어 있었으면 이 재조회는
+   * 무해하고, 그때 뜨는 통지는 사용자가 하지도 않은 일에 대한 경고가 된다.
+   */
+  useEffect(() => {
+    // 첫 연결에서는 위 이펙트가 방금 서버 문서를 놓았다 — 다시 읽을 것이 없다.
+    if (resyncToken === 0 || pageId === undefined) return
+
+    let alive = true
+    void (async () => {
+      try {
+        const page = await api.getPage(projectId, pageId)
+        if (!alive) return
+        // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
+        const hadUndo = store.getState().undoStack.length > 0
+        const dropped = store.loadPage(pageId, page.schema, page.headSeq)
+        if (dropped.length === 0 && !hadUndo) return
+        store.setEditFailure({ kind: 'message', message: resyncNotice(dropped.length, hadUndo) })
+      } catch {
+        // **여기서 알리지 않는다.** 사용자가 요청한 조회가 아니고, 실패해도 화면은 재연결
+        // 전과 같다 — 낡았다는 것은 `RemoteAlert`가 이미 말하고 있다(`'gap'`).
+      }
+    })()
+
+    return () => {
+      alive = false
+    }
+  }, [api, projectId, pageId, store, resyncToken])
 
   return (
     <div
