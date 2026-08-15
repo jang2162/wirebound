@@ -207,6 +207,28 @@ describe('프레임이 스토어에 닿는다', () => {
     expect(screen.getByRole('status').textContent).toContain('놓쳐')
   })
 
+  /**
+   * **끊긴 적이 없는데 끊겼다고 말하지 않는다**(델타 리뷰 O3). 복원 프레임 뒤에 오는 첫
+   * 편집 프레임은 복원이 `head_seq`를 밀어 올렸으므로 **당연히** 내 다음 번호가 아니다 —
+   * 그것을 갭으로 읽으면 화면이 *"연결이 끊긴 사이의 변경을 놓쳐"*라고 말한다. 화면이
+   * 겪지 않은 실패를 말하는 부류다.
+   */
+  it('복원 뒤 첫 편집 프레임이 와도 복원했다고 말한다 — 끊겼다고 말하지 않는다', () => {
+    const board = mount()
+
+    board.push({
+      type: 'restored',
+      projectId: 'project_1',
+      snapshotId: 's1',
+      actor: { type: 'user', label: '홍길동' },
+    })
+    board.push({ ...PAGE_CHANGED, seq: 9 })
+
+    const notice = screen.getByRole('status').textContent
+    expect(notice).toContain('스냅샷을 복원')
+    expect(notice).not.toContain('끊긴')
+  })
+
   it('얹히면 아무 말도 안 한다 — 음성 대조', () => {
     const board = mount()
 

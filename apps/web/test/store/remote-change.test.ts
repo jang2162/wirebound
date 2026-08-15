@@ -208,16 +208,34 @@ describe('applyRemoteChange — 프레임을 놓친 갈래 (B1)', () => {
   /**
    * **놓친 seq가 뒤늦게 도착하면 그것은 얹힌다.** 서버가 순서를 뒤바꿔 보낸 경우다 —
    * `headSeq + 1`이므로 갭이 아니고, 얹고 나면 낡음이 풀린다.
+   *
+   * **그리고 그 순간 조용해지는데 revision 하나는 여전히 없다**(델타 리뷰 O1). 앞 판의
+   * 이월이 그 상태를 *"시끄럽다"*고 적었는데 **거짓이었다** — 이 케이스가 그것을 잰다.
+   * 이월 §4.6이 이 케이스를 가리킨다.
+   *
+   * **해가 작은 이유도 함께 잰다:** 남은 문서가 서버 문서의 **온전한 앞부분**이고
+   * `headSeq`가 그 문서에 대해 정직하므로, 편집을 내면 409가 나고 수렴한다.
    */
-  it('놓쳤던 번호가 뒤늦게 오면 얹고 낡음을 푼다', () => {
+  it('놓쳤던 번호가 뒤늦게 오면 얹고 낡음을 푼다 — 그런데 하나는 여전히 없다', () => {
     const store = opened()
-    store.applyRemoteChange('page_1', { seq: 6, ops: ADD_ONE, warnings: NO_WARNINGS })
+    store.applyRemoteChange('page_1', {
+      seq: 6,
+      ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_six', type: 'Container' } }],
+      warnings: NO_WARNINGS,
+    })
 
-    const late = store.applyRemoteChange('page_1', { seq: 5, ops: ADD_ONE, warnings: NO_WARNINGS })
+    const late = store.applyRemoteChange('page_1', {
+      seq: 5,
+      ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_five', type: 'Container' } }],
+      warnings: NO_WARNINGS,
+    })
 
     expect(late).toBe('applied')
     expect(store.getState().headSeq).toBe(5)
+    // **조용해진다** — 화면은 더 이상 아무 말도 안 한다.
     expect(store.getState().remoteStale).toBeNull()
+    // **그런데 seq 6이 없다.** 서버 문서는 ['n_five','n_six']이고 내 것은 앞부분뿐이다.
+    expect(store.getState().document?.root.children?.map((node) => node.id)).toEqual(['n_five'])
   })
 
   /**
@@ -232,6 +250,116 @@ describe('applyRemoteChange — 프레임을 놓친 갈래 (B1)', () => {
 
     expect(result).toBe('deferred')
     expect(store.getState().remoteStale).toEqual({ reason: 'pending' })
+  })
+})
+
+/**
+ * **약한 진단이 센 진단을 덮지 않는다**(델타 리뷰 O3). 앞 판은 `#markStale`이 같은 이유일
+ * 때만 건너뛰었고 이유 사이에 순위가 없었다 — 그래서 복원 뒤 첫 편집 프레임이
+ * `'restored'`를 `'gap'`으로 덮어 **끊긴 적이 없는데 끊겼다고 말했다.**
+ */
+describe('낡음 이유에는 세기가 있다 (O3)', () => {
+  it('복원 뒤 첫 편집 프레임이 복원 진단을 덮지 않는다', () => {
+    const store = opened()
+    store.markRestored()
+
+    // 복원이 `head_seq`를 밀어 올렸으므로 이 `seq`는 내 `headSeq + 1`이 아니다 — 갭이다.
+    const result = store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(result).toBe('gap')
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
+  })
+
+  /**
+   * **음성 대조.** 복원이 안 서 있으면 같은 프레임이 `'gap'`을 세운다 — 위 케이스가
+   * *"갭이 원래 안 선다"*로 통과하지 않는다.
+   */
+  it('복원이 안 서 있으면 같은 프레임이 갭을 세운다 — 음성 대조', () => {
+    const store = opened()
+
+    store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'gap' })
+  })
+
+  /**
+   * **경계는 *"할 일이 있다"*와 *"할 일이 없다"* 사이다.** `'pending'`만 기다리라고 말하고
+   * 나머지 셋은 새로고침을 말한다. 약한 쪽이 덮으면 화면이 요구를 거둬들인다.
+   */
+  it('미룸이 갭을 덮지 않는다 — 화면이 새로고침 요구를 거둬들이지 않는다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
+    expect(store.getState().remoteStale).toEqual({ reason: 'gap' })
+
+    store.applyEdit([{ op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } }])
+    const result = store.applyRemoteChange('page_1', { seq: 10, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(result).toBe('deferred')
+    expect(store.getState().remoteStale).toEqual({ reason: 'gap' })
+  })
+
+  it('갈라짐은 갭을 덮는다 — 더 좁고 구체적인 실패다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    store.applyRemoteChange('page_1', {
+      seq: 5,
+      ops: [{ op: 'replace', path: '/root/children/9/type', value: 'Text' }],
+      warnings: NO_WARNINGS,
+    })
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'diverged' })
+  })
+
+  it('복원은 무엇이든 덮는다 — 판이 통째로 갈린 것이 가장 넓다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', {
+      seq: 5,
+      ops: [{ op: 'replace', path: '/root/children/9/type', value: 'Text' }],
+      warnings: NO_WARNINGS,
+    })
+    expect(store.getState().remoteStale).toEqual({ reason: 'diverged' })
+
+    store.markRestored()
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
+  })
+
+  /**
+   * **복원은 얹었다고 풀리지 않는다.** 복원은 프로젝트 사건이라 이 페이지의 프레임 하나를
+   * 잘 얹은 것이 그것을 해결하지 않는다 — 다섯 자원이 한꺼번에 갈렸다.
+   */
+  it('복원 뒤 프레임을 잘 얹어도 복원 진단이 남는다', () => {
+    const store = opened()
+    store.markRestored()
+
+    const result = store.applyRemoteChange('page_1', { seq: 5, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(result).toBe('applied')
+    expect(store.getState().headSeq).toBe(5)
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
+  })
+
+  it('복원이 아닌 낡음은 얹으면 풀린다 — 음성 대조', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    store.applyRemoteChange('page_1', { seq: 5, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  it('같은 이유가 이어지면 구독자를 다시 부르지 않는다 — 세기 비교가 그것도 한다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
+    let notified = 0
+    store.subscribe(() => {
+      notified += 1
+    })
+
+    store.applyRemoteChange('page_1', { seq: 11, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(notified).toBe(0)
   })
 })
 

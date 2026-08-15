@@ -194,9 +194,45 @@ export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged'
  * `'gap'`은 **못 받은 것이 있다**(연결이 끊겼다)이고 `'diverged'`는 **받은 것을 내 문서가
  * 못 받아들인다**(보내지 않은 구조 편집과 부딪쳤다)이다. 진단이 다르면 다음 사람이 보는
  * 것도 달라야 한다.
+ *
+ * ## 세기가 있다 — 약한 진단이 센 진단을 덮지 않는다 (델타 리뷰 O3)
+ *
+ * 앞 판은 `#markStale`이 **같은 이유일 때만** 건너뛰었고 이유 사이에 순위가 없었다. 그래서
+ * 복원 뒤 첫 편집 프레임 하나가 `'restored'`를 `'gap'`으로 덮었다 — 복원이 `head_seq`를
+ * 밀어 올렸으므로 그 프레임의 `seq`는 당연히 내 `headSeq + 1`이 아니다. **화면이
+ * *"연결이 끊긴 사이의 변경을 놓쳐"*라고 말하는데 끊긴 적이 없다.** 겪지 않은 실패를
+ * 말하는 부류이고, 이 저장소가 반복해서 닫아 온 자리다.
+ *
+ * **세기는 *"무엇이 무엇을 설명하는가"*로 정한다.**
+ *
+ * | 세기 | `reason` | 왜 그 자리인가 |
+ * |---|---|---|
+ * | 3 | `'restored'` | **판이 통째로 갈렸다.** 갭도 갈라짐도 그것의 결과다 — 원인이 증상을 덮으면 안 된다 |
+ * | 2 | `'diverged'` | 지금 이 프레임을 내 문서가 못 받아들인다. 가장 좁고 구체적인 실패다 |
+ * | 1 | `'gap'` | 못 받은 것이 있다 |
+ * | 0 | `'pending'` | **유일하게 *"할 일이 없다"*고 말하는 갈래다** |
+ *
+ * **경계는 3-2-1과 0 사이다.** 위 셋은 *"새로고침하세요"*이고 `'pending'`은 *"기다리세요"*다.
+ * **할 일이 없다는 진단이 할 일이 있다는 진단을 덮으면** 화면이 요구를 거둬들이고, 그것이
+ * *"성공했다고 말하면서 실패한"* 그 부류의 거울상이다.
  */
 export interface RemoteStale {
   reason: 'pending' | 'gap' | 'diverged' | 'restored'
+}
+
+/**
+ * 낡음 이유의 세기(위 표). **`#markStale`이 이것으로만 덮어쓸지 정한다** — 자리마다 조건을
+ * 다시 쓰면 갈래가 늘 때 한 자리가 빠진다.
+ *
+ * **`Record<RemoteStale['reason'], number>`인 것이 계약이다** — 갈래를 하나 더하면 여기서
+ * 컴파일이 막힌다. 세기를 안 정한 갈래가 `undefined`로 새어 나가면 비교가 조용히 거짓이 되고,
+ * 그 갈래는 **무엇이든 덮는다.**
+ */
+const STALE_RANK: Record<RemoteStale['reason'], number> = {
+  pending: 0,
+  gap: 1,
+  diverged: 2,
+  restored: 3,
 }
 
 /** `applyRemoteChange`의 결과. `MarkerChangeResult`에 `'deferred'`·`'gap'`이 더 있다. */
@@ -504,10 +540,17 @@ export class EditorStore {
     // (`editWarnings`의 계약), 얹었다는 것은 내 문서가 그 문서가 됐다는 뜻이다. 안 갈면
     // 남이 만든 경고를 **편집을 낸 사람만** 보게 되어, 사실 2가 막으려던 그 갈라짐이
     // 접속 방식 대신 *"누가 냈느냐"*로 되살아난다.
+    // **`'restored'`는 얹었다고 풀리지 않는다**(델타 리뷰 O3의 뒷면). 복원은 **프로젝트**
+    // 사건이라 페이지 다섯 자원이 한꺼번에 갈렸다는 뜻이고, 이 페이지의 프레임 하나를 잘
+    // 얹은 것이 그것을 해결하지 않는다. 푸는 것은 `loadPage`·`clearPage` 둘 — 즉 사용자가
+    // 실제로 다시 읽었을 때다.
+    //
+    // **같은 객체를 그대로 넘긴다** — 새로 만들면 참조가 달라져 구독자가 헛일을 한다.
+    const stale = this.#state.remoteStale
     this.#apply({
       document: next,
       headSeq: change.seq,
-      remoteStale: null,
+      remoteStale: stale !== null && stale.reason === 'restored' ? stale : null,
       editWarnings: change.warnings.length === 0 ? NO_WARNINGS : change.warnings,
     })
     return 'applied'
@@ -523,11 +566,15 @@ export class EditorStore {
   }
 
   /**
-   * 낡음을 표시한다. **이미 같은 이유로 낡아 있으면 아무것도 안 한다** — 같은 값을 다시
-   * 넣으면 참조가 달라져 구독자가 프레임마다 헛일을 한다(`NO_WARNINGS`와 같은 이유).
+   * 낡음을 표시한다. **자기보다 센 진단은 덮지 않는다**(`RemoteStale`의 세기 표 — 델타
+   * 리뷰 O3).
+   *
+   * **같은 이유면 아무것도 안 하는 것도 이 비교가 함께 한다**(`>=`) — 같은 값을 다시 넣으면
+   * 참조가 달라져 구독자가 프레임마다 헛일을 한다(`NO_WARNINGS`와 같은 이유).
    */
   #markStale(reason: RemoteStale['reason']): void {
-    if (this.#state.remoteStale?.reason === reason) return
+    const current = this.#state.remoteStale
+    if (current !== null && STALE_RANK[current.reason] >= STALE_RANK[reason]) return
     this.#apply({ remoteStale: { reason } })
   }
 
