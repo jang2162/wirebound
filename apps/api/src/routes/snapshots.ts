@@ -85,6 +85,7 @@ import {
 } from '../repos/snapshots'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
+import { notifyRestored, originConnectionId } from '../ws/notify'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const SnapshotParams = z.object({ projectId: z.uuid(), snapshotId: z.uuid() })
@@ -255,6 +256,18 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
         if (outcome.kind !== 'restored') {
           throw restoreOutcomeToApiError(outcome)
         }
+
+        // **P6-2 이월 §9가 지목한 자리다**(P3-1 D4의 둘째). 복원은 다섯 자원을 한꺼번에
+        // 바꾸는데 알릴 경로가 없어, 다른 접속자는 낡은 문서 위에서 편집하다 `stale` 409를
+        // 받고 화면은 왜인지 말할 수단이 없었다. **커밋 뒤**다 — `restoreSnapshot`이 자기
+        // 트랜잭션을 닫고 돌아온 뒤에 알린다.
+        notifyRestored(app, {
+          projectId,
+          snapshotId,
+          actor: { type: 'user', label: currentUser.name },
+          originConnectionId: originConnectionId(request),
+        })
+
         return toRestoreResponse(outcome.result)
       },
     )

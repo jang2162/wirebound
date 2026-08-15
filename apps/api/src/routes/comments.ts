@@ -122,7 +122,7 @@
  * 달린 노드를 지우면 그 행이 남는다(`node_id`에 FK가 없다 — 0008의 주석). 그 행은 GET에
  * 그대로 실려 나가고 화면이 *"사라진 노드"* 무리로 묶는다.
  */
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import {
   COMMENT_BODY_MAX_LENGTH,
@@ -132,6 +132,7 @@ import {
   walkNodes,
   type PageDocument,
   type PatchOp,
+  type ValidationIssue,
   type WbNode,
 } from '@wirebound/schema'
 import { projectGuard } from '../auth/roles'
@@ -152,6 +153,7 @@ import {
 } from '../repos/comments'
 import { findPageById, lockPageForEdit } from '../repos/pages'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
+import { notifyPageChanged, originConnectionId } from '../ws/notify'
 
 /**
  * 파이프라인 실패를 **트랜잭션 밖으로 던져** 그 구간을 되돌린다(머리말의 규칙 1).
@@ -172,6 +174,47 @@ class EditRollback extends Error {
     this.name = 'EditRollback'
     this.outcome = outcome
   }
+}
+
+/**
+ * 문서를 안 바꾼 갈래가 쓰는 빈 경고. **참조를 고정한다** — 매번 새 배열을 만들 이유가 없다.
+ */
+const NO_WARNINGS: ValidationIssue[] = []
+
+/**
+ * 코멘트 경로가 만든 **문서 변화**를 룸에 알린다(P3-1 D3·D4).
+ *
+ * **셋이 이것만 쓴다.** 세 자리가 각자 `notifyPageChanged`를 부르면 한 자리가 인자를 다르게
+ * 조립해도 아무도 모른다 — `runWrite`를 하나로 둔 것과 같은 이유다.
+ *
+ * **`markerOps`가 비면 아무것도 안 보낸다.** 그때는 revision도 안 쌓였고 문서도 그대로라,
+ * 프레임을 보내면 받는 쪽이 *"뭔가 바뀌었다"*로 읽고 헛일을 한다.
+ *
+ * **호출 자리가 트랜잭션 밖이어야 한다** — `runWrite`가 반환한 **뒤**다. 안에서 부르면 받는
+ * 쪽이 그 프레임을 보고 다시 읽었을 때 아직 커밋되지 않은 것을 읽는다.
+ *
+ * 사실 4(P5-1 이월)가 *"번호는 실시간이고 본문은 아니다가 반만 관측된다"*고 적은 자리가
+ * 여기다 — **번호는 문서에 살므로 문서 브로드캐스트가 그것을 나른다.** 코멘트 행 자체
+ * (본문·작성자)는 이 슬라이스가 알리지 않는다(D4).
+ */
+function notifyMarkerChange(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  projectId: string,
+  pageId: string,
+  actorLabel: string,
+  result: { seq: number; markerOps: PatchOp[]; warnings: ValidationIssue[] },
+): void {
+  if (result.markerOps.length === 0) return
+  notifyPageChanged(app, {
+    projectId,
+    pageId,
+    seq: result.seq,
+    ops: result.markerOps,
+    warnings: result.warnings,
+    actor: { type: 'user', label: actorLabel },
+    originConnectionId: originConnectionId(request),
+  })
 }
 
 /**
@@ -415,7 +458,7 @@ export function commentRoutes() {
             body: body.body,
             authorId: currentUser.id,
           })
-          return { comment, seq: page.headSeq, marker, markerOps: [] as PatchOp[] }
+          return { comment, seq: page.headSeq, marker, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
         }
 
         const outcome = await applyEdit(trx, {
@@ -437,8 +480,10 @@ export function commentRoutes() {
           body: body.body,
           authorId: currentUser.id,
         })
-        return { comment, seq: outcome.seq, marker, markerOps: ops }
+        return { comment, seq: outcome.seq, marker, markerOps: ops, warnings: outcome.warnings }
       })
+
+      notifyMarkerChange(app, request, projectId, pageId, currentUser.name, result)
 
       reply.code(201)
       return {
@@ -545,7 +590,7 @@ export function commentRoutes() {
 
           const remaining = await countNodeComments(trx, pageId, deleted.nodeId)
           if (remaining > 0) {
-            return { seq: page.headSeq, markerOps: [] as PatchOp[] }
+            return { seq: page.headSeq, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
           }
 
           // 마지막이었다. 문서에서 그 노드를 찾아 번호를 지운다. **노드가 문서에 없을 수
@@ -555,7 +600,7 @@ export function commentRoutes() {
           const node = nodePath === undefined ? undefined : nodeAt(document, deleted.nodeId)
           const ops = nodePath !== undefined && node !== undefined ? clearMarkerOps(node, nodePath) : []
           if (ops.length === 0) {
-            return { seq: page.headSeq, markerOps: [] as PatchOp[] }
+            return { seq: page.headSeq, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
           }
 
           const outcome = await applyEdit(trx, {
@@ -570,11 +615,16 @@ export function commentRoutes() {
           // 409를 낸다.
           if (!outcome.ok) throw new EditRollback(outcome)
 
-          return { seq: outcome.seq, markerOps: ops }
+          return { seq: outcome.seq, markerOps: ops, warnings: outcome.warnings }
         })
 
         if (result === 'not-found') throw notFound()
-        return result
+
+        notifyMarkerChange(app, request, projectId, pageId, currentUser.name, result)
+
+        // 응답에서 `warnings`를 뺀다 — 이 라우트의 계약은 `{ seq, markerOps }`이고
+        // (README의 표), 그것을 넓히는 것은 이 슬라이스가 하는 일이 아니다.
+        return { seq: result.seq, markerOps: result.markerOps }
       },
     )
 
@@ -613,6 +663,12 @@ export function commentRoutes() {
         if (!outcome.ok) {
           throw editOutcomeToApiError(outcome, page.headSeq)
         }
+
+        notifyMarkerChange(app, request, projectId, pageId, currentUser.name, {
+          seq: outcome.seq,
+          markerOps: ops,
+          warnings: outcome.warnings,
+        })
 
         return { seq: outcome.seq, markerOps: ops }
       },

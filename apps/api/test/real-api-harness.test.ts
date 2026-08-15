@@ -72,7 +72,7 @@ async function fillEveryTable(ctx: TestContext): Promise<void> {
   const page = await createPage(ctx, owner.cookie, project.id, menu.id)
   const nodeId = (page.schema as { root: { id: string } }).root.id
 
-  const post = async (url: string, payload: unknown): Promise<void> => {
+  const post = async (url: string, payload: Record<string, unknown>): Promise<void> => {
     const res = await ctx.app.inject({ method: 'POST', url, cookies: owner.cookie, payload })
     if (res.statusCode !== 201) throw new Error(`픽스처 실패 ${url} (${res.statusCode}): ${res.body}`)
   }

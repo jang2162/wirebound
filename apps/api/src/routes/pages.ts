@@ -72,6 +72,7 @@ import { parseBody, parseParams } from '../http/parse'
 import { withWarnings } from '../http/warnings'
 import { OpsBody } from '../http/patch-ops'
 import { applyEdit } from '../services/edit-pipeline'
+import { notifyPageChanged, originConnectionId } from '../ws/notify'
 import { importPage, type PageImportOutcome } from '../services/page-import'
 import { MenuNodeNotFoundError, deletePage, findPageById, insertPage, updatePage, type PageRecord } from '../repos/pages'
 
@@ -418,6 +419,21 @@ export function pageRoutes() {
         throw editOutcomeToApiError(outcome, before.headSeq)
       }
 
+      // **커밋 뒤에 알린다**(P3-1 D3·D4). `applyEdit(app.db, …)`는 풀 핸들 위에서 자기
+      // 트랜잭션을 열고 닫으므로 이 줄에 도달한 시점에 이미 커밋돼 있다.
+      notifyPageChanged(app, {
+        projectId,
+        pageId,
+        seq: outcome.seq,
+        ops: [
+          { op: 'replace', path: '/root', value: outcome.schema.root },
+          { op: 'replace', path: '/version', value: outcome.schema.version },
+        ],
+        warnings: outcome.warnings,
+        actor: { type: 'user', label: currentUser.name },
+        originConnectionId: originConnectionId(request),
+      })
+
       // 응답 형태는 바뀌지 않는다(페이지 객체 그대로). 바뀐 세 필드만 파이프라인
       // 결과로 덮어쓰고 나머지(제목·메뉴·순서)는 위에서 읽은 레코드를 쓴다 — 이
       // 엔드포인트는 그 필드들을 건드리지 않으므로 DB를 다시 조회할 이유가 없다.
@@ -467,6 +483,16 @@ export function pageRoutes() {
       if (!outcome.ok) {
         throw editOutcomeToApiError(outcome, body.baseSeq)
       }
+
+      notifyPageChanged(app, {
+        projectId,
+        pageId,
+        seq: outcome.seq,
+        ops: body.ops,
+        warnings: outcome.warnings,
+        actor: { type: 'user', label: currentUser.name },
+        originConnectionId: originConnectionId(request),
+      })
 
       // 성공 결과의 `schema`(적용 후 문서 전체)는 응답에 싣지 않는다 — 클라이언트는
       // 같은 ops를 자기도 적용했으므로 문서를 이미 갖고 있다. 편집마다 문서 전체를
