@@ -1,0 +1,426 @@
+/**
+ * ⚠️ 이 파일은 테스트 DB에 **실제로 커밋한다.** `helpers.ts`의 `withRealApi`를 쓴다 —
+ * `inject()`는 소켓을 만들지 않아 `patch` 프레임을 태울 수 없다.
+ *
+ * ---
+ *
+ * # 무엇을 재는가 (P3-2 T1·T2 · §7.1)
+ *
+ * §7.1의 서버 쪽 절반이 WebSocket으로 들어오는 판이다.
+ *
+ * ```
+ * [클라] WS 전송 { pageId, baseSeq, ops[], clientOpId }
+ * [서버] 권한 확인(editor+) → … → 룸 broadcast
+ * [본인] ack(seq) 수신
+ * ```
+ *
+ * # 하나짜리로 재지 않는다
+ *
+ * | 무엇을 여럿으로 두나 | 그것이 없으면 무엇이 안 죽나 |
+ * |---|---|
+ * | 연결 둘 | 발신자 제외를 지워도, ack를 룸 전체에 흘려도 안 죽는다 |
+ * | 프로젝트 둘 | 프레임의 `pageId`를 **연결의 프로젝트와 무관하게** 열어 두어도 안 죽는다(§10) |
+ * | `clientOpId` 여럿 | ack가 엉뚱한 편집의 것을 되돌려 줘도 안 죽는다 |
+ *
+ * # 역할 판정이 이 파일의 첫째다 (D1)
+ *
+ * 앞 슬라이스에는 WS 경로 어디에도 `editor` 판정이 없었다 — 받는 기준(`viewer`)이 프레임
+ * 수신 검사도 겸했다. §10은 viewer를 *"조회 전용 — 편집·코멘트 모두 불가"*로 못박았다.
+ * **뷰어가 내면 거절되고 에디터가 내면 통과하는 판을 함께 둔다** — 한쪽만 재면 *"아무도 못
+ * 낸다"*와 구분되지 않는다.
+ */
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { PatchOp } from '@wirebound/schema'
+import {
+  addMember,
+  createMenuNode,
+  createPage,
+  createProject,
+  getTestDb,
+  resetRealData,
+  signup,
+  withRealApi,
+  type CreatedPage,
+  type CreatedProject,
+  type RealApiContext,
+  type SignedUpUser,
+} from './helpers'
+import { WsProbe, joinRoom } from './ws-client'
+
+const db = getTestDb()
+
+beforeEach(resetRealData)
+afterEach(resetRealData)
+
+const opened: WsProbe[] = []
+
+afterEach(() => {
+  for (const probe of opened) probe.close()
+  opened.length = 0
+})
+
+function track(probe: WsProbe): WsProbe {
+  opened.push(probe)
+  return probe
+}
+
+interface Board {
+  owner: SignedUpUser
+  /** 같은 프로젝트의 **에디터**. 편집을 낼 수 있다. */
+  editor: SignedUpUser
+  /** 같은 프로젝트의 **뷰어**. §10이 편집을 막는다. */
+  viewer: SignedUpUser
+  project: CreatedProject
+  page: CreatedPage
+  /** **다른** 프로젝트. owner가 그쪽에서도 owner다 — 막는 것은 역할이 아니라 룸 경계다. */
+  other: CreatedProject
+  otherPage: CreatedPage
+}
+
+async function board(ctx: RealApiContext): Promise<Board> {
+  const owner = await signup(ctx)
+  const editor = await signup(ctx)
+  const viewer = await signup(ctx)
+
+  const project = await createProject(ctx, owner.cookie)
+  await addMember(ctx, project.id, editor.user.id, 'editor')
+  await addMember(ctx, project.id, viewer.user.id, 'viewer')
+  const menu = await createMenuNode(ctx, owner.cookie, project.id)
+  const page = await createPage(ctx, owner.cookie, project.id, menu.id, { title: '고칠 페이지' })
+
+  const other = await createProject(ctx, owner.cookie)
+  const otherMenu = await createMenuNode(ctx, owner.cookie, other.id)
+  const otherPage = await createPage(ctx, owner.cookie, other.id, otherMenu.id, { title: '남의 프로젝트 페이지' })
+
+  return {
+    owner,
+    editor,
+    viewer,
+    project,
+    page,
+    other,
+    otherPage,
+  }
+}
+
+async function headSeqOf(pageId: string): Promise<number> {
+  const row = await db.selectFrom('pages').select('head_seq').where('id', '=', pageId).executeTakeFirstOrThrow()
+  return Number(row.head_seq)
+}
+
+function addNode(id: string): PatchOp[] {
+  return [{ op: 'add', path: '/root/children/-', value: { id, type: 'Text', props: {} } }]
+}
+
+/** `patch` 프레임 하나를 보낸다. */
+function sendPatch(
+  probe: WsProbe,
+  input: { pageId: string; baseSeq: number; ops: PatchOp[]; clientOpId: string },
+): void {
+  probe.send(JSON.stringify({ type: 'patch', ...input }))
+}
+
+describe('patch 프레임에는 editor 이상이 필요하다 (D1 · §10)', () => {
+  it('에디터가 내면 통과한다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: await headSeqOf(fx.page.id),
+        ops: addNode('n_by_editor'),
+        clientOpId: 'op_editor',
+      })
+
+      const ack = await probe.waitFor('patch-ack')
+      expect(ack.clientOpId).toBe('op_editor')
+      expect(ack.seq).toBe(await headSeqOf(fx.page.id))
+    })
+  })
+
+  it('뷰어가 내면 거절된다 — 그리고 문서가 안 바뀐다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.viewer.cookie.wb_session))
+      const before = await headSeqOf(fx.page.id)
+
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: before,
+        ops: addNode('n_by_viewer'),
+        clientOpId: 'op_viewer',
+      })
+
+      const error = await probe.waitFor('patch-error')
+      expect(error.status).toBe(403)
+      expect(error.clientOpId).toBe('op_viewer')
+      expect(await headSeqOf(fx.page.id)).toBe(before)
+    })
+  })
+
+  /**
+   * **거절과 회수를 가른다.** 뷰어가 편집을 낸 것은 *"권한이 회수됐다"*가 아니다 — 그 연결은
+   * 남의 편집을 계속 받아야 한다(`ws/broadcast.ts`의 `MIN_ROLE_TO_RECEIVE`). 닫아 버리면
+   * 조회 전용 사용자가 편집 버튼을 한 번 잘못 누른 것으로 실시간을 잃는다.
+   */
+  it('거절된 뷰어의 연결은 살아 있다 — 회수가 아니다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.viewer.cookie.wb_session))
+
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: await headSeqOf(fx.page.id),
+        ops: addNode('n_by_viewer'),
+        clientOpId: 'op_viewer',
+      })
+      await probe.waitFor('patch-error')
+      probe.send(JSON.stringify({ type: 'ping' }))
+
+      await probe.waitFor('pong')
+      expect(probe.closeInfo).toBeNull()
+    })
+  })
+
+  /**
+   * **음성 대조.** 뷰어가 `ping`은 그대로 낼 수 있다 — 위 거절이 *"뷰어는 아무 프레임도 못
+   * 낸다"*로 통과하지 않는다.
+   */
+  it('뷰어의 ping은 그대로 통과한다 — 음성 대조', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.viewer.cookie.wb_session))
+
+      probe.send(JSON.stringify({ type: 'ping' }))
+
+      await probe.waitFor('pong')
+    })
+  })
+})
+
+describe('ack가 되돌려 주는 것 (D4 · §7.1)', () => {
+  it('undo가 필요로 하는 것을 전부 싣는다 — REST 응답과 같은 값이다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const baseSeq = await headSeqOf(fx.page.id)
+
+      sendPatch(probe, { pageId: fx.page.id, baseSeq, ops: addNode('n_acked'), clientOpId: 'op_1' })
+
+      const ack = await probe.waitFor('patch-ack')
+      expect(ack.seq).toBe(baseSeq + 1)
+      expect(ack.revisionId).toMatch(/./)
+      // 서버가 만든 역패치다(§7.1) — 클라이언트가 계산하지 않는다.
+      expect(ack.inverse).toEqual([{ op: 'remove', path: '/root/children/0' }])
+      expect(ack.warnings).toEqual([])
+    })
+  })
+
+  /**
+   * **경고를 싣는다**(P4a-3). `variant`를 받지 않는 컴포넌트에 `variant`를 얹으면
+   * `ignored-variant`가 나오고 저장은 통과한다. 한쪽 경로만 나르면 사용자가 보는 것이
+   * **접속 방식에 따라 갈린다.**
+   */
+  it('경고를 싣는다 — REST 응답만 나르면 접속 방식에 따라 갈린다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: await headSeqOf(fx.page.id),
+        ops: [
+          {
+            op: 'add',
+            path: '/root/children/-',
+            value: { id: 'n_warned', type: 'Text', variant: 'caption', props: { role: 'h2' } },
+          },
+        ],
+        clientOpId: 'op_warned',
+      })
+
+      const ack = await probe.waitFor('patch-ack')
+      expect(ack.warnings.map((issue) => issue.code)).toEqual(['ignored-variant'])
+    })
+  })
+
+  /**
+   * **`clientOpId` 여럿.** 하나짜리로 재면 ack가 어느 편집의 것인지 안 봐도 통과한다 —
+   * 되돌려 주는 값을 프레임에서 고정으로 만들어도 안 죽는다.
+   */
+  it('ack가 낸 편집마다 자기 clientOpId를 되돌려 준다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const baseSeq = await headSeqOf(fx.page.id)
+
+      // **한 번에 하나씩 보낸다.** 서버는 `baseSeq`가 `head_seq`와 정확히 같을 때만 받으므로
+      // (파이프라인 3단계) 앞의 ack를 받아야 다음 `baseSeq`가 정해진다.
+      sendPatch(probe, { pageId: fx.page.id, baseSeq, ops: addNode('n_a'), clientOpId: 'op_a' })
+      await probe.waitFor('patch-ack')
+      sendPatch(probe, { pageId: fx.page.id, baseSeq: baseSeq + 1, ops: addNode('n_b'), clientOpId: 'op_b' })
+      await probe.waitForCount('patch-ack', 2)
+      sendPatch(probe, { pageId: fx.page.id, baseSeq: baseSeq + 2, ops: addNode('n_c'), clientOpId: 'op_c' })
+
+      const acks = await probe.waitForCount('patch-ack', 3)
+      expect(acks.map((frame) => frame.clientOpId)).toEqual(['op_a', 'op_b', 'op_c'])
+      expect(acks.map((frame) => frame.seq)).toEqual([baseSeq + 1, baseSeq + 2, baseSeq + 3])
+    })
+  })
+})
+
+describe('실패는 봉투로 되돌아온다 — REST와 같은 표다', () => {
+  it('baseSeq가 어긋나면 409다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+
+      sendPatch(probe, { pageId: fx.page.id, baseSeq: 99, ops: addNode('n_stale'), clientOpId: 'op_stale' })
+
+      const error = await probe.waitFor('patch-error')
+      expect(error.status).toBe(409)
+      expect(error.code).toBe('conflict')
+      expect(error.clientOpId).toBe('op_stale')
+    })
+  })
+
+  it('얹을 수 없는 ops도 409다 — 본문은 계약을 지켰다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: await headSeqOf(fx.page.id),
+        ops: [{ op: 'replace', path: '/root/children/9/type', value: 'Text' }],
+        clientOpId: 'op_bad_path',
+      })
+
+      const error = await probe.waitFor('patch-error')
+      expect(error.status).toBe(409)
+    })
+  })
+
+  it('카탈로그를 어기면 422이고 issues가 실린다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: await headSeqOf(fx.page.id),
+        ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: '없는타입', props: {} } }],
+        clientOpId: 'op_invalid',
+      })
+
+      const error = await probe.waitFor('patch-error')
+      expect(error.status).toBe(422)
+      expect(error.issues.map((issue) => issue.code)).toContain('unknown-type')
+    })
+  })
+
+  /**
+   * **§10의 경계가 WS 편집 경로로 새지 않는다.** owner는 저쪽 프로젝트에서도 owner이므로
+   * 막는 것은 역할이 아니라 **연결이 어느 룸에 있는가**다 — `applyEdit`이 받는 `projectId`가
+   * 프레임이 아니라 연결에서 온다는 것이 이 케이스가 재는 것이다.
+   */
+  it('다른 프로젝트의 페이지는 이 연결로 못 고친다 — 404다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const before = await headSeqOf(fx.otherPage.id)
+
+      sendPatch(probe, {
+        pageId: fx.otherPage.id,
+        baseSeq: before,
+        ops: addNode('n_crossed'),
+        clientOpId: 'op_cross',
+      })
+
+      const error = await probe.waitFor('patch-error')
+      expect(error.status).toBe(404)
+      expect(await headSeqOf(fx.otherPage.id)).toBe(before)
+    })
+  })
+
+  /**
+   * **음성 대조.** 같은 owner가 **저쪽 룸에 붙어서** 내면 통과한다 — 위 404가
+   * *"owner라도 못 고친다"*로 통과하지 않는다.
+   */
+  it('그 프로젝트 룸에 붙으면 같은 사람이 같은 페이지를 고친다 — 음성 대조', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.other.id, fx.owner.cookie.wb_session))
+
+      sendPatch(probe, {
+        pageId: fx.otherPage.id,
+        baseSeq: await headSeqOf(fx.otherPage.id),
+        ops: addNode('n_crossed'),
+        clientOpId: 'op_cross',
+      })
+
+      await probe.waitFor('patch-ack')
+    })
+  })
+})
+
+describe('WS로 들어온 편집도 룸에 나간다 (D5)', () => {
+  it('남은 page-changed를 받고 낸 사람은 안 받는다 — 연결이 곧 발신자다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const author = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+
+      await sendBroadcastPatch(author, fx)
+
+      const frame = await watcher.waitFor('page-changed')
+      expect(frame.pageId).toBe(fx.page.id)
+      expect(frame.ops).toEqual(addNode('n_broadcast'))
+      // 낸 사람은 ack만 받는다 — 자기 ops가 되돌아오면 낙관적으로 이미 얹은 것을 또 얹는다.
+      await author.waitFor('patch-ack')
+      expect(author.received.filter((received) => received.type === 'page-changed')).toEqual([])
+    })
+  })
+
+  /**
+   * **음성 대조.** 낸 사람이 자기 프레임을 안 받는 것이 *"룸에 아무것도 안 나간다"*가
+   * 아니라는 것을 보인다 — 두 번째 연결이 낸 편집은 첫 번째가 받는다.
+   */
+  it('상대가 내면 이쪽이 받는다 — 음성 대조', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const author = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+
+      await sendBroadcastPatch(watcher, fx)
+
+      const frame = await author.waitFor('page-changed')
+      expect(frame.actor.label).toBe(fx.editor.user.name)
+    })
+  })
+
+  it('ack는 낸 사람에게만 간다 — 룸에 흘리지 않는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const author = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+
+      await sendBroadcastPatch(author, fx)
+      await author.waitFor('patch-ack')
+
+      await watcher.quiet()
+      expect(watcher.received.filter((received) => received.type === 'patch-ack')).toEqual([])
+    })
+  })
+})
+
+/** 위 셋이 같은 편집을 낸다 — 재는 것이 프레임 내용이 아니라 **누가 받는가**이기 때문이다. */
+async function sendBroadcastPatch(probe: WsProbe, fx: Board): Promise<void> {
+  sendPatch(probe, {
+    pageId: fx.page.id,
+    baseSeq: await headSeqOf(fx.page.id),
+    ops: addNode('n_broadcast'),
+    clientOpId: 'op_broadcast',
+  })
+}

@@ -231,6 +231,29 @@ const CALL_SITES: CallSite[] = [
     },
   },
   {
+    file: 'ws/patch.ts',
+    label: 'patch 프레임 — WS로 들어온 편집',
+    broadcasts: true,
+    why: '§7.1의 본줄기가 WS로 들어오는 자리다(P3-2 D5). **REST와 같은 `applyEdit`·같은 `notifyPageChanged`를 부른다** — 다른 것은 발신자를 헤더가 아니라 **연결 자체**로 아는 것뿐이다(이월 §2.1)',
+    drive: async (ctx, fx) => {
+      // **인구조사가 예고한 자리다.** 앞 판이 `routes`·`services`만 훑어 `src/ws/`의
+      // 호출자를 못 봤고, 리뷰가 그것을 실증하며 범위를 `src/` 전체로 넓혔다.
+      const author = track(await joinRoom(ctx.port, fx.projectId, fx.owner.cookie.wb_session))
+      const row = await db.selectFrom('pages').select('head_seq').where('id', '=', fx.pageId).executeTakeFirstOrThrow()
+      author.send(
+        JSON.stringify({
+          type: 'patch',
+          pageId: fx.pageId,
+          baseSeq: Number(row.head_seq),
+          ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_ws_patched', type: 'Text', props: {} } }],
+          clientOpId: 'op_census',
+        }),
+      )
+      const ack = await author.waitFor('patch-ack')
+      if (ack.clientOpId !== 'op_census') throw new Error(`ack가 엉뚱한 편집의 것이다: ${JSON.stringify(ack)}`)
+    },
+  },
+  {
     file: 'services/restore.ts',
     label: '복원이 페이지 문서를 되돌리는 자리',
     broadcasts: false,

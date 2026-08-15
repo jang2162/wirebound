@@ -96,6 +96,17 @@ export const PatchOpBody = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('move'), path: PatchPath, from: PatchPath }),
 ])
 
+/**
+ * 클라이언트의 pending 큐 식별자.
+ *
+ * **제약을 따로 뽑은 것은 두 진입점이 이 필드의 **필수 여부**만 다르기 때문이다**(P3-2 D2).
+ * REST에서는 없어도 되고(서버가 응답에 그대로 되돌려 줄 뿐이다), WebSocket에서는 **반드시
+ * 있어야 한다** — 그쪽의 ack는 응답이 아니라 프레임이라 짝을 지을 것이 이 값뿐이다.
+ * 길이 제한까지 두 벌로 적으면 한쪽만 늘어나고, 그러면 REST로는 되는데 WS로는 안 되는
+ * 입력이 생긴다.
+ */
+export const ClientOpId = z.string().min(1).max(64)
+
 /** `PATCH .../ops`의 본문. */
 export const OpsBody = z.strictObject({
   /** 클라이언트가 아는 마지막 seq. 새 페이지(이력 없음)는 0이다. */
@@ -111,8 +122,8 @@ export const OpsBody = z.strictObject({
    */
   ops: z.array(PatchOpBody).max(200, 'ops는 200개 이하여야 합니다'),
   /**
-   * 클라이언트의 pending 큐 식별자. 서버는 저장하지 않고 응답에 그대로 되돌려
-   * 준다 — 멱등 키가 아니다(설계 결정 D4). 중복 적용은 baseSeq가 막는다.
+   * 서버는 저장하지 않고 응답에 그대로 되돌려 준다 — 멱등 키가 아니다(설계 결정 D4).
+   * 중복 적용은 baseSeq가 막는다. **여기서는 선택이다**(위 `ClientOpId` 참고).
    */
-  clientOpId: z.string().min(1).max(64).optional(),
+  clientOpId: ClientOpId.optional(),
 })
