@@ -83,6 +83,17 @@ export class UnsupportedDocumentError extends Error {
 /** 번들에 실린 페이지 하나. **파일 경로를 담지 않는다** — 아래 `brokenLinks` 주석 참고. */
 export interface ExportedPageSummary {
   id: string
+  /**
+   * **번들이 이 페이지를 부르는 이름**(`TargetedPage.bundleTitle` — 조상 메뉴가 붙어 있다).
+   *
+   * 맨 제목이 아니다. 맨 제목이면 서로 다른 메뉴의 같은 제목이 화면에서 `목록`·`목록`으로
+   * 보이는데, **그것이 이 슬라이스가 번들의 좌측 트리에서 고친 바로 그 결함이다**
+   * (보고서 §4.4). 같은 결함을 화면에 남겨 두면 *"이 응답을 읽는 사람"*이 겪는다.
+   *
+   * **그리고 이 응답 안에서 한 페이지는 한 이름으로 불린다.** `errors[].title`은
+   * `exportBundle`이 낸 것이라 늘 이 이름이었다 — 여기가 맨 제목이면 같은 패널의 위아래가
+   * 같은 페이지를 다르게 부른다.
+   */
   title: string
   /** 이 페이지를 가리키는 §8.1의 타겟. 저작 화면이 손으로 적는 문자열이다. */
   target: string
@@ -92,7 +103,7 @@ export interface ExportedPageSummary {
 export interface BrokenLink {
   /** 문서에 적힌 타겟 문자열 그대로. */
   target: string
-  /** 그것을 겨눈 페이지들의 제목. 번들 순서다. */
+  /** 그것을 겨눈 페이지들의 **번들 이름**(`ExportedPageSummary.title`과 같은 자). 번들 순서다. */
   from: string[]
   /** `missing`이면 그 타겟을 든 페이지가 없고, `ambiguous`면 둘 이상이다. */
   reason: 'missing' | 'ambiguous'
@@ -134,8 +145,12 @@ export async function exportProjectBundle(db: DbHandle, projectId: string): Prom
   /**
    * **`buildMenuTree`가 버린 페이지가 있으면 여기서 멈춘다.** 그 함수는 고아 노드와
    * 순환에 갇힌 노드를 조용히 버리는데(제 머리말이 그렇게 적혀 있다), 버려진 페이지는
-   * 번들에서 **말없이 빠진다.** FK가 그 상태를 막고 있으므로 오늘 이 갈래는 닿지
-   * 않지만, 닿으면 사람이 봐야 한다 — 조용히 빠지는 것이 이 산출물에서 가장 나쁜 실패다.
+   * 번들에서 **말없이 빠진다.** 조용히 빠지는 것이 이 산출물에서 가장 나쁜 실패다.
+   *
+   * **FK가 이 상태를 막지 않는다**(P8-4 리뷰가 재서 보였다). `pages_menu_node_id_fkey`는
+   * `menu_nodes(id)`만 참조하고 **프로젝트를 안 본다** — 프로젝트 A의 페이지가 프로젝트 B의
+   * 메뉴를 가리켜도 FK는 통과하고, `listMenuRows(A)`가 그 메뉴를 안 내므로 페이지가 고아가
+   * 된다. 그러므로 이 갈래는 *"오늘 닿지 않는 것"*이 아니라 **닿는 것**이고 케이스가 든다.
    */
   if (ordered.length !== pageRecords.length) {
     throw new Error(
@@ -166,7 +181,10 @@ export async function exportProjectBundle(db: DbHandle, projectId: string): Prom
   return {
     files,
     errors,
-    pages: ordered.map((page) => ({ id: page.id, title: page.title, target: page.target })),
+    // **`bundleTitle`이다.** 맨 제목을 내면 화면의 페이지 목록이 `목록`·`목록`으로 보인다 —
+    // 번들의 좌측 트리에서 고친 것과 같은 결함이고, 여기는 `errors[].title`(늘 번들 이름)과
+    // 같은 응답이라 두 벌이 되기까지 한다.
+    pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
     duplicateTargets: duplicateTargets(ordered),
     brokenLinks: brokenLinks(ordered, documentById),
     themeId,
@@ -190,7 +208,8 @@ function documentsByPageId(
     try {
       documents.set(page.id, migrateDocument(record.schema))
     } catch (error) {
-      throw new UnsupportedDocumentError(page.title, error instanceof Error ? error.message : String(error))
+      // 이름은 **번들 이름**이다 — `errors[].title`·미리보기의 `pages[].title`과 한 벌이다.
+      throw new UnsupportedDocumentError(page.bundleTitle, error instanceof Error ? error.message : String(error))
     }
   }
   return documents
@@ -236,7 +255,7 @@ function resolvedTheme(theme: Parameters<typeof resolveTheme>[0] | null): Resolv
  * 말하려면 여기서 같은 셈을 한다. **판정 규칙은 한 문장이고 `exportBundle`의 것과 같다:**
  * 그 타겟을 든 페이지가 **정확히 하나**여야 링크가 생긴다.
  *
- * **파일 경로를 말하지 않고 페이지 제목으로 말한다.** `errors[].path`가 파일 이름이고
+ * **파일 경로를 말하지 않고 페이지의 번들 이름으로 말한다.** `errors[].path`가 파일 이름이고
  * `index.html`이 담는 첫 페이지의 오류에도 `pages/….html`이 붙는데(P8-3 이월 §1),
  * 아직 압축을 풀지도 않은 사람에게 파일 이름은 아무것도 짚어 주지 못한다.
  *
@@ -263,7 +282,7 @@ function brokenLinks(
         from: [],
         reason: count === 0 ? ('missing' as const) : ('ambiguous' as const),
       }
-      if (!link.from.includes(page.title)) link.from.push(page.title)
+      if (!link.from.includes(page.bundleTitle)) link.from.push(page.bundleTitle)
       found.set(target, link)
     }
   }

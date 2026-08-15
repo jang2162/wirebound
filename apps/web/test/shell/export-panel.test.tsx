@@ -20,10 +20,15 @@ import { ApiError } from '../../src/api/client'
 import type { ExportPreview } from '../../src/api/types'
 import { PROJECT_ID, openPage, pageDoc } from '../editor-harness'
 
+/**
+ * **`title`은 서버가 조립한 번들 이름이다**(조상 메뉴가 붙어 있다 — P8-4 리뷰 발견 ①③).
+ * 화면은 그것을 지어내지도 자르지도 않는다. 픽스처도 그 모양으로 둔다 — 맨 제목으로 두면
+ * 케이스가 *"화면이 조상을 붙인다"*로 읽힌다.
+ */
 const 깨끗한: ExportPreview = {
   pages: [
-    { id: 'pg-1', title: '회원 목록', target: 'page:관리자/회원/목록' },
-    { id: 'pg-2', title: '회원 상세', target: 'page:관리자/회원/상세' },
+    { id: 'pg-1', title: '관리자 회원 목록', target: 'page:관리자/회원/목록' },
+    { id: 'pg-2', title: '관리자 회원 상세', target: 'page:관리자/회원/상세' },
   ],
   duplicateTargets: [],
   brokenLinks: [],
@@ -34,17 +39,21 @@ const 깨끗한: ExportPreview = {
 
 const 어긋난: ExportPreview = {
   pages: [
-    { id: 'pg-1', title: '회원 목록', target: 'page:관리자/회원/목록' },
-    { id: 'pg-2', title: '회원 상세', target: 'page:관리자/회원/상세' },
-    { id: 'pg-3', title: '회원 상세', target: 'page:관리자/회원/상세' },
+    { id: 'pg-1', title: '관리자 회원 목록', target: 'page:관리자/회원/목록' },
+    { id: 'pg-2', title: '관리자 회원 상세', target: 'page:관리자/회원/상세' },
+    { id: 'pg-3', title: '관리자 회원 상세', target: 'page:관리자/회원/상세' },
   ],
   duplicateTargets: ['page:관리자/회원/상세'],
   brokenLinks: [
-    { target: 'page:관리자/회원/등록', from: ['회원 목록'], reason: 'missing' },
-    { target: 'page:관리자/회원/상세', from: ['회원 목록'], reason: 'ambiguous' },
+    { target: 'page:관리자/회원/등록', from: ['관리자 회원 목록'], reason: 'missing' },
+    { target: 'page:관리자/회원/상세', from: ['관리자 회원 목록'], reason: 'ambiguous' },
   ],
   errors: [
-    { path: 'pages/회원-목록.html', title: '회원 목록', error: { nodeId: 'n-x', message: '알 수 없는 타입: Blorb' } },
+    {
+      path: 'pages/관리자-회원-목록.html',
+      title: '관리자 회원 목록',
+      error: { nodeId: 'n-x', message: '알 수 없는 타입: Blorb' },
+    },
   ],
   themeId: null,
   fileName: 'wirebound-export-admin-console.zip',
@@ -116,11 +125,11 @@ describe('내보내기 화면', () => {
       const panel = await open(api(어긋난))
       const 구역 = await within(panel).findByRole('region', { name: '그리지 못한 노드' })
 
-      expect(within(구역).getByText(/회원 목록/)).toBeTruthy()
+      expect(within(구역).getByText(/관리자 회원 목록/)).toBeTruthy()
       expect(within(구역).getByText(/알 수 없는 타입: Blorb/)).toBeTruthy()
       // **파일 경로를 짚지 않는다** — 아직 압축을 풀지 않은 사람에게 뜻이 없고,
       // `index.html`이 담는 첫 페이지의 오류에도 `pages/….html`이 붙는다(P8-3 이월 §1).
-      expect(구역.textContent).not.toContain('pages/회원-목록.html')
+      expect(구역.textContent).not.toContain('pages/관리자-회원-목록.html')
     })
 
     it('겹친 경로를 말한다', async () => {

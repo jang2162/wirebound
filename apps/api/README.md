@@ -193,6 +193,11 @@ wirebound-export-<슬러그>/
 제목이 좌측 트리에서 똑같은 두 줄이 된다** — 스모크에서 실측했다. 이름을 만드는 마디는
 상호작용 타겟을 만드는 마디와 **같은 함수**에서 나온다(`services/page-target.ts`).
 
+**미리보기 응답도 같은 이름으로 부른다**(`pages[].title` · `errors[].title` ·
+`brokenLinks[].from`). 한 페이지를 두 이름으로 부르면 같은 화면의 위아래가 갈린다.
+**다만 같은 메뉴 아래 같은 제목이면 조상도 같아 이름이 그대로 겹친다** — 그 상태는
+`duplicateTargets`가 함께 낸다(타겟도 겹치기 때문이다).
+
 **출처는 라이브 프로젝트다**(P8-4 D1). 페이지·문서는 `pages` 표의 지금 값, 코멘트는
 `comments` 표의 살아 있는 값, 테마는 프로젝트가 지금 쓰는 것(`GET .../theme`와 **같은
 사슬**)이다. 스냅샷의 *"그때"*를 내보내는 경로는 아직 없다.
@@ -208,9 +213,9 @@ wirebound-export-<슬러그>/
 
 | 키 | 무엇 |
 |---|---|
-| `pages` | `{ id, title, target }[]` — 번들에 실릴 순서다. **`target`이 §8.1의 페이지 경로**이고, 저작 화면의 `navigate`·`openModal`에 그대로 적는 문자열이다 |
+| `pages` | `{ id, title, target }[]` — 번들에 실릴 순서다. **`title`은 조상 메뉴가 붙은 번들 이름**(맨 제목이 아니다 — 위 문단)이고, **`target`이 §8.1의 페이지 경로**로 저작 화면의 `navigate`·`openModal`에 그대로 적는 문자열이다 |
 | `duplicateTargets` | 둘 이상의 페이지가 든 타겟. **그 타겟을 겨눈 링크는 어디에도 안 생긴다** |
-| `brokenLinks` | `{ target, from, reason }[]` — 어느 페이지도 가리키지 못한 링크. `reason`은 `missing`(그 타겟을 든 페이지가 없다) 또는 `ambiguous`(둘 이상이다) |
+| `brokenLinks` | `{ target, from, reason }[]` — 어느 페이지도 가리키지 못한 링크. `from`은 그것을 겨눈 페이지들의 **번들 이름**이다. `reason`은 `missing`(그 타겟을 든 페이지가 없다) 또는 `ambiguous`(둘 이상이다) |
 | `errors` | `{ path, title, error }[]` — 그리지 못한 노드. **`title`이 어느 페이지인지 말한다** |
 | `themeId` | 번들이 실은 테마. `null`이면 구조 기본 CSS만으로 그려진 것이다 |
 | `fileName` | 내려받을 때 붙을 이름. **화면이 지어내지 않는다** |

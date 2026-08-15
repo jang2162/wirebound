@@ -60,6 +60,25 @@ interface Fixture {
   cookie: { wb_session: string }
   projectId: string
   slug: string
+  pageIds: Record<string, string>
+}
+
+/**
+ * **`errors`가 나는 상태를 만든다.** 정상 경로(`PUT .../schema`)는 모르는 컴포넌트를 422로
+ * 막으므로 편집 파이프라인을 우회해 `pages.schema`에 직접 심는다 — **카탈로그에서
+ * 컴포넌트가 빠지는 날 실제로 생기는 상태**다(P8-4 리뷰 발견 ④가 이 값을 재서 보였다).
+ */
+async function 그리지못할노드를심는다(ctx: TestContext, pageId: string, nodeId: string): Promise<void> {
+  await ctx.db
+    .updateTable('pages')
+    .set({
+      schema: JSON.stringify({
+        version: 1,
+        root: { id: 'n_broken_root', type: 'Page', children: [{ id: nodeId, type: '없는컴포넌트' }] },
+      }),
+    })
+    .where('id', '=', pageId)
+    .execute()
 }
 
 /** 메뉴 둘 · 페이지 셋. `상세`가 번들에 없는 타겟을 겨눈다. */
@@ -79,10 +98,19 @@ async function 설계서(ctx: TestContext, slug: string): Promise<Fixture> {
   await putSchema(ctx, cookie, project.id, 목록.id, doc('n_l', 'n_lb', `${slug} 목록`, 'page:관리자/회원/상세'))
   await putSchema(ctx, cookie, project.id, 상세.id, doc('n_s', 'n_sb', `${slug} 상세`, 'page:없는/것'))
 
-  return { cookie, projectId: project.id, slug }
+  return {
+    cookie,
+    projectId: project.id,
+    slug,
+    pageIds: { 대시보드: 대시보드.id, 목록: 목록.id, 상세: 상세.id },
+  }
 }
 
 describe('GET /:projectId/export/preview', () => {
+  /**
+   * **이름은 조상이 붙은 번들 이름이다**(리뷰 발견 ①③). 맨 제목이면 화면의 목록이
+   * `목록`·`목록`으로 보이고, 같은 응답의 `errors[].title`(늘 번들 이름)과도 갈린다.
+   */
   it('페이지마다 이름과 타겟을 낸다', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, 'one')
@@ -94,9 +122,9 @@ describe('GET /:projectId/export/preview', () => {
 
       expect(res.statusCode).toBe(200)
       expect(res.json().pages).toEqual([
-        { id: expect.any(String), title: '대시보드', target: 'page:관리자/대시보드' },
-        { id: expect.any(String), title: '목록', target: 'page:관리자/회원/목록' },
-        { id: expect.any(String), title: '상세', target: 'page:관리자/회원/상세' },
+        { id: expect.any(String), title: '관리자 대시보드', target: 'page:관리자/대시보드' },
+        { id: expect.any(String), title: '관리자 회원 목록', target: 'page:관리자/회원/목록' },
+        { id: expect.any(String), title: '관리자 회원 상세', target: 'page:관리자/회원/상세' },
       ])
     })
   })
@@ -111,7 +139,7 @@ describe('GET /:projectId/export/preview', () => {
       })
 
       expect(res.json().brokenLinks).toEqual([
-        { target: 'page:없는/것', reason: 'missing', from: ['상세'] },
+        { target: 'page:없는/것', reason: 'missing', from: ['관리자 회원 상세'] },
       ])
     })
   })
@@ -137,6 +165,35 @@ describe('GET /:projectId/export/preview', () => {
         cookies: fixture.cookie,
       })
       expect(res.json().errors).toEqual([])
+    })
+  })
+
+  /**
+   * **D6이 기대는 배선을 여기서 누른다**(리뷰 발견 ④). 위 케이스는 `errors`가 **비어 있는
+   * 것**만 재는데, 그것은 `errors`를 통째로 버리는 라우트도 만족한다 —
+   * *"내려받기 버튼이 조용히 성공하면 안 된다"*를 지키는 값이 이것이므로 **값이 실제로
+   * 흐르는 것**을 잰다. 화면 쪽 케이스는 미리보기를 스텁으로 넣으므로 그쪽도 이 배선을
+   * 안 지난다.
+   */
+  it('그리지 못한 노드가 있으면 그대로 흘려보낸다', async () => {
+    await withApi(async (ctx) => {
+      const fixture = await 설계서(ctx, 'one')
+      await 그리지못할노드를심는다(ctx, fixture.pageIds.목록!, 'n_gone')
+
+      const res = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${fixture.projectId}/export/preview`,
+        cookies: fixture.cookie,
+      })
+
+      expect(res.statusCode).toBe(200)
+      expect(res.json().errors).toHaveLength(1)
+      // 화면이 이 `title`로 *"어느 페이지인지"*를 말한다. 파일 경로가 아니다.
+      expect(res.json().errors[0].title).toBe('관리자 회원 목록')
+      expect(res.json().errors[0].error.nodeId).toBe('n_gone')
+      expect(res.json().errors[0].error.message).toContain('없는컴포넌트')
+      // 그래도 페이지 목록은 그대로 낸다 — 한 장이 깨져도 내보낼 수는 있다.
+      expect(res.json().pages).toHaveLength(3)
     })
   })
 
