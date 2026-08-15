@@ -135,6 +135,23 @@ const LIST_PAGE: PageDocument = {
   } as WbNode,
 }
 
+/** 어딘가로 가려는 페이지. 링크 갈래 셋을 재는 대조군의 재료다. */
+const GO_PAGE: PageDocument = {
+  version: 1,
+  root: {
+    id: 'n_root2',
+    type: 'Page',
+    children: [
+      {
+        id: 'n_go2',
+        type: 'Button',
+        props: { label: '간다' },
+        interactions: [{ on: 'click', actions: [{ type: 'navigate', target: 'page:같음' }] }],
+      },
+    ],
+  } as WbNode,
+}
+
 const DETAIL_PAGE: PageDocument = {
   version: 1,
   root: { id: 'n_detail', type: 'Page', children: [{ id: 'n_txt', type: 'Text', props: { content: '상세' } }] },
@@ -189,6 +206,22 @@ function press(nodeId: string, type = 'click'): void {
   const target = canvas().querySelector(`[data-wb-id="${nodeId}"]`)
   if (target === null) throw new Error(`누를 노드가 없습니다: ${nodeId}`)
   target.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }))
+}
+
+/** `window.location`을 갈아 끼워 이동을 잡는다. jsdom은 진짜 이동을 안 한다. */
+function stubLocation(moves: string[]): void {
+  Object.defineProperty(window, 'location', {
+    value: {
+      get href() {
+        return ''
+      },
+      set href(value: string) {
+        moves.push(value)
+      },
+    },
+    writable: true,
+    configurable: true,
+  })
 }
 
 function statusLines(): string[] {
@@ -480,25 +513,95 @@ describe('못 한 것을 조용히 넘기지 않는다 (D1·D6)', () => {
     expect(statusLines()).toEqual(['이 상태의 화면이 번들에 없습니다: n_list'])
   })
 
+  /**
+   * **같은 타겟을 든 페이지가 둘이면 조용히 첫 페이지로 가지 않는다**(리뷰 발견 D).
+   *
+   * D6이 거부한 *"제목으로 짐작하기"*보다 나쁜 갈래다 — 그쪽은 조용히 아무 데도 안 가는
+   * 것이고 이쪽은 **조용히 남의 페이지로 간다.** 그리고 *"없다"*와 같은 말을 하면 안 된다:
+   * 없으면 그 페이지를 함께 내보내야 하고, 둘 이상이면 타겟을 짓는 쪽이 겹치게 만든 것이다.
+   */
+  it('같은 타겟을 든 페이지가 둘이면 링크가 안 생기고 그 사실을 말한다', () => {
+    const twin = exportBundle({
+      pages: [
+        { title: '하나', document: DETAIL_PAGE, target: 'page:같음' },
+        { title: '둘', document: DETAIL_PAGE, target: 'page:같음' },
+        { title: '가는 쪽', document: GO_PAGE },
+      ],
+    })
+    const html = twin.files.find((file) => file.path === 'pages/가는-쪽.html')!.content
+    const parsed = new DOMParser().parseFromString(html, 'text/html')
+    document.head.innerHTML = parsed.head.innerHTML
+    document.body.innerHTML = parsed.body.innerHTML
+    const moves: string[] = []
+    stubLocation(moves)
+    new Function(twin.files.find((file) => file.path === 'assets/runtime.js')!.content)()
+    canvas()
+      .querySelector('[data-wb-id="n_go2"]')!
+      .dispatchEvent(new Event('click', { bubbles: true, cancelable: true }))
+    expect(moves).toEqual([])
+    expect(statusLines()).toEqual(['이 타겟을 가리키는 페이지가 번들에 둘 이상입니다: page:같음'])
+  })
+
+  /** 하나뿐이면 그대로 링크가 된다 — 위 케이스가 무엇과 갈리는지 못박는다. */
+  it('하나뿐이면 링크가 된다 — 대조군', () => {
+    const single = exportBundle({
+      pages: [
+        { title: '하나', document: DETAIL_PAGE, target: 'page:같음' },
+        { title: '가는 쪽', document: GO_PAGE },
+      ],
+    })
+    const html = single.files.find((file) => file.path === 'pages/가는-쪽.html')!.content
+    const parsed = new DOMParser().parseFromString(html, 'text/html')
+    document.head.innerHTML = parsed.head.innerHTML
+    document.body.innerHTML = parsed.body.innerHTML
+    const moves: string[] = []
+    stubLocation(moves)
+    new Function(single.files.find((file) => file.path === 'assets/runtime.js')!.content)()
+    canvas()
+      .querySelector('[data-wb-id="n_go2"]')!
+      .dispatchEvent(new Event('click', { bubbles: true, cancelable: true }))
+    expect(moves).toEqual(['%ED%95%98%EB%82%98.html'])
+    expect(statusLines()).toEqual([])
+  })
+
   /** **링크가 있으면 그리로 간다**(D6). 실제 이동은 실브라우저 프로브도 봤다. */
   it('페이지가 번들에 있으면 그 파일로 옮긴다', () => {
     load('pages/회원-목록.html')
     const moves: string[] = []
-    Object.defineProperty(window, 'location', {
-      value: {
-        get href() {
-          return ''
-        },
-        set href(value: string) {
-          moves.push(value)
-        },
-      },
-      writable: true,
-      configurable: true,
-    })
+    stubLocation(moves)
     run()
     press('n_go')
     expect(moves).toEqual(['%ED%9A%8C%EC%9B%90-%EC%83%81%EC%84%B8.html'])
+    expect(statusLines()).toEqual([])
+  })
+
+  /**
+   * **알림은 *"마지막 조작이 만든 것"*이다**(리뷰 발견 A).
+   *
+   * 앞 판은 규칙이 없는 자리를 눌렀을 때 **아무 말도 안 하고 빠져나가서** 앞 조작의 줄이
+   * 그대로 남았다. 그러면 읽는 사람이 **방금 누른 것이 실패한 줄 안다.**
+   *
+   * **캔버스가 이미 같은 갈래를 닫아 두었다**(`canvas.tsx`의 `beginGesture`). 케이스가
+   * 둘 있었는데 **조합이 빠져 있었다** — *"깨끗한 상태에서 규칙 없는 노드"*와 *"깨진 것
+   * 뒤에 규칙 **있는** 노드"*만 있었고 *"깨진 것 뒤에 규칙 **없는** 노드"*가 없었다.
+   */
+  it('깨진 규칙을 누른 뒤 규칙 없는 노드를 누르면 줄이 비워진다', () => {
+    load('pages/회원-목록.html')
+    run()
+    press('n_broken')
+    expect(statusLines()).toHaveLength(1)
+    press('n_list')
+    expect(statusLines()).toEqual([])
+    expect(document.querySelector('.wb-export-status')?.hasAttribute('hidden')).toBe(true)
+  })
+
+  /** 목업의 빈 자리(노드가 아닌 곳)를 눌러도 같다. */
+  it('캔버스의 빈 자리를 눌러도 줄이 비워진다', () => {
+    load('pages/회원-목록.html')
+    run()
+    press('n_broken')
+    expect(statusLines()).toHaveLength(1)
+    canvas().dispatchEvent(new Event('click', { bubbles: true, cancelable: true }))
     expect(statusLines()).toEqual([])
   })
 

@@ -37,7 +37,7 @@ beforeAll(() => {
   installStructures()
 })
 
-const NO_HREFS = new Map<string, string>()
+const NO_HREFS = new Map<string, string | null>()
 
 function page(interactions: Record<string, Interaction[]>): PageDocument {
   return {
@@ -55,7 +55,7 @@ function page(interactions: Record<string, Interaction[]>): PageDocument {
   }
 }
 
-function plan(document: PageDocument, hrefs: ReadonlyMap<string, string> = NO_HREFS) {
+function plan(document: PageDocument, hrefs: ReadonlyMap<string, string | null> = NO_HREFS) {
   return buildRuntimePlan({ page: document, theme: null, hrefs, baseErrors: [] })
 }
 
@@ -288,9 +288,59 @@ describe('계획이 무엇을 담나 (D1)', () => {
       new Map([['page:회원/상세', '회원-상세.html']]),
     )
     expect(built.events[0]?.requests).toEqual([
-      { type: 'navigate', target: 'page:회원/상세', href: '회원-상세.html' },
-      { type: 'openModal', target: 'page:회원/등록', href: null },
+      { type: 'navigate', target: 'page:회원/상세', href: '회원-상세.html', problem: null },
+      {
+        type: 'openModal',
+        target: 'page:회원/등록',
+        href: null,
+        problem: '이 번들에 없는 페이지입니다: page:회원/등록',
+      },
     ])
+  })
+
+  /**
+   * **못 가는 이유가 둘이고 문장이 갈린다**(리뷰 발견 D). 없는 것과 둘 이상인 것은 읽는
+   * 사람이 할 일이 다르다 — 없으면 그 페이지를 함께 내보내야 하고, 둘 이상이면 타겟을
+   * 짓는 쪽이 겹치게 만든 것이다. **판정도 문장도 내보내기가 짓는다**(D1).
+   */
+  it('타겟을 가진 페이지가 둘 이상이면 링크가 없고 다른 말을 한다', () => {
+    const { plan: built } = plan(
+      page({
+        n_btn: [{ on: 'click', actions: [{ type: 'navigate', target: 'page:겹침' }] }],
+      }),
+      new Map([['page:겹침', null]]),
+    )
+    expect(built.events[0]?.requests).toEqual([
+      {
+        type: 'navigate',
+        target: 'page:겹침',
+        href: null,
+        problem: '이 타겟을 가리키는 페이지가 번들에 둘 이상입니다: page:겹침',
+      },
+    ])
+  })
+
+  /** **`href`가 없으면 이유가 반드시 있다.** 둘 다 비면 화면이 조용해진다. */
+  it('링크가 없는 요청은 반드시 이유를 든다', () => {
+    const { plan: built } = plan(
+      page({
+        n_btn: [
+          {
+            on: 'click',
+            actions: [
+              { type: 'navigate', target: 'page:없음' },
+              { type: 'openModal', target: 'page:겹침' },
+            ],
+          },
+        ],
+      }),
+      new Map([['page:겹침', null]]),
+    )
+    const requests = built.events[0]?.requests ?? []
+    expect(requests).toHaveLength(2)
+    for (const request of requests) {
+      expect(request.href === null ? request.problem !== null : request.problem === null).toBe(true)
+    }
   })
 
   it('규칙이 없는 노드는 항목을 만들지 않는다', () => {

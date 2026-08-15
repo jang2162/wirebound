@@ -101,13 +101,17 @@ export interface RuntimePlanInput {
   page: PageDocument
   theme: ResolvedTheme | null
   /**
-   * `navigate`·`openModal`의 타겟 → 그 페이지로 가는 상대 링크(D6).
+   * `navigate`·`openModal`의 타겟 → 그 페이지의 번들 안 경로(D6).
    *
    * **번들이 스스로 알 수 없다.** 타겟은 `"page:관리자/회원/상세"`처럼 **페이지 경로**이고
    * (P5-2 재라 #1이 그 형식을 강제하지 않기로 판정했다) 번들 입력이 드는 것은 제목뿐이다.
    * 그래서 호출자가 짝을 준다 — `exportBundle`은 `BundlePage.target`에서 만든다.
+   *
+   * **값이 `null`인 항목은 *"그 타겟을 가진 페이지가 둘 이상"*이다.** 없는 것과 갈라 두는
+   * 이유는 읽는 사람이 할 일이 다르기 때문이다 — 없으면 그 페이지를 함께 내보내야 하고,
+   * 둘 이상이면 **타겟을 짓는 쪽이 겹치게 만든 것**이다.
    */
-  hrefs: ReadonlyMap<string, string>
+  hrefs: ReadonlyMap<string, string | null>
   /**
    * 본 판을 그릴 때 이미 난 오류. **미리 그린 판의 것과 견주려고 받는다** — 같은 노드를
    * 두 번 세면 화면이 문제가 둘인 줄 안다.
@@ -137,6 +141,38 @@ export function stateKey(record: RuntimeRecord): string {
   const keys = Object.keys(record).filter((key) => key !== VISIBLE_KEY)
   keys.sort()
   return keys.length === 0 ? '' : JSON.stringify(keys.map((key) => [key, record[key]]))
+}
+
+/**
+ * 페이지 액션 하나를 링크로 푼다(D6). **문장도 여기서 짓는다**(D1).
+ *
+ * 갈래가 셋이고 **셋이 서로 다른 일을 뜻한다:**
+ *
+ * | 갈래 | 무엇을 하나 |
+ * |---|---|
+ * | 그 타겟을 가진 페이지가 **하나** | 링크가 된다 |
+ * | **없다** | 그 페이지를 함께 내보내야 한다 |
+ * | **둘 이상** | 타겟을 짓는 쪽이 겹치게 만들었다 |
+ *
+ * **셋째를 첫째로 접으면 조용히 엉뚱한 페이지로 간다.** 앞 판이 `!targets.has(...)`로 먼저
+ * 온 것만 담아 그 상태였다(리뷰 발견 D). D6이 거부한 *"제목으로 짐작하기"*보다 나쁘다 —
+ * 그쪽은 조용히 아무 데도 안 가는 것이고 이쪽은 **조용히 남의 페이지로 간다.**
+ */
+function resolveRequest(
+  hrefs: ReadonlyMap<string, string | null>,
+  type: string,
+  target: string,
+): RuntimeRequest {
+  const found = hrefs.get(target)
+  if (typeof found === 'string') return { type, target, href: found, problem: null }
+  return {
+    type,
+    target,
+    href: null,
+    problem: hrefs.has(target)
+      ? `이 타겟을 가리키는 페이지가 번들에 둘 이상입니다: ${target}`
+      : `이 번들에 없는 페이지입니다: ${target}`,
+  }
 }
 
 /** 겹layer 기록에서 `visible`을 뺀 것. 빈 것이면 그릴 판이 없다. */
@@ -215,11 +251,7 @@ export function buildRuntimePlan(input: RuntimePlanInput): RuntimePlanResult {
           if (interaction?.on === trigger) rules.push(index)
         }
         for (const request of result.requests) {
-          requests.push({
-            type: request.type,
-            target: request.target,
-            href: input.hrefs.get(request.target) ?? null,
-          })
+          requests.push(resolveRequest(input.hrefs, request.type, request.target))
         }
         for (const issue of result.issues) {
           issues.push({ index: issue.index, actionIndex: issue.actionIndex, message: issue.message })

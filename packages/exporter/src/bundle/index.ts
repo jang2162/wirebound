@@ -133,9 +133,13 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
    * `localized`가 한다 — 계획은 페이지마다 **한 번만** 만든다(판을 미리 그리는 것이
    * 비싸고, 두 번 만들면 오류도 두 벌이 된다).
    */
-  const targets = new Map<string, string>()
+  const targets = new Map<string, string | null>()
   for (const [index, page] of pages.entries()) {
-    if (page.target !== undefined && !targets.has(page.target)) targets.set(page.target, paths[index]!)
+    if (page.target === undefined) continue
+    // **먼저 온 것을 이기게 두지 않는다.** 둘 이상이면 `null`이고, 그러면 링크가 안 생기며
+    // 런타임이 *"둘 이상"*이라고 말한다 — 조용히 첫 페이지로 가면 읽는 사람이 그것을
+    // 알아챌 방법이 없다(리뷰 발견 D).
+    targets.set(page.target, targets.has(page.target) ? null : paths[index]!)
   }
 
   /** **판정과 실행이 여기서 일어난다**(D1). 브라우저로 나가는 것은 그 답이다. */

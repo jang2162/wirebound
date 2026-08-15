@@ -53,13 +53,21 @@ export interface RuntimeWrite {
 /**
  * 렌더러 밖에서 처리할 요청(설계 §8.1의 `navigate`·`openModal`).
  *
- * **`href`가 이 슬라이스의 답이다**(D6) — 번들에 그 페이지가 있으면 상대 링크이고, 없으면
+ * **`href`가 이 슬라이스의 답이다**(D6) — 번들에 그 페이지가 있으면 상대 링크이고, 아니면
  * `null`이다. `null`을 조용히 넘기지 않는다.
  */
 export interface RuntimeRequest {
   type: string
   target: string
   href: string | null
+  /**
+   * 링크를 못 만든 이유. **`href`가 `null`이면 반드시 있고, 아니면 `null`이다.**
+   *
+   * **문장을 내보내기가 짓는다**(D1). 못 가는 이유가 하나가 아니기 때문이다 — 그 타겟을
+   * 가진 페이지가 **없는** 것과 **둘 이상인** 것은 읽는 사람이 할 일이 다르다. 런타임이
+   * 문장을 지으면 그 갈래를 런타임이 알아야 하고, 그러면 판정이 두 벌이 된다.
+   */
+  problem: string | null
 }
 
 /** 실행하지 못한 액션 하나. **문장은 `schema`의 검증기가 만든 것 그대로다.** */
@@ -303,9 +311,24 @@ export function installRuntime(): void {
     return out
   }
 
+  /**
+   * 조작 하나가 일어났다.
+   *
+   * **알림은 *"마지막 조작이 만든 것"*이다 — 규칙이 없는 자리를 눌러도 앞 조작의 줄을
+   * 비운다.** 그러지 않으면 깨진 규칙을 누른 뒤 아무 데나 누를 때 그 문장이 남아, 읽는
+   * 사람이 **방금 누른 것이 실패한 줄 안다.**
+   *
+   * **`apps/web`의 캔버스가 이미 같은 규칙으로 같은 갈래를 닫았다**(`canvas.tsx`의
+   * `beginGesture` — *"조작이 시작될 때 비우고 그 조작 동안 일어난 것을 쌓는다"*). 그쪽은
+   * 노드마다 핸들러가 붙어 **캡처 단계**가 필요하지만, 여기는 위임이라 이 함수 하나가 그
+   * 조작의 전부를 본다 — **비우기와 쌓기가 같은 호출 안에 있다.**
+   */
   const handle = (dom: string, event: Event): void => {
     const hits = chain(event.target, dom)
-    if (hits.length === 0) return
+    if (hits.length === 0) {
+      say([])
+      return
+    }
 
     // **이 줄을 지우면 폼 제출이 페이지를 떠난다.** 와이어프레임에는 제출을 보낼 곳이 없는데
     // `<form>`은 막지 않으면 문서를 떠나고, 그러면 겹layer가 통째로 사라진다. 웹 앱의
@@ -321,10 +344,13 @@ export function installRuntime(): void {
       }
       for (const issue of hit.issues) lines.push(issue.message)
       for (const request of hit.requests) {
-        // **조용히 아무 일도 안 일어나게 두지 않는다**(D6). 가리키는 페이지가 이 번들에
-        // 없으면 그렇다고 말한다.
-        if (request.href === null) lines.push(`이 번들에 없는 페이지입니다: ${request.target}`)
-        else if (go === null) go = request.href
+        // **조용히 아무 일도 안 일어나게 두지 않고, 조용히 엉뚱한 데로도 안 간다**(D6).
+        // 무엇이 잘못됐는지는 내보내기가 이미 문장으로 지어 뒀다.
+        if (request.href !== null) {
+          if (go === null) go = request.href
+        } else if (request.problem !== null) {
+          lines.push(request.problem)
+        }
       }
       if (
         hit.writes.length === 0 &&
