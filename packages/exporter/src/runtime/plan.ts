@@ -298,7 +298,7 @@ function renderVariant(
   })
   const html = renderToStaticMarkup(tree)
   for (const error of seen) {
-    const key = `${error.nodeId} ${error.message}`
+    const key = `${error.nodeId} ${error.message}`
     if (seenErrors.has(key)) continue
     seenErrors.add(key)
     errors.push(error)
