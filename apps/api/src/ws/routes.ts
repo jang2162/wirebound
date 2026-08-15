@@ -21,26 +21,43 @@
  *
  * # 참가 이후의 권한 — 확인 지점이 둘이다
  *
- * §10은 *"룸 참가 시 한 번, 각 patch 수신 시 한 번"*이라고 적었는데 **이 슬라이스에는 patch
- * 수신이 없다**(D6 — 클라이언트는 받기만 한다). 그래서 회수를 실행하는 자리를 둘로 둔다:
+ * §10은 *"룸 참가 시 한 번, 각 patch 수신 시 한 번"*이라고 적었다. **P3-2가 patch 수신을
+ * 얹으면서 그 문장이 글자 그대로 참이 됐다.** 회수를 실행하는 자리는 둘이다:
  *
- * 1. **프레임을 받을 때마다** — 이 파일. 오늘 그 프레임은 `ping` 하나다. §10의 *"각 patch
- *    수신 시"*가 이 슬라이스에서 설 수 있는 가장 가까운 자리이고, P3-2가 patch를 얹으면
- *    같은 줄이 그것을 덮는다.
+ * 1. **프레임을 받을 때마다** — 이 파일. `ping`도 `patch`도 같은 줄을 지나고, **요구하는
+ *    역할만 프레임 종류에서 온다**(`protocol.ts`의 `MIN_ROLE_FOR_FRAME` — D1).
  * 2. **보낼 때마다** — `broadcast.ts`. 아무것도 안 보내는 연결이 있으므로 1만으로는
  *    부족하다. 그쪽 머리말에 *"즉시"*가 어디까지인지 적어 두었다.
+ *
+ * # 편집을 처리하는 것은 이 파일이 아니다 (D5)
+ *
+ * `patch` 프레임의 본줄기는 `ws/patch.ts`에 있다. 이 파일은 **프레임을 읽고 자격을 보고
+ * 갈래로 보내는 것**까지다 — 규칙을 여기 두면 REST와 갈린다.
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { projectGuard } from '../auth/roles'
 import { hashSessionToken } from '../auth/session'
 import type { ApiConfig } from '../config'
-import { unauthenticated } from '../errors'
+import type { ProjectRole } from '../db/types'
+import { forbidden, internal, unauthenticated } from '../errors'
 import { parseParams } from '../http/parse'
 import { z } from 'zod'
-import { WS_CLOSE, parseClientFrame, type ServerFrame } from './protocol'
+import { handlePatchFrame, patchErrorFrame } from './patch'
+import { MIN_ROLE_FOR_FRAME, WS_CLOSE, parseClientFrame, type ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
 
 const WsParams = z.object({ projectId: z.uuid() })
+
+/**
+ * 룸에 **들어와 있을** 수 있는 최소 역할. 핸드셰이크 가드와, 프레임이 거절됐을 때
+ * *"회수인가 권한 부족인가"*를 가르는 자리가 같은 값을 본다 — 두 곳에 리터럴로 적으면
+ * 한쪽만 바뀌는 날 **권한이 없는데 연결이 남거나 있는데 끊긴다.**
+ *
+ * `broadcast.ts`의 `MIN_ROLE_TO_RECEIVE`와 같은 값이지만 **같은 것이 아니다**: 저쪽은
+ * *"프레임을 받을 자격"*이고 이쪽은 *"방에 있을 자격"*이다. 지금 둘이 같은 이유는 §10이
+ * viewer에게 조회를 열어 두기 때문이고, 갈릴 이유가 생기면 그때 따로 움직인다.
+ */
+const MIN_ROLE_TO_JOIN: ProjectRole = 'viewer'
 
 /**
  * 연결 id를 매기는 모듈 스코프 카운터. **`crypto.randomUUID`가 아니다** — `db/tx.ts`의
@@ -58,7 +75,7 @@ function nextConnectionId(): string {
 
 export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
   return async (app: FastifyInstance) => {
-    app.get('/:projectId/ws', { websocket: true, preHandler: projectGuard('viewer') }, (socket, request) => {
+    app.get('/:projectId/ws', { websocket: true, preHandler: projectGuard(MIN_ROLE_TO_JOIN) }, (socket, request) => {
       const { projectId } = parseParams(WsParams, request.params)
       const currentUser = request.currentUser
       const role = request.projectRole
@@ -101,25 +118,70 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
       announce()
 
       socket.on('message', (raw: unknown) => {
-        void (async () => {
-          const frame = parseClientFrame(String(raw))
-          if (!frame) {
-            socket.close(WS_CLOSE.badFrame, '읽을 수 없는 프레임입니다')
-            return
-          }
+        // **읽기는 동기이므로 IIFE 밖에서 한다.** 아래 `catch`가 *"어느 편집이 실패했나"*를
+        // 알려면 프레임을 손에 쥐고 있어야 한다.
+        //
+        // **여기서 던지면 감싸는 `catch`가 없어 unhandled가 된다** — 리뷰가 지적한 자리다.
+        // 재현 가능한 입력을 못 찾았다: `JSON.parse`는 `parseClientFrame` 안에서 막혀 있고
+        // `ClientFrameSchema`에 재귀 멤버가 없어 zod가 스택으로 던질 자리도 없다.
+        // **프레임 갈래에 재귀 스키마를 더하면 그 전제가 깨진다.**
+        const frame = parseClientFrame(String(raw))
+        if (!frame) {
+          socket.close(WS_CLOSE.badFrame, '읽을 수 없는 프레임입니다')
+          return
+        }
 
-          // 확인 지점 1 (머리말). 오늘 프레임은 `ping` 하나뿐이지만 검사는 프레임 종류와
-          // 무관하게 **먼저** 돈다 — P3-2가 patch를 더할 때 이 줄을 다시 쓰지 않게 한다.
-          if (!(await broadcast.stillAllowed(connection))) {
+        void (async () => {
+          // 확인 지점 1 (머리말). 검사는 프레임 종류와 무관하게 **먼저** 돌고, 요구하는
+          // 역할만 종류에서 온다(`MIN_ROLE_FOR_FRAME` — P3-2 D1).
+          const minRole = MIN_ROLE_FOR_FRAME[frame.type]
+          if (!(await broadcast.stillAllowed(connection, minRole))) {
+            // **왜 한 번 더 보는가.** 검사 하나로는 *"권한이 회수됐다"*와 *"뷰어가 편집을
+            // 냈다"*가 같은 값이 된다. 클라이언트가 할 일은 정반대다 — 앞의 것은 연결이
+            // 끊기고 다시 로그인해야 하는 것이고, 뒤의 것은 **연결이 살아 있는 것이
+            // 맞다**(뷰어는 계속 받아야 한다 — `broadcast.ts`의 `MIN_ROLE_TO_RECEIVE`).
+            //
+            // **두 번째 조회는 거절된 프레임에만 붙는다.** 통과하는 프레임의 비용은 앞
+            // 슬라이스와 같은 조회 두 건이다.
+            if (minRole !== MIN_ROLE_TO_JOIN && (await broadcast.stillAllowed(connection, MIN_ROLE_TO_JOIN))) {
+              if (frame.type === 'patch') {
+                push(patchErrorFrame(projectId, frame, forbidden('편집 권한이 없습니다')))
+              }
+              return
+            }
             rooms.leave(projectId, connection.id)
             socket.close(WS_CLOSE.revoked, '권한이 회수되었습니다')
             announce()
             return
           }
 
-          push({ type: 'pong' })
+          switch (frame.type) {
+            case 'ping':
+              push({ type: 'pong' })
+              return
+            case 'patch':
+              push(await handlePatchFrame(app, connection, frame))
+              return
+          }
         })().catch((error: unknown) => {
           app.log.error({ err: error, projectId }, 'WS 프레임 처리 실패')
+          // **낸 사람에게 답한다.** 예상 밖 예외에 아무것도 안 내면 그 편집의 응답이 영영 안
+          // 오고, 클라이언트의 in-flight가 매달려 **다음 편집도 안 나간다**(펌프의 가드가 계속
+          // 서 있다 — `apps/web`의 `edit-channel.ts` 머리말이 그 부류를 적었다). REST 경로는
+          // 같은 예외에 500 봉투가 나가 복구가 돈다 — **두 진입점의 결말을 맞춘다.**
+          if (frame.type !== 'patch') return
+          try {
+            push(patchErrorFrame(projectId, frame, internal()))
+          } catch (pushError: unknown) {
+            // 소켓이 이미 죽었으면 보낼 수 없다. 여기서 던지면 unhandled가 된다.
+            //
+            // **이 안쪽 `catch`는 0 사망이다(리뷰 변이 M-N9).** 그것이 도는 판은 *"핸들러가
+            // 던졌고 **그 순간 소켓도 이미 죽어** `push`까지 던진다"*인데, 그 둘을 함께
+            // 만드는 케이스가 없다. `connection.ts`의 `stopped`·`ackEdit`의 접기 실패와 같은
+            // 부류다 — **지워도 되는 신호로 읽지 마라.** 지금 안 죽는 이유는 두 사건이 겹치는
+            // 판을 아무도 안 만들기 때문이지 겹칠 수 없어서가 아니다.
+            app.log.error({ err: pushError, projectId }, 'WS 실패 통지 실패')
+          }
         })
       })
 

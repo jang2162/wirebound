@@ -23,6 +23,7 @@
  */
 import { createContext, useContext, type ReactElement, type ReactNode } from 'react'
 import type { RealtimeOptions } from './connection'
+import type { EditChannel } from './edit-channel'
 
 /** 지금 붙어 있는 연결의 id를 드는 곳. `main.tsx`가 하나 만들어 양쪽에 준다. */
 export interface ConnectionIdHolder {
@@ -42,6 +43,15 @@ export function createConnectionIdHolder(): ConnectionIdHolder {
 
 export interface RealtimeSetup {
   holder: ConnectionIdHolder
+  /**
+   * 편집을 WS로 내는 통로(P3-2 T3). **없으면 편집은 REST로 나간다** — D5가 그 경로를 남겨
+   * 두었고(§7.4의 MCP), `RealtimeProvider` 없이 도는 화면 테스트도 그쪽을 지난다.
+   *
+   * **소켓이 만들고 편집 경로가 쓰므로 둘 다 가리킬 수 있는 자리가 필요하다** — `holder`를
+   * 여기 둔 것과 같은 이유이고, 모듈 전역이 아닌 것도 같은 이유다(한 프로세스에서 트리를
+   * 여럿 세우는 테스트가 서로의 것을 덮는다).
+   */
+  channel?: EditChannel
   /** WebSocket 주소를 만들 오리진. 기본은 브라우저의 것이다. */
   origin?: string
   /** `openRealtime`에 그대로 넘어간다. 테스트가 가짜 소켓·가짜 타이머를 끼운다. */
@@ -57,4 +67,13 @@ export function RealtimeProvider(props: { setup: RealtimeSetup; children: ReactN
 /** Provider가 없으면 `null`이다 — **던지지 않는다**(위 머리말). */
 export function useRealtimeSetup(): RealtimeSetup | null {
   return useContext(RealtimeContext)
+}
+
+/**
+ * 편집을 WS로 낼 통로. **없으면 `null`이고 그때 편집은 REST로 나간다**(D5).
+ *
+ * 같은 이유로 던지지 않는다 — 통로가 없다고 화면이 편집을 못 하게 되면 안 된다.
+ */
+export function useEditChannel(): EditChannel | null {
+  return useContext(RealtimeContext)?.channel ?? null
 }

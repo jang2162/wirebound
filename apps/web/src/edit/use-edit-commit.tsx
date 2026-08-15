@@ -13,8 +13,10 @@
  */
 import { useCallback } from 'react'
 import type { Interaction, PatchOp } from '@wirebound/schema'
+import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
+import { useEditChannel } from '../realtime/context'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import type { EditStatus } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
@@ -108,6 +110,7 @@ export interface EditCommit {
 export function useEditCommit(props: { projectId: string; pageId: string }): EditCommit {
   const { projectId, pageId } = props
   const api = useApi()
+  const channel = useEditChannel()
   const store = useEditorStoreInstance()
   const open = useOpenPage(pageId)
   const status = useEditorStore(store, (s) => s.editStatus)
@@ -214,13 +217,64 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
 
         store.setEditStatus('sending')
         try {
-          const result = await api.patchOps(projectId, pageId, request)
+          // **WS가 붙어 있으면 그리로 낸다**(§7.1 — P3-2 T3). 없으면 REST다: D5가 그 경로를
+          // 남겨 두었고(§7.4의 MCP가 REST로 들어온다), `RealtimeProvider` 없이 도는 화면은
+          // 여전히 그쪽으로 편집한다.
+          //
+          // **갈리는 것은 전송뿐이다.** 두 경로가 같은 `applyEdit`을 지나고(`ws/patch.ts`),
+          // 같은 모양의 실패를 내며(`patch-error`가 REST 봉투를 그대로 싣는다), 여기 아래의
+          // `ackEdit`·`recover`도 같은 것을 받는다.
+          const result =
+            channel !== null && channel.ready()
+              ? await channel.send({ pageId, ...request })
+              : await api.patchOps(projectId, pageId, request)
           // **응답의 `warnings`가 여기로 함께 들어간다**(P5-3 D6). 서버는 P4c-1부터
           // 그것을 싣고 있었는데 P5-2까지 클라이언트가 그 필드를 몰라 **읽는 코드가 0건**
           // 이었다(P5-2 이월 §3). 스토어가 ack와 **함께** 싣는 것이 요점이다 — 늦게 도착한
           // 응답의 경고가 지금 문서의 것으로 실리지 않는다(`ackEdit`의 가드 뒤에 있다).
           store.ackEdit(request.clientOpId, result)
         } catch (caught) {
+          // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다**(P3-2 D3).
+          //
+          // **이것이 없으면 리베이스가 서버에 닿지 않는다 — 재서 알았다.** 서버는 `baseSeq`가
+          // `head_seq`와 정확히 같을 때만 받으므로, 내 편집이 떠 있는 동안 남의 편집이
+          // 기록되면 내 것은 **반드시** 409를 받는다. 그 409를 곧바로 `recover`에 넘기면
+          // 재조회가 큐를 통째로 비우므로, 방금 리베이스한 편집도 함께 사라진다. 즉
+          // **리베이스의 결과가 한 왕복 뒤에 지워진다.**
+          //
+          // 다시 내는 조건은 둘이다 — 큐의 머리가 **여전히 이 편집**이고(리베이스가 그것을
+          // 버리지 않았다), 그 사이 `headSeq`가 **움직였다**(다른 revision이 기록됐다).
+          // 조건이 `headSeq`의 이동이므로 **끝난다:** 서버가 새 revision을 만들어야만 한 번
+          // 더 시도하고, 아니면 그대로 `recover`로 간다.
+          //
+          // **이 갈래는 프레임이 실패보다 먼저 올 때만 돈다 — 두 순서가 다 실재한다**(리뷰 F1이
+          // 진짜 서버로 실증했다).
+          //
+          // | 순서 | 언제 | 무엇이 도나 |
+          // |---|---|---|
+          // | 프레임 먼저 | 두 편집 사이가 **벌어졌다**(사람 둘이 편집하는 흔한 판) | 여기 |
+          // | 실패 먼저 | **거의 같은 순간에** 냈다 | 아래 `recover` |
+          //
+          // **가르는 것은 두 편집 사이의 간격이다.** 뒤쪽이 나는 이유는 구조적이다 — 진 쪽의
+          // 실패는 파이프라인 3단계에서 곧바로 나오는데, 이긴 쪽의 브로드캐스트는
+          // fire-and-forget이고 룸 연결마다 조회 둘을 `await`한다. **다만 그 창은 좁다:**
+          // 간격을 변수로 두고 재 보니 십수 ms만 벌어져도 프레임이 먼저 온다(값은 이월 §2.2).
+          // 뒤쪽으로 가도 **덜 좋아질 뿐 틀리지 않는다** — 앞 슬라이스와 같은 재조회다.
+          // `test/edit/ws-transport.test.tsx`가 두 순서를 나란히 잰다.
+          //
+          // **409로 좁히는 것은 판정이다.** *"문서가 내 밑에서 움직였다"*는 부류가 그것뿐이고
+          // (`http/edit-outcome.ts`의 표), 401·422까지 다시 내면 고쳐지지 않는 실패에 왕복을
+          // 하나 더 쓴다.
+          const head = store.nextRequest()
+          if (
+            caught instanceof ApiError &&
+            caught.status === 409 &&
+            head !== null &&
+            head.clientOpId === request.clientOpId &&
+            head.baseSeq !== request.baseSeq
+          ) {
+            continue
+          }
           // 루프를 여기서 끝낸다. `recover`가 큐를 비우므로 남은 편집이 다시 나가지 않고,
           // 재조회가 문서를 서버 것으로 맞춘다.
           await recover(caught)
@@ -230,7 +284,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
     } finally {
       store.endPump()
     }
-  }, [api, projectId, pageId, store, recover])
+  }, [api, channel, projectId, pageId, store, recover])
 
   /**
    * 스택에서 한 단계 꺼내 보낸다. undo와 redo가 같은 규칙을 쓰므로 한 곳에 둔다 —

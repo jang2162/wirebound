@@ -15,7 +15,10 @@
  * 모양으로 갈래를 추측하게 되고, 그것이 이 저장소가 반복해 만난 부류다.
  */
 import type { PatchOp, ValidationIssue } from '@wirebound/schema'
+import { z } from 'zod'
 import type { ProjectRole } from '../db/types'
+import type { ApiErrorCode, ApiErrorIssue } from '../errors'
+import { ClientOpId, OpsBody } from '../http/patch-ops'
 
 /** 룸에 들어와 있는 연결 하나. §7.2의 잠금이 이 목록 위에 선다. */
 export interface Participant {
@@ -40,6 +43,8 @@ export interface EventActor {
  * | `page-changed` | `applyEdit`이 성공했을 때(D4) |
  * | `restored` | 스냅샷 복원이 성공했을 때(D4) |
  * | `pong` | `ping`에 대한 답. 클라이언트가 연결이 살아 있는지 재는 유일한 수단이다 |
+ * | `patch-ack` | **낸 사람에게만.** `patch` 프레임이 성공했다(§7.1의 *"[본인] ack(seq) 수신"*) |
+ * | `patch-error` | **낸 사람에게만.** `patch` 프레임이 실패했다 |
  */
 export type ServerFrame =
   | { type: 'joined'; projectId: string; connectionId: string; userId: string; role: ProjectRole }
@@ -62,19 +67,104 @@ export type ServerFrame =
        */
       warnings: ValidationIssue[]
       actor: EventActor
+      /**
+       * **낸 사람이 붙인 id. 있을 때만 실린다**(REST 본문이나 `patch` 프레임에 있었을 때).
+       *
+       * **받는 쪽이 *"이건 내가 낸 것"*을 알아보는 유일한 수단이다.** 보통은 서버가 발신자를
+       * 제외하므로(`exceptConnectionId`) 그럴 일이 없지만, **제외가 성립하지 않는 창이 있다:**
+       * 편집이 REST로 나가는 동안(소켓이 아직 안 열려 `x-wb-connection-id`가 없다) 그 소켓이
+       * 열려 룸에 들어오면, 그 뒤에 나가는 브로드캐스트를 **낸 사람이 되받는다.**
+       *
+       * 앞 슬라이스에서는 그 프레임이 미뤄지기만 해서 무해했다. **P3-2의 리베이스는 그것을
+       * 바탕에 얹고 내 pending을 그 위에 다시 올리므로 같은 편집이 두 번 들어간다** — 그리고
+       * 조용하다. 그래서 받는 쪽이 그 프레임을 알아보고 건너뛸 수 있게 이 값을 싣는다.
+       *
+       * **멱등 키가 아니다**(D4). 서버는 저장하지 않고 되돌려 줄 뿐이다.
+       */
+      clientOpId?: string
     }
   | { type: 'restored'; projectId: string; snapshotId: string; actor: EventActor }
   | { type: 'pong' }
+  | {
+      type: 'patch-ack'
+      projectId: string
+      pageId: string
+      /** 보낸 프레임의 `clientOpId`를 그대로 되돌려 준다 — 짝을 짓는 것은 이 값뿐이다. */
+      clientOpId: string
+      seq: number
+      revisionId: string
+      /**
+       * 서버가 적용 직전 상태를 보고 만든 역패치(§7.1). undo 스택이 이것을 든다 —
+       * REST 응답의 같은 필드와 같은 값이고, 그래서 두 경로의 undo가 갈리지 않는다.
+       */
+      inverse: PatchOp[]
+      /** REST 응답의 `warnings`와 같다(P4a-3 — 한쪽만 나르면 접속 방식에 따라 갈린다). */
+      warnings: ValidationIssue[]
+    }
+  | {
+      type: 'patch-error'
+      projectId: string
+      pageId: string
+      clientOpId: string
+      /**
+       * **REST가 내는 것과 같은 봉투다**(`errors.ts`의 `{ code, message, issues? }` +
+       * `status`). 같은 실패를 두 벌로 이름 짓지 않으려고 `http/edit-outcome.ts`의 매핑을
+       * 그대로 지나온 값을 싣는다 — 받는 쪽은 접속 방식과 무관하게 한 규칙으로 읽는다.
+       */
+      status: number
+      code: ApiErrorCode
+      message: string
+      issues: ApiErrorIssue[]
+    }
 
 /**
- * 클라이언트 → 서버. **이 슬라이스에는 `ping` 하나뿐이다** — 편집 전송·ack·리베이스는
- * P3-2다.
+ * 클라이언트 → 서버. **둘이다** — 하트비트(`ping`)와 편집 전송(`patch`).
  *
- * 그 하나가 있는 이유는 둘이다. 브라우저 `WebSocket`은 프로토콜 ping을 **보낼 수 없어**
+ * `ping`이 있는 이유는 둘이다. 브라우저 `WebSocket`은 프로토콜 ping을 **보낼 수 없어**
  * (읽기 전용 API에 그 메서드가 없다) 클라이언트가 연결이 살아 있는지 재려면 앱 수준
  * 프레임이 필요하고, §10이 요구하는 *"프레임 수신 시 권한 재확인"*이 설 자리가 생긴다.
+ *
+ * # `patch`의 모양은 REST 본문에서 온다 (P3-2 D2)
+ *
+ * `http/patch-ops.ts`의 `OpsBody`를 **그대로 넓혀** 만든다. 그 파일 머리말이 *"P3의
+ * WebSocket 핸들러도 `applyEdit`을 부르기 전에 신뢰할 수 없는 프레임을 걸러야 하는데, 그
+ * 규칙이 REST 라우트 파일 안에만 있으면 복제된다"*고 적어 둔 그 자리다. 복제하면
+ * *"REST로는 되는데 WS로는 안 되는"* 입력이 생기고, 그 어긋남은 **접속 방식에 따라 갈린다.**
+ *
+ * **넓히는 것은 셋뿐이다:** 판별자 `type`, REST에서는 URL이 나르던 `pageId`, 그리고
+ * `clientOpId`를 **선택에서 필수로** 좁히는 것. 마지막이 갈리는 이유는 ack의 모양이다 —
+ * REST의 응답은 요청과 짝이 지어져 오지만 `patch-ack`은 프레임이라 **이 값 말고는 짝지을
+ * 것이 없다.**
  */
-export type ClientFrame = { type: 'ping' }
+const PatchFrame = OpsBody.extend({
+  type: z.literal('patch'),
+  /** REST에서는 URL 파라미터였다(`routes/pages.ts`의 `PageParams`와 같은 술어다). */
+  pageId: z.uuid(),
+  clientOpId: ClientOpId,
+})
+
+const ClientFrameSchema = z.discriminatedUnion('type', [z.strictObject({ type: z.literal('ping') }), PatchFrame])
+
+export type ClientFrame = z.infer<typeof ClientFrameSchema>
+
+/**
+ * 프레임 하나를 받으려면 지금 무슨 역할이어야 하는가. **§10의 *"각 patch 수신 시 한 번"*이
+ * 실제로 서는 자리다.**
+ *
+ * **`viewer`와 `editor`가 갈리는 것이 이 표의 전부다**(P3-2 D1). 앞 슬라이스는 프레임이
+ * `ping` 하나여서 *"받을 자격"*(`broadcast.ts`의 `MIN_ROLE_TO_RECEIVE`)을 프레임 수신에도
+ * 그대로 썼고, 그래서 **WS 경로 어디에도 `editor` 판정이 없었다** — 그대로 `patch`를
+ * 얹었으면 §10이 *"조회 전용 — 편집·코멘트 모두 불가"*로 못박은 viewer가 편집을 냈다.
+ *
+ * **`Record<ClientFrame['type'], ProjectRole>`인 것이 계약이다** — 프레임을 하나 더하면
+ * 여기서 컴파일이 막힌다. 빠뜨린 갈래가 `undefined`로 새어 나가면 `roleAtLeast`가 무엇과
+ * 비교하는지 알 수 없게 되고, 그 자리는 조용하다(`editor-store.ts`의 `STALE_RANK`가 같은
+ * 이유로 같은 모양이다).
+ */
+export const MIN_ROLE_FOR_FRAME: Record<ClientFrame['type'], ProjectRole> = {
+  ping: 'viewer',
+  patch: 'editor',
+}
 
 /**
  * 닫을 때 쓰는 코드. 1000·1001은 표준이고 4000번대는 애플리케이션 몫이다(RFC 6455).
@@ -93,9 +183,23 @@ export const WS_CLOSE = {
 } as const
 
 /**
- * 신뢰할 수 없는 문자열을 `ClientFrame`으로 읽는다. **zod를 쓰지 않는다** — 갈래가 하나뿐인
- * 지금 스키마를 세우면 그 스키마가 이 파일의 유일한 내용이 된다. 갈래가 늘면
- * (`http/patch-ops.ts`가 그랬듯) zod로 옮긴다.
+ * 신뢰할 수 없는 문자열을 `ClientFrame`으로 읽는다. **zod로 읽는다** — 앞 슬라이스의 이
+ * 함수는 손으로 쓴 검사였고 그 주석이 *"갈래가 늘면 `http/patch-ops.ts`가 그랬듯 zod로
+ * 옮긴다"*고 적었다. `patch`가 그 갈래다.
+ *
+ * **모양이 어긋나면 `null`이다.** 부르는 쪽이 그것을 `WS_CLOSE.badFrame`으로 옮긴다 —
+ * 읽을 수 없는 프레임은 편집 실패가 아니라 계약 위반이라 되돌려 줄 `clientOpId`조차 없다.
+ *
+ * **그 근거가 덮지 못하는 판이 있다(리뷰 F3).** `clientOpId`는 멀쩡한데 `ops` 하나가 규격을
+ * 어긴 프레임도 같은 취급을 받는다 — REST로 같은 입력을 내면 400 봉투가 오는데 여기서는
+ * **연결이 끊긴다.** 스키마는 한 벌인데 **거절의 결말**이 두 벌이다.
+ *
+ * **그래도 두 단계로 읽지 않는다** — *"누구에게 답할지"*만 먼저 뽑는 파서를 두면 프레임을 읽는
+ * 자리가 둘이 되고, 그것이 D2가 닫은 형태다. 대가는 작다: 끊긴 클라이언트는 기다리던 편집을
+ * 실패로 끝내고 다시 붙으며, 다시 붙는 것 자체가 재조회 신호다(D6). **오늘 웹 클라이언트는
+ * 그런 `ops`를 만들지 못한다**(로컬 `applyOps`가 먼저 막는다) — 도달하는 것은 §7.4의 MCP나
+ * 다른 클라이언트다. **P3-3이 프레임을 더할 때 이 정책을 프레임 무리 전체에 대해 다시
+ * 판정하라** — 하트비트가 규격을 어기면 편집 채널까지 함께 끊긴다.
  */
 export function parseClientFrame(raw: string): ClientFrame | null {
   let value: unknown
@@ -104,7 +208,6 @@ export function parseClientFrame(raw: string): ClientFrame | null {
   } catch {
     return null
   }
-  if (typeof value !== 'object' || value === null) return null
-  const type = (value as { type?: unknown }).type
-  return type === 'ping' ? { type: 'ping' } : null
+  const parsed = ClientFrameSchema.safeParse(value)
+  return parsed.success ? parsed.data : null
 }

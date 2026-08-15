@@ -15,6 +15,7 @@
  * 낡은 클라이언트가 **연결째 죽지 않게** 하기 위해서다.
  */
 import type { PatchOp, ValidationIssue } from '@wirebound/schema'
+import type { ApiErrorIssue } from '../api/client'
 
 export interface Participant {
   connectionId: string
@@ -44,12 +45,70 @@ export type ServerFrame =
       ops: PatchOp[]
       warnings: ValidationIssue[]
       actor: EventActor
+      /**
+       * 낸 사람이 붙인 id. **있을 때만 온다.** 이것이 내 pending에 있으면 그 프레임은
+       * **내가 낸 편집이 되돌아온 것**이고, 리베이스가 그것을 얹으면 같은 편집이 두 번
+       * 들어간다(서버 `ws/protocol.ts`의 그 필드에 창이 적혀 있다).
+       */
+      clientOpId?: string
     }
   | { type: 'restored'; projectId: string; snapshotId: string; actor: EventActor }
   | { type: 'pong' }
+  | {
+      type: 'patch-ack'
+      projectId: string
+      pageId: string
+      clientOpId: string
+      seq: number
+      revisionId: string
+      inverse: PatchOp[]
+      warnings: ValidationIssue[]
+    }
+  | {
+      type: 'patch-error'
+      projectId: string
+      pageId: string
+      clientOpId: string
+      /**
+       * **REST 에러 봉투와 같은 값이다**(서버 `errors.ts`). 그래서 받는 쪽이 그것을
+       * `ApiError`로 되세우면 실패 → 화면 규칙(`api/failure.tsx`)이 접속 방식과 무관하게
+       * 하나로 남는다.
+       */
+      status: number
+      code: string
+      message: string
+      issues: ApiErrorIssue[]
+    }
 
-/** 클라이언트가 보내는 것. **이 슬라이스에는 하나뿐이다** — 편집 전송은 P3-2다. */
-export const PING_FRAME = JSON.stringify({ type: 'ping' })
+/**
+ * 클라이언트가 보내는 것. **둘이다** — 하트비트와 편집 전송(P3-2).
+ *
+ * **서버의 `ClientFrame`(zod)의 거울이다.** 그쪽은 `http/patch-ops.ts`의 `OpsBody`를 넓혀
+ * 만들고, 여기서는 같은 모양을 타입으로 적는다 — `test/realtime/protocol-parity.test.ts`가
+ * 두 벌의 이름을 소스에서 맞대 본다.
+ */
+export type ClientFrame =
+  | { type: 'ping' }
+  | {
+      type: 'patch'
+      pageId: string
+      /** 이 편집이 설 revision. 서버는 `head_seq`와 **정확히 같을 때만** 받는다. */
+      baseSeq: number
+      ops: PatchOp[]
+      /**
+       * **여기서는 필수다.** REST에서는 선택이지만(서버가 응답에 되돌려 줄 뿐이다) ack가
+       * 프레임으로 오는 이쪽에서는 짝지을 것이 이 값밖에 없다.
+       */
+      clientOpId: string
+    }
+
+/** 하트비트. 문자열을 미리 만들어 둔다 — 프레임마다 같은 값이다. */
+export const PING_FRAME = JSON.stringify({ type: 'ping' } satisfies ClientFrame)
+
+/** 편집 하나를 실어 보낼 문자열. */
+export function patchFrame(input: Omit<Extract<ClientFrame, { type: 'patch' }>, 'type'>): string {
+  return JSON.stringify({ type: 'patch', ...input } satisfies ClientFrame)
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -104,6 +163,9 @@ export function parseServerFrame(raw: string): ServerFrame | null {
             ops: value.ops as PatchOp[],
             warnings: value.warnings as ValidationIssue[],
             actor: value.actor as unknown as EventActor,
+            // **없으면 키 자체를 안 만든다** — `undefined`를 담아 두면 스토어의 대조가
+            // *"id 없는 pending"*과 우연히 맞을 여지가 생긴다.
+            ...(str(value.clientOpId) ? { clientOpId: value.clientOpId } : {}),
           }
         : null
     case 'restored':
@@ -117,6 +179,46 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         : null
     case 'pong':
       return { type: 'pong' }
+    case 'patch-ack':
+      // **`clientOpId`가 없으면 버린다.** 짝지을 수 없는 ack는 `undefined`를 키로 in-flight를
+      // 뒤지게 되고, 그러면 엉뚱한 편집이 성공으로 처리된다.
+      return str(value.projectId) &&
+        str(value.pageId) &&
+        str(value.clientOpId) &&
+        typeof value.seq === 'number' &&
+        str(value.revisionId) &&
+        Array.isArray(value.inverse) &&
+        Array.isArray(value.warnings)
+        ? {
+            type: 'patch-ack',
+            projectId: value.projectId,
+            pageId: value.pageId,
+            clientOpId: value.clientOpId,
+            seq: value.seq,
+            revisionId: value.revisionId,
+            inverse: value.inverse as PatchOp[],
+            warnings: value.warnings as ValidationIssue[],
+          }
+        : null
+    case 'patch-error':
+      return str(value.projectId) &&
+        str(value.pageId) &&
+        str(value.clientOpId) &&
+        typeof value.status === 'number' &&
+        str(value.code) &&
+        str(value.message) &&
+        Array.isArray(value.issues)
+        ? {
+            type: 'patch-error',
+            projectId: value.projectId,
+            pageId: value.pageId,
+            clientOpId: value.clientOpId,
+            status: value.status,
+            code: value.code,
+            message: value.message,
+            issues: value.issues as ApiErrorIssue[],
+          }
+        : null
     default:
       return null
   }

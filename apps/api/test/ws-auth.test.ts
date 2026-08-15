@@ -14,10 +14,13 @@
  * | *"REST와 WS가 동일한 가드 함수를 쓴다"* | 비멤버는 붙지 못하고, 뷰어는 붙는다 — REST의 404/403 규칙과 같은 판정이다 |
  * | *"세션 행을 지우면 열려 있는 WS 연결의 권한도 즉시 회수된다"* | 세션을 지운 뒤 프레임을 보내면 그 연결이 닫힌다 |
  *
- * **셋째 줄이 이 슬라이스의 판정이다.** §10은 *"룸 참가 시 한 번, 각 patch 수신 시 한 번"*
- * 이라고 적었는데 이 슬라이스에는 patch 수신이 없다(D6). 회수를 실행하는 자리를 둘로 두었고
- * (`ws/routes.ts` 머리말), 여기서는 그중 **프레임 수신** 쪽을 잰다. **보낼 때** 쪽은
- * `ws-broadcast.test.ts`가 잰다 — 아무것도 안 보내는 연결이 있으므로 둘 다 필요하다.
+ * **셋째 줄이 P3-1의 판정이었다.** §10은 *"룸 참가 시 한 번, 각 patch 수신 시 한 번"*
+ * 이라고 적었는데 그 슬라이스에는 patch 수신이 없어(D6) 회수를 실행하는 자리를 둘로 두었다
+ * (`ws/routes.ts` 머리말). **P3-2가 patch 수신을 얹으면서 그 문장이 글자 그대로 참이 됐다** —
+ * 여기서는 그중 **프레임 수신** 쪽을 잰다. **보낼 때** 쪽은 `ws-broadcast.test.ts`가 잰다.
+ *
+ * **역할이 프레임마다 갈리는 것(D1)은 `ws-patch.test.ts`가 잰다** — 이 파일이 재는 것은
+ * *"자격이 사라지면 닫힌다"*이고 그쪽이 재는 것은 *"뷰어는 편집을 못 낸다"*다.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -121,10 +124,7 @@ describe('WS 핸드셰이크는 REST와 같은 쿠키·같은 가드다 (§10 ·
 })
 
 describe('세션 행을 지우면 권한이 회수된다 (§10 · 재라 #3)', () => {
-  /**
-   * **프레임 수신 쪽 확인 지점**(`ws/routes.ts`의 1번). 이 슬라이스에 `patch` 수신이
-   * 없으므로 §10의 *"각 patch 수신 시 한 번"*이 설 수 있는 자리는 `ping`이다.
-   */
+  /** **프레임 수신 쪽 확인 지점**(`ws/routes.ts`의 1번). 종류와 무관하게 먼저 도는 줄이다. */
   it('세션을 지운 뒤 프레임을 보내면 그 연결이 닫힌다', async () => {
     await withRealApi(async (ctx) => {
       const owner = await signup(ctx)
@@ -191,10 +191,31 @@ describe('세션 행을 지우면 권한이 회수된다 (§10 · 재라 #3)', (
 
   /**
    * **JSON이지만 모르는 `type`도 같은 자리다** — 재서 알았다: JSON 파싱만 잡는 케이스로는
-   * `type` 검사를 통째로 지워도 아무도 안 죽는다(변이 M11이 0 사망이었다). **P3-2가 프레임을
-   * 더할 때 이름을 잘못 적으면 여기가 죽어야 한다.**
+   * `type` 검사를 통째로 지워도 아무도 안 죽는다(변이 M11이 0 사망이었다).
    */
   it('모르는 type도 연결을 닫는다 — JSON이라는 것만으로는 부족하다', async () => {
+    await withRealApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const probe = track(await joinRoom(ctx.port, project.id, owner.cookie.wb_session))
+
+      probe.send(JSON.stringify({ type: '없는프레임', ops: [] }))
+
+      const closed = await probe.waitClosed()
+      expect(closed.code).toBe(4400)
+    })
+  })
+
+  /**
+   * **아는 `type`인데 모양이 어긋난 것도 같은 자리다.** P3-2가 `patch`를 더하면서 이 자리의
+   * 뜻이 갈렸다 — 앞 판은 이 판을 *"모르는 type"*으로 세었는데 `patch`는 이제 아는 이름이다.
+   *
+   * **닫는 쪽을 고른 것은 판정이다.** 되돌려 줄 `clientOpId`조차 못 읽었으므로 `patch-error`를
+   * 보내도 받는 쪽이 어느 편집의 실패인지 짝지을 수 없다 — 그 프레임은 클라이언트의 in-flight를
+   * 영영 매달아 둔다. 닫으면 클라이언트가 그 자리에서 전부 실패로 처리하고 다시 붙는다
+   * (`apps/web`의 `edit-channel.ts`).
+   */
+  it('아는 type인데 모양이 어긋나도 닫는다 — 짝지을 것이 없다', async () => {
     await withRealApi(async (ctx) => {
       const owner = await signup(ctx)
       const project = await createProject(ctx, owner.cookie)

@@ -5,6 +5,7 @@ import { App } from './app'
 import { ApiProvider } from './api/context'
 import { createHttpClient } from './api/http-client'
 import { RealtimeProvider, createConnectionIdHolder } from './realtime/context'
+import { createEditChannel } from './realtime/edit-channel'
 // 셸 CSS는 앱에서만 필요하다. 화면 테스트는 `App`을 직접 렌더하므로 이 파일을 지나지
 // 않고, 그래서 vitest가 CSS를 처리할 일이 없다.
 import './shell.css'
@@ -19,13 +20,20 @@ if (!root) throw new Error('#root 엘리먼트를 찾을 수 없습니다')
  */
 const connectionIds = createConnectionIdHolder()
 
+/**
+ * 편집이 WS로 나가는 통로(P3-2). **소켓이 붙이고 편집 경로가 쓴다** — 홀더와 같은 이유로
+ * 여기 하나를 만들어 양쪽에 준다. **없으면 편집은 REST로 나가고**, 화면 테스트가 바로 그
+ * 판이다(`RealtimeProvider`를 안 세운다).
+ */
+const editChannel = createEditChannel()
+
 // HTTP 구현을 고르는 자리는 여기 하나다. 아래 화면들은 `useApi()`로 인터페이스만 본다.
 // **실시간을 켜는 자리도 여기 하나다** — 화면 테스트는 `RealtimeProvider` 없이 트리를
 // 세우므로 소켓을 열지 않는다.
 createRoot(root).render(
   <StrictMode>
     <ApiProvider client={createHttpClient(globalThis.fetch, connectionIds.get)}>
-      <RealtimeProvider setup={{ holder: connectionIds }}>
+      <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel }}>
         <BrowserRouter>
           <App />
         </BrowserRouter>

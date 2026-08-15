@@ -12,6 +12,7 @@ import { MemoryRouter, useLocation } from 'react-router'
 import { systemTheme } from '@wirebound/themes'
 import { ApiError, type ApiClient } from '../src/api/client'
 import { ApiProvider } from '../src/api/context'
+import { RealtimeProvider, type RealtimeSetup } from '../src/realtime/context'
 import type { SessionUser } from '../src/api/types'
 
 /**
@@ -171,6 +172,12 @@ export interface RenderOptions {
   client?: ApiClient
   /** 라우터의 시작 위치. 생략하면 `/`다. */
   route?: string
+  /**
+   * 실시간 연결 설정. **생략하면 `RealtimeProvider`를 아예 안 세운다** — 그것이 화면
+   * 테스트가 소켓을 열지 않는 이유이고(`src/realtime/context.tsx`), 편집이 REST로 나가는
+   * 이유이기도 하다(P3-2 D5). 재연결·WS 전송을 재는 테스트만 이것을 준다.
+   */
+  realtime?: RealtimeSetup
 }
 
 /**
@@ -181,12 +188,20 @@ export interface RenderOptions {
  * 순서 의존이 생긴다.
  */
 export function renderWithProviders(ui: ReactElement, options: RenderOptions = {}): void {
+  const routed = (
+    <MemoryRouter initialEntries={[options.route ?? '/']}>
+      {ui}
+      <LocationProbe />
+    </MemoryRouter>
+  )
+
   render(
     <ApiProvider client={options.client ?? fakeApi()}>
-      <MemoryRouter initialEntries={[options.route ?? '/']}>
-        {ui}
-        <LocationProbe />
-      </MemoryRouter>
+      {options.realtime === undefined ? (
+        routed
+      ) : (
+        <RealtimeProvider setup={options.realtime}>{routed}</RealtimeProvider>
+      )}
     </ApiProvider>,
   )
 }

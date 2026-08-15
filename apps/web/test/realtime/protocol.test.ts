@@ -5,7 +5,7 @@
  * `headSeq`가 `undefined`가 되고, 그 어긋남은 **다음 편집이 400을 받을 때까지 조용하다.**
  */
 import { describe, expect, it } from 'vitest'
-import { parseServerFrame, realtimeUrl } from '../../src/realtime/protocol'
+import { parseServerFrame, patchFrame, realtimeUrl } from '../../src/realtime/protocol'
 
 const PAGE_CHANGED = {
   type: 'page-changed',
@@ -17,21 +17,74 @@ const PAGE_CHANGED = {
   actor: { type: 'user', label: '홍길동' },
 }
 
+const PATCH_ACK = {
+  type: 'patch-ack',
+  projectId: 'p',
+  pageId: 'g',
+  clientOpId: 'op_1',
+  seq: 8,
+  revisionId: 'rev_8',
+  inverse: [{ op: 'remove', path: '/root/children/0' }],
+  warnings: [],
+}
+
+const PATCH_ERROR = {
+  type: 'patch-error',
+  projectId: 'p',
+  pageId: 'g',
+  clientOpId: 'op_1',
+  status: 409,
+  code: 'conflict',
+  message: '페이지가 이미 변경되었습니다 (요청 baseSeq 4, 현재 7)',
+  issues: [],
+}
+
 describe('읽는 것', () => {
-  it('다섯 갈래를 전부 읽는다', () => {
+  it('일곱 갈래를 전부 읽는다', () => {
     const read = [
       { type: 'joined', projectId: 'p', connectionId: 'wsc_1', userId: 'u', role: 'owner' },
       { type: 'presence', projectId: 'p', participants: [{ connectionId: 'wsc_1', userId: 'u', userName: '홍' }] },
       PAGE_CHANGED,
       { type: 'restored', projectId: 'p', snapshotId: 's', actor: { type: 'user', label: '홍길동' } },
       { type: 'pong' },
+      PATCH_ACK,
+      PATCH_ERROR,
     ].map((frame) => parseServerFrame(JSON.stringify(frame))?.type)
 
-    expect(read).toEqual(['joined', 'presence', 'page-changed', 'restored', 'pong'])
+    expect(read).toEqual([
+      'joined',
+      'presence',
+      'page-changed',
+      'restored',
+      'pong',
+      'patch-ack',
+      'patch-error',
+    ])
+  })
+
+  it('patch-ack의 값을 그대로 옮긴다 — undo 스택이 이것을 든다', () => {
+    expect(parseServerFrame(JSON.stringify(PATCH_ACK))).toEqual(PATCH_ACK)
+  })
+
+  it('patch-error의 봉투를 그대로 옮긴다 — 화면이 REST와 같은 규칙으로 읽는다', () => {
+    expect(parseServerFrame(JSON.stringify(PATCH_ERROR))).toEqual(PATCH_ERROR)
   })
 
   it('page-changed의 값을 그대로 옮긴다', () => {
     expect(parseServerFrame(JSON.stringify(PAGE_CHANGED))).toEqual(PAGE_CHANGED)
+  })
+
+  /**
+   * **`clientOpId`는 있을 때만 온다.** 이것을 안 읽으면 자기 편집이 되돌아온 것을 알아볼 수
+   * 없고, 리베이스가 그것을 두 번 얹는다(`store/editor-store.ts`의 되받기 창).
+   */
+  it('page-changed의 clientOpId를 읽는다 — 있을 때만', () => {
+    expect(parseServerFrame(JSON.stringify({ ...PAGE_CHANGED, clientOpId: 'op_1' }))).toEqual({
+      ...PAGE_CHANGED,
+      clientOpId: 'op_1',
+    })
+    // **없으면 키 자체가 없다** — `undefined`가 담기면 받는 쪽의 대조가 흔들린다.
+    expect(Object.keys(parseServerFrame(JSON.stringify(PAGE_CHANGED)) ?? {})).not.toContain('clientOpId')
   })
 
   it('joined에서 role은 읽지 않는다 — 역할 판정은 한 자리다', () => {
@@ -74,6 +127,49 @@ describe('안 읽는 것', () => {
 
   it('seq가 문자열이면 null이다 — 타입도 본다', () => {
     expect(parseServerFrame(JSON.stringify({ ...PAGE_CHANGED, seq: '7' }))).toBeNull()
+  })
+
+  /**
+   * **`clientOpId`가 빠진 ack가 흘러 들어가면 안 된다.** 짝지을 수 없는 ack는
+   * `undefined`를 키로 in-flight를 뒤지게 되고, 그러면 엉뚱한 편집이 성공으로 처리된다.
+   */
+  it.each(['projectId', 'pageId', 'clientOpId', 'seq', 'revisionId', 'inverse', 'warnings'])(
+    'patch-ack에서 %s가 없으면 null이다',
+    (missing) => {
+      const broken: Record<string, unknown> = { ...PATCH_ACK }
+      delete broken[missing]
+
+      expect(parseServerFrame(JSON.stringify(broken))).toBeNull()
+    },
+  )
+
+  it.each(['projectId', 'pageId', 'clientOpId', 'status', 'code', 'message', 'issues'])(
+    'patch-error에서 %s가 없으면 null이다',
+    (missing) => {
+      const broken: Record<string, unknown> = { ...PATCH_ERROR }
+      delete broken[missing]
+
+      expect(parseServerFrame(JSON.stringify(broken))).toBeNull()
+    },
+  )
+})
+
+describe('보내는 것', () => {
+  it('patch 프레임에 서버가 요구하는 것을 전부 싣는다', () => {
+    const raw = patchFrame({
+      pageId: 'g',
+      baseSeq: 4,
+      ops: [{ op: 'remove', path: '/root/children/0' }],
+      clientOpId: 'op_1',
+    })
+
+    expect(JSON.parse(raw)).toEqual({
+      type: 'patch',
+      pageId: 'g',
+      baseSeq: 4,
+      ops: [{ op: 'remove', path: '/root/children/0' }],
+      clientOpId: 'op_1',
+    })
   })
 })
 

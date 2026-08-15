@@ -56,7 +56,22 @@ export interface RealtimeOptions {
 const DEFAULT_HEARTBEAT_MS = 25_000
 const DEFAULT_RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000] as const
 
-export interface RealtimeConnection {
+/**
+ * 프레임을 흘려보낼 수 있는 것. **`openRealtime`이 돌려주는 것이 이 모양이고**, 편집 전송
+ * (`edit-channel.ts`)이 요구하는 것도 이것뿐이다 — 그쪽이 소켓도 재연결도 모르게 한다.
+ */
+export interface RealtimeLink {
+  /** 지금 프레임을 보낼 수 있는가. **`send`를 시험 삼아 부르지 않고 물어볼 수 있어야 한다.** */
+  isOpen(): boolean
+  /**
+   * 보냈으면 `true`. 열려 있지 않으면 **아무것도 안 하고 `false`**다 — 던지지 않는 것이
+   * 계약이다. 끊긴 소켓에 쓰는 것은 `WebSocket`이 던지는 자리이고, 그 예외가 편집 경로로
+   * 새면 실패 종류가 하나 더 늘어난다.
+   */
+  send(payload: string): boolean
+}
+
+export interface RealtimeConnection extends RealtimeLink {
   /** 붙는 것을 그만둔다. **이 뒤로는 재연결하지 않는다.** */
   close(): void
 }
@@ -76,6 +91,12 @@ export function openRealtime(options: RealtimeOptions): RealtimeConnection {
 
   let stopped = false
   let socket: RealtimeSocket | null = null
+  /**
+   * 소켓이 `onopen`을 지났는가. **`socket !== null`로는 알 수 없다** — `connect()`가 소켓을
+   * 만든 직후부터 핸드셰이크가 끝나기 전까지 그 값은 `null`이 아니고, 그 창에 보낸 프레임은
+   * 브라우저 `WebSocket`이 던진다(`CONNECTING` 상태의 `send`).
+   */
+  let open = false
   let attempt = 0
   let timer: unknown = null
   /** 마지막 `ping` 이후 무엇이든 받았는가. 안 받았으면 그 연결은 죽은 것으로 본다. */
@@ -110,6 +131,7 @@ export function openRealtime(options: RealtimeOptions): RealtimeConnection {
       if (stopped) return
       attempt = 0
       heardSinceLastPing = true
+      open = true
       options.onStatus?.('open')
       clearTimer()
       timer = schedule(beat, heartbeatMs)
@@ -137,6 +159,7 @@ export function openRealtime(options: RealtimeOptions): RealtimeConnection {
       next.onclose = null
       next.onerror = null
       socket = null
+      open = false
       clearTimer()
       options.onStatus?.('closed')
       const delay = delays[Math.min(attempt, delays.length - 1)] ?? 0
@@ -151,25 +174,34 @@ export function openRealtime(options: RealtimeOptions): RealtimeConnection {
   connect()
 
   return {
+    isOpen: () => open,
+    // **열려 있지 않으면 아무것도 안 한다.** 부르는 쪽이 `isOpen()`을 먼저 보지만, 그
+    // 사이에 끊길 수 있으므로 여기서도 본다 — 그 창에서 `WebSocket.send`는 던진다.
+    send: (payload) => {
+      if (stopped || !open || socket === null) return false
+      socket.send(payload)
+      return true
+    },
     close: () => {
       // **`stopped`는 방어선이고 오늘 그것만 지우는 케이스는 없다(0 사망 — 변이 M22).**
       // 아래 두 줄(예약 취소 + 핸들러 떼기)이 `stopped`가 막는 경로를 이미 전부 막기
       // 때문이다: 재연결 예약은 `clearTimer`가 지우고, 소켓이 `close()` 도중 동기로
       // `onclose`를 내도 그때는 핸들러가 이미 `null`이다.
       //
-      // **그래도 남긴다.** 저 두 줄의 **순서**가 뒤집히면(핸들러 떼기가 `open.close()`
+      // **그래도 남긴다.** 저 두 줄의 **순서**가 뒤집히면(핸들러 떼기가 `live.close()`
       // 뒤로 가면) 그 순간 `stopped`가 유일한 방벽이 된다. 이 줄을 지워도 되는 신호로
       // 읽지 마라 — 지금 안 죽는 이유는 다른 두 줄이 옳게 서 있기 때문이다.
       stopped = true
+      open = false
       clearTimer()
-      const open = socket
+      const live = socket
       socket = null
-      if (open) {
-        open.onopen = null
-        open.onmessage = null
-        open.onclose = null
-        open.onerror = null
-        open.close()
+      if (live) {
+        live.onopen = null
+        live.onmessage = null
+        live.onclose = null
+        live.onerror = null
+        live.close()
       }
     },
   }
