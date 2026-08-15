@@ -18,9 +18,13 @@
  *
  * # 세는 단위 — 한 문장으로 못박는다
  *
- * > **이 표가 세는 것은 `apps/api/src/routes/`와 `apps/api/src/services/`에서 `applyEdit`을
- * > 부르는 자리 하나당 한 줄이다.** 선언(`services/edit-pipeline.ts`의 `function
- * > applyEdit(`)은 호출이 아니므로 세지 않는다.
+ * > **이 표가 세는 것은 `apps/api/src/` 아래 어느 `.ts`에서든 `applyEdit`을 부르는 자리
+ * > 하나당 한 줄이다.** 선언(`services/edit-pipeline.ts`의 `function applyEdit(`)은 호출이
+ * > 아니므로 세지 않는다.
+ *
+ * **`src/` 전체를 재귀로 훑는 것이 리뷰가 뚫은 자리다.** 앞 판은 `routes`·`services` 둘만
+ * 비재귀로 봤고, 그래서 **`src/ws/`의 호출자를 못 봤다** — P3-2의 patch 핸들러가 갈 자리가
+ * 정확히 거기다. `훑는 범위가 src 전체다`가 그 범위를 실행으로 지킨다.
  *
  * **왜 라우트가 아니라 호출 자리인가.** 알릴 것은 *"페이지 문서가 바뀌었다"*이고, 그것을
  * 만드는 것은 라우트가 아니라 `applyEdit`의 성공이다. 한 라우트가 그 함수를 두 번 부를 수
@@ -74,10 +78,33 @@ function track(probe: WsProbe): WsProbe {
   return probe
 }
 
-const SRC_DIRS = ['../src/routes', '../src/services'].map((path) => fileURLToPath(new URL(path, import.meta.url)))
+/**
+ * 훑을 뿌리. **`src/` 전체이고 재귀한다** — 앞 판은 `routes`·`services` 둘을 비재귀로
+ * 훑었고, 리뷰가 그 구멍을 실증했다: **`src/ws/`에 `applyEdit` 호출을 심으면 0 사망**이었다
+ * (`routes/`에 심으면 1 사망). **P3-2의 patch 핸들러가 갈 자리가 정확히 거기다** — D3의
+ * 대가를 갚기로 한 유일한 장치가 다음 호출자에 대해 비어 있었다.
+ *
+ * **디렉터리 목록을 손으로 적지 않는 것이 이 고침의 요점이다.** 목록을 적으면 다음
+ * 디렉터리가 생길 때 같은 일이 다시 난다.
+ */
+const SRC_ROOT = fileURLToPath(new URL('../src', import.meta.url))
 
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+}
+
+/** `SRC_ROOT` 아래의 `.ts` 전부를 뿌리 기준 상대 경로로 낸다. */
+function sourceFiles(dir: string = SRC_ROOT, prefix = ''): string[] {
+  const found: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
+    if (entry.isDirectory()) {
+      found.push(...sourceFiles(join(dir, entry.name), relative))
+    } else if (entry.name.endsWith('.ts')) {
+      found.push(relative)
+    }
+  }
+  return found
 }
 
 /**
@@ -88,13 +115,11 @@ function stripComments(source: string): string {
  */
 function editCallSitesByFile(): Map<string, number> {
   const found = new Map<string, number>()
-  for (const dir of SRC_DIRS) {
-    for (const name of readdirSync(dir).filter((file) => file.endsWith('.ts'))) {
-      const source = stripComments(readFileSync(join(dir, name), 'utf8')).replace(/function\s+applyEdit\(/g, '')
-      const count = [...source.matchAll(/\bapplyEdit\(/g)].length
-      if (count > 0) {
-        found.set(`${dir.endsWith('routes') ? 'routes' : 'services'}/${name}`, count)
-      }
+  for (const relative of sourceFiles()) {
+    const source = stripComments(readFileSync(join(SRC_ROOT, relative), 'utf8')).replace(/function\s+applyEdit\(/g, '')
+    const count = [...source.matchAll(/\bapplyEdit\(/g)].length
+    if (count > 0) {
+      found.set(relative, count)
     }
   }
   return found
@@ -247,9 +272,31 @@ const CALL_SITES: CallSite[] = [
 describe('분모를 소스에서 만든다', () => {
   it('훑을 소스를 실제로 읽는다', () => {
     // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**(이 저장소가 겪은 사고다).
-    const files = SRC_DIRS.flatMap((dir) => readdirSync(dir).filter((file) => file.endsWith('.ts')))
-    expect(files.length).toBeGreaterThan(10)
+    expect(sourceFiles().length).toBeGreaterThan(10)
     expect([...editCallSitesByFile().values()].reduce((sum, count) => sum + count, 0)).toBeGreaterThan(5)
+  })
+
+  /**
+   * **훑는 범위가 `src/` 전체다.** 앞 판이 `routes`·`services` 둘을 비재귀로 봤고, 리뷰가
+   * `src/ws/`에 호출을 심어 **0 사망**을 실증했다. 이 케이스는 *"거기까지 본다"*를
+   * 디렉터리 이름이 아니라 **훑은 결과**로 확인한다 — `src/`의 모든 디렉터리가 결과에
+   * 나타나야 한다.
+   */
+  it('훑는 범위가 src 전체다 — 디렉터리가 빠지면 그 아래 호출자가 안 보인다', () => {
+    const scanned = new Set(
+      sourceFiles()
+        .filter((relative) => relative.includes('/'))
+        .map((relative) => relative.slice(0, relative.indexOf('/'))),
+    )
+    const declared = new Set(
+      readdirSync(SRC_ROOT, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name),
+    )
+
+    expect([...declared].filter((name) => !scanned.has(name))).toEqual([])
+    // **`ws`를 이름으로 못박는다** — 리뷰가 뚫은 자리이고, P3-2의 patch 핸들러가 거기 선다.
+    expect(scanned.has('ws')).toBe(true)
   })
 
   it('호출 자리가 하나도 빠지지 않았다 — 이 파일이 생긴 이유다', () => {

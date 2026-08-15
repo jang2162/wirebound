@@ -125,6 +125,116 @@ describe('applyRemoteChange — 안 얹는 갈래', () => {
   })
 })
 
+/**
+ * **리뷰가 뚫은 자리(B1).** 앞 판은 `seq > headSeq`이기만 하면 얹었다 — 그래서 프레임을
+ * 하나라도 놓치면 문서가 **조용히** 갈라지고, `headSeq`가 서버와 같아져 그 뒤 편집이
+ * `stale` 409조차 안 받았다. **재연결이 있는 이상 프레임 유실은 설계상 일어난다.**
+ */
+describe('applyRemoteChange — 프레임을 놓친 갈래 (B1)', () => {
+  it('seq가 내 다음 번호가 아니면 얹지 않는다', () => {
+    const store = opened()
+
+    const result = store.applyRemoteChange('page_1', { seq: 6, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(result).toBe('gap')
+    expect(store.getState().document?.root.children ?? []).toEqual([])
+  })
+
+  /**
+   * **이것이 그 사고의 심장이다.** `headSeq`를 올리면 서버와 값이 같아져 다음 편집이
+   * `stale` 409를 못 받고, **틀린 문서 위에서 만든 ops가 서버의 옳은 문서에 적용된다.**
+   * 안 올리면 그 409가 살아 있고 복구 경로가 페이지를 다시 받는다.
+   */
+  it('headSeq를 안 올린다 — 다음 편집이 409를 받아 저절로 수렴한다', () => {
+    const store = opened()
+
+    store.applyRemoteChange('page_1', { seq: 6, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(store.getState().headSeq).toBe(4)
+  })
+
+  it('낡았다고 말한다 — 조용히 두지 않는다', () => {
+    const store = opened()
+
+    store.applyRemoteChange('page_1', { seq: 6, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'gap' })
+  })
+
+  /**
+   * **`'gap'`과 `'diverged'`를 접지 않는다.** 둘 다 *"못 얹었다"*지만 원인이 정반대다 —
+   * 못 받은 것이 있는 것과, 받은 것을 내 문서가 못 받아들이는 것.
+   */
+  it('갈라진 것과 놓친 것을 다른 이유로 말한다', () => {
+    const missed = opened()
+    const conflicted = opened()
+
+    missed.applyRemoteChange('page_1', { seq: 6, ops: ADD_ONE, warnings: NO_WARNINGS })
+    conflicted.applyRemoteChange('page_1', {
+      seq: 5,
+      ops: [{ op: 'replace', path: '/root/children/9/type', value: 'Text' }],
+      warnings: NO_WARNINGS,
+    })
+
+    expect(missed.getState().remoteStale).toEqual({ reason: 'gap' })
+    expect(conflicted.getState().remoteStale).toEqual({ reason: 'diverged' })
+  })
+
+  it('바로 다음 번호는 그대로 얹는다 — 음성 대조', () => {
+    const store = opened()
+
+    const result = store.applyRemoteChange('page_1', { seq: 5, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(result).toBe('applied')
+    expect(store.getState().headSeq).toBe(5)
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  /**
+   * **놓친 것이 뒤늦게 와도 소용없다** — 그때는 `seq <= headSeq`가 아니라 여전히 갭이다.
+   * 갭 뒤에 이어지는 프레임을 얹어 버리면 **빠진 revision을 건너뛴 채 번호만 맞춰진다.**
+   */
+  it('갭 뒤에 이어지는 프레임도 안 얹는다 — 번호만 맞추지 않는다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 6, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    const next = store.applyRemoteChange('page_1', { seq: 7, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(next).toBe('gap')
+    expect(store.getState().headSeq).toBe(4)
+    expect(store.getState().document?.root.children ?? []).toEqual([])
+  })
+
+  /**
+   * **놓친 seq가 뒤늦게 도착하면 그것은 얹힌다.** 서버가 순서를 뒤바꿔 보낸 경우다 —
+   * `headSeq + 1`이므로 갭이 아니고, 얹고 나면 낡음이 풀린다.
+   */
+  it('놓쳤던 번호가 뒤늦게 오면 얹고 낡음을 푼다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 6, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    const late = store.applyRemoteChange('page_1', { seq: 5, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(late).toBe('applied')
+    expect(store.getState().headSeq).toBe(5)
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  /**
+   * **pending이 먼저다.** 갭이면서 pending도 있으면 `'pending'`이 더 좁고 정확한 진단이다 —
+   * 내가 낸 편집이 끝나면 409가 나고 복구가 돈다.
+   */
+  it('pending이 있으면 갭이어도 pending으로 말한다', () => {
+    const store = opened()
+    store.applyEdit([{ op: 'add', path: '/root/children/-', value: { id: 'n_mine', type: 'Container' } }])
+
+    const result = store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
+
+    expect(result).toBe('deferred')
+    expect(store.getState().remoteStale).toEqual({ reason: 'pending' })
+  })
+})
+
 describe('낡음은 풀린다', () => {
   it('페이지를 다시 받으면 풀린다 — 새로고침한 뒤에도 남지 않는다', () => {
     const store = opened()

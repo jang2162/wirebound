@@ -12,6 +12,15 @@
  * **`'pending'`은 저절로 풀린다** — 보내지 않은 편집이 서버에 닿으면 `loadPage`나 다음
  * `page-changed`가 `remoteStale`을 `null`로 되돌린다. 그래서 문장이 *"새로고침하세요"*로
  * 시작하지 않는다.
+ *
+ * **`'gap'`도 편집을 내는 사람에게는 저절로 풀린다** — `headSeq`가 뒤처진 채 남으므로 다음
+ * 편집이 409를 받고 복구 경로가 페이지를 다시 받는다(`editor-store.ts`의 그 문단). 그래도
+ * 문장이 새로고침을 말하는 것은 **아무것도 안 내고 보고만 있는 사람**에게는 그 수렴이
+ * 일어나지 않기 때문이다.
+ *
+ * **`NOTICE`가 `Record<RemoteStale['reason'], string>`인 것이 계약이다.** 갈래를 하나
+ * 더하면 여기서 컴파일이 막힌다 — 실제로 `'gap'`을 더할 때 그렇게 잡혔다. 문장 없는
+ * 갈래가 **조용히 아무 말도 안 하는 상태**로 새어 나가지 않는다.
  */
 import type { ReactElement } from 'react'
 import type { RemoteStale } from '../store/editor-store'
@@ -19,6 +28,7 @@ import { useEditorStore, useEditorStoreInstance } from '../store/use-editor-stor
 
 const NOTICE: Record<RemoteStale['reason'], string> = {
   pending: '다른 사람의 변경이 도착했습니다. 저장하지 않은 편집이 있어 아직 화면에 반영하지 않았습니다.',
+  gap: '연결이 끊긴 사이의 변경을 놓쳐 화면이 최신이 아닙니다. 새로고침하면 맞춰집니다.',
   diverged: '다른 사람의 변경을 화면에 반영하지 못했습니다. 새로고침하면 맞춰집니다.',
   restored: '다른 사람이 스냅샷을 복원했습니다. 새로고침해 지금 상태를 확인하세요.',
 }

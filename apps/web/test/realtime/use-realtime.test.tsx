@@ -192,6 +192,21 @@ describe('프레임이 스토어에 닿는다', () => {
     expect(screen.getByRole('status').textContent).toContain('아직 화면에 반영하지 않았습니다')
   })
 
+  /**
+   * **리뷰가 뚫은 자리(B1)가 화면까지 닿는지 본다.** 스토어 갈래는
+   * `test/store/remote-change.test.ts`가 재고, 여기는 그 갈래가 **문장이 되는 것**을 잰다 —
+   * `RemoteAlert`의 `NOTICE`에 갈래를 안 더하면 컴파일이 막히지만, **엉뚱한 문장을 붙이는
+   * 것은 컴파일이 안 막는다.**
+   */
+  it('프레임을 놓치면 놓쳤다고 말한다 — 갈라진 것과 다른 문장이다', () => {
+    const board = mount()
+
+    board.push({ ...PAGE_CHANGED, seq: 7 })
+
+    expect(board.store.getState().headSeq).toBe(4)
+    expect(screen.getByRole('status').textContent).toContain('놓쳐')
+  })
+
   it('얹히면 아무 말도 안 한다 — 음성 대조', () => {
     const board = mount()
 
