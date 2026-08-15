@@ -154,10 +154,11 @@ export interface EditorState {
   /**
    * **남의 변경을 받았는데 화면에 못 얹었다**(P3-1 D6). 얹은 경우엔 `null`이다.
    *
-   * 이 슬라이스의 클라이언트는 **받기만 한다** — 편집은 여전히 REST로 나간다. 그래서
-   * *"내 낙관적 편집이 pending인데 남의 ops가 오는"* 자리가 생기고, §7.1의 답
-   * (*"자기 pending 위에 리베이스 적용"*)은 **P3-2다.** 그때까지 할 수 있는 정직한 일은
-   * **미루고 그 사실을 말하는 것**이다 — `applyRemoteChange`의 머리말에 갈래 표가 있다.
+   * **P3-1에는 *"미뤘다"*는 갈래가 있었다** — 그때는 편집이 REST로 나갔고 §7.1의 답
+   * (*"자기 pending 위에 리베이스 적용"*)이 아직 없어서, `pending`이 차 있으면 남의 ops를
+   * 얹지 않고 그 사실을 말했다. **P3-2가 리베이스를 세우면서 그 갈래가 없어졌다** — 지금
+   * 못 얹는 이유는 셋뿐이고 전부 *"내 바탕이 서버 문서가 아니다"*에서 온다
+   * (`applyRemoteChange`의 갈래 표).
    *
    * **`null`과 `{reason}`을 접지 마라.** 접으면 *"낡지 않았다"*와 *"낡았는데 왜인지 모른다"*가
    * 같은 값이 된다.
@@ -310,9 +311,11 @@ export class EditorStore {
    * 실측: 그 트리에서 편집을 각각 내면 `maxInFlight`가 **2**가 되어 D6가 깨진다.
    * 스토어에 두면 인스턴스 수와 무관해진다.
    *
-   * **지금 그 자리는 셋이다**(세어 고쳤다 — 앞 판은 "둘"이라고 적었는데 P2b-3이 구조 툴바를
-   * 더하면서 늘었다): `routes/editor.tsx`의 undo/redo, `panels/structure-toolbar.tsx`,
-   * `panels/property-panel.tsx`.
+   * **부르는 자리는 여럿이다** — `routes/editor.tsx`의 undo/redo, `panels/structure-toolbar.tsx`,
+   * `panels/property-panel.tsx`, `panels/interaction-panel.tsx`. **수를 적지 않는다:** 앞
+   * 판들이 "둘"·"셋"으로 적었다가 패널이 늘 때마다 낡았다(P2b-3에서 한 번, P5-2에서 한 번).
+   * 재는 것은 수가 아니라 **인스턴스 수와 무관하다**는 성질이고, 그것을 잡는 것은
+   * `test/edit/use-edit-commit.test.tsx`의 in-flight 케이스다.
    */
   #pumping = false
 
@@ -587,6 +590,11 @@ export class EditorStore {
     if (change.seq <= headSeq) return unchanged('skipped')
     // **아직 ack되지 않은 내 편집이 되돌아온 것이다**(위 머리말의 되받기 창). 얹으면 같은
     // 편집이 바탕과 문서에 두 번 들어간다 — 그 갈라짐은 조용하다.
+    //
+    // **큐 전체를 본다(`some`) — 머리만 보지 않는다.** 오늘 되받을 수 있는 것은 이미 보낸
+    // 편집뿐이고 보내는 것은 언제나 머리이므로 **두 구현이 관측상 같다**(리뷰 변이 N1이 0
+    // 사망이었다). 넓은 쪽을 두는 이유는 그 등식이 *"in-flight는 항상 하나"*(D6)에 매여
+    // 있어서다 — 그 전제가 흔들리면 머리만 보는 판은 조용히 틀린다.
     if (change.clientOpId !== undefined && pending.some((edit) => edit.clientOpId === change.clientOpId)) {
       return unchanged('skipped')
     }

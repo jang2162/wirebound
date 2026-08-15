@@ -57,8 +57,11 @@ export interface EditChannel {
   /** 편집 하나를 내고 ack를 기다린다. 실패는 reject다. */
   send(request: EditSend): Promise<EditAck>
   /**
-   * 받은 프레임을 in-flight에 넘긴다. **그 프레임을 여기서 쓴 경우에만 `true`** — 부르는
-   * 쪽이 그것으로 *"이 프레임은 처리됐다"*를 안다.
+   * 받은 프레임을 in-flight에 넘긴다. **그 프레임을 여기서 쓴 경우에만 `true`**다.
+   *
+   * **오늘 그 반환을 읽는 프로덕션 호출자는 없다**(`use-realtime.ts`가 버린다 — 모르는 ack에
+   * 화면이 할 일이 없다). 읽는 것은 케이스뿐이고, 그것이 *"모르는 `clientOpId`는 아무것도
+   * 끝내지 않는다"*를 재는 유일한 수단이다. **`void`로 바꾸면 그 축이 관측 불가능해진다.**
    */
   deliver(frame: ServerFrame): boolean
   /** 연결 하나를 붙인다. 앞의 것이 있으면 그것에 매달린 편집은 실패로 끝난다. */

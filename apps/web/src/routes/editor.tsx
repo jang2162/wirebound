@@ -565,6 +565,11 @@ function CanvasFrame(props: {
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
   const zoom = useEditorStore(store, (s) => s.zoom)
   const [state, setState] = useState<PageLoadState>({ status: 'empty' })
+  /**
+   * 마지막으로 처리한 재조회 신호. **상태가 아니라 ref다** — 이 값이 바뀌었다고 다시 그릴
+   * 이유가 없고, 상태로 두면 그 갱신이 아래 이펙트를 한 번 더 태운다.
+   */
+  const handledResync = useRef(0)
   const { projectId, pageId, resyncToken } = props
 
   useEffect(() => {
@@ -693,10 +698,25 @@ function CanvasFrame(props: {
    *
    * **말할 것이 없으면 말하지 않는다.** 버린 편집도 없고 스택도 비어 있었으면 이 재조회는
    * 무해하고, 그때 뜨는 통지는 사용자가 하지도 않은 일에 대한 경고가 된다.
+   *
+   * ## 신호가 오를 때만 돈다 — `pageId`가 바뀔 때가 아니다 (리뷰 F5)
+   *
+   * 의존 배열에 `pageId`가 있으므로 이 이펙트는 **페이지를 옮길 때도 다시 돈다.** 앞 판은
+   * 그것을 막지 않아, **재연결을 한 번이라도 하면 그 뒤로는 페이지를 옮길 때마다 `getPage`가
+   * 두 번** 갔다(위 이펙트가 한 번, 여기가 또 한 번). 리뷰가 셸째로 재서 잡았다.
+   *
+   * **`pageId`를 의존에서 빼는 쪽은 고르지 않았다** — 그러면 이 클로저가 낡은 `pageId`를
+   * 들고 돌아 **지금 안 열린 페이지를 다시 읽는다.** 대신 **마지막으로 처리한 신호를 ref로
+   * 들고** 같은 신호에 두 번 돌지 않게 한다. 신호가 오른 뒤에 페이지를 옮기면 그때는 위
+   * 이펙트가 새 페이지를 서버 것으로 놓으므로, 여기가 또 읽을 이유가 없다.
    */
   useEffect(() => {
     // 첫 연결에서는 위 이펙트가 방금 서버 문서를 놓았다 — 다시 읽을 것이 없다.
     if (resyncToken === 0 || pageId === undefined) return
+    // 같은 신호에 두 번 돌지 않는다(위 머리말). **읽기와 쓰기가 한 문에 붙어 있어야 한다** —
+    // 사이에 `await`이 끼면 같은 신호의 두 실행이 둘 다 통과한다.
+    if (handledResync.current === resyncToken) return
+    handledResync.current = resyncToken
 
     let alive = true
     void (async () => {
@@ -709,8 +729,15 @@ function CanvasFrame(props: {
         if (dropped.length === 0 && !hadUndo) return
         store.setEditFailure({ kind: 'message', message: resyncNotice(dropped.length, hadUndo) })
       } catch {
-        // **여기서 알리지 않는다.** 사용자가 요청한 조회가 아니고, 실패해도 화면은 재연결
-        // 전과 같다 — 낡았다는 것은 `RemoteAlert`가 이미 말하고 있다(`'gap'`).
+        // **여기서 알리지 않는다.** 사용자가 요청한 조회가 아니고, 화면은 재연결 전과 같다 —
+        // 되돌릴 것도 잃은 것도 없다.
+        //
+        // **앞 판이 여기에 *"낡았다는 것은 `RemoteAlert`가 이미 말하고 있다"*고 적었는데
+        // 거짓이었다**(리뷰 F6). 끊긴 동안의 프레임은 오지 않았으므로 갭 검사가 돈 적이 없고
+        // `remoteStale`은 `null`이다 — 끊길 때 낡음을 세우는 코드도 없다(`onStatus`는 홀더를
+        // 비우고 in-flight를 실패시킬 뿐이다). **그래서 이 갈래에서 화면은 낡은 채 아무 말도
+        // 안 한다.** 그것을 말하려면 끊김 자체를 그리는 자리가 필요하고(P3-1 리뷰 C4가 지목한
+        // 자리), 그것은 이 슬라이스에 없다 — 이월에 적었다.
       }
     })()
 

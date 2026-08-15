@@ -184,6 +184,57 @@ describe('patch 프레임에는 editor 이상이 필요하다 (D1 · §10)', () 
   })
 
   /**
+   * **거절의 반대편 — 회수는 연결을 닫는다**(§10의 *"세션 행을 지우면 열려 있는 WS 연결의
+   * 권한도 즉시 회수된다"*).
+   *
+   * **리뷰가 뚫은 자리다(F2).** 회수를 재던 케이스(`ws-auth.test.ts` 셋)는 전부 `ping`을
+   * 쓰는데 `ping`의 최소 역할은 룸에 들어올 자격과 같아 **가르는 갈래를 아예 안 지난다.**
+   * 그리고 위 뷰어 판은 멤버십이 살아 있어 그 갈래가 어느 구현에서든 통과한다. 그래서
+   * *"회수된 사람이 patch를 냈다"*는 판이 없었고, 가르기를 지워도 **아무도 안 죽었다.**
+   *
+   * 그 갈래가 없으면 회수된 연결이 **룸에 남아** patch-error만 받는다 — 다음 브로드캐스트가
+   * 다시 쫓아낼 때까지 남의 편집을 계속 본다.
+   */
+  it('회수된 연결이 patch를 내면 닫힌다 — 거절이 아니라 회수다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+
+      await db
+        .deleteFrom('project_members')
+        .where('project_id', '=', fx.project.id)
+        .where('user_id', '=', fx.editor.user.id)
+        .execute()
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: await headSeqOf(fx.page.id),
+        ops: addNode('n_revoked'),
+        clientOpId: 'op_revoked',
+      })
+
+      expect((await probe.waitClosed()).code).toBe(4403)
+    })
+  })
+
+  /** 세션이 사라진 판도 같은 자리다 — 멤버십만이 아니다. */
+  it('세션이 사라진 연결이 patch를 내도 닫힌다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.editor.cookie.wb_session))
+
+      await ctx.db.deleteFrom('sessions').where('user_id', '=', fx.editor.user.id).execute()
+      sendPatch(probe, {
+        pageId: fx.page.id,
+        baseSeq: await headSeqOf(fx.page.id),
+        ops: addNode('n_revoked'),
+        clientOpId: 'op_revoked',
+      })
+
+      expect((await probe.waitClosed()).code).toBe(4403)
+    })
+  })
+
+  /**
    * **음성 대조.** 뷰어가 `ping`은 그대로 낼 수 있다 — 위 거절이 *"뷰어는 아무 프레임도 못
    * 낸다"*로 통과하지 않는다.
    */
@@ -423,6 +474,73 @@ describe('실패는 봉투로 되돌아온다 — REST와 같은 표다', () => 
       })
 
       await probe.waitFor('patch-ack')
+    })
+  })
+})
+
+describe('예상 밖 예외에도 낸 사람은 답을 받는다 (리뷰 F4)', () => {
+  /**
+   * **답이 없으면 클라이언트가 조용히 멈춘다.** 편집 하나가 응답을 못 받으면 그 `Promise`가
+   * 영영 안 끝나고, in-flight를 하나로 지키는 펌프가 거기 매달려 **다음 편집도 안 나간다**
+   * (`apps/web`의 `realtime/edit-channel.ts`가 그 부류를 머리말에 적었다).
+   *
+   * **REST 경로는 같은 예외에 500 봉투가 나간다** — 두 진입점의 결말을 맞춘다.
+   *
+   * 파이프라인의 모든 실패는 값(`outcome`)으로 돌아오므로 **예상 밖 예외를 내는 입력은 없다.**
+   * 그래서 자격 확인을 던지게 바꿔 그 갈래를 지나간다 — 재는 것은 *"무엇이 던졌나"*가 아니라
+   * *"던졌을 때 낸 사람이 답을 받는가"*다.
+   */
+  it('처리가 던져도 patch-error가 온다 — 매달아 두지 않는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const realtime = ctx.app.realtime
+      const original = realtime.broadcast.stillAllowed
+      realtime.broadcast.stillAllowed = () => {
+        throw new Error('예상 밖 예외 [F4]')
+      }
+
+      try {
+        sendPatch(probe, {
+          pageId: fx.page.id,
+          baseSeq: await headSeqOf(fx.page.id),
+          ops: addNode('n_boom'),
+          clientOpId: 'op_boom',
+        })
+
+        const error = await probe.waitFor('patch-error')
+        expect(error.status).toBe(500)
+        expect(error.clientOpId).toBe('op_boom')
+        expect(probe.closeInfo).toBeNull()
+      } finally {
+        realtime.broadcast.stillAllowed = original
+      }
+    })
+  })
+
+  /**
+   * **음성 대조.** `ping`은 되돌려 줄 짝이 없으므로 아무것도 안 낸다 — 위 케이스가
+   * *"던지면 늘 프레임을 낸다"*로 통과하지 않는다.
+   */
+  it('ping이 던지면 아무것도 안 낸다 — 짝지을 것이 없다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const probe = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const realtime = ctx.app.realtime
+      const original = realtime.broadcast.stillAllowed
+      realtime.broadcast.stillAllowed = () => {
+        throw new Error('예상 밖 예외 [F4]')
+      }
+
+      try {
+        probe.send(JSON.stringify({ type: 'ping' }))
+
+        const quiet = await probe.quiet()
+        // `presence`는 참가 알림이라 이 창에 섞일 수 있다. 재는 것은 **답이 없다**는 것이다.
+        expect(quiet.filter((f) => f.type === 'patch-error' || f.type === 'pong')).toEqual([])
+      } finally {
+        realtime.broadcast.stillAllowed = original
+      }
     })
   })
 })

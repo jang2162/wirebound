@@ -39,7 +39,7 @@ import { projectGuard } from '../auth/roles'
 import { hashSessionToken } from '../auth/session'
 import type { ApiConfig } from '../config'
 import type { ProjectRole } from '../db/types'
-import { forbidden, unauthenticated } from '../errors'
+import { forbidden, internal, unauthenticated } from '../errors'
 import { parseParams } from '../http/parse'
 import { z } from 'zod'
 import { handlePatchFrame, patchErrorFrame } from './patch'
@@ -118,13 +118,15 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
       announce()
 
       socket.on('message', (raw: unknown) => {
-        void (async () => {
-          const frame = parseClientFrame(String(raw))
-          if (!frame) {
-            socket.close(WS_CLOSE.badFrame, '읽을 수 없는 프레임입니다')
-            return
-          }
+        // **읽기는 동기이므로 IIFE 밖에서 한다.** 아래 `catch`가 *"어느 편집이 실패했나"*를
+        // 알려면 프레임을 손에 쥐고 있어야 한다.
+        const frame = parseClientFrame(String(raw))
+        if (!frame) {
+          socket.close(WS_CLOSE.badFrame, '읽을 수 없는 프레임입니다')
+          return
+        }
 
+        void (async () => {
           // 확인 지점 1 (머리말). 검사는 프레임 종류와 무관하게 **먼저** 돌고, 요구하는
           // 역할만 종류에서 온다(`MIN_ROLE_FOR_FRAME` — P3-2 D1).
           const minRole = MIN_ROLE_FOR_FRAME[frame.type]
@@ -158,6 +160,17 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
           }
         })().catch((error: unknown) => {
           app.log.error({ err: error, projectId }, 'WS 프레임 처리 실패')
+          // **낸 사람에게 답한다.** 예상 밖 예외에 아무것도 안 내면 그 편집의 응답이 영영 안
+          // 오고, 클라이언트의 in-flight가 매달려 **다음 편집도 안 나간다**(펌프의 가드가 계속
+          // 서 있다 — `apps/web`의 `edit-channel.ts` 머리말이 그 부류를 적었다). REST 경로는
+          // 같은 예외에 500 봉투가 나가 복구가 돈다 — **두 진입점의 결말을 맞춘다.**
+          if (frame.type !== 'patch') return
+          try {
+            push(patchErrorFrame(projectId, frame, internal()))
+          } catch (pushError: unknown) {
+            // 소켓이 이미 죽었으면 보낼 수 없다. 여기서 던지면 unhandled가 된다.
+            app.log.error({ err: pushError, projectId }, 'WS 실패 통지 실패')
+          }
         })
       })
 

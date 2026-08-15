@@ -14,13 +14,23 @@
  * `loadPage` 하나여야 하기 때문이다(D6). 그래서 스토어를 직접 쥐지 않고 `<App />`을
  * 라우트째 띄운다.
  */
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
-import { HEAD_SEQ, PAGE_ID, PROJECT_ID, openPage, pageDoc, pageDetail, waitForNode } from '../editor-harness'
+import {
+  HEAD_SEQ,
+  OTHER_PAGE_ID,
+  OTHER_PAGE_TITLE,
+  PAGE_ID,
+  PROJECT_ID,
+  openPage,
+  pageDoc,
+  pageDetail,
+  waitForNode,
+} from '../editor-harness'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -52,18 +62,30 @@ interface Board {
   /** 소켓이 열렸다고 알린다. 첫 번째는 최초 접속, 두 번째부터가 재연결이다. */
   open: (index: number) => void
   drop: (index: number) => void
+  /** 붙잡아 둔 재조회를 흘려 준다. `holdResync`를 준 판에서만 뜻이 있다. */
+  release: () => void
 }
 
 /**
  * 셸을 열고 소켓을 붙인다. **`schedule`을 진짜로 두지 않는다** — 재연결 예약이 실제
  * 타이머로 걸리면 테스트가 끝난 뒤에도 남는다. 대신 예약된 함수를 손으로 돌린다.
  */
-async function board(options?: { serverDoc?: PageDocument }): Promise<Board> {
+async function board(options?: { serverDoc?: PageDocument; holdResync?: boolean }): Promise<Board> {
   const sockets: FakeSocket[] = []
   const scheduled: (() => void)[] = []
-  const getPage = vi.fn(async (_projectId: string, pageId: string) =>
-    pageDetail(pageId, options?.serverDoc ?? doc('n-first')),
-  )
+  let release = (): void => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let calls = 0
+  // **페이지마다 다른 문서를 낸다** — 같은 것을 내면 "어느 페이지가 실렸나"를 잴 수 없다.
+  const getPage = vi.fn(async (_projectId: string, pageId: string) => {
+    calls += 1
+    // 첫 조회는 페이지를 여는 경로다. 붙잡는 것은 **그 페이지의** 재조회뿐이다 — 다른
+    // 페이지를 여는 조회까지 붙잡으면 옮겨 갈 수가 없다.
+    if (options?.holdResync === true && calls > 1 && pageId === PAGE_ID) await held
+    return pageDetail(pageId, pageId === PAGE_ID ? (options?.serverDoc ?? doc('n-first')) : doc('n-other'))
+  })
 
   const setup: RealtimeSetup = {
     holder: createConnectionIdHolder(),
@@ -90,6 +112,7 @@ async function board(options?: { serverDoc?: PageDocument }): Promise<Board> {
   return {
     sockets,
     getPage,
+    release,
     open: (index) => {
       act(() => {
         sockets[index]?.onopen?.()
@@ -105,6 +128,11 @@ async function board(options?: { serverDoc?: PageDocument }): Promise<Board> {
       })
     },
   }
+}
+
+/** 지금까지 `getPage`가 읽은 페이지들. 같은 페이지가 두 번 나오면 잉여 왕복이다. */
+function readPages(getPage: ReturnType<typeof vi.fn>): string[] {
+  return getPage.mock.calls.map((call) => String(call[1]))
 }
 
 describe('다시 붙으면 다시 읽는다 (D6)', () => {
@@ -142,6 +170,76 @@ describe('다시 붙으면 다시 읽는다 (D6)', () => {
 
     await waitFor(() => expect(view.getPage).toHaveBeenCalled())
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  /**
+   * **신호가 오를 때만 돈다 — 페이지를 옮길 때가 아니다**(리뷰 F5).
+   *
+   * 이펙트의 의존 배열에 `pageId`가 있으므로 막지 않으면 **재연결을 한 번이라도 한 뒤에는
+   * 페이지를 옮길 때마다 같은 페이지를 두 번 읽는다** — 위 이펙트가 한 번, 재조회가 또 한 번.
+   * D6이 세운 수렴 장치가 평상시 비용을 내는 형태다.
+   */
+  it('재연결 뒤 페이지를 옮겨도 그 페이지를 한 번만 읽는다', async () => {
+    const view = await board()
+    view.open(0)
+    view.drop(0)
+    view.open(1)
+    await waitFor(() => expect(view.getPage).toHaveBeenCalled())
+    view.getPage.mockClear()
+
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+
+    await waitForNode('n-other')
+    await act(async () => {})
+    expect(readPages(view.getPage)).toEqual([OTHER_PAGE_ID])
+  })
+
+  /**
+   * **음성 대조.** 옮긴 **뒤에** 다시 붙으면 그 페이지를 다시 읽는다 — 위 케이스가
+   * *"재연결 뒤에는 재조회가 아예 안 돈다"*로 통과하지 않는다.
+   */
+  it('페이지를 옮긴 뒤 다시 붙으면 그 페이지를 다시 읽는다 — 음성 대조', async () => {
+    const view = await board()
+    view.open(0)
+    view.drop(0)
+    view.open(1)
+    await waitFor(() => expect(view.getPage).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitForNode('n-other')
+    view.getPage.mockClear()
+
+    view.drop(1)
+    view.open(2)
+
+    await waitFor(() => expect(readPages(view.getPage)).toEqual([OTHER_PAGE_ID]))
+  })
+
+  /**
+   * **늦게 온 재조회 응답이 지금 안 열린 페이지를 스토어에 놓지 않는다**(리뷰 변이 N4).
+   *
+   * 페이지를 여는 이펙트에는 같은 가드를 재는 케이스가 있는데(`앞 페이지의 응답이 늦게 와도…`)
+   * 재조회 쪽에는 없었다. 없으면 그 응답이 **앞 페이지의 `openPageId`째로** 스토어에 실려,
+   * 주소는 새 페이지인데 스토어는 앞 페이지를 들고 있다고 말한다 — 그러면 캔버스가 아무것도
+   * 안 그린다(읽는 쪽이 주소와 대조하기 때문이다).
+   */
+  it('늦게 온 재조회 응답이 다른 페이지를 덮지 않는다', async () => {
+    const view = await board({ holdResync: true })
+    view.open(0)
+    view.drop(0)
+    view.open(1)
+    // `board`가 첫 조회를 세지 않게 지웠으므로 여기 하나가 재조회다.
+    await waitFor(() => expect(readPages(view.getPage)).toEqual([PAGE_ID]))
+
+    // 재조회가 붙잡혀 있는 동안 페이지를 옮긴다.
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitForNode('n-other')
+    await act(async () => {
+      view.release()
+    })
+
+    // 새 페이지가 그대로 그려져 있다 — 늦은 응답이 앞 페이지를 놓지 않았다.
+    await act(async () => {})
+    await waitForNode('n-other')
   })
 
   /**
