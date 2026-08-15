@@ -188,11 +188,15 @@ describe('끊기면 다시 붙는다', () => {
   })
 
   /**
-   * `onerror` 뒤에 `onclose`가 또 온다. 둘 다 재연결을 걸면 **소켓이 두 배로 늘어난다** —
-   * 끊길 때마다 배로 늘므로 몇 번이면 브라우저가 멈춘다.
+   * `onerror` 뒤에 `onclose`가 또 온다.
+   *
+   * **처음엔 *"예약이 둘이 된다"*로 잡으려 했고 그것은 거짓이었다** — 재연결 경로가
+   * 앞의 예약을 지우고 새로 걸므로 예약 수는 어느 쪽이든 하나다(변이 M23이 0 사망이었다).
+   * **실제로 어긋나는 것은 간격이다:** 두 번 세면 `attempt`가 두 칸 올라 첫 재시도가
+   * 벌써 두 번째 간격만큼 기다린다.
    */
-  it('error와 close가 잇달아 와도 한 번만 다시 붙는다', () => {
-    const h = harness()
+  it('error와 close가 잇달아 와도 간격이 한 칸만 움직인다', () => {
+    const h = harness({ reconnectDelaysMs: [10, 20, 40] })
     const socket = h.sockets[0]!
     socket.onopen?.()
 
@@ -200,7 +204,7 @@ describe('끊기면 다시 붙는다', () => {
     socket.onclose?.()
 
     expect(h.clock.pending.size).toBe(1)
-    h.clock.fire()
+    expect(h.clock.fire()).toBe(10)
     expect(h.sockets).toHaveLength(2)
   })
 })

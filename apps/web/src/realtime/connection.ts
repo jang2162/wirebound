@@ -126,7 +126,12 @@ export function openRealtime(options: RealtimeOptions): RealtimeConnection {
 
     const dropped = (): void => {
       if (stopped) return
-      // `onerror` 뒤에 `onclose`가 또 온다. 두 번 재연결을 걸지 않도록 핸들러를 떼어 낸다.
+      // **`onerror` 뒤에 `onclose`가 또 온다.** 핸들러를 떼지 않으면 이 함수가 두 번 돈다.
+      //
+      // **소켓이 두 배로 늘지는 않는다 — 재서 알았다.** 아래 `clearTimer()`가 앞의 예약을
+      // 지우므로 예약은 여전히 하나다. 실제로 어긋나는 것은 **`attempt`가 두 칸 오르는
+      // 것**이고, 그러면 첫 재시도가 이미 두 번째 간격만큼 기다린다. `connection.test.ts`의
+      // `error와 close가 잇달아 와도 간격이 한 칸만 움직인다`가 그 값을 잰다.
       next.onopen = null
       next.onmessage = null
       next.onclose = null
@@ -147,6 +152,14 @@ export function openRealtime(options: RealtimeOptions): RealtimeConnection {
 
   return {
     close: () => {
+      // **`stopped`는 방어선이고 오늘 그것만 지우는 케이스는 없다(0 사망 — 변이 M22).**
+      // 아래 두 줄(예약 취소 + 핸들러 떼기)이 `stopped`가 막는 경로를 이미 전부 막기
+      // 때문이다: 재연결 예약은 `clearTimer`가 지우고, 소켓이 `close()` 도중 동기로
+      // `onclose`를 내도 그때는 핸들러가 이미 `null`이다.
+      //
+      // **그래도 남긴다.** 저 두 줄의 **순서**가 뒤집히면(핸들러 떼기가 `open.close()`
+      // 뒤로 가면) 그 순간 `stopped`가 유일한 방벽이 된다. 이 줄을 지워도 되는 신호로
+      // 읽지 마라 — 지금 안 죽는 이유는 다른 두 줄이 옳게 서 있기 때문이다.
       stopped = true
       clearTimer()
       const open = socket

@@ -3,9 +3,17 @@
  *
  * `requireProjectRole`은 Fastify를 전혀 모른다 — `db` 핸들과 `projectId`·`userId`·
  * 최소 역할 네 값만 받고 `ApiError`를 던진다. `projectGuard`는 그 위에 얹은 얇은
- * Fastify preHandler 껍데기일 뿐이다. P3의 WebSocket은 방 입장·패치별 권한 확인에
- * 다른 껍데기를 새로 만들되, 안쪽의 `requireProjectRole`은 그대로 재사용한다 —
- * REST와 WebSocket이 같은 권한 판정을 공유해야 하기 때문이다(설계 §10).
+ * Fastify preHandler 껍데기일 뿐이다.
+ *
+ * **P3의 WebSocket은 껍데기를 새로 만들지 않았다 — 이 문단이 그렇게 예상했지만 거짓이었다
+ * (P3-1이 재서 고쳐 적는다).** `@fastify/websocket`은 업그레이드 요청을 평범한 라우트로
+ * 태우고 훅을 전부 돌린 뒤에야 소켓을 넘기므로, `ws/routes.ts`가 **`projectGuard('viewer')`를
+ * 그대로 preHandler로 쓴다.** 설계 §10의 *"REST와 WebSocket이 동일한 가드 함수를 쓴다"*가
+ * 글자 그대로 지켜진다.
+ *
+ * **연결 도중의 재확인은 다른 자리다.** §10의 *"각 patch 수신 시 한 번"*은 preHandler가
+ * 닿지 않는 곳이므로 `ws/broadcast.ts`의 `stillAllowed`가 `findMembership`·`roleAtLeast`를
+ * 직접 조합한다 — 그쪽도 이 파일의 함수를 쓰지 자기 판정을 만들지 않는다.
  *
  * **역할을 비교하는 코드는 이 파일의 `roleAtLeast` 하나뿐이어야 한다.** 다른 곳에서
  * 역할 순위를 다시 비교하는 코드를 쓰면 이 가드의 판정과 갈라질 수 있다.

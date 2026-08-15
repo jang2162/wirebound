@@ -188,6 +188,24 @@ describe('세션 행을 지우면 권한이 회수된다 (§10 · 재라 #3)', (
       expect(closed.code).toBe(4400)
     })
   })
+
+  /**
+   * **JSON이지만 모르는 `type`도 같은 자리다** — 재서 알았다: JSON 파싱만 잡는 케이스로는
+   * `type` 검사를 통째로 지워도 아무도 안 죽는다(변이 M11이 0 사망이었다). **P3-2가 프레임을
+   * 더할 때 이름을 잘못 적으면 여기가 죽어야 한다.**
+   */
+  it('모르는 type도 연결을 닫는다 — JSON이라는 것만으로는 부족하다', async () => {
+    await withRealApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const probe = track(await joinRoom(ctx.port, project.id, owner.cookie.wb_session))
+
+      probe.send(JSON.stringify({ type: 'patch', ops: [] }))
+
+      const closed = await probe.waitClosed()
+      expect(closed.code).toBe(4400)
+    })
+  })
 })
 
 async function deleteSessions(ctx: TestContext, userId: string): Promise<void> {
