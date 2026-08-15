@@ -13,12 +13,14 @@ import {
   EMPTY_OVERLAY,
   installStructures,
   renderDocument,
+  resetStructures,
   runInteraction,
   type InteractionEvent,
   type InteractionOverlay,
 } from '@wirebound/renderer'
 import {
   installCatalog,
+  resetRegistry,
   validatePage,
   type Interaction,
   type InteractionTrigger,
@@ -28,7 +30,7 @@ import {
 import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { buildRuntimePlan, RUNTIME_JS } from '../src/runtime/plan'
+import { buildRuntimePlan, RUNTIME_JS, stateKey } from '../src/runtime/plan'
 
 beforeAll(() => {
   installCatalog()
@@ -189,6 +191,28 @@ describe('DOM 이벤트 → 트리거 (plan.ts의 표가 렌더러와 같은가)
   })
 })
 
+/**
+ * **상태 열쇠의 계약.** `browser.ts`가 같은 이름의 함수를 **글자로 한 벌 더** 든다
+ * (브라우저로 나가는 함수가 클로저를 못 들기 때문이다). 두 벌이 갈리면 미리 그려 둔 판을
+ * 못 찾는데, 그 사고는 **누른 뒤에야** 보인다. 여기서 계약을 못박고, 실제로 맞물리는지는
+ * `runtime-bundle.test.ts`가 눌러서 잰다.
+ */
+describe('상태 열쇠 (browser.ts와 두 벌이다)', () => {
+  it('visible은 열쇠에 안 들어간다 — 그릴 판이 아니라 뺄지를 정하는 값이다', () => {
+    expect(stateKey({ loading: true, visible: false })).toBe(stateKey({ loading: true }))
+    expect(stateKey({ visible: false })).toBe('')
+  })
+
+  it('열쇠의 순서가 기록의 순서에 안 매인다', () => {
+    expect(stateKey({ items: 3, loading: true })).toBe(stateKey({ loading: true, items: 3 }))
+  })
+
+  it('값이 다르면 열쇠가 다르다 — 카나리아', () => {
+    expect(stateKey({ loading: true })).not.toBe(stateKey({ loading: false }))
+    expect(stateKey({})).toBe('')
+  })
+})
+
 describe('계획이 무엇을 담나 (D1)', () => {
   const RULES: Interaction[] = [
     { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
@@ -271,6 +295,61 @@ describe('계획이 무엇을 담나 (D1)', () => {
 
   it('규칙이 없는 노드는 항목을 만들지 않는다', () => {
     expect(plan(page({})).plan.events).toEqual([])
+  })
+
+  /**
+   * **한 DOM 이벤트가 트리거 둘을 도맡을 때 둘 다 실린다**(`click` ← `click`·`select`).
+   *
+   * 렌더러는 앞 트리거가 만든 겹layer **위에서** 뒤 트리거를 돌린다. 여기서 이어 돌리지
+   * 않으면 **앞 트리거의 쓰기가 통째로 사라지는데**, 화면에서는 *"규칙 하나는 되고 하나는
+   * 안 된다"*로만 보인다.
+   */
+  it('click과 select가 한 항목에 함께 실린다 — 순서까지', () => {
+    const { plan: built } = plan(
+      page({
+        n_btn: [
+          { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
+          { on: 'select', actions: [{ type: 'setProp', target: 'n_card', prop: 'title', value: '고름' }] },
+        ],
+      }),
+    )
+    expect(built.events).toHaveLength(1)
+    expect(built.events[0]?.dom).toBe('click')
+    expect(built.events[0]?.rules).toEqual([0, 1])
+    expect(built.events[0]?.writes).toEqual([
+      { target: 'n_list', prop: 'loading', value: true },
+      { target: 'n_card', prop: 'title', value: '고름' },
+    ])
+  })
+
+  /**
+   * **카탈로그 없이 판정하면 침묵이 돌아온다**(사실 9 · P5-3 이월 §3.2).
+   *
+   * `checkNodeAction`은 `getComponent`가 빈손이면 **문제가 없다고 답한다** — 대조할 계약이
+   * 없기 때문이다. 그러면 깨진 규칙이 이슈 0건으로 지나가고 **쓰기까지 실린다.**
+   * 그래서 이 함수가 스스로 설치한다. 그 줄이 사라지면 여기가 죽는다.
+   */
+  it('카탈로그가 비어 있어도 판정한다 — 스스로 설치한다', () => {
+    const document = page({
+      n_btn: [
+        { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: '없는prop', value: 1 }] },
+      ],
+    })
+    try {
+      resetRegistry()
+      resetStructures()
+      const { plan: built } = buildRuntimePlan({
+        page: document,
+        theme: null,
+        hrefs: NO_HREFS,
+        baseErrors: [],
+      })
+      expect(built.events[0]?.issues).toHaveLength(1)
+      expect(built.events[0]?.writes).toEqual([])
+    } finally {
+      installCatalog()
+      installStructures()
+    }
   })
 })
 

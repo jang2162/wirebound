@@ -69,6 +69,41 @@ const LIST_PAGE: PageDocument = {
         props: { label: '빈 규칙' },
         interactions: [{ on: 'click', actions: [] }],
       },
+      {
+        id: 'n_show',
+        type: 'Button',
+        props: { label: '되돌림' },
+        interactions: [
+          { on: 'click', actions: [{ type: 'setVisible', target: 'n_card', value: true }] },
+        ],
+      },
+      {
+        id: 'n_submit',
+        type: 'Button',
+        props: { label: '보냄' },
+        interactions: [
+          { on: 'submit', actions: [{ type: 'setProp', target: 'n_list', prop: 'empty', value: true }] },
+        ],
+      },
+      // **중첩**. 속을 누르면 겉까지 버블링하고, 바른 판도 겉→속 순서여야 한다.
+      {
+        id: 'n_outer',
+        type: 'Card',
+        props: { title: '겉' },
+        interactions: [
+          { on: 'click', actions: [{ type: 'setProp', target: 'n_outer', prop: 'subtitle', value: '겉눌림' }] },
+        ],
+        children: [
+          {
+            id: 'n_inner',
+            type: 'Button',
+            props: { label: '속' },
+            interactions: [
+              { on: 'click', actions: [{ type: 'setProp', target: 'n_inner', prop: 'label', value: '속눌림' }] },
+            ],
+          },
+        ],
+      },
       { id: 'n_list', type: 'List', props: {}, marker: 2 },
       { id: 'n_tabs', type: 'Tabs', props: { tabs: ['기본정보', '상세정보'], active: 0 } },
       { id: 'n_card', type: 'Card', props: { title: '회원' }, marker: 3 },
@@ -78,6 +113,8 @@ const LIST_PAGE: PageDocument = {
       { id: 'n_zero', type: 'Text', props: { content: '영' }, marker: 0 },
       { id: 'n_neg', type: 'Text', props: { content: '음' }, marker: -1 },
       { id: 'n_frac', type: 'Text', props: { content: '분수' }, marker: 1.5 },
+      // 번호가 없는데 코멘트만 달린 노드. 코멘트 줄은 생기고 **번호는 안 실린다.**
+      { id: 'n_plain', type: 'Text', props: { content: '번호 없음' } },
     ],
   } as WbNode,
 }
@@ -90,7 +127,16 @@ const DETAIL_PAGE: PageDocument = {
 function bundle() {
   return exportBundle({
     pages: [
-      { title: '회원 목록', document: LIST_PAGE, target: 'page:회원/목록' },
+      {
+        title: '회원 목록',
+        document: LIST_PAGE,
+        target: 'page:회원/목록',
+        comments: [
+          { nodeId: 'n_plain', body: '번호 없는 코멘트' },
+          { nodeId: 'n_list', body: '첫째' },
+          { nodeId: 'n_list', body: '둘째' },
+        ],
+      },
       { title: '회원 상세', document: DETAIL_PAGE, target: 'page:회원/상세' },
     ],
   })
@@ -225,6 +271,21 @@ describe('누르면 웹 앱에서 누른 것과 같은 화면이 된다 (§11.3)
     expect(drawn()).not.toBe(before)
   })
 
+  /**
+   * **다시 보이게 하면 되돌아온다.** 겹layer는 문서를 안 바꾸므로 *"원래 화면"*이 늘 남아
+   * 있고, 바를 때마다 거기서 다시 시작한다. 지운 것을 기억했다 되돌리는 길을 고르면
+   * *"무엇을 되돌려야 하는가"*가 상태가 되고, 그 상태가 틀리면 화면이 조용히 어긋난다.
+   */
+  it('숨긴 노드를 다시 보이게 하면 돌아온다', () => {
+    load('pages/회원-목록.html')
+    run()
+    press('n_btn')
+    expect(canvas().querySelector('[data-wb-id="n_card"]')).toBeNull()
+    press('n_show')
+    expect(canvas().querySelector('[data-wb-id="n_card"]')).not.toBeNull()
+    expect(drawn()).toBe(expected({ n_list: { loading: true }, n_tabs: { active: 1 } }))
+  })
+
   it('setVisible이 노드를 DOM에서 뺀다 — 감추는 것이 아니다', () => {
     load('pages/회원-목록.html')
     run()
@@ -248,6 +309,59 @@ describe('누르면 웹 앱에서 누른 것과 같은 화면이 된다 (§11.3)
     const once = drawn()
     press('n_btn')
     expect(drawn()).toBe(once)
+  })
+
+  /**
+   * **속을 누르면 겉의 규칙도 돈다.** 웹 앱에서는 핸들러가 노드마다 붙어 버블링이 그 순서를
+   * 만든다. 번들은 위임으로 받으므로 **바깥으로 올라가며 다 모아야** 같은 화면이 된다 —
+   * 안쪽 하나만 반응하면 *"겉의 규칙은 왜 안 되지"*가 된다.
+   */
+  it('중첩된 규칙이 안에서 밖으로 다 돈다', () => {
+    load('pages/회원-목록.html')
+    run()
+    press('n_inner')
+    expect(drawn()).toBe(expected({ n_inner: { label: '속눌림' }, n_outer: { subtitle: '겉눌림' } }))
+  })
+
+  /**
+   * **바깥부터 발라야 안쪽 판이 살아남는다.** 겉의 판은 *"겉만 덮은"* 상태로 그려져 있어
+   * 그 안에 속의 원래 모습이 들어 있다 — 속을 먼저 바르면 겉이 그것을 덮어 쓴다.
+   */
+  it('겉을 먼저 바르고 속을 나중에 바른다', () => {
+    load('pages/회원-목록.html')
+    run()
+    press('n_inner')
+    expect(canvas().querySelector('[data-wb-id="n_inner"]')?.textContent).toBe('속눌림')
+    expect(
+      canvas().querySelector('[data-wb-id="n_outer"] [data-wb-part="subtitle"]')?.textContent,
+    ).toBe('겉눌림')
+  })
+
+  /**
+   * **폼 제출이 페이지를 떠나면 겹layer가 통째로 사라진다.** 와이어프레임에는 제출을 보낼
+   * 곳이 없으므로 막는다 — 웹 앱의 런타임이 같은 자리에서 같은 것을 한다.
+   *
+   * jsdom은 제출이 이동을 만들지 않으므로 **`defaultPrevented`로 잰다**(`renderer` 쪽
+   * 케이스도 같은 한계를 적어 두었다). 실제 이동은 실브라우저 프로브가 봤다.
+   */
+  it('submit 규칙은 기본 동작을 막는다', () => {
+    load('pages/회원-목록.html')
+    run()
+    const target = canvas().querySelector('[data-wb-id="n_submit"]')!
+    const event = new Event('submit', { bubbles: true, cancelable: true })
+    target.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(canvas().querySelector('[data-wb-id="n_list"]')?.getAttribute('data-wb-state')).toBe(
+      'empty',
+    )
+  })
+
+  it('규칙이 없는 노드의 제출은 막지 않는다', () => {
+    load('pages/회원-목록.html')
+    run()
+    const event = new Event('submit', { bubbles: true, cancelable: true })
+    canvas().querySelector('[data-wb-id="n_list"]')!.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
   })
 
   it('규칙이 없는 노드를 눌러도 아무 일도 없다', () => {
@@ -289,6 +403,47 @@ describe('못 한 것을 조용히 넘기지 않는다 (D1·D6)', () => {
     expect(statusLines()).toEqual(['이 규칙에는 실행할 액션이 없습니다'])
   })
 
+  /**
+   * **미리 그린 판을 못 찾으면 그렇다고 말한다.**
+   *
+   * 이 상태는 정상 경로로는 안 생긴다 — 계획이 닿을 수 있는 판을 전부 담기 때문이다.
+   * 그래서 데이터를 손으로 지워 만든다. **막으려는 것은 두 `stateKey`가 갈리는 날이다**:
+   * 그때 눌러도 화면이 안 바뀌는데, 말이 없으면 *"규칙이 원래 그런가"*와 구분되지 않는다.
+   */
+  it('미리 그린 판이 없으면 그렇다고 말한다', () => {
+    load('pages/회원-목록.html')
+    const data = document.getElementById('wb-export-runtime-data')!
+    const plan = JSON.parse(data.textContent ?? '') as { variants: Record<string, unknown> }
+    expect(Object.keys(plan.variants)).toContain('n_list')
+    delete plan.variants['n_list']
+    data.textContent = JSON.stringify(plan)
+    run()
+    press('n_btn')
+    expect(statusLines()).toEqual(['이 상태의 화면이 번들에 없습니다: n_list'])
+  })
+
+  /** **링크가 있으면 그리로 간다**(D6). 실제 이동은 실브라우저 프로브도 봤다. */
+  it('페이지가 번들에 있으면 그 파일로 옮긴다', () => {
+    load('pages/회원-목록.html')
+    const moves: string[] = []
+    Object.defineProperty(window, 'location', {
+      value: {
+        get href() {
+          return ''
+        },
+        set href(value: string) {
+          moves.push(value)
+        },
+      },
+      writable: true,
+      configurable: true,
+    })
+    run()
+    press('n_go')
+    expect(moves).toEqual(['%ED%9A%8C%EC%9B%90-%EC%83%81%EC%84%B8.html'])
+    expect(statusLines()).toEqual([])
+  })
+
   it('말할 것이 없으면 줄을 감춘다', () => {
     load('pages/회원-목록.html')
     run()
@@ -309,18 +464,55 @@ describe('번호 마커 겹layer (D4)', () => {
     ])
   }
 
+  /** 코멘트 탭의 줄에서 번호를 든 것만. **노드마다 한 번씩** 센다. */
+  function numbered(): [string, string][] {
+    const seen = new Set<string>()
+    const out: [string, string][] = []
+    for (const line of document.querySelectorAll(
+      '#wb-export-panel-comments [data-wb-marker-for][data-wb-marker]',
+    )) {
+      const nodeId = line.getAttribute('data-wb-marker-for') ?? ''
+      if (seen.has(nodeId)) continue
+      seen.add(nodeId)
+      out.push([nodeId, line.getAttribute('data-wb-marker') ?? ''])
+    }
+    return out
+  }
+
   it('코멘트 탭의 줄과 같은 노드·같은 번호를 그린다', () => {
     load('pages/회원-목록.html')
     run()
-    const lines = [
-      ...document.querySelectorAll('#wb-export-panel-comments [data-wb-marker-for][data-wb-marker]'),
-    ].map((line): [string, string] => [
-      line.getAttribute('data-wb-marker-for') ?? '',
-      line.getAttribute('data-wb-marker') ?? '',
-    ])
-    expect(markers()).toEqual(lines)
+    expect(markers()).toEqual(numbered())
     // **하나짜리로 재지 않는다** — 마커가 하나면 자리가 섞여도 안 죽는다.
     expect(markers().length).toBeGreaterThan(1)
+  })
+
+  /**
+   * **한 노드에 코멘트가 여럿이면 줄은 여럿이고 마커는 하나다.** 겹layer는 *"이 노드에
+   * 번호가 있다"*를 그리는 것이지 코멘트를 세는 것이 아니다 — 겹쳐 찍으면 같은 자리에
+   * 같은 숫자가 포개져 읽는 사람이 그것을 다른 무엇으로 읽는다.
+   */
+  it('같은 노드의 코멘트가 둘이어도 마커는 하나다', () => {
+    load('pages/회원-목록.html')
+    run()
+    const lines = [
+      ...document.querySelectorAll('#wb-export-panel-comments [data-wb-marker-for="n_list"]'),
+    ]
+    expect(lines.length).toBe(2)
+    expect(markers().filter(([nodeId]) => nodeId === 'n_list')).toHaveLength(1)
+  })
+
+  /**
+   * **번호가 없는 코멘트에는 마커가 없다**(D4 · 사실 5). 그 줄에는 `data-wb-marker`가 아예
+   * 없다 — 겹layer가 줄만 보고 그리면 **숫자 없는 배지**가 생겨 화면이 거짓말을 한다.
+   */
+  it('번호 없는 코멘트 줄에는 마커를 안 그린다', () => {
+    load('pages/회원-목록.html')
+    run()
+    const line = document.querySelector('[data-wb-marker-for="n_plain"]')
+    expect(line).not.toBeNull()
+    expect(line?.hasAttribute('data-wb-marker')).toBe(false)
+    expect(markers().map(([nodeId]) => nodeId)).not.toContain('n_plain')
   })
 
   /**
@@ -364,8 +556,14 @@ describe('자리마다 제 것이 실렸는가', () => {
         return [file.path, (JSON.parse(data?.textContent ?? '{}') as { events: { nodeId: string }[] }).events.map((event) => event.nodeId)]
       })
     expect(plans).toEqual([
-      ['index.html', ['n_btn', 'n_go', 'n_nowhere', 'n_broken', 'n_empty']],
-      ['pages/회원-목록.html', ['n_btn', 'n_go', 'n_nowhere', 'n_broken', 'n_empty']],
+      [
+        'index.html',
+        ['n_btn', 'n_go', 'n_nowhere', 'n_broken', 'n_empty', 'n_show', 'n_submit', 'n_outer', 'n_inner'],
+      ],
+      [
+        'pages/회원-목록.html',
+        ['n_btn', 'n_go', 'n_nowhere', 'n_broken', 'n_empty', 'n_show', 'n_submit', 'n_outer', 'n_inner'],
+      ],
       ['pages/회원-상세.html', []],
     ])
   })

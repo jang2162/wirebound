@@ -128,8 +128,12 @@ export interface RuntimePlanResult {
  * 상태 열쇠. **`browser.ts`의 같은 이름 함수와 글자까지 같아야 한다.**
  *
  * `visible`은 넣지 않는다 — 그것은 *"그릴 판"*이 아니라 *"DOM에서 뺄지"*를 정하는 값이다.
+ * 여기 오는 기록은 `drawable`이 이미 걸렀지만 **브라우저 쪽은 안 걸린 기록을 받는다** —
+ * 그래서 두 함수가 같은 계약을 져야 하고, 그 계약을 `test/runtime-plan.test.tsx`가 든다.
+ *
+ * **패키지 밖으로 나가지 않는다** — `src/index.ts`가 수출하지 않는다.
  */
-function stateKey(record: RuntimeRecord): string {
+export function stateKey(record: RuntimeRecord): string {
   const keys = Object.keys(record).filter((key) => key !== VISIBLE_KEY)
   keys.sort()
   return keys.length === 0 ? '' : JSON.stringify(keys.map((key) => [key, record[key]]))
