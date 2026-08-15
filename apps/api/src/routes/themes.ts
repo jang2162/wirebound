@@ -83,6 +83,10 @@ import { badRequest, conflict, forbidden, notFound, validationFailed } from '../
 import { parseBody, parseParams } from '../http/parse'
 import { withWarnings } from '../http/warnings'
 import { findDefaultLayout, updateLayoutTheme } from '../repos/layouts'
+// **테마 사슬은 `services/project-theme.ts` 하나다**(P8-4 T2). 소비자가 셋이 되어
+// (캔버스·고르개·내보내기) 라우트 안의 비공개 함수로 둘 수 없게 됐다 — 두 벌이면
+// 캔버스가 보는 테마와 번들이 싣는 테마가 조용히 갈린다.
+import { currentProjectTheme, resolveThemeBase } from '../services/project-theme'
 import {
   ThemeNulByteError,
   deleteTheme,
@@ -165,36 +169,6 @@ function themeValidationFailed(issues: ThemeIssue[]): never {
 }
 
 /**
- * 상속 대상을 **코드에서** 찾는다(계획서 D4 — 코드가 진실이고 DB는 사본이다).
- *
- * DB의 `themes` 행을 보지 않는 이유: 그 행은 동기화가 만든 사본이고, 둘이 갈리면
- * 코드가 이긴다. 사본을 base로 쓰면 해석 결과가 **동기화가 언제 돌았는지에 따라**
- * 달라진다.
- */
-function resolveBase(theme: Theme): { base: Theme | undefined; missing: ThemeIssue | null } {
-  const ref = theme.meta.extends
-  if (ref === undefined) return { base: undefined, missing: null }
-
-  const base = systemTheme(ref)
-  if (base === undefined) {
-    return {
-      base: undefined,
-      // **`themeIssue`를 쓴다 — 객체 리터럴로 짓지 않는다.** 리터럴은 `severity`를 손으로
-      // 박게 되고, 그러면 바로 아래 `assertResolvable`의 주석(*"오늘 테마의 이슈는 전부
-      // `error`다(`THEME_ISSUE_SEVERITY`)"*)이 **이 함수가 만드는 이슈에 대해서는 거짓**이
-      // 된다. 실제로 그렇게 짰다가 리뷰가 잡았고, `'warning'`으로 바꿔도 api 599케이스가
-      // 전부 통과했다(구분력 0). 팩토리를 지나면 `code`와 `severity`가 어긋날 자리 자체가 없다.
-      missing: themeIssue(
-        'bad-extends',
-        'meta.extends',
-        `상속 대상 시스템 테마를 찾을 수 없습니다: ${ref}`,
-      ),
-    }
-  }
-  return { base, missing: null }
-}
-
-/**
  * 게이트 2·3단계. **`error`가 있으면 422로 던지고, 경고는 통과시켜 돌려준다.**
  *
  * **저장하는 것은 해석 결과가 아니라 들어온 파생 테마 그대로다(계획서 D2).**
@@ -222,63 +196,13 @@ function resolveBase(theme: Theme): { base: Theme | undefined; missing: ThemeIss
  * 그 머리말이 *"이 선을 긋는 코드는 이 함수 하나뿐이어야 한다"*고 못박아 두었다.
  */
 function assertResolvable(theme: Theme): ThemeIssue[] {
-  const { base, missing } = resolveBase(theme)
+  const { base, missing } = resolveThemeBase(theme)
   if (missing !== null) themeValidationFailed([missing])
 
   const { issues } = resolveTheme(theme, base)
   const { errors, warnings } = partitionIssues(issues)
   if (errors.length > 0) themeValidationFailed(issues)
   return warnings
-}
-
-/**
- * **이 프로젝트의 화면이 지금 써야 할 테마.** `GET /:projectId/theme`와
- * `PUT /:projectId/theme`가 **둘 다 이것을 부른다** — 응답이 같은 꼴인 것이 우연이
- * 아니라 구조다. 갈리면 고르개 UI가 PUT의 응답을 그대로 쓰지 못하고 한 번 더 조회한다.
- *
- * `theme`이 `null`인 경우가 셋이고 전부 정상이다: 기본 레이아웃이 없다(0007 이전
- * 프로젝트 — P4a-3 재라 #8), 레이아웃이 테마를 안 고름, 테마 행이 사라짐. 화면은 구조
- * 기본 CSS만으로 그려진다 — 이미 있는 경로다(`apps/web`의 `theme-source.ts`).
- *
- * ---
- *
- * **`themeId`를 함께 낸다 — P4b-3 ①이 더했다.**
- *
- * **고르개가 *"지금 무엇이 골라져 있는가"*를 알 방법이 없었다.** `theme`은 **합쳐진**
- * 문서라 파생이면 `meta.extends`가 지워져 있고, `meta.id`(=slug)로 목록과 맞대는 것은
- * **성립하지 않는다** — 시스템 테마와 프로젝트 테마가 같은 slug를 가질 수 있다
- * (`(project_id, slug)`가 유일성 단위다. `repos-themes.test.ts`가 `admin` 슬러그를
- * 프로젝트 쪽에도 만들어 그 경우를 이미 케이스로 들고 있다).
- *
- * **`theme`을 대신하지 않고 더한다.** 캔버스는 여전히 `theme` 하나만 읽고
- * (`ThemeSource`가 `() => Theme | null`로 남는다), 고르개만 `themeId`를 본다 —
- * *"그리는 쪽은 유래가 필요 없다"*는 이 엔드포인트의 구분이 그대로다.
- *
- * **`theme: null`이어도 `themeId`가 있을 수 있다** — 상속이 끊긴 파생을 고른 상태다
- * (재라 #5). 그때 고르개는 *"이것이 골라져 있는데 그릴 수 없다"*를 보여줄 수 있어야 한다.
- * 반대로 **테마 행 자체가 사라졌으면 `themeId`도 `null`이다** — 가리킬 것이 없다.
- */
-async function currentTheme(
-  app: FastifyInstance,
-  projectId: string,
-): Promise<{ themeId: string | null; theme: Theme | null; issues: (ThemeIssue | null)[] }> {
-  const layout = await findDefaultLayout(app.db, projectId)
-  if (!layout || layout.themeId === null) return { themeId: null, theme: null, issues: [] }
-
-  const themeId = layout.themeId
-  const record = await findThemeById(app.db, themeId)
-  if (!record) return { themeId: null, theme: null, issues: [] }
-
-  const stored = record.theme
-  if (stored.meta.extends === undefined) return { themeId, theme: stored, issues: [] }
-
-  const base = systemTheme(stored.meta.extends)
-  if (base === undefined) {
-    return { themeId, theme: null, issues: [resolveBase(stored).missing] }
-  }
-
-  const merged = mergeTheme(base, stored as ThemePatch)
-  return { themeId, theme: merged.theme, issues: merged.issues }
 }
 
 /** 쓰기(수정·삭제) 대상 하나를 찾아 소유권을 판정한다. */
@@ -335,7 +259,7 @@ export function themeRoutes() {
      */
     app.get('/:projectId/theme', { preHandler: projectGuard('viewer') }, async (request) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
-      return currentTheme(app, projectId)
+      return currentProjectTheme(app.db, projectId)
     })
 
     /**
@@ -356,7 +280,7 @@ export function themeRoutes() {
      *
      * ---
      *
-     * **응답이 `GET /:projectId/theme`와 같은 꼴이다.** 둘 다 `currentTheme()` 하나를
+     * **응답이 `GET /:projectId/theme`와 같은 꼴이다.** 둘 다 `currentProjectTheme()` 하나를
      * 부르므로 우연이 아니라 구조다 — 고르개 UI가 응답을 그대로 쓰고 다시 조회하지 않는다.
      *
      * **`null`을 받는다.** *"테마를 고르지 않았다"*는 이미 정상 상태다
@@ -412,7 +336,7 @@ export function themeRoutes() {
         throw error
       }
 
-      return currentTheme(app, projectId)
+      return currentProjectTheme(app.db, projectId)
     })
 
     app.get('/:projectId/themes', { preHandler: projectGuard('viewer') }, async (request) => {

@@ -170,7 +170,60 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/presets` | GET | viewer | — | 200 프리셋 배열 — **내장 3종이 함께 나온다**(아래 "프리셋 응답 형태"). 내장이 먼저, 그 뒤로 프로젝트 프리셋이 만든 순서대로 |
 | `/api/projects/:projectId/presets` | POST | **editor** | `{ name, schema: WbNode[], description? }` | 201 프리셋. **`schema`는 문서 봉투가 아니라 root의 `children`이다.** `marker`는 저장하며 버린다. 이름 1~60자·설명 0~2000자 밖과 노드 봉투 위반·NUL은 400. **이름 중복은 오류가 아니다** |
 | `/api/projects/:projectId/presets/:presetId` | DELETE | **editor** | — | 204. 없는 id·남의 프로젝트의 id는 404, **내장 id(`builtin:…`)는 400**(경로가 uuid를 요구한다) |
+| `/api/projects/:projectId/export/preview` | GET | viewer | — | 200 `{ pages, duplicateTargets, brokenLinks, errors, themeId, fileName }` — **내려받기 전에 화면이 말할 것**(아래 "HTML 정적 번들 내보내기"). 페이지가 없으면 409 |
+| `/api/projects/:projectId/export` | GET | viewer | — | 200 `application/zip` — §11.3의 번들. 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409 |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
+
+### HTML 정적 번들 내보내기 (§11.3 — P8-4)
+
+`GET .../export`가 §11.3의 트리를 zip 하나로 낸다.
+
+```
+wirebound-export-<슬러그>/
+  index.html            트리 네비 + 뷰어 셸 (첫 페이지를 담는다)
+  pages/….html          페이지마다 셸을 통째로
+  assets/shell.css      뷰어 셸의 CSS
+  assets/theme.css      구조 기본 CSS + 테마 컴파일 결과
+  assets/runtime.js     상호작용 런타임
+```
+
+**페이지의 이름에 조상 메뉴가 붙는다**(P8-2 이월 §2의 판정 ②). `<title>`·좌측 트리의
+이름·파일 이름 셋이 전부 `조상 메뉴들 + 페이지 제목`이고, 그래서 §11.3의 예시 파일 이름
+(`관리자-회원-목록.html`)과 같은 꼴이 나온다. **붙이지 않으면 서로 다른 메뉴의 같은
+제목이 좌측 트리에서 똑같은 두 줄이 된다** — 스모크에서 실측했다. 이름을 만드는 마디는
+상호작용 타겟을 만드는 마디와 **같은 함수**에서 나온다(`services/page-target.ts`).
+
+**미리보기 응답도 같은 이름으로 부른다**(`pages[].title` · `errors[].title` ·
+`brokenLinks[].from`). 한 페이지를 두 이름으로 부르면 같은 화면의 위아래가 갈린다.
+**다만 같은 메뉴 아래 같은 제목이면 조상도 같아 이름이 그대로 겹친다** — 그 상태는
+`duplicateTargets`가 함께 낸다(타겟도 겹치기 때문이다).
+
+**출처는 라이브 프로젝트다**(P8-4 D1). 페이지·문서는 `pages` 표의 지금 값, 코멘트는
+`comments` 표의 살아 있는 값, 테마는 프로젝트가 지금 쓰는 것(`GET .../theme`와 **같은
+사슬**)이다. 스냅샷의 *"그때"*를 내보내는 경로는 아직 없다.
+
+**URL에 파일 이름이 없다**(D7). 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면
+뒤에서 부딪히던 이름들의 번호가 밀린다 — 그것으로 URL을 만들면 남의 북마크가 깨진다.
+사람이 읽는 이름은 `Content-Disposition`과 미리보기의 `fileName`에만 있다.
+
+#### `GET .../export/preview` — 내려받기 전에 화면이 말할 것
+
+**내려받기 버튼이 조용히 성공하면 안 된다.** 그리지 못한 노드가 있어도 폴백이 든 HTML은
+눈으로는 그럴듯한 한 장이고, 번들은 그것을 남에게 전달한다.
+
+| 키 | 무엇 |
+|---|---|
+| `pages` | `{ id, title, target }[]` — 번들에 실릴 순서다. **`title`은 조상 메뉴가 붙은 번들 이름**(맨 제목이 아니다 — 위 문단)이고, **`target`이 §8.1의 페이지 경로**로 저작 화면의 `navigate`·`openModal`에 그대로 적는 문자열이다 |
+| `duplicateTargets` | 둘 이상의 페이지가 든 타겟. **그 타겟을 겨눈 링크는 어디에도 안 생긴다** |
+| `brokenLinks` | `{ target, from, reason }[]` — 어느 페이지도 가리키지 못한 링크. `from`은 그것을 겨눈 페이지들의 **번들 이름**이다. `reason`은 `missing`(그 타겟을 든 페이지가 없다) 또는 `ambiguous`(둘 이상이다) |
+| `errors` | `{ path, title, error }[]` — 그리지 못한 노드. **`title`이 어느 페이지인지 말한다** |
+| `themeId` | 번들이 실은 테마. `null`이면 구조 기본 CSS만으로 그려진 것이다 |
+| `fileName` | 내려받을 때 붙을 이름. **화면이 지어내지 않는다** |
+
+**이 응답이 담지 않는 것 하나:** 한 노드를 여러 규칙이 서로 다른 prop으로 겨누면 미리 그릴
+판이 곱으로 늘고, 상한을 넘으면 그 페이지의 런타임이 꺼진다. 그 사실은 **번들 자신이
+말한다**(그 페이지의 상태 줄에 이유가 뜬다) — 여기서 다시 세려면 그 상한을 두 벌로 갖게
+되고, 둘이 갈리는 날 화면이 거짓을 말한다.
 
 ### 프로젝트 응답 형태
 

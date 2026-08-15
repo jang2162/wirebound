@@ -1523,6 +1523,85 @@
   color: var(--wb-shell-accent);
 }
 
+/* 내보내기(§11.3 — P8-4). 셸 머리의 토글과 그 아래 떠서 보이는 요약이다.
+   **떠 있는 상자로 두는 것이 요점이다** — 머리에 그대로 펼치면 목록이 길어질수록
+   셸의 세 칸이 아래로 밀린다. */
+.wb-shell-export {
+  position: relative;
+}
+
+.wb-shell-export-toggle {
+  font-size: 13px;
+  color: var(--wb-shell-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.wb-shell-export-body {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 380px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  font-size: 13px;
+  text-align: left;
+}
+
+.wb-shell-export-count {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+.wb-shell-export-heading {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.wb-shell-export-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-shell-export-path {
+  font-family: monospace;
+  word-break: break-all;
+}
+
+/* 경고는 내려받기 링크보다 **위에** 있다 — 아래 두면 사람이 누르고 나서 본다. */
+.wb-shell-export-warning {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fff8e1;
+  color: #6b4e00;
+}
+
+.wb-shell-export-targets {
+  margin-bottom: 12px;
+}
+
+.wb-shell-export-download {
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--wb-shell-accent);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
 .wb-shell-snapshots {
   padding: 24px;
   display: flex;

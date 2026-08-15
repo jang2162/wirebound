@@ -397,3 +397,53 @@ export interface RestoreResult {
    */
   themes: Array<{ layoutId: string; themeId: string | null; differs: boolean }>
 }
+
+/**
+ * 내보내기 미리보기(§11.3 — P8-4). **내려받기 버튼이 조용히 성공하면 안 된다.**
+ *
+ * 그리지 못한 노드가 있어도 폴백이 든 HTML은 눈으로는 그럴듯한 한 장이고, **번들은 그것을
+ * 남에게 전달한다.** 그래서 화면이 내려받기 **전에** 무엇이 실릴지와 무엇이 어긋났는지
+ * 볼 수 있어야 한다.
+ */
+export interface ExportPreview {
+  /** 번들에 실릴 페이지들. **순서가 곧 번들의 순서다.** */
+  pages: ExportPagePlan[]
+  /**
+   * 둘 이상의 페이지가 든 타겟. **그 타겟을 겨눈 링크는 어디에도 안 생긴다** — 먼저 온
+   * 것을 이기게 두면 조용히 첫 페이지로 가는데, 읽는 사람이 그것을 알아챌 방법이 없다.
+   */
+  duplicateTargets: string[]
+  brokenLinks: ExportBrokenLink[]
+  /** 그리지 못한 노드들. `title`이 **어느 페이지인지** 말한다. */
+  errors: ExportNodeError[]
+  /** 번들이 실은 테마. `null`이면 구조 기본 CSS만으로 그려진 것이다. */
+  themeId: string | null
+  /** 내려받을 때 붙을 이름. **화면이 지어내지 않는다** — 두 벌이면 갈린다. */
+  fileName: string
+}
+
+export interface ExportPagePlan {
+  id: string
+  title: string
+  /**
+   * 이 페이지를 가리키는 §8.1의 타겟. **상호작용 탭의 `페이지 경로`에 그대로 적는
+   * 문자열이다** — 그 자리는 자유 입력이라 서버가 무엇을 조립하는지 알 길이 여기뿐이다.
+   */
+  target: string
+}
+
+export interface ExportBrokenLink {
+  target: string
+  /** 그 타겟을 겨눈 페이지들의 제목. */
+  from: string[]
+  /** `missing`이면 그 타겟을 든 페이지가 없고, `ambiguous`면 둘 이상이다. */
+  reason: 'missing' | 'ambiguous'
+}
+
+export interface ExportNodeError {
+  /** 번들 안의 파일 경로. **화면은 이것을 짚지 않는다** — 아직 압축을 풀지 않은 사람에게 뜻이 없다. */
+  path: string
+  /** 그 페이지의 제목. */
+  title: string
+  error: { nodeId?: string; message?: string }
+}

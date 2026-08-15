@@ -82,6 +82,23 @@ const 페이지용메뉴 = async (
   menuNodeId: (await createMenuNode(ctx, ownerCookie, projectId, { title: '페이지용 메뉴' })).id,
 })
 
+/**
+ * 내보내기 케이스가 실행 전에 페이지 하나를 만든다.
+ *
+ * **필요한 이유:** 페이지가 없는 프로젝트에서 내보내기는 409다(빈 번들을 내면 받는
+ * 사람이 푼 뒤에야 비었다는 것을 안다). 그러면 허용된 역할도 4xx를 받아 `허용`을
+ * 못 보인다 — `스냅샷 복원`이 `setup`을 요구하는 것과 같은 자리다.
+ */
+const 내보낼페이지 = async (
+  ctx: TestContext,
+  projectId: string,
+  ownerCookie: { wb_session: string },
+): Promise<Record<string, string>> => {
+  const menu = await createMenuNode(ctx, ownerCookie, projectId, { title: '내보낼 메뉴' })
+  await createPage(ctx, ownerCookie, projectId, menu.id, { title: '내보낼 페이지' })
+  return {}
+}
+
 /** ':pageId'가 필요한 케이스(페이지 조회·수정·스키마 저장·삭제)가 실행 전에 대상 페이지를 만든다. */
 const 페이지하나 = async (
   ctx: TestContext,
@@ -523,6 +540,23 @@ const CASES: Case[] = [
     url: '/api/projects/:projectId/presets/:presetId',
     allowed: ['owner', 'editor'],
     setup: 프리셋하나,
+  },
+  {
+    // **내보내기는 viewer다**(P8-4 D4). 번들은 viewer가 화면에서 볼 수 있는 것을 파일로
+    // 받는 것이므로 새 권한을 만들지 않는다 — 무엇을 담는지 세어 확인한 표는
+    // `routes/export.ts`의 머리말에 있다.
+    label: '내보내기 미리보기',
+    method: 'GET',
+    url: '/api/projects/:projectId/export/preview',
+    allowed: ['owner', 'editor', 'viewer'],
+    setup: 내보낼페이지,
+  },
+  {
+    label: '내보내기(zip)',
+    method: 'GET',
+    url: '/api/projects/:projectId/export',
+    allowed: ['owner', 'editor', 'viewer'],
+    setup: 내보낼페이지,
   },
 ]
 

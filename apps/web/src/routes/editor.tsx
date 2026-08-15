@@ -28,6 +28,7 @@ import { StructureTree } from '../panels/structure-tree'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
+import { ExportPanel } from '../shell/export-panel'
 import { projectAbilities } from '../projects/project-actions'
 import { ThemePicker } from '../theme/theme-picker'
 import {
@@ -241,6 +242,13 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
         <Link className="wb-shell-snapshots-link" to={`/projects/${props.project.id}/snapshots`}>
           스냅샷
         </Link>
+        {/* **설계서를 내려받는 자리**(§11.3 — P8-4). 스냅샷 링크 옆에 두는 것은 둘 다
+            *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
+
+            **역할로 감추지 않는다** — 번들은 viewer가 화면에서 볼 수 있는 것을 파일로 받는
+            것이고 서버도 viewer에게 연다(§10 · P8-4 D4). 감추면 설계서를 **읽으라고** 부른
+            사람이 그것을 가져갈 수 없다. */}
+        <ExportPanel projectId={props.project.id} />
         {/* 편집 실패 통지는 **한 자리**다(D8). 조회 실패처럼 화면마다 나누지 않는 것은,
             어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
             받고 보내지 못한 편집을 잃는다(D4). 셸 상단에 두면 어느 패널을 보고 있어도

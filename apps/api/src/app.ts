@@ -7,6 +7,7 @@ import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
 import { authRoutes } from './routes/auth'
 import { commentRoutes } from './routes/comments'
+import { exportRoutes } from './routes/export'
 import { healthRoutes } from './routes/health'
 import { memberRoutes } from './routes/members'
 import { menuRoutes } from './routes/menu'
@@ -135,6 +136,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 프리셋도 프로젝트 아래에 산다(`/:projectId/presets`) — 프리셋은 프로젝트가 소유한다
   // (§11.1). 내장 3종은 `@wirebound/schema`에 있고 목록이 그것을 함께 낸다(P7-2 D2).
   await app.register(presetRoutes(), { prefix: '/api/projects' })
+  // 내보내기도 프로젝트 아래에 산다(`/:projectId/export`). **URL에 파일 이름이 없다** —
+  // 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면 번호가 밀린다(P8-4 D7).
+  await app.register(exportRoutes(), { prefix: '/api/projects' })
   await app.register(healthRoutes)
 
   return app
