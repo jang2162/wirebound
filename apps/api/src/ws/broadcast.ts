@@ -35,6 +35,7 @@ import { findMembership, roleAtLeast } from '../auth/roles'
 import { sessionIsLive } from '../auth/session'
 import type { DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
+import type { LockStore } from '../lock/store'
 import { WS_CLOSE, type Participant, type ServerFrame } from './protocol'
 import type { RoomConnection, RoomRegistry } from './rooms'
 
@@ -54,6 +55,14 @@ export interface Broadcaster {
   send(projectId: string, frame: ServerFrame, options?: BroadcastOptions): Promise<number>
   /** 지금 룸에 있는 사람을 룸 전체에 알린다(D4의 셋째 — 연결·참가·이탈). */
   announcePresence(projectId: string): Promise<number>
+  /**
+   * 지금 살아 있는 잠금을 룸 전체에 알린다(§7.2).
+   *
+   * **`announcePresence`와 같은 모양이다** — 전부를 싣고, 낸 사람도 받는다. 잠금이
+   * 바뀔 때마다와 **누가 들어올 때** 부른다: 들어오는 쪽이 지금 상태를 알 길이 이것뿐이고,
+   * 그것이 없으면 다시 붙은 화면의 배지가 다음 누군가의 선택까지 비어 있다.
+   */
+  announceLocks(projectId: string): Promise<number>
   /**
    * 연결 하나가 아직 **그 역할 이상**인지 본다. `ws/routes.ts`가 프레임을 받을 때마다,
    * 아래 `send`가 프레임을 흘릴 때마다 부른다.
@@ -84,7 +93,7 @@ export interface Broadcaster {
  */
 const MIN_ROLE_TO_RECEIVE: ProjectRole = 'viewer'
 
-export function createBroadcaster(db: DbHandle, rooms: RoomRegistry): Broadcaster {
+export function createBroadcaster(db: DbHandle, rooms: RoomRegistry, locks: LockStore): Broadcaster {
   const stillAllowed: Broadcaster['stillAllowed'] = async (connection, minRole) => {
     if (!(await sessionIsLive(db, connection.sessionId))) return false
     const role = await findMembership(db, connection.projectId, connection.userId)
@@ -122,5 +131,6 @@ export function createBroadcaster(db: DbHandle, rooms: RoomRegistry): Broadcaste
       }))
       return send(projectId, { type: 'presence', projectId, participants })
     },
+    announceLocks: async (projectId) => send(projectId, { type: 'locks', projectId, locks: locks.liveIn(projectId) }),
   }
 }

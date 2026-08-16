@@ -5,7 +5,7 @@
  * `headSeq`가 `undefined`가 되고, 그 어긋남은 **다음 편집이 400을 받을 때까지 조용하다.**
  */
 import { describe, expect, it } from 'vitest'
-import { parseServerFrame, patchFrame, realtimeUrl } from '../../src/realtime/protocol'
+import { UNLOCK_FRAME, lockFrame, parseServerFrame, patchFrame, realtimeUrl } from '../../src/realtime/protocol'
 
 const PAGE_CHANGED = {
   type: 'page-changed',
@@ -170,6 +170,48 @@ describe('보내는 것', () => {
       ops: [{ op: 'remove', path: '/root/children/0' }],
       clientOpId: 'op_1',
     })
+  })
+})
+
+describe('잠금 프레임 (§7.2)', () => {
+  const LOCK = { pageId: 'g', nodeId: 'n_b', userId: 'u_1', userName: '보라' }
+
+  it('목록을 그대로 읽는다', () => {
+    const frame = parseServerFrame(JSON.stringify({ type: 'locks', projectId: 'p', locks: [LOCK] }))
+
+    expect(frame).toEqual({ type: 'locks', projectId: 'p', locks: [LOCK] })
+  })
+
+  it('빈 목록도 프레임이다 — *"아무도 안 잡고 있다"*가 뜻이 있다', () => {
+    expect(parseServerFrame(JSON.stringify({ type: 'locks', projectId: 'p', locks: [] }))).toEqual({
+      type: 'locks',
+      projectId: 'p',
+      locks: [],
+    })
+  })
+
+  it('모양이 어긋난 원소를 버린다 — 배지가 `undefined`를 그리지 않는다', () => {
+    const frame = parseServerFrame(
+      JSON.stringify({
+        type: 'locks',
+        projectId: 'p',
+        locks: [LOCK, { pageId: 'g', nodeId: 'n_c' }, null, { ...LOCK, userName: 7 }],
+      }),
+    )
+
+    expect(frame).toEqual({ type: 'locks', projectId: 'p', locks: [LOCK] })
+  })
+
+  it('목록이 배열이 아니면 프레임 자체를 버린다', () => {
+    expect(parseServerFrame(JSON.stringify({ type: 'locks', projectId: 'p', locks: {} }))).toBeNull()
+  })
+
+  it('잡는 프레임이 서버가 요구하는 것을 싣는다', () => {
+    expect(JSON.parse(lockFrame('g', 'n_b'))).toEqual({ type: 'lock', pageId: 'g', nodeId: 'n_b' })
+  })
+
+  it('놓는 프레임에는 가리킬 값이 없다 — 연결 하나가 드는 잠금은 하나다', () => {
+    expect(JSON.parse(UNLOCK_FRAME)).toEqual({ type: 'unlock' })
   })
 })
 
