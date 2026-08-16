@@ -59,6 +59,7 @@ import {
   parsePageJson,
   partitionIssues,
   validatePage,
+  type PatchOp,
 } from '@wirebound/schema'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
@@ -71,6 +72,7 @@ import { parseBody, parseParams } from '../http/parse'
 // **P4c-1이 `http/warnings.ts`로 옮겼다** — `routes/themes.ts`가 두 번째 소비자가 됐다.
 import { withWarnings } from '../http/warnings'
 import { OpsBody } from '../http/patch-ops'
+import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
 import { notifyPageChanged, originConnectionId } from '../ws/notify'
 import { importPage, type PageImportOutcome } from '../services/page-import'
@@ -404,14 +406,37 @@ export function pageRoutes() {
       // 함수에 태우므로 두 버전이 반드시 같다. 그 전제가 깨지면(어떤 단계의 `to`가
       // 목표를 넘으면) `migrateDocument`가 목표를 초과한 채 반환하므로 이 성질도 함께
       // 깨진다 — 그 보증은 `packages/schema`의 몫이다.
+      // **`ops`를 한 번만 만든다.** 잠금 확인과 적용이 **같은 자리**를 봐야 한다 — 두 번
+      // 만들면 한쪽만 고쳐지는 날 *"확인한 것과 적용한 것이 다른"* 상태가 되고, 그것은
+      // 조용하다.
+      const putOps: PatchOp[] = [
+        { op: 'replace', path: '/root', value: migrated.root },
+        { op: 'replace', path: '/version', value: migrated.version },
+      ]
+
+      // **잠금 확인은 적용 직전이다**(§7.1 · D2). `PUT`은 `/root`를 통째로 갈아 끼우므로
+      // **잠긴 서브트리가 무엇이든 그 안에 있다** — 다른 사람이 무엇이든 잡고 있으면 막힌다.
+      //
+      // **가져오기(P7)·복원(P6)을 근거로 적지 마라.** 그 둘은 이 라우트로 오지 않고
+      // `applyEdit`을 직접 부른다 — `test/lock-census.test.ts`가 그 둘을 별도 줄로 세면서
+      // *"잠금을 안 본다"*고 판정한다. 앞 판의 주석이 그렇게 적었다가 같은 슬라이스의
+      // 인구조사와 어긋났다.
+      const blocked = await lockConflictError(app, {
+        projectId,
+        pageId,
+        baseSeq: before.headSeq,
+        ops: putOps,
+        userId: currentUser.id,
+      })
+      if (blocked) {
+        throw blocked
+      }
+
       const outcome = await applyEdit(app.db, {
         projectId,
         pageId,
         baseSeq: before.headSeq,
-        ops: [
-          { op: 'replace', path: '/root', value: migrated.root },
-          { op: 'replace', path: '/version', value: migrated.version },
-        ],
+        ops: putOps,
         actor: { type: 'user', id: currentUser.id, label: currentUser.name },
       })
 
@@ -472,6 +497,20 @@ export function pageRoutes() {
       // 검증·적용·역패치·기록은 전부 파이프라인이 한 트랜잭션 안에서 한다. 이
       // 핸들러는 그 결과를 HTTP로 옮기기만 한다 — P3의 WebSocket이 같은 `applyEdit`을
       // 부르므로, 규칙을 여기 두면 두 진입점이 갈라진다.
+      // **§7.1의 순서다** — `projectGuard('editor')`가 권한을 봤고, 적용 전에 잠금을 본다(D2).
+      // **§7.4의 MCP가 이 길로 들어온다:** 에이전트는 잠금을 걸지 않지만(§7.4) 남의 잠금에는
+      // 막힌다 — 안 막으면 §7.2의 2차 방어가 접속 방식에 따라 갈린다.
+      const blocked = await lockConflictError(app, {
+        projectId,
+        pageId,
+        baseSeq: body.baseSeq,
+        ops: body.ops,
+        userId: currentUser.id,
+      })
+      if (blocked) {
+        throw blocked
+      }
+
       const outcome = await applyEdit(app.db, {
         projectId,
         pageId,

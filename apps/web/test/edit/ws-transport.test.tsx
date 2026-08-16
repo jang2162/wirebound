@@ -345,6 +345,54 @@ describe('리베이스한 편집을 다시 낸다 (D3)', () => {
     expect(board.getPage).not.toHaveBeenCalled()
   })
 
+  /**
+   * **잠금 충돌은 다시 내지 않는다 — P3-3 D1이 상태 코드를 가른 이유가 이것이다.**
+   *
+   * 판은 위 케이스와 **글자 하나만 다르다**: 남의 프레임이 먼저 오고 그 뒤에 내 실패가
+   * 온다. 그 순서는 드물지 않다 — 두 편집 사이가 10ms만 벌어져도 프레임이 먼저 왔다
+   * (P3-2 리뷰가 진짜 서버로 간격마다 4회씩 쟀다 · 이월 §2.2의 표). 잠금 충돌이 §7.2가
+   * 적은 대로 **409**였다면 재전송 조건 셋이 다 참이 되어 **한 번 더 나가고**, 그 사이
+   * 잠금이 풀렸다면 성공한다 — **사용자는 자기가 막혔다는 것을 모른 채 남의 잠금 구역을
+   * 편집한 것**이 된다.
+   *
+   * `423`이면 조건의 첫째(`status === 409`)에서 갈라져 재조회로 간다.
+   */
+  it('잠금 충돌은 조건이 다 맞아도 다시 내지 않는다 (D1)', async () => {
+    const board = mount()
+    board.commit('내 값')
+
+    // 조건 둘째·셋째를 참으로 만든다 — 큐의 머리가 여전히 이 편집이고 headSeq가 움직였다.
+    board.push({
+      type: 'page-changed',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      seq: HEAD_SEQ + 1,
+      ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_theirs', type: 'Text', props: {} } }],
+      warnings: [],
+      actor: { type: 'user', label: '남' },
+    })
+    board.push({
+      type: 'patch-error',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      clientOpId: 'op_1',
+      status: 423,
+      code: 'locked',
+      message: '보라님이 편집 중인 영역입니다',
+      issues: [],
+    })
+
+    await act(async () => {})
+    // **한 번만 나갔다.** 409였다면 여기 둘이 있다(바로 위 케이스가 그것을 잰다).
+    expect(board.patchFrames().map((frame) => [frame.clientOpId, frame.baseSeq])).toEqual([['op_1', HEAD_SEQ]])
+    // 재조회로 수렴하고, 사용자는 서버가 준 이유를 그대로 듣는다.
+    expect(board.getPage).toHaveBeenCalled()
+    expect(board.store.getState().editFailure?.kind).toBe('message')
+    expect(
+      board.store.getState().editFailure?.kind === 'message' ? board.store.getState().editFailure : null,
+    ).toMatchObject({ message: expect.stringContaining('보라님이 편집 중인 영역입니다') })
+  })
+
   it('다시 낸 것이 ack되면 내 편집이 남의 편집 위에 저장된다', async () => {
     const board = mount()
     board.commit('내 값')

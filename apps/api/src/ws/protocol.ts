@@ -14,13 +14,25 @@
  * **`type`이 판별자다.** 새 프레임을 더할 때 `type` 없이 필드만 늘리지 마라 — 받는 쪽이
  * 모양으로 갈래를 추측하게 되고, 그것이 이 저장소가 반복해 만난 부류다.
  */
-import type { PatchOp, ValidationIssue } from '@wirebound/schema'
+import { NODE_ID_PATTERN, type PatchOp, type ValidationIssue } from '@wirebound/schema'
 import { z } from 'zod'
 import type { ProjectRole } from '../db/types'
 import type { ApiErrorCode, ApiErrorIssue } from '../errors'
 import { ClientOpId, OpsBody } from '../http/patch-ops'
+import type { LiveLock } from '../lock/store'
 
-/** 룸에 들어와 있는 연결 하나. §7.2의 잠금이 이 목록 위에 선다. */
+/**
+ * 룸에 들어와 있는 연결 하나.
+ *
+ * **§7.2의 잠금은 이 목록 위에 서지 **않는다** — P3-3이 재고 그렇게 판정했다.** 이 목록은
+ * 회수된 연결이 pruning 직전 한 프레임 동안 남으므로(P3-2 이월 §2.5), 배지를 그 위에 세우면
+ * 그 창에서 **없는 사람의 이름을 그리거나** 잠금이 **이름 없이 사라진다.** 그래서 잠금
+ * 프레임이 `userName`을 직접 나른다(`LiveLock`) — 화면은 이 목록을 아예 안 본다
+ * (`apps/web/src/realtime/use-realtime.ts`의 표가 그렇게 적혀 있다).
+ *
+ * **그래서 이 목록의 소비자는 아직 없다.** *"지금 이 페이지를 누가 보고 있다"*를 그리려는
+ * 슬라이스가 첫 소비자가 된다(P3-3 이월 §5.3).
+ */
 export interface Participant {
   connectionId: string
   userId: string
@@ -45,10 +57,28 @@ export interface EventActor {
  * | `pong` | `ping`에 대한 답. 클라이언트가 연결이 살아 있는지 재는 유일한 수단이다 |
  * | `patch-ack` | **낸 사람에게만.** `patch` 프레임이 성공했다(§7.1의 *"[본인] ack(seq) 수신"*) |
  * | `patch-error` | **낸 사람에게만.** `patch` 프레임이 실패했다 |
+ * | `locks` | 잠금 목록이 바뀌었을 때(그리고 누가 들어올 때), **룸 전체에** — §7.2 |
  */
 export type ServerFrame =
   | { type: 'joined'; projectId: string; connectionId: string; userId: string; role: ProjectRole }
   | { type: 'presence'; projectId: string; participants: Participant[] }
+  | {
+      type: 'locks'
+      projectId: string
+      /**
+       * **프로젝트의 살아 있는 잠금 전부다** — 바뀐 것만이 아니다. 받는 쪽은 자기가 연
+       * 페이지의 것만 걸러 쓴다(`page-changed`가 `pageId`로 걸러지는 것과 같다).
+       *
+       * **전부를 싣는 것이 판정이다.** 증분으로 보내면 받는 쪽이 목록을 스스로 쌓아야 하고,
+       * 프레임 하나를 놓치면 그 목록이 **조용히** 틀린 채 남는다 — 잠금은 30초면 만료되는데
+       * 화면의 배지는 영영 남는다. 전부를 실으면 **다음 프레임이 언제나 그것을 고친다.**
+       * 크기는 룸의 연결 수로 묶여 있다(연결 하나가 드는 잠금은 하나다).
+       *
+       * **낸 사람도 받는다.** 자기 잠금이 실제로 섰다는 것을 아는 수단이 이 목록뿐이다
+       * (D4 — 잠금 프레임은 답을 짝지어 기다리지 않는다).
+       */
+      locks: LiveLock[]
+    }
   | {
       type: 'page-changed'
       projectId: string
@@ -118,7 +148,7 @@ export type ServerFrame =
     }
 
 /**
- * 클라이언트 → 서버. **둘이다** — 하트비트(`ping`)와 편집 전송(`patch`).
+ * 클라이언트 → 서버. 하트비트(`ping`) · 편집 전송(`patch`) · 잠금(`lock`·`unlock`).
  *
  * `ping`이 있는 이유는 둘이다. 브라우저 `WebSocket`은 프로토콜 ping을 **보낼 수 없어**
  * (읽기 전용 API에 그 메서드가 없다) 클라이언트가 연결이 살아 있는지 재려면 앱 수준
@@ -143,7 +173,41 @@ const PatchFrame = OpsBody.extend({
   clientOpId: ClientOpId,
 })
 
-const ClientFrameSchema = z.discriminatedUnion('type', [z.strictObject({ type: z.literal('ping') }), PatchFrame])
+/**
+ * 노드 하나를 잡는다(§7.2의 *"노드를 선택하면 그 서브트리에 잠금을 건다"*).
+ *
+ * **같은 노드를 다시 보내는 것이 하트비트다**(§7.2의 *"편집 중 하트비트로 갱신"*) — 갱신용
+ * 프레임을 따로 두지 않는다. 두면 *"잡기"*와 *"갱신"*이 갈래 둘이 되고, 잡지 않은 것을
+ * 갱신하는 갈래가 생긴다.
+ *
+ * **답을 짝지어 기다리지 않는다**(D4). 성공하면 `locks` 목록이 룸 전체에 흐르고 **낸 사람도
+ * 그것을 받는다** — 그것이 답이다. `patch`처럼 `clientOpId`로 짝짓지 않는 이유는 P3-2
+ * 이월 §2.4가 적었다: 잠금은 끊겼을 때 할 일이 편집과 **반대**다(서버가 알아서 놓는다).
+ *
+ * **`nodeId`가 문서에 있는지는 여기서 안 본다.** 그것을 보려면 문서를 읽어야 하고, 선택
+ * 하나마다 조회가 붙는다. 문서에 없는 노드의 잠금은 **아무것도 막지 못한다**
+ * (`@wirebound/schema`의 `findLockConflict`) — 그래서 무해하고, 30초면 사라진다.
+ */
+const LockFrame = z.strictObject({
+  type: z.literal('lock'),
+  pageId: z.uuid(),
+  /** `@wirebound/schema`의 봉투가 노드 id에 쓰는 그 술어다 — 모양을 두 벌로 적지 않는다. */
+  nodeId: z.string().regex(NODE_ID_PATTERN),
+})
+
+/**
+ * 잡고 있는 것을 놓는다. **`pageId`도 `nodeId`도 없다** — 연결 하나가 드는 잠금은 하나이므로
+ * 놓을 것을 가리킬 값이 필요 없고, 실으면 *"그 연결이 실제로 든 것"*과 어긋날 수 있는 값이
+ * 하나 늘어난다.
+ */
+const UnlockFrame = z.strictObject({ type: z.literal('unlock') })
+
+const ClientFrameSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('ping') }),
+  PatchFrame,
+  LockFrame,
+  UnlockFrame,
+])
 
 export type ClientFrame = z.infer<typeof ClientFrameSchema>
 
@@ -164,6 +228,14 @@ export type ClientFrame = z.infer<typeof ClientFrameSchema>
 export const MIN_ROLE_FOR_FRAME: Record<ClientFrame['type'], ProjectRole> = {
   ping: 'viewer',
   patch: 'editor',
+  // **잠금도 `editor`다.** 뷰어는 편집을 못 하므로 잠글 것이 없고, 잠글 수 있게 두면
+  // 조회 전용 사용자가 남의 편집을 막는다 — §10이 열어 준 것은 조회뿐이다.
+  lock: 'editor',
+  // **놓는 것도 `editor`다.** 뷰어가 든 잠금이 있을 수 없으므로 놓을 것도 없다.
+  // **권한이 editor에서 viewer로 깎인 연결의 잠금은 여기서 안 놓인다** — 그 연결은 룸에
+  // 남고(뷰어는 계속 받는다) 이 프레임이 거절되므로, 그 잠금은 **TTL 30초로 사라진다.**
+  // 멤버십 자체가 사라진 경우는 다르다: 그때는 연결이 닫히고 닫힘이 곧 해제다(§7.2).
+  unlock: 'editor',
 }
 
 /**
@@ -198,8 +270,18 @@ export const WS_CLOSE = {
  * 자리가 둘이 되고, 그것이 D2가 닫은 형태다. 대가는 작다: 끊긴 클라이언트는 기다리던 편집을
  * 실패로 끝내고 다시 붙으며, 다시 붙는 것 자체가 재조회 신호다(D6). **오늘 웹 클라이언트는
  * 그런 `ops`를 만들지 못한다**(로컬 `applyOps`가 먼저 막는다) — 도달하는 것은 §7.4의 MCP나
- * 다른 클라이언트다. **P3-3이 프레임을 더할 때 이 정책을 프레임 무리 전체에 대해 다시
- * 판정하라** — 하트비트가 규격을 어기면 편집 채널까지 함께 끊긴다.
+ * 다른 클라이언트다.
+ *
+ * **P3-3이 잠금 프레임 무리로 그 정책을 다시 판정했다 — 그대로 둔다.** 근거 둘:
+ *
+ * 1. **두 단계로 읽지 않는다는 근거가 그대로다.** 잠금 프레임에는 `clientOpId`조차 없어
+ *    *"누구에게 답할지"*를 먼저 뽑아 봐야 되돌려 줄 짝이 없다.
+ * 2. **끊기는 대가가 P3-2보다 작아졌다.** 다시 붙으면 서버가 룸에 **지금 살아 있는 잠금
+ *    전부**를 흘리므로(`ws/routes.ts`의 참가 알림) 배지가 스스로 되찾아지고, 잠금 자체는
+ *    닫힘이 곧 해제라 남지 않는다(§7.2).
+ *
+ * **그래도 값은 그대로다:** 잠금 프레임 하나가 규격을 어기면 **편집 채널까지 함께 끊긴다.**
+ * 연결이 하나이기 때문이고, 그것이 이 정책의 대가로 남는다.
  */
 export function parseClientFrame(raw: string): ClientFrame | null {
   let value: unknown

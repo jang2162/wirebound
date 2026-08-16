@@ -29,6 +29,19 @@ export interface EventActor {
 }
 
 /**
+ * 살아 있는 잠금 하나(§7.2). **서버의 `LiveLock`의 거울이다.**
+ *
+ * `userName`이 실려 오므로 배지가 참가자 목록을 다시 뒤지지 않는다 — 그 목록은 낡을 수
+ * 있고(P3-2 이월 §2.5), 뒤지게 두면 낡은 한 프레임 동안 배지가 **이름 없이** 사라진다.
+ */
+export interface NodeLockView {
+  pageId: string
+  nodeId: string
+  userId: string
+  userName: string
+}
+
+/**
  * **서버의 `joined`는 `role`도 싣는데 여기서는 읽지 않는다.** 화면의 역할 판정은
  * `projects/project-actions.ts`의 `projectAbilities` 하나가 하고 그 입력은
  * `getProject`의 응답이다 — 같은 값을 두 번째 경로로 들이면 그 판정이 둘이 된다
@@ -37,6 +50,12 @@ export interface EventActor {
 export type ServerFrame =
   | { type: 'joined'; projectId: string; connectionId: string; userId: string }
   | { type: 'presence'; projectId: string; participants: Participant[] }
+  | {
+      type: 'locks'
+      projectId: string
+      /** **프로젝트의 살아 있는 잠금 전부다.** 받는 쪽이 자기 페이지의 것만 걸러 쓴다. */
+      locks: NodeLockView[]
+    }
   | {
       type: 'page-changed'
       projectId: string
@@ -90,6 +109,19 @@ export type ServerFrame =
 export type ClientFrame =
   | { type: 'ping' }
   | {
+      /**
+       * 노드 하나를 잡는다(§7.2). **같은 노드를 다시 보내는 것이 하트비트다** — 갱신용
+       * 프레임이 따로 없다.
+       */
+      type: 'lock'
+      pageId: string
+      nodeId: string
+    }
+  | {
+      /** 잡고 있는 것을 놓는다. **가리킬 값이 없다** — 연결 하나가 드는 잠금은 하나다. */
+      type: 'unlock'
+    }
+  | {
       type: 'patch'
       pageId: string
       /** 이 편집이 설 revision. 서버는 `head_seq`와 **정확히 같을 때만** 받는다. */
@@ -110,12 +142,24 @@ export function patchFrame(input: Omit<Extract<ClientFrame, { type: 'patch' }>, 
   return JSON.stringify({ type: 'patch', ...input } satisfies ClientFrame)
 }
 
+/** 잠금 하나를 잡거나 갱신할 문자열(§7.2). */
+export function lockFrame(pageId: string, nodeId: string): string {
+  return JSON.stringify({ type: 'lock', pageId, nodeId } satisfies ClientFrame)
+}
+
+/** 잡고 있는 것을 놓는다. 프레임마다 같은 값이라 미리 만들어 둔다. */
+export const UNLOCK_FRAME = JSON.stringify({ type: 'unlock' } satisfies ClientFrame)
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
 function str(value: unknown): value is string {
   return typeof value === 'string'
+}
+
+function isLockView(value: unknown): value is NodeLockView {
+  return isRecord(value) && str(value.pageId) && str(value.nodeId) && str(value.userId) && str(value.userName)
 }
 
 /**
@@ -147,6 +191,14 @@ export function parseServerFrame(raw: string): ServerFrame | null {
     case 'presence':
       return str(value.projectId) && Array.isArray(value.participants)
         ? { type: 'presence', projectId: value.projectId, participants: value.participants as Participant[] }
+        : null
+    case 'locks':
+      // **원소를 하나씩 본다 — `as`로 넘기지 않는다.** 배지는 `userName`을 그리고 차단은
+      // `userId`를 보는데, 둘 중 하나가 없는 원소가 섞여 들어오면 화면이 `undefined`를
+      // 그리거나 **아무의 것도 아닌 잠금**이 선다. `page-changed`가 필드를 하나씩 보는 것과
+      // 같은 이유다.
+      return str(value.projectId) && Array.isArray(value.locks)
+        ? { type: 'locks', projectId: value.projectId, locks: value.locks.filter(isLockView) }
         : null
     case 'page-changed':
       return str(value.projectId) &&

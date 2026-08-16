@@ -43,9 +43,7 @@
  * 알린다"*가 *"연결이 죽어 있었다"*와 구분되지 않는다.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readdirSync } from 'node:fs'
 import { WIREBOUND_PAGE_VERSION, type PatchOp } from '@wirebound/schema'
 import {
   addMember,
@@ -59,6 +57,7 @@ import {
   type RealApiContext,
   type SignedUpUser,
 } from './helpers'
+import { SRC_ROOT, callSitesByFile, sourceFiles } from './source-census'
 import { WsProbe, joinRoom } from './ws-client'
 
 const db = getTestDb()
@@ -79,50 +78,15 @@ function track(probe: WsProbe): WsProbe {
 }
 
 /**
- * 훑을 뿌리. **`src/` 전체이고 재귀한다** — 앞 판은 `routes`·`services` 둘을 비재귀로
- * 훑었고, 리뷰가 그 구멍을 실증했다: **`src/ws/`에 `applyEdit` 호출을 심으면 0 사망**이었다
- * (`routes/`에 심으면 1 사망). **P3-2의 patch 핸들러가 갈 자리가 정확히 거기다** — D3의
- * 대가를 갚기로 한 유일한 장치가 다음 호출자에 대해 비어 있었다.
- *
- * **디렉터리 목록을 손으로 적지 않는 것이 이 고침의 요점이다.** 목록을 적으면 다음
- * 디렉터리가 생길 때 같은 일이 다시 난다.
- */
-const SRC_ROOT = fileURLToPath(new URL('../src', import.meta.url))
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
-
-/** `SRC_ROOT` 아래의 `.ts` 전부를 뿌리 기준 상대 경로로 낸다. */
-function sourceFiles(dir: string = SRC_ROOT, prefix = ''): string[] {
-  const found: string[] = []
-  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-    const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
-    if (entry.isDirectory()) {
-      found.push(...sourceFiles(join(dir, entry.name), relative))
-    } else if (entry.name.endsWith('.ts')) {
-      found.push(relative)
-    }
-  }
-  return found
-}
-
-/**
  * 소스에 있는 `applyEdit` **호출** 자리를 파일별로 센다.
  *
- * 선언(`function applyEdit(`)을 먼저 지운 뒤에 센다 — `await applyEdit(`만 찾으면
- * `void applyEdit(…)`이나 `return applyEdit(…)`으로 부르는 새 호출자를 **조용히 놓친다.**
+ * **훑는 것은 `./source-census.ts`다** — `lock-census.test.ts`가 같은 분모를 쓰므로, 훑는
+ * 방식을 두 벌로 두면 한쪽만 넓어진다. 앞 판이 `routes`·`services`만 비재귀로 훑어
+ * `src/ws/`의 호출자를 못 봤고(리뷰가 **0 사망**으로 실증했다), 그 고침이 이 파일에만
+ * 있으면 다음 census가 좁은 채로 태어난다.
  */
 function editCallSitesByFile(): Map<string, number> {
-  const found = new Map<string, number>()
-  for (const relative of sourceFiles()) {
-    const source = stripComments(readFileSync(join(SRC_ROOT, relative), 'utf8')).replace(/function\s+applyEdit\(/g, '')
-    const count = [...source.matchAll(/\bapplyEdit\(/g)].length
-    if (count > 0) {
-      found.set(relative, count)
-    }
-  }
-  return found
+  return callSitesByFile('applyEdit')
 }
 
 interface Fixture {

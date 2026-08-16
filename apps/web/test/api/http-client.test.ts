@@ -1157,21 +1157,26 @@ describe('createHttpClient', () => {
     expect(error.message).toBe('나는 주전자다')
   })
 
-  it('계약의 code 일곱을 그대로 싣는다', async () => {
-    // **일곱을 하나씩 지나간다.** 여기까지 오는 값은 `API_ERROR_CODES`를 통과한 것이고,
-    // 통과하지 못한 문자열은 위 케이스가 보듯 `internal`로 흡수된다 — 즉 목록에서 하나가
-    // 빠지거나 오타가 나면 그 코드가 조용히 `internal`이 되고 화면의 분기가 닿지 않는다.
-    // `ApiErrorCode` 유니온을 그대로 훑는 것은 유니온에 코드가 늘면 이 배열이 컴파일
-    // 에러가 되게 하기 위해서다.
-    const codes: ApiErrorCode[] = [
-      'bad-request',
-      'unauthenticated',
-      'forbidden',
-      'not-found',
-      'conflict',
-      'validation-failed',
-      'internal',
-    ]
+  it('계약의 code 전부를 그대로 싣는다', async () => {
+    // **하나씩 지나간다.** 여기까지 오는 값은 `API_ERROR_CODES`를 통과한 것이고, 통과하지
+    // 못한 문자열은 위 케이스가 보듯 `internal`로 흡수된다 — 즉 목록에서 하나가 빠지거나
+    // 오타가 나면 그 코드가 조용히 `internal`이 되고 화면의 분기가 닿지 않는다.
+    //
+    // **`Record<ApiErrorCode, true>`의 키를 훑는다 — 배열을 손으로 적지 않는다.** 앞 판은
+    // 배열이었고 그 주석이 *"유니온에 코드가 늘면 이 배열이 컴파일 에러가 된다"*고 적었는데
+    // **거짓이었다**: `ApiErrorCode[]`는 원소가 부족해도 멀쩡한 타입이다(P3-3이 `locked`를
+    // 더하며 재서 알았다 — 배열을 안 고쳐도 컴파일이 지났다). 레코드로 두면 빠뜨림이
+    // **양방향으로** 컴파일 에러가 되고, 케이스 이름에 수를 적을 일도 없어진다.
+    const codes = Object.keys({
+      'bad-request': true,
+      unauthenticated: true,
+      forbidden: true,
+      'not-found': true,
+      conflict: true,
+      locked: true,
+      'validation-failed': true,
+      internal: true,
+    } satisfies Record<ApiErrorCode, true>) as ApiErrorCode[]
 
     for (const code of codes) {
       const stub = stubFetch(jsonResponse(400, { error: { code, message: '이유' } }))

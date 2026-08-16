@@ -42,6 +42,7 @@ import type { ProjectRole } from '../db/types'
 import { forbidden, internal, unauthenticated } from '../errors'
 import { parseParams } from '../http/parse'
 import { z } from 'zod'
+import { handleLockFrame, releaseLocksOf } from './lock'
 import { handlePatchFrame, patchErrorFrame } from './patch'
 import { MIN_ROLE_FOR_FRAME, WS_CLOSE, parseClientFrame, type ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
@@ -116,6 +117,13 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         })
       }
       announce()
+      // **참가할 때 잠금 목록을 한 번 흘린다.** 잠금은 바뀔 때만 흐르므로, 여기서 안
+      // 흘리면 들어온 화면의 배지가 **다음 누군가의 선택까지** 비어 있다 — 그동안 §7.2의
+      // 1차 방어가 서지 않는다. 이탈에서는 부르지 않는다: 그 연결이 잠금을 들고 있었으면
+      // `releaseLocksOf`가 알리고, 안 들고 있었으면 목록이 안 바뀌었다.
+      void broadcast.announceLocks(projectId).catch((error: unknown) => {
+        app.log.error({ err: error, projectId }, 'locks 알림 실패')
+      })
 
       socket.on('message', (raw: unknown) => {
         // **읽기는 동기이므로 IIFE 밖에서 한다.** 아래 `catch`가 *"어느 편집이 실패했나"*를
@@ -151,6 +159,15 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
             }
             rooms.leave(projectId, connection.id)
             socket.close(WS_CLOSE.revoked, '권한이 회수되었습니다')
+            // **회수도 연결 종료다** — §7.2의 *"연결 종료 시 즉시 해제"*가 여기도 선다.
+            // `close` 이벤트가 뒤따르지만 그 자리에서 다시 놓아도 조용히 지난다.
+            //
+            // **그래서 이 줄은 0 사망이다(리뷰 N9).** 바로 위 `socket.close()`가 부르는
+            // `close` 핸들러가 같은 일을 하므로 지워도 아무것도 안 죽는다. **지워도 되는
+            // 신호로 읽지 마라:** 이것은 둘째 방어이고, `close` 이벤트가 안 오는 구현으로
+            // 갈아 끼우는 날 유일한 해제가 된다(`ws/patch.ts`의 `clientOpId`·`connection.ts`의
+            // `stopped`와 같은 부류다).
+            releaseLocksOf(app, connection)
             announce()
             return
           }
@@ -161,6 +178,13 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
               return
             case 'patch':
               push(await handlePatchFrame(app, connection, frame))
+              return
+            case 'lock':
+              // **답을 안 낸다**(D4). 답은 룸 전체로 나가는 `locks` 목록이고 낸 사람도 받는다.
+              handleLockFrame(app, connection, frame)
+              return
+            case 'unlock':
+              releaseLocksOf(app, connection)
               return
           }
         })().catch((error: unknown) => {
@@ -187,6 +211,9 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
 
       socket.on('close', () => {
         rooms.leave(projectId, connection.id)
+        // **§7.2의 *"WS 연결 종료 시 즉시 해제"*가 서는 자리다.** 룸에서 뺀 **뒤에** 놓는다 —
+        // 그래야 나가는 연결이 자기 해제 프레임을 받지 않는다.
+        releaseLocksOf(app, connection)
         announce()
       })
     })

@@ -9,6 +9,7 @@
 import websocketPlugin from '@fastify/websocket'
 import type { FastifyInstance } from 'fastify'
 import type { ApiConfig } from '../config'
+import { createLockStore, type LockStore } from '../lock/store'
 import { createBroadcaster, type Broadcaster } from './broadcast'
 import { wsRoutes } from './routes'
 import { InMemoryRoomRegistry, type RoomRegistry } from './rooms'
@@ -22,6 +23,12 @@ declare module 'fastify' {
 export interface Realtime {
   rooms: RoomRegistry
   broadcast: Broadcaster
+  /**
+   * §7.2의 소프트 잠금 저장소. **룸과 나란히 앱에 걸린다** — 잠금을 확인하는 것은 라우트
+   * 핸들러이고(`lock/check.ts`를 `ws/patch.ts`·`routes/pages.ts`가 부른다), 라우트 핸들러가
+   * 손에 쥐고 있는 것은 `app`이다. 모듈 전역으로 두면 앱을 여럿 세우는 테스트가 잠금을 섞는다.
+   */
+  locks: LockStore
 }
 
 export type { Broadcaster } from './broadcast'
@@ -43,7 +50,8 @@ export async function registerRealtime(app: FastifyInstance, config: ApiConfig):
   await app.register(websocketPlugin)
 
   const rooms = new InMemoryRoomRegistry()
-  app.decorate('realtime', { rooms, broadcast: createBroadcaster(app.db, rooms) })
+  const locks = createLockStore()
+  app.decorate('realtime', { rooms, locks, broadcast: createBroadcaster(app.db, rooms, locks) })
 
   await app.register(wsRoutes(config), { prefix: '/api/projects' })
 }

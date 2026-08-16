@@ -11,7 +11,7 @@
  * 고르는 일만 한다. 추가와 드래그 이동(설계 §9)은 아직 없다.
  */
 import type { KeyboardEvent, ReactElement } from 'react'
-import type { WbNode } from '@wirebound/schema'
+import type { NodeLock, WbNode } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import type { StructureAbilities } from '../edit/structure-actions'
 import { nodeTypeLabel } from './node-shape'
@@ -130,6 +130,9 @@ export function StructureTree(props: {
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 그린다.
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
+  // **목록을 구독하는 것이 요점이다.** 판정은 `store.lockedBy`가 하지만 그것은 함수라
+  // 참조가 안 바뀐다 — 이 구독이 없으면 남이 잠갔다 풀어도 트리가 다시 그려지지 않는다.
+  const locks = useEditorStore(store, (s) => s.locks)
   // **조작을 여기서 한 번만 만든다.** 툴바에 내려 주고 아래 키 핸들러도 같은 것을 쓴다 —
   // 그것이 D8이 요구하는 "같은 함수"다.
   const commands = useStructureCommands({ projectId: props.projectId, pageId: props.pageId })
@@ -175,7 +178,14 @@ export function StructureTree(props: {
     // 이 상자가 끼어도 그대로 바닥에 붙는다.
     <div onKeyDown={handleKeyDown}>
       <ul className="wb-shell-structure">
-        <StructureNode node={doc.root} selectedNodeId={selectedNodeId} onSelect={store.selectNode} />
+        <StructureNode
+          node={doc.root}
+          selectedNodeId={selectedNodeId}
+          onSelect={store.selectNode}
+          // **판정은 스토어 하나가 한다**(D7) — 서버의 2차 방어가 부르는 그 함수를 지나온
+          // 값이다. 여기서 `locks`를 직접 뒤지면 판정이 두 벌이 된다.
+          lockOf={locks.length === 0 ? null : store.lockedBy}
+        />
       </ul>
       {/* 툴바가 트리 **아래**인 것은 D4다. 스크롤되는 상자 안이라 `sticky`로 바닥에
           붙여 둔다 — 트리가 길어지면 조작 버튼이 화면 밖으로 밀려난다. */}
@@ -222,6 +232,8 @@ function StructureNode(props: {
   node: WbNode
   selectedNodeId: string | null
   onSelect: (nodeId: string) => void
+  /** 그 노드를 막는 남의 잠금을 내는 함수. 잠금이 하나도 없으면 `null`이다. */
+  lockOf: ((nodeId: string) => NodeLock | null) | null
 }): ReactElement {
   const { node } = props
   // **모양 가드 둘.** 검증 전 문서(P2b-2)에는 `children`이 배열이 아니거나 `type`이
@@ -232,6 +244,8 @@ function StructureNode(props: {
   // 재지 못했다.
   const children = Array.isArray(node.children) ? node.children : []
   const typeLabel = nodeTypeLabel(node)
+  // id가 없는 노드는 잠금과 짝지을 것이 없다 — 아래에서 고를 수도 없다.
+  const lock = isSelectable(node) ? (props.lockOf?.(node.id) ?? null) : null
 
   return (
     <li>
@@ -251,12 +265,25 @@ function StructureNode(props: {
           // `false`가 아니라 `undefined`인 것은 `aria-current="false"`가 DOM에 남기
           // 때문이다 — 그러면 "표시가 붙은 줄"을 셀 수 없다.
           aria-current={props.selectedNodeId === node.id ? true : undefined}
+          // **누를 수 없다는 것이 보여야 한다**(§7.2의 *"선택이 차단된다"*). 막는 것 자체는
+          // `store.selectNode`가 하고(캔버스도 그 함수를 지난다) 여기 `disabled`는 **왜
+          // 안 되는지를 보이는 쪽**이다 — 같은 모양인데 반응만 없으면 고장으로 읽힌다.
+          disabled={lock !== null}
           onClick={() => props.onSelect(node.id)}
         >
           {typeLabel}
         </button>
       ) : (
         <span className="wb-shell-structure-broken">{typeLabel}</span>
+      )}
+
+      {/* §7.2의 *"○○ 편집 중"* 배지. **잠금이 가리키는 노드에만 붙는다** — 서브트리 전체가
+          막히지만 자손마다 이름을 붙이면 트리가 이름으로 뒤덮이고, 누가 무엇을 잡았는지가
+          오히려 안 보인다. **이름은 잠금이 직접 나른다**(`realtime/protocol.ts`의
+          `NodeLockView`) — 참가자 목록에서 찾으면 그 목록이 낡은 한 프레임 동안 배지가
+          조용히 사라진다(P3-2 이월 §2.5). */}
+      {lock !== null && lock.nodeId === node.id && (
+        <span className="wb-shell-structure-lock">{lock.userName} 편집 중</span>
       )}
 
       {children.length > 0 && (
@@ -273,6 +300,7 @@ function StructureNode(props: {
               node={child}
               selectedNodeId={props.selectedNodeId}
               onSelect={props.onSelect}
+              lockOf={props.lockOf}
             />
           ))}
         </ul>
