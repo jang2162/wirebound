@@ -327,6 +327,29 @@ describe('막는 것은 **남의** 잠금이다 (D3)', () => {
     })
   }, 30_000)
 
+  it('낡은 요청은 잠금이 아니라 낡음으로 답한다 — 겪지 않은 실패를 말하지 않는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const holderTab = track(await joinRoom(ctx.port, fx.projectId, fx.holder.cookie.wb_session))
+      holderTab.send(JSON.stringify({ type: 'lock', pageId: fx.pageId, nodeId: 'n_b' }))
+      await locksWith(holderTab, 'n_b')
+
+      // **잠긴 자리를 건드리는 편집인데 `baseSeq`가 낡았다.** 잠금 확인은 자기가 읽은 문서가
+      // 요청이 선 revision의 것일 때만 판정한다(`lock/check.ts`) — 아니면 파이프라인이
+      // `stale`로 답한다. 그 순서가 뒤집히면 사용자는 *"남이 편집 중"*이라는 말을 듣고
+      // **재조회를 안 한다.**
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`,
+        cookies: fx.actor.cookie,
+        payload: { baseSeq: 0, ops: insideLock() },
+      })
+
+      expect(res.statusCode).toBe(409)
+      expect((res.json() as { error: { code: string } }).error.code).toBe('conflict')
+    })
+  }, 30_000)
+
   it('연결이 끊기면 다시 편집할 수 있다 — §7.2의 *"연결 종료 시 즉시 해제"*', async () => {
     await withRealApi(async (ctx) => {
       const fx = await fixture(ctx)

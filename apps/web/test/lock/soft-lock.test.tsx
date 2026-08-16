@@ -314,6 +314,16 @@ describe('선택 차단 (1차 방어)', () => {
     expect(view.store.getState().selectedNodeId).toBe('n-b')
   })
 
+  it('잠긴 줄은 **눌릴 수 없게 보인다** — 같은 모양인데 반응만 없으면 고장으로 읽힌다', async () => {
+    const view = await board()
+
+    view.push(locksFrame([foreign('n-b')]))
+
+    expect((treeButton('Section') as HTMLButtonElement).disabled).toBe(true)
+    // 대조: 잠기지 않은 줄은 그대로 눌린다.
+    expect((treeButtonAt('Text', 0) as HTMLButtonElement).disabled).toBe(false)
+  })
+
   it('스토어가 막는다 — 트리 밖(캔버스)에서 눌러도 같다', async () => {
     const view = await board()
     view.push(locksFrame([foreign('n-b')]))
