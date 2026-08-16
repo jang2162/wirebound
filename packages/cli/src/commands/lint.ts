@@ -78,6 +78,7 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
   const pathOf = new Map(ordered.map((page) => [page.id, pageTargetPath(page.target)]))
 
   let issues = all
+  let filtered = false
   if (path !== undefined && path.trim().length > 0) {
     const matched = matchPageTargets(ordered, path)
     if (matched.length === 0) {
@@ -85,16 +86,48 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
       return EXIT.usage
     }
     issues = filterLintIssues(all, { pageIds: matched.map((page) => page.id) })
+    filtered = true
     io.out(`경로 필터: ${path} — 전체 ${all.length}건 중 ${issues.length}건`)
   }
 
   for (const line of renderNotes(plan.notes)) io.out(line)
   for (const issue of issues) io.out(renderIssue(issue, pathOf))
 
-  const errors = issues.filter((issue) => issue.severity === 'error').length
+  const errors = countErrors(issues)
   const warnings = issues.length - errors
-  io.out(issues.length === 0 ? '결함 없음' : `결함 ${issues.length}건 (error ${errors} · warning ${warnings})`)
+  const summary = issues.length === 0 ? '결함 없음' : `결함 ${issues.length}건 (error ${errors} · warning ${warnings})`
+  // **범위를 요약 줄에 단다**(리뷰 N1 문제 3). 앞 줄이 *"전체 2건"*이라고 했는데 뒤 줄이
+  // *"결함 없음"*이면 **사람은 뒤 줄을 읽는다** — 두 줄이 서로 부딪히지 않게 한다.
+  io.out(filtered ? `${summary} — 경로 필터 안에서다 (전체 ${all.length}건)` : summary)
 
+  /**
+   * **경로 밖의 `error`를 말한다.**
+   *
+   * 종료 코드는 걸러진 것에서 나오므로(아래) `wireb lint <경로>`가 **0으로 끝나면서
+   * 프로젝트에 `error`가 남아 있을 수 있다.** 그것을 아무 데서도 말하지 않으면 CI에 이
+   * 명령을 건 팀이 *"설계서가 깨져도 초록"*을 본다. **코드는 안 바꾸고 말만 한다** —
+   * 무엇을 물었는지는 사람이 정한 것이다.
+   */
+  if (filtered) {
+    const outside = countErrors(all) - errors
+    if (outside > 0) {
+      io.err(`경로 밖에 error ${outside}건이 더 있습니다 — 전체를 보려면 경로 없이 실행하세요`)
+    }
+  }
+
+  /**
+   * **종료 코드는 걸러진 것에서 낸다**(판정 — 리뷰 N1).
+   *
+   * **근거: 출력과 종료 코드가 같은 것을 말해야 한다.** *"결함 없음"*을 찍고 10으로 끝나면
+   * 스크립트가 듣는 말과 사람이 읽는 말이 갈린다. **경로를 준 사람은 그 범위를 물은 것이다** —
+   * `grep`이 파일을 좁혀 주면 그 파일에서만 답하는 것과 같다.
+   *
+   * 반대 판정(전체에서 센다)을 고르면 `wireb lint <경로>`가 **자기 출력과 어긋난 코드**로
+   * 끝나고, 그때 경로 인자는 *"무엇을 보여 줄지"*만 정하는 장식이 된다.
+   *
+   * **케이스가 이 판정을 든다** — `test/lint.test.ts`의 *"다른 페이지에 error가 있어도
+   * 경로를 주면 0이다"*. 아래를 `all`에서 세게 바꾸면 그 케이스가 죽는다.
+   */
   const failing = failOn === 'warning' ? issues.length : errors
   if (failing === 0) return EXIT.ok
   io.err(
@@ -103,6 +136,10 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
       : `error ${failing}건이 있습니다`,
   )
   return EXIT.findings
+}
+
+function countErrors(issues: readonly LintIssue[]): number {
+  return issues.filter((issue) => issue.severity === 'error').length
 }
 
 /**
