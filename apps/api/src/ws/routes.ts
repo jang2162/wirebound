@@ -34,7 +34,7 @@
  * `patch` 프레임의 본줄기는 `ws/patch.ts`에 있다. 이 파일은 **프레임을 읽고 자격을 보고
  * 갈래로 보내는 것**까지다 — 규칙을 여기 두면 REST와 갈린다.
  */
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, preHandlerHookHandler } from 'fastify'
 import { projectGuard } from '../auth/roles'
 import { hashSessionToken } from '../auth/session'
 import type { ApiConfig } from '../config'
@@ -74,9 +74,28 @@ function nextConnectionId(): string {
   return `wsc_${connectionCounter}`
 }
 
+/**
+ * **WS는 쿠키만이다**(P9-2 D4).
+ *
+ * §10이 *"WS 핸드셰이크도 같은 쿠키를 쓰므로 REST와 WS의 인증 경로가 하나다"*라고 적었고,
+ * API 토큰을 여기 얹으면 그 **하나가 둘**이 된다. 이 라우트는 `:projectId`를 가지므로
+ * 토큰 훅이 `currentUser`를 채우고 `projectGuard`도 통과한다 — **재서 알았다**(그러기
+ * 전에는 101이 선 뒤 소켓 콜백의 쿠키 검사가 곧바로 닫았다: 핸드셰이크는 성공하고 연결만
+ * 죽는 어중간한 상태였다). 그래서 가드 **앞**에서 끊는다.
+ *
+ * 아래 소켓 콜백의 쿠키 검사를 지우지 않는다 — 그쪽은 `sessionId`를 만들어야 하고
+ * (§10의 *"세션 행을 지우면 권한도 즉시 회수된다"*), 마지막 방벽이기도 하다.
+ */
+const requireSessionAuth: preHandlerHookHandler = async (request) => {
+  if (request.authKind === 'token') {
+    throw unauthenticated('WebSocket은 세션 쿠키로만 연결할 수 있습니다')
+  }
+}
+
 export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
   return async (app: FastifyInstance) => {
-    app.get('/:projectId/ws', { websocket: true, preHandler: projectGuard(MIN_ROLE_TO_JOIN) }, (socket, request) => {
+    const guards = [requireSessionAuth, projectGuard(MIN_ROLE_TO_JOIN)]
+    app.get('/:projectId/ws', { websocket: true, preHandler: guards }, (socket, request) => {
       const { projectId } = parseParams(WsParams, request.params)
       const currentUser = request.currentUser
       const role = request.projectRole

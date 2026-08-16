@@ -384,7 +384,13 @@ describe('삭제 없는 태그 (§4.5)', () => {
     ])
   })
 
-  it('복원은 POST 하나이고 라우트가 넷이다', () => {
+  /**
+   * **P9-2가 다섯째를 더했다: `GET /:projectId/snapshot`(단수).** 읽기 전용 프로젝트
+   * 덤프이고 행을 쓰지 않는다(D8) — `wireb pull`이 부르는 것이 그쪽이다.
+   * **단수와 복수가 이름 하나 차이라 목록을 통째로 단언하는 이 케이스가 그 갈림을
+   * 사람에게 보인다.**
+   */
+  it('복원은 POST 하나이고 라우트가 다섯이다', () => {
     const code = stripComments(SOURCE)
     const routes = [...code.matchAll(/app\.(get|post|patch|put|delete)\(\s*'([^']+)'/g)].map(
       (match) => `${match[1]!.toUpperCase()} ${match[2]}`,
@@ -392,6 +398,7 @@ describe('삭제 없는 태그 (§4.5)', () => {
 
     expect(routes).toEqual([
       'POST /:projectId/snapshots',
+      'GET /:projectId/snapshot',
       'GET /:projectId/snapshots',
       'GET /:projectId/snapshots/:snapshotId',
       'POST /:projectId/snapshots/:snapshotId/restore',

@@ -100,6 +100,7 @@ interface Ids {
   commentId: string
   themeId: string
   presetId: string
+  tokenId: string
   otherUserId: string
   memberUserId: string
   cookie: { wb_session: string }
@@ -406,6 +407,34 @@ const PROBES: Probe[] = [
     restoreWrites: false,
     blocked: false,
   },
+  {
+    // **P9-2가 더한 둘. 이 파일이 또 그것을 강제했다** — 라우트를 만든 커밋에서 이
+    // 케이스가 먼저 죽었다.
+    //
+    // **막힌다 — `POST .../presets`·`POST .../themes`와 같은 이유다.**
+    // `api_tokens.project_id`가 `projects(id)`를 참조하므로 삽입이 그 행에
+    // `FOR KEY SHARE`를 걸고 그것이 `FOR UPDATE`와 충돌한다. **복원이 토큰 행을
+    // 쓰지 않는데도 막히는 것**이라 부수 효과다.
+    route: 'POST /:projectId/tokens',
+    label: 'API 토큰 발급 — 복원은 토큰을 되돌리지 않지만 `project_id` FK 때문에 막힌다',
+    method: 'POST',
+    url: (ids) => `/api/projects/${ids.projectId}/tokens`,
+    payload: () => ({ name: '끼어든 토큰' }),
+    restoreWrites: false,
+    blocked: true,
+  },
+  {
+    // **안 막힌다 — `DELETE .../presets`와 같은 이유다.** 자식 행을 지우는 것은 부모 행의
+    // FK 검사를 부르지 않는다. **복원이 토큰을 되돌리지 않으므로 해롭지 않다** —
+    // 오히려 막히면 안 되는 쪽이다: 폐기는 자격을 거두는 조작이라 복원이 도는 동안
+    // 기다려야 할 이유가 없다.
+    route: 'DELETE /:projectId/tokens/:tokenId',
+    label: 'API 토큰 폐기 — 자식 행 삭제라 부모를 잡지 않는다',
+    method: 'DELETE',
+    url: (ids) => `/api/projects/${ids.projectId}/tokens/${ids.tokenId}`,
+    restoreWrites: false,
+    blocked: false,
+  },
 ]
 
 /** `src/routes/`의 원문. 분모를 여기서 만든다(`permission-matrix.test.ts`와 같은 배치). */
@@ -486,6 +515,14 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
   })
   if (presetRes.statusCode !== 201) throw new Error(`프리셋 픽스처 실패: ${presetRes.body}`)
 
+  const tokenRes = await app.inject({
+    method: 'POST',
+    url: `/api/projects/${project.id}/tokens`,
+    cookies: owner.cookie,
+    payload: { name: '대상 토큰' },
+  })
+  if (tokenRes.statusCode !== 201) throw new Error(`토큰 픽스처 실패: ${tokenRes.body}`)
+
   const invitee = await signup(ctx, { email: 'census-invitee@example.com' })
   const member = await signup(ctx)
   await db
@@ -523,6 +560,7 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
     commentId: (commentRes.json() as { comment: { id: string } }).comment.id,
     themeId: (themeRes.json() as { id: string }).id,
     presetId: (presetRes.json() as { id: string }).id,
+    tokenId: (tokenRes.json() as { id: string }).id,
     otherUserId: invitee.user.id,
     memberUserId: member.user.id,
     cookie: owner.cookie,
@@ -631,6 +669,10 @@ describe('표가 스스로 세는 것', () => {
       // 복원이 프리셋을 되돌리지 않으므로(payload에 프리셋 절이 없다) 해롭지 않다.
       'DELETE /:projectId/presets/:presetId',
       'DELETE /:projectId/themes/:themeId',
+      // **P9-2가 일곱째를 더했다.** 토큰 폐기도 자식 행 삭제라 부모를 잡지 않는다.
+      // 복원이 토큰을 되돌리지 않으므로 해롭지 않고, **오히려 막히면 안 되는 쪽이다** —
+      // 폐기는 자격을 거두는 조작이라 복원이 도는 동안 기다려야 할 이유가 없다.
+      'DELETE /:projectId/tokens/:tokenId',
       'PATCH /:projectId/members/:userId',
       'POST /:projectId/pages/:pageId/comments/renumber',
       'PUT /:projectId/themes/:themeId',

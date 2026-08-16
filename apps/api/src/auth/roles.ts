@@ -74,13 +74,14 @@ export async function findMembership(db: DbHandle, projectId: string, userId: st
  * |---|---|
  * | 프로젝트가 없다 | 404 |
  * | 프로젝트는 있지만 멤버가 아니다 | 404 — 존재를 숨긴다 |
+ * | **자격이 다른 프로젝트에 묶여 있다**(API 토큰) | **404** — 아래 `scopeProjectId` |
  * | 멤버지만 역할이 모자라다 | 403 |
  *
  * 앞의 두 상황은 `findMembership`이 똑같이 `null`을 돌려주므로 조회 한 번으로
  * 구분 없이 처리된다 — 존재하지 않는 프로젝트와 멤버가 아닌 프로젝트가 같은
  * 응답을 내야 프로젝트 id의 존재 여부가 비멤버에게 새어 나가지 않는다.
  *
- * Fastify를 전혀 모른다: `db`·`projectId`·`userId`·`min` 네 값만 받고 `ApiError`를
+ * Fastify를 전혀 모른다: `db`·`projectId`·`userId`·`min`과 스코프만 받고 `ApiError`를
  * 던진다. `projectGuard`(REST)와 P3의 WebSocket 껍데기가 이 함수를 함께 재사용한다.
  */
 export async function requireProjectRole(
@@ -88,8 +89,19 @@ export async function requireProjectRole(
   projectId: string,
   userId: string,
   min: ProjectRole,
+  /**
+   * **이 요청의 자격이 묶인 프로젝트**(P9-2 D4). 세션 쿠키는 묶이지 않으므로 `null`이고,
+   * API 토큰은 §10대로 프로젝트 하나에 묶인다.
+   *
+   * **스코프 밖은 *"멤버가 아니다"*와 같게 다룬다 — 그래서 404다**(403이 아니다).
+   * 남의 프로젝트 id를 토큰으로 찔러 존재를 알아낼 수 없어야 하고(§10), 그 성질을 이미
+   * 갖고 있는 것이 위 표의 둘째 줄이다. **판정을 여기 두는 것이 요점이다** — 훅이나
+   * 라우트에 두면 *"역할을 비교하는 코드는 한 자리"*가 두 자리가 된다.
+   */
+  scopeProjectId: string | null = null,
 ): Promise<ProjectRole> {
-  const role = await findMembership(db, projectId, userId)
+  const outOfScope = scopeProjectId !== null && scopeProjectId !== projectId
+  const role = outOfScope ? null : await findMembership(db, projectId, userId)
   if (!role) {
     throw notFound('프로젝트를 찾을 수 없습니다')
   }
@@ -136,7 +148,15 @@ export function projectGuard(min: ProjectRole): preHandlerHookHandler {
     if (!request.currentUser) {
       throw unauthenticated()
     }
-    request.projectRole = await requireProjectRole(request.server.db, projectId, request.currentUser.id, min)
+    request.projectRole = await requireProjectRole(
+      request.server.db,
+      projectId,
+      request.currentUser.id,
+      min,
+      // **API 토큰이 실린 요청이면 그 토큰의 프로젝트다**(P9-2 D4). 세션이면 `null`이라
+      // 위 함수의 스코프 검사가 그대로 지나간다 — 기존 호출자의 행동이 바뀌지 않는다.
+      request.tokenProjectId,
+    )
   }
 }
 

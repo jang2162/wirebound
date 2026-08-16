@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { roleAtLeast } from '../src/auth/roles'
 import type { ProjectRole } from '../src/db/types'
+import { insertApiToken } from '../src/repos/api-tokens'
 import { insertPreset } from '../src/repos/presets'
 import { insertSnapshot } from '../src/repos/snapshots'
 import { insertTheme } from '../src/repos/themes'
@@ -204,6 +205,20 @@ const 스냅샷하나 = async (
  * **API가 아니라 repo로 넣는다** — `스냅샷하나`와 같은 이유다: 픽스처가 검사 대상
  * API(`POST .../presets`)에 의존하면 그쪽이 깨졌을 때 삭제 행까지 함께 무너진다.
  */
+/**
+ * ':tokenId'가 필요한 케이스(토큰 폐기)가 실행 전에 **그 주체의** 토큰을 만든다.
+ *
+ * **API가 아니라 repo로 넣는다** — `프리셋하나`·`스냅샷하나`와 같은 이유다.
+ */
+const 토큰하나 = async (
+  ctx: TestContext,
+  projectId: string,
+  _ownerCookie: { wb_session: string },
+  actorUserId: string,
+): Promise<Record<string, string>> => ({
+  tokenId: (await insertApiToken(ctx.db, { projectId, userId: actorUserId, name: '지울 토큰' })).record.id,
+})
+
 const 프리셋하나 = async (
   ctx: TestContext,
   projectId: string,
@@ -557,6 +572,44 @@ const CASES: Case[] = [
     url: '/api/projects/:projectId/export',
     allowed: ['owner', 'editor', 'viewer'],
     setup: 내보낼페이지,
+  },
+  {
+    // **읽기 전용 프로젝트 덤프는 viewer다**(P9-2 D8). 내보내기와 같은 자리이고 같은
+    // 이유다 — viewer가 화면에서 볼 수 있는 것을 값 하나로 받는 것이므로 새 권한을
+    // 만들지 않는다. 복수(`POST .../snapshots`, editor)와 갈리는 것은 그쪽이 **쓰기**이기
+    // 때문이다.
+    label: '프로젝트 덤프(단수 snapshot)',
+    method: 'GET',
+    url: '/api/projects/:projectId/snapshot',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    // **§10의 표는 토큰 발급을 owner 행에 적었지만 같은 절의 불릿이 그것을 반증한다**
+    // (P9-2 D2 — *"editor가 만든 토큰으로는 스냅샷 복원이 안 된다"*). 판정과 근거는
+    // `routes/tokens.ts`의 머리말에 있고, **어긋남 자체는 보고서가 든다**(설계서는
+    // 고치지 않는다).
+    label: 'API 토큰 발급',
+    method: 'POST',
+    url: '/api/projects/:projectId/tokens',
+    payload: { name: '매트릭스 토큰' },
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    label: 'API 토큰 목록',
+    method: 'GET',
+    url: '/api/projects/:projectId/tokens',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    // **`setup`이 주체의 것으로 만들어야 한다** — 폐기는 자기 토큰만 되고(그 파일의
+    // *"목록·폐기는 자기 것만 본다"*), owner가 만든 토큰을 editor가 지우려 하면 **권한과
+    // 무관한 이유로** 404가 되어 이 매트릭스가 재려는 것을 못 잰다. `코멘트하나`가 같은
+    // 함정을 이미 만났고 그래서 넷째 인자가 생겼다.
+    label: 'API 토큰 폐기',
+    method: 'DELETE',
+    url: '/api/projects/:projectId/tokens/:tokenId',
+    allowed: ['owner', 'editor', 'viewer'],
+    setup: 토큰하나,
   },
 ]
 
