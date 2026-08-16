@@ -100,6 +100,8 @@ interface Board {
   store: EditorStore
   /** 서버가 보낸 것처럼 프레임을 밀어 넣는다. */
   push: (frame: ServerFrame) => void
+  /** 끊는다. 재연결 예약은 그대로 둔다. */
+  disconnect: () => void
   /** 끊고 다시 붙는다 — 예약된 재연결을 손으로 돌린다(진짜 타이머를 남기지 않는다). */
   reconnect: () => void
   /** 지금까지 **모든 소켓으로** 나간 잠금 프레임(`ping`은 뺀다). */
@@ -143,6 +145,11 @@ async function board(): Promise<Board> {
     push: (frame) => {
       act(() => {
         live().onmessage?.({ data: JSON.stringify(frame) })
+      })
+    },
+    disconnect: () => {
+      act(() => {
+        live().onclose?.()
       })
     },
     reconnect: () => {
@@ -259,6 +266,35 @@ describe('배지 — *"○○ 편집 중"*', () => {
     view.push(locksFrame([]))
 
     expect(screen.queryByText(/편집 중$/)).toBeNull()
+  })
+})
+
+describe('연결이 끊긴 동안 — 배지는 낡은 채 남는다', () => {
+  /**
+   * **판정이고, 이 케이스는 그 판정을 이름과 함께 고정한다.**
+   *
+   * 끊긴 동안 화면은 잠금이 아직 살아 있는지 알 수 없다(서버가 TTL로 걷어 낼 수도 있고
+   * 남이 놓았을 수도 있다). 두 갈래뿐이다:
+   *
+   * | 갈래 | 대가 |
+   * |---|---|
+   * | 목록을 비운다 | 남이 편집 중인 자리를 고르게 되고, **친 값이 서버에서 423으로 죽는다** |
+   * | 목록을 남긴다 | 이미 풀린 잠금에 막힌다 — **할 수 있는 것을 못 한다** |
+   *
+   * **남기는 쪽을 골랐다.** 사용자의 입력을 잃는 쪽이 더 나쁘고, 2차 방어가 어차피 서 있어
+   * 비우는 쪽이 안전해지지도 않는다(편집은 끊긴 동안 REST로 나가고 그쪽도 잠금을 본다).
+   *
+   * **대가는 화면이 그것을 말하지 않는 것이다** — P3-1 리뷰 C4가 연 자리이고 P3-2도 안
+   * 닫았다. 이월에 적는다.
+   */
+  it('끊겨도 배지가 남는다 — 화면은 그것이 낡았다는 것을 말하지 않는다', async () => {
+    const view = await board()
+    view.push(locksFrame([foreign('n-b')]))
+
+    view.disconnect()
+
+    expect(screen.getByText('보라 편집 중')).toBeTruthy()
+    expect((treeButton('Section') as HTMLButtonElement).disabled).toBe(true)
   })
 })
 
