@@ -91,3 +91,10 @@ export {
 
 export type { PageImportGate, PageImportPlan } from './page-json/import'
 export { gatePageImport, planPageImport } from './page-json/import'
+
+// P9-1 — §12.4의 lint 규칙. **표는 열셋 전부를 들지만 구현은 소유자를 따른다**(D2):
+// 설계서 규칙은 여기, 테마 규칙은 `@wirebound/themes`. 합치는 자리는 그쪽이다.
+export type { LintRule, LintRuleGroup, LintRuleId, LintRuleOwner, OwnSeverityRuleId, RelayRuleId } from './lint/rules'
+export { LINT_RULES, lintRule } from './lint/rules'
+export type { LintIssue, LintWhere } from './lint/issue'
+export { lintIssue, relayLintIssue } from './lint/issue'
