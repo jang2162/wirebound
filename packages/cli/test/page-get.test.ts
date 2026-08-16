@@ -217,3 +217,40 @@ describe('자격과 바인딩 (세 갈래는 client.ts가 가른다)', () => {
     expect(io.stderr.join('\n')).toContain('.wirebound.json')
   })
 })
+
+/**
+ * **`migrateDocument`를 지난다 — P9-3 이월 §6의 구멍을 P9-4가 닫았다.**
+ *
+ * 앞 판은 `lint`만 그 길을 지났고 이 명령은 저장된 문서를 그대로 읽었다(리뷰 N8). 오늘
+ * `MIGRATIONS = []`이라 올릴 것은 없지만 **못 올리는 문서는 오늘도 만들 수 있고**, 그때
+ * 두 명령이 같은 페이지를 다르게 읽으면 안 된다. 조립이 `read/page.ts` 하나이므로
+ * §12.2의 `get_page`도 같은 말을 한다.
+ */
+describe('못 올리는 문서 버전을 말한다', () => {
+  function 미래문서(): SnapshotPayload {
+    const payload = snapshotPayload()
+    const 목록 = payload.pages.find((p) => p.id === PAGE_LIST)!
+    ;(목록.schema as unknown as { version: number }).version = 99
+    return payload
+  }
+
+  it('페이지를 여전히 내주고 stderr로 말한다 — 막지 않는다', async () => {
+    const io = 준비(미래문서())
+    expect(await run(['page', 'get', '관리자/회원/목록'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.stdout[0]).toBe('관리자/회원/목록')
+    expect(io.stderr.join('\n')).toContain('올릴 수 없습니다')
+  })
+
+  /** **`out`이 아니라 `err`다** — `--json`을 파이프로 받는 쪽에 섞이면 JSON이 아니게 된다. */
+  it('`--json`의 표준출력은 값 하나뿐이다', async () => {
+    const io = 준비(미래문서())
+    expect(await run(['page', 'get', '관리자/회원/목록', '--json'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(JSON.parse(io.stdout.join('\n')).id).toBe(PAGE_LIST)
+  })
+
+  it('멀쩡한 문서에는 아무 말도 안 한다 — 반대편', async () => {
+    const io = 준비()
+    expect(await run(['page', 'get', '관리자/회원/목록'], io)).toBe(EXIT.ok)
+    expect(io.stderr.join('\n')).not.toContain('올릴 수 없습니다')
+  })
+})
