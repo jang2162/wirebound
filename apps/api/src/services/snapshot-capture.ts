@@ -85,7 +85,7 @@ import {
   SnapshotPayloadSchema,
   type SnapshotLayoutTheme,
   type SnapshotPayload,
-} from './snapshot-payload'
+} from '@wirebound/themes'
 
 /**
  * 캡처의 결과. **`'fingerprint-mismatch'`가 유일한 실패 갈래다** — 그 밖의 사정(테마가
@@ -181,7 +181,7 @@ export async function captureSnapshot(
   // **규격을 지나게 한다.** 통과하지 못하면 그것은 이 파일의 버그이므로 조용히 저장하지
   // 않고 크게 실패한다 — `insertComment`가 *"방금 만든 코멘트를 다시 읽지 못했습니다"*로
   // 던지는 것과 같은 자리다. 여기서 막히는 것은 봉투가 깨진 문서뿐이고(버전 값의 의미는
-  // 보지 않는다 — `snapshot-payload.ts`의 D4 절), 그런 문서는 쓰기 경로가 이미 거부한다.
+  // 보지 않는다 — `@wirebound/themes`의 `snapshot/payload.ts`의 D4 절), 그런 문서는 쓰기 경로가 이미 거부한다.
   return { kind: 'captured', payload: SnapshotPayloadSchema.parse(payload) }
 }
 

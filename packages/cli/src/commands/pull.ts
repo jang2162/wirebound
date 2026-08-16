@@ -17,7 +17,7 @@
  * |---|---|
  * | 리포 뿌리(cwd가 아니다) | 바인딩과 그 산출물이 같은 자리에 있어야 하위 디렉터리에서 쳐도 같은 파일이 갱신된다 |
  * | 숨김 파일이 아니다 | 사람이 열어 볼 값이다. `git status`에 보여야 *"커밋할지"*를 정할 수 있다 |
- * | 한 파일 | payload가 이미 프로젝트 전체를 한 값으로 나른다(`snapshot-payload.ts`) |
+ * | 한 파일 | payload가 이미 프로젝트 전체를 한 값으로 나른다(`@wirebound/themes`의 `SnapshotPayload`) |
  *
  * # 자격이 리포에 남지 않는다
  *
@@ -36,12 +36,11 @@
  * 셋을 *"에러 처리"*로 뭉뚱그리지 않는 것이 이 명령의 값이다. 가르는 코드는
  * `client.ts` 한 자리에 있다.
  */
-import { requireBinding } from '../binding'
 import { callApi, parseJson } from '../client'
-import { findToken } from '../credentials'
-import { EXIT, configError } from '../exit'
+import { EXIT } from '../exit'
 import type { Io } from '../io'
 import { join, resolveFrom } from '../paths'
+import { requireProject } from '../project'
 
 /** `-o`를 안 주면 이 이름으로 리포 뿌리에 쓴다. */
 export const DEFAULT_PULL_FILE = 'wirebound-snapshot.json'
@@ -51,14 +50,9 @@ export interface PullOptions {
 }
 
 export async function runPull(io: Io, options: PullOptions): Promise<number> {
-  const binding = await requireBinding(io)
-
-  const token = await findToken(io, binding.server, binding.projectId)
-  if (token === null) {
-    throw configError(
-      `${binding.server} 의 프로젝트 ${binding.projectId} 에 쓸 자격이 없습니다. \`wireb login\`을 먼저 실행하세요`,
-    )
-  }
+  // **자격을 찾는 자리는 `project.ts` 하나다**(P9-3). 명령마다 다시 짜면 *"자격이
+  // 없습니다"*의 문장이 갈린다.
+  const { binding, token } = await requireProject(io)
 
   const response = await callApi(io, binding.server, {
     method: 'GET',

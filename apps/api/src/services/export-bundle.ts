@@ -10,7 +10,7 @@
  * # 아래 순서 자체가 규격이다
  *
  * 1. `listMenuRows` · `listPages` — 메뉴와 페이지(문서 포함).
- * 2. `buildMenuTree` → `targetedPages` — **한 번의 순회가 번들의 순서이자 페이지마다의
+ * 2. `targetedPages`(`@wirebound/schema`) — **한 번의 순회가 번들의 순서이자 페이지마다의
  *    조상**이다. 둘을 따로 계산하면 *"남의 조상을 단 타겟"*이 생기는데, 그 문자열은
  *    그럴듯해서 아무도 못 걸러 낸다.
  * 3. `listProjectComments` — 코멘트를 **한 문장으로** 받아 페이지별로 가른다.
@@ -44,18 +44,19 @@ import {
   type BundlePage,
 } from '@wirebound/exporter'
 import {
+  duplicateTargets,
   isPageTargetAction,
   migrateDocument,
+  targetedPages,
   walkNodes,
   type PageDocument,
+  type TargetedPage,
 } from '@wirebound/schema'
 import { resolveTheme, type ResolvedTheme } from '@wirebound/themes'
 import type { DbHandle } from '../db/tx'
 import { listProjectComments } from '../repos/comments'
 import { listMenuRows } from '../repos/menu'
 import { listPages, type PageRecord } from '../repos/pages'
-import { buildMenuTree } from './menu-tree'
-import { duplicateTargets, targetedPages, type TargetedPage } from './page-target'
 import { currentProjectTheme } from './project-theme'
 
 /** 페이지가 하나도 없는 프로젝트. 호출자가 409로 매핑한다. */
@@ -131,19 +132,29 @@ export async function exportProjectBundle(db: DbHandle, projectId: string): Prom
   const pageRecords = await listPages(db, projectId)
   if (pageRecords.length === 0) throw new EmptyProjectError()
 
-  const tree = buildMenuTree(
-    menuRows,
-    pageRecords.map((page) => ({
-      id: page.id,
-      menu_node_id: page.menuNodeId,
-      title: page.title,
-      sort_order: page.sortOrder,
+  /**
+   * **평평한 행을 그대로 넘긴다**(P9-3 T2). 승격 전에는 `buildMenuTree`로 트리를 만들어
+   * 넘겼는데, `targetedPages`가 `packages/schema`로 올라가며 입력이 평평해졌다 — 그래야
+   * CLI·MCP가 스냅샷 payload에서 트리를 다시 조립하지 않는다. 고아·순환을 버리는 계약은
+   * 그 함수가 그대로 이어받았고, 아래 대조가 그 버림을 여전히 잡는다.
+   */
+  const ordered = targetedPages({
+    menu: menuRows.map((row) => ({
+      id: row.id,
+      parentId: row.parent_id,
+      title: row.title,
+      sortOrder: row.sort_order,
     })),
-  )
-  const ordered = targetedPages(tree)
+    pages: pageRecords.map((page) => ({
+      id: page.id,
+      menuNodeId: page.menuNodeId,
+      title: page.title,
+      sortOrder: page.sortOrder,
+    })),
+  })
 
   /**
-   * **`buildMenuTree`가 버린 페이지가 있으면 여기서 멈춘다.** 그 함수는 고아 노드와
+   * **`targetedPages`가 버린 페이지가 있으면 여기서 멈춘다.** 그 함수는 고아 노드와
    * 순환에 갇힌 노드를 조용히 버리는데(제 머리말이 그렇게 적혀 있다), 버려진 페이지는
    * 번들에서 **말없이 빠진다.** 조용히 빠지는 것이 이 산출물에서 가장 나쁜 실패다.
    *

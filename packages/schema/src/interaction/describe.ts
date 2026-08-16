@@ -44,6 +44,7 @@
  */
 import { getComponent } from '../component/registry'
 import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, WbNode } from '../node'
+import { pageTargetPath } from '../page-target'
 import { walkNodes } from '../tree'
 
 /** 컴포넌트를 문장에서 부르는 이름과, 그 앞에 붙일 라벨을 담은 prop. */
@@ -97,8 +98,16 @@ const TRIGGER_VERBS: Record<InteractionTrigger, string> = {
   submit: '제출',
 }
 
-/** 문서에 없는 타겟. **코멘트 탭의 `MISSING_NODE`와 같은 말이다** — 같은 상태다. */
+/**
+ * 문서에 없는 타겟. **코멘트 탭의 `MISSING_NODE`와 같은 말이다** — 같은 상태다.
+ *
+ * **P9-3이 이름으로 내보냈다**(`MISSING_NODE_NAME`). `page-view.ts`가 *"그 노드가 문서에
+ * 없는 코멘트"*를 같은 말로 불러야 하는데, 거기서 리터럴을 다시 적으면 이 말을 아는 자리가
+ * 넷이 된다. 남은 사본 둘(`packages/exporter`의 `MISSING_NODE_LABEL` ·
+ * `apps/web`의 `MISSING_NODE`)은 이 슬라이스 밖이다 — 이월에 적었다.
+ */
 const MISSING_NODE = '사라진 노드'
+export { MISSING_NODE as MISSING_NODE_NAME }
 /**
  * **아직 타겟을 안 고른 액션.** *"사라진 노드"*와 갈라 말한다 — 저작 중에 액션을 막
  * 더한 상태이지 무엇이 없어진 것이 아니다. **이것이 P5-1 이월 §1의 부류를 이 자리에서
@@ -330,10 +339,16 @@ export function describePageTarget(target: string): string {
   return pageName(target)
 }
 
+/**
+ * **접두를 여기서 벗기지 않는다**(P9-3 T2).
+ *
+ * 앞 판은 `'page:'` 리터럴을 **한 줄에 두 번** 인라인했다(`startsWith` · `slice`). 그때
+ * 상수(`PAGE_TARGET_PREFIX`)는 `apps/api`에 살아 이 파일이 볼 수 없었고, P9-1 이월이
+ * *"상수만 올리면 접두가 세 자리가 된다"*고 경고한 것이 이 자리다. 승격 뒤에는 벗기는
+ * 자리도 `page-target.ts` 하나다.
+ */
 function pageName(target: string): string {
-  const trimmed = typeof target === 'string' ? target.trim() : ''
-  if (trimmed.length === 0) return UNSET_PAGE
-  const path = trimmed.startsWith('page:') ? trimmed.slice('page:'.length).trim() : trimmed
+  const path = pageTargetPath(target)
   return path.length === 0 ? UNSET_PAGE : `${path} 페이지`
 }
 

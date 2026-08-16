@@ -77,7 +77,7 @@ import {
   type ValidationIssue,
 } from '@wirebound/schema'
 import { canonicalJson } from '../canonical-json'
-import type { SnapshotComment, SnapshotMenuNode, SnapshotPage, SnapshotPayload } from './snapshot-payload'
+import type { SnapshotComment, SnapshotMenuNode, SnapshotPage, SnapshotPayload } from '@wirebound/themes'
 
 /**
  * 계획이 견줄 **현재 상태**. `repos/`의 레코드 타입을 그대로 받지 않고 **필요한 필드만**

@@ -1,0 +1,219 @@
+/**
+ * `wireb page get <경로> [--json]` (P9-3 T4 · D4).
+ *
+ * 재는 것 셋: **경로를 무엇으로 푸는가**, **못 찾았을 때·둘 이상일 때**, 그리고
+ * **사람이 읽는 판과 `--json`이 같은 값에서 나오는가.**
+ */
+import { describe, expect, it } from 'vitest'
+import { EXIT } from '../src/exit'
+import { run } from '../src/run'
+import { createFakeIo, stub, type FakeIo } from './fake-io'
+import { MENU_ADMIN, PAGE_DETAIL, PAGE_LIST, page, snapshotPayload } from './snapshot-fixture'
+import type { SnapshotPayload } from '@wirebound/themes'
+
+const SERVER = 'https://wb.example.com'
+const PROJECT = 'prj_a1b2'
+const TOKEN = 'RAW-TOKEN-ZZQ7-Vd9k2sLxPq'
+
+function 준비(payload: SnapshotPayload = snapshotPayload()): FakeIo {
+  const io = createFakeIo({
+    cwd: '/repo',
+    files: {
+      '/repo/.wirebound.json': JSON.stringify({ server: SERVER, projectId: PROJECT }),
+      '/home/tester/.wirebound/credentials.json': JSON.stringify({
+        version: 1,
+        credentials: [{ server: SERVER, projectId: PROJECT, token: TOKEN }],
+      }),
+    },
+  })
+  stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, { status: 200, body: payload })
+  return io
+}
+
+describe('경로를 §8.1의 타겟으로 푼다', () => {
+  it('조상 메뉴가 붙은 경로로 찾는다', async () => {
+    const io = 준비()
+    expect(await run(['page', 'get', '관리자/회원/목록'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.stdout[0]).toBe('관리자/회원/목록')
+  })
+
+  it('`page:` 접두를 붙여도 같은 것을 찾는다 — 접두를 아는 자리가 하나다', async () => {
+    const io = 준비()
+    expect(await run(['page', 'get', 'page:관리자/회원/목록'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.stdout[0]).toBe('관리자/회원/목록')
+  })
+
+  /** 제목만으로는 못 찾는다 — 그것이 조상을 붙이는 이유다. */
+  it('제목만 주면 못 찾는다', async () => {
+    const io = 준비()
+    expect(await run(['page', 'get', '목록'], io)).toBe(EXIT.usage)
+  })
+
+  it('마디의 앞뒤 공백을 걷는다 — 타겟을 만드는 쪽과 같은 규칙이다', async () => {
+    const io = 준비()
+    expect(await run(['page', 'get', ' 관리자 / 회원 / 목록 '], io), io.stderr.join('\n')).toBe(EXIT.ok)
+  })
+})
+
+describe('못 찾았을 때·둘 이상일 때를 갈라 말한다', () => {
+  it('없으면 코드 1이고 **있는 경로를 함께 낸다**', async () => {
+    const io = 준비()
+    expect(await run(['page', 'get', '관리자/없는페이지'], io)).toBe(EXIT.usage)
+
+    const said = io.stderr.join('\n')
+    expect(said).toContain('그 경로의 페이지가 없습니다')
+    // **접두를 벗긴 모양이다** — 사람이 그대로 다시 쳐야 하고 `wireb lint`의 출력도 그 모양이다.
+    expect(said).toContain('- 관리자/회원/목록')
+    expect(said).not.toContain('page:관리자')
+    // 표준출력에 아무것도 안 나가야 파이프로 받는 쪽이 빈손인 것을 안다.
+    expect(io.stdout).toEqual([])
+  })
+
+  /**
+   * **겹치는 타겟은 실재한다** — 같은 메뉴 아래 같은 제목이면 조립 규칙이 같은 문자열을
+   * 만든다(P9-1 이월 §9 · `duplicateTargets`가 그 판정을 든다). 하나를 골라 주면 **어느
+   * 쪽인지 아무도 모른 채** 지나간다.
+   */
+  it('둘 이상이면 코드 1이고 **둘 다 이름으로 낸다**', async () => {
+    const 겹침 = snapshotPayload()
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 1, root: { id: 'r', type: 'Page' } }, null))
+    겹침.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 1, root: { id: 'r', type: 'Page' } }, null))
+
+    const io = 준비(겹침)
+    expect(await run(['page', 'get', '관리자/목록'], io)).toBe(EXIT.usage)
+
+    const said = io.stderr.join('\n')
+    expect(said).toContain('그 경로의 페이지가 2개입니다')
+    expect(said.match(/- 목록 \(/g)).toHaveLength(2)
+  })
+
+  it('경로를 안 주면 쓰임말 오류다', async () => {
+    const io = 준비()
+    expect(await run(['page', 'get'], io)).toBe(EXIT.usage)
+    expect(io.stderr.join('\n')).toContain('페이지 경로를 주세요')
+  })
+})
+
+describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (§12.2)', () => {
+  it('구조를 노드 이름으로 편다', async () => {
+    const io = 준비()
+    await run(['page', 'get', '관리자/회원/목록'], io)
+
+    const said = io.stdout.join('\n')
+    expect(said).toContain('① 검색 버튼')
+    expect(said).toContain('② 목록')
+  })
+
+  /**
+   * **`installCatalog()`를 안 부르면 여기가 죽는다.** 라벨이 카탈로그의 `editor`에서 오므로
+   * 설치 전에는 `로딩 상태`가 아니라 `loading`이 나온다(실측). 던지지 않으므로 **조용히
+   * 나빠지는** 자리다 — 이 케이스가 그 침묵을 깬다.
+   */
+  it('상호작용 문장이 카탈로그의 라벨을 쓴다', async () => {
+    const io = 준비()
+    await run(['page', 'get', '관리자/회원/목록'], io)
+
+    expect(io.stdout.join('\n')).toContain('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
+  })
+
+  it('코멘트를 **어느 노드에 달렸는지**와 함께 낸다', async () => {
+    const io = 준비()
+    await run(['page', 'get', '관리자/회원/목록'], io)
+
+    const said = io.stdout.join('\n')
+    expect(said).toContain('② 목록 · 장병현')
+    expect(said).toContain('정렬 기준을 정해야 합니다')
+  })
+
+  it('다른 페이지의 코멘트를 섞지 않는다', async () => {
+    const io = 준비()
+    await run(['page', 'get', '관리자/회원/상세'], io)
+
+    expect(io.stdout.join('\n')).toContain('코멘트 0개')
+    expect(io.stdout.join('\n')).not.toContain('정렬 기준')
+  })
+
+  it('없는 것을 빈 화면으로 두지 않는다', async () => {
+    const io = 준비()
+    await run(['page', 'get', '관리자/회원/상세'], io)
+
+    const said = io.stdout.join('\n')
+    expect(said).toContain('상호작용 0개')
+    expect(said).toContain('(없음)')
+  })
+})
+
+describe('--json 은 같은 값을 낸다 (D4)', () => {
+  it('사람이 읽는 판과 같은 재료다', async () => {
+    const io = 준비()
+    expect(await run(['page', 'get', '관리자/회원/목록', '--json'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+
+    const view = JSON.parse(io.stdout.join('\n')) as Record<string, unknown>
+    expect(view.id).toBe(PAGE_LIST)
+    expect(view.path).toBe('관리자/회원/목록')
+    expect(view.target).toBe('page:관리자/회원/목록')
+    expect(view.menuPath).toEqual(['관리자', '회원'])
+    // 문서 전문이 실린다 — 사람이 읽는 판은 그것을 트리로 접어 보일 뿐이다.
+    expect((view.document as { root: { id: string } }).root.id).toBe('root')
+  })
+
+  it('상호작용 문장이 사람이 읽는 판의 것과 **글자까지 같다**', async () => {
+    const 사람 = 준비()
+    await run(['page', 'get', '관리자/회원/목록'], 사람)
+    const 기계 = 준비()
+    await run(['page', 'get', '관리자/회원/목록', '--json'], 기계)
+
+    const view = JSON.parse(기계.stdout.join('\n')) as { interactions: { text: string }[] }
+    for (const sentence of view.interactions) {
+      expect(사람.stdout.join('\n')).toContain(sentence.text)
+    }
+    // 분모가 0이면 위가 공허하다.
+    expect(view.interactions).toHaveLength(1)
+  })
+
+  it('--json 은 표준출력만 쓴다 — 파이프에 섞일 것이 없다', async () => {
+    const io = 준비()
+    await run(['page', 'get', '관리자/회원/목록', '--json'], io)
+    expect(io.stderr).toEqual([])
+  })
+})
+
+describe('서버가 준 것을 규격으로 검사한다 (D2)', () => {
+  it('규격과 다르면 코드 3이다 — 서버 쪽 문제다', async () => {
+    const io = 준비()
+    stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, {
+      status: 200,
+      body: { payloadVersion: 1, capturedAt: '2026-08-16T00:00:00.000Z', menu: [], pages: [] },
+    })
+
+    expect(await run(['page', 'get', '관리자/회원/목록'], io)).toBe(EXIT.server)
+    expect(io.stderr.join('\n')).toContain('규격과 다릅니다')
+  })
+
+  /**
+   * **모르는 형식을 막지 않는다**(`snapshot/payload.ts`의 D3). 막으면 새 서버에 붙은 옛
+   * CLI가 아무것도 못 읽는다. 대신 **stderr로 말한다.**
+   */
+  it('모르는 payload 형식은 경고하고 계속한다', async () => {
+    const io = 준비(snapshotPayload({ payloadVersion: 99 }))
+    expect(await run(['page', 'get', '관리자/회원/목록'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.stderr.join('\n')).toContain('이 wireb는 1까지 압니다')
+  })
+})
+
+describe('자격과 바인딩 (세 갈래는 client.ts가 가른다)', () => {
+  it('자격이 없으면 코드 2다', async () => {
+    const io = createFakeIo({
+      cwd: '/repo',
+      files: { '/repo/.wirebound.json': JSON.stringify({ server: SERVER, projectId: PROJECT }) },
+    })
+    expect(await run(['page', 'get', '관리자/회원/목록'], io)).toBe(EXIT.config)
+    expect(io.stderr.join('\n')).toContain('wireb login')
+  })
+
+  it('바인딩이 없으면 코드 2다', async () => {
+    const io = createFakeIo({ cwd: '/repo' })
+    expect(await run(['page', 'get', '관리자/회원/목록'], io)).toBe(EXIT.config)
+    expect(io.stderr.join('\n')).toContain('.wirebound.json')
+  })
+})

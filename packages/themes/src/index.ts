@@ -97,3 +97,19 @@ export type { LintThemeEntry, LintThemePage, ThemeLintInput } from './lint/input
 export { lintThemes } from './lint/index'
 export type { ProjectLintInput } from './lint/project'
 export { lintProject } from './lint/project'
+
+// P9-3 T3 — 스냅샷 payload 규격과 lint 입력 변환. **`apps/api/src/services/snapshot-payload.ts`
+// 에서 올라왔다**(D2). 그 파일이 *"P9의 `wireb pull`이 이 규격을 필요로 하면 그때 패키지로
+// 올린다"*로 조건을 적어 뒀고, `wireb lint`가 그 조건이다 — 안 올리면 CLI가 모양을 다시
+// 선언하고 P9-4의 MCP가 또 선언한다.
+export type {
+  SnapshotComment,
+  SnapshotLayout,
+  SnapshotLayoutTheme,
+  SnapshotMenuNode,
+  SnapshotPage,
+  SnapshotPayload,
+} from './snapshot/payload'
+export { SNAPSHOT_PAYLOAD_VERSION, SNAPSHOT_RESOURCES, SnapshotPayloadSchema } from './snapshot/payload'
+export type { SnapshotLintNote, SnapshotLintNoteKind, SnapshotLintPlan } from './snapshot/lint-input'
+export { snapshotToLintInput } from './snapshot/lint-input'

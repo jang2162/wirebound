@@ -24,8 +24,11 @@
  * 모양이 바뀌면 안 된다 — `test/args.test.ts`가 두 마디 명세로 그것을 잰다.
  */
 import { parseArgs, type ParseArgsConfig } from 'node:util'
+import { runExport } from './commands/export'
 import { runInit } from './commands/init'
+import { runLint } from './commands/lint'
 import { runLogin } from './commands/login'
+import { runPageGet } from './commands/page-get'
 import { runPull } from './commands/pull'
 import { CliError, EXIT, usageError, type ExitCode } from './exit'
 import type { Io } from './io'
@@ -86,6 +89,37 @@ export const COMMANDS: CommandSpec[] = [
       out: { type: 'string', short: 'o' },
     },
     run: (io, values) => runPull(io, { out: asString(values.out) }),
+  },
+  {
+    words: ['export'],
+    summary: 'wireb export --format html -o <dir>          §11.3 정적 번들을 그 디렉터리에 푼다',
+    options: {
+      format: { type: 'string' },
+      out: { type: 'string', short: 'o' },
+      force: { type: 'boolean', default: false },
+    },
+    run: (io, values) =>
+      runExport(io, {
+        format: asString(values.format),
+        out: asString(values.out),
+        force: values.force === true,
+      }),
+  },
+  {
+    words: ['lint'],
+    summary: 'wireb lint [경로] [--fail-on warning]        §12.4 규칙 검증 (결함이 있으면 코드 10)',
+    options: {
+      'fail-on': { type: 'string' },
+    },
+    run: (io, values, positionals) => runLint(io, positionals[0], { failOn: asString(values['fail-on']) }),
+  },
+  {
+    words: ['page', 'get'],
+    summary: 'wireb page get <경로> [--json]                페이지 하나를 스키마·코멘트·상호작용 문장으로',
+    options: {
+      json: { type: 'boolean', default: false },
+    },
+    run: (io, values, positionals) => runPageGet(io, positionals[0], { json: values.json === true }),
   },
 ]
 

@@ -9,7 +9,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { CURRENT_DOCUMENT_VERSION, type PageDocument } from '@wirebound/schema'
 import { ensureCatalog } from '../src/schema-setup'
 import { planRestore, type RestoreCurrentState, type RestoreStep } from '../src/services/restore-plan'
-import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from '../src/services/snapshot-payload'
+import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from '@wirebound/themes'
 
 const MENU_A = '11111111-1111-4111-8111-111111111111'
 const MENU_B = '22222222-2222-4222-8222-222222222222'

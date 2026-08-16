@@ -1,0 +1,312 @@
+/**
+ * `wireb lint [경로] [--fail-on]` (P9-3 T5 · D5·D6·D7·D8).
+ *
+ * 재는 것: **카탈로그를 안 부르면 결과가 통째로 거짓이 되는 것** · **경로가 출력 거르개이지
+ * 입력 좁히개가 아닌 것** · **종료 코드의 갈림** · **`.wirebound.json`의 `lint` 절**.
+ */
+import { describe, expect, it } from 'vitest'
+import { EXIT } from '../src/exit'
+import { run } from '../src/run'
+import { createFakeIo, stub, type FakeIo } from './fake-io'
+import { LAYOUT, MENU_MEMBER, THEME_ROW, page, snapshotPayload } from './snapshot-fixture'
+import type { SnapshotPayload } from '@wirebound/themes'
+
+const SERVER = 'https://wb.example.com'
+const PROJECT = 'prj_a1b2'
+const TOKEN = 'RAW-TOKEN-ZZQ7-Vd9k2sLxPq'
+
+function 준비(payload: SnapshotPayload = snapshotPayload(), binding: Record<string, unknown> = {}): FakeIo {
+  const io = createFakeIo({
+    cwd: '/repo',
+    files: {
+      '/repo/.wirebound.json': JSON.stringify({ server: SERVER, projectId: PROJECT, ...binding }),
+      '/home/tester/.wirebound/credentials.json': JSON.stringify({
+        version: 1,
+        credentials: [{ server: SERVER, projectId: PROJECT, token: TOKEN }],
+      }),
+    },
+  })
+  stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, { status: 200, body: payload })
+  return io
+}
+
+/** 코멘트 없는 `List`가 든 페이지 하나를 더한다 — ①이 `warning`을 낸다. */
+function 경고가_있는_프로젝트(): SnapshotPayload {
+  const payload = snapshotPayload()
+  payload.pages.push(
+    page('20000000-0000-4000-8000-000000000009', MENU_MEMBER, '경고', 9, {
+      version: 1,
+      root: { id: 'root', type: 'Page', children: [{ id: 'lonely', type: 'List' }] },
+    }, null),
+  )
+  return payload
+}
+
+/** 봉투가 깨진 문서 하나 — `document-invalid`가 `error`다. */
+function 오류가_있는_프로젝트(): SnapshotPayload {
+  const payload = snapshotPayload()
+  payload.pages.push(
+    page('20000000-0000-4000-8000-00000000000e', MENU_MEMBER, '오류', 8, {
+      version: 1,
+      root: { id: 'bad', type: '없는컴포넌트' },
+    }, null),
+  )
+  return payload
+}
+
+describe('installCatalog 를 부른다 — 안 부르면 결과가 통째로 거짓이다 (D7)', () => {
+  /**
+   * **실측**: 카탈로그 없이 `lintProject`를 돌리면 노드마다
+   * `document-invalid:error 알 수 없는 컴포넌트 타입: Page`가 나온다. 조용히 통과하지는
+   * 않지만 **전부 `error`라 종료 코드까지 뒤집힌다** — 결함이 없는 프로젝트가 10으로 끝난다.
+   */
+  it('멀쩡한 카탈로그 노드를 "알 수 없는 컴포넌트 타입"이라 하지 않는다', async () => {
+    const io = 준비()
+    await run(['lint'], io)
+
+    expect(io.stdout.join('\n')).not.toContain('알 수 없는 컴포넌트 타입')
+  })
+
+  it('진짜로 없는 타입은 여전히 말한다 — 반대편', async () => {
+    const io = 준비(오류가_있는_프로젝트())
+    await run(['lint'], io)
+
+    expect(io.stdout.join('\n')).toContain('알 수 없는 컴포넌트 타입: 없는컴포넌트')
+  })
+})
+
+describe('종료 코드 (D6)', () => {
+  it('결함이 없으면 0이다', async () => {
+    const io = 준비()
+    expect(await run(['lint'], io), io.stdout.join('\n')).toBe(EXIT.ok)
+    expect(io.stdout.join('\n')).toContain('결함 없음')
+  })
+
+  /**
+   * **근거는 실측이다**(P9-1 이월 §6이 쟀고 P9-3이 다시 쟀다 — 값이 같다): 시스템 테마
+   * `portal`·`docs`가 `theme-other:warning`을 하나씩 갖는다. `warning`으로 실패를 내면
+   * 그 테마를 고른 프로젝트가 **문서를 아무리 잘 써도** CI에서 빨개진다.
+   */
+  it('경고만 있으면 0이다', async () => {
+    const io = 준비(경고가_있는_프로젝트())
+    expect(await run(['lint'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.stdout.join('\n')).toContain('warning 1')
+  })
+
+  it('오류가 있으면 새 번호(10)다 — 1~4가 아니다', async () => {
+    const io = 준비(오류가_있는_프로젝트())
+    const code = await run(['lint'], io)
+
+    expect(code).toBe(EXIT.findings)
+    // *"명령이 서지 못했다"*의 번호와 섞이면 스크립트가 둘을 못 가른다.
+    expect([EXIT.usage, EXIT.config, EXIT.server, EXIT.unreachable]).not.toContain(code)
+  })
+
+  it('--fail-on warning 이 그 선을 올린다 — 기본값은 그대로다', async () => {
+    const io = 준비(경고가_있는_프로젝트())
+    expect(await run(['lint', '--fail-on', 'warning'], io)).toBe(EXIT.findings)
+
+    const 기본 = 준비(경고가_있는_프로젝트())
+    expect(await run(['lint'], 기본)).toBe(EXIT.ok)
+  })
+
+  it('모르는 --fail-on 값은 조용히 기본값이 되지 않는다', async () => {
+    const io = 준비(오류가_있는_프로젝트())
+    expect(await run(['lint', '--fail-on', 'info'], io)).toBe(EXIT.usage)
+    expect(io.stderr.join('\n')).toContain('--fail-on')
+  })
+})
+
+describe('[경로]는 출력 거르개다 — 입력을 좁히지 않는다 (D5)', () => {
+  /**
+   * **입력을 좁히면 프로젝트 단위 규칙이 거짓을 말한다.** 여기서는 그것을 반대로 잰다:
+   * 경로를 줘도 **전체 개수**를 함께 말하는가.
+   */
+  it('전체를 검사하고 무엇을 보일지만 고른다', async () => {
+    const io = 준비(경고가_있는_프로젝트())
+    await run(['lint', '관리자/회원/경고'], io)
+
+    const said = io.stdout.join('\n')
+    expect(said).toContain('경로 필터: 관리자/회원/경고')
+    expect(said).toContain('전체 1건 중 1건')
+  })
+
+  it('그 페이지의 것만 남는다', async () => {
+    const 둘 = 경고가_있는_프로젝트()
+    둘.pages.push(
+      page('20000000-0000-4000-8000-00000000000a', MENU_MEMBER, '경고둘', 10, {
+        version: 1,
+        root: { id: 'root', type: 'Page', children: [{ id: 'lonely2', type: 'List' }] },
+      }, null),
+    )
+
+    const io = 준비(둘)
+    await run(['lint', '관리자/회원/경고'], io)
+
+    const said = io.stdout.join('\n')
+    expect(said).toContain('전체 2건 중 1건')
+    expect(said).toContain('\t관리자/회원/경고 (lonely)\t')
+    expect(said).not.toContain('관리자/회원/경고둘')
+  })
+
+  it('없는 경로는 코드 1이다', async () => {
+    const io = 준비()
+    expect(await run(['lint', '관리자/없다'], io)).toBe(EXIT.usage)
+    expect(io.stderr.join('\n')).toContain('그 경로의 페이지가 없습니다')
+  })
+})
+
+/**
+ * **종료 코드도 함께 걸러진다 — 판정이다**(리뷰 N1).
+ *
+ * **근거: 출력과 종료 코드가 같은 것을 말해야 한다.** *"결함 없음"*을 찍고 10으로 끝나면
+ * 스크립트가 듣는 말과 사람이 읽는 말이 갈린다. **경로를 준 사람은 그 범위를 물은 것이다.**
+ *
+ * **리뷰어가 이 판정을 못박는 자가 없다고 실증했다**(R21 — 종료 코드를 걸러진 것이 아니라
+ * 전체에서 세게 바꿔도 1792건 중 **0건**이 죽었다). 아래 첫 케이스가 그 자다.
+ */
+describe('경로 필터와 종료 코드 (판정 — 리뷰 N1)', () => {
+  it('다른 페이지에 error 가 있어도 경로를 주면 0이다', async () => {
+    const io = 준비(오류가_있는_프로젝트())
+
+    // 전체로 돌리면 10이다(아래 반대편). 경로를 주면 그 범위의 답을 낸다.
+    expect(await run(['lint', '관리자/회원/목록'], io), io.stdout.join('\n')).toBe(EXIT.ok)
+  })
+
+  it('경로를 안 주면 같은 프로젝트가 10이다 — 반대편', async () => {
+    const io = 준비(오류가_있는_프로젝트())
+    expect(await run(['lint'], io)).toBe(EXIT.findings)
+  })
+
+  /**
+   * **요약 줄이 앞 줄과 부딪히지 않아야 한다.** 앞 줄이 *"전체 2건"*이라고 했는데 뒤 줄이
+   * 맨 *"결함 없음"*이면 **사람은 뒤 줄을 읽는다**(리뷰 N1 문제 3).
+   */
+  it('요약 줄이 범위를 단다', async () => {
+    const io = 준비(오류가_있는_프로젝트())
+    await run(['lint', '관리자/회원/목록'], io)
+
+    const said = io.stdout.join('\n')
+    expect(said).toContain('결함 없음 — 경로 필터 안에서다 (전체 2건)')
+  })
+
+  it('경로 없이 돌면 범위를 안 단다 — 달 것이 없다', async () => {
+    const io = 준비()
+    await run(['lint'], io)
+
+    expect(io.stdout.join('\n')).toContain('결함 없음')
+    expect(io.stdout.join('\n')).not.toContain('경로 필터')
+  })
+
+  /**
+   * **0으로 끝나면서 프로젝트에 `error`가 남아 있을 수 있다.** 그것을 아무 데서도 말하지
+   * 않으면 CI에 이 명령을 건 팀이 *"설계서가 깨져도 초록"*을 본다. **코드는 안 바꾸고
+   * 말만 한다** — 무엇을 물었는지는 사람이 정한 것이다.
+   */
+  it('경로 밖의 error 를 말한다 — 조용히 0으로 끝나지 않는다', async () => {
+    const io = 준비(오류가_있는_프로젝트())
+    await run(['lint', '관리자/회원/목록'], io)
+
+    expect(io.stderr.join('\n')).toContain('경로 밖에 error 2건이 더 있습니다')
+  })
+
+  it('경로 밖이 깨끗하면 아무 말도 안 한다', async () => {
+    const io = 준비(경고가_있는_프로젝트())
+    await run(['lint', '관리자/회원/목록'], io)
+
+    // 밖에 있는 것이 `warning`뿐이면 종료 코드가 안 바뀌므로 말할 것이 없다.
+    expect(io.stderr.join('\n')).not.toContain('경로 밖에')
+  })
+})
+
+describe('검사에서 빠진 것을 말한다 — 조용히 0건이 되지 않는다', () => {
+  it('상속이 끊긴 파생 테마를 말한다', async () => {
+    const io = 준비()
+    await run(['lint'], io)
+
+    const said = io.stdout.join('\n')
+    expect(said).toContain('검사에서 빠진 것:')
+    expect(said).toContain(THEME_ROW)
+  })
+
+  it('레이아웃이 둘이면 ⑪을 안 돌렸다고 말한다', async () => {
+    const 둘 = snapshotPayload()
+    둘.layouts.push({ id: LAYOUT.replace(/1$/, '2'), name: '둘째', themeId: null, schema: 둘.layouts[0]!.schema })
+    둘.themes.push({ layoutId: LAYOUT.replace(/1$/, '2'), themeId: null, theme: null })
+
+    const io = 준비(둘)
+    await run(['lint'], io)
+
+    expect(io.stdout.join('\n')).toContain('노드 variant 대조를 돌리지 않았습니다')
+  })
+
+  it('빠진 것이 없으면 그 절을 아예 안 낸다', async () => {
+    const 깨끗 = snapshotPayload({ layouts: [], themes: [] })
+    const io = 준비(깨끗)
+    await run(['lint'], io)
+
+    expect(io.stdout.join('\n')).not.toContain('검사에서 빠진 것')
+  })
+})
+
+describe('.wirebound.json 의 lint 절 (D8)', () => {
+  /** **기본값을 지어내지 않는다**(P9-1 D5) — 안 주면 그 축이 안 돈다. */
+  it('설정을 안 주면 명명 규칙이 안 돈다', async () => {
+    const io = 준비()
+    await run(['lint'], io)
+
+    expect(io.stdout.join('\n')).not.toContain('명명 규칙')
+  })
+
+  it('lint.naming.page 를 주면 그 축이 돈다', async () => {
+    const io = 준비(snapshotPayload(), { lint: { naming: { page: '^[A-Z]+$' } } })
+    const code = await run(['lint'], io)
+
+    const said = io.stdout.join('\n')
+    expect(said).toContain('명명 규칙(^[A-Z]+$)에 어긋납니다')
+    // ⑦은 `warning`이므로 코드가 뒤집히지 않는다.
+    expect(code).toBe(EXIT.ok)
+  })
+
+  it('lint.naming.menu 도 같은 절에서 온다', async () => {
+    const io = 준비(snapshotPayload(), { lint: { naming: { menu: '^[A-Z]+$' } } })
+    await run(['lint'], io)
+
+    expect(io.stdout.join('\n')).toContain('메뉴 이름이 명명 규칙')
+  })
+
+  /**
+   * **정규식을 CLI가 컴파일하지 않는다.** 여기서 먼저 죽이면 *"규칙 하나가 잘못 적혔다"*가
+   * *"명령이 서지 못했다"*가 되어 나머지 규칙의 결과까지 사라진다 — `lintDesign`이 이미
+   * 그것을 이슈로 낸다.
+   */
+  it('정규식이 아니면 이슈로 낸다 — 명령을 죽이지 않는다', async () => {
+    const io = 준비(snapshotPayload(), { lint: { naming: { page: '[' } } })
+    const code = await run(['lint'], io)
+
+    expect(code).toBe(EXIT.ok)
+    expect(io.stdout.join('\n')).toContain('명명 규칙이 정규식이 아닙니다')
+  })
+
+  it('lint 절의 모양이 어긋나면 코드 2다', async () => {
+    const io = 준비(snapshotPayload(), { lint: { naming: { page: 42 } } })
+    expect(await run(['lint'], io)).toBe(EXIT.config)
+    expect(io.stderr.join('\n')).toContain('lint.naming.page')
+  })
+
+  it('lint 가 객체가 아니면 코드 2다', async () => {
+    const io = 준비(snapshotPayload(), { lint: '켜기' })
+    expect(await run(['lint'], io)).toBe(EXIT.config)
+  })
+})
+
+describe('서버를 직접 부른다 (D7)', () => {
+  it('pull 이 쓴 파일이 있어도 그것을 읽지 않는다 — 낡을 수 있다', async () => {
+    const io = 준비()
+    // 낡은 산출물을 심는다. 이것을 읽으면 아래 대조가 죽는다.
+    io.fs.set('/repo/wirebound-snapshot.json', JSON.stringify(오류가_있는_프로젝트()))
+
+    expect(await run(['lint'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.requests.map((request) => request.url)).toEqual([`${SERVER}/api/projects/${PROJECT}/snapshot`])
+  })
+})

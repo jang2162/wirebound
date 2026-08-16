@@ -88,6 +88,10 @@ describe('공개 표면이 계약이다', () => {
     // `schema`가 구현하고 테마 규칙은 여기가 구현하는데, `themes → schema`가 의존 방향이라
     // **순수 스택에서 둘 다 볼 수 있는 자리가 여기뿐**이다. 웹·CLI·MCP 셋이 이 이름을 부른다.
     'lintProject', 'lintThemes',
+    // P9-3 T3 — 스냅샷 payload 규격과 lint 입력 변환. **`apps/api`에서 올라왔다**(D2).
+    // payload가 `PageDocument`와 `Theme`을 동시에 나르므로 순수 스택에서 둘 다 볼 수 있는
+    // 자리가 여기다. `wireb lint`와 P9-4의 MCP `validate`가 같은 변환을 부른다.
+    'SNAPSHOT_PAYLOAD_VERSION', 'SNAPSHOT_RESOURCES', 'SnapshotPayloadSchema', 'snapshotToLintInput',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {

@@ -133,6 +133,16 @@ importers:
         version: 6.4.3(@types/node@26.1.2)(tsx@4.23.5)
 
   packages/cli:
+    dependencies:
+      '@wirebound/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@wirebound/themes':
+        specifier: workspace:*
+        version: link:../themes
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
     devDependencies:
       '@types/node':
         specifier: ^26.1.2

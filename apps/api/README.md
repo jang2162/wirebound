@@ -199,7 +199,7 @@ wirebound-export-<슬러그>/
 이름·파일 이름 셋이 전부 `조상 메뉴들 + 페이지 제목`이고, 그래서 §11.3의 예시 파일 이름
 (`관리자-회원-목록.html`)과 같은 꼴이 나온다. **붙이지 않으면 서로 다른 메뉴의 같은
 제목이 좌측 트리에서 똑같은 두 줄이 된다** — 스모크에서 실측했다. 이름을 만드는 마디는
-상호작용 타겟을 만드는 마디와 **같은 함수**에서 나온다(`services/page-target.ts`).
+상호작용 타겟을 만드는 마디와 **같은 함수**에서 나온다(`@wirebound/schema`의 `page-target.ts` — P9-3이 `services/`에서 올렸다).
 
 **미리보기 응답도 같은 이름으로 부른다**(`pages[].title` · `errors[].title` ·
 `brokenLinks[].from`). 한 페이지를 두 이름으로 부르면 같은 화면의 위아래가 갈린다.
@@ -552,7 +552,7 @@ ops를 적용하고 `headSeq`를 `seq`로 맞춘다 — **문서를 통째로 �
   "payload": { /* 상세·생성에만 */ } }
 ```
 
-`payload`가 담는 것(규격은 `src/services/snapshot-payload.ts`가 소유한다):
+`payload`가 담는 것(규격은 `@wirebound/themes`의 `snapshot/payload.ts`가 소유한다 — P9-3이 `src/services/`에서 올렸다):
 
 | 절 | 담는 것 |
 |---|---|

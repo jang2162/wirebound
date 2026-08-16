@@ -15,6 +15,8 @@ import { describe, expect, it } from 'vitest'
 import { COMMANDS, run } from '../src/run'
 import { EXIT } from '../src/exit'
 import { createFakeIo, stub, type FakeIo } from './fake-io'
+import { bundleZip } from './bundle-fixture'
+import { snapshotPayload } from './snapshot-fixture'
 
 const SERVER = 'https://wb.example.com'
 const PROJECT = 'prj_a1b2'
@@ -31,10 +33,10 @@ function fullRun(): FakeIo {
   })
   stub(io, 'POST', `/api/projects/${PROJECT}/tokens`, { status: 201, body: { value: TOKEN } })
   stub(io, 'POST', '/api/auth/logout', { status: 204 })
-  stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, {
-    status: 200,
-    body: { payloadVersion: 1, capturedAt: '2026-08-16T00:00:00.000Z', menu: [], pages: [], layouts: [], themes: [], comments: [] },
-  })
+  // **빈 프로젝트로 재지 않는다.** `page get`은 페이지가 없으면 코드 1로 끝나고, 그러면
+  // `runAllCommands`의 대조가 죽거나(그쪽이 먼저 말한다) 아무것도 안 훑는 census가 된다.
+  stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, { status: 200, body: snapshotPayload() })
+  stub(io, 'GET', `/api/projects/${PROJECT}/export`, { status: 200, bytes: bundleZip() })
   return io
 }
 
@@ -54,6 +56,19 @@ const ARGV: Record<string, string[]> = {
   init: ['init', '--server', SERVER, '--project', PROJECT],
   login: ['login', '--email', 'a@example.com'],
   pull: ['pull'],
+  // **P9-3이 더한 셋.** 명령마다 *"리포에 무엇을 쓰는가"*를 보고 판정했다.
+  //
+  // | 명령 | 리포에 쓰는 것 |
+  // |---|---|
+  // | `page get` · `lint` | **없다.** 읽기만 한다 |
+  // | `export` | **번들 전부.** `-o`가 리포 안을 가리키면 파일 여럿이 생긴다 |
+  //
+  // 마지막 줄이 이 census가 P9-3에서 값을 내는 자리다 — 그 파일들이 훑기의 분모에
+  // 들어가고, 번들에 자격이 섞이면 여기가 말한다. `-o`를 리포 안으로 겨누는 것이
+  // 요점이다: 바깥으로 겨누면 census가 **아무것도 안 훑는다.**
+  'page get': ['page', 'get', '관리자/회원/목록'],
+  lint: ['lint'],
+  export: ['export', '--format', 'html', '-o', 'design-bundle'],
 }
 
 /**
@@ -74,6 +89,11 @@ describe('토큰은 리포에 남지 않는다 (D6)', () => {
    *
    * **P9-3이 명령 셋을 더한다**(`page get`·`lint`·`export` — §12.3). 그중 하나라도 리포에
    * 쓰면 앞 판의 census는 조용히 지나갔을 것이다.
+   *
+   * **실제로 먼저 죽었다**(P9-3 T4 실측): `page get`을 `COMMANDS`에 더하고 아래 표에 안
+   * 적은 채 `pnpm vitest run packages/cli`를 돌리니 **84건 중 이 한 건**이 죽었다.
+   * `test/args.test.ts`의 쓰임말 대조는 죽지 않았다 — 그쪽은 분모도 값도 `COMMANDS`에서
+   * 만들어 명세에 `summary`가 있으면 스스로 맞는다.
    */
   it('표가 명령을 하나도 빠뜨리지 않는다 — 분모는 COMMANDS다', () => {
     expect(Object.keys(ARGV).sort()).toEqual(COMMANDS.map((command) => command.words.join(' ')).sort())
@@ -89,6 +109,9 @@ describe('토큰은 리포에 남지 않는다 (D6)', () => {
     const files = repoFiles(io)
     expect(files.map(([path]) => path).sort()).toEqual([
       '/repo/.wirebound.json',
+      '/repo/design-bundle/assets/theme.css',
+      '/repo/design-bundle/index.html',
+      '/repo/design-bundle/pages/관리자-회원-목록.html',
       '/repo/wirebound-snapshot.json',
     ])
 

@@ -130,7 +130,7 @@ import { countExistingUsers } from '../repos/users'
 import { applyEdit, type EditOutcome } from './edit-pipeline'
 import { captureSnapshot, freezeTheme, type CaptureHooks } from './snapshot-capture'
 import { planRestore, type RestoreSummary } from './restore-plan'
-import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from './snapshot-payload'
+import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from '@wirebound/themes'
 import type { UnsupportedVersionPage } from './restore-plan'
 import type { ValidationIssue } from '@wirebound/schema'
 

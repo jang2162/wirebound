@@ -13,7 +13,7 @@ import { sql } from 'kysely'
  * 쪼개면 **스냅샷이 그 자원들의 스키마 변경을 따라다녀야 한다** — 페이지에 컬럼이 하나
  * 늘 때마다 그 사본 테이블도 함께 늘려야 하고, 늘리지 않으면 옛 스냅샷과 새 스냅샷이
  * 서로 다른 것을 담게 된다. jsonb 하나면 그 결합이 없고, 대신 **payload 형식 자체가
- * 자기 버전을 든다**(`payloadVersion` — 계획서 D3, `services/snapshot-payload.ts`).
+ * 자기 버전을 든다**(`payloadVersion` — 계획서 D3, `@wirebound/themes`의 `snapshot/payload.ts`).
  *
  * **`json`이 아니라 `jsonb`인 것은 `pages.schema`와 같은 이유다.** 키 순서 계약이 걸리는
  * 것은 테마의 **절**뿐인데(0006의 주석), 그 절들은 payload 안에서 이미 **값**으로 들어가

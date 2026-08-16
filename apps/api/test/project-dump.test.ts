@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { captureSnapshot } from '../src/services/snapshot-capture'
-import { SNAPSHOT_PAYLOAD_VERSION } from '../src/services/snapshot-payload'
+import { SNAPSHOT_PAYLOAD_VERSION } from '@wirebound/themes'
 import { insertApiToken } from '../src/repos/api-tokens'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi } from './helpers'
 

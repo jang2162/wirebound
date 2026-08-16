@@ -91,7 +91,7 @@ import { lockProjectComments } from './comments'
 import { lockProjectLayouts } from './layouts'
 import { lockProjectMenuNodes } from './menu'
 import { lockProjectPages } from './pages'
-import type { SnapshotPayload } from '../services/snapshot-payload'
+import type { SnapshotPayload } from '@wirebound/themes'
 
 /** 스냅샷 어딘가에 NUL(U+0000)이 있을 때 던진다. 호출자가 400으로 매핑한다. */
 export class SnapshotNulByteError extends Error {

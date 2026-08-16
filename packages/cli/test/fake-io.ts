@@ -19,6 +19,13 @@ export interface StubResponse {
   body?: unknown
   /** 날 문자열 본문. `body`보다 우선한다 — JSON이 아닌 응답을 재는 자리다. */
   text?: string
+  /**
+   * 날 바이트 본문. **`wireb export`가 받는 zip이 그것이다**(P9-3 D9).
+   *
+   * `text`·`body`와 **따로 둔다** — 문자열을 UTF-8로 되돌리는 대역을 쓰면 zip처럼
+   * 문자열로 왕복할 수 없는 바이트를 재는 자가 조용히 다른 것을 재게 된다.
+   */
+  bytes?: Uint8Array
   setCookie?: string[]
 }
 
@@ -91,13 +98,40 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
 
     const text = outcome.text ?? (outcome.body === undefined ? '' : JSON.stringify(outcome.body))
     const setCookie = outcome.setCookie ?? []
+
+    /**
+     * **본문은 한 번만 내준다** — 진짜 `Response`의 계약이다(리뷰 N3).
+     *
+     * 앞 판은 `text()`와 `bytes()`를 몇 번이든 내줬고, 그래서 `callApiBytes`가 2xx에서
+     * **둘 다** 부르게 바꿔도 케이스가 하나도 안 죽었다(리뷰어 실측 R25 — 1792건 중 0건).
+     * 그 코드는 실서버에서 즉시 깨진다. **가짜가 계약을 안 흉내 내면 자가 눈을 감는다** —
+     * P9-2 리뷰 N2(*"가짜가 셋째 인자를 버려 권한을 못 본다"*)와 같은 부류이고, 이번에
+     * 버린 것은 인자가 아니라 **한 번만 읽힌다는 성질**이다.
+     *
+     * 문장은 진짜 `Response`의 것을 따른다(`TypeError: Body is unusable`).
+     */
+    let consumed: 'text' | 'bytes' | null = null
+    const consume = (what: 'text' | 'bytes'): void => {
+      if (consumed !== null) {
+        throw new TypeError(`Body is unusable: already read (${consumed} 뒤에 ${what})`)
+      }
+      consumed = what
+    }
+
     return {
       status: outcome.status,
       headers: {
         get: (name) => (name.toLowerCase() === 'set-cookie' ? (setCookie[0] ?? null) : null),
         getSetCookie: () => setCookie,
       },
-      text: async () => text,
+      text: async () => {
+        consume('text')
+        return text
+      },
+      bytes: async () => {
+        consume('bytes')
+        return outcome.bytes ?? new TextEncoder().encode(text)
+      },
     }
   }
 
@@ -118,6 +152,19 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
       write: async (path, content, options) => {
         fs.set(path, content)
         modes.set(path, { mode: options?.mode, dirMode: options?.dirMode })
+      },
+      /**
+       * **디렉터리를 키에서 유추한다.** 이 가짜에는 디렉터리 개념이 없으므로(위 `fs`)
+       * *"그 경로로 시작하는 키가 있으면 디렉터리"*로 읽는다 — 진짜 파일 시스템에서
+       * `mkdir -p`가 만드는 것과 같은 자리다.
+       *
+       * **파일이 먼저다.** 같은 이름이 파일이면서 디렉터리일 수는 없다.
+       */
+      kind: async (path) => {
+        const failure = options.readFailures?.[path]
+        if (failure) throw failure
+        if (fs.has(path)) return 'file'
+        return [...fs.keys()].some((key) => key.startsWith(`${path}/`)) ? 'directory' : null
       },
     },
     fetch: fetchImpl,

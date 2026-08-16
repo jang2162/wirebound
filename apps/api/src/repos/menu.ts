@@ -273,7 +273,7 @@ export async function listMenuRows(db: DbHandle, projectId: string): Promise<Men
  * | `listMenuNodes` (여기) | camelCase **평평한 목록** | 스냅샷 캡처 |
  *
  * 캡처가 트리를 받지 않는 이유는 payload가 트리를 접지 않기 때문이다 —
- * `parentId`가 구조를 나른다(`services/snapshot-payload.ts`). 캡처가 `listMenuRows`를
+ * `parentId`가 구조를 나른다(`@wirebound/themes`의 `snapshot/payload.ts`). 캡처가 `listMenuRows`를
  * 대신 쓰지 않는 이유는 그쪽이 snake_case를 그대로 흘려 **키 변환이 repo 밖으로 새기**
  * 때문이다(README "계층 규칙").
  *
@@ -288,7 +288,7 @@ export async function listMenuRows(db: DbHandle, projectId: string): Promise<Men
  * 그래서 `parent_id NULLS FIRST`를 앞에 둔다: **루트가 먼저, 그다음 부모별로 묶여** 각
  * 그룹 안에서 `sort_order` 순이다. **트리 순회(깊이 우선)는 아니다** — 부모끼리의 순서는
  * uuid 순이라 사람이 읽는 순서와 다를 수 있다. 그래도 되는 이유는 payload가 트리를 접지
- * 않고 `parentId`가 구조를 나르기 때문이다(`services/snapshot-payload.ts`). 여기서 필요한
+ * 않고 `parentId`가 구조를 나르기 때문이다(`@wirebound/themes`의 `snapshot/payload.ts`). 여기서 필요한
  * 것은 **같은 상태면 같은 순서**이지 보기 좋은 순서가 아니다.
  */
 export async function listMenuNodes(db: DbHandle, projectId: string): Promise<MenuNodeRecord[]> {

@@ -9,7 +9,7 @@ import { insertPreset } from '../src/repos/presets'
 import { insertSnapshot } from '../src/repos/snapshots'
 import { insertTheme } from '../src/repos/themes'
 import { captureSnapshot } from '../src/services/snapshot-capture'
-import { SNAPSHOT_PAYLOAD_VERSION } from '../src/services/snapshot-payload'
+import { SNAPSHOT_PAYLOAD_VERSION } from '@wirebound/themes'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 type Actor = ProjectRole | 'outsider' | 'anonymous'

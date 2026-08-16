@@ -8,7 +8,7 @@
  * `bin` 필드)를 빌드 결과물로 잰다(D11).
  */
 import { createInterface } from 'node:readline'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { homedir } from 'node:os'
 import type { HttpRequestInit, HttpResponse, Io } from './io'
@@ -40,9 +40,19 @@ export function createNodeIo(): Io {
         await mkdir(dirname(path), { recursive: true, mode: options?.dirMode })
         await writeFile(path, content, { encoding: 'utf8', mode: options?.mode })
       },
+      kind: async (path) => {
+        try {
+          return (await stat(path)).isDirectory() ? 'directory' : 'file'
+        } catch (error) {
+          // `read`와 **같은 술어**를 쓴다 — *"없다"*만 접고 나머지는 올려 보낸다.
+          if (isNotFound(error)) return null
+          throw error
+        }
+      },
     },
     fetch: async (url: string, init?: HttpRequestInit): Promise<HttpResponse> => {
       // 전역 `fetch`를 그대로 쓴다 — HTTP 클라이언트를 새로 들이지 않는다(D10).
+      // `Response`가 `HttpResponse`의 면을 이미 갖는다(`bytes()` 포함 — Node 22).
       return await fetch(url, init)
     },
     promptSecret: async (label) => {
