@@ -92,10 +92,12 @@ describe('wireb pull', () => {
   })
 
   it('WIREB_TOKEN 이 자격 파일을 이긴다', async () => {
-    const io = pullIo({ token: '파일토큰', env: { WIREB_TOKEN: '환경토큰' } })
+    // **ASCII로 잰다.** 서버가 내는 토큰은 base64url이고, 헤더는 ByteString이라
+    // 한국어 값은 애초에 보낼 수 없다(아래 *"헤더에 실을 수 없는 자격"* 케이스).
+    const io = pullIo({ token: 'FILE-TOKEN', env: { WIREB_TOKEN: 'ENV-TOKEN' } })
     await run(['pull'], io)
 
-    expect(io.requests[0]?.headers.authorization).toBe('Bearer 환경토큰')
+    expect(io.requests[0]?.headers.authorization).toBe('Bearer ENV-TOKEN')
   })
 })
 
@@ -141,6 +143,21 @@ describe('세 갈래를 갈라 말한다 (T6)', () => {
 
   it('세 갈래의 코드가 서로 다르다 — 스크립트가 가를 수 있다', () => {
     expect(new Set([EXIT.config, EXIT.server, EXIT.unreachable]).size).toBe(3)
+  })
+
+  /**
+   * **스모크에서 재서 알았다.** HTTP 헤더 값은 ByteString이라 한국어가 든 `WIREB_TOKEN`은
+   * `fetch`가 던진다. 그것을 그대로 `catch`가 받으면 **"서버에 연결할 수 없습니다"(4)**가
+   * 나가 사람이 네트워크를 들여다보게 된다 — 원인은 자기 환경 변수다.
+   */
+  it('헤더에 실을 수 없는 자격은 4가 아니라 2다 — 원인을 서버에 떠넘기지 않는다', async () => {
+    const io = pullIo({ env: { WIREB_TOKEN: '한국어토큰' } })
+    const code = await run(['pull'], io)
+
+    expect(code).toBe(EXIT.config)
+    expect(io.stderr.join('\n')).toContain('authorization')
+    // **요청이 나가지 않는다** — 나갔다면 그 실패는 서버 쪽으로 기록된다.
+    expect(io.requests).toEqual([])
   })
 
   it('JSON이 아닌 응답도 3이다 — 본문을 터미널에 쏟지 않는다', async () => {

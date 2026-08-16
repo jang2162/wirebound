@@ -11,6 +11,7 @@
  *
  * | 무엇 | 코드 | 어떻게 아는가 |
  * |---|---|---|
+ * | 헤더에 실을 수 없는 자격이다 | 2 | 보내기 **전에** 본다(아래 `assertSendableHeaders` — 스모크에서 재서 알았다) |
  * | 서버에 닿지 못했다 | 4 | `fetch`가 **던진다**(DNS·연결 거부·타임아웃) |
  * | 서버가 거절했다 | 3 | 응답이 왔고 2xx가 아니다. **서버가 쓴 문장을 그대로 옮긴다** |
  * | 됐다 | 0 | 2xx |
@@ -30,7 +31,7 @@
  * `wb_session`을 여기 적으면 그 설정을 바꾼 배포에서 조용히 로그인이 안 된다. 받은 것을
  * 전부 그대로 되돌려 보낸다.
  */
-import { CliError, EXIT, serverError, unreachableError } from './exit'
+import { CliError, EXIT, configError, serverError, unreachableError } from './exit'
 import type { HttpRequestInit, Io } from './io'
 
 export interface ApiRequest {
@@ -62,6 +63,8 @@ export async function callApi(io: Io, server: string, request: ApiRequest): Prom
   if (request.token !== undefined) headers.authorization = `Bearer ${request.token}`
   if (request.cookie !== undefined) headers.cookie = request.cookie
 
+  assertSendableHeaders(headers)
+
   const init: HttpRequestInit = { method: request.method, headers }
   if (request.body !== undefined) init.body = JSON.stringify(request.body)
 
@@ -79,6 +82,27 @@ export async function callApi(io: Io, server: string, request: ApiRequest): Prom
     throw new CliError(EXIT.server, `${serverMessage(text, response.status)} (${request.method} ${url})`)
   }
   return { status: response.status, text, setCookie: response.headers.getSetCookie() }
+}
+
+/**
+ * **헤더에 실을 수 없는 값을 미리 잡는다 — 스모크에서 재서 알았다.**
+ *
+ * HTTP 헤더 값은 ByteString(코드 포인트 0~255)이라 `WIREB_TOKEN`에 한국어를 넣으면
+ * `fetch`가 *"Cannot convert argument to a ByteString …"*으로 **던진다.** 그러면 아래
+ * `catch`가 그것을 **"서버에 연결할 수 없습니다"**로 옮겨(코드 4) 사람이 네트워크와
+ * 서버를 들여다보게 된다 — 원인은 자기 환경 변수 한 줄인데.
+ *
+ * 서버가 내는 토큰은 base64url이라 이 갈래에 닿지 않는다. 닿는 것은 **사람이 손으로 넣은
+ * 값**이고, 그래서 코드는 *"설정을 고쳐라"*의 2다.
+ */
+function assertSendableHeaders(headers: Record<string, string>): void {
+  for (const [name, value] of Object.entries(headers)) {
+    for (const char of value) {
+      if (char.codePointAt(0)! > 0xff) {
+        throw configError(`${name} 헤더에 보낼 수 없는 문자가 있습니다: ${JSON.stringify(char)}`)
+      }
+    }
+  }
 }
 
 /** 2xx 응답의 본문을 JSON으로. 형식이 아니면 그것도 서버 쪽 문제다. */
