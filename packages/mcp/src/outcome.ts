@@ -27,7 +27,7 @@
  * 에이전트가 이 도구를 부를 때 둘이 같은 번호를 보는 것이, *"같은 함수를 부른다"*를 눈에
  * 보이게 만드는 자리다. 번호를 지어내지 않는다: `CliError.code`를 그대로 옮긴다.
  */
-import { CliError } from '@wirebound/cli/embed'
+import { CliError, EXIT } from '@wirebound/cli/embed'
 
 /** 도구 하나가 낸 것. **글자와 `isError` 둘뿐이다** — 프로토콜 모양은 `server.ts`가 만든다. */
 export interface ToolOutcome {
@@ -45,9 +45,24 @@ export function toolResult(value: unknown): ToolOutcome {
  * **`CliError`만 여기서 문장이 된다.** 그 밖의 예외는 버그이므로 다르게 다룬다 —
  * `run.ts`가 `CliError`만 잡는 것과 같은 규칙이고, 여기서 전부 삼키면 우리 쪽 버그가
  * *"설정을 고치세요"*로 위장한다.
+ *
+ * ---
+ *
+ * # 설정 갈래에는 **어디서 찾았는지**를 덧붙인다
+ *
+ * `wireb`의 문장은 *"`.wirebound.json`을 찾을 수 없습니다. 리포 뿌리에서 `wireb init`을
+ * 먼저 실행하세요"*다. **사람에게는 그것으로 충분하다** — 자기가 어느 디렉터리에서 쳤는지
+ * 안다. **에이전트는 모른다:** 이 서버를 띄운 것은 호스트이고 그 작업 디렉터리는 에이전트가
+ * 고른 것이 아니다. 그 값을 안 말하면 *"리포 뿌리에서 실행하세요"*가 **어느 리포인지 모르는
+ * 지시**가 된다.
+ *
+ * **문장을 다시 쓰지 않는다.** `wireb`의 문장을 그대로 옮기고 자리만 덧붙인다 — 두 도구가
+ * 다른 말을 하면 사람이 원인을 둘로 센다(`binding.ts`의 `SERVER_HINT`가 같은 자세다).
  */
-export function toolFailure(error: CliError): ToolOutcome {
-  return { text: `[wireb 코드 ${error.code}] ${error.message}`, isError: true }
+export function toolFailure(error: CliError, cwd: string): ToolOutcome {
+  const head = `[wireb 코드 ${error.code}] ${error.message}`
+  const text = error.code === EXIT.config ? `${head}\n(MCP 서버가 ${cwd} 에서부터 위로 찾았습니다)` : head
+  return { text, isError: true }
 }
 
 /**

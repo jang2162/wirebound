@@ -61,7 +61,7 @@ export async function callTool(io: Io, name: string, args: unknown): Promise<Too
   try {
     return await handler(io, parsed)
   } catch (error) {
-    if (isToolFailure(error)) return toolFailure(error)
+    if (isToolFailure(error)) return toolFailure(error, io.cwd)
     throw error
   }
 }

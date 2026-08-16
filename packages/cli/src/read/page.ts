@@ -30,6 +30,7 @@
  * 서버에 붙은 옛 판이 아무것도 못 읽는다(`snapshot/payload.ts`의 D3과 같은 근거).
  */
 import {
+  duplicateTargets,
   matchPageTargets,
   migrateDocument,
   pageTargetPath,
@@ -82,13 +83,6 @@ export type PageLookup =
  */
 export function listProject(payload: SnapshotPayload): ProjectListing {
   const ordered = orderedPages(payload)
-  const paths = ordered.map((page) => pageTargetPath(page.target))
-  const seen = new Set<string>()
-  const duplicated = new Set<string>()
-  for (const path of paths) {
-    if (seen.has(path)) duplicated.add(path)
-    seen.add(path)
-  }
   return {
     menu: payload.menu.map((node) => ({
       id: node.id,
@@ -97,7 +91,9 @@ export function listProject(payload: SnapshotPayload): ProjectListing {
       sortOrder: node.sortOrder,
     })),
     pages: ordered.map(summarize),
-    duplicatePaths: [...duplicated],
+    // **판정을 다시 짜지 않는다** — `duplicateTargets`가 이미 그것을 갖고 있다
+    // (P9-1 이월 §9). 접두만 벗겨 목록의 `path`와 같은 말로 만든다.
+    duplicatePaths: duplicateTargets(ordered).map(pageTargetPath),
   }
 }
 

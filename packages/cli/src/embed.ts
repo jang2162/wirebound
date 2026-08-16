@@ -57,3 +57,23 @@ export {
   type LintReport,
 } from './read/lint'
 export { prepareCatalog } from './read/catalog'
+
+/**
+ * 위 함수들이 **돌려주는** 순수 타입을 함께 내준다.
+ *
+ * **소비자의 의존 목록을 좁히려는 것이다** — `packages/mcp`가 `@wirebound/schema`·
+ * `@wirebound/themes`를 직접 의존하면 그 패키지에서 `pageView`나 `lintProject`를 부르는
+ * 길이 열린다. 오늘 `@wirebound/cli` 하나만 의존하므로 **조립을 두 벌로 만드는 길이
+ * 구조적으로 막혀 있고**, `packages/mcp/test/assembly-census.test.ts`가 그것을 지킨다.
+ */
+export type {
+  InteractionSentence,
+  LintConfig,
+  LintIssue,
+  PageDocument,
+  PageView,
+  PageViewComment,
+  PageViewNode,
+  TargetedPage,
+} from '@wirebound/schema'
+export type { SnapshotLintNote, SnapshotPayload } from '@wirebound/themes'
