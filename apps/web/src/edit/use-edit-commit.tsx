@@ -16,7 +16,7 @@ import type { Interaction, PatchOp } from '@wirebound/schema'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
-import { useEditChannel } from '../realtime/context'
+import { useEditChannel, useLockChannel } from '../realtime/context'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import type { EditStatus } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
@@ -111,6 +111,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const { projectId, pageId } = props
   const api = useApi()
   const channel = useEditChannel()
+  const lockChannel = useLockChannel()
   const store = useEditorStoreInstance()
   const open = useOpenPage(pageId)
   const status = useEditorStore(store, (s) => s.editStatus)
@@ -216,6 +217,13 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         }
 
         store.setEditStatus('sending')
+        // **§7.2의 *"편집 중 하트비트로 갱신"*.** 타이머를 두지 않고 **편집이 나가는 순간**에
+        // 매다는 것이 판정이다: §7.2가 갱신의 조건으로 적은 것이 *"편집 중"*이고, 타이머를
+        // 두면 케이스가 시간을 기다리게 된다(전역 제약). 잡은 것이 없으면 아무것도 안 나간다.
+        //
+        // **여기가 전송의 유일한 통로다** — 속성·구조·undo·redo가 전부 이 루프를 지난다.
+        // `commitOps`에 달면 undo/redo가 빠진다.
+        lockChannel?.refresh()
         try {
           // **WS가 붙어 있으면 그리로 낸다**(§7.1 — P3-2 T3). 없으면 REST다: D5가 그 경로를
           // 남겨 두었고(§7.4의 MCP가 REST로 들어온다), `RealtimeProvider` 없이 도는 화면은
@@ -284,7 +292,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
     } finally {
       store.endPump()
     }
-  }, [api, channel, projectId, pageId, store, recover])
+  }, [api, channel, lockChannel, projectId, pageId, store, recover])
 
   /**
    * 스택에서 한 단계 꺼내 보낸다. undo와 redo가 같은 규칙을 쓰므로 한 곳에 둔다 —

@@ -14,7 +14,16 @@
  * `getState()`가 돌려준 객체를 **바꾸지 마라.** 스토어는 그 객체를 다음 비교의
  * 기준으로 들고 있으므로, 밖에서 고치면 변경이 알림 없이 새어 들어간다.
  */
-import { applyOps, type PageDocument, type PatchOp, type ValidationIssue } from '@wirebound/schema'
+import {
+  applyOps,
+  findLockConflict,
+  findNodePath,
+  type NodeLock,
+  type PageDocument,
+  type PatchOp,
+  type ValidationIssue,
+} from '@wirebound/schema'
+import type { NodeLockView } from '../realtime/protocol'
 import {
   ackPending,
   clearPending,
@@ -152,6 +161,26 @@ export interface EditorState {
    */
   editWarnings: ValidationIssue[]
   /**
+   * **지금 프로젝트에서 살아 있는 잠금 전부**(설계 §7.2). 서버가 `locks` 프레임으로 통째로
+   * 준다 — 증분이 아니라 전부이므로 여기서 쌓지 않고 **갈아 끼운다.**
+   *
+   * **페이지가 섞여 있다.** 룸이 프로젝트 하나이기 때문이고(P3-1 D2), 읽는 쪽이
+   * `openPageId`로 거른다 — 거르는 자리는 `lockedBy` 하나다.
+   *
+   * **타입을 전송 계층에서 가져온다.** 이 파일은 React·DOM·`fetch`를 모르지만
+   * `realtime/protocol.ts`는 순수 타입 선언이라 그 규칙 안이다. 모양을 여기 다시 적으면
+   * 서버가 필드를 하나 더할 때 두 벌이 갈린다.
+   */
+  locks: NodeLockView[]
+  /**
+   * **지금 보고 있는 사람.** 잠금 소유자 판정이 이 값을 쓴다(P3-3 D3 — 같은 사람의 다른
+   * 탭에는 막히지 않는다).
+   *
+   * **`null`이면 모든 잠금이 남의 것이다.** 누구인지 모르는 채로 *"내 것일 수도 있다"*로
+   * 흘려보내면 §7.2의 1차 방어가 조용히 사라진다 — 모르는 쪽에서는 막는 것이 안전하다.
+   */
+  viewerUserId: string | null
+  /**
    * **남의 변경을 받았는데 화면에 못 얹었다**(P3-1 D6). 얹은 경우엔 `null`이다.
    *
    * **P3-1에는 *"미뤘다"*는 갈래가 있었다** — 그때는 편집이 REST로 나갔고 §7.1의 답
@@ -186,9 +215,14 @@ function initialState(): EditorState {
     editStatus: 'idle',
     editFailure: null,
     editWarnings: NO_WARNINGS,
+    locks: NO_LOCKS,
+    viewerUserId: null,
     remoteStale: null,
   }
 }
+
+/** 잠금이 없을 때 쓰는 배열. **참조를 고정한다** — `NO_WARNINGS`와 같은 이유다. */
+const NO_LOCKS: NodeLockView[] = []
 
 /**
  * 경고가 없을 때 쓰는 배열. **참조를 고정한다** — 매번 `[]`를 새로 만들면 경고 없는 편집이
@@ -951,8 +985,57 @@ export class EditorStore {
     this.#apply({ editFailure })
   }
 
+  /**
+   * 노드 하나를 고른다. **남이 잠근 자리는 고르지 않는다** — §7.2의 1차 방어다.
+   *
+   * **막는 자리가 여기 하나인 것이 요점이다.** 고르는 길은 셋이다(구조 트리·캔버스·구조
+   * 편집이 만든 노드로 옮기는 것) — 화면마다 막으면 규칙이 세 벌이 되고, 새로 고르는
+   * 자리가 늘 때 그 자리에는 규칙이 없다.
+   *
+   * **조용히 무시하지 않는다.** 왜 안 골라지는지는 그 줄의 *"○○ 편집 중"* 배지가 말한다
+   * (`panels/structure-tree.tsx`) — 같은 판정에서 나온 것이라 둘이 어긋날 수 없다.
+   */
   readonly selectNode = (nodeId: string | null): void => {
+    if (nodeId !== null && this.lockedBy(nodeId) !== null) return
     this.#apply({ selectedNodeId: nodeId })
+  }
+
+  /**
+   * 그 노드를 **고를 수 없게 막는 남의 잠금**. 없으면 `null`이다(설계 §7.2 · P3-3 D7).
+   *
+   * **판정 자체는 `@wirebound/schema`의 `findLockConflict`가 한다** — 서버의 2차 방어가
+   * 부르는 바로 그 함수다. 두 방어가 나뉜 것은 **자리**이지 판정이 아니다: 판정이 두 벌이면
+   * 화면이 통과시킨 편집을 서버가 거절하고, 사용자는 값을 쳤는데 저장이 안 되는 것을 보되
+   * **왜인지 화면에 없다.**
+   *
+   * **선택은 서브트리를 통째로 claim하는 것이므로** 남의 잠금을 품기만 해도 막힌다 — 그
+   * 성질과 대가는 `packages/schema/test/lock.test.ts`의 `선택이 편집보다 엄격하다`가 잰다.
+   */
+  readonly lockedBy = (nodeId: string): NodeLock | null => {
+    const { document, openPageId, locks, viewerUserId } = this.#state
+    if (document === null || openPageId === null || locks.length === 0) return null
+    const path = findNodePath(document.root, nodeId)
+    if (path === undefined) return null
+    return findLockConflict({
+      root: document.root,
+      locks: locks.filter((lock) => lock.pageId === openPageId),
+      pointers: [path],
+      // 누구인지 모르면 어느 잠금과도 같지 않은 값이 되어 **전부 남의 것**이 된다.
+      viewerUserId: viewerUserId ?? '',
+    })
+  }
+
+  /**
+   * 서버가 보낸 잠금 목록으로 갈아 끼운다(§7.2). **전부를 받는다** — 증분이면 하나를 놓친
+   * 화면의 배지가 조용히 남는다.
+   */
+  readonly setLocks = (locks: NodeLockView[]): void => {
+    this.#apply({ locks: locks.length === 0 && this.#state.locks.length === 0 ? this.#state.locks : locks })
+  }
+
+  /** 지금 보고 있는 사람. 소유자 판정이 이 값을 쓴다(D3). */
+  readonly setViewer = (viewerUserId: string | null): void => {
+    this.#apply({ viewerUserId })
   }
 
   readonly setMode = (mode: EditorMode): void => {

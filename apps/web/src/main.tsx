@@ -6,6 +6,7 @@ import { ApiProvider } from './api/context'
 import { createHttpClient } from './api/http-client'
 import { RealtimeProvider, createConnectionIdHolder } from './realtime/context'
 import { createEditChannel } from './realtime/edit-channel'
+import { createLockChannel } from './realtime/lock-channel'
 // 셸 CSS는 앱에서만 필요하다. 화면 테스트는 `App`을 직접 렌더하므로 이 파일을 지나지
 // 않고, 그래서 vitest가 CSS를 처리할 일이 없다.
 import './shell.css'
@@ -26,6 +27,8 @@ const connectionIds = createConnectionIdHolder()
  * 판이다(`RealtimeProvider`를 안 세운다).
  */
 const editChannel = createEditChannel()
+/** 잠금을 잡고 놓는 통로(§7.2). 편집 채널과 갈라 둔 이유는 `realtime/lock-channel.ts`에 있다. */
+const lockChannel = createLockChannel()
 
 // HTTP 구현을 고르는 자리는 여기 하나다. 아래 화면들은 `useApi()`로 인터페이스만 본다.
 // **실시간을 켜는 자리도 여기 하나다** — 화면 테스트는 `RealtimeProvider` 없이 트리를
@@ -33,7 +36,7 @@ const editChannel = createEditChannel()
 createRoot(root).render(
   <StrictMode>
     <ApiProvider client={createHttpClient(globalThis.fetch, connectionIds.get)}>
-      <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel }}>
+      <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel, lockChannel }}>
         <BrowserRouter>
           <App />
         </BrowserRouter>

@@ -10,7 +10,8 @@
  * | `page-changed` | `store.applyRemoteChange` — 얹거나, **내 pending 위에 리베이스하거나**, 갈라졌다고 말한다 |
  * | `restored` | `store.markRestored` — 판이 통째로 갈렸다. 얹을 `ops`가 없다 |
  * | `patch-ack`·`patch-error` | 채널에 넘긴다 — 내가 낸 편집의 답이다 |
- * | `presence`·`pong` | 아무것도 안 한다. §7.2의 잠금(P3-3)이 `presence` 위에 선다 |
+ * | `locks` | `store.setLocks` — §7.2의 배지와 선택 차단이 이 목록 위에 선다 |
+ * | `presence`·`pong` | 아무것도 안 한다 |
  *
  * **`projectId`가 룸이다**(D2). 페이지를 옮겨도 연결은 그대로다 — 페이지마다 다시 붙으면
  * 페이지를 옮기는 동안 남의 변경을 놓친다.
@@ -90,6 +91,11 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
           case 'restored':
             store.markRestored()
             break
+          case 'locks':
+            // **프로젝트 전체의 목록이다.** 어느 페이지의 것인지는 스토어가 `openPageId`로
+            // 거른다(`lockedBy`) — 여기서 거르면 페이지를 옮길 때 목록이 낡는다.
+            store.setLocks(frame.locks)
+            break
           case 'patch-ack':
           case 'patch-error':
             // **내가 낸 편집의 답이다.** 짝짓는 것은 채널이 한다 — 여기서 하면 *"어느 ack가
@@ -102,6 +108,11 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
       },
       onStatus: (status) => {
         if (status === 'open') {
+          // **잡고 있던 자리를 다시 알린다**(§7.2). 끊기면 서버가 놓았고, 화면의 선택은 그
+          // 사이 바뀌지 않았으므로 *"선택이 바뀔 때 보낸다"*만으로는 아무것도 안 나간다 —
+          // 사용자는 노드를 고른 채인데 남의 화면에서 배지가 사라진다. 첫 `'open'`에서는
+          // 잡은 것이 없어 아무 일도 안 일어난다.
+          setup.lockChannel?.refresh()
           // **다시 붙은 것이 두 번째 이상이면 페이지를 다시 읽어야 한다**(D6). 끊긴 동안 남이
           // 낸 편집의 프레임은 사라졌고, 그것을 갭으로 알아채려면 **누군가 다음 편집을 내야
           // 한다** — 보고만 있는 사람은 스스로 수렴하지 않는다(P3-1 이월 §2.4).
@@ -120,10 +131,12 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
     })
 
     setup.channel?.attach(connection)
+    setup.lockChannel?.attach(connection)
 
     return () => {
       connection.close()
       setup.channel?.detach()
+      setup.lockChannel?.detach()
       setup.holder.set(undefined)
     }
   }, [projectId, setup, store, onResync])

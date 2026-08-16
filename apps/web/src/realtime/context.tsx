@@ -24,6 +24,7 @@
 import { createContext, useContext, type ReactElement, type ReactNode } from 'react'
 import type { RealtimeOptions } from './connection'
 import type { EditChannel } from './edit-channel'
+import type { LockChannel } from './lock-channel'
 
 /** 지금 붙어 있는 연결의 id를 드는 곳. `main.tsx`가 하나 만들어 양쪽에 준다. */
 export interface ConnectionIdHolder {
@@ -52,6 +53,14 @@ export interface RealtimeSetup {
    * 여럿 세우는 테스트가 서로의 것을 덮는다).
    */
   channel?: EditChannel
+  /**
+   * 잠금을 잡고 놓는 통로(§7.2 · P3-3 D4). **없으면 잠금을 안 잡는다** — `RealtimeProvider`
+   * 없이 도는 화면 테스트가 그 판이고, 그때 화면은 §7.2 이전과 똑같이 동작한다.
+   *
+   * **편집 채널과 갈라 둔 이유는 `lock-channel.ts`의 머리말에 있다** — 끊겼을 때 할 일이
+   * 정반대다.
+   */
+  lockChannel?: LockChannel
   /** WebSocket 주소를 만들 오리진. 기본은 브라우저의 것이다. */
   origin?: string
   /** `openRealtime`에 그대로 넘어간다. 테스트가 가짜 소켓·가짜 타이머를 끼운다. */
@@ -76,4 +85,13 @@ export function useRealtimeSetup(): RealtimeSetup | null {
  */
 export function useEditChannel(): EditChannel | null {
   return useContext(RealtimeContext)?.channel ?? null
+}
+
+/**
+ * 잠금을 잡을 통로. **없으면 `null`이고 그때 화면은 잠금을 안 잡는다.**
+ *
+ * `useEditChannel`과 같은 이유로 던지지 않는다 — 통로가 없다고 화면이 멈추면 안 된다.
+ */
+export function useLockChannel(): LockChannel | null {
+  return useContext(RealtimeContext)?.lockChannel ?? null
 }

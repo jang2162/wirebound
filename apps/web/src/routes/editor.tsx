@@ -29,6 +29,7 @@ import { useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
+import { useNodeLock } from '../realtime/use-node-lock'
 import { useRealtime } from '../realtime/use-realtime'
 import { ExportPanel } from '../shell/export-panel'
 import { projectAbilities } from '../projects/project-actions'
@@ -247,6 +248,13 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
     props.project.id,
     useCallback(() => setResyncToken((token) => token + 1), []),
   )
+
+  /**
+   * **고른 노드를 서버에 알린다**(§7.2 — 선택이 곧 잠금이다). `pageId`는 주소에서 푼 값이다:
+   * 스토어의 `openPageId`를 쓰면 주소가 바뀐 뒤 한 커밋 동안 **앞 페이지의 노드를 새 주소에서
+   * 잡는다**(`useOpenPage`의 머리말).
+   */
+  useNodeLock(props.pageId)
 
   return (
     <div className="wb-shell">

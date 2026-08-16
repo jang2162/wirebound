@@ -346,6 +346,22 @@
   font-style: italic;
 }
 
+/* 남이 잠근 노드(설계 §7.2). 누를 수 없다는 것이 보여야 한다 — 왜인지는 옆의 배지가
+   말한다. `structure-tool:disabled`와 같은 자세다. */
+.wb-shell-structure-node:disabled {
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
+}
+
+/* *"○○ 편집 중"* 배지(설계 §7.2). 줄 아래에 붙는다 — 이름 길이가 제각각이라 옆에 두면
+   트리의 들여쓰기가 이름만큼 밀린다. */
+.wb-shell-structure-lock {
+  display: block;
+  padding: 0 4px 2px;
+  color: var(--wb-shell-muted);
+  font-size: 11px;
+}
+
 /* 선택된 노드. 표시는 `aria-current`가 갖고 색은 여기서 나온다. */
 .wb-shell-structure-node[aria-current='true'] {
   background: var(--wb-shell-accent);
