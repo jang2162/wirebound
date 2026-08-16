@@ -33,7 +33,7 @@ import {
 import type { Io } from '@wirebound/cli/embed'
 import { HANDLERS } from './handlers'
 import { isToolFailure, toolFailure, type ToolOutcome } from './outcome'
-import { TOOLS, findTool, type ToolSpec } from './tools'
+import { TOOLS, findTool, type ToolArgSchema, type ToolSpec } from './tools'
 
 /** 호스트에게 보이는 이름. `packages/mcp/package.json`의 `bin` 이름과 같다. */
 export const SERVER_NAME = 'wirebound'
@@ -72,8 +72,11 @@ export async function callTool(io: Io, name: string, args: unknown): Promise<Too
  * 모르는 키를 **거부한다**(`additionalProperties: false`). 조용히 무시하면 에이전트가
  * `pageId`를 주고 *"경로 전체를 검사했다"*는 답을 받는다 — 그때 무엇을 물었는지와 무엇을
  * 답했는지가 갈린다.
+ *
+ * **모양만 본다.** `ops`가 배열인지는 여기서 보고, 그 안이 옳은 JSON Patch인지는
+ * **서버가 본다**(D5 — `tools.ts`의 머리말). 여기서 더 보면 검증이 두 벌이 된다.
  */
-function readArgs(tool: ToolSpec, args: unknown): Record<string, string> {
+function readArgs(tool: ToolSpec, args: unknown): Record<string, unknown> {
   if (args === undefined || args === null) args = {}
   if (typeof args !== 'object' || Array.isArray(args)) {
     throw new McpError(ErrorCode.InvalidParams, `${tool.name}의 인자는 객체여야 합니다`)
@@ -88,7 +91,7 @@ function readArgs(tool: ToolSpec, args: unknown): Record<string, string> {
     }
   }
 
-  const parsed: Record<string, string> = {}
+  const parsed: Record<string, unknown> = {}
   for (const key of known) {
     const value = raw[key]
     if (value === undefined) {
@@ -97,12 +100,37 @@ function readArgs(tool: ToolSpec, args: unknown): Record<string, string> {
       }
       continue
     }
-    if (typeof value !== 'string') {
-      throw new McpError(ErrorCode.InvalidParams, `${tool.name}의 ${key}는 문자열이어야 합니다`)
-    }
+    assertShape(tool, key, tool.inputSchema.properties[key]!, value)
     parsed[key] = value
   }
   return parsed
+}
+
+/**
+ * 값 하나가 선언한 모양인가. **`ToolArgSchema`의 갈래마다 한 줄이고 `default`가 없다** —
+ * 갈래를 더하면 *"값을 반환하지 않고 끝나는 경로가 있다"*로 컴파일이 막힌다. `default`를
+ * 두면 새 갈래가 **검사 없이** 지나간다.
+ */
+function assertShape(tool: ToolSpec, key: string, schema: ToolArgSchema, value: unknown): void {
+  const bad = (want: string): never => {
+    throw new McpError(ErrorCode.InvalidParams, `${tool.name}의 ${key}는 ${want}이어야 합니다`)
+  }
+
+  switch (schema.type) {
+    case 'string':
+      if (typeof value !== 'string') bad('문자열')
+      return
+    case 'integer':
+      // **`Number.isInteger`로 본다** — `3.5`도 `NaN`도 `seq`가 될 수 없고, 그것을 서버까지
+      // 보내면 zod가 낸 문장이 도구 인자 이름을 안 쓴다.
+      if (typeof value !== 'number' || !Number.isInteger(value) || value < schema.minimum) {
+        bad(`${schema.minimum} 이상의 정수`)
+      }
+      return
+    case 'array':
+      if (!Array.isArray(value)) bad('배열')
+      return
+  }
 }
 
 /**

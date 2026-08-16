@@ -108,8 +108,8 @@ describe('D8의 셋이 프로토콜에서 갈린다 (리뷰 N2)', () => {
   it('모르는 도구는 JSON-RPC 오류다 — 결과가 아니다', async () => {
     const client = await connect(harness())
     try {
-      // P9-5가 이 이름을 만든다. 오늘은 프로토콜 층에서 거절된다.
-      await expect(client.callTool({ name: 'patch_page', arguments: {} })).rejects.toMatchObject({
+      // **§12.2의 표에 없는 이름이다.** 표가 다섯을 다 덮으므로 실재하지 않는 이름을 골랐다.
+      await expect(client.callTool({ name: 'delete_project', arguments: {} })).rejects.toMatchObject({
         code: ErrorCode.MethodNotFound,
       })
     } finally {

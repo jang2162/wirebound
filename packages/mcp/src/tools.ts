@@ -25,12 +25,42 @@
  *
  * §12.1이 *"이 리포가 어느 설계 프로젝트에 대응하는가"*를 `.wirebound.json`에 담았다.
  * 세션이 그것을 덮으면 리포 바인딩의 존재 이유가 사라진다.
+ *
+ * # 쓰기 둘이 받는 것 — **줄을 더하는 것이 판정이다** (P9-5 D5)
+ *
+ * `patch_page`가 `ops`·`baseSeq`를 받는다. **그 순간이 *"이 값을 세션이 줘도 되는가"*를
+ * 다시 묻는 자리다**(P9-4 이월 §2.1) — 답은 갈렸다:
+ *
+ * | 값 | 받나 | 왜 |
+ * |---|---|---|
+ * | `ops` | **받는다** | **그것이 이 도구의 존재 이유다.** 무엇을 고칠지는 에이전트만 안다 |
+ * | `baseSeq` | **받는다** | §12.2가 *"baseSeq 필수"*라고 적었다. **도구가 스스로 읽으면 안 된다** — 그러면 *"에이전트가 읽은 문서 위에 얹는다"*는 §7.4의 보증이 사라지고, 도구가 방금 읽은 판으로 남의 편집을 덮는다 |
+ * | `nodeId` | **받는다**(`add_comment`) | 어느 노드에 말을 붙일지도 에이전트의 판단이다. `get_page`가 낸 `nodes[].id`가 그 값이다 |
+ * | `projectId`·`token`·`config`·`naming` | **여전히 안 받는다** | D4·D5가 닫은 경계다. 쓰기가 섰다고 열리지 않는다 |
+ *
+ * **`ops`를 검증하는 자리는 서버다.** §7.4가 *"사람 편집과 동일 경로"*라고 적었고
+ * `http/patch-ops.ts`의 `OpsBody`가 그 경계를 이미 든다(상한 200 · 경로 술어 · `value` 키
+ * 요구). 도구가 자기 검증을 더하면 **두 벌**이 되고, 두 벌은 오늘 같은 답을 내므로 값을
+ * 재는 케이스가 갈림을 못 본다. 여기서 보는 것은 **모양뿐이다**(배열인가).
  */
 
-/** 인자 스키마. JSON Schema의 부분집합만 쓴다 — 도구 셋이 받는 것이 문자열 하나뿐이다. */
+/**
+ * 인자 하나의 스키마. **JSON Schema의 부분집합만 쓴다** — 도구가 받는 모양이 셋뿐이다.
+ *
+ * **P9-4까지는 `string` 하나였다.** `patch_page`가 `baseSeq`(수)와 `ops`(배열)를 받으면서
+ * 셋이 됐다 — **넓히는 것 자체가 판정이다**(D5): 여기 갈래를 더하면 도구가 받을 수 있는
+ * 모양이 늘어나고, `server.ts`의 검사도 함께 늘어야 한다(그러지 않으면 검사를 안 지나는
+ * 모양이 생긴다). `test/tools.test.ts`가 **두 목록의 갈래 수를 맞대** 그것을 막는다.
+ */
+export type ToolArgSchema =
+  | { type: 'string'; description: string }
+  | { type: 'integer'; description: string; minimum: number }
+  | { type: 'array'; description: string; items: { type: 'object' } }
+
+/** 인자 스키마. */
 export interface ToolInputSchema {
   type: 'object'
-  properties: Record<string, { type: 'string'; description: string }>
+  properties: Record<string, ToolArgSchema>
   required?: string[]
   additionalProperties: false
 }
@@ -44,7 +74,7 @@ export interface ToolSpec {
   spec: string
 }
 
-/** §8.1의 페이지 경로를 받는 자리. 두 도구가 같은 말을 받는다. */
+/** §8.1의 페이지 경로를 받는 자리. 네 도구가 같은 말을 받는다. */
 const PATH_ARG = {
   type: 'string',
   description: '페이지 경로 (예: 관리자/회원/목록). `page:` 접두를 붙여도 됩니다.',
@@ -66,6 +96,53 @@ export const TOOLS: readonly ToolSpec[] = [
       '경로가 없거나 둘 이상이면 후보를 함께 말합니다.',
     inputSchema: { type: 'object', properties: { path: PATH_ARG }, required: ['path'], additionalProperties: false },
     spec: '페이지 스키마 + 코멘트 + 상호작용 문장 조회',
+  },
+  {
+    name: 'patch_page',
+    description:
+      '페이지 문서를 JSON Patch 로 고칩니다. 사람 편집과 같은 경로를 지나므로 검증·이력·실시간 알림이 모두 같습니다. ' +
+      'baseSeq 는 get_page 가 낸 headSeq 여야 합니다 — 그 사이 문서가 바뀌었으면 409 로 거절하고 아무것도 쓰지 않습니다. ' +
+      '이 도구는 재시도하지 않습니다: 거절당하면 get_page 로 다시 읽고 ops 를 새로 만드세요.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: PATH_ARG,
+        baseSeq: {
+          type: 'integer',
+          description: 'get_page 응답의 headSeq. 이 편집이 어느 판 위에 서는지를 말합니다.',
+          minimum: 0,
+        },
+        ops: {
+          type: 'array',
+          description:
+            'RFC 6902 JSON Patch 연산 목록 (add·remove·replace·move·copy·test). 경로는 /root 아래를 가리킵니다 — get_page 응답의 nodes[].path 가 그 포인터입니다.',
+          items: { type: 'object' },
+        },
+      },
+      required: ['path', 'baseSeq', 'ops'],
+      additionalProperties: false,
+    },
+    spec: '사람 편집과 동일 경로의 수정 (baseSeq 필수)',
+  },
+  {
+    name: 'add_comment',
+    description:
+      '페이지의 노드 하나에 코멘트를 답니다. 구현 중 발견한 이슈를 설계서에 회신하는 자리입니다. ' +
+      '번호가 없던 노드면 서버가 번호를 붙이므로 **문서가 바뀌고 headSeq 가 오릅니다** — 응답의 documentChanged 와 headSeq 를 보고 다음 patch_page 의 baseSeq 를 맞추세요.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: PATH_ARG,
+        nodeId: {
+          type: 'string',
+          description: '코멘트를 달 노드의 id. get_page 응답의 nodes[].id 입니다.',
+        },
+        body: { type: 'string', description: '코멘트 본문.' },
+      },
+      required: ['path', 'nodeId', 'body'],
+      additionalProperties: false,
+    },
+    spec: '구현 중 발견한 이슈를 설계서에 기록',
   },
   {
     name: 'validate',

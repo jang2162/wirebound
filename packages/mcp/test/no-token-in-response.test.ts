@@ -24,9 +24,11 @@ import { TOOLS } from '../src/tools'
 import { TOKEN, harness } from './harness'
 
 /** 도구마다 성공 갈래를 부를 인자. **표를 분모로 쓰므로 여기 없는 도구가 생기면 죽는다.** */
-const ARGS: Record<string, Record<string, string>> = {
+const ARGS: Record<string, Record<string, unknown>> = {
   list_pages: {},
   get_page: { path: '관리자/회원/목록' },
+  patch_page: { path: '관리자/회원/목록', baseSeq: 0, ops: [{ op: 'remove', path: '/root/children/1' }] },
+  add_comment: { path: '관리자/회원/목록', nodeId: 'list', body: '정렬 기준이 없습니다' },
   validate: {},
 }
 

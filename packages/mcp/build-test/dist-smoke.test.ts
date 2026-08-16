@@ -141,12 +141,18 @@ describe('빌드된 wireb-mcp', () => {
 })
 
 describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
-  it('핸드셰이크가 서고 도구 셋이 보인다', async () => {
+  it('핸드셰이크가 서고 §12.2의 다섯이 보인다', async () => {
     payload = snapshotPayload()
     const client = await connect()
     try {
       const listed = await client.listTools()
-      expect(listed.tools.map((tool) => tool.name).sort()).toEqual(['get_page', 'list_pages', 'validate'])
+      expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
+        'add_comment',
+        'get_page',
+        'list_pages',
+        'patch_page',
+        'validate',
+      ])
       // 인자 스키마가 프로토콜을 건너 그대로 왔는가.
       const get = listed.tools.find((tool) => tool.name === 'get_page')!
       expect((get.inputSchema as { required?: string[] }).required).toEqual(['path'])
@@ -215,8 +221,8 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
     payload = snapshotPayload()
     const client = await connect()
     try {
-      // P9-5가 이 이름을 만든다. 오늘은 프로토콜 층에서 거절된다.
-      await expect(client.callTool({ name: 'patch_page', arguments: {} })).rejects.toMatchObject({ code: -32601 })
+      // **§12.2의 표에 없는 이름이다.** 표가 닫혔으므로 실재하지 않는 이름을 골랐다.
+      await expect(client.callTool({ name: 'delete_project', arguments: {} })).rejects.toMatchObject({ code: -32601 })
       await expect(client.callTool({ name: 'get_page', arguments: {} })).rejects.toMatchObject({ code: -32602 })
     } finally {
       await client.close()

@@ -42,6 +42,29 @@ export function toolResult(value: unknown): ToolOutcome {
 }
 
 /**
+ * **일어나지 않은 쓰기.** 값은 실려 있고 `isError`가 서 있다(P9-5 D3).
+ *
+ * ---
+ *
+ * # `toolFailure`와 무엇이 다른가
+ *
+ * `toolFailure`는 **도구가 못 섰을 때**다(바인딩·자격·못 닿음) — 글자 한 줄이고, 할 일이
+ * `wireb init`·`wireb login` 같은 **한 문장**이다. 여기는 **도구가 제대로 서서 서버까지
+ * 갔는데 서버가 거절한 것**이다. 그때 에이전트가 알아야 하는 것이 여럿이다: 무엇이
+ * 거절했나(`status`) · 왜(`reason`) · 무엇을 해야 하나(`next`) · 지금 판은 어디까지
+ * 왔나(`headSeq`). **그것을 산문 한 줄에 접으면 에이전트가 문장을 파싱하게 된다.**
+ *
+ * # 그래도 `isError`가 선다
+ *
+ * *"편집이 일어나지 않았다"*가 값의 한 필드로 묻히면 안 된다. `validate`가 결함을 찾은
+ * 것과 성질이 다르다 — 그쪽은 **명령이 제대로 서서 결과를 냈다**(`wireb`의 코드 10),
+ * 이쪽은 **하려던 일이 안 됐다**(코드 3).
+ */
+export function toolFailureResult(value: unknown): ToolOutcome {
+  return { text: JSON.stringify(value, null, 2), isError: true }
+}
+
+/**
  * **`CliError`만 여기서 문장이 된다.** 그 밖의 예외는 버그이므로 다르게 다룬다 —
  * `run.ts`가 `CliError`만 잡는 것과 같은 규칙이고, 여기서 전부 삼키면 우리 쪽 버그가
  * *"설정을 고치세요"*로 위장한다.
