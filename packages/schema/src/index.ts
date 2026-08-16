@@ -98,3 +98,5 @@ export type { LintRule, LintRuleGroup, LintRuleId, LintRuleOwner, OwnSeverityRul
 export { LINT_RULES, lintRule } from './lint/rules'
 export type { LintIssue, LintWhere } from './lint/issue'
 export { lintIssue, relayLintIssue } from './lint/issue'
+export type { LintComment, LintConfig, LintMenuNode, LintPage, LintProject } from './lint/input'
+export { lintDesign } from './lint/design'
