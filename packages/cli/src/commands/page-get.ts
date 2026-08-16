@@ -30,7 +30,14 @@
  * 문장의 prop 라벨이 카탈로그에서 온다. 안 부르면 *"목록이 로딩 상태로 바뀝니다"*가
  * *"목록이 loading로 바뀝니다"*가 된다(실측). 던지지 않으므로 **조용히 나빠지는** 자리다.
  */
-import { installCatalog, matchPageTargets, pageView, targetedPages, type PageView } from '@wirebound/schema'
+import {
+  installCatalog,
+  matchPageTargets,
+  pageTargetPath,
+  pageView,
+  targetedPages,
+  type PageView,
+} from '@wirebound/schema'
 import { EXIT, usageError } from '../exit'
 import type { Io } from '../io'
 import { fetchSnapshot, requireProject } from '../project'
@@ -59,7 +66,7 @@ export async function runPageGet(io: Io, path: string | undefined, options: Page
   // 줄로 다루고(`err`가 줄바꿈을 붙이는 자리이므로) 케이스가 줄 단위로 읽지 못한다.
   if (matched.length === 0) {
     io.err(`그 경로의 페이지가 없습니다: ${path}`)
-    for (const line of candidates(ordered.map((page) => page.target))) io.err(line)
+    for (const line of candidates(ordered.map((page) => pageTargetPath(page.target)))) io.err(line)
     return EXIT.usage
   }
   if (matched.length > 1) {
@@ -126,7 +133,12 @@ export function renderPageView(view: PageView): string[] {
   return lines
 }
 
-/** 못 찾았을 때 보일 후보. **분모를 말한다** — 잘린 것을 숨기지 않는다. */
+/**
+ * 못 찾았을 때 보일 후보. **분모를 말한다** — 잘린 것을 숨기지 않는다.
+ *
+ * **접두를 벗겨 낸다** — 사람이 이 줄을 그대로 다시 쳐야 하고, `wireb lint`의 출력도 벗긴
+ * 모양이다. 스모크에서 두 자리가 다르게 나오는 것을 보고 맞췄다.
+ */
 function candidates(targets: readonly string[]): string[] {
   if (targets.length === 0) return ['  이 프로젝트에는 페이지가 없습니다']
   const shown = targets.slice(0, CANDIDATE_LIMIT)

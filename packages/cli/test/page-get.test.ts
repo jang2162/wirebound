@@ -62,7 +62,9 @@ describe('못 찾았을 때·둘 이상일 때를 갈라 말한다', () => {
 
     const said = io.stderr.join('\n')
     expect(said).toContain('그 경로의 페이지가 없습니다')
-    expect(said).toContain('page:관리자/회원/목록')
+    // **접두를 벗긴 모양이다** — 사람이 그대로 다시 쳐야 하고 `wireb lint`의 출력도 그 모양이다.
+    expect(said).toContain('- 관리자/회원/목록')
+    expect(said).not.toContain('page:관리자')
     // 표준출력에 아무것도 안 나가야 파이프로 받는 쪽이 빈손인 것을 안다.
     expect(io.stdout).toEqual([])
   })
