@@ -24,6 +24,7 @@
  * 모양이 바뀌면 안 된다 — `test/args.test.ts`가 두 마디 명세로 그것을 잰다.
  */
 import { parseArgs, type ParseArgsConfig } from 'node:util'
+import { runExport } from './commands/export'
 import { runInit } from './commands/init'
 import { runLint } from './commands/lint'
 import { runLogin } from './commands/login'
@@ -88,6 +89,21 @@ export const COMMANDS: CommandSpec[] = [
       out: { type: 'string', short: 'o' },
     },
     run: (io, values) => runPull(io, { out: asString(values.out) }),
+  },
+  {
+    words: ['export'],
+    summary: 'wireb export --format html -o <dir>          §11.3 정적 번들을 그 디렉터리에 푼다',
+    options: {
+      format: { type: 'string' },
+      out: { type: 'string', short: 'o' },
+      force: { type: 'boolean', default: false },
+    },
+    run: (io, values) =>
+      runExport(io, {
+        format: asString(values.format),
+        out: asString(values.out),
+        force: values.force === true,
+      }),
   },
   {
     words: ['lint'],

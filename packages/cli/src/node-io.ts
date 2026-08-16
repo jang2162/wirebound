@@ -43,6 +43,7 @@ export function createNodeIo(): Io {
     },
     fetch: async (url: string, init?: HttpRequestInit): Promise<HttpResponse> => {
       // 전역 `fetch`를 그대로 쓴다 — HTTP 클라이언트를 새로 들이지 않는다(D10).
+      // `Response`가 `HttpResponse`의 면을 이미 갖는다(`bytes()` 포함 — Node 22).
       return await fetch(url, init)
     },
     promptSecret: async (label) => {

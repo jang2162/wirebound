@@ -32,6 +32,15 @@ export interface HttpResponse {
     getSetCookie(): string[]
   }
   text(): Promise<string>
+  /**
+   * 본문을 **날 바이트로**. `wireb export`가 zip을 받는 자리다(P9-3 D9).
+   *
+   * **`text()`와 둘 중 하나만 부른다.** 진짜 `Response`의 본문은 한 번만 읽힌다 —
+   * 오류 응답은 서버가 쓴 문장을 옮겨야 하므로 `text()`, 2xx는 `bytes()`다.
+   *
+   * `Response.bytes()`가 Node 22.x에 있다(전역 `fetch`가 내는 것이 그것이다).
+   */
+  bytes(): Promise<Uint8Array>
 }
 
 export type HttpFetch = (url: string, init?: HttpRequestInit) => Promise<HttpResponse>

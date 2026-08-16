@@ -19,6 +19,13 @@ export interface StubResponse {
   body?: unknown
   /** 날 문자열 본문. `body`보다 우선한다 — JSON이 아닌 응답을 재는 자리다. */
   text?: string
+  /**
+   * 날 바이트 본문. **`wireb export`가 받는 zip이 그것이다**(P9-3 D9).
+   *
+   * `text`·`body`와 **따로 둔다** — 문자열을 UTF-8로 되돌리는 대역을 쓰면 zip처럼
+   * 문자열로 왕복할 수 없는 바이트를 재는 자가 조용히 다른 것을 재게 된다.
+   */
+  bytes?: Uint8Array
   setCookie?: string[]
 }
 
@@ -98,6 +105,7 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
         getSetCookie: () => setCookie,
       },
       text: async () => text,
+      bytes: async () => outcome.bytes ?? new TextEncoder().encode(text),
     }
   }
 

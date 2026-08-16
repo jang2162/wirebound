@@ -32,7 +32,7 @@
  * 전부 그대로 되돌려 보낸다.
  */
 import { CliError, EXIT, configError, serverError, unreachableError } from './exit'
-import type { HttpRequestInit, Io } from './io'
+import type { HttpRequestInit, HttpResponse, Io } from './io'
 
 export interface ApiRequest {
   method: 'GET' | 'POST' | 'DELETE'
@@ -52,11 +52,51 @@ export interface ApiResponse {
   setCookie: string[]
 }
 
+/** 본문을 날 바이트로 받은 응답. `wireb export`의 zip이 그것이다. */
+export interface ApiBytesResponse {
+  status: number
+  bytes: Uint8Array
+}
+
 /**
  * 요청 하나. **2xx가 아니면 던진다** — 상태 코드를 값으로 돌려주면 호출자마다 그것을
  * 문장으로 바꾸는 코드가 생긴다.
  */
 export async function callApi(io: Io, server: string, request: ApiRequest): Promise<ApiResponse> {
+  const { url, response } = await send(io, server, request)
+  const text = await response.text()
+  assertOk(response.status, text, request, url)
+  return { status: response.status, text, setCookie: response.headers.getSetCookie() }
+}
+
+/**
+ * 본문을 **날 바이트로** 받는다(P9-3 D9 — `GET .../export`가 zip을 낸다).
+ *
+ * **오류 응답은 여전히 글자로 읽는다.** 서버가 쓴 문장을 그대로 옮기는 것이 이 CLI의
+ * 값이고(위 표), zip이 아닌 오류 봉투를 바이트로 받아 봐야 아무 말도 못 한다. 진짜
+ * `Response`의 본문은 한 번만 읽히므로 **둘 중 하나만** 부른다.
+ */
+export async function callApiBytes(
+  io: Io,
+  server: string,
+  request: ApiRequest,
+): Promise<ApiBytesResponse> {
+  const { url, response } = await send(io, server, request)
+  if (response.status < 200 || response.status >= 300) {
+    assertOk(response.status, await response.text(), request, url)
+  }
+  return { status: response.status, bytes: await response.bytes() }
+}
+
+/**
+ * 보내기까지. **세 갈래 중 앞의 둘**(헤더에 못 싣는 자격 · 닿지 못함)이 여기서 갈린다 —
+ * 글자로 읽든 바이트로 읽든 같은 판정이어야 하므로 한 자리에 둔다.
+ */
+async function send(
+  io: Io,
+  server: string,
+  request: ApiRequest,
+): Promise<{ url: string; response: HttpResponse }> {
   const url = `${server}${request.path}`
   const headers: Record<string, string> = {}
   if (request.body !== undefined) headers['content-type'] = 'application/json'
@@ -68,20 +108,19 @@ export async function callApi(io: Io, server: string, request: ApiRequest): Prom
   const init: HttpRequestInit = { method: request.method, headers }
   if (request.body !== undefined) init.body = JSON.stringify(request.body)
 
-  let response
   try {
-    response = await io.fetch(url, init)
+    return { url, response: await io.fetch(url, init) }
   } catch (error) {
     // **닿지 못한 것과 거절당한 것을 가른다**(위 표). 원인 문장을 함께 싣는다 —
     // `ECONNREFUSED`와 `ENOTFOUND`는 사람이 볼 곳이 다르다.
     throw unreachableError(`서버에 연결할 수 없습니다: ${url} (${describe(error)})`)
   }
+}
 
-  const text = await response.text()
-  if (response.status < 200 || response.status >= 300) {
-    throw new CliError(EXIT.server, `${serverMessage(text, response.status)} (${request.method} ${url})`)
+function assertOk(status: number, text: string, request: ApiRequest, url: string): void {
+  if (status < 200 || status >= 300) {
+    throw new CliError(EXIT.server, `${serverMessage(text, status)} (${request.method} ${url})`)
   }
-  return { status: response.status, text, setCookie: response.headers.getSetCookie() }
 }
 
 /**
