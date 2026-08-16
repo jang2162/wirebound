@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js'
 import { createFakeIo } from '@wirebound/cli/test-support'
 import designDoc from '../../../docs/superpowers/specs/2026-08-03-wirebound-design.md?raw'
+import { HANDLERS } from '../src/handlers'
 import { callTool } from '../src/server'
 import { TOOLS, findTool } from '../src/tools'
 
@@ -152,8 +153,17 @@ describe('인자 검사는 표에서 나온다 (D8)', () => {
 
   it('인자를 아예 안 줘도 필수가 없으면 지나간다 — 검사가 늘 던지지 않는다', async () => {
     // 반대편을 확인한다. 이 갈래가 없으면 위 넷이 *"언제나 던진다"*로도 통과한다.
-    // 구현이 아직 없는 도구는 InternalError로 끝난다 — **InvalidParams가 아닌 것이 요점이다.**
-    const error = await callTool(io, 'list_pages', undefined).catch((e: unknown) => e)
-    if (error instanceof McpError) expect(error.code).not.toBe(ErrorCode.InvalidParams)
+    // 바인딩이 없는 `io`라 도구는 `isError` 결과로 끝난다 — **던지지 않는 것이 요점이다.**
+    const outcome = await callTool(io, 'list_pages', undefined)
+    expect(outcome.isError).toBe(true)
+  })
+
+  it('표의 모든 도구에 구현이 있다', () => {
+    // 표에 줄만 더하고 지나가는 경로가 없다. **분모가 표다.**
+    expect(TOOLS.map((tool) => tool.name).filter((name) => HANDLERS[name] === undefined)).toEqual([])
+  })
+
+  it('표에 없는 이름의 구현이 없다 — 반대편', () => {
+    expect(Object.keys(HANDLERS).filter((name) => findTool(name) === undefined)).toEqual([])
   })
 })

@@ -22,4 +22,6 @@ export {
   PAGE_LANDING,
   PAGE_LIST,
   THEME_ROW,
+  경고가_있는_프로젝트,
+  오류가_있는_프로젝트,
 } from '../test/snapshot-fixture'

@@ -20,7 +20,7 @@
  * 값은 전부 읽기 층이 만들고, 여기서는 그것을 에이전트가 읽을 봉투에 담는다. 무엇을 담을지가
  * 판정인 자리는 각 함수의 머리말에 있다.
  */
-import { listProject, lookupPage, type Io } from '@wirebound/cli/embed'
+import { lintReport, listProject, lookupPage, readLintConfig, type Io } from '@wirebound/cli/embed'
 import { toolResult, type ToolOutcome } from './outcome'
 import { openProject, projectHead } from './session'
 
@@ -95,8 +95,76 @@ const getPage: ToolHandler = async (io, args) => {
   return toolResult({ ...head, found: true, notes: found.notes, page: found.view })
 }
 
-/** T5가 `validate`를 채운다. */
+/**
+ * §12.2 *"lint 규칙 실행"*.
+ *
+ * # 결함을 찾은 것은 **오류가 아니다** (D8)
+ *
+ * `wireb lint`는 그것을 코드 10으로 말하는데 그 번호가 1~4와 **멀리 떨어져 있는 것이
+ * 판정이다**(`exit.ts`): *"명령이 서지 못했다"*와 *"제대로 서서 결함을 찾았다"*를 스크립트가
+ * 갈라야 한다. 여기서도 같다 — `isError`를 세우면 에이전트가 *"도구가 고장났다"*로 읽고
+ * 재시도한다. 대신 **`failing`을 값으로 낸다.**
+ *
+ * # 걸러진 것으로 답하되 **빠진 것을 필드로 말한다** (D6)
+ *
+ * `wireb lint <경로>`가 걸러진 것으로 종료 코드를 내는 판정(P9-3 §9)을 그대로 쓴다 —
+ * 다르게 정하면 같은 프로젝트를 두 도구가 다르게 말한다. **그러나 CLI가 stderr 한 줄로
+ * 말하는 것을 에이전트는 놓친다.** 그래서 `outsideErrors`·`droppedProjectIssues`가 산문이
+ * 아니라 필드다.
+ *
+ * # `LintConfig`는 리포의 파일에서만 온다 (D5)
+ *
+ * `readLintConfig(binding)` 하나가 그 값을 만든다. **도구 인자에 그 자리가 없다** —
+ * 근거는 `tools.ts`의 머리말이고 `test/tools.test.ts`가 그 부재를 든다.
+ *
+ * # `notes`를 버리지 않는다 (D7)
+ *
+ * *"검사에서 빠진 것"*이다. 버리면 테마를 안 고른 레이아웃·상속이 끊긴 파생 테마·안 돈 ⑪·
+ * 못 올린 문서 버전·메뉴를 잃은 페이지가 전부 **"결함 0건"으로 위장된다.**
+ */
+const validate: ToolHandler = async (io, args) => {
+  const open = await openProject(io)
+  const outcome = lintReport(open.payload, readLintConfig(open.access.binding), args.path)
+  const head = projectHead(open)
+
+  if (outcome.kind === 'no-such-path') {
+    // `get_page`와 같은 모양이다 — 경로가 틀린 것은 에이전트가 고칠 수 있는 상태다.
+    return toolResult({
+      ...head,
+      ran: false,
+      reason: 'no-such-path',
+      message: `그 경로의 페이지가 없습니다: ${outcome.path}`,
+      candidates: listProject(open.payload).pages.map((page) => page.path),
+    })
+  }
+
+  const report = outcome.report
+  return toolResult({
+    ...head,
+    ran: true,
+    path: report.filtered ? args.path : null,
+    /** `wireb lint`가 코드 10을 내는 조건과 **같은 값**이다. */
+    failing: report.errors > 0,
+    errors: report.errors,
+    warnings: report.warnings,
+    totalIssues: report.totalIssues,
+    /** 경로 밖에 남은 `error`. **0이 아니면 이 응답만 보고 *"괜찮다"*로 읽으면 안 된다.** */
+    outsideErrors: report.outsideErrors,
+    /** `pageId`가 `null`이라 경로 필터에서 통째로 빠진 이슈 수(테마·메뉴 이름 규칙). */
+    droppedProjectIssues: report.droppedProjectIssues,
+    /** **검사에서 빠진 것.** 비어 있지 않으면 결함 0건이 *"깨끗하다"*가 아니다. */
+    notes: report.notes,
+    issues: report.issues.map((issue) => ({
+      ...issue,
+      // **`pageId`를 사람이 읽는 자리로도 옮긴다** — 에이전트가 이 값을 그대로
+      // `get_page`에 넣을 수 있어야 한다. uuid로만 말하면 다음 걸음이 손으로 옮겨진다.
+      pagePath: issue.pageId === null ? null : (report.pathOf.get(issue.pageId) ?? null),
+    })),
+  })
+}
+
 export const HANDLERS: Record<string, ToolHandler> = {
   list_pages: listPages,
   get_page: getPage,
+  validate,
 }

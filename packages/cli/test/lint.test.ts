@@ -8,7 +8,15 @@ import { describe, expect, it } from 'vitest'
 import { EXIT } from '../src/exit'
 import { run } from '../src/run'
 import { createFakeIo, stub, type FakeIo } from './fake-io'
-import { LAYOUT, MENU_MEMBER, THEME_ROW, page, snapshotPayload } from './snapshot-fixture'
+import {
+  LAYOUT,
+  MENU_MEMBER,
+  THEME_ROW,
+  page,
+  snapshotPayload,
+  경고가_있는_프로젝트,
+  오류가_있는_프로젝트,
+} from './snapshot-fixture'
 import type { SnapshotPayload } from '@wirebound/themes'
 
 const SERVER = 'https://wb.example.com'
@@ -28,30 +36,6 @@ function 준비(payload: SnapshotPayload = snapshotPayload(), binding: Record<st
   })
   stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, { status: 200, body: payload })
   return io
-}
-
-/** 코멘트 없는 `List`가 든 페이지 하나를 더한다 — ①이 `warning`을 낸다. */
-function 경고가_있는_프로젝트(): SnapshotPayload {
-  const payload = snapshotPayload()
-  payload.pages.push(
-    page('20000000-0000-4000-8000-000000000009', MENU_MEMBER, '경고', 9, {
-      version: 1,
-      root: { id: 'root', type: 'Page', children: [{ id: 'lonely', type: 'List' }] },
-    }, null),
-  )
-  return payload
-}
-
-/** 봉투가 깨진 문서 하나 — `document-invalid`가 `error`다. */
-function 오류가_있는_프로젝트(): SnapshotPayload {
-  const payload = snapshotPayload()
-  payload.pages.push(
-    page('20000000-0000-4000-8000-00000000000e', MENU_MEMBER, '오류', 8, {
-      version: 1,
-      root: { id: 'bad', type: '없는컴포넌트' },
-    }, null),
-  )
-  return payload
 }
 
 describe('installCatalog 를 부른다 — 안 부르면 결과가 통째로 거짓이다 (D7)', () => {
