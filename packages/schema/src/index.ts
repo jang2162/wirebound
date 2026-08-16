@@ -99,4 +99,7 @@ export { LINT_RULES, lintRule } from './lint/rules'
 export type { LintIssue, LintWhere } from './lint/issue'
 export { lintIssue, relayLintIssue } from './lint/issue'
 export type { LintComment, LintConfig, LintMenuNode, LintPage, LintProject } from './lint/input'
-export { lintDesign } from './lint/design'
+// `VALIDATION_RULE`은 *"`validatePage`의 어느 코드가 §12.4의 어느 줄로 가는가"*다. 밖으로
+// 내는 이유는 그것이 **판단**이고, `themes`의 대조 케이스가 자기 표와 함께 봐야 하기
+// 때문이다 — 두 표를 함께 보는 자리는 `themes`뿐이다(의존 방향).
+export { VALIDATION_RULE, lintDesign } from './lint/design'

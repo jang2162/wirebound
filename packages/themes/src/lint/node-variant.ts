@@ -24,7 +24,15 @@
  * 순수 패키지에 한 자리로 서야 하고, 그것은 `renderer`를 건드리는 일이라 이 슬라이스 밖이다
  * (이월에 적었다).
  */
-import { getComponent, lintIssue, walkNodes, type LintIssue, type WbNode } from '@wirebound/schema'
+import {
+  DocumentEnvelopeSchema,
+  getComponent,
+  lintIssue,
+  walkNodes,
+  type LintIssue,
+  type PageDocument,
+  type WbNode,
+} from '@wirebound/schema'
 import type { ResolvedTheme } from '../resolved'
 import type { LintThemeEntry } from './input'
 
@@ -35,6 +43,9 @@ export function nodeVariantIssues(entry: LintThemeEntry, theme: ResolvedTheme): 
   const issues: LintIssue[] = []
 
   for (const page of pages) {
+    // 봉투가 깨진 문서는 **돌 수 없다**(아래 `walkable`의 머리말).
+    if (!walkable(page.document)) continue
+
     for (const { node, path } of walkNodes(page.document.root)) {
       const variant = declaredVariant(node)
       if (variant === null) continue
@@ -59,6 +70,28 @@ export function nodeVariantIssues(entry: LintThemeEntry, theme: ResolvedTheme): 
 }
 
 /**
+ * 이 문서를 `walkNodes`로 돌 수 있는가.
+ *
+ * **lint는 남이 준 것을 읽는 도구다** — `wireb pull`이 받은 JSON도 MCP가 받은 본문도
+ * `JSON.parse`의 결과라 타입이 막아 주지 않는다. 돌기 전에 묻지 않으면 `root`가 없는 문서
+ * 하나가 **프로젝트 전체의 lint를 예외로 끝낸다.** 이 파일이 이미 *"lint는 서버 검증 전
+ * 문서를 받을 수 있으므로 값의 타입을 믿지 않는다"*고 적어 두고 그 태도를 문서 자체에는
+ * 적용하지 않았다.
+ *
+ * **묻는 자리는 `DocumentEnvelopeSchema` 하나다** — `validate.ts`의 `validateEnvelope`가
+ * 보는 것과 **같은 규격**이다. 여기서 조건을 손으로 적으면 두 벌이 되고, 갈리는 날 한쪽이
+ * 돌 수 있다고 한 문서에서 다른 쪽이 터진다.
+ *
+ * **깨졌다는 사실을 여기서 이슈로 내지 않는다.** 그것은 문서의 결함이고 §12.4의 설계서
+ * 규칙(`document-invalid`)이 낸다 — `lintProject`에서 `lintDesign`이 같은 페이지를 보고
+ * 이미 말한다. 여기서 함께 내면 **설계서 규칙이 `themes` 소유로 새어** *"표를 덮는다"*
+ * 케이스가 owner를 두고 죽는다.
+ */
+function walkable(document: PageDocument): boolean {
+  return DocumentEnvelopeSchema.safeParse(document).success
+}
+
+/**
  * 노드가 **문서에 적은** 변형. 없으면 `null`이다.
  *
  * **`variantFrom`을 선언한 컴포넌트는 `null`이다** — 그 컴포넌트에서 `node.variant`는
@@ -69,11 +102,18 @@ export function nodeVariantIssues(entry: LintThemeEntry, theme: ResolvedTheme): 
  * 카탈로그에 없는 타입도 `null`이다 — 대조할 선언이 없고, 그 사실은 `unknown-type`이
  * 이미 말한다(`lintDesign`이 나른다).
  *
+ * **카탈로그가 그 변형 자체를 거부하는 경우도 `null`이다.** 그때 `validatePage`가 이미
+ * `unknown-variant`를 `error`로 낸다 — 여기서 또 말하면 **한 노드의 같은 필드를 두 severity로**
+ * 말하는 목록이 되고, `wireb lint`가 severity로 종료 코드를 가를 때 읽는 사람이 *"고칠 것이
+ * 하나인가 둘인가"*를 판단해야 한다. 고칠 자리도 같다 — 둘 다 `variant` 한 글자다.
+ * ⑪이 말해야 하는 것은 *"카탈로그는 아는데 **테마가** 안 꾸몄다"*뿐이다.
+ *
  * 문자열이 아니면 `null`이다 — lint는 서버 검증 전 문서를 받을 수 있으므로 값의 타입을
  * 믿지 않는다(`renderer`의 `variantOf`와 같은 태도).
  */
 function declaredVariant(node: WbNode): string | null {
   const def = getComponent(node.type)
   if (def === undefined || def.variantFrom !== undefined) return null
-  return typeof node.variant === 'string' && node.variant.length > 0 ? node.variant : null
+  if (typeof node.variant !== 'string' || node.variant.length === 0) return null
+  return def.variants.includes(node.variant) ? node.variant : null
 }

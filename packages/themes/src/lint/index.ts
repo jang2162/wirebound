@@ -5,8 +5,12 @@
  *
  * §12.4는 *"규칙은 `schema` 패키지에 두어 웹·CLI·MCP가 공유한다"*고 적었다. **그런데 테마
  * 규칙은 `themes`를 봐야 하고 `schema`가 `themes`를 알면 의존 방향이 뒤집힌다**(§3.3 ·
- * CLAUDE.md). 실제로 쟀다 — `schema`의 소스 스물일곱 중 `@wirebound/themes`를 import하는
- * 파일은 0이고 `dependencies`는 `zod` 하나다.
+ * CLAUDE.md).
+ *
+ * **그 경계는 주석이 아니라 케이스가 든다** — `packages/schema/test/boundary.test.ts`가
+ * `schema`의 소스 전부를 훑어 `themes`·`renderer` 참조가 없는 것과 `dependencies`가 `zod`
+ * 하나인 것을 잰다. **여기 수를 적지 않는다:** 앞 판이 *"소스 스물일곱"*이라 적었고 이
+ * 슬라이스가 파일을 더한 그날 거짓이 됐다(리뷰가 잡았다).
  *
  * **판정: 설계서 규칙은 `schema`, 테마 규칙은 여기.** §12.4의 뜻(*"셋이 공유한다"*)은 그대로
  * 지켜진다 — 웹·CLI·MCP 셋 다 두 패키지를 볼 수 있다. 설계서는 고치지 않았고 근거는
@@ -14,10 +18,14 @@
  *
  * ## 이미 있는 것은 부른다 (D1)
  *
- * T1에서 재 보니 테마 규칙 여섯 중 **다섯이 이미 있다**(⑧⑨⑩⑫⑬). 그래서 이 파일이 하는
- * 일은 `resolveTheme`을 부르고 그 이슈를 규칙으로 옮기는 것이고, **새로 판정하는 것은 ⑪
- * 하나**다. 그 다섯을 다시 짜면 두 벌이 되고, 갈리는 날 테마 저작 화면과 lint가 같은 테마를
- * 다르게 말한다.
+ * T1에서 재 보니 §12.4의 테마 규칙 대부분을 `resolveTheme`이 이미 본다. 그래서 이 파일이
+ * 하는 일은 그 함수를 부르고 이슈를 규칙으로 옮기는 것이고, **새로 판정하는 것은 ⑪**
+ * (`node-variant.ts`)뿐이다. 나머지를 다시 짜면 두 벌이 되고, 갈리는 날 테마 저작 화면과
+ * lint가 같은 테마를 다르게 말한다.
+ *
+ * **어느 줄이 나르는 것이고 어느 줄이 새 판정인지는 표가 든다** — `LINT_RULES`에서
+ * `severity: null`이면 나르는 것이고 값이 있으면 새로 판정하는 것이다(D4). 수를 여기 적으면
+ * 규칙이 느는 날 조용히 거짓이 된다.
  */
 import { relayLintIssue, type LintIssue, type RelayRuleId } from '@wirebound/schema'
 import type { ThemeIssue, ThemeIssueCode } from '../issue'
@@ -35,8 +43,13 @@ import { nodeVariantIssues } from './node-variant'
  * **§12.4의 여섯 줄이 이 코드 전부를 덮지 않는다.** 덮지 못한 것은 `theme-other`로 간다 —
  * 버리면 **테마가 서지 않는 이유를 lint가 말하지 못한다.** 어느 줄에 넣을지 모호한 것은
  * 그쪽으로 보냈고, 사용자가 읽는 문장은 어느 쪽이든 원본 그대로다.
+ *
+ * **테스트가 이 표를 통째로 못박는다**(`test/lint-mapping.test.ts`). 타입은 *"항목이 있는가"*만
+ * 보므로 **오른쪽 값을 조용히 다른 줄로 옮기는 경로**가 남아 있었다 — 리뷰가 그 변이 여럿을
+ * 심어 전부 0 사망인 것을 쟀다. 어느 코드가 §12.4의 어느 줄로 가는지는 **판단**이므로
+ * 밖에서 볼 수 있어야 한다.
  */
-const THEME_RULE: Record<ThemeIssueCode, RelayRuleId> = {
+export const THEME_RULE: Record<ThemeIssueCode, RelayRuleId> = {
   // ⑧ *"컴포넌트 정의에 없는 `structure` · `part` · `state` 참조"* — 카탈로그와 대조해
   // 어휘가 없다고 말하는 것들이다. `unknown-component`·`unknown-variant`는 §12.4가 이름으로
   // 들지 않았지만 **같은 대조의 결과**라 같은 줄에 둔다.

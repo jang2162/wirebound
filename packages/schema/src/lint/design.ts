@@ -3,14 +3,17 @@
  *
  * ## 이미 있는 것은 부른다 (D1)
  *
- * T1에서 §12.4의 열셋을 재 보니 설계서 규칙 일곱 중 **셋만** 오늘의 판정기가 이미 본다
- * (③ 온전히 · ④ 절반 · 나머지 넷은 이슈 0건이었다). 그래서 이 파일이 하는 일은 둘이다:
+ * T1에서 §12.4의 열셋을 하나씩 재고 이 파일의 범위를 정했다. 그래서 하는 일이 둘이다:
  *
  * 1. **이미 있는 판정을 부르고 나른다** — `validatePage`(③과 §12.4 밖) ·
  *    `checkPageAction`(④의 *"아직 안 고름"*).
- * 2. **없는 것만 새로 판정한다** — ① ② ④의 존재 검사 ⑤ ⑥ ⑦.
+ * 2. **없는 것만 새로 판정한다** — ① ② ④의 **존재 검사** ⑤ ⑥ ⑦.
  *
  * 다시 짜면 두 벌이 되고, 갈리는 날 *"웹은 통과시키는데 lint는 막는다"*가 된다.
+ *
+ * **어느 쪽이 몇인지는 여기 적지 않는다.** 나르는 규칙은 `LINT_RULES`에서 `severity: null`이고
+ * 새 판정은 값을 든다(D4) — 표가 그것을 들므로 산문이 다시 세면 갈린다. **앞 판이 여기에
+ * 산술을 적었고 같은 파일 네 줄 아래와 어긋났다**(리뷰가 잡았다). T1이 잰 값은 보고서에 있다.
  *
  * ## 카탈로그를 여기서 설치하지 않는다
  *
@@ -60,8 +63,13 @@ const STRUCTURAL_GAPS: readonly { container: string; requires: string }[] = [
  *
  * 상호작용 셋이 ③으로 가는 것은 §12.4의 줄(*"대상 노드가 삭제된 상호작용 규칙"*)이 그
  * 부류를 가리키기 때문이다. 셋을 갈라 세 규칙으로 두면 §12.4에 없는 줄이 둘 생긴다.
+ *
+ * **테스트가 이 표를 통째로 못박는다**(`test/lint-mapping.test.ts`). 타입은 *"항목이 있는가"*만
+ * 보므로 **오른쪽 값을 조용히 다른 줄로 옮기는 경로**가 남아 있었다 — 리뷰가 그 변이 여럿을
+ * 심어 전부 0 사망인 것을 쟀다. 어느 코드가 §12.4의 어느 줄로 가는지는 **판단**이므로
+ * 밖에서 볼 수 있어야 한다.
  */
-const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
+export const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
   'missing-interaction-target': 'interaction-target',
   'invalid-interaction-target': 'interaction-target',
   'invalid-interaction-prop': 'interaction-target',
@@ -97,13 +105,29 @@ export function lintDesign(project: LintProject, config: LintConfig = {}): LintI
 }
 
 function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: ReadonlySet<string>): LintIssue[] {
-  const issues: LintIssue[] = []
   const where = { pageId: page.id }
 
   // ③ · §12.4 밖 — 이미 있는 판정을 그대로 나른다.
-  for (const issue of validatePage(page.document)) {
-    issues.push(relayValidation(page.id, issue))
-  }
+  const validation = validatePage(page.document)
+  const issues: LintIssue[] = validation.map((issue) => relayValidation(page.id, issue))
+
+  /**
+   * **봉투가 깨졌으면 여기서 끝난다.** `validate.ts`의 `validateEnvelope`가 그 계약을 이미
+   * 적어 뒀다 — *"트리 순회(`walkNodes`)보다 먼저 돌아야 한다. root가 null이거나 형태가
+   * 깨져 있으면 walkNodes가 그대로 터지기 때문이다."* `validatePage`는 그 계약을 지키는데
+   * 이 함수가 안 지켜서 **이슈 대신 예외가 나갔다.**
+   *
+   * **lint는 남이 준 것을 읽는 도구다.** `wireb pull`이 받은 JSON도 MCP가 받은 본문도
+   * `JSON.parse`의 결과라 타입이 막아 주지 않는다 — 깨진 입력이 정상 입력이다. 던지면
+   * 소비자 셋이 그 예외를 각자 다루게 되고 그것이 두 벌이 되는 자리다. 그리고 이 파일은
+   * 그 입력이 온다는 것을 **스스로 전제하고 있었다** — 아래 `VALIDATION_RULE` 표에
+   * `bad-document` 줄이 있다.
+   *
+   * **`bad-document`가 곧 봉투 실패다.** 그 코드를 만드는 자리는 `validateEnvelope` 하나이고
+   * 그 함수가 이슈를 내면 `validatePage`가 즉시 반환하므로, 이 코드가 목록에 있다는 것과
+   * 트리를 안 돌았다는 것이 같은 사실이다.
+   */
+  if (validation.some((issue) => issue.code === 'bad-document')) return issues
 
   const markers = new Set<number>()
 

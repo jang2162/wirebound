@@ -23,9 +23,56 @@ describe('경계 — schema가 무엇을 보지 않는가', () => {
     expect(sources['../src/index.ts']).toContain('PACKAGE_NAME')
   })
 
-  it('themes도 renderer도 react도 import하지 않는다', () => {
+  /**
+   * 금지된 모듈 지정자를 **어느 형태로 적어도** 잡는다.
+   *
+   * **앞 판은 `/from '(…)/`였고 세 형태가 빠져나갔다**(리뷰가 변이로 쟀다):
+   * 쌍따옴표(`from "…"`) · 부수효과 import(`import '…'` — `from`이 없다) · 동적
+   * `import('…')`. 그중 부수효과 import는 **`pnpm typecheck`도 통과하므로** 게이트 넷 어느
+   * 것도 그 한 줄을 막지 못했다.
+   *
+   * **모듈 지정자 자리만 본다** — 인용부호에 감싸인 채 `from`·`import`·`require` 뒤에 오는
+   * 것. 이름을 그냥 언급하는 주석(`index.ts`가 *"테마 규칙은 `@wirebound/themes`"*라고
+   * 적는다)까지 잡으면 케이스가 문서를 막게 된다.
+   */
+  const FORBIDDEN_SPECIFIER =
+    /(?:^|[^\w$])(?:from|import|require)\s*\(?\s*['"](?:@wirebound\/(?:themes|renderer)|react(?:\/[\w./-]*)?)['"]/
+
+  it('themes도 renderer도 react도 import하지 않는다 — 인용부호·부수효과·동적 전부', () => {
     for (const [path, source] of Object.entries(sources)) {
-      expect(String(source), path).not.toMatch(/from '(@wirebound\/(themes|renderer)|react)/)
+      expect(String(source), path).not.toMatch(FORBIDDEN_SPECIFIER)
+    }
+  })
+
+  /**
+   * **자를 케이스 안에서 재 둔다**(전역 제약: 자를 구현 파일에 두지 마라). 정규식이 조용히
+   * 좁아지면 위 케이스가 아무것도 안 잡는 채로 통과하므로, 잡아야 하는 형태를 여기서
+   * 직접 먹여 본다.
+   */
+  it('금지 형태를 실제로 잡는다 — 이 정규식의 구분력', () => {
+    const caught = [
+      "import type { Theme } from '@wirebound/themes'",
+      'import type { Theme } from "@wirebound/themes"',
+      "import '@wirebound/themes'",
+      'import "@wirebound/renderer"',
+      "const m = await import('@wirebound/themes')",
+      "require('@wirebound/renderer')",
+      "import { useState } from 'react'",
+      "import 'react/jsx-runtime'",
+    ]
+    for (const line of caught) {
+      expect(line, line).toMatch(FORBIDDEN_SPECIFIER)
+    }
+
+    const allowed = [
+      '// 테마 규칙은 `@wirebound/themes`. 합치는 자리는 그쪽이다.',
+      "import { z } from 'zod'",
+      "import type { WbNode } from '../node'",
+      ' * 그 판정은 react 쪽 이야기가 아니다',
+      "import { reactive } from './reactive'",
+    ]
+    for (const line of allowed) {
+      expect(line, line).not.toMatch(FORBIDDEN_SPECIFIER)
     }
   })
 

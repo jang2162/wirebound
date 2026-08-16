@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
-import { LINT_RULES } from '../src/lint/rules'
+import { LINT_RULES, type LintRule } from '../src/lint/rules'
 import { lintDesign } from '../src/lint/design'
 import type { LintPage, LintProject } from '../src/lint/input'
 import type { PageDocument, WbNode } from '../src/node'
@@ -187,6 +187,39 @@ describe('④ navigate/openModal 대상 페이지가 존재하지 않음', () =>
     expect(issues[0]!.message).toContain('page:관리자/회원/없음')
   })
 
+  /**
+   * **§12.4의 줄이 이름으로 든 둘 다 잰다.** 앞 판은 양성 케이스가 전부 `navigate`였고
+   * `openModal`은 *"내지 않는다"* 쪽에만 나왔다 — `isPageTargetAction`을 `navigate` 하나로
+   * 좁히는 변이가 **0 사망**이었다(리뷰가 쟀다).
+   */
+  it('openModal도 같은 규칙으로 낸다 — navigate 하나만 보지 않는다', () => {
+    const opener = node('Button', {
+      interactions: [{ on: 'click', actions: [{ type: 'openModal', target: 'page:관리자/회원/없음' }] }],
+    })
+    const goer = node('Button', {
+      interactions: [{ on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/회원/없음2' }] }],
+    })
+    const issues = lintDesign(
+      project({ pages: [page({ document: doc([opener, goer]) })] }),
+    ).filter((issue) => issue.rule === 'page-target-missing')
+
+    expect(issues.map((issue) => issue.nodeId).sort()).toEqual([opener.id, goer.id].sort())
+    const opened = issues.find((issue) => issue.nodeId === opener.id)!
+    expect(opened.message).toContain('openModal')
+    expect(opened.message).toContain('page:관리자/회원/없음')
+  })
+
+  it('openModal의 빈 타겟도 낸다', () => {
+    const opener = node('Button', {
+      interactions: [{ on: 'click', actions: [{ type: 'openModal', target: '' }] }],
+    })
+    const issues = lintDesign(project({ pages: [page({ document: doc([opener]) })] })).filter(
+      (issue) => issue.rule === 'page-target-missing',
+    )
+    expect(issues).toHaveLength(1)
+    expect(issues[0]!.message).toContain('openModal')
+  })
+
   it('있는 페이지를 가리키면 내지 않는다 — 자기 자신도 포함이다', () => {
     const button = node('Button', {
       interactions: [
@@ -230,6 +263,8 @@ describe('⑤ 중복된 코멘트 번호', () => {
     // **뒤에 온 것만 낸다** — `duplicate-id`가 같은 모양이다.
     expect(issues.map((issue) => issue.nodeId)).toEqual([second.id])
     expect(issues[0]!.message).toContain('3')
+    // 자리는 **그 노드의 `marker` 필드**를 가리킨다 — 노드가 아니라 필드를 고쳐야 한다.
+    expect(issues[0]!.path).toMatch(/^\/root\/children\/\d+\/marker$/)
   })
 
   it('다른 페이지의 같은 번호는 겹친 것이 아니다 — 번호는 페이지 단위다', () => {
@@ -307,6 +342,38 @@ describe('⑦ 프로젝트 명명 규칙 (설정 가능)', () => {
     expect(issues.map((issue) => issue.message.includes('Members'))).toEqual([true])
   })
 
+  /**
+   * **표의 `requiresConfig`에 소비자를 준다.** 앞 판은 그 필드를 지우는 변이가 **0 사망**이라
+   * 선언만 있고 아무도 안 읽는 상태였다(리뷰가 쟀다). 이제 이 케이스가 표에서 목록을 만들어
+   * *"설정 없이는 하나도 안 난다"*를 잰다 — 필드를 지우면 목록이 비어 카나리아가 죽는다.
+   */
+  describe('requiresConfig가 표에서 목록을 만든다 (D5)', () => {
+    // `LINT_RULES`는 `as const satisfies`라 항목마다 리터럴 타입이다(그래야 `OwnSeverityRuleId`가
+    // severity로 갈린다). 공통 필드로 훑을 때는 선언 타입으로 넓혀서 본다.
+    const configured = (LINT_RULES as readonly LintRule[]).filter((rule) => rule.requiresConfig === true)
+
+    it('설정으로 켜지는 규칙이 표에 실제로 있다', () => {
+      expect(configured.length).toBeGreaterThan(0)
+      expect(configured.every((rule) => rule.owner === 'schema')).toBe(true)
+    })
+
+    it('설정을 안 주면 그 규칙이 하나도 나지 않는다', () => {
+      const fired = lintDesign(project({ pages })).map((issue) => issue.rule)
+      for (const rule of configured) {
+        expect(fired, rule.id).not.toContain(rule.id)
+      }
+    })
+
+    it('설정을 주면 그 규칙이 실제로 난다', () => {
+      const fired = lintDesign(project({ pages }), { naming: { page: '^[가-힣 ]+$' } }).map(
+        (issue) => issue.rule,
+      )
+      for (const rule of configured) {
+        expect(fired, rule.id).toContain(rule.id)
+      }
+    })
+  })
+
   it('규칙이 정규식이 아니면 그 사실을 이슈로 낸다 — 조용히 넘기지 않는다', () => {
     const issues = lintDesign(project({ pages }), { naming: { page: '([' } }).filter(
       (issue) => issue.rule === 'naming',
@@ -342,6 +409,65 @@ describe('§12.4 밖 — validatePage의 나머지 이슈', () => {
 
     expect(issues.map((issue) => issue.severity)).toEqual(['error', 'error'])
     expect(issues.some((issue) => issue.message.includes('없는타입'))).toBe(true)
+  })
+})
+
+describe('봉투가 깨진 문서 — 던지지 않고 이슈로 낸다', () => {
+  /**
+   * **lint는 남이 준 것을 읽는 도구다.** `wireb pull`이 받은 JSON도, MCP가 받은 본문도
+   * `JSON.parse`의 결과라 타입이 막아 주지 않는다 — **깨진 입력이 정상 입력이다.**
+   * 던지면 CLI(P9-2)와 MCP(P9-3)가 그 예외를 각자 다루게 되고 그것이 두 벌이 되는 자리다.
+   */
+  const broken: { name: string; document: unknown }[] = [
+    { name: 'root가 없다', document: { version: 1 } },
+    { name: 'root가 null이다', document: { version: 1, root: null } },
+    { name: 'root가 노드가 아니다', document: { version: 1, root: 42 } },
+    { name: 'version이 없다', document: { root: { id: 'n_000000000001', type: 'Page' } } },
+    { name: '문서가 null이다', document: null },
+    { name: '문서가 배열이다', document: [] },
+  ]
+
+  for (const { name, document } of broken) {
+    it(`${name} — document-invalid를 내고 던지지 않는다`, () => {
+      const issues = lintDesign(
+        project({ pages: [page({ document: document as PageDocument })] }),
+      )
+      expect(issues.every((issue) => issue.rule === 'document-invalid')).toBe(true)
+      expect(issues.length).toBeGreaterThan(0)
+      expect(issues[0]!.pageId).toBe('pg1')
+    })
+  }
+
+  it('깨진 페이지가 멀쩡한 페이지의 검사를 막지 않는다', () => {
+    const list = node('List')
+    const issues = lintDesign(
+      project({
+        pages: [
+          page({ document: { version: 1 } as unknown as PageDocument }),
+          page({ id: 'pg2', title: '상세', target: 'page:관리자/회원/상세', document: doc([list]) }),
+        ],
+      }),
+    )
+    expect(issues.some((issue) => issue.pageId === 'pg1' && issue.rule === 'document-invalid')).toBe(true)
+    expect(issues.some((issue) => issue.pageId === 'pg2' && issue.rule === 'comment-missing')).toBe(true)
+  })
+
+  it('봉투만 지나면 노드 단위 규칙이 그대로 돈다', () => {
+    // 봉투는 통과하고 **노드**가 카탈로그와 어긋나는 문서다 — 즉시 반환이 여기까지 오면 안 된다.
+    const issues = lintDesign(
+      project({
+        pages: [
+          page({
+            document: {
+              version: 1,
+              root: { id: nid(), type: 'Page', children: [{ id: nid(), type: '없는타입' }, node('List')] },
+            },
+          }),
+        ],
+      }),
+    )
+    expect(issues.some((issue) => issue.rule === 'document-invalid')).toBe(true)
+    expect(issues.some((issue) => issue.rule === 'comment-missing')).toBe(true)
   })
 })
 

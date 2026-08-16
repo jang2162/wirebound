@@ -82,6 +82,39 @@ describe('합치는 자리 (D2 · T5)', () => {
   it('빈 프로젝트는 이슈를 내지 않는다', () => {
     expect(lintProject({ project: { menu: [], pages: [], comments: [] }, themes: [] })).toEqual([])
   })
+
+  /**
+   * **깨진 입력이 정상 입력이다.** `wireb pull`이 받은 JSON도 MCP가 받은 본문도
+   * `JSON.parse`의 결과라 타입이 막아 주지 않는다 — 던지면 소비자 셋이 그 예외를 각자
+   * 다루게 되고 그것이 두 벌이 되는 자리다.
+   */
+  it('봉투가 깨진 페이지를 양쪽 절반에 넣어도 던지지 않고 document-invalid를 한 번만 낸다', () => {
+    const brokenPage = { version: 1 } as unknown as PageDocument
+    const issues = lintProject({
+      project: {
+        menu: [{ id: 'm1', parentId: null, title: '관리자' }],
+        pages: [
+          { id: 'pg1', menuNodeId: 'm1', title: '목록', target: 'page:관리자/목록', document: brokenPage },
+        ],
+        comments: [],
+      },
+      themes: [
+        {
+          id: 'th1',
+          document: {
+            meta: meta('th1'),
+            components: { Button: { base: { padding: '4px' }, variants: { primary: { padding: '8px' } } } },
+          },
+          pages: [{ id: 'pg1', document: brokenPage }],
+        },
+      ],
+    })
+
+    expect(issues.map((issue) => issue.rule)).toEqual(['document-invalid'])
+    expect(issues[0]!.pageId).toBe('pg1')
+    // 문서의 결함은 **설계서 규칙**이 말한다 — 테마 쪽이 함께 내면 owner가 샌다.
+    expect(issues[0]!.themeId).toBeNull()
+  })
 })
 
 describe('표 전체가 이 한 자리에서 돈다 (D6)', () => {

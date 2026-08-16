@@ -212,12 +212,75 @@ describe('⑪ 노드가 쓰는 variant를 테마가 정의하지 않음 — 새�
     expect(rulesOf(issues)).not.toContain('theme-node-variant')
   })
 
+  /**
+   * 카탈로그가 이미 거부한 변형을 ⑪이 한 번 더 말하면 **한 노드의 같은 필드를 두 severity로**
+   * 말하는 목록이 된다(`unknown-variant:error` + `theme-node-variant:warning`). 리뷰가 그
+   * 상태를 재서 잡았다. 고칠 곳이 다르지도 않다 — 둘 다 `variant` 한 글자다.
+   */
+  it('카탈로그가 거부한 변형은 보지 않는다 — validatePage가 이미 error로 말한다', () => {
+    const bogus: WbNode = { id: nid(), type: 'Button', variant: '없는변형' }
+    const issues = lintThemes({
+      themes: entries([{ document: themed, pages: [{ id: 'pg1', document: doc([bogus]) }] }, {}]),
+    })
+    expect(rulesOf(issues)).not.toContain('theme-node-variant')
+  })
+
+  it('카탈로그가 아는 변형이면 그대로 낸다 — 위 케이스가 규칙을 통째로 끄지 않는다', () => {
+    const known: WbNode = { id: nid(), type: 'Button', variant: 'danger' }
+    const issues = lintThemes({
+      themes: entries([{ document: themed, pages: [{ id: 'pg1', document: doc([known]) }] }, {}]),
+    }).filter((issue) => issue.rule === 'theme-node-variant')
+    expect(issues.map((issue) => issue.nodeId)).toEqual([known.id])
+  })
+
   it('카탈로그에 없는 타입은 보지 않는다 — unknown-type이 이미 말한다', () => {
     const unknown: WbNode = { id: nid(), type: '없는타입', variant: 'danger' }
     const issues = lintThemes({
       themes: entries([{ document: themed, pages: [{ id: 'pg1', document: doc([unknown]) }] }, {}]),
     })
     expect(rulesOf(issues)).not.toContain('theme-node-variant')
+  })
+})
+
+describe('⑪ — 봉투가 깨진 페이지 문서에서 던지지 않는다', () => {
+  const themed = {
+    meta: meta('th1'),
+    components: { Button: { base: { padding: '4px' }, variants: { primary: { padding: '8px' } } } },
+  }
+  const broken: { name: string; document: unknown }[] = [
+    { name: 'root가 없다', document: { version: 1 } },
+    { name: 'root가 null이다', document: { version: 1, root: null } },
+    { name: '문서가 null이다', document: null },
+  ]
+
+  for (const { name, document } of broken) {
+    it(`${name} — 던지지 않고 ⑪이 돌지 않는다`, () => {
+      const issues = lintThemes({
+        themes: entries([
+          { document: themed, pages: [{ id: 'pg1', document: document as PageDocument }] },
+          {},
+        ]),
+      })
+      expect(issues).toEqual([])
+    })
+  }
+
+  it('깨진 페이지가 같은 테마의 멀쩡한 페이지를 막지 않는다', () => {
+    const danger: WbNode = { id: nid(), type: 'Button', variant: 'danger' }
+    const issues = lintThemes({
+      themes: entries([
+        {
+          document: themed,
+          pages: [
+            { id: 'pg1', document: { version: 1 } as unknown as PageDocument },
+            { id: 'pg2', document: doc([danger]) },
+          ],
+        },
+        {},
+      ]),
+    }).filter((issue) => issue.rule === 'theme-node-variant')
+
+    expect(issues.map((issue) => issue.pageId)).toEqual(['pg2'])
   })
 })
 
