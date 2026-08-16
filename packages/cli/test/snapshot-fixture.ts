@@ -109,3 +109,33 @@ export function page(
 ): SnapshotPayload['pages'][number] {
   return { id, menuNodeId, title, sortOrder, description, schemaVersion: 1, schema: schema as never, headSeq: 0 }
 }
+
+/**
+ * 코멘트 없는 `List`가 든 페이지 하나를 더한다 — 규칙 ①이 `warning`을 낸다.
+ *
+ * **`packages/mcp`도 이것을 본다**(`@wirebound/cli/test-support`). `wireb lint`와 §12.2의
+ * `validate`가 같은 함수를 부르므로 **같은 입력에 같은 값**이 나와야 하고, 픽스처가 두 벌이면
+ * 그 대조가 *"어느 하네스에서 잰 값인가"*로 미끄러진다.
+ */
+export function 경고가_있는_프로젝트(): SnapshotPayload {
+  const payload = snapshotPayload()
+  payload.pages.push(
+    page('20000000-0000-4000-8000-000000000009', MENU_MEMBER, '경고', 9, {
+      version: 1,
+      root: { id: 'root', type: 'Page', children: [{ id: 'lonely', type: 'List' }] },
+    }, null),
+  )
+  return payload
+}
+
+/** 봉투가 깨진 문서 하나 — `document-invalid`가 `error`다. */
+export function 오류가_있는_프로젝트(): SnapshotPayload {
+  const payload = snapshotPayload()
+  payload.pages.push(
+    page('20000000-0000-4000-8000-00000000000e', MENU_MEMBER, '오류', 8, {
+      version: 1,
+      root: { id: 'bad', type: '없는컴포넌트' },
+    }, null),
+  )
+  return payload
+}

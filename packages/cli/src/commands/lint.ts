@@ -10,21 +10,20 @@
  * 열려면 *"언제 뜬 것인가"*(`capturedAt`)를 출력이 말해야 하고, 그것은 이 슬라이스가
  * 열지 않는다.
  *
+ * # 조립은 여기 없다 — `read/lint.ts` 하나다 (P9-4 D1)
+ *
+ * `snapshotToLintInput`→`lintProject`→`filterLintIssues`와 *"경로 밖 `error`를 센다"*는
+ * §12.2의 `validate`가 같은 것을 해야 하므로 `read/lint.ts`로 갔다. **이 파일에는 글자와
+ * 종료 코드만 있다.** `test/assembly-census.test.ts`가 그것을 지킨다.
+ *
  * # `[경로]`는 **출력 거르개**다 (D5)
  *
  * §12.4의 규칙 여럿이 프로젝트 단위다. 입력을 좁히면 *"어느 메뉴에도 연결되지 않은 페이지"*나
  * *"`navigate` 대상 페이지가 존재하지 않음"*이 **거짓을 말한다.** 그래서 lint는 언제나
- * 프로젝트 전체를 받고 무엇을 보일지만 고른다 — 거르는 코드는 `packages/schema`의
- * `filterLintIssues`이고 §12.2의 MCP `validate`가 같은 것을 부른다.
+ * 프로젝트 전체를 받고 무엇을 보일지만 고른다.
  *
  * **§12.3이 `[경로]`가 무엇인지 안 적었다.** 판정: **§8.1의 페이지 경로**(`관리자/회원/목록`)다 —
  * `wireb page get`이 받는 것과 같은 말이어야 사람이 둘을 잇는다. 그 어긋남은 보고서에 적었다.
- *
- * # `installCatalog()`를 먼저 부른다 (D7)
- *
- * 안 부르면 **모든 노드가 `document-invalid:error`가 되어 나간다**(실측 — *"알 수 없는
- * 컴포넌트 타입: Page"*). 조용히 통과하지는 않지만 **결과가 통째로 거짓**이고, 게다가
- * 그것이 전부 `error`라 종료 코드까지 뒤집힌다.
  *
  * # 무엇이 종료 코드를 만드는가 (D6)
  *
@@ -36,19 +35,13 @@
  * `snapshotToLintInput`이 낸 `notes`를 그대로 낸다. 테마를 안 고른 레이아웃 · 상속이 끊긴
  * 파생 테마 · 레이아웃이 둘이라 안 돈 ⑪ — 전부 *"결함 0건"*으로 위장하면 안 되는 것들이다.
  */
-import {
-  filterLintIssues,
-  installCatalog,
-  matchPageTargets,
-  pageTargetPath,
-  targetedPages,
-  type LintIssue,
-} from '@wirebound/schema'
-import { lintProject, snapshotToLintInput, type SnapshotLintNote } from '@wirebound/themes'
+import type { LintIssue } from '@wirebound/schema'
+import type { SnapshotLintNote } from '@wirebound/themes'
 import { readLintConfig } from '../binding'
 import { EXIT } from '../exit'
 import type { Io } from '../io'
 import { fetchSnapshot, requireProject } from '../project'
+import { lintReport } from '../read/lint'
 
 /** `--fail-on`이 받는 값. **`error`가 기본이고 그것을 바꾸지 않는다**(D6). */
 export const FAIL_ON = ['error', 'warning'] as const
@@ -66,39 +59,27 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
   const config = readLintConfig(access.binding)
   const payload = await fetchSnapshot(io, access)
 
-  // **결과가 통째로 거짓이 되는 자리다** — 위 머리말.
-  installCatalog()
+  const outcome = lintReport(payload, config, path)
+  if (outcome.kind === 'no-such-path') {
+    io.err(`그 경로의 페이지가 없습니다: ${outcome.path}`)
+    return EXIT.usage
+  }
+  const report = outcome.report
 
-  const plan = snapshotToLintInput(payload, config)
-  const all = lintProject(plan.input)
-
-  const ordered = targetedPages({ menu: payload.menu, pages: payload.pages })
-  // **접두를 벗겨 낸다** — 사람이 이 줄을 읽고 그대로 `wireb page get <경로>`에 칠 수
-  // 있어야 한다. 자리를 말하는 것으로 끝나면 그 다음 걸음이 손으로 옮겨진다.
-  const pathOf = new Map(ordered.map((page) => [page.id, pageTargetPath(page.target)]))
-
-  let issues = all
-  let filtered = false
-  if (path !== undefined && path.trim().length > 0) {
-    const matched = matchPageTargets(ordered, path)
-    if (matched.length === 0) {
-      io.err(`그 경로의 페이지가 없습니다: ${path}`)
-      return EXIT.usage
-    }
-    issues = filterLintIssues(all, { pageIds: matched.map((page) => page.id) })
-    filtered = true
-    io.out(`경로 필터: ${path} — 전체 ${all.length}건 중 ${issues.length}건`)
+  if (report.filtered) {
+    io.out(`경로 필터: ${path} — 전체 ${report.totalIssues}건 중 ${report.issues.length}건`)
   }
 
-  for (const line of renderNotes(plan.notes)) io.out(line)
-  for (const issue of issues) io.out(renderIssue(issue, pathOf))
+  for (const line of renderNotes(report.notes)) io.out(line)
+  for (const issue of report.issues) io.out(renderIssue(issue, report.pathOf))
 
-  const errors = countErrors(issues)
-  const warnings = issues.length - errors
-  const summary = issues.length === 0 ? '결함 없음' : `결함 ${issues.length}건 (error ${errors} · warning ${warnings})`
+  const summary =
+    report.issues.length === 0
+      ? '결함 없음'
+      : `결함 ${report.issues.length}건 (error ${report.errors} · warning ${report.warnings})`
   // **범위를 요약 줄에 단다**(리뷰 N1 문제 3). 앞 줄이 *"전체 2건"*이라고 했는데 뒤 줄이
   // *"결함 없음"*이면 **사람은 뒤 줄을 읽는다** — 두 줄이 서로 부딪히지 않게 한다.
-  io.out(filtered ? `${summary} — 경로 필터 안에서다 (전체 ${all.length}건)` : summary)
+  io.out(report.filtered ? `${summary} — 경로 필터 안에서다 (전체 ${report.totalIssues}건)` : summary)
 
   /**
    * **경로 밖의 `error`를 말한다.**
@@ -107,12 +88,11 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
    * 프로젝트에 `error`가 남아 있을 수 있다.** 그것을 아무 데서도 말하지 않으면 CI에 이
    * 명령을 건 팀이 *"설계서가 깨져도 초록"*을 본다. **코드는 안 바꾸고 말만 한다** —
    * 무엇을 물었는지는 사람이 정한 것이다.
+   *
+   * **개수를 세는 것은 `read/lint.ts`다**(D1) — `validate`가 같은 값을 필드로 낸다.
    */
-  if (filtered) {
-    const outside = countErrors(all) - errors
-    if (outside > 0) {
-      io.err(`경로 밖에 error ${outside}건이 더 있습니다 — 전체를 보려면 경로 없이 실행하세요`)
-    }
+  if (report.outsideErrors > 0) {
+    io.err(`경로 밖에 error ${report.outsideErrors}건이 더 있습니다 — 전체를 보려면 경로 없이 실행하세요`)
   }
 
   /**
@@ -126,9 +106,9 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
    * 끝나고, 그때 경로 인자는 *"무엇을 보여 줄지"*만 정하는 장식이 된다.
    *
    * **케이스가 이 판정을 든다** — `test/lint.test.ts`의 *"다른 페이지에 error가 있어도
-   * 경로를 주면 0이다"*. 아래를 `all`에서 세게 바꾸면 그 케이스가 죽는다.
+   * 경로를 주면 0이다"*. 아래를 전체에서 세게 바꾸면 그 케이스가 죽는다.
    */
-  const failing = failOn === 'warning' ? issues.length : errors
+  const failing = failOn === 'warning' ? report.issues.length : report.errors
   if (failing === 0) return EXIT.ok
   io.err(
     failOn === 'warning'
@@ -136,10 +116,6 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
       : `error ${failing}건이 있습니다`,
   )
   return EXIT.findings
-}
-
-function countErrors(issues: readonly LintIssue[]): number {
-  return issues.filter((issue) => issue.severity === 'error').length
 }
 
 /**

@@ -14,7 +14,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./embed": {
+      "development": "./src/embed.ts",
+      "types": "./dist/embed.d.ts",
+      "import": "./dist/embed.js",
+      "default": "./dist/embed.js"
+    },
+    "./test-support": "./test-support/index.ts"
   },
   "files": ["dist"],
   "scripts": {

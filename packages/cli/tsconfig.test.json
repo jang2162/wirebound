@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "rootDir": ".", "outDir": ".tsbuild-test", "composite": true, "types": ["node"] },
-  "include": ["test", "build-test"],
+  "include": ["test", "test-support", "build-test"],
   "references": [{ "path": "./" }]
 }

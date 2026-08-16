@@ -21,6 +21,11 @@ const SRC = fileURLToPath(new URL('../src', import.meta.url))
  * 지키려는 명제(*"바깥 세계를 만지는가"*)와 어긋난다.
  *
  * **`node:` 접두사는 선택이다.** `'fs/promises'`와 `'node:fs/promises'`는 같은 것을 준다.
+ *
+ * **`console.`이 아래 `EFFECTFUL`에 있다** (델타 리뷰 D-2). `packages/mcp` 쪽 같은 자에서
+ * 온 물음이고 같은 답이다: `console.log` 한 줄은 `io`를 안 거치고 표준출력을 만진다 —
+ * `--json`을 파이프로 받는 쪽이 그것에 섞이면 그 출력이 JSON이 아니게 된다(`project.ts`의
+ * 머리말이 `out`이 아니라 `err`를 고른 것과 같은 근거).
  */
 const EFFECTFUL_MODULES = [
   'fs/promises',
@@ -70,6 +75,8 @@ const EFFECTFUL = [
   EFFECTFUL_SPECIFIER,
   /\bprocess\./,
   /(?<!io\.)\bfetch\(/,
+  // 위 머리말의 `console.` 절 — `io`를 안 거치고 표준출력을 만지는 가장 흔한 한 줄이다.
+  /\bconsole\./,
 ]
 
 function stripComments(source: string): string {
@@ -137,6 +144,30 @@ describe('바깥 세계를 만지는 자리 (D9)', () => {
     ]
     for (const line of caught) {
       expect(line, line).toMatch(EFFECTFUL_SPECIFIER)
+    }
+  })
+
+  /**
+   * **지정자 밖의 셋.** 위 케이스들은 `EFFECTFUL_SPECIFIER` 하나만 재므로 `process.`·
+   * `fetch(`·`console.`이 조용히 빠져도 안 보인다 — 술어 배열 전체를 여기서 잰다.
+   *
+   * **`console.`이 여기 있다**(델타 리뷰 D-2). `console.log` 한 줄은 `io`를 안 거치고
+   * 표준출력을 만진다 — `--json`을 파이프로 받는 쪽이 그것에 섞이면 JSON이 아니게 된다.
+   */
+  it('전역을 직접 만지는 형태도 잡는다', () => {
+    const caught = [
+      'process.cwd()',
+      'process.env.HOME',
+      'await fetch(url)',
+      'console.log(line)',
+      'console.error(error)',
+    ]
+    for (const line of caught) {
+      expect(EFFECTFUL.some((pattern) => pattern.test(line)), line).toBe(true)
+    }
+    // **반대편.** `io.fetch`는 허용하는 길이고, 이름이 겹치는 것은 안 잡는다.
+    for (const line of ['await io.fetch(url, init)', 'const processed = 1', 'const consoleWidth = 80']) {
+      expect(EFFECTFUL.some((pattern) => pattern.test(line)), line).toBe(false)
     }
   })
 

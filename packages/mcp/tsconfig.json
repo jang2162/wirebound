@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": ".", "outDir": ".tsbuild", "composite": true, "types": ["node"] },
+  "include": ["src"],
+  "references": [{ "path": "../cli" }]
+}

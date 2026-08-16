@@ -19,6 +19,12 @@ const shared = {
       // `…/src/index.ts/test-support`로 바뀐다.
       '@wirebound/exporter/test-support': src('./packages/exporter/test-support/index.ts'),
       '@wirebound/exporter': src('./packages/exporter/src/index.ts'),
+      // 같은 규칙이 `@wirebound/cli`에도 걸린다 — **좁은 둘이 먼저다**(P9-4 D3).
+      // `./embed`은 `packages/mcp`가 쓰는 **붙는 자리**이고 `./test-support`는 가짜 `io`와
+      // 스냅샷 픽스처다. 순서를 뒤집으면 `…/src/index.ts/embed`가 된다.
+      '@wirebound/cli/test-support': src('./packages/cli/test-support/index.ts'),
+      '@wirebound/cli/embed': src('./packages/cli/src/embed.ts'),
+      '@wirebound/cli': src('./packages/cli/src/index.ts'),
     },
   },
 }
