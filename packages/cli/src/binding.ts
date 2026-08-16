@@ -17,11 +17,24 @@
  *
  * # 모르는 키를 거부하지 않는다
  *
- * P9-1 이월 §5가 lint 설정(`LintConfig`)의 자리를 이 파일로 지목했고 **그 모양은 P9-3이
- * 정한다.** 지금 `z.strictObject` 같은 태도를 취하면 그 슬라이스가 키를 더하는 순간 이
+ * P9-1 이월 §5가 lint 설정(`LintConfig`)의 자리를 이 파일로 지목했고 P9-2가 **최상위
+ * `lint` 키**로 판정했다. 지금 `z.strictObject` 같은 태도를 취하면 키가 하나 늘 때마다 이
  * 파서가 먼저 죽는다. 그래서 **아는 둘만 보고 나머지는 그대로 둔다** — `init`이 다시 쓸
  * 때도 남은 절을 보존한다.
+ *
+ * # `lint` 절 (P9-3 D8)
+ *
+ * ```jsonc
+ * { "server": "…", "projectId": "…", "lint": { "naming": { "page": "…", "menu": "…" } } }
+ * ```
+ *
+ * **`LintConfig`의 모양을 그대로 싣는다.** 중간에 이름을 바꾸면 파일과 타입이 두 벌이 된다.
+ * **§12.1의 예시에 그 키가 없다** — 어긋남이고, 설계서를 고치지 않고 보고서에 적었다.
+ *
+ * **`init`은 그 절을 만들지 않는다.** 기본값이 없으므로(P9-1 D5) 빈 절을 써 두면
+ * *"안 줬다"*와 *"빈 것을 줬다"*가 섞인다.
  */
+import type { LintConfig } from '@wirebound/schema'
 import { configError } from './exit'
 import type { Io } from './io'
 import { join, parent } from './paths'
@@ -156,4 +169,41 @@ export function serializeBinding(binding: Binding, existing?: Record<string, unk
   // 아는 둘을 앞에 두고 모르는 절은 뒤에 그대로 남긴다(위 머리말).
   const { server: _server, projectId: _projectId, ...rest } = existing ?? {}
   return `${JSON.stringify({ server: binding.server, projectId: binding.projectId, ...rest }, null, 2)}\n`
+}
+
+/**
+ * `.wirebound.json`의 `lint` 절을 `LintConfig`로 읽는다. **없으면 `undefined`다** —
+ * 빈 객체를 지어내지 않는다(P9-1 D5: *"안 주면 그 축이 안 도는 것이 옳다"*).
+ *
+ * **정규식을 여기서 컴파일하지 않는다.** 못 읽는 정규식은 `lintDesign`이 이미
+ * `naming` 이슈로 낸다 — 여기서 먼저 죽이면 *"규칙 하나가 잘못 적혔다"*가 *"명령이 서지
+ * 못했다"*(코드 2)가 되어, 나머지 규칙의 결과까지 함께 사라진다.
+ *
+ * **모양이 어긋나면 코드 2다.** 사람이 자기 리포의 파일 한 줄을 고치면 되는 상태이고,
+ * 조용히 무시하면 *"명명 규칙을 켰는데 안 돈다"*를 아무도 못 알아챈다.
+ */
+export function readLintConfig(binding: LoadedBinding): LintConfig | undefined {
+  const section = binding.raw.lint
+  if (section === undefined || section === null) return undefined
+  const where = join(binding.root, BINDING_FILE)
+  if (typeof section !== 'object' || Array.isArray(section)) {
+    throw configError(`${where}의 lint 는 객체여야 합니다`)
+  }
+
+  const naming = (section as Record<string, unknown>).naming
+  if (naming === undefined || naming === null) return {}
+  if (typeof naming !== 'object' || Array.isArray(naming)) {
+    throw configError(`${where}의 lint.naming 은 객체여야 합니다`)
+  }
+
+  const config: LintConfig = { naming: {} }
+  for (const axis of ['page', 'menu'] as const) {
+    const value = (naming as Record<string, unknown>)[axis]
+    if (value === undefined) continue
+    if (typeof value !== 'string') {
+      throw configError(`${where}의 lint.naming.${axis} 는 정규식 문자열이어야 합니다`)
+    }
+    config.naming![axis] = value
+  }
+  return config
 }

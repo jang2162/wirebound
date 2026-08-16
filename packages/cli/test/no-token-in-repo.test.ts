@@ -54,10 +54,11 @@ const ARGV: Record<string, string[]> = {
   init: ['init', '--server', SERVER, '--project', PROJECT],
   login: ['login', '--email', 'a@example.com'],
   pull: ['pull'],
-  // **P9-3이 더한 것.** 이 명령이 리포에 무엇을 쓰는지 보고 판정했다: **아무것도 안 쓴다.**
-  // 표에 적는 것은 census의 분모를 정직하게 두기 위해서다 — 나중에 이 명령이 캐시 파일
-  // 하나를 쓰게 되는 날 아래 훑기가 그것을 잡는다.
+  // **P9-3이 더한 것.** 명령마다 *"리포에 무엇을 쓰는가"*를 보고 판정했다 — `page get`과
+  // `lint`는 **아무것도 안 쓴다.** 표에 적는 것은 census의 분모를 정직하게 두기 위해서다:
+  // 나중에 둘 중 하나가 캐시 파일을 쓰게 되는 날 아래 훑기가 그것을 잡는다.
   'page get': ['page', 'get', '관리자/회원/목록'],
+  lint: ['lint'],
 }
 
 /**

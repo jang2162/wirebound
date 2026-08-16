@@ -125,6 +125,11 @@ export { LINT_RULES, lintRule } from './lint/rules'
 export type { LintIssue, LintWhere } from './lint/issue'
 export { lintIssue, relayLintIssue } from './lint/issue'
 export type { LintComment, LintConfig, LintMenuNode, LintPage, LintProject } from './lint/input'
+// P9-3 T5 — 결과 거르개. **`wireb lint [경로]`의 경로는 출력 거르개이지 입력 좁히개가
+// 아니다**(D5): 프로젝트 단위 규칙이 여럿이라 입력을 좁히면 그것들이 거짓을 말한다.
+// §12.2의 MCP `validate`가 같은 거르개를 원하므로 CLI에 두지 않는다.
+export type { LintIssueFilter } from './lint/filter'
+export { filterLintIssues } from './lint/filter'
 // `VALIDATION_RULE`은 *"`validatePage`의 어느 코드가 §12.4의 어느 줄로 가는가"*다. 밖으로
 // 내는 이유는 그것이 **판단**이고, `themes`의 대조 케이스가 자기 표와 함께 봐야 하기
 // 때문이다 — 두 표를 함께 보는 자리는 `themes`뿐이다(의존 방향).

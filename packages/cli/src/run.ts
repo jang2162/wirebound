@@ -25,6 +25,7 @@
  */
 import { parseArgs, type ParseArgsConfig } from 'node:util'
 import { runInit } from './commands/init'
+import { runLint } from './commands/lint'
 import { runLogin } from './commands/login'
 import { runPageGet } from './commands/page-get'
 import { runPull } from './commands/pull'
@@ -87,6 +88,14 @@ export const COMMANDS: CommandSpec[] = [
       out: { type: 'string', short: 'o' },
     },
     run: (io, values) => runPull(io, { out: asString(values.out) }),
+  },
+  {
+    words: ['lint'],
+    summary: 'wireb lint [경로] [--fail-on warning]        §12.4 규칙 검증 (결함이 있으면 코드 10)',
+    options: {
+      'fail-on': { type: 'string' },
+    },
+    run: (io, values, positionals) => runLint(io, positionals[0], { failOn: asString(values['fail-on']) }),
   },
   {
     words: ['page', 'get'],
