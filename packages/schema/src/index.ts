@@ -14,6 +14,9 @@ export { createNodeId } from './node'
 export type { NodeVisit } from './tree'
 export { collectNodeIds, findNode, findNodePath, remapNodeIds, walkNodes } from './tree'
 
+export type { LockConflictInput, NodeLock } from './lock'
+export { findLockConflict, lockPointers } from './lock'
+
 export type { ComponentDef, EditorControl, EditorField } from './component/define'
 export { defineComponent } from './component/define'
 export {
