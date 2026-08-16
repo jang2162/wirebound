@@ -9,7 +9,7 @@
  *
  * ---
  *
- * # 엔드포인트 넷이고 **삭제는 없다**
+ * # 엔드포인트 다섯이고 **삭제는 없다**
  *
  * | 경로 | 가드 | 근거 |
  * |---|---|---|
@@ -17,6 +17,11 @@
  * | `GET /:projectId/snapshots` | viewer | 조회 |
  * | `GET /:projectId/snapshots/:snapshotId` | viewer | 조회 |
  * | `POST /:projectId/snapshots/:snapshotId/restore` | **owner** | §10 — 복원은 owner뿐이다 (P6-2 D9) |
+ * | **`GET /:projectId/snapshot`(단수)** | viewer | **행을 쓰지 않는 읽기 전용 덤프**(P9-2 D8) |
+ *
+ * **단수와 복수가 갈리는 것이 계약이다.** 복수는 *"삭제 없는 태그"*라 부를 때마다 지울 수
+ * 없는 행이 하나 쌓이고 editor여야 한다. 단수는 **아무것도 남기지 않는다** — `wireb pull`이
+ * 부를 것이 그쪽이다(아래 그 핸들러의 머리말).
  *
  * **P6-1은 owner 가드를 미리 만들어 두지 않았다**(*"쓰이지 않는 가드는 그것이 무엇을
  * 지키는지 아무도 확인하지 않은 채 남는다"*). 그것을 실행으로 지키던 케이스
@@ -201,6 +206,46 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
       }
 
       return reply.status(201).send(toDetailResponse(record))
+    })
+
+    /**
+     * **읽기 전용 프로젝트 덤프**(P9-2 D8). `wireb pull`이 부르는 것이 이것이다.
+     *
+     * # 왜 새 라우트인가
+     *
+     * 프로젝트 전체를 한 번에 내는 라우트가 그 전까지 없었다. 있는 것(`POST .../snapshots`)은
+     * **쓰기이고 editor 전용이며 지울 수 없는 태그 이름 공간을 더럽힌다** — CLI가 리포를
+     * 동기화할 때마다 그것을 부르면 태그가 무한히 쌓이고 viewer는 아예 못 쓴다.
+     *
+     * # 새 수집 코드를 짜지 않는다
+     *
+     * `captureSnapshot`을 **그대로** 부른다. 사실 4가 이것을 거의 공짜로 만든다 — 그 함수는
+     * `{ kind: 'captured', payload }`를 값으로 낼 뿐 **행을 쓰지 않고**(삽입은 위 POST
+     * 핸들러가 한다), 지문 불일치도 던지지 않고 값으로 낸다. 그래서 이 핸들러는 그 값을
+     * HTTP로 옮기는 것이 전부다.
+     *
+     * **payload가 `SnapshotPayload`와 같은 함수에서 나와야 한다**(D8). 갈리면 P9-3의 lint
+     * 입력이 두 벌이 된다 — P9-1 이월 §1이 그 매핑을 payload 기준으로 적었다.
+     *
+     * # 응답은 payload **그 자체**다
+     *
+     * 복수 쪽 상세는 `{ …메타, payload }`로 감싸지만 여기는 감싸지 않는다. 감쌀 메타가
+     * 없기 때문이다 — 태그도 만든 사람도 id도 없다(행이 없으므로). payload는
+     * `payloadVersion`·`capturedAt`을 스스로 들어 자기를 설명하고, **CLI가 받은 것을 그대로
+     * 파일에 쓰면 된다.**
+     *
+     * # 지문 불일치의 409도 그 값에서 온다
+     *
+     * 문장은 생성 쪽과 같다 — 사용자가 할 일이 같기 때문이다(그대로 다시 보낸다).
+     */
+    app.get('/:projectId/snapshot', { preHandler: projectGuard('viewer') }, async (request) => {
+      const { projectId } = parseParams(ProjectIdParams, request.params)
+
+      const outcome = await captureSnapshot(app.db, projectId, options?.captureHooks)
+      if (outcome.kind === 'fingerprint-mismatch') {
+        throw conflict('스냅샷을 뜨는 동안 프로젝트가 바뀌었습니다. 다시 시도해 주세요')
+      }
+      return outcome.payload
     })
 
     /** 목록. **payload 본문을 싣지 않는다**(D9) — 크기만 낸다. */

@@ -17,6 +17,7 @@ import { projectRoutes } from './routes/projects'
 import { revisionRoutes } from './routes/revisions'
 import { snapshotRoutes } from './routes/snapshots'
 import { themeRoutes } from './routes/themes'
+import { tokenRoutes } from './routes/tokens'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
 import { syncSystemThemes } from './services/system-themes'
@@ -44,6 +45,33 @@ export interface BuildAppOptions {
    * 파이프라인을 그대로 쓰면서 로그만 메모리로 가로챌 수 있게 해 준다.
    */
   loggerStream?: Writable
+  /**
+   * 테스트 전용: 등록되는 라우트를 하나도 빠짐없이 흘려보낸다. 운영 코드(`main.ts`)는
+   * 절대 채우지 않는다 — `loggerStream`과 같은 부류의 이음매다.
+   *
+   * **왜 이것이 없으면 잴 수 없는가(P9-2 D4의 인구조사).** D4는 *"`:projectId`가 없는
+   * 라우트 중 인증이 필요한 것 **전부**가 토큰만 든 요청에 401을 낸다"*를 주장한다. 그
+   * 명제의 **분모**는 등록된 라우트 전부이고, 그것을 손으로 적으면 앞으로 생길 프로젝트
+   * 밖 라우트가 **조용히 빠진다** — 이 저장소가 권한 매트릭스에서 이미 겪은 사고다.
+   *
+   * **Fastify가 아는 목록을 쓴다.** `printRoutes()`는 라딕스 트리를 사람이 읽는 글자로
+   * 그리는 것이라(`/theme` 아래에 `s`가 자식으로 붙는 식으로 마디가 쪼개진다) 그것을
+   * 되파싱하면 자가 대상보다 약해진다. `onRoute` 훅은 Fastify가 라우트를 등록할 때마다
+   * 부르므로 **경로 패턴과 preHandler 목록을 그대로** 준다.
+   *
+   * **`buildApp` 밖에서는 걸 수 없다.** 훅은 자기보다 **뒤에** 등록된 라우트만 보는데
+   * 라우트 등록은 전부 이 함수 안에서 끝난다.
+   */
+  onRoute?: (route: RegisteredRoute) => void
+}
+
+/** `BuildAppOptions.onRoute`가 흘리는 한 줄. 인구조사가 쓰는 것만 담는다. */
+export interface RegisteredRoute {
+  method: string
+  /** prefix가 붙은 최종 패턴(`/api/projects/:projectId/pages`). */
+  url: string
+  /** 이 라우트에 걸린 preHandler들. 인증이 필요한지를 여기서 본다. */
+  preHandlers: unknown[]
 }
 
 /**
@@ -92,7 +120,7 @@ export function buildLoggerOptions(config: ApiConfig): ApiLoggerOptions {
  * 이 함수가 만들지 않은 자원(DB 풀 등)은 닫지 않는다 — 그 자원의 생애주기는 호출자의 것이다.
  */
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const { db, config, loggerStream } = options
+  const { db, config, loggerStream, onRoute } = options
 
   const loggerOptions = buildLoggerOptions(config)
   const app = Fastify({
@@ -115,6 +143,18 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // `ensureCatalog`가 멱등한 것과 같은 이유로 이것도 멱등해야 하고, `ON CONFLICT`가
   // 그것을 보장한다(`repos/themes.ts`의 `upsertSystemTheme`).
   await syncSystemThemes(db)
+
+  // **라우트 등록보다 앞이어야 한다** — `onRoute` 훅은 자기보다 뒤에 등록된 것만 본다.
+  if (onRoute) {
+    app.addHook('onRoute', (route) => {
+      const preHandler = route.preHandler
+      onRoute({
+        method: Array.isArray(route.method) ? route.method.join(',') : route.method,
+        url: route.url,
+        preHandlers: preHandler === undefined ? [] : Array.isArray(preHandler) ? [...preHandler] : [preHandler],
+      })
+    })
+  }
 
   app.decorate('db', db)
   registerErrorHandler(app)
@@ -145,6 +185,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 내보내기도 프로젝트 아래에 산다(`/:projectId/export`). **URL에 파일 이름이 없다** —
   // 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면 번호가 밀린다(P8-4 D7).
   await app.register(exportRoutes(), { prefix: '/api/projects' })
+  // API 토큰도 프로젝트 아래에 산다(`/:projectId/tokens`) — §10이 *"토큰 스코프는 프로젝트
+  // 단위"*라고 적었으므로 그 밖에 둘 자리가 없다(P9-2 T2). 발급은 viewer 이상 누구나이고
+  // (D2), 이 셋은 **세션으로만** 부를 수 있다 — 근거는 `routes/tokens.ts`의 머리말에 있다.
+  await app.register(tokenRoutes(), { prefix: '/api/projects' })
   await app.register(healthRoutes)
 
   return app

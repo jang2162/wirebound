@@ -1,6 +1,6 @@
 import type { Writable } from 'node:stream'
 import type { FastifyInstance } from 'fastify'
-import { buildApp } from '../src/app'
+import { buildApp, type BuildAppOptions } from '../src/app'
 import type { ApiConfig } from '../src/config'
 import { loadConfig } from '../src/config'
 import { createDb, createPool } from '../src/db/client'
@@ -60,6 +60,12 @@ class Rollback extends Error {}
 export interface WithApiOptions {
   config?: ApiConfig
   loggerStream?: Writable
+  /**
+   * `buildApp`의 같은 이름 필드를 그대로 통과시킨다. `test/token-route-census.test.ts`가
+   * **하나의 앱에서** 라우트 목록과 요청을 함께 얻으려고 쓴다 — 앱을 둘 세우면
+   * `app.requireAuth` 데코레이터가 서로 다른 함수 객체라 참조로 비교할 수 없다.
+   */
+  onRoute?: BuildAppOptions['onRoute']
 }
 
 /**
@@ -105,6 +111,7 @@ export async function withApi(fn: (ctx: TestContext) => Promise<void>, options?:
         db: trx,
         config: options?.config ?? testConfig(),
         loggerStream: options?.loggerStream,
+        onRoute: options?.onRoute,
       })
 
       // fn과 app.close() 둘 다 던질 수 있다. finally 블록에서 던지면 try 블록의

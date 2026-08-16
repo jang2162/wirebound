@@ -69,7 +69,9 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 ## API 개요
 
 - 모든 요청/응답 본문은 JSON이다.
-- 인증은 세션 쿠키(`wb_session`, httpOnly)로 한다. `Authorization` 헤더는 쓰지 않는다.
+- 인증 수단은 **둘이다: 세션 쿠키(`wb_session`, httpOnly)와 API 토큰**(`Authorization: Bearer <토큰>`).
+  토큰은 **프로젝트 하위 라우트(`/:projectId/…`)에서만** 인증된다 — 아래 *"API 토큰"* 참고.
+  둘 다 실리면 **쿠키가 이긴다**.
 - 성공 응답은 리소스(또는 그 배열)를 그대로 반환한다. 실패 응답은 아래 "에러 형식"을 따른다.
 - 요청 본문의 키는 camelCase다(`sortOrder`, `menuNodeId` 등). DB 컬럼(snake_case)과의
   변환은 서버 내부(`repos/`)에서만 일어난다 — API 밖으로 snake_case가 나가지 않는다.
@@ -164,6 +166,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/themes/:themeId` | GET | viewer | — | 200 테마 — 파생 테마면 `base`가 더 붙는다. 시스템 테마는 어느 프로젝트에서나 읽힌다 |
 | `/api/projects/:projectId/themes/:themeId` | PUT | **owner** | `{ theme }`(문서 전체) | 200 테마(통째 교체). 경고가 있으면 `warnings`가 더 붙는다. **시스템 테마는 403**, 남의 프로젝트 테마는 404 |
 | `/api/projects/:projectId/themes/:themeId` | DELETE | **owner** | — | 204. **시스템 테마는 403**, 남의 프로젝트 테마는 404 |
+| `/api/projects/:projectId/snapshot` | GET | viewer | — | 200 **프로젝트 payload 그 자체**(아래 "읽기 전용 프로젝트 덤프"). **행을 쓰지 않는다.** 수집 도중 프로젝트가 바뀌면 409 |
 | `/api/projects/:projectId/snapshots` | POST | **editor** | `{ tag, description? }` | 201 스냅샷(아래 "스냅샷 응답 형태"). **지금 상태를 태그 하나로 얼린다**(§4.5). 태그 중복 409, 수집 도중 프로젝트가 바뀌면 409(**문장이 다르다**), NUL 400, 태그 1~60자·설명 0~2000자 밖은 400 |
 | `/api/projects/:projectId/snapshots` | GET | viewer | — | 200 스냅샷 배열(`created_at` 내림차순, 동률은 `tag` 오름차순). **`payload`가 없다** — 크기(`payloadBytes`)만 실린다 |
 | `/api/projects/:projectId/snapshots/:snapshotId` | GET | viewer | — | 200 스냅샷 + `payload`. 남의 프로젝트의 id는 404(존재를 숨긴다) |
@@ -174,6 +177,9 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/export/preview` | GET | viewer | — | 200 `{ pages, duplicateTargets, brokenLinks, errors, themeId, fileName }` — **내려받기 전에 화면이 말할 것**(아래 "HTML 정적 번들 내보내기"). 페이지가 없으면 409 |
 | `/api/projects/:projectId/export` | GET | viewer | — | 200 `application/zip` — §11.3의 번들. 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409 |
 | `/api/projects/:projectId/ws` | GET(업그레이드) | viewer | — | **101** — WebSocket. 아래 "실시간(WebSocket)" 참고. 업그레이드가 아닌 평범한 GET에도 같은 가드가 먼저 돈다(비멤버 404) |
+| `/api/projects/:projectId/tokens` | POST | viewer | `{ name }`(1~60자) | 201 `{ id, name, createdAt, lastUsedAt, value }` — **`value`(원문)가 실리는 유일한 응답이다.** 아래 "API 토큰". 토큰으로 부르면 403 |
+| `/api/projects/:projectId/tokens` | GET | viewer | — | 200 `{ id, name, createdAt, lastUsedAt }[]` — **자기가 만든 것만**, 오래된 것 먼저. **원문이 없다.** 토큰으로 부르면 403 |
+| `/api/projects/:projectId/tokens/:tokenId` | DELETE | viewer | — | 204. 남의 토큰·없는 id는 404. 토큰으로 부르면 403 |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
 
 ### HTML 정적 번들 내보내기 (§11.3 — P8-4)
@@ -226,6 +232,56 @@ wirebound-export-<슬러그>/
 판이 곱으로 늘고, 상한을 넘으면 그 페이지의 런타임이 꺼진다. 그 사실은 **번들 자신이
 말한다**(그 페이지의 상태 줄에 이유가 뜬다) — 여기서 다시 세려면 그 상한을 두 벌로 갖게
 되고, 둘이 갈리는 날 화면이 거짓을 말한다.
+
+### API 토큰 (§10 — P9-2)
+
+`wireb`(CLI)와 MCP가 붙을 자격이다. **세션 쿠키는 만료되는 브라우저 자격**이라 파일에
+눌러 담으면 며칠 뒤 조용히 401이 된다.
+
+```
+Authorization: Bearer <발급 응답의 value>
+```
+
+| 성질 | 값 | 왜 |
+|---|---|---|
+| 발급 | **viewer 이상 누구나** | §10의 표는 owner라 적었지만 **같은 절의 불릿이 그것을 반증한다**(*"editor가 만든 토큰으로는 스냅샷 복원이 안 된다"* — editor가 토큰을 만든다는 전제가 그 문장 안에 있다). 설계서를 고치지 않고 판정했다 |
+| 권한 | **요청 시점의 `project_members` 행** | 발급 시점의 역할을 얼리지 않는다. 얼리면 판정이 두 벌이 되고, 강등된 사람의 토큰이 옛 권한으로 계속 쓴다 |
+| 스코프 | **프로젝트 하나** | 다른 프로젝트에 쓰면 **404**다(403이 아니다 — §10의 존재 숨김) |
+| 닿는 라우트 | **`:projectId`를 가진 것만** | 그 밖의 라우트에서는 `currentUser`를 **채우지 않는다.** 인증이 필요한 것은 기존 `requireAuth`가 401을 내고, 공개 라우트(`/health`)는 토큰이 실려도 답이 달라지지 않는다 |
+| WebSocket | **쓸 수 없다** | §10의 *"REST와 WS의 인증 경로가 하나다"*를 지킨다. 토큰이 실린 핸드셰이크는 401이다 |
+| 저장 | **sha256 hex만** | 원문은 발급 응답에만 실린다. `sessions`와 같은 규칙이고 만드는 함수도 하나다(`auth/token-hash.ts`) |
+| 수명 | **없다** | §10에 만료·회전을 정하는 줄이 없다. 자격을 거두는 수단은 **폐기**와 **멤버십 제거** 둘이다 |
+
+**토큰 관리 셋(발급·목록·폐기)은 세션으로만 부를 수 있다 — 토큰으로 부르면 403이다.**
+토큰으로 토큰을 만들 수 있으면 새어 나간 토큰 하나가 스스로 대체품을 남기고, 폐기가 그
+사슬을 못 끊는다.
+
+**목록·폐기는 자기 것만 본다.** 발급이 viewer에게 열려 있으므로 프로젝트 단위로 열면
+조회 전용 역할이 owner의 자격을 거둘 수 있다. **프로젝트 차원의 회수는 멤버십 제거다** —
+멤버에서 빼면 그 사람의 토큰 전부가 그 프로젝트에서 404가 된다.
+
+**로그에 남지 않는다.** `buildLoggerOptions`의 `redact`가 `req.headers.authorization`을
+이미 덮고 있다(그 함수의 머리말에 오늘 시점의 실제 이유가 있다).
+
+### 읽기 전용 프로젝트 덤프 (`GET .../snapshot` — P9-2)
+
+**단수다.** 복수(`POST .../snapshots`)와 갈리는 것이 계약이다.
+
+| | `GET .../snapshot`(단수) | `POST .../snapshots`(복수) |
+|---|---|---|
+| 남기는 것 | **없다** | 지울 수 없는 태그 한 줄(§4.5) |
+| 역할 | viewer | editor |
+| 응답 | **payload 그 자체** | `{ …메타, payload }` |
+
+`wireb pull`이 부르는 것이 단수다. 리포를 동기화할 때마다 복수를 부르면 태그가 무한히
+쌓이고 viewer는 아예 못 쓴다.
+
+**payload는 복수와 같은 함수(`captureSnapshot`)가 만든다** — 절 구성과 값이 같다(위
+"스냅샷 응답 형태"의 표가 그대로 적용된다). 갈리면 CLI·MCP가 읽는 것과 스냅샷이 얼리는
+것이 두 벌이 된다.
+
+**감싸지 않는 이유:** 감쌀 메타가 없다(행이 없으므로 태그도 만든 사람도 id도 없다).
+payload는 `payloadVersion`·`capturedAt`을 스스로 들어 자기를 설명한다.
 
 ### 프로젝트 응답 형태
 
@@ -952,8 +1008,9 @@ revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `
   올 때 함께 연다)와 **테마 문서 되돌리기**(복원은 참조만 되돌리고 다름을 보고한다)다.
 - **테마의 동시 편집 방어**: `pages`는 `head_seq`로 닫혀 있는데 `themes`에는 그런 것이
   없다. 마지막 쓰기가 이긴다.
-- **API 토큰**: 세션 쿠키 외의 인증 수단(서비스 간 호출, CLI/MCP용 토큰 등)이 없다.
-  `revisions.actor_type`은 `mcp`·`cli`를 이미 담을 수 있지만 그 행을 만드는 경로는 없다.
+- ~~**API 토큰**~~ — **P9-2가 만들었다.** 위 *"API 토큰"* 참고. **아직 없는 것:** 토큰의
+  **만료·회전**(§10에 그 줄이 없어 근거 없이 정하지 않았다)과, `revisions.actor_type`의
+  `mcp`·`cli`를 실제로 채우는 경로 — 토큰이 편집을 부르면 그 행은 여전히 `user`로 남는다.
 
 ## 명령 요약
 

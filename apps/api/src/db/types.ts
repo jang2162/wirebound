@@ -251,6 +251,27 @@ export interface PresetsTable {
   updated_at: Generated<Date>
 }
 
+/**
+ * API 토큰(`0011-api-tokens`). 설계 §10의 *"발급자의 권한을 상속 … 스코프는 프로젝트 단위"*.
+ *
+ * **`token_hash`가 원문의 sha256 hex다 — 원문은 어디에도 저장되지 않는다**(`sessions.id`와
+ * 같은 규칙, 만드는 함수도 하나다: `auth/token-hash.ts`). `id`는 그것과 별개인 uuid이고,
+ * 목록·폐기가 지목하는 것이 그쪽이다(0011의 머리말).
+ *
+ * **역할 컬럼이 없다(P9-2 D3).** 토큰은 *"누가"*와 *"어느 프로젝트"*만 들고, 역할은 요청
+ * 시점의 `project_members` 행이 정한다 — 얼리면 판정이 두 벌이 된다.
+ */
+export interface ApiTokensTable {
+  id: Generated<string>
+  project_id: string
+  user_id: string
+  token_hash: string
+  name: string
+  created_at: Generated<Date>
+  /** 한 번도 쓰지 않았으면 `null`이다. 인증이 성공할 때마다 갱신된다. */
+  last_used_at: ColumnType<Date | null, Date | null | undefined, Date>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -264,4 +285,5 @@ export interface Database {
   comments: CommentsTable
   snapshots: SnapshotsTable
   presets: PresetsTable
+  api_tokens: ApiTokensTable
 }

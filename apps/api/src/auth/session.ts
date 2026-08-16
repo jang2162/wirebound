@@ -7,9 +7,9 @@
  * 들어간다. DB가 유출돼도 그 자체로는 세션을 탈취할 수 없다 — 공격자가 원문 토큰을
  * 별도로 얻지 못하는 한 해시만으로는 로그인 상태를 재현할 수 없다.
  */
-import { createHash, randomBytes } from 'node:crypto'
 import { sql } from 'kysely'
 import { withTransaction, type DbHandle } from '../db/tx'
+import { hashTokenValue, randomTokenValue } from './token-hash'
 
 export interface SessionUser {
   id: string
@@ -22,12 +22,17 @@ export interface CreatedSession {
   expiresAt: Date
 }
 
-/** 쿠키에 실을 토큰 원문의 바이트 길이. base64url 인코딩 후 43자가 된다. */
-const TOKEN_BYTES = 32
-
-/** 토큰 원문의 sha256 hex. `sessions.id`(PK)로 쓰는 값과 같은 함수로 만든다 — 쓰기·읽기가 다른 해시를 쓰면 영영 못 찾는다. */
+/**
+ * 토큰 원문의 sha256 hex. `sessions.id`(PK)로 쓰는 값과 같은 함수로 만든다 — 쓰기·읽기가
+ * 다른 해시를 쓰면 영영 못 찾는다.
+ *
+ * **몸통은 `auth/token-hash.ts`에 있다(P9-2 T2).** API 토큰이 같은 성질(*"원문은 저장하지
+ * 않는다"*)을 갖게 되면서 그 성질을 만드는 코드가 두 벌이 될 자리였다. **수명 정책은
+ * 함께 옮기지 않았다** — 그것은 아래 `resolveSession`의 SQL 조건이고 토큰에는 그 조건이
+ * 없다(그쪽 파일의 표에 근거가 있다).
+ */
 export function hashSessionToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
+  return hashTokenValue(token)
 }
 
 /**
@@ -38,7 +43,7 @@ export function hashSessionToken(token: string): string {
  * 감싸지 않으면 이 호출을 둘러싼 트랜잭션(테스트 하네스 포함) 전체가 오염된다.
  */
 export async function createSession(db: DbHandle, userId: string, ttlHours: number): Promise<CreatedSession> {
-  const token = randomBytes(TOKEN_BYTES).toString('base64url')
+  const token = randomTokenValue()
   const expiresAt = new Date(Date.now() + ttlHours * 3600_000)
 
   await withTransaction(db, async (trx) => {
