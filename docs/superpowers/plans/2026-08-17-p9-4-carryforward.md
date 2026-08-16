@@ -73,6 +73,10 @@ P9-4가 세운 것은 **MCP 서버와 읽기 도구 셋**이다. 서버가 stdio
 | **`no-token-in-response`의 인자 표** | `packages/mcp/test/no-token-in-response.test.ts` | 분모가 `TOOLS`다. 도구를 더하고 그 표에 안 적으면 *"표가 도구를 하나도 안 빠뜨린다"*가 **먼저** 죽는다 |
 | **`assembly-census`의 의존 목록** | `packages/mcp/test/assembly-census.test.ts` | 런타임 의존이 둘로 고정돼 있다. `@wirebound/schema`를 더하면 죽는다 — **더해야 하면 그때 판정하라** |
 | **`io-boundary`의 목록이 비어 있다** | `packages/mcp/test/io-boundary.test.ts` | `packages/mcp/src`에서 `node:*`·`process.`·전역 `fetch`를 부르면 죽는다 |
+| **도구 인자의 허용 목록** | `packages/mcp/test/tools.test.ts`의 `ALLOWED_ARGS` | **분모가 `TOOLS`다**(리뷰 R4). `patch_page`가 `ops`·`baseSeq`를 받으려면 **거기 이유와 함께 줄을 더해야 한다** — 그 순간이 *"이 값을 세션이 줘도 되는가"*를 다시 묻는 자리다(D5) |
+| **`embed`의 면 중 부르는 것** | `packages/mcp/test/assembly-census.test.ts`의 `ALLOWED_EMBED` | **분모가 `embed`의 런타임 export 전부다**(리뷰 R3). 쓰기 도구가 `callApi`를 직접 불러야 하면 거기 줄을 더한다 |
+| **`embed`이 `bin`을 안 내준다** | `packages/cli/test/embed-surface.test.ts` | `run`·`COMMANDS`·`usage`·`matchCommand`가 `embed`으로 나가거나 `embed.ts`가 `./run`에서 재수출하면 죽는다(리뷰 R5) |
+| **프로토콜 매핑** | `packages/mcp/test/protocol.test.ts` | `Server`↔`Client`를 메모리 짝으로 붙여 **`pnpm test`가** 본다(리뷰 N2). 도구를 더하고 서버에 안 실으면 목록 대조가 먼저 죽는다 |
 
 ### 2.2 §12.5의 스킬을 쓸 때
 
@@ -93,7 +97,7 @@ P9-4가 세운 것은 **MCP 서버와 읽기 도구 셋**이다. 서버가 stdio
 
 | 무엇 | 다음 사람이 알아야 할 것 |
 |---|---|
-| **`bin.ts`의 표준출력 리다이렉트를 지키는 자가 0이다** | 보고서 §4.2에 값이 있다(M17 — `pnpm test`·`test:build` 둘 다 **0 사망**). 원인은 오늘 도구가 지나는 경로에 `io.out`을 부르는 자리가 하나도 없다는 것이다. **쓰기 도구가 무엇이든 `out`으로 찍는 순간 그 줄이 하중을 받는다** — 그때 케이스를 세워라 |
+| **`bin.ts`의 표준출력 리다이렉트 — 자가 섰다** | **앞 판의 이 줄은 틀렸다**(*"쓰는 자가 생기는 순간 하중을 받는다"* — 리뷰어가 0 사망으로 반증했다). 지금은 `build-test/dist-smoke.test.ts`의 `표준출력이 JSON-RPC 프레임뿐이다`가 **날 스트림을 직접 읽어** 잰다. 값은 보고서 §4.2에 있다: 리다이렉트를 **지우기만 하면 0 사망**(찍는 자가 없다), **지우고 한 줄을 찍으면 2 사망**. 즉 *"쓰는 자가 생기면 죽는다"*가 이제 참이다 |
 | **못 올린 문서 버전 문장이 두 자리에 있다** | `packages/themes`의 `currentDocument`(비공개)와 `packages/cli/src/read/page.ts`. 합치려면 `packages/themes`가 그 판정을 함수로 내줘야 한다. **`packages/schema`의 `'page:'`가 세 자리에 있던 것과 같은 부류**(P9-1 이월 §2) |
 | **MCP SDK가 안 쓰는 것을 92개 끌고 온다** | 보고서 §1.2에 표가 있다. stdio 경로에서 로드되는 것은 5개다. **`express`·`hono`·`cors`·`jose`·`express-rate-limit`이 하드 의존이라 `pnpm install`이 무조건 받는다** — 이 저장소에는 67개가 새로 왔다(`zod`를 이미 갖고 있었다) |
 | **도구마다 스냅샷을 다시 받는다 — 비용을 안 쟀다** | `session.ts`의 머리말에 근거가 있다(낡은 판으로 답하지 않는다 — `wireb lint`가 `pull` 출력을 안 읽는 것과 같다). **P9-2 이월 §4의 *"비용을 안 쟀다"*가 그대로 살아 있고 사정이 나빠졌다** — 에이전트가 사람보다 자주 부른다. `payloadBytes`가 재는 자리다 |
@@ -102,8 +106,44 @@ P9-4가 세운 것은 **MCP 서버와 읽기 도구 셋**이다. 서버가 stdio
 | **`structuredContent`를 안 쓴다** | 보고서 §3.7에 판정과 여는 날의 조건이 있다 |
 | **응답 크기 상한이 없다** | `get_page`가 문서 전문을 싣고 `validate`가 이슈 전부를 싣는다. 페이지가 수백 개인 프로젝트에서 `list_pages`가 얼마나 큰지 **안 쟀다** — 모델 문맥에 들어가는 값이라 CLI의 `CANDIDATE_LIMIT` 같은 자름이 필요해질 수 있다. **자르면 분모를 함께 말해야 한다** |
 | **`payloadVersion`이 높을 때의 경고가 에이전트에게 안 간다** | `fetchSnapshot`이 `io.err`로 말하는데 stdio 서버의 `err`는 **호스트의 로그**로 간다. 응답에 실리지 않으므로 **에이전트는 자기가 모르는 절이 있는 payload를 읽었다는 것을 모른다.** P9-3 이월 §6이 *"MCP도 같은 태도를 쓸지 정하라"*고 물었고, 태도는 같게 했지만 **통로가 다르다는 것은 안 닫았다** |
-| **`comments-concurrency`의 B5 케이스가 흔들린다** | **이 슬라이스가 `apps/` 아래를 한 파일도 안 건드렸는데** `pnpm test` 전체가 5번 중 1번 그 케이스에서 빨갰다(파일 하나만 돌리면 5/5 초록). 값과 진단은 보고서 §10에 있다. 요지: 두 요청이 **실제로 겹쳤는지**를 케이스가 강제하지 않아, 직렬화되면 둘 다 200이 되고 그것이 옳은 동작이다. **고치려면 `apps/api` 쪽 판정이 선다** |
+| **`apps/api`의 `comments-concurrency` B5가 흔들린다 — 이 브랜치 탓이 아니다** | 아래 §3.1에 값과 귀속이 있다 |
 | **Windows 경로** | P9-2 이월 §6 · P9-3 이월 §6 그대로. `packages/cli/src/paths.ts`가 POSIX 문자열 조작만 한다. **MCP가 그 표면을 안 넓혔다** — 읽기뿐이라 파일을 안 쓴다 |
+
+### 3.1 흔들리는 케이스 — **`apps/api/test/comments-concurrency.test.ts`의 B5**
+
+`409를 받은 삭제는 행을 남기지 않는다 (리뷰 B5)`가 `pnpm test` **전체 실행에서만** 이따금
+빨갛다. **이 브랜치 탓이 아니다.**
+
+| 무엇 | 값 | 누가 쟀나 |
+|---|---|---|
+| 브랜치 `pnpm test` 전체 | 5회 중 **1회 빨강** | 구현자 |
+| 그 파일만 따로 | **5/5 초록** | 구현자 |
+| 브랜치 `pnpm test` 전체 | **3/3 초록** | **리뷰어** |
+| **`main`(3b58936)** `pnpm test` 전체 — 별도 워크트리 | **5/5 초록** | **리뷰어** |
+| `main`에서 그 파일만 + **CPU 부하 14개** | **10/10 초록** | **리뷰어** |
+| 리뷰어의 총 실행 | **18회 · 빨강 재현 0회** | **리뷰어** |
+| 브랜치가 `apps/` 아래를 건드린 파일 | **0개** | 구현자·리뷰어 각각 |
+| `apps/`가 `@wirebound/cli`를 쓰나 | **안 쓴다** — 소스 참조 0건, `apps/api/package.json`에도 없다 | **리뷰어** |
+
+**진단(구현자가 코드에서, 리뷰어가 독립으로 확인했다).** 그 케이스는 서로 다른 노드의
+마지막 코멘트를 **동시에** 지워 하나가 `stale`로 409를 받는 것을 잰다. 그런데 *"실제로
+겹쳤는가"*를 **강제하지 않는다** — `Promise.all`로 던질 뿐이다. 앞 요청이 커밋을 마친 뒤에
+뒤엣것이 `head_seq`를 읽으면 **둘 다 200이고 그것이 옳은 동작이다.**
+
+**브랜치가 그 케이스에 닿는 경로가 없다**(리뷰어의 판정): 공유 설정 중 바뀐 것은
+`vitest.config.ts`의 alias 셋뿐이고 전부 `@wirebound/cli*`인데 **`apps/`가 그 패키지를
+안 쓴다.**
+
+**그러나 재현이 어렵다는 것도 값이다.** 리뷰어가 18회에서 한 번도 못 재현했으므로
+*"브랜치가 흔들림 확률을 안 올린다"*를 **실측으로 보인 것은 아니다** — 브랜치는 unit 파일
+8개를 더해 부하를 3%쯤 올린다(248→256 파일). 방향은 있을 수 있고, 그것은 **브랜치의 결함이
+아니라 그 케이스의 결함**이다.
+
+**이 저장소는 P3-2에서 *"main이 빨간데 브랜치 탓이 아니었다"*를 한 번 겪었다.** 다음 사람이
+이 케이스의 빨강을 보면 **먼저 `main`을 별도 워크트리에서 돌려라** — 브랜치를 갈아타지 말고.
+
+**고치는 자리는 `apps/api`다.** 두 요청이 실제로 겹쳤다는 것을 케이스가 확인하는 이음매가
+필요하고, 그것은 이 슬라이스가 안 건드리는 자리다.
 
 ---
 
@@ -120,6 +160,11 @@ P9-4가 세운 것은 **MCP 서버와 읽기 도구 셋**이다. 서버가 stdio
 | `wireb page get --json`과 `get_page`가 같은 값을 낸다 | `packages/mcp/test/read-tools.test.ts`가 죽는다 |
 | `bin`이 `dist/bin.js`이고 실행 권한과 shebang이 있다 | `packages/mcp/build-test/dist-smoke.test.ts`가 죽는다(`pnpm test`는 초록이다 — 실측) |
 | `packages/cli`가 `./embed`을 내준다 | 〃 (`pnpm test`는 **0 사망** — 실측) |
+| **서버가 표준출력에 JSON-RPC 프레임만 쓴다** | `packages/mcp/build-test/dist-smoke.test.ts`가 **날 스트림을 읽어** 죽는다(리뷰 R2) |
+| **`packages/mcp/src`가 `embed`의 허용 목록 밖 이름을 안 부른다** | `packages/mcp/test/assembly-census.test.ts` 층 셋이 죽는다(리뷰 R3) |
+| **도구가 `ALLOWED_ARGS` 밖의 인자를 안 받는다** | `packages/mcp/test/tools.test.ts`가 죽는다 — **분모가 `TOOLS`라 새 도구도 본다**(리뷰 R4) |
+| **`embed`이 `run`·`COMMANDS`·`usage`를 안 내준다** | `packages/cli/test/embed-surface.test.ts`가 죽는다(리뷰 R5) |
+| **프로토콜 결과에 `isError`가 실린다** | `packages/mcp/test/protocol.test.ts`가 **`pnpm test`에서** 죽는다(리뷰 N2 — 앞 판은 스모크에만 걸려 있었다) |
 
 ---
 
