@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { EXIT } from '@wirebound/cli/embed'
 import { callTool } from '../src/server'
+import { TOOLS } from '../src/tools'
 import { PROJECT, SERVER, TOKEN, harness } from './harness'
 
 describe('붙지 못한 것은 결과이지 프로토콜 오류가 아니다 (D8)', () => {
@@ -93,10 +94,28 @@ describe('자격을 다시 짜지 않는다 (D3)', () => {
     expect(io.requests[0]!.headers.authorization).toBe('Bearer from-env')
   })
 
-  it('도구가 리포에 아무것도 안 쓴다 — 읽기뿐이다', async () => {
-    const io = harness()
-    const before = new Map(io.fs)
-    await callTool(io, 'list_pages', {})
-    expect([...io.fs.keys()]).toEqual([...before.keys()])
+  /**
+   * **분모가 `TOOLS`다**(리뷰 §6). 앞 판은 `list_pages` 하나로 쟀다 — 오늘 셋 다 안 쓰므로
+   * 무해했지만, 도구가 늘면 그 도구는 아무도 안 본다. `no-token-in-response.test.ts`가
+   * 분모를 표에서 만든 것과 같은 자세로 맞춘다.
+   */
+  it('어느 도구도 리포에 아무것도 안 쓴다 — 읽기뿐이다', async () => {
+    for (const tool of TOOLS) {
+      const io = harness()
+      const before = [...io.fs.keys()]
+      await callTool(io, tool.name, READ_ARGS[tool.name] ?? {})
+      expect([...io.fs.keys()], tool.name).toEqual(before)
+    }
+  })
+
+  it('그 표가 도구를 하나도 안 빠뜨린다', () => {
+    expect(TOOLS.map((tool) => tool.name).filter((name) => READ_ARGS[name] === undefined)).toEqual([])
   })
 })
+
+/** 도구마다 성공 갈래를 부를 인자. **표를 분모로 쓰므로 여기 없는 도구가 생기면 죽는다.** */
+const READ_ARGS: Record<string, Record<string, string>> = {
+  list_pages: {},
+  get_page: { path: '관리자/회원/목록' },
+  validate: {},
+}

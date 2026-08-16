@@ -17,10 +17,16 @@
  *
  * # 표준출력에 아무것도 쓰지 않는다
  *
- * stdio 전송에서 **표준출력은 JSON-RPC 프레임의 통로다.** 로그 한 줄이 섞이면 호스트가
- * 프레임을 못 읽고 연결이 끊긴다. `createNodeIo`의 `out`이 `console.log`이므로 **`io`를
- * 갈아 끼워 그것을 표준오류로 돌린다** — `wireb`가 `--json`을 파이프로 받는 쪽을 위해
- * 경고를 `err`로 보낸 것과 같은 부류의 판정이다(`project.ts`의 머리말).
+ * stdio 전송에서 **표준출력은 JSON-RPC 프레임의 통로다.** `createNodeIo`의 `out`이
+ * `process.stdout.write`이므로(`node-io.ts`) **`io`를 갈아 끼워 그것을 표준오류로 돌린다** —
+ * `wireb`가 `--json`을 파이프로 받는 쪽을 위해 경고를 `err`로 보낸 것과 같은 부류의
+ * 판정이다(`project.ts`의 머리말).
+ *
+ * **무엇이 일어나는지는 호스트에 달렸다.** 리뷰어가 실측했다(귀속: 리뷰어 R2): SDK
+ * 1.30.0의 `StdioClientTransport`는 **개행으로 끝나는 이물 한 줄**을 만나도 연결을 안 끊는다.
+ * 그러나 **개행 없는 조각**이 섞이면 다음 프레임 앞에 붙어 그 프레임이 깨지고, 그 관대함은
+ * 이 클라이언트의 것이지 계약이 아니다. 그래서 술어를 관대함에 안 맞춘다 —
+ * `build-test/dist-smoke.test.ts`가 **날 표준출력을 직접 읽어** 모든 줄이 프레임인지 잰다.
  */
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createNodeIo } from '@wirebound/cli/embed'

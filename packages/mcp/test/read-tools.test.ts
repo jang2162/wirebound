@@ -9,6 +9,7 @@
  * 제목이 하나 있다 — 조상을 안 붙이는 조립은 그 자리에서 드러난다.
  */
 import { describe, expect, it } from 'vitest'
+import { run } from '@wirebound/cli'
 import { EXIT, lookupPage } from '@wirebound/cli/embed'
 import { MENU_ADMIN, PAGE_DETAIL, page, snapshotPayload, stub } from '@wirebound/cli/test-support'
 import { callTool } from '../src/server'
@@ -206,23 +207,48 @@ describe('못 올리는 문서 버전을 말한다 — 조용히 넘어가지 �
  *
  * 자(`assembly-census`)는 *"부르는 자리가 하나다"*를 지키고 이 케이스는 *"그래서 값이
  * 같다"*를 잰다. 둘 다 필요하다: 자만 있으면 읽기 층 안에서 갈래를 나눠도 안 걸린다.
+ *
+ * **명령을 실제로 돌린다**(리뷰 §6). 앞 판은 `lookupPage`를 직접 불렀는데 그것은 *"같은
+ * 함수가 같은 값을 낸다"*라는 동어반복에 가까웠다 — 명령 파일에 후처리가 생기는 날 그
+ * 케이스가 그것을 못 본다. 이제 `run(['page','get',…,'--json'])`의 **표준출력**을 읽어
+ * 도구의 응답과 맞댄다.
  */
 describe('`wireb page get --json`과 `get_page`가 같은 값을 본다 (D1)', () => {
   it('페이지 값이 글자 하나까지 같다', async () => {
-    const io = harness()
-    const said = (await callJson(io, 'get_page', { path: '관리자/회원/목록' })) as { page: unknown }
+    const 도구 = harness()
+    const said = (await callJson(도구, 'get_page', { path: '관리자/회원/목록' })) as { page: unknown }
 
-    const lookup = lookupPage(snapshotPayload(), '관리자/회원/목록')
-    expect(lookup.kind).toBe('found')
-    // `wireb page get --json`이 내는 것이 바로 이 값이다(`commands/page-get.ts`).
-    expect(said.page).toEqual(JSON.parse(JSON.stringify(lookup.kind === 'found' ? lookup.view : null)))
+    const 명령 = harness()
+    expect(await run(['page', 'get', '관리자/회원/목록', '--json'], 명령), 명령.stderr.join('\n')).toBe(EXIT.ok)
+    // **표준출력이 값 하나뿐이어야 한다** — 섞이면 아래 `JSON.parse`가 먼저 죽는다.
+    expect(said.page).toEqual(JSON.parse(명령.stdout.join('\n')))
   })
 
   it('없는 경로의 후보 목록도 같은 자리에서 나온다', async () => {
     const said = (await callJson(harness(), 'get_page', { path: '없다' })) as { candidates: string[] }
-    const lookup = lookupPage(snapshotPayload(), '없다')
-    expect(lookup.kind).toBe('none')
-    expect(said.candidates).toEqual(lookup.kind === 'none' ? lookup.candidates : null)
+
+    // CLI는 그것을 코드 1과 stderr의 줄들로 말한다 — **받는 쪽이 다르고 값은 같다**.
+    const 명령 = harness()
+    expect(await run(['page', 'get', '없다'], 명령)).toBe(EXIT.usage)
+    const 후보 = 명령.stderr.filter((line) => line.startsWith('  - ')).map((line) => line.slice(4))
+    expect(said.candidates).toEqual(후보)
+  })
+
+  it('겹치는 경로에서도 두 도구가 같은 것을 든다', async () => {
+    const 겹침 = () => {
+      const payload = snapshotPayload()
+      payload.pages.push(page(PAGE_DETAIL.replace(/2$/, '9'), MENU_ADMIN, '목록', 5, { version: 1, root: { id: 'r', type: 'Page' } }, null))
+      payload.pages.push(page(PAGE_DETAIL.replace(/2$/, '8'), MENU_ADMIN, '목록', 6, { version: 1, root: { id: 'r', type: 'Page' } }, null))
+      return payload
+    }
+    const said = (await callJson(harness({ payload: 겹침() }), 'get_page', { path: '관리자/목록' })) as {
+      matches: { id: string }[]
+    }
+
+    const 명령 = harness({ payload: 겹침() })
+    expect(await run(['page', 'get', '관리자/목록'], 명령)).toBe(EXIT.usage)
+    const ids = 명령.stderr.filter((line) => line.startsWith('  - ')).map((line) => /\(([^)]+)\)$/.exec(line)![1])
+    expect(said.matches.map((match) => match.id)).toEqual(ids)
   })
 })
 

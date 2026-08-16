@@ -20,7 +20,7 @@
  * **최상위의 dev 서버와 DB를 안 건드린다.** 이 파일이 `node:http`로 자기 서버를 임시 포트에
  * 띄우고 스냅샷 하나를 내준다. 자격도 임시 디렉터리에 쓴다 — 진짜 홈을 안 만진다.
  */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { accessSync, constants, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer, type Server as HttpServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -28,6 +28,7 @@ import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 import { snapshotPayload, 오류가_있는_프로젝트 } from '@wirebound/cli/test-support'
 
 // vitest의 cwd는 루트 설정이 사는 저장소 뿌리다.
@@ -228,14 +229,15 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
   }, 60_000)
 
   /**
-   * **표준출력은 JSON-RPC 프레임의 통로다.** 서버가 거기 한 줄이라도 쓰면 호스트가 프레임을
-   * 못 읽고 연결이 끊긴다 — `bin.ts`가 `io.out`을 `err`로 돌린 이유이고, 그것이 실제 프로세스에서
-   * 참인지는 **여기서만** 드러난다(단위 케이스의 가짜 `io`는 배열에 담을 뿐이다).
+   * **`payloadVersion`이 높아도 응답이 온다.**
    *
-   * `payloadVersion`이 높으면 `fetchSnapshot`이 경고 한 줄을 낸다(`project.ts`) — 그 줄이
-   * 표준출력으로 갔다면 이 케이스가 죽는다.
+   * 앞 판은 이 케이스의 이름이 *"서버가 표준출력을 더럽히지 않는다"*였는데 **그것을 안 쟀다** —
+   * 리뷰어가 실측했다(귀속: 리뷰어 R2): 리다이렉트를 지우고 `io.out`으로 한 줄을 실제로
+   * 찍어도 스모크 11/11이 초록이었다. `StdioClientTransport`가 개행으로 끝나는 이물 한 줄을
+   * 만나도 안 끊기기 때문이다. **그래서 이름에서 그 주장을 뺐고**, 표준출력을 재는 것은
+   * 아래 `표준출력이 JSON-RPC 프레임뿐이다` 절이 **날 스트림을 직접 읽어** 한다.
    */
-  it('서버가 표준출력을 더럽히지 않는다 — payload 경고가 프레임을 안 깬다', async () => {
+  it('payload 형식이 높아도 응답이 온다 — 경고가 읽기를 막지 않는다', async () => {
     payload = snapshotPayload({ payloadVersion: 99 })
     const client = await connect()
     try {
@@ -261,6 +263,158 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
     }
   }, 60_000)
 })
+
+/**
+ * **표준출력이 JSON-RPC 프레임의 통로다 — 그것을 날 스트림에서 잰다** (리뷰 R2).
+ *
+ * ---
+ *
+ * # 왜 `Client`로는 못 재나 — 리뷰어가 실측했다 (귀속: 리뷰어 R2)
+ *
+ * `bin.ts`의 리다이렉트를 지우고 `io.out`으로 한 줄을 실제로 찍어도 **스모크 11/11이
+ * 초록이었다.** SDK 1.30.0의 `StdioClientTransport`가 **개행으로 끝나는 이물 한 줄을
+ * 만나도 연결을 안 끊기** 때문이고, 무엇보다 그 전송이 **자식의 표준출력을 독점하므로**
+ * 케이스가 원문을 볼 수 없다.
+ *
+ * **그래서 여기서는 `Client`를 안 쓴다.** `spawn`으로 직접 띄우고 JSON-RPC 프레임을 손으로
+ * 써 넣은 뒤 **표준출력 전문**을 읽어 모든 줄을 검사한다.
+ *
+ * # 무엇이 위험한가 — 오늘 위험은 문서가 적은 것보다 낮다
+ *
+ * 이 SDK 판은 개행으로 끝나는 이물 줄에 관대하다. **그러나 개행 없는 조각**이 섞이면 다음
+ * 프레임 앞에 붙어 그 프레임이 깨지고, **호스트마다 다르다.** 그래서 술어는 관대함에
+ * 기대지 않고 *"모든 줄이 JSON-RPC 프레임이다"*로 둔다.
+ */
+describe('표준출력이 JSON-RPC 프레임뿐이다 (리뷰 R2)', () => {
+  it('핸드셰이크와 도구 호출을 손으로 써 넣고 표준출력 전문을 읽는다', async () => {
+    payload = snapshotPayload({ payloadVersion: 99 })
+    const said = await rawStdout([
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: LATEST_PROTOCOL_VERSION,
+          capabilities: {},
+          clientInfo: { name: 'wirebound-raw', version: '0.0.0' },
+        },
+      },
+      { jsonrpc: '2.0', method: 'notifications/initialized' },
+      { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_pages', arguments: {} } },
+    ])
+
+    // **분모가 0이면 아래가 공허하다** — 응답 둘이 실제로 왔는가.
+    const frames = said.split('\n').filter((line) => line.length > 0)
+    expect(frames.length, said).toBeGreaterThanOrEqual(2)
+    expect(strayLines(said), said).toEqual([])
+
+    // 그 프레임들이 우리가 물은 것에 대한 답인가.
+    const ids = frames.map((line) => (JSON.parse(line) as { id?: number }).id)
+    expect(ids).toContain(1)
+    expect(ids).toContain(2)
+  }, 60_000)
+
+  it('붙지 못한 갈래에서도 프레임뿐이다 — 오류 문장이 표준출력으로 안 샌다', async () => {
+    payload = snapshotPayload()
+    const said = await rawStdout(
+      [
+        {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: LATEST_PROTOCOL_VERSION,
+            capabilities: {},
+            clientInfo: { name: 'wirebound-raw', version: '0.0.0' },
+          },
+        },
+        { jsonrpc: '2.0', method: 'notifications/initialized' },
+        { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_pages', arguments: {} } },
+      ],
+      // 자격을 없는 자리로 돌린다. `fetchSnapshot`도 `requireProject`도 말을 하는 갈래다.
+      { WIREB_CREDENTIALS: join(repo, 'none.json') },
+    )
+
+    expect(strayLines(said), said).toEqual([])
+    expect(said).toContain('wireb login')
+  }, 60_000)
+
+  /** **술어를 보정한다.** 늘 `[]`를 내면 위 둘이 아무것도 안 재고 통과한다. */
+  it('술어가 이물을 실제로 잡는다 — 반대편', () => {
+    expect(strayLines('{"jsonrpc":"2.0","id":1}\n')).toEqual([])
+    expect(strayLines('wirebound mcp ready\n{"jsonrpc":"2.0","id":1}\n')).toEqual(['wirebound mcp ready'])
+    // 개행 없는 조각이 앞에 붙으면 그 줄 자체가 프레임이 아니게 된다.
+    expect(strayLines('ready{"jsonrpc":"2.0","id":1}\n')).toEqual(['ready{"jsonrpc":"2.0","id":1}'])
+    // JSON이지만 JSON-RPC가 아닌 줄도 이물이다.
+    expect(strayLines('{"hello":1}\n')).toEqual(['{"hello":1}'])
+  })
+})
+
+/**
+ * 표준출력에서 **JSON-RPC 프레임이 아닌 줄**들. 비어 있어야 한다.
+ *
+ * `jsonrpc: '2.0'`까지 본다 — JSON이기만 하면 통과시키면 로그를 JSON으로 찍는 판이
+ * 그대로 새 나간다.
+ */
+function strayLines(stdout: string): string[] {
+  return stdout
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .filter((line) => {
+      try {
+        return (JSON.parse(line) as { jsonrpc?: unknown }).jsonrpc !== '2.0'
+      } catch {
+        return true
+      }
+    })
+}
+
+/**
+ * 빌드된 서버를 띄워 프레임들을 써 넣고 **표준출력 전문**을 돌려준다.
+ *
+ * 답을 짝짓지 않고 **`id`를 든 요청 수만큼 프레임이 올 때까지** 기다린다 — 서버가 이물을
+ * 찍으면 그 줄도 여기 담긴다(그것이 재려는 것이다).
+ */
+async function rawStdout(frames: unknown[], env: Record<string, string> = {}): Promise<string> {
+  const child = spawn(process.execPath, [binPath], {
+    cwd: repo,
+    env: { PATH: process.env.PATH ?? '', WIREB_CREDENTIALS: credentials, ...env },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+  const wanted = frames.filter((frame) => (frame as { id?: unknown }).id !== undefined).length
+  let out = ''
+
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`응답이 안 왔다: ${JSON.stringify(out)}`)), 30_000)
+      const finish = (): void => {
+        clearTimeout(timer)
+        resolve(out)
+      }
+      child.stdout.setEncoding('utf8')
+      child.stdout.on('data', (chunk: string) => {
+        out += chunk
+        // **줄 수가 아니라 프레임 수로 센다** — 이물이 섞여도 기다림이 안 끝나지 않게.
+        const answered = out
+          .split('\n')
+          .filter((line) => line.length > 0)
+          .filter((line) => {
+            try {
+              return (JSON.parse(line) as { id?: unknown }).id !== undefined
+            } catch {
+              return false
+            }
+          }).length
+        if (answered >= wanted) finish()
+      })
+      child.on('error', reject)
+      child.on('exit', finish)
+      for (const frame of frames) child.stdin.write(`${JSON.stringify(frame)}\n`)
+    })
+  } finally {
+    child.kill()
+  }
+}
 
 /** 날 제어 바이트. **소스에 날로 적지 않는다** — `packages/cli/build-test`와 같은 규칙이다. */
 const CONTROL_BYTES = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u

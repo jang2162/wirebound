@@ -75,9 +75,28 @@ describe('도구 표가 §12.2를 센다', () => {
   })
 })
 
+/**
+ * **도구가 받아도 되는 인자 이름 — 전체 목록이다** (리뷰 R4).
+ *
+ * 앞 판은 이 자리를 **도구 이름 셋을 손으로 적은 화이트리스트**와 **위험한 이름 여섯을 적은
+ * 블랙리스트**로 지켰다. 리뷰어가 실측했다(귀속: 리뷰어 R4): `validate`에 `namingRule`을
+ * 더하면 **화이트리스트 1건만 죽고 블랙리스트는 못 잡았다**(이름을 정확히 맞추는 목록이므로).
+ * **그리고 새 도구를 더하면 그 도구의 인자는 어느 화이트리스트에도 안 걸린다** —
+ * P9-5가 `patch_page`·`add_comment` 둘을 더하므로 여기를 바로 밟는다.
+ *
+ * **그래서 분모를 `TOOLS`에서 만든다.** 도구가 몇 개든, 이름이 무엇이든, 이 목록 밖의 인자를
+ * 받으면 죽는다.
+ *
+ * **줄을 더하는 것은 판정이다.** `patch_page`가 `ops`·`baseSeq`를 받아야 하면 그때 여기에
+ * 이유와 함께 적어라 — 그 순간이 *"이 값을 세션이 줘도 되는가"*를 다시 묻는 자리다.
+ */
+const ALLOWED_ARGS: readonly { name: string; why: string }[] = [
+  { name: 'path', why: '§8.1의 페이지 경로. 세션이 만드는 값이 아니라 list_pages 가 낸 값이다' },
+]
+
 describe('인자 스키마에 **없는 것**이 판정이다', () => {
   /**
-   * **D5 — 정규식의 신뢰 경계를 열지 않는다.**
+   * **D5 — 정규식의 신뢰 경계를 열지 않는다. D4 — 프로젝트는 리포가 정한다.**
    *
    * P9-1 이월 §5.2가 묻고 P9-2 이월 §2가 넘기고 P9-3 이월 §3이 *"경계가 바뀌는 날이
    * P9-4다"*로 적었다. **답은 열지 않는다이고, 그 부재를 이 케이스가 든다** — P9-2가
@@ -86,26 +105,39 @@ describe('인자 스키마에 **없는 것**이 판정이다', () => {
    * 여는 순간 에이전트가 만든 문자열이 `new RegExp`에 들어간다. 그때 필요한 것(길이 상한 ·
    * 백트래킹 · 타임아웃)은 이 슬라이스 밖이다.
    */
-  it('어느 도구도 lint 설정·정규식을 인자로 받지 않는다 (D5)', () => {
+  it('어느 도구도 허용 목록 밖의 인자를 안 받는다 (D4·D5)', () => {
+    const allowed = ALLOWED_ARGS.map((entry) => entry.name)
+    const found: string[] = []
+    for (const tool of TOOLS) {
+      for (const key of Object.keys(tool.inputSchema.properties)) {
+        if (!allowed.includes(key)) found.push(`${tool.name}.${key}`)
+      }
+    }
+    expect(found).toEqual([])
+  })
+
+  it('허용 목록에 이유가 달려 있고 죽은 줄이 없다', () => {
+    // 이유 없이 늘리면 위 케이스가 아무것도 안 막는다.
+    for (const entry of ALLOWED_ARGS) expect(entry.why.length, entry.name).toBeGreaterThan(10)
+    // 어느 도구도 안 받는 이름을 허용해 두면 그것도 죽은 허가다.
+    const used = new Set(TOOLS.flatMap((tool) => Object.keys(tool.inputSchema.properties)))
+    expect(ALLOWED_ARGS.map((entry) => entry.name).filter((name) => !used.has(name))).toEqual([])
+  })
+
+  /**
+   * **위험한 이름을 따로도 든다.** 위 화이트리스트가 이미 그것을 덮지만, 이 줄들이
+   * **왜 닫혀 있는지**를 이름으로 남긴다 — D5가 무엇을 막는 판정인지 다음 사람이 읽는다.
+   */
+  it('정규식·프로젝트·자격을 이름으로도 막는다 (D4·D5)', () => {
     for (const tool of TOOLS) {
       const keys = Object.keys(tool.inputSchema.properties)
-      for (const forbidden of ['config', 'lint', 'naming', 'pattern', 'regex', 'rules']) {
+      for (const forbidden of ['config', 'lint', 'naming', 'pattern', 'regex', 'rules', 'projectId', 'project', 'server', 'token', 'cwd']) {
         expect(keys, `${tool.name}.${forbidden}`).not.toContain(forbidden)
       }
     }
   })
 
-  /** **D4 — `.wirebound.json`이 프로젝트를 정한다. 세션이 정하지 않는다.** */
-  it('어느 도구도 프로젝트·서버·토큰을 인자로 받지 않는다 (D4)', () => {
-    for (const tool of TOOLS) {
-      const keys = Object.keys(tool.inputSchema.properties)
-      for (const forbidden of ['projectId', 'project', 'server', 'token', 'cwd']) {
-        expect(keys, `${tool.name}.${forbidden}`).not.toContain(forbidden)
-      }
-    }
-  })
-
-  it('받는 인자는 경로 하나뿐이다', () => {
+  it('오늘 셋이 받는 것 — 모양을 고정한다', () => {
     expect(Object.keys(findTool('list_pages')!.inputSchema.properties)).toEqual([])
     expect(Object.keys(findTool('get_page')!.inputSchema.properties)).toEqual(['path'])
     expect(Object.keys(findTool('validate')!.inputSchema.properties)).toEqual(['path'])
