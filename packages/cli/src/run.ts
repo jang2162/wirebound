@@ -26,6 +26,7 @@
 import { parseArgs, type ParseArgsConfig } from 'node:util'
 import { runInit } from './commands/init'
 import { runLogin } from './commands/login'
+import { runPageGet } from './commands/page-get'
 import { runPull } from './commands/pull'
 import { CliError, EXIT, usageError, type ExitCode } from './exit'
 import type { Io } from './io'
@@ -86,6 +87,14 @@ export const COMMANDS: CommandSpec[] = [
       out: { type: 'string', short: 'o' },
     },
     run: (io, values) => runPull(io, { out: asString(values.out) }),
+  },
+  {
+    words: ['page', 'get'],
+    summary: 'wireb page get <경로> [--json]                페이지 하나를 스키마·코멘트·상호작용 문장으로',
+    options: {
+      json: { type: 'boolean', default: false },
+    },
+    run: (io, values, positionals) => runPageGet(io, positionals[0], { json: values.json === true }),
   },
 ]
 

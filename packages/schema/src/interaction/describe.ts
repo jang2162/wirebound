@@ -98,8 +98,16 @@ const TRIGGER_VERBS: Record<InteractionTrigger, string> = {
   submit: '제출',
 }
 
-/** 문서에 없는 타겟. **코멘트 탭의 `MISSING_NODE`와 같은 말이다** — 같은 상태다. */
+/**
+ * 문서에 없는 타겟. **코멘트 탭의 `MISSING_NODE`와 같은 말이다** — 같은 상태다.
+ *
+ * **P9-3이 이름으로 내보냈다**(`MISSING_NODE_NAME`). `page-view.ts`가 *"그 노드가 문서에
+ * 없는 코멘트"*를 같은 말로 불러야 하는데, 거기서 리터럴을 다시 적으면 이 말을 아는 자리가
+ * 넷이 된다. 남은 사본 둘(`packages/exporter`의 `MISSING_NODE_LABEL` ·
+ * `apps/web`의 `MISSING_NODE`)은 이 슬라이스 밖이다 — 이월에 적었다.
+ */
 const MISSING_NODE = '사라진 노드'
+export { MISSING_NODE as MISSING_NODE_NAME }
 /**
  * **아직 타겟을 안 고른 액션.** *"사라진 노드"*와 갈라 말한다 — 저작 중에 액션을 막
  * 더한 상태이지 무엇이 없어진 것이 아니다. **이것이 P5-1 이월 §1의 부류를 이 자리에서

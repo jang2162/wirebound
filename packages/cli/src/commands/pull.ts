@@ -36,12 +36,11 @@
  * 셋을 *"에러 처리"*로 뭉뚱그리지 않는 것이 이 명령의 값이다. 가르는 코드는
  * `client.ts` 한 자리에 있다.
  */
-import { requireBinding } from '../binding'
 import { callApi, parseJson } from '../client'
-import { findToken } from '../credentials'
-import { EXIT, configError } from '../exit'
+import { EXIT } from '../exit'
 import type { Io } from '../io'
 import { join, resolveFrom } from '../paths'
+import { requireProject } from '../project'
 
 /** `-o`를 안 주면 이 이름으로 리포 뿌리에 쓴다. */
 export const DEFAULT_PULL_FILE = 'wirebound-snapshot.json'
@@ -51,14 +50,9 @@ export interface PullOptions {
 }
 
 export async function runPull(io: Io, options: PullOptions): Promise<number> {
-  const binding = await requireBinding(io)
-
-  const token = await findToken(io, binding.server, binding.projectId)
-  if (token === null) {
-    throw configError(
-      `${binding.server} 의 프로젝트 ${binding.projectId} 에 쓸 자격이 없습니다. \`wireb login\`을 먼저 실행하세요`,
-    )
-  }
+  // **자격을 찾는 자리는 `project.ts` 하나다**(P9-3). 명령마다 다시 짜면 *"자격이
+  // 없습니다"*의 문장이 갈린다.
+  const { binding, token } = await requireProject(io)
 
   const response = await callApi(io, binding.server, {
     method: 'GET',

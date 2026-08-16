@@ -51,11 +51,23 @@ export { checkNodeAction, checkPageAction, isPageTargetAction } from './interact
 export type { ComponentNoun, InteractionSentence } from './interaction/describe'
 export {
   COMPONENT_NOUNS,
+  MISSING_NODE_NAME,
   describeInteraction,
   describeNode,
   describePageTarget,
   listInteractionSentences,
 } from './interaction/describe'
+
+// P9-3 T4 — `wireb page get`과 §12.2의 `get_page`가 낼 것을 값으로. **CLI는 글자만
+// 만든다**(D4) — 무엇을 실을지는 이 함수가 정하고, `--json`이 그 값을 그대로 낸다.
+export type {
+  PageView,
+  PageViewComment,
+  PageViewCommentInput,
+  PageViewInput,
+  PageViewNode,
+} from './page-view'
+export { pageView } from './page-view'
 
 // P9-3 T2 — §8.1의 타겟 조립. **`apps/api/src/services/page-target.ts`에서 올라왔다**
 // (P9-1 이월 §2). `lint/input.ts`의 `LintPage.target`을 채우는 자리이고 CLI·MCP가 같은
@@ -64,6 +76,7 @@ export type { PageTargetInput, TargetMenuNode, TargetPage, TargetedPage } from '
 export {
   PAGE_TARGET_PREFIX,
   duplicateTargets,
+  matchPageTargets,
   pageBundleTitle,
   pageTarget,
   pageTargetPath,

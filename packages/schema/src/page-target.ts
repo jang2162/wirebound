@@ -217,6 +217,32 @@ function sorted<T extends { sortOrder: number }>(items: readonly T[] | undefined
 }
 
 /**
+ * 사람이 친 경로로 페이지를 고른다. **맞는 것 전부**를 낸다 — 0개·1개·둘 이상이 서로 다른
+ * 상태이고 부르는 쪽이 그것을 갈라 말해야 한다.
+ *
+ * **접두를 붙여 쳐도 되고 안 붙여도 된다**(`pageTargetPath`가 둘을 같은 자리에서 받는다).
+ * 마디마다 앞뒤 공백을 걷는다 — 타겟을 만드는 쪽이 그렇게 하므로 대조하는 쪽도 같아야
+ * `wireb page get "관리자 / 회원 / 목록"`이 맞는다.
+ *
+ * **둘 이상이 나오는 것은 정상 상태다.** 같은 메뉴 아래 같은 제목이거나 제목에 `/`가 들면
+ * 타겟이 겹치고(`duplicateTargets`가 그 판정을 든다), 그때 하나를 골라 주면 **어느 쪽인지
+ * 아무도 모른 채** 지나간다.
+ */
+export function matchPageTargets(pages: readonly TargetedPage[], input: string): TargetedPage[] {
+  const wanted = normalizePath(input)
+  if (wanted.length === 0) return []
+  return pages.filter((page) => normalizePath(page.target) === wanted)
+}
+
+/** 접두를 벗기고 마디마다 공백을 걷는다. */
+function normalizePath(value: string): string {
+  return pageTargetPath(value)
+    .split(TARGET_SEPARATOR)
+    .map((segment) => segment.trim())
+    .join(TARGET_SEPARATOR)
+}
+
+/**
  * 둘 이상의 페이지가 든 타겟. **첫 등장 순서**로 낸다.
  *
  * 여기 이름이 오르면 그 타겟을 겨눈 링크는 번들 어디에도 안 생긴다 — 먼저 온 것을

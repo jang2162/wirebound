@@ -21,6 +21,11 @@
     "build": "tsdown",
     "build:watch": "tsdown --watch"
   },
+  "dependencies": {
+    "@wirebound/schema": "workspace:*",
+    "@wirebound/themes": "workspace:*",
+    "fflate": "^0.8.3"
+  },
   "devDependencies": {
     "@types/node": "^26.1.2",
     "tsdown": "^0.22.14"
