@@ -89,3 +89,11 @@ export { compileTheme } from './emit/index'
 
 export { SYSTEM_THEME_IDS, systemTheme } from './system/index'
 export { ADMIN_THEME } from './system/admin'
+
+// P9-1 — §12.4의 테마 규칙과 **합치는 자리**. 규칙 구현은 소유자를 따라 갈라져 있고
+// (설계서 규칙은 `schema`) 둘을 한 목록으로 내는 이름이 `lintProject`다. 그 판정의 근거는
+// `lint/project.ts`의 머리말에 있다 — 설계서 §12.4와 어긋나는 자리다.
+export type { LintThemeEntry, LintThemePage, ThemeLintInput } from './lint/input'
+export { lintThemes } from './lint/index'
+export type { ProjectLintInput } from './lint/project'
+export { lintProject } from './lint/project'
