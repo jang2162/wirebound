@@ -58,7 +58,8 @@ export function createLockChannel(): LockChannel {
 
   const send = (payload: string): void => {
     // **못 보내도 조용하다.** 잠금을 못 잡은 것은 편집 실패가 아니고, 다시 붙으면
-    // `attach`가 같은 자리를 다시 알린다.
+    // `use-realtime.ts`의 `'open'` 갈래가 부르는 `refresh()`가 같은 자리를 다시 알린다.
+    // **`attach`가 아니다** — 그쪽은 링크만 갈아 끼운다(붙었다고 열린 것은 아니다).
     if (link !== null) link.send(payload)
   }
 

@@ -161,6 +161,12 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
             socket.close(WS_CLOSE.revoked, '권한이 회수되었습니다')
             // **회수도 연결 종료다** — §7.2의 *"연결 종료 시 즉시 해제"*가 여기도 선다.
             // `close` 이벤트가 뒤따르지만 그 자리에서 다시 놓아도 조용히 지난다.
+            //
+            // **그래서 이 줄은 0 사망이다(리뷰 N9).** 바로 위 `socket.close()`가 부르는
+            // `close` 핸들러가 같은 일을 하므로 지워도 아무것도 안 죽는다. **지워도 되는
+            // 신호로 읽지 마라:** 이것은 둘째 방어이고, `close` 이벤트가 안 오는 구현으로
+            // 갈아 끼우는 날 유일한 해제가 된다(`ws/patch.ts`의 `clientOpId`·`connection.ts`의
+            // `stopped`와 같은 부류다).
             releaseLocksOf(app, connection)
             announce()
             return

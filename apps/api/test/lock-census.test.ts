@@ -76,6 +76,15 @@ interface Fixture {
   projectId: string
   menuId: string
   pageId: string
+  /**
+   * **같은 프로젝트의 다른 페이지이고 노드 id가 `pageId`와 똑같다.**
+   *
+   * 노드 id가 페이지를 넘어 겹치는 것은 실재한다 — `POST .../pages/import`가 파일의 id를
+   * 그대로 쓰고 `PUT .../schema`는 임의의 id를 받는다. 서버가 `frame.pageId`를 **검증하지
+   * 않으므로**(문서를 읽어야 안다) 그것을 무해하게 만드는 것은 `lock/check.ts`의 페이지
+   * 필터 한 줄이고, 이 페이지가 그 줄을 재는 판을 만든다.
+   */
+  twinPageId: string
   /** `n_b` 안에 달린 코멘트. 지우는 갈래가 쓴다. */
   commentId: string
   snapshotId: string
@@ -97,7 +106,7 @@ const CALL_SITES: LockSite[] = [
     file: 'routes/pages.ts',
     label: 'PUT .../schema — 문서 통째 교체',
     checksLock: true,
-    why: '`/root`를 갈아 끼우므로 **잠긴 서브트리가 무엇이든 그 안에 있다.** 이 엔드포인트의 실제 사용자는 가져오기(P7)와 복원(P6)이고, 그 둘이 남이 편집 중인 문서를 통째로 덮는 것이 §7.2가 막으려던 그 일이다',
+    why: '`/root`를 갈아 끼우므로 **잠긴 서브트리가 무엇이든 그 안에 있다.** (가져오기·복원을 근거로 적지 마라 — 그 둘은 이 라우트로 안 오고 아래 두 줄이 그것을 별도로 센다)',
     drive: async (ctx, fx) => {
       const res = await ctx.app.inject({
         method: 'PUT',
@@ -327,6 +336,101 @@ describe('막는 것은 **남의** 잠금이다 (D3)', () => {
     })
   }, 30_000)
 
+  it('여러 op 중 **뒤쪽 하나만** 잠긴 자리여도 막힌다 — 편집은 자기가 건드리는 자리를 전부 낸다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const holderTab = track(await joinRoom(ctx.port, fx.projectId, fx.holder.cookie.wb_session))
+      holderTab.send(JSON.stringify({ type: 'lock', pageId: fx.pageId, nodeId: 'n_b' }))
+      await locksWith(holderTab, 'n_b')
+
+      // 첫 op은 잠긴 서브트리 **밖**이다. 첫 포인터만 보면 이 편집이 지나간다.
+      const status = await patchOps(ctx, fx, [...outsideLock(), ...insideLock()])
+
+      expect(status).toBe(LOCKED)
+    })
+  }, 30_000)
+
+  it('`move`는 **뽑는 자리**만 잠겨 있어도 막힌다 — 포인터가 둘이다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const holderTab = track(await joinRoom(ctx.port, fx.projectId, fx.holder.cookie.wb_session))
+      holderTab.send(JSON.stringify({ type: 'lock', pageId: fx.pageId, nodeId: 'n_b' }))
+      await locksWith(holderTab, 'n_b')
+
+      // `from`이 잠긴 `n_b` 안(`n_b1`), `path`는 밖(`n_a` 아래)이다.
+      const status = await patchOps(ctx, fx, [
+        { op: 'move', from: '/root/children/1/children/0', path: '/root/children/0/children/-' },
+      ])
+
+      expect(status).toBe(LOCKED)
+    })
+  }, 30_000)
+
+  it('**다른 페이지**의 잠금은 이 페이지의 편집을 막지 않는다 — 노드 id는 페이지를 넘어 겹친다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const holderTab = track(await joinRoom(ctx.port, fx.projectId, fx.holder.cookie.wb_session))
+
+      // **같은 `nodeId`를 다른 `pageId`로 잠근다.** 서버는 `frame.pageId`가 그 프로젝트의
+      // 페이지인지 보지 않으므로(문서를 읽어야 안다) 이 프레임은 그대로 선다 — 그것을
+      // 무해하게 만드는 것은 `lock/check.ts`의 페이지 필터 한 줄이다.
+      holderTab.send(JSON.stringify({ type: 'lock', pageId: fx.twinPageId, nodeId: 'n_b' }))
+      await locksWith(holderTab, 'n_b')
+
+      const status = await patchOps(ctx, fx, insideLock())
+
+      expect(status).toBe(200)
+    })
+  }, 30_000)
+
+  it('그 대조 — **같은 페이지**의 같은 노드를 잠그면 막힌다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const holderTab = track(await joinRoom(ctx.port, fx.projectId, fx.holder.cookie.wb_session))
+
+      holderTab.send(JSON.stringify({ type: 'lock', pageId: fx.pageId, nodeId: 'n_b' }))
+      await locksWith(holderTab, 'n_b')
+
+      const status = await patchOps(ctx, fx, insideLock())
+
+      expect(status).toBe(LOCKED)
+    })
+  }, 30_000)
+
+  it('읽을 수 없는 버전의 문서는 잠금이 아니라 **버전**으로 답한다 — 같은 부류다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const holderTab = track(await joinRoom(ctx.port, fx.projectId, fx.holder.cookie.wb_session))
+      holderTab.send(JSON.stringify({ type: 'lock', pageId: fx.pageId, nodeId: 'n_b' }))
+      await locksWith(holderTab, 'n_b')
+
+      // **새 배포가 쓴 문서를 옛 서버가 읽는 판이다**(설계 §13.1). 잠금 확인은 파이프라인과
+      // **같은 기준**으로 문서를 올리므로(`migrateDocument`) 여기서 읽지 못하고 판정을
+      // 건너뛴다 — 그러면 파이프라인이 자기 이름(`unsupported-version` → 400)으로 답한다.
+      // 올리지 않고 저장된 문서를 그대로 보면 잠금이 먼저 걸려 **400이 423으로 바뀐다.**
+      const row = await db
+        .selectFrom('pages')
+        .select(['schema', 'head_seq'])
+        .where('id', '=', fx.pageId)
+        .executeTakeFirstOrThrow()
+      await db
+        .updateTable('pages')
+        .set({ schema: JSON.stringify({ ...(row.schema as object), version: 99 }) as never })
+        .where('id', '=', fx.pageId)
+        .execute()
+
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`,
+        cookies: fx.actor.cookie,
+        payload: { baseSeq: Number(row.head_seq), ops: insideLock() },
+      })
+
+      expect(res.statusCode).toBe(400)
+      expect((res.json() as { error: { code: string } }).error.code).toBe('bad-request')
+    })
+  }, 30_000)
+
   it('낡은 요청은 잠금이 아니라 낡음으로 답한다 — 겪지 않은 실패를 말하지 않는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -452,6 +556,28 @@ async function fixture(ctx: RealApiContext): Promise<Fixture> {
   })
   if (put.statusCode !== 200) throw new Error(`픽스처 PUT 실패 (${put.statusCode}): ${put.body}`)
 
+  // **같은 문서를 두 번째 페이지에도 심는다.** 두 페이지의 노드 id가 겹치는 판을 만든다.
+  const twin = await createPage(ctx, actor.cookie, project.id, menu.id, { title: '노드 id가 겹치는 페이지' })
+  const twinPut = await ctx.app.inject({
+    method: 'PUT',
+    url: `/api/projects/${project.id}/pages/${twin.id}/schema`,
+    cookies: actor.cookie,
+    payload: {
+      schema: {
+        version: 1,
+        root: {
+          id: 'n_root',
+          type: 'Page',
+          children: [
+            { id: 'n_a', type: 'Section', children: [{ id: 'n_a1', type: 'Text', props: {} }] },
+            { id: 'n_b', type: 'Section', children: [{ id: 'n_b1', type: 'Text', props: {} }] },
+          ],
+        },
+      },
+    } as never,
+  })
+  if (twinPut.statusCode !== 200) throw new Error(`쌍둥이 페이지 PUT 실패 (${twinPut.statusCode}): ${twinPut.body}`)
+
   // 뒤 노드에 먼저 → 1번. 앞 노드에 나중에 → 2번. 재번호가 이것을 뒤집는다.
   await addComment(ctx, project.id, page.id, actor, 'n_b2')
   const commentId = await addComment(ctx, project.id, page.id, actor, 'n_b1')
@@ -470,6 +596,7 @@ async function fixture(ctx: RealApiContext): Promise<Fixture> {
     projectId: project.id,
     menuId: menu.id,
     pageId: page.id,
+    twinPageId: twin.id,
     commentId,
     snapshotId: (snapshot.json() as { id: string }).id,
   }

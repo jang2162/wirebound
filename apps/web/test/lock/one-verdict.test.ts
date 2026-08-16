@@ -52,6 +52,19 @@ const CALLS_VERDICT = /\bfindLockConflict\(/
 const DECLARES_VERDICT = /export function findLockConflict\(/
 /** 잠금 소유자를 비교하는 자리 — 이것이 흩어지면 D3이 자리 수만큼 다시 판정된다. */
 const COMPARES_OWNER = /\buserId\s*[!=]==/
+/**
+ * **살아 있는 잠금 목록을 손에 쥐는 자리**(서버).
+ *
+ * 판정을 하려면 목록이 있어야 하므로 **어떤 셋째 판정도 여기를 지난다.** 위의 두 정규식은
+ * 지나가지 않는 판정을 못 본다 — 리뷰가 `ws/lock.ts`에 `nodeId` 동등성으로 획득을 거절하는
+ * 판정을 심어 **0 사망**을 실증했다(그 변이는 판정만 늘린 것이 아니라 **동작도 바꿨다**).
+ * 이 명제가 그 구멍을 덮는다.
+ */
+const READS_LOCK_LIST = /\bliveIn\(/
+/** 목록을 *"내게 뜻이 있는 것"*으로 좁히는 자리. 이것이 복제되면 D3이 두 벌이 된다. */
+const NARROWS_BY_OWNER = /\blocksAgainst\(/
+/** 화면이 스토어의 잠금 목록을 손에 쥐는 자리. `#state`가 private이라 selector 말고 길이 없다. */
+const SELECTS_LOCK_LIST = /useEditorStore\([^,]+,\s*\(\s*\w+\s*\)\s*=>\s*\w+\.locks\s*\)/
 
 describe('판정은 한 벌이다 (D7)', () => {
   it('훑을 소스를 실제로 읽는다', () => {
@@ -83,10 +96,48 @@ describe('판정은 한 벌이다 (D7)', () => {
     expect(filesMatching(WEB_SRC, COMPARES_OWNER)).toEqual([])
   })
 
+  it('**살아 있는 잠금 목록을 읽는 자리는 둘뿐이다** — 셋째 판정은 여기서 먼저 보인다', () => {
+    // `lock/store.ts`는 그 함수를 **선언한** 자리라 뺀다. 나머지는 목록을 손에 쥐는
+    // 자리이고, 오늘 그것은 둘이다 — **알리려고**(`ws/broadcast.ts`) 그리고
+    // **판정하려고**(`lock/check.ts`). 셋째가 생기면 그것은 새 판정일 수 있으므로
+    // 사람이 봐야 한다.
+    const readers = filesMatching(API_SRC, READS_LOCK_LIST).filter((relative) => relative !== 'lock/store.ts')
+
+    expect(readers).toEqual(['lock/check.ts', 'ws/broadcast.ts'])
+  })
+
+  it('목록을 좁히는 자리도 하나다 — 판정하는 파일이 `locksAgainst`를 부른다', () => {
+    // 이 호출이 사라지면 그 파일이 소유자 판정을 **자기 손으로** 다시 쓴 것이다.
+    // (`\buserId\s*[!=]==`를 피한 복제는 위 `COMPARES_OWNER`가 못 본다 — 리뷰가
+    // `!Object.is(...)`로 실증했다.)
+    expect(filesMatching(API_SRC, NARROWS_BY_OWNER)).toEqual(['lock/check.ts'])
+  })
+
+  it('화면이 잠금 목록을 손에 쥐는 자리도 하나다 — 판정은 스토어 안에서 끝난다', () => {
+    // 스토어의 `#state`는 private이라 밖에서 목록을 얻는 길은 selector뿐이다. 오늘 그것은
+    // **다시 그리려는 구독 하나**이고(`panels/structure-tree.tsx`), 판정은 스토어의
+    // `lockedBy` 안에서 끝난다. 여기 줄이 늘면 화면 어딘가가 목록을 직접 들여다본다는 뜻이다.
+    expect(filesMatching(WEB_SRC, SELECTS_LOCK_LIST)).toEqual(['panels/structure-tree.tsx'])
+  })
+
   it('검사가 진짜로 무언가를 본다 — 음성 대조', () => {
     // 위 넷이 전부 `[]`를 기대하는 형태이므로, 정규식이 아무것도 안 맞아도 통과할 수 있다.
     // 실제로 맞는 것이 있다는 것을 여기서 본다.
     expect(filesMatching(SCHEMA_SRC, CALLS_VERDICT).length).toBeGreaterThan(0)
     expect(filesMatching(WEB_SRC, /\bfindNodePath\(/).length).toBeGreaterThan(0)
+  })
+
+  /**
+   * **`COMPARES_OWNER`는 반대 방향으로 무르다 — 리뷰가 지적한 자리다.**
+   *
+   * 그 정규식은 잠금과 무관한 `userId` 비교도 잡는다. *"내가 이 코멘트의 작성자인가"* 같은
+   * 비교가 어느 파일에든 생기면 위 케이스가 **잠금과 상관없이** 빨개진다. 좁히지 않는 것은
+   * 판정이다 — 좁히면 잠금 판정의 복제가 그 틈으로 새고, 그쪽이 더 비싸다. 대신 그때 무엇을
+   * 봐야 하는지를 여기 적어 둔다: **걸린 자리가 잠금 목록을 손에 쥐는가**(위 두 케이스)를
+   * 먼저 보라. 안 쥐면 그것은 잠금 판정이 아니고, 이 검사에 예외를 두면 된다.
+   */
+  it('무른 자리를 이름과 함께 남긴다 — 이 케이스는 위 규칙을 설명한다', () => {
+    expect(COMPARES_OWNER.test('if (comment.authorUserId === me.id) return')).toBe(false)
+    expect(COMPARES_OWNER.test('if (comment.userId === me.id) return')).toBe(true)
   })
 })

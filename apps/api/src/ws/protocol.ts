@@ -21,7 +21,18 @@ import type { ApiErrorCode, ApiErrorIssue } from '../errors'
 import { ClientOpId, OpsBody } from '../http/patch-ops'
 import type { LiveLock } from '../lock/store'
 
-/** 룸에 들어와 있는 연결 하나. §7.2의 잠금이 이 목록 위에 선다. */
+/**
+ * 룸에 들어와 있는 연결 하나.
+ *
+ * **§7.2의 잠금은 이 목록 위에 서지 **않는다** — P3-3이 재고 그렇게 판정했다.** 이 목록은
+ * 회수된 연결이 pruning 직전 한 프레임 동안 남으므로(P3-2 이월 §2.5), 배지를 그 위에 세우면
+ * 그 창에서 **없는 사람의 이름을 그리거나** 잠금이 **이름 없이 사라진다.** 그래서 잠금
+ * 프레임이 `userName`을 직접 나른다(`LiveLock`) — 화면은 이 목록을 아예 안 본다
+ * (`apps/web/src/realtime/use-realtime.ts`의 표가 그렇게 적혀 있다).
+ *
+ * **그래서 이 목록의 소비자는 아직 없다.** *"지금 이 페이지를 누가 보고 있다"*를 그리려는
+ * 슬라이스가 첫 소비자가 된다(P3-3 이월 §5.3).
+ */
 export interface Participant {
   connectionId: string
   userId: string

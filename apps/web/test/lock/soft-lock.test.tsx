@@ -27,7 +27,15 @@ import { createEditChannel } from '../../src/realtime/edit-channel'
 import { createLockChannel } from '../../src/realtime/lock-channel'
 import type { NodeLockView, ServerFrame } from '../../src/realtime/protocol'
 import type { EditorStore } from '../../src/store/editor-store'
-import { OTHER_PAGE_ID, PAGE_ID, PROJECT_ID, openPage, pageDoc } from '../editor-harness'
+import {
+  OTHER_PAGE_ID,
+  OTHER_PAGE_TITLE,
+  PAGE_ID,
+  PROJECT_ID,
+  openPage,
+  pageDoc,
+  waitForNode,
+} from '../editor-harness'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
 
@@ -436,6 +444,43 @@ describe('하트비트 — 편집 중 갱신 (§7.2)', () => {
     await act(async () => {})
 
     expect(view.lockFrames().length).toBeGreaterThan(before)
+  })
+})
+
+describe('페이지를 옮길 때 (리뷰 §11)', () => {
+  /**
+   * **주소가 바뀐 커밋 하나 동안 스토어는 앞 페이지를 들고 있다**(`useOpenPage`의 머리말).
+   * 그 커밋에서 잠금을 걸면 **새 주소에 앞 페이지의 노드로** 프레임이 나간다 — 리뷰가
+   * 프로브로 그것을 찍었다:
+   *
+   * ```
+   * lock(pg-1, n-b) → lock(pg-2, n-b) → unlock
+   * ```
+   *
+   * **두 페이지의 노드 id가 겹치면 남의 화면에 없는 노드의 배지가 한 프레임 뜬다** — 그런
+   * 문서는 가져오기·프리셋이 만든다(`POST .../pages/import`가 파일의 id를 그대로 쓴다).
+   * 다음 커밋에 스스로 풀리지만, 그동안 **남의 선택을 막는다.**
+   */
+  it('새 주소에 **앞 페이지의 노드로** 잠금이 나가지 않는다', async () => {
+    const view = await board()
+    fireEvent.click(treeButton('Section'))
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b' })
+
+    // 메뉴에서 다른 페이지로 옮긴다. 두 페이지의 문서는 노드 id가 같다(`board`가 그렇게 연다).
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitForNode('n-root')
+
+    expect(view.lockFrames().filter((frame) => frame.pageId === OTHER_PAGE_ID)).toEqual([])
+  })
+
+  it('옮기면 앞 페이지의 잠금을 놓는다 — 대조', async () => {
+    const view = await board()
+    fireEvent.click(treeButton('Section'))
+
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitForNode('n-root')
+
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'unlock' })
   })
 })
 

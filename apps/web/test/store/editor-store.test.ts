@@ -838,3 +838,52 @@ describe('EditorStore의 마커 반영', () => {
     expect(store.getState().document?.root.children?.map((node) => node.id)).toEqual(['n_a', 'n_theirs'])
   })
 })
+
+/**
+ * **잠금 판정은 *"내가 누구인가"*를 모를 때 막는 쪽으로 기운다**(설계 §7.2 · P3-3 D3).
+ *
+ * 화면에서 `setViewer`는 이펙트라 **첫 렌더에 한 커밋 늦는다** — 그 창에서 `locks` 프레임이
+ * 먼저 닿으면 `viewerUserId`가 아직 `null`이다. 그때 *"모르니까 통과시킨다"*로 두면 §7.2의
+ * 1차 방어가 그 커밋 동안 통째로 사라지고, 사용자는 남이 편집 중인 노드를 고른다.
+ *
+ * **셸로는 이 갈래를 잴 수 없다** — `useNodeLock`이 언제나 `setViewer`를 부르므로 그 창이
+ * 케이스로 재현되지 않는다(리뷰의 W5가 **0 사망**이던 이유다). 스토어를 직접 쥐면 잰다.
+ */
+describe('내가 누구인지 모를 때 (P3-3 D3)', () => {
+  const LOCK = { pageId: 'pg-1', nodeId: 'n_a', userId: 'u_bora', userName: '보라' }
+
+  function locked(): EditorStore {
+    const store = new EditorStore()
+    store.loadPage('pg-1', { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }] } }, 7)
+    store.setLocks([LOCK])
+    return store
+  }
+
+  it('`viewerUserId`가 없으면 **모든 잠금이 남의 것**이다 — 모르는 쪽에서는 막는다', () => {
+    const store = locked()
+
+    expect(store.getState().viewerUserId).toBeNull()
+    expect(store.lockedBy('n_a')).toMatchObject({ nodeId: 'n_a', userId: 'u_bora', userName: '보라' })
+    store.selectNode('n_a')
+    expect(store.getState().selectedNodeId).toBeNull()
+  })
+
+  it('누구인지 알게 되면 자기 잠금은 안 막는다 — 대조', () => {
+    const store = locked()
+
+    store.setViewer('u_bora')
+
+    expect(store.lockedBy('n_a')).toBeNull()
+    store.selectNode('n_a')
+    expect(store.getState().selectedNodeId).toBe('n_a')
+  })
+
+  it('누구인지 알아도 **남의** 잠금은 막는다 — 대조의 대조', () => {
+    const store = locked()
+
+    store.setViewer('u_dahye')
+
+    store.selectNode('n_a')
+    expect(store.getState().selectedNodeId).toBeNull()
+  })
+})
