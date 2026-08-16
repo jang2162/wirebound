@@ -11,7 +11,7 @@
  * 소스에서 센다)가 잰다.
  */
 import { describe, expect, it } from 'vitest'
-import { findLockConflict, lockPointers, type NodeLock } from '../src/lock'
+import { findLockConflict, lockPointers, locksAgainst, type NodeLock } from '../src/lock'
 import { findNodePath } from '../src/tree'
 import type { WbNode } from '../src/node'
 
@@ -180,5 +180,80 @@ describe('lockPointers — ops가 건드리는 자리 전부', () => {
 
   it('빈 ops는 아무 자리도 안 낸다', () => {
     expect(lockPointers([])).toEqual([])
+  })
+})
+
+describe('1차 방어가 통과시킨 것을 2차 방어가 뒤집지 않는다 (D7)', () => {
+  /**
+   * §7.2가 나눈 둘이 **같은 함수**를 쓰므로 성립하는 성질이다.
+   *
+   * **한 방향만 참이다 — 재서 알았다.** *"고를 수 있으면 그 안의 편집도 지나간다"*는 참이고,
+   * 그 역은 거짓이다: **선택이 편집보다 엄격하다.** 선택은 그 서브트리를 통째로 claim하는
+   * 것이라 남의 잠금을 **품기만 해도** 부딪치는데, 편집은 자기가 건드리는 자리만 본다.
+   * 그래서 *"못 고르는 노드"* 안에도 아무의 잠금과도 안 겹치는 편집이 있다 — 아래
+   * `선택이 편집보다 엄격하다`가 그 자리를 이름과 함께 고정한다.
+   *
+   * **위험한 방향은 그 반대쪽이었다:** 고를 수 있는데 편집이 막히면 사용자는 눌러서 값을
+   * 쳤는데 저장이 안 되고 **왜인지 화면에 없다.** 그쪽이 비어 있는 것이 이 표의 값이다.
+   *
+   * 표의 잠금은 **셋**이다(서로 다른 사람 · 서로 다른 깊이) — 하나면 *"어느 잠금과 부딪쳤나"*가
+   * 언제나 그 하나라 고르는 코드가 없어도 통과한다.
+   */
+  const CROWD: NodeLock[] = [
+    { nodeId: 'n_b', userId: 'u_bora', userName: '보라' },
+    { nodeId: 'n_a1', userId: 'u_dahye', userName: '다혜' },
+    { nodeId: 'n_mine', userId: ME, userName: '나' },
+  ]
+
+  /** 문서의 모든 노드. 표를 손으로 적으면 노드를 더할 때 낡는다. */
+  const EVERY_NODE = ['n_root', 'n_a', 'n_a1', 'n_b', 'n_b1', 'n_b2', 'n_c']
+
+  function canSelect(nodeId: string): boolean {
+    const path = findNodePath(root, nodeId)
+    return path !== undefined && findLockConflict({ root, locks: CROWD, pointers: [path], viewerUserId: ME }) === null
+  }
+
+  /** 그 서브트리 **안**을 건드리는 편집이 지나가는가. */
+  function canEditInside(nodeId: string): boolean {
+    const path = findNodePath(root, nodeId)
+    if (path === undefined) return false
+    const pointers = lockPointers([
+      { op: 'add', path: `${path}/children/-`, value: null },
+      { op: 'replace', path: `${path}/props/title`, value: 'x' },
+    ])
+    return findLockConflict({ root, locks: CROWD, pointers, viewerUserId: ME }) === null
+  }
+
+  it('표가 두 갈래를 다 태운다 — 한쪽으로 쏠리면 아래가 공허해진다', () => {
+    expect(EVERY_NODE.filter(canSelect).length).toBeGreaterThan(0)
+    expect(EVERY_NODE.filter((nodeId) => !canSelect(nodeId)).length).toBeGreaterThan(0)
+  })
+
+  it('고를 수 있는 노드의 서브트리 안 편집은 하나도 안 막힌다', () => {
+    const betrayed = EVERY_NODE.filter((nodeId) => canSelect(nodeId) && !canEditInside(nodeId))
+
+    expect(betrayed).toEqual([])
+  })
+
+  it('선택이 편집보다 엄격하다 — 남의 잠금을 **품는** 노드가 그 자리다', () => {
+    const stricter = EVERY_NODE.filter((nodeId) => !canSelect(nodeId) && canEditInside(nodeId))
+
+    // `n_root`는 잠긴 `n_b`·`n_a1`을 품고 `n_a`는 잠긴 `n_a1`을 품는다. 둘 다 **고를 수는
+    // 없지만**, 그 아래에 형제를 하나 더하는 편집은 아무의 잠긴 서브트리도 건드리지 않는다.
+    //
+    // **이것은 구멍이 아니라 대가다.** 화면에서 그 자리를 고칠 길이 없어진다(툴바가 선택을
+    // 요구한다) — 남이 섹션 하나를 잡고 있는 동안 아무도 페이지 루트를 못 고른다는 뜻이다.
+    // 반대 판(품는 것은 안 막는다)은 더 나쁘다: 누가 무심코 루트를 고르면 **모두가 멈춘다.**
+    expect(stricter.sort()).toEqual(['n_a', 'n_root'])
+  })
+
+  it('내 잠금은 양쪽 다 안 막는다 — 소유자 판정도 한 벌이다 (D3)', () => {
+    // 문서에 없는 `n_mine`은 아무것도 막지 못하지만, 그 사실이 소유자 판정을 덮지 않게
+    // **문서 안의 노드**로 다시 잰다.
+    const mineOnRoot: NodeLock[] = [{ nodeId: 'n_c', userId: ME, userName: '나' }]
+    const path = findNodePath(root, 'n_c')!
+
+    expect(locksAgainst(mineOnRoot, ME)).toEqual([])
+    expect(findLockConflict({ root, locks: mineOnRoot, pointers: [path], viewerUserId: ME })).toBeNull()
   })
 })
