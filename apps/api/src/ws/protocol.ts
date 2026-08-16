@@ -39,9 +39,18 @@ export interface Participant {
   userName: string
 }
 
-/** 변경을 일으킨 사람. `revisions.actor_*`와 같은 값이다(§7.4의 `mcp` 표시가 이 자리를 쓴다). */
+/**
+ * 변경을 일으킨 사람. `revisions.actor_*`와 같은 값이다(§7.4의 `mcp` 표시가 이 자리를 쓴다).
+ *
+ * **`RevisionActorType`과 같은 셋이다**(P9-5 D1). 앞 판은 `'user' | 'mcp'` 둘이었는데
+ * `wireb`도 자기 종류를 말하게 되면서 `'cli'`가 실제로 이 자리에 온다 — 좁게 두면 CLI가
+ * 낸 편집의 프레임이 컴파일에서 막힌다.
+ *
+ * **웹의 거울은 `type: string`이라 여기를 넓혀도 안 갈린다**(`apps/web/src/realtime/protocol.ts` —
+ * 쟀다). `protocol-parity.test.ts`는 `ServerFrame` 선언 안만 세므로 이 선언을 안 본다.
+ */
 export interface EventActor {
-  type: 'user' | 'mcp'
+  type: 'user' | 'mcp' | 'cli'
   label: string
 }
 

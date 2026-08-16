@@ -61,6 +61,7 @@ import {
   validatePage,
   type PatchOp,
 } from '@wirebound/schema'
+import { requestActor, requestEventActor } from '../auth/actor'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { badRequest, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
@@ -284,7 +285,9 @@ export function pageRoutes() {
         menuNodeId: body.menuNodeId,
         file: read.file,
         ...(body.title !== undefined ? { title: body.title } : {}),
-        actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+        // **actor는 요청이 정한다**(P9-5 D1 — `auth/actor.ts`). `authorId`는 다르다:
+        // 코멘트의 작성자는 **사람**이고 `comments.author_id`가 `users(id)`에 FK를 건다.
+        actor: requestActor(request),
         authorId: currentUser.id,
       })
       if (outcome.kind !== 'imported') {
@@ -437,7 +440,7 @@ export function pageRoutes() {
         pageId,
         baseSeq: before.headSeq,
         ops: putOps,
-        actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+        actor: requestActor(request),
       })
 
       if (!outcome.ok) {
@@ -455,7 +458,7 @@ export function pageRoutes() {
           { op: 'replace', path: '/version', value: outcome.schema.version },
         ],
         warnings: outcome.warnings,
-        actor: { type: 'user', label: currentUser.name },
+        actor: requestEventActor(request),
         originConnectionId: originConnectionId(request),
       })
 
@@ -516,7 +519,7 @@ export function pageRoutes() {
         pageId,
         baseSeq: body.baseSeq,
         ops: body.ops,
-        actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+        actor: requestActor(request),
       })
 
       if (!outcome.ok) {
@@ -529,7 +532,7 @@ export function pageRoutes() {
         seq: outcome.seq,
         ops: body.ops,
         warnings: outcome.warnings,
-        actor: { type: 'user', label: currentUser.name },
+        actor: requestEventActor(request),
         originConnectionId: originConnectionId(request),
         // **헤더가 없을 때의 두 번째 방벽이다**(P3-2). 소켓이 아직 안 열려 발신자 제외가
         // 성립하지 않으면 낸 사람이 자기 편집을 되받는데, 받는 쪽의 리베이스가 그것을 두 번

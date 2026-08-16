@@ -51,12 +51,21 @@ let credentials = ''
 let payload: unknown = null
 /** 서버가 실제로 받은 Authorization 헤더. **토큰이 실려 갔는지를 여기서 본다.** */
 const seenAuth: string[] = []
+/**
+ * 서버가 실제로 받은 `x-wb-client` 헤더.
+ *
+ * **이것을 재는 자가 여기밖에 없다**(P9-5 D1). `bin.ts`가 `io`를 조립하며 `client: 'mcp'`를
+ * 심는데, 단위 케이스는 그 파일을 안 지나고 자기 가짜 `io`를 세운다 — 그 한 줄을 지워도
+ * `pnpm test`는 0 사망이다.
+ */
+const seenClient: string[] = []
 
 beforeAll(async () => {
   execFileSync('pnpm', ['--filter', './packages/*', '-r', 'build'], { cwd: repoRoot, stdio: 'pipe' })
 
   http = createServer((request, response) => {
     seenAuth.push(request.headers.authorization ?? '')
+    seenClient.push(String(request.headers['x-wb-client'] ?? ''))
     if (request.url === `/api/projects/${PROJECT}/snapshot`) {
       response.writeHead(200, { 'content-type': 'application/json' })
       response.end(JSON.stringify(payload))
@@ -223,6 +232,26 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
       // 자격이 실제로 요청에 실렸다 — 분모가 0이면 아래가 공허하다.
       expect(seenAuth).toContain(`Bearer ${TOKEN}`)
       expect(text(result)).not.toContain(TOKEN)
+    } finally {
+      await client.close()
+    }
+  }, 60_000)
+
+  /**
+   * **자기를 `mcp`라고 말한다**(P9-5 D1 — §7.4의 `actor_type='mcp'`가 이 헤더에 매여 있다).
+   *
+   * **`bin.ts`의 `client: 'mcp'` 한 줄을 볼 수 있는 자가 여기뿐이다.** 단위 케이스는 자기
+   * 가짜 `io`를 세우므로 그 줄을 지워도 안 죽는다 — `dist`를 띄우는 이 파일만 그 조립을 지난다.
+   */
+  it('자기를 `mcp` 라고 말한다 — `wireb` 가 싣는 값과 갈린다', async () => {
+    payload = snapshotPayload()
+    seenClient.length = 0
+    const client = await connect()
+    try {
+      await client.callTool({ name: 'list_pages', arguments: {} })
+      // 분모가 0이면 아래가 공허하다 — 요청이 실제로 갔는가.
+      expect(seenClient.length).toBeGreaterThan(0)
+      expect([...new Set(seenClient)]).toEqual(['mcp'])
     } finally {
       await client.close()
     }

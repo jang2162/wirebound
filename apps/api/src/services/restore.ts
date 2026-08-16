@@ -368,6 +368,14 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
           ],
           // D10 — 복원이 만든 revision은 평범한 편집과 구분돼야 한다(§4.5의 *"복원 자체가
           // 이력에 남고"*의 실질).
+          //
+          // **P9-5의 `requestActor`가 여기 안 온다 — 판정이다.** 이 자리의 actor는
+          // *"누가 고쳤나"*가 아니라 *"무슨 사건인가"*를 든다(라벨이 `복원: <태그>`다).
+          // 종류를 `'cli'`·`'mcp'`로 바꾸면 `actor_id`도 `api_tokens.id`가 돼야 하는데
+          // 그 값은 여기 없고(이 함수는 `actorId` 하나만 받는다), 무엇보다
+          // `GET .../revisions?mine=true`가 `actor_type='user'`로 좁히므로 **복원 revision이
+          // 복원을 부른 사람의 undo 스택에서 조용히 빠진다.** 그것은 §7.3을 다시 여는 일이고
+          // 이 슬라이스 밖이다 — `test/actor-census.test.ts`가 이 판정을 표에 든다.
           actor: { type: 'user', id: input.actorId, label: actorLabel },
         })
         if (!outcome.ok) {

@@ -30,13 +30,13 @@
  * `@wirebound/exporter/test-support`이고 같은 근거다.
  */
 export { createNodeIo } from './node-io'
-export type { FileIo, HttpFetch, HttpRequestInit, HttpResponse, Io } from './io'
+export type { ClientKind, FileIo, HttpFetch, HttpRequestInit, HttpResponse, Io } from './io'
 
 export { CliError, EXIT, configError, serverError, unreachableError, usageError, type ExitCode } from './exit'
 
 export { BINDING_FILE, findBinding, readLintConfig, requireBinding, type Binding, type LoadedBinding } from './binding'
 export { findToken, type CredentialEntry } from './credentials'
-export { callApi, parseJson, type ApiRequest, type ApiResponse } from './client'
+export { CLIENT_KIND_HEADER, callApi, parseJson, type ApiRequest, type ApiResponse } from './client'
 export { fetchSnapshot, requireProject, type ProjectAccess } from './project'
 
 export {

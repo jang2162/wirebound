@@ -75,6 +75,7 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { requestEventActor } from '../auth/actor'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { ApiError, badRequest, conflict, notFound, unauthenticated, validationFailed } from '../errors'
@@ -309,7 +310,7 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
         notifyRestored(app, {
           projectId,
           snapshotId,
-          actor: { type: 'user', label: currentUser.name },
+          actor: requestEventActor(request),
           originConnectionId: originConnectionId(request),
         })
 

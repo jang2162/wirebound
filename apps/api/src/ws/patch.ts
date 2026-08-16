@@ -85,6 +85,11 @@ export async function handlePatchFrame(
     ops: frame.ops,
     // **actor는 연결이 든다.** 핸드셰이크가 세션 쿠키로 정한 값이고(§10 — REST와 WS의 인증
     // 경로가 하나다), 프레임이 실어 온 값이 아니다.
+    //
+    // **`auth/actor.ts`의 `requestActor`를 안 쓴다 — 여기에는 요청이 없다.** 그리고 쓸
+    // 이유도 없다: **WS는 쿠키만이다**(§10 · `ws/routes.ts`의 `requireSessionAuth`가 토큰이
+    // 실린 핸드셰이크를 401로 끊는다). 토큰이 이 자리에 닿을 수 없으므로 언제나 `'user'`가
+    // 맞고, `test/actor-census.test.ts`가 그 판정을 표에 한 줄로 든다.
     actor: { type: 'user', id: connection.userId, label: connection.userName },
   })
 
