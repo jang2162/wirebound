@@ -1,0 +1,112 @@
+/**
+ * 케이스가 쓰는 가짜 `Io` 하나. **파일도 소켓도 진짜를 건드리지 않는다**(D9).
+ *
+ * **두 벌을 만들지 않는다.** 명령마다 지역 가짜를 두면 *"어느 하네스에서 잰 값인가"*가
+ * 매번 물음이 되고(`apps/api`가 하네스 다섯 벌로 겪은 일이다), 무엇보다 D6의 census가
+ * **CLI가 리포에 쓴 파일 전부**를 훑으려면 그 기록이 한 곳에 모여 있어야 한다.
+ */
+import type { HttpRequestInit, HttpResponse, Io } from '../src/io'
+
+export interface RecordedRequest {
+  method: string
+  url: string
+  headers: Record<string, string>
+  body: string | undefined
+}
+
+export interface StubResponse {
+  status: number
+  body?: unknown
+  /** 날 문자열 본문. `body`보다 우선한다 — JSON이 아닌 응답을 재는 자리다. */
+  text?: string
+  setCookie?: string[]
+}
+
+export type Route = (request: RecordedRequest) => StubResponse | Error
+
+export interface FakeIo extends Io {
+  /** 경로(`/api/…`) 전부. **디렉터리 개념이 없다** — 쓴 파일의 절대 경로가 키다. */
+  readonly fs: Map<string, string>
+  readonly stdout: string[]
+  readonly stderr: string[]
+  readonly requests: RecordedRequest[]
+  /** `METHOD /경로` → 응답. 없으면 404를 낸다. */
+  readonly routes: Map<string, Route>
+}
+
+export interface FakeIoOptions {
+  cwd?: string
+  home?: string
+  env?: Record<string, string | undefined>
+  /** 파일을 미리 심는다. 키는 절대 경로. */
+  files?: Record<string, string>
+  /** tty처럼 굴어 `promptSecret`이 이 값을 낸다. `undefined`면 tty가 아니다. */
+  secret?: string
+  /** 표준입력 전문. `undefined`면 비어 있다. */
+  stdin?: string
+}
+
+export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
+  const fs = new Map<string, string>(Object.entries(options.files ?? {}))
+  const stdout: string[] = []
+  const stderr: string[] = []
+  const requests: RecordedRequest[] = []
+  const routes = new Map<string, Route>()
+
+  const fetchImpl = async (url: string, init?: HttpRequestInit): Promise<HttpResponse> => {
+    const request: RecordedRequest = {
+      method: init?.method ?? 'GET',
+      url,
+      headers: init?.headers ?? {},
+      body: init?.body,
+    }
+    requests.push(request)
+
+    const path = url.replace(/^https?:\/\/[^/]+/, '')
+    const route = routes.get(`${request.method} ${path}`)
+    const outcome: StubResponse | Error = route
+      ? route(request)
+      : { status: 404, body: { error: { code: 'not-found', message: '대상을 찾을 수 없습니다' } } }
+
+    // **던지는 것이 *"닿지 못했다"*다** — 전역 `fetch`가 DNS·연결 거부에서 그렇게 한다.
+    if (outcome instanceof Error) throw outcome
+
+    const text = outcome.text ?? (outcome.body === undefined ? '' : JSON.stringify(outcome.body))
+    const setCookie = outcome.setCookie ?? []
+    return {
+      status: outcome.status,
+      headers: {
+        get: (name) => (name.toLowerCase() === 'set-cookie' ? (setCookie[0] ?? null) : null),
+        getSetCookie: () => setCookie,
+      },
+      text: async () => text,
+    }
+  }
+
+  return {
+    cwd: options.cwd ?? '/repo',
+    home: options.home ?? '/home/tester',
+    env: options.env ?? {},
+    out: (line) => stdout.push(line),
+    err: (line) => stderr.push(line),
+    files: {
+      read: async (path) => fs.get(path) ?? null,
+      write: async (path, content) => {
+        fs.set(path, content)
+      },
+    },
+    fetch: fetchImpl,
+    promptSecret: async () => options.secret ?? null,
+    readStdin: async () => options.stdin ?? null,
+    fs,
+    stdout,
+    stderr,
+    requests,
+    routes,
+  }
+}
+
+/** 라우트를 건다. 문자열 키를 손으로 조립하지 않게 감싼다. */
+export function stub(io: FakeIo, method: string, path: string, response: StubResponse | Route): void {
+  io.routes.set(`${method} ${path}`, typeof response === 'function' ? response : () => response)
+}
