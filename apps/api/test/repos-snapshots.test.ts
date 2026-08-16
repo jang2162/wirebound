@@ -24,7 +24,7 @@ import {
   SNAPSHOT_RESOURCES,
   SnapshotPayloadSchema,
   type SnapshotPayload,
-} from '../src/services/snapshot-payload'
+} from '@wirebound/themes'
 import { TEST_DATABASE_URL, createProject, signup, withApi, type TestContext } from './helpers'
 
 const NUL = String.fromCharCode(0)

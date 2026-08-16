@@ -1,17 +1,25 @@
 /**
- * 스냅샷 payload의 규격(설계 §4.5). **`apps/api`가 소유한다 — 계획서 D2.**
+ * 스냅샷 payload의 규격(설계 §4.5). **`packages/themes`가 소유한다 — P9-3 D2.**
  *
- * payload는 `PageDocument`(`@wirebound/schema`)와 `Theme`(`@wirebound/themes`)를 **동시에**
- * 참조한다. 그래서 둘 중 어느 패키지에도 둘 수 없다:
+ * payload는 `PageDocument`(`@wirebound/schema`)와 `Theme`를 **동시에** 참조한다. P6-1이
+ * 이것을 만들 때 그 이유로 `apps/api`에 두었고, 그 판정의 조건절을 스스로 적어 두었다:
+ * *"P9의 `wireb pull`(§12)이 이 규격을 필요로 하면 그때 패키지로 올린다. 지금 올리면
+ * 소비자가 하나인 패키지가 생긴다."*
  *
- * | 후보 | 왜 아닌가 |
+ * **그 조건이 왔다.** `wireb lint`가 `GET .../snapshot`의 응답을 lint 입력으로 바꿔야 하는데
+ * CLI가 그 타입을 못 봤다. 그대로 두면 CLI가 이 모양을 다시 선언하고 **P9-4의 MCP가 또
+ * 선언한다.**
+ *
+ * | 후보 | 왜 아닌가 / 왜인가 |
  * |---|---|
  * | `packages/schema` | `schema → themes` 역방향 의존이 생긴다. CLAUDE.md의 *"의존 방향은 한 방향이다"*를 깬다 |
- * | `packages/themes` | 스냅샷이 테마 개념이 된다. `themes`는 페이지·메뉴·코멘트를 몰라야 한다 |
- * | **`apps/api`** | 이미 둘 다 의존한다. 쓰는 데가 여기 하나다 |
+ * | **`packages/themes`** | **골랐다.** `themes → schema`가 이미 의존 방향이라 payload가 나르는 둘을 다 볼 수 있다. **P9-1이 `lintProject`를 여기 둔 것과 같은 근거다** |
+ * | `apps/api` | CLI·MCP가 못 본다. 그것이 이 승격의 이유다 |
  *
- * P9의 `wireb pull`(§12)이 이 규격을 필요로 하면 그때 패키지로 올린다. **지금 올리면
- * 소비자가 하나인 패키지가 생긴다.**
+ * **대가를 적어 둔다:** `themes`가 페이지·메뉴·코멘트라는 이름을 알게 된다. 앞 판정이
+ * 그것을 *"스냅샷이 테마 개념이 된다"*로 적었는데, `lintProject`가 이미 `LintProject`
+ * (메뉴·페이지·코멘트)를 받고 있으므로 그 선은 P9-1에서 이미 넘었다. 규격은
+ * `snapshot/` 아래에 따로 둔다 — 테마 어휘(`spec/`)와 섞지 않는다.
  *
  * ---
  *
@@ -81,7 +89,8 @@
  */
 import { z } from 'zod'
 import { DocumentEnvelopeSchema, type LayoutDocument, type PageDocument } from '@wirebound/schema'
-import { ThemeSchema, type Theme } from '@wirebound/themes'
+import { ThemeSchema } from '../spec/theme'
+import type { Theme } from '../spec/theme'
 
 /**
  * 이 코드가 만드는 payload의 형식 버전. **올리는 것은 payload의 모양이 바뀔 때뿐이다** —
@@ -235,7 +244,7 @@ export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.strictObject(
 
 /**
  * payload가 담는 자원의 이름. **손으로 적지 않고 규격에서 읽는다** — 세는 쪽과 담는 쪽이
- * 어긋날 자리를 없앤다(`packages/themes`의 `SECTIONS`가 같은 방식이다).
+ * 어긋날 자리를 없앤다(이 패키지의 `SECTIONS`가 같은 방식이다).
  *
  * 사실 2(*"payload에 담기는 것은 다섯이고 겹layer는 없다"*)를 실행으로 지키는 케이스가
  * 이것을 센다.

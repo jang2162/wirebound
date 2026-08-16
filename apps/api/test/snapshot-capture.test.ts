@@ -13,7 +13,7 @@ import { sql } from 'kysely'
 import { ThemeSchema, systemTheme } from '@wirebound/themes'
 import { CURRENT_DOCUMENT_VERSION } from '@wirebound/schema'
 import { captureSnapshot } from '../src/services/snapshot-capture'
-import { SNAPSHOT_PAYLOAD_VERSION, SNAPSHOT_RESOURCES } from '../src/services/snapshot-payload'
+import { SNAPSHOT_PAYLOAD_VERSION, SNAPSHOT_RESOURCES } from '@wirebound/themes'
 import { listSnapshots } from '../src/repos/snapshots'
 import { createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
