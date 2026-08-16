@@ -339,6 +339,35 @@ describe('표준출력이 JSON-RPC 프레임뿐이다 (리뷰 R2)', () => {
     expect(said).toContain('wireb login')
   }, 60_000)
 
+  /**
+   * **응답을 낸 뒤에 찍히는 것도 본다** (델타 리뷰 D-1).
+   *
+   * 위 둘이 이미 같은 창을 쓰지만, **창이 응답에서 끊기면 조용히 좁아지는 자리**이므로
+   * 그 명제를 이름으로 남긴다 — 프로세스가 살아 있는 동안 나온 것이 전부 읽혔는가.
+   */
+  it('응답 뒤에도 읽는다 — 서버가 끝까지 산 뒤에 창이 닫힌다', async () => {
+    payload = snapshotPayload()
+    const said = await rawStdout([
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: LATEST_PROTOCOL_VERSION,
+          capabilities: {},
+          clientInfo: { name: 'wirebound-raw', version: '0.0.0' },
+        },
+      },
+      { jsonrpc: '2.0', method: 'notifications/initialized' },
+      { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'validate', arguments: {} } },
+    ])
+
+    // 응답은 왔고,
+    expect(said.split('\n').filter((line) => line.length > 0).length).toBeGreaterThanOrEqual(2)
+    // 그 뒤로도 이물이 안 나왔다.
+    expect(strayLines(said), said).toEqual([])
+  }, 60_000)
+
   /** **술어를 보정한다.** 늘 `[]`를 내면 위 둘이 아무것도 안 재고 통과한다. */
   it('술어가 이물을 실제로 잡는다 — 반대편', () => {
     expect(strayLines('{"jsonrpc":"2.0","id":1}\n')).toEqual([])
@@ -372,9 +401,23 @@ function strayLines(stdout: string): string[] {
 /**
  * 빌드된 서버를 띄워 프레임들을 써 넣고 **표준출력 전문**을 돌려준다.
  *
- * 답을 짝짓지 않고 **`id`를 든 요청 수만큼 프레임이 올 때까지** 기다린다 — 서버가 이물을
- * 찍으면 그 줄도 여기 담긴다(그것이 재려는 것이다).
+ * ---
+ *
+ * # 답을 받은 뒤에도 읽는다 — **창을 응답에서 끊지 않는다** (델타 리뷰 D-1)
+ *
+ * 앞 판은 *"`id`를 든 요청 수만큼 프레임이 오면"* 곧바로 끝냈다. 리뷰어가 실측했다
+ * (귀속: 리뷰어 D-1): 리다이렉트를 지우고 `setTimeout(() => io.out(…), 1500)`을 심으면
+ * **14/14 초록**이다 — 응답 뒤에 찍히는 것을 아무도 안 읽었다.
+ *
+ * **실서버에서는 그쪽이 더 흔하다.** 호스트의 세션은 오래 살고 도구 호출이 이어지므로,
+ * 응답 뒤에 찍는 줄은 **다음 프레임 앞에 붙는다.**
+ *
+ * 그래서 프레임을 다 받으면 **표준입력을 닫고**(stdio 전송이 EOF로 끝난다) 프로세스가
+ * 죽을 때까지 계속 읽는다. 안 죽으면 `GRACE_MS`까지 기다린 뒤 그때까지 모인 것을 낸다 —
+ * **늦게 찍히는 줄이 그 창 안에 들어온다.**
  */
+const GRACE_MS = 3_000
+
 async function rawStdout(frames: unknown[], env: Record<string, string> = {}): Promise<string> {
   const child = spawn(process.execPath, [binPath], {
     cwd: repo,
@@ -386,14 +429,21 @@ async function rawStdout(frames: unknown[], env: Record<string, string> = {}): P
 
   try {
     return await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`응답이 안 왔다: ${JSON.stringify(out)}`)), 30_000)
+      const deadline = setTimeout(() => reject(new Error(`응답이 안 왔다: ${JSON.stringify(out)}`)), 30_000)
+      let grace: NodeJS.Timeout | undefined
+      let done = false
       const finish = (): void => {
-        clearTimeout(timer)
+        if (done) return
+        done = true
+        clearTimeout(deadline)
+        if (grace !== undefined) clearTimeout(grace)
         resolve(out)
       }
+
       child.stdout.setEncoding('utf8')
       child.stdout.on('data', (chunk: string) => {
         out += chunk
+        if (grace !== undefined) return
         // **줄 수가 아니라 프레임 수로 센다** — 이물이 섞여도 기다림이 안 끝나지 않게.
         const answered = out
           .split('\n')
@@ -405,10 +455,15 @@ async function rawStdout(frames: unknown[], env: Record<string, string> = {}): P
               return false
             }
           }).length
-        if (answered >= wanted) finish()
+        if (answered < wanted) return
+
+        // **여기서 안 끝낸다.** 입력을 닫고 늦게 찍히는 것까지 읽는다(위 머리말).
+        child.stdin.end()
+        grace = setTimeout(finish, GRACE_MS)
       })
       child.on('error', reject)
-      child.on('exit', finish)
+      // 프로세스가 먼저 죽으면 더 나올 것이 없다.
+      child.on('close', finish)
       for (const frame of frames) child.stdin.write(`${JSON.stringify(frame)}\n`)
     })
   } finally {

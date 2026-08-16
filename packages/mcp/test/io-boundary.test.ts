@@ -35,7 +35,16 @@ const SRC = fileURLToPath(new URL('../src', import.meta.url))
  */
 const CLI_SRC = fileURLToPath(new URL('../../cli/src', import.meta.url))
 
-/** **효과가 있는 것만 센다.** `node:util`처럼 순수한 것은 안 센다(술어가 *"바깥 세계를 만지는가"*다). */
+/**
+ * **효과가 있는 것만 센다.** `node:util`처럼 순수한 것은 안 센다(술어가 *"바깥 세계를 만지는가"*다).
+ *
+ * **`console.`이 목록에 있다** (델타 리뷰 D-2). 리뷰어가 실측했다(귀속: 리뷰어 §10.3·D-2):
+ * `console.log`를 `packages/mcp/src`에 심어도 `pnpm test`가 **0 사망**이었다 —
+ * `test:build`가 2건으로 잡았지만 **stdout을 더럽히는 가장 흔한 한 줄이 `pnpm test`에서는
+ * 안 보였다.** MCP에서 표준출력은 프로토콜 그 자체이므로 그 자리를 `pnpm test`로 당긴다.
+ *
+ * **P9-3 리뷰 N4와 같은 부류다** — 술어가 모양 하나만 전제하면 우회가 실재한다.
+ */
 const EFFECTFUL_MODULES = [
   'fs/promises',
   'fs',
@@ -64,7 +73,7 @@ const EFFECTFUL_SPECIFIER = new RegExp(
   `(?:^|[^\\w$])(?:from|import|require)\\s*\\(?\\s*['"](?:node:)?(?:${EFFECTFUL_MODULES.join('|')})['"]`,
 )
 
-const EFFECTFUL = [EFFECTFUL_SPECIFIER, /\bprocess\./, /(?<!io\.)\bfetch\(/]
+const EFFECTFUL = [EFFECTFUL_SPECIFIER, /\bprocess\./, /(?<!io\.)\bfetch\(/, /\bconsole\./]
 
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
@@ -130,12 +139,27 @@ describe('바깥 세계를 만지는 자리 — packages/mcp', () => {
     }
   })
 
-  /** 지정자 밖의 둘. **`io.fetch`는 안 잡는다** — 그것이 이 규칙이 허용하는 길이다. */
+  /**
+   * 지정자 밖의 셋. **`io.fetch`는 안 잡는다** — 그것이 이 규칙이 허용하는 길이다.
+   *
+   * **`console.`이 여기 있다**(델타 리뷰 D-2). MCP에서 표준출력은 프로토콜 그 자체라
+   * `console.log` 한 줄이 프레임을 깬다 — 리뷰어가 그 한 줄에 `pnpm test` **0 사망**을
+   * 실측했고, 이제 여기서 죽는다.
+   */
   it('전역을 직접 만지는 형태도 잡는다', () => {
-    for (const line of ['process.cwd()', 'process.env.HOME', 'await fetch(url)']) {
+    const caught = [
+      'process.cwd()',
+      'process.env.HOME',
+      'await fetch(url)',
+      'console.log("ready")',
+      'console.error(error)',
+      '  console.warn(`${name} 이 없다`)',
+    ]
+    for (const line of caught) {
       expect(EFFECTFUL.some((pattern) => pattern.test(line)), line).toBe(true)
     }
-    for (const line of ['await io.fetch(url, init)', 'const processed = 1']) {
+    // **반대편.** 그물이 넓어지면 이름이 겹치는 것까지 잡는다.
+    for (const line of ['await io.fetch(url, init)', 'const processed = 1', 'const consoleWidth = 80']) {
       expect(EFFECTFUL.some((pattern) => pattern.test(line)), line).toBe(false)
     }
   })
