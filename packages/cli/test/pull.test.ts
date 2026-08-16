@@ -173,6 +173,37 @@ describe('세 갈래를 갈라 말한다 (T6)', () => {
     expect(io.stderr.join('\n')).not.toContain('<html>')
   })
 
+  /**
+   * **N8이 실제로 지목한 결말을 여기서 든다**(델타 리뷰 D4).
+   *
+   * 자격 파일이 **있는데 못 읽는** 상태(`chmod 000`)는 *"자격이 없다"*가 **아니다.**
+   * 접히면 이미 로그인했고 파일도 있는 사람이 *"`wireb login`을 먼저 실행하세요"*를 듣고
+   * 엉뚱한 곳을 본다 — 리뷰어가 진짜 `chmod 000`으로 그 결말을 실측했다.
+   *
+   * **위 술어 케이스(`node-io.test.ts`)와 다른 것을 지킨다.** 그쪽은 `isNotFound`가
+   * `EACCES`를 접지 않는 것을, 여기는 **그 위의 명령들이 그것을 다시 삼키지 않는 것**을
+   * 든다 — `credentials.ts`가 `readStore`를 `try/catch`로 감싸는 판이 그 구멍이다.
+   */
+  it('자격 파일을 못 읽는 것은 "자격이 없다"가 아니다 (N8)', async () => {
+    const denied = Object.assign(new Error("EACCES: permission denied, open '…/credentials.json'"), {
+      code: 'EACCES',
+    })
+    const io = createFakeIo({
+      cwd: '/repo',
+      files: { '/repo/.wirebound.json': JSON.stringify({ server: SERVER, projectId: PROJECT }) },
+      readFailures: { '/home/tester/.wirebound/credentials.json': denied },
+    })
+
+    const code = await run(['pull'], io)
+
+    // **2가 아니다.** 무엇으로 나가든 *"로그인하라"*는 말은 하면 안 된다.
+    expect(code).not.toBe(EXIT.config)
+    expect(io.stderr.join('\n')).not.toContain('wireb login')
+    // 원인이 사람에게 보인다.
+    expect(io.stderr.join('\n')).toContain('EACCES')
+    expect(io.requests).toEqual([])
+  })
+
   it('.wirebound.json이 없으면 2다', async () => {
     const io = createFakeIo()
     const code = await run(['pull'], io)

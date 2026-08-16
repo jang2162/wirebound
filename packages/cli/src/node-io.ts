@@ -62,7 +62,34 @@ export function createNodeIo(): Io {
   }
 }
 
-function isNotFound(error: unknown): boolean {
+/**
+ * 읽기 실패가 *"그 파일이 없다"*인가. **`ENOENT` 하나만 참이다.**
+ *
+ * *"없다"*는 정상 갈래라 `read`가 `null`로 접지만(자격 파일이 아직 없는 것은 흔하다),
+ * **그 밖의 실패는 접으면 안 된다.** 접히면 `chmod 000`된 자격 파일이 *"`wireb login`을
+ * 먼저 실행하세요"*(코드 2)로 나가 **이미 로그인했고 파일도 있는 사람이 엉뚱한 곳을 본다.**
+ *
+ * ---
+ *
+ * # 왜 export 하는가 — **대역이 대역이 아니었다** (델타 리뷰 D4)
+ *
+ * 앞 판은 이 술어를 `read()`를 통해서만 쟀다. `chmod 000`은 **root로 도는 판(흔한 CI
+ * 컨테이너)에서 그냥 읽혀** 값이 누가 돌리느냐에 갈리므로, 대신 **디렉터리를 파일로 읽어
+ * `EISDIR`**을 얻는 대역을 썼다. 그 회피 이유는 옳았다.
+ *
+ * **그런데 그 대역이 원래 물음을 안 쟀다.** `EISDIR`은 *"ENOENT가 아닌 실패"*의 **한
+ * 예일 뿐**이라, 자가 그 **한 코드**만 본다. 리뷰어가 `EISDIR`은 그대로 던지되
+ * **`EACCES`·`EPERM`만** 접는 변이를 심었더니 **81건 중 0건**이 죽었고, 그때
+ * `wireb pull`이 실제로 코드 2 *"`wireb login`을 먼저 실행하세요"*로 나갔다(리뷰어 실측).
+ * **N8이 원래 지목한 결말 그대로다.**
+ *
+ * 그래서 술어를 **코드 표로 직접 잰다** — 파일 시스템도 `chmod`도 root 여부도 안 타므로
+ * 피하려던 문제가 애초에 안 생긴다. `test/node-io.test.ts`가 그 표를 든다.
+ *
+ * **`EISDIR` 케이스는 그대로 둔다.** 그쪽은 **진짜 파일 시스템을 지나는** 카나리아이고
+ * 이쪽은 **술어를 지나는** 자다 — 둘이 서로를 대신하지 않는다.
+ */
+export function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
 }
 

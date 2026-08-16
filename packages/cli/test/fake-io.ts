@@ -49,6 +49,14 @@ export interface FakeIoOptions {
   env?: Record<string, string | undefined>
   /** 파일을 미리 심는다. 키는 절대 경로. */
   files?: Record<string, string>
+  /**
+   * 그 경로를 읽으면 **던진다.** 진짜 파일 시스템에서만 나는 실패(`EACCES`·`EPERM`…)를
+   * 케이스가 만들 수 있게 하는 자리다 — `chmod 000`으로 재면 **root로 도는 판에서 그냥
+   * 읽혀** 값이 누가 돌리느냐에 갈린다(델타 리뷰 D4가 그 회피를 옳다고 봤다).
+   *
+   * `files`보다 **먼저** 본다: 파일이 있는데 못 읽는 상태가 재려는 것이다.
+   */
+  readFailures?: Record<string, Error>
   /** tty처럼 굴어 `promptSecret`이 이 값을 낸다. `undefined`면 tty가 아니다. */
   secret?: string
   /** 표준입력 전문. `undefined`면 비어 있다. */
@@ -100,7 +108,12 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
     out: (line) => stdout.push(line),
     err: (line) => stderr.push(line),
     files: {
-      read: async (path) => fs.get(path) ?? null,
+      read: async (path) => {
+        // **있는데 못 읽는 상태가 먼저다.** `null`(없다)과 갈라야 하는 것이 그것이다.
+        const failure = options.readFailures?.[path]
+        if (failure) throw failure
+        return fs.get(path) ?? null
+      },
       // **셋째 인자를 버리지 않는다** — 버리면 권한을 재는 자가 설 수 없다(위 `modes`).
       write: async (path, content, options) => {
         fs.set(path, content)
