@@ -51,6 +51,20 @@ export interface FileIo {
   read(path: string): Promise<string | null>
   /** 부모 디렉터리는 이 함수가 만든다. `mode`는 파일 권한(8진수). */
   write(path: string, content: string, options?: { mode?: number; dirMode?: number }): Promise<void>
+  /**
+   * 그 경로에 **무엇이 있는가.** 없으면 `null`(P9-3 리뷰 N6).
+   *
+   * **`read`로는 이 물음에 답할 수 없다** — 디렉터리를 읽으면 `EISDIR`로 던지므로
+   * *"디렉터리다"*와 *"못 읽는다"*가 같은 모양이 된다. `wireb export`가 `-o`를 쓰기
+   * **전에** 그 자리가 파일인지 알아야 하고, 그것이 이 자리의 존재 이유다.
+   *
+   * **`null`로 말하는 결을 따른다** — `promptSecret`·`readStdin`이 tty 아님을 예외가
+   * 아니라 `null`로 말하는 것과 같다(P9-2 이월 §5). *"없다"*는 정상 갈래다.
+   *
+   * **접히는 것은 *"없다"* 하나뿐이다.** 권한 오류 같은 것은 그대로 올라간다 —
+   * `read`의 `isNotFound`와 같은 규칙이고 `test/node-io.test.ts`가 그 표를 든다.
+   */
+  kind(path: string): Promise<'file' | 'directory' | null>
 }
 
 export interface Io {

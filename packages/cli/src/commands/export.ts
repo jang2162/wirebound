@@ -84,6 +84,29 @@ export async function runExport(io: Io, options: ExportOptions): Promise<number>
   // **사람이 친 경로는 사람이 서 있는 곳에서 읽힌다**(`pull`과 같은 규칙).
   const target = resolveFrom(io.cwd, options.out.trim())
 
+  /**
+   * **`-o`가 파일을 가리키면 여기서 끊는다**(리뷰 N6).
+   *
+   * 안 끊으면 `mkdir`이 `ENOTDIR`로 던지고 `run.ts`의 마지막 갈래가 그것을 **70**
+   * (*"버그다 — 사용자가 고칠 수 없다"*)으로 낸다. **사람이 할 일은 `-o` 한 글자를
+   * 고치는 것**이므로 `exit.ts`의 표대로면 그 자리는 1이다.
+   *
+   * **P9-2의 `a3c6d12`와 같은 부류다** — 헤더에 실을 수 없는 자격을 `fetch`가 던지게 두어
+   * *"서버에 연결할 수 없습니다"*(4)로 나가던 것을 **보내기 전에** 보고 2로 끊은 그 고침.
+   * 여기서도 **쓰기 전에** 본다.
+   *
+   * **`--force`보다 앞이다.** `--force`는 *"덮어써도 된다"*이지 *"파일을 디렉터리로
+   * 만들어도 된다"*가 아니다 — 그쪽도 같은 `ENOTDIR`로 죽는다.
+   *
+   * **덮지 못하는 것 하나:** `-o`의 **조상**이 파일이면(`-o 파일/하위`) `mkdir`이 여전히
+   * `ENOTDIR`을 내고 70으로 나간다. 실측: `stat('파일/하위')`가 `ENOTDIR`이라 위 `kind`가
+   * 그것을 `null`(*"없다"*)로 접지 않고 올려 보낸다 — 접으면 술어가 거짓말을 한다.
+   * 이월에 적었다.
+   */
+  if ((await io.files.kind(target)) === 'file') {
+    throw usageError(`${target} 는 파일입니다. -o 는 디렉터리를 가리켜야 합니다`)
+  }
+
   if (!options.force) {
     const existing = await conflicts(io, target, files)
     if (existing.length > 0) {

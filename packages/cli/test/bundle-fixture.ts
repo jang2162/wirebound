@@ -30,3 +30,15 @@ export function bundleZip(over: Record<string, string> = {}, root: string | null
   }
   return zipSync(tree, { level: 6 })
 }
+
+/**
+ * **뿌리 폴더가 없는 한 파일짜리 번들.** `stripCommonRoot`의 `segments.length > 1` 가드가
+ * 막는 것이 이 모양이다(리뷰 N5) — 벗기면 경로가 빈 문자열이 되어 `-o` 디렉터리 자체에
+ * 쓰려 든다.
+ *
+ * 오늘 서버는 언제나 뿌리 폴더를 두지만 **CLI는 그 계약을 믿지 않기로 했다**(압축 안의
+ * 경로를 안 믿는 것과 같은 자세). 그래서 자가 있어야 한다.
+ */
+export function singleFileZip(path = 'index.html', content = '한 파일짜리 번들'): Uint8Array {
+  return zipSync({ [path]: strToU8(content) }, { level: 6 })
+}

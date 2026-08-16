@@ -9,7 +9,7 @@ import { strToU8, zipSync } from 'fflate'
 import { EXIT } from '../src/exit'
 import { run } from '../src/run'
 import { createFakeIo, stub, type FakeIo } from './fake-io'
-import { BUNDLE_FILES, BUNDLE_ROOT, bundleZip } from './bundle-fixture'
+import { BUNDLE_FILES, BUNDLE_ROOT, bundleZip, singleFileZip } from './bundle-fixture'
 
 const SERVER = 'https://wb.example.com'
 const PROJECT = 'prj_a1b2'
@@ -85,6 +85,34 @@ describe('서버가 만든 zip을 받아 푼다 (D9)', () => {
     expect(io.fs.has(`/repo/dist/${BUNDLE_ROOT}/index.html`)).toBe(true)
   })
 
+  /**
+   * **뿌리 폴더가 없는 한 파일짜리 번들**(리뷰 N5). `segments.length > 1` 가드를 `>= 1`로
+   * 바꿔도 **0건이 죽었다**(리뷰어 실측 R19) — 그 가드가 막는 유일한 모양을 아무도 안 쟀다.
+   *
+   * 벗기면 `'index.html'.slice(len + 1)`이 **빈 문자열**이 되어 `-o` 디렉터리 자체에 쓰려
+   * 든다. 오늘 서버는 언제나 뿌리 폴더를 두지만 **CLI는 그 계약을 안 믿기로 했다**(압축
+   * 안의 경로를 안 믿는 것과 같은 자세).
+   */
+  it('한 마디짜리 항목은 안 벗긴다 — 벗기면 경로가 빈 문자열이 된다', async () => {
+    const io = 준비(singleFileZip())
+
+    expect(await run(['export', '-o', 'dist'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(쓴것(io)).toEqual(['/repo/dist/index.html'])
+    // 벗겼다면 `join('/repo/dist', '')`가 `/repo/dist`가 된다.
+    expect(io.fs.has('/repo/dist')).toBe(false)
+  })
+
+  it('뿌리 없는 여러 파일도 안 벗긴다 — 마디를 공유하지 않는다', async () => {
+    const io = 준비(bundleZip({}, null))
+    await run(['export', '-o', 'dist'], io)
+
+    expect(쓴것(io)).toEqual([
+      '/repo/dist/assets/theme.css',
+      '/repo/dist/index.html',
+      '/repo/dist/pages/관리자-회원-목록.html',
+    ])
+  })
+
   it('상대 경로는 현재 디렉터리 기준이다', async () => {
     const io = createFakeIo({
       cwd: '/repo/apps/web',
@@ -153,12 +181,27 @@ describe('압축 안의 경로를 믿지 않는다', () => {
 })
 
 describe('이미 있는 파일을 덮지 않는다', () => {
-  it('하나라도 있으면 **아무것도 쓰기 전에** 멈춘다', async () => {
-    const io = 준비(bundleZip(), { '/repo/dist/index.html': '사람이 쓴 것' })
+  /**
+   * **충돌 파일이 압축의 *마지막* 항목이다**(리뷰 N4). 첫 항목(`index.html`)으로 재면
+   * 검사를 `files.slice(0, 1)`로 좁혀도 **0건이 죽는다**(리뷰어 실측 R20) — *"하나라도
+   * 있으면"*이 *"첫째가 있으면"*으로 조용히 바뀐다. **하나짜리로 재지 마라의 그 부류다.**
+   */
+  it('마지막 항목이 충돌해도 **아무것도 쓰기 전에** 멈춘다', async () => {
+    const 마지막 = `/repo/dist/${Object.keys(BUNDLE_FILES).at(-1)}`
+    const io = 준비(bundleZip(), { [마지막]: '사람이 쓴 것' })
 
     expect(await run(['export', '-o', 'dist'], io)).toBe(EXIT.usage)
     expect(io.stderr.join('\n')).toContain('--force')
-    // 남은 둘도 안 썼다.
+    // **앞의 둘도 안 썼다** — 절반 쓰고 멈추면 그 디렉터리가 섞인다.
+    expect(io.fs.has('/repo/dist/index.html')).toBe(false)
+    expect(io.fs.has('/repo/dist/assets/theme.css')).toBe(false)
+    expect(io.fs.get(마지막)).toBe('사람이 쓴 것')
+  })
+
+  it('첫 항목이 충돌해도 멈춘다 — 양쪽 끝을 다 본다', async () => {
+    const io = 준비(bundleZip(), { '/repo/dist/index.html': '사람이 쓴 것' })
+
+    expect(await run(['export', '-o', 'dist'], io)).toBe(EXIT.usage)
     expect(io.fs.has('/repo/dist/assets/theme.css')).toBe(false)
     expect(io.fs.get('/repo/dist/index.html')).toBe('사람이 쓴 것')
   })
@@ -174,6 +217,43 @@ describe('이미 있는 파일을 덮지 않는다', () => {
     const io = 준비()
     expect(await run(['export', '-o', 'dist'], io), io.stderr.join('\n')).toBe(EXIT.ok)
     expect(io.stdout.join('\n')).toContain('3개 파일을 썼습니다')
+  })
+})
+
+/**
+ * **`-o`가 디렉터리가 아닌 자리를 가리킬 때**(리뷰 N6).
+ *
+ * 안 끊으면 `mkdir`이 `ENOTDIR`로 던지고 `run.ts`의 마지막 갈래가 **70**
+ * (*"버그다 — 사용자가 고칠 수 없다"*)으로 낸다. **사람이 할 일은 `-o` 한 글자를 고치는
+ * 것**이므로 `exit.ts`의 표대로면 1이다.
+ */
+describe('-o 가 파일을 가리키면 (리뷰 N6)', () => {
+  it('쓰기 전에 끊고 코드 1이다 — 70이 아니다', async () => {
+    const io = 준비(bundleZip(), { '/repo/dist': '사람이 만든 파일' })
+
+    const code = await run(['export', '-o', 'dist'], io)
+
+    expect(code).toBe(EXIT.usage)
+    // **70과 갈리는 것이 요점이다** — 그 번호는 *"사용자가 고칠 수 없다"*를 뜻한다.
+    expect(code).not.toBe(EXIT.internal)
+    expect(io.stderr.join('\n')).toContain('-o 는 디렉터리를 가리켜야 합니다')
+    // 그 파일을 안 건드렸다.
+    expect(io.fs.get('/repo/dist')).toBe('사람이 만든 파일')
+  })
+
+  /** `--force`는 *"덮어써도 된다"*이지 *"파일을 디렉터리로 만들어도 된다"*가 아니다. */
+  it('--force 도 같은 자리에서 끊는다', async () => {
+    const io = 준비(bundleZip(), { '/repo/dist': '사람이 만든 파일' })
+
+    expect(await run(['export', '-o', 'dist', '--force'], io)).toBe(EXIT.usage)
+    expect(io.fs.get('/repo/dist')).toBe('사람이 만든 파일')
+  })
+
+  it('이미 디렉터리면 그냥 쓴다 — 반대편', async () => {
+    const io = 준비(bundleZip(), { '/repo/dist/기존.txt': '남의 파일' })
+
+    expect(await run(['export', '-o', 'dist'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.fs.has('/repo/dist/index.html')).toBe(true)
   })
 })
 
