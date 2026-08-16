@@ -8,6 +8,7 @@ export type ApiErrorCode =
   | 'forbidden'
   | 'not-found'
   | 'conflict'
+  | 'locked'
   | 'validation-failed'
   | 'internal'
 
@@ -17,6 +18,26 @@ export const ERROR_STATUS: Record<ApiErrorCode, number> = {
   forbidden: 403,
   'not-found': 404,
   conflict: 409,
+  /**
+   * 소프트 잠금 충돌(§7.2의 2차 방어). **`409`가 아닌 것이 P3-3 D1의 판정이고 §7.2와
+   * 어긋난다** — 그쪽은 *"불일치면 409"*라고 적었다. 근거는 클라이언트에 있다:
+   *
+   * `edit/use-edit-commit.tsx`의 조건부 재전송이 **`status === 409`**로 갈린다(P3-2 D3).
+   * 잠금 충돌이 409면 그 조건 셋(409 · 큐의 머리가 그 편집 · `headSeq`가 움직였다)이 다
+   * 참이 될 수 있고, 그러면 **한 번 더 보낸다.** 재전송이 성공하면(그 사이 잠금이 풀렸다면)
+   * 사용자는 **자기가 막혔다는 것을 모른 채 남의 잠금 구역을 편집한 것**이 된다.
+   *
+   * **그 경로는 드물지 않다.** P3-2 리뷰가 진짜 서버에서 두 편집 사이의 간격을 변수로 두고
+   * 간격마다 4회씩 쟀는데, **10ms만 벌어져도 `page-changed`가 실패보다 먼저 왔다(4/4)** —
+   * 사람 둘이 편집하는 판은 그쪽이 정상 경로다(P3-2 이월 §2.2의 표).
+   *
+   * 갈래 셋 중 이것을 고른 이유: 상태 코드가 실패의 성질을 나르는 것이 이 저장소의
+   * 자세이고(`http/edit-outcome.ts`), 이 표가 **하나뿐이라 갈라지지 않는다.** 클라이언트가
+   * 다시 판정하게 하는 갈래는 서버의 실패 분류와 두 벌이 된다.
+   *
+   * `423`은 RFC 4918의 `Locked`다 — *"대상 자원이 잠겨 있다"*가 글자 그대로 이 뜻이다.
+   */
+  locked: 423,
   'validation-failed': 422,
   internal: 500,
 }
@@ -80,6 +101,11 @@ export function notFound(message = '대상을 찾을 수 없습니다'): ApiErro
 
 export function conflict(message: string, issues?: ApiErrorIssue[]): ApiError {
   return new ApiError('conflict', message, issues)
+}
+
+/** 소프트 잠금 충돌(§7.2). **409가 아닌 이유는 `ERROR_STATUS`의 `locked`에 있다**(D1). */
+export function locked(message: string): ApiError {
+  return new ApiError('locked', message)
 }
 
 export function validationFailed(message: string, issues: ApiErrorIssue[]): ApiError {

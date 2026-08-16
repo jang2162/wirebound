@@ -32,6 +32,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { ApiError } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
+import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
 import { notifyPageChanged } from './notify'
 import type { ClientFrame, ServerFrame } from './protocol'
@@ -64,6 +65,19 @@ export async function handlePatchFrame(
   connection: RoomConnection,
   frame: PatchFrame,
 ): Promise<ServerFrame> {
+  // **§7.1의 순서다** — 권한 확인(`ws/routes.ts`)이 이미 지났고, 적용 전에 잠금을 본다(D2).
+  // 소유자는 **사람**이므로 같은 사람의 다른 탭이 잡은 것에는 막히지 않는다(D3).
+  const blocked = await lockConflictError(app, {
+    projectId: connection.projectId,
+    pageId: frame.pageId,
+    baseSeq: frame.baseSeq,
+    ops: frame.ops,
+    userId: connection.userId,
+  })
+  if (blocked !== null) {
+    return patchErrorFrame(connection.projectId, frame, blocked)
+  }
+
   const outcome = await applyEdit(app.db, {
     projectId: connection.projectId,
     pageId: frame.pageId,

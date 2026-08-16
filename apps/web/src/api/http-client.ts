@@ -77,6 +77,7 @@ const API_ERROR_CODES: Record<ApiErrorCode, true> = {
   forbidden: true,
   'not-found': true,
   conflict: true,
+  locked: true,
   'validation-failed': true,
   internal: true,
 }

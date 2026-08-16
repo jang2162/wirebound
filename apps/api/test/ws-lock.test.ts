@@ -33,7 +33,7 @@ import {
   type SignedUpUser,
 } from './helpers'
 import { WS_CLOSE } from '../src/ws/protocol'
-import { WsProbe, joinRoom } from './ws-client'
+import { WsProbe, joinRoom, locksEmpty, locksUntil, locksWith } from './ws-client'
 
 beforeEach(resetRealData)
 afterEach(resetRealData)
@@ -116,42 +116,6 @@ function lockFrame(pageId: string, nodeId: string): string {
 }
 
 const UNLOCK_FRAME = JSON.stringify({ type: 'unlock' })
-
-type LockList = Array<{ pageId: string; nodeId: string; userId: string; userName: string }>
-
-/** 그 연결이 지금까지 받은 `locks` 프레임 수. */
-function lockFrameCount(probe: WsProbe): number {
-  return probe.received.filter((frame) => frame.type === 'locks').length
-}
-
-/**
- * **기다릴 것을 명시적으로 기다린다** — 앞 슬라이스가 창에 기댄 케이스로 flake를 냈다.
- *
- * *"프레임 하나 더"*로 재면 안 된다: 누가 들어올 때마다 참가 알림이 `locks`를 한 번 더
- * 흘리므로(`ws/routes.ts`), 다음 프레임이 **내가 기다리던 것이 아닐 수 있다.** 그래서
- * **마지막 목록이 조건을 만족할 때까지** 기다린다.
- */
-async function locksUntil(probe: WsProbe, want: (locks: LockList) => boolean, label: string): Promise<LockList> {
-  const latest = (): LockList | undefined =>
-    probe.received.filter((frame) => frame.type === 'locks').at(-1)?.locks
-
-  for (let guard = 0; guard < 20; guard += 1) {
-    const last = latest()
-    if (last !== undefined && want(last)) return last
-    await probe.waitForCount('locks', lockFrameCount(probe) + 1)
-  }
-  throw new Error(`${label}: 잠금 목록이 그렇게 되지 않았습니다: ${JSON.stringify(probe.received)}`)
-}
-
-/** 그 노드가 목록에 들어올 때까지. */
-function locksWith(probe: WsProbe, nodeId: string): Promise<LockList> {
-  return locksUntil(probe, (locks) => locks.some((lock) => lock.nodeId === nodeId), `${nodeId} 잠금`)
-}
-
-/** 목록이 빌 때까지. */
-function locksEmpty(probe: WsProbe): Promise<LockList> {
-  return locksUntil(probe, (locks) => locks.length === 0, '빈 목록')
-}
 
 describe('잠금은 룸 전체가 본다 — 배지가 그 위에 선다 (§7.2)', () => {
   it('잠그면 룸의 다른 연결이 그 목록을 받는다', async () => {

@@ -71,8 +71,7 @@ export interface LockConflictInput {
 export function findLockConflict(input: LockConflictInput): NodeLock | null {
   const targets = input.pointers.map(segmentsOf)
 
-  for (const lock of input.locks) {
-    if (lock.userId === input.viewerUserId) continue
+  for (const lock of locksAgainst(input.locks, input.viewerUserId)) {
     const lockPath = findNodePath(input.root, lock.nodeId)
     if (lockPath === undefined) continue
     const lockSegments = segmentsOf(lockPath)
@@ -81,6 +80,18 @@ export function findLockConflict(input: LockConflictInput): NodeLock | null {
   }
 
   return null
+}
+
+/**
+ * 이 사람에게 **뜻이 있는** 잠금만(D3 — 소유자는 사람이다).
+ *
+ * **`findLockConflict`가 안에서 이것을 쓴다.** 밖으로도 내는 것은 부르는 쪽이 *"볼 잠금이
+ * 하나라도 있나"*를 먼저 물어 **문서 조회를 건너뛸 수 있게** 하기 위해서다(`apps/api`의
+ * `lock/check.ts`). 그 자리에서 `userId`를 다시 비교하면 **누구의 잠금이 뜻이 있는가**가
+ * 두 벌이 되고, 그것이 D7이 닫은 형태다.
+ */
+export function locksAgainst(locks: readonly NodeLock[], viewerUserId: string): NodeLock[] {
+  return locks.filter((lock) => lock.userId !== viewerUserId)
 }
 
 /**

@@ -442,6 +442,12 @@ export type ApiErrorCode =
   | 'forbidden'
   | 'not-found'
   | 'conflict'
+  /**
+   * 소프트 잠금 충돌(설계 §7.2 · 423). **`conflict`와 갈라 두는 것이 P3-3 D1의 판정이다** —
+   * `edit/use-edit-commit.tsx`의 조건부 재전송이 `status === 409`로 갈리는데, 잠금 충돌이
+   * 409면 그 재전송이 돌아 **사용자가 막힌 줄 모르고 남의 구역을 편집한 것**이 된다.
+   */
+  | 'locked'
   | 'validation-failed'
   | 'internal'
 
