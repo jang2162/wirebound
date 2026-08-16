@@ -1,9 +1,14 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  // **진입점이 둘이다.** `bin.ts`는 `wireb`가 되는 실행 파일이고, `index.ts`는 다른
-  // 패키지가 `run`을 부를 자리다(오늘은 아무도 안 부르지만 `exports`가 그것을 가리킨다).
-  entry: ['src/index.ts', 'src/bin.ts'],
+  // **진입점이 셋이다.** `bin.ts`는 `wireb`가 되는 실행 파일이고, `index.ts`는 다른
+  // 패키지가 `run`을 부를 자리이며, `embed.ts`는 **붙는 자리**다(P9-4 D3 — `@wirebound/mcp`가
+  // 그것을 쓴다).
+  //
+  // **셋이 모듈을 두 벌로 만들지 않는다** — `tsdown`이 공유 코드를 청크 하나로 빼고 세
+  // 진입점이 그것을 import한다(쟀다). `CliError`의 identity가 진입점마다 갈리면
+  // `packages/mcp`의 `isToolFailure`가 조용히 거짓이 된다.
+  entry: ['src/index.ts', 'src/bin.ts', 'src/embed.ts'],
   format: ['esm'],
   dts: true,
   outDir: 'dist',

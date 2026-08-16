@@ -19,28 +19,21 @@
  * 겹치는 타겟이 있다는 것은 P9-1 이월 §9가 이미 적었고 `duplicateTargets`가 그 판정을
  * 갖고 있다.
  *
- * # 무엇을 실을지는 `pageView`가 정한다 (D4)
+ * # 조립은 여기 없다 — `read/page.ts` 하나다 (P9-4 D1)
  *
- * 이 파일에는 **글자만** 있다. §12.2의 MCP `get_page`가 같은 것을 내야 하므로 조립을 여기
- * 두면 P9-4가 두 벌을 만든다. `--json`은 그 값을 **그대로** 낸다 — 사람이 읽는 판과
- * 기계가 읽는 판이 같은 값에서 나와야 갈리지 않는다.
+ * 앞 판은 이 파일이 `targetedPages`→`matchPageTargets`→0·1·다 갈래→`pageView`를 직접 했고,
+ * 그때 이 머리말이 *"§12.2의 MCP `get_page`가 같은 것을 내야 하므로 조립을 여기 두면 P9-4가
+ * 두 벌을 만든다"*고 적어 뒀다. **P9-4가 그 자리다** — 조립이 `read/page.ts`로 갔고
+ * `get_page`가 같은 함수를 부른다. `test/assembly-census.test.ts`가 그것을 지킨다.
  *
- * # `installCatalog()`를 먼저 부른다
- *
- * 문장의 prop 라벨이 카탈로그에서 온다. 안 부르면 *"목록이 로딩 상태로 바뀝니다"*가
- * *"목록이 loading로 바뀝니다"*가 된다(실측). 던지지 않으므로 **조용히 나빠지는** 자리다.
+ * **이 파일에는 글자만 있다.** `--json`은 `lookupPage`가 낸 값을 **그대로** 낸다 — 사람이
+ * 읽는 판과 기계가 읽는 판이 같은 값에서 나와야 갈리지 않는다.
  */
-import {
-  installCatalog,
-  matchPageTargets,
-  pageTargetPath,
-  pageView,
-  targetedPages,
-  type PageView,
-} from '@wirebound/schema'
+import type { PageView } from '@wirebound/schema'
 import { EXIT, usageError } from '../exit'
 import type { Io } from '../io'
 import { fetchSnapshot, requireProject } from '../project'
+import { lookupPage } from '../read/page'
 
 export interface PageGetOptions {
   json: boolean
@@ -56,51 +49,32 @@ export async function runPageGet(io: Io, path: string | undefined, options: Page
 
   const access = await requireProject(io)
   const payload = await fetchSnapshot(io, access)
-
-  installCatalog()
-
-  const ordered = targetedPages({ menu: payload.menu, pages: payload.pages })
-  const matched = matchPageTargets(ordered, path)
+  const found = lookupPage(payload, path)
 
   // **여러 줄은 `io.err`로 낸다** — `CliError`의 문장에 줄바꿈을 넣으면 `run`이 그것을 한
   // 줄로 다루고(`err`가 줄바꿈을 붙이는 자리이므로) 케이스가 줄 단위로 읽지 못한다.
-  if (matched.length === 0) {
+  if (found.kind === 'none') {
     io.err(`그 경로의 페이지가 없습니다: ${path}`)
-    for (const line of candidates(ordered.map((page) => pageTargetPath(page.target)))) io.err(line)
+    for (const line of candidates(found.candidates)) io.err(line)
     return EXIT.usage
   }
-  if (matched.length > 1) {
+  if (found.kind === 'ambiguous') {
     // **겹치는 타겟이다.** 하나를 고르면 그 판정이 조용히 묻힌다 — 설계서 쪽을 고쳐야 한다.
-    io.err(`그 경로의 페이지가 ${matched.length}개입니다: ${path}`)
+    io.err(`그 경로의 페이지가 ${found.matches.length}개입니다: ${path}`)
     io.err('  같은 타겟을 든 페이지가 둘 이상이면 설계서의 링크도 그 페이지들을 가리키지 못합니다')
-    for (const page of matched) io.err(`  - ${page.title} (${page.id})`)
+    for (const page of found.matches) io.err(`  - ${page.title} (${page.id})`)
     return EXIT.usage
   }
 
-  const found = matched[0]!
-  const record = payload.pages.find((page) => page.id === found.id)!
-  const view = pageView({
-    id: record.id,
-    title: record.title,
-    description: record.description,
-    target: found.target,
-    menuPath: found.menuPath,
-    document: record.schema,
-    comments: payload.comments
-      .filter((comment) => comment.pageId === record.id)
-      .map((comment) => ({
-        nodeId: comment.nodeId,
-        body: comment.body,
-        authorName: comment.authorName,
-        createdAt: comment.createdAt,
-      })),
-  })
+  // **읽은 문서에 대해 말할 것이 있으면 먼저 말한다**(못 올린 문서 버전 — `read/page.ts`).
+  // `out`이 아니라 `err`다: `--json`을 파이프로 받는 쪽에 섞이면 그 출력이 JSON이 아니게 된다.
+  for (const note of found.notes) io.err(note)
 
   if (options.json) {
-    io.out(JSON.stringify(view, null, 2))
+    io.out(JSON.stringify(found.view, null, 2))
     return EXIT.ok
   }
-  for (const line of renderPageView(view)) io.out(line)
+  for (const line of renderPageView(found.view)) io.out(line)
   return EXIT.ok
 }
 
@@ -137,7 +111,8 @@ export function renderPageView(view: PageView): string[] {
  * 못 찾았을 때 보일 후보. **분모를 말한다** — 잘린 것을 숨기지 않는다.
  *
  * **접두를 벗겨 낸다** — 사람이 이 줄을 그대로 다시 쳐야 하고, `wireb lint`의 출력도 벗긴
- * 모양이다. 스모크에서 두 자리가 다르게 나오는 것을 보고 맞췄다.
+ * 모양이다. 스모크에서 두 자리가 다르게 나오는 것을 보고 맞췄다. (벗기는 것은
+ * `read/page.ts`가 이미 했다 — 여기는 자르기만 한다.)
  */
 function candidates(targets: readonly string[]): string[] {
   if (targets.length === 0) return ['  이 프로젝트에는 페이지가 없습니다']
