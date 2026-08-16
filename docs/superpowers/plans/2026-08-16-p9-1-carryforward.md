@@ -23,13 +23,36 @@ import { lintProject } from '@wirebound/themes'
 
 입력은 `ProjectLintInput` 셋이다.
 
-| 절 | 무엇을 채우나 | 어디서 오나 |
+**payload와 필드 이름이 그대로 맞는 곳과 안 맞는 곳을 갈라 적는다.** 앞 판은 여기를
+*"payload의 `pages`에 `target`만 없다"*처럼 적었고 **거짓이었다**(리뷰가 잡았다) — 이름도
+nullable도 다르다.
+
+| 절 | lint가 받는 모양 | payload에서 |
 |---|---|---|
-| `project.menu` | `{ id, parentId, title }` | 스냅샷 payload의 `menu`가 **같은 모양**이다 |
-| `project.pages` | `{ id, menuNodeId, title, target, document }` | payload의 `pages`에 **`target`만 없다** — 아래 §2 |
-| `project.comments` | `{ pageId, nodeId }` | payload의 `comments`에서 두 필드만 |
-| `themes[]` | `{ id, document, base?, pages? }` | payload의 `themes`. `base`·`pages`는 아래 §3·§4 |
+| `project.menu` | `{ id, parentId, title }` | `SnapshotMenuNode`에 **그대로 있다**(`sortOrder`가 더 있고 lint는 안 읽는다) |
+| `project.pages` | `{ id, menuNodeId, title, target, document }` | `SnapshotPage`는 문서를 **`schema`**로 든다 — `document`로 **이름을 바꿔** 넣어야 한다. `target`은 payload에 아예 없다(아래 §2) |
+| `project.comments` | `{ pageId, nodeId }` | `SnapshotComment`에 그대로 있다 |
+| `themes[]` | `{ id, document, base?, pages? }` | `SnapshotLayoutTheme = { layoutId, themeId: string \| null, theme: Theme \| null }` — **`id`도 `document`도 없다.** 아래 ⓐ |
 | `config` | 안 주면 명명 규칙이 **안 돈다**(D5) | `.wirebound.json` — **P9-2가 정한다**, 아래 §5 |
+
+**ⓐ 테마 절을 채우려면 판정이 둘 필요하다.**
+
+1. `LintThemeEntry.id`는 **필수 `string`**인데 `themeId`가 `null`일 수 있다. `null`은
+   *"레이아웃이 테마를 안 골랐다"*이고 그때 `theme`도 `null`이라 검사할 문서가 없다 —
+   **그 항목은 넣지 않는 것이 옳다.** `themeId`는 있는데 `theme`이 `null`인 경우도 있다
+   (상속이 끊긴 파생 — `snapshot-payload.ts`가 적어 뒀다). 그때 무엇을 lint에 넣을지 정하라.
+2. `layoutId`를 버릴지 `id`에 실을지. ⑪의 짝짓기가 레이아웃 단위라(아래 §4) **`layoutId`를
+   `id`에 싣는 편이 출력이 읽힌다** — `wireb lint`가 *"어느 테마"*를 사람에게 말해야 한다.
+
+**ⓑ `schemaVersion`을 잊지 마라.** `SnapshotPage.schemaVersion`이 있고 payload는 **저장된
+문서를 그대로 담는다**(`snapshot-payload.ts`의 D4: *"캡처에서 `migrateDocument`를 돌리지
+않는다"*). 오래된 버전의 문서를 마이그레이션 없이 lint에 넣으면 `document-invalid`가 쏟아진다.
+`@wirebound/schema`의 `migrateDocument`·`CURRENT_DOCUMENT_VERSION`을 먼저 지나게 하라.
+**`wireb pull` 출력을 그대로 넣으라는 지시만 읽고 가면 여기서 걸린다**(리뷰가 잡았다).
+
+**ⓒ 깨진 문서를 걸러 낼 필요는 없다.** `root`가 없거나 `null`이거나 문서 자체가 `null`이어도
+lint는 **던지지 않고 `document-invalid`를 낸다**(케이스로 고정했다). `JSON.parse` 결과를
+그대로 넣어도 된다 — 예외를 CLI가 다루지 않는다.
 
 ---
 
@@ -43,19 +66,36 @@ import { lintProject } from '@wirebound/themes'
 순수 패키지가 못 본다. P9-1이 그것을 `schema`에 다시 짜면 두 벌이 되고, **두 벌이 갈리는
 날 lint가 멀쩡한 링크를 끊겼다고 말한다.**
 
-**P9-2가 할 일:**
+**P9-2가 할 일 — 순서가 있다.**
 
-1. `pageTarget` · `pageBundleTitle` · `targetedPages` · `duplicateTargets`를
-   `packages/schema`로 올린다(`PAGE_TARGET_PREFIX`도 함께 — `describePageTarget`이 이미
-   그 접두를 안다).
-2. `apps/api`의 `services/page-target.ts`를 **재수출로 바꾸거나 지우고** `routes/export.ts`·
-   `services/`의 호출자를 새 자리로 돌린다. **두 벌로 남기지 마라.**
-3. 옮길 때 `TreeMenuNode`(`services/menu-tree.ts`) 의존을 끊어야 한다 — `targetedPages`가
-   받는 것을 lint 입력과 같은 평평한 모양(`{ id, parentId, title }` + `{ id, menuNodeId,
-   title }`)으로 바꾸면 `wireb pull`이 받은 payload를 그대로 넣을 수 있다.
+**먼저 옮기고 그 다음에 `wireb lint`를 짜라.** 앞 판은 *"올리기 전까지 `wireb lint`는 타겟을
+스스로 조립해야 한다. 그 임시 코드를 남기지 마라"*고 적었는데 **그 문장이 D1과 정면으로
+부딪친다**(리뷰가 잡았다) — *"임시로 두 벌을 만들되 지워라"*는 지켜지지 않으면 정확히 D1이
+막으려던 상태다. 순서를 바꾸면 두 벌이 아예 안 생긴다.
 
-**올리기 전까지 `wireb lint`는 타겟을 스스로 조립해야 한다.** 그 임시 코드를 남기지 마라 —
-이 슬라이스가 피한 두 벌이 거기서 생긴다.
+1. `pageTarget` · `pageBundleTitle` · `targetedPages` · `duplicateTargets` · `PAGE_TARGET_PREFIX`를
+   `packages/schema`로 올린다.
+
+   **⚠ `describePageTarget`이 그 상수를 쓰지 않는다.** 앞 판은 *"이미 그 접두를 안다"*고
+   적었고 거짓이었다 — `interaction/describe.ts`의 `pageName`이 `'page:'` 리터럴을 **한 줄에
+   두 번** 인라인한다(`startsWith('page:')` · `.slice('page:'.length)`). 상수만 올리면
+   **접두가 세 자리**가 된다. **그 함수를 함께 고쳐라.**
+
+2. `apps/api`의 `services/page-target.ts`를 **재수출로 바꾸거나 지우고** 호출자를 새 자리로
+   돌린다. 호출자는 `services/export-bundle.ts`(`targetedPages`·`duplicateTargets`)와
+   `routes/export.ts`(`bundle.duplicateTargets`) 둘이다. **두 벌로 남기지 마라.**
+
+3. **⚠ `targetedPages`의 입력에 lint 입력형을 재사용하지 마라 — `sortOrder`가 없다.**
+
+   `LintMenuNode`·`LintPage`는 그것을 **일부러 뺐다**(`lint/input.ts`: *"어느 규칙도 보지
+   않으므로 없다"*). 그런데 `targetedPages`는 *"어떤 `TreeMenuNode[]`를 받아도 같은 답을
+   내야 한다"*며 **형제 메뉴와 페이지를 `sortOrder`로 다시 정렬한다**(그 파일의 `visit`
+   두 줄). 그 정렬이 §11.3의 *"번들의 좌측 트리가 웹 앱과 동일하다"*를 지키는 자리다.
+
+   **평평하게 바꾸면서 `sortOrder`를 빠뜨리면 그 보증이 그 자리에서 깨지고, 깨진 것을
+   말해 주는 것이 없다** — 파일 이름은 그대로 나오고 순서만 입력 배열 순서가 된다. 옮길 때
+   **`sortOrder`를 든 별도 입력형**을 두어라(예: `{ id, parentId, title, sortOrder }`).
+   P8이 세운 보증이므로 그 순서를 고정하는 케이스가 이미 있는지 먼저 확인하라.
 
 **겹치는 타겟은 lint가 아직 안 본다.** `duplicateTargets`가 그 판정을 이미 갖고 있으므로,
 올린 뒤에 규칙을 하나 더할지 판정하라(§12.4에 그 줄이 없다 — 더하면 표에 `spec: null`과
@@ -134,6 +174,19 @@ LintConfig = { naming?: { page?: string; menu?: string } }
 - `severity`의 뜻은 *"이 결함이 문서·테마를 무효로 만드는가"*이지 *"고쳐야 하는가"*가 아니다.
 - **P9-1이 새로 더한 규칙은 전부 `warning`이다.** `error`는 전부 나른 것이다 — `validatePage`나
   `resolveTheme`이 원래 그렇게 부른 것.
+
+**⚠ *"`warning`이 있으면 1"*을 고르면 아무 결함이 없는 프로젝트가 1로 끝난다.** 시스템 테마
+다섯을 그대로 `lintThemes`에 넣어 쟀다(리뷰가 먼저 쟀고 내가 다시 쟀다 — 값이 같다):
+
+| 테마 | lint 이슈 |
+|---|---|
+| `admin` · `saas-marketing` · `commerce` | 없다 |
+| `portal` · `docs` | `theme-other:warning` 하나씩 — `components.Tree.parts.node.paddingX` |
+
+그 둘은 `node-handle-overwrite`(*"테마가 노드 손잡이를 덮어쓴다"*)이고 **`resolveTheme`이
+원래 내던 경고를 그대로 나른 것**이다 — lint가 지어낸 과잉 경보가 아니다. 다만
+`portal`·`docs`를 고른 프로젝트는 **문서를 아무리 잘 써도 경고 하나로 시작한다.**
+
 - 그래서 *"`error`가 있으면 1"*은 **저장이 거부할 문서에서만** 1이 된다. §12.5의 흐름
   (*"`validate`로 설계서 자체의 결함을 보고한다"*)이 원하는 것이 그것인지 판정하라.
 
@@ -178,6 +231,7 @@ MCP(P9-3)의 `validate`도 같은 거르개를 원할 것이다.
 |---|---|
 | ⑪이 **파생 변형**(`variantFrom` — `Text`·`Divider`·`Field`)을 안 본다 | 파생 규칙이 `renderer/src/attrs.ts`의 `variantOf`에 있고 `themes`가 그것을 볼 수 없다. 메우려면 그 규칙이 순수 스택에 **한 자리로** 서야 한다. **케이스가 *"안 본다"*를 고정해 두었으니** 메울 때 그 케이스를 뒤집어라 |
 | ⑥의 표(`STRUCTURAL_GAPS`)가 둘뿐이다 | §12.4가 *"…등"*으로 열어 뒀다. 셋째를 더하려면 같은 근거가 서야 한다 — *"카탈로그가 자식 0을 허용하는데 그것 없이는 빈 상자다"* |
-| ⑧에 `unknown-component`·`unknown-variant`를 함께 넣었다 | §12.4의 줄은 `structure`·`part`·`state` 셋만 적었다. **같은 대조의 결과**라 같은 줄에 뒀다는 판단이 `THEME_RULE` 표의 주석에 있다. 갈라야 한다고 보면 §12.4 밖 규칙으로 두어라 |
-| `theme-other`가 `resolveTheme`의 코드 여덟을 받는다 | §12.4의 여섯 줄이 그 함수의 코드 전부를 덮지 않는다. **버리지 않고 나르는 쪽**을 골랐다 — 버리면 테마가 서지 않는 이유를 lint가 말하지 못한다 |
+| ⑧에 `unknown-component`·`unknown-variant`를 함께 넣었다 | §12.4의 줄은 `structure`·`part`·`state` 셋만 적었다. **같은 대조의 결과**라 같은 줄에 뒀다. 갈라야 한다고 보면 §12.4 밖 규칙으로 두어라 — **어느 코드가 어느 줄로 가는지는 `packages/themes/test/lint-mapping.test.ts`가 통째로 못박으므로** 옮기면 그 케이스가 먼저 말한다 |
+| `theme-other`가 §12.4 여섯 줄 밖의 테마 코드를 받는다 | 그 여섯 줄이 `resolveTheme`의 코드 전부를 덮지 않는다. **버리지 않고 나르는 쪽**을 골랐다 — 버리면 테마가 서지 않는 이유를 lint가 말하지 못한다. 목록은 `lint-mapping.test.ts`에 있다 |
 | lint가 **레이아웃 문서**를 안 본다 | `validateLayout`이 있고 스냅샷 payload가 레이아웃을 나르는데 §12.4에 그 줄이 없다. 더할지 판정하라 |
+| ④가 **겹치는 타겟**을 안 본다 | 두 페이지가 같은 `target`을 들면 `targets`(Set)에서 접혀 그 링크가 *"있다"*로 통과한다. `duplicateTargets`가 그 판정을 이미 갖고 있으니 §2를 끝낸 뒤 규칙을 더할지 판정하라 |
