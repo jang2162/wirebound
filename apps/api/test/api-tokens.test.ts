@@ -109,6 +109,36 @@ describe('토큰 발급 (D2 — 발급은 멤버 누구나)', () => {
     })
   })
 
+  /**
+   * **N3이 닫히는 자리.** 그 UPDATE를 통째로 빼도 1230건 중 0건이 죽었다(리뷰어 실측).
+   * **목록 응답이 내는 필드라 사용자에게 보이는 값이다** — *"한 번도 안 쓴 토큰"*과
+   * *"쓴 지 오래된 토큰"*을 가르는 것이 그 열의 쓸모다(0011의 머리말).
+   *
+   * 바로 위 *"목록 응답에 원문이 없다"*가 `lastUsedAt: null`을 단언하므로 그 짝이다 —
+   * 앞엣것이 **안 쓴 토큰**을, 이것이 **쓴 토큰**을 든다.
+   */
+  it('쓰고 나면 lastUsedAt이 채워진다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const token = await issueToken(ctx, owner.cookie, project.id)
+
+      const used = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}/tree`,
+        headers: token.header,
+      })
+      expect(used.statusCode).toBe(200)
+
+      const list = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}/tokens`,
+        cookies: owner.cookie,
+      })
+      expect(list.json()[0].lastUsedAt).toEqual(expect.any(String))
+    })
+  })
+
   it('이름이 1~60자 밖이면 400이다', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
@@ -456,6 +486,33 @@ describe('토큰의 범위는 프로젝트다 (D4)', () => {
           headers: { authorization },
         })
         expect(res.statusCode, authorization).toBe(200)
+      }
+    })
+  })
+
+  /**
+   * **N6이 닫히는 자리.** `bearerValue`의 정규식에서 `i` 플래그를 빼도 1230건 중 0건이
+   * 죽었다(리뷰어 실측).
+   *
+   * RFC 7235가 인증 스킴을 **대소문자 무시**로 정하므로 `i`가 있는 지금이 옳다. 지우면
+   * `authorization: bearer <값>`을 보내는 클라이언트가 **조용히 401을 받는다** — 자기
+   * 자격은 멀쩡한데.
+   *
+   * **네 꼴을 다 먹인다** — 하나만 재면 그 하나만 지키게 된다.
+   */
+  it('Bearer 스킴은 대소문자를 가리지 않는다 (RFC 7235)', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const token = await issueToken(ctx, owner.cookie, project.id)
+
+      for (const scheme of ['Bearer', 'bearer', 'BEARER', 'BeArEr']) {
+        const res = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/projects/${project.id}`,
+          headers: { authorization: `${scheme} ${token.value}` },
+        })
+        expect(res.statusCode, scheme).toBe(200)
       }
     })
   })

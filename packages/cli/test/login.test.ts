@@ -210,6 +210,39 @@ describe('비밀번호는 argv에 오지 않는다 (D7)', () => {
 })
 
 describe('자격 저장소 (D6)', () => {
+  /**
+   * **D6이 명시한 것을 지키는 자가 없었다**(리뷰 N2). 프로덕션은 좁게 쓰는데
+   * (구현자의 스모크가 `drwx------`·`-rw-------`를 봤고 리뷰어가 다시 봤다) 그것은
+   * **다시 안 도는 관찰**이었고, 0600을 0644로 바꿔도 71건 중 0건이 죽었다(리뷰어 실측).
+   *
+   * 원인은 가짜 `io`가 `write`의 셋째 인자를 버린 것이었다 — `fake-io.ts`의 `modes`가
+   * 그것을 기록하게 하고 여기서 단언한다.
+   *
+   * **8진수로 적는다.** `0o600`을 십진수 384로 적으면 사람이 그것이 무엇인지 못 읽는다.
+   */
+  it('자격 파일은 0600, 그 디렉터리는 0700이다 (D6)', async () => {
+    const io = loginIo()
+    const code = await run(['login', '--email', 'a@example.com'], io)
+
+    expect(code, io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.modes.get('/home/tester/.wirebound/credentials.json')).toEqual({
+      mode: 0o600,
+      dirMode: 0o700,
+    })
+  })
+
+  /**
+   * **바인딩 파일은 반대다 — 좁히지 않는다.** 그것은 커밋되는 선언이라(§12.1) 팀이 함께
+   * 읽고, 0600으로 쓰면 같은 기계의 다른 사용자·CI 러너가 못 읽는다. **없는 것을
+   * 케이스가 든다** — 누가 두 파일에 같은 권한을 걸면 여기가 말한다.
+   */
+  it('.wirebound.json에는 권한을 걸지 않는다 — 커밋되는 파일이다', async () => {
+    const io = loginIo()
+    await run(['init', '--server', SERVER, '--project', PROJECT, '--force'], io)
+
+    expect(io.modes.get('/repo/.wirebound.json')).toEqual({ mode: undefined, dirMode: undefined })
+  })
+
   it('WIREB_CREDENTIALS 가 자리를 덮는다 — CI에는 홈이 없을 수 있다', async () => {
     const io = loginIo({ env: { WIREB_PASSWORD: 'pw', WIREB_CREDENTIALS: '/tmp/ci-creds.json' } })
     const code = await run(['login', '--email', 'a@example.com'], io)

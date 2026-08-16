@@ -27,6 +27,15 @@ export type Route = (request: RecordedRequest) => StubResponse | Error
 export interface FakeIo extends Io {
   /** 경로(`/api/…`) 전부. **디렉터리 개념이 없다** — 쓴 파일의 절대 경로가 키다. */
   readonly fs: Map<string, string>
+  /**
+   * `files.write`가 받은 **셋째 인자**를 경로별로 기록한다.
+   *
+   * **앞 판은 이것을 버렸고 그래서 자가 눈을 감고 있었다**(리뷰 N2 — 리뷰어가 원인을
+   * 찾았다). `Io`의 계약은 `write(path, content, options?: { mode?, dirMode? })`인데
+   * 가짜가 셋째 인자를 아예 안 받으면 **단위 케이스가 권한을 관찰할 수단 자체가 없다** —
+   * D6이 명시한 0600/0700을 0644/0755로 바꿔도 71건 중 0건이 죽었다(리뷰어 실측 MC1).
+   */
+  readonly modes: Map<string, { mode?: number; dirMode?: number }>
   readonly stdout: string[]
   readonly stderr: string[]
   readonly requests: RecordedRequest[]
@@ -48,6 +57,7 @@ export interface FakeIoOptions {
 
 export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
   const fs = new Map<string, string>(Object.entries(options.files ?? {}))
+  const modes = new Map<string, { mode?: number; dirMode?: number }>()
   const stdout: string[] = []
   const stderr: string[] = []
   const requests: RecordedRequest[] = []
@@ -91,14 +101,17 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
     err: (line) => stderr.push(line),
     files: {
       read: async (path) => fs.get(path) ?? null,
-      write: async (path, content) => {
+      // **셋째 인자를 버리지 않는다** — 버리면 권한을 재는 자가 설 수 없다(위 `modes`).
+      write: async (path, content, options) => {
         fs.set(path, content)
+        modes.set(path, { mode: options?.mode, dirMode: options?.dirMode })
       },
     },
     fetch: fetchImpl,
     promptSecret: async () => options.secret ?? null,
     readStdin: async () => options.stdin ?? null,
     fs,
+    modes,
     stdout,
     stderr,
     requests,

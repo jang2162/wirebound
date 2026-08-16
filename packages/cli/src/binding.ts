@@ -98,12 +98,58 @@ export function parseBinding(text: string, path: string): LoadedBinding {
 }
 
 /**
- * 끝의 `/`를 걷는다. 안 걷으면 `https://x.com/` + `/api/…`가 `//api/…`가 된다 —
- * 그 요청은 서버에 따라 404가 되고, 원인이 URL 문자열 하나라는 것이 응답에 안 보인다.
+ * 앞뒤 공백과 끝의 `/`를 걷고, **못 쓰는 것이면 여기서 끊는다.**
+ *
+ * 끝의 `/`를 안 걷으면 `https://x.com/` + `/api/…`가 `//api/…`가 된다 — 그 요청은 서버에
+ * 따라 404가 되고, 원인이 URL 문자열 하나라는 것이 응답에 안 보인다.
+ *
+ * ---
+ *
+ * # 왜 여기서 끊는가 — `a3c6d12`와 **같은 부류다** (리뷰 N7)
+ *
+ * `server`가 스킴이 없거나(`wb.example.com`) 오타면(`htp://…`) `fetch`가 던지고,
+ * `client.ts`의 `catch`가 그것을 **"서버에 연결할 수 없습니다"(코드 4)**로 옮겼다.
+ * **원인은 사용자의 설정 파일 한 줄인데 코드가 *"주소·네트워크·서버 기동을 보라"*고 말한다.**
+ * `WIREB_TOKEN`에 비-ASCII가 들었을 때와 정확히 같은 모양이고, 그때의 수정(보내기 전에
+ * 검사)을 URL에는 안 걸었을 뿐이다.
+ *
+ * **`new URL()`만으로는 모자라다 — 쟀다.**
+ *
+ * | 값 | `new URL()` | `fetch` |
+ * |---|---|---|
+ * | `wb.example.com` | **던진다**(Invalid URL) | Invalid URL |
+ * | `htp://wb.example.com` | **통과한다**(`protocol: 'htp:'`) | **unknown scheme** |
+ * | `ftp://x` | **통과한다** | **unknown scheme** |
+ * | `https://` | **통과한다**(host가 빈다) | `getaddrinfo ENOTFOUND api` ← 경로 첫 마디를 호스트로 읽는다 |
+ *
+ * 그래서 셋을 다 본다: **파싱되고 · 스킴이 http(s)이고 · 호스트가 있다.**
+ *
+ * **코드는 2다**(*"설정을 고쳐라"*). `exit.ts`의 4는 *"주소·네트워크·서버 기동을 본다"*라
+ * 표 안에 들어가기는 하지만, 사람이 할 일이 **`.wirebound.json` 한 줄 고치기**라면 그것은
+ * `wireb init`을 가리키는 2 쪽이다.
+ *
+ * **`init`도 이 함수를 지난다** — 그래서 못 쓰는 주소로는 바인딩이 **아예 안 써진다.**
+ * 검사를 `client.ts`에 두면 파일은 이미 쓰인 뒤라 사람이 두 번 고쳐야 한다.
  */
 export function normalizeServer(server: string): string {
-  return server.replace(/\/+$/, '')
+  const trimmed = server.trim().replace(/\/+$/, '')
+
+  let parsed: URL
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    throw configError(`${SERVER_HINT}: ${JSON.stringify(server)}`)
+  }
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || parsed.host.length === 0) {
+    throw configError(`${SERVER_HINT}: ${JSON.stringify(server)}`)
+  }
+
+  return trimmed
 }
+
+/** 두 갈래가 같은 문장을 쓴다 — 갈래마다 다른 말을 하면 사람이 원인을 둘로 센다. */
+const SERVER_HINT =
+  '서버 주소는 http:// 또는 https:// 로 시작해야 합니다. `.wirebound.json`의 server 나 --server 를 확인하세요'
 
 /** 바인딩 파일의 글자. **`init`이 쓰는 것과 케이스가 읽는 것이 같은 함수에서 나온다.** */
 export function serializeBinding(binding: Binding, existing?: Record<string, unknown>): string {

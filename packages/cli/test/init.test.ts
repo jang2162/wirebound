@@ -37,6 +37,49 @@ describe('wireb init', () => {
     expect(JSON.parse(io.fs.get('/repo/.wirebound.json') ?? '').server).toBe('https://wb.example.com')
   })
 
+  /**
+   * **N7이 닫히는 자리.** 리뷰가 실행 관찰로 찾았다: `server`가 스킴이 없거나 오타면
+   * `fetch`가 던져 **코드 4**(*"서버에 연결할 수 없습니다"*)가 나갔다 — 원인은 사용자의
+   * 설정 한 줄인데. `a3c6d12`(헤더)와 같은 부류이고, 판정과 실측표는
+   * `binding.ts`의 `normalizeServer` 머리말에 있다.
+   *
+   * **`htp://`·`ftp://`는 `new URL()`을 통과한다** — 그래서 스킴까지 본다.
+   * **`https://`는 호스트가 비어** `fetch`가 경로 첫 마디를 호스트로 읽는다.
+   */
+  it('쓸 수 없는 서버 주소는 2이고 바인딩을 아예 안 쓴다 (N7)', async () => {
+    // **빈 문자열은 여기 없다** — 그것은 *"값을 안 줬다"*라 `runInit`이 먼저 1(사용법)로
+    // 끊는다. 아래 *"--server 나 --project 가 없으면"*이 그 갈래를 든다.
+    for (const server of ['wb.example.com', 'htp://wb.example.com', 'ftp://wb.example.com', 'https://']) {
+      const io = createFakeIo()
+      const code = await run(['init', '--server', server, '--project', 'prj_a1b2'], io)
+
+      expect(code, server).toBe(EXIT.config)
+      expect(io.stderr.join('\n'), server).toContain('http:// 또는 https://')
+      // **파일이 안 써진다** — 검사를 보내는 자리에 두면 여기는 이미 써진 뒤다.
+      expect(io.fs.has('/repo/.wirebound.json'), server).toBe(false)
+    }
+  })
+
+  it('쓸 수 있는 주소는 그대로 지난다 — 반대편', async () => {
+    for (const server of ['http://127.0.0.1:3055', 'https://wb.example.com', '  https://wb.example.com/  ']) {
+      const io = createFakeIo()
+      const code = await run(['init', '--server', server, '--project', 'prj_a1b2'], io)
+
+      expect(code, server).toBe(EXIT.ok)
+    }
+  })
+
+  it('낡은 바인딩의 server가 못 쓰는 값이어도 2다 — 읽는 쪽도 같은 자를 쓴다', async () => {
+    const io = createFakeIo({
+      files: { '/repo/.wirebound.json': JSON.stringify({ server: 'wb.example.com', projectId: 'p' }) },
+    })
+    const code = await run(['pull'], io)
+
+    expect(code).toBe(EXIT.config)
+    expect(io.stderr.join('\n')).toContain('http:// 또는 https://')
+    expect(io.requests).toEqual([])
+  })
+
   it('--server 나 --project 가 없으면 1이고 무엇이 없는지 말한다', async () => {
     for (const [args, missing] of [
       [['init', '--project', 'prj'], '--server'],
