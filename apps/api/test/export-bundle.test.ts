@@ -589,7 +589,7 @@ describe('exportProjectBundle', () => {
   })
 
   /**
-   * **`buildMenuTree`가 페이지를 잃으면 멈춘다** — 조용히 빠지는 것이 이 산출물에서 가장
+   * **`targetedPages`가 페이지를 잃으면 멈춘다** — 조용히 빠지는 것이 이 산출물에서 가장
    * 나쁜 실패다.
    *
    * **이 상태는 도달 가능하다.** `pages_menu_node_id_fkey`는 `menu_nodes(id)`만 참조하고

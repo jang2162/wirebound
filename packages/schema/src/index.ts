@@ -57,6 +57,19 @@ export {
   listInteractionSentences,
 } from './interaction/describe'
 
+// P9-3 T2 — §8.1의 타겟 조립. **`apps/api/src/services/page-target.ts`에서 올라왔다**
+// (P9-1 이월 §2). `lint/input.ts`의 `LintPage.target`을 채우는 자리이고 CLI·MCP가 같은
+// 문자열을 만들어야 한다 — 두 벌이 갈리면 lint가 멀쩡한 링크를 끊겼다고 말한다.
+export type { PageTargetInput, TargetMenuNode, TargetPage, TargetedPage } from './page-target'
+export {
+  PAGE_TARGET_PREFIX,
+  duplicateTargets,
+  pageBundleTitle,
+  pageTarget,
+  pageTargetPath,
+  targetedPages,
+} from './page-target'
+
 export { getKoreanErrorMap } from './locale'
 
 export type { PatchOp } from './patch/types'

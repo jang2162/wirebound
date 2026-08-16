@@ -44,6 +44,7 @@
  */
 import { getComponent } from '../component/registry'
 import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, WbNode } from '../node'
+import { pageTargetPath } from '../page-target'
 import { walkNodes } from '../tree'
 
 /** 컴포넌트를 문장에서 부르는 이름과, 그 앞에 붙일 라벨을 담은 prop. */
@@ -330,10 +331,16 @@ export function describePageTarget(target: string): string {
   return pageName(target)
 }
 
+/**
+ * **접두를 여기서 벗기지 않는다**(P9-3 T2).
+ *
+ * 앞 판은 `'page:'` 리터럴을 **한 줄에 두 번** 인라인했다(`startsWith` · `slice`). 그때
+ * 상수(`PAGE_TARGET_PREFIX`)는 `apps/api`에 살아 이 파일이 볼 수 없었고, P9-1 이월이
+ * *"상수만 올리면 접두가 세 자리가 된다"*고 경고한 것이 이 자리다. 승격 뒤에는 벗기는
+ * 자리도 `page-target.ts` 하나다.
+ */
 function pageName(target: string): string {
-  const trimmed = typeof target === 'string' ? target.trim() : ''
-  if (trimmed.length === 0) return UNSET_PAGE
-  const path = trimmed.startsWith('page:') ? trimmed.slice('page:'.length).trim() : trimmed
+  const path = pageTargetPath(target)
   return path.length === 0 ? UNSET_PAGE : `${path} 페이지`
 }
 
