@@ -23,9 +23,16 @@ export interface ApiTokenRecord {
   lastUsedAt: Date | null
 }
 
-/** 인증 훅이 쓰는 조회 결과. 자격이 누구의 것이고 어느 프로젝트에 묶였는지만 든다. */
+/**
+ * 인증 훅이 쓰는 조회 결과. 자격이 누구의 것이고 어느 프로젝트에 묶였는지만 든다.
+ *
+ * **`tokenName`이 여기 있는 이유는 §7.4다** — `actor_label='<토큰명>'`이 설계가 정한 값이고
+ * 그것을 아는 것은 서버뿐이다(`auth/actor.ts`). 이 필드가 없으면 그 문장이 참이 될 수 없다.
+ */
 export interface ApiTokenPrincipal {
   tokenId: string
+  /** 발급 때 사람이 붙인 이름. **원문도 해시도 아니다** — `revisions.actor_label`이 될 값이다. */
+  tokenName: string
   projectId: string
   user: { id: string; email: string; name: string }
 }
@@ -149,6 +156,7 @@ export async function findApiTokenByValue(db: DbHandle, value: string): Promise<
     .innerJoin('users', 'users.id', 'api_tokens.user_id')
     .select([
       'api_tokens.id as token_id',
+      'api_tokens.name as token_name',
       'api_tokens.project_id as project_id',
       'users.id as user_id',
       'users.email as email',
@@ -167,6 +175,7 @@ export async function findApiTokenByValue(db: DbHandle, value: string): Promise<
 
   return {
     tokenId: row.token_id,
+    tokenName: row.token_name,
     projectId: row.project_id,
     user: { id: row.user_id, email: row.email, name: row.name },
   }

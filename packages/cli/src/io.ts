@@ -67,9 +67,26 @@ export interface FileIo {
   kind(path: string): Promise<'file' | 'directory' | null>
 }
 
+/**
+ * 이 프로세스가 서버에게 자기를 무엇이라 말하는가. `revisions.actor_type`이 되는 값이다
+ * (설계 §7.4 · P9-5 D1).
+ *
+ * **요청이 아니라 프로세스의 성질이다.** 그래서 `ApiRequest`가 아니라 여기 있다 —
+ * `wireb`는 언제나 `cli`이고 MCP 서버는 언제나 `mcp`다. 요청마다 주게 하면 명령을 하나
+ * 더할 때 그 값을 빠뜨리는 경로가 생기고, 빠뜨린 요청은 **조용히 다른 종류로 기록된다.**
+ */
+export type ClientKind = 'cli' | 'mcp'
+
 export interface Io {
   /** 명령이 시작된 디렉터리. `.wirebound.json`을 여기서부터 위로 찾는다. */
   cwd: string
+  /**
+   * 이 프로세스의 종류. `callApi`가 **모든 요청**에 헤더로 싣는다(`client.ts`).
+   *
+   * **`createNodeIo`가 `'cli'`를 낸다** — `wireb`가 그것을 부르는 유일한 조립이다.
+   * MCP는 `bin.ts`에서 `'mcp'`로 갈아 끼운다(`out`을 `err`로 돌리는 것과 같은 자리).
+   */
+  client: ClientKind
   /** 홈 디렉터리. 자격 파일이 이 아래 산다(D6 — 리포에 쓰지 않는다). */
   home: string
   env: Record<string, string | undefined>

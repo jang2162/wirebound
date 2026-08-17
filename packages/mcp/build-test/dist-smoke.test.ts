@@ -51,17 +51,56 @@ let credentials = ''
 let payload: unknown = null
 /** 서버가 실제로 받은 Authorization 헤더. **토큰이 실려 갔는지를 여기서 본다.** */
 const seenAuth: string[] = []
+/**
+ * 서버가 실제로 받은 `x-wb-client` 헤더.
+ *
+ * **이것을 재는 자가 여기밖에 없다**(P9-5 D1). `bin.ts`가 `io`를 조립하며 `client: 'mcp'`를
+ * 심는데, 단위 케이스는 그 파일을 안 지나고 자기 가짜 `io`를 세운다 — 그 한 줄을 지워도
+ * `pnpm test`는 0 사망이다.
+ */
+const seenClient: string[] = []
+/**
+ * 쓰기 요청 하나가 실제로 받은 것. **받는 쪽이 받는 것을 재는 자리다**(D9).
+ *
+ * 단위 케이스는 `callTool`을 직접 부르므로 **프로토콜을 건넌 인자**를 못 본다 —
+ * `ops` 배열이 JSON-RPC를 지나 그대로 오는지, 한국어 본문이 안 깨지는지는 여기서만 잰다.
+ */
+const seenWrites: { method: string; url: string; body: unknown; client: string }[] = []
+/** 쓰기 라우트가 어떻게 답할지. 케이스가 갈아 끼운다. */
+let writeMode: 'ok' | 'stale' | 'locked' = 'ok'
 
 beforeAll(async () => {
   execFileSync('pnpm', ['--filter', './packages/*', '-r', 'build'], { cwd: repoRoot, stdio: 'pipe' })
 
   http = createServer((request, response) => {
     seenAuth.push(request.headers.authorization ?? '')
+    seenClient.push(String(request.headers['x-wb-client'] ?? ''))
     if (request.url === `/api/projects/${PROJECT}/snapshot`) {
       response.writeHead(200, { 'content-type': 'application/json' })
       response.end(JSON.stringify(payload))
       return
     }
+
+    // **쓰기 둘**(P9-5 T6). 본문을 다 받은 뒤에 답한다.
+    const write = /\/api\/projects\/[^/]+\/pages\/([^/]+)\/(ops|comments)$/.exec(request.url ?? '')
+    if (write !== null) {
+      const chunks: Buffer[] = []
+      request.on('data', (chunk: Buffer) => chunks.push(chunk))
+      request.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8')
+        seenWrites.push({
+          method: request.method ?? '',
+          url: request.url ?? '',
+          body: raw.length === 0 ? null : JSON.parse(raw),
+          client: String(request.headers['x-wb-client'] ?? ''),
+        })
+        const answer = writeAnswer(write[2] === 'ops')
+        response.writeHead(answer.status, { 'content-type': 'application/json' })
+        response.end(JSON.stringify(answer.body))
+      })
+      return
+    }
+
     response.writeHead(404, { 'content-type': 'application/json' })
     response.end(JSON.stringify({ error: { code: 'not-found', message: '대상을 찾을 수 없습니다' } }))
   })
@@ -83,6 +122,39 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((done) => http.close(() => done()))
 })
+
+/** 쓰기 라우트가 낼 답. **문장은 `apps/api`가 실제로 내는 것을 옮긴다**(T1의 프로브가 잰 글자다). */
+function writeAnswer(isOps: boolean): { status: number; body: unknown } {
+  if (writeMode === 'stale') {
+    return {
+      status: 409,
+      body: { error: { code: 'conflict', message: '페이지가 이미 변경되었습니다 (요청 baseSeq 0, 현재 2)' } },
+    }
+  }
+  if (writeMode === 'locked') {
+    return { status: 423, body: { error: { code: 'locked', message: '장병현님이 편집 중인 영역입니다' } } }
+  }
+  if (isOps) {
+    return { status: 200, body: { seq: 5, revisionId: 'rev_smoke', inverse: [], schemaVersion: 1 } }
+  }
+  return {
+    status: 201,
+    body: {
+      comment: {
+        id: 'cmt_smoke',
+        nodeId: 'list',
+        body: '정렬 기준이 없습니다',
+        authorId: 'usr_smoke',
+        authorName: '장병현',
+        createdAt: '2026-08-17T00:00:00.000Z',
+        updatedAt: '2026-08-17T00:00:00.000Z',
+      },
+      marker: 3,
+      seq: 6,
+      markerOps: [{ op: 'add', path: '/root/children/1/marker', value: 3 }],
+    },
+  }
+}
 
 /** 빌드된 서버를 **호스트가 하듯이** 띄우고 진짜 클라이언트로 붙는다. */
 async function connect(env: Record<string, string> = {}): Promise<Client> {
@@ -132,12 +204,18 @@ describe('빌드된 wireb-mcp', () => {
 })
 
 describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
-  it('핸드셰이크가 서고 도구 셋이 보인다', async () => {
+  it('핸드셰이크가 서고 §12.2의 다섯이 보인다', async () => {
     payload = snapshotPayload()
     const client = await connect()
     try {
       const listed = await client.listTools()
-      expect(listed.tools.map((tool) => tool.name).sort()).toEqual(['get_page', 'list_pages', 'validate'])
+      expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
+        'add_comment',
+        'get_page',
+        'list_pages',
+        'patch_page',
+        'validate',
+      ])
       // 인자 스키마가 프로토콜을 건너 그대로 왔는가.
       const get = listed.tools.find((tool) => tool.name === 'get_page')!
       expect((get.inputSchema as { required?: string[] }).required).toEqual(['path'])
@@ -206,8 +284,8 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
     payload = snapshotPayload()
     const client = await connect()
     try {
-      // P9-5가 이 이름을 만든다. 오늘은 프로토콜 층에서 거절된다.
-      await expect(client.callTool({ name: 'patch_page', arguments: {} })).rejects.toMatchObject({ code: -32601 })
+      // **§12.2의 표에 없는 이름이다.** 표가 닫혔으므로 실재하지 않는 이름을 골랐다.
+      await expect(client.callTool({ name: 'delete_project', arguments: {} })).rejects.toMatchObject({ code: -32601 })
       await expect(client.callTool({ name: 'get_page', arguments: {} })).rejects.toMatchObject({ code: -32602 })
     } finally {
       await client.close()
@@ -223,6 +301,26 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
       // 자격이 실제로 요청에 실렸다 — 분모가 0이면 아래가 공허하다.
       expect(seenAuth).toContain(`Bearer ${TOKEN}`)
       expect(text(result)).not.toContain(TOKEN)
+    } finally {
+      await client.close()
+    }
+  }, 60_000)
+
+  /**
+   * **자기를 `mcp`라고 말한다**(P9-5 D1 — §7.4의 `actor_type='mcp'`가 이 헤더에 매여 있다).
+   *
+   * **`bin.ts`의 `client: 'mcp'` 한 줄을 볼 수 있는 자가 여기뿐이다.** 단위 케이스는 자기
+   * 가짜 `io`를 세우므로 그 줄을 지워도 안 죽는다 — `dist`를 띄우는 이 파일만 그 조립을 지난다.
+   */
+  it('자기를 `mcp` 라고 말한다 — `wireb` 가 싣는 값과 갈린다', async () => {
+    payload = snapshotPayload()
+    seenClient.length = 0
+    const client = await connect()
+    try {
+      await client.callTool({ name: 'list_pages', arguments: {} })
+      // 분모가 0이면 아래가 공허하다 — 요청이 실제로 갔는가.
+      expect(seenClient.length).toBeGreaterThan(0)
+      expect([...new Set(seenClient)]).toEqual(['mcp'])
     } finally {
       await client.close()
     }
@@ -261,6 +359,166 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
     } finally {
       await client.close()
     }
+  }, 60_000)
+})
+
+/**
+ * **쓰기 둘이 실제로 서버에 닿는다** (P9-5 T6 · D9).
+ *
+ * ---
+ *
+ * # 단위 케이스가 못 보는 것
+ *
+ * 단위 케이스는 `callTool`을 직접 부르고 가짜 `io`의 라우트 표를 본다. **여기서만 보이는
+ * 것 셋:** (1) `ops` 배열이 JSON-RPC 프레임을 건너 그대로 오는가, (2) 빌드된 번들이
+ * `PATCH`를 실제로 보내는가(유니온에 더한 것이 런타임까지 왔는가), (3) 쓰기 응답을 낸
+ * **뒤에도** 표준출력이 프레임뿐인가.
+ */
+describe('빌드된 서버가 실제로 쓴다 (T6)', () => {
+  const OPS = [{ op: 'add', path: '/root/children/-', value: { id: 'n_smoke', type: 'Text', props: {} } }]
+
+  it('`patch_page` 가 `PATCH .../ops` 를 보낸다 — 본문이 프로토콜을 건너 그대로 온다', async () => {
+    payload = snapshotPayload()
+    writeMode = 'ok'
+    seenWrites.length = 0
+    const client = await connect()
+    try {
+      const said = JSON.parse(
+        text(await client.callTool({ name: 'patch_page', arguments: { path: '관리자/회원/목록', baseSeq: 0, ops: OPS } })),
+      ) as { applied: boolean; headSeq: number; revisionId: string }
+
+      expect(said.applied).toBe(true)
+      expect(said.headSeq).toBe(5)
+      expect(said.revisionId).toBe('rev_smoke')
+
+      expect(seenWrites).toHaveLength(1)
+      expect(seenWrites[0]!.method).toBe('PATCH')
+      expect(seenWrites[0]!.url).toContain('/ops')
+      // **`ops`가 그대로 왔는가** — 도구가 다시 만들지 않는다.
+      expect(seenWrites[0]!.body).toEqual({ baseSeq: 0, ops: OPS })
+      // **`actor_type`이 이 헤더에서 온다**(D1).
+      expect(seenWrites[0]!.client).toBe('mcp')
+    } finally {
+      await client.close()
+    }
+  }, 60_000)
+
+  it('`add_comment` 가 한국어 본문을 안 깨뜨리고 보낸다', async () => {
+    payload = snapshotPayload()
+    writeMode = 'ok'
+    seenWrites.length = 0
+    const client = await connect()
+    try {
+      const said = JSON.parse(
+        text(
+          await client.callTool({
+            name: 'add_comment',
+            arguments: { path: '관리자/회원/목록', nodeId: 'list', body: '① 정렬 기준이 없습니다' },
+          }),
+        ),
+      ) as { added: boolean; documentChanged: boolean; headSeq: number; note: string }
+
+      expect(said.added).toBe(true)
+      expect(said.documentChanged).toBe(true)
+      expect(said.headSeq).toBe(6)
+      expect(said.note).toContain('409')
+
+      expect(seenWrites[0]!.body).toEqual({ nodeId: 'list', body: '① 정렬 기준이 없습니다' })
+    } finally {
+      await client.close()
+    }
+  }, 60_000)
+
+  it('409 는 `isError` 결과이고 다시 읽으라고 말한다 — 예외가 아니다', async () => {
+    payload = snapshotPayload()
+    writeMode = 'stale'
+    seenWrites.length = 0
+    const client = await connect()
+    try {
+      const result = await client.callTool({
+        name: 'patch_page',
+        arguments: { path: '관리자/회원/목록', baseSeq: 0, ops: OPS },
+      })
+      expect(result.isError).toBe(true)
+      const said = JSON.parse(text(result)) as { reason: string; next: string; headSeq: number | null }
+      expect(said.reason).toBe('stale')
+      expect(said.next).toContain('get_page')
+      // 스냅샷을 다시 읽어 값으로 실었다(D4).
+      expect(said.headSeq).toBe(0)
+      // **한 번만 보냈다** — 재시도가 없다.
+      expect(seenWrites.filter((one) => one.method === 'PATCH')).toHaveLength(1)
+    } finally {
+      await client.close()
+    }
+  }, 60_000)
+
+  it('423 은 **기다리라고** 말하고 누가 잡고 있는지를 싣는다', async () => {
+    payload = snapshotPayload()
+    writeMode = 'locked'
+    const client = await connect()
+    try {
+      const result = await client.callTool({
+        name: 'patch_page',
+        arguments: { path: '관리자/회원/목록', baseSeq: 0, ops: OPS },
+      })
+      expect(result.isError).toBe(true)
+      const said = JSON.parse(text(result)) as { reason: string; next: string; message: string }
+      expect(said.reason).toBe('locked')
+      expect(said.next).toContain('기다')
+      expect(said.next).not.toContain('get_page')
+      expect(said.message).toContain('장병현님이 편집 중인 영역입니다')
+    } finally {
+      await client.close()
+    }
+  }, 60_000)
+
+  it('인자 모양이 틀리면 JSON-RPC 오류이고 **아무것도 안 보낸다**', async () => {
+    payload = snapshotPayload()
+    writeMode = 'ok'
+    seenWrites.length = 0
+    const client = await connect()
+    try {
+      await expect(
+        client.callTool({ name: 'patch_page', arguments: { path: '관리자/회원/목록', baseSeq: '0', ops: OPS } }),
+      ).rejects.toMatchObject({ code: -32602 })
+      expect(seenWrites).toHaveLength(0)
+    } finally {
+      await client.close()
+    }
+  }, 60_000)
+
+  /**
+   * **쓰기 뒤에도 표준출력이 프레임뿐이다**(P9-4의 계약 둘 · 델타 D-1).
+   *
+   * 쓰기 경로는 응답 본문을 새로 읽고 갈래를 새로 가른다 — **로그 한 줄이 붙기 가장 쉬운
+   * 자리**이고, 그 한 줄은 실서버에서 *다음* 프레임 앞에 붙는다.
+   */
+  it('쓰기 뒤에도 표준출력이 JSON-RPC 프레임뿐이다', async () => {
+    payload = snapshotPayload()
+    writeMode = 'ok'
+    const said = await rawStdout([
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: LATEST_PROTOCOL_VERSION,
+          capabilities: {},
+          clientInfo: { name: 'wirebound-raw', version: '0.0.0' },
+        },
+      },
+      { jsonrpc: '2.0', method: 'notifications/initialized' },
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'patch_page', arguments: { path: '관리자/회원/목록', baseSeq: 0, ops: OPS } },
+      },
+    ])
+
+    expect(said.split('\n').filter((line) => line.length > 0).length).toBeGreaterThanOrEqual(2)
+    expect(strayLines(said), said).toEqual([])
+    expect(said).toContain('rev_smoke')
   }, 60_000)
 })
 

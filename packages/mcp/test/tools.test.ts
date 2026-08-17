@@ -4,7 +4,8 @@
  *
  * 이 파일이 드는 것 셋:
  *
- * 1. 표가 §12.2의 **읽기 셋**을 빠짐없이 덮고, 쓰기 둘을 **아직 안 덮는다**(그것이 P9-5다).
+ * 1. 표가 §12.2의 **다섯을 빠짐없이** 덮는다. **P9-5가 쓰기 둘을 더해 표가 닫혔다** —
+ *    앞 판의 *"쓰기 둘은 아직 없다"*가 뒤집힌 자리이고, 지운 것이 아니라 **뒤집었다.**
  * 2. **없는 것** — `validate`가 `LintConfig`를 안 받고(D5) 어느 도구도 `projectId`를 안 받는다(D4).
  * 3. 인자 검사가 **표에서 나온다** — 도구마다 손으로 짠 검사가 아니다.
  */
@@ -30,9 +31,6 @@ function specTools(): { name: string; use: string }[] {
   return found
 }
 
-/** 이 슬라이스가 짓는 셋. 나머지 둘(`patch_page`·`add_comment`)은 P9-5다. */
-const READ_TOOLS = ['list_pages', 'get_page', 'validate']
-
 describe('도구 표가 §12.2를 센다', () => {
   const spec = specTools()
 
@@ -47,17 +45,18 @@ describe('도구 표가 §12.2를 센다', () => {
     ])
   })
 
-  it('읽기 셋을 빠짐없이 덮는다 — 이름도 용도도 문서에서 온다', () => {
-    // **수를 여기 적지 않는다.** 문서가 든 줄이 곧 기대값이다.
-    const expected = spec.filter((tool) => READ_TOOLS.includes(tool.name))
+  it('§12.2의 다섯을 빠짐없이 덮는다 — 이름도 용도도 문서에서 온다', () => {
+    // **수를 여기 적지 않는다.** 문서가 든 줄이 곧 기대값이고 **순서까지 같다.**
     expect(TOOLS.map((tool) => ({ name: tool.name, use: tool.spec }))).toEqual(
-      expected.map((tool) => ({ name: tool.name, use: tool.use })),
+      spec.map((tool) => ({ name: tool.name, use: tool.use })),
     )
   })
 
-  it('쓰기 둘은 아직 없다 — P9-5가 그 자리다', () => {
+  it('쓰기 둘이 실재한다 — 앞 판의 *"아직 없다"*를 뒤집은 자리다', () => {
+    // **앞 슬라이스의 케이스를 지우지 않고 뒤집었다**(P9-4 이월 §2.1). 지우면 §12.2의
+    // 표가 다시 좁아져도 아무도 안 죽는다.
     for (const name of ['patch_page', 'add_comment']) {
-      expect(findTool(name), name).toBeUndefined()
+      expect(findTool(name), name).toBeDefined()
     }
   })
 
@@ -92,6 +91,16 @@ describe('도구 표가 §12.2를 센다', () => {
  */
 const ALLOWED_ARGS: readonly { name: string; why: string }[] = [
   { name: 'path', why: '§8.1의 페이지 경로. 세션이 만드는 값이 아니라 list_pages 가 낸 값이다' },
+  {
+    name: 'baseSeq',
+    why: 'P9-5 D5 — §12.2가 "baseSeq 필수"라고 적었다. 도구가 스스로 읽으면 "에이전트가 읽은 문서 위에 얹는다"는 §7.4의 보증이 사라진다',
+  },
+  {
+    name: 'ops',
+    why: 'P9-5 D5 — 그것이 patch_page 의 존재 이유다. **검증하는 자리는 서버다**(§7.4의 "사람 편집과 동일 경로") — 도구가 자기 검증을 더하면 두 벌이 된다',
+  },
+  { name: 'nodeId', why: 'P9-5 — 어느 노드에 말을 붙일지는 에이전트의 판단이다. get_page 가 낸 nodes[].id 가 그 값이다' },
+  { name: 'body', why: 'P9-5 — 코멘트 본문. 길이 상한은 서버가 든다(COMMENT_BODY_MAX_LENGTH)' },
 ]
 
 describe('인자 스키마에 **없는 것**이 판정이다', () => {
@@ -137,15 +146,26 @@ describe('인자 스키마에 **없는 것**이 판정이다', () => {
     }
   })
 
-  it('오늘 셋이 받는 것 — 모양을 고정한다', () => {
+  it('다섯이 받는 것 — 모양을 고정한다', () => {
     expect(Object.keys(findTool('list_pages')!.inputSchema.properties)).toEqual([])
     expect(Object.keys(findTool('get_page')!.inputSchema.properties)).toEqual(['path'])
+    expect(Object.keys(findTool('patch_page')!.inputSchema.properties)).toEqual(['path', 'baseSeq', 'ops'])
+    expect(Object.keys(findTool('add_comment')!.inputSchema.properties)).toEqual(['path', 'nodeId', 'body'])
     expect(Object.keys(findTool('validate')!.inputSchema.properties)).toEqual(['path'])
   })
 
   it('get_page는 경로가 필수이고 validate는 아니다', () => {
     expect(findTool('get_page')!.inputSchema.required).toEqual(['path'])
     expect(findTool('validate')!.inputSchema.required).toBeUndefined()
+  })
+
+  /**
+   * **쓰기는 셋 다 필수다.** 하나라도 선택이면 *"안 줬다"*가 서버까지 가고, 그때 나오는
+   * 문장은 도구 인자 이름을 안 쓴다 — 에이전트가 무엇을 빠뜨렸는지 모른다.
+   */
+  it('쓰기 둘은 인자가 전부 필수다', () => {
+    expect(findTool('patch_page')!.inputSchema.required).toEqual(['path', 'baseSeq', 'ops'])
+    expect(findTool('add_comment')!.inputSchema.required).toEqual(['path', 'nodeId', 'body'])
   })
 })
 
@@ -159,7 +179,7 @@ describe('인자 검사는 표에서 나온다 (D8)', () => {
   const io = createFakeIo()
 
   it('모르는 도구는 MethodNotFound다', async () => {
-    await expect(callTool(io, 'patch_page', {})).rejects.toMatchObject({
+    await expect(callTool(io, 'delete_project', {})).rejects.toMatchObject({
       code: ErrorCode.MethodNotFound,
     })
   })

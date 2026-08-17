@@ -78,6 +78,15 @@ declare module 'fastify' {
      * `projectGuard`가 이 값을 `requireProjectRole`에 넘겨 스코프 밖을 404로 만든다.
      */
     tokenProjectId: string | null
+
+    /**
+     * 이 요청을 채운 **토큰 행의 신원**. 세션으로 들어왔으면 `null`이다.
+     *
+     * **`revisions.actor_id`·`actor_label`이 여기서 온다**(§7.4 · `auth/actor.ts`).
+     * `currentUser`만으로는 그 값을 만들 수 없다 — 토큰은 발급자의 권한을 상속하므로
+     * 사람은 같고 **자격이 다르다.**
+     */
+    tokenActor: { tokenId: string; tokenName: string } | null
   }
 
   interface FastifyInstance {
@@ -117,6 +126,7 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
   app.decorateRequest('currentUser', null)
   app.decorateRequest('authKind', null)
   app.decorateRequest('tokenProjectId', null)
+  app.decorateRequest('tokenActor', null)
 
   // 모든 요청(공개 라우트 포함)에서 돈다. 절대 던지지 않는다 — 여기서 던지면
   // `requireAuth`가 없는 공개 라우트까지 죽는다. 쿠키가 없거나, 형식이 이상하거나,
@@ -125,6 +135,7 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
     request.currentUser = null
     request.authKind = null
     request.tokenProjectId = null
+    request.tokenActor = null
 
     // **쿠키가 먼저다.** 둘 다 실린 요청(브라우저에서 도구를 부르는 경우)에서 사람이
     // 앉아 있는 쪽을 고른다 — 그쪽이 스코프에 묶이지 않아 더 넓고, 토큰이 이기면
@@ -158,6 +169,8 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
       request.authKind = 'token'
       // 판정은 `auth/roles.ts`가 한다 — 여기는 값만 나른다.
       request.tokenProjectId = principal.projectId
+      // **§7.4의 `actor_label='<토큰명>'`이 이 두 줄에 매여 있다**(`auth/actor.ts`).
+      request.tokenActor = { tokenId: principal.tokenId, tokenName: principal.tokenName }
     } catch {
       // 절대 던지지 않는다(위 문단).
     }

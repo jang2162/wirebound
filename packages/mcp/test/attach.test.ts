@@ -99,7 +99,7 @@ describe('자격을 다시 짜지 않는다 (D3)', () => {
    * 무해했지만, 도구가 늘면 그 도구는 아무도 안 본다. `no-token-in-response.test.ts`가
    * 분모를 표에서 만든 것과 같은 자세로 맞춘다.
    */
-  it('어느 도구도 리포에 아무것도 안 쓴다 — 읽기뿐이다', async () => {
+  it('어느 도구도 리포에 파일을 안 쓴다 — 쓰기 둘도 서버로만 쓴다', async () => {
     for (const tool of TOOLS) {
       const io = harness()
       const before = [...io.fs.keys()]
@@ -113,9 +113,16 @@ describe('자격을 다시 짜지 않는다 (D3)', () => {
   })
 })
 
-/** 도구마다 성공 갈래를 부를 인자. **표를 분모로 쓰므로 여기 없는 도구가 생기면 죽는다.** */
-const READ_ARGS: Record<string, Record<string, string>> = {
+/**
+ * 도구마다 성공 갈래를 부를 인자. **표를 분모로 쓰므로 여기 없는 도구가 생기면 죽는다.**
+ *
+ * **P9-4 이월 §4가 이 표를 안 적었다** — §2.1이 `no-token-in-response`의 같은 표는
+ * 적었는데 이쪽은 빠졌다. P9-5가 도구를 더하며 실제로 밟았고(2 사망), 그래서 여기 적는다.
+ */
+const READ_ARGS: Record<string, Record<string, unknown>> = {
   list_pages: {},
   get_page: { path: '관리자/회원/목록' },
+  patch_page: { path: '관리자/회원/목록', baseSeq: 0, ops: [{ op: 'remove', path: '/root/children/1' }] },
+  add_comment: { path: '관리자/회원/목록', nodeId: 'list', body: '정렬 기준이 없습니다' },
   validate: {},
 }

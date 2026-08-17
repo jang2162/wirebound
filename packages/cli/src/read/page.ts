@@ -73,7 +73,21 @@ export interface ProjectListing {
 
 /** 페이지 하나를 찾은 결과. **셋을 갈라 낸다** — 부르는 쪽이 그것을 글자로 만든다. */
 export type PageLookup =
-  | { kind: 'found'; view: PageView; notes: string[] }
+  | {
+      kind: 'found'
+      view: PageView
+      notes: string[]
+      /**
+       * 이 페이지가 선 revision 번호. **`PageView` 안이 아니라 여기 있다** —
+       * `pageView`가 만드는 것은 *"문서가 무엇인가"*이고 이것은 *"저장소가 어디까지
+       * 왔는가"*라 성질이 다르다(payload의 `SnapshotPage.headSeq`에서 그대로 온다).
+       *
+       * **§12.2가 *"`patch_page`(baseSeq 필수)"*라고 적었고 그 값을 에이전트가 알 길이
+       * 여기뿐이다.** 없으면 도구가 스스로 읽어야 하고, 그러면 *"내가 읽은 문서 위에
+       * 얹는다"*는 §7.4의 보증이 사라진다 — 도구가 자기가 방금 읽은 판으로 덮어쓴다.
+       */
+      headSeq: number
+    }
   | { kind: 'none'; candidates: string[] }
   | { kind: 'ambiguous'; matches: PageSummary[] }
 
@@ -138,6 +152,7 @@ export function lookupPage(payload: SnapshotPayload, path: string): PageLookup {
   return {
     kind: 'found',
     notes,
+    headSeq: record.headSeq,
     view: pageView({
       id: record.id,
       title: record.title,

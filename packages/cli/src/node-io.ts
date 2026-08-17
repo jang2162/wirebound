@@ -20,6 +20,9 @@ export const CREDENTIALS_DIR_MODE = 0o700
 
 export function createNodeIo(): Io {
   return {
+    // **`wireb`의 조립이므로 `'cli'`다.** MCP는 이 값을 `'mcp'`로 갈아 끼운다
+    // (`packages/mcp/src/bin.ts` — `out`을 `err`로 돌리는 것과 같은 자리).
+    client: 'cli',
     cwd: process.cwd(),
     home: homedir(),
     env: process.env,

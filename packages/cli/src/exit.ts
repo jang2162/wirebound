@@ -64,10 +64,29 @@ export type ExitCode = (typeof EXIT)[keyof typeof EXIT]
 export class CliError extends Error {
   readonly code: ExitCode
 
-  constructor(code: ExitCode, message: string) {
+  /**
+   * 서버가 거절했을 때의 **HTTP 상태 코드**. 그 밖의 갈래에서는 `undefined`다.
+   *
+   * ---
+   *
+   * # 왜 코드 3 하나로 안 접나 (P9-5 D3)
+   *
+   * `wireb`에게는 3 하나로 충분하다 — 사람이 문장을 읽는다. **에이전트는 다르다:**
+   * 409(*"문서가 내 밑에서 움직였다"*)와 423(*"사람이 그 자리를 잡고 있다"*)은
+   * **해야 할 일이 정반대**다(§7.4 · `apps/api/README.md`의 잠금 절: 409는 재조회 후
+   * 재시도, 423은 재조회해도 안 풀린다). 도구가 그 둘을 가르려면 상태 코드가 필요하고,
+   * **문장에서 숫자를 되파는 것은 서버가 문장을 바꾸는 날 조용히 틀린다.**
+   *
+   * **종료 코드를 안 늘린다.** 이 값은 갈래를 만들지 않는다 — `run`은 여전히
+   * `error.code`만 본다(`exit.ts`의 표가 그대로다).
+   */
+  readonly status: number | undefined
+
+  constructor(code: ExitCode, message: string, status?: number) {
     super(message)
     this.name = 'CliError'
     this.code = code
+    this.status = status
   }
 }
 

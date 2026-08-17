@@ -33,8 +33,12 @@ import { createNodeIo } from '@wirebound/cli/embed'
 import { createServer } from './server'
 
 const base = createNodeIo()
-// **`out`을 `err`로 돌린다**(위 머리말). 그 밖은 그대로다.
-const io = { ...base, out: base.err }
+// **`out`을 `err`로 돌리고 자기 종류를 말한다**(위 머리말 · P9-5 D1). 그 밖은 그대로다.
+// `client`가 `callApi`의 `x-wb-client` 헤더가 되고, 서버가 그 값으로
+// `revisions.actor_type`을 채운다(§7.4) — **이 한 줄이 없으면 도구가 낸 편집이 `cli`로
+// 기록된다.** 이 파일의 `io`를 볼 수 있는 자는 스모크뿐이므로
+// `build-test/dist-smoke.test.ts`의 `자기를 mcp 라고 말한다`가 그것을 든다.
+const io = { ...base, out: base.err, client: 'mcp' as const }
 
 const server = createServer(io)
 await server.connect(new StdioServerTransport())

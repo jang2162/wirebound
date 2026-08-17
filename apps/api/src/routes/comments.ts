@@ -135,6 +135,7 @@ import {
   type ValidationIssue,
   type WbNode,
 } from '@wirebound/schema'
+import { requestActor, requestEventActor } from '../auth/actor'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
@@ -202,7 +203,6 @@ function notifyMarkerChange(
   request: FastifyRequest,
   projectId: string,
   pageId: string,
-  actorLabel: string,
   result: { seq: number; markerOps: PatchOp[]; warnings: ValidationIssue[] },
 ): void {
   if (result.markerOps.length === 0) return
@@ -212,7 +212,9 @@ function notifyMarkerChange(
     seq: result.seq,
     ops: result.markerOps,
     warnings: result.warnings,
-    actor: { type: 'user', label: actorLabel },
+    // **actor는 요청이 정한다**(P9-5 D1). 앞 판은 사람 이름을 인자로 받았는데, 그러면
+    // 에이전트가 단 코멘트의 프레임이 사람이 단 것과 구별되지 않는다.
+    actor: requestEventActor(request),
     originConnectionId: originConnectionId(request),
   })
 }
@@ -466,7 +468,7 @@ export function commentRoutes() {
           pageId,
           baseSeq: page.headSeq,
           ops,
-          actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+          actor: requestActor(request),
         })
         // **던진다 — `return`이 아니다**(규칙 1). 이 자리는 아직 아무것도 안 썼으므로
         // `return`으로도 오늘은 안전하지만(그래서 이 던지기는 **0 사망**이다), 그 안전이
@@ -483,7 +485,7 @@ export function commentRoutes() {
         return { comment, seq: outcome.seq, marker, markerOps: ops, warnings: outcome.warnings }
       })
 
-      notifyMarkerChange(app, request, projectId, pageId, currentUser.name, result)
+      notifyMarkerChange(app, request, projectId, pageId, result)
 
       reply.code(201)
       return {
@@ -608,7 +610,7 @@ export function commentRoutes() {
             pageId,
             baseSeq: page.headSeq,
             ops,
-            actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+            actor: requestActor(request),
           })
           // **던진다 — `return`이 아니다**(규칙 1). 여기가 리뷰 B5의 자리다: 위에서 행을
           // 이미 지웠으므로 `return`하면 `withTransaction`이 그 삭제를 **커밋한 채**
@@ -620,7 +622,7 @@ export function commentRoutes() {
 
         if (result === 'not-found') throw notFound()
 
-        notifyMarkerChange(app, request, projectId, pageId, currentUser.name, result)
+        notifyMarkerChange(app, request, projectId, pageId, result)
 
         // 응답에서 `warnings`를 뺀다 — 이 라우트의 계약은 `{ seq, markerOps }`이고
         // (README의 표), 그것을 넓히는 것은 이 슬라이스가 하는 일이 아니다.
@@ -658,13 +660,13 @@ export function commentRoutes() {
           pageId,
           baseSeq: page.headSeq,
           ops,
-          actor: { type: 'user', id: currentUser.id, label: currentUser.name },
+          actor: requestActor(request),
         })
         if (!outcome.ok) {
           throw editOutcomeToApiError(outcome, page.headSeq)
         }
 
-        notifyMarkerChange(app, request, projectId, pageId, currentUser.name, {
+        notifyMarkerChange(app, request, projectId, pageId, {
           seq: outcome.seq,
           markerOps: ops,
           warnings: outcome.warnings,

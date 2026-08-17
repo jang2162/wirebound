@@ -30,12 +30,35 @@
  * **쿠키 이름을 안 본다.** 서버의 `SESSION_COOKIE_NAME`이 설정값이라(`apps/api/src/config.ts`)
  * `wb_session`을 여기 적으면 그 설정을 바꾼 배포에서 조용히 로그인이 안 된다. 받은 것을
  * 전부 그대로 되돌려 보낸다.
+ *
+ * # 자기 종류를 **모든 요청에** 싣는다 (P9-5 D1)
+ *
+ * `x-wb-client: cli|mcp`. 서버가 그 값으로 `revisions.actor_type`을 채운다(§7.4) —
+ * **`wireb`도 실어야 `cli`가 채워진다.** 안 실으면 서버가 기본값을 쓰고, 그 기본값이
+ * 무엇이든 *"헤더를 잊었다"*와 *"정말 그 종류다"*가 구별되지 않는다.
+ *
+ * **싣는 자리가 여기 하나인 것이 이 설계의 값이다** — MCP가 자기 HTTP 클라이언트를 안 갖고
+ * 이 함수를 부르므로(P9-4 D3), 도구를 더해도 헤더를 빠뜨리는 경로가 없다.
  */
 import { CliError, EXIT, configError, serverError, unreachableError } from './exit'
 import type { HttpRequestInit, HttpResponse, Io } from './io'
 
+/**
+ * 프로세스 종류를 나르는 헤더.
+ *
+ * **`apps/api/src/auth/actor.ts`의 `CLIENT_KIND_HEADER`가 이것의 거울이다.** `apps/*`와
+ * `packages/*`는 서로 의존하지 않으므로(`CLAUDE.md`) 손으로 맞추는 자리이고,
+ * `apps/api/test/actor-census.test.ts`가 **두 소스에서 글자를 읽어 맞댄다** —
+ * `ws/protocol.ts`의 프레임 이름을 `protocol-parity.test.ts`가 맞대는 것과 같은 자세다.
+ */
+export const CLIENT_KIND_HEADER = 'x-wb-client'
+
 export interface ApiRequest {
-  method: 'GET' | 'POST' | 'DELETE'
+  /**
+   * **`PATCH`가 있다**(P9-5). 없던 것을 P9-2 이월 §1이 예고하고 P9-3 이월 §6이 옮겼다 —
+   * §12.2의 `patch_page`가 `PATCH .../ops`를 부르는 자리에서 컴파일이 막혔을 것이다.
+   */
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   /** `/api/…`로 시작하는 경로. 서버 주소는 호출자가 준다. */
   path: string
   body?: unknown
@@ -98,7 +121,8 @@ async function send(
   request: ApiRequest,
 ): Promise<{ url: string; response: HttpResponse }> {
   const url = `${server}${request.path}`
-  const headers: Record<string, string> = {}
+  // **자기 종류를 언제나 싣는다**(위 머리말). 요청마다 고르게 두지 않는 것이 요점이다.
+  const headers: Record<string, string> = { [CLIENT_KIND_HEADER]: io.client }
   if (request.body !== undefined) headers['content-type'] = 'application/json'
   if (request.token !== undefined) headers.authorization = `Bearer ${request.token}`
   if (request.cookie !== undefined) headers.cookie = request.cookie
@@ -119,7 +143,8 @@ async function send(
 
 function assertOk(status: number, text: string, request: ApiRequest, url: string): void {
   if (status < 200 || status >= 300) {
-    throw new CliError(EXIT.server, `${serverMessage(text, status)} (${request.method} ${url})`)
+    // **상태 코드를 값으로도 나른다**(`CliError.status`의 머리말 — P9-5 D3). 문장은 그대로다.
+    throw new CliError(EXIT.server, `${serverMessage(text, status)} (${request.method} ${url})`, status)
   }
 }
 

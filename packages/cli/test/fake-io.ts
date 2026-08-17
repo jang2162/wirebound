@@ -5,7 +5,7 @@
  * 매번 물음이 되고(`apps/api`가 하네스 다섯 벌로 겪은 일이다), 무엇보다 D6의 census가
  * **CLI가 리포에 쓴 파일 전부**를 훑으려면 그 기록이 한 곳에 모여 있어야 한다.
  */
-import type { HttpRequestInit, HttpResponse, Io } from '../src/io'
+import type { ClientKind, HttpRequestInit, HttpResponse, Io } from '../src/io'
 
 export interface RecordedRequest {
   method: string
@@ -51,6 +51,14 @@ export interface FakeIo extends Io {
 }
 
 export interface FakeIoOptions {
+  /**
+   * 이 프로세스가 자기를 무엇이라 말하는가. 기본은 `'cli'`다 — `wireb`의 케이스가 다수다.
+   *
+   * **가짜가 이 필드를 버리면 자가 눈을 감는다.** `callApi`가 그것을 헤더로 싣는데
+   * (P9-5 D1) 가짜가 안 들면 *"헤더를 싣는다"*를 재는 케이스 자체가 설 수 없다 —
+   * 리뷰 N2가 `write`의 셋째 인자에서 겪은 것과 같은 부류다.
+   */
+  client?: ClientKind
   cwd?: string
   home?: string
   env?: Record<string, string | undefined>
@@ -136,6 +144,7 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
   }
 
   return {
+    client: options.client ?? 'cli',
     cwd: options.cwd ?? '/repo',
     home: options.home ?? '/home/tester',
     env: options.env ?? {},
