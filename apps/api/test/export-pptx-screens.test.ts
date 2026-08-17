@@ -13,6 +13,7 @@
 import { unzipSync } from 'fflate'
 import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
+import { SCREEN_PATH_FAILED } from '../src/services/export-pptx'
 import { NO_KOREAN_FONT, type ScreenBatch, type ScreenRenderer, type ScreenRequest, type ScreenResult } from '../src/services/screen-render'
 import { createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
@@ -355,6 +356,13 @@ describe('무엇을 그리라고 넘기나 (D2)', () => {
           // CSS 는 따로 온다(`exportPage`의 계약) — HTML 안에 시트가 없다.
           expect(request.html).not.toContain('<style')
           expect(request.css.length).toBeGreaterThan(0)
+          /**
+           * **`<script>`가 없다는 것이 값이어야 한다.** 리뷰가 이것을 재서
+           * *"오늘 팝업으로 나갈 길이 없다"*를 세웠는데(귀속: 리뷰 §4.2) 그 근거가
+           * **산문이면 `exportPage`가 바뀌는 날 조용히 열린다.** 차단은 컨텍스트로
+           * 올렸고(`screen-render-chromium.ts`), 이 줄은 그 위의 두 번째 방벽이다.
+           */
+          expect(request.html).not.toContain('<script')
         }
         // 페이지 문서가 실제로 그려졌다 — 버튼의 글자가 HTML 에 있다.
         expect(requests[0]!.html).toContain('대시보드 버튼')
@@ -396,6 +404,57 @@ describe('무엇을 그리라고 넘기나 (D2)', () => {
         expect(renderer.last[0]!.css).toContain('--wb-')
       },
       { screenRenderer: renderer },
+    )
+  })
+})
+
+describe('그리는 자가 던진다 (D5 · 리뷰 §2 — 라우트 둘이 500 이었다)', () => {
+  /**
+   * **이음매의 계약이 문서뿐이었다.** `ScreenRenderer.render`는 *"던지지 않는다"*로 적혀
+   * 있지만 **타입이 그것을 강제하지 못한다.** 리뷰가 던지는 구현을 넣어 라우트 둘이
+   * **500**을 내는 것을 값으로 봤다(귀속: 리뷰 §2.1).
+   *
+   * **이 슬라이스가 이 부류에 두 번 물렸다** — 앞의 한 번은 글꼴 물음의 예외였고 스모크가
+   * 잡았다. 그 고침은 `screen-render-chromium.ts` **안쪽**이라 그 한 갈래만 닫았다.
+   * 여기서 닫는 것은 **부르는 쪽**이므로 어떤 구현이 던져도 같다.
+   */
+  class 던지는렌더러 implements ScreenRenderer {
+    async render(): Promise<ScreenBatch> {
+      throw new Error('그리는 자가 터졌다\n두 번째 줄은 잘려야 한다')
+    }
+  }
+
+  it('내려받기가 200 이고 pptx 가 나온다 — 화면만 빠진다', async () => {
+    await withApi(
+      async (ctx) => {
+        const fixture = await 설계서(ctx, 'screens-throw-dl')
+        const entries = await download(ctx, fixture)
+        expect(mediaPaths(entries)).toEqual([])
+        expect(slideText(entries, 1)).toContain('화면 이미지가 실리지 않았습니다')
+      },
+      { screenRenderer: new 던지는렌더러() },
+    )
+  })
+
+  it('미리보기가 200 이고 **왜** 못 그렸는지 말한다', async () => {
+    await withApi(
+      async (ctx) => {
+        const fixture = await 설계서(ctx, 'screens-throw-pv')
+        const body = await preview(ctx, fixture)
+
+        const failures = body.screenFailures as { title: string; reason: string }[]
+        expect(failures.map((item) => item.title)).toEqual(fixture.titles)
+        for (const failure of failures) {
+          expect(failure.reason).toContain(SCREEN_PATH_FAILED)
+          expect(failure.reason).toContain('그리는 자가 터졌다')
+          // 여러 줄짜리 오류가 그대로 실리면 응답이 길어진다 — 첫 줄만 싣는다.
+          expect(failure.reason).not.toContain('두 번째 줄')
+        }
+        /** **접히지 않는다** — 던진 것도 *"만들려다 실패했다"*이지 *"아무도 안 만들었다"*가 아니다. */
+        expect(body.screenless).toEqual([])
+        expect(body.fontWarning).toBeNull()
+      },
+      { screenRenderer: new 던지는렌더러() },
     )
   })
 })

@@ -10,7 +10,12 @@
  * **여기는 브라우저를 안 띄운다**(D3). 그것이 이음매를 둔 이유다.
  */
 import { describe, expect, it } from 'vitest'
-import { readPngSize, screenFileName } from '../src/services/screen-render'
+import {
+  decideKoreanGlyphs,
+  KOREAN_PROBE_FAILED,
+  readPngSize,
+  screenFileName,
+} from '../src/services/screen-render'
 
 /**
  * **진짜 1×1 PNG 바이트다.** `packages/exporter/test/pptx.test.ts`가 같은 것을 든다 —
@@ -105,5 +110,57 @@ describe('screenFileName', () => {
   it('페이지마다 다르다 — 같은 이름을 주면 한 그림이 둘을 덮는다', () => {
     const names = Array.from({ length: 20 }, (_unused, index) => screenFileName(index))
     expect(new Set(names).size).toBe(names.length)
+  })
+})
+
+describe('decideKoreanGlyphs — 두부 물음의 판정 (D4 · 리뷰 §3)', () => {
+  /**
+   * **이 함수가 있는 이유가 리뷰의 §3.1이다.** 앞 판은 판정을 브라우저 안에 뒀고, 리뷰가
+   * 그 자리를 `return true`로 갈아도 **5111 케이스가 전부 초록**이었다(귀속: 리뷰 §3.1).
+   * 곧 D4(*"글꼴이 없으면 조용히 성공하면 안 된다"*)를 지키는 자가 없었다.
+   *
+   * 날 값을 걷는 것과 판정하는 것을 가르면 **판정은 브라우저 없이 잴 수 있다.**
+   * 걷어 온 값 자체는 `build-test/screen-chromium.test.ts`가 잰다.
+   */
+  const 기준선이_선다 = { baselines: [10, 10, 10, 10], blank: 99 }
+
+  it('한글이 기준선과 다르면 「있다」다', () => {
+    expect(decideKoreanGlyphs({ ...기준선이_선다, hangul: 42 })).toBe('yes')
+  })
+
+  it('한글이 기준선과 같으면 「없다」다 — 두부다', () => {
+    expect(decideKoreanGlyphs({ ...기준선이_선다, hangul: 10 })).toBe('no')
+  })
+
+  /**
+   * ***"사용자 영역은 반드시 두부"*가 참이 아니다.** 리뷰가 `U+F8FF`(macOS 의 Apple 로고)에
+   * **실제 글리프가 있는 것**을 값으로 보였다(귀속: 리뷰 §3.2). Nerd Font·Font Awesome
+   * 계열은 정확히 `U+E000` 부근을 쓰므로 그런 글꼴이 깔린 기계에서는 기준선이 두부가
+   * 아니게 되고, 그때 판정자는 **한글이 두부여도 「있다」로 답한다** — D4가 막으려던 그 사고다.
+   */
+  it('기준선 후보가 서로 다르면 「못 물었다」다 — 「있다」로 답하지 않는다', () => {
+    const 답 = decideKoreanGlyphs({ baselines: [10, 10, 77, 10], hangul: 42, blank: 99 })
+    expect(답).not.toBe('yes')
+    expect(답).not.toBe('no')
+    expect(답).toMatchObject({ reason: expect.stringContaining(KOREAN_PROBE_FAILED) })
+    if (typeof 답 !== 'string') expect(답.reason).toContain('사용자 영역')
+  })
+
+  it('후보가 둘 미만이면 「못 물었다」다 — 맞댈 것이 없다', () => {
+    for (const baselines of [[], [10]]) {
+      const 답 = decideKoreanGlyphs({ baselines, hangul: 42, blank: 99 })
+      expect(답).toMatchObject({ reason: expect.stringContaining(KOREAN_PROBE_FAILED) })
+    }
+  })
+
+  /**
+   * **거짓 양성을 막는 자리다.** 캔버스가 아무것도 안 그렸으면 두부도 한글도 빈 화면이라
+   * 값이 같아지고, 그러면 **멀쩡한 기계가 「글꼴이 없다」는 경고를 조용히 낸다.**
+   * 그것이 두부를 못 잡는 것보다 나쁘다.
+   */
+  it('기준선이 빈 캔버스와 같으면 「못 물었다」다 — 「없다」로 답하지 않는다', () => {
+    const 답 = decideKoreanGlyphs({ baselines: [99, 99], hangul: 99, blank: 99 })
+    expect(답).not.toBe('no')
+    expect(답).toMatchObject({ reason: expect.stringContaining('두부가 아무것도') })
   })
 })

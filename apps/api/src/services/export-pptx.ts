@@ -44,7 +44,13 @@ import { exportPage, exportPptx, type PptxPage, type PptxPart, type PptxScreen }
 import type { DbHandle } from '../db/tx'
 import { collectExportSource } from './export-source'
 import { asResolvedTheme, currentProjectTheme } from './project-theme'
-import { screenFileName, type ScreenRenderer, type ScreenRequest } from './screen-render'
+import {
+  errorLine,
+  screenFileName,
+  type ScreenBatch,
+  type ScreenRenderer,
+  type ScreenRequest,
+} from './screen-render'
 
 /** 화면 이미지를 못 그린 페이지 하나와 그 이유(D5). */
 export interface ScreenFailure {
@@ -124,13 +130,44 @@ interface DrawnScreens {
 }
 
 /**
- * 페이지들의 화면 이미지를 그린다.
+ * 페이지들의 화면 이미지를 그린다. **이 함수는 던지지 않는다** — D5가 규율이 아니라
+ * **구조**가 되는 자리다.
  *
  * **`exportPage`가 낸 HTML을 그대로 넘긴다**(D2) — 새 HTML을 만들면 화면·번들·PPTX가
  * 세 벌이 되고 §11.3의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*가 거짓이 된다.
  *
  * **화소가 0이면 그린 것으로 치지 않는다**(D8). 이음매가 이미 걸러 내지만 여기서 한 번 더
  * 본다 — 이 함수가 `PptxScreen`을 **만드는** 자리이고, `fitInto`가 그 값을 믿는다.
+ *
+ * ---
+ *
+ * # 그리는 길에서 던지는 것을 전부 값으로 바꾼다 (D5)
+ *
+ * **이 슬라이스가 이 부류에 두 번 물렸다.** 한 번은 글꼴 물음의 예외가 `render` 밖으로
+ * 샌 것(스모크가 잡았다)이고, 한 번은 **`render` 자체가 던지면 라우트 둘이 500이 된 것**
+ * 이다(귀속: 리뷰 §2 — 던지는 구현을 넣어 값으로 봤다).
+ *
+ * 그래서 **P10-2가 새로 들인 자리 셋을 한 `try` 안에 넣었다.** 셋 다 `exportProjectPptx`가
+ * P10-1까지는 **부르지도 않던** 것이라, 감싸지 않으면 *"화면 때문에 pptx 전체를 잃는다"*가
+ * 새로 생긴다.
+ *
+ * | 자리 | P10-1 에 있었나 |
+ * |---|---|
+ * | `currentProjectTheme` · `asResolvedTheme` | **없었다** — PPTX 는 테마를 안 읽었다 |
+ * | `exportPage` | **없었다** — 그리지 않았으므로 부를 일이 없었다 |
+ * | `renderer.render` | **없었다** — 이음매의 타입은 *"던지지 않는다"*를 강제하지 못한다 |
+ *
+ * **한 덩어리로 감싼다 — 자리마다 나누지 않는다.** 나누면 갈래마다 이유가 달라져 보기에
+ * 좋지만 **그 갈래를 재는 자를 못 만든다**(오늘 이 저장소에서 `exportPage`나 테마 읽기를
+ * 던지게 만드는 길이 라우트 밖에 없다). **재지 못하는 갈래를 늘리지 않는 것이 이 저장소의
+ * 결이다** — 대신 셋 전부가 *"화면을 그리지 못했습니다"* 하나로 모이고, 그 하나를
+ * `export-pptx-screens.test.ts`가 죽인다.
+ *
+ * **대가를 적는다:** 한 페이지의 `exportPage`가 죽으면 **그 배치의 화면이 전부 빠진다.**
+ * pptx 는 그래도 나온다 — 그것이 D5 가 지키려는 것이다.
+ *
+ * **`collectExportSource`는 여기 없다** — 그것은 P10-1부터 있던 자리이고 도메인 에러를
+ * 라우트가 상태 코드로 옮긴다(`routes/export.ts`의 `orFail`). 그 갈래는 그대로 둔다.
  */
 async function drawScreens(
   db: DbHandle,
@@ -141,15 +178,19 @@ async function drawScreens(
   const empty: DrawnScreens = { screens: pages.map(() => null), failures: [], fontWarning: null }
   if (renderer === undefined || pages.length === 0) return empty
 
-  const { theme } = await currentProjectTheme(db, projectId)
-  const resolved = asResolvedTheme(theme)
-
-  const requests: ScreenRequest[] = pages.map((page) => {
-    const rendered = exportPage({ document: page.document, title: page.title, theme: resolved })
-    return { title: page.title, html: rendered.html, css: rendered.css }
-  })
-
-  const batch = await renderer.render(requests)
+  let batch: ScreenBatch
+  try {
+    const { theme } = await currentProjectTheme(db, projectId)
+    const resolved = asResolvedTheme(theme)
+    const requests: ScreenRequest[] = pages.map((page) => {
+      const rendered = exportPage({ document: page.document, title: page.title, theme: resolved })
+      return { title: page.title, html: rendered.html, css: rendered.css }
+    })
+    batch = await renderer.render(requests)
+  } catch (error) {
+    // **그리는 길이 던졌다.** 화면은 전부 잃지만 **pptx 는 나온다** — 그것이 D5 다.
+    return allFailed(pages, `${SCREEN_PATH_FAILED}: ${errorLine(error)}`)
+  }
 
   const screens: (PptxScreen | null)[] = []
   const failures: ScreenFailure[] = []
@@ -179,4 +220,20 @@ async function drawScreens(
   }
 
   return { screens, failures, fontWarning: batch.fontWarning }
+}
+
+/**
+ * 그리는 길이 던졌을 때의 머리말.
+ *
+ * **글자를 한 자리에만 둔다** — 케이스와 이유 문자열이 이것을 나눠 쓴다.
+ */
+export const SCREEN_PATH_FAILED = '화면을 그리지 못했습니다'
+
+/** 페이지 전부를 같은 이유로 실패시킨다. **pptx 는 그래도 나온다**(D5). */
+function allFailed(pages: readonly PptxPage[], reason: string): DrawnScreens {
+  return {
+    screens: pages.map(() => null),
+    failures: pages.map((page) => ({ title: page.title, reason })),
+    fontWarning: null,
+  }
 }

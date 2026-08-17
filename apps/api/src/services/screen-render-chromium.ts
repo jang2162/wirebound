@@ -44,10 +44,15 @@
  * (보고서 §2의 표). 오래 사는 브라우저를 두면 그 프로세스를 누가 닫는지·요청 둘이 그것을
  * 어떻게 나눠 쓰는지가 새 물음이 되고, 그것은 이 슬라이스가 열 자리가 아니다.
  */
-import { chromium, type Browser, type Page } from 'playwright-core'
+import { chromium, type Browser, type BrowserContext } from 'playwright-core'
 import {
+  decideKoreanGlyphs,
+  errorLine,
+  KOREAN_PROBE_FAILED,
   NO_KOREAN_FONT,
   readPngSize,
+  type KoreanGlyphSamples,
+  type KoreanGlyphVerdict,
   type ScreenBatch,
   type ScreenRenderer,
   type ScreenRequest,
@@ -103,20 +108,29 @@ export interface ChromiumScreenRendererOptions {
 }
 
 /**
- * 한글이 두부가 되는지 브라우저 안에서 묻는다(D4).
+ * 두부 물음의 **날 값을 걷는다**(D4). **판정하지 않는다** — 그것은 `decideKoreanGlyphs`다.
  *
  * **`document.fonts.check`를 쓰지 않는다** — 없는 글꼴 이름에도 참을 낸다(보고서 §2의 재라
  * #4). 물어야 할 것은 *"이 이름의 글꼴이 있는가"*가 아니라 ***"한글에 글리프가 있는가"***다.
  *
- * 그래서 **사용자 영역(U+E000~) 두 글자**를 같은 자리에 그려 두부의 모양을 얻고, 한글
- * 두 글자를 같은 방법으로 그려 **픽셀이 같은지** 본다. 어느 글꼴에도 없는 코드포인트라
- * 그것은 반드시 두부이고, 한글이 그것과 같은 그림이면 한글도 두부다.
+ * 그래서 사용자 영역(PUA) 두 글자를 그려 두부의 모양을 얻고, 한글 두 글자를 같은 방법으로
+ * 그려 픽셀 해시를 맞댄다.
+ *
+ * **앞 판은 여기서 참·거짓을 정해서 냈고 그것이 틀렸다.** 두 가지 이유가 있다:
+ *
+ * 1. **판정이 브라우저 안에 있으면 게이트가 그것을 못 잰다** — 리뷰가 이 자리를
+ *    `return true`로 갈아도 5111 케이스가 전부 초록인 것을 보였다(귀속: 리뷰 §3.1).
+ * 2. ***"사용자 영역은 반드시 두부"*가 참이 아니다** — 리뷰가 `U+F8FF`에 실제 글리프가
+ *    있는 것을 값으로 보였다(귀속: 리뷰 §3.2). 그래서 후보를 **넷**으로 두고 서로 같을
+ *    때만 기준선으로 쓴다(`decideKoreanGlyphs`).
  *
  * **함수가 아니라 글자로 넘긴다.** 이 저장소의 TS는 esbuild를 지나고 그것이 함수에 이름
  * 표시(`__name`)를 심는데, 그 함수가 브라우저 안에서 실행되면 그 이름이 없어 죽는다
  * (실측 — 보고서 §2).
+ *
+ * **수출하는 것은 `build-test`가 이 글자를 그대로 브라우저에 먹여 날 값을 재기 위해서다.**
  */
-const KOREAN_GLYPH_PROBE = `(() => {
+export const KOREAN_GLYPH_PROBE = `(() => {
   function ink(text) {
     const canvas = document.createElement('canvas')
     canvas.width = 160
@@ -133,7 +147,16 @@ const KOREAN_GLYPH_PROBE = `(() => {
     for (let i = 0; i < data.length; i += 4) hash = (hash * 31 + data[i]) | 0
     return hash
   }
-  return ink('\\uD55C\\uAE00') !== ink('\\uE000\\uE001')
+  return {
+    baselines: [
+      ink('\\uE000\\uE001'),
+      ink('\\uE010\\uE011'),
+      ink('\\uE100\\uE101'),
+      ink('\\uE500\\uE501'),
+    ],
+    hangul: ink('\\uD55C\\uAE00'),
+    blank: ink(''),
+  }
 })()`
 
 /**
@@ -159,7 +182,7 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
         )
       } catch (error) {
         return {
-          results: requests.map(() => failure(`브라우저를 띄우지 못했습니다: ${messageOf(error)}`)),
+          results: requests.map(() => failure(`브라우저를 띄우지 못했습니다: ${errorLine(error)}`)),
           fontWarning: null,
         }
       }
@@ -186,7 +209,14 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
         }
         return { results: await renderAll(browser, requests, { concurrency, timeoutMs, maxPages }), fontWarning: null }
       } finally {
-        await browser.close()
+        /**
+         * **닫는 데 실패해도 다 그린 배치를 잃지 않는다.** 여기서 던지면 그 예외가 `render`
+         * 밖으로 그대로 나가고, 리뷰가 그 탈출구를 소스에서 셌다(귀속: 리뷰 §2.2).
+         *
+         * **삼키는 것이 공짜가 아니다** — 못 닫은 브라우저는 조용히 남는다. 그래서 정상
+         * 경로에서 프로세스가 0으로 돌아오는 것을 `build-test`가 센다.
+         */
+        await browser.close().catch(() => {})
       }
     },
   }
@@ -230,9 +260,10 @@ async function renderOne(
   request: ScreenRequest,
   timeoutMs: number,
 ): Promise<ScreenResult> {
-  let page: Page | undefined
+  let context: BrowserContext | undefined
   try {
-    page = await newRenderPage(browser, timeoutMs)
+    context = await newRenderContext(browser, timeoutMs)
+    const page = await context.newPage()
     await page.setContent(request.html, { waitUntil: 'load' })
     await page.addStyleTag({ content: request.css })
     const bytes = await page.screenshot({ type: 'png', fullPage: FULL_PAGE })
@@ -241,20 +272,34 @@ async function renderOne(
     if (size === null) return failure('그린 이미지의 화소를 읽지 못했습니다')
     return { ok: true, bytes, width: size.width, height: size.height }
   } catch (error) {
-    return failure(messageOf(error))
+    return failure(errorLine(error))
   } finally {
-    await page?.close().catch(() => {})
+    // **컨텍스트를 닫으면 그 안의 페이지가 함께 닫힌다** — 팝업까지 포함해서다.
+    await context?.close().catch(() => {})
   }
 }
 
-/** 그리는 페이지 하나. **바깥으로 나가는 요청을 끊는다**(위 머리말). */
-async function newRenderPage(browser: Browser, timeoutMs: number): Promise<Page> {
-  const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: DEVICE_SCALE_FACTOR })
-  page.setDefaultTimeout(timeoutMs)
-  await page.route('**/*', (route) => {
+/**
+ * 그리는 컨텍스트 하나. **바깥으로 나가는 요청을 끊는다**(위 머리말).
+ *
+ * **페이지가 아니라 컨텍스트에 건다.** `page.route`는 **그 페이지 하나**에만 걸리므로
+ * `window.open`이 만드는 새 페이지가 규칙 밖으로 나갔다 — 리뷰가 로컬 서버로 그 요청이
+ * 실제로 나가는 것을 값으로 봤다(귀속: 리뷰 §4.1: 일곱 길 중 여섯만 끊겼다).
+ *
+ * **오늘 `exportPage`가 `<script>`를 안 내므로 도달할 길이 없다는 것도 값이다**
+ * (`test/export-pptx-screens.test.ts`가 그것을 센다). 그래도 컨텍스트로 올린 이유는
+ * *"오늘 도달 불가"*가 **산문**이면 `exportPage`가 바뀌는 날 조용히 열리기 때문이다.
+ */
+async function newRenderContext(browser: Browser, timeoutMs: number): Promise<BrowserContext> {
+  const context = await browser.newContext({
+    viewport: VIEWPORT,
+    deviceScaleFactor: DEVICE_SCALE_FACTOR,
+  })
+  context.setDefaultTimeout(timeoutMs)
+  await context.route('**/*', (route) => {
     void route.abort()
   })
-  return page
+  return context
 }
 
 /**
@@ -263,28 +308,21 @@ async function newRenderPage(browser: Browser, timeoutMs: number): Promise<Page>
  * **답이 셋이다.** *"있다"*·*"없다"*·**"못 물었다"**. 셋째를 둘째에 접으면 브라우저가
  * 잠깐 흔들린 것이 *"이 서버에 한글 글꼴이 없다"*로 나가고, 그것은 거짓말이다.
  */
-async function probeKoreanGlyphs(
-  browser: Browser,
-  timeoutMs: number,
-): Promise<'yes' | 'no' | { reason: string }> {
-  let page: Page | undefined
+async function probeKoreanGlyphs(browser: Browser, timeoutMs: number): Promise<KoreanGlyphVerdict> {
+  let context: BrowserContext | undefined
   try {
-    page = await newRenderPage(browser, timeoutMs)
+    context = await newRenderContext(browser, timeoutMs)
+    const page = await context.newPage()
     await page.setContent('<!doctype html><html lang="ko"><body></body></html>', { waitUntil: 'load' })
-    return (await page.evaluate(KOREAN_GLYPH_PROBE)) === true ? 'yes' : 'no'
+    // **판정을 여기서 하지 않는다** — 날 값만 받아 `decideKoreanGlyphs`에 넘긴다(그 함수의 머리말).
+    return decideKoreanGlyphs(await page.evaluate<KoreanGlyphSamples>(KOREAN_GLYPH_PROBE))
   } catch (error) {
-    return { reason: `한글 글꼴을 확인하지 못했습니다: ${messageOf(error)}` }
+    return { reason: `${KOREAN_PROBE_FAILED}: ${errorLine(error)}` }
   } finally {
-    await page?.close().catch(() => {})
+    await context?.close().catch(() => {})
   }
 }
 
 function failure(reason: string): ScreenResult {
   return { ok: false, reason }
-}
-
-/** 던져진 것의 첫 줄. 브라우저 오류는 여러 줄이라 그대로 실으면 응답이 길어진다. */
-function messageOf(error: unknown): string {
-  const text = error instanceof Error ? error.message : String(error)
-  return text.split('\n')[0]!.trim()
 }

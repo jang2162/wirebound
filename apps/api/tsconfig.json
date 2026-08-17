@@ -6,7 +6,10 @@
     "composite": true,
     "types": ["node"]
   },
-  "include": ["src", "test"],
+  // **`build-test`도 든다**(리뷰 §9). 안 들면 그 파일이 타입검사를 아예 안 받는다 —
+  // 리뷰가 명백한 타입 오류를 심어도 `pnpm typecheck`가 0을 내는 것을 값으로 보였다.
+  // `packages/exporter/tsconfig.test.json`이 같은 이유로 `build-test`를 든다.
+  "include": ["src", "test", "build-test"],
   "references": [
     { "path": "../../packages/schema" },
     { "path": "../../packages/themes" },

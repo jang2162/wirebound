@@ -63,7 +63,11 @@ export interface ScreenBatch {
 }
 
 /**
- * 페이지들을 그린다. **던지지 않는다** — 실패는 `ScreenResult`의 한쪽이다.
+ * 페이지들을 그린다. **던지지 않기로 되어 있다** — 실패는 `ScreenResult`의 한쪽이다.
+ *
+ * **그러나 타입은 그것을 강제하지 못한다.** 그래서 부르는 쪽(`export-pptx.ts`의
+ * `drawScreens`)이 `try`로 감싼다 — 규율이 아니라 구조로 D5를 세우는 자리다.
+ * 리뷰가 그 자리를 값으로 지목했다(귀속: 리뷰 §2 — 던지는 구현을 넣으니 라우트 둘이 500).
  *
  * 브라우저를 언제 띄우고 닫는지·몇 장을 동시에 그리는지·한 장을 얼마나 기다리는지는
  * **구현이 정한다**(D7). 이 인터페이스는 그 상태를 갖지 않는다.
@@ -80,6 +84,77 @@ export interface ScreenRenderer {
  */
 export const NO_KOREAN_FONT =
   '이 서버에 한글 글꼴이 없어 화면 이미지를 그리지 않았습니다'
+
+/**
+ * 두부 물음이 **브라우저에서 걷어 온 날 값**(D4).
+ *
+ * **판정을 브라우저 안에 두지 않는 것이 이 타입의 존재 이유다.** 앞 판은 `true`/`false`를
+ * 브라우저가 정해서 냈고, 그러면 **그 판정을 재는 자를 게이트에 둘 수 없다** — 리뷰가
+ * 판정자를 `return true`로 갈아도 5111 케이스가 전부 초록인 것을 값으로 보였다
+ * (귀속: 리뷰 §3.1). 날 값만 받아 오면 판정은 순수 함수가 되고 `pnpm test`가 그것을 잰다.
+ */
+export interface KoreanGlyphSamples {
+  /**
+   * **두부 기준선 후보들**의 픽셀 해시. 사용자 영역(PUA) 코드포인트를 그린 것이다.
+   *
+   * **여럿인 것이 요점이다.** 하나만 쓰면 *"사용자 영역은 반드시 두부"*라는 전제에 기대는데
+   * **그 전제가 기계에 달렸다** — 리뷰가 `U+F8FF`(macOS 의 Apple 로고)에 **실제 글리프가
+   * 있는 것**을 값으로 보였고(귀속: 리뷰 §3.2), Nerd Font·Font Awesome 계열은 정확히
+   * `U+E000` 부근을 쓴다. 후보들이 **서로 같을 때만** 기준선이 선다.
+   */
+  baselines: number[]
+  /** 한글 두 글자의 픽셀 해시. */
+  hangul: number
+  /**
+   * **아무것도 안 그린 캔버스**의 픽셀 해시.
+   *
+   * 이것이 없으면 *"캔버스가 아예 안 돌았다"*와 *"한글이 두부다"*가 같은 값이 된다 —
+   * 그러면 멀쩡한 기계에서 조용히 거짓 경고가 뜬다. **그것이 두부를 못 잡는 것보다 나쁘다.**
+   */
+  blank: number
+}
+
+/** 두부 물음의 답 **셋**. 셋째를 둘째에 접으면 화면이 거짓을 말한다. */
+export type KoreanGlyphVerdict = 'yes' | 'no' | { reason: string }
+
+/** *"못 물었다"*의 머리말. 케이스와 이유 문자열이 이 한 자리를 나눠 쓴다. */
+export const KOREAN_PROBE_FAILED = '한글 글꼴을 확인하지 못했습니다'
+
+/**
+ * 걷어 온 날 값에서 답을 낸다(D4). **브라우저를 모른다 — 그래서 `pnpm test`가 잰다.**
+ *
+ * | 보는 것 | 답 | 왜 |
+ * |---|---|---|
+ * | 기준선 후보가 둘 미만 | **못 물었다** | 맞댈 것이 없으면 *"기준선이 두부다"*를 확인할 수 없다 |
+ * | 후보들이 서로 다르다 | **못 물었다** | 이 기계의 사용자 영역에 글리프가 있다 — 기준선이 두부가 아니다 |
+ * | 기준선이 **빈 캔버스와 같다** | **못 물었다** | 아무것도 안 그려졌다. 그대로 두면 한글도 같아져 **거짓 경고**가 된다 |
+ * | 한글이 기준선과 같다 | **없다** | 한글이 두부다 |
+ * | 그 밖 | **있다** | |
+ */
+export function decideKoreanGlyphs(samples: KoreanGlyphSamples): KoreanGlyphVerdict {
+  const baselines = samples.baselines
+  if (baselines.length < 2) {
+    return { reason: `${KOREAN_PROBE_FAILED}: 두부 기준선 후보가 ${baselines.length}개입니다` }
+  }
+  const baseline = baselines[0]!
+  if (!baselines.every((value) => value === baseline)) {
+    return { reason: `${KOREAN_PROBE_FAILED}: 이 기계의 사용자 영역에 글리프가 있어 두부 기준선을 세우지 못했습니다` }
+  }
+  if (baseline === samples.blank) {
+    return { reason: `${KOREAN_PROBE_FAILED}: 두부가 아무것도 그리지 않았습니다` }
+  }
+  return samples.hangul === baseline ? 'no' : 'yes'
+}
+
+/**
+ * 던져진 것의 첫 줄. **브라우저 오류는 여러 줄이라 그대로 실으면 응답이 길어진다.**
+ *
+ * **자리가 하나다** — 그리는 자와 조립하는 자가 같은 모양의 이유를 만든다.
+ */
+export function errorLine(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error)
+  return text.split('\n')[0]!.trim()
+}
 
 /**
  * `PptxScreen.fileName`이 될 이름.
