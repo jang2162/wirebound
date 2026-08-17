@@ -18,8 +18,10 @@
  */
 import {
   mergeTheme,
+  resolveTheme,
   systemTheme,
   themeIssue,
+  type ResolvedTheme,
   type Theme,
   type ThemeIssue,
   type ThemePatch,
@@ -97,4 +99,19 @@ export async function currentProjectTheme(
 
   const merged = mergeTheme(base, stored as ThemePatch)
   return { themeId, theme: merged.theme, issues: merged.issues }
+}
+
+/**
+ * `currentProjectTheme`이 낸 `Theme`을 그리는 쪽이 받는 `ResolvedTheme`으로 바꾼다.
+ *
+ * **소비자가 둘이 되어 여기로 왔다**(P10-2). `exportBundle`은 §11.3의 번들을 위해,
+ * `exportPage`는 **PPTX에 실릴 래스터**를 위해 같은 값을 받는다 — 두 자리에서 각자
+ * `resolveTheme`을 부르면 *"캔버스가 보는 테마와 산출물이 싣는 테마가 갈린다"*는
+ * 이 파일의 존재 이유가 파일 안에서부터 거짓이 된다.
+ *
+ * **`null`이 정상이다** — 테마를 안 고른 프로젝트는 구조 기본 CSS만으로 그려진다.
+ */
+export function asResolvedTheme(theme: Theme | null): ResolvedTheme | null {
+  if (theme === null) return null
+  return resolveTheme(theme).theme
 }

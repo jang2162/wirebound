@@ -11,8 +11,10 @@
  *
  * 1. `collectExportSource` — 메뉴·페이지·문서·코멘트·설명. **PPTX와 공유한다**(P10-1 D4).
  *    그 함수의 머리말이 수집 순서와 근거를 든다.
- * 2. `currentProjectTheme` → `resolveTheme` — 캔버스가 보는 것과 **같은 사슬**이다.
- *    **여기서만 읽는다** — PPTX는 §6의 테마를 안 쓴다.
+ * 2. `currentProjectTheme` → `asResolvedTheme` — 캔버스가 보는 것과 **같은 사슬**이다.
+ *    **PPTX도 같은 둘을 지난다**(P10-2). 앞 판에는 *"여기서만 읽는다"*고 적혀 있었는데
+ *    그것은 PPTX가 §6의 테마를 **OOXML 색으로** 안 옮긴다는 뜻이었고, 이제 PPTX는 그
+ *    테마로 **래스터를 그린다** — 슬라이드의 화면이 곧 그 테마다.
  * 3. `exportBundle` — 파일과 `errors`.
  * 4. 못 이은 링크를 센다.
  *
@@ -43,10 +45,9 @@ import {
   type PageDocument,
   type TargetedPage,
 } from '@wirebound/schema'
-import { resolveTheme, type ResolvedTheme } from '@wirebound/themes'
 import type { DbHandle } from '../db/tx'
 import { collectExportSource } from './export-source'
-import { currentProjectTheme } from './project-theme'
+import { asResolvedTheme, currentProjectTheme } from './project-theme'
 
 /**
  * **도메인 에러 둘을 `export-source`가 소유한다**(P10-1). 두 내보내기가 같은 수집을
@@ -122,7 +123,7 @@ export async function exportProjectBundle(db: DbHandle, projectId: string): Prom
     target: page.target,
   }))
 
-  const { files, errors } = exportBundle({ pages: bundlePages, theme: resolvedTheme(theme) })
+  const { files, errors } = exportBundle({ pages: bundlePages, theme: asResolvedTheme(theme) })
 
   return {
     files,
@@ -135,12 +136,6 @@ export async function exportProjectBundle(db: DbHandle, projectId: string): Prom
     brokenLinks: brokenLinks(ordered, documentById),
     themeId,
   }
-}
-
-/** `Theme`을 `exportBundle`이 받는 `ResolvedTheme`으로 바꾼다. **`currentProjectTheme`은 그 모양을 주지 않는다**(재라 #3). */
-function resolvedTheme(theme: Parameters<typeof resolveTheme>[0] | null): ResolvedTheme | null {
-  if (theme === null) return null
-  return resolveTheme(theme).theme
 }
 
 /**

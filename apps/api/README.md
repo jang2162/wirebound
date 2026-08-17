@@ -174,7 +174,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/presets` | GET | viewer | — | 200 프리셋 배열 — **내장 3종이 함께 나온다**(아래 "프리셋 응답 형태"). 내장이 먼저, 그 뒤로 프로젝트 프리셋이 만든 순서대로 |
 | `/api/projects/:projectId/presets` | POST | **editor** | `{ name, schema: WbNode[], description? }` | 201 프리셋. **`schema`는 문서 봉투가 아니라 root의 `children`이다.** `marker`는 저장하며 버린다. 이름 1~60자·설명 0~2000자 밖과 노드 봉투 위반·NUL은 400. **이름 중복은 오류가 아니다** |
 | `/api/projects/:projectId/presets/:presetId` | DELETE | **editor** | — | 204. 없는 id·남의 프로젝트의 id는 404, **내장 id(`builtin:…`)는 400**(경로가 uuid를 요구한다) |
-| `/api/projects/:projectId/export/preview` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — **내려받기 전에 화면이 말할 것**(아래 "내보내기"). **형식마다 답이 다르다**: html은 `{ format, pages, duplicateTargets, brokenLinks, errors, themeId, fileName }`, pptx는 `{ format, pages, screenless, fileName }`. 페이지가 없으면 409, 모르는 형식은 400 |
+| `/api/projects/:projectId/export/preview` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — **내려받기 전에 화면이 말할 것**(아래 "내보내기"). **형식마다 답이 다르다**: html은 `{ format, pages, duplicateTargets, brokenLinks, errors, themeId, fileName }`, pptx는 `{ format, pages, screenless, screenFailures, fontWarning, fileName }`. 페이지가 없으면 409, 모르는 형식은 400 |
 | `/api/projects/:projectId/export` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — html이면 `application/zip`(§11.3의 번들), pptx면 `application/vnd.openxmlformats-officedocument.presentationml.presentation`(§15). 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409, 모르는 형식은 400 |
 | `/api/projects/:projectId/ws` | GET(업그레이드) | viewer | — | **101** — WebSocket. 아래 "실시간(WebSocket)" 참고. 업그레이드가 아닌 평범한 GET에도 같은 가드가 먼저 돈다(비멤버 404) |
 | `/api/projects/:projectId/tokens` | POST | viewer | `{ name }`(1~60자) | 201 `{ id, name, createdAt, lastUsedAt, value }` — **`value`(원문)가 실리는 유일한 응답이다.** 아래 "API 토큰". 토큰으로 부르면 403 |
@@ -273,8 +273,24 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 | 페이지 이름 | **번들과 같은 이름**(조상 메뉴가 붙은 `bundleTitle`). 한 페이지를 두 이름으로 부르면 같은 설계서의 두 산출물이 갈린다 |
 | 코멘트·상호작용 문장 | **번들과 같은 함수가 만든다**(`@wirebound/exporter`의 `commentEntries`·`pageSentences`). §8.2가 *"HTML 번들도 PPTX도 이 문장을 싣는다"*고 적었다 |
 | 노트 | 슬라이드에 실린 것 **전부와 페이지 설명**. 슬라이드는 넘치면 잘리므로 **잘려도 사라지지 않게** 하는 자리다 |
-| **화면 이미지** | **오늘은 없다.** 만드는 자리가 P10-2이고, 슬라이드가 그 자리에서 *"화면 이미지가 실리지 않았습니다"*라고 말한다 |
-| 테마 | **§6의 테마를 안 쓴다.** §2.1이 도형 변환을 명시적으로 포기했고 슬라이드에 실릴 화면은 래스터다 — 그 이미지가 이미 테마 색을 담으므로 여기서 다시 칠하면 같은 색이 두 자리에서 다르게 나온다 |
+| **화면 이미지** | **서버가 헤드리스 Chromium으로 그린다**(P10-2 D1). `exportPage`가 내는 그 페이지의 HTML을 그대로 띄워 PNG 한 장을 찍고, 슬라이드의 화면 자리에 **비율을 지켜** 넣는다. 못 그린 장은 그 자리에서 *"화면 이미지가 실리지 않았습니다"*가 되고 **미리보기가 이유를 말한다** |
+| 테마 | **OOXML의 `a:clrScheme`으로 옮기지 않는다.** §2.1이 도형 변환을 명시적으로 포기했고 슬라이드에 실릴 화면은 래스터다 — 그 이미지가 이미 테마 색을 담으므로 여기서 다시 칠하면 같은 색이 두 자리에서 다르게 나온다. **다만 그 래스터를 그리는 입력으로는 읽는다**(번들과 같은 사슬: `currentProjectTheme` → `asResolvedTheme`) |
+
+##### 화면 이미지를 그리는 조건 (P10-2)
+
+| 무엇 | 값 |
+|---|---|
+| 무엇으로 | `playwright-core` + 기계에 설치된 Chromium. **저장소가 브라우저 바이너리를 안 들고 있다** — 없으면 그리기가 전부 실패하고 pptx는 그림 없이 나온다(던지지 않는다) |
+| 브라우저를 넣는 법 | `node node_modules/playwright-core/cli.js install chromium` — **`playwright` 패키지를 안 들여도 된다.** `--only-shell`이면 headless shell만, `--with-deps`가 시스템 라이브러리를 함께 넣는다 |
+| 어디서 | `apps/api`. **`@wirebound/exporter`는 브라우저를 모른다** — 그 패키지는 이미지를 **인자로** 받는다 |
+| 채우는 자리 | **`main.ts` 하나다.** `buildApp`에 `screenRenderer`를 안 주면 안 그린다(`pnpm test`가 브라우저를 안 띄우는 이유) |
+| 화소 | 뷰포트 720×552 · 배율 2배 → **1440×1104**. 페이지가 길면 **전체를 찍으므로 높이가 는다** |
+| 상한 | 페이지 **200장**. 넘은 장은 실패가 되고 **이유가 분모를 함께 말한다** |
+| 동시성·타임아웃 | 동시 **4장** · 한 장 **10초**. 브라우저는 내보내기 **한 번의 수명**이다 |
+| **요청끼리는 상한이 없다** | 위의 4장은 **한 번의 내보내기 안**이다. 동시에 들어온 내보내기끼리는 아무 방벽이 없다 — 동시 8요청이면 브라우저 **여덟**이 뜬다(요청마다 8장 기준 최고 RSS **5.2GB**). **배포 전에 정할 판정이다** |
+| **긴 페이지** | 화면 전체를 찍으므로 **높이가 내용을 따라간다.** 200행짜리 페이지는 1440×**16112**가 되고 슬라이드 위에서 폭 **≈37pt**(자리의 7%)로 줄어든다 — 던지지 않고 **조용히 실오라기가 된다.** 상한 200장이 재는 것은 **장 수이지 바이트가 아니다** |
+| 바깥 요청 | **끊는다.** 테마의 `@font-face`·`url()`은 사용자가 적은 문자열이라 서버가 그것을 가져가면 안 된다. `data:`는 네트워크를 안 타므로 그대로 산다 |
+| 한글 글꼴 | **없으면 한 장도 안 그린다**(두부를 내보내지 않는다). `fontWarning`이 그 사실을 낸다 |
 
 #### `GET .../export/preview?format=pptx`
 
@@ -282,8 +298,13 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 |---|---|
 | `format` | `'pptx'` |
 | `pages` | `{ id, title, target }[]` — **html 미리보기의 것과 같은 값이다** |
-| `screenless` | 화면 이미지가 실리지 않은 페이지들의 **번들 이름**. **오늘은 보통 전부다** — 화면이 *"이미지 없이 나갑니다"*를 내려받기 전에 말하는 자리다(P10-1 D2) |
+| `screenless` | **아무도 그리지 않은** 페이지들의 **번들 이름**. 그리는 자가 없으면 전부다(P10-1 D2) |
+| `screenFailures` | **그리려다 죽은** 페이지들 — `{ title, reason }[]`. `screenless`와 **겹치지 않는다**: *"아직 아무도 안 만들었다"*와 *"만들려다 실패했다"*는 다른 말이다(P10-2 D5) |
+| `fontWarning` | 그린 기계에 한글 글꼴이 없었다는 한 줄. 없으면 `null`이다(P10-2 D4) |
 | `fileName` | `wirebound-export-<슬러그>.pptx` |
+
+**미리보기도 페이지 N장을 그린다.** 내려받기와 **같은 판정**을 써야 하기 때문이다(P10-2 D6) —
+미리보기가 싼 답을 따로 만들면 화면이 *"괜찮다"*고 한 뒤 파일이 그림 없이 나오는 날이 온다.
 
 **`duplicateTargets`·`brokenLinks`·`errors`·`themeId`는 안 싣는다.** 그 넷은 HTML 번들의
 성질이다 — PPTX는 페이지 사이 링크를 만들지 않고 §6의 테마도 안 쓴다. 그대로 실으면 값이

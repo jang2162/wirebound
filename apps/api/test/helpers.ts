@@ -66,6 +66,12 @@ export interface WithApiOptions {
    * `app.requireAuth` 데코레이터가 서로 다른 함수 객체라 참조로 비교할 수 없다.
    */
   onRoute?: BuildAppOptions['onRoute']
+  /**
+   * `buildApp`의 같은 이름 필드를 그대로 통과시킨다(P10-2 D3). **위의 셋과 방향이
+   * 반대다** — 생략이 운영이 아니라 **채우는 것이 운영**이고, 여기서 채우는 것은 진짜
+   * 브라우저가 아니라 가짜다. 그 판정의 근거는 `src/services/screen-render.ts`에 있다.
+   */
+  screenRenderer?: BuildAppOptions['screenRenderer']
 }
 
 /**
@@ -112,6 +118,7 @@ export async function withApi(fn: (ctx: TestContext) => Promise<void>, options?:
         config: options?.config ?? testConfig(),
         loggerStream: options?.loggerStream,
         onRoute: options?.onRoute,
+        screenRenderer: options?.screenRenderer,
       })
 
       // fn과 app.close() 둘 다 던질 수 있다. finally 블록에서 던지면 try 블록의
