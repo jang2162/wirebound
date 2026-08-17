@@ -20,6 +20,7 @@ import { themeRoutes } from './routes/themes'
 import { tokenRoutes } from './routes/tokens'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
+import type { ScreenRenderer } from './services/screen-render'
 import { syncSystemThemes } from './services/system-themes'
 import { registerRealtime } from './ws'
 
@@ -63,6 +64,18 @@ export interface BuildAppOptions {
    * 라우트 등록은 전부 이 함수 안에서 끝난다.
    */
   onRoute?: (route: RegisteredRoute) => void
+  /**
+   * PPTX에 실을 화면 이미지를 그리는 자(P10-2 D2·D3).
+   *
+   * **위의 둘과 방향이 반대다.** `loggerStream`·`onRoute`는 생략이 운영이고 채우는 것이
+   * 테스트인데, 이것은 **채우는 것이 운영**이다 — 생략하면 pptx가 이미지 없이 나가고
+   * `screenless`가 그 사실을 말한다(P10-1이 만든 상태 그대로다).
+   *
+   * **`buildApp`이 스스로 만들지 않는다.** 만들면 `pnpm test`의 케이스 전부가 진짜
+   * 브라우저를 띄우게 된다(D3). 운영에서 이것을 채우는 자리는 `main.ts` 하나이고
+   * `test/screen-renderer-census.test.ts`가 그것을 소스에서 센다.
+   */
+  screenRenderer?: ScreenRenderer
 }
 
 /** `BuildAppOptions.onRoute`가 흘리는 한 줄. 인구조사가 쓰는 것만 담는다. */
@@ -120,7 +133,7 @@ export function buildLoggerOptions(config: ApiConfig): ApiLoggerOptions {
  * 이 함수가 만들지 않은 자원(DB 풀 등)은 닫지 않는다 — 그 자원의 생애주기는 호출자의 것이다.
  */
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const { db, config, loggerStream, onRoute } = options
+  const { db, config, loggerStream, onRoute, screenRenderer } = options
 
   const loggerOptions = buildLoggerOptions(config)
   const app = Fastify({
@@ -184,7 +197,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(presetRoutes(), { prefix: '/api/projects' })
   // 내보내기도 프로젝트 아래에 산다(`/:projectId/export`). **URL에 파일 이름이 없다** —
   // 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면 번호가 밀린다(P8-4 D7).
-  await app.register(exportRoutes(), { prefix: '/api/projects' })
+  await app.register(exportRoutes({ screenRenderer }), { prefix: '/api/projects' })
   // API 토큰도 프로젝트 아래에 산다(`/:projectId/tokens`) — §10이 *"토큰 스코프는 프로젝트
   // 단위"*라고 적었으므로 그 밖에 둘 자리가 없다(P9-2 T2). 발급은 viewer 이상 누구나이고
   // (D2), 이 셋은 **세션으로만** 부를 수 있다 — 근거는 `routes/tokens.ts`의 머리말에 있다.

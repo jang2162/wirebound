@@ -31,10 +31,24 @@
  * 이미지뿐이다) §6의 테마도 안 쓴다. **그 넷을 pptx 응답에 그대로 실으면 값이 있는데 그
  * 값이 아무것도 안 가리킨다** — 이 저장소가 반복해서 막아 온 부류다.
  *
- * 대신 pptx는 **`screenless`**를 낸다: 화면 이미지가 실리지 않은 페이지들. 오늘은 보통
- * 전부이고, P10-2가 그 자리를 채우면 줄어든다.
+ * 대신 pptx는 **셋**을 낸다(P10-2 D4·D5·D6):
+ *
+ * | 값 | 뜻 |
+ * |---|---|
+ * | `screenless` | **아무도 안 그렸다** — 그리는 자가 없었다 |
+ * | `screenFailures` | **그리려다 죽었다** — 페이지 이름과 이유 |
+ * | `fontWarning` | 그린 기계에 한글 글꼴이 없었다 |
  *
  * `format`을 응답에 **되싣는다** — 화면이 어느 갈래를 받았는지 키 유무로 짐작하지 않는다.
+ *
+ * # P10-2 D6 — 미리보기와 내려받기가 **같은 판정**을 쓴다
+ *
+ * 둘 다 `exportProjectPptx`를 지나고 **같은 `screenRenderer`를 받는다.** 미리보기가 싼
+ * 답을 따로 만들면 화면이 *"괜찮다"*고 한 다음 파일이 그림 없이 나오는 날이 온다 —
+ * P8-4가 *"내려받기 버튼이 조용히 성공하면 안 된다"*로 세운 자리가 그것이다.
+ *
+ * **대가는 미리보기가 내려받기만큼 무겁다는 것이다** — 미리보기도 페이지 N장을 그린다.
+ * 그 값은 보고서 §2의 비용 표에 있다.
  *
  * # D4 — 권한은 viewer다
  *
@@ -91,6 +105,7 @@ import {
   type ProjectBundle,
 } from '../services/export-bundle'
 import { exportProjectPptx, type ProjectPptx } from '../services/export-pptx'
+import type { ScreenRenderer } from '../services/screen-render'
 import {
   PPTX_CONTENT_TYPE,
   bundleFileName,
@@ -141,8 +156,12 @@ function buildOrFail(app: FastifyInstance, projectId: string): Promise<ProjectBu
   return orFail(() => exportProjectBundle(app.db, projectId))
 }
 
-function buildPptxOrFail(app: FastifyInstance, projectId: string): Promise<ProjectPptx> {
-  return orFail(() => exportProjectPptx(app.db, projectId))
+function buildPptxOrFail(
+  app: FastifyInstance,
+  projectId: string,
+  renderer: ScreenRenderer | undefined,
+): Promise<ProjectPptx> {
+  return orFail(() => exportProjectPptx(app.db, projectId, { renderer }))
 }
 
 /**
@@ -155,8 +174,15 @@ async function projectSlug(app: FastifyInstance, projectId: string): Promise<str
   return project.slug
 }
 
-/** `app.ts`가 `app.register(exportRoutes(), { prefix: '/api/projects' })`로 등록하는 팩토리. */
-export function exportRoutes() {
+/**
+ * `app.ts`가 `app.register(exportRoutes({…}), { prefix: '/api/projects' })`로 등록하는 팩토리.
+ *
+ * **`screenRenderer`를 안 주면 pptx가 이미지 없이 나간다**(P10-2 D2·D3) — `buildApp`의
+ * 같은 이름 필드를 그대로 받는다. 근거는 그쪽 머리말에 있다.
+ */
+export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
+  const screenRenderer = options?.screenRenderer
+
   return async function plugin(app: FastifyInstance): Promise<void> {
     /**
      * **내려받기 버튼이 조용히 성공하면 안 된다**(D6 · P8-2 이월 §7).
@@ -181,12 +207,20 @@ export function exportRoutes() {
       const { format } = parseQuery(FormatQuery, request.query)
 
       if (format === 'pptx') {
-        const pptx = await buildPptxOrFail(app, projectId)
+        const pptx = await buildPptxOrFail(app, projectId, screenRenderer)
         return {
           format,
           pages: pptx.pages,
-          /** **오늘은 보통 전부다.** 화면이 *"이미지 없이 나갑니다"*를 미리 말하는 자리다(D2). */
+          /**
+           * **아무도 안 그린 페이지들**(P10-1 D2 · P10-2 D5). 그리는 자가 없으면 전부다.
+           * *"그리려다 실패했다"*는 아래 `screenFailures`로 간다 — 둘이 접히면 화면이
+           * 거짓을 말한다.
+           */
           screenless: pptx.screenless,
+          /** **그리려다 죽은 페이지들과 그 이유**(P10-2 D5). 번들의 `errors`가 있는 자리다. */
+          screenFailures: pptx.screenFailures,
+          /** 그린 기계에 한글 글꼴이 없었다(P10-2 D4). 없으면 `null`이다. */
+          fontWarning: pptx.fontWarning,
           fileName: pptxFileName(await projectSlug(app, projectId)),
         }
       }
@@ -224,7 +258,7 @@ export function exportRoutes() {
       const slug = await projectSlug(app, projectId)
 
       if (format === 'pptx') {
-        const pptx = await buildPptxOrFail(app, projectId)
+        const pptx = await buildPptxOrFail(app, projectId, screenRenderer)
         /**
          * **뿌리 폴더가 없다.** `[Content_Types].xml`이 패키지 뿌리에 있어야 하고,
          * 폴더 하나를 씌우면 받는 쪽이 그것을 못 찾아 **파일이 통째로 안 열린다.**

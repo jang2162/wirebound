@@ -253,6 +253,33 @@ describe('이미지 자리 (T4 · D2)', () => {
     expect(cx).toBeLessThanOrEqual(SCREEN_BOX.width)
     expect(cy).toBeLessThanOrEqual(SCREEN_BOX.height)
   })
+
+  /**
+   * **못 읽은 화소가 오면 비율을 버리고 자리를 그대로 쓴다 — 곧 이미지가 늘어난다.**
+   *
+   * P10-1 리뷰 §6.1이 이 갈래를 지목하고 *"그 갈래를 재는 케이스가 없다"*로 이월에
+   * 남겼다(§4.2). 여기가 그 자리다.
+   *
+   * **이것은 옳은 동작을 재는 것이 아니라 값을 못 읽었을 때 무슨 일이 나는지를 고정하는
+   * 것이다** — 늘어난 목업을 보고 만드는 사람이 잘못된 비율을 만들기 때문에, 이 값을 이
+   * 함수에 넣지 않는 것이 부르는 쪽의 몫이다(P10-2가 `apps/api` 쪽에서 그것을 지킨다).
+   */
+  it.each([
+    ['0', 0, 0],
+    ['NaN', Number.NaN, Number.NaN],
+    ['음수', -1, -1],
+  ])('화소가 %s 이면 비율을 버리고 자리를 그대로 쓴다 — 이미지가 늘어난다', (_label, width, height) => {
+    const { parts } = exportPptx({
+      pages: [{ ...PAGES[0]!, screen: { fileName: 'a.png', bytes: PNG_1X1, width, height } }],
+    })
+    const pic = findAll(slide(parts, 1), 'p:pic')[0]!
+    const ext = findAll(pic, 'a:ext')[0]!
+    const off = findAll(pic, 'a:off')[0]!
+    expect(Number(ext.attributes.cx)).toBe(SCREEN_BOX.width)
+    expect(Number(ext.attributes.cy)).toBe(SCREEN_BOX.height)
+    expect(Number(off.attributes.x)).toBe(SCREEN_BOX.x)
+    expect(Number(off.attributes.y)).toBe(SCREEN_BOX.y)
+  })
 })
 
 describe('여러 줄 코멘트 (리뷰 발견 3)', () => {
