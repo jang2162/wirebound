@@ -2,35 +2,58 @@
  * **받는 쪽이 이 pptx를 여는가**(P10-1 T6 · D6).
  *
  * 이 저장소의 스모크는 늘 *"빌드된 것을 진짜 소비자에게 먹인다"*였다. **PPTX의 소비자는
- * PowerPoint다.** 그것을 이 자리에서 쓸 수 없다는 것을 재서 확인했고(아래), 대신 **같은
- * 기계의 다른 OOXML 구현 둘**에게 먹인다.
+ * PowerPoint이고, 그것을 자로 쓰는 길이 있다** — 다만 **여기 있는 것은 그 자가 아니다.**
+ * 아래가 그 갈림이다.
  *
  * ---
  *
- * # 자를 어떻게 골랐나 — T1에서 쟀다
+ * # 진짜 자는 PowerPoint다 — **손으로 돌린다**
+ *
+ * **앞 판의 이 머리말은 *"PowerPoint를 터미널에서 못 쓴다"*고 적었고 그것이 틀렸다.**
+ * 리뷰어가 우회를 찾았다(귀속: 리뷰 §0): **샌드박스는 자기 컨테이너 안의 파일에는
+ * 대화상자를 안 띄운다.**
+ *
+ * ```
+ * ~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/   ← 여기 두고 열면 안 묻는다
+ * open -a "Microsoft PowerPoint" <그 파일>
+ * osascript -e 'tell application "Microsoft PowerPoint" to count of presentations'
+ * osascript -e 'tell application "System Events" to tell process "Microsoft PowerPoint" …'
+ *     └ 창·버튼·정적 텍스트를 읽어 **복구 대화상자**를 값으로 잡는다
+ * ```
+ *
+ * **주의 둘.** `tell application "Microsoft PowerPoint"` 블록 안에서 `out`을 변수 이름으로
+ * 쓰면 `-10003`이 난다(PowerPoint 사전의 낱말과 부딪힌다). 그리고 **쓰고 나면 컨테이너에
+ * 만든 디렉터리를 지우고 PowerPoint를 종료한다.**
+ *
+ * **왜 이 파일이 그것을 안 하나:** GUI 앱을 띄우고 자동화 권한을 요구하는 것은 게이트가 할
+ * 일이 아니다. `pnpm test:build`는 아무 기계에서나 돌아야 한다. **그래서 진짜 자는 사람이
+ * 돌리고**(위 절차 · 이월이 같은 것을 든다) 여기서는 **아무 기계에서나 도는 절반**을 잰다.
+ *
+ * # 여기서 쓰는 자 둘 — **Apple이 만든 OOXML 구현이다**
  *
  * | 후보 | 값 |
  * |---|---|
- * | **Microsoft PowerPoint 16.112** | 설치돼 있다. **터미널에서 못 쓴다** — 샌드박스가 파일마다 *"파일 액세스 부여"* 대화상자를 띄우고, 그것을 지나도 창 없이 뜬다. **PowerPoint가 만든 파일로 대조군을 돌려도 같았으므로 막는 것은 우리 파일이 아니라 자동화다** |
- * | **macOS Spotlight**(`/System/Library/Spotlight/Office.mdimporter`) | **쓴다.** 파일 종류를 알아보고 **슬라이드 안의 글자를 뽑는다** |
- * | **macOS QuickLook**(`/System/Library/QuickLook/Office.qlgenerator`) | **쓴다.** 첫 슬라이드를 **그린다** |
+ * | **macOS Spotlight**(`/System/Library/Spotlight/Office.mdimporter`) | 파일 종류를 알아보고 **슬라이드 안의 글자를 뽑는다** |
+ * | **macOS QuickLook**(`/System/Library/QuickLook/Office.qlgenerator`) | 첫 슬라이드를 **그린다** |
  * | LibreOffice · `python-pptx` | 이 기계에 없다 |
  *
- * **둘 다 Apple이 만든 OOXML 구현이고 우리 코드가 아니다.** 그래서 *"우리가 만든 규칙에
- * 우리가 맞춘 것"*이 아니다 — 그래도 **PowerPoint가 열었다는 뜻은 아니다.** 그 한계는
- * 이월이 말한다.
+ * 둘 다 우리 코드가 아니므로 *"우리가 만든 규칙에 우리가 맞춘 것"*은 아니다. **그래도
+ * PowerPoint가 열었다는 뜻은 아니다** — 그것을 믿었던 것이 이 슬라이스의 첫 판이 막힌
+ * 자리다.
  *
  * # 이 자가 무엇을 잡고 무엇을 놓치나 — **변이로 쟀다**
  *
- * | 되돌린 것 | 여기서 |
- * |---|---|
- * | `presentation.xml.rels`의 슬라이드 관계 | **4 사망** — 둘 다 아무것도 못 읽는다 |
- * | 마스터의 테마 관계 | **1 사망**(QuickLook). **Spotlight는 글자를 그대로 뽑았다** |
- * | `[Content_Types].xml`의 슬라이드 `Override` | **0 사망 — 둘 다 그냥 읽었다** |
+ * | 되돌린 것 | 여기서 | **PowerPoint** |
+ * |---|---|---|
+ * | `presentation.xml.rels`의 슬라이드 관계 | **4 사망** | — |
+ * | 마스터의 테마 관계 | **1 사망**(QuickLook). Spotlight는 글자를 그대로 뽑았다 | — |
+ * | `[Content_Types].xml`의 슬라이드 `Override` | **0 사망 — 둘 다 그냥 읽었다** | — |
+ * | **테마 파트를 두 마스터가 나눠 쓴다** | **0 사망 — 둘 다 그냥 열었다** | **복구 대화상자**(귀속: 리뷰 §1) |
+ * | 슬라이드 → 레이아웃 관계 · 매달린 `r:id` · 매체 `png` `Default` | 앞 둘은 QuickLook 이 **상한에 걸린 정지**로 알린다. **매체 `Default` 는 둘 다 못 본다** | **셋 다 복구**(귀속: 리뷰 §2) |
  *
- * 마지막 줄이 이 자의 한계다. **규격은 그 `Override`를 요구하고 우리 케이스는 그것을
- * 잡는다**(`test/pptx-package.test.ts` — 1 사망) — 받는 쪽 하나가 관대하다고 규격이
- * 느슨해지는 것이 아니다. **두 자가 서로를 대신하지 않는다.**
+ * **아래 두 줄이 이 자의 한계다.** 규격이 요구하는 것을 받는 쪽 하나가 관대하게 넘긴다고
+ * 규격이 느슨해지는 것이 아니다 — 그 다섯은 **`test/pptx-package.test.ts`의 *"파일이 열리는
+ * 조건"* 절이 잡는다**(변이마다 1~2 사망). **세 자가 서로를 대신하지 않는다.**
  *
  * # 왜 `dist`인가
  *
