@@ -68,7 +68,7 @@ import {
 } from '../labels'
 import { installRegistries } from '../page'
 import { pageSentences } from '../sentences'
-import { NOTES_BOX, PANEL_BOX, SCREEN_BOX, TITLE_BOX } from './geometry'
+import { NOTES_BOX, PANEL_BOX, SCREEN_BOX, TITLE_BOX, type Box } from './geometry'
 import {
   extensionOf,
   MEDIA_EXTENSIONS,
@@ -227,7 +227,7 @@ function mediaName(screen: PptxScreen, index: number): string {
  * 사람이 잘못된 비율을 만든다. **화소 크기가 이상하면 자리를 그대로 쓴다**(0이나 음수는
  * 비율을 만들 수 없다).
  */
-function fitInto(box: typeof SCREEN_BOX, screen: PptxScreen): typeof SCREEN_BOX {
+function fitInto(box: Box, screen: PptxScreen): Box {
   if (!(screen.width > 0) || !(screen.height > 0)) return box
   const scale = Math.min(box.width / screen.width, box.height / screen.height)
   const width = Math.round(screen.width * scale)
