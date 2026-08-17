@@ -97,6 +97,57 @@ export function textBox(options: {
   )
 }
 
+/**
+ * **화면 이미지가 아직 없는 자리**(D2). 점선 상자 안에 가운데로 말한다.
+ *
+ * **빈 자리로 두지 않는다** — 아무것도 없으면 읽는 사람이 *"이미지가 원래 없는 형식"*으로
+ * 읽고, 그러면 P10-2가 그 자리를 채웠는지 아닌지도 눈으로 구분되지 않는다.
+ */
+export function placeholder(options: {
+  id: number
+  box: Box
+  text: string
+  size: number
+}): string {
+  return (
+    '<p:sp>' +
+    `<p:nvSpPr><p:cNvPr id="${options.id}" name="화면 자리"/>` +
+    '<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>' +
+    `<p:spPr>${transform(options.box)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+    '<a:solidFill><a:srgbClr val="F5F7FA"/></a:solidFill>' +
+    '<a:ln w="12700"><a:solidFill><a:srgbClr val="9AA5B1"/></a:solidFill>' +
+    '<a:prstDash val="dash"/></a:ln></p:spPr>' +
+    '<p:txBody>' +
+    '<a:bodyPr wrap="square" anchor="ctr"><a:normAutofit/></a:bodyPr><a:lstStyle/>' +
+    '<a:p><a:pPr algn="ctr"><a:buNone/></a:pPr>' +
+    `<a:r><a:rPr sz="${options.size}" lang="ko-KR" dirty="0">` +
+    '<a:solidFill><a:srgbClr val="6B7280"/></a:solidFill></a:rPr>' +
+    `<a:t>${xmlText(options.text)}</a:t></a:r></a:p>` +
+    '</p:txBody>' +
+    '</p:sp>'
+  )
+}
+
+/**
+ * 그림 하나. **바이트는 여기 없다** — `r:embed`가 관계를 가리키고 그 관계와 매체 파트는
+ * `ooxml.ts`가 만든다(`SLIDE_IMAGE_RID`).
+ */
+export function image(options: {
+  id: number
+  name: string
+  relationshipId: string
+  box: Box
+}): string {
+  return (
+    '<p:pic>' +
+    `<p:nvPicPr><p:cNvPr id="${options.id}" name="${xmlAttr(options.name)}"/>` +
+    '<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>' +
+    `<p:blipFill><a:blip r:embed="${xmlAttr(options.relationshipId)}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
+    `<p:spPr>${transform(options.box)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>` +
+    '</p:pic>'
+  )
+}
+
 /** 슬라이드 하나의 전문. 도형 글자들을 받아 감싼다. */
 export function slideXml(shapes: readonly string[]): string {
   return (

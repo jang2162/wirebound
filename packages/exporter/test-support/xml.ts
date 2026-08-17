@@ -104,6 +104,10 @@ export function parseXml(source: string): XmlElement {
       if (character === '&') {
         const match = ENTITY.exec(text.slice(index))
         if (match === null) onFail('실체 참조가 아닌 & 가 텍스트에 있습니다')
+        // **되돌린 글자를 담는다.** 앞 판은 건너뛰기만 해서 `&amp;`가 텍스트에서 사라졌고,
+        // 그러면 이스케이프를 재는 케이스가 **원문을 못 보고** 통과한다.
+        const owner = stack[stack.length - 1]
+        if (owner !== undefined) owner.text += decode(match![0])
         index += match![0].length
         continue
       }
@@ -164,6 +168,8 @@ function findNameEnd(source: string, start: number): number {
 
 function decode(value: string): string {
   return value
+    .replace(/&#x([0-9A-Fa-f]+);/g, (_all, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_all, digits: string) => String.fromCodePoint(Number(digits)))
     .replaceAll('&lt;', '<')
     .replaceAll('&gt;', '>')
     .replaceAll('&quot;', '"')

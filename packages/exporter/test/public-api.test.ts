@@ -145,7 +145,16 @@ describe('공개 표면이 계약이다', () => {
    * `src/index.ts`가 내는 것 전부. **여기 손으로 적은 목록이 계약이고, 이것을 고치는 것은
    * 밖으로 나가는 약속을 고치는 것이다.** 새 이름이 실수로 새면 이 케이스가 죽는다.
    */
-  const CONTRACT = ['PACKAGE_NAME', 'exportBundle', 'exportPage', 'scriptJson'].sort()
+  const CONTRACT = [
+    'PACKAGE_NAME',
+    'exportBundle',
+    'exportPage',
+    'scriptJson',
+    // P10-1 — §15의 P10. `NO_SCREEN`은 **화면 이미지가 없는 자리의 말**이고, 라우트·CLI가
+    // 사람에게 그 상태를 말할 때 같은 글자를 쓰라고 밖으로 낸다(두 벌이 되는 것을 막는다).
+    'exportPptx',
+    'NO_SCREEN',
+  ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {
     expect(Object.keys(api).sort()).toEqual(CONTRACT)

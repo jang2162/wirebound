@@ -152,10 +152,20 @@ const CLR_MAP =
   'accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" ' +
   'hlink="hlink" folHlink="folHlink"/>'
 
+/**
+ * 마스터의 바탕. **흰색을 못 박는다.**
+ *
+ * 안 적으면 받는 쪽이 자기 기본값으로 칠한다 — macOS QuickLook 이 회색으로 그리는 것을
+ * 봤다(T2 실측). 설계서는 문서이지 발표 자료가 아니므로 바탕은 종이색이어야 하고,
+ * **받는 쪽마다 다른 색이 나오는 것 자체가** 이 산출물이 피하려는 상태다.
+ */
+const WHITE_BACKGROUND =
+  '<p:bg><p:bgPr><a:solidFill><a:schemeClr val="lt1"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>'
+
 const SLIDE_MASTER_XML =
   XML_DECL +
   `<p:sldMaster ${MAIN_NS}>` +
-  `<p:cSld>${EMPTY_SP_TREE}</p:cSld>` +
+  `<p:cSld>${WHITE_BACKGROUND}${EMPTY_SP_TREE}</p:cSld>` +
   CLR_MAP +
   '<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>' +
   '</p:sldMaster>'

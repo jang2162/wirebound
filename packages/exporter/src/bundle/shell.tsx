@@ -37,11 +37,20 @@
  * **상호작용 탭은 `describeInteraction`의 문장을 그린다**(§8.2가 *"HTML 번들도 이 문장을
  * 싣는다"*고 적었다). 실제 동작은 P8-3이고, **문장화는 순수 함수라 런타임과 무관하다.**
  */
-import { listInteractionSentences, type InteractionSentence } from '@wirebound/schema'
+import type { InteractionSentence } from '@wirebound/schema'
 import type { ReactElement, ReactNode } from 'react'
 import type { PageDocument } from '@wirebound/schema'
 import type { CommentEntry } from './comments'
-import { nodesOnly } from '../nodes'
+// **문장화는 `../sentences`가 한 자리에서 한다**(P10-1 D4) — 여기서 다시 짜면 PPTX와 갈린다.
+import {
+  EMPTY_COMMENTS,
+  EMPTY_DESCRIPTION,
+  EMPTY_INTERACTIONS,
+  MARKER_WITHOUT_COMMENT,
+  PANEL_TABS,
+  type PanelTabId,
+} from '../labels'
+import { pageSentences } from '../sentences'
 
 /** 좌측 트리의 한 줄. */
 export interface ShellNavItem {
@@ -106,14 +115,13 @@ export function shellHead(stylesheets: readonly string[]): ReactElement {
   )
 }
 
-/** 탭 셋. **표로 둔다** — §9가 탭을 늘리면 여기 한 줄이지 조건이 아니다. */
-const TABS = [
-  { id: 'description', label: '페이지 설명' },
-  { id: 'comments', label: '코멘트' },
-  { id: 'interactions', label: '상호작용' },
-] as const
+/**
+ * 탭 셋. **`../labels`가 소유한다**(P10-1 D4) — PPTX가 같은 이름을 절 제목으로 쓰므로
+ * 여기 사본을 두면 둘이 갈린다. §9가 탭을 늘리면 그 파일 한 줄이지 조건이 아니다.
+ */
+const TABS = PANEL_TABS
 
-type TabId = (typeof TABS)[number]['id']
+type TabId = PanelTabId
 
 const RADIO_NAME = 'wb-export-tab'
 
@@ -125,29 +133,9 @@ function panelId(tab: TabId): string {
   return `wb-export-panel-${tab}`
 }
 
-/**
- * 문장화에 넘길 문서.
- *
- * **`listInteractionSentences`가 `walkNodes`를 쓰고 그 함수는 노드가 객체라고 믿는다** —
- * 자식이 `null`이면 거기서 던진다. 렌더 경로는 그 노드를 **폴백 상자로 그리고** `errors`에
- * 담으므로, 문장화만 던지면 **그리는 데 성공한 페이지가 번들에서 통째로 사라진다.**
- *
- * **앞 판은 그때 문장 목록을 통째로 비웠는데 그것이 D9를 깼다**(P8-3 리뷰 발견 4):
- * 깨진 자식 **하나**가 멀쩡한 규칙들의 문장까지 지우는데 **버튼은 그대로 눌린다** —
- * 런타임 쪽은 견디는 순회를 쓰기 때문이다. 화면이 *"상호작용이 없습니다"*라고 말하면서
- * 실제로는 동작하는 것이고, 그것이 이 저장소가 여섯 번 만난 부류다.
- *
- * **그래서 던지는 원인만 걷어 낸다**(`nodesOnly`). 근거는 그 함수의 머리말에 있다.
- */
-function sentencesOf(page: PageDocument): InteractionSentence[] {
-  const tree = nodesOnly(page.root)
-  if (tree === null) return []
-  return listInteractionSentences({ ...page, root: tree })
-}
-
 /** `<body>` 안 전부. */
 export function shellBody(input: ShellInput): ReactElement {
-  const sentences = sentencesOf(input.page)
+  const sentences = pageSentences(input.page)
   return (
     <>
     <div className="wb-export">
@@ -212,7 +200,7 @@ export function shellBody(input: ShellInput): ReactElement {
 }
 
 function DescriptionTab({ description }: { description: string | null }): ReactElement {
-  if (description === null) return <p className="wb-export-empty">페이지 설명이 없습니다</p>
+  if (description === null) return <p className="wb-export-empty">{EMPTY_DESCRIPTION}</p>
   return <p className="wb-export-description">{description}</p>
 }
 
@@ -221,7 +209,7 @@ function DescriptionTab({ description }: { description: string | null }): ReactE
  * 읽는 사람이 *"내가 못 찾은 것"*으로 읽는다.
  */
 function CommentTab({ entries }: { entries: readonly CommentEntry[] }): ReactElement {
-  if (entries.length === 0) return <p className="wb-export-empty">코멘트가 없습니다</p>
+  if (entries.length === 0) return <p className="wb-export-empty">{EMPTY_COMMENTS}</p>
   return (
     <ul className="wb-export-list">
       {entries.map((entry, index) => (
@@ -233,7 +221,7 @@ function CommentTab({ entries }: { entries: readonly CommentEntry[] }): ReactEle
         >
           <span className="wb-export-entry-label">{entry.label}</span>
           {entry.kind === 'marker-without-comment' ? (
-            <p className="wb-export-entry-meta">코멘트가 달려 있지 않습니다</p>
+            <p className="wb-export-entry-meta">{MARKER_WITHOUT_COMMENT}</p>
           ) : (
             <>
               <p className="wb-export-entry-body">{entry.body}</p>
@@ -267,7 +255,7 @@ function InteractionTab({
 }: {
   sentences: readonly InteractionSentence[]
 }): ReactElement {
-  if (sentences.length === 0) return <p className="wb-export-empty">상호작용이 없습니다</p>
+  if (sentences.length === 0) return <p className="wb-export-empty">{EMPTY_INTERACTIONS}</p>
   return (
     <ul className="wb-export-list">
       {sentences.map((sentence) => (
