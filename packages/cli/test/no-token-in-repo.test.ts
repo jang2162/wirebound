@@ -36,13 +36,13 @@ function fullRun(): FakeIo {
   // **빈 프로젝트로 재지 않는다.** `page get`은 페이지가 없으면 코드 1로 끝나고, 그러면
   // `runAllCommands`의 대조가 죽거나(그쪽이 먼저 말한다) 아무것도 안 훑는 census가 된다.
   stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, { status: 200, body: snapshotPayload() })
-  stub(io, 'GET', `/api/projects/${PROJECT}/export`, { status: 200, bytes: bundleZip() })
+  stub(io, 'GET', `/api/projects/${PROJECT}/export?format=html`, { status: 200, bytes: bundleZip() })
   return io
 }
 
 /** 리포 아래에 있는 파일 전부. **목록을 손으로 적지 않는다.** */
 function repoFiles(io: FakeIo): [string, string][] {
-  return [...io.fs.entries()].filter(([path]) => path.startsWith(`${REPO}/`))
+  return io.textEntries().filter(([path]) => path.startsWith(`${REPO}/`))
 }
 
 /**
@@ -124,7 +124,7 @@ describe('토큰은 리포에 남지 않는다 (D6)', () => {
     await runAllCommands(io)
 
     // **이 대조가 없으면 위 케이스가 *"토큰을 아예 안 만들었다"*와 구분되지 않는다.**
-    const stored = [...io.fs.entries()].filter(([, content]) => content.includes(TOKEN))
+    const stored = io.textEntries().filter(([, content]) => content.includes(TOKEN))
     expect(stored.map(([path]) => path)).toEqual(['/home/tester/.wirebound/credentials.json'])
   })
 
@@ -132,7 +132,7 @@ describe('토큰은 리포에 남지 않는다 (D6)', () => {
     const io = fullRun()
     await runAllCommands(io)
 
-    const binding = JSON.parse(io.fs.get('/repo/.wirebound.json') ?? '')
+    const binding = JSON.parse(io.text('/repo/.wirebound.json') ?? '')
     // 키를 통째로 단언한다 — 하나 늘면 사람이 *"이것이 커밋돼도 되나"*를 다시 판정한다.
     expect(Object.keys(binding)).toEqual(['server', 'projectId'])
   })
@@ -149,7 +149,7 @@ describe('토큰은 리포에 남지 않는다 (D6)', () => {
     const io = fullRun()
     await runAllCommands(io)
 
-    const leaked = [...io.fs.entries()].filter(([, content]) => content.includes('password1234'))
+    const leaked = io.textEntries().filter(([, content]) => content.includes('password1234'))
     expect(leaked.map(([path]) => path)).toEqual([])
   })
 

@@ -54,7 +54,7 @@ describe('wireb pull', () => {
     const io = pullIo({ token: 'RAWTOKEN' })
     await run(['pull'], io)
 
-    const written = io.fs.get(`/repo/${DEFAULT_PULL_FILE}`)
+    const written = io.text(`/repo/${DEFAULT_PULL_FILE}`)
     expect(written).toBeDefined()
     expect(JSON.parse(written ?? '')).toEqual(PAYLOAD)
     // **한 줄이 아니라 펴서 쓴다** — 사람이 열어 보고 `git diff`가 읽혀야 한다.

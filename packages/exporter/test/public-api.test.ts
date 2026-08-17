@@ -111,6 +111,22 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
   })
 
   /**
+   * **`src`가 zip을 모른다**(P10-1 전역 제약 · D1).
+   *
+   * PPTX가 zip(OOXML)이라 **압축을 여기서 하고 싶어지는 순간이 실제로 생겼다.** 하면
+   * 이 패키지가 파일 하나를 통째로 만들게 되고, 압축하는 자리가 `apps/api`와 둘이 된다 —
+   * `exportBundle`이 파일 시스템을 모르는 것과 같은 이유로 막는다.
+   *
+   * **`build-test`는 이 검사를 안 지난다** — 그쪽은 받는 쪽에게 먹일 진짜 파일을 만들어야
+   * 해서 `fflate`를 쓴다. 분모가 `src/**`인 것이 요점이다.
+   */
+  it('src가 압축 라이브러리를 부르지 않는다', () => {
+    for (const [path, source] of Object.entries(sources)) {
+      expect(source as string, path).not.toMatch(/from '(fflate|jszip|yazl|zlib)'/)
+    }
+  })
+
+  /**
    * **`react-dom`이 진짜 의존이다**(D2). `renderer`는 그것을 devDependency로만 두는데,
    * 이 패키지는 `renderToStaticMarkup`을 **부르므로** 받는 쪽에 함께 가야 한다.
    */
@@ -145,7 +161,16 @@ describe('공개 표면이 계약이다', () => {
    * `src/index.ts`가 내는 것 전부. **여기 손으로 적은 목록이 계약이고, 이것을 고치는 것은
    * 밖으로 나가는 약속을 고치는 것이다.** 새 이름이 실수로 새면 이 케이스가 죽는다.
    */
-  const CONTRACT = ['PACKAGE_NAME', 'exportBundle', 'exportPage', 'scriptJson'].sort()
+  const CONTRACT = [
+    'PACKAGE_NAME',
+    'exportBundle',
+    'exportPage',
+    'scriptJson',
+    // P10-1 — §15의 P10. `NO_SCREEN`은 **화면 이미지가 없는 자리의 말**이고, 라우트·CLI가
+    // 사람에게 그 상태를 말할 때 같은 글자를 쓰라고 밖으로 낸다(두 벌이 되는 것을 막는다).
+    'exportPptx',
+    'NO_SCREEN',
+  ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {
     expect(Object.keys(api).sort()).toEqual(CONTRACT)

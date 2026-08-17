@@ -43,7 +43,7 @@ describe('wireb login — 자격을 만드는 유일한 명령 (D5)', () => {
       `POST ${SERVER}/api/auth/logout`,
     ])
 
-    const stored = JSON.parse(io.fs.get('/home/tester/.wirebound/credentials.json') ?? '')
+    const stored = JSON.parse(io.text('/home/tester/.wirebound/credentials.json') ?? '')
     expect(stored).toEqual({
       version: 1,
       credentials: [{ server: SERVER, projectId: PROJECT, token: 'RAWTOKEN' }],
@@ -108,7 +108,7 @@ describe('wireb login — 자격을 만드는 유일한 명령 (D5)', () => {
     const code = await run(['login', '--email', 'a@example.com'], io)
 
     expect(code).toBe(EXIT.ok)
-    expect(io.fs.get('/home/tester/.wirebound/credentials.json')).toContain('RAWTOKEN')
+    expect(io.text('/home/tester/.wirebound/credentials.json')).toContain('RAWTOKEN')
   })
 
   it('.wirebound.json이 없으면 2이고 init을 가리킨다', async () => {
@@ -259,7 +259,7 @@ describe('자격 저장소 (D6)', () => {
     stub(io, 'POST', `/api/projects/${PROJECT}/tokens`, { status: 201, body: { value: 'SECONDTOKEN' } })
     await run(['login', '--email', 'a@example.com'], io)
 
-    const stored = JSON.parse(io.fs.get('/home/tester/.wirebound/credentials.json') ?? '')
+    const stored = JSON.parse(io.text('/home/tester/.wirebound/credentials.json') ?? '')
     expect(stored.credentials).toEqual([{ server: SERVER, projectId: PROJECT, token: 'SECONDTOKEN' }])
   })
 
@@ -270,7 +270,7 @@ describe('자격 저장소 (D6)', () => {
     stub(io, 'POST', '/api/projects/prj_other/tokens', { status: 201, body: { value: 'OTHERTOKEN' } })
     await run(['login', '--email', 'a@example.com', '--server', SERVER, '--project', 'prj_other'], io)
 
-    const stored = JSON.parse(io.fs.get('/home/tester/.wirebound/credentials.json') ?? '')
+    const stored = JSON.parse(io.text('/home/tester/.wirebound/credentials.json') ?? '')
     expect(stored.credentials.map((entry: { projectId: string }) => entry.projectId)).toEqual([
       PROJECT,
       'prj_other',
@@ -283,6 +283,6 @@ describe('자격 저장소 (D6)', () => {
     const code = await run(['login', '--email', 'a@example.com'], io)
 
     expect(code).toBe(EXIT.config)
-    expect(JSON.parse(io.fs.get('/home/tester/.wirebound/credentials.json') ?? '').version).toBe(99)
+    expect(JSON.parse(io.text('/home/tester/.wirebound/credentials.json') ?? '').version).toBe(99)
   })
 })

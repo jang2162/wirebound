@@ -17,7 +17,7 @@ describe('wireb init', () => {
     const code = await run(ARGS, io)
 
     expect(code).toBe(EXIT.ok)
-    expect(JSON.parse(io.fs.get('/repo/.wirebound.json') ?? '')).toEqual({
+    expect(JSON.parse(io.text('/repo/.wirebound.json') ?? '')).toEqual({
       server: 'https://wb.example.com',
       projectId: 'prj_a1b2',
     })
@@ -34,7 +34,7 @@ describe('wireb init', () => {
     const io = createFakeIo()
     await run(['init', '--server', 'https://wb.example.com/', '--project', 'prj_a1b2'], io)
 
-    expect(JSON.parse(io.fs.get('/repo/.wirebound.json') ?? '').server).toBe('https://wb.example.com')
+    expect(JSON.parse(io.text('/repo/.wirebound.json') ?? '').server).toBe('https://wb.example.com')
   })
 
   /**
@@ -100,7 +100,7 @@ describe('wireb init', () => {
     expect(code).toBe(EXIT.config)
     expect(io.stderr.join('\n')).toContain('--force')
     // **원본이 그대로다.** 이 줄이 없으면 *"거절했다고 말하면서 덮은"* 판이 통과한다.
-    expect(JSON.parse(io.fs.get('/repo/.wirebound.json') ?? '').projectId).toBe('old')
+    expect(JSON.parse(io.text('/repo/.wirebound.json') ?? '').projectId).toBe('old')
   })
 
   it('--force 면 덮지만 모르는 절은 보존한다 — P9-3의 lint 절이 그 자리다', async () => {
@@ -116,7 +116,7 @@ describe('wireb init', () => {
     const code = await run([...ARGS, '--force'], io)
 
     expect(code).toBe(EXIT.ok)
-    expect(JSON.parse(io.fs.get('/repo/.wirebound.json') ?? '')).toEqual({
+    expect(JSON.parse(io.text('/repo/.wirebound.json') ?? '')).toEqual({
       server: 'https://wb.example.com',
       projectId: 'prj_a1b2',
       lint: { naming: { page: '^[가-힣]+$' } },
@@ -128,7 +128,7 @@ describe('wireb init', () => {
     const code = await run([...ARGS, '--force'], io)
 
     expect(code).toBe(EXIT.ok)
-    expect(JSON.parse(io.fs.get('/repo/.wirebound.json') ?? '')).toEqual({
+    expect(JSON.parse(io.text('/repo/.wirebound.json') ?? '')).toEqual({
       server: 'https://wb.example.com',
       projectId: 'prj_a1b2',
     })
@@ -143,6 +143,6 @@ describe('wireb init', () => {
 
     expect(code).toBe(EXIT.ok)
     expect(io.fs.has('/repo/apps/web/.wirebound.json')).toBe(true)
-    expect(JSON.parse(io.fs.get('/repo/.wirebound.json') ?? '').projectId).toBe('old')
+    expect(JSON.parse(io.text('/repo/.wirebound.json') ?? '').projectId).toBe('old')
   })
 })

@@ -8,6 +8,8 @@
  * 어휘를 `renderer`와 대조하는 케이스가 이미 같은 이유로 `apps/web`에 있다).
  */
 export { describeTree, normalizeStyle } from './dom-compare'
+// P10-1 — `unit` 프로젝트에 DOM이 없어서 케이스가 XML을 읽을 자가 없었다. 근거는 그 파일의 머리말이다.
+export { findAll, parseXml, textOf, type XmlElement } from './xml'
 export type { CoverageThemeDocument } from './fixtures'
 export {
   brokenFixture,

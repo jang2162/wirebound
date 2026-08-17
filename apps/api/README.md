@@ -174,15 +174,29 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/presets` | GET | viewer | — | 200 프리셋 배열 — **내장 3종이 함께 나온다**(아래 "프리셋 응답 형태"). 내장이 먼저, 그 뒤로 프로젝트 프리셋이 만든 순서대로 |
 | `/api/projects/:projectId/presets` | POST | **editor** | `{ name, schema: WbNode[], description? }` | 201 프리셋. **`schema`는 문서 봉투가 아니라 root의 `children`이다.** `marker`는 저장하며 버린다. 이름 1~60자·설명 0~2000자 밖과 노드 봉투 위반·NUL은 400. **이름 중복은 오류가 아니다** |
 | `/api/projects/:projectId/presets/:presetId` | DELETE | **editor** | — | 204. 없는 id·남의 프로젝트의 id는 404, **내장 id(`builtin:…`)는 400**(경로가 uuid를 요구한다) |
-| `/api/projects/:projectId/export/preview` | GET | viewer | — | 200 `{ pages, duplicateTargets, brokenLinks, errors, themeId, fileName }` — **내려받기 전에 화면이 말할 것**(아래 "HTML 정적 번들 내보내기"). 페이지가 없으면 409 |
-| `/api/projects/:projectId/export` | GET | viewer | — | 200 `application/zip` — §11.3의 번들. 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409 |
+| `/api/projects/:projectId/export/preview` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — **내려받기 전에 화면이 말할 것**(아래 "내보내기"). **형식마다 답이 다르다**: html은 `{ format, pages, duplicateTargets, brokenLinks, errors, themeId, fileName }`, pptx는 `{ format, pages, screenless, fileName }`. 페이지가 없으면 409, 모르는 형식은 400 |
+| `/api/projects/:projectId/export` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — html이면 `application/zip`(§11.3의 번들), pptx면 `application/vnd.openxmlformats-officedocument.presentationml.presentation`(§15). 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409, 모르는 형식은 400 |
 | `/api/projects/:projectId/ws` | GET(업그레이드) | viewer | — | **101** — WebSocket. 아래 "실시간(WebSocket)" 참고. 업그레이드가 아닌 평범한 GET에도 같은 가드가 먼저 돈다(비멤버 404) |
 | `/api/projects/:projectId/tokens` | POST | viewer | `{ name }`(1~60자) | 201 `{ id, name, createdAt, lastUsedAt, value }` — **`value`(원문)가 실리는 유일한 응답이다.** 아래 "API 토큰". 토큰으로 부르면 403 |
 | `/api/projects/:projectId/tokens` | GET | viewer | — | 200 `{ id, name, createdAt, lastUsedAt }[]` — **자기가 만든 것만**, 오래된 것 먼저. **원문이 없다.** 토큰으로 부르면 403 |
 | `/api/projects/:projectId/tokens/:tokenId` | DELETE | viewer | — | 204. 남의 토큰·없는 id는 404. 토큰으로 부르면 403 |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
 
-### HTML 정적 번들 내보내기 (§11.3 — P8-4)
+### 내보내기 (§11.3 HTML 번들 — P8-4 · §15 PPTX — P10-1)
+
+**라우트는 둘이고 형식은 `?format=`으로 고른다**(P10-1 D7). 자원이 같고 표현만 다르므로
+형식마다 라우트를 늘리지 않는다 — 파일 이름은 이미 URL에 없으므로(아래 D7) 경로로 형식을
+가르는 이득이 없고, 라우트를 늘리면 권한·actor 인구조사의 표가 형식마다 자란다.
+
+**기본은 `html`이다** — P8-4가 만든 URL이 인자 없이 계속 zip을 받는다. **모르는 값은
+400이다**: 조용히 html로 떨어뜨리면 pptx를 부른 사람이 zip을 받고, 그 상태는 파일을 열어
+봐야 보인다.
+
+**두 형식이 같은 수집을 지난다**(`services/export-source.ts`). 같은 프로젝트를 **같은 순서로
+같은 이름으로** 실어야 하고, 수집이 두 벌이면 그 갈림은 두 파일을 나란히 열어 본 사람에게만
+보인다.
+
+#### `?format=html` — §11.3 정적 번들
 
 `GET .../export`가 §11.3의 트리를 zip 하나로 낸다.
 
@@ -214,7 +228,7 @@ wirebound-export-<슬러그>/
 뒤에서 부딪히던 이름들의 번호가 밀린다 — 그것으로 URL을 만들면 남의 북마크가 깨진다.
 사람이 읽는 이름은 `Content-Disposition`과 미리보기의 `fileName`에만 있다.
 
-#### `GET .../export/preview` — 내려받기 전에 화면이 말할 것
+#### `GET .../export/preview` — 내려받기 전에 화면이 말할 것 (html)
 
 **내려받기 버튼이 조용히 성공하면 안 된다.** 그리지 못한 노드가 있어도 폴백이 든 HTML은
 눈으로는 그럴듯한 한 장이고, 번들은 그것을 남에게 전달한다.
@@ -232,6 +246,48 @@ wirebound-export-<슬러그>/
 판이 곱으로 늘고, 상한을 넘으면 그 페이지의 런타임이 꺼진다. 그 사실은 **번들 자신이
 말한다**(그 페이지의 상태 줄에 이유가 뜬다) — 여기서 다시 세려면 그 상한을 두 벌로 갖게
 되고, 둘이 갈리는 날 화면이 거짓을 말한다.
+
+`format`을 응답에 되싣는다 — 화면이 어느 갈래를 받았는지 **키의 유무로 짐작하지 않는다.**
+
+#### `?format=pptx` — §15 PPTX (P10-1)
+
+`GET .../export?format=pptx`가 **페이지마다 슬라이드 한 장**인 pptx 파일 하나를 낸다.
+`Content-Disposition`의 이름은 `wirebound-export-<슬러그>.pptx`다.
+
+```
+[Content_Types].xml               ← **패키지 뿌리에 있어야 한다**
+_rels/.rels
+ppt/presentation.xml              슬라이드 목록 · 16:9 (12192000 × 6858000 EMU)
+ppt/slideMasters/ · ppt/slideLayouts/ · ppt/theme/
+ppt/slides/slideN.xml             페이지 N — 제목 · 화면 자리 · 코멘트 · 상호작용
+ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
+```
+
+**zip이지만 뿌리 폴더가 없다.** html 번들은 `wirebound-export-<슬러그>/` 아래에 담는데
+(푼 자리에 파일이 흩뿌려지지 않게), pptx에 같은 폴더를 씌우면 받는 쪽이
+`[Content_Types].xml`을 못 찾아 **파일이 통째로 안 열린다.**
+
+| 무엇 | 값 |
+|---|---|
+| 배치 | 화면이 왼쪽, 코멘트와 상호작용 문장이 오른쪽 — **§9의 저작 화면·§11.3의 번들과 같다** |
+| 페이지 이름 | **번들과 같은 이름**(조상 메뉴가 붙은 `bundleTitle`). 한 페이지를 두 이름으로 부르면 같은 설계서의 두 산출물이 갈린다 |
+| 코멘트·상호작용 문장 | **번들과 같은 함수가 만든다**(`@wirebound/exporter`의 `commentEntries`·`pageSentences`). §8.2가 *"HTML 번들도 PPTX도 이 문장을 싣는다"*고 적었다 |
+| 노트 | 슬라이드에 실린 것 **전부와 페이지 설명**. 슬라이드는 넘치면 잘리므로 **잘려도 사라지지 않게** 하는 자리다 |
+| **화면 이미지** | **오늘은 없다.** 만드는 자리가 P10-2이고, 슬라이드가 그 자리에서 *"화면 이미지가 실리지 않았습니다"*라고 말한다 |
+| 테마 | **§6의 테마를 안 쓴다.** §2.1이 도형 변환을 명시적으로 포기했고 슬라이드에 실릴 화면은 래스터다 — 그 이미지가 이미 테마 색을 담으므로 여기서 다시 칠하면 같은 색이 두 자리에서 다르게 나온다 |
+
+#### `GET .../export/preview?format=pptx`
+
+| 키 | 무엇 |
+|---|---|
+| `format` | `'pptx'` |
+| `pages` | `{ id, title, target }[]` — **html 미리보기의 것과 같은 값이다** |
+| `screenless` | 화면 이미지가 실리지 않은 페이지들의 **번들 이름**. **오늘은 보통 전부다** — 화면이 *"이미지 없이 나갑니다"*를 내려받기 전에 말하는 자리다(P10-1 D2) |
+| `fileName` | `wirebound-export-<슬러그>.pptx` |
+
+**`duplicateTargets`·`brokenLinks`·`errors`·`themeId`는 안 싣는다.** 그 넷은 HTML 번들의
+성질이다 — PPTX는 페이지 사이 링크를 만들지 않고 §6의 테마도 안 쓴다. 그대로 실으면 값이
+있는데 그 값이 **아무것도 안 가리킨다.**
 
 ### API 토큰 (§10 — P9-2)
 
