@@ -92,7 +92,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     words: ['export'],
-    summary: 'wireb export --format html -o <dir>          §11.3 정적 번들을 그 디렉터리에 푼다',
+    summary: 'wireb export --format html|pptx -o <dir>     §11.3 번들 또는 §15 pptx 를 그 디렉터리에',
     options: {
       format: { type: 'string' },
       out: { type: 'string', short: 'o' },

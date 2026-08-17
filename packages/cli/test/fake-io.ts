@@ -27,13 +27,44 @@ export interface StubResponse {
    */
   bytes?: Uint8Array
   setCookie?: string[]
+  /**
+   * 응답 헤더. **키는 소문자로 준다**(진짜 `Headers.get`이 대소문자를 안 가리므로 여기서
+   * 흉내만 내면 된다).
+   *
+   * **`wireb export --format pptx`가 `content-disposition`에서 파일 이름을 읽는다.**
+   * 가짜가 헤더를 못 주면 그 자리를 재는 케이스 자체가 설 수 없다 — 리뷰 N2(*"가짜가
+   * 셋째 인자를 버려 권한을 못 본다"*)·N3(*"본문이 한 번만 읽힌다는 성질을 버렸다"*)와
+   * 같은 부류다.
+   */
+  headers?: Record<string, string>
 }
 
 export type Route = (request: RecordedRequest) => StubResponse | Error
 
 export interface FakeIo extends Io {
-  /** 경로(`/api/…`) 전부. **디렉터리 개념이 없다** — 쓴 파일의 절대 경로가 키다. */
-  readonly fs: Map<string, string>
+  /**
+   * 쓴 파일 전부. **디렉터리 개념이 없다** — 절대 경로가 키다.
+   *
+   * **값이 글자일 수도 바이트일 수도 있다**(P10-1). `Io.files.write`가 그 둘을 받으므로
+   * 여기서 글자로 좁히면 **가짜가 진짜보다 좁아진다** — `wireb export --format pptx`가 쓴
+   * 바이트를 케이스가 관찰할 수단 자체가 없어진다(리뷰 N2가 `write`의 셋째 인자에서 겪은
+   * 것과 같은 부류다).
+   */
+  readonly fs: Map<string, string | Uint8Array>
+  /**
+   * 그 경로의 내용을 **글자로**. 없으면 `undefined`.
+   *
+   * 바이트로 쓰였으면 UTF-8로 되돌린다 — 진짜 `readFile(path, 'utf8')`이 하는 그대로다.
+   */
+  readonly text: (path: string) => string | undefined
+  /**
+   * 쓴 파일 **전부**를 글자로. `[경로, 내용]` 짝이다.
+   *
+   * **비밀을 훑는 자가 이것을 쓴다**(`no-token-in-repo.test.ts`). `fs`를 직접 훑으면
+   * 바이너리 파일이 `Uint8Array`라 `includes`가 안 되고, 그 파일만 검사에서 빠진다 —
+   * **훑는 자가 눈을 감는 자리**다. 여기서 되돌리면 바이너리에 실린 비밀도 걸린다.
+   */
+  readonly textEntries: () => [string, string][]
   /**
    * `files.write`가 받은 **셋째 인자**를 경로별로 기록한다.
    *
@@ -79,7 +110,7 @@ export interface FakeIoOptions {
 }
 
 export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
-  const fs = new Map<string, string>(Object.entries(options.files ?? {}))
+  const fs = new Map<string, string | Uint8Array>(Object.entries(options.files ?? {}))
   const modes = new Map<string, { mode?: number; dirMode?: number }>()
   const stdout: string[] = []
   const stderr: string[] = []
@@ -106,6 +137,7 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
 
     const text = outcome.text ?? (outcome.body === undefined ? '' : JSON.stringify(outcome.body))
     const setCookie = outcome.setCookie ?? []
+    const headers = outcome.headers ?? {}
 
     /**
      * **본문은 한 번만 내준다** — 진짜 `Response`의 계약이다(리뷰 N3).
@@ -129,7 +161,11 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
     return {
       status: outcome.status,
       headers: {
-        get: (name) => (name.toLowerCase() === 'set-cookie' ? (setCookie[0] ?? null) : null),
+        get: (name) => {
+          const key = name.toLowerCase()
+          if (key === 'set-cookie') return setCookie[0] ?? null
+          return headers[key] ?? null
+        },
         getSetCookie: () => setCookie,
       },
       text: async () => {
@@ -155,7 +191,11 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
         // **있는데 못 읽는 상태가 먼저다.** `null`(없다)과 갈라야 하는 것이 그것이다.
         const failure = options.readFailures?.[path]
         if (failure) throw failure
-        return fs.get(path) ?? null
+        const found = fs.get(path)
+        if (found === undefined) return null
+        // **바이트를 글자로 되돌린다.** 진짜 `readFile(path, 'utf8')`이 하는 그대로다 —
+        // *"있다"*를 재는 자리(`conflicts`)가 바이너리 파일을 못 보면 덮어쓰기 검사가 샌다.
+        return typeof found === 'string' ? found : new TextDecoder().decode(found)
       },
       // **셋째 인자를 버리지 않는다** — 버리면 권한을 재는 자가 설 수 없다(위 `modes`).
       write: async (path, content, options) => {
@@ -180,6 +220,16 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
     promptSecret: async () => options.secret ?? null,
     readStdin: async () => options.stdin ?? null,
     fs,
+    text: (path) => {
+      const found = fs.get(path)
+      if (found === undefined) return undefined
+      return typeof found === 'string' ? found : new TextDecoder().decode(found)
+    },
+    textEntries: () =>
+      [...fs.entries()].map(([path, content]) => [
+        path,
+        typeof content === 'string' ? content : new TextDecoder().decode(content),
+      ]),
     modes,
     stdout,
     stderr,

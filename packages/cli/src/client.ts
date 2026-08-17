@@ -75,10 +75,21 @@ export interface ApiResponse {
   setCookie: string[]
 }
 
-/** 본문을 날 바이트로 받은 응답. `wireb export`의 zip이 그것이다. */
+/** 본문을 날 바이트로 받은 응답. `wireb export`의 zip·pptx가 그것이다. */
 export interface ApiBytesResponse {
   status: number
   bytes: Uint8Array
+  /**
+   * 서버가 `Content-Disposition`에 실어 준 파일 이름. 없으면 `null`.
+   *
+   * **CLI가 이름을 지어내지 않는다**(P8-4 D7 — *"사람이 읽는 이름은 `Content-Disposition`과
+   * 미리보기의 `fileName`에만 있다"*). 지어내면 웹에서 내려받은 파일과 `wireb`가 쓴 파일의
+   * 이름이 갈리고, 같은 설계서의 두 사본이 서로를 못 알아본다.
+   *
+   * **`wireb export --format html`은 이 값을 안 쓴다** — zip을 풀어 디렉터리에 넣으므로
+   * 이름이 필요 없다. 쓰는 것은 pptx처럼 **파일 하나로 떨어지는** 형식이다.
+   */
+  fileName: string | null
 }
 
 /**
@@ -108,7 +119,30 @@ export async function callApiBytes(
   if (response.status < 200 || response.status >= 300) {
     assertOk(response.status, await response.text(), request, url)
   }
-  return { status: response.status, bytes: await response.bytes() }
+  return {
+    status: response.status,
+    bytes: await response.bytes(),
+    fileName: dispositionFileName(response.headers.get('content-disposition')),
+  }
+}
+
+/**
+ * `Content-Disposition`에서 파일 이름을 꺼낸다. 못 꺼내면 `null`.
+ *
+ * **`filename*`(RFC 5987)은 안 읽는다.** 우리 서버가 그것을 안 쓴다 — 이름이 슬러그에서
+ * 나오고 슬러그는 소문자·숫자·하이픈뿐이라 퍼센트 인코딩이 필요한 글자가 애초에 못 들어간다
+ * (`apps/api`의 `sendFile` 주석). 읽는 코드를 미리 두면 **안 쓰이는 갈래가 틀린 채로 남는다.**
+ *
+ * **경로 마디를 거른다.** 서버가 주는 이름이지만 이 값이 곧 **사용자의 파일 시스템에 쓰는
+ * 경로**가 된다 — `readArchive`가 압축 안의 경로를 안 믿는 것과 같은 이유다.
+ */
+function dispositionFileName(header: string | null): string | null {
+  if (header === null) return null
+  const match = /filename="([^"]*)"/.exec(header) ?? /filename=([^;]+)/.exec(header)
+  const raw = match?.[1]?.trim()
+  if (raw === undefined || raw.length === 0) return null
+  if (raw.includes('/') || raw.includes('\\') || raw === '.' || raw === '..') return null
+  return raw
 }
 
 /**

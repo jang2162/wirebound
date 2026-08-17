@@ -1,5 +1,20 @@
 /**
- * `wireb export --format html -o <dir>` — §12.3의 *"정적 번들 생성"*.
+ * `wireb export --format <html|pptx> -o <dir>` — §12.3의 *"정적 번들 생성"*.
+ *
+ * | 형식 | 서버가 주는 것 | 여기서 하는 것 |
+ * |---|---|---|
+ * | `html` | §11.3 번들의 zip | 뿌리를 벗기고 **파일 여럿**을 `-o` 아래에 푼다 |
+ * | `pptx` | §15의 pptx **하나** | **파일 하나**를 `-o` 아래에 그 이름으로 쓴다 |
+ *
+ * **pptx 를 풀지 않는다.** pptx 도 zip 이지만 그것은 **파일 하나의 안쪽**이다 — 풀어 놓으면
+ * 사람이 받아야 할 `.pptx` 가 사라지고 `[Content_Types].xml` 같은 것이 디렉터리에 흩뿌려진다.
+ *
+ * # 이름을 지어내지 않는다
+ *
+ * pptx 는 파일 하나이므로 이름이 필요한데, **CLI 가 그것을 만들지 않고 서버의
+ * `Content-Disposition` 에서 읽는다**(P8-4 D7 — *"사람이 읽는 이름은 `Content-Disposition`과
+ * 미리보기의 `fileName`에만 있다"*). 지어내면 웹에서 내려받은 파일과 `wireb` 가 쓴 파일의
+ * 이름이 갈린다.
  *
  * ---
  *
@@ -49,8 +64,20 @@ import type { Io } from '../io'
 import { join, resolveFrom } from '../paths'
 import { requireProject } from '../project'
 
-/** `--format`이 받는 값. **`html`만이다** — 다른 것은 P10이 그 자리를 쓴다. */
-export const EXPORT_FORMATS = ['html'] as const
+/**
+ * `--format`이 받는 값.
+ *
+ * **`apps/api`의 같은 이름과 다른 물음에 답한다.** 이쪽은 *"이 `wireb`가 파일로 쓸 줄 아는
+ * 형식"*이고 그쪽은 *"이 서버가 만들 줄 아는 형식"*이다 — 형식마다 여기서 하는 일이 다르므로
+ * (위 표) 서버가 형식을 더해도 옛 `wireb`는 그것을 못 쓰는 것이 맞다. 그때 사람이 볼 곳은
+ * 이 사용법이고, **모르는 값은 네트워크를 타기 전에** 끊긴다.
+ *
+ * **두 목록이 같은 글자를 써야 하는 자리는 하나다** — `?format=` 에 실리는 값. 아래
+ * `runExport`가 그 값을 그대로 싣고 `test/export.test.ts`가 요청 경로로 그것을 든다.
+ */
+export const EXPORT_FORMATS = ['html', 'pptx'] as const
+
+type ExportFormat = (typeof EXPORT_FORMATS)[number]
 
 export interface ExportOptions {
   format: string | undefined
@@ -67,18 +94,19 @@ export async function runExport(io: Io, options: ExportOptions): Promise<number>
     throw usageError(`--format 은 ${EXPORT_FORMATS.join(' 또는 ')} 입니다: ${format}`)
   }
   if (options.out === undefined || options.out.trim().length === 0) {
-    throw usageError('풀어 놓을 디렉터리를 주세요: wireb export --format html -o <dir>')
+    throw usageError(`받아 놓을 디렉터리를 주세요: wireb export --format ${format} -o <dir>`)
   }
 
   const access = await requireProject(io)
   const response = await callApiBytes(io, access.binding.server, {
     method: 'GET',
-    path: `/api/projects/${access.binding.projectId}/export`,
+    // **형식을 그대로 싣는다.** 서버가 아는 값이 아니면 그쪽이 400을 내고 그 문장이 나온다.
+    path: `/api/projects/${access.binding.projectId}/export?format=${format}`,
     token: access.token,
   })
 
-  const entries = readArchive(response.bytes)
-  const files = stripCommonRoot(entries)
+  const files =
+    format === 'pptx' ? [singleFile(response)] : stripCommonRoot(readArchive(response.bytes))
   if (files.length === 0) throw serverError('번들이 비어 있습니다')
 
   // **사람이 친 경로는 사람이 서 있는 곳에서 읽힌다**(`pull`과 같은 규칙).
@@ -125,10 +153,29 @@ export async function runExport(io: Io, options: ExportOptions): Promise<number>
   return EXIT.ok
 }
 
-/** 압축 안의 파일 하나. 디렉터리 항목은 안 담는다. */
+/**
+ * **파일 하나로 오는 형식**(pptx)을 그대로 든다.
+ *
+ * **이름이 없으면 끊는다.** 코드는 3이다 — 서버가 준 것이 이상한 상태이고 사용자가 자기
+ * 리포에서 고칠 것이 없다. **지어낸 이름으로 쓰지 않는다**: 그러면 웹에서 내려받은 파일과
+ * 이름이 갈리고, 사람은 그 둘이 같은 산출물인지 알 수 없다.
+ */
+function singleFile(response: { bytes: Uint8Array; fileName: string | null }): ArchiveFile {
+  if (response.fileName === null) {
+    throw serverError('서버가 파일 이름을 주지 않았습니다')
+  }
+  return { path: response.fileName, content: response.bytes }
+}
+
+/**
+ * `-o` 아래에 쓸 파일 하나. 디렉터리 항목은 안 담는다.
+ *
+ * **`content`가 바이트도 된다**(P10-1). pptx 는 바이너리이고, 문자열로 왕복시키면 바이트가
+ * 조용히 달라진다 — P9-3 리뷰 N9가 이 자리를 예고했다.
+ */
 interface ArchiveFile {
   path: string
-  content: string
+  content: string | Uint8Array
 }
 
 /**

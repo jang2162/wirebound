@@ -41,7 +41,13 @@ export function createNodeIo(): Io {
       },
       write: async (path, content, options) => {
         await mkdir(dirname(path), { recursive: true, mode: options?.dirMode })
-        await writeFile(path, content, { encoding: 'utf8', mode: options?.mode })
+        // **바이트에는 인코딩을 주지 않는다.** `writeFile(path, bytes, { encoding: 'utf8' })`는
+        // Node에서 그 옵션을 무시하지만, 적어 두면 다음 사람이 *"글자로 쓰고 있다"*고 읽는다.
+        if (typeof content === 'string') {
+          await writeFile(path, content, { encoding: 'utf8', mode: options?.mode })
+        } else {
+          await writeFile(path, content, { mode: options?.mode })
+        }
       },
       kind: async (path) => {
         try {

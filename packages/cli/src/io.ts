@@ -49,8 +49,21 @@ export type HttpFetch = (url: string, init?: HttpRequestInit) => Promise<HttpRes
 export interface FileIo {
   /** 없으면 `null`. *"없다"*를 예외로 만들지 않는 것은 그것이 정상 갈래이기 때문이다. */
   read(path: string): Promise<string | null>
-  /** 부모 디렉터리는 이 함수가 만든다. `mode`는 파일 권한(8진수). */
-  write(path: string, content: string, options?: { mode?: number; dirMode?: number }): Promise<void>
+  /**
+   * 부모 디렉터리는 이 함수가 만든다. `mode`는 파일 권한(8진수).
+   *
+   * **바이트도 받는다**(P10-1). `wireb export --format pptx`가 쓰는 것이 바이너리이고,
+   * 그것을 문자열로 나르면 UTF-8 왕복에서 바이트가 조용히 달라진다 — P9-3 리뷰 N9가
+   * *"`Io.files.write`가 `content: string`이라 바이너리를 못 다룬다"*고 예고한 자리다.
+   *
+   * **메서드를 하나 더 만들지 않았다.** 파일 시스템에서 이 둘은 인코딩만 다른 한 동작이고,
+   * 자리를 둘로 두면 `io-boundary`가 세는 *"바깥을 만지는 자리"*가 늘어난다.
+   */
+  write(
+    path: string,
+    content: string | Uint8Array,
+    options?: { mode?: number; dirMode?: number },
+  ): Promise<void>
   /**
    * 그 경로에 **무엇이 있는가.** 없으면 `null`(P9-3 리뷰 N6).
    *

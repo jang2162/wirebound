@@ -34,10 +34,19 @@ import { strToU8, zipSync } from 'fflate'
 /** 뿌리 폴더와 zip 파일 이름의 공통 줄기. */
 const STEM = 'wirebound-export'
 
-/** 번들 안의 파일 하나. `@wirebound/exporter`의 `BundleFile`과 같은 모양이다. */
+/**
+ * 압축에 넣을 항목 하나.
+ *
+ * **글자도 바이트도 받는다**(P10-1). §11.3의 번들은 전부 글자이지만 pptx 는 파트 안에
+ * 이미지 바이트를 담는다 — `strToU8`을 지나면 그 바이트가 UTF-8 로 뭉개진다.
+ *
+ * **`@wirebound/exporter`의 `BundleFile`·`PptxPart` 둘을 다 받는 모양이다.** 그 둘을
+ * 하나로 합치지 않은 이유는 `PptxPart`의 주석에 있다 — 여기는 *"압축에 들어가는 것"*이라는
+ * 더 넓은 물음에 답하는 자리라 둘을 함께 받는 것이 맞다.
+ */
 export interface ZipEntry {
   path: string
-  content: string
+  content: string | Uint8Array
 }
 
 /**
@@ -61,6 +70,21 @@ export function bundleFileName(projectSlug: string): string {
 }
 
 /**
+ * pptx 로 내려받을 때 붙일 이름(P10-1).
+ *
+ * **줄기를 번들과 나눠 쓴다** — 같은 프로젝트의 두 산출물이 이름에서 서로를 알아볼 수
+ * 있어야 하고, 확장자가 그 둘을 가른다. **`wireb export`가 이 이름을 응답 헤더에서 읽는다**
+ * (CLI가 이름을 지어내지 않는다 — P8-4 D7).
+ */
+export function pptxFileName(projectSlug: string): string {
+  return `${bundleRootDirectory(projectSlug)}.pptx`
+}
+
+/** pptx 의 MIME. **`Content-Disposition`과 함께 이 한 자리에만 둔다.** */
+export const PPTX_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+
+/**
  * 파일들을 zip 하나로 묶는다. 모든 엔트리가 `rootDirectory` 밑에 들어간다.
  *
  * **`level: 6`이다.** zlib의 기본값이고, 번들처럼 되풀이가 많은 글자에서는 9로 올려도
@@ -75,9 +99,33 @@ export function bundleFileName(projectSlug: string): string {
  * 파일이 디스크에 없다.
  */
 export function zipBundle(entries: readonly ZipEntry[], rootDirectory: string): Uint8Array {
+  return zipEntries(entries, (path) => `${rootDirectory}/${path}`)
+}
+
+/**
+ * **뿌리 폴더 없이** 묶는다 — pptx(OOXML)가 그것이다(P10-1).
+ *
+ * `[Content_Types].xml`은 **패키지 뿌리에 있어야 하고**, 폴더 하나를 씌우면 받는 쪽이
+ * 그것을 못 찾아 파일이 통째로 안 열린다. 그래서 `zipBundle`과 이름을 갈랐다 —
+ * 인자로 `''`를 받게 만들면 빈 문자열 하나가 *"열리는 파일"*과 *"안 열리는 파일"*을
+ * 가르게 된다.
+ *
+ * **압축하는 코드는 여전히 하나다**(아래 `zipEntries`). 그것이 P10-1 D1이 요구한 것이고,
+ * 그래서 `@wirebound/exporter`는 zip을 모르는 채로 남는다.
+ */
+export function zipParts(entries: readonly ZipEntry[]): Uint8Array {
+  return zipEntries(entries, (path) => path)
+}
+
+/** **압축이 일어나는 유일한 자리.** 이름 짓는 규칙만 부르는 쪽이 준다. */
+function zipEntries(
+  entries: readonly ZipEntry[],
+  nameOf: (path: string) => string,
+): Uint8Array {
   const tree: Record<string, Uint8Array> = {}
   for (const entry of entries) {
-    tree[`${rootDirectory}/${entry.path}`] = strToU8(entry.content)
+    tree[nameOf(entry.path)] =
+      typeof entry.content === 'string' ? strToU8(entry.content) : entry.content
   }
   return zipSync(tree, { level: 6 })
 }

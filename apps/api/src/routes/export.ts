@@ -3,13 +3,38 @@
  *
  * | 라우트 | 무엇 | 최소 역할 |
  * |---|---|---|
- * | `GET /:projectId/export/preview` | 내려받기 **전에** 화면이 말할 것 | viewer |
- * | `GET /:projectId/export` | zip 그 자체 | viewer |
+ * | `GET /:projectId/export/preview[?format=]` | 내려받기 **전에** 화면이 말할 것 | viewer |
+ * | `GET /:projectId/export[?format=]` | 파일 그 자체 (zip 또는 pptx) | viewer |
  *
  * HTTP·zod 검증만 다룬다 — SQL은 `repos/`가, 조립은 `services/export-bundle.ts`가,
  * 압축은 `services/export-zip.ts`가 한다(README "계층 규칙").
  *
  * ---
+ *
+ * # P10-1 D7 — **새 라우트가 아니라 `?format=`이다**
+ *
+ * 자원이 같다 — *"이 프로젝트의 내보내기"*이고 표현만 다르다. 판정의 근거 셋:
+ *
+ * | 무엇 | 값 |
+ * |---|---|
+ * | 라우트를 늘리면 | `permission-matrix.test.ts`·`actor-census.test.ts`의 라우트 표가 형식마다 자란다. 형식은 앞으로도 는다 |
+ * | 파일 이름 | 이미 URL에 없다(아래 D7) — 그러므로 경로로 형식을 가르는 이득이 없다 |
+ * | `wireb export --format` | 이미 있는 인자(P9-3 D9)이고 **한 줄로** 이어진다 |
+ *
+ * **모르는 값은 400이다.** 조용히 html로 떨어뜨리면 pptx를 부른 사람이 zip을 받고, 그
+ * 상태는 파일을 열어 봐야 보인다.
+ *
+ * # P10-1 D7 — 미리보기가 형식마다 **다른 것**을 말한다
+ *
+ * `duplicateTargets`·`brokenLinks`·`errors`·`themeId`는 **HTML 번들의 성질이다.** PPTX는
+ * 페이지 사이 링크를 만들지 않고(§2.1이 도형 변환을 포기했으므로 오늘 슬라이드는 글자와
+ * 이미지뿐이다) §6의 테마도 안 쓴다. **그 넷을 pptx 응답에 그대로 실으면 값이 있는데 그
+ * 값이 아무것도 안 가리킨다** — 이 저장소가 반복해서 막아 온 부류다.
+ *
+ * 대신 pptx는 **`screenless`**를 낸다: 화면 이미지가 실리지 않은 페이지들. 오늘은 보통
+ * 전부이고, P10-2가 그 자리를 채우면 줄어든다.
+ *
+ * `format`을 응답에 **되싣는다** — 화면이 어느 갈래를 받았는지 키 유무로 짐작하지 않는다.
  *
  * # D4 — 권한은 viewer다
  *
@@ -57,7 +82,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { projectGuard } from '../auth/roles'
 import { conflict, notFound } from '../errors'
-import { parseParams } from '../http/parse'
+import { parseParams, parseQuery } from '../http/parse'
 import { findProjectById } from '../repos/projects'
 import {
   EmptyProjectError,
@@ -65,17 +90,42 @@ import {
   exportProjectBundle,
   type ProjectBundle,
 } from '../services/export-bundle'
-import { bundleFileName, bundleRootDirectory, zipBundle } from '../services/export-zip'
+import { exportProjectPptx, type ProjectPptx } from '../services/export-pptx'
+import {
+  PPTX_CONTENT_TYPE,
+  bundleFileName,
+  bundleRootDirectory,
+  pptxFileName,
+  zipBundle,
+  zipParts,
+} from '../services/export-zip'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 
 /**
- * 두 라우트가 함께 지나는 자리. **`services`의 도메인 에러를 여기서 상태 코드로 옮긴다** —
- * 서비스는 HTTP를 모른다.
+ * **이 서버가 낼 수 있는 형식.** 표가 분모다 — 형식을 더하면 zod 검사·아래 `switch`·
+ * README의 표가 함께 걸린다.
+ *
+ * **`packages/cli`의 `EXPORT_FORMATS`와 같은 목록이 아니다** — 그쪽은 *"이 `wireb`가
+ * 파일로 쓸 줄 아는 형식"*이고 이쪽은 *"이 서버가 만들 줄 아는 형식"*이다. 서버가 형식을
+ * 더해도 옛 `wireb`는 그것을 못 쓰는 것이 맞고, 그때 사람이 볼 곳은 `wireb`의 사용법이다.
  */
-async function buildOrFail(app: FastifyInstance, projectId: string): Promise<ProjectBundle> {
+const EXPORT_FORMATS = ['html', 'pptx'] as const
+
+type ExportFormat = (typeof EXPORT_FORMATS)[number]
+
+/** **기본은 `html`이다** — P8-4가 만든 URL이 인자 없이 계속 zip을 받아야 한다. */
+const FormatQuery = z.object({ format: z.enum(EXPORT_FORMATS).default('html') })
+
+/**
+ * **`services`의 도메인 에러를 여기서 상태 코드로 옮긴다** — 서비스는 HTTP를 모른다.
+ *
+ * **네 라우트가 이 한 자리를 지난다**(형식 둘 × 미리보기·내려받기). 형식마다 따로 두면
+ * 같은 상태가 형식에 따라 다른 코드로 나가고, 그 갈림은 빈 프로젝트를 만들어 봐야 보인다.
+ */
+async function orFail<T>(build: () => Promise<T>): Promise<T> {
   try {
-    return await exportProjectBundle(app.db, projectId)
+    return await build()
   } catch (error) {
     if (error instanceof EmptyProjectError) {
       throw conflict('내보낼 페이지가 없습니다')
@@ -85,6 +135,14 @@ async function buildOrFail(app: FastifyInstance, projectId: string): Promise<Pro
     }
     throw error
   }
+}
+
+function buildOrFail(app: FastifyInstance, projectId: string): Promise<ProjectBundle> {
+  return orFail(() => exportProjectBundle(app.db, projectId))
+}
+
+function buildPptxOrFail(app: FastifyInstance, projectId: string): Promise<ProjectPptx> {
+  return orFail(() => exportProjectPptx(app.db, projectId))
 }
 
 /**
@@ -120,9 +178,23 @@ export function exportRoutes() {
      */
     app.get('/:projectId/export/preview', { preHandler: projectGuard('viewer') }, async (request) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
+      const { format } = parseQuery(FormatQuery, request.query)
+
+      if (format === 'pptx') {
+        const pptx = await buildPptxOrFail(app, projectId)
+        return {
+          format,
+          pages: pptx.pages,
+          /** **오늘은 보통 전부다.** 화면이 *"이미지 없이 나갑니다"*를 미리 말하는 자리다(D2). */
+          screenless: pptx.screenless,
+          fileName: pptxFileName(await projectSlug(app, projectId)),
+        }
+      }
+
       const bundle = await buildOrFail(app, projectId)
 
       return {
+        format,
         pages: bundle.pages,
         duplicateTargets: bundle.duplicateTargets,
         brokenLinks: bundle.brokenLinks,
@@ -148,14 +220,46 @@ export function exportRoutes() {
      */
     app.get('/:projectId/export', { preHandler: projectGuard('viewer') }, async (request, reply: FastifyReply) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
+      const { format } = parseQuery(FormatQuery, request.query)
       const slug = await projectSlug(app, projectId)
+
+      if (format === 'pptx') {
+        const pptx = await buildPptxOrFail(app, projectId)
+        /**
+         * **뿌리 폴더가 없다.** `[Content_Types].xml`이 패키지 뿌리에 있어야 하고,
+         * 폴더 하나를 씌우면 받는 쪽이 그것을 못 찾아 **파일이 통째로 안 열린다.**
+         */
+        return sendFile(reply, zipParts(pptx.parts), PPTX_CONTENT_TYPE, pptxFileName(slug))
+      }
+
       const bundle = await buildOrFail(app, projectId)
-
-      const zipped = zipBundle(bundle.files, bundleRootDirectory(slug))
-
-      reply.header('content-type', 'application/zip')
-      reply.header('content-disposition', `attachment; filename="${bundleFileName(slug)}"`)
-      return Buffer.from(zipped)
+      return sendFile(
+        reply,
+        zipBundle(bundle.files, bundleRootDirectory(slug)),
+        'application/zip',
+        bundleFileName(slug),
+      )
     })
   }
+}
+
+/**
+ * 바이트 하나를 내려받기로 낸다.
+ *
+ * **이름은 슬러그에서 나오고** 슬러그는 소문자·숫자·하이픈뿐이라(`routes/projects.ts`의
+ * 형식 검사) 인용부호 안에 그대로 쓸 수 있다 — `filename*`의 퍼센트 인코딩이 필요한 글자가
+ * 애초에 못 들어간다.
+ *
+ * **형식마다 다시 적지 않는다** — 헤더 둘 중 하나를 빠뜨리면 브라우저가 파일을 열어
+ * 보이거나 이름 없이 저장하고, 그 사고는 형식마다 따로 난다.
+ */
+function sendFile(
+  reply: FastifyReply,
+  bytes: Uint8Array,
+  contentType: string,
+  fileName: string,
+): Buffer {
+  reply.header('content-type', contentType)
+  reply.header('content-disposition', `attachment; filename="${fileName}"`)
+  return Buffer.from(bytes)
 }
