@@ -388,6 +388,11 @@ describe('무엇을 그리라고 넘기나 (D2)', () => {
         await download(ctx, fixture)
         // 프로젝트를 만들면 기본 레이아웃이 시스템 `admin`을 가리킨다(`repos/projects.ts`).
         // 그 테마가 컴파일된 시트가 여기 있어야 슬라이드의 화면이 캔버스와 같은 색이 된다.
+        //
+        // **`--wb-`로는 안 갈린다** — 구조 기본 CSS 도 그 접두를 쓴다(변이로 확인했다:
+        // `theme: null`을 심어도 0 사망이었다). 테마만 내는 것은 팔레트 선언이다.
+        expect(renderer.last[0]!.css).toContain('--wb-palette-')
+        // 구조 기본 CSS 도 함께 있어야 한다 — 순서가 곧 *"테마가 이긴다"*이다(`pageCss`).
         expect(renderer.last[0]!.css).toContain('--wb-')
       },
       { screenRenderer: renderer },

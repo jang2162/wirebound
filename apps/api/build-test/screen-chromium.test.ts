@@ -161,6 +161,32 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG (D1·D8)', () => {
     expect(batch.fontWarning).toBeNull()
   })
 
+  /**
+   * **바깥으로 나가는 요청을 끊는가.**
+   *
+   * 테마의 `@font-face`·`url()`은 사용자가 적은 문자열이라(`themes/spec/assets.ts`) 서버가
+   * 그것을 가져가면 프로젝트 멤버가 적은 주소로 **서버가 요청을 보내는 자리**가 된다.
+   *
+   * **재는 방법은 「기다리지 않는다」이다.** 라우팅되는 곳이 없는 주소를 걸어 두면 끊는
+   * 쪽은 그대로 그리고, 안 끊는 쪽은 `load`를 기다리다 타임아웃으로 죽는다.
+   *
+   * **이 자의 한계:** 그 주소가 **빨리 거절되는** 망에서는 안 끊어도 통과한다 — 그때
+   * 이 케이스는 조용히 이빨을 잃는다(초록이 되지 빨강이 되지 않는다). 이 기계에서는
+   * 갈렸다(보고서 §6의 M13).
+   */
+  it('바깥 자원을 든 페이지도 그려진다 — 요청을 끊으므로 기다리지 않는다', async () => {
+    const request: ScreenRequest = {
+      title: '바깥 자원',
+      html:
+        '<!doctype html><html lang="ko"><head>' +
+        '<link rel="stylesheet" href="http://10.255.255.1/x.css">' +
+        '</head><body><h1>회원 목록</h1></body></html>',
+      css: 'body { color: #111 }',
+    }
+    const batch = await chromiumScreenRenderer({ timeoutMs: 3000 }).render([request])
+    expect(batch.results[0]!.ok).toBe(true)
+  })
+
   it('상한을 넘은 장은 조용히 빠지지 않고 분모를 말한다 (D7)', async () => {
     const requests = [requestFor(1, 4), requestFor(2, 4), requestFor(3, 4)]
     const batch = await chromiumScreenRenderer({ maxPages: 2 }).render(requests)
