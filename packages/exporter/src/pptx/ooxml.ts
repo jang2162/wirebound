@@ -118,6 +118,27 @@ const MEDIA_TYPES: Record<string, string> = {
   png: 'image/png',
 }
 
+/**
+ * **마스터마다 테마 파트가 하나다 — 나눠 쓰지 마라.**
+ *
+ * 앞 판은 파트 하나를 슬라이드 마스터와 노트 마스터가 함께 가리켰다. 근거는
+ * *"규격은 마스터마다 테마 파트를 요구하지만 같은 파트를 둘이 가리키는 것을 막지 않는다"*
+ * 였고, 그 문장 뒤에 *"받는 쪽이 그것을 받아들이는지 쟀다"*가 붙어 있었다.
+ *
+ * **그 「쟀다」가 거짓이었다.** 잰 자는 macOS 의 Spotlight·QuickLook 둘인데 **둘 다 이것을
+ * 안 본다.** 진짜 소비자는 거절한다 — 리뷰어가 PowerPoint 16.112 로 실측했다(귀속: 리뷰
+ * §1.2): 파트를 나눠 쓰면 **복구 대화상자**가 뜨고(재현 2/2), 노트 마스터에게 자기 테마
+ * 파트를 주면 **열린다**(재현 2/2, 이미지를 실은 것도).
+ *
+ * **글자는 여전히 한 자리에서 나온다.** 두 파트가 같은 `THEME_XML` 을 쓰므로 색이 갈릴
+ * 길이 없다 — 갈리는 것은 파트 경로뿐이다.
+ *
+ * **`test/pptx-package.test.ts` 가 *"두 마스터가 같은 테마를 가리키지 않는다"* 를 든다** —
+ * 없으면 다음 사람이 파트를 아끼려고 같은 자리로 되돌린다.
+ */
+const SLIDE_MASTER_THEME = 'ppt/theme/theme1.xml'
+const NOTES_MASTER_THEME = 'ppt/theme/theme2.xml'
+
 /** 그 파일 이름의 확장자(소문자). 없으면 빈 문자열. */
 export function extensionOf(fileName: string): string {
   const dot = fileName.lastIndexOf('.')
@@ -261,14 +282,18 @@ export function pptxPackage(slides: readonly SlideSource[]): PptxPart[] {
     ]),
   })
 
-  parts.push({ path: 'ppt/theme/theme1.xml', content: THEME_XML })
+  parts.push({ path: SLIDE_MASTER_THEME, content: THEME_XML })
 
   if (hasNotes) {
     parts.push({ path: 'ppt/notesMasters/notesMaster1.xml', content: NOTES_MASTER_XML })
     parts.push({
+      // **노트 마스터가 자기 테마 파트를 갖는다** — 위 `THEMES` 의 머리말이 값과 근거다.
+      path: NOTES_MASTER_THEME,
+      content: THEME_XML,
+    })
+    parts.push({
       path: 'ppt/notesMasters/_rels/notesMaster1.xml.rels',
-      // **테마 한 벌을 마스터 둘이 나눠 쓴다**(`theme.ts`의 머리말).
-      content: relationships([relationship('rId1', 'theme', '../theme/theme1.xml')]),
+      content: relationships([relationship('rId1', 'theme', '../theme/theme2.xml')]),
     })
   }
 
@@ -362,7 +387,9 @@ function overrideType(path: string): string | null {
   if (path.startsWith('ppt/notesMasters/')) return `${PML}.notesMaster+xml`
   if (path.startsWith('ppt/notesSlides/')) return `${PML}.notesSlide+xml`
   if (path.startsWith('ppt/slides/')) return `${PML}.slide+xml`
-  if (path === 'ppt/theme/theme1.xml') {
+  // **테마 파트가 여럿이다**(위 `SLIDE_MASTER_THEME`·`NOTES_MASTER_THEME`). 이름 하나를
+  // 못 박으면 마스터를 더할 때 그 파트만 `Override` 를 못 받아 pptx 가 통째로 안 열린다.
+  if (path.startsWith('ppt/theme/')) {
     return 'application/vnd.openxmlformats-officedocument.theme+xml'
   }
   return null
