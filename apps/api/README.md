@@ -280,7 +280,8 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 
 | 무엇 | 값 |
 |---|---|
-| 무엇으로 | `playwright-core` + 기계에 설치된 Chromium. **저장소가 브라우저 바이너리를 안 들고 있다** — 없으면 그리기가 전부 실패하고 pptx는 그림 없이 나온다 |
+| 무엇으로 | `playwright-core` + 기계에 설치된 Chromium. **저장소가 브라우저 바이너리를 안 들고 있다** — 없으면 그리기가 전부 실패하고 pptx는 그림 없이 나온다(던지지 않는다) |
+| 브라우저를 넣는 법 | `node node_modules/playwright-core/cli.js install chromium` — **`playwright` 패키지를 안 들여도 된다.** `--only-shell`이면 headless shell만, `--with-deps`가 시스템 라이브러리를 함께 넣는다 |
 | 어디서 | `apps/api`. **`@wirebound/exporter`는 브라우저를 모른다** — 그 패키지는 이미지를 **인자로** 받는다 |
 | 채우는 자리 | **`main.ts` 하나다.** `buildApp`에 `screenRenderer`를 안 주면 안 그린다(`pnpm test`가 브라우저를 안 띄우는 이유) |
 | 화소 | 뷰포트 720×552 · 배율 2배 → **1440×1104**. 페이지가 길면 **전체를 찍으므로 높이가 는다** |
