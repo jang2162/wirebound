@@ -16,7 +16,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import { strFromU8, unzipSync } from 'fflate'
-import { bundleFileName, bundleRootDirectory, zipBundle } from '../src/services/export-zip'
+import {
+  PPTX_CONTENT_TYPE,
+  bundleFileName,
+  bundleRootDirectory,
+  pptxFileName,
+  zipBundle,
+  zipParts,
+} from '../src/services/export-zip'
 
 /** 서로 다른 글자를 담은 엔트리 넷. **하나짜리로 재지 않는다.** */
 const FILES = [
@@ -171,5 +178,56 @@ describe('bundleFileName', () => {
   /** 뿌리 폴더와 zip 이름의 줄기가 같아야 푼 폴더를 눈으로 짝지을 수 있다. */
   it('뿌리 폴더와 zip 이름의 줄기가 같다', () => {
     expect(bundleFileName('admin-guide')).toBe(`${bundleRootDirectory('admin-guide')}.zip`)
+  })
+})
+
+/* ------------------------------------------------------------ pptx (P10-1) */
+
+/**
+ * **UTF-8 로 왕복할 수 없는 바이트.** 진짜 PNG 의 머리(`\x89PNG`)와 짝 없는 상위 바이트다 —
+ * `strToU8(String(bytes))` 를 지나면 `U+FFFD` 가 되어 **바이트가 조용히 달라진다.**
+ */
+const RAW = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe, 0x00, 0x80])
+
+describe('zipParts — pptx 는 뿌리 폴더가 없다', () => {
+  it('경로를 그대로 항목 이름으로 쓴다', () => {
+    const back = unzipSync(zipParts([{ path: '[Content_Types].xml', content: '<Types/>' }]))
+    // **뿌리 폴더를 씌우면 받는 쪽이 이 파일을 못 찾아 pptx 가 통째로 안 열린다.**
+    expect(Object.keys(back)).toEqual(['[Content_Types].xml'])
+  })
+
+  /**
+   * **바이트를 글자로 왕복시키지 않는다.** 이미지 파트가 그 길로 가면 pptx 는 열리는데
+   * 그림만 깨진다 — 눈으로만 보이는 실패다. **오늘 라우트가 이미지를 안 실으므로 그쪽
+   * 케이스로는 이 갈래가 안 눌린다**(변이로 확인했다: 라우트 케이스 15건 중 0건 사망).
+   */
+  it('바이트를 그대로 담는다 — 글자로 왕복시키지 않는다', () => {
+    const back = unzipSync(zipParts([{ path: 'ppt/media/image1.png', content: RAW }]))
+    expect(back['ppt/media/image1.png']).toEqual(RAW)
+  })
+
+  it('글자와 바이트를 한 압축에 섞어 담는다', () => {
+    const back = unzipSync(
+      zipParts([
+        { path: 'ppt/slides/slide1.xml', content: '<p:sld/>' },
+        { path: 'ppt/media/image1.png', content: RAW },
+      ]),
+    )
+    expect(strFromU8(back['ppt/slides/slide1.xml']!)).toBe('<p:sld/>')
+    expect(back['ppt/media/image1.png']).toEqual(RAW)
+  })
+})
+
+describe('pptxFileName', () => {
+  it('번들과 줄기가 같고 확장자로 갈린다', () => {
+    expect(pptxFileName('admin-guide')).toBe('wirebound-export-admin-guide.pptx')
+    expect(pptxFileName('admin-guide')).toBe(`${bundleRootDirectory('admin-guide')}.pptx`)
+  })
+
+  /** **MIME 을 한 자리에만 둔다** — 두 벌이면 헤더와 문서가 갈린다. */
+  it('pptx 의 MIME 이 OOXML 프레젠테이션이다', () => {
+    expect(PPTX_CONTENT_TYPE).toBe(
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    )
   })
 })

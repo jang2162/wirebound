@@ -40,6 +40,17 @@
  * 셋으로 못 박았고, 설명은 문단이라 오른쪽 칸에 넣으면 코멘트를 밀어낸다. **버리지는
  * 않는다** — 노트가 전문을 받는 자리이므로 거기 있다.
  *
+ * ## 카탈로그를 설치한다 — **안 하면 문장이 조용히 나빠진다**
+ *
+ * `exportPage`가 같은 자리에서 같은 판단을 했다(`page.tsx`의 `installRegistries` 머리말 —
+ * *"카탈로그 설치를 번들의 계약으로 든다"*). **PPTX는 그 자리를 그냥 물려받지 못한다** —
+ * 그리지 않으므로 `renderPageTree`를 안 지나기 때문이다.
+ *
+ * **안 부르면 무엇이 되는지 쟀다**(스모크에서 실제로 났다): 상호작용 문장이
+ * *"② 목록이 **loading**로 바뀝니다"*가 된다. 카탈로그가 있으면 *"**로딩 상태**로
+ * 바뀝니다"*다. **던지지도 않고 개수도 그대로라 조용히 나빠진다** — `packages/cli`의
+ * `read/catalog.ts`가 `pageView`에 대해 같은 값을 재서 같은 말을 적어 두었다.
+ *
  * ## D4 — 코멘트와 문장을 다시 짜지 않는다
  *
  * `commentEntries`(번들이 부르는 것)와 `pageSentences`(번들의 셸이 부르는 것)를 **그대로**
@@ -55,6 +66,7 @@ import {
   MARKER_WITHOUT_COMMENT,
   panelLabel,
 } from '../labels'
+import { installRegistries } from '../page'
 import { pageSentences } from '../sentences'
 import { NOTES_BOX, PANEL_BOX, SCREEN_BOX, TITLE_BOX } from './geometry'
 import {
@@ -140,6 +152,9 @@ const META_COLOR = '6B7280'
 export function exportPptx(options: ExportPptxOptions): ExportedPptx {
   const pages = options.pages
   if (pages.length === 0) throw new Error('pptx 에 실을 페이지가 없습니다')
+
+  // **문장화보다 먼저다**(위 머리말). 멱등이라 호출자가 등록한 것을 덮지 않는다.
+  installRegistries()
 
   const screenless: string[] = []
   const slides: SlideSource[] = pages.map((page, index) => {

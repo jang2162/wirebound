@@ -53,13 +53,24 @@ const BODIES = new Map(
   FILES.map((relative) => [relative, stripComments(readFileSync(join(SRC, relative), 'utf8'))]),
 )
 
-/** 그 이름을 **부르는** 파일들. 정의한 자리(`export function`)는 뺀다. */
+/**
+ * 그 이름을 **부르는 자리** 전부. 파일 하나가 두 번 부르면 두 줄이다.
+ *
+ * **파일 이름만 세지 않는다 — 실측이 그 자를 반증했다.** 앞 판은 `[파일…]`을 냈고, 변이로
+ * `sentences.ts` **안에** 두 번째 문장화 함수를 심었더니 **13건 중 0건이 죽었다**(목록이
+ * 여전히 `['sentences.ts']`였다). 두 벌은 **다른 파일에서만** 생기는 것이 아니다.
+ *
+ * 정의한 자리(`function 이름(`)는 부름이 아니므로 뺀다.
+ */
 function callers(name: string): string[] {
-  const call = new RegExp(`(?:^|[^\\w$.])${name}\\s*\\(`)
-  const definition = new RegExp(`(?:export\\s+)?function\\s+${name}\\s*[(<]`)
-  return [...BODIES.entries()]
-    .filter(([, body]) => call.test(body.replace(definition, '')))
-    .map(([relative]) => relative)
+  const call = new RegExp(`(?:^|[^\\w$.])${name}\\s*\\(`, 'g')
+  const definition = new RegExp(`(?:export\\s+)?function\\s+${name}\\s*[(<]`, 'g')
+  const found: string[] = []
+  for (const [relative, body] of BODIES) {
+    const count = (body.replace(definition, '').match(call) ?? []).length
+    for (let index = 0; index < count; index += 1) found.push(relative)
+  }
+  return found
 }
 
 /** 그 글자를 리터럴로 든 파일들. */
