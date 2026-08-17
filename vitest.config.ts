@@ -103,7 +103,11 @@ export default defineConfig({
         ...shared,
         test: {
           name: 'build',
-          include: ['packages/*/build-test/**/*.test.ts'],
+          // `apps/*`도 든다(P10-2). 여기 담기는 것의 공통점은 **무거워서 `pnpm test`에
+          // 못 두는 것**이지 패키지인지 앱인지가 아니다 — `apps/api/build-test`가 진짜
+          // 브라우저를 띄운다(D3). 그쪽은 `dist`가 아니라 소스를 보지만(앱에는 `dist`가
+          // 없다) 재려는 것이 *"빌드된 것"*이 아니라 *"진짜 브라우저"*라 결이 같다.
+          include: ['packages/*/build-test/**/*.test.ts', 'apps/*/build-test/**/*.test.ts'],
           // tsdown 재빌드를 beforeAll에서 돈다. 기본 테스트 실행에서 분리한 이유:
           // pnpm test가 PATH의 pnpm과 전체 재빌드에 묶이면 개발 루프가 매번 수십 초씩
           // 느려진다. 이 프로젝트만 `pnpm test:build`로 따로 돌린다.

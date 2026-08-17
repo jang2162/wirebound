@@ -165,13 +165,24 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
       }
 
       try {
-        const hasKorean = await probeKoreanGlyphs(browser, timeoutMs)
-        if (!hasKorean) {
+        const korean = await probeKoreanGlyphs(browser, timeoutMs)
+        if (korean === 'no') {
           // **두부를 그려 내보내지 않는다**(D4). 없는 것이 나쁜 것보다 낫다.
           return {
             results: requests.map(() => failure(NO_KOREAN_FONT)),
             fontWarning: NO_KOREAN_FONT,
           }
+        }
+        if (korean !== 'yes') {
+          /**
+           * **모르면 안 그린다**(D4). 물음 자체가 죽은 것은 *"글꼴이 없다"*와 다르므로
+           * `fontWarning`을 세우지 않는다 — 그 값은 *"이 기계에 한글 글꼴이 없다"*를
+           * 뜻하고, 여기서 아는 것은 **모른다**는 것뿐이다.
+           *
+           * **스모크가 이 갈래를 찾았다** — 앞 판은 여기서 던졌고, 그러면 내보내기 하나가
+           * 통째로 500이 되어 pptx를 아예 못 받는다(D5의 정반대다).
+           */
+          return { results: requests.map(() => failure(korean.reason)), fontWarning: null }
         }
         return { results: await renderAll(browser, requests, { concurrency, timeoutMs, maxPages }), fontWarning: null }
       } finally {
@@ -246,14 +257,25 @@ async function newRenderPage(browser: Browser, timeoutMs: number): Promise<Page>
   return page
 }
 
-/** 두부 물음(D4). **배치마다 한 번이다** — 글꼴은 기계의 성질이다. */
-async function probeKoreanGlyphs(browser: Browser, timeoutMs: number): Promise<boolean> {
-  const page = await newRenderPage(browser, timeoutMs)
+/**
+ * 두부 물음(D4). **배치마다 한 번이다** — 글꼴은 기계의 성질이다.
+ *
+ * **답이 셋이다.** *"있다"*·*"없다"*·**"못 물었다"**. 셋째를 둘째에 접으면 브라우저가
+ * 잠깐 흔들린 것이 *"이 서버에 한글 글꼴이 없다"*로 나가고, 그것은 거짓말이다.
+ */
+async function probeKoreanGlyphs(
+  browser: Browser,
+  timeoutMs: number,
+): Promise<'yes' | 'no' | { reason: string }> {
+  let page: Page | undefined
   try {
+    page = await newRenderPage(browser, timeoutMs)
     await page.setContent('<!doctype html><html lang="ko"><body></body></html>', { waitUntil: 'load' })
-    return (await page.evaluate(KOREAN_GLYPH_PROBE)) === true
+    return (await page.evaluate(KOREAN_GLYPH_PROBE)) === true ? 'yes' : 'no'
+  } catch (error) {
+    return { reason: `한글 글꼴을 확인하지 못했습니다: ${messageOf(error)}` }
   } finally {
-    await page.close().catch(() => {})
+    await page?.close().catch(() => {})
   }
 }
 
