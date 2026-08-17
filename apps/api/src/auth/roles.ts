@@ -23,6 +23,7 @@ import { z } from 'zod'
 import type { DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
 import { forbidden, notFound, unauthenticated } from '../errors'
+import { requestClientKind } from './actor'
 import { parseParams } from '../http/parse'
 
 /** 컬럼 타입과 도메인 타입이 갈라지지 않도록 `db/types.ts`의 타입을 그대로 재수출한다. */
@@ -145,6 +146,25 @@ const ProjectParams = z.object({ projectId: z.uuid() })
 export function projectGuard(min: ProjectRole): preHandlerHookHandler {
   return async (request: FastifyRequest, _reply: FastifyReply) => {
     const { projectId } = parseParams(ProjectParams, request.params)
+
+    // **입력 검증이 조작보다 먼저 선다** (P9-5 리뷰 지적 1). `x-wb-client`가 모르는 값이면
+    // 여기서 400이고, **핸들러 본문은 아예 안 돈다.**
+    //
+    // 앞 판은 이 검사가 `requestActor` 안에만 있었다 — 곧 *"핸들러가 actor를 만들 때"*가
+    // 검사 시점이었다. 대부분의 쓰기는 `applyEdit` 앞에서 actor를 만들어 무해했는데
+    // **복원 하나만** 반대였다: `restoreSnapshot`이 자기 트랜잭션을 커밋한 **뒤**
+    // `notifyRestored`가 처음 헤더를 봐서, 400을 받은 클라이언트 몰래 프로젝트가 통째로
+    // 되돌아가고 룸에는 아무것도 안 갔다(리뷰어가 진짜 Postgres로 실증했다).
+    //
+    // **핸들러 두 줄을 위로 올리는 것으로는 다음 라우트를 못 막는다** — 순서를 지키는 자가
+    // 산문뿐이기 때문이다. preHandler로 올리면 *"본문보다 먼저"*가 **구조**가 되고,
+    // `actor-census.test.ts`의 라우트 인구조사가 등록된 `:projectId` 라우트 **전부**에
+    // 대해 그것을 잰다.
+    //
+    // **읽기도 지난다.** 읽기는 `actorType`을 안 쓰지만, 헤더 오타를 **첫 요청에서** 알려
+    // 주는 편이 낫다 — 쓸 때까지 모르면 그 사이 요청들이 조용히 기본값으로 기록된다.
+    requestClientKind(request)
+
     if (!request.currentUser) {
       throw unauthenticated()
     }
