@@ -11,6 +11,19 @@
  * OOXML의 `a:p`는 **문단**이고 그 안의 `a:r`이 같은 서식을 가진 토막이다. 줄바꿈을 `\n`
  * 으로 넣을 수 없다 — 그 글자는 XML 텍스트로 살아남지만 PowerPoint가 **한 줄로 그린다.**
  * 그래서 줄마다 `a:p`를 만든다.
+ *
+ * **그 규칙을 이 파일이 강제한다 — 부르는 쪽에 맡기지 않는다**(리뷰 발견 3).
+ *
+ * 앞 판은 `Line` 하나가 `a:p` 하나였고, **사람이 친 글자에는 그 규칙이 안 걸렸다.**
+ * 코멘트 본문은 §5의 자유 입력이고(`apps/api`의 코멘트 라우트는 NUL만 막는다 — 줄바꿈은
+ * 통과한다) 여러 줄인 것이 정상이다. 리뷰어가 PowerPoint로 읽어 실측했다(귀속: 리뷰 §3):
+ * 본문 `'첫째 줄\n둘째 줄\n셋째 줄'`이 **`첫째 줄둘째 줄셋째 줄`**로 나왔다 —
+ * **공백조차 안 남는다.** 같은 글자를 HTML 번들은 `<p>` 안에 넣으므로 브라우저가 공백으로
+ * 접어 `첫째 줄 둘째 줄 셋째 줄`이 된다. 곧 **두 산출물이 같은 코멘트를 다르게 말했다.**
+ *
+ * **부르는 쪽에서 가르면 자리가 는다.** `Line`을 만드는 자리가 오늘 둘이고(오른쪽 칸·노트)
+ * 하나를 빠뜨리면 그 갈래만 붙어 나온다. `paragraphs()`가 `Line` → `a:p` 사이 **하나뿐인
+ * 목**이므로 여기서 가르면 새 자리가 생겨도 그대로 걸린다.
  */
 import type { Box } from './geometry'
 import { POINT } from './geometry'
@@ -50,6 +63,23 @@ function transform(box: Box): string {
   )
 }
 
+/**
+ * 한 `Line`을 **문단들로** 가른다. 줄바꿈이 없으면 그대로 하나다.
+ *
+ * **`\r\n`과 홀로 온 `\r`도 가른다** — 붙여넣기로 들어오는 글자에 그 둘이 섞인다.
+ *
+ * **`spaceBefore`는 첫 문단만 갖는다.** 절과 절 사이를 벌리는 값이므로 한 코멘트의
+ * 둘째·셋째 줄에까지 붙으면 그 안이 절만큼 벌어진다. `indent`는 전부 갖는다 — 같은 코멘트의
+ * 본문이 계속되는 것이다.
+ */
+export function paragraphs(line: Line): Line[] {
+  const segments = line.text.replace(/\r\n?/g, '\n').split('\n')
+  if (segments.length === 1) return [line]
+  return segments.map((text, index) =>
+    index === 0 ? { ...line, text } : { ...line, text, spaceBefore: undefined },
+  )
+}
+
 function paragraph(line: Line): string {
   const properties: string[] = []
   if (line.indent !== undefined && line.indent > 0) {
@@ -63,12 +93,23 @@ function paragraph(line: Line): string {
   if (line.bold === true) run.push('b="1"')
   const fill = line.color === undefined ? '' : `<a:solidFill><a:srgbClr val="${xmlAttr(line.color)}"/></a:solidFill>`
 
+  const pPr = `<a:pPr ${properties.join(' ')}><a:buNone/>${spacing}</a:pPr>`
+  // **빈 문단은 토막을 안 만든다.** 사람이 코멘트에 빈 줄을 넣으면 여기로 오는데, 빈 `a:t`를
+  // 실으면 PowerPoint가 글자 없는 토막을 들고 있게 된다 — 문단만 두면 빈 줄 그대로다.
+  if (line.text.length === 0) return `<a:p>${pPr}</a:p>`
+
   return (
     '<a:p>' +
-    `<a:pPr ${properties.join(' ')}><a:buNone/>${spacing}</a:pPr>` +
+    pPr +
     `<a:r><a:rPr ${run.join(' ')}>${fill}</a:rPr><a:t>${xmlText(line.text)}</a:t></a:r>` +
     '</a:p>'
   )
+}
+
+/** `Line` 목록을 문단 글자로. **`paragraphs()`를 지나는 유일한 목이다**(위 머리말). */
+function bodyOf(lines: readonly Line[]): string {
+  if (lines.length === 0) return '<a:p/>'
+  return lines.flatMap(paragraphs).map(paragraph).join('')
 }
 
 /**
@@ -91,7 +132,7 @@ export function textBox(options: {
     '<p:txBody>' +
     '<a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0"><a:normAutofit/></a:bodyPr>' +
     '<a:lstStyle/>' +
-    (options.lines.length === 0 ? '<a:p/>' : options.lines.map(paragraph).join('')) +
+    bodyOf(options.lines) +
     '</p:txBody>' +
     '</p:sp>'
   )
@@ -179,7 +220,7 @@ export function notesXml(box: Box, lines: readonly Line[]): string {
     `<p:spPr>${transform(box)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>` +
     '<p:txBody>' +
     '<a:bodyPr wrap="square"><a:normAutofit/></a:bodyPr><a:lstStyle/>' +
-    (lines.length === 0 ? '<a:p/>' : lines.map(paragraph).join('')) +
+    bodyOf(lines) +
     '</p:txBody>' +
     '</p:sp>' +
     '</p:spTree></p:cSld>' +

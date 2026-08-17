@@ -64,6 +64,8 @@ const PAGES = [
     comments: [
       { nodeId: 'n_000000000002', body: '검색 조건은 AND & OR', authorName: '장', createdAt: '2026-08-17' },
       { nodeId: 'n_000000000404', body: '<사라진> 노드에 달린 코멘트' },
+      // **여러 줄 코멘트**(리뷰 발견 3). 설계서 코멘트는 여러 줄인 것이 정상이다.
+      { nodeId: 'n_000000000003', body: '첫째 줄\n둘째 줄' },
     ],
   },
   { title: '관리자 · 회원 · 상세', document: documentOf([LIST]), comments: [] },
@@ -84,6 +86,16 @@ function bundleTexts(index: number, panel: 'comments' | 'interactions'): string[
   return [...section.querySelectorAll('.wb-export-entry')]
     .flatMap((entry) => [...entry.children].map((child) => child.textContent ?? ''))
     .filter((text) => text.length > 0)
+}
+
+/** 번들 쪽 글자를 **줄로** 가른다. pptx 는 그 줄들을 문단 여럿으로 담는다. */
+function lines(text: string): string[] {
+  return text.replace(/\r\n?/g, '\n').split('\n')
+}
+
+/** 브라우저가 접는 것과 같게 공백을 줄인다. **번들 쪽 글자에만 쓴다.** */
+function collapse(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
 }
 
 function slideTexts(index: number): string[] {
@@ -113,7 +125,11 @@ describe('번들과 PPTX 가 같은 글자를 싣는다 (D4)', () => {
     it(`코멘트 줄이 같다 — ${page.title}`, () => {
       const 슬라이드 = slideTexts(index)
       for (const text of bundleTexts(index, 'comments')) {
-        expect(슬라이드, `번들의 "${text}"`).toContain(text)
+        // **줄마다 본다.** 번들은 여러 줄을 `<p>` 하나에 담고 pptx 는 문단 여럿으로 담는다 —
+        // 담는 모양이 다른 것이 옳고(리뷰 §3), 같아야 하는 것은 **줄의 글자**다.
+        for (const segment of lines(text)) {
+          expect(슬라이드, `번들의 "${segment}"`).toContain(segment)
+        }
       }
     })
 
@@ -129,7 +145,9 @@ describe('번들과 PPTX 가 같은 글자를 싣는다 (D4)', () => {
         ...bundleTexts(index, 'comments'),
         ...bundleTexts(index, 'interactions'),
       ]) {
-        expect(노트, `번들의 "${text}"`).toContain(text)
+        for (const segment of lines(text)) {
+          expect(노트, `번들의 "${segment}"`).toContain(segment)
+        }
       }
     })
   }
@@ -142,6 +160,29 @@ describe('번들과 PPTX 가 같은 글자를 싣는다 (D4)', () => {
     const 문장 = bundleTexts(2, 'interactions')
     expect(문장.length).toBeGreaterThan(0)
     for (const text of 문장) expect(slideTexts(2)).toContain(text)
+  })
+
+  /**
+   * **앞 판의 자가 이것을 못 봤다**(리뷰 §3). 양쪽 글자에 똑같이 `\n` 이 들어 있으면
+   * *"담긴 글자"* 는 같은데 **그린 결과가 갈린다** — 브라우저는 `\n` 을 공백으로 접고
+   * PowerPoint 는 **공백도 없이 붙인다.** 그래서 여기서는 담긴 글자가 아니라
+   * **그려질 모양**을 견준다: pptx 쪽에 날 줄바꿈이 없어야 하고, 문단을 공백으로 이으면
+   * 번들이 접은 것과 같아야 한다.
+   */
+  it('여러 줄 코멘트를 둘이 같게 그린다 — 날 줄바꿈이 pptx 에 안 남는다', () => {
+    for (const [index] of PAGES.entries()) {
+      for (const text of [...slideTexts(index), ...noteTexts(index)]) {
+        expect(text, JSON.stringify(text)).not.toContain('\n')
+      }
+    }
+
+    // 번들이 접은 글자와 pptx 의 문단을 이은 글자가 같다.
+    const 번들 = bundleTexts(0, 'comments').map(collapse)
+    expect(번들).toContain('첫째 줄 둘째 줄')
+    const 슬라이드 = slideTexts(0)
+    const 첫째 = 슬라이드.indexOf('첫째 줄')
+    expect(첫째).toBeGreaterThanOrEqual(0)
+    expect(`${슬라이드[첫째]} ${슬라이드[첫째 + 1]}`).toBe('첫째 줄 둘째 줄')
   })
 
   it('페이지 제목이 같다 — 한 페이지를 두 이름으로 부르지 않는다', () => {

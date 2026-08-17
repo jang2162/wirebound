@@ -255,6 +255,98 @@ describe('이미지 자리 (T4 · D2)', () => {
   })
 })
 
+describe('여러 줄 코멘트 (리뷰 발견 3)', () => {
+  /**
+   * **날 줄바꿈을 `a:t` 에 남기면 PowerPoint 가 공백도 없이 붙여 버린다** — 리뷰어가
+   * 실측했다(귀속: 리뷰 §3): `첫째 줄둘째 줄셋째 줄`. HTML 번들은 같은 글자를 `<p>` 안에
+   * 넣어 브라우저가 공백으로 접으므로 **두 산출물이 같은 코멘트를 다르게 말했다.**
+   */
+  const 여러줄 = exportPptx({
+    pages: [
+      {
+        title: '관리자 · 회원 · 목록',
+        document: documentOf([BUTTON, LIST]),
+        description: '설명 첫 줄\n설명 둘째 줄',
+        comments: [{ nodeId: 'n_000000000002', body: '첫째 줄\n둘째 줄\n셋째 줄' }],
+      },
+    ],
+  })
+
+  it('줄마다 문단을 만든다 — 한 a:t 에 붙이지 않는다', () => {
+    const 실린것 = texts(slide(여러줄.parts, 1))
+    expect(실린것).toContain('첫째 줄')
+    expect(실린것).toContain('둘째 줄')
+    expect(실린것).toContain('셋째 줄')
+  })
+
+  it('어느 a:t 에도 날 줄바꿈이 없다 — 슬라이드와 노트 둘 다', () => {
+    for (let number = 1; number <= 여러줄.parts.filter((part) => /slide\d+\.xml$/.test(part.path)).length; number += 1) {
+      for (const text of [...texts(slide(여러줄.parts, number)), ...texts(notes(여러줄.parts, number))]) {
+        expect(text, JSON.stringify(text)).not.toContain('\n')
+      }
+    }
+  })
+
+  it('문단 수가 줄 수만큼 는다 — 값으로 잰다', () => {
+    const 한줄 = exportPptx({
+      pages: [
+        {
+          title: '관리자 · 회원 · 목록',
+          document: documentOf([BUTTON, LIST]),
+          comments: [{ nodeId: 'n_000000000002', body: '첫째 줄' }],
+        },
+      ],
+    })
+    const 센다 = (parts: readonly PptxPart[]): number =>
+      findAll(slide(parts, 1), 'a:p').length
+    // 본문이 셋으로 갈리므로 문단이 **정확히 둘** 는다.
+    expect(센다(여러줄.parts) - 센다(한줄.parts)).toBe(2)
+  })
+
+  it('노트의 설명도 줄마다 갈린다', () => {
+    const 노트 = texts(notes(여러줄.parts, 1))
+    expect(노트).toContain('설명 첫 줄')
+    expect(노트).toContain('설명 둘째 줄')
+  })
+
+  /** `\r\n` 과 홀로 온 `\r` 도 가른다 — 붙여넣기로 들어오는 글자에 그 둘이 섞인다. */
+  it('CRLF 와 CR 도 문단으로 가른다', () => {
+    const { parts } = exportPptx({
+      pages: [
+        {
+          title: '관리자 · 회원 · 목록',
+          document: documentOf([LIST]),
+          comments: [{ nodeId: 'n_000000000003', body: '가\r\n나\r다' }],
+        },
+      ],
+    })
+    const 실린것 = texts(slide(parts, 1))
+    expect(실린것).toContain('가')
+    expect(실린것).toContain('나')
+    expect(실린것).toContain('다')
+    for (const text of 실린것) expect(text).not.toContain('\r')
+  })
+
+  /** 빈 줄은 **빈 문단**으로 남는다 — 사람이 넣은 간격을 버리지 않는다. */
+  it('빈 줄을 버리지 않는다', () => {
+    const { parts } = exportPptx({
+      pages: [
+        {
+          title: '관리자 · 회원 · 목록',
+          document: documentOf([LIST]),
+          comments: [{ nodeId: 'n_000000000003', body: '위\n\n아래' }],
+        },
+      ],
+    })
+    const xml = partText(parts, 'ppt/slides/slide1.xml')
+    const 실린것 = texts(slide(parts, 1))
+    expect(실린것).toContain('위')
+    expect(실린것).toContain('아래')
+    // 빈 문단은 토막 없이 `<a:p>…</a:p>` 다 — 글자 없는 `<a:t>` 를 안 만든다.
+    expect(xml).not.toContain('<a:t></a:t>')
+  })
+})
+
 describe('XML 로 못 담는 글자 (D5)', () => {
   it('코멘트에 든 제어 문자를 걷는다 — 남기면 pptx 가 통째로 안 열린다', () => {
     const { parts } = exportPptx({
