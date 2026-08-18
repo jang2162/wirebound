@@ -56,8 +56,23 @@ describe('운영이 그리는 자를 실제로 받는가', () => {
    */
   it('`main.ts` 가 그것을 만들어 `buildApp` 에 넘긴다', () => {
     const main = sourceOf('main.ts')
-    expect(main).toContain(`screenRenderer: ${FACTORY}()`)
+    expect(main).toContain(`screenRenderer: ${FACTORY}(`)
     expect(main).toMatch(/buildApp\(\{[^}]*screenRenderer/)
+  })
+
+  /**
+   * **`SCREEN_CHROMIUM_PATH`가 배선된 채로 남는가.**
+   *
+   * 앞 줄이 `${FACTORY}(`까지만 재는 것은 인자가 붙었기 때문이고, 그렇게 느슨해진 만큼
+   * **인자가 무엇인지를 여기서 센다.** 이 케이스가 없으면 `main.ts`가 다시
+   * `${FACTORY}()`로 돌아가도 위가 초록이고, 그러면 `config.screenChromiumPath`는
+   * **읽는 자가 없는 값**이 된다 — 기계에 있는 브라우저를 가리키는 유일한 길이 조용히
+   * 끊긴다(`config.ts`의 주석이 왜 그 길이 유일한지 든다).
+   */
+  it('`main.ts` 가 `config.screenChromiumPath` 를 그리는 자에게 넘긴다', () => {
+    const main = sourceOf('main.ts')
+    expect(main).toContain('config.screenChromiumPath')
+    expect(main).toContain('executablePath: config.screenChromiumPath')
   })
 
   it('`buildApp` 은 그것을 스스로 만들지 않는다 — 만들면 케이스 전부가 브라우저를 띄운다', () => {

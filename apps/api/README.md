@@ -6,35 +6,39 @@ Fastify 5 기반 REST 서버. 설계서 편집을 지원하는 백엔드다(P1·
 
 ## 기동 절차
 
-1. `docker compose up -d` — 저장소 루트에서. Postgres(호스트 포트 `5433`)를 띄운다.
-   `docker compose ps`로 `healthy`가 될 때까지 기다린다. 컨테이너가 healthy가
-   아니면 이후 마이그레이션·테스트가 전부 접속 실패로 죽는다.
-   - `docker/postgres-init/01-test-db.sql`(`wirebound_test` 생성)은 Postgres 볼륨을
-     **처음 만들 때만** 실행된다. `wirebound-pgdata` 볼륨이 이미 있는 상태로(예: 예전
-     버전의 이미지를 쓰다가) 새로 받았다면 `wirebound_test`가 없을 수 있다 — 이 경우
-     `docker compose down -v`로 볼륨까지 지우고 다시 `up -d`하거나, 컨테이너 안에서
-     `CREATE DATABASE wirebound_test;`를 직접 실행한다. 그렇지 않으면 테스트
-     `globalSetup`이 이유를 알기 어려운 접속 에러로 죽는다.
-2. `pnpm install` — 저장소 루트에서. 워크스페이스 심링크(`@wirebound/*`)를 만든다.
-3. `pnpm build` — `packages/schema`를 먼저 빌드한다. **`tsx`는 워크스페이스 패키지를
-   `package.json`의 `exports`를 통해 해석하는데, 그 `exports`가 가리키는 대상이
-   `dist`이기 때문이다(소스 `.ts`가 아니다).** 빌드하지 않으면 `@wirebound/schema`
-   import가 깨져 서버가 뜨지 않는다(vitest는 `vitest.config.ts`의 alias로 소스를
-   직접 보므로 이 제약이 없다 — `tsx`로 실행할 때만 해당한다).
-   - 스키마를 함께 고치며 개발할 때는 `pnpm --filter @wirebound/schema build:watch`를
-     별도 터미널에서 같이 돌린다.
-4. `.env.example`을 `.env`로 복사하고 필요하면 값을 조정한다. `dev`·`start`·`migrate`·
-   `migrate:down` 스크립트가 전부 `tsx`에 `--env-file-if-exists=.env`를 붙여
-   실행하므로(Node 22.9+, `apps/api/package.json`), `apps/api/.env`가 있으면 자동으로
-   읽는다 — 이 프로젝트는 `dotenv` 같은 별도 패키지를 쓰지 않는다. `.env` 파일 없이
-   셸에 직접 `export DATABASE_URL=...` 해도 그대로 동작한다(`--env-file-if-exists`는
-   파일이 없어도 에러 없이 넘어가고, 파일이 있어도 이미 셸에 있는 값을 덮어쓰지
-   않는다 — 둘 중 하나만 있어도, 둘 다 있어도 안전하다).
-5. `pnpm --filter @wirebound/api migrate` — 마이그레이션을 최신까지 올린다.
-6. `pnpm --filter @wirebound/api dev` — `tsx watch`로 서버를 띄운다.
+**저장소를 세우는 순서는 최상위 [`README.md`](../../README.md)에 있다** — Postgres·설치·
+빌드·`.env`·마이그레이션까지 한 자리다. **여기 두 벌로 적지 않는다.** 이 문서가 소유하는
+것은 **이 서버의 계약**(아래 *"API 개요"* 이하)이고, 아래 두 절은 그 계약에 붙는
+서버만의 사정이다.
 
-마이그레이션을 되돌리려면 `pnpm --filter @wirebound/api migrate:down`(가장 최근 것
-하나만 내린다, 반복하면 0까지 내려간다).
+```bash
+pnpm --filter @wirebound/api dev            # tsx watch 로 띄운다
+pnpm --filter @wirebound/api migrate        # 마이그레이션 최신화
+pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린다 (반복하면 0까지)
+```
+
+### 이 서버가 env 를 읽는 방식
+
+`dev`·`start`·`migrate`·`migrate:down` 스크립트가 전부 `tsx`에
+`--env-file-if-exists=.env`를 붙여 실행하므로(Node 22.9+, `apps/api/package.json`),
+`apps/api/.env`가 있으면 자동으로 읽는다 — 이 프로젝트는 `dotenv` 같은 별도 패키지를
+쓰지 않는다.
+
+`.env` 파일 없이 셸에 직접 `export DATABASE_URL=...` 해도 그대로 동작한다
+(`--env-file-if-exists`는 파일이 없어도 에러 없이 넘어가고, 파일이 있어도 **이미 셸에 있는
+값을 덮어쓰지 않는다** — 둘 중 하나만 있어도, 둘 다 있어도 안전하다). 값 목록과 기본값은
+`.env.example`에 있고, 검증하는 자는 `src/config.ts`의 `EnvSchema` 하나다.
+
+### 왜 `pnpm build` 가 이 서버의 전제인가
+
+**`tsx`는 워크스페이스 패키지를 `package.json`의 `exports`를 통해 해석하는데, 그 `exports`가
+가리키는 대상이 `dist`다**(소스 `.ts`가 아니다). 빌드하지 않으면 `@wirebound/schema` import
+가 깨져 서버가 뜨지 않는다 — **vitest 는 `vitest.config.ts`의 alias 로 소스를 직접 보므로
+이 제약이 없다.** 그래서 이 사고는 *"테스트는 통과하는데 서버만 안 뜬다"*는 모양으로 온다
+(증상 문장과 조치는 최상위 README 의 *"막히는 자리"* §6.1).
+
+스키마를 함께 고치며 개발할 때는 `pnpm --filter @wirebound/schema build:watch`를 별도
+터미널에서 같이 돌린다.
 
 ## 테스트
 
@@ -1134,15 +1138,18 @@ revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `
 
 ## 명령 요약
 
+**이 서버의 것만 든다.** 저장소를 세우는 명령(`docker compose up -d`·`pnpm install`·
+`pnpm build`)과 게이트 넷(`pnpm test`·`typecheck`·`build`·`test:build`)은 최상위
+[`README.md`](../../README.md)에 있다 — **두 벌로 적지 않는다.**
+
 ```bash
-docker compose up -d                              # Postgres 기동 (저장소 루트)
-pnpm install && pnpm build                         # 워크스페이스 설치 + schema 빌드
+pnpm --filter @wirebound/api dev                   # 개발 서버 (tsx watch)
+pnpm --filter @wirebound/api start                 # 개발 서버 없이 한 번 띄운다
 pnpm --filter @wirebound/api migrate               # 마이그레이션 최신화
 pnpm --filter @wirebound/api migrate:down          # 마이그레이션 하나 내리기(반복 시 0까지)
-pnpm --filter @wirebound/api dev                   # 개발 서버 (tsx watch)
-pnpm --filter @wirebound/web dev                   # 에디터 개발 서버 (/api를 위 API 서버로 프록시 — 함께 띄운다)
-pnpm vitest run --project api                       # api 테스트만 실행 (컨테이너 필요)
-pnpm test                                          # 전체 워크스페이스 테스트
-pnpm test:build                                    # dist 로드 가능성 검증 (패키지 재빌드 포함, 수십 초)
-pnpm typecheck                                     # 전체 타입 체크
+pnpm vitest run --project api                      # api 테스트만 실행 (컨테이너 필요)
 ```
+
+에디터(`pnpm --filter @wirebound/web dev`)는 `/api`를 이 서버로 프록시하므로 **함께
+띄운다** — 프록시 대상이 `apps/web/vite.config.ts`에 박혀 있고 `PORT`를 바꾸면 자동으로
+따라가지 않는다(최상위 README §3).
