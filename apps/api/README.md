@@ -31,14 +31,9 @@ pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린
 
 ### 왜 `pnpm build` 가 이 서버의 전제인가
 
-**`tsx`는 워크스페이스 패키지를 `package.json`의 `exports`를 통해 해석하는데, 그 `exports`가
-가리키는 대상이 `dist`다**(소스 `.ts`가 아니다). 빌드하지 않으면 `@wirebound/schema` import
-가 깨져 서버가 뜨지 않는다 — **vitest 는 `vitest.config.ts`의 alias 로 소스를 직접 보므로
-이 제약이 없다.** 그래서 이 사고는 *"테스트는 통과하는데 서버만 안 뜬다"*는 모양으로 온다
-(증상 문장과 조치는 최상위 README 의 *"막히는 자리"* §6.1).
-
-스키마를 함께 고치며 개발할 때는 `pnpm --filter @wirebound/schema build:watch`를 별도
-터미널에서 같이 돌린다.
+**최상위 [`README.md`](../../README.md) §6.1 이 그 자리다** — 증상 문장·원인(`tsx`가 `exports`를
+통해 `dist`를 본다)·조치·*"테스트는 통과하는데 서버만 안 뜬다"*가 값과 함께 한 자리에 있다.
+**여기 두 벌로 적지 않는다**(D1 — 리뷰가 이 문단을 두 벌로 지목했다: 귀속: 리뷰 §5 C2).
 
 ## 테스트
 

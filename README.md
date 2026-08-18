@@ -38,8 +38,9 @@ node -v && pnpm -v && docker -v
 
 ```bash
 # 1. Postgres 를 띄운다 — 저장소 루트에서
-docker compose up -d
+docker compose up -d                 # 이미 떠 있거나 표가 비면 → 6.3
 docker compose ps                    # healthy 가 될 때까지 기다린다
+                                     # healthy 가 아니면 5번과 테스트가 전부 접속 실패로 죽는다
 
 # 2. 워크스페이스를 설치한다
 pnpm install
@@ -171,13 +172,31 @@ alias wireb="node $(pwd)/packages/cli/dist/bin.js"
 (`pnpm bin -g`로 확인, 없으면 `pnpm setup`).
 
 > **`cd` 해서 부르는 것이 아니면 안 된다.** `pnpm --dir packages/cli link --global`도
-> `pnpm -C packages/cli link --global`도 **워크스페이스 뿌리를 건다** — 이 기계에서 쟀다:
-> 둘 다 `+ wirebound <- …/wirebound`를 내고 `wireb`는 `PATH`에 안 생긴다. **오류가 아니라
-> 성공으로 끝나므로** 그 다음 `wireb`가 `not found`일 때까지 모른다. 잘못 걸었으면
-> `pnpm uninstall --global wirebound`로 지운다.
+> `pnpm -C packages/cli link --global`도 **네가 가리킨 곳이 아니라 셸이 서 있는 쪽의 워크스페이스
+> 뿌리를 건다** — 이 기계에서 쟀다: 둘 다 `+ wirebound <- …/wirebound`를 내고 `wireb`는 `PATH`에
+> 안 생긴다. **신호가 없지는 않다** — 그 자리에 ` WARN  wirebound has no binaries`가 찍힌다.
+> 다만 성공으로 끝나므로 놓치기 쉽다. 잘못 걸었으면 `pnpm uninstall --global wirebound`.
 
-> **㉯는 저장소를 가리키는 심링크다.** 저장소를 옮기거나 지우면 `wireb`가 깨진다. 되돌리려면
-> `pnpm uninstall --global @wirebound/cli @wirebound/mcp`.
+> **㉯는 저장소를 가리키는 심링크다.** 저장소를 옮기거나 워크트리를 지우면 `wireb`가 깨진다.
+
+**되돌리기 — 명령 하나로 안 끝난다.**
+
+```bash
+pnpm uninstall --global @wirebound/cli @wirebound/mcp
+```
+
+이것이 지우는 것은 `PATH`에 놓인 `wireb`·`wireb-mcp`뿐이다(`command -v wireb` → 없음).
+**pnpm 의 전역 저장소에 둘이 남는다**(이 기계에서 쟀다 — 이 자리를 리뷰가 지목했다:
+귀속: 리뷰 §5 C6):
+
+| 남는 것 | 무엇이 담겨 있나 |
+|---|---|
+| `$(pnpm bin -g)/global/*/package.json` | `pnpm.overrides`에 `"@wirebound/cli": "link:…/packages/cli"` 두 줄 |
+| `$(pnpm bin -g)/global/*/node_modules/.bin/` | `wireb`·`wireb-mcp` 셸 스크립트 |
+
+**`pnpm ls --global`로는 안 보인다** — 그것도 아무것도 안 낸다(쟀다). 저장소를 옮기거나
+워크트리를 지우면 그 두 줄이 **죽은 경로**를 가리킨 채 남는다. 완전히 지우려면 그 파일의
+`overrides`를 비우고 `.bin`의 둘을 지워라.
 
 ### 5.2 붙이기
 
@@ -202,7 +221,7 @@ echo "$비밀번호" | wireb login --email me@example.com
 | **0** | 정상. **`lint`는 결함이 있어도 0 이다** — 결함이 있는 것은 오류가 아니다 |
 | **2** | 설정·자격이 없다 → `wireb init` 또는 `wireb login` |
 | **3** | 서버가 거절했다(권한·잠금·검증) |
-| **4** | 서버에 못 닿았다 |
+| **4** | 서버에 못 닿았다 — **같은 주소의 서버가 죽었을 때**다. `.wirebound.json`의 `server`를 **다른 주소로 바꾸면 4가 아니라 2**가 나온다: 자격이 `(server, projectId)`에 매여 있어 네트워크를 타기 전에 끊긴다(귀속: 리뷰 §5 C4) |
 | **10** | `lint --fail-on warning`에 걸렸다 (이 기계에서 쟀다) |
 
 ---
@@ -225,8 +244,13 @@ Error [ERR_MODULE_NOT_FOUND]: Cannot find module
 
 **vitest 는 안 걸린다** — `vitest.config.ts`의 alias 로 소스를 직접 보기 때문이다. 그래서
 이 사고는 *"게이트는 초록인데 서버만 안 뜬다"*는 모양으로 온다. (이 기계에서 쟀다:
-`packages/*/dist`를 지우면 `pnpm start`가 위 문장과 함께 **종료 코드 1**, 같은 상태에서
-api 테스트 한 파일은 **종료 코드 0**.)
+`packages/*/dist`를 지우면 **`pnpm --filter @wirebound/api start`**가 위 문장과 함께
+**종료 코드 1**, 같은 상태에서 api 테스트 한 파일은 **종료 코드 0**.)
+
+> **`--filter`를 빼지 마라.** 루트 `package.json`에 `start`가 없다 — 저장소 루트에서 그냥
+> `pnpm start`를 치면 `ERR_PNPM_NO_SCRIPT_OR_SERVER  Missing script start or file server.js`이고
+> **그것도 종료 코드 1이다.** 두 실패의 코드가 같아서 **위 문장을 확인해 본 사람이 확인했다고
+> 착각한다**(이 자리를 그렇게 잘못 적었다가 리뷰가 잡았다 — 귀속: 리뷰 §4 B2).
 
 **조치.** `pnpm build`. 스키마를 함께 고치며 개발할 때는 별도 터미널에
 `pnpm --filter @wirebound/schema build:watch`.
@@ -243,6 +267,11 @@ WARN  Failed to create bin at …/packages/mcp/node_modules/.bin/wireb.
 **원인.** `packages/mcp`가 `@wirebound/cli`를 의존으로 갖고, pnpm 이 그 `bin`을 링크하려는데
 **아직 빌드 전이라 `dist/bin.js`가 없다.** 설치가 빌드보다 먼저 오므로 **처음 설치에서는
 반드시 난다.**
+
+**같은 자리에 이상해 보이는 줄이 하나 더 있다** — `The following dependencies have build scripts
+that were ignored: esbuild`. `WARN`이 아니고 **정상이다**(pnpm 10 이 빌드 스크립트를 기본으로
+막는다). `esbuild`는 플랫폼별 바이너리를 의존으로 받으므로 그 스크립트가 없어도 돌아간다 —
+게이트 넷이 그것을 증명한다.
 
 **조치.** 없다 — `pnpm build`가 그 파일을 만든다. **다만 링크는 그때 안 생긴다**(pnpm 이
 설치를 다시 돌지 않는다). `wireb`를 이름으로 부르려면 5.1의 ㉮·㉯를 쓴다.
@@ -298,9 +327,19 @@ docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE
 **원인.** API 서버가 안 떠 있거나, `PORT`를 바꿨는데 `apps/web/vite.config.ts`의 프록시
 대상을 안 바꿨다(3절).
 
-**조치.** `curl http://127.0.0.1:3001/health`로 API 를 먼저 확인한다. 브라우저 개발자 도구의
-네트워크 탭에서 `/api/...` 요청이 **502·연결 거부**면 프록시 대상이 틀린 것이고, **401**이면
-서버는 붙었고 로그인만 안 된 것이다.
+**조치.** `curl http://127.0.0.1:3001/health`로 API 를 먼저 확인한다.
+
+**가장 빠른 자리는 브라우저가 아니라 에디터를 띄운 터미널이다** — vite 가 **틀린 대상을 이름까지**
+말한다(이 기계에서 쟀다):
+
+```
+[vite] http proxy error: /api/auth/me
+Error: connect ECONNREFUSED 127.0.0.1:3001
+```
+
+개발자 도구의 네트워크 탭에서는 `/api/...` 요청이 **500(본문 0 바이트)**이면 프록시 대상이 틀린
+것이고, **401**이면 서버는 붙었고 로그인만 안 된 것이다. **502가 아니다** — vite 는 프록시 실패를
+500으로 낸다.
 
 ---
 
@@ -373,9 +412,13 @@ Claude Desktop·Cursor·Zed 등은 **이 슬라이스가 등록해 보지 않았
 | `GET .../export?format=pptx` | **HTTP 200 이고 파일은 나온다.** 던지지 않는다. 슬라이드의 화면 자리에 **"화면 이미지가 실리지 않았습니다"**가 있고 `ppt/media/`가 **비어 있다** |
 | `GET .../export/preview?format=pptx` | **여기에만 이유가 있다** — `screenFailures[].reason`:<br>`브라우저를 띄우지 못했습니다: browserType.launch: Executable doesn't exist at <경로>` |
 | 에디터 화면 | **아무것도 안 보인다.** `apps/web`이 아직 pptx 미리보기를 그리지 않는다 |
+| **서버 로그** | **아무것도 안 남는다**(쟀다 — `chromium`·`browser`·`screen`·`화면` 매치 **0** · `warn`·`error` 줄 **0**). 운영자가 지켜보는 자리에도 안 간다 |
 
-> **그래서 이유는 API 를 직접 부르거나 `wireb`로 내보내야 보인다.** 파일만 받은 사람은
-> *"그림이 없다"*까지만 안다.
+> **그래서 이유는 `GET .../export/preview?format=pptx`를 직접 불러야 보인다.**
+> **`wireb export`로도 안 보인다** — 그 명령은 `/export` 하나만 부르므로 `screenFailures`가
+> **CLI 에 도달할 길이 없다**(`packages/cli/src` 전체에 그 이름이 **0건**이다). 이 기계에서
+> 쟀다: 실패 상태에서도 *"1개 파일을 썼습니다"* · **종료 코드 0** · **표준에러 0 바이트**이고
+> 그림 없는 pptx 가 그대로 나온다. **파일만 받은 사람은 *"그림이 없다"*까지만 안다.**
 
 **오류 문장이 자기가 찾던 경로와 리비전을 그대로 말한다** — 그것이 아래 명령이 채우는
 자리다.
@@ -422,6 +465,19 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 비우면 8.2의 기본 길로 돌아간다. **빈 문자열은 안 준 것과 같다.**
 **고쳤으면 API 서버를 다시 띄워라**(3절) — `.env`는 기동 때만 읽힌다.
 
+> **경로를 틀리게 적으면 브라우저가 없는 것과 똑같이 보인다.** 이 기계에서 쟀다 — 없는 경로를
+> 주면 `export`는 **HTTP 200**에 **8,008 B**, `ppt/media` **0개**, 슬라이드는
+> *"화면 이미지가 실리지 않았습니다"* 뿐이다. **8.1의 「브라우저가 없을 때」와 바이트까지 같다.**
+> **서버 로그에도 안 남는다**(그 요청 뒤 로그에서 `chromium|browser|screen|화면` 매치 **0**,
+> `warn`·`error` 레벨 줄 **0**).
+>
+> 다른 것은 `export/preview`의 `reason` 하나다:
+> *"Failed to launch chromium because executable doesn't exist at `<네가 적은 경로>`"*.
+>
+> **그리고 이 값은 8.2의 캐시를 이긴다** — 캐시가 멀쩡해도 이 경로가 틀리면 실패한다(그 상태로
+> 쟀다). 그래서 **`install chromium`을 다시 돌려도 안 낫는다**(이미 있으니 출력 없이 0이다).
+> **증상이 8.1과 같으면 이 줄부터 지우고 다시 띄워 봐라.**
+
 ### 8.4 알아 둘 것
 
 - **한글 글꼴이 없으면 한 장도 안 그린다.** 두부를 내보내지 않는 판정이고, 미리보기의 `fontWarning`이 그 사실을 낸다. 리눅스 컨테이너에는 보통 없다 — `fonts-noto-cjk` 부류를 넣어야 한다(**이 기계에서는 재지 못했다** — 10절).
@@ -461,6 +517,7 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 | **Claude Code 밖의 MCP 호스트** | 7.2 |
 | **`--with-deps`** | 리눅스에서만 의미가 있어 이 기계에서 안 썼다 |
 | **첫 설치의 내려받기 시간** | 2절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
+| **`SCREEN_CHROMIUM_PATH`의 성공 방향에 자동 케이스가 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. ***"옳은 경로를 주면 그 실행 파일로 뜬다"*는 손으로만 쟀다** — 브라우저 둘이 있어야 세울 수 있는 자리다(이쪽과 리뷰어가 각각 손으로 확인했다) |
 
 ---
 
