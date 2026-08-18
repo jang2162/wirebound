@@ -499,8 +499,14 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 ```
 
 - **`pnpm test`는 실제 Postgres 에 붙는다.** 컨테이너가 healthy 여야 하고 `wirebound_test`가 있어야 한다(6.4).
-- **`pnpm test`는 브라우저를 안 띄운다.** 진짜 브라우저를 재는 것은 `pnpm test:build` 하나이고, 브라우저가 없으면 **건너뛰고 그렇다고 말한다.**
+- **`pnpm test`는 브라우저를 안 띄운다.** 진짜 브라우저를 재는 것은 `pnpm test:build` 하나이고, 브라우저가 없으면 **건너뛰고 그렇다고 말한다**(리뷰어가 빈 캐시로 재서 **종료 0 · 13 skipped** 를 확인했다 — 귀속: 리뷰 §7).
+- **`pnpm test:build`는 시작할 때 패키지를 다시 빌드한다**(`vitest.config.ts`가 *"tsdown 재빌드를 `beforeAll`에서 돈다"*고 적는다). 그래서 넷 중 이것만 다른 셋과 결이 다르다 — 이미 빌드된 자리에서도 **10~13초**였다(이쪽이 세 번, 리뷰어가 두 번 쟀다).
 - 파일 하나만 돌리려면 `pnpm vitest run <경로>`, api 만 돌리려면 `pnpm vitest run --project api`.
+
+> **브라우저가 없을 때 `test:build`가 찍는 줄은 `npx playwright install chromium`을 권한다.**
+> **그 명령을 쓰지 마라** — 이 저장소는 `playwright` 패키지를 일부러 안 들인다(그것이 브라우저를
+> 내려받는 postinstall 을 달고 온다). 브라우저를 넣는 자리는 **8.2** 하나다. 그 안내 문구
+> (`apps/api/build-test/screen-chromium.test.ts`)는 아직 안 맞췄다 — 귀속: 리뷰 §5 C5.
 
 ---
 
