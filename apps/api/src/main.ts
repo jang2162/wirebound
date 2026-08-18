@@ -14,12 +14,24 @@ import { chromiumScreenRenderer } from './services/screen-render-chromium'
  * 스스로 만들면 `pnpm test`의 케이스 전부가 진짜 브라우저를 띄운다 — 그 판정의 근거는
  * `services/screen-render.ts`의 머리말에 있고, **이 줄이 있다는 것을**
  * `test/screen-renderer-census.test.ts`가 소스에서 센다.
+ *
+ * **그래서 브라우저 실행 파일을 넘기는 자리도 여기뿐이다.** `chromiumScreenRenderer`는
+ * `executablePath` 옵션을 처음부터 들고 있었는데 그것을 채우는 자가 없어 **바깥에서 닿을
+ * 수 없었다** — `SCREEN_CHROMIUM_PATH`가 그 길이다(`config.ts`의 주석이 왜 필요한지 든다).
  */
 async function main(): Promise<void> {
   const config = loadConfig()
   const pool = createPool(config.databaseUrl)
   const db = createDb(pool)
-  const app = await buildApp({ db, config, screenRenderer: chromiumScreenRenderer() })
+  const app = await buildApp({
+    db,
+    config,
+    // **`SCREEN_CHROMIUM_PATH`가 비면 인자를 안 준다** — 그때 `playwright-core`가 자기
+    // 캐시에서 찾는 것이 기본 길이다. 값이 있으면 그 실행 파일을 쓴다(`ApiConfig`의 주석).
+    screenRenderer: chromiumScreenRenderer(
+      config.screenChromiumPath === undefined ? undefined : { executablePath: config.screenChromiumPath },
+    ),
+  })
 
   async function shutdown(signal: NodeJS.Signals): Promise<void> {
     app.log.info(`${signal} 수신 — 서버를 종료합니다`)

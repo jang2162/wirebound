@@ -14,6 +14,16 @@ export interface ApiConfig {
   sessionTtlHours: number
   passwordScryptN: number
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent'
+  /**
+   * PPTX 화면 이미지를 그릴 브라우저 실행 파일. **비면 `undefined`다** —
+   * 그때 `playwright-core`가 자기 캐시(`~/.cache/ms-playwright` 부류)에서 찾는다.
+   *
+   * **이 값이 있어야 기계에 이미 있는 브라우저를 쓸 수 있다.** `playwright-core`는
+   * 실행 파일을 가리키는 환경변수를 **안 낸다**(1.62.1에서 쟀다 — `PLAYWRIGHT_BROWSERS_PATH`는
+   * *캐시 디렉터리*라 그 안이 playwright의 `chromium_headless_shell-<리비전>/…` 배치여야
+   * 한다). 그래서 배포판 chromium(`/usr/bin/chromium` 부류)을 쓰는 길이 이것뿐이다.
+   */
+  screenChromiumPath: string | undefined
 }
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const
@@ -52,6 +62,7 @@ const EnvSchema = z.object({
   SESSION_TTL_HOURS: numericEnv('SESSION_TTL_HOURS').default(720),
   PASSWORD_SCRYPT_N: numericEnv('PASSWORD_SCRYPT_N').default(32768),
   LOG_LEVEL: z.enum(LOG_LEVELS).optional(),
+  SCREEN_CHROMIUM_PATH: z.string().optional(),
 })
 
 /**
@@ -78,5 +89,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     sessionTtlHours: data.SESSION_TTL_HOURS,
     passwordScryptN: data.PASSWORD_SCRYPT_N,
     logLevel,
+    // **빈 문자열은 "안 줬다"와 같은 뜻이다.** `.env.example`이 주석으로 든 줄을 사람이
+    // 주석만 풀고 값을 안 채우는 자리이고, 그대로 넘기면 `executablePath: ''`가 되어
+    // *"Executable doesn't exist at "*라는 끝이 잘린 문장이 나온다.
+    screenChromiumPath:
+      data.SCREEN_CHROMIUM_PATH === undefined || data.SCREEN_CHROMIUM_PATH === ''
+        ? undefined
+        : data.SCREEN_CHROMIUM_PATH,
   }
 }
