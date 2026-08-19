@@ -1,21 +1,29 @@
 /**
  * **테스트 DB 를 워크트리마다 가를 수 있는가**(2026-08-19 D3).
  *
- * 이 자를 세운 근거는 실측이다(같은 날 보고 §2.4). 워크트리 둘이 **같은** 테스트 DB를
- * 보며 동시에 `vitest run --project api`를 돌리자:
+ * 이 자를 세운 근거는 실측이다. 워크트리 둘이 **같은** 테스트 DB를 보며 동시에
+ * `vitest run --project api`를 돌리면 **둘 다 종료 코드 1**이고, 가르면 **둘 다 종료 0**에
+ * 전 파일·전 케이스 통과다. 구현자와 리뷰어가 각각 쟀고 **결론이 같다.**
  *
- * | | 파일 | 케이스 | 종료 코드 |
- * |---|---|---|---|
- * | 공유 A | **16 실패** / 52 통과 | **92 실패** / 1226 통과 | 1 |
- * | 공유 B | **10 실패** / 58 통과 | **53 실패** / 1265 통과 | 1 |
- * | 가른 A | 68 통과 | 1318 통과 | **0** |
- * | 가른 B | 68 통과 | 1318 통과 | **0** |
+ * **깨지는 개수는 적지 않는다 — 판마다 다르다.** 경쟁 상태라 그렇다: 구현자 판은
+ * 16파일/92케이스와 10파일/53케이스였고 리뷰어 판은 13파일/57케이스와 18파일/82케이스였다
+ * (귀속: 리뷰 §5). 꼴도 갈린다 — 구현자 판에는 `relation "themes" does not exist`가 29건
+ * 났는데 리뷰어 판에는 **한 번도 안 났다**. **안 낡는 값은 종료 코드뿐이다.**
  *
- * 벽시계는 가른 쪽이 오히려 짧았다(91.2s·91.1s vs 98.1s·91.8s) — 값을 가르는 비용이
- * 사실상 0이라 `CLAUDE.md`의 *"api 테스트를 동시에 돌리지 않는다"*가 풀린다.
+ * 비용도 재라: 리뷰어 판에서 **단독 실행 94.02초** vs **동시 두 판이 각각 90.9초**다
+ * (귀속: 리뷰 §5). 공유한 판이 더 빨라 보이는 것은 **실패하는 판이라 일이 덜 들어서**이므로
+ * 비교 기준이 못 된다.
  */
-import { describe, expect, it } from 'vitest'
-import { DEFAULT_TEST_DATABASE_URL, resolveTestDatabaseUrl } from './test-database-url'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import {
+  DEFAULT_TEST_DATABASE_URL,
+  readApiEnvFile,
+  resolveTestDatabaseUrl,
+  resolveTestDatabaseUrlFrom,
+} from './test-database-url'
 
 const A = 'postgres://wirebound:wirebound@127.0.0.1:5433/wb_feat_a'
 const B = 'postgres://wirebound:wirebound@127.0.0.1:5433/wb_feat_b'
@@ -56,5 +64,76 @@ describe('TEST_DATABASE_URL 은 셸 → apps/api/.env → 기본값 순서로 �
     expect(resolveTestDatabaseUrl({ fileEnv: { TEST_DATABASE_URL: A } })).not.toBe(
       resolveTestDatabaseUrl({ fileEnv: { TEST_DATABASE_URL: B } }),
     )
+  })
+})
+
+/**
+ * **여기서부터가 배선이다.** 위의 케이스들은 *"주면 순서대로 고른다"*를 재고, 아래는
+ * *"진짜 파일에서 읽어다 그 순서에 넣는다"*를 잰다.
+ *
+ * 앞 판에는 이 자가 없었다. 리뷰가 `helpers.ts`의 조립 한 줄에서 `fileEnv` 인자를 빼자
+ * **게이트 넷이 전부 초록인 채로** 스위트가 조용히 기본 DB 를 먹었다(귀속: 리뷰 §9 R4).
+ * 순수 규칙 쪽에 같은 변이를 심으면 죽는다 — **덮인 쪽에만 자가 있었다.**
+ */
+describe('배선 — 진짜 파일을 읽어 그 순서에 넣는가', () => {
+  let dir: string
+  let envFile: string
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'wb-env-'))
+    envFile = join(dir, '.env')
+  })
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('파일에 적힌 값을 실제로 읽어 온다 — 기본값이 아니다', () => {
+    writeFileSync(envFile, `TEST_DATABASE_URL=${A}\nPORT=3011\n`)
+    expect(resolveTestDatabaseUrlFrom({}, envFile)).toBe(A)
+  })
+
+  it('셸이 그 파일을 이긴다 — 두 실행자가 같은 순서를 지켜야 한다', () => {
+    writeFileSync(envFile, `TEST_DATABASE_URL=${A}\n`)
+    expect(resolveTestDatabaseUrlFrom({ TEST_DATABASE_URL: B }, envFile)).toBe(B)
+  })
+
+  it('파일이 없으면 기본값이다 — .env 를 안 만든 사람이 깨지면 안 된다 (D6)', () => {
+    expect(resolveTestDatabaseUrlFrom({}, join(dir, '없는파일.env'))).toBe(DEFAULT_TEST_DATABASE_URL)
+  })
+
+  it('그 키가 없는 파일이면 기본값이다', () => {
+    writeFileSync(envFile, 'DATABASE_URL=postgres://wirebound:wirebound@127.0.0.1:5433/wirebound\nPORT=3001\n')
+    expect(resolveTestDatabaseUrlFrom({}, envFile)).toBe(DEFAULT_TEST_DATABASE_URL)
+  })
+
+  it('**운영 DATABASE_URL 은 안 건너온다** — 파일에서 가져가는 키가 하나뿐이다', () => {
+    const 운영 = 'postgres://wirebound:wirebound@127.0.0.1:5433/wirebound'
+    writeFileSync(envFile, `DATABASE_URL=${운영}\n`)
+    // api 테스트 열넷이 projects·users 를 범위 없이 지운다. 이 한 줄이 그 사고를 막는 전부다.
+    expect(resolveTestDatabaseUrlFrom({}, envFile)).not.toBe(운영)
+    expect(resolveTestDatabaseUrlFrom({}, envFile)).toBe(DEFAULT_TEST_DATABASE_URL)
+  })
+
+  it('readApiEnvFile 이 진짜로 파일을 읽는다 — 빈 객체만 내면 위 케이스가 통째로 헛돈다', () => {
+    writeFileSync(envFile, 'PORT=3011\nTEST_DATABASE_URL=x\n')
+    expect(readApiEnvFile(envFile)).toMatchObject({ PORT: '3011', TEST_DATABASE_URL: 'x' })
+    expect(readApiEnvFile(join(dir, '없는파일.env'))).toEqual({})
+  })
+})
+
+describe('helpers.ts 가 그 배선을 지나는가 — 소스에서 센다', () => {
+  const source = readFileSync(new URL('./helpers.ts', import.meta.url), 'utf8')
+
+  it('TEST_DATABASE_URL 을 `resolveTestDatabaseUrlFrom(process.env)` 로 정한다', () => {
+    expect(source).toContain('export const TEST_DATABASE_URL = resolveTestDatabaseUrlFrom(process.env)')
+  })
+
+  it('그 자리에서 순서를 다시 조립하지 않는다 — 조립이 둘이면 한쪽만 고쳐진다', () => {
+    expect(source).not.toContain('fileEnv')
+    expect(source).not.toContain('shellEnv')
+  })
+
+  it('기본값 문자열을 여기 베껴 두지 않는다', () => {
+    expect(source).not.toContain('wirebound_test')
   })
 })

@@ -44,11 +44,36 @@ export function resolveTestDatabaseUrl(sources: TestDatabaseUrlSources = {}): st
   )
 }
 
-/** `apps/api/.env`를 읽는다. **없으면 빈 객체다** — 안 만든 사람은 오늘과 같이 돈다. */
-export function readApiEnvFile(): Record<string, string | undefined> {
+/**
+ * `apps/api/.env`를 읽는다. **없으면 빈 객체다** — 안 만든 사람은 오늘과 같이 돈다.
+ *
+ * **경로를 인자로 받는다.** 기본값이 진짜 자리이고, 케이스는 임시 파일을 준다 —
+ * 그래야 *"읽어서 순서대로 고른다"*는 **합쳐진 동작**에 자를 댈 수 있다.
+ */
+export function readApiEnvFile(envFileUrl: URL | string = API_ENV_URL): Record<string, string | undefined> {
   try {
-    return parseEnv(readFileSync(API_ENV_URL, 'utf8')) as Record<string, string | undefined>
+    return parseEnv(readFileSync(envFileUrl, 'utf8')) as Record<string, string | undefined>
   } catch {
     return {}
   }
+}
+
+/**
+ * **읽기와 순서를 합친 자리.** `helpers.ts`가 부르는 것이 이것 하나다.
+ *
+ * 왜 따로 있나: 앞 판은 `helpers.ts`가 `resolveTestDatabaseUrl({shellEnv, fileEnv: readApiEnvFile()})`를
+ * **직접 조립**했고, 그 조립 한 줄에는 자가 없었다. 리뷰가 그 자리에 변이를 심어
+ * (`fileEnv` 인자 제거) **게이트 넷이 전부 초록인 채로** 스위트가 조용히
+ * `wirebound_test`를 먹게 만들었다 — 이 슬라이스가 산 *"워크트리마다 테스트 DB가
+ * 갈린다"*가 통째로 사라지는데 아무도 안 죽었다(귀속: 리뷰 §9 R4).
+ *
+ * **그래서 조립을 함수로 내렸다.** 이제 그 변이는 이 함수 안에서만 표현되고
+ * `test-database-url.test.ts`의 임시 파일 케이스가 그것을 문다. `helpers.ts`에 남은
+ * 한 줄은 인구조사가 못박는다.
+ */
+export function resolveTestDatabaseUrlFrom(
+  shellEnv: Record<string, string | undefined>,
+  envFileUrl: URL | string = API_ENV_URL,
+): string {
+  return resolveTestDatabaseUrl({ shellEnv, fileEnv: readApiEnvFile(envFileUrl) })
 }

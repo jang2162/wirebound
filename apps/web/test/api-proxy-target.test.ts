@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_API_PORT, resolveApiPort, resolveApiProxyTarget } from '../config/api-proxy-target'
+// `?raw`는 vite가 파일 원문을 문자열로 넣어 준다 — `shell-css.test.ts`·`store-access.test.ts`와
+// 같은 관용구다. 이 파일은 Node 타입이 없는 브라우저 프로그램에 살므로 `node:fs`를 못 쓴다.
+import viteConfigSource from '../vite.config.ts?raw'
 
 /**
  * 프록시 대상이 **한 자리에서 오는지**를 잰다.
@@ -45,5 +48,70 @@ describe('프록시 대상은 apps/api/.env 의 PORT 한 자리에서 온다', (
   it('대상 호스트는 루프백이다 — apps/api 의 HOST 를 따라가지 않는다', () => {
     // HOST 의 흔한 값 `0.0.0.0`은 바인딩 주소이지 붙을 주소가 아니다.
     expect(resolveApiProxyTarget({ fileEnv: { PORT: '3011', HOST: '0.0.0.0' } })).toBe('http://127.0.0.1:3011')
+  })
+})
+
+/**
+ * **여기서부터가 배선이다.** 위의 케이스들은 규칙(`resolveApiPort`)을 재고, 아래는
+ * **그 규칙에 무엇을 넣어 프록시에 꽂는가**를 잰다.
+ *
+ * 앞 판에는 이 자가 없었다. 리뷰가 `vite.config.ts`의 조립 한 줄에서 `shellEnv`와
+ * `fileEnv`를 뒤집자 **게이트 넷이 전부 초록인 채로** 파일이 셸을 이기게 됐다
+ * (귀속: 리뷰 §9 R3 — `.env`에 `PORT=3063`, 셸에 `PORT=3099`를 건 상태에서
+ * 원본은 `3099`, 변이는 `3063`을 프록시 대상으로 찍었다). **D1이 없애려던 것이
+ * 정확히 그 어긋남이다.**
+ *
+ * **규칙이 맞아도 그것을 안 꽂으면 교차가 되살아난다** — 이 슬라이스의 요점이 배선이다.
+ */
+describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
+  /** `resolveApiProxyTarget({ ... })`의 인자 객체를 키 → 값으로 읽는다. */
+  function wiring(): Record<string, string> {
+    const match = viteConfigSource.match(/resolveApiProxyTarget\(\{([^}]*)\}\)/)
+    if (match?.[1] === undefined) {
+      return {}
+    }
+    return Object.fromEntries(
+      match[1]
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+        .map((entry) => {
+          const [key, ...rest] = entry.split(':')
+          return [(key ?? '').trim(), rest.join(':').trim()]
+        }),
+    )
+  }
+
+  it('자가 진짜 소스를 읽는다 — `?raw` 가 빈 문자열이면 아래가 통째로 헛돈다', () => {
+    // 실제로 난 사고다: `shell.css?raw`가 빈 문자열이라 심기 37개가 전부 초록이었다
+    // (`store-access.test.ts` 머리말). 그래서 이 카나리아가 먼저 온다.
+    expect(viteConfigSource.length).toBeGreaterThan(200)
+    expect(viteConfigSource).toContain("export default defineConfig(")
+    expect(Object.keys(wiring()).sort()).toEqual(['fileEnv', 'shellEnv'])
+  })
+
+  it('**셸을 `shellEnv` 에, 파일을 `fileEnv` 에 넣는다** — 뒤집히면 파일이 셸을 이긴다', () => {
+    expect(wiring().shellEnv).toBe('process.env')
+    expect(wiring().fileEnv).toBe('readApiEnvFile()')
+  })
+
+  it('둘을 바꿔 넣지 않는다 — 뒤집기를 양쪽에서 못박는다', () => {
+    expect(wiring().shellEnv).not.toContain('readApiEnvFile')
+    expect(wiring().fileEnv).not.toBe('process.env')
+  })
+
+  it('계산한 값이 **실제로 프록시 대상이 된다** — 구해 놓고 안 쓰면 소용이 없다', () => {
+    expect(viteConfigSource).toMatch(/const apiProxyTarget = resolveApiProxyTarget\(/)
+    expect(viteConfigSource).toMatch(/'\/api':\s*\{\s*target:\s*apiProxyTarget\b/)
+  })
+
+  it('대상을 수로 박아 두지 않는다 — 이 슬라이스가 걷어 낸 것이 그것이다', () => {
+    const proxyLine = viteConfigSource.split('\n').find((line) => line.includes("'/api':")) ?? ''
+    expect(proxyLine).not.toMatch(/\d{4}/)
+  })
+
+  it('뜰 때 그 대상을 말한다 — 두 터미널을 나란히 놓은 사람이 눈으로 가른다 (D4)', () => {
+    expect(viteConfigSource).toContain('API 프록시')
+    expect(viteConfigSource).toMatch(/API 프록시[^\n]*\$\{apiProxyTarget\}/)
   })
 })

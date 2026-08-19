@@ -1,7 +1,7 @@
 import { createDb, createPool } from '../src/db/client'
-import { describeDatabaseTarget } from '../src/db/describe-target'
 import { migrateToLatest, migrateToNone } from '../src/db/migrate'
 import { TEST_DATABASE_URL } from './helpers'
+import { missingDatabaseHint } from './missing-database-hint'
 
 /**
  * vitest가 api 프로젝트 전체 실행 전 딱 한 번 부른다.
@@ -21,30 +21,21 @@ export default async function setup(): Promise<void> {
     await migrateToNone(db)
     await migrateToLatest(db)
   } catch (error) {
-    // **DB가 없을 때 고치는 한 줄을 여기 붙인다.** 워크트리마다 테스트 DB를 가르기로
+    // **DB가 없을 때 고치는 한 줄을 붙인다.** 워크트리마다 테스트 DB를 가르기로
     // 하면서(2026-08-19 D3) *"없는 DB를 가리킨 채 돌린다"*가 흔한 첫걸음이 됐다.
-    // Postgres 원문(`database "…" does not exist`, SQLSTATE 3D000)은 이름은 말하지만
-    // **어떻게 만드는지는 안 말한다** — 볼륨 초기화 스크립트가 처음에만 도는 함정과
-    // 같은 부류다(최상위 README §6.4).
-    throw new Error(`${missingDatabaseHint(error) ?? '테스트 DB 준비에 실패했습니다'}`, { cause: error })
+    // Postgres 원문(`database "…" does not exist`)은 이름은 말하지만 **어떻게 만드는지는
+    // 안 말한다** — 볼륨 초기화 스크립트가 처음에만 도는 함정과 같은 부류다(README §6.4).
+    //
+    // **문구를 만드는 자는 `missing-database-hint.ts`이고 그쪽에 자가 있다.** 이 `catch`는
+    // 마이그레이션이 실패해야만 지나는 길이라 케이스가 여기 못 닿는다 — 앞 판이 여기 두었다가
+    // 변이 둘이 살아남았다(귀속: 리뷰 §9 R5·R6).
+    //
+    // `cause`로 원문을 매단다. `3D000`이 아닌 실패는 겉면이 일반 문장이지만
+    // `Caused by:`가 원인을 그대로 낸다(리뷰가 비밀번호 오류로 확인했다 — 리뷰 §4.2).
+    throw new Error(missingDatabaseHint(error, TEST_DATABASE_URL) ?? '테스트 DB 준비에 실패했습니다', {
+      cause: error,
+    })
   } finally {
     await db.destroy()
   }
-}
-
-/** `3D000`(존재하지 않는 DB)일 때만 조치를 붙인다. 다른 실패에까지 붙이면 엉뚱한 곳을 보게 된다. */
-function missingDatabaseHint(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null || (error as { code?: unknown }).code !== '3D000') {
-    return undefined
-  }
-  // `describeDatabaseTarget`은 `호스트:포트/이름`을 내므로 앞 조각을 떼면 이름이다.
-  // **그 함수를 거치는 이유는 퍼센트 디코딩이다** — 안 거치면 한글 DB 이름이
-  // `wb_%EC%95%84…`로 나와 **붙여넣을 수 없는 명령**을 권하게 된다(실측).
-  const name = describeDatabaseTarget(TEST_DATABASE_URL).split('/').slice(1).join('/')
-  return [
-    `테스트 DB "${name}" 가 없습니다.`,
-    '컨테이너 안에서 한 줄로 만든다:',
-    `  docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE ${name};'`,
-    'TEST_DATABASE_URL 은 셸 → apps/api/.env → 기본값 순서로 정해진다.',
-  ].join('\n')
 }
