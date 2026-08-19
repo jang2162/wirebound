@@ -3,6 +3,25 @@ import { DEFAULT_API_PORT, resolveApiPort, resolveApiProxyTarget } from '../conf
 // `?raw`는 vite가 파일 원문을 문자열로 넣어 준다 — `shell-css.test.ts`·`store-access.test.ts`와
 // 같은 관용구다. 이 파일은 Node 타입이 없는 브라우저 프로그램에 살므로 `node:fs`를 못 쓴다.
 import viteConfigSource from '../vite.config.ts?raw'
+// **주석을 걷고 센다.** 안 걷으면 옳은 줄을 주석에 남기고 아래에서 뒤집는 우회가 통째로
+// 지나간다 — 리뷰어가 실측했다(귀속: 리뷰 델타 W4: `.env`의 3067 이 셸의 3099 를 이기는데
+// 13/13 통과). 이 저장소의 인구조사가 쓰는 자가 이미 있다.
+import { stripComments } from './store-access-guard'
+
+/**
+ * `apps/web` 옆의 api 패키지. **`vite.config.ts`가 `'../api/.env'`로 타는 그 상대 홉이
+ * 실재하는지**를 이 glob 이 증명한다 — 여기 기준은 `apps/web/test/`라 한 겹이 더 붙는다.
+ * 경로가 어긋나면 이 자리가 빈 객체가 된다.
+ *
+ * **`.env.example` 로는 못 잰다** — vite 가 `.env*` 를 `server.fs.deny` 로 막아
+ * `Denied ID …/.env.example?raw` 로 죽는다(쟀다). 그래서 같은 디렉터리의 추적 파일 중
+ * 가장 안 움직이는 것을 쓴다.
+ */
+const API_PACKAGE = import.meta.glob('../../api/package.json', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>
 
 /**
  * 프록시 대상이 **한 자리에서 오는지**를 잰다.
@@ -64,9 +83,12 @@ describe('프록시 대상은 apps/api/.env 의 PORT 한 자리에서 온다', (
  * **규칙이 맞아도 그것을 안 꽂으면 교차가 되살아난다** — 이 슬라이스의 요점이 배선이다.
  */
 describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
+  /** **주석을 걷은** 원문. 아래 케이스는 전부 이것만 본다. */
+  const source = stripComments(viteConfigSource)
+
   /** `resolveApiProxyTarget({ ... })`의 인자 객체를 키 → 값으로 읽는다. */
   function wiring(): Record<string, string> {
-    const match = viteConfigSource.match(/resolveApiProxyTarget\(\{([^}]*)\}\)/)
+    const match = source.match(/resolveApiProxyTarget\(\{([^}]*)\}\)/)
     if (match?.[1] === undefined) {
       return {}
     }
@@ -86,7 +108,9 @@ describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
     // 실제로 난 사고다: `shell.css?raw`가 빈 문자열이라 심기 37개가 전부 초록이었다
     // (`store-access.test.ts` 머리말). 그래서 이 카나리아가 먼저 온다.
     expect(viteConfigSource.length).toBeGreaterThan(200)
-    expect(viteConfigSource).toContain("export default defineConfig(")
+    expect(source).toContain('export default defineConfig(')
+    // 호출이 **하나뿐**이어야 한다 — 둘이면 첫 번째만 보고 두 번째가 조용히 이긴다.
+    expect(source.match(/resolveApiProxyTarget\(/g)).toHaveLength(1)
     expect(Object.keys(wiring()).sort()).toEqual(['fileEnv', 'shellEnv'])
   })
 
@@ -101,17 +125,47 @@ describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
   })
 
   it('계산한 값이 **실제로 프록시 대상이 된다** — 구해 놓고 안 쓰면 소용이 없다', () => {
-    expect(viteConfigSource).toMatch(/const apiProxyTarget = resolveApiProxyTarget\(/)
-    expect(viteConfigSource).toMatch(/'\/api':\s*\{\s*target:\s*apiProxyTarget\b/)
+    expect(source).toMatch(/const apiProxyTarget = resolveApiProxyTarget\(/)
+    expect(source).toMatch(/'\/api':\s*\{\s*target:\s*apiProxyTarget\b/)
   })
 
   it('대상을 수로 박아 두지 않는다 — 이 슬라이스가 걷어 낸 것이 그것이다', () => {
-    const proxyLine = viteConfigSource.split('\n').find((line) => line.includes("'/api':")) ?? ''
+    const proxyLine = source.split('\n').find((line) => line.includes("'/api':")) ?? ''
     expect(proxyLine).not.toMatch(/\d{4}/)
   })
 
   it('뜰 때 그 대상을 말한다 — 두 터미널을 나란히 놓은 사람이 눈으로 가른다 (D4)', () => {
-    expect(viteConfigSource).toContain('API 프록시')
-    expect(viteConfigSource).toMatch(/API 프록시[^\n]*\$\{apiProxyTarget\}/)
+    expect(source).toContain('API 프록시')
+    expect(source).toMatch(/API 프록시[^\n]*\$\{apiProxyTarget\}/)
+  })
+})
+
+/**
+ * **배선이 가리키는 자리 자체를 잰다** — api 쪽 `test-database-url.test.ts`의 같은 절과 짝이다.
+ *
+ * 리뷰어가 열어 뒀다(귀속: 리뷰 델타 W6): `new URL('../api/.env', import.meta.url)`을 없는
+ * 파일로 바꿔도 **13/13 통과**였고, 행동으로는 `.env`가 무시되어 **에디터가 3001로 조용히
+ * 물러난다.** 워크트리를 여럿 띄운 사람에게 그것은 §2.2의 교차가 그대로 되살아나는 것이다.
+ *
+ * 파일이 없는 것은 정상이므로(D6) 재는 축은 **가리키는 자리**다.
+ */
+describe('배선이 가리키는 자리', () => {
+  const source = stripComments(viteConfigSource)
+
+  it('`apps/api/.env` 를 상대 경로로 탄다 — 그 한 줄이 바뀌면 여기서 걸린다', () => {
+    expect(source).toContain("new URL('../api/.env', import.meta.url)")
+  })
+
+  it('그 상대 홉이 **실재하는 api 패키지**로 간다 — 문자열만 맞는 것이 아니다', () => {
+    // `.env` 자체는 gitignore 라 없을 수 있다(D6). 디렉터리가 맞는지만 본다.
+    const [, manifest] = Object.entries(API_PACKAGE)[0] ?? []
+    expect(manifest).toBeDefined()
+    expect(manifest).toContain('"@wirebound/api"')
+  })
+
+  it('그 파일을 읽는 자가 하나뿐이다 — 두 자리에서 읽으면 한쪽만 고쳐진다', () => {
+    expect(source.match(/new URL\('\.\.\/api\/\.env'/g)).toHaveLength(1)
+    // 선언(`function readApiEnvFile()`)은 빼고 **부르는 자리**만 센다.
+    expect(source.match(/(?<!function )readApiEnvFile\(\)/g)).toHaveLength(1)
   })
 })

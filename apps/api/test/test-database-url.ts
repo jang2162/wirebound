@@ -21,8 +21,17 @@ import { parseEnv } from 'node:util'
  */
 export const DEFAULT_TEST_DATABASE_URL = 'postgres://wirebound:wirebound@127.0.0.1:5433/wirebound_test'
 
-/** `apps/api/.env` — 이 앱의 값이 사는 한 자리. */
-const API_ENV_URL = new URL('../.env', import.meta.url)
+/**
+ * `apps/api/.env` — 이 앱의 값이 사는 한 자리.
+ *
+ * **내보내는 이유는 자를 대기 위해서다.** 이 상대 경로가 틀어지면 파일이 안 읽히고
+ * 스위트가 **말없이 공용 `wirebound_test`로 돌아간다** — 이 슬라이스가 없애려던
+ * *"공유 자원으로 조용히 떨어지는 것"* 그 자체다. 그런데 **파일이 없는 것 자체는
+ * 정상이므로**(D6 — `.env`를 안 만든 사람이 깨지면 안 된다) 런타임에서 시끄럽게 할 수는
+ * 없다. 가를 수 있는 것은 **가리키는 자리**다: 파일은 없어도 되지만 **디렉터리는
+ * `apps/api` 여야 한다.** `test-database-url.test.ts`가 그것을 잰다.
+ */
+export const API_ENV_URL = new URL('../.env', import.meta.url)
 
 export interface TestDatabaseUrlSources {
   /** 셸 환경변수. **파일을 이긴다.** */

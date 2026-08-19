@@ -14,16 +14,18 @@
  * (귀속: 리뷰 §5). 공유한 판이 더 빨라 보이는 것은 **실패하는 판이라 일이 덜 들어서**이므로
  * 비교 기준이 못 된다.
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  API_ENV_URL,
   DEFAULT_TEST_DATABASE_URL,
   readApiEnvFile,
   resolveTestDatabaseUrl,
   resolveTestDatabaseUrlFrom,
 } from './test-database-url'
+import { stripComments } from './source-census'
 
 const A = 'postgres://wirebound:wirebound@127.0.0.1:5433/wb_feat_a'
 const B = 'postgres://wirebound:wirebound@127.0.0.1:5433/wb_feat_b'
@@ -122,7 +124,9 @@ describe('배선 — 진짜 파일을 읽어 그 순서에 넣는가', () => {
 })
 
 describe('helpers.ts 가 그 배선을 지나는가 — 소스에서 센다', () => {
-  const source = readFileSync(new URL('./helpers.ts', import.meta.url), 'utf8')
+  // **주석을 걷고 센다.** 안 걷으면 옳은 줄을 주석에 남기고 아래에서 경로를 바꾸는 우회가
+  // 지나간다(귀속: 리뷰 델타 R4e — 15/15 통과했다).
+  const source = stripComments(readFileSync(new URL('./helpers.ts', import.meta.url), 'utf8'))
 
   it('TEST_DATABASE_URL 을 `resolveTestDatabaseUrlFrom(process.env)` 로 정한다', () => {
     expect(source).toContain('export const TEST_DATABASE_URL = resolveTestDatabaseUrlFrom(process.env)')
@@ -135,5 +139,37 @@ describe('helpers.ts 가 그 배선을 지나는가 — 소스에서 센다', ()
 
   it('기본값 문자열을 여기 베껴 두지 않는다', () => {
     expect(source).not.toContain('wirebound_test')
+  })
+})
+
+/**
+ * **배선이 가리키는 자리 자체를 잰다.**
+ *
+ * 리뷰어가 이 자리를 열어 뒀다(귀속: 리뷰 델타 R4c·R4d): `API_ENV_URL`을 없는 파일이나
+ * 엉뚱한 진짜 파일로 바꿔도 **api 프로젝트가 전부 통과하고 종료 0**이며, 행동으로는
+ * `.env`가 무시되어 **스위트가 조용히 공용 `wirebound_test`를 먹는다.**
+ *
+ * **그것이 이 슬라이스의 부류다** — 없애려던 것이 *"공유 자원으로 조용히 떨어지는 것"*이고
+ * 이건 그 정의에 그대로 맞는다. 다만 **런타임에서 시끄럽게 할 수는 없다**: 파일이 없는 것은
+ * D6이 지키기로 한 정상 상태다(`.env`를 안 만든 사람은 기본값으로 돌아야 한다).
+ *
+ * **그래서 가르는 축을 바꿨다.** *"파일이 있나"*가 아니라 ***"가리키는 디렉터리가
+ * `apps/api` 인가"*** 다. 파일은 없어도 되고 디렉터리는 틀리면 안 된다 — 자연히 깨지는 길이
+ * 그 파일을 옮기는 리팩터이므로, 옮긴 사람이 여기서 걸린다.
+ */
+describe('배선이 가리키는 자리', () => {
+  it('`apps/api/.env` 를 가리킨다 — 파일 이름과 디렉터리 둘 다', () => {
+    expect(API_ENV_URL.pathname.endsWith('/apps/api/.env')).toBe(true)
+  })
+
+  it('그 디렉터리가 **실재하는 api 패키지**다 — 문자열만 맞는 것이 아니다', () => {
+    // `.env` 자체는 gitignore 라 없을 수 있다(D6). 옆의 `.env.example` 은 추적되므로 늘 있다.
+    expect(existsSync(new URL('.env.example', API_ENV_URL))).toBe(true)
+    expect(existsSync(new URL('package.json', API_ENV_URL))).toBe(true)
+  })
+
+  it('읽는 자가 기본값으로 그 경로를 쓴다 — 인자를 안 주면 진짜 자리를 봐야 한다', () => {
+    // 인자를 주는 갈래는 위 임시 파일 케이스가 잰다. 여기서 재는 것은 **기본값**이다.
+    expect(readApiEnvFile()).toEqual(readApiEnvFile(API_ENV_URL))
   })
 })

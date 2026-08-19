@@ -33,6 +33,7 @@ import {
   withRealApi,
   type TestContext,
 } from './helpers'
+import { stripComments } from './source-census'
 
 const db = getTestDb()
 
@@ -154,7 +155,9 @@ describe('실커밋 하네스를 쓰는 파일은 전부 청소를 건다', () =
   const testDir = new URL('.', import.meta.url)
   const sources = readdirSync(testDir)
     .filter((name) => name.endsWith('.test.ts'))
-    .map((name) => ({ name, source: readFileSync(new URL(name, testDir), 'utf8') }))
+    // **주석을 걷는다.** 안 걷으면 청소를 주석 안에만 둔 파일이 "건다"로 세어진다
+    // (귀속: 리뷰 델타 B4 — D2 가 이미 든 함정과 같은 부류다).
+    .map((name) => ({ name, source: stripComments(readFileSync(new URL(name, testDir), 'utf8')) }))
 
   it('센 것이 비어 있지 않다 — 디렉터리를 못 읽으면 아래가 통째로 헛돈다', () => {
     expect(sources.length).toBeGreaterThan(10)
