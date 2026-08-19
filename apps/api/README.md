@@ -29,6 +29,22 @@ pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린
 값을 덮어쓰지 않는다** — 둘 중 하나만 있어도, 둘 다 있어도 안전하다). 값 목록과 기본값은
 `.env.example`에 있고, 검증하는 자는 `src/config.ts`의 `EnvSchema` 하나다.
 
+**그 플래그가 안 붙는 자리가 둘이고, 둘 다 이 파일을 따로 읽는다.**
+
+| 누가 | 왜 안 붙나 | 어떻게 읽나 |
+|---|---|---|
+| `apps/web`의 vite | 다른 앱이다 | `vite.config.ts`가 `node:util`의 `parseEnv`로 읽어 **`PORT`만** 쓴다. 규칙은 `apps/web/config/api-proxy-target.ts` |
+| `pnpm test`의 vitest | **루트에서 도는 vitest**라 이 패키지의 스크립트를 안 지난다 | `test/test-database-url.ts`가 같은 수단으로 읽어 **`TEST_DATABASE_URL`만** 쓴다 |
+
+**둘 다 셸이 파일을 이기는 순서를 지킨다** — 그래야 `PORT=3011 …`을 건 사람이 서버와
+에디터에서 같은 답을 본다. **가져가는 키를 하나씩으로 좁힌 것은 안전장치다**: 이 파일을
+통째로 테스트 프로세스의 `process.env`에 얹으면 운영 `DATABASE_URL`이 거기 들어가는데,
+아래 *"테스트"* 절이 말하는 **범위 없는 `DELETE`** 가 그때 무엇을 지우는지는 적을 필요도 없다.
+
+**서버는 뜰 때 자기가 보는 DB를 말한다** — `이 서버가 보는 DB: 127.0.0.1:5433/wirebound`.
+`호스트:포트/이름`뿐이고 **자격 문자열은 안 찍는다**(`src/db/describe-target.ts`). 워크트리를
+여럿 띄운 사람이 터미널을 나란히 놓고 가르는 값이 이것이다.
+
 ### 왜 `pnpm build` 가 이 서버의 전제인가
 
 **최상위 [`README.md`](../../README.md) §6.1 이 그 자리다** — 증상 문장·원인(`tsx`가 `exports`를
@@ -50,11 +66,27 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 감싸고 끝나면 롤백하므로 그 테스트가 커밋하는 데이터는 없다 — 다음 테스트는 항상
 깨끗한 스키마에서 시작한다.
 
-**예외가 하나 있다: `test/revisions-concurrency.test.ts`는 실제로 커밋한다.**
+**예외가 있다: `withRealApi` 하네스를 쓰는 파일들은 실제로 커밋한다.**
 `withApi`는 커넥션 하나·트랜잭션 하나 안에서 도므로 그 안에서 요청을 겹쳐도 전부
 직렬화된다 — 행 잠금과 `seq` 채번의 원자성은 **여러 커넥션이 실제로 커밋해야만**
-검증된다. 그 파일은 각 테스트 전후로 `projects`·`users`를 **범위 없이** 지운다
-(`DELETE FROM projects` / `DELETE FROM users` — 자기가 만든 행만 고르지 않는다).
+검증된다(`test/revisions-concurrency.test.ts`가 그 대표다).
+
+그 부류의 파일은 각 테스트 전후로 `helpers.ts`의 **`resetRealData`** 를 걸고, 그 함수가
+`projects`·`users`를 **범위 없이** 지운다 — 자기가 만든 행만 고르지 않는다.
+
+> **`DELETE FROM` 으로 grep 하면 0 건이다**(쟀다). Kysely 로 적혀 있다 —
+> `db.deleteFrom('projects').execute()` / `db.deleteFrom('users').execute()`, `where` 없이.
+> **그리고 그 파일은 하나가 아니다** — 앞 판은 이 문단이 *"그 파일"* 하나만 든다고 적었고
+> 그것이 틀렸다(2026-08-19).
+>
+> **몇 개인지는 여기 안 적는다.** 이 판이 테스트 파일 둘을 더하자 앞서 적어 둔 수가
+> 그 자리에서 낡았다(귀속: 리뷰 §7.1). 대신 **`real-api-harness.test.ts` 가 불변식을 센다** —
+> *"`withRealApi` 를 쓰는 파일은 전부 `resetRealData` 를 `beforeEach`·`afterEach` 양쪽에
+> 건다"*. 목록이 필요하면 `grep -rl 'beforeEach(resetRealData)' test/` 다.
+
+**그래서 테스트 DB 는 통째로 이 스위트의 것이다.** 다른 워크트리와 공유하면 서로의 판을
+지운다 — 갈라 두는 절차는 최상위 [`README.md`](../../README.md) §3.1 이 소유한다.
+
 새 테스트를 그 형식으로 쓰기 전에 "여러 커넥션이 실제로 커밋해야만 드러나는
 성질인가"를 먼저 확인한다. 아니면 `withApi`를 쓴다.
 

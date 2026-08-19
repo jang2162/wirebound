@@ -1,0 +1,55 @@
+import { describeDatabaseTarget } from '../src/db/describe-target'
+
+/**
+ * 없는 DB 를 가리킨 채 스위트를 돌렸을 때 **고치는 한 줄**을 만든다.
+ *
+ * **왜 `global-setup.ts` 밖으로 나왔나.** 앞 판은 이 로직이 `global-setup`의 `catch`
+ * 안에 있었고, 그 길은 **마이그레이션이 실패해야만** 지나므로 정상 실행의 어떤 케이스도
+ * 거기 못 닿았다. 리뷰가 변이 둘을 심어 확인했다(귀속: 리뷰 §9 R5·R6):
+ *
+ * | 심은 것 | 무엇이 됐나 | 죽었나 |
+ * |---|---|---|
+ * | 관문을 `'3D000'` → `'42P01'` | 힌트가 **안 뜬다**. `테스트 DB 준비에 실패했습니다`만 남는다 | **안 죽었다** |
+ * | 이름 대신 `TEST_DATABASE_URL` **원문**을 쓰게 | `테스트 DB "postgres://wirebound:wirebound@…" 가 없습니다` — **자격 문자열이 통째로 실린다** | **안 죽었다** |
+ *
+ * 뒤엣것이 무거운 쪽이다. **D4가 *"DB 이름을 로그에 찍을 때 자격 문자열을 통째로 찍지
+ * 마라"*를 든 자리인데, 그 규칙을 지키는 자가 `describeDatabaseTarget`에만 걸려 있고
+ * 이 경로에는 없었다.** 이제 `missing-database-hint.test.ts`가 양쪽을 다 문다.
+ */
+
+/** 존재하지 않는 데이터베이스. Postgres 의 SQLSTATE 다(`postinit.c`의 `InitPostgres`). */
+export const MISSING_DATABASE_SQLSTATE = '3D000'
+
+/**
+ * `3D000`**일 때만** 조치를 붙인다. 다른 실패에까지 붙이면 엉뚱한 곳을 보게 된다 —
+ * 비밀번호가 틀린 경우(`28P01`)에 *"DB 를 만들어라"*를 권하는 것이 그 꼴이다.
+ *
+ * **나가는 값에 자격 문자열이 없다.** 이름만 `describeDatabaseTarget`을 지나 뽑는다.
+ */
+export function missingDatabaseHint(error: unknown, databaseUrl: string): string | undefined {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    (error as { code?: unknown }).code !== MISSING_DATABASE_SQLSTATE
+  ) {
+    return undefined
+  }
+  return [
+    `테스트 DB "${databaseName(databaseUrl)}" 가 없습니다.`,
+    '컨테이너 안에서 한 줄로 만든다:',
+    `  docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE ${databaseName(databaseUrl)};'`,
+    'TEST_DATABASE_URL 은 셸 → apps/api/.env → 기본값 순서로 정해진다.',
+  ].join('\n')
+}
+
+/**
+ * 접속 문자열에서 **DB 이름만** 뽑는다.
+ *
+ * `describeDatabaseTarget`은 `호스트:포트/이름`을 내므로 앞 조각을 뗀다. **그 함수를
+ * 거치는 이유가 둘이다:** ⓐ 사용자 이름과 비밀번호가 거기서 이미 떨어진다 ⓑ 퍼센트
+ * 디코딩을 한다 — 안 거치면 한글 DB 이름이 `wb_%EC%95%84…`로 나와 **붙여넣을 수 없는
+ * 명령**을 권하게 된다(실측).
+ */
+function databaseName(databaseUrl: string): string {
+  return describeDatabaseTarget(databaseUrl).split('/').slice(1).join('/')
+}

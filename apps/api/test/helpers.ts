@@ -6,9 +6,13 @@ import { loadConfig } from '../src/config'
 import { createDb, createPool } from '../src/db/client'
 import type { DbHandle } from '../src/db/tx'
 import type { ProjectRole } from '../src/db/types'
+import { resolveTestDatabaseUrlFrom } from './test-database-url'
 
-export const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? 'postgres://wirebound:wirebound@127.0.0.1:5433/wirebound_test'
+/**
+ * 테스트가 붙을 DB. **워크트리마다 다를 수 있다** — 규칙과 그 이유는
+ * `test-database-url.ts`가 소유하고 `test-database-url.test.ts`가 잰다.
+ */
+export const TEST_DATABASE_URL = resolveTestDatabaseUrlFrom(process.env)
 
 export interface TestContext {
   app: FastifyInstance

@@ -89,13 +89,29 @@ pnpm --filter @wirebound/web dev
 뜨면 **회원가입**으로 계정을 만들고 프로젝트를 만든다.
 
 **에디터가 `/api`를 API 서버로 프록시한다** — 그래야 세션 쿠키가 same-origin 으로 실리고
-서버에 CORS 설정이 필요 없다. 그 대상이 `apps/web/vite.config.ts`에 **`127.0.0.1:3001`로
-박혀 있다.**
+서버에 CORS 설정이 필요 없다. **그 대상은 `apps/api/.env`의 `PORT`를 따라간다** —
+`apps/web/vite.config.ts`가 그 파일을 읽는다(`node:util`의 `parseEnv`, 새 의존 없음).
+**두 자리를 손으로 맞추지 않는다.**
 
-> **`apps/api/.env`의 `PORT`를 바꾸면 `apps/web/vite.config.ts`의 `target`도 함께 바꿔야
-> 한다. 자동으로 따라가지 않는다.** (이 기계에서 쟀다 — `PORT=3011`로 옮기고 프록시
-> 대상을 안 바꾸면 에디터의 모든 요청이 실패하고, 둘을 함께 바꾸면 로그인부터 편집까지
-> 그대로 돈다.)
+두 터미널이 각각 자기가 어디를 보는지 말한다(이 기계에서 쟀다):
+
+```
+# 터미널 1 (API)
+{"level":30,…,"msg":"Server listening at http://127.0.0.1:3001"}
+{"level":30,…,"msg":"이 서버가 보는 DB: 127.0.0.1:5433/wirebound"}
+
+# 터미널 2 (에디터)
+  ➜  Local:   http://localhost:5173/
+  ➜  API 프록시:  http://127.0.0.1:3001
+```
+
+> **값의 순서는 셸 → `apps/api/.env` → 기본값(3001)이다.** api 서버가 쓰는
+> `--env-file-if-exists`와 같은 순서라 **두 실행자가 같은 답을 낸다.** 셸에
+> `PORT=3011`을 걸면 서버도 에디터도 3011 이다. `.env`가 없으면 둘 다 3001 이다.
+>
+> **`PORT`에 숫자가 아닌 값이 들어 있으면 에디터가 뜨지 않고 그렇다고 말한다.** 조용히
+> 3001 로 물러나면 api 는 (같은 값을 거부해서) 안 뜨는데 에디터만 떠서 원래 없애려던
+> 어긋남을 그대로 다시 만들기 때문이다.
 
 띄운 뒤 서버만 따로 확인하려면:
 
@@ -103,10 +119,77 @@ pnpm --filter @wirebound/web dev
 curl http://127.0.0.1:3001/health        # {"status":"ok"}
 ```
 
-> **`apps/api/.env`를 고쳤으면 API 서버를 다시 띄워라.** `tsx watch`는 **소스만 본다** —
+### 3.1 워크트리를 여럿 띄울 때 — **`apps/api/.env` 의 값 셋을 가른다**
+
+git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자리가 넷**이다. 둘은 시끄럽고
+**둘은 조용하다** — 조용한 쪽이 이 절이 있는 이유다.
+
+| 부딪히는 것 | 어떻게 드러나나 | 가르는 법 |
+|---|---|---|
+| API 포트 | `EADDRINUSE` — **시끄럽다**(종료 코드 1) | `PORT` |
+| 에디터 포트 | vite 가 **자동으로 올려 뜬다**(5173 → 5174 → …). 안 부딪힌다 | — |
+| 운영 DB | **조용하다.** 한쪽 마이그레이션이 다른 쪽 스키마를 바꾼다 | `DATABASE_URL` 의 **DB 이름** |
+| 테스트 DB | **조용하다.** 동시에 `pnpm test` 를 돌리면 서로의 판을 지운다 | `TEST_DATABASE_URL` |
+| 에디터 → API | **가장 조용하다.** B 의 화면이 A 의 API 에 붙는다 | (자동 — `PORT` 를 따라간다) |
+
+**컨테이너는 가르지 않는다.** 하나를 띄워 워크트리들이 공유한다(6.3).
+
+**워크트리를 *만드는* 규칙은 [`CLAUDE.md`](CLAUDE.md)가 소유한다**(위치·이름·브랜치 —
+`git worktree add -b <브랜치> .worktrees/<이름>`). 아래는 **만든 뒤**의 순서다.
+`<이름>` 자리에 워크트리 이름을 넣는다.
+
+```bash
+# 1. 설치와 빌드 — 워크트리마다 따로 필요하다 (6.1)
+pnpm install && pnpm build
+
+# 2. 환경 파일
+cp apps/api/.env.example apps/api/.env
+
+# 3. DB 둘을 만든다 — 컨테이너 안에서 한 줄씩. 컨테이너는 공유하는 그것이다
+docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>;'
+docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>_test;'
+
+# 4. apps/api/.env 의 값 셋을 그 워크트리 것으로 바꾼다
+#      DATABASE_URL=…5433/wb_<이름>
+#      TEST_DATABASE_URL=…5433/wb_<이름>_test      ← 주석 처리되어 있다. 주석을 푼다
+#      PORT=3002                                    ← 워크트리마다 다른 수
+
+# 5. 마이그레이션
+pnpm --filter @wirebound/api migrate
+```
+
+**만든 DB 는 `wirebound` 와 소유자·인코딩·콜레이션이 같다**(이 기계에서 쟀다:
+`wirebound` / `UTF8` / `en_US.utf8`).
+
+3번을 빼먹으면 **먼저 5번이 죽는다.** 둘이 죽는 모양이 다르다(이 기계에서 쟀다):
+
+| 무엇 | 종료 코드 | 무엇을 찍나 |
+|---|---|---|
+| **5번** `pnpm --filter @wirebound/api migrate` | 1 | `마이그레이션 실패: error: database "…" does not exist` — **DB 이름만 말한다. 만드는 줄은 안 찍는다** |
+| `pnpm test` | 1 | 같은 문장에 **위 `CREATE DATABASE` 한 줄을 붙여서** 찍는다 |
+
+**절차대로 가면 5번을 먼저 만나므로 위 3번의 명령을 손에 들고 있어야 한다.** 조치가
+붙는 자리는 테스트 쪽 하나다(`apps/api/test/missing-database-hint.ts` — 없는 DB 를 뜻하는
+`3D000` 일 때만 붙고, 접속 문자열은 안 싣는다).
+
+**값을 안 가르면 무엇이 보이나** — 전부 이 기계에서 쟀다.
+
+| 안 가른 값 | 관측 |
+|---|---|
+| `PORT` | 둘째 서버가 `Error: listen EADDRINUSE: address already in use 127.0.0.1:3031` 로 죽는다. **종료 코드 1** |
+| `DATABASE_URL` | 워크트리 B 에서 `migrate:down` 을 한 번 돌리자 **A 의 살아 있는 서버가** `500 {"error":{"code":"internal"}}` 을 내기 시작했다. A 의 로그에만 `relation "api_tokens" does not exist` 가 남았고 **B 는 아무 말도 안 했다** |
+| `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **둘 다 종료 코드 1**로 죽는다. **가르면 둘 다 전 케이스 통과 · 종료 0** 이고, 벽시계는 **혼자 돌리는 것보다 오히려 짧다**(리뷰어 판: 단독 94.02초 vs 동시 두 판이 각각 90.9초 — 귀속: 리뷰 §5). 깨지는 꼴은 셋이다 — 상대의 `globalSetup` 이 판을 내려서 나는 `relation "…" does not exist` · 상대가 커밋한 행과 부딪히는 `409` · 상대의 정리가 지워서 나는 FK 위반. **몇 개가 죽는지는 판마다 다르다**(경쟁 상태다. 두 사람이 각각 재서 13~18 파일 사이로 갈렸다) — **안 낡는 값은 종료 코드뿐이라 그것만 적는다** |
+| (예전) 프록시 대상 | **이제 안 부딪힌다.** 대상이 박혀 있던 시절에는 B 의 에디터에서 **B 의 계정이 401, A 의 계정이 200** 이었고 B 의 API 는 그 로그인을 **0 번** 봤다. vite 도 API 도 아무 말을 안 했다 |
+
+> **`apps/api/.env`를 고쳤으면 서버 둘을 **다** 다시 띄워라.** `tsx watch`는 **소스만 본다** —
 > `.env`가 바뀌어도 다시 읽지 않는다. 이 기계에서 쟀다: `.env`에 없는 브라우저 경로를 심고
 > 기다려도 응답이 그대로였고, 서버를 다시 띄우자 그 값이 들었다. **조용한 자리다** —
 > 아무 로그도 안 난다.
+>
+> **에디터도 같다.** `vite.config.ts`가 그 파일을 읽는 것은 **뜰 때 한 번**이다. vite 는
+> 자기 설정 파일이 바뀌면 스스로 다시 뜨지만 `apps/api/.env`는 **감시 대상이 아니다**
+> (이 기계에서 쟀다: `PORT`를 바꿔도 에디터는 옛 대상을 그대로 잡고 있었고, 다시 띄우자
+> 새 대상을 찍었다). 다시 띄웠는지는 **`➜  API 프록시:` 줄의 값**으로 확인한다.
 
 ---
 
@@ -303,6 +386,42 @@ docker ps --filter name=wirebound-postgres
 > `feat-p1-api`였고 `-p wirebound ps`가 **빈 표**를 냈다. `docker compose ls`가 어느 이름으로
 > 떠 있는지 말해 준다.
 
+**여기서 조용한 것이 하나 더 나온다 — 볼륨이다.** 프로젝트 이름이 다르면 compose 가 보는
+**볼륨 이름도 다르다.** 이 기계에서 쟀다:
+
+```
+$ docker system df -v
+VOLUME NAME                                LINKS   SIZE
+feat-p1-api_wirebound-pgdata               1       (수백 MB)  ← 설계서가 여기 있다. LINKS 가 1 이다
+feat-p2b1-editor-shell_wirebound-pgdata    0       0B
+wirebound_wirebound-pgdata                 0       0B          ← 저장소 루트에서 띄우면 이것을 쓴다
+```
+
+> **크기는 적지 않는다 — 사는 수다.** 같은 볼륨을 세 번 재서 145.9MB · 316.4MB · 203.8MB 를
+> 봤다(Postgres 가 회수하는 공간이 그때그때 다르다. 가운데 값은 리뷰어가 쟀다). **읽을 것은
+> 크기가 아니라 모양이다: `LINKS` 가 1 인 것이 지금 쓰이는 볼륨이고 나머지는 `0` · `0B` 다.**
+
+**오늘 그 길이 막혀 있는 이유는 `container_name` 이 고정이라서다** — 이름 충돌로 둘째
+컨테이너가 안 뜨므로 빈 볼륨이 마운트되는 데까지 못 간다. **그 이름 충돌이 사라지는 날**
+(누가 컨테이너를 지우고 다른 디렉터리에서 `up -d` 하는 날) **빈 DB 가 뜨고 사람은 데이터가
+사라졌다고 읽는다.** 볼륨은 그대로 있다 — 이름이 다를 뿐이다.
+
+**그러므로 "어디서 `docker compose up -d` 를 치는가"가 계약이다: 저장소 루트다.**
+
+> **이미 빈 DB 를 본 사람에게 — 지우지 마라.** 데이터는 없어진 것이 아니라 **다른 이름의
+> 볼륨에 그대로 있다.** `docker volume ls` 로 `*_wirebound-pgdata` 를 전부 찾아 `LINKS` 가
+> 붙어 있거나 크기가 있는 쪽을 고른다. **`docker compose down -v` 를 치지 마라** — 그 한
+> 줄이 지금 보고 있는 빈 볼륨이 아니라 **찾고 있는 볼륨까지** 지운다.
+
+> **오늘 이 기계의 컨테이너는 그 계약을 이미 어긴 상태로 서 있다.** 라벨이
+> `com.docker.compose.project=feat-p1-api`, `project.working_dir=…/.worktrees/feat-p1-api`
+> 인데 **그 워크트리는 이제 git 이 모르는 디렉터리다**(`git worktree list` 에 없고, 남은
+> 것은 compose 의 바인드 마운트가 되살린 빈 `docker/postgres-init/` 뿐이다). 그래서
+> 저장소 루트에서 `docker compose down` 을 쳐도 **이 컨테이너를 못 찾는다.** 다루려면
+> `docker compose -p feat-p1-api …` 이거나 `docker start/stop wirebound-postgres` 다
+> (둘 다 이 기계에서 확인했다). **그 빈 `postgres-init/` 은 볼륨이 다시 만들어질 때
+> `01-test-db.sql` 이 안 돈다는 뜻이기도 하다** — 6.4 의 함정이 그때 다시 온다.
+
 ### 6.4 테스트가 이유를 알기 어려운 접속 에러로 죽는다
 
 **원인.** 테스트 DB `wirebound_test`가 없다. `docker/postgres-init/01-test-db.sql`이 그것을
@@ -315,6 +434,11 @@ docker ps --filter name=wirebound-postgres
 docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wirebound_test;'
 ```
 
+> **이제 그 에러가 이 줄을 스스로 들고 온다.** `globalSetup` 이 SQLSTATE `3D000` 을 잡아
+> **없는 DB 이름을 넣은 `CREATE DATABASE` 한 줄**을 붙여 던진다(이 기계에서 쟀다 —
+> 종료 코드 1). 워크트리마다 테스트 DB 를 가르면(3.1) 이 자리를 자주 지나기 때문이다.
+> **`3D000` 일 때만 붙인다** — 다른 실패에까지 붙이면 엉뚱한 곳을 보게 된다.
+
 > **`docker compose down -v`로 볼륨을 지우는 길도 있지만 그것은 그 볼륨의 설계서를 전부
 > 지운다.** 위 한 줄로 끝나는 일에 그것을 쓰지 마라.
 
@@ -324,22 +448,35 @@ docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE
 
 ### 6.6 에디터가 뜨는데 로그인이 안 된다 / 목록이 비어 있다
 
-**원인.** API 서버가 안 떠 있거나, `PORT`를 바꿨는데 `apps/web/vite.config.ts`의 프록시
-대상을 안 바꿨다(3절).
+**원인 둘이고 가르는 법이 다르다.**
 
-**조치.** `curl http://127.0.0.1:3001/health`로 API 를 먼저 확인한다.
+**ⓐ API 서버가 안 떠 있다(또는 다른 포트에 떠 있다).** 프록시 대상은 이제 `apps/api/.env`를
+따라가므로 **손으로 어긋나게 만들 수는 없지만**, `.env`를 고치고 **에디터를 다시 안 띄우면**
+옛 대상을 잡고 있다(3.1의 마지막 인용문).
 
 **가장 빠른 자리는 브라우저가 아니라 에디터를 띄운 터미널이다** — vite 가 **틀린 대상을 이름까지**
 말한다(이 기계에서 쟀다):
 
 ```
 [vite] http proxy error: /api/auth/me
-Error: connect ECONNREFUSED 127.0.0.1:3001
+Error: connect ECONNREFUSED 127.0.0.1:3041
 ```
+
+**뜰 때 찍은 `➜  API 프록시:` 줄과 API 터미널의 `Server listening at` 줄을 나란히 놓고 본다.**
+두 수가 같아야 한다.
 
 개발자 도구의 네트워크 탭에서는 `/api/...` 요청이 **500(본문 0 바이트)**이면 프록시 대상이 틀린
 것이고, **401**이면 서버는 붙었고 로그인만 안 된 것이다. **502가 아니다** — vite 는 프록시 실패를
-500으로 낸다.
+500으로 낸다(이 기계에서 다시 쟀다: 대상이 죽어 있을 때 `http=500`).
+
+**ⓑ 붙기는 붙었는데 *옆 워크트리* 의 API 다.** 워크트리를 여럿 띄웠고 `PORT`를 안 갈랐을 때다.
+**이쪽은 아무 에러도 안 난다** — 이 기계에서 쟀다: B 의 에디터에서 **B 의 계정이 401
+(*"이메일 또는 비밀번호가 올바르지 않습니다"*)**, **A 의 계정이 200**, `/api/auth/me` 가
+A 의 사용자를 돌려줬고 **B 의 API 는 그 로그인을 0 번 봤다.**
+
+**가르는 법.** API 터미널의 **`이 서버가 보는 DB:`** 줄을 본다 — 워크트리마다 DB 이름이
+다르므로(3.1) 그 한 줄이 *"내가 지금 누구의 서버를 보고 있나"*를 답한다. 값을 가르는 절차는
+3.1 이다.
 
 ---
 
@@ -499,6 +636,9 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 ```
 
 - **`pnpm test`는 실제 Postgres 에 붙는다.** 컨테이너가 healthy 여야 하고 `wirebound_test`가 있어야 한다(6.4).
+- **워크트리 둘이 `pnpm test`를 동시에 돌려도 된다 — `TEST_DATABASE_URL`이 다르면.** 3.1 이 그
+  절차다. 같으면 깨진다(3.1 의 표에 값이 있다). 가른 상태로 동시에 돌려 **둘 다 전 케이스
+  통과 · 종료 0** 을 확인했다(구현자와 리뷰어가 각각).
 - **`pnpm test`는 브라우저를 안 띄운다.** 진짜 브라우저를 재는 것은 `pnpm test:build` 하나이고, 브라우저가 없으면 **건너뛰고 그렇다고 말한다**(리뷰어가 빈 캐시로 재서 **종료 0 · 13 skipped** 를 확인했다 — 귀속: 리뷰 §7).
 - **`pnpm test:build`는 시작할 때 패키지를 다시 빌드한다**(`vitest.config.ts`가 *"tsdown 재빌드를 `beforeAll`에서 돈다"*고 적는다). 그래서 넷 중 이것만 다른 셋과 결이 다르다 — 이미 빌드된 자리에서도 **10~13초**였다(이쪽이 세 번, 리뷰어가 두 번 쟀다).
 - 파일 하나만 돌리려면 `pnpm vitest run <경로>`, api 만 돌리려면 `pnpm vitest run --project api`.
@@ -523,6 +663,9 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 | **Claude Code 밖의 MCP 호스트** | 7.2 |
 | **`--with-deps`** | 리눅스에서만 의미가 있어 이 기계에서 안 썼다 |
 | **첫 설치의 내려받기 시간** | 2절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
+| **워크트리 셋 이상** | 3.1 의 값은 전부 **워크트리 둘**로 쟀다 |
+| **이름 충돌이 사라진 뒤의 볼륨 갈림** | 6.3 의 *"빈 DB 가 뜬다"*는 **추론이다.** 컨테이너를 지워야 재현되는데 그것이 사용자의 것이라 안 했다(리뷰어도 같은 판단이다 — 귀속: 리뷰 §8). **잰 것은 볼륨 셋의 이름·`LINKS`·크기와 `container_name` 이 고정이라는 사실까지다** |
+| **워크트리에서 `docker compose up -d` 의 에러 원문** | 이 판이 **직접 못 쟀다**(도구 정책이 그 명령을 막았다). 6.3 의 `Conflict. The container name "/wirebound-postgres" is already in use…` 는 **설치 매뉴얼 판이 이 기계에서 잰 값**이다 |
 | **`SCREEN_CHROMIUM_PATH`의 성공 방향에 자동 케이스가 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. ***"옳은 경로를 주면 그 실행 파일로 뜬다"*는 손으로만 쟀다** — 브라우저 둘이 있어야 세울 수 있는 자리다(이쪽과 리뷰어가 각각 손으로 확인했다) |
 
 ---

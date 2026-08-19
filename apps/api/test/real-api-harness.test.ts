@@ -21,6 +21,7 @@
  * **아래 케이스가 그 마지막 칸을 실제로 센다.** 표에 적어 두기만 하면 새 테이블이 생겼을 때
  * 아무도 모른다.
  */
+import { readdirSync, readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createMenuNode,
@@ -32,6 +33,7 @@ import {
   withRealApi,
   type TestContext,
 } from './helpers'
+import { stripComments } from './source-census'
 
 const db = getTestDb()
 
@@ -135,5 +137,48 @@ describe('실커밋 하네스의 청소 (P3-1 D1)', () => {
 
       expect(res.status).toBe(200)
     })
+  })
+})
+
+/**
+ * **누가 이 청소를 쓰나 — 목록을 손으로 안 적고 센다.**
+ *
+ * 이 인구조사가 있는 이유: 문서가 *"api 테스트 파일은 모두 예순여덟"*처럼 **수를 산문에
+ * 적었다가 같은 판에서 낡았다**(테스트 파일 둘을 더한 것이 이 판 자신이다 — 귀속: 리뷰 §7.1).
+ * 수는 파일을 더할 때마다 낡지만 **아래 불변식은 안 낡는다.**
+ *
+ * 지키는 것: **실커밋 하네스를 쓰는 파일은 전부 청소를 건다.** 하나라도 안 걸면 그 파일이
+ * 커밋한 행이 다음 파일의 판에 남는다 — `singleFork`가 파일을 직렬화할 뿐 판을 비우지는
+ * 않기 때문이다.
+ */
+describe('실커밋 하네스를 쓰는 파일은 전부 청소를 건다', () => {
+  const testDir = new URL('.', import.meta.url)
+  const sources = readdirSync(testDir)
+    .filter((name) => name.endsWith('.test.ts'))
+    // **주석을 걷는다.** 안 걷으면 청소를 주석 안에만 둔 파일이 "건다"로 세어진다
+    // (귀속: 리뷰 델타 B4 — D2 가 이미 든 함정과 같은 부류다).
+    .map((name) => ({ name, source: stripComments(readFileSync(new URL(name, testDir), 'utf8')) }))
+
+  it('센 것이 비어 있지 않다 — 디렉터리를 못 읽으면 아래가 통째로 헛돈다', () => {
+    expect(sources.length).toBeGreaterThan(10)
+    expect(sources.map((file) => file.name)).toContain('real-api-harness.test.ts')
+  })
+
+  it('`withRealApi` 를 쓰면서 `resetRealData` 를 안 거는 파일이 없다', () => {
+    const 샌다 = sources
+      .filter((file) => file.source.includes('withRealApi'))
+      .filter((file) => !file.source.includes('beforeEach(resetRealData)'))
+      .map((file) => file.name)
+
+    expect(샌다).toEqual([])
+  })
+
+  it('청소를 거는 파일은 **`afterEach` 에도** 건다 — 중간에 죽은 케이스가 판을 남긴다', () => {
+    const 한쪽만 = sources
+      .filter((file) => file.source.includes('beforeEach(resetRealData)'))
+      .filter((file) => !file.source.includes('afterEach(resetRealData)'))
+      .map((file) => file.name)
+
+    expect(한쪽만).toEqual([])
   })
 })
