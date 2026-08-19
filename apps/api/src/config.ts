@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { getKoreanErrorMap } from '@wirebound/schema'
+import { portAgreementError } from './db/port-agreement'
 
 /**
  * API 서버 설정. env에서 읽어 검증한 값만 이 형태로 존재한다 —
@@ -63,6 +64,13 @@ const EnvSchema = z.object({
   PASSWORD_SCRYPT_N: numericEnv('PASSWORD_SCRYPT_N').default(32768),
   LOG_LEVEL: z.enum(LOG_LEVELS).optional(),
   SCREEN_CHROMIUM_PATH: z.string().optional(),
+  /**
+   * **`docker compose` 가 여는 호스트 포트.** 이 서버가 쓰는 값이 아니라 **`DATABASE_URL`
+   * 안의 포트와 맞는지 재기 위해서만** 읽는다 — 그래서 `ApiConfig` 에 안 실린다.
+   * 어긋나면 서버가 남의 컨테이너에 붙는데 붙는 데는 성공한다(`db/port-agreement.ts`).
+   * **없으면 아무것도 안 잰다** — 자기 Postgres 를 쓰는 사람이 깨지면 안 된다.
+   */
+  POSTGRES_PORT: z.string().optional(),
 })
 
 /**
@@ -77,6 +85,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   }
 
   const data = parsed.data
+
+  // **포트가 어긋나면 여기서 멈춘다.** 조용히 뜨면 옆 워크트리의 DB 를 열어 놓고
+  // "잘 떴다"고 읽게 된다 — `db/port-agreement.ts` 의 머리말이 그 실측을 든다.
+  // **`TEST_DATABASE_URL` 은 여기서 안 잰다** — 그 값은 `pnpm test` 만 쓰므로
+  // 재는 자리도 거기다(`test/test-database-url.ts`). 테스트 값 하나 때문에 도는
+  // 서버가 안 뜨면 그것대로 잘못이다.
+  const disagreement = portAgreementError({
+    postgresPort: data.POSTGRES_PORT,
+    urls: { DATABASE_URL: data.DATABASE_URL },
+  })
+  if (disagreement !== undefined) {
+    throw new Error(disagreement)
+  }
+
   // LOG_LEVEL 기본값은 NODE_ENV에 따라 달라지므로 zod 기본값이 아니라 여기서 채운다.
   const logLevel = data.LOG_LEVEL ?? (data.NODE_ENV === 'test' ? 'silent' : 'info')
 

@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { describeDatabaseTarget } from '../src/db/describe-target'
+import { describeSchemaState } from '../src/db/describe-schema-state'
 import { SRC_ROOT, stripComments } from './source-census'
 
 describe('describeDatabaseTarget — 사람이 가를 만큼만 낸다', () => {
@@ -54,6 +55,35 @@ describe('describeDatabaseTarget — 사람이 가를 만큼만 낸다', () => {
   })
 })
 
+/**
+ * **빈 DB 로 뜬 것이 조용하면 안 된다**(2026-08-19 D3).
+ *
+ * 오늘까지 빈 볼륨이 마운트되는 것을 막던 것은 `container_name` 고정 하나였다(README 6.3).
+ * **이 슬라이스가 그 방어를 걷어냈다** — 워크트리마다 컨테이너를 띄우면 **빈 볼륨으로 뜨는
+ * 것이 정상 경로**가 되고, 사람은 그것을 *"설계서가 사라졌다"* 로 읽는다. 데이터는 사라진
+ * 것이 아니라 **다른 이름의 볼륨**에 있다.
+ */
+describe('describeSchemaState — 빈 DB 를 말한다', () => {
+  it('0 건이면 **빈 DB 라고 말하고 볼륨을 찾는 길을 든다** — 지우지 말라는 말이 먼저다', () => {
+    const said = describeSchemaState(0)
+    expect(said).toContain('0건')
+    expect(said).toContain('빈 DB')
+    expect(said).toContain('docker volume ls')
+    expect(said).toContain('지우지 말고')
+  })
+
+  it('올라가 있으면 그 수만 말한다 — 정상 상태에 경고를 붙이지 않는다', () => {
+    expect(describeSchemaState(11)).toBe('마이그레이션 11건')
+    expect(describeSchemaState(1)).not.toContain('빈 DB')
+  })
+
+  it('**못 읽은 것과 0 건을 가른다** — 조치가 다르다', () => {
+    // "빈 볼륨" 과 "DB 가 없다/안 떠 있다" 는 다음에 칠 명령이 다르다.
+    expect(describeSchemaState(undefined)).not.toContain('0건')
+    expect(describeSchemaState(undefined)).toContain('읽지 못했습니다')
+  })
+})
+
 describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', () => {
   const main = stripComments(readFileSync(join(SRC_ROOT, 'main.ts'), 'utf8'))
 
@@ -70,5 +100,17 @@ describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', ()
 
   it('템플릿 문자열에 그대로 끼워 넣지도 않는다', () => {
     expect(main).not.toMatch(/\$\{\s*config\.databaseUrl\s*\}/)
+  })
+
+  it('**스키마 상태를 같은 줄에 붙인다**(D3) — 뜬 뒤에 세는 자를 실제로 지난다', () => {
+    // 규칙(`describeSchemaState`)에는 자가 촘촘한데 **꽂는 한 줄에 자가 없으면** 회귀가
+    // 게이트 넷을 초록으로 지나간다 — 앞 슬라이스가 그 자리에서 변이 넷을 살렸다
+    // (귀속: 리뷰 §9). 여기는 서버를 띄워야만 도는 길이라 행동으로 못 재고 글자로 잰다.
+    expect(main).toContain('describeSchemaState(')
+    expect(main).toContain('await countExecutedMigrations(db)')
+    expect(main).toMatch(/이 서버가 보는 DB:[^\n]*describeDatabaseTarget/)
+    // 세어 놓고 안 쓰면 소용이 없다 — 두 조각이 **한 줄**에 있어야 사람이 함께 읽는다.
+    const 찍는줄 = main.slice(main.indexOf('이 서버가 보는 DB:'))
+    expect(찍는줄.slice(0, 240)).toContain('describeSchemaState(')
   })
 })

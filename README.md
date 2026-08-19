@@ -34,22 +34,24 @@ node -v && pnpm -v && docker -v
 
 ## 2. 세우기 — 다섯 걸음
 
-**순서가 있다.** 3번을 빼먹으면 테스트는 통과하는데 서버만 안 뜬다(6.1).
+**순서가 있다.** 4번을 빼먹으면 테스트는 통과하는데 서버만 안 뜬다(6.1). **환경 파일이
+1번인 것도 순서다** — `docker compose` 가 그 파일을 읽으므로 없으면 2번이 죽는다.
 
 ```bash
-# 1. Postgres 를 띄운다 — 저장소 루트에서
-docker compose up -d                 # 이미 떠 있거나 표가 비면 → 6.3
-docker compose ps                    # healthy 가 될 때까지 기다린다
-                                     # healthy 가 아니면 5번과 테스트가 전부 접속 실패로 죽는다
+# 1. API 의 환경 파일을 만든다 — 아래 2번이 이 파일을 읽는다
+cp apps/api/.env.example apps/api/.env
 
-# 2. 워크스페이스를 설치한다
+# 2. Postgres 를 띄운다 — 저장소(또는 워크트리) 루트에서
+docker compose --env-file apps/api/.env up -d     # 이 플래그를 빼지 마라 → 6.3
+docker compose ps                                 # healthy 가 될 때까지 기다린다
+                                                  # PORTS 칸에 포트가 보여야 한다 → 6.3
+                                                  # healthy 가 아니면 5번과 테스트가 전부 접속 실패로 죽는다
+
+# 3. 워크스페이스를 설치한다
 pnpm install
 
-# 3. packages/* 를 빌드한다 — 건너뛰지 마라
+# 4. packages/* 를 빌드한다 — 건너뛰지 마라
 pnpm build
-
-# 4. API 의 환경 파일을 만든다
-cp apps/api/.env.example apps/api/.env
 
 # 5. 마이그레이션을 올린다
 pnpm --filter @wirebound/api migrate
@@ -63,13 +65,28 @@ pnpm --filter @wirebound/api migrate
 | `pnpm build` | **4.2초** | `packages/*` 여섯의 `dist` |
 | `migrate` | **1.5초** | 빈 DB 에 마이그레이션 **열하나**를 올렸다 |
 
-`docker compose up -d`가 만드는 것은 컨테이너 `wirebound-postgres` 하나이고 **호스트
-포트는 5433**이다(5432가 아니다 — 기계에 이미 있는 Postgres 와 겹치지 않게 비켜 뒀다).
-접속 문자열은 `.env.example`에 그 값으로 들어 있다.
+`docker compose … up -d`가 만드는 것은 Postgres 컨테이너 하나이고 **호스트 포트는
+`apps/api/.env` 의 `POSTGRES_PORT` 다. 기본값은 5433**이다(5432가 아니다 — 기계에 이미
+있는 Postgres 와 겹치지 않게 비켜 뒀다). 접속 문자열은 `.env.example`에 그 값으로 들어 있다.
+
+**컨테이너 이름은 고정이 아니다.** compose 가 `<프로젝트>-postgres-1` 로 짓고 **프로젝트
+이름은 디렉터리 이름**이다 — 저장소 루트에서 띄우면 `wirebound-postgres-1`, 워크트리에서
+띄우면 `<워크트리이름>-postgres-1`. **볼륨도 같은 규칙으로 갈린다**(`<프로젝트>_wirebound-pgdata`).
+그래서 **워크트리마다 자기 컨테이너·자기 데이터**를 갖는다(3.1). 이름으로 컨테이너를 찾지
+말고 `docker compose …` 를 쓴다(6.3).
+
+> **`--env-file apps/api/.env` 를 빼면 포트가 기본값(5433)으로 되돌아간다.** 그러면
+> 컨테이너가 그 포트로 **다시 만들어지고**, `apps/api/.env` 의 접속 문자열은 다른 수를
+> 가리킨 채 남는다. `up` 에서는 그 플래그를 생략하지 않는다 — `ps`·`logs`·`exec`·`down` 은
+> 프로젝트 이름으로 찾으므로 플래그가 없어도 된다(이 기계에서 쟀다).
+>
+> **어긋나면 서버도 테스트도 뜨지 않고 어디가 어긋났는지 말한다**(3.1의 표). 그 검사는
+> `POSTGRES_PORT` 가 있을 때만 돈다.
 
 **컨테이너를 안 쓰고 자기 Postgres 를 쓸 수도 있다.** `apps/api/.env`의 `DATABASE_URL`을
-그쪽으로 바꾸면 된다. 그때 **DB 둘이 필요하다** — 운영용 하나와 테스트용
-`wirebound_test`(9절).
+그쪽으로 바꾸고 **`POSTGRES_PORT` 줄을 지운다**(그 줄은 compose 가 여는 포트라 자기
+Postgres 와는 상관이 없다 — 남겨 두면 포트가 어긋났다며 서버가 안 뜬다). 그때 **DB 둘이
+필요하다** — 운영용 하나와 테스트용 `wirebound_test`(9절).
 
 ---
 
@@ -98,7 +115,7 @@ pnpm --filter @wirebound/web dev
 ```
 # 터미널 1 (API)
 {"level":30,…,"msg":"Server listening at http://127.0.0.1:3001"}
-{"level":30,…,"msg":"이 서버가 보는 DB: 127.0.0.1:5433/wirebound"}
+{"level":30,…,"msg":"이 서버가 보는 DB: 127.0.0.1:5433/wirebound · 마이그레이션 11건"}
 
 # 터미널 2 (에디터)
   ➜  Local:   http://localhost:5173/
@@ -113,30 +130,50 @@ pnpm --filter @wirebound/web dev
 > 3001 로 물러나면 api 는 (같은 값을 거부해서) 안 뜨는데 에디터만 떠서 원래 없애려던
 > 어긋남을 그대로 다시 만들기 때문이다.
 
+> **뒤에 붙는 `마이그레이션 N건` 은 이 DB 의 스키마 상태다.** 워크트리마다 컨테이너를
+> 띄우면 **빈 볼륨으로 뜨는 것이 정상 경로**가 되므로 그 갈림이 화면에 있어야 한다.
+> **0 건이면 서버가 아예 안 뜬다** — 부팅 중에 `themes` 에 쓰기 때문이다. 그때 나오는
+> 문장은 원문(`relation "themes" does not exist`)이 아니라 이것이다(이 기계에서 쟀다,
+> 종료 코드 1):
+>
+> ```
+> Error: 이 DB 는 비어 있습니다(마이그레이션 0건): 127.0.0.1:5433/wirebound
+> 새 볼륨이면 정상입니다 — 마이그레이션을 올리십시오:
+>   pnpm --filter @wirebound/api migrate
+> 데이터가 있어야 하는데 비었다면 지우지 말고 다른 이름의 볼륨을 찾으십시오: docker volume ls
+> ```
+>
+> **원문은 `Caused by:` 로 그대로 붙어 있다.** 그리고 *마이그레이션은 올렸는데 데이터만
+> 없는* 볼륨은 이 줄로 안 갈린다 — 그쪽은 6.6 이 든다.
+
 띄운 뒤 서버만 따로 확인하려면:
 
 ```bash
 curl http://127.0.0.1:3001/health        # {"status":"ok"}
 ```
 
-### 3.1 워크트리를 여럿 띄울 때 — **`apps/api/.env` 의 값 셋을 가른다**
+### 3.1 워크트리를 여럿 띄울 때 — **워크트리마다 자기 컨테이너를 띄운다**
 
-git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자리가 넷**이다. 둘은 시끄럽고
-**둘은 조용하다** — 조용한 쪽이 이 절이 있는 이유다.
+git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자리가 다섯**이다. 둘은 시끄럽고
+**셋은 조용하다** — 조용한 쪽이 이 절이 있는 이유다.
 
 | 부딪히는 것 | 어떻게 드러나나 | 가르는 법 |
 |---|---|---|
 | API 포트 | `EADDRINUSE` — **시끄럽다**(종료 코드 1) | `PORT` |
 | 에디터 포트 | vite 가 **자동으로 올려 뜬다**(5173 → 5174 → …). 안 부딪힌다 | — |
-| 운영 DB | **조용하다.** 한쪽 마이그레이션이 다른 쪽 스키마를 바꾼다 | `DATABASE_URL` 의 **DB 이름** |
+| DB 컨테이너 | 포트가 같으면 `port is already allocated` — **시끄럽다**. 다만 **다시 치면 조용해진다**(6.3) | `POSTGRES_PORT` |
+| 운영 DB | **조용하다.** 한쪽 마이그레이션이 다른 쪽 스키마를 바꾼다 | `DATABASE_URL` 의 **포트와 DB 이름** |
 | 테스트 DB | **조용하다.** 동시에 `pnpm test` 를 돌리면 서로의 판을 지운다 | `TEST_DATABASE_URL` |
 | 에디터 → API | **가장 조용하다.** B 의 화면이 A 의 API 에 붙는다 | (자동 — `PORT` 를 따라간다) |
 
-**컨테이너는 가르지 않는다.** 하나를 띄워 워크트리들이 공유한다(6.3).
+**컨테이너를 가른다.** 워크트리마다 `docker compose … up -d` 를 자기 디렉터리에서 친다 —
+컨테이너 이름도 볼륨도 **프로젝트 이름(디렉터리 이름)을 따라 저절로 갈린다**(6.3).
+**데이터가 완전히 별개다.** 새 볼륨이므로 **처음에는 비어 있다**(그것이 정상이다 — 3절의
+`마이그레이션 0건` 문장이 그것을 말한다).
 
 **워크트리를 *만드는* 규칙은 [`CLAUDE.md`](CLAUDE.md)가 소유한다**(위치·이름·브랜치 —
 `git worktree add -b <브랜치> .worktrees/<이름>`). 아래는 **만든 뒤**의 순서다.
-`<이름>` 자리에 워크트리 이름을 넣는다.
+`<이름>` 자리에 워크트리 이름을, `<포트>` 자리에 **다른 워크트리가 안 쓰는 수**를 넣는다.
 
 ```bash
 # 1. 설치와 빌드 — 워크트리마다 따로 필요하다 (6.1)
@@ -145,30 +182,60 @@ pnpm install && pnpm build
 # 2. 환경 파일
 cp apps/api/.env.example apps/api/.env
 
-# 3. DB 둘을 만든다 — 컨테이너 안에서 한 줄씩. 컨테이너는 공유하는 그것이다
-docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>;'
-docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>_test;'
+# 3. apps/api/.env 의 값 넷을 그 워크트리 것으로 바꾼다
+#      POSTGRES_PORT=<포트>                          ← compose 가 여는 포트
+#      DATABASE_URL=…<포트>/wb_<이름>                 ← 포트를 위와 같게
+#      TEST_DATABASE_URL=…<포트>/wb_<이름>_test       ← 주석 처리되어 있다. 주석을 푼다
+#      PORT=3002                                     ← 워크트리마다 다른 수
 
-# 4. apps/api/.env 의 값 셋을 그 워크트리 것으로 바꾼다
-#      DATABASE_URL=…5433/wb_<이름>
-#      TEST_DATABASE_URL=…5433/wb_<이름>_test      ← 주석 처리되어 있다. 주석을 푼다
-#      PORT=3002                                    ← 워크트리마다 다른 수
+# 4. 이 워크트리의 컨테이너를 띄운다 — 이 디렉터리에서
+docker compose --env-file apps/api/.env up -d
+docker compose ps          # healthy 이고 PORTS 칸에 <포트> 가 보여야 한다 (6.3)
 
-# 5. 마이그레이션
+# 5. DB 둘을 만든다 — 방금 띄운 내 컨테이너 안에서 한 줄씩
+docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>;'
+docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>_test;'
+
+# 6. 마이그레이션
 pnpm --filter @wirebound/api migrate
 ```
 
 **만든 DB 는 `wirebound` 와 소유자·인코딩·콜레이션이 같다**(이 기계에서 쟀다:
 `wirebound` / `UTF8` / `en_US.utf8`).
 
-3번을 빼먹으면 **먼저 5번이 죽는다.** 둘이 죽는 모양이 다르다(이 기계에서 쟀다):
+> **왜 5번이 아직 남아 있나 — 볼륨이 새것이면 `wirebound`·`wirebound_test` 는 이미 있다.**
+> (이 기계에서 쟀다: 새 볼륨의 `psql \l` 에 둘 다 있다. `docker/postgres-init/01-test-db.sql`
+> 이 **볼륨을 처음 만들 때 돈다** — 6.4 의 함정이 워크트리마다 새 볼륨에서는 안 온다.)
+> 그 이름을 그대로 쓰면 5번을 지울 수 있다. **그래도 이름을 가르는 이유는 하나다:
+> 포트를 잘못 짚어 남의 컨테이너에 붙었을 때 그것을 시끄럽게 만드는 것이 이 이름이다.**
+> 이름이 같으면 남의 DB 가 그냥 열리고, 다르면 `database "wb_<이름>" does not exist` 로
+> 죽는다. 한 컨테이너를 공유하기로 한 사람에게는 이 이름이 격리 그 자체다.
+
+**포트를 어긋나게 적으면 무엇이 보이나.** `POSTGRES_PORT` 와 접속 문자열의 포트는 **두
+자리에 있고 한 자리로 못 모은다**(compose 는 URL 에서 포트를 못 뽑고, Node 의 `--env-file`
+은 `${...}` 를 안 편다 — 둘 다 이 기계에서 쟀다). 그래서 **어긋나면 실행되기 전에 죽는다**
+(이 기계에서 쟀다 · 종료 코드 1 · `pnpm start` 도 `migrate` 도 같다):
+
+```
+Error: POSTGRES_PORT 와 접속 문자열의 포트가 어긋납니다 — 이대로 두면 이 워크트리의 컨테이너가
+아니라 옆 워크트리의 컨테이너에 붙습니다(붙는 데 성공하므로 아무 에러도 안 납니다).
+  POSTGRES_PORT=15433  ← docker compose 가 이 포트를 연다
+  DATABASE_URL → 127.0.0.1:15999/wb_fixpwc
+apps/api/.env 에서 포트를 한 수로 맞춘다. 자기 Postgres 를 쓰면 POSTGRES_PORT 줄을 지운다.
+```
+
+**`pnpm test` 는 `TEST_DATABASE_URL` 에 같은 검사를 건다**(그 값은 서버가 안 쓰므로 서버는
+그것 때문에 안 죽는다). **`TEST_DATABASE_URL` 을 아예 안 적으면 기본값이
+`POSTGRES_PORT` 를 따라간다** — 즉 **자기 컨테이너의** `wirebound_test` 다.
+
+3·5번을 빼먹으면 **먼저 6번이 죽는다.** 둘이 죽는 모양이 다르다(이 기계에서 쟀다):
 
 | 무엇 | 종료 코드 | 무엇을 찍나 |
 |---|---|---|
-| **5번** `pnpm --filter @wirebound/api migrate` | 1 | `마이그레이션 실패: error: database "…" does not exist` — **DB 이름만 말한다. 만드는 줄은 안 찍는다** |
+| **6번** `pnpm --filter @wirebound/api migrate` | 1 | `마이그레이션 실패: error: database "…" does not exist` — **DB 이름만 말한다. 만드는 줄은 안 찍는다** |
 | `pnpm test` | 1 | 같은 문장에 **위 `CREATE DATABASE` 한 줄을 붙여서** 찍는다 |
 
-**절차대로 가면 5번을 먼저 만나므로 위 3번의 명령을 손에 들고 있어야 한다.** 조치가
+**절차대로 가면 6번을 먼저 만나므로 위 5번의 명령을 손에 들고 있어야 한다.** 조치가
 붙는 자리는 테스트 쪽 하나다(`apps/api/test/missing-database-hint.ts` — 없는 DB 를 뜻하는
 `3D000` 일 때만 붙고, 접속 문자열은 안 싣는다).
 
@@ -177,7 +244,8 @@ pnpm --filter @wirebound/api migrate
 | 안 가른 값 | 관측 |
 |---|---|
 | `PORT` | 둘째 서버가 `Error: listen EADDRINUSE: address already in use 127.0.0.1:3031` 로 죽는다. **종료 코드 1** |
-| `DATABASE_URL` | 워크트리 B 에서 `migrate:down` 을 한 번 돌리자 **A 의 살아 있는 서버가** `500 {"error":{"code":"internal"}}` 을 내기 시작했다. A 의 로그에만 `relation "api_tokens" does not exist` 가 남았고 **B 는 아무 말도 안 했다** |
+| `POSTGRES_PORT` | 둘째 `up -d` 가 `Bind for 0.0.0.0:<포트> failed: port is already allocated` 로 죽는다. **그런데 그대로 한 번 더 치면 종료 0 으로 "Started" 를 찍고 컨테이너가 뜬다 — 포트 없이.** 그때 `docker compose ps` 의 `PORTS` 칸이 **비어 있고**, 그 포트에 붙는 것은 전부 **옆 워크트리의 컨테이너**다(6.3) |
+| `DATABASE_URL` | 워크트리 B 에서 `migrate:down` 을 한 번 돌리자 **A 의 살아 있는 서버가** `500 {"error":{"code":"internal"}}` 을 내기 시작했다. A 의 로그에만 `relation "api_tokens" does not exist` 가 남았고 **B 는 아무 말도 안 했다**(컨테이너를 공유하던 판에서 쟀다 — 이제 컨테이너를 가르면 이 갈래는 포트가 먼저 막는다) |
 | `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **둘 다 종료 코드 1**로 죽는다. **가르면 둘 다 전 케이스 통과 · 종료 0** 이고, 벽시계는 **혼자 돌리는 것보다 오히려 짧다**(리뷰어 판: 단독 94.02초 vs 동시 두 판이 각각 90.9초 — 귀속: 리뷰 §5). 깨지는 꼴은 셋이다 — 상대의 `globalSetup` 이 판을 내려서 나는 `relation "…" does not exist` · 상대가 커밋한 행과 부딪히는 `409` · 상대의 정리가 지워서 나는 FK 위반. **몇 개가 죽는지는 판마다 다르다**(경쟁 상태다. 두 사람이 각각 재서 13~18 파일 사이로 갈렸다) — **안 낡는 값은 종료 코드뿐이라 그것만 적는다** |
 | (예전) 프록시 대상 | **이제 안 부딪힌다.** 대상이 박혀 있던 시절에는 B 의 에디터에서 **B 의 계정이 401, A 의 계정이 200** 이었고 B 의 API 는 그 로그인을 **0 번** 봤다. vite 도 API 도 아무 말을 안 했다 |
 
@@ -185,6 +253,10 @@ pnpm --filter @wirebound/api migrate
 > `.env`가 바뀌어도 다시 읽지 않는다. 이 기계에서 쟀다: `.env`에 없는 브라우저 경로를 심고
 > 기다려도 응답이 그대로였고, 서버를 다시 띄우자 그 값이 들었다. **조용한 자리다** —
 > 아무 로그도 안 난다.
+>
+> **`POSTGRES_PORT` 를 고쳤으면 컨테이너도 다시 띄워라** — `docker compose --env-file
+> apps/api/.env up -d` 를 다시 치면 compose 가 포트가 바뀐 것을 보고 다시 만든다.
+> **그 볼륨은 그대로다**(이름이 프로젝트를 따라가지 포트를 따라가지 않는다).
 >
 > **에디터도 같다.** `vite.config.ts`가 그 파일을 읽는 것은 **뜰 때 한 번**이다. vite 는
 > 자기 설정 파일이 바뀌면 스스로 다시 뜨지만 `apps/api/.env`는 **감시 대상이 아니다**
@@ -359,79 +431,110 @@ that were ignored: esbuild`. `WARN`이 아니고 **정상이다**(pnpm 10 이 �
 **조치.** 없다 — `pnpm build`가 그 파일을 만든다. **다만 링크는 그때 안 생긴다**(pnpm 이
 설치를 다시 돌지 않는다). `wireb`를 이름으로 부르려면 5.1의 ㉮·㉯를 쓴다.
 
-### 6.3 `docker compose ps`가 빈 표를 내는데 컨테이너는 떠 있다
+### 6.3 컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다 / 빈 DB 가 떴다
 
-**원인.** `docker compose`는 **디렉터리 이름**을 프로젝트 이름으로 쓴다. 워크트리
-(`.worktrees/<이름>/`)에서 부르면 그 워크트리 이름의 **다른 프로젝트**를 보게 된다.
+**원인 하나에서 갈래가 셋 나온다.** `docker compose`는 **디렉터리 이름**을 프로젝트 이름으로
+쓴다(이 기계에서 쟀다: 저장소 루트 → `wirebound`, `.worktrees/<이름>` → `<이름>`).
+**컨테이너 이름도 볼륨 이름도 그것을 따른다** — `<프로젝트>-postgres-1` ·
+`<프로젝트>_wirebound-pgdata`. **그것이 워크트리마다 컨테이너를 가르는 기전이고**, 동시에
+아래 셋의 원인이다.
 
-**증상 둘.** `ps`가 비고, `up -d`는 이렇게 죽는다(이 기계에서 쟀다):
-
-```
-Conflict. The container name "/wirebound-postgres" is already in use by container "…"
-```
-
-`container_name`이 고정이라 **둘째 컨테이너가 안 뜬다** — 다행이다. 대신 그 워크트리
-이름의 **빈 볼륨과 네트워크가 남는다**(`docker volume ls`로 보인다).
-
-**조치.** **컨테이너는 한 번만 띄우고 워크트리들이 공유한다.** 상태는 compose 를 거치지 말고
-컨테이너 이름으로 본다:
+**ⓐ `ps` 가 빈 표를 낸다.** 컨테이너를 띄운 디렉터리가 아닌 곳에서 물었다. **상태는 그
+디렉터리에서 묻는다** — 워크트리의 컨테이너는 그 워크트리에서, 루트의 것은 루트에서.
 
 ```bash
-docker ps --filter name=wirebound-postgres
+docker compose ps                    # 이 디렉터리의 것
+docker compose ls                    # 어떤 프로젝트들이 떠 있나
+docker ps --filter name=postgres     # 이 기계의 전부
 ```
 
-> **`docker compose -p <이름> ps`는 믿지 마라.** 그 `<이름>`은 **그 컨테이너를 실제로 띄운
-> 디렉터리의 이름**이어야 한다 — 저장소 루트에서 띄웠으면 `wirebound`지만 누군가 워크트리
-> 에서 먼저 띄웠으면 그 워크트리 이름이다. 이 기계에서 쟀다: 떠 있는 컨테이너의 프로젝트가
-> `feat-p1-api`였고 `-p wirebound ps`가 **빈 표**를 냈다. `docker compose ls`가 어느 이름으로
-> 떠 있는지 말해 준다.
+> **`docker compose -p <이름> ps`의 `<이름>`은 그 컨테이너를 실제로 띄운 디렉터리의 이름**
+> 이어야 한다. 이 기계에서 쟀다: 떠 있던 컨테이너의 프로젝트가 `feat-p1-api`(지금은 git 이
+> 모르는 워크트리다)였고 `-p wirebound ps`가 **빈 표**를 냈다.
 
-**여기서 조용한 것이 하나 더 나온다 — 볼륨이다.** 프로젝트 이름이 다르면 compose 가 보는
-**볼륨 이름도 다르다.** 이 기계에서 쟀다:
+**ⓑ `up -d` 가 포트 충돌로 죽는다.** 다른 워크트리가 같은 `POSTGRES_PORT` 를 이미 열었다
+(이 기계에서 쟀다):
 
 ```
-$ docker system df -v
-VOLUME NAME                                LINKS   SIZE
-feat-p1-api_wirebound-pgdata               1       (수백 MB)  ← 설계서가 여기 있다. LINKS 가 1 이다
-feat-p2b1-editor-shell_wirebound-pgdata    0       0B
-wirebound_wirebound-pgdata                 0       0B          ← 저장소 루트에서 띄우면 이것을 쓴다
+Error response from daemon: failed to set up container networking:
+  ... Bind for 0.0.0.0:19011 failed: port is already allocated
 ```
 
+**조치는 `apps/api/.env` 의 `POSTGRES_PORT` 를 다른 수로 바꾸고 다시 치는 것이다**
+(접속 문자열의 포트도 함께 — 안 맞추면 서버가 그렇다고 말하고 안 뜬다. 3.1).
+
+> **✱ 그대로 한 번 더 치면 조용해진다 — 이 절에서 가장 위험한 줄이다.** 이 기계에서 쟀다:
+> 같은 명령을 다시 치면 **종료 0** 으로 `Started` 를 찍고 컨테이너가 `Up (healthy)` 가
+> 되는데 **포트가 하나도 안 열려 있다.** `docker compose ps` 의 `PORTS` 칸이 **빈 칸**이다.
+> 그 포트에 붙는 것은 전부 **먼저 잡은 워크트리의 컨테이너**다 — 내 서버가 남의 DB 를
+> 읽고 쓰는데 **아무도 안 운다.**
+>
+> **그래서 `up -d` 뒤에는 `docker compose ps` 의 `PORTS` 칸을 본다.** 비어 있으면 위
+> 충돌이 났던 것이다: `docker compose down` 하고 포트를 바꿔 다시 띄운다.
+> (DB 이름을 워크트리마다 가르는 것이 이 사고를 시끄럽게 만드는 두 번째 자다 — 3.1.)
+
+**ⓒ 컨테이너는 떴는데 DB 가 비었다.** **워크트리마다 볼륨이 따로 생기므로 그것이
+정상이다.** 새 볼륨에는 `wirebound`·`wirebound_test` 만 있고 스키마는 비어 있다 —
+`pnpm --filter @wirebound/api migrate` 를 올린다. 서버는 그 상태에서 **안 뜨고 그렇다고
+말한다**(3절의 `마이그레이션 0건` 문장).
+
+> **데이터가 있어야 하는데 비었으면 지우지 마라.** 데이터는 없어진 것이 아니라 **다른
+> 이름의 볼륨**에 있다. 프로젝트 이름이 다르면 compose 가 보는 볼륨도 다르기 때문이다.
+> 이 기계에서 쟀다:
+>
+> ```
+> $ docker system df -v
+> VOLUME NAME                                LINKS   SIZE
+> feat-p1-api_wirebound-pgdata               1       (수백 MB)  ← 설계서가 여기 있다. LINKS 가 1 이다
+> feat-p2b1-editor-shell_wirebound-pgdata    0       0B
+> wirebound_wirebound-pgdata                 0       0B
+> ```
+>
 > **크기는 적지 않는다 — 사는 수다.** 같은 볼륨을 세 번 재서 145.9MB · 316.4MB · 203.8MB 를
 > 봤다(Postgres 가 회수하는 공간이 그때그때 다르다. 가운데 값은 리뷰어가 쟀다). **읽을 것은
 > 크기가 아니라 모양이다: `LINKS` 가 1 인 것이 지금 쓰이는 볼륨이고 나머지는 `0` · `0B` 다.**
+>
+> `docker volume ls` 로 `*_wirebound-pgdata` 를 전부 찾아 `LINKS` 가 붙어 있거나 크기가
+> 있는 쪽을 고른다. **`docker compose down -v` 를 치지 마라** — 그 한 줄이 지금 보고 있는
+> 빈 볼륨이 아니라 **찾고 있는 볼륨까지** 지운다.
+>
+> **옛 볼륨의 데이터를 새 이름으로 옮기는 것은 복사이지 이동이 아니다** — 옛 볼륨을 지우지
+> 않는 절차가 `docs/superpowers/plans/2026-08-19-per-worktree-container-report.md` 에 있다.
 
-**오늘 그 길이 막혀 있는 이유는 `container_name` 이 고정이라서다** — 이름 충돌로 둘째
-컨테이너가 안 뜨므로 빈 볼륨이 마운트되는 데까지 못 간다. **그 이름 충돌이 사라지는 날**
-(누가 컨테이너를 지우고 다른 디렉터리에서 `up -d` 하는 날) **빈 DB 가 뜨고 사람은 데이터가
-사라졌다고 읽는다.** 볼륨은 그대로 있다 — 이름이 다를 뿐이다.
+> **`--env-file apps/api/.env` 는 `up` 에서 빼지 마라.** 빼면 포트가 기본값(5433)으로
+> 되돌아가 컨테이너가 **그 포트로 다시 만들어진다.** `ps`·`logs`·`exec`·`down` 은 프로젝트
+> 이름으로 찾으므로 플래그가 없어도 된다(이 기계에서 쟀다). **`POSTGRES_PORT` 를 바꿔
+> 다시 띄우면 컨테이너는 `Recreated` 되고 볼륨은 그대로다**(이 기계에서 쟀다 — 임시
+> 프로젝트에 표를 하나 만들어 두고 포트를 바꿔 다시 띄웠더니 그 표가 그대로 있었다).
 
-**그러므로 "어디서 `docker compose up -d` 를 치는가"가 계약이다: 저장소 루트다.**
-
-> **이미 빈 DB 를 본 사람에게 — 지우지 마라.** 데이터는 없어진 것이 아니라 **다른 이름의
-> 볼륨에 그대로 있다.** `docker volume ls` 로 `*_wirebound-pgdata` 를 전부 찾아 `LINKS` 가
-> 붙어 있거나 크기가 있는 쪽을 고른다. **`docker compose down -v` 를 치지 마라** — 그 한
-> 줄이 지금 보고 있는 빈 볼륨이 아니라 **찾고 있는 볼륨까지** 지운다.
-
-> **오늘 이 기계의 컨테이너는 그 계약을 이미 어긴 상태로 서 있다.** 라벨이
+> **오늘 이 기계의 컨테이너는 이 규칙보다 먼저 떠 있다.** 라벨이
 > `com.docker.compose.project=feat-p1-api`, `project.working_dir=…/.worktrees/feat-p1-api`
 > 인데 **그 워크트리는 이제 git 이 모르는 디렉터리다**(`git worktree list` 에 없고, 남은
-> 것은 compose 의 바인드 마운트가 되살린 빈 `docker/postgres-init/` 뿐이다). 그래서
-> 저장소 루트에서 `docker compose down` 을 쳐도 **이 컨테이너를 못 찾는다.** 다루려면
-> `docker compose -p feat-p1-api …` 이거나 `docker start/stop wirebound-postgres` 다
-> (둘 다 이 기계에서 확인했다). **그 빈 `postgres-init/` 은 볼륨이 다시 만들어질 때
-> `01-test-db.sql` 이 안 돈다는 뜻이기도 하다** — 6.4 의 함정이 그때 다시 온다.
+> 것은 compose 의 바인드 마운트가 되살린 빈 `docker/postgres-init/` 뿐이라
+> `docker-compose.yml` 도 없다). 그래서 저장소 루트에서 `docker compose down` 을 쳐도
+> **이 컨테이너를 못 찾는다.** 다루려면 `docker compose -p feat-p1-api …` 이거나
+> `docker start/stop <컨테이너이름>` 이다(둘 다 이 기계에서 확인했다). **그 빈
+> `postgres-init/` 은 그 프로젝트로 볼륨을 다시 만들면 `01-test-db.sql` 이 안 돈다는
+> 뜻이기도 하다** — 6.4 의 함정이 그때 온다.
 
 ### 6.4 테스트가 이유를 알기 어려운 접속 에러로 죽는다
 
-**원인.** 테스트 DB `wirebound_test`가 없다. `docker/postgres-init/01-test-db.sql`이 그것을
-만드는데 **그 스크립트는 볼륨을 처음 만들 때만 돈다.** `wirebound-pgdata` 볼륨이 이미 있는
-상태로(예전 판을 쓰다가) 새로 받았다면 없을 수 있다.
+**원인.** 테스트 DB(기본 `wirebound_test`)가 없다. `docker/postgres-init/01-test-db.sql`이
+그것을 만드는데 **그 스크립트는 볼륨을 처음 만들 때만 돈다.**
 
-**조치.** 컨테이너 안에서 직접 만든다.
+**워크트리마다 컨테이너를 띄우면 볼륨이 새로 생기므로 그 스크립트가 매번 돈다** — 이 기계
+에서 쟀다(새 볼륨의 `psql \l` 에 `wirebound_test` 가 있다). **그래서 이 함정은 두 경우에만
+온다:** 옛 볼륨을 그대로 쓰는 경우, 그리고 **`docker/postgres-init/` 이 비어 있는 경우**다.
+뒤엣것도 이 기계에서 쟀다 — 그 디렉터리가 비면 컨테이너 로그가 이렇게만 말하고 지나간다:
+
+```
+/usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+```
+
+**조치.** 컨테이너 안에서 직접 만든다 — **자기 디렉터리에서** 친다.
 
 ```bash
-docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wirebound_test;'
+docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wirebound_test;'
 ```
 
 > **이제 그 에러가 이 줄을 스스로 들고 온다.** `globalSetup` 이 SQLSTATE `3D000` 을 잡아
@@ -474,9 +577,14 @@ Error: connect ECONNREFUSED 127.0.0.1:3041
 (*"이메일 또는 비밀번호가 올바르지 않습니다"*)**, **A 의 계정이 200**, `/api/auth/me` 가
 A 의 사용자를 돌려줬고 **B 의 API 는 그 로그인을 0 번 봤다.**
 
-**가르는 법.** API 터미널의 **`이 서버가 보는 DB:`** 줄을 본다 — 워크트리마다 DB 이름이
-다르므로(3.1) 그 한 줄이 *"내가 지금 누구의 서버를 보고 있나"*를 답한다. 값을 가르는 절차는
-3.1 이다.
+**가르는 법.** API 터미널의 **`이 서버가 보는 DB:`** 줄을 본다 — 워크트리마다 **포트와 DB
+이름이** 다르므로(3.1) 그 한 줄이 *"내가 지금 누구의 서버를 보고 있나"*를 답한다. 값을
+가르는 절차는 3.1 이다.
+
+**ⓒ 붙는 것은 다 붙는데 *목록만* 비어 있다.** 워크트리마다 컨테이너를 띄우면 **볼륨이 새것**
+이라 그렇다 — 스키마는 올렸고(그래서 서버가 떴다) 행이 없다. **정상이다.** 옛 설계서는
+사라진 것이 아니라 **다른 이름의 볼륨**에 있다(6.3의 ⓒ). **`이 서버가 보는 DB:` 줄의
+`마이그레이션 N건` 이 0 이 아니면 이 갈래다** — 0 이면 서버가 아예 안 떴을 것이다.
 
 ---
 
@@ -635,8 +743,10 @@ pnpm build         # packages/* 의 dist
 pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브라우저 (없으면 건너뛴다)
 ```
 
-- **`pnpm test`는 실제 Postgres 에 붙는다.** 컨테이너가 healthy 여야 하고 `wirebound_test`가 있어야 한다(6.4).
-- **워크트리 둘이 `pnpm test`를 동시에 돌려도 된다 — `TEST_DATABASE_URL`이 다르면.** 3.1 이 그
+- **`pnpm test`는 실제 Postgres 에 붙는다.** 컨테이너가 healthy 여야 하고 테스트 DB(기본 `wirebound_test`)가 있어야 한다(6.4).
+- **워크트리 둘이 `pnpm test`를 동시에 돌려도 된다 — 붙는 DB 가 다르면.** 워크트리마다 자기
+  컨테이너를 띄우면 그것이 저절로 갈린다(포트가 다르므로). 한 컨테이너를 공유한다면
+  `TEST_DATABASE_URL` 을 갈라야 한다. 3.1 이 그
   절차다. 같으면 깨진다(3.1 의 표에 값이 있다). 가른 상태로 동시에 돌려 **둘 다 전 케이스
   통과 · 종료 0** 을 확인했다(구현자와 리뷰어가 각각).
 - **`pnpm test`는 브라우저를 안 띄운다.** 진짜 브라우저를 재는 것은 `pnpm test:build` 하나이고, 브라우저가 없으면 **건너뛰고 그렇다고 말한다**(리뷰어가 빈 캐시로 재서 **종료 0 · 13 skipped** 를 확인했다 — 귀속: 리뷰 §7).
@@ -664,8 +774,10 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 | **`--with-deps`** | 리눅스에서만 의미가 있어 이 기계에서 안 썼다 |
 | **첫 설치의 내려받기 시간** | 2절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
 | **워크트리 셋 이상** | 3.1 의 값은 전부 **워크트리 둘**로 쟀다 |
-| **이름 충돌이 사라진 뒤의 볼륨 갈림** | 6.3 의 *"빈 DB 가 뜬다"*는 **추론이다.** 컨테이너를 지워야 재현되는데 그것이 사용자의 것이라 안 했다(리뷰어도 같은 판단이다 — 귀속: 리뷰 §8). **잰 것은 볼륨 셋의 이름·`LINKS`·크기와 `container_name` 이 고정이라는 사실까지다** |
-| **워크트리에서 `docker compose up -d` 의 에러 원문** | 이 판이 **직접 못 쟀다**(도구 정책이 그 명령을 막았다). 6.3 의 `Conflict. The container name "/wirebound-postgres" is already in use…` 는 **설치 매뉴얼 판이 이 기계에서 잰 값**이다 |
+| **이름 충돌이 사라진 뒤의 볼륨 갈림** | **더는 추론이 아니다.** 2026-08-19(워크트리마다 컨테이너)가 임시 프로젝트 둘로 **끝까지 쟀다**: `container_name` 을 걷어내면 둘째 컨테이너가 `<프로젝트>-postgres-1` 로 뜨고 **자기 볼륨을 새로 만들며 그 DB 는 비어 있다.** 사용자의 컨테이너는 안 건드렸다 |
+| **옛 볼륨을 새 이름으로 옮기기** | 절차만 있고 **이 기계에서 아직 안 돌렸다** — `docs/superpowers/plans/2026-08-19-per-worktree-container-report.md` 가 든다(복사이지 이동이 아니다) |
+| **`--env-file` 을 뺀 `up -d` 가 무엇을 하는가** | **안 쟀다.** 기본값이 5433 이라 재려면 사용자의 컨테이너가 쓰는 포트를 건드려야 한다. **잰 것은 `docker compose config` 가 그때 5433 을 낸다는 것까지다** |
+| **컨테이너 이름 충돌의 원문** | 이제 안 난다(이름을 고정하지 않는다). 옛 원문 `Conflict. The container name "/wirebound-postgres" is already in use…` 는 **설치 매뉴얼 판이 이 기계에서 잰 값**이다 |
 | **`SCREEN_CHROMIUM_PATH`의 성공 방향에 자동 케이스가 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. ***"옳은 경로를 주면 그 실행 파일로 뜬다"*는 손으로만 쟀다** — 브라우저 둘이 있어야 세울 수 있는 자리다(이쪽과 리뷰어가 각각 손으로 확인했다) |
 
 ---

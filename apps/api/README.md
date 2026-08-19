@@ -41,7 +41,9 @@ pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린
 통째로 테스트 프로세스의 `process.env`에 얹으면 운영 `DATABASE_URL`이 거기 들어가는데,
 아래 *"테스트"* 절이 말하는 **범위 없는 `DELETE`** 가 그때 무엇을 지우는지는 적을 필요도 없다.
 
-**서버는 뜰 때 자기가 보는 DB를 말한다** — `이 서버가 보는 DB: 127.0.0.1:5433/wirebound`.
+**서버는 뜰 때 자기가 보는 DB와 스키마 상태를 말한다** —
+`이 서버가 보는 DB: 127.0.0.1:5433/wirebound · 마이그레이션 11건`.
+**빈 DB(0건)면 서버가 안 뜨고 그렇다고 말한다** — 절차는 최상위 README 3절이 소유한다.
 `호스트:포트/이름`뿐이고 **자격 문자열은 안 찍는다**(`src/db/describe-target.ts`). 워크트리를
 여럿 띄운 사람이 터미널을 나란히 놓고 가르는 값이 이것이다.
 
@@ -54,7 +56,7 @@ pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린
 ## 테스트
 
 api 프로젝트의 vitest 테스트는 실제 Postgres에 붙는다. 컨테이너가 healthy인
-상태에서 돌려야 한다 — `docker compose up -d` 이후 `pnpm vitest run --project api`
+상태에서 돌려야 한다 — 컨테이너를 띄운 뒤(최상위 README 2절) `pnpm vitest run --project api`
 (또는 루트의 `pnpm test`)를 실행한다.
 
 테스트 DB(`wirebound_test`)의 마이그레이션은 vitest의 `globalSetup`
@@ -1165,7 +1167,7 @@ revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `
 
 ## 명령 요약
 
-**이 서버의 것만 든다.** 저장소를 세우는 명령(`docker compose up -d`·`pnpm install`·
+**이 서버의 것만 든다.** 저장소를 세우는 명령(컨테이너 띄우기·`pnpm install`·
 `pnpm build`)과 게이트 넷(`pnpm test`·`typecheck`·`build`·`test:build`)은 최상위
 [`README.md`](../../README.md)에 있다 — **두 벌로 적지 않는다.**
 
