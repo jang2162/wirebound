@@ -36,6 +36,12 @@ describe('describeDatabaseTarget — 사람이 가를 만큼만 낸다', () => {
     expect(described).toBe('db.example:5432/prod')
   })
 
+  it('ASCII 가 아닌 DB 이름을 퍼센트 인코딩된 채로 내지 않는다 — 붙여넣을 수 있어야 한다', () => {
+    // `URL`은 경로를 인코딩해서 들고 있다. 안 되돌리면 `global-setup`이 권하는
+    // `CREATE DATABASE wb_%EC%95%84…` 가 실제로 못 쓰는 명령이 된다(실측).
+    expect(describeDatabaseTarget('postgres://u:p@127.0.0.1:5433/wb_아직없다')).toBe('127.0.0.1:5433/wb_아직없다')
+  })
+
   it('포트가 없으면 호스트만, DB 이름이 없으면 호스트만 낸다', () => {
     expect(describeDatabaseTarget('postgres://u:p@db.example/wirebound')).toBe('db.example/wirebound')
     expect(describeDatabaseTarget('postgres://u:p@db.example:5432')).toBe('db.example:5432')

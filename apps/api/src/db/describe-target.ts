@@ -17,7 +17,20 @@ export function describeDatabaseTarget(databaseUrl: string): string {
     // **원문을 되돌려주지 않는다** — 해석에 실패한 문자열에도 비밀번호가 들어 있다.
     return '(DATABASE_URL을 해석할 수 없습니다)'
   }
-  const name = url.pathname.replace(/^\//, '')
+  const name = decodePathSegment(url.pathname.replace(/^\//, ''))
   const host = url.port === '' ? url.hostname : `${url.hostname}:${url.port}`
   return name === '' ? host : `${host}/${name}`
+}
+
+/**
+ * `URL`은 경로를 퍼센트 인코딩해서 들고 있다. 사람이 읽을 값이므로 되돌린다 —
+ * 안 되돌리면 한글 DB 이름이 `wb_%EC%95%84…`로 나온다(실측).
+ * 되돌리다 실패하면(반쪽짜리 `%`) 인코딩된 채로 둔다. 던지지 않는다.
+ */
+function decodePathSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
 }
