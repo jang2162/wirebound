@@ -76,9 +76,13 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 
 > **`DELETE FROM` 으로 grep 하면 0 건이다**(쟀다). Kysely 로 적혀 있다 —
 > `db.deleteFrom('projects').execute()` / `db.deleteFrom('users').execute()`, `where` 없이.
-> **그리고 그 파일은 하나가 아니다**: `beforeEach(resetRealData)` 를 거는 파일이
-> **열넷**이고 api 테스트 파일은 모두 **예순여덟**이다(2026-08-19 에 셌다. 앞 판은 이
-> 문단이 *"그 파일"* 하나만 든다고 적었다 — 틀렸다).
+> **그리고 그 파일은 하나가 아니다** — 앞 판은 이 문단이 *"그 파일"* 하나만 든다고 적었고
+> 그것이 틀렸다(2026-08-19).
+>
+> **몇 개인지는 여기 안 적는다.** 이 판이 테스트 파일 둘을 더하자 앞서 적어 둔 수가
+> 그 자리에서 낡았다(귀속: 리뷰 §7.1). 대신 **`real-api-harness.test.ts` 가 불변식을 센다** —
+> *"`withRealApi` 를 쓰는 파일은 전부 `resetRealData` 를 `beforeEach`·`afterEach` 양쪽에
+> 건다"*. 목록이 필요하면 `grep -rl 'beforeEach(resetRealData)' test/` 다.
 
 **그래서 테스트 DB 는 통째로 이 스위트의 것이다.** 다른 워크트리와 공유하면 서로의 판을
 지운다 — 갈라 두는 절차는 최상위 [`README.md`](../../README.md) §3.1 이 소유한다.

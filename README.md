@@ -159,8 +159,18 @@ pnpm --filter @wirebound/api migrate
 ```
 
 **만든 DB 는 `wirebound` 와 소유자·인코딩·콜레이션이 같다**(이 기계에서 쟀다:
-`wirebound` / `UTF8` / `en_US.utf8`). 3번을 빼먹으면 5번과 `pnpm test` 가
-`database "…" does not exist` 로 죽고, **그 에러가 위 한 줄을 함께 찍는다.**
+`wirebound` / `UTF8` / `en_US.utf8`).
+
+3번을 빼먹으면 **먼저 5번이 죽는다.** 둘이 죽는 모양이 다르다(이 기계에서 쟀다):
+
+| 무엇 | 종료 코드 | 무엇을 찍나 |
+|---|---|---|
+| **5번** `pnpm --filter @wirebound/api migrate` | 1 | `마이그레이션 실패: error: database "…" does not exist` — **DB 이름만 말한다. 만드는 줄은 안 찍는다** |
+| `pnpm test` | 1 | 같은 문장에 **위 `CREATE DATABASE` 한 줄을 붙여서** 찍는다 |
+
+**절차대로 가면 5번을 먼저 만나므로 위 3번의 명령을 손에 들고 있어야 한다.** 조치가
+붙는 자리는 테스트 쪽 하나다(`apps/api/test/missing-database-hint.ts` — 없는 DB 를 뜻하는
+`3D000` 일 때만 붙고, 접속 문자열은 안 싣는다).
 
 **값을 안 가르면 무엇이 보이나** — 전부 이 기계에서 쟀다.
 
@@ -168,7 +178,7 @@ pnpm --filter @wirebound/api migrate
 |---|---|
 | `PORT` | 둘째 서버가 `Error: listen EADDRINUSE: address already in use 127.0.0.1:3031` 로 죽는다. **종료 코드 1** |
 | `DATABASE_URL` | 워크트리 B 에서 `migrate:down` 을 한 번 돌리자 **A 의 살아 있는 서버가** `500 {"error":{"code":"internal"}}` 을 내기 시작했다. A 의 로그에만 `relation "api_tokens" does not exist` 가 남았고 **B 는 아무 말도 안 했다** |
-| `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **한쪽 16 파일 · 92 케이스**, **다른 쪽 10 파일 · 53 케이스**가 죽었다(둘 다 종료 1). 꼴은 셋이다 — `relation "themes" does not exist` **29 건**(상대의 `globalSetup` 이 판을 내렸다) · `409 이미 가입된 이메일입니다`(상대가 커밋한 행) · `project_members_user_id_fkey` 위반(상대의 정리가 지웠다). **가르면 둘 다 68 파일 · 1318 케이스 통과 · 종료 0** 이고 벽시계는 오히려 짧았다(91.2초·91.1초 vs 98.1초·91.8초) |
+| `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **둘 다 종료 코드 1**로 죽는다. **가르면 둘 다 전 케이스 통과 · 종료 0** 이고, 벽시계는 **혼자 돌리는 것보다 오히려 짧다**(리뷰어 판: 단독 94.02초 vs 동시 두 판이 각각 90.9초 — 귀속: 리뷰 §5). 깨지는 꼴은 셋이다 — 상대의 `globalSetup` 이 판을 내려서 나는 `relation "…" does not exist` · 상대가 커밋한 행과 부딪히는 `409` · 상대의 정리가 지워서 나는 FK 위반. **몇 개가 죽는지는 판마다 다르다**(경쟁 상태다. 두 사람이 각각 재서 13~18 파일 사이로 갈렸다) — **안 낡는 값은 종료 코드뿐이라 그것만 적는다** |
 | (예전) 프록시 대상 | **이제 안 부딪힌다.** 대상이 박혀 있던 시절에는 B 의 에디터에서 **B 의 계정이 401, A 의 계정이 200** 이었고 B 의 API 는 그 로그인을 **0 번** 봤다. vite 도 API 도 아무 말을 안 했다 |
 
 > **`apps/api/.env`를 고쳤으면 서버 둘을 **다** 다시 띄워라.** `tsx watch`는 **소스만 본다** —
@@ -382,10 +392,14 @@ docker ps --filter name=wirebound-postgres
 ```
 $ docker system df -v
 VOLUME NAME                                LINKS   SIZE
-feat-p1-api_wirebound-pgdata               1       145.9MB     ← 사용자의 설계서가 여기 있다
+feat-p1-api_wirebound-pgdata               1       (수백 MB)  ← 설계서가 여기 있다. LINKS 가 1 이다
 feat-p2b1-editor-shell_wirebound-pgdata    0       0B
 wirebound_wirebound-pgdata                 0       0B          ← 저장소 루트에서 띄우면 이것을 쓴다
 ```
+
+> **크기는 적지 않는다 — 사는 수다.** 같은 볼륨을 세 번 재서 145.9MB · 316.4MB · 203.8MB 를
+> 봤다(Postgres 가 회수하는 공간이 그때그때 다르다. 가운데 값은 리뷰어가 쟀다). **읽을 것은
+> 크기가 아니라 모양이다: `LINKS` 가 1 인 것이 지금 쓰이는 볼륨이고 나머지는 `0` · `0B` 다.**
 
 **오늘 그 길이 막혀 있는 이유는 `container_name` 이 고정이라서다** — 이름 충돌로 둘째
 컨테이너가 안 뜨므로 빈 볼륨이 마운트되는 데까지 못 간다. **그 이름 충돌이 사라지는 날**
@@ -393,6 +407,11 @@ wirebound_wirebound-pgdata                 0       0B          ← 저장소 루
 사라졌다고 읽는다.** 볼륨은 그대로 있다 — 이름이 다를 뿐이다.
 
 **그러므로 "어디서 `docker compose up -d` 를 치는가"가 계약이다: 저장소 루트다.**
+
+> **이미 빈 DB 를 본 사람에게 — 지우지 마라.** 데이터는 없어진 것이 아니라 **다른 이름의
+> 볼륨에 그대로 있다.** `docker volume ls` 로 `*_wirebound-pgdata` 를 전부 찾아 `LINKS` 가
+> 붙어 있거나 크기가 있는 쪽을 고른다. **`docker compose down -v` 를 치지 마라** — 그 한
+> 줄이 지금 보고 있는 빈 볼륨이 아니라 **찾고 있는 볼륨까지** 지운다.
 
 > **오늘 이 기계의 컨테이너는 그 계약을 이미 어긴 상태로 서 있다.** 라벨이
 > `com.docker.compose.project=feat-p1-api`, `project.working_dir=…/.worktrees/feat-p1-api`
@@ -618,8 +637,8 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 
 - **`pnpm test`는 실제 Postgres 에 붙는다.** 컨테이너가 healthy 여야 하고 `wirebound_test`가 있어야 한다(6.4).
 - **워크트리 둘이 `pnpm test`를 동시에 돌려도 된다 — `TEST_DATABASE_URL`이 다르면.** 3.1 이 그
-  절차다. 같으면 깨진다(3.1 의 표에 값이 있다). 가른 상태로 동시에 돌려 **둘 다 68 파일 ·
-  1318 케이스 · 종료 0** 을 확인했다.
+  절차다. 같으면 깨진다(3.1 의 표에 값이 있다). 가른 상태로 동시에 돌려 **둘 다 전 케이스
+  통과 · 종료 0** 을 확인했다(구현자와 리뷰어가 각각).
 - **`pnpm test`는 브라우저를 안 띄운다.** 진짜 브라우저를 재는 것은 `pnpm test:build` 하나이고, 브라우저가 없으면 **건너뛰고 그렇다고 말한다**(리뷰어가 빈 캐시로 재서 **종료 0 · 13 skipped** 를 확인했다 — 귀속: 리뷰 §7).
 - **`pnpm test:build`는 시작할 때 패키지를 다시 빌드한다**(`vitest.config.ts`가 *"tsdown 재빌드를 `beforeAll`에서 돈다"*고 적는다). 그래서 넷 중 이것만 다른 셋과 결이 다르다 — 이미 빌드된 자리에서도 **10~13초**였다(이쪽이 세 번, 리뷰어가 두 번 쟀다).
 - 파일 하나만 돌리려면 `pnpm vitest run <경로>`, api 만 돌리려면 `pnpm vitest run --project api`.
@@ -645,7 +664,7 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 | **`--with-deps`** | 리눅스에서만 의미가 있어 이 기계에서 안 썼다 |
 | **첫 설치의 내려받기 시간** | 2절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
 | **워크트리 셋 이상** | 3.1 의 값은 전부 **워크트리 둘**로 쟀다 |
-| **이름 충돌이 사라진 뒤의 볼륨 갈림** | 6.3 의 *"빈 DB 가 뜬다"*는 **추론이다.** 컨테이너를 지워야 재현되는데 그것이 사용자의 것이라 안 했다. **잰 것은 볼륨 셋의 이름과 크기**(`145.9MB` / `0B` / `0B`)와 `container_name` 이 고정이라는 사실까지다 |
+| **이름 충돌이 사라진 뒤의 볼륨 갈림** | 6.3 의 *"빈 DB 가 뜬다"*는 **추론이다.** 컨테이너를 지워야 재현되는데 그것이 사용자의 것이라 안 했다(리뷰어도 같은 판단이다 — 귀속: 리뷰 §8). **잰 것은 볼륨 셋의 이름·`LINKS`·크기와 `container_name` 이 고정이라는 사실까지다** |
 | **워크트리에서 `docker compose up -d` 의 에러 원문** | 이 판이 **직접 못 쟀다**(도구 정책이 그 명령을 막았다). 6.3 의 `Conflict. The container name "/wirebound-postgres" is already in use…` 는 **설치 매뉴얼 판이 이 기계에서 잰 값**이다 |
 | **`SCREEN_CHROMIUM_PATH`의 성공 방향에 자동 케이스가 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. ***"옳은 경로를 주면 그 실행 파일로 뜬다"*는 손으로만 쟀다** — 브라우저 둘이 있어야 세울 수 있는 자리다(이쪽과 리뷰어가 각각 손으로 확인했다) |
 
