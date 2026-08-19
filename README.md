@@ -175,6 +175,13 @@ git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자�
 `git worktree add -b <브랜치> .worktrees/<이름>`). 아래는 **만든 뒤**의 순서다.
 `<이름>` 자리에 워크트리 이름을, `<포트>` 자리에 **다른 워크트리가 안 쓰는 수**를 넣는다.
 
+**무슨 수가 이미 쓰이는지는 이렇게 본다** — 아래 둘이 각각 컨테이너와 API 서버 쪽이다.
+
+```bash
+docker ps --format '{{.Names}}\t{{.Ports}}'   # 떠 있는 컨테이너가 연 포트
+lsof -nP -iTCP -sTCP:LISTEN | grep node       # 떠 있는 API·에디터가 연 포트
+```
+
 ```bash
 # 1. 설치와 빌드 — 워크트리마다 따로 필요하다 (6.1)
 pnpm install && pnpm build

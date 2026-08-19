@@ -209,6 +209,32 @@ describe('안 적은 사람의 기본값', () => {
  * compose 의 기본값(5433)으로 컨테이너를 띄우고 `.env.example` 의 접속 문자열로 붙는다.
  * 한쪽만 움직이면 **어제까지 되던 것이 조용히 안 된다.**
  */
+/**
+ * **자를 재는 자.** 위의 인구조사는 `stripYamlComments` 를 믿고 서 있다 — 그것이 아무것도
+ * 안 걷으면 *"옳은 줄을 주석에 남기고 아래에서 뒤집는"* 우회가 통째로 지나간다(이 저장소가
+ * 이미 당했다: 귀속 리뷰 델타 W4·R4e·B4).
+ *
+ * 이 판이 심어 확인했다: 그 함수를 무동작으로 바꿔도 **아래 인구조사가 전부 초록이었다**
+ * (변이 M18). compose 파일의 주석이 한글이라 우연히 안 걸렸을 뿐이다 — 그래서 자를 세운다.
+ */
+describe('stripYamlComments — 인구조사가 딛고 선 자', () => {
+  it('줄 전체 주석을 걷는다', () => {
+    expect(stripYamlComments('# container_name: x\nimage: y')).not.toContain('container_name')
+  })
+
+  it('코드 뒤에 붙은 주석도 걷는다 — 그 자리가 가장 흔한 우회다', () => {
+    expect(stripYamlComments("    - '5433:5432'   # ${POSTGRES_PORT:-5433}")).toBe("    - '5433:5432'   ")
+  })
+
+  it('**따옴표 안의 `#` 은 안 걷는다** — 값이 잘리면 인구조사가 엉뚱한 것을 본다', () => {
+    expect(stripYamlComments("    password: 'a#b'")).toBe("    password: 'a#b'")
+  })
+
+  it('주석이 없으면 그대로다', () => {
+    expect(stripYamlComments('services:\n  postgres:\n')).toBe('services:\n  postgres:\n')
+  })
+})
+
 describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 든다 (D6)', () => {
   const REPO_ROOT = new URL('../../../', import.meta.url)
   const COMPOSE = stripYamlComments(readFileSync(new URL('docker-compose.yml', REPO_ROOT), 'utf8'))
