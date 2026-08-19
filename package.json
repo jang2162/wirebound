@@ -9,7 +9,7 @@
     "test": "vitest run --project '!build'",
     "test:watch": "vitest --project '!build'",
     "test:build": "vitest run --project build",
-    "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig.json"
+    "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json"
   },
   "devDependencies": {
     "jsdom": "^25.0.0",

@@ -1,6 +1,7 @@
 import { buildApp } from './app'
 import { loadConfig } from './config'
 import { createDb, createPool } from './db/client'
+import { describeDatabaseTarget } from './db/describe-target'
 import { chromiumScreenRenderer } from './services/screen-render-chromium'
 
 /**
@@ -44,6 +45,10 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => void shutdown('SIGINT'))
 
   await app.listen({ host: config.host, port: config.port })
+  // **어느 DB를 보는지 말한다**(2026-08-19 D4). 바로 위에서 fastify가 찍는 줄은 포트만
+  // 말하므로, 워크트리를 여럿 띄운 사람이 터미널을 나란히 놓고 가를 수 있는 값이 없다.
+  // 자격 문자열은 안 찍는다 — `describeDatabaseTarget`이 그것을 지킨다.
+  app.log.info(`이 서버가 보는 DB: ${describeDatabaseTarget(config.databaseUrl)}`)
 }
 
 main().catch((error) => {
