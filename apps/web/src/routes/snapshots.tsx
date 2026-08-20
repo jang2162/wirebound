@@ -397,7 +397,10 @@ function SnapshotsScreen(props: {
         {props.snapshots.length === 0 ? (
           <p className="wb-shell-snapshots-empty">아직 스냅샷이 없습니다.</p>
         ) : (
-          <ul>
+          // **`<ul>`에도 클래스가 필요하다.** D7이 자손 선택자를 막으므로
+          // `.wb-shell-snapshots-list`에서 안쪽 `<ul>`을 겨냥할 수 없다 — 클래스가 없으면
+          // `•`와 UA 기본 여백이 그대로 보인다.
+          <ul className="wb-shell-snapshots-rows">
             {props.snapshots.map((snapshot) => (
               <li key={snapshot.id} className="wb-shell-snapshots-row">
                 <span className="wb-shell-snapshots-tag">{snapshot.tag}</span>

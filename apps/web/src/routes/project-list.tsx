@@ -33,12 +33,21 @@ export function ProjectListRoute(): ReactElement {
   if (state.status === 'failed' && state.failure.kind === 'signed-out') return <SignedOut />
 
   return (
-    <main>
-      <h1>프로젝트</h1>
+    // **클래스 이름은 `.wb-shell-project-form`·`-field`·`-confirm`의 체계를 잇는다** —
+    // 그 셋이 이 화면 안에서 열리므로 접두어가 갈리면 한 화면이 두 어휘로 쪼개진다.
+    // 셸 밖의 라우트지만 스타일은 `src/shell.css` 한 파일에 있고 `wb-shell-` 접두어를
+    // `test/shell-css.test.ts`가 기계로 지킨다.
+    <main className="wb-shell-project-list">
+      <h1 className="wb-shell-project-list-title">프로젝트</h1>
 
       {/* **여는 버튼도 잠근다(D2).** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
           그것을 화면에 보이게 한다 — P2b-4에서 여는 쪽 하나가 빠져 사고가 났다. */}
-      <button type="button" disabled={commands.busy} onClick={commands.openCreate}>
+      <button
+        className="wb-shell-project-create"
+        type="button"
+        disabled={commands.busy}
+        onClick={commands.openCreate}
+      >
         새 프로젝트
       </button>
 
@@ -58,18 +67,26 @@ export function ProjectListRoute(): ReactElement {
       {/* **조작 실패는 조회 실패와 다른 자리에 낸다**(D8). 둘이 한 자리에 나오면 목록을
           못 받은 사실이 조작 실패 문장에 덮인다. */}
       {commands.failure !== null && commands.failure.kind === 'message' && (
-        <p role="alert">{commands.failure.message}</p>
+        <p className="wb-shell-project-alert" role="alert">
+          {commands.failure.message}
+        </p>
       )}
 
-      {state.status === 'loading' && <p role="status">불러오는 중…</p>}
+      {state.status === 'loading' && (
+        <p className="wb-shell-project-notice" role="status">
+          불러오는 중…
+        </p>
+      )}
       {state.status === 'failed' && state.failure.kind === 'message' && (
-        <p role="alert">{state.failure.message}</p>
+        <p className="wb-shell-project-alert" role="alert">
+          {state.failure.message}
+        </p>
       )}
       {state.status === 'ready' &&
         (state.projects.length === 0 ? (
-          <p>{EMPTY_NOTICE}</p>
+          <p className="wb-shell-project-notice">{EMPTY_NOTICE}</p>
         ) : (
-          <ul>
+          <ul className="wb-shell-project-items">
             {state.projects.map((project) => (
               <ProjectRow key={project.id} project={project} commands={commands} />
             ))}
@@ -90,23 +107,37 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
   const confirming = commands.confirmingDelete?.id === project.id
 
   return (
-    <li>
+    <li className="wb-shell-project-item">
       {/* 버튼이 아니라 링크인 것은 주소가 있는 이동이기 때문이다 — 새 탭으로 열거나
           주소를 공유할 수 있어야 한다. */}
-      <Link to={`/projects/${project.id}`}>{project.name}</Link>
-      {project.description !== null && <p>{project.description}</p>}
+      <Link className="wb-shell-project-name" to={`/projects/${project.id}`}>
+        {project.name}
+      </Link>
+      {project.description !== null && (
+        <p className="wb-shell-project-desc">{project.description}</p>
+      )}
 
       {/* **`owner`가 아니면 버튼 자체가 없다**(D3) — `editor`·`viewer`는 `PATCH`·`DELETE`
           둘 다 403이다(웨이브 1 실측). 비활성으로 두지 않고 아예 그리지 않는 것은, 이 화면에서
           역할이 바뀌는 길이 없어 "지금은 못 하지만 곧 될 수도 있다"가 아니기 때문이다. */}
       {abilities.rename && (
-        <button type="button" disabled={commands.busy} onClick={() => commands.openEdit(project)}>
+        <button
+          className="wb-shell-project-action"
+          type="button"
+          disabled={commands.busy}
+          onClick={() => commands.openEdit(project)}
+        >
           {`${project.name} 수정`}
         </button>
       )}
 
       {abilities.remove && (
-        <button type="button" disabled={commands.busy} onClick={() => commands.askDelete(project)}>
+        <button
+          className="wb-shell-project-action"
+          type="button"
+          disabled={commands.busy}
+          onClick={() => commands.askDelete(project)}
+        >
           {`${project.name} 삭제`}
         </button>
       )}

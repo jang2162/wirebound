@@ -190,6 +190,78 @@ export function findViolations(css: string): Violation[] {
   return violations
 }
 
+/**
+ * `shell.css`가 **규칙을 갖는** 클래스 이름 전부. `shell-css-coverage.ts`가 이것을 쓴다 —
+ * *"코드가 붙인 클래스에 규칙이 있는가"*의 CSS 쪽 절반이다.
+ *
+ * **`findViolations`와 파서를 나눠 쓰는 것이 요점이다.** 주석 걷기·중괄호 세기·선택자
+ * 가르기를 두 벌 두면 한쪽만 고쳐지는 자리가 생기고, 그러면 D7 검사와 커버리지 검사가
+ * **같은 파일을 다르게 읽는다**.
+ *
+ * **못 보는 것**(이 함수 몫):
+ *
+ * - `@keyframes` 안. `scanRules`가 통째로 건너뛰므로 그 안의 이름은 여기 없다. 키프레임
+ *   선택자는 클래스가 아니므로 의도한 것이다.
+ * - **상태만 갖는 규칙과 진짜 규칙을 구분하지 않는다.** `.x:disabled { … }`만 있고
+ *   `.x { … }`가 없어도 `x`는 "규칙이 있다"로 센다. 가르려면 의사 클래스 목록을 여기
+ *   두어야 하는데, 그 목록이 낡는 쪽이 더 나쁘다.
+ * - `:not(.y)` 안의 `.y`는 **세지 않는다**(`stripParens`). 그 클래스는 규칙을 받는 것이
+ *   아니라 배제되는 것이다. 오늘 이 파일에 함수형 의사 클래스는 없다 — `checkSelector`가
+ *   막는다.
+ * - **복합 선택자 `.a.b`의 두 이름을 낱개로 센다.** 그 규칙은 둘이 **함께** 붙은 요소에만
+ *   걸리는데, 여기서는 `a`도 `b`도 각각 "규칙 있음"이 된다. 그래서 `.a.b` 규칙만 있고
+ *   `a`만 붙이는 자리가 있으면 그 자리는 무스타일인데 커버리지 검사가 통과한다.
+ *   **오늘 `shell.css`에 다중 클래스 선택자는 0개다**(검산:
+ *   `grep -cE '^\.wb-shell[A-Za-z0-9_-]*\.wb-shell' apps/web/src/shell.css`). 가르려면
+ *   "이 클래스 하나만으로 걸리는 규칙이 있는가"를 봐야 하는데, 그러면 `.a:disabled`처럼
+ *   정당한 형태와 구분할 규칙이 하나 더 필요해진다 — 0건인 것을 위해 들일 복잡도가 아니다.
+ */
+export function ruledClasses(css: string): Set<string> {
+  const rules: Rule[] = []
+  // 위반은 여기서 보지 않는다 — 그 몫은 `findViolations`다. 같은 파일을 두 번 읽는 대신
+  // 파서만 같이 쓰고 결과를 각자 만든다.
+  scanRules(stripComments(css), rules, [])
+
+  const names = new Set<string>()
+  for (const rule of rules) {
+    for (const selector of splitTop(rule.prelude, ',')) {
+      for (const name of classNames(stripParens(skeleton(selector)))) names.add(name)
+    }
+  }
+  return names
+}
+
+/**
+ * **`--wb-shell-*` 팔레트를 선언하는 클래스들** — 즉 "화면 루트". `shell-css-palette.test.ts`가
+ * 이것을 쓴다.
+ *
+ * **이 집합이 왜 따로 필요한가.** 셸 밖 라우트는 `.wb-shell` 아래에 있지 않으므로 팔레트를
+ * 스스로 선언해야 한다. 안 하면 `var(--wb-shell-accent)`가 **계산 시점에 무효**가 되고
+ * `color`는 상속 속성이라 결과가 검정이다 — 렌더는 되고 아무것도 실패하지 않는다.
+ * 이번 브랜치가 잡으려던 침묵과 정확히 같은 부류라 기계가 보게 한다.
+ *
+ * 값은 `ruledClasses`와 같은 파서에서 나온다. **못 보는 것도 그쪽과 같다**(복합 선택자를
+ * 낱개로 세는 것 포함).
+ */
+export function paletteRoots(css: string): Set<string> {
+  const rules: Rule[] = []
+  scanRules(stripComments(css), rules, [])
+
+  const roots = new Set<string>()
+  for (const rule of rules) {
+    // 선언 이름이 `--wb-shell-`로 시작하는 것이 하나라도 있으면 그 선택자들이 화면 루트다.
+    const declares = splitTop(rule.body, ';').some((declaration) =>
+      declaration.trim().toLowerCase().startsWith(`--${PREFIX}-`),
+    )
+    if (!declares) continue
+
+    for (const selector of splitTop(rule.prelude, ',')) {
+      for (const name of classNames(stripParens(skeleton(selector)))) roots.add(name)
+    }
+  }
+  return roots
+}
+
 /** 주석을 걷는다. 주석 안의 선택자·속성이 검사에 걸리면 안 된다(머리말이 그 예를 든다). */
 function stripComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, ' ')
