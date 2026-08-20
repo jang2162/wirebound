@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { parseEnv } from 'node:util'
+import { COMPOSE_DEFAULT_POSTGRES_PORT, portAgreementError } from '../src/db/port-agreement'
 
 /**
  * 테스트가 붙을 DB를 정한다 — **워크트리마다 다를 수 있어야 한다.**
@@ -9,17 +10,34 @@ import { parseEnv } from 'node:util'
  * 스크립트에만 붙어 있다. 그래서 `apps/api/.env`에 `TEST_DATABASE_URL`을 적어도
  * 오늘은 아무 일도 일어나지 않는다 — 이 모듈이 그 한 칸을 잇는다.
  *
- * **파일에서 가져오는 키는 `TEST_DATABASE_URL` 하나뿐이다.** `apps/api/.env`를 통째로
- * `process.env`에 얹으면 운영 `DATABASE_URL`이 테스트 프로세스에 들어간다. api 테스트
- * 열넷이 `projects`·`users`를 **범위 없이** 지우므로(`helpers.ts`의 `resetRealData`)
- * 그때 무엇이 지워지는지는 적을 필요도 없다.
+ * **파일에서 가져오는 키는 둘뿐이다** — `TEST_DATABASE_URL` 과 `POSTGRES_PORT` 다.
+ * `apps/api/.env`를 통째로 `process.env`에 얹으면 운영 `DATABASE_URL`이 테스트 프로세스에
+ * 들어간다. api 테스트 열넷이 `projects`·`users`를 **범위 없이** 지우므로
+ * (`helpers.ts`의 `resetRealData`) 그때 무엇이 지워지는지는 적을 필요도 없다.
+ * **`POSTGRES_PORT` 를 더한 것은 그 반대 방향이다** — 그 값은 자격이 아니라 *어느
+ * 컨테이너인가*이고, 안 보면 기본값이 남의 컨테이너를 가리킨다(아래 `defaultTestDatabaseUrl`).
  *
  * 순서는 `--env-file-if-exists`와 같다: **셸이 파일을 이긴다.**
  * (같은 규칙을 에디터 쪽에서 재는 자는 `apps/web/config/api-proxy-target.ts`다.
  * 두 앱이 서로를 import할 수 없어 규칙은 두 자리에 있고, **그 순서가 같다는 것**을
  * 양쪽 케이스가 각각 잰다.)
  */
-export const DEFAULT_TEST_DATABASE_URL = 'postgres://wirebound:wirebound@127.0.0.1:5433/wirebound_test'
+export const DEFAULT_TEST_DATABASE_URL = defaultTestDatabaseUrl()
+
+/**
+ * 아무것도 안 적었을 때 붙을 곳. **포트가 `POSTGRES_PORT` 를 따라간다.**
+ *
+ * 워크트리마다 컨테이너를 띄우면서 이 기본값이 위험해졌다 — 옛 판은 5433 을 박고 있어서,
+ * 자기 컨테이너를 5443 에 띄운 사람이 `TEST_DATABASE_URL` 을 안 적으면 스위트가 **5433**,
+ * 즉 **남의 컨테이너**의 `wirebound_test` 를 지우며 돌았다. 그 자리를 값 하나로 없앤다 —
+ * 안 적은 사람은 **자기 컨테이너의** `wirebound_test` 를 본다(볼륨을 처음 만들 때
+ * `docker/postgres-init/01-test-db.sql` 이 만들어 둔다).
+ *
+ * **적은 사람의 어긋남은 `portAgreementError` 가 잡는다** — 기본값은 어긋날 수가 없다.
+ */
+export function defaultTestDatabaseUrl(postgresPort: string = COMPOSE_DEFAULT_POSTGRES_PORT): string {
+  return `postgres://wirebound:wirebound@127.0.0.1:${postgresPort}/wirebound_test`
+}
 
 /**
  * `apps/api/.env` — 이 앱의 값이 사는 한 자리.
@@ -40,6 +58,11 @@ export interface TestDatabaseUrlSources {
   fileEnv?: Record<string, string | undefined>
 }
 
+/** `POSTGRES_PORT` 도 셸이 파일을 이긴다 — 같은 순서를 두 값이 함께 쓴다. */
+export function resolvePostgresPort(sources: TestDatabaseUrlSources = {}): string | undefined {
+  return pick(sources.shellEnv?.POSTGRES_PORT) ?? pick(sources.fileEnv?.POSTGRES_PORT)
+}
+
 /** 빈 문자열은 "안 줬다"와 같은 뜻이다. */
 function pick(value: string | undefined): string | undefined {
   return value === undefined || value === '' ? undefined : value
@@ -49,7 +72,7 @@ export function resolveTestDatabaseUrl(sources: TestDatabaseUrlSources = {}): st
   return (
     pick(sources.shellEnv?.TEST_DATABASE_URL) ??
     pick(sources.fileEnv?.TEST_DATABASE_URL) ??
-    DEFAULT_TEST_DATABASE_URL
+    defaultTestDatabaseUrl(resolvePostgresPort(sources))
   )
 }
 
@@ -84,5 +107,17 @@ export function resolveTestDatabaseUrlFrom(
   shellEnv: Record<string, string | undefined>,
   envFileUrl: URL | string = API_ENV_URL,
 ): string {
-  return resolveTestDatabaseUrl({ shellEnv, fileEnv: readApiEnvFile(envFileUrl) })
+  const sources: TestDatabaseUrlSources = { shellEnv, fileEnv: readApiEnvFile(envFileUrl) }
+  const testDatabaseUrl = resolveTestDatabaseUrl(sources)
+  // **여기서 멈추는 것이 요점이다.** 어긋난 채로 돌면 스위트가 *남의 컨테이너*의 판을
+  // 지운다 — `helpers.ts` 의 `resetRealData` 가 `projects`·`users` 를 범위 없이 지운다.
+  // 서버 쪽의 같은 검사는 `src/config.ts` 가 `DATABASE_URL` 에 건다.
+  const disagreement = portAgreementError({
+    postgresPort: resolvePostgresPort(sources),
+    urls: { TEST_DATABASE_URL: testDatabaseUrl },
+  })
+  if (disagreement !== undefined) {
+    throw new Error(disagreement)
+  }
+  return testDatabaseUrl
 }

@@ -23,6 +23,34 @@ export function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 }
 
+/**
+ * YAML 의 주석(`#`)을 걷는다. **`docker-compose.yml` 을 재는 자가 쓴다.**
+ *
+ * 왜 필요한가: 인구조사가 주석을 안 걷으면 **옳은 줄을 주석에 남기고 아래에서 뒤집는
+ * 우회**가 통째로 지나간다 — 이 저장소가 이미 한 번 당했다(귀속: 리뷰 델타 W4·R4e·B4).
+ * compose 파일은 주석이 길어서 그 함정이 더 크다.
+ *
+ * **작은따옴표 안의 `#` 은 안 걷는다.** compose 의 포트 줄이 따옴표로 싸여 있고
+ * (`- '${POSTGRES_PORT:-5433}:5432'`) 값 안에 `#` 이 들어올 수 있다.
+ */
+export function stripYamlComments(source: string): string {
+  return source
+    .split('\n')
+    .map((line) => {
+      let quoted = false
+      for (let index = 0; index < line.length; index += 1) {
+        const character = line[index]
+        if (character === "'" || character === '"') {
+          quoted = !quoted
+        } else if (character === '#' && !quoted) {
+          return line.slice(0, index)
+        }
+      }
+      return line
+    })
+    .join('\n')
+}
+
 /** `SRC_ROOT` 아래의 `.ts` 전부를 뿌리 기준 상대 경로로 낸다. */
 export function sourceFiles(dir: string = SRC_ROOT, prefix = ''): string[] {
   const found: string[] = []

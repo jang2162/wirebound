@@ -17,6 +17,17 @@ import { describeDatabaseTarget } from '../src/db/describe-target'
  * 이 경로에는 없었다.** 이제 `missing-database-hint.test.ts`가 양쪽을 다 문다.
  */
 
+/**
+ * **컨테이너를 이름으로 부르지 않는다.** 2026-08-19(워크트리마다 컨테이너) 전에는 이 줄이
+ * `docker exec wirebound-postgres …` 였는데, `container_name` 고정을 걷어내면서 그 이름이
+ * 사라졌다 — 이제 워크트리마다 `<프로젝트>-postgres-1` 이고 프로젝트 이름은 디렉터리
+ * 이름이다. `docker compose exec` 는 그 이름을 몰라도 되고, **자기 디렉터리의 컨테이너**를
+ * 고르므로 *"옆 워크트리의 DB 를 만들어 놓고 왜 안 되지"* 가 안 생긴다.
+ *
+ * 그래서 이 줄은 **저장소나 워크트리 루트에서** 쳐야 한다. 컨테이너를 공유하기로 한
+ * 사람은 그 컨테이너를 띄운 디렉터리에서 치거나 `docker exec <이름>` 을 쓴다(README 6.3).
+ */
+
 /** 존재하지 않는 데이터베이스. Postgres 의 SQLSTATE 다(`postinit.c`의 `InitPostgres`). */
 export const MISSING_DATABASE_SQLSTATE = '3D000'
 
@@ -36,8 +47,8 @@ export function missingDatabaseHint(error: unknown, databaseUrl: string): string
   }
   return [
     `테스트 DB "${databaseName(databaseUrl)}" 가 없습니다.`,
-    '컨테이너 안에서 한 줄로 만든다:',
-    `  docker exec wirebound-postgres psql -U wirebound -d postgres -c 'CREATE DATABASE ${databaseName(databaseUrl)};'`,
+    '컨테이너 안에서 한 줄로 만든다 — 저장소(또는 워크트리) 루트에서:',
+    `  docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE ${databaseName(databaseUrl)};'`,
     'TEST_DATABASE_URL 은 셸 → apps/api/.env → 기본값 순서로 정해진다.',
   ].join('\n')
 }

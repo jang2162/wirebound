@@ -35,6 +35,26 @@ export async function migrateToLatest(db: DbHandle): Promise<void> {
   report(await buildMigrator(db).migrateToLatest())
 }
 
+/**
+ * **이 DB 에 올라가 있는 마이그레이션이 몇 건인가.** 서버가 뜰 때 *"빈 DB 입니다"* 를
+ * 말하는 근거다(2026-08-19 D3 — `db/describe-schema-state.ts`).
+ *
+ * **아무것도 안 바꾼다.** kysely 의 `getMigrations()` 는 마이그레이션 표가 없으면
+ * 만들지 않고 `executedAt: undefined` 로 낸다(0.28.17 의 소스에서 확인했다) — 서버가
+ * 뜨는 길에 스키마를 건드리지 않는다는 뜻이다.
+ *
+ * **못 읽으면 던지지 않고 `undefined` 다.** DB 가 없거나 안 떠 있어도 서버는 떠야 한다 —
+ * 오늘도 그렇고(풀은 게으르다), 이 한 줄 때문에 그것이 바뀌면 안 된다.
+ */
+export async function countExecutedMigrations(db: DbHandle): Promise<number | undefined> {
+  try {
+    const migrations = await buildMigrator(db).getMigrations()
+    return migrations.filter((migration) => migration.executedAt !== undefined).length
+  } catch {
+    return undefined
+  }
+}
+
 /** 가장 최근에 실행된 마이그레이션 하나를 내린다. */
 export async function migrateDown(db: DbHandle): Promise<void> {
   report(await buildMigrator(db).migrateDown())

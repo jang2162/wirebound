@@ -2,6 +2,8 @@ import { buildApp } from './app'
 import { loadConfig } from './config'
 import { createDb, createPool } from './db/client'
 import { describeDatabaseTarget } from './db/describe-target'
+import { describeSchemaState, emptySchemaHint } from './db/describe-schema-state'
+import { countExecutedMigrations } from './db/migrate'
 import { chromiumScreenRenderer } from './services/screen-render-chromium'
 
 /**
@@ -24,6 +26,24 @@ async function main(): Promise<void> {
   const config = loadConfig()
   const pool = createPool(config.databaseUrl)
   const db = createDb(pool)
+  try {
+    await listen(config, db)
+  } catch (error) {
+    // **빈 DB 로 죽은 것이면 그렇게 말한다**(2026-08-19 D3). 워크트리마다 컨테이너를 띄우면
+    // **빈 볼륨으로 뜨는 것이 정상 경로**가 되는데, 원문은 `relation "themes" does not exist`
+    // 라 사람이 *"설계서가 사라졌다"* 로 읽는다. 데이터는 다른 이름의 볼륨에 있다.
+    // 문구를 만드는 자는 `describe-schema-state.ts` 이고 그쪽에 자가 있다 — 이 길은
+    // 부팅이 실패해야만 지나므로 케이스가 여기 못 닿는다(같은 판정: `missing-database-hint.ts`).
+    const hint = emptySchemaHint(await countExecutedMigrations(db), config.databaseUrl)
+    if (hint === undefined) {
+      throw error
+    }
+    throw new Error(hint, { cause: error })
+  }
+}
+
+/** 조립하고 포트를 연다. **실패는 `main` 이 가려서 옮긴다.** */
+async function listen(config: ReturnType<typeof loadConfig>, db: ReturnType<typeof createDb>): Promise<void> {
   const app = await buildApp({
     db,
     config,
@@ -48,7 +68,15 @@ async function main(): Promise<void> {
   // **어느 DB를 보는지 말한다**(2026-08-19 D4). 바로 위에서 fastify가 찍는 줄은 포트만
   // 말하므로, 워크트리를 여럿 띄운 사람이 터미널을 나란히 놓고 가를 수 있는 값이 없다.
   // 자격 문자열은 안 찍는다 — `describeDatabaseTarget`이 그것을 지킨다.
-  app.log.info(`이 서버가 보는 DB: ${describeDatabaseTarget(config.databaseUrl)}`)
+  //
+  // **그 줄에 스키마 상태를 붙인다**(2026-08-19 D3). 워크트리마다 컨테이너를 띄우면
+  // **빈 볼륨으로 뜨는 것이 정상 경로**가 되는데, 사람은 그것을 *"설계서가 사라졌다"* 로
+  // 읽는다. 데이터는 다른 이름의 볼륨에 있다 — 그 갈림을 여기서 한 줄로 말한다.
+  app.log.info(
+    `이 서버가 보는 DB: ${describeDatabaseTarget(config.databaseUrl)} · ${describeSchemaState(
+      await countExecutedMigrations(db),
+    )}`,
+  )
 }
 
 main().catch((error) => {
