@@ -441,11 +441,21 @@ R10b·R5b 는 리뷰어의 변이가 아니라 **내 수정이 만들 수 있었
 `wb_seededaccounts_test` · 3051. 그리고 이 워크트리의 컨테이너를 띄우고 DB 둘을 만들었다.
 `.env` 는 gitignore 라 커밋에 안 들어간다.
 
-**남겨 둔 것 하나 — 코디네이터가 정할 자리다.** 이 워크트리의 컨테이너
-(`feat-seeded-accounts-postgres-1`)와 볼륨은 **안 지웠다.** `CLAUDE.md` §3.1 이 말하는
-*"워크트리마다 자기 컨테이너"* 이고 리뷰어가 이 워크트리에서 게이트를 돌리려면 필요하다.
-**임시 검증 자원**(`wb-seedverify-*`)은 지웠다. 워크트리를 폐기할 때 `CLAUDE.md` 의
-"워크트리 폐기" 절차대로 함께 지우면 된다.
+**컨테이너는 지금 없다 — 두 번 지웠다.** 구현이 끝났을 때는 *"리뷰어가 게이트를 돌리려면
+필요하다"* 로 남겨 뒀고, **리뷰어가 브리프대로 지웠다**(귀속: 리뷰 §12.3 — `down` 에 `-v` 를
+안 붙이고 볼륨은 이름을 대조해 하나만 지웠다). **리뷰 대응(자 세우기) 판이 게이트를 돌리려고
+같은 절차로 다시 만들었고, 끝나고 같은 절차로 다시 지웠다.** 검증용 DB `wb_recheck` 도
+만들고 지웠다. **임시 검증 자원**(`wb-seedverify-*`)은 구현 판에서 이미 지웠다.
+
+**다시 필요하면 세 줄이다.** `.env` 는 이 워크트리 값(15438 / `wb_seededaccounts` /
+`wb_seededaccounts_test` / 3051)으로 갈려 있고 gitignore 라 그대로 남는다:
+
+```bash
+# 이 워크트리 디렉터리에서 (어디서 치느냐가 곧 어느 컨테이너냐다)
+docker compose --env-file apps/api/.env up -d
+docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_seededaccounts;'
+docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_seededaccounts_test;'
+```
 
 ---
 
