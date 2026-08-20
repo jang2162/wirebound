@@ -70,7 +70,8 @@ pnpm --filter @wirebound/api migrate
 있는 Postgres 와 겹치지 않게 비켜 뒀다). 접속 문자열은 `.env.example`에 그 값으로 들어 있다.
 
 **컨테이너 이름은 고정이 아니다.** compose 가 `<프로젝트>-postgres-1` 로 짓고 **프로젝트
-이름은 디렉터리 이름**이다 — 저장소 루트에서 띄우면 `wirebound-postgres-1`, 워크트리에서
+이름은 디렉터리 이름**이다(**대문자는 소문자로 낮춘다** — 귀속: 리뷰 §4.2 가 `stageA` →
+`stagea` 로 쟀다) — 저장소 루트에서 띄우면 `wirebound-postgres-1`, 워크트리에서
 띄우면 `<워크트리이름>-postgres-1`. **볼륨도 같은 규칙으로 갈린다**(`<프로젝트>_wirebound-pgdata`).
 그래서 **워크트리마다 자기 컨테이너·자기 데이터**를 갖는다(3.1). 이름으로 컨테이너를 찾지
 말고 `docker compose …` 를 쓴다(6.3).
@@ -487,23 +488,38 @@ Error response from daemon: failed to set up container networking:
 
 > **데이터가 있어야 하는데 비었으면 지우지 마라.** 데이터는 없어진 것이 아니라 **다른
 > 이름의 볼륨**에 있다. 프로젝트 이름이 다르면 compose 가 보는 볼륨도 다르기 때문이다.
-> 이 기계에서 쟀다:
+> 이 기계에서 쟀다 — **워크트리 컨테이너가 하나 떠 있는 상태다**:
 >
 > ```
 > $ docker system df -v
-> VOLUME NAME                                LINKS   SIZE
-> feat-p1-api_wirebound-pgdata               1       (수백 MB)  ← 설계서가 여기 있다. LINKS 가 1 이다
-> feat-p2b1-editor-shell_wirebound-pgdata    0       0B
-> wirebound_wirebound-pgdata                 0       0B
+> VOLUME NAME                                    LINKS   SIZE
+> feat-p1-api_wirebound-pgdata                     1     186.5MB   ← 설계서가 여기 있다
+> fix-per-worktree-container_wirebound-pgdata      1      88.1MB   ← 지금 이 워크트리 것
+> feat-p2b1-editor-shell_wirebound-pgdata          0      0B
+> wirebound_wirebound-pgdata                       0      0B
 > ```
 >
-> **크기는 적지 않는다 — 사는 수다.** 같은 볼륨을 세 번 재서 145.9MB · 316.4MB · 203.8MB 를
-> 봤다(Postgres 가 회수하는 공간이 그때그때 다르다. 가운데 값은 리뷰어가 쟀다). **읽을 것은
-> 크기가 아니라 모양이다: `LINKS` 가 1 인 것이 지금 쓰이는 볼륨이고 나머지는 `0` · `0B` 다.**
+> **`LINKS` 로 고르지 마라 — 1 인 것이 여럿이다.** `LINKS` 는 *"지금 어떤 컨테이너가 이
+> 볼륨을 물고 있다"* 는 뜻일 뿐이고, **워크트리마다 컨테이너를 띄우는 것이 정상이 된 이상
+> 그런 볼륨이 여럿인 것도 정상이다**(위 표가 그 모양이다. 이 규칙이 한동안 *"`LINKS` 가
+> 1 인 것 하나를 고른다"* 로 적혀 있었는데 **이 슬라이스가 그것을 거짓으로 만들었고**
+> 리뷰어가 잡았다). **크기도 사는 수다** — 같은 볼륨을 네 번 재서 145.9MB · 316.4MB ·
+> 203.8MB · 186.5MB 를 봤다(Postgres 가 회수하는 공간이 그때그때 다르다. 가운데 둘은
+> 리뷰어와 앞 판이 쟀다).
 >
-> `docker volume ls` 로 `*_wirebound-pgdata` 를 전부 찾아 `LINKS` 가 붙어 있거나 크기가
-> 있는 쪽을 고른다. **`docker compose down -v` 를 치지 마라** — 그 한 줄이 지금 보고 있는
-> 빈 볼륨이 아니라 **찾고 있는 볼륨까지** 지운다.
+> **고르는 법은 이름이다.** 볼륨 이름의 `_` 앞이 **그 볼륨을 만든 디렉터리 이름**이다.
+>
+> 1. `docker system df -v` 로 `*_wirebound-pgdata` 를 전부 본다. **`0B` 는 후보가 아니다.**
+> 2. 남은 것에서 **지금 워크트리·저장소 루트의 이름으로 시작하는 것은 내 것이다** — 찾는
+>    것은 **그 밖의**, 크기가 있는 볼륨이다.
+> 3. 어느 컨테이너가 물고 있는지는 이름으로 되짚는다(이 기계에서 쟀다):
+>
+> ```bash
+> docker ps -a --filter volume=<볼륨이름> --format '{{.Names}} ({{.Status}})'
+> ```
+>
+> **`docker compose down -v` 를 치지 마라** — 그 한 줄이 지금 보고 있는 빈 볼륨이 아니라
+> **찾고 있는 볼륨까지** 지운다.
 >
 > **옛 볼륨의 데이터를 새 이름으로 옮기는 것은 복사이지 이동이 아니다** — 옛 볼륨을 지우지
 > 않는 절차가 `docs/superpowers/plans/2026-08-19-per-worktree-container-report.md` 에 있다.

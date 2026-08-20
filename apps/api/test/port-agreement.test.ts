@@ -6,10 +6,11 @@
  * **성공한다** — 그래서 조용하다(그때의 실측: B 의 에디터에서 B 의 계정이 401, A 의 계정이
  * 200 이었고 아무도 안 울었다. 귀속: 2026-08-19 보고 §2.2). 이번엔 DB 다.
  *
- * **한 자리로 못 모은다 — 재고 확인했다.** compose 는 URL 에서 포트를 뽑을 수 없고,
+ * **두 자리가 서로를 읽을 수는 없다 — 재고 확인했다.** compose 는 URL 에서 포트를 뽑을 수 없고,
  * Node 의 `--env-file` 도 `util.parseEnv` 도 `${...}` 를 펴지 않으므로(이 판이 쟀다:
  * `DATABASE_URL=…:${POSTGRES_PORT}/db` 가 **문자 그대로** 들어온다) `DATABASE_URL` 안에서
  * `POSTGRES_PORT` 를 참조할 수도 없다. 그래서 D2 의 두 번째 길을 간다: **어긋남을 자가 잡는다.**
+ * (한 자리를 *없애는* 길은 따로 있고 이 슬라이스가 안 골랐다 — `src/db/port-agreement.ts` 머리말.)
  *
  * 재는 축이 셋이다.
  * 1. **규칙** — `portAgreementError` 자체
@@ -24,7 +25,12 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/config'
 import { COMPOSE_DEFAULT_POSTGRES_PORT, portAgreementError } from '../src/db/port-agreement'
-import { defaultTestDatabaseUrl, resolveTestDatabaseUrl, resolveTestDatabaseUrlFrom } from './test-database-url'
+import {
+  defaultTestDatabaseUrl,
+  resolvePostgresPort,
+  resolveTestDatabaseUrl,
+  resolveTestDatabaseUrlFrom,
+} from './test-database-url'
 import { stripYamlComments } from './source-census'
 
 const 로컬 = (port: string, name = 'wirebound') => `postgres://wirebound:wirebound@127.0.0.1:${port}/${name}`
@@ -172,6 +178,28 @@ describe('배선 ② — 스위트가 남의 판을 지우기 전에 죽는가 (
     writeFileSync(envFile, `TEST_DATABASE_URL=${로컬('5433', 'wb_a_test')}\n`)
     expect(() => resolveTestDatabaseUrlFrom({ POSTGRES_PORT: '5443' }, envFile)).toThrow(/POSTGRES_PORT=5443/)
   })
+
+  it('**셸이 파일을 이긴다** — 둘에 다른 값이 동시에 있을 때', () => {
+    // 리뷰어가 이 자리를 열어 뒀다(귀속: 리뷰 §7.1 R9): 순서를 뒤집어도 **전체 스위트가
+    // 종료 0** 이었다. 위 케이스 둘은 ⓐ파일에만·ⓑ셸에만 있는 경우라 **어느 쪽이 이기든
+    // 결과가 같아서** 못 갈랐다.
+    //
+    // 실제 영향: `POSTGRES_PORT=15434 pnpm test` 로 다른 컨테이너를 겨냥한 셸 값이 조용히
+    // 무시되는데, 서버 쪽(`config.ts`)은 `--env-file-if-exists` 를 타서 **셸이 이긴다** —
+    // 서버와 스위트가 서로 다른 값을 authoritative 로 삼는다. 이 슬라이스가 없애려던
+    // *"값이 두 자리에 있다"* 부류 그 자체다.
+    expect(resolvePostgresPort({ shellEnv: { POSTGRES_PORT: '5443' }, fileEnv: { POSTGRES_PORT: '5433' } })).toBe(
+      '5443',
+    )
+    writeFileSync(envFile, `POSTGRES_PORT=5433\nTEST_DATABASE_URL=${로컬('5443', 'wb_a_test')}\n`)
+    // 파일이 이기면 5433 과 5443 이 어긋나 던진다. 셸이 이기면 조용하다 — **행동으로도 잰다.**
+    expect(resolveTestDatabaseUrlFrom({ POSTGRES_PORT: '5443' }, envFile)).toBe(로컬('5443', 'wb_a_test'))
+  })
+
+  it('빈 문자열은 "안 줬다"와 같은 뜻이다 — 셸 쪽도', () => {
+    expect(resolvePostgresPort({ shellEnv: { POSTGRES_PORT: '' }, fileEnv: { POSTGRES_PORT: '5433' } })).toBe('5433')
+    expect(resolvePostgresPort({})).toBeUndefined()
+  })
 })
 
 /**
@@ -239,6 +267,8 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
   const REPO_ROOT = new URL('../../../', import.meta.url)
   const COMPOSE = stripYamlComments(readFileSync(new URL('docker-compose.yml', REPO_ROOT), 'utf8'))
   const EXAMPLE = readFileSync(new URL('../.env.example', import.meta.url), 'utf8')
+  const README = readFileSync(new URL('README.md', REPO_ROOT), 'utf8')
+  const CLAUDE = readFileSync(new URL('CLAUDE.md', REPO_ROOT), 'utf8')
 
   it('자가 진짜 파일을 읽는다 — 빈 문자열이면 아래가 통째로 헛돈다', () => {
     // `shell-css.test.ts` 가 빈 문자열로 초록이 됐던 사고와 같은 부류를 막는 카나리아다.
@@ -246,6 +276,8 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
     expect(COMPOSE).toContain('services:')
     expect(COMPOSE.length).toBeGreaterThan(200)
     expect(EXAMPLE.length).toBeGreaterThan(200)
+    expect(README).toContain('## 2. 세우기')
+    expect(CLAUDE).toContain('# 워크트리 작업')
   })
 
   it('**컨테이너 이름을 고정하지 않는다** — 고정하면 워크트리 둘째가 안 뜬다', () => {
@@ -276,6 +308,35 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
       expect(new URL(url).port).toBe(COMPOSE_DEFAULT_POSTGRES_PORT)
     }
     expect(portAgreementError({ postgresPort: COMPOSE_DEFAULT_POSTGRES_PORT, urls: { a: urls[0], b: urls[1] } })).toBeUndefined()
+  })
+
+  it('**문서가 든 명령과 수도 같은 것을 든다** — 소유자만 안 재는 비대칭을 없앤다', () => {
+    // 리뷰어가 이 자리를 열어 뒀다(귀속: 리뷰 §7.2 R5·R6): README §2 의 `up` 명령에서
+    // `--env-file` 을 지워도, 거기 적힌 기본 포트를 5432 로 바꿔도 **게이트 넷이 초록**이었다.
+    // `.env.example` 은 인구조사가 글자까지 지키는데 **README 는 아무도 안 지켰다** —
+    // D5 가 *"README 가 소유하고 CLAUDE.md 가 가리킨다"* 로 정한 그 소유자다.
+    //
+    // **재는 것은 산문이 아니라 명령과 수 둘뿐이다**(리뷰어의 권고 폭 그대로다. 산문까지
+    // 못박으면 문장을 못 고치게 된다).
+    for (const [이름, 원문] of [
+      ['README.md', README],
+      ['CLAUDE.md', CLAUDE],
+    ] as const) {
+      // `docker compose … up -d` 처럼 줄임표가 낀 **산문**은 뺀다 — 그것은 칠 명령이 아니다.
+      const 칠명령 = 원문.split('\n').filter((line) => /docker compose[^…\n]*\bup -d/.test(line))
+      expect(칠명령.length, `${이름} 에 칠 수 있는 up 명령이 있어야 한다`).toBeGreaterThan(0)
+      for (const line of 칠명령) {
+        expect(line, `${이름}: 이 플래그를 잃으면 컨테이너가 기본 포트로 다시 만들어진다`).toContain(
+          '--env-file apps/api/.env',
+        )
+      }
+    }
+  })
+
+  it('README 가 든 기본 포트가 `COMPOSE_DEFAULT_POSTGRES_PORT` 와 같다', () => {
+    // 문서의 수가 낡으면 따라 하는 사람이 막힌다. compose·`.env.example`·코드 셋은 이미
+    // 위에서 묶였고 **README 만 떨어져 있었다.**
+    expect(README).toContain(`기본값은 ${COMPOSE_DEFAULT_POSTGRES_PORT}`)
   })
 
   it('초기화 스크립트가 만드는 DB 를 기본 테스트 URL 이 가리킨다 — 손으로 만드는 걸음을 없앤 근거다', () => {
