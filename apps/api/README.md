@@ -13,9 +13,29 @@ Fastify 5 기반 REST 서버. 설계서 편집을 지원하는 백엔드다(P1·
 
 ```bash
 pnpm --filter @wirebound/api dev            # tsx watch 로 띄운다
-pnpm --filter @wirebound/api migrate        # 마이그레이션 최신화
+pnpm --filter @wirebound/api migrate        # 마이그레이션 최신화 + 계정 시딩 (아래)
 pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린다 (반복하면 0까지)
 ```
+
+### `migrate` 가 계정도 만든다 — **가입 라우트가 없기 때문이다**
+
+`migrate` 는 마이그레이션을 **다 올린 뒤** `SEED_USER_EMAIL`·`SEED_USER_PASSWORD` 가
+있으면 계정 하나를 만든다. **이것이 이 저장소에서 계정이 생기는 유일한 경로다**(값 셋의
+설명은 `.env.example` 이 소유한다 — 여기 두 벌로 적지 않는다).
+
+| 무엇이 있나 | 무엇을 하나 | 종료 코드 |
+|---|---|---|
+| 아무것도 없다 | 마이그레이션만 올리고 **건너뛴다고 한 줄 말한다** | 0 |
+| 이메일·비밀번호 | 만든다. **만들었다고 말한다**(이메일까지) | 0 |
+| 그 이메일이 이미 있다 | **그대로 둔다 — 비밀번호를 안 덮는다.** 그렇다고 말한다 | 0 |
+| 하나만 줬다 / 값이 나쁘다 | **안 만든다.** *"마이그레이션은 올렸고 계정은 만들지 않았습니다"* 를 이유와 함께 찍는다 | **1** |
+
+**비밀번호는 어느 갈래에서도 안 찍힌다** — 이메일은 찍는다. 그 성질은
+`test/seed-user.test.ts` 가 출력 전문을 읽어 잰다.
+
+**`migrate:down` 은 계정을 안 건드린다.** 시딩이 마이그레이션 **파일 안**이 아니라 CLI
+진입점에 있기 때문이다 — 계정을 `0012-seed-user.ts` 같은 것으로 만들면 롤백이 남의
+계정을 지우게 된다(`src/db/seed-user.ts` 의 머리말이 그 판정을 든다).
 
 ### 이 서버가 env 를 읽는 방식
 
@@ -159,9 +179,14 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 
 **이 표가 P2(에디터)가 이 API를 상대로 구현될 때 근거로 삼는 계약이다.**
 
+> **계정을 만드는 엔드포인트는 없다**(2026-08-20). `POST /api/auth/signup` 이 있던
+> 자리이고 지금은 **404** 다 — `test/auth-routes.test.ts` 가 그 부재를 든다. 계정은
+> `migrate` 가 마이그레이션을 올린 뒤 환경변수로 만든다(위 *"기동 절차"*, 최상위
+> README 2절 5번). 그래서 **`POST .../members` 의 *"이미 가입한 사용자만"* 은 이제
+> *"이미 시딩된 사용자만"* 이라는 뜻이다** — 초대만으로는 계정이 생기지 않는다.
+
 | 경로 | 메서드 | 최소 역할 | 요청 | 응답 |
 |---|---|---|---|---|
-| `/api/auth/signup` | POST | (없음, 공개) | `{ email, name, password }` | 201 `{ id, email, name }`, 세션 쿠키 설정 |
 | `/api/auth/login` | POST | (없음, 공개) | `{ email, password }` | 200 `{ id, email, name }`, 세션 쿠키 설정 |
 | `/api/auth/logout` | POST | 로그인만 | — | 204 |
 | `/api/auth/me` | GET | 로그인만 | — | 200 `{ id, email, name }` |
@@ -171,7 +196,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId` | PATCH | owner | `{ name?, slug?, description? }`(하나 이상) | 200 `{ ...프로젝트, role }` |
 | `/api/projects/:projectId` | DELETE | owner | — | 204 |
 | `/api/projects/:projectId/members` | GET | viewer | — | 200 멤버 배열 — 항목은 `{ userId, email, name, role, invitedAt }` |
-| `/api/projects/:projectId/members` | POST | owner | `{ email, role }`(이미 가입한 사용자만 초대 가능) | 201 멤버 |
+| `/api/projects/:projectId/members` | POST | owner | `{ email, role }`(**이미 계정이 있는 사람만** 초대 가능 — 없으면 404) | 201 멤버 |
 | `/api/projects/:projectId/members/:userId` | PATCH | owner | `{ role }` | 200 멤버(마지막 owner의 강등은 409) |
 | `/api/projects/:projectId/members/:userId` | DELETE | owner | — | 204(마지막 owner 제거는 409) |
 | `/api/projects/:projectId/menu` | GET | viewer | — | 200 메뉴 트리(중첩 배열, `pages` 없음) |

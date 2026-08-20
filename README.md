@@ -53,9 +53,27 @@ pnpm install
 # 4. packages/* 를 빌드한다 — 건너뛰지 마라
 pnpm build
 
-# 5. 마이그레이션을 올린다
-pnpm --filter @wirebound/api migrate
+# 5. 마이그레이션을 올리면서 **계정을 만든다** — 가입 화면이 없다
+SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
+  pnpm --filter @wirebound/api migrate
 ```
+
+> **5번의 두 환경변수가 이 저장소에서 계정을 만드는 유일한 길이다.** 공개 가입 경로가
+> 없다 — **에디터에도 회원가입 화면이 없다.** 값을 비우고 돌리면 마이그레이션만 올리고
+> *"계정 시딩 건너뜀"*을 한 줄 찍는다(그때 로그인할 계정이 없다).
+>
+> **`apps/api/.env` 에 적어도 된다**(그 파일은 gitignore 된다 — `migrate` 가 읽는다).
+> **`.env.example` 에는 적지 마라** — 그 파일은 커밋된다. 그래서 템플릿의 세 줄은
+> 값이 비어 있고, `apps/api/test/env-example-census.test.ts` 가 그것을 잰다.
+>
+> **다시 돌려도 안전하다.** 그 이메일이 이미 있으면 그대로 두고 **비밀번호를 덮어쓰지
+> 않는다.** **값을 바꿔 다시 돌리면 계정이 하나 는다** — 두 번째 사람을 만드는 길이
+> 이것이다(멤버 초대는 이미 계정이 있는 사람만 대상이다). 이름을 정하려면
+> `SEED_USER_NAME` 을 함께 준다(비우면 이메일의 로컬 파트를 쓴다).
+>
+> **이메일 형식이나 비밀번호 길이(8자 이상)가 어긋나면 종료 1 이고, 무엇이 됐고 무엇이
+> 안 됐는지 말한다** — 마이그레이션은 이미 올라간 뒤다. **비밀번호는 어느 갈래에서도
+> 안 찍힌다.**
 
 **이 기계에서 잰 값**
 
@@ -63,7 +81,7 @@ pnpm --filter @wirebound/api migrate
 |---|---|---|
 | `pnpm install` | **1.2초** | 패키지 **357개**. **pnpm 스토어가 이미 따뜻한 기계다** — 처음 받는 기계는 내려받는 시간이 더 든다. `wireb` 관련 `WARN` 둘이 나오는데 **정상이다**(6.2) |
 | `pnpm build` | **4.2초** | `packages/*` 여섯의 `dist` |
-| `migrate` | **1.5초** | 빈 DB 에 마이그레이션 **열하나**를 올렸다 |
+| `migrate` | **1.5초** | 빈 DB 에 마이그레이션 **열하나**를 올렸다. **시딩은 안 켠 값이다** — 켜면 scrypt 해시 한 번이 더 든다 |
 
 `docker compose … up -d`가 만드는 것은 Postgres 컨테이너 하나이고 **호스트 포트는
 `apps/api/.env` 의 `POSTGRES_PORT` 다. 기본값은 5433**이다(5432가 아니다 — 기계에 이미
@@ -103,8 +121,14 @@ pnpm --filter @wirebound/api dev
 pnpm --filter @wirebound/web dev
 ```
 
-두 번째 터미널이 낸 주소(기본 `http://localhost:5173/`)를 브라우저에서 연다. 로그인 화면이
-뜨면 **회원가입**으로 계정을 만들고 프로젝트를 만든다.
+두 번째 터미널이 낸 주소(기본 `http://localhost:5173/`)를 브라우저에서 연다. **로그인
+화면뿐이고 회원가입 화면은 없다** — 2절 5번에서 만든 계정으로 로그인해 프로젝트를 만든다.
+계정을 안 만들었으면 지금 만든다(그 명령 하나면 되고, 서버를 내릴 필요도 없다):
+
+```bash
+SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
+  pnpm --filter @wirebound/api migrate
+```
 
 **에디터가 `/api`를 API 서버로 프록시한다** — 그래야 세션 쿠키가 same-origin 으로 실리고
 서버에 CORS 설정이 필요 없다. **그 대상은 `apps/api/.env`의 `PORT`를 따라간다** —
@@ -204,9 +228,13 @@ docker compose ps          # healthy 이고 PORTS 칸에 <포트> 가 보여야 
 docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>;'
 docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>_test;'
 
-# 6. 마이그레이션
-pnpm --filter @wirebound/api migrate
+# 6. 마이그레이션 — 계정도 여기서 만든다(2절 5번과 같다)
+SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
+  pnpm --filter @wirebound/api migrate
 ```
+
+> **워크트리마다 DB 가 다르므로 계정도 워크트리마다 따로 만든다.** 옆 워크트리에서 만든
+> 계정으로는 이 워크트리의 서버에 로그인되지 않는다 — 6.6 의 ⓑ 가 그 증상이다.
 
 **만든 DB 는 `wirebound` 와 소유자·인코딩·콜레이션이 같다**(이 기계에서 쟀다:
 `wirebound` / `UTF8` / `en_US.utf8`).
@@ -277,13 +305,19 @@ apps/api/.env 에서 포트를 한 수로 맞춘다. 자기 Postgres 를 쓰면 
 
 에디터를 안 열고 확인하고 싶을 때. 아래는 **이 기계에서 그대로 돌려 본 것**이다.
 
+**계정은 curl 로 못 만든다** — 가입 엔드포인트가 없다. 2절 5번의 `migrate` 가 그 자리이고,
+아래는 **그렇게 만든 계정으로 로그인**해서 시작한다.
+
 ```bash
 B=http://127.0.0.1:3001
-curl -c /tmp/wb.txt -X POST $B/api/auth/signup -H 'content-type: application/json' \
-  -d '{"email":"me@example.com","name":"나","password":"비밀번호12345"}'
+curl -c /tmp/wb.txt -X POST $B/api/auth/login -H 'content-type: application/json' \
+  -d '{"email":"me@example.com","password":"고른-비밀번호"}'
 curl -b /tmp/wb.txt -X POST $B/api/projects -H 'content-type: application/json' \
   -d '{"name":"첫 설계서","slug":"first"}'
 ```
+
+첫 응답이 **401**이면 그 계정이 없거나 비밀번호가 다른 것이다(로그인은 둘을 구분하지
+않는다 — 설계 §10). 계정을 만든 적이 없으면 2절 5번을 먼저 돌린다.
 
 두 번째 응답의 `id`가 **프로젝트 id**이고, 그것이 5절 `wireb init`의 `--project` 인자다.
 나머지 엔드포인트는 [`apps/api/README.md`의 엔드포인트 표](apps/api/README.md#엔드포인트)에 있다.
@@ -574,7 +608,25 @@ docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE w
 
 ### 6.6 에디터가 뜨는데 로그인이 안 된다 / 목록이 비어 있다
 
-**원인 둘이고 가르는 법이 다르다.**
+**갈래 넷이고 가르는 법이 다르다.** 앞의 셋은 *"로그인이 안 된다"*이고 마지막 하나는
+*"로그인은 되는데 목록만 비어 있다"*이다.
+
+**ⓞ 그 계정이 애초에 없다.** **가입 화면도 가입 엔드포인트도 없으므로**(2026-08-20)
+계정은 2절 5번의 `migrate` 로만 생긴다 — 그 걸음에서 환경변수를 안 준 사람은 **DB 에
+사용자가 0명**인 채로 로그인 화면을 보고 있다.
+
+**가르는 법.** `migrate` 를 돌린 터미널이 그때 무엇을 했는지 한 줄로 말했다:
+*"계정 시딩 건너뜀 — SEED_USER_EMAIL·SEED_USER_PASSWORD 가 없습니다"*. 그 줄을
+지나쳤으면 지금 다시 돌려도 된다(**이미 있는 계정은 안 건드린다**):
+
+```bash
+SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
+  pnpm --filter @wirebound/api migrate
+```
+
+**이 갈래는 아래 ⓑ 와 화면에서 똑같이 보인다** — 둘 다 *"이메일 또는 비밀번호가
+올바르지 않습니다"* 다(로그인은 *"없는 계정"* 과 *"틀린 비밀번호"* 를 구분하지 않는다 —
+설계 §10). 그래서 화면이 아니라 터미널에서 가른다.
 
 **ⓐ API 서버가 안 떠 있다(또는 다른 포트에 떠 있다).** 프록시 대상은 이제 `apps/api/.env`를
 따라가므로 **손으로 어긋나게 만들 수는 없지만**, `.env`를 고치고 **에디터를 다시 안 띄우면**
