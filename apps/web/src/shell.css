@@ -62,16 +62,26 @@
   테스트로 옮겼고, 그 파일의 **심기 표**가 그 열넷을 하나씩 심어 잡히는 것을 함께 잰다.
 */
 
-/* 셸의 팔레트. **화면 루트 둘이 공유한다** — 에디터 셸(§9)과 테마 저작 화면(P4c-2 D1).
-   후자는 셸 안이 아니라 별도 라우트라(`routes/theme-editor.tsx`) `.wb-shell` 아래에 있지
-   않다. 값을 두 벌 적으면 한쪽만 고쳐지는 자리가 되므로 선언을 여기 하나로 둔다.
+/* 셸의 팔레트. **화면 루트 다섯이 공유한다** — 에디터 셸(§9), 테마 저작 화면(P4c-2 D1),
+   스냅샷 화면(P6-1 D10), 프로젝트 목록, 로그인. 뒤의 넷은 셸 안이 아니라 별도 라우트라
+   `.wb-shell` 아래에 있지 않다. 값을 두 벌 적으면 한쪽만 고쳐지는 자리가 되므로 선언을
+   여기 하나로 둔다.
+
+   **여기 없는 화면 루트에서는 변수가 아예 정의되지 않는다 — 조용히 검게 나온다.**
+   `var(--wb-shell-accent)`는 이름이 없으면 계산 시점에 무효가 되어 그 속성이 상속값으로
+   떨어지는데, `color`는 상속 속성이라 결과가 **검정**이다. 실측(고치기 전 스냅샷 화면):
+   `.wb-shell-snapshots-back`의 `color`가 `rgb(0, 0, 0)`, 루트의 `--wb-shell-line`이 빈
+   문자열이었다. **셸 밖에 새 화면 루트를 만드는 사람은 여기 한 줄을 더해야 한다.**
 
    **여섯이다.** `theme/use-theme-css.ts`가 D5의 근거로 이 수를 인용하는데(테마가 `:root`에
    싣는 이름과 **교집합이 비어 있다**), 그쪽은 "일곱"이라 적고 있었고 거짓이었다 — 그
    판정을 떠받치는 것은 수가 아니라 **접두어가 전부 `--wb-shell-`이라는 것**이고 그쪽은 참이다.
    검산: `grep -oE -- "^\s*--wb-shell-[a-z-]+:" apps/web/src/shell.css | sort -u | wc -l` */
 .wb-shell,
-.wb-shell-theme {
+.wb-shell-theme,
+.wb-shell-snapshots,
+.wb-shell-project-list,
+.wb-shell-login {
   --wb-shell-line: #dfe3e8;
   --wb-shell-chrome: #f6f7f9;
   --wb-shell-ink: #1d2530;
@@ -128,6 +138,26 @@
   display: inline-flex;
   gap: 4px;
   font-size: 13px;
+}
+
+/* 되돌리기·다시 실행. **머리의 다른 버튼(`.wb-shell-zoom-step`)과 같은 값이다** — 같은 줄에
+   나란히 서므로 테두리 굵기·모서리가 어긋나면 그 줄이 두 벌로 보인다. */
+.wb-shell-history-step {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+/* 되돌릴 것이 없을 때. 회색만 두고 테두리는 남긴다 — 자리가 사라지면 옆 버튼이 움직인다. */
+.wb-shell-history-step:disabled {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: default;
 }
 
 .wb-shell-title {
@@ -297,6 +327,17 @@
 .wb-shell-tree-page[aria-current='page'] {
   background: var(--wb-shell-accent);
   color: #fff;
+}
+
+/* 메뉴 트리를 감싸는 상자(`panels/menu-tree.tsx`). **키 조작 하나를 받으려고 둔 껍데기라
+   스스로 그리는 것이 없다** — 그 파일의 주석도 그렇게 적고 있다. 그래도 규칙을 두는 것은
+   이 상자가 지고 있는 역할이 하나 있기 때문이다: **아래 `.wb-shell-menu-toolbar`의
+   `position: sticky`가 이 상자를 담는 블록으로 삼는다.** 그 성질이 `<div>`의 기본값에만
+   얹혀 있으면, 여기에 `display: contents`를 걸어 "어차피 빈 상자"라고 치우는 순간 툴바가
+   조용히 다른 자리에 붙는다. 그래서 **기본값을 값으로 적어 둔다** — 이 한 줄이 하는 일은
+   그리는 것이 아니라 그 사실을 이 파일 안에 남기는 것이다. */
+.wb-shell-tree-keys {
+  display: block;
 }
 
 /* 트리 자리의 안내·오류 문장. */
@@ -535,6 +576,17 @@
   font-weight: 600;
 }
 
+/* 탭 몸통(`routes/editor.tsx`). **글자 크기를 여기 한 번 건다.** 앞까지는 패널의 조각들이
+   각자 `font-size: 13px`를 적고 있었는데, 상호작용 탭이 붙으며 `<fieldset>`·`<legend>`처럼
+   클래스를 붙일 자리가 마땅치 않은 태그가 들어왔다 — 그것들이 브라우저 기본(16px 계열)으로
+   떠서 패널의 진짜 제목보다 커 보였다. 몸통에 한 번 걸면 상속으로 닿는다.
+
+   **이 상자는 문서를 감싸지 않으므로 상속 속성을 걸어도 D7이 깨지지 않는다** — 캔버스가
+   아니라 우측 패널이고, `test/shell-css-guard.ts`의 `WRAPPERS`에 없다. */
+.wb-shell-tabpanel {
+  font-size: 13px;
+}
+
 /* 코멘트 탭. 새 코멘트 폼과 무리 목록이 세로로 쌓인다. */
 .wb-shell-comments {
   display: flex;
@@ -631,6 +683,61 @@
   word-break: break-word;
 }
 
+/* 코멘트 탭의 버튼 여섯. **한 규칙에 묶는 것은 여섯이 같은 크기여야 하기 때문이다** —
+   폼의 둘과 항목의 넷이 한 화면에 세로로 이어져 보인다. 값은 셸의 작은 버튼 형태 그대로다
+   (`.wb-shell-menu-tool`·`.wb-shell-structure-tool`이 같은 값을 쓴다). */
+.wb-shell-comment-submit,
+.wb-shell-comment-renumber,
+.wb-shell-comment-edit,
+.wb-shell-comment-delete,
+.wb-shell-comment-save,
+.wb-shell-comment-cancel {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+/* **코멘트 달기만 색을 갖는다.** 이 탭에서 새로 만드는 동작이 그것 하나이고, 나머지 다섯은
+   이미 있는 것에 대한 조작이다. */
+.wb-shell-comment-submit {
+  border-color: var(--wb-shell-accent);
+  background: var(--wb-shell-accent);
+  color: #fff;
+}
+
+/* 빈 코멘트이거나 요청이 도는 동안. 색을 뺀 자리에 테두리를 남겨 자리가 흔들리지 않게 한다. */
+.wb-shell-comment-submit:disabled {
+  border-color: var(--wb-shell-line);
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: default;
+}
+
+.wb-shell-comment-renumber:disabled,
+.wb-shell-comment-edit:disabled,
+.wb-shell-comment-delete:disabled,
+.wb-shell-comment-save:disabled,
+.wb-shell-comment-cancel:disabled {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: default;
+}
+
+/* 항목 안의 넷은 본문 아래에 그냥 놓인다 — `.wb-shell-comment`가 flex가 아니라서 묶어 줄
+   상자가 없다. **자손 선택자를 쓸 수 없으므로 간격을 버튼 자신이 갖는다**(D7 3번). */
+.wb-shell-comment-edit,
+.wb-shell-comment-delete,
+.wb-shell-comment-save,
+.wb-shell-comment-cancel {
+  margin: 4px 4px 0 0;
+}
+
 /* 그리지 못한 노드를 알리는 배너. 프레임 안(문서 위)에 둔 것은 어느 문서의 이야기인지가
    자리로 보이기 때문이다. 문서의 형제라 아래 글꼴·글자색이 문서로 새지 않는다. */
 .wb-shell-canvas-error {
@@ -703,6 +810,237 @@
 .wb-shell-prop-value {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+/* ── 속성 패널의 위젯(`panels/controls/*`) ──────────────────────────────────────────
+
+   **다섯 위젯이 클래스 하나를 공유한다** — `text-control`(`text`·`textarea`·`number`)·
+   `select-control`·`switch-control`·`variant-control`, 그리고 `list-control`의 칸. 그래서
+   이 한 규칙이 `<input type=text>`·`<textarea>`·`<select>`·`<input type=checkbox>` 넷에
+   동시에 걸린다. 요소 선택자를 쓸 수 없으므로(D7 2번) `type`으로 갈라 줄 수단이 없고,
+   **넷 다에 안전한 것만 걸어야 한다.**
+
+   **그래서 `width`가 없다.** `width: 100%`를 걸면 체크박스가 칸 전체를 덮는 상자가 된다.
+   넘침은 `max-width`로 막고, 늘어나야 하는 자리(목록의 칸)는 그쪽 클래스가 flex로 늘린다.
+
+   **테두리·모서리·안쪽 여백은 체크박스에 *아예 적용되지 않는다* — 재서 확인했다.** 여기서
+   `border: 1px solid …`·`border-radius: 4px`·`padding: 3px 6px`를 걸었는데 체크박스의
+   computed 값은 **`border: 0px none` · `border-radius: 0px` · `padding: 0px`**이다.
+   상자는 13×13 그대로이고 켠 상태도 네이티브로 그려진다.
+
+   **어느 선언이 닿고 어느 것이 되돌려지는지 — 클래스를 뗐다 붙였다 하며 잰 값이다.**
+
+   | | 체크박스 | 텍스트 입력(대조군) |
+   |---|---|---|
+   | `box-sizing` | **안 바뀐다** — UA가 이미 `border-box`다 | `content-box` → `border-box` |
+   | `border`(폭·꼴·색) | **되돌려진다** → `0px none` | 선언대로 `1px solid #dfe3e8` |
+   | `border-radius` · `padding` | **되돌려진다** → `0` | 선언대로 |
+   | `background` · `color` | 닿는다(계산값이 바뀐다) | 닿는다 |
+   | `max-width` · `font-size` · `font-family` | 닿는다 | 닿는다 |
+
+   **`border-color`도 되돌려진다 — 계산값만 보면 속는다.** 체크박스의 `border-top-color`가
+   클래스를 붙이면 `rgb(29,37,48)`로 바뀌어 *"선언이 닿았다"*로 보이는데, 그것은
+   `var(--wb-shell-line)`(=`#dfe3e8`=`rgb(223,227,232)`)이 아니라 **`currentColor`(초기값)가
+   `color`를 따라간 것**이다. 갈라 봤다: `color`만 `rgb(1,2,3)`으로 바꾸면 `border-color`가
+   함께 `rgb(1,2,3)`이 된다. 텍스트 입력 쪽은 `rgb(223,227,232)`로 선언값 그대로다.
+
+   **닿는 것들도 화면에는 안 나타난다.** `background`·`color`는 네이티브 컨트롤이 스스로
+   그리므로 칠해지지 않고, 체크박스는 글자를 그리지 않으므로 `font`도 무의미하며,
+   `max-width: 100%`는 13px 상자에 아무 제약이 아니다.
+
+   **근거를 정확히 적는다 — 앞 판은 두 번 틀렸다.** 첫 판은 *"걸리지만 망가뜨리지 않는다"*
+   였는데 실제로는 걸리지 않는다. 둘째 판은 그것을 고치면서 *"닿는 것은
+   `box-sizing`·`max-width`·`font` 셋뿐"*이라고 적었는데, **`box-sizing`은 닿지 않고**
+   (UA가 이미 `border-box`다) **`background`·`color`가 빠져 있었다.** 위 표가 다시 잰 값이다.
+
+   되돌리는 주체는 명세가 아니라 **엔진**이다: Blink가 themed control(`appearance: auto`)에
+   대해 author의 border·border-radius·padding을 초기값으로 되돌린다. **`width`는 그 되돌림
+   대상이 아니라서 혼자 위험하다** — 위에서 `width` 하나만 빼면 되는 이유가 그 비대칭이다.
+
+   **다른 엔진에서 같다는 보장은 없다**(이 저장소는 Blink에서만 쟀다). 다른 엔진에서
+   체크박스에 테두리가 보이면 그때 할 일은 `.wb-shell-control`을 쪼개는 것이지 여기에
+   `appearance: none`을 더하는 것이 **아니다** — 그것을 걸면 되돌림이 사라져 지금 걸어 둔
+   테두리·모서리·여백이 체크박스에 한꺼번에 살아난다. */
+.wb-shell-control {
+  box-sizing: border-box;
+  max-width: 100%;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 6px;
+  background: #fff;
+  /* 폼 컨트롤은 글꼴을 물려받지 않는다. `.wb-shell-props`의 13px이 여기로 오게 한다. */
+  font: inherit;
+  color: var(--wb-shell-ink);
+}
+
+/* 목록 위젯(`panels/controls/list-control.tsx`) — `stringList`·`pairList`의 편집기.
+   **`컬럼`이 여기다.** */
+.wb-shell-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+/* 항목 목록. **`<ul>`의 UA 기본값 둘을 지운다.** 지우기 전 실측: `list-style-type`이
+   `disc`라 항목마다 `•`가 보였고, `padding-inline-start: 40px`가 172px 짜리 값 칸에서
+   40px를 먹어 안쪽 폭이 132px로 줄어 있었다. 요소·자손 선택자를 쓸 수 없으므로 `<ul>`마다
+   클래스에 직접 건다 — 메뉴 트리·구조 트리가 같은 이유로 같은 세 줄을 갖는다.
+   `list-style`은 상속되므로 `<li>`에는 따로 걸지 않는다. */
+.wb-shell-list-items {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 항목 한 줄. `pairList`면 키·값 두 칸과 지우기 버튼이, `stringList`면 값 한 칸과 버튼이
+   들어온다. **`flex-wrap`이 있는 것은 좁은 패널 때문이다** — 값 칸이 300px 패널 안의
+   172px 칸에 들어가므로, `pairList`에서는 두 칸이 한 줄을 쓰고 버튼이 아랫줄로 내려온다. */
+.wb-shell-list-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* **오른쪽이 잘리던 자리가 여기다 — 원인을 재서 적는다.**
+   `<input>`은 `width`가 `auto`면 담긴 상자를 보지 않고 자기 고유 폭을 쓴다(실측: 테두리까지
+   153px). 값 칸이 172px인데 `<ul>`의 기본 여백 40px를 빼면 항목 줄이 132px이므로, 입력이
+   21px를 패널 밖으로 밀어냈다 — `.wb-shell-panel`의 `scrollWidth`가 `clientWidth`보다
+   9px 컸고 입력의 오른쪽 모서리가 화면 밖(1449 > 1440)에 있었다.
+   **`.wb-shell-prop`의 `minmax(0, 1fr)`는 제 일을 하고 있었다** — 값 칸은 172px로 정확히
+   잡혀 있었고 넘친 것은 그 안의 입력이다.
+
+   그래서 둘이 함께 필요하다: `flex: 1 1 72px`가 남는 폭을 나눠 주고, `min-width: 0`이
+   flex 항목의 기본 최소 폭(`auto` = 고유 폭 153px)을 풀어 **실제로 줄어들게** 한다.
+   하나만 있으면 안 된다 — `min-width`만 풀면 늘어나지 않고, `flex`만 주면 줄어들지 않는다.
+   기준 폭 72px는 `stringList`(칸 하나 + 버튼)가 한 줄에 들어가는 값이다. */
+.wb-shell-list-cell {
+  flex: 1 1 72px;
+  min-width: 0;
+}
+
+/* 항목 추가·지우기. 셸의 작은 버튼 형태다. */
+.wb-shell-list-add,
+.wb-shell-list-remove {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+/* 지우기는 줄 안에서 줄어들지 않는다 — 글자가 접히면 그 줄만 높아져 칸과 밑선이 어긋난다. */
+.wb-shell-list-remove {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* ── 상호작용 탭(`panels/interaction-panel.tsx`, §8.1·§8.2) ─────────────────────────
+
+   **앞의 두 탭과 달리 이 탭은 규칙이 하나도 없었다** — `<h2>`만 `.wb-shell-panel-title`을
+   갖고 나머지는 전부 브라우저 기본이었다. 아래가 그 자리들이다. */
+
+/* 패널 안의 절. 상호작용 탭이 절 둘(고른 노드의 규칙 / 이 페이지의 규칙 전부)로 갈린다. */
+.wb-shell-panel-section {
+  margin-top: 12px;
+}
+
+/* 절의 제목(`<h3>`). **`.wb-shell-panel-title`(`<h2>`)보다 한 눈금 작다.** 이것이 없으면
+   `<h3>`이 브라우저 기본으로 떠서 패널의 진짜 제목보다 커진다 — 고치기 전의 증상이 그것이다. */
+.wb-shell-panel-subtitle {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wb-shell-muted);
+}
+
+/* 규칙 하나(`<fieldset>`). 브라우저 기본 테두리·여백을 셸의 값으로 바꾼다. 안의 `<legend>`는
+   클래스를 붙일 자리가 마땅치 않아 `.wb-shell-tabpanel`의 글자 크기를 물려받는다. */
+.wb-shell-interaction {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 8px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 8px;
+  /* `<fieldset>`은 최소 폭이 안의 내용을 따라간다(`min-inline-size: min-content`가 UA
+     기본이다). 풀지 않으면 대상 `<select>`의 긴 선택지가 상자를 패널 밖으로 밀어낸다. */
+  min-width: 0;
+}
+
+/* 액션 한 줄. 종류·대상·값 컨트롤과 삭제 버튼이 함께 온다. */
+.wb-shell-interaction-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--wb-shell-line);
+}
+
+/* §8.2의 문장. **한 클래스가 두 자리에 붙는다** — 규칙 안의 미리보기(`<p>`)와 아래 목록의
+   한 줄(`<li>`)이다. 둘 다 "이 규칙이 설계서에서 어떻게 읽히는가"라 같은 꼴로 둔다. */
+.wb-shell-interaction-sentence {
+  margin: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+/* 이 페이지의 상호작용 목록. `<ul>`의 UA 기본 둘을 지운다 — 위 목록 위젯과 같은 이유이고,
+   고치기 전에는 여기도 `•`가 그대로 보였다. */
+.wb-shell-interaction-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 저작 버튼 넷. 셸의 작은 버튼 형태다. */
+.wb-shell-interaction-add,
+.wb-shell-interaction-add-action,
+.wb-shell-interaction-remove,
+.wb-shell-interaction-remove-action {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* 이 탭의 텍스트 입력(`TextField`). **속성 패널의 `.wb-shell-control`과 갈라 두는 것은
+   담긴 자리가 다르기 때문이다** — 이쪽은 `.wb-shell-field`(라벨과 한 줄인 inline-flex)
+   안에 있어 라벨 옆의 남는 폭을 채워야 한다. */
+.wb-shell-input {
+  flex: 1 1 72px;
+  min-width: 0;
+  box-sizing: border-box;
+  max-width: 100%;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
 }
 
 /* 셸에 이르지 못한 화면(조회 중·조회 실패). 레이아웃이 아직 없으므로 문서 흐름 그대로 둔다. */
@@ -843,6 +1181,258 @@
   gap: 0.5rem;
   align-items: flex-end;
   margin: 0.5rem 0;
+}
+
+/* 폼·확인의 입력 넷. 위 둘은 상자만 잡고 있었고 **그 안의 `<input>`에는 클래스가 없어**
+   브라우저 기본이었다 — 요소 선택자를 쓸 수 없으므로 클래스를 붙이는 것 말고는 길이 없다. */
+.wb-shell-project-input {
+  box-sizing: border-box;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+}
+
+/* ── 프로젝트 목록(`routes/project-list.tsx`) ────────────────────────────────────────
+
+   **이 화면에는 `className`이 하나도 없었다** — `<h1>`이 브라우저 기본 크기로 뜨고
+   `<ul><li>`에 `•`가 붙고 링크에 밑줄이 있고 버튼이 기본 회색이었다. 셸 밖의 별도
+   라우트라 `.wb-shell` 아래가 아니므로 팔레트를 위 루트 목록에서 함께 받는다.
+
+   이름은 **이미 있던 `.wb-shell-project-form`·`-field`·`-confirm`의 체계를 잇는다** —
+   그 셋이 이 화면 안에서 열리므로 접두어가 갈리면 한 화면이 두 어휘로 쪼개진다. */
+.wb-shell-project-list {
+  color-scheme: light;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-project-list-title {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* 새 프로젝트. 이 화면에서 새로 만드는 동작이 하나뿐이라 색을 갖는다 — 코멘트 탭의
+   `코멘트 달기`와 같은 판단이다. */
+.wb-shell-project-create {
+  appearance: none;
+  border: 1px solid var(--wb-shell-accent);
+  border-radius: 4px;
+  padding: 5px 12px;
+  background: var(--wb-shell-accent);
+  font: inherit;
+  color: #fff;
+  cursor: pointer;
+}
+
+.wb-shell-project-create:disabled {
+  border-color: var(--wb-shell-line);
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: default;
+}
+
+/* 목록. `<ul>`의 기본 표식과 여백을 지운다(트리·목록 위젯과 같은 세 줄). */
+.wb-shell-project-items {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wb-shell-gap);
+  background: var(--wb-shell-line);
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* 한 줄. **줄 사이의 선을 `border`가 아니라 목록의 `gap`이 그린다** — 목록의 배경이 선
+   색이고 항목이 흰 상자라, 마지막 줄만 선이 남는 형태가 생기지 않는다. */
+.wb-shell-project-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+/* 프로젝트 이름. **밑줄을 지운다** — 줄마다 밑줄이 있으면 목록의 선과 섞여 보인다. */
+.wb-shell-project-name {
+  flex: 1 1 auto;
+  font-weight: 600;
+  color: var(--wb-shell-ink);
+  text-decoration: none;
+}
+
+.wb-shell-project-desc {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 13px;
+  color: var(--wb-shell-muted);
+  word-break: break-word;
+}
+
+/* 이 화면의 버튼 셋 — **무게로 가른다.**
+
+   앞 판은 `.wb-shell-project-action` **하나가 만들기·취소·수정·삭제를 다 걸었다.** 실측하면
+   넷 다 배경 흰색·글자 먹색이라 **주 동작과 취소가 구분되지 않았다.** 같은 브랜치 안에서
+   규칙이 갈리기도 했다 — 목록의 `새 프로젝트`(`-create`)와 로그인의 `-submit`은 강조색을
+   받았는데 폼의 `만들기`/`저장`만 못 받았다. 그래서 셋으로 나눈다.
+
+   | 클래스 | 무엇 | 꼴 |
+   |---|---|---|
+   | `-action` | 되돌릴 수 있는 것 — `수정` · `취소` · `삭제 취소` · 목록의 `삭제`(확인을 연다) | 흰 바탕 |
+   | `-submit` | 그 폼의 주 동작 — `만들기` · `저장` | 강조색. `-create`·`-login-submit`과 같다 |
+   | `-danger` | 되돌릴 수 없는 것 — `삭제 확정` | 붉은색(`#b42318`, 이 파일이 이미 쓰는 경고색) |
+
+   **목록의 `삭제`가 `-danger`가 아닌 것이 요점이다.** 그 버튼은 확인을 열 뿐이고, 실제로
+   지우는 것은 이름을 정확히 친 뒤의 `삭제 확정` 하나다(`delete-confirm.tsx`의 D6).
+   눌러도 되돌릴 수 있는 것에 붉은색을 쓰면 진짜 붉은색의 뜻이 닳는다.
+
+   셋이 값을 대부분 공유하지만 규칙을 합치지 않는다 — 합치려면 `.a.b` 형태가 되는데
+   `ruledClasses`가 복합 선택자를 낱개로 세므로(그쪽 주석) 커버리지 검사가 헐거워진다. */
+.wb-shell-project-action,
+.wb-shell-project-submit,
+.wb-shell-project-danger {
+  appearance: none;
+  flex: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wb-shell-project-submit {
+  border-color: var(--wb-shell-accent);
+  background: var(--wb-shell-accent);
+  color: #fff;
+}
+
+.wb-shell-project-danger {
+  border-color: #b42318;
+  background: #b42318;
+  color: #fff;
+}
+
+/* 비활성. **셋이 같은 회색으로 수렴한다** — 못 누르는 버튼은 무게를 말할 이유가 없고,
+   무게가 남아 있으면 "누르면 되는데 왜 안 되나"로 읽힌다. */
+.wb-shell-project-action:disabled,
+.wb-shell-project-submit:disabled,
+.wb-shell-project-danger:disabled {
+  border-color: var(--wb-shell-line);
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: default;
+}
+
+/* 조회 중·빈 목록의 문장. */
+.wb-shell-project-notice {
+  margin: 16px 0 0;
+  color: var(--wb-shell-muted);
+}
+
+/* 실패 문장. **조회 실패와 조작 실패가 같은 꼴을 쓴다** — 자리는 D8이 갈라 두었고
+   (한쪽은 폼 아래, 한쪽은 목록 자리) 색까지 갈라야 할 이유는 없다. */
+.wb-shell-project-alert {
+  margin: 12px 0 0;
+  color: #b42318;
+}
+
+/* ── 로그인(`routes/login.tsx`) ──────────────────────────────────────────────────────
+
+   **여기도 `className`이 하나도 없었다.** 화면에 상자가 하나뿐이라 가운데로 모은다. */
+.wb-shell-login {
+  color-scheme: light;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 320px;
+  margin: 0 auto;
+  padding: 88px 24px 24px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-login-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.wb-shell-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+/* 라벨과 입력 한 쌍. 마크업이 `<p>`라 기본 여백을 지운다. */
+.wb-shell-login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.wb-shell-login-label {
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-login-input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 6px 8px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-login-submit {
+  appearance: none;
+  margin-top: 4px;
+  border: 1px solid var(--wb-shell-accent);
+  border-radius: 4px;
+  padding: 7px 12px;
+  background: var(--wb-shell-accent);
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+}
+
+.wb-shell-login-submit:disabled {
+  border-color: var(--wb-shell-line);
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: default;
+}
+
+/* 로그인 실패. 서버가 준 문장을 그대로 그린다(그쪽 주석) — 여기서는 색만 갖는다. */
+.wb-shell-login-error {
+  margin: 0;
+  width: 100%;
+  font-size: 13px;
+  color: #b42318;
 }
 
 /* ── 테마 저작 화면(P4c-2 D1). **셸 밖의 별도 라우트다** ────────────────────────────
@@ -1628,11 +2218,25 @@
   text-decoration: none;
 }
 
+/* **글꼴·글자색·스킴을 여기서 건다.** 이 화면만 브라우저 기본(`Apple SD Gothic Neo` 16px)
+   으로 그려지고 있었다 — 셸 밖 라우트 셋 중 이것만 루트 규칙에 글꼴이 없었고, 다른 둘
+   (`.wb-shell-project-list`·`.wb-shell-login`)은 `system-ui…` 14px였다. 나란히 보면 눈에 띈다.
+
+   `color-scheme: light`도 여기만 빠져 있었다. **이 화면에도 `<input>`이 둘 있다**(태그·설명)
+   — 사용자의 OS가 어두운 스킴이면 UA가 그 둘과 스크롤바를 어둡게 그린다.
+
+   **이 상자는 문서를 감싸지 않으므로 상속 속성을 걸어도 D7이 깨지지 않는다** —
+   `test/shell-css-guard.ts`의 `WRAPPERS`에 없다(렌더러가 그리는 문서 노드가 이 안에
+   들어오지 않는다). */
 .wb-shell-snapshots {
+  color-scheme: light;
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--wb-shell-ink);
 }
 
 .wb-shell-snapshots-header {
@@ -1687,6 +2291,20 @@
   margin: 0;
   color: var(--wb-shell-muted);
   font-size: 13px;
+}
+
+/* 목록 절(`<section>`). 위의 저장 폼과 세로로 이어지므로 자기 여백을 갖지 않는다 —
+   간격은 `.wb-shell-snapshots`의 `gap`이 준다. */
+.wb-shell-snapshots-list {
+  min-width: 0;
+}
+
+/* 그 안의 `<ul>`. **클래스가 없어 `•`와 40px 여백이 그대로 보이던 자리다** —
+   자손 선택자를 쓸 수 없으므로 `<ul>`에 클래스를 붙였다(트리·목록 위젯과 같은 세 줄). */
+.wb-shell-snapshots-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .wb-shell-snapshots-row {

@@ -82,6 +82,7 @@ export function ProjectForm(props: {
       <label className="wb-shell-project-field">
         이름
         <input
+          className="wb-shell-project-input"
           ref={first}
           type="text"
           value={name}
@@ -92,6 +93,7 @@ export function ProjectForm(props: {
       <label className="wb-shell-project-field">
         슬러그
         <input
+          className="wb-shell-project-input"
           type="text"
           value={slug}
           disabled={props.busy}
@@ -101,6 +103,7 @@ export function ProjectForm(props: {
       <label className="wb-shell-project-field">
         설명
         <input
+          className="wb-shell-project-input"
           type="text"
           value={description}
           disabled={props.busy}
@@ -111,10 +114,16 @@ export function ProjectForm(props: {
           이 컴포넌트는 값을 모아 넘기기만 한다 — `tree-input.tsx`가 같은 경계를 갖는다.
           `disabled`로 막지 않는 것은 **왜 안 되는지 보이지 않기 때문이다**: 비활성 버튼은
           이유를 말하지 않는다. */}
-      <button type="submit" disabled={props.busy}>
+      {/* 이 폼의 주 동작이다 — 목록의 `새 프로젝트`·로그인의 `로그인`과 같은 무게를 받는다. */}
+      <button className="wb-shell-project-submit" type="submit" disabled={props.busy}>
         {props.submitLabel}
       </button>
-      <button type="button" disabled={props.busy} onClick={props.onCancel}>
+      <button
+        className="wb-shell-project-action"
+        type="button"
+        disabled={props.busy}
+        onClick={props.onCancel}
+      >
         취소
       </button>
     </form>

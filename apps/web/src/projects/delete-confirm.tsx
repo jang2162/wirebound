@@ -56,6 +56,7 @@ export function DeleteConfirm(props: {
       <label className="wb-shell-project-field">
         삭제하려면 프로젝트 이름을 입력하세요
         <input
+          className="wb-shell-project-input"
           ref={box}
           type="text"
           value={typed}
@@ -64,10 +65,22 @@ export function DeleteConfirm(props: {
         />
       </label>
       {/* **정확히 일치할 때만 활성이다.** 여기서 `trim`하지 않는 근거는 머리말에 있다. */}
-      <button type="button" disabled={props.busy || typed !== props.project.name} onClick={props.onConfirm}>
+      {/* **되돌릴 수 없는 유일한 버튼이라 이것만 붉다.** 목록의 `삭제`는 이 확인을 열 뿐이라
+          흰 바탕을 쓴다 — 되돌릴 수 있는 것에 붉은색을 쓰면 진짜 붉은색의 뜻이 닳는다. */}
+      <button
+        className="wb-shell-project-danger"
+        type="button"
+        disabled={props.busy || typed !== props.project.name}
+        onClick={props.onConfirm}
+      >
         삭제 확정
       </button>
-      <button type="button" disabled={props.busy} onClick={props.onCancel}>
+      <button
+        className="wb-shell-project-action"
+        type="button"
+        disabled={props.busy}
+        onClick={props.onCancel}
+      >
         삭제 취소
       </button>
     </div>

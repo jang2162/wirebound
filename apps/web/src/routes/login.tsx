@@ -70,16 +70,23 @@ export function LoginRoute(): ReactElement {
   }
 
   return (
-    <main>
-      <h1>wirebound</h1>
+    // **클래스는 전부 `wb-shell-` 접두어를 쓴다.** 이 화면은 셸 안이 아니지만 스타일이
+    // `src/shell.css` 한 파일에 있고, `test/shell-css.test.ts`가 그 접두어를 기계로
+    // 지킨다 — 프로젝트 목록·스냅샷·테마 화면이 같은 자리에서 같은 규칙을 따른다.
+    <main className="wb-shell-login">
+      <h1 className="wb-shell-login-title">wirebound</h1>
       <form
+        className="wb-shell-login-form"
         onSubmit={(event) => {
           void submit(event)
         }}
       >
-        <p>
-          <label htmlFor="login-email">이메일</label>
+        <p className="wb-shell-login-field">
+          <label className="wb-shell-login-label" htmlFor="login-email">
+            이메일
+          </label>
           <input
+            className="wb-shell-login-input"
             id="login-email"
             type="email"
             value={email}
@@ -88,9 +95,12 @@ export function LoginRoute(): ReactElement {
             onChange={(event) => setEmail(event.target.value)}
           />
         </p>
-        <p>
-          <label htmlFor="login-password">비밀번호</label>
+        <p className="wb-shell-login-field">
+          <label className="wb-shell-login-label" htmlFor="login-password">
+            비밀번호
+          </label>
           <input
+            className="wb-shell-login-input"
             id="login-password"
             type="password"
             value={password}
@@ -98,11 +108,15 @@ export function LoginRoute(): ReactElement {
           />
         </p>
         {/* 요청이 도는 동안 잠근다 — 두 번 눌러 두 세션을 만들 이유가 없다. */}
-        <button type="submit" disabled={submitting}>
+        <button className="wb-shell-login-submit" type="submit" disabled={submitting}>
           로그인
         </button>
       </form>
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && (
+        <p className="wb-shell-login-error" role="alert">
+          {error}
+        </p>
+      )}
     </main>
   )
 }
