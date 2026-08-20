@@ -262,6 +262,81 @@ export function paletteRoots(css: string): Set<string> {
   return roots
 }
 
+/** `var(--x, …)` 사용 한 자리. `shell-css-palette.test.ts`가 이것을 쓴다. */
+export interface VariableUse {
+  /** `--`를 포함한 이름 그대로. `var(` 뒤의 첫 토큰이므로 `--`로 시작하지 않을 수도 있다. */
+  name: string
+  /** `var(--x, #fff)`처럼 대체값이 있는가. 있으면 선언이 없어도 무효가 되지 않는다. */
+  hasFallback: boolean
+}
+
+/**
+ * **`shell.css`가 선언하는 커스텀 프로퍼티 이름 전부**(`--`를 포함한 형태).
+ * `shell-css-palette.test.ts`가 `variableUses`와 짝지어 *"쓰는데 선언이 없는 이름"*을 찾는다.
+ *
+ * 값은 `paletteRoots`와 **같은 파서에서 같은 방식으로** 나온다 — 주석을 걷고, 규칙으로
+ * 가르고, 본문을 `;`로 나눈다. 그래서 팔레트 검사가 "어느 선택자가 선언하는가"로 보는 것과
+ * 이쪽이 "어떤 이름이 선언되는가"로 보는 것이 **같은 글자를 읽는다.**
+ *
+ * **못 보는 것:**
+ *
+ * - `@keyframes` 안의 선언. `scanRules`가 통째로 건너뛴다(그쪽 주석). 키프레임 안에서만
+ *   선언되고 밖에서 쓰이는 변수는 여기 없어 "선언 없음"으로 잡히는데, 그것은 실제로도
+ *   밖에서 무효이므로 **틀린 판정이 아니다.**
+ * - **이름의 접두어를 보지 않는다.** `.wb-shell-comment-body { --brand: red }`처럼 감싸는
+ *   상자가 아닌 규칙에서 접두어 없는 변수를 선언하면 여기 그대로 들어온다. 그 형태를 막는
+ *   것은 `wrapper-variable`인데 그쪽은 `WRAPPERS`만 본다. **이 함수의 몫이 아니다** —
+ *   여기서 접두어까지 요구하면 "선언됐는가"와 "이름이 옳은가"가 한 함수에 섞인다.
+ */
+export function declaredVariables(css: string): Set<string> {
+  const rules: Rule[] = []
+  scanRules(stripComments(css), rules, [])
+
+  const names = new Set<string>()
+  for (const rule of rules) {
+    for (const declaration of splitTop(rule.body, ';')) {
+      const colon = declaration.indexOf(':')
+      if (colon === -1) continue
+      const property = declaration.slice(0, colon).trim().toLowerCase()
+      if (property.startsWith('--')) names.add(property)
+    }
+  }
+  return names
+}
+
+/**
+ * **`shell.css`의 `var(…)` 사용 전부**, 나온 순서대로. 같은 이름이 여러 번 나오면 여러 번
+ * 들어온다 — 세는 쪽이 쓸 일이 있고, 줄이는 것은 부르는 쪽에서 하면 된다.
+ *
+ * **여기만 `scanRules`를 안 쓴다.** 위의 셋(`findViolations`·`ruledClasses`·`paletteRoots`)은
+ * *"어느 규칙이 무엇을 하는가"*를 묻지만 이쪽은 *"이 이름이 이 파일에서 쓰이는가"*를 묻고,
+ * 그 답에 규칙 구조가 필요 없다. 그리고 주석을 걷은 원문을 통째로 훑는 쪽이 **더 많이 본다** —
+ * `scanRules`가 건너뛰는 `@keyframes` 안의 `var()`도 여기서는 보인다. 주석 걷기는 그대로
+ * 공유하므로 *"주석에 적힌 예시가 검사에 걸린다"*는 사고는 여기서도 안 난다(이 파일 머리말이
+ * 그 예를 든다 — `shell.css`의 팔레트 주석이 본문에 `var(--wb-shell-accent)`를 적고 있다).
+ *
+ * **`var(` 뒤의 첫 토큰을 그대로 담는다.** `--`로 시작하지 않는 이상한 형태도 버리지 않고
+ * 그 글자 그대로 내보내, 부르는 쪽에서 "선언되지 않은 이름"으로 **소리 내며** 걸리게 한다.
+ * 조용히 버리면 그것이야말로 이 검사가 없애려는 침묵이다.
+ *
+ * **못 보는 것:** `shell.css` 밖. `theme/use-theme-css.ts`가 `document.head`에 붙이는 시트와
+ * `.tsx`의 인라인 `style`은 읽지 않는다(머리말의 같은 항목). 그쪽은 **테마의 어휘**라
+ * `--wb-shell-*`를 쓰지도 않는다(D5 — 두 이름 집합의 교집합이 비어 있다).
+ */
+export function variableUses(css: string): VariableUse[] {
+  const uses: VariableUse[] = []
+  // 이름 뒤에 오는 것은 `,`(대체값 있음) 아니면 `)`(없음)뿐이다. 둘 다 아니면 깨진
+  // 형태이므로 대체값 없음으로 두어 아래 검사에서 걸리게 한다.
+  const pattern = /var\(\s*([^,)\s]*)\s*([,)]?)/g
+
+  for (const match of stripComments(css).matchAll(pattern)) {
+    // `?? ''`는 `noUncheckedIndexedAccess` 때문이다 — 두 그룹 다 `*`·`?`라 항상 참여하므로
+    // 실행 시점에 `undefined`가 될 수 없지만, 타입은 그것을 모른다.
+    uses.push({ name: match[1] ?? '', hasFallback: match[2] === ',' })
+  }
+  return uses
+}
+
 /** 주석을 걷는다. 주석 안의 선택자·속성이 검사에 걸리면 안 된다(머리말이 그 예를 든다). */
 function stripComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, ' ')
