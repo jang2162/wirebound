@@ -5,6 +5,8 @@
   "packageManager": "pnpm@10.0.0",
   "engines": { "node": ">=22.9.0" },
   "scripts": {
+    "dev:api": "pnpm --filter @wirebound/api dev",
+    "dev:web": "pnpm --filter @wirebound/web dev",
     "build": "pnpm --filter './packages/*' -r build",
     "test": "vitest run --project '!build'",
     "test:watch": "vitest --project '!build'",
