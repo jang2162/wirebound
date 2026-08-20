@@ -25,6 +25,8 @@ import {
   seedUser,
   seedUserFromEnv,
 } from '../src/db/seed-user'
+import { withTransaction } from '../src/db/tx'
+import { DuplicateEmailError, insertUser } from '../src/repos/users'
 import { getTestDb, withApi } from './helpers'
 
 /** 테스트용 scrypt 비용. `testConfig()`와 같은 값이다(운영 32768은 케이스마다 수십 ms를 쌓는다). */
@@ -175,6 +177,30 @@ describe('시딩 — 없으면 만들고 이미 있으면 그대로 둔다 (D4)'
         seedUserFromEnv(db, { SEED_USER_EMAIL: '골뱅이없음', SEED_USER_PASSWORD: 'password1234' }, TEST_SCRYPT_N),
       ).rejects.toBeInstanceOf(SeedUserError)
       expect(await db.selectFrom('users').selectAll().execute()).toHaveLength(0)
+    })
+  })
+
+  /**
+   * **가입 라우트의 409 케이스가 지키던 성질이 여기로 옮겨 왔다**(2026-08-20).
+   *
+   * 그 케이스는 *"중복 이메일은 409다"*를 확인한 **뒤에** 같은 트랜잭션에서 `users`를
+   * 한 번 더 조회했다. `insertUser`가 자기 INSERT를 `withTransaction`(세이브포인트)으로
+   * 감싸지 않았다면 유니크 위반이 바깥 트랜잭션 전체를 aborted로 만들어 그 조회가
+   * 내용과 무관하게 `25P02`로 죽는다. 라우트가 사라지면서 그 자를 드는 자리가
+   * 저장소에서 **사라질 뻔했다** — 실제로 유니크 위반을 유발하는 경로가 여기뿐이다.
+   */
+  it('같은 이메일을 두 번 삽입하면 `DuplicateEmailError` 이고 **바깥 트랜잭션이 산다**', async () => {
+    await withApi(async ({ db }) => {
+      await seedUser(db, { email: 'seed@example.com', name: '시딩계정', password: 'password1234' }, TEST_SCRYPT_N)
+
+      await expect(
+        withTransaction(db, (trx) =>
+          insertUser(trx, { email: 'seed@example.com', name: '두번째', passwordHash: 'scrypt$fake' }),
+        ),
+      ).rejects.toBeInstanceOf(DuplicateEmailError)
+
+      // 세이브포인트가 없다면 이 조회가 25P02로 죽는다 — 통과 자체가 증거다.
+      expect(await db.selectFrom('users').selectAll().execute()).toHaveLength(1)
     })
   })
 

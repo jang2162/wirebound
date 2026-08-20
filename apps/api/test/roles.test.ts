@@ -121,7 +121,8 @@ describe('role CHECK 제약', () => {
  * `__test`로 시작하는 임시 라우트만 쓴다.
  *
  * **라우트는 `signup()`보다 먼저 등록한다.** `signup()`은 내부에서
- * `/api/auth/signup`에 `app.inject()`를 한 번 호출하는데, Fastify 5는 첫 `inject`
+ * `/api/auth/login`에 `app.inject()`를 한 번 호출하는데(2026-08-20 전에는 가입
+ * 라우트였다 — 부르는 자만 바뀌고 이 순서 제약은 그대로다), Fastify 5는 첫 `inject`
  * 호출에서 인스턴스를 "시작된" 상태로 만들고 그 뒤로는 새 라우트 등록을 거부한다
  * (`FastifyError: Fastify instance is already listening`). 그래서 임시 라우트를
  * 먼저 등록해 두고, 그다음에 `signup()`으로 로그인 쿠키를 발급받는다.

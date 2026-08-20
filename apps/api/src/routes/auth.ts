@@ -1,18 +1,24 @@
 /**
- * 인증 라우트: 회원가입·로그인·로그아웃·내 정보. `/api/auth` prefix로 등록한다(`app.ts`).
+ * 인증 라우트: 로그인·로그아웃·내 정보. `/api/auth` prefix로 등록한다(`app.ts`).
  *
  * HTTP·쿠키·zod 검증은 여기서 다루고, SQL은 전부 `repos/users.ts`와 `auth/session.ts`에
  * 맡긴다 — 이 파일은 postgres 에러 코드도 세션 테이블 구조도 알지 못한다.
+ *
+ * **계정을 만드는 라우트는 없다**(2026-08-20 D1). `POST /signup`이 있던 자리이고,
+ * 그 부재를 `test/auth-routes.test.ts`가 **404로 든다** — 그냥 지우면 다음 사람이
+ * 조용히 되살린다. 계정을 만드는 길은 `db/seed-user.ts`(마이그레이션 뒤의 시딩)
+ * 하나이고, 이미 계정이 있는 사람을 프로젝트에 넣는 길이 멤버 초대다.
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { NormalizedEmail, RawPassword } from '../auth/credentials'
 import { DEFAULT_SCRYPT_PARAMS, hashPassword, verifyPassword } from '../auth/password'
 import { sessionCookieOptions } from '../auth/plugin'
 import { createSession, destroySession } from '../auth/session'
 import type { ApiConfig } from '../config'
-import { conflict, unauthenticated } from '../errors'
+import { unauthenticated } from '../errors'
 import { parseBody } from '../http/parse'
-import { DuplicateEmailError, findUserByEmail, insertUser } from '../repos/users'
+import { findUserByEmail } from '../repos/users'
 
 /**
  * 로그인 실패 메시지. "없는 이메일"과 "틀린 비밀번호"가 정확히 같은 문자열을 써야
@@ -22,26 +28,15 @@ import { DuplicateEmailError, findUserByEmail, insertUser } from '../repos/users
 const LOGIN_FAILURE_MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다'
 
 /**
- * `.email()`은 형식만 검증한다 — 정규화(소문자화)는 이 스키마의 `.transform()`이 한다.
- * 이후 `repos/users.ts`는 이미 정규화된 이메일만 받는다고 가정한다.
+ * 로그인 본문. `z.strictObject`라 선언되지 않은 키가 오면 그 자체로 400이다.
  *
- * zod 기본 정규식(`regexes.email`)을 그대로 쓴다 — 로컬 파트를 ASCII로 제한한다.
- * 국제화 로컬 파트 지원은 이 도구가 메일을 보내지도 않는 P1 시점에 저장 데이터의
- * 게이트만 느슨하게 할 뿐 실질적인 이득이 없는 별도의 제품 결정이라, 여기서
- * 임의로 넓히지 않는다.
+ * **규격 자체는 `auth/credentials.ts`가 소유한다.** 계정을 만드는 자(시딩)와 받는 자(여기)가
+ * 파일이 갈렸으므로, 두 벌이 되면 *"만들어졌는데 로그인 본문 검증에서 400 나는 계정"*이
+ * 생긴다 — 그 갈림을 없애려고 규격을 한 자리로 모았다.
  */
-const NormalizedEmail = z.email().transform((value) => value.toLowerCase())
-
-/** 회원가입 본문. `z.strictObject`라 선언되지 않은 키(예: `role`)가 오면 그 자체로 400이다 — 권한 상승 필드를 조용히 무시하지 않는다. */
-const SignupBody = z.strictObject({
-  email: NormalizedEmail,
-  name: z.string().min(1).max(80),
-  password: z.string().min(8).max(200),
-})
-
 const LoginBody = z.strictObject({
   email: NormalizedEmail,
-  password: z.string().min(8).max(200),
+  password: RawPassword,
 })
 
 /** 이 서버가 쓰는 scrypt 비용 파라미터. `config.passwordScryptN`만 환경별로 달라지고(운영 32768, 테스트 1024), r·p는 고정값을 쓴다. */
@@ -66,26 +61,6 @@ export function authRoutes(config: ApiConfig) {
      * 매 요청 같은 값과 비교해도 안전에 영향이 없다).
      */
     const dummyHash = await hashPassword('타이밍-방어-전용-더미-비밀번호', scryptParams(config))
-
-    app.post('/signup', async (request, reply) => {
-      const body = parseBody(SignupBody, request.body)
-      const passwordHash = await hashPassword(body.password, scryptParams(config))
-
-      let user
-      try {
-        user = await insertUser(app.db, { email: body.email, name: body.name, passwordHash })
-      } catch (error) {
-        if (error instanceof DuplicateEmailError) {
-          throw conflict(error.message)
-        }
-        throw error
-      }
-
-      const { token, expiresAt } = await createSession(app.db, user.id, config.sessionTtlHours)
-      reply.setCookie(config.sessionCookieName, token, sessionCookieOptions(config, expiresAt))
-      reply.code(201)
-      return { id: user.id, email: user.email, name: user.name }
-    })
 
     app.post('/login', async (request, reply) => {
       const body = parseBody(LoginBody, request.body)

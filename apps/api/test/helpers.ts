@@ -4,6 +4,7 @@ import { buildApp, type BuildAppOptions } from '../src/app'
 import type { ApiConfig } from '../src/config'
 import { loadConfig } from '../src/config'
 import { createDb, createPool } from '../src/db/client'
+import { seedUser } from '../src/db/seed-user'
 import type { DbHandle } from '../src/db/tx'
 import type { ProjectRole } from '../src/db/types'
 import { resolveTestDatabaseUrlFrom } from './test-database-url'
@@ -248,13 +249,28 @@ export interface SignedUpUser {
 let signupCounter = 0
 
 /**
- * 가입시키고 로그인 쿠키까지 돌려준다. 이메일 기본값은 호출마다 유일하게 만든다
+ * 사용자를 만들고 로그인 쿠키까지 돌려준다. 이메일 기본값은 호출마다 유일하게 만든다
  * (모듈 스코프 카운터) — `withApi`가 테스트마다 롤백하므로 파일 간 충돌은 없지만,
  * 한 테스트 안에서 여러 사용자를 만드는 경우가 흔해 그 안에서도 겹치면 안 된다.
  *
- * `/api/auth/signup`을 실제로 호출한다(직접 `insertUser`를 부르지 않는다) — 그래야
- * 비밀번호 해시·세션 발급까지 실제 라우트가 하는 그대로 거치고, 이후 태스크가
- * 돌려받은 쿠키로 바로 인증된 요청을 보낼 수 있다.
+ * **이름이 `signup`인 채로 남는다. 가입 라우트는 없다**(2026-08-20 D1·D2). 앞서 이
+ * 픽스처는 *"`/api/auth/signup`을 **실제로** 호출한다(직접 `insertUser`를 부르지 않는다) —
+ * 그래야 비밀번호 해시·세션 발급까지 실제 라우트가 하는 그대로 거친다"*고 적고 있었다.
+ * **그 근거는 살아 있고 부르는 자만 바뀌었다** — 오늘 계정을 만드는 프로덕션 경로는
+ * `db/seed-user.ts`의 `seedUser`이고(마이그레이션 뒤에 `migrate`가 부르는 바로 그 함수),
+ * 세션을 내는 프로덕션 경로는 `POST /api/auth/login`이다. **그래서 둘을 잇는다:**
+ *
+ * 1. `seedUser` — 비밀번호 해시와 삽입. 옛 라우트가 하던 그 일이고, 지금 운영에서도
+ *    계정은 이 함수로만 생긴다.
+ * 2. `POST /api/auth/login` — 세션 발급. **시딩은 쿠키를 안 낸다**(HTTP 요청이 아니다).
+ *
+ * **호출자 쪽 계약은 그대로다** — 돌려주는 것도 `{ user, cookie, password }` 셋이고,
+ * 첫 `inject`가 Fastify 인스턴스를 부팅시키는 성질도 그대로다(`roles.test.ts`가 그 순서에
+ * 기대고 있다). 그래서 이 함수를 쓰는 파일 쉰셋을 한 줄도 안 고쳤다.
+ *
+ * **scrypt 비용은 `testConfig()`의 값(1024)을 쓴다.** 운영 기본값(32768)이면 해시 한 번에
+ * 50ms 이상이라 이 픽스처가 등장하는 케이스마다 그 비용이 쌓인다. 다른 `config`로
+ * `withApi`를 연 케이스도 로그인은 그대로 된다 — 해시가 자기 파라미터를 동봉하기 때문이다.
  */
 export async function signup(
   ctx: TestContext,
@@ -265,13 +281,18 @@ export async function signup(
   const name = overrides?.name ?? `사용자${signupCounter}`
   const password = overrides?.password ?? 'password1234'
 
+  const outcome = await seedUser(ctx.db, { email, name, password }, testConfig().passwordScryptN)
+  if (outcome.kind !== 'created') {
+    throw new Error(`signup 픽스처가 실패했습니다: 계정을 만들지 못했습니다 (${outcome.kind}: ${email})`)
+  }
+
   const res = await ctx.app.inject({
     method: 'POST',
-    url: '/api/auth/signup',
-    payload: { email, name, password },
+    url: '/api/auth/login',
+    payload: { email, password },
   })
 
-  if (res.statusCode !== 201) {
+  if (res.statusCode !== 200) {
     throw new Error(`signup 픽스처가 실패했습니다 (status ${res.statusCode}): ${res.body}`)
   }
 

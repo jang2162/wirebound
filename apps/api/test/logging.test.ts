@@ -6,7 +6,7 @@ import { createSession } from '../src/auth/session'
 import { loadConfig } from '../src/config'
 import { registerErrorHandler } from '../src/http/error-handler'
 import { healthRoutes } from '../src/routes/health'
-import { testConfig, withApi } from './helpers'
+import { signup, testConfig, withApi } from './helpers'
 
 const testEnv = {
   DATABASE_URL: 'postgres://wirebound:wirebound@127.0.0.1:5433/wirebound_test',
@@ -90,23 +90,24 @@ describe('로그 리다크션', () => {
     expect(logged).not.toContain(token)
   })
 
-  it('회원가입·로그인 요청 본문의 평문 비밀번호가 로그에 나타나지 않는다', async () => {
-    // 위 두 테스트는 쿠키 헤더에 실린 세션 토큰만 다룬다. task 8의 `/api/auth/login`은
+  it('로그인 요청 본문의 평문 비밀번호가 로그에 나타나지 않는다', async () => {
+    // 위 두 테스트는 쿠키 헤더에 실린 세션 토큰만 다룬다. `/api/auth/login`은
     // 매 호출마다 평문 비밀번호를 요청 **본문**에 담아 나른다 — 헤더가 아니라 본문이므로
     // 위 redact 설정(`req.headers.*`)의 대상도 아니다. 이 값이 로그에 안 남는 진짜 이유는
     // `buildLoggerOptions`의 redact가 아니라(그 redact는 헤더 경로만 가린다), Fastify
     // 기본 req 시리얼라이저가 애초에 method·url·hostname 등만 담고 body를 아예 로그
     // 객체에 넣지 않기 때문이다 — 그 사실을 "그럴 것이다"로 남겨두지 않고 실측한다.
+    //
+    // **가입 인젝트가 빠졌다**(2026-08-20 D1 — 그 라우트가 없다). 계정을 만드는 경로가
+    // 비밀번호를 안 찍는지는 `seed-user.test.ts`가 시딩 출력 전문을 읽어 잰다 — 그쪽은
+    // HTTP가 아니라 콘솔이라 이 파일의 자(pino 스트림)로는 닿지 않는 자리다.
     const marker = 'MARKER-plaintext-password-f7d2b9'
     const { stream, read } = captureLogStream()
 
     await withApi(
-      async ({ app }) => {
-        await app.inject({
-          method: 'POST', url: '/api/auth/signup',
-          payload: { email: 'logpw@example.com', name: '로그검증', password: marker },
-        })
-        await app.inject({
+      async (ctx) => {
+        await signup(ctx, { email: 'logpw@example.com', name: '로그검증', password: marker })
+        await ctx.app.inject({
           method: 'POST', url: '/api/auth/login',
           payload: { email: 'logpw@example.com', password: marker },
         })
