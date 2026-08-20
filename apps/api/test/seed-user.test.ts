@@ -326,6 +326,38 @@ describe('시딩한 계정은 로그인된다', () => {
     expect(RawPassword.safeParse(password).success).toBe(ok)
   })
 
+  /**
+   * **위의 규격 비교보다 강한 자다.** 저것은 `RawPassword` 라는 **한 객체**를 두 번 물어
+   * 보므로, 누군가 `seed-user.ts` 에 **자기 규격을 새로 적으면**(공유를 끊으면) 통과한
+   * 채로 갈린다 — 시딩이 5자를 받고 로그인이 400 을 내는 계정이 그렇게 생긴다.
+   *
+   * 그래서 여기서는 **실제로 시딩해 보고 실제로 로그인해 본다**: 시딩이 받은 비밀번호는
+   * 로그인도 받아야 하고, 시딩이 거절한 것은 로그인도 거절해야 한다. 길이를 훑는 이유는
+   * 경계가 어디로 옮겨가든 걸리게 하기 위해서다.
+   */
+  it.each([4, 6, 7, 8, 9, 20])('비밀번호 %i자 — 시딩이 받으면 로그인도 받는다', async (length) => {
+    await withApi(async ({ app, db }) => {
+      const email = `len${length}@example.com`
+      const password = 'a'.repeat(length)
+
+      let seeded = true
+      try {
+        await seedUser(db, { email, name: '길이검증', password }, TEST_SCRYPT_N)
+      } catch (error) {
+        if (!(error instanceof SeedUserError)) throw error
+        seeded = false
+      }
+
+      const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password } })
+
+      // 시딩됐으면 200, 안 됐으면 400(본문 검증) — 어느 쪽이든 **"만들어졌는데 못 쓰는"**
+      // 조합(시딩 성공 + 로그인 400)이 나오면 안 된다.
+      expect({ seeded, login: login.statusCode }).toEqual(
+        seeded ? { seeded: true, login: 200 } : { seeded: false, login: 400 },
+      )
+    })
+  })
+
   it('시딩이 쓰는 이름 규격이 곧 `users.name` 이 받는 것이다', () => {
     expect(DisplayName.safeParse('').success).toBe(false)
     expect(DisplayName.safeParse('가'.repeat(80)).success).toBe(true)
