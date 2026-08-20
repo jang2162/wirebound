@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url'
 import { Migrator, NO_MIGRATIONS, type MigrationResultSet } from 'kysely'
 import { loadConfig } from '../config'
 import { createDb, createPool } from './client'
+import { runSeedStep } from './seed-user'
 import type { DbHandle } from './tx'
 import { migrationProvider } from './migrations/index'
 
@@ -83,15 +84,31 @@ async function main(): Promise<void> {
   const pool = createPool(config.databaseUrl)
   const db = createDb(pool)
   try {
-    if (direction === 'latest') {
-      await migrateToLatest(db)
-    } else {
-      await migrateDown(db)
+    try {
+      if (direction === 'latest') {
+        await migrateToLatest(db)
+      } else {
+        await migrateDown(db)
+      }
+      console.log('마이그레이션 완료')
+    } catch (error) {
+      console.error('마이그레이션 실패:', error)
+      process.exitCode = 1
+      return
     }
-    console.log('마이그레이션 완료')
-  } catch (error) {
-    console.error('마이그레이션 실패:', error)
-    process.exitCode = 1
+
+    // **계정 시딩은 여기다**(2026-08-20 D3). 사용자가 *"db 마이그레이션 할 때"*라고
+    // 정했고, 스키마가 **다 올라간 뒤**여야 `users` 에 쓸 수 있다.
+    //
+    // **`down` 에서는 안 돈다.** 내리는 길에 계정을 만들 이유가 없고, 계정을 마이그레이션
+    // 안에 두지 않기로 한 판정(`db/seed-user.ts` 머리말)의 짝이 이 조건이다 —
+    // `migrate:down` 은 계정을 안 건드린다.
+    //
+    // **위 `try` 안에 넣지 않는다.** 시딩 실패를 *"마이그레이션 실패"* 로 찍으면 사람이
+    // 마이그레이션을 다시 돌려야 하는지 알 수 없다 — 그 문장은 `runSeedStep` 이 소유한다.
+    if (direction === 'latest' && !(await runSeedStep(db, process.env, config.passwordScryptN, console))) {
+      process.exitCode = 1
+    }
   } finally {
     await db.destroy()
   }
