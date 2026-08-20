@@ -262,6 +262,133 @@ export function paletteRoots(css: string): Set<string> {
   return roots
 }
 
+/**
+ * **커스텀 프로퍼티의 대소문자 규칙 — 두 자리가 정반대다.** 아래 두 함수가 이 문단을
+ * 가리키므로 여기 한 벌만 적는다.
+ *
+ * | | 규칙 | 명세 |
+ * |---|---|---|
+ * | 함수 이름 `var(` | **대소문자를 무시한다** — `VAR(`도 유효한 참조다 | `<function-token>`은 ident로 시작하고, CSS의 키워드·함수 이름 매칭은 ASCII 대소문자를 무시한다 (css-syntax-3 §4 · css-values-4 §1) |
+ * | 변수 이름 `--Foo` | **대소문자를 구분한다** — `--Foo`와 `--foo`는 **다른 프로퍼티**다 | 커스텀 프로퍼티 이름은 `<dashed-ident>`이고 대소문자를 구분한다 (css-variables-1 §2). **일반 속성 이름이 대소문자를 무시하는 것과 갈리는 자리다** |
+ *
+ * **인용만 하지 않고 Chrome 151에서 직접 쟀다**(2026-08-20):
+ *
+ * ```
+ * #a { --wb-x: rgb(1,2,3); background: VAR(--wb-x) }  → rgb(1, 2, 3)      함수명 대문자, 동작한다
+ * #b { --wb-x: rgb(1,2,3); background: vAr(--wb-x) }  → rgb(1, 2, 3)      섞여도 동작한다
+ * #c { --wb-x: rgb(1,2,3); background: var(--WB-X) }  → rgba(0,0,0,0)     이름 대문자, 무효다
+ * #d { --Foo: rgb(9,9,9); --foo: rgb(4,5,6); var(--foo) } → rgb(4, 5, 6)  둘이 공존한다
+ * #e { --Foo: rgb(9,9,9); var(--Foo) }  → rgb(9, 9, 9)                    구분해서 읽는다
+ * #f { --Foo: rgb(9,9,9); var(--foo) }  → rgba(0,0,0,0)                   소문자로는 못 읽는다
+ * #g { BACKGROUND-COLOR: rgb(7,7,7) }   → rgb(7, 7, 7)                    일반 속성은 무시한다
+ * ```
+ *
+ * **앞 판은 이 둘이 뒤집혀 있었다.** 정규식에 `i`가 없어 `VAR(--없는이름)`이 검사를 통째로
+ * 빠져나갔고(실측: 19케이스 전부 초록), `declaredVariables`만 `toLowerCase`를 걸어
+ * 대소문자 섞인 **유효한** 이름이 거짓 양성으로 울었다. 한쪽만 정규화한 **비대칭**이 둘째
+ * 증상의 원인이었다 — 그래서 지금은 **양쪽 다 이름을 원문 그대로 다룬다.**
+ */
+
+/** `var(--x, …)` 사용 한 자리. `shell-css-palette.test.ts`가 이것을 쓴다. */
+export interface VariableUse {
+  /** `--`를 포함한 이름 그대로. `var(` 뒤의 첫 토큰이므로 `--`로 시작하지 않을 수도 있다. */
+  name: string
+  /** `var(--x, #fff)`처럼 대체값이 있는가. 있으면 선언이 없어도 무효가 되지 않는다. */
+  hasFallback: boolean
+}
+
+/**
+ * **`shell.css`가 선언하는 커스텀 프로퍼티 이름 전부**(`--`를 포함한 형태).
+ * `shell-css-palette.test.ts`가 `variableUses`와 짝지어 *"쓰는데 선언이 없는 이름"*을 찾는다.
+ *
+ * 값은 `paletteRoots`와 **같은 파서에서 같은 방식으로** 나온다 — 주석을 걷고, 규칙으로
+ * 가르고, 본문을 `;`로 나눈다. 그래서 팔레트 검사가 "어느 선택자가 선언하는가"로 보는 것과
+ * 이쪽이 "어떤 이름이 선언되는가"로 보는 것이 **같은 글자를 읽는다.**
+ *
+ * **못 보는 것:**
+ *
+ * - `@keyframes` 안의 선언. `scanRules`가 통째로 건너뛴다(그쪽 주석). 키프레임 안에서만
+ *   선언되고 밖에서 쓰이는 변수는 여기 없어 "선언 없음"으로 잡히는데, 그것은 실제로도
+ *   밖에서 무효이므로 **틀린 판정이 아니다.**
+ * - **이름의 접두어를 보지 않는다.** `.wb-shell-comment-body { --brand: red }`처럼 감싸는
+ *   상자가 아닌 규칙에서 접두어 없는 변수를 선언하면 여기 그대로 들어온다. 그 형태를 막는
+ *   것은 `wrapper-variable`인데 그쪽은 `WRAPPERS`만 본다. **이 함수의 몫이 아니다** —
+ *   여기서 접두어까지 요구하면 "선언됐는가"와 "이름이 옳은가"가 한 함수에 섞인다.
+ *   **판정은 `shell-css-palette.test.ts`의 7번이 한다**(이 함수의 결과를 그대로 쓴다).
+ *
+ * **이름을 소문자로 내리지 않는다** — 커스텀 프로퍼티 이름은 대소문자를 구분한다(위 표).
+ * `paletteRoots`에서 물려온 코드가 `toLowerCase`를 걸고 있었는데, **그쪽은 무해하고 여기는
+ * 아니다**: 그쪽은 `startsWith('--wb-shell-')`만 보므로 소문자화가 판정을 안 바꾸지만,
+ * 여기서는 이름 자체가 결과라 `--Foo`가 `--foo`로 바뀌어 나간다. 그러면 `variableUses`가
+ * 담는 원문과 짝이 안 맞아 **유효한 CSS가 거짓 양성으로 운다**(실측: `--wb-shell-Accent2`를
+ * 선언하고 그대로 쓴 실물 변조에서 *"어디에도 선언이 없다"*가 났다).
+ */
+export function declaredVariables(css: string): Set<string> {
+  const rules: Rule[] = []
+  scanRules(stripComments(css), rules, [])
+
+  const names = new Set<string>()
+  for (const rule of rules) {
+    for (const declaration of splitTop(rule.body, ';')) {
+      const colon = declaration.indexOf(':')
+      if (colon === -1) continue
+      // 소문자로 내리지 않는다(위 머리말). `--`에는 대소문자가 없으므로 커스텀
+      // 프로퍼티인지 가르는 데는 원문 그대로로 충분하다.
+      const property = declaration.slice(0, colon).trim()
+      if (property.startsWith('--')) names.add(property)
+    }
+  }
+  return names
+}
+
+/**
+ * **`shell.css`의 `var(…)` 사용 전부**, 나온 순서대로. 같은 이름이 여러 번 나오면 여러 번
+ * 들어온다 — 세는 쪽이 쓸 일이 있고, 줄이는 것은 부르는 쪽에서 하면 된다.
+ *
+ * **여기만 `scanRules`를 안 쓴다.** 위의 셋(`findViolations`·`ruledClasses`·`paletteRoots`)은
+ * *"어느 규칙이 무엇을 하는가"*를 묻지만 이쪽은 *"이 이름이 이 파일에서 쓰이는가"*를 묻고,
+ * 그 답에 규칙 구조가 필요 없다. 그리고 주석을 걷은 원문을 통째로 훑는 쪽이 **더 많이 본다** —
+ * `scanRules`가 건너뛰는 `@keyframes` 안의 `var()`도 여기서는 보인다. 주석 걷기는 그대로
+ * 공유하므로 *"주석에 적힌 예시가 검사에 걸린다"*는 사고는 여기서도 안 난다(이 파일 머리말이
+ * 그 예를 든다 — `shell.css`의 팔레트 주석이 본문에 `var(--wb-shell-accent)`를 적고 있다).
+ *
+ * **`var(` 뒤의 첫 토큰을 그대로 담는다.** `--`로 시작하지 않는 이상한 형태도 버리지 않고
+ * 그 글자 그대로 내보내, 부르는 쪽에서 "선언되지 않은 이름"으로 **소리 내며** 걸리게 한다.
+ * 조용히 버리면 그것이야말로 이 검사가 없애려는 침묵이다.
+ *
+ * **`i` 플래그가 붙어 있다** — `VAR(`·`vAr(`도 유효한 참조이기 때문이다(위 대소문자 표).
+ * **앞 판에 이것이 없어 대문자 하나로 검사가 통째로 열렸다**(실측: `VAR(--wb-shell-nowhere)`를
+ * 실물에 심었더니 19케이스 전부 초록). 이름 쪽은 `[^,)\s]*`·`[,)]?`라 대소문자가 없으므로
+ * 플래그를 전체에 걸어도 **함수 이름에만 듣는다** — 이름은 여전히 원문 그대로 담긴다.
+ *
+ * **못 보는 것 둘:**
+ *
+ * - **`shell.css` 밖.** `theme/use-theme-css.ts`가 `document.head`에 붙이는 시트와
+ *   `.tsx`의 인라인 `style`은 읽지 않는다(머리말의 같은 항목). 그쪽은 **테마의 어휘**라
+ *   `--wb-shell-*`를 쓰지도 않는다(D5 — 두 이름 집합의 교집합이 비어 있다).
+ * - **문자열 리터럴 안의 `var(`도 사용으로 센다.** `content: "var(--없는것)"`이 그 형태다 —
+ *   `stripComments`는 주석만 걷고 문자열은 안 걷는다. **거짓 양성이라 방향이 안전한 쪽이고,
+ *   `shell-css-coverage.ts`가 같은 부류(주석 안의 `className`)를 문서화로 처리한 선례를
+ *   따른다**: 없는 사용을 더 세는 것이므로 *"선언이 있는데 없다"*고 말하지는 않는다. 반대로
+ *   **문자열에 예시로 적은 이름의 선언이 없으면 검사가 운다.** 지금 그런 자리는 0건이다
+ *   (검산: `grep -nE '"[^"]*var\(|'"'"'[^'"'"']*var\(' apps/web/src/shell.css`).
+ *   **고치려면 문자열 걷기가 필요한데 그것은 `stripComments`를 셋째 정규화로 갈라 놓는다** —
+ *   D7 파서와 공유하는 걷기가 두 벌이 되는 값이 0건짜리 거짓 양성보다 크다.
+ */
+export function variableUses(css: string): VariableUse[] {
+  const uses: VariableUse[] = []
+  // 이름 뒤에 오는 것은 `,`(대체값 있음) 아니면 `)`(없음)뿐이다. 둘 다 아니면 깨진
+  // 형태이므로 대체값 없음으로 두어 아래 검사에서 걸리게 한다.
+  const pattern = /var\(\s*([^,)\s]*)\s*([,)]?)/gi
+
+  for (const match of stripComments(css).matchAll(pattern)) {
+    // `?? ''`는 `noUncheckedIndexedAccess` 때문이다 — 두 그룹 다 `*`·`?`라 항상 참여하므로
+    // 실행 시점에 `undefined`가 될 수 없지만, 타입은 그것을 모른다.
+    uses.push({ name: match[1] ?? '', hasFallback: match[2] === ',' })
+  }
+  return uses
+}
+
 /** 주석을 걷는다. 주석 안의 선택자·속성이 검사에 걸리면 안 된다(머리말이 그 예를 든다). */
 function stripComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, ' ')

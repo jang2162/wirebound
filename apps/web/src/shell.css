@@ -20,7 +20,7 @@
      앞 둘만 봤지만, **이제 프레임 안에 설계서 문서가 들어온다**(`canvas/canvas.tsx`).
      그래서 검사 대상이 넷으로 늘었다.
 
-     **예외 — 커스텀 프로퍼티.** 아래 `.wb-shell`이 선언하는 `--wb-shell-*` 여섯 개도
+     **예외 — 커스텀 프로퍼티.** 아래 `.wb-shell`이 선언하는 `--wb-shell-*` 일곱 개도
      상속 속성이라 프레임 안까지 내려간다. 그래도 두는 것은 `wb-shell-` 접두어가 P4a
      테마의 변수 이름과 겹칠 수 없고, 쓰이지 않는 변수는 아무것도 그리지 않기 때문이다.
      접두어 없는 변수는 그 넷에 선언할 수 없다 — 검사가 막는다(아래).
@@ -73,10 +73,19 @@
    `.wb-shell-snapshots-back`의 `color`가 `rgb(0, 0, 0)`, 루트의 `--wb-shell-line`이 빈
    문자열이었다. **셸 밖에 새 화면 루트를 만드는 사람은 여기 한 줄을 더해야 한다.**
 
-   **여섯이다.** `theme/use-theme-css.ts`가 D5의 근거로 이 수를 인용하는데(테마가 `:root`에
-   싣는 이름과 **교집합이 비어 있다**), 그쪽은 "일곱"이라 적고 있었고 거짓이었다 — 그
-   판정을 떠받치는 것은 수가 아니라 **접두어가 전부 `--wb-shell-`이라는 것**이고 그쪽은 참이다.
-   검산: `grep -oE -- "^\s*--wb-shell-[a-z-]+:" apps/web/src/shell.css | sort -u | wc -l` */
+   **일곱이다** — 코멘트 전용 색이 들어오며 여섯에서 늘었다. **이 수는 적어 두면 낡는다:**
+   앞 판의 `theme/use-theme-css.ts`가 D5의 근거로 "일곱"이라 적고 있었는데 실제는 여섯이라
+   거짓이었다. 그래서 그쪽을 수가 아니라 성질로 고쳤고, D5(테마가 `:root`에 싣는 이름과
+   **교집합이 비어 있다**)를 떠받치는 것은 **접두어가 전부 `--wb-shell-`이라는 것**이므로
+   변수가 몇이 되든 참이다. 여기 적힌 수는 세어 보라는 안내일 뿐이다.
+   검산: `grep -oE -- "^\s*--wb-shell-[a-z-]+:" apps/web/src/shell.css | sort -u | wc -l`
+
+   **`--wb-shell-comment`는 코멘트의 표식 전용이다**(캔버스 번호 배지·패널 번호 배지·보고
+   있는 그룹의 왼쪽 테두리 셋). 이 파일이 이미 쓰는 붉은색 `#b42318`을 재사용하지 않는 것은
+   그 색이 **되돌릴 수 없는 것**(`.wb-shell-project-danger` = `삭제 확정`)과 **오류 문장**에
+   배정돼 있기 때문이다. 주석에 위험의 색을 쓰면 *"붉은색 = 위험"* 신호가 닳는다. 값은
+   흰 글자 11px 기준 대비 **4.83:1**로 WCAG AA(작은 텍스트 4.5:1)를 넘는다 — 앞서 쓰던
+   파랑 `#2f6fed`의 4.55:1보다 오히려 높다. **어둡게 조정하지 않은 근거가 이 실측이다.** */
 .wb-shell,
 .wb-shell-theme,
 .wb-shell-snapshots,
@@ -87,6 +96,7 @@
   --wb-shell-ink: #1d2530;
   --wb-shell-muted: #6b7684;
   --wb-shell-accent: #2f6fed;
+  --wb-shell-comment: #d92d20;
   --wb-shell-gap: 1px;
 }
 
@@ -542,7 +552,7 @@
   height: 18px;
   padding: 0 4px;
   border-radius: 9px;
-  background: var(--wb-shell-accent);
+  background: var(--wb-shell-comment);
   color: #fff;
   font-size: 11px;
   line-height: 18px;
@@ -633,7 +643,7 @@
 /* 고른 노드의 무리. `aria-current`가 그 표시이므로 선택자도 그것을 본다 — 클래스를
    따로 두면 접근성 속성과 화면 표시가 갈릴 자리가 생긴다. */
 .wb-shell-comment-group[aria-current='true'] {
-  border-left: 2px solid var(--wb-shell-accent);
+  border-left: 2px solid var(--wb-shell-comment);
   padding-left: 6px;
 }
 
@@ -650,7 +660,7 @@
   min-width: 16px;
   padding: 0 4px;
   border-radius: 8px;
-  background: var(--wb-shell-accent);
+  background: var(--wb-shell-comment);
   color: #fff;
   text-align: center;
 }
@@ -1851,7 +1861,8 @@
 }
 
 /* **경보가 아니다 — 늘 참인 사실이다.** 색으로 경보와 갈라 두지 않는 것은 셸에 경고색이
-   없기 때문이고(팔레트 여섯에 없다), 무게는 `role`이 이미 가른다. */
+   없기 때문이고(팔레트 일곱 중 붉은 것은 `--wb-shell-comment` 하나인데 그것은 코멘트의
+   표식이지 경고가 아니다), 무게는 `role`이 이미 가른다. */
 .wb-shell-theme-json-caveat {
   margin: 0;
   font-size: 11px;
