@@ -4,7 +4,7 @@
  *
  * **묻는 것이 둘이다.** ㉠ **화면 루트가 팔레트를 받는가**(1~4번) — 셸 밖 라우트가 팔레트
  * 선언을 못 받으면 그 화면의 `var()`가 전부 무효가 된다. ㉡ **쓰는 이름이 선언돼 있는가**
- * (5~6번) — 루트가 팔레트를 받아도 그 안에 그 이름이 없으면 같은 일이 난다.
+ * (5~7번) — 루트가 팔레트를 받아도 그 안에 그 이름이 없으면 같은 일이 난다.
  *
  * **한 파일에 두는 것은 두 질문이 같은 고장의 양끝이기 때문이다.** 둘 다 결과가
  * `var(--x)`의 **계산 시점 무효**이고, 둘 다 렌더는 되고 콘솔은 조용하다. 파일을 가르면
@@ -41,7 +41,7 @@
  * 없이** 그려지는데 아무 데서도 울지 않았다. **5번이 그 자리다** — 같은 변조가 이제 운다
  * (아래 구분력 표). 선택자를 빼는 쪽은 예나 지금이나 1번이 잡는다.
  *
- * 그래서 아래 **여섯**을 본다.
+ * 그래서 아래 **일곱**을 본다.
  *
  * 1. **CSS의 팔레트 선택자 집합 == 이 파일의 `SCREEN_ROOTS`.** 한쪽만 바뀌면 운다.
  *    새 루트를 CSS에 더하면 여기도 고쳐야 하고, 고치는 사람이 이 머리말을 읽게 된다.
@@ -55,6 +55,8 @@
  * 5. **`var(…)`로 쓰는 이름이 전부 선언돼 있다.** 사용 → 선언 **한쪽 방향이다.**
  * 6. **대체값(`var(--x, #fff)`)을 쓰는 자리가 없다.** 오늘 0건이고, 첫 하나가 생길 때
  *    사람이 이 머리말을 읽고 결정하게 하는 자리다.
+ * 7. **선언하는 커스텀 프로퍼티가 전부 `--wb-shell-` 접두어를 갖는다.** 5번이 *"선언됐는가"*를
+ *    본다면 이쪽은 *"그 이름이 셸의 것인가"*를 본다.
  *
  * **5번은 왜 한쪽 방향인가 — 선언했는데 안 쓰는 변수(죽은 변수)는 잡지 않는다.**
  * `shell-css-coverage.ts`가 같은 이유로 반대 방향(**규칙은 있는데 코드가 안 붙이는 클래스**)을
@@ -71,17 +73,39 @@
  * 자리가 된다"*라고 적고 있는 그것이다. 그래서 **막지 않고 세운다**: 첫 대체값이 들어올 때
  * 이 케이스가 울고, 쓰는 사람이 여기 근거를 적고 수를 고친다.
  *
- * **5·6번이 못 보는 것**(`shell-css-guard.ts`의 두 함수 주석에 기계 쪽 몫이 더 있다):
+ * **7번은 왜 D7 파일이 아니라 여기인가.** 규칙만 보면 D7 쪽이다 — `shell.css` 머리말 4번이
+ * *"접두어 없는 변수는 그 넷에 선언할 수 없다 — 검사가 막는다"*라고 적고 있고, 그 검사가
+ * `wrapper-variable`이다. **7번은 그 규칙을 감싸는 상자에서 파일 전체로 넓힌 것**이다.
+ * 그래도 여기 둔 이유 둘:
  *
- * - **선언 이름의 접두어를 안 본다.** 감싸는 상자가 아닌 규칙에서 `--brand: red`를 선언하고
- *   `var(--brand)`로 쓰면 **5번은 통과한다**(선언이 있으니까). `wrapper-variable`이 그
- *   형태를 막지만 그쪽은 `WRAPPERS` 넷만 본다. 즉 **접두어 없는 변수를 셸 안에서 쓰는 길이
- *   아직 열려 있다.** 조용히 깨지지는 않는다(값이 나온다) — D5의 *"셸이 읽는 것은 전부
- *   `--wb-shell-*`"*가 사람의 규율로 남아 있는 자리다.
+ * - **`shell-css.test.ts`의 케이스는 전부 `findViolations`의 산출을 재는 형태다**
+ *   (`PLANTED` 표와 `ALLOWED` 표가 그 파일의 뼈대다). 7번은 `Violation`을 내지 않는다.
+ * - **`findViolations`에 새 검사로 접으면 감싸는 상자에서 두 번 신고한다.** 거기서는
+ *   `wrapper-variable`이 이미 물고 있고, 그쪽 메시지는 *"문서 안까지 물려 내려간다"*로
+ *   **다른 손해**를 말한다(상속 누수). 7번이 말하는 손해는 *"셸이 테마의 어휘를 쓴다"*(D5)다.
+ *   겹치지 않게 하려면 기존 규칙을 고쳐야 하고, 그러면 그 파일의 심기 표를 건드린다.
+ *
+ * **그래서 이름을 다루는 셋(5·6·7)이 한 자리에 모인다.** 실패 메시지에 선택자가 필요해지면
+ * `findViolations`의 `CheckName`으로 올리는 길이 있다 — 그때 위의 두 번 신고를 함께 풀어라.
+ *
+ * **7번은 대소문자를 구분해서 본다.** `--WB-SHELL-x`는 `--wb-shell-x`와 **다른 프로퍼티**이므로
+ * (`shell-css-guard.ts`의 대소문자 표) 접두어도 원문 그대로 본다. 참고로 `wrapper-variable`은
+ * 속성 이름을 소문자로 내려 보므로 그 형태를 통과시킨다 — **7번이 그것까지 잡는다.**
+ *
+ * **5·6·7번이 못 보는 것**(`shell-css-guard.ts`의 두 함수 주석에 기계 쪽 몫이 더 있다):
+ *
+ * - **문자열 리터럴 안의 `var(`를 사용으로 센다.** `content: "var(--없는것)"`이 그 형태다.
+ *   **거짓 양성이라 방향이 안전한 쪽이고**, `shell-css-coverage.ts`가 같은 부류(주석 안의
+ *   `className`)를 문서화로 처리한 선례를 따랐다 — 근거와 검산 명령은 `variableUses`의
+ *   주석에 있다. 오늘 0건이다.
  * - **`shell.css` 밖.** 인라인 `style`과 `use-theme-css.ts`가 `document.head`에 붙이는
  *   시트는 대상이 아니다. 그쪽은 **테마의 어휘**이고 D5가 두 이름 집합의 교집합이 비어
  *   있다고 말한다 — 셸의 변수를 쓰지 않으므로 여기서 볼 것이 없다.
  * - **선언의 값이 옳은지는 안 본다.** `--wb-shell-accent: ;`처럼 빈 값이어도 "선언됐다"다.
+ *   같은 부류의 침묵이 **값 쪽에 남아 있다**.
+ * - **7번은 선언만 본다.** 쓰는 쪽에 접두어 없는 이름이 나오면 5번이 *"선언 없음"*으로 잡고,
+ *   선언까지 함께 있으면 7번이 잡는다 — **`shell.css` 안에서는 둘이 짝을 이뤄 새는 곳이
+ *   없다.** 파일 밖은 위의 항목 그대로다.
  *
  * **4번은 필요조건이지 충분조건이 아니다.** 이미 루트를 쓰는 라우트 파일 **안에** 두 번째
  * 루트를 더하면(예: `snapshots.tsx`가 `.wb-shell-archive`를 루트로 하는 화면을 하나 더
@@ -213,6 +237,16 @@ describe('팔레트가 실제로 닿는가', () => {
     ).toEqual([])
   })
 
+  it('선언하는 커스텀 프로퍼티는 전부 `--wb-shell-` 접두어를 갖는다', () => {
+    // **대소문자를 구분해 본다** — `--WB-SHELL-x`는 다른 프로퍼티다(머리말).
+    const stray = [...declaredVariables(shellCss)].filter((name) => !name.startsWith('--wb-shell-')).sort()
+
+    expect(
+      stray,
+      '이 이름들은 `--wb-shell-` 접두어가 없다 — 셸이 읽는 커스텀 프로퍼티가 전부 그 접두어라는 것이 D5(테마가 `:root`에 싣는 이름과 교집합이 비어 있다)를 떠받친다',
+    ).toEqual([])
+  })
+
   describe('라우트 파일은 화면 루트를 하나 이상 쓴다', () => {
     const known = new Set([...SCREEN_ROOTS, ...PALETTE_FREE_ROOTS])
 
@@ -291,6 +325,36 @@ describe('팔레트가 실제로 닿는가', () => {
       const typo = shellCss.replace('var(--wb-shell-comment)', 'var(--wb-shell-coment)')
       expect(typo, '심을 자리가 사라졌다 — `var(--wb-shell-comment)`를 쓰는 곳이 없어졌으면 다른 이름으로 바꿔라').not.toBe(shellCss)
       expect(missingNames(typo)).toEqual(['--wb-shell-coment'])
+    })
+
+    it('함수 이름이 대문자여도 잡는다 — `VAR(`도 유효한 참조다', () => {
+      // **앞 판은 여기가 뚫려 있었다.** 정규식에 `i`가 없어 이 변조가 19케이스를 전부
+      // 통과했다(리뷰어 실측). 대소문자 근거는 `shell-css-guard.ts`의 표에 있다.
+      const upper = shellCss.replace('var(--wb-shell-comment)', 'VAR(--wb-shell-nowhere)')
+      expect(upper, '심을 자리가 사라졌다 — 아래 케이스들과 같은 자리를 쓴다').not.toBe(shellCss)
+      expect(missingNames(upper)).toEqual(['--wb-shell-nowhere'])
+    })
+
+    it('대소문자 섞인 이름은 거짓 양성을 내지 않는다 — 유효한 CSS다', () => {
+      // `--Foo`와 `--foo`는 **다른 프로퍼티**이므로, 섞인 이름을 선언하고 그대로 쓰는 것은
+      // 유효하다. 앞 판은 `declaredVariables`만 소문자로 내려 이것이 울었다.
+      const mixed = shellCss
+        .replace('  --wb-shell-comment: #d92d20;', '  --wb-shell-comment: #d92d20;\n  --wb-shell-Accent2: #2f6fed;')
+        .replace('var(--wb-shell-comment)', 'var(--wb-shell-Accent2)')
+      expect(mixed, '심을 자리가 사라졌다').not.toBe(shellCss)
+      expect(declaredVariables(mixed).has('--wb-shell-Accent2')).toBe(true)
+      expect(missingNames(mixed)).toEqual([])
+    })
+
+    it('접두어 없는 변수를 감싸는 상자 밖에 선언하면 7번이 잡는다', () => {
+      // `wrapper-variable`은 `WRAPPERS`만 보므로 이 자리를 안 문다(머리말).
+      const stray = shellCss.replace(
+        '.wb-shell-comment-marker {',
+        '.wb-shell-comment-marker {\n  --brand: red;',
+      )
+      expect(stray, '심을 자리가 사라졌다 — `.wb-shell-comment-marker` 규칙이 없어졌으면 다른 규칙으로 바꿔라').not.toBe(shellCss)
+      expect([...declaredVariables(shellCss)].filter((n) => !n.startsWith('--wb-shell-'))).toEqual([])
+      expect([...declaredVariables(stray)].filter((n) => !n.startsWith('--wb-shell-'))).toEqual(['--brand'])
     })
 
     it('선언이 없어도 대체값이 있으면 5번은 넘어간다 — 6번이 대신 센다', () => {
