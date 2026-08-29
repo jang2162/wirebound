@@ -1130,6 +1130,47 @@ describe('복원 뒤 재동기화', () => {
     expect(canvasRootId()).toBe('n-old')
   })
 
+  /**
+   * **열린 페이지가 없을 때도 신호를 소비한다**(리뷰 (다)4). 재연결 쪽에 같은 케이스가
+   * 있고(`edit/reconnect-resync.test.tsx`) 근거도 같다 — **두 이펙트가 같은 모양이라
+   * 고장도 같았다.**
+   *
+   * 앞 판은 `pageId === undefined`일 때 `handledRestore`를 갱신하지 않고 빠져, 나중에
+   * 페이지를 열면 그 페이지를 **두 번** 읽었다.
+   */
+  it('페이지를 안 연 채로 복원해도, 그 뒤에 연 페이지는 한 번만 읽는다', async () => {
+    const getPage = vi.fn(async (_projectId: string, pageId: string) =>
+      pageDetail(pageId, pageDoc(옛뿌리)),
+    )
+    renderEditor({
+      route: PROJECT_ROUTE,
+      apiOverrides: {
+        getProject: async () => project('owner'),
+        listSnapshots: async () => [snapshot()],
+        restoreSnapshot: async () => restoreResult(),
+        getPage,
+      },
+      children: <GoTo to={PAGE_ROUTE} />,
+    })
+    await screen.findByRole('heading', { name: PROJECT_NAME })
+
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+    await screen.findByText(/되돌렸습니다/)
+
+    // 열린 페이지가 없으니 다시 읽을 것도 없다 — 여기까지는 앞 판도 같다.
+    expect(getPage).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '이동' }))
+    await waitForNode('n-old')
+    await waitFor(() => expect(getPage).toHaveBeenCalled())
+
+    // **두 번이면 신호를 안 소비한 것이다.**
+    expect(getPage.mock.calls.map((call) => String(call[1]))).toEqual([PAGE_ID])
+  })
+
   it('스냅샷을 저장하는 것만으로는 다시 읽지 않는다 — 프로젝트가 안 바뀌었다', async () => {
     const { getPage, calls } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
     await openPage(pageDoc(옛뿌리), {

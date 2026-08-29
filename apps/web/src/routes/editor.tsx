@@ -882,11 +882,20 @@ function CanvasFrame(props: {
    */
   useEffect(() => {
     // 첫 연결에서는 위 이펙트가 방금 서버 문서를 놓았다 — 다시 읽을 것이 없다.
-    if (resyncToken === 0 || pageId === undefined) return
+    if (resyncToken === 0) return
     // 같은 신호에 두 번 돌지 않는다(위 머리말). **읽기와 쓰기가 한 문에 붙어 있어야 한다** —
     // 사이에 `await`이 끼면 같은 신호의 두 실행이 둘 다 통과한다.
     if (handledResync.current === resyncToken) return
     handledResync.current = resyncToken
+    // **페이지가 없어도 신호를 소비한다 — 소비한 *뒤에* 빠진다**(리뷰 (다)4가 찾았다).
+    // 앞 판은 `pageId === undefined`를 위 조건에 얹어 **소비하지 않고** 빠졌고, 그래서
+    // 나중에 페이지를 열면 이 이펙트가 그 페이지에 대해 한 번 더 돌아 `getPage`가 두 번
+    // 갔다. 페이지가 없으면 다시 읽을 문서도 없으므로 소비해도 잃는 것이 없다.
+    //
+    // **무해한 낭비가 아니다.** 두 번째 응답이 위 이펙트의 `restoreUndo`보다 늦게 오면
+    // `applyServerPage → loadPage`가 **방금 복원한 undo 스택을 비우고**, 그냥 페이지를 연
+    // 사용자에게 *"되돌리기 이력이 초기화됐습니다"*가 뜬다.
+    if (pageId === undefined) return
 
     let alive = true
     void (async () => {
@@ -942,9 +951,12 @@ function CanvasFrame(props: {
    * (신호가 오른 뒤 페이지를 옮기면 위 이펙트가 새 페이지를 서버 것으로 놓는다).
    */
   useEffect(() => {
-    if (restoredToken === 0 || pageId === undefined) return
+    if (restoredToken === 0) return
     if (handledRestore.current === restoredToken) return
     handledRestore.current = restoredToken
+    // 페이지가 없어도 신호를 소비한다 — 근거는 위 재연결 이펙트의 같은 자리에 있다.
+    // **두 이펙트가 같은 모양이라 고장도 같았다**(리뷰 (다)4).
+    if (pageId === undefined) return
 
     let alive = true
     void (async () => {

@@ -26,9 +26,12 @@ import {
   OTHER_PAGE_TITLE,
   PAGE_ID,
   PROJECT_ID,
+  PROJECT_NAME,
+  PROJECT_ROUTE,
   openPage,
   pageDoc,
   pageDetail,
+  renderEditor,
   waitForNode,
 } from '../editor-harness'
 
@@ -70,22 +73,21 @@ interface Board {
  * 셸을 열고 소켓을 붙인다. **`schedule`을 진짜로 두지 않는다** — 재연결 예약이 실제
  * 타이머로 걸리면 테스트가 끝난 뒤에도 남는다. 대신 예약된 함수를 손으로 돌린다.
  */
-async function board(options?: { serverDoc?: PageDocument; holdResync?: boolean }): Promise<Board> {
+/**
+ * 소켓·재연결 예약 배선만. **`board()`에서 뽑아낸 것은 셸을 `PAGE_ROUTE`가 아닌 데서 띄우는
+ * 케이스가 생겼기 때문이다**(아래 *"페이지를 안 연 채로…"*) — 그쪽은 `openPage()`를 못 쓴다.
+ */
+interface Wiring {
+  setup: RealtimeSetup
+  sockets: FakeSocket[]
+  /** 소켓이 열렸다고 알린다. 첫 번째는 최초 접속, 두 번째부터가 재연결이다. */
+  open: (index: number) => void
+  drop: (index: number) => void
+}
+
+function wiring(): Wiring {
   const sockets: FakeSocket[] = []
   const scheduled: (() => void)[] = []
-  let release = (): void => {}
-  const held = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  let calls = 0
-  // **페이지마다 다른 문서를 낸다** — 같은 것을 내면 "어느 페이지가 실렸나"를 잴 수 없다.
-  const getPage = vi.fn(async (_projectId: string, pageId: string) => {
-    calls += 1
-    // 첫 조회는 페이지를 여는 경로다. 붙잡는 것은 **그 페이지의** 재조회뿐이다 — 다른
-    // 페이지를 여는 조회까지 붙잡으면 옮겨 갈 수가 없다.
-    if (options?.holdResync === true && calls > 1 && pageId === PAGE_ID) await held
-    return pageDetail(pageId, pageId === PAGE_ID ? (options?.serverDoc ?? doc('n-first')) : doc('n-other'))
-  })
 
   const setup: RealtimeSetup = {
     holder: createConnectionIdHolder(),
@@ -105,14 +107,9 @@ async function board(options?: { serverDoc?: PageDocument; holdResync?: boolean 
     },
   }
 
-  await openPage(doc('n-first'), { realtime: setup, apiOverrides: { getPage } })
-  // 첫 조회는 셸이 페이지를 여는 경로다 — 아래 단언은 그 뒤의 호출만 센다.
-  getPage.mockClear()
-
   return {
+    setup,
     sockets,
-    getPage,
-    release,
     open: (index) => {
       act(() => {
         sockets[index]?.onopen?.()
@@ -122,12 +119,35 @@ async function board(options?: { serverDoc?: PageDocument; holdResync?: boolean 
       act(() => {
         sockets[index]?.onclose?.()
       })
-      // 재연결 예약을 손으로 돌려 두 번째 소켓을 만든다.
+      // 재연결 예약을 손으로 돌려 다음 소켓을 만든다.
       act(() => {
         scheduled.pop()?.()
       })
     },
   }
+}
+
+async function board(options?: { serverDoc?: PageDocument; holdResync?: boolean }): Promise<Board> {
+  const wired = wiring()
+  let release = (): void => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let calls = 0
+  // **페이지마다 다른 문서를 낸다** — 같은 것을 내면 "어느 페이지가 실렸나"를 잴 수 없다.
+  const getPage = vi.fn(async (_projectId: string, pageId: string) => {
+    calls += 1
+    // 첫 조회는 페이지를 여는 경로다. 붙잡는 것은 **그 페이지의** 재조회뿐이다 — 다른
+    // 페이지를 여는 조회까지 붙잡으면 옮겨 갈 수가 없다.
+    if (options?.holdResync === true && calls > 1 && pageId === PAGE_ID) await held
+    return pageDetail(pageId, pageId === PAGE_ID ? (options?.serverDoc ?? doc('n-first')) : doc('n-other'))
+  })
+
+  await openPage(doc('n-first'), { realtime: wired.setup, apiOverrides: { getPage } })
+  // 첫 조회는 셸이 페이지를 여는 경로다 — 아래 단언은 그 뒤의 호출만 센다.
+  getPage.mockClear()
+
+  return { sockets: wired.sockets, getPage, release, open: wired.open, drop: wired.drop }
 }
 
 /** 지금까지 `getPage`가 읽은 페이지들. 같은 페이지가 두 번 나오면 잉여 왕복이다. */
@@ -192,6 +212,42 @@ describe('다시 붙으면 다시 읽는다 (D6)', () => {
     await waitForNode('n-other')
     await act(async () => {})
     expect(readPages(view.getPage)).toEqual([OTHER_PAGE_ID])
+  })
+
+  /**
+   * **열린 페이지가 없을 때도 신호를 소비한다**(리뷰 (다)4).
+   *
+   * 앞 판은 `if (resyncToken === 0 || pageId === undefined) return`으로 **소비하지 않고**
+   * 빠졌다. 그래서 페이지 없는 주소에서 재연결하면 신호가 남아 있다가, 나중에 페이지를 열
+   * 때 이 이펙트가 그 페이지에 대해 한 번 더 돈다 — `getPage`가 **두 번** 간다.
+   *
+   * **무해한 낭비가 아니다.** 두 번째 응답이 여는 경로의 `restoreUndo`보다 늦게 오면
+   * `loadPage`가 방금 복원한 undo 스택을 비우고, 그냥 페이지를 연 사용자에게
+   * *"되돌리기 이력이 초기화됐습니다"*가 뜬다.
+   *
+   * **`board()`를 못 쓴다** — 그쪽은 `openPage()`로 페이지가 열린 주소에서 시작한다.
+   */
+  it('페이지를 안 연 채로 다시 붙어도, 그 뒤에 연 페이지는 한 번만 읽는다', async () => {
+    const getPage = vi.fn(async (_projectId: string, pageId: string) =>
+      pageDetail(pageId, doc(pageId === PAGE_ID ? 'n-first' : 'n-other')),
+    )
+    const wired = wiring()
+    renderEditor({ route: PROJECT_ROUTE, realtime: wired.setup, apiOverrides: { getPage } })
+    await screen.findByRole('heading', { name: PROJECT_NAME })
+
+    wired.open(0)
+    wired.drop(0)
+    wired.open(1)
+    await act(async () => {})
+    // 열린 페이지가 없으니 다시 읽을 것도 없다 — 여기까지는 앞 판도 같다.
+    expect(readPages(getPage)).toEqual([])
+
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitForNode('n-other')
+    await act(async () => {})
+
+    // **두 번이면 신호를 안 소비한 것이다.**
+    expect(readPages(getPage)).toEqual([OTHER_PAGE_ID])
   })
 
   /**

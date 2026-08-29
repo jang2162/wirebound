@@ -112,6 +112,28 @@ describe('팝오버 닫기', () => {
     expect(isOpen()).toBe(false)
   })
 
+  /**
+   * **IME 조합 중의 `Escape`는 조합을 취소하는 키다.** 그것으로 닫으면 본문이 언마운트되어
+   * **친 글자가 통째로 사라진다** — 이 저장소는 한국어가 1차 언어이고 스냅샷 태그·설명은
+   * 한글을 적는 자리다.
+   *
+   * **여기서 만드는 것은 진짜 조합 상태가 아니다.** jsdom에 IME가 없으므로 `isComposing`을
+   * 이벤트에 실어 흉내 낸다. 진짜 조합에서 그 값이 실제로 `true`로 온다는 것은 리뷰가 CDP로
+   * 쟀다(`use-popover-dismiss.ts` 머리말의 실측) — **이 케이스가 잠그는 것은 "그 값이 오면
+   * 무시한다"이지 "그 값이 온다"가 아니다.**
+   */
+  it('조합 중의 Escape는 안 닫는다 — 친 글자를 버리지 않는다', () => {
+    openHost()
+
+    fireEvent.keyDown(document, { key: 'Escape', isComposing: true })
+
+    expect(isOpen()).toBe(true)
+
+    // 조합이 끝난 뒤의 Escape는 그대로 닫는다 — 가드가 키를 통째로 죽이지 않는다.
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(isOpen()).toBe(false)
+  })
+
   it('다른 키로는 안 닫힌다 — 음성 대조', () => {
     openHost()
 
