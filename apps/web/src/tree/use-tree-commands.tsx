@@ -109,6 +109,8 @@ export interface TreeCommands {
 export function useTreeCommands(props: {
   projectId: string
   pageId: string | undefined
+  /** 오를 때마다 트리를 다시 받는다. 지금 올리는 것은 스냅샷 복원 하나다(아래 이펙트). */
+  reloadToken: number
 }): TreeCommands {
   const api = useApi()
   // **이 단계가 앱의 첫 `useNavigate`다**(D8). 지금 앱의 이동은 전부 렌더 시점 판정이고
@@ -117,7 +119,7 @@ export function useTreeCommands(props: {
   // 그렇게 표현되지 않는다: 만들기가 성공한 그 순간에만 한 번 일어나고, 렌더가 다시 돌 때
   // 같은 판정을 되풀이하면 안 된다.
   const navigate = useNavigate()
-  const { projectId, pageId } = props
+  const { projectId, pageId, reloadToken } = props
 
   const [state, setState] = useState<TreeLoadState>({ status: 'loading' })
   const [picked, setPicked] = useState<TreeSelection | null>(null)
@@ -205,6 +207,30 @@ export function useTreeCommands(props: {
       alive = false
     }
   }, [load])
+
+  /**
+   * **바깥이 신호를 올리면 다시 받는다.** 오늘 올리는 것은 **스냅샷 복원**이다(셸의
+   * `restoredToken`) — 복원은 페이지를 지우고 만들므로 이 목록 자체가 바뀐다.
+   *
+   * **`reload: true`다.** 위 이펙트와 갈리는 자리가 그것이고, 조작 뒤 재조회와 같은
+   * 이유다 — 트리가 잠깐 사라지면 사용자가 방금 되돌린 결과를 확인할 자리가 흔들린다.
+   *
+   * **의존의 `load`가 바뀔 때는 돌지 않아야 한다.** `load`는 `projectId`가 바뀌면 새로
+   * 만들어지는데, 그때는 위 이펙트가 이미 새 프로젝트의 트리를 받는다. 마지막으로 처리한
+   * 신호를 ref로 들어 같은 신호에 두 번 돌지 않게 한다 — 셸의 재조회 이펙트가 같은 자리에서
+   * 같은 장치를 쓰고, 근거도 같다(`routes/editor.tsx`).
+   */
+  const handledReload = useRef(0)
+  useEffect(() => {
+    if (reloadToken === 0 || handledReload.current === reloadToken) return
+    handledReload.current = reloadToken
+
+    let alive = true
+    void load(() => alive, true)
+    return () => {
+      alive = false
+    }
+  }, [load, reloadToken])
 
   /**
    * 화면이 사라진 뒤의 `setState`를 막는다. **이펙트의 `alive` 플래그로는 안 되는 자리다** —

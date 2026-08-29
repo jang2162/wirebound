@@ -22,10 +22,10 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import type { ProjectDetail } from '../api/types'
+import type { PageDetail, ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
@@ -40,6 +40,7 @@ import { RemoteAlert } from '../shell/remote-alert'
 import { useNodeLock } from '../realtime/use-node-lock'
 import { useRealtime } from '../realtime/use-realtime'
 import { ExportPanel } from '../shell/export-panel'
+import { SnapshotsPanel } from '../shell/snapshots-panel'
 import { projectAbilities } from '../projects/project-actions'
 import { ThemePicker } from '../theme/theme-picker'
 import {
@@ -118,13 +119,22 @@ function fitZoom(canvas: HTMLElement, viewportWidth: number): number | null {
  * **`recover`의 문안을 건드리지 않는다**(P3-1 이월 §2.5의 마지막 문단). 그쪽 문장은
  * `edit/edit-recovery.test.tsx`의 여러 케이스가 글자로 재고 있고, 이것은 **다른 사건**이다 —
  * 사용자가 낸 편집이 실패한 것이 아니라 연결이 끊겼다 붙은 것이다.
+ *
+ * **앞머리만 인자다.** 잃은 것을 세는 두 조각은 재연결과 복원이 **똑같이** 잃는데,
+ * *"왜 다시 읽었는가"*는 사용자에게 다른 사실이다 — 하나는 연결이 끊겼다 붙은 것이고
+ * 하나는 자기가 방금 되돌린 것이다. 문장을 통째로 두 벌 두면 두 조각의 문안이 갈린다.
  */
-function resyncNotice(dropped: number, hadUndo: boolean): string {
-  const parts = ['연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다.']
+function resyncNotice(lead: string, dropped: number, hadUndo: boolean): string {
+  const parts = [lead]
   if (dropped > 0) parts.push(`아직 저장되지 않은 편집 ${dropped}개가 취소됐습니다.`)
   if (hadUndo) parts.push('되돌리기 이력이 초기화됐습니다.')
   return parts.join(' ')
 }
+
+/** 재연결로 다시 읽었을 때의 앞머리(P3-2 D6). */
+const RESYNC_LEAD = '연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다.'
+/** 내가 스냅샷을 복원해 다시 읽었을 때의 앞머리. **재연결과 다른 사건이다.** */
+const RESTORED_LEAD = '스냅샷을 복원해 페이지를 다시 불러왔습니다.'
 
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
@@ -293,6 +303,27 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
   const canvasRef = useRef<HTMLElement>(null)
 
   /**
+   * **내가 스냅샷을 복원했다는 신호.** 값에는 뜻이 없고 오를 때마다 **캔버스가 문서를,
+   * 좌측이 트리를** 다시 읽는다 — 앞의 두 토큰과 같은 모양이고 같은 이유로 스토어에 두지
+   * 않는다.
+   *
+   * **이 신호가 이 판에서 새로 필요해졌다.** 스냅샷이 셸 밖 별도 라우트였을 때는 되돌리고
+   * 설계서로 **돌아오는 길**에 셸이 통째로 다시 마운트돼 자연히 다시 읽혔다. 팝오버는
+   * 에디터 **위에** 뜨므로 그 길이 없다.
+   *
+   * **`resyncToken`을 재사용하지 않는다.** 두 사건은 **범위와 실패 정책이 다르다.**
+   *
+   * | | 재연결(`resyncToken`) | 복원(`restoredToken`) |
+   * |---|---|---|
+   * | 무엇이 달라졌나 | 끊긴 동안 놓친 이 **페이지**의 프레임 | **프로젝트 전체** — 페이지가 생기거나 사라진다 |
+   * | 트리를 다시 읽나 | 아니다 | **읽는다** — 목록 자체가 바뀐다 |
+   * | 재조회가 실패하면 | 조용히 둔다(화면은 재연결 전과 같고 잃은 것이 없다) | **말한다** — 화면에 남은 문서가 프로젝트의 상태가 아니라는 것을 이미 알기 때문이다 |
+   *
+   * 한 토큰으로 접으면 저 셋을 갈 자리가 없어지고, 재연결마다 트리까지 다시 받게 된다.
+   */
+  const [restoredToken, setRestoredToken] = useState(0)
+
+  /**
    * **룸에 붙어 있는다**(P3-1 D2 — 룸은 프로젝트 단위 하나다). 페이지를 옮겨도 연결은
    * 그대로다: 페이지마다 다시 붙으면 옮기는 동안 남의 변경을 놓친다.
    *
@@ -343,15 +374,17 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
           canChoose={projectAbilities(props.project.role).chooseTheme}
           onChanged={() => setThemeReloadToken((token) => token + 1)}
         />
-        {/* **스냅샷 화면으로 가는 길**(P6-1 D10). 그 화면은 셸 밖의 별도 라우트라
-            여기 링크가 없으면 주소를 직접 치는 수밖에 없다.
+        {/* **스냅샷 팝오버**(앞 판은 셸 밖 별도 라우트였다 — 뒤집힌 근거는
+            `shell/snapshots-panel.tsx` 머리말의 표에 있다). 내보내기 옆에 두는 것은 둘 다
+            *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
 
             **역할로 감추지 않는다** — 목록은 viewer도 본다(§10 — 막는 것은 생성 하나이고,
-            그 판정은 저쪽 화면이 한다). 감추면 viewer가 *"이 프로젝트에 어떤 기록이
+            그 판정은 팝오버 안이 한다). 감추면 viewer가 *"이 프로젝트에 어떤 기록이
             있는지"*조차 못 본다. */}
-        <Link className="wb-shell-snapshots-link" to={`/projects/${props.project.id}/snapshots`}>
-          스냅샷
-        </Link>
+        <SnapshotsPanel
+          projectId={props.project.id}
+          onRestored={() => setRestoredToken((token) => token + 1)}
+        />
         {/* **설계서를 내려받는 자리**(§11.3 — P8-4). 스냅샷 링크 옆에 두는 것은 둘 다
             *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
 
@@ -378,7 +411,14 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
           {/* 트리에 주는 `projectId`는 **조회해 온 프로젝트의 id**다. 경로의 파라미터를
               다시 읽지 않는 것은, 트리가 만드는 주소가 지금 열려 있는 프로젝트를 가리켜야
               하기 때문이다 — 둘은 같은 값이지만 진실은 조회 결과 쪽에 있다. */}
-          <MenuTree projectId={props.project.id} pageId={props.pageId} />
+          {/* **복원이 트리도 바꾼다.** 스냅샷 시점에 있던 페이지가 지금 없거나 그
+              반대다 — 문서만 다시 읽고 트리를 두면 목록이 존재하지 않는 페이지를 그린다.
+              `resyncToken`은 여기 닿지 않는다(재연결은 이 페이지의 프레임만 잃는다). */}
+          <MenuTree
+            projectId={props.project.id}
+            pageId={props.pageId}
+            reloadToken={restoredToken}
+          />
         </ShellRegion>
         {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를
             쓴다(설계 §9).
@@ -408,6 +448,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
           pageId={props.pageId}
           themeReloadToken={themeReloadToken}
           resyncToken={resyncToken}
+          restoredToken={restoredToken}
         />
       </main>
 
@@ -627,6 +668,8 @@ function CanvasFrame(props: {
   themeReloadToken: number
   /** 연결이 다시 붙었다는 신호(P3-2 D6). 오를 때마다 아래 재조회 이펙트가 돈다. */
   resyncToken: number
+  /** 내가 스냅샷을 복원했다는 신호. 오를 때마다 아래 복원 재조회 이펙트가 돈다. */
+  restoredToken: number
 }): ReactElement {
   const api = useApi()
   const store = useEditorStoreInstance()
@@ -638,7 +681,32 @@ function CanvasFrame(props: {
    * 이유가 없고, 상태로 두면 그 갱신이 아래 이펙트를 한 번 더 태운다.
    */
   const handledResync = useRef(0)
-  const { projectId, pageId, resyncToken } = props
+  /** 복원 신호 쪽의 같은 장치. 두 이펙트가 각자 든다 — 신호가 서로 다르다. */
+  const handledRestore = useRef(0)
+  const { projectId, pageId, resyncToken, restoredToken } = props
+
+  /**
+   * **서버가 준 페이지를 스토어에 놓고, 그러면서 잃은 것이 있으면 말한다.**
+   * 두 재조회 경로(재연결·복원)가 공유한다 — 잃는 것이 같기 때문이다.
+   *
+   * **`restoreUndo`를 부르지 않는 것이 이 함수의 요점이다.** 근거는 위 `restoreUndo`의
+   * 독블록에 있는 실측이다: 서버가 내 것과 갈라진 뒤에 옛 `inverse`를 되살리면 **남의
+   * 편집을 조용히 덮는다.** 두 경로 모두 전제가 같다 — 재연결은 끊긴 동안 남이 편집했을
+   * 수 있다는 뜻이고, 복원은 문서가 통째로 갈렸다는 뜻이다.
+   *
+   * **말할 것이 없으면 말하지 않는다.** 버린 편집도 없고 스택도 비어 있었으면 이 재조회는
+   * 무해하고, 그때 뜨는 통지는 사용자가 잃지 않은 것에 대한 경고가 된다.
+   */
+  const applyServerPage = useCallback(
+    (openPageId: string, page: PageDetail, lead: string): void => {
+      // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
+      const hadUndo = store.getState().undoStack.length > 0
+      const dropped = store.loadPage(openPageId, page.schema, page.headSeq)
+      if (dropped.length === 0 && !hadUndo) return
+      store.setEditFailure({ kind: 'message', message: resyncNotice(lead, dropped.length, hadUndo) })
+    },
+    [store],
+  )
 
   useEffect(() => {
     if (pageId === undefined) {
@@ -791,11 +859,7 @@ function CanvasFrame(props: {
       try {
         const page = await api.getPage(projectId, pageId)
         if (!alive) return
-        // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
-        const hadUndo = store.getState().undoStack.length > 0
-        const dropped = store.loadPage(pageId, page.schema, page.headSeq)
-        if (dropped.length === 0 && !hadUndo) return
-        store.setEditFailure({ kind: 'message', message: resyncNotice(dropped.length, hadUndo) })
+        applyServerPage(pageId, page, RESYNC_LEAD)
       } catch {
         // **여기서 알리지 않는다.** 사용자가 요청한 조회가 아니고, 화면은 재연결 전과 같다 —
         // 되돌릴 것도 잃은 것도 없다.
@@ -812,7 +876,63 @@ function CanvasFrame(props: {
     return () => {
       alive = false
     }
-  }, [api, projectId, pageId, store, resyncToken])
+  }, [api, projectId, pageId, applyServerPage, resyncToken])
+
+  /**
+   * **내가 스냅샷을 복원했으므로 페이지를 다시 읽는다.**
+   *
+   * ## 왜 재연결 이펙트에 얹지 않았나 — 실패했을 때가 다르다
+   *
+   * 성공 경로는 같고(`applyServerPage`를 공유한다) **실패 경로가 갈린다.**
+   *
+   * 재연결 쪽은 조용히 둔다: 화면은 재연결 전과 같고 사용자가 요청한 조회도 아니다.
+   * **복원 쪽은 그 근거가 성립하지 않는다** — 프로젝트가 방금 통째로 바뀐 것을 이미
+   * 알고 있으므로, 화면에 남아 있는 문서는 *"아직 확인 못 한 것"*이 아니라 **틀린 것**이다.
+   * 조용히 두면 **되돌렸는데 옛 문서를 그대로 보인다** — 이 판이 닫으려던 바로 그 고장이
+   * 한 갈래만 남는 꼴이다.
+   *
+   * ## 실패의 대부분은 "그 페이지가 사라진 것"이다
+   *
+   * 복원은 스냅샷 시점에 없던 페이지를 지운다. 지금 보고 있던 페이지가 그것이면 이
+   * 조회가 404를 받는다. 그때 **스토어도 비운다** — `setState`만 하면 캔버스는 오류를
+   * 그리지만 문서를 스토어에서 읽는 나머지 둘(구조 트리·속성 패널)은 **사라진 페이지의
+   * 노드를 계속 그린다.** 셋이 같은 사실을 말해야 한다.
+   *
+   * ## 페이지를 여는 이펙트를 다시 태우지 않는 이유
+   *
+   * 그쪽(`pageId`가 바뀔 때 도는 이펙트)을 태우면 실패 화면까지 공짜로 얻는다. 그런데
+   * 그 경로는 성공 뒤 **undo 스택을 복원한다** — 복원 직후에 그러면 옛 `inverse`가
+   * 되돌아온 문서 위에 얹혀 **방금 되돌린 것을 조용히 덮는다.** 그래서 여기 따로 있다.
+   *
+   * 같은 신호에 두 번 돌지 않는 장치(`handledRestore`)는 재연결 쪽과 같다 — 근거도 같다
+   * (신호가 오른 뒤 페이지를 옮기면 위 이펙트가 새 페이지를 서버 것으로 놓는다).
+   */
+  useEffect(() => {
+    if (restoredToken === 0 || pageId === undefined) return
+    if (handledRestore.current === restoredToken) return
+    handledRestore.current = restoredToken
+
+    let alive = true
+    void (async () => {
+      try {
+        const page = await api.getPage(projectId, pageId)
+        if (!alive) return
+        applyServerPage(pageId, page, RESTORED_LEAD)
+        // 앞서 이 페이지의 조회가 실패해 있었을 수도 있다. 복원으로 다시 생긴 페이지를
+        // 오류 문장 아래 감춰 두지 않는다.
+        setState({ status: 'ready' })
+      } catch (caught) {
+        if (!alive) return
+        // 위 머리말의 둘째 절. 문서를 스토어에서 읽는 셋이 같은 사실을 말하게 한다.
+        store.clearPage()
+        setState({ status: 'failed', failure: toFailure(caught, PAGE_UNKNOWN_FAILURE) })
+      }
+    })()
+
+    return () => {
+      alive = false
+    }
+  }, [api, projectId, pageId, store, applyServerPage, restoredToken])
 
   return (
     <div

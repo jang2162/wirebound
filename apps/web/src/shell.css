@@ -62,16 +62,25 @@
   테스트로 옮겼고, 그 파일의 **심기 표**가 그 열넷을 하나씩 심어 잡히는 것을 함께 잰다.
 */
 
-/* 셸의 팔레트. **화면 루트 다섯이 공유한다** — 에디터 셸(§9), 테마 저작 화면(P4c-2 D1),
-   스냅샷 화면(P6-1 D10), 프로젝트 목록, 로그인. 뒤의 넷은 셸 안이 아니라 별도 라우트라
-   `.wb-shell` 아래에 있지 않다. 값을 두 벌 적으면 한쪽만 고쳐지는 자리가 되므로 선언을
-   여기 하나로 둔다.
+/* 셸의 팔레트. **화면 루트 넷이 공유한다** — 에디터 셸(§9), 테마 저작 화면(P4c-2 D1),
+   프로젝트 목록, 로그인. 뒤의 셋은 셸 안이 아니라 별도 라우트라 `.wb-shell` 아래에 있지
+   않다. 값을 두 벌 적으면 한쪽만 고쳐지는 자리가 되므로 선언을 여기 하나로 둔다.
+
+   **다섯에서 넷이 됐다 — `.wb-shell-snapshots`가 빠졌다.** 스냅샷이 셸 밖 라우트를 그만두고
+   셸 머리의 팝오버가 되면서(`shell/snapshots-panel.tsx` 머리말) 그 상자는 이제 `.wb-shell`
+   **안**이다. 안쪽에 두면 팔레트가 이미 상속되므로, 목록에 남겨 두는 것은 같은 값을 두 번
+   선언하는 자리가 된다 — 이 블록이 막으려는 바로 그것이다.
+
+   반대편(빼면 무엇이 깨지는가)도 재 봤다: 빼지 않고 두어도 화면은 같다. 그래서 이 줄은
+   **검사가 아니라 근거로 지키는 자리**이고, `test/shell-css-palette.test.ts`의 1번이 목록과
+   CSS를 양방향으로 대조해 한쪽만 고치는 것을 막는다.
 
    **여기 없는 화면 루트에서는 변수가 아예 정의되지 않는다 — 조용히 검게 나온다.**
    `var(--wb-shell-accent)`는 이름이 없으면 계산 시점에 무효가 되어 그 속성이 상속값으로
    떨어지는데, `color`는 상속 속성이라 결과가 **검정**이다. 실측(고치기 전 스냅샷 화면):
-   `.wb-shell-snapshots-back`의 `color`가 `rgb(0, 0, 0)`, 루트의 `--wb-shell-line`이 빈
-   문자열이었다. **셸 밖에 새 화면 루트를 만드는 사람은 여기 한 줄을 더해야 한다.**
+   그 화면의 `설계서로 돌아가기` 링크 색이 `rgb(0, 0, 0)`, 루트의 `--wb-shell-line`이 빈
+   문자열이었다. **그 링크도 화면도 지금은 없다**(팝오버가 됐다) — 남긴 것은 값이 아니라
+   **고장의 모양**이다. **셸 밖에 새 화면 루트를 만드는 사람은 여기 한 줄을 더해야 한다.**
 
    **일곱이다** — 코멘트 전용 색이 들어오며 여섯에서 늘었다. **이 수는 적어 두면 낡는다:**
    앞 판의 `theme/use-theme-css.ts`가 D5의 근거로 "일곱"이라 적고 있었는데 실제는 여섯이라
@@ -88,7 +97,6 @@
    파랑 `#2f6fed`의 4.55:1보다 오히려 높다. **어둡게 조정하지 않은 근거가 이 실측이다.** */
 .wb-shell,
 .wb-shell-theme,
-.wb-shell-snapshots,
 .wb-shell-project-list,
 .wb-shell-login {
   --wb-shell-line: #dfe3e8;
@@ -2153,17 +2161,6 @@
   color: #2a4a7a;
 }
 
-/* ── 스냅샷 화면(P6-1 D10) ─────────────────────────────────────────────
-   **셸 밖의 별도 라우트다.** 캔버스를 감싸지 않으므로 D7의 "셸 CSS가 문서 안으로 새지
-   않는다" 규칙에서 이 블록이 다루는 것은 접두어 하나뿐이다 — 여기 선택자는 전부
-   `.wb-shell-`로 시작하고 문서 노드를 겨냥하는 결합자가 없다. */
-
-/* 셸 머리의 링크. 도구 묶음과 같은 크기 규칙을 쓴다. */
-.wb-shell-snapshots-link {
-  font-size: 13px;
-  color: var(--wb-shell-accent);
-}
-
 /* 내보내기(§11.3 — P8-4). 셸 머리의 토글과 그 아래 떠서 보이는 요약이다.
    **떠 있는 상자로 두는 것이 요점이다** — 머리에 그대로 펼치면 목록이 길어질수록
    셸의 세 칸이 아래로 밀린다. */
@@ -2243,42 +2240,60 @@
   text-decoration: none;
 }
 
-/* **글꼴·글자색·스킴을 여기서 건다.** 이 화면만 브라우저 기본(`Apple SD Gothic Neo` 16px)
-   으로 그려지고 있었다 — 셸 밖 라우트 셋 중 이것만 루트 규칙에 글꼴이 없었고, 다른 둘
-   (`.wb-shell-project-list`·`.wb-shell-login`)은 `system-ui…` 14px였다. 나란히 보면 눈에 띈다.
+/* ── 스냅샷 팝오버 ────────────────────────────────────────────────────
+   **앞 판은 셸 밖의 별도 라우트였다**(P6-1 D10). 이제 셸 머리의 팝오버이고, 자리·크기
+   규칙은 바로 위 내보내기와 같다 — 두 팝오버가 나란히 있는데 생김새가 다르면 사용자가
+   같은 장치로 읽지 못한다.
 
-   `color-scheme: light`도 여기만 빠져 있었다. **이 화면에도 `<input>`이 둘 있다**(태그·설명)
-   — 사용자의 OS가 어두운 스킴이면 UA가 그 둘과 스크롤바를 어둡게 그린다.
+   **팔레트 선언이 여기서 사라졌다.** 이 상자가 `.wb-shell` 안이라 이미 상속받는다
+   (위 팔레트 블록의 근거 절). 같은 이유로 `font-family`·`color-scheme`도 안 건다 —
+   앞 판이 그 둘을 여기 걸었던 것은 셸 밖이라 아무것도 안 물려받았기 때문이고, 지금은
+   셸의 머리(`.wb-shell-header`)가 그 둘을 이미 세워 이 안까지 내려온다.
 
-   **이 상자는 문서를 감싸지 않으므로 상속 속성을 걸어도 D7이 깨지지 않는다** —
-   `test/shell-css-guard.ts`의 `WRAPPERS`에 없다(렌더러가 그리는 문서 노드가 이 안에
-   들어오지 않는다). */
+   **이 상자는 문서를 감싸지 않는다** — `test/shell-css-guard.ts`의 `WRAPPERS`에 없다
+   (렌더러가 그리는 문서 노드가 이 안에 들어오지 않는다). */
 .wb-shell-snapshots {
-  color-scheme: light;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  color: var(--wb-shell-ink);
+  position: relative;
 }
 
-.wb-shell-snapshots-header {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-}
-
-.wb-shell-snapshots-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.wb-shell-snapshots-back {
+/* 토글. **내보내기 토글과 같은 값이다** — 머리에 나란히 선 둘이라 같아야 한다. */
+.wb-shell-snapshots-toggle {
   font-size: 13px;
   color: var(--wb-shell-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* 떠 있는 상자. 내보내기 본문과 **자리 규칙이 같고 폭만 넓다** — 목록이 태그·설명·
+   만든 사람·시각·바이트·버튼 여섯 칸이라 380px에서는 줄마다 접힌다. */
+.wb-shell-snapshots-body {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 520px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-size: 13px;
+  text-align: left;
+}
+
+/* 목록을 통째로 못 받았을 때의 앞머리. **저장 실패(`-error`)와 색이 같고 굵기가 다르다** —
+   같은 붉은색인 것은 둘 다 실패이기 때문이고, 굵은 것은 이쪽이 화면 전체의 실패라서다. */
+.wb-shell-snapshots-failure {
+  margin: 0;
+  font-weight: 600;
+  color: #b42318;
 }
 
 .wb-shell-snapshots-form {
@@ -2319,7 +2334,7 @@
 }
 
 /* 목록 절(`<section>`). 위의 저장 폼과 세로로 이어지므로 자기 여백을 갖지 않는다 —
-   간격은 `.wb-shell-snapshots`의 `gap`이 준다. */
+   간격은 `.wb-shell-snapshots-body`의 `gap`이 준다. */
 .wb-shell-snapshots-list {
   min-width: 0;
 }

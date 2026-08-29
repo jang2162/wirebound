@@ -575,7 +575,8 @@ describe('삭제', () => {
  */
 describe('조작 잠금', () => {
   function Probe(props: { sink: { latest: TreeCommands | null }; pageId?: string }): ReactElement {
-    props.sink.latest = useTreeCommands({ projectId: 'p-1', pageId: props.pageId })
+    // `reloadToken`은 이 블록의 대상이 아니다(잠금을 잰다) — 아무도 안 올리는 0으로 둔다.
+    props.sink.latest = useTreeCommands({ projectId: 'p-1', pageId: props.pageId, reloadToken: 0 })
     return <div />
   }
 
