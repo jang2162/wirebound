@@ -93,6 +93,25 @@ const ZOOM_STEP = 0.25
  * **`gap`은 뺄 것이 없다.** 여백은 `.wb-shell`의 그리드 `gap`(1px)이 칸 **사이**에 두는
  * 것이라 칸의 폭에 이미 반영돼 있고, 캔버스 안에는 프레임 하나뿐이라 `gap`이 없다.
  *
+ * ## 가운데 정렬한 만큼을 마저 뺀다 — 브라우저에서 재서 알았다
+ *
+ * 프레임이 칸보다 **좁으면** `margin: 0 auto`가 그것을 가운데 세운다. 그런데
+ * `transform-origin`이 좌상단이라 확대는 **그 자리에서 오른쪽으로만** 자란다 — 왼쪽 여백은
+ * 그대로 있고 오른쪽으로 그만큼 넘친다.
+ *
+ * 실측(창 1100 · 뷰포트 프리셋 375 · 쓸 수 있는 폭 486): 여백을 안 뺀 판은 486/375 =
+ * **130%**를 냈고, 프레임의 오른쪽이 칸 밖으로 **31px** 나갔다(오른쪽으로 조금 밀어야
+ * 보였다). 여백(`margin-left` 55.5px)을 빼면 (486−55.5)/375 = **115%**이고 오른쪽 끝이
+ * 칸의 끝과 **정확히 같다**.
+ *
+ * **여백은 재서 쓴다 — 계산하지 않는다.** 크롬은 `margin: 0 auto`의 계산값으로 **실제 쓰인
+ * 값**을 준다(실측: 프리셋 375에서 `55.5px`, 칸보다 넓은 프리셋 셋에서는 전부 `0px`). 그래서
+ * 좁은 프리셋에서만 저절로 걸리고, `shell.css`가 가운데 정렬을 그만두는 날 이 계산이 따라온다.
+ *
+ * **줌이 이 값을 흔들지 않는다.** 여백은 **레이아웃 폭**(`viewportWidth`)으로 정해지고
+ * `transform`은 레이아웃을 안 바꾼다 — 그래서 두 번 눌러도 같은 값이다(위 `clientWidth`
+ * 문단과 같은 성질).
+ *
  * ## 못 재는 경우가 있다
  *
  * 레이아웃이 없는 자리(jsdom, `display: none`)에서는 `clientWidth`가 0이고 계산된 CSS에
@@ -101,12 +120,16 @@ const ZOOM_STEP = 0.25
  * 사실이므로 여기서 `null`로 갈라 부르는 쪽이 아무것도 안 하게 한다. **클램프를 여기서
  * 흉내 내는 것이 아니다** — 계산한 배율은 그대로 넘긴다(한계는 스토어 하나가 안다).
  */
-function fitZoom(canvas: HTMLElement, viewportWidth: number): number | null {
+function fitZoom(canvas: HTMLElement, frame: HTMLElement, viewportWidth: number): number | null {
   const style = getComputedStyle(canvas)
   const usable =
     canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-  if (!Number.isFinite(usable) || usable <= 0) return null
-  return usable / viewportWidth
+  // 가운데 정렬한 만큼은 확대가 쓸 수 없다(위 문단). 못 읽으면 0으로 둔다 — 그 값이 없다는
+  // 것은 가운데 정렬이 없다는 뜻이거나 레이아웃이 없다는 뜻이고, 뒤쪽은 아래 가드가 잡는다.
+  const inset = parseFloat(getComputedStyle(frame).marginLeft)
+  const room = usable - (Number.isFinite(inset) ? inset : 0)
+  if (!Number.isFinite(room) || room <= 0) return null
+  return room / viewportWidth
 }
 
 /**
@@ -301,6 +324,14 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
    * ref는 그 연결을 타입으로 들고 있다.
    */
   const canvasRef = useRef<HTMLElement>(null)
+  /**
+   * 캔버스 **프레임**. `화면 맞춤`이 그 가운데 정렬 여백을 읽는다(위 `fitZoom`).
+   *
+   * **`canvas.querySelector('.wb-shell-canvas-frame')`로 찾지 않는다** — 클래스 이름이
+   * 배선이 되면 이름을 바꾸는 날 아무것도 실패하지 않은 채 좁은 프리셋에서만 조용히
+   * 어긋난다(`canvasRef`와 같은 근거).
+   */
+  const frameRef = useRef<HTMLDivElement>(null)
 
   /**
    * **내가 스냅샷을 복원했다는 신호.** 값에는 뜻이 없고 오를 때마다 **캔버스가 문서를,
@@ -365,7 +396,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             시연 상태라 *"어디까지"*가 정의되지 않는다(undo 한 칸이 겹layer 몇 칸인가).
             **원인을 없애는 쪽이 정의가 필요 없다.** */}
         {mode === 'edit' && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
-        <ShellTools canvasRef={canvasRef} />
+        <ShellTools canvasRef={canvasRef} frameRef={frameRef} />
         {/* **테마 고르개**(P4b-3 D2). 셸 머리에 두는 것은 이것이 화면 **전체**를 바꾸기
             때문이다 — 페이지 하나가 아니라 이 프로젝트의 모든 화면이 갈린다.
             `role`을 그대로 넘겨 owner가 아니면 읽기 전용으로 그린다(서버도 막는다). */}
@@ -449,6 +480,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
           themeReloadToken={themeReloadToken}
           resyncToken={resyncToken}
           restoredToken={restoredToken}
+          frameRef={frameRef}
         />
       </main>
 
@@ -670,6 +702,8 @@ function CanvasFrame(props: {
   resyncToken: number
   /** 내가 스냅샷을 복원했다는 신호. 오를 때마다 아래 복원 재조회 이펙트가 돈다. */
   restoredToken: number
+  /** 셸이 `화면 맞춤`에서 이 프레임의 여백을 읽는다(`fitZoom`). 그리는 데는 쓰지 않는다. */
+  frameRef: RefObject<HTMLDivElement | null>
 }): ReactElement {
   const api = useApi()
   const store = useEditorStoreInstance()
@@ -936,6 +970,7 @@ function CanvasFrame(props: {
 
   return (
     <div
+      ref={props.frameRef}
       className="wb-shell-canvas-frame"
       // 폭은 프리셋 그대로, 줌은 그 위의 배율이다. 폭에 줌을 곱해 넣으면 "1280 폭에서
       // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
@@ -963,6 +998,8 @@ function CanvasFrame(props: {
 function ShellTools(props: {
   /** 캔버스 칸. `화면 맞춤`이 이것의 폭을 잰다(위 `fitZoom`). */
   canvasRef: RefObject<HTMLElement | null>
+  /** 캔버스 프레임. 같은 계산이 이것의 가운데 정렬 여백을 읽는다. */
+  frameRef: RefObject<HTMLDivElement | null>
 }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
@@ -1042,8 +1079,9 @@ function ShellTools(props: {
           className="wb-shell-zoom-fit"
           onClick={() => {
             const canvas = props.canvasRef.current
-            if (canvas === null) return
-            const next = fitZoom(canvas, viewportWidth)
+            const frame = props.frameRef.current
+            if (canvas === null || frame === null) return
+            const next = fitZoom(canvas, frame, viewportWidth)
             if (next === null) return
             store.setZoom(next)
           }}

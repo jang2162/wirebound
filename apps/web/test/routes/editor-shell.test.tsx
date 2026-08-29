@@ -325,7 +325,12 @@ describe('에디터 셸', () => {
  * 있고, 브라우저 실측으로 확인했다.
  */
 describe('화면 맞춤', () => {
-  /** `shell.css`가 캔버스 칸에 거는 값을 심는다. 돌려주는 것은 폭을 바꾸는 손잡이다. */
+  /**
+   * `shell.css`가 캔버스 칸에 거는 값을 심는다. 돌려주는 것은 폭을 바꾸는 손잡이다.
+   *
+   * **프레임의 `margin-left`는 심지 않는다** — jsdom에서 `''`이고, 그 자리는 아래
+   * `가운데 정렬한 만큼을 뺀다` 하나가 따로 심는다.
+   */
   function measurable(clientWidth: number): (next: number) => void {
     const canvas = screen.getByRole('main', { name: '캔버스' })
     canvas.style.padding = '24px'
@@ -386,6 +391,32 @@ describe('화면 맞춤', () => {
     // 그래도 **다시 누르면** 새 폭으로 맞춘다 — 값을 캐시해 둔 구현과 갈린다.
     fireEvent.click(screen.getByRole('button', { name: '화면 맞춤' }))
     expect(shellStore().getState().zoom).toBe(1.2125)
+  })
+
+  /**
+   * **가운데 정렬한 만큼은 확대가 쓸 수 없다.** 프레임이 칸보다 좁으면 `margin: 0 auto`가
+   * 그것을 가운데 세우는데, `transform-origin`이 좌상단이라 확대는 **그 자리에서 오른쪽으로만**
+   * 자란다 — 왼쪽 여백은 남고 오른쪽으로 그만큼 넘친다.
+   *
+   * **브라우저에서 재서 알았다**(창 1100 · 프리셋 375 · 쓸 수 있는 폭 486): 여백을 안 뺀
+   * 판은 130%를 내고 프레임 오른쪽이 칸 밖으로 **31px** 나갔다. 여백(55.5px)을 빼면
+   * (486−55.5)/375 = 115%이고 오른쪽 끝이 칸의 끝과 정확히 같다.
+   *
+   * 여기서는 같은 형태를 값만 바꿔 심는다: 852 − 100 = 752를 375로 나눈 **2.005**가
+   * `MAX_ZOOM`(2) 밖이라 스토어가 자른다 — 그래서 100이 아니라 **200**을 심어
+   * 자르지 않는 값(1.738…)이 나오게 한다.
+   */
+  it('가운데 정렬한 만큼을 뺀다 — 확대는 오른쪽으로만 자란다', async () => {
+    await openShell()
+    measurable(900)
+    canvasFrame().style.marginLeft = '200px'
+
+    fireEvent.change(screen.getByLabelText('뷰포트 폭'), { target: { value: '375' } })
+    fireEvent.click(screen.getByRole('button', { name: '화면 맞춤' }))
+
+    // (900 − 48 − 200) / 375. **여백을 안 뺐다면 852/375 = 2.272이고 스토어가 2로 자른다.**
+    expect(shellStore().getState().zoom).toBeCloseTo(652 / 375, 10)
+    expect(shellStore().getState().zoom).not.toBe(2)
   })
 
   /**
