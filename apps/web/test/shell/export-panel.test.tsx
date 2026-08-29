@@ -185,4 +185,40 @@ describe('내보내기 화면', () => {
     fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
     await waitFor(() => expect(calls).toBe(2))
   })
+
+  /**
+   * **닫는 장치가 실제로 이 화면에 붙어 있는가.** 장치 자체(왜 `mousedown`인지·토글이 두 번
+   * 처리되지 않는지·리스너가 남지 않는지)는 `popover-dismiss.test.tsx`가 재고, 여기서는
+   * **배선**만 본다 — 훅이 있어도 ref를 안 걸면 아무것도 실패하지 않은 채 안 닫힌다.
+   */
+  describe('닫기 (공용 장치의 배선)', () => {
+    it('바깥을 누르면 닫힌다', async () => {
+      const panel = await open(api(깨끗한))
+      await within(panel).findByText('페이지 2장을 내보냅니다')
+
+      // 셸 머리 밖의 아무 자리 — 캔버스를 쓴다.
+      fireEvent.mouseDown(screen.getByRole('main', { name: '캔버스' }))
+
+      expect(screen.queryByRole('group', { name: '내보내기' })).toBeNull()
+      expect(screen.getByRole('button', { name: '내보내기' }).getAttribute('aria-expanded')).toBe('false')
+    })
+
+    it('Escape로 닫힌다', async () => {
+      const panel = await open(api(깨끗한))
+      await within(panel).findByText('페이지 2장을 내보냅니다')
+
+      fireEvent.keyDown(document, { key: 'Escape' })
+
+      expect(screen.queryByRole('group', { name: '내보내기' })).toBeNull()
+    })
+
+    it('안쪽을 눌러도 안 닫힌다', async () => {
+      const panel = await open(api(깨끗한))
+      const 경로 = await within(panel).findByRole('region', { name: '페이지 경로' })
+
+      fireEvent.mouseDown(경로)
+
+      expect(screen.getByRole('group', { name: '내보내기' })).toBeTruthy()
+    })
+  })
 })

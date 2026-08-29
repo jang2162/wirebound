@@ -13,11 +13,19 @@
  * 들고 내려보내지 않는 이유는 P2b-2 때문이다 — 낙관적 적용·롤백·undo가 붙으면 그 상태는
  * 화면 없이 단위 테스트할 수 있어야 하고, 컴포넌트 안에 있으면 그럴 수 없다.
  */
-import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from 'react'
+import { useParams } from 'react-router'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import type { ProjectDetail } from '../api/types'
+import type { PageDetail, ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
@@ -32,6 +40,7 @@ import { RemoteAlert } from '../shell/remote-alert'
 import { useNodeLock } from '../realtime/use-node-lock'
 import { useRealtime } from '../realtime/use-realtime'
 import { ExportPanel } from '../shell/export-panel'
+import { SnapshotsPanel } from '../shell/snapshots-panel'
 import { projectAbilities } from '../projects/project-actions'
 import { ThemePicker } from '../theme/theme-picker'
 import {
@@ -59,6 +68,71 @@ const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 const ZOOM_STEP = 0.25
 
 /**
+ * **화면에 들어가는 폭 ÷ 뷰포트 폭.** 잴 수 없으면 `null`이다.
+ *
+ * ## 무엇을 재는가 — 캔버스의 **content box**다
+ *
+ * 셋 중에서 고른다.
+ *
+ * | 상자 | 무엇인가 | 왜 아닌가 / 왜 맞는가 |
+ * |---|---|---|
+ * | `.wb-shell-canvas` | 스크롤되는 그리드 칸 | **이것이다.** 프레임이 잘리지 않고 들어가야 하는 자리가 여기다 |
+ * | `.wb-shell-canvas-frame` | 뷰포트 폭 그대로의 상자 | 재려는 값이 이미 `viewportWidth`다 — 자기 자신을 나눈다 |
+ * | `.wb-shell-canvas-surface` | 프레임 **안**의 문서 상자 | 프레임 안이라 프레임과 같은 폭이다. 같은 이유로 안 된다 |
+ *
+ * **`clientWidth`이지 `getBoundingClientRect()`가 아니다.** 둘의 갈림은 스크롤바다 —
+ * `clientWidth`는 세로 스크롤바를 **빼고** 주고 `getBoundingClientRect().width`는 포함한다.
+ * 프레임이 실제로 들어가야 하는 폭은 앞쪽이다. (프레임 쪽을 쟀다면 갈림이 하나 더
+ * 있었다: `.wb-shell-canvas-frame`에는 `transform: scale()`이 걸려 있어
+ * `getBoundingClientRect()`가 **변환 뒤** 크기를 준다. 캔버스에는 변환이 없어 이 갈림이
+ * 없고, 그래서 지금 줌이 몇이든 이 계산이 같은 값을 낸다 — 두 번 눌러도 흔들리지 않는다.)
+ *
+ * **`padding`을 뺀다.** `clientWidth`는 padding box라 `.wb-shell-canvas`의 `padding: 24px`
+ * 양쪽 48px이 들어 있다. 안 빼면 그만큼 넓게 잡아 프레임의 오른쪽이 잘린다.
+ *
+ * **`gap`은 뺄 것이 없다.** 여백은 `.wb-shell`의 그리드 `gap`(1px)이 칸 **사이**에 두는
+ * 것이라 칸의 폭에 이미 반영돼 있고, 캔버스 안에는 프레임 하나뿐이라 `gap`이 없다.
+ *
+ * ## 가운데 정렬한 만큼을 마저 뺀다 — 브라우저에서 재서 알았다
+ *
+ * 프레임이 칸보다 **좁으면** `margin: 0 auto`가 그것을 가운데 세운다. 그런데
+ * `transform-origin`이 좌상단이라 확대는 **그 자리에서 오른쪽으로만** 자란다 — 왼쪽 여백은
+ * 그대로 있고 오른쪽으로 그만큼 넘친다.
+ *
+ * 실측(창 1100 · 뷰포트 프리셋 375 · 쓸 수 있는 폭 486): 여백을 안 뺀 판은 486/375 =
+ * **130%**를 냈고, 프레임의 오른쪽이 칸 밖으로 **31px** 나갔다(오른쪽으로 조금 밀어야
+ * 보였다). 여백(`margin-left` 55.5px)을 빼면 (486−55.5)/375 = **115%**이고 오른쪽 끝이
+ * 칸의 끝과 **정확히 같다**.
+ *
+ * **여백은 재서 쓴다 — 계산하지 않는다.** 크롬은 `margin: 0 auto`의 계산값으로 **실제 쓰인
+ * 값**을 준다(실측: 프리셋 375에서 `55.5px`, 칸보다 넓은 프리셋 셋에서는 전부 `0px`). 그래서
+ * 좁은 프리셋에서만 저절로 걸리고, `shell.css`가 가운데 정렬을 그만두는 날 이 계산이 따라온다.
+ *
+ * **줌이 이 값을 흔들지 않는다.** 여백은 **레이아웃 폭**(`viewportWidth`)으로 정해지고
+ * `transform`은 레이아웃을 안 바꾼다 — 그래서 두 번 눌러도 같은 값이다(위 `clientWidth`
+ * 문단과 같은 성질).
+ *
+ * ## 못 재는 경우가 있다
+ *
+ * 레이아웃이 없는 자리(jsdom, `display: none`)에서는 `clientWidth`가 0이고 계산된 CSS에
+ * `padding`이 없다. 그때 나오는 0이나 `NaN`을 그대로 `setZoom`에 넘기면 **스토어가
+ * 0.25로 클램프해** 아무 이유 없이 25%가 된다 — 재지 못한 것과 "폭이 25%다"는 다른
+ * 사실이므로 여기서 `null`로 갈라 부르는 쪽이 아무것도 안 하게 한다. **클램프를 여기서
+ * 흉내 내는 것이 아니다** — 계산한 배율은 그대로 넘긴다(한계는 스토어 하나가 안다).
+ */
+function fitZoom(canvas: HTMLElement, frame: HTMLElement, viewportWidth: number): number | null {
+  const style = getComputedStyle(canvas)
+  const usable =
+    canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  // 가운데 정렬한 만큼은 확대가 쓸 수 없다(위 문단). 못 읽으면 0으로 둔다 — 그 값이 없다는
+  // 것은 가운데 정렬이 없다는 뜻이거나 레이아웃이 없다는 뜻이고, 뒤쪽은 아래 가드가 잡는다.
+  const inset = parseFloat(getComputedStyle(frame).marginLeft)
+  const room = usable - (Number.isFinite(inset) ? inset : 0)
+  if (!Number.isFinite(room) || room <= 0) return null
+  return room / viewportWidth
+}
+
+/**
  * 재연결 재조회가 무언가를 잃었을 때의 안내(P3-2 D6).
  *
  * **두 조각을 따로 붙인다.** 보내지 못한 편집과 되돌리기 이력은 **다른 것**이고, 둘 중
@@ -68,13 +142,22 @@ const ZOOM_STEP = 0.25
  * **`recover`의 문안을 건드리지 않는다**(P3-1 이월 §2.5의 마지막 문단). 그쪽 문장은
  * `edit/edit-recovery.test.tsx`의 여러 케이스가 글자로 재고 있고, 이것은 **다른 사건**이다 —
  * 사용자가 낸 편집이 실패한 것이 아니라 연결이 끊겼다 붙은 것이다.
+ *
+ * **앞머리만 인자다.** 잃은 것을 세는 두 조각은 재연결과 복원이 **똑같이** 잃는데,
+ * *"왜 다시 읽었는가"*는 사용자에게 다른 사실이다 — 하나는 연결이 끊겼다 붙은 것이고
+ * 하나는 자기가 방금 되돌린 것이다. 문장을 통째로 두 벌 두면 두 조각의 문안이 갈린다.
  */
-function resyncNotice(dropped: number, hadUndo: boolean): string {
-  const parts = ['연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다.']
+function resyncNotice(lead: string, dropped: number, hadUndo: boolean): string {
+  const parts = [lead]
   if (dropped > 0) parts.push(`아직 저장되지 않은 편집 ${dropped}개가 취소됐습니다.`)
   if (hadUndo) parts.push('되돌리기 이력이 초기화됐습니다.')
   return parts.join(' ')
 }
+
+/** 재연결로 다시 읽었을 때의 앞머리(P3-2 D6). */
+const RESYNC_LEAD = '연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다.'
+/** 내가 스냅샷을 복원해 다시 읽었을 때의 앞머리. **재연결과 다른 사건이다.** */
+const RESTORED_LEAD = '스냅샷을 복원해 페이지를 다시 불러왔습니다.'
 
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
@@ -233,6 +316,45 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
   const [resyncToken, setResyncToken] = useState(0)
 
   /**
+   * **캔버스 칸을 손에 쥐는 자리.** `화면 맞춤`이 누른 순간의 폭을 재려면 그 상자가 필요한데,
+   * 버튼은 머리에 있고 상자는 가운데 칸이라 서로 안 보인다.
+   *
+   * **`document.querySelector('.wb-shell-canvas')`로 찾지 않는다.** 그러면 클래스 이름이
+   * 배선이 되어, 이름을 바꾸는 날 아무것도 실패하지 않은 채 버튼만 조용히 죽는다.
+   * ref는 그 연결을 타입으로 들고 있다.
+   */
+  const canvasRef = useRef<HTMLElement>(null)
+  /**
+   * 캔버스 **프레임**. `화면 맞춤`이 그 가운데 정렬 여백을 읽는다(위 `fitZoom`).
+   *
+   * **`canvas.querySelector('.wb-shell-canvas-frame')`로 찾지 않는다** — 클래스 이름이
+   * 배선이 되면 이름을 바꾸는 날 아무것도 실패하지 않은 채 좁은 프리셋에서만 조용히
+   * 어긋난다(`canvasRef`와 같은 근거).
+   */
+  const frameRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * **내가 스냅샷을 복원했다는 신호.** 값에는 뜻이 없고 오를 때마다 **캔버스가 문서를,
+   * 좌측이 트리를** 다시 읽는다 — 앞의 두 토큰과 같은 모양이고 같은 이유로 스토어에 두지
+   * 않는다.
+   *
+   * **이 신호가 이 판에서 새로 필요해졌다.** 스냅샷이 셸 밖 별도 라우트였을 때는 되돌리고
+   * 설계서로 **돌아오는 길**에 셸이 통째로 다시 마운트돼 자연히 다시 읽혔다. 팝오버는
+   * 에디터 **위에** 뜨므로 그 길이 없다.
+   *
+   * **`resyncToken`을 재사용하지 않는다.** 두 사건은 **범위와 실패 정책이 다르다.**
+   *
+   * | | 재연결(`resyncToken`) | 복원(`restoredToken`) |
+   * |---|---|---|
+   * | 무엇이 달라졌나 | 끊긴 동안 놓친 이 **페이지**의 프레임 | **프로젝트 전체** — 페이지가 생기거나 사라진다 |
+   * | 트리를 다시 읽나 | 아니다 | **읽는다** — 목록 자체가 바뀐다 |
+   * | 재조회가 실패하면 | 조용히 둔다(화면은 재연결 전과 같고 잃은 것이 없다) | **말한다** — 화면에 남은 문서가 프로젝트의 상태가 아니라는 것을 이미 알기 때문이다 |
+   *
+   * 한 토큰으로 접으면 저 셋을 갈 자리가 없어지고, 재연결마다 트리까지 다시 받게 된다.
+   */
+  const [restoredToken, setRestoredToken] = useState(0)
+
+  /**
    * **룸에 붙어 있는다**(P3-1 D2 — 룸은 프로젝트 단위 하나다). 페이지를 옮겨도 연결은
    * 그대로다: 페이지마다 다시 붙으면 옮기는 동안 남의 변경을 놓친다.
    *
@@ -274,7 +396,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             시연 상태라 *"어디까지"*가 정의되지 않는다(undo 한 칸이 겹layer 몇 칸인가).
             **원인을 없애는 쪽이 정의가 필요 없다.** */}
         {mode === 'edit' && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
-        <ShellTools />
+        <ShellTools canvasRef={canvasRef} frameRef={frameRef} />
         {/* **테마 고르개**(P4b-3 D2). 셸 머리에 두는 것은 이것이 화면 **전체**를 바꾸기
             때문이다 — 페이지 하나가 아니라 이 프로젝트의 모든 화면이 갈린다.
             `role`을 그대로 넘겨 owner가 아니면 읽기 전용으로 그린다(서버도 막는다). */}
@@ -283,15 +405,17 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
           canChoose={projectAbilities(props.project.role).chooseTheme}
           onChanged={() => setThemeReloadToken((token) => token + 1)}
         />
-        {/* **스냅샷 화면으로 가는 길**(P6-1 D10). 그 화면은 셸 밖의 별도 라우트라
-            여기 링크가 없으면 주소를 직접 치는 수밖에 없다.
+        {/* **스냅샷 팝오버**(앞 판은 셸 밖 별도 라우트였다 — 뒤집힌 근거는
+            `shell/snapshots-panel.tsx` 머리말의 표에 있다). 내보내기 옆에 두는 것은 둘 다
+            *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
 
             **역할로 감추지 않는다** — 목록은 viewer도 본다(§10 — 막는 것은 생성 하나이고,
-            그 판정은 저쪽 화면이 한다). 감추면 viewer가 *"이 프로젝트에 어떤 기록이
+            그 판정은 팝오버 안이 한다). 감추면 viewer가 *"이 프로젝트에 어떤 기록이
             있는지"*조차 못 본다. */}
-        <Link className="wb-shell-snapshots-link" to={`/projects/${props.project.id}/snapshots`}>
-          스냅샷
-        </Link>
+        <SnapshotsPanel
+          projectId={props.project.id}
+          onRestored={() => setRestoredToken((token) => token + 1)}
+        />
         {/* **설계서를 내려받는 자리**(§11.3 — P8-4). 스냅샷 링크 옆에 두는 것은 둘 다
             *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
 
@@ -318,7 +442,14 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
           {/* 트리에 주는 `projectId`는 **조회해 온 프로젝트의 id**다. 경로의 파라미터를
               다시 읽지 않는 것은, 트리가 만드는 주소가 지금 열려 있는 프로젝트를 가리켜야
               하기 때문이다 — 둘은 같은 값이지만 진실은 조회 결과 쪽에 있다. */}
-          <MenuTree projectId={props.project.id} pageId={props.pageId} />
+          {/* **복원이 트리도 바꾼다.** 스냅샷 시점에 있던 페이지가 지금 없거나 그
+              반대다 — 문서만 다시 읽고 트리를 두면 목록이 존재하지 않는 페이지를 그린다.
+              `resyncToken`은 여기 닿지 않는다(재연결은 이 페이지의 프레임만 잃는다). */}
+          <MenuTree
+            projectId={props.project.id}
+            pageId={props.pageId}
+            reloadToken={restoredToken}
+          />
         </ShellRegion>
         {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를
             쓴다(설계 §9).
@@ -342,12 +473,14 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
         )}
       </nav>
 
-      <main className="wb-shell-canvas" aria-label="캔버스">
+      <main className="wb-shell-canvas" aria-label="캔버스" ref={canvasRef}>
         <CanvasFrame
           projectId={props.project.id}
           pageId={props.pageId}
           themeReloadToken={themeReloadToken}
           resyncToken={resyncToken}
+          restoredToken={restoredToken}
+          frameRef={frameRef}
         />
       </main>
 
@@ -567,6 +700,10 @@ function CanvasFrame(props: {
   themeReloadToken: number
   /** 연결이 다시 붙었다는 신호(P3-2 D6). 오를 때마다 아래 재조회 이펙트가 돈다. */
   resyncToken: number
+  /** 내가 스냅샷을 복원했다는 신호. 오를 때마다 아래 복원 재조회 이펙트가 돈다. */
+  restoredToken: number
+  /** 셸이 `화면 맞춤`에서 이 프레임의 여백을 읽는다(`fitZoom`). 그리는 데는 쓰지 않는다. */
+  frameRef: RefObject<HTMLDivElement | null>
 }): ReactElement {
   const api = useApi()
   const store = useEditorStoreInstance()
@@ -578,7 +715,32 @@ function CanvasFrame(props: {
    * 이유가 없고, 상태로 두면 그 갱신이 아래 이펙트를 한 번 더 태운다.
    */
   const handledResync = useRef(0)
-  const { projectId, pageId, resyncToken } = props
+  /** 복원 신호 쪽의 같은 장치. 두 이펙트가 각자 든다 — 신호가 서로 다르다. */
+  const handledRestore = useRef(0)
+  const { projectId, pageId, resyncToken, restoredToken } = props
+
+  /**
+   * **서버가 준 페이지를 스토어에 놓고, 그러면서 잃은 것이 있으면 말한다.**
+   * 두 재조회 경로(재연결·복원)가 공유한다 — 잃는 것이 같기 때문이다.
+   *
+   * **`restoreUndo`를 부르지 않는 것이 이 함수의 요점이다.** 근거는 위 `restoreUndo`의
+   * 독블록에 있는 실측이다: 서버가 내 것과 갈라진 뒤에 옛 `inverse`를 되살리면 **남의
+   * 편집을 조용히 덮는다.** 두 경로 모두 전제가 같다 — 재연결은 끊긴 동안 남이 편집했을
+   * 수 있다는 뜻이고, 복원은 문서가 통째로 갈렸다는 뜻이다.
+   *
+   * **말할 것이 없으면 말하지 않는다.** 버린 편집도 없고 스택도 비어 있었으면 이 재조회는
+   * 무해하고, 그때 뜨는 통지는 사용자가 잃지 않은 것에 대한 경고가 된다.
+   */
+  const applyServerPage = useCallback(
+    (openPageId: string, page: PageDetail, lead: string): void => {
+      // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
+      const hadUndo = store.getState().undoStack.length > 0
+      const dropped = store.loadPage(openPageId, page.schema, page.headSeq)
+      if (dropped.length === 0 && !hadUndo) return
+      store.setEditFailure({ kind: 'message', message: resyncNotice(lead, dropped.length, hadUndo) })
+    },
+    [store],
+  )
 
   useEffect(() => {
     if (pageId === undefined) {
@@ -720,22 +882,27 @@ function CanvasFrame(props: {
    */
   useEffect(() => {
     // 첫 연결에서는 위 이펙트가 방금 서버 문서를 놓았다 — 다시 읽을 것이 없다.
-    if (resyncToken === 0 || pageId === undefined) return
+    if (resyncToken === 0) return
     // 같은 신호에 두 번 돌지 않는다(위 머리말). **읽기와 쓰기가 한 문에 붙어 있어야 한다** —
     // 사이에 `await`이 끼면 같은 신호의 두 실행이 둘 다 통과한다.
     if (handledResync.current === resyncToken) return
     handledResync.current = resyncToken
+    // **페이지가 없어도 신호를 소비한다 — 소비한 *뒤에* 빠진다**(리뷰 (다)4가 찾았다).
+    // 앞 판은 `pageId === undefined`를 위 조건에 얹어 **소비하지 않고** 빠졌고, 그래서
+    // 나중에 페이지를 열면 이 이펙트가 그 페이지에 대해 한 번 더 돌아 `getPage`가 두 번
+    // 갔다. 페이지가 없으면 다시 읽을 문서도 없으므로 소비해도 잃는 것이 없다.
+    //
+    // **무해한 낭비가 아니다.** 두 번째 응답이 위 이펙트의 `restoreUndo`보다 늦게 오면
+    // `applyServerPage → loadPage`가 **방금 복원한 undo 스택을 비우고**, 그냥 페이지를 연
+    // 사용자에게 *"되돌리기 이력이 초기화됐습니다"*가 뜬다.
+    if (pageId === undefined) return
 
     let alive = true
     void (async () => {
       try {
         const page = await api.getPage(projectId, pageId)
         if (!alive) return
-        // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
-        const hadUndo = store.getState().undoStack.length > 0
-        const dropped = store.loadPage(pageId, page.schema, page.headSeq)
-        if (dropped.length === 0 && !hadUndo) return
-        store.setEditFailure({ kind: 'message', message: resyncNotice(dropped.length, hadUndo) })
+        applyServerPage(pageId, page, RESYNC_LEAD)
       } catch {
         // **여기서 알리지 않는다.** 사용자가 요청한 조회가 아니고, 화면은 재연결 전과 같다 —
         // 되돌릴 것도 잃은 것도 없다.
@@ -752,10 +919,70 @@ function CanvasFrame(props: {
     return () => {
       alive = false
     }
-  }, [api, projectId, pageId, store, resyncToken])
+  }, [api, projectId, pageId, applyServerPage, resyncToken])
+
+  /**
+   * **내가 스냅샷을 복원했으므로 페이지를 다시 읽는다.**
+   *
+   * ## 왜 재연결 이펙트에 얹지 않았나 — 실패했을 때가 다르다
+   *
+   * 성공 경로는 같고(`applyServerPage`를 공유한다) **실패 경로가 갈린다.**
+   *
+   * 재연결 쪽은 조용히 둔다: 화면은 재연결 전과 같고 사용자가 요청한 조회도 아니다.
+   * **복원 쪽은 그 근거가 성립하지 않는다** — 프로젝트가 방금 통째로 바뀐 것을 이미
+   * 알고 있으므로, 화면에 남아 있는 문서는 *"아직 확인 못 한 것"*이 아니라 **틀린 것**이다.
+   * 조용히 두면 **되돌렸는데 옛 문서를 그대로 보인다** — 이 판이 닫으려던 바로 그 고장이
+   * 한 갈래만 남는 꼴이다.
+   *
+   * ## 실패의 대부분은 "그 페이지가 사라진 것"이다
+   *
+   * 복원은 스냅샷 시점에 없던 페이지를 지운다. 지금 보고 있던 페이지가 그것이면 이
+   * 조회가 404를 받는다. 그때 **스토어도 비운다** — `setState`만 하면 캔버스는 오류를
+   * 그리지만 문서를 스토어에서 읽는 나머지 둘(구조 트리·속성 패널)은 **사라진 페이지의
+   * 노드를 계속 그린다.** 셋이 같은 사실을 말해야 한다.
+   *
+   * ## 페이지를 여는 이펙트를 다시 태우지 않는 이유
+   *
+   * 그쪽(`pageId`가 바뀔 때 도는 이펙트)을 태우면 실패 화면까지 공짜로 얻는다. 그런데
+   * 그 경로는 성공 뒤 **undo 스택을 복원한다** — 복원 직후에 그러면 옛 `inverse`가
+   * 되돌아온 문서 위에 얹혀 **방금 되돌린 것을 조용히 덮는다.** 그래서 여기 따로 있다.
+   *
+   * 같은 신호에 두 번 돌지 않는 장치(`handledRestore`)는 재연결 쪽과 같다 — 근거도 같다
+   * (신호가 오른 뒤 페이지를 옮기면 위 이펙트가 새 페이지를 서버 것으로 놓는다).
+   */
+  useEffect(() => {
+    if (restoredToken === 0) return
+    if (handledRestore.current === restoredToken) return
+    handledRestore.current = restoredToken
+    // 페이지가 없어도 신호를 소비한다 — 근거는 위 재연결 이펙트의 같은 자리에 있다.
+    // **두 이펙트가 같은 모양이라 고장도 같았다**(리뷰 (다)4).
+    if (pageId === undefined) return
+
+    let alive = true
+    void (async () => {
+      try {
+        const page = await api.getPage(projectId, pageId)
+        if (!alive) return
+        applyServerPage(pageId, page, RESTORED_LEAD)
+        // 앞서 이 페이지의 조회가 실패해 있었을 수도 있다. 복원으로 다시 생긴 페이지를
+        // 오류 문장 아래 감춰 두지 않는다.
+        setState({ status: 'ready' })
+      } catch (caught) {
+        if (!alive) return
+        // 위 머리말의 둘째 절. 문서를 스토어에서 읽는 셋이 같은 사실을 말하게 한다.
+        store.clearPage()
+        setState({ status: 'failed', failure: toFailure(caught, PAGE_UNKNOWN_FAILURE) })
+      }
+    })()
+
+    return () => {
+      alive = false
+    }
+  }, [api, projectId, pageId, store, applyServerPage, restoredToken])
 
   return (
     <div
+      ref={props.frameRef}
       className="wb-shell-canvas-frame"
       // 폭은 프리셋 그대로, 줌은 그 위의 배율이다. 폭에 줌을 곱해 넣으면 "1280 폭에서
       // 어떻게 보이는가"라는 뷰포트 프리셋의 뜻이 깨진다.
@@ -780,7 +1007,12 @@ function CanvasFrame(props: {
 }
 
 /** 모드 토글·뷰포트 프리셋·줌. 셋 다 스토어를 읽고 쓴다. */
-function ShellTools(): ReactElement {
+function ShellTools(props: {
+  /** 캔버스 칸. `화면 맞춤`이 이것의 폭을 잰다(위 `fitZoom`). */
+  canvasRef: RefObject<HTMLElement | null>
+  /** 캔버스 프레임. 같은 계산이 이것의 가운데 정렬 여백을 읽는다. */
+  frameRef: RefObject<HTMLDivElement | null>
+}): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
@@ -843,6 +1075,30 @@ function ShellTools(): ReactElement {
           onClick={() => store.setZoom(zoom + ZOOM_STEP)}
         >
           확대
+        </button>
+        {/* **누른 순간의 1회 계산이다** — 창 크기를 따라다니지 않는다. 따라다니게 하면
+            사용자가 손으로 맞춘 배율을 창을 조금만 흔들어도 빼앗기고, 그것을 막으려면
+            *"마지막으로 누른 것이 맞춤인가"*라는 상태가 하나 더 생긴다. 여기 버튼 셋은
+            전부 **누른 값을 스토어에 놓는** 같은 모양이고, 이것도 그 하나다.
+
+            **폭 기준이다.** 높이까지 맞추면 페이지가 세로로 길어 대개 읽을 수 없는 배율이
+            나온다 — 뷰포트 프리셋이 폭만 고르는 것과 같은 축이다.
+
+            한계값은 여기서도 모른다 — 잰 배율을 그대로 넘기고 스토어가 클램프한다
+            (`fitZoom`이 `null`을 내는 것은 클램프가 아니라 *"재지 못했다"*이다). */}
+        <button
+          type="button"
+          className="wb-shell-zoom-fit"
+          onClick={() => {
+            const canvas = props.canvasRef.current
+            const frame = props.frameRef.current
+            if (canvas === null || frame === null) return
+            const next = fitZoom(canvas, frame, viewportWidth)
+            if (next === null) return
+            store.setZoom(next)
+          }}
+        >
+          화면 맞춤
         </button>
       </div>
     </div>

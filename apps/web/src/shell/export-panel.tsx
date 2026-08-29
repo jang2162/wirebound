@@ -31,6 +31,13 @@
  * 고를 수 없다"*고 적혀 있다). 서버가 조립하는 문자열이 무엇인지 알 길이 오늘 여기뿐이라,
  * 페이지마다 그 문자열을 그대로 보인다.
  *
+ * ## 닫는 방식은 공용이다
+ *
+ * 바깥 클릭·`Escape`로 닫는 장치는 `shell/use-popover-dismiss.ts`가 갖는다 — 스냅샷
+ * 팝오버와 같은 것을 쓴다. **두 벌로 두지 않는 이유는 그 부류가 조용히 갈리기
+ * 때문이다:** 한쪽만 `Escape`를 안 듣거나 한쪽만 리스너를 안 걷어도 화면에는 아무것도
+ * 안 보인다.
+ *
  * ## 새 런타임 의존이 없다
  *
  * `<button>`·`<a download>`·`useState`뿐이다.
@@ -39,6 +46,7 @@ import { useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ExportPreview } from '../api/types'
+import { usePopoverDismiss } from './use-popover-dismiss'
 
 /** 조회 상태. 성공과 실패를 판별 유니온으로 가른다(`routes/editor.tsx`와 같은 이유). */
 type PreviewState =
@@ -54,6 +62,11 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
   const api = useApi()
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<PreviewState>({ status: 'idle' })
+  /**
+   * **토글까지 감싸는 상자에 건다.** 그래야 토글 위의 `mousedown`이 *"바깥"*이 아니고,
+   * 닫는 일을 토글의 `onClick` 하나가 한다(그 훅의 머리말).
+   */
+  const rootRef = usePopoverDismiss(open, () => setOpen(false))
 
   async function load(): Promise<void> {
     setState({ status: 'loading' })
@@ -65,7 +78,7 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
   }
 
   return (
-    <div className="wb-shell-export">
+    <div className="wb-shell-export" ref={rootRef}>
       <button
         type="button"
         className="wb-shell-export-toggle"

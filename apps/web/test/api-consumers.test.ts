@@ -100,8 +100,8 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다).
   getProject: [
     '../src/routes/editor.tsx',
-    '../src/routes/snapshots.tsx',
     '../src/routes/theme-editor.tsx',
+    '../src/shell/snapshots-panel.tsx',
   ],
   createProject: ['../src/projects/use-project-commands.tsx'],
   updateProject: ['../src/projects/use-project-commands.tsx'],
@@ -177,19 +177,23 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 그것이고, **이 줄이 그것을 실행으로 지킨다:** 셸이나 다른 화면이 직접 스냅샷을 부르기
   // 시작하면 여기가 죽는다.
   //
+  // **그 한 파일이 라우트를 그만뒀다** — 셸 머리의 팝오버가 됐다
+  // (`src/shell/snapshots-panel.tsx` 머리말이 뒤집힌 근거 둘을 적고 있다). D10의 *"한
+  // 자리"*는 그대로다: 셸은 팝오버를 그리기만 하고 스냅샷 API를 직접 부르지 않는다.
+  //
   // **`getSnapshot`(상세)이 목록에 아예 없는 것이 요점이다.** 서버에는 그 엔드포인트가
   // 있지만 `ApiClient`에 두지 않았다 — payload를 읽을 자리가 복원(P6-2)이고 그것이 아직
   // 없다. 부르는 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도
   // 확인하지 않은 채 남는다.
-  listSnapshots: ['../src/routes/snapshots.tsx'],
-  createSnapshot: ['../src/routes/snapshots.tsx'],
+  listSnapshots: ['../src/shell/snapshots-panel.tsx'],
+  createSnapshot: ['../src/shell/snapshots-panel.tsx'],
   // **복원도 같은 한 파일이다**(P6-2). 셋이 한 화면에 모여 있는 것이 D10의 *"웹은 라우트
   // 하나다"*이고, 이 줄이 그것을 실행으로 지킨다.
   //
   // **`getSnapshot`(상세)은 여전히 목록에 없다.** 복원이 왔는데도 그렇다 — payload를 읽는
   // 것은 **서버**이고(라우트가 스냅샷 id만 받는다), 화면은 그 결과 요약만 본다. 부르는
   // 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도 확인하지 않은 채 남는다.
-  restoreSnapshot: ['../src/routes/snapshots.tsx'],
+  restoreSnapshot: ['../src/shell/snapshots-panel.tsx'],
   // 프리셋 둘(P7-2). **둘 다 고르개 하나에서만 불린다** — 고를 목록과 저장이 한 자리에
   // 있는 것이 T4의 꼴이고, **이 줄이 그것을 실행으로 지킨다:** 툴바나 셸이 직접 프리셋을
   // 부르기 시작하면 여기가 죽는다.

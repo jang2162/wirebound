@@ -1,25 +1,124 @@
 /**
- * 스냅샷 화면(P6-1 T4).
+ * 스냅샷 팝오버(P6-1 T4에서 옮겨 왔다).
  *
  * **이 파일의 요점은 실패의 화면판이다.** *"실패했다고 말하는데 조작은 일어났다"*가
  * P5-1·P5-2·P5-3에서 여섯 형태로 관측됐고, 계획서 T4가 그 화면판을 확인하라고 적었다.
  * 아래 `저장이 실패했을 때 화면에 남는 것` 블록이 그것을 셋으로 나눠 잰다.
+ *
+ * ---
+ *
+ * # 주소로 들어가던 것이 버튼 클릭이 됐다
+ *
+ * 이 화면은 `/projects/:projectId/snapshots`라는 별도 라우트였다. 이제 셸 머리의
+ * 팝오버이므로(`src/shell/snapshots-panel.tsx` 머리말이 뒤집힌 근거 둘을 적고 있다)
+ * 모든 케이스가 **셸을 열고 `스냅샷` 버튼을 눌러** 시작한다 — `../editor-harness`의
+ * `openPage()`가 그 셸을 성공 대역까지 열어 준다.
+ *
+ * **케이스는 하나도 줄지 않았다.** 갈래 셋만 형태가 바뀌었고 재는 명제는 그대로다.
+ *
+ * | 무엇 | 앞 | 지금 |
+ * |---|---|---|
+ * | 진입 | 주소로 들어간다 | `스냅샷` 버튼을 누른다 |
+ * | 조회 실패 두 갈래 | `getProject`가 던진다 | **`listSnapshots`가 던진다** — 셸이 그 `getProject`를 함께 쓰므로, 그것이 던지면 셸 자체가 안 뜬다(재려는 것은 팝오버의 조회다) |
+ * | 버튼 훑기 | 문서 전체를 훑는다 | **팝오버 안만** 훑는다 — 셸 머리에 `되돌리기`(undo)가 있어 문서 전체를 훑으면 그것이 함께 걸린다 |
+ *
+ * **팝오버가 열려야 조회가 시작된다**(`ExportPanel`과 같은 판단) — 셸이 뜨는 것만으로
+ * 스냅샷을 부르지 않는다. 아래 `누르기 전에는 아무것도 안 부른다`가 그 자리다.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { App } from '../../src/app'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { useNavigate } from 'react-router'
+import type { WbNode } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
-import type { ProjectDetail, ProjectRole, RestoreResult, SnapshotSummary } from '../../src/api/types'
-import { currentPath, expiringSession, fakeApi, renderWithProviders } from '../helpers'
+import type {
+  PageDetail,
+  ProjectDetail,
+  ProjectRole,
+  RestoreResult,
+  SnapshotSummary,
+} from '../../src/api/types'
+import { currentPath, expiringSession } from '../helpers'
+import {
+  PAGE_ID,
+  PAGE_ROUTE,
+  PROJECT_ID,
+  PROJECT_NAME,
+  PROJECT_ROUTE,
+  canvasRootId,
+  nodeElement,
+  openPage,
+  pageDetail,
+  pageDoc,
+  renderEditor,
+  structureTypes,
+  waitForNode,
+} from '../editor-harness'
 
-const PROJECT_ID = 'p1'
-const ROUTE = `/projects/${PROJECT_ID}/snapshots`
-
-/** 문지기(`RequireAuth`)를 지나려면 `me`가 있어야 한다. 이 라우트는 그 아래에 산다. */
+/** 문지기(`RequireAuth`)를 지나려면 `me`가 있어야 한다. 셸도 그 아래에 산다. */
 const user = { id: 'u1', email: 'a@example.com', name: '홍길동' }
 
+/**
+ * **이름은 하네스의 것을 쓴다.** `openPage()`가 그 이름을 기다려 *"셸이 성공 대역으로
+ * 떴다"*를 확인하므로(`../editor-harness`), 다른 이름을 주면 거기서 멈춘다.
+ */
 function project(role: ProjectRole): ProjectDetail {
-  return { id: PROJECT_ID, name: '관리자 화면', slug: 'admin', description: null, role }
+  return { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin', description: null, role }
+}
+
+/**
+ * 셸을 열고 `스냅샷` 버튼을 누른다. **가짜는 하네스 것 위에 덮는 조각만 준다** —
+ * `fakeApi`를 통째로 만들어 넘기면 스텁 안 된 메서드가 `notStubbed`가 되어 셸의 트리와
+ * 캔버스가 함께 죽는다(그러면 단언이 *"팝오버가 무엇을 말하는가"*가 아니라 *"오류가
+ * 떴는가"*를 보게 된다 — `editor-shell.test.tsx` 머리말의 그 사고다).
+ */
+async function openPanel(overrides: Partial<ApiClient>): Promise<void> {
+  await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }), { apiOverrides: overrides })
+  fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+}
+
+/**
+ * 팝오버 상자. **단언을 여기로 좁히는 케이스가 있다** — 셸 머리에 `되돌리기`(undo)가 있어
+ * 문서 전체에서 버튼을 훑으면 그것이 함께 걸린다.
+ */
+function panel(): HTMLElement {
+  return screen.getByRole('group', { name: '스냅샷' })
+}
+
+/**
+ * 주소를 옮기는 버튼. 셸에는 *"페이지 없는 주소 → 페이지"*로 가는 길이 트리밖에 없고,
+ * 트리 클릭은 조회를 하나 더 태워 세는 것을 흐린다. `editor-shell.test.tsx`의 같은 장치다.
+ */
+function GoTo(props: { to: string }): ReactElement {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => navigate(props.to)}>
+      이동
+    </button>
+  )
+}
+
+/** 이 파일이 덮는 조각만 든다. 이름을 `fakeApi`와 갈라 둔 근거는 `openPanel`에 있다. */
+function panelApi(overrides: Partial<ApiClient>): Partial<ApiClient> {
+  return overrides
+}
+
+/**
+ * 서버가 낼 복원 결과. **두 블록이 쓴다** — 결과 넷을 재는 쪽(`복원`)과 셸이 다시 읽는지
+ * 재는 쪽(`복원 뒤 재동기화`).
+ */
+function restoreResult(overrides: Partial<RestoreResult> = {}): RestoreResult {
+  return {
+    summary: {
+      menu: { created: 0, updated: 1, deleted: 0 },
+      pages: { created: 0, metaUpdated: 0, schemaChanged: 2, schemaUnchanged: 3, deleted: 1 },
+      comments: { created: 0, updated: 0, deleted: 0 },
+      layouts: { themeRefChanged: 0 },
+    },
+    safetySnapshot: { id: 's9', tag: '복원 전 2026-08-12T09:24:30.443Z' },
+    themes: [{ layoutId: 'l1', themeId: 't1', differs: false }],
+    ...overrides,
+  }
 }
 
 function snapshot(overrides: Partial<SnapshotSummary> = {}): SnapshotSummary {
@@ -59,13 +158,13 @@ function saveWith(tag: string, description?: string): void {
 
 describe('목록', () => {
   it('태그·설명·만든 사람·시각·바이트를 그린다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
 
     expect(await screen.findByText('v1')).toBeTruthy()
     expect(screen.getByText('첫 릴리스 직전')).toBeTruthy()
@@ -77,13 +176,13 @@ describe('목록', () => {
   })
 
   it('비었으면 그렇게 말한다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [],
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
 
     expect(await screen.findByText('아직 스냅샷이 없습니다.')).toBeTruthy()
   })
@@ -100,31 +199,92 @@ describe('목록', () => {
    */
   for (const role of ['editor', 'viewer'] as const) {
     it(`${role}에게는 복원 버튼이 없다 — 비활성 상태로도 없다`, async () => {
-      const client = fakeApi({
+      const client = panelApi({
         me: async () => user,
         getProject: async () => project(role),
         listSnapshots: async () => [snapshot()],
       })
 
-      renderWithProviders(<App />, { client, route: ROUTE })
+      await openPanel(client)
       await screen.findByText('v1')
 
       // `hidden: true`로 훑어 `aria-hidden`이나 비활성 버튼까지 본다.
       // **`queryAllByRole`이다** — viewer에게는 저장 폼도 없어 버튼이 **0개**이고,
       // `getAllByRole`은 0개에서 던진다(그러면 이 케이스가 재려는 것과 무관하게 죽는다).
-      const labels = screen.queryAllByRole('button', { hidden: true }).map((button) => button.textContent)
+      //
+      // **팝오버 안만 훑는다.** 문서 전체를 훑으면 셸 머리의 `되돌리기`(undo)가 아래
+      // 패턴에 걸려, 역할과 무관하게 늘 실패한다 — 재려는 것은 *"이 줄에 복원 버튼이
+      // 서는가"*이지 화면 어딘가에 그 낱말이 있는가가 아니다.
+      const labels = within(panel())
+        .queryAllByRole('button', { hidden: true })
+        .map((button) => button.textContent)
       expect(labels.filter((label) => label !== null && /복원|되돌리/.test(label))).toEqual([])
     })
   }
 
+  /**
+   * **설명이 줄의 마지막 칸이다 — 이것이 레이아웃의 절반이다.**
+   *
+   * `shell.css`에서 설명만 `flex-basis: 100%`라 자기 줄을 통째로 쓰는데, 그 성질은 **맨
+   * 뒤에 있을 때만** 뜻이 있다. 앞으로 옮기면 그 100%가 태그 **바로 뒤**에서 줄을 끊어
+   * 태그 혼자 첫 줄에 남고 나머지가 셋째 줄로 밀린다.
+   *
+   * **CSS 쪽 짝은 `snapshots-layout.test.ts`가 잡는다** — 거기 머리말에 이 화면이 520px
+   * 팝오버에서 무너졌던 실측이 있다. 둘이 함께 있어야 이 레이아웃이 선다.
+   */
+  it('설명이 줄의 마지막 칸이다 — 자기 줄을 쓰려면 맨 뒤여야 한다', async () => {
+    const client = panelApi({
+      getProject: async () => project('owner'),
+      listSnapshots: async () => [snapshot()],
+    })
+
+    await openPanel(client)
+    await screen.findByText('v1')
+
+    const row = panel().querySelector('.wb-shell-snapshots-row')
+    expect(row).not.toBeNull()
+    expect(row?.lastElementChild?.className).toBe('wb-shell-snapshots-desc')
+    // 앞 칸들의 순서까지 함께 못박는다 — 하나가 뒤로 밀리면 설명이 마지막이 아니게 된다.
+    expect([...(row?.children ?? [])].map((cell) => cell.className)).toEqual([
+      'wb-shell-snapshots-tag',
+      'wb-shell-snapshots-author',
+      'wb-shell-snapshots-time',
+      'wb-shell-snapshots-bytes',
+      'wb-shell-snapshots-restore',
+      'wb-shell-snapshots-desc',
+    ])
+  })
+
+  /** 확인 단계가 열려도 설명은 마지막이다 — 확인 칸도 자기 줄을 쓴다(같은 근거). */
+  it('확인 단계가 열려도 설명이 마지막 칸이다', async () => {
+    const client = panelApi({
+      getProject: async () => project('owner'),
+      listSnapshots: async () => [snapshot()],
+    })
+
+    await openPanel(client)
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+
+    const row = panel().querySelector('.wb-shell-snapshots-row')
+    expect([...(row?.children ?? [])].map((cell) => cell.className)).toEqual([
+      'wb-shell-snapshots-tag',
+      'wb-shell-snapshots-author',
+      'wb-shell-snapshots-time',
+      'wb-shell-snapshots-bytes',
+      'wb-shell-snapshots-confirm',
+      'wb-shell-snapshots-desc',
+    ])
+  })
+
   it('owner에게는 줄마다 복원 버튼이 선다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot(), snapshot({ id: 's2', tag: 'v2' })],
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('v1')
 
     expect(screen.getAllByRole('button', { name: '이 상태로 되돌리기' })).toHaveLength(2)
@@ -139,30 +299,16 @@ describe('목록', () => {
  * (P6-1의 일곱째 — 복원은 그 부류가 더 위험하다).
  */
 describe('복원 (P6-2 D11)', () => {
-  function restoreResult(overrides: Partial<RestoreResult> = {}): RestoreResult {
-    return {
-      summary: {
-        menu: { created: 0, updated: 1, deleted: 0 },
-        pages: { created: 0, metaUpdated: 0, schemaChanged: 2, schemaUnchanged: 3, deleted: 1 },
-        comments: { created: 0, updated: 0, deleted: 0 },
-        layouts: { themeRefChanged: 0 },
-      },
-      safetySnapshot: { id: 's9', tag: '복원 전 2026-08-12T09:24:30.443Z' },
-      themes: [{ layoutId: 'l1', themeId: 't1', differs: false }],
-      ...overrides,
-    }
-  }
-
   /** owner로 목록을 그리고 첫 줄의 복원 버튼을 누른 상태까지 간다. */
-  async function openConfirm(client: ApiClient): Promise<void> {
-    renderWithProviders(<App />, { client, route: ROUTE })
+  async function openConfirm(client: Partial<ApiClient>): Promise<void> {
+    await openPanel(client)
     await screen.findByText('v1')
     fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
   }
 
   it('버튼 한 번으로는 되돌리지 않는다 — 확인을 받는다', async () => {
     const restore = vi.fn(async () => restoreResult())
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
@@ -180,7 +326,7 @@ describe('복원 (P6-2 D11)', () => {
 
   it('취소하면 부르지 않고 확인만 닫는다', async () => {
     const restore = vi.fn(async () => restoreResult())
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
@@ -196,7 +342,7 @@ describe('복원 (P6-2 D11)', () => {
 
   it('확인하면 그 스냅샷 id로 부른다', async () => {
     const restore = vi.fn(async () => restoreResult())
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot({ id: 's7' })],
@@ -214,7 +360,7 @@ describe('복원 (P6-2 D11)', () => {
    * **아무 일도 안 일어난 것**과 **전부 그대로였던 것**을 구분하지 못한다.
    */
   it('결과가 넷을 말한다 — 바뀐 수·그대로인 수·안전망 태그·테마 차이', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
@@ -233,7 +379,7 @@ describe('복원 (P6-2 D11)', () => {
   })
 
   it('테마가 같으면 테마 이야기를 하지 않는다 — 매번 보이는 줄은 신호가 아니다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
@@ -250,7 +396,7 @@ describe('복원 (P6-2 D11)', () => {
 
   it('성공하면 목록을 다시 받는다 — 프로젝트가 바뀌었고 안전망이 하나 생겼다', async () => {
     const list = vi.fn(async () => [snapshot()])
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: list,
@@ -270,7 +416,7 @@ describe('복원 (P6-2 D11)', () => {
    */
   it('실패하면 서버 문장을 그대로 보이고 목록을 다시 받지 않는다', async () => {
     const list = vi.fn(async () => [snapshot()])
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: list,
@@ -295,7 +441,7 @@ describe('복원 (P6-2 D11)', () => {
    */
   it('성공 뒤 목록 재조회가 실패해도 성공 알림이 남는다', async () => {
     let calls = 0
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => {
@@ -318,7 +464,7 @@ describe('복원 (P6-2 D11)', () => {
   })
 
   it('저장 성공 알림과 복원 성공 알림이 함께 보이지 않는다 — 알림은 하나다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
@@ -326,7 +472,7 @@ describe('복원 (P6-2 D11)', () => {
       restoreSnapshot: async () => restoreResult(),
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('v1')
     saveWith('v2')
     await screen.findByText('v2 저장됨')
@@ -341,25 +487,25 @@ describe('복원 (P6-2 D11)', () => {
 
 describe('권한 (§10 — 생성은 editor)', () => {
   it('editor는 저장 폼을 본다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('editor'),
       listSnapshots: async () => [],
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
 
     expect(await screen.findByRole('button', { name: '지금 상태를 태그로 저장' })).toBeTruthy()
   })
 
   it('viewer는 목록만 본다 — 폼 자리에 이유가 있다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('viewer'),
       listSnapshots: async () => [snapshot()],
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
 
     expect(await screen.findByText('v1')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '지금 상태를 태그로 저장' })).toBeNull()
@@ -374,14 +520,14 @@ describe('저장', () => {
       .fn<() => Promise<SnapshotSummary[]>>()
       .mockResolvedValueOnce([])
       .mockResolvedValue([snapshot({ tag: 'v2' })])
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots,
       createSnapshot,
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('아직 스냅샷이 없습니다.')
     saveWith('v2')
 
@@ -399,14 +545,14 @@ describe('저장', () => {
     // 컴파일 오류다**(vitest는 타입을 안 보므로 테스트만으로는 안 드러난다 — 이 파일에서
     // 실제로 그렇게 났다). `ApiClient['createSnapshot']`을 그대로 씌워 인자 모양을 준다.
     const createSnapshot = vi.fn<ApiClient['createSnapshot']>(async () => snapshot())
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [],
       createSnapshot,
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('아직 스냅샷이 없습니다.')
     saveWith('v1')
 
@@ -416,14 +562,14 @@ describe('저장', () => {
 
   it('설명을 적으면 함께 보낸다', async () => {
     const createSnapshot = vi.fn(async () => snapshot())
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [],
       createSnapshot,
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('아직 스냅샷이 없습니다.')
     saveWith('v1', '릴리스 직전')
 
@@ -442,7 +588,7 @@ describe('저장', () => {
  */
 describe('두 409를 가른다', () => {
   it('태그 중복이면 이름을 바꾸라는 문장이 보인다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
@@ -451,7 +597,7 @@ describe('두 409를 가른다', () => {
       },
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('v1')
     saveWith('v1')
 
@@ -461,7 +607,7 @@ describe('두 409를 가른다', () => {
   })
 
   it('지문 불일치면 다시 시도하라는 문장이 보인다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
@@ -470,7 +616,7 @@ describe('두 409를 가른다', () => {
       },
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('v1')
     saveWith('v2')
 
@@ -489,7 +635,7 @@ describe('두 409를 가른다', () => {
 describe('저장이 실패했을 때 화면에 남는 것', () => {
   it('목록에 새 줄이 생기지 않는다 — 목록을 다시 받지 않는다', async () => {
     const listSnapshots = vi.fn(async () => [snapshot()])
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots,
@@ -498,7 +644,7 @@ describe('저장이 실패했을 때 화면에 남는 것', () => {
       },
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('v1')
     saveWith('v1')
 
@@ -509,7 +655,7 @@ describe('저장이 실패했을 때 화면에 남는 것', () => {
   })
 
   it('폼이 비워지지 않는다 — 다시 시도할 때 사용자가 다시 타이핑하지 않는다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [],
@@ -518,7 +664,7 @@ describe('저장이 실패했을 때 화면에 남는 것', () => {
       },
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('아직 스냅샷이 없습니다.')
     saveWith('v9')
 
@@ -531,14 +677,14 @@ describe('저장이 실패했을 때 화면에 남는 것', () => {
       .fn<() => Promise<SnapshotSummary>>()
       .mockResolvedValueOnce(snapshot({ tag: 'v1' }))
       .mockRejectedValue(duplicateTagError())
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
       createSnapshot,
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('v1')
 
     saveWith('v1')
@@ -572,14 +718,14 @@ describe('저장이 실패했을 때 화면에 남는 것', () => {
             release = () => resolve(snapshot({ tag: 'v2' }))
           }),
       )
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => [snapshot()],
       createSnapshot,
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('v1')
 
     saveWith('v1')
@@ -616,7 +762,7 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
   }
 
   function savedThenFailingReload() {
-    return fakeApi({
+    return panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: listThenFail(),
@@ -625,7 +771,7 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
   }
 
   it('"저장됨"이 그대로 남는다', async () => {
-    renderWithProviders(<App />, { client: savedThenFailingReload(), route: ROUTE })
+    await openPanel(savedThenFailingReload())
     await screen.findByText('아직 스냅샷이 없습니다.')
     saveWith('v2')
 
@@ -635,7 +781,7 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
   })
 
   it('목록을 못 갱신했다는 것도 함께 보인다 — 서버 문장을 그대로 싣는다', async () => {
-    renderWithProviders(<App />, { client: savedThenFailingReload(), route: ROUTE })
+    await openPanel(savedThenFailingReload())
     await screen.findByText('아직 스냅샷이 없습니다.')
     saveWith('v2')
 
@@ -645,7 +791,7 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
   })
 
   it('오류 화면으로 갈아엎지 않는다 — 목록이 그대로 있다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: vi
@@ -655,7 +801,7 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
       createSnapshot: async () => snapshot({ tag: 'v2' }),
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('v1')
     saveWith('v2')
 
@@ -672,7 +818,7 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
    * 계속 보여 주면 사용자가 아직 로그인해 있다고 믿는다.
    */
   it('세션이 끊겼으면 목록을 붙들지 않고 로그인으로 보낸다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: expiringSession(user),
       getProject: async () => project('owner'),
       listSnapshots: vi
@@ -682,7 +828,7 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
       createSnapshot: async () => snapshot({ tag: 'v2' }),
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('아직 스냅샷이 없습니다.')
     saveWith('v2')
 
@@ -691,7 +837,7 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
 
   /** **첫 조회 실패는 그대로 오류 화면이다** — 붙들 화면이 아직 없다. 음성 대조. */
   it('첫 조회가 실패하면 여전히 오류 화면이다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: async () => {
@@ -699,14 +845,14 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
       },
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
 
     expect(await screen.findByText('스냅샷을 열지 못했습니다')).toBeTruthy()
   })
 
   /** 재조회가 성공하면 그 문장이 사라진다 — 남아 있으면 낫지 않은 실패를 계속 말한다. */
   it('다음 저장이 목록까지 성공하면 그 문장이 사라진다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
       listSnapshots: vi
@@ -717,7 +863,7 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
       createSnapshot: async () => snapshot({ tag: 'v3' }),
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
     await screen.findByText('아직 스냅샷이 없습니다.')
     saveWith('v2')
     await screen.findByRole('alert')
@@ -730,35 +876,321 @@ describe('저장은 됐는데 목록만 못 받았을 때', () => {
   })
 })
 
+/**
+ * # 팝오버 조회가 실패했을 때
+ *
+ * **던지는 것이 `getProject`에서 `listSnapshots`로 바뀌었다.** 셸이 같은 `getProject`로
+ * 프로젝트를 받으므로, 그것이 던지면 **셸 자체가 안 뜬다** — 그러면 이 두 케이스가 재는
+ * 것이 *"팝오버가 조회 실패를 어떻게 그리는가"*가 아니라 *"셸이 안 떴다"*가 된다.
+ * 팝오버는 둘을 `Promise.all`로 함께 받으므로 어느 쪽이 던져도 같은 갈래를 지난다.
+ */
 describe('조회 실패', () => {
   it('세션이 끊겼으면 로그인으로 보낸다', async () => {
     // **문지기는 통과시키고 그다음 조회부터 401이다.** 재현하는 상황은 *"화면에 들어와
     // 있는 동안 서버가 세션을 지웠다"*이고, `expiringSession`이 그 형태를 만든다 —
     // 뒤 호출까지 성공하게 두면 로그인 화면이 다시 목록으로 돌려보내 두 주소를 오간다.
-    const client = fakeApi({
+    const client = panelApi({
       me: expiringSession(user),
-      getProject: async () => {
+      getProject: async () => project('owner'),
+      listSnapshots: async () => {
         throw new ApiError(401, 'unauthenticated', '로그인이 필요합니다')
       },
-      listSnapshots: async () => [],
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
 
     await waitFor(() => expect(currentPath()).toBe('/login'))
   })
 
   it('그 밖의 실패는 서버 문장을 그대로 그린다', async () => {
-    const client = fakeApi({
+    const client = panelApi({
       me: async () => user,
-      getProject: async () => {
+      getProject: async () => project('owner'),
+      listSnapshots: async () => {
         throw new ApiError(404, 'not-found', '프로젝트를 찾을 수 없습니다')
       },
-      listSnapshots: async () => [],
     })
 
-    renderWithProviders(<App />, { client, route: ROUTE })
+    await openPanel(client)
 
-    expect((await screen.findByRole('alert')).textContent).toContain('프로젝트를 찾을 수 없습니다')
+    expect((await within(panel()).findByRole('alert')).textContent).toContain(
+      '프로젝트를 찾을 수 없습니다',
+    )
+    // **제목도 함께 있다** — *"목록을 통째로 못 받았다"*와 *"저장이 실패했다"*는 다른
+    // 사실인데, 서버 문장만 있으면 둘이 같은 모양으로 보인다.
+    expect(within(panel()).getByText('스냅샷을 열지 못했습니다')).toBeTruthy()
+  })
+})
+
+/**
+ * # 팝오버로서의 동작 — 여는 것과 닫는 것
+ *
+ * 닫는 장치 자체(왜 `mousedown`인지·토글이 두 번 처리되지 않는지·리스너가 남지 않는지)는
+ * `popover-dismiss.test.tsx`가 잰다. 여기서는 **이 화면에 붙어 있는가**와, 이 화면에만
+ * 있는 결과(**확인 단계가 함께 풀린다**)를 본다.
+ */
+describe('팝오버', () => {
+  it('누르기 전에는 아무것도 안 부른다', async () => {
+    let calls = 0
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }), {
+      apiOverrides: {
+        getProject: async () => project('owner'),
+        listSnapshots: async () => {
+          calls += 1
+          return [snapshot()]
+        },
+      },
+    })
+
+    // 셸이 뜨는 것만으로는 부르지 않는다. 앞 판은 주소가 곧 조회였다 — 팝오버는 아니다.
+    expect(calls).toBe(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    await waitFor(() => expect(calls).toBe(1))
+  })
+
+  it('다시 열면 목록을 다시 받는다 — 그 사이 남이 스냅샷을 떴을 수 있다', async () => {
+    const listSnapshots = vi.fn(async () => [snapshot()])
+    await openPanel(panelApi({ getProject: async () => project('owner'), listSnapshots }))
+    await screen.findByText('v1')
+
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+
+    await waitFor(() => expect(listSnapshots).toHaveBeenCalledTimes(2))
+  })
+
+  it('바깥을 누르면 닫힌다', async () => {
+    await openPanel(panelApi({ getProject: async () => project('owner'), listSnapshots: async () => [snapshot()] }))
+    await screen.findByText('v1')
+
+    fireEvent.mouseDown(screen.getByRole('main', { name: '캔버스' }))
+
+    expect(screen.queryByRole('group', { name: '스냅샷' })).toBeNull()
+  })
+
+  it('Escape로 닫힌다', async () => {
+    await openPanel(panelApi({ getProject: async () => project('owner'), listSnapshots: async () => [snapshot()] }))
+    await screen.findByText('v1')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('group', { name: '스냅샷' })).toBeNull()
+  })
+
+  /**
+   * **복원 확인 중에도 특례가 없다.** 그냥 닫히고 확인이 풀린다 — 예외를 두면 *"언제
+   * 닫히는가"*가 화면마다 달라지고 그 규칙을 사용자가 외워야 한다. 되돌릴 수 없는 조작을
+   * 막는 장치인데 **닫히는 쪽이 안전한 방향**이기도 하다.
+   */
+  it('확인 중에 닫으면 확인이 풀린다 — 다시 열어도 물어보는 상태가 아니다', async () => {
+    const restore = vi.fn(async () => restoreResult())
+    const client = panelApi({
+      getProject: async () => project('owner'),
+      listSnapshots: async () => [snapshot()],
+      restoreSnapshot: restore,
+    })
+    await openPanel(client)
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+    expect(screen.getByRole('button', { name: '되돌린다' })).toBeTruthy()
+
+    fireEvent.mouseDown(screen.getByRole('main', { name: '캔버스' }))
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    await screen.findByText('v1')
+
+    // 확인이 풀렸다. 남아 있으면 사용자가 **잊은 확인 위에서** `되돌린다`를 누르게 된다.
+    expect(screen.queryByRole('button', { name: '되돌린다' })).toBeNull()
+    expect(screen.getByRole('button', { name: '이 상태로 되돌리기' })).toBeTruthy()
+    expect(restore).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * # 복원 뒤 재동기화 — **이 판이 새로 지는 몫이다**
+ *
+ * 스냅샷이 셸 밖 별도 라우트였을 때는 되돌리고 설계서로 **돌아오는 길**에 셸이 통째로 다시
+ * 마운트돼 자연히 다시 읽혔다. 팝오버는 에디터 **위에** 뜨므로 그 길이 없다 — 안 알리면
+ * **되돌렸는데 캔버스는 옛 문서를 그대로 보인다.**
+ *
+ * **문서만으로 부족하다.** 복원은 페이지를 지우고 만들므로 **트리도 바뀌고**, 지금 보고
+ * 있던 페이지가 사라질 수도 있다. 아래 셋이 그 셋이다.
+ */
+describe('복원 뒤 재동기화', () => {
+  const 옛뿌리: WbNode = { id: 'n-old', type: 'Page', children: [] }
+  const 새뿌리: WbNode = { id: 'n-new', type: 'Page', children: [] }
+
+  /** 복원 전후로 다른 것을 내는 `getPage`. 첫 응답이 `옛뿌리`여야 셸이 열린다. */
+  function pageThen(second: () => Promise<PageDetail>): {
+    getPage: ApiClient['getPage']
+    calls: () => number
+  } {
+    let calls = 0
+    return {
+      calls: () => calls,
+      getPage: async (_projectId, pageId) => {
+        calls += 1
+        return calls === 1 ? pageDetail(pageId, pageDoc(옛뿌리)) : second()
+      },
+    }
+  }
+
+  /** 셸을 열고 팝오버를 연 뒤 확인까지 간다. 남은 것은 `되돌린다` 한 번이다. */
+  async function openConfirm(overrides: Partial<ApiClient>): Promise<void> {
+    await openPage(pageDoc(옛뿌리), {
+      apiOverrides: {
+        getProject: async () => project('owner'),
+        listSnapshots: async () => [snapshot()],
+        restoreSnapshot: async () => restoreResult(),
+        ...overrides,
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+  }
+
+  it('성공하면 캔버스가 새 문서를 읽는다', async () => {
+    const { getPage } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
+    await openConfirm({ getPage })
+    expect(canvasRootId()).toBe('n-old')
+
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+
+    await waitForNode('n-new')
+    // 옛 문서가 남아 있지 않다 — 남으면 "되돌렸는데 화면은 그대로"의 그 고장이다.
+    expect(nodeElement('n-old')).toBeNull()
+  })
+
+  /**
+   * **트리는 `resyncToken`이 닿지 않는 자리다**(재연결은 이 페이지의 프레임만 잃는다).
+   * 복원은 페이지 목록 자체를 바꾸므로 셸이 따로 신호를 내려보낸다.
+   */
+  it('성공하면 트리를 다시 받는다 — 페이지 목록 자체가 바뀐다', async () => {
+    const { getPage } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
+    let trees = 0
+    await openConfirm({
+      getPage,
+      getTree: async () => {
+        trees += 1
+        return trees === 1
+          ? [{ id: 'mn-1', title: '회원관리', sortOrder: 1, pages: [{ id: PAGE_ID, title: '회원 목록', sortOrder: 1 }], children: [] }]
+          : [{ id: 'mn-1', title: '회원관리', sortOrder: 1, pages: [{ id: PAGE_ID, title: '되살아난 페이지', sortOrder: 1 }], children: [] }]
+      },
+    })
+    expect(screen.getByText('회원 목록')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+
+    expect(await screen.findByText('되살아난 페이지')).toBeTruthy()
+  })
+
+  /**
+   * **보고 있던 페이지가 복원으로 사라지면.** 서버가 404를 내고, 화면은 그 문장을 그린다.
+   *
+   * **재연결 재조회는 같은 자리에서 조용히 둔다** — 그쪽은 화면이 재연결 전과 같고 잃은
+   * 것이 없다. 복원은 아니다: 프로젝트가 방금 통째로 바뀐 것을 이미 알고 있으므로 화면에
+   * 남은 문서는 *"아직 확인 못 한 것"*이 아니라 **틀린 것**이다.
+   *
+   * **스토어까지 비운다.** 캔버스만 오류로 바꾸면 문서를 스토어에서 읽는 나머지 둘
+   * (구조 트리·속성 패널)이 **사라진 페이지의 노드를 계속 그린다** — 셋이 같은 사실을
+   * 말해야 한다.
+   */
+  it('보고 있던 페이지가 사라지면 캔버스가 그렇게 말하고 옛 노드가 남지 않는다', async () => {
+    const { getPage } = pageThen(async () => {
+      throw new ApiError(404, 'not-found', '페이지를 찾을 수 없습니다')
+    })
+    await openConfirm({ getPage })
+    expect(structureTypes()).toEqual(['Page'])
+
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+
+    expect(await screen.findByText('페이지를 찾을 수 없습니다')).toBeTruthy()
+    // 셋이 같은 사실을 말한다.
+    await waitFor(() => expect(canvasRootId()).toBeNull())
+    expect(structureTypes()).toEqual([])
+    expect(nodeElement('n-old')).toBeNull()
+  })
+
+  /** **음성 대조 둘.** 신호를 아무 때나 올리면 이 둘이 죽는다. */
+  it('실패한 복원은 다시 읽게 하지 않는다', async () => {
+    const { getPage, calls } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
+    await openConfirm({
+      getPage,
+      restoreSnapshot: async () => {
+        throw new ApiError(409, 'conflict', '레이아웃 구성이 스냅샷과 다릅니다')
+      },
+    })
+    expect(calls()).toBe(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+    await within(panel()).findByText(/레이아웃 구성이 스냅샷과 다릅니다/)
+
+    expect(calls()).toBe(1)
+    expect(canvasRootId()).toBe('n-old')
+  })
+
+  /**
+   * **열린 페이지가 없을 때도 신호를 소비한다**(리뷰 (다)4). 재연결 쪽에 같은 케이스가
+   * 있고(`edit/reconnect-resync.test.tsx`) 근거도 같다 — **두 이펙트가 같은 모양이라
+   * 고장도 같았다.**
+   *
+   * 앞 판은 `pageId === undefined`일 때 `handledRestore`를 갱신하지 않고 빠져, 나중에
+   * 페이지를 열면 그 페이지를 **두 번** 읽었다.
+   */
+  it('페이지를 안 연 채로 복원해도, 그 뒤에 연 페이지는 한 번만 읽는다', async () => {
+    const getPage = vi.fn(async (_projectId: string, pageId: string) =>
+      pageDetail(pageId, pageDoc(옛뿌리)),
+    )
+    renderEditor({
+      route: PROJECT_ROUTE,
+      apiOverrides: {
+        getProject: async () => project('owner'),
+        listSnapshots: async () => [snapshot()],
+        restoreSnapshot: async () => restoreResult(),
+        getPage,
+      },
+      children: <GoTo to={PAGE_ROUTE} />,
+    })
+    await screen.findByRole('heading', { name: PROJECT_NAME })
+
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+    await screen.findByText(/되돌렸습니다/)
+
+    // 열린 페이지가 없으니 다시 읽을 것도 없다 — 여기까지는 앞 판도 같다.
+    expect(getPage).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '이동' }))
+    await waitForNode('n-old')
+    await waitFor(() => expect(getPage).toHaveBeenCalled())
+
+    // **두 번이면 신호를 안 소비한 것이다.**
+    expect(getPage.mock.calls.map((call) => String(call[1]))).toEqual([PAGE_ID])
+  })
+
+  it('스냅샷을 저장하는 것만으로는 다시 읽지 않는다 — 프로젝트가 안 바뀌었다', async () => {
+    const { getPage, calls } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
+    await openPage(pageDoc(옛뿌리), {
+      apiOverrides: {
+        getProject: async () => project('owner'),
+        listSnapshots: async () => [snapshot()],
+        createSnapshot: async () => snapshot({ id: 's2', tag: 'v2' }),
+        getPage,
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    await screen.findByText('v1')
+    expect(calls()).toBe(1)
+
+    fireEvent.change(screen.getByLabelText('태그'), { target: { value: 'v2' } })
+    fireEvent.click(screen.getByRole('button', { name: '지금 상태를 태그로 저장' }))
+    await screen.findByText('v2 저장됨')
+
+    // 저장은 이 목록만 바꾼다. 한 신호로 접으면 스냅샷 하나마다 셸이 문서와 트리를 다시 읽는다.
+    expect(calls()).toBe(1)
+    expect(canvasRootId()).toBe('n-old')
   })
 })

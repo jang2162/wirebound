@@ -9,7 +9,6 @@ import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
 import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
-import { SnapshotsRoute } from './routes/snapshots'
 import { ThemeEditorRoute } from './routes/theme-editor'
 import { SessionProvider } from './session/session-context'
 
@@ -64,14 +63,15 @@ export function App(): ReactElement {
               **문지기 안이다** — 위 `RequireAuth` 아래에 있으므로 로그인 없이는 못 온다.
               owner인지는 화면이 판정한다(읽기는 viewer도 된다 — 그 파일의 권한 절). */}
           <Route path="/projects/:projectId/themes/:themeId" element={<ThemeEditorRoute />} />
-          {/* **스냅샷도 셸 밖의 별도 라우트다**(P6-1 D10) — 테마 저작과 같은 판단이고
-              근거도 같다: §9의 3분할에 이 화면이 들어갈 자리가 없다.
+          {/* **스냅샷에는 주소가 없다.** P6-1은 그것도 셸 밖 라우트로 두었는데(D10),
+              이 판이 그 근거 둘을 뒤집고 **셸 머리의 팝오버**로 옮겼다
+              (`shell/snapshots-panel.tsx` 머리말의 표가 그 둘을 짝지어 적고 있다).
+              요지: §9는 머리에 무엇이 오는지 말하지 않고, 스냅샷 목록은 링크로 건네는
+              화면이 아니다.
 
-              **문지기 안이다.** 목록은 viewer도 보고(§10 — 막는 것은 생성 하나다) 그
-              판정은 화면이 한다(`routes/snapshots.tsx`의 권한 절).
-
-              **복원 라우트는 없다**(D1) — P6-2가 만든다. */}
-          <Route path="/projects/:projectId/snapshots" element={<SnapshotsRoute />} />
+              **테마 저작은 그대로 라우트다** — 그쪽 근거는 갈리지 않았다: 갤러리와
+              캔버스가 *"화면 전체를 쓰는 미리보기"* 자리를 다툰다(`routes/theme-editor.tsx`).
+              팝오버 안에 들어갈 크기가 아니라는 뜻이므로 스냅샷과 같은 판단을 하지 않는다. */}
         </Route>
       </Routes>
     </SessionProvider>

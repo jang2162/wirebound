@@ -87,7 +87,16 @@ const SHORTCUTS: {
  * 셸이 이미 푼 것을 두 곳에서 풀면 라우트 표가 바뀔 때 한쪽만 고치는 일이 생기기
  * 때문이다.
  */
-export function MenuTree(props: { projectId: string; pageId: string | undefined }): ReactElement {
+export function MenuTree(props: {
+  projectId: string
+  pageId: string | undefined
+  /**
+   * 오를 때마다 트리를 다시 받는다. 셸이 **스냅샷 복원**에서 올린다 —
+   * 복원은 페이지를 지우고 만들므로 목록 자체가 바뀐다(`routes/editor.tsx`의
+   * `restoredToken`). 그대로 훅에 넘긴다.
+   */
+  reloadToken: number
+}): ReactElement {
   // **훅을 부르는 자리는 여기 하나다**(D2의 전제). 툴바는 결과를 prop으로 받는다 —
   // 두 번째 호출자가 생기면 `busy` 잠금이 각자 것이 된다.
   const commands = useTreeCommands(props)
