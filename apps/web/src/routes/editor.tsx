@@ -13,7 +13,15 @@
  * 들고 내려보내지 않는 이유는 P2b-2 때문이다 — 낙관적 적용·롤백·undo가 붙으면 그 상태는
  * 화면 없이 단위 테스트할 수 있어야 하고, 컴포넌트 안에 있으면 그럴 수 없다.
  */
-import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Link, useParams } from 'react-router'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -57,6 +65,48 @@ const PAGE_UNKNOWN_FAILURE = '페이지를 불러오지 못했습니다'
 
 /** 줌 한 칸. 한계(0.25~2)는 스토어가 클램프하므로 여기서 다시 알 필요가 없다. */
 const ZOOM_STEP = 0.25
+
+/**
+ * **화면에 들어가는 폭 ÷ 뷰포트 폭.** 잴 수 없으면 `null`이다.
+ *
+ * ## 무엇을 재는가 — 캔버스의 **content box**다
+ *
+ * 셋 중에서 고른다.
+ *
+ * | 상자 | 무엇인가 | 왜 아닌가 / 왜 맞는가 |
+ * |---|---|---|
+ * | `.wb-shell-canvas` | 스크롤되는 그리드 칸 | **이것이다.** 프레임이 잘리지 않고 들어가야 하는 자리가 여기다 |
+ * | `.wb-shell-canvas-frame` | 뷰포트 폭 그대로의 상자 | 재려는 값이 이미 `viewportWidth`다 — 자기 자신을 나눈다 |
+ * | `.wb-shell-canvas-surface` | 프레임 **안**의 문서 상자 | 프레임 안이라 프레임과 같은 폭이다. 같은 이유로 안 된다 |
+ *
+ * **`clientWidth`이지 `getBoundingClientRect()`가 아니다.** 둘의 갈림은 스크롤바다 —
+ * `clientWidth`는 세로 스크롤바를 **빼고** 주고 `getBoundingClientRect().width`는 포함한다.
+ * 프레임이 실제로 들어가야 하는 폭은 앞쪽이다. (프레임 쪽을 쟀다면 갈림이 하나 더
+ * 있었다: `.wb-shell-canvas-frame`에는 `transform: scale()`이 걸려 있어
+ * `getBoundingClientRect()`가 **변환 뒤** 크기를 준다. 캔버스에는 변환이 없어 이 갈림이
+ * 없고, 그래서 지금 줌이 몇이든 이 계산이 같은 값을 낸다 — 두 번 눌러도 흔들리지 않는다.)
+ *
+ * **`padding`을 뺀다.** `clientWidth`는 padding box라 `.wb-shell-canvas`의 `padding: 24px`
+ * 양쪽 48px이 들어 있다. 안 빼면 그만큼 넓게 잡아 프레임의 오른쪽이 잘린다.
+ *
+ * **`gap`은 뺄 것이 없다.** 여백은 `.wb-shell`의 그리드 `gap`(1px)이 칸 **사이**에 두는
+ * 것이라 칸의 폭에 이미 반영돼 있고, 캔버스 안에는 프레임 하나뿐이라 `gap`이 없다.
+ *
+ * ## 못 재는 경우가 있다
+ *
+ * 레이아웃이 없는 자리(jsdom, `display: none`)에서는 `clientWidth`가 0이고 계산된 CSS에
+ * `padding`이 없다. 그때 나오는 0이나 `NaN`을 그대로 `setZoom`에 넘기면 **스토어가
+ * 0.25로 클램프해** 아무 이유 없이 25%가 된다 — 재지 못한 것과 "폭이 25%다"는 다른
+ * 사실이므로 여기서 `null`로 갈라 부르는 쪽이 아무것도 안 하게 한다. **클램프를 여기서
+ * 흉내 내는 것이 아니다** — 계산한 배율은 그대로 넘긴다(한계는 스토어 하나가 안다).
+ */
+function fitZoom(canvas: HTMLElement, viewportWidth: number): number | null {
+  const style = getComputedStyle(canvas)
+  const usable =
+    canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  if (!Number.isFinite(usable) || usable <= 0) return null
+  return usable / viewportWidth
+}
 
 /**
  * 재연결 재조회가 무언가를 잃었을 때의 안내(P3-2 D6).
@@ -233,6 +283,16 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
   const [resyncToken, setResyncToken] = useState(0)
 
   /**
+   * **캔버스 칸을 손에 쥐는 자리.** `화면 맞춤`이 누른 순간의 폭을 재려면 그 상자가 필요한데,
+   * 버튼은 머리에 있고 상자는 가운데 칸이라 서로 안 보인다.
+   *
+   * **`document.querySelector('.wb-shell-canvas')`로 찾지 않는다.** 그러면 클래스 이름이
+   * 배선이 되어, 이름을 바꾸는 날 아무것도 실패하지 않은 채 버튼만 조용히 죽는다.
+   * ref는 그 연결을 타입으로 들고 있다.
+   */
+  const canvasRef = useRef<HTMLElement>(null)
+
+  /**
    * **룸에 붙어 있는다**(P3-1 D2 — 룸은 프로젝트 단위 하나다). 페이지를 옮겨도 연결은
    * 그대로다: 페이지마다 다시 붙으면 옮기는 동안 남의 변경을 놓친다.
    *
@@ -274,7 +334,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             시연 상태라 *"어디까지"*가 정의되지 않는다(undo 한 칸이 겹layer 몇 칸인가).
             **원인을 없애는 쪽이 정의가 필요 없다.** */}
         {mode === 'edit' && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
-        <ShellTools />
+        <ShellTools canvasRef={canvasRef} />
         {/* **테마 고르개**(P4b-3 D2). 셸 머리에 두는 것은 이것이 화면 **전체**를 바꾸기
             때문이다 — 페이지 하나가 아니라 이 프로젝트의 모든 화면이 갈린다.
             `role`을 그대로 넘겨 owner가 아니면 읽기 전용으로 그린다(서버도 막는다). */}
@@ -342,7 +402,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
         )}
       </nav>
 
-      <main className="wb-shell-canvas" aria-label="캔버스">
+      <main className="wb-shell-canvas" aria-label="캔버스" ref={canvasRef}>
         <CanvasFrame
           projectId={props.project.id}
           pageId={props.pageId}
@@ -780,7 +840,10 @@ function CanvasFrame(props: {
 }
 
 /** 모드 토글·뷰포트 프리셋·줌. 셋 다 스토어를 읽고 쓴다. */
-function ShellTools(): ReactElement {
+function ShellTools(props: {
+  /** 캔버스 칸. `화면 맞춤`이 이것의 폭을 잰다(위 `fitZoom`). */
+  canvasRef: RefObject<HTMLElement | null>
+}): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
@@ -843,6 +906,29 @@ function ShellTools(): ReactElement {
           onClick={() => store.setZoom(zoom + ZOOM_STEP)}
         >
           확대
+        </button>
+        {/* **누른 순간의 1회 계산이다** — 창 크기를 따라다니지 않는다. 따라다니게 하면
+            사용자가 손으로 맞춘 배율을 창을 조금만 흔들어도 빼앗기고, 그것을 막으려면
+            *"마지막으로 누른 것이 맞춤인가"*라는 상태가 하나 더 생긴다. 여기 버튼 셋은
+            전부 **누른 값을 스토어에 놓는** 같은 모양이고, 이것도 그 하나다.
+
+            **폭 기준이다.** 높이까지 맞추면 페이지가 세로로 길어 대개 읽을 수 없는 배율이
+            나온다 — 뷰포트 프리셋이 폭만 고르는 것과 같은 축이다.
+
+            한계값은 여기서도 모른다 — 잰 배율을 그대로 넘기고 스토어가 클램프한다
+            (`fitZoom`이 `null`을 내는 것은 클램프가 아니라 *"재지 못했다"*이다). */}
+        <button
+          type="button"
+          className="wb-shell-zoom-fit"
+          onClick={() => {
+            const canvas = props.canvasRef.current
+            if (canvas === null) return
+            const next = fitZoom(canvas, viewportWidth)
+            if (next === null) return
+            store.setZoom(next)
+          }}
+        >
+          화면 맞춤
         </button>
       </div>
     </div>

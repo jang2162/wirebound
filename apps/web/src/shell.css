@@ -243,6 +243,20 @@
   cursor: pointer;
 }
 
+/* `화면 맞춤`. **`.wb-shell-zoom-step`과 값이 같지만 규칙을 합치지 않는다** — 둘은
+   *"한 칸 민다"*와 *"지금 폭에 맞춘다"*로 하는 일이 다르고, 한쪽의 생김새를 바꿀 때
+   다른 쪽까지 끌려가면 안 된다. (D7이 막는 것은 결합자이지 같은 값의 규칙 둘이 아니다.) */
+.wb-shell-zoom-fit {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
 .wb-shell-zoom-value {
   min-width: 4ch;
   text-align: center;

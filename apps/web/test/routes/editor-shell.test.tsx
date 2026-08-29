@@ -307,6 +307,109 @@ describe('에디터 셸', () => {
   })
 })
 
+/**
+ * # 화면 맞춤 — **누른 순간의 폭 ÷ 뷰포트 폭**
+ *
+ * ## jsdom에는 레이아웃이 없다 — 그래서 치수를 심는다
+ *
+ * `clientWidth`는 jsdom에서 언제나 0이고 `getComputedStyle`은 `shell.css`를 읽지 않는다
+ * (그 파일은 `main.tsx`가 import 한다). 그래서 이 블록은 캔버스 칸에 **`shell.css`가 실제로
+ * 거는 값**을 심는다 — `padding: 24px`(그 파일의 `.wb-shell-canvas`)와 폭 하나.
+ *
+ * **심은 값이 곧 이 케이스의 하중이다.** `padding`을 심는 이유는 그것을 빼는지 재기
+ * 위해서다: 900 − 48 = 852를 1280으로 나눈 **0.665625**와, 안 뺐을 때 나오는 900/1280 =
+ * **0.703125**가 다른 값이라 구현이 갈린다.
+ *
+ * **`getBoundingClientRect`가 아니라 `clientWidth`를 쓰는 결정은 여기서 재지 못한다** —
+ * jsdom은 둘 다 0을 내고 스크롤바가 없다. 근거는 `routes/editor.tsx`의 `fitZoom` 머리말에
+ * 있고, 브라우저 실측으로 확인했다.
+ */
+describe('화면 맞춤', () => {
+  /** `shell.css`가 캔버스 칸에 거는 값을 심는다. 돌려주는 것은 폭을 바꾸는 손잡이다. */
+  function measurable(clientWidth: number): (next: number) => void {
+    const canvas = screen.getByRole('main', { name: '캔버스' })
+    canvas.style.padding = '24px'
+    let width = clientWidth
+    Object.defineProperty(canvas, 'clientWidth', { configurable: true, get: () => width })
+    return (next) => {
+      width = next
+    }
+  }
+
+  it('캔버스에 들어가는 폭으로 배율을 맞춘다 — padding을 뺀 값이다', async () => {
+    await openShell()
+    measurable(900)
+
+    expect(shellStore().getState().zoom).toBe(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '화면 맞춤' }))
+
+    // (900 − 24 − 24) / 1280. **`padding`을 안 뺐다면 0.703125다** — 그 구현은 여기서 죽는다.
+    expect(shellStore().getState().zoom).toBe(0.665625)
+    expect(canvasFrame().style.transform).toBe('scale(0.665625)')
+    screen.getByText('67%')
+  })
+
+  /**
+   * **분모가 뷰포트 폭이라는 것과, 한계는 스토어가 안다는 것을 한 케이스에서 잰다.**
+   * 852/375 = 2.272는 `MAX_ZOOM`(2) 밖이라 스토어가 자른다 — 버튼이 자르지 않는다.
+   */
+  it('뷰포트 폭이 분모다 — 한계를 넘으면 스토어가 자른다', async () => {
+    await openShell()
+    measurable(900)
+
+    fireEvent.change(screen.getByLabelText('뷰포트 폭'), { target: { value: '375' } })
+    fireEvent.click(screen.getByRole('button', { name: '화면 맞춤' }))
+
+    // 852/375 = 2.272. 화면이 자르지 않았다면 스토어가 2로 자른 이 값이 나온다.
+    expect(shellStore().getState().zoom).toBe(2)
+    screen.getByText('200%')
+  })
+
+  /**
+   * **창 크기를 따라가지 않는다.** 맞춘 뒤 칸이 넓어져도 배율은 그대로다 — 따라다니면
+   * 사용자가 손으로 맞춘 배율까지 창을 흔들 때마다 빼앗긴다.
+   */
+  it('맞춘 뒤 창이 바뀌어도 배율은 그대로다 — 1회 계산이다', async () => {
+    await openShell()
+    const resize = measurable(900)
+
+    fireEvent.click(screen.getByRole('button', { name: '화면 맞춤' }))
+    expect(shellStore().getState().zoom).toBe(0.665625)
+
+    resize(1600)
+    fireEvent(window, new Event('resize'))
+
+    // 리스너가 걸려 있었다면 (1600 − 48)/1280 = 1.2125가 된다.
+    expect(shellStore().getState().zoom).toBe(0.665625)
+
+    // 그래도 **다시 누르면** 새 폭으로 맞춘다 — 값을 캐시해 둔 구현과 갈린다.
+    fireEvent.click(screen.getByRole('button', { name: '화면 맞춤' }))
+    expect(shellStore().getState().zoom).toBe(1.2125)
+  })
+
+  /**
+   * **재지 못하면 아무것도 안 한다.** 심는 폭이 0이다 — `padding`은 그대로라 실제
+   * 브라우저에서 캔버스가 `display: none`일 때의 모양이고, 그때 나오는 값은 852가 아니라
+   * **−48**이다. 그대로 `setZoom`에 넘기면 스토어가 `MIN_ZOOM`으로 잘라 **아무 이유 없이
+   * 25%가 된다** — 재지 못한 것과 *"폭이 25%다"*는 다른 사실이다.
+   *
+   * **치수를 아예 안 심는 판(순수 jsdom)은 이 결정을 재지 못한다.** 그때는 계산된
+   * `padding`이 없어 `usable`이 `NaN`이 되고, `fitZoom`의 가드를 지워도 **스토어의 NaN
+   * 가드가 대신 막는다**(실측: 가드를 지운 판이 이 파일 15케이스를 전부 통과했다).
+   * 그래서 이 케이스는 폭만 0으로 심는다.
+   */
+  it('잴 수 없으면 줌을 건드리지 않는다', async () => {
+    await openShell()
+    measurable(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '화면 맞춤' }))
+
+    expect(shellStore().getState().zoom).toBe(1)
+    screen.getByText('100%')
+  })
+})
+
 /** 주소를 바꾸는 버튼. 셸에는 다른 프로젝트로 가는 길이 아직 없어 테스트가 직접 놓는다. */
 function GoTo(props: { to: string }): ReactElement {
   const navigate = useNavigate()
