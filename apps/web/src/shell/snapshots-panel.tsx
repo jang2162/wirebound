@@ -411,10 +411,14 @@ function SnapshotsScreen(props: {
     <>
       <section className="wb-shell-snapshots-form" aria-label="스냅샷 저장">
         {abilities.createSnapshot ? (
-          <form onSubmit={(event) => void save(event)}>
+          /* **`<form>`·`<input>`·제출 버튼에 클래스가 붙어 있다.** D7이 요소 선택자와 자손
+             선택자를 막으므로 클래스가 없으면 이 셋의 폭을 정할 길이 아예 없다 — 520px
+             팝오버에서 셋이 한 줄로 눌려 `태그` 입력과 `설명` 라벨이 붙어 있었다. */
+          <form className="wb-shell-snapshots-fields" onSubmit={(event) => void save(event)}>
             <label className="wb-shell-snapshots-field">
               <span>태그</span>
               <input
+                className="wb-shell-snapshots-input"
                 name="tag"
                 value={tag}
                 maxLength={60}
@@ -425,13 +429,14 @@ function SnapshotsScreen(props: {
             <label className="wb-shell-snapshots-field">
               <span>설명</span>
               <input
+                className="wb-shell-snapshots-input"
                 name="description"
                 value={description}
                 maxLength={2000}
                 onChange={(event) => setDescription(event.target.value)}
               />
             </label>
-            <button type="submit" disabled={saving}>
+            <button type="submit" className="wb-shell-snapshots-save" disabled={saving}>
               지금 상태를 태그로 저장
             </button>
           </form>
@@ -470,9 +475,13 @@ function SnapshotsScreen(props: {
           // `•`와 UA 기본 여백이 그대로 보인다.
           <ul className="wb-shell-snapshots-rows">
             {props.snapshots.map((snapshot) => (
+              /* **칸 순서가 곧 레이아웃이다 — 설명이 맨 뒤다.**
+                 줄은 `flex-wrap: wrap`이고 설명만 `flex-basis: 100%`라 **자기 줄을 통째로
+                 쓴다**(`shell.css`). 설명을 앞으로 되돌리면 그 100%가 태그 **바로 뒤**에서
+                 줄을 끊어, 태그 혼자 첫 줄에 남고 나머지가 셋째 줄로 밀린다.
+                 읽는 순서로도 이쪽이 맞다 — 태그·만든 사람·시각·크기가 한 줄, 긴 설명이 그 아래다. */
               <li key={snapshot.id} className="wb-shell-snapshots-row">
                 <span className="wb-shell-snapshots-tag">{snapshot.tag}</span>
-                <span className="wb-shell-snapshots-desc">{snapshot.description}</span>
                 <span className="wb-shell-snapshots-author">{snapshot.createdByName}</span>
                 <span className="wb-shell-snapshots-time">{snapshot.createdAt}</span>
                 {/* **`payloadBytes`를 그대로 그린다**(§16의 보관 정책을 닫을 관측이다).
@@ -504,6 +513,10 @@ function SnapshotsScreen(props: {
                     </button>
                   )
                 ) : null}
+                {/* **맨 뒤다**(위 주석). 안전망 스냅샷의 설명은 서버가 복원마다 만드는 긴
+                    문자열이라(`"…"(으)로 복원하기 직전 상태 — 스냅샷 <uuid>`) 이 줄에서
+                    가장 긴 칸이 되는 것이 예외가 아니라 보통이다. */}
+                <span className="wb-shell-snapshots-desc">{snapshot.description}</span>
               </li>
             ))}
           </ul>

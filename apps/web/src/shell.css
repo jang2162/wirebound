@@ -2304,10 +2304,52 @@
   font-size: 13px;
 }
 
+/* 저장 폼의 세 조각(태그·설명·제출). **감싸는 `<form>`에 클래스가 필요했다** — D7이 요소
+   선택자를 막으므로 `<form>`은 이름 없이는 겨냥할 수 없고, 이름이 없는 동안 그 상자는
+   그냥 블록이라 안의 셋이 인라인으로 흘러 **520px 팝오버에서 한 줄로 눌렸다**(`태그`
+   입력과 `설명` 라벨이 붙어 보였다). */
+.wb-shell-snapshots-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* **`flex: 1 1 200px`이 요점이다.** 200px는 "이 밑으로는 줄을 바꾼다"는 뜻이고, 좁아지면
+   둘이 세로로 선다. `inline-flex`였을 때는 안의 `<input>`이 UA 기본 폭(약 177px)을 고집해
+   두 칸이 줄을 넘겼다. */
 .wb-shell-snapshots-field {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
+  flex: 1 1 200px;
+  /* 안 주면 `<input>`의 기본 폭이 하한이 되어 줄어들지 않는다(flex 항목의 기본
+     `min-width: auto`). 아래 `-input`에도 같은 이유로 준다. */
+  min-width: 0;
+}
+
+/* `<input>`에도 클래스가 필요하다 — 같은 이유(D7). 폭을 라벨 칸에 맡긴다. */
+.wb-shell-snapshots-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: inherit;
+  color: var(--wb-shell-ink);
+}
+
+/* 제출 버튼. **줄어들지 않는다** — 글자가 잘리면 무엇을 저장하는지 못 읽는다. */
+.wb-shell-snapshots-save {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 4px 10px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
 }
 
 .wb-shell-snapshots-readonly {
@@ -2347,9 +2389,17 @@
   list-style: none;
 }
 
+/* 줄 하나. **칸이 여섯이고 520px 팝오버 안이라 반드시 접힌다**(태그·만든 사람·시각·크기·
+   버튼·설명). 전체 폭 라우트일 때는 `nowrap` 한 줄로 됐지만, 팝오버로 옮기면서 설명이
+   **11.3px 폭 · 1194px 높이**로 짜부라졌다(한 글자씩 세로로 흘렀다) — 실측이고, 그때
+   `이 상태로 되돌리기` 버튼도 팝오버 밖으로 30px쯤 나가 글자가 잘렸다.
+
+   **`flex-wrap: wrap`이 그 고침의 전부는 아니다.** 아래 `-desc`가 자기 줄을 통째로 쓰고,
+   `-confirm`도 그렇다. 셋이 함께 있어야 접힌다. */
 .wb-shell-snapshots-row {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   align-items: baseline;
   padding: 6px 0;
   border-bottom: 1px solid var(--wb-shell-line);
@@ -2360,10 +2410,24 @@
   font-weight: 600;
 }
 
+/* **자기 줄을 통째로 쓴다** — `flex-basis: 100%`가 그 뜻이고, 그래서 마크업에서 이 칸이
+   **맨 뒤**에 있어야 한다(`snapshots-panel.tsx`의 주석). 안전망 스냅샷의 설명은 서버가
+   복원마다 만드는 긴 문자열이라 이 줄에서 가장 긴 칸이 되는 것이 보통이다.
+
+   `overflow-wrap: anywhere`는 그 문자열 끝의 **uuid** 때문이다 — 공백이 없어 `break-word`
+   만으로는 안 끊기는 토막이 들어 있다.
+
+   **설명이 없는 스냅샷은 이 칸을 아예 안 그린다**(`:empty`). 안 그러면 빈 줄 하나가
+   `row-gap`만큼 자리를 먹는다 — 목록이 길어질수록 눈에 띈다. */
 .wb-shell-snapshots-desc {
-  flex: 1;
+  flex: 1 0 100%;
+  min-width: 0;
   color: var(--wb-shell-muted);
-  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-snapshots-desc:empty {
+  display: none;
 }
 
 .wb-shell-snapshots-author {
@@ -2389,12 +2453,16 @@
   white-space: nowrap;
 }
 
-/* 확인 단계. **그 줄 안에서 받는다** — 어느 스냅샷에 답하는지가 붙어 있어야 한다. */
+/* 확인 단계. **그 줄 안에서 받는다** — 어느 스냅샷에 답하는지가 붙어 있어야 한다.
+   **자기 줄을 통째로 쓴다**(`-desc`와 같은 이유): 문장에 태그가 들어가고 버튼이 둘이라
+   메타 칸들과 한 줄에 두면 520px에서 문장이 한 글자 폭으로 짜부라진다. */
 .wb-shell-snapshots-confirm {
   display: flex;
   gap: 8px;
   align-items: baseline;
   flex-wrap: wrap;
+  flex: 1 0 100%;
+  min-width: 0;
 }
 
 /* 복원 결과. **줄이 여럿이라 `<p>`가 아니라 상자다** — 바뀐 수·안전망 태그·테마 차이가

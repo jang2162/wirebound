@@ -27,6 +27,8 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { useNavigate } from 'react-router'
 import type { WbNode } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type {
@@ -39,13 +41,16 @@ import type {
 import { currentPath, expiringSession } from '../helpers'
 import {
   PAGE_ID,
+  PAGE_ROUTE,
   PROJECT_ID,
   PROJECT_NAME,
+  PROJECT_ROUTE,
   canvasRootId,
   nodeElement,
   openPage,
   pageDetail,
   pageDoc,
+  renderEditor,
   structureTypes,
   waitForNode,
 } from '../editor-harness'
@@ -78,6 +83,19 @@ async function openPanel(overrides: Partial<ApiClient>): Promise<void> {
  */
 function panel(): HTMLElement {
   return screen.getByRole('group', { name: '스냅샷' })
+}
+
+/**
+ * 주소를 옮기는 버튼. 셸에는 *"페이지 없는 주소 → 페이지"*로 가는 길이 트리밖에 없고,
+ * 트리 클릭은 조회를 하나 더 태워 세는 것을 흐린다. `editor-shell.test.tsx`의 같은 장치다.
+ */
+function GoTo(props: { to: string }): ReactElement {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => navigate(props.to)}>
+      이동
+    </button>
+  )
 }
 
 /** 이 파일이 덮는 조각만 든다. 이름을 `fakeApi`와 갈라 둔 근거는 `openPanel`에 있다. */
@@ -203,6 +221,61 @@ describe('목록', () => {
       expect(labels.filter((label) => label !== null && /복원|되돌리/.test(label))).toEqual([])
     })
   }
+
+  /**
+   * **설명이 줄의 마지막 칸이다 — 이것이 레이아웃의 절반이다.**
+   *
+   * `shell.css`에서 설명만 `flex-basis: 100%`라 자기 줄을 통째로 쓰는데, 그 성질은 **맨
+   * 뒤에 있을 때만** 뜻이 있다. 앞으로 옮기면 그 100%가 태그 **바로 뒤**에서 줄을 끊어
+   * 태그 혼자 첫 줄에 남고 나머지가 셋째 줄로 밀린다.
+   *
+   * **CSS 쪽 짝은 `snapshots-layout.test.ts`가 잡는다** — 거기 머리말에 이 화면이 520px
+   * 팝오버에서 무너졌던 실측이 있다. 둘이 함께 있어야 이 레이아웃이 선다.
+   */
+  it('설명이 줄의 마지막 칸이다 — 자기 줄을 쓰려면 맨 뒤여야 한다', async () => {
+    const client = panelApi({
+      getProject: async () => project('owner'),
+      listSnapshots: async () => [snapshot()],
+    })
+
+    await openPanel(client)
+    await screen.findByText('v1')
+
+    const row = panel().querySelector('.wb-shell-snapshots-row')
+    expect(row).not.toBeNull()
+    expect(row?.lastElementChild?.className).toBe('wb-shell-snapshots-desc')
+    // 앞 칸들의 순서까지 함께 못박는다 — 하나가 뒤로 밀리면 설명이 마지막이 아니게 된다.
+    expect([...(row?.children ?? [])].map((cell) => cell.className)).toEqual([
+      'wb-shell-snapshots-tag',
+      'wb-shell-snapshots-author',
+      'wb-shell-snapshots-time',
+      'wb-shell-snapshots-bytes',
+      'wb-shell-snapshots-restore',
+      'wb-shell-snapshots-desc',
+    ])
+  })
+
+  /** 확인 단계가 열려도 설명은 마지막이다 — 확인 칸도 자기 줄을 쓴다(같은 근거). */
+  it('확인 단계가 열려도 설명이 마지막 칸이다', async () => {
+    const client = panelApi({
+      getProject: async () => project('owner'),
+      listSnapshots: async () => [snapshot()],
+    })
+
+    await openPanel(client)
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+
+    const row = panel().querySelector('.wb-shell-snapshots-row')
+    expect([...(row?.children ?? [])].map((cell) => cell.className)).toEqual([
+      'wb-shell-snapshots-tag',
+      'wb-shell-snapshots-author',
+      'wb-shell-snapshots-time',
+      'wb-shell-snapshots-bytes',
+      'wb-shell-snapshots-confirm',
+      'wb-shell-snapshots-desc',
+    ])
+  })
 
   it('owner에게는 줄마다 복원 버튼이 선다', async () => {
     const client = panelApi({
