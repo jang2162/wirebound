@@ -26,7 +26,7 @@
 | 무엇 | 코디네이터 값 | 내가 잰 값 | 갈렸나 |
 |---|---|---|---|
 | `signup` 을 부르는 **소스** | `apps/api/src/routes/auth.ts` 한 곳뿐 | **같다.** `grep -rn signup apps/api/src/` 가 그 한 줄(`app.post('/signup'`)만 낸다 | — |
-| 에디터가 가입을 부르나 | 안 부른다 | **같다.** `apps/web/src/routes/` 는 `editor`·`login`·`project-list`·`require-auth`·`snapshots`·`theme-editor` 여섯이고 가입 화면이 없다. `apps/web/src` 전체에 `signup` 이 0건 | — |
+| 에디터가 가입을 부르나 | 안 부른다 | **같다.** `apps/web/src/routes/` 는 `editor`·`login`·`project-list`·`require-auth`·`snapshots`·`theme-editor` 여섯이고 가입 화면이 없다(**2026-08-20에 잰 값이다** — `snapshots`가 2026-08-29에 팝오버로 옮겨 지금은 다섯이다. 이 줄이 재는 명제는 *"가입 화면이 없다"*이고 그쪽은 그대로다). `apps/web/src` 전체에 `signup` 이 0건 | — |
 | 멤버 초대 | 이미 가입한 사용자만 | **같다 — 그리고 실행해서 다시 쟀다.** 계정 있는 사람 초대 **201**, 없는 사람 **404**(§5의 실행) | — |
 | README §3 의 *"회원가입으로"* | 거짓이다 | **같다.** 고쳤다(§4) | — |
 | 테스트 | **54개 파일이 전부 `helpers.ts` 의 `signup()` 을 지난다** | **갈린다 — 아래** | **✱ 갈렸다** |
