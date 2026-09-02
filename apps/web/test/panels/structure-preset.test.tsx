@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { BUILTIN_PRESETS, applyOps, invertOps, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { Comment, PageDetail, PatchResult, Preset } from '../../src/api/types'
-import { HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
+import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import '../../src/catalog-setup'
 
 /**
@@ -710,6 +710,10 @@ describe('단축키 — D9: 판정 없는 조작', () => {
   it('선택이 없어도 열린다 — 자리를 고르는 조작이 아니다', async () => {
     const backend = server()
     await openPage(doc(), { apiOverrides: backend.api })
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
 
     fireEvent.keyDown(keyTarget(), { code: 'KeyP', altKey: true, shiftKey: true })
 

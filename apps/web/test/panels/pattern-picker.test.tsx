@@ -10,7 +10,7 @@ import { systemTheme, type Theme } from '@wirebound/themes'
 import type { PageDocument } from '@wirebound/schema'
 import type { ApiClient } from '../../src/api/client'
 import { SYSTEM_ADMIN_THEME_ID } from '../helpers'
-import { openPage, pageDoc } from '../editor-harness'
+import { deselect, openPage, pageDoc } from '../editor-harness'
 import { NOTICE } from '../../src/panels/pattern-picker'
 
 function doc(): PageDocument {
@@ -56,6 +56,11 @@ describe('패턴 고르개 — 여는 자리 (D8)', () => {
 
   it('선택이 없어도 누를 수 있다 — 선택 없이도 root에 꽂기 때문이다(D5)', async () => {
     await openPage(doc(), { apiOverrides: themeApi('portal') })
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
+
     expect(toolButton('패턴 넣기').disabled).toBe(false)
   })
 

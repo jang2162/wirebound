@@ -523,7 +523,7 @@ describe('페이지를 옮길 때 (리뷰 §11)', () => {
 })
 
 describe('놓는다', () => {
-  it('선택이 없어지면 놓는 프레임이 나간다 — 페이지를 옮기면 `loadPage`가 선택을 비운다', async () => {
+  it('선택이 없어지면 놓는 프레임이 나간다 — 캔버스 빈 자리를 누르면 그 상태가 된다', async () => {
     const view = await board()
     fireEvent.click(treeButton('Section'))
 
