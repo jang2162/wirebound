@@ -723,6 +723,10 @@ describe('단축키 — D9: 판정 없는 조작', () => {
   it('Alt+Shift+I가 패턴 고르개를 연다 — 패턴만 단축키가 없는 상태를 끝낸다', async () => {
     const backend = server()
     await openPage(doc(), { apiOverrides: backend.api })
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
 
     fireEvent.keyDown(keyTarget(), { code: 'KeyI', altKey: true, shiftKey: true })
 

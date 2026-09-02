@@ -32,6 +32,7 @@ import {
   OTHER_PAGE_TITLE,
   PAGE_ID,
   PROJECT_ID,
+  deselect,
   openPage,
   pageDoc,
   waitForNode,
@@ -527,9 +528,10 @@ describe('놓는다', () => {
     const view = await board()
     fireEvent.click(treeButton('Section'))
 
-    act(() => {
-      view.store.selectNode(null)
-    })
+    // **선택을 사용자가 하듯 푼다** — `store.selectNode(null)`을 직접 부르면 캔버스에서
+    // 스토어까지의 배선이 빠진 채 단언이 통과한다(이 파일 머리말의 *"스토어를 직접 쥐면"*,
+    // 그리고 `editor-harness.tsx`의 `deselect` 주석).
+    deselect()
 
     expect(view.lockFrames().at(-1)).toEqual({ type: 'unlock' })
   })
