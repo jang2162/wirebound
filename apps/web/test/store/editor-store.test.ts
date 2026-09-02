@@ -127,16 +127,25 @@ describe('EditorStore', () => {
 
     it('`clearPage` 뒤에 **같은** 페이지를 다시 열어도 루트를 고른다', () => {
       const store = new EditorStore()
-      store.loadPage('pg-a', doc('n_a'), 1)
+      store.loadPage('pg-a', withChild('n_root', 'n_a'), 1)
+      // **루트가 아닌 자리를 고른다.** 앞 판은 여기서 `doc('n_a')`를 써 루트 id와 고른 id가
+      // 같았고, 그래서 마지막 단언이 *"루트를 골랐다"*와 *"앞 선택이 남았다"*를 **가르지
+      // 못했다** — 통과하는 이유가 둘 중 무엇인지 케이스가 말하지 못했다. 이제 갈린다:
+      // 재조회 갈래로 새면 `n_a`(또는 `null`)이고, 여는 갈래라야 `n_root`다.
       store.selectNode('n_a')
       // 화면이 페이지를 여는 경로에서 실제로 하는 순서다 — 조회를 시작할 때 비우고
       // (`routes/editor.tsx`의 `CanvasFrame`), 응답이 오면 싣는다. 페이지 id가 그대로여도
       // 이것은 **여는** 경로이므로 루트로 시작해야 한다.
       store.clearPage()
 
-      store.loadPage('pg-a', doc('n_a'), 2)
+      store.loadPage('pg-a', withChild('n_root', 'n_a'), 2)
 
-      expect(store.getState().selectedNodeId).toBe('n_a')
+      // **재는 것은 `pageId`만 보는 구현을 가르는 힘이다 — 심어서 확인했다.** 갈림을
+      // *"마지막으로 실은 `pageId`"*를 따로 들고 그것만 비교하는 구현으로 바꾸면 이 케이스가
+      // 죽는다(전량에서 2 사망: 이것과 아래 잠금 대조). 지금 구현이 통과하는 이유는
+      // **`clearPage`가 `openPageId`를 문서·선택과 함께 비우기 때문**이고, 그 성질은
+      // `clearPage는 openPageId·문서·headSeq·선택을 비운다`가 따로 지킨다.
+      expect(store.getState().selectedNodeId).toBe('n_root')
     })
 
     it('남이 잠근 자리는 자동으로도 고르지 않는다 — 1차 방어를 우회하지 않는다', () => {
@@ -955,6 +964,79 @@ describe('EditorStore의 마커 반영', () => {
   })
 })
 
+/**
+ * **밖에서 온 루트 잠금은 그대로 존중한다 — `lockedBy`에 예외를 두지 않았다.**
+ *
+ * 화면은 루트로 잠금을 **보내지 않는다**(`realtime/use-node-lock.ts` — 루트 잠금은 페이지
+ * 전체 잠금이고 §7.2의 서브트리 잠금이 뜻한 것이 아니다). 그래서 *"루트는 어차피 안
+ * 잠기니 `lockedBy`도 예외로 두면 깔끔하다"*가 다음 사람에게 자연스러운 정리로 보인다.
+ * **이 묶음이 그 정리를 막는 자리다.**
+ *
+ * **왜 막아야 하나.** `lockedBy`의 판정은 `@wirebound/schema`의 `findLockConflict`이고
+ * **서버의 2차 방어가 부르는 바로 그 함수**다(`editor-store.ts`의 `lockedBy` 독블록).
+ * 여기에만 예외를 두면 판정이 두 벌이 되어, 화면이 통과시킨 편집을 서버가 거절한다 —
+ * 사용자는 값을 쳤는데 저장이 안 되고 **왜인지는 화면에 없다.**
+ *
+ * **그리고 루트 잠금은 실제로 도착할 수 있다.** 서버는 받은 것을 그대로 브로드캐스트하므로
+ * (`apps/api/src/ws/lock.ts` — 루트 예외가 없다) 안 고친 탭·다른 클라이언트·옛 세션이 남긴
+ * 것이 온다. **보내는 쪽을 고친 것이 받는 쪽의 계약을 바꾸지는 않는다.**
+ *
+ * **이 묶음이 서기 전에는 그 예외가 0 사망이었다** — 밖에서 온 루트 잠금을 쏘는 케이스가
+ * 테스트 전체에 없었다(리뷰가 예외를 심어 보고 잡았다).
+ */
+describe('밖에서 온 루트 잠금 (§7.2 — 화면은 안 보내지만 받는다)', () => {
+  const ROOT_LOCK = { pageId: 'pg-1', nodeId: 'n_root', userId: 'u_bora', userName: '보라' }
+
+  it('이미 도착해 있으면 자동 선택도 막힌다 — 페이지 전체가 남의 것이다', () => {
+    const store = new EditorStore()
+    store.setViewer('u_dahye')
+    store.setLocks([ROOT_LOCK])
+
+    store.loadPage('pg-1', withChild('n_root', 'n_a'), 1)
+
+    // **판정이 그 잠금을 낸다.** 루트에 예외를 두면 이 줄이 먼저 죽는다.
+    expect(store.lockedBy('n_root')).toMatchObject({ nodeId: 'n_root', userId: 'u_bora' })
+    // 루트는 문서 전체의 조상이므로 자손도 전부 막힌다. **예외는 이 줄을 죽이지 않는다**
+    // (자손의 경로가 잠금과 부딪치는 것은 그대로다) — 둘을 함께 두는 것이 요점이다.
+    expect(store.lockedBy('n_a')).toMatchObject({ nodeId: 'n_root', userId: 'u_bora' })
+    // 그래서 여는 경로의 루트 자동 선택도 막힌다(`#selectionFor`의 마지막 줄).
+    expect(store.getState().selectedNodeId).toBeNull()
+
+    // 손으로 눌러도 같다 — 막는 자리는 `selectNode` 하나다.
+    store.selectNode('n_root')
+    expect(store.getState().selectedNodeId).toBeNull()
+    store.selectNode('n_a')
+    expect(store.getState().selectedNodeId).toBeNull()
+  })
+
+  it('연 뒤에 도착해도 같다 — 고른 자리에서 움직이지 못한다', () => {
+    const store = new EditorStore()
+    store.setViewer('u_dahye')
+    store.loadPage('pg-1', withChild('n_root', 'n_a'), 1)
+    expect(store.getState().selectedNodeId).toBe('n_root')
+
+    store.setLocks([ROOT_LOCK])
+
+    expect(store.lockedBy('n_root')).toMatchObject({ nodeId: 'n_root', userId: 'u_bora' })
+    // 이미 고른 자리를 스토어가 되돌리지는 않는다(`setLocks`는 선택을 안 건드린다) — 대신
+    // **어디로도 옮겨가지 못한다.** 그 상태가 화면에서 어떻게 보이는지는 이월에 적었다.
+    store.selectNode('n_a')
+    expect(store.getState().selectedNodeId).toBe('n_root')
+  })
+
+  it('내가 잡은 루트 잠금은 나를 막지 않는다 — 대조 (D3)', () => {
+    const store = new EditorStore()
+    store.setViewer('u_bora')
+    store.setLocks([ROOT_LOCK])
+
+    store.loadPage('pg-1', withChild('n_root', 'n_a'), 1)
+
+    // 소유자가 나면 부딪치지 않으므로 자동 선택이 그대로 선다. 이 대조가 없으면
+    // *"루트 잠금이 있으면 무조건 막는다"*는 구현도 위 둘을 통과한다.
+    expect(store.lockedBy('n_root')).toBeNull()
+    expect(store.getState().selectedNodeId).toBe('n_root')
+  })
+})
 /**
  * **잠금 판정은 *"내가 누구인가"*를 모를 때 막는 쪽으로 기운다**(설계 §7.2 · P3-3 D3).
  *

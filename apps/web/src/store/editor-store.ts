@@ -456,7 +456,21 @@ export class EditorStore {
    * **가르는 값은 `openPageId`와 문서다.** 화면은 **여는 경로에서만** 조회를 시작하며
    * `clearPage()`를 부르므로(`routes/editor.tsx`의 `CanvasFrame`), 그 둘이 아직 이 페이지의
    * 것이라는 사실이 곧 *"다시 싣는 중"*이다. `pageId` 비교만으로는 안 된다 — 같은 페이지를
-   * 닫았다 다시 여는 것도 **여는** 경로다.
+   * 닫았다 다시 여는 것도 **여는** 경로다(심어서 쟀다: *"마지막으로 실은 `pageId`"*를 따로
+   * 들고 그것만 비교하는 구현으로 바꾸면 2 사망).
+   *
+   * **`&& current !== null`은 0 사망이다 — 재 봤고, 그래도 남긴다.** 그 조건을 지우고
+   * 전량을 돌려도 210파일 3865케이스가 그대로 통과한다. 도달할 수 없기 때문이다:
+   * `openPageId`와 `document`를 쓰는 자리는 `initialState`(둘 다 `null`)·`loadPage`(둘 다
+   * 세팅)·`clearPage`(둘 다 `null`) 셋뿐이라 **둘은 함께 움직인다.**
+   *
+   * 남기는 근거는 `structure-toolbar.tsx`의 `removeSelected`가 `commitOps` 반환값을 남긴
+   * 것과 같다 — **지금 통과하는 이유가 다른 성질에 기대고 있다.** 여기서는 그 성질이
+   * *"`clearPage`가 넷을 함께 비운다"*이고(그 성질은 `clearPage는 openPageId·문서·headSeq·
+   * 선택을 비운다`가 지킨다), 깨지는 날 이 조건이 마지막 방벽이다. 없으면 그때 다시 싣는
+   * 갈래로 새어 **죽은 화면이 조용히 돌아온다** — 이 함수가 없애려던 바로 그것이다.
+   * 같은 파일의 형제 판정 둘(`applyRemoteChange`·`ackEdit`)도 *"이 페이지가 실려 있나"*를
+   * `openPageId !== pageId || document === null`로 **둘 다** 본다.
    *
    * **사용자가 명시적으로 푼 선택(`selectNode(null)` — 캔버스 빈 곳)도 그 갈래에 들어간다.**
    * 페이지가 열려 있는 동안의 `null`은 사용자가 놓은 것이므로 재조회가 되살리지 않는다.
