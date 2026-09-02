@@ -416,6 +416,13 @@ export function variableUses(css: string): VariableUse[] {
  * - **단축 속성을 펼치지 않는다.** `flex: 1 0 100%`는 `flex` 하나로 담기고 `flex-basis`로는
  *   안 보인다. 펼치려면 속성마다 문법을 아는 표가 필요한데, 그 표가 낡는 쪽이 더 나쁘다 —
  *   **부르는 쪽이 자기가 보는 속성의 단축형을 알고 함께 물어야 한다.**
+ *
+ *   **그 규칙을 안 지키면 어떻게 새는지 실측된 자리가 있다.** `shell-css-picker.test.ts`가
+ *   `flex-wrap`만 묻고 `flex-flow`를 안 물던 판에서, 뜻이 같은 `flex-flow: row wrap`으로
+ *   바꾸자 **2건이 거짓으로 울었다**(2 failed | 7 passed). 없는 위반을 부르는 쪽이라 방향은
+ *   안전했지만 정확하지는 않았다 — 그 파일이 지금은 `flex-flow`도 함께 본다. 이 함수를 새로
+ *   쓰는 사람은 자기가 보는 속성의 단축형 목록을 **먼저** 적어라. 오늘 걸리는 짝:
+ *   `flex-basis`↔`flex`, `flex-wrap`·`flex-direction`↔`flex-flow`, `row-gap`·`column-gap`↔`gap`.
  * - `@media` 안의 규칙도 **같은 이름으로 담긴다.** 조건이 붙은 값인데 그것이 안 보인다.
  *   지금 `shell.css`에 `@media`는 0건이다(검산: `grep -n '@media' apps/web/src/shell.css`).
  *   첫 하나가 생기면 이 항목을 다시 읽어라 — 조건 밖의 값과 안의 값이 한 칸에 겹쳐 담긴다.

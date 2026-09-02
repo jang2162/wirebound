@@ -10,21 +10,24 @@
  * *"렌더는 되는데 틀린"* 부류다(`shell-css-palette.test.ts` 머리말의 `var()` 무효화와 같다).
  *
  * **실제로 그렇게 깨져 있었다.** `.wb-shell-picker`가 `display: flex`인데 `flex-wrap`이
- * 없었고(기본 `nowrap`), `.wb-shell-picker-notice`는 `flex-basis: 100%`였다. 그 짝이
- * 어긋난 것을 **프리셋 적용의 확인 단계**가 드러냈다 — 안내문과 `덮고 적용`·`적용 취소`가
- * 한 줄에 서면서 줄이 터졌다.
+ * 없었고(기본 `nowrap`), `.wb-shell-picker-notice`는 `flex-basis: 100%`였다.
  *
- * 240px 툴바를 재현해 Chrome 152에서 잰 값(2026-09-02):
+ * 264px 사이드바를 재현해 고르개 여덟 상태를 Chrome 152에서 전후로 쟀다(2026-09-02):
  *
- * | | 수정 전 | 수정 후 |
+ * | 상태 | 수정 전 | 수정 후 |
  * |---|---|---|
- * | `.wb-shell-picker` 폭 | **421px** | 240px |
- * | 사이드바(264px) 밖에서 시작하는 자식 | **4개**(`프리셋 이름`·이름 입력·`현재 페이지를 프리셋으로 저장`·`프리셋 취소`) | 0개 |
- * | `<select>` 폭 | **2px** | 205px |
+ * | 프리셋 **기본** | 371px · 밖으로 2개 | 240px · 0개 |
+ * | 프리셋 **저장 결과** | 388.9px · 밖으로 2개 | 240px · 0개 |
+ * | 프리셋 **확인 단계** | 421.3px · 밖으로 5개 · `<select>` 2px | 240px · 0개 · `<select>` 204.9px |
+ * | 패턴/프리셋 **안내문 갈래** | 안내문이 버튼에 눌려 183.6·177.2px | 안내문 240px 자기 줄, 버튼 아랫줄 |
+ * | 타입·패턴 **목록** | 240px 한 줄 | **똑같다** |
+ *
+ * **넘친 것은 확인 단계만이 아니다** — 프리셋 고르개는 기본 상태에서 이미 371px였다.
+ * 확인 단계는 가장 크게 벌린 방아쇠이지 유일한 원인이 아니다. 그리고 하필 그 화면이 D6의
+ * 안전장치라 *"덮는다"*는 확인을 안 보이는 버튼으로 받고 있었다.
  *
  * 감싸는 `.wb-shell-region`이 `overflow: auto`라 가로 스크롤로 닿기는 했다. **그래서 더
- * 나쁘다** — 오른쪽에 무언가 있다는 신호가 화면에 없다. 하필 그 화면이 D6의 안전장치라
- * *"덮는다"*는 확인을 안 보이는 버튼으로 받고 있었다.
+ * 나쁘다** — 오른쪽에 무언가 있다는 신호가 화면에 없다.
  *
  * ## 그래서 무엇을 재는가
  *
@@ -39,16 +42,27 @@
  * 1. **자기 줄을 요구하는 쪽이 정말 그렇게 선언돼 있다.** 표의 전제 절반이다.
  * 2. **담는 상자가 flex이고 감싼다.** 나머지 절반이자 이번에 고친 그 자리다.
  *    `.wb-shell-picker`에서 `flex-wrap: wrap`을 빼거나 `display`를 `block`으로 바꾸면 운다.
- * 3. **`display: flex`가 있으면 `flex-wrap`도 함께 적는다** — 고르개 상자에 한해서다.
- *    `nowrap`을 **고른** 것과 안 적은 것을 가르는 자리다(아래).
- * 4. **표가 완전하다.** `wb-shell-picker*` 클래스 중 자기 줄을 요구하는 것은 전부 표에
- *    있어야 한다. 새로 하나가 생기면 여기서 울고, 적는 사람이 담는 상자를 함께 적게 된다.
+ * 3. **고르개의 flex 상자는 감싼다** — 아니면 `ONE_LINE`에 *왜 한 줄이어야 하는지*가
+ *    적혀 있어야 한다. 이 둘 말고 셋째 길은 없다. **3-b**가 그 면제가 낡지 않았는지 되본다.
+ *    1·2번이 표에 오른 짝만 보는 데 비해 3번은 **범위 안의 모든 flex 상자**를 본다 —
+ *    이번 고장의 뿌리는 `flex-wrap`이 없던 것이지 `flex-basis`가 아니었다.
+ * 4. **표가 완전하다.** 범위 안에서 자기 줄을 요구하는 것은 전부 표에 있어야 한다.
+ *    새로 하나가 생기면 여기서 울고, 적는 사람이 담는 상자를 함께 적게 된다.
+ *
+ * **범위는 접두어가 아니라 부류다**(`SCOPE`). 앞 판은 `'wb-shell-picker'` 접두어였고, 그래서
+ * **똑같은 형태로 서 있던 `.wb-shell-menu-picker`가 검사 밖이었다** — 고친 인스턴스 하나만
+ * 잠그고 부류는 열어 둔 상태였다. 그 상자에도 감싸기를 주고 범위를 넓혔다.
  *
  * **3번이 왜 필요한가.** 1·2번은 표에 오른 짝만 본다. 고르개 안에 `flex-basis: 100%`가
  * 없는 새 상자가 생기면 표에 오르지 않고, 그러면 그 상자가 `nowrap`이어도 아무도 안 운다 —
  * 이번 고장의 뿌리는 **`flex-wrap`을 안 적은 것**이지 `flex-basis`가 아니다. 3번은 그
- * 뿌리를 직접 문다. **`nowrap`을 적는 것은 막지 않는다** — 한 줄이 옳은 자리가 있을 수 있고,
- * 그때 이 검사가 요구하는 것은 *"고르개의 한 줄은 고른 것이어야 한다"*뿐이다.
+ * 뿌리를 직접 문다.
+ *
+ * **한 줄인 것을 `flex-wrap: nowrap` 선언으로 말할 수는 없다 — `ONE_LINE`에 적어야 한다.**
+ * 앞 판은 *"선언이 있기만 하면 통과"*였고, 실측이 그 구멍을 보였다: `.wb-shell-menu-picker`의
+ * 감싸기를 `flex-flow: column nowrap`으로 바꿔도 **12케이스 전부 초록**이었다. 선언의
+ * 있고 없음은 사람이 **골랐다는 것**을 뜻하지 *재 봤다는 것*을 뜻하지 않는다. 그래서 셋째
+ * 길을 막고, 한 줄이 옳다는 주장은 근거를 적게 했다 — 그 표의 머리말이 *"재라"*고 말한다.
  *
  * ## 이 검사가 보지 못하는 것 — 먼저 읽어라
  *
@@ -68,8 +82,18 @@ import { describe, expect, it } from 'vitest'
 import shellCss from '../src/shell.css?raw'
 import { classDeclarations } from './shell-css-guard'
 
-/** 이 파일이 보는 범위. 고르개 주변으로 한정한다 — 다른 자리의 같은 짝은 여기 몫이 아니다. */
-const SCOPE = 'wb-shell-picker'
+/**
+ * 이 파일이 보는 범위 — **고르개라는 부류 전체다.**
+ *
+ * **앞 판은 `'wb-shell-picker'` 접두어였고 그것이 너무 좁았다.** 그때 이 범위에 든 flex
+ * 상자는 `.wb-shell-picker` **하나**였다. 그 사이 `.wb-shell-menu-picker`가 **똑같은 형태로**
+ * 서 있었는데(`display: flex` + 자기 `flex-basis: 100%` + 감싸기 없음) 접두어가 달라
+ * 검사에 안 들어왔다 — 즉 검사가 **고친 인스턴스 하나만 잠그고 부류는 열어 둔 상태**였다.
+ *
+ * 이름에 `picker`가 든 것으로 넓히면 flex 상자가 다섯이 된다. 그중 셋은 아래
+ * `ONE_LINE`이 받는다.
+ */
+const SCOPE = /picker/
 
 /**
  * **자기 줄을 요구하는 것 → 그것을 담는 flex 상자.** 담김 관계는 CSS에 없으므로 마크업에서
@@ -95,6 +119,40 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
     child: 'wb-shell-picker-notice',
     container: 'wb-shell-structure-toolbar',
     where: 'panels/type-picker.tsx:45 — `types.length === 0`이면 `<p>` 하나만 반환한다',
+  },
+  {
+    // 소속 메뉴 고르개. **오늘 자식에 `flex-basis: 100%`가 없어 안 터진다** — 그래서
+    // 아래 2번이 무는 것은 이 상자가 **자기** 줄을 받는 쪽이다(툴바가 감싸야 한다).
+    child: 'wb-shell-menu-picker',
+    container: 'wb-shell-menu-toolbar',
+    where: 'panels/menu-toolbar.tsx:139 — `MenuPicker`가 메뉴 툴바 `<div>` 안이다',
+  },
+]
+
+/**
+ * **한 줄인 것이 확인된 flex 상자.** 아래 3번이 *"감싸는지 안 감싸는지를 고른 흔적이
+ * 있어야 한다"*를 요구하는데, 흔적은 `flex-wrap` 선언일 수도 있고 **여기 적힌 근거**일 수도
+ * 있다. 셋 다 `shell.css`가 이미 주석으로 *"한 줄이 의도"*라고 적고 있는 자리다.
+ *
+ * **CSS를 고쳐 `flex-wrap: nowrap`을 적는 길도 있었지만 그러지 않았다.** 이 셋은 이번
+ * 고장과 무관하고(고르개 밖의 자리다) 손대면 이 라운드가 잠그려는 것과 다른 것을 바꾸게
+ * 된다. 그 판단은 코디네이터에게 보고했다.
+ *
+ * **여기 이름을 더하는 것은 "검사를 끄는 것"이다.** 더하기 전에 그 상자가 정말 한 줄이어야
+ * 하는지 브라우저에서 재라 — 이 표는 잰 것을 적는 자리이지 초록을 만드는 자리가 아니다.
+ */
+const ONE_LINE: { name: string; why: string }[] = [
+  {
+    name: 'wb-shell-menu-picker-label',
+    why: '라벨 글자와 `<select>`를 한 묶음으로 `flex: 1` 늘리는 상자다 — 나뉘면 라벨이 자기 select와 갈린다',
+  },
+  {
+    name: 'wb-shell-theme-picker',
+    why: 'shell.css 주석: "셸 머리의 넷째 조각이라 `flex-wrap`이 이미 자리를 만들어 준다"',
+  },
+  {
+    name: 'wb-shell-theme-picker-group',
+    why: 'shell.css 주석: "셸 머리의 `flex-wrap`이 그 묶음을 한 조각으로 본다" — 나뉘면 한 조각이 아니게 된다',
   },
 ]
 
@@ -131,6 +189,44 @@ function wantsOwnLine(className: string): boolean {
   return shorthand.split(/\s+/).includes('100%')
 }
 
+/** `flex-flow` 안에 올 수 있는 `flex-wrap` 값. 나머지 토막은 `flex-direction`이다. */
+const WRAP_KEYWORDS = new Set(['wrap', 'nowrap', 'wrap-reverse'])
+
+/**
+ * **이 상자의 `flex-wrap` 값.** 안 적었으면 `undefined`다 — 기본값 `nowrap`과 **가르는 것이
+ * 요점이라** 여기서 `'nowrap'`으로 채우지 않는다(3번이 그 차이를 문다).
+ *
+ * **`flex-flow: row wrap`도 함께 본다.** `classDeclarations`의 머리말이 *"부르는 쪽이 자기가
+ * 보는 속성의 단축형을 알고 함께 물어야 한다"*는 규칙을 세웠는데, 앞 판은 `flex` 단축형만
+ * 지키고 `flex-wrap` ↔ `flex-flow`에서 그것을 빠뜨렸다. 그래서 **뜻이 같은 CSS를 써도
+ * 2·3번이 울었다**(리뷰 실측: `flex-flow: row wrap`으로 바꾸니 2 failed | 7 passed).
+ *
+ * 검사의 **안전한 방향으로 틀린 것**이었다 — 없는 위반을 부르는 쪽이라 고장을 놓치지는
+ * 않았다. 그래도 막지 않고 고친 것은 **여기서 끝나기 때문이다**: 규칙은 이 파일이 이미
+ * 세워 놨고 `wantsOwnLine`이 그 형태를 하고 있어, 같은 모양을 하나 더 두는 것으로 끝난다.
+ * `classDeclarations` 쪽에서 단축형을 펼치려면 속성마다 문법을 아는 표가 필요하고 그 표가
+ * 낡는 값이 훨씬 크다(그쪽 머리말이 그 판단을 갖는다).
+ *
+ * **둘 다 적혀 있으면 소스에서 뒤에 오는 것이 이긴다** — 캐스케이드가 그렇고,
+ * `classDeclarations`가 `Map`의 삽입 순서로 소스 순서를 보존하므로 그대로 읽을 수 있다.
+ * 오늘 `shell.css`에 `flex-flow`는 0건이다(검산: `grep -n 'flex-flow' apps/web/src/shell.css`).
+ */
+function resolvedWrap(className: string): string | undefined {
+  let wrap: string | undefined
+  for (const [property, value] of DECLARATIONS.get(className) ?? []) {
+    if (property === 'flex-wrap') wrap = value
+    else if (property === 'flex-flow') {
+      wrap = value.split(/\s+/).find((token) => WRAP_KEYWORDS.has(token)) ?? wrap
+    }
+  }
+  return wrap
+}
+
+/** 이 클래스가 flex 상자인가. `flex-basis`는 상자가 flex가 아니면 아무 뜻이 없다. */
+function isFlexBox(className: string): boolean {
+  return /^(inline-)?flex$/.test(declared(className, 'display') ?? '')
+}
+
 describe('고르개는 감싼다 — `flex-basis: 100%`와 `flex-wrap`의 짝', () => {
   it('검사가 진짜 shell.css의 고르개 규칙을 읽는다', () => {
     // 경로가 어긋나거나 파서가 헛돌면 아래 표가 통째로 무의미해진다. 실물 값으로 확인한다.
@@ -148,28 +244,43 @@ describe('고르개는 감싼다 — `flex-basis: 100%`와 `flex-wrap`의 짝', 
   describe('2 · 담는 상자는 감싸는 flex다', () => {
     it.each(ROWS)('`.%s`를 담는 `.%s` — %s', (_child, container) => {
       // `display`가 flex가 아니면 `flex-basis`가 아예 아무 뜻이 없다 — 먼저 본다.
-      expect(declared(container, 'display')).toMatch(/^(inline-)?flex$/)
+      expect(isFlexBox(container)).toBe(true)
       // 이번에 고친 그 자리. 빠지면 기본값이 `nowrap`이고, 그때 위 `flex-basis: 100%`는
       // 자기 줄이 아니라 **줄을 터뜨리는 값**이 된다.
-      expect(declared(container, 'flex-wrap')).toBe('wrap')
+      expect(resolvedWrap(container)).toBe('wrap')
     })
   })
 
-  it('3 · 고르개의 flex 상자는 flex-wrap 을 고른 채로 적는다', () => {
-    // 값이 `nowrap`인 것을 막지 않는다 — 막는 것은 **안 적는 것**이다. 이번 고장의 뿌리가
-    // 그것이었다: 아무도 한 줄을 고르지 않았는데 한 줄이 됐다.
-    const missing = [...DECLARATIONS]
-      .filter(([name, rule]) => name.startsWith(SCOPE) && /^(inline-)?flex$/.test(rule.get('display') ?? ''))
-      .filter(([, rule]) => !rule.has('flex-wrap'))
-      .map(([name]) => name)
+  it('3 · 고르개의 flex 상자는 감싸거나, 한 줄인 근거가 적혀 있다', () => {
+    // **`flex-wrap: nowrap`을 적는 것으로는 빠져나갈 수 없다.** 앞 판은 *"안 적는 것만
+    // 막는다"*였는데, 그러면 `.wb-shell-menu-picker`의 감싸기를 `nowrap`으로 바꿔도 검사가
+    // 조용했다(실측: 12 통과). 그것은 부류를 닫은 것이 아니라 **선언이 있는지만** 본 것이다.
+    // 지금은 감싸든가 `ONE_LINE`에 근거를 적든가 둘 중 하나여야 한다.
+    const excused = new Set(ONE_LINE.map((entry) => entry.name))
+    const unwrapped = [...DECLARATIONS.keys()]
+      .filter((name) => SCOPE.test(name) && isFlexBox(name))
+      .filter((name) => resolvedWrap(name) !== 'wrap')
+      .filter((name) => !excused.has(name))
 
-    expect(missing).toEqual([])
+    // 실패하면 이름이 그대로 나온다. 감싸야 하면 `flex-wrap: wrap`을 적고, 한 줄이 옳다면
+    // 그것을 **재서 확인한 뒤** `ONE_LINE`에 근거와 함께 적어라.
+    expect(unwrapped).toEqual([])
+  })
+
+  it('3-b · `ONE_LINE`의 면제는 아직 필요한 것만 남는다', () => {
+    // 면제는 조용히 낡는다 — 그 클래스가 flex 상자를 그만두거나 감싸기를 갖게 되면 이 줄은
+    // 아무것도 면제하지 않으면서 "여기는 한 줄이 옳다"고 계속 말한다. 그 죽은 줄을 문다.
+    const stale = ONE_LINE.filter(
+      (entry) => !isFlexBox(entry.name) || resolvedWrap(entry.name) === 'wrap',
+    ).map((entry) => entry.name)
+
+    expect(stale).toEqual([])
   })
 
   it('4 · 자기 줄을 요구하는 고르개 클래스는 전부 위 표에 있다', () => {
     const listed = new Set(OWN_LINE.map((entry) => entry.child))
     const unlisted = [...DECLARATIONS.keys()]
-      .filter((name) => name.startsWith(SCOPE))
+      .filter((name) => SCOPE.test(name))
       .filter((name) => wantsOwnLine(name))
       .filter((name) => !listed.has(name))
 
