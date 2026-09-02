@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { validatePage, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
-import { openPage, pageDetail, pageDoc, PAGE_ID } from '../editor-harness'
+import { deselect, openPage, PAGE_ID, pageDetail, pageDoc } from '../editor-harness'
 import '../../src/catalog-setup'
 
 /** 버튼 하나와 목록 하나. 버튼이 트리거, 목록이 타겟이다. */
@@ -84,6 +84,10 @@ function sentences(): string[] {
 describe('상호작용 탭 — 자리', () => {
   it('노드를 고르지 않으면 그렇다고 말한다', async () => {
     await openPage(DOC)
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
     await openInteractionTab()
 
     expect(screen.getByText('상호작용을 걸 노드를 캔버스나 구조 트리에서 고르세요')).toBeTruthy()
@@ -303,21 +307,28 @@ describe('상호작용 탭 — 편집 파이프라인(D6)', () => {
  * | `NodeRules`가 규칙 목록을 `useState`로 들게 한다(초안을 든다) | **죽지 않는다** |
  *
  * **다른 장치로 원인을 쟀다.** 실패 직후 화면을 찍어 보니 저작 자리가 통째로 사라지고
- * *"상호작용을 걸 노드를 고르세요"*가 떠 있다 — **선택이 풀린 것이다.** `recover`가
- * `loadPage`를 지나고 그것이 `selectedNodeId`를 `null`로 놓기 때문에(P2b-2의 그 자리는
- * *"다른 페이지의 id가 남으면 안 된다"*는 다른 이유로 있다) `NodeRules`가 언마운트되고,
- * 초안을 들었더라도 함께 사라진다.
+ * *"상호작용을 걸 노드를 고르세요"*가 떠 있었다 — **선택이 풀린 것이다.** `recover`가
+ * `loadPage`를 지나고 그것이 `selectedNodeId`를 `null`로 놓았기 때문에(P2b-2의 그 자리는
+ * *"다른 페이지의 id가 남으면 안 된다"*는 다른 이유로 있었다) `NodeRules`가 언마운트되고,
+ * 초안을 들었더라도 함께 사라졌다.
  *
- * **그래서 초안을 안 드는 설계의 하중은 오늘 0이다.** 실패 경로 셋이 전부 저작 자리를
- * 먼저 없앤다: 409·422·네트워크는 위의 재설정, 세션 만료는 `EditAlert`이 `<SignedOut />`으로
- * 화면을 갈아 끼운다, 로컬 적용 실패는 정상 경로에서 나지 않는다.
+ * ---
  *
- * **그래도 초안을 두지 않는다.** 이 성질을 지탱하는 것이 *"다른 이유로 있는 장치"*이므로,
- * 재조회 뒤 선택을 되살리는 판(사용자가 원할 만한 개선이다)이 생기면 바로 깨진다 —
- * P5-1이 `throw`의 하중 0을 두고 같은 판단을 했다(그쪽 이월 §1.1).
+ * ## 그리고 그 판이 왔다 — 이제 하중이 0이 아니다
+ *
+ * 위 문단은 *"이 성질을 지탱하는 것이 다른 이유로 있는 장치이므로, **재조회 뒤 선택을
+ * 되살리는 판(사용자가 원할 만한 개선이다)이 생기면 바로 깨진다**"*고 적어 두었다.
+ * 그 판이 이것이다: `loadPage`가 **같은 페이지를 다시 싣는 경로에서는 선택을 건드리지
+ * 않게** 됐다(`store/editor-store.ts`의 `#selectionFor` — 루트 자동 선택이 그 갈래를
+ * 요구했다). 재조회가 사용자의 자리를 뺏지 않는 것이 목적이고, 409 복구가 그 경로다.
+ *
+ * **그래서 이제 실패 뒤에도 저작 자리가 남는다.** 아래 케이스가 재는 것이 그것으로 바뀌었고,
+ * 동시에 *"문서가 유일한 진실"*이라는 패널 설계의 하중이 **0에서 벗어났다** — 규칙 목록을
+ * `useState`로 들게 심으면 이제 죽는다: 실패 통지를 보면서 자기 규칙이 그대로 있는 화면이
+ * 곧 P5-1 이월 §1의 부류다. 아래 케이스가 그 자리를 잡는다(목록이 서버 상태를 보인다).
  */
 describe('상호작용 탭 — 저장에 실패하면', () => {
-  it('실패를 말하고, 저작 자리가 사라진다(선택이 풀린다)', async () => {
+  it('실패를 말하고, 저작 자리는 남은 채 문서가 서버 값으로 되돌아간다', async () => {
     const patchOps: ApiClient['patchOps'] = async () => {
       // 서버는 낡은 `baseSeq`에 **409 `conflict`**를 낸다(`ApiErrorCode`에 `stale`은 없다 —
       // 그렇게 적었다가 타입체크가 잡았다).
@@ -334,10 +345,13 @@ describe('상호작용 탭 — 저장에 실패하면', () => {
 
     // 실패를 말한다(D8의 한 자리).
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('페이지가 이미 변경되었습니다'))
-    // **저작 자리가 사라진다 — 선택이 풀렸기 때문이다**(위 머리말의 실측).
-    expect(screen.getByText('상호작용을 걸 노드를 캔버스나 구조 트리에서 고르세요')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '상호작용 추가' })).toBeNull()
-    // **그리고 조작이 문서에 남아 있지 않다** — 목록이 서버 상태를 보인다.
+    // **저작 자리는 그대로다** — 재조회가 선택을 건드리지 않으므로(위 머리말) `NodeRules`가
+    // 마운트된 채 남는다. 고르던 자리에서 바로 다시 시도할 수 있다는 뜻이다.
+    expect(screen.getByRole('button', { name: '상호작용 추가' })).toBeTruthy()
+    expect(screen.queryByText('상호작용을 걸 노드를 캔버스나 구조 트리에서 고르세요')).toBeNull()
+    // **그리고 조작이 문서에 남아 있지 않다** — 목록이 서버 상태를 보인다. **이 단언이
+    // 이제 하중을 진다**: 패널이 규칙 목록을 자기 `useState`로 들었다면 문서만 되돌아가고
+    // 화면에는 내 규칙이 남아, 사용자는 취소됐다는 알림을 보면서 그것을 본다.
     expect(screen.getByText('아직 상호작용이 없습니다')).toBeTruthy()
   })
 

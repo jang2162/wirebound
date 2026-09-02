@@ -272,8 +272,9 @@ describe('캔버스', () => {
 
   it('노드를 누르면 그 노드가 선택된다', async () => {
     await openPage(DOC)
-    // 양성 대조: 열자마자 고른 것이 있으면 아래 단언이 무의미하다.
-    expect(shellStore().getState().selectedNodeId).toBeNull()
+    // 양성 대조: 열자마자 이미 `n-list`가 고른 것이면 아래 단언이 무의미하다. **`null`이
+    // 아니라 루트다** — 페이지를 열면 스토어가 루트를 고른 채로 시작한다.
+    expect(shellStore().getState().selectedNodeId).toBe('n-root')
 
     fireEvent.click(requireNode('n-list'))
 
@@ -298,8 +299,9 @@ describe('캔버스', () => {
 
   it('편집 모드에서 선택 노드에 아웃라인이 붙는다', async () => {
     await openPage(DOC)
-    // 양성 대조: 고르기 전에는 아웃라인이 없다.
-    expect(selectionOutline()).toBeNull()
+    // 양성 대조: 고르기 전 아웃라인은 **루트**에 붙어 있다(페이지를 열면 그것이 고른
+    // 자리다). `n-list`가 아니라는 것이 아래 단언을 뜻있게 만드는 값이다.
+    expect(selectionOutline()?.getAttribute('data-wb-selected-id')).toBe('n-root')
 
     fireEvent.click(requireNode('n-list'))
 
@@ -433,9 +435,10 @@ describe('캔버스', () => {
     fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
 
     await waitForNode('n-other')
-    // 노드 id는 문서 안에서만 뜻이 있다. 남으면 존재하지 않는 노드를 가리킨다.
-    expect(shellStore().getState().selectedNodeId).toBeNull()
-    expect(selectionOutline()).toBeNull()
+    // 노드 id는 문서 안에서만 뜻이 있다. 남으면 존재하지 않는 노드를 가리킨다 — 그것을
+    // 막는 것과 **새 문서의 루트**로 옮기는 것이 한 판정이다(`#selectionFor`).
+    expect(shellStore().getState().selectedNodeId).toBe('n-other')
+    expect(selectionOutline()?.getAttribute('data-wb-selected-id')).toBe('n-other')
   })
 
   it('주소가 바뀐 커밋에 앞 페이지가 그려지지 않는다', async () => {

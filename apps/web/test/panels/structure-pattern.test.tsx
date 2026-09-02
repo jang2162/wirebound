@@ -12,7 +12,7 @@ import { applyOps, invertOps, type PageDocument, type PatchOp } from '@wirebound
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
 import { SYSTEM_ADMIN_THEME_ID } from '../helpers'
-import { HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
+import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 
 /**
  * ```
@@ -199,7 +199,10 @@ describe('패턴 삽입 — D5: 꽂는 자리', () => {
     const backend = server()
     await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
 
-    // 아무것도 고르지 않은 채로 연다.
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
     expect(selectedType()).toBeNull()
     await insertPattern()
     await waitFor(() => {

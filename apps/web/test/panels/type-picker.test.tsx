@@ -15,7 +15,7 @@ import {
 } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
-import { HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
+import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
 import { createNode } from '../../src/edit/create-node'
 import '../../src/catalog-setup'
 
@@ -334,6 +334,10 @@ describe('타입 목록과 노드 추가', () => {
 
   it('고른 것이 없으면 추가 버튼이 둘 다 비활성이다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
 
     expect(toolButton('안에 추가').disabled).toBe(true)
     expect(toolButton('아래 추가').disabled).toBe(true)
