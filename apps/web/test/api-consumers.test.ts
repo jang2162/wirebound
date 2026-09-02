@@ -88,10 +88,14 @@ function consumers(): Map<string, string[]> {
  */
 const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   login: ['../src/routes/login.tsx'],
-  // **부르는 자리가 없다.** 화면에 로그아웃이 없다(P2b가 만들지 않았다) — 세션을 끊는 길은
-  // `api/failure.tsx`의 `signed-out` 경로뿐이고 그쪽은 서버가 401을 낼 때 걸린다.
-  // 로그아웃 단추를 만들면 이 줄이 먼저 죽는다.
-  logout: [],
+  // **앞 판은 `[]`였다 — *"화면에 로그아웃이 없다(P2b가 만들지 않았다). 로그아웃 단추를
+  // 만들면 이 줄이 먼저 죽는다"*고 적혀 있었고 그대로 됐다.** 셸 머리의 계정 묶음이
+  // 그 자리다(`session/session-menu.tsx`).
+  //
+  // **부르는 자리가 하나인 것이 요점이다.** 세션을 끊는 길이 둘이 되면 한쪽만
+  // `invalidate()`를 부르는 판이 생기고, 그러면 쿠키는 지워졌는데 화면은 로그인한 줄
+  // 아는 상태가 남는다 — 그 상태의 모양은 `session/session-context.tsx` 머리말의 순환이다.
+  logout: ['../src/session/session-menu.tsx'],
   me: ['../src/session/session-context.tsx'],
   listProjects: ['../src/projects/use-project-commands.tsx'],
   // **소비자가 둘이고 읽는 것이 다르다.** 셸은 `name`·`id`를 그리려고 부르고, 테마 저작

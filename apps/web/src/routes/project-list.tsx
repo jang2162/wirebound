@@ -18,6 +18,7 @@ import { DeleteConfirm } from '../projects/delete-confirm'
 import { projectAbilities } from '../projects/project-actions'
 import { ProjectForm } from '../projects/project-form'
 import { useProjectCommands, type ProjectCommands } from '../projects/use-project-commands'
+import { SessionMenu } from '../session/session-menu'
 import type { ProjectDetail } from '../api/types'
 
 /** 조회가 성공했는데 결과가 비어 있을 때의 안내. */
@@ -38,7 +39,18 @@ export function ProjectListRoute(): ReactElement {
     // 셸 밖의 라우트지만 스타일은 `src/shell.css` 한 파일에 있고 `wb-shell-` 접두어를
     // `test/shell-css.test.ts`가 기계로 지킨다.
     <main className="wb-shell-project-list">
-      <h1 className="wb-shell-project-list-title">프로젝트</h1>
+      {/* **여기에도 앱에서 나가는 길이 있어야 한다.** 셸 머리에만 두면 프로젝트를 하나
+          열지 않고는 로그아웃할 수 없다 — 원래 고장이 *"로그아웃 UI가 앱 전체에 하나도
+          없다"*였으므로 이 화면까지 닫아야 그 항목이 끝난다.
+
+          **`SessionMenu`는 셸 전용이 아니다** — `projectId`를 받지 않고 세션 컨텍스트만
+          본다(`session/session-menu.tsx`). 이 화면이 팔레트 루트 넷 중 하나라
+          (`shell.css`의 팔레트 블록에 `.wb-shell-project-list`가 있다) 그 안의
+          `var(--wb-shell-*)`도 여기서 정의돼 있다 — 없으면 조용히 검게 나온다. */}
+      <div className="wb-shell-project-head">
+        <h1 className="wb-shell-project-list-title">프로젝트</h1>
+        <SessionMenu />
+      </div>
 
       {/* **여는 버튼도 잠근다(D2).** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
           그것을 화면에 보이게 한다 — P2b-4에서 여는 쪽 하나가 빠져 사고가 났다. */}

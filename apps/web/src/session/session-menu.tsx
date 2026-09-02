@@ -1,0 +1,102 @@
+/**
+ * **앱에서 나가는 길**(누구로 들어와 있는지 + 로그아웃). 에디터 셸의 머리 오른쪽 끝에 산다.
+ *
+ * ## 왜 이것이 없었는가 — 그리고 왜 여기인가
+ *
+ * `api.logout()`은 P1부터 있었지만 **부르는 화면이 하나도 없었다**(검산:
+ * `grep -rn "로그아웃\|logout" apps/web/src`가 `api/client.ts`의 선언과 `http-client.ts`의
+ * 구현 말고 아무것도 내지 않았다). 즉 이 앱에 들어온 사람이 **세션을 끝낼 길이 없었다** —
+ * 쿠키가 만료되기를 기다리거나 브라우저의 저장소를 손으로 지우는 것뿐이다.
+ *
+ * **머리의 오른쪽 끝인 것은 그것이 계정의 자리이기 때문이다.** 셸 머리의 갈래는 왼쪽이
+ * *"어디에 있고 어디로 나가는가"*(`.wb-shell-lead`)이고 오른쪽이 *"이 설계서로 무엇을
+ * 하는가"*(도구들)인데, 계정은 둘 다 아니다 — **설계서가 아니라 앱 전체에 걸리는 것**이라
+ * 도구 묶음 뒤, 줄의 끝에 둔다.
+ *
+ * ## 누구인지 함께 보인다 — 이유
+ *
+ * 1. **로그아웃은 무엇을 끝내는지 말하고 눌러야 하는 단추다.** 이름이 없으면 여럿이 쓰는
+ *    브라우저에서 *"내 세션인가"*를 확인할 길이 화면에 없다.
+ * 2. **이미 손에 있는 값이다.** `useSessionUser()`가 마운트의 `me()` 결과를 들고 있어
+ *    요청이 새로 나가지 않는다.
+ * 3. **코멘트 탭이 같은 값으로 *"내가 쓴 것"*을 가른다**(`session/session-context.tsx`).
+ *    같은 사실을 두 자리가 말하면 사용자가 그 판정을 화면에서 검산할 수 있다.
+ *
+ * **`null`이면 이름 자리를 비운다.** 그것은 실패가 아니라 *"아직 누구인지 모른다"*이고
+ * (그 파일의 `useSessionUser` 주석), 누구인지 몰라도 로그아웃은 유효한 동작이다.
+ *
+ * ## 실패했을 때 — 상태를 끊지 않는다
+ *
+ * 성공하면 `invalidate()`로 세션을 끊는다. **주소를 여기서 옮기지 않는다** —
+ * `RequireAuth`가 `anonymous`를 보고 `/login`으로 보낸다(`routes/login.tsx`가 성공 뒤
+ * `navigate`를 안 하는 것과 같은 근거: 목적지 규칙이 한 곳에 남는다).
+ *
+ * **실패하면 끊지 않고 이유를 말한다.** 서버가 세션을 안 지웠는데 화면만 끊으면 *"로그아웃
+ * 했다"*가 거짓이 된다 — 쿠키는 살아 있어 다른 탭·다른 창이 그대로 들어간다. 그래서
+ * `role="alert"` 한 문장으로 남긴다(이 셸의 다른 실패와 같은 모양 — `shell/edit-alert.tsx`).
+ *
+ * **`signed-out`만 성공으로 친다.** 서버가 *"세션이 없다"*고 답한 것은 로그아웃이 이루려던
+ * 상태가 이미 참이라는 뜻이다. 그때 오류를 그리면 사용자는 나가지 못한 줄 알고 다시 누른다.
+ * 판정 자체는 `api/failure.tsx`가 갖는다(D5) — 여기서 `code`를 다시 읽지 않는다.
+ */
+import { useState, type ReactElement } from 'react'
+import { useApi } from '../api/context'
+import { toFailure } from '../api/failure'
+import { useInvalidateSession, useSessionUser } from './session-context'
+
+/** 서버가 이유를 주지 않은 실패(네트워크 단절 등)에 쓸 문장. */
+const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
+
+export function SessionMenu(): ReactElement {
+  const api = useApi()
+  const user = useSessionUser()
+  const invalidate = useInvalidateSession()
+  /** 실패 문장. **`Failure`를 통째로 들지 않는다** — `signed-out`은 아래에서 성공으로
+   * 접히므로 이 자리에 올 수 있는 것은 문장 하나뿐이다. */
+  const [failure, setFailure] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function run(): Promise<void> {
+    setBusy(true)
+    setFailure(null)
+    try {
+      await api.logout()
+    } catch (caught) {
+      const caughtFailure = toFailure(caught, UNKNOWN_FAILURE)
+      // 세션이 이미 없다는 답은 실패가 아니다(머리말). 아래로 흘려보내 끊는다.
+      if (caughtFailure.kind === 'message') {
+        setFailure(caughtFailure.message)
+        setBusy(false)
+        return
+      }
+    }
+    // **여기 뒤로 상태를 놓지 않는다.** 끊는 순간 문지기가 로그인으로 보내 이 컴포넌트가
+    // 사라지므로, `setBusy(false)`는 사라진 것에 거는 일이 된다.
+    invalidate()
+  }
+
+  return (
+    /* **묶음과 통지가 형제다** — 통지를 묶음 **안**에 넣으면 머리의 그 줄이 두 줄로 두꺼워진다.
+       밖에 두면 `.wb-shell-session-alert`의 `flex-basis: 100%`가 머리의 `flex-wrap`을 타고
+       아랫줄로 내려간다 — `.wb-shell-edit-alert`와 같은 자리이고 같은 장치다. */
+    <>
+      <div className="wb-shell-session">
+        {user !== null && <span className="wb-shell-session-user">{user.name}</span>}
+        {/* 요청이 도는 동안 잠근다 — 두 번 눌러 두 번 나갈 이유가 없다(로그인 폼과 같은 관례). */}
+        <button
+          type="button"
+          className="wb-shell-session-logout"
+          disabled={busy}
+          onClick={() => void run()}
+        >
+          로그아웃
+        </button>
+      </div>
+      {failure !== null && (
+        <p className="wb-shell-session-alert" role="alert">
+          {failure}
+        </p>
+      )}
+    </>
+  )
+}

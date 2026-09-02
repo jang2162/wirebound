@@ -11,8 +11,19 @@
  * 구조 트리 쪽은 P2b가 이미 닫았고 `routes/editor-shell.test.tsx`가 잰다. **여기가 재는
  * 것은 우측 탭이다** — P5-1 이월 §5가 지목하고 P5-2가 안 고친 자리다(`RightPanel`이
  * `mode`를 안 읽었다).
+ *
+ * ## 뷰 모드가 반만 뷰 모드였다
+ *
+ * 셸이 뷰 모드에서 DOM에서 빼는 것은 **구조 트리 하나**였다. 좌측의 **메뉴 편집
+ * 툴바**(하위 메뉴·페이지 추가·이름 변경·삭제·위로·아래로·들여쓰기·내어쓰기·옮기기)와
+ * **페이지 JSON 패널**(내보내기 + 파일 고르개 + JSON 입력 + 가져오기)은 그대로 남아
+ * **눌리는 상태**였다(브라우저 실측). §9가 구조 트리를 접는 근거(*"편집 도구는 편집
+ * 모드에 있다"*)는 그 둘에 똑같이 걸리는데 한쪽만 걸려 있었다.
+ *
+ * **아래 셋이 그 자리다.** 방식도 구조 트리와 같다 — `hidden`이 아니라 DOM에서 제거이고,
+ * 그 근거와 *"테스트가 둘을 구분하지 못한다"*는 사실은 `routes/editor.tsx`의 그 주석에 있다.
  */
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import {
   PROJECT_NAME,
@@ -209,5 +220,64 @@ describe('§9 — 페이지 설명 탭', () => {
 
     expect(await screen.findByText('페이지를 열면 설명이 보입니다')).toBeTruthy()
     expect(calls).toBe(0)
+  })
+})
+
+describe('§9 — 좌측의 편집 도구도 편집 모드에 있다', () => {
+  /** 좌측 상자. 툴바·JSON 패널을 여기 안에서 찾아 다른 자리의 같은 이름과 섞이지 않게 한다. */
+  function treeRegion(): HTMLElement {
+    return screen.getByRole('region', { name: '메뉴·페이지 트리' })
+  }
+
+  it('뷰 모드에서는 메뉴 편집 툴바가 없다', async () => {
+    await openPage(DOC)
+    // 양성 대조: 편집 모드에는 있다. 이것이 없으면 툴바를 아예 안 그리는 구현도 통과한다.
+    expect(within(treeRegion()).getByRole('group', { name: '메뉴 편집' })).toBeTruthy()
+
+    toView()
+
+    expect(within(treeRegion()).queryByRole('group', { name: '메뉴 편집' })).toBeNull()
+    // **툴바 안의 조작 이름으로도 확인한다.** 상자만 지우고 버튼을 다른 데로 옮긴 판이
+    // 위 단언 하나로는 통과한다 — 브라우저에서 실제로 눌리는 것을 본 둘을 이름으로 못박는다.
+    expect(screen.queryByRole('button', { name: '이름 변경' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '옮기기' })).toBeNull()
+  })
+
+  it('뷰 모드에서는 페이지 JSON 패널이 없다', async () => {
+    await openPage(DOC)
+    expect(within(treeRegion()).getByRole('region', { name: '페이지 JSON' })).toBeTruthy()
+
+    toView()
+
+    expect(within(treeRegion()).queryByRole('region', { name: '페이지 JSON' })).toBeNull()
+    // 가져오기 폼은 명백히 편집이다. 상자만 지우고 폼을 남긴 판을 가른다.
+    expect(screen.queryByRole('button', { name: '페이지 가져오기' })).toBeNull()
+    expect(screen.queryByLabelText('가져올 페이지 제목')).toBeNull()
+    // **`페이지 내보내기`도 함께 간다 — 판정이다.** 읽기 동작이지만 이 상자의 축은
+    // *"페이지를 JSON으로 주고받는다"*라는 저작 도구이고, 설계서를 **읽는** 사람의
+    // 내려받기는 셸 머리의 `내보내기`(§11.3)가 두 모드 모두에서 낸다.
+    expect(screen.queryByRole('button', { name: '페이지 내보내기' })).toBeNull()
+  })
+
+  it('뷰 모드에서도 메뉴 트리 자체는 남는다', async () => {
+    // **접히는 것은 편집 도구뿐이다.** 트리까지 사라지면 뷰 모드에서 다른 페이지로 옮겨
+    // 갈 길이 없어진다 — 구조 트리를 접으면서 메뉴 트리를 남기는 것과 같은 선이다.
+    await openPage(DOC)
+
+    toView()
+
+    expect(within(treeRegion()).getByText('회원관리')).toBeTruthy()
+    expect(within(treeRegion()).getByRole('link', { name: '회원 목록' })).toBeTruthy()
+  })
+
+  it('편집 모드로 돌아오면 둘 다 되살아난다', async () => {
+    // 한 방향만 보면 "뷰 모드를 한 번 지나면 영영 없다"는 구현도 위를 통과한다.
+    await openPage(DOC)
+    toView()
+
+    toEdit()
+
+    expect(within(treeRegion()).getByRole('group', { name: '메뉴 편집' })).toBeTruthy()
+    expect(within(treeRegion()).getByRole('region', { name: '페이지 JSON' })).toBeTruthy()
   })
 })

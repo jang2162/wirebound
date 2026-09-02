@@ -96,9 +96,27 @@ export function MenuTree(props: {
    * `restoredToken`). 그대로 훅에 넘긴다.
    */
   reloadToken: number
+  /**
+   * **편집 도구를 낼 것인가.** 셸이 `mode === 'edit'`를 넘긴다(`routes/editor.tsx`).
+   *
+   * **모드를 여기서 읽지 않고 받는 이유.** 이 컴포넌트는 `EditorStore`를 안 보고 산다 —
+   * 트리는 문서 편집 상태(문서·`headSeq`·undo 스택)와 무관하고, 여기서 스토어를 구독하기
+   * 시작하면 편집이 일어날 때마다 트리가 다시 그려진다. 그리고 §9의 *"뷰 모드에서 무엇이
+   * 접히는가"*는 셸의 판단이라 그 표가 한 파일에 모여 있는 편이 읽힌다(구조 트리·되돌리기·
+   * 우측 탭이 이미 거기서 갈린다).
+   *
+   * **`false`면 셋이 함께 간다:** 툴바 · 페이지 JSON 패널 · 편집 단축키. 셋을 따로 가르지
+   * 않는 것은 **같은 조작에 닿는 세 입구**이기 때문이다 — 툴바만 감추면 `Delete`·`Alt+↑`가
+   * 그대로 남아 뷰 모드에서 메뉴가 지워진다.
+   */
+  editable: boolean
 }): ReactElement {
   // **훅을 부르는 자리는 여기 하나다**(D2의 전제). 툴바는 결과를 prop으로 받는다 —
   // 두 번째 호출자가 생기면 `busy` 잠금이 각자 것이 된다.
+  //
+  // **`editable`이 false여도 훅은 그대로 돈다.** 트리를 조회하는 것이 이 훅이라 끄면
+  // 뷰 모드에서 트리 자체가 사라진다. 조작은 부르는 자리가 없어져서 닫히는 것이지
+  // 훅이 꺼져서 닫히는 것이 아니다.
   const commands = useTreeCommands(props)
   const { state } = commands
 
@@ -120,6 +138,11 @@ export function MenuTree(props: {
    * 건 확인이 잠금 해제 뒤까지 살아남았다(리뷰가 잡았고 재현했다).
    */
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    // **뷰 모드에서는 단축키도 없다.** 툴바만 감추면 여기 아홉 조작이 키로 그대로 살아
+    // 있어, 화면에 아무 단추도 없는 상태에서 `Delete`가 메뉴를 지운다 — `disabled`를
+    // 지나지 않는다는 이 표의 성질(아래 `abilities` 검사 주석)이 여기서는 구멍이 된다.
+    if (!props.editable) return
+
     /**
      * **값을 넣거나 고르는 표면에서 난 키는 단축키를 찾기 전에 돌려보낸다**(P7-2 이월 §2,
      * P7-3 D11).
@@ -216,11 +239,30 @@ export function MenuTree(props: {
           />
         ))}
       </ul>
-      {/* 툴바가 트리 **아래**인 것은 `StructureToolbar`와 같은 자리 규칙이다. */}
-      <MenuToolbar commands={commands} />
+      {/* 툴바가 트리 **아래**인 것은 `StructureToolbar`와 같은 자리 규칙이다.
+
+          **뷰 모드에서는 DOM에서 뺀다** — `hidden`이 아니다. 근거는 구조 트리를 그렇게 뺀
+          자리에 적혀 있고(`routes/editor.tsx`), *"테스트가 두 방식을 구분하지 못한다"*는
+          것까지 그쪽이 적고 있다. 앞 판은 이 자리가 뷰 모드에서 그대로 남아 **`이름 변경`·
+          `옮기기`가 눌리는 상태**였다(브라우저 실측).
+
+          닫혀 있던 인라인 입력(`TreeInput`·`MenuPicker`)도 함께 사라진다 — 그 상태는 훅이
+          들고 있으므로 편집 모드로 돌아오면 열려 있던 그대로 되살아난다(구조 트리의 선택이
+          스토어에 남는 것과 같은 결). */}
+      {props.editable && <MenuToolbar commands={commands} />}
       {/* **페이지 JSON은 툴바 아래다**(P7-3 T5). 같은 상자 안인 것이 요점이고, 그래서 위
-          `handleKeyDown`이 `isTypingSurface`를 지난다(D11). */}
-      <PageJsonPanel projectId={props.projectId} pageId={props.pageId} commands={commands} />
+          `handleKeyDown`이 `isTypingSurface`를 지난다(D11).
+
+          **뷰 모드에서는 `페이지 내보내기`까지 함께 간다 — 판정이고, 되돌리지 마라.**
+          그것 하나는 읽기 동작이 맞다. 그래도 남기지 않는 이유는 이 상자의 축이 *"페이지를
+          JSON으로 주고받는다"*라는 **저작·연동용 아티팩트**이고 내보내기와 가져오기 폼이 한
+          덩어리이기 때문이다. 읽기라는 이유로 그 하나만 남기면 패널에 솔기가 하나 더 생기는데,
+          그 대가로 얻는 것이 *"편집 모드로 한 번 돌아가면 되는 일"*뿐이다. **설계서를 읽는
+          사람의 내려받기는 셸 머리의 `내보내기`(§11.3)가 두 모드 모두에서 낸다** — 그쪽은
+          역할로도 감추지 않는다(`shell/export-panel.tsx`). */}
+      {props.editable && (
+        <PageJsonPanel projectId={props.projectId} pageId={props.pageId} commands={commands} />
+      )}
     </div>
   )
 }

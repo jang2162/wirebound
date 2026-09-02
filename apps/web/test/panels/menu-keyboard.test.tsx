@@ -343,3 +343,44 @@ describe('통합', () => {
     await waitFor(() => expect(tool('아래로').disabled).toBe(false))
   })
 })
+
+describe('뷰 모드에서는 단축키가 듣지 않는다 (§9)', () => {
+  /**
+   * **툴바를 감추는 것만으로는 안 닫힌다.** 단축키는 `disabled`를 지나지 않으므로
+   * (위 `비활성인 조작은 단축키로도 실행되지 않는다`가 재는 그 성질) 툴바가 DOM에서
+   * 빠져도 키는 그대로 살아 있다 — 화면에 아무 단추도 없는데 `Delete`가 메뉴를 지운다.
+   * 그래서 `MenuTree`가 `editable`로 셋(툴바·페이지 JSON·이 핸들러)을 함께 가른다.
+   */
+  function toView(): void {
+    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+  }
+
+  it('Alt+화살표가 아무것도 옮기지 않는다', async () => {
+    const api = await open()
+    // 양성 대조는 편집 모드에서 이미 잰다(위 `Alt+화살표가 위/아래로 옮긴다`).
+    fireEvent.click(menuButton('등급'))
+
+    toView()
+    fireEvent.keyDown(keyTarget(), { key: 'ArrowUp', altKey: true })
+    fireEvent.keyDown(keyTarget(), { key: 'ArrowRight', altKey: true, shiftKey: true })
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(api.updateMenu).not.toHaveBeenCalled()
+  })
+
+  it('Delete가 삭제 확인조차 걸지 않는다', async () => {
+    // **확인이 안 걸리는 것까지 본다.** 툴바가 없으니 확인 단추도 안 보이는데, 걸려만
+    // 있으면 편집 모드로 돌아온 순간 `정말 삭제합니까?`가 떠 있다 — 사용자가 건 적 없는
+    // 확인이다.
+    const api = await open()
+    fireEvent.click(menuButton('권한'))
+
+    toView()
+    fireEvent.keyDown(keyTarget(), { key: 'Delete' })
+    fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
+
+    expect(api.deleteMenu).not.toHaveBeenCalled()
+    expect(within(toolbar()).queryByRole('button', { name: '정말 삭제합니까?' })).toBeNull()
+    expect(within(toolbar()).getByRole('button', { name: '삭제' })).toBeDefined()
+  })
+})
