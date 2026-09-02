@@ -389,6 +389,69 @@ export function variableUses(css: string): VariableUse[] {
   return uses
 }
 
+/**
+ * **클래스 하나에 곧바로 걸리는 선언들** — `.wb-shell-x { … }` 꼴 규칙의 본문이다.
+ * `shell-css-picker.test.ts`가 이것을 쓴다: *"이 상자가 감싸도록 선언돼 있는가"*를 물으려면
+ * 규칙 **본문**을 봐야 하는데, 위의 셋(`ruledClasses`·`paletteRoots`·`declaredVariables`)은
+ * 이름만 낸다.
+ *
+ * **`.x` 하나뿐인 선택자만 센다.** `.x:disabled`·`.x[aria-pressed]`·`.x.y`는 **조건이 붙은
+ * 규칙**이라 "이 클래스를 붙이면 늘 걸리는 값"이 아니다 — 섞어 담으면 부르는 쪽이
+ * *"선언돼 있다"*를 잘못 읽는다. `shell.css`에 다중 클래스 선택자는 0개다(`ruledClasses`의
+ * 머리말이 그 검산을 갖는다).
+ *
+ * **같은 클래스에 규칙이 여럿이면 뒤엣것이 이긴다.** 특이도가 같으므로 캐스케이드가
+ * 그렇게 정한다. 원문 순서를 그대로 따라가면 되는 자리다.
+ *
+ * **속성 이름은 소문자로 내리고 값은 그대로 둔다.** 일반 속성 이름은 ASCII 대소문자를
+ * 무시하지만(위 대소문자 표의 `#g`) 값은 그렇지 않은 것이 섞여 있다(`content`의 문자열,
+ * `url()`). 키워드를 대조하는 쪽이 필요하면 **부르는 쪽에서** 접어라.
+ *
+ * **커스텀 프로퍼티(`--*`)는 빼지 않는다** — 이름만 소문자로 내려가면 `--Foo`와 `--foo`가
+ * 접혀 **다른 프로퍼티 둘이 하나가 된다**(위 표의 `#d`). 그래서 `--`로 시작하는 이름은
+ * 원문 그대로 담는다. 커스텀 프로퍼티를 세는 것이 일이면 `declaredVariables`가 그 자리다.
+ *
+ * **못 보는 것**(파서는 위의 셋과 같으므로 그쪽 목록이 그대로 걸린다):
+ *
+ * - **단축 속성을 펼치지 않는다.** `flex: 1 0 100%`는 `flex` 하나로 담기고 `flex-basis`로는
+ *   안 보인다. 펼치려면 속성마다 문법을 아는 표가 필요한데, 그 표가 낡는 쪽이 더 나쁘다 —
+ *   **부르는 쪽이 자기가 보는 속성의 단축형을 알고 함께 물어야 한다.**
+ * - `@media` 안의 규칙도 **같은 이름으로 담긴다.** 조건이 붙은 값인데 그것이 안 보인다.
+ *   지금 `shell.css`에 `@media`는 0건이다(검산: `grep -n '@media' apps/web/src/shell.css`).
+ *   첫 하나가 생기면 이 항목을 다시 읽어라 — 조건 밖의 값과 안의 값이 한 칸에 겹쳐 담긴다.
+ */
+export function classDeclarations(css: string): Map<string, Map<string, string>> {
+  const rules: Rule[] = []
+  scanRules(stripComments(css), rules, [])
+
+  const byClass = new Map<string, Map<string, string>>()
+  for (const rule of rules) {
+    for (const selector of splitTop(rule.prelude, ',')) {
+      // `.x` 하나뿐인 형태만. 의사 클래스·속성 선택자·결합자가 붙으면 여기서 걸러진다.
+      const match = /^\.([A-Za-z0-9_-]+)$/.exec(skeleton(selector).trim())
+      if (match === null) continue
+      const name = match[1] ?? ''
+
+      let declarations = byClass.get(name)
+      if (declarations === undefined) {
+        declarations = new Map<string, string>()
+        byClass.set(name, declarations)
+      }
+
+      for (const declaration of splitTop(rule.body, ';')) {
+        const colon = declaration.indexOf(':')
+        if (colon === -1) continue
+        const raw = declaration.slice(0, colon).trim()
+        if (raw === '') continue
+        // 커스텀 프로퍼티는 대소문자를 구분한다 — 위 표의 `#d`.
+        const property = raw.startsWith('--') ? raw : raw.toLowerCase()
+        declarations.set(property, normalize(declaration.slice(colon + 1)))
+      }
+    }
+  }
+  return byClass
+}
+
 /** 주석을 걷는다. 주석 안의 선택자·속성이 검사에 걸리면 안 된다(머리말이 그 예를 든다). */
 function stripComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, ' ')
