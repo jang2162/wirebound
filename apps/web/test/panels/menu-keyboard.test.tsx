@@ -13,6 +13,20 @@ import type { ApiClient } from '../../src/api/client'
 import type { MenuNode, PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { fakeApi, renderWithProviders } from '../helpers'
+import { stripComments } from '../store-access-guard'
+
+/**
+ * `menu-tree.tsx`의 원문. **`SHORTCUTS`를 값으로 import하지 않고 글자로 읽는 이유**는
+ * 아래 `표의 여섯을 다 덮는다`의 독블록에 있다. 읽는 방식은 `test/api-consumers.test.ts`·
+ * `test/store-access.test.ts`와 같은 것을 쓴다.
+ */
+const MENU_TREE_SOURCE = (
+  import.meta.glob('../../src/panels/menu-tree.tsx', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  }) as Record<string, string>
+)['../../src/panels/menu-tree.tsx'] as string
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT: ProjectDetail = { id: 'p-1', name: '설계서', slug: 'proj', description: null, role: 'owner' }
@@ -341,5 +355,117 @@ describe('통합', () => {
 
     gate.release?.()
     await waitFor(() => expect(tool('아래로').disabled).toBe(false))
+  })
+})
+
+describe('뷰 모드에서는 단축키가 듣지 않는다 (§9)', () => {
+  /**
+   * **툴바를 감추는 것만으로는 안 닫힌다.** 단축키는 `disabled`를 지나지 않으므로
+   * (위 `비활성인 조작은 단축키로도 실행되지 않는다`가 재는 그 성질) 툴바가 DOM에서
+   * 빠져도 키는 그대로 살아 있다 — 화면에 아무 단추도 없는데 `Delete`가 메뉴를 지운다.
+   * 그래서 `MenuTree`가 `editable`로 셋(툴바·페이지 JSON·이 핸들러)을 함께 가른다.
+   *
+   * ## 표를 순회한다 — 셋만 재던 것을 여섯으로 넓혔다 (리뷰가 지목했다)
+   *
+   * 앞 판은 `Delete`·`Alt+↑`·`Alt+Shift+→` **셋**만 눌렀다. 나머지 셋(`Backspace`·`Alt+↓`·
+   * `Alt+Shift+←`)도 그때 이미 죽고 있었지만 **지금 옳은 것과 앞으로 지켜지는 것은 다르다** —
+   * 케이스가 없으면 `handleKeyDown`에 키를 하나 더할 때 그것이 뷰 모드에서도 사는지 아무도
+   * 묻지 않는다.
+   *
+   * **`SHORTCUTS`를 import해서 순회하지 않는다 — 그럴 수 없다.** 그 표가 드는 것은
+   * `match: (event) => …`라는 **술어**이고, 술어에서 `fireEvent.keyDown`에 넘길 이벤트를
+   * 거꾸로 만들어 낼 방법이 없다(같은 술어를 만족하는 이벤트가 여럿이다). 그래서 아래
+   * `SHORTCUT_KEYS`가 여섯 조합을 손으로 든다 — **`editor-shell.test.tsx`가 문안을 다시
+   * 적는 것과 같은 형태**이고, 대신 `표의 여섯을 다 덮는다`가 그 손목록이 표와 어긋나면
+   * 죽는다.
+   *
+   * **다섯 항목이 여섯 조합인 것에 주의한다.** `remove` 하나가 `Delete`와 `Backspace`를
+   * 함께 받는다(macOS 노트북에 forward delete 키가 없다 — 위 표의 근거).
+   */
+
+  /**
+   * 뷰 모드에서 죽어야 하는 **여섯 조합**. `등급`을 고르면 여섯이 전부 활성이다
+   * (앞뒤 형제가 있고 · 앞 형제가 메뉴이며 · 부모가 있고 · 하위가 없다).
+   *
+   * `arms`는 **편집 모드에서 무엇이 관측되는가**다 — 양성 대조가 그것을 본다.
+   * 옮기기 넷은 `updateMenu`가 나가고, 삭제 둘은 요청 대신 **확인이 걸린다**(D7).
+   */
+  const SHORTCUT_KEYS = [
+    { name: 'Delete', init: { key: 'Delete' }, arms: 'confirm' },
+    { name: 'Backspace', init: { key: 'Backspace' }, arms: 'confirm' },
+    { name: 'Alt+Up', init: { key: 'ArrowUp', altKey: true }, arms: 'request' },
+    { name: 'Alt+Down', init: { key: 'ArrowDown', altKey: true }, arms: 'request' },
+    { name: 'Alt+Shift+Right', init: { key: 'ArrowRight', altKey: true, shiftKey: true }, arms: 'request' },
+    { name: 'Alt+Shift+Left', init: { key: 'ArrowLeft', altKey: true, shiftKey: true }, arms: 'request' },
+  ] as const
+
+  function toView(): void {
+    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+  }
+  function toEdit(): void {
+    fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
+  }
+  /** 삭제 확인이 걸려 있는가. **툴바에서만 보이므로** 편집 모드에서만 물을 수 있다. */
+  function confirmArmed(): boolean {
+    return within(toolbar()).queryByRole('button', { name: '정말 삭제합니까?' }) !== null
+  }
+
+  it.each(SHORTCUT_KEYS)(
+    '편집 모드에서 $name 가 조작을 낸다 — 양성 대조',
+    async ({ init, arms }) => {
+      // **이것이 없으면 표에서 키를 아예 지운 판도 아래 음성 케이스를 통과한다.**
+      const api = await open()
+      fireEvent.click(menuButton('등급'))
+
+      fireEvent.keyDown(keyTarget(), init)
+
+      if (arms === 'request') {
+        await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
+      } else {
+        // 삭제는 요청을 내지 않는다 — 한 번 더 눌러야 나간다(D7).
+        expect(confirmArmed()).toBe(true)
+        expect(api.deleteMenu).not.toHaveBeenCalled()
+      }
+    },
+  )
+
+  it.each(SHORTCUT_KEYS)('뷰 모드에서 $name 가 아무것도 하지 않는다', async ({ init }) => {
+    const api = await open()
+    fireEvent.click(menuButton('등급'))
+
+    toView()
+    fireEvent.keyDown(keyTarget(), init)
+
+    // 요청이 나갈 시간을 준다 — 안 주면 "아직 안 나갔다"와 "안 나간다"가 같아진다.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(api.updateMenu).not.toHaveBeenCalled()
+    expect(api.deleteMenu).not.toHaveBeenCalled()
+    // **확인이 걸리지 않은 것까지 본다.** 툴바가 없으니 뷰 모드에서는 안 보이는데, 걸려만
+    // 있으면 편집 모드로 돌아온 순간 사용자가 건 적 없는 `정말 삭제합니까?`가 떠 있다.
+    toEdit()
+    expect(confirmArmed()).toBe(false)
+    expect(within(toolbar()).getByRole('button', { name: '삭제' })).toBeDefined()
+  })
+
+  it('표의 여섯을 다 덮는다 — 키가 늘면 여기서 먼저 죽는다', () => {
+    /**
+     * **손목록과 `SHORTCUTS`가 어긋나면 운다.** 위 `SHORTCUT_KEYS`가 표를 import하지 못하는
+     * 대신 이 자리가 수를 맞대 본다 — 키를 하나 더하고 여기 안 적으면 그 키는 뷰 모드에서
+     * 아무도 안 묻는 채로 남는다.
+     *
+     * **닻은 `event.key === '`이다** — 표의 술어가 조합마다 그것을 하나씩 쓴다(`remove`는
+     * 둘이라 둘을 센다). 파일 전체를 세도 되는 것은 이 낱말이 `menu-tree.tsx`에서 그 표
+     * 안에서만 나오기 때문이다(검산: `grep -n "event.key" apps/web/src/panels/menu-tree.tsx`).
+     *
+     * **못 보는 것:** 술어를 다른 꼴로 쓰면(`['Delete','Backspace'].includes(event.key)`)
+     * 이 수가 어긋난다. 그때는 여기서 요란하게 죽으므로 사람이 읽고 고치면 된다 —
+     * 조용히 지나가지 않는 쪽이다. 주석 안의 인용은 `stripComments`가 걷는다.
+     */
+    const source = stripComments(MENU_TREE_SOURCE)
+    const declared = (source.match(/event\.key === '/g) ?? []).length
+
+    expect(declared, `SHORTCUTS의 조합 수가 바뀌었다: 표 ${declared} vs 케이스 ${SHORTCUT_KEYS.length}`).toBe(
+      SHORTCUT_KEYS.length,
+    )
   })
 })

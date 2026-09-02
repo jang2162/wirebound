@@ -22,7 +22,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { PageDetail, ProjectDetail } from '../api/types'
@@ -42,6 +42,7 @@ import { useRealtime } from '../realtime/use-realtime'
 import { ExportPanel } from '../shell/export-panel'
 import { SnapshotsPanel } from '../shell/snapshots-panel'
 import { projectAbilities } from '../projects/project-actions'
+import { SessionMenu } from '../session/session-menu'
 import { ThemePicker } from '../theme/theme-picker'
 import {
   EditorStore,
@@ -381,7 +382,29 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
   return (
     <div className="wb-shell">
       <header className="wb-shell-header">
-        <h1 className="wb-shell-title">{props.project.name}</h1>
+        {/* **머리의 왼쪽은 *"어디에 있고 어디로 나가는가"*다.** 오른쪽 도구들과 갈리는 축이
+            이것이라, 둘을 한 묶음으로 싸서 `space-between`이 사이를 벌리지 못하게 한다.
+
+            **여기 나가는 길이 없었다.** 제목이 `<h1>` 글자뿐이라 접근성 트리에서도
+            `heading`이고, 프로젝트 목록으로 가는 길이 화면에 **없었다** — 브라우저 뒤로
+            가기나 주소를 손으로 고치는 것뿐이었다. 셸 밖 라우트인 테마 저작 화면에는
+            `설계서로 돌아가기`가 있는데(`routes/theme-editor.tsx`) 정작 셸에만 없었다. */}
+        <div className="wb-shell-lead">
+          {/* **제목 자체를 링크로 만들지 않았다.** 링크의 글자는 **갈 곳**을 말해야 하는데
+              제목은 *"지금 여기"*를 말한다 — `관리자 콘솔 설계서`를 눌렀더니 프로젝트
+              **목록**으로 가는 것은 그 계약을 어긴다. 옆에 따로 두면 글자가 곧 목적지다.
+
+              **문안을 테마 저작 화면과 같은 꼴로 맞췄다**(`<목적지>로 돌아가기`). 두 화면이
+              같은 일을 다른 말로 부르면 그 자체가 외울 것이 된다.
+
+              `<button>`이 아니라 `<Link>`인 것은 **주소가 있는 이동**이기 때문이다 — 새 탭으로
+              열거나 주소를 공유할 수 있어야 한다(`routes/project-list.tsx`의 `ProjectRow`와
+              `panels/menu-tree.tsx`의 `PageLink`가 같은 근거로 링크다). */}
+          <Link className="wb-shell-back" to="/">
+            프로젝트 목록으로 돌아가기
+          </Link>
+          <h1 className="wb-shell-title">{props.project.name}</h1>
+        </div>
         {/* **되돌리기·다시 실행은 편집 모드에만 있다**(P5-3 리뷰가 찾았다).
             §9가 뷰 모드에서 구조 트리를 접고 속성 탭을 페이지 설명으로 바꾸는 것과 같은
             선이다 — **편집 도구는 편집 모드에 있다.**
@@ -423,6 +446,14 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             것이고 서버도 viewer에게 연다(§10 · P8-4 D4). 감추면 설계서를 **읽으라고** 부른
             사람이 그것을 가져갈 수 없다. */}
         <ExportPanel projectId={props.project.id} />
+        {/* **계정은 줄의 끝이다**(`session/session-menu.tsx`). 앞의 도구들이 전부
+            *"이 설계서로 무엇을 하는가"*인 것과 달리 이것은 **앱 전체**에 걸린다 — 왼쪽의
+            이동·정체성 묶음에 붙이지 않은 것도 그래서다: 그쪽은 *"이 설계서에서 나가는
+            길"*이고 이쪽은 *"앱에서 나가는 길"*이다.
+
+            **`projectId`를 받지 않는다.** 세션은 프로젝트에 매이지 않으므로 이 컴포넌트를
+            셸 밖(프로젝트 목록 등)에 그대로 옮겨 놓을 수 있다. */}
+        <SessionMenu />
         {/* 편집 실패 통지는 **한 자리**다(D8). 조회 실패처럼 화면마다 나누지 않는 것은,
             어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
             받고 보내지 못한 편집을 잃는다(D4). 셸 상단에 두면 어느 패널을 보고 있어도
@@ -445,10 +476,19 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
           {/* **복원이 트리도 바꾼다.** 스냅샷 시점에 있던 페이지가 지금 없거나 그
               반대다 — 문서만 다시 읽고 트리를 두면 목록이 존재하지 않는 페이지를 그린다.
               `resyncToken`은 여기 닿지 않는다(재연결은 이 페이지의 프레임만 잃는다). */}
+          {/* **편집 도구를 낼지는 셸이 정한다**(§9의 표가 여기 모여 있다 — 구조 트리·
+              되돌리기·우측 탭이 이미 이 파일에서 갈린다). 트리 안의 셋(메뉴 편집 툴바·
+              페이지 JSON 패널·편집 단축키)이 이 값 하나로 함께 갈린다 —
+              `panels/menu-tree.tsx`의 `editable` 주석이 왜 셋이 함께인지 적고 있다.
+
+              **앞 판에는 이 값이 없었고, 그래서 뷰 모드가 반만 뷰 모드였다:** 구조 트리는
+              접히는데 좌측의 편집 도구는 그대로 남아 눌렸다(브라우저 실측 —
+              `이름 변경`·`옮기기`). */}
           <MenuTree
             projectId={props.project.id}
             pageId={props.pageId}
             reloadToken={restoredToken}
+            editable={mode === 'edit'}
           />
         </ShellRegion>
         {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를

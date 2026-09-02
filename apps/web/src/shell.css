@@ -178,6 +178,33 @@
   cursor: default;
 }
 
+/* 머리의 왼쪽 묶음 — 나가는 길과 제목. **하나로 싸는 것이 요점이다**: 머리가
+   `justify-content: space-between`이라 둘을 따로 두면 그 사이를 벌려 링크가 제목에서
+   떨어져 나간다(`.wb-shell-theme-picker-group`이 같은 이유로 있다).
+
+   `min-width: 0`은 제목의 `text-overflow: ellipsis`가 살아 있게 한다 — flex 아이템의
+   기본 `min-width: auto`는 내용보다 작아지지 않아 줄임표 대신 묶음이 넘친다. */
+.wb-shell-lead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 프로젝트 목록으로 돌아가는 링크. **테마 저작 화면의 `.wb-shell-theme-back`과 같은 값이다** —
+   두 화면의 "돌아가기"가 같은 일이므로 크기·색이 갈리면 그 자체가 사용자에게 신호가 된다.
+   규칙을 합치지 않는 것은 `.wb-shell-zoom-fit`이 `.wb-shell-zoom-step`과 합치지 않는 것과
+   같은 근거다(한쪽의 생김새를 바꿀 때 다른 쪽이 끌려가면 안 된다).
+
+   `nowrap`인 것은 이 글자가 접히면 머리의 줄 높이가 흔들리기 때문이다 — 줄어들 것은 제목
+   쪽이고, 그쪽이 줄임표를 갖고 있다. */
+.wb-shell-back {
+  flex: none;
+  font-size: 12px;
+  color: var(--wb-shell-ink);
+  white-space: nowrap;
+}
+
 .wb-shell-title {
   margin: 0;
   font-size: 15px;
@@ -270,6 +297,103 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
   color: var(--wb-shell-muted);
+}
+
+/* 계정 묶음. 머리 줄의 **끝**이다 — 근거는 `session/session-menu.tsx` 머리말에 있다.
+   `margin-left: auto`를 걸지 않는다: 머리가 이미 `space-between`이라 마지막 조각이 오른쪽
+   끝에 선다.
+
+   ## 머리가 한 줄에 들어가는 폭 — 재서 적는다. 추정이 아니다
+
+   **아래 수는 전부 크롬에서 이분 탐색으로 잰 값이다**(셸의 실제 DOM에 이 파일을 그대로
+   씌우고, 상자 폭을 600~2400 사이에서 갈라 가며 머리 높이가 49px인 최소 폭을 찾았다).
+   `-270px` 쪽은 **이 판이 더한 둘(`.wb-shell-back`·`.wb-shell-session`)을 DOM에서 빼고**
+   같은 탐색을 다시 돌린 값이다 — 조각 폭을 더해 어림한 것이 아니다.
+
+   | 모드 | 이 판 이전 | 지금 | 증가분 | 그보다 좁으면 |
+   |---|---|---|---|---|
+   | 편집 (되돌리기 묶음이 있다) | 1147px | **1417px** | +270 | 머리가 49 → 100px, 조각이 둘째 줄로 내려간다 |
+   | 뷰 (되돌리기가 없다) | 989px | **1259px** | +270 | 〃 |
+
+   **앞 판의 주석은 이 자리에 259px라고 적었고 그것이 틀렸다** — 조각 폭을 손으로 더해
+   (링크 ~120 + lead gap 10 + 묶음 105 + 머리 gap 24) 어림한 수였고 실제보다 11px 작았다.
+   **어림한 수를 실측처럼 적어 두면 다음 사람이 그것을 근거로 계산한다.** 절대값
+   1417·1259는 그때도 맞았다(그쪽은 실제로 잰 값이었다) — 틀린 것은 증가분 하나였다.
+   두 모드의 증가분이 **똑같이 270**인 것이 이 수의 검산이다: 이 판이 더한 것은 모드와
+   무관한 두 조각뿐이므로 편집·뷰가 같은 값만큼 늘어야 한다.
+
+   ## 둘째 줄이 어떻게 생겼는가 — 구간마다 다르다
+
+   | 폭(편집) | 폭(뷰) | 둘째 줄 |
+   |---|---|---|
+   | 1417+ | 1259+ | 없다 (한 줄) |
+   | 1288~1416 | 1130~1258 | **계정 묶음 혼자, 왼쪽 끝에** |
+   | 그 아래 | 그 아래 | 내보내기·스냅샷·테마가 차례로 합류하고, 계정 묶음은 `space-between`을 따라 오른쪽 끝으로 간다 |
+
+   (리뷰어가 독립으로 재서 위 구간의 아래 끝을 편집 1278·뷰 1120으로 봤다. 위 끝
+   1416·1258과 현상은 양쪽이 같고 아래 끝만 10px 갈린다 — 어느 쪽이든 *"혼자 서는 구간이
+   있다"*는 결론은 같아 더 좁히지 않았다.)
+
+   ## 그래서 무엇을 안 했나
+
+   **줄바꿈을 막으려고 조각을 줄이지 않았다.** `flex-wrap: wrap`은 이 머리가 원래 갖고 있던
+   장치이고(위 `.wb-shell-header`의 주석 — 편집 실패 통지가 그 줄을 쓴다), 넘치는 것을
+   가로 스크롤이나 잘림으로 두는 것보다 낫다. 문안을 줄여 버는 것은 55px(`프로젝트 목록으로
+   돌아가기` → `프로젝트 목록`)뿐이라 1366~1417 구간만 덮고, 그 대가로 이 앱의 "돌아가기"
+   문안이 두 벌이 된다(테마 저작 화면이 `설계서로 돌아가기`다).
+
+   **내려간 묶음이 왼쪽에 서는 것은 `space-between`의 성질이다**(둘째 줄에 조각이 하나뿐이면
+   flex-start). 오른쪽에 세우려면 이 규칙에 `margin-left: auto` 한 줄이면 되는데, 그러면
+   **한 줄로 들어갈 때의 배치까지 바뀐다** — 앞 여섯 조각이 왼쪽으로 뭉치고 남는 공간이
+   전부 이 여백으로 간다(실측: 1600px에서 `.wb-shell-tools`가 x=510 → 449로 밀렸다).
+   지금 배치는 이 판이 만든 것이 아니므로 건드리지 않았다.
+
+   **여기를 줄여서 될 일이 아니다 — 머리 전체의 그룹핑에서 풀 일이다.** 이 판이 270px을
+   더한 것은 맞지만, 그 전에도 여덟 묶음이 한 줄에 서 있었고 1147px 아래에서는 이미
+   두 줄이었다. 이 묶음을 깎으면 임계가 조금 내려갈 뿐 **줄이 하나라는 전제는 그대로**라
+   다음 조각이 들어올 때 같은 자리로 돌아온다. 고칠 자리는 *"머리에 무엇을 몇 묶음으로
+   두는가"*이고 그것은 UI 점검의 별도 항목이다 — **이 규칙만 만지작거리지 마라.** */
+.wb-shell-session {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+/* 지금 로그인한 사람. 이름이지 조작이 아니므로 흐린 색이다 — `.wb-shell-zoom-value`·
+   `.wb-shell-field`가 같은 자리에서 같은 값을 쓴다. */
+.wb-shell-session-user {
+  color: var(--wb-shell-muted);
+  white-space: nowrap;
+}
+
+/* 로그아웃. **머리의 다른 버튼(`.wb-shell-zoom-step`·`.wb-shell-history-step`)과 같은 값이다** —
+   같은 줄에 나란히 서므로 테두리 굵기·모서리가 어긋나면 그 줄이 두 벌로 보인다. */
+.wb-shell-session-logout {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+/* 요청이 도는 동안. `.wb-shell-history-step:disabled`와 같은 값이다 — 자리를 지키고 색만 죽인다. */
+.wb-shell-session-logout:disabled {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: default;
+}
+
+/* 로그아웃 실패 문장. **`.wb-shell-edit-alert`와 같은 장치다** — `flex-basis: 100%`가 머리의
+   `flex-wrap`을 타고 아랫줄로 내려보낸다. 색을 주지 않는 것도 그쪽과 같은 근거다(이 셸의
+   `role="alert"` 자리들이 다 색이 없고, 손대려면 그것을 함께 봐야 한다). */
+.wb-shell-session-alert {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
 }
 
 .wb-shell-side {
@@ -1320,6 +1444,18 @@
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 14px;
   color: var(--wb-shell-ink);
+}
+
+/* 목록 화면의 머리 줄 — 제목과 계정 묶음. **셸 머리와 같은 모양이다**: `space-between`이
+   둘을 양 끝에 세우고 `flex-wrap`이 로그아웃 실패 문장(`.wb-shell-session-alert`,
+   `flex-basis: 100%`)을 아랫줄로 내려보낸다. 그 장치가 두 화면에서 같아야 같은 컴포넌트가
+   두 자리에서 같은 모양으로 앉는다. */
+.wb-shell-project-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .wb-shell-project-list-title {

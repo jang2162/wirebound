@@ -168,7 +168,11 @@ describe('목록', () => {
 
     expect(await screen.findByText('v1')).toBeTruthy()
     expect(screen.getByText('첫 릴리스 직전')).toBeTruthy()
-    expect(screen.getByText('홍길동')).toBeTruthy()
+    // **팝오버 안에서 찾는다.** 셸 머리의 계정 묶음이 *지금 로그인한 사람*의 이름을
+    // 그리는데(`session/session-menu.tsx`) 이 케이스에서는 그것이 스냅샷을 만든 사람과
+    // 같은 값이다 — 화면 전체에서 찾으면 둘이 잡혀 `getByText`가 던진다. 여기서 재려는
+    // 것은 **목록의 한 줄이 만든 사람을 그리는가**이므로 범위가 팝오버인 편이 맞다.
+    expect(within(panel()).getByText('홍길동')).toBeTruthy()
     expect(screen.getByText('2026-08-12T09:00:00.000Z')).toBeTruthy()
     // **자릿수 구분만 하고 단위를 바꾸지 않는다** — KB로 접으면 작은 스냅샷이 전부 `0KB`가
     // 되어 §16을 닫을 관측이 사라진다.
