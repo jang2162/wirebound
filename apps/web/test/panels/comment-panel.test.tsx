@@ -89,9 +89,16 @@ function canvasMarkers(): Record<string, string> {
 describe('코멘트 탭 — 자리', () => {
   it('탭을 누르면 속성 대신 코멘트가 보인다', async () => {
     await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
 
     // 기본은 속성이다.
     expect(screen.getByRole('tab', { name: '속성' }).getAttribute('aria-selected')).toBe('true')
+    // **탭을 바꾸기 전에는 안내가 있다.** 이 줄이 없으면 아래 부재 단언이 아무것도 재지
+    // 않는다 — 루트가 고른 상태로 시작하니 안내는 애초에 없고, 단언은 늘 참이 된다.
+    expect(screen.queryByText('노드를 고르면 속성이 보입니다')).not.toBeNull()
 
     await openCommentTab()
 

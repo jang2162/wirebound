@@ -99,6 +99,10 @@ describe('상호작용 탭 — 자리', () => {
    */
   it('노드를 고르지 않아도 이 페이지의 규칙이 보인다', async () => {
     await openPage(DOC_WITH_RULE)
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
     await openInteractionTab()
 
     expect(sentences()).toContain('① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다')
