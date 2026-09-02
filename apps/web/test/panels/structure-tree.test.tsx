@@ -171,8 +171,10 @@ describe('구조 트리', () => {
 
   it('노드를 누르면 선택된다', async () => {
     await openPage(DOC)
-    // 양성 대조: 열자마자 고른 것이 있으면 아래가 무의미하다.
-    expect(shellStore().getState().selectedNodeId).toBeNull()
+    // 양성 대조: 열자마자 이미 `n-list`가 고른 것이면 아래가 무의미하다. **`null`이 아니라
+    // 루트다** — 페이지를 열면 스토어가 루트를 고른 채로 시작한다(`store/editor-store.ts`의
+    // `#selectionFor`).
+    expect(shellStore().getState().selectedNodeId).toBe('n-root')
 
     fireEvent.click(row('List'))
 
@@ -201,9 +203,10 @@ describe('구조 트리', () => {
 
   it('선택된 노드만 구분 표시된다', async () => {
     await openPage(DOC)
-    // 양성 대조: 고르기 전에는 표시가 하나도 없다. 이것이 없으면 모든 줄에 표시를 다는
-    // 구현도 "선택된 줄에 표시가 있다"를 통과한다.
-    expect(currentRows()).toHaveLength(0)
+    // 양성 대조: 고르기 전에는 **루트 한 줄에만** 표시가 있다(페이지를 열면 그것이 고른
+    // 자리다). 이것이 없으면 모든 줄에 표시를 다는 구현도 "선택된 줄에 표시가 있다"를
+    // 통과한다 — 세는 것이 0에서 1로 바뀌었을 뿐 가르는 힘은 그대로다.
+    expect(currentRows().map((node) => node.textContent)).toEqual(['Page'])
 
     fireEvent.click(row('List'))
 

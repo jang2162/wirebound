@@ -401,8 +401,10 @@ export class EditorStore {
    */
   readonly loadPage = (pageId: string, document: PageDocument, headSeq: number): PendingEdit[] => {
     const { pending, undoStack, redoStack } = this.#state
-    // 선택을 함께 지운다. 노드 id는 문서 안에서만 뜻이 있으므로, 다른 페이지의 id가
-    // 남으면 선택 표시가 존재하지 않는 노드를 가리킨다.
+    // **선택은 지우지 않고 다시 정한다** — 무엇으로 정하는지는 `#selectionFor`가 갖는다.
+    // 여는 경로는 루트로 시작하고(죽은 화면을 없앤다), 같은 페이지를 다시 싣는 재조회는
+    // 보고 있던 자리를 그대로 둔다.
+    const selectedNodeId = this.#selectionFor(pageId, document)
     this.#apply({
       openPageId: pageId,
       document,
@@ -410,7 +412,7 @@ export class EditorStore {
       // 아래에서 `pending`을 함께 비우는 것과 같은 사실의 다른 면이다.
       baseDocument: document,
       headSeq,
-      selectedNodeId: null,
+      selectedNodeId,
       // **이미 비어 있으면 같은 배열을 그대로 넘긴다**(`clearPage`와 같은 이유) — 빈 배열을
       // 새로 만들면 참조가 달라져 `pending`을 구독하는 쪽이 페이지를 열 때마다 헛일을 한다.
       pending: pending.length === 0 ? pending : [],
@@ -430,6 +432,57 @@ export class EditorStore {
       remoteStale: null,
     })
     return pending
+  }
+
+  /**
+   * `loadPage`가 놓을 선택. **두 경로가 갈린다.**
+   *
+   * ## 페이지를 여는 경로 — 루트를 고른다
+   *
+   * 앞 판은 여기서 `null`을 놓았고, 그래서 **페이지를 연 직후가 항상 죽은 화면**이었다.
+   * 브라우저에서 잰 값: 구조 편집 도구 9개 중 7개가 꺼지고(`안에 추가`의 `title`이
+   * *"자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다"*, `아래 추가`·`삭제`가
+   * *"루트가 아닌 노드를 고르세요"*), 속성 패널은 *"노드를 고르면 속성이 보입니다"*만 그렸다.
+   * 사용자는 아무 안내 없이 트리에서 루트를 한 번 눌러야 시작할 수 있었다 — **클릭 한 번으로
+   * 풀린다**는 것이 곧 스토어가 그 선택을 스스로 놓아도 된다는 근거다.
+   *
+   * ## 같은 페이지를 다시 싣는 경로 — 자리를 뺏지 않는다
+   *
+   * `loadPage`를 지나는 길은 셋이고(페이지 열기 · 재연결/복원 재조회 · 편집 실패 복구)
+   * **뒤의 둘은 사용자가 아무것도 안 했는데 돈다.** 그때 선택을 루트로 옮기면 편집하던
+   * 사람의 자리를 뺏는다 — 속성 패널이 다른 노드를 그리고 다음 `안에 추가`가 엉뚱한 자리에
+   * 꽂힌다. 그래서 그 갈래는 들고 있던 선택을 그대로 둔다.
+   *
+   * **가르는 값은 `openPageId`와 문서다.** 화면은 **여는 경로에서만** 조회를 시작하며
+   * `clearPage()`를 부르므로(`routes/editor.tsx`의 `CanvasFrame`), 그 둘이 아직 이 페이지의
+   * 것이라는 사실이 곧 *"다시 싣는 중"*이다. `pageId` 비교만으로는 안 된다 — 같은 페이지를
+   * 닫았다 다시 여는 것도 **여는** 경로다.
+   *
+   * **사용자가 명시적으로 푼 선택(`selectNode(null)` — 캔버스 빈 곳)도 그 갈래에 들어간다.**
+   * 페이지가 열려 있는 동안의 `null`은 사용자가 놓은 것이므로 재조회가 되살리지 않는다.
+   *
+   * ## 사라진 노드는 놓는다
+   *
+   * 다시 싣는 갈래에서 들고 있던 선택이 새 문서에 없으면 `null`이다 — 남이 지웠거나 스냅샷
+   * 복원으로 문서가 통째로 갈린 판이다. 그대로 두면 선택이 **존재하지 않는 노드**를 가리키고,
+   * 그 위에서 만든 편집은 없는 경로를 건드린다. 여기서도 루트로 옮기지는 않는다: 사용자가
+   * 하지 않은 재조회가 자리를 옮기는 것은 같은 이유로 안 된다.
+   *
+   * ## 잠긴 자리는 자동으로도 고르지 않는다
+   *
+   * 여는 경로의 루트 선택도 §7.2의 1차 방어를 지난다. `selectNode`가 막는 것을 이 자리가
+   * 뒷문으로 통과시키면 **판정이 두 벌**이 되고, 그 순간 화면은 남이 잠근 서브트리를 고른
+   * 채로 시작한다. 루트는 문서 전체의 조상이므로 **남이 그 페이지 안 어디든 잡고 있으면**
+   * 부딪친다 — 그때는 앞 판과 같은 `null`이다.
+   */
+  #selectionFor(pageId: string, document: PageDocument): string | null {
+    const { openPageId, document: current, selectedNodeId } = this.#state
+    if (openPageId === pageId && current !== null) {
+      if (selectedNodeId === null) return null
+      return findNodePath(document.root, selectedNodeId) === undefined ? null : selectedNodeId
+    }
+    const rootId = document.root.id
+    return this.#lockConflict(pageId, document, rootId) === null ? rootId : null
   }
 
   /**
@@ -1012,13 +1065,24 @@ export class EditorStore {
    * 성질과 대가는 `packages/schema/test/lock.test.ts`의 `선택이 편집보다 엄격하다`가 잰다.
    */
   readonly lockedBy = (nodeId: string): NodeLock | null => {
-    const { document, openPageId, locks, viewerUserId } = this.#state
-    if (document === null || openPageId === null || locks.length === 0) return null
+    const { document, openPageId } = this.#state
+    if (document === null || openPageId === null) return null
+    return this.#lockConflict(openPageId, document, nodeId)
+  }
+
+  /**
+   * `lockedBy`의 판정 본체. **페이지와 문서를 인자로 받는 것이 요점이다** — `loadPage`가 첫
+   * 선택을 정할 때는 그 둘이 아직 `#state`에 들어가 있지 않다(들어간 뒤에 물으면 `#apply`가
+   * 두 번 돌아 구독자가 두 번 깬다). 공개 API가 이것을 부르므로 **판정은 한 벌**이다.
+   */
+  #lockConflict(pageId: string, document: PageDocument, nodeId: string): NodeLock | null {
+    const { locks, viewerUserId } = this.#state
+    if (locks.length === 0) return null
     const path = findNodePath(document.root, nodeId)
     if (path === undefined) return null
     return findLockConflict({
       root: document.root,
-      locks: locks.filter((lock) => lock.pageId === openPageId),
+      locks: locks.filter((lock) => lock.pageId === pageId),
       pointers: [path],
       // 누구인지 모르면 어느 잠금과도 같지 않은 값이 되어 **전부 남의 것**이 된다.
       viewerUserId: viewerUserId ?? '',

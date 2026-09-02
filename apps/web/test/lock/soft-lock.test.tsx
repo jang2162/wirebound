@@ -313,7 +313,11 @@ describe('선택 차단 (1차 방어)', () => {
 
     fireEvent.click(treeButton('Section'))
 
-    expect(view.store.getState().selectedNodeId).toBeNull()
+    // **막혔다는 것은 "선택이 없다"가 아니라 "옮겨가지 않았다"이다** — 페이지를 열면
+    // 스토어가 루트를 고른 채로 시작하므로(`store/editor-store.ts`의 `#selectionFor`)
+    // 거절된 클릭은 그 자리를 그대로 둔다. `null`로 단언하면 재는 것이 거절이 아니라
+    // 초기값이 된다.
+    expect(view.store.getState().selectedNodeId).toBe('n-root')
   })
 
   it('잠긴 서브트리 **안**의 노드도 막힌다 — §7.2가 잠그는 것은 서브트리다', async () => {
@@ -323,7 +327,7 @@ describe('선택 차단 (1차 방어)', () => {
     // 둘째 `Text`가 잠긴 `n-b` 안의 `n-b1`이다.
     fireEvent.click(treeButtonAt('Text', 1))
 
-    expect(view.store.getState().selectedNodeId).toBeNull()
+    expect(view.store.getState().selectedNodeId).toBe('n-root')
   })
 
   it('밖의 노드는 그대로 선택된다 — 대조', async () => {
@@ -350,7 +354,8 @@ describe('선택 차단 (1차 방어)', () => {
     const view = await board()
     view.push(locksFrame([foreign('n-b')]))
     fireEvent.click(treeButton('Section'))
-    expect(view.store.getState().selectedNodeId).toBeNull()
+    // 아직 막혀 있다 — 연 자리(루트) 그대로다.
+    expect(view.store.getState().selectedNodeId).toBe('n-root')
 
     view.push(locksFrame([]))
     fireEvent.click(treeButton('Section'))
@@ -377,7 +382,7 @@ describe('선택 차단 (1차 방어)', () => {
       view.store.selectNode('n-b1')
     })
 
-    expect(view.store.getState().selectedNodeId).toBeNull()
+    expect(view.store.getState().selectedNodeId).toBe('n-root')
   })
 })
 
@@ -388,6 +393,39 @@ describe('잠금을 잡는다 — 선택이 곧 잠금이다 (§7.2)', () => {
     fireEvent.click(treeButton('Section'))
 
     expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b' })
+  })
+
+  /**
+   * **루트는 claim 하지 않는다**(`realtime/use-node-lock.ts`의 머리말).
+   *
+   * 페이지를 열면 스토어가 루트를 고른 채로 시작하는데(`store/editor-store.ts`의
+   * `#selectionFor` — 그러지 않으면 연 직후가 죽은 화면이다), 그것을 그대로 보내면
+   * **페이지를 여는 것만으로 남의 그 페이지 전체가 얼어붙는다.** 루트는 문서 안 모든
+   * 노드의 조상이라 그 잠금 하나가 모든 선택을 막는다.
+   *
+   * 잰 값: 예외를 빼면 아래 `선택을 옮기면 새 자리를 잡는다`가 `['n-b', 'n-a']` 대신
+   * `['n-root', 'n-b', 'n-a']`를 본다 — 맨 앞이 아무도 누르지 않은 잠금이다.
+   */
+  it('페이지를 열어도 잠금이 나가지 않는다 — 루트 잠금은 페이지 전체 잠금이다', async () => {
+    const view = await board()
+
+    // 고른 것은 있다. 안 보낼 뿐이다 — 이 두 단언이 함께 있어야 "자동 선택이 안 걸렸다"와
+    // 구분된다.
+    expect(view.store.getState().selectedNodeId).toBe('n-root')
+    expect(view.lockFrames()).toEqual([])
+  })
+
+  it('루트로 돌아오면 잡고 있던 것을 놓는다', async () => {
+    const view = await board()
+    fireEvent.click(treeButton('Section'))
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b' })
+
+    // 트리에서 루트 줄을 누른다. 잠글 자리를 고른 것이 아니므로 앞의 것을 놓아야 한다 —
+    // 안 놓으면 사용자가 떠난 자리의 배지가 남의 화면에 남는다.
+    fireEvent.click(treeButton('Page'))
+
+    expect(view.store.getState().selectedNodeId).toBe('n-root')
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'unlock' })
   })
 
   it('선택을 옮기면 새 자리를 잡는다', async () => {

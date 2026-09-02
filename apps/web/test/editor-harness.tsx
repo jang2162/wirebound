@@ -19,7 +19,7 @@
  * 따라 mock이 늦게 걸려 셸이 진짜 `EditorStore`를 만든다), 필요한 테스트 파일이 각자
  * 갖는다.
  */
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { useLayoutEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
 import { CURRENT_DOCUMENT_VERSION, type PageDocument, type WbNode } from '@wirebound/schema'
@@ -192,6 +192,23 @@ export function canvasSurface(): HTMLElement {
   const surface = canvasFrame().querySelector<HTMLElement>('.wb-shell-canvas-surface')
   if (surface === null) throw new Error('캔버스 표면을 찾지 못했습니다')
   return surface
+}
+
+/**
+ * 선택을 **사용자가 하듯** 푼다 — 캔버스의 빈 자리를 누른다(`canvas/canvas.tsx`의
+ * `nodeIdAt`이 노드 밖에서는 `null`을 낸다).
+ *
+ * **페이지를 열면 스토어가 루트를 고른 채로 시작하므로**(`store/editor-store.ts`의
+ * `#selectionFor` — 그러지 않으면 연 직후가 죽은 화면이다), *"고른 것이 없을 때"*를 재는
+ * 케이스는 그 상태를 **손으로 만들어야 한다.** 그것이 사라진 상태가 아니라는 것이 요점이다:
+ * 캔버스 빈 자리를 누르면 지금도 그대로 도달한다.
+ *
+ * **`store.selectNode(null)`을 직접 부르지 않는다.** 화면에서 도달할 수 없는 상태를 재면
+ * 그 케이스는 사용자가 못 보는 것을 지키게 된다 — 여기서는 도달 경로까지 함께 지난다.
+ * (편집 모드에서만 먹는다. 뷰 모드는 선택을 바꾸지 않는다 — `canvas.tsx`의 `onClick`.)
+ */
+export function deselect(): void {
+  fireEvent.click(canvasSurface())
 }
 
 /** 선택 아웃라인. 어느 노드에 붙었는지는 `data-wb-selected-id`가 말한다. */

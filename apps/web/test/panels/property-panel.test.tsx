@@ -26,12 +26,13 @@ import { EditorStore } from '../../src/store/editor-store'
 import { EditorStoreProvider } from '../../src/store/use-editor-store'
 import type { PatchResult } from '../../src/api/types'
 import {
-  PAGE_ID,
-  PROJECT_NAME,
-  PROJECT_ROUTE,
+  deselect,
   openPage,
+  PAGE_ID,
   pageDetail,
   pageDoc,
+  PROJECT_NAME,
+  PROJECT_ROUTE,
   renderEditor,
 } from '../editor-harness'
 // 카탈로그가 설치돼 있어야 `listComponents()`가 빈 배열이 아니다.
@@ -373,6 +374,10 @@ describe('속성 패널', () => {
 
   it('선택이 없으면 안내를 보여준다', async () => {
     await openPage(DOC)
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
 
     within(panel()).getByText('노드를 고르면 속성이 보입니다')
     expect(propRows()).toHaveLength(0)
@@ -883,16 +888,17 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
     expect(controlWidget('입력 종류')).not.toBeNull()
   })
 
-  it('편집이 실패하면 재조회가 선택을 지운다', async () => {
-    // **재조회 경로에서는** 스위치가 문서를 비추는지 볼 수 없다 — `loadPage`가
-    // `selectedNodeId`를 비우므로(`store/editor-store.ts` — 노드 id는 문서 안에서만 뜻이
-    // 있다) 위젯이 아예 사라진다. 여기서는 실제로 일어나는 일만 고정한다: 사용자가 고르던
-    // 노드를 잃는다.
+  it('편집이 실패하면 재조회가 서버 값을 되비춘다 — 고르던 자리는 그대로다', async () => {
+    // **앞 판은 여기서 선택이 지워졌다.** `loadPage`가 `selectedNodeId`를 비웠으므로 위젯이
+    // 아예 사라졌고, 그래서 *"재조회 경로에서는 스위치가 문서를 비추는지 볼 수 없다"*고
+    // 적혀 있었다. 이제 `loadPage`는 **같은 페이지를 다시 싣는 경로에서 선택을 건드리지
+    // 않으므로**(`store/editor-store.ts`의 `#selectionFor`) 위젯이 마운트된 채 문서만
+    // 갈린다 — 이 케이스가 그것을 직접 잰다.
     //
-    // **"오늘 코드에서 관측할 수 없다"고 적었던 것은 틀렸다** — 그것은 이 순차 경로에서만
-    // 참이다. `loadPage`와 `selectNode`를 한 배치에 넣으면 `key`가 그대로라 위젯이 마운트된
-    // 채 문서만 갈리고, 거기서 두 구현이 갈린다. 아래
-    // `문서가 밖에서 바뀌면 스위치가 새 값을 비춘다`가 그 자리를 잡는다.
+    // **그래서 재는 것이 세졌다.** 앞 판이 고정하던 것은 *"사용자가 고르던 노드를 잃는다"*
+    // 였고, 지금 고정하는 것은 *"고르던 자리에 남은 채 서버 값이 되비친다"*이다. 위젯이
+    // 자기 `useState`만 보고 그리는 구현은 여기서 죽는다(꺼진 채로 남는다) — 아래
+    // `문서가 밖에서 바뀌면 스위치가 새 값을 비춘다`와 같은 자리를 실패 경로에서 잡는다.
     let getPageCalls = 0
     const getPage: ApiClient['getPage'] = async (_projectId, pageId) => {
       getPageCalls += 1
@@ -912,12 +918,10 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
 
     await waitFor(() => expect(getPageCalls).toBe(2))
 
-    // 선택이 지워져 패널이 안내로 돌아간다. 다시 고르면 서버 값이다.
-    await waitFor(() => {
-      within(panel()).getByText('노드를 고르면 속성이 보입니다')
-    })
-    selectAt('Field', 0)
-    expect((requireWidget('필수') as HTMLInputElement).checked).toBe(true)
+    // 다시 고르지 않는다 — 그대로 있는 위젯이 서버 값(`true`)으로 돌아온다.
+    await waitFor(() => expect((requireWidget('필수') as HTMLInputElement).checked).toBe(true))
+    // 안내로 돌아가지 않았다는 것이 "선택이 남았다"의 다른 면이다.
+    expect(within(panel()).queryByText('노드를 고르면 속성이 보입니다')).toBeNull()
   })
 
   it('연속으로 두 번 누르면 두 편집이 순서대로 나간다', async () => {

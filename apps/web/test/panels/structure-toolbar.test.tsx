@@ -15,6 +15,7 @@ import type { PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
 import {
+  deselect,
   HEAD_SEQ,
   openPage,
   pageDetail,
@@ -156,6 +157,10 @@ function isNestedIn(childType: string, parentType: string): boolean {
 describe('구조 툴바 — 삭제와 순서 이동', () => {
   it('노드를 고르지 않으면 버튼이 전부 비활성이다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
 
     for (const name of BUTTONS) {
       expect(toolButton(name).disabled, name).toBe(true)
@@ -366,13 +371,17 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     expect(screen.getByRole('alert').textContent).toContain(SERVER_REASON)
   })
 
-  it('편집이 실패하면 선택이 지워진다', async () => {
-    // **툴바가 옮긴 선택이 남지 않는다 — 재서 확인한 값이다.** 재조회는 `loadPage`를
-    // 지나고, 그것이 문서·`headSeq`뿐 아니라 **선택까지** 서버 상태로 재설정한다
-    // (P2b-2 이월 §1). 그래서 실패 뒤 선택은 부모(`Page`)가 아니라 **없음**이다.
+  it('편집이 실패해도 툴바가 옮긴 선택은 남는다 — 두 경로가 갈리지 않는다', async () => {
+    // **앞 판은 여기서 `null`이었다.** 재조회가 `loadPage`를 지나고 그것이 문서·`headSeq`
+    // 뿐 아니라 **선택까지** 비웠기 때문이다(P2b-2 이월 §1). 그래서 "삭제 뒤 선택은 부모"
+    // 라는 D5와 실패 경로가 **갈렸고**, 이 케이스는 그 갈림을 적어 두는 자리였다.
     //
-    // 이 케이스가 있는 이유: 이 값을 적어 두지 않으면 다음 사람이 "삭제 뒤 선택은
-    // 부모"라는 D5만 보고 실패 경로에서도 부모일 것이라 읽는다. **두 경로가 갈린다.**
+    // **이제 갈리지 않는다.** `loadPage`가 같은 페이지를 다시 싣는 경로에서는 선택을
+    // 건드리지 않는다(`store/editor-store.ts`의 `#selectionFor` — 사용자가 하지도 않은
+    // 재조회가 자리를 뺏지 않는다). 그래서 실패 뒤에도 D5 그대로 **부모**다.
+    //
+    // 이 케이스가 남는 이유는 뒤집혔다: 실패 경로가 선택을 **따로 손대지 않는다**는 것을
+    // 고정한다. 되돌아온 문서 위에서 사용자는 고르던 자리 곁에 그대로 있다.
     const srv = server({ failAt: 1 })
     await openPage(doc(), { apiOverrides: srv.api })
     select('Card')
@@ -380,7 +389,8 @@ describe('구조 툴바 — 삭제와 순서 이동', () => {
     fireEvent.click(toolButton('삭제'))
 
     await waitFor(() => expect(structureTypes()).toEqual(INITIAL_TYPES))
-    expect(selectedType()).toBeNull()
+    // 삭제가 옮겨 둔 부모(`Page` — 이 문서의 루트)가 그대로다.
+    expect(selectedType()).toBe('Page')
   })
 })
 

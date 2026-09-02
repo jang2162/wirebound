@@ -15,11 +15,12 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import {
-  PROJECT_NAME,
-  PROJECT_ROUTE,
+  deselect,
   openPage,
   pageDetail,
   pageDoc,
+  PROJECT_NAME,
+  PROJECT_ROUTE,
   renderEditor,
 } from '../editor-harness'
 
@@ -78,6 +79,10 @@ describe('§9 — 우측 탭 구성이 모드로 갈린다', () => {
 
   it('뷰 모드에서 속성 탭의 본문이 사라진다 — 탭만 바뀌는 것이 아니다', async () => {
     await openPage(DOC)
+    // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
+    // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
+    // 상태가 아니다. 캔버스 빈 자리를 누르는 것이 사용자가 그 상태에 이르는 길이다.
+    deselect()
     expect(screen.queryByText('노드를 고르면 속성이 보입니다')).not.toBeNull()
 
     toView()
