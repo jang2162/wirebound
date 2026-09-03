@@ -111,6 +111,10 @@ describe('ensureCatalog', () => {
     resetRegistry()
     const marker = defineComponent({
       type: '__matrix_marker__',
+      // 사람이 읽을 축은 필수다(P10-3) — 이 표식은 화면에 서지 않지만 계약은 지나야 한다.
+      label: '표식',
+      description: '레지스트리 표식.',
+      group: 'document',
       props: z.strictObject({}),
       editor: [],
       structures: ['default'],

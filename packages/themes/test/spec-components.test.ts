@@ -163,6 +163,58 @@ describe('checkThemeComponents — 카탈로그 대조 (D1)', () => {
   })
 })
 
+/**
+ * **사람이 읽을 축이 테마 어휘를 넓히지 않는다** (P10-3).
+ *
+ * `ComponentDef`에 `label`·`description`·`group`이 들어왔다. 그것이 §6.11의 여섯을
+ * 건드리는지가 그 슬라이스의 판단 지점이었고, 답은 *"아니다 — 여섯은 렌더러가 내보내는
+ * **DOM 속성**이고 새 필드는 그중 하나도 만들지 않는다"*였다.
+ *
+ * **여기서는 그 판단의 나머지 절반을 잰다:** 테마 검증기가 어휘를 **필드 이름으로 골라**
+ * 읽지 `Object.keys(def)`로 모으지 않는다는 것. 후자였다면 필드를 더하는 것만으로
+ * `components.List.variants.label`이 조용히 통과하게 된다 — 테마가 아무도 켤 수 없는
+ * 스킨을 정의하고 검증기가 그것을 안 잡는 상태다.
+ *
+ * **`label`을 고른 것은 우연이 아니다.** 카탈로그에 `parts: ['label']`이 넷 있어(§Tree·
+ * EntryForm·Field·Button) **조각으로는 정당한 이름**이다. 그래서 이 케이스는 *"그 낱말을
+ * 금지한다"*가 아니라 *"어느 축에서 쓰였느냐로 갈린다"*를 잰다.
+ */
+describe('사람이 읽을 축은 테마 어휘가 아니다 (P10-3)', () => {
+  it('label·description·group을 변형·상태 이름으로 쓰면 여전히 모르는 이름이다', () => {
+    const issues = checkThemeComponents(
+      {
+        List: {
+          variants: { label: { base: { opacity: 1 } } },
+          states: { description: { base: { opacity: 1 } } },
+        },
+      } as never,
+      TOKENS,
+      [],
+    )
+    expect(codes(issues.issues)).toEqual(['unknown-state', 'unknown-variant'])
+  })
+
+  it('group을 조각 이름으로 쓰면 모르는 조각이다', () => {
+    const issues = checkThemeComponents(
+      { List: { parts: { group: { opacity: 1 } } } } as never,
+      TOKENS,
+      [],
+    )
+    expect(codes(issues.issues)).toEqual(['unknown-part'])
+  })
+
+  it('같은 낱말이라도 조각으로 선언된 곳에서는 통과한다', () => {
+    // **금지가 아니라 축의 문제라는 것이 여기서 보인다.** `Tree`는 `label`을 조각으로
+    // 선언하므로 테마가 그것을 겨냥하는 것이 옳다.
+    const issues = checkThemeComponents(
+      { Tree: { parts: { label: { opacity: 1 } } } } as never,
+      TOKENS,
+      [],
+    )
+    expect(issues.issues).toEqual([])
+  })
+})
+
 describe('카탈로그 전체가 테마 규격을 지난다', () => {
   it('listComponents()를 훑어 각 컴포넌트의 최소 항목이 이슈 0으로 통과한다', () => {
     // **분모를 손으로 적지 않는다.** 카탈로그가 늘면 새 컴포넌트가 여기 그대로 들어오고,

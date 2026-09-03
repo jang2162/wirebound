@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { COMPONENT_GROUPS, isComponentGroup, type ComponentGroup } from './group'
 
 /** 속성 패널이 자동 생성할 입력 컨트롤 종류 */
 export type EditorControl =
@@ -20,12 +21,58 @@ export interface EditorField {
   visibleWhen?: { structure: string }
 }
 
+/** 사람이 읽을 이름의 상한. 고르개의 `<option>` 한 줄에 표시(`담을 수 있음`)와 함께 든다. */
+const LABEL_MAX = 12
+
 /**
- * 컴포넌트의 계약. 여기 선언된 것이 테마가 쓸 수 있는 어휘 전부다.
+ * 설명의 상한. 240px 좌측 패널에서 12px 글자로 **두 줄**쯤이다. 상한이 없으면 한 컴포넌트가
+ * 고르개를 세로로 밀어낸다 — 3차의 프리셋 고르개가 가로로 겪은 것과 같은 부류다.
+ */
+const DESCRIPTION_MAX = 60
+
+/**
+ * 컴포넌트의 계약.
+ *
+ * ## 두 축이 있다 — 섞지 않는다
+ *
+ * | 축 | 필드 | 누가 읽는가 |
+ * |---|---|---|
+ * | **테마 어휘** | `props`·`editor`·`structures`·`parts`·`variants`·`variantFrom`·`states`·`children` | 테마 검증기(§12.4)·`checkThemeComponents`·렌더러 |
+ * | **사람이 읽을 것** | `label`·`description`·`group` | 저작 UI(타입 고르개·문장화) |
+ *
+ * 아래 축은 **DOM에 나가지 않는다.** §6.11이 못박은 여섯(`data-wb-id`·`data-wb-component`·
+ * `data-wb-structure`·`data-wb-variant`·`data-wb-part`·`data-wb-state`)은 전부 위 축에서
+ * 나오고, 사람이 읽을 필드는 그중 하나도 만들지 않는다 — 그래서 §6.11 계약을 넓히지
+ * 않는다(`variantFrom`의 주석이 말하는 *"일곱 번째 속성"*은 **DOM 속성**이다).
+ * `checkThemeComponents`가 어휘를 필드 이름으로 골라 읽는 것이 그 분리를 실제로 지킨다
+ * (`test/component/human-axis.test.ts`가 새 필드를 변형·상태·조각 이름으로 써 봐 확인한다).
+ *
  * 실제 DOM을 그리는 함수는 renderer 패키지가 (타입, 구조) 키로 등록한다.
  */
 export interface ComponentDef {
   type: string
+  /**
+   * 사람이 읽는 이름. `List` → `목록`. **한국어 UI가 영문 타입명을 그대로 내지 않게 하는
+   * 자리다** — 고르개도 상호작용 문장도 이것을 쓴다(`interaction/describe.ts`의
+   * `COMPONENT_NOUNS`가 여기서 유도된다).
+   *
+   * **필수다.** 선택으로 두면 새 컴포넌트가 조용히 영문 이름으로 떨어지는데, 그것이 지금
+   * 고치는 고장 그 자체다.
+   */
+  label: string
+  /**
+   * 한 줄 설명. *"EntryForm이 무엇인가"*를 화면이 답하는 자리다.
+   *
+   * **필수다.** 이름만으로 갈리지 않는 짝이 카탈로그에 이미 있다(`SearchForm` 검색폼 ·
+   * `EntryForm` 입력폼 / `Flex` 배치 · `Grid` 그리드). 선택으로 두면 하필 그런 것이 비고
+   * 화면은 다시 답하지 못한다.
+   */
+  description: string
+  /**
+   * 갈래. 카탈로그가 **파일로** 나눠 둔 분류를 런타임에 올린 것이고, 선언과 파일이
+   * 어긋나지 않는 것은 케이스가 본다 — 근거는 `group.ts`가 소유한다.
+   */
+  group: ComponentGroup
   props: z.ZodType
   editor: EditorField[]
   /** 첫 번째가 기본 구조 */
@@ -43,6 +90,12 @@ export interface ComponentDef {
    * `data-wb-state`). 빠진 것은 **enum prop → `data-wb-variant`**뿐이므로 그것을 채운다.
    * 일곱 번째 속성을 만들면 §6.11이 *"이 여섯이 전체 계약"*이라고 못박은 것이 깨지고,
    * 테마 검증기(§12.4)와 `checkThemeComponents`가 볼 어휘가 함께 넓어진다.
+   *
+   * **여기서 «속성»은 렌더러가 내보내는 `data-wb-*` DOM 속성이다** — `ComponentDef`의
+   * 필드 수가 아니다(§6.11의 표가 세는 것이 그 여섯이다). 그래서 `label`·`description`·
+   * `group`처럼 **DOM에 나가지 않는** 필드는 이 못을 건드리지 않는다. 위
+   * `ComponentDef` 주석의 두 축 표가 그 구분을 소유한다. 이 문장이 없어서 P10-3이
+   * *"사람이 읽을 이름을 계약에 두면 §6.11이 깨지는가"*를 처음부터 다시 물었다.
    */
   variantFrom?: string
   /** 같은 이름의 prop이 true면 활성화되는 상태 */
@@ -53,6 +106,25 @@ export interface ComponentDef {
 /** 계약의 자체 정합성을 확인하고 그대로 돌려준다. */
 export function defineComponent(def: ComponentDef): ComponentDef {
   const { type } = def
+
+  /**
+   * **사람이 읽을 축을 같은 결로 검사한다.** 아래 어휘 검사들이 *"선언은 있는데 닿을 수
+   * 없다"*를 막는 것처럼, 여기서는 *"화면에 낼 말이 없다"*와 *"내면 화면이 깨진다"*를
+   * 막는다. 걸리면 컴포넌트를 정의하는 **그 자리에서** 걸린다.
+   *
+   * **빈 문자열을 통과시키지 않는다.** 타입만으로는 `label: ''`이 막히지 않는데, 그러면
+   * 고르개에 **글자 없는 항목**이 서고 고를 수는 있다 — 없는 것보다 나쁜 상태다.
+   */
+  assertHumanText(type, 'label', def.label, LABEL_MAX)
+  assertHumanText(type, 'description', def.description, DESCRIPTION_MAX)
+  // 타입이 이미 막지만 `as`로 지나온 값·JSON에서 온 값은 여기서만 걸린다. 조용히 통과하면
+  // 고르개가 그 컴포넌트를 **어느 그룹에도 못 넣어** 목록에서 통째로 사라진다.
+  if (!isComponentGroup(def.group)) {
+    throw new Error(
+      `${type}: group이 갈래 목록에 없습니다: ${String(def.group)} ` +
+        `(${COMPONENT_GROUPS.join(' · ')})`,
+    )
+  }
 
   if (def.structures.length === 0) {
     throw new Error(`${type}: structures는 최소 하나여야 합니다`)
@@ -167,6 +239,25 @@ export function defineComponent(def: ComponentDef): ComponentDef {
   }
 
   return def
+}
+
+/**
+ * 사람에게 보이는 한 줄. **비어 있지 않고 · 한 줄이고 · 상한 안**이어야 한다.
+ *
+ * **줄바꿈을 막는 것이 상한과 별개다.** `<option>`은 줄바꿈을 공백으로 접어 조용히
+ * 넘어가고, 설명 줄은 반대로 상자를 세로로 민다 — 어느 쪽이든 적은 사람이 본 모양과
+ * 화면이 갈린다. 상한만 두면 `\n`이 든 짧은 말이 그대로 지난다.
+ */
+function assertHumanText(type: string, field: string, value: string, max: number): void {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${type}: ${field}가 비어 있습니다`)
+  }
+  if (/[\r\n]/.test(value)) {
+    throw new Error(`${type}: ${field}는 한 줄이어야 합니다`)
+  }
+  if ([...value].length > max) {
+    throw new Error(`${type}: ${field}가 ${max}자를 넘습니다 (${[...value].length}자)`)
+  }
 }
 
 function assertUnique(type: string, field: string, values: string[]): void {

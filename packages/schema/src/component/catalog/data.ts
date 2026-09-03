@@ -3,6 +3,11 @@ import { defineComponent } from '../define'
 
 export const ListDef = defineComponent({
   type: 'List',
+  // **이름은 §9의 그림에서 빌려 왔다**(*"① 검색폼 / ② 목록"*). 규격이 부른 이름을 그대로
+  // 쓰는 것이 문서와 화면을 갈리지 않게 하는 가장 싼 방법이다.
+  label: '목록',
+  description: '여러 건을 표·카드·목록 모양으로 늘어놓는다.',
+  group: 'data',
   props: z.strictObject({
     items: z.number().int().min(0).max(50).default(5),
     columns: z.array(z.string()).default(['컬럼 1', '컬럼 2']),
@@ -50,6 +55,9 @@ export const ListDef = defineComponent({
 
 export const TreeDef = defineComponent({
   type: 'Tree',
+  label: '트리',
+  description: '계층이 있는 항목을 접었다 펴며 보인다.',
+  group: 'data',
   props: z.strictObject({
     items: z.array(z.string()).default(['항목 1', '항목 2']),
     depth: z.number().int().min(1).max(5).default(2),
@@ -75,6 +83,9 @@ export const TreeDef = defineComponent({
 
 export const KeyValueDef = defineComponent({
   type: 'KeyValue',
+  label: '키-값 목록',
+  description: '항목 이름과 값을 짝지어 보인다. 상세 화면에 쓴다.',
+  group: 'data',
   props: z.strictObject({
     pairs: z
       .array(z.strictObject({ key: z.string(), value: z.string() }))

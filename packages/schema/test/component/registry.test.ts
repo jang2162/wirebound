@@ -12,6 +12,9 @@ import {
 
 const Sample = defineComponent({
   type: 'Sample',
+  label: '표본',
+  description: '검사용 표본.',
+  group: 'document',
   props: z.object({ label: z.string(), disabled: z.boolean() }),
   // `disabled`가 `states`에 있으므로 `editor`에도 있어야 한다(P4b-1의 도달성 검사).
   editor: [
@@ -49,7 +52,8 @@ describe('컴포넌트 레지스트리', () => {
   })
 
   it('등록 순서대로 목록을 준다', () => {
-    const Other = defineComponent({ ...Sample, type: 'Other' })
+    // 이름도 갈라야 한다 — `registerComponent`가 겹치는 이름을 던진다(아래 케이스).
+    const Other = defineComponent({ ...Sample, type: 'Other', label: '다른 표본' })
     registerComponent(Sample)
     registerComponent(Other)
     expect(listComponents().map((d) => d.type)).toEqual(['Sample', 'Other'])

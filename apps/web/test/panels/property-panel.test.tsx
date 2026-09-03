@@ -54,7 +54,13 @@ import '../../src/catalog-setup'
 const PROBE_TYPE = '구조프로브'
 
 registerComponent(
-  defineComponent({ ...ListDef, type: PROBE_TYPE, structures: ['cardGrid', 'table'] }),
+  defineComponent({
+    ...ListDef,
+    type: PROBE_TYPE,
+    // 이름도 갈아야 한다 — `registerComponent`가 겹치는 `label`을 던진다.
+    label: PROBE_TYPE,
+    structures: ['cardGrid', 'table'],
+  }),
 )
 // 캔버스가 폴백 대신 이 구현으로 그리도록 기본 구조 하나를 등록해 둔다. 속성 패널의
 // 단언과는 무관하지만, 폴백이 뜨면 그 화면이 무엇을 말하는지 읽기 어려워진다.
@@ -71,6 +77,7 @@ registerComponent(
   defineComponent({
     ...ListDef,
     type: NO_OPTIONS_TYPE,
+    label: NO_OPTIONS_TYPE,
     editor: [{ prop: 'items', control: 'select', label: '선택지 없는 필드' }],
     // **`states`를 비운다.** `ListDef`의 `editor`를 통째로 갈았으므로 그대로 두면
     // P4b-1의 도달성 검사가 *"states가 editor에 없다"*로 던진다 — 이 프로브가 재려는 것은

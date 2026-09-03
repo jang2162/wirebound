@@ -125,7 +125,14 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
     // 상자 없이 `<p>` 하나만 반환하므로 그 `<p>`의 부모가 툴바다.
     child: 'wb-shell-picker-notice',
     container: 'wb-shell-structure-toolbar',
-    where: 'panels/type-picker.tsx:45 — `types.length === 0`이면 `<p>` 하나만 반환한다',
+    where: 'panels/type-picker.tsx — `groups.length === 0`이면 `<p>` 하나만 반환한다',
+  },
+  {
+    // 고른 타입의 설명(P10-3). **`-notice`와 같은 모양이지만 다른 클래스다** — 이유는
+    // `shell.css`의 그 규칙 주석이 소유한다. 자기 줄을 받아야 목록·버튼과 안 겹친다.
+    child: 'wb-shell-picker-desc',
+    container: 'wb-shell-picker',
+    where: 'panels/type-picker.tsx — 고르개 `<div>` 안 마지막 `<p>`다(고른 것이 있을 때만 선다)',
   },
   {
     // 소속 메뉴 고르개. **오늘 자식에 `flex-basis: 100%`가 없어 안 터진다** — 그래서
