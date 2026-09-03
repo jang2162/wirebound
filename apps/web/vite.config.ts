@@ -48,7 +48,20 @@ export default defineConfig({
       // **대상은 `apps/api/.env`의 `PORT`를 따라간다 — 손으로 맞추지 않는다.**
       // 셸 환경변수가 파일을 이기는 순서까지 api 쪽과 같다. 규칙은
       // `config/api-proxy-target.ts`가 소유하고 `test/api-proxy-target.test.ts`가 잰다.
-      '/api': { target: apiProxyTarget, changeOrigin: false },
+      //
+      // **`ws: true`가 없으면 실시간이 통째로 죽는다.** 실시간 라우트
+      // (`/api/projects/:projectId/ws`)는 이 컨텍스트에 맞지만, vite는 업그레이드를
+      // **따로** 다루면서 `opts.ws || 대상이 ws:/wss:`를 한 번 더 묻는다. 셋 다 거짓이면
+      // 그 핸들러는 소켓을 닫지도 상태 코드를 쓰지도 않고 그냥 빠져나온다 — **응답
+      // 바이트 0**이다. 브라우저는 `CONNECTING`에서 멈추고 `onclose`가 안 오니
+      // `realtime/connection.ts`의 재연결도 안 탄다. 조용히 죽는 실패라 아무도 말하지
+      // 않는다. 대상을 `ws:`로 바꾸는 것은 답이 아니다 — 같은 엔트리로 REST도 나간다.
+      //
+      // **`changeOrigin`은 WS에서도 `false`다.** http-proxy는 업그레이드 요청의 헤더를
+      // 통째로 베끼고(`setupOutgoing`) `changeOrigin`이 손대는 것은 `Host` 하나뿐이라,
+      // 세션 쿠키는 same-origin으로 그대로 실린다 — D4의 근거가 그대로 선다. 그 쿠키가
+      // 없으면 이 라우트의 `projectGuard('viewer')`가 막는다.
+      '/api': { target: apiProxyTarget, changeOrigin: false, ws: true },
     },
   },
 })

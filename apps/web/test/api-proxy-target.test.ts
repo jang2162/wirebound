@@ -169,3 +169,87 @@ describe('배선이 가리키는 자리', () => {
     expect(source.match(/(?<!function )readApiEnvFile\(\)/g)).toHaveLength(1)
   })
 })
+
+/**
+ * **업그레이드도 이 프록시를 타야 한다** — `ws: true` 가 그 한 줄이다.
+ *
+ * # 없으면 무엇이 보이는가 (2026-09-03 실측)
+ *
+ * 서버의 실시간 라우트는 `/api/projects/:projectId/ws` 라 `'/api'` 컨텍스트에 **맞는다.**
+ * 그런데 vite 의 프록시는 업그레이드를 **따로** 다루고, 그 자리에서 한 번 더 묻는다
+ * (`vite/dist/node/chunks/dep-*.js` 의 `httpServer.on("upgrade", …)`):
+ *
+ * ```js
+ * if (opts.ws || opts.target?.toString().startsWith("ws:") || …startsWith("wss:")) {
+ *   proxy.ws(req, socket, head)   // ← 여기 못 오면
+ * }
+ * ```
+ *
+ * **셋 다 거짓이면 그 핸들러는 아무것도 안 하고 그냥 빠져나온다.** 소켓을 닫지도,
+ * 상태 코드를 쓰지도 않는다. 그래서 실패가 **조용하다**:
+ *
+ * | 잰 것 | 값 |
+ * |---|---|
+ * | 원시 업그레이드 요청(5173) | **응답 바이트 0** · 3초 타임아웃 |
+ * | 브라우저 `new WebSocket(…)` | 6초 뒤 `readyState=0 (CONNECTING)` · **open·error·close 어느 것도 안 옴** |
+ * | api 로그의 그 요청 | **없다** — 서버까지 가지 않는다 |
+ * | 직접 api 로(3002) 같은 요청 | `101 Switching Protocols` + `joined`·`presence`·`locks` |
+ *
+ * `onclose` 가 안 오므로 `connection.ts` 의 재연결도 안 탄다 — 화면은 *"붙는 중"* 에서
+ * 영원히 멈춘다. **협업 잠금(§7.2)과 WS 편집(§7.1)이 통째로 죽는데 아무도 말하지 않는다.**
+ *
+ * # 왜 원문을 읽는가
+ *
+ * 위 배선 절과 같은 자를 쓴다. 설정 객체를 `import` 해서 재는 길도 있지만 그쪽은
+ * `vite.config.ts` 를 **브라우저 프로그램의 타입 그래프로 끌고 들어온다** — 그 파일이
+ * `tsconfig.node.json` 에 따로 사는 이유가 정확히 그것이다(`types: ["node"]` 를
+ * `apps/web/src` 에 안 얹으려고 갈랐다). 게다가 jsdom 안에서 `@vitejs/plugin-react` 를
+ * 실행하고 **gitignore 된 `.env` 를 읽게** 되므로, 재는 값이 있을 수도 없을 수도 있는
+ * 파일에 매인다.
+ *
+ * 원문 읽기의 약점(글자가 맞아도 vite 에 안 꽂힐 수 있다)은 위 배선 절이 쓰는 방법으로
+ * 좁힌다 — **`'/api'` 엔트리 *안에* 있는지**를 보지 파일 어딘가에 있는지를 보지 않는다.
+ */
+describe('업그레이드도 프록시를 탄다 — ws', () => {
+  const source = stripComments(viteConfigSource)
+
+  /** `'/api': { … }` 의 중괄호 안. 없으면 빈 문자열이라 아래가 전부 실패한다. */
+  const apiEntry = source.match(/'\/api':\s*\{([^}]*)\}/)?.[1] ?? ''
+
+  it('자가 진짜 엔트리를 잡았다 — 못 잡으면 아래가 통째로 헛돈다', () => {
+    // 배선 절의 카나리아와 같은 이유다. 정규식이 빗나가면 `not.toMatch` 계열이 전부
+    // 초록이 되므로, 먼저 **잡았다는 것**을 못박는다.
+    expect(apiEntry).not.toBe('')
+    expect(apiEntry).toContain('target: apiProxyTarget')
+  })
+
+  it('**`ws` 가 그 엔트리 안에 켜져 있다** — 없으면 업그레이드가 조용히 멈춘다', () => {
+    expect(apiEntry).toMatch(/\bws:\s*true\b/)
+  })
+
+  it('vite 가 묻는 조건을 만족한다 — `ws` 가 참이거나 대상이 ws:/wss: 여야 한다', () => {
+    // 이 저장소의 대상은 `http://127.0.0.1:<PORT>` 다(위 절이 잰다). 즉 뒤의 둘은
+    // 영원히 거짓이고 **`ws` 만이 그 게이트를 연다.** 대상을 `ws:` 로 바꾸는 것은
+    // 답이 아니다 — 같은 엔트리로 REST 도 나가기 때문이다.
+    expect(apiEntry).toMatch(/\bws:\s*true\b/)
+    expect(apiEntry).toContain('target: apiProxyTarget')
+    expect(apiEntry).not.toMatch(/target:\s*'wss?:/)
+  })
+
+  it('`changeOrigin` 은 그대로 `false` 다 — WS 도 same-origin 쿠키를 쓴다 (D4)', () => {
+    // 업그레이드 요청의 헤더는 http-proxy 가 통째로 베낀다(`setupOutgoing` 의
+    // `Object.assign({}, req.headers)`) — `changeOrigin` 이 손대는 것은 `Host` 하나뿐이라
+    // `Cookie` 는 어느 쪽이든 실린다. **그래서 D4 의 근거가 WS 에서도 그대로 선다:**
+    // 브라우저가 같은 오리진으로 붙으니 쿠키가 실리고, `Host` 를 안 바꾸니 서버는
+    // 브라우저가 본 오리진을 그대로 본다. 실측으로 확인했다 — 이 값 그대로
+    // `preHandler: projectGuard('viewer')` 를 통과해 `joined` 가 왔다.
+    expect(apiEntry).toMatch(/\bchangeOrigin:\s*false\b/)
+  })
+
+  it('업그레이드도 **같은 대상 규칙**을 쓴다 — 대상을 두 벌 두지 않는다', () => {
+    // vite 의 업그레이드 핸들러는 같은 `proxies[context]` 엔트리를 다시 꺼내 쓴다.
+    // 즉 대상은 위 절이 잰 `apiProxyTarget` 하나뿐이고, WS 전용 대상을 따로 두면
+    // 그 순간 손으로 맞출 자리가 둘이 된다(이 파일이 없애려던 것이 그것이다).
+    expect(source.match(/target:/g)).toHaveLength(1)
+  })
+})
