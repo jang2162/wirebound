@@ -296,6 +296,51 @@ describe('타입 목록과 노드 추가', () => {
     expect(within(structureRegion()).queryByRole('group', { name: '타입 고르기' })).toBeNull()
   })
 
+  /**
+   * **목록을 연 «뒤에» 선택이 움직일 수 있다** — 목록은 툴바 안에 있지만 트리 줄은 그
+   * 옆에 그대로 있으므로, 열어 둔 채 다른 노드를 누르는 것이 흔한 경로다.
+   *
+   * **앞 판은 목록이 남았고, 그때 고르면 «옮긴 뒤의 선택»에 꽂혔다** — `addNode`가 클릭
+   * 시점의 `selectedNodeId`를 보기 때문이다. **그것이 얼마나 나빴는지는 잰 값이 있다:**
+   * `Card`에서 목록을 열고 `Text`(카탈로그가 `children: 'none'`)로 옮긴 뒤 고르면
+   *
+   * ```
+   * add /root/children/0/children  value: [Divider]
+   * ```
+   *
+   * 이 나갔다 — **`Text`에 `children` 배열을 만드는 편집**이고, 그 결과 문서에
+   * `validatePage`가 `children-not-allowed`(**error**)를 낸다. 즉 서버의 편집 파이프라인
+   * 6단계가 `invalid`로 거절하는 편집이다(`apps/api/src/services/edit-pipeline.ts` —
+   * 소스로 확인했고 DB가 없어 실행으로는 재지 않았다). *"보내 봐야 거절될 편집은 만들지
+   * 않는다"*(`edit/structure-actions.ts` 머리말)가 막으려던 부류 그대로다.
+   *
+   * **지금은 목록이 닫힌다.** 그것을 고른 것이 `panels/structure-toolbar.tsx`의
+   * `visiblePicker`이고, 거기 조건이 `abilities.addInside`라 **잠금만이 아니라 이 전이도
+   * 함께 답한다.** 잠금 쪽 케이스는 `../lock/toolbar-abilities.test.tsx`가 갖고, 잠금이
+   * 아닌 이 축을 재는 것이 여기 하나다.
+   *
+   * **`adding`은 비우지 않는다** — 다시 담을 수 있는 노드로 옮기면 목록이 그대로 돌아온다.
+   * 그것도 함께 잰다(비우는 구현과 여기서 갈린다).
+   */
+  it('목록을 연 뒤 자식을 못 담는 노드로 옮기면 닫히고, 돌아오면 다시 열린다', async () => {
+    const srv = server()
+    await openPage(doc(), { apiOverrides: srv.api })
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+    expect(within(structureRegion()).getByRole('group', { name: '타입 고르기' })).toBeTruthy()
+
+    select('Text')
+
+    expect(within(structureRegion()).queryByRole('group', { name: '타입 고르기' })).toBeNull()
+    expect(toolButton('안에 추가').disabled).toBe(true)
+    // 목록이 없으니 나갈 편집도 없다 — 위 머리말의 `add …/children`이 여기서 사라진다.
+    expect(srv.calls).toHaveLength(0)
+
+    select('Card')
+
+    expect(within(structureRegion()).getByRole('group', { name: '타입 고르기' })).toBeTruthy()
+  })
+
   it('children이 none인 노드에는 안에 추가가 비활성이다', async () => {
     await openPage(doc(), { apiOverrides: server().api })
     select('Text')
