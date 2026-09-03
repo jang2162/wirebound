@@ -631,8 +631,9 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
    * 고르면 `add /root/children/1/children/2`가 나가 **423 + "편집 1개가 취소됐습니다"**를
    * 받았다(재현해 확인한 값이다).
    *
-   * **잠금이 풀리면 목록이 돌아오는 것도 함께 잰다.** `adding`을 비우지 않는 것이 판단이고
-   * (잠깐 잠긴 사이에 고르던 것을 잃지 않는다), 비우는 구현과 여기서 갈린다.
+   * **잠금이 풀리면 목록이 돌아오는 것도 함께 잰다.** `adding`을 비우지 않는 것이 판단이고,
+   * 비우는 구현과 여기서 갈린다. **돌아오는 것은 «어느 고르개가 열려 있었는지»뿐이다** —
+   * 그 안에서 고르던 것은 함께 돌아오지 않는다(아래 두 케이스가 그 값을 든다).
    */
   it('타입 고르개도 같다 — 사라지고, 잠금이 풀리면 돌아온다', async () => {
     const view = await board()
@@ -647,6 +648,72 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     view.lock([])
 
     expect(screen.getByRole('group', { name: '타입 고르기' })).toBeTruthy()
+  })
+
+  /**
+   * **여기서부터 둘은 «잃는 것»을 못박는다**(P10-2 이월 E).
+   *
+   * 앞 판의 주석은 *"잠깐 잠긴 사이에 사용자가 고르던 것을 잃지 않는다"*였는데 **거짓이다** —
+   * 조건이 거짓인 동안 컴포넌트가 DOM에서 빠지므로 그 `useState`가 함께 사라진다. 돌아오는
+   * 것은 `adding`(어느 고르개가 열려 있었는지)뿐이다.
+   *
+   * **살리지 않기로 한 근거는 `panels/structure-toolbar.tsx`의 `visiblePicker` 머리말이
+   * 갖는다**(요지: 지금 잃는 것은 «고르던 자리»뿐이고 틀린 편집은 한 건도 안 나가는데,
+   * 살리는 두 길은 각각 §3.14가 닫은 우회로를 다시 열거나 명령 층이 폼을 들게 한다).
+   *
+   * **그래서 이 둘은 «지금 이렇다»를 못박는 자다.** 살리는 쪽으로 판단이 바뀌면 이 두
+   * 케이스와 그 머리말을 **함께** 고쳐야 한다 — 한쪽만 고치면 다시 말과 코드가 갈린다.
+   */
+  it('잠금이 오갔다 오면 타입 고르개의 고른 타입이 초깃값으로 되돌아간다', async () => {
+    const view = await board()
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+    const typeSelect = () =>
+      within(screen.getByRole('group', { name: '타입 고르기' })).getByRole<HTMLSelectElement>(
+        'combobox',
+      )
+    await screen.findByRole('group', { name: '타입 고르기' })
+
+    const initial = typeSelect().value
+    const other = [...typeSelect().options].map((option) => option.value).find((v) => v !== initial)
+    // **전제를 값으로 못박는다.** 목록에 둘 이상 없으면 아래가 아무것도 재지 못한다.
+    expect(other).toBeDefined()
+    fireEvent.change(typeSelect(), { target: { value: other! } })
+    expect(typeSelect().value).toBe(other)
+
+    view.lock([foreign('n-box')])
+    view.lock([])
+
+    expect(typeSelect().value).toBe(initial)
+    // **설명 줄도 함께 되돌아간다** — 그 줄은 고른 타입에서 나온다(P10-3).
+    const desc = screen
+      .getByRole('group', { name: '타입 고르기' })
+      .querySelector('.wb-shell-picker-desc')
+    expect(desc?.textContent).toContain(initial)
+  })
+
+  /**
+   * **프리셋 쪽이 가장 나쁘다 — 사용자가 «친» 글자가 사라진다.** 타입·프리셋 목록은 눈앞에
+   * 다시 있지만 이름칸의 글자는 다시 쳐야 한다. 이 케이스를 따로 두는 것이 그래서다 —
+   * 타입 쪽만 살린 구현에서 이 케이스가 혼자 죽는다.
+   */
+  it('프리셋 고르개는 이름칸에 친 글자까지 잃는다', async () => {
+    const view = await board()
+    fireEvent.click(toolButton('프리셋'))
+    const group = () => screen.getByRole('group', { name: '프리셋 고르기' })
+    const nameInput = () => group().querySelector<HTMLInputElement>('.wb-shell-picker-input')!
+    await screen.findByRole('group', { name: '프리셋 고르기' })
+
+    fireEvent.change(nameInput(), { target: { value: '회원 목록 기본' } })
+    expect(nameInput().value).toBe('회원 목록 기본')
+
+    view.lock([foreign('n-1')])
+    view.lock([])
+    await settle()
+
+    expect(nameInput().value).toBe('')
+    // **아무것도 서버로 안 나갔다는 것이 이 잃음의 대가다** — 그 값이 이 판단의 근거다.
+    expect(view.calls).toEqual([])
   })
 
   /**
