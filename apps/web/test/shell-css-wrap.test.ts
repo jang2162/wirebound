@@ -15,18 +15,30 @@
  * | 값 | 칸 폭 | 넘침 | 상자 가로 스크롤 |
  * |---|---|---|---|
  * | 없음(`normal`) | **397.3px** | **157.3px** | **145px** |
- * | `break-word` | 397.3px | 157.3px | 145px |
- * | **`anywhere`** | **240px** | **0** | **0** |
+ * | `overflow-wrap: break-word` | 397.3px | 157.3px | 145px |
+ * | **`overflow-wrap: anywhere`** | **240px** | **0** | **0** |
  *
  * 한글은 전후가 같다(음절 단위로 이미 끊긴다).
  *
  * # 왜 값이 `anywhere`여야 하는가 — 이 파일이 재는 둘째 축
  *
- * `break-word`는 **min-content 크기를 바꾸지 않는다.** 끊을 수 없는 토막의 폭이 그대로
- * 남으므로 `min-width: auto`가 항목을 그 폭까지 벌리고, **선언은 붙는데 넘침은 한 픽셀도
- * 안 줄어든다**(위 표의 둘째 줄이 그 값이다). 셸의 다른 두 자리가 쓰는
- * `word-break: break-word`를 여기 그대로 옮기면 그렇게 된다. 같은 이유로 `anywhere`를
- * 고른 선례가 이미 있다 — `.wb-shell-snapshots-desc`(그쪽은 uuid다).
+ * `overflow-wrap: break-word`는 **min-content 크기를 바꾸지 않는다.** 끊을 수 없는 토막의
+ * 폭이 그대로 남으므로 `min-width: auto`가 항목을 그 폭까지 벌리고, **선언은 붙는데 넘침은
+ * 한 픽셀도 안 줄어든다**(위 표의 둘째 줄이 그 값이다).
+ *
+ * **`word-break: break-word`는 다르다 — 그 값은 «된다».** 앞 판의 이 자리는 *"셸의 다른 두
+ * 자리가 쓰는 `word-break: break-word`를 여기 그대로 옮기면 그렇게 된다(넘침 그대로)"*고
+ * 적었고 **그것이 거짓이었다**(P10-2 리뷰 발견 2 — `overflow-wrap: break-word`와 혼동한
+ * 것이다). 그 철자는 폐기된 별칭이라 사용 동작이 `anywhere` 쪽이고 **240px / 넘침 0**을
+ * 낸다(다시 쟀다).
+ *
+ * **그래서 «둘 다 되지만 이것을 고른다»가 답이고, 그 근거는 `src/shell.css`의 이 칸 주석이
+ * 갖는다**(선례 · computed에 안 보임 · 후손이 `word-break`를 되돌릴 때 갈림 — 수와 함께).
+ * 여기 두 벌로 적지 않는다.
+ *
+ * **다만 근거 하나는 이 파일에 대한 것이라 여기 적는다.** `word-break: break-word`를 걸면
+ * `overflow-wrap`의 computed가 **`normal`**이다 — 즉 그 철자를 고르면 **이 자가 재는 값이
+ * 사라진다.** «감싼다»는 성질을 값으로 읽을 수 없게 되고, 그때 남는 자는 원문 읽기뿐이다.
  *
  * # 형제 둘을 함께 잠그는 것이 첫째 축이다
  *
@@ -102,12 +114,17 @@ describe('고르개의 말 한 줄은 공백 없는 토막에서도 감싼다', 
   })
 
   /**
-   * **값의 축이다.** `break-word`는 min-content를 안 바꿔 이 자리에서 **넘침을 한 픽셀도
-   * 못 줄인다**(머리말의 표 둘째 줄). 선언이 붙었다는 것이 재 봤다는 뜻은 아니다.
+   * **값의 축이다.** `overflow-wrap: break-word`는 min-content를 안 바꿔 이 자리에서
+   * **넘침을 한 픽셀도 못 줄인다**(머리말의 표 둘째 줄). 선언이 붙었다는 것이 재 봤다는
+   * 뜻은 아니다.
+   *
+   * **`word-break: break-word`와 섞어 읽지 않는다** — 그 철자는 넘침을 없애지만
+   * `overflow-wrap`의 computed를 `normal`로 두므로 **이 단언에서 죽는다.** 그것이 값이
+   * 아니라 흠이라는 뜻은 아니고, 왜 그래도 `anywhere`인지는 머리말과 `src/shell.css`가 갖는다.
    *
    * 대상은 **오늘 도달하는 쪽**이다(사용자가 지은 프리셋 이름 최대 60자).
    */
-  it('도달하는 칸이 `anywhere` 다 — `break-word` 는 이 자리에서 아무것도 안 한다', () => {
+  it('도달하는 칸이 `anywhere` 다 — `overflow-wrap: break-word` 는 이 자리에서 아무것도 안 한다', () => {
     expect(overflowWrapOf('wb-shell-picker-notice')).toBe('anywhere')
   })
 

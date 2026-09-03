@@ -1450,7 +1450,7 @@
    한국어 이름이 되면서 가장 긴 것이 `그리드 (담을 수 있음)` **102.3px**가 되어 든다.
 
    **`overflow-wrap: anywhere`는 형제(`-notice`)와 한 짝이다** — 그 주석에 실측과
-   *"왜 `break-word`로는 안 되는가"*가 있다. 이 칸만 보면 지금은 도달 불가다(설명 19개가
+   *"`word-break: break-word`도 되는데 왜 `anywhere`인가"*가 있다. 이 칸만 보면 지금은 도달 불가다(설명 19개가
    전부 한글이고 앞에 붙는 영문 타입명은 열 자 안이다). **그래도 함께 거는 것이 판단이다**:
    같은 형태의 두 칸에 다른 답을 두면 다음 사람이 어느 쪽이 옳은지 알 수 없고,
    `-notice`는 **오늘 도달한다**(사용자가 짓는 프리셋 이름 최대 60자가 그 칸에 실린다). */
@@ -1512,12 +1512,40 @@
    | `break-word` | 397.3px | 157.3px | 145px | 29px |
    | **`anywhere`** | **240px** | **0** | **0** | 43px |
 
-   **`break-word`로는 한 픽셀도 안 줄어든다 — 이것이 값을 고른 근거다.** 이 칸은
+   **`overflow-wrap: break-word`로는 한 픽셀도 안 줄어든다 — 그 값을 버린 근거다.** 이 칸은
    `flex-basis: 100%`인 flex 항목이고 `min-width: auto`가 **min-content로 풀리는데**,
-   `break-word`는 min-content 크기를 바꾸지 않는다(끊을 수 없는 토막의 폭이 그대로 남는다).
-   `anywhere`는 그 크기까지 바꾼다. 셸의 다른 두 자리가 쓰는 `word-break: break-word`를
-   여기 그대로 옮기면 **선언은 붙고 넘침은 그대로**다. 같은 이유로 `anywhere`를 고른
-   선례가 이미 있다 — `.wb-shell-snapshots-desc`(그쪽은 uuid다).
+   `break-word`는 min-content를 바꾸지 않는다(끊을 수 없는 토막의 폭이 그대로 남는다 —
+   **319.6px**). `anywhere`는 그것을 **12px**로 만든다.
+
+   # `word-break: break-word`**도 된다** — 그런데도 `anywhere`를 고른다
+
+   **앞 판의 이 자리는 *"셸의 다른 두 자리가 쓰는 `word-break: break-word`를 여기 그대로
+   옮기면 선언은 붙고 넘침은 그대로다"*라고 적었고 그것이 거짓이었다**(P10-2 리뷰 발견 2).
+   `overflow-wrap: break-word`와 혼동한 것이다 — 뒤엣것은 폐기된 별칭이고 그 사용 동작이
+   `anywhere` 쪽이라 **min-content를 똑같이 줄인다.** 다시 쟀다(같은 재현판, 2026-09-04):
+
+   | 선언 | 칸 폭 | 넘침 | min-content | computed `overflow-wrap` |
+   |---|---|---|---|---|
+   | 없음(`normal`) | 397.3px | 157.3px | 319.6px | `normal` |
+   | `overflow-wrap: break-word` | 397.3px | 157.3px | **319.6px** | `break-word` |
+   | **`overflow-wrap: anywhere`** | **240px** | **0** | **12px** | **`anywhere`** |
+   | `word-break: break-word` | **240px** | **0** | **12px** | **`normal`** |
+
+   **«둘 다 되지만 이것을 고른다»가 정직한 답이다.** 근거 셋:
+
+   1. **선례가 이미 `anywhere`다** — `.wb-shell-snapshots-desc`(그쪽은 uuid다). 같은 형태에
+      다른 철자를 두면 다음 사람이 어느 쪽이 옳은지 모른다. 이 칸이 형제(`-desc`)와 답을
+      맞추는 것과 같은 판단이다.
+   2. **효과가 값으로 안 읽힌다.** 표의 마지막 칸이 그것이다 — `word-break: break-word`를
+      걸면 `overflow-wrap`의 computed는 **`normal`**이다. 이 저장소가 5차에 세운 규칙이
+      *"값이 있는 것은 값으로 잰다"*인데, 그 철자를 고르면 **감싼다는 성질을 읽을 값이
+      없어진다**(`test/shell-css-wrap.test.ts`가 재는 것이 그 값이다).
+   3. **후손이 `word-break`를 건드리면 갈린다 — 둘이 같은 것의 두 철자가 아니다.** 감싸는
+      상자에 걸고 안쪽 요소가 `word-break: normal`로 되돌리면, min-content가 `anywhere`는
+      **7.1px** 그대로인데 `word-break: break-word`는 **426.1px로 통째로 풀린다**(쟀다).
+      이 셸은 `word-break`를 네 자리에서 쓴다 — `break-word`가 셋(**두 자리가 아니다**),
+      `break-all`이 하나. 오늘 이 칸은 후손 없는 한 줄이라 그 판이 오지 않지만, **갈리는
+      자리가 있다는 것**이 값을 고를 때의 차이다.
 
    한글은 전후가 같다(음절 단위로 이미 끊긴다 — 높이 15px·넘침 0, 양쪽 판 다). 대가는
    라틴 토막이 왔을 때 칸이 두 줄에서 세 줄로 늘어나는 것이고, 그것이 가로 스크롤보다 낫다. */
@@ -2878,8 +2906,9 @@
    **맨 뒤**에 있어야 한다(`snapshots-panel.tsx`의 주석). 안전망 스냅샷의 설명은 서버가
    복원마다 만드는 긴 문자열이라 이 줄에서 가장 긴 칸이 되는 것이 보통이다.
 
-   `overflow-wrap: anywhere`는 그 문자열 끝의 **uuid** 때문이다 — 공백이 없어 `break-word`
-   만으로는 안 끊기는 토막이 들어 있다.
+   `overflow-wrap: anywhere`는 그 문자열 끝의 **uuid** 때문이다 — 공백이 없어
+   `overflow-wrap: break-word`만으로는 안 끊기는 토막이 들어 있다(**`word-break`의 같은
+   철자와 다른 값이다** — 그 둘을 가른 실측은 `.wb-shell-picker-notice`의 주석이 갖는다).
 
    **설명이 없는 스냅샷은 이 칸을 아예 안 그린다**(`:empty`). 안 그러면 빈 줄 하나가
    `row-gap`만큼 자리를 먹는다 — 목록이 길어질수록 눈에 띈다. */
