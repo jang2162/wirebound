@@ -251,13 +251,19 @@ describe('§9 — 좌측의 편집 도구도 편집 모드에 있다', () => {
   it('뷰 모드에서는 페이지 JSON 패널이 없다', async () => {
     await openPage(DOC)
     expect(within(treeRegion()).getByRole('region', { name: '페이지 JSON' })).toBeTruthy()
+    // 편집 모드에서는 가져오기의 **토글**이 있다. 아래 부재 단언의 분모다.
+    expect(screen.getByRole('button', { name: '페이지 JSON 가져오기' })).toBeTruthy()
 
     toView()
 
     expect(within(treeRegion()).queryByRole('region', { name: '페이지 JSON' })).toBeNull()
-    // 가져오기 폼은 명백히 편집이다. 상자만 지우고 폼을 남긴 판을 가른다.
+    // 가져오기는 명백히 편집이다. 상자만 지우고 폼을 남긴 판을 가른다.
+    //
+    // **토글로 잰다 — `페이지 가져오기`(실행 버튼)로 재면 아무것도 안 재는 줄이 된다.**
+    // 그 폼은 편집 모드에서도 기본이 접혀 있어(`panels/page-json-panel.tsx`의 머리말)
+    // 실행 버튼의 부재가 두 모드에 대해 똑같이 참이다.
+    expect(screen.queryByRole('button', { name: '페이지 JSON 가져오기' })).toBeNull()
     expect(screen.queryByRole('button', { name: '페이지 가져오기' })).toBeNull()
-    expect(screen.queryByLabelText('가져올 페이지 제목')).toBeNull()
     // **`페이지 내보내기`도 함께 간다 — 판정이다.** 읽기 동작이지만 이 상자의 축은
     // *"페이지를 JSON으로 주고받는다"*라는 저작 도구이고, 설계서를 **읽는** 사람의
     // 내려받기는 셸 머리의 `내보내기`(§11.3)가 두 모드 모두에서 낸다.
