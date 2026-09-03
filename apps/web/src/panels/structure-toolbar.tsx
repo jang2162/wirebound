@@ -147,15 +147,23 @@ export function useStructureCommands(props: {
   pageId: string | undefined
   /**
    * 고른 노드를 막는 **남의** 잠금(`store.lockedBy`가 낸 것). 없으면 `null`이다.
-   * 상태줄이 이것을 맨 위에서 본다(`./toolbar-status.ts`).
+   *
+   * **두 곳이 이 값을 쓴다.** 판정이 이것으로 꺼지고(`structureAbilities`의 셋째 인자 —
+   * 그쪽 머리말에 왜 «전부» 꺼지는지와 실측이 있다), 상태줄이 사다리 맨 위에서 이유를
+   * 말한다(`./toolbar-status.ts`). **판정을 끄는 자리가 여기인 것이 요점이다** — 툴바
+   * 컴포넌트에서 `disabled`를 겹치면 단축키가 안 막힌다(`panels/structure-tree.tsx`의
+   * `SHORTCUTS`는 `commands.abilities`를 지난다).
    *
    * **여기서 구독하지 않고 받는다.** 스토어의 잠금 목록을 손에 쥐는 자리는 화면에 **하나**여야
    * 하고(`test/lock/one-verdict.test.ts` — *"셋째 판정은 여기서 먼저 보인다"*), 그 하나가
    * 이 훅을 부르는 `StructureTree`다. 거기서 목록을 이미 구독해 트리 줄의 배지·비활성을
    * 그리므로, 같은 값을 여기서 또 구독하면 자리만 늘고 얻는 것이 없다. **판정은 어느 쪽도
    * 하지 않는다** — 양쪽 다 스토어의 `lockedBy`를 지난 값을 든다.
+   *
+   * **선택 인자가 아니다.** 빠뜨리면 잠긴 자리에서 도구가 다시 살아나는데, 그것은 조용히
+   * 지나가는 부류의 누락이다(이 슬라이스가 고친 것이 정확히 그 모양이다).
    */
-  selectedLock?: NodeLock | null
+  selectedLock: NodeLock | null
 }): StructureCommands {
   const store = useEditorStoreInstance()
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 본다
@@ -173,7 +181,7 @@ export function useStructureCommands(props: {
   // 아니다.
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
 
-  const abilities = structureAbilities(document, selectedNodeId)
+  const abilities = structureAbilities(document, selectedNodeId, props.selectedLock)
   /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`이다. */
   const [adding, setAdding] = useState<OpenPicker | null>(null)
 
@@ -437,7 +445,7 @@ export function useStructureCommands(props: {
     status: structureStatus({
       selectedNodeId,
       isRoot: document !== null && selectedNodeId !== null && document.root?.id === selectedNodeId,
-      lock: props.selectedLock ?? null,
+      lock: props.selectedLock,
       abilities,
     }),
     remove: removeSelected,

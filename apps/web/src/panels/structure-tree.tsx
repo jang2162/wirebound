@@ -142,9 +142,14 @@ export function StructureTree(props: {
   const commands = useStructureCommands({
     projectId: props.projectId,
     pageId: props.pageId,
-    // **고른 노드의 잠금도 여기서 내려 준다** — 툴바 아래 상태줄이 *"○○님이 편집 중"*을
-    // 그 값으로 말한다. 목록을 손에 쥐는 자리는 화면에 하나여야 하고(그 규칙과 근거는
+    // **고른 노드의 잠금도 여기서 내려 준다.** 그 값이 하는 일이 둘이다 — 툴바의 판정을
+    // 끄고(`structureAbilities`의 셋째 인자), 툴바 아래 상태줄이 *"○○님이 편집 중"*을
+    // 그것으로 말한다. 목록을 손에 쥐는 자리는 화면에 하나여야 하고(그 규칙과 근거는
     // `test/lock/one-verdict.test.ts`), 그 하나가 바로 위의 구독이다.
+    //
+    // **아래 키 핸들러가 같은 값을 지나는 것이 요점이다.** 단축키는 `commands.abilities`를
+    // 보므로, 판정이 훅에서 꺼지면 단축키도 함께 꺼진다 — 판정을 이 컴포넌트에서 `disabled`로
+    // 겹쳤으면 그렇게 되지 않았다(D8이 툴바와 단축키를 한 묶음으로 둔 이유가 그것이다).
     //
     // **줄에 붙는 배지로는 안 닫히는 자리가 있다.** 배지는 잠금이 가리키는 노드에만
     // 붙는데(아래 `StructureNode`), 막히는 것은 그 **서브트리 전체**다 — 자동 선택된
@@ -167,7 +172,9 @@ export function StructureTree(props: {
     // 포커스 이동이 그대로 일어난다.
     event.preventDefault()
     // **버튼과 같은 판정을 지난다**(D8). 키 이벤트는 `disabled`를 지나지 않으므로
-    // 여기서 보지 않으면 비활성인 조작이 단축키로만 실행된다.
+    // 여기서 보지 않으면 비활성인 조작이 단축키로만 실행된다. **남이 잠근 자리도 이 줄이
+    // 막는다** — 잠금은 `useStructureCommands`가 판정에 넣으므로 여기서 따로 볼 것이 없다.
+    // (`test/lock/toolbar-abilities.test.tsx`가 단축키 쪽을 따로 잰다.)
     //
     // **`ability`가 `null`이면 지날 판정이 없다**(P7-2 D9) — 고르개를 여는 것뿐이고
     // 그것은 선택이 없어도 되는 조작이다. 위 표의 주석에 왜 `StructureAbilities`에

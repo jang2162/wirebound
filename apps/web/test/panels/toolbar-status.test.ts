@@ -91,14 +91,21 @@ function doc(): PageDocument {
   return { version: 1, root }
 }
 
-/** 그 노드를 고른 상태의 상태줄 문안. 잠금은 없다. */
+/**
+ * 그 노드를 고른 상태의 상태줄 문안. 잠금은 기본이 없음이다.
+ *
+ * **잠금을 `structureAbilities`에도 넘긴다** — 화면에서 그 둘은 같은 값을 지나므로
+ * (`panels/structure-toolbar.tsx`의 `useStructureCommands`), 여기서 상태줄에만 주면
+ * **도달하지 않는 조합**(잠겼는데 판정은 켜져 있다)을 재게 된다. 그 조합을 재던 것이
+ * 이 슬라이스가 고친 고장이다.
+ */
 function statusOf(nodeId: string | null, lock: NodeLock | null = null): string {
   const document = doc()
   return structureStatus({
     selectedNodeId: nodeId,
     isRoot: nodeId !== null && document.root.id === nodeId,
     lock,
-    abilities: structureAbilities(document, nodeId),
+    abilities: structureAbilities(document, nodeId, lock),
   })
 }
 
@@ -244,7 +251,7 @@ describe('구조 상태줄 — 잠금이 사다리의 맨 위다', () => {
    * `aria-current`인 채 회색이 되고 **그 이유가 화면 어디에도 없었다.**
    */
   it('루트가 남의 잠금에 막히면 이름을 말한다 — 배지가 안 붙는 자리다', () => {
-    expect(statusOf('n-root', LOCK)).toBe('보라님이 편집 중이라 고를 수 없습니다')
+    expect(statusOf('n-root', LOCK)).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
   /**
@@ -256,12 +263,26 @@ describe('구조 상태줄 — 잠금이 사다리의 맨 위다', () => {
   })
 
   it('잠금은 잎의 타입 문장보다도 먼저다', () => {
-    expect(statusOf('n-a', LOCK)).toBe('보라님이 편집 중이라 고를 수 없습니다')
+    expect(statusOf('n-a', LOCK)).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
+  })
+
+  /**
+   * **이 조합은 판정이 잠금을 보게 된 뒤에야 생겼다.** 잠기면 `structureAbilities`가
+   * `NOTHING`을 내므로 `addAfter`·`remove`가 둘 다 `false`인데, 그 값은 사다리의 아래
+   * 칸이 *"고른 노드가 문서에 없습니다"*로 읽는 값과 **같다**. 순서를 뒤집으면 잠긴
+   * 자리에서 없는 노드 이야기가 나온다 — 그 노드는 문서에 있다.
+   */
+  it('잠금이 «문서에 없다»보다 먼저다 — 잠기면 판정이 그쪽과 같은 값이 된다', () => {
+    const abilities = structureAbilities(doc(), 'n-p', LOCK)
+    expect(abilities.addAfter).toBe(false)
+    expect(abilities.remove).toBe(false)
+
+    expect(statusOf('n-p', LOCK)).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
   it('잠금 소유자 이름을 그대로 싣는다 — 하드코딩이 아니다', () => {
     const other: NodeLock = { nodeId: 'n-1', userId: 'u-dahye', userName: '다혜' }
-    expect(statusOf('n-root', other)).toBe('다혜님이 편집 중이라 고를 수 없습니다')
+    expect(statusOf('n-root', other)).toBe('다혜님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
   /**
