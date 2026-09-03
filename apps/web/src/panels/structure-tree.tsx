@@ -13,7 +13,6 @@
 import type { KeyboardEvent, ReactElement } from 'react'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import type { StructureAbilities } from '../edit/structure-actions'
 import { nodeTypeLabel } from './node-shape'
 import { isTypingSurface } from './typing-surface'
 import { StructureToolbar, useStructureCommands, type StructureCommands } from './structure-toolbar'
@@ -56,45 +55,49 @@ import { StructureToolbar, useStructureCommands, type StructureCommands } from '
 const SHORTCUTS: {
   match: (event: KeyboardEvent) => boolean
   /**
-   * 이 조작이 지나야 하는 판정. **`null`이면 판정이 없다**(P7-2 D9).
+   * 이 조작이 지금 막혔는가. **버튼의 `disabled`와 같은 값을 지나야 한다**(D8) — 키
+   * 이벤트는 `disabled`를 지나지 않으므로, 여기서 안 보면 회색인 조작이 단축키로만
+   * 실행된다.
    *
-   * **`StructureAbilities`에 자리를 만들 수 없어서 여기에 만들었다 — 재라 #6을 재서
-   * 알았다.** 그 표에 `openPattern: true` 같은 키를 더하면 `structureAbilities`가
-   * *"고른 노드가 없다"*에서 내는 `NOTHING`(전부 `false`)에 그 키도 `false`로 들어간다.
-   * **그런데 이 둘은 선택이 없어도 되는 조작이다** — 패턴은 선택이 없으면 root의 자식
-   * 끝에 꽂고(P7-1 D5), 프리셋은 페이지 통째라 자리를 아예 고르지 않는다. 즉 표에 넣는
-   * 순간 **정확히 그 상태에서만 단축키가 죽는다.** `WHY_DISABLED`도 절대 보이지 않을
-   * 문장을 하나씩 갖게 된다(그 표는 `Record<keyof StructureAbilities, string>`이다).
+   * **불린을 내는 함수인 것이 요점이다.** 앞 판은 `ability: keyof StructureAbilities | null`
+   * 이었는데, `null`이 *"판정이 없다"*를 뜻해 **패턴·프리셋이 잠금도 안 봤다**(그 사이
+   * 그 둘이 잠긴 자리에 423을 냈다 — `structure-toolbar.tsx`의 `patternLocked`에 실측).
+   * 지금은 그 둘도 자기 값을 갖는다.
    *
-   * 그래서 자리를 **단축키 표**에 만들었다. 판정 없는 조작이라는 성질이 툴바 쪽에서도
-   * 같다 — 그 둘만 `ToolButton`이 아니다(`structure-toolbar.tsx`).
+   * **`StructureAbilities`에 키를 만들지 않은 것은 그대로다 — 재라 #6을 재서 알았다.**
+   * 그 표에 `openPattern: true` 같은 키를 더하면 `structureAbilities`가 *"고른 노드가
+   * 없다"*에서 내는 `NOTHING`(전부 `false`)에 그 키도 `false`로 들어간다. **그런데 이
+   * 둘은 선택이 없어도 되는 조작이다** — 패턴은 선택이 없으면 root의 자식 끝에 꽂고
+   * (P7-1 D5), 프리셋은 페이지 통째라 자리를 아예 고르지 않는다. 즉 표에 넣는 순간
+   * **정확히 그 상태에서만 단축키가 죽는다.** `WHY_DISABLED`도 절대 보이지 않을 문장을
+   * 하나씩 갖게 된다(그 표는 `Record<keyof StructureAbilities, string>`이다).
    */
-  ability: keyof StructureAbilities | null
+  blocked: (commands: StructureCommands) => boolean
   run: (commands: StructureCommands) => void
 }[] = [
   {
     match: (event) => event.key === 'Delete' || event.key === 'Backspace',
-    ability: 'remove',
+    blocked: (commands) => !commands.abilities.remove,
     run: (commands) => commands.remove(),
   },
   {
     match: (event) => event.key === 'ArrowUp' && event.altKey,
-    ability: 'moveUp',
+    blocked: (commands) => !commands.abilities.moveUp,
     run: (commands) => commands.moveUp(),
   },
   {
     match: (event) => event.key === 'ArrowDown' && event.altKey,
-    ability: 'moveDown',
+    blocked: (commands) => !commands.abilities.moveDown,
     run: (commands) => commands.moveDown(),
   },
   {
     match: (event) => event.key === 'ArrowRight' && event.altKey && event.shiftKey,
-    ability: 'indent',
+    blocked: (commands) => !commands.abilities.indent,
     run: (commands) => commands.indent(),
   },
   {
     match: (event) => event.key === 'ArrowLeft' && event.altKey && event.shiftKey,
-    ability: 'outdent',
+    blocked: (commands) => !commands.abilities.outdent,
     run: (commands) => commands.outdent(),
   },
   {
@@ -108,7 +111,7 @@ const SHORTCUTS: {
     // `Alt`+`Shift` 조합에 브라우저·OS 기본 바인딩이 있는지도 위의 화살표 단축키와 같은
     // 이유로 재지 못했다.
     match: (event) => event.code === 'KeyI' && event.altKey && event.shiftKey,
-    ability: null,
+    blocked: (commands) => commands.patternLocked,
     run: (commands) => commands.openAdd('pattern'),
   },
   {
@@ -116,7 +119,7 @@ const SHORTCUTS: {
     // (Pattern·Preset) 첫 글자로는 못 가른다 — 툴바 라벨이 *"패턴 **넣기**"*이고
     // 프리셋은 **페이지** 통째를 바꾸는 것이라 그 축으로 골랐다.
     match: (event) => event.code === 'KeyP' && event.altKey && event.shiftKey,
-    ability: null,
+    blocked: (commands) => commands.presetLocked,
     run: (commands) => commands.openAdd('preset'),
   },
 ]
@@ -142,15 +145,28 @@ export function StructureTree(props: {
   const commands = useStructureCommands({
     projectId: props.projectId,
     pageId: props.pageId,
-    // **고른 노드의 잠금도 여기서 내려 준다** — 툴바 아래 상태줄이 *"○○님이 편집 중"*을
-    // 그 값으로 말한다. 목록을 손에 쥐는 자리는 화면에 하나여야 하고(그 규칙과 근거는
+    // **고른 노드의 잠금도 여기서 내려 준다.** 그 값이 하는 일이 둘이다 — 툴바의 판정을
+    // 끄고(`structureAbilities`의 셋째 인자), 툴바 아래 상태줄이 *"○○님이 편집 중"*을
+    // 그것으로 말한다. 목록을 손에 쥐는 자리는 화면에 하나여야 하고(그 규칙과 근거는
     // `test/lock/one-verdict.test.ts`), 그 하나가 바로 위의 구독이다.
+    //
+    // **아래 키 핸들러가 같은 값을 지나는 것이 요점이다.** 단축키는 `commands.abilities`를
+    // 보므로, 판정이 훅에서 꺼지면 단축키도 함께 꺼진다 — 판정을 이 컴포넌트에서 `disabled`로
+    // 겹쳤으면 그렇게 되지 않았다(D8이 툴바와 단축키를 한 묶음으로 둔 이유가 그것이다).
     //
     // **줄에 붙는 배지로는 안 닫히는 자리가 있다.** 배지는 잠금이 가리키는 노드에만
     // 붙는데(아래 `StructureNode`), 막히는 것은 그 **서브트리 전체**다 — 자동 선택된
     // 루트는 문서 안 모든 노드의 조상이라, 남이 아무 노드나 잡으면 루트 줄이
     // `aria-current`인 채 회색이 되고 그 이유는 화면 어디에도 없었다(P10-2 이월).
     selectedLock: selectedNodeId === null ? null : (lockOf?.(selectedNodeId) ?? null),
+    // **판정 밖의 둘이 지나는 잠금.** 루트는 문서 안 모든 노드의 조상이므로
+    // `lockedBy(root)`가 곧 *"이 페이지에 살아 있는 남의 잠금이 있나"*다 — 목록을 다시
+    // 뒤지지 않고 **같은 판정 한 벌**로 답한다. 어느 조작이 이것을 쓰는지는
+    // `structure-toolbar.tsx`의 `pageLock` 주석에 있다.
+    //
+    // 루트가 노드가 아닌 문서(검증 전에는 가능하다)에서는 물을 id가 없으므로 `null`이다 —
+    // 그때는 `structureAbilities`도 아무것도 못 찾아 일곱이 이미 꺼져 있다.
+    pageLock: typeof doc?.root?.id === 'string' ? (lockOf?.(doc.root.id) ?? null) : null,
   })
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
@@ -167,12 +183,11 @@ export function StructureTree(props: {
     // 포커스 이동이 그대로 일어난다.
     event.preventDefault()
     // **버튼과 같은 판정을 지난다**(D8). 키 이벤트는 `disabled`를 지나지 않으므로
-    // 여기서 보지 않으면 비활성인 조작이 단축키로만 실행된다.
-    //
-    // **`ability`가 `null`이면 지날 판정이 없다**(P7-2 D9) — 고르개를 여는 것뿐이고
-    // 그것은 선택이 없어도 되는 조작이다. 위 표의 주석에 왜 `StructureAbilities`에
-    // 넣지 않았는지가 있다.
-    if (shortcut.ability !== null && !commands.abilities[shortcut.ability]) return
+    // 여기서 보지 않으면 비활성인 조작이 단축키로만 실행된다. **남이 잠근 자리도 이 줄이
+    // 막는다** — 잠금은 `useStructureCommands`가 넣으므로 여기서 따로 볼 것이 없고,
+    // 그것이 아홉 **전부**에 걸린다(앞 판은 일곱뿐이었다).
+    // (`test/lock/toolbar-abilities.test.tsx`가 단축키 쪽을 따로 잰다.)
+    if (shortcut.blocked(commands)) return
 
     shortcut.run(commands)
   }

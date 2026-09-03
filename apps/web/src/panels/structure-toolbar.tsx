@@ -97,6 +97,30 @@ const WHY_DISABLED: Record<keyof StructureAbilities, string> = {
 export interface StructureCommands {
   abilities: StructureAbilities
   /**
+   * `패턴 넣기`가 남의 잠금에 막혔는가.
+   *
+   * **`abilities`에 키를 만들지 않은 이유는 그대로다**(`panels/structure-tree.tsx`의
+   * `SHORTCUTS` 주석) — `structureAbilities`는 선택이 없으면 `NOTHING`을 내는데 패턴은
+   * **선택이 없어도 되는 조작**이라, 그 표에 넣으면 정확히 그 상태에서만 죽는다.
+   *
+   * **대신 «꽂힐 자리»의 잠금을 지난다.** 패턴이 꽂히는 자리는 고른 노드가 정하고
+   * (`edit/pattern-insert.ts`의 `insertSpot`), 고른 것이 없으면 **루트의 자식 끝**이다.
+   * 그래서 이 값은 선택이 있으면 `selectedLock`, 없으면 `pageLock`이다 — **일곱과 같은
+   * 규칙이다**(*"고를 수 없는 자리는 바꿀 수 없다"*). 실측: 잠긴 노드를 고른 채 누르면
+   * `add …/children/2`가 나가 **423**이었고, 낙관적 적용이 붙었다 사라지며
+   * *"편집 1개가 취소됐습니다"*가 떴다 — `structureAbilities`가 없애려던 바로 그 모양이다.
+   */
+  patternLocked: boolean
+  /**
+   * `프리셋`이 남의 잠금에 막혔는가. **잠금이 하나라도 있으면 참이다**(`pageLock`).
+   *
+   * 패턴과 갈리는 이유: 프리셋의 op은 `replace /root/children` **하나**이고
+   * (`edit/preset-apply.ts`) 그 포인터는 문서 안 모든 노드의 조상이다. 그래서 이 페이지에
+   * 남의 잠금이 하나라도 살아 있으면 **언제나** 부딪친다 — 과차단이 아니라 서버 판정과
+   * 같은 값이다(실측: `replace /root/children` → **423**).
+   */
+  presetLocked: boolean
+  /**
    * 도구모음 아래 상태줄에 설 한 문장. 할 말이 없으면 `''`다.
    *
    * **툴바가 아니라 여기서 만든다** — 문안이 `abilities` 말고도 **선택 자체의 성질**
@@ -142,20 +166,82 @@ export interface StructureCommands {
  */
 export type OpenPicker = 'inside' | 'after' | 'pattern' | 'preset'
 
+/**
+ * **지금 그려도 되는 고르개.** 닫혀 있거나 **그 조작이 지금 막혔으면** `null`이다.
+ *
+ * # 왜 «열려 있는가»와 «그려도 되는가»를 가르나
+ *
+ * 고르개를 연 **뒤에** 조건이 바뀔 수 있다 — 남이 그 자리를 잠그는 것이 그 창이다.
+ * 목록을 그대로 남겨 두면 사용자가 그 안의 `추가`를 눌러 편집을 내고, **회색으로 만든
+ * 버튼을 우회한다.** 실측(패턴): 잠긴 노드를 고른 채 목록을 열어 두고 잠금이 도착한 뒤
+ * 꽂으면 `add …/children/2`가 나가 **423**을 받고 낙관적 적용이 붙었다 사라졌다.
+ * **타입 고르개도 같은 값이었다** — `안에 추가`로 연 뒤 잠금이 오면 목록이 남고,
+ * 거기서 고르면 같은 포인터로 같은 423을 받았다.
+ *
+ * # 셋이 한 자리에 있는 것이 요점이다
+ *
+ * 조건은 고르개마다 다르다(아래 표). 그것을 렌더에 흩어 두면 **닫아야 할 창이 셋인데
+ * 닫힌 것은 둘**인 상태가 생기고, 실제로 그런 커밋이 한 번 있었다. 여기 한 자리에 두면
+ * 고르개가 늘 때 그 자리가 보인다.
+ *
+ * | 고르개 | 그려도 되는 조건 | 그 조건이 잠금을 어떻게 보나 |
+ * |---|---|---|
+ * | `'inside'` | `abilities.addInside` | `structureAbilities`가 잠금을 지난다 |
+ * | `'after'` | `abilities.addAfter` | 같음 |
+ * | `'pattern'` | `!patternLocked` | 꽂힐 자리의 잠금(고른 노드 · 없으면 루트) |
+ * | `'preset'` | `!presetLocked` | 페이지에 남의 잠금이 하나라도 |
+ *
+ * **`adding`을 비우지 않는다.** 조건이 풀리면 열려 있던 것이 그대로 돌아온다 — 잠깐
+ * 잠긴 사이에 사용자가 고르던 것을 잃지 않는다.
+ *
+ * **판정을 새로 짓지 않는다** — 넷 다 `useStructureCommands`가 이미 낸 값을 읽을 뿐이다.
+ */
+export function visiblePicker(commands: StructureCommands): OpenPicker | null {
+  switch (commands.adding) {
+    case 'inside':
+      return commands.abilities.addInside ? 'inside' : null
+    case 'after':
+      return commands.abilities.addAfter ? 'after' : null
+    case 'pattern':
+      return commands.patternLocked ? null : 'pattern'
+    case 'preset':
+      return commands.presetLocked ? null : 'preset'
+    default:
+      return null
+  }
+}
+
 export function useStructureCommands(props: {
   projectId: string
   pageId: string | undefined
   /**
    * 고른 노드를 막는 **남의** 잠금(`store.lockedBy`가 낸 것). 없으면 `null`이다.
-   * 상태줄이 이것을 맨 위에서 본다(`./toolbar-status.ts`).
+   *
+   * **두 곳이 이 값을 쓴다.** 판정이 이것으로 꺼지고(`structureAbilities`의 셋째 인자 —
+   * 그쪽 머리말에 왜 «전부» 꺼지는지와 실측이 있다), 상태줄이 사다리 맨 위에서 이유를
+   * 말한다(`./toolbar-status.ts`). **판정을 끄는 자리가 여기인 것이 요점이다** — 툴바
+   * 컴포넌트에서 `disabled`를 겹치면 단축키가 안 막힌다(`panels/structure-tree.tsx`의
+   * `SHORTCUTS`는 `commands.abilities`를 지난다).
    *
    * **여기서 구독하지 않고 받는다.** 스토어의 잠금 목록을 손에 쥐는 자리는 화면에 **하나**여야
    * 하고(`test/lock/one-verdict.test.ts` — *"셋째 판정은 여기서 먼저 보인다"*), 그 하나가
    * 이 훅을 부르는 `StructureTree`다. 거기서 목록을 이미 구독해 트리 줄의 배지·비활성을
    * 그리므로, 같은 값을 여기서 또 구독하면 자리만 늘고 얻는 것이 없다. **판정은 어느 쪽도
    * 하지 않는다** — 양쪽 다 스토어의 `lockedBy`를 지난 값을 든다.
+   *
+   * **선택 인자가 아니다.** 빠뜨리면 잠긴 자리에서 도구가 다시 살아나는데, 그것은 조용히
+   * 지나가는 부류의 누락이다(이 슬라이스가 고친 것이 정확히 그 모양이다).
    */
-  selectedLock?: NodeLock | null
+  selectedLock: NodeLock | null
+  /**
+   * **이 페이지에 남의 잠금이 하나라도 있는가** — `store.lockedBy(document.root.id)`가 낸
+   * 값이다. 루트는 문서 안 모든 노드의 조상이므로 그 물음이 곧 *"살아 있는 남의 잠금이
+   * 있나"*이고, **판정을 새로 짓지 않고** 같은 `lockedBy` 한 벌로 답한다.
+   *
+   * 이것을 쓰는 것은 판정 밖의 둘뿐이다 — `프리셋`은 언제나, `패턴 넣기`는 **고른 것이
+   * 없을 때**(그때 꽂힐 자리의 부모가 루트다). 일곱은 `selectedLock`만 본다.
+   */
+  pageLock: NodeLock | null
 }): StructureCommands {
   const store = useEditorStoreInstance()
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 본다
@@ -173,7 +259,12 @@ export function useStructureCommands(props: {
   // 아니다.
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.pageId ?? '' })
 
-  const abilities = structureAbilities(document, selectedNodeId)
+  const abilities = structureAbilities(document, selectedNodeId, props.selectedLock)
+  // **판정 밖의 둘도 잠금을 지난다.** 어느 잠금을 지나는지는 각각의 필드 주석에 있다 —
+  // 여기서 하는 것은 고르기뿐이고 판정은 스토어의 `lockedBy`가 이미 했다.
+  const patternLock = selectedNodeId === null ? props.pageLock : props.selectedLock
+  const patternLocked = patternLock !== null
+  const presetLocked = props.pageLock !== null
   /** 고르개가 열려 있으면 무엇을 고르는 중인지. 닫혀 있으면 `null`이다. */
   const [adding, setAdding] = useState<OpenPicker | null>(null)
 
@@ -432,12 +523,14 @@ export function useStructureCommands(props: {
 
   return {
     abilities,
+    patternLocked,
+    presetLocked,
     // **루트인지는 id로 본다.** 판정을 다시 하지 않는다 — `structureAbilities`가 이미
     // 지나간 순회를 한 벌 더 돌면 둘이 갈릴 수 있다(`./toolbar-status.ts` 머리말).
     status: structureStatus({
       selectedNodeId,
       isRoot: document !== null && selectedNodeId !== null && document.root?.id === selectedNodeId,
-      lock: props.selectedLock ?? null,
+      lock: props.selectedLock,
       abilities,
     }),
     remove: removeSelected,
@@ -494,6 +587,8 @@ export function StructureToolbar(props: {
 }): ReactElement {
   const { commands } = props
   const { abilities } = commands
+  /** 지금 그려도 되는 고르개. 열려 있어도 그 조작이 막혔으면 `null`이다. */
+  const picker = visiblePicker(commands)
   /**
    * 상태줄의 id. **`aria-describedby`가 그것을 가리킨다** — `useId`인 것은 이 툴바가 한
    * 화면에 둘 이상 그려져도 id가 겹치지 않게 하기 위해서다(React가 렌더 트리마다 다른
@@ -579,22 +674,31 @@ export function StructureToolbar(props: {
       />
       {/* **패턴은 `ToolButton`이 아니다.** 그 버튼은 `StructureAbilities`의 키 하나에
           묶여 있는데(비활성 여부와 이유가 같은 곳에서 나온다), 패턴 넣기는 **선택이
-          없어도 할 수 있다**(D5 — 선택이 없으면 root의 자식 끝). 판정이 없으므로 걸
-          `ability`도 없다. 패턴이 0개인 테마에서도 활성인 것은 D7이다 — *"없다"*를
-          보여 주는 것이 회색 버튼보다 낫다. */}
+          없어도 할 수 있다**(D5 — 선택이 없으면 root의 자식 끝). 그래서 걸 `ability`가
+          없다. 패턴이 0개인 테마에서도 활성인 것은 D7이다 — *"없다"*를 보여 주는 것이
+          회색 버튼보다 낫다.
+
+          **그래도 잠금은 지난다.** *"판정이 없다"*가 *"아무것도 안 본다"*는 아니었어야
+          했는데 한동안 그랬고, 그 사이 이 버튼이 잠긴 자리에 423을 내고 있었다
+          (`commands.patternLocked`의 주석에 실측이 있다). */}
       <button
         type="button"
         className="wb-shell-structure-tool"
+        disabled={commands.patternLocked}
         onClick={() => commands.openAdd('pattern')}
       >
         패턴 넣기
       </button>
       {/* **프리셋도 `ToolButton`이 아니다 — 패턴과 같은 이유다.** 선택이 없어도 할 수
-          있고(페이지 통째라 자리를 고르지 않는다) 판정이 없으므로 걸 `ability`가 없다.
-          그 성질이 단축키 쪽에도 그대로 걸린다(`structure-tree.tsx`의 `ability: null`). */}
+          있고(페이지 통째라 자리를 고르지 않는다) 걸 `ability`가 없다. 그 성질이 단축키
+          쪽에도 그대로 걸린다(`structure-tree.tsx`의 `SHORTCUTS`).
+
+          **막히는 조건은 패턴과 다르다** — 이쪽은 페이지 통째라 잠금이 하나라도 있으면
+          부딪친다(`commands.presetLocked`). */}
       <button
         type="button"
         className="wb-shell-structure-tool"
+        disabled={commands.presetLocked}
         onClick={() => commands.openAdd('preset')}
       >
         프리셋
@@ -620,18 +724,21 @@ export function StructureToolbar(props: {
       </p>
       {/* 목록은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 노드에 붙는
           작업인지가 보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이
-          그대로 남는다. */}
-      {(commands.adding === 'inside' || commands.adding === 'after') && (
+          그대로 남는다.
+
+          **`adding`이 아니라 `visiblePicker`를 본다** — 연 뒤에 조건이 바뀌는 창을 그
+          함수가 갖는다(왜 셋이 한 자리인지도 거기 있다). */}
+      {(picker === 'inside' || picker === 'after') && (
         <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />
       )}
-      {commands.adding === 'pattern' && (
+      {picker === 'pattern' && (
         <PatternPicker
           projectId={props.projectId}
           onPick={commands.pickPattern}
           onCancel={commands.cancelAdd}
         />
       )}
-      {commands.adding === 'preset' && (
+      {picker === 'preset' && (
         <PresetPicker
           projectId={props.projectId}
           pageId={props.pageId}

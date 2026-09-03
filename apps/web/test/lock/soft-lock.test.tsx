@@ -586,7 +586,7 @@ describe('상태줄 — 잠긴 조상의 이유는 배지가 아니라 여기 �
 
     view.push(locksFrame([foreign('n-b')]))
 
-    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수 없습니다')
+    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
   it('**잠긴 서브트리 밖을 고르면 잠금을 말하지 않는다** — 하나면 *"잠금이 있으면 무조건"*과 구분되지 않는다', async () => {
@@ -611,7 +611,7 @@ describe('상태줄 — 잠긴 조상의 이유는 배지가 아니라 여기 �
   it('잠금이 풀리면 문장도 돌아온다', async () => {
     const view = await board()
     view.push(locksFrame([foreign('n-b')]))
-    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수 없습니다')
+    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
 
     view.push(locksFrame([]))
 
@@ -650,7 +650,7 @@ describe('상태줄 — 잠긴 조상의 이유는 배지가 아니라 여기 �
       '보라 편집 중',
     )
     // 문장은 «조상» 경우(`그 이유가 상태줄에 온다`)와 **글자까지 같다.**
-    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수 없습니다')
+    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 
   it('사람이 둘이면 부딪치는 쪽의 이름이 온다', async () => {
@@ -660,6 +660,6 @@ describe('상태줄 — 잠긴 조상의 이유는 배지가 아니라 여기 �
     // `findLockConflict`가 낸 **첫 잠금** 하나다(`packages/schema/src/lock.ts`).
     view.push(locksFrame([foreign('n-a'), foreign('n-b', { userId: 'u-dahye', userName: '다혜' })]))
 
-    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수 없습니다')
+    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수도 바꿀 수도 없습니다')
   })
 })

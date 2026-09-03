@@ -10,7 +10,7 @@
  * 던지면 `.wb-shell`이 통째로 DOM에서 사라진다(`panels/node-shape.ts` 머리말의 실측).
  * 그래서 검증 전 문서에 들어올 수 있는 모양을 값으로 다룬다.
  */
-import { getComponent, type PageDocument, type WbNode } from '@wirebound/schema'
+import { getComponent, type NodeLock, type PageDocument, type WbNode } from '@wirebound/schema'
 import { nodeType } from '../panels/node-shape'
 // **schema의 `walkNodes`를 쓰지 않는다** — `children` 배열 안의 `null` 원소에서 던진다
 // (`./safe-walk.ts` 머리말에 실측). 이 파일의 계약이 "던지지 않는다"이므로 순회부터 갈았다.
@@ -57,12 +57,62 @@ const NOTHING: StructureAbilities = {
  * **조상을 지우는 것도 0이 된다**(리뷰가 더 잰 것을 나도 재현했다). 어느 쪽이든 삭제가
  * 그 페이지를 다시 편집 가능하게 만드는 길이므로 자리로만 판정한다.
  * (계획서의 케이스 표도 이쪽과 맞는다 — 케이스 12가 `안에 추가`만 지목한다.)
+ *
+ * # 남이 잠근 자리는 전부 `false`다 (§7.2 · P3-3 D7)
+ *
+ * **셋째 인자는 판정이 아니라 «판정의 결과»다.** 스토어의 `lockedBy`가
+ * `@wirebound/schema`의 `findLockConflict`로 낸 값을 그대로 받는다 — 서버의 2차 방어가
+ * 부르는 바로 그 함수다. 여기서 잠금을 **다시** 판정하면 화면에 판정이 두 벌이 되고,
+ * 그것이 D7이 닫은 형태다(`test/lock/one-verdict.test.ts`가 `findLockConflict`를 부르는
+ * 자리를 소스에서 센다 — `apps/web`에서 그것은 스토어 하나여야 한다).
+ *
+ * ## 왜 «전부»인가 — 서버는 그중 일부를 통과시킨다
+ *
+ * 진짜 `findLockConflict`를 서버 대역으로 놓고 잰 값이다. 문서는
+ * `root > [a, box > [b1, b2], c]`이고 표의 «잠금»은 남의 것이다.
+ *
+ * | 고른 것 | 잠금 | 도구 | 나가는 포인터 | 서버 |
+ * |---|---|---|---|---|
+ * | 루트 | `b1` | `안에 추가` | `/root/children/3` | **통과** |
+ * | `box` | `b1` | `안에 추가` | `/root/children/1/children/2` | **통과** |
+ * | `box` | `b1` | `아래 추가` | `/root/children/2` | **통과** |
+ * | `box` | `b1` | `삭제`·`위로`·`아래로` | `/root/children/1` | 423 |
+ * | `box` | `box` | `안에 추가` | `/root/children/1/children/2` | 423 |
+ * | `box` | `box` | `아래 추가` | `/root/children/2` | **통과** |
+ *
+ * 즉 **형제 자리를 건드리는 편집은 서버가 받는다** — `findLockConflict`는 편집이 실제로
+ * 건드리는 자리만 보기 때문이다. 그런데도 전부 끄는 근거 둘:
+ *
+ * 1. **선택이 편집보다 엄격한 것은 대가로 받아들인 것이다**(`packages/schema/test/lock.test.ts`
+ *    의 `선택이 편집보다 엄격하다` — *"남이 섹션 하나를 잡고 있는 동안 아무도 페이지 루트를
+ *    못 고친다는 뜻이다. 이것은 구멍이 아니라 대가다"*). 지금 이 자리가 그 대가를 **피해
+ *    가는 유일한 구멍**이었다: `setLocks`는 선택을 건드리지 않으므로 잠금이 도착하기 **전에**
+ *    골라 둔 노드가 그대로 남고, 그 노드는 지금 다시 고를 수 없는데 도구는 살아 있었다.
+ *    **무엇을 할 수 있는지가 «어떻게 그 자리에 도착했는지»에 달리면 안 된다** — 지금 그
+ *    노드를 누르면 `selectNode`가 거부하는데, 앞서 눌러 둔 사람만 편집할 수 있었다.
+ * 2. **끈 것 중 절반은 그냥 두면 423을 받는다.** 위 표의 423 줄들이 그것이고, 그때 화면은
+ *    낙관적 적용을 붙였다가 재조회로 되돌리고 큐를 통째로 버린다 —
+ *    *"보내 봐야 422를 받을 편집은 만들지 않는다"*(이 파일 머리말)가 막으려던 바로 그 모양이다.
+ *
+ * **막다른 길이 되지는 않는다.** 잠긴 서브트리 밖의 노드는 그대로 고를 수 있고, 거기서
+ * `아래 추가`로 형제를 만들면 위 표의 «통과» 줄과 같은 편집이 나간다. 선택을 요구하지 않는
+ * `패턴 넣기`·`프리셋`도 그대로다(그 둘은 판정 자체가 없다 — `panels/structure-toolbar.tsx`).
+ *
+ * **기본값이 `null`인 것은 부르는 자리가 둘이기 때문이다.** 도구모음(`useStructureCommands`)은
+ * 잠금을 **반드시** 넘기고(그쪽의 `selectedLock`이 필수 인자다), `edit/pattern-insert.ts`는
+ * 넘기지 않는다 — 거기서 `addInside`를 묻는 것은 권한이 아니라 **자리 계산**이고(*"이 노드가
+ * 자식을 받나"* — D5), 패턴은 애초에 판정을 지나지 않는 조작이다. **잠금이 패턴에도 걸려야
+ * 하는지는 이 함수가 답할 물음이 아니다** — 그 조작에는 끌 `ability`가 없다.
  */
 export function structureAbilities(
   document: PageDocument | null,
   nodeId: string | null,
+  lock: NodeLock | null = null,
 ): StructureAbilities {
   if (document === null || nodeId === null) return NOTHING
+  // **남이 잠근 자리에서는 전부 `false`다**(위 머리말의 마지막 절). 잠금을 **판정하지
+  // 않고** 판정의 결과를 받는 것이 요점이다 — 그 판정은 스토어의 `lockedBy` 하나가 한다.
+  if (lock !== null) return NOTHING
 
   const visit = findVisit(document, nodeId)
   if (visit === null) return NOTHING
