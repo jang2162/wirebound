@@ -141,6 +141,22 @@ async function openPptx(overrides: Partial<ApiClient>): Promise<HTMLElement> {
   return panel
 }
 
+/**
+ * **경고 구역들이 내려받기 링크보다 앞에 있는가**(D6 — 아래 두면 사람이 누르고 나서 본다).
+ *
+ * **두 갈래가 지키는 규칙은 하나인데 그리는 자리가 둘이라** 재는 자리도 갈리면 한쪽만
+ * 고쳐진 채 남는다. 갈래마다 다른 것은 경고의 **이름들**뿐이므로 그것만 받는다.
+ */
+function 경고가링크보다앞(panel: HTMLElement, 이름들: readonly string[]): void {
+  const link = within(panel).getByRole('link', { name: /내려받기$/ })
+
+  for (const 이름 of 이름들) {
+    const 구역 = within(panel).getByRole('region', { name: 이름 })
+    // `DOCUMENT_POSITION_FOLLOWING`(4) — 링크가 구역보다 **뒤에** 있다.
+    expect(구역.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  }
+}
+
 describe('내보내기 화면', () => {
   it('누르기 전에는 아무것도 안 부른다', async () => {
     let calls = 0
@@ -220,6 +236,17 @@ describe('내보내기 화면', () => {
       expect(
         await within(panel).findByRole('link', { name: /내려받기$/ }),
       ).toBeTruthy()
+    })
+
+    /**
+     * 경고가 내려받기 링크보다 **먼저** 온다(D6). **pptx 갈래에도 같은 케이스가 있다** —
+     * 규칙은 하나인데 자리가 둘이라, 한쪽만 재면 다른 쪽은 주석만 남고 조용히 뒤집힌다.
+     */
+    it('경고 셋이 내려받기 링크보다 앞에 있다', async () => {
+      const panel = await open(api(어긋난))
+      await within(panel).findByRole('region', { name: '그리지 못한 노드' })
+
+      경고가링크보다앞(panel, ['그리지 못한 노드', '겹친 페이지 경로', '이어지지 않는 링크'])
     })
   })
 
@@ -376,13 +403,12 @@ describe('내보내기 화면', () => {
     /** 경고가 내려받기 링크보다 **먼저** 온다 — 아래 두면 사람이 누르고 나서 본다(D6). */
     it('경고 셋이 내려받기 링크보다 앞에 있다', async () => {
       const panel = await openPptx(api(형식별(깨끗한, pptx어긋난)))
-      const link = within(panel).getByRole('link', { name: /내려받기$/ })
 
-      for (const 이름 of ['글꼴 경고', '화면 이미지가 없는 페이지', '화면 이미지를 그리다 실패한 페이지']) {
-        const 구역 = within(panel).getByRole('region', { name: 이름 })
-        // `DOCUMENT_POSITION_FOLLOWING`(4) — 링크가 구역보다 **뒤에** 있다.
-        expect(구역.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      }
+      경고가링크보다앞(panel, [
+        '글꼴 경고',
+        '화면 이미지가 없는 페이지',
+        '화면 이미지를 그리다 실패한 페이지',
+      ])
     })
 
     /**
@@ -480,6 +506,46 @@ describe('내보내기 화면', () => {
       expect(within(panel).queryByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeNull()
       expect(within(panel).getByRole('region', { name: '페이지 경로' })).toBeTruthy()
       expect(within(panel).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      )
+    })
+
+    /**
+     * **반대 순서도 잰다 — 버리는 규칙이 형식에 매여 있지 않다는 것이 이 케이스의 몫이다.**
+     *
+     * 위 케이스가 서는 근거는 *"pptx가 html보다 느리다"*라는 **사실**이지만, `load()`가 드는
+     * 것은 표(`latest`) 하나이지 형식이 아니다. 그리고 늦게 오는 쪽이 html인 순서는 지어낸
+     * 것이 아니다 — **열자마자 PPTX를 누르면** 그것이 그대로 이 순서다(여는 순간의 조회는
+     * html이다). 한 방향만 재면 *"html 답은 표를 안 보고 받는다"*가 통과한다 — 그 구현을
+     * 심어 위 케이스는 살고 이 케이스만 죽는 것을 재서 확인했다.
+     */
+    it('늦게 온 html 답이 뒤에 고른 pptx 화면을 덮지 않는다', async () => {
+      let 놓아주기: (() => void) | undefined
+      let html답함 = 0
+      const panel = await open(
+        api(async (format) => {
+          if (format === 'pptx') return pptx깨끗한
+          await new Promise<void>((resolve) => {
+            놓아주기 = resolve
+          })
+          html답함 += 1
+          return 깨끗한
+        }),
+      )
+      // 여는 순간의 html이 아직 안 왔다 — 이 상태에서 형식을 바꾸는 것이 이 순서다.
+      await within(panel).findByRole('status')
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
+      await within(panel).findByRole('region', { name: '슬라이드에 실릴 페이지' })
+
+      // 이제야 html이 답한다.
+      놓아주기?.()
+      await waitFor(() => expect(html답함).toBe(1))
+
+      expect(within(panel).queryByRole('region', { name: '페이지 경로' })).toBeNull()
+      expect(within(panel).getByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeTruthy()
+      expect(within(panel).getByRole('link', { name: /\.pptx 내려받기$/ })).toBeTruthy()
+      expect(within(panel).getByRole('button', { name: 'PPTX' }).getAttribute('aria-pressed')).toBe(
         'true',
       )
     })
