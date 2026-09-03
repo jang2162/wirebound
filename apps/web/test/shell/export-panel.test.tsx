@@ -109,6 +109,13 @@ const pptx어긋난: PptxExportPreview = {
   fileName: 'wirebound-export-admin-console.pptx',
 }
 
+/**
+ * 늦게 오는 **실패**가 낼 문장. 케이스가 *"이 문장이 화면에 없다"*를 짚으므로 한 자리에
+ * 둔다 — 두 벌로 적으면 한쪽만 고친 채 통과한다. 갈래를 안 가리는 것은 케이스마다 늦게
+ * 오는 실패가 하나뿐이기 때문이다.
+ */
+const 늦은실패 = '앞 형식을 만들지 못했습니다'
+
 function api(
   preview: ExportPreview | ((format: ExportFormat) => Promise<ExportPreview>),
 ): Partial<ApiClient> {
@@ -124,6 +131,37 @@ function api(
 /** 형식마다 다른 것을 내는 가짜. */
 function 형식별(html: ExportPreview, pptx: ExportPreview) {
   return async (format: ExportFormat): Promise<ExportPreview> => (format === 'pptx' ? pptx : html)
+}
+
+/**
+ * **한 형식의 답을 붙잡아 두는 가짜.** 늦게 오는 답은 손에 쥐고 있다가 놓아야 만들어지는데,
+ * 그 장치를 케이스마다 한 벌씩 두면 경합을 재는 자리가 갈린다 — 순서는 전부 같고 **늦게
+ * 오는 것이 성공이냐 실패냐**만 다르다(`load()`의 try·catch 쪽 표 검사는 같은 규칙의
+ * 두 자리다).
+ *
+ * `붙잡을형식`의 조회는 `놓아주기()` 전까지 답하지 않는다. 놓으면 `늦은답()`이 내는 것을
+ * 답하는데, **그것이 던지면 늦게 오는 실패**가 된다. `도착함()`은 그 답이 `load()`에 실제로
+ * 닿은 횟수다 — 놓자마자 재면 아직 아무것도 안 흐른 것을 *"버렸다"*로 읽는다.
+ */
+function 붙잡는(붙잡을형식: ExportFormat, 늦은답: () => ExportPreview, 빠른답: ExportPreview) {
+  let 풀기: (() => void) | undefined
+  let 도착 = 0
+
+  return {
+    /** `api()`에 그대로 넘기는 가짜. */
+    가짜: async (format: ExportFormat): Promise<ExportPreview> => {
+      if (format !== 붙잡을형식) return 빠른답
+      await new Promise<void>((resolve) => {
+        풀기 = resolve
+      })
+      도착 += 1
+      return 늦은답()
+    },
+    놓아주기: (): void => {
+      풀기?.()
+    },
+    도착함: (): number => 도착,
+  }
 }
 
 async function open(overrides: Partial<ApiClient>): Promise<HTMLElement> {
@@ -453,16 +491,8 @@ describe('내보내기 화면', () => {
     })
 
     it('부르는 동안엔 앞 형식의 결과가 이미 없다', async () => {
-      let 놓아주기: (() => void) | undefined
-      const panel = await open(
-        api(async (format) => {
-          if (format === 'html') return 어긋난
-          await new Promise<void>((resolve) => {
-            놓아주기 = resolve
-          })
-          return pptx어긋난
-        }),
-      )
+      const 늦은 = 붙잡는('pptx', () => pptx어긋난, 어긋난)
+      const panel = await open(api(늦은.가짜))
       await within(panel).findByRole('region', { name: '페이지 경로' })
 
       fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
@@ -472,7 +502,7 @@ describe('내보내기 화면', () => {
       expect(within(panel).queryByRole('link', { name: /내려받기$/ })).toBeNull()
       expect(within(panel).getByRole('status')).toBeTruthy()
 
-      놓아주기?.()
+      늦은.놓아주기()
       await within(panel).findByRole('region', { name: '슬라이드에 실릴 페이지' })
     })
 
@@ -481,18 +511,8 @@ describe('내보내기 화면', () => {
      * (P10-2 D6) pptx를 눌렀다 html로 되돌리면 먼저 보낸 pptx가 나중에 도착한다.
      */
     it('늦게 온 앞 형식의 답이 뒤 형식의 화면을 덮지 않는다', async () => {
-      let 놓아주기: (() => void) | undefined
-      let pptx답함 = 0
-      const panel = await open(
-        api(async (format) => {
-          if (format === 'html') return 깨끗한
-          await new Promise<void>((resolve) => {
-            놓아주기 = resolve
-          })
-          pptx답함 += 1
-          return pptx깨끗한
-        }),
-      )
+      const 늦은 = 붙잡는('pptx', () => pptx깨끗한, 깨끗한)
+      const panel = await open(api(늦은.가짜))
       await within(panel).findByRole('region', { name: '페이지 경로' })
 
       fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
@@ -500,8 +520,8 @@ describe('내보내기 화면', () => {
       await within(panel).findByRole('region', { name: '페이지 경로' })
 
       // 이제야 pptx가 답한다.
-      놓아주기?.()
-      await waitFor(() => expect(pptx답함).toBe(1))
+      늦은.놓아주기()
+      await waitFor(() => expect(늦은.도착함()).toBe(1))
 
       expect(within(panel).queryByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeNull()
       expect(within(panel).getByRole('region', { name: '페이지 경로' })).toBeTruthy()
@@ -520,18 +540,8 @@ describe('내보내기 화면', () => {
      * 심어 위 케이스는 살고 이 케이스만 죽는 것을 재서 확인했다.
      */
     it('늦게 온 html 답이 뒤에 고른 pptx 화면을 덮지 않는다', async () => {
-      let 놓아주기: (() => void) | undefined
-      let html답함 = 0
-      const panel = await open(
-        api(async (format) => {
-          if (format === 'pptx') return pptx깨끗한
-          await new Promise<void>((resolve) => {
-            놓아주기 = resolve
-          })
-          html답함 += 1
-          return 깨끗한
-        }),
-      )
+      const 늦은 = 붙잡는('html', () => 깨끗한, pptx깨끗한)
+      const panel = await open(api(늦은.가짜))
       // 여는 순간의 html이 아직 안 왔다 — 이 상태에서 형식을 바꾸는 것이 이 순서다.
       await within(panel).findByRole('status')
 
@@ -539,8 +549,8 @@ describe('내보내기 화면', () => {
       await within(panel).findByRole('region', { name: '슬라이드에 실릴 페이지' })
 
       // 이제야 html이 답한다.
-      놓아주기?.()
-      await waitFor(() => expect(html답함).toBe(1))
+      늦은.놓아주기()
+      await waitFor(() => expect(늦은.도착함()).toBe(1))
 
       expect(within(panel).queryByRole('region', { name: '페이지 경로' })).toBeNull()
       expect(within(panel).getByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeTruthy()
@@ -548,6 +558,71 @@ describe('내보내기 화면', () => {
       expect(within(panel).getByRole('button', { name: 'PPTX' }).getAttribute('aria-pressed')).toBe(
         'true',
       )
+    })
+
+    /**
+     * **늦게 온 실패도 버린다** — `load()`의 catch 쪽 표 검사. 성공 쪽 둘이 재는 것과 같은
+     * 규칙이 같은 함수 안에 두 자리로 있는데, 지금까지 재는 것은 성공 쪽뿐이었다.
+     *
+     * 버리지 않으면 사람이 보는 것은 이렇다: 형식을 바꿔 새 형식이 이미 그려져 있는데
+     * **앞 형식의 오류 문장**이 그 위를 덮는다 — 화면 전체가 `role="alert"` 하나로 바뀌므로
+     * 새 형식의 미리보기가 통째로 사라진다.
+     */
+    it('늦게 온 pptx 실패가 뒤에 고른 html 화면을 덮지 않는다', async () => {
+      const 늦은 = 붙잡는(
+        'pptx',
+        () => {
+          throw new ApiError(500, 'internal', 늦은실패)
+        },
+        깨끗한,
+      )
+      const panel = await open(api(늦은.가짜))
+      await within(panel).findByRole('region', { name: '페이지 경로' })
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
+      fireEvent.click(within(panel).getByRole('button', { name: 'HTML 번들' }))
+      await within(panel).findByRole('region', { name: '페이지 경로' })
+
+      // 이제야 pptx가 죽었다고 답한다.
+      늦은.놓아주기()
+      await waitFor(() => expect(늦은.도착함()).toBe(1))
+
+      expect(within(panel).queryByRole('alert')).toBeNull()
+      expect(panel.textContent).not.toContain(늦은실패)
+      expect(within(panel).getByRole('region', { name: '페이지 경로' })).toBeTruthy()
+      expect(within(panel).getByRole('link', { name: /\.zip 내려받기$/ })).toBeTruthy()
+    })
+
+    /**
+     * **실패 쪽도 두 방향을 잰다 — 근거는 성공 쪽과 같고, 여기서 다시 쟀다.**
+     *
+     * catch 에는 `preview`가 없지만 그 조회의 형식(`next`)은 클로저에 있어 *"html 실패는
+     * 표를 안 보고 띄운다"*가 **그대로 쓰인다.** 그 구현을 심으니 위 케이스를 포함해 31건이
+     * 전부 통과했다 — 한 방향은 부족하다. 순서도 지어낸 것이 아니다: **열자마자 PPTX를
+     * 누르면** 늦게 죽는 쪽이 여는 순간의 html 조회다.
+     */
+    it('늦게 온 html 실패가 뒤에 고른 pptx 화면을 덮지 않는다', async () => {
+      const 늦은 = 붙잡는(
+        'html',
+        () => {
+          throw new ApiError(500, 'internal', 늦은실패)
+        },
+        pptx깨끗한,
+      )
+      const panel = await open(api(늦은.가짜))
+      await within(panel).findByRole('status')
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
+      await within(panel).findByRole('region', { name: '슬라이드에 실릴 페이지' })
+
+      // 이제야 html이 죽었다고 답한다.
+      늦은.놓아주기()
+      await waitFor(() => expect(늦은.도착함()).toBe(1))
+
+      expect(within(panel).queryByRole('alert')).toBeNull()
+      expect(panel.textContent).not.toContain(늦은실패)
+      expect(within(panel).getByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeTruthy()
+      expect(within(panel).getByRole('link', { name: /\.pptx 내려받기$/ })).toBeTruthy()
     })
   })
 
