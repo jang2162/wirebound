@@ -213,8 +213,56 @@ describe('배선이 가리키는 자리', () => {
 describe('업그레이드도 프록시를 탄다 — ws', () => {
   const source = stripComments(viteConfigSource)
 
-  /** `'/api': { … }` 의 중괄호 안. 없으면 빈 문자열이라 아래가 전부 실패한다. */
-  const apiEntry = source.match(/'\/api':\s*\{([^}]*)\}/)?.[1] ?? ''
+  /**
+   * `'/api': { … }` 의 중괄호 **안**. 짝을 세어 잡는다. 없으면 빈 문자열이라 아래가 전부 실패한다.
+   *
+   * **`/'\/api':\s*\{([^}]*)\}/` 로는 안 된다.** 그 자는 첫 `}` 에서 끊기므로 엔트리 안에
+   * 객체가 하나라도 들어오면 그 뒤를 통째로 잃는다. 리뷰어가 실측했다 — `headers: { … }` 를
+   * `ws: true` **앞**에 두면 **설정이 옳은데도** 「ws 가 없다」고 둘이 죽었다(그 설정으로
+   * 런타임은 `101` · 550바이트 · `joined` 였다). **거짓 빨강인 데다 카나리아는 통과해서**
+   * (잘린 조각에도 `target: apiProxyTarget` 이 남는다) 원인을 안 짚는다 — 메시지가 사람을
+   * 엉뚱한 데로 보낸다.
+   *
+   * **문자열 안의 중괄호는 세지 않는다.** `stripComments` 는 주석만 걷고 문자열의 내용은
+   * 남기므로, 안 가르면 **거짓 초록**이 난다 — 쟀다: `'/api'` 안에 `headers: { 'x': '{' }` 를
+   * 두고 `ws: true` 를 **다른 엔트리**에 놓으면 짝이 어긋나 자가 그 다음 엔트리까지 삼키고,
+   * **`'/api'` 에 `ws` 가 없는데 ws 케이스가 통과했다.** 그래서 따옴표 안은 건너뛴다.
+   *
+   * 끝까지 짝을 못 찾으면 빈 문자열이다 — 카나리아가 잡는다(짝이 맞는 정상 소스에서는
+   * 닿지 않는 자리다).
+   */
+  function apiProxyEntry(text: string): string {
+    const head = text.match(/'\/api':\s*\{/)
+    if (head?.index === undefined) {
+      return ''
+    }
+    const open = head.index + head[0].length
+    let depth = 1
+    /** 문자열 안이면 그 따옴표. 빈 문자열이면 코드 자리다. */
+    let quote = ''
+    for (let i = open; i < text.length; i += 1) {
+      const char = text[i]
+      if (quote !== '') {
+        if (char === '\\') {
+          i += 1 // 이스케이프된 한 글자는 따옴표라도 닫지 않는다
+        } else if (char === quote) {
+          quote = ''
+        }
+      } else if (char === "'" || char === '"' || char === '`') {
+        quote = char
+      } else if (char === '{') {
+        depth += 1
+      } else if (char === '}') {
+        depth -= 1
+        if (depth === 0) {
+          return text.slice(open, i)
+        }
+      }
+    }
+    return ''
+  }
+
+  const apiEntry = apiProxyEntry(source)
 
   it('자가 진짜 엔트리를 잡았다 — 못 잡으면 아래가 통째로 헛돈다', () => {
     // 배선 절의 카나리아와 같은 이유다. 정규식이 빗나가면 `not.toMatch` 계열이 전부
@@ -224,16 +272,13 @@ describe('업그레이드도 프록시를 탄다 — ws', () => {
   })
 
   it('**`ws` 가 그 엔트리 안에 켜져 있다** — 없으면 업그레이드가 조용히 멈춘다', () => {
+    // **이 저장소에서 그 게이트를 여는 것은 `ws` 하나뿐이다.** 게이트는
+    // `opts.ws || 대상이 ws: || 대상이 wss:` 인데 여기 대상은 `http://127.0.0.1:<PORT>` 라
+    // (위 절이 잰다) 뒤의 둘은 영원히 거짓이다. 대상을 `ws:` 로 바꿔 여는 것은 답이
+    // 아니다 — 같은 엔트리로 REST 도 나간다. **그 우회는 위 배선 절이 막는다**:
+    // 「계산한 값이 실제로 프록시 대상이 된다」(`'/api': { target: apiProxyTarget`)와
+    // 「대상을 수로 박아 두지 않는다」가 각각 문 앞에 서 있다.
     expect(apiEntry).toMatch(/\bws:\s*true\b/)
-  })
-
-  it('vite 가 묻는 조건을 만족한다 — `ws` 가 참이거나 대상이 ws:/wss: 여야 한다', () => {
-    // 이 저장소의 대상은 `http://127.0.0.1:<PORT>` 다(위 절이 잰다). 즉 뒤의 둘은
-    // 영원히 거짓이고 **`ws` 만이 그 게이트를 연다.** 대상을 `ws:` 로 바꾸는 것은
-    // 답이 아니다 — 같은 엔트리로 REST 도 나가기 때문이다.
-    expect(apiEntry).toMatch(/\bws:\s*true\b/)
-    expect(apiEntry).toContain('target: apiProxyTarget')
-    expect(apiEntry).not.toMatch(/target:\s*'wss?:/)
   })
 
   it('`changeOrigin` 은 그대로 `false` 다 — WS 도 same-origin 쿠키를 쓴다 (D4)', () => {
@@ -250,6 +295,11 @@ describe('업그레이드도 프록시를 탄다 — ws', () => {
     // vite 의 업그레이드 핸들러는 같은 `proxies[context]` 엔트리를 다시 꺼내 쓴다.
     // 즉 대상은 위 절이 잰 `apiProxyTarget` 하나뿐이고, WS 전용 대상을 따로 두면
     // 그 순간 손으로 맞출 자리가 둘이 된다(이 파일이 없애려던 것이 그것이다).
-    expect(source.match(/target:/g)).toHaveLength(1)
+    //
+    // **세는 자리는 `'/api'` 엔트리 안이다.** 앞 판은 `source` 전체를 셌고, 그래서
+    // **무관한 프록시 엔트리**(`'/uploads': { target: … }`)를 더하기만 해도 빨개졌다
+    // (리뷰어 실측). 이 케이스가 무는 규칙은 「이 라우트에 대상을 두 벌 두지 마라」지
+    // 「이 파일에 프록시 엔트리는 하나뿐」이 아니다.
+    expect(apiEntry.match(/target:/g)).toHaveLength(1)
   })
 })
