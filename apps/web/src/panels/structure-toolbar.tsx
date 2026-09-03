@@ -505,6 +505,26 @@ export function StructureToolbar(props: {
    * *"설명이 있다"*는 관계만 남고, 그것을 읽는 도구마다 다르게 다룬다.
    */
   const describedBy = commands.status === '' ? undefined : statusId
+  /**
+   * **할 말이 있으면 그 줄 자체가 탭 정지점이다.**
+   *
+   * 위 `describedBy`만으로는 **활성 버튼이 있을 때만** 키보드에 닿는다. 그런데 이 툴바에서
+   * 판정 버튼 일곱이 **전부** 꺼지는 자리가 있고(선택이 없다 · 고른 노드가 문서에 없다),
+   * 하필 그때가 할 말이 가장 많은 자리다 — 남는 정지점은 판정 밖의 `패턴 넣기`·`프리셋`
+   * 둘뿐인데 **그 둘에는 이 설명을 걸지 않는다**: 선택이 없어도 되는 조작이라(D5·P7-2 D3)
+   * *"트리에서 노드를 고르면 편집할 수 있습니다"*를 그 버튼의 설명으로 붙이면 **없는
+   * 전제조건을 만든다.**
+   *
+   * 그래서 줄 자체를 탭으로 받는다. **어느 버튼이 켜져 있는지를 보지 않는 규칙**이라 상태에
+   * 안 매이고 버튼이 늘거나 줄어도 낡지 않으며, 포커스가 닿으면 그 요소의 글이 곧 읽히므로
+   * `aria-describedby` 해석에도 기대지 않는다.
+   *
+   * **빈 줄은 정지점이 아니다** — 아무것도 읽히지 않는 정지점이 하나 늘 뿐이다. 빈 요소를
+   * 가리키지 않는 것과 같은 판단이라 조건도 같은 것 하나를 쓴다.
+   *
+   * 케이스는 `test/panels/toolbar-status-reach.test.tsx`가 열두 상태로 갖는다.
+   */
+  const statusTabIndex = commands.status === '' ? undefined : 0
 
   return (
     <div className="wb-shell-structure-toolbar" role="group" aria-label="구조 편집">
@@ -590,9 +610,12 @@ export function StructureToolbar(props: {
           **포커스가 그 버튼에 닿을 때 한 번** 읽히고, 그 시점은 사용자가 그 조작을 하려는
           바로 그때다.
 
+          **그리고 그 줄에 탭이 선다** — 판정 버튼 일곱이 전부 꺼지면 위의 `describedby`를
+          든 정지점이 하나도 없기 때문이다(`statusTabIndex`의 주석이 그 사연을 갖는다).
+
           **글자가 없어도 요소는 남는다** — 자리를 지키는 것은 CSS의 `min-height`이고
           (`shell.css`), 그러지 않으면 상태가 바뀔 때마다 툴바 높이가 달라져 트리가 튄다. */}
-      <p className="wb-shell-structure-status" id={statusId}>
+      <p className="wb-shell-structure-status" id={statusId} tabIndex={statusTabIndex}>
         {commands.status}
       </p>
       {/* 목록은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 노드에 붙는
@@ -632,8 +655,13 @@ function ToolButton(props: {
   abilities: StructureAbilities
   /**
    * 상태줄의 id. **활성·비활성 가릴 것 없이 건다** — 비활성 버튼에 걸린 것은 포커스가
-   * 가지 않아 조용하지만, 활성 버튼에 걸린 것이 **키보드 사용자가 그 문장에 닿는 유일한
-   * 길**이다(비활성 버튼은 탭 순서에서 빠진다).
+   * 가지 않아 조용하고(탭 순서에서 빠진다), 마우스가 닿는 쪽은 `title`이다.
+   *
+   * **활성 버튼에 걸린 것이 "유일한 길"은 아니다 — 앞 판은 그렇게 적었고 그것이 거짓이었다.**
+   * 판정 일곱이 **전부** 꺼지는 자리가 있고(선택 없음 · 고른 노드가 문서에 없음) 그때는 이
+   * 길이 아예 끊긴다(실측: 열두 상태 중 다섯 —
+   * `test/panels/toolbar-status-reach.test.tsx`). 그 바닥은 상태줄 자신의 `tabIndex`가
+   * 받는다. 이쪽이 하는 일은 *"조작을 하려는 그 순간"*에 이유를 붙이는 것이다.
    *
    * 할 말이 없으면 `undefined`다 — 부르는 쪽이 정한다.
    */

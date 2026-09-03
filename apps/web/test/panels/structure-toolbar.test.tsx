@@ -652,11 +652,15 @@ describe('구조 툴바 — 상태줄', () => {
     expect(statusLine().textContent).toBe('루트라 삭제·순서·계층을 바꿀 수 없습니다')
   })
 
-  it('**활성 버튼이 그 문장을 자기 설명으로 든다** — 키보드가 닿는 것은 그쪽뿐이다', async () => {
+  it('**활성 버튼이 그 문장을 자기 설명으로 든다** — 활성 버튼이 있을 때는 그쪽이 먼저다', async () => {
     // `disabled` 버튼은 포커스를 받지 못해 탭 순서에서 빠진다. 그래서 `title`이든
     // `aria-describedby`든 **비활성 버튼에 건 설명은 키보드 사용자에게 영영 안 읽힌다.**
     // 이 케이스가 재는 것은 그 반대편이다 — 지금 탭이 닿는 버튼(루트 상태에서 유일하게
     // 살아 있는 `안에 추가`)의 **접근 가능한 설명**이 상태줄 문장으로 계산되는가.
+    //
+    // **"그쪽뿐"은 아니다** — 앞 판은 제목에 그렇게 적었고 그것이 거짓이었다. 판정 일곱이
+    // **전부** 꺼지면 이 길이 통째로 끊긴다(아래 `선택을 풀면 …`). 여기서 재는 것은
+    // *"활성 버튼이 있을 때 그 버튼이 문장을 든다"*까지다.
     await openPage(doc(), { apiOverrides: server().api })
 
     const reachable = within(toolbar()).getByRole<HTMLButtonElement>('button', {
@@ -723,6 +727,33 @@ describe('구조 툴바 — 상태줄', () => {
     deselect()
 
     expect(statusLine().textContent).toBe('트리에서 노드를 고르면 편집할 수 있습니다')
+  })
+
+  it('**선택을 풀면 그 문장에 닿는 길이 상태줄 자신뿐이다** — 앱째로 잰다', async () => {
+    // **앞 판의 접근성 주장이 깨져 있던 자리다.** 선택이 없으면 판정 일곱이 전부 꺼지고,
+    // 탭이 서는 것은 판정 밖의 `패턴 넣기`·`프리셋` 둘뿐인데 **그 둘에는 이 설명을 걸지
+    // 않는다**(선택이 없어도 되는 조작이라 없는 전제조건을 만든다). 그래서 고치기 전에는
+    // 이 상태에서 키보드가 문장에 **영영 못 닿았다.**
+    //
+    // 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다(툴바만 떼어 렌더한다).
+    // **여기서 재는 것은 그 상태가 진짜 앱에서 나온다는 쪽이다.**
+    await openPage(doc(), { apiOverrides: server().api })
+    deselect()
+
+    const line = statusLine()
+    const stops = [
+      ...toolbar().querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ]
+    // 앞의 둘은 판정 밖의 버튼이고 설명이 없다 — 문장을 든 정지점은 상태줄 하나다.
+    expect(stops.map((el) => el.textContent)).toEqual([
+      '패턴 넣기',
+      '프리셋',
+      '트리에서 노드를 고르면 편집할 수 있습니다',
+    ])
+    expect(stops.filter((el) => el === line || el.getAttribute('aria-describedby') === line.id))
+      .toEqual([line])
   })
 
   it('**알림 자리를 쓰지 않는다** — `role="alert"`도 `aria-live`도 아니다', async () => {

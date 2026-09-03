@@ -841,7 +841,37 @@ describe('메뉴 툴바 — 상태줄', () => {
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
   })
 
-  it('활성 버튼이 그 문장을 자기 설명으로 든다 — 키보드가 닿는 것은 그쪽뿐이다', async () => {
+  it('**보내는 중에는 그 줄이 이 툴바의 유일한 탭 정지점이다** — 앱째로 잰다', async () => {
+    // **앞 판의 접근성 주장이 깨져 있던 자리다.** *"활성 버튼에 걸린 것이 키보드가 그
+    // 문장에 닿는 길"*이라고 적었는데, `busy`면 아홉이 **전부** 꺼져 활성 버튼이 하나도
+    // 없다 — 그때는 `aria-describedby`를 아무리 잘 걸어도 아무 데도 안 닿았다.
+    //
+    // 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다(툴바만 떼어 렌더한다).
+    // **여기서 재는 것은 그 상태가 진짜 앱에서 나온다는 쪽이다** — 조작 하나를 실제로
+    // 붙들어 `busy`를 만든다.
+    let release = (): void => {}
+    const held = new Promise<void>((resolve) => {
+      release = () => resolve()
+    })
+    const api = await open({ deleteMenu: vi.fn(async () => held) })
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(tool('정말 삭제합니까?'))
+    await waitFor(() => expect(menuStatusLine().textContent).toBe('조작을 보내는 중입니다'))
+
+    const stops = [
+      ...toolbar().querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ]
+    expect(stops).toEqual([menuStatusLine()])
+
+    release()
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+  })
+
+  it('활성 버튼이 그 문장을 자기 설명으로 든다 — 활성 버튼이 있을 때는 그쪽이 먼저다', async () => {
     await open({}, '/projects/p-1/pages/pg-list')
 
     const reachable = within(toolbar()).getByRole('button', {

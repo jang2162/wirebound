@@ -60,6 +60,17 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
   })
   /** 할 말이 없으면 가리키지 않는다(`StructureToolbar`와 같은 근거). */
   const describedBy = status === '' ? undefined : statusId
+  /**
+   * **할 말이 있으면 그 줄 자체가 탭 정지점이다**(`StructureToolbar`의 같은 자리와 한 벌).
+   *
+   * **이쪽이 더 센 자리다.** 구조 툴바에는 판정 밖의 버튼 둘(`패턴 넣기`·`프리셋`)이 있어
+   * 일곱이 다 꺼져도 정지점이 남지만, 여기 아홉은 **전부** 판정에 매여 있다 — `busy`이거나
+   * 아무것도 안 골랐거나 고른 것이 트리에 없으면 **이 툴바에 탭이 설 자리가 하나도 없다.**
+   * `describedby`를 아무리 잘 걸어도 그때는 아무 데도 안 닿는다.
+   *
+   * 케이스는 `test/panels/toolbar-status-reach.test.tsx`가 열두 상태로 갖는다.
+   */
+  const statusTabIndex = status === '' ? undefined : 0
 
   return (
     <div className="wb-shell-menu-toolbar" role="group" aria-label="메뉴 편집">
@@ -160,8 +171,9 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
 
           **`busy`일 때 무엇이 뜨는지가 이쪽의 다른 점이다** — 그때는 아홉이 전부 꺼지는데
           판정 문안을 붙이면 거짓말이므로(`title`이 `busy`를 안 보는 것과 같은 이유) 상태줄이
-          *"보내는 중"*을 말한다. 그것이 그 순간 참인 유일한 이유다. */}
-      <p className="wb-shell-menu-status" id={statusId}>
+          *"보내는 중"*을 말한다. 그것이 그 순간 참인 유일한 이유다. **그리고 그때 이 줄이
+          이 툴바의 유일한 탭 정지점이다** — 아홉이 다 꺼져 있다(`statusTabIndex`). */}
+      <p className="wb-shell-menu-status" id={statusId} tabIndex={statusTabIndex}>
         {status}
       </p>
 
@@ -209,8 +221,14 @@ function ToolButton(props: {
   ability: keyof TreeAbilities
   commands: TreeCommands
   /**
-   * 상태줄의 id. **활성 버튼에 걸린 것이 키보드 사용자가 그 문장에 닿는 유일한 길이다** —
-   * 비활성 버튼은 탭 순서에서 빠진다(`StructureToolbar`의 같은 자리와 한 벌).
+   * 상태줄의 id. **활성 버튼에 걸린 것만 키보드에 닿는다** — 비활성 버튼은 탭 순서에서
+   * 빠지므로 거기 건 설명은 조용하다(`StructureToolbar`의 같은 자리와 한 벌).
+   *
+   * **그래서 이것이 유일한 길은 아니다 — 앞 판은 그렇게 적었고 그것이 거짓이었다.**
+   * 여기 아홉은 전부 판정에 매여 있어 `busy`·선택 없음·트리에 없음이면 **활성 버튼이 하나도
+   * 없다**(실측: 열두 상태 중 다섯에서 이 길이 끊긴다 —
+   * `test/panels/toolbar-status-reach.test.tsx`). 그 바닥을 상태줄 자신의 `tabIndex`가
+   * 받는다. 이쪽은 *"조작을 하려는 그 순간"*에 이유를 붙이는 길이다.
    */
   describedBy?: string
   onClick: () => void
