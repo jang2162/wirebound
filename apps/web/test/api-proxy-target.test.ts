@@ -1,6 +1,6 @@
 // @vitest-environment node
 // **이 파일만 node 환경이다** — 이 프로젝트의 기본은 jsdom 이다(루트 `vitest.config.ts`).
-// 아래 ws 절이 `vite.config.ts` 로 **진짜 dev 서버를 띄운다.** 그 로더는
+// 아래 **라이브 절과 ws 절**이 `vite.config.ts` 로 **진짜 dev 서버를 띄운다.** 그 로더는
 // `@vitejs/plugin-react` 를 실제로 import 하는데, jsdom 안에서는 거기서 esbuild 가 invariant 로
 // 죽는다(리뷰어가 값으로 확인했다). 소켓·`http.Server` 도 노드 것이어야 한다.
 // 위 절들은 DOM 을 안 쓰므로 잃는 것이 없다.
@@ -12,8 +12,9 @@ import { type ProxyOptions, createServer as createViteServer, type ViteDevServer
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEFAULT_API_PORT, resolveApiPort, resolveApiProxyTarget } from '../config/api-proxy-target'
 // `?raw`는 vite가 파일 원문을 문자열로 넣어 준다 — `shell-css.test.ts`·`store-access.test.ts`와
-// 같은 관용구다. **원문을 보는 것은 아래 배선 두 절뿐이다** — ws 절은 원문도 값도 아닌
-// **되돌아온 바이트**를 본다(그 이유는 그쪽 머리말에 있다).
+// 같은 관용구다. **원문을 보는 것은 아래 배선 두 절뿐이고, 그 둘도 «어느 이름을 어디에
+// 넣는가»만 본다** — 대상 값과 업그레이드는 라이브 절과 ws 절이 **되돌아온 바이트**로
+// 잰다(값 읽기는 그 안에서 카나리아로만 쓴다. 이유는 그쪽 머리말들에 있다).
 import viteConfigSource from '../vite.config.ts?raw'
 // **주석을 걷고 센다.** 안 걷으면 옳은 줄을 주석에 남기고 아래에서 뒤집는 우회가 통째로
 // 지나간다 — 리뷰어가 실측했다(귀속: 리뷰 델타 W4: `.env`의 3067 이 셸의 3099 를 이기는데
@@ -93,6 +94,33 @@ describe('프록시 대상은 apps/api/.env 의 PORT 한 자리에서 온다', (
  * 정확히 그 어긋남이다.**
  *
  * **규칙이 맞아도 그것을 안 꽂으면 교차가 되살아난다** — 이 슬라이스의 요점이 배선이다.
+ *
+ * # 이 절이 «대상 값»을 더는 원문으로 재지 않는다 (P10-2 이월 G)
+ *
+ * 앞 판에는 여기 케이스가 둘 더 있었고 **둘 다 원문의 자리에 매여 있었다.**
+ *
+ * | 앞 판의 케이스 | 무엇으로 쟀나 | 무엇이 났나 |
+ * |---|---|---|
+ * | 계산한 값이 실제로 프록시 대상이 된다 | `/'\/api':\s*\{\s*target:/` — `target:`이 **첫 키**여야 한다 | **거짓 빨강 1.** `headers`를 `target` 앞에 둔 **옳은** 설정이 죽는다(실측: 그 상태에서 이 케이스만 1 실패이고 라이브 ws 절 스물하나는 초록이다 — 런타임은 멀쩡하다) |
+ * | 대상을 수로 박아 두지 않는다 | `'/api':`가 든 **그 한 줄**에 네 자리 수가 없다 | **거짓 초록.** 엔트리를 여러 줄로 쓰고 `target: 'http://127.0.0.1:3001'`을 다음 줄에 두면 그 줄을 안 본다(실측: 이 케이스는 초록이고, 우연히 앞 케이스만 죽었다) |
+ *
+ * **같은 처방이 그대로 먹는다** — 아래 «라이브» 절이 5차의 ws 절과 같은 방식으로 그 축을
+ * 가져갔다: 스텁 상류를 세우고 **그 포트를 규칙의 입력으로 넣은 뒤**, 이 저장소의
+ * `vite.config.ts`를 그대로 실행해 **요청이 거기 닿는지**를 본다. 원문 파싱으로는 닫을 수
+ * 없던 것까지 함께 닫힌다 — `preview.proxy`를 앞에 둔 미끼, 같은 객체의 중복 키, 죽은
+ * 가지, 그리고 **값으로도 못 읽는** `configure`·`bypass`(5차 표의 그 넷).
+ *
+ * **약점이 어디로 갔나 — 이것이 이 바꿈의 대가다.**
+ *
+ * - 앞 판은 원문만 봤으므로 **환경에 안 매였다.** 라이브는 매일 수 있는데, 그래서
+ *   **입력을 자가 스스로 정한다**(`process.env.PORT`에 스텁의 임시 포트를 심는다).
+ *   그러면 gitignore된 `apps/api/.env`의 값이 무엇이든 결과가 같다 — 워크트리마다 다른
+ *   수가 나오던 그 매임이 **사라진다.**
+ * - 대신 셸 값을 심으므로 **라이브 절은 «파일 쪽 갈래»를 못 본다** — `fileEnv`를
+ *   `readApiEnvFile()`이 아니라 빈 객체로 바꿔도 스텁에 닿는다. 그 축은 이 절이 그대로
+ *   갖는다(아래 `셸을 `shellEnv` 에, 파일을 `fileEnv` 에 넣는다`와
+ *   `배선이 가리키는 자리`의 세 케이스). **그 셋에는 자리 매임이 없다** — `wiring()`은
+ *   키 순서를 안 보고, 경로 케이스는 문자열 하나와 glob 하나다.
  */
 describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
   /** **주석을 걷은** 원문. 아래 케이스는 전부 이것만 본다. */
@@ -123,6 +151,8 @@ describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
     expect(source).toContain('export default defineConfig(')
     // 호출이 **하나뿐**이어야 한다 — 둘이면 첫 번째만 보고 두 번째가 조용히 이긴다.
     expect(source.match(/resolveApiProxyTarget\(/g)).toHaveLength(1)
+    // 그 값이 이름을 갖는다 — 아래 배너 케이스가 그 이름을 다시 쓴다.
+    expect(source).toMatch(/const apiProxyTarget = resolveApiProxyTarget\(/)
     expect(Object.keys(wiring()).sort()).toEqual(['fileEnv', 'shellEnv'])
   })
 
@@ -134,16 +164,6 @@ describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
   it('둘을 바꿔 넣지 않는다 — 뒤집기를 양쪽에서 못박는다', () => {
     expect(wiring().shellEnv).not.toContain('readApiEnvFile')
     expect(wiring().fileEnv).not.toBe('process.env')
-  })
-
-  it('계산한 값이 **실제로 프록시 대상이 된다** — 구해 놓고 안 쓰면 소용이 없다', () => {
-    expect(source).toMatch(/const apiProxyTarget = resolveApiProxyTarget\(/)
-    expect(source).toMatch(/'\/api':\s*\{\s*target:\s*apiProxyTarget\b/)
-  })
-
-  it('대상을 수로 박아 두지 않는다 — 이 슬라이스가 걷어 낸 것이 그것이다', () => {
-    const proxyLine = source.split('\n').find((line) => line.includes("'/api':")) ?? ''
-    expect(proxyLine).not.toMatch(/\d{4}/)
   })
 
   it('뜰 때 그 대상을 말한다 — 두 터미널을 나란히 놓은 사람이 눈으로 가른다 (D4)', () => {
@@ -179,6 +199,169 @@ describe('배선이 가리키는 자리', () => {
     expect(source.match(/new URL\('\.\.\/api\/\.env'/g)).toHaveLength(1)
     // 선언(`function readApiEnvFile()`)은 빼고 **부르는 자리**만 센다.
     expect(source.match(/(?<!function )readApiEnvFile\(\)/g)).toHaveLength(1)
+  })
+})
+
+/**
+ * **규칙이 정한 포트로 요청이 실제로 간다 — 라이브**(P10-2 이월 G).
+ *
+ * 위 배선 절이 원문의 자리에 매여 있던 두 케이스를 여기로 옮겼다(그쪽 머리말의 표가 무엇이
+ * 났는지와 약점이 어디로 갔는지를 갖는다). 방식은 5차의 ws 절과 **한 벌이다** — 스텁 상류 +
+ * 이 저장소의 `vite.config.ts` 를 그대로 띄운 진짜 dev 서버 + 되돌아온 바이트.
+ *
+ * # 다른 것이 하나 있다 — **`target` 을 안 갈아 끼운다**
+ *
+ * ws 절은 `target` 을 스텁으로 **덮어서** 띄우므로 *"대상 값 자체는 여기서 안 잰다"* 고
+ * 스스로 적는다. 이 절이 그 자리를 받는다: **덮지 않고, 대신 규칙의 입력을 정한다** —
+ * 스텁을 임시 포트에 세우고 `process.env.PORT` 에 그 수를 심는다. 셸이 파일을 이기는 것이
+ * 규칙이므로(`resolveApiPort`), 배선이 온전하면 대상이 **그 스텁**이 된다.
+ *
+ * 그래서 이 절은 **gitignore 된 `apps/api/.env` 에 매이지 않는다** — 그 파일에 무엇이
+ * 있든(없어도) 결과가 같다. 앞 판의 약점이 그 매임이었다.
+ *
+ * # 무엇이 닫히나
+ *
+ * 대상이 **한 자리에서 오는가**를 런타임에서 묻는 것이므로, 원문 파싱이 못 보던 것이 함께
+ * 닫힌다 — `preview.proxy` 를 `server` 앞에 둔 미끼 · 같은 객체의 중복 키(뒤엣것이 이긴다) ·
+ * `...(false ? … : {})` 죽은 가지 · 주석 걷기를 속이는 정규식, 그리고 **값으로도 못 읽는**
+ * `configure`·`bypass`(5차 표의 그 넷).
+ *
+ * # 이 자가 못 보는 것 — 정직하게 적는다
+ *
+ * - **파일 쪽 갈래.** 셸 값을 심으므로 `fileEnv` 를 빈 객체로 바꿔도 초록이다. 그 축은 위
+ *   배선 절의 `wiring()` 케이스들과 `배선이 가리키는 자리` 가 갖는다.
+ * - **업그레이드**는 안 본다(ws 절이 갖는다). 여기서 보내는 것은 평범한 REST 하나다.
+ * - **`build`·`preview`** 는 안 본다. `serve` 다.
+ */
+
+/**
+ * `apps/web/vite.config.ts` — **아래 두 하네스가 그대로 실행하는 파일.** 라이브 절과
+ * ws 절이 같은 파일을 띄운다(각각 다루는 것이 다르다 — 그쪽 머리말들).
+ */
+const WEB_ROOT = fileURLToPath(new URL('../', import.meta.url))
+const WEB_CONFIG_FILE = fileURLToPath(new URL('../vite.config.ts', import.meta.url))
+
+/**
+ * 게이트가 닫히면 **아무 바이트도 안 온다** — 그때 매달리지 않도록 여기서 끊는다.
+ * 두 하네스가 같은 값을 쓴다.
+ */
+const SILENCE_TIMEOUT_MS = 3_000
+
+/** 스텁 상류만 낼 수 있는 표식. **실서버가 답해도 이 글자는 안 온다.** */
+const TARGET_STUB_MARKER = 'x-wirebound-target-stub'
+
+/** 프록시를 지나갈 평범한 경로. 라우트가 아니어도 스텁이 답한다. */
+const PROBE_URL = '/api/proxy-target-probe'
+
+describe('프록시 대상은 규칙이 정한 포트로 간다 — 라이브', () => {
+  let viteServer: ViteDevServer
+  let upstream: Server
+  /** 스텁의 주소. **배선이 온전하면 대상이 이것이어야 한다.** */
+  let expectedTarget = ''
+  /** `process.env.PORT` 의 원래 값. 이 절이 끝나면 되돌린다. */
+  let savedPort: string | undefined
+  /** 심은 포트로 규칙이 내는 답. 카나리아가 대상과 대조한다. */
+  let plantedPort = ''
+
+  /**
+   * **요청을 보내기 전**의 `'/api'` 엔트리. 요청 뒤에 읽으면 안 된다 — http-proxy 가
+   * 첫 요청에서 `opts.target` 을 `url.parse()` 결과로 **제자리 바꾼다**(ws 절이 잰 것과
+   * 같은 자리다).
+   */
+  let configuredEntry: ProxyOptions | undefined
+
+  let status = 0
+  let marker: string | null = null
+  let sightedUrl: string | undefined
+
+  beforeAll(async () => {
+    // ── 1. 스텁 상류. 실제 api 도 DB 도 필요 없다.
+    upstream = createHttpServer((req, res) => {
+      sightedUrl = req.url ?? ''
+      res.writeHead(200, { [TARGET_STUB_MARKER]: 'yes' })
+      res.end('stub')
+    })
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve))
+    plantedPort = String((upstream.address() as AddressInfo).port)
+    // **규칙의 입력을 자가 정한다.** 셸이 `apps/api/.env` 를 이기는 것이 규칙이므로
+    // (`resolveApiPort`), 이 한 줄이 «대상은 어디여야 하는가»를 이 절 안에서 결정한다.
+    expectedTarget = resolveApiProxyTarget({ shellEnv: { PORT: plantedPort } })
+    savedPort = process.env.PORT
+    process.env.PORT = plantedPort
+
+    // ── 2. 진짜 vite dev 서버. **`server.proxy` 를 안 덮는다** — 그것이 이 절의 요점이다.
+    viteServer = await createViteServer({
+      root: WEB_ROOT,
+      configFile: WEB_CONFIG_FILE,
+      logLevel: 'error',
+      // ws 절과 같은 이유다(그쪽 주석) — 이 하네스는 모듈을 하나도 요청하지 않는데
+      // 스캐너가 배경에서 `index.html` 을 훑기 시작해 `close()` 와 경합한다.
+      optimizeDeps: { noDiscovery: true, include: [] },
+    })
+    const entry = viteServer.config.server.proxy?.['/api']
+    configuredEntry = typeof entry === 'object' ? { ...entry } : undefined
+    await viteServer.listen()
+    const address = viteServer.httpServer?.address() as AddressInfo
+    const authority = `${address.family === 'IPv6' ? `[${address.address}]` : address.address}:${address.port}`
+
+    // ── 3. 평범한 REST 하나. **되돌아온 표식이 이 절의 판정이다.**
+    try {
+      const response = await fetch(`http://${authority}${PROBE_URL}`, {
+        signal: AbortSignal.timeout(SILENCE_TIMEOUT_MS),
+      })
+      status = response.status
+      marker = response.headers.get(TARGET_STUB_MARKER)
+      await response.arrayBuffer()
+    } catch {
+      // 못 갔으면 아래 케이스가 `0` 을 보고 빨개진다.
+    }
+  }, 30_000)
+
+  afterAll(async () => {
+    await viteServer?.close()
+    await new Promise<void>((resolve) => {
+      if (!upstream?.listening) {
+        resolve()
+        return
+      }
+      upstream.close(() => resolve())
+    })
+    // **환경을 되돌린다.** 안 되돌리면 이 파일 뒤의 것이 심은 값을 본다.
+    if (savedPort === undefined) {
+      delete process.env.PORT
+    } else {
+      process.env.PORT = savedPort
+    }
+  })
+
+  /**
+   * **카나리아이지 독립된 축이 아니다** — 아래 라이브 단언이 죽었을 때 *왜* 죽었는지를
+   * 가르는 자리다(5차가 값 읽기를 카나리아로 남긴 것과 같은 이유). 대상 값이 틀리면 이
+   * 케이스와 아래가 **함께** 죽고, 그때 이쪽 메시지가 «어느 수로 갔는지»를 말한다.
+   */
+  it('카나리아 — 심은 포트가 그대로 대상이 됐다', () => {
+    expect(viteServer.config.configFile?.replace(/\\/g, '/')).toMatch(
+      /apps\/web\/vite\.config\.ts$/,
+    )
+    // 문자열 축약형(`'/api': 'http://…'`)이면 여기서 걸린다.
+    expect(configuredEntry).toBeDefined()
+    // **수를 여기 박지 않는다** — 규칙이 그 수를 내고, 심은 것은 임시 포트다.
+    expect(expectedTarget).toBe(`http://127.0.0.1:${plantedPort}`)
+    expect(configuredEntry?.target).toBe(expectedTarget)
+  })
+
+  /**
+   * **이 절의 판정이다.** 대상을 수로 박아 두거나(임시 포트와 같을 수 없다), 값을 구해
+   * 놓고 안 꽂거나, `preview.proxy` 에 꽂거나, 중복 키로 뒤에서 덮거나, `configure` 로
+   * 런타임에 바꾸거나, `bypass` 로 상류에 안 보내면 — **표식이 안 온다.**
+   *
+   * **`target:` 이 엔트리의 몇째 키인지는 안 본다.** 앞 판이 그것을 요구해 옳은 설정을
+   * 죽였다(위 배선 절 머리말의 표).
+   */
+  it('그 대상으로 요청이 실제로 간다 — 스텁이 답한 표식이 돌아온다', () => {
+    expect(status).toBe(200)
+    expect(marker).toBe('yes')
+    expect(sightedUrl).toBe(PROBE_URL)
   })
 })
 
@@ -269,8 +452,11 @@ describe('배선이 가리키는 자리', () => {
  *
  * # 이 자가 못 보는 것 — 정직하게 적는다
  *
- * - **대상(`target`) 값 자체**는 여기서 안 잰다 — 스텁으로 바꿔 놓기 때문이다. 그 규칙은
- *   위 배선 절이 소유한다(gitignore 된 `apps/api/.env` 에 매인다).
+ * - **대상(`target`) 값 자체**는 여기서 안 잰다 — 스텁으로 바꿔 놓기 때문이다. **그 축은
+ *   위 «라이브» 절이 갖는다**(P10-2 이월 G에서 배선 절의 원문 케이스 둘을 대신했다):
+ *   그쪽은 `target` 을 덮지 않고 **규칙의 입력**(`process.env.PORT`)에 스텁의 임시 포트를
+ *   심어, 요청이 거기 닿는지를 본다. 앞 판의 주석은 이 축을 *"배선 절이 소유한다 —
+ *   gitignore 된 `apps/api/.env` 에 매인다"* 고 적었는데, **그 매임이 지금은 없다.**
  * - **실제 api 가 그 업그레이드에 무엇으로 답하는지**는 안 잰다. 여기서 재는 것은
  *   *"vite 가 업그레이드를 상류까지, 경로·`Host`·`Cookie` 를 보존한 채 넘기는가"* 다.
  * - `build`·`preview` 는 안 본다. 이 절이 재는 것은 `serve` 다.
@@ -281,10 +467,6 @@ describe('배선이 가리키는 자리', () => {
  * **5173 을 점유한 채로도 22/22**(vite 가 `pnpm dev` 와 똑같이 올려 잡는다) ·
  * **동시 2회 실행도 각각 22/22** · 끝난 뒤 남는 프로세스·리스닝 포트 **0**.
  */
-
-/** `apps/web/vite.config.ts` — 아래 하네스가 **그대로** 실행하는 파일. */
-const WEB_ROOT = fileURLToPath(new URL('../', import.meta.url))
-const WEB_CONFIG_FILE = fileURLToPath(new URL('../vite.config.ts', import.meta.url))
 
 /** 실시간 라우트(`apps/api/src/ws/routes.ts` 의 `'/:projectId/ws'`)가 붙는 자리. */
 const REALTIME_URL = '/api/projects/9f1d0c3e-0000-4000-8000-000000000001/ws'
@@ -298,9 +480,6 @@ const STUB_REST_MARKER = 'x-wirebound-stub-rest'
 
 /** RFC 6455 의 그 상수. 스텁이 진짜 핸드셰이크를 완성하도록 쓴다. */
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
-
-/** 게이트가 닫히면 **아무 바이트도 안 온다** — 그때 매달리지 않도록 여기서 끊는다. */
-const SILENCE_TIMEOUT_MS = 3_000
 
 /** 스텁 상류가 한 요청에서 실제로 본 것. `undefined` 면 **거기까지 오지 않았다**는 뜻이다. */
 interface UpstreamSighting {
