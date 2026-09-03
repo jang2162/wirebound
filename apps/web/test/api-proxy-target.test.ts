@@ -1,7 +1,15 @@
+// @vitest-environment node
+// **이 파일만 node 환경이다** — 이 프로젝트의 기본은 jsdom 이다(루트 `vitest.config.ts`).
+// 아래 ws 절이 `vite.config.ts` 를 vite 자신의 로더로 **실행해** 값을 읽는데, 그 로더는
+// `@vitejs/plugin-react` 를 실제로 import 한다. jsdom 안에서는 거기서 esbuild 가 invariant 로
+// 죽는다(리뷰어가 값으로 확인했다). 위 절들은 DOM 을 안 쓰므로 잃는 것이 없다.
+import { fileURLToPath } from 'node:url'
+import { resolveConfig } from 'vite'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_API_PORT, resolveApiPort, resolveApiProxyTarget } from '../config/api-proxy-target'
 // `?raw`는 vite가 파일 원문을 문자열로 넣어 준다 — `shell-css.test.ts`·`store-access.test.ts`와
-// 같은 관용구다. 이 파일은 Node 타입이 없는 브라우저 프로그램에 살므로 `node:fs`를 못 쓴다.
+// 같은 관용구다. **원문을 보는 것은 아래 배선 두 절뿐이고**, ws 절은 원문이 아니라 값을 잰다
+// (그 이유는 그쪽 머리말에 있다).
 import viteConfigSource from '../vite.config.ts?raw'
 // **주석을 걷고 센다.** 안 걷으면 옳은 줄을 주석에 남기고 아래에서 뒤집는 우회가 통째로
 // 지나간다 — 리뷰어가 실측했다(귀속: 리뷰 델타 W4: `.env`의 3067 이 셸의 3099 를 이기는데
@@ -180,9 +188,14 @@ describe('배선이 가리키는 자리', () => {
  * (`vite/dist/node/chunks/dep-*.js` 의 `httpServer.on("upgrade", …)`):
  *
  * ```js
- * if (opts.ws || opts.target?.toString().startsWith("ws:") || …startsWith("wss:")) {
- *   proxy.ws(req, socket, head)   // ← 여기 못 오면
- * }
+ * for (const context in proxies) {
+ *   if (doesProxyContextMatchUrl(context, url)) {
+ *     const [proxy, opts] = proxies[context]
+ *     if (opts.ws || opts.target?.toString().startsWith("ws:") || …startsWith("wss:")) {
+ *       …; proxy.ws(req, socket, head); return    // ← 여기 못 오면
+ *     }
+ *   }
+ * }                                               // ← 그냥 루프가 끝난다
  * ```
  *
  * **셋 다 거짓이면 그 핸들러는 아무것도 안 하고 그냥 빠져나온다.** 소켓을 닫지도,
@@ -198,87 +211,131 @@ describe('배선이 가리키는 자리', () => {
  * `onclose` 가 안 오므로 `connection.ts` 의 재연결도 안 탄다 — 화면은 *"붙는 중"* 에서
  * 영원히 멈춘다. **협업 잠금(§7.2)과 WS 편집(§7.1)이 통째로 죽는데 아무도 말하지 않는다.**
  *
- * # 왜 원문을 읽는가
+ * # 왜 원문이 아니라 **값**을 재는가
  *
- * 위 배선 절과 같은 자를 쓴다. 설정 객체를 `import` 해서 재는 길도 있지만 그쪽은
- * `vite.config.ts` 를 **브라우저 프로그램의 타입 그래프로 끌고 들어온다** — 그 파일이
- * `tsconfig.node.json` 에 따로 사는 이유가 정확히 그것이다(`types: ["node"]` 를
- * `apps/web/src` 에 안 얹으려고 갈랐다). 게다가 jsdom 안에서 `@vitejs/plugin-react` 를
- * 실행하고 **gitignore 된 `.env` 를 읽게** 되므로, 재는 값이 있을 수도 없을 수도 있는
- * 파일에 매인다.
+ * 앞 판은 이 절도 위 배선 절과 같은 자를 썼다 — `?raw` 원문을 `stripComments` 로 걷고
+ * `'/api': { … }` 의 짝을 세어 그 안에 `ws: true` 라는 **글자**가 있는지 봤다.
+ * 반증 워커가 `vite.config.ts` 를 21 갈래로 변조해 그 자를 실측했고 **거짓 초록이 아홉**
+ * 나왔다(2026-09-03). 최악은 한 줄짜리다:
  *
- * 원문 읽기의 약점(글자가 맞아도 vite 에 안 꽂힐 수 있다)은 위 배선 절이 쓰는 방법으로
- * 좁힌다 — **`'/api'` 엔트리 *안에* 있는지**를 보지 파일 어딘가에 있는지를 보지 않는다.
+ * ```ts
+ * '/api': { target: apiProxyTarget, changeOrigin: false, ws: false, todo: 'ws: true' },
+ * ```
+ *
+ * **설정이 실시간을 끄고 있는데 「ws 가 켜져 있다」가 20/20 초록이었다.** 나머지 여덟도
+ * 악의가 필요한 모양이 아니다 — 같은 객체의 **중복 키**(뒤엣것이 런타임에서 이기는데 자는
+ * 앞엣것을 읽는다), `preview.proxy` 를 `server` 앞에 둔 것(`pnpm dev` 가 쓰는 것은
+ * `server.proxy` 다), **로그 문자열 안의 같은 글자**(`stripComments` 는 문자열 내용을
+ * 일부러 남긴다), `agent: { ws: true }` 같은 **중첩**, `...(false ? { ws: true } : {})`
+ * **죽은 가지**, 그리고 `rewrite: (p) => p.replace(/^https?:\/\//, '')` — `stripComments` 가
+ * 정규식을 모르고 `//` 뒤를 지워 엔트리의 `}` 를 없애 버린다. **프록시 설정에서 가장 흔한
+ * 정규식 자리다.**
+ *
+ * **「ws 가 실행되는 자리에서 참인가」는 글자로 답할 수 있는 질문이 아니다.** 원문을 더
+ * 잘 파싱하는 것으로는 못 닫는다 — 위 아홉 중 파싱으로 닫히는 것은 셋뿐이고 나머지는
+ * 「그 글자가 실행되는 값인가」를 묻지 않는 데서 온다.
+ *
+ * 그래서 이 절은 **vite 자신의 로더로 설정을 실행해 값을 읽는다** — `resolveConfig` 는
+ * `createServer` 가 프록시를 세울 때 부르는 바로 그 함수이고, 플러그인의 `config()` 훅까지
+ * 반영된 뒤의 객체를 준다. 그 위에서 **vite 의 선택 규칙 자체를 옮겨** 실시간 라우트가
+ * 실제로 어느 엔트리를 타는지 고른다. 중복 키는 JS 가 이미 하나로 접었고, `preview` 미끼는
+ * 그 필드에 없으며, 문자열·중첩·죽은 가지는 값이 되지 못한다.
+ *
+ * # 이 자가 못 보는 것 — 정직하게 적는다
+ *
+ * - **`configureServer` 훅**에서 미들웨어를 직접 얹어 프록시를 앞질러 가는 것은 값에
+ *   나타나지 않는다. 그것까지 재려면 서버를 띄워야 한다.
+ * - 대상(`target`) **값**은 여기서 안 잰다 — gitignore 된 `apps/api/.env` 에 매인다
+ *   (이 워크트리에서는 `3002` 였다). 대상 규칙은 위 배선 절이 소유한다.
  */
-describe('업그레이드도 프록시를 탄다 — ws', () => {
-  const source = stripComments(viteConfigSource)
 
-  /**
-   * `'/api': { … }` 의 중괄호 **안**. 짝을 세어 잡는다. 없으면 빈 문자열이라 아래가 전부 실패한다.
-   *
-   * **`/'\/api':\s*\{([^}]*)\}/` 로는 안 된다.** 그 자는 첫 `}` 에서 끊기므로 엔트리 안에
-   * 객체가 하나라도 들어오면 그 뒤를 통째로 잃는다. 리뷰어가 실측했다 — `headers: { … }` 를
-   * `ws: true` **앞**에 두면 **설정이 옳은데도** 「ws 가 없다」고 둘이 죽었다(그 설정으로
-   * 런타임은 `101` · 550바이트 · `joined` 였다). **거짓 빨강인 데다 카나리아는 통과해서**
-   * (잘린 조각에도 `target: apiProxyTarget` 이 남는다) 원인을 안 짚는다 — 메시지가 사람을
-   * 엉뚱한 데로 보낸다.
-   *
-   * **문자열 안의 중괄호는 세지 않는다.** `stripComments` 는 주석만 걷고 문자열의 내용은
-   * 남기므로, 안 가르면 **거짓 초록**이 난다 — 쟀다: `'/api'` 안에 `headers: { 'x': '{' }` 를
-   * 두고 `ws: true` 를 **다른 엔트리**에 놓으면 짝이 어긋나 자가 그 다음 엔트리까지 삼키고,
-   * **`'/api'` 에 `ws` 가 없는데 ws 케이스가 통과했다.** 그래서 따옴표 안은 건너뛴다.
-   *
-   * 끝까지 짝을 못 찾으면 빈 문자열이다 — 카나리아가 잡는다(짝이 맞는 정상 소스에서는
-   * 닿지 않는 자리다).
-   */
-  function apiProxyEntry(text: string): string {
-    const head = text.match(/'\/api':\s*\{/)
-    if (head?.index === undefined) {
-      return ''
-    }
-    const open = head.index + head[0].length
-    let depth = 1
-    /** 문자열 안이면 그 따옴표. 빈 문자열이면 코드 자리다. */
-    let quote = ''
-    for (let i = open; i < text.length; i += 1) {
-      const char = text[i]
-      if (quote !== '') {
-        if (char === '\\') {
-          i += 1 // 이스케이프된 한 글자는 따옴표라도 닫지 않는다
-        } else if (char === quote) {
-          quote = ''
-        }
-      } else if (char === "'" || char === '"' || char === '`') {
-        quote = char
-      } else if (char === '{') {
-        depth += 1
-      } else if (char === '}') {
-        depth -= 1
-        if (depth === 0) {
-          return text.slice(open, i)
-        }
-      }
-    }
-    return ''
+/**
+ * `apps/web/vite.config.ts` 를 **vite 가 뜰 때와 같은 방식으로** 해석한 결과.
+ *
+ * 정적 `import` 로는 못 한다 — 그쪽은 이 파일이 사는 브라우저 프로그램의 타입 그래프로
+ * `vite.config.ts` 를 끌고 들어와 `TS6307` 로 죽는다(`tsconfig.node.json` 이 그 파일을
+ * 따로 드는 이유다). `resolveConfig` 는 **경로 문자열**을 받으므로 타입 그래프에 안 들어오고,
+ * vite 가 자기 로더(node 쪽 esbuild)로 읽으므로 `@vitejs/plugin-react` 도 정상적으로 산다.
+ */
+const WEB_ROOT = fileURLToPath(new URL('../', import.meta.url))
+const resolvedViteConfig = await resolveConfig(
+  { root: WEB_ROOT, configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)) },
+  'serve',
+  'development',
+  'development',
+)
+
+/** 실시간 라우트(`apps/api/src/ws/routes.ts` 의 `'/:projectId/ws'`)가 붙는 자리. */
+const REALTIME_URL = '/api/projects/9f1d0c3e-0000-4000-8000-000000000001/ws'
+
+describe('업그레이드도 프록시를 탄다 — ws', () => {
+  /** `pnpm dev` 가 프록시를 세울 때 그대로 훑는 목록. 순서가 곧 우선순위다. */
+  const contexts = Object.entries(resolvedViteConfig.server.proxy ?? {}).map(
+    ([context, value]) =>
+      // 문자열 축약형(`'/api': 'http://…'`)은 vite 가 `{ target }` 으로 편다.
+      [context, typeof value === 'string' ? { target: value } : value] as const,
+  )
+
+  /** vite 의 `doesProxyContextMatchUrl` 을 그대로 옮긴 것. */
+  function matchesContext(context: string, url: string): boolean {
+    return (context[0] === '^' && new RegExp(context).test(url)) || url.startsWith(context)
   }
 
-  const apiEntry = apiProxyEntry(source)
+  /**
+   * **REST 가 타는 자리** — `viteProxyMiddleware` 는 **첫 매치**에서 `return` 한다.
+   * 그래서 앞에 놓인 더 넓은 컨텍스트가 있으면 그것이 이긴다.
+   */
+  function restEntry(url: string) {
+    return contexts.find(([context]) => matchesContext(context, url))
+  }
 
-  it('자가 진짜 엔트리를 잡았다 — 못 잡으면 아래가 통째로 헛돈다', () => {
-    // 배선 절의 카나리아와 같은 이유다. 정규식이 빗나가면 `not.toMatch` 계열이 전부
-    // 초록이 되므로, 먼저 **잡았다는 것**을 못박는다.
-    expect(apiEntry).not.toBe('')
-    expect(apiEntry).toContain('target: apiProxyTarget')
+  /**
+   * **업그레이드가 타는 자리** — 매치하더라도 게이트(`opts.ws || 대상이 ws:/wss:`)가
+   * 닫혀 있으면 `return` 하지 않고 **다음 컨텍스트로 넘어간다.** 끝까지 못 열면
+   * `undefined` 다 — 그것이 위 표의 "응답 바이트 0" 이다.
+   */
+  function upgradeEntry(url: string) {
+    return contexts.find(([context, options]) => {
+      if (!matchesContext(context, url)) {
+        return false
+      }
+      const target = String(options.target ?? '')
+      return Boolean(options.ws) || target.startsWith('ws:') || target.startsWith('wss:')
+    })
+  }
+
+  it('자가 진짜 그 설정을 실행해 읽었다 — 엉뚱한 파일이면 아래가 통째로 헛돈다', () => {
+    // 배선 절의 카나리아와 같은 이유다. 읽은 자리가 빗나가면 아래가 전부 초록이 되거나
+    // 전부 빨개진다. **어느 파일을 읽었는지**를 먼저 못박는다.
+    expect(resolvedViteConfig.configFile?.replace(/\\/g, '/')).toMatch(/apps\/web\/vite\.config\.ts$/)
+    expect(contexts.length).toBeGreaterThan(0)
+    // 이 절이 재는 것은 **dev 서버**다. `preview.proxy` 를 봐서는 안 된다.
+    expect(resolvedViteConfig.server.proxy).toBeDefined()
   })
 
-  it('**`ws` 가 그 엔트리 안에 켜져 있다** — 없으면 업그레이드가 조용히 멈춘다', () => {
-    // **이 저장소에서 그 게이트를 여는 것은 `ws` 하나뿐이다.** 게이트는
-    // `opts.ws || 대상이 ws: || 대상이 wss:` 인데 여기 대상은 `http://127.0.0.1:<PORT>` 라
-    // (위 절이 잰다) 뒤의 둘은 영원히 거짓이다. 대상을 `ws:` 로 바꿔 여는 것은 답이
-    // 아니다 — 같은 엔트리로 REST 도 나간다. **그 우회는 위 배선 절이 막는다**:
-    // 「계산한 값이 실제로 프록시 대상이 된다」(`'/api': { target: apiProxyTarget`)와
-    // 「대상을 수로 박아 두지 않는다」가 각각 문 앞에 서 있다.
-    expect(apiEntry).toMatch(/\bws:\s*true\b/)
+  it('**업그레이드 게이트가 열린다** — 닫혀 있으면 실시간이 조용히 멈춘다', () => {
+    const entry = upgradeEntry(REALTIME_URL)
+    // `undefined` 면 그 핸들러가 아무것도 안 하고 빠져나온다 — 소켓도 상태 코드도 없다.
+    expect(entry).toBeDefined()
+    const [context, options] = entry ?? ['', {}]
+    expect(context).toBe('/api')
+    // **이 저장소에서 그 게이트를 여는 것은 `ws` 하나뿐이다.** 대상은
+    // `http://127.0.0.1:<PORT>` 라(위 배선 절이 잰다) `ws:`·`wss:` 가지는 영원히 거짓이고,
+    // 대상을 `ws:` 로 바꿔 여는 것은 답이 아니다 — 같은 엔트리로 REST 도 나간다.
+    expect(options.ws).toBe(true)
+  })
+
+  it('REST 와 업그레이드가 **같은 엔트리**를 탄다 — 대상을 두 벌 두지 않는다', () => {
+    // vite 의 업그레이드 핸들러는 같은 `proxies[context]` 를 다시 꺼내 쓴다. 즉 대상은
+    // `apiProxyTarget` 하나뿐이어야 하고, 실시간 전용 컨텍스트를 앞에 끼워 넣으면
+    // 그 순간 손으로 맞출 자리가 둘이 된다(이 파일이 없애려던 것이 그것이다).
+    //
+    // **재는 자리는 「이 URL 이 실제로 타는 엔트리」다.** 파일에 프록시 엔트리가 몇 개인지가
+    // 아니다 — 무관한 `'/uploads'` 를 더했다고 빨개지면 안 된다(리뷰어 실측).
+    const rest = restEntry(REALTIME_URL)
+    expect(rest?.[0]).toBe('/api')
+    // 같은 객체여야 한다. 다르면 업그레이드가 REST 와 **다른 대상**으로 나가고 있다.
+    expect(upgradeEntry(REALTIME_URL)?.[1]).toBe(rest?.[1])
   })
 
   it('`changeOrigin` 은 그대로 `false` 다 — WS 도 same-origin 쿠키를 쓴다 (D4)', () => {
@@ -288,18 +345,6 @@ describe('업그레이드도 프록시를 탄다 — ws', () => {
     // 브라우저가 같은 오리진으로 붙으니 쿠키가 실리고, `Host` 를 안 바꾸니 서버는
     // 브라우저가 본 오리진을 그대로 본다. 실측으로 확인했다 — 이 값 그대로
     // `preHandler: projectGuard('viewer')` 를 통과해 `joined` 가 왔다.
-    expect(apiEntry).toMatch(/\bchangeOrigin:\s*false\b/)
-  })
-
-  it('업그레이드도 **같은 대상 규칙**을 쓴다 — 대상을 두 벌 두지 않는다', () => {
-    // vite 의 업그레이드 핸들러는 같은 `proxies[context]` 엔트리를 다시 꺼내 쓴다.
-    // 즉 대상은 위 절이 잰 `apiProxyTarget` 하나뿐이고, WS 전용 대상을 따로 두면
-    // 그 순간 손으로 맞출 자리가 둘이 된다(이 파일이 없애려던 것이 그것이다).
-    //
-    // **세는 자리는 `'/api'` 엔트리 안이다.** 앞 판은 `source` 전체를 셌고, 그래서
-    // **무관한 프록시 엔트리**(`'/uploads': { target: … }`)를 더하기만 해도 빨개졌다
-    // (리뷰어 실측). 이 케이스가 무는 규칙은 「이 라우트에 대상을 두 벌 두지 마라」지
-    // 「이 파일에 프록시 엔트리는 하나뿐」이 아니다.
-    expect(apiEntry.match(/target:/g)).toHaveLength(1)
+    expect(restEntry(REALTIME_URL)?.[1].changeOrigin).toBe(false)
   })
 })
