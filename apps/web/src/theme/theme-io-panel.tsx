@@ -50,6 +50,42 @@
  *
  * ---
  *
+ * # 가져오기 쪽은 **기본이 접혀 있다**
+ *
+ * 파일 고르개와 `테마 JSON` 상자가 화면 **머리**를 큰 상자로 상시 점유하고 있었다. 이 화면은
+ * 글자가 빽빽한 화면이고(P4c-2 ③이 왼쪽 칸을 세로 3639px로 쟀다) **가져오기는 한 테마를
+ * 저작하는 동안 많아야 한두 번 하는 조작**인데, 늘 열려 있어 저장·되돌리기와 토큰 편집
+ * 사이를 가르고 있었다. **이 상자 자신이 262.5px → 56px이 됐다**(진짜 크로미움에서 잰
+ * `clientHeight`) — 그만큼이 토큰 편집으로 간다.
+ *
+ * **판단의 근거는 `panels/page-json-panel.tsx`의 같은 절이 갖는다**(둘이 같은 사고이고 같은
+ * 형태로 고쳤다 — 토글 버튼 + `aria-expanded` + 조건부 렌더, `<details>`도 팝오버도 아니다).
+ * 여기서만 다른 것 둘만 적는다.
+ *
+ * - **접힘 밖에 남는 것이 셋이다** — `내보내기`·파일 이름·`마지막 저장으로 되돌리기`, 그리고
+ *   파생의 대가를 말하는 줄. 넷 다 **내보내기·저장 쪽**이고 가져오기와 축이 다르다(아래 표).
+ *
+ *   **여기서 그쪽 절을 그대로 가져오면 안 된다.** 그쪽의 `페이지 내보내기`는 토글과 **같은
+ *   줄**이라 접어서 버는 값이 0px이지만, **여기 셋은 토글과 다른 줄이라 26.5px이다**(쟀다 —
+ *   앞 판은 이 자리에도 *"0px"*이라 적었고 그것이 거짓이었다). 그래도 밖에 두는 근거는 값이
+ *   아니라 이 둘이다:
+ *
+ *   1. **접으려면 토글이 하나 더 필요하다.** 이 셋은 가져오기가 아니라 `테마 JSON 가져오기`
+ *      라는 이름 아래로 들어갈 수 없다. 그리고 새 토글은 다시 버튼 한 줄을 차지한다 — 접힌
+ *      이 상자 56px이 그 셋의 줄(26.5px)과 토글 줄로 거의 다 차므로, 버튼 한 줄은 벌려는
+ *      26.5px과 같은 자릿수다. **26.5px을 벌어 대부분을 도로 쓴다.** 왼쪽 칸이 세로
+ *      3639px인 화면에서 그 차액은 소수점이다.
+ *   2. **축이 다르고 훨씬 자주 쓴다.** 저장·되돌리기는 한 테마를 저작하는 동안 계속 쓰는
+ *      조작이고 가져오기는 많아야 한두 번이다. 되돌리기는 **저장의 짝**이라 저장이 막히는
+ *      상태(D6 — 읽지 못한 글자)에서 손이 가는 자리이기도 하다. *"읽지 못한 글자에서
+ *      빠져나오는 **유일한** 문"*은 아니다 — 앞 판이 그렇게 적었으나 **거짓이다**(리뷰가
+ *      브라우저에서 재현했다: 상자를 비우거나 JSON을 고쳐도 빠져나온다). 밖에 두는 이유는
+ *      유일해서가 아니라 축과 빈도다.
+ * - **결과(`OutcomeView`)도 접힘 밖이다.** *"초안에 넣었습니다"*는 폼을 접은 뒤에 읽는 문장이고,
+ *   거절 이유는 파일을 고치러 가는 사람이 읽는 문장이다.
+ *
+ * ---
+ *
  * # 무엇이 무엇을 막는가 — **축이 셋이다**
  *
  * | 조작 | 막는 축 | 왜 |
@@ -117,6 +153,8 @@ function ThemeIoBody(props: PanelProps & { draft: Theme }): ReactElement {
   const [slug, setSlug] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmingRevert, setConfirmingRevert] = useState(false)
+  /** 가져오기 쪽이 펼쳐졌는가. **기본은 접힘이다**(머리말). */
+  const [importOpen, setImportOpen] = useState(false)
 
   /**
    * 대기 글자를 문서로 읽는다. **A와 B가 공유한다.**
@@ -302,89 +340,106 @@ function ThemeIoBody(props: PanelProps & { draft: Theme }): ReactElement {
         </p>
       )}
 
-      <div className="wb-shell-theme-io-row">
-        <label className="wb-shell-theme-field">
-          테마 파일
-          <input
-            className="wb-shell-theme-input"
-            type="file"
-            accept="application/json,.json"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file === undefined) return
-              void readTextFile(file).then(
-                (read1) => {
-                  setText(read1)
-                  setOutcome(null)
-                },
-                // 파일 자체를 못 읽는 것(권한·삭제)과 내용이 JSON이 아닌 것은 다르다.
-                (error: unknown) => {
-                  /**
-                   * **대기 글자를 비운다 — 안 비우면 사실 2와 같은 모양이 된다.**
-                   *
-                   * 화면은 *"파일을 읽지 못했습니다"*라고 말하는데 대기 글자에는 **앞에
-                   * 읽힌 것**이 그대로 남아, 그 상태로 *"초안에 넣기"*를 누르면 **고르지도
-                   * 않은 앞 문서**가 들어간다. **고치기 전에 그것이 실제로 일어나는 것을
-                   * 쟀다**(P4c-3 리뷰 ①): 대기 글자 길이 87 · 넣기 버튼 `disabled=false` ·
-                   * 누르니 초안 이름이 앞 파일의 *"앞의 것"*이 됐다.
-                   *
-                   * **이 슬라이스가 스토어에서 닫은 그 부류가 이 화면에서 다시 열려 있었다** —
-                   * *"화면이 못 읽었다고 말하는데 조작은 마지막으로 읽힌 값에 대해 일어난다."*
-                   */
-                  setText('')
-                  setOutcome({
-                    kind: 'unreadable',
-                    message: error instanceof Error ? error.message : '파일을 읽지 못했습니다',
-                  })
-                },
-              )
-            }}
-          />
-        </label>
-      </div>
-
-      <label className="wb-shell-theme-io-paste">
-        테마 JSON
-        {/* **붙여 넣는 길이 여기서 생긴다** — 이월 §12.1-6이 *"JSON으로 테마 전문을 붙여
-            넣는 길이 없다"*로 남긴 공백이고, 파일 고르기와 **같은 대기 글자**를 채운다. */}
-        <textarea
-          className="wb-shell-theme-json-input"
-          value={text}
-          rows={4}
-          spellCheck={false}
-          onChange={(event) => {
-            setText(event.target.value)
-            setOutcome(null)
-          }}
-        />
-      </label>
-
+      {/* **가져오기는 여기서부터다.** 위의 셋(내보내기·파일 이름·되돌리기)과 파생 줄은 접힘
+          밖이고, 아래 결과 상자도 밖이다 — 근거는 머리말. */}
       <div className="wb-shell-theme-io-row">
         <button
           type="button"
           className="wb-shell-theme-action"
-          disabled={props.locked || text.trim() === ''}
-          onClick={applyToDraft}
+          aria-expanded={importOpen}
+          onClick={() => setImportOpen((was) => !was)}
         >
-          초안에 넣기
-        </button>
-        <label className="wb-shell-theme-field">
-          가져올 테마의 id
-          <input
-            className="wb-shell-theme-input"
-            value={slug}
-            onChange={(event) => setSlug(event.target.value)}
-          />
-        </label>
-        <button
-          type="button"
-          className="wb-shell-theme-action"
-          disabled={!props.canCreate || busy || slug === '' || text.trim() === ''}
-          onClick={() => void importAsNew()}
-        >
-          새 테마로 가져오기
+          테마 JSON 가져오기
         </button>
       </div>
+
+      {importOpen && (
+        <div className="wb-shell-theme-io-import" role="group" aria-label="테마 JSON 가져오기">
+          <div className="wb-shell-theme-io-row">
+            <label className="wb-shell-theme-field">
+              테마 파일
+              <input
+                className="wb-shell-theme-input"
+                type="file"
+                accept="application/json,.json"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file === undefined) return
+                  void readTextFile(file).then(
+                    (read1) => {
+                      setText(read1)
+                      setOutcome(null)
+                    },
+                    // 파일 자체를 못 읽는 것(권한·삭제)과 내용이 JSON이 아닌 것은 다르다.
+                    (error: unknown) => {
+                      /**
+                       * **대기 글자를 비운다 — 안 비우면 사실 2와 같은 모양이 된다.**
+                       *
+                       * 화면은 *"파일을 읽지 못했습니다"*라고 말하는데 대기 글자에는 **앞에
+                       * 읽힌 것**이 그대로 남아, 그 상태로 *"초안에 넣기"*를 누르면 **고르지도
+                       * 않은 앞 문서**가 들어간다. **고치기 전에 그것이 실제로 일어나는 것을
+                       * 쟀다**(P4c-3 리뷰 ①): 대기 글자 길이 87 · 넣기 버튼 `disabled=false` ·
+                       * 누르니 초안 이름이 앞 파일의 *"앞의 것"*이 됐다.
+                       *
+                       * **이 슬라이스가 스토어에서 닫은 그 부류가 이 화면에서 다시 열려 있었다** —
+                       * *"화면이 못 읽었다고 말하는데 조작은 마지막으로 읽힌 값에 대해 일어난다."*
+                       */
+                      setText('')
+                      setOutcome({
+                        kind: 'unreadable',
+                        message: error instanceof Error ? error.message : '파일을 읽지 못했습니다',
+                      })
+                    },
+                  )
+                }}
+              />
+            </label>
+          </div>
+
+          <label className="wb-shell-theme-io-paste">
+            테마 JSON
+            {/* **붙여 넣는 길이 여기서 생긴다** — 이월 §12.1-6이 *"JSON으로 테마 전문을 붙여
+                넣는 길이 없다"*로 남긴 공백이고, 파일 고르기와 **같은 대기 글자**를 채운다. */}
+            <textarea
+              className="wb-shell-theme-json-input"
+              value={text}
+              rows={4}
+              spellCheck={false}
+              onChange={(event) => {
+                setText(event.target.value)
+                setOutcome(null)
+              }}
+            />
+          </label>
+
+          <div className="wb-shell-theme-io-row">
+            <button
+              type="button"
+              className="wb-shell-theme-action"
+              disabled={props.locked || text.trim() === ''}
+              onClick={applyToDraft}
+            >
+              초안에 넣기
+            </button>
+            <label className="wb-shell-theme-field">
+              가져올 테마의 id
+              <input
+                className="wb-shell-theme-input"
+                value={slug}
+                onChange={(event) => setSlug(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="wb-shell-theme-action"
+              disabled={!props.canCreate || busy || slug === '' || text.trim() === ''}
+              onClick={() => void importAsNew()}
+            >
+              새 테마로 가져오기
+            </button>
+          </div>
+        </div>
+      )}
 
       {outcome !== null && <OutcomeView outcome={outcome} />}
     </section>

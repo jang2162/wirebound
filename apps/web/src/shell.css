@@ -2250,6 +2250,14 @@
   gap: 8px;
 }
 
+/* 가져오기 쪽(기본이 접힘이다 — `theme/theme-io-panel.tsx`의 머리말). `wb-shell-pagejson-import`와
+   같은 이유로 부모의 `gap`(6px)을 여기서 다시 세운다. */
+.wb-shell-theme-io-import {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* 내보낼 파일 이름. **버튼 옆에 늘 보인다** — 무엇이 저장될지가 이름 하나에 다 있다. */
 .wb-shell-theme-io-file {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -2706,6 +2714,15 @@
 .wb-shell-pagejson-row {
   display: flex;
   flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* 가져오기 폼(`panels/page-json-panel.tsx` — 기본이 접힘이다). **상자가 하나 늘었으므로
+   세로 리듬을 여기서 다시 만든다** — 부모의 `gap`은 이 상자 하나에만 닿고 그 안의 칸들에는
+   닿지 않는다. 값은 부모와 같은 4px다: 접었다 폈을 때 자리가 움직이지 않아야 한다. */
+.wb-shell-pagejson-import {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
 }
 

@@ -32,7 +32,7 @@ import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectDetail, ThemeDetail } from '../../src/api/types'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
-import { exportText } from '../../src/theme/theme-io'
+import { exportFileName, exportText } from '../../src/theme/theme-io'
 
 const user = { id: 'u1', email: 'a@b.c', name: '홍길동' }
 
@@ -153,7 +153,21 @@ async function withDownloadCapture(run: () => void): Promise<Download> {
   return { fileName, href, text, clicks, revoked }
 }
 
+/** 가져오기 쪽의 토글. **접힌 채로도 늘 있다.** */
+function importToggle(): HTMLButtonElement {
+  return screen.getByRole('button', { name: '테마 JSON 가져오기' }) as HTMLButtonElement
+}
+
+/**
+ * 가져오기 쪽을 편다. **기본이 접힘이라**(화면 머리말) 파일 고르개·붙여 넣기 칸·버튼 둘에
+ * 닿는 케이스는 전부 이것을 먼저 부른다 — 접힌 동안에는 그것들이 **DOM에 없다.**
+ */
+function openImport(): void {
+  if (importToggle().getAttribute('aria-expanded') === 'false') fireEvent.click(importToggle())
+}
+
 function paste(text: string): void {
+  openImport()
   fireEvent.change(screen.getByRole('textbox', { name: '테마 JSON' }), { target: { value: text } })
 }
 
@@ -390,6 +404,7 @@ describe('가져오기 A — 초안으로 (T3, D3-A)', () => {
       theme: { meta: { id: 'solo', name: '파일에서 왔다', version: '1.0.0' } },
     })
     const file = new File([text], 'solo.wirebound-theme.json', { type: 'application/json' })
+    openImport()
     fireEvent.change(screen.getByLabelText('테마 파일'), { target: { files: [file] } })
 
     // `FileReader`가 비동기라 기다린다.
@@ -573,6 +588,7 @@ describe('리뷰 ① — 파일 읽기가 실패하면 대기 글자가 남지 �
    * 같은 갈래로 들어온다.
    */
   function pickBrokenFile(): void {
+    openImport()
     fireEvent.change(screen.getByLabelText('테마 파일'), {
       target: { files: [{ name: 'broken.json' } as unknown as File] },
     })
@@ -672,5 +688,84 @@ describe('리뷰 ⑤ — 파싱 실패에서도 되돌릴 수 있다', () => {
     expect(
       (screen.getByRole('button', { name: '마지막 저장으로 되돌리기' }) as HTMLButtonElement).disabled,
     ).toBe(true)
+  })
+})
+
+/**
+ * **접힘**(2026-09-02). 이 화면의 머리를 큰 상자로 점유하던 가져오기 쪽을 접었다 — 진짜
+ * 크로미움에서 잰 이 상자의 `clientHeight`가 **262.5px → 56px**이다(jsdom에는 레이아웃이
+ * 없어 여기서 재지 못한다. 여기서 재는 것은 그 값을 만드는 **DOM의 있고 없음**이다).
+ *
+ * 형태와 근거는 `panels/page-json-panel.tsx`와 같고(그쪽 머리말이 근거를 갖는다), 여기서
+ * 재는 것은 **이 화면에서만 다른 것** — 접힘 밖에 남아야 하는 것 셋이다.
+ *
+ * **되돌려 재면 이 다섯 중 넷이 죽고, 넷 다 같은 이유다** — 토글(`테마 JSON 가져오기`)을
+ * 못 찾는다. 남는 하나(*"접힘 밖에 셋이 남는다"*)는 그 셋을 접힘 **안**으로 옮기는 다른
+ * 변조로 죽는다.
+ */
+describe('가져오기 쪽은 기본이 접혀 있다', () => {
+  it('파일 고르개·붙여 넣기 칸·버튼 둘이 DOM에 아예 없다', async () => {
+    open()
+    await screen.findByRole('button', { name: '내보내기' })
+
+    expect(importToggle().getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByLabelText('테마 파일')).toBeNull()
+    expect(screen.queryByRole('textbox', { name: '테마 JSON' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '초안에 넣기' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '새 테마로 가져오기' })).toBeNull()
+    expect(screen.queryByLabelText('가져올 테마의 id')).toBeNull()
+  })
+
+  it('접힘 밖에 셋이 남는다 — 내보내기·파일 이름·되돌리기', async () => {
+    // **셋 다 저장·내보내기 축이라 밖이다**(화면 머리말). 되돌리기가 밖인 것은
+    // *"읽지 못한 글자에서 빠져나오는 유일한 문"*이라서가 **아니다**(그 문장은 거짓이었다 —
+    // 상자를 비우거나 JSON을 고쳐도 빠져나온다). **저장의 짝**이라서다.
+    open()
+    await screen.findByRole('button', { name: '내보내기' })
+
+    expect(screen.getByRole('button', { name: '내보내기' })).toBeDefined()
+    expect(screen.getByText(exportFileName(derived().theme))).toBeDefined()
+    expect(screen.getByRole('button', { name: '마지막 저장으로 되돌리기' })).toBeDefined()
+  })
+
+  it('토글이 펴고 다시 접는다', async () => {
+    open()
+    await screen.findByRole('button', { name: '내보내기' })
+
+    fireEvent.click(importToggle())
+    expect(importToggle().getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('button', { name: '초안에 넣기' })).toBeDefined()
+
+    fireEvent.click(importToggle())
+    expect(screen.queryByRole('button', { name: '초안에 넣기' })).toBeNull()
+  })
+
+  it('접었다 펴도 대기 글자가 남는다', async () => {
+    open()
+    await screen.findByRole('button', { name: '내보내기' })
+    paste('{"wireboundVersion":"1"}')
+
+    fireEvent.click(importToggle())
+    openImport()
+
+    expect(screen.getByRole('textbox', { name: '테마 JSON' })).toHaveProperty(
+      'value',
+      '{"wireboundVersion":"1"}',
+    )
+  })
+
+  it('결과는 접힘 밖에 남는다 — 접어도 방금 한 일이 화면에 있다', async () => {
+    // 결과를 폼 안에 두면 접는 순간 *"초안에 넣었습니다"*가 사라진다. 넣고 나서 폼을
+    // 접는 것이 자연스러운 순서이므로, 그때 사라지면 무엇이 일어났는지 화면이 잃는다.
+    open()
+    await screen.findByRole('button', { name: '내보내기' })
+    paste(exportText({ meta: { id: 'brand', name: '넣은 것', version: '1.0.0', extends: 'system:admin' } } as Theme))
+    fireEvent.click(screen.getByRole('button', { name: '초안에 넣기' }))
+    await screen.findByText('초안에 넣었습니다 — 갤러리로 확인한 뒤 저장하세요.')
+
+    fireEvent.click(importToggle())
+
+    expect(screen.queryByRole('button', { name: '초안에 넣기' })).toBeNull()
+    expect(screen.getByText('초안에 넣었습니다 — 갤러리로 확인한 뒤 저장하세요.')).toBeDefined()
   })
 })

@@ -130,7 +130,21 @@ function panel(): HTMLElement {
   return screen.getByRole('region', { name: '페이지 JSON' })
 }
 
+/** 가져오기 폼의 토글. **접힌 채로도 늘 있다.** */
+function importToggle(): HTMLButtonElement {
+  return within(panel()).getByRole('button', { name: '페이지 JSON 가져오기' }) as HTMLButtonElement
+}
+
+/**
+ * 가져오기 폼을 편다. **기본이 접힘이라**(패널 머리말) 폼의 칸에 닿는 케이스는 전부 이것을
+ * 먼저 부른다 — 접힌 동안에는 칸이 `hidden`이 아니라 **DOM에 없다.**
+ */
+function openImport(): void {
+  if (importToggle().getAttribute('aria-expanded') === 'false') fireEvent.click(importToggle())
+}
+
 function paste(text: string): void {
+  openImport()
   fireEvent.change(within(panel()).getByRole('textbox', { name: '페이지 JSON' }), {
     target: { value: text },
   })
@@ -218,6 +232,7 @@ describe('D11 — 이 패널의 키가 트리 단축키로 새지 않는다', ()
     // **삭제가 실제로 가능한 메뉴를 고른다.** 자식이 있는 메뉴를 고르면 `abilities.remove`가
     // 거짓이라 가드가 없어도 확인이 안 걸리고 — 이 케이스가 아무것도 재지 않는다.
     fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('button', { name: '주문관리' }))
+    openImport()
 
     const input = titleInput()
     const event = fireEvent.keyDown(input, { key: 'Backspace', bubbles: true })
@@ -235,6 +250,7 @@ describe('D11 — 이 패널의 키가 트리 단축키로 새지 않는다', ()
     await open()
     fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('button', { name: '주문관리' }))
 
+    openImport()
     const box = within(panel()).getByRole('textbox', { name: '페이지 JSON' })
     expect(fireEvent.keyDown(box, { key: 'Delete', bubbles: true })).toBe(true)
     expect(screen.queryByRole('button', { name: '정말 삭제합니까?' })).toBeNull()
@@ -529,6 +545,7 @@ describe('파일 읽기가 실패하면 대기 글자가 남지 않는다 — P4
    * (`theme-io-panel.test.ts`의 같은 장치).
    */
   function pickBrokenFile(): void {
+    openImport()
     fireEvent.change(within(panel()).getByLabelText('페이지 파일'), {
       target: { files: [{ name: 'broken.json' } as unknown as File] },
     })
@@ -562,5 +579,90 @@ describe('파일 읽기가 실패하면 대기 글자가 남지 않는다 — P4
     expect(within(panel()).getByRole('alert').textContent).toContain(
       'wirebound가 내보낸 페이지 파일이 아닙니다',
     )
+  })
+})
+
+/**
+ * **접힘**(2026-09-02). 드물게 쓰는 폼이 좌측 264px의 한복판을 상시 점유하던 것을 접었다.
+ *
+ * **세로 값은 여기서 재지 않는다** — jsdom에는 레이아웃이 없다. 진짜 크로미움에서 잰 값은
+ * 패널의 머리말에 있다: 패널 **235px → 33px**, 작은 설계서에서 상자의 콘텐츠
+ * **506px → 425px**(= 상자의 `clientHeight`라 **스크롤이 사라진다**). **«몇 줄 보인다»로는
+ * 적지 않는다** — 창 크기·글꼴에 흔들리는 수라 근거가 못 된다(앞 판의 커밋 메시지가 그렇게
+ * 적었고 리뷰가 뒤집었다). 여기서 재는 것은 **무엇이 DOM에 있고 없는가**이고, 그것이 저 값을
+ * 만드는 원인이다.
+ *
+ * **되돌려 재면 이 다섯 중 넷이 죽고, 넷 다 같은 이유다** — 토글(`페이지 JSON 가져오기`)을
+ * 못 찾는다. 남는 하나(*"접힘 밖"*)는 그 버튼을 접힘 **안**으로 옮기는 다른 변조로 죽는다.
+ * **«세 파일 84개 중 49개가 죽는다»는 수를 근거로 쓰지 마라** — 그 49개도 전부 이 한 이유이고
+ * (남의 케이스는 뜻이 바뀐 것이 아니라 헬퍼에 *"편다"* 한 걸음이 붙었을 뿐이다), 하나를
+ * 49번 센 수다.
+ */
+describe('가져오기 폼은 기본이 접혀 있다', () => {
+  it('폼의 칸 셋과 실행 버튼이 DOM에 아예 없다', async () => {
+    await open()
+
+    expect(importToggle().getAttribute('aria-expanded')).toBe('false')
+    // **`hidden`이 아니라 없다.** RTL의 role 조회는 둘을 구분하지 못하므로
+    // `queryByLabelText`·`queryByRole`이 아니라 상자 안의 요소 수로도 한 번 더 못박는다.
+    expect(within(panel()).queryByLabelText('페이지 파일')).toBeNull()
+    expect(within(panel()).queryByRole('textbox', { name: '페이지 JSON' })).toBeNull()
+    expect(within(panel()).queryByRole('textbox', { name: '가져올 페이지 제목' })).toBeNull()
+    expect(within(panel()).queryByRole('button', { name: '페이지 가져오기' })).toBeNull()
+    expect(panel().querySelectorAll('input, textarea').length).toBe(0)
+  })
+
+  it('접힌 채로도 `페이지 내보내기`는 그대로 눌린다 — 접힘 밖이라는 판정', async () => {
+    await open({}, '/projects/p-1/pages/pg-list')
+
+    const button = within(panel()).getByRole('button', { name: '페이지 내보내기' }) as HTMLButtonElement
+    expect(button.disabled).toBe(false)
+  })
+
+  it('토글이 펴고 다시 접는다', async () => {
+    await open()
+
+    fireEvent.click(importToggle())
+    expect(importToggle().getAttribute('aria-expanded')).toBe('true')
+    expect(within(panel()).getByRole('button', { name: '페이지 가져오기' })).toBeDefined()
+
+    fireEvent.click(importToggle())
+    expect(importToggle().getAttribute('aria-expanded')).toBe('false')
+    expect(within(panel()).queryByRole('button', { name: '페이지 가져오기' })).toBeNull()
+  })
+
+  it('접었다 펴도 치던 글자가 남는다 — 대기 글자가 폼이 아니라 패널의 것이다', async () => {
+    // **접힘을 폼 안쪽 상태로 만들면 여기서 죽는다.** 붙여 넣은 JSON과 제목이 접는 순간
+    // 사라지면, 접기가 *"자리를 아끼는 장치"*가 아니라 **일을 잃는 장치**가 된다.
+    await open()
+    paste(JSON.stringify(file()))
+    fireEvent.change(titleInput(), { target: { value: '사본' } })
+
+    fireEvent.click(importToggle())
+    openImport()
+
+    expect(within(panel()).getByRole('textbox', { name: '페이지 JSON' })).toHaveProperty(
+      'value',
+      JSON.stringify(file()),
+    )
+    expect(titleInput().value).toBe('사본')
+    // 미리보기도 그대로 선다 — 글자가 남았으므로 다시 읽힌다.
+    expect(within(panel()).getByRole('status').textContent).toContain('가져온 목록')
+  })
+
+  it('페이지를 옮겨도 열어 둔 것이 닫히지 않는다', async () => {
+    // 접힘 상태를 `MenuTree` 밖(라우트·스토어)으로 올리거나 페이지마다 새로 마운트되게
+    // 만들면 여기서 죽는다. **드물게 쓰는 폼이라 세션에 한 번 여는 것이 대가인데**,
+    // 페이지를 옮길 때마다 닫히면 그 대가가 페이지 수만큼 는다.
+    await open()
+    openImport()
+
+    fireEvent.click(screen.getByRole('link', { name: '회원 목록' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location-probe').textContent).toBe('/projects/p-1/pages/pg-list'),
+    )
+    expect(importToggle().getAttribute('aria-expanded')).toBe('true')
+    expect(within(panel()).getByRole('button', { name: '페이지 가져오기' })).toBeDefined()
   })
 })
