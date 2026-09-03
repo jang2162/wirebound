@@ -179,10 +179,22 @@ describe('보존', () => {
     expect(readLayout(localStorage)).toEqual({ regionRatio: 0.31 })
   })
 
-  it('숫자가 아닌 것·유한하지 않은 것은 통과하지 못한다', () => {
+  it('숫자가 아닌 것은 통과하지 못한다', () => {
     localStorage.clear()
-    // `NaN`·`Infinity`는 JSON에서 `null`로 나가므로 그 형태로도 재 둔다.
+    // `NaN`·`Infinity`는 `JSON.stringify`에서 `null`로 나가므로 그 형태로도 재 둔다.
+    // **읽는 쪽으로는 `Infinity`가 그대로 들어온다** — 다음 케이스가 그것이다.
     localStorage.setItem(STORAGE_KEY, '{"sideWidth":null,"regionRatio":true}')
+    expect(readLayout(localStorage)).toEqual({})
+  })
+
+  it('`Infinity`는 통과하지 못한다 — JSON이 실제로 내는 값이다', () => {
+    // **`typeof`만으로는 못 막는다.** `1e999`는 JSON의 평범한 숫자 리터럴이고
+    // `JSON.parse`가 그것을 `Infinity`로 준다(실측) — `typeof`는 `'number'`다.
+    // 지금은 하류의 클램프가 삼켜 무해하지만(`clampSideWidth(Infinity, 1440)`는 811이다),
+    // 검증을 두었으면 그것이 실제로 도는지는 재야 한다.
+    localStorage.clear()
+    expect(JSON.parse('{"sideWidth":1e999}').sideWidth).toBe(Infinity)
+    localStorage.setItem(STORAGE_KEY, '{"sideWidth":1e999,"regionRatio":-1e999}')
     expect(readLayout(localStorage)).toEqual({})
   })
 
@@ -247,6 +259,16 @@ describe('`shell.css`와의 짝', () => {
     expect(gap).toBeDefined()
     // 칸이 넷이므로 사이의 여백은 셋이다.
     expect(SIDE_RESERVED_WIDTH).toBe(Number(panel) + Number(resizer) + Number(gap) * 3)
+  })
+
+  it('두 영역 사이 손잡이가 `flex: none`이다 — 지우면 좁은 창에서 사라진다', () => {
+    // **근거가 앞 판과 다르다 — 다시 쟀다.** 두 영역이 `flex-basis: 0`이라 일상 구간에서는
+    // 지워도 6px 그대로다. 그런데 여백(위아래 10px씩)이 `flex-basis` 밖이라 기본 크기의
+    // 합이 48px이고, **그 아래로는 줄일 것을 가진 항목이 손잡이뿐**이 된다 — 지운 판의
+    // 실측이 47px에서 5 · 46px에서 4 · 40px 아래로 0이다(Chrome 2026-09-03).
+    // `.wb-shell-region`이 `flex-basis: 0`을 잃기만 해도 모든 크기에서 그렇게 된다
+    // (850.5px에서 4.82px). 근거 전문은 `shell.css`의 그 규칙 위에 있다.
+    expect(shellCss).toMatch(/\.wb-shell-region-resizer \{[^}]*\n  flex: none;/)
   })
 
   it('격자의 행 이름과 손잡이의 `grid-area`가 맞는다', () => {
