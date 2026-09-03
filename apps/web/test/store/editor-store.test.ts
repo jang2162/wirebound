@@ -736,7 +736,9 @@ describe('EditorStore의 편집 상태', () => {
     const store = loaded()
     const before = store.getState()
 
-    expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 0 })
+    // **모양을 통째로 못박는다** — 필드가 늘면 여기가 먼저 죽고 그때 사람이 본다.
+    // `blocked`는 남의 잠금에 막힌 항목이다(§7.2 · `test/lock/undo-locks.test.tsx`).
+    expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 0, blocked: null })
 
     expect(store.getState()).toBe(before)
   })
@@ -769,7 +771,7 @@ describe('EditorStore의 편집 상태', () => {
 
     const attempt = store.startUndo()
 
-    expect(attempt).toEqual({ clientOpId: null, skipped: 2 })
+    expect(attempt).toEqual({ clientOpId: null, skipped: 2, blocked: null })
     // 갇히지 않도록 비운다 — 남겨 두면 다음 undo가 같은 항목을 또 시도한다.
     expect(store.getState().undoStack).toEqual([])
   })
