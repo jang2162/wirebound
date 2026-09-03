@@ -1,0 +1,127 @@
+/**
+ * 두 툴바(구조·메뉴) 아래에 서는 **상태줄 한 줄**의 문안.
+ *
+ * # 왜 이 줄이 생겼나
+ *
+ * 비활성 버튼의 이유가 `title`에만 있었다. **재 본 값:** 페이지를 막 열면(루트가 자동
+ * 선택된다 — `store/editor-store.ts`의 `#selectionFor`) **구조 도구 일곱 중 여섯,
+ * 메뉴 도구 아홉 중 여섯이 꺼져 있다.** 첫 화면의 대부분이 회색인데 그 이유는
+ * **마우스를 1초 이상 올려야** 뜨고, **`disabled` 버튼은 탭 순서에서 빠지므로 키보드
+ * 사용자는 영영 볼 수 없으며**, 터치에서는 아예 뜨지 않는다.
+ *
+ * 그래서 **마우스를 안 올려도 보이는 자리**로 이유 하나를 꺼낸다. 대가는 세로 한 줄을
+ * 상시 차지하는 것이고(`shell.css`의 `.wb-shell-structure-status`가 그 값을 갖는다),
+ * 그것은 받아들이기로 한 것이다.
+ *
+ * # 나열하지 않는다 — 이 파일의 어려운 부분이 그것이다
+ *
+ * 꺼진 것이 여섯이면 이유도 여섯이다. **여섯을 나열하면 그 줄이 노이즈가 되고**, 상시
+ * 보이는 자리라 노이즈의 값이 특히 비싸다. 그래서 이 줄이 답하는 질문을 좁혔다:
+ *
+ * > **지금 고른 것이 무엇이라서 그런가** — 한 문장으로.
+ *
+ * 사다리를 위에서부터 내려가며 **처음 맞는 것 하나만** 말한다. 나머지 이유는 그대로
+ * `title`에 남는다(**남긴 판단**: 이 줄은 *대표* 이유 하나를 말하므로, 지우면 나머지는
+ * 갈 곳이 없다. 둘은 겹치는 것이 아니라 **결이 다르다** — 이 줄은 *"고른 것이 무엇인가"*,
+ * `title`은 *"그 버튼 하나가 활성이려면 무엇이 필요한가"*다).
+ *
+ * # 사다리의 순서를 정한 두 규칙
+ *
+ * 1. **화면에 다른 단서가 없는 것이 위다.** 잠금이 맨 위인 이유가 이것이다 — 잠긴 노드
+ *    자신에게는 *"○○ 편집 중"* 배지가 붙지만(`panels/structure-tree.tsx`), **그 조상**은
+ *    배지 없이 회색이 된다. 그 자리가 곧 자동 선택된 루트라 **페이지를 열어 둔 채 남이
+ *    아무 노드나 잡으면** 루트 줄이 `aria-current`인 채 `disabled`가 되고 이유가 화면
+ *    어디에도 없었다(P10-2 이월이 연 자리). 반대로 형제 자리(맨 앞·맨 뒤)는 **트리를
+ *    보면 보이므로** 사다리에 두지 않았다.
+ * 2. **무리가 통째로 죽었을 때만 말한다.** `위로`·`아래로` 중 하나라도 살아 있으면 그
+ *    무리는 죽지 않았다 — 그때 *"맨 앞이라 위로가 안 됩니다"*를 띄우면 선택을 옮길 때마다
+ *    문장이 바뀌어 줄이 깜빡인다.
+ *
+ * # 다 켜져 있으면 빈 문자열이다
+ *
+ * **자리는 지키되 글자를 두지 않는다.** 이 줄의 계약이 *"왜 회색인가"*이므로 회색이 없으면
+ * 할 말이 없다. 빈 줄이 레이아웃을 흔드는 것은 CSS의 `min-height`가 막는다 — 상시 보이는
+ * 자리에 *"모두 쓸 수 있습니다"* 같은 문장을 두면, 정작 말할 것이 생겼을 때 눈이 그 자리를
+ * 이미 무시하고 있다.
+ *
+ * **메뉴 쪽에는 "다 켜진 상태"가 아예 없다** — `옮기기`(reparent)가 메뉴 선택에서 **언제나**
+ * 꺼진다(`tree/tree-actions.ts`: 메뉴는 `reparent: false`). 그래서 그 하나만 꺼진 상태도
+ * 빈 문자열이다: 그 버튼을 말하려면 사다리 규칙 2를 어겨야 하고, 그 이유는 `title`에 있다.
+ *
+ * # 판정을 두 벌로 만들지 않는다
+ *
+ * 이 파일은 **판정하지 않는다.** 무엇을 할 수 있는지는 `edit/structure-actions.ts`의
+ * `structureAbilities`와 `tree/tree-actions.ts`의 `treeAbilities`가 정하고, 여기서는 그
+ * 결과(`abilities`)와 **선택 자체의 성질**(잠금·루트·종류)만 읽는다. 루트인지도 다시
+ * 판정하지 않고 `document.root.id`와의 **id 비교**를 호출자가 넘긴다.
+ *
+ * **순수 함수이고 React·DOM을 모른다** — 두 툴바가 같은 어휘를 쓰는지, 상태마다 무엇이
+ * 나오는지가 화면을 지나지 않고 재진다.
+ */
+import type { NodeLock } from '@wirebound/schema'
+import type { StructureAbilities } from '../edit/structure-actions'
+import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
+
+/**
+ * 구조 툴바의 상태줄 문안. 할 말이 없으면 `''`다.
+ *
+ * `isRoot`를 인자로 받는 것은 위 머리말의 마지막 절이다 — 루트 판정을 여기서 다시 하면
+ * 문서 순회가 한 벌 더 생기고, `structureAbilities`가 이미 지나간 그 판정과 갈릴 수 있다.
+ */
+export function structureStatus(input: {
+  selectedNodeId: string | null
+  /** 고른 것이 문서 루트인가. 호출자가 `document.root.id`와 id로 비교한다. */
+  isRoot: boolean
+  /** 고른 노드를 막는 **남의** 잠금(`store.lockedBy`). 없으면 `null`. */
+  lock: NodeLock | null
+  abilities: StructureAbilities
+}): string {
+  const { abilities } = input
+
+  if (input.selectedNodeId === null) return '트리에서 노드를 고르면 편집할 수 있습니다'
+  // **사다리 규칙 1의 자리다.** 잠긴 노드 자신에게는 배지가 붙지만 그 조상에게는 안 붙는다 —
+  // 자동 선택된 루트가 늘 그 조상이다.
+  if (input.lock !== null) return `${input.lock.userName}님이 편집 중이라 고를 수 없습니다`
+  if (input.isRoot) return '루트라 삭제·순서·계층을 바꿀 수 없습니다'
+  // 루트가 아닌데 전부 꺼졌으면 그 노드가 문서에 없다 — `structureAbilities`가 찾지 못한
+  // 노드에만 `NOTHING`을 낸다(찾은 비루트 노드는 `addAfter`·`remove`가 언제나 참이다).
+  // 남이 그 노드를 지운 뒤 재조회 전까지의 상태다.
+  if (!abilities.addAfter && !abilities.remove) return '고른 노드가 문서에 없습니다'
+  // **카탈로그 제약은 화면 어디에도 안 보인다**(사다리 규칙 1) — 형제 자리와 달리 트리를
+  // 봐도 알 수 없으므로 위에 둔다.
+  if (!abilities.addInside) return '자식을 담지 못하는 타입입니다'
+  if (!abilities.moveUp && !abilities.moveDown) return '형제가 없어 순서를 바꿀 수 없습니다'
+
+  return ''
+}
+
+/**
+ * 메뉴 툴바의 상태줄 문안. 할 말이 없으면 `''`다.
+ *
+ * **`busy`가 맨 위이고 판정 문안을 붙이지 않는다.** 조작이 나가 있는 동안은 툴바 전체가
+ * 꺼지는데(`tree/use-tree-commands.tsx`의 D2), 그때 *"메뉴를 고르세요"*가 뜨면 거짓말이다 —
+ * 곧 풀릴 상태이고 고른 것은 이미 있다. `menu-toolbar.tsx`의 `title`이 같은 이유로 `busy`를
+ * 안 보는 것과 한 짝이다.
+ */
+export function menuStatus(input: {
+  selection: TreeSelection | null
+  busy: boolean
+  abilities: TreeAbilities
+}): string {
+  const { abilities } = input
+
+  if (input.busy) return '조작을 보내는 중입니다'
+  if (input.selection === null) return '메뉴나 페이지를 고르면 편집할 수 있습니다'
+  // 찾지 못한 선택에만 `NOTHING`이 온다 — 찾은 것은 메뉴든 페이지든 `rename`이 참이다.
+  // 남이 지웠거나 다른 세션이 트리를 바꾼 뒤에 실제로 생기는 상태다(`treeAbilities` 머리말).
+  if (!abilities.rename) return '고른 것이 트리에 없습니다'
+  // 페이지는 컨테이너가 아니고(하위 추가 불가) 계층 이동도 성립하지 않는다 — 넷이 함께
+  // 꺼지는 하나의 성질이라 한 문장이다(D5).
+  if (input.selection.kind === 'page') return '페이지라 하위 추가·계층 이동이 안 됩니다'
+  // **두 배열을 다 말하지 않는다** — `title`이 그 조건을 갖는다(하위 메뉴만 있어도, 페이지만
+  // 있어도 서버가 409다). 이 줄이 말하는 것은 *"고른 것이 무엇이라서"*다.
+  if (!abilities.remove) return '하위가 있는 메뉴라 삭제할 수 없습니다'
+  if (!abilities.moveUp && !abilities.moveDown) return '형제가 없어 순서를 바꿀 수 없습니다'
+
+  return ''
+}

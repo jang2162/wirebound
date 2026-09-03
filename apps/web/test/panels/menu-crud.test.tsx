@@ -760,3 +760,132 @@ describe('인라인 입력의 용도 전환', () => {
     expect(input().value).toBe('회원관리')
   })
 })
+
+/**
+ * **도구모음 아래 상태줄**(`src/panels/toolbar-status.ts`). 구조 툴바와 한 벌이고, 문안 표는
+ * `./toolbar-status.test.ts`가 갖는다.
+ *
+ * 여기서 재는 것은 **이 툴바에만 있는 축 둘**이다: ㉠ 선택의 **종류**(메뉴/페이지)가 문장을
+ * 가른다, ㉡ **`busy`에는 판정 문안을 붙이지 않는다** — 아홉이 전부 꺼지는 유일한 상태인데
+ * 그 이유가 판정이 아니다.
+ */
+function menuStatusLine(): HTMLElement {
+  const line = toolbar().querySelector<HTMLElement>('.wb-shell-menu-status')
+  if (line === null) throw new Error('메뉴 툴바에 상태줄이 없습니다')
+  return line
+}
+
+describe('메뉴 툴바 — 상태줄', () => {
+  it('아무것도 안 고른 채 열리면 고르라고 말한다', async () => {
+    await open()
+
+    expect(menuStatusLine().textContent).toBe('메뉴나 페이지를 고르면 편집할 수 있습니다')
+  })
+
+  it('하위가 있는 메뉴를 고르면 삭제가 왜 꺼졌는지 말한다', async () => {
+    await open()
+
+    fireEvent.click(menuButton('회원관리'))
+
+    expect(tool('삭제').disabled).toBe(true)
+    expect(menuStatusLine().textContent).toBe('하위가 있는 메뉴라 삭제할 수 없습니다')
+  })
+
+  it('페이지를 고르면 페이지라고 말한다', async () => {
+    // **페이지는 링크다** — 여는 것이 곧 고르는 것이고 선택은 주소에서 온다(D3).
+    await open({}, '/projects/p-1/pages/pg-list')
+
+    expect(menuStatusLine().textContent).toBe('페이지라 하위 추가·계층 이동이 안 됩니다')
+  })
+
+  it('형제가 없는 메뉴는 순서를 못 바꾼다고 말한다', async () => {
+    // `권한`은 `회원관리`의 유일한 자식이다 — `위로`·`아래로`가 함께 죽는 유일한 자리.
+    await open()
+
+    fireEvent.click(menuButton('권한'))
+
+    expect(tool('위로').disabled).toBe(true)
+    expect(tool('아래로').disabled).toBe(true)
+    expect(menuStatusLine().textContent).toBe('형제가 없어 순서를 바꿀 수 없습니다')
+  })
+
+  it('**`옮기기` 하나가 꺼진 메뉴에는 아무 말도 하지 않는다**', async () => {
+    // `주문관리`는 형제가 있고 비었다. 메뉴 선택에서 `옮기기`는 **언제나** 꺼지므로
+    // (`treeAbilities`), 그것까지 말하면 메뉴를 고를 때마다 같은 문장이 선다.
+    await open()
+
+    fireEvent.click(menuButton('주문관리'))
+
+    expect(tool('옮기기').disabled).toBe(true)
+    expect(menuStatusLine().textContent).toBe('')
+    expect(tool('삭제').getAttribute('aria-describedby')).toBeNull()
+  })
+
+  it('**보내는 중에는 판정 문안을 붙이지 않는다** — 곧 풀릴 상태다', async () => {
+    // 조작이 나가 있는 동안 아홉이 전부 꺼진다(D2). 그때 *"메뉴를 고르세요"*가 뜨면
+    // 거짓말이다 — 고른 것은 이미 있다.
+    let release = (): void => {}
+    const held = new Promise<void>((resolve) => {
+      release = () => resolve()
+    })
+    const api = await open({ deleteMenu: vi.fn(async () => held) })
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(tool('정말 삭제합니까?'))
+
+    await waitFor(() => expect(menuStatusLine().textContent).toBe('조작을 보내는 중입니다'))
+    expect(tool('이름 변경').disabled).toBe(true)
+
+    release()
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+  })
+
+  it('**보내는 중에는 그 줄이 이 툴바의 유일한 탭 정지점이다** — 앱째로 잰다', async () => {
+    // **앞 판의 접근성 주장이 깨져 있던 자리다.** *"활성 버튼에 걸린 것이 키보드가 그
+    // 문장에 닿는 길"*이라고 적었는데, `busy`면 아홉이 **전부** 꺼져 활성 버튼이 하나도
+    // 없다 — 그때는 `aria-describedby`를 아무리 잘 걸어도 아무 데도 안 닿았다.
+    //
+    // 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다(툴바만 떼어 렌더한다).
+    // **여기서 재는 것은 그 상태가 진짜 앱에서 나온다는 쪽이다** — 조작 하나를 실제로
+    // 붙들어 `busy`를 만든다.
+    let release = (): void => {}
+    const held = new Promise<void>((resolve) => {
+      release = () => resolve()
+    })
+    const api = await open({ deleteMenu: vi.fn(async () => held) })
+
+    fireEvent.click(menuButton('권한'))
+    fireEvent.click(tool('삭제'))
+    fireEvent.click(tool('정말 삭제합니까?'))
+    await waitFor(() => expect(menuStatusLine().textContent).toBe('조작을 보내는 중입니다'))
+
+    const stops = [
+      ...toolbar().querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ]
+    expect(stops).toEqual([menuStatusLine()])
+
+    release()
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+  })
+
+  it('활성 버튼이 그 문장을 자기 설명으로 든다 — 활성 버튼이 있을 때는 그쪽이 먼저다', async () => {
+    await open({}, '/projects/p-1/pages/pg-list')
+
+    const reachable = within(toolbar()).getByRole('button', {
+      name: '이름 변경',
+      description: '페이지라 하위 추가·계층 이동이 안 됩니다',
+    }) as HTMLButtonElement
+    expect(reachable.disabled).toBe(false)
+    expect(reachable.getAttribute('aria-describedby')).toBe(menuStatusLine().id)
+  })
+
+  it('알림 자리를 쓰지 않는다 — `role="alert"`도 `aria-live`도 아니다', async () => {
+    await open()
+
+    expect(menuStatusLine().getAttribute('role')).toBeNull()
+    expect(menuStatusLine().getAttribute('aria-live')).toBeNull()
+  })
+})

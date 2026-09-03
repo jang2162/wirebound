@@ -536,3 +536,130 @@ describe('놓는다', () => {
     expect(view.lockFrames().at(-1)).toEqual({ type: 'unlock' })
   })
 })
+
+/**
+ * **배지가 닿지 않는 자리 — 도구모음 아래 상태줄이 그것을 말한다**(P10-2 이월).
+ *
+ * 배지는 **잠금이 가리키는 노드에만** 붙는다(위 `배지` 묶음의 *"자손마다 이름을 붙이면
+ * 트리가 이름으로 뒤덮인다"*). 그런데 막히는 것은 그 **서브트리 전체**이고, 루트는 문서 안
+ * 모든 노드의 조상이다 — 그래서 **남이 그 페이지의 아무 노드나 잡으면** 자동 선택된 루트
+ * 줄이 `aria-current`를 든 채 회색이 되는데 **그 줄에는 배지가 없다.** 이월이 연 자리가
+ * 그것이고, 아래 케이스들이 그것을 닫는다.
+ *
+ * **왜 배지를 루트에도 붙이지 않았나.** 그러면 잠금 하나가 배지 둘을 만들고(잠긴 노드와 그
+ * 조상 전부), 위 묶음이 잰 *"이름이 하나"*가 무너진다. 상태줄은 **고른 것 하나**에 대해서만
+ * 말하므로 그 성질을 건드리지 않는다.
+ */
+function statusLine(): HTMLElement {
+  const region = screen.getByRole('region', { name: '구조 트리' })
+  const line = region.querySelector<HTMLElement>('.wb-shell-structure-status')
+  if (line === null) throw new Error('구조 툴바에 상태줄이 없습니다')
+  return line
+}
+
+describe('상태줄 — 잠긴 조상의 이유는 배지가 아니라 여기 있다', () => {
+  it('남이 아무 노드나 잡으면 **루트 줄이 회색이 되는데 그 줄에 배지가 없다** — 사고의 모양', async () => {
+    const view = await board()
+
+    view.push(locksFrame([foreign('n-b')]))
+
+    // 고른 것은 여전히 루트다(잠금이 도착하기 전에 이미 골라져 있었다).
+    expect(view.store.getState().selectedNodeId).toBe('n-root')
+    const root = treeButton('Page') as HTMLButtonElement
+    expect(root.disabled).toBe(true)
+    expect(root.getAttribute('aria-current')).toBe('true')
+    // **배지는 루트 줄에 없다.** `:scope >`로 좁히는 것이 요점이다 — 트리가 `<li>` 중첩이라
+    // 루트의 `<li>`는 잠긴 자손의 배지를 **품고 있다**(그래서 그냥 찾으면 있는 것처럼 보인다).
+    // 화면에서 사용자가 보는 것은 자기 줄에 붙은 것뿐이다.
+    const rootRow = root.closest('li')
+    expect(rootRow?.querySelector(':scope > .wb-shell-structure-lock')).toBeNull()
+    // 대조: 잠긴 노드 자신의 줄에는 붙어 있다.
+    const lockedRow = treeButton('Section').closest('li')
+    expect(lockedRow?.querySelector(':scope > .wb-shell-structure-lock')?.textContent).toBe(
+      '보라 편집 중',
+    )
+  })
+
+  it('그 이유가 상태줄에 온다 — 이름과 함께', async () => {
+    const view = await board()
+    expect(statusLine().textContent).toBe('루트라 삭제·순서·계층을 바꿀 수 없습니다')
+
+    view.push(locksFrame([foreign('n-b')]))
+
+    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수 없습니다')
+  })
+
+  it('**잠긴 서브트리 밖을 고르면 잠금을 말하지 않는다** — 하나면 *"잠금이 있으면 무조건"*과 구분되지 않는다', async () => {
+    const view = await board()
+    view.push(locksFrame([foreign('n-b')]))
+
+    // 첫째 `Text`가 잠긴 서브트리 밖의 `n-a`다. 고를 수 있고, 그 자리의 이유는 잠금이 아니다.
+    fireEvent.click(treeButtonAt('Text', 0))
+
+    expect(view.store.getState().selectedNodeId).toBe('n-a')
+    expect(statusLine().textContent).toBe('자식을 담지 못하는 타입입니다')
+  })
+
+  it('내 잠금은 상태줄에도 안 뜬다 (D3)', async () => {
+    const view = await board()
+
+    view.push(locksFrame([foreign('n-b', { userId: ME, userName: '테스터' })]))
+
+    expect(statusLine().textContent).toBe('루트라 삭제·순서·계층을 바꿀 수 없습니다')
+  })
+
+  it('잠금이 풀리면 문장도 돌아온다', async () => {
+    const view = await board()
+    view.push(locksFrame([foreign('n-b')]))
+    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수 없습니다')
+
+    view.push(locksFrame([]))
+
+    expect(statusLine().textContent).toBe('루트라 삭제·순서·계층을 바꿀 수 없습니다')
+  })
+
+  /**
+   * **루트 «자신»이 잠긴 경우 — 위 케이스들과 다른 상황이고, 상태줄은 같은 문장을 낸다.**
+   *
+   * 위 묶음이 닫은 것은 *"루트가 «조상»이라 막히는데 배지가 안 붙는"* 경우다. 여기는
+   * *"루트 «자신»이 잠긴"* 경우이고 **배지가 그 줄에 실제로 붙는다** — 잠금이 가리키는
+   * 노드가 곧 고른 노드이기 때문이다. 화면에서 갈리는 것이 바로 그 배지 하나다.
+   *
+   * **그런데 상태줄은 두 경우에 같은 문장을 낸다.** `structureStatus`가 잠금에서 읽는 것은
+   * `userName` 하나이고(`panels/toolbar-status.ts`), 그것이 **의도다**: 이 줄이 답하는
+   * 질문은 *"지금 고른 것이 무엇이라서 그런가"*이고 그 답은 두 경우에 정말로 같다 —
+   * *"남이 편집 중이라서"*. 배지가 어느 줄에 붙느냐는 **다른 축**이라(사다리 규칙 1이
+   * 잠금을 맨 위에 둔 근거가 «조상» 쪽에 단서가 없다는 것이지, 문장을 갈라야 한다는 것이
+   * 아니다) 문장을 둘로 나누면 같은 이유를 두 벌로 말하게 된다.
+   *
+   * 이 케이스가 그 둘을 **한 자리에서** 값으로 고정한다: 배지는 갈리고 문장은 같다.
+   * `test/store/editor-store.test.ts`의 *"밖에서 온 루트 잠금"*이 재는 것이 이 상황이다.
+   */
+  it('**루트 자신이 잠기면 배지는 그 줄에 붙는다 — 문장은 조상 경우와 같다**', async () => {
+    const view = await board()
+
+    view.push(locksFrame([foreign('n-root')]))
+
+    const root = treeButton('Page') as HTMLButtonElement
+    expect(root.disabled).toBe(true)
+    expect(root.getAttribute('aria-current')).toBe('true')
+    // **여기서는 자기 줄에 붙는다.** 위 `사고의 모양` 케이스가 `toBeNull()`을 요구하는
+    // 바로 그 자리다 — 둘을 갈라 놓지 않으면 *"배지는 늘 없다"*는 거짓이 남는다.
+    const rootRow = root.closest('li')
+    expect(rootRow?.querySelector(':scope > .wb-shell-structure-lock')?.textContent).toBe(
+      '보라 편집 중',
+    )
+    // 문장은 «조상» 경우(`그 이유가 상태줄에 온다`)와 **글자까지 같다.**
+    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수 없습니다')
+  })
+
+  it('사람이 둘이면 부딪치는 쪽의 이름이 온다', async () => {
+    const view = await board()
+
+    // `n-a`는 루트의 다른 자식이라 루트와 부딪치는 것은 둘 다지만, 화면이 드는 것은
+    // `findLockConflict`가 낸 **첫 잠금** 하나다(`packages/schema/src/lock.ts`).
+    view.push(locksFrame([foreign('n-a'), foreign('n-b', { userId: 'u-dahye', userName: '다혜' })]))
+
+    expect(statusLine().textContent).toBe('보라님이 편집 중이라 고를 수 없습니다')
+  })
+})

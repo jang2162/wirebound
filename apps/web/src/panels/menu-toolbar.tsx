@@ -10,10 +10,11 @@
  * 경계는 캔버스의 `CanvasBoundary` 하나뿐이라(웨이브 1이 셌다), 던지면 `.wb-shell`이 통째로
  * DOM에서 사라진다. 여기서 부르는 것들은 값으로 답해야 한다.
  */
-import type { KeyboardEvent, ReactElement } from 'react'
+import { useId, type KeyboardEvent, type ReactElement } from 'react'
 import type { TreeAbilities } from '../tree/tree-actions'
 import type { TreeCommands } from '../tree/use-tree-commands'
 import { MenuPicker } from './menu-picker'
+import { menuStatus } from './toolbar-status'
 import { TreeInput } from './tree-input'
 
 /**
@@ -23,8 +24,10 @@ import { TreeInput } from './tree-input'
  * 갈래가 곧 판정의 두 번째 벌이 되기 때문이다 — 판정은 `treeAbilities` 하나가 하고(D5),
  * 여기 있는 것은 "그 버튼이 활성이려면 무엇이 필요한가"뿐이다.
  *
- * **`title`의 한계는 재지 못했다** — `StructureToolbar`와 같다. 비활성 버튼은 포커스를 받지
- * 못하므로 보조 기술이 이 설명에 닿는지는 브라우저·리더 조합에 달려 있고 jsdom으로는 잴 수 없다.
+ * **`title`의 한계는 이제 잰 것이다** — `StructureToolbar`와 같다. 비활성 버튼은 **탭 순서에서
+ * 빠지므로** 키보드 사용자는 이 설명에 닿을 길이 없고, 마우스는 1초 이상 머물러야 하며 터치에는
+ * 뜨지 않는다. **그래서 이 표를 지우지 않고 상태줄을 더했다**(`./toolbar-status.ts`) — 상태줄이
+ * *"고른 것이 무엇이라서"*를 한 문장으로 말하고, 그것이 말하지 않은 나머지가 갈 곳이 여기다.
  */
 const WHY_DISABLED: Record<keyof TreeAbilities, string> = {
   addMenu: '메뉴를 고르세요',
@@ -47,6 +50,27 @@ const WHY_DISABLED: Record<keyof TreeAbilities, string> = {
  */
 export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
   const { commands } = props
+  /** 상태줄의 id. `useId`인 이유는 `StructureToolbar`와 같다. */
+  const statusId = useId()
+  /** 문안. **`busy`도 함께 본다** — 그때 판정 문안을 붙이지 않는 것이 `./toolbar-status.ts`다. */
+  const status = menuStatus({
+    selection: commands.selection,
+    busy: commands.busy,
+    abilities: commands.abilities,
+  })
+  /** 할 말이 없으면 가리키지 않는다(`StructureToolbar`와 같은 근거). */
+  const describedBy = status === '' ? undefined : statusId
+  /**
+   * **할 말이 있으면 그 줄 자체가 탭 정지점이다**(`StructureToolbar`의 같은 자리와 한 벌).
+   *
+   * **이쪽이 더 센 자리다.** 구조 툴바에는 판정 밖의 버튼 둘(`패턴 넣기`·`프리셋`)이 있어
+   * 일곱이 다 꺼져도 정지점이 남지만, 여기 아홉은 **전부** 판정에 매여 있다 — `busy`이거나
+   * 아무것도 안 골랐거나 고른 것이 트리에 없으면 **이 툴바에 탭이 설 자리가 하나도 없다.**
+   * `describedby`를 아무리 잘 걸어도 그때는 아무 데도 안 닿는다.
+   *
+   * 케이스는 `test/panels/toolbar-status-reach.test.tsx`가 열두 상태로 갖는다.
+   */
+  const statusTabIndex = status === '' ? undefined : 0
 
   return (
     <div className="wb-shell-menu-toolbar" role="group" aria-label="메뉴 편집">
@@ -54,18 +78,21 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
         label="하위 메뉴"
         ability="addMenu"
         commands={commands}
+        describedBy={describedBy}
         onClick={() => commands.openInput('new-menu')}
       />
       <ToolButton
         label="페이지 추가"
         ability="addPage"
         commands={commands}
+        describedBy={describedBy}
         onClick={() => commands.openInput('new-page')}
       />
       <ToolButton
         label="이름 변경"
         ability="rename"
         commands={commands}
+        describedBy={describedBy}
         onClick={() => commands.openInput('rename')}
       />
       {/* **삭제만 버튼 이름이 상태에 따라 바뀐다**(D7). 확인이 같은 버튼 안에서 끝나므로
@@ -90,6 +117,7 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
         label={commands.confirmingRemove ? REMOVE_CONFIRM_LABEL : REMOVE_LABEL}
         ability="remove"
         commands={commands}
+        describedBy={describedBy}
         onClick={commands.confirmingRemove ? commands.confirmRemove : commands.askRemove}
         onKeyDown={(event) => {
           if (commands.confirmingRemove && event.key === 'Escape') {
@@ -103,12 +131,14 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
         label="위로"
         ability="moveUp"
         commands={commands}
+        describedBy={describedBy}
         onClick={() => commands.move(-1)}
       />
       <ToolButton
         label="아래로"
         ability="moveDown"
         commands={commands}
+        describedBy={describedBy}
         onClick={() => commands.move(1)}
       />
 
@@ -116,12 +146,14 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
         label="들여쓰기"
         ability="indent"
         commands={commands}
+        describedBy={describedBy}
         onClick={commands.indent}
       />
       <ToolButton
         label="내어쓰기"
         ability="outdent"
         commands={commands}
+        describedBy={describedBy}
         onClick={commands.outdent}
       />
 
@@ -129,8 +161,21 @@ export function MenuToolbar(props: { commands: TreeCommands }): ReactElement {
         label="옮기기"
         ability="reparent"
         commands={commands}
+        describedBy={describedBy}
         onClick={commands.openReparent}
       />
+
+      {/* **상태줄.** 자리·근거는 `StructureToolbar`의 같은 줄과 한 벌이다 — 버튼 뒤에 두고,
+          `role="alert"`도 `aria-live`도 걸지 않으며(이 셸의 알림 자리는 `EditAlert` 하나다),
+          대신 위 버튼들이 `aria-describedby`로 이것을 가리킨다.
+
+          **`busy`일 때 무엇이 뜨는지가 이쪽의 다른 점이다** — 그때는 아홉이 전부 꺼지는데
+          판정 문안을 붙이면 거짓말이므로(`title`이 `busy`를 안 보는 것과 같은 이유) 상태줄이
+          *"보내는 중"*을 말한다. 그것이 그 순간 참인 유일한 이유다. **그리고 그때 이 줄이
+          이 툴바의 유일한 탭 정지점이다** — 아홉이 다 꺼져 있다(`statusTabIndex`). */}
+      <p className="wb-shell-menu-status" id={statusId} tabIndex={statusTabIndex}>
+        {status}
+      </p>
 
       {/* 입력은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 항목에 붙는 작업인지가
           보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이 그대로 남는다
@@ -175,6 +220,17 @@ function ToolButton(props: {
   label: string
   ability: keyof TreeAbilities
   commands: TreeCommands
+  /**
+   * 상태줄의 id. **활성 버튼에 걸린 것만 키보드에 닿는다** — 비활성 버튼은 탭 순서에서
+   * 빠지므로 거기 건 설명은 조용하다(`StructureToolbar`의 같은 자리와 한 벌).
+   *
+   * **그래서 이것이 유일한 길은 아니다 — 앞 판은 그렇게 적었고 그것이 거짓이었다.**
+   * 여기 아홉은 전부 판정에 매여 있어 `busy`·선택 없음·트리에 없음이면 **활성 버튼이 하나도
+   * 없다**(실측: 열두 상태 중 다섯에서 이 길이 끊긴다 —
+   * `test/panels/toolbar-status-reach.test.tsx`). 그 바닥을 상태줄 자신의 `tabIndex`가
+   * 받는다. 이쪽은 *"조작을 하려는 그 순간"*에 이유를 붙이는 길이다.
+   */
+  describedBy?: string
   onClick: () => void
   onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void
 }): ReactElement {
@@ -190,6 +246,7 @@ function ToolButton(props: {
       // 판정과 다른 이유이므로 판정 문안을 붙이지 않는다**: 곧 풀릴 상태에 "메뉴를
       // 고르세요"가 뜨면 거짓말이다.
       title={allowed ? '' : WHY_DISABLED[props.ability]}
+      aria-describedby={props.describedBy}
       onClick={props.onClick}
       onKeyDown={props.onKeyDown}
     >

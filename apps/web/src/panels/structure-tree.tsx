@@ -133,9 +133,25 @@ export function StructureTree(props: {
   // **목록을 구독하는 것이 요점이다.** 판정은 `store.lockedBy`가 하지만 그것은 함수라
   // 참조가 안 바뀐다 — 이 구독이 없으면 남이 잠갔다 풀어도 트리가 다시 그려지지 않는다.
   const locks = useEditorStore(store, (s) => s.locks)
+  // **판정은 스토어 하나가 한다**(D7) — 서버의 2차 방어가 부르는 그 함수를 지나온 값이다.
+  // 여기서 `locks`를 직접 뒤지면 판정이 두 벌이 된다. 잠금이 하나도 없으면 아예 묻지
+  // 않는다(그때는 문서를 뒤질 일이 없다).
+  const lockOf = locks.length === 0 ? null : store.lockedBy
   // **조작을 여기서 한 번만 만든다.** 툴바에 내려 주고 아래 키 핸들러도 같은 것을 쓴다 —
   // 그것이 D8이 요구하는 "같은 함수"다.
-  const commands = useStructureCommands({ projectId: props.projectId, pageId: props.pageId })
+  const commands = useStructureCommands({
+    projectId: props.projectId,
+    pageId: props.pageId,
+    // **고른 노드의 잠금도 여기서 내려 준다** — 툴바 아래 상태줄이 *"○○님이 편집 중"*을
+    // 그 값으로 말한다. 목록을 손에 쥐는 자리는 화면에 하나여야 하고(그 규칙과 근거는
+    // `test/lock/one-verdict.test.ts`), 그 하나가 바로 위의 구독이다.
+    //
+    // **줄에 붙는 배지로는 안 닫히는 자리가 있다.** 배지는 잠금이 가리키는 노드에만
+    // 붙는데(아래 `StructureNode`), 막히는 것은 그 **서브트리 전체**다 — 자동 선택된
+    // 루트는 문서 안 모든 노드의 조상이라, 남이 아무 노드나 잡으면 루트 줄이
+    // `aria-current`인 채 회색이 되고 그 이유는 화면 어디에도 없었다(P10-2 이월).
+    selectedLock: selectedNodeId === null ? null : (lockOf?.(selectedNodeId) ?? null),
+  })
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     // **값을 넣거나 고르는 표면에서 난 키는 구조 조작이 아니다.** 판정과 실측은
@@ -182,9 +198,8 @@ export function StructureTree(props: {
           node={doc.root}
           selectedNodeId={selectedNodeId}
           onSelect={store.selectNode}
-          // **판정은 스토어 하나가 한다**(D7) — 서버의 2차 방어가 부르는 그 함수를 지나온
-          // 값이다. 여기서 `locks`를 직접 뒤지면 판정이 두 벌이 된다.
-          lockOf={locks.length === 0 ? null : store.lockedBy}
+          // 판정의 자리는 위 `lockOf` 선언이 갖는다 — 줄과 상태줄이 **같은 값**을 쓴다.
+          lockOf={lockOf}
         />
       </ul>
       {/* 툴바가 트리 **아래**인 것은 D4다. 스크롤되는 상자 안이라 `sticky`로 바닥에

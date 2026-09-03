@@ -628,3 +628,142 @@ describe('구조 툴바 — 들여쓰기와 내어쓰기', () => {
     ])
   })
 })
+
+/**
+ * **도구모음 아래 상태줄**(`src/panels/toolbar-status.ts`).
+ *
+ * 문안 표 자체는 `./toolbar-status.test.ts`가 갖는다 — 여기서 재는 것은 셋이다:
+ * ㉠ 그 문장이 **화면에 서는가**(마우스를 올리지 않아도 보이는 자리인가), ㉡ **보조 기술이
+ * 닿는가**(비활성 버튼은 탭 순서에서 빠지므로 *활성* 버튼의 설명이어야 한다), ㉢ **`title`이
+ * 그대로 남는가**(상태줄은 대표 이유 하나를 말하고 나머지는 여전히 `title`에만 있다).
+ */
+function statusLine(): HTMLElement {
+  const line = toolbar().querySelector<HTMLElement>('.wb-shell-structure-status')
+  if (line === null) throw new Error('구조 툴바에 상태줄이 없습니다')
+  return line
+}
+
+describe('구조 툴바 — 상태줄', () => {
+  it('페이지를 열면 왜 회색인지가 화면에 있다 — 마우스를 올리지 않아도', async () => {
+    // 여는 순간이 곧 루트를 고른 상태다(`#selectionFor`). 도구 일곱 중 여섯이 꺼지는
+    // 자리이고, 고치기 전에는 그 이유가 `title`에만 있었다.
+    await openPage(doc(), { apiOverrides: server().api })
+
+    expect(statusLine().textContent).toBe('루트라 삭제·순서·계층을 바꿀 수 없습니다')
+  })
+
+  it('**활성 버튼이 그 문장을 자기 설명으로 든다** — 활성 버튼이 있을 때는 그쪽이 먼저다', async () => {
+    // `disabled` 버튼은 포커스를 받지 못해 탭 순서에서 빠진다. 그래서 `title`이든
+    // `aria-describedby`든 **비활성 버튼에 건 설명은 키보드 사용자에게 영영 안 읽힌다.**
+    // 이 케이스가 재는 것은 그 반대편이다 — 지금 탭이 닿는 버튼(루트 상태에서 유일하게
+    // 살아 있는 `안에 추가`)의 **접근 가능한 설명**이 상태줄 문장으로 계산되는가.
+    //
+    // **"그쪽뿐"은 아니다** — 앞 판은 제목에 그렇게 적었고 그것이 거짓이었다. 판정 일곱이
+    // **전부** 꺼지면 이 길이 통째로 끊긴다(아래 `선택을 풀면 …`). 여기서 재는 것은
+    // *"활성 버튼이 있을 때 그 버튼이 문장을 든다"*까지다.
+    await openPage(doc(), { apiOverrides: server().api })
+
+    const reachable = within(toolbar()).getByRole<HTMLButtonElement>('button', {
+      name: '안에 추가',
+      description: '루트라 삭제·순서·계층을 바꿀 수 없습니다',
+    })
+
+    // 대조 둘. **활성이어야** 탭이 닿고, 설명은 상태줄 **그 요소**에서 와야 한다.
+    expect(reachable.disabled).toBe(false)
+    expect(reachable.getAttribute('aria-describedby')).toBe(statusLine().id)
+  })
+
+  it('비활성 버튼도 같은 것을 가리킨다 — 마우스는 그 버튼에 닿는다', async () => {
+    await openPage(doc(), { apiOverrides: server().api })
+
+    expect(toolButton('삭제').getAttribute('aria-describedby')).toBe(statusLine().id)
+  })
+
+  it('**`title`은 그대로 남는다** — 상태줄이 말하지 않은 여섯이 갈 곳은 거기뿐이다', async () => {
+    // 상태줄은 *"고른 것이 무엇이라서"*를 하나만 말한다. 버튼마다의 조건은 결이 다르다.
+    await openPage(doc(), { apiOverrides: server().api })
+
+    expect(statusLine().textContent).toBe('루트라 삭제·순서·계층을 바꿀 수 없습니다')
+    expect(toolButton('들여쓰기').title).toBe('앞 형제가 자식을 담을 수 있어야 합니다')
+    expect(toolButton('내어쓰기').title).toBe('부모가 루트가 아니어야 합니다')
+  })
+
+  it('할 말이 없으면 비운다 — 그리고 그때는 가리키지도 않는다', async () => {
+    // `Card`는 자식을 담고 앞뒤로 형제가 있다 — 무리가 통째로 죽은 것이 없다.
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+
+    expect(toolButton('안에 추가').disabled).toBe(false)
+    expect(statusLine().textContent).toBe('')
+    // **빈 요소를 가리키지 않는다** — 설명이 비어 있는 것이 아니라 관계만 남는다.
+    expect(toolButton('삭제').getAttribute('aria-describedby')).toBeNull()
+  })
+
+  it('자리는 지킨다 — 문장이 없어도 요소가 남는다', async () => {
+    // 상태가 바뀔 때마다 툴바 높이가 달라지면, 툴바가 `sticky`라 그 차이가 그대로 트리
+    // 높이의 출렁임이 된다. 자리를 지키는 값은 CSS에 있고(`test/shell-css-status.test.ts`)
+    // 여기서 재는 것은 **요소가 DOM에서 사라지지 않는다**는 쪽이다.
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+
+    expect(statusLine().textContent).toBe('')
+    expect(toolbar().contains(statusLine())).toBe(true)
+  })
+
+  it('선택을 옮기면 문장이 따라 바뀐다', async () => {
+    await openPage(doc(), { apiOverrides: server().api })
+    expect(statusLine().textContent).toBe('루트라 삭제·순서·계층을 바꿀 수 없습니다')
+
+    // `Text`는 자식을 담지 못한다 — 트리를 봐서는 알 수 없는 유일한 제약이라 사다리에서
+    // 형제 자리보다 위다(`Text`는 맨 앞 형제이기도 하다).
+    select('Text')
+
+    expect(statusLine().textContent).toBe('자식을 담지 못하는 타입입니다')
+  })
+
+  it('아무것도 안 고르면 고르라고 말한다', async () => {
+    await openPage(doc(), { apiOverrides: server().api })
+
+    deselect()
+
+    expect(statusLine().textContent).toBe('트리에서 노드를 고르면 편집할 수 있습니다')
+  })
+
+  it('**선택을 풀면 그 문장에 닿는 길이 상태줄 자신뿐이다** — 앱째로 잰다', async () => {
+    // **앞 판의 접근성 주장이 깨져 있던 자리다.** 선택이 없으면 판정 일곱이 전부 꺼지고,
+    // 탭이 서는 것은 판정 밖의 `패턴 넣기`·`프리셋` 둘뿐인데 **그 둘에는 이 설명을 걸지
+    // 않는다**(선택이 없어도 되는 조작이라 없는 전제조건을 만든다). 그래서 고치기 전에는
+    // 이 상태에서 키보드가 문장에 **영영 못 닿았다.**
+    //
+    // 열두 상태의 표는 `./toolbar-status-reach.test.tsx`가 갖는다(툴바만 떼어 렌더한다).
+    // **여기서 재는 것은 그 상태가 진짜 앱에서 나온다는 쪽이다.**
+    await openPage(doc(), { apiOverrides: server().api })
+    deselect()
+
+    const line = statusLine()
+    const stops = [
+      ...toolbar().querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ]
+    // 앞의 둘은 판정 밖의 버튼이고 설명이 없다 — 문장을 든 정지점은 상태줄 하나다.
+    expect(stops.map((el) => el.textContent)).toEqual([
+      '패턴 넣기',
+      '프리셋',
+      '트리에서 노드를 고르면 편집할 수 있습니다',
+    ])
+    expect(stops.filter((el) => el === line || el.getAttribute('aria-describedby') === line.id))
+      .toEqual([line])
+  })
+
+  it('**알림 자리를 쓰지 않는다** — `role="alert"`도 `aria-live`도 아니다', async () => {
+    // 이 셸의 알림 자리는 `EditAlert` 하나다(`shell/edit-alert.tsx`). 실패가 아닌 것에 그
+    // 채널을 쓰면 그 하나뿐인 규칙이 흩어지고, `aria-live`를 걸면 **선택을 옮길 때마다
+    // 읽혀 트리 탐색이 불가능해진다.**
+    await openPage(doc(), { apiOverrides: server().api })
+
+    const line = statusLine()
+    expect(line.getAttribute('role')).toBeNull()
+    expect(line.getAttribute('aria-live')).toBeNull()
+  })
+})
