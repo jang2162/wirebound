@@ -18,6 +18,7 @@ import {
   applyOps,
   findLockConflict,
   findNodePath,
+  lockPointers,
   type NodeLock,
   type PageDocument,
   type PatchOp,
@@ -326,7 +327,20 @@ export interface UndoAttempt {
   clientOpId: string | null
   /** 적용할 수 없어 버린 항목 수. */
   skipped: number
+  /**
+   * 되돌리려던 항목을 막은 **남의** 잠금. 없으면 `null`이다(§7.2의 1차 방어).
+   *
+   * **`skipped`와 결이 다르다 — 그래서 필드를 갈랐다.** `skipped`는 §7.3의 *"그 사이 다른
+   * 사람이 대상 노드를 지운 경우"*이고 **되돌아오지 않는다.** 잠금은 §7.2가 TTL·하트비트·
+   * 연결 종료로 **곧 풀리게** 설계한 상태라, 그 항목은 **스택에 그대로 남는다** — 설계 §13의
+   * 잠금 충돌 행이 *"안내 후 재시도"*라고 적은 그것이다. 한 필드에 접으면 *"영영 못 되돌린다"*와
+   * *"지금은 못 되돌린다"*가 같은 값이 되고, 그것이 이 저장소가 여러 번 만난 부류다.
+   */
+  blocked: NodeLock | null
 }
+
+/** 아무것도 시작하지 못한 결과. 부르는 쪽이 세 필드를 매번 적지 않게 여기 둔다. */
+const NO_ATTEMPT: UndoAttempt = { clientOpId: null, skipped: 0, blocked: null }
 
 type Listener = () => void
 
@@ -496,7 +510,7 @@ export class EditorStore {
       return findNodePath(document.root, selectedNodeId) === undefined ? null : selectedNodeId
     }
     const rootId = document.root.id
-    return this.#lockConflict(pageId, document, rootId) === null ? rootId : null
+    return this.#lockConflictAt(pageId, document, rootId) === null ? rootId : null
   }
 
   /**
@@ -885,6 +899,54 @@ export class EditorStore {
    * 넘어간다. 그 경로가 없으면 다른 사람이 지운 노드를 되돌릴 때 스택 맨 위에 갇힌다.
    * 전부 적용 불가면 스택을 비우고 `clientOpId: null`을 낸다 — 남겨 두면 다음 undo가 같은
    * 항목을 또 시도한다.
+   *
+   * # 남의 잠금 안을 건드리는 되돌리기는 여기서 멈춘다 (§7.2의 1차 방어)
+   *
+   * **되돌리기의 판정 단위는 «고른 노드»가 아니라 `inverse` **ops**다.** 그래서 서버가
+   * 재는 것과 **같은 함수에 같은 입력**을 넣을 수 있다 — 툴바는 그럴 수 없어 «전부 끈다»를
+   * 골랐지만(`edit/structure-actions.ts`의 표 — 선택이 편집보다 엄격한 대가), 되돌리기에는
+   * 선택이 없으므로 맞출 것이 ops뿐이다.
+   *
+   * ## 무엇을 보증하고 무엇을 안 보증하나 — 좁혀 적는다
+   *
+   * 이것은 **낙관적 1차 방어**다. 보증은 *"**누를 때** 서 있던 잠금"*까지다.
+   *
+   * - **막는다 — 누를 때 이미 선 잠금.** 그 범위 안에서 과차단도 과소차단도 0이다(아래 표의
+   *   여섯 줄이 그것이고, 요청이 아예 안 나가므로 스택도 그대로다).
+   * - **못 막는다 — 누름과 전송 사이에 오는 잠금.** 화면이 잠금을 아는 것은 WS 프레임이
+   *   도착한 뒤이고, `#startFrom`이 통과시킨 뒤 요청이 서버에 닿기까지의 창은 남는다. 그때는
+   *   요청이 나가고 **서버의 2차 방어**(`apps/api`의 `lock/check.ts`)가 423으로 받으며,
+   *   아래 «이력을 통째로 잃는다»가 **그대로 밟힌다.** 재서 확인했다 — 스택 2에서 눌러
+   *   `[200, 200, 423]` · **undo 0 · redo 0**.
+   *
+   * **그 창은 이 고침이 지울 수 있는 것이 아니다** — 어느 낙관적 1차 방어에도 있다. 지우려면
+   * 423을 받은 `recover`가 *"이력 전부가 아니라 그 항목만 버린다"*로 바뀌어야 하고(설계 §13이
+   * undo 실패에 대해 적은 그것), 그것은 `loadPage`가 두 스택을 비우는 자리라 이 슬라이스 밖이다.
+   *
+   * **막는 자리가 훅이 아니라 여기인 것이 §3.14와 같은 이유다**(그쪽은 툴바가 아니라
+   * `useStructureCommands`에서 껐고 그래서 단축키까지 막혔다). **그런데 되돌리기에는 막을
+   * 단축키가 아예 없다 — 세어서 확인했다.** 키를 받는 자리는 두 트리의 `SHORTCUTS`뿐이고
+   * (`panels/structure-tree.tsx` **일곱**, `panels/menu-tree.tsx` **다섯**) 그 열둘의 실물
+   * `match`에 `Cmd/Ctrl`+`Z`·`Cmd`+`Shift`+`Z`·`Ctrl`+`Y`를 먹여도 걸리는 것이 **0**이다.
+   * 그래서 입구는 셸 헤더의 버튼 둘뿐이지만, **여기서 막으면 입구가 늘어도 그것이 판정 밖으로
+   * 새지 않는다.**
+   *
+   * **막은 항목은 버리지 않는다.** 진짜 서버로 잰 값이 아래이고(`inverse`는 서버가 준 그대로
+   * 되보냈다), 왼쪽 넷이 이 자리에서 멈추고 오른쪽 둘은 그대로 나간다:
+   *
+   * | 되돌리는 것 | 나가는 포인터 | 서버 |
+   * |---|---|---|
+   * | 내가 만든 노드를 남이 잠갔다 | `remove /root/children/2` | **423** |
+   * | 내가 고친 노드를 남이 잠갔다 | `replace /root/children/1/children/0/props/content` | **423** |
+   * | 지운 노드를 되살리는데 그 **부모**가 잠겼다 | `add /root/children/1/children/0` | **423** |
+   * | 되살리는 인덱스에 잠긴 **형제**가 앞당겨 와 있다 | `add /root/children/0` | **423** |
+   * | 잠금과 무관한 편집 | `replace /root/children/0/children/0/props/content` | 통과 |
+   * | 내가 만든 노드의 **형제**가 잠겼다 | `remove /root/children/2` | 통과 |
+   *
+   * **막지 않으면 이력을 통째로 잃는다 — 재서 알았다.** 423은 `use-edit-commit.tsx`의
+   * `recover`로 가고 그 재조회의 `loadPage`가 **두 스택을 비운다.** 스택이 2일 때 눌러도
+   * undo 0 · redo 0이 됐고 되돌리기 버튼이 비활성이 됐다. 설계 §13이 undo 실패에 대해
+   * 적은 것(*"그 항목만 스택에서 버리고 나머지는 그대로 쓴다"*)과 어긋나는 값이다.
    */
   readonly startUndo = (): UndoAttempt => this.#startFrom('undo')
 
@@ -892,8 +954,8 @@ export class EditorStore {
   readonly startRedo = (): UndoAttempt => this.#startFrom('redo')
 
   #startFrom(kind: 'undo' | 'redo'): UndoAttempt {
-    const { document } = this.#state
-    if (document === null) return { clientOpId: null, skipped: 0 }
+    const { document, openPageId } = this.#state
+    if (document === null) return NO_ATTEMPT
 
     let stack = kind === 'undo' ? this.#state.undoStack : this.#state.redoStack
     let skipped = 0
@@ -913,6 +975,22 @@ export class EditorStore {
         continue
       }
 
+      // **낙관적 적용보다 먼저 묻는다 — 순서가 계약이다.** 뒤로 옮기면 «깜빡임»이 아니라
+      // **항목이 사라진다.** 변조로 쟀다(이 판정을 아래 `#enqueue` **뒤로** 옮긴다):
+      // `test/lock/undo-locks.test.tsx`의 **케이스 넷**이 죽고, 그때 undo 스택이
+      // **2 → 1**로 «소비»된다. `#enqueue`가 낙관 적용과 함께 그 항목을 스택에서 빼는데
+      // 훅(`edit/use-edit-commit.tsx`의 `step`)은 `blocked`를 보고 펌프를 안 밟으므로,
+      // **문서는 되돌아간 채 남고 요청은 나가지 않으며 잠금이 풀린 뒤 다시 눌러도 그 항목은
+      // 이미 없다.** 되돌아갔다가 재조회로 복귀하는 깜빡임은 그보다 나은 판이다.
+      const blocked =
+        openPageId === null ? null : this.#lockConflict(openPageId, document, lockPointers(ref.inverse))
+      if (blocked !== null) {
+        // **건너뛴 것만 버리고 막힌 것은 남긴다.** `stack`은 이미 건너뛴 만큼 좁혀져 있고
+        // 그 맨 위가 막힌 항목이다 — 잠금이 풀리면 다음 누름이 바로 그것을 집는다.
+        if (skipped > 0) this.#apply(kind === 'undo' ? { undoStack: stack } : { redoStack: stack })
+        return { clientOpId: null, skipped, blocked }
+      }
+
       const clientOpId = this.#enqueue(
         next,
         // **서버가 준 `inverse`를 그대로 보낸다**(설계 §7.1). 클라이언트가 `invertOps`로
@@ -921,13 +999,13 @@ export class EditorStore {
         kind,
         kind === 'undo' ? { undoStack: rest } : { redoStack: rest },
       )
-      return { clientOpId, skipped }
+      return { clientOpId, skipped, blocked: null }
     }
 
     if (skipped > 0) {
       this.#apply(kind === 'undo' ? { undoStack: [] } : { redoStack: [] })
     }
-    return { clientOpId: null, skipped }
+    return { clientOpId: null, skipped, blocked: null }
   }
 
   /**
@@ -1081,23 +1159,56 @@ export class EditorStore {
   readonly lockedBy = (nodeId: string): NodeLock | null => {
     const { document, openPageId } = this.#state
     if (document === null || openPageId === null) return null
-    return this.#lockConflict(openPageId, document, nodeId)
+    return this.#lockConflictAt(openPageId, document, nodeId)
   }
 
   /**
-   * `lockedBy`의 판정 본체. **페이지와 문서를 인자로 받는 것이 요점이다** — `loadPage`가 첫
-   * 선택을 정할 때는 그 둘이 아직 `#state`에 들어가 있지 않다(들어간 뒤에 물으면 `#apply`가
-   * 두 번 돌아 구독자가 두 번 깬다). 공개 API가 이것을 부르므로 **판정은 한 벌**이다.
+   * 노드 **하나를 고르는** 자리의 잠금. `lockedBy`와 `#selectionFor`가 공유한다 —
+   * 둘 다 *"이 노드를 고를 수 있나"*를 묻고, 그 물음이 포인터로 바뀌는 자리가 여기다.
+   *
+   * **잠금이 없으면 문서를 뒤지지 않는다 — 순서가 계약이다.** `findNodePath`는 검증 전
+   * 문서에서 **던진다**(`children` 배열 안의 `null` — `edit/safe-walk.ts`의 머리말). 이
+   * 패널·구조 트리는 오류 경계 밖이라 던지면 `.wb-shell`이 통째로 사라진다. 실측: 이 두 줄을
+   * 뒤집으면 `test/panels/property-panel.test.tsx`의 *"children 배열 안에 노드가 아닌 원소가
+   * 있어도 노드를 고를 수 있다"*가 `reading 'id'`로 죽는다. 잠금이 하나도 없는 흔한 판에서
+   * 그 문서를 여는 것이 그 케이스이고, 지금 이 순서가 그것을 지킨다.
+   *
+   * **문서에 없는 노드는 부딪칠 자리가 없다.** 경로가 없으면 `null`이고, 그 판정은
+   * `findLockConflict`의 *"가리키는 노드가 문서에 없는 잠금은 아무것도 막지 못한다"*와
+   * 같은 방향이다.
    */
-  #lockConflict(pageId: string, document: PageDocument, nodeId: string): NodeLock | null {
-    const { locks, viewerUserId } = this.#state
-    if (locks.length === 0) return null
+  #lockConflictAt(pageId: string, document: PageDocument, nodeId: string): NodeLock | null {
+    if (this.#state.locks.length === 0) return null
     const path = findNodePath(document.root, nodeId)
     if (path === undefined) return null
+    return this.#lockConflict(pageId, document, [path])
+  }
+
+  /**
+   * 잠금 판정의 **본체 한 자리**. **포인터를 받는 것이 요점이다** — §7.2가 나눈 두 방어가
+   * 같은 함수에 **다른 자리**를 넣는 것이 P3-3 D7이 요구한 형태이고(`lock.ts`의
+   * `LockConflictInput.pointers` 주석), 화면 안에서도 그 자리가 둘이다:
+   *
+   * | 묻는 것 | 넣는 포인터 | 부르는 쪽 |
+   * |---|---|---|
+   * | 이 노드를 고를 수 있나 | `findNodePath(root, nodeId)` 하나 | `lockedBy` |
+   * | 이 되돌리기를 낼 수 있나 | `lockPointers(inverse)` 전부 | `#startFrom` |
+   *
+   * **`findLockConflict`를 부르는 자리는 `apps/web` 전체에 여기 하나다**
+   * (`test/lock/one-verdict.test.ts`가 소스에서 센다). 둘째 갈래가 생겼다고 호출을 하나 더
+   * 두면 그 순간 판정이 두 벌이 된다.
+   *
+   * **페이지와 문서를 인자로 받는 것도 그대로다** — `loadPage`가 첫 선택을 정할 때는 그 둘이
+   * 아직 `#state`에 들어가 있지 않다(들어간 뒤에 물으면 `#apply`가 두 번 돌아 구독자가 두 번
+   * 깬다).
+   */
+  #lockConflict(pageId: string, document: PageDocument, pointers: readonly string[]): NodeLock | null {
+    const { locks, viewerUserId } = this.#state
+    if (locks.length === 0) return null
     return findLockConflict({
       root: document.root,
       locks: locks.filter((lock) => lock.pageId === pageId),
-      pointers: [path],
+      pointers,
       // 누구인지 모르면 어느 잠금과도 같지 않은 값이 되어 **전부 남의 것**이 된다.
       viewerUserId: viewerUserId ?? '',
     })

@@ -18,7 +18,7 @@ import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import { useEditChannel, useLockChannel } from '../realtime/context'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
-import type { EditStatus } from '../store/editor-store'
+import type { EditStatus, UndoAttempt } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
 
 /** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
@@ -57,6 +57,30 @@ const UNRECOVERED_NOTICE =
 function skippedNotice(skipped: number, applied: boolean): string {
   const head = `되돌릴 수 없는 편집 ${skipped}개를 건너뛰었습니다.`
   return applied ? `${head} 그 앞의 편집을 되돌렸습니다.` : `${head} 되돌릴 것이 더 없습니다.`
+}
+
+/**
+ * 남의 잠금에 막혀 되돌리지 못했을 때의 안내(§7.2 · 설계 §13의 *"안내 후 재시도"*).
+ *
+ * **위 `skippedNotice`와 갈라 적는다.** 그쪽은 *"그 편집은 이제 없다"*이고 이쪽은
+ * *"지금은 안 된다"*다 — 사용자가 다음에 할 일이 다르므로(포기 / 기다림) 문장도 다르다.
+ * 뒷문장이 그 차이를 말하는 자리이고, 그것이 없으면 사용자는 이력이 사라진 줄 안다.
+ *
+ * **건너뛴 것이 함께 있으면 앞에 붙인다.** 둘은 서로 다른 항목에서 났고(건너뛴 것은
+ * 버려졌다, 막힌 것은 남아 있다) 한쪽만 말하면 나머지가 조용히 사라진다.
+ *
+ * # 왜 상태줄이 아니라 여기인가
+ *
+ * 3차가 세운 상태줄(`panels/toolbar-status.ts`)이 «왜 회색인가»를 말하는 자리이고 §3.14가
+ * 잠금을 그 사다리 맨 위에 올렸다. **되돌리기는 그 사다리에 안 올린다** — 그 줄이 답하는
+ * 물음이 *"지금 **고른 것**이 무엇이라서 그런가"*인데 되돌리기는 **선택과 무관**하고, 자리도
+ * 구조 툴바가 아니라 셸 헤더의 `편집 이력` 묶음이다(`routes/editor.tsx`의 `UndoTools`).
+ * 그 줄에 얹으면 사다리가 자기 것이 아닌 물음에 답하게 되고, 구조 툴바를 안 보고 있는
+ * 사용자에게는 어차피 안 보인다.
+ */
+function lockedNotice(userName: string, skipped: number): string {
+  const head = skipped > 0 ? `되돌릴 수 없는 편집 ${skipped}개를 건너뛰었습니다. 그 앞의 편집은 ` : ''
+  return `${head}${userName}님이 편집 중이라 되돌릴 수 없습니다. 잠금이 풀리면 그대로 되돌릴 수 있습니다.`
 }
 
 export interface EditCommit {
@@ -299,13 +323,31 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   /**
    * 스택에서 한 단계 꺼내 보낸다. undo와 redo가 같은 규칙을 쓰므로 한 곳에 둔다 —
    * 다른 것은 어느 스택을 보느냐뿐이고, 그 판단은 스토어 안에 있다.
+   *
+   * **남의 잠금도 그 판단 안이다**(§7.2의 1차 방어). 여기서 `locks`를 뒤지지 않고 스토어가
+   * 낸 `blocked`를 받는 것이 요점이다 — 화면이 잠금 목록을 손에 쥐는 자리는 하나여야 하고
+   * (`test/lock/one-verdict.test.ts`), 되돌리기 버튼을 **비활성으로 만들지 않은 것도** 그
+   * 규칙 때문이다: 비활성이 되려면 셸 헤더가 잠금 목록을 구독해 다시 그려야 한다.
+   * 대신 **누르면 이 자리가 이유를 말한다** — undo가 이미 쓰는 통로이고(위 `skippedNotice`),
+   * 설계 §7.3이 *"적용 불가는 에러가 아니라 정상 흐름"*으로 정한 자리와 같다.
    */
   const step = useCallback(
-    (start: () => { clientOpId: string | null; skipped: number }): void => {
+    (start: () => UndoAttempt): void => {
       // 지금 열린 페이지가 아니면 아무것도 하지 않는다(`commitProp`과 같은 대조).
       if (open === null) return
 
       const attempt = start()
+      // **잠금이 먼저다.** 건너뛴 것이 함께 있어도 사용자가 지금 답을 기다리는 물음은
+      // *"왜 안 되돌아갔나"*이고, 그 답은 잠금이다. 건너뛴 수는 문장 안에 함께 실린다.
+      if (attempt.blocked !== null) {
+        store.setEditFailure({
+          kind: 'message',
+          message: lockedNotice(attempt.blocked.userName, attempt.skipped),
+        })
+        // **큐에 들어간 것이 없으므로 펌프도 밟지 않는다** — 스토어가 낙관적 적용조차
+        // 안 했다(`#startFrom`이 그 앞에서 멈춘다).
+        return
+      }
       if (attempt.skipped > 0) {
         store.setEditFailure({
           kind: 'message',
