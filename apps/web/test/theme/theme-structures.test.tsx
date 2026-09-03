@@ -101,7 +101,7 @@ const NO_IMPL_TYPE = '구현없는컴포넌트'
 // props 스키마를 새로 쓰려면 zod가 필요한데 `apps/web`은 zod에 의존하지 않는다 —
 // `ListDef`를 그대로 빌리고 타입 이름만 바꾼다(`canvas.test.tsx`와 같은 이유).
 // **구조 구현은 등록하지 않는다.** `installStructures()`가 이 타입을 모르므로 영구히 빈다.
-registerComponent(defineComponent({ ...ListDef, type: NO_IMPL_TYPE }))
+registerComponent(defineComponent({ ...ListDef, type: NO_IMPL_TYPE, label: NO_IMPL_TYPE }))
 
 describe('구현이 없는 구조를 테마가 고를 때', () => {
   const themeChoosing = {

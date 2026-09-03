@@ -6,6 +6,18 @@ export function registerComponent(def: ComponentDef): void {
   if (registry.has(def.type)) {
     throw new Error(`이미 등록된 컴포넌트 타입: ${def.type}`)
   }
+  /**
+   * **이름이 겹치는 것은 `defineComponent`가 볼 수 없다** — 그 함수는 정의 **하나**만 본다.
+   * 겹침은 레지스트리에 둘이 들어온 뒤에야 성립하므로 타입 중복과 같은 자리에서 본다.
+   *
+   * **고르개에서 구별되지 않는 항목 둘이 되는 것**이 이 검사가 막는 것이다. 타입이 달라
+   * 동작은 갈리는데 화면의 글자가 같으면 사용자가 어느 쪽을 골랐는지 알 수 없다 —
+   * 영문 타입명을 내던 판에는 없던 고장이라 이름을 들이면서 함께 막는다.
+   */
+  const clash = [...registry.values()].find((other) => other.label === def.label)
+  if (clash) {
+    throw new Error(`이미 쓰이는 컴포넌트 이름: ${def.label} (${clash.type} · ${def.type})`)
+  }
   registry.set(def.type, def)
 }
 

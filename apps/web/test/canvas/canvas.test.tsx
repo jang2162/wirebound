@@ -219,7 +219,9 @@ const DOC = pageDoc({
 const BOOM_TYPE = '터지는구조'
 const BOOM_MESSAGE = '구조 구현체가 터졌습니다 [T9-BOOM]'
 
-registerComponent(defineComponent({ ...ListDef, type: BOOM_TYPE }))
+// **이름도 갈아야 한다** — `registerComponent`가 겹치는 `label`을 던진다(고르개에서
+// 구별되지 않는 항목 둘이 되는 것을 막는다). 타입 이름을 그대로 쓴다.
+registerComponent(defineComponent({ ...ListDef, type: BOOM_TYPE, label: BOOM_TYPE }))
 registerStructure(BOOM_TYPE, 'table', () => {
   throw new Error(BOOM_MESSAGE)
 })

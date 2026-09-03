@@ -556,6 +556,25 @@ describe('COMPONENT_NOUNS는 카탈로그 전체를 덮는다', () => {
     expect(extra).toEqual([])
   })
 
+  it('labelProp을 가진 타입이 여덟이다', () => {
+    /**
+     * **오타 하나가 조용히 라벨을 지우는 자리다**(P10-3). 이름은 이제 카탈로그에서
+     * 유도되지만 `labelProp`은 `describe.ts`의 리터럴 표(`LABEL_PROPS`)에 남았다 —
+     * *"어느 prop이 노드마다 다른 이름을 담는가"*는 다른 축이기 때문이다.
+     *
+     * 그 표의 키를 `Card` 대신 `Cards`로 적으면 **유도가 그것을 그냥 안 쓴다.** 아래
+     * `labelProp이 카탈로그의 prop을 가리킨다`는 유도된 표를 훑으므로 없어진 항목을
+     * 보지 못한다 — 빠짐은 목록을 고정해야만 보인다.
+     */
+    const withLabel = Object.entries(COMPONENT_NOUNS)
+      .filter(([, noun]) => noun.labelProp !== undefined)
+      .map(([type]) => type)
+      .sort()
+    expect(withLabel).toEqual([
+      'Button', 'Card', 'EntryForm', 'Field', 'Link', 'Media', 'Placeholder', 'Text',
+    ])
+  })
+
   /** `labelProp`은 그 컴포넌트에 **실제로 있는** prop이어야 한다. */
   it('labelProp이 카탈로그의 prop을 가리킨다', () => {
     const broken: string[] = []

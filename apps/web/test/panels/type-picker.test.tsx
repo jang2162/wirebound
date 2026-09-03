@@ -8,8 +8,12 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import {
+  COMPONENT_GROUPS,
+  COMPONENT_GROUP_LABELS,
+  getComponent,
   listComponents,
   validatePage,
+  type ComponentGroup,
   type PageDocument,
   type PatchOp,
 } from '@wirebound/schema'
@@ -114,6 +118,18 @@ function optionValues(): string[] {
   return [...typeSelect().options].map((option) => option.value)
 }
 
+/** 설명 줄의 글자. 서 있지 않으면 던진다 — 없는 것과 빈 것을 갈라야 한다. */
+function description(): string {
+  const node = picker().querySelector('.wb-shell-picker-desc')
+  if (node === null) throw new Error('설명 줄이 없습니다')
+  return node.textContent ?? ''
+}
+
+/** 그 타입의 갈래. 카탈로그에서 읽는다 — 여기 표를 두면 재려는 것을 스스로 적는 셈이다. */
+function groupOf(type: string): ComponentGroup {
+  return getComponent(type)!.group
+}
+
 function pick(type: string): void {
   fireEvent.change(typeSelect(), { target: { value: type } })
   fireEvent.click(within(picker()).getByRole('button', { name: '추가' }))
@@ -172,14 +188,119 @@ describe('타입 목록과 노드 추가', () => {
     }
   })
 
-  it('목록은 이름순이다', async () => {
-    // D6 — 카탈로그 파일의 분류(action·data·…)는 런타임에 없으므로 그것으로 나누지
-    // 않는다. 이름순 한 목록이면 어디를 봐야 할지가 하나로 정해진다.
+  it('옵션 글자가 영문 타입명이 아니라 카탈로그의 한국어 이름이다', async () => {
+    // **이것이 P10-3이 고치는 고장이다.** 한국어 UI가 `EntryForm`·`KeyValue`를 그대로
+    // 냈고 *"그것이 무엇인가"*를 화면이 답하지 않았다. 분모를 손으로 적지 않는다 —
+    // 카탈로그의 `def.label`과 대조하므로 이름을 고치면 여기가 따라간다.
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
     fireEvent.click(toolButton('안에 추가'))
 
-    expect(optionValues()).toEqual(optionValues().slice().sort())
+    const labels = new Map(listComponents().map((def) => [def.type, def.label]))
+    for (const option of typeSelect().options) {
+      const label = labels.get(option.value)!
+      expect(option.textContent?.startsWith(label), option.value).toBe(true)
+      // 영문 타입명이 옵션에 남아 있으면 고친 것이 아니다. `Text`처럼 이름이 짧은 것도
+      // 있으므로 **정확히 그 타입명이 낱말로** 들어 있는지 본다.
+      expect(option.textContent, option.value).not.toContain(option.value)
+    }
+  })
+
+  it('갈래별로 optgroup이 서고 라벨이 한국어다', async () => {
+    // **손으로 둔 표가 없다는 것을 여기서 잰다.** 그룹도 그룹 이름도 카탈로그가 준다
+    // (`def.group` · `COMPONENT_GROUP_LABELS`) — D6이 그룹을 만들지 않기로 한 근거가
+    // *"그 분류가 런타임에 없다"*였고, 그 전제가 없어져서 뒤집혔다.
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+
+    const groups = [...typeSelect().querySelectorAll('optgroup')]
+    const expected = COMPONENT_GROUPS.filter((group) =>
+      placeableTypes().some((type) => group === groupOf(type)),
+    )
+    expect(groups.map((group) => group.getAttribute('label'))).toEqual(
+      expected.map((group) => COMPONENT_GROUP_LABELS[group]),
+    )
+
+    // **어느 옵션도 그룹 밖에 있지 않다.** 하나라도 새면 그 타입은 목록에서 눈에 안 띈다.
+    expect(groups.flatMap((group) => [...group.querySelectorAll('option')]).length).toBe(
+      typeSelect().options.length,
+    )
+  })
+
+  it('그룹 안은 한국어 이름순이다', async () => {
+    // **영문 타입명순이 아니다.** 보이는 글자와 순서가 갈리면 목록을 훑는 사람이 어디를
+    // 봐야 할지 모른다 — 앞 판의 *"이름순 한 목록"*이 지키려던 것이 그것이고, 이름이
+    // 한국어가 되면서 정렬 기준도 함께 옮겨야 한다.
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+
+    const labels = new Map(listComponents().map((def) => [def.type, def.label]))
+    const groups = [...typeSelect().querySelectorAll('optgroup')]
+    // **분모가 0이면 이 케이스는 아무것도 재지 않는다.** 구분력 실증에서 실제로 그랬다 —
+    // `<optgroup>`을 없앤 판에서 루프가 0번 돌아 조용히 통과했다. 여기서 막는다.
+    expect(groups.length).toBeGreaterThan(0)
+
+    let differsFromTypeOrder = 0
+    for (const group of groups) {
+      const types = [...group.querySelectorAll('option')].map((option) => option.value)
+      const names = types.map((type) => labels.get(type)!)
+      expect(names, group.getAttribute('label') ?? '').toEqual(
+        names.slice().sort((a, b) => a.localeCompare(b, 'ko')),
+      )
+      // **양성 대조.** 두 순서가 어디서도 갈리지 않으면 위 단언은 영문 타입명순 구현도
+      // 통과시킨다 — 그러면 «한국어 이름순»이라는 제목이 거짓이 된다.
+      if (types.join() !== types.slice().sort().join()) differsFromTypeOrder += 1
+    }
+    expect(differsFromTypeOrder).toBeGreaterThan(0)
+  })
+
+  it('옵션 글자에 설명을 붙이지 않는다', async () => {
+    // **3차의 고장을 다시 만들지 않는 자리다** — 프리셋 고르개가 긴 옵션으로 240px 좌측
+    // 패널을 터뜨렸다(`<select>` 2px, `shell.css`의 표). `<option>`은 잘려도 아무 신호가
+    // 없으므로 설명은 아래 자기 줄로 간다.
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+
+    const descriptions = listComponents().map((def) => def.description)
+    for (const option of typeSelect().options) {
+      for (const description of descriptions) {
+        expect(option.textContent, `${option.value} / ${description}`).not.toContain(description)
+      }
+      // 표시(`담을 수 있음`)까지 해서 이름 + 11자가 상한이다. 넘으면 설명이 샌 것이다.
+      expect([...(option.textContent ?? '')].length, option.value).toBeLessThanOrEqual(23)
+    }
+  })
+
+  it('고른 타입의 설명이 자기 줄에 서고 select에 묶인다', async () => {
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+
+    fireEvent.change(typeSelect(), { target: { value: 'EntryForm' } })
+    const id = typeSelect().getAttribute('aria-describedby')
+    expect(id).toBeTruthy()
+    const desc = picker().querySelector(`#${id}`)
+    // **영문 타입명이 여기 있다.** 목록이 한국어가 되면서 내보낸 JSON·설계 문서가 부르는
+    // 이름과 잇는 자리가 화면에 이것 하나뿐이다.
+    expect(desc?.textContent).toContain('EntryForm')
+    expect(desc?.textContent).toContain(getComponent('EntryForm')!.description)
+    expect(desc?.classList.contains('wb-shell-picker-desc')).toBe(true)
+  })
+
+  it('고르개를 바꾸면 설명도 바뀐다', async () => {
+    // **양성 대조다.** 없으면 첫 타입의 설명을 박아 두는 구현이 통과한다.
+    await openPage(doc(), { apiOverrides: server().api })
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+
+    fireEvent.change(typeSelect(), { target: { value: 'KeyValue' } })
+    expect(description()).toContain(getComponent('KeyValue')!.description)
+    fireEvent.change(typeSelect(), { target: { value: 'Divider' } })
+    expect(description()).toContain(getComponent('Divider')!.description)
+    expect(description()).not.toContain(getComponent('KeyValue')!.description)
   })
 
   it('자식을 담을 수 있는 타입이 표시된다', async () => {

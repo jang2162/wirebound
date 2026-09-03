@@ -3,6 +3,9 @@ import { defineComponent } from '../define'
 
 export const PageDef = defineComponent({
   type: 'Page',
+  label: '페이지',
+  description: '설계서 한 장의 뿌리. 모든 내용이 이 안에 담긴다.',
+  group: 'structure',
   props: z.strictObject({}),
   editor: [],
   structures: ['default'],
@@ -14,6 +17,9 @@ export const PageDef = defineComponent({
 
 export const SlotDef = defineComponent({
   type: 'Slot',
+  label: '슬롯',
+  description: '레이아웃이 페이지 내용을 끼우는 자리. 레이아웃 문서 전용이다.',
+  group: 'structure',
   props: z.strictObject({}),
   editor: [],
   structures: ['default'],
@@ -25,6 +31,9 @@ export const SlotDef = defineComponent({
 
 export const SectionDef = defineComponent({
   type: 'Section',
+  label: '영역',
+  description: '화면을 크게 가르는 묶음. 배경과 여백을 따로 준다.',
+  group: 'structure',
   props: z.strictObject({
     compact: z.boolean().default(false),
   }),
@@ -41,6 +50,9 @@ export const SectionDef = defineComponent({
 
 export const FlexDef = defineComponent({
   type: 'Flex',
+  label: '배치',
+  description: '자식을 가로나 세로 한 줄로 늘어놓는다.',
+  group: 'structure',
   props: z.strictObject({
     direction: z.enum(['row', 'column']).default('row'),
     align: z.enum(['start', 'center', 'end', 'stretch']).default('stretch'),
@@ -62,6 +74,9 @@ export const FlexDef = defineComponent({
 
 export const GridDef = defineComponent({
   type: 'Grid',
+  label: '그리드',
+  description: '자식을 정해진 열 수로 나눠 배치한다.',
+  group: 'structure',
   props: z.strictObject({
     columns: z.number().int().min(1).max(12).default(2),
   }),
@@ -75,6 +90,9 @@ export const GridDef = defineComponent({
 
 export const CardDef = defineComponent({
   type: 'Card',
+  label: '카드',
+  description: '제목과 내용을 한 덩어리로 묶어 보이는 상자.',
+  group: 'structure',
   props: z.strictObject({
     title: z.string().default(''),
     subtitle: z.string().default(''),
@@ -98,6 +116,9 @@ export const CardDef = defineComponent({
 
 export const TabsDef = defineComponent({
   type: 'Tabs',
+  label: '탭',
+  description: '여러 화면을 탭으로 갈라 한 번에 하나씩 보인다.',
+  group: 'structure',
   props: z.strictObject({
     tabs: z.array(z.string()).default(['탭 1', '탭 2']),
     active: z.number().int().min(0).default(0),

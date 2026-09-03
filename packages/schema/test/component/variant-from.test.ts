@@ -13,6 +13,9 @@ import { defineComponent } from '../../src/component/define'
 describe('defineComponent의 variantFrom 검사', () => {
   const base = {
     type: 'T',
+    label: '티',
+    description: '검사용 표본.',
+    group: 'document' as const,
     editor: [],
     structures: ['default'],
     parts: [],

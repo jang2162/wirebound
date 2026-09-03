@@ -1,28 +1,59 @@
 /**
  * 새 노드의 타입을 고르는 목록(D6). 툴바의 `안에 추가`·`아래 추가`가 연다.
  *
- * **이름순 한 목록이고 그룹을 만들지 않는다**(D6). 카탈로그 파일이 `action`·`data`·
- * `document`·`input`·`structure`로 나뉘지만 **그 분류가 런타임에 없다**(`ComponentDef`에
- * group 필드가 없다) — `apps/web`에 표를 손으로 두면 카탈로그가 늘 때 어긋나는 자리가
- * 하나 더 생긴다. **대신 런타임 정보로 가르는 것은 한다:** `def.children === 'many'`인
- * 타입에 표시를 붙여 "무언가를 담을 수 있는 것"을 고를 수 있게 한다.
+ * ## 영문 18개 한 목록에서 갈래별 한국어 목록으로 (P10-3)
+ *
+ * **앞 판은 *"이름순 한 목록이고 그룹을 만들지 않는다"*였고 근거는 *"그 분류가 런타임에
+ * 없다(`ComponentDef`에 group 필드가 없다) — `apps/web`에 표를 손으로 두면 카탈로그가 늘
+ * 때 어긋나는 자리가 하나 더 생긴다"*였다.** 근거의 **전제**를 없앴다: 갈래와 사람이 읽을
+ * 이름이 이제 `ComponentDef`에 있다(`label`·`description`·`group`). 손으로 둔 표가 여전히
+ * 하나도 없다는 뜻이므로 그 판단은 뒤집힌 것이 아니라 **조건이 바뀐 것**이다.
+ *
+ * 고치는 고장은 이것이다 — 한국어 UI가 `EntryForm`·`KeyValue` 같은 **영문 타입명 18개**를
+ * `<select>` 하나에 냈고, *"EntryForm이 무엇인가"*를 화면이 답하지 않았다.
+ *
+ * ## 설명은 옵션 글자에 붙이지 않는다
+ *
+ * **3차에서 프리셋 고르개가 정확히 그 고장이었다** — 240px 좌측 패널에서 긴 옵션이 잘리고
+ * `<select>` 폭이 2px까지 떨어졌다(`shell.css`의 `.wb-shell-picker` 표). `<option>`은
+ * 잘려도 아무 신호가 없다.
+ *
+ * 그래서 **목록은 이름만**(+ `담을 수 있음` 표시) 내고, **고른 것 하나의 설명을 아래
+ * 자기 줄에** 낸다(`.wb-shell-picker-desc`). 거기에는 **영문 타입명도 함께** 싣는다 —
+ * 내보낸 JSON·문서가 영문 타입으로 말하므로 둘을 잇는 자리가 화면에 있어야 한다.
+ * `aria-describedby`로 `<select>`에 묶여 스크린리더가 고른 항목의 설명을 함께 읽는다.
+ *
+ * **상태줄(`panels/toolbar-status.ts`)을 쓰지 않았다.** 그 줄은 *"고른 노드"*를 말하는
+ * 자리인데 여기서 설명할 것은 **아직 만들지 않은 타입**이다. 그리고 고르개가 닫히면
+ * 사라져야 하는 말이라 고르개와 생몰이 같은 것이 맞다.
+ *
+ * ## 나머지는 그대로다
  *
  * **`<select>`를 고른 근거는 잰 것이다.** 페이지에 둘 수 있는 타입이 **18종**이므로
  * 버튼 목록으로 만들면 **Tab 정지점이 18개** 늘고, `<select>`는 1개다. 구조 트리는
  * 키보드로 지나가는 자리이고 Task 8이 Tab을 빼앗지 않기로 했으므로(그 파일 참고) 그
  * 비용이 그대로 사용자에게 간다. `role="listbox"` + `aria-activedescendant`로 직접
  * 만들면 키보드 이동 코드가 늘고 그것을 재는 케이스가 또 필요한데, 새 런타임 의존을
- * 들이지 않는다는 제약과도 맞지 않는다.
+ * 들이지 않는다는 제약과도 맞지 않는다. **`<optgroup>`은 그 셈을 바꾸지 않는다** —
+ * 정지점도 새 코드도 늘지 않는다.
  *
  * **재지 못한 것:** 네이티브 `<select>`의 타이핑 탐색(첫 글자로 점프)은 jsdom에 없어
- * 확인하지 못했다 — 브라우저가 주는 것이지 이 코드가 만드는 것이 아니다.
+ * 확인하지 못했다 — 브라우저가 주는 것이지 이 코드가 만드는 것이 아니다. 한국어 이름이
+ * 되면서 그 탐색의 첫 글자도 한글이 된다.
  *
  * **페이지에 둘 수 없는 타입은 목록에 없다.** 지금 그런 것은 `Slot` 하나이고(설계 §4.4 —
  * 레이아웃 전용), 판정은 이름이 아니라 **`validatePage`를 실제로 돌려** 한다. 이름으로
  * 거르면 카탈로그에 같은 성질의 타입이 생길 때 어긋난다.
  */
 import { useMemo, useState, type ReactElement } from 'react'
-import { listComponents, validatePage, type PageDocument } from '@wirebound/schema'
+import {
+  COMPONENT_GROUPS,
+  COMPONENT_GROUP_LABELS,
+  listComponents,
+  validatePage,
+  type ComponentGroup,
+  type PageDocument,
+} from '@wirebound/schema'
 import { createNode } from '../edit/create-node'
 import '../catalog-setup'
 
@@ -32,18 +63,27 @@ const MANY_HINT = '담을 수 있음'
 /** 목록에 아무것도 없을 때. 카탈로그가 비어 있는 판이라 정상 경로에서는 오지 않는다. */
 const EMPTY_NOTICE = '고를 수 있는 타입이 없습니다'
 
+/** 설명 줄의 id. `aria-describedby`가 가리킨다. */
+const DESC_ID = 'wb-shell-picker-desc'
+
 export function TypePicker(props: {
   onPick: (type: string) => void
   onCancel: () => void
 }): ReactElement {
   // 카탈로그는 실행 중에 바뀌지 않는다(`catalog-setup`이 한 번 설치한다). 매 렌더
   // `validatePage`를 18번 돌리지 않도록 한 번만 계산한다.
-  const types = useMemo(placeableTypes, [])
-  const [picked, setPicked] = useState(() => types[0]?.type ?? '')
+  const groups = useMemo(placeableGroups, [])
+  const first = groups[0]?.types[0]?.type ?? ''
+  const [picked, setPicked] = useState(() => first)
 
-  if (types.length === 0) {
+  if (groups.length === 0) {
     return <p className="wb-shell-picker-notice">{EMPTY_NOTICE}</p>
   }
+
+  // 고른 것 하나. `picked`는 언제나 목록 안이라(초기값도 목록에서 왔다) 못 찾는 상태는
+  // 성립하지 않지만, 찾지 못하면 설명 줄을 **비우지 않고 내지 않는다** — 빈 줄은
+  // "설명이 없는 타입"으로 읽힌다.
+  const chosen = groups.flatMap((group) => group.types).find((type) => type.type === picked)
 
   return (
     <div className="wb-shell-picker" role="group" aria-label="타입 고르기">
@@ -55,13 +95,18 @@ export function TypePicker(props: {
         className="wb-shell-picker-select"
         value={picked}
         onChange={(event) => setPicked(event.target.value)}
+        {...(chosen === undefined ? {} : { 'aria-describedby': DESC_ID })}
       >
-        {types.map((type) => (
-          // `value`는 타입 이름 그대로다 — 보이는 글자에만 표시가 붙는다. 둘을 섞으면
-          // 카탈로그와 대조하는 테스트가 표시 문구에 흔들린다.
-          <option key={type.type} value={type.type}>
-            {type.many ? `${type.type} (${MANY_HINT})` : type.type}
-          </option>
+        {groups.map((group) => (
+          <optgroup key={group.group} label={group.label}>
+            {group.types.map((type) => (
+              // `value`는 타입 이름 그대로다 — 보이는 글자에만 한국어 이름과 표시가 붙는다.
+              // 둘을 섞으면 카탈로그와 대조하는 테스트가 표시 문구에 흔들린다.
+              <option key={type.type} value={type.type}>
+                {type.many ? `${type.label} (${MANY_HINT})` : type.label}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
       <button
@@ -74,33 +119,74 @@ export function TypePicker(props: {
       <button type="button" className="wb-shell-picker-action" onClick={props.onCancel}>
         취소
       </button>
+      {chosen === undefined ? null : (
+        <p className="wb-shell-picker-desc" id={DESC_ID}>
+          <span className="wb-shell-picker-desc-type">{chosen.type}</span> {chosen.description}
+        </p>
+      )}
     </div>
   )
 }
 
 interface PickableType {
   type: string
+  label: string
+  description: string
   many: boolean
 }
 
+interface PickableGroup {
+  group: string
+  label: string
+  types: PickableType[]
+}
+
 /**
- * 페이지 문서에 둘 수 있는 타입을 이름순으로.
+ * 페이지 문서에 둘 수 있는 타입을 갈래별로.
  *
  * **`validatePage`를 실제로 돌려 거른다.** `createNode`가 만든 노드를 빈 페이지의 자식으로
  * 넣어 이슈가 없는 것만 남긴다 — 이름 목록을 손으로 두는 것보다 정확하고, 카탈로그가
  * 늘어도 여기가 스스로 따라간다(D6과 같은 근거).
+ *
+ * **갈래를 데이터에서 모은 뒤 순서만 준다.** `COMPONENT_GROUPS`를 훑어 각 갈래의 타입을
+ * 담으면 목록에 없는 갈래를 가진 타입이 **조용히 사라진다**. 반대로 하면 그 상태에서도
+ * 항목이 남고(순서가 뒤로 갈 뿐), 사라지는 것보다 낫다.
  */
-function placeableTypes(): PickableType[] {
-  return listComponents()
-    .filter((def) => {
-      const node = createNode(def.type, () => 'n-probe')
-      if (node === null) return false
-      const probe: PageDocument = {
-        version: 1,
-        root: { id: 'n-probe-root', type: 'Page', children: [node] },
-      }
-      return validatePage(probe).length === 0
+function placeableGroups(): PickableGroup[] {
+  const buckets = new Map<string, PickableType[]>()
+
+  for (const def of listComponents()) {
+    const node = createNode(def.type, () => 'n-probe')
+    if (node === null) continue
+    const probe: PageDocument = {
+      version: 1,
+      root: { id: 'n-probe-root', type: 'Page', children: [node] },
+    }
+    if (validatePage(probe).length > 0) continue
+
+    const bucket = buckets.get(def.group) ?? []
+    bucket.push({
+      type: def.type,
+      label: def.label,
+      description: def.description,
+      many: def.children === 'many',
     })
-    .map((def) => ({ type: def.type, many: def.children === 'many' }))
-    .sort((a, b) => a.type.localeCompare(b.type))
+    buckets.set(def.group, bucket)
+  }
+
+  return [...buckets.entries()]
+    .sort(([a], [b]) => groupOrder(a) - groupOrder(b))
+    .map(([group, types]) => ({
+      group,
+      label: COMPONENT_GROUP_LABELS[group as ComponentGroup] ?? group,
+      // **한국어 이름순이다.** 영문 타입명순으로 두면 화면에 보이는 글자와 순서가 갈려
+      // 목록을 훑는 사람이 어디를 봐야 할지 모른다.
+      types: types.sort((a, b) => a.label.localeCompare(b.label, 'ko')),
+    }))
+}
+
+/** 갈래의 자리. 카탈로그가 정한 순서를 그대로 쓰고, 모르는 갈래는 맨 뒤다. */
+function groupOrder(group: string): number {
+  const index = (COMPONENT_GROUPS as readonly string[]).indexOf(group)
+  return index === -1 ? COMPONENT_GROUPS.length : index
 }

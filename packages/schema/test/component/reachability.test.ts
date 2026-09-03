@@ -40,6 +40,9 @@ beforeAll(() => {
 
 const base = {
   type: 'T',
+  label: '티',
+  description: '검사용 표본.',
+  group: 'document' as const,
   structures: ['default'],
   parts: [],
   variants: [],

@@ -3,6 +3,11 @@ import { defineComponent } from '../define'
 
 export const ButtonDef = defineComponent({
   type: 'Button',
+  // **이름은 §8.2의 예에서 빌려 왔다**(*"검색 버튼 클릭 시"*) — 상호작용 문장이 이 이름으로
+  // 노드를 부르므로 규격의 낱말과 어긋나면 문장과 규격이 갈린다.
+  label: '버튼',
+  description: '누르면 동작이 일어나는 조작 버튼.',
+  group: 'action',
   props: z.strictObject({
     label: z.string().default('버튼'),
     disabled: z.boolean().default(false),
@@ -22,6 +27,9 @@ export const ButtonDef = defineComponent({
 
 export const LinkDef = defineComponent({
   type: 'Link',
+  label: '링크',
+  description: '다른 화면으로 이동하는 글자 링크.',
+  group: 'action',
   props: z.strictObject({
     label: z.string().default('링크'),
     target: z.string().default(''),

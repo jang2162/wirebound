@@ -3,6 +3,10 @@ import { defineComponent } from '../define'
 
 export const SearchFormDef = defineComponent({
   type: 'SearchForm',
+  // **이름은 §9의 그림에서 빌려 왔다**(*"① 검색폼"*) — `List`와 같은 근거다.
+  label: '검색폼',
+  description: '목록을 거를 조건을 받는 검색 영역.',
+  group: 'input',
   props: z.strictObject({
     collapsed: z.boolean().default(false),
   }),
@@ -22,6 +26,9 @@ export const SearchFormDef = defineComponent({
 
 export const EntryFormDef = defineComponent({
   type: 'EntryForm',
+  label: '입력폼',
+  description: '여러 항목을 입력받는 등록·수정 폼.',
+  group: 'input',
   props: z.strictObject({
     title: z.string().default(''),
   }),
@@ -40,6 +47,9 @@ export const EntryFormDef = defineComponent({
 
 export const FieldDef = defineComponent({
   type: 'Field',
+  label: '입력 필드',
+  description: '입력 한 칸. 종류에 따라 텍스트·선택·날짜가 된다.',
+  group: 'input',
   props: z.strictObject({
     label: z.string().default('라벨'),
     control: z

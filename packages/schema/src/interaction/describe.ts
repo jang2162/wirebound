@@ -25,12 +25,26 @@
  * |---|---|---|
  * | `①` | 노드의 `marker` | **비운다** — 번호 없음은 정상 상태다(§4.3: *"없으면 코멘트 없음"*) |
  * | `검색` | 라벨성 prop (`COMPONENT_NOUNS`의 `labelProp`) | 비운다 |
- * | `버튼` | `COMPONENT_NOUNS`의 한국어 이름 | **영문 타입 이름**을 쓴다 |
+ * | `버튼` | **카탈로그의 `def.label`** | **영문 타입 이름**을 쓴다 |
  *
- * **한국어 이름을 `ComponentDef`에 두지 않았다.** §5.1의 계약(`props`·`editor`·`structures`·
- * `parts`·`variants`·`states`·`children`)은 **테마가 쓸 수 있는 어휘**를 정하는 자리이고
- * (`component/define.ts`의 `variantFrom` 주석이 그 경계를 적었다), 문장의 낱말은 테마가
- * 볼 것이 아니다. 대신 **카탈로그 전체를 덮는지 케이스가 센다**
+ * ## 한국어 이름이 `ComponentDef`로 옮겨 갔다 (P10-3)
+ *
+ * **앞 판은 이 파일이 이름 표를 소유했고 근거는 *"§5.1의 계약은 테마 어휘를 정하는 자리이니
+ * 문장의 낱말이 낄 곳이 아니다"*였다.** 그 전제는 **계약이 한 축뿐이라는 것**인데, 이름을
+ * 필요로 하는 화면이 문장 하나가 아니게 되면서 거짓이 됐다 — 타입 고르개가 영문 18개를
+ * `<select>` 하나에 내고 있었고, 그 화면도 같은 이름을 필요로 한다.
+ *
+ * **두 벌로 두지 않는 것이 요점이다.** 이 파일에 표를 남기고 고르개가 자기 표를 또 두면
+ * `사라진 노드`가 네 곳에 있던 것과 같은 부류가 하나 는다. 그래서 `ComponentDef`에
+ * **사람이 읽을 축**을 새로 세우고(테마 어휘와 갈라 적었다 — `define.ts`의 두 축 표),
+ * 이 표의 이름은 **거기서 유도한다.**
+ *
+ * **`labelProp`은 옮기지 않았다.** 그것은 *"어느 prop이 노드마다 다른 이름을 담는가"*라는
+ * **다른 축**이고, 문장에만 쓰인다(고르개는 노드가 없는 화면이다).
+ *
+ * **정적 객체인 것은 유지된다.** 카탈로그 배열을 모듈 로드 시점에 훑을 뿐이라
+ * `installCatalog()`와 무관하다 — `packages/exporter`가 그것에 기댄다
+ * (`test/pptx-catalog.test.ts`). 대조는 여전히 케이스가 센다
  * (`test/interaction-describe.test.ts`).
  *
  * ## `null`·모름을 접지 않는다 (P5-1 이월 §1)
@@ -42,6 +56,7 @@
  * 비어 있는 페이지 경로도 `아직 정해지지 않은 페이지`라고 말한다 — 빈 문자열을 그대로
  * 흘리면 *"…로 이동합니다"*가 되어 **대상이 있는 것처럼 읽힌다.**
  */
+import { CATALOG_DEFS } from '../component/catalog/index'
 import { getComponent } from '../component/registry'
 import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, WbNode } from '../node'
 import { pageTargetPath } from '../page-target'
@@ -59,36 +74,41 @@ export interface ComponentNoun {
 }
 
 /**
+ * 노드마다 다른 이름을 담는 prop. **이름과 갈라 여기 남는 유일한 표다.**
+ *
+ * 카탈로그 타입 전부를 적지 않는다 — 그런 prop이 없는 컴포넌트가 절반이고, 없는 것이
+ * 정상이다(그 노드는 이름만으로 불린다). **키가 카탈로그 안인지는 케이스가 센다.**
+ */
+const LABEL_PROPS: Record<string, string> = {
+  Card: 'title',
+  EntryForm: 'title',
+  Field: 'label',
+  Button: 'label',
+  Link: 'label',
+  Text: 'content',
+  Media: 'caption',
+  Placeholder: 'label',
+}
+
+/**
  * 카탈로그 19종의 한국어 이름.
  *
- * **§9의 그림과 §8.2의 예에서 빌려 온 이름이 셋 있다** — `SearchForm`→검색폼,
- * `List`→목록(§9의 *"① 검색폼 / ② 목록"*), `Button`→버튼(§8.2의 *"검색 버튼"*).
- * 규격이 부른 이름을 그대로 쓰는 것이 문서와 화면을 갈리지 않게 하는 가장 싼 방법이다.
+ * **이름은 카탈로그가 소유한다**(`def.label`). 이 객체는 그것에 `labelProp`을 얹어 문장이
+ * 쓰기 좋은 모양으로 만든 것뿐이고, 표를 두 벌 두지 않는 것이 요점이다 — 근거는 파일
+ * 머리말에 있다. **이름을 고치려면 카탈로그를 고쳐라**(`component/catalog/*.ts`).
+ * 이름의 근거(§9·§8.2에서 빌려 온 셋 · `Placeholder`가 `영역`이 아닌 이유)도 그리로 갔다.
  *
- * **`Placeholder`의 이름이 `자리 표시자`인 것은** 그 컴포넌트의 `label` 기본값이
- * `'미정 영역'`이라, 이름을 `영역`으로 두면 기본 상태에서 *"미정 영역 영역"*이 되기 때문이다.
+ * **`CATALOG_DEFS`를 훑는다 — 레지스트리가 아니다.** 레지스트리는 `installCatalog()`가
+ * 채우므로 모듈 로드 시점에 비어 있을 수 있고, 그러면 이 표가 조용히 비어 문장이 전부
+ * 영문 타입명으로 떨어진다. 정적 배열이면 그 상태가 성립하지 않는다.
  */
-export const COMPONENT_NOUNS: Record<string, ComponentNoun> = {
-  Page: { name: '페이지' },
-  Slot: { name: '슬롯' },
-  Section: { name: '영역' },
-  Flex: { name: '배치' },
-  Grid: { name: '그리드' },
-  Card: { name: '카드', labelProp: 'title' },
-  Tabs: { name: '탭' },
-  List: { name: '목록' },
-  Tree: { name: '트리' },
-  KeyValue: { name: '키-값 목록' },
-  SearchForm: { name: '검색폼' },
-  EntryForm: { name: '입력폼', labelProp: 'title' },
-  Field: { name: '입력 필드', labelProp: 'label' },
-  Button: { name: '버튼', labelProp: 'label' },
-  Link: { name: '링크', labelProp: 'label' },
-  Text: { name: '텍스트', labelProp: 'content' },
-  Media: { name: '미디어', labelProp: 'caption' },
-  Divider: { name: '구분선' },
-  Placeholder: { name: '자리 표시자', labelProp: 'label' },
-}
+export const COMPONENT_NOUNS: Record<string, ComponentNoun> = Object.fromEntries(
+  CATALOG_DEFS.map((def) => {
+    const labelProp = LABEL_PROPS[def.type]
+    const noun: ComponentNoun = labelProp === undefined ? { name: def.label } : { name: def.label, labelProp }
+    return [def.type, noun]
+  }),
+)
 
 /** 트리거를 부르는 말. §8.2의 *"클릭 시"*·*"선택 시"*가 이 표의 표본이다. */
 const TRIGGER_VERBS: Record<InteractionTrigger, string> = {
