@@ -76,17 +76,29 @@ export function PresetPicker(props: {
    * `null`이고 그때 저장 버튼이 비활성이다.
    */
   currentNodes: readonly WbNode[] | null
+  /**
+   * 이름칸에 친 글자. **이 컴포넌트가 안 든다 — 툴바가 든다**(P10-2 이월 E).
+   *
+   * 남이 이 페이지에 잠금을 잡으면 `visiblePicker`가 `null`이 되어 이 컴포넌트가 DOM에서
+   * 빠지고, `useState`로 들면 그때 **사용자가 친 글자가 사라진다.** 툴바는 그동안 그대로
+   * 마운트돼 있으므로 이 문자열만 거기 둔다.
+   *
+   * **폼을 통째로 올리는 것이 아니다** — 고른 프리셋(`picked`)·확인 단계(`confirming`)·
+   * 저장 결과는 그대로 여기 있고 잠금이 오가면 되돌아간다. 왜 이 하나만 가르는지는
+   * `structure-toolbar.tsx`의 `visiblePicker` 머리말이 갖는다.
+   */
+  name: string
+  onNameChange: (name: string) => void
   /** 고른 프리셋을 놓는다. 편집을 만드는 것은 툴바다(판정이 컴포넌트로 들어오지 않는다). */
   onApply: (nodes: WbNode[]) => void
   onCancel: () => void
 }): ReactElement {
   const api = useApi()
-  const { projectId, pageId } = props
+  const { projectId, pageId, name } = props
   const [load, setLoad] = useState<LoadState>({ status: 'loading' })
   const [picked, setPicked] = useState('')
   /** 덮는다는 확인을 받는 중인가(D6). */
   const [confirming, setConfirming] = useState(false)
-  const [name, setName] = useState('')
   /** 저장 결과 한 줄. 성공도 실패도 여기 실린다. */
   const [saveFailure, setSaveFailure] = useState<Failure | null>(null)
   /** 저장 성공 한 줄. 실패는 `saveFailure`가 든다 — 세션이 끊긴 갈래를 갈라야 하기 때문이다. */
@@ -171,7 +183,7 @@ export function PresetPicker(props: {
         schema: [...props.currentNodes],
       })
       setSaved(`프리셋으로 저장했습니다: ${created.name}`)
-      setName('')
+      props.onNameChange('')
       // 방금 저장한 것이 목록에 있어야 바로 다른 페이지에 놓을 수 있다.
       setReload((value) => value + 1)
     } catch (caught) {
@@ -240,7 +252,7 @@ export function PresetPicker(props: {
         id="wb-shell-preset-name"
         className="wb-shell-picker-input"
         value={name}
-        onChange={(event) => setName(event.target.value)}
+        onChange={(event) => props.onNameChange(event.target.value)}
       />
       <button
         type="button"
