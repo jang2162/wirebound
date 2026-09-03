@@ -5,18 +5,26 @@
 // 죽는다(리뷰어가 값으로 확인했다). 소켓·`http.Server` 도 노드 것이어야 한다.
 // 위 절들은 DOM 을 안 쓰므로 잃는 것이 없다.
 import { createHash, randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { type IncomingMessage, createServer as createHttpServer, type Server } from 'node:http'
 import { type AddressInfo, connect as netConnect } from 'node:net'
 import { fileURLToPath } from 'node:url'
-import { type ProxyOptions, createServer as createViteServer, type ViteDevServer } from 'vite'
+import { parseEnv } from 'node:util'
+import {
+  type ProxyOptions,
+  type ResolvedConfig,
+  createServer as createViteServer,
+  resolveConfig,
+  type ViteDevServer,
+} from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEFAULT_API_PORT, resolveApiPort, resolveApiProxyTarget } from '../config/api-proxy-target'
 // `?raw`는 vite가 파일 원문을 문자열로 넣어 준다 — `shell-css.test.ts`·`store-access.test.ts`와
 // 같은 관용구다. **원문을 보는 것은 아래 배선 두 절뿐이고, 그 둘이 보는 것은 «어느 이름을
-// 어디에 넣는가»와 «대상에 무엇이라고 써 있는가» 둘이다** — 뒤엣것은 실행해서는 안 보이는
-// 축이라 글자로 잰다(그 사연은 배선 절 머리말에 있다). **대상 값이 실제로 어디로 가는지**와
-// 업그레이드는 라이브 절과 ws 절이 **되돌아온 바이트**로 잰다(값 읽기는 그 안에서
-// 카나리아로만 쓴다. 이유는 그쪽 머리말들에 있다).
+// 어디에 넣고 어느 모듈에서 가져오는가» 하나다.** **대상에 무엇이 꽂혔는지**는 «값 대 값»
+// 절이 이 저장소의 `vite.config.ts` 를 **평가해 나온 값**으로 재고, **그 대상으로 요청이
+// 실제로 가는지**와 업그레이드는 라이브 절과 ws 절이 **되돌아온 바이트**로 잰다. 대상 축을
+// 원문으로 재려던 판이 셋 있었고 셋 다 뚫렸다 — 사연은 «값 대 값» 절 머리말에 있다.
 import viteConfigSource from '../vite.config.ts?raw'
 // **주석을 걷고 센다.** 안 걷으면 옳은 줄을 주석에 남기고 아래에서 뒤집는 우회가 통째로
 // 지나간다 — 리뷰어가 실측했다(귀속: 리뷰 델타 W4: `.env`의 3067 이 셸의 3099 를 이기는데
@@ -97,65 +105,32 @@ describe('프록시 대상은 apps/api/.env 의 PORT 한 자리에서 온다', (
  *
  * **규칙이 맞아도 그것을 안 꽂으면 교차가 되살아난다** — 이 슬라이스의 요점이 배선이다.
  *
- * # 이 절이 재는 축 둘 — «무엇으로 부르는가»와 «그 값을 꽂는가» (P10-2 이월 G)
+ * # 이 절이 재는 축은 하나다 — «규칙을 **무엇으로** 부르는가»
  *
- * 앞 판에는 여기 케이스가 둘 더 있었고 **둘 다 원문의 «자리»에 매여 있었다.**
- *
- * | 앞 판의 케이스 | 무엇으로 쟀나 | 무엇이 났나 |
- * |---|---|---|
- * | 계산한 값이 실제로 프록시 대상이 된다 | `/'\/api':\s*\{\s*target:/` — `target:`이 **첫 키**여야 한다 | **거짓 빨강 1.** `headers`를 `target` 앞에 둔 **옳은** 설정이 죽는다(실측: 그 상태에서 이 케이스만 1 실패이고 라이브 ws 절 스물하나는 초록이다 — 런타임은 멀쩡하다) |
- * | 대상을 수로 박아 두지 않는다 | `'/api':`가 든 **그 한 줄**에 네 자리 수가 없다 | **거짓 초록.** 엔트리를 여러 줄로 쓰고 `target: 'http://127.0.0.1:3001'`을 다음 줄에 두면 그 줄을 안 본다(실측: 이 케이스는 초록이고, 우연히 앞 케이스만 죽었다) |
- *
- * **런타임에서 닫을 수 있는 것은 아래 «라이브» 절이 가져갔다** — 5차의 ws 절과 같은
- * 방식으로 스텁 상류를 세우고 **그 포트를 규칙의 입력으로 넣은 뒤**, 이 저장소의
- * `vite.config.ts`를 그대로 실행해 **요청이 거기 닿는지**를 본다. 원문 파싱으로는 닫을 수
- * 없던 것까지 함께 닫힌다 — `preview.proxy`를 앞에 둔 미끼, 같은 객체의 중복 키, 죽은
- * 가지, 그리고 **값으로도 못 읽는** `configure`·`bypass`(5차 표의 그 넷).
- *
- * # 그런데 둘을 **다** 옮겼더니 거짓 초록이 하나 났다 — 그래서 한 축이 돌아왔다
- *
- * 리뷰어가 지었다(귀속: 리뷰 발견 1). 규칙은 그대로 부르되 **꽂는 값만 손으로 만든다**:
- *
- * ```ts
- * const apiProxyTarget = resolveApiProxyTarget({ shellEnv: process.env, fileEnv: readApiEnvFile() })
- * // …
- * '/api': { target: `http://127.0.0.1:${process.env.PORT ?? '3001'}`, changeOrigin: false, ws: true },
- * ```
- *
- * **전량 초록이었다**(298파일 5641케이스, 재현해 확인했다). 아래 `wiring()` 케이스들은
- * 호출이 온전하니 초록이고, **라이브 절은 자기가 `process.env.PORT`를 심으므로 손으로 만든
- * 값과 규칙의 값이 그 안에서만 우연히 같아진다.** 실제 사용에서는 갈린다 — §2.2가 든 바로
- * 그 판(`PORT`가 `apps/api/.env`에만 있는 워크트리)에서 프록시는 **3001**로 가고 api는
- * **3003**에 있다. 이 파일이 없애려고 생긴 그 어긋남이다.
- *
- * **그래서 «꽂는가» 축을 이 절이 되찾는다 — 다만 자리에 안 매인 형태로.** 5차가 배운 것은
- * *"값이 있는 것은 값으로"*이지 *"원문 읽기는 언제나 나쁘다"*가 아니다. 이 축이 묻는 것은
- * **«대상에 무엇이라고 써 있는가»**이고 그것은 실행해서는 안 보인다(위 변조가 그 증거다 —
- * 런타임 값이 같으니 어떤 라이브 자로도 못 가른다). 아래 `apiTargetExpression()`은 그 하나만
- * 본다: **몇째 키인지·몇 줄인지를 안 보고**, `target`에 **쓰인 식**이 규칙이 낸 이름
- * `apiProxyTarget` 그대로인지.
- *
- * **실패 방향을 먼저 물었다.** 손으로 쓴 파서가 헛돌면 5차가 값으로 확인한 부류(거짓
- * 초록이 가능한 설계)가 된다. 그래서 이 자는 **못 읽으면 `undefined`를 낸다** — 엔트리를
- * 못 찾아도, 괄호가 안 닫혀도, `target`이 둘이어도 그렇다. 그때 케이스는 **빨개진다.**
+ * **«그 값이 대상이 되는가»는 여기 없다.** 그 축은 아래 «값 대 값» 절이 갖는다 —
+ * 이 자리에서 원문으로 재려던 시도가 **세 판 내리 뚫렸기 때문이다.** 그 이력과 원인은
+ * 그쪽 머리말이 소유한다(여기 두 벌로 적지 않는다).
  *
  * # 지금 축이 어떻게 나뉘나 — 정직하게
  *
  * | 축 | 누가 갖나 |
  * |---|---|
  * | 규칙을 **무엇으로** 부르는가(`shellEnv`/`fileEnv`가 안 뒤집혔나) | 아래 `wiring()` 케이스 셋 |
- * | 그 파일을 **어디서** 읽는가 | `배선이 가리키는 자리` 셋 |
- * | 규칙이 낸 값을 **꽂는가**(손으로 만들지 않는가) | 아래 `계산한 값을 그대로 꽂는다` **하나** |
- * | 그 대상으로 요청이 **실제로 가는가** | 아래 «라이브» 절 둘 |
+ * | 그 파일을 **어디서** 읽고 규칙을 **어디서** 가져오는가 | `배선이 가리키는 자리` 넷 |
+ * | 규칙이 낸 값이 **그대로 대상이 되는가** | «값 대 값» 절 넷 |
+ * | 그 대상으로 요청이 **실제로 가는가** | «라이브» 절 둘 |
+ * | 업그레이드가 그 대상까지 가는가 | «ws» 절 |
  *
- * **어느 것에도 자리 매임이 없다** — `wiring()`은 키 순서를 안 보고, 경로 케이스는 문자열
- * 하나와 glob 하나이며, `apiTargetExpression()`은 괄호 깊이로 자른다.
+ * **이 절의 세 케이스는 원문을 읽는다.** `wiring()` 은 `resolveApiProxyTarget({…})` 의
+ * 인자 객체를 정규식 하나로 잘라 키 → 값으로 읽는다 — 키 **순서**는 안 보지만
+ * **표기**에는 매인다(호출을 여러 줄로 쓰거나 인자를 변수에 담아 넘기면 빈 객체가 되어
+ * **빨개진다**). 실패 방향이 빨강이라 위험하지는 않고, 옳은 설정을 죽이면 여기서 눈에
+ * 띈다.
  *
- * **그래도 아무도 못 보는 것이 남는다:** **파일 쪽 갈래의 값**이 끝까지 가는 것을 실행으로
- * 본 자가 없다. 라이브 절은 셸 값을 심으므로 `fileEnv`를 빈 객체로 바꿔도 스텁에 닿는다.
- * 위 넷은 그 갈래를 **구조로** 잠글 뿐이다(호출이 온전하고 · 파일 자리가 맞고 · 결과가
- * 꽂히고 · 꽂힌 곳으로 요청이 간다). `.env`를 이 자가 쓸 수는 없으므로(사용자의 개발 설정
- * 이다) 여기까지가 지금 낼 수 있는 값이다.
+ * **뒤집힘은 이제 값으로도 잡힌다 — 다만 조건부다.** «값 대 값» 절이 셸에 임시 포트를
+ * 심는 케이스를 가지므로, 인자가 뒤집혀 있으면 그 케이스가 **파일의 수**를 보고 빨개진다
+ * (`apps/api/.env` 에 `PORT` 가 있을 때만 그렇다 — 없으면 뒤집어도 두 자리가 다 비어
+ * 답이 같다). 이 세 케이스는 **그 조건이 없는 기계에서도 서는** 쪽을 맡는다.
  */
 describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
   /** **주석을 걷은** 원문. 아래 케이스는 전부 이것만 본다. */
@@ -205,112 +180,7 @@ describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
     expect(source).toContain('API 프록시')
     expect(source).toMatch(/API 프록시[^\n]*\$\{apiProxyTarget\}/)
   })
-
-  /**
-   * `server.proxy` 의 `'/api'` 엔트리에서 **`target` 에 쓰인 식**을 꺼낸다.
-   *
-   * **자리에 안 매인다.** 몇째 키인지도 몇 줄로 썼는지도 안 본다 — 앞 판이 «첫 키»를
-   * 요구해 옳은 설정을 죽였다(위 표의 첫 줄). 따옴표·역따옴표 안을 건너뛰고 **괄호
-   * 깊이로** 자르므로 `${…}` 가 든 템플릿도 통째로 한 덩어리가 된다.
-   *
-   * **실패 방향은 빨강이다.** 엔트리를 못 찾거나 · 괄호가 안 닫히거나 · `target` 이
-   * 하나가 아니면 `undefined` 를 낸다. 손으로 쓴 파서에서 무서운 것은 헛돌 때 **초록**이
-   * 나오는 것이고(5차가 값으로 확인한 부류), 이 자의 모든 이탈은 그 반대로 간다.
-   *
-   * **이것이 못 보는 것은 라이브 절이 본다** — 스프레드로 뒤에서 덮기, `preview.proxy`
-   * 미끼, `configure`·`bypass`. 그쪽은 **글자를 못 보고** 이쪽은 **런타임을 못 본다.**
-   */
-  function apiTargetExpression(): string | undefined {
-    const entries = source.match(/'\/api'\s*:/g)
-    // 둘이면 어느 것이 이기는지를 이 자가 못 정한다 — 라이브 절이 그 판을 잡는다.
-    if (entries?.length !== 1) return undefined
-    const at = source.search(/'\/api'\s*:/)
-    const open = source.indexOf('{', at)
-    // 문자열 축약형(`'/api': 'http://…'`)이면 여기서 걸린다.
-    if (open < 0 || !/^'\/api'\s*:\s*$/.test(source.slice(at, open))) return undefined
-
-    /** 엔트리 객체의 닫는 괄호. **문자열 안의 괄호는 안 센다.** */
-    const close = matchingBrace(source, open)
-    if (close < 0) return undefined
-
-    const targets = splitTopLevel(source.slice(open + 1, close))
-      .map((part) => part.trim())
-      .filter((part) => /^(['"]?)target\1\s*:/.test(part))
-      .map((part) => part.replace(/^(['"]?)target\1\s*:/, '').trim())
-    return targets.length === 1 ? targets[0] : undefined
-  }
-
-  /**
-   * **이 절이 지키는 마지막 축이다**(P10-2 이월 G — 위 머리말의 «그래서 한 축이 돌아왔다»).
-   *
-   * 규칙을 옳게 부르고도 **그 값을 안 꽂으면** 이 파일이 없애려는 어긋남이 그대로
-   * 되살아난다. 그리고 그 변조는 **런타임으로는 안 보인다** — 라이브 절이 심는 셸 `PORT`
-   * 를 손으로 만든 값이 똑같이 읽으면 되돌아온 바이트까지 같아진다(리뷰어가 지어 전량
-   * 초록을 냈다). 그래서 이 하나는 **글자로** 잰다.
-   *
-   * `apiProxyTarget` 이라는 **이름**을 요구하는 것이지 값을 요구하는 것이 아니다 —
-   * 그 이름을 무엇이 만드는지는 위 카나리아가(`const apiProxyTarget = resolveApiProxyTarget(`),
-   * 그 인자가 뒤집히지 않았는지는 앞 두 케이스가 갖는다.
-   */
-  it('**계산한 값을 그대로 꽂는다** — 대상을 손으로 만들지 않는다', () => {
-    expect(apiTargetExpression()).toBe('apiProxyTarget')
-  })
 })
-
-/**
- * `source[open]` 의 `{` 와 짝인 `}` 의 자리. 없으면 `-1`.
- *
- * **문자열·템플릿 안은 통째로 건너뛴다** — 그래서 `` `…${x}` `` 안의 괄호가 깊이를
- * 건드리지 않는다(열지도 닫지도 않으므로 균형이 그대로다).
- */
-function matchingBrace(text: string, open: number): number {
-  let depth = 0
-  let quote = ''
-  for (let i = open; i < text.length; i += 1) {
-    const ch = text[i]
-    if (quote !== '') {
-      if (ch === '\\') i += 1
-      else if (ch === quote) quote = ''
-      continue
-    }
-    if (ch === "'" || ch === '"' || ch === '`') quote = ch
-    else if (ch === '{') depth += 1
-    else if (ch === '}') {
-      depth -= 1
-      if (depth === 0) return i
-    }
-  }
-  return -1
-}
-
-/**
- * 객체 본문을 **맨 바깥 쉼표**로 자른다. 중첩된 객체·배열·호출 안의 쉼표와 문자열 안의
- * 쉼표는 안 센다. 스프레드(`...{ … }`)는 자기 덩어리로 남으므로 `target:` 로 안 읽힌다 —
- * 그 우회는 런타임에서 보이고 라이브 절이 잡는다.
- */
-function splitTopLevel(body: string): string[] {
-  const parts: string[] = []
-  let depth = 0
-  let quote = ''
-  let start = 0
-  for (let i = 0; i < body.length; i += 1) {
-    const ch = body[i]
-    if (quote !== '') {
-      if (ch === '\\') i += 1
-      else if (ch === quote) quote = ''
-      continue
-    }
-    if (ch === "'" || ch === '"' || ch === '`') quote = ch
-    else if (ch === '{' || ch === '(' || ch === '[') depth += 1
-    else if (ch === '}' || ch === ')' || ch === ']') depth -= 1
-    else if (ch === ',' && depth === 0) {
-      parts.push(body.slice(start, i))
-      start = i + 1
-    }
-  }
-  parts.push(body.slice(start))
-  return parts
-}
 
 /**
  * **배선이 가리키는 자리 자체를 잰다** — api 쪽 `test-database-url.test.ts`의 같은 절과 짝이다.
@@ -320,6 +190,18 @@ function splitTopLevel(body: string): string[] {
  * 물러난다.** 워크트리를 여럿 띄운 사람에게 그것은 §2.2의 교차가 그대로 되살아나는 것이다.
  *
  * 파일이 없는 것은 정상이므로(D6) 재는 축은 **가리키는 자리**다.
+ *
+ * **이제 값으로도 닫힌다.** «값 대 값» 절이 `apps/api/.env` 를 **따로 읽어** 규칙의 답을
+ * 만들므로, 설정이 다른 파일을 읽으면 두 답이 갈린다 — 쟀다: 경로를 없는 파일로 바꾸면
+ * 여기 둘 + 그쪽 ①② 해서 **23/27**(`apps/api/.env` 가 `PORT` 를 말하는 기계에서).
+ * 아래 셋은 **그 조건이 없는 기계에서도 서는** 쪽이다.
+ *
+ * **규칙을 어느 모듈에서 가져오는지도 여기 있다** — 리뷰어가 가드 비대칭을 실증했다
+ * (6차 2판 리뷰 V6): `readApiEnvFile` 쪽에는 `(?<!function )` 가드가 있어 선언과 호출을
+ * 가르는데 `resolveApiProxyTarget` 쪽에는 없었다. 그래서 `function` 선언으로 갈음하면
+ * 빨갛고 **화살표 `const` 로 갈음하면 초록**이었다(`const 이름 = (` 는 이름 뒤에 `(` 가
+ * 안 붙어 호출 카운트를 안 올린다). 아래 마지막 케이스가 **import 자체를 요구해** 그
+ * 비대칭을 없앤다.
  */
 describe('배선이 가리키는 자리', () => {
   const source = stripComments(viteConfigSource)
@@ -340,19 +222,231 @@ describe('배선이 가리키는 자리', () => {
     // 선언(`function readApiEnvFile()`)은 빼고 **부르는 자리**만 센다.
     expect(source.match(/(?<!function )readApiEnvFile\(\)/g)).toHaveLength(1)
   })
+
+  it('**규칙을 그 모듈에서 가져온다** — 같은 이름의 지역 함수로 갈음하지 않는다', () => {
+    expect(source).toMatch(
+      /import\s*\{[^}]*\bresolveApiProxyTarget\b[^}]*\}\s*from\s*'\.\/config\/api-proxy-target'/,
+    )
+  })
+})
+
+/**
+ * `apps/web/vite.config.ts` — **아래 세 절이 그대로 쓰는 파일.** «값 대 값» 절은
+ * 평가만 하고(서버를 안 띄운다), 라이브 절과 ws 절은 진짜 dev 서버로 띄운다
+ * (각각 다루는 것이 다르다 — 그쪽 머리말들).
+ */
+const WEB_ROOT = fileURLToPath(new URL('../', import.meta.url))
+const WEB_CONFIG_FILE = fileURLToPath(new URL('../vite.config.ts', import.meta.url))
+
+/**
+ * **규칙이 낸 값이 그대로 대상이 되는가 — 값 대 값**(P10-2 이월 G, 4판).
+ *
+ * # 이 한 축의 자가 세 판 내리 뚫렸다
+ *
+ * | 판 | 방법 | 결과 |
+ * |---|---|---|
+ * | 1 (`main`) | 원문 읽기 — «`target` 이 **첫 키**» + «`'/api':` 가 든 **그 한 줄**에 네 자리 수가 없다» | **거짓 빨강 1**(`headers` 를 `target` 앞에 둔 **옳은** 설정이 죽는다) · **거짓 초록 1**(엔트리를 여러 줄로 쓰고 다음 줄에 수를 박으면 안 본다) |
+ * | 2 (6차 1판) | 축을 통째로 라이브(값)로 옮김 | **거짓 초록 1** — 리뷰어가 지었다: `target:` 자리에 `` `http://127.0.0.1:${process.env.PORT ?? '3001'}` `` |
+ * | 3 (6차 2판) | 원문(**이름**) + 라이브(**값**) **둘을 겹침** — `apiTargetExpression()` 이 `target` 에 쓰인 식이 `apiProxyTarget` 인지 봤다 | **거짓 초록 7 · 거짓 빨강 2**(리뷰어 실측. 일곱 중 **다섯은 `pnpm typecheck` 도 통과**했다) |
+ *
+ * **왜 겹쳐 놓고도 뚫렸나 — 원인 한 줄.** `apiTargetExpression()` 은 **이름**을 보고
+ * 라이브 절은 **값**을 보는데, **라이브 절이 심는 값이 `process.env.PORT` 라서** 손으로
+ * 만든 `` `http://127.0.0.1:${process.env.PORT ?? '3001'}` `` 가 **두 자를 다 통과한다.**
+ * 두 자의 사각이 서로를 덮은 것이 아니라 **겹쳤다.** 그래서 공격이 하나로 줄었다 —
+ * 글자로는 `target: apiProxyTarget` 을 그대로 남기고 **그 이름이 가리키는 값**이나
+ * **그 엔트리가 실제로 쓰이는지**만 갈아 끼우면 된다: `&&` 로 이어 붙이기 · 같은 이름의
+ * 지역 화살표로 갈음(**규칙 모듈을 import 조차 안 하는데 초록**) · `readApiEnvFile()` 이
+ * `{}` 반환 · 죽지 않은 삼항 스프레드 · `preview.proxy` 미끼.
+ *
+ * 그리고 **손으로 쓴 파서가 또 뚫렸다** — `matchingBrace` 가 **정규식 리터럴을 몰라**
+ * `rewrite: (p) => p.replace(/[}]/g, '')` 의 `}` 를 진짜 닫는 괄호로 세고 엔트리를 일찍
+ * 닫았다. 5차에 2판을 뚫은 것과 **같은 구멍**이다(그때는 `stripComments` 가 `//` 를 먹었다).
+ *
+ * # 4판 — **겹침을 없앤다.** 규칙을 이 자가 직접 불러 «값 대 값» 으로 잰다
+ *
+ * **원문을 안 본다. 손으로 쓴 파서를 없앴다** — 정규식 리터럴 구멍도 함께 사라지고,
+ * 표기에 매여 나던 **거짓 빨강 둘**(`"/api":` · `['/api']:`)도 사라진다. 대신 이 저장소의
+ * `vite.config.ts` 를 **`resolveConfig` 로 그대로 평가해** vite 가 쓸
+ * `server.proxy['/api'].target` 을 읽고, **같은 입력을 규칙 모듈에 직접 넣어** 나온 답과
+ * 대조한다. **수를 어디에도 안 박는다** — 양쪽 다 그 자리에서 구한 값이다.
+ *
+ * **겹침이 없어지는 이유는 셸을 안 심는 판이 있기 때문이다.** 셸에 `PORT` 를 안 심으면
+ * 규칙의 답은 `apps/api/.env` 에서 오고 손으로 만든 값은 자기 기본값으로 간다 —
+ * **갈린다.** 리뷰어가 정확히 그 조건에서 재서 일곱을 잡았다.
+ *
+ * # 판을 넷 만든다 — 규칙의 **계약**을 통째로 통과해야 한다
+ *
+ * 값 하나만 맞히면 되는 자는 그 값 하나만 흉내 내면 뚫린다. 그래서 이 절은 셸 `PORT` 를
+ * 넷으로 바꿔 가며 매번 «설정이 낸 대상 == 규칙이 낸 답» 을 묻는다.
+ *
+ * | 판 | 심는 셸 `PORT` | 규칙의 답 | 무엇을 가르나 |
+ * |---|---|---|---|
+ * | ① | **지운다** | `.env` 의 `PORT` ?? 3001 | **파일 갈래.** 손으로 만든 값·`readApiEnvFile()` 훼손·규칙 갈음이 여기서 갈린다 |
+ * | ② | `''` | 위와 같다(빈 값 = «안 줬다») | `??` 는 빈 문자열을 안 잡는다 — 계약을 안 베낀 값은 `http://127.0.0.1:` 이 된다 |
+ * | ③ | 임시 포트(무작위) | 그 수 | **셸이 파일을 이긴다.** 대상을 수로 박거나 인자를 뒤집으면 여기서 죽는다 |
+ * | ④ | 숫자가 아닌 값 | **던진다** | 규칙의 거부가 설정까지 간다. 규칙을 안 부르면 설정이 그냥 뜬다 |
+ *
+ * ①②는 `process.env.PORT` 를 **지운 채** 평가하므로 **셸에 `PORT` 가 걸린 기계에서도**
+ * 판이 같다. ③④는 `apps/api/.env` 가 무엇이든(없어도) 답이 같다.
+ *
+ * # 받아들임 검사 — 3판을 뚫은 열 갈래를 **그대로 심어 쟀다** (2026-09-04, 이 파일 27 케이스)
+ *
+ * | 심은 것 | 이 파일 | 죽은 자리 |
+ * |---|---|---|
+ * | `target:` 자리에 손으로 만든 값 · `&&` 이어 붙이기 · 스프레드 덮기 · 죽지 않은 삼항 스프레드 · 중복 `'/api'` 키 · `preview.proxy` 미끼 · 정규식으로 깊이 속이기 · `readApiEnvFile()` 이 `{}` 반환 · `Object.assign` 덮기 | **25/27** | ①② |
+ * | 같은 이름의 지역 화살표로 갈음(3판에서 **23/23 초록**이었다) | **23/27** | ①②④ + `규칙을 그 모듈에서 가져온다` |
+ * | `['/api']:` 계산된 키 · `"/api":` 쌍따옴표 키 — **옳은 설정**(3판의 거짓 빨강 둘) | **27/27** | — |
+ * | `target` 이 마지막 키·여러 줄·주석 · `headers` 중첩이 앞 · `'target':` 따옴표 키 · 인자 순서 뒤집기 · `rewrite` 에 `/[{]/` — 옳은 설정 다섯 | **27/27** | — |
+ * | 대상을 수로 박기(`.env` 와 **같은 수**로) | 19/27 | ③④ + 라이브 둘 + 배선 셋 + `자리` 하나 |
+ * | 인자 뒤집기(`shellEnv`↔`fileEnv`) | 21/27 | ③④ + 라이브 둘 + 배선 둘 |
+ * | `.env` 경로를 없는 파일로(리뷰 델타 W6) | 23/27 | ①② + `배선이 가리키는 자리` 둘 |
+ *
+ * **넷이 서로 다른 것을 잰다** — 각각 **그 넷 중 혼자만** 죽는 변조가 있다(재는 척만
+ * 하지 않는다는 뜻이다):
+ * ① 「셸에 `PORT` 가 없을 때만 기본값으로 물러난다」 · ② 「빈 문자열을 진짜 값으로 본다」 ·
+ * ③ 「셸의 숫자 값에만 `0` 을 붙인다」 · ④ 「거부를 삼키고 기본값으로 물러난다」.
+ * `규칙을 그 모듈에서 가져온다` 도 혼자 죽는다 — **규칙을 그대로 베껴 지역에 두면**
+ * 넷은 다 초록인데 그 하나만 빨개진다(§7.2 의 *"판정이 두 벌이면 갈린다"* 가 그 자리다).
+ *
+ * # 이 자가 못 보는 것 — 정직하게 적는다
+ *
+ * - **`.env` 가 `PORT` 를 안 말하는 기계(또는 그 값이 3001 인 기계)에서는 ①②의 구분력이
+ *   준다.** 규칙의 답도 3001, 손으로 만든 값도 3001 이라 안 갈린다. **다만 그 기계에서는
+ *   그 우회가 해롭지도 않다** — 규칙과 같은 답을 내고 있기 때문이다. `.env` 에 다른 값이
+ *   생기는 순간 ①이 빨개진다. `.env` 는 사용자의 개발 설정이라 이 자가 쓸 수 없으므로
+ *   여기까지가 지금 낼 수 있는 값이다. (③④는 그 조건과 **무관하게** 선다.)
+ * - **런타임에 대상을 바꾸는 것**(`configure`·`bypass`·`configureServer`)은 값으로 못
+ *   읽는다 — 아래 라이브 절과 ws 절이 **되돌아온 바이트**로 잡는다.
+ * - **`'/api'` 보다 좁은 컨텍스트를 앞에 끼우는 것**은 이 절도 라이브 절도 못 본다.
+ *   vite 는 **먼저 맞는 컨텍스트 하나**만 쓰는데 둘 다 `'/api'` 엔트리를 보고 그 컨텍스트에
+ *   맞는 경로만 쏘기 때문이다(ws 절이 그 갈래를 하나 잰다 — 그쪽 머리말).
+ * - **`build`·`preview`** 는 안 본다. `serve` 다.
+ */
+
+/** ④ 가 심을 값. **숫자가 아니면 규칙이 던진다**(`resolveApiPort`). */
+const BOGUS_PORT = 'not-a-port'
+
+describe('규칙이 낸 값이 그대로 대상이 된다 — 값 대 값', () => {
+  /**
+   * `apps/api/.env` 를 **이 자가 따로** 읽는다. `vite.config.ts` 의 `readApiEnvFile()` 을
+   * 베끼는 것이 아니라 **같은 파일을 독립적으로 보는 것**이다 — 설정이 다른 파일을 읽게
+   * 되면 두 답이 갈려 ①②가 빨개진다(리뷰 델타 W6 이 열어 둔 자리다).
+   * **파일이 없으면 빈 객체다** — D6.
+   */
+  function apiEnvFile(): Record<string, string | undefined> {
+    try {
+      return parseEnv(readFileSync(new URL('../../api/.env', import.meta.url), 'utf8')) as Record<
+        string,
+        string | undefined
+      >
+    } catch {
+      return {}
+    }
+  }
+
+  /** 셸에 이 값을 심었을 때 **규칙이 내는 답.** 수를 박지 않는다. */
+  function ruleAnswer(shellPort: string | undefined): string {
+    return resolveApiProxyTarget({
+      shellEnv: shellPort === undefined ? {} : { PORT: shellPort },
+      fileEnv: apiEnvFile(),
+    })
+  }
+
+  /**
+   * 셸에 이 값을 심고 이 저장소의 `vite.config.ts` 를 **그대로 평가한다.**
+   * `resolveConfig` 가 내는 것은 라이브 절이 읽는 `viteServer.config` 와 같은 자리다.
+   * **끝나면 `process.env.PORT` 를 되돌린다** — 안 되돌리면 이 파일 뒤의 것이 심은 값을 본다.
+   */
+  async function resolveUnder(shellPort: string | undefined): Promise<ResolvedConfig> {
+    const saved = process.env.PORT
+    if (shellPort === undefined) {
+      delete process.env.PORT
+    } else {
+      process.env.PORT = shellPort
+    }
+    try {
+      return await resolveConfig(
+        { root: WEB_ROOT, configFile: WEB_CONFIG_FILE, logLevel: 'silent' },
+        'serve',
+      )
+    } finally {
+      if (saved === undefined) {
+        delete process.env.PORT
+      } else {
+        process.env.PORT = saved
+      }
+    }
+  }
+
+  /** vite 가 실제로 쓸 `'/api'` 대상. 문자열 축약형이면 그 문자열 자체다. */
+  function targetOf(config: ResolvedConfig): unknown {
+    const entry = config.server.proxy?.['/api']
+    return typeof entry === 'object' && entry !== null ? entry.target : entry
+  }
+
+  /** ③ 이 심을 임시 포트. **파일의 값·기본값과 다른 수**여야 그 판이 선다. */
+  let plantedPort = ''
+  let targetWithoutShell: unknown
+  let targetWithEmptyShell: unknown
+  let targetWithPlantedShell: unknown
+  /** ④ — 규칙이 던진 말과 설정이 던진 말. 둘이 같아야 한다. */
+  let ruleRejection = ''
+  let configRejection = ''
+
+  beforeAll(async () => {
+    const filePort = apiEnvFile().PORT
+    do {
+      plantedPort = String(1024 + (randomBytes(2).readUInt16BE(0) % 60000))
+    } while (plantedPort === filePort || plantedPort === DEFAULT_API_PORT)
+
+    targetWithoutShell = targetOf(await resolveUnder(undefined))
+    targetWithEmptyShell = targetOf(await resolveUnder(''))
+    targetWithPlantedShell = targetOf(await resolveUnder(plantedPort))
+
+    try {
+      ruleAnswer(BOGUS_PORT)
+    } catch (error) {
+      ruleRejection = (error as Error).message
+    }
+    try {
+      await resolveUnder(BOGUS_PORT)
+    } catch (error) {
+      configRejection = (error as Error).message
+    }
+  }, 30_000)
+
+  it('① 셸에 `PORT` 가 없으면 **파일 갈래**가 그대로 대상이 된다 — 규칙과 같은 답이다', () => {
+    expect(targetWithoutShell).toBe(ruleAnswer(undefined))
+  })
+
+  it('② 빈 문자열은 «안 줬다»와 같은 뜻이다 — 그 뜻이 대상까지 간다', () => {
+    expect(targetWithEmptyShell).toBe(ruleAnswer(''))
+  })
+
+  it('③ 셸이 파일을 이긴다 — 심은 수가 그대로 대상이 된다', () => {
+    // **수를 박지 않는다** — 심은 것은 무작위 임시 포트이고, 그것을 대상으로 옮기는 것은
+    // 규칙이다. 이 줄은 그 임시 포트가 정말 대상에 실렸는지를 말해 주는 카나리아다.
+    expect(ruleAnswer(plantedPort)).toBe(`http://127.0.0.1:${plantedPort}`)
+    expect(targetWithPlantedShell).toBe(ruleAnswer(plantedPort))
+  })
+
+  it('④ 규칙이 거부하는 값은 **설정도 거부한다** — 에디터만 기본값으로 뜨지 않는다', () => {
+    // 카나리아: 규칙이 정말 던지는지 먼저 본다. 안 던지면 아래가 헛돈다.
+    expect(ruleRejection).toMatch(/숫자가 아닙니다/)
+    expect(configRejection).toContain(ruleRejection)
+  })
 })
 
 /**
  * **규칙이 정한 포트로 요청이 실제로 간다 — 라이브**(P10-2 이월 G).
  *
- * 위 배선 절이 원문의 **자리**에 매여 있던 두 케이스를 여기로 옮겼다(그쪽 머리말의 표가
- * 무엇이 났는지를 갖는다). 방식은 5차의 ws 절과 **한 벌이다** — 스텁 상류 + 이 저장소의
- * `vite.config.ts` 를 그대로 띄운 진짜 dev 서버 + 되돌아온 바이트.
+ * 배선 절이 원문의 **자리**에 매여 있던 케이스를 여기로 옮겼다(무엇이 났는지는 위
+ * «값 대 값» 절 머리말의 표가 갖는다). 방식은 5차의 ws 절과 **한 벌이다** — 스텁 상류 +
+ * 이 저장소의 `vite.config.ts` 를 그대로 띄운 진짜 dev 서버 + 되돌아온 바이트.
  *
- * **다 옮기지는 못했다.** 「대상을 손으로 만들지 않는다」는 이 절로 **안 온다** — 손으로
- * 만든 값이 이 절이 심는 셸 `PORT` 를 똑같이 읽으면 되돌아온 바이트까지 같아지기 때문이다
- * (리뷰어가 지어 전량 초록을 냈다). 그 한 축은 배선 절이 `apiTargetExpression()` 으로
- * 되찾았다 — 사연은 그쪽 머리말에 있다.
+ * **이 절은 «어디로 갔나»만 잰다.** 「대상을 손으로 만들지 않는다」는 여기서 **못 잰다** —
+ * 손으로 만든 값이 이 절이 심는 셸 `PORT` 를 똑같이 읽으면 되돌아온 바이트까지 같아지기
+ * 때문이다(리뷰어가 지어 전량 초록을 냈다. 그것이 «값 대 값» 절이 생긴 이유다).
  *
  * # 다른 것이 하나 있다 — **`target` 을 안 갈아 끼운다**
  *
@@ -366,29 +460,22 @@ describe('배선이 가리키는 자리', () => {
  *
  * # 무엇이 닫히나
  *
- * 대상이 **한 자리에서 오는가**를 런타임에서 묻는 것이므로, 원문 파싱이 못 보던 것이 함께
- * 닫힌다 — `preview.proxy` 를 `server` 앞에 둔 미끼 · 같은 객체의 중복 키(뒤엣것이 이긴다) ·
- * `...(false ? … : {})` 죽은 가지 · 주석 걷기를 속이는 정규식, 그리고 **값으로도 못 읽는**
- * `configure`·`bypass`(5차 표의 그 넷).
+ * **값으로도 못 읽는 것**이 여기서 닫힌다 — `configure`·`bypass`·`configureServer` 처럼
+ * 런타임에 대상을 바꾸는 **임의의 함수**(5차 표의 그 넷)와, 값을 구해 놓고 안 꽂거나
+ * `preview.proxy` 에만 꽂는 갈래. 설정을 **평가해서** 답할 수 있는 것은 위 «값 대 값»
+ * 절이 이미 잠갔다 — 이 절은 그 위에 **되돌아온 바이트**를 얹는다.
  *
  * # 이 자가 못 보는 것 — 정직하게 적는다
  *
- * - **파일 쪽 갈래.** 셸 값을 심으므로 `fileEnv` 를 빈 객체로 바꿔도 초록이다. 그 갈래를
- *   **실행으로 보는 자는 이 파일에 없다** — 위 배선 절의 `wiring()`·`배선이 가리키는 자리`
- *   가 «어느 이름을 어디에 넣고 어느 파일을 읽는가»를 잠그고 `계산한 값을 그대로 꽂는다`
- *   가 «그 결과가 대상이 된다»를 잠글 뿐이다. 넷이 이어지면 갈래가 **구조로는** 닫히지만
- *   값이 끝까지 가는 것을 되돌아온 바이트로 본 자는 없다.
- * - **대상에 무엇이라고 써 있는가.** 실행해서는 안 보인다 — 위 배선 절의 그 케이스가 갖는다.
+ * - **파일 쪽 갈래.** 셸 값을 심으므로 `fileEnv` 를 빈 객체로 바꿔도 초록이다. **그 갈래는
+ *   위 «값 대 값» 절 ①②가 잰다** — 셸을 안 심고 규칙의 답과 대조하므로 `readApiEnvFile()`
+ *   이 값을 버리면 거기서 갈린다(`apps/api/.env` 가 `PORT` 를 말할 때. 그쪽 머리말의
+ *   §못 보는 것). **되돌아온 바이트로 그 갈래를 본 자는 여전히 없다.**
+ * - **대상에 무엇이 꽂혔는가.** 여기서는 심은 셸 값과 우연히 같아질 수 있다 — 위
+ *   «값 대 값» 절이 그 축을 갖는다.
  * - **업그레이드**는 안 본다(ws 절이 갖는다). 여기서 보내는 것은 평범한 REST 하나다.
  * - **`build`·`preview`** 는 안 본다. `serve` 다.
  */
-
-/**
- * `apps/web/vite.config.ts` — **아래 두 하네스가 그대로 실행하는 파일.** 라이브 절과
- * ws 절이 같은 파일을 띄운다(각각 다루는 것이 다르다 — 그쪽 머리말들).
- */
-const WEB_ROOT = fileURLToPath(new URL('../', import.meta.url))
-const WEB_CONFIG_FILE = fileURLToPath(new URL('../vite.config.ts', import.meta.url))
 
 /**
  * 게이트가 닫히면 **아무 바이트도 안 온다** — 그때 매달리지 않도록 여기서 끊는다.
@@ -602,10 +689,9 @@ describe('프록시 대상은 규칙이 정한 포트로 간다 — 라이브', 
  * # 이 자가 못 보는 것 — 정직하게 적는다
  *
  * - **대상(`target`) 값 자체**는 여기서 안 잰다 — 스텁으로 바꿔 놓기 때문이다. **그 축은
- *   위 «라이브» 절이 갖는다**(P10-2 이월 G에서 배선 절의 원문 케이스 둘을 대신했다):
- *   그쪽은 `target` 을 덮지 않고 **규칙의 입력**(`process.env.PORT`)에 스텁의 임시 포트를
- *   심어, 요청이 거기 닿는지를 본다. 앞 판의 주석은 이 축을 *"배선 절이 소유한다 —
- *   gitignore 된 `apps/api/.env` 에 매인다"* 고 적었는데, **그 매임이 지금은 없다.**
+ *   위 두 절이 나눠 갖는다:** «값 대 값» 절이 설정을 평가해 **무엇이 꽂혔는지**를 규칙의
+ *   답과 대조하고, «라이브» 절이 `target` 을 덮지 않은 채 **규칙의 입력**(`process.env.PORT`)
+ *   에 스텁의 임시 포트를 심어 **요청이 거기 닿는지**를 본다.
  * - **실제 api 가 그 업그레이드에 무엇으로 답하는지**는 안 잰다. 여기서 재는 것은
  *   *"vite 가 업그레이드를 상류까지, 경로·`Host`·`Cookie` 를 보존한 채 넘기는가"* 다.
  * - `build`·`preview` 는 안 본다. 이 절이 재는 것은 `serve` 다.
