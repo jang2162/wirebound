@@ -115,11 +115,25 @@
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-columns: 264px minmax(0, 1fr) 300px;
+  /* **좌측 트랙이 `auto`인 것은 폭을 사람이 정하기 때문이다**(`shell/sidebar-layout.ts`).
+     폭 자체는 `.wb-shell-side`에 인라인 `width`로 붙고 이 트랙이 그것을 그대로 받는다
+     (실측: `width` 180·264·420·760px에 대해 트랙이 각각 같은 값으로 잡힌다).
+
+     **여기 `var(--wb-shell-side-width)`를 두지 않은 근거가 있다.** 그러려면 그 변수를
+     `.wb-shell`에 인라인으로 실어야 하는데 커스텀 프로퍼티는 상속 속성이라 캔버스 프레임
+     안의 설계서까지 내려간다. 접두어 덕에 테마와 겹치지는 않지만(머리말의 예외), 그러면
+     *"인라인 `style`은 상속되지 않는 속성만 건다"*는 성질이 깨진다
+     (`test/shell-css-guard.ts` 머리말의 ㉠·㉡). `width`는 상속되지 않으므로 그 성질이
+     그대로 참이고, 기본값 264px이 CSS와 TS 두 벌로 적히지도 않는다.
+
+     **둘째 트랙 6px이 손잡이다.** 1px 여백 사이에 놓여 총 8px 홈이 된다 — 1px 선만으로는
+     마우스로 잡을 수 없다. 이 수는 `SIDE_RESERVED_WIDTH`가 함께 알고 있고
+     `test/shell/sidebar-layout.test.ts`가 둘을 대조한다. */
+  grid-template-columns: auto 6px minmax(0, 1fr) 300px;
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
-    'head head head'
-    'side canvas panel';
+    'head head head head'
+    'side side-resizer canvas panel';
   gap: var(--wb-shell-gap);
   background: var(--wb-shell-line);
 }
@@ -410,13 +424,80 @@
 
 /* 좌측의 두 상자는 같은 규칙을 쓴다. 뷰 모드에서 구조 트리가 DOM에서 빠지면 남은
    상자가 `flex: 1`로 좌측 전체를 차지한다 — 설계 §9의 "접히면 메뉴 트리가 전체를
-   쓴다"가 여기서 나온다. */
+   쓴다"가 여기서 나온다.
+
+   **편집 모드에서는 `flex-grow`가 인라인으로 덮인다**(`routes/editor.tsx`) — 사람이 정한
+   배분이 그 값이다. **뷰 모드에서는 덮지 않는다**: 상자가 하나뿐인데 `flex-grow: 0.5`를
+   주면 flex의 남는 공간 배분 규칙상 절반만 자라고 나머지 절반이 빈칸으로 남는다.
+
+   **다만 `flex-grow`의 비는 상자의 세로의 비가 아니다 — 여백만큼 어긋난다.** `flex: 1`의
+   `flex-basis: 0`은 상자를 0으로 만들지 못한다: 여백 20px(위아래 10px)이 배분 **밖**에
+   남아 상자의 세로가 `20 + grow × 나눌 공간`이 된다. 실측(1440×900, 두 상자 사이 손잡이
+   포함): `나눌 공간 = 802.5` · `여백 = 20`이고, 두 점(`grow` 0.0854/0.9146 → 88.54/753.96px)
+   에서 푼 값이 정확히 그것이다.
+
+   **`box-sizing: border-box`로는 안 고쳐진다 — 실측으로 확인했다.** `border-box`에서도
+   지정 크기가 여백보다 작으면 바깥 상자가 여백 크기로 바닥을 치므로 base가 똑같이 20px가
+   되고, 켜기 전후의 수가 한 자리도 다르지 않았다(88.54 · 753.96 그대로). 그래서 그 선언을
+   두지 않는다.
+
+   **되돌리는 자리는 CSS가 아니라 환산이다** — `shell/sidebar-layout.ts`의 `regionGrow`가
+   여백을 읽어 비율을 `flex-grow`로 바꾼다. 그래서 여기 여백을 고치면 그 환산이 따라온다
+   (값을 그쪽에 적어 두지 않고 computed style에서 읽는 이유가 이것이다). */
 .wb-shell-region {
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: 10px 12px;
   background: #fff;
+}
+
+/* 사이드바와 캔버스 사이의 손잡이(`shell/shell-resizer.tsx`). 폭은 위 격자의 둘째 트랙이
+   갖는다 — 여기서 다시 적으면 두 벌이 된다.
+
+   **`touch-action: none`이 없으면 터치에서는 드래그가 아니라 스크롤이 된다** — 브라우저가
+   포인터를 스크롤 제스처로 가져가면서 `pointercancel`을 보내고, 손잡이는 첫 몇 px만
+   움직이다 멈춘다.
+
+   바탕이 머리와 같은 `--wb-shell-chrome`인 것은 이 자리가 **셸의 장치**라고 말하기
+   위해서다. 좌우의 상자는 흰색이고 그 사이 1px 여백은 선 색이므로, 회색 6px이 그 둘과
+   갈리면서 "여기를 잡아라"가 된다. */
+.wb-shell-side-resizer {
+  grid-area: side-resizer;
+  background: var(--wb-shell-chrome);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* 좌측 두 영역 사이의 손잡이. 세로 손잡이와 같은 값이고 축만 다르다 — 규칙을 합치지
+   않는 것은 `.wb-shell-zoom-fit`이 `.wb-shell-zoom-step`과 합치지 않는 것과 같은
+   근거다(한쪽의 생김새를 바꿀 때 다른 쪽이 끌려가면 안 된다).
+
+   `flex: none`인 것은 이 상자가 **배분의 대상이 아니기** 때문이다. 기본 `flex-shrink: 1`을
+   두면 좌측이 좁아질 때 손잡이부터 얇아져 잡을 수 없게 된다. */
+.wb-shell-region-resizer {
+  flex: none;
+  height: 6px;
+  background: var(--wb-shell-chrome);
+  cursor: row-resize;
+  touch-action: none;
+}
+
+/* 마우스가 올라왔을 때. 6px 회색 홈이 강조색으로 차서 **잡을 수 있는 자리**라고 말한다. */
+.wb-shell-side-resizer:hover,
+.wb-shell-region-resizer:hover {
+  background: var(--wb-shell-accent);
+}
+
+/* 키보드 초점. **마우스 표시와 갈라 둔다** — 색만 바꾸면 초점이 온 것인지 포인터가 지나간
+   것인지 화면이 구분하지 못하고, 화살표가 무엇을 움직이는지 모른 채 누르게 된다.
+   `outline`이 6px 밖으로 나가 옆 상자 위에 그려지는 것은 의도다: 이만한 폭에서 안쪽으로
+   넣으면(`outline-offset` 음수) 남는 것이 2px라 보이지 않는다. `outline`은 자리를 차지하지
+   않으므로 옆 상자가 밀리지도 않는다. */
+.wb-shell-side-resizer:focus-visible,
+.wb-shell-region-resizer:focus-visible {
+  background: var(--wb-shell-accent);
+  outline: 2px solid var(--wb-shell-ink);
 }
 
 .wb-shell-region-title {

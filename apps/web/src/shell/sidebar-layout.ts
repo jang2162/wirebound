@@ -1,0 +1,447 @@
+/**
+ * 좌측 사이드바의 **폭**과 그 안 두 영역의 **세로 배분**. 값과 한계와 보존이 여기 한
+ * 자리에 있고, 손잡이 자체는 `shell/shell-resizer.tsx`, 배선은 `routes/editor.tsx`다.
+ *
+ * # 왜 이 파일이 생겼는가 — 잰 값
+ *
+ * 셸의 격자가 `264px minmax(0,1fr) 300px`으로 **좌우가 고정**이었고, 좌측의 두 상자는
+ * `.wb-shell-region { flex: 1 }`이라 **내용과 무관하게 정확히 반씩** 가졌다. 1440×900에서
+ * 재현해 잰 값(Chrome, 2026-09-03): 사이드바 264px, 두 영역 각 424.75px. 메뉴 쪽은 내용이
+ * 눌려 세로로 스크롤 중인데 구조 쪽은 대부분이 빈 공간이었다.
+ *
+ * # 다섯 가지 판단
+ *
+ * ## 1. 손잡이는 둘이다 — 폭 하나, 두 영역 사이 하나
+ *
+ * 하나만 두면 나머지 한쪽이 고쳐지지 않는다. 위 실측의 고장이 **둘**이기 때문이다:
+ * 폭이 좁은 것과 배분이 내용과 무관한 것은 서로 다른 원인이고 한쪽을 고쳐도 다른 쪽이
+ * 남는다. **우측 패널(300px)은 이번 범위 밖이다** — 그쪽은 손대지 않는다.
+ *
+ * ## 2. `localStorage`에 기억한다 — 이 저장소에 처음 들어온다
+ *
+ * `panels/page-json-panel.tsx`가 접힘을 `useState`로 둔 근거는 *"`localStorage`는 이
+ * 저장소에 0건이고, 드물게 쓰는 폼을 세션마다 한 번 여는 것은 맞는 대가"*였다. 그 문단이
+ * 스스로 **뒤집힐 신호**를 적어 뒀다 — *"필요해지는 날의 신호는 열어 두는 사람이 매번 다시
+ * 여는 것"*이다. 리사이저가 정확히 그 신호다: 사람이 마우스로 힘들여 맞춘 폭이 새로고침마다
+ * 264px로 돌아가면 이 기능은 **기능이 아니라 성가심**이 된다. 접힘 토글은 한 번 누르면
+ * 되지만 폭은 그렇지 않다.
+ *
+ * **실패는 전부 삼키고 기본값으로 간다.** 비공개 창·차단 설정·quota 초과에서
+ * `localStorage`는 접근 자체가 던진다(`SecurityError`). 그래서 읽기도 쓰기도 `try`로 감싸고,
+ * 실패하면 **이번 세션 동안만 사는 값**이 된다 — 화면은 그대로 돌아간다. 저장이 안 된다는
+ * 것을 사용자에게 알리지 않는 것도 판단이다: 알려도 사용자가 할 수 있는 일이 없고, 셸의
+ * `role="alert"` 자리는 *"방금 누른 것이 실패했다"*에 배정돼 있다.
+ *
+ * **읽어 온 값은 믿지 않는다.** 손으로 고칠 수 있는 자리이고 앞 판이 남긴 값일 수도 있다.
+ * 숫자가 아니거나 범위 밖이면 그 필드만 버리고 기본값을 쓴다 — 통째로 버리지 않는 것은
+ * 폭이 깨졌다고 배분까지 잃을 이유가 없기 때문이다.
+ *
+ * **설계서마다가 아니라 사람마다 하나다.** 이 값이 답하는 질문은 *"내 화면이 얼마나
+ * 넓은가"*이지 *"이 설계서가 어떤 설계서인가"*가 아니다. 키에 프로젝트 id를 넣으면
+ * 설계서를 옮길 때마다 폭이 튄다.
+ *
+ * ## 3. 한계와 되돌리기 — 0px까지 줄지 않는다
+ *
+ * **최소 200px**(`SIDE_WIDTH_MIN`). 0px까지 열어 두면 손잡이가 창 끝에 붙어 되잡기가
+ * 어렵고, 사이드바가 사라진 것과 고장 난 것을 사용자가 가릴 수 없다. 200px인 것은
+ * **실측이다**: 사이드바를 좁혀 가며 재면 구조 영역이 **180px에서 가로로 넘치기 시작하고**
+ * (`scrollWidth` 192 · `clientWidth` 180), 그 아래로는 `scrollWidth`가 192에 고정된다 —
+ * 즉 구조 도구모음의 최소 내용 폭이 192px이다. 200px은 그 바로 위의 눈금이다.
+ *
+ * **최대는 창에서 계산한다**(`sideWidthMax`). 고정값을 두면 좁은 창에서 캔버스가 0이 되고
+ * 격자가 통째로 넘친다 — 실측: 1440 창에서 사이드바를 1200px로 두면 캔버스 트랙이 0px가
+ * 되고 셸의 `scrollWidth`가 1502로 벌어졌다. 그래서 **캔버스에 남겨 둘 몫**(`CANVAS_MIN_WIDTH`)
+ * 을 먼저 떼고 나머지를 준다.
+ *
+ * **되돌리는 길은 셋이다.** 손잡이를 두 번 누르면 기본값, `Home`·`End`가 양 끝, 화살표가
+ * 한 칸이다. 하나로는 부족하다 — 손잡이를 창 끝까지 밀어 놓은 사람이 마우스로 그것을 다시
+ * 잡기 어려운 상황이 이 기능의 가장 흔한 사고이고, 최소·최대를 둔 것 자체가 그 사고를
+ * 막는 첫 겹이다.
+ *
+ * ## 4. 키보드로도 된다
+ *
+ * 드래그 전용이면 키보드 사용자에게는 이 기능이 **없는 것과 같다.** `role="separator"` +
+ * `aria-valuenow`/`valuemin`/`valuemax` + 화살표가 그 표준 모양이고(WAI-ARIA의 window
+ * splitter), `tabindex`가 붙어 초점을 받는다. 자세한 것은 `shell/shell-resizer.tsx`.
+ *
+ * ## 5. 두 영역 사이는 **비율**이다 — 픽셀이 아니다
+ *
+ * 픽셀로 고정하면 창 높이가 바뀔 때 어긋난다. 창을 키우면 늘어난 세로가 전부 한쪽으로
+ * 가고, 줄이면 한쪽이 먼저 0이 된다. 비율은 그 둘을 다 피한다 — 지금 `flex: 1` 둘이 하던
+ * 일(반반)이 비율 0.5인 특수한 경우가 되므로, 바뀌는 것은 **그 값을 사람이 정할 수 있게
+ * 된 것**뿐이고 창 크기에 대한 성질은 그대로다.
+ *
+ * **드래그는 픽셀로 받아 비율로 바꾼다.** 사람이 잡고 움직이는 것은 픽셀이므로 손잡이는
+ * 픽셀만 말하고(`shell-resizer.tsx`), 픽셀→비율 환산은 두 영역이 나눠 쓰는 세로를 아는
+ * 이쪽에서 한다.
+ *
+ * **비율의 한계도 픽셀에서 나온다**(`clampRegionRatio`). 고정 비율(예: 0.15~0.85)로 막으면
+ * 창이 낮을 때 한쪽이 몇 픽셀만 남고, 창이 높을 때는 필요 이상으로 막는다. 영역 하나가
+ * 최소로 가질 세로를 픽셀로 정하고(`REGION_MIN_HEIGHT`) 그때그때 비율로 환산한다.
+ *
+ * **비율을 `flex-grow`에 그대로 실으면 손잡이가 포인터를 놓친다**(`regionGrow`). 상자의
+ * 여백이 배분 밖에 남아 `세로 = 여백 + grow × 나눌 공간`이기 때문이다 — 실측: 여백 20px ·
+ * 나눌 공간 802.5px에서 포인터를 200px 밀었는데 경계는 190.4px만 움직였다(802.5/842.5 =
+ * 95.2%). 그래서 비율은 **사람이 보는 것**(상자 세로의 비)으로 두고, `flex-grow`로 나갈 때
+ * 여백을 되돌린다.
+ */
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+
+/**
+ * 사이드바 기본 폭(px). **`shell.css`가 아니라 여기가 한 자리다** — 격자의 첫 트랙이
+ * `auto`이고 폭은 `.wb-shell-side`에 인라인으로 붙으므로, 이 수가 CSS에 두 벌 적히지 않는다.
+ *
+ * **264px 그대로다.** 폭을 넓히는 쪽으로 기본값을 옮기지 않은 근거는 실측이다 — 이 폭을
+ * 문제로 지목했던 프리셋 고르개(P10-2 이월)는 **폭을 넓혀도 풀리지 않는다.** 사이드바를
+ * 240→1040px으로 훑으며 잰 값에서 `<select>`의 폭은 단조롭게 자라지 않고 **톱니**를 그린다
+ * (360px에서 77.1px까지 자랐다가 380px에서 3.6px로 떨어진다 — 고르개가 `flex-wrap` 상자라
+ * 폭이 늘면 항목이 같은 줄로 올라오고, 그 줄의 `flex: 1` 항목이 남는 폭을 나눠 갖기
+ * 때문이다). 옵션 글자 전체(실측 157.6px)를 담으려면 사이드바가 **800px쯤** 되어야 한다.
+ * 즉 그 이월의 판정(*"264px 사이드바 자체의 문제"*)은 **기전이 틀렸다** — 원인은 고르개
+ * 자신의 `flex: 1` 공유이고, 폭은 실용 범위에서 그것을 고치지 못한다. 고르개를 근거로
+ * 기본값을 올릴 수 없으므로, 다른 실측 근거가 없는 한 지금 값을 유지한다. 넓게 쓰고 싶은
+ * 사람은 손잡이로 넓히고 그 값이 기억된다.
+ */
+export const SIDE_WIDTH_DEFAULT = 264
+
+/** 사이드바 최소 폭(px). 근거는 머리말 3번의 192px 실측이다. */
+export const SIDE_WIDTH_MIN = 200
+
+/**
+ * 사이드바가 아무리 넓어도 캔버스에 남겨 두는 폭(px). 설계서 미리보기가 가장 좁은
+ * 뷰포트 프리셋(375px)에 못 미치더라도 **무엇이 그려지는지는 보여야 한다**는 선이다.
+ */
+export const CANVAS_MIN_WIDTH = 320
+
+/**
+ * 사이드바가 가져갈 수 없는 가로(px) — 우측 패널 300 + 손잡이 6 + 칸 사이 여백 3(1px × 3).
+ * **`shell.css`의 `.wb-shell` 격자와 짝이다**(`test/shell/sidebar-layout.test.ts`가 그 짝을
+ * CSS 원문과 대조한다 — 한쪽만 고치면 최대가 틀린 값이 된다).
+ */
+export const SIDE_RESERVED_WIDTH = 300 + 6 + 3
+
+/** 두 영역의 기본 배분. 0.5는 지금 `flex: 1` 둘이 내던 값과 같다. */
+export const REGION_RATIO_DEFAULT = 0.5
+
+/**
+ * 영역 하나가 최소로 가질 세로(px). **이름표와 한 줄이 보이는 높이다** — 실측: 이름표
+ * 블록이 42px(글자 14 + 아래 여백 8 + 상자의 위아래 여백 20)이고 트리 한 줄이 22.5px이다.
+ * 64.5px 위의 눈금으로 72px를 쓴다. **곧 도구모음 아래에 상태줄 한 줄(20px 안팎)이
+ * 들어오므로**(다른 슬라이스) 여유가 있는 쪽으로 잡았다.
+ */
+export const REGION_MIN_HEIGHT = 72
+
+/** 화살표 한 칸(px). 드래그와 같은 단위다. */
+export const RESIZE_STEP = 16
+
+/** 보존 키. **설계서마다가 아니라 사람마다 하나다**(머리말 2번). */
+export const STORAGE_KEY = 'wirebound.editor.sidebar'
+
+/** 보존되는 값. 둘 다 없을 수 있다 — 한쪽이 깨져도 다른 쪽은 산다. */
+export interface StoredLayout {
+  sideWidth?: number
+  regionRatio?: number
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+/**
+ * 지금 창에서 사이드바가 가질 수 있는 최대 폭(px).
+ *
+ * **최소보다 작아지지 않는다.** 창이 아주 좁으면 계산이 최소 아래로 내려가는데, 그때
+ * `clampSideWidth`의 `min`과 `max`가 뒤집히면 결과가 튄다. 좁은 창에서는 최소를 지키고
+ * 격자가 넘치게 두는 편이 낫다 — 그 상황에서 사이드바를 더 줄여도 캔버스는 여전히 못 쓴다.
+ */
+export function sideWidthMax(shellWidth: number): number {
+  return Math.max(SIDE_WIDTH_MIN, shellWidth - SIDE_RESERVED_WIDTH - CANVAS_MIN_WIDTH)
+}
+
+/** 화면에 실제로 쓸 사이드바 폭. 창이 좁아지면 저장된 값은 그대로 두고 이 값만 줄어든다. */
+export function clampSideWidth(width: number, shellWidth: number): number {
+  return clamp(width, SIDE_WIDTH_MIN, sideWidthMax(shellWidth))
+}
+
+/**
+ * 두 영역이 나눠 쓰는 세로가 `sharedHeight`일 때 쓸 수 있는 비율의 하한.
+ *
+ * **0.5를 넘지 않는다.** 상자가 `REGION_MIN_HEIGHT`의 두 배보다 낮으면 두 영역이 다
+ * 최소를 가질 수 없는데, 그때 하한이 0.5를 넘으면 상한(`1 - min`)보다 커져 범위가 뒤집힌다.
+ * 그 상황의 답은 반반이고, 0.5로 막으면 하한과 상한이 만나 저절로 그렇게 된다.
+ */
+export function regionRatioMin(sharedHeight: number): number {
+  if (!(sharedHeight > 0)) return 0
+  return Math.min(0.5, REGION_MIN_HEIGHT / sharedHeight)
+}
+
+/** 화면에 실제로 쓸 배분. 창 높이가 바뀌면 한계가 따라 바뀐다(머리말 5번). */
+export function clampRegionRatio(ratio: number, sharedHeight: number): number {
+  const min = regionRatioMin(sharedHeight)
+  return clamp(ratio, min, 1 - min)
+}
+
+/** 두 영역이 놓인 자리의 치수. 둘 다 화면에서 재서 온다 — CSS를 여기 두 벌 적지 않는다. */
+export interface RegionMetrics {
+  /** 두 영역이 나눠 쓰는 세로(px). 손잡이와 칸 사이 여백은 이미 빠져 있다. */
+  shared: number
+  /** 영역 하나가 배분 **밖에서** 갖는 세로(px) — 위아래 여백과 테두리다. */
+  inset: number
+}
+
+/**
+ * 상자가 배분 밖에서 갖는 세로(px). `flex-basis: 0`이 못 없애는 몫이다.
+ *
+ * **여백을 상수로 적지 않고 읽는 이유가 이것이다** — `shell.css`의 `.wb-shell-region`이
+ * 여백을 바꾸면 이 환산이 저절로 따라온다. 상수로 두면 그날 손잡이가 조용히 어긋난다.
+ */
+export function regionInset(region: Element | null): number {
+  if (region === null) return 0
+  const style = getComputedStyle(region)
+  const parts = [
+    style.paddingTop,
+    style.paddingBottom,
+    style.borderTopWidth,
+    style.borderBottomWidth,
+  ].map((value) => parseFloat(value))
+  return parts.reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0)
+}
+
+/**
+ * 사람이 보는 비율(상자 세로의 비)을 `flex-grow`로 바꾼다.
+ *
+ * `세로 = inset + grow × free`이고 `free = shared - inset × 2`이므로, `세로`가
+ * `ratio × shared`가 되게 하는 `grow`는 `(ratio × shared - inset) ÷ free`다. 두 상자의
+ * `grow` 합이 1이므로 세로의 합은 `inset × 2 + free = shared`로 그대로 맞는다.
+ *
+ * **잴 수 없으면 비율을 그대로 낸다.** 레이아웃이 없는 자리(jsdom)에서는 `free`가 0이고,
+ * 그때 나누면 `Infinity`가 나와 배분이 통째로 깨진다. 비율을 그대로 쓰면 적어도 반반은
+ * 반반으로 그려진다.
+ */
+export function regionGrow(ratio: number, metrics: RegionMetrics): number {
+  const free = metrics.shared - metrics.inset * 2
+  if (!(free > 0)) return ratio
+  return clamp((ratio * metrics.shared - metrics.inset) / free, 0, 1)
+}
+
+/**
+ * `localStorage`. **접근 자체가 던질 수 있다** — 비공개 창·사이트 데이터 차단에서
+ * `globalThis.localStorage`를 읽는 것만으로 `SecurityError`가 난다. 못 쓰면 `null`이고,
+ * 부르는 쪽은 그때 이번 세션 동안만 사는 값을 쓴다.
+ */
+export function browserStorage(): Storage | null {
+  try {
+    return globalThis.localStorage ?? null
+  } catch {
+    return null
+  }
+}
+
+/** 숫자로 쓸 수 있는 값만 통과시킨다. `NaN`·`Infinity`·문자열·`null`은 전부 버린다. */
+function usableNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+/**
+ * 저장된 값을 읽는다. **필드마다 따로 검증하고 따로 버린다**(머리말 2번) — 통째로 버리면
+ * 폭이 깨졌다는 이유로 배분까지 잃는다.
+ *
+ * 범위 검사는 여기서 하지 않는다. 한계가 창 크기에 매여 있어 읽는 시점에는 아직 모르고,
+ * 그리는 시점에 어차피 클램프를 지나기 때문이다 — 여기서 또 자르면 좁은 창에서 한 번 연
+ * 것만으로 넓은 창의 값이 영구히 깎인다.
+ */
+export function readLayout(storage: Storage | null): StoredLayout {
+  if (storage === null) return {}
+  let raw: string | null
+  try {
+    raw = storage.getItem(STORAGE_KEY)
+  } catch {
+    return {}
+  }
+  if (raw === null) return {}
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return {}
+  }
+  if (typeof parsed !== 'object' || parsed === null) return {}
+
+  const record = parsed as Record<string, unknown>
+  const sideWidth = usableNumber(record.sideWidth)
+  const regionRatio = usableNumber(record.regionRatio)
+  return {
+    ...(sideWidth === undefined ? {} : { sideWidth }),
+    ...(regionRatio === undefined ? {} : { regionRatio }),
+  }
+}
+
+/** 저장한다. **실패는 삼킨다**(머리말 2번) — quota·차단에서 던지고, 화면은 그대로 돈다. */
+export function writeLayout(storage: Storage | null, layout: StoredLayout): void {
+  if (storage === null) return
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(layout))
+  } catch {
+    // 저장되지 않았을 뿐이다. 이번 세션의 값은 살아 있다.
+  }
+}
+
+export interface SidebarLayout {
+  /** 두 영역을 담는 상자. 나눠 쓰는 세로를 여기서 잰다. */
+  sideRef: RefObject<HTMLElement | null>
+  /** 두 영역 사이의 손잡이. 배분의 대상이 아니라 배분 **전에** 떼는 몫이라 따로 잰다. */
+  regionResizerRef: RefObject<HTMLDivElement | null>
+  /** 화면에 쓸 폭(px). 저장된 값이 아니라 **클램프를 지난 값**이다. */
+  sideWidth: number
+  sideWidthMin: number
+  sideWidthMax: number
+  /** 지금 폭을 픽셀로 준다. 손잡이가 드래그를 시작할 때 부른다. */
+  grabSideWidth: () => number
+  setSideWidth: (width: number) => void
+  resetSideWidth: () => void
+  /** 화면에 쓸 배분. 첫 영역의 몫이다. **사람이 보는 비율**이지 `flex-grow`가 아니다. */
+  regionRatio: number
+  regionRatioMin: number
+  /** 첫 영역에 실을 `flex-grow`. 둘째는 `1 - regionGrow`다(`regionGrow` 함수의 머리말). */
+  regionGrow: number
+  /** 첫 영역의 지금 높이(px). */
+  grabRegionHeight: () => number
+  /** 첫 영역의 목표 높이(px)를 비율로 바꿔 싣는다. */
+  setRegionHeight: (height: number) => void
+  /** 비율을 그대로 싣는다. `Home`·`End`가 쓴다 — 양 끝은 픽셀을 거칠 이유가 없다. */
+  setRegionRatio: (ratio: number) => void
+  resetRegionRatio: () => void
+}
+
+/**
+ * 창 폭. **`.wb-shell`이 `position: fixed; inset: 0`이라 창 폭이 곧 셸 폭이다** — 요소를
+ * 재려면 `ResizeObserver`가 필요한데 jsdom에 없어서 테스트가 통째로 갈린다.
+ */
+function windowWidth(): number {
+  return typeof window === 'undefined' ? 0 : window.innerWidth
+}
+
+/**
+ * 사이드바의 폭·배분과 그 한계.
+ *
+ * **클램프가 두 번 걸리고 둘이 하는 일이 다르다.**
+ *
+ * - **싣는 자리**(`setSideWidth`·`setRegionHeight`) — *그때의* 창으로 자른다. 손잡이를 창
+ *   밖까지 밀어도 저장되는 것은 화면에 보인 값이다. 이 클램프가 없으면 1440 창에서 끝까지
+ *   민 사람의 저장값이 2196px가 되고(실측), 더 넓은 화면에서 열었을 때 **아무도 정한 적
+ *   없는 폭**으로 펼쳐진다.
+ * - **그리는 자리** — *지금* 창으로 다시 자른다. 좁은 창에서 열면 화면만 줄고 저장값은
+ *   그대로다. **여기서 되싣지 않는 것이 요점이다** — 되실으면 노트북에서 한 번 연 것만으로
+ *   넓은 화면의 폭이 영구히 깎인다.
+ */
+export function useSidebarLayout(): SidebarLayout {
+  const sideRef = useRef<HTMLElement | null>(null)
+  const regionResizerRef = useRef<HTMLDivElement | null>(null)
+  const storageRef = useRef<Storage | null>(null)
+  if (storageRef.current === null) storageRef.current = browserStorage()
+
+  // 첫 렌더에 한 번만 읽는다. 뒤로는 이 상태가 진실이다.
+  const [stored, setStored] = useState<StoredLayout>(() => readLayout(storageRef.current))
+  const [shellWidth, setShellWidth] = useState(windowWidth)
+  const [metrics, setMetrics] = useState<RegionMetrics>({ shared: 0, inset: 0 })
+
+  /**
+   * 두 영역의 치수 둘을 한 번에 잰다.
+   *
+   * **클래스로 찾지 않고 ref로 잰다.** `routes/editor.tsx`가 캔버스를 잴 때와 같은 근거다
+   * (그 파일의 `canvasRef` 주석) — 클래스 이름은 `shell.css`의 것이고, 여기서 그 이름을
+   * 조회하면 스타일을 고치다 계산이 조용히 틀리게 된다. 여백을 읽을 상자만 예외인데,
+   * 그것도 이름이 아니라 **자리**로 집는다(손잡이 앞의 형제 = 첫 영역).
+   *
+   * **`clientHeight`가 아니라 `getBoundingClientRect()`다.** `clientHeight`는 정수로
+   * 반올림돼 실측에서 0.5px이 어긋났다(851 vs 850.5) — 그 0.5가 환산에 그대로 실린다.
+   *
+   * **손잡이가 없으면 뺄 것도 없다.** 뷰 모드에서는 영역이 하나라 상자 전체가 그 영역의
+   * 몫이고, 그때 이 값은 쓰이지도 않는다.
+   */
+  const measure = useCallback((): RegionMetrics => {
+    const side = sideRef.current
+    if (side === null) return { shared: 0, inset: 0 }
+    const height = side.getBoundingClientRect().height
+    const resizer = regionResizerRef.current
+    if (resizer === null) return { shared: height, inset: 0 }
+    const gap = parseFloat(getComputedStyle(side).rowGap)
+    const gaps = Number.isFinite(gap) ? gap * 2 : 0
+    const shared = Math.max(0, height - resizer.getBoundingClientRect().height - gaps)
+    return { shared, inset: regionInset(side.firstElementChild) }
+  }, [])
+
+  /**
+   * 창이 바뀌면 한계도 바뀐다. **레이아웃 이펙트**인 것은 첫 그림에서 이미 참인 값을 쓰기
+   * 위해서다 — 한 프레임 동안 잘못된 한계로 그리면 손잡이의 `aria-valuemax`가 눈에 띄게
+   * 튄다.
+   */
+  useLayoutEffect(() => {
+    const sync = (): void => {
+      setShellWidth(windowWidth())
+      setMetrics(measure())
+    }
+    sync()
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+  }, [measure])
+
+  /**
+   * **렌더마다 다시 잰다 — 의존 배열이 없다.** 나눠 쓰는 세로는 창 크기 말고도 바뀐다:
+   * 편집↔뷰 모드가 손잡이를 넣고 빼고, 머리가 한 줄 접히면 상자의 세로가 바뀐다. 창
+   * 리스너만으로는 그 순간을 놓쳐 드래그가 어긋난 배율로 움직인다.
+   *
+   * **값이 같으면 `setState`가 없어 무한 루프가 되지 않는다** — React는 같은 값으로 부른
+   * `setState`를 리렌더로 잇지 않는다.
+   */
+  useLayoutEffect(() => {
+    const next = measure()
+    setMetrics((prev) => (prev.shared === next.shared && prev.inset === next.inset ? prev : next))
+  })
+
+  /**
+   * 보존. **값이 실제로 달라졌을 때만 쓴다.**
+   *
+   * *"첫 렌더면 건너뛴다"*로는 부족하다 — `StrictMode`가 개발에서 이펙트를 두 번 돌리므로
+   * 두 번째에 통과해 **아무도 아무것도 안 했는데 `{}`가 저장된다**(실측: 그 판에서 셸을
+   * 처음 열기만 해도 `wirebound.editor.sidebar`에 `{}`가 생겼다). 마지막으로 쓴 것을 들고
+   * 비교하면 첫 렌더도, 값이 왕복해 제자리로 온 경우도 함께 걸러진다.
+   */
+  const writtenRef = useRef(JSON.stringify(stored))
+  useEffect(() => {
+    const next = JSON.stringify(stored)
+    if (next === writtenRef.current) return
+    writtenRef.current = next
+    writeLayout(storageRef.current, stored)
+  }, [stored])
+
+  const sideWidth = clampSideWidth(stored.sideWidth ?? SIDE_WIDTH_DEFAULT, shellWidth)
+  const regionRatio = clampRegionRatio(stored.regionRatio ?? REGION_RATIO_DEFAULT, metrics.shared)
+
+  return {
+    sideRef,
+    regionResizerRef,
+    sideWidth,
+    sideWidthMin: SIDE_WIDTH_MIN,
+    sideWidthMax: sideWidthMax(shellWidth),
+    grabSideWidth: () => sideWidth,
+    setSideWidth: (width) =>
+      setStored((prev) => ({ ...prev, sideWidth: clampSideWidth(width, shellWidth) })),
+    resetSideWidth: () => setStored((prev) => ({ ...prev, sideWidth: SIDE_WIDTH_DEFAULT })),
+    regionRatio,
+    regionRatioMin: regionRatioMin(metrics.shared),
+    regionGrow: regionGrow(regionRatio, metrics),
+    grabRegionHeight: () => regionRatio * metrics.shared,
+    setRegionHeight: (height) => {
+      // 잴 수 없는 자리(레이아웃이 없는 곳)에서는 나눌 수가 없다. 아무것도 안 하는 편이
+      // `NaN`이나 `Infinity`를 싣는 것보다 낫다 — 그 값은 클램프도 못 고친다.
+      const shared = metrics.shared > 0 ? metrics.shared : measure().shared
+      if (!(shared > 0)) return
+      setStored((prev) => ({ ...prev, regionRatio: clampRegionRatio(height / shared, shared) }))
+    },
+    setRegionRatio: (ratio) =>
+      setStored((prev) => ({ ...prev, regionRatio: clampRegionRatio(ratio, metrics.shared) })),
+    resetRegionRatio: () => setStored((prev) => ({ ...prev, regionRatio: REGION_RATIO_DEFAULT })),
+  }
+}
