@@ -99,12 +99,17 @@ function doc(): PageDocument {
  * **도달하지 않는 조합**(잠겼는데 판정은 켜져 있다)을 재게 된다. 그 조합을 재던 것이
  * 이 슬라이스가 고친 고장이다.
  */
-function statusOf(nodeId: string | null, lock: NodeLock | null = null): string {
+function statusOf(
+  nodeId: string | null,
+  lock: NodeLock | null = null,
+  pageLock: NodeLock | null = null,
+): string {
   const document = doc()
   return structureStatus({
     selectedNodeId: nodeId,
     isRoot: nodeId !== null && document.root.id === nodeId,
     lock,
+    pageLock,
     abilities: structureAbilities(document, nodeId, lock),
   })
 }
@@ -296,6 +301,65 @@ describe('구조 상태줄 — 잠금이 사다리의 맨 위다', () => {
   })
 })
 
+/**
+ * **«안 골랐다» 칸이 둘로 갈린다**(P10-2 이월 C).
+ *
+ * 고른 것이 없어도 쓸 수 있는 조작이 둘 있고(`패턴 넣기`·`프리셋`) 그 둘은 **페이지에
+ * 남의 잠금이 하나라도 있으면 함께 꺼진다.** 그래서 그 상태에서는 **도구 아홉이 전부
+ * 회색인데** 앞 판의 문장은 *"고르면 편집할 수 있습니다"* 하나였다 — 페이지 전체가
+ * 잠긴 판에서는 **고를 수 있는 줄이 하나도 없는데** 고르라고 말했다(셸을 띄워 잰 표가
+ * `panels/toolbar-status.ts` 머리말에 있다).
+ *
+ * **`lock`과 `pageLock`은 다른 값이다.** 위 묶음의 마지막 케이스가 재는 것은 `lock`이고
+ * (선택이 없으면 언제나 `null`이라 그 조합은 화면에 오지 않는다), 여기는 `pageLock`이다.
+ */
+describe('구조 상태줄 — 안 골랐을 때 페이지 잠금', () => {
+  const PAGE_LOCK: NodeLock = { nodeId: 'n-1', userId: 'u-bora', userName: '보라' }
+
+  /**
+   * **«고르면 된다»를 되풀이하지 않는 것이 판단이다.** 잠금이 서브트리 하나만 덮은
+   * 판에서는 고르는 것이 실제로 답이지만 페이지 전체가 잠긴 판에서는 아니고(그 판에서는
+   * 트리 줄이 **전부** 회색이다), 이 함수는 둘을 가르지 못한다. 그래서 **둘 다에서 참인
+   * 것만** 말한다 — 지금 쓸 수 있는 도구가 없다는 것과 그 원인.
+   *
+   * 대조는 위 묶음의 `아무것도 안 고르면 고르라고 말한다`가 갖는다.
+   */
+  it('안 골랐는데 페이지에 남의 잠금이 있으면 원인을 말한다', () => {
+    expect(statusOf(null, null, PAGE_LOCK)).toBe(
+      '보라님이 편집 중이라 지금은 쓸 수 있는 도구가 없습니다',
+    )
+  })
+
+  /**
+   * **문안을 다시 적지 않고 «이름만 바뀐다»를 잰다.** 위 케이스가 글자를 소유하므로
+   * 여기서 전문을 한 벌 더 두면 문안을 고칠 때 **둘이 함께 죽어** 어느 축이 깨졌는지가
+   * 안 갈린다. 이 형태면 문안을 바꿔도 살아 있고 이름을 박으면 혼자 죽는다.
+   */
+  it('잠금 소유자 이름을 그대로 싣는다 — 하드코딩이 아니다', () => {
+    const other: NodeLock = { nodeId: 'n-1', userId: 'u-dahye', userName: '다혜' }
+    expect(statusOf(null, null, other)).toBe(
+      statusOf(null, null, PAGE_LOCK).replace('보라', '다혜'),
+    )
+    // 양쪽이 빈 문자열로 같아지는 것을 막는다 — 그러면 이 케이스가 아무것도 안 잰다.
+    expect(statusOf(null, null, other)).toContain('다혜')
+  })
+
+  /**
+   * **이 칸은 «고른 것이 없을 때»뿐이다.** 고른 것이 있으면 아래 칸들이 *"고른 것이
+   * 무엇이라서"*를 답해야 한다 — `n-a`는 잠긴 서브트리 밖이라 실제로 편집할 수 있고,
+   * 그때 남의 잠금을 대표 이유로 띄우면 **틀린 이유**를 말하게 된다.
+   *
+   * **둘째 단언이 이 케이스가 혼자 지는 자리다.** 다 켜진 자리에서도 `프리셋` 하나는
+   * 잠겨 있는데, 그것을 빈 줄에 얹고 싶어지는 것이 자연스러운 변형이다 — 그러면 사다리
+   * 규칙 2(*"무리가 통째로 죽었을 때만"*)를 어기고, 남이 아무 노드나 잡는 동안 **일곱이
+   * 다 켜진 화면에 잠금 문장이 상주한다.**
+   */
+  it('고른 것이 있으면 페이지 잠금이 이 칸을 대신하지 않는다', () => {
+    expect(statusOf('n-a', null, PAGE_LOCK)).toBe('자식을 담지 못하는 타입입니다')
+    expect(statusOf('n-full', null, PAGE_LOCK)).toBe('')
+  })
+})
+
 describe('구조 상태줄 — 루트는 자기 문장을 잃지 않는다', () => {
   /**
    * **루트가 자식을 못 담아도 루트 문장이다.** 그때는 일곱이 전부 꺼지는데, 그것을
@@ -311,6 +375,7 @@ describe('구조 상태줄 — 루트는 자기 문장을 잃지 않는다', () 
       selectedNodeId: 'n-root',
       isRoot: true,
       lock: null,
+      pageLock: null,
       abilities,
     })
 

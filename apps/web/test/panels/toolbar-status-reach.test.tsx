@@ -152,6 +152,9 @@ function structureToolbar(input: {
     selectedNodeId,
     isRoot: selectedNodeId !== null && document.root.id === selectedNodeId,
     lock,
+    // **아래 `presetLocked`와 같은 값을 쓴다** — 화면에서 그 둘은 한 값(`pageLock`)에서
+    // 나온다. 갈리는 자리는 아래 주석이 가리키는 파일이 셸째로 잰다.
+    pageLock: lock,
     abilities,
   })
   const commands: StructureCommands = {

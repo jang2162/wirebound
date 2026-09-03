@@ -531,6 +531,10 @@ export function useStructureCommands(props: {
       selectedNodeId,
       isRoot: document !== null && selectedNodeId !== null && document.root?.id === selectedNodeId,
       lock: props.selectedLock,
+      // **`presetLocked`를 끄는 그 값 그대로다.** 고른 것이 없을 때 아홉이 다 회색인
+      // 이유가 이것뿐이라, 상태줄이 이 값을 못 보면 *"고르면 편집할 수 있습니다"*를
+      // 그 자리에서도 말한다(그쪽 머리말의 표).
+      pageLock: props.pageLock,
       abilities,
     }),
     remove: removeSelected,
