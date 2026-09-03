@@ -156,6 +156,12 @@ function structureToolbar(input: {
   })
   const commands: StructureCommands = {
     abilities,
+    // **하네스의 `lock` 하나가 훅의 두 값을 대신한다.** 화면에서 `selectedLock`이 있으면
+    // `pageLock`도 반드시 있고(루트가 모든 노드의 조상이다), 이 표가 태우는 상태에는
+    // 그 둘이 갈리는 자리가 없다 — 갈리는 자리(선택 없음 + 페이지 잠금)는
+    // `../lock/toolbar-abilities.test.tsx`가 셸째로 잰다.
+    patternLocked: lock !== null,
+    presetLocked: lock !== null,
     status,
     remove: unused,
     moveUp: unused,
@@ -260,7 +266,7 @@ function firstStop(toolbar: HTMLElement): number {
  * | 상태 | 고치기 전 | 지금 | 첫 정지점이 무엇인가 |
  * |---|---|---|---|
  * | 구조 · 안 골랐다 | **-1** | 2 | `패턴 넣기`·`프리셋`을 지나 상태줄 |
- * | 구조 · 남이 잠갔다 | 0 | **2** | `패턴 넣기`·`프리셋`을 지나 상태줄 — **판정이 잠금을 본다**(아래) |
+ * | 구조 · 남이 잠갔다 | 0 | **0** | **상태줄** — 아홉이 다 꺼져 다른 정지점이 없다(아래) |
  * | 구조 · 루트다 | 0 | 0 | `안에 추가` |
  * | 구조 · 문서에 없다 | **-1** | 2 | `패턴 넣기`·`프리셋`을 지나 상태줄 |
  * | 구조 · 자식을 못 담는다 | 0 | 0 | `아래 추가` |
@@ -272,14 +278,20 @@ function firstStop(toolbar: HTMLElement): number {
  * | 메뉴 · 하위가 있다 | 0 | 0 | `하위 메뉴` |
  * | 메뉴 · 형제가 없다 | 0 | 0 | `하위 메뉴` |
  *
- * **`구조 · 남이 잠갔다`가 `0`에서 `2`로 옮겼다 — 그것이 이 슬라이스가 고친 것이다.**
- * 앞 판의 `0`은 *"잠긴 자리인데 `안에 추가`가 켜져 있다"*는 뜻이었고(그때
- * `structureAbilities`의 인자가 문서와 id뿐이라 잠금을 아예 못 봤다), 그 상태에서 켜진
- * 버튼을 실제로 누르면 어떻게 되는지를 잰 값이 `edit/structure-actions.ts`의 머리말 표에
- * 있다. 지금은 잠금이 판정을 끄므로 이 상태는 `구조 · 안 골랐다`·`구조 · 문서에 없다`와
- * 같은 자리에 선다 — **판정 일곱이 전부 꺼져 상태줄 자신이 정지점이 되는 셋**이다.
- * 아래 `잠금이 판정을 끈다`가 그 사실 자체를 값으로 못박는다 — 이 표의 `2`가 우연이
- * 아니라는 근거다.
+ * **`구조 · 남이 잠갔다`의 `0`은 앞뒤로 뜻이 정반대다 — 그것이 두 슬라이스가 고친 것이다.**
+ *
+ * | 판 | `at` | 첫 정지점 | 뜻 |
+ * |---|---|---|---|
+ * | 처음 | 0 | `안에 추가` | *"잠긴 자리인데 버튼이 켜져 있다"* — `structureAbilities`가 잠금을 못 봤다 |
+ * | 판정에 잠금을 넣은 뒤 | 2 | `패턴 넣기` | 일곱은 꺼졌는데 **판정 밖의 둘이 남았다** |
+ * | 지금 | **0** | **상태줄** | 아홉이 다 꺼졌다 |
+ *
+ * 가운데 판이 이 파일에 남긴 값이 특히 나빴다: 상태줄이 *"고를 수도 **바꿀 수도** 없습니다"*
+ * 라고 말한 **직후** 사용자가 탭으로 닿는 것이 살아 있는 «바꾸는» 버튼 둘이었다.
+ * 그 둘을 누르면 실제로 편집이 나가 423을 받았다(`panels/structure-toolbar.tsx`의
+ * `patternLocked`·`presetLocked`에 실측이 있다). 지금은 이 상태가
+ * `메뉴 · 보내는 중`·`메뉴 · 안 골랐다`와 같은 자리에 선다 — **정지점이 상태줄 하나뿐**이다.
+ * 아래 `잠금이 판정을 끈다`가 그 사실 자체를 값으로 못박는다.
  */
 const STATES: {
   name: string
@@ -290,7 +302,7 @@ const STATES: {
   { name: '구조 · 안 골랐다', at: 2, open: () => structureToolbar({ selectedNodeId: null }) },
   {
     name: '구조 · 남이 잠갔다',
-    at: 2,
+    at: 0,
     open: () => structureToolbar({ selectedNodeId: 'n-root', lock: LOCK }),
   },
   { name: '구조 · 루트다', at: 0, open: () => structureToolbar({ selectedNodeId: 'n-root' }) },
@@ -382,17 +394,15 @@ describe('잠금이 판정을 끈다 — 표의 `2`가 우연이 아니다', () 
     expect(tabStops(toolbar)[0]?.textContent).toBe('안에 추가')
   })
 
-  it('잠기면 그 하나까지 꺼지고 상태줄이 정지점이 된다', () => {
+  it('잠기면 아홉이 다 꺼지고 상태줄만 정지점으로 남는다', () => {
     expect(structureAbilities(doc(), 'n-root', LOCK).addInside).toBe(false)
 
     const { toolbar } = structureToolbar({ selectedNodeId: 'n-root', lock: LOCK })
     const stops = tabStops(toolbar)
-    // 판정 일곱이 전부 꺼졌으므로 남은 것은 판정 밖의 둘과 상태줄뿐이다.
-    expect(stops.map((stop) => stop.textContent)).toEqual([
-      '패턴 넣기',
-      '프리셋',
-      statusLine(toolbar).textContent,
-    ])
+    // **판정 밖의 둘까지 꺼진 것이 이 케이스의 값이다.** 앞 판은 여기가
+    // `['패턴 넣기','프리셋', 상태줄]`이었고, 그 둘이 상태줄 문장을 거짓으로 만들고
+    // 있었다(누르면 423이었다).
+    expect(stops.map((stop) => stop.textContent)).toEqual([statusLine(toolbar).textContent])
   })
 })
 
