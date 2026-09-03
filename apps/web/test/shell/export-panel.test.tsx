@@ -1,5 +1,6 @@
 /**
- * **내려받기 화면**(P8-4 T5 · D6·D7). `<App />`을 라우트째 렌더한다(`../editor-harness`).
+ * **내려받기 화면**(P8-4 T5 · D6·D7 · P10-3의 형식 토글). `<App />`을 라우트째 렌더한다
+ * (`../editor-harness`).
  *
  * ## 무엇을 재는가
  *
@@ -9,15 +10,28 @@
  *
  * ## 하나짜리로 재지 않는다
  *
- * 경고 세 갈래(그리지 못한 노드 · 겹친 경로 · 이어지지 않는 링크)를 **함께 든 응답**과
- * **하나도 없는 응답** 둘로 잰다. 갈래 하나만 든 응답으로 재면 화면이 셋을 한 자리에
- * 뭉뚱그려도 통과한다.
+ * 경고 갈래들을 **함께 든 응답**과 **하나도 없는 응답** 둘로 잰다. 갈래 하나만 든 응답으로
+ * 재면 화면이 여럿을 한 자리에 뭉뚱그려도 통과한다. pptx의 셋(`screenless`·`screenFailures`
+ * ·`fontWarning`)도 같은 이유로 **셋을 함께 든** 픽스처로 잰다 — 특히 앞의 둘은 서버가
+ * 일부러 가른 값이라(`services/export-pptx.ts`의 D5) **서로 다른 페이지**를 넣어 접히는지
+ * 본다.
+ *
+ * ## 형식은 응답이 정하고, 화면은 그것을 따른다
+ *
+ * 두 형식이 **다른 것**을 말하므로(`api/types.ts`의 판별 유니온) 재는 축이 셋이다:
+ * ① 고른 형식으로 부르는가 ② 형식마다 그 형식의 것만 그리는가 ③ 바꿀 때 앞 형식의 결과가
+ * 남지 않는가(늦게 온 답까지 포함해서).
  */
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { ApiClient } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
-import type { ExportPreview } from '../../src/api/types'
+import type {
+  ExportFormat,
+  ExportPreview,
+  HtmlExportPreview,
+  PptxExportPreview,
+} from '../../src/api/types'
 import { PROJECT_ID, openPage, pageDoc } from '../editor-harness'
 
 /**
@@ -25,7 +39,8 @@ import { PROJECT_ID, openPage, pageDoc } from '../editor-harness'
  * 화면은 그것을 지어내지도 자르지도 않는다. 픽스처도 그 모양으로 둔다 — 맨 제목으로 두면
  * 케이스가 *"화면이 조상을 붙인다"*로 읽힌다.
  */
-const 깨끗한: ExportPreview = {
+const 깨끗한: HtmlExportPreview = {
+  format: 'html',
   pages: [
     { id: 'pg-1', title: '관리자 회원 목록', target: 'page:관리자/회원/목록' },
     { id: 'pg-2', title: '관리자 회원 상세', target: 'page:관리자/회원/상세' },
@@ -37,7 +52,8 @@ const 깨끗한: ExportPreview = {
   fileName: 'wirebound-export-admin-console.zip',
 }
 
-const 어긋난: ExportPreview = {
+const 어긋난: HtmlExportPreview = {
+  format: 'html',
   pages: [
     { id: 'pg-1', title: '관리자 회원 목록', target: 'page:관리자/회원/목록' },
     { id: 'pg-2', title: '관리자 회원 상세', target: 'page:관리자/회원/상세' },
@@ -59,17 +75,70 @@ const 어긋난: ExportPreview = {
   fileName: 'wirebound-export-admin-console.zip',
 }
 
-function api(preview: ExportPreview | (() => Promise<ExportPreview>)): Partial<ApiClient> {
+/**
+ * pptx가 깨끗한 판. **`pages`는 HTML 갈래와 같은 모양이다**(서버가 그렇게 낸다) —
+ * 픽스처도 같은 값으로 두어 *"화면이 pptx에서 경로를 안 보인다"*가 **값이 없어서**가
+ * 아니라 **안 그려서**인 것을 잰다.
+ */
+const pptx깨끗한: PptxExportPreview = {
+  format: 'pptx',
+  pages: [
+    { id: 'pg-1', title: '관리자 회원 목록', target: 'page:관리자/회원/목록' },
+    { id: 'pg-2', title: '관리자 회원 상세', target: 'page:관리자/회원/상세' },
+  ],
+  screenless: [],
+  screenFailures: [],
+  fontWarning: null,
+  fileName: 'wirebound-export-admin-console.pptx',
+}
+
+/**
+ * pptx의 셋이 **전부 든** 판. **`screenless`와 `screenFailures`에 다른 페이지를 넣는다** —
+ * 같은 페이지를 넣으면 화면이 둘을 한 자리에 접어도 케이스가 통과한다(서버가 두 값을 가른
+ * 근거가 바로 그것이다: *"아직 아무도 안 만들었다"*와 *"만들려다 실패했다"*).
+ */
+const pptx어긋난: PptxExportPreview = {
+  format: 'pptx',
+  pages: [
+    { id: 'pg-1', title: '관리자 회원 목록', target: 'page:관리자/회원/목록' },
+    { id: 'pg-2', title: '관리자 회원 상세', target: 'page:관리자/회원/상세' },
+  ],
+  screenless: ['관리자 회원 목록'],
+  screenFailures: [{ title: '관리자 회원 상세', reason: '페이지를 여는 데 실패했습니다: timeout' }],
+  fontWarning: '이 서버에 한글 글꼴이 없어 화면 이미지를 그리지 않았습니다',
+  fileName: 'wirebound-export-admin-console.pptx',
+}
+
+function api(
+  preview: ExportPreview | ((format: ExportFormat) => Promise<ExportPreview>),
+): Partial<ApiClient> {
   return {
-    getExportPreview: typeof preview === 'function' ? preview : async () => preview,
-    exportUrl: (projectId) => `/api/projects/${projectId}/export`,
+    getExportPreview:
+      typeof preview === 'function' ? (_projectId, format) => preview(format) : async () => preview,
+    // **주소를 만드는 자리는 하나다**(`api/client.ts`). 가짜도 그 계약대로 형식을 받는다 —
+    // 여기서 형식을 무시하면 *"pptx를 보고 zip을 받는"* 상태를 케이스가 못 잡는다.
+    exportUrl: (projectId, format) => `/api/projects/${projectId}/export?format=${format}`,
   }
+}
+
+/** 형식마다 다른 것을 내는 가짜. */
+function 형식별(html: ExportPreview, pptx: ExportPreview) {
+  return async (format: ExportFormat): Promise<ExportPreview> => (format === 'pptx' ? pptx : html)
 }
 
 async function open(overrides: Partial<ApiClient>): Promise<HTMLElement> {
   await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }), { apiOverrides: overrides })
   fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
   return screen.findByRole('group', { name: '내보내기' })
+}
+
+/** 열고 **PPTX로 바꾼** 상자. 그 형식의 무언가가 그려질 때까지 기다린다. */
+async function openPptx(overrides: Partial<ApiClient>): Promise<HTMLElement> {
+  const panel = await open(overrides)
+  await within(panel).findByText(/페이지 \d+장을 내보냅니다/)
+  fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
+  await within(panel).findByRole('region', { name: '슬라이드에 실릴 페이지' })
+  return panel
 }
 
 describe('내보내기 화면', () => {
@@ -108,7 +177,7 @@ describe('내보내기 화면', () => {
       name: 'wirebound-export-admin-console.zip 내려받기',
     })
     expect(link.getAttribute('download')).toBe('wirebound-export-admin-console.zip')
-    expect(link.getAttribute('href')).toBe(`/api/projects/${PROJECT_ID}/export`)
+    expect(link.getAttribute('href')).toBe(`/api/projects/${PROJECT_ID}/export?format=html`)
   })
 
   it('깨끗하면 경고를 하나도 안 그린다', async () => {
@@ -184,6 +253,236 @@ describe('내보내기 화면', () => {
     fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
     fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
     await waitFor(() => expect(calls).toBe(2))
+  })
+
+  describe('형식 토글 (P10-3)', () => {
+    it('여는 순간엔 HTML 번들을 부른다', async () => {
+      const 부른것: ExportFormat[] = []
+      await open({
+        ...api(형식별(깨끗한, pptx깨끗한)),
+        getExportPreview: async (_projectId, format) => {
+          부른것.push(format)
+          return format === 'pptx' ? pptx깨끗한 : 깨끗한
+        },
+      })
+
+      // **둘을 동시에 부르지 않는다** — 이 조회는 번들을 실제로 만들어 보고, pptx는 거기에
+      // 더해 페이지를 한 장씩 그린다. 여는 순간의 값은 하나여야 한다.
+      await waitFor(() => expect(부른것).toEqual(['html']))
+    })
+
+    it('PPTX를 고르면 그 형식으로 다시 부른다', async () => {
+      const 부른것: ExportFormat[] = []
+      const panel = await open({
+        ...api(형식별(깨끗한, pptx깨끗한)),
+        getExportPreview: async (_projectId, format) => {
+          부른것.push(format)
+          return format === 'pptx' ? pptx깨끗한 : 깨끗한
+        },
+      })
+      await within(panel).findByRole('region', { name: '페이지 경로' })
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
+
+      await waitFor(() => expect(부른것).toEqual(['html', 'pptx']))
+    })
+
+    it('이미 고른 형식을 다시 눌러도 다시 부르지 않는다', async () => {
+      let calls = 0
+      const panel = await open({
+        ...api(깨끗한),
+        getExportPreview: async () => {
+          calls += 1
+          return 깨끗한
+        },
+      })
+      await within(panel).findByRole('region', { name: '페이지 경로' })
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'HTML 번들' }))
+
+      await waitFor(() => expect(calls).toBe(1))
+    })
+
+    /** 눌린 쪽만 표시하면 보조 기술은 나머지 버튼이 토글인지 알 수 없다(셸 머리의 `모드`와 같다). */
+    it('두 버튼이 다 눌림 상태를 말하고, 고른 쪽만 눌려 있다', async () => {
+      const panel = await openPptx(api(형식별(깨끗한, pptx깨끗한)))
+
+      expect(within(panel).getByRole('button', { name: 'PPTX' }).getAttribute('aria-pressed')).toBe('true')
+      expect(within(panel).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe(
+        'false',
+      )
+    })
+
+    it('닫았다 열면 HTML 번들로 돌아온다', async () => {
+      const 부른것: ExportFormat[] = []
+      const panel = await openPptx({
+        ...api(형식별(깨끗한, pptx깨끗한)),
+        getExportPreview: async (_projectId, format) => {
+          부른것.push(format)
+          return format === 'pptx' ? pptx깨끗한 : 깨끗한
+        },
+      })
+      expect(부른것).toEqual(['html', 'pptx'])
+
+      // 닫고 다시 연다.
+      fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
+      fireEvent.keyDown(document, { key: 'Escape' })
+      fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+
+      const 다시 = await screen.findByRole('group', { name: '내보내기' })
+      await within(다시).findByRole('region', { name: '페이지 경로' })
+      expect(부른것[부른것.length - 1]).toBe('html')
+      expect(within(다시).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      )
+    })
+  })
+
+  describe('PPTX가 말하는 것', () => {
+    it('셋을 각각 다른 자리에서 말한다', async () => {
+      const panel = await openPptx(api(형식별(깨끗한, pptx어긋난)))
+
+      const 글꼴 = within(panel).getByRole('region', { name: '글꼴 경고' })
+      expect(within(글꼴).getByText('이 서버에 한글 글꼴이 없어 화면 이미지를 그리지 않았습니다')).toBeTruthy()
+      expect(within(panel).getByRole('region', { name: '화면 이미지가 없는 페이지' })).toBeTruthy()
+      expect(within(panel).getByRole('region', { name: '화면 이미지를 그리다 실패한 페이지' })).toBeTruthy()
+    })
+
+    /**
+     * **접으면 화면이 거짓을 말한다**(`services/export-pptx.ts`의 D5). 두 값에 **다른**
+     * 페이지가 들어 있으므로, 한 자리에 뭉치면 각 구역이 남의 페이지까지 담게 된다.
+     */
+    it('안 그린 것과 그리다 죽은 것을 접지 않는다', async () => {
+      const panel = await openPptx(api(형식별(깨끗한, pptx어긋난)))
+
+      const 없음 = within(panel).getByRole('region', { name: '화면 이미지가 없는 페이지' })
+      expect(within(없음).getByText('관리자 회원 목록')).toBeTruthy()
+      expect(없음.textContent).not.toContain('관리자 회원 상세')
+
+      const 실패 = within(panel).getByRole('region', { name: '화면 이미지를 그리다 실패한 페이지' })
+      // 이유가 붙는 쪽이다 — 뭉뚱그리면 왜 실패했는지 아는 길이 다시 사라진다.
+      expect(within(실패).getByText(/관리자 회원 상세 — 페이지를 여는 데 실패했습니다: timeout/)).toBeTruthy()
+      expect(실패.textContent).not.toContain('관리자 회원 목록')
+    })
+
+    it('깨끗하면 셋을 하나도 안 그린다', async () => {
+      const panel = await openPptx(api(형식별(깨끗한, pptx깨끗한)))
+
+      expect(within(panel).queryByRole('region', { name: '글꼴 경고' })).toBeNull()
+      expect(within(panel).queryByRole('region', { name: '화면 이미지가 없는 페이지' })).toBeNull()
+      expect(within(panel).queryByRole('region', { name: '화면 이미지를 그리다 실패한 페이지' })).toBeNull()
+    })
+
+    /** 경고가 내려받기 링크보다 **먼저** 온다 — 아래 두면 사람이 누르고 나서 본다(D6). */
+    it('경고 셋이 내려받기 링크보다 앞에 있다', async () => {
+      const panel = await openPptx(api(형식별(깨끗한, pptx어긋난)))
+      const link = within(panel).getByRole('link', { name: /내려받기$/ })
+
+      for (const 이름 of ['글꼴 경고', '화면 이미지가 없는 페이지', '화면 이미지를 그리다 실패한 페이지']) {
+        const 구역 = within(panel).getByRole('region', { name: 이름 })
+        // `DOCUMENT_POSITION_FOLLOWING`(4) — 링크가 구역보다 **뒤에** 있다.
+        expect(구역.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      }
+    })
+
+    /**
+     * **슬라이드 사이에는 링크가 생기지 않는다** — 그 경로가 pptx 안에서 아무것도 가리키지
+     * 않으므로 보이지 않는다. 픽스처는 그 값을 **들고 있다**(위 `pptx깨끗한`) — 값이 없어서가
+     * 아니라 안 그려서인 것을 잰다.
+     */
+    it('페이지 경로 대신 실릴 페이지 제목을 보인다', async () => {
+      const panel = await openPptx(api(형식별(깨끗한, pptx깨끗한)))
+
+      expect(within(panel).queryByRole('region', { name: '페이지 경로' })).toBeNull()
+      const 목록 = within(panel).getByRole('region', { name: '슬라이드에 실릴 페이지' })
+      expect(within(목록).getByText('관리자 회원 목록')).toBeTruthy()
+      expect(panel.textContent).not.toContain('page:관리자/회원/목록')
+    })
+
+    it('내려받기 주소와 이름이 pptx를 따른다', async () => {
+      const panel = await openPptx(api(형식별(깨끗한, pptx깨끗한)))
+
+      const link = within(panel).getByRole('link', {
+        name: 'wirebound-export-admin-console.pptx 내려받기',
+      })
+      expect(link.getAttribute('download')).toBe('wirebound-export-admin-console.pptx')
+      expect(link.getAttribute('href')).toBe(`/api/projects/${PROJECT_ID}/export?format=pptx`)
+    })
+  })
+
+  /**
+   * **앞 형식의 결과가 남으면 화면이 거짓을 말한다.** 두 갈래는 다른 것을 말하므로
+   * (`api/types.ts`의 판별 유니온) 섞여 보이는 순간 경고와 내려받기 링크가 서로 다른
+   * 응답에서 나온 것이 된다.
+   */
+  describe('형식을 바꾸면 앞 형식의 결과가 안 남는다', () => {
+    it('바꾸면 앞 형식의 구역이 사라진다', async () => {
+      const panel = await openPptx(api(형식별(어긋난, pptx어긋난)))
+
+      expect(within(panel).queryByRole('region', { name: '페이지 경로' })).toBeNull()
+      expect(within(panel).queryByRole('region', { name: '그리지 못한 노드' })).toBeNull()
+      expect(within(panel).queryByRole('region', { name: '겹친 페이지 경로' })).toBeNull()
+      expect(within(panel).queryByRole('region', { name: '이어지지 않는 링크' })).toBeNull()
+      expect(within(panel).getByRole('link', { name: /\.pptx 내려받기$/ })).toBeTruthy()
+    })
+
+    it('부르는 동안엔 앞 형식의 결과가 이미 없다', async () => {
+      let 놓아주기: (() => void) | undefined
+      const panel = await open(
+        api(async (format) => {
+          if (format === 'html') return 어긋난
+          await new Promise<void>((resolve) => {
+            놓아주기 = resolve
+          })
+          return pptx어긋난
+        }),
+      )
+      await within(panel).findByRole('region', { name: '페이지 경로' })
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
+
+      // 아직 아무 답도 안 왔는데 앞 형식의 것이 남아 있으면 안 된다.
+      expect(within(panel).queryByRole('region', { name: '페이지 경로' })).toBeNull()
+      expect(within(panel).queryByRole('link', { name: /내려받기$/ })).toBeNull()
+      expect(within(panel).getByRole('status')).toBeTruthy()
+
+      놓아주기?.()
+      await within(panel).findByRole('region', { name: '슬라이드에 실릴 페이지' })
+    })
+
+    /**
+     * **늦게 온 답이 화면을 덮으면 안 된다.** pptx는 페이지를 그리느라 html보다 오래 걸리므로
+     * (P10-2 D6) pptx를 눌렀다 html로 되돌리면 먼저 보낸 pptx가 나중에 도착한다.
+     */
+    it('늦게 온 앞 형식의 답이 뒤 형식의 화면을 덮지 않는다', async () => {
+      let 놓아주기: (() => void) | undefined
+      let pptx답함 = 0
+      const panel = await open(
+        api(async (format) => {
+          if (format === 'html') return 깨끗한
+          await new Promise<void>((resolve) => {
+            놓아주기 = resolve
+          })
+          pptx답함 += 1
+          return pptx깨끗한
+        }),
+      )
+      await within(panel).findByRole('region', { name: '페이지 경로' })
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
+      fireEvent.click(within(panel).getByRole('button', { name: 'HTML 번들' }))
+      await within(panel).findByRole('region', { name: '페이지 경로' })
+
+      // 이제야 pptx가 답한다.
+      놓아주기?.()
+      await waitFor(() => expect(pptx답함).toBe(1))
+
+      expect(within(panel).queryByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeNull()
+      expect(within(panel).getByRole('region', { name: '페이지 경로' })).toBeTruthy()
+      expect(within(panel).getByRole('button', { name: 'HTML 번들' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      )
+    })
   })
 
   /**

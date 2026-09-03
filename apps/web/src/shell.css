@@ -2407,6 +2407,37 @@
   text-align: left;
 }
 
+/* 형식 토글(P10-3). **셸 머리의 `모드`(편집/뷰)와 같은 장치다** — `role="group"` 안의
+   버튼 둘에 `aria-pressed`가 붙고 눌린 쪽이 강조된다.
+
+   **그런데 `.wb-shell-modes`와 규칙을 합치지 않는다.** `.wb-shell-zoom-fit`이
+   `.wb-shell-zoom-step`에 대해 한 판단과 같다: 값이 같아도 하는 일이 다르고(한쪽은 셸 머리에
+   상시로 서고 이쪽은 팝오버 안에 산다), 한쪽의 생김새를 바꿀 때 다른 쪽이 끌려오면 안 된다.
+   (D7이 막는 것은 결합자이지 같은 값의 규칙 둘이 아니다.) */
+.wb-shell-export-formats {
+  display: inline-flex;
+  margin-bottom: 12px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.wb-shell-export-format {
+  appearance: none;
+  border: 0;
+  padding: 5px 12px;
+  background: transparent;
+  font: inherit;
+  color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-export-format[aria-pressed='true'] {
+  background: var(--wb-shell-accent);
+  color: #fff;
+}
+
 .wb-shell-export-count {
   margin: 0 0 12px;
   font-weight: 600;
@@ -2440,6 +2471,13 @@
 }
 
 .wb-shell-export-targets {
+  margin-bottom: 12px;
+}
+
+/* pptx의 페이지 목록. **`-targets`와 값이 같지만 이름이 다른 것이 요점이다** — 그쪽은
+   상호작용에 적을 **경로**이고 이쪽은 슬라이드에 실릴 **제목**이다(pptx는 링크를 만들지
+   않는다). 위 `.wb-shell-export-formats`가 같은 판단을 적어 두었다. */
+.wb-shell-export-pages {
   margin-bottom: 12px;
 }
 

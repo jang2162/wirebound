@@ -1,5 +1,6 @@
 /**
- * **설계서를 내려받는 자리**(설계 §11.3 — P8-4 T5 · D6·D7). 에디터 셸 머리에 산다.
+ * **설계서를 내려받는 자리**(설계 §11.3 — P8-4 T5 · D6·D7 · P10-3의 형식 토글).
+ * 에디터 셸 머리에 산다.
  *
  * ## 조용히 성공하면 안 된다 (D6)
  *
@@ -8,11 +9,36 @@
  * **폴백이 든 HTML도 눈으로는 그럴듯한 한 장이고 번들은 그것을 남에게 전달한다**
  * (P8-2 이월 §7). 그래서 누르면 먼저 **무엇이 실릴지**를 보이고, 내려받기는 그 다음이다.
  *
- * ## 열 때 미리 부르지 않는다
+ * **pptx도 같은 자리를 쓴다.** 브라우저나 한글 글꼴이 없는 서버에서 pptx를 내보내면
+ * 파일은 200으로 나오고 슬라이드가 *"화면 이미지가 실리지 않았습니다"*만 말한다 —
+ * **왜 없는지는 `export/preview`를 직접 부른 사람에게만 갔다**(P10-2 이월 §3의
+ * *"`apps/web`이 pptx를 모른다"*). 이 화면이 그 이유가 사람에게 닿는 유일한 길이다.
  *
- * `getExportPreview`는 번들을 **실제로 만들어 본다** — 프로젝트의 모든 페이지를 서버에서
- * 그린다. 셸이 뜰 때마다 그것을 부르면 설계서를 여는 비용이 그만큼 는다. 그래서 사람이
- * 누를 때 부른다.
+ * ## 형식은 토글이고, 한 번에 하나만 부른다 (P10-3)
+ *
+ * 상자의 맨 위에 `HTML 번들`·`PPTX` 버튼 둘이 있고, 고른 쪽의 미리보기만 부른다.
+ * **둘을 동시에 부르지 않는 이유는 이 조회가 싸지 않기 때문이다** — 위 *"열 때 미리 부르지
+ * 않는다"*와 **같은 근거**다. `getExportPreview`는 번들을 실제로 만들어 보고, pptx는 거기에
+ * 더해 **페이지를 한 장씩 그린다**(P10-2 D6 — 미리보기와 내려받기가 같은 판정을 쓴다).
+ * 여는 순간 둘을 다 부르면 아무도 안 볼 형식의 값을 매번 치른다.
+ *
+ * **여는 순간엔 HTML 번들이다.** P8-4가 만든 화면이 하던 일이 그것이고, 형식을 기억해 두면
+ * *"저번에 pptx를 봤다"*는 사실이 다음 번 여는 비용을 정하게 된다.
+ *
+ * **토글의 장치는 셸 머리의 `모드`(편집/뷰)와 같다** — `role="group"` 안의 버튼 둘에
+ * `aria-pressed`를 **둘 다** 단다. 눌린 쪽만 표시하면 보조 기술은 나머지 버튼이 토글인지
+ * 알 수 없다(`routes/editor.tsx`의 `ShellTools`가 같은 이유로 그렇게 한다). 새 어휘를
+ * 만들지 않는다.
+ *
+ * ## 형식을 바꾸면 앞 형식의 결과가 남지 않는다
+ *
+ * 두 갈래는 **다른 것**을 말한다(`api/types.ts`의 판별 유니온). 앞 형식의 경고가 남은 채
+ * 새 형식의 내려받기 링크가 서면 화면이 거짓을 말한다. `load()`가 부르기 **전에**
+ * `loading`으로 갈아 끼우는 것이 그 자리다.
+ *
+ * **늦게 온 답도 막는다.** pptx는 페이지를 그리느라 html보다 오래 걸리므로, pptx를 눌렀다
+ * html로 되돌리면 **먼저 보낸 pptx가 나중에 도착한다.** 표를 하나 들고 마지막 것이 아니면
+ * 버린다 — 이것이 `useRef` 하나가 여기 있는 이유다.
  *
  * ## 내려받기는 앵커다 — `fetch` + blob이 아니다
  *
@@ -24,12 +50,17 @@
  * **주소는 `api.exportUrl()`이 만든다** — 화면이 `/api/…`를 적기 시작하면 경로가 두 곳이
  * 된다. 파일 이름도 서버가 준 것을 그대로 쓴다(같은 이유).
  *
- * ## 타겟을 보이는 것이 이 화면의 둘째 몫이다
+ * ## 타겟을 보이는 것이 이 화면의 둘째 몫이다 — **HTML 번들에서만**
  *
  * 상호작용 탭의 `navigate`·`openModal` 타겟은 **손으로 적는 자유 입력**이다(재서 확인했다 —
  * `panels/interaction-panel.tsx`에 고르개가 없고, 그 자리 주석이 *"페이지 경로는 목록에서
  * 고를 수 없다"*고 적혀 있다). 서버가 조립하는 문자열이 무엇인지 알 길이 오늘 여기뿐이라,
  * 페이지마다 그 문자열을 그대로 보인다.
+ *
+ * **pptx에는 그 목록을 안 보인다.** 슬라이드 사이에는 링크가 생기지 않으므로(§2.1이 도형
+ * 변환을 포기했다) 그 경로는 pptx 안에서 **아무것도 가리키지 않는다.** 값이 있는데 그 값이
+ * 아무것도 안 가리키는 것은 `routes/export.ts`의 D7이 응답에서 막은 바로 그 부류다. 대신
+ * *"어느 페이지가 실리는가"*는 제목 목록으로 말한다 — D6의 첫 몫은 형식과 무관하다.
  *
  * ## 닫는 방식은 공용이다
  *
@@ -40,12 +71,17 @@
  *
  * ## 새 런타임 의존이 없다
  *
- * `<button>`·`<a download>`·`useState`뿐이다.
+ * `<button>`·`<a download>`·`useState`·`useRef`뿐이다.
  */
-import { useState, type ReactElement } from 'react'
+import { useRef, useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import type { ExportPreview } from '../api/types'
+import type {
+  ExportFormat,
+  ExportPreview,
+  HtmlExportPreview,
+  PptxExportPreview,
+} from '../api/types'
 import { usePopoverDismiss } from './use-popover-dismiss'
 
 /** 조회 상태. 성공과 실패를 판별 유니온으로 가른다(`routes/editor.tsx`와 같은 이유). */
@@ -58,23 +94,49 @@ type PreviewState =
 /** 서버가 이유를 주지 않은 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '내보낼 것을 확인하지 못했습니다'
 
+/** 열 때의 형식. **기억하지 않는다** — 위 머리말의 근거. */
+const DEFAULT_FORMAT: ExportFormat = 'html'
+
 export function ExportPanel(props: { projectId: string }): ReactElement {
   const api = useApi()
   const [open, setOpen] = useState(false)
+  /** **고른** 형식. 토글의 눌림이 이것을 따른다 — 부르는 동안에도 무엇을 고른 상태인지 보인다. */
+  const [format, setFormat] = useState<ExportFormat>(DEFAULT_FORMAT)
   const [state, setState] = useState<PreviewState>({ status: 'idle' })
+  /**
+   * 마지막으로 보낸 조회의 표. **늦게 온 앞 형식의 답을 버리는 자리다**(위 머리말).
+   * `useState`가 아니라 `useRef`인 것은 이 값이 화면을 다시 그릴 이유가 아니기 때문이다.
+   */
+  const latest = useRef(0)
   /**
    * **토글까지 감싸는 상자에 건다.** 그래야 토글 위의 `mousedown`이 *"바깥"*이 아니고,
    * 닫는 일을 토글의 `onClick` 하나가 한다(그 훅의 머리말).
    */
   const rootRef = usePopoverDismiss(open, () => setOpen(false))
 
-  async function load(): Promise<void> {
+  async function load(next: ExportFormat): Promise<void> {
+    const ticket = (latest.current += 1)
+    setFormat(next)
+    // **여기서 앞 형식의 결과가 사라진다.** 두 갈래는 다른 것을 말하므로 섞여 보이면 안 된다.
     setState({ status: 'loading' })
     try {
-      setState({ status: 'ready', preview: await api.getExportPreview(props.projectId) })
+      const preview = await api.getExportPreview(props.projectId, next)
+      if (latest.current !== ticket) return
+      setState({ status: 'ready', preview })
     } catch (caught) {
+      if (latest.current !== ticket) return
       setState({ status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) })
     }
+  }
+
+  /**
+   * **이미 고른 형식을 다시 눌러도 다시 부르지 않는다** — 이 조회는 번들을 실제로 만들어
+   * 보는 요청이라 비싸고, 같은 것을 누르는 것은 *"다시 보자"*가 아니라 잘못 누른 것이다.
+   * 다시 보려면 닫았다 연다(열 때마다 다시 부르는 것이 이 화면의 규칙이다).
+   */
+  function choose(next: ExportFormat): void {
+    if (next === format) return
+    void load(next)
   }
 
   return (
@@ -88,7 +150,7 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
           setOpen(next)
           // **열 때마다 다시 본다.** 그 사이 페이지를 고쳤을 수 있고, 이 화면이 말하는 것은
           // 전부 *"지금 내보내면 무엇이 나오는가"*다 — 낡은 답을 보이면 D6이 뒤집힌다.
-          if (next) void load()
+          if (next) void load(DEFAULT_FORMAT)
         }}
       >
         내보내기
@@ -96,6 +158,28 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
 
       {open && (
         <div className="wb-shell-export-body" role="group" aria-label="내보내기">
+          {/* **맨 위다.** 아래의 모든 문장이 이 고름에 매여 있으므로, 읽기 전에 무엇을 읽는
+              중인지 알아야 한다. 눌림은 **고른 것**을 따른다 — 응답을 기다리는 동안에도
+              고름은 이미 정해져 있다. */}
+          <div className="wb-shell-export-formats" role="group" aria-label="내보내기 형식">
+            <button
+              type="button"
+              className="wb-shell-export-format"
+              aria-pressed={format === 'html'}
+              onClick={() => choose('html')}
+            >
+              HTML 번들
+            </button>
+            <button
+              type="button"
+              className="wb-shell-export-format"
+              aria-pressed={format === 'pptx'}
+              onClick={() => choose('pptx')}
+            >
+              PPTX
+            </button>
+          </div>
+
           {state.status === 'loading' && <p role="status">내보낼 것을 확인하는 중…</p>}
           {/* 세션이 끊겼으면 문장이 아니라 로그인이다(`api/failure.tsx`의 D5) — 이
               화면만 다르게 굴면 사용자는 *"내보내기가 고장 났다"*로 읽는다. */}
@@ -105,15 +189,22 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
             ) : (
               <p role="alert">{state.failure.message}</p>
             ))}
-          {state.status === 'ready' && <Summary preview={state.preview} projectId={props.projectId} />}
+          {/* **`preview.format`으로 가른다 — 고른 형식이 아니라.** 그려지는 값과 그 값이
+              나온 응답이 같은 것이어야 한다. */}
+          {state.status === 'ready' &&
+            (state.preview.format === 'pptx' ? (
+              <PptxSummary preview={state.preview} projectId={props.projectId} />
+            ) : (
+              <HtmlSummary preview={state.preview} projectId={props.projectId} />
+            ))}
         </div>
       )}
     </div>
   )
 }
 
-function Summary(props: { preview: ExportPreview; projectId: string }): ReactElement {
-  const api = useApi()
+/** HTML 정적 번들(zip)이 말하는 것. */
+function HtmlSummary(props: { preview: HtmlExportPreview; projectId: string }): ReactElement {
   const { preview } = props
 
   return (
@@ -179,14 +270,102 @@ function Summary(props: { preview: ExportPreview; projectId: string }): ReactEle
         </ul>
       </section>
 
-      {/* 파일 이름도 주소도 서버가 준 것을 그대로 쓴다 — 지어내면 두 벌이 된다. */}
-      <a
-        className="wb-shell-export-download"
-        href={api.exportUrl(props.projectId)}
-        download={preview.fileName}
-      >
-        {preview.fileName} 내려받기
-      </a>
+      <DownloadLink preview={preview} projectId={props.projectId} />
     </>
+  )
+}
+
+/**
+ * PPTX가 말하는 것 — **화면 이미지에 대한 셋**이다(P10-2 D4·D5).
+ *
+ * **세 자리로 가른다.** 서버가 `screenless`와 `screenFailures`를 가른 근거가 그대로
+ * 여기에도 선다: *"아직 아무도 안 만들었다"*와 *"만들려다 실패했다"*를 한 자리에 접으면
+ * 화면이 거짓을 말한다(`services/export-pptx.ts`의 D5). 셋째 `fontWarning`은 **기계의
+ * 성질**이라 페이지 목록이 아니라 문장 하나다.
+ *
+ * **`fontWarning`이 맨 위인 것은 그것이 나머지의 이유이기 때문이다.** 한글 글꼴이 없으면
+ * 아무것도 안 그리므로 `screenless`가 **전부**가 된다 — 둘이 함께 뜰 때 이유를 먼저 읽고
+ * 목록을 나중에 읽는 순서가 된다.
+ */
+function PptxSummary(props: { preview: PptxExportPreview; projectId: string }): ReactElement {
+  const { preview } = props
+
+  return (
+    <>
+      <p className="wb-shell-export-count">페이지 {preview.pages.length}장을 내보냅니다</p>
+
+      {preview.fontWarning !== null && (
+        <section className="wb-shell-export-warning" aria-label="글꼴 경고">
+          <h3 className="wb-shell-export-heading">화면 이미지를 그리지 못한 이유가 있습니다</h3>
+          {/* **서버가 준 문장을 그대로 쓴다** — 글자를 한 자리에만 둔다(P10-2 D4의
+              `NO_KOREAN_FONT`). 화면이 다시 지으면 미리보기와 파일이 다른 말을 한다. */}
+          <p>{preview.fontWarning}</p>
+        </section>
+      )}
+
+      {preview.screenless.length > 0 && (
+        <section className="wb-shell-export-warning" aria-label="화면 이미지가 없는 페이지">
+          <h3 className="wb-shell-export-heading">화면 이미지 없이 실리는 페이지가 있습니다</h3>
+          <p>아래 페이지의 슬라이드에는 글자만 실립니다.</p>
+          <ul className="wb-shell-export-list">
+            {preview.screenless.map((title, index) => (
+              <li key={`${title}-${index}`}>{title}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {preview.screenFailures.length > 0 && (
+        <section className="wb-shell-export-warning" aria-label="화면 이미지를 그리다 실패한 페이지">
+          <h3 className="wb-shell-export-heading">화면 이미지를 그리다 실패했습니다</h3>
+          {/* **이유를 페이지마다 그대로 보인다.** 브라우저가 낸 말이거나 서버가 정한
+              말이고(`services/screen-render.ts`), 화면이 그것을 뭉뚱그리면 왜 실패했는지
+              아는 길이 다시 사라진다. */}
+          <ul className="wb-shell-export-list">
+            {preview.screenFailures.map((failure, index) => (
+              <li key={`${failure.title}-${index}`}>
+                {failure.title} — {failure.reason}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* **제목만이다 — 경로가 아니다.** 슬라이드 사이에는 링크가 생기지 않으므로 그 경로가
+          pptx 안에서 아무것도 가리키지 않는다(위 머리말). */}
+      <section className="wb-shell-export-pages" aria-label="슬라이드에 실릴 페이지">
+        <h3 className="wb-shell-export-heading">슬라이드에 실릴 페이지</h3>
+        <ul className="wb-shell-export-list">
+          {preview.pages.map((page) => (
+            <li key={page.id}>{page.title}</li>
+          ))}
+        </ul>
+      </section>
+
+      <DownloadLink preview={preview} projectId={props.projectId} />
+    </>
+  )
+}
+
+/**
+ * 내려받기 앵커. **형식마다 다시 적지 않는다** — 이름과 주소를 짓는 규칙이 두 벌이 되면
+ * 한쪽만 낡는다(`routes/export.ts`의 `sendFile`이 서버 쪽에서 같은 판단을 한다).
+ *
+ * **형식은 `preview.format`에서 온다 — 고른 형식이 아니다.** 그래야 위에 그려진 경고와
+ * 이 링크가 **같은 응답**에서 나온 것이 된다. 파일 이름도 주소도 서버가 준 것을 그대로
+ * 쓴다 — 지어내면 두 벌이 된다.
+ */
+function DownloadLink(props: { preview: ExportPreview; projectId: string }): ReactElement {
+  const api = useApi()
+  const { preview } = props
+
+  return (
+    <a
+      className="wb-shell-export-download"
+      href={api.exportUrl(props.projectId, preview.format)}
+      download={preview.fileName}
+    >
+      {preview.fileName} 내려받기
+    </a>
   )
 }

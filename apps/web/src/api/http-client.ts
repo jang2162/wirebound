@@ -252,23 +252,40 @@ function isProjectDetail(value: unknown): boolean {
 }
 
 /**
- * 내보내기 미리보기(P8-4). **네 배열과 `fileName`이 실제로 그 모양인지 본다.**
+ * 내보내기 미리보기(P8-4 · P10-1 D7). **배열들과 `fileName`이 실제로 그 모양인지 본다.**
  *
- * 화면이 넷을 전부 전개하고 `fileName`을 `<a download>`에 그대로 건다 — 배열이 아니면
+ * 화면이 배열을 전부 전개하고 `fileName`을 `<a download>`에 그대로 건다 — 배열이 아니면
  * 그 자리에서 던지고 이 화면을 감싸는 오류 경계가 없다(`apps/web`의 경계는 캔버스 하나다).
  * 항목의 속 내용까지 보지 않는 것은 `restoreResult`가 같은 자리에서 한 판단과 같다:
  * 빠진 필드는 문장에 `undefined`가 보일 뿐이고, **전개가 던지는 것과 손해의 등급이 다르다.**
+ *
+ * **`format`으로 먼저 가른다.** 응답의 두 갈래는 **다른 배열들**을 들고(`api/types.ts`의
+ * 판별 유니온) 화면은 `format`을 보고 어느 쪽을 그릴지 정한다. 그래서 여기서 `format`을
+ * 안 보면 *"`format: 'pptx'`인데 `screenFailures`가 없는"* 응답이 통과하고, 화면은 그것을
+ * pptx로 그리다 `undefined.map`에서 죽는다 — **모르는 `format`도 막는다**(그 값이 오면
+ * 화면의 두 갈래 어느 쪽도 안 그려 상자가 조용히 빈다).
  */
 function isExportPreview(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    Array.isArray(value['pages']) &&
-    Array.isArray(value['duplicateTargets']) &&
-    Array.isArray(value['brokenLinks']) &&
-    Array.isArray(value['errors']) &&
-    typeof value['fileName'] === 'string' &&
-    value['fileName'] !== ''
-  )
+  if (!isRecord(value)) return false
+  if (!Array.isArray(value['pages'])) return false
+  if (typeof value['fileName'] !== 'string' || value['fileName'] === '') return false
+
+  if (value['format'] === 'pptx') {
+    // `fontWarning`은 배열이 아니라 **문장 하나**다 — 없으면 `null`이고 화면은 그때
+    // 아무것도 안 그린다. 전개하는 값이 아니라서 여기서 보지 않는다(`snapshot`의
+    // `createdAt`과 같은 판단: *"가설적인 경로에 가드를 달지 않는다"*).
+    return Array.isArray(value['screenless']) && Array.isArray(value['screenFailures'])
+  }
+
+  if (value['format'] === 'html') {
+    return (
+      Array.isArray(value['duplicateTargets']) &&
+      Array.isArray(value['brokenLinks']) &&
+      Array.isArray(value['errors'])
+    )
+  }
+
+  return false
 }
 
 const SHAPES = {
@@ -1257,11 +1274,20 @@ export function createHttpClient(
         `${projectPath(projectId)}/snapshots/${snapshotId}/restore`,
         SHAPES.restoreResult,
       ),
-    getExportPreview: (projectId) =>
-      request<ExportPreview>('GET', `${projectPath(projectId)}/export/preview`, SHAPES.exportPreview),
+    getExportPreview: (projectId, format) =>
+      request<ExportPreview>(
+        'GET',
+        `${projectPath(projectId)}/export/preview?format=${format}`,
+        SHAPES.exportPreview,
+      ),
     // **요청을 보내지 않는다** — 앵커에 걸 주소를 만들 뿐이다. 그래도 여기 있는 것은
     // 주소를 아는 자리가 하나여야 하기 때문이다(`api/client.ts`의 머리말).
-    exportUrl: (projectId) => `${API_PREFIX}${projectPath(projectId)}/export`,
+    //
+    // **`html`에도 `?format=`을 붙인다.** 서버의 기본값이 `html`이라 생략해도 같은 것을
+    // 받지만(`routes/export.ts`), 생략하는 가지를 두면 *"형식을 붙이는 길"*과 *"안 붙이는
+    // 길"* 둘이 생기고 어느 쪽이 도는지는 주소를 눈으로 봐야 안다. 붙는 값은 `ExportFormat`
+    // 이라 인코딩이 필요한 글자가 애초에 못 들어간다.
+    exportUrl: (projectId, format) => `${API_PREFIX}${projectPath(projectId)}/export?format=${format}`,
     listMyRevisions: (projectId, pageId) =>
       request<RevisionSummary[]>(
         'GET',
