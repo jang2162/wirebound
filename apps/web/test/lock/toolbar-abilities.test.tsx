@@ -565,15 +565,15 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
   })
 
   /**
-   * **버튼을 끄는 것만으로는 안 닫히는 창이 하나 있다.** 고르개를 연 **뒤에** 잠금이
-   * 도착하면 목록이 그대로 남고, 거기서 `패턴 추가`를 누르면 편집이 나간다 — 회색으로
-   * 만든 버튼을 우회하는 길이다. 그래서 고르개도 같은 값으로 그린다
-   * (`panels/structure-toolbar.tsx`의 렌더 주석).
+   * **버튼을 끄는 것만으로는 안 닫히는 창이 있다.** 고르개를 연 **뒤에** 잠금이 도착하면
+   * 목록이 그대로 남고, 거기서 `추가`를 누르면 편집이 나간다 — 회색으로 만든 버튼을
+   * 우회하는 길이다. 그래서 고르개도 같은 값으로 그린다
+   * (`panels/structure-toolbar.tsx`의 `visiblePicker`).
    *
-   * **타입 고르개에는 같은 창이 남아 있다** — 재서 이월에 적었다(`add …/children/2`가
-   * 나가 423을 받는다). 그쪽 조건은 `abilities`의 두 키라 이 슬라이스의 범위 밖이다.
+   * **고르개 넷을 다 태운다.** 조건이 넷 다 다르므로(그 함수의 표) 하나만 재면 나머지가
+   * 조용히 열려 있어도 안 죽는다 — 실제로 한 커밋이 셋 중 둘만 닫은 채 지나갔다.
    */
-  it('고르개가 열린 뒤에 잠금이 오면 목록이 사라진다 — 우회로가 남지 않는다', async () => {
+  it('패턴 고르개 — 열린 뒤에 잠금이 오면 목록이 사라진다', async () => {
     const view = await board()
     select('Card')
     fireEvent.click(toolButton('패턴 넣기'))
@@ -582,6 +582,58 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     view.lock([foreign('n-box')])
 
     expect(screen.queryByRole('group', { name: '패턴 고르기' })).toBeNull()
+    expect(view.calls).toEqual([])
+  })
+
+  it('프리셋 고르개도 같다 — 잠금이 하나라도 오면 사라진다', async () => {
+    const view = await board()
+    fireEvent.click(toolButton('프리셋'))
+    expect(await screen.findByRole('group', { name: '프리셋 고르기' })).toBeTruthy()
+
+    // 프리셋은 페이지 통째라 **어느 노드가 잠기든** 부딪친다 — 고른 것과 무관하다.
+    view.lock([foreign('n-1')])
+
+    expect(screen.queryByRole('group', { name: '프리셋 고르기' })).toBeNull()
+    expect(view.calls).toEqual([])
+  })
+
+  /**
+   * **타입 고르개가 마지막 하나였다.** `안에 추가`·`아래 추가`가 여는 것이라 **여는
+   * 버튼은 이미 막혀 있었는데**, 연 뒤에 잠금이 오는 창만 남아 있었다 — 그때 목록에서
+   * 고르면 `add /root/children/1/children/2`가 나가 **423 + "편집 1개가 취소됐습니다"**를
+   * 받았다(재현해 확인한 값이다).
+   *
+   * **잠금이 풀리면 목록이 돌아오는 것도 함께 잰다.** `adding`을 비우지 않는 것이 판단이고
+   * (잠깐 잠긴 사이에 고르던 것을 잃지 않는다), 비우는 구현과 여기서 갈린다.
+   */
+  it('타입 고르개도 같다 — 사라지고, 잠금이 풀리면 돌아온다', async () => {
+    const view = await board()
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+    expect(await screen.findByRole('group', { name: '타입 고르기' })).toBeTruthy()
+
+    view.lock([foreign('n-box')])
+    expect(screen.queryByRole('group', { name: '타입 고르기' })).toBeNull()
+    expect(view.calls).toEqual([])
+
+    view.lock([])
+
+    expect(screen.getByRole('group', { name: '타입 고르기' })).toBeTruthy()
+  })
+
+  /**
+   * **`아래 추가`가 여는 것도 같은 목록이지만 조건이 다르다**(`addAfter` — 루트가 아닌
+   * 노드면 참이다). 하나만 재면 두 키 중 한쪽만 본 구현이 안 죽는다.
+   */
+  it('`아래 추가`로 연 목록도 사라진다 — 조건이 두 키다', async () => {
+    const view = await board()
+    select('Card')
+    fireEvent.click(toolButton('아래 추가'))
+    expect(await screen.findByRole('group', { name: '타입 고르기' })).toBeTruthy()
+
+    view.lock([foreign('n-box')])
+
+    expect(screen.queryByRole('group', { name: '타입 고르기' })).toBeNull()
     expect(view.calls).toEqual([])
   })
 

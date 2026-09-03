@@ -166,6 +166,51 @@ export interface StructureCommands {
  */
 export type OpenPicker = 'inside' | 'after' | 'pattern' | 'preset'
 
+/**
+ * **지금 그려도 되는 고르개.** 닫혀 있거나 **그 조작이 지금 막혔으면** `null`이다.
+ *
+ * # 왜 «열려 있는가»와 «그려도 되는가»를 가르나
+ *
+ * 고르개를 연 **뒤에** 조건이 바뀔 수 있다 — 남이 그 자리를 잠그는 것이 그 창이다.
+ * 목록을 그대로 남겨 두면 사용자가 그 안의 `추가`를 눌러 편집을 내고, **회색으로 만든
+ * 버튼을 우회한다.** 실측(패턴): 잠긴 노드를 고른 채 목록을 열어 두고 잠금이 도착한 뒤
+ * 꽂으면 `add …/children/2`가 나가 **423**을 받고 낙관적 적용이 붙었다 사라졌다.
+ * **타입 고르개도 같은 값이었다** — `안에 추가`로 연 뒤 잠금이 오면 목록이 남고,
+ * 거기서 고르면 같은 포인터로 같은 423을 받았다.
+ *
+ * # 셋이 한 자리에 있는 것이 요점이다
+ *
+ * 조건은 고르개마다 다르다(아래 표). 그것을 렌더에 흩어 두면 **닫아야 할 창이 셋인데
+ * 닫힌 것은 둘**인 상태가 생기고, 실제로 그런 커밋이 한 번 있었다. 여기 한 자리에 두면
+ * 고르개가 늘 때 그 자리가 보인다.
+ *
+ * | 고르개 | 그려도 되는 조건 | 그 조건이 잠금을 어떻게 보나 |
+ * |---|---|---|
+ * | `'inside'` | `abilities.addInside` | `structureAbilities`가 잠금을 지난다 |
+ * | `'after'` | `abilities.addAfter` | 같음 |
+ * | `'pattern'` | `!patternLocked` | 꽂힐 자리의 잠금(고른 노드 · 없으면 루트) |
+ * | `'preset'` | `!presetLocked` | 페이지에 남의 잠금이 하나라도 |
+ *
+ * **`adding`을 비우지 않는다.** 조건이 풀리면 열려 있던 것이 그대로 돌아온다 — 잠깐
+ * 잠긴 사이에 사용자가 고르던 것을 잃지 않는다.
+ *
+ * **판정을 새로 짓지 않는다** — 넷 다 `useStructureCommands`가 이미 낸 값을 읽을 뿐이다.
+ */
+export function visiblePicker(commands: StructureCommands): OpenPicker | null {
+  switch (commands.adding) {
+    case 'inside':
+      return commands.abilities.addInside ? 'inside' : null
+    case 'after':
+      return commands.abilities.addAfter ? 'after' : null
+    case 'pattern':
+      return commands.patternLocked ? null : 'pattern'
+    case 'preset':
+      return commands.presetLocked ? null : 'preset'
+    default:
+      return null
+  }
+}
+
 export function useStructureCommands(props: {
   projectId: string
   pageId: string | undefined
@@ -542,6 +587,8 @@ export function StructureToolbar(props: {
 }): ReactElement {
   const { commands } = props
   const { abilities } = commands
+  /** 지금 그려도 되는 고르개. 열려 있어도 그 조작이 막혔으면 `null`이다. */
+  const picker = visiblePicker(commands)
   /**
    * 상태줄의 id. **`aria-describedby`가 그것을 가리킨다** — `useId`인 것은 이 툴바가 한
    * 화면에 둘 이상 그려져도 id가 겹치지 않게 하기 위해서다(React가 렌더 트리마다 다른
@@ -677,28 +724,21 @@ export function StructureToolbar(props: {
       </p>
       {/* 목록은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 노드에 붙는
           작업인지가 보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이
-          그대로 남는다. */}
-      {(commands.adding === 'inside' || commands.adding === 'after') && (
+          그대로 남는다.
+
+          **`adding`이 아니라 `visiblePicker`를 본다** — 연 뒤에 조건이 바뀌는 창을 그
+          함수가 갖는다(왜 셋이 한 자리인지도 거기 있다). */}
+      {(picker === 'inside' || picker === 'after') && (
         <TypePicker onPick={commands.pick} onCancel={commands.cancelAdd} />
       )}
-      {/* **고르개가 열린 «뒤에» 잠금이 도착할 수 있다.** 그때 목록을 남겨 두면 사용자가
-          그 안의 `추가`를 눌러 423을 받는다 — 버튼을 회색으로 만든 것이 헛일이 된다.
-          목록이 사라지고 버튼이 회색이 되며 상태줄이 이유를 말하는 것이 그 순간 화면에
-          남는 전부다(조용히 실패하는 것보다 낫다는 판단은 `addPattern`의 갈래 표와 같다).
-          `adding`을 비우지 않는 것은 이 조건이 풀리면 열려 있던 것이 그대로 돌아오기
-          때문이다 — 잠깐 잠긴 사이에 사용자가 고르던 것을 잃지 않는다.
-
-          **타입 고르개에도 같은 창이 있다**(`'inside'`·`'after'`) — 재서 확인했고 이월에
-          적었다. 여기서 함께 닫지 않는 것은 그쪽 조건이 `abilities` 두 키라 이 슬라이스의
-          범위 밖이기 때문이다. */}
-      {commands.adding === 'pattern' && !commands.patternLocked && (
+      {picker === 'pattern' && (
         <PatternPicker
           projectId={props.projectId}
           onPick={commands.pickPattern}
           onCancel={commands.cancelAdd}
         />
       )}
-      {commands.adding === 'preset' && !commands.presetLocked && (
+      {picker === 'preset' && (
         <PresetPicker
           projectId={props.projectId}
           pageId={props.pageId}
