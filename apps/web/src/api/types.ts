@@ -399,13 +399,39 @@ export interface RestoreResult {
 }
 
 /**
- * 내보내기 미리보기(§11.3 — P8-4). **내려받기 버튼이 조용히 성공하면 안 된다.**
+ * 이 서버가 낼 줄 아는 형식(`apps/api/src/routes/export.ts`의 `EXPORT_FORMATS`).
+ *
+ * **유니온에서 뽑는다** — 아래 두 갈래에 형식을 더하면 이 타입이 저절로 따라오고, 손으로
+ * 적은 목록이 갈래와 어긋나는 날이 오지 않는다.
+ */
+export type ExportFormat = ExportPreview['format']
+
+/**
+ * 내보내기 미리보기(§11.3 — P8-4 · P10-1 D7). **내려받기 버튼이 조용히 성공하면 안 된다.**
  *
  * 그리지 못한 노드가 있어도 폴백이 든 HTML은 눈으로는 그럴듯한 한 장이고, **번들은 그것을
  * 남에게 전달한다.** 그래서 화면이 내려받기 **전에** 무엇이 실릴지와 무엇이 어긋났는지
  * 볼 수 있어야 한다.
+ *
+ * # 형식마다 **다른 것**을 말한다 — 그래서 판별 유니온이다
+ *
+ * `duplicateTargets`·`brokenLinks`·`errors`·`themeId`는 **HTML 번들의 성질이다.** PPTX는
+ * 페이지 사이 링크를 만들지 않고 §6의 테마도 안 쓴다 — 대신 **화면 이미지**에 대해 셋을
+ * 낸다(`screenless`·`screenFailures`·`fontWarning`). 서버가 이미 그렇게 가른 것을
+ * (`routes/export.ts`의 D7) 화면 쪽 타입이 그대로 받는다.
+ *
+ * **두 모양을 옵셔널로 뭉치지 않는다.** 뭉치면 *"pptx인데 `brokenLinks`를 읽는"* 코드가
+ * **타입 검사를 통과하고**, 그 자리는 `undefined.length`로 렌더 도중 죽는다 — 이 화면을
+ * 감싸는 오류 경계가 없다(`api/http-client.ts`의 `isExportPreview`가 같은 근거를 든다).
+ *
+ * **`format`은 서버가 응답에 되싣는 값이다** — 키 유무로 갈래를 짐작하지 않는다
+ * (`routes/export.ts`: *"화면이 어느 갈래를 받았는지 키 유무로 짐작하지 않는다"*).
  */
-export interface ExportPreview {
+export type ExportPreview = HtmlExportPreview | PptxExportPreview
+
+/** HTML 정적 번들(zip)의 미리보기. */
+export interface HtmlExportPreview {
+  format: 'html'
   /** 번들에 실릴 페이지들. **순서가 곧 번들의 순서다.** */
   pages: ExportPagePlan[]
   /**
@@ -420,6 +446,45 @@ export interface ExportPreview {
   themeId: string | null
   /** 내려받을 때 붙을 이름. **화면이 지어내지 않는다** — 두 벌이면 갈린다. */
   fileName: string
+}
+
+/**
+ * PPTX의 미리보기(P10-1 D7 · P10-2 D4·D5).
+ *
+ * **`pages`는 HTML 갈래와 같은 모양이다** — 서버의 `ProjectPptx.pages`가 번들의 것과 같은
+ * 값을 낸다. 나머지 셋은 **화면 이미지**에 대한 것이고 HTML 번들에는 없는 축이다.
+ */
+export interface PptxExportPreview {
+  format: 'pptx'
+  /** 슬라이드에 실릴 페이지들. **순서가 곧 슬라이드 차례다.** */
+  pages: ExportPagePlan[]
+  /**
+   * **아무도 그리지 않은** 페이지 이름들(P10-2 D5). 그리는 자가 없으면 **전부**다.
+   *
+   * **`screenFailures`와 접지 마라** — *"아직 아무도 안 만들었다"*와 *"만들려다 실패했다"*가
+   * 같은 말이 되면 화면이 거짓을 말한다(`services/export-pptx.ts`의 D5).
+   */
+  screenless: string[]
+  /** **그리려다 죽은** 페이지들과 그 이유(P10-2 D5). `screenless`와 겹치지 않는다. */
+  screenFailures: ExportScreenFailure[]
+  /**
+   * 그린 기계에 한글 글꼴이 없었다(P10-2 D4). 없으면 `null`이다.
+   *
+   * **이 값이 화면에 닿지 않으면 이유가 아무 데도 안 간다** — 브라우저나 글꼴이 없는
+   * 서버에서 pptx를 내보내면 파일은 200으로 나오고 슬라이드는 *"화면 이미지가 실리지
+   * 않았습니다"*만 말한다(P10-2 이월 §3의 *"`apps/web`이 pptx를 모른다"*).
+   */
+  fontWarning: string | null
+  /** 내려받을 때 붙을 이름. **화면이 지어내지 않는다** — 두 벌이면 갈린다. */
+  fileName: string
+}
+
+/** 화면 이미지를 못 그린 페이지 하나와 그 이유(P10-2 D5). */
+export interface ExportScreenFailure {
+  /** 페이지의 번들 이름. **`pages[].title`·`screenless[]`와 같은 이름이다.** */
+  title: string
+  /** 사람이 읽을 한 줄. 브라우저가 낸 말이거나 서버가 정한 말이다. */
+  reason: string
 }
 
 export interface ExportPagePlan {

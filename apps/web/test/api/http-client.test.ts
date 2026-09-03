@@ -189,14 +189,28 @@ const restoreResult = {
   themes: [{ layoutId: 'l1', themeId: 't1', differs: false }],
 }
 
-/** `GET .../export/preview`의 응답(P8-4). */
+/** `GET .../export/preview?format=html`의 응답(P8-4). */
 const exportPreview = {
+  format: 'html',
   pages: [{ id: 'pg1', title: '회원 목록', target: 'page:관리자/회원/목록' }],
   duplicateTargets: [],
   brokenLinks: [],
   errors: [],
   themeId: 't1',
   fileName: 'wirebound-export-proj.zip',
+}
+
+/**
+ * `GET .../export/preview?format=pptx`의 응답(P10-1 D7). **위와 다른 모양이다** —
+ * 형식마다 다른 것을 말하므로 shape 검사도 갈래마다 재야 한다.
+ */
+const pptxPreview = {
+  format: 'pptx',
+  pages: [{ id: 'pg1', title: '회원 목록', target: 'page:관리자/회원/목록' }],
+  screenless: ['회원 목록'],
+  screenFailures: [{ title: '회원 상세', reason: '페이지를 여는 데 실패했습니다' }],
+  fontWarning: null,
+  fileName: 'wirebound-export-proj.pptx',
 }
 
 /** `GET .../revisions?mine=true`의 항목 하나. */
@@ -460,12 +474,21 @@ const ENDPOINTS: Array<{
     body: restoreResult,
     call: (c) => c.restoreSnapshot('p1', 's1'),
   },
+  // **형식이 쿼리로 간다**(P10-1 D7 — 새 라우트가 아니라 `?format=`이다). `html`에도 붙는다:
+  // 생략하는 가지를 두면 형식을 붙이는 길과 안 붙이는 길이 둘 생긴다(`http-client.ts`).
   {
     client: 'getExportPreview',
-    url: '/api/projects/p1/export/preview',
+    url: '/api/projects/p1/export/preview?format=html',
     method: 'GET',
     body: exportPreview,
-    call: (c) => c.getExportPreview('p1'),
+    call: (c) => c.getExportPreview('p1', 'html'),
+  },
+  {
+    client: 'getExportPreview',
+    url: '/api/projects/p1/export/preview?format=pptx',
+    method: 'GET',
+    body: pptxPreview,
+    call: (c) => c.getExportPreview('p1', 'pptx'),
   },
 ]
 
@@ -617,7 +640,22 @@ const SHAPE_CASES: Array<{
     shape: 'exportPreview',
     broken: { ...exportPreview, brokenLinks: null },
     ok: exportPreview,
-    call: (c) => c.getExportPreview('p1'),
+    call: (c) => c.getExportPreview('p1', 'html'),
+  },
+  {
+    // **pptx 갈래는 다른 배열들을 든다**(P10-1 D7). `format`을 안 보고 통과시키면 화면이
+    // 그것을 pptx로 그리다 `undefined.map`에서 죽는다.
+    shape: 'exportPreview',
+    broken: { ...pptxPreview, screenFailures: null },
+    ok: pptxPreview,
+    call: (c) => c.getExportPreview('p1', 'pptx'),
+  },
+  {
+    // **모르는 형식도 막는다** — 화면의 두 갈래 어느 쪽도 안 그려 상자가 조용히 빈다.
+    shape: 'exportPreview',
+    broken: { ...exportPreview, format: 'docx' },
+    ok: exportPreview,
+    call: (c) => c.getExportPreview('p1', 'html'),
   },
 ]
 
@@ -683,7 +721,9 @@ describe('표의 완전성', () => {
     const stub = stubFetch(jsonResponse(200, exportPreview))
     const client = createHttpClient(stub.fetchImpl)
 
-    expect(client.exportUrl('p1')).toBe('/api/projects/p1/export')
+    expect(client.exportUrl('p1', 'html')).toBe('/api/projects/p1/export?format=html')
+    // **형식이 주소에 실린다.** 이것이 빠지면 화면은 pptx를 보이면서 zip을 받는다.
+    expect(client.exportUrl('p1', 'pptx')).toBe('/api/projects/p1/export?format=pptx')
     // **요청이 아니다** — 부르는 것만으로 서버에 가면 이 함수의 존재 이유가 사라진다.
     expect(stub.calls).toHaveLength(0)
   })

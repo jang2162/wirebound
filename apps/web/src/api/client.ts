@@ -9,6 +9,7 @@ import type { PatchOp, WbNode } from '@wirebound/schema'
 import type { Theme } from '@wirebound/themes'
 import type {
   Comment,
+  ExportFormat,
   ExportPreview,
   CommentCreated,
   MarkerChange,
@@ -419,10 +420,10 @@ export interface ApiClient {
    * **페이지가 하나도 없으면 409다.** 빈 번들을 내면 받는 사람이 푼 뒤에야 비었다는 것을
    * 안다.
    */
-  getExportPreview(projectId: string): Promise<ExportPreview>
+  getExportPreview(projectId: string, format: ExportFormat): Promise<ExportPreview>
   /**
-   * zip을 받는 **주소**. 요청을 보내지 않는다 — 반환한 것을 `<a download href>`에 그대로
-   * 건다.
+   * 파일을 받는 **주소**(zip 또는 pptx). 요청을 보내지 않는다 — 반환한 것을
+   * `<a download href>`에 그대로 건다.
    *
    * **`fetch`로 받아 blob으로 넘기지 않는 이유 둘.** 번들 전체가 페이지 수의 제곱이라
    * (P8-2 이월 §4) 다 받아 메모리에 드는 것이 그대로 비용이 되고, `URL.createObjectURL`은
@@ -431,8 +432,13 @@ export interface ApiClient {
    *
    * **그래도 이 함수가 `ApiClient`에 있는 이유:** 주소를 아는 자리가 하나여야 한다.
    * 화면이 `/api/…`를 직접 적기 시작하면 경로가 두 곳이 된다.
+   *
+   * **`format`에 기본값을 두지 않는다.** 서버는 기본이 `html`이지만(P8-4가 만든 URL이
+   * 인자 없이 계속 zip을 받아야 한다) **이쪽에서 생략을 허용하면** 형식을 고를 줄 아는
+   * 화면이 그 인자를 빠뜨렸을 때 *"pptx를 보고 zip을 받는"* 상태가 조용히 선다. 필수로
+   * 두면 타입 검사가 모든 호출부에서 그것을 묻는다.
    */
-  exportUrl(projectId: string): string
+  exportUrl(projectId: string, format: ExportFormat): string
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */
