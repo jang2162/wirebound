@@ -1019,7 +1019,15 @@ describe('밖에서 온 루트 잠금 (§7.2 — 화면은 안 보내지만 받�
 
     expect(store.lockedBy('n_root')).toMatchObject({ nodeId: 'n_root', userId: 'u_bora' })
     // 이미 고른 자리를 스토어가 되돌리지는 않는다(`setLocks`는 선택을 안 건드린다) — 대신
-    // **어디로도 옮겨가지 못한다.** 그 상태가 화면에서 어떻게 보이는지는 이월에 적었다.
+    // **어디로도 옮겨가지 못한다.**
+    //
+    // **그 상태가 화면에서 어떻게 보이는지는 이제 도구모음 아래 상태줄이 말한다**
+    // (*"○○님이 편집 중이라 고를 수 없습니다"* — `panels/toolbar-status.ts`, 케이스는
+    // `test/lock/soft-lock.test.tsx`의 *"상태줄 — 잠긴 조상의 이유는 배지가 아니라 여기
+    // 있다"*). **앞 판은 이 자리에 *"이월에 적었다"*고 적었는데 그것이 거짓이었다** —
+    // 장부(`docs/superpowers/plans/2026-08-17-p10-2-carryforward.md`)에 그 줄이 실리지
+    // 않았다. 이 줄이 그 자리를 대신한다: 고른 자리가 잠긴 화면은 **트리 줄에 배지가
+    // 없다**(배지는 잠금이 가리키는 노드에만 붙는데, 여기서 막는 것은 그 조상이다).
     store.selectNode('n_a')
     expect(store.getState().selectedNodeId).toBe('n_root')
   })

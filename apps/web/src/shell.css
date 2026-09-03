@@ -592,10 +592,29 @@
   cursor: pointer;
 }
 
-/* 할 수 없는 조작. 왜인지는 버튼의 `title`이 말한다 — 회색만으로는 이유를 알 수 없다. */
+/* 할 수 없는 조작. 왜인지는 **아래 상태줄이 한 문장으로** 말하고, 그것이 말하지 않은
+   나머지가 버튼의 `title`에 남는다 — 회색만으로는 이유를 알 수 없다. */
 .wb-shell-menu-tool:disabled {
   color: var(--wb-shell-muted);
   cursor: not-allowed;
+}
+
+/* 도구모음 아래 상태줄(`panels/menu-toolbar.tsx` · `panels/toolbar-status.ts`). 구조 쪽과
+   값이 겹치지만 클래스를 나눠 둔다 — 위 툴바 규칙 둘이 나뉜 것과 같은 이유다.
+
+   **`flex-basis: 100%`로 자기 줄을 받는다.** 툴바가 `flex-wrap: wrap`이라 성립한다 —
+   감싸기가 없는 상자에서 이 값은 자기 줄을 받는 것이 아니라 줄을 터뜨린다(고르개가 그렇게
+   사이드바 밖으로 나갔다: `test/shell-css-picker.test.ts`).
+
+   **글자가 없어도 자리를 지킨다**(`min-height`). 안 지키면 선택을 옮길 때마다 툴바 높이가
+   달라지고, 툴바가 `sticky`라 그 차이가 그대로 트리 높이의 출렁임이 된다. */
+.wb-shell-menu-status {
+  flex-basis: 100%;
+  margin: 0;
+  min-height: 15px;
+  color: var(--wb-shell-muted);
+  font-size: 11px;
+  line-height: 15px;
 }
 
 /* 인라인 입력(`panels/tree-input.tsx`, D6). 툴바가 `flex-wrap`이라 버튼과 같은 줄에 서다가
@@ -639,10 +658,23 @@
   cursor: pointer;
 }
 
-/* 할 수 없는 조작. 왜인지는 버튼의 `title`이 말한다 — 회색만으로는 이유를 알 수 없다. */
+/* 할 수 없는 조작. 왜인지는 **아래 상태줄이 한 문장으로** 말하고, 그것이 말하지 않은
+   나머지가 버튼의 `title`에 남는다 — 회색만으로는 이유를 알 수 없다. */
 .wb-shell-structure-tool:disabled {
   color: var(--wb-shell-muted);
   cursor: not-allowed;
+}
+
+/* 도구모음 아래 상태줄(`panels/structure-toolbar.tsx` · `panels/toolbar-status.ts`).
+   근거는 `.wb-shell-menu-status`와 한 벌이다 — 자기 줄(`flex-basis`)과 빈 줄의 자리
+   (`min-height`) 둘. */
+.wb-shell-structure-status {
+  flex-basis: 100%;
+  margin: 0;
+  min-height: 15px;
+  color: var(--wb-shell-muted);
+  font-size: 11px;
+  line-height: 15px;
 }
 
 .wb-shell-canvas {

@@ -37,8 +37,8 @@
  * **완전하다고는 적지 않는다** — 잰 것은 그 반례 부류(배열 원소가 노드가 아닌 경우)와
  * 웨이브 1이 잰 여섯 형태까지다.
  */
-import { useState, type ReactElement } from 'react'
-import type { WbNode } from '@wirebound/schema'
+import { useId, useState, type ReactElement } from 'react'
+import type { NodeLock, WbNode } from '@wirebound/schema'
 import { expandPattern, type ThemePattern } from '@wirebound/themes'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { createNode } from '../edit/create-node'
@@ -51,6 +51,7 @@ import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../stor
 import { PatternPicker } from './pattern-picker'
 import { PresetPicker } from './preset-picker'
 import { TypePicker } from './type-picker'
+import { structureStatus } from './toolbar-status'
 
 /**
  * 버튼이 비활성일 때 붙는 설명.
@@ -60,9 +61,14 @@ import { TypePicker } from './type-picker'
  * 판정은 `structureAbilities` 하나가 하고(D3), 여기 있는 것은 "그 버튼이 활성이려면
  * 무엇이 필요한가"뿐이다.
  *
- * **`title`의 한계는 재지 못했다.** 비활성 버튼은 포커스를 받지 못하므로 보조 기술이
- * 이 설명에 닿는지는 브라우저·리더 조합에 달려 있고, jsdom으로는 잴 수 없다.
- * `aria-describedby`로 바꿔도 같은 창에 걸리므로 더 싼 쪽을 골랐다.
+ * **`title`의 한계는 이제 잰 것이다.** 비활성 버튼은 **탭 순서에서 빠지므로** 키보드
+ * 사용자는 이 설명에 닿을 길이 없고(포커스가 안 가면 `title`도 `aria-describedby`도
+ * 읽히지 않는다), 마우스는 1초 이상 머물러야 하며 터치에는 아예 뜨지 않는다.
+ *
+ * **그래서 이 표를 지우지 않고 상태줄을 더했다**(`./toolbar-status.ts`). 둘은 겹치는 것이
+ * 아니라 결이 다르다 — 상태줄은 *"고른 것이 무엇이라서 그런가"*를 **대표 이유 하나**로
+ * 말하고, 이 표는 *"그 버튼 하나가 활성이려면 무엇이 필요한가"*를 버튼마다 말한다.
+ * 상태줄이 말하지 않은 나머지가 갈 곳은 오늘 여기뿐이다.
  */
 const WHY_DISABLED: Record<keyof StructureAbilities, string> = {
   // **조건 둘을 다 말한다.** `acceptsChildren`은 카탈로그의 `many` 여부만이 아니라
@@ -90,6 +96,15 @@ const WHY_DISABLED: Record<keyof StructureAbilities, string> = {
  */
 export interface StructureCommands {
   abilities: StructureAbilities
+  /**
+   * 도구모음 아래 상태줄에 설 한 문장. 할 말이 없으면 `''`다.
+   *
+   * **툴바가 아니라 여기서 만든다** — 문안이 `abilities` 말고도 **선택 자체의 성질**
+   * (잠금·루트)을 보는데, 그 둘은 스토어와 문서에서 나오고 그것을 이미 든 자리가 여기다.
+   * 문안 자체는 `./toolbar-status.ts`가 갖는다(순수 함수 — 상태마다 무엇이 나오는지가
+   * 화면을 지나지 않고 재진다).
+   */
+  status: string
   remove: () => void
   moveUp: () => void
   moveDown: () => void
@@ -130,6 +145,17 @@ export type OpenPicker = 'inside' | 'after' | 'pattern' | 'preset'
 export function useStructureCommands(props: {
   projectId: string
   pageId: string | undefined
+  /**
+   * 고른 노드를 막는 **남의** 잠금(`store.lockedBy`가 낸 것). 없으면 `null`이다.
+   * 상태줄이 이것을 맨 위에서 본다(`./toolbar-status.ts`).
+   *
+   * **여기서 구독하지 않고 받는다.** 스토어의 잠금 목록을 손에 쥐는 자리는 화면에 **하나**여야
+   * 하고(`test/lock/one-verdict.test.ts` — *"셋째 판정은 여기서 먼저 보인다"*), 그 하나가
+   * 이 훅을 부르는 `StructureTree`다. 거기서 목록을 이미 구독해 트리 줄의 배지·비활성을
+   * 그리므로, 같은 값을 여기서 또 구독하면 자리만 늘고 얻는 것이 없다. **판정은 어느 쪽도
+   * 하지 않는다** — 양쪽 다 스토어의 `lockedBy`를 지난 값을 든다.
+   */
+  selectedLock?: NodeLock | null
 }): StructureCommands {
   const store = useEditorStoreInstance()
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 본다
@@ -406,6 +432,14 @@ export function useStructureCommands(props: {
 
   return {
     abilities,
+    // **루트인지는 id로 본다.** 판정을 다시 하지 않는다 — `structureAbilities`가 이미
+    // 지나간 순회를 한 벌 더 돌면 둘이 갈릴 수 있다(`./toolbar-status.ts` 머리말).
+    status: structureStatus({
+      selectedNodeId,
+      isRoot: document !== null && selectedNodeId !== null && document.root?.id === selectedNodeId,
+      lock: props.selectedLock ?? null,
+      abilities,
+    }),
     remove: removeSelected,
     moveUp: () => moveSelected(-1),
     moveDown: () => moveSelected(1),
@@ -460,6 +494,17 @@ export function StructureToolbar(props: {
 }): ReactElement {
   const { commands } = props
   const { abilities } = commands
+  /**
+   * 상태줄의 id. **`aria-describedby`가 그것을 가리킨다** — `useId`인 것은 이 툴바가 한
+   * 화면에 둘 이상 그려져도 id가 겹치지 않게 하기 위해서다(React가 렌더 트리마다 다른
+   * 값을 준다).
+   */
+  const statusId = useId()
+  /**
+   * **할 말이 없으면 가리키지 않는다.** 빈 요소를 가리키면 설명이 비어 있는 것이 아니라
+   * *"설명이 있다"*는 관계만 남고, 그것을 읽는 도구마다 다르게 다룬다.
+   */
+  const describedBy = commands.status === '' ? undefined : statusId
 
   return (
     <div className="wb-shell-structure-toolbar" role="group" aria-label="구조 편집">
@@ -467,32 +512,49 @@ export function StructureToolbar(props: {
         label="안에 추가"
         ability="addInside"
         abilities={abilities}
+        describedBy={describedBy}
         onClick={() => commands.openAdd('inside')}
       />
       <ToolButton
         label="아래 추가"
         ability="addAfter"
         abilities={abilities}
+        describedBy={describedBy}
         onClick={() => commands.openAdd('after')}
       />
-      <ToolButton label="삭제" ability="remove" abilities={abilities} onClick={commands.remove} />
-      <ToolButton label="위로" ability="moveUp" abilities={abilities} onClick={commands.moveUp} />
+      <ToolButton
+        label="삭제"
+        ability="remove"
+        abilities={abilities}
+        describedBy={describedBy}
+        onClick={commands.remove}
+      />
+      <ToolButton
+        label="위로"
+        ability="moveUp"
+        abilities={abilities}
+        describedBy={describedBy}
+        onClick={commands.moveUp}
+      />
       <ToolButton
         label="아래로"
         ability="moveDown"
         abilities={abilities}
+        describedBy={describedBy}
         onClick={commands.moveDown}
       />
       <ToolButton
         label="들여쓰기"
         ability="indent"
         abilities={abilities}
+        describedBy={describedBy}
         onClick={commands.indent}
       />
       <ToolButton
         label="내어쓰기"
         ability="outdent"
         abilities={abilities}
+        describedBy={describedBy}
         onClick={commands.outdent}
       />
       {/* **패턴은 `ToolButton`이 아니다.** 그 버튼은 `StructureAbilities`의 키 하나에
@@ -517,6 +579,22 @@ export function StructureToolbar(props: {
       >
         프리셋
       </button>
+      {/* **상태줄.** 버튼 **뒤**에 있는 것이 의도다 — 훑어 읽는 순서가 화면 순서와 같아야
+          하고(`role="group"` 안이라 보조 기술도 이 순서로 지난다), 눈으로는 이 줄이 방금
+          본 회색 버튼들의 이유로 읽힌다.
+
+          **`role="alert"`도 `aria-live`도 아니다.** 이 셸의 알림 자리는 `EditAlert` 하나이고
+          (`shell/edit-alert.tsx`), 실패가 아닌 것에 그 채널을 쓰면 그 하나뿐인 규칙이 흩어진다.
+          `aria-live`를 걸지 않은 것은 더 센 이유다 — **선택을 옮길 때마다 읽히면 트리 탐색이
+          불가능해진다.** 대신 위 버튼들이 `aria-describedby`로 이 줄을 가리킨다: 그러면
+          **포커스가 그 버튼에 닿을 때 한 번** 읽히고, 그 시점은 사용자가 그 조작을 하려는
+          바로 그때다.
+
+          **글자가 없어도 요소는 남는다** — 자리를 지키는 것은 CSS의 `min-height`이고
+          (`shell.css`), 그러지 않으면 상태가 바뀔 때마다 툴바 높이가 달라져 트리가 튄다. */}
+      <p className="wb-shell-structure-status" id={statusId}>
+        {commands.status}
+      </p>
       {/* 목록은 툴바 **안**에 있다 — 조작 묶음과 같은 자리라야 어느 노드에 붙는
           작업인지가 보인다. 닫혀 있을 때는 DOM에 없다: 남겨 두면 Tab 순서에 정지점이
           그대로 남는다. */}
@@ -552,6 +630,14 @@ function ToolButton(props: {
   label: string
   ability: keyof StructureAbilities
   abilities: StructureAbilities
+  /**
+   * 상태줄의 id. **활성·비활성 가릴 것 없이 건다** — 비활성 버튼에 걸린 것은 포커스가
+   * 가지 않아 조용하지만, 활성 버튼에 걸린 것이 **키보드 사용자가 그 문장에 닿는 유일한
+   * 길**이다(비활성 버튼은 탭 순서에서 빠진다).
+   *
+   * 할 말이 없으면 `undefined`다 — 부르는 쪽이 정한다.
+   */
+  describedBy?: string
   onClick: () => void
 }): ReactElement {
   const enabled = props.abilities[props.ability]
@@ -563,6 +649,7 @@ function ToolButton(props: {
       disabled={!enabled}
       // 활성일 때 설명을 남기지 않는다 — 버튼 이름과 겹쳐 읽힌다.
       title={enabled ? '' : WHY_DISABLED[props.ability]}
+      aria-describedby={props.describedBy}
       onClick={props.onClick}
     >
       {props.label}
