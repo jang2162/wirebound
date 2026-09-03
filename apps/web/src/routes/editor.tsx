@@ -18,6 +18,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactElement,
   type ReactNode,
   type RefObject,
@@ -37,6 +38,8 @@ import { useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
+import { ShellResizer } from '../shell/shell-resizer'
+import { useSidebarLayout } from '../shell/sidebar-layout'
 import { useNodeLock } from '../realtime/use-node-lock'
 import { useRealtime } from '../realtime/use-realtime'
 import { ExportPanel } from '../shell/export-panel'
@@ -379,6 +382,25 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
    */
   useNodeLock(props.pageId)
 
+  /**
+   * **좌측의 폭과 두 영역의 배분.** 값·한계·보존은 `shell/sidebar-layout.ts`가 갖고, 여기는
+   * 그것을 마크업에 얹기만 한다 — 폭은 `.wb-shell-side`의 인라인 `width`, 배분은 두
+   * `.wb-shell-region`의 인라인 `flex-grow`다.
+   *
+   * **인라인인 것은 `shell.css`가 이 값을 알 수 없기 때문이다**(사람마다 다르고 저장에서
+   * 온다). 둘 다 상속되지 않는 속성이라 D7의 4번을 건드리지 않는다
+   * (`test/shell-css-guard.ts` 머리말의 ㉠ — *"자리·크기를 코드가 계산하는 것"*).
+   */
+  const layout = useSidebarLayout()
+
+  /**
+   * **구조 트리가 있을 때만 배분이 있다.** 뷰 모드에서는 상자가 하나뿐이라 손잡이가 나눌
+   * 것이 없고, 그때 `flex-grow`를 덮으면 오히려 고장이 난다 — flex는 `flex-grow`의 합이
+   * 1보다 작으면 남는 공간을 **그 합만큼만** 나눠 주므로, 상자 하나에 `0.5`를 주면 좌측의
+   * 절반이 빈칸이 된다. 설계 §9의 *"접히면 메뉴 트리가 좌측 전체를 쓴다"*가 그렇게 깨진다.
+   */
+  const split = mode === 'edit'
+
   return (
     <div className="wb-shell">
       <header className="wb-shell-header">
@@ -468,8 +490,17 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
         <RemoteAlert />
       </header>
 
-      <nav className="wb-shell-side" aria-label="메뉴와 구조">
-        <ShellRegion className="wb-shell-region" name="메뉴·페이지 트리">
+      <nav
+        className="wb-shell-side"
+        aria-label="메뉴와 구조"
+        ref={layout.sideRef}
+        style={{ width: `${layout.sideWidth}px` }}
+      >
+        <ShellRegion
+          className="wb-shell-region"
+          name="메뉴·페이지 트리"
+          style={split ? { flexGrow: layout.regionGrow } : undefined}
+        >
           {/* 트리에 주는 `projectId`는 **조회해 온 프로젝트의 id**다. 경로의 파라미터를
               다시 읽지 않는 것은, 트리가 만드는 주소가 지금 열려 있는 프로젝트를 가리켜야
               하기 때문이다 — 둘은 같은 값이지만 진실은 조회 결과 쪽에 있다. */}
@@ -504,14 +535,57 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             이 자리를 `hidden` 방식으로 바꿔도 `--project web` 전량이 통과한다 — 0 사망).
             테스트가 지키는 것은 "접힌다"는 사용자가 보는 성질이고, 방식은 여기 적힌
             이유다. */}
-        {mode === 'edit' && (
-          <ShellRegion className="wb-shell-region" name="구조 트리">
-            {/* `projectId`는 메뉴 트리와 같은 이유로 **조회해 온 프로젝트의 id**다.
-                구조 편집이 그것을 `PATCH /projects/:id/pages/:id/ops`의 경로로 쓴다. */}
-            <StructureTree projectId={props.project.id} pageId={props.pageId} />
-          </ShellRegion>
+        {split && (
+          <>
+            {/* **두 영역 사이의 손잡이.** 값은 첫 영역의 **높이(px)**로 주고받고, 비율로
+                바꾸는 것은 `useSidebarLayout`이 한다 — 사람이 잡고 미는 것은 픽셀이고
+                창 높이가 바뀌어도 어긋나지 않아야 하는 것은 비율이다. */}
+            <ShellResizer
+              orientation="horizontal"
+              className="wb-shell-region-resizer"
+              label="좌측 두 영역의 세로 배분"
+              ref={layout.regionResizerRef}
+              value={Math.round(layout.regionRatio * 100)}
+              min={Math.round(layout.regionRatioMin * 100)}
+              max={Math.round((1 - layout.regionRatioMin) * 100)}
+              valueText={`메뉴·페이지 트리 ${Math.round(layout.regionRatio * 100)}%`}
+              onGrab={layout.grabRegionHeight}
+              onMove={layout.setRegionHeight}
+              onEdge={(edge) =>
+                layout.setRegionRatio(
+                  edge === 'min' ? layout.regionRatioMin : 1 - layout.regionRatioMin,
+                )
+              }
+              onReset={layout.resetRegionRatio}
+            />
+            <ShellRegion
+              className="wb-shell-region"
+              name="구조 트리"
+              style={{ flexGrow: 1 - layout.regionGrow }}
+            >
+              {/* `projectId`는 메뉴 트리와 같은 이유로 **조회해 온 프로젝트의 id**다.
+                  구조 편집이 그것을 `PATCH /projects/:id/pages/:id/ops`의 경로로 쓴다. */}
+              <StructureTree projectId={props.project.id} pageId={props.pageId} />
+            </ShellRegion>
+          </>
         )}
       </nav>
+
+      {/* **사이드바와 캔버스 사이의 손잡이.** 편집·뷰 모드 둘 다에 있다 — 폭은 모드가
+          아니라 사람의 화면에 대한 값이다. */}
+      <ShellResizer
+        orientation="vertical"
+        className="wb-shell-side-resizer"
+        label="사이드바 폭"
+        value={layout.sideWidth}
+        min={layout.sideWidthMin}
+        max={layout.sideWidthMax}
+        valueText={`${Math.round(layout.sideWidth)}px`}
+        onGrab={layout.grabSideWidth}
+        onMove={layout.setSideWidth}
+        onEdge={(edge) => layout.setSideWidth(edge === 'min' ? layout.sideWidthMin : layout.sideWidthMax)}
+        onReset={layout.resetSideWidth}
+      />
 
       <main className="wb-shell-canvas" aria-label="캔버스" ref={canvasRef}>
         <CanvasFrame
@@ -643,9 +717,15 @@ function UndoTools(props: { projectId: string; pageId: string | undefined }): Re
  * 이름표가 붙은 상자. `children`이 그 안의 내용이다 — 메뉴·페이지 트리는 채워져 있고,
  * 구조 트리 자리는 아직 비어 있다.
  */
-function ShellRegion(props: { className: string; name: string; children?: ReactNode }): ReactElement {
+function ShellRegion(props: {
+  className: string
+  name: string
+  /** 세로 배분. **편집 모드에서만 온다** — 근거는 셸의 `split` 주석에 있다. */
+  style?: CSSProperties
+  children?: ReactNode
+}): ReactElement {
   return (
-    <section className={props.className} aria-label={props.name}>
+    <section className={props.className} aria-label={props.name} style={props.style}>
       <h2 className="wb-shell-region-title">{props.name}</h2>
       {props.children}
     </section>
