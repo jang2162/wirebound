@@ -432,6 +432,34 @@ describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
     expect(gates()).toEqual({ pattern: false, preset: false })
   })
 
+  /**
+   * **아홉이 다 회색인데 상태줄이 그 이유를 말하지 않았다**(P10-2 이월 C). 앞 판의
+   * *"트리에서 노드를 고르면 편집할 수 있습니다"*는 이 상태에서 두 가지를 빠뜨린다 —
+   * 지금 켜진 도구가 하나도 없다는 것과, 그 원인이 남의 잠금이라는 것.
+   *
+   * **여기서만 재지는 자리다.** 이 케이스가 잠그는 것은 **배선**이다 —
+   * `useStructureCommands`가 `프리셋`을 끄는 데 쓰는 `pageLock`을 상태줄에도 넘기는가.
+   * 안 넘기면 순수 함수 케이스는 전부 초록인 채 화면만 앞 판 문장으로 돌아간다.
+   *
+   * **문안을 글자로 다시 적지 않는다.** 그 자는 `../panels/toolbar-status.test.ts`가
+   * 소유하고, 여기서 같은 문장을 한 벌 더 두면 문안을 고칠 때 **자가 둘이라 갈린다**
+   * (§7.2의 *"판정이 두 벌이면 갈린다"*와 같은 부류다 — 5차가 «다른 케이스의 단언을
+   * 글자 그대로 복사한» 케이스를 지운 근거이기도 하다). 여기서 재는 축은 둘이다:
+   * **잠금 소유자가 그 줄에 실렸는가**와 **앞 판의 문장이 아닌가.**
+   */
+  it('그때 상태줄이 아홉이 회색인 이유를 말한다 — 이름과 함께', async () => {
+    const view = await board()
+    view.lock([foreign('n-1')])
+
+    deselect()
+
+    // 전제를 값으로 못박는다 — 아홉이 다 회색인 것이 이 문장이 서는 근거다.
+    expect(live()).toEqual([])
+    expect(gates()).toEqual({ pattern: false, preset: false })
+    expect(statusLine()).toContain('보라')
+    expect(statusLine()).not.toBe('트리에서 노드를 고르면 편집할 수 있습니다')
+  })
+
   it('대조 — 잠금이 없으면 고른 것이 없어도 둘 다 켜져 있다', async () => {
     await board()
 
@@ -603,8 +631,9 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
    * 고르면 `add /root/children/1/children/2`가 나가 **423 + "편집 1개가 취소됐습니다"**를
    * 받았다(재현해 확인한 값이다).
    *
-   * **잠금이 풀리면 목록이 돌아오는 것도 함께 잰다.** `adding`을 비우지 않는 것이 판단이고
-   * (잠깐 잠긴 사이에 고르던 것을 잃지 않는다), 비우는 구현과 여기서 갈린다.
+   * **잠금이 풀리면 목록이 돌아오는 것도 함께 잰다.** `adding`을 비우지 않는 것이 판단이고,
+   * 비우는 구현과 여기서 갈린다. **돌아오는 것은 «어느 고르개가 열려 있었는지»뿐이다** —
+   * 그 안에서 고르던 것은 함께 돌아오지 않는다(아래 두 케이스가 그 값을 든다).
    */
   it('타입 고르개도 같다 — 사라지고, 잠금이 풀리면 돌아온다', async () => {
     const view = await board()
@@ -619,6 +648,81 @@ describe('막힌 자리에서는 서버로 아무것도 나가지 않는다', ()
     view.lock([])
 
     expect(screen.getByRole('group', { name: '타입 고르기' })).toBeTruthy()
+  })
+
+  /**
+   * **여기서부터 둘은 잠금이 오갔다 온 뒤에 무엇이 남는지를 못박는다**(P10-2 이월 E).
+   * 답이 서로 다르고, **그 갈림 자체가 판단이다.**
+   *
+   * | 무엇 | 잠금이 풀린 뒤 | 왜 |
+   * |---|---|---|
+   * | 고른 타입 · 고른 프리셋 | **되돌아간다** | «지금 꽂을 수 있는 것»에서 고른 값이라 초기화가 방어 가능하다 |
+   * | 이름칸에 **친** 글자 | **그대로 있다** | 사용자 자신의 것이고 문서와 무관해 낡을 수가 없다 |
+   *
+   * 앞 판의 주석은 *"잠깐 잠긴 사이에 사용자가 고르던 것을 잃지 않는다"*였는데 **둘 다에
+   * 대해 거짓이었다** — 조건이 거짓인 동안 컴포넌트가 DOM에서 빠지므로 그 `useState`가
+   * 함께 사라진다. 아랫줄은 그 뒤에 고쳤다(문자열 하나를 `StructureToolbar`가 든다).
+   *
+   * **근거는 `panels/structure-toolbar.tsx`의 `visiblePicker` 머리말이 갖는다** —
+   * 두 축을 왜 갈랐는지가 거기 있다. 판단이 다시 바뀌면 이 두 케이스와 그 머리말을
+   * **함께** 고쳐야 한다: 한쪽만 고치면 다시 말과 코드가 갈린다.
+   */
+  it('잠금이 오갔다 오면 타입 고르개의 고른 타입이 초깃값으로 되돌아간다', async () => {
+    const view = await board()
+    select('Card')
+    fireEvent.click(toolButton('안에 추가'))
+    const typeSelect = () =>
+      within(screen.getByRole('group', { name: '타입 고르기' })).getByRole<HTMLSelectElement>(
+        'combobox',
+      )
+    await screen.findByRole('group', { name: '타입 고르기' })
+
+    const initial = typeSelect().value
+    const other = [...typeSelect().options].map((option) => option.value).find((v) => v !== initial)
+    // **전제를 값으로 못박는다.** 목록에 둘 이상 없으면 아래가 아무것도 재지 못한다.
+    expect(other).toBeDefined()
+    fireEvent.change(typeSelect(), { target: { value: other! } })
+    expect(typeSelect().value).toBe(other)
+
+    view.lock([foreign('n-box')])
+    view.lock([])
+
+    expect(typeSelect().value).toBe(initial)
+    // **설명 줄도 함께 되돌아간다** — 그 줄은 고른 타입에서 나온다(P10-3).
+    const desc = screen
+      .getByRole('group', { name: '타입 고르기' })
+      .querySelector('.wb-shell-picker-desc')
+    expect(desc?.textContent).toContain(initial)
+  })
+
+  /**
+   * **친 글자는 살아남는다 — 위 케이스와 반대다.** 타입·프리셋 목록은 눈앞에 다시 있지만
+   * 이름칸의 글자는 사용자가 **친** 것이라 다시 쳐 줄 사람이 없다. 그래서 그 문자열
+   * 하나만 `StructureToolbar`가 들고 `PresetPicker`에 내려 준다(P10-2 리뷰 발견 4).
+   *
+   * **함께 잰다: «살렸다»가 «목록을 DOM에 남겼다»가 아니라는 것.** 잠긴 동안 고르개는
+   * 그대로 사라져야 하고(§3.14가 닫은 우회로), 서버로는 여전히 아무것도 안 나가야 한다.
+   * 그 셋이 다 참일 때만 이 고침이 **실패 방향을 안 바꾼 것**이다.
+   */
+  it('프리셋 고르개가 사라졌다 와도 이름칸에 친 글자는 남는다', async () => {
+    const view = await board()
+    fireEvent.click(toolButton('프리셋'))
+    const group = () => screen.getByRole('group', { name: '프리셋 고르기' })
+    const nameInput = () => group().querySelector<HTMLInputElement>('.wb-shell-picker-input')!
+    await screen.findByRole('group', { name: '프리셋 고르기' })
+
+    fireEvent.change(nameInput(), { target: { value: '회원 목록 기본' } })
+    expect(nameInput().value).toBe('회원 목록 기본')
+
+    view.lock([foreign('n-1')])
+    // **잠긴 동안에는 고르개가 DOM 에 없다** — 살린 것은 문자열 하나이지 목록이 아니다.
+    expect(screen.queryByRole('group', { name: '프리셋 고르기' })).toBeNull()
+    view.lock([])
+    await settle()
+
+    expect(nameInput().value).toBe('회원 목록 기본')
+    // **서버로는 여전히 아무것도 안 나갔다** — 실패 방향이 안 바뀌었다는 값이다.
+    expect(view.calls).toEqual([])
   })
 
   /**
