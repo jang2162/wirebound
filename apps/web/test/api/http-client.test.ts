@@ -1691,8 +1691,14 @@ describe('페이지 CRUD', () => {
     // 이 자리만 남는다.
     //
     // **이 케이스가 서기 전까지 `BODY_KEYS.updatePage`에 `description`이 없었다** —
-    // 시그니처만 넓히면 `declaredOnly`가 그 키를 조용히 떨궈 내 **200이 오는데 값이
-    // 안 바뀐다.** 서버는 처음부터 그 키를 받고 있었다(`apps/api/test/pages.test.ts`).
+    // 시그니처만 넓히면 `declaredOnly`가 그 키를 조용히 떨궈 낸다. 서버는 처음부터 그 키를
+    // 받고 있었다(`apps/api/test/pages.test.ts`).
+    //
+    // **그때 무엇이 나는지는 본문의 모양에 따라 갈린다.** 이 케이스처럼 `{description}`
+    // 하나면 `declaredOnly`가 `{}`로 만들어 **`updateBody`가 `바꿀 내용이 없습니다`로 던지고
+    // 요청이 아예 안 나간다**(그 줄을 지우고 쟀다). *"200이 오는데 값이 안 바뀐다"*는
+    // **다른 선언된 키가 함께 실릴 때**의 이야기다 — 갈래 표는 `api/http-client.ts`의
+    // `BODY_KEYS.updatePage` 주석이 갖는다.
     const stub = stubFetch(jsonResponse(200, page), jsonResponse(200, page))
     const client = createHttpClient(stub.fetchImpl)
 
