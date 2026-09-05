@@ -90,6 +90,15 @@ function toView(): void {
   fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
 }
 
+function toEdit(): void {
+  fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
+}
+
+/** 우측 패널의 탭을 **누른다** — 사용자가 하듯. */
+function toTab(label: string): void {
+  fireEvent.click(screen.getByRole('tab', { name: label }))
+}
+
 /** 메뉴 트리에서 다른 페이지로 옮긴다 — **사용자가 하듯** 누른다. */
 function toOtherPage(): void {
   fireEvent.click(
@@ -369,5 +378,75 @@ describe('§9 — 페이지를 바꾸면 앞 페이지의 것을 버린다', () 
     // **남의 페이지의 오류 문장이 이 페이지에 붙지 않는다.** 조회 실패의 `role="alert"`와
     // 같은 자를 쓰므로 «둘 다 없다»를 재는 것이 맞다 — 이 페이지의 조회는 성공했다.
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+/**
+ * **탭·모드를 오가는 축.** 이 파일의 다른 케이스는 전부 «페이지 설명» 탭에 **머문 채로**
+ * 돌고, 위 «페이지를 바꾸면 …» 절은 **페이지**를 바꾼다. 그래서 *"탭을 한 번 눌렀다
+ * 돌아온다"*를 지나는 케이스가 하나도 없었고, **친 글이 경고 없이 사라지는 결함이
+ * 7차 통합까지 살아남았다**(`routes/editor.tsx`가 안 보이는 탭을 DOM에서 뺀다 +
+ * 이 상자는 blur에 커밋하지 않는다 — 두 판단의 접점).
+ *
+ * **`test/routes/view-mode.test.tsx`와 갈리는 자리:** 그쪽은 *"탭이 되살아나는가"*
+ * (어느 탭이 골라져 있나)를 재고, **여기는 그 탭 본문이 든 «친 글자»가 남는가**를 잰다.
+ * 같은 왕복을 지나지만 재는 것이 다르다.
+ *
+ * **둘이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 쟀다:
+ *
+ * | 변조 | 혼자 죽는 것 |
+ * |---|---|
+ * | `PageDescriptionDraftProvider`에 `key={chosen}` (탭마다 새로 든다) | *"탭을 오갔다 돌아와도 …"* |
+ * | 그것에 `key={mode}` (모드마다 새로 든다) | *"모드를 오갔다 돌아와도 …"* |
+ *
+ * **초안을 패널의 `useState`로 되돌리면 둘이 함께 죽는다** — 고치기 전의 판이다.
+ * 그때도 위 «페이지를 바꾸면 …»의 셋은 **산다**. 두 축이 부딪히지 않는 것이 그 값이다.
+ */
+describe('§9 — 탭·모드를 오가도 저장하지 않은 초안이 남는다', () => {
+  it('탭을 오갔다 돌아와도 친 글이 남는다 — 서버 값으로 되돌아가지 않는다', async () => {
+    const api = recordingApi()
+    await openPage(DOC, { apiOverrides: { ...withDescription('서버에 있는 설명'), ...api.overrides } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버에 있는 설명'))
+
+    type('아직 저장 안 한 초안')
+    toTab('코멘트')
+    // **상자가 정말 사라지는 것을 먼저 잠근다.** 없으면 «탭을 눌러도 언마운트되지 않는»
+    // 판에서도 이 케이스가 통과해, 재는 것이 없어진다.
+    expect(boxOrNull()).toBeNull()
+
+    toTab('페이지 설명')
+    await findBox()
+
+    expect(box().value).toBe('아직 저장 안 한 초안')
+    // **상자의 글자만 보면 «값은 되살렸는데 초안으로는 안 든» 판이 통과한다** — 그 판에서
+    // 저장 버튼은 꺼져 있고 누를 수가 없다. 보내지는 것까지 본다.
+    expect(saveButton().disabled).toBe(false)
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(api.bodies).toEqual([{ description: '아직 저장 안 한 초안' }]))
+    expect(api.pages).toEqual([PAGE_ID])
+  })
+
+  it('모드를 오갔다 돌아와도 친 글이 남는다 — 편집 모드에는 이 탭이 아예 없다', async () => {
+    const api = recordingApi()
+    await openPage(DOC, { apiOverrides: { ...withDescription('서버에 있는 설명'), ...api.overrides } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버에 있는 설명'))
+
+    type('모드를 오갈 초안')
+    toEdit()
+    // **탭 왕복과 다른 사건이다.** 편집 모드의 탭 목록에 «페이지 설명»이 없어서
+    // (`PANEL_TABS`) 눌러서 돌아올 탭조차 없다 — 그래서 케이스를 따로 둔다.
+    expect(boxOrNull()).toBeNull()
+    expect(screen.queryByRole('tab', { name: '페이지 설명' })).toBeNull()
+
+    toView()
+    await findBox()
+
+    expect(box().value).toBe('모드를 오갈 초안')
+    expect(saveButton().disabled).toBe(false)
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(api.bodies).toEqual([{ description: '모드를 오갈 초안' }]))
+    expect(api.pages).toEqual([PAGE_ID])
   })
 })
