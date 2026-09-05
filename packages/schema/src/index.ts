@@ -107,7 +107,9 @@ export type {
 export {
   COMMENT_BODY_MAX_LENGTH,
   COMMENT_BODY_MIN_LENGTH,
+  PAGE_DESCRIPTION_MAX_LENGTH,
   PAGE_JSON_FILE_SUFFIX,
+  PageDescriptionSchema,
   PageJsonSchema,
   WIREBOUND_PAGE_VERSION,
   pageJsonFileName,

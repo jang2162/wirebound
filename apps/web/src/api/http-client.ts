@@ -915,7 +915,10 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['createPage']>[1],
     true
   >,
-  updatePage: { title: true, menuNodeId: true, sortOrder: true } satisfies Record<
+  // **`description`이 P10에서 늘었다.** 이 줄이 그 키를 막고 있던 두 자리 중 하나다
+  // (다른 하나는 `ApiClient['updatePage']`의 시그니처) — 서버는 처음부터 받고 있었다.
+  // 여기 안 더하면 `declaredOnly`가 그 키를 조용히 떨궈 내 **200이 오는데 값이 안 바뀐다.**
+  updatePage: { title: true, description: true, menuNodeId: true, sortOrder: true } satisfies Record<
     keyof Parameters<ApiClient['updatePage']>[2],
     true
   >,

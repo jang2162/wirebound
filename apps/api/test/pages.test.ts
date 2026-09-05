@@ -9,6 +9,7 @@ import {
   listComponents,
   registerComponent,
   resetRegistry,
+  PAGE_DESCRIPTION_MAX_LENGTH,
   type PageDocument,
 } from '@wirebound/schema'
 import { withTransaction } from '../src/db/tx'
@@ -466,6 +467,146 @@ describe('PATCH /api/projects/:projectId/pages/:pageId', () => {
 
       const row = await ctx.db.selectFrom('pages').select('title').where('id', '=', page.id).executeTakeFirstOrThrow()
       expect(row.title).toBe('바뀐 제목')
+    })
+  })
+
+  /**
+   * ## 설명 갱신 (P10 — 점검 #10)
+   *
+   * **이 다섯이 서기 전까지 `description` 갱신을 재는 케이스가 하나도 없었다.** 라우트의
+   * `UpdatePageBody`는 처음부터 그 키를 받았고 `repos/pages.ts`도 그것을 썼는데, 그 이음이
+   * 자유로웠다 — `UpdatePageBody`에서 `description` 줄을 지워도, `repos/pages.ts`의
+   * `patch.description !== undefined` 갈래를 지워도 아무것도 죽지 않았다(실측).
+   *
+   * **역할 축은 여기 없다.** `permission-matrix.test.ts`의 *"페이지 수정"* 행이 소유한다
+   * (`allowed: ['owner','editor']`) — 여기 한 벌 더 두면 그것이 두 벌이다.
+   */
+  it('설명을 바꾸고 되읽는다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+        payload: { description: '회원을 찾고 고치는 화면' },
+      })
+      expect(res.statusCode).toBe(200)
+      expect(res.json().description).toBe('회원을 찾고 고치는 화면')
+
+      // **응답만 보면 안 된다** — 응답을 요청 본문으로 만드는 구현도 그것을 통과한다.
+      const read = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+      })
+      expect(read.json().description).toBe('회원을 찾고 고치는 화면')
+    })
+  })
+
+  it('description: null은 설명을 지우고, 키가 없으면 그대로 둔다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+      const patch = (payload: { title?: string; description?: string | null }) =>
+        ctx.app.inject({
+          method: 'PATCH',
+          url: `/api/projects/${project.id}/pages/${page.id}`,
+          cookies: owner.cookie,
+          payload,
+        })
+
+      await patch({ description: '있던 설명' })
+
+      // **키가 없는 것은 "바꾸지 않는다"다.** 제목만 보내도 설명이 살아 있어야 한다 —
+      // `updateMenu`의 `parentId`와 같은 계약이고, 이 갈래가 없으면 제목만 고쳐도
+      // 설명이 조용히 지워진다.
+      const kept = await patch({ title: '제목만 바꾼다' })
+      expect(kept.json().description).toBe('있던 설명')
+
+      const cleared = await patch({ description: null })
+      expect(cleared.statusCode).toBe(200)
+      expect(cleared.json().description).toBeNull()
+    })
+  })
+
+  it('빈 문자열은 null로 접히지 않는다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+        payload: { description: '' },
+      })
+      expect(res.statusCode).toBe(200)
+      // **`''`와 `null`은 다른 값이다**(`projects.description`과 같은 취급). 서버가 둘을
+      // 합치면 화면이 "설명 없음"과 "빈 설명"을 가를 수 없다.
+      expect(res.json().description).toBe('')
+    })
+  })
+
+  it('상한은 받고 상한+1은 400이다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+      const patch = (description: string) =>
+        ctx.app.inject({
+          method: 'PATCH',
+          url: `/api/projects/${project.id}/pages/${page.id}`,
+          cookies: owner.cookie,
+          payload: { description },
+        })
+
+      // **수를 박지 않고 상수에서 만든다**(`comments.test.ts`의 본문 길이 케이스와 같은
+      // 이유). 박으면 라우트가 그 상수에서 떨어져 나가도 이 케이스가 안 죽는다.
+      expect((await patch('가'.repeat(PAGE_DESCRIPTION_MAX_LENGTH))).statusCode).toBe(200)
+
+      const over = await patch('가'.repeat(PAGE_DESCRIPTION_MAX_LENGTH + 1))
+      expect(over.statusCode).toBe(400)
+      expect(over.json().error.issues[0].path).toBe('description')
+    })
+  })
+
+  it('남이 그 페이지의 노드를 잠근 동안에도 설명은 바뀐다 — 잠금은 문서 안만 본다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const { project, page } = await createProjectWithPage(ctx, owner)
+      const other = await signup(ctx)
+      await addMember(ctx, project.id, other.user.id, 'editor')
+
+      const doc = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+      })
+      const rootId = (doc.json().schema as PageDocument).root.id
+
+      // 남이 이 페이지의 루트 노드를 쥔다. `PATCH .../ops`였다면 423이 날 자리다.
+      ctx.app.realtime.locks.hold({
+        projectId: project.id,
+        pageId: page.id,
+        nodeId: rootId,
+        connectionId: 'conn-other',
+        userId: other.user.id,
+        userName: '남',
+      })
+
+      const res = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${project.id}/pages/${page.id}`,
+        cookies: owner.cookie,
+        payload: { description: '남이 잠근 동안' },
+      })
+      // **§7.2의 `findLockConflict`는 문서 안 포인터를 본다.** `pages.description`은 문서
+      // 밖 컬럼이라 이 라우트는 `lockConflictError`를 아예 지나지 않는다. **화면의 판정이
+      // 이 값에 달려 있다** — 423이 나기 시작하면 화면이 말할 것이 생긴 것이고 이 케이스가
+      // 먼저 죽는다.
+      expect(res.statusCode).toBe(200)
+      expect(res.json().description).toBe('남이 잠근 동안')
     })
   })
 

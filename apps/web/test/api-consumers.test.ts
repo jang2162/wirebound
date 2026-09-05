@@ -115,7 +115,10 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   updateMenu: ['../src/tree/use-tree-commands.tsx'],
   deleteMenu: ['../src/tree/use-tree-commands.tsx'],
   createPage: ['../src/tree/use-tree-commands.tsx'],
-  updatePage: ['../src/tree/use-tree-commands.tsx'],
+  // **부르는 자리가 둘이다(P10).** 트리 훅은 제목·소속 메뉴·순서를 고치고, 설명 탭은
+  // `description` 하나를 고친다 — **본문의 키가 겹치지 않아** 두 자리가 서로의 값을
+  // 덮지 않는다(`declaredOnly`가 준 키만 싣는다). 겹치기 시작하면 이 줄이 먼저 눈에 띈다.
+  updatePage: ['../src/panels/page-description.tsx', '../src/tree/use-tree-commands.tsx'],
   deletePage: ['../src/tree/use-tree-commands.tsx'],
   // 페이지 가져오기(P7-3). **트리 훅 하나에서만 불린다** — 가져오기는 트리를 바꾸는
   // 조작이므로 `createPage`와 같은 잠금·재조회·이동을 지나야 하고(D2·D8), 그 셋이 그 훅에

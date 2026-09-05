@@ -149,15 +149,42 @@ export interface ApiClient {
    */
   createPage(projectId: string, body: { menuNodeId: string; title: string }): Promise<PageDetail>
   /**
-   * 페이지의 제목·소속 메뉴·순서를 고친다. `updateMenu`와 같은 계약이다 — 준 키만 실린다.
+   * 페이지의 제목·설명·소속 메뉴·순서를 고친다. `updateMenu`와 같은 계약이다 — 준 키만 실린다.
    *
-   * **`description`·`schema`는 여기서 못 바꾼다**(전자는 이 단계 밖, 후자는 서버가
-   * `PUT .../schema`·`PATCH .../ops`로만 받는다).
+   * **`schema`는 여기서 못 바꾼다** — 서버가 `PUT .../schema`·`PATCH .../ops`로만 받는다.
+   *
+   * ## `description`이 여기 있다 — 서버는 처음부터 받고 있었다
+   *
+   * **앞 판의 이 자리는 *"`description`은 여기서 못 바꾼다"*였고 그 근거를 *"이 단계 밖"*이라고
+   * 적었다.** 그 문장은 이 인터페이스에 대해서만 참이었다 — `routes/pages.ts`의
+   * `UpdatePageBody`는 **처음부터** `description`을 받았고 `repos/pages.ts`의 `updatePage`도
+   * 그것을 썼다. 막고 있던 것은 **여기 시그니처와 `http-client.ts`의 `BODY_KEYS.updatePage`
+   * 화이트리스트** 둘뿐이고, 후자가 `declaredOnly`로 그 키를 떨궈 냈다.
+   *
+   * **실측**(api 하네스, `projectGuard('editor')`):
+   *
+   * | 보낸 것 | 결과 |
+   * |---|---|
+   * | `{description:'설명'}` | 200, 되읽으면 그대로 |
+   * | `{description:null}` | 200, `null` — *"설명을 지운다"* |
+   * | `{description:''}` | 200, `""` — **빈 문자열은 `null`로 접히지 않는다** |
+   * | `{description:'a'×2000}` | 200 |
+   * | `{description:'a'×2001}` · `{description:'가'×2001}` | 400 `"설명은 2000자 이하여야 합니다"` |
+   * | viewer가 보냄 | 403 |
+   * | **남이 그 페이지의 노드를 잠근 동안** | **200** |
+   *
+   * **잠금이 이 경로를 안 본다**(실측). §7.2의 `findLockConflict`는 **문서 안 포인터**를
+   * 보는데 `pages.description`은 문서 밖 컬럼이라, 이 라우트는 `lockConflictError`를 아예
+   * 지나지 않는다. `title` 갱신도 같다. **그래서 화면이 잠금을 판정하지 않는다** — 없는
+   * 실패를 화면이 지어내면 그것이 곧 두 번째 판정이다.
+   *
+   * `description: null`은 **"설명을 지운다"**이고 키가 없는 것("설명을 바꾸지 않는다")과
+   * 다르다 — `updateMenu`의 `parentId: null`과 같은 자리다.
    */
   updatePage(
     projectId: string,
     pageId: string,
-    body: { title?: string; menuNodeId?: string; sortOrder?: number },
+    body: { title?: string; description?: string | null; menuNodeId?: string; sortOrder?: number },
   ): Promise<PageDetail>
   deletePage(projectId: string, pageId: string): Promise<void>
   /**

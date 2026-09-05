@@ -2582,6 +2582,60 @@
   word-break: break-word;
 }
 
+/* 페이지 설명 편집기(`panels/page-description.tsx`의 `PageDescriptionEditor`). 편집 모드
+   속성 탭에서 루트 `Page`를 골랐을 때 선다(§9). `snapshots-panel.tsx`의 폼과 같은 결이되
+   여러 줄 상자라 세로로 쌓는다. */
+.wb-shell-page-description-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-shell-page-description-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #234;
+}
+
+.wb-shell-page-description-input {
+  /* 패널 폭을 넘지 않게 한다 — `textarea`의 기본 `cols`가 20자라 부모를 밀어낸다. */
+  width: 100%;
+  box-sizing: border-box;
+  /* 가로 리사이즈는 패널을 부수므로 세로만 연다. */
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 글자 수. 세는 것이 없으면 `maxLength`가 조용히 막을 때 이유가 안 보인다. */
+.wb-shell-page-description-count {
+  margin: 0;
+  font-size: 11px;
+  color: #678;
+  text-align: right;
+}
+
+.wb-shell-page-description-save {
+  align-self: flex-start;
+}
+
+/* 저장 성공·실패. **둘이 같은 자리를 쓰되 `role`과 색이 다르다** — 스냅샷 패널의
+   `.wb-shell-snapshots-saved` / `.wb-shell-snapshots-error`와 같은 배치다. */
+.wb-shell-page-description-saved {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #1a6b3a;
+}
+
+.wb-shell-page-description-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #a11;
+}
+
 /* 문서 경고(`shell/edit-warnings.tsx`). 실패 통지(`.wb-shell-edit-alert`)와 같은 줄 자리를
    쓰되 `role`이 다르다 — 저장은 성공했다. 색을 주는 것은 실패와 갈라 보이게 하기 위해서다. */
 .wb-shell-edit-warnings {
