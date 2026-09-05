@@ -2582,9 +2582,16 @@
   word-break: break-word;
 }
 
-/* 페이지 설명 편집기(`panels/page-description.tsx`의 `PageDescriptionEditor`). 편집 모드
-   속성 탭에서 루트 `Page`를 골랐을 때 선다(§9). `snapshots-panel.tsx`의 폼과 같은 결이되
-   여러 줄 상자라 세로로 쌓는다. */
+/* 페이지 설명 편집기(`panels/page-description.tsx`의 `PageDescriptionPanel`). **뷰 모드
+   «페이지 설명» 탭**에 선다 — 위 `.wb-shell-page-description`과 같은 탭이고, 그 탭이
+   읽기 전용이던 시절의 문단을 이 폼이 대신한다. `snapshots-panel.tsx`의 폼과 같은 결이되
+   여러 줄 상자라 세로로 쌓는다.
+
+   **앞 판은 여기 *"편집 모드 속성 탭에서 루트 `Page`를 골랐을 때"*라고 적었다.** §9의
+   문장이 그렇게 말하지만 그 자리는 **지어 보고 되돌린 자리**이고(그 파일 머리말과
+   `panels/property-panel.tsx` 머리말이 되돌린 이유를 든다), 없는 이름
+   (`PageDescriptionEditor`)까지 함께 적혀 있었다. 되돌린 설계를 설명으로 남기면 다음
+   사람이 없는 것을 찾는다. */
 .wb-shell-page-description-form {
   display: flex;
   flex-direction: column;
