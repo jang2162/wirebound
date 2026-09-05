@@ -8,13 +8,20 @@
  * `apps/api/test/pages.test.ts`와 `apps/api/test/permission-matrix.test.ts`가 갖는다.
  * 여기가 재는 것은 **화면이 무엇을 보내고 무엇을 말하는가**다.
  */
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { ApiError } from '../../src/api/client'
 import type { ApiClient } from '../../src/api/client'
 import type { PageDetail } from '../../src/api/types'
-import { openPage, PAGE_ID, pageDetail, pageDoc } from '../editor-harness'
+import {
+  openPage,
+  OTHER_PAGE_ID,
+  OTHER_PAGE_TITLE,
+  PAGE_ID,
+  pageDetail,
+  pageDoc,
+} from '../editor-harness'
 import '../../src/catalog-setup'
 
 const ROOT_ID = 'n-root'
@@ -34,6 +41,23 @@ function withDescription(description: string | null): Partial<ApiClient> {
       description,
     })) as never,
   }
+}
+
+/**
+ * 페이지마다 다른 설명. **둘을 같게 두면 «앞 페이지의 초안이 따라왔다»와 «이 페이지의
+ * 값을 제대로 읽었다»가 같은 글자가 되어 구별되지 않는다.**
+ */
+const DESCRIPTION_OF: Record<string, string> = {
+  [PAGE_ID]: '회원 목록 화면이다',
+  [OTHER_PAGE_ID]: '회원 상세 화면이다',
+}
+
+/** 페이지마다 자기 설명을 내는 `getPage` 가짜. */
+const perPageDescription: Partial<ApiClient> = {
+  getPage: (async (_projectId: string, pageId: string) => ({
+    ...pageDetail(pageId, DOC),
+    description: DESCRIPTION_OF[pageId] ?? null,
+  })) as never,
 }
 
 /**
@@ -66,17 +90,35 @@ function toView(): void {
   fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
 }
 
-/** `updatePage` 호출을 받아 적는 가짜. 응답의 `description`은 부르는 쪽이 정한다. */
+/** 메뉴 트리에서 다른 페이지로 옮긴다 — **사용자가 하듯** 누른다. */
+function toOtherPage(): void {
+  fireEvent.click(
+    within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', {
+      name: OTHER_PAGE_TITLE,
+    }),
+  )
+}
+
+/**
+ * `updatePage` 호출을 받아 적는 가짜. 응답의 `description`은 부르는 쪽이 정한다.
+ *
+ * **본문과 함께 «어느 페이지에 보냈나»도 적는다** — 본문만 보면 앞 페이지의 글이 이
+ * 페이지로 나간 것과 이 페이지의 글이 나간 것이 같아 보인다(그것이 F1이다).
+ */
 function recordingApi(reply?: (description: string | null) => PageDetail): {
   overrides: Partial<ApiClient>
   bodies: { description?: string | null }[]
+  pages: string[]
 } {
   const bodies: { description?: string | null }[] = []
+  const pages: string[] = []
   return {
     bodies,
+    pages,
     overrides: {
       updatePage: (async (_projectId: string, pageId: string, body: { description?: string | null }) => {
         bodies.push(body)
+        pages.push(pageId)
         const next = body.description ?? null
         return reply?.(next) ?? { ...pageDetail(pageId, DOC), description: next }
       }) as never,
@@ -219,5 +261,102 @@ describe('§9 — 상한은 `@wirebound/schema`가 소유한다', () => {
 
     type('여섯 글자다')
     expect(screen.getByText(`6 / ${PAGE_DESCRIPTION_MAX_LENGTH}`)).toBeTruthy()
+  })
+})
+
+/**
+ * **페이지를 바꾸는 축.** 이 파일의 다른 케이스는 전부 페이지 하나 안에서 돌아
+ * `pageId`가 바뀌는 갈래를 아무도 지나지 않았고, 그래서 «앞 페이지의 초안이 남는다»가
+ * 리뷰까지 살아남았다(실측: 브라우저 → DB. A에서 안 저장한 글을 치고 B로 옮겨 저장하면
+ * **A의 글이 B에 저장됐다**). **그 축의 주인이 이 절이다.**
+ *
+ * **셋이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 쟀다:
+ *
+ * | 변조 | 혼자 죽는 것 |
+ * |---|---|
+ * | 이펙트의 `setDraft(null)`을 뺀다 | *"앞 페이지에서 친 초안이 …"* |
+ * | 통지 초기화가 `'saved'`만 지우게 한다(절반만 고친 판) | *"앞 페이지의 실패 문장이 …"* |
+ * | 그 거울판 — `'failed'`만 지우게 한다 | *"앞 페이지의 저장 통지가 …"* |
+ *
+ * **통지 초기화를 통째로 빼면 뒤의 둘이 함께 죽는다** — 한 줄이 둘을 잠근다. 그래도 둘로
+ * 두는 것은 **새는 것이 둘이고 사용자가 보는 것이 다르기 때문**이다(거짓 «저장했습니다»
+ * vs. 남의 페이지의 오류 문장). 위 표의 절반 변조 둘이 그 둘을 가른다.
+ */
+describe('§9 — 페이지를 바꾸면 앞 페이지의 것을 버린다', () => {
+  it('앞 페이지에서 친 초안이 따라오지 않는다', async () => {
+    const api = recordingApi()
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: DOC },
+      apiOverrides: { ...perPageDescription, ...api.overrides },
+    })
+    toView()
+    await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
+
+    type('저장하지 않은 초안 — 앞 페이지의 것')
+    toOtherPage()
+
+    // **제목이 바뀐 것을 먼저 기다린다** — 조회가 끝나기 전에 재면 아직 앞 페이지의
+    // 화면이라 «초안이 사라졌다»가 우연히 참일 수 있다.
+    await screen.findByRole('heading', { name: OTHER_PAGE_TITLE })
+    expect(box().value).toBe(DESCRIPTION_OF[OTHER_PAGE_ID])
+    // **저장 버튼까지 본다.** 상자만 보면 «값은 갈아 끼웠는데 초안은 살아 있는» 판이
+    // 통과한다 — 그 판에서 버튼을 누르면 앞 페이지의 글이 이 페이지에 저장된다.
+    expect(saveButton().disabled).toBe(true)
+
+    // **양성 대조**: 여기서 친 글은 이 페이지의 것이라 남는다. 없으면 "언제나 비운다"도
+    // 통과한다.
+    type('이 페이지에서 친 글')
+    fireEvent.click(saveButton())
+    await waitFor(() =>
+      expect(api.bodies).toEqual([{ description: '이 페이지에서 친 글' }]),
+    )
+    expect(api.pages).toEqual([OTHER_PAGE_ID])
+  })
+
+  it('앞 페이지의 저장 통지가 따라오지 않는다', async () => {
+    const api = recordingApi()
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: DOC },
+      apiOverrides: { ...perPageDescription, ...api.overrides },
+    })
+    toView()
+    await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
+
+    type('앞 페이지에 저장할 글')
+    fireEvent.click(saveButton())
+    await screen.findByText('설명을 저장했습니다')
+
+    toOtherPage()
+    await screen.findByRole('heading', { name: OTHER_PAGE_TITLE })
+
+    // 이 페이지에는 아무것도 저장한 적이 없다.
+    expect(screen.queryByText('설명을 저장했습니다')).toBeNull()
+  })
+
+  it('앞 페이지의 실패 문장이 따라오지 않는다', async () => {
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: DOC },
+      apiOverrides: {
+        ...perPageDescription,
+        updatePage: (async () => {
+          throw new ApiError(403, 'forbidden', '이 작업을 수행할 권한이 없습니다')
+        }) as never,
+      },
+    })
+    toView()
+    await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
+
+    type('막힐 글')
+    fireEvent.click(saveButton())
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '이 작업을 수행할 권한이 없습니다',
+    )
+
+    toOtherPage()
+    await screen.findByRole('heading', { name: OTHER_PAGE_TITLE })
+
+    // **남의 페이지의 오류 문장이 이 페이지에 붙지 않는다.** 조회 실패의 `role="alert"`와
+    // 같은 자를 쓰므로 «둘 다 없다»를 재는 것이 맞다 — 이 페이지의 조회는 성공했다.
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

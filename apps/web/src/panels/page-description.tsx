@@ -82,6 +82,37 @@
  * **코멘트 탭이 이미 같은 형태다** — 마운트될 때 자기 것을 조회한다. 그리고 이 패널은
  * **뷰 모드에서 그 탭을 봤을 때만 마운트된다**(`routes/editor.tsx`가 보이지 않는 탭을
  * DOM에서 뺀다). 값이 큰 것은 `schema`를 함께 받아 오는 낭비 하나다.
+ *
+ * ## 페이지가 바뀌면 초안도 통지도 버린다 — **조회 상태와 같은 자리에서**
+ *
+ * **탭이 그대로면 페이지를 바꿔도 이 패널은 언마운트되지 않는다** — `routes/editor.tsx`가
+ * 탭 본문을 `key` 없이 그리므로 같은 인스턴스가 산다. 그래서 조회를 다시 거는 것만으로는
+ * 부족했다: 앞 페이지에 쓰던 초안이 `value = draft ?? server`에서 **이기고**, 그대로
+ * 저장하면 **남의 페이지에 그 글이 들어간다.** 저장 통지도 같은 경로로 새어 아무것도
+ * 저장한 적 없는 페이지에 «저장했습니다»가 떠 있었다. **지어 놓고 났던 결함이고**
+ * 브라우저에서 쳐서 DB까지 확인됐다(P10 리뷰 F1).
+ *
+ * **`comment-panel.tsx`가 같은 자리에서 같은 것을 한다** — 조회를 다시 걸면서 초안·고치던
+ * 것·오류를 함께 버리고, 이유를 *"노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다"*로
+ * 적어 뒀다. **여기도 같은 결이다.**
+ *
+ * **그래서 셋(조회·초안·저장 통지)을 `usePageDescription`이 함께 든다.** 초안과 통지를
+ * 컴포넌트가 따로 들면 «페이지가 바뀌면 버린다»가 **두 벌의 처방**이 되고, 실제로 그렇게
+ * 지었다가 조회 하나만 갖췄다.
+ *
+ * ### §3.16 E의 *"친 글자를 잃지 않는다"*와 부딪히지 않는다 — **축이 다르다**
+ *
+ * `panels/structure-toolbar.tsx`의 «두 축을 가른다»는 *"친 글자는 살리고 고른 것은
+ * 되돌아간다"*이고, **그 근거는 «친 글자는 사용자 자신의 것이고 문서와 무관해 낡을 수가
+ * 없다»**였다. 갈리는 자리가 정확히 그 근거다.
+ *
+ * - **같은 페이지 안에서 조건이 오갈 때는 살린다** — 그 근거가 그대로 선다. 글이 무엇에
+ *   대한 것인지가 안 바뀐다. 저장이 403·400으로 막혀도 친 글을 안 지우는 것이 그 자리다
+ *   (케이스 *"저장이 실패하면 …"*의 마지막 단언이 그것을 잠근다).
+ * - **페이지가 바뀌면 버린다** — 이 초안은 *"이 페이지가 무엇인가"*라서 **가리키는 페이지가
+ *   곧 뜻의 절반**이다. 페이지가 바뀌는 순간 «낡을 수가 없다»가 아예 성립하지 않는다.
+ *   그리고 살렸을 때 잃는 것은 «친 글자»가 아니라 **남의 페이지에 그 글자가 저장되는
+ *   것**이다 — 더 나쁜 손실을 막는 쪽이 이긴다.
  */
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
 import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
@@ -104,8 +135,19 @@ type LoadState =
   | { status: 'ready'; title: string; description: string | null }
   | { status: 'failed'; failure: Failure }
 
+/** 저장 진행 상태. 성공·실패 통지는 **다음 편집이 시작되면 사라진다**(아래 `onChange`). */
+type SaveState =
+  | { status: 'idle' }
+  | { status: 'saving' }
+  | { status: 'saved' }
+  | { status: 'failed'; failure: Failure }
+
 /**
- * 그 페이지의 제목·설명을 조회한다.
+ * **그 페이지의 것 셋을 함께 든다** — 조회(`state`)·초안(`draft`)·저장 통지(`save`).
+ *
+ * 셋이 한 자리에 있는 것이 이 훅의 요점이다. 셋 다 «그 페이지의 것»이라 **페이지가 바뀌면
+ * 함께 버려야 하는데**, 초안과 통지를 컴포넌트가 따로 들면 그 버리는 일이 두 벌의 처방이
+ * 된다(위 머리말의 그 절 — 그렇게 지었다가 결함이 났다).
  *
  * `replace`는 저장이 성공했을 때 부르는 자리다. 다시 조회하지 않는 이유는 서버가 갱신된
  * 행을 응답으로 주기 때문이다(`PageDetail`) — 왕복 하나를 아끼는 것이 아니라, 다시 읽는
@@ -114,9 +156,21 @@ type LoadState =
 function usePageDescription(
   projectId: string,
   pageId: string | undefined,
-): { state: LoadState; replace: (description: string | null) => void } {
+): {
+  state: LoadState
+  /** 아직 아무것도 안 쳤으면 `null`. 아래 컴포넌트의 `value`가 그것을 푼다. */
+  draft: string | null
+  setDraft: (draft: string | null) => void
+  save: SaveState
+  setSave: (save: SaveState) => void
+  replace: (description: string | null) => void
+} {
   const api = useApi()
   const [state, setState] = useState<LoadState>({ status: 'loading' })
+  // **초안은 «아직 안 쳤다»를 `null`로 든다.** 빈 문자열로 초기화하면 조회가 끝나기 전의
+  // 빈 상자와 *"사용자가 지운 상자"*가 같은 값이 되어, 값이 도착할 때 지운 것을 되살린다.
+  const [draft, setDraft] = useState<string | null>(null)
+  const [save, setSave] = useState<SaveState>({ status: 'idle' })
 
   useEffect(() => {
     if (pageId === undefined) return
@@ -124,6 +178,12 @@ function usePageDescription(
     // 응답이 오기 전에 다른 페이지로 옮기면 결과를 버린다(`routes/editor.tsx`와 같은 가드).
     let alive = true
     setState({ status: 'loading' })
+    // **페이지가 바뀌면 앞 페이지에 쓰던 초안도, 그 페이지에 대한 통지도 버린다.** 초안은
+    // *"이 페이지가 무엇인가"*라 가리키는 페이지가 곧 뜻의 절반이고, 통지는 그 페이지에서
+    // 한 저장의 결과다 — 둘 다 이 페이지 안에서만 뜻이 있다. `comment-panel.tsx`가 같은
+    // 자리에서 같은 것을 하고 이유도 같다(위 머리말 «페이지가 바뀌면 …»).
+    setDraft(null)
+    setSave({ status: 'idle' })
 
     async function load(openPageId: string): Promise<void> {
       try {
@@ -149,15 +209,8 @@ function usePageDescription(
     setState((prev) => (prev.status === 'ready' ? { ...prev, description } : prev))
   }, [])
 
-  return { state, replace }
+  return { state, draft, setDraft, save, setSave, replace }
 }
-
-/** 저장 진행 상태. 성공·실패 통지는 **다음 편집이 시작되면 사라진다**(아래 `onChange`). */
-type SaveState =
-  | { status: 'idle' }
-  | { status: 'saving' }
-  | { status: 'saved' }
-  | { status: 'failed'; failure: Failure }
 
 /** 뷰 모드 «페이지 설명» 탭의 본문. 읽고 고친다(위 머리말). */
 export function PageDescriptionPanel(props: {
@@ -166,11 +219,7 @@ export function PageDescriptionPanel(props: {
 }): ReactElement {
   const api = useApi()
   const { projectId, pageId } = props
-  const { state, replace } = usePageDescription(projectId, pageId)
-  // **초안은 «아직 안 쳤다»를 `null`로 든다.** 빈 문자열로 초기화하면 조회가 끝나기 전의
-  // 빈 상자와 *"사용자가 지운 상자"*가 같은 값이 되어, 값이 도착할 때 지운 것을 되살린다.
-  const [draft, setDraft] = useState<string | null>(null)
-  const [save, setSave] = useState<SaveState>({ status: 'idle' })
+  const { state, draft, setDraft, save, setSave, replace } = usePageDescription(projectId, pageId)
 
   const server = state.status === 'ready' ? (state.description ?? '') : ''
   const value = draft ?? server
