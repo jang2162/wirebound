@@ -115,9 +115,27 @@ describe('판정은 한 벌이다 (D7)', () => {
 
   it('화면이 잠금 목록을 손에 쥐는 자리도 하나다 — 판정은 스토어 안에서 끝난다', () => {
     // 스토어의 `#state`는 private이라 밖에서 목록을 얻는 길은 selector뿐이다. 오늘 그것은
-    // **다시 그리려는 구독 하나**이고(`panels/structure-tree.tsx`), 판정은 스토어의
-    // `lockedBy` 안에서 끝난다. 여기 줄이 늘면 화면 어딘가가 목록을 직접 들여다본다는 뜻이다.
-    expect(filesMatching(WEB_SRC, SELECTS_LOCK_LIST)).toEqual(['panels/structure-tree.tsx'])
+    // **다시 그리려는 구독 하나**이고, 판정은 스토어의 `lockedBy` 안에서 끝난다.
+    // 여기 줄이 늘면 화면 어딘가가 목록을 직접 들여다본다는 뜻이다.
+    //
+    // **그 하나가 패널에서 훅으로 옮겨 갔다(UI 점검 7차).** 앞 판은 `panels/structure-tree.tsx`
+    // 였는데, 속성 패널도 잠금을 봐야 하게 되면서 **형제 둘 중 하나에 둘 수 없어졌다** —
+    // 한쪽이 다른 쪽에 값을 내려 줄 수 없다. `store/use-locked-by.ts`는 목록을 뒤지지 않고
+    // `store.lockedBy`를 그대로 돌려주므로 **이 케이스가 세는 것(«판정이 몇 벌인가»)은
+    // 그대로 하나다.** 자리가 「스토어의 React 바인딩」이라 잠금을 보는 화면이 더 생겨도
+    // 늘지 않는다.
+    expect(filesMatching(WEB_SRC, SELECTS_LOCK_LIST)).toEqual(['store/use-locked-by.ts'])
+  })
+
+  it('그 자리가 **판정을 새로 짓지 않는다** — 목록을 쥐는 파일이 곧 판정하는 파일은 아니다', () => {
+    // 위 케이스는 *"목록을 쥐는 자리가 하나"*만 세므로, 그 하나가 **자기 손으로** 판정하기
+    // 시작하면 조용히 통과한다(옮기기 전에는 그 자리가 패널이라 이 구멍이 같은 크기였다).
+    // `findLockConflict`를 부르는 자리가 스토어 하나라는 것은 위에서 이미 세므로, 여기서는
+    // 그 파일이 **문서를 뒤지는 코드를 갖지 않는다**는 것을 본다.
+    const source = stripComments(readFileSync(join(WEB_SRC, 'store/use-locked-by.ts'), 'utf8'))
+
+    expect(source).toContain('store.lockedBy')
+    expect(source).not.toMatch(/\bfindNodePath\(|\blocksAgainst\(|\.filter\(/)
   })
 
   it('검사가 진짜로 무언가를 본다 — 음성 대조', () => {

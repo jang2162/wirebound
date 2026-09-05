@@ -32,6 +32,11 @@ export interface ListControlProps {
   value: unknown
   /** 그룹에 붙는 id. 라벨(`<dt>`의 `<label htmlFor>`)이 이것을 가리킨다. */
   id: string
+  /**
+   * 남이 잠근 자리라 못 바꾸는가. **칸뿐 아니라 버튼 둘도 함께 꺼진다** — 추가·삭제는
+   * 즉시 커밋이라 칸만 끄면 그 둘로 목록이 그대로 나간다.
+   */
+  disabled: boolean
   onCommit: (value: ListValue) => void
 }
 
@@ -65,7 +70,7 @@ function toValue(items: Pair[], pairs: boolean): ListValue {
 }
 
 export function ListControl(props: ListControlProps): ReactElement {
-  const { field, value, id, onCommit } = props
+  const { field, value, id, disabled, onCommit } = props
   const pairs = isPairList(field)
   const items = toItems(value, pairs)
 
@@ -110,6 +115,7 @@ export function ListControl(props: ListControlProps): ReactElement {
       <input
         className="wb-shell-control wb-shell-list-cell"
         type="text"
+        disabled={disabled}
         aria-label={label}
         value={textOf(index, part)}
         onChange={(event) => setDraft({ index, part, text: event.target.value })}
@@ -136,6 +142,7 @@ export function ListControl(props: ListControlProps): ReactElement {
             <button
               type="button"
               className="wb-shell-list-remove"
+              disabled={disabled}
               onClick={() => removeItem(index)}
             >
               {`${index + 1}번째 지우기`}
@@ -143,7 +150,7 @@ export function ListControl(props: ListControlProps): ReactElement {
           </li>
         ))}
       </ul>
-      <button type="button" className="wb-shell-list-add" onClick={addItem}>
+      <button type="button" className="wb-shell-list-add" disabled={disabled} onClick={addItem}>
         항목 추가
       </button>
     </div>

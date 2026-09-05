@@ -66,6 +66,9 @@ import {
 import { useEditCommit } from '../edit/use-edit-commit'
 import { walkSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { useLockedBy } from '../store/use-locked-by'
+// 우측 패널의 두 탭이 같은 이유로 같이 꺼진다 — 문장을 두 벌로 두지 않는다.
+import { lockedNotice } from './property-panel'
 import '../catalog-setup'
 
 /** 페이지를 열지 않았을 때. */
@@ -128,6 +131,9 @@ export function InteractionPanel(props: {
     projectId: props.projectId,
     pageId: props.pageId ?? '',
   })
+  // **속성 패널과 같은 값을 같은 자리에서 받는다**(`store/use-locked-by.ts`) — 판정은
+  // 스토어의 `lockedBy` 하나이고 여기서 하는 것은 그것을 위젯에 잇는 것뿐이다.
+  const lockOf = useLockedBy()
 
   if (doc === null) {
     return <p className="wb-shell-panel-notice">{NO_PAGE}</p>
@@ -135,6 +141,13 @@ export function InteractionPanel(props: {
 
   const node = selectedNodeId === null ? undefined : findSafely(doc, selectedNodeId)
   const sentences = listInteractionSentences(doc)
+  /**
+   * **이 탭도 «고른 노드»가 단위다** — 근거는 `./property-panel.tsx`의 `lock` 선언이
+   * 소유한다. 나가는 op이 `…/interactions`라 잠금 판정이 속성과 **같은 값**이기도 하다
+   * (스파이크: 잠긴 노드 423 · 조상 200 — 그 표도 그쪽이 갖는다).
+   */
+  const lock = node === undefined ? null : lockOf(node.id)
+  const blocked = lock !== null
 
   return (
     <>
@@ -143,11 +156,20 @@ export function InteractionPanel(props: {
       {node === undefined ? (
         <p className="wb-shell-panel-notice">{NO_TARGET}</p>
       ) : (
-        <NodeRules
-          document={doc}
-          node={node}
-          onChange={(next) => commitInteractions(node.id, next)}
-        />
+        <>
+          {/* 꺼진 위젯의 이유를 이 탭이 자기 자리에서 말한다(속성 패널과 같은 판단). */}
+          {lock !== null && <p className="wb-shell-panel-notice">{lockedNotice(lock.userName)}</p>}
+          <NodeRules
+            document={doc}
+            node={node}
+            disabled={blocked}
+            // **커밋이 나가는 자리가 하나라 가드도 하나다.** 위젯을 끄는 것만으로는 안 되는
+            // 이유는 속성 패널의 `blocked` 주석에 있다(잠긴 동안 도착하는 blur).
+            onChange={(next) => {
+              if (!blocked) commitInteractions(node.id, next)
+            }}
+          />
+        </>
       )}
 
       {/* **이 페이지의 규칙 전부를 보인다** — 코멘트 탭이 같은 판정을 했다(그쪽 재라 #3).
@@ -179,9 +201,11 @@ export function InteractionPanel(props: {
 function NodeRules(props: {
   document: PageDocument
   node: WbNode
+  /** 남이 잠근 자리라 못 바꾸는가. **아래 모든 위젯에 내려간다** — 하나만 빠져도 그것으로 나간다. */
+  disabled: boolean
   onChange: (next: Interaction[]) => void
 }): ReactElement {
-  const { document: doc, node, onChange } = props
+  const { document: doc, node, disabled, onChange } = props
   // **문서에서 읽는다 — 로컬 사본을 두지 않는다**(머리말의 근거).
   const interactions = Array.isArray(node.interactions) ? node.interactions : []
   const choices = nodeChoices(doc)
@@ -205,6 +229,7 @@ function NodeRules(props: {
             트리거
             <select
               className="wb-shell-select"
+              disabled={disabled}
               value={interaction.on}
               onChange={(event) =>
                 replaceAt(index, { ...interaction, on: event.target.value as InteractionTrigger })
@@ -221,6 +246,7 @@ function NodeRules(props: {
           <button
             type="button"
             className="wb-shell-interaction-remove"
+            disabled={disabled}
             onClick={() => onChange(interactions.filter((_, i) => i !== index))}
           >
             규칙 {index + 1} 삭제
@@ -234,6 +260,7 @@ function NodeRules(props: {
             <ActionRow
               key={actionIndex}
               document={doc}
+              disabled={disabled}
               action={action}
               index={actionIndex}
               choices={choices}
@@ -255,6 +282,7 @@ function NodeRules(props: {
           <button
             type="button"
             className="wb-shell-interaction-add-action"
+            disabled={disabled}
             onClick={() =>
               replaceAt(index, {
                 ...interaction,
@@ -270,6 +298,7 @@ function NodeRules(props: {
       <button
         type="button"
         className="wb-shell-interaction-add"
+        disabled={disabled}
         onClick={() => onChange([...interactions, { on: 'click', actions: [] }])}
       >
         상호작용 추가
@@ -284,10 +313,12 @@ function ActionRow(props: {
   action: InteractionAction
   index: number
   choices: { id: string; label: string }[]
+  /** 남이 잠근 자리인가. `NodeRules`가 그대로 내려 준다. */
+  disabled: boolean
   onChange: (next: InteractionAction) => void
   onRemove: () => void
 }): ReactElement {
-  const { document: doc, action, index, choices, onChange, onRemove } = props
+  const { document: doc, action, index, choices, disabled, onChange, onRemove } = props
   const ordinal = index + 1
 
   return (
@@ -299,6 +330,7 @@ function ActionRow(props: {
         종류
         <select
           className="wb-shell-select"
+          disabled={disabled}
           value={action.type}
           // **타입을 바꾸면 액션을 새로 만든다.** 남은 필드를 이어 쓰면 `setProp`의 `prop`이
           // `navigate`에 남아 봉투 검증(`strictObject`)이 그 문서를 거절한다.
@@ -317,6 +349,7 @@ function ActionRow(props: {
         <TextField
           label="페이지 경로"
           value={action.target}
+          disabled={disabled}
           onCommit={(value) => onChange({ ...action, target: value })}
         />
       ) : (
@@ -324,6 +357,7 @@ function ActionRow(props: {
           대상
           <select
             className="wb-shell-select"
+            disabled={disabled}
             value={action.target}
             onChange={(event) => onChange({ ...action, target: event.target.value })}
           >
@@ -343,6 +377,7 @@ function ActionRow(props: {
           어떻게
           <select
             className="wb-shell-select"
+            disabled={disabled}
             value={action.value ? 'show' : 'hide'}
             onChange={(event) => onChange({ ...action, value: event.target.value === 'show' })}
           >
@@ -355,6 +390,7 @@ function ActionRow(props: {
       {action.type === 'switchTab' && (
         <TabPicker
           document={doc}
+          disabled={disabled}
           target={action.target}
           tab={action.tab}
           onChange={(tab) => onChange({ ...action, tab })}
@@ -364,6 +400,7 @@ function ActionRow(props: {
       {action.type === 'setProp' && (
         <PropPicker
           document={doc}
+          disabled={disabled}
           target={action.target}
           prop={action.prop}
           value={action.value}
@@ -371,7 +408,12 @@ function ActionRow(props: {
         />
       )}
 
-      <button type="button" className="wb-shell-interaction-remove-action" onClick={onRemove}>
+      <button
+        type="button"
+        className="wb-shell-interaction-remove-action"
+        disabled={disabled}
+        onClick={onRemove}
+      >
         액션 {ordinal} 삭제
       </button>
     </div>
@@ -386,6 +428,8 @@ function TabPicker(props: {
   document: PageDocument
   target: string
   tab: number
+  /** 남이 잠근 자리인가. `ActionRow`가 그대로 내려 준다. */
+  disabled: boolean
   onChange: (tab: number) => void
 }): ReactElement {
   const node = findSafely(props.document, props.target)
@@ -399,6 +443,7 @@ function TabPicker(props: {
       <TextField
         label="탭 번호"
         value={String(props.tab)}
+        disabled={props.disabled}
         onCommit={(value) => {
           const parsed = Number(value)
           if (Number.isInteger(parsed) && parsed >= 0) props.onChange(parsed)
@@ -412,6 +457,7 @@ function TabPicker(props: {
       탭
       <select
         className="wb-shell-select"
+        disabled={props.disabled}
         value={String(props.tab)}
         onChange={(event) => props.onChange(Number(event.target.value))}
       >
@@ -437,6 +483,8 @@ function PropPicker(props: {
   target: string
   prop: string
   value: unknown
+  /** 남이 잠근 자리인가. `ActionRow`가 그대로 내려 준다. */
+  disabled: boolean
   onChange: (next: { prop?: string; value?: unknown }) => void
 }): ReactElement {
   const node = findSafely(props.document, props.target)
@@ -449,12 +497,18 @@ function PropPicker(props: {
       {fields.length === 0 ? (
         // 타겟을 아직 안 골랐거나 카탈로그에 없는 타입이다. 목록을 만들 재료가 없으므로
         // 손으로 적게 두되, 그 값이 유효한지는 검증이 `invalid-interaction-prop`으로 말한다.
-        <TextField label="속성" value={props.prop} onCommit={(value) => props.onChange({ prop: value })} />
+        <TextField
+          label="속성"
+          value={props.prop}
+          disabled={props.disabled}
+          onCommit={(value) => props.onChange({ prop: value })}
+        />
       ) : (
         <label className="wb-shell-field">
           속성
           <select
             className="wb-shell-select"
+            disabled={props.disabled}
             value={props.prop}
             onChange={(event) => props.onChange({ prop: event.target.value, value: defaultFor(fields, event.target.value) })}
           >
@@ -468,7 +522,12 @@ function PropPicker(props: {
         </label>
       )}
 
-      <ValueField field={field} value={props.value} onChange={(value) => props.onChange({ value })} />
+      <ValueField
+        field={field}
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(value) => props.onChange({ value })}
+      />
     </>
   )
 }
@@ -482,6 +541,8 @@ function defaultFor(fields: readonly EditorField[], prop: string): unknown {
 function ValueField(props: {
   field: EditorField | undefined
   value: unknown
+  /** 남이 잠근 자리인가. `PropPicker`가 그대로 내려 준다. */
+  disabled: boolean
   onChange: (value: unknown) => void
 }): ReactElement {
   if (props.field?.control === 'switch') {
@@ -490,6 +551,7 @@ function ValueField(props: {
         값
         <select
           className="wb-shell-select"
+          disabled={props.disabled}
           value={props.value === true ? 'on' : 'off'}
           onChange={(event) => props.onChange(event.target.value === 'on')}
         >
@@ -505,6 +567,7 @@ function ValueField(props: {
       <TextField
         label="값"
         value={typeof props.value === 'number' ? String(props.value) : ''}
+        disabled={props.disabled}
         onCommit={(text) => {
           const parsed = Number(text)
           // 수가 아니면 문자열 그대로 보낸다 — 검증이 `invalid-interaction-prop`으로
@@ -519,6 +582,7 @@ function ValueField(props: {
     <TextField
       label="값"
       value={typeof props.value === 'string' ? props.value : String(props.value ?? '')}
+      disabled={props.disabled}
       onCommit={(text) => props.onChange(text)}
     />
   )
@@ -534,6 +598,8 @@ function ValueField(props: {
 function TextField(props: {
   label: string
   value: string
+  /** 남이 잠근 자리인가. **선택 인자가 아니다** — 빠뜨리면 그 칸만 조용히 되살아난다. */
+  disabled: boolean
   onCommit: (value: string) => void
 }): ReactElement {
   const [draft, setDraft] = useState<string | null>(null)
@@ -551,6 +617,7 @@ function TextField(props: {
       <input
         className="wb-shell-input"
         type="text"
+        disabled={props.disabled}
         value={shown}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}

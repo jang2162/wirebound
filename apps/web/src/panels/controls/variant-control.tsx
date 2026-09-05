@@ -19,12 +19,14 @@ export interface VariantControlProps {
   options: readonly string[]
   value: unknown
   id: string
+  /** 남이 잠근 자리라 못 바꾸는가. `TextControlProps.disabled`와 같은 값이다. */
+  disabled: boolean
   /** 빈 칸을 고르면 `null`이다 — 부르는 쪽이 그것을 `remove`로 옮긴다. */
   onCommit: (variant: string | null) => void
 }
 
 export function VariantControl(props: VariantControlProps): ReactElement {
-  const { options, value, id, onCommit } = props
+  const { options, value, id, disabled, onCommit } = props
 
   // 문서의 값이 선언된 변형에 없으면 빈 칸으로 둔다. `unknown-variant`인 문서가 그 경로이고
   // (검증 전 문서가 스토어에 실릴 수 있다 — P2b-2), 그때 첫 선택지가 골라진 것처럼 보이면
@@ -34,6 +36,7 @@ export function VariantControl(props: VariantControlProps): ReactElement {
   return (
     <select
       id={id}
+      disabled={disabled}
       className="wb-shell-control"
       value={current}
       onChange={(event) => onCommit(event.target.value === '' ? null : event.target.value)}

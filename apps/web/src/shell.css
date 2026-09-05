@@ -275,6 +275,13 @@
   color: var(--wb-shell-ink);
 }
 
+/* 잠긴 자리(상호작용 탭의 고르개들). `.wb-shell-control:disabled`와 같은 값이다. */
+.wb-shell-select:disabled {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
+}
+
 .wb-shell-zoom {
   display: inline-flex;
   align-items: center;
@@ -1155,6 +1162,16 @@
   color: var(--wb-shell-ink);
 }
 
+/* 남이 그 노드를 잠갔을 때(`panels/property-panel.tsx`). **이 줄이 없으면 «꺼졌다»가 화면에
+   안 보인다** — 위 규칙이 `background`와 `color`를 직접 놓으므로 브라우저가 disabled에 주는
+   기본 회색이 덮인다(자리를 지키고 색만 죽이는 `.wb-shell-history-step:disabled`와 같은 값).
+   **왜 회색인지는 패널의 안내 줄과 구조 툴바의 상태줄이 이름과 함께 말한다.** */
+.wb-shell-control:disabled {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
+}
+
 /* 목록 위젯(`panels/controls/list-control.tsx`) — `stringList`·`pairList`의 편집기.
    **`컬럼`이 여기다.** */
 .wb-shell-list {
@@ -1218,6 +1235,14 @@
   font-size: 12px;
   color: var(--wb-shell-ink);
   cursor: pointer;
+}
+
+/* 잠긴 자리. `.wb-shell-control:disabled`와 같은 값이다 — 그쪽 주석이 근거를 갖는다. */
+.wb-shell-list-add:disabled,
+.wb-shell-list-remove:disabled {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
 }
 
 /* 지우기는 줄 안에서 줄어들지 않는다 — 글자가 접히면 그 줄만 높아져 칸과 밑선이 어긋난다. */
@@ -1308,6 +1333,16 @@
   white-space: nowrap;
 }
 
+/* 잠긴 자리. `.wb-shell-control:disabled`와 같은 값이다 — 그쪽 주석이 근거를 갖는다. */
+.wb-shell-interaction-add:disabled,
+.wb-shell-interaction-add-action:disabled,
+.wb-shell-interaction-remove:disabled,
+.wb-shell-interaction-remove-action:disabled {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
+}
+
 /* 이 탭의 텍스트 입력(`TextField`). **속성 패널의 `.wb-shell-control`과 갈라 두는 것은
    담긴 자리가 다르기 때문이다** — 이쪽은 `.wb-shell-field`(라벨과 한 줄인 inline-flex)
    안에 있어 라벨 옆의 남는 폭을 채워야 한다. */
@@ -1323,6 +1358,13 @@
   font: inherit;
   font-size: 12px;
   color: var(--wb-shell-ink);
+}
+
+/* 잠긴 자리. `.wb-shell-control:disabled`와 같은 값이다. */
+.wb-shell-input:disabled {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
+  cursor: not-allowed;
 }
 
 /* 셸에 이르지 못한 화면(조회 중·조회 실패). 레이아웃이 아직 없으므로 문서 흐름 그대로 둔다. */
