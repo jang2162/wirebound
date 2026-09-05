@@ -252,6 +252,12 @@ describe('§9 — 상한은 `@wirebound/schema`가 소유한다', () => {
 
     // **값으로 잰다.** 원문에서 `2000`을 찾는 자는 라우트가 상수에서 떨어져 나가도 안 죽는다
     // (`COMMENT_BODY_MAX_LENGTH` 머리말이 겪은 그 사고).
+    //
+    // **그리고 이 `maxLength`가 서버의 400을 타건으로 도달 불가하게 만든다** — 정확히
+    // 막는다(리뷰 실측: 1999자에서 한 자를 치면 2000이 되고 그다음 자는 안 들어간다).
+    // 그래서 *"상한 초과 400을 브라우저에서 봤다"*는 보고는 **값을 프로그램으로 심어야만**
+    // 재현된다. 그래도 400 갈래를 화면이 받는 것은 붙여넣기·미래의 상한 변경에 대한
+    // 방어이고, 그 문장을 옮기는 규칙은 D5다(`api/failure.tsx`).
     expect((await findBox()).getAttribute('maxlength')).toBe(
       String(PAGE_DESCRIPTION_MAX_LENGTH),
     )

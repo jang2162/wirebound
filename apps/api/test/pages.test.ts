@@ -480,6 +480,24 @@ describe('PATCH /api/projects/:projectId/pages/:pageId', () => {
    *
    * **역할 축은 여기 없다.** `permission-matrix.test.ts`의 *"페이지 수정"* 행이 소유한다
    * (`allowed: ['owner','editor']`) — 여기 한 벌 더 두면 그것이 두 벌이다.
+   *
+   * ### 경계 하나가 케이스로 안 서 있다 — **NUL은 500이다**(선재 결함, 이월)
+   *
+   * 아래 *"상한은 받고 상한+1은 400이다"*가 **길이** 경계를 소유한다. **NUL(`U+0000`)은
+   * 그 옆의 다른 경계이고 답이 다르다:** `description`도 `title`도 **500**이다(실측 —
+   * `POST .../pages`도 같다). Postgres의 `invalid byte sequence for encoding "UTF8": 0x00`
+   * 이 그대로 올라온다. `containsNulByte`는 `PUT .../schema` 한 자리에서만 불리고
+   * (`routes/pages.ts`) 이 라우트는 그것을 안 지난다.
+   *
+   * **같은 값이 `POST .../pages/import`로 오면 400이고 문장까지 있다**(실측 —
+   * `"페이지 제목·설명에 NUL 문자(U+0000)를 포함할 수 없습니다"`). **한 값에 두 답이다.**
+   *
+   * **케이스를 안 세운다.** 이것은 이 슬라이스가 만든 것이 아니고
+   * (`docs/superpowers/plans/2026-08-12-p6-1-carryforward.md`가 *"NUL이 500을 내는 여섯
+   * 경로"*로 이미 장부에 적었다) 고치는 것은 `apps/api`의 다른 슬라이스다. **지금 500을
+   * 케이스로 못박으면 고치는 날 그 케이스가 «고쳤다»를 실패로 보고한다** — 재는 것이
+   * 계약이 아니라 결함이 되기 때문이다. 그래서 **여기에 사실만 적어 둔다** — 이 표를
+   * 읽는 사람이 «길이만 재면 되는구나»로 읽지 않게.
    */
   it('설명을 바꾸고 되읽는다', async () => {
     await withApi(async (ctx) => {
