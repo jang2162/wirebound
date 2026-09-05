@@ -57,6 +57,7 @@ import {
   createNodeId,
   migrateDocument,
   parsePageJson,
+  PageDescriptionSchema,
   partitionIssues,
   validatePage,
   type PatchOp,
@@ -83,7 +84,13 @@ const ProjectIdParams = z.object({ projectId: z.uuid() })
 const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
 
 const Title = z.string().min(1, '제목을 입력하세요').max(200, '제목은 200자 이하여야 합니다')
-const Description = z.string().max(2000, '설명은 2000자 이하여야 합니다').nullable()
+/**
+ * **수를 여기 적지 않는다** — 상한도 `null` 허용도 `@wirebound/schema`의
+ * `PageDescriptionSchema` 하나가 갖는다(`routes/comments.ts`의 `Body`가
+ * `COMMENT_BODY_MAX_LENGTH`에 대해 하는 것과 같은 자세). 앞 판은 그 수가 여기와 봉투에
+ * 두 벌이라 한쪽만 고쳐도 아무것도 안 죽었다.
+ */
+const Description = PageDescriptionSchema
 
 /** `repos/menu.ts`의 `sortOrder`와 같은 이유(음수는 여기서 400, 형제 수보다 큰 값은 저장소가 클램프한다). */
 const SortOrder = z.int().min(0)

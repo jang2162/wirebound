@@ -915,7 +915,17 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['createPage']>[1],
     true
   >,
-  updatePage: { title: true, menuNodeId: true, sortOrder: true } satisfies Record<
+  // **`description`이 P10에서 늘었다.** 이 줄이 그 키를 막고 있던 두 자리 중 하나다
+  // (다른 하나는 `ApiClient['updatePage']`의 시그니처) — 서버는 처음부터 받고 있었다.
+  //
+  // **여기 안 더하면 무엇이 나는지는 본문의 모양에 따라 갈린다**(둘 다 이 줄을 지우고 쟀다.
+  // 앞 판은 아래 둘째 줄만 적어 과장이었다):
+  //
+  // | 본문 | 관측 |
+  // |---|---|
+  // | `{description}` 하나 — 새 패널이 보내는 모양이다 | `declaredOnly`가 `{}`로 만들고 **`updateBody`가 `바꿀 내용이 없습니다`로 던진다. 요청이 아예 안 나간다** |
+  // | 다른 선언된 키가 함께 — 예: 트리 훅의 `{title, menuNodeId, sortOrder}`에 얹는 경우 | 요청은 나가고 그 키만 조용히 빠진다 — **200이 오는데 값이 안 바뀐다** |
+  updatePage: { title: true, description: true, menuNodeId: true, sortOrder: true } satisfies Record<
     keyof Parameters<ApiClient['updatePage']>[2],
     true
   >,

@@ -149,15 +149,61 @@ export interface ApiClient {
    */
   createPage(projectId: string, body: { menuNodeId: string; title: string }): Promise<PageDetail>
   /**
-   * 페이지의 제목·소속 메뉴·순서를 고친다. `updateMenu`와 같은 계약이다 — 준 키만 실린다.
+   * 페이지의 제목·설명·소속 메뉴·순서를 고친다. `updateMenu`와 같은 계약이다 — 준 키만 실린다.
    *
-   * **`description`·`schema`는 여기서 못 바꾼다**(전자는 이 단계 밖, 후자는 서버가
-   * `PUT .../schema`·`PATCH .../ops`로만 받는다).
+   * **`schema`는 여기서 못 바꾼다** — 서버가 `PUT .../schema`·`PATCH .../ops`로만 받는다.
+   *
+   * ## `description`이 여기 있다 — 서버는 처음부터 받고 있었다
+   *
+   * **앞 판의 이 자리는 *"`description`은 여기서 못 바꾼다"*였고 그 근거를 *"이 단계 밖"*이라고
+   * 적었다.** 그 문장은 이 인터페이스에 대해서만 참이었다 — `routes/pages.ts`의
+   * `UpdatePageBody`는 **처음부터** `description`을 받았고 `repos/pages.ts`의 `updatePage`도
+   * 그것을 썼다. 막고 있던 것은 **여기 시그니처와 `http-client.ts`의 `BODY_KEYS.updatePage`
+   * 화이트리스트** 둘뿐이고, 후자가 `declaredOnly`로 그 키를 떨궈 냈다.
+   *
+   * **실측**(api 하네스, `projectGuard('editor')`):
+   *
+   * | 보낸 것 | 결과 |
+   * |---|---|
+   * | `{description:'설명'}` | 200, 되읽으면 그대로 |
+   * | `{description:null}` | 200, `null` — *"설명을 지운다"* |
+   * | `{description:''}` | 200, `""` — **빈 문자열은 `null`로 접히지 않는다** |
+   * | `{description:'a'×2000}` | 200 |
+   * | `{description:'a'×2001}` · `{description:'가'×2001}` | 400 `"설명은 2000자 이하여야 합니다"` |
+   * | **`{description:'a\x00b'}`(NUL)** | **500** `"서버 오류가 발생했습니다"` — 아래 |
+   * | viewer가 보냄 | 403 |
+   * | **남이 그 페이지의 노드를 잠근 동안** | **200** |
+   *
+   * ### NUL은 500이다 — **`importPage`와 갈린다**(선재 결함, 이 슬라이스 밖)
+   *
+   * `description`도 `title`도 NUL(`U+0000`)이 들어가면 **400이 아니라 500**이다(실측 —
+   * `POST .../pages`도 같다). Postgres가 `invalid byte sequence for encoding "UTF8": 0x00`
+   * 으로 거절하는 것이 그대로 올라온다. **`routes/pages.ts`의 `containsNulByte`는
+   * `PUT .../schema` 한 자리에서만 불리고 이 라우트는 그것을 안 지난다.**
+   *
+   * **같은 값이 `importPage`로 오면 400이고 문장까지 있다** — `"페이지 제목·설명에 NUL
+   * 문자(U+0000)를 포함할 수 없습니다"`(실측. 아래 `importPage`의 실패 표에도 그 갈래가
+   * 있다). **한 값에 두 답이 있는 것이고 새 발견이 아니다** —
+   * `docs/superpowers/plans/2026-08-12-p6-1-carryforward.md`가 *"NUL이 500을 내는 여섯
+   * 경로"*로 이미 적었다. **여기 적는 이유는 이 표를 읽는 사람이 그 갈래를 모르기
+   * 때문이다** — 고치는 것은 `apps/api` 쪽 일이라 이 슬라이스가 하지 않는다.
+   *
+   * **화면은 이 갈래를 다시 판정하지 않는다.** 500이면 서버가 문장을 안 주므로
+   * `toFailure`가 `SAVE_FAILED`(*"설명을 저장하지 못했습니다"*)를 쓴다 — 그것이 D5이고,
+   * 화면이 NUL을 미리 막으면 서버와 규칙이 두 벌이 된다.
+   *
+   * **잠금이 이 경로를 안 본다**(실측). §7.2의 `findLockConflict`는 **문서 안 포인터**를
+   * 보는데 `pages.description`은 문서 밖 컬럼이라, 이 라우트는 `lockConflictError`를 아예
+   * 지나지 않는다. `title` 갱신도 같다. **그래서 화면이 잠금을 판정하지 않는다** — 없는
+   * 실패를 화면이 지어내면 그것이 곧 두 번째 판정이다.
+   *
+   * `description: null`은 **"설명을 지운다"**이고 키가 없는 것("설명을 바꾸지 않는다")과
+   * 다르다 — `updateMenu`의 `parentId: null`과 같은 자리다.
    */
   updatePage(
     projectId: string,
     pageId: string,
-    body: { title?: string; menuNodeId?: string; sortOrder?: number },
+    body: { title?: string; description?: string | null; menuNodeId?: string; sortOrder?: number },
   ): Promise<PageDetail>
   deletePage(projectId: string, pageId: string): Promise<void>
   /**

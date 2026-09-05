@@ -1683,6 +1683,35 @@ describe('페이지 CRUD', () => {
     expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ title: '새 이름' })
   })
 
+  it('updatePage는 description을 싣는다 — null도 값이다', async () => {
+    // **혼자 죽지 않는다 — 늘 아래 *"페이지 응답 객체를 그대로 넘겨도 선언된 키만 나간다"*와
+    // 함께 죽는다**(실측: `BODY_KEYS.updatePage`에서 그 키를 지우면 둘이 함께 2 사망).
+    // 그쪽이 *"미선언 키가 떨어진다"*를 소유하고 여기는 **`description`이 실린다**를 소유한다 —
+    // 그쪽 픽스처가 `description`을 우연히 들고 있어 겹칠 뿐이라, 그 픽스처가 좁아지면
+    // 이 자리만 남는다.
+    //
+    // **이 케이스가 서기 전까지 `BODY_KEYS.updatePage`에 `description`이 없었다** —
+    // 시그니처만 넓히면 `declaredOnly`가 그 키를 조용히 떨궈 낸다. 서버는 처음부터 그 키를
+    // 받고 있었다(`apps/api/test/pages.test.ts`).
+    //
+    // **그때 무엇이 나는지는 본문의 모양에 따라 갈린다.** 이 케이스처럼 `{description}`
+    // 하나면 `declaredOnly`가 `{}`로 만들어 **`updateBody`가 `바꿀 내용이 없습니다`로 던지고
+    // 요청이 아예 안 나간다**(그 줄을 지우고 쟀다). *"200이 오는데 값이 안 바뀐다"*는
+    // **다른 선언된 키가 함께 실릴 때**의 이야기다 — 갈래 표는 `api/http-client.ts`의
+    // `BODY_KEYS.updatePage` 주석이 갖는다.
+    const stub = stubFetch(jsonResponse(200, page), jsonResponse(200, page))
+    const client = createHttpClient(stub.fetchImpl)
+
+    await client.updatePage('p1', 'pg1', { description: '회원을 찾고 고치는 화면' })
+    await client.updatePage('p1', 'pg1', { description: null })
+
+    expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({
+      description: '회원을 찾고 고치는 화면',
+    })
+    // `null`은 "설명을 지운다"이고 키가 없는 것("바꾸지 않는다")과 다르다.
+    expect(JSON.parse(String(stub.calls[1]?.init?.body))).toEqual({ description: null })
+  })
+
   it('updatePage는 sortOrder 0을 싣는다', async () => {
     const stub = stubFetch(jsonResponse(200, page))
     const client = createHttpClient(stub.fetchImpl)
@@ -1820,6 +1849,10 @@ describe('페이지 CRUD', () => {
     //
     // **`schema`가 섞여 나가는 것이 특히 나쁘다** — 서버는 그것을 `PUT .../schema`·
     // `PATCH .../ops`로만 받는다(`api/client.ts`의 `updatePage` 주석).
+    //
+    // **P10이 `updatePage`의 기대를 한 줄 늘렸다.** `description`이 선언된 키가 됐으므로
+    // 이제 **나가는 것이 맞다** — 이 케이스가 재는 것은 *"미선언 키가 안 나간다"*이지
+    // *"세 키만 나간다"*가 아니다. `createPage`는 그대로 둘이다(그 자리는 §9가 제목만 묻는다).
     const stub = stubFetch(jsonResponse(201, page), jsonResponse(200, page))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -1829,6 +1862,7 @@ describe('페이지 CRUD', () => {
     expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ menuNodeId: 'm1', title: '목록' })
     expect(JSON.parse(String(stub.calls[1]?.init?.body))).toEqual({
       title: '목록',
+      description: null,
       menuNodeId: 'm1',
       sortOrder: 0,
     })

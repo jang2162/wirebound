@@ -124,6 +124,35 @@ const FALLBACK_FILE_STEM = 'page'
 export const COMMENT_BODY_MIN_LENGTH = 1
 export const COMMENT_BODY_MAX_LENGTH = 2000
 
+/**
+ * `pages.description`의 규격. **`routes/pages.ts`의 `Description`이 이것을 가져다 쓰고,
+ * 화면의 입력(`panels/page-description.tsx`)이 같은 상수로 글자 수를 센다** — 값이 한 자리다.
+ *
+ * **`COMMENT_BODY_MAX_LENGTH`와 같은 근거로 여기 산다.** 봉투에도 걸지 않으면 가져오기가
+ * `POST .../pages`·`PATCH .../pages/:id`로는 만들 수 없는 행을 만든다.
+ *
+ * **앞 판은 이 수가 두 자리였다** — 이 파일이 `2000`을 적고 `routes/pages.ts`도 `2000`을
+ * 적었으며, 이 파일의 `PageSectionSchema` 주석은 *"길이는 `routes/pages.ts`의 것과 같다"*고
+ * **라우트를 소유자로 가리키고 있었다.** 그 상태에서 한쪽만 고치면 갈렸고 아무 케이스도
+ * 죽지 않았다(`COMMENT_BODY_MAX_LENGTH` 머리말이 코멘트에 대해 겪은 그 사고다). 이제
+ * 소유자는 이 상수이고 주석의 화살표도 뒤집혔다.
+ *
+ * **`nullable`이 규격의 일부다.** `null`은 *"설명 없음"*이라는 값이고 빈 문자열(`''`)과
+ * **다르다** — 서버는 `''`를 `''`로 저장한다(실측: `PATCH {description:''}` → 200,
+ * 되읽으면 `""`). 그 둘을 여기서 합치지 않는 이유는 `projects.description`과 같다.
+ *
+ * **글자 수는 코드포인트가 아니라 UTF-16 코드 단위다**(zod가 `.length`를 본다). 한글은
+ * 한 자가 한 단위라 한글 2001자도 400이다(실측). BMP 밖(이모지 등)은 한 자가 둘로 세이는데,
+ * 그것이 이 상한의 뜻을 바꿀 만큼 흔한 입력이 아니라 그대로 둔다.
+ */
+export const PAGE_DESCRIPTION_MAX_LENGTH = 2000
+
+/** `pages.description`이 받는 값. 상한과 `null` 허용이 여기 한 벌로 있다(위 머리말). */
+export const PageDescriptionSchema = z
+  .string()
+  .max(PAGE_DESCRIPTION_MAX_LENGTH, `설명은 ${PAGE_DESCRIPTION_MAX_LENGTH}자 이하여야 합니다`)
+  .nullable()
+
 /** 봉투의 `comments[]` 한 줄. **`marker`가 없다** — 위 D6 절. */
 export interface PageJsonComment {
   nodeId: string
@@ -148,15 +177,18 @@ export interface PageJson {
 }
 
 /**
- * 제목·설명의 길이는 **`pages` 테이블의 것과 같다**(`routes/pages.ts`의 `Title`·`Description`).
- * 여기서 막지 않으면 가져오기가 `POST .../pages`로는 만들 수 없는 행을 만든다 —
- * 코멘트 본문 상한과 같은 근거다.
+ * 제목·설명의 길이는 **`pages` 테이블의 것과 같다**. 여기서 막지 않으면 가져오기가
+ * `POST .../pages`로는 만들 수 없는 행을 만든다 — 코멘트 본문 상한과 같은 근거다.
+ *
+ * **설명은 소유자가 위의 `PageDescriptionSchema`다** — `routes/pages.ts`가 그것을 가져다
+ * 쓰고 여기도 같은 것을 쓴다. **제목은 아직 두 자리다**(여기와 `routes/pages.ts`의 `Title`) —
+ * 이 슬라이스가 만진 것은 설명뿐이라 그대로 두고 이월한다.
  */
 const PageSectionSchema = z.strictObject({
   title: z.string().min(1, '제목을 입력하세요').max(200, '제목은 200자 이하여야 합니다'),
   // **길이만 본다.** 이 값이 무엇을 가리키는지는 이 봉투가 답할 수 없다(D4).
   layoutRef: z.string().min(1).max(200).optional(),
-  description: z.string().max(2000, '설명은 2000자 이하여야 합니다').nullable().optional(),
+  description: PageDescriptionSchema.optional(),
 })
 
 /**

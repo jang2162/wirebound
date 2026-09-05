@@ -177,15 +177,24 @@ describe('§9 — 페이지 설명 탭', () => {
 
     toView()
 
-    expect(await screen.findByText('이 페이지에는 아직 설명이 없습니다')).toBeTruthy()
+    // **P10이 이 자리를 문장에서 상자로 옮겼다.** 탭이 고칠 수 있게 되면서 *"아직 설명이
+    // 없습니다"*는 **어디에 쓰라는 안내**가 됐다 — 그래도 재는 것은 같다: 빈 자리로 두지
+    // 않는다. (고치는 쪽의 다른 갈래들은 `test/panels/page-description-edit.tsx`가 갖는다.)
+    const box = await screen.findByRole('textbox', { name: '페이지 설명' })
+    expect((box as HTMLTextAreaElement).value).toBe('')
+    expect(box.getAttribute('placeholder')).toBe('이 페이지에는 아직 설명이 없습니다')
   })
 
-  it('공백뿐인 설명도 없는 것으로 다룬다', async () => {
+  it('공백뿐인 설명은 서버에 있는 그대로 보인다 — 화면이 다듬지 않는다', async () => {
+    // **앞 판은 이것을 "없는 것"으로 다뤘고 그때는 그것이 맞았다**(읽기 전용이라 공백만
+    // 그리면 빈 자리와 같았다). **고칠 수 있게 된 지금은 뒤집힌다** — 서버에 공백이 들어
+    // 있다는 사실 자체가 사용자가 고쳐야 할 것이고, 화면이 그것을 감추면 지울 수가 없다.
     await openPage(DOC, { apiOverrides: withDescription('   ') })
 
     toView()
 
-    expect(await screen.findByText('이 페이지에는 아직 설명이 없습니다')).toBeTruthy()
+    const box = await screen.findByRole('textbox', { name: '페이지 설명' })
+    expect((box as HTMLTextAreaElement).value).toBe('   ')
   })
 
   it('조회가 실패하면 그 자리에 이유를 그린다 — 셸은 살아 있다', async () => {
