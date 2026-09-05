@@ -19,6 +19,11 @@ export interface TextControlProps {
   value: unknown
   /** 입력에 붙는 id. 라벨(`<dt>`의 `<label htmlFor>`)이 이것을 가리킨다. */
   id: string
+  /**
+   * 남이 잠근 자리라 못 바꾸는가(`../property-panel.tsx`). **선택 인자가 아니다** —
+   * 빠뜨리면 잠긴 자리에서 위젯이 조용히 되살아난다(§3.14가 툴바에서 만난 부류다).
+   */
+  disabled: boolean
   onCommit: (value: string | number) => void
 }
 
@@ -35,7 +40,7 @@ function toDraft(value: unknown): string {
 }
 
 export function TextControl(props: TextControlProps): ReactElement {
-  const { field, value, id, onCommit } = props
+  const { field, value, id, disabled, onCommit } = props
   const original = toDraft(value)
   const [draft, setDraft] = useState(original)
   const [seen, setSeen] = useState(original)
@@ -82,6 +87,7 @@ export function TextControl(props: TextControlProps): ReactElement {
 
   const shared = {
     id,
+    disabled,
     className: 'wb-shell-control',
     value: draft,
     onChange: (event: { target: { value: string } }) => setDraft(event.target.value),

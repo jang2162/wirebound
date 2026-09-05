@@ -28,6 +28,7 @@ import { useEditCommit } from '../edit/use-edit-commit'
 // 열기만 할 때는 여기까지 오지 않아 살아 있다.
 import { findNodeSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { useLockedBy } from '../store/use-locked-by'
 import { ListControl } from './controls/list-control'
 import { SelectControl } from './controls/select-control'
 import { SwitchControl } from './controls/switch-control'
@@ -42,6 +43,23 @@ const NO_SELECTION = '노드를 고르면 속성이 보입니다'
 
 /** 타입을 읽지 못한 노드의 안내. 캔버스는 같은 노드를 폴백으로 그리고 배너로 알린다. */
 const BROKEN_TYPE_NOTICE = '이 노드의 타입을 읽을 수 없습니다'
+
+/**
+ * 남이 잠근 자리라 위젯이 전부 꺼졌을 때의 안내.
+ *
+ * **구조 툴바의 상태줄과 문장을 나눈다**(`./toolbar-status.ts`). 그쪽은 *"고를 수도 바꿀
+ * 수도 없습니다"*로 **선택**까지 말하는데, 이 패널은 이미 골라 둔 노드를 그리는 자리라
+ * 고르기를 되풀이할 이유가 없다. 원인(남이 편집 중)은 같고 결과만 이 패널의 것이다.
+ *
+ * **자리를 나눈 이유는 상태줄이 안 보이는 판이 있어서다** — 이 패널은 셸의 반대쪽 끝이고
+ * (`routes/editor.tsx`의 `RightPanel`), 좌측 사이드바를 접으면 그 줄이 화면에 없다.
+ *
+ * **상호작용 탭이 같은 문장을 쓴다**(`./interaction-panel.tsx`). 우측 패널의 두 탭이 같은
+ * 이유로 같이 꺼지므로 문장도 한 벌이다 — 두 벌이면 한쪽만 고쳐지는 날이 온다.
+ */
+export function lockedNotice(userName: string): string {
+  return `${userName}님이 편집 중이라 바꿀 수 없습니다`
+}
 
 export function PropertyPanel(props: {
   projectId: string
@@ -60,11 +78,52 @@ export function PropertyPanel(props: {
     projectId: props.projectId,
     pageId: props.pageId ?? '',
   })
+  // **판정은 스토어가 한다**(D7 — `test/lock/one-verdict.test.ts`). 여기서 하는 것은 목록이
+  // 바뀔 때 다시 그리는 것과 그 답을 위젯에 잇는 것뿐이고, 목록을 손에 쥐는 자리는
+  // `store/use-locked-by.ts` 하나다.
+  const lockOf = useLockedBy()
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 P2b-2의 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
   const node =
     doc !== null && selectedNodeId !== null ? findNodeSafely(doc.root, selectedNodeId) : undefined
+
+  /**
+   * **재라 — 이 패널의 판정 단위는 «고른 노드»다.**
+   *
+   * §3.16이 되돌리기에서 세운 규칙은 *"그 조작의 단위에 맞춘다"*이고, 되돌리기의 단위가
+   * `inverse` ops였던 것은 **그 조작에 선택이 없기 때문**이다. 이 패널은 반대다 — 존재
+   * 자체가 *"고른 노드의 속성"*이고, 위의 `findNodeSafely(doc.root, selectedNodeId)`가 그
+   * 단위를 그대로 적고 있다. 그래서 §3.14가 툴바에 쓴 그 값(`store.lockedBy`)을 쓴다.
+   *
+   * **서버보다 한 갈래 엄격하다 — 그것은 이미 적힌 대가다.** 진짜 서버로 잰 값이 아래이고,
+   * 마지막 줄만 갈린다:
+   *
+   * | 고른 노드가 무엇인가 | 나가는 포인터 | 서버 | 이 패널 |
+   * |---|---|---|---|
+   * | 잠긴 노드 자신 | `replace …/props/title` | **423** | 막는다 |
+   * | 잠긴 서브트리 **안쪽** | `replace …/props/content` | **423** | 막는다 |
+   * | 잠긴 노드의 **형제** | `replace …/props/content` | 200 | 안 막는다 |
+   * | 무관한 노드 | `replace …/props/content` | 200 | 안 막는다 |
+   * | 잠긴 노드의 **조상** | `replace …/props/title` | **200** | **막는다** |
+   *
+   * 마지막 줄이 `packages/schema/test/lock.test.ts`의 `선택이 편집보다 엄격하다`가
+   * *"구멍이 아니라 대가다 — 화면에서 그 자리를 고칠 길이 없어진다(툴바가 선택을 요구한다)"*
+   * 로 이미 못박은 자리다. **속성 패널도 선택을 요구하므로 같은 대가를 진다.** 반대로 갔다면
+   * §3.14가 툴바에서 반증한 모양이 그대로 돌아온다 — *"고를 수 없는 줄 위에 켜진 위젯"*이고,
+   * 그때 상태줄의 *"바꿀 수도 없습니다"*가 이 패널에 대해 거짓인 채로 남는다.
+   *
+   * **과소차단은 0이다.** 잠금이 이 노드의 조상이거나 자신이어야 `…/props/…`가 그 잠긴
+   * 서브트리 안에 들어가므로, 서버가 423을 낼 갈래는 전부 `lockedBy`가 먼저 낸다.
+   */
+  const lock = node === undefined ? null : lockOf(node.id)
+  // **잠긴 동안 들어온 커밋은 요청을 만들지 않는다.** 위젯을 끄는 것과 **같은 값**에서
+  // 나오는 가드다. 끄는 것만으로 안 되는 것은 blur 때문이다 — 포커스가 있는 입력이
+  // `disabled`가 되면 실브라우저는 포커스를 놓고 blur를 내는데, 그 blur가 곧
+  // `TextControl`·`ListControl`의 커밋이다. **jsdom은 안 놓는다(실측: `disabled`로 바꿔도
+  // `activeElement`가 그대로이고 blur 이벤트 0건).** 어느 쪽이든 *"잠긴 동안 도착한 blur는
+  // 커밋이 아니다"*가 이 줄이 잠그는 것이고, 케이스는 그 blur를 직접 낸다.
+  const blocked = lock !== null
 
   if (node === undefined) {
     return <p className="wb-shell-panel-notice">{NO_SELECTION}</p>
@@ -117,52 +176,64 @@ export function PropertyPanel(props: {
         // "아직 고르지 않았다"와 구분되지 않는다.
         <p className="wb-shell-panel-notice">이 컴포넌트에는 편집할 속성이 없습니다</p>
       ) : (
-        <dl className="wb-shell-props">
-          {/* **변형이 맨 앞이다.** 개별 prop이 아니라 이 노드가 어떤 표현인가를 정하는
-              것이라 상위이고, §6.5도 `variants`를 `base`/`parts` 위의 층으로 둔다. */}
-          {variantField !== null && (
-            <div className="wb-shell-prop" key={VARIANT_FIELD}>
-              <dt className="wb-shell-prop-label">
-                <label id={`${controlId(VARIANT_FIELD)}-label`} htmlFor={controlId(VARIANT_FIELD)}>
-                  {variantField.label}
-                </label>
-              </dt>
-              <dd className="wb-shell-prop-value">
-                <VariantControl
-                  // props 컨트롤과 같은 이유로 노드가 바뀌면 위젯을 다시 만든다.
-                  key={node.id}
-                  options={variantField.options}
-                  value={node.variant}
-                  id={controlId(VARIANT_FIELD)}
-                  onCommit={(variant) => commitVariant(node.id, variant)}
-                />
-              </dd>
-            </div>
-          )}
-          {fields.map((field) => (
-            // `<dl>` 안의 `<div>`는 표준이 허용하는 묶음이다. 라벨과 값을 한 줄로 묶어야
-            // 스타일과 테스트가 "줄"을 다룰 수 있다.
-            <div className="wb-shell-prop" key={field.prop}>
-              <dt className="wb-shell-prop-label">
-                {/* 목록 컨트롤은 입력이 여럿이라 `htmlFor` 하나로 이름을 줄 수 없다.
-                    그쪽은 `role="group"`이 이 `<label>`을 `aria-labelledby`로 가리킨다. */}
-                <label id={`${controlId(field.prop)}-label`} htmlFor={controlId(field.prop)}>
-                  {field.label}
-                </label>
-              </dt>
-              <dd className="wb-shell-prop-value">
-                <PropControl
-                  // **노드가 바뀌면 위젯을 다시 만든다.** 로컬 초안(타이핑 중인 값)을
-                  // 버리는 장치이고, 아래 `PropControl`의 주석에 그 선택의 근거와 잰 값이 있다.
-                  key={node.id}
-                  field={field}
-                  value={readProp(node, field.prop)}
-                  onCommit={(value) => commitProp(node.id, field.prop, value)}
-                />
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <>
+          {/* **꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다.** 위젯이 없으면 설명할
+              회색도 없으므로 이 갈래 안에만 둔다 — 편집할 속성이 없는 컴포넌트
+              (`Page`·`Slot`)에서는 위의 문장이 이미 그 자리를 설명한다. */}
+          {lock !== null && <p className="wb-shell-panel-notice">{lockedNotice(lock.userName)}</p>}
+          <dl className="wb-shell-props">
+            {/* **변형이 맨 앞이다.** 개별 prop이 아니라 이 노드가 어떤 표현인가를 정하는
+                것이라 상위이고, §6.5도 `variants`를 `base`/`parts` 위의 층으로 둔다. */}
+            {variantField !== null && (
+              <div className="wb-shell-prop" key={VARIANT_FIELD}>
+                <dt className="wb-shell-prop-label">
+                  <label id={`${controlId(VARIANT_FIELD)}-label`} htmlFor={controlId(VARIANT_FIELD)}>
+                    {variantField.label}
+                  </label>
+                </dt>
+                <dd className="wb-shell-prop-value">
+                  <VariantControl
+                    // props 컨트롤과 같은 이유로 노드가 바뀌면 위젯을 다시 만든다.
+                    key={node.id}
+                    options={variantField.options}
+                    value={node.variant}
+                    id={controlId(VARIANT_FIELD)}
+                    disabled={blocked}
+                    onCommit={(variant) => {
+                      if (!blocked) commitVariant(node.id, variant)
+                    }}
+                  />
+                </dd>
+              </div>
+            )}
+            {fields.map((field) => (
+              // `<dl>` 안의 `<div>`는 표준이 허용하는 묶음이다. 라벨과 값을 한 줄로 묶어야
+              // 스타일과 테스트가 "줄"을 다룰 수 있다.
+              <div className="wb-shell-prop" key={field.prop}>
+                <dt className="wb-shell-prop-label">
+                  {/* 목록 컨트롤은 입력이 여럿이라 `htmlFor` 하나로 이름을 줄 수 없다.
+                      그쪽은 `role="group"`이 이 `<label>`을 `aria-labelledby`로 가리킨다. */}
+                  <label id={`${controlId(field.prop)}-label`} htmlFor={controlId(field.prop)}>
+                    {field.label}
+                  </label>
+                </dt>
+                <dd className="wb-shell-prop-value">
+                  <PropControl
+                    // **노드가 바뀌면 위젯을 다시 만든다.** 로컬 초안(타이핑 중인 값)을
+                    // 버리는 장치이고, 아래 `PropControl`의 주석에 그 선택의 근거와 잰 값이 있다.
+                    key={node.id}
+                    field={field}
+                    value={readProp(node, field.prop)}
+                    disabled={blocked}
+                    onCommit={(value) => {
+                      if (!blocked) commitProp(node.id, field.prop, value)
+                    }}
+                  />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </>
       )}
     </>
   )
@@ -247,28 +318,30 @@ export function variantFieldOf(
 function PropControl(props: {
   field: EditorField
   value: unknown
+  /** 남이 잠근 자리인가. **위젯 넷에 전부 내려간다** — 하나만 빠뜨려도 그 control만 살아난다. */
+  disabled: boolean
   onCommit: (value: unknown) => void
 }): ReactElement {
-  const { field, value, onCommit } = props
+  const { field, value, disabled, onCommit } = props
   const id = controlId(field.prop)
 
   if (field.control === 'text' || field.control === 'textarea' || field.control === 'number') {
-    return <TextControl field={field} value={value} id={id} onCommit={onCommit} />
+    return <TextControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} />
   }
 
   if (field.control === 'switch') {
-    return <SwitchControl field={field} value={value} id={id} onCommit={onCommit} />
+    return <SwitchControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} />
   }
 
   if (field.control === 'stringList' || field.control === 'pairList') {
-    return <ListControl field={field} value={value} id={id} onCommit={onCommit} />
+    return <ListControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} />
   }
 
   // `options`가 없거나 비면 `<select>`를 그리지 않는다(`SelectControl`이 `null`을 낸다).
   // 그 판정을 여기서 한 번 더 하는 것은, 그때 **아래 글자로 되돌아가야** 하기 때문이다 —
   // 위젯도 글자도 없으면 그 줄이 통째로 비어 사용자가 값을 볼 수 없다.
   if (field.control === 'select' && field.options !== undefined && field.options.length > 0) {
-    return <SelectControl field={field} value={value} id={id} onCommit={onCommit} />
+    return <SelectControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} />
   }
 
   return <>{formatValue(value)}</>

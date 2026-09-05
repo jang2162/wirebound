@@ -11,6 +11,8 @@ export interface SelectControlProps {
   field: EditorField
   value: unknown
   id: string
+  /** 남이 잠근 자리라 못 바꾸는가. `TextControlProps.disabled`와 같은 값이다. */
+  disabled: boolean
   onCommit: (value: string) => void
 }
 
@@ -26,7 +28,7 @@ export interface SelectControlProps {
  * 컴파일러가 그 짝을 강제하지 않기 때문이다(`EditorField.options`는 `?`다).
  */
 export function SelectControl(props: SelectControlProps): ReactElement | null {
-  const { field, value, id, onCommit } = props
+  const { field, value, id, disabled, onCommit } = props
   const options = field.options
   if (options === undefined || options.length === 0) return null
 
@@ -38,6 +40,7 @@ export function SelectControl(props: SelectControlProps): ReactElement | null {
   return (
     <select
       id={id}
+      disabled={disabled}
       className="wb-shell-control"
       value={current}
       onChange={(event) => onCommit(event.target.value)}

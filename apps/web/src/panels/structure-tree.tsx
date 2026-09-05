@@ -13,6 +13,7 @@
 import type { KeyboardEvent, ReactElement } from 'react'
 import type { NodeLock, WbNode } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { useLockedBy } from '../store/use-locked-by'
 import { nodeTypeLabel } from './node-shape'
 import { isTypingSurface } from './typing-surface'
 import { StructureToolbar, useStructureCommands, type StructureCommands } from './structure-toolbar'
@@ -133,13 +134,10 @@ export function StructureTree(props: {
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 그린다.
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
-  // **목록을 구독하는 것이 요점이다.** 판정은 `store.lockedBy`가 하지만 그것은 함수라
-  // 참조가 안 바뀐다 — 이 구독이 없으면 남이 잠갔다 풀어도 트리가 다시 그려지지 않는다.
-  const locks = useEditorStore(store, (s) => s.locks)
-  // **판정은 스토어 하나가 한다**(D7) — 서버의 2차 방어가 부르는 그 함수를 지나온 값이다.
-  // 여기서 `locks`를 직접 뒤지면 판정이 두 벌이 된다. 잠금이 하나도 없으면 아예 묻지
-  // 않는다(그때는 문서를 뒤질 일이 없다).
-  const lockOf = locks.length === 0 ? null : store.lockedBy
+  // **목록을 구독하는 자리가 이 파일 밖으로 나갔다.** 잠금을 봐야 하는 패널이 둘이 되면서
+  // (여기와 속성 패널) 형제 둘 중 하나에 둘 수 없어졌다 — 그 사정과 «자리는 여전히 하나»는
+  // `store/use-locked-by.ts`가 갖는다. **판정은 그때도 지금도 스토어가 한다**(D7).
+  const lockOf = useLockedBy()
   // **조작을 여기서 한 번만 만든다.** 툴바에 내려 주고 아래 키 핸들러도 같은 것을 쓴다 —
   // 그것이 D8이 요구하는 "같은 함수"다.
   const commands = useStructureCommands({
@@ -158,7 +156,7 @@ export function StructureTree(props: {
     // 붙는데(아래 `StructureNode`), 막히는 것은 그 **서브트리 전체**다 — 자동 선택된
     // 루트는 문서 안 모든 노드의 조상이라, 남이 아무 노드나 잡으면 루트 줄이
     // `aria-current`인 채 회색이 되고 그 이유는 화면 어디에도 없었다(P10-2 이월).
-    selectedLock: selectedNodeId === null ? null : (lockOf?.(selectedNodeId) ?? null),
+    selectedLock: selectedNodeId === null ? null : lockOf(selectedNodeId),
     // **판정 밖의 둘이 지나는 잠금.** 루트는 문서 안 모든 노드의 조상이므로
     // `lockedBy(root)`가 곧 *"이 페이지에 살아 있는 남의 잠금이 있나"*다 — 목록을 다시
     // 뒤지지 않고 **같은 판정 한 벌**로 답한다. 어느 조작이 이것을 쓰는지는
@@ -166,7 +164,7 @@ export function StructureTree(props: {
     //
     // 루트가 노드가 아닌 문서(검증 전에는 가능하다)에서는 물을 id가 없으므로 `null`이다 —
     // 그때는 `structureAbilities`도 아무것도 못 찾아 일곱이 이미 꺼져 있다.
-    pageLock: typeof doc?.root?.id === 'string' ? (lockOf?.(doc.root.id) ?? null) : null,
+    pageLock: typeof doc?.root?.id === 'string' ? lockOf(doc.root.id) : null,
   })
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
@@ -262,8 +260,8 @@ function StructureNode(props: {
   node: WbNode
   selectedNodeId: string | null
   onSelect: (nodeId: string) => void
-  /** 그 노드를 막는 남의 잠금을 내는 함수. 잠금이 하나도 없으면 `null`이다. */
-  lockOf: ((nodeId: string) => NodeLock | null) | null
+  /** 그 노드를 막는 남의 잠금을 내는 함수(`store/use-locked-by.ts`). 없으면 `null`을 낸다. */
+  lockOf: (nodeId: string) => NodeLock | null
 }): ReactElement {
   const { node } = props
   // **모양 가드 둘.** 검증 전 문서(P2b-2)에는 `children`이 배열이 아니거나 `type`이
@@ -275,7 +273,7 @@ function StructureNode(props: {
   const children = Array.isArray(node.children) ? node.children : []
   const typeLabel = nodeTypeLabel(node)
   // id가 없는 노드는 잠금과 짝지을 것이 없다 — 아래에서 고를 수도 없다.
-  const lock = isSelectable(node) ? (props.lockOf?.(node.id) ?? null) : null
+  const lock = isSelectable(node) ? props.lockOf(node.id) : null
 
   return (
     <li>

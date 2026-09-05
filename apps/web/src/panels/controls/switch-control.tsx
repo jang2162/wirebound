@@ -38,11 +38,13 @@ export interface SwitchControlProps {
   field: EditorField
   value: unknown
   id: string
+  /** 남이 잠근 자리라 못 바꾸는가. `TextControlProps.disabled`와 같은 값이다. */
+  disabled: boolean
   onCommit: (value: boolean) => void
 }
 
 export function SwitchControl(props: SwitchControlProps): ReactElement {
-  const { value, id, onCommit } = props
+  const { value, id, disabled, onCommit } = props
   // 값이 없거나 불리언이 아니면 꺼짐이다. 검증을 통과하지 못한 문서가 스토어에 실릴 수
   // 있으므로(D4의 재조회 전 창) `Boolean(value)`로 뭉뚱그리지 않고 타입을 본다 —
   // `'false'`나 `0`이 켜짐/꺼짐 어느 쪽으로 읽힐지가 우연에 달리지 않게 한다.
@@ -51,6 +53,7 @@ export function SwitchControl(props: SwitchControlProps): ReactElement {
   return (
     <input
       id={id}
+      disabled={disabled}
       className="wb-shell-control"
       type="checkbox"
       checked={checked}
