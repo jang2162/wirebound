@@ -22,22 +22,30 @@ import type { NodeLock } from '@wirebound/schema'
 import { useEditorStore, useEditorStoreInstance } from './use-editor-store'
 
 /**
- * 잠금이 하나도 없을 때의 답. **참조를 고정한다** — 렌더마다 새 함수를 만들면 이 값을
- * 의존 배열에 넣는 쪽이 생겼을 때 매 렌더 다시 돈다.
- *
- * 잠금이 없으면 아예 묻지 않는 것이기도 하다. `lockedBy`는 문서를 뒤지므로(`findNodePath`)
- * 흔한 판에서 그 순회를 건너뛴다 — 스토어도 같은 이유로 같은 가드를 갖는다.
- */
-const NO_LOCK = (): null => null
-
-/**
  * 그 노드를 막는 **남의** 잠금을 답하는 함수. 없으면 `null`이다.
  *
  * **잠금 목록이 바뀌면 부르는 컴포넌트가 다시 그려진다** — 그것이 이 훅의 절반이고,
  * 나머지 절반은 *"판정은 스토어가 한다"*이다.
+ *
+ * **여기 «잠금이 없으면»이라는 갈래를 두지 않는다.** 앞 판에는
+ * `locks.length === 0 ? NO_LOCK : store.lockedBy`가 있었고 그것을 셋으로 재서 뺐다
+ * (UI 점검 7차 — 리뷰가 *"지워도 0 사망"*을 먼저 실측했고, 그 뒤 셋을 쟀다):
+ *
+ * | 그 가드가 한다던 일 | 잰 값 | 그래서 |
+ * |---|---|---|
+ * | 잠금이 없을 때 `findNodePath` 순회를 건너뛴다 | **스토어가 먼저 돌아온다** — `#lockConflictAt`의 첫 줄이 그 가드이고 `findNodePath`가 그 다음 줄이다. 두 줄을 뒤집으면 `test/panels/property-panel.test.tsx`의 *"children 배열 안에 노드가 아닌 원소가 있어도 노드를 고를 수 있다"*가 **혼자** 죽는다(1 실패 / 51 통과) | **그 축의 주인은 스토어다.** 여기 두 벌째를 두어도 건너뛸 것이 이미 없다 |
+ * | 답의 참조를 고정한다 | `store.lockedBy`는 클래스 필드라 **그것도 고정이다** — 렌더 둘에서 같은 참조인 것을 가드가 있을 때와 없을 때 **양쪽 다** 실측했다(`allSame=true`) | 가르지 않는다 |
+ * | 행동 | 웹 전량 **109 파일 · 2108 케이스 0 사망** | 가르지 않는다 |
+ *
+ * **셋 다 안 가르는데 남기면 그것이 두 벌째다** — 이 파일이 잠금 «목록의 내용»(`length`)을
+ * 읽는 자리가 그 한 줄뿐이었고, 그래서 위 머리말의 *"`store.lockedBy`를 **그대로**
+ * 돌려준다"*가 글자 그대로는 거짓이었다. 스토어가 사는 판정을 화면이 한 조각 베껴 쥐면
+ * 갈릴 자리가 생긴다(설계 §7.2).
  */
 export function useLockedBy(): (nodeId: string) => NodeLock | null {
   const store = useEditorStoreInstance()
-  const locks = useEditorStore(store, (s) => s.locks)
-  return locks.length === 0 ? NO_LOCK : store.lockedBy
+  // **값을 안 쓴다 — 다시 그리려고 구독한다.** 판정하는 `store.lockedBy`는 함수라 참조가
+  // 안 바뀌므로, 이 줄이 없으면 잠금이 오가도 부르는 화면이 그대로 서 있다.
+  useEditorStore(store, (s) => s.locks)
+  return store.lockedBy
 }
