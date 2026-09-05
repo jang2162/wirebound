@@ -29,7 +29,7 @@ exportBundle({ pages, theme?, lang? }) → { files: [{ path, content }], errors 
 |---|---|
 | `pages[].title` | **필수.** `<title>` · 좌측 트리의 이름 · **파일 이름의 재료**다 |
 | `pages[].document` | `PageDocument`. `exportPage`와 같은 타입이다 — **레이아웃은 안 받는다**(§6) |
-| `pages[].description` | 선택. 우측 *"페이지 설명"* 탭. 없으면 탭이 **없다고 말한다** |
+| `pages[].description` | 선택. 우측 *"페이지 설명"* 탭. ~~없으면 탭이 **없다고 말한다**~~ → **2026-09-05 7차부터 빈 상자 + placeholder 이고 고칠 수 있다**(§3.17) |
 | `pages[].comments` | 선택. `{ nodeId, body, authorName?, createdAt? }` |
 | `theme` | `ResolvedTheme \| null`. **없는 것이 정상이다** |
 | `files` | `index.html` · `pages/….html` · `assets/shell.css` · `assets/theme.css` |
