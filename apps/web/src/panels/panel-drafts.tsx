@@ -116,8 +116,11 @@
  * - **새로고침·탭 닫기** — provider 째 내려가는 길 가운데 **장부까지 사라지는** 둘이다(문서가
  *   새로 뜬다). 잠금이 사라지고 브라우저는 나가 있던 요청을 끊지만, **서버가 이미 받았으면 끊겨도
  *   커밋한다.** 그 값과 남는 틈은 `write-ledger.tsx`의 머리말이 갖는다. (프로젝트 목록 · 다른
- *   프로젝트 · 테마 편집기 · 로그아웃 뒤 다시 로그인은 **이제 막는다** — 위 3의 «잠금은 이 provider
- *   보다 오래 산다». 9차 판에는 그 넷도 여기 있었다.)
+ *   프로젝트 · 테마 편집기는 **이제 막는다** — 위 3의 «잠금은 이 provider 보다 오래 산다». 9차 판에는
+ *   그 셋과 로그아웃도 여기 있었다.)
+ * - **로그아웃·세션 만료** — 잠금이 **일부러** 넘지 않는다. 세션이 끝나면 장부가 그 세션의 쓰기를
+ *   끊고 비운다 — 앞 사람의 쓰기로 다음 사람을 잠그지 않는다(`write-ledger.tsx`의 «세션을 넘지 않는다»).
+ *   대가로 서버에 이미 닿은 앞 세션의 쓰기가 새 세션의 쓰기 뒤에 늦게 커밋될 수 있다(그 절의 끝).
  * - **응답이 늦는 쓰기의 판정 뒤 늦은 커밋** — 쓰기에 시간 제한이 생겼다(`write-ledger.tsx`의
  *   `WRITE_DEADLINE_MS`). 넘으면 끊고 서버에서 다시 읽어 판정하는데, 서버가 이미 받은 요청이면 판정
  *   **뒤에** 커밋될 수 있다. 9차 판에서는 시간 제한이 없어 잠금이 페이지·탭·모드 왕복에도 남고
@@ -148,6 +151,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
+import { useSessionEpoch } from '../session/session-context'
 import {
   useWriteLedger,
   writeKey,
@@ -282,10 +286,12 @@ function useBox(name: string): Box {
 export function usePanelSlot<T>(key: Slot<T>): [T, (update: SlotUpdate<T>) => void] {
   const { held, receiver } = useBox(key.name)
   const { deliver } = useWriteLedger()
+  // **세션 세대도 단다** — 앞 세션의 쓰기가 다음 세션의 방문에 닿지 않게 장부가 본다(`write-ledger.tsx`).
+  const epoch = useSessionEpoch()
   const { projectId, pageId } = held
   const set = useCallback(
-    (update: SlotUpdate<T>) => deliver(receiver, { projectId, pageId }, key, update),
-    [deliver, receiver, projectId, pageId, key],
+    (update: SlotUpdate<T>) => deliver(receiver, { projectId, pageId, epoch }, key, update),
+    [deliver, receiver, projectId, pageId, epoch, key],
   )
   return [read(held, key), set]
 }

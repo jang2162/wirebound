@@ -33,10 +33,53 @@
  * 언제나 **지금 떠 있는 provider**(`Receiver`)로 간다 — 그 provider 가 같은 (프로젝트, 페이지)를
  * 보고 있을 때만 받는다. 9차가 «가 → 나 → 가»에서 응답을 **돌아온 방문**에 닿게 한 것과 같은
  * 규칙을 provider 째 갈린 방문까지 넓힌 것이다. 잠금이 남아 있는 한 돌아온 방문은 그 칸을 고칠 수
- * 없었으므로 응답의 뒷일(초안 비우기·편집 칸 닫기)이 지우는 것은 언제나 **보낸 그것**이다.
+ * 없었으므로 응답의 뒷일(초안 비우기·편집 칸 닫기)이 지우는 것은 언제나 **보낸 그것**이다 — **같은
+ * 세션 안에서.** 세션을 넘으면 아무것도 안 닿는다(아래 «세션을 넘지 않는다»).
  *
  * 응답이 **에디터 밖에 있는 동안** 오면 받을 provider 가 없어 버려진다. 잠금은 여기서 풀리므로,
  * 돌아오면 새 방문이 조회를 걸어 **커밋된 뒤의** 값을 읽는다.
+ *
+ * ## 세션을 넘지 않는다 — 세션이 끝나면 장부를 끊는다 (2026-09-21)
+ *
+ * 라우트 표 바깥에 섰더니 **로그아웃도 넘었다.** 같은 탭에서 앨리스가 저장 중 로그아웃하고 밥이
+ * 로그인해 같은 페이지로 가면(리뷰 1-1, Chrome) 앨리스의 쓰기가 **밥의 상자를 잠갔고**, 앨리스의
+ * «저장했습니다»·«저장되지 않았습니다»가 **밥의 화면에 섰고**, 앨리스의 요청이 로그아웃 뒤 서버에
+ * 닿아 받은 401 이 **밥을 로그인 화면으로 튕겼다**(밥의 `/me`는 200). 같은 사람이 세션 만료 뒤 다시
+ * 로그인해도 같았다. 원인은 셋이 겹친 것이다 — 장부가 세션으로 안 갈렸다 · 키에 세션이 없다 ·
+ * `Receiver.accept`가 (프로젝트, 페이지)만 본다. `main`에는 없던 길이다(장부가 셸과 함께 사라졌다).
+ *
+ * **세션 세대**(`session/session-context.tsx` — 세션이 끝날 때마다 오른다)로 가른다. 셋이다:
+ *
+ * 1. **세대가 바뀌면 항목을 비운다**(렌더 중에) — «모름»으로 남은 쓰기도(리뷰 1-2 · 이월 9번).
+ * 2. **그 세대의 쓰기를 끊는다**(`AbortSignal`) — 서버에 아직 안 닿았으면 영영 안 가고, 끊긴 요청의
+ *    응답(401 포함)은 브라우저가 버린다. 서버에 이미 닿았으면 **서버는 끝낸다** — 앞 사람의 쿠키로 나간
+ *    정당한 쓰기이고 그 결과가 DB 에 남는 것은 옳다. 잠금만 풀린다.
+ * 3. **지난 세대의 것은 새 장부도 칸도 못 고친다** — 항목은 낸 세대의 장부일 때만(`put`), 칸 쓰기는 지금
+ *    세대일 때만(`deliver`) 닿는다. 끊기지 않는 일(판정용 다시 읽기 · 게시 뒤의 목록 다시 받기)이 세션을
+ *    넘어 끝날 때 이것이 막는다.
+ *
+ * **401 → 로그인 화면(`SignedOut`)의 판정은 두 벌이 아니다** — 여전히 `api/failure.tsx`의 `toFailure`
+ * 한 곳이다. 여기서 거르는 것은 그 판정에 닿을 **칸 쓰기**다: 지난 세대의 401 은 칸에 안 닿으므로 지금
+ * 세션의 화면이 `SignedOut`을 그리지 않는다. 지금 세대의 쓰기가 받은 401 은 그대로 닿는다 — 그때는 지금
+ * 세션이 정말 끝난 것이다.
+ *
+ * Chrome(고친 뒤 · 계정 셋 · 같은 탭):
+ *
+ * | 판 | 다음 세션의 화면 | 서버 |
+ * |---|---|---|
+ * | 서버 안 지연 8초(캐시 켬) · 로그아웃 → 밥 | 로그아웃 순간 앨리스의 `PATCH` `ERR_ABORTED` · 장부 `[]` → 밥 1.7s 도착: 상자 **열림** · 통지 없음 → 13s 까지 그대로 | 8s 에 앨리스의 글 커밋 |
+ * | route 에 붙잡고 안 놓음 · 로그아웃 → 밥 | 도착 열림 → 9.5 · 11 · 13s 에도 통지 없음 · 장부 `[]` | 그대로(안 닿았다) |
+ * | 앨리스가 이미 «모름»(다시 읽기를 끊음) · 로그아웃 → 밥 | 장부 `[]` · 열림 · «다시 확인» 없음 | — |
+ * | 붙잡힌 쓰기에 401 을 준다(설명 · 새 코멘트) — 모델링 | 로그인 화면으로 **안 간다** · 밥 `/me` 200 | — |
+ * | 게시는 커밋 · 뒤의 목록 다시 받기를 붙잡았다가 401 — 모델링 | 로그인 화면으로 **안 간다** · 목록에 앨리스의 글 | 1행 |
+ * | 서버가 세션을 지움 → 목록 401 → 같은 사람 재로그인 | 끊김(`ERR_ABORTED`) · 돌아온 상자 **열림** | 그대로 |
+ *
+ * **대가 — 잠금이 세션을 넘지 않으므로 Q 의 틈이 세션 경계에서 다시 선다.** 새 세션의 상자는 열려 있고,
+ * 앞 세션의 쓰기가 서버에 이미 닿아 있었으면 그것이 **새 세션의 쓰기와 겹친다.** Chrome(같은 판에서 밥이
+ * 1.9s 에 같은 설명을 저장): 밥의 `PATCH`가 같은 행 잠금 뒤에 줄을 서서 앨리스의 것 다음에 커밋됐다 —
+ * 8.1s «설명을 저장했습니다» · 화면·DB `"밥이 저장한 글"`. **이 스택에서는 온 순서대로라 뒤가 이겼다.**
+ * 서버 앞단이 순서를 바꾸면 앞 세션의 것이 뒤에 서서 덮는다 — 일반적인 보장이 아니다. 받아들인 것이다 —
+ * 앞 사람의 쓰기로 다음 사람을 잠그는 것은 안 된다. 닫는 길은 이월 P(기대값)다.
  *
  * ## 시간 제한 — 넘으면 «풀림»이 아니라 «결과를 모름»이다 (이월 R)
  *
@@ -110,12 +153,14 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactElement,
   type ReactNode,
 } from 'react'
+import { useSessionEpoch } from '../session/session-context'
 
 /** 쓰기의 시간 제한. 값의 근거는 위 머리말의 표다. */
 export const WRITE_DEADLINE_MS = 10_000
@@ -185,6 +230,14 @@ export interface PageAt {
   readonly pageId: string | undefined
 }
 
+/**
+ * 칸 쓰기의 주소 — **그 쓰기를 부른 렌더**의 페이지와 **세션 세대**(`session-context.tsx`). 페이지는
+ * 받는 provider 가 보고(`accept`), 세대는 장부가 본다(`deliver`).
+ */
+export interface SlotAt extends PageAt {
+  readonly epoch: number
+}
+
 interface Ledger {
   readonly writes: ReadonlyMap<string, WriteEntry>
   /**
@@ -196,8 +249,23 @@ interface Ledger {
   run<T, V>(target: WriteTarget, owner: symbol, write: TrackedWrite<T, V>): Promise<void>
   /** 지금 떠 있는 provider 로 선다. 돌려주는 함수가 물러난다. */
   receive(receiver: Receiver): () => void
-  /** 칸 쓰기를 보낸다 — **지금 떠 있는 provider** 로(없거나 자기면 자기에게). */
-  deliver(from: Receiver, at: PageAt, key: object, update: unknown): void
+  /**
+   * 칸 쓰기를 보낸다 — **지금 떠 있는 provider** 로(없거나 자기면 자기에게). **지난 세대의 것은
+   * 버린다**(머리말 «세션을 넘지 않는다»).
+   */
+  deliver(from: Receiver, at: SlotAt, key: object, update: unknown): void
+}
+
+/** 장부 — 항목과 그것이 속한 세션 세대. 세대가 바뀌면 통째로 새것이 된다. */
+interface Book {
+  readonly epoch: number
+  readonly writes: ReadonlyMap<string, WriteEntry>
+}
+
+/** 지금 세대와, 그 세대의 쓰기를 한꺼번에 끊는 신호. */
+interface Live {
+  readonly epoch: number
+  readonly signal: AbortSignal
 }
 
 const LedgerContext = createContext<Ledger | null>(null)
@@ -213,28 +281,53 @@ const CHECKING: WriteEntry = { phase: 'checking', recheck: null }
 const EXPIRED = Symbol('expired')
 
 export function WriteLedgerProvider(props: { children: ReactNode }): ReactElement {
-  const [writes, setWrites] = useState<ReadonlyMap<string, WriteEntry>>(() => new Map())
+  const epoch = useSessionEpoch()
+  const [book, setBook] = useState<Book>(() => ({ epoch, writes: new Map() }))
   const receiverRef = useRef<Receiver | null>(null)
+  const liveRef = useRef<Live | null>(null)
 
-  const put = useCallback((key: string, entry: WriteEntry | null) => {
-    setWrites((prev) => {
-      if (entry === null && !prev.has(key)) return prev
-      const next = new Map(prev)
-      if (entry === null) next.delete(key)
-      else next.set(key, entry)
-      return next
+  // **세대가 바뀌면 항목을 비운다 — 렌더 중에**(`panel-drafts.tsx`가 페이지가 바뀌면 칸을 버리는 것과
+  // 같은 모양). 이펙트로 비우면 새 세대의 첫 커밋 하나 동안 앞 세션의 잠금이 그려진다.
+  if (book.epoch !== epoch) setBook({ epoch, writes: new Map() })
+
+  // **그리고 앞 세대의 요청을 끊는다**(머리말 «세션을 넘지 않는다»). 쓰기는 낸 순간의 세대의 신호를
+  // 받는다(`run`) — 세대가 바뀌면 이 정리가 그 신호를 끊는다.
+  useLayoutEffect(() => {
+    const controller = new AbortController()
+    liveRef.current = { epoch, signal: controller.signal }
+    return () => controller.abort()
+  }, [epoch])
+
+  /** 항목 하나를 고친다. **그 쓰기를 낸 세대의 장부일 때만** — 지난 세대의 쓰기는 새 장부를 못 고친다. */
+  const put = useCallback((at: number, key: string, entry: WriteEntry | null) => {
+    setBook((prev) => {
+      if (prev.epoch !== at) return prev
+      if (entry === null && !prev.writes.has(key)) return prev
+      const writes = new Map(prev.writes)
+      if (entry === null) writes.delete(key)
+      else writes.set(key, entry)
+      return { epoch: prev.epoch, writes }
     })
   }, [])
 
   const run = useCallback(
     async <T, V>(target: WriteTarget, owner: symbol, write: TrackedWrite<T, V>): Promise<void> => {
+      const live = liveRef.current
+      if (live === null) throw new Error('쓰기 장부가 아직 서지 않았다')
       const key = writeKey(target)
-      put(key, SENDING)
+      const report = (entry: WriteEntry | null): void => put(live.epoch, key, entry)
+      // **세대가 바뀌면 이 쓰기를 끊는다**(머리말 «세션을 넘지 않는다»). 끊긴 거절은 `attempt`의 경주에서
+      // «실패»로 끝나고, 그 뒷일의 칸 쓰기는 `deliver`가 지난 세대라 버린다.
+      const controller = new AbortController()
+      const cut = (): void => controller.abort()
+      live.signal.addEventListener('abort', cut)
+      report(SENDING)
       try {
-        const outcome = await attempt(write, (entry) => put(key, entry))
+        const outcome = await attempt(write, report, controller)
         await write.settle(outcome, receiverRef.current?.token === owner)
       } finally {
-        put(key, null)
+        live.signal.removeEventListener('abort', cut)
+        report(null)
       }
     },
     [put],
@@ -247,11 +340,16 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
     }
   }, [])
 
-  const deliver = useCallback((from: Receiver, at: PageAt, key: object, update: unknown) => {
+  const deliver = useCallback((from: Receiver, at: SlotAt, key: object, update: unknown) => {
+    // **지난 세대의 칸 쓰기는 버린다** — 앞 세션의 응답(통지 · 401 의 `SignedOut` · 다시 받은 목록)이 다음
+    // 세션의 방문에 닿지 않는다. 401 을 로그인 화면으로 바꾸는 판정은 여전히 `api/failure.tsx` 한 곳이다 —
+    // 여기는 그 판정에 닿을 **칸 쓰기**를 거른다.
+    if (at.epoch !== liveRef.current?.epoch) return
     const current = receiverRef.current
     ;(current === null ? from : current).accept(at, key, update)
   }, [])
 
+  const { writes } = book
   const ledger = useMemo<Ledger>(() => ({ writes, run, receive, deliver }), [writes, run, receive, deliver])
   return <LedgerContext.Provider value={ledger}>{props.children}</LedgerContext.Provider>
 }
@@ -266,8 +364,8 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
 async function attempt<T, V>(
   write: TrackedWrite<T, V>,
   report: (entry: WriteEntry) => void,
+  controller: AbortController,
 ): Promise<WriteOutcome<T, V>> {
-  const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   const expired = new Promise<typeof EXPIRED>((resolve) => {
     timer = setTimeout(() => {

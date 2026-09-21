@@ -18,7 +18,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient, WriteOptions } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
-import type { Comment, CommentCreated, PageDetail, ProjectDetail } from '../../src/api/types'
+import type { Comment, CommentCreated, PageDetail, ProjectDetail, SessionUser } from '../../src/api/types'
 import { WRITE_DEADLINE_MS } from '../../src/panels/write-ledger'
 import {
   HEAD_SEQ,
@@ -145,14 +145,24 @@ function descriptionServer(
   respond: (index?: number) => Promise<void>
   /** 다시 읽기를 실패시킨다. */
   failReads: (on: boolean) => void
+  /** 켜 있는 동안의 읽기를 붙잡는다 — 끈 뒤의 읽기는 곧바로 답한다. 붙잡힌 것은 `releaseReads`가 놓는다. */
+  holdReads: (on: boolean) => void
+  /** 붙잡힌 읽기를 **그때의** 서버 값으로 놓는다. */
+  releaseReads: () => Promise<void>
   /** 남이 서버의 설명을 바꾼다. */
   overwrite: (value: string | null) => void
 } {
   let stored = initial
   let readsFail = false
+  let readsHeld = false
+  const heldReads: (() => void)[] = []
   const sent: (string | null | undefined)[] = []
   const signals: (AbortSignal | undefined)[] = []
   const waiting: { commit: () => void; resolve: () => void }[] = []
+  const read = (pageId: string): PageDetail => ({
+    ...pageDetail(pageId, DOC),
+    description: pageId === PAGE_ID ? stored : null,
+  })
   return {
     sent,
     signals,
@@ -160,13 +170,24 @@ function descriptionServer(
     failReads: (on) => {
       readsFail = on
     },
+    holdReads: (on) => {
+      readsHeld = on
+    },
+    releaseReads: async () => {
+      await act(async () => {
+        for (const release of heldReads.splice(0)) release()
+      })
+    },
     overwrite: (value) => {
       stored = value
     },
     overrides: {
       getPage: (async (_projectId: string, pageId: string) => {
         if (readsFail && pageId === PAGE_ID) throw new ApiError(0, 'internal', '서버에 연결하지 못했습니다')
-        return { ...pageDetail(pageId, DOC), description: pageId === PAGE_ID ? stored : null }
+        if (readsHeld && pageId === PAGE_ID) {
+          return new Promise<PageDetail>((resolve) => heldReads.push(() => resolve(read(pageId))))
+        }
+        return read(pageId)
       }) as never,
       updatePage: ((_projectId: string, pageId: string, body: { description?: string | null }, options?: WriteOptions) => {
         sent.push(body.description)
@@ -229,6 +250,15 @@ function commentServer(initial: Comment[] = []): {
   /** 게시가 실어 온 멱등 키 — 부른 순서대로. */
   keys: (string | undefined)[]
   failNext: () => void
+  /** 켜 있는 동안의 목록 읽기를 붙잡는다 — 끈 뒤의 읽기는 곧바로 답한다. */
+  holdLists: (on: boolean) => void
+  /** 붙잡힌 목록 읽기의 수. */
+  heldLists: () => number
+  /**
+   * 붙잡힌 목록 읽기를 **401** 로 끝낸다 — 로그아웃 **뒤에** 서버에 닿은 앞 세션의 요청이다(모델링: 그
+   * 요청은 로그아웃보다 먼저 나갔고, 서버에는 늦게 닿았다).
+   */
+  failHeldLists: () => Promise<void>
   commit: (index?: number) => void
   respond: (index?: number) => Promise<void>
 } {
@@ -236,6 +266,8 @@ function commentServer(initial: Comment[] = []): {
   let next = 100
   let seq = HEAD_SEQ
   let failing = 0
+  let listsHeld = false
+  const heldLists: ((caught: unknown) => void)[] = []
   const markers = new Map<string, number>()
   const byKey = new Map<string, Comment>()
   const keys: (string | undefined)[] = []
@@ -246,8 +278,20 @@ function commentServer(initial: Comment[] = []): {
     failNext: () => {
       failing += 1
     },
+    holdLists: (on) => {
+      listsHeld = on
+    },
+    heldLists: () => heldLists.length,
+    failHeldLists: async () => {
+      await act(async () => {
+        for (const fail of heldLists.splice(0)) fail(new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
+      })
+    },
     overrides: {
-      listComments: async () => [...rows],
+      listComments: async () => {
+        if (listsHeld) return new Promise<Comment[]>((_resolve, reject) => heldLists.push(reject))
+        return [...rows]
+      },
       createComment: ((
         _projectId: string,
         _pageId: string,
@@ -321,6 +365,33 @@ function commentServer(initial: Comment[] = []): {
 }
 
 const listProjects: Partial<ApiClient> = { listProjects: async () => [PROJECT] }
+
+// ---- 계정 ----
+
+/** 하네스가 처음 세션으로 내는 사람(`editor-harness.tsx`의 `USER`) — 여기서는 앞 사람이다. */
+const ALICE: SessionUser = { id: MY_ID, email: 'me@example.com', name: '테스터' }
+/** 같은 프로젝트의 다른 사람. */
+const BOB: SessionUser = { id: 'u-2', email: 'bob@example.com', name: '밥' }
+
+/** 로그인은 친 이메일의 사람으로, 로그아웃은 성공으로 답한다. */
+const accounts: Partial<ApiClient> = {
+  login: (async (email: string) => (email === BOB.email ? BOB : ALICE)) as never,
+  logout: async () => undefined,
+}
+
+/** 셸 머리의 «로그아웃» → 로그인 화면. */
+async function logout(): Promise<void> {
+  fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+  await screen.findByLabelText('이메일')
+}
+
+/** 로그인 화면에서 그 사람으로 들어간다 → 프로젝트 목록. */
+async function login(user: SessionUser): Promise<void> {
+  fireEvent.change(screen.getByLabelText('이메일'), { target: { value: user.email } })
+  fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: '아무 비밀번호' } })
+  fireEvent.click(screen.getByRole('button', { name: '로그인' }))
+  await screen.findByRole('link', { name: PROJECT_NAME })
+}
 
 /**
  * ## Q — 에디터를 떠났다 와도
@@ -771,5 +842,191 @@ describe('멱등 키 — 같은 초안은 같은 키를 싣고, 성공·고침·
     await waitFor(() => expect(server.keys).toHaveLength(2))
 
     expect(server.keys[1]).not.toBe(server.keys[0])
+  })
+})
+
+/**
+ * ## 세션을 넘지 않는다 — 세션이 끝나면 장부를 끊는다
+ *
+ * 장부는 라우트 표 바깥이라 **로그아웃 뒤에도 산다.** 그래서 앞 판은 앞 사람의 쓰기가 다음 사람에게
+ * 넘어갔다(리뷰 1-1, Chrome — 잠금 · 통지 · 401 의 `SignedOut`). 무엇을 왜 막는지는
+ * `src/panels/write-ledger.tsx`의 «세션을 넘지 않는다»와 `src/session/session-context.tsx`의 «세션 세대»가
+ * 갖는다. **하네스는 한 사람으로 돌았다** — 여기는 로그인 화면을 지나 **다른 사람**(`BOB`)으로, 또는
+ * 세션이 끊긴 **같은 사람**(`ALICE`)으로 다시 들어온다.
+ *
+ * **401 판은 모델링이다** — 앞 세션의 요청이 **로그아웃보다 먼저 나갔고 서버에는 늦게 닿아** 401 을
+ * 받는다(느린 망 · 앞단 큐에서 작은 로그아웃 요청이 앞지르는 판 — 리뷰 1-1 과 같은 모델). 가짜 서버가
+ * 붙잡은 읽기를 로그인한 뒤에 401 로 끝낸다. **쓰기 자체의 401 은 여기서 모델링하지 않았다** — 세션이
+ * 끝나면 그 쓰기를 끊으므로(첫 케이스) 실브라우저는 그 응답을 버린다. 끊기지 않는 것이 목록 다시 받기다.
+ *
+ * 고치기 전(`eb7a155`)에는 다섯 다 죽는다. 각각이 혼자 죽는 변조(웹 전량에서 쟀다):
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 무효화가 세대를 안 올린다 | 이 절의 다섯 전부 |
+ * | 세대를 로그아웃 단추에서만 올린다(401 의 `SignedOut`이 부르는 무효화는 안 올린다) | *"같은 사람 — …"* **혼자** |
+ * | 세대가 바뀌어도 나가 있는 쓰기를 안 끊는다 | *"다른 사람 — … 로그아웃에 끊기고 …"* **혼자** |
+ * | 지난 세대의 쓰기가 새 장부의 항목을 고친다(`put`) | *"앞 세션의 판정이 늦게 끝나도 …"* **혼자** |
+ * | 세대가 바뀌어도 항목을 안 비운다 | *"… «확인하지도 못했습니다»로 남은 …"* 와 *"앞 세션의 판정이 …"* — **축의 주인은 «확인하지도 못했습니다» 케이스** |
+ * | 지난 세대의 칸 쓰기를 안 버린다(`deliver`) | *"401 이 늦게 닿는 판 …"* 와 *"앞 세션의 판정이 …"*(앨리스의 판정 통지가 밥의 화면에 선다) — **축의 주인은 «401» 케이스** |
+ */
+describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰기는 다음 세션에 닿지 않는다', () => {
+  it('다른 사람 — 앞 사람의 나가 있는 저장은 로그아웃에 끊기고, 다음 사람의 상자를 잠그지 않는다', async () => {
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+
+    type(box(), '앨리스의 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+
+    await logout()
+    // **세션이 끝나면 그 세션의 요청을 끊는다** — 서버에 아직 안 닿았으면 영영 안 간다.
+    expect(server.signals[0]?.aborted).toBe(true)
+
+    await login(BOB)
+    await returnFromList()
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+
+    // **앞 판은 여기서 밥의 상자가 꺼져 있었다**(Chrome — 앨리스의 쓰기가 잠갔다).
+    expect(box().disabled).toBe(false)
+    expect(screen.queryByRole('alert')).toBeNull()
+    type(box(), '밥의 글')
+    expect(saveButton().disabled).toBe(false)
+  })
+
+  it('다른 사람 — «확인하지도 못했습니다»로 남은 앞 사람의 쓰기가 다음 사람에게 넘어가지 않는다', async () => {
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    type(box(), '앨리스의 글')
+    fireEvent.click(saveButton())
+    server.failReads(true)
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    await waitFor(() => expect(screen.getByRole('button', { name: '다시 확인' })).toBeTruthy())
+    server.failReads(false)
+
+    await logout()
+    await login(BOB)
+    await returnFromList()
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+
+    // **앞 판은 밥이 앨리스의 «모름»을 봤다**(리뷰 1-2 · 이월 9번) — 꺼진 상자와 «다시 확인».
+    expect(box().disabled).toBe(false)
+    expect(screen.queryByRole('button', { name: '다시 확인' })).toBeNull()
+    expect(screen.queryByText('응답이 없고, 저장됐는지 확인하지도 못했습니다')).toBeNull()
+  })
+
+  it('401 이 늦게 닿는 판 — 앞 사람의 다시 받기가 받은 401 은 다음 사람을 로그인 화면으로 보내지 않는다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
+    await toCommentTab()
+
+    type(commentBox(), '앨리스의 말')
+    fireEvent.click(submitButton())
+    // 게시는 커밋되고 응답도 온다 — **그 뒤의 목록 다시 받기**가 붙잡힌다.
+    server.holdLists(true)
+    await server.respond()
+    await waitFor(() => expect(server.heldLists()).toBe(1))
+    server.holdLists(false)
+
+    await logout()
+    await login(BOB)
+    await returnFromList()
+    await toCommentTab()
+    // 밥이 건 목록 조회는 커밋된 행을 읽는다 — 앨리스의 게시는 서버에서 정상 처리됐다.
+    await screen.findByText('앨리스의 말')
+
+    // 앨리스의 다시 받기가 로그아웃 **뒤에** 서버에 닿아 401 을 받는다(모델링 — 위 머리말).
+    await server.failHeldLists()
+
+    // **앞 판은 여기서 밥이 로그인 화면으로 튕겼다**(Chrome — 밥의 `/me`는 200 이었다).
+    expect(screen.queryByLabelText('이메일')).toBeNull()
+    expect(commentBox().disabled).toBe(false)
+    expect(screen.getByText('앨리스의 말')).toBeTruthy()
+  })
+
+  it('같은 사람 — 세션이 끊겨 다시 로그인한 새 세션은 앞 세션의 저장에 잠기지 않는다', async () => {
+    const server = descriptionServer('서버 값')
+    let expired = false
+    await openPage(DOC, {
+      apiOverrides: {
+        ...server.overrides,
+        ...accounts,
+        // 서버가 세션을 지웠다 — 다음 조회가 401 을 받고 `SignedOut`이 로그인 화면으로 보낸다.
+        listProjects: async () => {
+          if (expired) throw new ApiError(401, 'unauthenticated', '로그인이 필요합니다')
+          return [PROJECT]
+        },
+        login: (async () => {
+          expired = false
+          return ALICE
+        }) as never,
+      },
+    })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+
+    type(box(), '만료 전의 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+
+    expired = true
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    await screen.findByLabelText('이메일')
+
+    await login(ALICE)
+    await returnFromList()
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+
+    // **사람은 같아도 세션이 다르다** — 로그아웃 단추가 아니라 401 이 세션을 끝낸 판이다.
+    expect(box().disabled).toBe(false)
+    type(box(), '다시 들어와 친 글')
+    expect(saveButton().disabled).toBe(false)
+  })
+
+  it('앞 세션의 판정이 늦게 끝나도 다음 세션의 잠금을 풀지 않는다', async () => {
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    type(box(), '앨리스의 글')
+    fireEvent.click(saveButton())
+    // 시간이 넘어 다시 읽는다 — 그 읽기가 붙잡힌다(«확인 중»).
+    server.holdReads(true)
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    server.holdReads(false)
+
+    await logout()
+    await login(BOB)
+    await returnFromList()
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    expect(box().disabled).toBe(false)
+
+    type(box(), '밥의 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(2))
+    expect(box().disabled).toBe(true)
+
+    // 앨리스의 판정이 이제야 끝난다. **밥의 저장은 아직 나가 있다** — 잠금이 남아야 한다.
+    await server.releaseReads()
+    expect(box().disabled).toBe(true)
+    expect(saveButton().disabled).toBe(true)
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    // **양성 대조** — 밥의 응답이 오면 풀린다.
+    await server.respond(1)
+    await waitFor(() => expect(screen.queryByText('설명을 저장했습니다')).not.toBeNull())
+    expect(box().disabled).toBe(false)
   })
 })
