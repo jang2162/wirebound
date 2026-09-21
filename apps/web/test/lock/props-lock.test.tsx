@@ -529,6 +529,39 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
     expect(view.calls[0]?.ops[0]).toMatchObject({ path: '/root/children/0/props/title', value: '새 제목' })
   })
 
+  it('목록 칸에 친 글자도 잠금이 오가도 남는다 — 꺼질 때 온 blur가 초안을 비우지 않는다', async () => {
+    // **위 케이스의 목록 판이다. 갈리는 것은 blur 하나다.** 실브라우저는 칸이 `disabled`가
+    // 되는 순간 포커스를 거두며 blur를 낸다(Chrome 실측). `TextControl`은 그 blur에 커밋이
+    // 막혀도 초안을 들고 있지만, `ListControl`은 blur에서 초안을 **먼저 비우고** 커밋을
+    // 불렀다 — 커밋은 가드에 막히고 친 글자만 사라졌다(Chrome 실측: `"새 항목"` → `"옛 항목"`).
+    // jsdom은 그 blur를 안 내므로(위 *"잠긴 동안 도착한 blur는…"*) 여기서 직접 낸다.
+    const view = await board()
+    select('List')
+    await settle()
+
+    const cell = (): HTMLInputElement =>
+      within(panel()).getByRole<HTMLInputElement>('textbox', { name: '컬럼 1번째 항목' })
+    fireEvent.change(cell(), { target: { value: '새 컬럼' } })
+    view.lock([foreign('n-list')])
+    await settle()
+    fireEvent.blur(cell())
+    await settle()
+
+    expect(cell().disabled).toBe(true)
+    expect(cell().value).toBe('새 컬럼')
+    expect(view.calls).toHaveLength(0)
+
+    view.lock([])
+    await settle()
+
+    // 풀리면 그 글자를 그대로 낸다 — 위 케이스와 같은 끝이다.
+    expect(cell().value).toBe('새 컬럼')
+    fireEvent.blur(cell())
+    await waitFor(() => expect(view.calls).toHaveLength(1))
+    expect(view.status).toEqual([200])
+    expect(view.calls[0]?.ops[0]).toMatchObject({ path: '/root/children/2/props/columns', value: ['새 컬럼'] })
+  })
+
   it('안내 줄이 이름과 함께 뜨고, 풀리면 사라진다', async () => {
     const view = await board()
     select('Card')

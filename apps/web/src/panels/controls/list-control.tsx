@@ -88,6 +88,14 @@ export function ListControl(props: ListControlProps): ReactElement {
 
   function commitDraft(): void {
     if (draft === null) return
+    // **꺼진 동안 도착한 blur는 커밋도 버리기도 아니다.** 남이 이 노드를 잠그면 칸이
+    // `disabled`가 되고, 실브라우저는 그 순간 포커스를 거두며 blur를 낸다(Chrome 실측:
+    // `focusout INPUT → null`, `activeElement`는 `BODY`). 커밋은 부르는 쪽의 가드가 막지만
+    // (`../property-panel.tsx`의 `blocked`), 그 전에 여기서 초안을 `null`로 비우면 **친 글자가
+    // 그 자리에서 사라진다** — 실측: `"새 항목"`을 치던 중 잠금이 오면 칸이 `"옛 항목"`이었다.
+    // `TextControl`은 커밋이 막혀도 초안을 들고 있으므로 이 갈림이 없다. §3.16 E의
+    // *"친 글자는 잠금이 오가도 남는다"*를 두 위젯이 같게 지킨다.
+    if (disabled) return
     const current = items[draft.index]
     setDraft(null)
     if (current === undefined) return
