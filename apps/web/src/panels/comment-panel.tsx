@@ -134,6 +134,7 @@ import { walkSafely } from '../edit/safe-walk'
 import { useSessionUser } from '../session/session-context'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { lockSlot, slot, usePanelLock, usePanelSlot } from './panel-drafts'
+import { PendingNotice } from './pending-notice'
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 코멘트가 보입니다'
@@ -151,6 +152,20 @@ const MISSING_NODE = '사라진 노드'
 const NO_DOCUMENT = '문서를 읽지 못해 번호를 보일 수 없습니다'
 /** 서버는 번호를 바꿨는데 내 문서에 얹지 못했을 때(리뷰 ④). */
 const DIVERGED = '번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다'
+/**
+ * 시간 안에 응답이 없어 목록을 다시 읽는 중(`panels/write-ledger.tsx`의 `'checking'`). **«실패»가
+ * 아니다** — 서버가 이미 반영했을 수 있다.
+ */
+const CHECKING = '응답이 없어 반영됐는지 서버에서 확인하는 중입니다'
+/** 다시 읽기도 실패했다 — 결과를 모른다. 잠금은 그대로다. */
+const UNKNOWN = '응답이 없고, 반영됐는지 확인하지도 못했습니다'
+/** 다시 읽었더니 그 글이 목록에 없다 — **초안은 남긴다.** 다시 달 수 있다. */
+const NOT_POSTED = '응답이 없어 목록을 다시 읽었더니 이 코멘트는 달리지 않았습니다'
+/** 다시 읽었더니 그 코멘트의 본문이 고친 글과 다르다 — 편집 칸과 글은 남긴다. */
+const NOT_EDITED = '응답이 없어 목록을 다시 읽었더니 이 수정은 저장되지 않았습니다'
+/** 다시 읽었더니 그 코멘트가 아직 목록에 있다. */
+const NOT_DELETED = '응답이 없어 목록을 다시 읽었더니 이 코멘트는 지워지지 않았습니다'
+
 type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; comments: Comment[] }
@@ -364,24 +379,41 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   }, [api, projectId, pageId])
 
   /**
-   * 쓰기 하나를 장부에 올려 보낸다(`write-ledger.tsx`). **잠금은 장부가 쥐고 푼다** — 성공·실패
-   * 어느 쪽이든 반드시 풀리고(안 그러면 실패 한 번에 패널이 영영 잠긴다), **뒷일(`done`)이 끝난
-   * 뒤에** 풀린다. 8차까지 다시 받기가 잠금 안에서 돌았던 것과 같다.
+   * 쓰기 하나를 장부에 올려 보낸다(`write-ledger.tsx`). **잠금은 장부가 쥐고 푼다** — 성공·실패·
+   * 판정 어느 쪽이든 반드시 풀리고(안 그러면 실패 한 번에 패널이 영영 잠긴다), **뒷일(`done`·
+   * `verified`)이 끝난 뒤에** 풀린다. 8차까지 다시 받기가 잠금 안에서 돌았던 것과 같다.
+   *
+   * `verified`는 시간 안에 응답이 없어 **목록을 다시 읽어 판정했을 때**다(이월 R). 반영되지
+   * 않았으면 그렇다고 말할 문장을 돌려준다 — 초안·편집 칸은 남는다.
+   *
+   * **판정으로 끝난 쓰기는 번호 변화(`markerOps`)를 못 받았다.** 그 변화가 내 문서에 안 오는
+   * 것은 **쓰기를 시작한 셸이 아직 떠 있을 때**뿐이다(`ownerLive`) — 서버가 방송에서 그 요청의
+   * 연결을 빼기 때문이다. 셸이 내려갔다 새로 섰으면 새 셸은 **새 연결**이라 그 방송을 받는다
+   * (Chrome 실측 — 에디터를 떠났다 온 사이 커밋된 게시의 번호가 새 스토어에 섰다). 그래서
+   * 어긋났다고 말하는 것은 셸이 떠 있을 때만이다.
    */
   const perform = useCallback(
-    <T,>(op: {
-      send: (client: ApiClient, openPageId: string) => Promise<T>
+    <T, V>(op: {
+      send: (client: ApiClient, openPageId: string, signal: AbortSignal) => Promise<T>
+      verify: (client: ApiClient, openPageId: string) => Promise<V>
       done: (value: T, openPageId: string) => Promise<void> | void
+      verified: (verdict: V, ownerLive: boolean) => string | null
     }): void => {
       if (pageId === undefined || busy) return
       const openPageId = pageId
-      void busyLock.run<T>({
-        send: () => op.send(api, openPageId),
-        settle: async (outcome) => {
+      void busyLock.run<T, V>({
+        send: (signal) => op.send(api, openPageId, signal),
+        verify: () => op.verify(api, openPageId),
+        settle: async (outcome, ownerLive) => {
           try {
             if (outcome.kind === 'failed') throw outcome.caught
-            await op.done(outcome.value, openPageId)
-            setWriteError(null)
+            if (outcome.kind === 'done') {
+              await op.done(outcome.value, openPageId)
+              setWriteError(null)
+              return
+            }
+            const notApplied = op.verified(outcome.verdict, ownerLive)
+            setWriteError(notApplied === null ? null : { kind: 'message', message: notApplied })
           } catch (caught) {
             setWriteError(toFailure(caught, WRITE_FAILED))
           }
@@ -391,13 +423,32 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     [api, busy, busyLock, pageId, setWriteError],
   )
 
+  /** 지금 문서에서 그 노드에 번호가 있는가. 문서를 못 읽었으면 «없다»로 본다 — 어긋남을 말하는 쪽이다. */
+  const numbered = (nodeId: string): boolean =>
+    document !== null && typeof markersOf(document).get(nodeId) === 'number'
+
   const submit = (): void => {
     const nodeId = selectedNodeId
     const body = draft.trim()
     if (body === '' || nodeId === null) return
+    // 판정에 쓴다 — **보내기 전에 목록에 있던 것**은 이 글이 아니다(같은 말을 앞서 단 적이 있어도).
+    const known = new Set(state.status === 'ready' ? state.comments.map((comment) => comment.id) : [])
+    const authorId = currentUser?.id ?? null
+    const hadMarker = numbered(nodeId)
 
     perform({
-      send: (client, openPageId) => client.createComment(projectId, openPageId, { nodeId, body }),
+      send: (client, openPageId, signal) => client.createComment(projectId, openPageId, { nodeId, body }, { signal }),
+      verify: async (client, openPageId) => {
+        const comments = await client.listComments(projectId, openPageId)
+        const posted = comments.some(
+          (comment) =>
+            !known.has(comment.id) &&
+            comment.nodeId === nodeId &&
+            comment.body === body &&
+            (authorId === null || comment.authorId === authorId),
+        )
+        return { comments, posted }
+      },
       done: async (created, openPageId) => {
         // **문서 변화를 먼저 얹는다.** 목록을 다시 받아도 번호는 그 응답에 없다 —
         // 번호는 문서의 값이다(D1). 결과를 **버리지 않는다**(리뷰 ④).
@@ -408,15 +459,37 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
         setDrafts((prev) => withDraft(prev, nodeId, ''))
         await reload()
       },
+      verified: ({ comments, posted }, ownerLive) => {
+        setState({ status: 'ready', comments })
+        if (!posted) return NOT_POSTED
+        setDrafts((prev) => withDraft(prev, nodeId, ''))
+        // 응답(`markerOps`)을 못 받았다. 번호가 없던 노드면 서버가 붙인 번호가 내 문서에 없다.
+        setDiverged(ownerLive && !hadMarker)
+        return null
+      },
     })
   }
 
   const remove = (commentId: string): void => {
+    const target = state.status === 'ready' ? state.comments.find((comment) => comment.id === commentId) : undefined
+    const hadMarker = target !== undefined && numbered(target.nodeId)
+
     perform({
-      send: (client, openPageId) => client.deleteComment(projectId, openPageId, commentId),
+      send: (client, openPageId, signal) => client.deleteComment(projectId, openPageId, commentId, { signal }),
+      verify: async (client, openPageId) => {
+        const comments = await client.listComments(projectId, openPageId)
+        return { comments, gone: !comments.some((comment) => comment.id === commentId) }
+      },
       done: async (change, openPageId) => {
         setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
         await reload()
+      },
+      verified: ({ comments, gone }, ownerLive) => {
+        setState({ status: 'ready', comments })
+        if (!gone) return NOT_DELETED
+        // 그 노드의 마지막이었으면 서버가 번호를 지웠다 — 응답을 못 받았으니 내 문서에는 남아 있다.
+        setDiverged(ownerLive && hadMarker && !comments.some((comment) => comment.nodeId === target?.nodeId))
+        return null
       },
     })
   }
@@ -426,21 +499,40 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     if (body === '') return
 
     perform({
-      send: (client, openPageId) => client.updateComment(projectId, openPageId, commentId, { body }),
+      send: (client, openPageId, signal) =>
+        client.updateComment(projectId, openPageId, commentId, { body }, { signal }),
+      verify: async (client, openPageId) => {
+        const comments = await client.listComments(projectId, openPageId)
+        return { comments, saved: comments.find((comment) => comment.id === commentId)?.body === body }
+      },
       done: async () => {
         setEditingId(null)
         await reload()
+      },
+      verified: ({ comments, saved }) => {
+        setState({ status: 'ready', comments })
+        if (!saved) return NOT_EDITED
+        setEditingId(null)
+        return null
       },
     })
   }
 
   const renumber = (): void => {
     perform({
-      send: (client, openPageId) => client.renumberComments(projectId, openPageId),
+      send: (client, openPageId, signal) => client.renumberComments(projectId, openPageId, { signal }),
+      // **목록으로는 판정할 것이 없다** — 재번호는 표를 안 건드리고 문서만 바꾼다(D4). 다시
+      // 눌러도 같은 결과이므로(서버가 그때의 문서 순서로 다시 매긴다) 두 번 반영될 것이 없다.
+      // 응답을 못 받았으니 번호가 바뀌었어도 내 문서에 없다 — 그렇다고만 말한다.
+      verify: async () => null,
       done: (change, openPageId) => {
         setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
         // 목록은 다시 받지 않아도 된다 — 재번호는 **표를 안 건드린다**(D4). 번호만 바뀌고
         // 그 번호는 문서에서 읽는다.
+      },
+      verified: (_verdict, ownerLive) => {
+        setDiverged(ownerLive)
+        return null
       },
     })
   }
@@ -519,6 +611,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
               {writeError.message}
             </p>
           ))}
+        <PendingNotice lock={busyLock} checking={CHECKING} unknown={UNKNOWN} />
         {/* **실패가 아니라 어긋남이다** — 코멘트는 저장됐고 번호만 화면에 못 얹었다.
             그래서 `alert`가 아니라 `status`이고 문안도 *"실패했다"*가 아니다. */}
         {diverged && (

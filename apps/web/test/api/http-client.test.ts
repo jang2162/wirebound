@@ -954,6 +954,32 @@ describe('createHttpClient', () => {
     }
   })
 
+  it('쓰기 다섯은 받은 `signal`을 fetch 에 싣는다 — 안 받으면 키를 만들지 않는다', async () => {
+    // 우측 패널의 쓰기 장부(`panels/write-ledger.tsx`)가 시간이 지나면 이것으로 요청을 끊는다.
+    // 빠지면 장부는 «모름»으로 가서 판정하는데 요청은 브라우저에 남는다 — 서버에 아직 안 닿은 요청이
+    // **판정 뒤에** 가서 커밋될 수 있다(Chrome: 끊으면 `ERR_ABORTED`이고 서버 로그에 그 요청이 없다).
+    //
+    // **안 받으면 키가 없다** — 위 `credentials` 주석처럼 기존 케이스가 `init`을 통째로 단언한다.
+    const writes: [string, (client: ReturnType<typeof createHttpClient>, signal?: AbortSignal) => Promise<unknown>, () => Response][] = [
+      ['updatePage', (c, signal) => c.updatePage('p1', 'pg1', { description: '가' }, signal && { signal }), () => jsonResponse(200, page)],
+      ['createComment', (c, signal) => c.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' }, signal && { signal }), () => jsonResponse(201, commentCreated)],
+      ['updateComment', (c, signal) => c.updateComment('p1', 'pg1', 'c1', { body: '가' }, signal && { signal }), () => jsonResponse(200, comment)],
+      ['deleteComment', (c, signal) => c.deleteComment('p1', 'pg1', 'c1', signal && { signal }), () => jsonResponse(200, markerChange)],
+      ['renumberComments', (c, signal) => c.renumberComments('p1', 'pg1', signal && { signal }), () => jsonResponse(200, markerChange)],
+    ]
+
+    for (const [name, call, response] of writes) {
+      const signal = new AbortController().signal
+      const given = stubFetch(response())
+      await call(createHttpClient(given.fetchImpl), signal)
+      expect(given.calls[0]?.init?.signal, name).toBe(signal)
+
+      const none = stubFetch(response())
+      await call(createHttpClient(none.fetchImpl))
+      expect(Object.keys(none.calls[0]?.init ?? {}), name).not.toContain('signal')
+    }
+  })
+
   it('204 응답은 본문을 파싱하지 않는다', async () => {
     const empty = new Response(null, { status: 204 })
     const json = vi.spyOn(empty, 'json')

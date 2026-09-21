@@ -150,7 +150,14 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
-import { useWriteLedger, writeKey, type PageAt, type Receiver, type TrackedWrite } from './write-ledger'
+import {
+  useWriteLedger,
+  writeKey,
+  type PageAt,
+  type Receiver,
+  type TrackedWrite,
+  type WritePhase,
+} from './write-ledger'
 
 /**
  * 칸 하나의 선언. **모듈 최상위에 한 번 만든다** — 칸을 가리는 것은 이 객체의 정체성이다.
@@ -289,16 +296,26 @@ export function usePanelSlot<T>(key: Slot<T>): [T, (update: SlotUpdate<T>) => vo
 export interface PanelLock {
   /** 이 페이지의 이 칸으로 나간 쓰기가 있다. */
   readonly locked: boolean
-  /** 쓰기를 장부에 올려 보낸다. **이 렌더의 페이지를 단다.** */
-  run<T>(write: TrackedWrite<T>): Promise<void>
+  /** 그 쓰기의 단계(`write-ledger.tsx`). 없으면 `null`. */
+  readonly phase: WritePhase | null
+  /** `'unknown'`일 때만 — 서버에서 다시 읽어 판정한다. */
+  readonly recheck: (() => void) | null
+  /**
+   * 쓰기를 장부에 올려 보낸다. **이 렌더의 페이지를 단다.** 이미 나가 있으면 아무것도 안 한다.
+   */
+  run<T, V>(write: TrackedWrite<T, V>): Promise<void>
 }
 
 export function usePanelLock(key: LockSlot): PanelLock {
-  const { held } = useBox(key.name)
+  const { held, receiver } = useBox(key.name)
   const ledger = useWriteLedger()
   const { projectId, pageId } = held
   const target = useMemo(() => ({ projectId, pageId, slot: key.name }), [projectId, pageId, key.name])
+  const entry = ledger.writes.get(writeKey(target))
   const { run: runOnLedger } = ledger
-  const run = useCallback(<T,>(write: TrackedWrite<T>) => runOnLedger(target, write), [runOnLedger, target])
-  return { locked: ledger.writes.has(writeKey(target)), run }
+  const run = useCallback(
+    <T, V>(write: TrackedWrite<T, V>) => runOnLedger(target, receiver.token, write),
+    [runOnLedger, target, receiver.token],
+  )
+  return { locked: entry !== undefined, phase: entry?.phase ?? null, recheck: entry?.recheck ?? null, run }
 }

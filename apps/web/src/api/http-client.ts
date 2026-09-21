@@ -5,7 +5,7 @@
  * 정적 파일을 함께 서빙하는 서버가 그렇게 만든다). 그래서 절대 URL을 만들지 않고
  * `/api`로 시작하는 경로만 쓴다.
  */
-import { ApiError, type ApiClient, type ApiErrorCode, type ApiErrorIssue } from './client'
+import { ApiError, type ApiClient, type ApiErrorCode, type ApiErrorIssue, type WriteOptions } from './client'
 import type {
   Comment,
   CommentCreated,
@@ -998,7 +998,13 @@ export function createHttpClient(
   fetchImpl: typeof fetch = globalThis.fetch,
   connectionId: () => string | undefined = () => undefined,
 ): ApiClient {
-  async function request<T>(method: string, path: string, shape: Shape, body?: unknown): Promise<T> {
+  async function request<T>(
+    method: string,
+    path: string,
+    shape: Shape,
+    body?: unknown,
+    options?: WriteOptions,
+  ): Promise<T> {
     // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
     // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`originConnectionId`가 길이를 본다).
     const connection = connectionId()
@@ -1017,6 +1023,10 @@ export function createHttpClient(
       // 단언하므로(위 `credentials` 주석), 빈 `headers`를 늘 붙이면 그것들이 죽는다.
       ...(Object.keys(headers).length === 0 ? {} : { headers }),
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      // **끊을 신호도 받았을 때만 키를 만든다** — 위 `headers`와 같은 이유다. 끊기면 `fetch`가
+      // 거절하고 아래 `catch`가 연결 실패로 옮긴다. **끊은 쪽은 그것이 자기 신호인 줄 안다**
+      // (`panels/write-ledger.tsx`) — 여기서 따로 가르지 않는다.
+      ...(options?.signal === undefined ? {} : { signal: options.signal }),
     }
 
     // `fetch`는 응답을 받지 못하면(네트워크 단절·DNS 실패·CORS 차단) 실패 응답이
@@ -1157,12 +1167,13 @@ export function createHttpClient(
         declaredOnly(body, BODY_KEYS.createPage),
       ),
     // `updateMenu`와 같은 이유로 `async`다.
-    updatePage: async (projectId, pageId, body) =>
+    updatePage: async (projectId, pageId, body, options) =>
       request<PageDetail>(
         'PATCH',
         pagePath(projectId, pageId),
         SHAPES.pageDetail,
         updateBody(declaredOnly(body, BODY_KEYS.updatePage)),
+        options,
       ),
     deletePage: (projectId, pageId) =>
       request<void>('DELETE', pagePath(projectId, pageId), SHAPES.noBody),
@@ -1228,34 +1239,44 @@ export function createHttpClient(
     // 프로젝트가 아니라 **페이지의 노드**에 붙는다(노드 id는 그 문서 안에서만 뜻이 있다).
     listComments: (projectId, pageId) =>
       request<Comment[]>('GET', commentsPath(projectId, pageId), SHAPES.commentList),
-    createComment: (projectId, pageId, body) =>
+    createComment: (projectId, pageId, body, options) =>
       request<CommentCreated>(
         'POST',
         commentsPath(projectId, pageId),
         SHAPES.commentCreated,
         declaredOnly(body, BODY_KEYS.createComment),
+        options,
       ),
     // **`updateBody`를 안 지난다.** 키가 `body` 하나뿐이라 *"바꿀 값이 하나도 없는 갱신"*이
     // 성립하지 않는다 — 그 키가 없는 것은 본문이 없는 것이고 서버가 봉투 위반 400을 낸다
     // (`updateTheme`과 같은 자리).
-    updateComment: (projectId, pageId, commentId, body) =>
+    updateComment: (projectId, pageId, commentId, body, options) =>
       request<Comment>(
         'PATCH',
         `${commentsPath(projectId, pageId)}/${encodeURIComponent(commentId)}`,
         SHAPES.comment,
         declaredOnly(body, BODY_KEYS.updateComment),
+        options,
       ),
     // **`SHAPES.noBody`가 아니다** — 204가 아니라 200에 문서 변화가 실려 온다(서버 README).
-    deleteComment: (projectId, pageId, commentId) =>
+    deleteComment: (projectId, pageId, commentId, options) =>
       request<MarkerChange>(
         'DELETE',
         `${commentsPath(projectId, pageId)}/${encodeURIComponent(commentId)}`,
         SHAPES.markerChange,
+        undefined,
+        options,
       ),
     // **`:commentId` 자리와 겹치지 않는다** — 그쪽에 오는 메서드는 `PATCH`·`DELETE`뿐이라
     // 같은 메서드로 두 패턴이 맞붙는 자리가 없다(서버가 정적 세그먼트를 먼저 잡기도 한다).
-    renumberComments: (projectId, pageId) =>
-      request<MarkerChange>('POST', `${commentsPath(projectId, pageId)}/renumber`, SHAPES.markerChange),
+    renumberComments: (projectId, pageId, options) =>
+      request<MarkerChange>(
+        'POST',
+        `${commentsPath(projectId, pageId)}/renumber`,
+        SHAPES.markerChange,
+        undefined,
+        options,
+      ),
     listPresets: (projectId) =>
       request<Preset[]>('GET', `${projectPath(projectId)}/presets`, SHAPES.presetList),
     createPreset: (projectId, body) =>

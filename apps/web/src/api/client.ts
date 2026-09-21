@@ -29,6 +29,18 @@ import type {
   TreeMenuNode,
 } from './types'
 
+/**
+ * 쓰기 하나에 얹는 선택 — **`signal`뿐이다.** 끊을지·언제 끊을지는 부르는 쪽이 정한다
+ * (`panels/write-ledger.tsx`의 시간 제한). 지금 이것을 받는 것은 우측 패널의 쓰기 다섯(설명 ·
+ * 코멘트 넷)이고, 그 장부가 잠금을 쥐는 쓰기들이다.
+ *
+ * **끊겨도 서버는 끝낼 수 있다** — 끊는 것은 이 브라우저가 응답을 더 기다리지 않는다는 뜻이지
+ * 서버가 안 썼다는 뜻이 아니다(그 장부의 머리말에 실측이 있다).
+ */
+export interface WriteOptions {
+  readonly signal?: AbortSignal
+}
+
 export interface ApiClient {
   login(email: string, password: string): Promise<SessionUser>
   logout(): Promise<void>
@@ -204,6 +216,7 @@ export interface ApiClient {
     projectId: string,
     pageId: string,
     body: { title?: string; description?: string | null; menuNodeId?: string; sortOrder?: number },
+    options?: WriteOptions,
   ): Promise<PageDetail>
   deletePage(projectId: string, pageId: string): Promise<void>
   /**
@@ -359,14 +372,25 @@ export interface ApiClient {
    * **그 사이 남이 페이지를 고쳤으면 409다** — 서버가 `head_seq`를 잠그기 전에 읽어
    * 낙관적 잠금으로 쓰기 때문이고, 그래야 두 노드의 첫 코멘트가 같은 번호를 받지 않는다.
    */
-  createComment(projectId: string, pageId: string, body: { nodeId: string; body: string }): Promise<CommentCreated>
+  createComment(
+    projectId: string,
+    pageId: string,
+    body: { nodeId: string; body: string },
+    options?: WriteOptions,
+  ): Promise<CommentCreated>
   /**
    * 본문을 고친다. **작성자만 부를 수 있다** — 남의 것이면 403이다(서버 재라 #2:
    * 남의 이름이 붙은 채 내용이 바뀌면 말을 지어내는 일이 된다).
    *
    * **문서를 안 바꾸므로 `seq`가 없다.** 응답은 코멘트 하나뿐이다.
    */
-  updateComment(projectId: string, pageId: string, commentId: string, body: { body: string }): Promise<Comment>
+  updateComment(
+    projectId: string,
+    pageId: string,
+    commentId: string,
+    body: { body: string },
+    options?: WriteOptions,
+  ): Promise<Comment>
   /**
    * 코멘트를 지운다. **그 노드의 마지막이었으면 번호도 함께 사라진다**(§4.3의
    * *"없으면 코멘트 없음"*) — 그때 `markerOps`에 `remove`가 실려 온다.
@@ -374,7 +398,7 @@ export interface ApiClient {
    * **204가 아니라 200에 본문이 온다** — 다른 `DELETE` 셋과 갈리는 이유는 이것이 문서를
    * 바꿀 수 있기 때문이다. **남의 코멘트도 지울 수 있다**(수정과 갈린다).
    */
-  deleteComment(projectId: string, pageId: string, commentId: string): Promise<MarkerChange>
+  deleteComment(projectId: string, pageId: string, commentId: string, options?: WriteOptions): Promise<MarkerChange>
   /**
    * **문서 순서대로 재번호**(§9의 버튼). 번호가 **있는** 노드만 1부터 다시 매긴다 —
    * 번호가 없는 노드에 새로 주지 않는다.
@@ -382,7 +406,7 @@ export interface ApiClient {
    * **한 revision이다.** 노드마다 따로 부르면 중간 상태에 번호가 겹친다.
    * 바꿀 것이 없으면 `markerOps: []`이고 문서도 revision도 안 건드린다.
    */
-  renumberComments(projectId: string, pageId: string): Promise<MarkerChange>
+  renumberComments(projectId: string, pageId: string, options?: WriteOptions): Promise<MarkerChange>
   /**
    * 이 프로젝트의 스냅샷 전부(P6-1). **최근 것이 먼저** 오고 동률이면 태그 순이다 —
    * 순서가 서버의 계약이므로 여기서 다시 정렬하지 않는다(`listProjectThemes`와 같은 판단).

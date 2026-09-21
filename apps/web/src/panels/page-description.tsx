@@ -269,6 +269,7 @@ import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import { lockSlot, slot, usePanelLock, usePanelSlot, type PanelLock } from './panel-drafts'
+import { PendingNotice } from './pending-notice'
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 설명이 보입니다'
@@ -280,6 +281,15 @@ const LOAD_FAILED = '페이지 설명을 불러오지 못했습니다'
 const SAVE_FAILED = '설명을 저장하지 못했습니다'
 /** 저장이 끝났다는 통지. `snapshots-panel.tsx`의 *"저장됨"*과 같은 자리·같은 `role`이다. */
 const SAVED = '설명을 저장했습니다'
+/**
+ * 시간 안에 응답이 없어 서버에서 다시 읽는 중(`panels/write-ledger.tsx`의 `'checking'`). **«실패»가
+ * 아니다** — 저장됐을 수도 있다.
+ */
+const CHECKING = '응답이 없어 저장됐는지 서버에서 확인하는 중입니다'
+/** 다시 읽기도 실패했다 — 결과를 모른다. 잠금은 그대로다. */
+const UNKNOWN = '응답이 없고, 저장됐는지 확인하지도 못했습니다'
+/** 다시 읽었더니 서버의 설명이 보낸 글과 다르다. **초안은 남긴다** — 다시 저장할 수 있다. */
+const NOT_SAVED = '응답이 없어 서버를 다시 읽었더니 이 설명은 저장되지 않았습니다'
 
 type LoadState =
   | { status: 'loading' }
@@ -429,7 +439,14 @@ export function PageDescriptionPanel(props: {
     // **잠금은 장부가 쥐고 푼다**(`write-ledger.tsx`) — 그 페이지의 것을, 지금 어디에 가 있든
     // (머리말 3), 에디터를 떠났다 와도(이월 Q). 아래 `settle`이 끝나야 풀린다.
     await saving.run({
-      send: () => api.updatePage(projectId, openPageId, { description: next }),
+      send: (signal) => api.updatePage(projectId, openPageId, { description: next }, { signal }),
+      // **시간 안에 응답이 없으면 서버에서 다시 읽는다**(이월 R). 서버 값이 보낸 값과 같으면
+      // 커밋된 것이다 — 서버가 설명을 정규화하지 않는다(`api/client.ts`의 `updatePage` 표:
+      // 보낸 그대로 되읽힌다).
+      verify: async () => {
+        const page = await api.getPage(projectId, openPageId)
+        return { description: page.description, committed: page.description === next }
+      },
       settle: (outcome) => {
         // **아래는 칸에 쓴다 — 이 클릭이 난 렌더의 페이지를 달고.** 그래서 응답이 오기 전에
         // 탭을 오갔으면 **지금 떠 있는 본문**에 닿고(리뷰 N1 — 7차 판은 셋 중 초안 비우기만
@@ -442,9 +459,17 @@ export function PageDescriptionPanel(props: {
           return
         }
         // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다.
-        replace(outcome.value.description)
-        setDraft(null)
-        setSave({ status: 'saved' })
+        // 다시 읽어 판정했으면 그 읽은 값이다.
+        const committed = outcome.kind === 'done' || outcome.verdict.committed
+        replace(outcome.kind === 'done' ? outcome.value.description : outcome.verdict.description)
+        if (committed) {
+          setDraft(null)
+          setSave({ status: 'saved' })
+        } else {
+          // **초안은 남긴다** — 서버 값만 갈아 끼웠으므로 상자는 친 글을 보이고 저장 버튼이
+          // 열린다. 다시 저장할 수 있다.
+          setSave({ status: 'failed', failure: { kind: 'message', message: NOT_SAVED } })
+        }
       },
     })
   }
@@ -517,6 +542,7 @@ export function PageDescriptionPanel(props: {
           설명 저장
         </button>
       </form>
+      <PendingNotice lock={saving} checking={CHECKING} unknown={UNKNOWN} />
       {save.status === 'saved' && (
         <p className="wb-shell-page-description-saved" role="status">{SAVED}</p>
       )}

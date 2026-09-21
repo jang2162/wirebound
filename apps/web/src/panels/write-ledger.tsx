@@ -1,5 +1,5 @@
 /**
- * **나가 있는 쓰기의 장부** — 에디터 라우트보다 오래 산다(이월 Q, 2026-09-21).
+ * **나가 있는 쓰기의 장부** — 에디터 라우트보다 오래 산다(이월 Q·R, 2026-09-21).
  *
  * `panel-drafts.tsx`의 provider 는 에디터 셸 안에 선다. 그래서 **프로젝트 목록 · 다른 프로젝트 ·
  * 테마 편집기 · 로그아웃 뒤 다시 로그인**으로 가면 통째로 내려가고, 거기 들어 있던 잠금도 함께
@@ -38,12 +38,54 @@
  * 응답이 **에디터 밖에 있는 동안** 오면 받을 provider 가 없어 버려진다. 잠금은 여기서 풀리므로,
  * 돌아오면 새 방문이 조회를 걸어 **커밋된 뒤의** 값을 읽는다.
  *
- * ## 이것이 막지 못하는 것
+ * ## 시간 제한 — 넘으면 «풀림»이 아니라 «결과를 모름»이다 (이월 R)
  *
- * - **새로고침·탭 닫기.** 이 장부는 메모리라 문서와 함께 사라진다(`sessionStorage` 로 넘기지
- *   않았다 — 세션을 넘는 상태를 이 앱이 처음 드는 것이 된다).
- * - **응답이 영영 안 오는 쓰기** — 쓰기에 시간 제한이 없다. 잠금이 이제 에디터를 떠났다 와도 남으므로
- *   **새로고침 말고는 풀 길이 없다**(이월 R — 다음 커밋).
+ * 앞 판의 쓰기에는 시간 제한이 없었다. **응답이 영영 안 오면**(Chrome · 쓰기를 붙잡고 안 놓았다)
+ * 설명·코멘트 둘 다 상자·단추가 탭·모드·옆 페이지 왕복에도 꺼진 채였고 60초 동안(코멘트 30초)
+ * 아무 말도 없었다. 프로젝트 목록을 다녀와야 풀렸고 친 글은 사라졌다 — 그리고 **그렇게 풀면 위 Q 로
+ * 간다.**
+ *
+ * **시간이 지났다고 잠금을 풀면 틀린다.** 클라이언트가 포기해도 서버는 나중에 커밋할 수 있다 — 재
+ * 봤다: 새로고침으로 브라우저가 끊은 코멘트 게시가 서버에서 **그대로 커밋되어** 다시 단 것과 함께 두
+ * 행이 됐다(서버가 요청을 받은 채 DB 행 잠금에 5초 막혀 있던 판). 그래서 시간이 지나면
+ * `'checking'`으로 가서 **서버에서 다시 읽어 판정한다**(`verify` — 판정의 뜻은 칸마다 다르고 그
+ * 칸이 정한다). 다시 읽기도 실패하면 `'unknown'`이고, 잠금을 쥔 채 누군가 «다시 확인»을 누를
+ * 때까지 기다린다(`recheck`).
+ *
+ * **시간이 지나면 요청을 끊는다**(`AbortSignal`). 서버에 아직 안 닿은 요청은 그걸로 영영 안
+ * 간다(Chrome · 서버 앞에서 붙잡은 요청을 페이지가 끊은 뒤 놓아 줬더니 서버 로그에 그 요청이 없었다).
+ * 이미 닿은 요청은 끊어도 서버가 끝낸다 — **그 틈은 클라이언트가 못 닫는다**(아래).
+ *
+ * **늦게 온 원래 응답은 버린다.** 판정은 다시 읽은 값이 한다 — 늦은 응답이 판정을 뒤집지 않는다.
+ * 끊었으므로 실브라우저에서는 늦은 응답 자체가 안 오고, 신호를 안 보는 가짜 클라이언트(테스트)가
+ * 늦게 풀려도 여기서 버린다.
+ *
+ * ### 값 — `WRITE_DEADLINE_MS`
+ *
+ * 이 앱의 쓰기가 실제로 걸리는 시간(Vite 프록시를 지나 · 순차 200회 · 이 기계):
+ *
+ * | 쓰기 | p50 | p99 | 최대 |
+ * |---|---|---|---|
+ * | 설명 `PATCH` | 4.3ms | 7.2ms | 11.0ms |
+ * | 코멘트 `POST` | 5.8ms | 20.6ms | 47.7ms |
+ * | 코멘트 `PATCH` | 5.7ms | 31.1ms | 35.3ms |
+ * | 코멘트 `DELETE` | 4.9ms | 10.2ms | 11.6ms |
+ * | 설명 `PATCH` 20개 동시(한 행을 다툰다) | 32.7ms | — | 42.1ms |
+ *
+ * **10초**는 본 최대의 200배를 넘는다. 원격 배포의 왕복이 더해도 수백 ms 이고, 10초를 넘기는 쓰기는
+ * 막힌 것이다. 더 짧으면 느리지만 멀쩡한 서버에서 «모름»이 나서 아래 틈(판정 뒤 늦은 커밋)을
+ * 스스로 연다. 더 길면 사용자가 꺼진 상자 앞에서 그만큼 기다린다.
+ *
+ * ## 이것이 막지 못하는 것 — 클라이언트만으로는 못 닫는다
+ *
+ * - **새로고침·탭 닫기.** 이 장부는 메모리라 문서와 함께 사라진다. 그 입구의 값과 남는 틈은
+ *   이 슬라이스의 보고서가 갖는다(`sessionStorage` 로 넘기지 않았다 — 세션을 넘는 상태를 이 앱이
+ *   처음 드는 것이 된다).
+ * - **판정 뒤의 늦은 커밋.** «서버 값이 보낸 값과 다르다 / 목록에 그 글이 없다»는 **그 순간 아직**
+ *   아니라는 뜻이지 영영 아니라는 뜻이 아니다. 요청이 이미 서버에 있으면 판정 뒤에 커밋될 수 있고,
+ *   그 사이 사용자가 다시 보낸 것과 겹친다. 이것을 닫는 곧은 길은 서버다(설명의 기대값 · 코멘트의
+ *   멱등 키).
+ * - **다시 읽기가 응답하지 않으면** `'checking'`에 머문다 — 읽기에는 시간 제한을 두지 않았다.
  */
 import {
   createContext,
@@ -56,6 +98,26 @@ import {
   type ReactNode,
 } from 'react'
 
+/** 쓰기의 시간 제한. 값의 근거는 위 머리말의 표다. */
+export const WRITE_DEADLINE_MS = 10_000
+
+/**
+ * 나가 있는 쓰기의 단계.
+ *
+ * | 단계 | 뜻 |
+ * |---|---|
+ * | `'sending'` | 보냈고 응답을 기다린다 |
+ * | `'checking'` | 시간 안에 응답이 없어 **서버에서 다시 읽어** 판정하는 중이다 |
+ * | `'unknown'` | 다시 읽기도 실패했다 — 결과를 모른다. «다시 확인»을 기다린다 |
+ */
+export type WritePhase = 'sending' | 'checking' | 'unknown'
+
+export interface WriteEntry {
+  readonly phase: WritePhase
+  /** `'unknown'`일 때만 있다 — 다시 읽어 판정한다. */
+  readonly recheck: (() => void) | null
+}
+
 /** 쓰기가 가리키는 자리. **키가 셋인 것이 요점이다** — 셸이 바뀌어도 같은 칸을 가리킨다. */
 export interface WriteTarget {
   readonly projectId: string
@@ -64,17 +126,32 @@ export interface WriteTarget {
   readonly slot: string
 }
 
-/** 쓰기가 끝난 모양 — 성공 응답(`'done'`) 또는 실패(`'failed'` — 실패 응답 · 연결 실패). */
-export type WriteOutcome<T> = { kind: 'done'; value: T } | { kind: 'failed'; caught: unknown }
+/**
+ * 쓰기가 끝난 모양.
+ *
+ * - `'done'` — 시간 안에 성공 응답을 받았다.
+ * - `'failed'` — 시간 안에 실패했다(실패 응답 · 연결 실패). **결과를 안다: 안 됐다.**
+ * - `'verified'` — 시간 안에 응답이 없어 **다시 읽어 판정했다.** 판정의 모양은 칸이 정한다.
+ */
+export type WriteOutcome<T, V> =
+  | { kind: 'done'; value: T }
+  | { kind: 'failed'; caught: unknown }
+  | { kind: 'verified'; verdict: V }
 
-export interface TrackedWrite<T> {
-  /** 요청을 보낸다. */
-  send(): Promise<T>
+export interface TrackedWrite<T, V> {
+  /** 요청을 보낸다. **`signal`을 요청에 싣는다** — 시간이 지나면 끊는다. */
+  send(signal: AbortSignal): Promise<T>
+  /** 서버에서 다시 읽어 판정한다. 던지면 `'unknown'`이다. */
+  verify(): Promise<V>
   /**
    * 끝난 뒤의 일(응답을 칸에 쓰기 · 목록 다시 받기 …). **잠금을 쥔 채 돈다** — 이것이 끝나야 풀린다.
    * 8차까지 코멘트의 쓰기가 다시 받기까지 잠금 안에서 했던 것과 같다.
+   *
+   * `ownerLive`는 **쓰기를 시작한 provider 가 아직 떠 있는가**다. 셸이 새로 섰으면 실시간 연결도
+   * 새것이라 서버의 방송이 새 스토어에 닿는다 — 판정으로 끝난 코멘트 쓰기가 «번호를 못 얹었다»고
+   * 말할지를 이것으로 가른다(`comment-panel.tsx`의 `perform`).
    */
-  settle(outcome: WriteOutcome<T>): void | Promise<void>
+  settle(outcome: WriteOutcome<T, V>, ownerLive: boolean): void | Promise<void>
 }
 
 /** 칸 쓰기가 닿을 곳 — 지금 떠 있는 `PanelDraftsProvider`. */
@@ -90,15 +167,14 @@ export interface PageAt {
 }
 
 interface Ledger {
-  /** 쓰기가 나가 있는 칸들(`writeKey`). */
-  readonly writes: ReadonlySet<string>
+  readonly writes: ReadonlyMap<string, WriteEntry>
   /**
    * 쓰기를 올린다. **잠겨 있는지는 부르는 쪽이 먼저 본다**(`usePanelLock`의 `locked`) — 여기서
    * 한 번 더 막지 않는다. 막을 길을 찾아 봤는데 화면에서 닿는 길이 없었다: 클릭·제출은 React 가
    * 곧바로 다시 그린 뒤에 다음 이벤트를 받으므로 둘째 클릭은 이미 꺼진 버튼을 본다. 재는 것이 없는
    * 가드를 두지 않았다.
    */
-  run<T>(target: WriteTarget, write: TrackedWrite<T>): Promise<void>
+  run<T, V>(target: WriteTarget, owner: symbol, write: TrackedWrite<T, V>): Promise<void>
   /** 지금 떠 있는 provider 로 선다. 돌려주는 함수가 물러난다. */
   receive(receiver: Receiver): () => void
   /** 칸 쓰기를 보낸다 — **지금 떠 있는 provider** 로(없거나 자기면 자기에게). */
@@ -111,29 +187,39 @@ export function writeKey(target: WriteTarget): string {
   return `${target.projectId}\u0000${target.pageId ?? ''}\u0000${target.slot}`
 }
 
+const SENDING: WriteEntry = { phase: 'sending', recheck: null }
+const CHECKING: WriteEntry = { phase: 'checking', recheck: null }
+
+/** 시간 제한이 먼저 왔다는 표지. */
+const EXPIRED = Symbol('expired')
+
 export function WriteLedgerProvider(props: { children: ReactNode }): ReactElement {
-  const [writes, setWrites] = useState<ReadonlySet<string>>(() => new Set())
+  const [writes, setWrites] = useState<ReadonlyMap<string, WriteEntry>>(() => new Map())
   const receiverRef = useRef<Receiver | null>(null)
 
-  const run = useCallback(async <T,>(target: WriteTarget, write: TrackedWrite<T>): Promise<void> => {
-    const key = writeKey(target)
-    setWrites((prev) => new Set(prev).add(key))
-    try {
-      let outcome: WriteOutcome<T>
-      try {
-        outcome = { kind: 'done', value: await write.send() }
-      } catch (caught) {
-        outcome = { kind: 'failed', caught }
-      }
-      await write.settle(outcome)
-    } finally {
-      setWrites((prev) => {
-        const next = new Set(prev)
-        next.delete(key)
-        return next
-      })
-    }
+  const put = useCallback((key: string, entry: WriteEntry | null) => {
+    setWrites((prev) => {
+      if (entry === null && !prev.has(key)) return prev
+      const next = new Map(prev)
+      if (entry === null) next.delete(key)
+      else next.set(key, entry)
+      return next
+    })
   }, [])
+
+  const run = useCallback(
+    async <T, V>(target: WriteTarget, owner: symbol, write: TrackedWrite<T, V>): Promise<void> => {
+      const key = writeKey(target)
+      put(key, SENDING)
+      try {
+        const outcome = await attempt(write, (entry) => put(key, entry))
+        await write.settle(outcome, receiverRef.current?.token === owner)
+      } finally {
+        put(key, null)
+      }
+    },
+    [put],
+  )
 
   const receive = useCallback((receiver: Receiver) => {
     receiverRef.current = receiver
@@ -149,6 +235,60 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
 
   const ledger = useMemo<Ledger>(() => ({ writes, run, receive, deliver }), [writes, run, receive, deliver])
   return <LedgerContext.Provider value={ledger}>{props.children}</LedgerContext.Provider>
+}
+
+/**
+ * 보내고, 시간 안에 오면 그 답을, 안 오면 끊고 **다시 읽어 판정한 답**을 낸다.
+ *
+ * **끊긴 요청의 거절은 «실패»가 아니다.** 끊는 순간 `fetch`가 거절하지만(실제 `fetch`처럼 신호를
+ * 받으면 거절하는 가짜로 케이스가 잰다) 그 거절은 아래 `then`을 한 번 더 지나 경주에 들어가므로,
+ * 같은 순간에 풀린 `expired`가 먼저 선다. 그래서 시간이 되면 언제나 다시 읽기로 간다.
+ */
+async function attempt<T, V>(
+  write: TrackedWrite<T, V>,
+  report: (entry: WriteEntry) => void,
+): Promise<WriteOutcome<T, V>> {
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<typeof EXPIRED>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(EXPIRED)
+      controller.abort()
+    }, WRITE_DEADLINE_MS)
+  })
+  const stop = (): void => clearTimeout(timer)
+
+  let sent: Promise<T>
+  try {
+    sent = write.send(controller.signal)
+  } catch (caught) {
+    stop()
+    return { kind: 'failed', caught }
+  }
+  // 경주에서 진 쪽의 거절이 처리되지 않은 채 떠돌지 않게 붙잡는다 — 늦게 온 응답은 버린다.
+  sent.catch(() => undefined)
+
+  const first = await Promise.race([
+    sent.then(
+      (value) => ({ value }) as const,
+      (caught: unknown) => ({ caught }) as const,
+    ),
+    expired,
+  ])
+  stop()
+  if (first !== EXPIRED) {
+    return 'value' in first ? { kind: 'done', value: first.value } : { kind: 'failed', caught: first.caught }
+  }
+
+  // 시간 안에 응답이 없었다 — 결과를 모른다. 서버에서 다시 읽는다.
+  for (;;) {
+    report(CHECKING)
+    try {
+      return { kind: 'verified', verdict: await write.verify() }
+    } catch {
+      await new Promise<void>((resolve) => report({ phase: 'unknown', recheck: resolve }))
+    }
+  }
 }
 
 /** 장부. **provider 가 없으면 요란하게 깨진다** — 조용히 물러나면 잠금이 셸과 함께 다시 사라진다. */
