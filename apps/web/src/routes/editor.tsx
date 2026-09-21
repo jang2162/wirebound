@@ -681,8 +681,8 @@ function RightPanel(props: { projectId: string; pageId: string | undefined }): R
           왜 드는지, 페이지가 바뀌면 무엇을 버리는지는 `panels/panel-drafts.tsx`의 머리말이
           갖는다(여기 두 벌로 적지 않는다).
 
-          **코멘트 탭의 초안은 아직 이 대가를 문다**(실측: 탭을 오가면 `""`가 된다 —
-          jsdom 과 Chrome 둘 다). 그 축은 그 파일의 것이라 여기서 손대지 않는다. */}
+          «페이지 설명»과 코멘트 탭이 **같은 provider**를 쓴다 — 페이지가 바뀌면 버리는 일도
+          그 한 자리에서 같은 값으로 한다. */}
       <PanelDraftsProvider pageId={props.pageId}>
         <div
           className="wb-shell-tabpanel"

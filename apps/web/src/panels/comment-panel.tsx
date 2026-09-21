@@ -38,6 +38,48 @@
  * `store.applyMarkerChange`가 내 문서에 얹는다 — 그러지 않으면 캔버스에 번호가 안 뜨고
  * `headSeq`가 서버보다 뒤처진다.
  *
+ * ## 탭을 오가도 쓰던 말이 남는다 — **페이지에 매인 것은 패널 밖에 든다** (8차)
+ *
+ * **결함이었다.** 새 코멘트 초안·고치던 코멘트를 이 패널의 `useState`로 들었더니 옆 탭을 한 번
+ * 눌렀다 돌아온 것만으로 **경고 없이** 사라졌다. `routes/editor.tsx`가 안 보이는 탭을 DOM에서
+ * 빼고, 조회 이펙트가 마운트마다 초안을 비웠다. 코멘트는 **blur에 게시하면 안 되는** 글이라
+ * (쓰다 만 말이 저절로 달린다) 속성 패널처럼 blur 커밋으로 막을 수도 없다 — «페이지 설명»과
+ * 같은 결이다.
+ *
+ * 실측(치던 중에 → 돌아와 본 상자):
+ *
+ * | 갈래 | 앞 판 (jsdom · Chrome) | 8차 (jsdom · Chrome) |
+ * |---|---|---|
+ * | 옆 탭 왕복 — 새 코멘트 | `""` | 초안 그대로 |
+ * | 옆 탭 왕복 — 고치던 것 | 편집 칸째 닫힘 | 편집 칸과 글 그대로 |
+ * | 모드 왕복(코멘트 탭을 보던 채) | 그대로 — 코멘트 탭은 두 모드에 다 있어 언마운트되지 않는다 | 같음 |
+ * | 다른 노드를 고른다 | 그대로 — 달릴 대상이 새 노드로 바뀐다(아래) | 같음 |
+ * | 다른 페이지 → 복귀 | 버림 | 버림 — 규칙이다 |
+ *
+ * **고른 것 — `panel-drafts.tsx`의 칸에 든다.** «페이지 설명»과 **같은 provider**이고, 페이지가
+ * 바뀌면 버리는 일(아래 조회 이펙트의 주석)도 그 provider가 **같은 자리에서 같은 값으로**
+ * 한다. 두 벌의 장치를 두지 않았다.
+ *
+ * **초안만 올리지 않았다 — 목록·쓰기 잠금·통지도 칸이다.** 초안만 올리면 «페이지 설명»의 리뷰
+ * N1이 여기서도 난다. 게시를 3초 늦추고 Chrome 으로 잰 앞 판의 값:
+ *
+ * | 갈래 | 앞 판 | 8차 |
+ * |---|---|---|
+ * | 게시 중 탭 왕복 | 새 마운트의 상자가 **열려**(잠금이 마운트에 묶였다) 이어 쳐서 누르면 **게시가 둘 나갔다** | 상자·단추가 꺼진 채다. 게시 1회, 응답 뒤 목록에 그 말이 선다 |
+ * | 게시 중 옆 페이지로 | 옆 페이지의 상자가 앞 페이지의 게시 동안 **꺼져 있고**, 응답 뒤 **앞 페이지의 목록을 다시 받아 옆 페이지에 그렸다** | 옆 페이지에서 바로 쓸 수 있고, 앞 페이지의 응답은 **어디에도 닿지 않는다** |
+ *
+ * 둘째 줄이 «페이지 설명»의 리뷰 N2와 같은 부류다 — 다시 받기가 **게시를 시작한 렌더의
+ * `pageId`**로 앞 페이지의 목록을 불렀다. 케이스는 `test/panels/comment-panel.test.tsx`의
+ * «탭·페이지를 오가도 …» 절이다.
+ *
+ * ### 다른 노드를 고르면 초안은 남고 **대상이 바뀐다** — 그대로 둔다
+ *
+ * 새 코멘트는 «지금 고른 노드»에 달린다(`submit`). 쓰는 도중 다른 노드를 누르면 초안은 남고
+ * 달릴 자리가 그 노드로 바뀐다 — 고른 노드의 무리에 붙는 표시가 함께 옮겨 가므로 화면이 그것을
+ * 말한다(Chrome 실측: 표시가 `["1 a_card"]` → `[]`). 페이지와 달리 노드는 초안의 뜻을 통째로
+ * 바꾸지 않는다고 보고(쓰다가 옆 노드를 확인하는 일이 흔하다) 버리지 않는다. **앞 판부터
+ * 그랬고 이 판이 바꾸지 않았다** — 바꿀지는 이 슬라이스가 정할 것이 아니라 보고로 올린다.
+ *
  * ## 이 패널은 오류 경계 밖이다
  *
  * `apps/web/src` 전체에서 경계는 캔버스의 `CanvasBoundary` 하나다. 그래서 여기서 예외가
@@ -46,7 +88,7 @@
  * `api/http-client.ts`의 `SHAPES.comment`에서 이미 끊는다), 문서 순회는 던지지 않는
  * `walkSafely`를 쓴다.
  */
-import { useCallback, useEffect, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, type ReactElement } from 'react'
 import type { PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -55,6 +97,7 @@ import type { Comment } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
 import { useSessionUser } from '../session/session-context'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { slot, usePanelSlot } from './panel-drafts'
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 코멘트가 보입니다'
@@ -77,6 +120,34 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; comments: Comment[] }
   | { status: 'failed'; failure: Failure }
+
+/**
+ * **이 탭의 칸 일곱** — 전부 `panel-drafts.tsx`의 칸이다. 이 본문은 탭을 옮기면
+ * 언마운트되므로(`routes/editor.tsx`), 여기 `useState`로 들면 탭을 한 번 누르는 것만으로
+ * 사라진다(위 머리말 «탭을 오가도 …»). **페이지가 바뀌면 그 provider가 일곱을 함께
+ * 버린다** — 노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다.
+ */
+/** 목록. 쓰기 뒤의 다시 받기가 **여기를** 채운다 — 그래서 목록도 마운트 밖에 든다. */
+const LIST = slot<LoadState>('comments/list', { status: 'loading' })
+/** 쓰기 중에는 조작을 막는다. 같은 코멘트가 두 번 나가면 번호는 하나인데 행이 둘이 된다. */
+const BUSY = slot<boolean>('comments/busy', false)
+/** 마지막 쓰기 실패. **성공하면 지운다** — 남아 있으면 방금 한 조작도 실패한 것으로 읽힌다. */
+const WRITE_ERROR = slot<Failure | null>('comments/write-error', null)
+/**
+ * **서버는 번호를 바꿨는데 내 문서에 얹지 못했다**(리뷰 ④ — `applyMarkerChange`가
+ * `'diverged'`를 냈다). 보내지 않은 구조 편집이 그 노드를 이미 지운 경우다.
+ *
+ * **버리지 않고 말한다.** 버리면 *"코멘트는 달렸는데 캔버스에 번호가 없고 아무도 그것을
+ * 말하지 않는"* 상태가 되고, 그것이 이 저장소가 네 번 만난 부류의 형태다.
+ * **`'skipped'`는 말하지 않는다** — 그때는 화면이 이미 다른 페이지를 보고 있다.
+ */
+const MARKERS_DIVERGED = slot<boolean>('comments/diverged', false)
+/** 새 코멘트 초안. */
+const DRAFT = slot<string>('comments/draft', '')
+/** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. */
+const EDITING_ID = slot<string | null>('comments/editing-id', null)
+/** 고치던 코멘트의 초안. */
+const EDIT_DRAFT = slot<string>('comments/edit-draft', '')
 
 /** 한 노드에 붙은 코멘트 묶음. `marker`는 문서에서 읽은 값이다(표에는 없다). */
 interface Group {
@@ -163,24 +234,16 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   const document = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
 
-  const [state, setState] = useState<LoadState>({ status: 'loading' })
-  /** 쓰기 중에는 조작을 막는다. 같은 코멘트가 두 번 나가면 번호는 하나인데 행이 둘이 된다. */
-  const [busy, setBusy] = useState(false)
-  /** 마지막 쓰기 실패. **성공하면 지운다** — 남아 있으면 방금 한 조작도 실패한 것으로 읽힌다. */
-  const [writeError, setWriteError] = useState<Failure | null>(null)
-  /**
-   * **서버는 번호를 바꿨는데 내 문서에 얹지 못했다**(리뷰 ④ — `applyMarkerChange`가
-   * `'diverged'`를 냈다). 보내지 않은 구조 편집이 그 노드를 이미 지운 경우다.
-   *
-   * **버리지 않고 말한다.** 버리면 *"코멘트는 달렸는데 캔버스에 번호가 없고 아무도 그것을
-   * 말하지 않는"* 상태가 되고, 그것이 이 저장소가 네 번 만난 부류의 형태다.
-   * **`'skipped'`는 말하지 않는다** — 그때는 화면이 이미 다른 페이지를 보고 있다.
-   */
-  const [diverged, setDiverged] = useState(false)
-  const [draft, setDraft] = useState('')
-  /** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. */
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState('')
+  // **일곱 다 칸이다**(위 `LIST` 선언의 주석). 아래 쓰기 함수들은 **이 렌더의 페이지를 단다** —
+  // 응답이 오기 전에 탭을 오갔으면 지금 떠 있는 본문에 닿고, 페이지를 옮겼으면 어디에도
+  // 안 닿는다(`panel-drafts.tsx`의 머리말 — 리뷰 N1·N2).
+  const [state, setState] = usePanelSlot(LIST)
+  const [busy, setBusy] = usePanelSlot(BUSY)
+  const [writeError, setWriteError] = usePanelSlot(WRITE_ERROR)
+  const [diverged, setDiverged] = usePanelSlot(MARKERS_DIVERGED)
+  const [draft, setDraft] = usePanelSlot(DRAFT)
+  const [editingId, setEditingId] = usePanelSlot(EDITING_ID)
+  const [editDraft, setEditDraft] = usePanelSlot(EDIT_DRAFT)
 
   const { projectId, pageId } = props
 
@@ -194,7 +257,21 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       setState({ status: 'failed', failure: toFailure(caught, LOAD_FAILED) })
       return null
     }
-  }, [api, projectId, pageId])
+  }, [api, projectId, pageId, setState])
+
+  // **마운트될 때 지난 통지를 지운다 — 초안·고치던 것·쓰기 잠금은 지우지 않는다.**
+  //
+  // 통지(쓰기 실패·번호 어긋남)는 지난 조작의 결과라 탭을 다녀온 뒤에도 떠 있으면 지금 화면에
+  // 대한 말로 읽힌다 — `page-description.tsx`가 같은 자리에서 같은 것을 한다. **앞 판은 아래
+  // 조회 이펙트에서 초안·고치던 것까지 함께 지웠고**, 그 이펙트는 마운트마다 돌아 탭을 한 번
+  // 누른 것만으로 쓰던 말이 사라졌다(위 머리말 «탭을 오가도 …»).
+  //
+  // **의존이 비어 있는 것이 요점이다.** 페이지가 바뀔 때 버리는 것은 provider가 한다(칸
+  // 일곱을 함께) — 여기서 `pageId`에도 돌면 같은 일을 두 자리가 하게 된다.
+  useEffect(() => {
+    setWriteError(null)
+    setDiverged(false)
+  }, [])
 
   useEffect(() => {
     if (pageId === undefined) {
@@ -202,15 +279,14 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       return
     }
 
-    // 응답이 오기 전에 다른 페이지로 옮기면 결과를 버린다(`routes/editor.tsx`와 같은 가드).
+    // 응답이 오기 전에 다른 페이지로 옮기거나 이 본문이 내려가면 결과를 버린다
+    // (`routes/editor.tsx`와 같은 가드). 페이지 쪽은 칸의 쓰기 가드도 막는다.
+    //
+    // **페이지가 바뀌면 앞 페이지에 쓰던 초안·고치던 것도 버린다 — 여기가 아니라
+    // `panel-drafts.tsx`의 provider가.** 노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다.
+    // 그 규칙이 «페이지 설명»의 F1과 **같은 자리에서 같은 값으로** 돈다.
     let alive = true
     setState({ status: 'loading' })
-    // 페이지가 바뀌면 앞 페이지에 쓰던 초안·고치던 것도 버린다. 노드 id도 코멘트 id도
-    // 그 페이지 안에서만 뜻이 있다.
-    setDraft('')
-    setEditingId(null)
-    setWriteError(null)
-    setDiverged(false)
 
     async function load(openPageId: string): Promise<void> {
       try {
@@ -227,6 +303,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     return () => {
       alive = false
     }
+    // `setState`는 이 렌더의 페이지를 단 쓰기라 `pageId`와 함께만 바뀐다.
   }, [api, projectId, pageId])
 
   /**
@@ -246,7 +323,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
         setBusy(false)
       }
     },
-    [api, busy, pageId],
+    [api, busy, pageId, setBusy, setWriteError],
   )
 
   const submit = (): void => {
