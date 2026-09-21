@@ -494,8 +494,9 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
     view.lock([foreign('n-card')])
     await settle()
 
-    // **실브라우저는 `disabled`가 되는 순간 포커스를 놓고 blur를 낸다. jsdom은 안 놓는다**
-    // (실측: `activeElement`가 그대로이고 blur 이벤트 0건). 어느 쪽이든 *"잠긴 동안 도착한
+    // **실브라우저는 `disabled`가 되는 순간 포커스를 놓고 blur를 낸다**(8차 Chrome 실측 —
+    // 치던 중에 잠금이 오면 `focusout INPUT → null`, `activeElement`는 `BODY`). **jsdom은
+    // 안 놓는다**(실측: `activeElement`가 그대로이고 blur 이벤트 0건). 어느 쪽이든 *"잠긴 동안 도착한
     // blur"*가 커밋이 되면 안 되므로, 여기서 그 blur를 직접 낸다.
     fireEvent.blur(textInput('제목'))
     await settle()

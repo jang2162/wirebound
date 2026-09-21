@@ -346,7 +346,9 @@ export function variantFieldOf(
  *   property-panel.test.tsx`의 캔버스 판). **그 둘은 사용자가 겪는 일이 아니라 «포커스가
  *   안 옮겨 간 채 선택이 바뀌면»의 값이다.** 7차 판의 `page-description.tsx`가 이 값을
  *   «속성 패널도 탭을 누르면 친 글자를 잃는다»로 옮겨 적었다 — jsdom 값을 행동처럼 적은
- *   것이었다.
+ *   것이었다. **위 표의 행동은 `test/click-as-browser.ts`의 `clickAsBrowser`로 잰다** — 그
+ *   흉내는 표의 클릭 갈래 다섯 × 위젯 다섯, 25칸에서 Chrome 과 같은 값을 냈다
+ *   (`test/panels/property-panel.test.tsx`의 «실브라우저의 클릭은 …» 절).
  * - **`focus()`로 옮기면 커밋된다.** 같은 하네스에서 트리 버튼에 `focus()`를 부르면
  *   `activeElement`가 `BUTTON`이 되고 `blur`가 나 요청이 1건 나간다. **앞 판의 주석은 이
  *   값을 "구조 트리로 고르면 손실이 없다"로 적었는데, 잰 것은 `focus()`이고 사용자가 하는
