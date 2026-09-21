@@ -604,6 +604,22 @@
   color: var(--wb-shell-muted);
 }
 
+/* 빈 메뉴 트리의 빈 상태(`panels/menu-tree.tsx`). 문장 한 줄과 `최상위 메뉴` 버튼이
+   세로로 선다.
+
+   **버튼은 자기 꼴을 이미 갖고 있다**(`.wb-shell-menu-tool` — 하는 일이 툴바의 `하위 메뉴`와
+   같은 부류라 같은 꼴을 쓴다). 그래서 이 상자가 주는 것은 **간격과 정렬 둘뿐**이다.
+
+   **`align-items: flex-start`가 없으면 버튼이 사이드바 너비만큼 늘어난다** — `stretch`가
+   기본값이라 세로 flex에서 자식의 가로가 상자에 맞춰진다. */
+.wb-shell-tree-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+}
+
 /* 구조 트리(`panels/structure-tree.tsx`). 목록 표식과 기본 여백은 `<ul>`마다 지운다 —
    메뉴 트리와 같은 이유(요소·자손 선택자를 쓸 수 없다)로 규칙을 클래스에 직접 건다.
    메뉴 트리의 클래스를 함께 쓰지 않는 것은 둘의 줄 모양이 다르기 때문이다 — 한쪽이
