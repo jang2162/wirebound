@@ -135,31 +135,73 @@
  *
  * **고른 갈래와, 고르지 않은 셋의 값.**
  *
- * - **채택 — 초안을 패널 밖에 든다.** `PageDescriptionDraftProvider`가 `RightPanel`의
- *   탭 목록 **밖**에 서서 초안 한 칸을 든다. 그 컴포넌트는 탭·모드가 바뀌어도 언마운트되지
- *   않으므로 초안이 산다. **드는 자리가 언마운트를 고른 자리와 같다** — 대가를 만든 곳이
- *   대가를 문다.
+ * - **채택 — 초안을 패널 밖에 든다.** `RightPanel`의 탭 목록 **밖**에 선 provider가 든다
+ *   (7차는 초안 한 칸만 든 `PageDescriptionDraftProvider`였고, 8차에 `panel-drafts.tsx`의
+ *   `PanelDraftsProvider`로 넓혔다 — 아래 «초안만 올렸더니 …»). 그 컴포넌트는 탭·모드가
+ *   바뀌어도 언마운트되지 않으므로 초안이 산다. **드는 자리가 언마운트를 고른 자리와
+ *   같다** — 대가를 만든 곳이 대가를 문다.
  * - **버림 — 이 탭을 언마운트하지 않는다(`hidden`으로 둔다).** 재 봤다: `RightPanel`이
- *   탭 넷을 전부 그리게 하면 **`--project web`에서 35 사망 / 11 파일**이다
- *   (`edit-recovery` 8 · `props-lock` 8 · `menu-tree` 6 · `snapshots-panel` 4 · …).
- *   *"페이지를 한 번만 읽는다"*(D6)를 재는 케이스들이 그 안에 있다 — 위 §9 절이 적은
- *   **`getPage`가 둘이 된다**와 같은 값이고, 코멘트의 `listComments`까지 늘 나간다.
- * - **버림 — blur에 커밋한다(속성 패널 선례).** **그 선례가 이 갈래를 못 고친다.**
- *   실측: 속성 패널에 글을 치고 **탭을 클릭**하면 `activeElement`가 `BODY`로 가고
- *   `patchOps` **0건**이며, 돌아오면 상자가 `"옛 내용"`(서버 값)이다 — **속성 패널도 같은
- *   방식으로 친 글자를 잃는다.** `property-panel.tsx` 머리말이 이미 그 값을 갖고 있고
- *   (*"클릭으로 노드를 옮기면 초안이 사라진다 … 요청이 0건"*), **실브라우저에서는 재지
- *   않았다**고 스스로 못박아 뒀다. 그러니 blur 커밋은 «탭을 눌렀을 때»를 **브라우저에
- *   맡기는** 판이고, 그 위에 얹은 자는 jsdom에서 재현되지 않는다. 위 이유 셋도 그대로 선다.
+ *   탭 넷을 전부 그리게 하면 *"페이지를 한 번만 읽는다"*(D6)를 재는 케이스들이 **`getPage`
+ *   두 번**으로 죽는다 — 위 §9 절이 적은 그 값이다. 코멘트의 *"탭을 열기 전에는 조회하지
+ *   않는다"*도 죽는다(`listComments`가 늘 나간다). **몇 개가 죽는지는 적지 않는다** — 7차
+ *   판이 적은 수를 리뷰가 다시 재니 달랐고(판 짓는 법 — 래퍼·`hidden`을 거는 자리 — 에 따라
+ *   갈린다), 참인 것은 관계뿐이었다.
+ * - **버림 — blur에 커밋한다(속성 패널 선례).** **버린 근거는 위 «즉시 저장이 아니라 저장
+ *   버튼이다»의 이유 셋이다** — 2000자 여러 줄 글이 다른 곳을 누르는 것만으로 저장되고,
+ *   되돌릴 길이 없다.
+ *
+ *   **7차 판은 여기에 *"그 선례가 이 갈래를 못 고친다 — 속성 패널도 탭을 누르면 친 글자를
+ *   잃는다"*를 더했는데, 그것은 jsdom 값이었다.** `fireEvent.click`은 포커스를 옮기지 않고
+ *   jsdom은 포커스된 요소가 DOM에서 빠질 때도 blur를 안 내서, `patchOps` 0건·`"옛 내용"`이
+ *   나왔다. **실브라우저(Chrome)는 탭 버튼의 `mousedown`에서 입력의 포커스를 거두고
+ *   (`focusout TEXTAREA → BUTTON`) 그 blur가 커밋한다** — 속성 패널은 탭을 눌러도 안 잃는다
+ *   (`property-panel.tsx`의 `PropControl` 주석에 위젯 다섯 × 갈래 여덟의 표가 있다). 곧 blur
+ *   커밋은 실브라우저에서는 이 갈래를 **고쳤을 것이다.** 그래도 위 이유 셋으로 버린다.
  * - **버림 — 못 살린다고 머리말을 고치고 사용자에게 알린다.** 위 채택 갈래가 **파일 둘·
  *   50줄 안**이고 테스트 사망 0이므로, 값으로 «비용이 크다»가 성립하지 않는다.
  *   §3.16이 *"친 글자는 문서와 무관해 낡지 않는다"*로 살릴 값이라 판정한 그 부류다.
  *
  * **`comment-panel.tsx`는 아직 이 대가를 문다** — 실측: 코멘트 초안 `"코멘트 초안"`을 치고
- * 속성 탭을 눌렀다 돌아오면 `""`다. **여기서 고치지 않는다**(그 파일의 축이고 초안이 셋이다
- * — 새 코멘트·고치던 것·`editingId`). **보고로 올린다.**
+ * 속성 탭을 눌렀다 돌아오면 `""`다(jsdom · Chrome 둘 다). **여기서 고치지 않는다**(그 파일의
+ * 축이고 초안이 셋이다 — 새 코멘트·고치던 것·`editingId`).
  *
- * ## 페이지가 바뀌면 초안도 통지도 버린다 — **통지는 조회와 같은 자리, 초안은 한 겹 위**
+ * ## 초안만 올렸더니 저장의 생애가 마운트에 남았다 — **8차: 페이지에 매인 것을 통째로 올린다**
+ *
+ * 7차 판은 초안 **한 칸**만 위로 올렸다. 리뷰가 저장을 늦추고 재서 둘을 찾았다(Chrome·jsdom):
+ *
+ * | 갈래 | `7053388`(7차 전) | `357f27c`(7차) | 8차 |
+ * |---|---|---|---|
+ * | **N1** 저장 중 탭 왕복 → 응답 | 이어 친 글이 남는다(초안은 탭에 이미 잃음) | 재마운트에 상자·버튼이 **열려** 한 번 더 보낼 수 있고, 응답이 오면 **이어 친 글이 지워지고 낡은 서버 값**이 보인다 | 재마운트에도 상자·버튼이 **꺼져 있다**. 응답이 오면 상자가 **저장된 값**이다 |
+ * | **N2** 저장 중 옆 페이지로 → 응답 | 옆 페이지 상자가 **앞 페이지의 글**을 서버 값처럼 보이고 거짓 통지가 뜬다. 한 글자 붙여 저장하면 **옆 페이지 DB에 앞 페이지의 글** | 같음 | 응답이 **어디에도 닿지 않는다** — 옆 페이지에서 친 글이 남고 통지도 없다 |
+ *
+ * **무엇을 왜 드는지는 `panel-drafts.tsx`의 머리말이 갖는다**(여기 두 벌로 적지 않는다). 이
+ * 파일의 몫은 칸 셋이다 — 조회 값·초안·저장. 조회 값까지 칸인 것은 **저장의 응답이 그것을
+ * 갈아 끼우기 때문**이다(N1의 «낡은 서버 값»이 그 자리였다). 케이스는
+ * `test/panels/page-description-edit.test.tsx`의 «저장이 나가 있는 동안 …» 절이다.
+ *
+ * **재지 않은 창 하나.** 저장이 나가 있는 동안 탭을 오가면 새 마운트가 조회를 다시 건다. 그
+ * 조회가 **저장이 커밋되기 전의 값을 읽고, 저장의 응답보다 늦게** 도착하면 응답이 갈아 끼운
+ * 값을 덮어 상자가 낡은 값을 보인다. 리뷰의 판(저장 요청을 늦춘다)에서는 조회가 먼저 끝나
+ * 이 창에 안 들어간다. 이 순서를 만드는 케이스는 세우지 않았다.
+ *
+ * ## 남의 저장을 조용히 덮는다 — **고치지 않는다. 이월한다** (리뷰 N3)
+ *
+ * **이 화면에는 페이지 메타(설명·제목)의 충돌 모델이 없다.** 서버의 `UpdatePageBody`는
+ * `{ title?, description?, menuNodeId?, sortOrder? }`뿐이고 버전도 기대값도 없다 — 나중에
+ * 저장한 쪽이 이긴다. 화면도 남이 설명을 저장한 것을 알리지 않는다.
+ *
+ * **그래서 사용자가 겪는 것:** 내가 초안을 치는 동안 남이 같은 페이지의 설명을 저장하면, 내
+ * 상자는 **내 초안을 계속 보이고** 저장 버튼이 열려 있다. 누르면 **남의 설명을 경고 없이
+ * 덮는다.** 탭을 오가 다시 조회해도 초안이 그 값을 가린다(리뷰 실측 — Chrome·jsdom).
+ * 7차 전에는 탭 왕복이 **우연히** 남의 새 값을 보여 줬다 — 내 초안을 잃는 대가로. 덮는 것
+ * 자체는 탭을 안 오가도 7차 전부터 그랬다.
+ *
+ * **여기서만 충돌 감지를 넣지 않는 이유:** 그것이 이 앱의 **첫 충돌 모델**이 된다. 제목도
+ * 같은 경로(`PATCH .../pages/:id`)로 덮이는데 거기엔 없고, 제대로 하려면 서버 계약(기대값)을
+ * 바꿔야 한다. 한 자리에서 먼저 지으면 두 자리가 다른 규칙을 갖는다 — 위 «viewer에게 …»가
+ * 역할 게이트를 한 자리에서 먼저 만들지 않은 것과 같은 이유다. **이월로 올린다.**
+ *
+ * ## 페이지가 바뀌면 초안도 통지도 버린다 — **한 자리에서**
  *
  * **탭이 그대로면 페이지를 바꿔도 이 패널은 언마운트되지 않는다** — `routes/editor.tsx`가
  * 탭 본문을 `key` 없이 그리므로 같은 인스턴스가 산다. 그래서 조회를 다시 거는 것만으로는
@@ -168,20 +210,18 @@
  * 저장한 적 없는 페이지에 «저장했습니다»가 떠 있었다. **지어 놓고 났던 결함이고**
  * 브라우저에서 쳐서 DB까지 확인됐다(P10 리뷰 F1).
  *
- * **`comment-panel.tsx`가 같은 자리에서 같은 것을 한다** — 조회를 다시 걸면서 초안·고치던
- * 것·오류를 함께 버리고, 이유를 *"노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다"*로
- * 적어 뒀다. **여기도 같은 결이다.**
+ * **`comment-panel.tsx`도 같은 것을 한다** — 초안·고치던 것·오류를 함께 버리고, 이유를
+ * *"노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다"*로 적어 뒀다. **여기도 같은 결이다.**
  *
- * **그래서 셋(조회·초안·저장 통지)을 `usePageDescription`이 함께 낸다.** 초안과 통지를
- * 컴포넌트가 따로 들면 «페이지가 바뀌면 버린다»가 **두 벌의 처방**이 되고, 실제로 그렇게
- * 지었다가 조회 하나만 갖췄다.
+ * **그래서 셋(조회·초안·저장)을 `usePageDescription`이 함께 내고, 셋을 버리는 것은 한
+ * 자리다** — `panel-drafts.tsx`의 provider가 `pageId`가 바뀔 때 칸을 전부 버린다. 초안과
+ * 통지를 따로 버리면 «페이지가 바뀌면 버린다»가 **두 벌의 처방**이 되고, 실제로 그렇게
+ * 지었다가 조회 하나만 갖췄다(P10).
  *
- * **7차에 초안의 «드는 자리»만 위로 올라갔다**(`PageDescriptionDraftProvider` — 위 절).
- * **처방이 두 벌이 된 것이 아니라 자리가 하나 옮겨간 것이다:** 훅은 여전히 셋을 함께 내고,
- * 초안을 버리는 일도 여전히 **한 군데**서만 한다. 다만 그 한 군데가 «패널이 마운트될 때»가
- * 아니라 «`pageId`가 바뀔 때»다 — **재 보니 그 둘이 같은 사건이 아니었다**(탭을 누르면
- * 앞의 것만 일어난다). 통지는 «마운트될 때»가 맞아 훅에 남았고, 그 갈리는 근거는
- * 이펙트 안 주석에 있다.
+ * **자리가 옮겨 온 내력.** P10은 셋을 이 훅의 조회 이펙트에서 버렸다. 7차는 초안을 버리는
+ * 일을 위로 옮겼다 — «본문이 마운트될 때»와 «`pageId`가 바뀔 때»가 **같은 사건이 아니었기**
+ * 때문이다(탭을 누르면 앞의 것만 일어난다). 8차는 나머지 둘도 올렸다. **마운트될 때 하는
+ * 일은 이제 «지난 통지를 지운다» 하나다** — 그 근거는 훅의 이펙트 주석에 있다.
  *
  * ### §3.16 E의 *"친 글자를 잃지 않는다"*와 부딪히지 않는다 — **축이 다르다**
  *
@@ -199,19 +239,11 @@
  *   그리고 살렸을 때 잃는 것은 «친 글자»가 아니라 **남의 페이지에 그 글자가 저장되는
  *   것**이다 — 더 나쁜 손실을 막는 쪽이 이긴다.
  */
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactElement,
-  type ReactNode,
-} from 'react'
+import { useEffect, type ReactElement } from 'react'
 import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
+import { slot, usePanelSlot } from './panel-drafts'
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 설명이 보입니다'
@@ -223,58 +255,6 @@ const LOAD_FAILED = '페이지 설명을 불러오지 못했습니다'
 const SAVE_FAILED = '설명을 저장하지 못했습니다'
 /** 저장이 끝났다는 통지. `snapshots-panel.tsx`의 *"저장됨"*과 같은 자리·같은 `role`이다. */
 const SAVED = '설명을 저장했습니다'
-
-/**
- * **저장하지 않은 초안 한 칸.** `PageDescriptionPanel` 밖에 있는 것이 요점이다 —
- * 패널이 **언마운트되기 때문**이다(위 머리말 «탭·모드를 오가도 …»).
- *
- * 드는 자리는 `routes/editor.tsx`의 `RightPanel`이고, 그것이 **언마운트를 고른 컴포넌트**다.
- * 대가를 만든 자리가 대가를 문다.
- */
-interface DraftBox {
-  /** 아직 아무것도 안 쳤으면 `null`. `PageDescriptionPanel`의 `value`가 그것을 푼다. */
-  draft: string | null
-  setDraft: (draft: string | null) => void
-}
-
-const DraftContext = createContext<DraftBox | null>(null)
-
-/**
- * 초안을 드는 자리. **탭 목록 밖에 세운다** — 안에 세우면 탭과 함께 언마운트되어
- * 아무것도 달라지지 않는다.
- *
- * **«페이지가 바뀌면 버린다»(F1)를 여기가 든다.** 이 이펙트가 패널이 아니라 여기 있는
- * 것이 이 판의 전부다: 패널의 이펙트는 **마운트마다** 돌아 탭을 한 번 누른 것만으로도
- * 초안을 지웠지만, 이 컴포넌트는 탭·모드가 바뀌어도 언마운트되지 않아 `pageId`가
- * **실제로 바뀔 때만** 돈다. (첫 마운트에서도 한 번 도는데 그때 초안은 이미 `null`이라
- * 아무 일도 안 한다.)
- */
-export function PageDescriptionDraftProvider(props: {
-  pageId: string | undefined
-  children: ReactNode
-}): ReactElement {
-  const [draft, setDraft] = useState<string | null>(null)
-  const { pageId } = props
-
-  useEffect(() => {
-    setDraft(null)
-  }, [pageId])
-
-  const box = useMemo<DraftBox>(() => ({ draft, setDraft }), [draft])
-  return <DraftContext.Provider value={box}>{props.children}</DraftContext.Provider>
-}
-
-/**
- * 그 칸을 읽는다. **없으면 요란하게 깨진다** — 조용히 로컬 상태로 물러나면 초안이 다시
- * 사라지는데 화면은 멀쩡해 보인다(고치기 전과 똑같은 결함이 소리 없이 돌아온다).
- */
-function useDraftBox(): DraftBox {
-  const box = useContext(DraftContext)
-  if (box === null) {
-    throw new Error('PageDescriptionPanel은 PageDescriptionDraftProvider 안에서만 선다')
-  }
-  return box
-}
 
 type LoadState =
   | { status: 'loading' }
@@ -289,11 +269,29 @@ type SaveState =
   | { status: 'failed'; failure: Failure }
 
 /**
- * **그 페이지의 것 셋을 함께 든다** — 조회(`state`)·초안(`draft`)·저장 통지(`save`).
+ * **이 탭의 칸 셋.** 셋 다 `panel-drafts.tsx`의 칸이라 탭·모드를 오가도 산다 — 이 패널이
+ * 언마운트되기 때문이다(위 머리말 «탭·모드를 오가도 …»). 셋 다 «그 페이지의 것»이라
+ * **페이지가 바뀌면 그 provider가 함께 버린다**(위 머리말 «페이지가 바뀌면 …»).
+ */
+/** 조회 값. 저장의 응답이 **여기를** 갈아 끼운다 — 그래서 조회 값도 마운트 밖에 든다. */
+const LOAD = slot<LoadState>('page-description/load', { status: 'loading' })
+/**
+ * **초안은 «아직 안 쳤다»를 `null`로 든다.** 빈 문자열로 초기화하면 조회가 끝나기 전의
+ * 빈 상자와 *"사용자가 지운 상자"*가 같은 값이 되어, 값이 도착할 때 지운 것을 되살린다.
+ */
+const DRAFT = slot<string | null>('page-description/draft', null)
+/** 저장의 생애 — 진행 중(상자·버튼을 끈다)과 통지. */
+const SAVE = slot<SaveState>('page-description/save', { status: 'idle' })
+
+const IDLE: SaveState = { status: 'idle' }
+
+/**
+ * **그 페이지의 것 셋을 함께 낸다** — 조회(`state`)·초안(`draft`)·저장(`save`).
  *
- * 셋이 한 자리에 있는 것이 이 훅의 요점이다. 셋 다 «그 페이지의 것»이라 **페이지가 바뀌면
- * 함께 버려야 하는데**, 초안과 통지를 컴포넌트가 따로 들면 그 버리는 일이 두 벌의 처방이
- * 된다(위 머리말의 그 절 — 그렇게 지었다가 결함이 났다).
+ * **셋을 드는 것은 이 훅이 아니다** — `panel-drafts.tsx`의 칸이다. 이 훅이 하는 일은 셋을
+ * 한 자리에서 꺼내 주는 것과, 이 본문이 **마운트될 때** 할 일 둘이다: 조회를 걸고, 지난
+ * 통지를 지운다. **버리는 일은 둘로 갈린다** — 페이지가 바뀌면 칸 셋을 provider가 함께
+ * 버리고, 마운트될 때는 이 훅이 **통지만** 지운다(아래 이펙트의 주석).
  *
  * `replace`는 저장이 성공했을 때 부르는 자리다. 다시 조회하지 않는 이유는 서버가 갱신된
  * 행을 응답으로 주기 때문이다(`PageDetail`) — 왕복 하나를 아끼는 것이 아니라, 다시 읽는
@@ -312,32 +310,32 @@ function usePageDescription(
   replace: (description: string | null) => void
 } {
   const api = useApi()
-  const [state, setState] = useState<LoadState>({ status: 'loading' })
-  // **초안은 «아직 안 쳤다»를 `null`로 든다.** 빈 문자열로 초기화하면 조회가 끝나기 전의
-  // 빈 상자와 *"사용자가 지운 상자"*가 같은 값이 되어, 값이 도착할 때 지운 것을 되살린다.
+  const [state, setState] = usePanelSlot(LOAD)
+  const [draft, setDraft] = usePanelSlot(DRAFT)
+  const [save, setSave] = usePanelSlot(SAVE)
+
+  // **마운트될 때 지난 통지를 지운다 — 저장 진행 중은 지우지 않는다.**
   //
-  // **`useState`가 아니라 위쪽 칸이다.** 여기 두면 탭을 한 번 누르는 것만으로 사라진다
-  // (위 머리말 «탭·모드를 오가도 …»). 버리는 일도 그 칸이 한다.
-  const { draft, setDraft } = useDraftBox()
-  const [save, setSave] = useState<SaveState>({ status: 'idle' })
+  // 통지는 «방금 저장했다»는 사건이라 탭을 다녀온 뒤에도 떠 있으면 지금 화면의 글이 저장된
+  // 것처럼 보인다 — `onChange`가 통지를 지우는 것과 같은 이유다. **그런데 `saving`은 통지가
+  // 아니라 잠금이다.** 7차 판은 이 둘을 한 줄(`setSave({ status: 'idle' })`)로 지워, 저장이
+  // 나가 있는 동안 탭을 오가면 상자와 버튼이 열렸다(리뷰 N1 — 한 번 더 보낼 수 있었다).
+  //
+  // **의존이 비어 있는 것이 요점이다.** 페이지가 바뀔 때 통지를 버리는 것은 provider가
+  // 한다(칸 셋을 함께) — 여기서 `pageId`에도 돌면 같은 일을 두 자리가 하게 된다.
+  useEffect(() => {
+    setSave((prev) => (prev.status === 'saving' ? prev : IDLE))
+    // 마운트될 때 한 번. 위 주석이 그 근거다.
+  }, [])
 
   useEffect(() => {
     if (pageId === undefined) return
 
-    // 응답이 오기 전에 다른 페이지로 옮기면 결과를 버린다(`routes/editor.tsx`와 같은 가드).
+    // 응답이 오기 전에 다른 페이지로 옮기거나 이 본문이 내려가면 결과를 버린다
+    // (`routes/editor.tsx`와 같은 가드). 페이지 쪽은 칸의 쓰기 가드도 막지만(`panel-drafts.tsx`),
+    // 언마운트 쪽은 이것만 막는다 — 다음 마운트가 자기 조회를 다시 건다.
     let alive = true
     setState({ status: 'loading' })
-    // **그 페이지에 대한 통지를 버린다.** 통지는 그 페이지에서 한 저장의 결과라 이 페이지
-    // 안에서만 뜻이 있다. `comment-panel.tsx`가 같은 자리에서 같은 것을 한다.
-    //
-    // **초안은 여기서 안 버린다 — `PageDescriptionDraftProvider`가 버린다.** 이 이펙트는
-    // **마운트마다** 돌아서, 여기 두면 탭을 한 번 누르고 돌아온 것만으로 친 글이 사라진다
-    // (위 머리말 «탭·모드를 오가도 …»의 그 값 — 실측으로 잡힌 결함이다).
-    //
-    // **통지는 갈린다. 마운트마다 지우는 것이 맞다.** 초안은 «사용자가 친 글자»라 잃으면
-    // 안 되지만(§3.16 E), 통지는 «방금 저장했다»는 사건이라 탭을 다녀온 뒤에도 떠 있으면
-    // 지금 화면의 글이 저장된 것처럼 보인다 — `onChange`가 통지를 지우는 것과 같은 이유다.
-    setSave({ status: 'idle' })
 
     async function load(openPageId: string): Promise<void> {
       try {
@@ -355,13 +353,14 @@ function usePageDescription(
     return () => {
       alive = false
     }
+    // `setState`는 이 렌더의 페이지를 단 쓰기라 `pageId`와 함께만 바뀐다.
   }, [api, projectId, pageId])
 
-  const replace = useCallback((description: string | null) => {
+  const replace = (description: string | null): void => {
     // **조회에 성공한 상태에서만 갈아 끼운다.** 로딩·실패 상태를 `ready`로 만들면 제목이
     // 없는 `ready`를 지어내야 한다.
     setState((prev) => (prev.status === 'ready' ? { ...prev, description } : prev))
-  }, [])
+  }
 
   return { state, draft, setDraft, save, setSave, replace }
 }
@@ -385,6 +384,10 @@ export function PageDescriptionPanel(props: {
     const next = value === '' ? null : value
     try {
       const page = await api.updatePage(projectId, pageId, { description: next })
+      // **아래 셋은 칸에 쓴다 — 이 클릭이 난 렌더의 페이지를 달고.** 그래서 응답이 오기 전에
+      // 탭을 오갔으면 **지금 떠 있는 본문**에 닿고(리뷰 N1 — 7차 판은 셋 중 초안 비우기만
+      // 닿았다), 페이지를 옮겼으면 **어디에도 안 닿는다**(리뷰 N2 — `panel-drafts.tsx`).
+      //
       // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다.
       replace(page.description)
       setDraft(null)

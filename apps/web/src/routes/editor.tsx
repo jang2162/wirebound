@@ -31,7 +31,8 @@ import { Canvas } from '../canvas/canvas'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { InteractionPanel } from '../panels/interaction-panel'
-import { PageDescriptionDraftProvider, PageDescriptionPanel } from '../panels/page-description'
+import { PageDescriptionPanel } from '../panels/page-description'
+import { PanelDraftsProvider } from '../panels/panel-drafts'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
 import { useEditCommit } from '../edit/use-edit-commit'
@@ -670,20 +671,19 @@ function RightPanel(props: { projectId: string; pageId: string | undefined }): R
           위해 페이지를 열 때마다 요청이 나간다. 구조 트리를 뷰 모드에서 DOM에서 빼는 것과
           같은 판단이고, 근거도 같다(그쪽 주석).
 
-          **재 봤다 — 넷을 다 그리면 `--project web`에서 35 사망 / 11 파일이다**
-          (*"페이지를 한 번만 읽는다"*(D6)를 재는 케이스들이 그 안에 있다). 그러니 이 판단은
-          그대로 선다. **다만 대가가 요청 하나가 아니었다.**
+          **넷을 다 그리면 *"페이지를 한 번만 읽는다"*(D6)를 재는 케이스들이 `getPage` 두
+          번으로 죽는다**(재 봤다 — 코멘트의 *"탭을 열기 전에는 조회하지 않는다"*도 함께).
+          그러니 이 판단은 그대로 선다. **다만 대가가 요청 하나가 아니었다.**
 
-          **대가: 언마운트되는 본문이 든 «친 글자»가 사라진다.** 실측 — 뷰 모드
-          «페이지 설명»에 초안을 치고 코멘트 탭을 눌렀다 돌아오면 상자가 서버 값으로
-          돌아가 있었다(`getPage` 2→3 = 재마운트). 경고도 흔적도 없다. **그래서 그 초안
-          한 칸만 탭 목록 밖에 세운다** — 언마운트를 고른 것이 이 컴포넌트이므로 대가도
-          이 컴포넌트가 문다. 근거와 버린 갈래들의 값은 `panels/page-description.tsx`의
-          머리말 «탭·모드를 오가도 …»가 갖는다(여기 두 벌로 적지 않는다).
+          **대가: 언마운트되는 본문이 든 «친 글자»와 «나가 있는 저장»이 사라진다.**
+          그래서 본문들의 **페이지에 매인 상태**를 탭 목록 밖의 `PanelDraftsProvider`가
+          든다 — 언마운트를 고른 것이 이 컴포넌트이므로 대가도 이 컴포넌트가 문다. 무엇을
+          왜 드는지, 페이지가 바뀌면 무엇을 버리는지는 `panels/panel-drafts.tsx`의 머리말이
+          갖는다(여기 두 벌로 적지 않는다).
 
-          **코멘트 탭의 초안은 아직 이 대가를 문다**(실측: 탭을 오가면 `""`가 된다).
-          그 축은 그 파일의 것이라 여기서 손대지 않는다. */}
-      <PageDescriptionDraftProvider pageId={props.pageId}>
+          **코멘트 탭의 초안은 아직 이 대가를 문다**(실측: 탭을 오가면 `""`가 된다 —
+          jsdom 과 Chrome 둘 다). 그 축은 그 파일의 것이라 여기서 손대지 않는다. */}
+      <PanelDraftsProvider pageId={props.pageId}>
         <div
           className="wb-shell-tabpanel"
           role="tabpanel"
@@ -695,7 +695,7 @@ function RightPanel(props: { projectId: string; pageId: string | undefined }): R
             return <Body projectId={props.projectId} pageId={props.pageId} />
           })()}
         </div>
-      </PageDescriptionDraftProvider>
+      </PanelDraftsProvider>
     </>
   )
 }

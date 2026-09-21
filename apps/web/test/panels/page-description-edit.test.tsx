@@ -8,7 +8,7 @@
  * `apps/api/test/pages.test.ts`와 `apps/api/test/permission-matrix.test.ts`가 갖는다.
  * 여기가 재는 것은 **화면이 무엇을 보내고 무엇을 말하는가**다.
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { ApiError } from '../../src/api/client'
@@ -290,17 +290,23 @@ describe('§9 — 상한은 `@wirebound/schema`가 소유한다', () => {
  * 리뷰까지 살아남았다(실측: 브라우저 → DB. A에서 안 저장한 글을 치고 B로 옮겨 저장하면
  * **A의 글이 B에 저장됐다**). **그 축의 주인이 이 절이다.**
  *
- * **셋이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 쟀다:
+ * **버리는 자리는 `panels/panel-drafts.tsx`의 provider 하나다**(8차 — 그 전에는 훅의 조회
+ * 이펙트였다가 7차에 초안만 위로 갔다). 페이지가 바뀌면 칸을 **전부** 버린다.
+ *
+ * **셋이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 쟀다.
+ * 버리기가 «칸 전부»라 변조는 «그 칸 하나만 새 페이지로 넘긴다»의 꼴이다:
  *
  * | 변조 | 혼자 죽는 것 |
  * |---|---|
- * | 이펙트의 `setDraft(null)`을 뺀다 | *"앞 페이지에서 친 초안이 …"* |
- * | 통지 초기화가 `'saved'`만 지우게 한다(절반만 고친 판) | *"앞 페이지의 실패 문장이 …"* |
- * | 그 거울판 — `'failed'`만 지우게 한다 | *"앞 페이지의 저장 통지가 …"* |
+ * | provider 의 리셋이 초안 칸을 넘긴다 | *"앞 페이지에서 친 초안이 …"* |
+ * | 그 리셋이 `'saved'`인 저장 칸을 넘긴다 | *"앞 페이지의 저장 통지가 …"* |
+ * | 그 리셋이 `'failed'`인 저장 칸을 넘긴다 | *"앞 페이지의 실패 문장이 …"* |
  *
- * **통지 초기화를 통째로 빼면 뒤의 둘이 함께 죽는다** — 한 줄이 둘을 잠근다. 그래도 둘로
- * 두는 것은 **새는 것이 둘이고 사용자가 보는 것이 다르기 때문**이다(거짓 «저장했습니다»
- * vs. 남의 페이지의 오류 문장). 위 표의 절반 변조 둘이 그 둘을 가른다.
+ * **리셋을 통째로 빼면(페이지만 바꾸고 칸을 넘기면) 셋이 함께 죽고** 아래 «저장이 나가 있는
+ * 동안 …» 절의 *"… 옆 페이지에 닿지 않는다"*도 함께 죽는다 — 저장 중 잠금이 옆 페이지로
+ * 넘어와 그 페이지의 저장 버튼이 꺼지기 때문이다. **그 케이스의 축은 쓰기 가드이고 거기서
+ * 혼자 죽는다**(그 절의 표). 통지 둘을 둘로 두는 것은 **새는 것이 둘이고 사용자가 보는 것이
+ * 다르기 때문**이다(거짓 «저장했습니다» vs. 남의 페이지의 오류 문장).
  */
 describe('§9 — 페이지를 바꾸면 앞 페이지의 것을 버린다', () => {
   it('앞 페이지에서 친 초안이 따라오지 않는다', async () => {
@@ -392,15 +398,22 @@ describe('§9 — 페이지를 바꾸면 앞 페이지의 것을 버린다', () 
  * (어느 탭이 골라져 있나)를 재고, **여기는 그 탭 본문이 든 «친 글자»가 남는가**를 잰다.
  * 같은 왕복을 지나지만 재는 것이 다르다.
  *
- * **둘이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 쟀다:
+ * **변조와 죽는 것** — 하나씩 심고 매번 복구해서 `--project web` 전체로 쟀다(8차):
  *
- * | 변조 | 혼자 죽는 것 |
+ * | 변조 | 죽는 것 |
  * |---|---|
- * | `PageDescriptionDraftProvider`에 `key={chosen}` (탭마다 새로 든다) | *"탭을 오갔다 돌아와도 …"* |
- * | 그것에 `key={mode}` (모드마다 새로 든다) | *"모드를 오갔다 돌아와도 …"* |
+ * | provider(`PanelDraftsProvider`)에 `key={chosen}` (탭마다 새로 든다) | *"탭을 오갔다 돌아와도 …"* **와** 아래 «저장이 나가 있는 동안 …»의 탭 왕복 둘 |
+ * | 그것에 `key={mode}` (모드마다 새로 든다) | *"모드를 오갔다 돌아와도 …"* — 혼자 |
  *
- * **초안을 패널의 `useState`로 되돌리면 둘이 함께 죽는다** — 고치기 전의 판이다.
- * 그때도 위 «페이지를 바꾸면 …»의 셋은 **산다**. 두 축이 부딪히지 않는 것이 그 값이다.
+ * **탭 케이스는 혼자 죽지 않는다 — 늘 아래 N1 둘과 함께 죽는다.** 셋 다 탭 왕복을 지나고,
+ * «탭마다 새로 든다»는 칸을 **전부** 버리기 때문이다. **«탭을 오가도 칸이 산다» 축의 주인은
+ * 이 케이스다** — N1 둘은 그 위에서 «저장 중 잠금»·«응답이 닿는 자리»를 재고, 각자 혼자
+ * 죽는 변조가 있다(그 절의 표). 7차 판에서는 이 케이스가 혼자 죽었다 — N1 케이스가 없었다.
+ *
+ * **고치기 전의 판**(초안을 본문의 `useState`로 들고 조회 이펙트에서 버린다)으로 되돌리면
+ * 탭·모드 둘과 N1 의 *"… 저장 중 잠금이 남는다 …"*(재마운트 뒤 상자가 초안을 보이는지도
+ * 본다), N2 가 함께 죽고 위 «페이지를 바꾸면 …»의 셋은 **산다**. N2 가 죽는 것은 리뷰가 잰
+ * 그대로다 — 7차 전후 판 모두 그 결함을 갖고 있었다.
  */
 describe('§9 — 탭·모드를 오가도 저장하지 않은 초안이 남는다', () => {
   it('탭을 오갔다 돌아와도 친 글이 남는다 — 서버 값으로 되돌아가지 않는다', async () => {
@@ -448,5 +461,156 @@ describe('§9 — 탭·모드를 오가도 저장하지 않은 초안이 남는�
     fireEvent.click(saveButton())
     await waitFor(() => expect(api.bodies).toEqual([{ description: '모드를 오갈 초안' }]))
     expect(api.pages).toEqual([PAGE_ID])
+  })
+})
+
+/**
+ * `updatePage`를 **붙잡아 두는** 가짜 — «저장이 나가 있는 동안»을 만든다. `release()`를 부를
+ * 때까지 응답이 안 온다. 응답은 보낸 값을 그대로 돌려준다(서버가 정규화하지 않는 판).
+ *
+ * **`getPage`는 따로 준다** — 붙잡힌 동안 다시 조회하면 **옛 값**이 온다. 리뷰가 실브라우저에서
+ * 본 판(PATCH 를 3초 늦추면 재마운트의 GET 이 먼저 끝난다)이 그것이다.
+ */
+function heldApi(): {
+  overrides: Partial<ApiClient>
+  bodies: { description?: string | null }[]
+  pages: string[]
+  /** 붙잡은 응답 하나를 놓고, 그 응답을 받은 쪽의 뒷일까지 끝나기를 기다린다. */
+  release: () => Promise<void>
+} {
+  const bodies: { description?: string | null }[] = []
+  const pages: string[] = []
+  const gates: (() => void)[] = []
+  const replies: Promise<unknown>[] = []
+  return {
+    bodies,
+    pages,
+    overrides: {
+      updatePage: ((_projectId: string, pageId: string, body: { description?: string | null }) => {
+        bodies.push(body)
+        pages.push(pageId)
+        const reply = new Promise<PageDetail>((resolve) => {
+          gates.push(() => resolve({ ...pageDetail(pageId, DOC), description: body.description ?? null }))
+        })
+        replies.push(reply)
+        return reply
+      }) as never,
+    },
+    release: async () => {
+      const gate = gates.shift()
+      const reply = replies.shift()
+      if (gate === undefined || reply === undefined) throw new Error('붙잡힌 저장이 없다')
+      // 받은 쪽이 먼저 `await`를 걸어 두었으므로, 여기서 그 약속을 기다리면 그쪽의 뒷일이
+      // 먼저 돈다(마이크로태스크 순서).
+      await act(async () => {
+        gate()
+        await reply
+      })
+    },
+  }
+}
+
+/**
+ * **저장이 나가 있는 동안의 축**(리뷰 N1·N2). 위 절들은 저장이 **곧바로** 끝나는 가짜로 돌아
+ * «응답이 오기 전에 무엇을 했나»를 아무도 지나지 않았다 — 7차 판의 케이스 다섯이 N1·N2를
+ * 하나도 못 잡은 이유다(리뷰 (a) 5).
+ *
+ * 무엇을 막는지는 `panels/panel-drafts.tsx`의 머리말이 갖는다. 여기는 그 셋을 값으로 잠근다.
+ *
+ * **셋이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 쟀다:
+ *
+ * | 변조 | 혼자 죽는 것 |
+ * |---|---|
+ * | 마운트 이펙트가 `saving`까지 지운다(7차 판의 한 줄) | *"… 저장 중 잠금이 남는다 …"* |
+ * | 조회 값을 칸이 아니라 본문의 `useState`로 든다 | *"… 떠 있는 본문에 닿는다 …"* |
+ * | 칸의 쓰기 가드(`prev.pageId !== at`)를 뺀다 | *"… 옆 페이지에 닿지 않는다 …"* |
+ */
+describe('§9 — 저장이 나가 있는 동안 탭·페이지를 옮겨도 그 저장이 제자리에 닿는다', () => {
+  it('저장이 나가 있는 동안 탭을 오가도 저장 중 잠금이 남는다 — 한 번 더 보낼 수 없다', async () => {
+    const api = heldApi()
+    await openPage(DOC, { apiOverrides: { ...withDescription('서버 값'), ...api.overrides } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+
+    type('첫 저장 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(api.bodies).toHaveLength(1))
+    expect(box().disabled).toBe(true)
+
+    toTab('코멘트')
+    expect(boxOrNull()).toBeNull()
+    toTab('페이지 설명')
+    await findBox()
+
+    // **7차 판은 여기서 상자와 버튼이 열려 있었다**(리뷰 N1 — 새 마운트가 저장 상태를 `idle`로
+    // 시작했다). 그러면 같은 글을 한 번 더 보내고, 이어 친 글은 첫 응답에 지워졌다.
+    expect(box().value).toBe('첫 저장 글')
+    expect(box().disabled).toBe(true)
+    expect(saveButton().disabled).toBe(true)
+
+    await api.release()
+
+    // **양성 대조** — 응답이 오면 풀린다. 없으면 «언제나 잠근다»도 통과한다.
+    expect(box().disabled).toBe(false)
+    expect(api.bodies).toEqual([{ description: '첫 저장 글' }])
+  })
+
+  it('저장이 나가 있는 동안 탭을 오가면 그 응답이 떠 있는 본문에 닿는다 — 낡은 서버 값을 보이지 않는다', async () => {
+    const api = heldApi()
+    await openPage(DOC, { apiOverrides: { ...withDescription('서버 값'), ...api.overrides } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+
+    type('첫 저장 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(api.bodies).toHaveLength(1))
+
+    toTab('코멘트')
+    toTab('페이지 설명')
+    await findBox()
+
+    await api.release()
+
+    // **7차 판은 `"서버 값"`이었다** — 새 마운트의 조회는 저장이 끝나기 전의 값이고, 응답의
+    // «서버 값 갈아 끼우기»는 죽은 옛 마운트에 닿았다. 초안 비우기만 공유 칸에 닿아서 상자가
+    // 낡은 값으로 돌아갔고 버튼도 꺼졌다 — 저장이 됐는지 사용자가 알 수 없었다.
+    expect(box().value).toBe('첫 저장 글')
+    expect(saveButton().disabled).toBe(true)
+  })
+
+  it('저장 중에 옆 페이지로 옮기면 그 응답이 옆 페이지에 닿지 않는다 — 앞 페이지의 글이 옆 페이지에 저장되지 않는다', async () => {
+    const api = heldApi()
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: DOC },
+      apiOverrides: { ...perPageDescription, ...api.overrides },
+    })
+    toView()
+    await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
+
+    type('앞 페이지에 저장할 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(api.bodies).toHaveLength(1))
+
+    toOtherPage()
+    // **제목만 기다리고 상자의 값은 안 본다** — 그것은 위 F1 절(*"앞 페이지에서 친 초안이
+    // 따라오지 않는다"*)의 축이다. 여기서 보면 그 축이 깨질 때 이 케이스도 함께 죽어 이
+    // 케이스가 재는 것(응답이 어디에 닿는가)과 섞인다.
+    await screen.findByRole('heading', { name: OTHER_PAGE_TITLE })
+    type('옆 페이지에서 친 글')
+
+    await api.release()
+
+    // **7차 전후 판 모두 여기서 `"앞 페이지에 저장할 글"`이었다**(리뷰 N2) — 앞 페이지의 응답이
+    // 옆 페이지의 조회 값을 갈아 끼우고 초안을 비웠고, 이 페이지에 저장한 적 없는 통지가 떴다.
+    expect(screen.getByRole('heading', { name: OTHER_PAGE_TITLE })).toBeTruthy()
+    expect(box().value).toBe('옆 페이지에서 친 글')
+    expect(screen.queryByText('설명을 저장했습니다')).toBeNull()
+
+    // 끝까지 간다 — 이 페이지에 저장하면 이 페이지의 글이 이 페이지로 간다.
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(api.bodies).toHaveLength(2))
+    expect(api.bodies[1]).toEqual({ description: '옆 페이지에서 친 글' })
+    expect(api.pages).toEqual([PAGE_ID, OTHER_PAGE_ID])
+    await api.release()
   })
 })
