@@ -45,7 +45,12 @@ const UNKNOWN_COMMAND_FAILURE = '요청을 처리하지 못했습니다'
 
 /** 인라인 입력이 무엇을 위해 열려 있는지. 닫혀 있으면 `null`. */
 export interface TreeEditing {
-  kind: 'new-menu' | 'new-page' | 'rename'
+  /**
+   * **`new-root-menu`만 선택을 보지 않는다.** 나머지 셋은 고른 것에 붙는 조작이라 선택이
+   * 없으면 성립하지 않는데(D5), 최상위 메뉴가 붙는 곳은 트리 자체다 — **빈 트리에는 고를
+   * 것이 없고, 그것이 이 갈래가 있는 이유다**(`panels/menu-tree.tsx`의 빈 상태).
+   */
+  kind: 'new-menu' | 'new-root-menu' | 'new-page' | 'rename'
   /** 입력의 초기값. 이름 변경이면 지금 제목, 새로 만들기면 빈 문자열이다. */
   initial: string
 }
@@ -360,10 +365,34 @@ export function useTreeCommands(props: {
    * 단계가 새로 만들지 않는다.)
    */
   function submitInput(title: string): void {
-    if (editing === null || selection === null) return
+    if (editing === null) return
     if (title === '') return
 
     const kind = editing.kind
+
+    // **최상위 메뉴는 선택을 보지 않는다 — 여기가 이 갈래의 전부다.** 아래 셋과 갈리는
+    // 자리가 그것이고, 그래서 선택 가드보다 **위**에 선다.
+    //
+    // **빈 트리가 막다른 길이었다.** 메뉴 노드가 0개인 새 프로젝트
+    // (`apps/api/src/repos/projects.ts`의 `insertProject`는 프로젝트·멤버·기본 레이아웃만
+    // 만든다)에서는 고를 메뉴가 없어 `treeAbilities`가 아홉을 전부 끄고, 페이지는
+    // `menuNodeId`가 필수라 페이지도 만들 수 없었다. **구멍은 화면에만 있었다** — 서버는
+    // 처음부터 루트를 받는다(`apps/api/src/routes/menu.ts`의
+    // `parentId: z.uuid().nullable().optional()` · `body.parentId ?? null`)고,
+    // `api/http-client.ts`의 `createMenu`도 *"`parentId`는 `null`이어도 그대로 싣는다"*를
+    // 이미 적고 있었다.
+    //
+    // **`title === ''` 가드보다는 아래다** — 빈 제목은 이 갈래에서도 나가지 않는다(D6).
+    if (kind === 'new-root-menu') {
+      setEditing(null)
+      void run(async () => {
+        await api.createMenu(projectId, { parentId: null, title })
+      })
+      return
+    }
+
+    // 나머지 셋은 고른 것에 붙는다.
+    if (selection === null) return
     setEditing(null)
 
     if (kind === 'rename') {
