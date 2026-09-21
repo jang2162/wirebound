@@ -301,6 +301,15 @@ const CHECKING = '응답이 없어 저장됐는지 서버에서 확인하는 중
 const UNKNOWN = '응답이 없고, 저장됐는지 확인하지도 못했습니다'
 /** 다시 읽었더니 서버의 설명이 보낸 글과 다르다. **초안은 남긴다** — 다시 저장할 수 있다. */
 const NOT_SAVED = '응답이 없어 서버를 다시 읽었더니 이 설명은 저장되지 않았습니다'
+/**
+ * 다시 읽었더니 서버의 설명이 보낸 글과 **같다.** «저장했습니다»라고 하지 않는다 — 다시 읽기가 아는 것은
+ * **값이 같다**는 것뿐이고 **누가 썼는지**는 모른다. 남이 같은 값을 먼저 저장했고 이 쓰기는 서버에 한 번도
+ * 안 닿은 판이 있다(리뷰 2-1, Chrome: 붙잡힌 저장 · 그 사이 남이 같은 값 저장 → 앞 판은 «설명을
+ * 저장했습니다»). 화면의 값·서버의 값·사용자가 원한 값은 셋 다 같으므로 해는 귀속뿐이다 — 판정은 그대로
+ * 두고 **문장만 사실로** 한다. «변경 없는 저장은 보내지 않는다»로는 못 막는다: 보낼 때는 서버 값과
+ * 달랐다(`dirty`), 같아진 것은 그 뒤다.
+ */
+const MATCHED = '응답이 없어 서버를 다시 읽었더니 서버의 설명이 이 글과 같습니다'
 
 type LoadState =
   | { status: 'loading' }
@@ -319,6 +328,8 @@ type LoadState =
 type SaveState =
   | { status: 'idle' }
   | { status: 'saved' }
+  /** 다시 읽기로 판정했더니 서버 값이 같다 — «저장했다»가 아니다(`MATCHED`). */
+  | { status: 'matched' }
   | { status: 'failed'; failure: Failure }
 
 /**
@@ -452,8 +463,8 @@ export function PageDescriptionPanel(props: {
     await saving.run({
       send: (signal) => api.updatePage(projectId, openPageId, { description: next }, { signal }),
       // **시간 안에 응답이 없으면 서버에서 다시 읽는다**(이월 R). 서버 값이 보낸 값과 같으면
-      // 커밋된 것이다 — 서버가 설명을 정규화하지 않는다(`api/client.ts`의 `updatePage` 표:
-      // 보낸 그대로 되읽힌다).
+      // 원하던 상태다 — 서버가 설명을 정규화하지 않는다(`api/client.ts`의 `updatePage` 표:
+      // 보낸 그대로 되읽힌다). **이 쓰기가 커밋했다는 뜻은 아니다** — 그래서 통지가 다르다(`MATCHED`).
       verify: async () => {
         const page = await api.getPage(projectId, openPageId)
         return { description: page.description, committed: page.description === next }
@@ -475,7 +486,7 @@ export function PageDescriptionPanel(props: {
         replace(outcome.kind === 'done' ? outcome.value.description : outcome.verdict.description)
         if (committed) {
           setDraft(null)
-          setSave({ status: 'saved' })
+          setSave({ status: outcome.kind === 'done' ? 'saved' : 'matched' })
         } else {
           // **초안은 남긴다** — 서버 값만 갈아 끼웠으므로 상자는 친 글을 보이고 저장 버튼이
           // 열린다. 다시 저장할 수 있다.
@@ -556,6 +567,9 @@ export function PageDescriptionPanel(props: {
       <PendingNotice lock={saving} checking={CHECKING} unknown={UNKNOWN} />
       {save.status === 'saved' && (
         <p className="wb-shell-page-description-saved" role="status">{SAVED}</p>
+      )}
+      {save.status === 'matched' && (
+        <p className="wb-shell-page-description-saved" role="status">{MATCHED}</p>
       )}
       {saveFailure !== null && (
         // 서버 문장 그대로다(`api/failure.tsx`) — 400의 상한 문장·403의 권한 문장이 여기 온다.

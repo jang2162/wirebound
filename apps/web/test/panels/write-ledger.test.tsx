@@ -40,6 +40,8 @@ const DOC = pageDoc({ id: ROOT_ID, type: 'Page', children: [{ id: 'n-list', type
 const PAGE_TITLE = '회원 목록'
 /** 하네스가 세션으로 내는 사용자. */
 const MY_ID = 'u-1'
+/** 다시 읽기로 판정했더니 서버 값이 같을 때(`page-description.tsx`의 `MATCHED`). */
+const MATCHED = '응답이 없어 서버를 다시 읽었더니 서버의 설명이 이 글과 같습니다'
 
 const PROJECT: ProjectDetail = {
   id: PROJECT_ID,
@@ -241,19 +243,24 @@ function comment(id: string, body: string): Comment {
  * 코멘트 표를 드는 서버. 쓰기는 `descriptionServer`처럼 붙잡힌다.
  *
  * **서버처럼 번호를 붙인다** — 노드의 첫 게시는 `markerOps`(번호 추가)와 오른 `seq`를 내고 그 뒤로는
- * 빈 `markerOps`다(`apps/api`의 `POST .../comments`). **멱등 키도 서버처럼 받는다** — 같은 키면 붙잡지
- * 않고 앞 행을 곧바로 돌려준다(빈 `markerOps` · 지금의 번호). `failNext`는 다음 게시를 500 으로 끝낸다.
+ * 빈 `markerOps`다(`apps/api`의 `POST .../comments`). **멱등 키도 서버처럼 받는다** — 같은 키로 이미
+ * 커밋됐으면 붙잡지 않고 앞 행을 곧바로 돌려주고(빈 `markerOps` · 지금의 번호), **붙잡힌 게시가 커밋될
+ * 때 한 번 더 본다** — 같은 키가 그 사이 먼저 커밋됐으면 새 행 대신 재생이다(서버의 «잠금 안에서 한 번
+ * 더 본다»: 같은 페이지 행 잠금 뒤에 줄을 선 둘째가 앞의 것을 돌려받는다). `failNext`는 다음 게시를 그
+ * 실패로 끝낸다(기본 500).
  */
 function commentServer(initial: Comment[] = []): {
   overrides: Partial<ApiClient>
   rows: () => Comment[]
   /** 게시가 실어 온 멱등 키 — 부른 순서대로. */
   keys: (string | undefined)[]
-  failNext: () => void
+  failNext: (error?: ApiError) => void
   /** 켜 있는 동안의 목록 읽기를 붙잡는다 — 끈 뒤의 읽기는 곧바로 답한다. */
   holdLists: (on: boolean) => void
   /** 붙잡힌 목록 읽기의 수. */
   heldLists: () => number
+  /** **다른 곳에서**(다른 탭·기기) 같은 사람이 루트에 그 글을 단다 — 이 화면은 모른다. */
+  addElsewhere: (body: string) => void
   /**
    * 붙잡힌 목록 읽기를 **401** 로 끝낸다 — 로그아웃 **뒤에** 서버에 닿은 앞 세션의 요청이다(모델링: 그
    * 요청은 로그아웃보다 먼저 나갔고, 서버에는 늦게 닿았다).
@@ -265,7 +272,7 @@ function commentServer(initial: Comment[] = []): {
   let rows = [...initial]
   let next = 100
   let seq = HEAD_SEQ
-  let failing = 0
+  const failing: ApiError[] = []
   let listsHeld = false
   const heldLists: ((caught: unknown) => void)[] = []
   const markers = new Map<string, number>()
@@ -275,13 +282,16 @@ function commentServer(initial: Comment[] = []): {
   return {
     rows: () => rows,
     keys,
-    failNext: () => {
-      failing += 1
+    failNext: (error = new ApiError(500, 'internal', '서버 오류가 발생했습니다')) => {
+      failing.push(error)
     },
     holdLists: (on) => {
       listsHeld = on
     },
     heldLists: () => heldLists.length,
+    addElsewhere: (body) => {
+      rows = [...rows, comment(`c-${next++}`, body)]
+    },
     failHeldLists: async () => {
       await act(async () => {
         for (const fail of heldLists.splice(0)) fail(new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
@@ -298,39 +308,43 @@ function commentServer(initial: Comment[] = []): {
         body: { nodeId: string; body: string; idempotencyKey?: string },
       ) => {
         keys.push(body.idempotencyKey)
-        if (failing > 0) {
-          failing -= 1
-          return Promise.reject(new ApiError(500, 'internal', '서버 오류가 발생했습니다'))
-        }
+        const failure = failing.shift()
+        if (failure !== undefined) return Promise.reject(failure)
+        const replay = (row: Comment): CommentCreated => ({
+          comment: row,
+          marker: markers.get(row.nodeId) ?? null,
+          seq,
+          markerOps: [],
+        })
         const replayed = body.idempotencyKey === undefined ? undefined : byKey.get(body.idempotencyKey)
-        if (replayed !== undefined) {
-          return Promise.resolve({
-            comment: replayed,
-            marker: markers.get(replayed.nodeId) ?? null,
-            seq,
-            markerOps: [],
-          } satisfies CommentCreated)
-        }
+        if (replayed !== undefined) return Promise.resolve(replay(replayed))
         return new Promise<CommentCreated>((resolve) => {
-          let created: Comment | undefined
-          let markerOps: CommentCreated['markerOps'] = []
+          let result: CommentCreated | undefined
           const commit = (): void => {
-            if (created !== undefined) return
-            created = { ...comment(`c-${next++}`, body.body), nodeId: body.nodeId }
+            if (result !== undefined) return
+            // 잠금 안에서 한 번 더 본다 — 같은 키가 먼저 커밋됐으면 재생이다.
+            const first = body.idempotencyKey === undefined ? undefined : byKey.get(body.idempotencyKey)
+            if (first !== undefined) {
+              result = replay(first)
+              return
+            }
+            const created = { ...comment(`c-${next++}`, body.body), nodeId: body.nodeId }
             rows = [...rows, created]
             if (body.idempotencyKey !== undefined) byKey.set(body.idempotencyKey, created)
+            let markerOps: CommentCreated['markerOps'] = []
             if (!markers.has(body.nodeId)) {
               if (body.nodeId !== ROOT_ID) throw new Error('이 가짜는 루트에만 번호를 붙인다')
               markers.set(body.nodeId, markers.size + 1)
               seq += 1
               markerOps = [{ op: 'add', path: '/root/marker', value: markers.get(body.nodeId) as number }]
             }
+            result = { comment: created, seq, marker: markers.get(body.nodeId) ?? null, markerOps }
           }
           waiting.push({
             commit,
             resolve: () => {
               commit()
-              resolve({ comment: created as Comment, seq, marker: markers.get(body.nodeId) ?? null, markerOps })
+              resolve(result as CommentCreated)
             },
           })
         })
@@ -536,18 +550,27 @@ describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리�
  * | 시간이 돼도 요청을 끊지 않는다 | *"시간이 되기 전에는 …"* **혼자** |
  * | 판정으로 «저장됨»인데 초안을 안 비운다 | *"서버 값이 보낸 값과 같으면 …"* **혼자** |
  * | 판정으로 «안 됨»인데 초안을 비운다 | *"서버 값이 다르면 …"* **혼자** |
- * | 다시 읽기가 실패하면 «실패»로 풀어 버린다 | *"다시 읽기도 실패하면 모른다 …"* **혼자** |
+ * | 다시 읽기가 실패하면 «실패»로 풀어 버린다 | *"다시 읽기도 실패하면 모른다 …"* · 코멘트의 *"… 연결이 실패하면 모른다 …"* · 세션 절의 *"… «확인하지도 못했습니다»로 남은 …"* — 축의 주인은 앞의 것 |
  * | 판정 뒤에 늦게 온 원래 응답으로 다시 고친다 | *"늦게 온 원래 응답은 …"* **혼자** |
- * | 코멘트: 판정으로 «달림»인데 초안을 안 비운다 | *"코멘트 — 목록에 그 글이 있으면 …"* **혼자** |
- * | 코멘트: 보내기 전 목록에 있던 행을 판정에서 안 뺀다 | *"코멘트 — 목록에 그 글이 없으면 …"* **혼자** |
+ * | 설명: 다시 읽어 같으면 «저장했습니다»라고 한다(앞 판 — 리뷰 2-1) | *"서버 값이 보낸 값과 같으면 …"* 와 *"다시 읽기도 실패하면 …"*(그 끝이 «같습니다»다) — 축의 주인은 앞의 것 |
+ * | 코멘트: 다시 보낼 때 **목록을 먼저 보고** 같은 노드·같은 글이 있으면 안 보낸다 | *"코멘트 — 목록을 읽은 뒤 다른 곳에서 달린 …"* **혼자** |
+ * | 코멘트: 판정을 앞 판처럼 목록으로 한다(다시 보내지 않는다) | 코멘트 넷 + 멱등 키 절의 둘 — 축의 주인은 *"… 다른 곳에서 달린 …"*(리뷰 2-2) |
+ * | 코멘트: 연결 실패·5xx 도 거절(확정)로 친다 | *"코멘트 — 다시 보낸 것도 연결이 실패하면 모른다 …"* **혼자** |
+ * | 코멘트: 4xx 도 모름으로 친다 · 거절에 키를 버린다 | *"코멘트 — 다시 보낸 것을 서버가 거절하면 …"* **혼자**(둘 다) |
+ * | 코멘트: 달렸다는 판정인데 뒷일(초안 비우기·번호)을 안 한다 | *"코멘트 — 서버가 첫 게시를 안 받았으면 …"* 와 넷 — 축의 주인은 그것 |
  * | 코멘트 수정: 판정으로 «저장됨»인데 편집 칸을 안 닫는다 | *"코멘트 수정 — …"* **혼자** |
- * | 설명의 판정이 늘 «안 됨»이다 | *"서버 값이 보낸 값과 같으면 …"* · *"다시 읽기도 실패하면 …"*(둘 다 «저장됨»으로 끝난다) |
- * | 시간 제한이 사실상 없다(1000 배) | 이 절의 여덟 전부 |
+ * | 설명의 판정이 늘 «안 됨»이다 | *"서버 값이 보낸 값과 같으면 …"* · *"다시 읽기도 실패하면 …"*(둘 다 «같습니다»로 끝난다) |
+ * | 시간 제한이 사실상 없다 — **타이머 자리에서** 1000 배 | 이 절 전부 · 멱등 키 절의 둘 · 세션 절의 «모름»(13). 상수(`WRITE_DEADLINE_MS`)를 바꾸면 **0** 이다 — 케이스가 같은 상수로 시간을 민다 |
+ *
+ * **코멘트 게시의 판정은 다시 읽기가 아니라 같은 키로 다시 보내기다**(`comment-panel.tsx`의 `submit`). 앞
+ * 판의 *"목록에 그 글이 있으면 달린 것이다"*는 뜻이 사라져 지웠다 — 그 자리의 «서버가 이미 달았으면
+ * 재생»은 멱등 키 절의 *"다시 보낸 게시는 같은 키를 싣는다 …"*와 클라이언트 경로가 같아(가짜 서버의 재생
+ * 시점만 다르다) 늘 함께 죽었다. *"목록에 그 글이 없으면 …"*은 *"서버가 첫 게시를 안 받았으면 …"*이 됐다.
  *
  * **`signal`이 요청에 실리는가**는 `test/api/http-client.test.ts`의 *"쓰기 다섯은 받은 `signal`을 …"*가
  * 갖는다(그 줄을 지우면 그것 **혼자** 죽는다). 여기의 가짜 클라이언트는 `http-client`를 안 지난다.
  */
-describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 — 다시 읽어 판정한다', () => {
+describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 — 다시 읽어(게시는 다시 보내) 판정한다', () => {
   /** 설명을 치고 저장을 누른다 — **가짜 타이머를 켠 뒤에** 누른다(시간 제한의 타이머가 가짜여야 한다). */
   async function saveWithFakeTimers(server: ReturnType<typeof descriptionServer>, text: string): Promise<void> {
     await openPage(DOC, { apiOverrides: server.overrides })
@@ -574,7 +597,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     expect(server.signals[0]?.aborted).toBe(true)
   })
 
-  it('서버 값이 보낸 값과 같으면 저장된 것이다 — «저장했습니다»·풀림·초안 비움', async () => {
+  it('서버 값이 보낸 값과 같으면 원하던 상태다 — «같습니다»(«저장했습니다»가 아니다)·풀림·초안 비움', async () => {
     const server = descriptionServer('서버 값')
     await saveWithFakeTimers(server, '시간 넘긴 글')
     // 서버는 썼는데 응답만 안 온다.
@@ -583,7 +606,9 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
 
-    await waitFor(() => expect(screen.queryByText('설명을 저장했습니다')).not.toBeNull())
+    // **누가 썼는지는 모른다** — 남이 같은 값을 먼저 저장한 판도 같은 값이다(리뷰 2-1).
+    await waitFor(() => expect(screen.queryByText(MATCHED)).not.toBeNull())
+    expect(screen.queryByText('설명을 저장했습니다')).toBeNull()
     expect(box().disabled).toBe(false)
     expect(box().value).toBe('시간 넘긴 글')
     expect(saveButton().disabled).toBe(true)
@@ -633,7 +658,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     server.commit()
     fireEvent.click(screen.getByRole('button', { name: '다시 확인' }))
 
-    await waitFor(() => expect(screen.queryByText('설명을 저장했습니다')).not.toBeNull())
+    await waitFor(() => expect(screen.queryByText(MATCHED)).not.toBeNull())
     expect(box().disabled).toBe(false)
     expect(screen.queryByRole('button', { name: '다시 확인' })).toBeNull()
   })
@@ -662,46 +687,94 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     expect(seen()).toEqual(judged)
   })
 
-  it('코멘트 — 목록에 그 글이 있으면 달린 것이다: 초안을 비우고 목록에 선다', async () => {
-    const server = commentServer()
+  /** 코멘트를 치고 단다 — **가짜 타이머를 켠 뒤에** 누른다. */
+  async function postWithFakeTimers(server: ReturnType<typeof commentServer>, text: string): Promise<void> {
     await openPage(DOC, { apiOverrides: server.overrides })
     await toCommentTab()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    type(commentBox(), '시간 넘긴 코멘트')
+    type(commentBox(), text)
     fireEvent.click(submitButton())
-    server.commit()
+  }
+
+  it('코멘트 — 서버가 첫 게시를 안 받았으면 다시 보낸 것이 달린다: 한 행', async () => {
+    const server = commentServer()
+    await postWithFakeTimers(server, '시간 넘긴 코멘트')
 
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
+    // 다시 보낸 것도 붙잡힌다 — 그동안은 «확인 중»이고 잠겨 있다.
+    await waitFor(() => expect(server.keys).toHaveLength(2))
+    expect(commentBox().disabled).toBe(true)
+    expect(screen.getByText('응답이 없어 반영됐는지 서버에서 확인하는 중입니다')).toBeTruthy()
+
+    await server.respond(1)
 
     await waitFor(() => expect(screen.queryByText('시간 넘긴 코멘트')).not.toBeNull())
     expect(commentBox().value).toBe('')
     expect(commentBox().disabled).toBe(false)
-    expect(screen.queryByRole('alert')).toBeNull()
     expect(server.rows()).toHaveLength(1)
   })
 
-  it('코멘트 — 목록에 그 글이 없으면 달리지 않았다고 말하고 초안을 남긴다 — 다시 달 수 있다', async () => {
-    // **같은 말이 앞서 달려 있어도** 그것은 이 글이 아니다 — 보내기 전 목록에 있던 행은 판정에서 뺀다.
-    const server = commentServer([comment('c-old', '시간 넘긴 코멘트')])
-    await openPage(DOC, { apiOverrides: server.overrides })
-    await toCommentTab()
-    await screen.findByText('시간 넘긴 코멘트')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    type(commentBox(), '시간 넘긴 코멘트')
-    fireEvent.click(submitButton())
+  it('코멘트 — 목록을 읽은 뒤 다른 곳에서 달린 같은 글을 이 게시로 치지 않는다', async () => {
+    // **리뷰 2-2**(Chrome) — 앞 판은 «보내기 전 목록에 없던 · 같은 노드 · 같은 글 · 내가 쓴 행»을 찾아
+    // 판정했다. 목록을 읽은 **뒤에** 다른 탭에서 같은 글을 달면 그 행이 이 게시로 읽혀, 서버에 안 닿은
+    // 게시가 «달림»이 되고 초안이 지워졌다(DB 1행).
+    const server = commentServer()
+    await postWithFakeTimers(server, '확인')
+    server.addElsewhere('확인')
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    await waitFor(() => expect(server.keys).toHaveLength(2))
+    await server.respond(1)
+
+    await waitFor(() => expect(commentBox().value).toBe(''))
+    // **이 게시가 달렸다** — 다른 곳의 것과 이것, 두 행이다.
+    expect(server.rows().map((row) => row.body)).toEqual(['확인', '확인'])
+  })
+
+  it('코멘트 — 다시 보낸 것을 서버가 거절하면(4xx) 달리지 않은 것이 확정이다: 그 문장을 말하고 초안을 남긴다', async () => {
+    const server = commentServer()
+    await postWithFakeTimers(server, '시간 넘긴 코멘트')
+    server.failNext(new ApiError(409, 'conflict', '페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 8)'))
 
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
 
     await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe(
-        '응답이 없어 목록을 다시 읽었더니 이 코멘트는 달리지 않았습니다',
-      ),
+      expect(screen.getByRole('alert').textContent).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 8)'),
     )
     expect(commentBox().value).toBe('시간 넘긴 코멘트')
     expect(commentBox().disabled).toBe(false)
-    expect(submitButton().disabled).toBe(false)
+    expect(server.rows()).toHaveLength(0)
+
+    // **다시 달면 같은 키다** — 같은 초안이다.
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(server.keys).toHaveLength(3))
+    expect(server.keys[2]).toBe(server.keys[0])
+  })
+
+  it('코멘트 — 다시 보낸 것도 연결이 실패하면 모른다: 잠금을 쥔 채 «다시 확인»이 같은 키로 또 보낸다', async () => {
+    const server = commentServer()
+    await postWithFakeTimers(server, '시간 넘긴 코멘트')
+    server.failNext(new ApiError(0, 'internal', '서버에 연결하지 못했습니다'))
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 반영됐는지 확인하지도 못했습니다'),
+    )
+    expect(commentBox().disabled).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: '다시 확인' }))
+    await waitFor(() => expect(server.keys).toHaveLength(3))
+    expect(server.keys[2]).toBe(server.keys[0])
+    await server.respond(1)
+
+    await waitFor(() => expect(screen.queryByText('시간 넘긴 코멘트')).not.toBeNull())
+    expect(commentBox().value).toBe('')
+    expect(server.rows()).toHaveLength(1)
   })
 
   it('코멘트 수정 — 목록의 본문이 고친 글이면 저장된 것이다: 편집 칸을 닫는다', async () => {
@@ -736,10 +809,11 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
  * | 키가 글에 안 매인다(고쳐도 같은 키) | *"글을 고쳐 다시 달면 새 키다 …"* **혼자** |
  * | 달려도 키를 안 버린다 | *"달리면 키를 버린다 …"* **혼자** |
  * | 키를 페이지를 넘어 든다(모듈 전역 — 장부에 드는 꼴) | *"페이지를 떠나면 키도 …"* **혼자** |
- * | 보낼 때마다 새 키를 짓는다 · «안 달림» 판정에 키를 버린다 | *"«안 달림» 판정 뒤 다시 달면 같은 키를 싣는다 …"* **와** *"재생은 …"* |
+ * | 다시 보낼 때 새 키를 짓는다 | *"다시 보낸 게시는 같은 키를 싣는다 …"* · *"재생은 …"* · R 절의 *"… 연결이 실패하면 모른다 …"* |
+ * | 셸이 바뀌었어도 재생의 번호 어긋남을 말한다(`ownerLive`) | **0** — jsdom 에는 실시간 방송이 없다. Chrome 으로 잰다(`comment-panel.tsx`의 `landed`: 이 조건을 빼면 번호 `1`이 보이는데 «반영하지 못했습니다»가 선다) |
  *
- * **«같은 키를 싣는다»는 혼자 죽지 않는다** — 그것이 깨지면 재생이 안 일어나 *"재생은 …"*이 설
- * 자리가 없어진다. **«같은 초안은 같은 키» 축의 주인은 이 케이스다** — *"재생은 …"*은 그 위에서
+ * **«같은 키로 다시 보낸다»는 혼자 죽지 않는다** — 그것이 깨지면 재생이 안 일어나 *"재생은 …"*이 설
+ * 자리가 없어진다. **그 축의 주인은 *"다시 보낸 게시는 같은 키를 싣는다 …"*다** — *"재생은 …"*은 그 위에서
  * «번호 어긋남을 말한다»를 재고 혼자 죽는 변조가 있다(첫 줄). 본문에 키가 실리는지는
  * `test/api/http-client.test.ts`의 *"createComment 는 멱등 키를 …"*가 갖는다(그 줄을 떨구면 혼자 죽는다).
  */
@@ -748,8 +822,11 @@ describe('멱등 키 — 같은 초안은 같은 키를 싣고, 성공·고침·
     fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }))
   }
 
-  /** 응답 없는 게시 → 10초 → «안 달림» 판정 → 서버가 **늦게** 커밋 → 같은 초안을 다시 단다. */
-  async function lateCommitThenRepost(server: ReturnType<typeof commentServer>): Promise<void> {
+  /**
+   * 응답 없는 게시 → 10초 → 같은 키로 다시 보낸다(붙잡힘) → 서버가 첫 게시를 **늦게** 커밋 → 다시 보낸 것이
+   * 그 뒤에 줄을 서서 재생을 받는다(Chrome: 서버 안 지연 16초 — 이 절 머리말).
+   */
+  async function lateCommitWhileResending(server: ReturnType<typeof commentServer>): Promise<void> {
     await openPage(DOC, { apiOverrides: server.overrides })
     await toCommentTab()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
@@ -757,22 +834,17 @@ describe('멱등 키 — 같은 초안은 같은 키를 싣고, 성공·고침·
     fireEvent.click(submitButton())
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe(
-        '응답이 없어 목록을 다시 읽었더니 이 코멘트는 달리지 않았습니다',
-      ),
-    )
+    await waitFor(() => expect(server.keys).toHaveLength(2))
 
-    // 판정 **뒤에** 서버가 첫 게시를 커밋한다(Chrome: 10초 판정 · 13.4초 커밋).
-    server.commit()
-    expect(commentBox().value).toBe('늦게 달린 말')
-    fireEvent.click(submitButton())
+    // 판정(다시 보내기) **도중에** 서버가 첫 게시를 커밋한다.
+    server.commit(0)
+    await server.respond(1)
     await waitFor(() => expect(screen.queryByText('늦게 달린 말')).not.toBeNull())
   }
 
-  it('«안 달림» 판정 뒤 다시 달면 같은 키를 싣는다 — 서버가 늦게 커밋했어도 한 행이다', async () => {
+  it('다시 보낸 게시는 같은 키를 싣는다 — 서버가 첫 게시를 늦게 커밋했어도 한 행이다', async () => {
     const server = commentServer()
-    await lateCommitThenRepost(server)
+    await lateCommitWhileResending(server)
 
     expect(server.keys).toHaveLength(2)
     expect(server.keys[0]).toBeTypeOf('string')
@@ -786,7 +858,7 @@ describe('멱등 키 — 같은 초안은 같은 키를 싣고, 성공·고침·
     // 없었으니 앞 게시의 변화를 못 받은 것이다(시간 초과로 끊겼다). 말하지 않으면 «코멘트는
     // 달렸는데 캔버스에 번호가 없고 아무도 말하지 않는» 상태다(`comment-panel.tsx`의 `MARKERS_DIVERGED`).
     const server = commentServer()
-    await lateCommitThenRepost(server)
+    await lateCommitWhileResending(server)
 
     expect(screen.getByText('번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다')).toBeTruthy()
   })
