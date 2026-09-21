@@ -802,15 +802,19 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
  * **그 흉내가 맞는지는 Chrome 표로 대조했다** — 위젯 다섯 × 클릭 갈래 다섯, 25칸 전부에서
  * 나간 편집 수 · 페이지 · 경로 · 돌아와 본 값 · focusout 순서가 같았다(대조용 가짜 서버는
  * 커밋을 기억하게 했다). `fireEvent.click`으로 재면 25칸 전부 «0건 · 옛 값»이다. 키(Enter·
- * Tab·Esc)와 창 닫기·뒤로 가기는 이 흉내의 밖이다.
+ * Tab·Esc)와 창 닫기·뒤로 가기는 이 흉내의 밖이다. **9차에 흉내를 고친 뒤 다시 댔고 25칸이 또
+ * 같았다**(갈래까지의 값은 `test/click-as-browser.ts`의 머리말).
  *
  * **이 절이 잡는 회귀는 «누르면 포커스를 안 빼앗게» 하는 손질이다** — 누른 요소의
- * `mousedown`에 `preventDefault()`를 걸면 실브라우저에서 blur 가 안 나 친 글자가 사라진다.
- * 흉내도 그때 포커스를 안 옮긴다(`clickAsBrowser`의 1번).
+ * **`pointerdown`이나 `mousedown`**에 `preventDefault()`를 걸면 실브라우저에서 blur 가 안 나 친
+ * 글자가 사라진다. 흉내도 그때 포커스를 안 옮긴다(`clickAsBrowser`의 1·2번). **8차 판은
+ * `mousedown`만 알았다** — 탭·캔버스의 `onPointerDown`에 걸면 Chrome 은 편집 0건 · 옛 값인데 이
+ * 절은 살았다(리뷰 N-B — web 2145 중 0 사망). 이 앱에 이미 그 꼴이 있다(`ShellResizer`).
  *
- * **다섯이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 쟀다:
+ * **다섯이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 쟀다.
+ * 줄마다 `onMouseDown` 판과 `onPointerDown` 판을 **따로** 심었고 둘 다 그 케이스 하나만 죽였다(9차):
  *
- * | 변조 — 그 자리의 `mousedown`에 `preventDefault()` | 혼자 죽는 것 |
+ * | 변조 — 그 자리의 누르는 이벤트에 `preventDefault()` | 혼자 죽는 것 |
  * |---|---|
  * | 우측 패널의 탭 버튼(`routes/editor.tsx`의 `RightPanel`) | *"다른 탭을 누르면 …"* |
  * | 모드 토글의 «뷰 모드» 버튼(`ShellTools`) | *"모드를 바꾸면 …"* |
@@ -819,9 +823,23 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
  * | 메뉴 트리의 페이지 링크(`panels/menu-tree.tsx`) | *"메뉴로 다른 페이지를 누르면 …"* |
  *
  * **흉내에서 포커스 이동을 빼면 다섯이 함께 죽는다** — 흉내가 `fireEvent.click`과 같아진다.
+ * 포커스 대상에서 `button`·`a[href]`·`[tabindex]`를 빼면 *"다른 탭을 누르면 …"*이 혼자 죽는다 —
+ * 커밋은 `BODY`로 blur 해도 나므로 그 케이스가 **활성 요소**까지 본다.
  *
- * **실패 방향도 대조했다** — 위 표의 탭·캔버스 변조를 Chrome 에 그대로 심으니 실제로 편집 0건 ·
- * 돌아와 본 칸이 옛 값이었다. 곧 이 절이 죽는 자리에서 사용자도 글자를 잃는다.
+ * **흉내 자신의 검사 둘**(끝의 두 케이스)이 흉내의 1·2번을 지킨다:
+ *
+ * | 변조 — 흉내를 약하게 | 혼자 죽는 것 |
+ * |---|---|
+ * | `pointerdown`의 `preventDefault()`를 무시한다(또는 8차 판의 흉내로 되돌린다) | *"… `pointerdown`을 막으면 커밋이 없다 …"* |
+ * | `mousedown`의 `preventDefault()`를 무시한다 | *"… `mousedown`을 막으면 커밋이 없다 …"* |
+ *
+ * **8차 판에서는 흉내를 약하게 해도 아무것도 안 죽었고**, 제품 회귀와 겹치면(탭 `mousedown` 막음 +
+ * 흉내가 그것을 무시) 그 회귀도 안 잡혔다(리뷰 M1+M6 — 0 사망). 9차에는 두 겹침 모두 흉내 검사가
+ * 혼자 죽는다.
+ *
+ * **실패 방향도 대조했다** — 위 표의 탭·캔버스 변조(두 이벤트 다)를 Chrome 에 런타임 리스너로
+ * 심으니 실제로 편집 0건 · 돌아와 본 칸이 옛 값이었다. 곧 이 절이 죽는 자리에서 사용자도 글자를
+ * 잃는다.
  */
 describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전에 원래 노드로 커밋한다', () => {
   /** 편집을 받아 적는 가짜. **어느 페이지로 갔는지**도 적는다 — 페이지 갈래가 그것을 본다. */
@@ -860,9 +878,13 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
   it('다른 탭을 누르면 커밋되고, 돌아와도 그 값이다', async () => {
     const { calls } = await typing()
 
-    clickAsBrowser(screen.getByRole('tab', { name: '코멘트' }))
+    const tab = screen.getByRole('tab', { name: '코멘트' })
+    clickAsBrowser(tab)
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]).toEqual({ pageId: PAGE_ID, ops: FIRST_TEXT })
+    // **포커스가 누른 버튼으로 간다**(Chrome 실측: `focusout TEXTAREA → BUTTON`, 활성 요소 `BUTTON`).
+    // 커밋은 `BODY`로 blur 해도 나므로 커밋 수만 보면 흉내가 버튼을 포커스하는지 아무도 안 잰다.
+    expect(document.activeElement).toBe(tab)
 
     fireEvent.click(screen.getByRole('tab', { name: '속성' }))
     expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('새 내용')
@@ -911,6 +933,39 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
     await waitFor(() => expect(calls).toHaveLength(1))
     // **페이지가 앞 페이지다.** 옆 페이지로 갔다면 남의 페이지에 그 글이 들어간다(F1 부류).
     expect(calls[0]).toEqual({ pageId: PAGE_ID, ops: FIRST_TEXT })
+  })
+
+  /**
+   * **흉내 자신의 검사 둘**(9차, 리뷰 N-B). 위 다섯은 흉내가 «커밋된다»고 말하는 쪽만 재서, 흉내가
+   * 누르는 이벤트의 `preventDefault()`를 **존중하는지** — 이 절이 잡으려는 회귀가 그것에 달려
+   * 있다 — 는 아무도 안 쟀다(리뷰: 그 가지를 지워도 web 2145 중 0 사망).
+   *
+   * 막는 것은 **런타임의 네이티브 리스너**다 — 리뷰가 Chrome 에 심은 것과 같은 꼴이라 두 값을
+   * 나란히 댈 수 있다. Chrome 값(리뷰 5번 · 9차 재대조): 탭 + `pointerdown` 막음 → 편집 0 ·
+   * 돌아오면 옛 값. 탭 + `mousedown` 막음 → 같음. 막지 않으면 위 *"다른 탭을 누르면 …"* — 1건.
+   */
+  async function noCommitAfter(block: 'pointerdown' | 'mousedown'): Promise<void> {
+    const { calls } = await typing()
+    const tab = screen.getByRole('tab', { name: '코멘트' })
+    tab.addEventListener(block, (event) => event.preventDefault())
+
+    clickAsBrowser(tab)
+    // 커밋은 낙관적으로 먼저 문서에 얹히고 요청은 그 뒤에 나간다 — 한 틱 기다려 둘 다 본다.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(calls).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('옛 내용')
+  }
+
+  it('누르는 자리가 `pointerdown`을 막으면 커밋이 없다 — 흉내 자신의 검사', async () => {
+    await noCommitAfter('pointerdown')
+  })
+
+  it('누르는 자리가 `mousedown`을 막으면 커밋이 없다 — 흉내 자신의 검사', async () => {
+    await noCommitAfter('mousedown')
   })
 })
 
