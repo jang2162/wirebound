@@ -29,7 +29,7 @@
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { ApiClient } from '../../src/api/client'
+import { ApiError, type ApiClient } from '../../src/api/client'
 import type { MenuNode, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { fakeApi, renderWithProviders } from '../helpers'
@@ -120,8 +120,16 @@ describe('빈 메뉴 트리 — 최상위 메뉴를 만드는 자리', () => {
   /**
    * **대조가 이 케이스의 절반이다.** `하위 메뉴`가 꺼져 있다는 것이 이 버튼이 왜 따로
    * 있어야 하는지이고, 동시에 *"선택이 없을 때 「하위 메뉴」가 루트를 만들게 한다"*는
-   * 다른 형태를 **고르지 않았다**는 사실을 값으로 둔다. 그 형태로 갈아타면 이 줄이 먼저
-   * 운다.
+   * 다른 형태를 **고르지 않았다**는 사실을 값으로 둔다.
+   *
+   * **그 형태로 갈아타도 이 줄이 혼자 울지는 않는다.** 판정표(`treeAbilities`)에서 선택 없이
+   * `addMenu`·`addPage`를 켜면 기존 셋과 **함께** 운다 — `./menu-tree.test.tsx`의 `아무것도
+   * 고르지 않으면 툴바가 전부 비활성이다`, `./page-json.test.tsx`의 `메뉴를 고르지 않으면 누를
+   * 수 없다`, `../tree/tree-actions.test.ts`의 `고른 것이 없으면 아무 조작도 못 한다`. «선택이
+   * 없으면 꺼진다»는 축은 그 셋이 갖는다(셋 다 메뉴가 **있는** 트리를 본다).
+   *
+   * **이 줄이 혼자 우는 판은 따로 있다** — 판정표를 그대로 두고 툴바가 빈 트리에서만
+   * `하위 메뉴`나 `페이지 추가`를 켜는 판이다. 그 자리는 메뉴가 없는 트리라 위 셋이 닿지 않는다.
    */
   it('빈 트리에 최상위 메뉴 버튼이 서고, 툴바의 하위 메뉴는 꺼져 있다', async () => {
     await open()
@@ -192,9 +200,11 @@ describe('빈 메뉴 트리 — 최상위 메뉴를 만드는 자리', () => {
   })
 
   /**
-   * **이 갈래가 `run`을 지나는가 — 그 축을 이 케이스가 통째로 갖는다.**
+   * **이 갈래가 `run`을 지나는가 — 성공 경로를 이 케이스가 갖는다.** 실패 경로(문장이 남고
+   * 재조회하지 않는다)는 바로 아래 `실패하면 서버 문장이 트리 안에 남고 트리를 다시 받지
+   * 않는다`가 갖는다.
    *
-   * `run`이 주는 것이 둘이고 둘 다 여기서 잰다:
+   * 성공 경로에서 `run`이 주는 것이 둘이고 둘 다 여기서 잰다:
    *
    * 1. **잠금**(D2) — 조작이 나가 있는 동안 `busy`라 이 버튼도 꺼진다. 툴바 아홉과 **같은
    *    값**을 보는 것이 요점이다: 이 버튼만 살아 있으면 잠긴 화면에 눌리는 것이 하나
@@ -204,8 +214,24 @@ describe('빈 메뉴 트리 — 최상위 메뉴를 만드는 자리', () => {
    *    `run` 밖에서 `api.createMenu`를 직접 부르면 요청은 나가고 화면은 빈 채로 남는다.
    *
    * **재조회만 재는 케이스를 따로 두지 않았다.** 처음에 그렇게 썼는데 **혼자 죽는 변조가
-   * 없었다** — 이 케이스의 둘째 단언이 그것을 글자 그대로 삼키고, `run`을 우회하는 변조는
-   * 둘을 **함께** 죽인다. 재는 척만 하는 자를 남기지 않는다.
+   * 없었다** — 게이트를 연 뒤의 `getTree` 2회 단언이 그것을 글자 그대로 삼키고, `run`을
+   * 우회하는 변조는 둘을 **함께** 죽인다. 재는 척만 하는 자를 남기지 않는다.
+   *
+   * **«동안»은 첫 `waitFor` 뒤의 두 줄이 잰다 — `waitFor` 하나로는 못 잰다.** 그 첫 검사는
+   * Enter 직후의 렌더에서 곧바로 통과한다: `run`은 요청을 기다리기 **전에** `busy`를 세우므로,
+   * `run` 안에서 요청을 기다리지 않는 판(`await api.createMenu` → `void`)에서도 그 순간엔
+   * 참이다. 그 판은 게이트가 닫힌 채로 잠금을 풀고 재조회를 내보낸다 — 서버가 만들기 전의
+   * 트리를 받아 와 방금 만든 메뉴가 화면에 뜨지 않는다. 앞 판은 첫 `waitFor`에서 멈춰 그 판이
+   * 이 파일 전체를 통과했다. `await waitFor`는 돌아오기 전에 큐를 비우므로(Testing Library의
+   * `asyncWrapper`) 그 뒤의 줄은 게이트가 닫힌 채 가라앉은 값을 본다 —
+   * `./menu-crud.test.tsx`의 `요청이 나가 있는 동안 툴바가 전부 비활성이다`가 `하위 메뉴`
+   * 갈래에서 같은 자리를 같은 방법으로 잰다.
+   *
+   * **두 줄은 서로를 대신하지 않는다.** 잠금 표시만 먼저 풀리는 판은 첫 줄만 죽인다. 재조회가
+   * 응답보다 먼저 나가는 판은 둘째 줄이 죽이는데, 그 재조회가 결과와 상관없이 나가면(요청과
+   * 나란히) 아래 실패 케이스의 `getTree` 1회도 **함께** 운다 — 응답 전에는 성공인지 모르기
+   * 때문이다. 이 줄이 혼자 우는 판은 성공 경로에서만 일찍 나가는 판(응답이 늦을 때만 먼저
+   * 받는다)이다.
    */
   it('조작이 나가 있는 동안 비활성이고, 끝나면 살아난다 — `run`을 지난다 (D1·D2)', async () => {
     const gate: { release: (() => void) | null } = { release: null }
@@ -225,10 +251,44 @@ describe('빈 메뉴 트리 — 최상위 메뉴를 만드는 자리', () => {
     typeAndEnter('관리자')
 
     await waitFor(() => expect(rootButton().disabled).toBe(true))
+    // 게이트는 아직 닫혀 있다 — 요청이 나가 있는 **동안**이다.
+    expect(rootButton().disabled).toBe(true)
+    expect(api.getTree).toHaveBeenCalledTimes(1)
 
     gate.release?.()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
     // 잠금이지 영구 비활성이 아니다.
     await waitFor(() => expect(rootButton().disabled).toBe(false))
+  })
+
+  /**
+   * **실패 경로 — `run`의 `catch`를 이 갈래가 지나는가.** `./menu-crud.test.tsx`의 `하위 메뉴`
+   * 갈래에 있는 같은 이름의 케이스를 그대로 따른다. 거절은 403(`편집 권한이 없습니다`)으로
+   * 둔다 — 같은 파일의 이름 변경 실패 케이스가 쓰는 값이다.
+   *
+   * 둘을 잰다: 서버 문장이 트리 안에 남는다(D9), 그리고 재조회하지 않는다 — 서버가 거절했다는
+   * 것은 트리가 그대로라는 뜻이다(`run`의 머리말). root 갈래가 실패를 스스로 삼키면 첫 줄이,
+   * 실패에도 재조회하면 둘째 줄이 죽는다.
+   *
+   * **위 케이스와 축이 다르다** — 저쪽은 성공 경로의 잠금·재조회 순서다. 다만 `run` 안에서
+   * 요청을 기다리지 않는 판(`await` → `void`)은 둘을 **함께** 죽인다: 거절이 `run`의 `catch`에
+   * 닿지 못하므로 이쪽도 문장이 안 남는다. 그 판은 둘 다 깨뜨리는 것이 맞다(`run`을 아예
+   * 우회하는 판도 같은 이유로 둘을 함께 죽인다).
+   */
+  it('실패하면 서버 문장이 트리 안에 남고 트리를 다시 받지 않는다', async () => {
+    const api = await open(
+      () => [],
+      {
+        createMenu: vi.fn(async () => {
+          throw new ApiError(403, 'forbidden', '편집 권한이 없습니다')
+        }),
+      },
+    )
+
+    fireEvent.click(rootButton())
+    typeAndEnter('관리자')
+
+    await within(treeRegion()).findByText('편집 권한이 없습니다')
+    expect(api.getTree).toHaveBeenCalledTimes(1)
   })
 })
