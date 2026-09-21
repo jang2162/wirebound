@@ -8,3 +8,5 @@
 # Datasource local storage ignored files
 /dataSources/
 /dataSources.local.xml
+# IntelliJ 가 Go 플러그인으로 자동 생성한다 — 이 저장소에 Go 코드가 없다
+/go.imports.xml
