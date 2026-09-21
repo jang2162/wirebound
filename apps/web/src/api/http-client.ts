@@ -571,7 +571,8 @@ const SHAPES = {
   commentCreated: (value) =>
     isRecord(value) &&
     isComment(value['comment']) &&
-    typeof value['marker'] === 'number' &&
+    // `null`은 멱등 키의 재생에서 온다 — 노드나 번호가 그 사이 사라졌다(`CommentCreated`).
+    (typeof value['marker'] === 'number' || value['marker'] === null) &&
     isMarkerChange(value),
   /** 삭제·재번호의 결과. 문서 변화만 온다. */
   markerChange: isMarkerChange,
@@ -954,7 +955,7 @@ const BODY_KEYS = {
   // 그 자체로 400이고, **`marker`가 그 자리다** — 번호를 정하는 것은 서버이므로
   // 코멘트 응답(`{ id, nodeId, body, authorId, authorName, … }`)을 그대로 되보내면
   // `id`·`authorId` 따위가 400을 부른다.
-  createComment: { nodeId: true, body: true } satisfies Record<
+  createComment: { nodeId: true, body: true, idempotencyKey: true } satisfies Record<
     keyof Parameters<ApiClient['createComment']>[2],
     true
   >,

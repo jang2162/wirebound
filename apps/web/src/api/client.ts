@@ -371,11 +371,16 @@ export interface ApiClient {
    * **문서에 없는 노드는 404다.** 본문은 1~2000자이고 그 밖은 400이다.
    * **그 사이 남이 페이지를 고쳤으면 409다** — 서버가 `head_seq`를 잠그기 전에 읽어
    * 낙관적 잠금으로 쓰기 때문이고, 그래야 두 노드의 첫 코멘트가 같은 번호를 받지 않는다.
+   *
+   * **`idempotencyKey`** — 같은 (페이지, 작성자, 키)로 이미 달렸으면 서버가 **그 행을 200 으로**
+   * 돌려준다(새 행·새 번호가 없고 `markerOps: []`). 같은 키에 다른 글이면 409 다. 계약은
+   * `apps/api/README.md`의 «멱등 키», 화면이 키를 어디에 드는지는 `panels/comment-panel.tsx`의
+   * `POST_KEYS`가 갖는다.
    */
   createComment(
     projectId: string,
     pageId: string,
-    body: { nodeId: string; body: string },
+    body: { nodeId: string; body: string; idempotencyKey?: string },
     options?: WriteOptions,
   ): Promise<CommentCreated>
   /**

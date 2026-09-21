@@ -117,9 +117,10 @@
  *    들고, 게시 뒤의 다시 받기는 새로 선 방문에 닿는다. Chrome 재측(프로젝트 목록 왕복): 돌아온 상자·
  *    단추가 **꺼져 있고**, 앞 게시의 응답이 오면 화면 목록 1행 · DB 1행 · 번호 1(새 셸의 실시간 연결이
  *    서버의 방송을 받아 새 스토어에 번호가 섰다). 코멘트 수정도 화면·DB 가 같은 값(`"첫째 수정"`).
- *    응답이 영영 안 오면 10초 뒤 목록을 다시 읽어 판정한다(`perform`). **남는 입구는 새로고침·탭
- *    닫기다** — 그때 서버가 이미 받은 게시는 끊겨도 커밋되고, 번호가 있는 노드면 다시 단 것과 두 행이
- *    된다(Chrome — 그 파일의 «이것이 막지 못하는 것»).
+ *    응답이 영영 안 오면 10초 뒤 목록을 다시 읽어 판정한다(`perform`). 판정 뒤 서버가 늦게 커밋해도
+ *    같은 초안을 다시 달면 **멱등 키**로 한 행이다(`POST_KEYS`). **남는 입구는 새로고침·탭 닫기다** —
+ *    초안과 키가 함께 버려져 다시 친 같은 글이 새 키가 되고, 번호가 있는 노드면 두 행이 된다(Chrome —
+ *    `write-ledger.tsx`의 «이것이 막지 못하는 것»).
  * 2. **타이밍 창.** 가 → 나 → 가로 돌아와 건 목록 조회가 **게시가 커밋되기 전에 읽고, 게시 뒤의
  *    다시 받기보다 늦게** 오면, 다시 받기가 세운 목록(방금 단 말이 있다)을 덮는다 — 같은 페이지라
  *    조회 이펙트의 `alive`가 참이다. 방금 단 말이 목록에서 사라지고 잠금은 이미 풀려 있다.
@@ -213,6 +214,27 @@ const MARKERS_DIVERGED = slot<boolean>('comments/diverged', false)
  * 빈 칸이다. **한 칸으로 들면 다른 노드를 고르는 순간 쓰던 글의 대상이 그 노드로 바뀐다.**
  */
 const DRAFTS = slot<ReadonlyMap<string, string>>('comments/drafts', new Map())
+/**
+ * 새 코멘트 게시의 **멱등 키** — 노드마다, **그 글에** 매인다(`apps/api/README.md`의 «멱등 키»).
+ *
+ * 응답이 없어 «안 달림»으로 판정한 게시를 서버가 늦게 커밋할 수 있다(`write-ledger.tsx`의 머리말 —
+ * Chrome 13.4초). 그 사이 사용자가 다시 달면 같은 글이 두 행이 됐다. **같은 초안은 같은 키를 싣고**
+ * 서버가 같은 키면 앞 행을 돌려주므로 한 행으로 합쳐진다.
+ *
+ * | 언제 | 키 |
+ * |---|---|
+ * | 그 노드의 글을 처음 보낸다 | 새로 짓는다(`crypto.randomUUID()` — `store/editor-store.ts`의 `clientOpId`와 같은 출처) |
+ * | 실패·«안 달림» 뒤 **같은 글**을 다시 보낸다 | **같은 키** |
+ * | 글을 고쳐 보낸다 | **새 키** — 고친 글은 다른 게시다. 같은 키로 보내면 서버가 409 로 막는다 |
+ * | 달렸다(응답 · «달림» 판정) | **버린다** — 같은 말을 일부러 또 다는 것은 새 게시다 |
+ * | 페이지를 떠난다 · 에디터를 떠난다 | 초안과 **함께** 버려진다(방문의 칸이다 — `panel-drafts.tsx`의 머리말 1) |
+ *
+ * **초안 쪽에 든다 — 장부가 아니다.** 키의 수명은 그 초안의 수명이다. 장부는 에디터를 떠나도
+ * 살아, 거기 들면 초안이 버려진 뒤에도 키가 남는다 — 돌아와 같은 글을 새로 쳐 달면 앞 게시로
+ * 합쳐진다. 일부러 같은 말을 다시 다는 사람의 게시가 사라지는 길이다. 대가도 적어 둔다: 떠났다
+ * 오는 사이 늦게 커밋된 게시는 돌아와 새로 친 같은 글과 **합쳐지지 않는다**(새 키다).
+ */
+const POST_KEYS = slot<ReadonlyMap<string, { body: string; key: string }>>('comments/post-keys', new Map())
 /** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. */
 const EDITING_ID = slot<string | null>('comments/editing-id', null)
 /** 고치던 코멘트의 초안. */
@@ -322,6 +344,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   const [drafts, setDrafts] = usePanelSlot(DRAFTS)
   const [editingId, setEditingId] = usePanelSlot(EDITING_ID)
   const [editDraft, setEditDraft] = usePanelSlot(EDIT_DRAFT)
+  const [postKeys, setPostKeys] = usePanelSlot(POST_KEYS)
 
   const { projectId, pageId } = props
   // 상자가 보이는 것은 **고른 노드의 초안**이다 — 새 코멘트가 달릴 자리와 같은 값을 본다.
@@ -443,9 +466,21 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     const known = new Set(state.status === 'ready' ? state.comments.map((comment) => comment.id) : [])
     const authorId = currentUser?.id ?? null
     const hadMarker = numbered(nodeId)
+    // **같은 글이면 같은 키**(위 `POST_KEYS`). 보내기 **전에** 적는다 — 응답이 오기 전에 탭을 오가도
+    // 칸이라 남고, 실패하면 그대로 남아 다시 보낼 때 실린다.
+    const held = postKeys.get(nodeId)
+    const idempotencyKey = held !== undefined && held.body === body ? held.key : crypto.randomUUID()
+    setPostKeys((prev) => new Map(prev).set(nodeId, { body, key: idempotencyKey }))
+    const forgetKey = (): void =>
+      setPostKeys((prev) => {
+        const next = new Map(prev)
+        next.delete(nodeId)
+        return next
+      })
 
     perform({
-      send: (client, openPageId, signal) => client.createComment(projectId, openPageId, { nodeId, body }, { signal }),
+      send: (client, openPageId, signal) =>
+        client.createComment(projectId, openPageId, { nodeId, body, idempotencyKey }, { signal }),
       verify: async (client, openPageId) => {
         const comments = await client.listComments(projectId, openPageId)
         const posted = comments.some(
@@ -460,7 +495,13 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       done: async (created, openPageId) => {
         // **문서 변화를 먼저 얹는다.** 목록을 다시 받아도 번호는 그 응답에 없다 —
         // 번호는 문서의 값이다(D1). 결과를 **버리지 않는다**(리뷰 ④).
-        setDiverged(store.applyMarkerChange(openPageId, created) === 'diverged')
+        const applied = store.applyMarkerChange(openPageId, created)
+        // **바뀐 것이 없다는데 서버는 번호가 있다고 한다** — 보낼 때 내 문서의 그 노드에 번호가
+        // 없었으면 어긋났다. 멱등 키의 재생이 그 길이다: 앞 게시가 번호를 붙인 응답을 못 받았다
+        // (같은 셸이면 서버의 방송도 이 연결을 뺀다 — `perform`의 주석).
+        const missed = created.markerOps.length === 0 && created.marker !== null && !hadMarker
+        setDiverged(applied === 'diverged' || (applied === 'applied' && missed))
+        forgetKey()
         // 초안은 **성공한 뒤에** 비운다. 실패했는데 비우면 사용자가 쓴 말이 사라진다
         // (P4c-3 이월의 둘째 줄이 말하는 부류의 반대편이다). **보낸 노드의 것만** 비운다 —
         // 게시가 나가 있는 동안 다른 노드를 골랐어도, 다른 노드에 써 둔 초안이 있어도.
@@ -469,7 +510,10 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       },
       verified: ({ comments, posted }, ownerLive) => {
         setState({ status: 'ready', comments })
+        // «안 달림»이면 키를 **남긴다** — 다시 달면 같은 키가 실려, 이 게시가 늦게 커밋됐어도
+        // 서버가 한 행으로 합친다.
         if (!posted) return NOT_POSTED
+        forgetKey()
         setDrafts((prev) => withDraft(prev, nodeId, ''))
         // 응답(`markerOps`)을 못 받았다. 번호가 없던 노드면 서버가 붙인 번호가 내 문서에 없다.
         setDiverged(ownerLive && !hadMarker)

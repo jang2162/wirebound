@@ -552,7 +552,8 @@ function heldComments(seed: Comment[] = []): {
     overrides: {
       listComments: async (_projectId, pageId) => [...(listed[pageId] ?? [])],
       createComment: (_projectId, pageId, body) => {
-        created.push({ pageId, ...body })
+        // **어느 페이지·노드·글인가만 적는다** — 멱등 키는 `write-ledger.test.tsx`의 «멱등 키» 절이 잰다.
+        created.push({ pageId, nodeId: body.nodeId, body: body.body })
         const reply = new Promise<CommentCreated>((resolve) => {
           gates.push(() => {
             const row = comment({ id: `c-${created.length}`, nodeId: body.nodeId, body: body.body })
@@ -887,7 +888,8 @@ describe('새 코멘트는 쓴 노드에만 달린다 (9차)', () => {
       apiOverrides: {
         listComments: async () => [],
         createComment: async (_projectId, pageId, body) => {
-          created.push({ pageId, ...body })
+          // 어느 페이지·노드·글인가만 적는다(위 `heldComments`와 같은 이유).
+          created.push({ pageId, nodeId: body.nodeId, body: body.body })
           return {
             comment: comment({ id: `c-${created.length}`, nodeId: body.nodeId, body: body.body }),
             marker: 1,

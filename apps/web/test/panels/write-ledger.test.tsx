@@ -20,7 +20,18 @@ import type { ApiClient, WriteOptions } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
 import type { Comment, CommentCreated, PageDetail, ProjectDetail } from '../../src/api/types'
 import { WRITE_DEADLINE_MS } from '../../src/panels/write-ledger'
-import { openPage, pageDetail, pageDoc, PAGE_ID, PROJECT_ID, PROJECT_NAME, waitForNode } from '../editor-harness'
+import {
+  HEAD_SEQ,
+  OTHER_PAGE_TITLE,
+  openPage,
+  pageDetail,
+  pageDoc,
+  OTHER_PAGE_ID,
+  PAGE_ID,
+  PROJECT_ID,
+  PROJECT_NAME,
+  waitForNode,
+} from '../editor-harness'
 import '../../src/catalog-setup'
 
 const ROOT_ID = 'n-root'
@@ -205,36 +216,81 @@ function comment(id: string, body: string): Comment {
   }
 }
 
-/** 코멘트 표를 드는 서버. 쓰기는 `descriptionServer`처럼 붙잡힌다. */
+/**
+ * 코멘트 표를 드는 서버. 쓰기는 `descriptionServer`처럼 붙잡힌다.
+ *
+ * **서버처럼 번호를 붙인다** — 노드의 첫 게시는 `markerOps`(번호 추가)와 오른 `seq`를 내고 그 뒤로는
+ * 빈 `markerOps`다(`apps/api`의 `POST .../comments`). **멱등 키도 서버처럼 받는다** — 같은 키면 붙잡지
+ * 않고 앞 행을 곧바로 돌려준다(빈 `markerOps` · 지금의 번호). `failNext`는 다음 게시를 500 으로 끝낸다.
+ */
 function commentServer(initial: Comment[] = []): {
   overrides: Partial<ApiClient>
   rows: () => Comment[]
+  /** 게시가 실어 온 멱등 키 — 부른 순서대로. */
+  keys: (string | undefined)[]
+  failNext: () => void
   commit: (index?: number) => void
   respond: (index?: number) => Promise<void>
 } {
   let rows = [...initial]
   let next = 100
+  let seq = HEAD_SEQ
+  let failing = 0
+  const markers = new Map<string, number>()
+  const byKey = new Map<string, Comment>()
+  const keys: (string | undefined)[] = []
   const waiting: { commit: () => void; resolve: () => void }[] = []
   return {
     rows: () => rows,
+    keys,
+    failNext: () => {
+      failing += 1
+    },
     overrides: {
       listComments: async () => [...rows],
-      createComment: ((_projectId: string, _pageId: string, body: { nodeId: string; body: string }) =>
-        new Promise<CommentCreated>((resolve) => {
+      createComment: ((
+        _projectId: string,
+        _pageId: string,
+        body: { nodeId: string; body: string; idempotencyKey?: string },
+      ) => {
+        keys.push(body.idempotencyKey)
+        if (failing > 0) {
+          failing -= 1
+          return Promise.reject(new ApiError(500, 'internal', '서버 오류가 발생했습니다'))
+        }
+        const replayed = body.idempotencyKey === undefined ? undefined : byKey.get(body.idempotencyKey)
+        if (replayed !== undefined) {
+          return Promise.resolve({
+            comment: replayed,
+            marker: markers.get(replayed.nodeId) ?? null,
+            seq,
+            markerOps: [],
+          } satisfies CommentCreated)
+        }
+        return new Promise<CommentCreated>((resolve) => {
           let created: Comment | undefined
+          let markerOps: CommentCreated['markerOps'] = []
           const commit = (): void => {
             if (created !== undefined) return
             created = { ...comment(`c-${next++}`, body.body), nodeId: body.nodeId }
             rows = [...rows, created]
+            if (body.idempotencyKey !== undefined) byKey.set(body.idempotencyKey, created)
+            if (!markers.has(body.nodeId)) {
+              if (body.nodeId !== ROOT_ID) throw new Error('이 가짜는 루트에만 번호를 붙인다')
+              markers.set(body.nodeId, markers.size + 1)
+              seq += 1
+              markerOps = [{ op: 'add', path: '/root/marker', value: markers.get(body.nodeId) as number }]
+            }
           }
           waiting.push({
             commit,
             resolve: () => {
               commit()
-              resolve({ comment: created as Comment, seq: 7, marker: 1, markerOps: [] } as unknown as CommentCreated)
+              resolve({ comment: created as Comment, seq, marker: markers.get(body.nodeId) ?? null, markerOps })
             },
           })
-        })) as never,
+        })
+      }) as never,
       updateComment: ((_projectId: string, _pageId: string, commentId: string, body: { body: string }) =>
         new Promise<Comment>((resolve) => {
           const commit = (): void => {
@@ -593,5 +649,127 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await waitFor(() => expect(screen.queryByRole('textbox', { name: '코멘트 수정' })).toBeNull())
     expect(screen.getByText('시간 넘긴 수정')).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+/**
+ * ## 멱등 키 — 같은 초안은 같은 키를 싣는다
+ *
+ * 무엇을 왜 하는지는 `src/panels/comment-panel.tsx`의 `POST_KEYS`, 서버가 무엇을 해 주는지는
+ * `apps/api/README.md`의 «멱등 키»가 갖는다. 서버 쪽 케이스는 `apps/api/test/comments.test.ts`·
+ * `comments-concurrency.test.ts`의 «멱등 키» 절이다. 여기는 **화면이 무엇을 싣는가**를 잰다.
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 재생 뒤에 번호 어긋남을 안 본다(`missed`) | *"재생은 앞 게시의 번호 변화를 못 받았다 …"* **혼자** |
+ * | 키가 글에 안 매인다(고쳐도 같은 키) | *"글을 고쳐 다시 달면 새 키다 …"* **혼자** |
+ * | 달려도 키를 안 버린다 | *"달리면 키를 버린다 …"* **혼자** |
+ * | 키를 페이지를 넘어 든다(모듈 전역 — 장부에 드는 꼴) | *"페이지를 떠나면 키도 …"* **혼자** |
+ * | 보낼 때마다 새 키를 짓는다 · «안 달림» 판정에 키를 버린다 | *"«안 달림» 판정 뒤 다시 달면 같은 키를 싣는다 …"* **와** *"재생은 …"* |
+ *
+ * **«같은 키를 싣는다»는 혼자 죽지 않는다** — 그것이 깨지면 재생이 안 일어나 *"재생은 …"*이 설
+ * 자리가 없어진다. **«같은 초안은 같은 키» 축의 주인은 이 케이스다** — *"재생은 …"*은 그 위에서
+ * «번호 어긋남을 말한다»를 재고 혼자 죽는 변조가 있다(첫 줄). 본문에 키가 실리는지는
+ * `test/api/http-client.test.ts`의 *"createComment 는 멱등 키를 …"*가 갖는다(그 줄을 떨구면 혼자 죽는다).
+ */
+describe('멱등 키 — 같은 초안은 같은 키를 싣고, 성공·고침·떠남에 버린다', () => {
+  function toPage(title: string): void {
+    fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }))
+  }
+
+  /** 응답 없는 게시 → 10초 → «안 달림» 판정 → 서버가 **늦게** 커밋 → 같은 초안을 다시 단다. */
+  async function lateCommitThenRepost(server: ReturnType<typeof commentServer>): Promise<void> {
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    type(commentBox(), '늦게 달린 말')
+    fireEvent.click(submitButton())
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe(
+        '응답이 없어 목록을 다시 읽었더니 이 코멘트는 달리지 않았습니다',
+      ),
+    )
+
+    // 판정 **뒤에** 서버가 첫 게시를 커밋한다(Chrome: 10초 판정 · 13.4초 커밋).
+    server.commit()
+    expect(commentBox().value).toBe('늦게 달린 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(screen.queryByText('늦게 달린 말')).not.toBeNull())
+  }
+
+  it('«안 달림» 판정 뒤 다시 달면 같은 키를 싣는다 — 서버가 늦게 커밋했어도 한 행이다', async () => {
+    const server = commentServer()
+    await lateCommitThenRepost(server)
+
+    expect(server.keys).toHaveLength(2)
+    expect(server.keys[0]).toBeTypeOf('string')
+    expect(server.keys[1]).toBe(server.keys[0])
+    expect(server.rows()).toHaveLength(1)
+    expect(commentBox().value).toBe('')
+  })
+
+  it('재생은 앞 게시의 번호 변화를 못 받았다 — 그렇다고 말한다', async () => {
+    // 재생 응답은 `markerOps: []`인데 서버는 번호 1 을 말한다. 보낼 때 내 문서의 루트에 번호가
+    // 없었으니 앞 게시의 변화를 못 받은 것이다(시간 초과로 끊겼다). 말하지 않으면 «코멘트는
+    // 달렸는데 캔버스에 번호가 없고 아무도 말하지 않는» 상태다(`comment-panel.tsx`의 `MARKERS_DIVERGED`).
+    const server = commentServer()
+    await lateCommitThenRepost(server)
+
+    expect(screen.getByText('번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다')).toBeTruthy()
+  })
+
+  it('글을 고쳐 다시 달면 새 키다 — 고친 글은 다른 게시다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    server.failNext()
+    type(commentBox(), '처음 쓴 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('서버 오류가 발생했습니다'))
+
+    type(commentBox(), '고쳐 쓴 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(server.keys).toHaveLength(2))
+
+    expect(server.keys[1]).not.toBe(server.keys[0])
+  })
+
+  it('달리면 키를 버린다 — 같은 말을 또 달면 새 키다(새 게시다)', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    type(commentBox(), '확인')
+    fireEvent.click(submitButton())
+    await server.respond()
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+
+    type(commentBox(), '확인')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(server.keys).toHaveLength(2))
+
+    // 같은 키였으면 서버가 앞 행을 돌려줘 **둘째 «확인»이 사라진다.**
+    expect(server.keys[1]).not.toBe(server.keys[0])
+  })
+
+  it('페이지를 떠나면 키도 초안과 함께 버린다 — 돌아와 같은 말을 치면 새 키다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    await toCommentTab()
+    server.failNext()
+    type(commentBox(), '떠나기 전의 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(commentBox().value).toBe(''))
+    toPage(PAGE_TITLE)
+    await waitFor(() => expect(commentBox().value).toBe(''))
+    type(commentBox(), '떠나기 전의 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(server.keys).toHaveLength(2))
+
+    expect(server.keys[1]).not.toBe(server.keys[0])
   })
 })

@@ -980,6 +980,30 @@ describe('createHttpClient', () => {
     }
   })
 
+  it('createComment 는 멱등 키를 본문에 싣는다 — 안 주면 키를 만들지 않는다', async () => {
+    // `BODY_KEYS.createComment`에 그 키가 없으면 `declaredOnly`가 **조용히 떨군다** — 화면은 키를
+    // 들고 있는데 서버는 못 받아, 늦게 커밋된 게시와 다시 단 게시가 두 행이 된다.
+    const given = stubFetch(jsonResponse(201, commentCreated))
+    await createHttpClient(given.fetchImpl).createComment('p1', 'pg1', { nodeId: 'n_1', body: '가', idempotencyKey: 'k-1' })
+    expect(JSON.parse(String(given.calls[0]?.init?.body))).toEqual({ nodeId: 'n_1', body: '가', idempotencyKey: 'k-1' })
+
+    const none = stubFetch(jsonResponse(201, commentCreated))
+    await createHttpClient(none.fetchImpl).createComment('p1', 'pg1', { nodeId: 'n_1', body: '가' })
+    expect(JSON.parse(String(none.calls[0]?.init?.body))).toEqual({ nodeId: 'n_1', body: '가' })
+  })
+
+  it('재생 응답의 `marker: null`을 받는다 — 노드나 번호가 그 사이 사라진 게시다', async () => {
+    // 서버는 같은 키로 이미 달린 게시를 돌려줄 때 그 노드의 **지금** 번호를 싣고, 없으면 `null`이다
+    // (`apps/api/README.md`의 «멱등 키»). 막으면 달린 게시를 «서버 응답을 이해할 수 없습니다»로 읽는다.
+    const stub = stubFetch(jsonResponse(200, { ...commentCreated, marker: null, markerOps: [] }))
+    const created = await createHttpClient(stub.fetchImpl).createComment('p1', 'pg1', {
+      nodeId: 'n_1',
+      body: '가',
+      idempotencyKey: 'k-1',
+    })
+    expect(created.marker).toBeNull()
+  })
+
   it('204 응답은 본문을 파싱하지 않는다', async () => {
     const empty = new Response(null, { status: 204 })
     const json = vi.spyOn(empty, 'json')
