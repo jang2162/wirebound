@@ -239,6 +239,53 @@ export function MenuTree(props: {
           />
         ))}
       </ul>
+      {/* **빈 트리의 빈 상태 — 이 자리가 없으면 새 프로젝트가 막다른 길이다.**
+
+          새 프로젝트는 메뉴 노드가 0개로 만들어진다(`apps/api/src/repos/projects.ts`의
+          `insertProject`는 프로젝트·멤버·기본 레이아웃만 만든다). 그런데 툴바의 아홉은
+          **전부 선택에 매여 있고**(`tree/tree-actions.ts`: `selection === null`이면
+          `NOTHING`), 빈 트리에는 고를 것이 없다 — 첫 메뉴를 만들 수 없고 페이지는
+          `menuNodeId`가 필수라 페이지도 못 만든다. **서버는 처음부터 루트를 받는다**
+          (`apps/api/src/routes/menu.ts`의 `parentId: z.uuid().nullable().optional()`):
+          구멍은 화면에만 있었다.
+
+          **툴바에 「최상위 메뉴」를 상설하지 않고 빈 상태에 둔 이유는 둘이다.**
+
+          1. **버그의 자리가 여기다.** 메뉴가 하나라도 있으면 형제 최상위 메뉴를 만드는 길이
+             이미 있다 — 아무 메뉴에 `하위 메뉴`를 만들고 `내어쓰기`(부모가 루트면 목적지가
+             `parentId: null`이다. `tree/tree-actions.ts`의 `menuOutdentTarget`)다. 빈
+             트리에만 그 길이 없다.
+          2. **툴바의 계약을 깨지 않는다.** `panels/menu-toolbar.tsx`의 아홉은 *"전부 판정에
+             매여 있다"*가 전제이고, `panels/toolbar-status.ts`의 *"메뉴나 페이지를 고르면
+             편집할 수 있습니다"*와 `test/panels/toolbar-status-reach.test.tsx`의 열두 상태가
+             그 위에 서 있다. **선택 없이 켜지는 버튼을 거기 하나 두면 그 셋이 함께 거짓이
+             된다** — 구조 툴바의 `패턴 넣기`·`프리셋`이 정확히 그 값을 치르고 있다(그쪽
+             파일의 머리말: *"없는 전제조건을 만든다"*).
+
+          **판정이 두 벌이 되지 않는다.** 여기서 보는 것은 `treeAbilities`가 답하는
+          *"고른 것에 무엇을 할 수 있나"*가 아니라 **트리가 비었나**이고, 그 둘은 축이 다르다.
+          `busy`만 툴바와 같은 값을 본다(D2 — 조작이 나가 있으면 입력을 열지 않는다).
+
+          **뷰 모드에서는 버튼이 없다.** 문장은 남는다 — 빈 상자가 왜 비었는지는 읽는 사람도
+          알아야 한다. 셋(툴바·페이지 JSON·단축키)을 `editable` 하나로 가르는 위 주석과 같은
+          자리다. */}
+      {state.menu.length === 0 && (
+        <div className="wb-shell-tree-empty">
+          <p className="wb-shell-tree-notice">메뉴가 없습니다.</p>
+          {props.editable && (
+            <button
+              type="button"
+              className="wb-shell-menu-tool"
+              // **툴바 버튼과 같은 꼴을 쓴다.** 하는 일이 `하위 메뉴`와 같은 부류라 다르게
+              // 보일 이유가 없고, 바로 아래 툴바와 나란히 선다.
+              disabled={commands.busy}
+              onClick={() => commands.openInput('new-root-menu')}
+            >
+              최상위 메뉴
+            </button>
+          )}
+        </div>
+      )}
       {/* 툴바가 트리 **아래**인 것은 `StructureToolbar`와 같은 자리 규칙이다.
 
           **뷰 모드에서는 DOM에서 뺀다** — `hidden`이 아니다. 근거는 구조 트리를 그렇게 뺀
