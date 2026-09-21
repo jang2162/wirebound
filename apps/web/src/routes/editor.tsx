@@ -32,6 +32,7 @@ import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { InteractionPanel } from '../panels/interaction-panel'
 import { PageDescriptionPanel } from '../panels/page-description'
+import { PanelDraftsProvider } from '../panels/panel-drafts'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
 import { useEditCommit } from '../edit/use-edit-commit'
@@ -668,18 +669,33 @@ function RightPanel(props: { projectId: string; pageId: string | undefined }): R
       {/* **보이지 않는 탭은 DOM에서 뺀다** — `hidden`으로 두지 않는다. 코멘트 탭은
           마운트될 때 `listComments`를 부르므로, 감춰 둔 채 살려 두면 보지도 않는 목록을
           위해 페이지를 열 때마다 요청이 나간다. 구조 트리를 뷰 모드에서 DOM에서 빼는 것과
-          같은 판단이고, 근거도 같다(그쪽 주석). */}
-      <div
-        className="wb-shell-tabpanel"
-        role="tabpanel"
-        id={`wb-tabpanel-${tab}`}
-        aria-labelledby={`wb-tab-${tab}`}
-      >
-        {(() => {
-          const Body = PANEL_BODIES[tab]
-          return <Body projectId={props.projectId} pageId={props.pageId} />
-        })()}
-      </div>
+          같은 판단이고, 근거도 같다(그쪽 주석).
+
+          **넷을 다 그리면 *"페이지를 한 번만 읽는다"*(D6)를 재는 케이스들이 `getPage` 두
+          번으로 죽는다**(재 봤다 — 코멘트의 *"탭을 열기 전에는 조회하지 않는다"*도 함께).
+          그러니 이 판단은 그대로 선다. **다만 대가가 요청 하나가 아니었다.**
+
+          **대가: 언마운트되는 본문이 든 «친 글자»와 «나가 있는 저장»이 사라진다.**
+          그래서 본문들의 **페이지에 매인 상태**를 탭 목록 밖의 `PanelDraftsProvider`가
+          든다 — 언마운트를 고른 것이 이 컴포넌트이므로 대가도 이 컴포넌트가 문다. 무엇을
+          왜 드는지, 페이지가 바뀌면 무엇을 버리는지는 `panels/panel-drafts.tsx`의 머리말이
+          갖는다(여기 두 벌로 적지 않는다).
+
+          «페이지 설명»과 코멘트 탭이 **같은 provider**를 쓴다 — 페이지가 바뀌면 버리는 일도
+          그 한 자리에서 같은 값으로 한다. */}
+      <PanelDraftsProvider pageId={props.pageId}>
+        <div
+          className="wb-shell-tabpanel"
+          role="tabpanel"
+          id={`wb-tabpanel-${tab}`}
+          aria-labelledby={`wb-tab-${tab}`}
+        >
+          {(() => {
+            const Body = PANEL_BODIES[tab]
+            return <Body projectId={props.projectId} pageId={props.pageId} />
+          })()}
+        </div>
+      </PanelDraftsProvider>
     </>
   )
 }

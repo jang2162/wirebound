@@ -11,13 +11,16 @@
  * 모든 케이스가 `<App />`을 라우트째로 렌더한다(`../editor-harness`) — 이유는 그 파일
  * 머리말에 있다.
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { WbNode } from '@wirebound/schema'
-import type { Comment } from '../../src/api/types'
+import type { ApiClient } from '../../src/api/client'
+import type { Comment, CommentCreated } from '../../src/api/types'
 import {
   deselect,
   openPage,
+  OTHER_PAGE_ID,
+  OTHER_PAGE_TITLE,
   PAGE_ID,
   PAGE_ROUTE,
   pageDoc,
@@ -487,5 +490,435 @@ describe('페이지 경계', () => {
     await waitForNode('n_a')
 
     expect(listComments).not.toHaveBeenCalled()
+  })
+})
+
+/** 목록에 그려진 코멘트 본문들. **상자 안의 초안 글자는 안 센다** — `getByText`는 그것도 잡는다. */
+function listedBodies(): string[] {
+  return [...panel().querySelectorAll('.wb-shell-comment-body')].map((element) => element.textContent ?? '')
+}
+
+/**
+ * 상자에 친다. **꺼진 상자에는 안 친다 — 던진다.** jsdom 의 `fireEvent.change`는 `disabled`를 안
+ * 봐서 꺼진 상자에도 값이 들어간다 — 실브라우저에서는 없는 길이다(«페이지 설명»의 리뷰 N-F).
+ */
+function typeInto(box: HTMLTextAreaElement, value: string): void {
+  if (box.disabled) throw new Error('꺼진 상자에는 칠 수 없다 — 실브라우저에서 없는 길이다')
+  fireEvent.change(box, { target: { value } })
+}
+
+/** 새 코멘트 상자. */
+function newBox(): HTMLTextAreaElement {
+  return screen.getByLabelText('새 코멘트') as HTMLTextAreaElement
+}
+
+/** 코멘트 탭의 폼이 다시 설 때까지 — 탭을 다시 열면 목록 조회가 끝나야 폼이 선다. */
+async function findNewBox(): Promise<HTMLTextAreaElement> {
+  return (await screen.findByLabelText('새 코멘트')) as HTMLTextAreaElement
+}
+
+function toPropsTab(): void {
+  fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+}
+
+/** 메뉴 트리에서 페이지를 **누른다** — 사용자가 하듯. */
+function toPage(title: string): void {
+  fireEvent.click(
+    within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }),
+  )
+}
+
+/**
+ * `createComment`·`updateComment`를 **붙잡아 두는** 가짜 — «쓰기가 나가 있는 동안»을 만든다.
+ * 응답이 오면 `listed`가 그만큼 바뀐다(서버가 행을 쓴 것처럼). 목록은 페이지마다 따로 들고,
+ * `seed`가 첫 페이지의 목록이다.
+ */
+function heldComments(seed: Comment[] = []): {
+  overrides: Partial<ApiClient>
+  listed: Record<string, Comment[]>
+  created: { pageId: string; nodeId: string; body: string }[]
+  updated: { pageId: string; commentId: string; body: string }[]
+  release: () => Promise<void>
+} {
+  const listed: Record<string, Comment[]> = { [PAGE_ID]: [...seed], [OTHER_PAGE_ID]: [] }
+  const created: { pageId: string; nodeId: string; body: string }[] = []
+  const updated: { pageId: string; commentId: string; body: string }[] = []
+  const gates: (() => void)[] = []
+  const replies: Promise<unknown>[] = []
+  return {
+    listed,
+    created,
+    updated,
+    overrides: {
+      listComments: async (_projectId, pageId) => [...(listed[pageId] ?? [])],
+      createComment: (_projectId, pageId, body) => {
+        created.push({ pageId, ...body })
+        const reply = new Promise<CommentCreated>((resolve) => {
+          gates.push(() => {
+            const row = comment({ id: `c-${created.length}`, nodeId: body.nodeId, body: body.body })
+            listed[pageId] = [...(listed[pageId] ?? []), row]
+            resolve({ comment: row, marker: 1, seq: 8, markerOps: [] })
+          })
+        })
+        replies.push(reply)
+        return reply
+      },
+      updateComment: (_projectId, pageId, commentId, body) => {
+        updated.push({ pageId, commentId, body: body.body })
+        const reply = new Promise<Comment>((resolve, reject) => {
+          gates.push(() => {
+            const rows = listed[pageId] ?? []
+            const row = rows.find((item) => item.id === commentId)
+            if (row === undefined) {
+              reject(new Error(`고칠 코멘트가 없다: ${commentId}`))
+              return
+            }
+            const next = { ...row, body: body.body }
+            listed[pageId] = rows.map((item) => (item.id === commentId ? next : item))
+            resolve(next)
+          })
+        })
+        replies.push(reply)
+        return reply
+      },
+    },
+    release: async () => {
+      const gate = gates.shift()
+      const reply = replies.shift()
+      if (gate === undefined || reply === undefined) throw new Error('붙잡힌 게시가 없다')
+      await act(async () => {
+        gate()
+        await reply
+      })
+      // 게시 뒤의 목록 다시 받기까지 끝나게 한다.
+      await act(async () => {})
+    },
+  }
+}
+
+/**
+ * **탭·페이지를 오가는 축**(8차). 이 파일의 다른 케이스는 전부 코멘트 탭에 머문 채 한
+ * 페이지 안에서 돌아, 탭을 한 번 눌렀다 오는 것만으로 쓰던 말이 사라지는 결함이 아무에게도
+ * 안 잡혔다(`routes/editor.tsx`가 안 보이는 탭을 DOM에서 빼고, 이 패널은 초안을 자기
+ * `useState`로 들었다). 무엇을 어디에 드는지는 `panels/panel-drafts.tsx`의 머리말이 갖는다.
+ *
+ * **여섯이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 쟀다.
+ * 앞의 넷은 «마운트에 묶는다»의 꼴이다 — 앞 판의 결함이 정확히 그것이었다(조회 이펙트가
+ * 마운트마다 초안을 비웠다):
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 마운트 이펙트가 새 코멘트 초안까지 지운다 | *"새 코멘트 초안이 탭을 오가도 …"* **와** 아래 *"쓰던 코멘트는 쓴 노드에만 …"*(속성 탭을 다녀온다) |
+ * | 그것이 고치던 것까지 지운다 | *"고치던 코멘트가 탭을 오가도 …"* **혼자** |
+ * | 그것이 쓰기 잠금까지 푼다 | *"게시가 나가 있는 동안 … 잠금이 남는다 …"* **혼자** |
+ * | 다시 받은 목록을 마운트에 묶는다(언마운트 뒤면 안 쓴다) | *"… 그 뒤 목록이 떠 있는 본문에 닿는다"* **혼자** |
+ * | 칸의 쓰기 가드가 코멘트 칸에만 안 걸린다 | *"게시 중에 옆 페이지로 …"* **혼자** |
+ * | provider 의 리셋이 노드마다의 새 코멘트 초안(`DRAFTS`)을 넘긴다 | *"페이지가 바뀌면 …"* **혼자** |
+ *
+ * (9차에 다시 쟀다 — web 전체.) **«새 코멘트 초안이 탭을 오가도 …»는 이제 혼자 죽지 않는다** —
+ * 9차의 대상 케이스가 속성 탭을 다녀오며 노드마다의 초안이 사는지까지 보기 때문이다. **«새 코멘트
+ * 초안이 탭 왕복에 산다» 축의 주인은 이 케이스다** — 대상 케이스는 그 위에서 «노드마다»를 재고
+ * 혼자 죽는 변조가 있다(그 절의 표). 리셋이 초안과 고치던 것을 **함께** 넘기면 *"페이지가 바뀌면
+ * …"*이 아래 *"수정 중에 옆 페이지를 다녀와도 …"*와 함께 죽는다(넘어온 편집 칸이 돌아와도 열려
+ * 있다) — 8차 판의 이 줄은 «혼자»였다.
+ *
+ * **provider 째 망가뜨리는 변조**(쓰기 가드를 통째로 뺀다 · `key={chosen}` · 리셋을 넓게 망가뜨린다)는
+ * 이 절의 케이스를 «페이지 설명»의 케이스와 **함께** 죽인다 — 가드도 리셋도 탭 왕복의 칸도 한
+ * provider 의 것이기 때문이다. **그 수와 목록은 `page-description-edit.test.tsx`의 머리말 표들이
+ * 갖는다** — 여기 두 벌로 적지 않는다(8차에 두 파일이 같은 수를 따로 적었다가 한쪽만 낡았다 —
+ * 리뷰 7번). 칸별로 가르면(위 표 다섯째 줄과 그 거울판) 각자 혼자 죽는다.
+ *
+ * **8차 전 `comment-panel.tsx`(`555623c`)로 되돌리면** 이 절의 여섯 중 다섯과 대상 케이스가 죽는다.
+ * *"페이지가 바뀌면 …"*은 산다 — 앞 판도 지키던 규칙이고, 이 케이스는 그 규칙이 **자리를 옮긴
+ * 뒤에도** 지켜지는지를 잠근다. **아래 가 → 나 → 가 둘도 산다** — 앞 판의 `busy`는 본문의
+ * `useState`라 페이지를 옮겨도(같은 탭이면 본문이 안 내려간다) 풀리지 않았다. 대신 **옆 페이지까지
+ * 잠갔다**(리뷰의 «게시 중 옆 페이지로» — 앞 판 줄). 8차가 `busy`를 페이지 리셋에 넣어 옆 페이지를
+ * 풀면서 가 → 나 → 가 를 열었고, 9차가 잠금을 페이지에 매달아 둘을 함께 닫았다.
+ *
+ * **가 → 나 → 가 의 둘**(9차, 리뷰 N-A) — 쓰기 잠금이 페이지 리셋에 버려져, 돌아와 쓰던 말·고치던
+ * 칸이 앞 쓰기의 응답에 지워졌다. 무엇을 막는지는 `panels/panel-drafts.tsx`의 머리말 3이 갖는다.
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 수정 단추가 쓰기 잠금을 안 본다 | *"수정 중에 옆 페이지를 다녀와도 …"* **혼자** |
+ * | 쓰기 잠금(`BUSY`)을 방문 칸(`slot`)으로 든다 | *"게시 중에 옆 페이지를 …"* **와** *"수정 중에 …"* |
+ * | 새 코멘트 상자가 쓰기 잠금을 안 본다 | *"게시 중에 옆 페이지를 …"* **와** 위 *"게시가 나가 있는 동안 탭을 오가도 …"* |
+ *
+ * **«게시 중에 …»는 혼자 죽지 않는다** — 잠금이 한 칸이라 수정 케이스와, 상자가 한 개라 탭 왕복
+ * 케이스와 함께 죽는다. **«코멘트의 쓰기 잠금이 페이지 왕복에도 남는다» 축의 주인은 이 케이스다**
+ * — 수정 케이스는 그 위에서 «수정 단추까지 꺼진다»를 재고 혼자 죽는 변조가 있다. 8차 판(이 커밋
+ * 전의 세 파일)으로 되돌리면 둘 다 죽는다.
+ */
+describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)', () => {
+  it('새 코멘트 초안이 탭을 오가도 남는다', async () => {
+    await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
+    await openCommentTab()
+    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    typeInto(await findNewBox(), '쓰던 코멘트')
+
+    toPropsTab()
+    // **상자가 정말 사라지는 것을 먼저 잠근다** — 없으면 «탭을 눌러도 언마운트되지 않는»
+    // 판에서도 통과해 재는 것이 없어진다.
+    expect(screen.queryByLabelText('새 코멘트')).toBeNull()
+    await openCommentTab()
+
+    // **앞 판은 `""`였다**(jsdom · Chrome 둘 다).
+    expect((await findNewBox()).value).toBe('쓰던 코멘트')
+    expect((screen.getByRole('button', { name: '코멘트 달기' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('고치던 코멘트가 탭을 오가도 남는다 — 편집 칸도 글도', async () => {
+    await openPage(pageDoc(three({ a: 1 })), {
+      apiOverrides: { listComments: async () => [comment({ id: 'c1', nodeId: 'n_a', body: '옛 말' })] },
+    })
+    await openCommentTab()
+    await waitFor(() => expect(screen.getByText('옛 말')).toBeTruthy())
+    fireEvent.click(within(panel()).getByRole('button', { name: '수정' }))
+    typeInto(screen.getByLabelText<HTMLTextAreaElement>('코멘트 수정'), '고치던 말')
+
+    toPropsTab()
+    expect(screen.queryByLabelText('코멘트 수정')).toBeNull()
+    await openCommentTab()
+
+    // **앞 판은 편집 칸째 닫혀 `"옛 말"`만 보였다**(Chrome 실측도 같다).
+    const edit = (await screen.findByLabelText('코멘트 수정')) as HTMLTextAreaElement
+    expect(edit.value).toBe('고치던 말')
+  })
+
+  it('게시가 나가 있는 동안 탭을 오가도 잠금이 남는다 — 같은 코멘트를 두 번 달 수 없다', async () => {
+    const api = heldComments()
+    await openPage(pageDoc(three({})), { apiOverrides: api.overrides })
+    await openCommentTab()
+    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    typeInto(await findNewBox(), '한 번만 달 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await waitFor(() => expect(api.created).toHaveLength(1))
+
+    toPropsTab()
+    await openCommentTab()
+    await findNewBox()
+
+    // **잠금이 마운트에 묶여 있으면 여기서 풀린다** — 새 마운트가 `busy`를 `false`로 시작해
+    // 같은 초안으로 한 번 더 달 수 있다(«페이지 설명»의 리뷰 N1 과 같은 부류).
+    expect(newBox().disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '코멘트 달기' }) as HTMLButtonElement).disabled).toBe(true)
+
+    await api.release()
+
+    // 양성 대조 — 응답이 오면 풀린다.
+    expect(newBox().disabled).toBe(false)
+    expect(api.created).toHaveLength(1)
+  })
+
+  it('게시가 나가 있는 동안 탭을 오가면 그 뒤 목록이 떠 있는 본문에 닿는다', async () => {
+    const api = heldComments()
+    await openPage(pageDoc(three({})), { apiOverrides: api.overrides })
+    await openCommentTab()
+    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    typeInto(await findNewBox(), '방금 단 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await waitFor(() => expect(api.created).toHaveLength(1))
+
+    toPropsTab()
+    await openCommentTab()
+    await findNewBox()
+    // 새 마운트의 조회는 게시가 끝나기 전의 목록이다.
+    expect(listedBodies()).toEqual([])
+
+    await api.release()
+
+    // **다시 받은 목록이 죽은 옛 마운트에 닿으면** 새 마운트는 낡은 목록을 그대로 보인다.
+    await waitFor(() => expect(listedBodies()).toEqual(['방금 단 말']))
+    expect(newBox().value).toBe('')
+  })
+
+  it('게시 중에 옆 페이지로 옮기면 그 응답이 옆 페이지에 닿지 않는다 — 옆 페이지에서 쓰던 말이 남는다', async () => {
+    const api = heldComments()
+    await openPage(pageDoc(three({})), {
+      docs: { [OTHER_PAGE_ID]: pageDoc(three({})) },
+      apiOverrides: api.overrides,
+    })
+    await openCommentTab()
+    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    typeInto(await findNewBox(), '앞 페이지에 단 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await waitFor(() => expect(api.created).toHaveLength(1))
+
+    toPage(OTHER_PAGE_TITLE)
+    // **상자의 값은 기다리지 않는다** — 그것은 아래 *"페이지가 바뀌면 …"*의 축이다.
+    await waitFor(() => expect(screen.getByText('아직 코멘트가 없습니다')).toBeTruthy())
+    typeInto(await findNewBox(), '옆 페이지에서 쓰던 말')
+
+    await api.release()
+
+    // **앞 판에서는 앞 페이지의 응답이 이 상자를 비우고, 앞 페이지의 목록을 다시 받아 이
+    // 페이지에 그렸다** — 옆 페이지의 코멘트 탭에 남의 페이지의 말이 섰다.
+    expect(newBox().value).toBe('옆 페이지에서 쓰던 말')
+    expect(listedBodies()).toEqual([])
+    expect(screen.getByText('아직 코멘트가 없습니다')).toBeTruthy()
+    expect(api.created).toEqual([{ pageId: PAGE_ID, nodeId: 'n_a', body: '앞 페이지에 단 말' }])
+  })
+
+  it('게시 중에 옆 페이지를 다녀와도(가 → 나 → 가) 잠금이 남는다 — 돌아와 쓰는 말이 앞 응답에 비워질 수 없다', async () => {
+    const api = heldComments()
+    await openPage(pageDoc(three({})), {
+      docs: { [OTHER_PAGE_ID]: pageDoc(three({})) },
+      apiOverrides: api.overrides,
+    })
+    await openCommentTab()
+    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    typeInto(await findNewBox(), '앞에 단 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await waitFor(() => expect(api.created).toHaveLength(1))
+
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(screen.getByText('아직 코멘트가 없습니다')).toBeTruthy())
+    toPage('회원 목록')
+    await waitFor(() => expect(screen.getByText('아직 코멘트가 없습니다')).toBeTruthy())
+
+    // **8차 판은 여기서 상자와 단추가 열려 있었다**(리뷰 N-A — 쓰기 잠금이 페이지 리셋에 함께
+    // 버려졌다). 돌아와 쓰던 말은 앞 게시의 응답(«보낸 초안을 비운다»)에 `""`가 됐고, 한 번 더
+    // 달면 게시가 둘 동시에 나갔다.
+    expect(newBox().disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '코멘트 달기' }) as HTMLButtonElement).disabled).toBe(true)
+
+    await api.release()
+
+    // **양성 대조** — 응답이 돌아온 방문에 닿는다: 목록에 그 말이 서고 풀린다.
+    await waitFor(() => expect(listedBodies()).toEqual(['앞에 단 말']))
+    expect(newBox().disabled).toBe(false)
+    expect(api.created).toEqual([{ pageId: PAGE_ID, nodeId: 'n_a', body: '앞에 단 말' }])
+  })
+
+  it('수정 중에 옆 페이지를 다녀와도(가 → 나 → 가) 잠금이 남는다 — 돌아와 다른 코멘트를 고치던 칸이 앞 응답에 닫힐 수 없다', async () => {
+    const api = heldComments([
+      comment({ id: 'c1', nodeId: 'n_a', body: '기존 말 1' }),
+      comment({ id: 'c2', nodeId: 'n_a', body: '기존 말 2' }),
+    ])
+    await openPage(pageDoc(three({ a: 1 })), {
+      docs: { [OTHER_PAGE_ID]: pageDoc(three({})) },
+      apiOverrides: api.overrides,
+    })
+    await openCommentTab()
+    await waitFor(() => expect(listedBodies()).toEqual(['기존 말 1', '기존 말 2']))
+    fireEvent.click(within(panel()).getAllByRole('button', { name: '수정' })[0]!)
+    typeInto(screen.getByLabelText<HTMLTextAreaElement>('코멘트 수정'), '기존 말 1 고침')
+    fireEvent.click(within(panel()).getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(api.updated).toHaveLength(1))
+
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(screen.getByText('아직 코멘트가 없습니다')).toBeTruthy())
+    toPage('회원 목록')
+    await waitFor(() => expect(listedBodies()).toEqual(['기존 말 1', '기존 말 2']))
+
+    // **8차 판은 여기서 수정 단추가 열려 있었다**(리뷰 N-A). 둘째 코멘트를 고치기 시작하면
+    // 첫째의 응답(«고치던 칸을 닫는다»)이 **둘째의** 칸을 닫아 그 글이 사라졌다.
+    const edits = (): HTMLButtonElement[] => within(panel()).getAllByRole<HTMLButtonElement>('button', { name: '수정' })
+    expect(edits().map((button) => button.disabled)).toEqual([true, true])
+
+    await api.release()
+
+    // **양성 대조** — 응답이 돌아온 방문에 닿는다: 고친 말이 서고 풀린다.
+    await waitFor(() => expect(listedBodies()).toEqual(['기존 말 1 고침', '기존 말 2']))
+    expect(edits().map((button) => button.disabled)).toEqual([false, false])
+    expect(api.updated).toEqual([{ pageId: PAGE_ID, commentId: 'c1', body: '기존 말 1 고침' }])
+  })
+
+  it('페이지가 바뀌면 쓰던 초안과 고치던 것을 버린다 — 노드 id도 코멘트 id도 그 페이지의 것이다', async () => {
+    await openPage(pageDoc(three({ a: 1 })), {
+      docs: { [OTHER_PAGE_ID]: pageDoc(three({})) },
+      apiOverrides: {
+        listComments: async (_projectId, pageId) =>
+          pageId === PAGE_ID ? [comment({ id: 'c1', nodeId: 'n_a', body: '옛 말' })] : [],
+      },
+    })
+    await openCommentTab()
+    await waitFor(() => expect(screen.getByText('옛 말')).toBeTruthy())
+    typeInto(newBox(), '쓰던 새 코멘트')
+    fireEvent.click(within(panel()).getByRole('button', { name: '수정' }))
+    typeInto(screen.getByLabelText<HTMLTextAreaElement>('코멘트 수정'), '고치던 말')
+
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(screen.getByText('아직 코멘트가 없습니다')).toBeTruthy())
+    expect(newBox().value).toBe('')
+
+    // **돌아와도 되살아나지 않는다** — 고치던 것은 앞 페이지의 코멘트 id를 들고 있어, 넘겨
+    // 받으면 돌아온 순간 편집 칸이 다시 선다.
+    toPage('회원 목록')
+    await waitFor(() => expect(screen.getByText('옛 말')).toBeTruthy())
+    expect(screen.queryByLabelText('코멘트 수정')).toBeNull()
+    expect(newBox().value).toBe('')
+  })
+})
+
+/**
+ * **대상의 축**(9차, 리뷰 N-C). 위 절들은 전부 노드 하나를 고른 채 돌아, 쓰는 도중 **다른 노드를
+ * 고르는** 갈래를 아무도 지나지 않았다. 8차 판에서 그 갈래는 초안을 남기고 **달릴 대상을 그
+ * 노드로 바꿨다** — 노드 X에 대해 쓴 글이 노드 Y에 달린다(리뷰 실측, Chrome). 코멘트 탭에 머문 채
+ * 누르는 길은 7차부터 있었고, 속성 탭을 다녀오는 길은 8차가 탭 왕복에 초안을 살리며 열었다.
+ * 무엇을 왜 바꿨는지는 `panels/comment-panel.tsx`의 머리말 «새 코멘트 초안은 노드마다 …»가 갖는다.
+ *
+ * **혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 쟀다:
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 초안을 한 칸으로 되돌린다(`853ce0e` 전의 `comment-panel.tsx`) | 이 케이스 **혼자** |
+ * | 게시의 응답이 **모든** 노드의 초안을 비운다 | 이 케이스 **혼자** |
+ *
+ * 탭 왕복을 지나므로 «탭을 오가도 칸이 산다»를 깨는 변조(`key={chosen}`·마운트가 초안을 지운다)에서는
+ * 남과 함께 죽는다 — 그 축의 주인은 위 절의 *"새 코멘트 초안이 탭을 오가도 …"*다.
+ *
+ * 페이지가 바뀌면 노드마다의 초안도 버리는 것은 위 *"페이지가 바뀌면 쓰던 초안과 …"*가 잰다 —
+ * 두 페이지가 같은 노드 id(`n_root`)를 가져서, 넘기면 옆 페이지의 같은 id 칸에 앞 페이지의 글이
+ * 선다. 노드 id가 그 페이지 안에서만 뜻이 있다는 규칙이 그대로 그것이다.
+ */
+describe('새 코멘트는 쓴 노드에만 달린다 (9차)', () => {
+  it('쓰던 코멘트는 쓴 노드에만 달린다 — 다른 노드를 고르면 그 노드의 칸이 보이고, 돌아오면 쓰던 글이 그대로다', async () => {
+    const created: { pageId: string; nodeId: string; body: string }[] = []
+    await openPage(pageDoc(three({})), {
+      apiOverrides: {
+        listComments: async () => [],
+        createComment: async (_projectId, pageId, body) => {
+          created.push({ pageId, ...body })
+          return {
+            comment: comment({ id: `c-${created.length}`, nodeId: body.nodeId, body: body.body }),
+            marker: 1,
+            seq: 8,
+            markerOps: [],
+          }
+        },
+      },
+    })
+    const pick = (key: 'a' | 'b' | 'c'): void => {
+      fireEvent.click(document.body.querySelector(`[data-wb-id="n_${key}"]`) as HTMLElement)
+    }
+    await openCommentTab()
+    pick('a')
+    typeInto(await findNewBox(), '가에 대해 쓴 말')
+
+    // **1. 코멘트 탭에 머문 채 다른 노드를 누른다** — 7차부터 있던 길. 8차 판은 여기서 상자가
+    // `"가에 대해 쓴 말"`을 그대로 보였고, 그대로 달면 `n_b`에 달렸다.
+    pick('b')
+    expect(newBox().value).toBe('')
+    typeInto(newBox(), '나에 대해 쓴 말')
+    pick('a')
+    expect(newBox().value).toBe('가에 대해 쓴 말')
+
+    // **2. 속성 탭을 다녀오며 다른 노드를 고른다** — 8차가 연 길(그 전에는 탭 왕복에 초안을 잃었다).
+    toPropsTab()
+    pick('c')
+    await openCommentTab()
+    expect((await findNewBox()).value).toBe('')
+
+    // **돌아오면 쓰던 글이 원래 노드를 대상으로 그대로 있다** — 달면 그 노드에 달린다.
+    pick('a')
+    expect(newBox().value).toBe('가에 대해 쓴 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await waitFor(() => expect(created).toEqual([{ pageId: PAGE_ID, nodeId: 'n_a', body: '가에 대해 쓴 말' }]))
+    await waitFor(() => expect(newBox().value).toBe(''))
+
+    // **응답은 보낸 노드의 초안만 비운다** — 다른 노드에 써 둔 글은 남는다.
+    pick('b')
+    expect(newBox().value).toBe('나에 대해 쓴 말')
   })
 })

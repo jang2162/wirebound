@@ -28,6 +28,8 @@ import type { PatchResult } from '../../src/api/types'
 import {
   deselect,
   openPage,
+  OTHER_PAGE_ID,
+  OTHER_PAGE_TITLE,
   PAGE_ID,
   pageDetail,
   pageDoc,
@@ -36,6 +38,7 @@ import {
   renderEditor,
 } from '../editor-harness'
 // 카탈로그가 설치돼 있어야 `listComponents()`가 빈 배열이 아니다.
+import { clickAsBrowser } from '../click-as-browser'
 import { fakeApi } from '../helpers'
 import '../../src/catalog-setup'
 
@@ -763,12 +766,17 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
   })
 
-  it('캔버스로 다른 노드를 고르면 커밋되지 않은 타이핑이 사라진다', async () => {
-    // **설계된 손실이다.** 노드가 바뀔 때 로컬 초안을 버리는 방식(`key`)을 골랐기 때문이고,
-    // 그 근거는 `panels/controls/text-control.tsx`에 잰 값과 함께 있다.
+  it('포커스가 안 옮겨 간 채 캔버스로 노드가 바뀌면 커밋되지 않은 타이핑은 버려진다 — `key` 장치', async () => {
+    // **이 케이스가 재는 것은 장치이지 사용자가 겪는 일이 아니다** — `test/edit/
+    // undo-redo.test.tsx`의 트리 판과 같다. `fireEvent.click`은 포커스를 옮기지 않으므로
+    // blur 없이 선택이 바뀌고, 그때 `key`가 초안을 버린다(근거는 `panels/property-panel.tsx`의
+    // `PropControl` 주석).
     //
-    // 구조 트리로 고르면 이 손실이 없다 — 버튼이 포커스를 받아 blur가 나고 그때 커밋된다
-    // (실측). 캔버스는 `<div onClick>`이라 포커스가 옮겨 가지 않아 blur가 없다.
+    // **앞 판은 여기에 거꾸로 적었다** — *"구조 트리로 고르면 … blur가 나고 커밋된다(실측).
+    // 캔버스는 `<div onClick>`이라 포커스가 옮겨 가지 않아 blur가 없다."* jsdom 에서는 둘 다
+    // blur 가 없고(트리 판이 잰다), **Chrome 에서는 둘 다 blur 가 난다** — 캔버스의 `<div>`를
+    // 누르면 포커스가 `BODY`로 가며 `focusout TEXTAREA → null`이 나고 원래 노드로 커밋된다
+    // (8차 실측). 실브라우저의 클릭은 아래 «실브라우저의 클릭은 …» 절이 잰다.
     const { calls, api } = editable()
     await openPage(EDIT_DOC, { apiOverrides: api })
 
@@ -782,6 +790,182 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     // 초안은 나가지 않았고, 입력은 새 노드의 값이다.
     expect(calls).toHaveLength(0)
     expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
+  })
+})
+
+/**
+ * **실브라우저의 클릭은 선택이 바뀌기 전에 커밋한다**(8차 Chrome 실측 — `panels/
+ * property-panel.tsx`의 `PropControl` 주석의 표). 위 절의 «포커스가 안 옮겨 간 채 …» 둘은
+ * `fireEvent.click`이 포커스를 안 옮겨서 생기는 **장치의 값**이고, 이 절이 **사용자가 겪는
+ * 값**을 잰다. 흉내는 `test/click-as-browser.ts`의 `clickAsBrowser`다.
+ *
+ * **그 흉내가 맞는지는 Chrome 표로 대조했다** — 위젯 다섯 × 클릭 갈래 다섯, 25칸 전부에서
+ * 나간 편집 수 · 페이지 · 경로 · 돌아와 본 값 · focusout 순서가 같았다(대조용 가짜 서버는
+ * 커밋을 기억하게 했다). `fireEvent.click`으로 재면 25칸 전부 «0건 · 옛 값»이다. 키(Enter·
+ * Tab·Esc)와 창 닫기·뒤로 가기는 이 흉내의 밖이다. **9차에 흉내를 고친 뒤 다시 댔고 25칸이 또
+ * 같았다**(갈래까지의 값은 `test/click-as-browser.ts`의 머리말).
+ *
+ * **이 절이 잡는 회귀는 «누르면 포커스를 안 빼앗게» 하는 손질이다** — 누른 요소의
+ * **`pointerdown`이나 `mousedown`**에 `preventDefault()`를 걸면 실브라우저에서 blur 가 안 나 친
+ * 글자가 사라진다. 흉내도 그때 포커스를 안 옮긴다(`clickAsBrowser`의 1·2번). **8차 판은
+ * `mousedown`만 알았다** — 탭·캔버스의 `onPointerDown`에 걸면 Chrome 은 편집 0건 · 옛 값인데 이
+ * 절은 살았다(리뷰 N-B — web 2145 중 0 사망). 이 앱에 이미 그 꼴이 있다(`ShellResizer`).
+ *
+ * **다섯이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 쟀다.
+ * 줄마다 `onMouseDown` 판과 `onPointerDown` 판을 **따로** 심었고 둘 다 그 케이스 하나만 죽였다(9차):
+ *
+ * | 변조 — 그 자리의 누르는 이벤트에 `preventDefault()` | 혼자 죽는 것 |
+ * |---|---|
+ * | 우측 패널의 탭 버튼(`routes/editor.tsx`의 `RightPanel`) | *"다른 탭을 누르면 …"* |
+ * | 모드 토글의 «뷰 모드» 버튼(`ShellTools`) | *"모드를 바꾸면 …"* |
+ * | 구조 트리의 줄 버튼(`panels/structure-tree.tsx`) | *"트리로 다른 노드를 누르면 …"* |
+ * | 캔버스의 표면(`canvas/canvas.tsx`) | *"캔버스로 다른 노드를 누르면 …"* |
+ * | 메뉴 트리의 페이지 링크(`panels/menu-tree.tsx`) | *"메뉴로 다른 페이지를 누르면 …"* |
+ *
+ * **흉내에서 포커스 이동을 빼면 다섯이 함께 죽는다** — 흉내가 `fireEvent.click`과 같아진다.
+ * 포커스 대상에서 `button`·`a[href]`·`[tabindex]`를 빼면 *"다른 탭을 누르면 …"*이 혼자 죽는다 —
+ * 커밋은 `BODY`로 blur 해도 나므로 그 케이스가 **활성 요소**까지 본다.
+ *
+ * **흉내 자신의 검사 둘**(끝의 두 케이스)이 흉내의 1·2번을 지킨다:
+ *
+ * | 변조 — 흉내를 약하게 | 혼자 죽는 것 |
+ * |---|---|
+ * | `pointerdown`의 `preventDefault()`를 무시한다(또는 8차 판의 흉내로 되돌린다) | *"… `pointerdown`을 막으면 커밋이 없다 …"* |
+ * | `mousedown`의 `preventDefault()`를 무시한다 | *"… `mousedown`을 막으면 커밋이 없다 …"* |
+ *
+ * **8차 판에서는 흉내를 약하게 해도 아무것도 안 죽었고**, 제품 회귀와 겹치면(탭 `mousedown` 막음 +
+ * 흉내가 그것을 무시) 그 회귀도 안 잡혔다(리뷰 M1+M6 — 0 사망). 9차에는 두 겹침 모두 흉내 검사가
+ * 혼자 죽는다.
+ *
+ * **실패 방향도 대조했다** — 위 표의 탭·캔버스 변조(두 이벤트 다)를 Chrome 에 런타임 리스너로
+ * 심으니 실제로 편집 0건 · 돌아와 본 칸이 옛 값이었다. 곧 이 절이 죽는 자리에서 사용자도 글자를
+ * 잃는다.
+ */
+describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전에 원래 노드로 커밋한다', () => {
+  /** 편집을 받아 적는 가짜. **어느 페이지로 갔는지**도 적는다 — 페이지 갈래가 그것을 본다. */
+  function pagedEdits(): { calls: { pageId: string; ops: unknown }[]; api: Partial<ApiClient> } {
+    const calls: { pageId: string; ops: unknown }[] = []
+    let seq = 7
+    const patchOps: ApiClient['patchOps'] = async (_projectId, pageId, body) => {
+      calls.push({ pageId, ops: body.ops })
+      seq += 1
+      const result: PatchResult = {
+        seq,
+        revisionId: `rev-${seq}`,
+        inverse: [],
+        schemaVersion: 1,
+        ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }),
+      }
+      return result
+    }
+    return { calls, api: { patchOps } }
+  }
+
+  /** 첫 `Text`를 고르고 «내용» 칸을 **눌러** 친다 — 누르는 것이 포커스를 준다. */
+  async function typing(): Promise<{ calls: { pageId: string; ops: unknown }[] }> {
+    const { calls, api } = pagedEdits()
+    await openPage(EDIT_DOC, { docs: { [OTHER_PAGE_ID]: EDIT_DOC }, apiOverrides: api })
+    selectAt('Text', 0)
+    const box = requireWidget('내용')
+    clickAsBrowser(box)
+    fireEvent.change(box, { target: { value: '새 내용' } })
+    expect(calls).toHaveLength(0)
+    return { calls }
+  }
+
+  const FIRST_TEXT = [{ op: 'replace', path: '/root/children/0/props/content', value: '새 내용' }]
+
+  it('다른 탭을 누르면 커밋되고, 돌아와도 그 값이다', async () => {
+    const { calls } = await typing()
+
+    const tab = screen.getByRole('tab', { name: '코멘트' })
+    clickAsBrowser(tab)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]).toEqual({ pageId: PAGE_ID, ops: FIRST_TEXT })
+    // **포커스가 누른 버튼으로 간다**(Chrome 실측: `focusout TEXTAREA → BUTTON`, 활성 요소 `BUTTON`).
+    // 커밋은 `BODY`로 blur 해도 나므로 커밋 수만 보면 흉내가 버튼을 포커스하는지 아무도 안 잰다.
+    expect(document.activeElement).toBe(tab)
+
+    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('새 내용')
+  })
+
+  it('모드를 바꾸면 커밋된다', async () => {
+    const { calls } = await typing()
+
+    clickAsBrowser(screen.getByRole('button', { name: '뷰 모드' }))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]).toEqual({ pageId: PAGE_ID, ops: FIRST_TEXT })
+  })
+
+  it('트리로 다른 노드를 누르면 원래 노드로 커밋된다 — 새 노드가 아니다', async () => {
+    const { calls } = await typing()
+
+    clickAsBrowser(
+      within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[1]!,
+    )
+    await waitFor(() => expect(calls).toHaveLength(1))
+    // **경로가 첫 노드다.** 새 노드로 갔다면 `children/1`이다 — 그것이 더 나쁜 손실이다
+    // (앞 노드에 친 글이 다른 노드의 값이 된다).
+    expect(calls[0]).toEqual({ pageId: PAGE_ID, ops: FIRST_TEXT })
+    expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
+  })
+
+  it('캔버스로 다른 노드를 누르면 원래 노드로 커밋된다', async () => {
+    const { calls } = await typing()
+
+    const other = document.body.querySelector('[data-wb-id="n-text2"]')
+    if (other === null) throw new Error('캔버스에 둘째 노드가 없다')
+    clickAsBrowser(other)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]).toEqual({ pageId: PAGE_ID, ops: FIRST_TEXT })
+    expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('둘째 내용')
+  })
+
+  it('메뉴로 다른 페이지를 누르면 원래 페이지로 커밋된다', async () => {
+    const { calls } = await typing()
+
+    clickAsBrowser(
+      within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', {
+        name: OTHER_PAGE_TITLE,
+      }),
+    )
+    await waitFor(() => expect(calls).toHaveLength(1))
+    // **페이지가 앞 페이지다.** 옆 페이지로 갔다면 남의 페이지에 그 글이 들어간다(F1 부류).
+    expect(calls[0]).toEqual({ pageId: PAGE_ID, ops: FIRST_TEXT })
+  })
+
+  /**
+   * **흉내 자신의 검사 둘**(9차, 리뷰 N-B). 위 다섯은 흉내가 «커밋된다»고 말하는 쪽만 재서, 흉내가
+   * 누르는 이벤트의 `preventDefault()`를 **존중하는지** — 이 절이 잡으려는 회귀가 그것에 달려
+   * 있다 — 는 아무도 안 쟀다(리뷰: 그 가지를 지워도 web 2145 중 0 사망).
+   *
+   * 막는 것은 **런타임의 네이티브 리스너**다 — 리뷰가 Chrome 에 심은 것과 같은 꼴이라 두 값을
+   * 나란히 댈 수 있다. Chrome 값(리뷰 5번 · 9차 재대조): 탭 + `pointerdown` 막음 → 편집 0 ·
+   * 돌아오면 옛 값. 탭 + `mousedown` 막음 → 같음. 막지 않으면 위 *"다른 탭을 누르면 …"* — 1건.
+   */
+  async function noCommitAfter(block: 'pointerdown' | 'mousedown'): Promise<void> {
+    const { calls } = await typing()
+    const tab = screen.getByRole('tab', { name: '코멘트' })
+    tab.addEventListener(block, (event) => event.preventDefault())
+
+    clickAsBrowser(tab)
+    // 커밋은 낙관적으로 먼저 문서에 얹히고 요청은 그 뒤에 나간다 — 한 틱 기다려 둘 다 본다.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(calls).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    expect((requireWidget('내용') as HTMLTextAreaElement).value).toBe('옛 내용')
+  }
+
+  it('누르는 자리가 `pointerdown`을 막으면 커밋이 없다 — 흉내 자신의 검사', async () => {
+    await noCommitAfter('pointerdown')
+  })
+
+  it('누르는 자리가 `mousedown`을 막으면 커밋이 없다 — 흉내 자신의 검사', async () => {
+    await noCommitAfter('mousedown')
   })
 })
 

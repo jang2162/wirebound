@@ -402,15 +402,17 @@ describe('undo / redo', () => {
     expect(calls).toHaveLength(1)
   })
 
-  it('구조 트리를 클릭해 노드를 옮기면 커밋되지 않은 타이핑이 사라진다', async () => {
-    // **주석이 오래 주장하던 것의 반대다.** 앞 판은 "구조 트리로 고르면 버튼이 포커스를
-    // 받아 blur가 나고 초안이 커밋된다"고 적었는데, 그것은 `focus()`로 잰 값이고 **사용자가
-    // 하는 것은 클릭이다.** 실측: 트리 버튼을 클릭하면 `activeElement`가 `BODY`에 남아
-    // `blur`가 나지 않고 요청이 0건이며, 입력은 새 노드의 값이 된다 — 캔버스 클릭과
-    // 갈리지 않는다.
+  it('포커스가 안 옮겨 간 채 트리로 노드가 바뀌면 커밋되지 않은 타이핑은 버려진다 — `key` 장치', async () => {
+    // **이 케이스가 재는 것은 장치이지 사용자가 겪는 일이 아니다.** `fireEvent.click`은
+    // 포커스를 옮기지 않아(`activeElement`는 `BODY`에 남는다) blur 가 안 나고, 그래서 선택이
+    // 먼저 바뀐다 — 그때 `PropertyPanel`의 `key={node.id}`가 앞 노드의 초안을 **새 노드로
+    // 옮겨 가지 않고 버리는지**를 잠근다.
     //
-    // 실브라우저는 플랫폼에 달렸고 **여기서 재지 않았다**(`controls/text-control.tsx`가
-    // 아니라 `panels/property-panel.tsx`의 `PropControl` 주석에 그 사실이 있다).
+    // **실브라우저(Chrome, 8차 실측)의 클릭은 다르다** — `mousedown`이 입력의 포커스를 거두어
+    // 그 blur 가 **원래 노드로** 커밋한 뒤에 선택이 바뀐다. 그 행동은 `test/panels/
+    // property-panel.test.tsx`의 «실브라우저의 클릭은 …» 절이 `clickAsBrowser`로 잰다. 앞
+    // 판은 이 케이스의 이름을 *"구조 트리를 클릭해 … 사라진다"*로 달아 jsdom 값을 행동처럼
+    // 적었다(`panels/property-panel.tsx`의 `PropControl` 주석).
     const { calls, api } = server()
     await openPage(DOC, { apiOverrides: api })
 
