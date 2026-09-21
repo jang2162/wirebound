@@ -212,7 +212,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다(D11) |
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
 | `/api/projects/:projectId/pages/:pageId/comments` | GET | viewer | — | 200 코멘트 배열(`created_at` 오름차순). 항목은 `{ id, nodeId, body, authorId, authorName, createdAt, updatedAt }` |
-| `/api/projects/:projectId/pages/:pageId/comments` | POST | editor | `{ nodeId, body }` | 201 `{ comment, marker, seq, markerOps }` — **번호가 없는 노드면 문서에 `marker`를 붙이고 revision을 남긴다**(아래 "코멘트와 번호"). 문서에 없는 노드는 404, 본문 1~2000자 밖·NUL은 400, 그 사이 남이 고쳤으면 409 |
+| `/api/projects/:projectId/pages/:pageId/comments` | POST | editor | `{ nodeId, body, idempotencyKey? }` | 201 `{ comment, marker, seq, markerOps }` — **번호가 없는 노드면 문서에 `marker`를 붙이고 revision을 남긴다**(아래 "코멘트와 번호"). 문서에 없는 노드는 404, 본문 1~2000자 밖·NUL은 400, 그 사이 남이 고쳤으면 409. **`idempotencyKey`**(영숫자·`-`·`_` 1~64자, 밖은 400): 같은 (페이지, 작성자, 키)로 **이미 달렸으면 200 으로 그 행을 그대로 돌려준다** — 새 행·새 번호·revision 이 없고 `markerOps: []`, `seq`는 지금의 `head_seq`, `marker`는 그 노드의 **지금** 번호(노드나 번호가 사라졌으면 `null`). **같은 키에 다른 `nodeId`·`body`면 409**(아래 "멱등 키") |
 | `/api/projects/:projectId/pages/:pageId/comments/:commentId` | PATCH | editor | `{ body }` | 200 코멘트. **작성자만 고칠 수 있다 — 남의 것은 403.** 문서를 안 바꾸므로 `seq`가 없다 |
 | `/api/projects/:projectId/pages/:pageId/comments/:commentId` | DELETE | editor | — | 200 `{ seq, markerOps }`(**204가 아니다** — 문서 변화를 실어야 한다). **그 노드의 마지막이면 `marker`도 지운다.** 남의 코멘트도 지울 수 있다 |
 | `/api/projects/:projectId/pages/:pageId/comments/renumber` | POST | editor | — | 200 `{ seq, markerOps }` — 문서 순서대로 1부터 재번호(§9). **한 revision이다.** 바꿀 것이 없으면 `markerOps: []`이고 revision도 안 쌓인다 |
@@ -577,6 +577,29 @@ ops를 적용하고 `headSeq`를 `seq`로 맞춘다 — **문서를 통째로 �
 - **코멘트 행은 있는데 노드가 문서에 없는 경우.** 코멘트가 달린 노드를 지우면 그 행이
   남는다(`comments.node_id`에 FK가 없다 — 노드는 테이블이 아니라 jsonb 안의 값이다).
   그 행은 GET에 그대로 실려 나간다.
+
+### 멱등 키 — 같은 게시를 두 번 커밋하지 않는다 (2026-09-21)
+
+클라이언트는 응답을 못 받은 게시가 **달렸는지 모른다.** 서버는 브라우저가 끊은 요청도 끝까지
+처리하므로(실측 — 새로고침이 끊은 게시가 커밋됐다), 「안 달렸다」고 보고 다시 보내면 **같은 글이
+두 행**이 된다. 그래서 `POST .../comments`가 `idempotencyKey`를 받는다.
+
+| 규칙 | 왜 |
+|---|---|
+| 같은 (페이지, **작성자**, 키)면 앞 행을 **200** 으로 돌려준다 | 작성자를 빼면 남이 내 키를 실어 **내 행을 제 게시의 결과로** 받는다 — 멱등이 아니라 남의 것을 받는 길이다 |
+| 재생은 문서를 안 바꾼다 — `markerOps: []` · `seq`는 지금의 `head_seq` | 번호가 두 번 오르면 안 된다. 받는 쪽은 빈 `markerOps`면 아무것도 안 건드린다 |
+| 재생의 `marker`는 그 노드의 **지금** 번호, 없으면 `null` | 첫 게시 뒤 노드가 지워졌어도 게시는 있다 — 그래서 **노드를 보기 전에** 키를 본다 |
+| 같은 키에 **다른 `nodeId`·`body`**면 **409** | 앞 행을 돌려주면 새 글이 조용히 버려지고, 새 행을 만들면 한 키 아래 게시가 둘이 된다 |
+| 키를 **잠금 안에서 한 번 더** 본다 — 낡음(`stale`)보다 먼저 | 같은 키가 동시에 오면 뒤의 요청은 앞 요청이 올린 `head_seq`에 걸린다. 키를 먼저 봐야 409 가 아니라 재생이다 |
+| 키가 없으면 예전 그대로다 | 같은 말을 일부러 두 번 다는 사람의 둘째 행을 지우지 않는다 |
+
+저장은 `comments.idempotency_key`(NULL 허용)와 유일 색인 `(page_id, author_id, idempotency_key)`다
+(`src/db/migrations/0012-comment-idempotency-key.ts`). 키 없는 행(가져오기·스냅샷 복원 포함)은
+`NULL`이라 여럿 들어간다. **스냅샷을 복원하면 키가 비워진다** — 복원 앞에 보낸 키가 복원 뒤에
+다시 오면 새 행이 된다.
+
+**웹이 키를 어디에 드는지**(초안이 성공할 때까지 같은 키 · 초안을 고치면 새 키 · 페이지를 떠나면
+버림)는 `apps/web/src/panels/comment-panel.tsx`의 `POST_KEYS`가 갖는다.
 
 ### 트리 응답 형태 (`GET /api/projects/:projectId/tree`)
 

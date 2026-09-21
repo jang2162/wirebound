@@ -115,6 +115,32 @@ function sorted(codes: number[]): number[] {
   return codes.slice().sort((a, b) => a - b)
 }
 
+describe('같은 멱등 키의 게시가 동시에 온다', () => {
+  it('둘 다 성공하고(201·200) 행은 하나 · 번호는 1 이다', async () => {
+    // **잠금 안에서 키를 한 번 더 보는 것이 이 케이스의 전부다**(`routes/comments.ts`). 둘 다
+    // 잠그기 전의 확인을 지나(아직 아무것도 커밋되지 않았다) 페이지 행에서 줄을 선다. 뒤의 요청이
+    // 잠근 뒤 키를 안 보면 앞 요청이 번호를 붙여 올린 `head_seq`에 걸려 **409(stale)** 를 받는다 —
+    // 같은 게시를 두 번 보낸 사람이 «실패»를 듣는다. 키를 봐도 **낡음보다 뒤에** 보면 같다.
+    await withRealApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const post = () =>
+        ctx.app.inject({
+          method: 'POST',
+          url: commentsUrl(fx),
+          cookies: fx.owner.cookie,
+          payload: { nodeId: 'n_a', body: '한 번만 달 말', idempotencyKey: 'same-key' },
+        })
+
+      const [first, second] = await Promise.all([post(), post()])
+
+      expect(sorted([first.statusCode, second.statusCode])).toEqual([200, 201])
+      expect(first.json().comment.id).toBe(second.json().comment.id)
+      expect(await commentCount(fx.pageId)).toBe(1)
+      expect(markerOf(await schemaOf(fx.pageId), 'n_a')).toBe(1)
+    })
+  })
+})
+
 describe('코멘트 삭제의 동시성', () => {
   it('409를 받은 삭제는 행을 남기지 않는다 (리뷰 B5)', async () => {
     // **이 케이스가 B5의 전부다.** 서로 다른 노드의 마지막 코멘트를 동시에 지우면 둘 다

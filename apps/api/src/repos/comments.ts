@@ -167,6 +167,27 @@ export async function findCommentById(
 }
 
 /**
+ * 그 사람이 그 키로 이 페이지에 단 코멘트. 없으면 `null`이다(`0012-comment-idempotency-key`).
+ *
+ * **범위가 (페이지, 작성자, 키)인 것이 요점이다** — 그 마이그레이션의 머리말. 남이 같은 키를
+ * 실어도 이 조회는 그 사람의 행을 찾지 않는다.
+ */
+export async function findCommentByIdempotencyKey(
+  db: DbHandle,
+  pageId: string,
+  authorId: string,
+  idempotencyKey: string,
+): Promise<CommentRecord | null> {
+  const row = await selectComments(db)
+    .where('comments.page_id', '=', pageId)
+    .where('comments.author_id', '=', authorId)
+    .where('comments.idempotency_key', '=', idempotencyKey)
+    .executeTakeFirst()
+
+  return row ? toRecord(row as CommentRow) : null
+}
+
+/**
  * 이 노드에 붙은 코멘트 수. **D3의 *"마지막 코멘트를 지우면 번호가 사라진다"*를 판정하는
  * 자리다** — 라우트가 삭제 **뒤에** 이것을 세어 0이면 문서에서 `marker`를 지운다.
  *
@@ -196,7 +217,7 @@ export async function countNodeComments(db: DbHandle, pageId: string, nodeId: st
  */
 export async function insertComment(
   db: DbHandle,
-  input: { pageId: string; nodeId: string; body: string; authorId: string },
+  input: { pageId: string; nodeId: string; body: string; authorId: string; idempotencyKey?: string },
 ): Promise<CommentRecord> {
   assertNoNulByte(input.body)
 
@@ -207,6 +228,8 @@ export async function insertComment(
       node_id: input.nodeId,
       body: input.body,
       author_id: input.authorId,
+      // 없으면 키를 만들지 않는다 — 컬럼의 기본값(`NULL`)이 «키 없는 게시»다(0012).
+      ...(input.idempotencyKey === undefined ? {} : { idempotency_key: input.idempotencyKey }),
     })
     .returning('id')
     .executeTakeFirstOrThrow()

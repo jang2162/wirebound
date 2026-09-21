@@ -361,6 +361,164 @@ describe('POST .../comments — 번호 부여(D2·D3)', () => {
   })
 })
 
+/**
+ * **멱등 키**(`0012-comment-idempotency-key` — 이월 Q·R 뒤). 웹의 쓰기 장부가 응답 없는 게시를
+ * 다시 읽어 «안 달림»으로 판정한 뒤 서버가 늦게 커밋하면, 다시 단 게시가 **같은 글의 둘째 행**이
+ * 됐다(Chrome — `apps/web/src/panels/write-ledger.tsx`의 머리말). 같은 초안은 같은 키를 싣고,
+ * 서버는 같은 키면 앞 행을 돌려준다. 무엇을 왜 하는지는 `routes/comments.ts`의 `replayOf`가 갖는다.
+ *
+ * **각 케이스가 혼자 죽는다** — 변조를 하나씩 심고 백업에서 바이트 비교로 복원하며 쟀다(이 절 ·
+ * `comments-concurrency.test.ts` · `repos-comments.test.ts` · 웹 케이스를 함께 돌렸다):
+ *
+ * | 변조 | 혼자 죽는 것 |
+ * |---|---|
+ * | 재생도 번호 변화(`markerOps`)를 다시 싣는다 | *"같은 키가 다시 오면 …"* |
+ * | 같은 키에 다른 글이어도 앞 행을 돌려준다 | *"같은 키에 다른 글이 오면 409 …"* |
+ * | 키가 없어도 같은 (노드, 본문)이면 합친다 | *"키가 없으면 예전 그대로다 …"* |
+ * | 키 값을 안 본다(내 키 있는 행이면 합친다) | *"키가 다르면 같은 말이어도 새 행이다"* |
+ * | 키의 범위에서 작성자를 뺀다 | *"남이 같은 키를 실어도 …"* |
+ * | 노드를 보기 전의 키 확인을 뺀다 | *"첫 게시 뒤 그 노드가 지워졌어도 …"* |
+ * | 키의 글자를 안 좁힌다(길이만) | *"키의 글자를 좁힌다 …"* |
+ * | 잠금 안의 키 확인을 뺀다 · 그것을 낡음 뒤로 옮긴다 | `comments-concurrency.test.ts`의 *"둘 다 성공하고 …"* |
+ * | 유일 색인을 안 만든다(보통 색인으로) | `repos-comments.test.ts`의 *"같은 (페이지, 작성자, 키)의 둘째 행은 …"* |
+ *
+ * 묶음: 키를 저장하지 않으면 다섯이, 재생도 201 이면 셋이 함께 죽는다.
+ */
+describe('POST .../comments — 멱등 키', () => {
+  function postKeyed(ctx: TestContext, fx: Fixture, nodeId: string, body: string, key: string, cookie = fx.cookie) {
+    return ctx.app.inject({
+      method: 'POST',
+      url: commentsUrl(fx),
+      cookies: cookie,
+      payload: { nodeId, body, idempotencyKey: key },
+    })
+  }
+
+  async function rows(ctx: TestContext, fx: Fixture): Promise<{ id: string; body: string; authorId: string }[]> {
+    const res = await ctx.app.inject({ method: 'GET', url: commentsUrl(fx), cookies: fx.cookie })
+    return res.json()
+  }
+
+  it('같은 키가 다시 오면 앞 행을 그대로 돌려준다 — 행이 하나이고 번호가 두 번 오르지 않는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await putThree(ctx, fx)
+
+      const first = await postKeyed(ctx, fx, 'n_b', '같은 말', 'key-1')
+      const again = await postKeyed(ctx, fx, 'n_b', '같은 말', 'key-1')
+
+      expect(first.statusCode, first.body).toBe(201)
+      // **200 이다** — 이 요청은 아무것도 만들지 않았다.
+      expect(again.statusCode, again.body).toBe(200)
+      expect(again.json().comment).toEqual(first.json().comment)
+      expect(again.json().marker).toBe(1)
+      // 이 요청이 문서에 낸 변화가 없다 — 빈 `markerOps`이고 `seq`는 지금의 것이다.
+      expect(again.json().markerOps).toEqual([])
+      expect(again.json().seq).toBe(first.json().seq)
+      expect(await rows(ctx, fx)).toHaveLength(1)
+
+      // **번호가 두 번 오르지 않았다** — 다음 노드의 첫 코멘트가 2번을 받는다(재생이 번호를
+      // 하나 먹었으면 3번이다).
+      const next = await postComment(ctx, fx, 'n_c', '다음 노드')
+      expect(next.json().marker).toBe(2)
+    })
+  })
+
+  it('같은 키에 다른 글이 오면 409 다 — 앞 행도 새 행도 돌려주지 않는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await putThree(ctx, fx)
+      await postKeyed(ctx, fx, 'n_a', '처음 쓴 말', 'key-1')
+
+      const edited = await postKeyed(ctx, fx, 'n_a', '고쳐 쓴 말', 'key-1')
+      const moved = await postKeyed(ctx, fx, 'n_b', '처음 쓴 말', 'key-1')
+
+      expect(edited.statusCode, edited.body).toBe(409)
+      expect(edited.json().error.message).toBe('같은 멱등 키로 다른 코멘트가 이미 달렸습니다')
+      expect(moved.statusCode, moved.body).toBe(409)
+      expect((await rows(ctx, fx)).map((row) => row.body)).toEqual(['처음 쓴 말'])
+    })
+  })
+
+  it('키가 없으면 예전 그대로다 — 같은 말을 두 번 보내면 두 행이다', async () => {
+    // **양성 대조.** 이것이 없으면 «키와 무관하게 같은 글이면 합친다»도 위 케이스를 통과한다 —
+    // 같은 말을 일부러 두 번 다는 사람(«확인»)의 둘째 행이 사라진다.
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await postComment(ctx, fx, fx.rootNodeId, '확인')
+      await postComment(ctx, fx, fx.rootNodeId, '확인')
+
+      expect(await rows(ctx, fx)).toHaveLength(2)
+    })
+  })
+
+  it('키가 다르면 같은 말이어도 새 행이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await postKeyed(ctx, fx, fx.rootNodeId, '확인', 'key-1')
+      const second = await postKeyed(ctx, fx, fx.rootNodeId, '확인', 'key-2')
+
+      expect(second.statusCode, second.body).toBe(201)
+      expect(await rows(ctx, fx)).toHaveLength(2)
+    })
+  })
+
+  it('남이 같은 키를 실어도 내 행을 받지 않는다 — 범위는 (페이지, 작성자, 키)다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const other = await signup(ctx)
+      await addMember(ctx, fx.projectId, other.user.id, 'editor')
+      const mine = await postKeyed(ctx, fx, fx.rootNodeId, '같은 말', 'key-1')
+
+      const theirs = await postKeyed(ctx, fx, fx.rootNodeId, '같은 말', 'key-1', other.cookie)
+
+      expect(theirs.statusCode, theirs.body).toBe(201)
+      expect(theirs.json().comment.id).not.toBe(mine.json().comment.id)
+      expect(theirs.json().comment.authorId).toBe(other.user.id)
+      expect(await rows(ctx, fx)).toHaveLength(2)
+    })
+  })
+
+  it('첫 게시 뒤 그 노드가 지워졌어도 같은 키면 재생한다 — 번호는 `null`이다', async () => {
+    // **노드를 보기 전에 키를 본다**(`routes/comments.ts`). 노드부터 보면 여기가 404 다 —
+    // 게시는 있는데(«사라진 노드» 무리) «그 노드가 없다»고 말하게 된다.
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await putThree(ctx, fx)
+      const first = await postKeyed(ctx, fx, 'n_a', '가에 단 말', 'key-1')
+      const withoutA = docWithThree()
+      withoutA.root.children = (withoutA.root.children ?? []).filter((node) => node.id !== 'n_a')
+      const put = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/schema`,
+        cookies: fx.cookie,
+        payload: { schema: withoutA },
+      })
+      expect(put.statusCode, put.body).toBe(200)
+
+      const again = await postKeyed(ctx, fx, 'n_a', '가에 단 말', 'key-1')
+
+      expect(again.statusCode, again.body).toBe(200)
+      expect(again.json().comment.id).toBe(first.json().comment.id)
+      expect(again.json().marker).toBeNull()
+      expect(await rows(ctx, fx)).toHaveLength(1)
+    })
+  })
+
+  it('키의 글자를 좁힌다 — 영숫자·`-`·`_` 1~64자 밖은 400 이다(NUL 이 컬럼까지 가지 않는다)', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      for (const key of ['', 'a'.repeat(65), 'has space', `nul${String.fromCharCode(0)}`, '한글']) {
+        const res = await postKeyed(ctx, fx, fx.rootNodeId, '말', key)
+        expect(res.statusCode, `${JSON.stringify(key)} ${res.body}`).toBe(400)
+      }
+      const ok = await postKeyed(ctx, fx, fx.rootNodeId, '말', 'a'.repeat(64))
+      expect(ok.statusCode, ok.body).toBe(201)
+      expect(await rows(ctx, fx)).toHaveLength(1)
+    })
+  })
+})
+
 describe('PATCH .../comments/:commentId — 본문 수정', () => {
   it('작성자는 고칠 수 있고 문서는 안 바뀐다', async () => {
     await withApi(async (ctx) => {

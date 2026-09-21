@@ -139,7 +139,7 @@ import { requestActor, requestEventActor } from '../auth/actor'
 import { projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
-import { badRequest, forbidden, notFound, unauthenticated } from '../errors'
+import { badRequest, conflict, forbidden, notFound, unauthenticated } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
 import {
@@ -147,6 +147,7 @@ import {
   countNodeComments,
   deleteComment,
   findCommentById,
+  findCommentByIdempotencyKey,
   insertComment,
   listComments,
   updateCommentBody,
@@ -284,8 +285,26 @@ const Body = z
   .min(COMMENT_BODY_MIN_LENGTH, '코멘트를 입력하세요')
   .max(COMMENT_BODY_MAX_LENGTH, `코멘트는 ${COMMENT_BODY_MAX_LENGTH}자 이하여야 합니다`)
 
+/**
+ * 게시의 멱등 키(`0012-comment-idempotency-key`). **클라이언트가 짓는다** — 웹은 초안을 처음
+ * 보낼 때 `crypto.randomUUID()`로 짓고 그 초안이 성공할 때까지 같은 키를 싣는다
+ * (`apps/web/src/panels/comment-panel.tsx`의 `POST_KEYS`).
+ *
+ * **글자를 좁힌다** — `PATCH .../ops`의 `clientOpId`(`http/patch-ops.ts`)는 길이만 보는데, 이
+ * 키는 **컬럼에 저장된다.** 아무 문자열이나 받으면 NUL 이 Postgres 에서 500 이 되는 길을 하나
+ * 더 연다(`routes/pages.ts`의 NUL 절이 적은 부류). uuid 와 흔한 키 형식이 다 들어가는 영숫자·
+ * `-`·`_` 1~64자로 두면 그 길이 봉투에서 400 으로 끝난다.
+ */
+const IdempotencyKey = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{1,64}$/, '멱등 키는 영숫자·`-`·`_` 1~64자여야 합니다')
+
 /** `z.strictObject`라 선언되지 않은 키가 오면 그 자체로 400이다(이 저장소의 관례). */
-const CreateCommentBody = z.strictObject({ nodeId: z.string().min(1), body: Body })
+const CreateCommentBody = z.strictObject({
+  nodeId: z.string().min(1),
+  body: Body,
+  idempotencyKey: IdempotencyKey.optional(),
+})
 
 /**
  * 키가 `body` 하나라 `.refine(빈 본문 금지)`를 걸지 않는다 — 그 키가 없는 것은
@@ -295,6 +314,39 @@ const CreateCommentBody = z.strictObject({ nodeId: z.string().min(1), body: Body
 const UpdateCommentBody = z.strictObject({ body: Body })
 
 /** API 계약이 노출하는 필드만 담는다 — `pageId`는 응답에 싣지 않는다(경로에 이미 있다). */
+/**
+ * **같은 키로 이미 달린 게시에 답한다 — 앞 행을 그대로 돌려준다.** 새 행도, 새 번호도,
+ * revision 도 없다(번호가 두 번 오르면 안 된다). 그래서:
+ *
+ * - `markerOps`는 **빈 배열**이고 `seq`는 **지금의** `head_seq`다 — 이 요청이 문서에 낸 변화가
+ *   없다. 웹의 `applyMarkerChange`는 빈 `markerOps`면 아무것도 안 건드린다(`headSeq`도).
+ * - `marker`는 그 노드의 **지금** 번호다. 그 사이 노드가 지워졌거나 번호가 사라졌으면 `null`이다 —
+ *   게시는 있는데 번호가 없는 상태를 지어낸 번호로 덮지 않는다.
+ * - 상태는 **200**이다(새로 만든 것이 없다). 201 은 이 요청이 행을 만들었을 때만이다.
+ *
+ * **같은 키에 다른 글(노드·본문)이 오면 409다.** 웹은 초안을 고치면 새 키를 짓는다(키가 초안의
+ * **그 글**에 매인다 — `comment-panel.tsx`의 `POST_KEYS`) — 그러니 이 갈래는 클라이언트의 잘못이다.
+ * 앞 행을 돌려주면 새 글이 **조용히 버려지고**, 새 행을 만들면 한 키 아래 게시가 둘이 되어
+ * 키가 멱등이 아니게 된다. 둘 다 사용자가 모르는 채 일어나므로 실패로 말한다.
+ */
+function replayOf(
+  existing: CommentRecord,
+  request: { nodeId: string; body: string },
+  document: PageDocument,
+  headSeq: number,
+) {
+  if (existing.nodeId !== request.nodeId || existing.body !== request.body) {
+    throw conflict('같은 멱등 키로 다른 코멘트가 이미 달렸습니다')
+  }
+  const marker = nodeAt(document, existing.nodeId)?.marker
+  return {
+    comment: toResponse(existing),
+    marker: typeof marker === 'number' ? marker : null,
+    seq: headSeq,
+    markerOps: [] as PatchOp[],
+  }
+}
+
 function toResponse(comment: CommentRecord) {
   return {
     id: comment.id,
@@ -406,6 +458,9 @@ export function commentRoutes() {
      * 편집이 이미 얹혀 있을 수 있다)에 같은 ops를 적용하고 `headSeq`를 `seq`로 맞춘다 —
      * 문서를 통째로 돌려주면 아직 보내지 않은 낙관적 편집이 화면에서 사라진다.
      * 문서가 안 바뀐 경우(이미 번호가 있는 노드)에는 빈 배열이고 `seq`는 그대로다.
+     *
+     * **`idempotencyKey`가 있으면 같은 게시를 두 번 커밋하지 않는다** — 같은 (페이지, 작성자, 키)로
+     * 이미 달렸으면 앞 행을 200 으로 돌려준다(`replayOf`, `0012-comment-idempotency-key`).
      */
     app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('editor') }, async (request, reply) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)
@@ -428,6 +483,20 @@ export function commentRoutes() {
       }
 
       const { document, page } = await loadDocument(app, projectId, pageId)
+      const key = body.idempotencyKey
+
+      // **같은 키로 이미 달렸으면 앞 행을 돌려준다**(`replayOf`). **노드를 보기 전에 본다** — 첫
+      // 게시 뒤 그 노드가 지워졌어도 게시는 있다. 여기서 404 를 내면 «달렸는데 안 달렸다»가 된다.
+      // 잠그지 않고 본다 — 이미 커밋된 게시는 이것으로 충분하다. **아직 커밋 중인** 같은 키는 아래
+      // 잠금 안에서 한 번 더 본다.
+      if (key !== undefined) {
+        const existing = await findCommentByIdempotencyKey(app.db, pageId, currentUser.id, key)
+        if (existing !== null) {
+          reply.code(200)
+          return replayOf(existing, body, document, page.headSeq)
+        }
+      }
+
       const nodePath = findNodePath(document.root, body.nodeId)
       const node = nodePath === undefined ? undefined : nodeAt(document, body.nodeId)
       if (nodePath === undefined || node === undefined) {
@@ -444,10 +513,22 @@ export function commentRoutes() {
       // 트랜잭션은 이 구간의 세이브포인트가 된다. 나누면 *"번호는 붙었는데 코멘트가
       // 없다"*(재라 #6의 상태)가 실패 경로에서 실제로 만들어진다.
       const result = await runWrite(app.db, page.headSeq, async (trx) => {
-        // **잠그고, 그 사이 문서가 바뀌지 않았는지 본다**(규칙 2). `ops`가 비어도 지난다 —
-        // 남이 마지막 코멘트를 지워 번호를 없앤 직후라면 아래 *"이미 번호가 있다"*는
-        // 판단이 낡은 것이고, 그대로 두면 **번호 없는 코멘트**가 만들어진다.
-        await lockAndCheck(trx, projectId, pageId, page.headSeq)
+        // **잠근다.** 그리고 **낡았는지 보기 전에** 같은 키를 한 번 더 본다 — 같은 키가 동시에
+        // 왔으면 앞 요청이 방금 커밋했다. 그 요청이 번호를 붙였으면 `head_seq`가 올라 있어,
+        // 순서를 바꾸면 이 요청이 재생 대신 **409(stale)** 를 받는다(같은 게시를 두 번 보낸 사람이
+        // «실패»를 듣는다). 페이지 행을 잠갔으므로 같은 페이지의 게시는 여기서 한 줄로 선다.
+        const locked = await lockPageForEdit(trx, projectId, pageId)
+        if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' })
+        if (key !== undefined) {
+          const existing = await findCommentByIdempotencyKey(trx, pageId, currentUser.id, key)
+          if (existing !== null) return { replay: replayOf(existing, body, migrateDocument(locked.schema), locked.headSeq) }
+        }
+        // **그 사이 문서가 바뀌지 않았는지 본다**(규칙 2 — `lockAndCheck`와 같은 판정). `ops`가
+        // 비어도 지난다 — 남이 마지막 코멘트를 지워 번호를 없앤 직후라면 아래 *"이미 번호가
+        // 있다"*는 판단이 낡은 것이고, 그대로 두면 **번호 없는 코멘트**가 만들어진다.
+        if (locked.headSeq !== page.headSeq) {
+          throw new EditRollback({ ok: false, reason: 'stale', headSeq: locked.headSeq })
+        }
 
         if (ops.length === 0) {
           // 이미 번호가 있는 노드다 — 문서를 안 바꾸므로 revision도 만들지 않는다.
@@ -459,6 +540,7 @@ export function commentRoutes() {
             nodeId: body.nodeId,
             body: body.body,
             authorId: currentUser.id,
+            ...(key === undefined ? {} : { idempotencyKey: key }),
           })
           return { comment, seq: page.headSeq, marker, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
         }
@@ -481,9 +563,16 @@ export function commentRoutes() {
           nodeId: body.nodeId,
           body: body.body,
           authorId: currentUser.id,
+          ...(key === undefined ? {} : { idempotencyKey: key }),
         })
         return { comment, seq: outcome.seq, marker, markerOps: ops, warnings: outcome.warnings }
       })
+
+      // 잠금 안에서 같은 키를 찾았다 — 이 요청은 아무것도 안 바꿨다(알릴 것도 없다).
+      if ('replay' in result) {
+        reply.code(200)
+        return result.replay
+      }
 
       notifyMarkerChange(app, request, projectId, pageId, result)
 
