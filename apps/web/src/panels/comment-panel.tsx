@@ -53,7 +53,7 @@
  * | 옆 탭 왕복 — 새 코멘트 | `""` | 초안 그대로 |
  * | 옆 탭 왕복 — 고치던 것 | 편집 칸째 닫힘 | 편집 칸과 글 그대로 |
  * | 모드 왕복(코멘트 탭을 보던 채) | 그대로 — 코멘트 탭은 두 모드에 다 있어 언마운트되지 않는다 | 같음 |
- * | 다른 노드를 고른다 | 그대로 — 달릴 대상이 새 노드로 바뀐다(아래) | 같음 |
+ * | 다른 노드를 고른다 | 그대로 — 달릴 대상이 새 노드로 바뀐다 | 같음 — **9차에 고쳤다**(아래) |
  * | 다른 페이지 → 복귀 | 버림 | 버림 — 규칙이다 |
  *
  * **고른 것 — `panel-drafts.tsx`의 칸에 든다.** «페이지 설명»과 **같은 provider**이고, 페이지가
@@ -72,13 +72,32 @@
  * `pageId`**로 앞 페이지의 목록을 불렀다. 케이스는 `test/panels/comment-panel.test.tsx`의
  * «탭·페이지를 오가도 …» 절이다.
  *
- * ### 다른 노드를 고르면 초안은 남고 **대상이 바뀐다** — 그대로 둔다
+ * ### 새 코멘트 초안은 **노드마다** 든다 — 글은 쓴 노드에만 달린다 (9차, 리뷰 N-C)
  *
- * 새 코멘트는 «지금 고른 노드»에 달린다(`submit`). 쓰는 도중 다른 노드를 누르면 초안은 남고
- * 달릴 자리가 그 노드로 바뀐다 — 고른 노드의 무리에 붙는 표시가 함께 옮겨 가므로 화면이 그것을
- * 말한다(Chrome 실측: 표시가 `["1 a_card"]` → `[]`). 페이지와 달리 노드는 초안의 뜻을 통째로
- * 바꾸지 않는다고 보고(쓰다가 옆 노드를 확인하는 일이 흔하다) 버리지 않는다. **앞 판부터
- * 그랬고 이 판이 바꾸지 않았다** — 바꿀지는 이 슬라이스가 정할 것이 아니라 보고로 올린다.
+ * 새 코멘트는 «지금 고른 노드»에 달린다(`submit`). 8차 판은 초안을 **한 칸**으로 들어, 쓰는 도중
+ * 다른 노드를 고르면 초안은 남고 **달릴 자리가 그 노드로 바뀌었다** — 노드 X에 대해 쓴 글이
+ * 노드 Y에 달린다. 코멘트 작성은 `marker`를 쓰고 revision을 남기므로(D2) 틀린 노드에 번호가 붙은
+ * revision이 설계서에 남고, 수정은 본문만 바꿔 `nodeId`를 못 고친다. «페이지 설명»의 F1
+ * (*"가리키는 페이지가 곧 뜻의 절반"*)과 **같은 부류의 자료 오염**이다(리뷰 판정).
+ *
+ * | 쓰는 도중 다른 노드를 고른다 | 7차까지 | 8차 | 9차 |
+ * |---|---|---|---|
+ * | 코멘트 탭에 머문 채 캔버스·트리로 | 초안이 남고 **대상이 바뀐다** | 같음 | 상자가 **그 노드의 초안**(없으면 빈 칸)이 된다. 돌아오면 쓰던 글이 원래 노드를 대상으로 그대로 있다 |
+ * | 속성 탭을 다녀오며 | 초안을 잃는다(탭 왕복) | 초안이 남고 **대상이 바뀐다** — 8차가 탭 왕복에 초안을 살리며 **연 길**이다 | 같음(위 줄) |
+ *
+ * (7차까지·8차 = 리뷰 실측, Chrome. 9차 = jsdom 케이스 *"쓰던 코멘트는 쓴 노드에만 달린다 …"*.)
+ *
+ * 8차 판이 «버리지 않는다»의 근거로 든 *"쓰다가 옆 노드를 확인하는 일이 흔하다"*가 바로 대상이
+ * 바뀌는 조작이었다. 그 조작은 이제 **초안을 옮기지 않고 칸을 바꾼다** — 옆 노드를 보고 돌아오면
+ * 쓰던 글이 그대로다. 그리고 그 판의 *"고른 노드의 무리에 붙는 표시가 함께 옮겨 가므로 화면이
+ * 그것을 말한다"*는 **새 대상에 코멘트가 이미 있을 때만** 참이었다 — 없으면 표시가 사라질 뿐
+ * 새 대상을 가리키지 않는다(리뷰 실측: `["1 n-tree"]` → `[]`). 9차에서는 상자의 글이 그 노드의
+ * 것으로 바뀌어 대상이 바뀐 것이 보인다. **폼에 대상 이름을 적지는 않았다** — 뷰 모드에는
+ * 아웃라인이 없어 대상이 아예 안 보이는 것(앞 판부터)과 함께 보고로 올린다.
+ *
+ * **페이지가 바뀌면 노드마다의 초안도 한 칸째 버린다** — 노드 id 는 그 페이지 안에서만 뜻이
+ * 있다. 7차 F1과 이 규칙이 **같은 자리에서 같은 값으로** 도는 것은 그대로다(`DRAFTS`가 방문의
+ * 칸 하나다). 게시가 나가 있는 동안 다른 노드를 골라도 응답은 **보낸 노드의 초안만** 비운다.
  *
  * ## 이 패널은 오류 경계 밖이다
  *
@@ -150,12 +169,23 @@ const WRITE_ERROR = slot<Failure | null>('comments/write-error', null)
  * **`'skipped'`는 말하지 않는다** — 그때는 화면이 이미 다른 페이지를 보고 있다.
  */
 const MARKERS_DIVERGED = slot<boolean>('comments/diverged', false)
-/** 새 코멘트 초안. */
-const DRAFT = slot<string>('comments/draft', '')
+/**
+ * 새 코멘트 초안 — **노드마다**(위 머리말 «새 코멘트 초안은 노드마다 …»). 키는 노드 id이고 없으면
+ * 빈 칸이다. **한 칸으로 들면 다른 노드를 고르는 순간 쓰던 글의 대상이 그 노드로 바뀐다.**
+ */
+const DRAFTS = slot<ReadonlyMap<string, string>>('comments/drafts', new Map())
 /** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. */
 const EDITING_ID = slot<string | null>('comments/editing-id', null)
 /** 고치던 코멘트의 초안. */
 const EDIT_DRAFT = slot<string>('comments/edit-draft', '')
+
+/** `drafts`에서 그 노드의 초안을 `text`로 바꾼 새 표. 빈 글이면 키를 지운다(없는 것과 같다). */
+function withDraft(drafts: ReadonlyMap<string, string>, nodeId: string, text: string): ReadonlyMap<string, string> {
+  const next = new Map(drafts)
+  if (text === '') next.delete(nodeId)
+  else next.set(nodeId, text)
+  return next
+}
 
 /** 한 노드에 붙은 코멘트 묶음. `marker`는 문서에서 읽은 값이다(표에는 없다). */
 interface Group {
@@ -249,11 +279,13 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   const [busy, setBusy] = usePanelSlot(BUSY)
   const [writeError, setWriteError] = usePanelSlot(WRITE_ERROR)
   const [diverged, setDiverged] = usePanelSlot(MARKERS_DIVERGED)
-  const [draft, setDraft] = usePanelSlot(DRAFT)
+  const [drafts, setDrafts] = usePanelSlot(DRAFTS)
   const [editingId, setEditingId] = usePanelSlot(EDITING_ID)
   const [editDraft, setEditDraft] = usePanelSlot(EDIT_DRAFT)
 
   const { projectId, pageId } = props
+  // 상자가 보이는 것은 **고른 노드의 초안**이다 — 새 코멘트가 달릴 자리와 같은 값을 본다.
+  const draft = selectedNodeId === null ? '' : (drafts.get(selectedNodeId) ?? '')
 
   const reload = useCallback(async (): Promise<Comment[] | null> => {
     if (pageId === undefined) return null
@@ -335,17 +367,19 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   )
 
   const submit = (): void => {
+    const nodeId = selectedNodeId
     const body = draft.trim()
-    if (body === '' || selectedNodeId === null) return
+    if (body === '' || nodeId === null) return
 
     void write(async (client, openPageId) => {
-      const created = await client.createComment(projectId, openPageId, { nodeId: selectedNodeId, body })
+      const created = await client.createComment(projectId, openPageId, { nodeId, body })
       // **문서 변화를 먼저 얹는다.** 목록을 다시 받아도 번호는 그 응답에 없다 —
       // 번호는 문서의 값이다(D1). 결과를 **버리지 않는다**(리뷰 ④).
       setDiverged(store.applyMarkerChange(openPageId, created) === 'diverged')
       // 초안은 **성공한 뒤에** 비운다. 실패했는데 비우면 사용자가 쓴 말이 사라진다
-      // (P4c-3 이월의 둘째 줄이 말하는 부류의 반대편이다).
-      setDraft('')
+      // (P4c-3 이월의 둘째 줄이 말하는 부류의 반대편이다). **보낸 노드의 것만** 비운다 —
+      // 게시가 나가 있는 동안 다른 노드를 골랐어도, 다른 노드에 써 둔 초안이 있어도.
+      setDrafts((prev) => withDraft(prev, nodeId, ''))
       await reload()
     })
   }
@@ -424,7 +458,11 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
           // **고른 노드가 없으면 아예 쓸 수 없다.** 눌러 봐야 실패할 자리를 열어 두지
           // 않는다(P2b-2 D7과 같은 판단) — 서버도 `nodeId` 없는 본문을 400으로 막는다.
           disabled={selectedNodeId === null || busy}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            if (selectedNodeId === null) return
+            const text = event.target.value
+            setDrafts((prev) => withDraft(prev, selectedNodeId, text))
+          }}
         />
         {selectedNodeId === null && <p className="wb-shell-panel-notice">{NO_TARGET}</p>}
         <div className="wb-shell-comment-actions">

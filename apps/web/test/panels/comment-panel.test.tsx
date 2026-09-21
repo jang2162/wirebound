@@ -829,3 +829,72 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
     expect(newBox().value).toBe('')
   })
 })
+
+/**
+ * **대상의 축**(9차, 리뷰 N-C). 위 절들은 전부 노드 하나를 고른 채 돌아, 쓰는 도중 **다른 노드를
+ * 고르는** 갈래를 아무도 지나지 않았다. 8차 판에서 그 갈래는 초안을 남기고 **달릴 대상을 그
+ * 노드로 바꿨다** — 노드 X에 대해 쓴 글이 노드 Y에 달린다(리뷰 실측, Chrome). 코멘트 탭에 머문 채
+ * 누르는 길은 7차부터 있었고, 속성 탭을 다녀오는 길은 8차가 탭 왕복에 초안을 살리며 열었다.
+ * 무엇을 왜 바꿨는지는 `panels/comment-panel.tsx`의 머리말 «새 코멘트 초안은 노드마다 …»가 갖는다.
+ *
+ * **혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 쟀다:
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 초안을 한 칸으로 되돌린다(이 커밋 전의 `comment-panel.tsx`) | 이 케이스 **혼자** |
+ * | 게시의 응답이 **모든** 노드의 초안을 비운다 | 이 케이스 **혼자** |
+ *
+ * 페이지가 바뀌면 노드마다의 초안도 버리는 것은 위 *"페이지가 바뀌면 쓰던 초안과 …"*가 잰다 —
+ * 두 페이지가 같은 노드 id(`n_root`)를 가져서, 넘기면 옆 페이지의 같은 id 칸에 앞 페이지의 글이
+ * 선다. 노드 id가 그 페이지 안에서만 뜻이 있다는 규칙이 그대로 그것이다.
+ */
+describe('새 코멘트는 쓴 노드에만 달린다 (9차)', () => {
+  it('쓰던 코멘트는 쓴 노드에만 달린다 — 다른 노드를 고르면 그 노드의 칸이 보이고, 돌아오면 쓰던 글이 그대로다', async () => {
+    const created: { pageId: string; nodeId: string; body: string }[] = []
+    await openPage(pageDoc(three({})), {
+      apiOverrides: {
+        listComments: async () => [],
+        createComment: async (_projectId, pageId, body) => {
+          created.push({ pageId, ...body })
+          return {
+            comment: comment({ id: `c-${created.length}`, nodeId: body.nodeId, body: body.body }),
+            marker: 1,
+            seq: 8,
+            markerOps: [],
+          }
+        },
+      },
+    })
+    const pick = (key: 'a' | 'b' | 'c'): void => {
+      fireEvent.click(document.body.querySelector(`[data-wb-id="n_${key}"]`) as HTMLElement)
+    }
+    await openCommentTab()
+    pick('a')
+    fireEvent.change(await findNewBox(), { target: { value: '가에 대해 쓴 말' } })
+
+    // **1. 코멘트 탭에 머문 채 다른 노드를 누른다** — 7차부터 있던 길. 8차 판은 여기서 상자가
+    // `"가에 대해 쓴 말"`을 그대로 보였고, 그대로 달면 `n_b`에 달렸다.
+    pick('b')
+    expect(newBox().value).toBe('')
+    fireEvent.change(newBox(), { target: { value: '나에 대해 쓴 말' } })
+    pick('a')
+    expect(newBox().value).toBe('가에 대해 쓴 말')
+
+    // **2. 속성 탭을 다녀오며 다른 노드를 고른다** — 8차가 연 길(그 전에는 탭 왕복에 초안을 잃었다).
+    toPropsTab()
+    pick('c')
+    await openCommentTab()
+    expect((await findNewBox()).value).toBe('')
+
+    // **돌아오면 쓰던 글이 원래 노드를 대상으로 그대로 있다** — 달면 그 노드에 달린다.
+    pick('a')
+    expect(newBox().value).toBe('가에 대해 쓴 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await waitFor(() => expect(created).toEqual([{ pageId: PAGE_ID, nodeId: 'n_a', body: '가에 대해 쓴 말' }]))
+    await waitFor(() => expect(newBox().value).toBe(''))
+
+    // **응답은 보낸 노드의 초안만 비운다** — 다른 노드에 써 둔 글은 남는다.
+    pick('b')
+    expect(newBox().value).toBe('나에 대해 쓴 말')
+  })
+})
