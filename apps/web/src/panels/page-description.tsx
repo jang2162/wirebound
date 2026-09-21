@@ -174,9 +174,13 @@
  * | **N2** 저장 중 옆 페이지로 → 응답 | 옆 페이지 상자가 **앞 페이지의 글**을 서버 값처럼 보이고 거짓 통지가 뜬다. 한 글자 붙여 저장하면 **옆 페이지 DB에 앞 페이지의 글** | 같음 | 응답이 **어디에도 닿지 않는다** — 옆 페이지에서 친 글이 남고 통지도 없다 |
  *
  * **무엇을 왜 드는지는 `panel-drafts.tsx`의 머리말이 갖는다**(여기 두 벌로 적지 않는다). 이
- * 파일의 몫은 칸 셋이다 — 조회 값·초안·저장. 조회 값까지 칸인 것은 **저장의 응답이 그것을
+ * 파일의 몫은 칸 넷이다 — 조회 값·초안·통지·잠금. 조회 값까지 칸인 것은 **저장의 응답이 그것을
  * 갈아 끼우기 때문**이다(N1의 «낡은 서버 값»이 그 자리였다). 케이스는
  * `test/panels/page-description-edit.test.tsx`의 «저장이 나가 있는 동안 …» 절이다.
+ *
+ * **9차: 가 → 나 → 가**(리뷰 N-A) — 8차 판은 잠금이 페이지 리셋에 함께 버려져, 저장 중에 옆
+ * 페이지를 다녀오면 상자가 열린 채 돌아왔고 거기 친 글이 앞 저장의 응답에 지워졌다. 잠금만
+ * **페이지에 매다는** 까닭과 고르지 않은 갈래는 `panel-drafts.tsx`의 머리말 3이 갖는다.
  *
  * **재지 않은 창 하나.** 저장이 나가 있는 동안 탭을 오가면 새 마운트가 조회를 다시 건다. 그
  * 조회가 **저장이 커밋되기 전의 값을 읽고, 저장의 응답보다 늦게** 도착하면 응답이 갈아 끼운
@@ -243,7 +247,7 @@ import { useEffect, type ReactElement } from 'react'
 import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import { slot, usePanelSlot } from './panel-drafts'
+import { lockSlot, slot, usePanelSlot } from './panel-drafts'
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 설명이 보입니다'
@@ -261,17 +265,25 @@ type LoadState =
   | { status: 'ready'; title: string; description: string | null }
   | { status: 'failed'; failure: Failure }
 
-/** 저장 진행 상태. 성공·실패 통지는 **다음 편집이 시작되면 사라진다**(아래 `onChange`). */
+/**
+ * 마지막 저장의 통지. **다음 편집이 시작되면 사라진다**(아래 `onChange`).
+ *
+ * **«저장 중»은 여기 없다 — 그것은 통지가 아니라 잠금이다**(아래 `SAVING`). 8차 판은 둘을 한
+ * 값으로 들어, 통지를 지우는 자리가 잠금까지 풀 수 있었다 — 7차 판의 마운트 한 줄이 실제로
+ * 풀었고(리뷰 N1), jsdom 에서는 `onChange`도 풀었다(`fireEvent.change`는 꺼진 상자에도
+ * 들어간다 — 리뷰 N-F). 9차부터는 두 칸이 **드는 곳부터 다르다** — 통지는 방문의 칸, 잠금은
+ * 페이지의 칸이다(`panel-drafts.tsx`의 머리말 3).
+ */
 type SaveState =
   | { status: 'idle' }
-  | { status: 'saving' }
   | { status: 'saved' }
   | { status: 'failed'; failure: Failure }
 
 /**
- * **이 탭의 칸 셋.** 셋 다 `panel-drafts.tsx`의 칸이라 탭·모드를 오가도 산다 — 이 패널이
- * 언마운트되기 때문이다(위 머리말 «탭·모드를 오가도 …»). 셋 다 «그 페이지의 것»이라
- * **페이지가 바뀌면 그 provider가 함께 버린다**(위 머리말 «페이지가 바뀌면 …»).
+ * **이 탭의 칸 넷.** 넷 다 `panel-drafts.tsx`의 칸이라 탭·모드를 오가도 산다 — 이 패널이
+ * 언마운트되기 때문이다(위 머리말 «탭·모드를 오가도 …»). 앞의 셋은 «그 방문의 것»이라
+ * **페이지가 바뀌면 그 provider가 함께 버리고**(위 머리말 «페이지가 바뀌면 …»), 넷째인 잠금만
+ * **그 페이지에 매인 채 남는다**(`SAVING`).
  */
 /** 조회 값. 저장의 응답이 **여기를** 갈아 끼운다 — 그래서 조회 값도 마운트 밖에 든다. */
 const LOAD = slot<LoadState>('page-description/load', { status: 'loading' })
@@ -280,17 +292,23 @@ const LOAD = slot<LoadState>('page-description/load', { status: 'loading' })
  * 빈 상자와 *"사용자가 지운 상자"*가 같은 값이 되어, 값이 도착할 때 지운 것을 되살린다.
  */
 const DRAFT = slot<string | null>('page-description/draft', null)
-/** 저장의 생애 — 진행 중(상자·버튼을 끈다)과 통지. */
+/** 마지막 저장의 통지. */
 const SAVE = slot<SaveState>('page-description/save', { status: 'idle' })
+/**
+ * **저장이 나가 있다 — 상자와 버튼을 끈다.** 잠금 칸이라 페이지를 떠났다 돌아와도 그 저장이
+ * 끝나기 전에는 풀리지 않는다(리뷰 N-A — 8차 판은 이것이 리셋에 버려져, 가 → 나 → 가로 돌아와
+ * 친 글이 앞 저장의 응답에 지워졌고 둘째 저장이 동시에 나갔다. `panel-drafts.tsx`의 머리말 3).
+ */
+const SAVING = lockSlot('page-description/saving')
 
 const IDLE: SaveState = { status: 'idle' }
 
 /**
- * **그 페이지의 것 셋을 함께 낸다** — 조회(`state`)·초안(`draft`)·저장(`save`).
+ * **그 페이지의 것 넷을 함께 낸다** — 조회(`state`)·초안(`draft`)·통지(`save`)·잠금(`saving`).
  *
- * **셋을 드는 것은 이 훅이 아니다** — `panel-drafts.tsx`의 칸이다. 이 훅이 하는 일은 셋을
+ * **넷을 드는 것은 이 훅이 아니다** — `panel-drafts.tsx`의 칸이다. 이 훅이 하는 일은 넷을
  * 한 자리에서 꺼내 주는 것과, 이 본문이 **마운트될 때** 할 일 둘이다: 조회를 걸고, 지난
- * 통지를 지운다. **버리는 일은 둘로 갈린다** — 페이지가 바뀌면 칸 셋을 provider가 함께
+ * 통지를 지운다. **버리는 일은 둘로 갈린다** — 페이지가 바뀌면 방문의 칸 셋을 provider가 함께
  * 버리고, 마운트될 때는 이 훅이 **통지만** 지운다(아래 이펙트의 주석).
  *
  * `replace`는 저장이 성공했을 때 부르는 자리다. 다시 조회하지 않는 이유는 서버가 갱신된
@@ -307,24 +325,28 @@ function usePageDescription(
   setDraft: (draft: string | null) => void
   save: SaveState
   setSave: (save: SaveState) => void
+  /** 저장이 나가 있다 — 잠금. */
+  saving: boolean
+  setSaving: (saving: boolean) => void
   replace: (description: string | null) => void
 } {
   const api = useApi()
   const [state, setState] = usePanelSlot(LOAD)
   const [draft, setDraft] = usePanelSlot(DRAFT)
   const [save, setSave] = usePanelSlot(SAVE)
+  const [saving, setSaving] = usePanelSlot(SAVING)
 
-  // **마운트될 때 지난 통지를 지운다 — 저장 진행 중은 지우지 않는다.**
+  // **마운트될 때 지난 통지를 지운다 — 잠금은 지우지 않는다.**
   //
   // 통지는 «방금 저장했다»는 사건이라 탭을 다녀온 뒤에도 떠 있으면 지금 화면의 글이 저장된
-  // 것처럼 보인다 — `onChange`가 통지를 지우는 것과 같은 이유다. **그런데 `saving`은 통지가
-  // 아니라 잠금이다.** 7차 판은 이 둘을 한 줄(`setSave({ status: 'idle' })`)로 지워, 저장이
-  // 나가 있는 동안 탭을 오가면 상자와 버튼이 열렸다(리뷰 N1 — 한 번 더 보낼 수 있었다).
+  // 것처럼 보인다 — `onChange`가 통지를 지우는 것과 같은 이유다. **잠금은 통지가 아니다.**
+  // 7차 판은 둘을 한 줄로 지워, 저장이 나가 있는 동안 탭을 오가면 상자와 버튼이 열렸다(리뷰
+  // N1 — 한 번 더 보낼 수 있었다). 9차부터는 잠금이 다른 칸(`SAVING`)이라 이 줄이 닿지 않는다.
   //
   // **의존이 비어 있는 것이 요점이다.** 페이지가 바뀔 때 통지를 버리는 것은 provider가
-  // 한다(칸 셋을 함께) — 여기서 `pageId`에도 돌면 같은 일을 두 자리가 하게 된다.
+  // 한다(방문의 칸 셋을 함께) — 여기서 `pageId`에도 돌면 같은 일을 두 자리가 하게 된다.
   useEffect(() => {
-    setSave((prev) => (prev.status === 'saving' ? prev : IDLE))
+    setSave(IDLE)
     // 마운트될 때 한 번. 위 주석이 그 근거다.
   }, [])
 
@@ -362,7 +384,7 @@ function usePageDescription(
     setState((prev) => (prev.status === 'ready' ? { ...prev, description } : prev))
   }
 
-  return { state, draft, setDraft, save, setSave, replace }
+  return { state, draft, setDraft, save, setSave, saving, setSaving, replace }
 }
 
 /** 뷰 모드 «페이지 설명» 탭의 본문. 읽고 고친다(위 머리말). */
@@ -372,14 +394,18 @@ export function PageDescriptionPanel(props: {
 }): ReactElement {
   const api = useApi()
   const { projectId, pageId } = props
-  const { state, draft, setDraft, save, setSave, replace } = usePageDescription(projectId, pageId)
+  const { state, draft, setDraft, save, setSave, saving, setSaving, replace } = usePageDescription(
+    projectId,
+    pageId,
+  )
 
   const server = state.status === 'ready' ? (state.description ?? '') : ''
   const value = draft ?? server
 
   async function submit(): Promise<void> {
     if (pageId === undefined) return
-    setSave({ status: 'saving' })
+    setSaving(true)
+    setSave(IDLE)
     // 빈 칸은 "설명을 지운다"(`null`)이고 그 밖은 친 그대로다(위 머리말).
     const next = value === '' ? null : value
     try {
@@ -387,6 +413,8 @@ export function PageDescriptionPanel(props: {
       // **아래 셋은 칸에 쓴다 — 이 클릭이 난 렌더의 페이지를 달고.** 그래서 응답이 오기 전에
       // 탭을 오갔으면 **지금 떠 있는 본문**에 닿고(리뷰 N1 — 7차 판은 셋 중 초안 비우기만
       // 닿았다), 페이지를 옮겼으면 **어디에도 안 닿는다**(리뷰 N2 — `panel-drafts.tsx`).
+      // 가 → 나 → 가로 돌아와 있으면 돌아온 방문에 닿는데, 그 방문은 잠금이 남아 있어
+      // 초안을 칠 수 없었으므로 비우는 것은 **보낸 그것**뿐이다(리뷰 N-A — 머리말 3).
       //
       // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다.
       replace(page.description)
@@ -394,6 +422,9 @@ export function PageDescriptionPanel(props: {
       setSave({ status: 'saved' })
     } catch (caught) {
       setSave({ status: 'failed', failure: toFailure(caught, SAVE_FAILED) })
+    } finally {
+      // 잠금은 **그 페이지의 것**을 푼다 — 지금 옆 페이지에 가 있어도(머리말 3).
+      setSaving(false)
     }
   }
 
@@ -413,7 +444,6 @@ export function PageDescriptionPanel(props: {
   const saveFailure = save.status === 'failed' ? save.failure : null
   if (saveFailure?.kind === 'signed-out') return <SignedOut />
 
-  const saving = save.status === 'saving'
   // **바꾼 것이 없으면 보내지 않는다.** 서버가 빈 본문에 400을 내는 것과는 다른 이유다 —
   // 이 본문은 키가 하나라 비지 않는다. 누를 것이 없을 때 눌리는 버튼을 두지 않는 것뿐이다.
   const dirty = value !== server
@@ -451,8 +481,8 @@ export function PageDescriptionPanel(props: {
             onChange={(event) => {
               setDraft(event.target.value)
               // **친 순간 앞의 통지를 지운다.** 남겨 두면 고치는 중에 "저장했습니다"가
-              // 떠 있어, 지금 화면의 글이 저장된 것처럼 보인다.
-              setSave({ status: 'idle' })
+              // 떠 있어, 지금 화면의 글이 저장된 것처럼 보인다. 잠금(`SAVING`)은 건드리지 않는다.
+              setSave(IDLE)
             }}
           />
         </label>

@@ -97,7 +97,7 @@ import type { Comment } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
 import { useSessionUser } from '../session/session-context'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { slot, usePanelSlot } from './panel-drafts'
+import { lockSlot, slot, usePanelSlot } from './panel-drafts'
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 코멘트가 보입니다'
@@ -124,13 +124,21 @@ type LoadState =
 /**
  * **이 탭의 칸 일곱** — 전부 `panel-drafts.tsx`의 칸이다. 이 본문은 탭을 옮기면
  * 언마운트되므로(`routes/editor.tsx`), 여기 `useState`로 들면 탭을 한 번 누르는 것만으로
- * 사라진다(위 머리말 «탭을 오가도 …»). **페이지가 바뀌면 그 provider가 일곱을 함께
- * 버린다** — 노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다.
+ * 사라진다(위 머리말 «탭을 오가도 …»). **페이지가 바뀌면 그 provider가 여섯을 함께
+ * 버린다** — 노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다. 남는 하나는 쓰기 잠금이다
+ * (`BUSY` — 그 페이지에 매인다).
  */
 /** 목록. 쓰기 뒤의 다시 받기가 **여기를** 채운다 — 그래서 목록도 마운트 밖에 든다. */
 const LIST = slot<LoadState>('comments/list', { status: 'loading' })
-/** 쓰기 중에는 조작을 막는다. 같은 코멘트가 두 번 나가면 번호는 하나인데 행이 둘이 된다. */
-const BUSY = slot<boolean>('comments/busy', false)
+/**
+ * 쓰기 중에는 조작을 막는다. 같은 코멘트가 두 번 나가면 번호는 하나인데 행이 둘이 된다.
+ *
+ * **잠금 칸이다** — 페이지를 떠났다 돌아와도 그 쓰기가 끝나기 전에는 풀리지 않는다(리뷰 N-A.
+ * 8차 판은 이것이 리셋에 버려져, 가 → 나 → 가로 돌아와 쓰던 새 코멘트가 앞 게시의 응답에
+ * 비워지고 고치던 **다른** 코멘트의 편집 칸이 앞 수정의 응답에 닫혔다. `panel-drafts.tsx`의
+ * 머리말 3).
+ */
+const BUSY = lockSlot('comments/busy')
 /** 마지막 쓰기 실패. **성공하면 지운다** — 남아 있으면 방금 한 조작도 실패한 것으로 읽힌다. */
 const WRITE_ERROR = slot<Failure | null>('comments/write-error', null)
 /**

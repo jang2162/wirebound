@@ -99,13 +99,18 @@ function toTab(label: string): void {
   fireEvent.click(screen.getByRole('tab', { name: label }))
 }
 
-/** 메뉴 트리에서 다른 페이지로 옮긴다 — **사용자가 하듯** 누른다. */
-function toOtherPage(): void {
+/** 하네스의 첫 페이지(`PAGE_ID`)의 제목. */
+const PAGE_TITLE = '회원 목록'
+
+/** 메뉴 트리에서 그 페이지로 옮긴다 — **사용자가 하듯** 누른다. */
+function toPage(title: string): void {
   fireEvent.click(
-    within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', {
-      name: OTHER_PAGE_TITLE,
-    }),
+    within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }),
   )
+}
+
+function toOtherPage(): void {
+  toPage(OTHER_PAGE_TITLE)
 }
 
 /**
@@ -521,9 +526,22 @@ function heldApi(): {
  *
  * | 변조 | 혼자 죽는 것 |
  * |---|---|
- * | 마운트 이펙트가 `saving`까지 지운다(7차 판의 한 줄) | *"… 저장 중 잠금이 남는다 …"* |
+ * | 마운트 이펙트가 잠금까지 푼다(`setSaving(false)` — 7차 판의 한 줄이 한 일. 9차부터 잠금은 통지와 다른 칸이다) | *"… 저장 중 잠금이 남는다 …"* |
  * | 조회 값을 칸이 아니라 본문의 `useState`로 든다 | *"… 떠 있는 본문에 닿는다 …"* |
  * | 칸의 쓰기 가드(`prev.pageId !== at`)를 뺀다 | *"… 옆 페이지에 닿지 않는다 …"* |
+ *
+ * **가 → 나 → 가 의 둘**(9차, 리뷰 N-A). 위 셋은 페이지를 한 번 옮기고 **돌아오지 않아**, 잠금이
+ * 페이지 리셋에 버려지는 것을 아무도 못 봤다 — 리뷰의 어느 변조도 이 길을 안 지났다. 무엇을
+ * 막는지는 `panels/panel-drafts.tsx`의 머리말 3이 갖는다.
+ *
+ * | 변조 | 혼자 죽는 것 |
+ * |---|---|
+ * | 설명의 잠금(`SAVING`)을 방문 칸(`slot`)으로 든다 | *"저장 중에 옆 페이지를 다녀와도 …"* |
+ * | 잠금의 쓰기가 «지금 페이지» 가드를 지난다 | *"옆 페이지에 가 있는 동안 응답이 오면 …"* |
+ *
+ * provider 의 리셋이 잠금까지 버리면 첫째가 코멘트 탭의 가 → 나 → 가 둘과 함께 죽는다 — 잠금을
+ * 넘기는 자리가 한 벌이다. 8차 판(이 커밋 전의 세 파일)으로 되돌리면 첫째와 코멘트 둘이 죽고
+ * 둘째는 산다 — 둘째는 이 판이 새로 지은 갈래(잠금의 쓰기가 가드를 비켜 간다)를 잠그는 것이다.
  */
 describe('§9 — 저장이 나가 있는 동안 탭·페이지를 옮겨도 그 저장이 제자리에 닿는다', () => {
   it('저장이 나가 있는 동안 탭을 오가도 저장 중 잠금이 남는다 — 한 번 더 보낼 수 없다', async () => {
@@ -612,5 +630,67 @@ describe('§9 — 저장이 나가 있는 동안 탭·페이지를 옮겨도 그
     expect(api.bodies[1]).toEqual({ description: '옆 페이지에서 친 글' })
     expect(api.pages).toEqual([PAGE_ID, OTHER_PAGE_ID])
     await api.release()
+  })
+
+  it('저장 중에 옆 페이지를 다녀와도(가 → 나 → 가) 잠금이 남는다 — 돌아와 친 글이 앞 응답에 지워질 수 없고 둘째 저장이 나갈 수 없다', async () => {
+    const api = heldApi()
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: DOC },
+      apiOverrides: { ...perPageDescription, ...api.overrides },
+    })
+    toView()
+    await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
+
+    type('첫 저장 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(api.bodies).toHaveLength(1))
+
+    toOtherPage()
+    await screen.findByRole('heading', { name: OTHER_PAGE_TITLE })
+    toPage(PAGE_TITLE)
+    await screen.findByRole('heading', { name: PAGE_TITLE })
+
+    // **8차 판은 여기서 상자와 버튼이 열려 있었다**(리뷰 N-A — 잠금이 페이지 리셋에 함께
+    // 버려졌다). 그러면 돌아와 친 글은 앞 저장의 응답에 경고 없이 지워졌고, 한 번 더 누르면
+    // 저장이 **둘 동시에** 나가 첫 응답이 둘째가 나가 있는 동안 잠금을 풀었다(ABA2).
+    expect(box().disabled).toBe(true)
+    expect(saveButton().disabled).toBe(true)
+
+    await api.release()
+
+    // **양성 대조** — 응답이 돌아온 방문에 닿아 저장된 값이 서고 풀린다. 없으면 «한 번 잠기면
+    // 안 풀린다»도 통과한다.
+    expect(box().value).toBe('첫 저장 글')
+    expect(box().disabled).toBe(false)
+    expect(saveButton().disabled).toBe(true)
+    expect(api.bodies).toEqual([{ description: '첫 저장 글' }])
+    expect(api.pages).toEqual([PAGE_ID])
+  })
+
+  it('옆 페이지에 가 있는 동안 응답이 오면 앞 페이지의 잠금이 풀린다 — 돌아와 잠겨 있지 않다', async () => {
+    const api = heldApi()
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: DOC },
+      apiOverrides: { ...perPageDescription, ...api.overrides },
+    })
+    toView()
+    await waitFor(() => expect(box().value).toBe(DESCRIPTION_OF[PAGE_ID]))
+
+    type('앞 페이지에 저장할 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(api.bodies).toHaveLength(1))
+
+    toOtherPage()
+    await screen.findByRole('heading', { name: OTHER_PAGE_TITLE })
+    await api.release()
+
+    toPage(PAGE_TITLE)
+    await screen.findByRole('heading', { name: PAGE_TITLE })
+
+    // **잠금의 쓰기는 «지금 페이지»의 가드를 지나지 않는다**(`panel-drafts.tsx`의 머리말 3).
+    // 지나면 나에 있는 동안 온 응답이 가의 잠금을 못 풀어, 가로 돌아오면 **영영** 꺼져 있다.
+    expect(box().disabled).toBe(false)
+    type('돌아와 친 글')
+    expect(saveButton().disabled).toBe(false)
   })
 })
