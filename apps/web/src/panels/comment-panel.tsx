@@ -111,6 +111,7 @@
  *    함께 사라져 돌아온 상자가 열려 있다. 거기서 다시 달고 앞 게시의 응답이 늦게 오면 DB 에는 두
  *    행이 있고 화면 목록에는 한 행만 보인다. 게시가 응답을 영영 못 받는 판에서는 잠금이 페이지·탭
  *    왕복에도 꺼진 채이다가 **이 길로만** 풀린다(`panel-drafts.tsx` «이것이 막지 못하는 것»).
+
  * 2. **타이밍 창.** 가 → 나 → 가로 돌아와 건 목록 조회가 **게시가 커밋되기 전에 읽고, 게시 뒤의
  *    다시 받기보다 늦게** 오면, 다시 받기가 세운 목록(방금 단 말이 있다)을 덮는다 — 같은 페이지라
  *    조회 이펙트의 `alive`가 참이다. 방금 단 말이 목록에서 사라지고 잠금은 이미 풀려 있다.
@@ -132,7 +133,7 @@ import type { Comment } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
 import { useSessionUser } from '../session/session-context'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { lockSlot, slot, usePanelSlot } from './panel-drafts'
+import { lockSlot, slot, usePanelLock, usePanelSlot } from './panel-drafts'
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 코멘트가 보입니다'
@@ -150,7 +151,6 @@ const MISSING_NODE = '사라진 노드'
 const NO_DOCUMENT = '문서를 읽지 못해 번호를 보일 수 없습니다'
 /** 서버는 번호를 바꿨는데 내 문서에 얹지 못했을 때(리뷰 ④). */
 const DIVERGED = '번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다'
-
 type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; comments: Comment[] }
@@ -171,7 +171,7 @@ const LIST = slot<LoadState>('comments/list', { status: 'loading' })
  * **잠금 칸이다** — 페이지를 떠났다 돌아와도 그 쓰기가 끝나기 전에는 풀리지 않는다(리뷰 N-A.
  * 8차 판은 이것이 리셋에 버려져, 가 → 나 → 가로 돌아와 쓰던 새 코멘트가 앞 게시의 응답에
  * 비워지고 고치던 **다른** 코멘트의 편집 칸이 앞 수정의 응답에 닫혔다. `panel-drafts.tsx`의
- * 머리말 3).
+ * 머리말 3). **값은 장부에 든다**(`write-ledger.tsx`) — 에디터를 떠났다 와도 풀리지 않는다(이월 Q).
  */
 const BUSY = lockSlot('comments/busy')
 /** 마지막 쓰기 실패. **성공하면 지운다** — 남아 있으면 방금 한 조작도 실패한 것으로 읽힌다. */
@@ -292,7 +292,8 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   // 응답이 오기 전에 탭을 오갔으면 지금 떠 있는 본문에 닿고, 페이지를 옮겼으면 어디에도
   // 안 닿는다(`panel-drafts.tsx`의 머리말 — 리뷰 N1·N2).
   const [state, setState] = usePanelSlot(LIST)
-  const [busy, setBusy] = usePanelSlot(BUSY)
+  const busyLock = usePanelLock(BUSY)
+  const busy = busyLock.locked
   const [writeError, setWriteError] = usePanelSlot(WRITE_ERROR)
   const [diverged, setDiverged] = usePanelSlot(MARKERS_DIVERGED)
   const [drafts, setDrafts] = usePanelSlot(DRAFTS)
@@ -363,23 +364,31 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   }, [api, projectId, pageId])
 
   /**
-   * 쓰기 하나를 감싼다. **성공·실패 어느 쪽이든 `busy`를 반드시 내린다** — 안 그러면
-   * 실패 한 번에 패널이 영영 잠긴다.
+   * 쓰기 하나를 장부에 올려 보낸다(`write-ledger.tsx`). **잠금은 장부가 쥐고 푼다** — 성공·실패
+   * 어느 쪽이든 반드시 풀리고(안 그러면 실패 한 번에 패널이 영영 잠긴다), **뒷일(`done`)이 끝난
+   * 뒤에** 풀린다. 8차까지 다시 받기가 잠금 안에서 돌았던 것과 같다.
    */
-  const write = useCallback(
-    async (run: (client: ApiClient, openPageId: string) => Promise<void>): Promise<void> => {
+  const perform = useCallback(
+    <T,>(op: {
+      send: (client: ApiClient, openPageId: string) => Promise<T>
+      done: (value: T, openPageId: string) => Promise<void> | void
+    }): void => {
       if (pageId === undefined || busy) return
-      setBusy(true)
-      try {
-        await run(api, pageId)
-        setWriteError(null)
-      } catch (caught) {
-        setWriteError(toFailure(caught, WRITE_FAILED))
-      } finally {
-        setBusy(false)
-      }
+      const openPageId = pageId
+      void busyLock.run<T>({
+        send: () => op.send(api, openPageId),
+        settle: async (outcome) => {
+          try {
+            if (outcome.kind === 'failed') throw outcome.caught
+            await op.done(outcome.value, openPageId)
+            setWriteError(null)
+          } catch (caught) {
+            setWriteError(toFailure(caught, WRITE_FAILED))
+          }
+        },
+      })
     },
-    [api, busy, pageId, setBusy, setWriteError],
+    [api, busy, busyLock, pageId, setWriteError],
   )
 
   const submit = (): void => {
@@ -387,24 +396,28 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     const body = draft.trim()
     if (body === '' || nodeId === null) return
 
-    void write(async (client, openPageId) => {
-      const created = await client.createComment(projectId, openPageId, { nodeId, body })
-      // **문서 변화를 먼저 얹는다.** 목록을 다시 받아도 번호는 그 응답에 없다 —
-      // 번호는 문서의 값이다(D1). 결과를 **버리지 않는다**(리뷰 ④).
-      setDiverged(store.applyMarkerChange(openPageId, created) === 'diverged')
-      // 초안은 **성공한 뒤에** 비운다. 실패했는데 비우면 사용자가 쓴 말이 사라진다
-      // (P4c-3 이월의 둘째 줄이 말하는 부류의 반대편이다). **보낸 노드의 것만** 비운다 —
-      // 게시가 나가 있는 동안 다른 노드를 골랐어도, 다른 노드에 써 둔 초안이 있어도.
-      setDrafts((prev) => withDraft(prev, nodeId, ''))
-      await reload()
+    perform({
+      send: (client, openPageId) => client.createComment(projectId, openPageId, { nodeId, body }),
+      done: async (created, openPageId) => {
+        // **문서 변화를 먼저 얹는다.** 목록을 다시 받아도 번호는 그 응답에 없다 —
+        // 번호는 문서의 값이다(D1). 결과를 **버리지 않는다**(리뷰 ④).
+        setDiverged(store.applyMarkerChange(openPageId, created) === 'diverged')
+        // 초안은 **성공한 뒤에** 비운다. 실패했는데 비우면 사용자가 쓴 말이 사라진다
+        // (P4c-3 이월의 둘째 줄이 말하는 부류의 반대편이다). **보낸 노드의 것만** 비운다 —
+        // 게시가 나가 있는 동안 다른 노드를 골랐어도, 다른 노드에 써 둔 초안이 있어도.
+        setDrafts((prev) => withDraft(prev, nodeId, ''))
+        await reload()
+      },
     })
   }
 
   const remove = (commentId: string): void => {
-    void write(async (client, openPageId) => {
-      const change = await client.deleteComment(projectId, openPageId, commentId)
-      setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
-      await reload()
+    perform({
+      send: (client, openPageId) => client.deleteComment(projectId, openPageId, commentId),
+      done: async (change, openPageId) => {
+        setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
+        await reload()
+      },
     })
   }
 
@@ -412,19 +425,23 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     const body = editDraft.trim()
     if (body === '') return
 
-    void write(async (client, openPageId) => {
-      await client.updateComment(projectId, openPageId, commentId, { body })
-      setEditingId(null)
-      await reload()
+    perform({
+      send: (client, openPageId) => client.updateComment(projectId, openPageId, commentId, { body }),
+      done: async () => {
+        setEditingId(null)
+        await reload()
+      },
     })
   }
 
   const renumber = (): void => {
-    void write(async (client, openPageId) => {
-      const change = await client.renumberComments(projectId, openPageId)
-      setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
-      // 목록은 다시 받지 않아도 된다 — 재번호는 **표를 안 건드린다**(D4). 번호만 바뀌고
-      // 그 번호는 문서에서 읽는다.
+    perform({
+      send: (client, openPageId) => client.renumberComments(projectId, openPageId),
+      done: (change, openPageId) => {
+        setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
+        // 목록은 다시 받지 않아도 된다 — 재번호는 **표를 안 건드린다**(D4). 번호만 바뀌고
+        // 그 번호는 문서에서 읽는다.
+      },
     })
   }
 

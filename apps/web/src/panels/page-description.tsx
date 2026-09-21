@@ -268,7 +268,7 @@ import { useEffect, type ReactElement } from 'react'
 import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import { lockSlot, slot, usePanelSlot } from './panel-drafts'
+import { lockSlot, slot, usePanelLock, usePanelSlot, type PanelLock } from './panel-drafts'
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 설명이 보입니다'
@@ -319,6 +319,7 @@ const SAVE = slot<SaveState>('page-description/save', { status: 'idle' })
  * **저장이 나가 있다 — 상자와 버튼을 끈다.** 잠금 칸이라 페이지를 떠났다 돌아와도 그 저장이
  * 끝나기 전에는 풀리지 않는다(리뷰 N-A — 8차 판은 이것이 리셋에 버려져, 가 → 나 → 가로 돌아와
  * 친 글이 앞 저장의 응답에 지워졌고 둘째 저장이 동시에 나갔다. `panel-drafts.tsx`의 머리말 3).
+ * **값은 장부에 든다**(`write-ledger.tsx`) — 에디터를 떠났다 와도 풀리지 않는다(이월 Q).
  */
 const SAVING = lockSlot('page-description/saving')
 
@@ -346,16 +347,15 @@ function usePageDescription(
   setDraft: (draft: string | null) => void
   save: SaveState
   setSave: (save: SaveState) => void
-  /** 저장이 나가 있다 — 잠금. */
-  saving: boolean
-  setSaving: (saving: boolean) => void
+  /** 저장이 나가 있다 — 잠금. 장부에 든다(`write-ledger.tsx`). */
+  saving: PanelLock
   replace: (description: string | null) => void
 } {
   const api = useApi()
   const [state, setState] = usePanelSlot(LOAD)
   const [draft, setDraft] = usePanelSlot(DRAFT)
   const [save, setSave] = usePanelSlot(SAVE)
-  const [saving, setSaving] = usePanelSlot(SAVING)
+  const saving = usePanelLock(SAVING)
 
   // **마운트될 때 지난 통지를 지운다 — 잠금은 지우지 않는다.**
   //
@@ -405,7 +405,7 @@ function usePageDescription(
     setState((prev) => (prev.status === 'ready' ? { ...prev, description } : prev))
   }
 
-  return { state, draft, setDraft, save, setSave, saving, setSaving, replace }
+  return { state, draft, setDraft, save, setSave, saving, replace }
 }
 
 /** 뷰 모드 «페이지 설명» 탭의 본문. 읽고 고친다(위 머리말). */
@@ -415,38 +415,38 @@ export function PageDescriptionPanel(props: {
 }): ReactElement {
   const api = useApi()
   const { projectId, pageId } = props
-  const { state, draft, setDraft, save, setSave, saving, setSaving, replace } = usePageDescription(
-    projectId,
-    pageId,
-  )
+  const { state, draft, setDraft, save, setSave, saving, replace } = usePageDescription(projectId, pageId)
 
   const server = state.status === 'ready' ? (state.description ?? '') : ''
   const value = draft ?? server
 
   async function submit(): Promise<void> {
-    if (pageId === undefined) return
-    setSaving(true)
+    if (pageId === undefined || saving.locked) return
     setSave(IDLE)
     // 빈 칸은 "설명을 지운다"(`null`)이고 그 밖은 친 그대로다(위 머리말).
     const next = value === '' ? null : value
-    try {
-      const page = await api.updatePage(projectId, pageId, { description: next })
-      // **아래 셋은 칸에 쓴다 — 이 클릭이 난 렌더의 페이지를 달고.** 그래서 응답이 오기 전에
-      // 탭을 오갔으면 **지금 떠 있는 본문**에 닿고(리뷰 N1 — 7차 판은 셋 중 초안 비우기만
-      // 닿았다), 페이지를 옮겼으면 **어디에도 안 닿는다**(리뷰 N2 — `panel-drafts.tsx`).
-      // 가 → 나 → 가로 돌아와 있으면 돌아온 방문에 닿는데, 그 방문은 잠금이 남아 있어
-      // 초안을 칠 수 없었으므로 비우는 것은 **보낸 그것**뿐이다(리뷰 N-A — 머리말 3).
-      //
-      // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다.
-      replace(page.description)
-      setDraft(null)
-      setSave({ status: 'saved' })
-    } catch (caught) {
-      setSave({ status: 'failed', failure: toFailure(caught, SAVE_FAILED) })
-    } finally {
-      // 잠금은 **그 페이지의 것**을 푼다 — 지금 옆 페이지에 가 있어도(머리말 3).
-      setSaving(false)
-    }
+    const openPageId = pageId
+    // **잠금은 장부가 쥐고 푼다**(`write-ledger.tsx`) — 그 페이지의 것을, 지금 어디에 가 있든
+    // (머리말 3), 에디터를 떠났다 와도(이월 Q). 아래 `settle`이 끝나야 풀린다.
+    await saving.run({
+      send: () => api.updatePage(projectId, openPageId, { description: next }),
+      settle: (outcome) => {
+        // **아래는 칸에 쓴다 — 이 클릭이 난 렌더의 페이지를 달고.** 그래서 응답이 오기 전에
+        // 탭을 오갔으면 **지금 떠 있는 본문**에 닿고(리뷰 N1 — 7차 판은 셋 중 초안 비우기만
+        // 닿았다), 페이지를 옮겼으면 **어디에도 안 닿는다**(리뷰 N2 — `panel-drafts.tsx`).
+        // 가 → 나 → 가로 돌아와 있으면 돌아온 방문에 닿고, 에디터를 떠났다 돌아와 있으면 **새로
+        // 선 provider** 의 방문에 닿는다(이월 Q). 두 방문 다 잠금이 남아 있어 초안을 칠 수
+        // 없었으므로 비우는 것은 **보낸 그것**뿐이다(리뷰 N-A — 머리말 3).
+        if (outcome.kind === 'failed') {
+          setSave({ status: 'failed', failure: toFailure(outcome.caught, SAVE_FAILED) })
+          return
+        }
+        // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다.
+        replace(outcome.value.description)
+        setDraft(null)
+        setSave({ status: 'saved' })
+      },
+    })
   }
 
   if (pageId === undefined) {
@@ -498,7 +498,7 @@ export function PageDescriptionPanel(props: {
             // `Description`도 같은 것을 쓴다. 박으면 상한이 바뀌는 날 화면만 낡는다.
             maxLength={PAGE_DESCRIPTION_MAX_LENGTH}
             value={value}
-            disabled={saving}
+            disabled={saving.locked}
             onChange={(event) => {
               setDraft(event.target.value)
               // **친 순간 앞의 통지를 지운다.** 남겨 두면 고치는 중에 "저장했습니다"가
@@ -513,7 +513,7 @@ export function PageDescriptionPanel(props: {
         <p className="wb-shell-page-description-count">
           {value.length} / {PAGE_DESCRIPTION_MAX_LENGTH}
         </p>
-        <button type="submit" className="wb-shell-page-description-save" disabled={saving || !dirty}>
+        <button type="submit" className="wb-shell-page-description-save" disabled={saving.locked || !dirty}>
           설명 저장
         </button>
       </form>
