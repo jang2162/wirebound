@@ -498,6 +498,15 @@ function listedBodies(): string[] {
   return [...panel().querySelectorAll('.wb-shell-comment-body')].map((element) => element.textContent ?? '')
 }
 
+/**
+ * 상자에 친다. **꺼진 상자에는 안 친다 — 던진다.** jsdom 의 `fireEvent.change`는 `disabled`를 안
+ * 봐서 꺼진 상자에도 값이 들어간다 — 실브라우저에서는 없는 길이다(«페이지 설명»의 리뷰 N-F).
+ */
+function typeInto(box: HTMLTextAreaElement, value: string): void {
+  if (box.disabled) throw new Error('꺼진 상자에는 칠 수 없다 — 실브라우저에서 없는 길이다')
+  fireEvent.change(box, { target: { value } })
+}
+
 /** 새 코멘트 상자. */
 function newBox(): HTMLTextAreaElement {
   return screen.getByLabelText('새 코멘트') as HTMLTextAreaElement
@@ -597,22 +606,34 @@ function heldComments(seed: Comment[] = []): {
  * 앞의 넷은 «마운트에 묶는다»의 꼴이다 — 앞 판의 결함이 정확히 그것이었다(조회 이펙트가
  * 마운트마다 초안을 비웠다):
  *
- * | 변조 | 혼자 죽는 것 |
+ * | 변조 | 죽는 것 |
  * |---|---|
- * | 마운트 이펙트가 새 코멘트 초안까지 지운다 | *"새 코멘트 초안이 탭을 오가도 …"* |
- * | 그것이 고치던 것까지 지운다 | *"고치던 코멘트가 탭을 오가도 …"* |
- * | 그것이 쓰기 잠금까지 푼다 | *"게시가 나가 있는 동안 … 잠금이 남는다 …"* |
- * | 다시 받은 목록을 마운트에 묶는다(언마운트 뒤면 안 쓴다) | *"… 그 뒤 목록이 떠 있는 본문에 닿는다"* |
- * | 칸의 쓰기 가드가 코멘트 칸에만 안 걸린다 | *"게시 중에 옆 페이지로 …"* |
- * | provider 의 리셋이 코멘트 초안·고치던 것을 넘긴다 | *"페이지가 바뀌면 …"* |
+ * | 마운트 이펙트가 새 코멘트 초안까지 지운다 | *"새 코멘트 초안이 탭을 오가도 …"* **와** 아래 *"쓰던 코멘트는 쓴 노드에만 …"*(속성 탭을 다녀온다) |
+ * | 그것이 고치던 것까지 지운다 | *"고치던 코멘트가 탭을 오가도 …"* **혼자** |
+ * | 그것이 쓰기 잠금까지 푼다 | *"게시가 나가 있는 동안 … 잠금이 남는다 …"* **혼자** |
+ * | 다시 받은 목록을 마운트에 묶는다(언마운트 뒤면 안 쓴다) | *"… 그 뒤 목록이 떠 있는 본문에 닿는다"* **혼자** |
+ * | 칸의 쓰기 가드가 코멘트 칸에만 안 걸린다 | *"게시 중에 옆 페이지로 …"* **혼자** |
+ * | provider 의 리셋이 노드마다의 새 코멘트 초안(`DRAFTS`)을 넘긴다 | *"페이지가 바뀌면 …"* **혼자** |
  *
- * **쓰기 가드를 통째로 빼면** 이 절의 *"게시 중에 옆 페이지로 …"*와 «페이지 설명»의 N2 케이스가
- * 함께 죽는다 — 가드가 한 벌이기 때문이다. 칸별로 가르면(위 표 다섯째 줄과 그 거울판) 각자
- * 혼자 죽는다. provider 에 `key={chosen}`을 걸면 이 절의 탭 왕복 넷과 «페이지 설명»의 탭 왕복
- * 셋이 함께 죽는다 — «탭을 오가도 칸이 산다» 축은 한 provider 의 것이다.
+ * (9차에 다시 쟀다 — web 전체.) **«새 코멘트 초안이 탭을 오가도 …»는 이제 혼자 죽지 않는다** —
+ * 9차의 대상 케이스가 속성 탭을 다녀오며 노드마다의 초안이 사는지까지 보기 때문이다. **«새 코멘트
+ * 초안이 탭 왕복에 산다» 축의 주인은 이 케이스다** — 대상 케이스는 그 위에서 «노드마다»를 재고
+ * 혼자 죽는 변조가 있다(그 절의 표). 리셋이 초안과 고치던 것을 **함께** 넘기면 *"페이지가 바뀌면
+ * …"*이 아래 *"수정 중에 옆 페이지를 다녀와도 …"*와 함께 죽는다(넘어온 편집 칸이 돌아와도 열려
+ * 있다) — 8차 판의 이 줄은 «혼자»였다.
  *
- * **앞 판 `comment-panel.tsx`로 되돌리면 여섯 중 다섯이 죽는다.** *"페이지가 바뀌면 …"*은 산다 —
- * 앞 판도 지키던 규칙이고, 이 케이스는 그 규칙이 **자리를 옮긴 뒤에도** 지켜지는지를 잠근다.
+ * **provider 째 망가뜨리는 변조**(쓰기 가드를 통째로 뺀다 · `key={chosen}` · 리셋을 넓게 망가뜨린다)는
+ * 이 절의 케이스를 «페이지 설명»의 케이스와 **함께** 죽인다 — 가드도 리셋도 탭 왕복의 칸도 한
+ * provider 의 것이기 때문이다. **그 수와 목록은 `page-description-edit.test.tsx`의 머리말 표들이
+ * 갖는다** — 여기 두 벌로 적지 않는다(8차에 두 파일이 같은 수를 따로 적었다가 한쪽만 낡았다 —
+ * 리뷰 7번). 칸별로 가르면(위 표 다섯째 줄과 그 거울판) 각자 혼자 죽는다.
+ *
+ * **8차 전 `comment-panel.tsx`(`555623c`)로 되돌리면** 이 절의 여섯 중 다섯과 대상 케이스가 죽는다.
+ * *"페이지가 바뀌면 …"*은 산다 — 앞 판도 지키던 규칙이고, 이 케이스는 그 규칙이 **자리를 옮긴
+ * 뒤에도** 지켜지는지를 잠근다. **아래 가 → 나 → 가 둘도 산다** — 앞 판의 `busy`는 본문의
+ * `useState`라 페이지를 옮겨도(같은 탭이면 본문이 안 내려간다) 풀리지 않았다. 대신 **옆 페이지까지
+ * 잠갔다**(리뷰의 «게시 중 옆 페이지로» — 앞 판 줄). 8차가 `busy`를 페이지 리셋에 넣어 옆 페이지를
+ * 풀면서 가 → 나 → 가 를 열었고, 9차가 잠금을 페이지에 매달아 둘을 함께 닫았다.
  *
  * **가 → 나 → 가 의 둘**(9차, 리뷰 N-A) — 쓰기 잠금이 페이지 리셋에 버려져, 돌아와 쓰던 말·고치던
  * 칸이 앞 쓰기의 응답에 지워졌다. 무엇을 막는지는 `panels/panel-drafts.tsx`의 머리말 3이 갖는다.
@@ -633,7 +654,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
     await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
     await openCommentTab()
     fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
-    fireEvent.change(await findNewBox(), { target: { value: '쓰던 코멘트' } })
+    typeInto(await findNewBox(), '쓰던 코멘트')
 
     toPropsTab()
     // **상자가 정말 사라지는 것을 먼저 잠근다** — 없으면 «탭을 눌러도 언마운트되지 않는»
@@ -653,7 +674,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
     await openCommentTab()
     await waitFor(() => expect(screen.getByText('옛 말')).toBeTruthy())
     fireEvent.click(within(panel()).getByRole('button', { name: '수정' }))
-    fireEvent.change(screen.getByLabelText('코멘트 수정'), { target: { value: '고치던 말' } })
+    typeInto(screen.getByLabelText<HTMLTextAreaElement>('코멘트 수정'), '고치던 말')
 
     toPropsTab()
     expect(screen.queryByLabelText('코멘트 수정')).toBeNull()
@@ -669,7 +690,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
     await openPage(pageDoc(three({})), { apiOverrides: api.overrides })
     await openCommentTab()
     fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
-    fireEvent.change(await findNewBox(), { target: { value: '한 번만 달 말' } })
+    typeInto(await findNewBox(), '한 번만 달 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
 
@@ -694,7 +715,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
     await openPage(pageDoc(three({})), { apiOverrides: api.overrides })
     await openCommentTab()
     fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
-    fireEvent.change(await findNewBox(), { target: { value: '방금 단 말' } })
+    typeInto(await findNewBox(), '방금 단 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
 
@@ -719,14 +740,14 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
     })
     await openCommentTab()
     fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
-    fireEvent.change(await findNewBox(), { target: { value: '앞 페이지에 단 말' } })
+    typeInto(await findNewBox(), '앞 페이지에 단 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
 
     toPage(OTHER_PAGE_TITLE)
     // **상자의 값은 기다리지 않는다** — 그것은 아래 *"페이지가 바뀌면 …"*의 축이다.
     await waitFor(() => expect(screen.getByText('아직 코멘트가 없습니다')).toBeTruthy())
-    fireEvent.change(await findNewBox(), { target: { value: '옆 페이지에서 쓰던 말' } })
+    typeInto(await findNewBox(), '옆 페이지에서 쓰던 말')
 
     await api.release()
 
@@ -746,7 +767,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
     })
     await openCommentTab()
     fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
-    fireEvent.change(await findNewBox(), { target: { value: '앞에 단 말' } })
+    typeInto(await findNewBox(), '앞에 단 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
 
@@ -781,7 +802,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
     await openCommentTab()
     await waitFor(() => expect(listedBodies()).toEqual(['기존 말 1', '기존 말 2']))
     fireEvent.click(within(panel()).getAllByRole('button', { name: '수정' })[0]!)
-    fireEvent.change(screen.getByLabelText('코멘트 수정'), { target: { value: '기존 말 1 고침' } })
+    typeInto(screen.getByLabelText<HTMLTextAreaElement>('코멘트 수정'), '기존 말 1 고침')
     fireEvent.click(within(panel()).getByRole('button', { name: '저장' }))
     await waitFor(() => expect(api.updated).toHaveLength(1))
 
@@ -813,9 +834,9 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
     })
     await openCommentTab()
     await waitFor(() => expect(screen.getByText('옛 말')).toBeTruthy())
-    fireEvent.change(newBox(), { target: { value: '쓰던 새 코멘트' } })
+    typeInto(newBox(), '쓰던 새 코멘트')
     fireEvent.click(within(panel()).getByRole('button', { name: '수정' }))
-    fireEvent.change(screen.getByLabelText('코멘트 수정'), { target: { value: '고치던 말' } })
+    typeInto(screen.getByLabelText<HTMLTextAreaElement>('코멘트 수정'), '고치던 말')
 
     toPage(OTHER_PAGE_TITLE)
     await waitFor(() => expect(screen.getByText('아직 코멘트가 없습니다')).toBeTruthy())
@@ -841,8 +862,11 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다 (8차)',
  *
  * | 변조 | 죽는 것 |
  * |---|---|
- * | 초안을 한 칸으로 되돌린다(이 커밋 전의 `comment-panel.tsx`) | 이 케이스 **혼자** |
+ * | 초안을 한 칸으로 되돌린다(`853ce0e` 전의 `comment-panel.tsx`) | 이 케이스 **혼자** |
  * | 게시의 응답이 **모든** 노드의 초안을 비운다 | 이 케이스 **혼자** |
+ *
+ * 탭 왕복을 지나므로 «탭을 오가도 칸이 산다»를 깨는 변조(`key={chosen}`·마운트가 초안을 지운다)에서는
+ * 남과 함께 죽는다 — 그 축의 주인은 위 절의 *"새 코멘트 초안이 탭을 오가도 …"*다.
  *
  * 페이지가 바뀌면 노드마다의 초안도 버리는 것은 위 *"페이지가 바뀌면 쓰던 초안과 …"*가 잰다 —
  * 두 페이지가 같은 노드 id(`n_root`)를 가져서, 넘기면 옆 페이지의 같은 id 칸에 앞 페이지의 글이
@@ -870,13 +894,13 @@ describe('새 코멘트는 쓴 노드에만 달린다 (9차)', () => {
     }
     await openCommentTab()
     pick('a')
-    fireEvent.change(await findNewBox(), { target: { value: '가에 대해 쓴 말' } })
+    typeInto(await findNewBox(), '가에 대해 쓴 말')
 
     // **1. 코멘트 탭에 머문 채 다른 노드를 누른다** — 7차부터 있던 길. 8차 판은 여기서 상자가
     // `"가에 대해 쓴 말"`을 그대로 보였고, 그대로 달면 `n_b`에 달렸다.
     pick('b')
     expect(newBox().value).toBe('')
-    fireEvent.change(newBox(), { target: { value: '나에 대해 쓴 말' } })
+    typeInto(newBox(), '나에 대해 쓴 말')
     pick('a')
     expect(newBox().value).toBe('가에 대해 쓴 말')
 
