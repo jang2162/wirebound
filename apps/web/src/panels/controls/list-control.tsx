@@ -126,7 +126,16 @@ export function ListControl(props: ListControlProps): ReactElement {
         disabled={disabled}
         aria-label={label}
         value={textOf(index, part)}
-        onChange={(event) => setDraft({ index, part, text: event.target.value })}
+        onChange={(event) => {
+          // **다른 칸의 초안이 남아 있으면 먼저 낸다**(9차, 리뷰 N-D). 초안은 한 칸 몫이라 새 칸의
+          // 초안이 앞 칸의 것을 덮는다. 평소에는 앞 칸의 blur가 먼저 커밋해 여기 올 때 초안이
+          // 비어 있지만, **잠금이 오면 포커스 없는 초안이 남는다**(위 `commitDraft`의 가드 — Chrome
+          // 실측: 풀린 뒤 같은 목록의 다른 칸에 한 글자 치면 앞 칸의 `"새 항목"`이 커밋 없이
+          // `"옛 항목"`으로 돌아갔다). 그 초안을 blur가 냈을 값 그대로 먼저 낸다 — 9차 Chrome:
+          // `x`를 치는 순간 `["새 항목","항목 2"]` 1건, 떠나면 `["새 항목","항목 2x"]` 1건.
+          if (draft !== null && (draft.index !== index || draft.part !== part)) commitDraft()
+          setDraft({ index, part, text: event.target.value })
+        }}
         onBlur={commitDraft}
         onKeyDown={(event) => {
           if (event.key === 'Enter') commitDraft()

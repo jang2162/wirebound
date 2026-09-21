@@ -55,7 +55,8 @@
  * | 조상을 골라 둔 판도 막는다 | **없음** — 단위를 «op 포인터»로 바꾸면 «상태줄…»과 함께 죽는다. **단위 축의 주인은 이 케이스다** |
  * | 잠긴 동안 도착한 blur는… | **없음** — 커밋 가드를 빼면 «조상…»·«이월 J…»와 함께 죽는다 |
  * | 친 글자는 잠금이 오가도 남는다 | 잠금이 오갈 때 위젯을 새로 만든다(`key`에 잠금을 섞는다) |
- * | 목록 칸에 친 글자도 잠금이 오가도 남는다 | `ListControl`의 «꺼진 동안 온 blur는 무시» 줄을 뺀다(8차 — `--project web` 전체에서 이 케이스 하나) |
+ * | 목록 칸에 친 글자도 잠금이 오가도 남는다 | **없음**(9차) — `ListControl`의 «꺼진 동안 온 blur는 무시» 줄을 빼면 아래 «풀린 뒤 같은 목록의 다른 칸…»과 함께 죽는다(그 케이스가 이 길 위에 선다). **«잠금 순간 목록 칸의 초안이 남는다» 축의 주인은 이 케이스다** — 8차에는 혼자 죽었다 |
+ * | 잠금이 풀린 뒤 같은 목록의 다른 칸에 치면… | `ListControl`의 «다른 칸의 초안을 먼저 낸다» 줄을 뺀다 — 또는 그 줄이 `index`만 보고 `part`를 안 본다(9차 · 리뷰 N-D) |
  * | 안내 줄이 이름과 함께 뜨고… | 안내 줄을 뺀다 |
  * | 편집할 속성이 없는 컴포넌트에는… | 그 갈래에서도 안내를 낸다 |
  * | 잠금이 풀리면 위젯이 돌아온다 | **없음** — `setLocks`가 빈 목록을 무시하면 «친 글자…»·«안내 줄…»과 함께 죽는다 |
@@ -92,6 +93,7 @@ import { createLockChannel } from '../../src/realtime/lock-channel'
 import type { NodeLockView, ServerFrame } from '../../src/realtime/protocol'
 import type { EditorStore } from '../../src/store/editor-store'
 import { HEAD_SEQ, OTHER_PAGE_ID, PAGE_ID, PROJECT_ID, openPage, pageDetail, pageDoc } from '../editor-harness'
+import { clickAsBrowser } from '../click-as-browser'
 import '../../src/catalog-setup'
 // `?raw`로 읽는다 — `shell-css-coverage.test.ts`가 이미 쓰는 기전이고, jsdom 환경에서는
 // `import.meta.url`이 http URL이라 `node:fs`로 못 연다(실측: *"The URL must be of scheme file"*).
@@ -556,12 +558,57 @@ describe('막는다 — 잠긴 노드의 속성은 화면에서 바꿀 수 없�
     view.lock([])
     await settle()
 
-    // 풀리면 그 글자를 그대로 낸다 — 위 케이스와 같은 끝이다.
+    // 풀리면 그 글자가 칸에 **남아 있다.** 나가는 것은 그 칸을 다시 눌렀다 떠날 때다 — Chrome
+    // 실측(리뷰 6번): 풀린 뒤 커밋 0건 · 칸에 `"새 항목"`, 그 칸을 눌렀다 탭으로 떠나면 1건.
+    // 아래의 blur 가 «눌렀다 떠난다»의 떠나는 쪽이다(jsdom 은 누르는 쪽의 포커스를 안 옮기므로
+    // blur 만 낸다). **8차 판의 주석(«풀리면 그 글자를 그대로 낸다»)은 jsdom 지름길이었다** —
+    // 포커스 없는 칸에 blur 를 내서 «풀리면 곧 나간다»처럼 읽혔다(리뷰 9번).
     expect(cell().value).toBe('새 컬럼')
+    expect(view.calls).toHaveLength(0)
     fireEvent.blur(cell())
     await waitFor(() => expect(view.calls).toHaveLength(1))
     expect(view.status).toEqual([200])
     expect(view.calls[0]?.ops[0]).toMatchObject({ path: '/root/children/2/props/columns', value: ['새 컬럼'] })
+  })
+
+  it('잠금이 풀린 뒤 같은 목록의 다른 칸에 치면 앞 칸에 남은 글자가 먼저 나간다 — 커밋 없이 사라지지 않는다', async () => {
+    // **위 케이스의 이어지는 길**(리뷰 N-D). 잠금은 포커스 없는 초안을 남기고, `ListControl`의
+    // 초안은 한 칸 몫이다. 8차 판은 풀린 뒤 **같은 목록의 다른 칸**에 한 글자 치면 새 칸의 초안이
+    // 앞 칸의 것을 덮어, 앞 칸의 글자가 커밋 없이 사라졌다(Chrome 실측: 1번째 칸이 곧바로
+    // `"옛 항목"`, 떠나면 `["옛 항목","항목 2x"]` 한 건). 9차 Chrome: 치는 순간 앞 칸이 먼저
+    // 1건, 떠나면 새 칸이 1건 — 서버 `["새 항목","항목 2x"]`. 여기서는 키·값 두 칸으로 잰다
+    // (이 보드의 목록은 한 칸이다 — 같은 목록의 «다른 칸»은 `index`든 `part`든 같은 길이다).
+    const view = await board()
+    select('KeyValue')
+    await settle()
+
+    const key = (): HTMLInputElement => within(panel()).getByRole<HTMLInputElement>('textbox', { name: '키-값 1번째 키' })
+    const value = (): HTMLInputElement => within(panel()).getByRole<HTMLInputElement>('textbox', { name: '키-값 1번째 값' })
+    fireEvent.change(key(), { target: { value: '새 키' } })
+    view.lock([foreign('n-kv')])
+    await settle()
+    // 실브라우저가 꺼질 때 내는 blur(위 케이스와 같다 — jsdom 은 안 낸다).
+    fireEvent.blur(key())
+    await settle()
+    view.lock([])
+    await settle()
+    expect(key().value).toBe('새 키')
+    expect(view.calls).toHaveLength(0)
+
+    // 사용자는 다른 칸을 **눌러** 친다 — 꺼진 칸에는 칠 수 없으므로 풀린 것을 먼저 본다.
+    expect(value().disabled).toBe(false)
+    clickAsBrowser(value())
+    fireEvent.change(value(), { target: { value: 'v2' } })
+
+    await waitFor(() => expect(view.calls).toHaveLength(1))
+    expect(view.calls[0]?.ops[0]).toMatchObject({ path: '/root/children/3/props/pairs', value: [{ key: '새 키', value: 'v' }] })
+    expect(key().value).toBe('새 키')
+
+    // 새 칸의 글자는 그 칸을 떠날 때 나간다 — 두 글자가 다 남는다.
+    fireEvent.blur(value())
+    await waitFor(() => expect(view.calls).toHaveLength(2))
+    expect(view.calls[1]?.ops[0]).toMatchObject({ path: '/root/children/3/props/pairs', value: [{ key: '새 키', value: 'v2' }] })
+    expect(view.status).toEqual([200, 200])
   })
 
   it('안내 줄이 이름과 함께 뜨고, 풀리면 사라진다', async () => {
