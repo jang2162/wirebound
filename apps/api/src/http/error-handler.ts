@@ -1,4 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
+import { DbConnectionLostError } from '../db/connection-loss'
+import { NulByteError } from '../db/nul-guard'
 import { ApiError, ERROR_STATUS, type ApiErrorIssue } from '../errors'
 
 interface ErrorBody {
@@ -20,6 +22,19 @@ function send(reply: FastifyReply, status: number, body: ErrorBody): void {
  */
 const ERROR_STATUS_PAYLOAD_TOO_LARGE = 413
 
+/**
+ * **DB 가 답하지 않은 실패의 상태 코드** — 그 요청이 반영됐는지 모른다(`db/connection-loss.ts`).
+ *
+ * **500 이 아닌 것이 요점이다.** 웹은 봉투 있는 500 을 «그 요청은 커밋 전»으로 읽어 코멘트 게시를 «확정 안
+ * 달림»으로 판정한다(`apps/web`의 `comment-panel.tsx`의 `knownRejection` 표) — COMMIT 응답만 잃은 판이 그 모양으로
+ * 나가면 사용자가 고쳐 달아 **두 행**이 된다. 503 은 그 표가 이미 «모른다»로 읽는 줄이다(웹을 고치지 않는다).
+ *
+ * **`code`는 `internal` 그대로다.** 413 과 같은 자리다 — `ERROR_STATUS`는 **우리가 던지는** 코드의 표이고, 코드를
+ * 새로 세우면 웹의 계약 표(`API_ERROR_CODES`)에도 한 줄이 늘어야 한다. 화면이 이 실패를 코드로 가를 일은 없다 —
+ * 가르는 것은 숫자다.
+ */
+const ERROR_STATUS_DB_UNREACHABLE = 503
+
 /** Fastify 내부 오류(잘못된 JSON 등)가 갖는 `statusCode`를 안전하게 읽는다. */
 function statusCodeOf(error: unknown): number | undefined {
   if (typeof error !== 'object' || error === null || !('statusCode' in error)) return undefined
@@ -32,6 +47,8 @@ function statusCodeOf(error: unknown): number | undefined {
  *
  * - `ApiError`는 자신의 status·code·message(있으면 issues)를 그대로 응답한다.
  * - Fastify가 자체적으로 던지는 4xx 오류(깨진 JSON 본문 등)는 `bad-request`로 묶는다.
+ * - **DB 가 답하지 않은 실패**(`DbConnectionLostError`)는 **503** — 결과를 모른다(`ERROR_STATUS_DB_UNREACHABLE`).
+ * - **글자의 NUL**(`NulByteError`)은 400 `bad-request` — 쓰기 전에 거절했다.
  * - 그 외 예상 못 한 예외는 500 `internal` 고정 메시지로 응답하고, 원본은 로그에만 남긴다.
  *   응답 본문에 원본 메시지를 실으면 내부 정보가 새어 나갈 수 있어 절대 쓰지 않는다.
  */
@@ -61,6 +78,22 @@ export function registerErrorHandler(app: FastifyInstance): void {
           ? '요청 본문이 너무 큽니다'
           : '요청 형식이 올바르지 않습니다'
       send(reply, statusCode, { code: 'bad-request', message })
+      return
+    }
+
+    // **DB 가 답하지 않았다 — 결과를 모른다**(위 상수). 아래 500 보다 먼저다.
+    if (error instanceof DbConnectionLostError) {
+      request.log.error(error, 'DB 연결을 잃었다 — 요청의 결과를 모른다')
+      send(reply, ERROR_STATUS_DB_UNREACHABLE, {
+        code: 'internal',
+        message: '데이터베이스와의 연결이 끊겨 요청이 반영됐는지 알 수 없습니다',
+      })
+      return
+    }
+
+    // **사용자가 보낸 글자에 NUL 이 있다**(`db/nul-guard.ts`의 `NulByteError`) — 쓰기 전에 거절했다.
+    if (error instanceof NulByteError) {
+      send(reply, ERROR_STATUS['bad-request'], { code: 'bad-request', message: error.message })
       return
     }
 

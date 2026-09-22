@@ -15,6 +15,7 @@
  */
 import { DatabaseError } from 'pg'
 import { sql } from 'kysely'
+import { assertNoNulBytes } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { assertLocking } from '../db/locking'
 import type { MenuRow } from '../services/menu-tree'
@@ -61,6 +62,9 @@ function isChildRestrictViolation(error: unknown): boolean {
     (error.constraint === MENU_NODES_PARENT_FK_CONSTRAINT || error.constraint === PAGES_MENU_NODE_FK_CONSTRAINT)
   )
 }
+
+/** 제목의 NUL 을 거절할 때 문장이 부르는 이름(`db/nul-guard.ts`의 `NulByteError`). */
+const MENU_TEXT = '메뉴 제목'
 
 /** `parentId`가 자기 자신일 때 `assertParentValid`가 던진다. */
 export class SelfParentError extends Error {
@@ -349,6 +353,8 @@ export async function insertMenuNode(
   projectId: string,
   input: { parentId: string | null; title: string },
 ): Promise<MenuNodeRecord> {
+  // 제목의 NUL — 판정과 번역자는 `db/nul-guard.ts`의 `NulByteError`가 소유한다.
+  assertNoNulBytes(MENU_TEXT, input.title)
   return withTransaction(db, async (trx) => {
     if (input.parentId !== null) {
       await assertParentValid(trx, projectId, input.parentId)
@@ -386,6 +392,7 @@ export async function updateMenuNode(
   nodeId: string,
   patch: MenuNodePatch,
 ): Promise<MenuNodeRecord | null> {
+  assertNoNulBytes(MENU_TEXT, patch.title)
   return withTransaction(db, async (trx) => {
     const current = await trx
       .selectFrom('menu_nodes')

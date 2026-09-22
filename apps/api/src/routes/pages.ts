@@ -156,8 +156,6 @@ function pageImportOutcomeToApiError(outcome: Exclude<PageImportOutcome, { kind:
     case 'invalid-document':
       // 이슈의 `nodeId`가 **파일의 id**다(D8) — 사용자에게 남는 것이 파일뿐이므로.
       return validationFailed('가져올 문서의 스키마 검증에 실패했습니다', outcome.issues)
-    case 'nul-byte':
-      return badRequest('페이지 제목·설명에 NUL 문자(U+0000)를 포함할 수 없습니다')
     case 'menu-not-found':
       return notFound('메뉴를 찾을 수 없습니다')
     case 'comment-nul-byte':
