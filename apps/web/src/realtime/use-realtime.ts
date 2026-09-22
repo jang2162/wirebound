@@ -120,9 +120,15 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
           opened = true
           return
         }
-        // **끊긴 연결의 id를 계속 실으면 안 된다.** 서버가 그 id로 아무도 못 찾으면
-        // 제외가 일어나지 않아 무해하지만, 다시 붙어 새 id를 받기 전까지 **낡은 값**을
+        // **끊긴 연결의 id를 홀더에 남기지 않는다.** 다시 붙어 새 id를 받기 전까지 **낡은 값**을
         // 싣는 것은 *"내가 그 연결이다"*라는 거짓말이다.
+        //
+        // **게시의 재전송은 일부러 그 거짓말을 한다** — 첫 보내기의 id 를 잡아 두고 싣는다
+        // (`panels/comment-panel.tsx`의 `submit` — 같은 요청이라서). 그 낡은 id 가 **남을** 빼지 않는
+        // 것은 홀더가 아니라 서버가 막는다: id 는 무작위라 재기동을 넘어 안 겹치고
+        // (`apps/api/src/ws/connection-id.ts`), 방송은 요청과 같은 세션의 연결만 뺀다(`ws/broadcast.ts`의
+        // `sentBy`). 앞 판의 *"서버가 그 id로 아무도 못 찾으면 무해하다"*는 **같은 프로세스 안에서만**
+        // 참이었다 — 재기동 뒤 옛 id 를 받은 남의 연결이 빠졌다(좁은 반증 3차 · Chrome).
         setup.holder.set(undefined)
         // 답을 기다리던 편집은 이 연결과 함께 끝났다. 안 끝내면 펌프가 거기 매달려 **다음
         // 편집도 안 나간다**(`realtime/edit-channel.ts`).

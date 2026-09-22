@@ -72,6 +72,14 @@ export interface BroadcastOptions {
  * 편집이 자기에게 한 번 더 오는 것이고 헤더를 안 싣는 클라이언트와 같은 판이다(`ws/notify.ts`의 머리말 —
  * 문서 편집은 `clientOpId`로 알아보고, 코멘트 번호는 같은 `add`라 끝의 문서가 같다 — `apps/web`의
  * `write-ledger.tsx` «두 번 얹힘»). 더 빼는 쪽의 대가는 **남의 화면이 조용히 낡는 것**이다.
+ *
+ * Chrome(리뷰 (c-1) 절차 — 앨리스의 게시 중 api 를 죽였다 띄우고, 앨리스의 «다시 확인»이 싣는 옛 id 를 route 에서
+ * **캐럴의 지금 id** 로 바꿔 끼웠다 = 캐럴이 그 id 를 받은 판):
+ *
+ * | 이 함수 | 캐럴이 받은 `page-changed` | 캐럴의 번호 칸 | 밥이 다음 게시를 단 뒤 |
+ * |---|---|---|---|
+ * | 세션 확인을 끄면(id 만 견줌 — 변조) | 없음 | `[]`(앨리스·밥 `["1"]`) | `[]` · «연결이 끊긴 사이의 변경을 놓쳐 …» |
+ * | 지금 | seq 2 · 3 | `["1"]` | `["1","2"]` · 통지 없음 |
  */
 function sentBy(connection: RoomConnection, origin: BroadcastOrigin): boolean {
   if (connection.id !== origin.connectionId) return false

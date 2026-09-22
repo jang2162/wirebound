@@ -120,9 +120,11 @@
  *    응답이 영영 안 오면 10초 뒤 **같은 키로 다시 보내** 판정한다(`submit`의 `verify`) — 서버가 앞 게시를
  *    쥐고 있으면 다시 보낸 것이 같은 행 잠금 뒤에 줄을 서서 재생을 받는다. 그동안 상자는 잠겨 있어
  *    고쳐 다시 달 수도, 떠났다 와서 새로 칠 수도 없다. 시간 안의 **모르는 실패**(연결 끊김 · 502·503·504 ·
- *    봉투 없는 500)도 같은 판정으로 간다(`knownRejection` — 2026-09-22). **남는 입구는 하나다 — 새로고침·탭
- *    닫기**: 초안과 키가 함께 버려져 다시 친 같은 글이 새 키가 되고, 번호가 있는 노드면 두 행이 된다(Chrome
- *    — 값은 `write-ledger.tsx`의 «판정 뒤의 늦은 커밋»).
+ *    봉투 없는 500)도 같은 판정으로 간다(`knownRejection` — 2026-09-22). **남는 입구는 초안과 키가 함께
+ *    버려지는 길이다** — 새로고침·탭 닫기만이 아니다: 로그아웃 · 세션 만료(401)도 셸째 버린다. 다시 친 같은
+ *    글이 새 키가 되어 두 행이 선다(Chrome). **입구의 목록과 값은 `write-ledger.tsx`의 «이것이 막지 못하는
+ *    것»이 소유한다** — 여기 옮겨 적지 않는다(앞 판은 «남는 입구는 새로고침뿐»이라 적어 그 목록과 갈렸다 —
+ *    좁은 반증 3차).
  * 2. **타이밍 창.** 가 → 나 → 가로 돌아와 건 목록 조회가 **게시가 커밋되기 전에 읽고, 게시 뒤의
  *    다시 받기보다 늦게** 오면, 다시 받기가 세운 목록(방금 단 말이 있다)을 덮는다 — 같은 페이지라
  *    조회 이펙트의 `alive`가 참이다. 방금 단 말이 목록에서 사라지고 잠금은 이미 풀려 있다.
@@ -220,9 +222,15 @@ type Reposted = { posted: true; created: CommentCreated } | { posted: false; cau
  *
  * | 실패 | 뜻 |
  * |---|---|
- * | 4xx | **확정** — 서버가 이 요청을 보고 거절했다 |
+ * | 4xx | **확정** — 서버가 **이 키로 내 행을 찾아보고** 거절했다(키 판정이 권한 가드 앞이다) |
  * | **api 가 낸 500**(오류 봉투가 있다 — `ApiError.enveloped`) | **확정** — 핸들러가 던진 것이고 커밋 전이다(아래) |
  * | 연결 실패 · 502·503·504 · **봉투 없는 500** | **모른다** — 요청이 서버에 닿아 커밋됐을 수 있다 |
+ *
+ * **4xx 줄은 서버의 판정 순서에 매여 있다 — 그 순서와 예외는 `apps/api/README.md`의 «멱등 키»가 소유한다.**
+ * 좁은 반증 3차 전에는 키 판정이 권한 가드 **뒤**라, 첫 게시가 커밋된 뒤 역할이 내려가거나 멤버에서 빠지면
+ * 다시 보낸 것이 재생에 못 닿고 403·404 를 받았다 — 이 표가 그것을 «안 달림»으로 확정했고, 권한을 되찾아 고쳐
+ * 달면 DB 두 행이었다(Chrome route). 이제 서버는 인증 뒤 · 권한 앞에서 키를 본다. 401 은 여전히 먼저이고
+ * «세션 끝»으로 따로 간다(`attempt`).
  *
  * **«api 가 낸 500 은 커밋 전이다»를 코드로 봤다**(`apps/api/src/routes/comments.ts`의 게시 핸들러). 커밋
  * (`runWrite`가 끝난 것) 뒤에 도는 것은 셋이다: `notifyMarkerChange` — 방송은 `async`인 `broadcast.send`이고
@@ -311,8 +319,9 @@ const DRAFTS = slot<ReadonlyMap<string, string>>('comments/drafts', new Map())
  * 합쳐진다. 일부러 같은 말을 다시 다는 사람의 게시가 사라지는 길이다. 대가도 적어 둔다: 떠났다
  * 오는 사이 늦게 커밋된 게시는 돌아와 새로 친 같은 글과 **합쳐지지 않는다**(새 키다). 시간 초과와 모르는
  * 실패의 판에서는 판정(같은 키로 다시 보내기)이 끝날 때까지 상자가 잠겨 있어 이 길이 안 선다 — 확정 실패
- * (`knownRejection`) 뒤라면 앞 게시가 커밋될 수 없어 새 키여도 한 행이다. 서는 것은 새로고침 뒤뿐이다
- * (`write-ledger.tsx`의 «이것이 막지 못하는 것»).
+ * (`knownRejection`) 뒤라면 서버가 **그 키로 내 행을 찾아보고** 거절한 것이라 새 키여도 한 행이다(예외는
+ * `knownRejection`의 주석이 가리킨다). 서는 것은 **초안과 키가 셸째 버려지는 입구** 뒤다 — 새로고침만이 아니다
+ * (로그아웃 · 세션 만료. 목록은 `write-ledger.tsx`의 «이것이 막지 못하는 것»).
  */
 const POST_KEYS = slot<ReadonlyMap<string, { body: string; key: string }>>('comments/post-keys', new Map())
 /** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. */
@@ -586,7 +595,9 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     // 연결을 실었고, 그 사이 셸째 떠났다 왔으면 그것은 **새 셸의** 연결이라 새 셸이 방송을 못 받았다 —
     // 응답의 번호는 내려간 셸의 스토어에 얹혔다(Chrome: 첫 게시를 route 에 붙잡아 둔 채 셸째 떠났다 오고,
     // 다시 보낸 것이 201 — 새 셸의 번호 칸 `–` · 통지 없음 · DB 의 번호 1 · 새로고침하면 `1`). 첫 보내기의
-    // 연결이면 셸이 떠 있을 때는 지금과 같고, 내려갔으면 없는 연결이라 서버가 아무도 빼지 않는다. 같은 셸에서 WS 가
+    // 연결이면 셸이 떠 있을 때는 지금과 같고, 내려갔으면 **아무도 빼지 않는다** — 서버는 id 가 같고 **요청과 같은
+    // 세션인** 연결만 빼고 id 는 무작위다(`apps/api/src/ws/broadcast.ts`의 `sentBy` · `ws/connection-id.ts` — 앞
+    // 판의 서버에서는 api 재기동 뒤 그 옛 id 를 받은 **남의** 연결이 빠졌다. 값은 그쪽이 적는다). 같은 셸에서 WS 가
     // 다시 붙은 판의 두 번 얹힘은 이월이다(`write-ledger.tsx`의 «이것이 막지 못하는 것»).
     const origin = connections?.get()
     const post = (client: ApiClient, openPageId: string, signal: AbortSignal): Promise<CommentCreated> =>
@@ -635,10 +646,10 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
         try {
           return { posted: true, created: await post(client, openPageId, signal) }
         } catch (caught) {
-          // **확정인 거절이면 «안 달림»이다**(`knownRejection`) — 같은 키 · 같은 글을 거절했다면 앞 게시도
-          // 커밋될 수 없다(키가 없으니 같은 판정을 받는다). 그 밖은 모른다 — «다시 확인». **예외 하나** — 앞
-          // 게시가 달렸고 그 사이 **다른 탭에서 고쳐졌으면** 409 다(서버의 재생 비교가 지금 행을 본다 —
-          // `apps/api/README.md`의 «멱등 키», 이월). 그때 이 판정은 «안 달림»이 틀린다.
+          // **확정인 거절이면 «안 달림»이다**(`knownRejection`) — 서버는 권한을 보기 전에 이 키로 내 행을
+          // 찾으므로 4xx 는 «그 순간 이 키의 내 행이 없다»이다. 그 밖은 모른다 — «다시 확인». **이 판정이 틀리는
+          // 판**(앞 게시가 아직 서버에서 커밋 중인데 가드가 거절한 판 · 다른 탭에서 고쳐진 행의 409)은
+          // `apps/api/README.md`의 «멱등 키»가 적는다 — 여기 옮겨 적지 않는다.
           if (knownRejection(caught)) return { posted: false, caught }
           throw caught
         }
