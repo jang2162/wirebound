@@ -122,7 +122,7 @@
  * 달린 노드를 지우면 그 행이 남는다(`node_id`에 FK가 없다 — 0008의 주석). 그 행은 GET에
  * 그대로 실려 나가고 화면이 *"사라진 노드"* 무리로 묶는다.
  */
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import {
   COMMENT_BODY_MAX_LENGTH,
@@ -135,8 +135,8 @@ import {
   type ValidationIssue,
   type WbNode,
 } from '@wirebound/schema'
-import { requestActor, requestEventActor } from '../auth/actor'
-import { projectGuard } from '../auth/roles'
+import { requestActor, requestClientKind, requestEventActor } from '../auth/actor'
+import { outOfTokenScope, projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { badRequest, conflict, forbidden, notFound, unauthenticated } from '../errors'
@@ -347,6 +347,62 @@ function replayOf(
   }
 }
 
+/**
+ * **같은 키로 이미 달렸으면 권한 가드보다 먼저 답한다**(좁은 반증 3차 · 2026-09-22). 게시 라우트의
+ * `preValidation`이다 — Fastify 는 `onRequest`(인증 — `auth/plugin.ts`) → `preValidation` → `preHandler`
+ * (`projectGuard`) → 핸들러 순으로 돌리므로 여기는 **인증 뒤 · 권한 앞**이다.
+ *
+ * **왜 권한 앞인가.** 앞 판은 키를 핸들러 안에서 봤다 — 가드 뒤다. 첫 게시가 커밋된 뒤 그 사람의 역할이
+ * 내려가거나(403) 멤버에서 빠지면(404) 같은 키로 다시 보낸 것이 재생에 못 닿았고, 웹은 다시 보낸 것의
+ * 4xx 를 «안 달림» 확정으로 읽어(`apps/web`의 `knownRejection`) 초안을 열어 줬다 — 권한을 되찾아 고쳐 달면
+ * **DB 두 행**이었다(Chrome route). 키가 낸 4xx(같은 키 다른 글 409)만 «그 키를 보고 낸 답»이다.
+ *
+ * **재생이 권한을 잃은 사람에게 돌려주는 것** — 그 사람이 그 키로 단 **자기 행**과, 그 페이지의 **지금**
+ * `head_seq`·그 노드의 번호다(`replayOf`). 행은 새로 드러나는 것이 아니고, 뒤의 둘은 드러난다: 같은 키 · 같은
+ * 글을 되풀이해 보내면 빠진 뒤에도 그 페이지가 바뀌었는지(`seq`)와 그 노드의 번호를 읽을 수 있다. 그 행을
+ * 스스로 단 사람에게만이다.
+ *
+ * **재생할 자기 행이 없으면 아무것도 안 한다** — 그 뒤는 앞 판과 글자 그대로 같다(가드가 401·403·404 를
+ * 내고 핸들러가 400·404·409 를 낸다). 그래서 던지지 않고 빠지는 자리가 많다: 자격이 없다(401 은 가드가
+ * 먼저다) · 토큰의 스코프 밖이다(가드가 404) · 파라미터·본문이 틀렸다(핸들러가 400) · 키가 없다 · 그 페이지가
+ * 그 프로젝트에 없다 · 문서를 못 읽는다(핸들러가 400). **자기 행이 없는 사람에게 가드 앞에서 아무것도 알려
+ * 주지 않는다** — 페이지가 있는지조차. 행을 먼저 찾고 페이지를 나중에 읽는 순서가 그것이다.
+ *
+ * 던지는 것은 둘이다: 헤더 400(`requestClientKind` — 가드가 먼저 내던 것과 같은 답이다. P9-5 의 «입력
+ * 검증이 조작보다 먼저»가 여기서도 선다) · 같은 키에 다른 글의 409(`replayOf`).
+ *
+ * **남는 틈 — 앞 게시가 아직 커밋 중일 때.** 여기는 잠그지 않고 본다. 앞 게시가 서버에서 아직 커밋 중이면
+ * 행이 없어 가드로 넘어가고, 그 사이 권한이 바뀌었으면 403·404 가 나간 **뒤에** 앞 게시가 커밋된다. 권한이
+ * 그대로면 핸들러가 잠금 안에서 다시 보므로 재생이다(아래 핸들러). 닫으려면 가드 앞에서 페이지 잠금을
+ * 기다려야 하는데, 그것은 **권한 없는 요청이 잠금 줄에 서는 것**이라 하지 않는다. 틈이 서는 판은 «게시가
+ * 서버에 쥐인 동안 그 사람의 역할이 바뀐다»이다.
+ */
+async function replayBeforeGuard(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
+  requestClientKind(request)
+  const currentUser = request.currentUser
+  if (!currentUser) return undefined
+  const params = PageParams.safeParse(request.params)
+  const body = CreateCommentBody.safeParse(request.body)
+  if (!params.success || !body.success) return undefined
+  const { projectId, pageId } = params.data
+  const key = body.data.idempotencyKey
+  if (key === undefined || containsNulByte(body.data.body)) return undefined
+  if (outOfTokenScope(request.tokenProjectId, projectId)) return undefined
+
+  const db = request.server.db
+  const existing = await findCommentByIdempotencyKey(db, pageId, currentUser.id, key)
+  if (existing === null) return undefined
+  const page = await findPageById(db, projectId, pageId)
+  if (!page) return undefined
+  let document: PageDocument
+  try {
+    document = migrateDocument(page.schema)
+  } catch {
+    return undefined
+  }
+  return reply.code(200).send(replayOf(existing, body.data, document, page.headSeq))
+}
+
 function toResponse(comment: CommentRecord) {
   return {
     id: comment.id,
@@ -460,9 +516,12 @@ export function commentRoutes() {
      * 문서가 안 바뀐 경우(이미 번호가 있는 노드)에는 빈 배열이고 `seq`는 그대로다.
      *
      * **`idempotencyKey`가 있으면 같은 게시를 두 번 커밋하지 않는다** — 같은 (페이지, 작성자, 키)로
-     * 이미 달렸으면 앞 행을 200 으로 돌려준다(`replayOf`, `0012-comment-idempotency-key`).
+     * 이미 달렸으면 앞 행을 200 으로 돌려준다(`replayOf`, `0012-comment-idempotency-key`). **그 판정은
+     * 권한 가드보다 먼저다**(`preValidation` — `replayBeforeGuard`). 적는 순서와 도는 순서가 반대다:
+     * `preHandler`를 먼저 적는 것은 가드가 걸린 라우트를 소스에서 세는 자들(`permission-matrix.test.ts` ·
+     * `restore-lock-census.test.ts`)의 글꼴이고, Fastify 는 `preValidation`을 `preHandler`보다 먼저 돌린다.
      */
-    app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('editor') }, async (request, reply) => {
+    app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('editor'), preValidation: replayBeforeGuard }, async (request, reply) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)
       const body = parseBody(CreateCommentBody, request.body)
 
@@ -485,18 +544,9 @@ export function commentRoutes() {
       const { document, page } = await loadDocument(app, projectId, pageId)
       const key = body.idempotencyKey
 
-      // **같은 키로 이미 달렸으면 앞 행을 돌려준다**(`replayOf`). **노드를 보기 전에 본다** — 첫
-      // 게시 뒤 그 노드가 지워졌어도 게시는 있다. 여기서 404 를 내면 «달렸는데 안 달렸다»가 된다.
-      // 잠그지 않고 본다 — 이미 커밋된 게시는 이것으로 충분하다. **아직 커밋 중인** 같은 키는 아래
-      // 잠금 안에서 한 번 더 본다.
-      if (key !== undefined) {
-        const existing = await findCommentByIdempotencyKey(app.db, pageId, currentUser.id, key)
-        if (existing !== null) {
-          reply.code(200)
-          return replayOf(existing, body, document, page.headSeq)
-        }
-      }
-
+      // **이미 커밋된 같은 키는 여기 오지 않는다** — `replayBeforeGuard`가 가드 앞에서 재생했다(그것이
+      // **노드를 보기 전**이기도 하다: 첫 게시 뒤 그 노드가 지워졌어도 게시는 있다. 노드부터 보면 404 로
+      // «달렸는데 안 달렸다»가 된다). **아직 커밋 중인** 같은 키는 아래 잠금 안에서 한 번 더 본다.
       const nodePath = findNodePath(document.root, body.nodeId)
       const node = nodePath === undefined ? undefined : nodeAt(document, body.nodeId)
       if (nodePath === undefined || node === undefined) {

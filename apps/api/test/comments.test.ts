@@ -505,6 +505,97 @@ describe('POST .../comments — 멱등 키', () => {
     })
   })
 
+  /**
+   * **키 판정이 권한 가드 앞이다**(`routes/comments.ts`의 `replayBeforeGuard` — 좁은 반증 3차). 앞 판은 가드
+   * 뒤라 여기가 403 · 404 였고, 웹은 다시 보낸 것의 4xx 를 «안 달림»으로 확정해 초안을 열었다 — 권한을 되찾아
+   * 고쳐 달면 두 행이었다(Chrome route).
+   *
+   * 강등과 제외를 한 케이스에 둔다 — 같은 축(가드가 재생을 가리는가)이고 «키 판정을 가드 뒤로»가 둘을 함께
+   * 죽인다. 끝의 새 키 둘은 **대조**다: 재생만 가드 앞이고 새 게시는 가드가 그대로 막는다.
+   */
+  it('역할이 내려가거나 멤버에서 빠진 뒤에도 같은 키면 재생한다 — 새 키는 가드가 막는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const demoted = await signup(ctx)
+      const removed = await signup(ctx)
+      await addMember(ctx, fx.projectId, demoted.user.id, 'editor')
+      await addMember(ctx, fx.projectId, removed.user.id, 'editor')
+      const firstDemoted = await postKeyed(ctx, fx, fx.rootNodeId, '강등 전에 단 말', 'key-d', demoted.cookie)
+      const firstRemoved = await postKeyed(ctx, fx, fx.rootNodeId, '빠지기 전에 단 말', 'key-r', removed.cookie)
+      expect(firstDemoted.statusCode, firstDemoted.body).toBe(201)
+      expect(firstRemoved.statusCode, firstRemoved.body).toBe(201)
+
+      const toViewer = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.projectId}/members/${demoted.user.id}`,
+        cookies: fx.cookie,
+        payload: { role: 'viewer' },
+      })
+      const out = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/projects/${fx.projectId}/members/${removed.user.id}`,
+        cookies: fx.cookie,
+      })
+      expect(toViewer.statusCode, toViewer.body).toBe(200)
+      expect(out.statusCode, out.body).toBe(204)
+
+      const againDemoted = await postKeyed(ctx, fx, fx.rootNodeId, '강등 전에 단 말', 'key-d', demoted.cookie)
+      const againRemoved = await postKeyed(ctx, fx, fx.rootNodeId, '빠지기 전에 단 말', 'key-r', removed.cookie)
+
+      expect(againDemoted.statusCode, againDemoted.body).toBe(200)
+      expect(againDemoted.json().comment.id).toBe(firstDemoted.json().comment.id)
+      expect(againRemoved.statusCode, againRemoved.body).toBe(200)
+      expect(againRemoved.json().comment.id).toBe(firstRemoved.json().comment.id)
+      expect(await rows(ctx, fx)).toHaveLength(2)
+
+      const freshDemoted = await postKeyed(ctx, fx, fx.rootNodeId, '강등 뒤의 새 말', 'key-d2', demoted.cookie)
+      const freshRemoved = await postKeyed(ctx, fx, fx.rootNodeId, '빠진 뒤의 새 말', 'key-r2', removed.cookie)
+      expect(freshDemoted.statusCode, freshDemoted.body).toBe(403)
+      expect(freshRemoved.statusCode, freshRemoved.body).toBe(404)
+      expect(await rows(ctx, fx)).toHaveLength(2)
+    })
+  })
+
+  /**
+   * **가드 앞에서도 토큰의 스코프는 먼저 본다**(`outOfTokenScope`). 안 보면 다른 프로젝트에 묶인 토큰이 같은
+   * 키로 이 페이지의 재생 — 지금의 `head_seq`·번호 — 을 받는다. 스코프 안의 토큰은 재생을 받는다(대조 — «토큰은
+   * 재생하지 않는다»가 이 케이스를 통과하지 못하게).
+   */
+  it('다른 프로젝트에 묶인 토큰은 같은 키여도 재생을 못 받는다 — 404 · 이 프로젝트의 토큰은 받는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const elsewhere = await createProject(ctx, fx.cookie)
+      const posted = await postKeyed(ctx, fx, fx.rootNodeId, '세션으로 단 말', 'key-1')
+      expect(posted.statusCode, posted.body).toBe(201)
+
+      async function tokenFor(projectId: string): Promise<string> {
+        const res = await ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${projectId}/tokens`,
+          cookies: fx.cookie,
+          payload: { name: '재생 토큰' },
+        })
+        expect(res.statusCode, res.body).toBe(201)
+        return `Bearer ${res.json().value}`
+      }
+      const resend = async (authorization: string) =>
+        ctx.app.inject({
+          method: 'POST',
+          url: commentsUrl(fx),
+          headers: { authorization },
+          payload: { nodeId: fx.rootNodeId, body: '세션으로 단 말', idempotencyKey: 'key-1' },
+        })
+
+      const outOfScope = await resend(await tokenFor(elsewhere.id))
+      const inScope = await resend(await tokenFor(fx.projectId))
+
+      expect(outOfScope.statusCode, outOfScope.body).toBe(404)
+      expect(inScope.statusCode, inScope.body).toBe(200)
+      expect(inScope.json().comment.id).toBe(posted.json().comment.id)
+      expect(await rows(ctx, fx)).toHaveLength(1)
+    })
+  })
+
   it('키의 글자를 좁힌다 — 영숫자·`-`·`_` 1~64자 밖은 400 이다(NUL 이 컬럼까지 가지 않는다)', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
