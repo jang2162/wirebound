@@ -161,7 +161,16 @@ describe('인증 훅', () => {
     })
   })
 
-  it('resolveSession 조회 자체가 실패해도 401이고 500이 아니다', async () => {
+  /**
+   * **앞 판은 이 케이스가 401 을 잠갔다** — 훅의 `try/catch`가 조회의 예외를 삼켜 «자격이 없다»로 만들었다. 그런데
+   * 이 조회가 던지는 것은 DB 오류뿐이고, 401 은 웹에서 «세션 끝»이라 멀쩡한 세션의 나가 있던 쓰기를 끊었다(2026-09-22
+   * 이월 W (i) — `src/auth/plugin.ts`의 머리말 «자격이 없다 · 확인하지 못했다»). 이제 **확인하지 못했으면 던지고** 오류
+   * 처리기가 가른다 — 서버가 답한 오류(여기서는 `25P02`)는 500, 연결을 잃은 것은 503(`api-db-errors.test.ts`).
+   *
+   * 변조(잰 값): **연결을 잃은 것만** 던지고 나머지는 삼킨다 → 이것 **혼자**. 훅이 조회의 예외를 앞 판처럼 다 삼킨다 →
+   * 이것과 `api-db-errors.test.ts`의 둘(그 축의 주인은 그쪽 *"세션 조회가 연결을 잃으면 …"*).
+   */
+  it('resolveSession 조회 자체가 실패하면 401이 아니다 — «확인하지 못했다»는 «자격이 없다»가 아니다', async () => {
     await withApi(async ({ app, db }) => {
       const userId = await seedUser(db, 'crash@example.com')
       const { token } = await createSession(db, userId, 24)
@@ -169,9 +178,7 @@ describe('인증 훅', () => {
 
       // withTransaction 없이 raw db로 유니크 위반을 직접 낸다 (db.test.ts가 문서화한
       // 25P02 함정). 이 트랜잭션 위의 모든 이후 쿼리가 내용과 무관하게 실패하는
-      // 상태가 되므로, resolveSession의 SELECT도 예외 없이 던진다 — 이제서야
-      // onRequest 훅의 try/catch가 실제로 시험대에 오른다. 이 try/catch를 지우면
-      // 이 테스트는 실패한다(500).
+      // 상태가 되므로, resolveSession의 SELECT도 예외 없이 던진다.
       await expect(
         db.insertInto('users')
           .values({ email: 'crash@example.com', name: '중복', password_hash: 'y' })
@@ -179,8 +186,8 @@ describe('인증 훅', () => {
       ).rejects.toThrow()
 
       const res = await app.inject({ method: 'GET', url: '/__me', cookies: { wb_session: token } })
-      expect(res.statusCode).toBe(401)
-      expect(res.json().error.code).toBe('unauthenticated')
+      expect(res.statusCode).toBe(500)
+      expect(res.json().error.code).toBe('internal')
     })
   })
 

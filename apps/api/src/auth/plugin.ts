@@ -9,7 +9,7 @@
  *
  * # 토큰은 **프로젝트 라우트에서만** 사람을 채운다 (D4)
  *
- * §10이 *"토큰 스코프는 프로젝트 단위"*라고 적었는데, 이 훅은 **절대 던질 수 없다**
+ * §10이 *"토큰 스코프는 프로젝트 단위"*라고 적었는데, 이 훅은 **«자격이 없다»로는 던질 수 없다**
  * (아래 훅의 주석 — 여기서 던지면 `requireAuth`가 없는 공개 라우트까지 죽는다). 그래서
  * 범위 위반을 401로 던지는 대신 **채우지 않는다.**
  *
@@ -36,6 +36,32 @@
  * 토큰이 든 요청을 가드 앞에서 끊는다(`requireSessionAuth`) — **재서 알았다**: 그 라우트도
  * `:projectId`를 가지므로 그것 없이는 토큰이 핸드셰이크를 통과했다.
  * `test/api-tokens.test.ts`의 *"WS는 쿠키만이다"*가 그것을 든다.
+ *
+ * ---
+ *
+ * # «자격이 없다»와 «확인하지 못했다»를 가른다 (2026-09-22 이월 W (i))
+ *
+ * 앞 판은 세션·토큰 조회의 **어떤 예외든** `catch {}`로 삼켜 `currentUser = null`로 두었다. 그런데 이 두 조회가
+ * 던지는 것은 **DB 오류뿐이다** — 만료는 SQL 조건이라 `null`이고, 쿠키·토큰 원문은 해시로만 질의에 실려 형식을
+ * 보는 자가 없다. 그래서 삼킨 것은 전부 **«확인하지 못했다»** 였고, 그것이 401 `unauthenticated`로 나갔다. 웹은
+ * 401 을 «세션 끝»으로 읽어 로그인 화면으로 보내고 **세션 세대를 올려 나가 있던 쓰기를 끊는다** — 멀쩡한 세션이
+ * 쓰던 게시를 잃고, 다시 들어와 같은 글을 달면 **두 행**이었다(좁은 반증 3차 a-2 · Chrome: 세션 조회만 1.2s 실패시킨
+ * 판 — GET 401 · 나가 있던 POST `ERR_ABORTED` · 같은 쿠키 `/me` **200**).
+ *
+ * | 조회의 답 | 뜻 | 이 훅 |
+ * |---|---|---|
+ * | 행이 있다 | 자격이 있다 | `currentUser`를 채운다 |
+ * | 행이 없다(없는 세션 · 만료 · 폐기된 토큰) | **자격이 없다** | `null`로 둔다 → 가드가 401 |
+ * | **던졌다**(DB 오류) | **확인하지 못했다** | **그대로 던진다** → `http/error-handler.ts`가 가른다: 연결을 잃었으면 503, 서버가 답한 오류면 500 |
+ *
+ * **던지는 자리를 여기 하나로 둔다** — `currentUser`가 없으면 401 을 내는 자리는 여럿이다(`projectGuard` ·
+ * `requireAuth` · 핸들러의 타입 좁히기). 그 자리마다 «확인 못 함»을 따로 들고 가르면 새 라우트 하나가 그것을
+ * 잊는 순간 다시 401 이다. 여기서 던지면 **`currentUser === null`은 언제나 «자격이 없다»** 라서 그 자리들이 그대로
+ * 참이다.
+ *
+ * **잃는 것** — DB 가 안 닿는 동안 **쿠키를 실은** 공개 라우트 요청도 실패한다. 공개 라우트는 `/health`·
+ * `POST /api/auth/login` 둘이고 로그인은 어차피 DB 가 필요하다. `/health`는 DB 를 안 쓰지만 쿠키를 실어 부르는
+ * 자가 없다(웹은 부르지 않는다).
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import fastifyCookie, { type CookieSerializeOptions } from '@fastify/cookie'
@@ -139,9 +165,11 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
   app.decorateRequest('tokenActor', null)
   app.decorateRequest('sessionId', null)
 
-  // 모든 요청(공개 라우트 포함)에서 돈다. 절대 던지지 않는다 — 여기서 던지면
-  // `requireAuth`가 없는 공개 라우트까지 죽는다. 쿠키가 없거나, 형식이 이상하거나,
-  // 세션이 없거나 만료됐으면 조용히 `currentUser`를 `null`로 둔다. 토큰도 같다.
+  // 모든 요청(공개 라우트 포함)에서 돈다. **«자격이 없다»로는 던지지 않는다** — 여기서 401 을 던지면
+  // `requireAuth`가 없는 공개 라우트까지 죽는다. 쿠키가 없거나, 세션이 없거나 만료됐으면 조용히
+  // `currentUser`를 `null`로 둔다. 토큰도 같다.
+  //
+  // **«확인하지 못했다»면 던진다**(2026-09-22 이월 W (i)) — 머리말 «자격이 없다 · 확인하지 못했다».
   app.addHook('onRequest', async (request) => {
     request.currentUser = null
     request.authKind = null
@@ -154,16 +182,14 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
     // 브라우저가 자기 프로젝트 밖에서 조용히 404를 받는다.
     const cookie = request.cookies[config.sessionCookieName]
     if (cookie) {
-      try {
-        const user = await resolveSession(app.db, cookie)
-        if (user) {
-          request.currentUser = user
-          request.authKind = 'session'
-          request.sessionId = hashSessionToken(cookie)
-          return
-        }
-      } catch {
-        // 만료·형식 오류는 *"자격이 없다"*와 같게 다룬다. 아래 토큰 갈래로 넘어간다.
+      // **잡지 않는다.** 이 조회가 던지는 것은 DB 오류뿐이다(만료는 SQL 조건이라 `null` · 쿠키 원문은 해시로만
+      // 질의에 실린다). 던지면 아래 토큰 갈래로도 넘어가지 않는다 — 쿠키가 먼저인데 그 쿠키를 모른다.
+      const user = await resolveSession(app.db, cookie)
+      if (user) {
+        request.currentUser = user
+        request.authKind = 'session'
+        request.sessionId = hashSessionToken(cookie)
+        return
       }
     }
 
@@ -175,18 +201,15 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
     // 것**(재라 #6)이 이 한 줄에서 나온다.
     if (!request.routeOptions.url?.includes(PROJECT_ID_PARAM)) return
 
-    try {
-      const principal = await findApiTokenByValue(app.db, bearer)
-      if (!principal) return
-      request.currentUser = principal.user
-      request.authKind = 'token'
-      // 판정은 `auth/roles.ts`가 한다 — 여기는 값만 나른다.
-      request.tokenProjectId = principal.projectId
-      // **§7.4의 `actor_label='<토큰명>'`이 이 두 줄에 매여 있다**(`auth/actor.ts`).
-      request.tokenActor = { tokenId: principal.tokenId, tokenName: principal.tokenName }
-    } catch {
-      // 절대 던지지 않는다(위 문단).
-    }
+    // **잡지 않는다** — 쿠키 갈래와 같다. 형식을 보는 자가 없고(해시만 질의에 실린다) 던지는 것은 DB 오류뿐이다.
+    const principal = await findApiTokenByValue(app.db, bearer)
+    if (!principal) return
+    request.currentUser = principal.user
+    request.authKind = 'token'
+    // 판정은 `auth/roles.ts`가 한다 — 여기는 값만 나른다.
+    request.tokenProjectId = principal.projectId
+    // **§7.4의 `actor_label='<토큰명>'`이 이 두 줄에 매여 있다**(`auth/actor.ts`).
+    request.tokenActor = { tokenId: principal.tokenId, tokenName: principal.tokenName }
   })
 
   app.decorate('requireAuth', async (request: FastifyRequest, _reply: FastifyReply) => {
