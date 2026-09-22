@@ -72,8 +72,10 @@ const MIN_ROLE_TO_JOIN: ProjectRole = 'viewer'
  *
  * 아래 소켓 콜백의 쿠키 검사를 지우지 않는다 — 그쪽은 `sessionId`를 만들어야 하고
  * (§10의 *"세션 행을 지우면 권한도 즉시 회수된다"*), 마지막 방벽이기도 하다.
+ *
+ * **가드 앞에 도는 훅이라 허용 목록에 있다** — `test/pre-guard-hook-census.test.ts`가 참조로 견주려고 내보낸다.
  */
-const requireSessionAuth: preHandlerHookHandler = async (request) => {
+export const requireSessionAuth: preHandlerHookHandler = async (request) => {
   if (request.authKind === 'token') {
     throw unauthenticated('WebSocket은 세션 쿠키로만 연결할 수 있습니다')
   }

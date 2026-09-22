@@ -376,7 +376,7 @@ function replayOf(
  * 기다려야 하는데, 그것은 **권한 없는 요청이 잠금 줄에 서는 것**이라 하지 않는다. 틈이 서는 판은 «게시가
  * 서버에 쥐인 동안 그 사람의 역할이 바뀐다»이다.
  */
-async function replayBeforeGuard(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
+export async function replayBeforeGuard(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
   requestClientKind(request)
   const currentUser = request.currentUser
   if (!currentUser) return undefined
@@ -517,8 +517,11 @@ export function commentRoutes() {
      * **`idempotencyKey`가 있으면 같은 게시를 두 번 커밋하지 않는다** — 같은 (페이지, 작성자, 키)로
      * 이미 달렸으면 앞 행을 200 으로 돌려준다(`replayOf`, `0012-comment-idempotency-key`). **그 판정은
      * 권한 가드보다 먼저다**(`preValidation` — `replayBeforeGuard`). 적는 순서와 도는 순서가 반대다:
-     * `preHandler`를 먼저 적는 것은 가드가 걸린 라우트를 소스에서 세는 자들(`permission-matrix.test.ts` ·
-     * `restore-lock-census.test.ts`)의 글꼴이고, Fastify 는 `preValidation`을 `preHandler`보다 먼저 돌린다.
+     * Fastify 는 `preValidation`을 `preHandler`보다 먼저 돌린다. **가드 앞에 무엇이 달렸는지는 값으로 잰다** —
+     * `test/pre-guard-hook-census.test.ts`의 허용 목록에 이 훅이 이 라우트의 것으로 있다. `preHandler`를 먼저
+     * 적는 것은 가드가 걸린 라우트를 소스에서 세는 자들(`permission-matrix.test.ts` · `restore-lock-census.test.ts`)의
+     * 글꼴이다 — 뒤집으면 뒤의 것만 «반대편»으로 죽고 앞의 것은 이 라우트를 분모에서 조용히 잃는다(좁은 반증 4차
+     * M1 · 이월).
      */
     app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('editor'), preValidation: replayBeforeGuard }, async (request, reply) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)

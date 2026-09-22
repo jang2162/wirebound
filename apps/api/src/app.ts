@@ -85,6 +85,12 @@ export interface RegisteredRoute {
   url: string
   /** 이 라우트에 걸린 preHandler들. 인증이 필요한지를 여기서 본다. */
   preHandlers: unknown[]
+  /**
+   * 이 라우트에 **라우트 옵션으로** 걸린 훅 중 `preHandler`보다 먼저 도는 단계의 것 — 값 그대로다
+   * (`test/pre-guard-hook-census.test.ts`가 허용 목록과 **참조로** 견준다). **플러그인의 `addHook`은 안 든다** —
+   * Fastify 는 그것을 이 훅이 불린 뒤(`preReady`)에 라우트 옵션과 합친다.
+   */
+  beforePreHandler: { onRequest: unknown[]; preParsing: unknown[]; preValidation: unknown[] }
 }
 
 /**
@@ -159,12 +165,17 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   // **라우트 등록보다 앞이어야 한다** — `onRoute` 훅은 자기보다 뒤에 등록된 것만 본다.
   if (onRoute) {
+    const list = (hook: unknown): unknown[] => (hook === undefined ? [] : Array.isArray(hook) ? [...hook] : [hook])
     app.addHook('onRoute', (route) => {
-      const preHandler = route.preHandler
       onRoute({
         method: Array.isArray(route.method) ? route.method.join(',') : route.method,
         url: route.url,
-        preHandlers: preHandler === undefined ? [] : Array.isArray(preHandler) ? [...preHandler] : [preHandler],
+        preHandlers: list(route.preHandler),
+        beforePreHandler: {
+          onRequest: list(route.onRequest),
+          preParsing: list(route.preParsing),
+          preValidation: list(route.preValidation),
+        },
       })
     })
   }
