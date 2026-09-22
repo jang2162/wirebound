@@ -283,11 +283,12 @@ function commentServer(initial: Comment[] = []): {
   addElsewhere: (body: string) => void
   /**
    * 붙잡힌 목록 읽기를 그 실패로 끝낸다 — 기본은 **401**: 로그아웃 **뒤에** 서버에 닿은 앞 세션의 요청이다
-   * (모델링: 그 요청은 로그아웃보다 먼저 나갔고, 서버에는 늦게 닿았다).
+   * (모델링: 그 요청은 로그아웃보다 먼저 나갔고, 서버에는 늦게 닿았다). `index`를 주면 붙잡힌 순서로 그것
+   * 하나만 끝낸다 — 없으면 전부다.
    */
-  failHeldLists: (error?: ApiError) => Promise<void>
-  /** 붙잡힌 목록 읽기를 **그것을 낸 순간의** 표로 놓는다 — 서버는 그때 읽었고 답만 늦게 왔다. */
-  releaseHeldLists: () => Promise<void>
+  failHeldLists: (error?: ApiError, index?: number) => Promise<void>
+  /** 붙잡힌 목록 읽기를 **그것을 낸 순간의** 표로 놓는다 — 서버는 그때 읽었고 답만 늦게 왔다. `index`는 위와 같다. */
+  releaseHeldLists: (index?: number) => Promise<void>
   commit: (index?: number) => void
   respond: (index?: number) => Promise<void>
 } {
@@ -319,14 +320,14 @@ function commentServer(initial: Comment[] = []): {
     addElsewhere: (body) => {
       rows = [...rows, comment(`c-${next++}`, body)]
     },
-    failHeldLists: async (error = new ApiError(401, 'unauthenticated', '로그인이 필요합니다')) => {
+    failHeldLists: async (error = new ApiError(401, 'unauthenticated', '로그인이 필요합니다'), index) => {
       await act(async () => {
-        for (const held of heldLists.splice(0)) held.reject(error)
+        for (const held of index === undefined ? heldLists.splice(0) : heldLists.splice(index, 1)) held.reject(error)
       })
     },
-    releaseHeldLists: async () => {
+    releaseHeldLists: async (index) => {
       await act(async () => {
-        for (const held of heldLists.splice(0)) held.resolve()
+        for (const held of index === undefined ? heldLists.splice(0) : heldLists.splice(index, 1)) held.resolve()
       })
     },
     overrides: {
@@ -1183,11 +1184,18 @@ describe('멱등 키 — 같은 초안은 같은 키를 싣고, 성공·고침·
  * | 지난 세대의 칸 쓰기를 안 버린다(`deliver`) | *"신호를 안 보는 클라이언트여도 …"* **혼자** |
  * | 세대가 바뀌어도 항목을 안 비운다 | *"… «확인하지도 못했습니다»로 남은 …"* 와 *"앞 세션의 판정이 …"* — **축의 주인은 «확인하지도 못했습니다» 케이스** |
  *
- * ***"401 이 늦게 닿는 판 — 앞 사람의 다시 받기가 …"*는 한 변조로는 안 죽는다** — 가드 넷이 겹쳐 덮는다:
- * `deliver`의 세대 · 목록 칸의 «늦게 낸 조회만»(`answered` — 밥의 방문은 앨리스의 다시 받기보다 늦게 낸
- * 조회를 들고 있다) · `REFRESH`의 번호 대조 · 그리는 자리의 견줌. 앞의 셋을 함께 빼면
- * *"… «다시 불러오는 중»도 내린다 …"*와 함께 죽는다. **남긴다** — 리뷰 1-1 의 Chrome 판 그대로이고, 1번
- * 커밋 때는 `deliver` 혼자가 막았다(3번이 뒤 둘을 더했다). 겹침을 걷어 내는 사람이 마지막에 만나는 자리다.
+ * ***"401 이 늦게 닿는 판 — 앞 사람의 다시 받기가 …"*는 가드 셋을 다 빼야 죽는다** — 셋이 **저마다 혼자**
+ * 이 길을 막는다(이 파일에서 쟀다: 둘씩 뺀 세 판은 이 케이스가 살고, 셋을 다 뺀 판에서 죽는다):
+ *
+ * | 가드 | 이 길에서 막는 까닭 | 그것 **하나만** 빼면 혼자 죽는 것 |
+ * |---|---|---|
+ * | `deliver`의 세대(`write-ledger.tsx`) | 앨리스의 다시 받기는 앨리스의 세대를 단 칸 쓰기다 | *"신호를 안 보는 클라이언트여도 …"* |
+ * | `REFRESH`의 번호 대조(`comment-panel.tsx`의 `refresh`) | 밥의 `REFRESH` 칸은 비어 있다 — 앨리스의 번호와 안 맞는다 | 아래 «잠금 밖» 절의 *"다시 받기가 둘 겹쳐 앞 것이 실패해도 …"* |
+ * | 그리는 자리의 견줌(`refreshNotice`) | 밥의 방문이 앨리스의 다시 받기보다 **늦게 낸** 조회로 목록을 세웠다 | 아래 절의 *"… «다시 불러오는 중»도 내린다 …"* |
+ *
+ * 목록 칸의 «늦게 낸 조회만»(`answered`)은 이 길의 가드가 **아니다** — 앨리스의 것은 실패라 목록 칸을 안
+ * 쓴다(셋을 뺀 판이 `answered`를 둔 채로 죽는다). **남긴다** — 리뷰 1-1 의 Chrome 판 그대로이고, 1번 커밋
+ * 때는 `deliver` 혼자가 막았다(3번이 뒤 둘을 더했다). 겹침을 걷어 내는 사람이 마지막에 만나는 자리다.
  *
  * `eb7a155`(고치기 전)에서는 앞의 다섯이 죽었다. *"신호를 안 보는 클라이언트여도 …"*는 3번 뒤에 더했고 그
  * 판에서는 재지 않았다.
@@ -1388,11 +1396,13 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
  *
  * | 변조 | 죽는 것 |
  * |---|---|
- * | 다시 받기를 쓰기의 뒷일 안에서 기다린다(앞 판) | *"… 매달려도 잠금은 풀린다 …"* 와 *"앞 게시의 다시 받기가 …"*(둘째 게시를 못 보낸다) — **축의 주인은 앞의 것** |
- * | «다시 불러오는 중»을 안 그린다 | *"… 매달려도 잠금은 풀린다 …"* 와 *"… «다시 불러오는 중»도 내린다 …"*(그 문장이 서는 것부터 기다린다) |
+ * | 다시 받기를 쓰기의 뒷일 안에서 기다린다(앞 판) | *"… 매달려도 잠금은 풀린다 …"* 와 *"앞 게시의 다시 받기가 …"* · *"다시 받기가 둘 겹쳐 …"* 둘(셋 다 둘째 게시를 못 보낸다) — **축의 주인은 앞의 것** |
+ * | «다시 불러오는 중»을 안 그린다 | *"… 매달려도 잠금은 풀린다 …"* 와 *"… «다시 불러오는 중»도 내린다 …"*(그 문장이 서는 것부터 기다린다) · *"다시 받기가 둘 겹쳐 …"* 둘 — **축의 주인은 앞의 것** |
  * | 그 문장을 보이는 목록과 견주지 않는다(매달린 다시 받기가 있으면 늘 말한다) | *"… «다시 불러오는 중»도 내린다 …"* **혼자** |
- * | 다시 받기가 실패하면 목록 자리를 실패로 바꾼다(앞 판) | *"목록 다시 받기가 실패하면 …"* **혼자** |
+ * | 다시 받기가 실패하면 목록 자리를 실패로 바꾼다(앞 판) | *"목록 다시 받기가 실패하면 …"* 와 *"다시 받기가 둘 겹쳐 앞 것이 실패해도 …"* — **축의 주인은 앞의 것** |
  * | 다시 받기의 답을 낸 순서와 무관하게 쓴다 | *"앞 게시의 다시 받기가 늦게 와도 …"* **혼자** |
+ * | 다시 받기가 오면 번호를 안 보고 «도는 중»을 지운다(`REFRESH`의 번호 대조 — 성공 쪽) | *"다시 받기가 둘 겹쳐 앞 것이 먼저 오면 …"* **혼자** |
+ * | 다시 받기가 실패하면 번호를 안 보고 그 실패를 세운다(같은 대조 — 실패 쪽) | *"다시 받기가 둘 겹쳐 앞 것이 실패해도 …"* **혼자** |
  * | 조회 이펙트의 답을 낸 순서와 무관하게 쓴다(앞 판) | *"돌아와 건 목록 조회가 늦게 와도 …"* **혼자** |
  *
  * 고치기 전(`b136610`)에는 이 절의 넷과 R 절의 *"판정용 다시 읽기에도 …"*가 죽는다(다섯 — «내린다»는
@@ -1479,6 +1489,57 @@ describe('쓰기가 끝나면 잠금이 풀린다 — 목록 다시 받기는 �
 
     expect(screen.getByText('둘째')).toBeTruthy()
     expect(screen.getByText('첫째')).toBeTruthy()
+  })
+
+  /** 게시 둘을 잇달아 달고, 둘의 다시 받기를 **다 붙잡은** 채 돌아온다 — 붙잡힌 순서는 첫째 · 둘째다. */
+  async function twoHeldRefreshes(server: ReturnType<typeof commentServer>): Promise<void> {
+    await post('첫째')
+    server.holdLists(true)
+    await server.respond(0)
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+    await post('둘째')
+    await server.respond(1)
+    await waitFor(() => expect(server.heldLists()).toBe(2))
+    server.holdLists(false)
+  }
+
+  it('다시 받기가 둘 겹쳐 앞 것이 먼저 오면 «다시 불러오는 중»이 남는다 — 뒤 것이 아직 돈다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    await twoHeldRefreshes(server)
+
+    // 첫째의 다시 받기만 온다 — 그것을 낸 순간의 표(둘째가 없다)다.
+    await server.releaseHeldLists(0)
+    await waitFor(() => expect(screen.queryByText('첫째')).not.toBeNull())
+
+    // **둘째는 달렸는데 목록에 없다 — 그래서 말이 남아야 한다.** 앞 것의 답이 뒤 것의 «도는 중»을 지우면
+    // 방금 단 말이 통지 없이 빠진 목록이 선다(`REFRESH`의 번호 대조).
+    expect(screen.queryByText('둘째')).toBeNull()
+    expect(screen.getByText('목록을 다시 불러오는 중…')).toBeTruthy()
+
+    // **양성 대조** — 뒤 것이 오면 둘째가 서고 말이 사라진다.
+    await server.releaseHeldLists()
+    await waitFor(() => expect(screen.queryByText('둘째')).not.toBeNull())
+    expect(screen.queryByText('목록을 다시 불러오는 중…')).toBeNull()
+  })
+
+  it('다시 받기가 둘 겹쳐 앞 것이 실패해도 그 실패는 말하지 않는다 — 뒤 것이 아직 돈다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    await twoHeldRefreshes(server)
+
+    await server.failHeldLists(new ApiError(0, 'internal', '서버에 연결하지 못했습니다'), 0)
+
+    // 번호를 안 보면 여기서 «목록을 다시 불러오지 못했습니다»가 선다 — 뒤 것이 도는 중인데.
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText('목록을 다시 불러오는 중…')).toBeTruthy()
+
+    await server.releaseHeldLists()
+    await waitFor(() => expect(screen.queryByText('둘째')).not.toBeNull())
+    expect(screen.getByText('첫째')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('돌아와 건 목록 조회가 늦게 와도 게시 뒤의 다시 받기가 세운 목록을 덮지 않는다', async () => {
