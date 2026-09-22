@@ -122,7 +122,7 @@
  * 달린 노드를 지우면 그 행이 남는다(`node_id`에 FK가 없다 — 0008의 주석). 그 행은 GET에
  * 그대로 실려 나가고 화면이 *"사라진 노드"* 무리로 묶는다.
  */
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import {
   COMMENT_BODY_MAX_LENGTH,
@@ -135,11 +135,11 @@ import {
   type ValidationIssue,
   type WbNode,
 } from '@wirebound/schema'
-import { requestActor, requestEventActor } from '../auth/actor'
-import { projectGuard } from '../auth/roles'
+import { requestActor, requestClientKind, requestEventActor } from '../auth/actor'
+import { outOfTokenScope, projectGuard } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
-import { badRequest, forbidden, notFound, unauthenticated } from '../errors'
+import { badRequest, conflict, forbidden, notFound, unauthenticated } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
 import {
@@ -147,6 +147,7 @@ import {
   countNodeComments,
   deleteComment,
   findCommentById,
+  findCommentByIdempotencyKey,
   insertComment,
   listComments,
   updateCommentBody,
@@ -154,7 +155,7 @@ import {
 } from '../repos/comments'
 import { findPageById, lockPageForEdit } from '../repos/pages'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
-import { notifyPageChanged, originConnectionId } from '../ws/notify'
+import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
 
 /**
  * 파이프라인 실패를 **트랜잭션 밖으로 던져** 그 구간을 되돌린다(머리말의 규칙 1).
@@ -215,7 +216,7 @@ function notifyMarkerChange(
     // **actor는 요청이 정한다**(P9-5 D1). 앞 판은 사람 이름을 인자로 받았는데, 그러면
     // 에이전트가 단 코멘트의 프레임이 사람이 단 것과 구별되지 않는다.
     actor: requestEventActor(request),
-    originConnectionId: originConnectionId(request),
+    origin: broadcastOrigin(request),
   })
 }
 
@@ -284,8 +285,26 @@ const Body = z
   .min(COMMENT_BODY_MIN_LENGTH, '코멘트를 입력하세요')
   .max(COMMENT_BODY_MAX_LENGTH, `코멘트는 ${COMMENT_BODY_MAX_LENGTH}자 이하여야 합니다`)
 
+/**
+ * 게시의 멱등 키(`0012-comment-idempotency-key`). **클라이언트가 짓는다** — 웹은 초안을 처음
+ * 보낼 때 `crypto.randomUUID()`로 짓고 그 초안이 성공할 때까지 같은 키를 싣는다
+ * (`apps/web/src/panels/comment-panel.tsx`의 `POST_KEYS`).
+ *
+ * **글자를 좁힌다** — `PATCH .../ops`의 `clientOpId`(`http/patch-ops.ts`)는 길이만 보는데, 이
+ * 키는 **컬럼에 저장된다.** 아무 문자열이나 받으면 NUL 이 Postgres 에서 500 이 되는 길을 하나
+ * 더 연다(`routes/pages.ts`의 NUL 절이 적은 부류). uuid 와 흔한 키 형식이 다 들어가는 영숫자·
+ * `-`·`_` 1~64자로 두면 그 길이 봉투에서 400 으로 끝난다.
+ */
+const IdempotencyKey = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{1,64}$/, '멱등 키는 영숫자·`-`·`_` 1~64자여야 합니다')
+
 /** `z.strictObject`라 선언되지 않은 키가 오면 그 자체로 400이다(이 저장소의 관례). */
-const CreateCommentBody = z.strictObject({ nodeId: z.string().min(1), body: Body })
+const CreateCommentBody = z.strictObject({
+  nodeId: z.string().min(1),
+  body: Body,
+  idempotencyKey: IdempotencyKey.optional(),
+})
 
 /**
  * 키가 `body` 하나라 `.refine(빈 본문 금지)`를 걸지 않는다 — 그 키가 없는 것은
@@ -295,6 +314,94 @@ const CreateCommentBody = z.strictObject({ nodeId: z.string().min(1), body: Body
 const UpdateCommentBody = z.strictObject({ body: Body })
 
 /** API 계약이 노출하는 필드만 담는다 — `pageId`는 응답에 싣지 않는다(경로에 이미 있다). */
+/**
+ * **같은 키로 이미 달린 게시에 답한다 — 앞 행을 그대로 돌려준다.** 새 행도, 새 번호도,
+ * revision 도 없다(번호가 두 번 오르면 안 된다). 그래서:
+ *
+ * - `markerOps`는 **빈 배열**이고 `seq`는 **지금의** `head_seq`다 — 이 요청이 문서에 낸 변화가
+ *   없다. 웹의 `applyMarkerChange`는 빈 `markerOps`면 아무것도 안 건드린다(`headSeq`도).
+ * - `marker`는 그 노드의 **지금** 번호다. 그 사이 노드가 지워졌거나 번호가 사라졌으면 `null`이다 —
+ *   게시는 있는데 번호가 없는 상태를 지어낸 번호로 덮지 않는다.
+ * - 상태는 **200**이다(새로 만든 것이 없다). 201 은 이 요청이 행을 만들었을 때만이다.
+ *
+ * **같은 키에 다른 글(노드·본문)이 오면 409다.** 웹은 초안을 고치면 새 키를 짓는다(키가 초안의
+ * **그 글**에 매인다 — `comment-panel.tsx`의 `POST_KEYS`) — 그러니 이 갈래는 클라이언트의 잘못이다.
+ * 앞 행을 돌려주면 새 글이 **조용히 버려지고**, 새 행을 만들면 한 키 아래 게시가 둘이 되어
+ * 키가 멱등이 아니게 된다. 둘 다 사용자가 모르는 채 일어나므로 실패로 말한다.
+ */
+function replayOf(
+  existing: CommentRecord,
+  request: { nodeId: string; body: string },
+  document: PageDocument,
+  headSeq: number,
+) {
+  if (existing.nodeId !== request.nodeId || existing.body !== request.body) {
+    throw conflict('같은 멱등 키로 다른 코멘트가 이미 달렸습니다')
+  }
+  const marker = nodeAt(document, existing.nodeId)?.marker
+  return {
+    comment: toResponse(existing),
+    marker: typeof marker === 'number' ? marker : null,
+    seq: headSeq,
+    markerOps: [] as PatchOp[],
+  }
+}
+
+/**
+ * **같은 키로 이미 달렸으면 권한 가드보다 먼저 답한다**(좁은 반증 3차 · 2026-09-22). 게시 라우트의
+ * `preValidation`이다 — Fastify 는 `onRequest`(인증 — `auth/plugin.ts`) → `preValidation` → `preHandler`
+ * (`projectGuard`) → 핸들러 순으로 돌리므로 여기는 **인증 뒤 · 권한 앞**이다.
+ *
+ * **왜 권한 앞인가.** 앞 판은 키를 핸들러 안에서 봤다 — 가드 뒤다. 첫 게시가 커밋된 뒤 그 사람의 역할이
+ * 내려가거나(403) 멤버에서 빠지면(404) 같은 키로 다시 보낸 것이 재생에 못 닿았고, 웹은 다시 보낸 것의
+ * 4xx 를 «안 달림» 확정으로 읽어(`apps/web`의 `knownRejection`) 초안을 열어 줬다 — 권한을 되찾아 고쳐 달면
+ * **DB 두 행**이었다(Chrome route). 키가 낸 4xx(같은 키 다른 글 409)만 «그 키를 보고 낸 답»이다.
+ *
+ * **재생이 권한을 잃은 사람에게 돌려주는 것** — 그 사람이 그 키로 단 **자기 행**과, 그 페이지의 **지금**
+ * `head_seq`·그 노드의 번호다(`replayOf`). 그것으로 무엇이 드러나는지는 `apps/api/README.md`의 «멱등 키»가
+ * 소유한다 — 여기 옮겨 적지 않는다(앞 판은 두 자리에 적었고, 좁은 반증 4차가 더한 두 줄이 한쪽에만 설 뻔했다).
+ *
+ * **재생할 자기 행이 없으면 아무것도 안 한다** — 그 뒤는 앞 판과 글자 그대로 같다(가드가 401·403·404 를
+ * 내고 핸들러가 400·404·409 를 낸다). 그래서 던지지 않고 빠지는 자리가 많다: 자격이 없다(401 은 가드가
+ * 먼저다) · 토큰의 스코프 밖이다(가드가 404) · 파라미터·본문이 틀렸다(핸들러가 400) · 키가 없다 · 그 페이지가
+ * 그 프로젝트에 없다 · 문서를 못 읽는다(핸들러가 400). **자기 행이 없는 사람에게 가드 앞에서 아무것도 알려
+ * 주지 않는다** — 페이지가 있는지조차. 행을 먼저 찾고 페이지를 나중에 읽는 순서가 그것이다.
+ *
+ * 던지는 것은 둘이다: 헤더 400(`requestClientKind` — 가드가 먼저 내던 것과 같은 답이다. P9-5 의 «입력
+ * 검증이 조작보다 먼저»가 여기서도 선다) · 같은 키에 다른 글의 409(`replayOf`).
+ *
+ * **남는 틈 — 앞 게시가 아직 커밋 중일 때.** 여기는 잠그지 않고 본다. 앞 게시가 서버에서 아직 커밋 중이면
+ * 행이 없어 가드로 넘어가고, 그 사이 권한이 바뀌었으면 403·404 가 나간 **뒤에** 앞 게시가 커밋된다. 권한이
+ * 그대로면 핸들러가 잠금 안에서 다시 보므로 재생이다(아래 핸들러). 닫으려면 가드 앞에서 페이지 잠금을
+ * 기다려야 하는데, 그것은 **권한 없는 요청이 잠금 줄에 서는 것**이라 하지 않는다. 틈이 서는 판은 «게시가
+ * 서버에 쥐인 동안 그 사람의 역할이 바뀐다»이다.
+ */
+export async function replayBeforeGuard(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
+  requestClientKind(request)
+  const currentUser = request.currentUser
+  if (!currentUser) return undefined
+  const params = PageParams.safeParse(request.params)
+  const body = CreateCommentBody.safeParse(request.body)
+  if (!params.success || !body.success) return undefined
+  const { projectId, pageId } = params.data
+  const key = body.data.idempotencyKey
+  if (key === undefined || containsNulByte(body.data.body)) return undefined
+  if (outOfTokenScope(request.tokenProjectId, projectId)) return undefined
+
+  const db = request.server.db
+  const existing = await findCommentByIdempotencyKey(db, pageId, currentUser.id, key)
+  if (existing === null) return undefined
+  const page = await findPageById(db, projectId, pageId)
+  if (!page) return undefined
+  let document: PageDocument
+  try {
+    document = migrateDocument(page.schema)
+  } catch {
+    return undefined
+  }
+  return reply.code(200).send(replayOf(existing, body.data, document, page.headSeq))
+}
+
 function toResponse(comment: CommentRecord) {
   return {
     id: comment.id,
@@ -406,8 +513,17 @@ export function commentRoutes() {
      * 편집이 이미 얹혀 있을 수 있다)에 같은 ops를 적용하고 `headSeq`를 `seq`로 맞춘다 —
      * 문서를 통째로 돌려주면 아직 보내지 않은 낙관적 편집이 화면에서 사라진다.
      * 문서가 안 바뀐 경우(이미 번호가 있는 노드)에는 빈 배열이고 `seq`는 그대로다.
+     *
+     * **`idempotencyKey`가 있으면 같은 게시를 두 번 커밋하지 않는다** — 같은 (페이지, 작성자, 키)로
+     * 이미 달렸으면 앞 행을 200 으로 돌려준다(`replayOf`, `0012-comment-idempotency-key`). **그 판정은
+     * 권한 가드보다 먼저다**(`preValidation` — `replayBeforeGuard`). 적는 순서와 도는 순서가 반대다:
+     * Fastify 는 `preValidation`을 `preHandler`보다 먼저 돌린다. **가드 앞에 무엇이 달렸는지는 값으로 잰다** —
+     * `test/pre-guard-hook-census.test.ts`의 허용 목록에 이 훅이 이 라우트의 것으로 있다. `preHandler`를 먼저
+     * 적는 것은 가드가 걸린 라우트를 소스에서 세는 자들(`permission-matrix.test.ts` · `restore-lock-census.test.ts`)의
+     * 글꼴이다 — 뒤집으면 뒤의 것만 «반대편»으로 죽고 앞의 것은 이 라우트를 분모에서 조용히 잃는다(좁은 반증 4차
+     * M1 · 이월).
      */
-    app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('editor') }, async (request, reply) => {
+    app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('editor'), preValidation: replayBeforeGuard }, async (request, reply) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)
       const body = parseBody(CreateCommentBody, request.body)
 
@@ -428,6 +544,11 @@ export function commentRoutes() {
       }
 
       const { document, page } = await loadDocument(app, projectId, pageId)
+      const key = body.idempotencyKey
+
+      // **이미 커밋된 같은 키는 여기 오지 않는다** — `replayBeforeGuard`가 가드 앞에서 재생했다(그것이
+      // **노드를 보기 전**이기도 하다: 첫 게시 뒤 그 노드가 지워졌어도 게시는 있다. 노드부터 보면 404 로
+      // «달렸는데 안 달렸다»가 된다). **아직 커밋 중인** 같은 키는 아래 잠금 안에서 한 번 더 본다.
       const nodePath = findNodePath(document.root, body.nodeId)
       const node = nodePath === undefined ? undefined : nodeAt(document, body.nodeId)
       if (nodePath === undefined || node === undefined) {
@@ -444,10 +565,22 @@ export function commentRoutes() {
       // 트랜잭션은 이 구간의 세이브포인트가 된다. 나누면 *"번호는 붙었는데 코멘트가
       // 없다"*(재라 #6의 상태)가 실패 경로에서 실제로 만들어진다.
       const result = await runWrite(app.db, page.headSeq, async (trx) => {
-        // **잠그고, 그 사이 문서가 바뀌지 않았는지 본다**(규칙 2). `ops`가 비어도 지난다 —
-        // 남이 마지막 코멘트를 지워 번호를 없앤 직후라면 아래 *"이미 번호가 있다"*는
-        // 판단이 낡은 것이고, 그대로 두면 **번호 없는 코멘트**가 만들어진다.
-        await lockAndCheck(trx, projectId, pageId, page.headSeq)
+        // **잠근다.** 그리고 **낡았는지 보기 전에** 같은 키를 한 번 더 본다 — 같은 키가 동시에
+        // 왔으면 앞 요청이 방금 커밋했다. 그 요청이 번호를 붙였으면 `head_seq`가 올라 있어,
+        // 순서를 바꾸면 이 요청이 재생 대신 **409(stale)** 를 받는다(같은 게시를 두 번 보낸 사람이
+        // «실패»를 듣는다). 페이지 행을 잠갔으므로 같은 페이지의 게시는 여기서 한 줄로 선다.
+        const locked = await lockPageForEdit(trx, projectId, pageId)
+        if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' })
+        if (key !== undefined) {
+          const existing = await findCommentByIdempotencyKey(trx, pageId, currentUser.id, key)
+          if (existing !== null) return { replay: replayOf(existing, body, migrateDocument(locked.schema), locked.headSeq) }
+        }
+        // **그 사이 문서가 바뀌지 않았는지 본다**(규칙 2 — `lockAndCheck`와 같은 판정). `ops`가
+        // 비어도 지난다 — 남이 마지막 코멘트를 지워 번호를 없앤 직후라면 아래 *"이미 번호가
+        // 있다"*는 판단이 낡은 것이고, 그대로 두면 **번호 없는 코멘트**가 만들어진다.
+        if (locked.headSeq !== page.headSeq) {
+          throw new EditRollback({ ok: false, reason: 'stale', headSeq: locked.headSeq })
+        }
 
         if (ops.length === 0) {
           // 이미 번호가 있는 노드다 — 문서를 안 바꾸므로 revision도 만들지 않는다.
@@ -459,6 +592,7 @@ export function commentRoutes() {
             nodeId: body.nodeId,
             body: body.body,
             authorId: currentUser.id,
+            ...(key === undefined ? {} : { idempotencyKey: key }),
           })
           return { comment, seq: page.headSeq, marker, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
         }
@@ -481,9 +615,16 @@ export function commentRoutes() {
           nodeId: body.nodeId,
           body: body.body,
           authorId: currentUser.id,
+          ...(key === undefined ? {} : { idempotencyKey: key }),
         })
         return { comment, seq: outcome.seq, marker, markerOps: ops, warnings: outcome.warnings }
       })
+
+      // 잠금 안에서 같은 키를 찾았다 — 이 요청은 아무것도 안 바꿨다(알릴 것도 없다).
+      if ('replay' in result) {
+        reply.code(200)
+        return result.replay
+      }
 
       notifyMarkerChange(app, request, projectId, pageId, result)
 

@@ -32,6 +32,23 @@
  * 수 없다. 두 상태가 어긋날 자리는 **`authenticated`인데 `user`가 `null`인 것** 하나이고,
  * 그것은 실패가 아니라 *"아직 누구인지 모른다"*이다 — 읽는 쪽(`useSessionUser`)이
  * `null`을 받아 수정 단추를 안 내면 된다(서버가 어차피 403으로 막는다).
+ *
+ * ## 세션 세대 — 세션이 끝날 때마다 오른다 (2026-09-21)
+ *
+ * **라우트보다 오래 사는 것이 세션을 넘지 않게 하는 값이다.** 나가 있는 쓰기의 장부
+ * (`panels/write-ledger.tsx`)는 에디터를 떠나도 살도록 라우트 표 바깥에 서는데, 그러자 **앞 사람의
+ * 쓰기가 다음 사람에게 넘어갔다**(리뷰 1-1, Chrome — 같은 탭에서 앨리스가 저장 중 로그아웃하고 밥이
+ * 로그인해 같은 페이지로 가면: 앨리스의 쓰기가 **밥의 상자를 잠그고**, 앨리스의 «저장했습니다»가
+ * **밥의 화면에 서고**, 앨리스의 요청이 로그아웃 뒤 서버에 닿아 받은 401 이 **밥을 로그인 화면으로
+ * 튕겼다**). 같은 사람이 세션 만료 뒤 다시 로그인해도 같다 — 옛 쿠키를 실은 쓰기의 401 이 새 세션을
+ * 튕긴다. 사용자 id 로는 뒤의 판을 못 가른다. 그래서 **사람이 아니라 세션**을 센다.
+ *
+ * **오르는 자리는 하나다 — `invalidate`가 세션을 끝낼 때**(로그아웃 단추 · 401 을 받은 `SignedOut`).
+ * **상태가 실제로 바뀔 때만** 오른다(이미 `anonymous`인데 무효화는 그대로) — 아래 상태 상수의 «같은
+ * 참조» 계약을 세대가 깨지 않게 상태와 한 칸에 묶었다. **로그인(`confirm`)에서는 안 올린다** — 세션이
+ * 없는 동안(`anonymous`·`failed`)에는 문지기가 에디터를 안 그려 쓰기가 하나도 없으므로, 앞 세션의
+ * 쓰기는 전부 그 세션을 끝낸 `invalidate`의 세대에 이미 갇혀 있다. 올려도 재는 것이 없다. 마운트의
+ * `me()`도 같은 이유로 안 올린다.
  */
 import {
   createContext,
@@ -71,8 +88,16 @@ const PENDING: SessionState = { status: 'pending' }
 const AUTHENTICATED: SessionState = { status: 'authenticated' }
 const ANONYMOUS: SessionState = { status: 'anonymous' }
 
+/** 상태와 세션 세대. **한 칸에 든다** — 세대는 상태가 바뀔 때만 오른다(위 머리말 «세션 세대»). */
+interface Session {
+  state: SessionState
+  epoch: number
+}
+
 interface SessionContextValue {
   state: SessionState
+  /** 세션 세대(위 머리말). */
+  epoch: number
   /** 지금 로그인한 사람. `state`가 `authenticated`여도 아직 `null`일 수 있다(위 머리말). */
   user: SessionUser | null
   invalidate: () => void
@@ -88,7 +113,7 @@ const SessionContext = createContext<SessionContextValue | null>(null)
 
 export function SessionProvider(props: { children: ReactNode }): ReactElement {
   const api = useApi()
-  const [state, setState] = useState<SessionState>(PENDING)
+  const [session, setSession] = useState<Session>({ state: PENDING, epoch: 0 })
   const [user, setUser] = useState<SessionUser | null>(null)
 
   useEffect(() => {
@@ -99,7 +124,7 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
       (sessionUser) => {
         if (!alive) return
         setUser(sessionUser)
-        setState(AUTHENTICATED)
+        setSession((current) => ({ ...current, state: AUTHENTICATED }))
       },
       (caught: unknown) => {
         if (!alive) return
@@ -113,9 +138,10 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
         // 누구인지 모르는 상태로 되돌린다. 실패한 뒤에도 앞 사람이 남아 있으면 화면이
         // 그 사람의 권리로 단추를 낸다 — P4c-3 이월의 둘째 줄이 말하는 부류다.
         setUser(null)
-        setState(
-          failure.kind === 'signed-out' ? ANONYMOUS : { status: 'failed', message: failure.message },
-        )
+        setSession((current) => ({
+          ...current,
+          state: failure.kind === 'signed-out' ? ANONYMOUS : { status: 'failed', message: failure.message },
+        }))
       },
     )
     return () => {
@@ -123,8 +149,8 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
     }
   }, [api])
 
-  // **순환을 닫는 다리는 아래 `current.status === 'anonymous' ? current : ANONYMOUS`다.**
-  // 그것을 `setState({ status: 'anonymous' })`로 바꿔 매번 새 객체를 만들게 하면
+  // **순환을 닫는 다리는 아래 `current.state.status === 'anonymous' ? current : …`다.**
+  // 그것을 매번 새 객체(`{ state: ANONYMOUS, … }`)로 바꾸게 하면
   // `이미 anonymous면 무효화가 상태를 교체하지 않는다`가 죽는다(실측 1 사망).
   //
   // **`useCallback`은 겹치는 방어다 — 하중이 아니다.** 걷어내 참조를 불안정하게 만들어도
@@ -133,19 +159,26 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
   // `SignedOut`이 `useEffect(invalidate, [invalidate])`로 부르기 때문이다 — 참조가 렌더마다
   // 바뀌면 그 이펙트가 커밋마다 다시 돈다. 즉 헛일을 줄이는 것이지 순환을 막는 것이 아니다.
   const invalidate = useCallback(() => {
-    // 세션이 끊겼으면 누구인지도 잊는다.
+    // 세션이 끊겼으면 누구인지도 잊는다. **세션이 끝났으니 세대가 오른다**(위 머리말).
     setUser(null)
-    setState((current) => (current.status === 'anonymous' ? current : ANONYMOUS))
+    setSession((current) =>
+      current.state.status === 'anonymous' ? current : { state: ANONYMOUS, epoch: current.epoch + 1 },
+    )
   }, [])
 
   const confirm = useCallback((sessionUser: SessionUser) => {
     setUser(sessionUser)
-    setState((current) => (current.status === 'authenticated' ? current : AUTHENTICATED))
+    // **세대는 안 올린다** — 앞 세션은 `invalidate`가 이미 끝냈고, 세션이 없는 동안에는 쓰기가 없다
+    // (위 머리말 «세션 세대»).
+    setSession((current) =>
+      current.state.status === 'authenticated' ? current : { ...current, state: AUTHENTICATED },
+    )
   }, [])
 
+  const { state, epoch } = session
   const value = useMemo(
-    () => ({ state, user, invalidate, confirm }),
-    [state, user, invalidate, confirm],
+    () => ({ state, epoch, user, invalidate, confirm }),
+    [state, epoch, user, invalidate, confirm],
   )
 
   return <SessionContext.Provider value={value}>{props.children}</SessionContext.Provider>
@@ -160,6 +193,14 @@ function useSessionContext(): SessionContextValue {
 /** 지금 세션 상태. Provider 밖에서 부르면 던진다. */
 export function useSessionState(): SessionState {
   return useSessionContext().state
+}
+
+/**
+ * 지금 세션 세대(위 머리말 «세션 세대»). **라우트보다 오래 사는 것**이 앞 세션의 일을 다음 세션에
+ * 넘기지 않으려고 읽는다 — 오늘은 쓰기 장부(`panels/write-ledger.tsx`)와 그 칸 쓰기(`panel-drafts.tsx`)다.
+ */
+export function useSessionEpoch(): number {
+  return useSessionContext().epoch
 }
 
 /** 세션이 끊긴 것을 알았을 때 부른다. 이미 `anonymous`면 아무 일도 하지 않는다. */

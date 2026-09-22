@@ -59,6 +59,24 @@ async function readSchema(ctx: TestContext, fx: Fixture): Promise<PageDocument> 
   return migrateDocument(page.schema)
 }
 
+describe('멱등 키의 유일 색인(0012)', () => {
+  it('같은 (페이지, 작성자, 키)의 둘째 행은 들어가지 않는다 — 라우트의 확인이 빠져도 조용한 두 행이 안 된다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const input = { pageId: fx.pageId, nodeId: fx.rootNodeId, body: '말', authorId: fx.userId, idempotencyKey: 'k' }
+      await insertComment(ctx.db, input)
+
+      await expect(withTransaction(ctx.db, (trx) => insertComment(trx, input))).rejects.toThrow(
+        /comments_page_author_idempotency_key_idx/,
+      )
+      // 키가 없는 행은 여럿이다 — `NULL`끼리는 같은 값이 아니다.
+      await insertComment(ctx.db, { ...input, idempotencyKey: undefined })
+      await insertComment(ctx.db, { ...input, idempotencyKey: undefined })
+      expect(await listComments(ctx.db, fx.pageId)).toHaveLength(3)
+    })
+  })
+})
+
 describe('NUL 가드 — 마지막 방벽', () => {
   it('삽입이 NUL을 던진다', async () => {
     await withApi(async (ctx) => {

@@ -182,8 +182,8 @@
  * 페이지를 다녀오면 상자가 열린 채 돌아왔고 거기 친 글이 앞 저장의 응답에 지워졌다. 잠금만
  * **페이지에 매다는** 까닭과 고르지 않은 갈래는 `panel-drafts.tsx`의 머리말 3이 갖는다.
  *
- * **낡은 값이 보이는 길 둘 — 둘 다 고치지 않았다.** 8차 판은 첫째만 적었는데 둘째는 타이밍과
- * 무관하다(리뷰 N-E — 9차에 갈라 적는다).
+ * **낡은 값이 보이는 길 둘.** 8차 판은 첫째만 적었는데 둘째는 타이밍과 무관하다(리뷰 N-E — 9차에
+ * 갈라 적는다). **둘째는 이월 Q 판(2026-09-21)에서 고쳤다**(아래 둘째 항목의 끝). 첫째는 그대로다.
  *
  * 1. **타이밍 창.** 저장이 나가 있는 동안 탭을 오가거나 옆 페이지를 다녀오면 조회를
  *    다시 건다. 그 조회가 **저장이 커밋되기 전의 값을 읽고, 저장의 응답보다 늦게** 도착하면
@@ -206,7 +206,14 @@
  *    순서» 문제가 이 길로 그대로 돌아온 것이다. 코멘트에서는 한 번호에 두 행이 된다
  *    (`comment-panel.tsx`). 앞 판도 같은 부류였다(8차는 페이지 왕복으로도 동시 저장이 나갔다 —
  *    리뷰 ABA2, jsdom).
- *    **이월한다** — 고치려면 provider 보다 오래 사는 자리(또는 돌아왔을 때의 재조회)가 필요하다.
+ *    **이월 Q 판(2026-09-21)에서 고쳤다** — 잠금이 provider 보다 오래 사는 장부(`write-ledger.tsx`)에
+ *    들고, 응답은 **새로 선 provider** 의 방문에 닿는다. Chrome 재측(같은 판 · 입구 넷 — 프로젝트 목록 ·
+ *    다른 프로젝트 · 테마 편집기 · 로그아웃 뒤 다시 로그인): 돌아온 상자가 **꺼져 있어** 둘째를 보낼 수
+ *    없고, 첫째의 응답이 오면 화면 `"매달린 저장 글"` · «설명을 저장했습니다» · DB 같은 값. 남는 입구는
+ *    **새로고침·탭 닫기**다 — 장부도 문서와 함께 사라진다(그 파일의 «이것이 막지 못하는 것»).
+ *    **로그아웃 뒤 다시 로그인은 그 뒤 되돌렸다** — 잠금이 세션을 넘자 앞 사람의 쓰기가 다음 사람을
+ *    잠그고 통지하고 401 로 튕겼다(리뷰 1-1). 이제 세션이 끝나면 장부가 그 세션의 쓰기를 끊고 비운다.
+ *    돌아온 상자는 **열려** 있다 — 그 판의 값과 대가는 `write-ledger.tsx`의 «세션을 넘지 않는다».
  *
  * ## 남의 저장을 조용히 덮는다 — **고치지 않는다. 이월한다** (리뷰 N3)
  *
@@ -219,6 +226,10 @@
  * 덮는다.** 탭을 오가 다시 조회해도 초안이 그 값을 가린다(리뷰 실측 — Chrome·jsdom).
  * 7차 전에는 탭 왕복이 **우연히** 남의 새 값을 보여 줬다 — 내 초안을 잃는 대가로. 덮는 것
  * 자체는 탭을 안 오가도 7차 전부터 그랬다.
+ *
+ * **이월 Q·R 뒤에 같은 결정이 한 번 더 왔다** — 응답 없는 저장의 «판정 뒤 늦은 커밋»을 닫는 길도
+ * 설명 `PATCH`의 기대값이었고, 그것도 **이 항목과 함께 이월했다**(`write-ledger.tsx`의 «판정 뒤의
+ * 늦은 커밋»). 코멘트는 충돌 모델이 아닌 멱등 키로 닫았다.
  *
  * **여기서만 충돌 감지를 넣지 않는 이유:** 그것이 이 앱의 **첫 충돌 모델**이 된다. 제목도
  * 같은 경로(`PATCH .../pages/:id`)로 덮이는데 거기엔 없고, 제대로 하려면 서버 계약(기대값)을
@@ -268,7 +279,8 @@ import { useEffect, type ReactElement } from 'react'
 import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import { lockSlot, slot, usePanelSlot } from './panel-drafts'
+import { lockSlot, slot, usePanelLock, usePanelSlot, type PanelLock } from './panel-drafts'
+import { PendingNotice } from './pending-notice'
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 설명이 보입니다'
@@ -280,6 +292,24 @@ const LOAD_FAILED = '페이지 설명을 불러오지 못했습니다'
 const SAVE_FAILED = '설명을 저장하지 못했습니다'
 /** 저장이 끝났다는 통지. `snapshots-panel.tsx`의 *"저장됨"*과 같은 자리·같은 `role`이다. */
 const SAVED = '설명을 저장했습니다'
+/**
+ * 시간 안에 응답이 없어 서버에서 다시 읽는 중(`panels/write-ledger.tsx`의 `'checking'`). **«실패»가
+ * 아니다** — 저장됐을 수도 있다.
+ */
+const CHECKING = '응답이 없어 저장됐는지 서버에서 확인하는 중입니다'
+/** 다시 읽기도 실패했다 — 결과를 모른다. 잠금은 그대로다. */
+const UNKNOWN = '응답이 없고, 저장됐는지 확인하지도 못했습니다'
+/** 다시 읽었더니 서버의 설명이 보낸 글과 다르다. **초안은 남긴다** — 다시 저장할 수 있다. */
+const NOT_SAVED = '응답이 없어 서버를 다시 읽었더니 이 설명은 저장되지 않았습니다'
+/**
+ * 다시 읽었더니 서버의 설명이 보낸 글과 **같다.** «저장했습니다»라고 하지 않는다 — 다시 읽기가 아는 것은
+ * **값이 같다**는 것뿐이고 **누가 썼는지**는 모른다. 남이 같은 값을 먼저 저장했고 이 쓰기는 서버에 한 번도
+ * 안 닿은 판이 있다(리뷰 2-1, Chrome: 붙잡힌 저장 · 그 사이 남이 같은 값 저장 → 앞 판은 «설명을
+ * 저장했습니다»). 화면의 값·서버의 값·사용자가 원한 값은 셋 다 같으므로 해는 귀속뿐이다 — 판정은 그대로
+ * 두고 **문장만 사실로** 한다. «변경 없는 저장은 보내지 않는다»로는 못 막는다: 보낼 때는 서버 값과
+ * 달랐다(`dirty`), 같아진 것은 그 뒤다.
+ */
+const MATCHED = '응답이 없어 서버를 다시 읽었더니 서버의 설명이 이 글과 같습니다'
 
 type LoadState =
   | { status: 'loading' }
@@ -298,6 +328,8 @@ type LoadState =
 type SaveState =
   | { status: 'idle' }
   | { status: 'saved' }
+  /** 다시 읽기로 판정했더니 서버 값이 같다 — «저장했다»가 아니다(`MATCHED`). */
+  | { status: 'matched' }
   | { status: 'failed'; failure: Failure }
 
 /**
@@ -319,6 +351,7 @@ const SAVE = slot<SaveState>('page-description/save', { status: 'idle' })
  * **저장이 나가 있다 — 상자와 버튼을 끈다.** 잠금 칸이라 페이지를 떠났다 돌아와도 그 저장이
  * 끝나기 전에는 풀리지 않는다(리뷰 N-A — 8차 판은 이것이 리셋에 버려져, 가 → 나 → 가로 돌아와
  * 친 글이 앞 저장의 응답에 지워졌고 둘째 저장이 동시에 나갔다. `panel-drafts.tsx`의 머리말 3).
+ * **값은 장부에 든다**(`write-ledger.tsx`) — 에디터를 떠났다 와도 풀리지 않는다(이월 Q).
  */
 const SAVING = lockSlot('page-description/saving')
 
@@ -346,16 +379,15 @@ function usePageDescription(
   setDraft: (draft: string | null) => void
   save: SaveState
   setSave: (save: SaveState) => void
-  /** 저장이 나가 있다 — 잠금. */
-  saving: boolean
-  setSaving: (saving: boolean) => void
+  /** 저장이 나가 있다 — 잠금. 장부에 든다(`write-ledger.tsx`). */
+  saving: PanelLock
   replace: (description: string | null) => void
 } {
   const api = useApi()
   const [state, setState] = usePanelSlot(LOAD)
   const [draft, setDraft] = usePanelSlot(DRAFT)
   const [save, setSave] = usePanelSlot(SAVE)
-  const [saving, setSaving] = usePanelSlot(SAVING)
+  const saving = usePanelLock(SAVING)
 
   // **마운트될 때 지난 통지를 지운다 — 잠금은 지우지 않는다.**
   //
@@ -405,7 +437,7 @@ function usePageDescription(
     setState((prev) => (prev.status === 'ready' ? { ...prev, description } : prev))
   }
 
-  return { state, draft, setDraft, save, setSave, saving, setSaving, replace }
+  return { state, draft, setDraft, save, setSave, saving, replace }
 }
 
 /** 뷰 모드 «페이지 설명» 탭의 본문. 읽고 고친다(위 머리말). */
@@ -415,38 +447,53 @@ export function PageDescriptionPanel(props: {
 }): ReactElement {
   const api = useApi()
   const { projectId, pageId } = props
-  const { state, draft, setDraft, save, setSave, saving, setSaving, replace } = usePageDescription(
-    projectId,
-    pageId,
-  )
+  const { state, draft, setDraft, save, setSave, saving, replace } = usePageDescription(projectId, pageId)
 
   const server = state.status === 'ready' ? (state.description ?? '') : ''
   const value = draft ?? server
 
   async function submit(): Promise<void> {
-    if (pageId === undefined) return
-    setSaving(true)
+    if (pageId === undefined || saving.locked) return
     setSave(IDLE)
     // 빈 칸은 "설명을 지운다"(`null`)이고 그 밖은 친 그대로다(위 머리말).
     const next = value === '' ? null : value
-    try {
-      const page = await api.updatePage(projectId, pageId, { description: next })
-      // **아래 셋은 칸에 쓴다 — 이 클릭이 난 렌더의 페이지를 달고.** 그래서 응답이 오기 전에
-      // 탭을 오갔으면 **지금 떠 있는 본문**에 닿고(리뷰 N1 — 7차 판은 셋 중 초안 비우기만
-      // 닿았다), 페이지를 옮겼으면 **어디에도 안 닿는다**(리뷰 N2 — `panel-drafts.tsx`).
-      // 가 → 나 → 가로 돌아와 있으면 돌아온 방문에 닿는데, 그 방문은 잠금이 남아 있어
-      // 초안을 칠 수 없었으므로 비우는 것은 **보낸 그것**뿐이다(리뷰 N-A — 머리말 3).
-      //
-      // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다.
-      replace(page.description)
-      setDraft(null)
-      setSave({ status: 'saved' })
-    } catch (caught) {
-      setSave({ status: 'failed', failure: toFailure(caught, SAVE_FAILED) })
-    } finally {
-      // 잠금은 **그 페이지의 것**을 푼다 — 지금 옆 페이지에 가 있어도(머리말 3).
-      setSaving(false)
-    }
+    const openPageId = pageId
+    // **잠금은 장부가 쥐고 푼다**(`write-ledger.tsx`) — 그 페이지의 것을, 지금 어디에 가 있든
+    // (머리말 3), 에디터를 떠났다 와도(이월 Q). 아래 `settle`이 끝나야 풀린다.
+    await saving.run({
+      send: (signal) => api.updatePage(projectId, openPageId, { description: next }, { signal }),
+      // **시간 안에 응답이 없으면 서버에서 다시 읽는다**(이월 R). 서버 값이 보낸 값과 같으면
+      // 원하던 상태다 — 서버가 설명을 정규화하지 않는다(`api/client.ts`의 `updatePage` 표:
+      // 보낸 그대로 되읽힌다). **이 쓰기가 커밋했다는 뜻은 아니다** — 그래서 통지가 다르다(`MATCHED`).
+      verify: async (signal) => {
+        const page = await api.getPage(projectId, openPageId, { signal })
+        return { description: page.description, committed: page.description === next }
+      },
+      settle: (outcome) => {
+        // **아래는 칸에 쓴다 — 이 클릭이 난 렌더의 페이지를 달고.** 그래서 응답이 오기 전에
+        // 탭을 오갔으면 **지금 떠 있는 본문**에 닿고(리뷰 N1 — 7차 판은 셋 중 초안 비우기만
+        // 닿았다), 페이지를 옮겼으면 **어디에도 안 닿는다**(리뷰 N2 — `panel-drafts.tsx`).
+        // 가 → 나 → 가로 돌아와 있으면 돌아온 방문에 닿고, 에디터를 떠났다 돌아와 있으면 **새로
+        // 선 provider** 의 방문에 닿는다(이월 Q). 두 방문 다 잠금이 남아 있어 초안을 칠 수
+        // 없었으므로 비우는 것은 **보낸 그것**뿐이다(리뷰 N-A — 머리말 3).
+        if (outcome.kind === 'failed') {
+          setSave({ status: 'failed', failure: toFailure(outcome.caught, SAVE_FAILED) })
+          return
+        }
+        // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다.
+        // 다시 읽어 판정했으면 그 읽은 값이다.
+        const committed = outcome.kind === 'done' || outcome.verdict.committed
+        replace(outcome.kind === 'done' ? outcome.value.description : outcome.verdict.description)
+        if (committed) {
+          setDraft(null)
+          setSave({ status: outcome.kind === 'done' ? 'saved' : 'matched' })
+        } else {
+          // **초안은 남긴다** — 서버 값만 갈아 끼웠으므로 상자는 친 글을 보이고 저장 버튼이
+          // 열린다. 다시 저장할 수 있다.
+          setSave({ status: 'failed', failure: { kind: 'message', message: NOT_SAVED } })
+        }
+      },
+    })
   }
 
   if (pageId === undefined) {
@@ -498,7 +545,7 @@ export function PageDescriptionPanel(props: {
             // `Description`도 같은 것을 쓴다. 박으면 상한이 바뀌는 날 화면만 낡는다.
             maxLength={PAGE_DESCRIPTION_MAX_LENGTH}
             value={value}
-            disabled={saving}
+            disabled={saving.locked}
             onChange={(event) => {
               setDraft(event.target.value)
               // **친 순간 앞의 통지를 지운다.** 남겨 두면 고치는 중에 "저장했습니다"가
@@ -513,12 +560,16 @@ export function PageDescriptionPanel(props: {
         <p className="wb-shell-page-description-count">
           {value.length} / {PAGE_DESCRIPTION_MAX_LENGTH}
         </p>
-        <button type="submit" className="wb-shell-page-description-save" disabled={saving || !dirty}>
+        <button type="submit" className="wb-shell-page-description-save" disabled={saving.locked || !dirty}>
           설명 저장
         </button>
       </form>
+      <PendingNotice lock={saving} checking={CHECKING} unknown={UNKNOWN} />
       {save.status === 'saved' && (
         <p className="wb-shell-page-description-saved" role="status">{SAVED}</p>
+      )}
+      {save.status === 'matched' && (
+        <p className="wb-shell-page-description-saved" role="status">{MATCHED}</p>
       )}
       {saveFailure !== null && (
         // 서버 문장 그대로다(`api/failure.tsx`) — 400의 상한 문장·403의 권한 문장이 여기 온다.

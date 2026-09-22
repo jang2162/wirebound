@@ -683,7 +683,7 @@ function RightPanel(props: { projectId: string; pageId: string | undefined }): R
 
           «페이지 설명»과 코멘트 탭이 **같은 provider**를 쓴다 — 페이지가 바뀌면 버리는 일도
           그 한 자리에서 같은 값으로 한다. */}
-      <PanelDraftsProvider pageId={props.pageId}>
+      <PanelDraftsProvider projectId={props.projectId} pageId={props.pageId}>
         <div
           className="wb-shell-tabpanel"
           role="tabpanel"

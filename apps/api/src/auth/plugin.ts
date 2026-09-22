@@ -42,7 +42,7 @@ import fastifyCookie, { type CookieSerializeOptions } from '@fastify/cookie'
 import type { ApiConfig } from '../config'
 import { unauthenticated } from '../errors'
 import { findApiTokenByValue } from '../repos/api-tokens'
-import { resolveSession, type SessionUser } from './session'
+import { hashSessionToken, resolveSession, type SessionUser } from './session'
 
 /** 이 요청이 무엇으로 인증됐는가. 인증되지 않았으면 `null`이다. */
 export type AuthKind = 'session' | 'token'
@@ -87,6 +87,16 @@ declare module 'fastify' {
      * 사람은 같고 **자격이 다르다.**
      */
     tokenActor: { tokenId: string; tokenName: string } | null
+
+    /**
+     * 이 요청을 채운 **세션 행의 id**(`sessions.id` — 쿠키 원문의 sha256, `auth/session.ts`). 토큰으로
+     * 들어왔거나 자격이 없으면 `null`이다.
+     *
+     * **방송의 발신자 제외가 이것을 본다**(`ws/broadcast.ts`의 `sentBy`) — 요청이 실은 연결 id 가 **이
+     * 세션의** 연결일 때만 뺀다. 없으면(토큰) 아무도 안 뺀다. WS 연결이 드는 `RoomConnection.sessionId`와
+     * 같은 함수로 만든 값이다.
+     */
+    sessionId: string | null
   }
 
   interface FastifyInstance {
@@ -127,6 +137,7 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
   app.decorateRequest('authKind', null)
   app.decorateRequest('tokenProjectId', null)
   app.decorateRequest('tokenActor', null)
+  app.decorateRequest('sessionId', null)
 
   // 모든 요청(공개 라우트 포함)에서 돈다. 절대 던지지 않는다 — 여기서 던지면
   // `requireAuth`가 없는 공개 라우트까지 죽는다. 쿠키가 없거나, 형식이 이상하거나,
@@ -136,6 +147,7 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
     request.authKind = null
     request.tokenProjectId = null
     request.tokenActor = null
+    request.sessionId = null
 
     // **쿠키가 먼저다.** 둘 다 실린 요청(브라우저에서 도구를 부르는 경우)에서 사람이
     // 앉아 있는 쪽을 고른다 — 그쪽이 스코프에 묶이지 않아 더 넓고, 토큰이 이기면
@@ -147,6 +159,7 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
         if (user) {
           request.currentUser = user
           request.authKind = 'session'
+          request.sessionId = hashSessionToken(cookie)
           return
         }
       } catch {

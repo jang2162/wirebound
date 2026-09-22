@@ -5,7 +5,14 @@
  * 정적 파일을 함께 서빙하는 서버가 그렇게 만든다). 그래서 절대 URL을 만들지 않고
  * `/api`로 시작하는 경로만 쓴다.
  */
-import { ApiError, type ApiClient, type ApiErrorCode, type ApiErrorIssue } from './client'
+import {
+  ApiError,
+  type ApiClient,
+  type ApiErrorCode,
+  type ApiErrorIssue,
+  type ReadOptions,
+  type WriteOptions,
+} from './client'
 import type {
   Comment,
   CommentCreated,
@@ -571,7 +578,8 @@ const SHAPES = {
   commentCreated: (value) =>
     isRecord(value) &&
     isComment(value['comment']) &&
-    typeof value['marker'] === 'number' &&
+    // `null`은 멱등 키의 재생에서 온다 — 노드나 번호가 그 사이 사라졌다(`CommentCreated`).
+    (typeof value['marker'] === 'number' || value['marker'] === null) &&
     isMarkerChange(value),
   /** 삭제·재번호의 결과. 문서 변화만 온다. */
   markerChange: isMarkerChange,
@@ -733,7 +741,7 @@ async function toApiError(response: Response): Promise<ApiError> {
   const message = typeof envelope['message'] === 'string' ? envelope['message'] : UNREADABLE
   const code = isApiErrorCode(envelope['code']) ? envelope['code'] : 'internal'
 
-  return new ApiError(response.status, code, message, readIssues(envelope))
+  return new ApiError(response.status, code, message, readIssues(envelope), true)
 }
 
 /**
@@ -954,7 +962,7 @@ const BODY_KEYS = {
   // 그 자체로 400이고, **`marker`가 그 자리다** — 번호를 정하는 것은 서버이므로
   // 코멘트 응답(`{ id, nodeId, body, authorId, authorName, … }`)을 그대로 되보내면
   // `id`·`authorId` 따위가 400을 부른다.
-  createComment: { nodeId: true, body: true } satisfies Record<
+  createComment: { nodeId: true, body: true, idempotencyKey: true } satisfies Record<
     keyof Parameters<ApiClient['createComment']>[2],
     true
   >,
@@ -998,10 +1006,18 @@ export function createHttpClient(
   fetchImpl: typeof fetch = globalThis.fetch,
   connectionId: () => string | undefined = () => undefined,
 ): ApiClient {
-  async function request<T>(method: string, path: string, shape: Shape, body?: unknown): Promise<T> {
+  async function request<T>(
+    method: string,
+    path: string,
+    shape: Shape,
+    body?: unknown,
+    options?: (WriteOptions | ReadOptions) & { readonly cache?: RequestCache },
+  ): Promise<T> {
     // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
-    // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`originConnectionId`가 길이를 본다).
-    const connection = connectionId()
+    // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`broadcastOrigin`이 길이를 본다).
+    // **쓰기가 낸 연결을 주면 그것이다**(`WriteOptions.connectionId`) — 없으면 지금 연결이다.
+    const origin = options !== undefined && 'connectionId' in options ? options.connectionId : undefined
+    const connection = origin ?? connectionId()
     const headers: Record<string, string> = {
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       ...(connection === undefined ? {} : { [CONNECTION_ID_HEADER]: connection }),
@@ -1017,6 +1033,12 @@ export function createHttpClient(
       // 단언하므로(위 `credentials` 주석), 빈 `headers`를 늘 붙이면 그것들이 죽는다.
       ...(Object.keys(headers).length === 0 ? {} : { headers }),
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      // **끊을 신호도 받았을 때만 키를 만든다** — 위 `headers`와 같은 이유다. 끊기면 `fetch`가
+      // 거절하고 아래 `catch`가 연결 실패로 옮긴다. **끊은 쪽은 그것이 자기 신호인 줄 안다**
+      // (`panels/write-ledger.tsx`) — 여기서 따로 가르지 않는다.
+      ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      // **캐시 모드도 받았을 때만 키를 만든다** — 위 두 키와 같은 이유다. 받는 것은 `getPage` 하나다(그 주석).
+      ...(options?.cache === undefined ? {} : { cache: options.cache }),
     }
 
     // `fetch`는 응답을 받지 못하면(네트워크 단절·DNS 실패·CORS 차단) 실패 응답이
@@ -1157,12 +1179,13 @@ export function createHttpClient(
         declaredOnly(body, BODY_KEYS.createPage),
       ),
     // `updateMenu`와 같은 이유로 `async`다.
-    updatePage: async (projectId, pageId, body) =>
+    updatePage: async (projectId, pageId, body, options) =>
       request<PageDetail>(
         'PATCH',
         pagePath(projectId, pageId),
         SHAPES.pageDetail,
         updateBody(declaredOnly(body, BODY_KEYS.updatePage)),
+        options,
       ),
     deletePage: (projectId, pageId) =>
       request<void>('DELETE', pagePath(projectId, pageId), SHAPES.noBody),
@@ -1174,8 +1197,21 @@ export function createHttpClient(
         SHAPES.pageImported,
         declaredOnly(body, BODY_KEYS.importPage),
       ),
-    getPage: (projectId, pageId) =>
-      request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail),
+    // **HTTP 캐시를 안 지난다**(`no-store`). 설명 저장(`PATCH`)과 **같은 URL** 이라, 저장이 서버에 매달린
+    // 동안 이 GET 이 Chrome 의 HTTP 캐시 잠금에 선다 — 같은 브라우저의 **모든 탭**에서 그 페이지(캔버스의
+    // 문서 · 설명)가 안 열렸다(리뷰 1-3). 잰 값(Chrome · 캐시 켬 · 서버 안 지연 · 그 URL 을 먼저 한 번 읽어
+    // 둔 판): 기본 모드 GET **20016ms**(PATCH 60초 매달림 — 잠금의 상한이 약 20초다) · `no-store` **10ms**.
+    // 앱에서는(서버 안 지연 12초) 옆 탭의 설명 상자가 **9.8s** 뒤에 떴다(쓰기의 10초 시간 제한이 PATCH 를
+    // 끊을 때까지) → 고친 뒤 **0.0s**. 같은 탭 가 → 나 → 가도 앞 판은 페이지 전체가 10초 «페이지를 불러오는
+    // 중…»이었고(리뷰 5번 끝) 고친 뒤 1.5s 에 꺼진 상자가 선다. 시간 제한이 없던 판(이월 R 전)이었어도
+    // 무한이 아니라 GET 하나에 약 20초였다(위 값). 이 응답에는 캐시 헤더가 없어 원래도 매번 서버에 물었다 —
+    // 잃는 것이 없다. **다른 읽기에는 안 준다**: 코멘트 목록
+    // (`GET …/comments`)은 게시(`POST`)와 같은 URL 이지만 `POST`는 잠금을 안 걸었다(같은 판 12ms).
+    getPage: (projectId, pageId, options) =>
+      request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail, undefined, {
+        ...options,
+        cache: 'no-store',
+      }),
     patchOps: (projectId, pageId, body) =>
       request<PatchResult>(
         'PATCH',
@@ -1226,36 +1262,46 @@ export function createHttpClient(
       ),
     // 코멘트 다섯(P5-1). **경로가 전부 `.../pages/:pageId/comments` 아래다** — 코멘트는
     // 프로젝트가 아니라 **페이지의 노드**에 붙는다(노드 id는 그 문서 안에서만 뜻이 있다).
-    listComments: (projectId, pageId) =>
-      request<Comment[]>('GET', commentsPath(projectId, pageId), SHAPES.commentList),
-    createComment: (projectId, pageId, body) =>
+    listComments: (projectId, pageId, options) =>
+      request<Comment[]>('GET', commentsPath(projectId, pageId), SHAPES.commentList, undefined, options),
+    createComment: (projectId, pageId, body, options) =>
       request<CommentCreated>(
         'POST',
         commentsPath(projectId, pageId),
         SHAPES.commentCreated,
         declaredOnly(body, BODY_KEYS.createComment),
+        options,
       ),
     // **`updateBody`를 안 지난다.** 키가 `body` 하나뿐이라 *"바꿀 값이 하나도 없는 갱신"*이
     // 성립하지 않는다 — 그 키가 없는 것은 본문이 없는 것이고 서버가 봉투 위반 400을 낸다
     // (`updateTheme`과 같은 자리).
-    updateComment: (projectId, pageId, commentId, body) =>
+    updateComment: (projectId, pageId, commentId, body, options) =>
       request<Comment>(
         'PATCH',
         `${commentsPath(projectId, pageId)}/${encodeURIComponent(commentId)}`,
         SHAPES.comment,
         declaredOnly(body, BODY_KEYS.updateComment),
+        options,
       ),
     // **`SHAPES.noBody`가 아니다** — 204가 아니라 200에 문서 변화가 실려 온다(서버 README).
-    deleteComment: (projectId, pageId, commentId) =>
+    deleteComment: (projectId, pageId, commentId, options) =>
       request<MarkerChange>(
         'DELETE',
         `${commentsPath(projectId, pageId)}/${encodeURIComponent(commentId)}`,
         SHAPES.markerChange,
+        undefined,
+        options,
       ),
     // **`:commentId` 자리와 겹치지 않는다** — 그쪽에 오는 메서드는 `PATCH`·`DELETE`뿐이라
     // 같은 메서드로 두 패턴이 맞붙는 자리가 없다(서버가 정적 세그먼트를 먼저 잡기도 한다).
-    renumberComments: (projectId, pageId) =>
-      request<MarkerChange>('POST', `${commentsPath(projectId, pageId)}/renumber`, SHAPES.markerChange),
+    renumberComments: (projectId, pageId, options) =>
+      request<MarkerChange>(
+        'POST',
+        `${commentsPath(projectId, pageId)}/renumber`,
+        SHAPES.markerChange,
+        undefined,
+        options,
+      ),
     listPresets: (projectId) =>
       request<Preset[]>('GET', `${projectPath(projectId)}/presets`, SHAPES.presetList),
     createPreset: (projectId, body) =>

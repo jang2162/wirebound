@@ -954,6 +954,90 @@ describe('createHttpClient', () => {
     }
   })
 
+  it('쓰기 다섯은 받은 `signal`을 fetch 에 싣는다 — 안 받으면 키를 만들지 않는다', async () => {
+    // 우측 패널의 쓰기 장부(`panels/write-ledger.tsx`)가 시간이 지나면 이것으로 요청을 끊는다.
+    // 빠지면 장부는 «모름»으로 가서 판정하는데 요청은 브라우저에 남는다 — 서버에 아직 안 닿은 요청이
+    // **판정 뒤에** 가서 커밋될 수 있다(Chrome: 끊으면 `ERR_ABORTED`이고 서버 로그에 그 요청이 없다).
+    //
+    // **안 받으면 키가 없다** — 위 `credentials` 주석처럼 기존 케이스가 `init`을 통째로 단언한다.
+    const writes: [string, (client: ReturnType<typeof createHttpClient>, signal?: AbortSignal) => Promise<unknown>, () => Response][] = [
+      ['updatePage', (c, signal) => c.updatePage('p1', 'pg1', { description: '가' }, signal && { signal }), () => jsonResponse(200, page)],
+      ['createComment', (c, signal) => c.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' }, signal && { signal }), () => jsonResponse(201, commentCreated)],
+      ['updateComment', (c, signal) => c.updateComment('p1', 'pg1', 'c1', { body: '가' }, signal && { signal }), () => jsonResponse(200, comment)],
+      ['deleteComment', (c, signal) => c.deleteComment('p1', 'pg1', 'c1', signal && { signal }), () => jsonResponse(200, markerChange)],
+      ['renumberComments', (c, signal) => c.renumberComments('p1', 'pg1', signal && { signal }), () => jsonResponse(200, markerChange)],
+    ]
+
+    for (const [name, call, response] of writes) {
+      const signal = new AbortController().signal
+      const given = stubFetch(response())
+      await call(createHttpClient(given.fetchImpl), signal)
+      expect(given.calls[0]?.init?.signal, name).toBe(signal)
+
+      const none = stubFetch(response())
+      await call(createHttpClient(none.fetchImpl))
+      expect(Object.keys(none.calls[0]?.init ?? {}), name).not.toContain('signal')
+    }
+  })
+
+  it('판정용 읽기 둘은 받은 `signal`을 fetch 에 싣는다 — 안 받으면 키를 만들지 않는다', async () => {
+    // 쓰기 장부가 **판정용 다시 읽기**에도 시간 제한을 두고 넘으면 이것으로 끊는다(`panels/write-ledger.tsx`의
+    // `race`). 빠지면 장부는 «모름»으로 가는데 매달린 읽기가 브라우저에 남는다. 일반 조회는 신호를 안
+    // 싣는다 — 안 받으면 키가 없는 것이 그 자리다(위 케이스와 같은 이유).
+    const reads: [string, (client: ReturnType<typeof createHttpClient>, signal?: AbortSignal) => Promise<unknown>, () => Response][] = [
+      ['getPage', (c, signal) => c.getPage('p1', 'pg1', signal && { signal }), () => jsonResponse(200, page)],
+      ['listComments', (c, signal) => c.listComments('p1', 'pg1', signal && { signal }), () => jsonResponse(200, [comment])],
+    ]
+
+    for (const [name, call, response] of reads) {
+      const signal = new AbortController().signal
+      const given = stubFetch(response())
+      await call(createHttpClient(given.fetchImpl), signal)
+      expect(given.calls[0]?.init?.signal, name).toBe(signal)
+
+      const none = stubFetch(response())
+      await call(createHttpClient(none.fetchImpl))
+      expect(Object.keys(none.calls[0]?.init ?? {}), name).not.toContain('signal')
+    }
+  })
+
+  it("getPage 는 HTTP 캐시를 안 지난다(`cache: 'no-store'`) — 다른 읽기는 캐시 모드를 안 싣는다", async () => {
+    // 설명 저장(`PATCH …/pages/:id`)과 같은 URL 이라, 기본 모드면 저장이 서버에 매달린 동안 Chrome 의 HTTP
+    // 캐시 잠금에 선다(`http-client.ts`의 `getPage` 주석 — 20016ms vs 10ms). **목록은 안 싣는다** — 게시
+    // (`POST`)는 잠금을 안 걸었다(같은 판 12ms). 번지지 않았는지를 같이 본다.
+    const pageFetch = stubFetch(jsonResponse(200, page))
+    await createHttpClient(pageFetch.fetchImpl).getPage('p1', 'pg1')
+    expect(pageFetch.calls[0]?.init?.cache).toBe('no-store')
+
+    const listFetch = stubFetch(jsonResponse(200, [comment]))
+    await createHttpClient(listFetch.fetchImpl).listComments('p1', 'pg1')
+    expect(Object.keys(listFetch.calls[0]?.init ?? {})).not.toContain('cache')
+  })
+
+  it('createComment 는 멱등 키를 본문에 싣는다 — 안 주면 키를 만들지 않는다', async () => {
+    // `BODY_KEYS.createComment`에 그 키가 없으면 `declaredOnly`가 **조용히 떨군다** — 화면은 키를
+    // 들고 있는데 서버는 못 받아, 늦게 커밋된 게시와 다시 단 게시가 두 행이 된다.
+    const given = stubFetch(jsonResponse(201, commentCreated))
+    await createHttpClient(given.fetchImpl).createComment('p1', 'pg1', { nodeId: 'n_1', body: '가', idempotencyKey: 'k-1' })
+    expect(JSON.parse(String(given.calls[0]?.init?.body))).toEqual({ nodeId: 'n_1', body: '가', idempotencyKey: 'k-1' })
+
+    const none = stubFetch(jsonResponse(201, commentCreated))
+    await createHttpClient(none.fetchImpl).createComment('p1', 'pg1', { nodeId: 'n_1', body: '가' })
+    expect(JSON.parse(String(none.calls[0]?.init?.body))).toEqual({ nodeId: 'n_1', body: '가' })
+  })
+
+  it('재생 응답의 `marker: null`을 받는다 — 노드나 번호가 그 사이 사라진 게시다', async () => {
+    // 서버는 같은 키로 이미 달린 게시를 돌려줄 때 그 노드의 **지금** 번호를 싣고, 없으면 `null`이다
+    // (`apps/api/README.md`의 «멱등 키»). 막으면 달린 게시를 «서버 응답을 이해할 수 없습니다»로 읽는다.
+    const stub = stubFetch(jsonResponse(200, { ...commentCreated, marker: null, markerOps: [] }))
+    const created = await createHttpClient(stub.fetchImpl).createComment('p1', 'pg1', {
+      nodeId: 'n_1',
+      body: '가',
+      idempotencyKey: 'k-1',
+    })
+    expect(created.marker).toBeNull()
+  })
+
   it('204 응답은 본문을 파싱하지 않는다', async () => {
     const empty = new Response(null, { status: 204 })
     const json = vi.spyOn(empty, 'json')
@@ -998,6 +1082,24 @@ describe('createHttpClient', () => {
     const error = asApiError(await client.getProject('p1').catch((e: unknown) => e))
 
     expect(error.issues).toEqual([])
+  })
+
+  it('api 의 오류 봉투를 실은 실패만 `enveloped`다 — 봉투 없는 500 · 연결 실패는 아니다', async () => {
+    // 같은 500 이라도 **누가 냈는지**가 게시의 결과를 아는지를 가른다(`panels/comment-panel.tsx`의
+    // `knownRejection`). Vite 개발 프록시는 api 가 요청을 쥔 채 죽으면 `500 text/plain` 빈 본문을 준다.
+    const own = stubFetch(jsonResponse(500, { error: { code: 'internal', message: '서버 오류가 발생했습니다' } }))
+    const ownError = asApiError(await createHttpClient(own.fetchImpl).listComments('p1', 'pg1').catch((e: unknown) => e))
+    expect(ownError.status).toBe(500)
+    expect(ownError.enveloped).toBe(true)
+
+    const proxy = stubFetch(new Response('', { status: 500, headers: { 'content-type': 'text/plain' } }))
+    const proxyError = asApiError(await createHttpClient(proxy.fetchImpl).listComments('p1', 'pg1').catch((e: unknown) => e))
+    expect(proxyError.status).toBe(500)
+    expect(proxyError.enveloped).toBe(false)
+
+    const unreachable = createHttpClient(() => Promise.reject(new TypeError('Failed to fetch')))
+    const unreachableError = asApiError(await unreachable.listComments('p1', 'pg1').catch((e: unknown) => e))
+    expect(unreachableError.enveloped).toBe(false)
   })
 
   it('봉투가 아닌 응답도 ApiError로 바꾼다', async () => {
@@ -1135,6 +1237,21 @@ describe('createHttpClient', () => {
     expect(stub.calls.map((call) => (call.init?.headers as Record<string, string>)['x-wb-connection-id'])).toEqual([
       'wsc_1',
       'wsc_2',
+    ])
+  })
+
+  it('쓰기가 낸 연결을 주면 그것이 나간다 — 지금 연결이 아니다(게시의 같은 키 재전송)', async () => {
+    // `panels/comment-panel.tsx`의 `submit`: 다시 보낸 것은 첫 보내기의 연결을 싣는다. 지금 연결을 실으면
+    // 그 사이 셸이 바뀌었을 때 서버가 **새 셸의** 연결을 방송에서 뺀다(Chrome — 새 셸의 번호 칸 `–`).
+    const stub = stubFetch(jsonResponse(201, commentCreated), jsonResponse(201, commentCreated))
+    const client = createHttpClient(stub.fetchImpl, () => 'wsc_new')
+
+    await client.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' }, { connectionId: 'wsc_old' })
+    await client.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' })
+
+    expect(stub.calls.map((call) => (call.init?.headers as Record<string, string>)['x-wb-connection-id'])).toEqual([
+      'wsc_old',
+      'wsc_new',
     ])
   })
 

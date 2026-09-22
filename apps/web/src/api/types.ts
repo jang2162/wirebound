@@ -314,10 +314,16 @@ export interface MarkerChange {
   markerOps: PatchOp[]
 }
 
-/** 코멘트를 만든 결과. `marker`는 그 노드가 갖게 된(또는 이미 갖고 있던) 번호다. */
+/**
+ * 코멘트를 만든 결과. `marker`는 그 노드가 갖게 된(또는 이미 갖고 있던) 번호다.
+ *
+ * **`null`은 멱등 키의 재생에서만 온다** — 같은 키로 이미 달린 게시를 돌려줄 때 그 노드의
+ * **지금** 번호를 싣는데, 그 사이 노드가 지워졌거나 번호가 사라졌으면 없다(`apps/api/README.md`의
+ * «멱등 키»). 새로 단 게시는 늘 번호를 받는다.
+ */
 export interface CommentCreated extends MarkerChange {
   comment: Comment
-  marker: number
+  marker: number | null
 }
 
 /**

@@ -42,6 +42,7 @@ import type { ProjectRole } from '../db/types'
 import { forbidden, internal, unauthenticated } from '../errors'
 import { parseParams } from '../http/parse'
 import { z } from 'zod'
+import { nextConnectionId } from './connection-id'
 import { handleLockFrame, releaseLocksOf } from './lock'
 import { handlePatchFrame, patchErrorFrame } from './patch'
 import { MIN_ROLE_FOR_FRAME, WS_CLOSE, parseClientFrame, type ServerFrame } from './protocol'
@@ -61,20 +62,6 @@ const WsParams = z.object({ projectId: z.uuid() })
 const MIN_ROLE_TO_JOIN: ProjectRole = 'viewer'
 
 /**
- * 연결 id를 매기는 모듈 스코프 카운터. **`crypto.randomUUID`가 아니다** — `db/tx.ts`의
- * SAVEPOINT 이름이 같은 이유로 카운터를 쓴다: 프로세스 안에서 절대 겹치지 않고, 실패를
- * 재현할 때 값이 매번 바뀌지 않아 로그를 읽을 수 있다.
- *
- * **프로세스 안에서만 유일하다**(`rooms.ts`의 단일 인스턴스 가정 표 넷째 줄).
- */
-let connectionCounter = 0
-
-function nextConnectionId(): string {
-  connectionCounter += 1
-  return `wsc_${connectionCounter}`
-}
-
-/**
  * **WS는 쿠키만이다**(P9-2 D4).
  *
  * §10이 *"WS 핸드셰이크도 같은 쿠키를 쓰므로 REST와 WS의 인증 경로가 하나다"*라고 적었고,
@@ -85,8 +72,10 @@ function nextConnectionId(): string {
  *
  * 아래 소켓 콜백의 쿠키 검사를 지우지 않는다 — 그쪽은 `sessionId`를 만들어야 하고
  * (§10의 *"세션 행을 지우면 권한도 즉시 회수된다"*), 마지막 방벽이기도 하다.
+ *
+ * **가드 앞에 도는 훅이라 허용 목록에 있다** — `test/pre-guard-hook-census.test.ts`가 참조로 견주려고 내보낸다.
  */
-const requireSessionAuth: preHandlerHookHandler = async (request) => {
+export const requireSessionAuth: preHandlerHookHandler = async (request) => {
   if (request.authKind === 'token') {
     throw unauthenticated('WebSocket은 세션 쿠키로만 연결할 수 있습니다')
   }
@@ -113,6 +102,7 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
       }
 
       const connection: RoomConnection = {
+        // **무작위다** — 재기동을 넘어 겹치지 않는다(`connection-id.ts`).
         id: nextConnectionId(),
         projectId,
         userId: currentUser.id,

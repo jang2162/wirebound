@@ -11,7 +11,7 @@
  *
  * | 무엇을 여럿으로 두나 | 그것이 없으면 무엇이 안 죽나 |
  * |---|---|
- * | 연결 둘 | 발신자 제외(`exceptConnectionId`)를 지워도 안 죽는다 |
+ * | 연결 둘 | 발신자 제외(`except`)를 지워도 안 죽는다 |
  * | 프로젝트 둘 | 룸 키를 무시하고 **모두에게** 보내도 안 죽는다 |
  * | 페이지 여럿 | 프레임에서 `pageId`를 빼도 안 죽는다 |
  *
@@ -111,6 +111,46 @@ async function editPage(
   return { statusCode: res.statusCode, seq: res.statusCode === 200 ? (res.json() as { seq: number }).seq : -1 }
 }
 
+/** 같은 사람으로 **한 번 더** 로그인한다 — 새 세션의 쿠키다(다른 탭·다른 브라우저의 모양). */
+async function loginAgain(ctx: RealApiContext, who: SignedUpUser): Promise<{ wb_session: string }> {
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { email: who.user.email, password: who.password },
+  })
+  const token = res.cookies.find((cookie) => cookie.name === 'wb_session')?.value
+  if (res.statusCode !== 200 || token === undefined) throw new Error(`다시 로그인 실패 (status ${res.statusCode})`)
+  expect(token).not.toBe(who.cookie.wb_session)
+  return { wb_session: token }
+}
+
+/** 그 사람의 API 토큰. `Authorization` 헤더 값을 돌려준다. */
+async function issueToken(ctx: RealApiContext, who: SignedUpUser, projectId: string): Promise<string> {
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${projectId}/tokens`,
+    cookies: who.cookie,
+    payload: { name: '방송 토큰' },
+  })
+  if (res.statusCode !== 201) throw new Error(`토큰 발급 실패 (status ${res.statusCode}): ${res.body}`)
+  return `Bearer ${(res.json() as { value: string }).value}`
+}
+
+/** 토큰으로 `PATCH .../ops` 를 한 번 — 쿠키 없이, 연결 id 헤더를 싣고. 새 `seq`를 돌려준다. */
+async function editWithToken(ctx: RealApiContext, fx: Board, authorization: string, connectionId: string): Promise<number> {
+  const res = await ctx.app.inject({
+    method: 'PATCH',
+    url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/ops`,
+    headers: { authorization, [CONNECTION_ID_HEADER]: connectionId },
+    payload: {
+      baseSeq: await headSeqOf(fx.page.id),
+      ops: [{ op: 'add', path: '/root/children/-', value: { id: nodeId(), type: 'Text', props: {} } }],
+    },
+  })
+  expect(res.statusCode, res.body).toBe(200)
+  return (res.json() as { seq: number }).seq
+}
+
 let nodeCounter = 0
 
 function nodeId(): string {
@@ -202,7 +242,7 @@ describe('자기 편집은 자기에게 돌아오지 않는다 (§7.1)', () => {
 
   /**
    * **음성 대조.** 이것이 없으면 위 케이스가 *"작성자에게는 원래 안 간다"*로도 통과한다 —
-   * 그러면 `exceptConnectionId`를 아예 지워도 안 죽는다.
+   * 그러면 `except`를 아예 지워도 안 죽는다.
    */
   it('헤더가 없으면 작성자의 연결도 받는다 — 음성 대조', async () => {
     await withRealApi(async (ctx) => {
@@ -214,6 +254,60 @@ describe('자기 편집은 자기에게 돌아오지 않는다 (§7.1)', () => {
 
       const frame = await author.waitFor('page-changed')
       expect(frame.pageId).toBe(fx.page.id)
+    })
+  })
+
+  /**
+   * **빠지는 것은 그 요청의 세션이 든 연결뿐이다**(`broadcast.ts`의 `sentBy` — 좁은 반증 3차). 앞 판은
+   * id 만 견줘서, 재기동 뒤 앨리스의 옛 id 를 받은 캐럴이 앨리스의 게시 방송에서 빠졌다(Chrome). 여기서는
+   * 재기동 대신 **남의 id 를 그대로 싣는다** — 서버가 보는 것은 같다(id 가 같고 세션이 다르다).
+   *
+   * 두 판을 한 케이스에 둔다: **남**(다른 사용자)과 **같은 사람의 다른 세션**(다시 로그인한 쿠키). 뒤의 것이
+   * 없으면 «사용자로 견준다»가 통과한다 — 같은 사람이 탭 둘에서 다른 세션이면 한쪽의 게시가 다른 쪽을 뺀다.
+   */
+  it('다른 세션의 요청이 실은 id 로는 아무도 안 빠진다 — 남의 연결도, 같은 사람의 다른 세션도', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const peer = track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
+      const elsewhere = await loginAgain(ctx, fx.owner)
+      const ownerElsewhere = track(await joinRoom(ctx.port, fx.project.id, elsewhere.wb_session))
+      const peerId = (await peer.waitFor('joined')).connectionId
+      const elsewhereId = (await ownerElsewhere.waitFor('joined')).connectionId
+
+      const intoPeer = await editPage(ctx, fx, fx.owner, { connectionId: peerId })
+      // 첫 방송이 룸을 다 돈 뒤에 둘째를 낸다 — 방송은 기다리지 않고 나가므로(`notify.ts`) 안 기다리면 두
+      // 방송의 프레임 순서가 섞일 수 있다. 룸은 넣은 순서로 돌고 `ownerElsewhere`가 마지막이다.
+      await ownerElsewhere.waitFor('page-changed')
+      const intoElsewhere = await editPage(ctx, fx, fx.owner, { connectionId: elsewhereId })
+
+      const seqs = [intoPeer.seq, intoElsewhere.seq]
+      expect((await peer.waitForCount('page-changed', 2)).map((frame) => frame.seq)).toEqual(seqs)
+      expect((await ownerElsewhere.waitForCount('page-changed', 2)).map((frame) => frame.seq)).toEqual(seqs)
+    })
+  })
+
+  /**
+   * **토큰 요청은 아무도 안 뺀다**(`sentBy`의 머리말). 토큰은 WS 를 못 열므로(`ws/routes.ts`의
+   * `requireSessionAuth`) 그 요청을 **낸 연결이 없다** — 같은 사람의 연결 id 를 실었어도 그 연결은 에이전트가 낸
+   * 편집을 받아야 한다. 남의 id 를 실은 둘째 편집은 «토큰이면 id 만 본다»를 잰다.
+   */
+  it('토큰 요청은 아무도 안 뺀다 — 같은 사람의 연결 id 를 실어도 그 연결은 받는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const author = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const peer = track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
+      const authorId = (await author.waitFor('joined')).connectionId
+      const peerId = (await peer.waitFor('joined')).connectionId
+      const token = await issueToken(ctx, fx.owner, fx.project.id)
+
+      const intoAuthor = await editWithToken(ctx, fx, token, authorId)
+      // 첫 방송이 룸을 다 돈 뒤에 둘째를 낸다(위 케이스와 같은 이유). `peer`가 마지막으로 넣은 연결이다.
+      await peer.waitFor('page-changed')
+      const intoPeer = await editWithToken(ctx, fx, token, peerId)
+
+      const seqs = [intoAuthor, intoPeer]
+      expect((await author.waitForCount('page-changed', 2)).map((frame) => frame.seq)).toEqual(seqs)
+      expect((await peer.waitForCount('page-changed', 2)).map((frame) => frame.seq)).toEqual(seqs)
     })
   })
 })

@@ -69,6 +69,17 @@ export async function findMembership(db: DbHandle, projectId: string, userId: st
 }
 
 /**
+ * **자격이 다른 프로젝트에 묶여 있는가**(API 토큰 — P9-2 D4). 세션은 묶이지 않으므로(`null`) 늘 거짓이다.
+ *
+ * `requireProjectRole`이 이것으로 스코프 밖을 404 로 만든다. **밖에 내놓는 것은 부르는 자리가 둘이라서다** —
+ * 코멘트 게시의 재생이 가드 **앞**에서 돌며 같은 판정을 먼저 봐야 한다(`routes/comments.ts`의
+ * `replayBeforeGuard`). 술어를 거기 한 벌 더 쓰면 아래 문단의 *"두 자리"*가 된다.
+ */
+export function outOfTokenScope(scopeProjectId: string | null, projectId: string): boolean {
+  return scopeProjectId !== null && scopeProjectId !== projectId
+}
+
+/**
  * 프로젝트에 대한 최소 역할을 요구한다. 설계 §10의 404/403 규칙을 구현하는 단일 함수다.
  *
  * | 상황 | 응답 |
@@ -101,8 +112,7 @@ export async function requireProjectRole(
    */
   scopeProjectId: string | null = null,
 ): Promise<ProjectRole> {
-  const outOfScope = scopeProjectId !== null && scopeProjectId !== projectId
-  const role = outOfScope ? null : await findMembership(db, projectId, userId)
+  const role = outOfTokenScope(scopeProjectId, projectId) ? null : await findMembership(db, projectId, userId)
   if (!role) {
     throw notFound('프로젝트를 찾을 수 없습니다')
   }

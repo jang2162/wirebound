@@ -552,7 +552,8 @@ function heldComments(seed: Comment[] = []): {
     overrides: {
       listComments: async (_projectId, pageId) => [...(listed[pageId] ?? [])],
       createComment: (_projectId, pageId, body) => {
-        created.push({ pageId, ...body })
+        // **어느 페이지·노드·글인가만 적는다** — 멱등 키는 `write-ledger.test.tsx`의 «멱등 키» 절이 잰다.
+        created.push({ pageId, nodeId: body.nodeId, body: body.body })
         const reply = new Promise<CommentCreated>((resolve) => {
           gates.push(() => {
             const row = comment({ id: `c-${created.length}`, nodeId: body.nodeId, body: body.body })
@@ -610,7 +611,7 @@ function heldComments(seed: Comment[] = []): {
  * |---|---|
  * | 마운트 이펙트가 새 코멘트 초안까지 지운다 | *"새 코멘트 초안이 탭을 오가도 …"* **와** 아래 *"쓰던 코멘트는 쓴 노드에만 …"*(속성 탭을 다녀온다) |
  * | 그것이 고치던 것까지 지운다 | *"고치던 코멘트가 탭을 오가도 …"* **혼자** |
- * | 그것이 쓰기 잠금까지 푼다 | *"게시가 나가 있는 동안 … 잠금이 남는다 …"* **혼자** |
+ * | 쓰기 잠금을 본문의 `useState`로 든다(마운트에 묶는다) | *"게시가 나가 있는 동안 … 잠금이 남는다 …"* · *"게시 중에 옆 페이지로 …"* · `write-ledger.test.tsx`의 *"코멘트 — 에디터를 떠났다 와도 잠금이 남는다 …"* |
  * | 다시 받은 목록을 마운트에 묶는다(언마운트 뒤면 안 쓴다) | *"… 그 뒤 목록이 떠 있는 본문에 닿는다"* **혼자** |
  * | 칸의 쓰기 가드가 코멘트 칸에만 안 걸린다 | *"게시 중에 옆 페이지로 …"* **혼자** |
  * | provider 의 리셋이 노드마다의 새 코멘트 초안(`DRAFTS`)을 넘긴다 | *"페이지가 바뀌면 …"* **혼자** |
@@ -628,6 +629,12 @@ function heldComments(seed: Comment[] = []): {
  * 갖는다** — 여기 두 벌로 적지 않는다(8차에 두 파일이 같은 수를 따로 적었다가 한쪽만 낡았다 —
  * 리뷰 7번). 칸별로 가르면(위 표 다섯째 줄과 그 거울판) 각자 혼자 죽는다.
  *
+ * **이월 Q 판(2026-09-21)에서 셋째 줄을 다시 쟀다.** 앞 판의 변조(*"마운트 이펙트가 쓰기 잠금까지
+ * 푼다"*)는 **이제 심을 수 없다** — 잠금이 장부(`write-ledger.tsx`)로 옮겨 본문에는 잠금에 쓸 자리가
+ * 없다. 같은 뜻의 변조(잠금을 마운트에 묶는다)로 바꿔 적었고, 그것은 혼자가 아니다 — 마운트에 묶인
+ * 잠금은 옆 페이지까지 잠그고(8차 전 판의 꼴), 새 케이스가 같은 축을 provider 째 내려가는 길에서 잰다.
+ * 축의 주인은 **«잠금이 장부에 든다»**이고 `write-ledger.test.tsx`의 머리말 표가 그것을 갖는다.
+ *
  * **8차 전 `comment-panel.tsx`(`555623c`)로 되돌리면** 이 절의 여섯 중 다섯과 대상 케이스가 죽는다.
  * *"페이지가 바뀌면 …"*은 산다 — 앞 판도 지키던 규칙이고, 이 케이스는 그 규칙이 **자리를 옮긴
  * 뒤에도** 지켜지는지를 잠근다. **아래 가 → 나 → 가 둘도 산다** — 앞 판의 `busy`는 본문의
@@ -641,8 +648,10 @@ function heldComments(seed: Comment[] = []): {
  * | 변조 | 죽는 것 |
  * |---|---|
  * | 수정 단추가 쓰기 잠금을 안 본다 | *"수정 중에 옆 페이지를 다녀와도 …"* **혼자** |
- * | 쓰기 잠금(`BUSY`)을 방문 칸(`slot`)으로 든다 | *"게시 중에 옆 페이지를 …"* **와** *"수정 중에 …"* |
- * | 새 코멘트 상자가 쓰기 잠금을 안 본다 | *"게시 중에 옆 페이지를 …"* **와** 위 *"게시가 나가 있는 동안 탭을 오가도 …"* |
+ * | 쓰기 잠금(`BUSY`)을 방문 칸(`slot`)으로 든다 | *"게시 중에 옆 페이지를 …"* **와** *"수정 중에 …"* **와** `write-ledger.test.tsx`의 *"코멘트 — 에디터를 떠났다 와도 잠금이 남는다 …"* |
+ * | 새 코멘트 상자가 쓰기 잠금을 안 본다 | *"게시 중에 옆 페이지를 …"* **와** 위 *"게시가 나가 있는 동안 탭을 오가도 …"* **와** `write-ledger.test.tsx`의 코멘트 둘(잠금 · 전달 — 둘 다 게시 뒤 상자가 꺼지기를 기다린다) |
+ *
+ * (이월 Q 판에서 다시 쟀다 — 뒤의 두 줄에 새 케이스가 더해졌을 뿐 앞의 이름들은 그대로다.)
  *
  * **«게시 중에 …»는 혼자 죽지 않는다** — 잠금이 한 칸이라 수정 케이스와, 상자가 한 개라 탭 왕복
  * 케이스와 함께 죽는다. **«코멘트의 쓰기 잠금이 페이지 왕복에도 남는다» 축의 주인은 이 케이스다**
@@ -879,7 +888,8 @@ describe('새 코멘트는 쓴 노드에만 달린다 (9차)', () => {
       apiOverrides: {
         listComments: async () => [],
         createComment: async (_projectId, pageId, body) => {
-          created.push({ pageId, ...body })
+          // 어느 페이지·노드·글인가만 적는다(위 `heldComments`와 같은 이유).
+          created.push({ pageId, nodeId: body.nodeId, body: body.body })
           return {
             comment: comment({ id: `c-${created.length}`, nodeId: body.nodeId, body: body.body }),
             marker: 1,

@@ -205,6 +205,11 @@ export interface CommentsTable {
   created_at: Generated<Date>
   /** 본문을 고치면 `repos/comments.ts`가 `clock_timestamp()`로 함께 갱신한다. */
   updated_at: ColumnType<Date, Date | undefined, Date>
+  /**
+   * 게시를 실은 클라이언트가 지은 멱등 키(`0012-comment-idempotency-key`). 없으면 `null`이다 —
+   * 키 없는 게시·가져오기·복원. **고치지 않는다** — 같은 게시를 가리키는 이름이다.
+   */
+  idempotency_key: ColumnType<string | null, string | null | undefined, never>
 }
 
 /**

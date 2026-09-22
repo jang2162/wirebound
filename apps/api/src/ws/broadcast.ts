@@ -39,15 +39,53 @@ import type { LockStore } from '../lock/store'
 import { WS_CLOSE, type Participant, type ServerFrame } from './protocol'
 import type { RoomConnection, RoomRegistry } from './rooms'
 
+/**
+ * 방송을 일으킨 요청이 **어느 세션의 어느 연결**에서 왔는가. 연결 id 는 요청이 자기 입으로 말한 값이고
+ * (`x-wb-connection-id` — `ws/notify.ts`), 세션은 서버가 그 요청의 쿠키에서 읽은 값이다(`request.sessionId`).
+ */
+export interface BroadcastOrigin {
+  connectionId: string
+  sessionId: string
+}
+
 export interface BroadcastOptions {
   /**
-   * 이 연결에는 보내지 않는다. **REST로 편집을 낸 사람 자신의 연결**이 여기 온다 —
+   * 이 요청을 낸 연결에는 보내지 않는다. **REST로 편집을 낸 사람 자신의 연결**이 여기 온다 —
    * §7.1이 *"[본인] ack 수신 / [타인] ops 수신"*으로 갈라 둔 그 자리다.
    *
    * 안 가르면 자기 편집이 자기에게 되돌아오고, 그 프레임이 **HTTP 응답보다 먼저 도착할 수
    * 있다.** 그때 받는 쪽은 이미 낙관적으로 적용한 ops를 한 번 더 적용하게 된다.
+   *
+   * **빠지는 것은 그 요청의 세션이 든 연결뿐이다**(`sentBy`). 앞 판은 id 만 견줬다 — 그러면 요청이 실은
+   * id 가 **남의 연결**이어도 그 연결이 빠졌다(좁은 반증 3차: 재기동 뒤 옛 id 를 받은 캐럴이 앨리스의 게시
+   * 방송을 못 받았다). id 는 룸의 모두에게 보인다(`presence`의 `participants`) — 그래서 이 확인이 없으면
+   * 위조로도 같은 일이 난다.
    */
-  exceptConnectionId?: string
+  except?: BroadcastOrigin
+}
+
+/**
+ * 이 연결이 그 요청을 낸 연결인가. **id 가 같고 세션도 같아야 한다.** 아니면 **아무도 안 뺀다**: 덜 빼는 쪽의
+ * 대가는 자기 편집이 자기에게 한 번 더 오는 것이고 헤더를 안 싣는 클라이언트와 같은 판이다(`ws/notify.ts`의 머리말 —
+ * 문서 편집은 `clientOpId`로 알아보고, 코멘트 번호는 같은 `add`라 끝의 문서가 같다 — `apps/web`의
+ * `write-ledger.tsx` «두 번 얹힘»). 더 빼는 쪽의 대가는 **남의 화면이 조용히 낡는 것**이다.
+ *
+ * Chrome(리뷰 (c-1) 절차 — 앨리스의 게시 중 api 를 죽였다 띄우고, 앨리스의 «다시 확인»이 싣는 옛 id 를 route 에서
+ * **캐럴의 지금 id** 로 바꿔 끼웠다 = 캐럴이 그 id 를 받은 판):
+ *
+ * | 이 함수 | 캐럴이 받은 `page-changed` | 캐럴의 번호 칸 | 밥이 다음 게시를 단 뒤 |
+ * |---|---|---|---|
+ * | 세션 확인을 끄면(id 만 견줌 — 변조) | 없음 | `[]`(앨리스·밥 `["1"]`) | `[]` · «연결이 끊긴 사이의 변경을 놓쳐 …» |
+ * | 지금 | seq 2 · 3 | `["1"]` | `["1","2"]` · 통지 없음 |
+ *
+ * **토큰 요청은 아무도 안 뺀다**(`broadcastOrigin`이 세션 없는 요청에 `undefined`를 준다). 요청을 «낸 셸»이
+ * 없기 때문이다: WS 는 쿠키로만 열리고(`ws/routes.ts`의 `requireSessionAuth`) 웹은 쿠키로만 부르므로, 쿠키 없이
+ * 토큰만 든 요청(MCP · `wireb`)은 **어떤 연결의 셸에서도 나오지 않았다.** 그 요청이 같은 사람의 연결 id 를
+ * 실었다고 그 연결을 빼면, 에이전트가 낸 편집을 **그 사람의 브라우저가 못 받는다.** (오늘 토큰 클라이언트는 이
+ * 헤더를 안 싣는다.)
+ */
+function sentBy(connection: RoomConnection, origin: BroadcastOrigin): boolean {
+  return connection.id === origin.connectionId && connection.sessionId === origin.sessionId
 }
 
 export interface Broadcaster {
@@ -105,7 +143,7 @@ export function createBroadcaster(db: DbHandle, rooms: RoomRegistry, locks: Lock
     let delivered = 0
 
     for (const connection of rooms.membersOf(projectId)) {
-      if (options?.exceptConnectionId === connection.id) continue
+      if (options?.except !== undefined && sentBy(connection, options.except)) continue
 
       if (!(await stillAllowed(connection, MIN_ROLE_TO_RECEIVE))) {
         rooms.leave(projectId, connection.id)

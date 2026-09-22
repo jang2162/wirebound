@@ -677,7 +677,7 @@ export class EditorStore {
    *
    * ## 자기 편집이 되돌아오는 창 — 리베이스가 그것을 두 배로 만든다
    *
-   * 보통은 서버가 발신자를 제외한다(`ws/notify.ts`의 `exceptConnectionId`). **성립하지 않는
+   * 보통은 서버가 발신자를 제외한다(`ws/broadcast.ts`의 `except`). **성립하지 않는
    * 창이 있다:** 편집이 REST로 나가는 동안(소켓이 아직 안 열려 `x-wb-connection-id`가 없다)
    * 그 소켓이 열려 룸에 들어오면, 뒤이어 나가는 브로드캐스트를 **낸 사람이 되받는다.**
    *

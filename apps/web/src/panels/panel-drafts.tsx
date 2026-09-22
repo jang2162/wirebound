@@ -66,6 +66,21 @@
  * 방문의 잠금이 풀린다. 잠금이 남아 있는 한 돌아온 방문은 **그 칸을 고칠 수 없으므로**, 응답의
  * 뒷일(초안 비우기·편집 칸 닫기)이 지우는 것은 언제나 **보낸 그것**이다.
  *
+ * ### 잠금은 이 provider 보다 오래 산다 — 장부에 든다 (이월 Q, 2026-09-21)
+ *
+ * 9차 판은 잠금을 이 provider 의 상태에 들었다. 그래서 provider 째 내려가는 길(프로젝트 목록 ·
+ * 다른 프로젝트 · 테마 편집기 · 로그아웃 뒤 다시 로그인)에서는 잠금이 함께 사라졌고, 앞 쓰기가
+ * 나가 있는 채 둘째 쓰기가 나가 **늦게 온 앞 쓰기가 뒤 쓰기를 덮었다**(Chrome — 값은
+ * `write-ledger.tsx`의 머리말). **이제 잠금 칸의 값은 `app.tsx`의 `<Routes>` 위에 선 장부
+ * (`write-ledger.tsx`)에 든다** — 키는 (프로젝트, 페이지, 칸)이고, 여기는 그것을 읽기만 한다
+ * (`usePanelLock`). 위 셋째 단락의 규칙(«그 쓰기를 부른 페이지의 잠금을 곧바로 고친다»)은 장부가
+ * 그대로 지킨다 — 키가 페이지를 들고 있다.
+ *
+ * **칸 쓰기도 «지금 떠 있는 provider»로 간다**(`usePanelSlot`) — 내려간 provider 로 시작한 쓰기의
+ * 응답이, 새로 선 provider 가 같은 페이지를 보고 있으면 그 방문에 닿는다. 위 셋째 단락의 «돌아온
+ * 방문의 잠금이 풀린다 · 뒷일이 지우는 것은 보낸 그것이다»를 provider 째 갈린 방문까지 넓힌 것이다.
+ * 이 provider 가 떠 있는 동안은 자기 자신이 «지금 떠 있는 provider»라 아무것도 달라지지 않는다.
+ *
  * **고르지 않은 둘**(리뷰가 제시한 갈래):
  *
  * - **쓰기 표지를 «방문 세대»로** — 돌아온 방문에 앞 응답이 안 닿는다. 그러면 돌아온 가는
@@ -98,22 +113,24 @@
  * ## 이것이 막지 못하는 것
  *
  * - **남의 저장을 조용히 덮는다**(리뷰 N3) — `panels/page-description.tsx`의 머리말이 갖는다.
- * - **provider 째 내려가는 길**(프로젝트를 오가거나 로그아웃 뒤 다시 들어온다) — 잠금도
- *   초안도 함께 사라지고 응답은 **어디에도 닿지 않는다.** 돌아온 화면의 조회가 커밋 전 값을
- *   읽었으면 그 낡은 값을 고칠 길이 없다(리뷰 N-E). **그리고 잠금이 사라졌으므로 앞 쓰기가
- *   나가 있는 채 다시 쓸 수 있다** — 위 3이 막으려던 동시 쓰기가 이 길로 돌아온다. 늦게 온 앞
- *   쓰기가 뒤 쓰기를 덮어 설명은 «저장했습니다»와 함께 DB 에 없는 값을 보이고, 코멘트는 한
- *   번호에 두 행이 된다(9차 좁은 반증, Chrome. 값은 `page-description.tsx`의 «낡은 값이 보이는
- *   길 둘»의 둘째와 `comment-panel.tsx`의 «잠금이 막지 못하는 길»이 갖는다).
- * - **응답이 영영 안 오는 쓰기** — 쓰기 요청에 시간 제한이 없다(`api/http-client.ts`의 `fetch`에
- *   `signal`이 없다). 응답이 안 오면 잠금이 **페이지·탭·모드를 오가도 남고**, 프로젝트 목록을
- *   다녀오거나 새로고침해야 풀린다(9차 좁은 반증, Chrome — 쓰기를 영영 붙잡은 판). 그렇게 풀면
- *   바로 위 provider 의 길로 간다. 8차 판에서는 페이지 왕복이 잠금을 풀었다.
+ * - **새로고침·탭 닫기** — provider 째 내려가는 길 가운데 **장부까지 사라지는** 둘이다(문서가
+ *   새로 뜬다). 잠금이 사라지고 브라우저는 나가 있던 요청을 끊지만, **서버가 이미 받았으면 끊겨도
+ *   커밋한다.** 그 값과 남는 틈은 `write-ledger.tsx`의 머리말이 갖는다. (프로젝트 목록 · 다른
+ *   프로젝트 · 테마 편집기는 **이제 막는다** — 위 3의 «잠금은 이 provider 보다 오래 산다». 9차 판에는
+ *   그 셋과 로그아웃도 여기 있었다.)
+ * - **로그아웃·세션 만료** — 잠금이 **일부러** 넘지 않는다. 세션이 끝나면 장부가 그 세션의 쓰기를
+ *   끊고 비운다 — 앞 사람의 쓰기로 다음 사람을 잠그지 않는다(`write-ledger.tsx`의 «세션을 넘지 않는다»).
+ *   대가로 서버에 이미 닿은 앞 세션의 쓰기가 새 세션의 쓰기 뒤에 늦게 커밋될 수 있다(그 절의 끝).
+ * - **응답이 늦는 쓰기의 판정 뒤 늦은 커밋** — 쓰기에 시간 제한이 생겼다(`write-ledger.tsx`의
+ *   `WRITE_DEADLINE_MS`). 넘으면 끊고 서버에서 다시 읽어 판정하는데, 서버가 이미 받은 요청이면 판정
+ *   **뒤에** 커밋될 수 있다. 9차 판에서는 시간 제한이 없어 잠금이 페이지·탭·모드 왕복에도 남고
+ *   프로젝트 목록을 다녀와야 풀렸다(그리고 그렇게 풀면 위 첫째 길로 갔다).
  * - **타이밍 창** — 돌아와 건 조회가 **커밋 전 값을 읽고 쓰기 응답보다 늦게** 오면, 응답이 세운
  *   값을 그 조회가 덮는다. 잠금은 응답에 풀리고 조회 값을 안 건드리므로 이 창을 막지도 만들지도
  *   않는다.
  *   설명·코멘트가 각자 무엇을 보이는지는 `page-description.tsx`의 «낡은 값이 보이는 길 둘»의
- *   첫째와 `comment-panel.tsx`의 «잠금이 막지 못하는 길»이 갖는다(9차 좁은 반증, Chrome).
+ *   첫째와 `comment-panel.tsx`의 «잠금이 막지 못하던 길»이 갖는다(9차 좁은 반증, Chrome). **코멘트
+ *   목록은 2026-09-22 에 닫았다** — 늦게 낸 조회의 답만 받는다(그 파일의 `answered`). 설명은 그대로다.
  * - **다른 페이지에 가 있는 동안 저장이 실패하는 길** — 초안은 떠날 때 1번이 이미 버렸고
  *   실패 통지는 2번이 버린다. 돌아와도 통지가 없다(상자는 서버 값 · 열림). 돌아와 있는 동안
  *   실패하면 통지(«서버 오류»)는 서지만 상자는 서버 값이다 — 보낸 글은 떠날 때 버렸다(9차 jsdom
@@ -129,61 +146,72 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactElement,
   type ReactNode,
 } from 'react'
+import { useSessionEpoch } from '../session/session-context'
+import {
+  useWriteLedger,
+  writeKey,
+  type PageAt,
+  type Receiver,
+  type TrackedWrite,
+  type WritePhase,
+} from './write-ledger'
 
 /**
  * 칸 하나의 선언. **모듈 최상위에 한 번 만든다** — 칸을 가리는 것은 이 객체의 정체성이다.
  * 이름은 사람이 읽으라고 있다(디버거에서 `Map`의 키를 볼 때).
  *
  * `initial`은 **공유되는 값**이라 고쳐 쓰지 않는다 — 쓰는 쪽은 언제나 새 값을 넣는다.
+ *
+ * 이 칸은 **그 방문의 것**이라 페이지가 바뀌면 버린다(위 머리말 1·2). 잠금은 칸이 아니다 —
+ * `lockSlot`이고 값은 장부에 든다(머리말 3).
  */
 export interface Slot<T> {
   readonly name: string
   readonly initial: T
-  /**
-   * `'visit'`은 그 방문의 것이라 페이지가 바뀌면 버린다(위 머리말 1·2). `'lock'`은 그 페이지로
-   * 나간 쓰기가 있다는 잠금이라 **그 페이지에 매인 채** 남는다(머리말 3).
-   */
-  readonly kind: 'visit' | 'lock'
 }
 
 export function slot<T>(name: string, initial: T): Slot<T> {
-  return { name, initial, kind: 'visit' }
+  return { name, initial }
 }
 
 /**
- * 잠금 칸 — «이 페이지로 나간 쓰기가 있다». 처음엔 풀려 있다. **페이지를 떠났다 돌아와도
- * 그 쓰기가 끝나기 전에는 풀리지 않는다**(위 머리말 3).
+ * 잠금 칸 — «이 페이지의 이 칸으로 나간 쓰기가 있다». **값은 여기가 아니라 장부
+ * (`write-ledger.tsx`)에 든다** — 이 provider 가 내려가도 쓰기는 살기 때문이다(머리말 3). 이름이
+ * 장부의 키 셋째 자리다.
  */
-export function lockSlot(name: string): Slot<boolean> {
-  return { name, initial: false, kind: 'lock' }
+export interface LockSlot {
+  readonly name: string
+}
+
+export function lockSlot(name: string): LockSlot {
+  return { name }
 }
 
 /** 칸에 넣을 값, 또는 앞 값으로 다음 값을 짓는 함수(`useState`의 그것과 같다). */
 export type SlotUpdate<T> = T | ((prev: T) => T)
 
 interface Held {
-  /** 이 칸들이 가리키는 페이지. */
+  /** 이 칸들이 가리키는 프로젝트와 페이지. */
+  projectId: string
   pageId: string | undefined
   /** 이 방문의 칸. 한 번도 안 쓴 칸은 여기 없다 — 읽으면 `initial`이 나온다. */
   values: ReadonlyMap<Slot<unknown>, unknown>
-  /** 잠금 칸마다 **잠긴 페이지들**. 페이지가 바뀌어도 리셋이 건드리지 않는다. */
-  locks: ReadonlyMap<Slot<unknown>, ReadonlySet<string | undefined>>
 }
 
 interface Box {
   held: Held
-  write: <T>(pageId: string | undefined, key: Slot<T>, update: SlotUpdate<T>) => void
+  receiver: Receiver
 }
 
 const PanelDraftsContext = createContext<Box | null>(null)
 
 function read<T>(held: Held, key: Slot<T>): T {
-  if (key.kind === 'lock') return (held.locks.get(key)?.has(held.pageId) ?? false) as T
   return (held.values.has(key) ? held.values.get(key) : key.initial) as T
 }
 
@@ -198,68 +226,103 @@ function apply<T>(current: T, update: SlotUpdate<T>): T {
  * 고른 컴포넌트**다. 대가를 만든 자리가 대가를 문다.
  */
 export function PanelDraftsProvider(props: {
+  projectId: string
   pageId: string | undefined
   children: ReactNode
 }): ReactElement {
-  const { pageId } = props
-  const [held, setHeld] = useState<Held>(() => ({ pageId, values: new Map(), locks: new Map() }))
+  const { projectId, pageId } = props
+  const ledger = useWriteLedger()
+  const [held, setHeld] = useState<Held>(() => ({ projectId, pageId, values: new Map() }))
 
   // **1. 페이지가 바뀌면 방문의 칸을 전부 버린다** — 렌더 중에(위 머리말). React가 이
-  // 컴포넌트를 곧바로 다시 그리므로 자식은 앞 페이지의 칸을 한 번도 보지 않는다.
-  // **잠금은 넘긴다**(머리말 3) — 페이지마다 따로 들므로 옆 페이지를 잠그지 않는다.
-  if (held.pageId !== pageId) {
-    setHeld((prev) => ({ pageId, values: new Map(), locks: prev.locks }))
+  // 컴포넌트를 곧바로 다시 그리므로 자식은 앞 페이지의 칸을 한 번도 보지 않는다. 잠금은
+  // 여기 없으므로 건드릴 것이 없다(머리말 3 — 장부에 든다).
+  if (held.projectId !== projectId || held.pageId !== pageId) {
+    setHeld({ projectId, pageId, values: new Map() })
   }
 
-  const write = useCallback(
-    <T,>(at: string | undefined, key: Slot<T>, update: SlotUpdate<T>): void => {
-      setHeld((prev) => {
-        // **3. 잠금은 그 쓰기를 부른 페이지의 것을 고친다 — 지금 페이지가 어디든.** 아래
-        // 가드를 지나면 나에 가 있는 동안 온 가의 응답이 가의 잠금을 못 풀어, 돌아온 가가
-        // 영영 잠긴다.
-        if (key.kind === 'lock') {
-          const pages = prev.locks.get(key) ?? new Set<string | undefined>()
-          const current = pages.has(at)
-          const next = apply(current as T, update) as boolean
-          if (next === current) return prev
-          const nextPages = new Set(pages)
-          if (next) nextPages.add(at)
-          else nextPages.delete(at)
-          const locks = new Map(prev.locks)
-          locks.set(key, nextPages)
-          return { ...prev, locks }
-        }
-        // **2. 다른 페이지를 위해 부른 쓰기는 버린다**(리뷰 N2) — 위 1번과 같은 값을 본다.
-        if (prev.pageId !== at) return prev
-        const current = read(prev, key)
-        const next = apply(current, update)
-        if (Object.is(next, current)) return prev
-        const values = new Map(prev.values)
-        values.set(key as Slot<unknown>, next)
-        return { ...prev, values }
-      })
-    },
-    [],
-  )
+  const accept = useCallback((at: PageAt, key: object, update: unknown): void => {
+    setHeld((prev) => {
+      // **2. 다른 페이지를 위해 부른 쓰기는 버린다**(리뷰 N2) — 위 1번과 같은 값을 본다.
+      if (prev.projectId !== at.projectId || prev.pageId !== at.pageId) return prev
+      const slotKey = key as Slot<unknown>
+      const current = read(prev, slotKey)
+      const next = apply(current, update as SlotUpdate<unknown>)
+      if (Object.is(next, current)) return prev
+      const values = new Map(prev.values)
+      values.set(slotKey, next)
+      return { ...prev, values }
+    })
+  }, [])
 
-  const box = useMemo<Box>(() => ({ held, write }), [held, write])
+  const [token] = useState(() => Symbol('panel-drafts'))
+  const receiver = useMemo<Receiver>(() => ({ token, accept }), [token, accept])
+  const { receive } = ledger
+  // **지금 떠 있는 provider 로 선다**(머리말 3) — 내려간 provider 로 시작한 쓰기의 응답이 여기
+  // 닿는다. **레이아웃 이펙트인 것이 요점이다** — 자식의 이펙트(조회 걸기)가 먼저 돌면 그 쓰기가
+  // 서기 전의 자리를 찾는다.
+  useLayoutEffect(() => receive(receiver), [receive, receiver])
+
+  const box = useMemo<Box>(() => ({ held, receiver }), [held, receiver])
   return <PanelDraftsContext.Provider value={box}>{props.children}</PanelDraftsContext.Provider>
+}
+
+function useBox(name: string): Box {
+  const box = useContext(PanelDraftsContext)
+  if (box === null) {
+    throw new Error(`패널 칸(${name})은 PanelDraftsProvider 안에서만 쓴다`)
+  }
+  return box
 }
 
 /**
  * 칸 하나를 읽고 쓴다. 돌려주는 쓰기 함수는 **이 렌더의 페이지를 단다** — 저장을 시작한
- * 클릭이 잡아 둔 그 함수는 응답이 올 때도 그 페이지를 말한다(위 머리말의 2번·3번).
+ * 클릭이 잡아 둔 그 함수는 응답이 올 때도 그 페이지를 말한다(위 머리말의 2번·3번). 그리고
+ * **지금 떠 있는 provider 에 쓴다** — 이 provider 가 내려갔으면 새로 선 provider 가 같은 페이지를
+ * 보고 있을 때 받는다(머리말 3).
  *
  * **provider가 없으면 요란하게 깨진다** — 조용히 로컬 상태로 물러나면 탭을 누를 때 초안이
  * 다시 사라지는데 화면은 멀쩡해 보인다(고치기 전과 똑같은 결함이 소리 없이 돌아온다).
  */
 export function usePanelSlot<T>(key: Slot<T>): [T, (update: SlotUpdate<T>) => void] {
-  const box = useContext(PanelDraftsContext)
-  if (box === null) {
-    throw new Error(`패널 칸(${key.name})은 PanelDraftsProvider 안에서만 쓴다`)
-  }
-  const { held, write } = box
-  const pageId = held.pageId
-  const set = useCallback((update: SlotUpdate<T>) => write(pageId, key, update), [write, pageId, key])
+  const { held, receiver } = useBox(key.name)
+  const { deliver } = useWriteLedger()
+  // **세션 세대도 단다** — 앞 세션의 쓰기가 다음 세션의 방문에 닿지 않게 장부가 본다(`write-ledger.tsx`).
+  const epoch = useSessionEpoch()
+  const { projectId, pageId } = held
+  const set = useCallback(
+    (update: SlotUpdate<T>) => deliver(receiver, { projectId, pageId, epoch }, key, update),
+    [deliver, receiver, projectId, pageId, epoch, key],
+  )
   return [read(held, key), set]
+}
+
+/** 잠금 칸 하나 — 장부에서 읽고, 쓰기를 장부에 올린다. */
+export interface PanelLock {
+  /** 이 페이지의 이 칸으로 나간 쓰기가 있다. */
+  readonly locked: boolean
+  /** 그 쓰기의 단계(`write-ledger.tsx`). 없으면 `null`. */
+  readonly phase: WritePhase | null
+  /** `'unknown'`일 때만 — 서버에서 다시 읽어 판정한다. */
+  readonly recheck: (() => void) | null
+  /**
+   * 쓰기를 장부에 올려 보낸다. **이 렌더의 페이지를 단다.** **이미 나가 있는지는 여기서 안 본다** — 부르는
+   * 쪽이 `locked`를 먼저 본다(설명의 `saving.locked` · 코멘트의 `busy`). 장부도 한 번 더 막지 않는다
+   * (`write-ledger.tsx`의 `Ledger.run` — 화면에서 닿는 길이 없어 재는 것이 없는 가드를 두지 않았다).
+   */
+  run<T, V>(write: TrackedWrite<T, V>): Promise<void>
+}
+
+export function usePanelLock(key: LockSlot): PanelLock {
+  const { held, receiver } = useBox(key.name)
+  const ledger = useWriteLedger()
+  const { projectId, pageId } = held
+  const target = useMemo(() => ({ projectId, pageId, slot: key.name }), [projectId, pageId, key.name])
+  const entry = ledger.writes.get(writeKey(target))
+  const { run: runOnLedger } = ledger
+  const run = useCallback(
+    <T, V>(write: TrackedWrite<T, V>) => runOnLedger(target, receiver.token, write),
+    [runOnLedger, target, receiver.token],
+  )
+  return { locked: entry !== undefined, phase: entry?.phase ?? null, recheck: entry?.recheck ?? null, run }
 }
