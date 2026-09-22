@@ -63,8 +63,9 @@ import {
   type PatchOp,
 } from '@wirebound/schema'
 import { requestActor, requestEventActor } from '../auth/actor'
-import { projectGuard } from '../auth/roles'
+import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
+import { withTransaction } from '../db/tx'
 import { badRequest, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
 // **P5-1이 `http/edit-outcome.ts`로 옮겼다** — `routes/comments.ts`가 두 번째 소비자가
 // 됐다(코멘트가 번호를 부여하려고 같은 파이프라인을 부른다). `withWarnings`가 P4c-1에서
@@ -318,7 +319,13 @@ export function pageRoutes() {
 
       let page
       try {
-        page = await updatePage(app.db, projectId, pageId, body)
+        page = await withTransaction(app.db, async (trx) => {
+          const updated = await updatePage(trx, projectId, pageId, body)
+          // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). 위 UPDATE 가 페이지 행
+          // 잠금에 선다 — 그 대기 뒤의 역할로 판정한다.
+          if (updated) await recheckProjectRole(trx, request)
+          return updated
+        })
       } catch (error) {
         if (error instanceof MenuNodeNotFoundError) {
           throw notFound(error.message)
@@ -442,19 +449,25 @@ export function pageRoutes() {
         throw blocked
       }
 
-      const outcome = await applyEdit(app.db, {
-        projectId,
-        pageId,
-        baseSeq: before.headSeq,
-        ops: putOps,
-        actor: requestActor(request),
+      const outcome = await withTransaction(app.db, async (trx) => {
+        const edited = await applyEdit(trx, {
+          projectId,
+          pageId,
+          baseSeq: before.headSeq,
+          ops: putOps,
+          actor: requestActor(request),
+        })
+        // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). `applyEdit`이 페이지를
+        // 잠갔다 — 그 대기 뒤의 역할로 판정한다. 던지면 이 트랜잭션째 되돌아간다.
+        if (edited.ok) await recheckProjectRole(trx, request)
+        return edited
       })
 
       if (!outcome.ok) {
         throw editOutcomeToApiError(outcome, before.headSeq)
       }
 
-      // **커밋 뒤에 알린다**(P3-1 D3·D4). `applyEdit(app.db, …)`는 풀 핸들 위에서 자기
+      // **커밋 뒤에 알린다**(P3-1 D3·D4). 위 `withTransaction(app.db, …)`는 풀 핸들 위에서 자기
       // 트랜잭션을 열고 닫으므로 이 줄에 도달한 시점에 이미 커밋돼 있다.
       notifyPageChanged(app, {
         projectId,
@@ -521,12 +534,17 @@ export function pageRoutes() {
         throw blocked
       }
 
-      const outcome = await applyEdit(app.db, {
-        projectId,
-        pageId,
-        baseSeq: body.baseSeq,
-        ops: body.ops,
-        actor: requestActor(request),
+      const outcome = await withTransaction(app.db, async (trx) => {
+        const edited = await applyEdit(trx, {
+          projectId,
+          pageId,
+          baseSeq: body.baseSeq,
+          ops: body.ops,
+          actor: requestActor(request),
+        })
+        // **커밋 순간의 권한**(이월 AA). `PUT .../schema`와 같은 자리 · 같은 까닭이다.
+        if (edited.ok) await recheckProjectRole(trx, request)
+        return edited
       })
 
       if (!outcome.ok) {
@@ -568,7 +586,12 @@ export function pageRoutes() {
     app.delete('/:projectId/pages/:pageId', { preHandler: projectGuard('editor') }, async (request, reply) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)
 
-      const result = await deletePage(app.db, projectId, pageId)
+      const result = await withTransaction(app.db, async (trx) => {
+        const deleted = await deletePage(trx, projectId, pageId)
+        // **커밋 순간의 권한**(이월 AA). 위 DELETE 가 페이지 행 잠금에 선다.
+        if (deleted === 'deleted') await recheckProjectRole(trx, request)
+        return deleted
+      })
       if (result === 'not-found') {
         throw notFound()
       }

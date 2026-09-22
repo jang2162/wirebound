@@ -7,7 +7,9 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { projectGuard } from '../auth/roles'
+import { projectGuard, recheckProjectRole } from '../auth/roles'
+import { withTransaction } from '../db/tx'
+import { lockProjectPages } from '../repos/pages'
 import { conflict, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import {
@@ -123,7 +125,20 @@ export function projectRoutes() {
 
     app.delete('/:projectId', { preHandler: projectGuard('owner') }, async (request, reply) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
-      await deleteProject(app.db, projectId)
+      await withTransaction(app.db, async (trx) => {
+        // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). 삭제는 CASCADE 로 페이지 행
+        // 잠금에 서는데, 재확인을 **삭제 뒤에** 두면 CASCADE 가 이 사람의 멤버 행까지 지운 뒤라 404 가 된다.
+        // 그래서 페이지를 **먼저** 잠가 대기를 여기서 치르고 → 권한을 보고 → 지운다.
+        //
+        // 먼저 잠그는 것에는 몫이 하나 더 있다. CASCADE 는 멤버 행을 페이지보다 **먼저** 지운다 — 잠그지 않으면
+        // 페이지 잠금을 기다리는 동안 그 프로젝트의 멤버 행이 전부 이 트랜잭션에 잡혀 있어, **역할 변경이 이
+        // 삭제를 기다렸다**(잰 값: 강등이 3s 창을 넘겼다). 그리고 그 판은 페이지를 쥔 쓰기의 재확인(`FOR SHARE`)과
+        // 서로를 기다리는 교착이 된다(잰 값: 쓰기가 페이지를 쥔 채 삭제가 CASCADE 로 그 멤버 행을 지운 뒤 재확인이
+        // 오면 ~1s 에 `40P01` — 희생자는 삭제였다. 먼저 잠그면 삭제가 쓰기의 커밋을 기다렸다가 지운다).
+        await lockProjectPages(trx, projectId)
+        await recheckProjectRole(trx, request)
+        await deleteProject(trx, projectId)
+      })
       reply.code(204).send()
     })
   }

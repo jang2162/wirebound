@@ -474,8 +474,12 @@ export async function deletePage(db: DbHandle, projectId: string, pageId: string
 }
 
 /**
- * 프로젝트의 페이지 행 전부를 `FOR UPDATE`로 잠근다(P6-2 D8). **복원 전용이다.**
- * 근거와 실측표는 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말에 있다.
+ * 프로젝트의 페이지 행 전부를 `FOR UPDATE`로 잠근다(P6-2 D8). 복원의 근거와 실측표는 `repos/snapshots.ts`의
+ * `lockProjectForRestore` 머리말에 있다.
+ *
+ * **부르는 자리가 둘이다** — 복원과 프로젝트 삭제(`routes/projects.ts`). 삭제는 CASCADE 가 멤버 행을 페이지보다
+ * 먼저 지우므로, 페이지 대기를 이것으로 **먼저** 치러야 커밋 순간의 재확인(`auth/roles.ts`의
+ * `recheckProjectRole`)이 제 멤버 행을 보고, 역할 변경이 그 대기에 묶이지 않는다(이월 AA).
  */
 export async function lockProjectPages(trx: DbHandle, projectId: string): Promise<void> {
   assertLocking(trx, 'lockProjectPages')
