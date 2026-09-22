@@ -119,8 +119,8 @@
  *    서버의 방송을 받아 새 스토어에 번호가 섰다). 코멘트 수정도 화면·DB 가 같은 값(`"첫째 수정"`).
  *    응답이 영영 안 오면 10초 뒤 **같은 키로 다시 보내** 판정한다(`submit`의 `verify`) — 서버가 앞 게시를
  *    쥐고 있으면 다시 보낸 것이 같은 행 잠금 뒤에 줄을 서서 재생을 받는다. 그동안 상자는 잠겨 있어
- *    고쳐 다시 달 수도, 떠났다 와서 새로 칠 수도 없다. 시간 안의 **모르는 실패**(연결 끊김 · 502·503·504 ·
- *    봉투 없는 500)도 같은 판정으로 간다(`knownRejection` — 2026-09-22). **남는 입구는 초안과 키가 함께
+ *    고쳐 다시 달 수도, 떠났다 와서 새로 칠 수도 없다. 시간 안의 **모르는 실패**도 같은 판정으로 간다(무엇이
+ *    모르는 실패인지는 `knownRejection`의 표가 소유한다 — 2026-09-22). **남는 입구는 초안과 키가 함께
  *    버려지는 길이다** — 새로고침·탭 닫기만이 아니다: 로그아웃 · 세션 만료(401)도 셸째 버린다. 다시 친 같은
  *    글이 새 키가 되어 두 행이 선다(Chrome). **입구의 목록과 값은 `write-ledger.tsx`의 «이것이 막지 못하는
  *    것»이 소유한다** — 여기 옮겨 적지 않는다(앞 판은 «남는 입구는 새로고침뿐»이라 적어 그 목록과 갈렸다 —
@@ -213,24 +213,40 @@ function answered(at: number, next: LoadState): (prev: LoadState) => LoadState {
   return (prev) => (at < prev.at ? prev : next)
 }
 
-/** 게시를 같은 키로 다시 보낸 결과(`submit`의 판정). 거절은 `knownRejection`인 것뿐이다 — 그 밖은 모른다. */
+/** 게시를 같은 키로 다시 보낸 결과(`submit`의 판정). 거절은 `knownRejection`의 `'resent'` 칸인 것뿐이다 — 그 밖은 모른다. */
 type Reposted = { posted: true; created: CommentCreated } | { posted: false; caught: unknown }
 
 /**
- * 게시의 실패가 **안 달렸다고 확정할 수 있는** 실패인가. 첫 보내기의 실패(`uncertain`)와 같은 키로 다시
- * 보낸 것의 실패(`verify`)가 **같은 이 함수**로 갈린다 — 두 자리가 따로 가르면 한쪽만 낡는다.
+ * 게시의 실패가 **안 달렸다고 확정할 수 있는** 실패인가 — **무엇에 대해 묻는가**로 칸이 갈린다. 첫 보내기의
+ * 실패(`uncertain` — `'sent'`)는 **그 요청 자신이** 커밋됐는가를, 같은 키로 다시 보낸 것의 실패(`verify` —
+ * `'resent'`)는 **앞 게시가** 달렸는가를 묻는다. **두 칸의 가름은 이 표 하나가 소유한다** — 두 자리가 따로
+ * 가르면 한쪽만 낡는다(`write-ledger.tsx`·`apps/api/README.md`의 «멱등 키»는 여기를 가리킨다).
  *
- * | 실패 | 뜻 |
- * |---|---|
- * | 4xx | **확정** — 서버가 **이 키로 내 행을 찾아보고** 거절했다(키 판정이 권한 가드 앞이다) |
- * | **api 가 낸 500**(오류 봉투가 있다 — `ApiError.enveloped`) | **확정** — 핸들러가 던진 것이고 커밋 전이다(아래) |
- * | 연결 실패 · 502·503·504 · **봉투 없는 500** | **모른다** — 요청이 서버에 닿아 커밋됐을 수 있다 |
+ * | 실패 | 첫 보내기(`'sent'`) — 이 요청이 커밋됐나 | 다시 보낸 것(`'resent'`) — 앞 게시가 달렸나 |
+ * |---|---|---|
+ * | 4xx | **확정 안 됨** — 서버가 커밋 전에 거절했다 | **확정 안 달림** — 서버가 **이 키로 내 행을 찾아보고** 거절했다(키 판정이 권한 가드 앞이다) |
+ * | **api 가 낸 500**(오류 봉투가 있다 — `ApiError.enveloped`) | **확정 안 됨** — 핸들러가 던진 것이고 커밋 전이다(아래) | **모른다** — 서버가 키를 **보기 전이나 도중에** 던졌을 수 있다. 그러면 앞 게시에 대해 아무것도 말하지 않는다(아래) |
+ * | 연결 실패 · 502·503·504 · **봉투 없는 500** | **모른다** — 요청이 서버에 닿아 커밋됐을 수 있다 | **모른다** |
+ *
+ * 401 은 두 칸 다 4xx 줄로 가지만 «안 달림»이 아니라 **«세션 끝»**이 된다 — `toFailure`가 로그인 화면으로
+ * 바꾼다(`api/failure.tsx`).
+ *
+ * **봉투 500 이 두 칸에서 갈리는 까닭**(좁은 반증 4차 · 2026-09-22). 앞 판은 두 자리가 한 칸을 썼고, 그래서
+ * 다시 보낸 것의 봉투 500 도 «안 달림»이었다. 그 500 이 «그 요청은 커밋 전»인 것은 참이지만, `verify`가 묻는
+ * 것은 **앞 게시**다. 서버는 키를 가드 앞 재생(`findCommentByIdempotencyKey`·`findPageById`) · 가드의
+ * `findMembership` · 핸들러의 `loadDocument`·`lockPageForEdit` 뒤에야 보므로(`apps/api/README.md`의 «멱등
+ * 키») 그 사이의 DB 오류는 키를 못 본 답이다. Chrome(route + DB 오류 모델 — 첫 POST 를 서버에 보내 커밋시키고
+ * 그 사이 `comments` 표 이름을 1.5s 바꾼 뒤 브라우저에는 502): 첫 게시 201 · DB 1행 → 다시 보낸 것이 가드 앞
+ * 재생의 질의에서 봉투 500 → alert «서버 오류가 발생했습니다» · 상자 열림 · «다시 확인» 없음 · 목록 `[]` →
+ * 고쳐 달면 **DB 두 행**이었다. 재측(같은 절차): 다시 보낸 것 봉투 500 → alert «응답이 없고, 반영됐는지 확인하지도
+ * 못했습니다» · 상자·단추 **꺼짐** · «다시 확인» 1 → 표 이름이 돌아온 뒤 누르면 같은 키 **200(재생)** · 초안 비움 ·
+ * 목록 `["밥의 말"]` · 장부 `[]` · **DB 1행**. 이 한 줄(`asked === 'sent'`)만 떼면 같은 판이 앞 판의 값으로 돌아간다.
  *
  * **4xx 줄은 서버의 판정 순서에 매여 있다 — 그 순서와 예외는 `apps/api/README.md`의 «멱등 키»가 소유한다.**
  * 좁은 반증 3차 전에는 키 판정이 권한 가드 **뒤**라, 첫 게시가 커밋된 뒤 역할이 내려가거나 멤버에서 빠지면
  * 다시 보낸 것이 재생에 못 닿고 403·404 를 받았다 — 이 표가 그것을 «안 달림»으로 확정했고, 권한을 되찾아 고쳐
- * 달면 DB 두 행이었다(Chrome route). 이제 서버는 인증 뒤 · 권한 앞에서 키를 본다. 401 은 여전히 먼저이고
- * «세션 끝»으로 따로 간다(`attempt`).
+ * 달면 DB 두 행이었다(Chrome route). 이제 서버는 인증 뒤 · 권한 앞에서 키를 본다. 401 은 여전히 먼저다(«세션
+ * 끝»으로 가는 것은 위 표 아래).
  *
  * **«api 가 낸 500 은 커밋 전이다»를 코드로 봤다**(`apps/api/src/routes/comments.ts`의 게시 핸들러). 커밋
  * (`runWrite`가 끝난 것) 뒤에 도는 것은 셋이다: `notifyMarkerChange` — 방송은 `async`인 `broadcast.send`이고
@@ -244,10 +260,10 @@ type Reposted = { posted: true; created: CommentCreated } | { posted: false; cau
  * `500` · 본문 `""`). 그 판은 롤백됐지만 **커밋 직후에 죽어도 같은 모양**이다. 그래서 가르는 것은 숫자가
  * 아니라 **봉투**다 — api 가 직접 낸 오류는 늘 봉투를 싣는다.
  */
-function knownRejection(caught: unknown): boolean {
+function knownRejection(caught: unknown, asked: 'sent' | 'resent'): boolean {
   if (!(caught instanceof ApiError)) return false
   if (caught.status >= 400 && caught.status < 500) return true
-  return caught.status === 500 && caught.enveloped
+  return asked === 'sent' && caught.status === 500 && caught.enveloped
 }
 
 /**
@@ -319,7 +335,7 @@ const DRAFTS = slot<ReadonlyMap<string, string>>('comments/drafts', new Map())
  * 합쳐진다. 일부러 같은 말을 다시 다는 사람의 게시가 사라지는 길이다. 대가도 적어 둔다: 떠났다
  * 오는 사이 늦게 커밋된 게시는 돌아와 새로 친 같은 글과 **합쳐지지 않는다**(새 키다). 시간 초과와 모르는
  * 실패의 판에서는 판정(같은 키로 다시 보내기)이 끝날 때까지 상자가 잠겨 있어 이 길이 안 선다 — 확정 실패
- * (`knownRejection`) 뒤라면 서버가 **그 키로 내 행을 찾아보고** 거절한 것이라 새 키여도 한 행이다(예외는
+ * (`knownRejection`) 뒤라면 앞 게시가 안 달린 것이 확정이라 새 키여도 한 행이다(칸마다의 까닭과 예외는
  * `knownRejection`의 주석이 가리킨다). 서는 것은 **초안과 키가 셸째 버려지는 입구** 뒤다 — 새로고침만이 아니다
  * (로그아웃 · 세션 만료. 목록은 `write-ledger.tsx`의 «이것이 막지 못하는 것»).
  */
@@ -646,18 +662,19 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
         try {
           return { posted: true, created: await post(client, openPageId, signal) }
         } catch (caught) {
-          // **확정인 거절이면 «안 달림»이다**(`knownRejection`) — 서버는 권한을 보기 전에 이 키로 내 행을
-          // 찾으므로 4xx 는 «그 순간 이 키의 내 행이 없다»이다. 그 밖은 모른다 — «다시 확인». **이 판정이 틀리는
-          // 판**(앞 게시가 아직 서버에서 커밋 중인데 가드가 거절한 판 · 다른 탭에서 고쳐진 행의 409)은
-          // `apps/api/README.md`의 «멱등 키»가 적는다 — 여기 옮겨 적지 않는다.
-          if (knownRejection(caught)) return { posted: false, caught }
+          // **키를 보고 낸 거절만 «안 달림»이다**(`knownRejection`의 `'resent'` 칸) — 서버는 권한을 보기 전에 이
+          // 키로 내 행을 찾으므로 4xx 는 «그 순간 이 키의 내 행이 없다»이다. **api 의 봉투 500 은 여기서 모른다** —
+          // 첫 보내기에서는 «그 요청이 커밋 전»이지만 여기서 묻는 것은 앞 게시다. 그 밖도 모른다 — «다시 확인».
+          // **이 판정이 틀리는 판**(앞 게시가 아직 서버에서 커밋 중인데 가드가 거절한 판 · 다른 탭에서 고쳐진 행의
+          // 409)은 `apps/api/README.md`의 «멱등 키»가 적는다 — 여기 옮겨 적지 않는다.
+          if (knownRejection(caught, 'resent')) return { posted: false, caught }
           throw caught
         }
       },
       // **시간 안의 모르는 실패도 판정으로 간다**(2026-09-22 — 코디네이터 판정). 앞 판은 첫 게시가 서버에
       // 닿았는데 브라우저가 502·연결 끊김을 받으면 `'failed'`라 초안이 열렸고, 고쳐 달면 새 키라 두 행이었다
       // (Chrome route). 이제 같은 키로 다시 보내 확정한다 — 그동안 상자는 잠겨 있다.
-      uncertain: (caught) => !knownRejection(caught),
+      uncertain: (caught) => !knownRejection(caught, 'sent'),
       done: (created, openPageId) => landed(created, openPageId, true),
       verified: (verdict, ownerLive, openPageId) => {
         // 거절됐으면 **초안과 키를 남긴다** — 같은 글을 다시 달면 같은 키다.
