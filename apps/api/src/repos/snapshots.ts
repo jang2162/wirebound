@@ -91,6 +91,7 @@ import { lockProjectComments } from './comments'
 import { lockProjectLayouts } from './layouts'
 import { lockProjectMenuNodes } from './menu'
 import { lockProjectPages } from './pages'
+import { lockProjectRow } from './projects'
 import type { SnapshotPayload } from '@wirebound/themes'
 
 /** 스냅샷 어딘가에 NUL(U+0000)이 있을 때 던진다. 호출자가 400으로 매핑한다. */
@@ -495,12 +496,14 @@ export async function readCaptureFingerprint(
  *
  * ## 순서
  *
- * `projects`를 **먼저** 잠근다. 다른 순서로 잠그는 경로가 오늘 없으므로 교착이 날 자리는
- * 아니지만, 순서를 한 자리에 고정해 두면 두 번째 잠금 경로가 생길 때 맞출 기준이 생긴다.
+ * `projects`를 **먼저** 잠근다(`repos/projects.ts`의 `lockProjectRow`). **두 번째 경로가 생겼다 — 프로젝트
+ * 삭제**(`routes/projects.ts`, 이월 AA). 그 판이 처음엔 페이지를 먼저 잠가 이 순서와 엇갈렸고, 복원과 삭제가
+ * 서로를 기다리는 교착이 났다(2026-09-22 리뷰 E1 — 복원이 ~1s 에 500). 지금은 삭제도 `projects` → 페이지다.
+ * 그 순서를 재는 자는 `test/guard-in-lock.test.ts`의 «잠금 순서» 절이다.
  */
 export async function lockProjectForRestore(trx: DbHandle, projectId: string): Promise<void> {
   assertLocking(trx, 'lockProjectForRestore')
-  await trx.selectFrom('projects').select('id').where('id', '=', projectId).forUpdate().execute()
+  await lockProjectRow(trx, projectId)
   await lockProjectMenuNodes(trx, projectId)
   await lockProjectPages(trx, projectId)
   await lockProjectLayouts(trx, projectId)

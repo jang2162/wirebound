@@ -4,9 +4,9 @@
  * URL 네임스페이스는 공유한다(`routes/menu.ts`·`routes/revisions.ts`와 같은 관례).
  *
  * HTTP·zod 검증과 **번호 부여 규칙**만 다룬다. SQL은 `repos/comments.ts`, 문서를 실제로
- * 바꾸는 일은 `services/edit-pipeline.ts`가 한다. 권한 판정은 `projectGuard` 하나가
- * 전담한다 — 이 파일이 역할을 비교하는 자리는 **작성자 판정 하나뿐**이고 그것은
- * 역할이 아니라 소유권이다(아래 재라 #2).
+ * 바꾸는 일은 `services/edit-pipeline.ts`가 한다. 권한 판정은 `projectGuard`와, 잠금을 잡은
+ * 뒤의 재확인(`recheckProjectRole` — 같은 술어, 이월 AA)이 한다 — 이 파일이 역할을 비교하는
+ * 자리는 **작성자 판정 하나뿐**이고 그것은 역할이 아니라 소유권이다(아래 재라 #2).
  *
  * ---
  *
@@ -136,7 +136,7 @@ import {
   type WbNode,
 } from '@wirebound/schema'
 import { requestActor, requestClientKind, requestEventActor } from '../auth/actor'
-import { outOfTokenScope, projectGuard } from '../auth/roles'
+import { outOfTokenScope, projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { badRequest, conflict, forbidden, notFound, unauthenticated } from '../errors'
@@ -370,11 +370,11 @@ function replayOf(
  * 던지는 것은 둘이다: 헤더 400(`requestClientKind` — 가드가 먼저 내던 것과 같은 답이다. P9-5 의 «입력
  * 검증이 조작보다 먼저»가 여기서도 선다) · 같은 키에 다른 글의 409(`replayOf`).
  *
- * **남는 틈 — 앞 게시가 아직 커밋 중일 때.** 여기는 잠그지 않고 본다. 앞 게시가 서버에서 아직 커밋 중이면
- * 행이 없어 가드로 넘어가고, 그 사이 권한이 바뀌었으면 403·404 가 나간 **뒤에** 앞 게시가 커밋된다. 권한이
- * 그대로면 핸들러가 잠금 안에서 다시 보므로 재생이다(아래 핸들러). 닫으려면 가드 앞에서 페이지 잠금을
- * 기다려야 하는데, 그것은 **권한 없는 요청이 잠금 줄에 서는 것**이라 하지 않는다. 틈이 서는 판은 «게시가
- * 서버에 쥐인 동안 그 사람의 역할이 바뀐다»이다.
+ * **커밋 중 틈 — 닫혔다(이월 AA).** 여기는 잠그지 않고 본다. 앞 게시가 서버에서 아직 커밋 중이면 행이 없어
+ * 가드로 넘어가고, 그 사이 권한이 바뀌었으면 403·404 를 받는다. 앞 판은 그 **뒤에** 앞 게시가 커밋됐다 — 이제
+ * 앞 게시도 잠금을 잡은 뒤 권한을 다시 보므로(아래 핸들러의 `recheckProjectRole`) 같은 답으로 되돌아간다.
+ * 권한이 그대로면 핸들러가 잠금 안에서 키를 다시 보므로 재생이다. **가드 앞에서 잠금을 기다리지는 않는다** —
+ * 잠금 줄에 서는 것은 가드를 지난 요청뿐이다. 서버 쪽 판정 순서는 `apps/api/README.md`의 «멱등 키»가 소유한다.
  */
 export async function replayBeforeGuard(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
   requestClientKind(request)
@@ -575,6 +575,14 @@ export function commentRoutes() {
           const existing = await findCommentByIdempotencyKey(trx, pageId, currentUser.id, key)
           if (existing !== null) return { replay: replayOf(existing, body, migrateDocument(locked.schema), locked.headSeq) }
         }
+        // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). 잠금 대기 동안 강등·제외됐으면
+        // 여기서 가드와 같은 403·404 로 끝나고 아무것도 안 남는다. **재생 뒤다** — 이미 커밋된 자기 행은 권한을
+        // 잃어도 돌려준다(가드 앞 재생과 같은 판정). 그래서 «커밋 중 틈»이 닫힌다: 다시 보낸 것이 가드에서 403·404
+        // 를 받았으면, 잠금 뒤에서 기다리던 첫 게시도 여기서 같은 답으로 되돌아간다 — 웹의 «안 달림»이 참이 된다.
+        // **«재생 뒤»라는 순서는 `test/guard-in-lock.test.ts`의 «커밋 중 틈» 셋째 판이 잰다.** 앞 게시의 커밋과 이 요청의
+        // 잠금 획득 **사이에** 강등이 끼는 판이다 — 같은 페이지의 남의 쓰기가 둘 사이에 줄을 서면 선다(페이지 행의 잠금
+        // 대기열은 도착 순이다). 이 줄을 재생 앞으로 옮기면 그 판에서 달린 게시가 403 을 받는다.
+        await recheckProjectRole(trx, request)
         // **그 사이 문서가 바뀌지 않았는지 본다**(규칙 2 — `lockAndCheck`와 같은 판정). `ops`가
         // 비어도 지난다 — 남이 마지막 코멘트를 지워 번호를 없앤 직후라면 아래 *"이미 번호가
         // 있다"*는 판단이 낡은 것이고, 그대로 두면 **번호 없는 코멘트**가 만들어진다.
@@ -725,6 +733,8 @@ export function commentRoutes() {
           //   끊긴다. **행을 지우기 전에** 끊기므로 *"409를 받았는데 코멘트가 사라져
           //   있다"*가 성립하지 않는다.
           await lockAndCheck(trx, projectId, pageId, page.headSeq)
+          // **커밋 순간의 권한**(이월 AA). 잠금 대기 뒤의 역할로 판정한다 — 게시와 같은 자리다.
+          await recheckProjectRole(trx, request)
 
           // **삭제와 세기가 같은 트랜잭션 안이다.** 나누면 그 사이에 들어온 새 코멘트를
           // 못 보고 번호를 지워, *"코멘트는 있는데 번호가 없는 노드"*가 만들어진다.
@@ -796,12 +806,17 @@ export function commentRoutes() {
           return { seq: page.headSeq, markerOps: [] as PatchOp[] }
         }
 
-        const outcome = await applyEdit(app.db, {
-          projectId,
-          pageId,
-          baseSeq: page.headSeq,
-          ops,
-          actor: requestActor(request),
+        const outcome = await withTransaction(app.db, async (trx) => {
+          const edited = await applyEdit(trx, {
+            projectId,
+            pageId,
+            baseSeq: page.headSeq,
+            ops,
+            actor: requestActor(request),
+          })
+          // **커밋 순간의 권한**(이월 AA). `applyEdit`이 페이지를 잠갔다 — 그 대기 뒤의 역할로 판정한다.
+          if (edited.ok) await recheckProjectRole(trx, request)
+          return edited
         })
         if (!outcome.ok) {
           throw editOutcomeToApiError(outcome, page.headSeq)

@@ -20,6 +20,7 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify'
 import { z } from 'zod'
+import { assertLocking } from '../db/locking'
 import type { DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
 import { forbidden, notFound, unauthenticated } from '../errors'
@@ -33,6 +34,11 @@ declare module 'fastify' {
   interface FastifyRequest {
     /** `projectGuard`를 통과하면 실제 역할이 담긴다. 가드를 거치지 않은 요청은 `null`이다. */
     projectRole: ProjectRole | null
+    /**
+     * `projectGuard`가 **요구한** 최소 역할. 가드를 거치지 않은 요청은 `null`이다. 커밋 직전의 재확인
+     * (`recheckProjectRole`)이 가드와 **같은 값**으로 보게 하려고 남긴다 — 라우트가 역할을 두 자리에 적지 않는다.
+     */
+    projectGuardMin: ProjectRole | null
   }
 }
 
@@ -57,13 +63,20 @@ export function roleAtLeast(actual: ProjectRole, min: ProjectRole): boolean {
  * 자체가 없는 경우와, 프로젝트는 있지만 이 사용자가 멤버가 아닌 경우를 구분하지
  * 않는다. `requireProjectRole`이 이 성질을 그대로 이용해 404/403을 가른다.
  */
-export async function findMembership(db: DbHandle, projectId: string, userId: string): Promise<ProjectRole | null> {
-  const row = await db
+export async function findMembership(
+  db: DbHandle,
+  projectId: string,
+  userId: string,
+  /** `'share'`면 그 멤버 행을 `FOR SHARE`로 잡는다 — 커밋 순간의 재확인만 쓴다(`recheckProjectRole`). */
+  lock: 'none' | 'share' = 'none',
+): Promise<ProjectRole | null> {
+  const query = db
     .selectFrom('project_members')
     .select('role')
     .where('project_id', '=', projectId)
     .where('user_id', '=', userId)
-    .executeTakeFirst()
+  if (lock === 'share') assertLocking(db, 'findMembership')
+  const row = await (lock === 'share' ? query.forShare() : query).executeTakeFirst()
 
   return row?.role ?? null
 }
@@ -111,8 +124,10 @@ export async function requireProjectRole(
    * 라우트에 두면 *"역할을 비교하는 코드는 한 자리"*가 두 자리가 된다.
    */
   scopeProjectId: string | null = null,
+  /** 멤버 행을 잡는가 — `findMembership`의 같은 인자. 가드는 안 잡고 커밋 순간의 재확인만 잡는다. */
+  lock: 'none' | 'share' = 'none',
 ): Promise<ProjectRole> {
-  const role = outOfTokenScope(scopeProjectId, projectId) ? null : await findMembership(db, projectId, userId)
+  const role = outOfTokenScope(scopeProjectId, projectId) ? null : await findMembership(db, projectId, userId, lock)
   if (!role) {
     throw notFound('프로젝트를 찾을 수 없습니다')
   }
@@ -178,6 +193,7 @@ export function projectGuard(min: ProjectRole): preHandlerHookHandler {
     if (!request.currentUser) {
       throw unauthenticated()
     }
+    request.projectGuardMin = min
     request.projectRole = await requireProjectRole(
       request.server.db,
       projectId,
@@ -191,9 +207,47 @@ export function projectGuard(min: ProjectRole): preHandlerHookHandler {
 }
 
 /**
+ * **커밋 순간의 권한으로 판정한다**(이월 AA · 2026-09-22). 쓰기 트랜잭션 **안에서**, 페이지 잠금을 잡은
+ * **뒤에** 부른다 — 가드(`projectGuard`)가 핸들러 앞에서 한 번 본 것을 그 자리에서 다시 본다.
+ *
+ * **왜 필요한가.** 가드는 잠금 **밖**에서 한 번 돈다. 쓰기가 페이지 잠금에 쥐인 동안 그 사람이 강등되거나
+ * 멤버에서 빠져도, 잠금이 풀리면 **그 사람 이름으로 커밋됐다**(좁은 반증 4차 a-4 — Chrome · psql 이 페이지
+ * 행을 22s 쥔 판: 22s 에 커밋된 행의 작성자는 그 순간 이미 viewer·비멤버였다). 잠금 대기가 길수록 가드의
+ * 판정은 낡는다 — 여기서 다시 보면 판정이 **커밋과 같은 트랜잭션**의 것이 된다.
+ *
+ * **술어는 가드와 같다 — `requireProjectRole` 하나다.** 입력도 가드와 같은 자리에서 읽는다: 프로젝트는 경로
+ * (`ProjectParams`), 사람은 `currentUser`, 최소 역할은 **가드가 남긴 `projectGuardMin`**, 스코프는
+ * `tokenProjectId`. 그래서 거절도 가드와 같은 상태 코드 · 봉투다(비멤버 404 · 역할 모자람 403).
+ * 던지면 부른 쪽의 트랜잭션이 되돌아간다.
+ *
+ * **멤버 행을 `FOR SHARE`로 잡는다.** 잡지 않으면 «재확인 → (역할 변경 커밋) → 이 쓰기의 커밋»이 선다 —
+ * 강등이 200 으로 끝난 **뒤에** 옛 역할로 판정된 쓰기가 커밋된다. 잡으면 그 행을 바꾸는 역할 변경
+ * (`repos/members.ts`의 UPDATE·DELETE)이 이 쓰기의 커밋을 기다리고, 먼저 바뀌고 있던 행이면 이 쪽이
+ * 그 커밋을 기다렸다가 **바뀐 값**으로 판정한다. 뒤의 방향은 `test/guard-in-lock.test.ts`의 동시 역할 변경
+ * 절이 잰다. 앞의 방향은 재확인 뒤로 커밋밖에 없어 결정적으로 세울 판이 없다 — 재확인 뒤에 800ms 를 끼워
+ * 넣어 한 번 쟀다(2026-09-22, 코멘트 게시 · 250ms 에 강등): 잡지 않으면 **강등 200 @292ms → 쓰기 201 @856ms**
+ * (viewer 이름의 행), 잡으면 **쓰기 201 @837ms → 강등 200 @840ms**.
+ *
+ * **재생은 이것을 부르지 않는다.** 같은 키로 이미 커밋된 자기 행은 권한을 잃어도 돌려준다 — 가드 앞 재생
+ * (`routes/comments.ts`의 `replayBeforeGuard`)과 같은 판정이다. 쓰는 갈래만 부른다.
+ */
+export async function recheckProjectRole(trx: DbHandle, request: FastifyRequest): Promise<ProjectRole> {
+  assertLocking(trx, 'recheckProjectRole')
+  const min = request.projectGuardMin
+  const currentUser = request.currentUser
+  if (min === null || !currentUser) {
+    // 가드를 안 지난 요청이다 — 부른 자리가 틀렸다(프로그래밍 오류). 권한 판정으로 흉내 내지 않는다.
+    throw new Error('recheckProjectRole은 projectGuard를 지난 요청에서만 부른다')
+  }
+  const { projectId } = parseParams(ProjectParams, request.params)
+  return requireProjectRole(trx, projectId, currentUser.id, min, request.tokenProjectId, 'share')
+}
+
+/**
  * `FastifyRequest.projectRole` 데코레이터를 등록한다. `app.ts`의 `buildApp`이
  * 한 번 부른다 — `registerAuthPlugin`이 `currentUser`를 등록하는 것과 같은 자리다.
  */
 export function registerProjectRoleDecorator(app: FastifyInstance): void {
   app.decorateRequest('projectRole', null)
+  app.decorateRequest('projectGuardMin', null)
 }

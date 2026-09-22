@@ -30,12 +30,14 @@
  * (README 4단계).
  */
 import type { FastifyInstance } from 'fastify'
-import type { ApiError } from '../errors'
+import { requireProjectRole } from '../auth/roles'
+import { withTransaction } from '../db/tx'
+import { ApiError } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
 import { notifyPageChanged } from './notify'
-import type { ClientFrame, ServerFrame } from './protocol'
+import { MIN_ROLE_FOR_FRAME, type ClientFrame, type ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
 
 export type PatchFrame = Extract<ClientFrame, { type: 'patch' }>
@@ -78,20 +80,38 @@ export async function handlePatchFrame(
     return patchErrorFrame(connection.projectId, frame, blocked)
   }
 
-  const outcome = await applyEdit(app.db, {
-    projectId: connection.projectId,
-    pageId: frame.pageId,
-    baseSeq: frame.baseSeq,
-    ops: frame.ops,
-    // **actor는 연결이 든다.** 핸드셰이크가 세션 쿠키로 정한 값이고(§10 — REST와 WS의 인증
-    // 경로가 하나다), 프레임이 실어 온 값이 아니다.
-    //
-    // **`auth/actor.ts`의 `requestActor`를 안 쓴다 — 여기에는 요청이 없다.** 그리고 쓸
-    // 이유도 없다: **WS는 쿠키만이다**(§10 · `ws/routes.ts`의 `requireSessionAuth`가 토큰이
-    // 실린 핸드셰이크를 401로 끊는다). 토큰이 이 자리에 닿을 수 없으므로 언제나 `'user'`가
-    // 맞고, `test/actor-census.test.ts`가 그 판정을 표에 한 줄로 든다.
-    actor: { type: 'user', id: connection.userId, label: connection.userName },
-  })
+  let outcome
+  try {
+    outcome = await withTransaction(app.db, async (trx) => {
+      const edited = await applyEdit(trx, {
+        projectId: connection.projectId,
+        pageId: frame.pageId,
+        baseSeq: frame.baseSeq,
+        ops: frame.ops,
+        // **actor는 연결이 든다.** 핸드셰이크가 세션 쿠키로 정한 값이고(§10 — REST와 WS의 인증
+        // 경로가 하나다), 프레임이 실어 온 값이 아니다.
+        //
+        // **`auth/actor.ts`의 `requestActor`를 안 쓴다 — 여기에는 요청이 없다.** 그리고 쓸
+        // 이유도 없다: **WS는 쿠키만이다**(§10 · `ws/routes.ts`의 `requireSessionAuth`가 토큰이
+        // 실린 핸드셰이크를 401로 끊는다). 토큰이 이 자리에 닿을 수 없으므로 언제나 `'user'`가
+        // 맞고, `test/actor-census.test.ts`가 그 판정을 표에 한 줄로 든다.
+        actor: { type: 'user', id: connection.userId, label: connection.userName },
+      })
+      // **커밋 순간의 권한**(이월 AA — REST 는 `auth/roles.ts`의 `recheckProjectRole`). 프레임을 받을 때의
+      // 확인(`ws/routes.ts`의 `stillAllowed`)은 잠금 **밖**이다 — `applyEdit`이 페이지 잠금에 선 동안 강등되면
+      // 그 확인은 낡는다. 술어는 가드와 같은 `requireProjectRole`, 최소 역할은 프레임 수신과 같은 표의 값,
+      // 스코프는 없다(WS 는 쿠키만이다). 멤버 행을 잡는 까닭은 REST 와 같다.
+      if (edited.ok) {
+        await requireProjectRole(trx, connection.projectId, connection.userId, MIN_ROLE_FOR_FRAME.patch, null, 'share')
+      }
+      return edited
+    })
+  } catch (error) {
+    // 재확인의 거절은 REST 봉투와 같은 값으로 낸 사람에게 돌려준다. 그 밖의 예외는 그대로 던진다 —
+    // `ws/routes.ts`의 `catch`가 500 프레임으로 답한다.
+    if (error instanceof ApiError) return patchErrorFrame(connection.projectId, frame, error)
+    throw error
+  }
 
   if (!outcome.ok) {
     return patchErrorFrame(connection.projectId, frame, editOutcomeToApiError(outcome, frame.baseSeq))

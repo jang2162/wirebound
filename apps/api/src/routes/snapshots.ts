@@ -76,8 +76,9 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requestEventActor } from '../auth/actor'
-import { projectGuard } from '../auth/roles'
+import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
+import { withTransaction } from '../db/tx'
 import { ApiError, badRequest, conflict, notFound, unauthenticated, validationFailed } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
@@ -298,7 +299,14 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           throw unauthenticated()
         }
 
-        const outcome = await restoreSnapshot(app.db, { projectId, snapshotId, actorId: currentUser.id })
+        const outcome = await withTransaction(app.db, async (trx) => {
+          const restored = await restoreSnapshot(trx, { projectId, snapshotId, actorId: currentUser.id })
+          // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
+          // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
+          // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
+          if (restored.kind === 'restored') await recheckProjectRole(trx, request)
+          return restored
+        })
         if (outcome.kind !== 'restored') {
           throw restoreOutcomeToApiError(outcome)
         }
