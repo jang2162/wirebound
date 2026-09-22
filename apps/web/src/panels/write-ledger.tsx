@@ -55,8 +55,10 @@
  *    응답(401 포함)은 브라우저가 버린다. 서버에 이미 닿았으면 **서버는 끝낸다** — 앞 사람의 쿠키로 나간
  *    정당한 쓰기이고 그 결과가 DB 에 남는 것은 옳다. 잠금만 풀린다.
  * 3. **지난 세대의 것은 새 장부도 칸도 못 고친다** — 항목은 낸 세대의 장부일 때만(`put`), 칸 쓰기는 지금
- *    세대일 때만(`deliver`) 닿는다. 끊기지 않는 일(판정용 다시 읽기 · 게시 뒤의 목록 다시 받기)이 세션을
- *    넘어 끝날 때 이것이 막는다.
+ *    세대일 때만(`deliver`) 닿는다. 실브라우저에서 끊긴 쓰기는 응답 자체가 안 온다 — 이것이 막는 것은
+ *    **끊겨도 뒷일이 도는 판**(끊긴 판정이 «모름»으로 가며 항목을 고치는 것 · 신호를 안 보는 클라이언트의
+ *    늦은 응답)과 **끊기지 않는 일**(게시 뒤의 목록 다시 받기 — 잠금 밖의 일반 읽기다. 이것은 목록 칸의
+ *    «늦게 낸 조회만» 규칙도 막는다 — 겹친다: `comment-panel.tsx`의 `answered`).
  *
  * **401 → 로그인 화면(`SignedOut`)의 판정은 두 벌이 아니다** — 여전히 `api/failure.tsx`의 `toFailure`
  * 한 곳이다. 여기서 거르는 것은 그 판정에 닿을 **칸 쓰기**다: 지난 세대의 401 은 칸에 안 닿으므로 지금
@@ -165,8 +167,10 @@
  *   **같은 글 두 행**(키 둘). 번호가 없던 노드 — 둘째가 409(`stale` — 첫째가 번호를 붙여 `head_seq`를
  *   올렸다) · 1행. `sessionStorage`로 장부·키를 넘기지 않았다(판정: 이월) — 세션을 넘는 상태를 이 앱이
  *   처음 드는 것이 되고, 그것으로도 «서버에 이미 간 요청»은 못 막는다.
- * - **다시 읽기가 응답하지 않으면** `'checking'`에 머문다 — 읽기에는 시간 제한을 두지 않았다(판정:
- *   이월).
+ * - **쓰기 뒤의 목록 다시 받기가 응답하지 않으면** «목록을 다시 불러오는 중»에 머문다 — 잠금은 풀려
+ *   있고 쓰기는 끝났다. 일반 읽기에는 시간 제한을 두지 않는다(판정용 읽기에만 둔다 — `attempt`). 앞 판의
+ *   «다시 읽기가 응답하지 않으면 `'checking'`에 머문다»는 닫았다(`attempt`의 주석 — Chrome: 10s 판정 →
+ *   그 판정도 매달려 20s 에 끊김 → «확인하지도 못했습니다» + «다시 확인» → 누르면 판정).
  */
 import {
   createContext,
@@ -226,12 +230,15 @@ export interface TrackedWrite<T, V> {
   send(signal: AbortSignal): Promise<T>
   /**
    * 판정한다 — 보통은 서버에서 다시 읽고, 멱등한 쓰기는 **같은 것을 다시 보낸다**(코멘트 게시 —
-   * `comment-panel.tsx`의 `submit`). 던지면 `'unknown'`이다.
+   * `comment-panel.tsx`의 `submit`). 던지거나 시간이 넘으면 `'unknown'`이다. **`signal`을 요청에
+   * 싣는다** — 시간이 넘으면(또는 세션이 끝나면) 끊는다.
    */
-  verify(): Promise<V>
+  verify(signal: AbortSignal): Promise<V>
   /**
-   * 끝난 뒤의 일(응답을 칸에 쓰기 · 목록 다시 받기 …). **잠금을 쥔 채 돈다** — 이것이 끝나야 풀린다.
-   * 8차까지 코멘트의 쓰기가 다시 받기까지 잠금 안에서 했던 것과 같다.
+   * 끝난 뒤의 일(응답을 칸에 쓰기 · 초안 비우기 …). **잠금을 쥔 채 돈다** — 이것이 끝나야 풀린다. 그래서
+   * **여기서 네트워크를 기다리지 않는다** — 쓰기가 끝났으면 잠금은 풀려야 한다. 코멘트의 목록 다시 받기는
+   * 잠금 밖에서 돈다(`comment-panel.tsx`의 `refresh` — 리뷰 2-4 (b): 앞 판은 이것이 잠금 안에서 매달리면
+   * 게시가 커밋됐는데도 상자가 말없이 꺼진 채 F5 말고는 안 풀렸다).
    *
    * `ownerLive`는 **쓰기를 시작한 provider 가 아직 떠 있는가**다. 셸이 새로 섰으면 실시간 연결도
    * 새것이라 서버의 방송이 새 스토어에 닿는다 — 판정으로 끝난 코멘트 쓰기가 «번호를 못 얹었다»고
@@ -338,17 +345,13 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
       if (live === null) throw new Error('쓰기 장부가 아직 서지 않았다')
       const key = writeKey(target)
       const report = (entry: WriteEntry | null): void => put(live.epoch, key, entry)
-      // **세대가 바뀌면 이 쓰기를 끊는다**(머리말 «세션을 넘지 않는다»). 끊긴 거절은 `attempt`의 경주에서
-      // «실패»로 끝나고, 그 뒷일의 칸 쓰기는 `deliver`가 지난 세대라 버린다.
-      const controller = new AbortController()
-      const cut = (): void => controller.abort()
-      live.signal.addEventListener('abort', cut)
       report(SENDING)
       try {
-        const outcome = await attempt(write, report, controller)
+        // **세대가 바뀌면 이 쓰기를 끊는다**(머리말 «세션을 넘지 않는다») — 보내기도 판정도 낸 세대의 신호에
+        // 매인다(`race`). 끊긴 거절은 «실패»로 끝나고, 그 뒷일의 칸 쓰기는 `deliver`가 지난 세대라 버린다.
+        const outcome = await attempt(write, report, live.signal)
         await write.settle(outcome, receiverRef.current?.token === owner)
       } finally {
-        live.signal.removeEventListener('abort', cut)
         report(null)
       }
     },
@@ -376,18 +379,26 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
   return <LedgerContext.Provider value={ledger}>{props.children}</LedgerContext.Provider>
 }
 
+/** 시간 안에 온 답, 또는 시간이 넘었다는 표지. */
+type Raced<X> = { value: X } | { caught: unknown } | typeof EXPIRED
+
 /**
- * 보내고, 시간 안에 오면 그 답을, 안 오면 끊고 **다시 읽어 판정한 답**을 낸다.
+ * 요청 하나를 **시간 제한 안에서** 기다린다 — 넘으면 끊고 `EXPIRED`다. 보내기와 판정이 같은 규칙을 쓴다.
+ * 요청은 **낸 세대의 신호**(`session`)에도 매인다 — 세대가 바뀌면 함께 끊긴다.
  *
  * **끊긴 요청의 거절은 «실패»가 아니다.** 끊는 순간 `fetch`가 거절하지만(실제 `fetch`처럼 신호를
  * 받으면 거절하는 가짜로 케이스가 잰다) 그 거절은 아래 `then`을 한 번 더 지나 경주에 들어가므로,
- * 같은 순간에 풀린 `expired`가 먼저 선다. 그래서 시간이 되면 언제나 다시 읽기로 간다.
+ * 같은 순간에 풀린 `expired`가 먼저 선다. 그래서 시간이 되면 언제나 `EXPIRED`다.
+ *
+ * **끊는 것이 다음 요청보다 먼저다.** 설명의 다시 읽기(`GET …/pages/:id`)는 끊긴 쓰기(`PATCH`)와 **같은
+ * URL** 이라, 쓰기가 살아 있으면 Chrome 의 HTTP 캐시 잠금에 선다(리뷰 1-3). 타이머 콜백이 `resolve` 뒤에
+ * 곧바로 `abort`하고 다시 읽기는 `await` 뒤에 나가므로 이 순서가 선다 — 바꾸지 마라.
  */
-async function attempt<T, V>(
-  write: TrackedWrite<T, V>,
-  report: (entry: WriteEntry) => void,
-  controller: AbortController,
-): Promise<WriteOutcome<T, V>> {
+async function race<X>(start: (signal: AbortSignal) => Promise<X>, session: AbortSignal): Promise<Raced<X>> {
+  const controller = new AbortController()
+  const cut = (): void => controller.abort()
+  session.addEventListener('abort', cut)
+  if (session.aborted) controller.abort()
   let timer: ReturnType<typeof setTimeout> | undefined
   const expired = new Promise<typeof EXPIRED>((resolve) => {
     timer = setTimeout(() => {
@@ -395,38 +406,53 @@ async function attempt<T, V>(
       controller.abort()
     }, WRITE_DEADLINE_MS)
   })
-  const stop = (): void => clearTimeout(timer)
-
-  let sent: Promise<T>
   try {
-    sent = write.send(controller.signal)
-  } catch (caught) {
-    stop()
-    return { kind: 'failed', caught }
+    let sent: Promise<X>
+    try {
+      sent = start(controller.signal)
+    } catch (caught) {
+      return { caught }
+    }
+    // 경주에서 진 쪽의 거절이 처리되지 않은 채 떠돌지 않게 붙잡는다 — 늦게 온 응답은 버린다.
+    sent.catch(() => undefined)
+    return await Promise.race([
+      sent.then(
+        (value) => ({ value }) as const,
+        (caught: unknown) => ({ caught }) as const,
+      ),
+      expired,
+    ])
+  } finally {
+    clearTimeout(timer)
+    session.removeEventListener('abort', cut)
   }
-  // 경주에서 진 쪽의 거절이 처리되지 않은 채 떠돌지 않게 붙잡는다 — 늦게 온 응답은 버린다.
-  sent.catch(() => undefined)
+}
 
-  const first = await Promise.race([
-    sent.then(
-      (value) => ({ value }) as const,
-      (caught: unknown) => ({ caught }) as const,
-    ),
-    expired,
-  ])
-  stop()
+/**
+ * 보내고, 시간 안에 오면 그 답을, 안 오면 끊고 **판정한 답**을 낸다.
+ *
+ * **판정에도 시간 제한이 있다**(리뷰 2-4 (a) — 앞 판은 다시 읽기가 응답하지 않으면 `'checking'`에
+ * 머물렀고 «다시 확인»도 없었다. F5 말고 탈출구가 없었고 초안을 잃었다). 넘으면 끊고 `'unknown'` —
+ * «다시 확인»이 선다. **판정용 읽기에만 둔다** — 일반 읽기(조회 이펙트 · 쓰기 뒤의 목록 다시 받기)에는
+ * 여전히 없다. 값은 쓰기와 같은 `WRITE_DEADLINE_MS`다 — 다시 읽기 GET 은 페이지 p99 6.7ms · 코멘트
+ * 목록 p99 11.8ms 였고(이월 R 의 실측), 게시의 판정은 쓰기 그 자체다(같은 키로 다시 보낸다).
+ */
+async function attempt<T, V>(
+  write: TrackedWrite<T, V>,
+  report: (entry: WriteEntry) => void,
+  session: AbortSignal,
+): Promise<WriteOutcome<T, V>> {
+  const first = await race((signal) => write.send(signal), session)
   if (first !== EXPIRED) {
     return 'value' in first ? { kind: 'done', value: first.value } : { kind: 'failed', caught: first.caught }
   }
 
-  // 시간 안에 응답이 없었다 — 결과를 모른다. 서버에서 다시 읽는다.
+  // 시간 안에 응답이 없었다 — 결과를 모른다. 판정한다(다시 읽기 — 게시는 다시 보내기).
   for (;;) {
     report(CHECKING)
-    try {
-      return { kind: 'verified', verdict: await write.verify() }
-    } catch {
-      await new Promise<void>((resolve) => report({ phase: 'unknown', recheck: resolve }))
-    }
+    const checked = await race((signal) => write.verify(signal), session)
+    if (checked !== EXPIRED && 'value' in checked) return { kind: 'verified', verdict: checked.value }
+    await new Promise<void>((resolve) => report({ phase: 'unknown', recheck: resolve }))
   }
 }
 

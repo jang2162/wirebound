@@ -465,8 +465,8 @@ export function PageDescriptionPanel(props: {
       // **시간 안에 응답이 없으면 서버에서 다시 읽는다**(이월 R). 서버 값이 보낸 값과 같으면
       // 원하던 상태다 — 서버가 설명을 정규화하지 않는다(`api/client.ts`의 `updatePage` 표:
       // 보낸 그대로 되읽힌다). **이 쓰기가 커밋했다는 뜻은 아니다** — 그래서 통지가 다르다(`MATCHED`).
-      verify: async () => {
-        const page = await api.getPage(projectId, openPageId)
+      verify: async (signal) => {
+        const page = await api.getPage(projectId, openPageId, { signal })
         return { description: page.description, committed: page.description === next }
       },
       settle: (outcome) => {

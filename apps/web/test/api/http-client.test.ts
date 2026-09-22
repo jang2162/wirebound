@@ -980,6 +980,27 @@ describe('createHttpClient', () => {
     }
   })
 
+  it('판정용 읽기 둘은 받은 `signal`을 fetch 에 싣는다 — 안 받으면 키를 만들지 않는다', async () => {
+    // 쓰기 장부가 **판정용 다시 읽기**에도 시간 제한을 두고 넘으면 이것으로 끊는다(`panels/write-ledger.tsx`의
+    // `race`). 빠지면 장부는 «모름»으로 가는데 매달린 읽기가 브라우저에 남는다. 일반 조회는 신호를 안
+    // 싣는다 — 안 받으면 키가 없는 것이 그 자리다(위 케이스와 같은 이유).
+    const reads: [string, (client: ReturnType<typeof createHttpClient>, signal?: AbortSignal) => Promise<unknown>, () => Response][] = [
+      ['getPage', (c, signal) => c.getPage('p1', 'pg1', signal && { signal }), () => jsonResponse(200, page)],
+      ['listComments', (c, signal) => c.listComments('p1', 'pg1', signal && { signal }), () => jsonResponse(200, [comment])],
+    ]
+
+    for (const [name, call, response] of reads) {
+      const signal = new AbortController().signal
+      const given = stubFetch(response())
+      await call(createHttpClient(given.fetchImpl), signal)
+      expect(given.calls[0]?.init?.signal, name).toBe(signal)
+
+      const none = stubFetch(response())
+      await call(createHttpClient(none.fetchImpl))
+      expect(Object.keys(none.calls[0]?.init ?? {}), name).not.toContain('signal')
+    }
+  })
+
   it('createComment 는 멱등 키를 본문에 싣는다 — 안 주면 키를 만들지 않는다', async () => {
     // `BODY_KEYS.createComment`에 그 키가 없으면 `declaredOnly`가 **조용히 떨군다** — 화면은 키를
     // 들고 있는데 서버는 못 받아, 늦게 커밋된 게시와 다시 단 게시가 두 행이 된다.

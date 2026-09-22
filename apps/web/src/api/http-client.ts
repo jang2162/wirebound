@@ -5,7 +5,14 @@
  * 정적 파일을 함께 서빙하는 서버가 그렇게 만든다). 그래서 절대 URL을 만들지 않고
  * `/api`로 시작하는 경로만 쓴다.
  */
-import { ApiError, type ApiClient, type ApiErrorCode, type ApiErrorIssue, type WriteOptions } from './client'
+import {
+  ApiError,
+  type ApiClient,
+  type ApiErrorCode,
+  type ApiErrorIssue,
+  type ReadOptions,
+  type WriteOptions,
+} from './client'
 import type {
   Comment,
   CommentCreated,
@@ -1004,7 +1011,7 @@ export function createHttpClient(
     path: string,
     shape: Shape,
     body?: unknown,
-    options?: WriteOptions,
+    options?: WriteOptions | ReadOptions,
   ): Promise<T> {
     // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
     // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`originConnectionId`가 길이를 본다).
@@ -1186,8 +1193,8 @@ export function createHttpClient(
         SHAPES.pageImported,
         declaredOnly(body, BODY_KEYS.importPage),
       ),
-    getPage: (projectId, pageId) =>
-      request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail),
+    getPage: (projectId, pageId, options) =>
+      request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail, undefined, options),
     patchOps: (projectId, pageId, body) =>
       request<PatchResult>(
         'PATCH',
@@ -1238,8 +1245,8 @@ export function createHttpClient(
       ),
     // 코멘트 다섯(P5-1). **경로가 전부 `.../pages/:pageId/comments` 아래다** — 코멘트는
     // 프로젝트가 아니라 **페이지의 노드**에 붙는다(노드 id는 그 문서 안에서만 뜻이 있다).
-    listComments: (projectId, pageId) =>
-      request<Comment[]>('GET', commentsPath(projectId, pageId), SHAPES.commentList),
+    listComments: (projectId, pageId, options) =>
+      request<Comment[]>('GET', commentsPath(projectId, pageId), SHAPES.commentList, undefined, options),
     createComment: (projectId, pageId, body, options) =>
       request<CommentCreated>(
         'POST',

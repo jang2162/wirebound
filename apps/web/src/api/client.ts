@@ -41,6 +41,15 @@ export interface WriteOptions {
   readonly signal?: AbortSignal
 }
 
+/**
+ * 읽기 하나에 얹는 선택 — **`signal`뿐이다.** 받는 것은 둘(`getPage` · `listComments`)이고, 쓰는 것은
+ * **쓰기의 판정용 다시 읽기뿐이다**(`panels/write-ledger.tsx` — 판정에만 시간 제한을 둔다). 일반 조회는
+ * 싣지 않는다 — 읽기에 시간 제한을 두지 않는 것은 그대로다.
+ */
+export interface ReadOptions {
+  readonly signal?: AbortSignal
+}
+
 export interface ApiClient {
   login(email: string, password: string): Promise<SessionUser>
   logout(): Promise<void>
@@ -251,7 +260,7 @@ export interface ApiClient {
     projectId: string,
     body: { menuNodeId: string; file: unknown; title?: string },
   ): Promise<PageImported>
-  getPage(projectId: string, pageId: string): Promise<PageDetail>
+  getPage(projectId: string, pageId: string, options?: ReadOptions): Promise<PageDetail>
   /**
    * 편집 하나를 보낸다. **응답의 `seq`가 다음 호출의 `baseSeq`다**(README 4단계).
    *
@@ -359,7 +368,7 @@ export interface ApiClient {
    *
    * `viewer`도 읽는다 — 막는 것은 쓰기 넷이다(§10).
    */
-  listComments(projectId: string, pageId: string): Promise<Comment[]>
+  listComments(projectId: string, pageId: string, options?: ReadOptions): Promise<Comment[]>
   /**
    * 코멘트를 단다. **그 노드에 번호가 없으면 서버가 번호를 붙이고 revision을 남긴다**
    * (계획서 D2 — `marker`는 페이지 문서의 값이므로 편집 파이프라인을 지나야 한다).

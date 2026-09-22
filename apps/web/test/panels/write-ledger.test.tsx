@@ -16,7 +16,7 @@
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ApiClient, WriteOptions } from '../../src/api/client'
+import type { ApiClient, ReadOptions, WriteOptions } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
 import type { Comment, CommentCreated, PageDetail, ProjectDetail, SessionUser } from '../../src/api/types'
 import { WRITE_DEADLINE_MS } from '../../src/panels/write-ledger'
@@ -145,12 +145,16 @@ function descriptionServer(
   commit: (index?: number) => void
   /** 붙잡힌 쓰기 하나의 응답을 준다 — 먼저 서버에 쓴다. */
   respond: (index?: number) => Promise<void>
+  /** 붙잡힌 쓰기 하나를 그 실패로 끝낸다(서버에 안 쓴다). */
+  fail: (index: number, error: ApiError) => Promise<void>
   /** 다시 읽기를 실패시킨다. */
   failReads: (on: boolean) => void
   /** 켜 있는 동안의 읽기를 붙잡는다 — 끈 뒤의 읽기는 곧바로 답한다. 붙잡힌 것은 `releaseReads`가 놓는다. */
   holdReads: (on: boolean) => void
   /** 붙잡힌 읽기를 **그때의** 서버 값으로 놓는다. */
   releaseReads: () => Promise<void>
+  /** 읽기가 받은 신호 — 부른 순서대로(판정용 다시 읽기만 싣는다). */
+  readSignals: (AbortSignal | undefined)[]
   /** 남이 서버의 설명을 바꾼다. */
   overwrite: (value: string | null) => void
 } {
@@ -158,9 +162,10 @@ function descriptionServer(
   let readsFail = false
   let readsHeld = false
   const heldReads: (() => void)[] = []
+  const readSignals: (AbortSignal | undefined)[] = []
   const sent: (string | null | undefined)[] = []
   const signals: (AbortSignal | undefined)[] = []
-  const waiting: { commit: () => void; resolve: () => void }[] = []
+  const waiting: { commit: () => void; resolve: () => void; reject: (caught: unknown) => void }[] = []
   const read = (pageId: string): PageDetail => ({
     ...pageDetail(pageId, DOC),
     description: pageId === PAGE_ID ? stored : null,
@@ -168,6 +173,7 @@ function descriptionServer(
   return {
     sent,
     signals,
+    readSignals,
     stored: () => stored,
     failReads: (on) => {
       readsFail = on
@@ -184,10 +190,15 @@ function descriptionServer(
       stored = value
     },
     overrides: {
-      getPage: (async (_projectId: string, pageId: string) => {
+      getPage: (async (_projectId: string, pageId: string, options?: ReadOptions) => {
+        if (pageId === PAGE_ID) readSignals.push(options?.signal)
         if (readsFail && pageId === PAGE_ID) throw new ApiError(0, 'internal', '서버에 연결하지 못했습니다')
         if (readsHeld && pageId === PAGE_ID) {
-          return new Promise<PageDetail>((resolve) => heldReads.push(() => resolve(read(pageId))))
+          // 붙잡힌 읽기도 **끊기면 실제 `fetch`처럼 거절한다**.
+          return new Promise<PageDetail>((resolve, reject) => {
+            options?.signal?.addEventListener('abort', () => reject(new DOMException('요청을 끊었다', 'AbortError')))
+            heldReads.push(() => resolve(read(pageId)))
+          })
         }
         return read(pageId)
       }) as never,
@@ -207,7 +218,7 @@ function descriptionServer(
             committed = true
             stored = value
           }
-          waiting.push({ commit, resolve: () => resolve({ ...pageDetail(pageId, DOC), description: value }) })
+          waiting.push({ commit, resolve: () => resolve({ ...pageDetail(pageId, DOC), description: value }), reject })
         })
       }) as never,
     },
@@ -222,6 +233,13 @@ function descriptionServer(
       await act(async () => {
         entry.commit()
         entry.resolve()
+      })
+    },
+    fail: async (index, error) => {
+      const entry = waiting[index]
+      if (entry === undefined) throw new Error('붙잡힌 쓰기가 없다')
+      await act(async () => {
+        entry.reject(error)
       })
     },
   }
@@ -262,10 +280,12 @@ function commentServer(initial: Comment[] = []): {
   /** **다른 곳에서**(다른 탭·기기) 같은 사람이 루트에 그 글을 단다 — 이 화면은 모른다. */
   addElsewhere: (body: string) => void
   /**
-   * 붙잡힌 목록 읽기를 **401** 로 끝낸다 — 로그아웃 **뒤에** 서버에 닿은 앞 세션의 요청이다(모델링: 그
-   * 요청은 로그아웃보다 먼저 나갔고, 서버에는 늦게 닿았다).
+   * 붙잡힌 목록 읽기를 그 실패로 끝낸다 — 기본은 **401**: 로그아웃 **뒤에** 서버에 닿은 앞 세션의 요청이다
+   * (모델링: 그 요청은 로그아웃보다 먼저 나갔고, 서버에는 늦게 닿았다).
    */
-  failHeldLists: () => Promise<void>
+  failHeldLists: (error?: ApiError) => Promise<void>
+  /** 붙잡힌 목록 읽기를 **그것을 낸 순간의** 표로 놓는다 — 서버는 그때 읽었고 답만 늦게 왔다. */
+  releaseHeldLists: () => Promise<void>
   commit: (index?: number) => void
   respond: (index?: number) => Promise<void>
 } {
@@ -274,7 +294,7 @@ function commentServer(initial: Comment[] = []): {
   let seq = HEAD_SEQ
   const failing: ApiError[] = []
   let listsHeld = false
-  const heldLists: ((caught: unknown) => void)[] = []
+  const heldLists: { resolve: () => void; reject: (caught: unknown) => void }[] = []
   const markers = new Map<string, number>()
   const byKey = new Map<string, Comment>()
   const keys: (string | undefined)[] = []
@@ -292,14 +312,24 @@ function commentServer(initial: Comment[] = []): {
     addElsewhere: (body) => {
       rows = [...rows, comment(`c-${next++}`, body)]
     },
-    failHeldLists: async () => {
+    failHeldLists: async (error = new ApiError(401, 'unauthenticated', '로그인이 필요합니다')) => {
       await act(async () => {
-        for (const fail of heldLists.splice(0)) fail(new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
+        for (const held of heldLists.splice(0)) held.reject(error)
+      })
+    },
+    releaseHeldLists: async () => {
+      await act(async () => {
+        for (const held of heldLists.splice(0)) held.resolve()
       })
     },
     overrides: {
       listComments: async () => {
-        if (listsHeld) return new Promise<Comment[]>((_resolve, reject) => heldLists.push(reject))
+        if (listsHeld) {
+          const snapshot = [...rows]
+          return new Promise<Comment[]>((resolve, reject) =>
+            heldLists.push({ resolve: () => resolve(snapshot), reject }),
+          )
+        }
         return [...rows]
       },
       createComment: ((
@@ -552,6 +582,7 @@ describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리�
  * | 판정으로 «안 됨»인데 초안을 비운다 | *"서버 값이 다르면 …"* **혼자** |
  * | 다시 읽기가 실패하면 «실패»로 풀어 버린다 | *"다시 읽기도 실패하면 모른다 …"* · 코멘트의 *"… 연결이 실패하면 모른다 …"* · 세션 절의 *"… «확인하지도 못했습니다»로 남은 …"* — 축의 주인은 앞의 것 |
  * | 판정 뒤에 늦게 온 원래 응답으로 다시 고친다 | *"늦게 온 원래 응답은 …"* **혼자** |
+ * | 판정에 시간 제한이 없다(앞 판) · 설명의 판정용 읽기가 신호를 안 싣는다 | *"판정용 다시 읽기에도 시간 제한이 있다 …"* **혼자**(둘 다) |
  * | 설명: 다시 읽어 같으면 «저장했습니다»라고 한다(앞 판 — 리뷰 2-1) | *"서버 값이 보낸 값과 같으면 …"* 와 *"다시 읽기도 실패하면 …"*(그 끝이 «같습니다»다) — 축의 주인은 앞의 것 |
  * | 코멘트: 다시 보낼 때 **목록을 먼저 보고** 같은 노드·같은 글이 있으면 안 보낸다 | *"코멘트 — 목록을 읽은 뒤 다른 곳에서 달린 …"* **혼자** |
  * | 코멘트: 판정을 앞 판처럼 목록으로 한다(다시 보내지 않는다) | 코멘트 넷 + 멱등 키 절의 둘 — 축의 주인은 *"… 다른 곳에서 달린 …"*(리뷰 2-2) |
@@ -661,6 +692,33 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await waitFor(() => expect(screen.queryByText(MATCHED)).not.toBeNull())
     expect(box().disabled).toBe(false)
     expect(screen.queryByRole('button', { name: '다시 확인' })).toBeNull()
+  })
+
+  it('판정용 다시 읽기에도 시간 제한이 있다 — 매달리면 끊고 모른다: «다시 확인»이 선다', async () => {
+    // **앞 판은 다시 읽기가 응답하지 않으면 «확인 중»에 머물렀고 «다시 확인»도 없었다**(리뷰 2-4 (a),
+    // Chrome — F5 말고 탈출구가 없었고 초안을 잃었다).
+    const server = descriptionServer('서버 값')
+    await saveWithFakeTimers(server, '시간 넘긴 글')
+    server.holdReads(true)
+
+    await advance(WRITE_DEADLINE_MS)
+    expect(screen.getByText('응답이 없어 저장됐는지 서버에서 확인하는 중입니다')).toBeTruthy()
+    expect(server.readSignals.at(-1)?.aborted).toBe(false)
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '다시 확인' })).toBeTruthy())
+    // **판정용 읽기를 끊었다** — 매달린 읽기가 남지 않는다.
+    expect(server.readSignals.at(-1)?.aborted).toBe(true)
+    expect(box().disabled).toBe(true)
+
+    // **양성 대조** — 누르면 다시 판정한다.
+    server.holdReads(false)
+    server.commit()
+    fireEvent.click(screen.getByRole('button', { name: '다시 확인' }))
+    await waitFor(() => expect(screen.queryByText(MATCHED)).not.toBeNull())
+    expect(box().disabled).toBe(false)
   })
 
   it('늦게 온 원래 응답은 판정을 뒤집지 않는다', async () => {
@@ -928,19 +986,29 @@ describe('멱등 키 — 같은 초안은 같은 키를 싣고, 성공·고침·
  *
  * **401 판은 모델링이다** — 앞 세션의 요청이 **로그아웃보다 먼저 나갔고 서버에는 늦게 닿아** 401 을
  * 받는다(느린 망 · 앞단 큐에서 작은 로그아웃 요청이 앞지르는 판 — 리뷰 1-1 과 같은 모델). 가짜 서버가
- * 붙잡은 읽기를 로그인한 뒤에 401 로 끝낸다. **쓰기 자체의 401 은 여기서 모델링하지 않았다** — 세션이
- * 끝나면 그 쓰기를 끊으므로(첫 케이스) 실브라우저는 그 응답을 버린다. 끊기지 않는 것이 목록 다시 받기다.
+ * 붙잡은 읽기를 로그인한 뒤에 401 로 끝낸다. **쓰기 자체의 401** 은 실브라우저에서는 안 닿는다 — 세션이
+ * 끝나면 그 쓰기를 끊고(첫 케이스) 끊긴 요청의 응답은 브라우저가 버린다. 그래서 그 판은 **끊겨도 응답을
+ * 내는 클라이언트**(`ignoreAbort`)로 잰다.
  *
- * 고치기 전(`eb7a155`)에는 다섯 다 죽는다. 각각이 혼자 죽는 변조(웹 전량에서 쟀다):
+ * 각각이 혼자 죽는 변조(웹 전량에서 쟀다 — 3번(목록 다시 받기를 잠금 밖으로) 뒤의 값이다):
  *
  * | 변조 | 죽는 것 |
  * |---|---|
- * | 무효화가 세대를 안 올린다 | 이 절의 다섯 전부 |
+ * | 무효화가 세대를 안 올린다 | 이 절의 다섯(*"401 이 늦게 닿는 판 — … 다시 받기 …"* 빼고 전부) |
  * | 세대를 로그아웃 단추에서만 올린다(401 의 `SignedOut`이 부르는 무효화는 안 올린다) | *"같은 사람 — …"* **혼자** |
  * | 세대가 바뀌어도 나가 있는 쓰기를 안 끊는다 | *"다른 사람 — … 로그아웃에 끊기고 …"* **혼자** |
  * | 지난 세대의 쓰기가 새 장부의 항목을 고친다(`put`) | *"앞 세션의 판정이 늦게 끝나도 …"* **혼자** |
+ * | 지난 세대의 칸 쓰기를 안 버린다(`deliver`) | *"신호를 안 보는 클라이언트여도 …"* **혼자** |
  * | 세대가 바뀌어도 항목을 안 비운다 | *"… «확인하지도 못했습니다»로 남은 …"* 와 *"앞 세션의 판정이 …"* — **축의 주인은 «확인하지도 못했습니다» 케이스** |
- * | 지난 세대의 칸 쓰기를 안 버린다(`deliver`) | *"401 이 늦게 닿는 판 …"* 와 *"앞 세션의 판정이 …"*(앨리스의 판정 통지가 밥의 화면에 선다) — **축의 주인은 «401» 케이스** |
+ *
+ * ***"401 이 늦게 닿는 판 — 앞 사람의 다시 받기가 …"*는 한 변조로는 안 죽는다** — 가드 넷이 겹쳐 덮는다:
+ * `deliver`의 세대 · 목록 칸의 «늦게 낸 조회만»(`answered` — 밥의 방문은 앨리스의 다시 받기보다 늦게 낸
+ * 조회를 들고 있다) · `REFRESH`의 번호 대조 · 그리는 자리의 견줌. 앞의 셋을 함께 빼면
+ * *"… «다시 불러오는 중»도 내린다 …"*와 함께 죽는다. **남긴다** — 리뷰 1-1 의 Chrome 판 그대로이고, 1번
+ * 커밋 때는 `deliver` 혼자가 막았다(3번이 뒤 둘을 더했다). 겹침을 걷어 내는 사람이 마지막에 만나는 자리다.
+ *
+ * `eb7a155`(고치기 전)에서는 앞의 다섯이 죽었다. *"신호를 안 보는 클라이언트여도 …"*는 3번 뒤에 더했고 그
+ * 판에서는 재지 않았다.
  */
 describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰기는 다음 세션에 닿지 않는다', () => {
   it('다른 사람 — 앞 사람의 나가 있는 저장은 로그아웃에 끊기고, 다음 사람의 상자를 잠그지 않는다', async () => {
@@ -1024,6 +1092,31 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
     expect(screen.getByText('앨리스의 말')).toBeTruthy()
   })
 
+  it('신호를 안 보는 클라이언트여도 — 앞 세션 쓰기의 늦은 401 은 다음 사람을 로그인 화면으로 보내지 않는다', async () => {
+    // 실브라우저는 로그아웃에 끊긴 쓰기의 응답을 버린다(첫 케이스). **끊겨도 응답을 내는 클라이언트**(장부가
+    // 견딘다고 적은 부류 — R 절의 *"늦게 온 원래 응답은 …"*과 같은 가짜)면 그 401 이 밥의 방문이 선 뒤에
+    // 뒷일로 닿는다. 그때 막는 것이 **칸 쓰기의 세대**다(`deliver`).
+    const server = descriptionServer('서버 값', { ignoreAbort: true })
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '앨리스의 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+
+    await logout()
+    await login(BOB)
+    await returnFromList()
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+
+    await server.fail(0, new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
+
+    expect(screen.queryByLabelText('이메일')).toBeNull()
+    expect(box().disabled).toBe(false)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('같은 사람 — 세션이 끊겨 다시 로그인한 새 세션은 앞 세션의 저장에 잠기지 않는다', async () => {
     const server = descriptionServer('서버 값')
     let expired = false
@@ -1100,5 +1193,136 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
     await server.respond(1)
     await waitFor(() => expect(screen.queryByText('설명을 저장했습니다')).not.toBeNull())
     expect(box().disabled).toBe(false)
+  })
+})
+
+/**
+ * ## 쓰기가 끝나면 잠금이 풀린다 — 목록 다시 받기는 잠금 밖이다
+ *
+ * **앞 판은 게시가 커밋됐는데 뒤의 목록 다시 받기가 매달리면 상자가 통지 없이 꺼진 채였다**(리뷰 2-4 (b),
+ * Chrome — F5 말고는 안 풀렸다). 다시 받기를 쓰기의 뒷일 **안에서** 기다렸기 때문이다. 이제 쓰기가 끝나면
+ * 잠금이 풀리고, 다시 받기는 따로 돈다(`src/panels/comment-panel.tsx`의 `refresh`). 둘이 갈리자 **조회끼리
+ * 도착 순서가 뒤집힐 수 있어**, 목록 칸은 늦게 **낸** 조회의 답만 받는다(`answered`).
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 다시 받기를 쓰기의 뒷일 안에서 기다린다(앞 판) | *"… 매달려도 잠금은 풀린다 …"* 와 *"앞 게시의 다시 받기가 …"*(둘째 게시를 못 보낸다) — **축의 주인은 앞의 것** |
+ * | «다시 불러오는 중»을 안 그린다 | *"… 매달려도 잠금은 풀린다 …"* 와 *"… «다시 불러오는 중»도 내린다 …"*(그 문장이 서는 것부터 기다린다) |
+ * | 그 문장을 보이는 목록과 견주지 않는다(매달린 다시 받기가 있으면 늘 말한다) | *"… «다시 불러오는 중»도 내린다 …"* **혼자** |
+ * | 다시 받기가 실패하면 목록 자리를 실패로 바꾼다(앞 판) | *"목록 다시 받기가 실패하면 …"* **혼자** |
+ * | 다시 받기의 답을 낸 순서와 무관하게 쓴다 | *"앞 게시의 다시 받기가 늦게 와도 …"* **혼자** |
+ * | 조회 이펙트의 답을 낸 순서와 무관하게 쓴다(앞 판) | *"돌아와 건 목록 조회가 늦게 와도 …"* **혼자** |
+ *
+ * 고치기 전(`b136610`)에는 이 절의 넷과 R 절의 *"판정용 다시 읽기에도 …"*가 죽는다(다섯 — «내린다»는
+ * 그 뒤에 더했다). 두 읽기가 신호를 싣는지는 `test/api/http-client.test.ts`의 *"판정용 읽기 둘은 …"*가
+ * 갖는다(`getPage`의 신호를 떨구면 그것 **혼자** 죽는다).
+ */
+describe('쓰기가 끝나면 잠금이 풀린다 — 목록 다시 받기는 잠금 밖이다', () => {
+  async function post(text: string): Promise<void> {
+    type(commentBox(), text)
+    fireEvent.click(submitButton())
+  }
+
+  it('게시는 달렸는데 목록 다시 받기가 매달려도 잠금은 풀린다 — «다시 불러오는 중»이라고 말한다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    await post('달린 말')
+    server.holdLists(true)
+    await server.respond()
+
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+    expect(commentBox().value).toBe('')
+    expect(screen.getByText('목록을 다시 불러오는 중…')).toBeTruthy()
+
+    // **양성 대조** — 다시 받기가 오면 목록에 서고 말이 사라진다.
+    await server.releaseHeldLists()
+    await waitFor(() => expect(screen.queryByText('달린 말')).not.toBeNull())
+    expect(screen.queryByText('목록을 다시 불러오는 중…')).toBeNull()
+  })
+
+  it('다시 받기가 매달린 채 새 조회가 목록을 세우면 «다시 불러오는 중»도 내린다 — 매달린 것은 낡았다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    await post('달린 말')
+    server.holdLists(true)
+    await server.respond()
+    await waitFor(() => expect(screen.queryByText('목록을 다시 불러오는 중…')).not.toBeNull())
+    server.holdLists(false)
+
+    // 탭을 오가면 새 조회가 나간다 — 게시가 커밋된 **뒤에** 낸 것이다.
+    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    await toCommentTab()
+    await waitFor(() => expect(screen.queryByText('달린 말')).not.toBeNull())
+
+    // Chrome 은 여기서 그 문장이 남았다(고치기 전) — 매달린 다시 받기가 아직 안 끝났다.
+    expect(screen.queryByText('목록을 다시 불러오는 중…')).toBeNull()
+  })
+
+  it('목록 다시 받기가 실패하면 목록은 그대로 두고 그렇다고 말한다 — 쓰기는 끝났다', async () => {
+    const server = commentServer([comment('c-1', '먼저 단 말')])
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    await screen.findByText('먼저 단 말')
+    await post('달린 말')
+    server.holdLists(true)
+    await server.respond()
+    await server.failHeldLists(new ApiError(0, 'internal', '서버에 연결하지 못했습니다'))
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe('목록을 다시 불러오지 못했습니다 — 서버에 연결하지 못했습니다'),
+    )
+    // 앞 판(8차)은 다시 받기의 실패가 목록 자리를 통째로 «코멘트를 불러오지 못했습니다»로 바꿨다.
+    expect(screen.getByText('먼저 단 말')).toBeTruthy()
+    expect(commentBox().disabled).toBe(false)
+  })
+
+  it('앞 게시의 다시 받기가 늦게 와도 뒤 게시의 다시 받기가 세운 목록을 덮지 않는다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    await post('첫째')
+    server.holdLists(true)
+    await server.respond(0)
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+    server.holdLists(false)
+
+    await post('둘째')
+    await server.respond(1)
+    await waitFor(() => expect(screen.queryByText('둘째')).not.toBeNull())
+
+    // 첫째의 다시 받기가 이제 온다 — **그것을 낸 순간의 표**(둘째가 없다)다.
+    await server.releaseHeldLists()
+
+    expect(screen.getByText('둘째')).toBeTruthy()
+    expect(screen.getByText('첫째')).toBeTruthy()
+  })
+
+  it('돌아와 건 목록 조회가 늦게 와도 게시 뒤의 다시 받기가 세운 목록을 덮지 않는다', async () => {
+    // **앞 판의 «타이밍 창»**(`comment-panel.tsx` 머리말 «잠금이 막지 못하는 길»의 2) — 가 → 나 → 가로 돌아와
+    // 건 조회가 게시가 커밋되기 **전에** 읽고 다시 받기보다 **늦게** 오면 방금 단 말이 목록에서 사라졌다.
+    const server = commentServer()
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    await toCommentTab()
+    await post('매달린 말')
+    await waitFor(() => expect(commentBox().disabled).toBe(true))
+
+    const tree = screen.getByRole('region', { name: '메뉴·페이지 트리' })
+    fireEvent.click(within(tree).getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+    server.holdLists(true)
+    fireEvent.click(within(tree).getByRole('link', { name: PAGE_TITLE }))
+    await waitFor(() => expect(server.heldLists()).toBe(1))
+    server.holdLists(false)
+
+    // 게시가 커밋되고 응답이 온다 → 다시 받기가 곧바로 선다.
+    await server.respond()
+    await waitFor(() => expect(screen.queryByText('매달린 말')).not.toBeNull())
+
+    // 돌아와 건 조회가 이제 온다 — 커밋 **전**의 빈 표다.
+    await server.releaseHeldLists()
+
+    expect(screen.getByText('매달린 말')).toBeTruthy()
   })
 })

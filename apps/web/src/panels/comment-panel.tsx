@@ -101,10 +101,10 @@
  * 있다. 7차 F1과 이 규칙이 **같은 자리에서 같은 값으로** 도는 것은 그대로다(`DRAFTS`가 방문의
  * 칸 하나다). 게시가 나가 있는 동안 다른 노드를 골라도 응답은 **보낸 노드의 초안만** 비운다.
  *
- * ### 잠금이 막지 못하는 길 둘 — 끝에 **한 번호에 두 행**이 선다 (9차 좁은 반증, Chrome)
+ * ### 잠금이 막지 못하던 길 둘 — 끝에 **한 번호에 두 행**이 섰다 (9차 좁은 반증, Chrome)
  *
- * `BUSY`는 페이지 왕복에도 남지만(`panel-drafts.tsx`의 머리말 3) 아래 둘은 막지 못했다(첫째는 이제
- * 막는다 — 그 항목의 끝). 둘 다
+ * `BUSY`는 페이지 왕복에도 남지만(`panel-drafts.tsx`의 머리말 3) 아래 둘은 막지 못했다(**둘 다 이제
+ * 막는다** — 각 항목의 끝). 둘 다
  * 끝에 보이는 것이 같다 — **목록에 방금 단 말이 없고 잠금은 풀려 있다.** 사용자가 다시 달면
  * 같은 노드에 같은 말이 두 행 선다(`BUSY`의 주석이 막으려던 바로 그 상태다). jsdom 케이스는 없다.
  *
@@ -129,6 +129,12 @@
  * 2. **타이밍 창.** 가 → 나 → 가로 돌아와 건 목록 조회가 **게시가 커밋되기 전에 읽고, 게시 뒤의
  *    다시 받기보다 늦게** 오면, 다시 받기가 세운 목록(방금 단 말이 있다)을 덮는다 — 같은 페이지라
  *    조회 이펙트의 `alive`가 참이다. 방금 단 말이 목록에서 사라지고 잠금은 이미 풀려 있다.
+ *
+ *    **2026-09-22 에 닫았다 — 목록 칸은 늦게 *낸* 조회의 답만 받는다**(`issue`·`answered`). 다시 받기를
+ *    잠금 밖으로 뺐더니(`refresh` — 리뷰 2-4 (b)) 다시 받기끼리도 도착 순서가 뒤집힐 수 있어서 넣은
+ *    규칙인데, 돌아와 건 조회는 게시의 응답 **전에** 나가므로 같은 규칙에 걸린다. Chrome(route — 돌아와
+ *    건 GET 을 곧바로 서버에서 읽히고 답만 붙잡았다): 게시 커밋 → 다시 받기가 `"매달린 말"`을 세움 →
+ *    그 뒤 낡은 답(빈 표)이 와도 목록 그대로 · DB 1행. 붙잡힌 동안 그 방문은 «코멘트를 불러오는 중…»이다.
  *
  * ## 이 패널은 오류 경계 밖이다
  *
@@ -158,6 +164,10 @@ const NO_COMMENTS = '아직 코멘트가 없습니다'
 const NO_TARGET = '코멘트를 달 노드를 캔버스나 구조 트리에서 고르세요'
 /** 조회가 이유 없이 실패했을 때. */
 const LOAD_FAILED = '코멘트를 불러오지 못했습니다'
+/** 쓰기 뒤의 목록 다시 받기가 도는 중(`refresh`). 쓰기는 끝났고 잠금은 풀렸다 — 표시만 아직이다. */
+const REFRESHING = '목록을 다시 불러오는 중…'
+/** 쓰기 뒤의 목록 다시 받기가 실패했다 — **쓰기는 끝났다.** 목록은 그 앞의 것 그대로다. */
+const REFRESH_FAILED = '목록을 다시 불러오지 못했습니다'
 /** 쓰기가 이유 없이 실패했을 때. */
 const WRITE_FAILED = '코멘트를 저장하지 못했습니다'
 /** 문서에 없는 노드에 붙은 코멘트의 무리 이름. */
@@ -178,10 +188,30 @@ const NOT_EDITED = '응답이 없어 목록을 다시 읽었더니 이 수정은
 /** 다시 읽었더니 그 코멘트가 아직 목록에 있다. */
 const NOT_DELETED = '응답이 없어 목록을 다시 읽었더니 이 코멘트는 지워지지 않았습니다'
 
+/**
+ * 목록 칸. **`at`은 그 값을 낸 조회의 순서 번호다**(`issue`) — 칸은 늦게 낸 조회의 답만 받는다(`answered`).
+ */
 type LoadState =
-  | { status: 'loading' }
-  | { status: 'ready'; comments: Comment[] }
-  | { status: 'failed'; failure: Failure }
+  | { status: 'loading'; at: number }
+  | { status: 'ready'; at: number; comments: Comment[] }
+  | { status: 'failed'; at: number; failure: Failure }
+
+/**
+ * 목록 조회를 **낸 순서**. 쓰기 뒤의 다시 받기가 잠금 밖으로 나가면서(`refresh`) 조회 둘이 겹칠 수 있다 —
+ * 앞 게시의 다시 받기가 늦게 와서 뒤 게시의 다시 받기가 세운 목록을 덮으면 **방금 단 말이 사라진다.**
+ * 그래서 도착 순서가 아니라 낸 순서로 가른다. 페이지가 바뀌면 칸이 버려지므로 번호는 한 줄로 늘기만
+ * 하면 된다 — 모듈에 하나 둔다.
+ */
+let issued = 0
+function issue(): number {
+  issued += 1
+  return issued
+}
+
+/** `at`에 낸 조회의 답을 칸에 쓰는 갱신 — **그보다 늦게 낸 조회의 것이 이미 서 있으면 버린다.** */
+function answered(at: number, next: LoadState): (prev: LoadState) => LoadState {
+  return (prev) => (at < prev.at ? prev : next)
+}
 
 /** 게시를 같은 키로 다시 보낸 결과(`submit`의 판정). 거절은 서버가 답한 4xx 뿐이다 — 그 밖은 모른다. */
 type Reposted = { posted: true; created: CommentCreated } | { posted: false; caught: unknown }
@@ -194,7 +224,16 @@ type Reposted = { posted: true; created: CommentCreated } | { posted: false; cau
  * (`BUSY` — 그 페이지에 매인다).
  */
 /** 목록. 쓰기 뒤의 다시 받기가 **여기를** 채운다 — 그래서 목록도 마운트 밖에 든다. */
-const LIST = slot<LoadState>('comments/list', { status: 'loading' })
+const LIST = slot<LoadState>('comments/list', { status: 'loading', at: 0 })
+/**
+ * 쓰기 뒤의 목록 다시 받기 — **잠금 밖이라 따로 말한다**(`refresh`). **마지막으로 낸** 다시 받기의 번호와,
+ * 그것이 실패했으면 그 실패다. `null`이면 말할 것이 없다.
+ *
+ * **말하는 것은 그 번호가 보이는 목록보다 새것일 때뿐이다**(아래 그리는 자리). 다시 받기가 매달린 채 탭을
+ * 오가 새 조회가 목록을 세우면, 매달린 것은 이미 낡았다 — «다시 불러오는 중»이 남으면 거짓이다(Chrome: 탭
+ * 왕복 뒤 목록에 방금 단 말이 서 있는데 그 문장이 남았다).
+ */
+const REFRESH = slot<{ at: number; failure: Failure | null } | null>('comments/refresh', null)
 /**
  * 쓰기 중에는 조작을 막는다. 같은 코멘트가 두 번 나가면 번호는 하나인데 행이 둘이 된다.
  *
@@ -352,22 +391,36 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   const [editingId, setEditingId] = usePanelSlot(EDITING_ID)
   const [editDraft, setEditDraft] = usePanelSlot(EDIT_DRAFT)
   const [postKeys, setPostKeys] = usePanelSlot(POST_KEYS)
+  const [refreshing, setRefreshing] = usePanelSlot(REFRESH)
 
   const { projectId, pageId } = props
   // 상자가 보이는 것은 **고른 노드의 초안**이다 — 새 코멘트가 달릴 자리와 같은 값을 본다.
   const draft = selectedNodeId === null ? '' : (drafts.get(selectedNodeId) ?? '')
 
-  const reload = useCallback(async (): Promise<Comment[] | null> => {
-    if (pageId === undefined) return null
-    try {
-      const comments = await api.listComments(projectId, pageId)
-      setState({ status: 'ready', comments })
-      return comments
-    } catch (caught) {
-      setState({ status: 'failed', failure: toFailure(caught, LOAD_FAILED) })
-      return null
-    }
-  }, [api, projectId, pageId, setState])
+  /**
+   * **쓰기 뒤의 목록 다시 받기 — 잠금 밖이다**(리뷰 2-4 (b)). 앞 판은 이것을 쓰기의 뒷일 안에서 기다려,
+   * 게시가 **커밋됐는데** 이 읽기가 매달리면 상자가 통지 없이 꺼진 채 F5 말고는 안 풀렸다(Chrome). 쓰기가
+   * 끝났으면 잠금은 풀려야 한다 — 표시를 새로 못 받은 것은 따로 말한다(`REFRESH`: 도는 중 · 실패).
+   *
+   * **읽기에는 시간 제한이 없다**(일반 읽기다 — 판정용이 아니다). 매달리면 «목록을 다시 불러오는 중»에
+   * 머물지만 잠금은 풀려 있다. 실패하면 목록은 그 앞의 것 그대로 두고 그렇다고 말한다 — 401 이면 로그인
+   * 화면이다(`toFailure`).
+   *
+   * 칸에 쓰는 것은 **이 렌더의 페이지와 세대를 단 쓰기**라(`usePanelSlot`) 페이지를 옮겼거나 세션이 바뀌었으면
+   * 어디에도 안 닿는다.
+   */
+  const refresh = (openPageId: string): void => {
+    const at = issue()
+    setRefreshing({ at, failure: null })
+    api.listComments(projectId, openPageId).then(
+      (comments) => {
+        setState(answered(at, { status: 'ready', at, comments }))
+        setRefreshing((prev) => (prev?.at === at ? null : prev))
+      },
+      (caught: unknown) =>
+        setRefreshing((prev) => (prev?.at === at ? { at, failure: toFailure(caught, REFRESH_FAILED) } : prev)),
+    )
+  }
 
   // **마운트될 때 지난 통지를 지운다 — 초안·고치던 것·쓰기 잠금은 지우지 않는다.**
   //
@@ -381,11 +434,13 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   useEffect(() => {
     setWriteError(null)
     setDiverged(false)
+    // 다시 받기의 실패도 지난 통지다. **도는 중인 것은 남긴다** — 아직 끝나지 않았다.
+    setRefreshing((prev) => (prev?.failure == null ? prev : null))
   }, [])
 
   useEffect(() => {
     if (pageId === undefined) {
-      setState({ status: 'ready', comments: [] })
+      setState({ status: 'ready', at: issue(), comments: [] })
       return
     }
 
@@ -396,16 +451,19 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     // `panel-drafts.tsx`의 provider가.** 노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다.
     // 그 규칙이 «페이지 설명»의 F1과 **같은 자리에서 같은 값으로** 돈다.
     let alive = true
-    setState({ status: 'loading' })
+    const at = issue()
+    setState({ status: 'loading', at })
 
     async function load(openPageId: string): Promise<void> {
       try {
         const comments = await api.listComments(projectId, openPageId)
         if (!alive) return
-        setState({ status: 'ready', comments })
+        // **늦게 낸 다시 받기의 답이 이미 섰으면 버린다**(`answered`) — 돌아와 건 이 조회는 쓰기가
+        // 커밋되기 전에 읽었을 수 있다(리뷰 N-E · 머리말 «잠금이 막지 못하는 길»의 2).
+        setState(answered(at, { status: 'ready', at, comments }))
       } catch (caught) {
         if (!alive) return
-        setState({ status: 'failed', failure: toFailure(caught, LOAD_FAILED) })
+        setState(answered(at, { status: 'failed', at, failure: toFailure(caught, LOAD_FAILED) }))
       }
     }
 
@@ -419,7 +477,9 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   /**
    * 쓰기 하나를 장부에 올려 보낸다(`write-ledger.tsx`). **잠금은 장부가 쥐고 푼다** — 성공·실패·
    * 판정 어느 쪽이든 반드시 풀리고(안 그러면 실패 한 번에 패널이 영영 잠긴다), **뒷일(`done`·
-   * `verified`)이 끝난 뒤에** 풀린다. 8차까지 다시 받기가 잠금 안에서 돌았던 것과 같다.
+   * `verified`)이 끝난 뒤에** 풀린다. **뒷일은 네트워크를 기다리지 않는다** — 목록 다시 받기는 잠금 밖에서
+   * 돈다(`refresh`). 8차부터 이월 Q·R 판까지는 다시 받기를 잠금 안에서 기다렸고, 그것이 매달리면 게시가
+   * 커밋됐는데도 상자가 말없이 꺼진 채였다(리뷰 2-4 (b)).
    *
    * `verified`는 시간 안에 응답이 없어 **판정했을 때**다(이월 R) — 수정·삭제는 목록을 다시 읽고, 게시는
    * 같은 키로 다시 보낸다(`submit`). 반영되지 않았으면 그 실패를 돌려준다 — 초안·편집 칸은 남는다.
@@ -433,7 +493,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   const perform = useCallback(
     <T, V>(op: {
       send: (client: ApiClient, openPageId: string, signal: AbortSignal) => Promise<T>
-      verify: (client: ApiClient, openPageId: string) => Promise<V>
+      verify: (client: ApiClient, openPageId: string, signal: AbortSignal) => Promise<V>
       done: (value: T, openPageId: string) => Promise<void> | void
       /** 판정을 화면에 옮긴다. 반영되지 않았으면 그 실패를 돌려준다 — 초안·편집 칸은 남는다. */
       verified: (verdict: V, ownerLive: boolean, openPageId: string) => Promise<Failure | null> | Failure | null
@@ -442,7 +502,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       const openPageId = pageId
       void busyLock.run<T, V>({
         send: (signal) => op.send(api, openPageId, signal),
-        verify: () => op.verify(api, openPageId),
+        verify: (signal) => op.verify(api, openPageId, signal),
         settle: async (outcome, ownerLive) => {
           try {
             if (outcome.kind === 'failed') throw outcome.caught
@@ -484,7 +544,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       )
 
     /** 달렸다 — 첫 응답이든 다시 보낸 것의 응답이든 뒷일은 같다. */
-    const landed = async (created: CommentCreated, openPageId: string, ownerLive: boolean): Promise<void> => {
+    const landed = (created: CommentCreated, openPageId: string, ownerLive: boolean): void => {
       // **문서 변화를 먼저 얹는다.** 목록을 다시 받아도 번호는 그 응답에 없다 —
       // 번호는 문서의 값이다(D1). 결과를 **버리지 않는다**(리뷰 ④).
       const applied = store.applyMarkerChange(openPageId, created)
@@ -506,7 +566,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       // (P4c-3 이월의 둘째 줄이 말하는 부류의 반대편이다). **보낸 노드의 것만** 비운다 —
       // 게시가 나가 있는 동안 다른 노드를 골랐어도, 다른 노드에 써 둔 초안이 있어도.
       setDrafts((prev) => withDraft(prev, nodeId, ''))
-      await reload()
+      refresh(openPageId)
     }
 
     perform<CommentCreated, Reposted>({
@@ -517,9 +577,9 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       // 서버가 앞 게시를 커밋했으면 그 행을 돌려주고(재생 200), 아니었으면 지금 커밋한다(201) — **어느
       // 쪽이든 확정이다.** 앞 게시를 서버가 아직 쥐고 있으면 다시 보낸 것은 같은 페이지 행 잠금 뒤에
       // 줄을 서서 재생을 받는다(`apps/api`의 «잠금 안에서 한 번 더 본다»).
-      verify: async (client, openPageId) => {
+      verify: async (client, openPageId, signal) => {
         try {
-          return { posted: true, created: await post(client, openPageId) }
+          return { posted: true, created: await post(client, openPageId, signal) }
         } catch (caught) {
           // **서버가 답한 거절(4xx)은 확정이다** — 같은 키 · 같은 글을 거절했다면 앞 게시도 커밋될 수 없다
           // (키가 없으니 같은 판정을 받는다). 연결 실패·5xx 는 아무것도 말하지 않는다 — 모른다.
@@ -530,10 +590,10 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
         }
       },
       done: (created, openPageId) => landed(created, openPageId, true),
-      verified: async (verdict, ownerLive, openPageId) => {
+      verified: (verdict, ownerLive, openPageId) => {
         // 거절됐으면 **초안과 키를 남긴다** — 같은 글을 다시 달면 같은 키다.
         if (!verdict.posted) return toFailure(verdict.caught, WRITE_FAILED)
-        await landed(verdict.created, openPageId, ownerLive)
+        landed(verdict.created, openPageId, ownerLive)
         return null
       },
     })
@@ -545,16 +605,17 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
 
     perform({
       send: (client, openPageId, signal) => client.deleteComment(projectId, openPageId, commentId, { signal }),
-      verify: async (client, openPageId) => {
-        const comments = await client.listComments(projectId, openPageId)
-        return { comments, gone: !comments.some((comment) => comment.id === commentId) }
+      verify: async (client, openPageId, signal) => {
+        const at = issue()
+        const comments = await client.listComments(projectId, openPageId, { signal })
+        return { at, comments, gone: !comments.some((comment) => comment.id === commentId) }
       },
-      done: async (change, openPageId) => {
+      done: (change, openPageId) => {
         setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
-        await reload()
+        refresh(openPageId)
       },
-      verified: ({ comments, gone }, ownerLive) => {
-        setState({ status: 'ready', comments })
+      verified: ({ at, comments, gone }, ownerLive) => {
+        setState(answered(at, { status: 'ready', at, comments }))
         if (!gone) return { kind: 'message', message: NOT_DELETED }
         // 그 노드의 마지막이었으면 서버가 번호를 지웠다 — 응답을 못 받았으니 내 문서에는 남아 있다.
         setDiverged(ownerLive && hadMarker && !comments.some((comment) => comment.nodeId === target?.nodeId))
@@ -570,16 +631,17 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     perform({
       send: (client, openPageId, signal) =>
         client.updateComment(projectId, openPageId, commentId, { body }, { signal }),
-      verify: async (client, openPageId) => {
-        const comments = await client.listComments(projectId, openPageId)
-        return { comments, saved: comments.find((comment) => comment.id === commentId)?.body === body }
+      verify: async (client, openPageId, signal) => {
+        const at = issue()
+        const comments = await client.listComments(projectId, openPageId, { signal })
+        return { at, comments, saved: comments.find((comment) => comment.id === commentId)?.body === body }
       },
-      done: async () => {
+      done: (_comment, openPageId) => {
         setEditingId(null)
-        await reload()
+        refresh(openPageId)
       },
-      verified: ({ comments, saved }) => {
-        setState({ status: 'ready', comments })
+      verified: ({ at, comments, saved }) => {
+        setState(answered(at, { status: 'ready', at, comments }))
         if (!saved) return { kind: 'message', message: NOT_EDITED }
         setEditingId(null)
         return null
@@ -631,6 +693,8 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   }
 
   const groups = groupComments(state.comments, document)
+  // 다시 받기가 **보이는 목록보다 새것일 때만** 말한다(`REFRESH`의 주석).
+  const refreshNotice = refreshing !== null && refreshing.at > state.at ? refreshing : null
 
   return (
     <div className="wb-shell-comments">
@@ -681,6 +745,22 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
             </p>
           ))}
         <PendingNotice lock={busyLock} checking={CHECKING} unknown={UNKNOWN} />
+        {/* **쓰기는 끝났고 표시만 아직이다** — 잠금과 따로 말한다(`refresh`). */}
+        {refreshNotice !== null && refreshNotice.failure === null && (
+          <p className="wb-shell-panel-notice" role="status">
+            {REFRESHING}
+          </p>
+        )}
+        {refreshNotice?.failure != null &&
+          (refreshNotice.failure.kind === 'signed-out' ? (
+            <SignedOut />
+          ) : (
+            <p className="wb-shell-panel-notice" role="alert">
+              {refreshNotice.failure.message === REFRESH_FAILED
+                ? REFRESH_FAILED
+                : `${REFRESH_FAILED} — ${refreshNotice.failure.message}`}
+            </p>
+          ))}
         {/* **실패가 아니라 어긋남이다** — 코멘트는 저장됐고 번호만 화면에 못 얹었다.
             그래서 `alert`가 아니라 `status`이고 문안도 *"실패했다"*가 아니다. */}
         {diverged && (
