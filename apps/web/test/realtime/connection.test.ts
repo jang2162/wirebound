@@ -10,7 +10,12 @@
  * | `close()`가 재연결을 멈춘다 | 프로젝트를 옮길 때마다 소켓이 하나씩 쌓인다 |
  */
 import { describe, expect, it } from 'vitest'
-import { openRealtime, type RealtimeSocket, type RealtimeStatus } from '../../src/realtime/connection'
+import {
+  openRealtime,
+  type RealtimeConnection,
+  type RealtimeSocket,
+  type RealtimeStatus,
+} from '../../src/realtime/connection'
 import type { ServerFrame } from '../../src/realtime/protocol'
 
 /** 손으로 밀 수 있는 소켓. 실제 네트워크가 없어야 갈래를 하나씩 태울 수 있다. */
@@ -68,7 +73,7 @@ interface Harness {
   clock: FakeClock
   frames: ServerFrame[]
   statuses: RealtimeStatus[]
-  connection: { close(): void }
+  connection: RealtimeConnection
 }
 
 function harness(options?: { heartbeatMs?: number; reconnectDelaysMs?: number[] }): Harness {
@@ -276,5 +281,76 @@ describe('close()는 그만두는 것이다', () => {
     socket.onmessage?.({ data: JSON.stringify({ type: 'pong' }) })
 
     expect(h.frames).toEqual([])
+  })
+})
+
+/**
+ * ## `reconnect()` — 쿠키가 바뀌었다: 지금 소켓을 버리고 곧바로 다시 붙는다
+ *
+ * 다른 탭이 **같은 사람으로 다시 로그인하면** 쿠키는 새 세션인데 이 탭의 WS 는 옛 세션에 붙어 있다(옛 세션은
+ * 산다). 서버의 방송은 요청과 같은 세션의 연결만 빼므로 **이 탭이 자기 방송을 되받는다**(이월 Z — 4차 리뷰
+ * b-3). 핸드셰이크가 쿠키를 싣는 유일한 순간이라, 새 쿠키로 붙는 길은 다시 붙는 것뿐이다
+ * (`session/session-context.tsx`의 «탭 사이»가 부른다).
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 곧바로가 아니라 재연결 간격을 기다려 붙는다 | *"열린 연결을 버리고 곧바로 …"* **혼자** |
+ * | 옛 소켓의 핸들러를 떼지 않고 닫는다(닫힘이 재연결을 한 번 더 예약한다) | *"옛 소켓이 늦게 낸 …"* **혼자** |
+ * | 재연결을 기다리는 중에도(`close()` 뒤에도) 곧바로 붙는다 | *"재연결을 기다리는 중이거나 …"* **혼자** |
+ */
+describe('reconnect()는 새 쿠키로 다시 붙는 것이다', () => {
+  it('열린 연결을 버리고 곧바로 새 소켓을 연다 — 기다리지 않는다', () => {
+    const h = harness()
+    h.sockets[0]!.onopen?.()
+    h.statuses.length = 0
+
+    h.connection.reconnect()
+
+    expect(h.sockets[0]!.closed).toBe(true)
+    expect(h.sockets).toHaveLength(2)
+    // 닫힘을 알리고(연결 id 를 비우고 답을 기다리던 편집을 끝낸다 — `use-realtime.ts`) 곧바로 붙는다.
+    expect(h.statuses).toEqual(['closed', 'connecting'])
+    h.sockets[1]!.onopen?.()
+    expect(h.connection.isOpen()).toBe(true)
+  })
+
+  it('옛 소켓이 늦게 낸 프레임·닫힘은 새 연결에 닿지 않는다 — 재연결을 또 예약하지 않는다', () => {
+    const h = harness()
+    const old = h.sockets[0]!
+    old.onopen?.()
+    const beforeReconnect = h.clock.pending.size
+
+    h.connection.reconnect()
+    old.onmessage?.({ data: JSON.stringify({ type: 'pong' }) })
+    old.onclose?.()
+
+    expect(h.frames).toEqual([])
+    expect(h.sockets).toHaveLength(2)
+    // 하트비트 예약 하나가 옛 소켓과 함께 지워지고, 새 소켓은 아직 안 열려 예약이 없다.
+    expect(beforeReconnect).toBe(1)
+    expect(h.clock.pending.size).toBe(0)
+  })
+
+  it('재연결을 기다리는 중이거나 닫은 뒤면 아무것도 안 한다 — 예약된 연결이 그때의 쿠키를 싣는다', () => {
+    const waiting = harness()
+    waiting.sockets[0]!.onclose?.()
+    expect(waiting.clock.pending.size).toBe(1)
+    waiting.statuses.length = 0
+
+    waiting.connection.reconnect()
+
+    expect(waiting.sockets).toHaveLength(1)
+    expect(waiting.clock.pending.size).toBe(1)
+    expect(waiting.statuses).toEqual([])
+
+    const closed = harness()
+    closed.sockets[0]!.onopen?.()
+    closed.connection.close()
+    closed.statuses.length = 0
+
+    closed.connection.reconnect()
+
+    expect(closed.sockets).toHaveLength(1)
+    expect(closed.statuses).toEqual([])
   })
 })

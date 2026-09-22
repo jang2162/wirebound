@@ -74,6 +74,16 @@ export interface RealtimeLink {
 export interface RealtimeConnection extends RealtimeLink {
   /** 붙는 것을 그만둔다. **이 뒤로는 재연결하지 않는다.** */
   close(): void
+  /**
+   * **쿠키가 바뀌었다 — 지금 소켓을 버리고 곧바로 다시 붙는다.** 핸드셰이크가 쿠키를 싣는 유일한 순간이라
+   * 새 쿠키로 붙는 길은 이것뿐이다(다른 탭이 같은 사람으로 다시 로그인한 판 — 이월 Z,
+   * `session/session-context.tsx`의 «탭 사이»). 끊긴 것과 같게 `'closed'`를 알린다 — 다시 붙으면
+   * 두 번째 `'open'`이라 부르는 쪽이 다시 읽는다(D6, `use-realtime.ts`).
+   *
+   * **재연결을 기다리는 중이면 아무것도 안 한다** — 예약된 연결이 그때의 쿠키를 싣는다. `close()` 뒤에도
+   * 아무것도 안 한다(같은 줄이 막는다).
+   */
+  reconnect(): void
 }
 
 /**
@@ -173,6 +183,25 @@ export function openRealtime(options: RealtimeOptions): RealtimeConnection {
 
   connect()
 
+  /**
+   * 지금 소켓을 버린다 — 예약을 지우고 핸들러를 **먼저** 뗀 뒤에 닫는다. `close()`와 `reconnect()`가 같이
+   * 쓴다. `reconnect()`에서는 `stopped`가 서 있지 않으므로 **떼는 것이 유일한 방벽이다** — 떼지 않고 닫으면
+   * 소켓이 낸 `onclose`가 `dropped`를 태워 재연결을 한 번 더 예약한다.
+   */
+  const discard = (): void => {
+    const live = socket
+    socket = null
+    open = false
+    clearTimer()
+    if (live) {
+      live.onopen = null
+      live.onmessage = null
+      live.onclose = null
+      live.onerror = null
+      live.close()
+    }
+  }
+
   return {
     isOpen: () => open,
     // **열려 있지 않으면 아무것도 안 한다.** 부르는 쪽이 `isOpen()`을 먼저 보지만, 그
@@ -184,7 +213,7 @@ export function openRealtime(options: RealtimeOptions): RealtimeConnection {
     },
     close: () => {
       // **`stopped`는 방어선이고 오늘 그것만 지우는 케이스는 없다(0 사망 — 변이 M22).**
-      // 아래 두 줄(예약 취소 + 핸들러 떼기)이 `stopped`가 막는 경로를 이미 전부 막기
+      // `discard`의 두 걸음(예약 취소 + 핸들러 떼기)이 `stopped`가 막는 경로를 이미 전부 막기
       // 때문이다: 재연결 예약은 `clearTimer`가 지우고, 소켓이 `close()` 도중 동기로
       // `onclose`를 내도 그때는 핸들러가 이미 `null`이다.
       //
@@ -192,17 +221,16 @@ export function openRealtime(options: RealtimeOptions): RealtimeConnection {
       // 뒤로 가면) 그 순간 `stopped`가 유일한 방벽이 된다. 이 줄을 지워도 되는 신호로
       // 읽지 마라 — 지금 안 죽는 이유는 다른 두 줄이 옳게 서 있기 때문이다.
       stopped = true
-      open = false
-      clearTimer()
-      const live = socket
-      socket = null
-      if (live) {
-        live.onopen = null
-        live.onmessage = null
-        live.onclose = null
-        live.onerror = null
-        live.close()
-      }
+      discard()
+    },
+    reconnect: () => {
+      // 재연결을 기다리는 중이면 예약된 연결이 그때의 쿠키를 싣는다. **`close()` 뒤도 이 줄이 막는다** —
+      // `close()`가 소켓을 비우고, 그 뒤로 소켓을 세우는 길(`connect`)은 `stopped`에서 멈춘다.
+      if (socket === null) return
+      discard()
+      options.onStatus?.('closed')
+      attempt = 0
+      connect()
     },
   }
 }
