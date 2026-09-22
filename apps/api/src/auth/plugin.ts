@@ -93,7 +93,8 @@ declare module 'fastify' {
      * 들어왔거나 자격이 없으면 `null`이다.
      *
      * **방송의 발신자 제외가 이것을 본다**(`ws/broadcast.ts`의 `sentBy`) — 요청이 실은 연결 id 가 **이
-     * 세션의** 연결일 때만 뺀다. WS 연결이 드는 `RoomConnection.sessionId`와 같은 함수로 만든 값이다.
+     * 세션의** 연결일 때만 뺀다. 없으면(토큰) 아무도 안 뺀다. WS 연결이 드는 `RoomConnection.sessionId`와
+     * 같은 함수로 만든 값이다.
      */
     sessionId: string | null
   }

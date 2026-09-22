@@ -287,11 +287,11 @@ describe('자기 편집은 자기에게 돌아오지 않는다 (§7.1)', () => {
   })
 
   /**
-   * **세션이 없는 요청(토큰)은 같은 사용자로 견준다**(`sentBy`). 토큰은 WS 를 못 열므로(`ws/routes.ts`의
-   * `requireSessionAuth`) 그 사람의 연결은 늘 **다른 자격**의 것이다 — 세션으로 견주면 아무도 안 빠지고,
-   * id 만 보면 남도 빠진다. 두 편집이 그 둘을 하나씩 잰다.
+   * **토큰 요청은 아무도 안 뺀다**(`sentBy`의 머리말). 토큰은 WS 를 못 열므로(`ws/routes.ts`의
+   * `requireSessionAuth`) 그 요청을 **낸 연결이 없다** — 같은 사람의 연결 id 를 실었어도 그 연결은 에이전트가 낸
+   * 편집을 받아야 한다. 남의 id 를 실은 둘째 편집은 «토큰이면 id 만 본다»를 잰다.
    */
-  it('토큰 요청은 같은 사람의 연결만 뺀다 — 남의 id 를 실어도 그 사람은 받는다', async () => {
+  it('토큰 요청은 아무도 안 뺀다 — 같은 사람의 연결 id 를 실어도 그 연결은 받는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const author = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
@@ -300,15 +300,14 @@ describe('자기 편집은 자기에게 돌아오지 않는다 (§7.1)', () => {
       const peerId = (await peer.waitFor('joined')).connectionId
       const token = await issueToken(ctx, fx.owner, fx.project.id)
 
-      const ownOrigin = await editWithToken(ctx, fx, token, authorId)
+      const intoAuthor = await editWithToken(ctx, fx, token, authorId)
       // 첫 방송이 룸을 다 돈 뒤에 둘째를 낸다(위 케이스와 같은 이유). `peer`가 마지막으로 넣은 연결이다.
       await peer.waitFor('page-changed')
-      const peersOrigin = await editWithToken(ctx, fx, token, peerId)
+      const intoPeer = await editWithToken(ctx, fx, token, peerId)
 
-      expect((await peer.waitForCount('page-changed', 2)).map((frame) => frame.seq)).toEqual([ownOrigin, peersOrigin])
-      // 자기 연결은 **첫 편집에서만** 빠졌다 — 둘째는 남의 id 를 실었으므로 받는다. 첫 것이 왔다면 같은 소켓에서
-      // 둘째보다 먼저 왔으므로 «처음 받은 하나»가 곧 판정이다.
-      expect((await author.waitForCount('page-changed', 1)).map((frame) => frame.seq)).toEqual([peersOrigin])
+      const seqs = [intoAuthor, intoPeer]
+      expect((await author.waitForCount('page-changed', 2)).map((frame) => frame.seq)).toEqual(seqs)
+      expect((await peer.waitForCount('page-changed', 2)).map((frame) => frame.seq)).toEqual(seqs)
     })
   })
 })

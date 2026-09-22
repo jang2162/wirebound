@@ -46,13 +46,14 @@ import type { EventActor } from './protocol'
 export const CONNECTION_ID_HEADER = 'x-wb-connection-id'
 
 /**
- * 방송에서 뺄 발신 연결. 헤더가 없거나 문자열이 아니거나 자격이 없으면 `undefined`다 — 아무도 안 뺀다.
- * 연결 id 는 요청이 말한 값이고, 세션·사용자는 `auth/plugin.ts`가 자격에서 읽은 값이다.
+ * 방송에서 뺄 발신 연결. 헤더가 없거나 문자열이 아니거나 **세션이 없으면**(토큰 요청 — `ws/broadcast.ts`의
+ * `sentBy`가 까닭을 적는다) `undefined`다 — 아무도 안 뺀다. 연결 id 는 요청이 말한 값이고, 세션은
+ * `auth/plugin.ts`가 쿠키에서 읽은 값이다.
  */
 export function broadcastOrigin(request: FastifyRequest): BroadcastOrigin | undefined {
   const raw = request.headers[CONNECTION_ID_HEADER]
-  if (typeof raw !== 'string' || raw.length === 0 || request.currentUser === null) return undefined
-  return { connectionId: raw, sessionId: request.sessionId, userId: request.currentUser.id }
+  if (typeof raw !== 'string' || raw.length === 0 || request.sessionId === null) return undefined
+  return { connectionId: raw, sessionId: request.sessionId }
 }
 
 export interface PageChangedInput {
