@@ -14,7 +14,7 @@
  * `loadPage` 하나여야 하기 때문이다(D6). 그래서 스토어를 직접 쥐지 않고 `<App />`을
  * 라우트째 띄운다.
  */
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import type { RealtimeSocket } from '../../src/realtime/connection'
@@ -411,5 +411,108 @@ describe('다른 탭이 같은 사람으로 다시 들어오면 (이월 Z)', () 
     view.open(1)
     await waitForNode('n-after-renewal')
     expect(readPages(view.getPage)).toEqual([PAGE_ID])
+  })
+})
+
+/**
+ * ## 스스로 버린 소켓으로 답을 기다리던 편집 — «취소됐다» 고 말하지 않는다 (③ 리뷰 B1)
+ *
+ * 위의 `reconnect()`는 **이 탭이 스스로** 옛 소켓을 버린다. 그 소켓은 열려 있었으므로 답을 기다리던 편집은 **이미
+ * 서버에 닿았다** — 결과를 모를 뿐이다. 앞 판은 그것을 끊김과 같게 끝내 «편집을 저장하지 못했습니다 — … 편집 1개가
+ * 취소됐습니다» 를 냈는데, 서버는 그 편집을 커밋했고 새 연결이 그것을 방송해 화면에도 섰다(리뷰 B1 · Chrome —
+ * 행 잠금 5s). 사용자가 그 문장을 믿고 다시 하면 **두 번 선다.** 문장은 `edit/use-edit-commit.tsx`의
+ * `unansweredNotice`가 갖는다.
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 스스로 버릴 때도 끊김과 같게 끝낸다(앞 판 — 실시간 훅이 `abandonInFlight`를 안 부른다) | 셋 다 — **축의 주인은 첫째** |
+ * | 취소한 수가 0 이어도 취소 문장을 붙인다 | 첫째 **혼자** |
+ * | 아직 안 보낸 편집의 취소를 말하지 않는다 | 둘째 **혼자** |
+ * | 다시 불러오지도 못한 판이 앞 판의 «저장되지 않았습니다» 로 끝난다 | 셋째 **혼자** |
+ */
+describe('스스로 버린 소켓으로 답을 기다리던 편집 (③ B1)', () => {
+  /** «아래로»·«위로»가 설 형제 둘. 트리의 줄 이름이 타입이라 둘의 타입이 달라야 한다. */
+  const pair = (): PageDocument =>
+    pageDoc({
+      id: 'n-root',
+      type: 'Page',
+      children: [
+        { id: 'n-a', type: 'Text', props: {} },
+        { id: 'n-b', type: 'Divider', props: {} },
+      ],
+    })
+
+  const tool = (name: string): HTMLElement =>
+    within(within(screen.getByRole('region', { name: '구조 트리' })).getByRole('group', { name: '구조 편집' })).getByRole(
+      'button',
+      { name },
+    )
+
+  /**
+   * 페이지를 열고 WS 로 편집 하나를 낸다 — 답(ack)은 안 온다(서버가 행 잠금에 쥔 판). `reload`가 재조회의 답이다.
+   * 서버는 아직 커밋 전이라 **편집 전의 문서**를 낸다(GET 은 행 잠금에 안 막힌다 — 리뷰 B1 의 기전).
+   */
+  async function inFlight(reload: () => Promise<ReturnType<typeof pageDetail>>): Promise<{
+    wired: Wiring
+    hub: ReturnType<typeof tabHub>
+  }> {
+    const wired = wiring()
+    const hub = tabHub()
+    let calls = 0
+    const getPage = vi.fn(async (_projectId: string, pageId: string) => {
+      calls += 1
+      return calls === 1 ? pageDetail(pageId, pair()) : reload()
+    })
+    await openPage(pair(), { realtime: wired.setup, apiOverrides: { getPage }, tabChannel: hub.channel })
+    wired.open(0)
+
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: 'Text' }))
+    fireEvent.click(tool('아래로'))
+    await act(async () => {})
+    // WS 로 나갔다 — 답을 기다린다.
+    expect(wired.sockets[0]?.sent.filter((raw) => raw.includes('"patch"'))).toHaveLength(1)
+    return { wired, hub }
+  }
+
+  const sameUser = { kind: 'signed-in' as const, user: { id: 'u-1', email: 'me@example.com', name: '테스터' } }
+
+  it('답을 기다리던 편집은 반영됐는지 모른다고 말한다 — 취소됐다고 하지 않는다', async () => {
+    const { wired, hub } = await inFlight(async () => pageDetail(PAGE_ID, pair()))
+
+    await hub.fromOtherTab(sameUser)
+
+    expect(wired.sockets[0]?.closed).toBe(true)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe(
+      '다른 탭에서 다시 로그인해 실시간 연결을 새로 붙이느라 보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 ' +
+        '없습니다. 페이지를 서버 상태로 다시 불러왔고, 반영됐다면 곧 화면에 나타납니다.',
+    )
+  })
+
+  it('아직 안 보낸 편집은 취소됐다고 따로 센다 — 그것은 서버에 닿지 않았다', async () => {
+    const { hub } = await inFlight(async () => pageDetail(PAGE_ID, pair()))
+    // 앞 편집이 답을 기다리는 동안 낸 것은 큐에 선다(D6 — 한 번에 하나).
+    fireEvent.click(tool('위로'))
+    await act(async () => {})
+
+    await hub.fromOtherTab(sameUser)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('서버에 반영됐는지 알 수 없습니다')
+    expect(alert.textContent).toContain('아직 보내지 않은 편집 1개는 취소됐습니다.')
+  })
+
+  it('다시 불러오지도 못하면 모른다고 말하고 새로고침을 권한다 — «저장되지 않았습니다» 가 아니다', async () => {
+    const { hub } = await inFlight(async () => {
+      throw new Error('네트워크')
+    })
+
+    await hub.fromOtherTab(sameUser)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe(
+      '다른 탭에서 다시 로그인해 실시간 연결을 새로 붙이느라 보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 ' +
+        '없습니다. 페이지를 다시 불러오지도 못했습니다 — 새로고침해 서버 상태를 확인하세요.',
+    )
   })
 })
