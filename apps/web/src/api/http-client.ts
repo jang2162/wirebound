@@ -1014,7 +1014,7 @@ export function createHttpClient(
     options?: (WriteOptions | ReadOptions) & { readonly cache?: RequestCache },
   ): Promise<T> {
     // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
-    // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`originConnectionId`가 길이를 본다).
+    // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`broadcastOrigin`이 길이를 본다).
     // **쓰기가 낸 연결을 주면 그것이다**(`WriteOptions.connectionId`) — 없으면 지금 연결이다.
     const origin = options !== undefined && 'connectionId' in options ? options.connectionId : undefined
     const connection = origin ?? connectionId()

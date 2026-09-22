@@ -39,15 +39,43 @@ import type { LockStore } from '../lock/store'
 import { WS_CLOSE, type Participant, type ServerFrame } from './protocol'
 import type { RoomConnection, RoomRegistry } from './rooms'
 
+/**
+ * 방송을 일으킨 요청이 **누구의 어느 연결**에서 왔는가. 연결 id 는 요청이 자기 입으로 말한 값이고
+ * (`x-wb-connection-id` — `ws/notify.ts`), 세션·사용자는 서버가 그 요청의 자격에서 읽은 값이다.
+ */
+export interface BroadcastOrigin {
+  connectionId: string
+  /** 요청의 세션(`sessions.id`). **토큰으로 들어왔으면 `null`이다** — 그때는 사용자로 견준다. */
+  sessionId: string | null
+  userId: string
+}
+
 export interface BroadcastOptions {
   /**
-   * 이 연결에는 보내지 않는다. **REST로 편집을 낸 사람 자신의 연결**이 여기 온다 —
+   * 이 요청을 낸 연결에는 보내지 않는다. **REST로 편집을 낸 사람 자신의 연결**이 여기 온다 —
    * §7.1이 *"[본인] ack 수신 / [타인] ops 수신"*으로 갈라 둔 그 자리다.
    *
    * 안 가르면 자기 편집이 자기에게 되돌아오고, 그 프레임이 **HTTP 응답보다 먼저 도착할 수
    * 있다.** 그때 받는 쪽은 이미 낙관적으로 적용한 ops를 한 번 더 적용하게 된다.
+   *
+   * **빠지는 것은 그 요청의 세션이 든 연결뿐이다**(`sentBy`). 앞 판은 id 만 견줬다 — 그러면 요청이 실은
+   * id 가 **남의 연결**이어도 그 연결이 빠졌다(좁은 반증 3차: 재기동 뒤 옛 id 를 받은 캐럴이 앨리스의 게시
+   * 방송을 못 받았다). id 는 룸의 모두에게 보인다(`presence`의 `participants`) — 그래서 이 확인이 없으면
+   * 위조로도 같은 일이 난다.
    */
-  exceptConnectionId?: string
+  except?: BroadcastOrigin
+}
+
+/**
+ * 이 연결이 그 요청을 낸 연결인가. **id 가 같고 자격도 같아야 한다** — 세션으로 들어온 요청이면 같은
+ * 세션, 토큰이면(세션이 없다) 같은 사용자. 어느 쪽도 아니면 **아무도 안 뺀다**: 덜 빼는 쪽의 대가는 자기
+ * 편집이 자기에게 한 번 더 오는 것이고 헤더를 안 싣는 클라이언트와 같은 판이다(`ws/notify.ts`의 머리말 —
+ * 문서 편집은 `clientOpId`로 알아보고, 코멘트 번호는 같은 `add`라 끝의 문서가 같다 — `apps/web`의
+ * `write-ledger.tsx` «두 번 얹힘»). 더 빼는 쪽의 대가는 **남의 화면이 조용히 낡는 것**이다.
+ */
+function sentBy(connection: RoomConnection, origin: BroadcastOrigin): boolean {
+  if (connection.id !== origin.connectionId) return false
+  return origin.sessionId !== null ? connection.sessionId === origin.sessionId : connection.userId === origin.userId
 }
 
 export interface Broadcaster {
@@ -105,7 +133,7 @@ export function createBroadcaster(db: DbHandle, rooms: RoomRegistry, locks: Lock
     let delivered = 0
 
     for (const connection of rooms.membersOf(projectId)) {
-      if (options?.exceptConnectionId === connection.id) continue
+      if (options?.except !== undefined && sentBy(connection, options.except)) continue
 
       if (!(await stillAllowed(connection, MIN_ROLE_TO_RECEIVE))) {
         rooms.leave(projectId, connection.id)

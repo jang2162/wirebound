@@ -42,6 +42,7 @@ import type { ProjectRole } from '../db/types'
 import { forbidden, internal, unauthenticated } from '../errors'
 import { parseParams } from '../http/parse'
 import { z } from 'zod'
+import { nextConnectionId } from './connection-id'
 import { handleLockFrame, releaseLocksOf } from './lock'
 import { handlePatchFrame, patchErrorFrame } from './patch'
 import { MIN_ROLE_FOR_FRAME, WS_CLOSE, parseClientFrame, type ServerFrame } from './protocol'
@@ -59,20 +60,6 @@ const WsParams = z.object({ projectId: z.uuid() })
  * viewer에게 조회를 열어 두기 때문이고, 갈릴 이유가 생기면 그때 따로 움직인다.
  */
 const MIN_ROLE_TO_JOIN: ProjectRole = 'viewer'
-
-/**
- * 연결 id를 매기는 모듈 스코프 카운터. **`crypto.randomUUID`가 아니다** — `db/tx.ts`의
- * SAVEPOINT 이름이 같은 이유로 카운터를 쓴다: 프로세스 안에서 절대 겹치지 않고, 실패를
- * 재현할 때 값이 매번 바뀌지 않아 로그를 읽을 수 있다.
- *
- * **프로세스 안에서만 유일하다**(`rooms.ts`의 단일 인스턴스 가정 표 넷째 줄).
- */
-let connectionCounter = 0
-
-function nextConnectionId(): string {
-  connectionCounter += 1
-  return `wsc_${connectionCounter}`
-}
 
 /**
  * **WS는 쿠키만이다**(P9-2 D4).
@@ -113,6 +100,7 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
       }
 
       const connection: RoomConnection = {
+        // **무작위다** — 재기동을 넘어 겹치지 않는다(`connection-id.ts`).
         id: nextConnectionId(),
         projectId,
         userId: currentUser.id,

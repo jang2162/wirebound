@@ -23,6 +23,7 @@
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { PatchOp, ValidationIssue } from '@wirebound/schema'
+import type { BroadcastOrigin } from './broadcast'
 import type { EventActor } from './protocol'
 
 /**
@@ -37,14 +38,22 @@ import type { EventActor } from './protocol'
  * 동작하고, 자기 편집이 자기에게 한 번 더 온다. **그 되받기를 받는 쪽이 알아보는 수단이
  * 아래 `clientOpId`다**(P3-2 — 리베이스가 그것을 두 번 얹지 않게 한다).
  *
- * 위조해도 남의 것을 훔칠 수 없다: 이 값이 하는 일은 **덜 받는 것**뿐이다.
+ * **이 값이 빼는 것은 그 요청과 같은 세션의 연결뿐이다**(`ws/broadcast.ts`의 `sentBy` — 2026-09-22).
+ * 앞 판은 *"위조해도 남의 것을 훔칠 수 없다: 이 값이 하는 일은 덜 받는 것뿐이다"*라고 적었는데, **덜 받는
+ * 쪽은 그 id 를 쥔 연결이지 보낸 사람이 아니었다** — 연결 id 는 룸의 모두에게 보이고(`presence`의
+ * `participants`) 서버는 그 연결이 누구의 것인지 안 봤다. 위조 없이도 났다: 재기동 뒤 옛 id 를 받은
+ * 남의 연결이 빠졌다(좁은 반증 3차 · Chrome). 이제 위조해도 빠지는 것은 **자기 세션의 연결**뿐이다.
  */
 export const CONNECTION_ID_HEADER = 'x-wb-connection-id'
 
-/** 요청이 실어 온 연결 id. 없거나 문자열이 아니면 `undefined`다. */
-export function originConnectionId(request: FastifyRequest): string | undefined {
+/**
+ * 방송에서 뺄 발신 연결. 헤더가 없거나 문자열이 아니거나 자격이 없으면 `undefined`다 — 아무도 안 뺀다.
+ * 연결 id 는 요청이 말한 값이고, 세션·사용자는 `auth/plugin.ts`가 자격에서 읽은 값이다.
+ */
+export function broadcastOrigin(request: FastifyRequest): BroadcastOrigin | undefined {
   const raw = request.headers[CONNECTION_ID_HEADER]
-  return typeof raw === 'string' && raw.length > 0 ? raw : undefined
+  if (typeof raw !== 'string' || raw.length === 0 || request.currentUser === null) return undefined
+  return { connectionId: raw, sessionId: request.sessionId, userId: request.currentUser.id }
 }
 
 export interface PageChangedInput {
@@ -54,7 +63,8 @@ export interface PageChangedInput {
   ops: PatchOp[]
   warnings: ValidationIssue[]
   actor: EventActor
-  originConnectionId?: string
+  /** 방송에서 뺄 발신 연결(`broadcastOrigin`). 없으면 아무도 안 뺀다. */
+  origin?: BroadcastOrigin
   /**
    * 낸 사람이 붙인 id. **있을 때만 프레임에 실린다** — 서버가 만들어 내는 값이 아니다
    * (`routes/pages.ts`의 응답이 같은 관례를 쓴다).
@@ -67,9 +77,9 @@ export interface PageChangedInput {
 
 /** 페이지 문서가 바뀌었다(D4의 첫째). `applyEdit` 성공 하나당 한 번. */
 export function notifyPageChanged(app: FastifyInstance, input: PageChangedInput): void {
-  const { originConnectionId: except, ...frame } = input
+  const { origin, ...frame } = input
   void app.realtime.broadcast
-    .send(input.projectId, { type: 'page-changed', ...frame }, { exceptConnectionId: except })
+    .send(input.projectId, { type: 'page-changed', ...frame }, origin === undefined ? undefined : { except: origin })
     .catch((error: unknown) => {
       app.log.error({ err: error, projectId: input.projectId, pageId: input.pageId }, 'page-changed 알림 실패')
     })
@@ -79,7 +89,8 @@ export interface RestoredInput {
   projectId: string
   snapshotId: string
   actor: EventActor
-  originConnectionId?: string
+  /** 방송에서 뺄 발신 연결(`broadcastOrigin`). 없으면 아무도 안 뺀다. */
+  origin?: BroadcastOrigin
 }
 
 /**
@@ -95,9 +106,9 @@ export interface RestoredInput {
  * ops로 표현되지 않는다. **한 프레임으로 *"판이 갈렸다"*를 말하고 받는 쪽이 다시 읽는다.**
  */
 export function notifyRestored(app: FastifyInstance, input: RestoredInput): void {
-  const { originConnectionId: except, ...frame } = input
+  const { origin, ...frame } = input
   void app.realtime.broadcast
-    .send(input.projectId, { type: 'restored', ...frame }, { exceptConnectionId: except })
+    .send(input.projectId, { type: 'restored', ...frame }, origin === undefined ? undefined : { except: origin })
     .catch((error: unknown) => {
       app.log.error({ err: error, projectId: input.projectId }, 'restored 알림 실패')
     })

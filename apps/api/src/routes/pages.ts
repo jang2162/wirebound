@@ -76,7 +76,7 @@ import { withWarnings } from '../http/warnings'
 import { OpsBody } from '../http/patch-ops'
 import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
-import { notifyPageChanged, originConnectionId } from '../ws/notify'
+import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
 import { importPage, type PageImportOutcome } from '../services/page-import'
 import { MenuNodeNotFoundError, deletePage, findPageById, insertPage, updatePage, type PageRecord } from '../repos/pages'
 
@@ -466,7 +466,7 @@ export function pageRoutes() {
         ],
         warnings: outcome.warnings,
         actor: requestEventActor(request),
-        originConnectionId: originConnectionId(request),
+        origin: broadcastOrigin(request),
       })
 
       // 응답 형태는 바뀌지 않는다(페이지 객체 그대로). 바뀐 세 필드만 파이프라인
@@ -540,7 +540,7 @@ export function pageRoutes() {
         ops: body.ops,
         warnings: outcome.warnings,
         actor: requestEventActor(request),
-        originConnectionId: originConnectionId(request),
+        origin: broadcastOrigin(request),
         // **헤더가 없을 때의 두 번째 방벽이다**(P3-2). 소켓이 아직 안 열려 발신자 제외가
         // 성립하지 않으면 낸 사람이 자기 편집을 되받는데, 받는 쪽의 리베이스가 그것을 두 번
         // 얹는다 — 이 값이 있으면 그 자리에서 건너뛴다(`ws/protocol.ts`의 그 필드).

@@ -155,7 +155,7 @@ import {
 } from '../repos/comments'
 import { findPageById, lockPageForEdit } from '../repos/pages'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
-import { notifyPageChanged, originConnectionId } from '../ws/notify'
+import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
 
 /**
  * 파이프라인 실패를 **트랜잭션 밖으로 던져** 그 구간을 되돌린다(머리말의 규칙 1).
@@ -216,7 +216,7 @@ function notifyMarkerChange(
     // **actor는 요청이 정한다**(P9-5 D1). 앞 판은 사람 이름을 인자로 받았는데, 그러면
     // 에이전트가 단 코멘트의 프레임이 사람이 단 것과 구별되지 않는다.
     actor: requestEventActor(request),
-    originConnectionId: originConnectionId(request),
+    origin: broadcastOrigin(request),
   })
 }
 
