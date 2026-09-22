@@ -17,6 +17,7 @@ import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import { useEditChannel, useLockChannel } from '../realtime/context'
+import { UnansweredEditError } from '../realtime/edit-channel'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import type { EditStatus, UndoAttempt } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
@@ -45,6 +46,32 @@ const RECOVER_UNKNOWN_FAILURE = '편집에 실패한 뒤 페이지를 다시 불
  */
 const UNRECOVERED_NOTICE =
   '화면에 남아 있는 편집은 저장되지 않았습니다. 새로고침해 서버 상태를 확인하세요.'
+
+/**
+ * **답을 기다리던 편집을 이 탭이 스스로 버린 연결과 함께 잃었을 때의 문장**(③ 리뷰 B1 — `UnansweredEditError`).
+ *
+ * **«취소됐다»도 «저장하지 못했다»도 거짓이다.** 그 연결은 열려 있었으므로 편집은 서버에 닿았다 — 결과만 모른다.
+ * 앞 판은 끊김과 같은 문장(«편집을 저장하지 못했습니다 — … 편집 1개가 취소됐습니다»)을 냈고, 서버는 그것을
+ * 커밋했으며 새 연결이 방송해 화면에도 섰다(Chrome · 행 잠금 5s). 사용자가 믿고 다시 하면 **두 번 선다.** 그래서
+ * 모른다고 말하고, 반영됐다면 화면이 저절로 맞춰진다는 것을 말한다(까닭은 `realtime/use-realtime.ts`의 «쿠키가
+ * 바뀌면»). 되돌리기 이력이 비는 것은 그대로다 — 답(`inverse`)을 못 받았다.
+ *
+ * **앞머리가 까닭을 말한다 — 부르는 곳이 하나라서다**(같은 사람이 다른 탭에서 다시 로그인했을 때의 재연결). 답을
+ * 못 받은 편집은 하나다(D6 — 한 번에 하나). **아직 안 보낸 편집은 서버에 닿지 않았다** — 그것은 따로 세어 취소됐다고
+ * 말한다.
+ *
+ * @param outcome 다시 불러왔으면 `cancelled`(그러며 버린 **안 보낸** 편집 수), 다시 불러오지도 못했으면 `reason`(그 까닭).
+ */
+function unansweredNotice(outcome: { cancelled: number } | { reason: string }): string {
+  const head =
+    '다른 탭에서 다시 로그인해 실시간 연결을 새로 붙이느라 보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다.'
+  if ('reason' in outcome) return `${head} ${outcome.reason} — 새로고침해 서버 상태를 확인하세요.`
+  const tail = outcome.cancelled > 0 ? ` 아직 보내지 않은 편집 ${outcome.cancelled}개는 취소됐습니다.` : ''
+  return `${head} 페이지를 서버 상태로 다시 불러왔고, 반영됐다면 곧 화면에 나타납니다.${tail}`
+}
+
+/** 답을 못 받은 판에서 다시 불러오지도 못했을 때, 서버가 이유를 주지 않으면 쓸 문장(`unansweredNotice`의 `reason`). */
+const UNANSWERED_RECOVER_FAILURE = '페이지를 다시 불러오지도 못했습니다'
 
 /**
  * 되돌릴 수 없는 항목을 건너뛰었을 때의 안내(설계 §7.3).
@@ -153,6 +180,9 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * **세션이 끊긴 실패 하나만 갈린다.** 다시 받아도 401이고 그 사이 요청만 쌓이므로
    * 재조회하지 않는다. 통지 자리(`shell/edit-alert.tsx`)가 그 값을 보고 `<SignedOut />`을
    * 그리면 웨이브 1의 세션 무효화 경로로 이어진다.
+   *
+   * **문장만 갈리는 실패가 하나 있다 — 답을 못 받은 편집**(`UnansweredEditError` · ③ B1). 수습은 같고(다시 불러와
+   * 서버 상태로) 그 편집을 «취소됐다»고 말하지 않는다 — 서버에 닿았다(`unansweredNotice`).
    */
   const recover = useCallback(
     async (caught: unknown): Promise<void> => {
@@ -165,6 +195,9 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         return
       }
 
+      // **답을 기다리던 편집을 이 탭이 스스로 버린 연결과 함께 잃었다 — 서버에 닿았다**(③ B1). 수습은 같고
+      // (다시 불러와 서버 상태로) 말만 다르다 — 그 편집을 «취소됐다»고 하지 않는다(`unansweredNotice`).
+      const unanswered = caught instanceof UnansweredEditError
       const dropped = store.failEdits()
       try {
         const page = await api.getPage(projectId, pageId)
@@ -175,6 +208,11 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         // 버린 수는 **센 값이다** — 전송에 실패한 것, 큐에 남아 있던 것, 재조회를 기다리는
         // 동안 들어온 것을 합친 것이고, 셋 다 문서가 서버 것으로 되돌아가며 사라졌다.
         const lost = dropped.length + alsoDropped.length
+        if (unanswered) {
+          // 버린 것 중 하나(큐의 머리)가 답을 못 받은 그 편집이다 — 나머지는 안 보냈다.
+          store.setEditFailure({ kind: 'message', message: unansweredNotice({ cancelled: lost - 1 }) })
+          return
+        }
         store.setEditFailure({
           kind: 'message',
           // **서버 문장과 우리 문장 사이에 구분자를 둔다.** 공백 하나로 붙이면 두 문장이 한
@@ -208,16 +246,22 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         store.failEdits()
         // **여기서 다시 재조회하지 않는다.** 서버가 계속 실패하는 동안 요청이 쌓인다 —
         // 세션 확인에 자동 재시도를 두지 않은 것과 같은 판단이다.
-        const recoverFailure = toFailure(recoverCaught, RECOVER_UNKNOWN_FAILURE)
+        const recoverFailure = toFailure(
+          recoverCaught,
+          unanswered ? UNANSWERED_RECOVER_FAILURE : RECOVER_UNKNOWN_FAILURE,
+        )
         store.setEditFailure(
           recoverFailure.kind === 'signed-out'
             ? // 세션이 끊긴 것은 여기서 말하지 않는다 — `EditAlert`이 `<SignedOut />`으로
               // 화면을 갈아 끼우므로 남아 있는 화면 자체가 없다.
               recoverFailure
-            : // **성공 갈래와 같은 형식으로 우리 문장을 덧붙인다**(구분자 `—`도 같다).
-              // 서버 문장은 끝에 마침표를 두지 않으므로 그대로 이어 붙이면 두 문장이 한
-              // 문장처럼 읽힌다(성공 갈래 주석의 실측).
-              { kind: 'message', message: `${recoverFailure.message} — ${UNRECOVERED_NOTICE}` },
+            : unanswered
+              ? // **«저장되지 않았습니다»가 여기서도 거짓이다** — 답을 못 받은 편집은 서버에 닿았다(③ B1).
+                { kind: 'message', message: unansweredNotice({ reason: recoverFailure.message }) }
+              : // **성공 갈래와 같은 형식으로 우리 문장을 덧붙인다**(구분자 `—`도 같다).
+                // 서버 문장은 끝에 마침표를 두지 않으므로 그대로 이어 붙이면 두 문장이 한
+                // 문장처럼 읽힌다(성공 갈래 주석의 실측).
+                { kind: 'message', message: `${recoverFailure.message} — ${UNRECOVERED_NOTICE}` },
         )
       } finally {
         store.setEditStatus('idle')

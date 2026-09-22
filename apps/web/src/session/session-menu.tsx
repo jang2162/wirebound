@@ -27,7 +27,8 @@
  *
  * ## 실패했을 때 — 상태를 끊지 않는다
  *
- * 성공하면 `invalidate()`로 세션을 끊는다. **주소를 여기서 옮기지 않는다** —
+ * 성공하면 `signOut()`으로 세션을 끊는다(다른 탭에도 알린다 — `session-context.tsx`의 «탭 사이»).
+ * **주소를 여기서 옮기지 않는다** —
  * `RequireAuth`가 `anonymous`를 보고 `/login`으로 보낸다(`routes/login.tsx`가 성공 뒤
  * `navigate`를 안 하는 것과 같은 근거: 목적지 규칙이 한 곳에 남는다).
  *
@@ -42,7 +43,7 @@
 import { useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
-import { useInvalidateSession, useSessionUser } from './session-context'
+import { useSessionUser, useSignOut } from './session-context'
 
 /** 서버가 이유를 주지 않은 실패(네트워크 단절 등)에 쓸 문장. */
 const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
@@ -50,7 +51,8 @@ const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
 export function SessionMenu(): ReactElement {
   const api = useApi()
   const user = useSessionUser()
-  const invalidate = useInvalidateSession()
+  // **끊고 다른 탭에 알린다**(`session-context.tsx`의 «탭 사이») — 401 의 무효화와 갈린다.
+  const signOut = useSignOut()
   /** 실패 문장. **`Failure`를 통째로 들지 않는다** — `signed-out`은 아래에서 성공으로
    * 접히므로 이 자리에 올 수 있는 것은 문장 하나뿐이다. */
   const [failure, setFailure] = useState<string | null>(null)
@@ -72,7 +74,7 @@ export function SessionMenu(): ReactElement {
     }
     // **여기 뒤로 상태를 놓지 않는다.** 끊는 순간 문지기가 로그인으로 보내 이 컴포넌트가
     // 사라지므로, `setBusy(false)`는 사라진 것에 거는 일이 된다.
-    invalidate()
+    signOut()
   }
 
   return (

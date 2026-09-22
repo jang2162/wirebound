@@ -33,6 +33,7 @@ import {
   PROJECT_NAME,
   waitForNode,
 } from '../editor-harness'
+import { tabHub } from '../helpers'
 import '../../src/catalog-setup'
 
 const ROOT_ID = 'n-root'
@@ -1457,6 +1458,60 @@ describe('세션을 넘지 않는다 — 세션이 끝나면 앞 세션의 쓰�
 
     // **양성 대조** — 밥의 응답이 오면 풀린다.
     await server.respond(1)
+    await waitFor(() => expect(screen.queryByText('설명을 저장했습니다')).not.toBeNull())
+    expect(box().disabled).toBe(false)
+  })
+})
+
+/**
+ * ## 탭 사이 — 다른 탭이 들어오면(이월 Y · Z)
+ *
+ * 쿠키는 탭끼리 하나라 다른 탭의 로그인이 이 탭의 쿠키도 바꾼다. 앞 판은 이 탭의 세대가 안 올라, **나가 있던 앨리스의
+ * 게시가 판정(같은 키 재전송)을 밥의 쿠키로 냈다** — DB 에 같은 글 alice · bob 두 행(좁은 반증 3차 · Chrome). 받은
+ * 탭이 무엇을 하는지는 `src/session/session-context.tsx`의 «탭 사이»가 갖는다. 여기는 **쓰기**만 본다 — 화면이 어디로
+ * 가는지는 `test/session/tab-session.test.tsx`, WS 는 `test/edit/reconnect-resync.test.tsx`가 잰다.
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 다른 사람이 들어와도 세대를 안 올린다(`heard`) | *"다른 사람 — … 밥의 쿠키로 다시 보내지 않는다"* **혼자** |
+ * | 같은 사람이 다시 들어와도 세대를 올린다 | *"같은 사람 — … 끊지 않는다"* **혼자** |
+ */
+describe('탭 사이 — 다른 탭이 들어오면 나가 있던 쓰기는', () => {
+  it('다른 사람 — 다른 탭이 밥으로 들어오면 나가 있던 앨리스의 게시를 끊는다: 판정을 밥의 쿠키로 다시 보내지 않는다', async () => {
+    const hub = tabHub()
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects }, tabChannel: hub.channel })
+    await toCommentTab()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    type(commentBox(), '앨리스의 말')
+    fireEvent.click(submitButton())
+    expect(server.keys).toHaveLength(1)
+
+    await hub.fromOtherTab({ kind: 'signed-in', user: BOB })
+    // 시간 제한을 넘긴다 — 앞 판은 여기서 같은 키로 다시 보냈다(밥의 쿠키로).
+    await advance(WRITE_DEADLINE_MS * 2)
+    vi.useRealTimers()
+
+    expect(server.keys).toHaveLength(1)
+    expect(server.rows()).toEqual([])
+  })
+
+  it('같은 사람 — 다른 탭이 같은 사람으로 다시 들어와도 나가 있던 저장은 끊지 않는다: 응답이 오면 저장했다고 말한다', async () => {
+    const hub = tabHub()
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { apiOverrides: server.overrides, tabChannel: hub.channel })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '앨리스의 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+
+    await hub.fromOtherTab({ kind: 'signed-in', user: ALICE })
+
+    // **같은 사람이다** — 쿠키의 세션만 새것이고, 이 쓰기를 낸 사람과 쿠키의 사람이 같다.
+    expect(server.signals[0]?.aborted).toBe(false)
+    expect(box().disabled).toBe(true)
+    await server.respond()
     await waitFor(() => expect(screen.queryByText('설명을 저장했습니다')).not.toBeNull())
     expect(box().disabled).toBe(false)
   })

@@ -74,10 +74,30 @@ export interface EditChannel {
    * 있다). 조용히 멈추는 그 상태가 이 저장소가 반복해 닫아 온 부류다.
    */
   failInFlight(): void
+  /**
+   * **이 탭이 스스로 연결을 버린다 — 기다리던 편집을 «답을 못 받았다»로 끝낸다**(`UnansweredEditError`).
+   * `failInFlight`와 갈린다: 끊긴 연결은 편집이 닿았는지부터 모르지만, 스스로 버린 연결은 **열려 있었으므로**
+   * 기다리던 편집이 **이미 서버에 닿았다** — 결과만 모른다. 그것을 끊김과 같게 끝내면 화면이 «취소됐다» 고
+   * 말하는데 서버는 커밋한다(③ 리뷰 B1 · Chrome). 부르는 곳은 쿠키가 바뀌어 다시 붙는 자리 하나다
+   * (`use-realtime.ts`의 «쿠키가 바뀌면»).
+   */
+  abandonInFlight(): void
 }
 
 /** 연결이 사라져 끝난 편집. **`ApiError`가 아니다**(머리말). */
 const DISCONNECTED = '실시간 연결이 끊겨 편집을 보내지 못했습니다'
+
+/**
+ * 이 탭이 스스로 버린 연결로 답을 기다리던 편집(`abandonInFlight`). **`ApiError`가 아니고 끊김도 아니다** — 서버에
+ * 닿았는데 결과를 모른다. 편집 경로가 이것을 보고 «취소됐다» 대신 «반영됐는지 모른다»를 말한다
+ * (`edit/use-edit-commit.tsx`의 `unansweredNotice`).
+ */
+export class UnansweredEditError extends Error {
+  constructor() {
+    super('연결을 다시 붙이느라 보낸 편집의 답을 받지 못했습니다')
+    this.name = 'UnansweredEditError'
+  }
+}
 
 interface Waiting {
   resolve: (ack: EditAck) => void
@@ -93,12 +113,12 @@ export function createEditChannel(): EditChannel {
    */
   const waiting = new Map<string, Waiting>()
 
-  const failAll = (): void => {
+  const failAll = (reason: () => Error = () => new Error(DISCONNECTED)): void => {
     // **사본을 순회하고 먼저 비운다.** reject가 부르는 쪽의 `catch`를 태우고, 그쪽이 다시
     // 이 채널을 건드릴 수 있다.
     const pending = [...waiting.values()]
     waiting.clear()
-    for (const one of pending) one.reject(new Error(DISCONNECTED))
+    for (const one of pending) one.reject(reason())
   }
 
   return {
@@ -148,6 +168,8 @@ export function createEditChannel(): EditChannel {
       link = null
     },
 
-    failInFlight: failAll,
+    failInFlight: () => failAll(),
+
+    abandonInFlight: () => failAll(() => new UnansweredEditError()),
   }
 }

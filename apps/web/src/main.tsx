@@ -7,6 +7,7 @@ import { createHttpClient } from './api/http-client'
 import { RealtimeProvider, createConnectionIdHolder } from './realtime/context'
 import { createEditChannel } from './realtime/edit-channel'
 import { createLockChannel } from './realtime/lock-channel'
+import { TabChannelProvider, openTabChannel } from './session/tab-channel'
 // 셸 CSS는 앱에서만 필요하다. 화면 테스트는 `App`을 직접 렌더하므로 이 파일을 지나지
 // 않고, 그래서 vitest가 CSS를 처리할 일이 없다.
 import './shell.css'
@@ -30,6 +31,12 @@ const editChannel = createEditChannel()
 /** 잠금을 잡고 놓는 통로(§7.2). 편집 채널과 갈라 둔 이유는 `realtime/lock-channel.ts`에 있다. */
 const lockChannel = createLockChannel()
 
+/**
+ * 탭 사이의 세션 소식 통로(이월 Y · Z — `session/tab-channel.tsx`). **켜는 자리는 여기 하나다** — 화면 테스트는
+ * 세우지 않거나 가짜를 끼운다. 브라우저에 `BroadcastChannel`이 없으면 `null`이고 그때는 알리지도 받지도 않는다.
+ */
+const tabChannel = openTabChannel()
+
 // HTTP 구현을 고르는 자리는 여기 하나다. 아래 화면들은 `useApi()`로 인터페이스만 본다.
 // **실시간을 켜는 자리도 여기 하나다** — 화면 테스트는 `RealtimeProvider` 없이 트리를
 // 세우므로 소켓을 열지 않는다.
@@ -37,9 +44,11 @@ createRoot(root).render(
   <StrictMode>
     <ApiProvider client={createHttpClient(globalThis.fetch, connectionIds.get)}>
       <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel, lockChannel }}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <TabChannelProvider channel={tabChannel}>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </TabChannelProvider>
       </RealtimeProvider>
     </ApiProvider>
   </StrictMode>,

@@ -23,11 +23,36 @@
  * 갭은 편집을 내야만 수렴한다** — 아무것도 안 내고 보고만 있는 사람의 화면은 스스로
  * 맞춰지지 않는다. 다시 읽는 **자리**는 여기가 아니라 `routes/editor.tsx`다(`loadPage`를
  * 부르는 경로를 둘로 만들지 않는다).
+ *
+ * # 쿠키가 바뀌면 다시 붙는다 (이월 Z, 2026-09-22)
+ *
+ * 다른 탭이 **같은 사람으로 다시 들어오면**(옛 세션은 산다) 이 탭의 HTTP 는 새 세션, WS 는 옛 세션이다. 서버의 방송은
+ * 요청과 같은 세션의 연결만 빼므로(`apps/api/src/ws/broadcast.ts`의 `sentBy`) **자기 방송을 되받는다** — 복원이면
+ * 본인에게 «다른 사람이 스냅샷을 복원했습니다»(4차 리뷰 b-3 · Chrome). 세션이 그것을 알리면(`useSessionRenewal` —
+ * `session/session-context.tsx`의 «탭 사이») 옛 소켓을 버리고 곧바로 다시 붙는다(`connection.ts`의 `reconnect`). 끊긴
+ * 것과 같은 길이라 **두 번째 `'open'`이 다시 읽는다**(D6) — 버린 소켓과 새 소켓 사이의 프레임은 사라졌다. **대가도
+ * 끊긴 것과 같다** — 다시 읽기가 되돌리기 이력을 비우면 그렇다고 말한다(`routes/editor.tsx`의 D6).
+ *
+ * **옛 소켓으로 답을 기다리던 편집은 끊긴 것과 갈린다**(③ 리뷰 B1). 그 소켓은 열려 있었으므로 편집은 **이미 서버에
+ * 닿았다** — 앞 판은 끊김과 같게 끝내(`failInFlight`) «편집 1개가 취소됐습니다» 를 냈는데 서버는 그것을 커밋했고 새
+ * 연결이 방송해 화면에도 섰다(Chrome · 행 잠금 5s). 믿고 다시 하면 두 번 선다. 이제 버리기 전에 `abandonInFlight`로
+ * «답을 못 받았다»로 끝내고, 편집 경로가 «반영됐는지 모른다 — 반영됐다면 곧 나타난다»를 말한다
+ * (`edit/use-edit-commit.tsx`의 `unansweredNotice`). 반영됐으면 화면은 저절로 맞춰진다: 새 연결이 붙은 뒤의 커밋은
+ * 방송으로 오고(방송이 빼는 것은 보낸 연결 하나다 — 새 연결은 id 가 달라 안 빠진다, `apps/api/src/ws/broadcast.ts`의
+ * `sentBy`), 그 전의 커밋은 두 번째 `'open'`의 다시 읽기가 가져온다.
+ *
+ * **새 소켓을 먼저 붙이고 옛 것은 답을 받은 뒤 닫는 겹침은 짓지 않았다.** 겹치면 답은 받지만 그것으로 끝나지 않는다 —
+ * 새 소켓의 두 번째 `'open'`이 다시 읽기(`loadPage`)로 기다리던 편집을 큐째 버리므로 늦게 온 답은 모르는 편집의
+ * 답이 되고(`ackEdit`의 가드), 그것을 피하려면 다시 읽기를 옛 소켓이 정리될 때까지 미뤄야 한다. 옛 소켓의
+ * 하트비트·잠금·프레임 중복도 따로 다뤄야 하고, 답이 끝내 안 오는 판(시간 제한)은 결국 «모른다»로 끝난다 — 겹침은
+ * 이 문장을 없애지 못하고 그 위에 얹힐 뿐이다. 방아쇠도 드물다(다른 탭이 로그인 화면을 거쳐 같은 사람으로 다시
+ * 들어오는 그 순간 이 탭에 답을 기다리는 편집이 있다).
  */
 import { useEffect } from 'react'
 import { openRealtime } from './connection'
 import { useRealtimeSetup } from './context'
 import { realtimeUrl } from './protocol'
+import { useSessionRenewal } from '../session/session-context'
 import { useEditorStoreInstance } from '../store/use-editor-store'
 
 /**
@@ -50,6 +75,7 @@ function droppedNotice(dropped: number): string {
 export function useRealtime(projectId: string | undefined, onResync?: () => void): void {
   const store = useEditorStoreInstance()
   const setup = useRealtimeSetup()
+  const onRenewal = useSessionRenewal()
 
   useEffect(() => {
     if (!setup || !projectId) return
@@ -138,12 +164,20 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
 
     setup.channel?.attach(connection)
     setup.lockChannel?.attach(connection)
+    // **쿠키가 바뀌면 다시 붙는다**(위 머리말 «쿠키가 바뀌면»). 답을 기다리던 편집은 **소켓을 버리기 전에**
+    // «답을 못 받았다»로 끝낸다 — 버린 뒤의 `'closed'`가 부르는 `failInFlight`는 끊김의 실패를 내므로, 먼저 비워
+    // 두지 않으면 그것이 이긴다.
+    const stopRenewal = onRenewal?.(() => {
+      setup.channel?.abandonInFlight()
+      connection.reconnect()
+    })
 
     return () => {
+      stopRenewal?.()
       connection.close()
       setup.channel?.detach()
       setup.lockChannel?.detach()
       setup.holder.set(undefined)
     }
-  }, [projectId, setup, store, onResync])
+  }, [projectId, setup, store, onResync, onRenewal])
 }
