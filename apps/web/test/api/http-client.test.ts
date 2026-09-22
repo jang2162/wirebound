@@ -1084,6 +1084,24 @@ describe('createHttpClient', () => {
     expect(error.issues).toEqual([])
   })
 
+  it('api 의 오류 봉투를 실은 실패만 `enveloped`다 — 봉투 없는 500 · 연결 실패는 아니다', async () => {
+    // 같은 500 이라도 **누가 냈는지**가 게시의 결과를 아는지를 가른다(`panels/comment-panel.tsx`의
+    // `knownRejection`). Vite 개발 프록시는 api 가 요청을 쥔 채 죽으면 `500 text/plain` 빈 본문을 준다.
+    const own = stubFetch(jsonResponse(500, { error: { code: 'internal', message: '서버 오류가 발생했습니다' } }))
+    const ownError = asApiError(await createHttpClient(own.fetchImpl).listComments('p1', 'pg1').catch((e: unknown) => e))
+    expect(ownError.status).toBe(500)
+    expect(ownError.enveloped).toBe(true)
+
+    const proxy = stubFetch(new Response('', { status: 500, headers: { 'content-type': 'text/plain' } }))
+    const proxyError = asApiError(await createHttpClient(proxy.fetchImpl).listComments('p1', 'pg1').catch((e: unknown) => e))
+    expect(proxyError.status).toBe(500)
+    expect(proxyError.enveloped).toBe(false)
+
+    const unreachable = createHttpClient(() => Promise.reject(new TypeError('Failed to fetch')))
+    const unreachableError = asApiError(await unreachable.listComments('p1', 'pg1').catch((e: unknown) => e))
+    expect(unreachableError.enveloped).toBe(false)
+  })
+
   it('봉투가 아닌 응답도 ApiError로 바꾼다', async () => {
     // 리버스 프록시가 502 HTML을 내면 `res.json()`이 SyntaxError를 던진다.
     // 그것이 새어 나가면 화면이 서버 코드 대신 "Unexpected token <"를 보여준다.

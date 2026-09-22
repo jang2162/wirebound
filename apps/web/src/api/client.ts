@@ -562,12 +562,20 @@ export class ApiError extends Error {
   readonly code: ApiErrorCode
   /** 항상 배열이다 — 서버가 키를 생략해도 `[]`다. 화면이 그냥 순회할 수 있어야 한다. */
   readonly issues: ApiErrorIssue[]
+  /**
+   * **이 api 의 오류 봉투**(`{ error: { code, message } }`)를 실은 HTTP 응답이었다. 봉투 없는 실패 응답은
+   * 앞단(프록시)이 낸 것이다 — Vite 개발 프록시는 api 가 요청을 쥔 채 죽으면 `500 text/plain` 빈 본문을
+   * 준다(잰 값 — `panels/comment-panel.tsx`의 `knownRejection`). 같은 500 이라도 **누가 냈는지**가 결과를
+   * 아는지를 가른다. 응답을 못 받은 실패(`status` 0)는 `false`다.
+   */
+  readonly enveloped: boolean
 
-  constructor(status: number, code: ApiErrorCode, message: string, issues?: ApiErrorIssue[]) {
+  constructor(status: number, code: ApiErrorCode, message: string, issues?: ApiErrorIssue[], enveloped = false) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.issues = issues ?? []
+    this.enveloped = enveloped
   }
 }

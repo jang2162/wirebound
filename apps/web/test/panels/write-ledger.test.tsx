@@ -273,6 +273,8 @@ function commentServer(initial: Comment[] = []): {
   /** 게시가 실어 온 멱등 키 — 부른 순서대로. */
   keys: (string | undefined)[]
   failNext: (error?: ApiError) => void
+  /** 다음 게시를 **서버는 커밋하고** 브라우저에는 그 실패를 준다(앞단이 502 를 냈다 · 연결이 끊겼다). */
+  commitThenFail: (error: ApiError) => void
   /** 켜 있는 동안의 목록 읽기를 붙잡는다 — 끈 뒤의 읽기는 곧바로 답한다. */
   holdLists: (on: boolean) => void
   /** 붙잡힌 목록 읽기의 수. */
@@ -293,6 +295,7 @@ function commentServer(initial: Comment[] = []): {
   let next = 100
   let seq = HEAD_SEQ
   const failing: ApiError[] = []
+  const committedFailing: ApiError[] = []
   let listsHeld = false
   const heldLists: { resolve: () => void; reject: (caught: unknown) => void }[] = []
   const markers = new Map<string, number>()
@@ -302,8 +305,12 @@ function commentServer(initial: Comment[] = []): {
   return {
     rows: () => rows,
     keys,
-    failNext: (error = new ApiError(500, 'internal', '서버 오류가 발생했습니다')) => {
+    // 기본은 **api 가 낸 500**(오류 봉투가 있다) — 확정 실패다(`comment-panel.tsx`의 `knownRejection`).
+    failNext: (error = new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true)) => {
       failing.push(error)
+    },
+    commitThenFail: (error) => {
+      committedFailing.push(error)
     },
     holdLists: (on) => {
       listsHeld = on
@@ -336,6 +343,7 @@ function commentServer(initial: Comment[] = []): {
         _projectId: string,
         _pageId: string,
         body: { nodeId: string; body: string; idempotencyKey?: string },
+        options?: WriteOptions,
       ) => {
         keys.push(body.idempotencyKey)
         const failure = failing.shift()
@@ -348,7 +356,9 @@ function commentServer(initial: Comment[] = []): {
         })
         const replayed = body.idempotencyKey === undefined ? undefined : byKey.get(body.idempotencyKey)
         if (replayed !== undefined) return Promise.resolve(replay(replayed))
-        return new Promise<CommentCreated>((resolve) => {
+        return new Promise<CommentCreated>((resolve, reject) => {
+          // **끊기면 실제 클라이언트처럼 거절한다** — `http-client`는 끊긴 `fetch`를 연결 실패로 옮긴다.
+          options?.signal?.addEventListener('abort', () => reject(new ApiError(0, 'internal', '서버에 연결하지 못했습니다')))
           let result: CommentCreated | undefined
           const commit = (): void => {
             if (result !== undefined) return
@@ -369,6 +379,13 @@ function commentServer(initial: Comment[] = []): {
               markerOps = [{ op: 'add', path: '/root/marker', value: markers.get(body.nodeId) as number }]
             }
             result = { comment: created, seq, marker: markers.get(body.nodeId) ?? null, markerOps }
+          }
+          const lost = committedFailing.shift()
+          if (lost !== undefined) {
+            // 서버는 커밋했다 — 응답만 브라우저에 안 닿았다.
+            commit()
+            reject(lost)
+            return
           }
           waiting.push({
             commit,
@@ -817,6 +834,20 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     expect(server.keys[2]).toBe(server.keys[0])
   })
 
+  it('코멘트 — 다시 보낸 것을 api 가 500 으로 거절하면(봉투) 확정이다 — 첫 보내기와 같은 가름', async () => {
+    const server = commentServer()
+    await postWithFakeTimers(server, '시간 넘긴 코멘트')
+    server.failNext(new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true))
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('서버 오류가 발생했습니다'))
+    expect(screen.queryByRole('button', { name: '다시 확인' })).toBeNull()
+    expect(commentBox().value).toBe('시간 넘긴 코멘트')
+    expect(commentBox().disabled).toBe(false)
+  })
+
   it('코멘트 — 다시 보낸 것도 연결이 실패하면 모른다: 잠금을 쥔 채 «다시 확인»이 같은 키로 또 보낸다', async () => {
     const server = commentServer()
     await postWithFakeTimers(server, '시간 넘긴 코멘트')
@@ -883,6 +914,125 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await waitFor(() => expect(screen.queryByRole('textbox', { name: '코멘트 수정' })).toBeNull())
     expect(screen.getByText('시간 넘긴 수정')).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+/**
+ * ## 시간 안의 모르는 실패 — 같은 키로 다시 보내 판정한다 (2026-09-22)
+ *
+ * 앞 판은 첫 게시가 서버에 닿았는데 브라우저가 502·연결 끊김을 받으면 `'failed'`라 초안이 열렸고, 고쳐
+ * 달면 새 키라 **두 행**이었다(Chrome route — 리뷰 6번의 마지막 길). 이제 **모르는 실패**는 판정(같은 키로
+ * 다시 보내기)으로 간다. 무엇이 모르는 실패인지는 `src/panels/comment-panel.tsx`의 `knownRejection`이
+ * 갖는다 — 4xx 와 **api 가 낸 500**(봉투)만 확정이다.
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 모르는 실패도 판정으로 안 보낸다(앞 판) | *"502 — …"* · *"연결 끊김 — …"* · *"봉투 없는 500 …"* · *"«모름»으로 떠났다 와도 …"* — 축의 주인은 *"502 — …"* |
+ * | 502 를 확정으로 | *"502 — …"* **혼자** |
+ * | 503 을 확정으로 | *"«모름»으로 떠났다 와도 …"* **혼자** |
+ * | 봉투 없는 500 을 확정으로(숫자만 본다) | *"봉투 없는 500 …"* **혼자** |
+ * | 연결 끊김(`status` 0)을 확정으로 | *"연결 끊김 — …"* 와 R 절의 *"… 다시 보낸 것도 연결이 실패하면 모른다 …"* — 첫 보내기와 다시 보낸 것이 **같은 가름**을 쓰는 것이 요점이라 함께 죽는다 |
+ * | 봉투 있는 500 을 모름으로 | *"api 가 낸 500(봉투) 은 확정이다 …"* · R 절의 *"… api 가 500 으로 거절하면 …"* · 멱등 키 절의 *"글을 고쳐 …"*·*"페이지를 떠나면 …"*(둘 다 api 의 500 으로 실패시킨다) — 축의 주인은 앞의 것 |
+ * | 세션이 끝나 끊긴 실패도 판정으로 보낸다 | *"세션이 끝나 끊긴 게시는 …"* **혼자** |
+ * | 다시 보낸 것은 제 가름(4xx 만 확정)을 쓴다 | R 절의 *"… api 가 500 으로 거절하면 …"* **혼자** |
+ *
+ * `http-client`가 봉투를 실은 실패에 `enveloped`를 세우는지는 `test/api/http-client.test.ts`의 *"api 의 오류
+ * 봉투를 실은 실패만 …"*가 갖는다(세우지 않으면 그것 **혼자** 죽는다).
+ */
+describe('시간 안의 모르는 실패 — 같은 키로 다시 보내 판정한다', () => {
+  /** 서버는 커밋했는데 브라우저가 그 실패를 받는 판 — 곧바로 같은 키로 다시 보내 재생을 받아야 한다. */
+  async function lostAfterCommit(error: ApiError): Promise<ReturnType<typeof commentServer>> {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    server.commitThenFail(error)
+    type(commentBox(), '닿았던 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(commentBox().value).toBe(''))
+    return server
+  }
+
+  it('502 — 서버가 이미 달았으면 같은 키로 다시 보내 그 행을 받는다: 한 행이고 고쳐 달 틈이 없다', async () => {
+    const server = await lostAfterCommit(new ApiError(502, 'internal', '서버 응답을 이해할 수 없습니다'))
+
+    expect(server.keys).toHaveLength(2)
+    expect(server.keys[1]).toBe(server.keys[0])
+    expect(server.rows()).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('연결 끊김 — 같은 판: 한 행', async () => {
+    const server = await lostAfterCommit(new ApiError(0, 'internal', '서버에 연결하지 못했습니다'))
+
+    expect(server.keys[1]).toBe(server.keys[0])
+    expect(server.rows()).toHaveLength(1)
+  })
+
+  it('봉투 없는 500 은 앞단이 낸 것이다 — 모른다: 같은 판으로 한 행', async () => {
+    // Vite 개발 프록시는 api 가 요청을 쥔 채 죽으면 `500 text/plain` 빈 본문을 준다(잰 값 — `knownRejection`).
+    const server = await lostAfterCommit(new ApiError(500, 'internal', '서버 응답을 이해할 수 없습니다'))
+
+    expect(server.keys[1]).toBe(server.keys[0])
+    expect(server.rows()).toHaveLength(1)
+  })
+
+  it('api 가 낸 500(봉투) 은 확정이다 — 다시 보내지 않고 그 문장과 초안을 남긴다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    server.failNext(new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true))
+    type(commentBox(), '안 달린 말')
+    fireEvent.click(submitButton())
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('서버 오류가 발생했습니다'))
+    expect(server.keys).toHaveLength(1)
+    expect(commentBox().value).toBe('안 달린 말')
+    expect(commentBox().disabled).toBe(false)
+  })
+
+  it('세션이 끝나 끊긴 게시는 다시 보내지 않는다 — 끊긴 거절도 «연결 실패»로 읽힌다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects, ...accounts } })
+    await toCommentTab()
+    type(commentBox(), '앨리스의 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(server.keys).toHaveLength(1))
+
+    await logout()
+    await login(BOB)
+
+    // 끊긴 요청이 «연결 실패»로 거절됐다. 판정으로 보냈으면 여기서 둘째 게시가 나갔다.
+    expect(server.keys).toHaveLength(1)
+  })
+
+  it('«모름»으로 떠났다 와도 상자가 영영 잠기지 않는다 — «다시 확인»으로 판정이 끝나면 풀린다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    await toCommentTab()
+    // 첫 게시도, 같은 키로 다시 보낸 것도 503 이다(서버가 잠깐 못 받는다) — 모른다.
+    server.failNext(new ApiError(503, 'internal', '서버 응답을 이해할 수 없습니다'))
+    server.failNext(new ApiError(503, 'internal', '서버 응답을 이해할 수 없습니다'))
+    type(commentBox(), '매달린 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(screen.getByRole('button', { name: '다시 확인' })).toBeTruthy())
+
+    const tree = screen.getByRole('region', { name: '메뉴·페이지 트리' })
+    fireEvent.click(within(tree).getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+    fireEvent.click(within(tree).getByRole('link', { name: PAGE_TITLE }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '다시 확인' })).toBeTruthy())
+    // 초안은 떠날 때 버렸다(F1) — 잠금과 «다시 확인»은 남는다.
+    expect(commentBox().disabled).toBe(true)
+    expect(commentBox().value).toBe('')
+
+    fireEvent.click(screen.getByRole('button', { name: '다시 확인' }))
+    await waitFor(() => expect(server.keys).toHaveLength(3))
+    expect(server.keys[2]).toBe(server.keys[0])
+    await server.respond(0)
+
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+    expect(screen.getByText('매달린 말')).toBeTruthy()
+    expect(server.rows()).toHaveLength(1)
   })
 })
 

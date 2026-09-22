@@ -741,7 +741,7 @@ async function toApiError(response: Response): Promise<ApiError> {
   const message = typeof envelope['message'] === 'string' ? envelope['message'] : UNREADABLE
   const code = isApiErrorCode(envelope['code']) ? envelope['code'] : 'internal'
 
-  return new ApiError(response.status, code, message, readIssues(envelope))
+  return new ApiError(response.status, code, message, readIssues(envelope), true)
 }
 
 /**

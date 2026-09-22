@@ -119,13 +119,10 @@
  *    서버의 방송을 받아 새 스토어에 번호가 섰다). 코멘트 수정도 화면·DB 가 같은 값(`"첫째 수정"`).
  *    응답이 영영 안 오면 10초 뒤 **같은 키로 다시 보내** 판정한다(`submit`의 `verify`) — 서버가 앞 게시를
  *    쥐고 있으면 다시 보낸 것이 같은 행 잠금 뒤에 줄을 서서 재생을 받는다. 그동안 상자는 잠겨 있어
- *    고쳐 다시 달 수도, 떠났다 와서 새로 칠 수도 없다. **남는 입구는 둘이다**(Chrome — 값은
- *    `write-ledger.tsx`의 «판정 뒤의 늦은 커밋»):
- *    - **새로고침·탭 닫기** — 초안과 키가 함께 버려져 다시 친 같은 글이 새 키가 되고, 번호가 있는
- *      노드면 두 행이 된다.
- *    - **시간 안의 모르는 실패** — 첫 게시가 서버에 닿았는데 브라우저가 502·연결 끊김을 받으면
- *      `'failed'`다(판정을 안 지난다). 초안이 열려 고쳐 달면 새 키라 두 행이다. 고치지 않고 다시 달면
- *      같은 키라 한 행이다.
+ *    고쳐 다시 달 수도, 떠났다 와서 새로 칠 수도 없다. 시간 안의 **모르는 실패**(연결 끊김 · 502·503·504 ·
+ *    봉투 없는 500)도 같은 판정으로 간다(`knownRejection` — 2026-09-22). **남는 입구는 하나다 — 새로고침·탭
+ *    닫기**: 초안과 키가 함께 버려져 다시 친 같은 글이 새 키가 되고, 번호가 있는 노드면 두 행이 된다(Chrome
+ *    — 값은 `write-ledger.tsx`의 «판정 뒤의 늦은 커밋»).
  * 2. **타이밍 창.** 가 → 나 → 가로 돌아와 건 목록 조회가 **게시가 커밋되기 전에 읽고, 게시 뒤의
  *    다시 받기보다 늦게** 오면, 다시 받기가 세운 목록(방금 단 말이 있다)을 덮는다 — 같은 페이지라
  *    조회 이펙트의 `alive`가 참이다. 방금 단 말이 목록에서 사라지고 잠금은 이미 풀려 있다.
@@ -213,8 +210,36 @@ function answered(at: number, next: LoadState): (prev: LoadState) => LoadState {
   return (prev) => (at < prev.at ? prev : next)
 }
 
-/** 게시를 같은 키로 다시 보낸 결과(`submit`의 판정). 거절은 서버가 답한 4xx 뿐이다 — 그 밖은 모른다. */
+/** 게시를 같은 키로 다시 보낸 결과(`submit`의 판정). 거절은 `knownRejection`인 것뿐이다 — 그 밖은 모른다. */
 type Reposted = { posted: true; created: CommentCreated } | { posted: false; caught: unknown }
+
+/**
+ * 게시의 실패가 **안 달렸다고 확정할 수 있는** 실패인가. 첫 보내기의 실패(`uncertain`)와 같은 키로 다시
+ * 보낸 것의 실패(`verify`)가 **같은 이 함수**로 갈린다 — 두 자리가 따로 가르면 한쪽만 낡는다.
+ *
+ * | 실패 | 뜻 |
+ * |---|---|
+ * | 4xx | **확정** — 서버가 이 요청을 보고 거절했다 |
+ * | **api 가 낸 500**(오류 봉투가 있다 — `ApiError.enveloped`) | **확정** — 핸들러가 던진 것이고 커밋 전이다(아래) |
+ * | 연결 실패 · 502·503·504 · **봉투 없는 500** | **모른다** — 요청이 서버에 닿아 커밋됐을 수 있다 |
+ *
+ * **«api 가 낸 500 은 커밋 전이다»를 코드로 봤다**(`apps/api/src/routes/comments.ts`의 게시 핸들러). 커밋
+ * (`runWrite`가 끝난 것) 뒤에 도는 것은 셋이다: `notifyMarkerChange` — 방송은 `async`인 `broadcast.send`이고
+ * 실패를 `.catch`로 삼킨다(`ws/notify.ts`) · 그 인자의 `requestEventActor` — 번호를 붙이는 갈래에서는 이미
+ * 트랜잭션 **안에서** 같은 요청으로 `requestActor`를 불렀다(같은 값이라 여기서 새로 던질 길이 없다), 번호가
+ * 있던 갈래는 `markerOps`가 비어 이 호출 전에 돌아간다 · 응답 객체 — 문자열·수뿐이라 직렬화가 던지지 않는다.
+ * 핸들러 뒤에 도는 훅(`onSend`·`onResponse`)은 없다(`addHook`은 `onRoute`·`onRequest`뿐).
+ *
+ * **그런데 브라우저가 받은 500 이 늘 api 의 것은 아니다.** Vite 개발 프록시는 api 가 요청을 쥔 채 죽으면
+ * `500 text/plain` 빈 본문을 준다(잰 값 — 행 잠금으로 게시를 막아 둔 채 api 프로세스를 내렸다: 1.5s 에
+ * `500` · 본문 `""`). 그 판은 롤백됐지만 **커밋 직후에 죽어도 같은 모양**이다. 그래서 가르는 것은 숫자가
+ * 아니라 **봉투**다 — api 가 직접 낸 오류는 늘 봉투를 싣는다.
+ */
+function knownRejection(caught: unknown): boolean {
+  if (!(caught instanceof ApiError)) return false
+  if (caught.status >= 400 && caught.status < 500) return true
+  return caught.status === 500 && caught.enveloped
+}
 
 /**
  * **이 탭의 칸 일곱** — 전부 `panel-drafts.tsx`의 칸이다. 이 본문은 탭을 옮기면
@@ -278,9 +303,10 @@ const DRAFTS = slot<ReadonlyMap<string, string>>('comments/drafts', new Map())
  * **초안 쪽에 든다 — 장부가 아니다.** 키의 수명은 그 초안의 수명이다. 장부는 에디터를 떠나도
  * 살아, 거기 들면 초안이 버려진 뒤에도 키가 남는다 — 돌아와 같은 글을 새로 쳐 달면 앞 게시로
  * 합쳐진다. 일부러 같은 말을 다시 다는 사람의 게시가 사라지는 길이다. 대가도 적어 둔다: 떠났다
- * 오는 사이 늦게 커밋된 게시는 돌아와 새로 친 같은 글과 **합쳐지지 않는다**(새 키다). 시간 초과의 판에서는
- * 판정(같은 키로 다시 보내기)이 끝날 때까지 상자가 잠겨 있어 이 길이 안 선다 — 서는 것은 시간 안의 모르는
- * 실패(502·연결 끊김) 뒤와 새로고침 뒤다(`write-ledger.tsx`의 «이것이 막지 못하는 것»).
+ * 오는 사이 늦게 커밋된 게시는 돌아와 새로 친 같은 글과 **합쳐지지 않는다**(새 키다). 시간 초과와 모르는
+ * 실패의 판에서는 판정(같은 키로 다시 보내기)이 끝날 때까지 상자가 잠겨 있어 이 길이 안 선다 — 확정 실패
+ * (`knownRejection`) 뒤라면 앞 게시가 커밋될 수 없어 새 키여도 한 행이다. 서는 것은 새로고침 뒤뿐이다
+ * (`write-ledger.tsx`의 «이것이 막지 못하는 것»).
  */
 const POST_KEYS = slot<ReadonlyMap<string, { body: string; key: string }>>('comments/post-keys', new Map())
 /** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. */
@@ -501,11 +527,14 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       verified: (verdict: V, ownerLive: boolean, openPageId: string) => Promise<Failure | null> | Failure | null
       /** 시간 안에 실패했을 때 실패 통지 **말고** 더 할 일. 없으면 통지만 한다. */
       failed?: (openPageId: string) => void
+      /** 모르는 실패면 판정으로 보낸다(`write-ledger.tsx`의 `TrackedWrite.uncertain`). 게시만 준다. */
+      uncertain?: (caught: unknown) => boolean
     }): void => {
       if (pageId === undefined || busy) return
       const openPageId = pageId
       void busyLock.run<T, V>({
         send: (signal) => op.send(api, openPageId, signal),
+        ...(op.uncertain === undefined ? {} : { uncertain: op.uncertain }),
         verify: (signal) => op.verify(api, openPageId, signal),
         settle: async (outcome, ownerLive) => {
           try {
@@ -588,16 +617,18 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
         try {
           return { posted: true, created: await post(client, openPageId, signal) }
         } catch (caught) {
-          // **서버가 답한 거절(4xx)은 확정이다** — 같은 키 · 같은 글을 거절했다면 앞 게시도 커밋될 수 없다
-          // (키가 없으니 같은 판정을 받는다). 연결 실패·5xx 는 아무것도 말하지 않는다 — 모른다. **예외
-          // 하나** — 앞 게시가 달렸고 그 사이 **다른 탭에서 고쳐졌으면** 409 다(서버의 재생 비교가 지금 행을
-          // 본다 — `apps/api/README.md`의 «멱등 키», 이월). 그때 이 판정은 «안 달림»이 틀린다.
-          if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500) {
-            return { posted: false, caught }
-          }
+          // **확정인 거절이면 «안 달림»이다**(`knownRejection`) — 같은 키 · 같은 글을 거절했다면 앞 게시도
+          // 커밋될 수 없다(키가 없으니 같은 판정을 받는다). 그 밖은 모른다 — «다시 확인». **예외 하나** — 앞
+          // 게시가 달렸고 그 사이 **다른 탭에서 고쳐졌으면** 409 다(서버의 재생 비교가 지금 행을 본다 —
+          // `apps/api/README.md`의 «멱등 키», 이월). 그때 이 판정은 «안 달림»이 틀린다.
+          if (knownRejection(caught)) return { posted: false, caught }
           throw caught
         }
       },
+      // **시간 안의 모르는 실패도 판정으로 간다**(2026-09-22 — 코디네이터 판정). 앞 판은 첫 게시가 서버에
+      // 닿았는데 브라우저가 502·연결 끊김을 받으면 `'failed'`라 초안이 열렸고, 고쳐 달면 새 키라 두 행이었다
+      // (Chrome route). 이제 같은 키로 다시 보내 확정한다 — 그동안 상자는 잠겨 있다.
+      uncertain: (caught) => !knownRejection(caught),
       done: (created, openPageId) => landed(created, openPageId, true),
       verified: (verdict, ownerLive, openPageId) => {
         // 거절됐으면 **초안과 키를 남긴다** — 같은 글을 다시 달면 같은 키다.

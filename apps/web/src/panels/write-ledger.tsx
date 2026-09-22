@@ -146,12 +146,23 @@
  *
  *   **리뷰 6(«고치면 새 키»가 늦은 커밋 창을 다시 연다)은 이 길에서 닫혔다** — 판정하는 동안 상자가 잠겨
  *   고칠 수 없고, 판정이 끝나면 이미 확정이다(위 표 첫 줄·셋째 줄. 앞 판은 11s «안 달림» 뒤 고쳐 달면 두
- *   행, 페이지 왕복 뒤 다시 치면 같은 글 두 행이었다 — 리뷰 4, Chrome). **남는 길 — 시간 안의 모르는 실패.** 첫 게시가
- *   서버에 닿았는데 브라우저가 502·연결 끊김을 받으면 `'failed'`라 판정을 안 지나고 초안이 열린다.
- *   Chrome(route — 첫 게시를 서버에 보내고 브라우저에는 502/끊김을 줬다): «서버 응답을 이해할 수
- *   없습니다»/«서버에 연결하지 못했습니다» → `"원문!"`으로 고쳐 달면 새 키 → DB `원문` · `원문!` 두 행.
- *   고치지 않고 다시 달면 같은 키라 재생이다. 닫는 길은 게시의 5xx·연결 실패도 판정(다시 보내기)으로
- *   보내는 것인데, 서버가 계속 500 이면 상자가 «모름»에 잠기는 대가가 있어 **이번에 하지 않았다**(보고).
+ *   행, 페이지 왕복 뒤 다시 치면 같은 글 두 행이었다 — 리뷰 4, Chrome).
+ *
+ *   **시간 안의 모르는 실패도 닫았다**(2026-09-22 — 코디네이터 판정). 앞 판은 첫 게시가 서버에 닿았는데
+ *   브라우저가 502·연결 끊김을 받으면 `'failed'`라 판정을 안 지나고 초안이 열려, `"원문!"`으로 고쳐 달면 새
+ *   키 → DB `원문` · `원문!` 두 행이었다(Chrome route). 이제 **모르는 실패**(연결 끊김 · 502·503·504 · 봉투
+ *   없는 500 — `comment-panel.tsx`의 `knownRejection`)는 곧바로 같은 키로 다시 보내 판정한다
+ *   (`TrackedWrite.uncertain`). **세션이 끝나 끊긴 실패는 뺀다**(`attempt`). 대가: 서버가 계속 모르는 실패를
+ *   내면 «모름»에 잠긴다 — «다시 확인»이 있고, 떠나면 초안은 F1 대로 버려지지만 잠금과 «다시 확인»은 남아
+ *   판정이 끝나면 풀린다.
+ *
+ *   | 판 | 값 |
+ *   |---|---|
+ *   | 첫 게시가 서버에 닿고(201) 브라우저에는 502 — Chrome(route) | 곧바로 같은 키로 다시 보냄 → **200(재생)** · 초안 비움 · DB 1행 |
+ *   | 같은 판 · 연결 끊김 — Chrome(route) | 같음 · DB 1행 |
+ *   | 게시를 행 잠금에 막아 둔 채 **api 를 죽임** — Chrome(서버 안 지연) | 첫 게시 · 다시 보낸 것 둘 다 `500 text/plain`(Vite 빈 본문) → «모름» + «다시 확인» → api 를 다시 띄우고 누름 → 7.4s **201** · 풀림 · DB 1행(죽은 첫 요청은 롤백) |
+ *   | 첫 게시를 붙잡은 채 로그아웃 — Chrome(route) | 로그아웃에 `ERR_ABORTED` · **다시 보내지 않았다**(POST 1건) · DB 0행 |
+ *   | 첫 게시·다시 보낸 것 둘 다 503 → 가 → 나 → 가 — Chrome(route) | 돌아온 상자 꺼짐 · 초안 없음(F1) · «다시 확인» 그대로 → 누르면 201 · 풀림 · DB 1행 |
  * - **설명 — 이번에 닫지 않는다. 이월 P(창 둘의 덮어쓰기)와 한 항목으로 넘긴다.** 닫는 길은 설명
  *   `PATCH`가 기대값을 받아 늦은 쓰기를 409로 거절하는 것인데, 그것이 이 앱의 **첫 충돌 모델**이다.
  *   남는 위험은 좁다: 이 스택에서 같은 행 쓰기는 행 잠금으로 **온 순서대로** 커밋되어 늦게 커밋된
@@ -167,15 +178,12 @@
  *   **같은 글 두 행**(키 둘). 번호가 없던 노드 — 둘째가 409(`stale` — 첫째가 번호를 붙여 `head_seq`를
  *   올렸다) · 1행. `sessionStorage`로 장부·키를 넘기지 않았다(판정: 이월) — 세션을 넘는 상태를 이 앱이
  *   처음 드는 것이 되고, 그것으로도 «서버에 이미 간 요청»은 못 막는다.
- * - **시간 안의 모르는 실패 뒤 고쳐 다시 단 코멘트** — 첫 게시가 서버에 닿았는데 브라우저가 502·연결 끊김을
- *   받으면 판정을 안 지나 초안이 열리고, 고쳐 달면 새 키라 두 행이다(값은 위 «판정 뒤의 늦은 커밋»). 페이지·
- *   에디터를 다녀와 다시 친 같은 글도 이 판에서는 새 키다 — 시간 초과의 판에서는 판정 동안 잠겨 있어 닿지
- *   않는다(그 절의 표).
  * - **세션 경계의 늦은 커밋** — 앞 세션의 쓰기가 서버에 이미 닿아 있었으면 새 세션의 쓰기와 겹친다(위 «세션을
  *   넘지 않는다»의 끝 — 이 스택에서는 온 순서대로라 뒤가 이겼다).
  * - **닫은 것**(리뷰 7번이 이 목록에 없다고 짚은 것): 계정 전환(위 «세션을 넘지 않는다») · «모름»이 계정을 넘는
  *   것(같은 절) · 쓰기 뒤의 다시 받기 매달림(`comment-panel.tsx`의 `refresh`) · 판정용 다시 읽기 매달림
- *   (`attempt`) · 같은 URL 의 HTTP 캐시 잠금(`api/http-client.ts`의 `getPage`).
+ *   (`attempt`) · 같은 URL 의 HTTP 캐시 잠금(`api/http-client.ts`의 `getPage`) · 시간 안의 모르는 실패 뒤 고쳐
+ *   다시 단 코멘트(위 «판정 뒤의 늦은 커밋»).
  * - **쓰기 뒤의 목록 다시 받기가 응답하지 않으면** «목록을 다시 불러오는 중»에 머문다 — 잠금은 풀려
  *   있고 쓰기는 끝났다. 일반 읽기에는 시간 제한을 두지 않는다(판정용 읽기에만 둔다 — `attempt`). 앞 판의
  *   «다시 읽기가 응답하지 않으면 `'checking'`에 머문다»는 닫았다(`attempt`의 주석 — Chrome: 10s 판정 →
@@ -226,7 +234,8 @@ export interface WriteTarget {
  * 쓰기가 끝난 모양.
  *
  * - `'done'` — 시간 안에 성공 응답을 받았다.
- * - `'failed'` — 시간 안에 실패했다(실패 응답 · 연결 실패). **결과를 안다: 안 됐다.**
+ * - `'failed'` — 시간 안에 실패했다(실패 응답 · 연결 실패). **결과를 안다: 안 됐다** — 쓰기가 «모르는
+ *   실패»라고 한 것(`TrackedWrite.uncertain`)은 여기 안 오고 판정으로 간다.
  * - `'verified'` — 시간 안에 응답이 없어 **다시 읽어 판정했다.** 판정의 모양은 칸이 정한다.
  */
 export type WriteOutcome<T, V> =
@@ -237,6 +246,12 @@ export type WriteOutcome<T, V> =
 export interface TrackedWrite<T, V> {
   /** 요청을 보낸다. **`signal`을 요청에 싣는다** — 시간이 지나면 끊는다. */
   send(signal: AbortSignal): Promise<T>
+  /**
+   * 시간 안에 온 **실패가 결과를 모르는 실패인가** — 그렇다면 `'failed'`가 아니라 판정(`verify`)으로 간다.
+   * 없으면 모든 실패가 «안 됐다»다(설명 · 코멘트 수정·삭제·재번호). 코멘트 게시만 준다 — 같은 키로 다시
+   * 보내는 판정이 **안전하게 되풀이되는** 쓰기라서다(`comment-panel.tsx`의 `knownRejection`).
+   */
+  uncertain?(caught: unknown): boolean
   /**
    * 판정한다 — 보통은 서버에서 다시 읽고, 멱등한 쓰기는 **같은 것을 다시 보낸다**(코멘트 게시 —
    * `comment-panel.tsx`의 `submit`). 던지거나 시간이 넘으면 `'unknown'`이다. **`signal`을 요청에
@@ -408,7 +423,6 @@ async function race<X>(start: (signal: AbortSignal) => Promise<X>, session: Abor
   const controller = new AbortController()
   const cut = (): void => controller.abort()
   session.addEventListener('abort', cut)
-  if (session.aborted) controller.abort()
   let timer: ReturnType<typeof setTimeout> | undefined
   const expired = new Promise<typeof EXPIRED>((resolve) => {
     timer = setTimeout(() => {
@@ -454,10 +468,13 @@ async function attempt<T, V>(
 ): Promise<WriteOutcome<T, V>> {
   const first = await race((signal) => write.send(signal), session)
   if (first !== EXPIRED) {
-    return 'value' in first ? { kind: 'done', value: first.value } : { kind: 'failed', caught: first.caught }
+    if ('value' in first) return { kind: 'done', value: first.value }
+    // **세션이 끝나 끊긴 실패는 판정하지 않는다** — 끊긴 거절도 «연결 실패»로 읽혀, 판정으로 보내면 로그아웃
+    // 뒤에 다시 보낸다(머리말 «세션을 넘지 않는다»). 그 밖의 모르는 실패만 판정으로 간다(`uncertain`).
+    if (session.aborted || write.uncertain?.(first.caught) !== true) return { kind: 'failed', caught: first.caught }
   }
 
-  // 시간 안에 응답이 없었다 — 결과를 모른다. 판정한다(다시 읽기 — 게시는 다시 보내기).
+  // 시간 안에 응답이 없었거나 모르는 실패였다 — 결과를 모른다. 판정한다(다시 읽기 — 게시는 다시 보내기).
   for (;;) {
     report(CHECKING)
     const checked = await race((signal) => write.verify(signal), session)
