@@ -583,7 +583,8 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     // 연결을 실었고, 그 사이 셸째 떠났다 왔으면 그것은 **새 셸의** 연결이라 새 셸이 방송을 못 받았다 —
     // 응답의 번호는 내려간 셸의 스토어에 얹혔다(Chrome: 첫 게시를 route 에 붙잡아 둔 채 셸째 떠났다 오고,
     // 다시 보낸 것이 201 — 새 셸의 번호 칸 `–` · 통지 없음 · DB 의 번호 1 · 새로고침하면 `1`). 첫 보내기의
-    // 연결이면 셸이 떠 있을 때는 지금과 같고, 내려갔으면 없는 연결이라 서버가 아무도 빼지 않는다.
+    // 연결이면 셸이 떠 있을 때는 지금과 같고, 내려갔으면 없는 연결이라 서버가 아무도 빼지 않는다. 같은 셸에서 WS 가
+    // 다시 붙은 판의 두 번 얹힘은 이월이다(`write-ledger.tsx`의 «이것이 막지 못하는 것»).
     const origin = connections?.get()
     const post = (client: ApiClient, openPageId: string, signal: AbortSignal): Promise<CommentCreated> =>
       client.createComment(
