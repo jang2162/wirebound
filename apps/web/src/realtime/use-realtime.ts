@@ -23,11 +23,23 @@
  * 갭은 편집을 내야만 수렴한다** — 아무것도 안 내고 보고만 있는 사람의 화면은 스스로
  * 맞춰지지 않는다. 다시 읽는 **자리**는 여기가 아니라 `routes/editor.tsx`다(`loadPage`를
  * 부르는 경로를 둘로 만들지 않는다).
+ *
+ * # 쿠키가 바뀌면 다시 붙는다 (이월 Z, 2026-09-22)
+ *
+ * 다른 탭이 **같은 사람으로 다시 들어오면**(옛 세션은 산다) 이 탭의 HTTP 는 새 세션, WS 는 옛 세션이다. 서버의 방송은
+ * 요청과 같은 세션의 연결만 빼므로(`apps/api/src/ws/broadcast.ts`의 `sentBy`) **자기 방송을 되받는다** — 복원이면
+ * 본인에게 «다른 사람이 스냅샷을 복원했습니다»(4차 리뷰 b-3 · Chrome). 세션이 그것을 알리면(`useSessionRenewal` —
+ * `session/session-context.tsx`의 «탭 사이») 옛 소켓을 버리고 곧바로 다시 붙는다(`connection.ts`의 `reconnect`). 끊긴
+ * 것과 같은 길이라 **두 번째 `'open'`이 다시 읽는다**(D6) — 버린 소켓과 새 소켓 사이의 프레임은 사라졌다. 옛 소켓으로
+ * 답을 기다리던 편집도 끊긴 것과 같게 끝난다(`failInFlight`). **대가도 끊긴 것과 같다** — 다시 읽기가 되돌리기 이력을
+ * 비우면 그렇다고 말한다(`routes/editor.tsx`의 D6). 방아쇠가 드물어(다른 탭이 로그인 화면을 거쳐 같은 사람으로 다시
+ * 들어온다 — 옛 세션이 산 채로) 새 소켓을 먼저 붙이고 옛 것을 나중에 닫는 겹침은 짓지 않았다.
  */
 import { useEffect } from 'react'
 import { openRealtime } from './connection'
 import { useRealtimeSetup } from './context'
 import { realtimeUrl } from './protocol'
+import { useSessionRenewal } from '../session/session-context'
 import { useEditorStoreInstance } from '../store/use-editor-store'
 
 /**
@@ -50,6 +62,7 @@ function droppedNotice(dropped: number): string {
 export function useRealtime(projectId: string | undefined, onResync?: () => void): void {
   const store = useEditorStoreInstance()
   const setup = useRealtimeSetup()
+  const onRenewal = useSessionRenewal()
 
   useEffect(() => {
     if (!setup || !projectId) return
@@ -138,12 +151,15 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
 
     setup.channel?.attach(connection)
     setup.lockChannel?.attach(connection)
+    // **쿠키가 바뀌면 다시 붙는다**(위 머리말 «쿠키가 바뀌면»).
+    const stopRenewal = onRenewal?.(() => connection.reconnect())
 
     return () => {
+      stopRenewal?.()
       connection.close()
       setup.channel?.detach()
       setup.lockChannel?.detach()
       setup.holder.set(undefined)
     }
-  }, [projectId, setup, store, onResync])
+  }, [projectId, setup, store, onResync, onRenewal])
 }
