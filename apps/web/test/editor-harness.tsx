@@ -27,6 +27,7 @@ import { App } from '../src/app'
 import { ApiError, type ApiClient } from '../src/api/client'
 import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../src/api/types'
 import type { RealtimeSetup } from '../src/realtime/context'
+import type { TabChannel } from '../src/session/tab-channel'
 import { fakeApi, renderWithProviders } from './helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
@@ -108,6 +109,8 @@ export interface EditorOptions {
   apiOverrides?: Partial<ApiClient>
   /** 실시간 연결 설정. 생략하면 `RealtimeProvider`가 없다(`helpers.tsx`의 그 필드). */
   realtime?: RealtimeSetup
+  /** 탭 사이의 세션 소식 통로. 생략하면 다른 탭이 없다(`helpers.tsx`의 그 필드). */
+  tabChannel?: TabChannel
 }
 
 /** 셸을 렌더하기만 한다. 성공 대역을 기다리는 것은 호출자 몫이다. */
@@ -142,6 +145,7 @@ export function renderEditor(options: EditorOptions = {}): void {
       }),
       route: options.route ?? PAGE_ROUTE,
       ...(options.realtime === undefined ? {} : { realtime: options.realtime }),
+      ...(options.tabChannel === undefined ? {} : { tabChannel: options.tabChannel }),
     },
   )
 }

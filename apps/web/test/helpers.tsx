@@ -6,7 +6,7 @@
  * 하나뿐이므로, 여기서 그 인터페이스를 직접 만족시키는 편이 `fetch`를 흉내 내는 것보다
  * 짧고 무엇을 검사하는지가 분명하다.
  */
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
 import { systemTheme } from '@wirebound/themes'
@@ -14,6 +14,7 @@ import { ApiError, type ApiClient } from '../src/api/client'
 import { ApiProvider } from '../src/api/context'
 import { RealtimeProvider, type RealtimeSetup } from '../src/realtime/context'
 import type { SessionUser } from '../src/api/types'
+import { TabChannelProvider, type SessionNews, type TabChannel } from '../src/session/tab-channel'
 
 /**
  * 스텁되지 않은 메서드 자리에 놓는 함수. **`undefined`를 돌려주지 않고 던진다.**
@@ -178,6 +179,50 @@ export interface RenderOptions {
    * 이유이기도 하다(P3-2 D5). 재연결·WS 전송을 재는 테스트만 이것을 준다.
    */
   realtime?: RealtimeSetup
+  /**
+   * 탭 사이의 세션 소식 통로(`src/session/tab-channel.tsx`). **생략하면 `TabChannelProvider`를 안 세운다** —
+   * 다른 탭이 없는 화면이다. 진짜 `BroadcastChannel`을 기본으로 두지 않는 까닭은 그 파일의 머리말에 있다(워커
+   * 사이로 흐른다). 탭 사이를 재는 테스트만 `tabHub()`의 것을 준다.
+   */
+  tabChannel?: TabChannel
+}
+
+/**
+ * **다른 탭을 흉내 내는 통로.** 이 탭이 낸 소식은 `posted`에 쌓이고(다른 탭이 받을 것), `fromOtherTab`이 다른
+ * 탭의 소식을 이 탭에 건넨다. 실제 `BroadcastChannel`처럼 **보낸 탭에는 안 온다** — `posted`는 이 탭의 수신자에
+ * 닿지 않는다.
+ */
+export interface TabHub {
+  channel: TabChannel
+  posted: SessionNews[]
+  fromOtherTab: (news: SessionNews) => Promise<void>
+  /** 지금 듣고 있는 수신자 수 — 구독을 떼는지 잰다. */
+  listeners: () => number
+}
+
+export function tabHub(): TabHub {
+  const posted: SessionNews[] = []
+  const receivers = new Set<(news: SessionNews) => void>()
+  return {
+    posted,
+    listeners: () => receivers.size,
+    channel: {
+      post: (news) => {
+        posted.push(news)
+      },
+      listen: (receive) => {
+        receivers.add(receive)
+        return () => {
+          receivers.delete(receive)
+        }
+      },
+    },
+    fromOtherTab: async (news) => {
+      await act(async () => {
+        for (const receive of [...receivers]) receive(news)
+      })
+    },
+  }
 }
 
 /**
@@ -195,12 +240,15 @@ export function renderWithProviders(ui: ReactElement, options: RenderOptions = {
     </MemoryRouter>
   )
 
+  const tabbed =
+    options.tabChannel === undefined ? routed : <TabChannelProvider channel={options.tabChannel}>{routed}</TabChannelProvider>
+
   render(
     <ApiProvider client={options.client ?? fakeApi()}>
       {options.realtime === undefined ? (
-        routed
+        tabbed
       ) : (
-        <RealtimeProvider setup={options.realtime}>{routed}</RealtimeProvider>
+        <RealtimeProvider setup={options.realtime}>{tabbed}</RealtimeProvider>
       )}
     </ApiProvider>,
   )

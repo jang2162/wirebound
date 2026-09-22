@@ -9,9 +9,9 @@
  * 그것이 이월 문서 §1의 리다이렉트 순환이었다. 상태는 `session/session-context.tsx`에
  * 하나 있고 여기서는 **읽기만** 한다.
  */
-import type { ReactElement, ReactNode } from 'react'
-import { Navigate } from 'react-router'
-import { UNKNOWN_SESSION_FAILURE, useSessionState } from '../session/session-context'
+import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
+import { Navigate, useNavigate } from 'react-router'
+import { UNKNOWN_SESSION_FAILURE, useSessionState, useSessionUser } from '../session/session-context'
 
 /**
  * `failed`를 화면에서 어떻게 다룰지는 상태가 정하지 않는다 — 아래 두 컴포넌트가 다르게
@@ -34,14 +34,36 @@ function SessionFailure(props: { message: string }): ReactElement {
  *
  * 확인이 끝나기 전에는 아무것도 렌더하지 않는다 — 자식을 먼저 그렸다가 치우면 한 번
  * 깜빡이고, 그사이 자식이 부른 요청은 전부 401로 버려진다.
+ *
+ * **들어와 있는 동안 사람이 바뀌면 목록으로 옮긴다**(2026-09-22 — 다른 탭이 다른 사람으로 들어왔다.
+ * `session/session-context.tsx`의 «탭 사이»). 자식을 **한 번 내렸다가** 목록에서 새로 세운다 — 이미 목록이어도
+ * 앞 사람의 권리로 받은 목록이 새 사람에게 남지 않는다. 같은 탭에서 사람이 바뀌는 길(로그아웃 → 로그인)은 로그인
+ * 화면을 지나므로 이 문지기가 내려갔다 새로 서서 여기에 안 온다.
+ *
+ * **사람으로 가른다 — 세대로 가르지 않는다.** 세대는 «나가 있던 쓰기를 끊는다»의 값이고(같은 파일 «세션 세대»),
+ * 화면을 옮길지는 «누구의 화면인가»의 일이다. 둘을 한 값에 매면 한쪽을 바꾸는 사람이 다른 쪽을 함께 바꾼다.
  */
 export function RequireAuth(props: { children: ReactNode }): ReactElement | null {
   const session = useSessionState()
+  const who = useSessionUser()?.id ?? null
+  const navigate = useNavigate()
+  /** 이 문지기를 지나 자식을 본 사람. **`null`은 «아직 아무도»다** — 누구인지 모르는 동안에는 옮기지 않는다. */
+  const [holder, setHolder] = useState<string | null>(null)
+  const authenticated = session.status === 'authenticated'
+  const moved = authenticated && holder !== null && who !== holder
+
+  useEffect(() => {
+    if (!authenticated) return
+    if (moved) navigate('/', { replace: true })
+    setHolder(who)
+  }, [authenticated, moved, who, navigate])
 
   if (session.status === 'pending') return null
   if (session.status === 'failed') return <SessionFailure message={session.message} />
   // `replace`: 로그인한 뒤 뒤로 가기가 방금 튕겨 나온 주소로 돌아가면 다시 튕긴다.
   if (session.status === 'anonymous') return <Navigate to="/login" replace />
+  // 옮기는 동안은 아무것도 안 그린다 — 앞 사람의 화면이 새 사람의 것으로 한 번이라도 서지 않게.
+  if (moved) return null
   return <>{props.children}</>
 }
 
