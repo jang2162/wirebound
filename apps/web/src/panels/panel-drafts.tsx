@@ -306,7 +306,9 @@ export interface PanelLock {
   /** `'unknown'`일 때만 — 서버에서 다시 읽어 판정한다. */
   readonly recheck: (() => void) | null
   /**
-   * 쓰기를 장부에 올려 보낸다. **이 렌더의 페이지를 단다.** 이미 나가 있으면 아무것도 안 한다.
+   * 쓰기를 장부에 올려 보낸다. **이 렌더의 페이지를 단다.** **이미 나가 있는지는 여기서 안 본다** — 부르는
+   * 쪽이 `locked`를 먼저 본다(설명의 `saving.locked` · 코멘트의 `busy`). 장부도 한 번 더 막지 않는다
+   * (`write-ledger.tsx`의 `Ledger.run` — 화면에서 닿는 길이 없어 재는 것이 없는 가드를 두지 않았다).
    */
   run<T, V>(write: TrackedWrite<T, V>): Promise<void>
 }

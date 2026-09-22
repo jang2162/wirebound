@@ -447,13 +447,17 @@ async function login(user: SessionUser): Promise<void> {
  * | 장부가 **받을 provider 가 있을 때만** 잠금을 푼다 | *"설명 — 에디터 밖에 있는 동안 끝난 쓰기 …"* **혼자** |
  * | 칸 쓰기를 늘 **자기 provider** 로 보낸다(`deliver`가 지금 떠 있는 provider 를 안 본다) | 전달 둘(설명·코멘트) — 축의 주인은 `write-ledger.tsx`의 `deliver`다 |
  * | 장부를 셸 안(`RightPanel`의 `PanelDraftsProvider` 바로 위)으로 내린다 — 앞 판의 자리 | 넷(설명·코멘트 × 잠금·전달) |
+ * | 잠금 키에 **provider 인스턴스**를 넣는다(`usePanelLock`의 `slot` — 잠금이 provider 교체를 못 넘는다) | 잠금 둘 — 웹 전량 가운데 이 둘뿐이다 |
+ * | 같은 것을 **설명 칸에만** | *"설명 — 에디터를 떠났다 와도 잠금이 남는다 …"* **혼자** |
+ * | 같은 것을 **코멘트 칸에만** | *"코멘트 — 에디터를 떠났다 와도 잠금이 남는다 …"* **혼자** |
  *
- * **잠금 둘(*"설명 — 에디터를 떠났다 와도 잠금이 남는다 …"*·*"코멘트 — …"*)은 혼자 죽는 변조가 없다.**
- * 늘 남과 함께 죽는다 — 축의 주인은 **«잠금이 장부에 든다»**이고, 그 축을 깨는 변조(장부의 자리를
- * 셸 안으로 · 잠금을 본문의 `useState`로 · 방문 칸으로)가 셸 **안**의 왕복을 재는 8차·9차 케이스
- * (`page-description-edit.test.tsx`·`comment-panel.test.tsx`의 «저장이 나가 있는 동안 …»·«… 가 → 나 →
- * 가 …»)를 함께 죽인다. 잠금이 한 자리로 모였으니 그 자리를 깨면 전부 함께 죽는 것이 맞다. 이 둘이
- * 따로 재는 것은 **provider 째 내려가는 길**이다 — 8차·9차 케이스 가운데 그 길을 지나는 것은 없다.
+ * **잠금 둘은 «잠금이 provider 교체를 넘는다» 축의 주인이다** — 위 끝의 세 줄이 그것이다(리뷰 6번이 찾은
+ * 변조를 칸마다 좁혀 쟀다). 앞 판의 머리말은 «혼자 죽는 변조가 없다 — 늘 남과 함께 죽는다»였는데, 그것은
+ * 그때 심은 변조(장부의 자리를 셸 안으로 · 잠금을 본문의 `useState`로 · 방문 칸으로)로는 참이었고 —
+ * 그 변조들은 셸 **안**의 왕복을 재는 8차·9차 케이스(`page-description-edit.test.tsx`·`comment-panel.test.tsx`의
+ * «저장이 나가 있는 동안 …»·«… 가 → 나 → 가 …»)도 함께 죽인다 — 이월 Q 의 결함을 잠금 한 자리에서 되살리는
+ * 가장 자연스러운 퇴행(provider 에 매인 잠금)으로는 틀렸다. 이 둘이 따로 재는 것은 **provider 째 내려가는
+ * 길**이다 — 8차·9차 케이스 가운데 그 길을 지나는 것은 없다.
  */
 describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리에 있다', () => {
   it('설명 — 에디터를 떠났다 와도 잠금이 남는다: 둘째 저장이 나갈 수 없다', async () => {
@@ -590,6 +594,7 @@ describe('Q — 에디터를 떠났다 와도 나가 있는 쓰기가 제자리�
  * | 코멘트: 4xx 도 모름으로 친다 · 거절에 키를 버린다 | *"코멘트 — 다시 보낸 것을 서버가 거절하면 …"* **혼자**(둘 다) |
  * | 코멘트: 달렸다는 판정인데 뒷일(초안 비우기·번호)을 안 한다 | *"코멘트 — 서버가 첫 게시를 안 받았으면 …"* 와 넷 — 축의 주인은 그것 |
  * | 코멘트 수정: 판정으로 «저장됨»인데 편집 칸을 안 닫는다 | *"코멘트 수정 — …"* **혼자** |
+ * | 코멘트 삭제: 실패해도 목록을 안 다시 받는다(앞 판 — 리뷰 4번) | *"코멘트 삭제 — 다시 누른 삭제가 409 면 …"* **혼자** |
  * | 설명의 판정이 늘 «안 됨»이다 | *"서버 값이 보낸 값과 같으면 …"* · *"다시 읽기도 실패하면 …"*(둘 다 «같습니다»로 끝난다) |
  * | 시간 제한이 사실상 없다 — **타이머 자리에서** 1000 배 | 이 절 전부 · 멱등 키 절의 둘 · 세션 절의 «모름»(13). 상수(`WRITE_DEADLINE_MS`)를 바꾸면 **0** 이다 — 케이스가 같은 상수로 시간을 민다 |
  *
@@ -833,6 +838,33 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await waitFor(() => expect(screen.queryByText('시간 넘긴 코멘트')).not.toBeNull())
     expect(commentBox().value).toBe('')
     expect(server.rows()).toHaveLength(1)
+  })
+
+  it('코멘트 삭제 — 다시 누른 삭제가 409 면 목록을 다시 받는다: 이미 지워진 코멘트가 남지 않는다', async () => {
+    // **리뷰 4번**(Chrome) — «지워지지 않았습니다» 판정 뒤 서버가 앞 삭제를 늦게 커밋하면, 다시 누른 삭제는
+    // 409 를 받고 목록에는 이미 지워진 코멘트가 남았다. 여기서는 그 둘째 삭제만 흉내 낸다 — 서버에서 행은
+    // 이미 사라졌고 요청은 `stale`로 409 다.
+    let rows = [comment('c-1', '지울 말'), comment('c-2', '남을 말')]
+    await openPage(DOC, {
+      apiOverrides: {
+        listComments: async () => [...rows],
+        deleteComment: (async () => {
+          rows = rows.filter((row) => row.id !== 'c-1')
+          throw new ApiError(409, 'conflict', '페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 8)')
+        }) as never,
+      },
+    })
+    await toCommentTab()
+    await screen.findByText('지울 말')
+
+    const row = screen.getByText('지울 말').closest('li') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: '삭제' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 8)'),
+    )
+    await waitFor(() => expect(screen.queryByText('지울 말')).toBeNull())
+    expect(screen.getByText('남을 말')).toBeTruthy()
   })
 
   it('코멘트 수정 — 목록의 본문이 고친 글이면 저장된 것이다: 편집 칸을 닫는다', async () => {

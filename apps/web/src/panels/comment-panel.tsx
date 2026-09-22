@@ -278,7 +278,9 @@ const DRAFTS = slot<ReadonlyMap<string, string>>('comments/drafts', new Map())
  * **초안 쪽에 든다 — 장부가 아니다.** 키의 수명은 그 초안의 수명이다. 장부는 에디터를 떠나도
  * 살아, 거기 들면 초안이 버려진 뒤에도 키가 남는다 — 돌아와 같은 글을 새로 쳐 달면 앞 게시로
  * 합쳐진다. 일부러 같은 말을 다시 다는 사람의 게시가 사라지는 길이다. 대가도 적어 둔다: 떠났다
- * 오는 사이 늦게 커밋된 게시는 돌아와 새로 친 같은 글과 **합쳐지지 않는다**(새 키다).
+ * 오는 사이 늦게 커밋된 게시는 돌아와 새로 친 같은 글과 **합쳐지지 않는다**(새 키다). 시간 초과의 판에서는
+ * 판정(같은 키로 다시 보내기)이 끝날 때까지 상자가 잠겨 있어 이 길이 안 선다 — 서는 것은 시간 안의 모르는
+ * 실패(502·연결 끊김) 뒤와 새로고침 뒤다(`write-ledger.tsx`의 «이것이 막지 못하는 것»).
  */
 const POST_KEYS = slot<ReadonlyMap<string, { body: string; key: string }>>('comments/post-keys', new Map())
 /** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. */
@@ -497,6 +499,8 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       done: (value: T, openPageId: string) => Promise<void> | void
       /** 판정을 화면에 옮긴다. 반영되지 않았으면 그 실패를 돌려준다 — 초안·편집 칸은 남는다. */
       verified: (verdict: V, ownerLive: boolean, openPageId: string) => Promise<Failure | null> | Failure | null
+      /** 시간 안에 실패했을 때 실패 통지 **말고** 더 할 일. 없으면 통지만 한다. */
+      failed?: (openPageId: string) => void
     }): void => {
       if (pageId === undefined || busy) return
       const openPageId = pageId
@@ -505,7 +509,10 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
         verify: (signal) => op.verify(api, openPageId, signal),
         settle: async (outcome, ownerLive) => {
           try {
-            if (outcome.kind === 'failed') throw outcome.caught
+            if (outcome.kind === 'failed') {
+              op.failed?.(openPageId)
+              throw outcome.caught
+            }
             if (outcome.kind === 'done') {
               await op.done(outcome.value, openPageId)
               setWriteError(null)
@@ -582,7 +589,9 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
           return { posted: true, created: await post(client, openPageId, signal) }
         } catch (caught) {
           // **서버가 답한 거절(4xx)은 확정이다** — 같은 키 · 같은 글을 거절했다면 앞 게시도 커밋될 수 없다
-          // (키가 없으니 같은 판정을 받는다). 연결 실패·5xx 는 아무것도 말하지 않는다 — 모른다.
+          // (키가 없으니 같은 판정을 받는다). 연결 실패·5xx 는 아무것도 말하지 않는다 — 모른다. **예외
+          // 하나** — 앞 게시가 달렸고 그 사이 **다른 탭에서 고쳐졌으면** 409 다(서버의 재생 비교가 지금 행을
+          // 본다 — `apps/api/README.md`의 «멱등 키», 이월). 그때 이 판정은 «안 달림»이 틀린다.
           if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500) {
             return { posted: false, caught }
           }
@@ -614,6 +623,10 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
         setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
         refresh(openPageId)
       },
+      // **실패하면 목록을 다시 받는다**(리뷰 4번). «지워지지 않았습니다» 판정 뒤 서버가 앞 삭제를 늦게
+      // 커밋하면, 다시 누른 삭제는 409(페이지가 이미 변경되었습니다)를 받는데 목록에는 **이미 지워진 코멘트가
+      // 남아** 있었다(Chrome). 무엇이 참인지는 서버의 목록이 말한다 — 통지(409)는 그대로 둔다.
+      failed: (openPageId) => refresh(openPageId),
       verified: ({ at, comments, gone }, ownerLive) => {
         setState(answered(at, { status: 'ready', at, comments }))
         if (!gone) return { kind: 'message', message: NOT_DELETED }
