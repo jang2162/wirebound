@@ -20,14 +20,32 @@ export interface FaultProxy {
   dropCommitReplyAfter(fragment: string): void
   /** `fragment` 를 담은 질의를 **Postgres 에 넘기지 않고** 그 연결을 끊는다 — 그 질의는 서버에 안 닿았다. */
   dropOnQuery(fragment: string): void
+  /**
+   * `fragment` 를 담은 질의 **대신 잘못된 메시지**(형식 `z`)를 Postgres 에 보낸다 — 서버가 **진짜** `FATAL 08P01`
+   * («invalid frontend message type 122»)로 답하고 연결을 닫는다. 리뷰(2026-09-22)의 `corrupt` 모드다 — `08` 부류를 서버에서
+   * 내게 하는 길이 이것뿐이었다.
+   */
+  corruptQuery(fragment: string): void
+  /**
+   * **서버가 연결을 닫은 뒤 api 쪽 소켓을 `ms` 만큼 늦게 닫는다** — 서버의 FATAL 답과 소켓 끝 사이의 틈을 넓힌다. 그 틈은
+   * 진짜로 있다(곁 — api 스크립트에서 경합으로 섰다). 케이스가 경합에 기대지 않고 그 틈을 매번 서게 하려는 것이다. 그 사이
+   * api 가 보낸 바이트는 버린다(서버 쪽은 이미 닫혔다).
+   */
+  holdClientAfterServerClose(ms: number): void
   /** 무장이 쏴졌는가. */
   readonly fired: boolean
   close(): Promise<void>
 }
 
-type Arm = { kind: 'commit-reply'; fragment: string } | { kind: 'query'; fragment: string } | null
+type Arm =
+  | { kind: 'commit-reply'; fragment: string }
+  | { kind: 'query'; fragment: string }
+  | { kind: 'corrupt'; fragment: string }
+  | null
 
 const QUERY = 0x51 // 'Q' — 단순 질의
+/** 없는 메시지 형식 `z`(길이 4 — 본문 없음). 서버는 `08P01`로 답하고 닫는다. */
+const INVALID_MESSAGE = Buffer.from([0x7a, 0, 0, 0, 4])
 
 export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> {
   const upstream = new URL(databaseUrl)
@@ -35,6 +53,7 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
   const upstreamHost = upstream.hostname
   let arm: Arm = null
   let fired = false
+  let holdMs = 0
   const sockets = new Set<net.Socket>()
 
   const server = net.createServer((client) => {
@@ -43,17 +62,32 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     sockets.add(up)
     let sawFragment = false
     let commitSent = false
+    let serverGone = false
     const cut = (): void => {
       client.destroy()
       up.destroy()
     }
+    /** 서버 쪽이 닫혔다 — `holdClientAfterServerClose`가 있으면 api 쪽은 그만큼 뒤에 닫는다. */
+    const onServerGone = (): void => {
+      if (serverGone) return
+      serverGone = true
+      if (holdMs > 0 && !client.destroyed) setTimeout(cut, holdMs).unref()
+      else cut()
+    }
 
     client.on('data', (chunk) => {
+      if (serverGone) return
       const text = chunk.toString('latin1').toLowerCase()
       if (arm?.kind === 'query' && text.includes(arm.fragment)) {
         arm = null
         fired = true
         cut()
+        return
+      }
+      if (arm?.kind === 'corrupt' && text.includes(arm.fragment)) {
+        arm = null
+        fired = true
+        up.write(INVALID_MESSAGE)
         return
       }
       if (arm?.kind === 'commit-reply') {
@@ -73,13 +107,16 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
       }
       client.write(chunk)
     })
-    for (const socket of [client, up]) {
-      socket.on('error', cut)
-      socket.on('close', () => {
-        sockets.delete(socket)
-        cut()
-      })
-    }
+    client.on('error', cut)
+    client.on('close', () => {
+      sockets.delete(client)
+      cut()
+    })
+    up.on('error', onServerGone)
+    up.on('close', () => {
+      sockets.delete(up)
+      onServerGone()
+    })
   })
 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -96,6 +133,12 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     },
     dropOnQuery: (fragment) => {
       arm = { kind: 'query', fragment: fragment.toLowerCase() }
+    },
+    corruptQuery: (fragment) => {
+      arm = { kind: 'corrupt', fragment: fragment.toLowerCase() }
+    },
+    holdClientAfterServerClose: (ms) => {
+      holdMs = ms
     },
     get fired() {
       return fired
