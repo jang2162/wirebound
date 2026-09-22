@@ -1001,6 +1001,19 @@ describe('createHttpClient', () => {
     }
   })
 
+  it("getPage 는 HTTP 캐시를 안 지난다(`cache: 'no-store'`) — 다른 읽기는 캐시 모드를 안 싣는다", async () => {
+    // 설명 저장(`PATCH …/pages/:id`)과 같은 URL 이라, 기본 모드면 저장이 서버에 매달린 동안 Chrome 의 HTTP
+    // 캐시 잠금에 선다(`http-client.ts`의 `getPage` 주석 — 20016ms vs 10ms). **목록은 안 싣는다** — 게시
+    // (`POST`)는 잠금을 안 걸었다(같은 판 12ms). 번지지 않았는지를 같이 본다.
+    const pageFetch = stubFetch(jsonResponse(200, page))
+    await createHttpClient(pageFetch.fetchImpl).getPage('p1', 'pg1')
+    expect(pageFetch.calls[0]?.init?.cache).toBe('no-store')
+
+    const listFetch = stubFetch(jsonResponse(200, [comment]))
+    await createHttpClient(listFetch.fetchImpl).listComments('p1', 'pg1')
+    expect(Object.keys(listFetch.calls[0]?.init ?? {})).not.toContain('cache')
+  })
+
   it('createComment 는 멱등 키를 본문에 싣는다 — 안 주면 키를 만들지 않는다', async () => {
     // `BODY_KEYS.createComment`에 그 키가 없으면 `declaredOnly`가 **조용히 떨군다** — 화면은 키를
     // 들고 있는데 서버는 못 받아, 늦게 커밋된 게시와 다시 단 게시가 두 행이 된다.

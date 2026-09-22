@@ -1011,7 +1011,7 @@ export function createHttpClient(
     path: string,
     shape: Shape,
     body?: unknown,
-    options?: WriteOptions | ReadOptions,
+    options?: (WriteOptions | ReadOptions) & { readonly cache?: RequestCache },
   ): Promise<T> {
     // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
     // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`originConnectionId`가 길이를 본다).
@@ -1035,6 +1035,8 @@ export function createHttpClient(
       // 거절하고 아래 `catch`가 연결 실패로 옮긴다. **끊은 쪽은 그것이 자기 신호인 줄 안다**
       // (`panels/write-ledger.tsx`) — 여기서 따로 가르지 않는다.
       ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      // **캐시 모드도 받았을 때만 키를 만든다** — 위 두 키와 같은 이유다. 받는 것은 `getPage` 하나다(그 주석).
+      ...(options?.cache === undefined ? {} : { cache: options.cache }),
     }
 
     // `fetch`는 응답을 받지 못하면(네트워크 단절·DNS 실패·CORS 차단) 실패 응답이
@@ -1193,8 +1195,21 @@ export function createHttpClient(
         SHAPES.pageImported,
         declaredOnly(body, BODY_KEYS.importPage),
       ),
+    // **HTTP 캐시를 안 지난다**(`no-store`). 설명 저장(`PATCH`)과 **같은 URL** 이라, 저장이 서버에 매달린
+    // 동안 이 GET 이 Chrome 의 HTTP 캐시 잠금에 선다 — 같은 브라우저의 **모든 탭**에서 그 페이지(캔버스의
+    // 문서 · 설명)가 안 열렸다(리뷰 1-3). 잰 값(Chrome · 캐시 켬 · 서버 안 지연 · 그 URL 을 먼저 한 번 읽어
+    // 둔 판): 기본 모드 GET **20016ms**(PATCH 60초 매달림 — 잠금의 상한이 약 20초다) · `no-store` **10ms**.
+    // 앱에서는(서버 안 지연 12초) 옆 탭의 설명 상자가 **9.8s** 뒤에 떴다(쓰기의 10초 시간 제한이 PATCH 를
+    // 끊을 때까지) → 고친 뒤 **0.0s**. 같은 탭 가 → 나 → 가도 앞 판은 페이지 전체가 10초 «페이지를 불러오는
+    // 중…»이었고(리뷰 5번 끝) 고친 뒤 1.5s 에 꺼진 상자가 선다. 시간 제한이 없던 판(이월 R 전)이었어도
+    // 무한이 아니라 GET 하나에 약 20초였다(위 값). 이 응답에는 캐시 헤더가 없어 원래도 매번 서버에 물었다 —
+    // 잃는 것이 없다. **다른 읽기에는 안 준다**: 코멘트 목록
+    // (`GET …/comments`)은 게시(`POST`)와 같은 URL 이지만 `POST`는 잠금을 안 걸었다(같은 판 12ms).
     getPage: (projectId, pageId, options) =>
-      request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail, undefined, options),
+      request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail, undefined, {
+        ...options,
+        cache: 'no-store',
+      }),
     patchOps: (projectId, pageId, body) =>
       request<PatchResult>(
         'PATCH',

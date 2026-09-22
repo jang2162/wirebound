@@ -390,9 +390,10 @@ type Raced<X> = { value: X } | { caught: unknown } | typeof EXPIRED
  * 받으면 거절하는 가짜로 케이스가 잰다) 그 거절은 아래 `then`을 한 번 더 지나 경주에 들어가므로,
  * 같은 순간에 풀린 `expired`가 먼저 선다. 그래서 시간이 되면 언제나 `EXPIRED`다.
  *
- * **끊는 것이 다음 요청보다 먼저다.** 설명의 다시 읽기(`GET …/pages/:id`)는 끊긴 쓰기(`PATCH`)와 **같은
- * URL** 이라, 쓰기가 살아 있으면 Chrome 의 HTTP 캐시 잠금에 선다(리뷰 1-3). 타이머 콜백이 `resolve` 뒤에
- * 곧바로 `abort`하고 다시 읽기는 `await` 뒤에 나가므로 이 순서가 선다 — 바꾸지 마라.
+ * **끊는 것이 다음 요청보다 먼저다.** 타이머 콜백이 `resolve` 뒤에 곧바로 `abort`하고 판정은 `await` 뒤에
+ * 나간다. 앞 판에서는 이 순서가 하중이었다 — 설명의 다시 읽기(`GET …/pages/:id`)는 끊긴 쓰기(`PATCH`)와
+ * **같은 URL** 이라 쓰기가 살아 있으면 Chrome 의 HTTP 캐시 잠금에 섰다(리뷰 1-3). 이제 그 GET 은 캐시를 안
+ * 지나므로(`api/http-client.ts`의 `getPage` — `no-store`) 이 순서에 기대지 않는다. 순서는 그대로 둔다.
  */
 async function race<X>(start: (signal: AbortSignal) => Promise<X>, session: AbortSignal): Promise<Raced<X>> {
   const controller = new AbortController()
