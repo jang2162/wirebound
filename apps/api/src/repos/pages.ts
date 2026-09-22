@@ -33,6 +33,10 @@ import { sql } from 'kysely'
 import type { PageDocument } from '@wirebound/schema'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { assertLocking } from '../db/locking'
+import { assertNoNulBytes } from '../db/nul-guard'
+
+/** 제목·설명의 NUL 을 거절할 때 문장이 부르는 이름. 가져오기가 앞 판에 내던 문장과 같다. */
+const PAGE_TEXT = '페이지 제목·설명'
 
 export interface PageRecord {
   id: string
@@ -191,6 +195,8 @@ export async function insertPage(
   projectId: string,
   input: { menuNodeId: string; title: string; description: string | null; schema: PageDocument; schemaVersion: number },
 ): Promise<PageRecord> {
+  // **가져오기도 여기를 지난다** — 제목·설명의 NUL 판정은 이 자리 하나다(`db/nul-guard.ts`의 `NulByteError`).
+  assertNoNulBytes(PAGE_TEXT, input.title, input.description)
   return withTransaction(db, async (trx) => {
     await assertMenuNodeValid(trx, projectId, input.menuNodeId)
 
@@ -299,6 +305,7 @@ export async function updatePage(
   pageId: string,
   patch: PagePatch,
 ): Promise<PageRecord | null> {
+  assertNoNulBytes(PAGE_TEXT, patch.title, patch.description)
   return withTransaction(db, async (trx) => {
     const current = await trx
       .selectFrom('pages')

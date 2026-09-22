@@ -25,8 +25,8 @@
  * |---|---|---|
  * | `unsupported-version` | 트랜잭션 **앞** | 없다 — 아직 아무것도 안 썼다 |
  * | `invalid-document` | 트랜잭션 **앞** | 없다 |
- * | `nul-byte`(제목·설명) | 트랜잭션 **앞** | 없다 |
  * | `menu-not-found` | 첫 쓰기 시도(`insertPage`) | 없다 — 그 함수가 INSERT 전에 던진다 |
+ * | 제목·설명의 NUL(`NulByteError` — 값이 아니라 **던진 채로** 나간다) | 첫 쓰기 시도(`insertPage`) | 없다 — 그 함수가 트랜잭션도 열기 전에 던진다 |
  * | `edit-failed` | 문서 쓰기 | **페이지 행**(트랜잭션이 되돌린다) |
  * | `comment-nul-byte` | 코멘트 쓰기 | **페이지 행 · 문서 · revision** |
  *
@@ -36,11 +36,13 @@
  * |---|---|---|
  * | 문서 | `applyEdit` 8단계 | `edit-failed`(reason `nul-byte`) → 400 |
  * | 코멘트 본문 | `repos/comments.ts`의 `assertNoNulByte` | `comment-nul-byte` → 400 |
- * | **제목·설명** | **여기** | `nul-byte` → 400 |
+ * | 제목·설명 | `repos/pages.ts`의 `insertPage`(`NulByteError`) | `http/error-handler.ts`가 400 |
  *
- * 셋째만 이 파일이 직접 보는 것은 **`pages.title`에 그런 자리가 없기** 때문이다 — 막지
- * 않으면 `pg`의 raw 예외가 `http/error-handler.ts`에서 **500**이 된다. 사용자가 보낸 글자
- * 때문에 나는 실패는 500이 아니라 400이다(`repos/comments.ts` 머리말과 같은 판단).
+ * **셋째도 이제 그 자리를 쓴다**(2026-09-22 이월 O). 앞 판은 **`pages.title`에 그런 자리가 없어서** 이 파일이
+ * 직접 봤고, 그래서 같은 칸을 쓰는 `PATCH .../pages/:pageId`·`POST .../pages`는 500 이었다 — 판정이 이 파일
+ * 한 자리에만 있었다. 이제 판정은 `insertPage`·`updatePage` 한 자리이고 가져오기도 그것을 지난다(두 벌 금지).
+ * 값으로 옮기지 않고 **던진 채로 둔다** — 번역자가 `http/error-handler.ts` 하나라 가져오기만의 문장을 따로 둘
+ * 이유가 없다(문장은 앞 판과 같다).
  *
  * **앞의 둘을 여기서 미리 끊지 않는 것이 판정이다.** `routes/pages.ts`의 `PUT .../schema`는
  * 미리 끊는데(*"여기서 걸러야 이 요청이 잠금도 트랜잭션도 열지 않고 끝난다"*), 그쪽은
@@ -73,7 +75,6 @@ import {
   type PageJson,
   type ValidationIssue,
 } from '@wirebound/schema'
-import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { CommentNulByteError, insertComment } from '../repos/comments'
 import { MenuNodeNotFoundError, insertPage, type PageRecord } from '../repos/pages'
@@ -111,7 +112,6 @@ export type PageImportOutcome =
     }
   | { kind: 'unsupported-version'; message: string }
   | { kind: 'invalid-document'; issues: ValidationIssue[] }
-  | { kind: 'nul-byte' }
   | { kind: 'menu-not-found' }
   | { kind: 'edit-failed'; baseSeq: number; outcome: Extract<EditOutcome, { ok: false }> }
   | { kind: 'comment-nul-byte' }
@@ -140,9 +140,8 @@ class PageImportAbort extends Error {
  *    머리말에 있고, **리매핑 전 문서로 보는 것**(D8)과 **`error`만 막는 것**(P7-1 이월 §7)이
  *    거기 적혀 있다. **전부에 건다** — P6-2 이월 §7: 복원은 *만드는* 페이지에만 걸지만
  *    가져오기는 전부 만든다.
- * 2. 제목·설명의 NUL(위 표).
- * 3. `planPageImport` — id 재발급과 참조 옮기기(D5).
- * 4. 한 트랜잭션: 페이지 → 문서(`applyEdit`) → 코멘트.
+ * 2. `planPageImport` — id 재발급과 참조 옮기기(D5).
+ * 3. 한 트랜잭션: 페이지(제목·설명의 NUL 은 여기서 — 위 표) → 문서(`applyEdit`) → 코멘트.
  */
 export async function importPage(db: DbHandle, input: PageImportInput): Promise<PageImportOutcome> {
   // **게이트 둘을 여기서 짜지 않는다 — 화면의 미리보기와 같은 함수를 부른다**(P7-3 리뷰 ③).
@@ -158,9 +157,6 @@ export async function importPage(db: DbHandle, input: PageImportInput): Promise<
 
   const title = input.title ?? input.file.page.title
   const description = input.file.page.description ?? null
-  if (containsNulByte(title) || containsNulByte(description)) {
-    return { kind: 'nul-byte' }
-  }
 
   const plan = planPageImport(migrated, input.file.comments)
 

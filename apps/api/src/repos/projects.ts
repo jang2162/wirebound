@@ -6,6 +6,7 @@
  */
 import { DatabaseError } from 'pg'
 import { sql } from 'kysely'
+import { assertNoNulBytes } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
 import { DEFAULT_LAYOUT_NAME, defaultLayoutDocument, insertLayout } from './layouts'
@@ -32,6 +33,9 @@ const UNIQUE_VIOLATION = '23505'
  * `USERS_EMAIL_UNIQUE_CONSTRAINT`와 같은 근거).
  */
 const PROJECTS_SLUG_UNIQUE_CONSTRAINT = 'projects_slug_key'
+
+/** 이름·설명의 NUL 을 거절할 때 문장이 부르는 이름(`db/nul-guard.ts`의 `NulByteError`). */
+const PROJECT_TEXT = '프로젝트 이름·설명'
 
 /** slug가 이미 다른 프로젝트에서 쓰이고 있을 때 `insertProject`/`updateProject`가 던진다. */
 export class DuplicateSlugError extends Error {
@@ -104,6 +108,8 @@ export async function insertProject(
   ownerId: string,
   input: { name: string; slug: string; description: string | null },
 ): Promise<ProjectWithRole> {
+  // 이름·설명의 NUL — 판정과 번역자는 `db/nul-guard.ts`의 `NulByteError`가 소유한다.
+  assertNoNulBytes(PROJECT_TEXT, input.name, input.description)
   try {
     return await withTransaction(db, async (trx) => {
       // 1단계: 프로젝트. `default_layout_id`는 아직 비어 있다.
@@ -194,6 +200,7 @@ export async function updateProject(
   projectId: string,
   patch: { name?: string; slug?: string; description?: string | null },
 ): Promise<ProjectRecord | null> {
+  assertNoNulBytes(PROJECT_TEXT, patch.name, patch.description)
   try {
     const row = await withTransaction(db, (trx) =>
       trx
