@@ -19,6 +19,8 @@
  * | 문지기가 사람이 바뀌어도 머문다 | *"다른 탭이 다른 사람으로 들어오면 목록으로 …"* 와 *"… 이미 목록이어도 …"* — **축의 주인은 앞의 것** |
  * | 문지기가 옮기기만 하고 앞 화면을 내리지 않는다(이미 `/`면 그대로) | *"… 이미 목록이어도 새로 받는다 …"* **혼자** |
  * | 세션 확인이 도는 동안 온 소식을 늦게 온 답이 덮는다 | *"세션 확인이 도는 동안 온 소식이 이긴다 …"* **혼자** |
+ * | 확인 중(`pending`·`failed`)인 탭이 다른 탭의 로그아웃을 버린다(③ 리뷰 N1) | *"… 다른 탭이 로그아웃하면 로그인 화면으로 …"* **혼자** |
+ * | 로그인 소식만 확인의 답을 이긴다(③ 리뷰 N2) | *"… 늦게 온 확인의 답이 앞 사람으로 들이지 않는다 …"* **혼자** |
  * | 떼어도 계속 듣는다(구독을 안 뗀다) | *"떠나면 그만 듣는다"* **혼자** |
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -229,6 +231,44 @@ describe('다른 탭의 소식을 받는다', () => {
     })
 
     expect(who()).toBe('밥')
+  })
+
+  it('세션 확인이 도는 동안 다른 탭이 로그아웃하면 로그인 화면으로 간다 — 버린 확인을 기다리며 빈 화면에 머물지 않는다', async () => {
+    // 소식을 받은 뒤로는 확인의 답을 버린다(위 케이스). 그러니 로그아웃 소식이 확인 중인 탭을 **옮기지 않으면** 그
+    // 탭은 오지 않을 답을 기다리며 빈 화면에 영영 선다(③ 리뷰 B5 N1).
+    const hub = tabHub()
+    renderTab({ client: fakeApi({ me: () => new Promise<SessionUser>(() => {}) }), route: '/', hub })
+
+    await hub.fromOtherTab({ kind: 'signed-out' })
+
+    expect(path()).toBe('/login')
+    expect(screen.getByText('로그인 폼')).toBeTruthy()
+  })
+
+  it('세션 확인이 도는 동안 다른 탭이 로그아웃하면 늦게 온 확인의 답이 앞 사람으로 들이지 않는다 — 그 쿠키는 죽었다', async () => {
+    // 위 «소식이 이긴다»는 로그인 소식만 잰다. 로그아웃 소식도 이겨야 한다 — 마운트의 `me()`는 로그아웃 **전에**
+    // 나가 앞 사람을 답하는데, 그 쿠키는 서버가 이미 지웠다(③ 리뷰 B5 N2).
+    const hub = tabHub()
+    let answer: (user: SessionUser) => void = () => {}
+    renderTab({
+      client: fakeApi({
+        me: () =>
+          new Promise<SessionUser>((resolve) => {
+            answer = resolve
+          }),
+      }),
+      route: '/',
+      hub,
+    })
+
+    await hub.fromOtherTab({ kind: 'signed-out' })
+    await act(async () => {
+      answer(ALICE)
+    })
+
+    // 어디에 섰는지는 위 케이스(N1)의 축이다 — 여기는 «앞 사람으로 들어가지 않는다»만 잰다.
+    expect(who()).toBe('-')
+    expect(screen.queryByText('목록')).toBeNull()
   })
 
   it('떠나면 그만 듣는다', async () => {

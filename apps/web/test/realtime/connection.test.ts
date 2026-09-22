@@ -295,6 +295,7 @@ describe('close()는 그만두는 것이다', () => {
  * | 변조 | 죽는 것 |
  * |---|---|
  * | 곧바로가 아니라 재연결 간격을 기다려 붙는다 | *"열린 연결을 버리고 곧바로 …"* **혼자** |
+ * | 열린 소켓만 버린다(핸드셰이크 중이면 그대로 둔다 — ③ 리뷰 N3) | *"핸드셰이크 중인 소켓도 …"* **혼자** |
  * | 옛 소켓의 핸들러를 떼지 않고 닫는다(닫힘이 재연결을 한 번 더 예약한다) | *"옛 소켓이 늦게 낸 …"* **혼자** |
  * | 재연결을 기다리는 중에도(`close()` 뒤에도) 곧바로 붙는다 | *"재연결을 기다리는 중이거나 …"* **혼자** |
  */
@@ -310,6 +311,19 @@ describe('reconnect()는 새 쿠키로 다시 붙는 것이다', () => {
     expect(h.sockets).toHaveLength(2)
     // 닫힘을 알리고(연결 id 를 비우고 답을 기다리던 편집을 끝낸다 — `use-realtime.ts`) 곧바로 붙는다.
     expect(h.statuses).toEqual(['closed', 'connecting'])
+    h.sockets[1]!.onopen?.()
+    expect(h.connection.isOpen()).toBe(true)
+  })
+
+  it('핸드셰이크 중인 소켓도 버리고 곧바로 다시 붙는다 — 그 핸드셰이크는 옛 쿠키를 실었다', () => {
+    // 첫 소켓은 아직 `onopen`을 안 지났다(끊긴 뒤 예약된 연결이 막 떠난 판과 같다). 그 핸드셰이크는 쿠키가 바뀌기
+    // **전에** 나갔으므로 붙으면 옛 세션이다 — 열린 소켓만 버리면 Z 가 그 연결에서 선다(③ 리뷰 B5 N3).
+    const h = harness()
+
+    h.connection.reconnect()
+
+    expect(h.sockets[0]!.closed).toBe(true)
+    expect(h.sockets).toHaveLength(2)
     h.sockets[1]!.onopen?.()
     expect(h.connection.isOpen()).toBe(true)
   })
