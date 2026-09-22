@@ -30,15 +30,21 @@ import type {
 } from './types'
 
 /**
- * 쓰기 하나에 얹는 선택 — **`signal`뿐이다.** 끊을지·언제 끊을지는 부르는 쪽이 정한다
+ * 쓰기 하나에 얹는 선택. **`signal`** — 끊을지·언제 끊을지는 부르는 쪽이 정한다
  * (`panels/write-ledger.tsx`의 시간 제한). 지금 이것을 받는 것은 우측 패널의 쓰기 다섯(설명 ·
  * 코멘트 넷)이고, 그 장부가 잠금을 쥐는 쓰기들이다.
  *
  * **끊겨도 서버는 끝낼 수 있다** — 끊는 것은 이 브라우저가 응답을 더 기다리지 않는다는 뜻이지
  * 서버가 안 썼다는 뜻이 아니다(그 장부의 머리말에 실측이 있다).
+ *
+ * **`connectionId`** — 이 쓰기를 **낸** 연결(`x-wb-connection-id`). 없으면 **지금** 연결이다
+ * (`createHttpClient`의 둘째 인자). 받는 것은 게시의 같은 키 재전송 하나다 — 다시 보낸 것은 같은 요청이라
+ * 첫 보내기의 연결을 싣는다(`panels/comment-panel.tsx`의 `submit`). 지금 연결을 실으면 그 사이 셸이
+ * 바뀌었을 때 서버가 **새 셸의** 연결을 방송에서 빼서 번호가 새 셸에 안 선다.
  */
 export interface WriteOptions {
   readonly signal?: AbortSignal
+  readonly connectionId?: string
 }
 
 /**

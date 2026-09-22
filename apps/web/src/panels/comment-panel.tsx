@@ -148,6 +148,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import { ApiError, type ApiClient } from '../api/client'
 import type { Comment, CommentCreated } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
+import { useRealtimeSetup } from '../realtime/context'
 import { useSessionUser } from '../session/session-context'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { lockSlot, slot, usePanelLock, usePanelSlot } from './panel-drafts'
@@ -402,6 +403,8 @@ function rank(group: Group): number {
 export function CommentPanel(props: { projectId: string; pageId: string | undefined }): ReactElement {
   const api = useApi()
   const store = useEditorStoreInstance()
+  // 지금 연결의 id 를 읽는 자리 — 게시가 그것을 **보낼 때** 잡아 다시 보낼 때도 싣는다(`submit`).
+  const connections = useRealtimeSetup()?.holder
   // **남의 코멘트는 고칠 수 없다**(서버의 재라 #2). `null`이면 아직 누구인지 모르는
   // 것이므로 수정 단추를 하나도 안 낸다 — 서버가 어차피 403으로 막는다.
   const currentUser = useSessionUser()
@@ -518,7 +521,9 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
    * 것은 **쓰기를 시작한 셸이 아직 떠 있을 때**뿐이다(`ownerLive`) — 서버가 방송에서 그 요청의
    * 연결을 빼기 때문이다. 셸이 내려갔다 새로 섰으면 새 셸은 **새 연결**이라 그 방송을 받는다
    * (Chrome 실측 — 에디터를 떠났다 온 사이 커밋된 게시의 번호가 새 스토어에 섰다). 그래서
-   * 어긋났다고 말하는 것은 셸이 떠 있을 때만이다.
+   * 어긋났다고 말하는 것은 셸이 떠 있을 때만이다. **게시를 같은 키로 다시 보낸 것이 커밋해도(201) 같다** —
+   * 다시 보낸 것이 첫 보내기의 연결을 싣기 때문이다(`submit`의 `origin`. 앞 판은 지금 연결을 실어 새 셸이
+   * 방송에서 빠졌다).
    */
   const perform = useCallback(
     <T, V>(op: {
@@ -573,12 +578,19 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     const held = postKeys.get(nodeId)
     const idempotencyKey = held !== undefined && held.body === body ? held.key : crypto.randomUUID()
     setPostKeys((prev) => new Map(prev).set(nodeId, { body, key: idempotencyKey }))
-    const post = (client: ApiClient, openPageId: string, signal?: AbortSignal): Promise<CommentCreated> =>
+    // **다시 보낸 것도 첫 보내기의 연결을 싣는다**(`WriteOptions.connectionId`) — 같은 요청이다. 서버는 그
+    // 연결을 방송에서 뺀다(응답의 `markerOps`를 낸 셸이 스스로 얹으므로). 앞 판은 다시 보낼 때 **지금**
+    // 연결을 실었고, 그 사이 셸째 떠났다 왔으면 그것은 **새 셸의** 연결이라 새 셸이 방송을 못 받았다 —
+    // 응답의 번호는 내려간 셸의 스토어에 얹혔다(Chrome: 첫 게시를 route 에 붙잡아 둔 채 셸째 떠났다 오고,
+    // 다시 보낸 것이 201 — 새 셸의 번호 칸 `–` · 통지 없음 · DB 의 번호 1 · 새로고침하면 `1`). 첫 보내기의
+    // 연결이면 셸이 떠 있을 때는 지금과 같고, 내려갔으면 없는 연결이라 서버가 아무도 빼지 않는다.
+    const origin = connections?.get()
+    const post = (client: ApiClient, openPageId: string, signal: AbortSignal): Promise<CommentCreated> =>
       client.createComment(
         projectId,
         openPageId,
         { nodeId, body, idempotencyKey },
-        signal === undefined ? undefined : { signal },
+        origin === undefined ? { signal } : { signal, connectionId: origin },
       )
 
     /** 달렸다 — 첫 응답이든 다시 보낸 것의 응답이든 뒷일은 같다. */

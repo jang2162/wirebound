@@ -1240,6 +1240,21 @@ describe('createHttpClient', () => {
     ])
   })
 
+  it('쓰기가 낸 연결을 주면 그것이 나간다 — 지금 연결이 아니다(게시의 같은 키 재전송)', async () => {
+    // `panels/comment-panel.tsx`의 `submit`: 다시 보낸 것은 첫 보내기의 연결을 싣는다. 지금 연결을 실으면
+    // 그 사이 셸이 바뀌었을 때 서버가 **새 셸의** 연결을 방송에서 뺀다(Chrome — 새 셸의 번호 칸 `–`).
+    const stub = stubFetch(jsonResponse(201, commentCreated), jsonResponse(201, commentCreated))
+    const client = createHttpClient(stub.fetchImpl, () => 'wsc_new')
+
+    await client.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' }, { connectionId: 'wsc_old' })
+    await client.createComment('p1', 'pg1', { nodeId: 'n_000000000001', body: '가' })
+
+    expect(stub.calls.map((call) => (call.init?.headers as Record<string, string>)['x-wb-connection-id'])).toEqual([
+      'wsc_old',
+      'wsc_new',
+    ])
+  })
+
   it('연결이 없으면 헤더를 아예 안 만든다 — 빈 문자열을 보내지 않는다', async () => {
     const stub = stubFetch(jsonResponse(200, user))
     const client = createHttpClient(stub.fetchImpl, () => undefined)

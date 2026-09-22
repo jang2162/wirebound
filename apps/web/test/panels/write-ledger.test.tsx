@@ -20,6 +20,7 @@ import type { ApiClient, ReadOptions, WriteOptions } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
 import type { Comment, CommentCreated, PageDetail, ProjectDetail, SessionUser } from '../../src/api/types'
 import { WRITE_DEADLINE_MS } from '../../src/panels/write-ledger'
+import { createConnectionIdHolder, type ConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import {
   HEAD_SEQ,
   OTHER_PAGE_TITLE,
@@ -112,6 +113,16 @@ async function returnFromList(): Promise<void> {
   const tree = await screen.findByRole('region', { name: '메뉴·페이지 트리' })
   fireEvent.click(await within(tree).findByRole('link', { name: PAGE_TITLE }))
   await waitForNode(ROOT_ID)
+}
+
+/**
+ * 연결 id 를 **손으로** 드는 실시간 설정 — 소켓은 열리지 않는다(`holder`만 쓴다). 셸이 내려가면 실시간 훅이
+ * 그 값을 비우므로 새 셸에서 다시 넣는다.
+ */
+function connections(): { setup: RealtimeSetup; holder: ConnectionIdHolder } {
+  const holder = createConnectionIdHolder()
+  const socket = () => ({ onopen: null, onmessage: null, onclose: null, onerror: null, send: () => {}, close: () => {} })
+  return { holder, setup: { holder, connection: { createSocket: socket, schedule: () => 0, cancel: () => {} } } }
 }
 
 /** 가짜 타이머를 그만큼 민다 — 그 사이 약속과 React 갱신을 함께 흘린다. */
@@ -272,6 +283,8 @@ function commentServer(initial: Comment[] = []): {
   rows: () => Comment[]
   /** 게시가 실어 온 멱등 키 — 부른 순서대로. */
   keys: (string | undefined)[]
+  /** 게시가 실어 온 연결 id(`WriteOptions.connectionId`) — 부른 순서대로. 안 실었으면 `undefined`다. */
+  origins: (string | undefined)[]
   failNext: (error?: ApiError) => void
   /** 다음 게시를 **서버는 커밋하고** 브라우저에는 그 실패를 준다(앞단이 502 를 냈다 · 연결이 끊겼다). */
   commitThenFail: (error: ApiError) => void
@@ -302,10 +315,12 @@ function commentServer(initial: Comment[] = []): {
   const markers = new Map<string, number>()
   const byKey = new Map<string, Comment>()
   const keys: (string | undefined)[] = []
+  const origins: (string | undefined)[] = []
   const waiting: { commit: () => void; resolve: () => void }[] = []
   return {
     rows: () => rows,
     keys,
+    origins,
     // 기본은 **api 가 낸 500**(오류 봉투가 있다) — 확정 실패다(`comment-panel.tsx`의 `knownRejection`).
     failNext: (error = new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true)) => {
       failing.push(error)
@@ -347,6 +362,7 @@ function commentServer(initial: Comment[] = []): {
         options?: WriteOptions,
       ) => {
         keys.push(body.idempotencyKey)
+        origins.push(options?.connectionId)
         const failure = failing.shift()
         if (failure !== undefined) return Promise.reject(failure)
         const replay = (row: Comment): CommentCreated => ({
@@ -1052,6 +1068,8 @@ describe('시간 안의 모르는 실패 — 같은 키로 다시 보내 판정�
  * | 키를 페이지를 넘어 든다(모듈 전역 — 장부에 드는 꼴) | *"페이지를 떠나면 키도 …"* **혼자** |
  * | 다시 보낼 때 새 키를 짓는다 | *"다시 보낸 게시는 같은 키를 싣는다 …"* · *"재생은 …"* · R 절의 *"… 연결이 실패하면 모른다 …"* |
  * | 셸이 바뀌었어도 재생의 번호 어긋남을 말한다(`ownerLive`) | **0** — jsdom 에는 실시간 방송이 없다. Chrome 으로 잰다(`comment-panel.tsx`의 `landed`: 이 조건을 빼면 번호 `1`이 보이는데 «반영하지 못했습니다»가 선다) |
+ * | 다시 보낸 게시가 첫 보내기의 연결 id 를 안 싣는다(지금 연결이 나간다 — 앞 판) | *"다시 보낸 게시는 첫 보내기의 연결 id 를 …"* **혼자**. 그 뜻은 Chrome 이 쟀다(`comment-panel.tsx`의 `submit`: 새 셸의 번호 칸 `–` · 통지 없음) |
+ * | 연결 id 를 다시 보낼 때 읽는다(보낼 때 잡지 않는다) | 같은 케이스 **혼자** |
  *
  * **«같은 키로 다시 보낸다»는 혼자 죽지 않는다** — 그것이 깨지면 재생이 안 일어나 *"재생은 …"*이 설
  * 자리가 없어진다. **그 축의 주인은 *"다시 보낸 게시는 같은 키를 싣는다 …"*다** — *"재생은 …"*은 그 위에서
@@ -1102,6 +1120,33 @@ describe('멱등 키 — 같은 초안은 같은 키를 싣고, 성공·고침·
     await lateCommitWhileResending(server)
 
     expect(screen.getByText('번호를 화면에 반영하지 못했습니다 — 새로고침하면 맞춰집니다')).toBeTruthy()
+  })
+
+  it('다시 보낸 게시는 첫 보내기의 연결 id 를 싣는다 — 그 사이 셸째 떠났다 왔어도', async () => {
+    // 서버는 게시를 낸 연결을 방송에서 뺀다. 다시 보낸 것이 **지금** 연결을 실으면 셸째 떠났다 온 판에서
+    // 그것은 새 셸의 연결이라 새 셸이 번호를 못 받는다(Chrome — `comment-panel.tsx`의 `submit`). **jsdom 에는
+    // 방송이 없어 여기서는 싣는 값만 잰다** — 헤더로 나가는지는 `test/api/http-client.test.ts`가 갖는다.
+    const server = commentServer()
+    const live = connections()
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...listProjects }, realtime: live.setup })
+    await toCommentTab()
+    live.holder.set('wsc_old')
+    // 첫 보내기도 다시 보낸 것도 모른다 — «다시 확인»에 선다.
+    server.failNext(new ApiError(503, 'internal', '서버 응답을 이해할 수 없습니다'))
+    server.failNext(new ApiError(503, 'internal', '서버 응답을 이해할 수 없습니다'))
+    type(commentBox(), '셸을 넘는 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(screen.getByRole('button', { name: '다시 확인' })).toBeTruthy())
+
+    await leaveEditorAndReturn()
+    await toCommentTab()
+    // 새 셸은 새 연결이다.
+    live.holder.set('wsc_new')
+    fireEvent.click(await screen.findByRole('button', { name: '다시 확인' }))
+    await waitFor(() => expect(server.keys).toHaveLength(3))
+
+    expect(server.origins).toEqual(['wsc_old', 'wsc_old', 'wsc_old'])
+    expect(server.keys[2]).toBe(server.keys[0])
   })
 
   it('글을 고쳐 다시 달면 새 키다 — 고친 글은 다른 게시다', async () => {
