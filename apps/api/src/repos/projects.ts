@@ -6,6 +6,7 @@
  */
 import { DatabaseError } from 'pg'
 import { sql } from 'kysely'
+import { assertLocking } from '../db/locking'
 import { withTransaction, type DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
 import { DEFAULT_LAYOUT_NAME, defaultLayoutDocument, insertLayout } from './layouts'
@@ -173,6 +174,20 @@ export async function findProjectById(db: DbHandle, projectId: string): Promise<
     .executeTakeFirst()
 
   return row ?? null
+}
+
+/**
+ * 프로젝트 행을 `FOR UPDATE`로 잠근다. **프로젝트를 통째로 다루는 트랜잭션이 맨 먼저 잡는 잠금이다** — 부르는
+ * 자리가 둘이다: 복원(`repos/snapshots.ts`의 `lockProjectForRestore`)과 프로젝트 삭제(`routes/projects.ts`).
+ * 둘 다 이것을 **페이지보다 먼저** 잡는다. 한쪽이라도 페이지를 먼저 잡으면 «프로젝트 행을 쥐고 페이지를 기다림 ↔
+ * 페이지를 쥐고 프로젝트 행을 기다림»이 된다(잰 값은 `routes/projects.ts`의 삭제 주석).
+ *
+ * `FOR UPDATE`여야 한다 — `FOR NO KEY UPDATE`는 FK 삽입이 부모 행에 거는 `FOR KEY SHARE`와 충돌하지 않아, 그 삽입을
+ * 막지 못하고 그 대기를 뒤로 미룬다(복원은 그 삽입을 막는 것이 몫이다 — `lockProjectForRestore` 머리말).
+ */
+export async function lockProjectRow(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectRow')
+  await trx.selectFrom('projects').select('id').where('id', '=', projectId).forUpdate().execute()
 }
 
 /**

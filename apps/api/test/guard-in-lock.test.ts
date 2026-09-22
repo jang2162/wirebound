@@ -17,19 +17,24 @@
  *
  * # 분모 — 페이지 잠금에 서는 쓰기
  *
- * 쓰기 라우트 전부(`restore-lock-census.test.ts`의 표 — `projectGuard`가 걸린 비-`GET`)를 페이지 행
- * 잠금(`lockPageForEdit`) 아래에서 쏘아 **서는 것만** 골랐다(2026-09-22 · 창 700ms). 아래 `분모` 절이
- * 소스의 쓰기 라우트를 이 표와 `페이지 잠금에 안 서는 쓰기` 목록 둘로 **빠짐없이** 가르게 한다 — 새 쓰기
- * 라우트가 생기면 이 파일이 먼저 죽고, 사람이 «이것이 페이지 잠금에 서는가»를 판정한다.
+ * 쓰기 라우트 전부를 페이지 행 잠금(`lockPageForEdit`) 아래에서 쏘아 **서는 것만** 골랐다(2026-09-22 · 창 700ms).
+ * 아래 `분모` 절이 **등록된** 쓰기 라우트(Fastify 의 `onRoute` 값)와 WS 프레임 종류를 이 표와 `페이지 잠금에 안 서는
+ * 쓰기` 목록 둘로 **빠짐없이** 가르게 한다 — 새 쓰기가 생기면 이 파일이 먼저 죽고, 사람이 «이것이 페이지 잠금에
+ * 서는가»를 판정한다.
+ *
+ * # 잠금 순서 — 재확인이 연 교착
+ *
+ * 프로젝트 삭제가 재확인을 위해 기다릴 것을 먼저 잡게 되면서 잠금 순서가 생겼다. 아래 `잠금 순서` 절이 그 순서가
+ * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로 잰다.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
-import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import type { RegisteredRoute } from '../src/app'
 import { withTransaction } from '../src/db/tx'
 import { updateMemberRole } from '../src/repos/members'
+import { insertMenuNode } from '../src/repos/menu'
 import { lockPageForEdit } from '../src/repos/pages'
+import { MIN_ROLE_FOR_FRAME } from '../src/ws/protocol'
 import {
   addMember,
   createMenuNode,
@@ -38,6 +43,7 @@ import {
   getTestDb,
   resetRealData,
   signup,
+  withApi,
   withRealApi,
   type RealApiContext,
   type SignedUpUser,
@@ -168,6 +174,16 @@ interface Prepared {
   authorization?: string
 }
 
+/** 보낸 요청을 «끝났는가»를 볼 수 있는 모양으로 싼다. */
+function track(response: PromiseLike<{ statusCode: number; body: string }>): Fired {
+  let settled = false
+  const promise = Promise.resolve(response).then((res) => {
+    settled = true
+    return { status: res.statusCode, body: res.body }
+  })
+  return { done: () => settled, promise }
+}
+
 function fireRest(
   ctx: RealApiContext,
   fx: Fx,
@@ -176,16 +192,15 @@ function fireRest(
   payload?: Record<string, unknown>,
   prepared: Prepared = {},
 ): Fired {
-  let settled = false
   // 토큰 판은 쿠키를 싣지 않는다 — 실으면 쿠키가 이긴다(`auth/plugin.ts`).
   const auth = prepared.authorization === undefined ? { cookies: fx.bob.cookie } : { headers: { authorization: prepared.authorization } }
-  const promise = ctx.app
-    .inject({ method, url, ...auth, ...(payload === undefined ? {} : { payload: payload as never }) })
-    .then((res) => {
-      settled = true
-      return { status: res.statusCode, body: res.body }
-    })
-  return { done: () => settled, promise }
+  return track(ctx.app.inject({ method, url, ...auth, ...(payload === undefined ? {} : { payload: payload as never }) }))
+}
+
+/** 끝나기를 `ms`까지만 기다리고, 그 안에 끝났는지를 돌려준다(막혔으면 `false` — 요청은 계속 돈다). */
+async function settlesWithin(fired: Fired, ms: number): Promise<boolean> {
+  await Promise.race([fired.promise, new Promise((resolve) => setTimeout(resolve, ms))])
+  return fired.done()
 }
 
 async function headSeqOf(pageId: string): Promise<number> {
@@ -194,7 +209,7 @@ async function headSeqOf(pageId: string): Promise<number> {
 }
 
 interface Probe {
-  /** 소스에서 뽑은 키(`METHOD /경로`)와 맞대는 값. WS 는 `WS patch`. */
+  /** 등록된 라우트의 키(`METHOD /api/…` — 아래 «분모» 절)와 맞대는 값. WS 는 `WS <프레임 종류>`. */
   route: string
   label: string
   bobRole: BobRole
@@ -207,9 +222,14 @@ interface Probe {
   okStatus: number
 }
 
+/** 아래 절들이 표의 판을 라벨로 다시 꺼낸다(`probeLabeled`). */
+const BARE_COMMENT = '코멘트 게시 (번호를 붙인다 — Chrome a-4 의 판)'
+const OPS_EDIT = '페이지 ops 편집'
+const WS_PATCH = 'WS patch 프레임'
+
 const PROBES: Probe[] = [
   {
-    route: 'PATCH /:projectId/pages/:pageId',
+    route: 'PATCH /api/projects/:projectId/pages/:pageId',
     label: '페이지 메타 수정',
     bobRole: 'editor',
     lockPage: (fx) => fx.pageId,
@@ -218,7 +238,7 @@ const PROBES: Probe[] = [
     okStatus: 200,
   },
   {
-    route: 'DELETE /:projectId/pages/:pageId',
+    route: 'DELETE /api/projects/:projectId/pages/:pageId',
     label: '페이지 삭제',
     bobRole: 'editor',
     lockPage: (fx) => fx.sparePageId,
@@ -226,7 +246,7 @@ const PROBES: Probe[] = [
     okStatus: 204,
   },
   {
-    route: 'PUT /:projectId/pages/:pageId/schema',
+    route: 'PUT /api/projects/:projectId/pages/:pageId/schema',
     label: '페이지 스키마 저장',
     bobRole: 'editor',
     lockPage: (fx) => fx.pageId,
@@ -237,8 +257,8 @@ const PROBES: Probe[] = [
     okStatus: 200,
   },
   {
-    route: 'PATCH /:projectId/pages/:pageId/ops',
-    label: '페이지 ops 편집',
+    route: 'PATCH /api/projects/:projectId/pages/:pageId/ops',
+    label: OPS_EDIT,
     bobRole: 'editor',
     lockPage: (fx) => fx.pageId,
     fire: async (ctx, fx) =>
@@ -249,8 +269,8 @@ const PROBES: Probe[] = [
     okStatus: 200,
   },
   {
-    route: 'POST /:projectId/pages/:pageId/comments',
-    label: '코멘트 게시 (번호를 붙인다 — Chrome a-4 의 판)',
+    route: 'POST /api/projects/:projectId/pages/:pageId/comments',
+    label: BARE_COMMENT,
     bobRole: 'editor',
     lockPage: (fx) => fx.barePageId,
     fire: async (ctx, fx) =>
@@ -265,7 +285,7 @@ const PROBES: Probe[] = [
     // 재확인은 두 갈래(번호를 붙인다 / 행만 넣는다) **앞에 한 줄**이다 — 그 줄을 지우면 위 판과 함께 죽는다(그 축은
     // 위 판이 소유한다). 이 판이 혼자 재는 것은 «행만 넣는 갈래도 재확인을 지난다»다: 재확인을 `applyEdit` 갈래로만
     // 옮기면 이 판만 죽는다.
-    route: 'POST /:projectId/pages/:pageId/comments',
+    route: 'POST /api/projects/:projectId/pages/:pageId/comments',
     label: '코멘트 게시 (번호가 이미 있다 — 행만 넣는다)',
     bobRole: 'editor',
     lockPage: (fx) => fx.pageId,
@@ -278,7 +298,7 @@ const PROBES: Probe[] = [
     okStatus: 201,
   },
   {
-    route: 'DELETE /:projectId/pages/:pageId/comments/:commentId',
+    route: 'DELETE /api/projects/:projectId/pages/:pageId/comments/:commentId',
     label: '코멘트 삭제 (마지막이라 번호도 지운다)',
     bobRole: 'editor',
     lockPage: (fx) => fx.pageId,
@@ -287,7 +307,7 @@ const PROBES: Probe[] = [
     okStatus: 200,
   },
   {
-    route: 'POST /:projectId/pages/:pageId/comments/renumber',
+    route: 'POST /api/projects/:projectId/pages/:pageId/comments/renumber',
     label: '코멘트 재번호 (바꿀 번호가 있다)',
     bobRole: 'editor',
     lockPage: (fx) => fx.misnumberedPageId,
@@ -296,7 +316,7 @@ const PROBES: Probe[] = [
     okStatus: 200,
   },
   {
-    route: 'POST /:projectId/snapshots/:snapshotId/restore',
+    route: 'POST /api/projects/:projectId/snapshots/:snapshotId/restore',
     label: '스냅샷 복원 (owner)',
     bobRole: 'owner',
     lockPage: (fx) => fx.pageId,
@@ -305,7 +325,7 @@ const PROBES: Probe[] = [
     okStatus: 200,
   },
   {
-    route: 'DELETE /:projectId',
+    route: 'DELETE /api/projects/:projectId',
     label: '프로젝트 삭제 (owner)',
     bobRole: 'owner',
     lockPage: (fx) => fx.pageId,
@@ -316,7 +336,7 @@ const PROBES: Probe[] = [
     // 재확인을 지우면 아래 동시 역할 변경의 WS 판과 함께 죽는다. 이 판이 혼자 재는 것은 **자리**다 — 재확인을
     // `applyEdit` 앞(잠금 대기 앞)으로 옮기면 멤버 행을 쥔 채 잠금을 기다려 강등이 막히고, 이 판만 죽는다.
     route: 'WS patch',
-    label: 'WS patch 프레임',
+    label: WS_PATCH,
     bobRole: 'editor',
     lockPage: (fx) => fx.pageId,
     prepare: async (ctx, fx) => {
@@ -369,29 +389,47 @@ async function waitForLockWaiter(atLeast = 1, timeoutMs = 5_000): Promise<void> 
   throw new Error('잠금을 기다리는 트랜잭션이 나타나지 않았습니다 — 시나리오가 성립하지 않았습니다')
 }
 
+interface QueuedLock {
+  /** 잠금을 **잡았을 때** 풀린다. 남이 쥐고 있으면 그동안 줄에 서 있다. */
+  acquired: Promise<void>
+  /** 그 트랜잭션을 커밋한다(잡기 전에 부르면 잡자마자 커밋한다). */
+  release: () => Promise<void>
+}
+
 /**
- * 페이지 행 하나를 **진짜 잠금 함수로** 잡는다 — 잠금 SQL 을 베끼지 않는다(`restore-lock-census`와 같은 판단).
- * 돌려준 `release`를 부르면 그 트랜잭션이 커밋된다.
+ * 페이지 행 하나를 **진짜 잠금 함수로** 잡으러 간다 — 잠금 SQL 을 베끼지 않는다(`restore-lock-census`와 같은 판단).
+ * 기다리지 않고 돌아온다 — 남이 쥐고 있으면 이 트랜잭션은 **줄에 선다**(«같은 페이지의 다른 사람 편집»).
  */
-async function holdPageLock(projectId: string, pageId: string): Promise<{ release: () => Promise<void> }> {
+function queuePageLock(projectId: string, pageId: string): QueuedLock {
   let release: () => void = () => {}
   const held = new Promise<void>((resolve) => {
     release = resolve
   })
-  let locked = false
+  let markAcquired: () => void = () => {}
+  const acquired = new Promise<void>((resolve) => {
+    markAcquired = resolve
+  })
   const holder = withTransaction(db, async (trx) => {
     const page = await lockPageForEdit(trx, projectId, pageId)
     if (!page) throw new Error('잡을 페이지가 없습니다')
-    locked = true
+    markAcquired()
     await held
   })
-  while (!locked) await new Promise((resolve) => setTimeout(resolve, 10))
   return {
+    // 잡기 전에 트랜잭션이 던지면 그것을 그대로 드러낸다 — 영영 안 풀리는 약속으로 매달리지 않는다.
+    acquired: Promise.race([acquired, holder]),
     release: async () => {
       release()
       await holder
     },
   }
+}
+
+/** 페이지 행 하나를 잡고 **잡을 때까지** 기다린다. 돌려준 `release`를 부르면 그 트랜잭션이 커밋된다. */
+async function holdPageLock(projectId: string, pageId: string): Promise<{ release: () => Promise<void> }> {
+  const lock = queuePageLock(projectId, pageId)
+  await lock.acquired
+  return lock
 }
 
 type Demotion = 'role' | 'member'
@@ -487,27 +525,31 @@ function probeLabeled(label: string): Probe {
   return probe
 }
 
-const BARE_COMMENT = '코멘트 게시 (번호를 붙인다 — Chrome a-4 의 판)'
-const OPS_EDIT = '페이지 ops 편집'
-
 /**
  * **멤버에서 빠지면 404 — 가드와 같은 상태 코드다.** 재확인이 가드의 술어(`requireProjectRole`)를 그대로 쓰면
  * 비멤버는 404 · 역할 모자람은 403 으로 갈린다. 재확인에 술어를 한 벌 더 쓰면(예: «역할이 없거나 모자라면 403»)
- * 위 표의 403 판은 전부 그대로 지나고 **이 판만** 죽는다.
+ * 위 표의 403 판은 전부 그대로 지나고 **이 절만** 죽는다.
  *
- * 재확인 자리를 지우는 변조에는 표의 `코멘트 게시 (번호를 붙인다 …)` 판과 **함께** 죽는다 — 그 축(재확인이
- * 서는가)은 그 판이 소유한다. 이 판이 혼자 소유하는 것은 상태 코드(404)다.
+ * **REST 와 WS 가 한 판씩이다 — 재확인이 두 자리에 따로 있기 때문이다**(`auth/roles.ts`의 `recheckProjectRole` ·
+ * `ws/patch.ts`의 `requireProjectRole`). 한쪽만 두 벌 술어로 바꾸면 그쪽 판만 죽는다. 앞 판은 REST 한 판뿐이라
+ * WS 쪽을 두 벌로 바꾸는 변조에 api 전량이 통과했다(2026-09-22 리뷰 W1). WS 는 거절이 `patch-error` 프레임의 상태다 —
+ * 가드 경로의 WS(프레임 수신 확인)는 비멤버면 소켓을 끊지만(4403), 잠금 안의 재확인은 끊지 않고 404 를 답한다.
+ *
+ * 재확인 자리를 지우는 변조에는 표의 같은 라우트 판(`코멘트 게시 (번호를 붙인다 …)` · `WS patch 프레임`)과 **함께**
+ * 죽는다 — 그 축(재확인이 서는가)은 그 판들이 소유한다. 이 절이 혼자 소유하는 것은 상태 코드(404)다.
  */
 describe('멤버에서 빠지면 404 — 가드와 같은 상태 코드 (Chrome a-4 gap-member 의 api 판)', () => {
-  it('코멘트 게시가 잠금에 쥐인 채 멤버에서 빠지면 풀린 뒤 404 — 아무것도 안 바뀐다', async () => {
-    await withRealApi(async (ctx) => {
-      const outcome = await runHeld(ctx, probeLabeled(BARE_COMMENT), 'member')
-      expect(outcome.demotedWhileHeld, '제외가 쓰기의 잠금 대기에 막혔다').toBe(true)
-      expect(outcome.demotionStatus).toBe(204)
-      expect(outcome.status, outcome.body).toBe(REFUSED.member)
-      expect(outcome.after).toEqual(outcome.before)
-    })
-  }, 60_000)
+  for (const label of [BARE_COMMENT, WS_PATCH]) {
+    it(`${label}: 잠금에 쥐인 채 멤버에서 빠지면 풀린 뒤 404 — 아무것도 안 바뀐다`, async () => {
+      await withRealApi(async (ctx) => {
+        const outcome = await runHeld(ctx, probeLabeled(label), 'member')
+        expect(outcome.demotedWhileHeld, '제외가 쓰기의 잠금 대기에 막혔다').toBe(true)
+        expect(outcome.demotionStatus).toBe(204)
+        expect(outcome.status, outcome.body).toBe(REFUSED.member)
+        expect(outcome.after).toEqual(outcome.before)
+      })
+    }, 60_000)
+  }
 })
 
 /**
@@ -578,6 +620,15 @@ describe('토큰 요청도 커밋 순간의 권한으로 판정한다', () => {
  * **이 판의 축(재확인이 서는가)은 표의 `코멘트 게시 (번호를 붙인다 …)` 판이 소유한다** — 같은 변조에 함께 죽는다.
  * 이 판이 더 재는 것은 **다시 보낸 것의 답과 첫 게시의 결말이 같은가**다. 대조는 권한이 그대로인 판 — 다시 보낸
  * 것이 잠금 뒤에 줄을 서 있다가 첫 게시의 행을 **잠금 안에서** 재생한다(`routes/comments.ts`).
+ *
+ * **셋째 판 — 재확인은 잠금 안 재생의 뒤다.** 첫 게시가 **커밋된 뒤**, 다시 보낸 것이 잠금을 잡기 **전에** 강등되면
+ * 다시 보낸 것은 재생(200 · 같은 코멘트)이어야 한다 — 이미 커밋된 자기 행이다(가드 앞 재생과 같은 판정). 재확인을
+ * 재생 앞으로 옮기면 403 이 나가고, 웹은 **달린 게시**를 «안 달림»으로 읽는다(고쳐 달면 두 행의 씨앗).
+ *
+ * 이 판은 **같은 페이지의 남의 쓰기가 줄에 끼면** 선다 — 페이지 행의 잠금 대기열은 도착 순이다. 첫 게시 → 남의 쓰기
+ * → 다시 보낸 것 순으로 줄을 세우면, 첫 게시가 커밋한 뒤 남의 쓰기가 잠금을 쥔 동안 다시 보낸 것은 아직 잠금 밖이다
+ * — 그 사이에 강등을 넣는다. (앞 판은 «앞 게시의 커밋과 이 요청의 잠금 획득 사이에 기다리는 문장이 없어 세울 판이
+ * 없다»고 적었다 — 줄에 끼는 제삼자를 안 봤다. 2026-09-22 리뷰 M17.)
  */
 describe('커밋 중 틈 — 같은 키로 다시 보낸 게시 (좁은 반증 4차 a-4 의 api 판)', () => {
   const KEY = 'k-bob-resend'
@@ -642,6 +693,47 @@ describe('커밋 중 틈 — 같은 키로 다시 보낸 게시 (좁은 반증 4
       const [a, b] = await Promise.all([first.promise, resent.promise])
 
       expect([a.status, b.status], `${a.body} / ${b.body}`).toEqual([201, 200])
+      expect(await keyedRows(fx.barePageId, fx.bob.user.id)).toBe(1)
+    })
+  }, 60_000)
+
+  it('첫 게시가 커밋된 뒤 · 다시 보낸 것이 잠금을 잡기 전에 강등되면 — 다시 보낸 것은 잠금 안에서 재생 200 · 행 1', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await fixture(ctx, 'editor')
+      const hold = await holdPageLock(fx.projectId, fx.barePageId)
+      let first: Fired | undefined
+      let other: QueuedLock | undefined
+      let resent: Fired | undefined
+      try {
+        first = post(ctx, fx)
+        await waitForLockWaiter(1)
+        // 같은 페이지의 **남의 쓰기**가 첫 게시 뒤에 줄을 선다.
+        other = queuePageLock(fx.projectId, fx.barePageId)
+        await waitForLockWaiter(2)
+        resent = post(ctx, fx)
+        await waitForLockWaiter(3)
+      } finally {
+        await hold.release()
+      }
+      const committed = await first.promise
+      let demotion: number | undefined
+      let resentWasWaiting = false
+      try {
+        // 첫 게시가 커밋했고, 남의 쓰기가 잠금을 쥐었다 — 다시 보낸 것은 아직 그 뒤에 서 있다.
+        await other.acquired
+        resentWasWaiting = !resent.done()
+        demotion = await demote(ctx, fx, 'editor', 'role')
+      } finally {
+        await other.release()
+      }
+      const replayed = await resent.promise
+
+      expect(committed.status, committed.body).toBe(201)
+      expect(resentWasWaiting, '다시 보낸 것이 강등 전에 끝났다 — 판이 성립하지 않았다').toBe(true)
+      expect(demotion).toBe(200)
+      expect(replayed.status, replayed.body).toBe(200)
+      const commentId = (body: string) => (JSON.parse(body) as { comment: { id: string } }).comment.id
+      expect(commentId(replayed.body)).toBe(commentId(committed.body))
       expect(await keyedRows(fx.barePageId, fx.bob.user.id)).toBe(1)
     })
   }, 60_000)
@@ -712,7 +804,7 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
     return { ...res, waitedOnRoleChange, before, after: await projectState(fx.projectId) }
   }
 
-  for (const label of [BARE_COMMENT, 'WS patch 프레임']) {
+  for (const label of [BARE_COMMENT, WS_PATCH]) {
     describe(label, () => {
       it('역할 변경이 커밋 전이면 재확인이 그것을 기다렸다가 바뀐 값으로 판정한다 — 403 · 아무것도 안 바뀐다', async () => {
         await withRealApi(async (ctx) => {
@@ -737,74 +829,233 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
 })
 
 /**
- * # 분모 — 소스의 쓰기 라우트를 빠짐없이 가른다
+ * # 잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 잠근다 (프로젝트 행 → 페이지)
  *
- * **세는 단위는 `restore-lock-census.test.ts`와 같다** — `apps/api/src/routes/`의 `projectGuard`가 걸린 비-`GET`
- * 라우트 하나당 한 키. 그 전부가 위 `PROBES`(페이지 잠금에 선다 → 재확인한다) 또는 아래 목록(안 선다) 중
- * **정확히 하나**에 있어야 한다. 새 쓰기 라우트는 이 절을 먼저 죽이고, 사람이 어느 쪽인지 판정한다.
+ * 프로젝트 삭제는 재확인 앞에서 기다릴 것을 먼저 다 잡는다(`routes/projects.ts`). 앞 판은 **페이지만** 먼저 잡았고,
+ * 그 순서가 두 교착을 열었다(2026-09-22 리뷰 E1 · E2). 지금은 복원(`lockProjectForRestore`)과 같이 **프로젝트 행 →
+ * 페이지**다(`repos/projects.ts`의 `lockProjectRow`).
  *
- * **아래 목록의 판정은 잰 값이다**(2026-09-22 — 쓰기 라우트 전부를 `lockPageForEdit` 아래에서 쏘아 700ms 창).
- * **이 파일은 그것을 다시 재지 않는다** — 목록에 넣는 사람이 잰다. 페이지 잠금에 안 서도 **다른 잠금**(복원의
- * `lockProjectForRestore` · 자기 행의 행 잠금)에는 설 수 있다 — 그 판의 틈은 이월로 적었다(장부 AA).
+ * | 판 | 앞 판에서 무엇이 서로를 기다렸나 | 이 절이 보는 것 |
+ * |---|---|---|
+ * | E1 — 남의 페이지 쓰기가 진행 중일 때 owner 둘이 삭제 · 복원 | 복원: 프로젝트 행을 쥐고 페이지를 · 삭제: 페이지를 쥐고 프로젝트 행을 | 복원이 삭제를 기다렸다가 404 · 삭제 204 · 교착 0 |
+ * | E2 — FK 삽입이 진행 중일 때 삭제와 다른 owner 의 역할 변경 | 삭제: 제 멤버 행을 `FOR SHARE`로 쥐고 프로젝트 행을(FK 삽입 뒤) · 역할 변경(`lockOwnerIds`): 다른 owner 행을 쥐고 삭제의 멤버 행을 · 그다음 CASCADE 가 그 다른 owner 행을 | 역할 변경이 삭제를 **안 기다린다**(200) · 교착 0 |
+ *
+ * **교착은 `pg_stat_database.deadlocks`로 본다** — 희생자는 500 을 받으므로 상태 코드가 먼저 죽지만, 카운터는 «그
+ * 500 이 교착이었다»를 따로 말한다.
+ *
+ * **E2 는 멤버 행의 물리 순서에 기댄다** — `lockOwnerIds`는 `ORDER BY` 없이 잠가 계획(오늘 heap 순서)의 순서로
+ * 잡는다. 삭제하는 사람의 행이 **먼저**면 역할 변경은 교착 대신 그 행에서 **삭제가 끝날 때까지 기다린다**(리뷰 E2 의
+ * 둘째 줄). 이 판은 둘 다 잡는다 — «역할 변경이 FK 삽입을 쥔 동안 끝났는가»를 본다. 앨리스를 나중에 owner 로 올리는
+ * 것은 교착 쪽이 서기 쉽게 하려는 것이지 판의 전제가 아니다.
+ *
+ * **FK 삽입은 진짜 `insertMenuNode`다**(메뉴를 만드는 중인 트랜잭션) — 초대 · 페이지 · 스냅샷 · 토큰 생성이 프로젝트
+ * 행에 거는 잠금(`FOR KEY SHARE`)과 같다.
+ *
+ * | 변조(`routes/projects.ts`) | 죽는 것 |
+ * |---|---|
+ * | 삭제의 `lockProjectRow`를 뺀다(앞 판의 순서) | E1 · E2 |
+ * | `lockProjectRow`를 `lockProjectPages` **뒤로** | **E1 혼자** — 프로젝트 행 대기가 재확인 앞이라 E2 는 선다 |
+ * | 삭제의 프로젝트 행 잠금을 `FOR NO KEY UPDATE`로 | **E2 혼자** — FK 삽입과 충돌하지 않아 그 대기가 재확인 뒤(`DELETE`)로 밀린다. 복원과는 여전히 충돌해 E1 은 선다 |
+ */
+async function deadlockCount(): Promise<number> {
+  const result = await sql<{ n: number }>`
+    select deadlocks::int as n from pg_stat_database where datname = current_database()
+  `.execute(db)
+  return result.rows[0]!.n
+}
+
+/**
+ * 그 프로젝트에 **메뉴 노드를 넣는 중인** 트랜잭션을 붙들어 둔다 — 진짜 `insertMenuNode`다. 넣은 행의 FK 가 프로젝트
+ * 행에 `FOR KEY SHARE`를 건다. 돌려준 `release`를 부르면 커밋된다.
+ */
+async function holdMenuInsert(projectId: string): Promise<{ release: () => Promise<void> }> {
+  let release: () => void = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let markInserted: () => void = () => {}
+  const inserted = new Promise<void>((resolve) => {
+    markInserted = resolve
+  })
+  const holder = withTransaction(db, async (trx) => {
+    await insertMenuNode(trx, projectId, { parentId: null, title: '넣는 중인 메뉴' })
+    markInserted()
+    await held
+  })
+  await Promise.race([inserted, holder])
+  return {
+    release: async () => {
+      release()
+      await holder
+    },
+  }
+}
+
+describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 잠근다 (프로젝트 행 → 페이지)', () => {
+  it('E1 — 남의 페이지 쓰기가 진행 중일 때 owner 둘이 삭제 · 복원을 겹치면: 복원은 삭제를 기다렸다가 404 · 교착 0', async () => {
+    await withRealApi(async (ctx) => {
+      // 앨리스 · 밥 둘 다 owner. 스냅샷 뒤에 바꾼 것이 있어 복원이 실제로 쓰는 판이다.
+      const fx = await fixture(ctx, 'owner')
+      const deadlocksBefore = await deadlockCount()
+      const pageWrite = await holdPageLock(fx.projectId, fx.pageId)
+      let removal: Fired | undefined
+      let restore: Fired | undefined
+      try {
+        removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie }))
+        await waitForLockWaiter(1)
+        restore = fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/snapshots/${fx.snapshotId}/restore`)
+        // 둘 다 서야 판이 선다 — 삭제는 페이지에서, 복원은 (지금 순서면) 프로젝트 행에서.
+        await waitForLockWaiter(2)
+      } finally {
+        await pageWrite.release()
+      }
+      const [removed, restored] = await Promise.all([removal.promise, restore.promise])
+
+      expect(restored.status, restored.body).toBe(404)
+      expect(removed.status, removed.body).toBe(204)
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+    })
+  }, 60_000)
+
+  it('E2 — FK 삽입이 진행 중일 때 삭제와 다른 owner 의 역할 변경을 겹치면: 역할 변경은 삭제를 안 기다린다 · 교착 0', async () => {
+    await withRealApi(async (ctx) => {
+      const carol = await signup(ctx)
+      const alice = await signup(ctx)
+      const bob = await signup(ctx)
+      const project = await createProject(ctx, carol.cookie)
+      await addMember(ctx, project.id, alice.user.id, 'editor')
+      const promoted = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${project.id}/members/${alice.user.id}`,
+        cookies: carol.cookie,
+        payload: { role: 'owner' },
+      })
+      if (promoted.statusCode !== 200) throw new Error(`owner 승격 픽스처 실패: ${promoted.body}`)
+      await addMember(ctx, project.id, bob.user.id, 'editor')
+      const menu = await createMenuNode(ctx, carol.cookie, project.id, { title: '메뉴' })
+      await createPage(ctx, carol.cookie, project.id, menu.id, { title: '페이지' })
+
+      const deadlocksBefore = await deadlockCount()
+      const insert = await holdMenuInsert(project.id)
+      let removal: Fired | undefined
+      let roleChange: Fired | undefined
+      let roleChangedWhileHeld = false
+      try {
+        removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${project.id}`, cookies: alice.cookie }))
+        await waitForLockWaiter(1)
+        roleChange = track(
+          ctx.app.inject({
+            method: 'PATCH',
+            url: `/api/projects/${project.id}/members/${bob.user.id}`,
+            cookies: carol.cookie,
+            payload: { role: 'viewer' },
+          }),
+        )
+        roleChangedWhileHeld = await settlesWithin(roleChange, 3_000)
+      } finally {
+        await insert.release()
+      }
+      const [removed, changed] = await Promise.all([removal.promise, roleChange.promise])
+
+      expect(roleChangedWhileHeld, '역할 변경이 삭제의 대기에 묶였다').toBe(true)
+      expect(changed.status, changed.body).toBe(200)
+      expect(removed.status, removed.body).toBe(204)
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+    })
+  }, 60_000)
+})
+
+/**
+ * # 분모 — 등록된 쓰기를 빠짐없이 가른다
+ *
+ * **세는 것은 Fastify 가 등록한 라우트의 값이다** — `buildApp`의 `onRoute` 이음매(`pre-guard-hook-census.test.ts`가
+ * 쓰는 것과 같다). 앞 판은 소스 글자를 정규식(`app.post('…', { preHandler: projectGuard(`)으로 셌고,
+ * `preHandler: [projectGuard('editor')]`(배열)로 적은 새 쓰기 라우트를 못 봤다 — api 전량이 통과하는 채로 그 라우트가
+ * 강등 뒤에 뷰어 이름으로 커밋했다(2026-09-22 리뷰 F1). 값으로 세면 옵션을 어떤 글꼴로 적든(배열 · `app.route({…})` ·
+ * 옵션 순서 · 하위 디렉터리) 등록되는 한 분모에 든다.
+ *
+ * **단위는 `GET`·`HEAD`가 아닌 라우트 전부다** — 가드가 걸렸는지로 거르지 않는다(`projectGuard(…)`는 부를 때마다
+ * 새 클로저라 값으로 알아볼 수 없다 · 거르지 않으면 알아볼 필요도 없다). 그래서 프로젝트 밖의 쓰기(로그인 · 로그아웃 ·
+ * 프로젝트 생성)도 아래 목록에 있다.
+ *
+ * **WS 는 프레임 종류다** — `ws/protocol.ts`의 `MIN_ROLE_FOR_FRAME`의 키. 그 표는 `Record<ClientFrame['type'], …>`라
+ * 프레임을 하나 더하면 거기서 컴파일이 막히고, 표에 더하면 이 절이 죽는다.
+ *
+ * 그 전부가 위 `PROBES`(페이지 잠금에 선다 → 재확인한다) 또는 아래 목록(안 선다) 중 **정확히 하나**에 있어야 한다.
+ * 새 쓰기는 이 절을 먼저 죽이고, 사람이 어느 쪽인지 판정한다.
+ *
+ * **아래 목록의 판정은 잰 값이다**(2026-09-22 — 쓰기 라우트 전부를 `lockPageForEdit` 아래에서 쏘아 700ms 창). WS 셋은
+ * 코드로 판정했다 — 핸들러가 동기라 DB 잠금을 기다릴 자리가 없다. **이 파일은 그것을 다시 재지 않는다** — 목록에
+ * 넣는 사람이 잰다. 페이지 잠금에 안 서도 **다른 잠금**(복원의 `lockProjectForRestore` · 자기 행의 행 잠금)에는 설 수
+ * 있다 — 그 판의 틈은 이월로 적었다(장부 AA).
+ *
+ * **못 재는 것**: 플러그인의 `addHook`으로 단 훅이 페이지 잠금에 서는 쓰기 — 라우트가 아니라 분모에 안 든다(오늘
+ * 없다 · `pre-guard-hook-census.test.ts`의 «못 재는 것»과 같은 부류). 라우트 **밖**의 쓰기 경로(예: 서버가 스스로 도는
+ * 작업)도 같다.
  */
 const NOT_PAGE_LOCKED: Record<string, string> = {
-  'POST /:projectId/menu': '메뉴 행만 쓴다',
-  'PATCH /:projectId/menu/:nodeId': '메뉴 행만 쓴다',
-  'DELETE /:projectId/menu/:nodeId': '페이지가 매인 메뉴는 RESTRICT 로 실패한다 — 쓰는 판은 페이지 행을 안 건드린다',
-  'POST /:projectId/pages': '새 페이지 행을 넣는다 — 있는 페이지 행을 안 잡는다',
-  'POST /:projectId/pages/import': '새 페이지를 만들고 **그 새 행**만 잠근다 — 남이 쥘 수 없는 행이다',
-  'PATCH /:projectId/pages/:pageId/comments/:commentId': '코멘트 행만 고친다 — FK 열을 안 바꾸는 UPDATE 는 페이지 행을 안 잡는다',
-  'PUT /:projectId/theme': '레이아웃 행만 쓴다',
-  'POST /:projectId/snapshots': '페이지를 **읽기만** 한다 — `FOR UPDATE`는 읽기를 막지 않는다',
-  'PATCH /:projectId': '프로젝트 행만 쓴다',
-  'POST /:projectId/members': '멤버 행',
-  'PATCH /:projectId/members/:userId': '멤버 행',
-  'DELETE /:projectId/members/:userId': '멤버 행',
-  'POST /:projectId/themes': '테마 행',
-  'PUT /:projectId/themes/:themeId': '테마 행',
-  'DELETE /:projectId/themes/:themeId': '테마 행',
-  'POST /:projectId/presets': '프리셋 행',
-  'DELETE /:projectId/presets/:presetId': '프리셋 행',
-  'POST /:projectId/tokens': '토큰 행',
-  'DELETE /:projectId/tokens/:tokenId': '토큰 행',
+  'POST /api/auth/login': '프로젝트 밖 — 세션 행만 쓴다',
+  'POST /api/auth/logout': '프로젝트 밖 — 세션 행만 지운다',
+  'POST /api/projects': '새 프로젝트 — 남이 쥘 수 있는 페이지 행이 아직 없다',
+  'POST /api/projects/:projectId/menu': '메뉴 행만 쓴다',
+  'PATCH /api/projects/:projectId/menu/:nodeId': '메뉴 행만 쓴다',
+  'DELETE /api/projects/:projectId/menu/:nodeId': '페이지가 매인 메뉴는 RESTRICT 로 실패한다 — 쓰는 판은 페이지 행을 안 건드린다',
+  'POST /api/projects/:projectId/pages': '새 페이지 행을 넣는다 — 있는 페이지 행을 안 잡는다',
+  'POST /api/projects/:projectId/pages/import': '새 페이지를 만들고 **그 새 행**만 잠근다 — 남이 쥘 수 없는 행이다',
+  'PATCH /api/projects/:projectId/pages/:pageId/comments/:commentId': '코멘트 행만 고친다 — FK 열을 안 바꾸는 UPDATE 는 페이지 행을 안 잡는다',
+  'PUT /api/projects/:projectId/theme': '레이아웃 행만 쓴다',
+  'POST /api/projects/:projectId/snapshots': '페이지를 **읽기만** 한다 — `FOR UPDATE`는 읽기를 막지 않는다',
+  'PATCH /api/projects/:projectId': '프로젝트 행만 쓴다',
+  'POST /api/projects/:projectId/members': '멤버 행',
+  'PATCH /api/projects/:projectId/members/:userId': '멤버 행',
+  'DELETE /api/projects/:projectId/members/:userId': '멤버 행',
+  'POST /api/projects/:projectId/themes': '테마 행',
+  'PUT /api/projects/:projectId/themes/:themeId': '테마 행',
+  'DELETE /api/projects/:projectId/themes/:themeId': '테마 행',
+  'POST /api/projects/:projectId/presets': '프리셋 행',
+  'DELETE /api/projects/:projectId/presets/:presetId': '프리셋 행',
+  'POST /api/projects/:projectId/tokens': '토큰 행',
+  'DELETE /api/projects/:projectId/tokens/:tokenId': '토큰 행',
+  'WS ping': '아무것도 안 쓴다',
+  'WS lock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
+  'WS unlock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
 }
 
-const ROUTES_DIR = fileURLToPath(new URL('../src/routes', import.meta.url))
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+/** Fastify 가 등록한 쓰기 라우트 — `METHOD /api/…`. */
+async function registeredWrites(): Promise<string[]> {
+  const routes: RegisteredRoute[] = []
+  await withApi(async () => {}, { onRoute: (route) => routes.push(route) })
+  return routes.flatMap((route) =>
+    route.method
+      .split(',')
+      .filter((method) => method !== 'GET' && method !== 'HEAD')
+      .map((method) => `${method} ${route.url}`),
+  )
 }
 
-/** `restore-lock-census.test.ts`의 `declaredWriteRoutes`와 같은 패턴 — 세는 단위를 두 파일이 같게 쓴다. */
-function declaredWriteRoutes(): string[] {
-  const found: string[] = []
-  for (const name of readdirSync(ROUTES_DIR).filter((file) => file.endsWith('.ts'))) {
-    const source = stripComments(readFileSync(join(ROUTES_DIR, name), 'utf8'))
-    const pattern = /app\.(post|patch|put|delete)\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\('\w+'\)/g
-    for (const match of source.matchAll(pattern)) {
-      found.push(`${match[1]!.toUpperCase()} ${match[2]}`)
-    }
-  }
-  return found
+/** WS 로 받는 프레임 종류 — `WS <type>`. */
+function frameKinds(): string[] {
+  return Object.keys(MIN_ROLE_FOR_FRAME).map((type) => `WS ${type}`)
 }
 
-describe('분모 — 소스의 쓰기 라우트가 두 목록 중 정확히 하나에 있다', () => {
-  const locked = new Set(PROBES.map((probe) => probe.route).filter((route) => route !== 'WS patch'))
+describe('분모 — 등록된 쓰기가 두 목록 중 정확히 하나에 있다', () => {
+  const locked = new Set(PROBES.map((probe) => probe.route))
   const free = new Set(Object.keys(NOT_PAGE_LOCKED))
 
-  it('훑을 소스를 실제로 읽는다', () => {
-    // 글롭이 어긋나면 빈 집합에서 아래가 조용히 통과한다.
-    expect(declaredWriteRoutes().length).toBeGreaterThan(20)
+  it('분모를 실제로 만든다 — 이음매가 라우트와 프레임을 준다', async () => {
+    // 이음매가 어긋나면 빈 집합에서 아래가 조용히 통과한다.
+    expect((await registeredWrites()).length).toBeGreaterThan(20)
+    expect(frameKinds()).toContain('WS patch')
   })
 
-  it('쓰기 라우트가 하나도 빠지지 않았다', () => {
-    const missing = [...new Set(declaredWriteRoutes())].filter((route) => !locked.has(route) && !free.has(route))
-    expect(missing).toEqual([])
+  it('쓰기가 하나도 빠지지 않았다', async () => {
+    const declared = [...new Set([...(await registeredWrites()), ...frameKinds()])]
+    expect(declared.filter((write) => !locked.has(write) && !free.has(write))).toEqual([])
   })
 
-  it('두 목록이 겹치지 않고, 소스에 없는 라우트를 적지 않았다', () => {
-    const declared = new Set(declaredWriteRoutes())
-    expect([...locked].filter((route) => free.has(route))).toEqual([])
-    expect([...locked, ...free].filter((route) => !declared.has(route))).toEqual([])
+  it('두 목록이 겹치지 않고, 등록되지 않은 쓰기를 적지 않았다', async () => {
+    const declared = new Set([...(await registeredWrites()), ...frameKinds()])
+    expect([...locked].filter((write) => free.has(write))).toEqual([])
+    expect([...locked, ...free].filter((write) => !declared.has(write))).toEqual([])
   })
 })

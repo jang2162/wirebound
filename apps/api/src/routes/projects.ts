@@ -18,6 +18,7 @@ import {
   findProjectById,
   insertProject,
   listProjectsForUser,
+  lockProjectRow,
   updateProject,
 } from '../repos/projects'
 
@@ -128,13 +129,30 @@ export function projectRoutes() {
       await withTransaction(app.db, async (trx) => {
         // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). 삭제는 CASCADE 로 페이지 행
         // 잠금에 서는데, 재확인을 **삭제 뒤에** 두면 CASCADE 가 이 사람의 멤버 행까지 지운 뒤라 404 가 된다.
-        // 그래서 페이지를 **먼저** 잠가 대기를 여기서 치르고 → 권한을 보고 → 지운다.
+        // 그래서 기다릴 것을 **먼저** 다 잡고 → 권한을 보고 → 지운다. 잡는 순서는 **프로젝트 행 → 페이지**다.
         //
-        // 먼저 잠그는 것에는 몫이 하나 더 있다. CASCADE 는 멤버 행을 페이지보다 **먼저** 지운다 — 잠그지 않으면
+        // **페이지를 CASCADE 보다 먼저 잡는 까닭.** CASCADE 는 멤버 행을 페이지보다 **먼저** 지운다 — 그대로 두면
         // 페이지 잠금을 기다리는 동안 그 프로젝트의 멤버 행이 전부 이 트랜잭션에 잡혀 있어, **역할 변경이 이
         // 삭제를 기다렸다**(잰 값: 강등이 3s 창을 넘겼다). 그리고 그 판은 페이지를 쥔 쓰기의 재확인(`FOR SHARE`)과
-        // 서로를 기다리는 교착이 된다(잰 값: 쓰기가 페이지를 쥔 채 삭제가 CASCADE 로 그 멤버 행을 지운 뒤 재확인이
-        // 오면 ~1s 에 `40P01` — 희생자는 삭제였다. 먼저 잠그면 삭제가 쓰기의 커밋을 기다렸다가 지운다).
+        // 서로를 기다리는 교착이 된다(잰 값: ~1s 에 `40P01` — 희생자는 삭제였다).
+        //
+        // **프로젝트 행을 페이지보다 먼저 잡는 까닭 — 복원과 같은 순서다**(`repos/projects.ts`의 `lockProjectRow`).
+        // 앞 판은 페이지만 먼저 잡았고 교착 둘이 났다(2026-09-22 리뷰 E1 · E2, api):
+        //
+        // | 판 | 앞 판(페이지 → 재확인 → 프로젝트 행) | 이 순서 |
+        // |---|---|---|
+        // | E1 — 남의 페이지 쓰기가 진행 중일 때 복원 | 복원이 프로젝트 행을 쥔 채 페이지를, 삭제가 페이지를 쥔 채 프로젝트 행을 기다린다 → ~1s 에 한쪽이 500 · `deadlocks` +1 | 복원이 프로젝트 행에서 기다렸다가 404 |
+        // | E2 — FK 삽입이 진행 중일 때 다른 owner 의 역할 변경 | 삭제가 제 멤버 행을 `FOR SHARE`로 쥔 채 프로젝트 행을 기다린다 → 역할 변경(`lockOwnerIds`)이 그 행에 서고, 삭제의 CASCADE 가 역할 변경이 쥔 다른 owner 행에 선다 → 한쪽이 500 · +1 | 역할 변경이 안 기다린다 — 프로젝트 행 대기가 재확인 **앞**이다 |
+        //
+        // 둘을 재는 자는 `test/guard-in-lock.test.ts`의 «잠금 순서» 절이다.
+        //
+        // **대가 — 페이지를 기다리는 동안 프로젝트 행을 쥔다.** 그 사이 프로젝트 행을 잡는 쓰기가 이 삭제의 커밋을
+        // 기다린다: FK 삽입(프로젝트 행에 `FOR KEY SHARE` — 초대 · 메뉴 · 페이지 · 스냅샷 · 토큰 생성)과 프로젝트
+        // 수정. 삭제가 커밋되면 FK 삽입은 **500**(FK 위반을 봉투로 안 바꾼다), 프로젝트 수정은 404 다(api 로 잰 값 ·
+        // 2026-09-22). 앞 판(이 절이 생기기 전 — `DELETE` 가 프로젝트 행을 먼저 지우고 CASCADE 에서 페이지를 기다렸다)도
+        // **같은 것이 같은 답으로 섰고**, 메뉴 수정까지 섰다(CASCADE 가 메뉴 행을 페이지보다 먼저 지운다). 페이지만
+        // 먼저 잡던 판(이 순서 바로 앞)은 안 섰다 — 대신 201 로 만든 것이 곧 CASCADE 로 사라졌다.
+        await lockProjectRow(trx, projectId)
         await lockProjectPages(trx, projectId)
         await recheckProjectRole(trx, request)
         await deleteProject(trx, projectId)
