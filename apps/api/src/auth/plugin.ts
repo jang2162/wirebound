@@ -84,10 +84,19 @@
  * | 쿠키로 인증됐고 **다르다** | **409 `conflict` + 이슈 코드 `session-user-changed`** — 읽기도 쓰기도 핸드셰이크도 |
  * | 쿠키가 없다 · 만료 · 토큰 | 보지 않는다 — 앞 판 그대로(401 은 가드가 낸다) |
  * | `GET /api/auth/me` · `POST /api/auth/login` | 보지 않는다 — `me`는 탭이 **쿠키의 사람을 알아내는** 길이고, 로그인은 쿠키를 바꾸는 요청이다 |
+ * | `POST /api/auth/logout` | 보지 않는다 — **권리를 줄이는 쪽이다**(아래 «로그아웃을 막지 않는다») |
+ * | 실린 id 가 **둘 이상**(쿼리 `knownUser`를 두 번) | **다르다**로 본다 — REST 머리 둘이 `, `로 이어져 409 인 것과 같다(`knownUserOf`) |
  *
  * **읽기도 거절한다.** 탭은 앞 사람의 화면(권리 · 초안 · 잠금)을 들고 있다 — 새 사람의 권리로 읽은 값을 앞 사람의 화면에
  * 그리지 않는다. 그리고 거절받는 첫 요청이 곧 탭이 사람이 바뀐 것을 아는 순간이다(웹은 이 코드를 받으면 `me`로 쿠키의
  * 사람을 다시 알아낸다 — `api/http-client.ts`). 쓰기만 막으면 알림 없는 판의 탭은 읽기만 하는 동안 영영 모른다.
+ *
+ * **로그아웃을 막지 않는다**(2026-09-24 리뷰 F1). 앞 판은 면제가 `me` · 로그인 둘뿐이라 낡은 탭의 «로그아웃»이 409 로 막혔고,
+ * 웹이 그 거절을 받아 `me`로 쿠키의 사람을 알아낸 뒤 **나가려고 누른 사람에게 다른 사람(밥)의 목록**을 열었다(Chrome: 첫 클릭
+ * 409 → 머리 «밥» · `/` · 두 번째 클릭에서야 204 → `/login`). 이 확인이 막는 것은 **다른 사람의 이름으로 쓰기 · 읽기**인데 로그아웃은
+ * 아무것도 쓰지 않고 권리를 거둔다. 막아서 얻는 것은 «앨리스로 믿던 탭이 밥의 세션을 끝내지 않는다» 하나이고, 쿠키는 브라우저에
+ * 하나라 **어느 탭의 로그아웃이든 그 브라우저의 로그아웃**이다(밥의 탭에서 눌러도 같다). 그래서 앞 판(한 번에 쿠키를 지우고 로그인
+ * 화면) 그대로다 — 지우는 세션은 **쿠키의 사람(밥)** 의 것이고, 밥의 다른 탭은 탭 사이 알림(`signed-out`)으로 로그인 화면에 간다.
  *
  * **핸드셰이크도 같은 판정이다** — 업그레이드 요청도 이 훅을 지난다(`ws/routes.ts` 머리말). 거절은 **101 전의 HTTP 409**
  * 다 — 소켓이 서기 전이라 닫힘 코드가 없고, 브라우저에는 «열리지 못하고 닫힘»으로 보인다. 401 · 403 · 404 핸드셰이크 거절이
@@ -132,12 +141,16 @@ export const KNOWN_USER_QUERY = 'knownUser'
 /** 쿠키의 사용자가 탭이 아는 사용자와 다를 때의 이슈 코드. 웹은 이 코드 하나로 가른다. */
 export const SESSION_USER_CHANGED = 'session-user-changed'
 
-/** 탭이 아는 사용자를 확인하지 않는 라우트 — 쿠키의 사람을 알아내는 길과 쿠키를 바꾸는 길(머리말의 표). */
-const KNOWN_USER_EXEMPT = new Set(['GET /api/auth/me', 'POST /api/auth/login'])
+/** 탭이 아는 사용자를 확인하지 않는 라우트 — 쿠키의 사람을 알아내는 길과 쿠키를 바꾸는 길(로그인 · 로그아웃 — 머리말의 표). */
+const KNOWN_USER_EXEMPT = new Set(['GET /api/auth/me', 'POST /api/auth/login', 'POST /api/auth/logout'])
 
 /**
  * 요청이 실은 «탭이 아는 사용자» — 없으면 `null`(그때는 지금처럼 받는다). 머리가 먼저고, WS 핸드셰이크(`GET` · 패턴이
  * `/ws`로 끝난다)만 쿼리를 본다 — REST 라우트의 쿼리는 라우트마다 선언된 키만 받는다(README «쿼리»). 빈 값은 없는 것이다.
+ *
+ * **쿼리가 둘 이상이면 `, `로 잇는다**(리뷰 F4) — 쿼리 파서는 같은 키를 배열로 주는데, 앞 판은 문자열만 받아 배열을 «없음»으로
+ * 쳐 **확인 없이 열었다**(A: `?knownUser=<앨리스>&knownUser=<밥>` + 앨리스 쿠키 → 101). REST 머리는 둘이면 Node 가 `, `로 이어
+ * 문자열로 주므로 409 였다 — 같은 규칙으로 맞춘다. 이은 값은 어떤 id 와도 같지 않으니 **둘 이상은 늘 «다름»** 이다(둘이 같아도).
  */
 export function knownUserOf(request: FastifyRequest): string | null {
   const header = request.headers[KNOWN_USER_HEADER]
@@ -147,7 +160,8 @@ export function knownUserOf(request: FastifyRequest): string | null {
       : request.method === 'GET' && request.routeOptions.url?.endsWith('/ws') === true
         ? (request.query as Record<string, unknown> | undefined)?.[KNOWN_USER_QUERY]
         : undefined
-  return typeof raw === 'string' && raw !== '' ? raw : null
+  const known = Array.isArray(raw) ? raw.join(', ') : raw
+  return typeof known === 'string' && known !== '' ? known : null
 }
 
 /**
@@ -163,7 +177,9 @@ export function knownUserConflict(request: FastifyRequest, cookieUserId: string)
 }
 
 /**
- * **이 훅에서 거절한 WS 업그레이드는 답을 보낸 뒤 소켓을 닫는다.** 업그레이드 소켓을 닫는 것은 `@fastify/websocket`의
+ * **이 훅이 던진 WS 업그레이드는 답을 보낸 뒤 소켓을 닫는다** — 409(`session-user-changed`)만이 아니라 던짐 전부다(리뷰 F3 —
+ * «확인하지 못했다»의 503/500 도 같은 기전으로 열린 채 남았다. A: DB 를 내린 채 쿠키 실은 업그레이드 → 503 을 1–2ms 에 보내고
+ * **10 000ms 에도 안 닫힘** · 쿠키 없는 업그레이드는 가드의 401 을 1ms 에 닫음). 업그레이드 소켓을 닫는 것은 `@fastify/websocket`의
  * `onResponse` 훅인데, 그 훅은 **자기 `onRequest`가 돈 요청만** 닫는다(`request.ws`). 그 `onRequest`는 이 훅보다 뒤에
  * 등록되므로(`app.ts` — 인증이 먼저다) 여기서 던지면 돌지 않고, 409 는 나가지만 TCP 소켓이 열린 채 남는다 — 재서
  * 알았다: `withRealApi`의 `close`가 그 소켓을 기다려 케이스가 20초 시간 초과였다(`test/known-user.test.ts`). 브라우저는
@@ -259,6 +275,17 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
   //
   // **«확인하지 못했다»면 던진다**(2026-09-22 이월 W (i)) — 머리말 «자격이 없다 · 확인하지 못했다».
   app.addHook('onRequest', async (request, reply) => {
+    try {
+      await authenticate(request)
+    } catch (caught) {
+      // **이 훅이 던진 업그레이드는 여기서 닫는다**(`closeUpgradeAfterReply` — 409 · 503 · 500 전부).
+      closeUpgradeAfterReply(request, reply)
+      throw caught
+    }
+  })
+
+  /** 위 훅의 몸 — 자격 하나를 `request`에 채운다. **던지면** 훅이 업그레이드 소켓을 닫고 다시 던진다. */
+  async function authenticate(request: FastifyRequest): Promise<void> {
     request.currentUser = null
     request.authKind = null
     request.tokenProjectId = null
@@ -277,10 +304,7 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
         // **요청한 탭이 다른 사람을 안다면 거절한다**(머리말 «요청한 탭이 아는 사용자» — 이월 Y′). 쿠키 갈래에서만 —
         // 쿠키가 먼저이고, 쿠키가 없으면 견줄 «쿠키의 사용자»가 없다.
         const changed = knownUserConflict(request, user.id)
-        if (changed !== null) {
-          closeUpgradeAfterReply(request, reply)
-          throw changed
-        }
+        if (changed !== null) throw changed
         request.currentUser = user
         request.authKind = 'session'
         request.sessionId = hashSessionToken(cookie)
@@ -305,7 +329,7 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
     request.tokenProjectId = principal.projectId
     // **§7.4의 `actor_label='<토큰명>'`이 이 두 줄에 매여 있다**(`auth/actor.ts`).
     request.tokenActor = { tokenId: principal.tokenId, tokenName: principal.tokenName }
-  })
+  }
 
   app.decorate('requireAuth', async (request: FastifyRequest, _reply: FastifyReply) => {
     if (!request.currentUser) {

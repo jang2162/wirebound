@@ -16,8 +16,12 @@
  * (`WriteNote` — 코멘트의 «이미 달렸고 그 뒤 지워졌습니다»)은 머리 없이 그 문장만 `status`로 말한다. 그 페이지를 보고 있었고
  * 그 칸의 본문만 내려가 있었으면(다른 탭 · 다른 모드 — `Missed.stayed`) 머리가 «이 탭을 떠나 있는 동안 …»이다 — «이 페이지를
  * 떠나 있는 동안»은 그 판에 거짓이다.
+ *
+ * **이 컴포넌트가 떠 있는 것이 곧 «그 칸의 결말을 그린다»다**(`PanelLock.draw` · 장부의 `Receiver.draws` — 리뷰 F2). 설명 · 코멘트는
+ * 그 칸의 저장 통지(칸 `SAVE` · `WRITE_ERROR` · `LANDED_SINCE_NOTICE`)를 이것의 형제로 그리므로, 이것이 없는 갈래(viewer · 코멘트의
+ * 폼 밖 · 조기 반환)에서 끝난 결말은 장부가 남긴다. 앞 판은 본문이 서면 섰다 — 통지 자리가 없는 갈래에서 결말을 잃었다.
  */
-import type { ReactElement } from 'react'
+import { useLayoutEffect, type ReactElement } from 'react'
 import type { PanelLock } from './panel-drafts'
 
 /** «다시 확인» 단추의 이름. 두 탭이 같은 말을 쓴다. */
@@ -40,6 +44,9 @@ export function PendingNotice(props: {
   missedLead?: string
 }): ReactElement | null {
   const { lock } = props
+  // **그리는 갈래가 여기 섰다**(위 머리말). 레이아웃 이펙트다 — 장부의 받는 자리(`receive`)와 같은 까닭으로 이 갈래가 서는 커밋 안에서 선다.
+  const { draw } = lock
+  useLayoutEffect(() => draw?.(), [draw])
   // 잠금이 서 있으면 새 쓰기가 나간 것이다 — 남긴 실패는 그 쓰기가 이미 지웠다(`run`). 그래서 둘이 함께 서지 않는다.
   if (lock.missed !== null && lock.phase === null) {
     const { conclusion, stayed } = lock.missed

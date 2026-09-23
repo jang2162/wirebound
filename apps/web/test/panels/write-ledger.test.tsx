@@ -19,7 +19,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { samePageMeta } from '@wirebound/schema'
 import type { ApiClient, ReadOptions, WriteOptions } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
-import type { Comment, CommentCreated, PageDetail, ProjectDetail, SessionUser } from '../../src/api/types'
+import type { Comment, CommentCreated, PageDetail, ProjectDetail, ProjectRole, SessionUser } from '../../src/api/types'
 import { WRITE_DEADLINE_MS } from '../../src/panels/write-ledger'
 import { createConnectionIdHolder, type ConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import {
@@ -34,6 +34,7 @@ import {
   PROJECT_NAME,
   waitForNode,
 } from '../editor-harness'
+import { fakeRealtime } from '../fake-realtime'
 import { tabHub } from '../helpers'
 import '../../src/catalog-setup'
 
@@ -2384,7 +2385,8 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
    * 같은 판에서 결말이 충돌(409 · 다른 사람의 글)이면 돌아온 탭은 **말만** 한다 — 충돌 화면을 다시 세우지 않는다(브리프의 기본값 —
    * 같은 말이 두 번 서지 않게). 초안은 그대로다(같은 페이지라 버려지지 않았다) — 다시 저장하면 409 가 충돌 화면을 세운다.
    *
-   * 혼자 죽는 변조: 설명 본문의 마운트 이펙트가 남긴 결말을 안 보고 늘 충돌을 남긴다(`keepConflict`).
+   * 혼자 죽는 변조: 남긴 결말이 서면 칸을 `IDLE` 대신 `keepConflict`로 둔다(충돌 화면이 남는다 — 리뷰 F2 부터 그 자리는 마운트
+ * 이펙트가 아니라 «남긴 결말이 설 때마다»의 이펙트다). 그 이펙트째 떼면 아래 «제자리에서 … 한 번만 말한다»와 **함께** 죽는다.
    */
   it('설명 — 다른 탭에 가 있는 동안 저장이 충돌로 끝나면 돌아온 탭은 말만 하고 충돌 화면은 세우지 않는다 · 초안은 그대로다', async () => {
     const server = descriptionServer('서버 값')
@@ -2403,5 +2405,128 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
     expect(screen.getByRole('alert').textContent).toContain('다른 사람이 이 설명을 바꿨습니다 · 지금 저장된 설명: 남의 글')
     expect(screen.queryByRole('button', { name: '내 글로 덮기' })).toBeNull()
     expect(box().value).toBe('내 글')
+  })
+})
+
+/**
+ * **그리는 갈래가 없는 동안 끝난 결말**(리뷰 F2 · 2026-09-24) — 본문은 떠 있는데 그 칸의 통지를 그리는 갈래(`PendingNotice`)가 없는 판:
+ * 저장이 나가 있는 동안 강등돼 viewer 갈래가 됐다(이월 5차 C 의 역할 실시간). 앞 판은 `usePanelLock`을 부른 본문이면 «그린다»로 쳐
+ * 장부가 안 남겼고, 결말은 칸에만 쓰였다가 **탭을 한 번 오가면** 마운트가 지워 말없이 사라졌다(Chrome · 고치기 전: 설명 · 코멘트 둘 다
+ * 승격 뒤 통지 0). 제자리에서 승격되면 칸이 말했는데, 이제 장부가 남기므로 **칸의 같은 통지를 지워야** 한 번 말한다.
+ *
+ * 값은 [jsdom]이다. 같은 절차의 Chrome 값은 보고서(d) — 여기 적지 않는다(두 벌).
+ */
+describe('그리는 갈래가 없는 동안 끝난 결말 — 강등된 viewer 갈래 (리뷰 F2)', () => {
+  const STAYED = '이 탭을 떠나 있는 동안 저장하지 못했습니다'
+  const SERVER_ERROR = '서버 오류가 발생했습니다'
+  const MEMBERSHIP = { type: 'membership-changed', projectId: PROJECT_ID }
+
+  /** 역할을 바꿀 수 있는 셸 — `getProject`가 그때의 역할을 낸다. 역할 신호는 가짜 실시간이 나른다(`role-live.test.tsx`와 같은 장치). */
+  async function openAs(overrides: Partial<ApiClient>): Promise<(role: ProjectRole) => void> {
+    let role: ProjectRole = 'editor'
+    const rt = fakeRealtime(PROJECT_ID, MY_ID)
+    await openPage(DOC, {
+      realtime: rt.realtime,
+      apiOverrides: { ...overrides, getProject: async () => ({ ...PROJECT, role }) },
+    })
+    rt.open()
+    return (next) => {
+      role = next
+      rt.deliver(MEMBERSHIP)
+    }
+  }
+
+  /** 설명 저장을 붙잡아 둔 채 viewer 가 된다 — 상자가 사라질 때까지. */
+  async function descriptionDemoted(): Promise<{ server: ReturnType<typeof descriptionServer>; setRole: (role: ProjectRole) => void }> {
+    const server = descriptionServer('서버 값')
+    const setRole = await openAs({ ...server.overrides, ...commentServer().overrides })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '강등될 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+    setRole('viewer')
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: '페이지 설명' })).toBeNull())
+    return { server, setRole }
+  }
+
+  /** 코멘트 게시를 붙잡아 둔 채 viewer 가 된다 — 폼이 사라질 때까지. 돌려주는 함수가 그 게시를 실패로 끝낸다. */
+  async function commentDemoted(): Promise<{ fail: () => Promise<void>; setRole: (role: ProjectRole) => void }> {
+    const server = commentServer()
+    let reject: (caught: unknown) => void = () => {}
+    const setRole = await openAs({
+      ...descriptionServer('서버 값').overrides,
+      ...server.overrides,
+      createComment: (() => new Promise((_resolve, fail) => (reject = fail))) as never,
+    })
+    await toCommentTab()
+    type(commentBox(), '강등될 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(commentBox().disabled).toBe(true))
+    setRole('viewer')
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: '새 코멘트' })).toBeNull())
+    // api 가 낸 500(봉투)은 확정이다 — 다시 보내지 않는다(위 «api 가 낸 500(봉투) 은 확정이다»).
+    return { fail: () => act(async () => reject(new ApiError(500, 'internal', SERVER_ERROR, [], true))), setRole }
+  }
+
+  /**
+   * 설명 — viewer 동안 저장이 실패하고, viewer 인 채 탭을 한 번 오간 뒤 승격 → 돌아온 폼이 말한다. 고치기 전: 통지 0(Chrome `D-in2`).
+   *
+   * 혼자 죽는 변조: 설명의 viewer 갈래도 `PendingNotice`를 그린다(= 앞 판처럼 그 갈래를 «그린다»로 센다).
+   */
+  it('설명 — viewer 로 강등된 동안 끝난 저장 실패는 탭을 오가도 남아, 다시 editor 가 되면 말한다', async () => {
+    const { server, setRole } = await descriptionDemoted()
+    await server.fail(0, new ApiError(500, 'internal', SERVER_ERROR))
+    expect(screen.queryByRole('alert')).toBeNull()
+    // viewer 인 채 탭을 한 번 오간다 — 돌아온 본문의 마운트가 칸의 지난 통지를 지운다.
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+
+    setRole('editor')
+    await waitFor(() => expect(box().disabled).toBe(false))
+    expect(screen.getAllByRole('alert').map((el) => el.textContent)).toEqual([`${STAYED} — ${SERVER_ERROR}`])
+  })
+
+  /** 코멘트 — 같은 판. 고치기 전: 통지 0(Chrome `C-in2`). 혼자 죽는 변조: 코멘트의 폼이 없는 갈래(viewer)도 `PendingNotice`를 그린다. */
+  it('코멘트 — viewer 로 강등된 동안 끝난 게시 실패는 탭을 오가도 남아, 다시 editor 가 되면 말한다', async () => {
+    const { fail, setRole } = await commentDemoted()
+    await fail()
+    expect(screen.queryByRole('alert')).toBeNull()
+    // viewer 인 채 탭을 한 번 오간다(편집 모드 — 옆 탭은 «상호작용»).
+    fireEvent.click(screen.getByRole('tab', { name: '상호작용' }))
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+
+    setRole('editor')
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+    expect(screen.getAllByRole('alert').map((el) => el.textContent)).toEqual([`${STAYED} — ${SERVER_ERROR}`])
+  })
+
+  /**
+   * 설명 — 탭을 안 오가고 제자리에서 승격되면 **한 번만** 말한다. 장부가 남긴 결말과 칸(`SAVE`)에 쓰인 같은 결말이 함께 설 자리다.
+   * 머리는 보지 않는다 — 앞 판은 칸이 머리 없이 한 번 말했다(이 케이스는 «두 번»만 잰다).
+   *
+   * 혼자 죽는 변조: 설명 본문이 남긴 결말이 설 때 칸의 통지를 지우지 않는다(마운트에서만 지운다).
+   */
+  it('설명 — 제자리에서 다시 editor 가 되면 한 번만 말한다 — 칸의 통지와 남긴 결말이 겹쳐 서지 않는다', async () => {
+    const { server, setRole } = await descriptionDemoted()
+    await server.fail(0, new ApiError(500, 'internal', SERVER_ERROR))
+
+    setRole('editor')
+    await waitFor(() => expect(box().disabled).toBe(false))
+    const alerts = screen.getAllByRole('alert').map((el) => el.textContent)
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toContain(SERVER_ERROR)
+  })
+
+  /** 코멘트 — 같은 판. 혼자 죽는 변조: 코멘트 본문이 남긴 결말이 설 때 칸(`WRITE_ERROR`)을 지우지 않는다. */
+  it('코멘트 — 제자리에서 다시 editor 가 되면 한 번만 말한다 — 칸의 통지와 남긴 결말이 겹쳐 서지 않는다', async () => {
+    const { fail, setRole } = await commentDemoted()
+    await fail()
+
+    setRole('editor')
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+    const alerts = screen.getAllByRole('alert').map((el) => el.textContent)
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toContain(SERVER_ERROR)
   })
 })

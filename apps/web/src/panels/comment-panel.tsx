@@ -657,6 +657,16 @@ export function CommentPanel(props: {
     setRefreshing((prev) => (prev?.failure == null ? prev : null))
   }, [])
 
+  // **장부가 결말을 남기면 칸의 같은 통지를 지운다**(리뷰 F2 — `page-description.tsx`의 같은 자리). 장부는 통지를 그리는 갈래
+  // (폼 안의 `PendingNotice`)가 없으면 남기는데, 이 본문이 떠 있는 채 폼만 없던 판(강등된 viewer · 불러오는 중)에는 `settle`이 칸
+  // (`WRITE_ERROR` · `LANDED_SINCE_NOTICE`)에도 같은 결말을 썼다 — 폼이 돌아오면 둘 다 선다. 남기는 것은 칸 쓰기 뒤다.
+  const { missed } = busyLock
+  useEffect(() => {
+    if (missed === null) return
+    setWriteError(null)
+    setLandedSince(null)
+  }, [missed, setWriteError, setLandedSince])
+
   useEffect(() => {
     if (pageId === undefined) {
       setState({ status: 'ready', at: issue(), comments: [] })

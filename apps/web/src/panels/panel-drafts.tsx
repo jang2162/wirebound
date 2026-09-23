@@ -321,7 +321,7 @@ interface Held {
 interface Box {
   held: Held
   receiver: Receiver
-  /** 이 잠금 칸의 결말을 그리는 본문이 떠 있는 동안 선다 — 돌려주는 함수가 물러난다(`Receiver.draws` · `usePanelLock`). */
+  /** 이 잠금 칸의 결말을 그리는 갈래가 떠 있는 동안 선다 — 돌려주는 함수가 물러난다(`Receiver.draws` · `PanelLock.draw`). */
   draw: (slot: string) => () => void
 }
 
@@ -434,9 +434,10 @@ export function PanelDraftsProvider(props: {
   )
 
   /**
-   * **떠 있는 본문이 그리는 잠금 칸**(`Receiver.draws`) — 칸 이름마다 몇 번 섰는가. 본문은 탭 · 모드마다 내려가지만 이 provider 는
-   * 산다 — 그래서 «그 페이지를 본다»(`sees`)만으로는 결말이 말해질지 모른다(3차 이월 «S 의 넓이»). 세는 것은 같은 칸을 두 본문이
-   * 잠깐 함께 쥐는 판(StrictMode 의 이중 마운트) 때문이다.
+   * **떠 있는 갈래가 그리는 잠금 칸**(`Receiver.draws`) — 칸 이름마다 몇 번 섰는가. 본문은 탭 · 모드마다 내려가지만 이 provider 는
+   * 산다 — 그래서 «그 페이지를 본다»(`sees`)만으로는 결말이 말해질지 모른다(3차 이월 «S 의 넓이»). 세는 것은 같은 칸을 두 갈래가
+   * 잠깐 함께 쥐는 판(StrictMode 의 이중 마운트) 때문이다. **서는 자리는 `PendingNotice`다**(`PanelLock.draw`) — 본문이 떠 있어도
+   * 통지를 안 그리는 갈래(viewer · 조기 반환)는 안 선다(리뷰 F2).
    */
   const drawnRef = useRef(new Map<string, number>())
   const draws = useCallback((slot: string): boolean => (drawnRef.current.get(slot) ?? 0) > 0, [])
@@ -508,6 +509,16 @@ export interface PanelLock {
   /** 그 실패를 지운다(«확인»). */
   readonly dismiss: () => void
   /**
+   * **이 칸의 결말을 그리는 갈래가 여기 섰다**(`Receiver.draws`) — 돌려주는 함수가 물러난다. 부르는 자리는 `PendingNotice`
+   * 하나다(그 컴포넌트의 머리말). 없으면(트리) 받는 자리가 늘 그린다.
+   *
+   * **본문이 아니라 갈래다**(리뷰 F2 · 2026-09-24). 앞 판은 `usePanelLock`을 부른 본문이 서면 섰는데, 설명의 viewer 갈래 ·
+   * 코멘트의 폼 밖 · 조기 반환(불러오는 중 · 실패)도 그 훅을 불러 **통지 자리가 없는데 «그린다»** 였다 — 강등된 사람의 저장이
+   * 그 동안 끝나면 결말이 칸에만 쓰이고 장부는 안 남겨, 탭을 한 번 오가면 마운트가 지워 말없이 사라졌다(Chrome: 설명 · 코멘트
+   * 둘 다 통지 0).
+   */
+  readonly draw?: () => () => void
+  /**
    * 쓰기를 장부에 올려 보낸다. **이 렌더의 페이지를 단다.** **이미 나가 있는지는 여기서 안 본다** — 부르는
    * 쪽이 `locked`를 먼저 본다(설명의 `saving.locked` · 코멘트의 `busy`). 장부도 한 번 더 막지 않는다
    * (`write-ledger.tsx`의 `Ledger.run` — 화면에서 닿는 길이 없어 재는 것이 없는 가드를 두지 않았다).
@@ -516,10 +527,9 @@ export interface PanelLock {
 }
 
 export function usePanelLock(key: LockSlot): PanelLock {
-  const { held, receiver, draw } = useBox(key.name)
-  // **이 칸의 결말을 그리는 본문이 여기 섰다**(`Receiver.draws`) — 이 훅을 부르는 본문이 그 칸의 `PendingNotice`를 그린다.
-  // 레이아웃 이펙트다 — 받는 자리(`receive`)와 같은 까닭으로, 본문이 서는 커밋 안에서 선다.
-  useLayoutEffect(() => draw(key.name), [draw, key.name])
+  const { held, receiver, draw: drawSlot } = useBox(key.name)
+  // **여기서 서지 않는다** — 서는 것은 그리는 갈래의 `PendingNotice`다(`PanelLock.draw` — 리뷰 F2).
+  const draw = useCallback(() => drawSlot(key.name), [drawSlot, key.name])
   const ledger = useWriteLedger()
   const { projectId, pageId } = held
   const target = useMemo<WriteTarget>(() => ({ projectId, pageId, slot: key.name, realm: 'page' }), [projectId, pageId, key.name])
@@ -536,6 +546,7 @@ export function usePanelLock(key: LockSlot): PanelLock {
     recheck: entry?.recheck ?? null,
     missed: ledger.missed.get(writeKey(target)) ?? null,
     dismiss,
+    draw,
     run,
   }
 }
