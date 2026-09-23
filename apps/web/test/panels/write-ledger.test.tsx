@@ -165,8 +165,13 @@ function descriptionServer(
   failReads: (on: boolean) => void
   /** 켜 있는 동안의 읽기를 붙잡는다 — 끈 뒤의 읽기는 곧바로 답한다. 붙잡힌 것은 `releaseReads`가 놓는다. */
   holdReads: (on: boolean) => void
-  /** 붙잡힌 읽기를 **그때의** 서버 값으로 놓는다. */
-  releaseReads: () => Promise<void>
+  /**
+   * 붙잡힌 읽기를 **그때의** 서버 값으로 놓는다. `asIssued`면 **읽기를 낸 순간의** 값으로 놓는다 — 서버는 그때 읽었고
+   * 답만 늦게 왔다(이월 V 의 판).
+   */
+  releaseReads: (asIssued?: boolean) => Promise<void>
+  /** 붙잡힌 읽기의 수. */
+  heldReads: () => number
   /** 읽기가 받은 신호 — 부른 순서대로(판정용 다시 읽기만 싣는다). */
   readSignals: (AbortSignal | undefined)[]
   /** 남이 서버의 설명을 바꾼다. */
@@ -175,7 +180,7 @@ function descriptionServer(
   let stored = initial
   let readsFail = false
   let readsHeld = false
-  const heldReads: (() => void)[] = []
+  const heldReads: ((asIssued: boolean) => void)[] = []
   const readSignals: (AbortSignal | undefined)[] = []
   const sent: (string | null | undefined)[] = []
   const bases: unknown[] = []
@@ -197,11 +202,12 @@ function descriptionServer(
     holdReads: (on) => {
       readsHeld = on
     },
-    releaseReads: async () => {
+    releaseReads: async (asIssued = false) => {
       await act(async () => {
-        for (const release of heldReads.splice(0)) release()
+        for (const release of heldReads.splice(0)) release(asIssued)
       })
     },
+    heldReads: () => heldReads.length,
     overwrite: (value) => {
       stored = value
     },
@@ -213,7 +219,8 @@ function descriptionServer(
           // 붙잡힌 읽기도 **끊기면 실제 `fetch`처럼 거절한다**.
           return new Promise<PageDetail>((resolve, reject) => {
             options?.signal?.addEventListener('abort', () => reject(new DOMException('요청을 끊었다', 'AbortError')))
-            heldReads.push(() => resolve(read(pageId)))
+            const issued = read(pageId)
+            heldReads.push((asIssued) => resolve(asIssued ? issued : read(pageId)))
           })
         }
         return read(pageId)
@@ -1740,5 +1747,39 @@ describe('쓰기가 끝나면 잠금이 풀린다 — 목록 다시 받기는 �
     await server.releaseHeldLists()
 
     expect(screen.getByText('매달린 말')).toBeTruthy()
+  })
+
+  it('돌아와 건 설명 조회가 늦게 와도 저장 응답이 세운 값을 덮지 않는다 — 저장 전 값이 «저장했습니다» 옆에 서지 않는다', async () => {
+    // **이월 V** — 앞 판(`page-description.tsx` 머리말 «낡은 값이 보이는 길 둘»의 1)은 가 → 나 → 가로 돌아와 건 조회가
+    // 저장이 커밋되기 **전**에 읽고 저장의 응답보다 **늦게** 오면, 응답이 왔을 때 칸이 `loading`이라 아무것도 못 하고
+    // 뒤이어 선 조회가 저장 전 값을 «설명을 저장했습니다»와 함께 보였다(Chrome route — 이어 고쳐 저장하면 내 앞 저장을
+    // «다른 사람이 바꿨습니다»로 보였다).
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '매달린 저장 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+
+    const tree = screen.getByRole('region', { name: '메뉴·페이지 트리' })
+    fireEvent.click(within(tree).getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitFor(() => expect(box().value).toBe(''))
+    server.holdReads(true)
+    fireEvent.click(within(tree).getByRole('link', { name: PAGE_TITLE }))
+    await waitFor(() => expect(server.heldReads()).toBeGreaterThan(0))
+    server.holdReads(false)
+
+    // 저장이 커밋되고 응답이 온다 — 돌아와 건 조회는 아직 안 왔다.
+    await server.respond()
+    await waitFor(() => expect(screen.queryByText('설명을 저장했습니다')).not.toBeNull())
+    expect(box().value).toBe('매달린 저장 글')
+
+    // 돌아와 건 조회가 이제 온다 — 커밋 **전**에 읽은 값이다.
+    await server.releaseReads(true)
+
+    expect(box().value).toBe('매달린 저장 글')
+    expect(screen.getByText('설명을 저장했습니다')).toBeTruthy()
+    expect(server.stored()).toBe('매달린 저장 글')
   })
 })

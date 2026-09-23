@@ -160,7 +160,7 @@
  * **페이지에 매다는** 까닭과 고르지 않은 갈래는 `panel-drafts.tsx`의 머리말 3이 갖는다.
  *
  * **낡은 값이 보이는 길 둘.** 8차 판은 첫째만 적었는데 둘째는 타이밍과 무관하다(리뷰 N-E — 9차에
- * 갈라 적는다). **둘째는 이월 Q 판(2026-09-21)에서 고쳤다**(아래 둘째 항목의 끝). 첫째는 그대로다.
+ * 갈라 적는다). **둘째는 이월 Q 판(2026-09-21)에서 고쳤다**(아래 둘째 항목의 끝). **첫째는 이월 V(2026-09-23)가 닫았다**(첫째 항목의 끝).
  *
  * 1. **타이밍 창.** 저장이 나가 있는 동안 탭을 오가거나 옆 페이지를 다녀오면 조회를
  *    다시 건다. 그 조회가 **저장이 커밋되기 전의 값을 읽고, 저장의 응답보다 늦게** 도착하면
@@ -169,7 +169,19 @@
  *    나 → 가로 돌아와 건 조회를 곧바로 서버에서 읽히고, 그 응답을 저장의 응답 뒤로 늦췄다):
  *    저장의 응답이 올 때 조회 값이 아직 `loading`이라 `replace`가 아무것도 안 하고 잠금만
  *    풀린다. 뒤이어 조회가 서면 상자는 **저장 전 서버 값을 «설명을 저장했습니다»와 함께** 보이고
- *    DB 는 저장한 값이다. 이 순서를 만드는 jsdom 케이스는 세우지 않았다.
+ *    DB 는 저장한 값이다. 그때는 이 순서를 만드는 jsdom 케이스가 없었다.
+ *
+ *    **이월 V(2026-09-23)에서 닫았다 — 조회 칸은 늦게 *낸* 것의 답만 받는다**(`issue`·`answered` — 코멘트 목록이
+ *    2026-09-22 에 닫은 규칙과 같다). 저장의 응답은 **받는 순간** 번호를 받고(그때 서버는 커밋을 마쳤다), 조회는
+ *    **보낼 때** 받는다 — 응답 앞에 낸 조회는 늦게 와도 응답이 세운 값을 못 덮는다. 응답은 제목까지 실어 오므로
+ *    조회가 아직 `loading`이어도 선다(`settleWith` — 앞 판의 `replace`는 `ready`에서만 갈아 끼웠다).
+ *
+ *    | 판(Chrome · 가 → 나 → 가) | 앞 판 | 이 판 |
+ *    |---|---|---|
+ *    | route — 돌아와 건 GET 을 곧바로 서버에서 읽히고 답만 저장 응답 뒤로 | 상자 `"가의 서버 값"` · «설명을 저장했습니다» · DB `"V 저장 글"` → 이어 고쳐 저장하면 **내 앞 저장을 «다른 사람이 이 설명을 바꿨습니다»**(바탕이 낡았다) | 상자 `"V 저장 글"` · «설명을 저장했습니다» · 이어 저장 200 |
+ *    | 서버 안 지연 — 페이지 행 `FOR UPDATE`를 쥐었다 놓음 | 닫혀 있다 — 평 `SELECT`는 행 잠금에 안 서서 조회가 먼저 온다 | 같음 |
+ *
+ *    케이스는 `test/panels/write-ledger.test.tsx`의 *"돌아와 건 설명 조회가 늦게 와도 …"*다.
  * 2. **응답이 영영 안 닿는 길(리뷰 실측, Chrome).** provider 째 내려가는 조작 — 저장 중에
  *    **프로젝트를 오가거나 로그아웃 뒤 다시 로그인한다** — 이면 응답이 닿을 칸이 아예 없다. 돌아온
  *    화면의 조회가 커밋 전 값을 읽었으면 **그 낡은 값을 고칠 것이 없다**: 프로젝트 왕복 — 화면
@@ -301,10 +313,33 @@ const MATCHED = '응답이 없어 서버를 다시 읽었더니 서버의 설명
  */
 const SAME = '서버의 설명이 이미 이 글과 같습니다'
 
+/**
+ * 조회 칸. **`at`은 그 값을 낸 조회(또는 그 값을 실어 온 저장 응답)의 순서 번호다**(`issue`) — 칸은 늦게 낸 것의
+ * 답만 받는다(`answered`). 까닭은 머리말 «낡은 값이 보이는 길 둘»의 1.
+ */
 type LoadState =
-  | { status: 'loading' }
-  | { status: 'ready'; title: string; description: string | null }
-  | { status: 'failed'; failure: Failure }
+  | { status: 'loading'; at: number }
+  | { status: 'ready'; at: number; title: string; description: string | null }
+  | { status: 'failed'; at: number; failure: Failure }
+
+/**
+ * 조회 칸에 값을 **낸 순서**(이월 V · 2026-09-23). 돌아와 건 조회는 저장이 커밋되기 **전**에 읽고 저장의 응답보다
+ * **늦게** 올 수 있다 — 도착 순서로 받으면 저장 전 값이 «설명을 저장했습니다» 옆에 선다. 그래서 낸 순서로 가른다:
+ * 조회는 **보낼 때**, 저장의 응답은 **받을 때** 번호를 받는다. 응답을 받은 순간 서버는 커밋을 마쳤으므로, 그 뒤에
+ * 낸 조회는 커밋 뒤의 값을 읽는다 — 그것만 응답이 세운 값을 갈아 끼울 수 있다. `comment-panel.tsx`의 `issue`·
+ * `answered`와 같은 규칙이다(목록 칸 — 2026-09-22). 페이지가 바뀌면 칸이 버려지므로 번호는 한 줄로 늘기만 하면
+ * 된다 — 모듈에 하나 둔다.
+ */
+let issued = 0
+function issue(): number {
+  issued += 1
+  return issued
+}
+
+/** `at`에 낸 조회의 답을 칸에 쓰는 갱신 — **그보다 늦게 낸 것이 이미 서 있으면 버린다.** */
+function answered(at: number, next: LoadState): (prev: LoadState) => LoadState {
+  return (prev) => (at < prev.at ? prev : next)
+}
 
 /**
  * 마지막 저장의 통지. **다음 편집이 시작되면 사라진다**(아래 `onChange`).
@@ -336,7 +371,7 @@ type SaveState =
  * **그 페이지에 매인 채 남는다**(`SAVING`).
  */
 /** 조회 값. 저장의 응답이 **여기를** 갈아 끼운다 — 그래서 조회 값도 마운트 밖에 든다. */
-const LOAD = slot<LoadState>('page-description/load', { status: 'loading' })
+const LOAD = slot<LoadState>('page-description/load', { status: 'loading', at: 0 })
 /**
  * 초안 — 친 글(`text`)과 **그 글의 바탕**(`base` — 첫 글자를 친 순간의 서버 값). 머리말 «남의 저장을 조용히
  * 덮지 않는다».
@@ -409,6 +444,8 @@ function usePageDescription(
   /** 저장이 나가 있다 — 잠금. 장부에 든다(`write-ledger.tsx`). */
   saving: PanelLock
   replace: (description: string | null) => void
+  /** 서버가 알려 준 페이지 값(제목 · 설명)을 `at`의 순서로 세운다. */
+  settleWith: (at: number, page: { title: string; description: string | null }) => void
 } {
   const api = useApi()
   const [state, setState] = usePanelSlot(LOAD)
@@ -439,17 +476,20 @@ function usePageDescription(
     // (`routes/editor.tsx`와 같은 가드). 페이지 쪽은 칸의 쓰기 가드도 막지만(`panel-drafts.tsx`),
     // 언마운트 쪽은 이것만 막는다 — 다음 마운트가 자기 조회를 다시 건다.
     let alive = true
-    setState({ status: 'loading' })
+    const at = issue()
+    setState({ status: 'loading', at })
 
     async function load(openPageId: string): Promise<void> {
       try {
         const page = await api.getPage(projectId, openPageId)
         if (!alive) return
-        setState({ status: 'ready', title: page.title, description: page.description })
+        // **늦게 낸 것의 답이 이미 섰으면 버린다**(`answered`) — 돌아와 건 이 조회는 저장이 커밋되기 전에 읽었을 수
+        // 있다(머리말 «낡은 값이 보이는 길 둘»의 1).
+        setState(answered(at, { status: 'ready', at, title: page.title, description: page.description }))
       } catch (caught) {
         if (!alive) return
         // 실패 → 화면 규칙은 `api/failure.tsx`에 있다(D5). 여기서 다시 판정하지 않는다.
-        setState({ status: 'failed', failure: toFailure(caught, LOAD_FAILED) })
+        setState(answered(at, { status: 'failed', at, failure: toFailure(caught, LOAD_FAILED) }))
       }
     }
 
@@ -460,13 +500,25 @@ function usePageDescription(
     // `setState`는 이 렌더의 페이지를 단 쓰기라 `pageId`와 함께만 바뀐다.
   }, [api, projectId, pageId])
 
-  const replace = (description: string | null): void => {
-    // **조회에 성공한 상태에서만 갈아 끼운다.** 로딩·실패 상태를 `ready`로 만들면 제목이
-    // 없는 `ready`를 지어내야 한다.
-    setState((prev) => (prev.status === 'ready' ? { ...prev, description } : prev))
+  /**
+   * 서버가 알려 준 페이지 값을 조회 칸에 세운다 — 저장의 응답(`PageDetail`)과 판정용 다시 읽기가 부른다. `at`은
+   * 그 값의 순서 번호다(`issue` — 응답은 받을 때, 다시 읽기는 보낼 때). **조회가 아직 안 끝났어도 선다** — 제목까지
+   * 실려 오기 때문이다. 앞 판은 `ready`일 때만 갈아 끼워, 돌아와 건 조회가 도는 동안 온 응답은 아무것도 못 했다.
+   */
+  const settleWith = (at: number, page: { title: string; description: string | null }): void => {
+    setState(answered(at, { status: 'ready', at, title: page.title, description: page.description }))
   }
 
-  return { state, draft, setDraft, save, setSave, saving, replace }
+  /**
+   * 설명 하나만 아는 자리(409 에 실린 지금 값)가 부른다 — 제목이 없어 **조회에 성공한 상태에서만** 갈아 끼운다.
+   * 번호는 새로 받는다 — 그 앞에 낸 조회가 늦게 와서 이 값을 덮지 않게.
+   */
+  const replace = (description: string | null): void => {
+    const at = issue()
+    setState((prev) => (prev.status === 'ready' ? { ...prev, at, description } : prev))
+  }
+
+  return { state, draft, setDraft, save, setSave, saving, replace, settleWith }
 }
 
 /** 뷰 모드 «페이지 설명» 탭의 본문. 읽고 고친다(위 머리말). viewer 에게는 읽기 전용이다(`canEdit`). */
@@ -482,7 +534,7 @@ export function PageDescriptionPanel(props: {
   const api = useApi()
   const { projectId, pageId } = props
   const canEdit = props.canEdit ?? true
-  const { state, draft, setDraft, save, setSave, saving, replace } = usePageDescription(projectId, pageId)
+  const { state, draft, setDraft, save, setSave, saving, replace, settleWith } = usePageDescription(projectId, pageId)
 
   const server = state.status === 'ready' ? (state.description ?? '') : ''
   const value = draft?.text ?? server
@@ -500,12 +552,12 @@ export function PageDescriptionPanel(props: {
     const openPageId = pageId
 
     /**
-     * 서버 값 하나를 판정해 칸에 적는다 — **409 의 지금 값과 다시 읽은 값이 같은 길을 지난다**(`judgeMeta`).
+     * 서버 값 하나를 판정한다 — **409 의 지금 값과 다시 읽은 값이 같은 길을 지난다**(`judgeMeta`). 그 값을 조회 칸에
+     * 세우는 것은 부르는 쪽이다(409 는 `replace` · 다시 읽기는 `settleWith` — 다시 읽기만 제목을 든다).
      * `asked`는 그 값이 어디서 왔는가다: 다시 읽은 값이면(`'verified'`) «모름»의 판정이고, 409 면(`'rejected'`)
      * 서버가 바탕과 다르다고 이미 판정한 값이다.
      */
     function land(current: string | null, asked: 'verified' | 'rejected'): void {
-      replace(current)
       const verdict = judgeMeta(current, next, base)
       if (verdict === 'mine') {
         setDraft(null)
@@ -528,7 +580,11 @@ export function PageDescriptionPanel(props: {
       // **시간 안에 응답이 없으면 서버에서 다시 읽는다**(이월 R). 판정은 `land`가 한다 — 서버 값이 내 글이면
       // 원하던 상태, 바탕이면 안 닿음, 그 밖이면 **다른 사람이 바꿨다**(이월 P). 서버가 설명을 정규화하지
       // 않는다(`api/client.ts`의 `updatePage` 표: 보낸 그대로 되읽힌다).
-      verify: async (signal) => (await api.getPage(projectId, openPageId, { signal })).description,
+      // 번호는 **보낼 때** 받는다(`issue`) — 그 뒤에 낸 조회가 있으면 그것이 더 새것이다.
+      verify: async (signal) => {
+        const at = issue()
+        return { at, page: await api.getPage(projectId, openPageId, { signal }) }
+      },
       settle: (outcome) => {
         // **아래는 칸에 쓴다 — 이 클릭이 난 렌더의 페이지를 달고.** 그래서 응답이 오기 전에
         // 탭을 오갔으면 **지금 떠 있는 본문**에 닿고(리뷰 N1 — 7차 판은 셋 중 초안 비우기만
@@ -538,16 +594,21 @@ export function PageDescriptionPanel(props: {
         // 없었으므로 비우는 것은 **보낸 그것**뿐이다(리뷰 N-A — 머리말 3).
         if (outcome.kind === 'failed') {
           const clash = metaConflict(outcome.caught, 'description')
-          if (clash !== null) land(clash.current, 'rejected')
+          if (clash !== null) {
+            replace(clash.current)
+            land(clash.current, 'rejected')
+          }
           else setSave({ status: 'failed', failure: toFailure(outcome.caught, SAVE_FAILED) })
           return
         }
         if (outcome.kind === 'verified') {
-          land(outcome.verdict, 'verified')
+          settleWith(outcome.verdict.at, outcome.verdict.page)
+          land(outcome.verdict.page.description, 'verified')
           return
         }
-        // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다.
-        replace(outcome.value.description)
+        // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다. 번호는 **받은 지금**이다 —
+        // 그 앞에 낸 조회(돌아와 건 것)가 늦게 와도 이 값을 덮지 못한다(이월 V).
+        settleWith(issue(), outcome.value)
         setDraft(null)
         setSave({ status: 'saved' })
       },
