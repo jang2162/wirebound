@@ -68,7 +68,7 @@ import { walkSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
 // 우측 패널의 두 탭이 같은 이유로 같이 꺼진다 — 문장을 두 벌로 두지 않는다.
-import { lockedNotice } from './property-panel'
+import { blockedNotice } from './property-panel'
 import '../catalog-setup'
 
 /** 페이지를 열지 않았을 때. */
@@ -122,6 +122,12 @@ function emptyAction(type: InteractionAction['type']): InteractionAction {
 export function InteractionPanel(props: {
   projectId: string
   pageId: string | undefined
+  /**
+   * 고칠 수 있는가 — 셸의 `canEdit`(`projectAbilities(role).editDesign` · 이월 M′). `false`면 규칙 위젯 · 추가 · 삭제가
+   * **꺼지고** 이유가 선다 — 속성 패널과 같은 관례다(규칙이 곧 읽을 값이라 숨기지 않는다). 아래 «이 페이지의 상호작용»
+   * 문장 목록은 그대로다.
+   */
+  canEdit: boolean
 }): ReactElement {
   const store = useEditorStoreInstance()
   const doc = useOpenDocument(props.pageId)
@@ -147,7 +153,8 @@ export function InteractionPanel(props: {
    * (스파이크: 잠긴 노드 423 · 조상 200 — 그 표도 그쪽이 갖는다).
    */
   const lock = node === undefined ? null : lockOf(node.id)
-  const blocked = lock !== null
+  const blocked = lock !== null || !props.canEdit
+  const notice = blockedNotice(props.canEdit, lock)
 
   return (
     <>
@@ -158,7 +165,7 @@ export function InteractionPanel(props: {
       ) : (
         <>
           {/* 꺼진 위젯의 이유를 이 탭이 자기 자리에서 말한다(속성 패널과 같은 판단). */}
-          {lock !== null && <p className="wb-shell-panel-notice">{lockedNotice(lock.userName)}</p>}
+          {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
           <NodeRules
             document={doc}
             node={node}

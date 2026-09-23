@@ -545,7 +545,16 @@ function targetOf(document: PageDocument | null, nodeId: string): string {
   return `${TARGET}: ${nodeId}`
 }
 
-export function CommentPanel(props: { projectId: string; pageId: string | undefined }): ReactElement {
+export function CommentPanel(props: {
+  projectId: string
+  pageId: string | undefined
+  /**
+   * 코멘트를 달고 · 고치고 · 지우고 · 재번호할 수 있는가 — 셸의 `canEdit`(`projectAbilities(role).editDesign` · 이월 M′).
+   * `false`면 **폼과 줄마다의 «수정» · «삭제»가 없다**(셸 `canEdit`의 표 «동작 입구»). 목록 · 번호 · 달 곳은 그대로 읽힌다 —
+   * §10 viewer 의 *"코멘트 불가"* 는 **다는 것**이지 읽는 것이 아니다.
+   */
+  canEdit: boolean
+}): ReactElement {
   const api = useApi()
   const store = useEditorStoreInstance()
   // 지금 연결의 id 를 읽는 자리 — 게시가 그것을 **보낼 때** 잡아 다시 보낼 때도 싣는다(`submit`).
@@ -568,6 +577,11 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   const [editedSince, setEditedSince] = usePanelSlot(EDITED_SINCE_NOTICE)
   const [drafts, setDrafts] = usePanelSlot(DRAFTS)
   const [editingId, setEditingId] = usePanelSlot(EDITING_ID)
+  // **viewer 에게는 고치는 중인 글이 없다**(이월 M′ 리뷰 F1). 칸은 저장소에서 되살아나므로(`EDITING_ID`) editor 때 열어 둔
+  // 수정 상자가 강등 뒤 새로고침에 **그대로 섰다** — 켜진 «저장» · 403 · 실패 문장 없음(그 문장은 폼 안이다) · 제 글의 원문도
+  // 상자에 가렸다. «수정» 단추(칸을 **세우는** 입구)만 가려서는 모자라다 — 세워진 칸을 **그리는** 갈래와 **보내는** `saveEdit`이
+  // 이 한 값을 본다. 칸 자체는 **안 지운다** — 다시 editor 가 되면 초안이 돌아와야 한다(설명 초안 · 새 코멘트 초안과 같은 결정).
+  const editing = props.canEdit ? editingId : null
   const [editDraft, setEditDraft] = usePanelSlot(EDIT_DRAFT)
   const [postKeys, setPostKeys] = usePanelSlot(POST_KEYS)
   const [refreshing, setRefreshing] = usePanelSlot(REFRESH)
@@ -863,6 +877,8 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
   }
 
   const saveEdit = (commentId: string): void => {
+    // 그리는 갈래와 **같은 값**이다(`editing`) — 상자가 안 선 글은 보내지도 않는다.
+    if (editing !== commentId) return
     const body = editDraft.trim()
     if (body === '') return
 
@@ -936,90 +952,95 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
 
   return (
     <div className="wb-shell-comments">
-      <form
-        className="wb-shell-comment-form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          submit()
-        }}
-      >
-        <label className="wb-shell-comment-label" htmlFor="wb-comment-draft">
-          새 코멘트
-        </label>
-        {/* **어느 노드에 다는가** — 두 모드 다(`targetOf`). 상자의 이름(«새 코멘트»)은 그대로 두고 설명으로 잇는다. */}
-        {selectedNodeId !== null && (
-          <p id="wb-comment-target" className="wb-shell-comment-target">
-            {targetOf(document, selectedNodeId)}
-          </p>
-        )}
-        <textarea
-          id="wb-comment-draft"
-          className="wb-shell-comment-input"
-          {...(selectedNodeId === null ? {} : { 'aria-describedby': 'wb-comment-target' })}
-          value={draft}
-          rows={3}
-          // **고른 노드가 없으면 아예 쓸 수 없다.** 눌러 봐야 실패할 자리를 열어 두지
-          // 않는다(P2b-2 D7과 같은 판단) — 서버도 `nodeId` 없는 본문을 400으로 막는다.
-          disabled={selectedNodeId === null || busy}
-          onChange={(event) => {
-            if (selectedNodeId === null) return
-            const text = event.target.value
-            setDrafts((prev) => withDraft(prev, selectedNodeId, text))
+      {/* **폼째 뺀다**(`canEdit`). 폼 안의 통지(실패 · 확인 중 · 어긋남)도 함께 가는데, 그것들은 전부 **내가 낸 쓰기**의
+          뒷말이다. viewer 가 쓰기를 못 내는 것은 폼만의 일이 아니다 — 줄마다의 수정 상자도 `editing`(위)이 막아야 참이다.
+          앞 판은 저장소에서 되살아난 수정 상자가 폼 **밖**에서 쓰기를 냈고, 그 실패가 설 자리는 뺀 폼 안이었다(리뷰 F1). */}
+      {props.canEdit && (
+        <form
+          className="wb-shell-comment-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            submit()
           }}
-        />
-        {selectedNodeId === null && <p className="wb-shell-panel-notice">{NO_TARGET}</p>}
-        <div className="wb-shell-comment-actions">
-          <button
-            type="submit"
-            className="wb-shell-comment-submit"
-            disabled={selectedNodeId === null || busy || draft.trim() === ''}
-          >
-            코멘트 달기
-          </button>
-          {/* §9의 *"문서 순서대로 재번호"* 버튼. 표는 안 건드리고 문서만 바꾼다(D4). */}
-          <button type="button" className="wb-shell-comment-renumber" disabled={busy} onClick={renumber}>
-            문서 순서대로 재번호
-          </button>
-        </div>
-        {writeError !== null &&
-          (writeError.kind === 'signed-out' ? (
-            <SignedOut />
-          ) : (
-            <p className="wb-shell-panel-notice" role="alert">
-              {writeError.message}
+        >
+          <label className="wb-shell-comment-label" htmlFor="wb-comment-draft">
+            새 코멘트
+          </label>
+          {/* **어느 노드에 다는가** — 두 모드 다(`targetOf`). 상자의 이름(«새 코멘트»)은 그대로 두고 설명으로 잇는다. */}
+          {selectedNodeId !== null && (
+            <p id="wb-comment-target" className="wb-shell-comment-target">
+              {targetOf(document, selectedNodeId)}
             </p>
-          ))}
-        <PendingNotice lock={busyLock} checking={CHECKING} unknown={UNKNOWN} />
-        {/* **쓰기는 끝났고 표시만 아직이다** — 잠금과 따로 말한다(`refresh`). */}
-        {refreshNotice !== null && refreshNotice.failure === null && (
-          <p className="wb-shell-panel-notice" role="status">
-            {REFRESHING}
-          </p>
-        )}
-        {refreshNotice?.failure != null &&
-          (refreshNotice.failure.kind === 'signed-out' ? (
-            <SignedOut />
-          ) : (
-            <p className="wb-shell-panel-notice" role="alert">
-              {refreshNotice.failure.message === REFRESH_FAILED
-                ? REFRESH_FAILED
-                : `${REFRESH_FAILED} — ${refreshNotice.failure.message}`}
+          )}
+          <textarea
+            id="wb-comment-draft"
+            className="wb-shell-comment-input"
+            {...(selectedNodeId === null ? {} : { 'aria-describedby': 'wb-comment-target' })}
+            value={draft}
+            rows={3}
+            // **고른 노드가 없으면 아예 쓸 수 없다.** 눌러 봐야 실패할 자리를 열어 두지
+            // 않는다(P2b-2 D7과 같은 판단) — 서버도 `nodeId` 없는 본문을 400으로 막는다.
+            disabled={selectedNodeId === null || busy}
+            onChange={(event) => {
+              if (selectedNodeId === null) return
+              const text = event.target.value
+              setDrafts((prev) => withDraft(prev, selectedNodeId, text))
+            }}
+          />
+          {selectedNodeId === null && <p className="wb-shell-panel-notice">{NO_TARGET}</p>}
+          <div className="wb-shell-comment-actions">
+            <button
+              type="submit"
+              className="wb-shell-comment-submit"
+              disabled={selectedNodeId === null || busy || draft.trim() === ''}
+            >
+              코멘트 달기
+            </button>
+            {/* §9의 *"문서 순서대로 재번호"* 버튼. 표는 안 건드리고 문서만 바꾼다(D4). */}
+            <button type="button" className="wb-shell-comment-renumber" disabled={busy} onClick={renumber}>
+              문서 순서대로 재번호
+            </button>
+          </div>
+          {writeError !== null &&
+            (writeError.kind === 'signed-out' ? (
+              <SignedOut />
+            ) : (
+              <p className="wb-shell-panel-notice" role="alert">
+                {writeError.message}
+              </p>
+            ))}
+          <PendingNotice lock={busyLock} checking={CHECKING} unknown={UNKNOWN} />
+          {/* **쓰기는 끝났고 표시만 아직이다** — 잠금과 따로 말한다(`refresh`). */}
+          {refreshNotice !== null && refreshNotice.failure === null && (
+            <p className="wb-shell-panel-notice" role="status">
+              {REFRESHING}
             </p>
-          ))}
-        {/* **실패가 아니라 어긋남이다** — 코멘트는 저장됐고 번호만 화면에 못 얹었다.
-            그래서 `alert`가 아니라 `status`이고 문안도 *"실패했다"*가 아니다. */}
-        {diverged && (
-          <p className="wb-shell-panel-notice" role="status">
-            {DIVERGED}
-          </p>
-        )}
-        {/* **실패가 아니다** — 게시는 달려 있다(`reusedKey`). */}
-        {editedSince && (
-          <p className="wb-shell-panel-notice" role="status">
-            {EDITED_SINCE}
-          </p>
-        )}
-      </form>
+          )}
+          {refreshNotice?.failure != null &&
+            (refreshNotice.failure.kind === 'signed-out' ? (
+              <SignedOut />
+            ) : (
+              <p className="wb-shell-panel-notice" role="alert">
+                {refreshNotice.failure.message === REFRESH_FAILED
+                  ? REFRESH_FAILED
+                  : `${REFRESH_FAILED} — ${refreshNotice.failure.message}`}
+              </p>
+            ))}
+          {/* **실패가 아니라 어긋남이다** — 코멘트는 저장됐고 번호만 화면에 못 얹었다.
+              그래서 `alert`가 아니라 `status`이고 문안도 *"실패했다"*가 아니다. */}
+          {diverged && (
+            <p className="wb-shell-panel-notice" role="status">
+              {DIVERGED}
+            </p>
+          )}
+          {/* **실패가 아니다** — 게시는 달려 있다(`reusedKey`). */}
+          {editedSince && (
+            <p className="wb-shell-panel-notice" role="status">
+              {EDITED_SINCE}
+            </p>
+          )}
+        </form>
+      )}
 
       {/* **문서를 못 읽었으면 그렇다고 말한다**(리뷰 F). 코멘트는 그대로 보이되 번호
           자리가 비는 이유를 화면이 스스로 설명한다 — 조용히 `–`만 두면 사용자는 번호가
@@ -1052,7 +1073,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
                 {group.comments.map((comment) => (
                   <li key={comment.id} className="wb-shell-comment">
                     <p className="wb-shell-comment-author">{comment.authorName}</p>
-                    {editingId === comment.id ? (
+                    {editing === comment.id ? (
                       <>
                         <label className="wb-shell-comment-label" htmlFor={`wb-comment-edit-${comment.id}`}>
                           코멘트 수정
@@ -1087,7 +1108,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
                         <p className="wb-shell-comment-body">{comment.body}</p>
                         {/* **수정은 작성자만 부를 수 있다**(서버 재라 #2 — 남이 부르면
                             403이다). 눌러 봐야 실패할 버튼을 두지 않는다. */}
-                        {currentUser !== null && comment.authorId === currentUser.id && (
+                        {props.canEdit && currentUser !== null && comment.authorId === currentUser.id && (
                           <button
                             type="button"
                             className="wb-shell-comment-edit"
@@ -1100,15 +1121,18 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
                             수정
                           </button>
                         )}
-                        {/* **삭제는 editor면 누구나 한다** — 수정과 갈린다(서버 재라 #2). */}
-                        <button
-                          type="button"
-                          className="wb-shell-comment-delete"
-                          disabled={busy}
-                          onClick={() => remove(comment.id)}
-                        >
-                          삭제
-                        </button>
+                        {/* **삭제는 editor면 누구나 한다** — 수정과 갈린다(서버 재라 #2). viewer 에게는 없다(`canEdit`) —
+                            제 글이어도 그렇다(역할이 깎인 사람의 옛 글). */}
+                        {props.canEdit && (
+                          <button
+                            type="button"
+                            className="wb-shell-comment-delete"
+                            disabled={busy}
+                            onClick={() => remove(comment.id)}
+                          >
+                            삭제
+                          </button>
+                        )}
                       </>
                     )}
                   </li>

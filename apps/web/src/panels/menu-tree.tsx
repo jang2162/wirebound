@@ -109,13 +109,11 @@ export function MenuTree(props: {
    * **`false`면 셋이 함께 간다:** 툴바 · 페이지 JSON 패널 · 편집 단축키. 셋을 따로 가르지
    * 않는 것은 **같은 조작에 닿는 세 입구**이기 때문이다 — 툴바만 감추면 `Delete`·`Alt+↑`가
    * 그대로 남아 뷰 모드에서 메뉴가 지워진다.
+   *
+   * **viewer 에게는 편집 모드에서도 `false`다**(이월 M′) — 셸이 역할까지 얹어 넘긴다. 이 컴포넌트는 역할을 모른다.
+   * 앞 판(이월 M)에 있던 둘째 칸(`canEditPageMeta` — 페이지 이름 변경만 닫았다)은 이 값에 덮여 없앴다.
    */
   editable: boolean
-  /**
-   * 페이지의 제목을 고칠 수 있는가 — 셸이 `projectAbilities(role).editPageMeta`를 넘긴다(이월 M). `false`면 **페이지**
-   * 이름 변경이 닫힌다(툴바 · 단축키가 같은 판정을 본다). 안 주면 열린다.
-   */
-  canEditPageMeta?: boolean
 }): ReactElement {
   // **훅을 부르는 자리는 여기 하나다**(D2의 전제). 툴바는 결과를 prop으로 받는다 —
   // 두 번째 호출자가 생기면 `busy` 잠금이 각자 것이 된다.

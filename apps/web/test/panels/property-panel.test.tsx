@@ -1174,7 +1174,7 @@ describe('문서가 밖에서 바뀔 때', () => {
     render(
       <ApiProvider client={fakeApi()}>
         <EditorStoreProvider store={store}>
-          <PropertyPanel projectId="p-1" pageId="pg-1" />
+          <PropertyPanel projectId="p-1" pageId="pg-1" canEdit />
         </EditorStoreProvider>
       </ApiProvider>,
     )

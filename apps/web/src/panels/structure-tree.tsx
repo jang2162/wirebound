@@ -128,6 +128,13 @@ const SHORTCUTS: {
 export function StructureTree(props: {
   projectId: string
   pageId: string | undefined
+  /**
+   * **구조를 고칠 수 있는가** — 셸이 `projectAbilities(role).editDesign`을 넘긴다(이월 M′). `false`면 **툴바와 단축키가
+   * 함께 간다** — 메뉴 트리의 `editable`과 같은 이유로 둘을 가르지 않는다(툴바만 빼면 `Delete`·`Alt+↑`가 남는다).
+   * **트리 자체는 남는다** — 노드를 고르는 것은 읽기다(속성 · 코멘트를 보려고 고른다). 고른 노드를 잠그지 않는 것은
+   * 셸의 `useNodeLock`이 같은 값으로 한다. 이 컴포넌트는 역할을 모른다.
+   */
+  editable: boolean
 }): ReactElement {
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다(`use-editor-store.tsx`의 주석 — `(s) => s`는 테스트 전용이다).
@@ -168,6 +175,9 @@ export function StructureTree(props: {
   })
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    // **고칠 수 없으면 단축키도 없다**(`editable`). 찾기 전에 돌아가므로 `preventDefault`도 안 걸린다 — 방향키 같은 키가
+    // 브라우저의 기본 동작(스크롤)을 그대로 갖는다.
+    if (!props.editable) return
     // **값을 넣거나 고르는 표면에서 난 키는 구조 조작이 아니다.** 판정과 실측은
     // `./typing-surface.ts`에 있다(그 상자 밖의 패널도 같은 것을 쓸 수 있게 갈라 두었다).
     // **단축키를 찾기 전에** 걸러야 `preventDefault`가 걸리지 않는다 — 걸리면 글자가
@@ -216,16 +226,21 @@ export function StructureTree(props: {
         />
       </ul>
       {/* 툴바가 트리 **아래**인 것은 D4다. 스크롤되는 상자 안이라 `sticky`로 바닥에
-          붙여 둔다 — 트리가 길어지면 조작 버튼이 화면 밖으로 밀려난다. */}
-      <StructureToolbar
-        commands={commands}
-        projectId={props.projectId}
-        pageId={props.pageId}
-        // **문서를 여기서 이미 읽었으므로 그대로 내려 준다**(D7). 툴바가 다시 구독하면
-        // 같은 값을 두 번 읽는다. `children`이 배열이 아닌 문서에서는 `null`이다 —
-        // 그때 저장할 것이 없고, 고르개의 저장 버튼이 비활성이 된다.
-        currentNodes={Array.isArray(doc.root?.children) ? doc.root.children : null}
-      />
+          붙여 둔다 — 트리가 길어지면 조작 버튼이 화면 밖으로 밀려난다.
+
+          **고칠 수 없으면 DOM 에서 뺀다**(`editable` — 셸의 `canEdit` 표 «동작 입구»). 프리셋 · 패턴 고르개도 툴바 안이라
+          함께 간다. */}
+      {props.editable && (
+        <StructureToolbar
+          commands={commands}
+          projectId={props.projectId}
+          pageId={props.pageId}
+          // **문서를 여기서 이미 읽었으므로 그대로 내려 준다**(D7). 툴바가 다시 구독하면
+          // 같은 값을 두 번 읽는다. `children`이 배열이 아닌 문서에서는 `null`이다 —
+          // 그때 저장할 것이 없고, 고르개의 저장 버튼이 비활성이 된다.
+          currentNodes={Array.isArray(doc.root?.children) ? doc.root.children : null}
+        />
+      )}
     </div>
   )
 }
