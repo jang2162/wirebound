@@ -213,6 +213,20 @@ export interface CommentsTable {
 }
 
 /**
+ * 지운 게시의 키(`0013-comment-tombstones` — 이월 AC′). `comments`에서 키가 있는 행을 지울 때
+ * `repos/comments.ts`의 `deleteComment`가 한 줄을 남기고, 복원이 같은 id 로 되살리면
+ * `insertCommentWithId`가 그 줄을 지우며 키를 되붙인다. 읽는 자리는 게시의 키 판정뿐이다.
+ */
+export interface CommentTombstonesTable {
+  /** 지운 코멘트의 id. FK 가 아니다 — 가리키는 행이 이미 없다. */
+  comment_id: string
+  page_id: string
+  author_id: string
+  idempotency_key: string
+  deleted_at: Generated<Date>
+}
+
+/**
  * 스냅샷(`0009-snapshots`). 설계 §4.5의 **삭제 없는 태그**다.
  *
  * `payload`는 `JSONColumnType<SnapshotPayload>` — `PagesTable.schema`와 **같은 비대칭**이다:
@@ -288,6 +302,7 @@ export interface Database {
   themes: ThemesTable
   layouts: LayoutsTable
   comments: CommentsTable
+  comment_tombstones: CommentTombstonesTable
   snapshots: SnapshotsTable
   presets: PresetsTable
   api_tokens: ApiTokensTable

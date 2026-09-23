@@ -207,6 +207,7 @@ function server(): {
   respond: (index?: number) => Promise<void>
   expire: () => void
   edit: (id: string, body: string) => void
+  remove: (id: string) => void
   staleNext: () => void
 } {
   let description: string | null = '서버 값'
@@ -239,6 +240,14 @@ function server(): {
     new ApiError(409, 'conflict', '같은 멱등 키로 다른 코멘트가 이미 달렸습니다', [
       { path: 'idempotencyKey', message: '같은 멱등 키로 다른 코멘트가 이미 달렸습니다', code: 'idempotency-key-reused' },
     ])
+  /**
+   * 그 키의 행이 달렸다가 지워졌으면 409 + 이슈 코드다(`apps/api`의 묘비 — 이월 AC′). **키만 기억한다** — 서버의
+   * 묘비도 본문을 들지 않는다.
+   */
+  const deleted = (): ApiError =>
+    new ApiError(409, 'conflict', '같은 멱등 키로 달린 코멘트가 그 뒤 지워졌습니다', [
+      { path: 'idempotencyKey', message: '같은 멱등 키로 달린 코멘트가 그 뒤 지워졌습니다', code: 'idempotency-key-deleted' },
+    ])
   const current = (key: string): Comment | undefined => {
     const found = byKey.get(key)
     return found === undefined ? undefined : rows.find((one) => one.id === found.id)
@@ -253,6 +262,10 @@ function server(): {
     /** 같은 사람이 **다른 탭에서** 그 코멘트를 고친다(`PATCH` — 서버만 바뀐다). */
     edit: (id, body) => {
       rows = rows.map((one) => (one.id === id ? { ...one, body } : one))
+    },
+    /** 누군가 그 코멘트를 지운다(`DELETE` — 서버만 바뀐다). 키를 든 행이면 서버가 그 키를 기억한다. */
+    remove: (id) => {
+      rows = rows.filter((one) => one.id !== id)
     },
     /** 다음 게시가 낡음 409 를 받는다 — **이슈 코드가 없다**(`apps/api`의 `stale`). */
     staleNext: () => {
@@ -305,6 +318,7 @@ function server(): {
         if (found !== undefined) {
           return found.body === body.body && found.nodeId === body.nodeId ? Promise.resolve(replay(found)) : Promise.reject(reused())
         }
+        if (body.idempotencyKey !== undefined && byKey.has(body.idempotencyKey)) return Promise.reject(deleted())
         return new Promise<CommentCreated>((resolve, reject) => {
           options?.signal?.addEventListener('abort', () => reject(new ApiError(0, 'internal', '서버에 연결하지 못했습니다')))
           let result: CommentCreated | undefined
@@ -436,12 +450,14 @@ describe('새로고침 — 초안과 키를 살린다', () => {
 })
 
 /**
- * ## 되살린 키 — 그 사이 그 코멘트가 고쳐졌으면 «달림»이다 (리뷰 R1)
+ * ## 되살린 키 — 그 사이 그 코멘트가 고쳐졌거나 지워졌으면 «달림»이다 (리뷰 R1 · 이월 AC′)
  *
  * | 변조 | 죽는 것 |
  * |---|---|
- * | 웹이 이슈 코드를 안 본다(`reusedKey`가 늘 거짓 — 409 를 «안 달림»으로) | *"되살린 글을 달기 전에 …"* |
- * | 웹이 이슈 코드 없이 409 면 «달림»(`reusedKey`가 `code === 'conflict'`만 본다) | *"이슈 코드가 없는 409(낡음)는 …"* |
+ * | 웹이 이슈 코드를 안 본다(`keyVerdict`가 늘 `null` — 409 를 «안 달림»으로) | *"되살린 글을 달기 전에 다른 탭이 …"* · *"되살린 글을 달기 전에 그 코멘트가 지워졌다 …"* |
+ * | 웹이 이슈 코드 없이 409 면 «달림»(`keyVerdict`가 `code === 'conflict'`만 본다) | *"이슈 코드가 없는 409(낡음)는 …"* |
+ * | 웹이 `idempotency-key-deleted`를 모른다(`KEY_VERDICTS`에서 뺀다 — 이월 AC′) | *"되살린 글을 달기 전에 그 코멘트가 지워졌다 …"* |
+ * | 지워졌는데 «고쳐졌다»고 말한다(통지가 판정을 안 가른다) | *"되살린 글을 달기 전에 그 코멘트가 지워졌다 …"* |
  *
  * 혼자 죽는지는 보고서 (f)가 갖는다.
  */
@@ -470,6 +486,38 @@ describe('되살린 키 — 그 사이 고쳐졌으면 달림으로 끝낸다', 
     expect(current.session.draftKeys()).toEqual([])
     expect(backend.keys[1]).toBe(backend.keys[0])
     expect(backend.rows().map((row) => row.body)).toEqual(['다른 탭에서 고친 말'])
+
+    current = await reload(current, options)
+    await toCommentTab()
+    expect(commentBox().value).toBe('')
+  })
+
+  it('되살린 글을 달기 전에 그 코멘트가 지워졌다 — 묘비 409 를 «달림»으로: 상자 비움 · 누가 지웠는지 말하지 않는 문장 · 저장소에 없음 · 새로고침해도 안 돌아옴 · 행 0', async () => {
+    // **이월 AC′.** 앞 판의 서버는 여기서 새 행을 세웠다(지운 말이 되살아남 · 통지 없음 — Chrome). 이제 서버가 그 키를
+    // 기억해 `idempotency-key-deleted`를 싣고, 웹은 그 코드 하나로 끝낸다. 코드를 안 보면 4xx 라 «안 달림» — 초안과
+    // 키가 남아 누를 때마다 같은 409 다.
+    const backend = server()
+    let current = tab()
+    const options = await open(backend, current)
+    await toCommentTab()
+    type(commentBox(), '지워질 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await waitFor(() => expect(backend.keys).toHaveLength(1))
+
+    current = await reload(current, options)
+    backend.commit(0)
+    // 그 사이 누군가(제 손의 다른 탭이든 남이든) 그 코멘트를 지운다.
+    backend.remove(backend.rows()[0]!.id)
+    await toCommentTab()
+    expect(commentBox().value).toBe('지워질 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+
+    await screen.findByText('이 글은 이미 달렸고, 그 뒤 지워졌습니다')
+    expect(commentBox().value).toBe('')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(current.session.draftKeys()).toEqual([])
+    expect(backend.keys[1]).toBe(backend.keys[0])
+    expect(backend.rows()).toEqual([])
 
     current = await reload(current, options)
     await toCommentTab()

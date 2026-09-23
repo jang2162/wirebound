@@ -194,10 +194,15 @@ const NOT_EDITED = '응답이 없어 목록을 다시 읽었더니 이 수정은
 /** 다시 읽었더니 그 코멘트가 아직 목록에 있다. */
 const NOT_DELETED = '응답이 없어 목록을 다시 읽었더니 이 코멘트는 지워지지 않았습니다'
 /**
- * 게시가 **이미 달렸고 그 뒤 고쳐졌다**(`reusedKey`). 실패가 아니다 — 목록의 글이 지금 글이다. 초안과 키는
+ * 게시가 **이미 달렸고 그 뒤 고쳐졌다**(`keyVerdict`). 실패가 아니다 — 목록의 글이 지금 글이다. 초안과 키는
  * 버렸다.
  */
 const EDITED_SINCE = '이 글은 이미 달렸고, 그 뒤 다른 곳에서 고쳐졌습니다 — 목록의 글이 지금 글입니다'
+/**
+ * 게시가 **이미 달렸고 그 뒤 지워졌다**(`keyVerdict` — 이월 AC′). 실패가 아니다 — 초안과 키는 버렸다. **누가
+ * 지웠는지 말하지 않는다** — 서버도 모른다(묘비는 지운 사람을 적지 않는다. 제 손 · 남의 손 · 복원이 같은 답이다).
+ */
+const DELETED_SINCE = '이 글은 이미 달렸고, 그 뒤 지워졌습니다'
 
 /**
  * 목록 칸. **`at`은 그 값을 낸 조회의 순서 번호다**(`issue`) — 칸은 늦게 낸 조회의 답만 받는다(`answered`).
@@ -226,9 +231,9 @@ function answered(at: number, next: LoadState): (prev: LoadState) => LoadState {
 
 /**
  * 게시가 **달렸다** — 이 요청이 달았거나 재생을 받았다(`created`), 또는 **그 키의 게시가 이미 달렸고 그 뒤
- * 고쳐졌다**(`edited-since` — `reusedKey`). 둘 다 «달림»이다.
+ * 고쳐졌다 · 지워졌다**(`edited-since` · `deleted-since` — `keyVerdict`). 셋 다 «달림»이다.
  */
-type Posted = { kind: 'created'; created: CommentCreated } | { kind: 'edited-since' }
+type Posted = { kind: 'created'; created: CommentCreated } | { kind: KeyVerdict }
 
 /** 게시를 같은 키로 다시 보낸 결과(`submit`의 판정). 거절은 `knownRejection`의 `'resent'` 칸인 것뿐이다 — 그 밖은 모른다. */
 type Reposted = { posted: true; result: Posted } | { posted: false; caught: unknown }
@@ -247,12 +252,26 @@ type Reposted = { posted: true; result: Posted } | { posted: false; caught: unkn
  * 마다 같은 글 · 같은 키가 되살아나 누를 때마다 409 였다(Chrome — 리뷰 R1: 게시 «모름» → 새로고침 → 다른 탭이
  * 그 코멘트를 고침 → 되살린 글 달기 → 409 · 상자에 글 · 저장소에 키 · DB 는 고친 글 1행).
  */
-const REUSED_KEY = 'idempotency-key-reused'
+/**
+ * **그 키의 게시는 달렸다가 그 뒤 지워졌다**(2026-09-23 — 이월 AC′). 서버는 키가 있던 행을 지울 때 그 키를 기억하고
+ * (`apps/api/src/db/migrations/0013-comment-tombstones.ts`) 같은 키가 다시 오면 새 행을 세우지 않고 위와 같은 꼴의
+ * 409 에 이 이슈 코드를 싣는다. 앞 판은 그 사이 행이 지워졌으면 같은 키 재전송이 **새 행을 세웠다**(지운 말이 되살아남
+ * · 통지 없음). 이 409 도 «안 달림»이 아니다 — 확정으로 받으면 초안과 키가 남아, 누를 때마다 같은 409 다.
+ */
+type KeyVerdict = 'edited-since' | 'deleted-since'
+const KEY_VERDICTS: Readonly<Record<string, KeyVerdict>> = {
+  'idempotency-key-reused': 'edited-since',
+  'idempotency-key-deleted': 'deleted-since',
+}
 
-function reusedKey(caught: unknown): boolean {
-  return (
-    caught instanceof ApiError && caught.code === 'conflict' && caught.issues.some((issue) => issue.code === REUSED_KEY)
-  )
+/** 키를 보고 낸 409 면 그 판정, 아니면 `null`이다. **이슈 코드로만** 가른다 — 문장으로 가르지 않는다. */
+function keyVerdict(caught: unknown): KeyVerdict | null {
+  if (!(caught instanceof ApiError) || caught.code !== 'conflict') return null
+  for (const issue of caught.issues) {
+    const verdict = issue.code === undefined ? undefined : KEY_VERDICTS[issue.code]
+    if (verdict !== undefined) return verdict
+  }
+  return null
 }
 
 /**
@@ -269,8 +288,8 @@ function reusedKey(caught: unknown): boolean {
  * | **api 가 낸 503**(봉투가 있다) | **모른다** — DB 가 답하지 않았다(COMMIT 의 답을 잃었을 수 있다) | **모른다** |
  *
  * 401 은 두 칸 다 4xx 줄로 가지만 «안 달림»이 아니라 **«세션 끝»**이 된다 — `toFailure`가 로그인 화면으로
- * 바꾼다(`api/failure.tsx`). **이슈 코드 `idempotency-key-reused`가 실린 409 는 이 표에 오지 않는다** — 두 칸 다
- * «달림»이고, `submit`의 `post`가 먼저 받는다(`reusedKey`).
+ * 바꾼다(`api/failure.tsx`). **이슈 코드 `idempotency-key-reused` · `idempotency-key-deleted`가 실린 409 는 이 표에 오지
+ * 않는다** — 두 칸 다 «달림»이고, `submit`의 `post`가 먼저 받는다(`keyVerdict`).
  *
  * **봉투 500 이 두 칸에서 갈리는 까닭**(좁은 반증 4차 · 2026-09-22). 앞 판은 두 자리가 한 칸을 썼고, 그래서
  * 다시 보낸 것의 봉투 500 도 «안 달림»이었다. 그 500 이 «그 요청은 커밋 전»인 것은 참이지만, `verify`가 묻는
@@ -356,8 +375,8 @@ const WRITE_ERROR = slot<Failure | null>('comments/write-error', null)
  * **`'skipped'`는 말하지 않는다** — 그때는 화면이 이미 다른 페이지를 보고 있다.
  */
 const MARKERS_DIVERGED = slot<boolean>('comments/diverged', false)
-/** 게시가 **이미 달렸고 그 뒤 고쳐졌다**(`reusedKey`) — 통지다. 다음 게시가 달리면 지운다. */
-const EDITED_SINCE_NOTICE = slot<boolean>('comments/edited-since', false)
+/** 게시가 **이미 달렸고 그 뒤 고쳐졌다 · 지워졌다**(`keyVerdict`) — 통지다. 다음 게시가 달리면 지운다. */
+const LANDED_SINCE_NOTICE = slot<KeyVerdict | null>('comments/landed-since', null)
 /**
  * 새 코멘트 초안 — **노드마다**(위 머리말 «새 코멘트 초안은 노드마다 …»). 키는 노드 id이고 없으면
  * 빈 칸이다. **한 칸으로 들면 다른 노드를 고르는 순간 쓰던 글의 대상이 그 노드로 바뀐다.**
@@ -574,7 +593,7 @@ export function CommentPanel(props: {
   const busy = busyLock.locked
   const [writeError, setWriteError] = usePanelSlot(WRITE_ERROR)
   const [diverged, setDiverged] = usePanelSlot(MARKERS_DIVERGED)
-  const [editedSince, setEditedSince] = usePanelSlot(EDITED_SINCE_NOTICE)
+  const [landedSince, setLandedSince] = usePanelSlot(LANDED_SINCE_NOTICE)
   const [drafts, setDrafts] = usePanelSlot(DRAFTS)
   const [editingId, setEditingId] = usePanelSlot(EDITING_ID)
   // **viewer 에게는 고치는 중인 글이 없다**(이월 M′ 리뷰 F1). 칸은 저장소에서 되살아나므로(`EDITING_ID`) editor 때 열어 둔
@@ -627,7 +646,7 @@ export function CommentPanel(props: {
   useEffect(() => {
     setWriteError(null)
     setDiverged(false)
-    setEditedSince(false)
+    setLandedSince(null)
     // 다시 받기의 실패도 지난 통지다. **도는 중인 것은 남긴다** — 아직 끝나지 않았다.
     setRefreshing((prev) => (prev?.failure == null ? prev : null))
   }, [])
@@ -708,7 +727,7 @@ export function CommentPanel(props: {
         ...(op.uncertain === undefined ? {} : { uncertain: op.uncertain }),
         verify: (signal) => op.verify(api, openPageId, signal),
         // **돌려주는 것은 칸에 그린 실패 그대로다** — 떠나 있는 동안 끝나면 장부가 이것을 남긴다(`write-ledger.tsx`의
-        // «떠나 있는 동안 끝난 실패» — 이월 S). «이미 달렸고 그 뒤 고쳐졌다»(`reusedKey`)는 실패가 아니라 `done`으로 온다.
+        // «떠나 있는 동안 끝난 실패» — 이월 S). «이미 달렸고 그 뒤 고쳐졌다 · 지워졌다»(`keyVerdict`)는 실패가 아니라 `done`으로 온다.
         settle: async (outcome, ownerLive) => {
           try {
             if (outcome.kind === 'failed') {
@@ -758,8 +777,8 @@ export function CommentPanel(props: {
     // 판의 서버에서는 api 재기동 뒤 그 옛 id 를 받은 **남의** 연결이 빠졌다. 값은 그쪽이 적는다). 같은 셸에서 WS 가
     // 다시 붙은 판의 두 번 얹힘은 이월이다(`write-ledger.tsx`의 «이것이 막지 못하는 것»).
     const origin = connections?.get()
-    // **첫 보내기와 다시 보낸 것이 이 함수 하나를 지난다** — «그 키의 게시는 이미 달렸고 그 뒤 고쳐졌다»(`reusedKey`)를
-    // 받는 자리가 여기 하나다.
+    // **첫 보내기와 다시 보낸 것이 이 함수 하나를 지난다** — «그 키의 게시는 이미 달렸고 그 뒤 고쳐졌다 · 지워졌다»
+    // (`keyVerdict`)를 받는 자리가 여기 하나다.
     const post = async (client: ApiClient, openPageId: string, signal: AbortSignal): Promise<Posted> => {
       try {
         const created = await client.createComment(
@@ -770,14 +789,15 @@ export function CommentPanel(props: {
         )
         return { kind: 'created', created }
       } catch (caught) {
-        if (reusedKey(caught)) return { kind: 'edited-since' }
+        const verdict = keyVerdict(caught)
+        if (verdict !== null) return { kind: verdict }
         throw caught
       }
     }
 
     /**
-     * 달렸다 — 첫 응답이든 다시 보낸 것의 응답이든 뒷일은 같다. **«이미 달렸고 그 뒤 고쳐졌다»도 달림이다**
-     * (`reusedKey`) — 초안과 키를 버리고 목록을 다시 받고 그렇다고 말한다. 그 응답은 문서 변화를 싣지 않는다 —
+     * 달렸다 — 첫 응답이든 다시 보낸 것의 응답이든 뒷일은 같다. **«이미 달렸고 그 뒤 고쳐졌다 · 지워졌다»도
+     * 달림이다**(`keyVerdict`) — 초안과 키를 버리고 목록을 다시 받고 그렇다고 말한다. 그 응답은 문서 변화를 싣지 않는다 —
      * 번호는 앞 게시가 붙였고 그 변화는 앞 게시의 응답이나 방송이 날랐다(어긋났는지 말할 값이 없다).
      */
     const landed = (posted: Posted, openPageId: string, ownerLive: boolean): void => {
@@ -798,7 +818,7 @@ export function CommentPanel(props: {
       } else {
         setDiverged(false)
       }
-      setEditedSince(posted.kind === 'edited-since')
+      setLandedSince(posted.kind === 'created' ? null : posted.kind)
       setPostKeys((prev) => {
         const next = new Map(prev)
         next.delete(nodeId)
@@ -827,8 +847,8 @@ export function CommentPanel(props: {
           // 키로 내 행을 찾으므로 4xx 는 «그 순간 이 키의 내 행이 없다»이다. **api 의 봉투 500 은 여기서 모른다** —
           // 첫 보내기에서는 «그 요청이 커밋 전»이지만 여기서 묻는 것은 앞 게시다. 그 밖도 모른다 — «다시 확인».
           // **이 판정이 틀리는 판**(앞 게시가 아직 서버에서 커밋 중인데 가드가 거절한 판)은 `apps/api/README.md`의
-          // «멱등 키»가 적는다 — 여기 옮겨 적지 않는다. 다른 탭에서 고쳐진 행의 409 는 여기 오지 않는다 — `post`가
-          // «달림»으로 받는다(`reusedKey`).
+          // «멱등 키»가 적는다 — 여기 옮겨 적지 않는다. 그 사이 고쳐진 · 지워진 행의 409 는 여기 오지 않는다 —
+          // `post`가 «달림»으로 받는다(`keyVerdict`).
           if (knownRejection(caught, 'resent')) return { posted: false, caught }
           throw caught
         }
@@ -1033,10 +1053,10 @@ export function CommentPanel(props: {
               {DIVERGED}
             </p>
           )}
-          {/* **실패가 아니다** — 게시는 달려 있다(`reusedKey`). */}
-          {editedSince && (
+          {/* **실패가 아니다** — 게시는 달렸었다(`keyVerdict`). */}
+          {landedSince !== null && (
             <p className="wb-shell-panel-notice" role="status">
-              {EDITED_SINCE}
+              {landedSince === 'edited-since' ? EDITED_SINCE : DELETED_SINCE}
             </p>
           )}
         </form>
