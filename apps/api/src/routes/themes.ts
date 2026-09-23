@@ -78,11 +78,13 @@ import {
   type ThemeIssue,
   type ThemePatch,
 } from '@wirebound/themes'
-import { projectGuard } from '../auth/roles'
+import { projectGuard, recheckProjectRole } from '../auth/roles'
+import { withTransaction } from '../db/tx'
 import { badRequest, conflict, forbidden, notFound, validationFailed } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import { withWarnings } from '../http/warnings'
 import { findDefaultLayout, updateLayoutTheme } from '../repos/layouts'
+import { lockProjectShared } from '../repos/projects'
 // **테마 사슬은 `services/project-theme.ts` 하나다**(P8-4 T2). 소비자가 셋이 되어
 // (캔버스·고르개·내보내기) 라우트 안의 비공개 함수로 둘 수 없게 됐다 — 두 벌이면
 // 캔버스가 보는 테마와 번들이 싣는 테마가 조용히 갈린다.
@@ -328,7 +330,17 @@ export function themeRoutes() {
       try {
         // 위 확인과 이 UPDATE 사이에 테마가 지워지는 경합. FK(0007)가 마지막 방벽이고
         // `updateTheme`의 같은 자리와 같은 취급이다 — 500이 아니라 404다.
-        if (!(await updateLayoutTheme(app.db, layout.id, themeId))) {
+        const updated = await withTransaction(app.db, async (trx) => {
+          // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`) — 아래 재확인이 멤버 행을 잡으므로, 레이아웃
+          // 행부터 잡으면 프로젝트 삭제의 CASCADE 와 고리가 된다(그 함수의 머리말에 잰 값).
+          await lockProjectShared(trx, projectId)
+          const chosen = await updateLayoutTheme(trx, layout.id, themeId)
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
+          // 있다 — 그 대기 뒤의 역할로 판정한다.
+          if (chosen) await recheckProjectRole(trx, request)
+          return chosen
+        })
+        if (!updated) {
           throw conflict('이 프로젝트에는 기본 레이아웃이 없어 테마를 고를 수 없습니다')
         }
       } catch (error) {
@@ -365,7 +377,16 @@ export function themeRoutes() {
 
       let record
       try {
-        record = await insertTheme(app.db, projectId, theme)
+        record = await withTransaction(app.db, async (trx) => {
+          // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`). 삽입의 FK 도 같은 `KEY SHARE`를 걸지만
+          // 그것은 프로젝트 삭제 뒤에 섰다가 깨면 23503 — 봉투 없는 500 이다(이월 AA′ 남는 틈 2). 먼저 잡으면 0 행 → 404.
+          await lockProjectShared(trx, projectId)
+          const inserted = await insertTheme(trx, projectId, theme)
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는
+          // `KEY SHARE`가 복원 · 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
+          await recheckProjectRole(trx, request)
+          return inserted
+        })
       } catch (error) {
         if (error instanceof ThemeNulByteError) throw badRequest(error.message)
         if (isUniqueViolation(error)) throw conflict('이미 사용 중인 테마 id입니다')
@@ -389,7 +410,17 @@ export function themeRoutes() {
         // **통째 교체다.** `updateTheme`이 절 다섯을 전부 쓰므로 없는 절은 실제로 비워진다
         // (`repos/themes.ts` 주석). `meta.id`를 바꾸면 slug도 바뀐다 — 그 자체를 막을 근거가
         // 없고, 충돌하면 아래 409가 말한다.
-        record = await updateTheme(app.db, themeId, theme)
+        record = await withTransaction(app.db, async (trx) => {
+          // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared` — 테마 고르기와 같은 꼴). 이것이 없으면
+          // slug 를 바꾸는 UPDATE(`themes (project_id, slug)` UNIQUE — 키 갱신이라 `FOR UPDATE`)가 복원의 `set-layout-theme`
+          // · 테마 고르기의 FK 가 테마 행에 건 `KEY SHARE` 뒤에 서고, 그 대기가 재확인보다 늦게 끝난다(이월 AA′ 리뷰 F2).
+          await lockProjectShared(trx, projectId)
+          const updated = await updateTheme(trx, themeId, theme)
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
+          // 있다 — 그 대기 뒤의 역할로 판정한다.
+          if (updated) await recheckProjectRole(trx, request)
+          return updated
+        })
       } catch (error) {
         if (error instanceof ThemeNulByteError) throw badRequest(error.message)
         if (isUniqueViolation(error)) throw conflict('이미 사용 중인 테마 id입니다')
@@ -407,7 +438,18 @@ export function themeRoutes() {
       await requireWritableTheme(app, projectId, themeId)
 
       try {
-        if (!(await deleteTheme(app.db, themeId))) throw notFound('테마를 찾을 수 없습니다')
+        const deleted = await withTransaction(app.db, async (trx) => {
+          // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared` — 테마 고르기와 같은 꼴). 이것이 없으면
+          // 삭제의 `ON DELETE RESTRICT` 검사(`layouts`를 `FOR KEY SHARE`로 훑는다)가 복원이 `FOR UPDATE`로 쥔 레이아웃
+          // 행 뒤에 서고, 복원이 레이아웃을 이 테마에서 떼면 그 대기 **뒤에** 통과해 강등된 사람의 삭제가 커밋됐다
+          // (이월 AA′ 리뷰 F1 — 강등 200 뒤에 204).
+          await lockProjectShared(trx, projectId)
+          const removed = await deleteTheme(trx, themeId)
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 그 대기 뒤의 역할로 판정한다.
+          if (removed) await recheckProjectRole(trx, request)
+          return removed
+        })
+        if (!deleted) throw notFound('테마를 찾을 수 없습니다')
       } catch (error) {
         // `layouts.theme_id`가 `ON DELETE RESTRICT`다(0007) — 쓰이고 있는 테마는 지워지지
         // 않는다. `SET NULL`로 두면 **화면이 말없이 달라지므로**(테마가 사라져 구조 기본

@@ -250,6 +250,45 @@ export async function lockProjectTree(trx: DbHandle, projectId: string): Promise
 }
 
 /**
+ * **자기 행만 쓰는 쓰기의 첫 잠금** — 프로젝트 행을 `FOR KEY SHARE`로 잡는다(이월 AA′ · 2026-09-24). 부르는 자리: 프로젝트
+ * 테마 고르기(`routes/themes.ts` — 레이아웃 행) · 코멘트 수정(`routes/comments.ts` — 코멘트 행) · 테마 수정 · 삭제
+ * (`routes/themes.ts` — 테마 행) · FK 삽입 다섯(스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성).
+ *
+ * **테마 수정 · 삭제도 복원 뒤에 선다 — 자기 행이 아니라 남의 쓰기가 건 잠금에서**(이월 AA′ 리뷰 F1 · F2). 삭제의
+ * `ON DELETE RESTRICT` 검사는 `layouts`를 `FOR KEY SHARE`로 훑어 복원이 `FOR UPDATE`로 쥔 레이아웃 행에 서고, slug 를
+ * 바꾸는 수정은 UNIQUE 키 갱신이라 `FOR UPDATE`여서 복원의 `set-layout-theme` · 테마 고르기의 FK 가 테마 행에 건
+ * `KEY SHARE`에 선다. 그 대기가 재확인보다 늦게 끝나면 강등 뒤에 커밋됐다 — 이것을 먼저 잡아 복원의 프로젝트 행 대기를
+ * 재확인 앞으로 끌어온다.
+ *
+ * **FK 삽입 다섯은 권한이 아니라 봉투 때문이다.** 삽입의 FK 도 같은 `KEY SHARE`를 걸지만 그것은 프로젝트 삭제 뒤에 섰다가
+ * 깨면 23503 — 봉투 없는 500 이었다. 이것으로 먼저 잡으면 0 행 → 404(트리 쓰기 · 테마 고르기와 같은 답).
+ *
+ * **왜 — 커밋 순간의 재확인이 잠금 순서를 요구한다.** 두 쓰기는 프로젝트 행을 안 잡고 자기 행만 잡는다(그 행은 복원이
+ * `lockProjectForRestore`로 잠근다 — 그래서 복원 뒤에 선다). 그 뒤에 재확인(`auth/roles.ts`의 `recheckProjectRole` — 멤버 행
+ * `FOR SHARE`)을 붙이면 «자기 행 → 멤버 행» 순이 되는데, 프로젝트 삭제는 «프로젝트 행 → 페이지 → CASCADE(멤버 행 → … →
+ * 레이아웃 · 코멘트 행)» 순이다 — 삭제가 멤버 행을 지운 채 이 쓰기의 행을 기다리고, 이 쓰기는 그 멤버 행을 기다린다.
+ * 잰 값(쓰기를 자기 행 뒤 · 재확인 앞에 세워 둔 채 삭제를 쏜다 — 5 판씩): **교착 5/5 · 삭제 500**(테마 · 코멘트 둘 다). 이것을
+ * 먼저 잡으면 삭제는 프로젝트 행에서 기다리고 **교착 0/5 · 삭제 204**. 순서가 «프로젝트 행 → 자기 행 → 멤버 행»이 된다 —
+ * 트리 쓰기(`lockProjectTree`) · FK 삽입(부모 행 `KEY SHARE`)과 같은 방향이다.
+ *
+ * **`KEY SHARE`인 까닭** — 복원 · 프로젝트 삭제의 `FOR UPDATE`와 부딪힌다. 트리 쓰기의 `NO KEY UPDATE` · 다른 `KEY SHARE`와는
+ * 안 부딪혀 같은 프로젝트의 테마 고르기 · 코멘트 수정이 트리 쓰기 뒤에 줄을 서지 않는다(앞 판과 같다). **프로젝트 수정은
+ * 갈린다** — 이름 · 설명만 바꾸면 `NO KEY UPDATE`라 안 부딪히고, **`slug`(UNIQUE)를 바꾸면 키 갱신이라 `FOR UPDATE`여서
+ * 부딪힌다**(리뷰 S2 — 그 수정을 쥔 채 테마 고르기 · 스냅샷 · 토큰 발급이 섰다가 풀린 뒤 200/201). 그 대기는 이것에서 나므로
+ * 뒤의 재확인이 그 뒤의 역할로 판정한다 — 권한 구멍이 아니라 기다림의 폭이다.
+ * 코멘트 삭제의 `lockProjectForBurial`(`repos/comments.ts`)과 같은 모드다 — 그쪽은 0 행이면 조용히 지나가는 계약이라(뒤의
+ * 페이지 잠금이 404 를 낸다) 합치지 않았다.
+ *
+ * **대상이 없으면(그 사이 지워졌다) 던진다**(`ProjectGoneError` → 404) — 테마 고르기는 뒤에서 레이아웃이 없음을 409 «기본
+ * 레이아웃이 없어»로 읽으므로, 여기서 끊지 않으면 지워진 프로젝트가 409 로 새어 나간다.
+ */
+export async function lockProjectShared(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectShared')
+  const rows = await trx.selectFrom('projects').select('id').where('id', '=', projectId).forKeyShare().execute()
+  if (rows.length === 0) throw new ProjectGoneError()
+}
+
+/**
  * 트리 쓰기가 잠금을 기다리는 사이 프로젝트가 지워졌다(`lockProjectTree`). **HTTP 를 모르는 이 계층의 값이다** — 404 로
  * 옮기는 것은 `http/error-handler.ts`(`NulByteError`와 같은 자리)다. 라우트마다 잡지 않는 것은 여섯 자리가 한 규칙이어야
  * 해서다 — 한 자리가 빠지면 그 자리만 500 이다(앞 판의 루트 메뉴 생성).

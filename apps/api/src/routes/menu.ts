@@ -108,7 +108,13 @@ export function menuRoutes() {
 
       let node
       try {
-        node = await insertMenuNode(app.db, projectId, { parentId: body.parentId ?? null, title: body.title })
+        node = await withTransaction(app.db, async (trx) => {
+          const inserted = await insertMenuNode(trx, projectId, { parentId: body.parentId ?? null, title: body.title })
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
+          // 복원 · 프로젝트 삭제 · 다른 트리 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
+          await recheckProjectRole(trx, request)
+          return inserted
+        })
       } catch (error) {
         if (error instanceof ParentNotFoundError) {
           throw notFound(error.message)
@@ -132,7 +138,7 @@ export function menuRoutes() {
      *
      * **재확인이 견줌보다 먼저다** — 잠금을 기다리는 동안 멤버에서 빠진 사람에게 지금 제목을 409 로 흘리지 않는다.
      * **바탕 없는 경로도 쓴 뒤 재확인한다**(페이지와 같다) — 앞 판에는 이 라우트에 재확인이 없었다. 메뉴 `POST` ·
-     * `DELETE`는 아직 없다(남는 틈).
+     * `DELETE`도 쓴 뒤 재확인한다(이월 AA′).
      *
      * 방송하지 않는다 — 남이 바꾼 것은 저장할 때 409 로 안다(페이지와 같다).
      */
@@ -181,7 +187,12 @@ export function menuRoutes() {
 
       let result
       try {
-        result = await deleteMenuNode(app.db, projectId, nodeId)
+        result = await withTransaction(app.db, async (trx) => {
+          const deleted = await deleteMenuNode(trx, projectId, nodeId)
+          // **커밋 순간의 권한**(이월 AA′) — 생성과 같은 자리다(트리 쓰기의 첫 잠금 뒤).
+          if (deleted === 'deleted') await recheckProjectRole(trx, request)
+          return deleted
+        })
       } catch (error) {
         if (error instanceof HasChildrenError) {
           throw conflict(error.message)

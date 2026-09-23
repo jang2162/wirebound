@@ -365,21 +365,29 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
+    // **막힌다 — 이월 AA′(2026-09-24)부터.** 트랜잭션의 첫 잠금이 프로젝트 행 `KEY SHARE`(`repos/projects.ts`의
+    // `lockProjectShared`)라 `FOR UPDATE`와 충돌한다 — 부수 효과다. 앞 판은 «안 막힌다»였는데 그 값은 복원이 **테마를 안
+    // 쓰는** 판이었다: 복원의 `set-layout-theme`이 테마 행에 `KEY SHARE`를 걸면 slug 를 바꾸는 수정은 그 뒤에 섰고, 가드의
+    // 판정이 낡은 채 커밋됐다(리뷰 F2). 이제 기다림을 재확인 앞으로 끌어온다. **그 편집이 이기는 것은 그대로다** — 복원은
+    // 테마 행을 되돌리지 않으므로 풀린 뒤의 편집이 남는다.
     route: 'PUT /:projectId/themes/:themeId',
-    label: '테마 수정 — 복원이 도는 동안 고치면 **그 편집이 이긴다**',
+    label: '테마 수정 — 복원이 도는 동안 고치면 기다렸다가 **그 편집이 이긴다**',
     method: 'PUT',
     url: (ids) => `/api/projects/${ids.projectId}/themes/${ids.themeId}`,
     payload: () => ({ theme: { meta: { id: 'census-target', name: '바뀐 테마', version: '2.0.0' } } }),
     restoreWrites: false,
-    blocked: false,
+    blocked: true,
   },
   {
+    // **막힌다 — 테마 수정과 같은 이유다.** 앞 판의 «안 막힌다»는 쓰이지 않는 테마의 값이었다 — 복원이 레이아웃을 그
+    // 테마에서 떼는 판이면 `ON DELETE RESTRICT` 검사가 복원이 쥔 레이아웃 행에 서고, 복원 커밋 뒤에 통과해 강등된 사람의
+    // 삭제가 커밋됐다(리뷰 F1).
     route: 'DELETE /:projectId/themes/:themeId',
     label: '테마 삭제',
     method: 'DELETE',
     url: (ids) => `/api/projects/${ids.projectId}/themes/${ids.themeId}`,
     restoreWrites: false,
-    blocked: false,
+    blocked: true,
   },
   {
     // **P7-2가 더한 둘. 이 파일이 그것을 강제했다** — 라우트를 만든 커밋에서 이
@@ -668,14 +676,13 @@ describe('표가 스스로 세는 것', () => {
       // **P7-2가 여섯째를 더했다.** 프리셋 삭제는 자식 행 삭제라 부모를 잡지 않는다 —
       // 복원이 프리셋을 되돌리지 않으므로(payload에 프리셋 절이 없다) 해롭지 않다.
       'DELETE /:projectId/presets/:presetId',
-      'DELETE /:projectId/themes/:themeId',
+      // 테마 삭제 · 수정은 2026-09-24(이월 AA′)에 이 목록에서 나갔다 — 위 census 의 그 두 줄.
       // **P9-2가 일곱째를 더했다.** 토큰 폐기도 자식 행 삭제라 부모를 잡지 않는다.
       // 복원이 토큰을 되돌리지 않으므로 해롭지 않고, **오히려 막히면 안 되는 쪽이다** —
       // 폐기는 자격을 거두는 조작이라 복원이 도는 동안 기다려야 할 이유가 없다.
       'DELETE /:projectId/tokens/:tokenId',
       'PATCH /:projectId/members/:userId',
       'POST /:projectId/pages/:pageId/comments/renumber',
-      'PUT /:projectId/themes/:themeId',
     ])
   })
 })

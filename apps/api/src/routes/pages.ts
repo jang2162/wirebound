@@ -296,12 +296,18 @@ export function pageRoutes() {
 
       let page
       try {
-        page = await insertPage(app.db, projectId, {
-          menuNodeId: body.menuNodeId,
-          title: body.title,
-          description: body.description ?? null,
-          schema: { version: CURRENT_DOCUMENT_VERSION, root: { id: createNodeId(), type: 'Page', children: [] } },
-          schemaVersion: CURRENT_DOCUMENT_VERSION,
+        page = await withTransaction(app.db, async (trx) => {
+          const inserted = await insertPage(trx, projectId, {
+            menuNodeId: body.menuNodeId,
+            title: body.title,
+            description: body.description ?? null,
+            schema: { version: CURRENT_DOCUMENT_VERSION, root: { id: createNodeId(), type: 'Page', children: [] } },
+            schemaVersion: CURRENT_DOCUMENT_VERSION,
+          })
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
+          // 복원 · 프로젝트 삭제 · 다른 트리 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
+          await recheckProjectRole(trx, request)
+          return inserted
         })
       } catch (error) {
         if (error instanceof MenuNodeNotFoundError) {
@@ -350,15 +356,21 @@ export function pageRoutes() {
         throw unauthenticated()
       }
 
-      const outcome = await importPage(app.db, {
-        projectId,
-        menuNodeId: body.menuNodeId,
-        file: read.file,
-        ...(body.title !== undefined ? { title: body.title } : {}),
-        // **actor는 요청이 정한다**(P9-5 D1 — `auth/actor.ts`). `authorId`는 다르다:
-        // 코멘트의 작성자는 **사람**이고 `comments.author_id`가 `users(id)`에 FK를 건다.
-        actor: requestActor(request),
-        authorId: currentUser.id,
+      const outcome = await withTransaction(app.db, async (trx) => {
+        const imported = await importPage(trx, {
+          projectId,
+          menuNodeId: body.menuNodeId,
+          file: read.file,
+          ...(body.title !== undefined ? { title: body.title } : {}),
+          // **actor는 요청이 정한다**(P9-5 D1 — `auth/actor.ts`). `authorId`는 다르다:
+          // 코멘트의 작성자는 **사람**이고 `comments.author_id`가 `users(id)`에 FK를 건다.
+          actor: requestActor(request),
+          authorId: currentUser.id,
+        })
+        // **커밋 순간의 권한**(이월 AA′). 생성과 같은 자리다 — `insertPage`의 트리 쓰기 첫 잠금 뒤. 실패한 가져오기는
+        // 제 세이브포인트를 이미 되돌렸다(`importPage`) — 쓴 것이 없으니 재확인하지 않는다.
+        if (imported.kind === 'imported') await recheckProjectRole(trx, request)
+        return imported
       })
       if (outcome.kind !== 'imported') {
         throw pageImportOutcomeToApiError(outcome)

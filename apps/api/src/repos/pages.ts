@@ -535,6 +535,36 @@ export async function deletePage(db: DbHandle, projectId: string, pageId: string
 }
 
 /**
+ * **코멘트 수정의 둘째 잠금** — 페이지 행 하나를 `FOR KEY SHARE`로 잡는다(이월 AA′ 리뷰 F3 · 2026-09-24). 부르는 자리는
+ * 하나다: 코멘트 수정(`routes/comments.ts` — 프로젝트 행(`repos/projects.ts`의 `lockProjectShared`) 뒤 · 재확인 앞).
+ *
+ * **왜 페이지 행을 먼저 — 코멘트 행을 지우는 두 쓰기가 둘 다 페이지 행 `FOR UPDATE`를 먼저 잡는다.** 코멘트 삭제는
+ * «페이지 행(`lockPageForEdit`) → 재확인(멤버 행 `FOR SHARE`) → 코멘트 행», 페이지 삭제(`deletePage`)는 «페이지 행 →
+ * 코멘트 행(`deletePageComments`) → 끝의 재확인»이다 — 코멘트 행과 멤버 행의 순서가 **둘이 반대다.** 그래서 코멘트
+ * 수정이 코멘트 행과 재확인을 어느 순서로 두어도 둘 중 하나와 엇갈리고, 다른 owner 의 역할 변경(`repos/members.ts`의
+ * `lockOwnerIds` — owner 행을 차례로 `FOR UPDATE`)이 셋째로 끼면 고리가 선다. 잰 값(스테이징 — 남의 다른 쓰기가 재확인을
+ * 지난 채 멤버 행을 `FOR SHARE`로 쥔 판): «`UPDATE` → 재확인»이면 코멘트 삭제와 **교착 · 수정 500**, «재확인 →
+ * `UPDATE`»이면 페이지 삭제와 **교착 · 삭제 500**. 페이지 행을 먼저 잡으면 두 삭제 뒤에 줄을 서므로 — 코멘트 행을 쥔
+ * 자가 멤버 행을 기다리는 동안 코멘트 수정은 아무 멤버 행도 안 쥔다 — **둘 다 0**(`test/guard-in-lock.test.ts`의 F3 · F3′).
+ *
+ * **`KEY SHARE`인 까닭** — `FOR UPDATE`(두 삭제 · 문서 편집 · 코멘트 게시의 `lockPageForEdit`)와만 부딪힌다. 그래서 코멘트
+ * 수정이 같은 페이지의 문서 편집 뒤에도 선다(그 판이 `PROBES`에 있다) — 그 값을 치르고 산 것이 위 순서다.
+ *
+ * 대상이 `projectId` 소속이 아니면(지워졌거나 다른 프로젝트) `false`다 — 부르는 쪽이 404 로 읽는다.
+ */
+export async function lockPageShared(trx: DbHandle, projectId: string, pageId: string): Promise<boolean> {
+  assertLocking(trx, 'lockPageShared')
+  const row = await trx
+    .selectFrom('pages')
+    .select('id')
+    .where('id', '=', pageId)
+    .where('project_id', '=', projectId)
+    .forKeyShare()
+    .executeTakeFirst()
+  return row !== undefined
+}
+
+/**
  * 프로젝트의 페이지 행 전부를 `FOR UPDATE`로 잠근다(P6-2 D8). 복원의 근거와 실측표는 `repos/snapshots.ts`의
  * `lockProjectForRestore` 머리말에 있다.
  *
