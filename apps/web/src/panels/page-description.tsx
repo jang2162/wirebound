@@ -281,9 +281,10 @@ import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import { judgeMeta, metaConflict } from '../api/page-meta'
-import { MetaConflict } from './meta-conflict'
+import { MetaConflict, metaConflictSentence } from './meta-conflict'
 import { lockSlot, slotsOf, usePanelLock, usePanelSlot, type PanelLock } from './panel-drafts'
 import { PendingNotice } from './pending-notice'
+import type { WriteConclusion } from './write-ledger'
 
 /** 이 모듈의 칸을 선언한다 — 같은 모듈이 다시 불리면(HMR) 같은 칸을 돌려준다(`panel-drafts.tsx`의 `slotsOf`). */
 const slot = slotsOf(import.meta.url)
@@ -585,33 +586,39 @@ export function PageDescriptionPanel(props: {
      * 세우는 것은 부르는 쪽이다(409 는 `replace` · 다시 읽기는 `settleWith` — 다시 읽기만 제목을 든다).
      * `asked`는 그 값이 어디서 왔는가다: 다시 읽은 값이면(`'verified'`) «모름»의 판정이고, 409 면(`'rejected'`)
      * 서버가 바탕과 다르다고 이미 판정한 값이다.
+     *
+     * **돌려주는 것은 이 판정의 결말이다**(`WriteConclusion` — 칸에 그린 것과 같은 판정). 그 페이지를 보는 방문이 없으면
+     * 장부가 이것을 남기고 돌아온 방문이 말한다(`write-ledger.tsx`의 «판정은 장부가 하지 않는다»). `'mine'`은 실패가
+     * 아니다(`null`) — 떠나 있었어도 돌아와 말할 것이 없다. 저장이 성공한 판(`'done'`)이 떠나 있는 동안 끝나도 말하지
+     * 않는 것과 같다 — 상자에는 서버 값인 내 글이 선다.
      */
-    function land(current: string | null, asked: 'verified' | 'rejected'): void {
+    function land(current: string | null, asked: 'verified' | 'rejected'): WriteConclusion {
       const verdict = judgeMeta(current, next, base, pending)
       if (verdict === 'mine') {
         setDraft(null)
         setSave({ status: asked === 'verified' ? 'matched' : 'same' })
-      } else if (verdict === 'base' && asked === 'verified') {
+        return null
+      }
+      if (verdict === 'base' && asked === 'verified') {
         // **초안은 남긴다** — 서버 값만 갈아 끼웠으므로 상자는 친 글을 보이고 저장 버튼이 열린다. 다시 저장할 수
         // 있다. **보낸 글을 매달린 값으로 든다**(`Draft`의 `pending` — 리뷰 F2) — 끊긴 요청이 늦게 커밋될 수 있다.
         // 그러면 글을 안 고치고 다시 누를 때 409 의 `'mine'`(«이미 같습니다»)이고, 더 쳐서 누를 때 `'late'`다.
         setDraft((prev) => (prev === null ? prev : { ...prev, pending: [...(prev.pending ?? []), next] }))
-        setSave({ status: 'failed', failure: { kind: 'message', message: NOT_SAVED } })
-      } else if (verdict === 'late') {
-        // **앞서 보낸 내 글이 늦게 닿았다** — «다른 사람»이 아니다. 같은 화면이 그렇게 말하고 덮기를 권한다.
-        setSave({ status: 'conflict', theirs: current, late: true })
-      } else {
-        // 다른 사람이 바꿨다. (409 의 값은 바탕과 다르다고 서버가 판정한 값이라 `'base'`로 오지 않는다 — 와도
-        // 그 사람의 값을 보이는 쪽이 안전하다.)
-        setSave({ status: 'conflict', theirs: current })
+        const failure: Failure = { kind: 'message', message: NOT_SAVED }
+        setSave({ status: 'failed', failure })
+        return failure
       }
+      // **앞서 보낸 내 글이 늦게 닿았다**(`'late'`) — «다른 사람»이 아니다. 같은 화면이 그렇게 말하고 덮기를 권한다.
+      // 그 밖은 다른 사람이 바꿨다. (409 의 값은 바탕과 다르다고 서버가 판정한 값이라 `'base'`로 오지 않는다 — 와도
+      // 그 사람의 값을 보이는 쪽이 안전하다.) 떠나 있었으면 화면 대신 같은 뜻의 문장이 남는다(`metaConflictSentence`).
+      const late = verdict === 'late'
+      setSave(late ? { status: 'conflict', theirs: current, late: true } : { status: 'conflict', theirs: current })
+      return { kind: 'message', message: metaConflictSentence('설명', current, late) }
     }
 
     // **잠금은 장부가 쥐고 푼다**(`write-ledger.tsx`) — 그 페이지의 것을, 지금 어디에 가 있든
     // (머리말 3), 에디터를 떠났다 와도(이월 Q). 아래 `settle`이 끝나야 풀린다.
     await saving.run({
-      // 떠나 있는 동안 실패하면 장부가 이 문장으로 남긴다(`write-ledger.tsx`의 «떠나 있는 동안 끝난 실패» — 이월 S).
-      failedMessage: SAVE_FAILED,
       send: (signal) => api.updatePage(projectId, openPageId, { description: next, base: { description: base } }, { signal }),
       // **시간 안에 응답이 없으면 서버에서 다시 읽는다**(이월 R). 판정은 `land`가 한다 — 서버 값이 내 글이면
       // 원하던 상태, 바탕이면 안 닿음, 그 밖이면 **다른 사람이 바꿨다**(이월 P). 서버가 설명을 정규화하지
@@ -628,30 +635,38 @@ export function PageDescriptionPanel(props: {
         // 가 → 나 → 가로 돌아와 있으면 돌아온 방문에 닿고, 에디터를 떠났다 돌아와 있으면 **새로
         // 선 provider** 의 방문에 닿는다(이월 Q). 두 방문 다 잠금이 남아 있어 초안을 칠 수
         // 없었으므로 비우는 것은 **보낸 그것**뿐이다(리뷰 N-A — 머리말 3).
+        //
+        // **돌려주는 것은 결말이다** — 떠나 있는 동안 끝나면 장부가 이것을 남긴다(`write-ledger.tsx`의 «떠나 있는 동안
+        // 끝난 실패»). 칸에 그리는 값과 **같은 값**을 돌려준다 — 보고 있을 때와 떠나 있을 때의 말이 갈리지 않게.
         if (outcome.kind === 'failed') {
           const clash = metaConflict(outcome.caught, 'description')
           if (clash !== null) {
             replace(clash.current)
-            land(clash.current, 'rejected')
+            return land(clash.current, 'rejected')
           }
-          else setSave({ status: 'failed', failure: toFailure(outcome.caught, SAVE_FAILED) })
-          return
+          const failure = toFailure(outcome.caught, SAVE_FAILED)
+          setSave({ status: 'failed', failure })
+          return failure
         }
         if (outcome.kind === 'verified') {
           settleWith(outcome.verdict.at, outcome.verdict.page)
-          land(outcome.verdict.page.description, 'verified')
-          return
+          return land(outcome.verdict.page.description, 'verified')
         }
         // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다. 번호는 **받은 지금**이다 —
         // 그 앞에 낸 조회(돌아와 건 것)가 늦게 와도 이 값을 덮지 못한다(이월 V).
         settleWith(issue(), outcome.value)
         setDraft(null)
         setSave({ status: 'saved' })
+        return null
       },
     })
   }
 
-  /** «내 글 버리기» — 그 사람의 값을 받는다. 서버 값은 충돌이 이미 그 값으로 갈아 끼웠다(`land`). */
+  /**
+   * «내 글 버리기» — 그 사람의 값을 받는다. 서버 값은 충돌을 세울 때 이미 그 값으로 갈아 끼웠다 — `land`가 아니라
+   * 부르는 쪽이(409 는 `settle`의 `replace` · 다시 읽기는 `settleWith` — 이월 V 부터). 409 의 `replace`는 조회가
+   * `ready`일 때만 갈아 끼운다 — 조회가 도는 중에 온 충돌이면 뒤이어 선 조회 값이 보인다(이월 V 의 남는 틈).
+   */
   function discard(): void {
     setDraft(null)
     setSave(IDLE)

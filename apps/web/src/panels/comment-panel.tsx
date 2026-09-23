@@ -687,11 +687,11 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       if (pageId === undefined || busy) return
       const openPageId = pageId
       void busyLock.run<T, V>({
-        // 떠나 있는 동안 실패하면 장부가 이 문장으로 남긴다(`write-ledger.tsx`의 «떠나 있는 동안 끝난 실패» — 이월 S).
-        failedMessage: WRITE_FAILED,
         send: (signal) => op.send(api, openPageId, signal),
         ...(op.uncertain === undefined ? {} : { uncertain: op.uncertain }),
         verify: (signal) => op.verify(api, openPageId, signal),
+        // **돌려주는 것은 칸에 그린 실패 그대로다** — 떠나 있는 동안 끝나면 장부가 이것을 남긴다(`write-ledger.tsx`의
+        // «떠나 있는 동안 끝난 실패» — 이월 S). «이미 달렸고 그 뒤 고쳐졌다»(`reusedKey`)는 실패가 아니라 `done`으로 온다.
         settle: async (outcome, ownerLive) => {
           try {
             if (outcome.kind === 'failed') {
@@ -701,11 +701,15 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
             if (outcome.kind === 'done') {
               await op.done(outcome.value, openPageId)
               setWriteError(null)
-              return
+              return null
             }
-            setWriteError(await op.verified(outcome.verdict, ownerLive, openPageId))
+            const failure = await op.verified(outcome.verdict, ownerLive, openPageId)
+            setWriteError(failure)
+            return failure
           } catch (caught) {
-            setWriteError(toFailure(caught, WRITE_FAILED))
+            const failure = toFailure(caught, WRITE_FAILED)
+            setWriteError(failure)
+            return failure
           }
         },
       })

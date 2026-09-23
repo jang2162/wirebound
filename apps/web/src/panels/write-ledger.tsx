@@ -184,15 +184,33 @@
  * 그대로 머물다 **다음 읽기**에서야 로그인 화면.
  *
  * **새 통지 체계를 세우지 않았다 — 이 장부가 이미 «그 페이지 그 칸의 쓰기»를 들고, 돌아온 방문의 `PendingNotice`가
- * 그것을 그린다.** 끝난 쓰기가 `'failed'`이고 그 순간 받는 방문이 그 페이지를 안 보면(`Receiver.sees`):
+ * 그것을 그린다.** 끝난 쓰기가 `'failed'`이고 그 순간 받는 방문이 그 페이지를 안 보면(`Receiver.sees`), **쓰기가
+ * `settle`에서 돌려준 결말**(`WriteConclusion`)을 본다:
  *
+ * - **결말이 실패가 아니면(`null`) 아무것도 안 남긴다** — 실패 응답이 곧 실패인 것은 아니다. 설명의 409
+ *   `page-meta-changed`에 실린 지금 값이 내 글이면 원하던 상태다(`judgeMeta`의 `'mine'`).
  * - **401 이면 곧바로 세션을 끝낸다**(`useInvalidateSession` — `SignedOut`이 부르는 것과 같다). 세션은 페이지에 안
- *   매인다. 401 의 판정은 여전히 `toFailure` 하나다 — 여기서 상태 번호를 따로 보지 않는다.
+ *   매인다. 401 의 판정은 여전히 `toFailure` 하나다 — 쓰기가 칸에 그린 실패가 그 값이고, 여기서 상태 번호를 따로
+ *   보지 않는다.
  * - **그 밖이면 실패를 남긴다**(`missed` — 키는 잠금과 같은 (프로젝트, 페이지, 칸)). 잠금이 아니다 — 칸은 열려 있다.
  *   돌아온 방문이 «이 페이지를 떠나 있는 동안 저장하지 못했습니다 — <문장>»으로 말하고(`alert`), «확인»이나 **그 칸의
  *   다음 쓰기**가 지운다. 세대가 바뀌면 장부와 함께 비워진다.
  *
  * 그 페이지를 보고 있으면 아무것도 안 남긴다 — 칸이 스스로 말한다(앞 판 그대로). 세션이 끝나 끊긴 실패도 뺀다.
+ *
+ * **판정은 장부가 하지 않는다 — 쓰기가 한다**(3차 통합 후속 · 2026-09-23). 앞 판은 장부가 실패 응답을 `toFailure`로
+ * 곧바로 읽었다(쓰기는 이유 없는 실패의 문장 `failedMessage`만 줬다). 그러면 설명의 409 는 칸의 판정(`judgeMeta`)을
+ * 안 지났다 — Chrome: 붙잡은 저장 · 그 사이 남이 **같은 글**을 씀 · 옆 페이지에 가 있음 → 돌아온 가에 «… 저장하지
+ * 못했습니다 — 다른 사람이 이 페이지를 먼저 바꿨습니다» · DB 는 내 글(보고 있었으면 «서버의 설명이 이미 이 글과
+ * 같습니다»). 이제 `settle`이 **칸에 그리는 바로 그 판정**의 결말을 돌려주고 장부는 그것을 남긴다 — 떠나 있든 보고
+ * 있든 결말은 판정 한 자리를 지난다.
+ *
+ * | 떠나 있는 동안 온 설명의 409(Chrome · 저장을 붙잡은 채 떠남) | 돌아온 가 |
+ * |---|---|
+ * | `'mine'` — 그 사이 남이 **같은 글**을 씀 | 통지 없음 · 상자 내 글 · DB 내 글(`'done'`이 떠나 있는 동안 끝난 판과 같다) |
+ * | `'other'` — 남이 다른 글 · 옆 페이지 경유 | «… 저장하지 못했습니다 — 다른 사람이 이 설명을 바꿨습니다 · 지금 저장된 설명: <그 값>» · 상자 그 값 |
+ * | `'other'` · 프로젝트 목록 경유 | 같은 문장 · 상자는 남은 내 초안 → 다시 저장하면 충돌 화면(덮기 / 버리기) |
+ * | `'late'` — «저장되지 않았습니다» 뒤 늦게 커밋된 내 앞 글 | «… — 앞서 보낸 설명이 늦게 저장됐습니다(다른 사람이 바꾼 것이 아닙니다) · 지금 저장된 설명: <앞 글>» |
  *
  * | 판(Chrome) | 앞 판 | 이 판 |
  * |---|---|---|
@@ -282,7 +300,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
-import { toFailure, type Failure } from '../api/failure'
+import type { Failure } from '../api/failure'
 import { useInvalidateSession, useSessionEpoch } from '../session/session-context'
 
 /** 쓰기의 시간 제한. 값의 근거는 위 머리말의 표다. */
@@ -330,11 +348,6 @@ export interface TrackedWrite<T, V> {
   /** 요청을 보낸다. **`signal`을 요청에 싣는다** — 시간이 지나면 끊는다. */
   send(signal: AbortSignal): Promise<T>
   /**
-   * 이유 없는 실패의 문장(`toFailure`의 둘째 인자) — **그 페이지를 보는 방문이 없을 때 끝난 실패**를 장부가 남길 때
-   * 쓴다(아래 머리말 «떠나 있는 동안 끝난 실패»). 칸이 보이는 실패 문장과 같게 준다. 없으면 `UNSAVED`다.
-   */
-  readonly failedMessage?: string
-  /**
    * 시간 안에 온 **실패가 결과를 모르는 실패인가** — 그렇다면 `'failed'`가 아니라 판정(`verify`)으로 간다.
    * 없으면 모든 실패가 «안 됐다»다(설명 · 코멘트 수정·삭제·재번호). 코멘트 게시만 준다 — 같은 키로 다시
    * 보내는 판정이 **안전하게 되풀이되는** 쓰기라서다(`comment-panel.tsx`의 `knownRejection`).
@@ -355,9 +368,19 @@ export interface TrackedWrite<T, V> {
    * `ownerLive`는 **쓰기를 시작한 provider 가 아직 떠 있는가**다. 셸이 새로 섰으면 실시간 연결도
    * 새것이라 서버의 방송이 새 스토어에 닿는다 — 판정으로 끝난 코멘트 쓰기가 «번호를 못 얹었다»고
    * 말할지를 이것으로 가른다(`comment-panel.tsx`의 `perform`).
+   *
+   * **돌려주는 것은 이 쓰기의 결말이다**(`WriteConclusion`) — 칸에 그린 판정 그대로. 그 페이지를 보는 방문이 없으면
+   * 장부가 이것을 남긴다(머리말 «떠나 있는 동안 끝난 실패»). **칸에 그리는 자리와 돌려주는 자리가 같은 판정이어야
+   * 한다** — 따로 지으면 보고 있을 때와 떠나 있을 때의 말이 갈린다.
    */
-  settle(outcome: WriteOutcome<T, V>, ownerLive: boolean): void | Promise<void>
+  settle(outcome: WriteOutcome<T, V>, ownerLive: boolean): WriteConclusion | Promise<WriteConclusion>
 }
+
+/**
+ * 끝난 쓰기의 결말 — **실패면 그 실패, 아니면 `null`.** 문장은 쓰기가 칸에 그린 것과 같다(`toFailure`든 칸의 판정이
+ * 지은 문장이든). 장부는 이것을 읽기만 한다.
+ */
+export type WriteConclusion = Failure | null
 
 /** 칸 쓰기가 닿을 곳 — 지금 떠 있는 `PanelDraftsProvider`. */
 export interface Receiver {
@@ -431,9 +454,6 @@ const CHECKING: WriteEntry = { phase: 'checking', recheck: null }
 /** 시간 제한이 먼저 왔다는 표지. */
 const EXPIRED = Symbol('expired')
 
-/** 쓰기가 실패 문장을 안 줬을 때(`TrackedWrite.failedMessage`). */
-const UNSAVED = '저장하지 못했습니다'
-
 const NOTHING_MISSED: ReadonlyMap<string, Failure> = new Map()
 
 export function WriteLedgerProvider(props: { children: ReactNode }): ReactElement {
@@ -496,13 +516,12 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
         // 말한다(`settle`의 칸 쓰기가 닿는다). 세션이 끝나 끊긴 실패는 뺀다 — 앞 세션의 일이다.
         const unseen =
           outcome.kind === 'failed' && !live.signal.aborted && receiverRef.current?.sees(target) !== true
-        await write.settle(outcome, receiverRef.current?.token === owner)
-        if (unseen) {
-          // **판정은 `toFailure` 하나다**(`api/failure.tsx`) — 여기서 401 을 따로 알아보지 않는다.
-          const failure = toFailure(outcome.caught, write.failedMessage ?? UNSAVED)
+        const conclusion = await write.settle(outcome, receiverRef.current?.token === owner)
+        // **판정은 쓰기가 했다**(`settle`의 결말 — 머리말 «판정은 장부가 하지 않는다»). 실패가 아니면 남길 것이 없다.
+        if (unseen && conclusion !== null) {
           // **세션은 페이지에 안 매인다** — 어디에 가 있든 로그인 화면으로 간다(`SignedOut`이 부르는 것과 같은 것).
-          if (failure.kind === 'signed-out') invalidate()
-          else note(live.epoch, key, failure)
+          if (conclusion.kind === 'signed-out') invalidate()
+          else note(live.epoch, key, conclusion)
         }
       } finally {
         report(null)
