@@ -51,7 +51,11 @@ export async function registerRealtime(app: FastifyInstance, config: ApiConfig):
 
   const rooms = new InMemoryRoomRegistry()
   const locks = createLockStore()
-  app.decorate('realtime', { rooms, locks, broadcast: createBroadcaster(app.db, rooms, locks) })
+  // 권한을 못 잰 연결은 그 프레임만 건너뛴다(`broadcast.ts`의 `createBroadcaster` 머리말) — 한 줄 남긴다.
+  const broadcast = createBroadcaster(app.db, rooms, locks, (error, connection) =>
+    app.log.warn({ err: error, projectId: connection.projectId, connectionId: connection.id }, '방송 — 권한을 재지 못해 한 연결을 건너뜀'),
+  )
+  app.decorate('realtime', { rooms, locks, broadcast })
 
   await app.register(wsRoutes(config), { prefix: '/api/projects' })
 }

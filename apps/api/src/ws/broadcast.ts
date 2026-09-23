@@ -131,7 +131,30 @@ export interface Broadcaster {
  */
 const MIN_ROLE_TO_RECEIVE: ProjectRole = 'viewer'
 
-export function createBroadcaster(db: DbHandle, rooms: RoomRegistry, locks: LockStore): Broadcaster {
+/** 한 연결의 권한을 못 재서 그 연결을 건너뛴 것을 적는 자리 — `ws/index.ts`가 앱 로거를 준다. */
+export type BroadcastSkipSink = (error: unknown, connection: RoomConnection) => void
+
+function writeSkipToStderr(error: unknown, connection: RoomConnection): void {
+  console.error(`방송 — 연결 ${connection.id}의 권한을 재지 못해 이 프레임을 건너뛴다:`, error)
+}
+
+/**
+ * # 한 연결의 권한을 못 재면 그 연결만 건너뛴다 (2026-09-23 W′ 리뷰 F5)
+ *
+ * `stillAllowed`는 연결마다 질의 둘이다 — 풀이 다 차 풀 대기 시간 제한(`createPool`의 `connectionTimeoutMillis`)에 걸리거나
+ * DB 연결을 잃으면 **던진다.** 앞 판은 그 던짐이 루프를 통째로 끝내 **방의 나머지 연결 모두가 그 프레임을 잃었다**(모듈
+ * 스크립트: 가짜 연결 6 · 둘째가 받는 순간 풀 10 칸을 3s 쥠 · 풀 대기 1.5s → `send`가 1.5s 에 던지고 c0 c1 만 받음).
+ *
+ * **판정은 «못 쟀으면 안 보낸다»다** — 건너뛴 연결에 보내면 회수된 세션이 프레임을 받는 길(인가 우회)이 열린다. 닫지도 않는다
+ * (회수가 확인된 것이 아니다). 그 연결은 다음 프레임의 `seq`로 빈 것을 안다(`apps/web`의 `applyRemoteChange` → `'gap'`).
+ * 그 프레임이 마지막이면 다음 편집까지 낡은 화면이다 — 남는 틈.
+ */
+export function createBroadcaster(
+  db: DbHandle,
+  rooms: RoomRegistry,
+  locks: LockStore,
+  onSkip: BroadcastSkipSink = writeSkipToStderr,
+): Broadcaster {
   const stillAllowed: Broadcaster['stillAllowed'] = async (connection, minRole) => {
     if (!(await sessionIsLive(db, connection.sessionId))) return false
     const role = await findMembership(db, connection.projectId, connection.userId)
@@ -145,7 +168,14 @@ export function createBroadcaster(db: DbHandle, rooms: RoomRegistry, locks: Lock
     for (const connection of rooms.membersOf(projectId)) {
       if (options?.except !== undefined && sentBy(connection, options.except)) continue
 
-      if (!(await stillAllowed(connection, MIN_ROLE_TO_RECEIVE))) {
+      let allowed: boolean
+      try {
+        allowed = await stillAllowed(connection, MIN_ROLE_TO_RECEIVE)
+      } catch (error) {
+        onSkip(error, connection)
+        continue
+      }
+      if (!allowed) {
         rooms.leave(projectId, connection.id)
         connection.close(WS_CLOSE.revoked, '권한이 회수되었습니다')
         continue

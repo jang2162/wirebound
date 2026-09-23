@@ -64,7 +64,9 @@ pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린
 | `DB_POOL_WAIT_TIMEOUT_MS` | 5000 | 풀에서 연결을 이만큼 못 얻으면 **503** |
 | `DB_KEEPALIVE_IDLE_MS` | 10000 | DB 소켓의 TCP keepalive 첫 탐침까지. 진짜 분할에서 api 가 끊긴 줄을 아는 길이 이것뿐이다 — 걸리는 시간은 여기에 OS 의 간격 × 횟수가 붙는다(리눅스 기본 75s × 9) |
 
-0 은 끈다. `lock_timeout`·`statement_timeout`은 **걸지 않는다** — 이 앱은 페이지 행 잠금에 일부러 줄을 서므로 정당한
+비우면 기본값, **0 은 싣지 않는다 — 서버·DB 설정을 따른다**(범위 밖이면 api 가 뜨지 않는다 — `config.ts`의 `dbTimeLimitEnv`).
+**풀러(pgbouncer 부류) 뒤라면** 첫째 값은 기동 인자라 풀러가 거절하거나 버린다 — api·`migrate`가 기동 때 재서 거절이면
+무엇을 하라고 말하고 멈추고, 버렸으면 경고하고 뜬다(`src/db/client.ts`의 `verifyDbTimeLimits`). `lock_timeout`·`statement_timeout`은 **걸지 않는다** — 이 앱은 페이지 행 잠금에 일부러 줄을 서므로 정당한
 기다림이 봉투 500 으로 끊긴다. 값의 근거(잰 값)와 판정은 `src/db/client.ts`의 `createPool` 머리말 «네트워크 분할»이 갖는다.
 
 **그 플래그가 안 붙는 자리가 둘이고, 둘 다 이 파일을 따로 읽는다.**

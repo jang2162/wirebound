@@ -38,6 +38,14 @@ export interface FaultProxy {
    * 마치고 트랜잭션 안에서 쉰다(잠금을 쥔 채 — 고아). 2026-09-22 ① 리뷰 (b)의 `half-cut` 모드다.
    */
   halfCutOnQuery(fragment: string): void
+  /**
+   * **풀러 흉내 — 기동 메시지에 `name`이 있으면 거절한다**(무장과 달리 계속 선다 · 모든 새 연결). 기본 설정 pgbouncer 가 모르는
+   * 기동 인자에 보내는 것과 **같은 바이트**를 보내고 닫는다 — `ErrorResponse`의 칸 셋 `S FATAL` · `C 08P01` ·
+   * `M unsupported startup parameter: <name>`(`edoburu/pgbouncer` 1.25.2 에서 원시 소켓으로 쟀다 · `V` 칸이 없다).
+   */
+  rejectStartupParameter(name: string): void
+  /** **풀러 흉내 — 기동 메시지에서 `name`을 조용히 뺀다**(pgbouncer 의 `ignore_startup_parameters`). 계속 선다. */
+  dropStartupParameter(name: string): void
   /** 무장이 쏴졌는가. */
   readonly fired: boolean
   close(): Promise<void>
@@ -53,6 +61,36 @@ type Arm =
 const QUERY = 0x51 // 'Q' — 단순 질의
 /** 없는 메시지 형식 `z`(길이 4 — 본문 없음). 서버는 `08P01`로 답하고 닫는다. */
 const INVALID_MESSAGE = Buffer.from([0x7a, 0, 0, 0, 4])
+/** 프로토콜 3.0 의 기동 메시지 — 형식 바이트 없이 길이 · 196608 · `이름\0값\0`… · `\0`. */
+const PROTOCOL_3 = 196608
+
+interface StartupPolicy {
+  reject: Set<string>
+  drop: Set<string>
+}
+
+/** 기동 메시지를 풀러처럼 다룬다 — 거절이면 보낼 `ErrorResponse`, 아니면 (뺄 것을 뺀) 기동 메시지. 기동 메시지가 아니면 그대로. */
+function applyStartupPolicy(chunk: Buffer, policy: StartupPolicy): { reject: Buffer } | { forward: Buffer } {
+  if (chunk.length < 8 || chunk.readInt32BE(4) !== PROTOCOL_3) return { forward: chunk }
+  const fields = chunk.subarray(8, chunk.readInt32BE(0)).toString('utf8').split('\0')
+  const kept: string[] = []
+  for (let i = 0; i + 1 < fields.length && fields[i] !== ''; i += 2) {
+    const [name, value] = [fields[i] as string, fields[i + 1] as string]
+    if (policy.reject.has(name)) {
+      const body = Buffer.from(`SFATAL\0C08P01\0Munsupported startup parameter: ${name}\0\0`, 'utf8')
+      const head = Buffer.alloc(5)
+      head.write('E', 0, 'latin1')
+      head.writeInt32BE(4 + body.length, 1)
+      return { reject: Buffer.concat([head, body]) }
+    }
+    if (!policy.drop.has(name)) kept.push(name, value)
+  }
+  const body = Buffer.from(kept.map((part) => `${part}\0`).join('') + '\0', 'utf8')
+  const head = Buffer.alloc(8)
+  head.writeInt32BE(8 + body.length, 0)
+  head.writeInt32BE(PROTOCOL_3, 4)
+  return { forward: Buffer.concat([head, body, chunk.subarray(chunk.readInt32BE(0))]) }
+}
 
 export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> {
   const upstream = new URL(databaseUrl)
@@ -61,6 +99,7 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
   let arm: Arm = null
   let fired = false
   let holdMs = 0
+  const startup: StartupPolicy = { reject: new Set(), drop: new Set() }
   const sockets = new Set<net.Socket>()
 
   const server = net.createServer((client) => {
@@ -72,6 +111,8 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     let serverGone = false
     /** `halfCutOnQuery`가 쐈다 — 서버 쪽 소켓은 `close()`까지 둔다. */
     let orphaned = false
+    /** 첫 덩어리는 기동 메시지다 — pg 는 SSL 을 안 쓰면 그것부터 보낸다. */
+    let startupSeen = false
     const cut = (): void => {
       client.destroy()
       if (!orphaned) up.destroy()
@@ -84,8 +125,21 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
       else cut()
     }
 
-    client.on('data', (chunk) => {
+    client.on('data', (chunk: Buffer) => {
       if (serverGone) return
+      if (!startupSeen) {
+        startupSeen = true
+        const handled = applyStartupPolicy(chunk, startup)
+        if ('reject' in handled) {
+          // 서버 쪽 끝이 api 쪽을 곧바로 끊지 않게(`onServerGone`) 먼저 세운다 — 거절 바이트가 다 나간 뒤 닫힌다.
+          serverGone = true
+          up.destroy()
+          client.end(handled.reject)
+          return
+        }
+        up.write(handled.forward)
+        return
+      }
       const text = chunk.toString('latin1').toLowerCase()
       if (arm?.kind === 'query' && text.includes(arm.fragment)) {
         arm = null
@@ -160,6 +214,12 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     },
     halfCutOnQuery: (fragment) => {
       arm = { kind: 'half-cut', fragment: fragment.toLowerCase() }
+    },
+    rejectStartupParameter: (name) => {
+      startup.reject.add(name)
+    },
+    dropStartupParameter: (name) => {
+      startup.drop.add(name)
     },
     get fired() {
       return fired

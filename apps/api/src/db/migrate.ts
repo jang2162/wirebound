@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url'
 import { Migrator, NO_MIGRATIONS, type MigrationResultSet } from 'kysely'
 import { loadConfig } from '../config'
-import { createDb, createPool } from './client'
+import { createDb, createPool, verifyDbTimeLimits } from './client'
 import { runSeedStep, type SeedReporter } from './seed-user'
 import type { DbHandle } from './tx'
 import { migrationProvider } from './migrations/index'
@@ -114,6 +114,14 @@ async function main(): Promise<void> {
   const pool = createPool(config.databaseUrl, undefined, config.dbTimeLimits)
   const db = createDb(pool)
   try {
+    try {
+      // 실은 시간 제한이 걸리는지 한 번 잰다 — 앞단이 거절하면 마이그레이션 전에 멈춘다(`client.ts`의 `verifyDbTimeLimits`).
+      await verifyDbTimeLimits(pool, config.dbTimeLimits, (message) => console.warn(message))
+    } catch (error) {
+      console.error(error)
+      process.exitCode = 1
+      return
+    }
     try {
       if (direction === 'latest') {
         await migrateToLatest(db)

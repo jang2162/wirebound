@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { buildApp, type BuildAppOptions } from '../src/app'
 import type { ApiConfig } from '../src/config'
 import { loadConfig } from '../src/config'
-import { createDb, createPool } from '../src/db/client'
+import { DEFAULT_DB_TIME_LIMITS, createDb, createPool, type DbTimeLimits } from '../src/db/client'
 import { seedUser } from '../src/db/seed-user'
 import type { DbHandle } from '../src/db/tx'
 import type { ProjectRole } from '../src/db/types'
@@ -22,10 +22,17 @@ export interface TestContext {
 
 let testDb: DbHandle | undefined
 
+/**
+ * 하네스 풀의 시간 제한 — **idle 제한은 싣지 않는다.** `withApi`는 케이스 전체를 트랜잭션 하나로 감싸므로 붐비는 기계(옆 워커 ·
+ * load 160+)에서 케이스 사이의 쉼이 기본값 10s 를 넘으면 하네스가 거짓으로 죽는다(`createPool` 머리말 «이 값들이 정당한 일을
+ * 끊는 판»과 같은 기전). 그 제한을 재는 케이스는 제 풀을 따로 만든다(`db-partition.test.ts`).
+ */
+const HARNESS_DB_TIME_LIMITS: DbTimeLimits = { ...DEFAULT_DB_TIME_LIMITS, idleInTransactionMs: 0 }
+
 /** 테스트 전체가 공유하는 DB 핸들을 모듈 스코프에 지연 생성해 재사용한다. */
 export function getTestDb(): DbHandle {
   if (!testDb) {
-    testDb = createDb(createPool(TEST_DATABASE_URL))
+    testDb = createDb(createPool(TEST_DATABASE_URL, undefined, HARNESS_DB_TIME_LIMITS))
   }
   return testDb
 }
