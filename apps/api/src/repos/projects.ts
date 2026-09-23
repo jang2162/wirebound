@@ -197,6 +197,43 @@ export async function lockProjectRow(trx: DbHandle, projectId: string): Promise<
 }
 
 /**
+ * **트리 쓰기의 첫 잠금** — 프로젝트 행을 `FOR NO KEY UPDATE`로 잡는다(이월 5차 · 2026-09-23). 형제의 `sort_order`를
+ * 다시 매기는 쓰기는 **전부 이것을 맨 먼저** 잡는다: 메뉴 · 페이지의 생성 · 순서 이동 · 소속 이동 · 삭제
+ * (`repos/menu.ts` · `repos/pages.ts`). 제목 · 설명만 바꾸는 쓰기는 안 잡는다 — 형제를 안 건드린다.
+ *
+ * **왜 형제 행이 아니라 프로젝트 행인가 — 고치기 전 값**(api · 실커밋 하네스 · 같은 메뉴 여섯 · 60 회 · 둘이 동시에):
+ *
+ * | 판 | 교착(`pg_stat_database.deadlocks`) · 500 |
+ * |---|---|
+ * | 페이지 맨 앞 → 맨 뒤 ∥ 맨 뒤 → 맨 앞 | 11 |
+ * | 메뉴(루트) 같은 판 | 35 |
+ * | 페이지 두 메뉴 사이 맞바꿈(가 → 나 ∥ 나 → 가) | 51 |
+ * | 페이지 순서 이동 ∥ 같은 메뉴의 페이지 삭제 | 21 |
+ * | 같은 메뉴에 페이지 생성 둘 | 0 — 대신 **`sort_order`가 겹쳤다**(둘 다 형제 수를 세고 같은 자리에 넣는다) |
+ *
+ * 원인은 하나다 — 형제를 다시 매기는 `UPDATE … WHERE sort_order BETWEEN …`이 **범위의 행을 스캔 순서로** 잠그고, 옮기는
+ * 행은 **맨 끝에** 따로 잠근다. 맨 앞 → 맨 뒤는 «1–5 를 잡고 0 을 기다리고», 맨 뒤 → 맨 앞은 «0–4 를 잡고 5 를
+ * 기다린다». 두 메뉴 사이 이동은 «옛 형제 → 새 형제» 순이라 맞바꾸면 거꾸로 선다. 형제 행을 id 순으로 먼저 잡는 길은
+ * **빈 형제**(아직 행이 없는 메뉴 — 생성 · 옮겨 넣기)를 못 잠그고, 옮기는 사이 소속이 바뀐 행을 놓친다. 그래서 형제
+ * 무리 전부의 위에 있는 행 하나 — 프로젝트 행 — 를 먼저 잡는다. 트리 쓰기끼리는 **줄을 선다**(프로젝트 하나에
+ * 하나씩). 오래 걸리는 쓰기가 아니다(수 ms — `write-ledger.tsx`의 표).
+ *
+ * **잠금 순서는 «프로젝트 행 → 메뉴 · 페이지 행 → 멤버 행(재확인)»이다** — 복원(`lockProjectForRestore`) · 프로젝트
+ * 삭제(`routes/projects.ts`)와 같은 방향이다. 그 둘의 `FOR UPDATE`와는 충돌해 **기다린다**(고리가 아니다 — 그쪽도
+ * 프로젝트 행이 먼저다).
+ *
+ * **`FOR NO KEY UPDATE`인 까닭** — FK 삽입(코멘트 · 스냅샷 · 초대 · 토큰)이 부모 행에 거는 `FOR KEY SHARE`와 충돌하지
+ * 않는다. `FOR UPDATE`면 트리 쓰기 하나가 그 프로젝트의 모든 FK 삽입을 세운다. 프로젝트 수정(`UPDATE projects`)과는
+ * 서로 기다린다.
+ *
+ * 대상이 없으면(그 사이 지워졌다) 아무것도 안 잡는다 — 뒤의 조회가 `null`을 보고 404 가 된다.
+ */
+export async function lockProjectTree(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectTree')
+  await trx.selectFrom('projects').select('id').where('id', '=', projectId).forNoKeyUpdate().execute()
+}
+
+/**
  * 프로젝트를 갱신한다. `patch`에 있는 필드만 바뀐다 — 나머지는 기존 값을 유지한다.
  * 호출자(`routes/projects.ts`)가 이미 "적어도 하나는 있다"를 검증했다고 가정한다.
  *

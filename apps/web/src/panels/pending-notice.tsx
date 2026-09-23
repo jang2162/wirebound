@@ -22,7 +22,16 @@ const MISSED = '이 페이지를 떠나 있는 동안 저장하지 못했습니�
 /** 그 통지를 닫는 단추. */
 const DISMISS = '확인'
 
-export function PendingNotice(props: { lock: PanelLock; checking: string; unknown: string }): ReactElement | null {
+export function PendingNotice(props: {
+  lock: PanelLock
+  checking: string
+  unknown: string
+  /**
+   * 떠나 있는 동안 끝난 실패의 머리 — 없으면 «이 페이지를 떠나 있는 동안 …»이다. 트리는 **에디터**를 떠나 있었을 때만
+   * 남는다(`tree/use-tree-commands.tsx` — 트리는 프로젝트의 어느 페이지에서나 떠 있다).
+   */
+  missedLead?: string
+}): ReactElement | null {
   const { lock } = props
   // 잠금이 서 있으면 새 쓰기가 나간 것이다 — 남긴 실패는 그 쓰기가 이미 지웠다(`run`). 그래서 둘이 함께 서지 않는다.
   if (lock.missed !== null && lock.phase === null) {
@@ -32,7 +41,7 @@ export function PendingNotice(props: { lock: PanelLock; checking: string; unknow
     return (
       <div className="wb-shell-pending">
         <p className="wb-shell-panel-notice" role="alert">
-          {reason === '' ? MISSED : `${MISSED} — ${reason}`}
+          {reason === '' ? (props.missedLead ?? MISSED) : `${props.missedLead ?? MISSED} — ${reason}`}
         </p>
         <button type="button" className="wb-shell-pending-dismiss" onClick={lock.dismiss}>
           {DISMISS}

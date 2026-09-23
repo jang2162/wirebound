@@ -977,7 +977,7 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['createMenu']>[1],
     true
   >,
-  updateMenu: { title: true, parentId: true, sortOrder: true } satisfies Record<
+  updateMenu: { title: true, parentId: true, sortOrder: true, base: true } satisfies Record<
     keyof Parameters<ApiClient['updateMenu']>[2],
     true
   >,
@@ -1240,11 +1240,13 @@ export function createHttpClient(
     // 봉투가 계약대로인 것은 `request`가 이미 확인했다(`SHAPES.treeEnvelope`). 그래서 여기서
     // `body.menu`를 곧장 읽어도 던지지 않는다 — 앞서는 이 줄이 본문이 `null`일 때 raw
     // `TypeError`를 냈고, 그것은 `ApiError`가 아니라 호출자의 분기를 빗나갔다.
-    getTree: async (projectId) => {
+    getTree: async (projectId, options) => {
       const body = await request<{ menu: TreeMenuNode[] }>(
         'GET',
         `${projectPath(projectId)}/tree`,
         SHAPES.treeEnvelope,
+        undefined,
+        options,
       )
       return body.menu
     },
@@ -1263,12 +1265,13 @@ export function createHttpClient(
       ),
     // **`async`인 것이 요점이다** — `updateBody`가 빈 본문에서 던지는데, 동기 `throw`면
     // `await` 없이 `.catch`를 붙인 호출부가 잡지 못한다(`ApiClient`의 계약은 `Promise`다).
-    updateMenu: async (projectId, nodeId, body) =>
+    updateMenu: async (projectId, nodeId, body, options) =>
       request<MenuNode>(
         'PATCH',
         menuPath(projectId, nodeId),
         SHAPES.menuNode,
         updateBody(declaredOnly(body, BODY_KEYS.updateMenu)),
+        options,
       ),
     deleteMenu: (projectId, nodeId) =>
       request<void>('DELETE', menuPath(projectId, nodeId), SHAPES.noBody),

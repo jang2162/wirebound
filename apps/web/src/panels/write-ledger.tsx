@@ -374,6 +374,15 @@ export interface TrackedWrite<T, V> {
    * 한다** — 따로 지으면 보고 있을 때와 떠나 있을 때의 말이 갈린다.
    */
   settle(outcome: WriteOutcome<T, V>, ownerLive: boolean): WriteConclusion | Promise<WriteConclusion>
+  /**
+   * **이 쓰기의 결말을 그릴 자리가 아직 떠 있는가**(이월 5차 ③ · 2026-09-23). 주면 떠나 있었는지(머리말 «떠나 있는 동안 끝난
+   * 실패»)를 **이것 하나로** 가른다 — 우측 패널의 `Receiver.sees`(그 페이지를 보는가)를 **대신한다**(둘을 섞지 않는다 —
+   * 판정이 두 벌이 된다). 안 주면 앞 판 그대로 `sees`다(설명 · 코멘트).
+   *
+   * 주는 것은 트리 이름 변경이다(`tree/use-tree-commands.tsx`의 `rename`). 트리는 **프로젝트** 단위로 보인다 — 어느 페이지에
+   * 있든 떠 있다. `sees`로 가르면 다른 페이지에 가 있는 동안 끝난 실패를 트리가 스스로 말하고 장부도 남겨 두 번 말한다.
+   */
+  seen?(): boolean
 }
 
 /**
@@ -514,8 +523,9 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
         const outcome = await attempt(write, report, live.signal)
         // **그 페이지를 보는 방문이 있는가는 끝난 순간에 본다**(머리말 «떠나 있는 동안 끝난 실패») — 보고 있으면 칸이
         // 말한다(`settle`의 칸 쓰기가 닿는다). 세션이 끝나 끊긴 실패는 뺀다 — 앞 세션의 일이다.
-        const unseen =
-          outcome.kind === 'failed' && !live.signal.aborted && receiverRef.current?.sees(target) !== true
+        // 그릴 자리는 쓰기가 말하면 그것으로, 안 말하면 우측 패널로 본다(`TrackedWrite.seen`).
+        const shown = write.seen !== undefined ? write.seen() : receiverRef.current?.sees(target) === true
+        const unseen = outcome.kind === 'failed' && !live.signal.aborted && !shown
         const conclusion = await write.settle(outcome, receiverRef.current?.token === owner)
         // **판정은 쓰기가 했다**(`settle`의 결말 — 머리말 «판정은 장부가 하지 않는다»). 실패가 아니면 남길 것이 없다.
         if (unseen && conclusion !== null) {

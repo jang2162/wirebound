@@ -134,8 +134,11 @@ export interface ApiClient {
    * 딸린 것이 함께 사라지는 범위는 Task 6이 재서 `projects/delete-confirm.tsx`에 적는다.
    */
   deleteProject(projectId: string): Promise<void>
-  /** 메뉴·페이지 통합 트리. 서버의 `{ menu }` 봉투는 구현이 벗겨 준다. */
-  getTree(projectId: string): Promise<TreeMenuNode[]>
+  /**
+   * 메뉴·페이지 통합 트리. 서버의 `{ menu }` 봉투는 구현이 벗겨 준다. `options.signal`은 **판정용 다시 읽기**가 싣는다 —
+   * 트리 이름 변경의 «모름»(`tree/use-tree-commands.tsx`의 `rename` · `ReadOptions`의 머리말).
+   */
+  getTree(projectId: string, options?: ReadOptions): Promise<TreeMenuNode[]>
   /**
    * 메뉴 노드를 만든다. **`parentId: null`이 "루트에 만든다"이고 그것을 값으로 싣는다.**
    *
@@ -163,7 +166,18 @@ export interface ApiClient {
   updateMenu(
     projectId: string,
     nodeId: string,
-    body: { title?: string; parentId?: string | null; sortOrder?: number },
+    body: {
+      title?: string
+      parentId?: string | null
+      sortOrder?: number
+      /**
+       * **고치기 전 제목**(이월 5차 ② — 메뉴 제목의 충돌 모델). 주면 서버가 지금 제목과 견주고, 다르면 409 · 이슈 코드
+       * `menu-title-changed` · 지금 제목(`current`)이다. 안 주면 나중이 이긴다. 읽는 법은 `api/page-meta.ts`가 소유한다 —
+       * 페이지 메타와 같은 함수다.
+       */
+      base?: { title?: string }
+    },
+    options?: WriteOptions,
   ): Promise<MenuNode>
   /**
    * 메뉴 노드를 지운다. **자식 메뉴·페이지가 있으면 서버가 409를 낸다.**

@@ -309,7 +309,8 @@ describe('통합', () => {
     fireEvent.change(rename, { target: { value: '등급 정책' } })
     fireEvent.keyDown(rename, { key: 'Enter' })
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
-    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-grade', { title: '등급 정책' })
+    // 메뉴도 바탕을 싣고(이월 5차 ②) 장부의 끊는 신호를 받는다(이월 5차 ③).
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-grade', { title: '등급 정책', base: { title: '등급' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
 
     // 옮기기(순서)
     fireEvent.click(tool('위로'))

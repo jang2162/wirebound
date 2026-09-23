@@ -3,9 +3,9 @@
  * `apps/api/src/routes/pages.ts`의 `PATCH` 머리말이 소유한다: 저장할 때 **고치기 전 값**(`base`)을 함께 보내고,
  * 서버는 행 잠금 안에서 지금 값과 견줘 다르면 409 · 이슈 코드 `page-meta-changed` · 칸마다 지금 값(`current`)이다.
  *
- * 이 파일이 소유하는 것은 둘이다 — **409 를 읽는 법**(`metaConflict`)과 **서버 값 하나를 세 갈래로 가르는 판정**
- * (`judgeMeta`). 제목을 고치는 자리(`tree/use-tree-commands.tsx`의 이름 변경)와 설명을 고치는 자리
- * (`panels/page-description.tsx`)가 **같은 둘을 지난다** — 두 자리가 따로 가르면 한쪽만 낡는다. 화면(«다른 사람이
+ * 이 파일이 소유하는 것은 둘이다 — **409 를 읽는 법**(`metaConflict`)과 **서버 값 하나를 네 갈래로 가르는 판정**
+ * (`judgeMeta`). 제목을 고치는 자리(`tree/use-tree-commands.tsx`의 이름 변경 — 페이지와 **메뉴**, 이월 5차 ②)와 설명을
+ * 고치는 자리(`panels/page-description.tsx`)가 **같은 둘을 지난다** — 두 자리가 따로 가르면 한쪽만 낡는다. 화면(«다른 사람이
  * 바꿨습니다» · 덮기 · 버리기)은 `panels/meta-conflict.tsx` 하나다.
  *
  * **React 를 모른다** — 순수 함수 둘이라 케이스가 화면을 안 지나고 잰다.
@@ -15,6 +15,16 @@ import { ApiError } from './client'
 
 /** 서버의 `PAGE_META_CHANGED`와 같은 글자다(`apps/api/src/routes/pages.ts`). **문장으로 가르지 않는다.** */
 export const PAGE_META_CHANGED = 'page-meta-changed'
+
+/**
+ * 서버의 `MENU_TITLE_CHANGED`와 같은 글자다(`apps/api/src/routes/menu.ts` — 이월 5차 ②). **메뉴 제목도 같은 모델이다** —
+ * 바탕을 싣고, 409 의 지금 값을 이 파일의 `metaConflict`로 읽고, 같은 `judgeMeta`로 가른다. 코드만 갈라 둔다 — 한 코드면
+ * 메뉴의 409 가 페이지 제목의 충돌로 읽힐 수 있다.
+ */
+export const MENU_TITLE_CHANGED = 'menu-title-changed'
+
+/** 409 의 이슈 코드 — 어느 모델의 충돌인가. */
+export type MetaConflictCode = typeof PAGE_META_CHANGED | typeof MENU_TITLE_CHANGED
 
 /** 충돌 모델이 보는 칸. 순서 · 소속 메뉴는 이 모델 밖이다. */
 export type MetaField = 'title' | 'description'
@@ -26,9 +36,14 @@ export type MetaField = 'title' | 'description'
  * 느는 날에도 조용히 섞이지 않는다. 이슈에 `current`가 없는(계약 밖) 응답도 충돌로 치지 않는다 — «다른 사람의
  * 값»을 못 보이는 충돌 화면을 짓지 않는다. 그때는 여느 실패처럼 서버 문장이 선다.
  */
-export function metaConflict(caught: unknown, field: MetaField): { current: string | null } | null {
+export function metaConflict(
+  caught: unknown,
+  field: MetaField,
+  /** 어느 모델의 409 인가 — 페이지 메타가 기본이다. 메뉴 제목은 `MENU_TITLE_CHANGED`를 준다. */
+  code: MetaConflictCode = PAGE_META_CHANGED,
+): { current: string | null } | null {
   if (!(caught instanceof ApiError) || caught.code !== 'conflict') return null
-  const issue = caught.issues.find((item) => item.code === PAGE_META_CHANGED && item.path === field)
+  const issue = caught.issues.find((item) => item.code === code && item.path === field)
   if (issue === undefined) return null
   const current: unknown = issue.current
   if (current === null || typeof current === 'string') return { current }

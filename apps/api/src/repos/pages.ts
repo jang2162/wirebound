@@ -34,6 +34,7 @@ import { samePageMeta, type PageDocument } from '@wirebound/schema'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { assertLocking } from '../db/locking'
 import { assertNoNulBytes } from '../db/nul-guard'
+import { lockProjectTree } from './projects'
 
 /** 제목·설명의 NUL 을 거절할 때 문장이 부르는 이름. 가져오기가 앞 판에 내던 문장과 같다. */
 const PAGE_TEXT = '페이지 제목·설명'
@@ -238,6 +239,9 @@ export async function insertPage(
   // **가져오기도 여기를 지난다** — 제목·설명의 NUL 판정은 이 자리 하나다(`db/nul-guard.ts`의 `NulByteError`).
   assertNoNulBytes(PAGE_TEXT, input.title, input.description)
   return withTransaction(db, async (trx) => {
+    // **트리 쓰기의 첫 잠금**(`repos/projects.ts`의 `lockProjectTree`) — 형제 수를 세고 그 자리에 넣는 사이에 옆 생성이
+    // 같은 수를 세지 않게(고치기 전: 같은 메뉴에 둘이 동시에 오면 `sort_order`가 겹쳤다).
+    await lockProjectTree(trx, projectId)
     await assertMenuNodeValid(trx, projectId, input.menuNodeId)
 
     const sortOrder = await countPagesInMenuNode(trx, input.menuNodeId)
@@ -347,6 +351,9 @@ export async function updatePage(
 ): Promise<PageRecord | null> {
   assertNoNulBytes(PAGE_TEXT, patch.title, patch.description)
   return withTransaction(db, async (trx) => {
+    // **자리를 옮기면 트리 쓰기의 첫 잠금을 맨 먼저 잡는다**(`repos/projects.ts`의 `lockProjectTree`) — 지금 자리를 읽기
+    // 전에. 제목 · 설명만 바꾸면 안 잡는다(그 쓰기는 이 행 하나만 잡는다 — `routes/pages.ts`의 `PATCH` 머리말).
+    if (patch.menuNodeId !== undefined || patch.sortOrder !== undefined) await lockProjectTree(trx, projectId)
     const current = await trx
       .selectFrom('pages')
       .select(['id', 'menu_node_id', 'sort_order'])
@@ -505,6 +512,8 @@ export async function writePageSchemaAtSeq(
  */
 export async function deletePage(db: DbHandle, projectId: string, pageId: string): Promise<'deleted' | 'not-found'> {
   return withTransaction(db, async (trx) => {
+    // 남은 형제를 당긴다 — 트리 쓰기의 첫 잠금이 먼저다(`repos/projects.ts`의 `lockProjectTree`).
+    await lockProjectTree(trx, projectId)
     const current = await trx
       .selectFrom('pages')
       .select(['menu_node_id', 'sort_order'])
