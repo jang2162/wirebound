@@ -135,6 +135,12 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         app.log.error({ err: error, projectId }, 'locks 알림 실패')
       })
 
+      /**
+       * 이 연결이 받은 `lock`·`unlock`의 차례. **받는 순간 매긴다** — 끝나는 순서는 await 가 정하므로 받은 순서와 다를 수 있다
+       * (`ws/lock.ts`의 «뒤에 온 것이 이긴다»).
+       */
+      let lockTurns = 0
+
       socket.on('message', (raw: unknown) => {
         // **읽기는 동기이므로 IIFE 밖에서 한다.** 아래 `catch`가 *"어느 편집이 실패했나"*를
         // 알려면 프레임을 손에 쥐고 있어야 한다.
@@ -148,6 +154,9 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
           socket.close(WS_CLOSE.badFrame, '읽을 수 없는 프레임입니다')
           return
         }
+
+        const turn = frame.type === 'lock' || frame.type === 'unlock' ? ++lockTurns : 0
+        const current = (): boolean => turn === lockTurns
 
         void (async () => {
           // **자격을 보기 전의 멤버십 세대**(`RoomConnection.membershipEpoch` — 이월 5차 리뷰 R5). 아래 `lock` 갈래가 본다.
@@ -194,15 +203,15 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
             case 'lock':
               // **자격을 보는 동안 멤버십이 바뀌었으면 잡지 않는다**(이월 5차 리뷰 R5). 위 await 사이에 강등이 커밋되고
               // `notifyMembershipChanged`가 먼저 놓으면(놓을 것이 아직 없다) 여기서 잡은 잠금은 **TTL 까지** 남는다 —
-              // viewer 가 된 주인의 `unlock`은 editor 문턱에 걸린다. 바뀐 쪽이 승격이어도 잡지 않는다: 알림을 받은 화면이
-              // 다시 읽고, 그 화면의 다음 편집이 같은 자리를 다시 보낸다(`apps/web`의 `lock-channel.ts` — `refresh`).
+              // viewer 가 된 주인의 `unlock`은 editor 문턱에 걸린다. 세대는 **쥘 수 없게 된 변경에만** 오른다(`ws/notify.ts`의
+              // `canHold`) — 그 판정과 답(`lock-denied`)은 `ws/lock.ts`의 표가 소유한다(끝나는 순간에 본다 —
+              // 문서를 읽는 await 가 하나 더 있을 수 있다).
               // **`patch`는 여기서 거르지 않는다** — 커밋 순간에 권한을 다시 본다(`ws/patch.ts` · 이월 AA).
-              if (connection.membershipEpoch !== epoch) return
-              // **답을 안 낸다**(D4). 답은 룸 전체로 나가는 `locks` 목록이고 낸 사람도 받는다.
-              handleLockFrame(app, connection, frame)
+              await handleLockFrame(app, connection, frame, { epoch, current })
               return
             case 'unlock':
-              releaseLocksOf(app, connection)
+              // 뒤에 받은 `lock`이 이미 끝났으면 이 `unlock`은 그것을 놓으면 안 된다(`ws/lock.ts`의 «뒤에 온 것이 이긴다»).
+              if (current()) releaseLocksOf(app, connection)
               return
           }
         })().catch((error: unknown) => {

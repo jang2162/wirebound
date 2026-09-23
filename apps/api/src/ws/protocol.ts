@@ -67,6 +67,7 @@ export interface EventActor {
  * | `patch-ack` | **낸 사람에게만.** `patch` 프레임이 성공했다(§7.1의 *"[본인] ack(seq) 수신"*) |
  * | `patch-error` | **낸 사람에게만.** `patch` 프레임이 실패했다 |
  * | `locks` | 잠금 목록이 바뀌었을 때(그리고 누가 들어올 때), **룸 전체에** — §7.2 |
+ * | `lock-denied` | **낸 사람에게만.** `lock` 프레임을 받지 않았다 — 겹치는 자리를 남이 쥐고 있다(이월 5차 2회 LK · `ws/lock.ts`) |
  * | `membership-changed` | 그 사람의 역할이 바뀌었거나 멤버에서 빠졌을 때, **그 사람의 연결에만**(이월 5차 — `ws/notify.ts`) |
  */
 export type ServerFrame =
@@ -88,6 +89,25 @@ export type ServerFrame =
        * (D4 — 잠금 프레임은 답을 짝지어 기다리지 않는다).
        */
       locks: LiveLock[]
+    }
+  /**
+   * **그 `lock`을 받지 않았다 — 이 연결은 이제 아무것도 쥐지 않는다**(이월 5차 2회 LK). 겹치는 서브트리를 다른 사람이 쥐고
+   * 있거나, 자격을 보는 사이 멤버십이 바뀌었다(`ws/lock.ts`의 표). 받지 않은 `lock`은 **이 연결이 앞서 쥔 것도 놓는다** —
+   * 새 자리를 달라는 것이 앞 자리를 놓는 것이기 때문이다(연결 하나가 드는 잠금은 하나다 — `lock/store.ts`).
+   *
+   * **누가 쥐었는지는 싣지 않는다.** 배지는 `locks` 목록이 그리고(그 목록은 룸 전체에 이미 흐른다), 이 프레임이 이름을 실으면
+   * «누가 잡았나»의 출처가 둘이 된다. 받는 쪽은 그 자리를 «잡지 않은 선택»으로 둔다(`apps/web`의 `lock-channel.ts`).
+   */
+  | {
+      type: 'lock-denied'
+      projectId: string
+      pageId: string
+      nodeId: string
+      /**
+       * **거절된 그 `lock` 프레임의 `lockId`** — 실어 왔을 때만 되돌려준다. 받는 쪽은 이것으로 «내가 마지막으로 보낸
+       * `lock`의 거절인가»를 가린다. 자리로만 짝지으면 같은 자리를 다시 보낸 뒤 닿은 앞 거절을 뒤 것으로 읽는다.
+       */
+      lockId?: number
     }
   | {
       type: 'page-changed'
@@ -201,18 +221,22 @@ const PatchFrame = OpsBody.extend({
  * 갱신하는 갈래가 생긴다.
  *
  * **답을 짝지어 기다리지 않는다**(D4). 성공하면 `locks` 목록이 룸 전체에 흐르고 **낸 사람도
- * 그것을 받는다** — 그것이 답이다. `patch`처럼 `clientOpId`로 짝짓지 않는 이유는 P3-2
- * 이월 §2.4가 적었다: 잠금은 끊겼을 때 할 일이 편집과 **반대**다(서버가 알아서 놓는다).
+ * 그것을 받는다** — 그것이 답이다. **받지 않았으면 낸 사람에게만 `lock-denied`가 간다**(이월 5차 2회 LK — `ws/lock.ts`).
+ * `patch`처럼 `clientOpId`로 짝짓지 않는 이유는 P3-2 이월 §2.4가 적었다: 잠금은 끊겼을 때 할 일이 편집과
+ * **반대**다(서버가 알아서 놓는다). **거절만은 짝이 필요하다** — 화면이 매긴 `lockId`를 실어 오면 `lock-denied`가
+ * 그것을 되돌려준다. 서버는 그 값으로 아무 판정도 안 한다(차례는 받는 순간 서버가 따로 매긴다 — `ws/routes.ts`의 `lockTurns`).
  *
- * **`nodeId`가 문서에 있는지는 여기서 안 본다.** 그것을 보려면 문서를 읽어야 하고, 선택
- * 하나마다 조회가 붙는다. 문서에 없는 노드의 잠금은 **아무것도 막지 못한다**
- * (`@wirebound/schema`의 `findLockConflict`) — 그래서 무해하고, 30초면 사라진다.
+ * **`nodeId`가 문서에 있는지는 여기서 안 본다.** 문서를 읽는 것은 겹침을 판정할 때뿐이고(같은 페이지에 남의 잠금이 있을
+ * 때 — `lock/check.ts`의 `selectionVerdict`), 문서에 없는 노드의 잠금은 **아무것도 막지 못한다**
+ * (`@wirebound/schema`의 `findLockConflict`) — 그래서 받아들이고, 30초면 사라진다.
  */
 const LockFrame = z.strictObject({
   type: z.literal('lock'),
   pageId: z.uuid(),
   /** `@wirebound/schema`의 봉투가 노드 id에 쓰는 그 술어다 — 모양을 두 벌로 적지 않는다. */
   nodeId: z.string().regex(NODE_ID_PATTERN),
+  /** 화면이 매긴 이 프레임의 차례(위). **선택이다** — 없으면 거절도 싣지 않는다(에이전트 · `lockId`를 모르는 화면). */
+  lockId: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
 })
 
 /**

@@ -87,10 +87,15 @@
  * 승격 응답 뒤 d = 0…30ms 에 카드를 누름 · 각 3회): **겹침 17/48 → 고친 뒤 보고 (c)**. editor 둘이 d 간격으로 누르는 기준선은
  * 1/48 이다. 잡지 않으면 잡는 시각을 늘 그 사람이 정한다 — 남은 그 순간을 보통 경합과 같은 조건으로 본다.
  *
+ * **서버가 획득을 거절하게 된 뒤에도(이월 5차 2회 LK) 이 규칙은 그대로 둔다.** 겹침은 이제 서버가 막으므로 위 근거의 절반은
+ * 사라졌다 — 그래도 승격 순간 잡으면 남의 PATCH 가 정한 시각에 캐럴이 잡아, 그 순간 누른 밥의 고르기가 거절당한다. 바꾸려면 그것을
+ * 따로 판정해야 하고, 이 트랙의 일이 아니다.
+ *
  * 선택을 **놓지 않고** 남기는 것은 사용자가 보던 것(속성 · 코멘트)과 치던 글을 지키려는 것이다 — 선택을 놓으면 속성 패널이
  * 내려가며 친 글이 사라진다. 막힌 자리를 놓는 앞 판의 규칙(첫 줄)은 그대로다.
  *
- * 잃은 잠금(서버의 `locks`에서 빠짐 — 리뷰 R4)도 같은 «잡지 않은 선택»으로 간다(`lock-channel.ts`의 `observe`) — 판정이 한 벌이다.
+ * 서버가 거절한 잠금(`lock-denied` — 이월 5차 2회 LK)도 같은 «잡지 않은 선택»으로 간다(`lock-channel.ts`의 `denied`). **첫 편집이 잡을 때
+ * 막혔는지 스토어에 묻지 않는다** — 앞 판의 `claimable`은 서버가 하지 않던 판정을 화면이 대신 한 것이었고, 이제 서버가 판정한다.
  */
 import { useEffect, useRef } from 'react'
 import { useLockChannel } from './context'
@@ -124,12 +129,6 @@ export function useNodeLock(pageId: string | undefined, canHold: boolean): void 
   useEffect(() => {
     store.setSelectionClaims(canHold)
   }, [store, canHold])
-
-  // 잡지 않은 선택을 첫 편집이 잡을 때 **지금 막혔는지** 묻는 자리 — 판정은 스토어 한 자리 그대로다.
-  useEffect(() => {
-    channel?.setClaimable((_pageId, nodeId) => store.selectionBlockedBy(nodeId) === null)
-    return () => channel?.setClaimable(null)
-  }, [store, channel])
 
   /** 앞 커밋의 `canHold` — 이 커밋이 승격인지 가른다(위 표). */
   const heldBefore = useRef(canHold)

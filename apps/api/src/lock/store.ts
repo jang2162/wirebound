@@ -15,6 +15,14 @@
  * **읽을 때 실제로 지운다.** 판정만 하고 두면 만료된 항목이 `Map`에 남아, 연결이 오간
  * 만큼 자란다. `liveIn`은 훑은 항목 중 만료된 것을 그 자리에서 걷어 낸다.
  *
+ * # 걷은 것은 알린다 — 한 자리에서
+ *
+ * **조용히 걷으면 배지가 다음 `locks` 알림까지 남는다** — 조용한 방이면 끝이 없고, 그동안 남의 화면은 그 자리를 못 고른다.
+ * 그래서 **걷는 자리(`liveAt`) 하나가 `onExpired`를 부른다** —
+ * `liveIn` · `hold` · `release` · `sweep` 어디서 걷히든 같은 길이다. 부르는 쪽(`ws/index.ts`)이 그 방에 목록을 알린다.
+ * 읽는 자가 없는 방을 위해 **`sweep`을 주기로 부르는 것도 그쪽이다**(`LOCK_SWEEP_MS`) — 스위퍼는 걷기만 하고 알림은 이 한
+ * 갈래로 모인다. 시계는 여전히 인자다 — 케이스는 `now`를 밀고 `sweep`을 부른다.
+ *
  * # 연결 하나가 드는 잠금은 하나다
  *
  * §7.2가 *"노드를 **선택하면**"*이라고 적었고 선택은 하나다. 그래서 키가 `connectionId`이고,
@@ -27,6 +35,12 @@
 
 /** §7.2의 TTL. */
 export const LOCK_TTL_MS = 30_000
+
+/**
+ * 만료를 걷는 주기(`ws/index.ts`의 스위퍼). 배지는 TTL 뒤 **이 주기 안에** 사라진다. 한 번 훑는 값은 살아 있는 잠금 수(연결 수)
+ * 만큼의 `Map` 순회다.
+ */
+export const LOCK_SWEEP_MS = 1_000
 
 /** 연결 하나가 잡겠다고 낸 것. */
 export interface LockClaim {
@@ -63,6 +77,8 @@ export interface LockStore {
   liveIn(projectId: string): LiveLock[]
   /** 살아 있는 잠금의 수. 누수를 재는 자리가 쓴다. */
   liveCount(): number
+  /** 만료된 것을 전부 걷는다 — 걷힌 것마다 `onExpired`가 불린다(위 «걷은 것은 알린다»). 읽는 자가 없는 방을 위한 것이다. */
+  sweep(): void
 }
 
 interface LockRecord extends LockClaim {
@@ -75,15 +91,21 @@ interface LockRecord extends LockClaim {
  * **시계를 인자로 받는다.** 이 파일의 유일한 환경 의존이고, 주입하면 그것마저 없어진다
  * (`store/editor-store.ts`의 `nextOpId`가 같은 자세다).
  */
-export function createLockStore(now: () => number = Date.now, ttlMs: number = LOCK_TTL_MS): LockStore {
+export function createLockStore(
+  now: () => number = Date.now,
+  ttlMs: number = LOCK_TTL_MS,
+  /** 만료로 걷힌 잠금 하나마다 — 그 잠금의 프로젝트. **던지지 않아야 한다**(걷는 도중에 불린다). */
+  onExpired: (projectId: string) => void = () => {},
+): LockStore {
   const held = new Map<string, LockRecord>()
 
-  /** 만료됐으면 그 자리에서 지우고 `undefined`. */
+  /** 만료됐으면 그 자리에서 지우고 `undefined`. **걷는 자리는 여기 하나다** — 알림도 여기서 나간다. */
   const liveAt = (connectionId: string, at: number): LockRecord | undefined => {
     const record = held.get(connectionId)
     if (record === undefined) return undefined
     if (record.expiresAt <= at) {
       held.delete(connectionId)
+      onExpired(record.projectId)
       return undefined
     }
     return record
@@ -128,6 +150,11 @@ export function createLockStore(now: () => number = Date.now, ttlMs: number = LO
         if (liveAt(connectionId, at) !== undefined) count += 1
       }
       return count
+    },
+
+    sweep: () => {
+      const at = now()
+      for (const connectionId of [...held.keys()]) liveAt(connectionId, at)
     },
   }
 }

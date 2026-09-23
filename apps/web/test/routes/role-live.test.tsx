@@ -280,10 +280,10 @@ describe('신호가 닿지 않는 창(리뷰 R1 · R2)', () => {
 })
 
 /**
- * **리뷰 R3 · R4 — 잡는 시각을 사용자가 정한다.** 승격 · 잃은 잠금은 곧장 잡지 않고 «잡지 않은 선택»으로 남는다(`lock-channel.ts`).
- * 채널 단독의 축(막혔으면 안 잡음 · 한 번 선 뒤에만 잃음)은 `realtime/lock-channel.test.ts`가 잰다 — 여기는 셸째로 잇는다.
+ * **리뷰 R3 · 2회 LK — 잡는 시각을 사용자가 정한다.** 승격 · 서버가 거절한 잠금은 곧장 잡지 않고 «잡지 않은 선택»으로 남는다
+ * (`lock-channel.ts`). 채널 단독의 축(거절의 세 경로 · 옮겨 간 뒤의 거절)은 `realtime/lock-channel.test.ts`가 잰다 — 여기는 셸째로 잇는다.
  */
-describe('잡는 시각을 사용자가 정한다(리뷰 R3 · R4)', () => {
+describe('잡는 시각을 사용자가 정한다(리뷰 R3 · 2회 LK)', () => {
   const carolHolds = (nodeId: string): Record<string, unknown> => ({
     type: 'locks',
     projectId: PROJECT_ID,
@@ -299,7 +299,7 @@ describe('잡는 시각을 사용자가 정한다(리뷰 R3 · R4)', () => {
 
   /**
    * 혼자 죽는 변조: `useNodeLock`이 승격 순간 막히지 않은 자리를 곧장 잡는다(앞 판). 잠금 통로의 `reannounce`가 잡지 않은 선택을
-   * 잡는 변조에는 `lock-channel`의 «한 번 선 뒤» · 아래 R4 케이스와 함께 죽는다(다시 붙는 축의 주인은 R4 케이스).
+   * 잡는 변조에는 `lock-channel`의 «거절된 자리» · 아래 거절 케이스와 함께 죽는다(다시 붙는 축의 주인은 아래 거절 케이스).
    */
   it('viewer → editor — 고른 카드는 잡지 않은 채 남고(다시 붙어도), 첫 편집이 `lock` 다음 `patch`로 잡는다', async () => {
     const server: Server = { role: 'viewer', fail: null, reads: 0 }
@@ -320,28 +320,37 @@ describe('잡는 시각을 사용자가 정한다(리뷰 R3 · R4)', () => {
   })
 
   /**
-   * 빠른 강등→승격(두 조회가 겹쳐 셸의 `canEdit`이 한 번도 안 바뀐다)으로 서버가 놓은 자리를 밥이 잡았다 — 다시 붙어도 그 자리를 다시
-   * 보내지 않는다(겹친 잠금). 밥이 놓은 뒤 캐럴의 첫 편집이 잡는다. 혼자 죽는 변조: `use-realtime`이 `locks`를 잠금 통로에 안 넘긴다.
+   * **다시 붙어 보낸 `lock`을 서버가 거절한다**(이월 5차 2회 LK — C 리뷰 2 N1 의 셸 판). 끊긴 동안 밥이 카드를 잡았다 — 캐럴의
+   * 재알림은 그대로 나가고(`reannounce`) 서버가 거절하면 «잡지 않은 선택»이 된다: 또 다시 붙어도 안 보내고, 루트로 옮겨도 놓을
+   * 것이 없고(서버가 이미 놓았다), 밥이 놓은 뒤 첫 편집이 잡는다. 앞 판의 R4(목록에서 빠지면 잃음 — `observe`)는 이 판으로
+   * 바뀌었다 — 서버가 판정하므로 목록을 보지 않는다. 혼자 죽는 변조: `use-realtime`이 `lock-denied`를 잠금 통로에 안 넘긴다.
    */
-  it('잡은 자리가 서버 목록에서 빠지면 잃은 것이다 — 다시 붙어도 안 보내고, 첫 편집이 잡는다', async () => {
+  it('다시 붙어 보낸 `lock`을 서버가 거절하면 잡지 않은 선택이다 — 또 붙어도 안 보내고, 밥이 놓은 뒤 첫 편집이 잡는다', async () => {
     const server: Server = { role: 'editor', fail: null, reads: 0 }
     const rt = await open(server)
     pick('n-card')
+    await waitFor(() => expect(rt.frames()).toEqual(['lock n-card']))
     rt.deliver(carolHolds('n-card'))
-    rt.deliver(noLocks)
+
+    let reads = server.reads
+    rt.reconnect()
+    await waitFor(() => expect(server.reads).toBe(reads + 1))
+    expect(rt.frames()).toEqual(['lock n-card', 'lock n-card'])
+    rt.deliver({ type: 'lock-denied', projectId: PROJECT_ID, pageId: PAGE_ID, nodeId: 'n-card', lockId: rt.lastLockId() })
     rt.deliver(bobHolds(PAGE_ID, 'n-card'))
     await waitFor(() => expect(titleBox().disabled).toBe(true))
+    expect(treeRow('Card').getAttribute('aria-current')).toBe('true')
 
-    const readsBefore = server.reads
+    reads = server.reads
     rt.reconnect()
-    await waitFor(() => expect(server.reads).toBe(readsBefore + 1))
+    await waitFor(() => expect(server.reads).toBe(reads + 1))
     rt.deliver(bobHolds(PAGE_ID, 'n-card'))
-    expect(rt.frames()).toEqual(['lock n-card'])
+    expect(rt.frames()).toEqual(['lock n-card', 'lock n-card'])
 
     rt.deliver(noLocks)
     await waitFor(() => expect(titleBox().disabled).toBe(false))
     editTitle('회원 정보3')
-    await waitFor(() => expect(rt.frames()).toEqual(['lock n-card', 'lock n-card', 'patch']))
+    await waitFor(() => expect(rt.frames()).toEqual(['lock n-card', 'lock n-card', 'lock n-card', 'patch']))
   })
 })
 

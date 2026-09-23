@@ -237,7 +237,63 @@ describe('자격을 본 뒤 hold 전에 끼는 강등', () => {
 
       await ownerTab.quiet()
       expect(locks.liveIn(fx.project.id)).toEqual([])
-      expect(ownerTab.received.filter((frame) => frame.type === 'locks' && frame.locks.length > 0)).toHaveLength(1)
+      // 버린 자리는 목록에 한 번도 안 선다. (앞 판은 «비어 있지 않은 목록이 하나»로 쟀다 — 목록을 보내는 순간 짓게 되면서
+      // (`ws/broadcast.ts` · 이월 5차 2회 LK) 늦게 닿은 참가 알림도 대조 판의 `n_card`를 실어 그 수가 흔들렸다.)
+      expect(
+        ownerTab.received.filter((frame) => frame.type === 'locks' && frame.locks.some((lock) => lock.nodeId === 'n_btn')),
+      ).toEqual([])
+      // **버린 것을 낸 쪽에 말한다**(이월 5차 2회 LK — C 리뷰 2 N3). 앞 판은 조용히 버려 그 화면은 쥔 줄 알았다. 대조 판(첫 `lock`)에는
+      // 거절이 없다.
+      expect(targetTab.received.filter((frame) => frame.type === 'lock-denied')).toEqual([
+        { type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_btn' },
+      ])
+    })
+  }, 30_000)
+
+  /**
+   * **편집 권한이 그대로인 변경은 그 창의 하트비트를 버리지 않는다**(`ws/notify.ts`의 `canHold`). 세대는 잠금을 쥘 수 없게 된 변경에만
+   * 오른다 — 놓는 판정(`canHold`)과 같은 값이다. editor → owner 와 역할이 그대로인 PATCH(owner → owner) 둘 다, 쥔 자리의 하트비트가
+   * 그 창에 끼어도 잠금은 그대로이고 거절이 없다. 혼자 죽는 변조: 세대를 모든 변경에 올린다.
+   */
+  it('editor → owner · 같은 역할의 PATCH 가 그 창에 끼어도 하트비트는 쥔 잠금을 놓지 않는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const targetTab = track(await joinRoom(ctx.port, fx.project.id, fx.target.cookie.wb_session))
+      const ownerTab = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      targetTab.send(lockFrame(fx.page.id, 'n_card'))
+      await locksWith(ownerTab, 'n_card')
+
+      const { broadcast, locks } = ctx.app.realtime
+      const real = broadcast.stillAllowed
+      let gate: { entered: () => void; opened: Promise<void> } | null = null
+      broadcast.stillAllowed = async (connection, minRole) => {
+        const allowed = await real(connection, minRole)
+        const armed = gate
+        if (armed !== null && connection.userId === fx.target.user.id && minRole === 'editor') {
+          gate = null
+          armed.entered()
+          await armed.opened
+        }
+        return allowed
+      }
+      const heartbeatAcross = async (role: string, changes: number): Promise<void> => {
+        let entered = (): void => {}
+        let open = (): void => {}
+        const atDoor = new Promise<void>((resolve) => (entered = resolve))
+        gate = { entered, opened: new Promise<void>((resolve) => (open = resolve)) }
+        targetTab.send(lockFrame(fx.page.id, 'n_card'))
+        await atDoor
+        expect(await setRole(ctx, fx, fx.target.user.id, role)).toBe(200)
+        await targetTab.waitForCount('membership-changed', changes)
+        open()
+        await ownerTab.quiet()
+      }
+
+      await heartbeatAcross('owner', 1)
+      await heartbeatAcross('owner', 2)
+
+      expect(locks.liveIn(fx.project.id).map((lock) => `${lock.userId}:${lock.nodeId}`)).toEqual([`${fx.target.user.id}:n_card`])
+      expect(targetTab.received.filter((frame) => frame.type === 'lock-denied')).toEqual([])
     })
   }, 30_000)
 })

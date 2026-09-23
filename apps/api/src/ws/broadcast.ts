@@ -161,8 +161,11 @@ export function createBroadcaster(
     return role !== null && roleAtLeast(role, minRole)
   }
 
-  const send: Broadcaster['send'] = async (projectId, frame, options) => {
-    const payload = JSON.stringify(frame)
+  /**
+   * 룸을 돌며 연결마다 자격을 보고 보낸다. **싣는 것은 보내는 순간 짓는다**(`payload`) — `announceLocks`가 그 자리를 쓴다
+   * (아래 그 줄).
+   */
+  const deliver = async (projectId: string, payload: () => string, options?: BroadcastOptions): Promise<number> => {
     let delivered = 0
 
     for (const connection of rooms.membersOf(projectId)) {
@@ -181,11 +184,16 @@ export function createBroadcaster(
         continue
       }
 
-      connection.send(payload)
+      connection.send(payload())
       delivered += 1
     }
 
     return delivered
+  }
+
+  const send: Broadcaster['send'] = async (projectId, frame, options) => {
+    const payload = JSON.stringify(frame)
+    return deliver(projectId, () => payload, options)
   }
 
   return {
@@ -199,6 +207,11 @@ export function createBroadcaster(
       }))
       return send(projectId, { type: 'presence', projectId, participants })
     },
-    announceLocks: async (projectId) => send(projectId, { type: 'locks', projectId, locks: locks.liveIn(projectId) }),
+    // **목록은 연결마다 보내는 순간 짓는다**(이월 5차 2회 LK — C 리뷰 2 N4). 앞 판은 부를 때 한 번 짓고 연결마다 자격을 await
+    // 한 뒤 보냈다 — 앞서 지은(낡은) 목록이 뒤에 지은 목록을 한 연결에서 **추월해 마지막 프레임으로 남았다**(raw WS: 250ms 뒤
+    // 구경꾼의 마지막 목록에 선 잠금이 없음 6/210). 보내는 순간 지으면 한 연결이 받는 목록은 **지은 순서대로 닿고**, 짓기와
+    // 보내기 사이에 await 가 없으므로 마지막 것이 가장 새 것이다.
+    announceLocks: async (projectId) =>
+      deliver(projectId, () => JSON.stringify({ type: 'locks', projectId, locks: locks.liveIn(projectId) } satisfies ServerFrame)),
   }
 }
