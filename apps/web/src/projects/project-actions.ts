@@ -94,16 +94,21 @@ export interface ProjectAbilities {
    */
   restoreSnapshot: boolean
   /**
-   * 페이지의 **제목 · 설명**을 고칠 수 있는가(`PATCH .../pages/:pageId` — 이월 M · 2026-09-23). 서버는
-   * `projectGuard('editor')`다(§10). **viewer 에게는 입구를 안 보인다** — «페이지 설명» 탭은 읽기 전용이 되고
-   * (`panels/page-description.tsx`), 메뉴 트리의 **페이지** 이름 변경이 닫힌다(`tree/tree-actions.ts`).
+   * **설계서 본문을 고칠 수 있는가** — 메뉴 · 페이지(제목 · 설명 · 순서 · 가져오기) · 노드(구조 · 속성 · 상호작용 · 프리셋 ·
+   * 패턴) · 코멘트(달기 · 고치기 · 지우기 · 재번호), 그리고 노드 **잠금**(§7.2 — 선택이 곧 잠금이다). §10 의 editor 줄
+   * *"메뉴·페이지·컴포넌트·코멘트·상호작용 편집"* 이 이것이고, viewer 줄 *"조회 전용 — 편집·코멘트 모두 불가"* 가 그 반대다.
+   * 서버는 이 쓰기들을 전부 `projectGuard('editor')`로 받는다(WS 는 `MIN_ROLE_FOR_FRAME` — `patch` · `lock` · `unlock`).
    *
-   * **이것이 편집 표면의 첫 역할 게이트다.** 7차 판은 그 이유로 이 필드를 안 만들었다(구조 편집 · 트리의 다른
-   * 버튼이 역할을 안 보는데 여기만 보면 두 모드가 다른 말을 한다). 사용자가 «숨긴다»로 판정했다(장부 §3.19 «판정
-   * — 이월 다섯»). **범위는 제목 · 설명뿐이다** — 메뉴의 이름 · 페이지의 순서 · 구조 편집은 여전히 역할을 안 본다
-   * (서버가 403 을 낸다). 넓힐지는 이 필드가 정할 것이 아니다.
+   * **이 칸 하나가 에디터의 쓰기 입구를 전부 가른다**(이월 M′ · 2026-09-23). 셸(`routes/editor.tsx`)이 한 번 읽어 트리 ·
+   * 툴바 · 우측 패널 · 되돌리기 · 잠금에 내린다 — 받는 쪽은 역할을 모른다. **앞 판(이월 M)은 이것이 `editPageMeta`였고
+   * 설명 · 페이지 제목만 닫았다** — 메뉴 이름 · 순서 · 구조 편집 · 코멘트는 역할을 안 봐서 viewer 가 누르면 서버가 403 을
+   * 냈다. 칸을 둘로 두지 않고 넓힌 것은 §10 이 그 둘을 가르지 않기 때문이다(제목도 «페이지 편집»이다) — 둘로 두면 한쪽만
+   * 열린 역할이 생길 때 어느 입구가 어느 칸을 보는지를 사람이 외워야 한다.
+   *
+   * **조회는 이것으로 막지 않는다** — 뷰 모드 · 페이지 옮기기 · 코멘트 읽기 · 내보내기 · 스냅샷 목록은 viewer 에게 그대로다.
+   * 무엇이 숨고 무엇이 꺼지는지는 셸의 `canEdit` 주석이 갖는다. 서버의 403 은 방어로 그대로 선다.
    */
-  editPageMeta: boolean
+  editDesign: boolean
 }
 
 /** 아무것도 못 하는 상태. 역할을 모르거나 계약 밖 값일 때의 답이다. */
@@ -114,11 +119,11 @@ const NOTHING: ProjectAbilities = {
   editTheme: false,
   createSnapshot: false,
   restoreSnapshot: false,
-  editPageMeta: false,
+  editDesign: false,
 }
 
 /**
- * `owner`는 전부, `editor`는 **스냅샷 생성 하나**, 그 밖은 아무것도 못 한다.
+ * `owner`는 전부, `editor`는 **스냅샷 생성과 설계서 본문**, 그 밖은 아무것도 못 한다.
  *
  * **앞 판은 *"`role`이 `owner`일 때만 열린다"*였고 P6-1이 그것을 거짓으로 만들었다.**
  * §10이 스냅샷 **생성**을 editor에게 열었기 때문이다(복원만 owner다). 그때까지 이 함수가
@@ -166,12 +171,12 @@ export function projectAbilities(role: ProjectRole | undefined): ProjectAbilitie
       editTheme: true,
       createSnapshot: true,
       restoreSnapshot: true,
-      editPageMeta: true,
+      editDesign: true,
     }
   }
-  // **editor가 열 수 있는 것이 오늘 하나다**(§10 — 스냅샷 생성). 앞서 이 함수는
+  // **editor가 여는 것은 스냅샷 생성과 설계서 본문이다**(§10). 앞서 이 함수는
   // `role !== 'owner'`면 곧장 `NOTHING`이었는데, 그 형태는 *"owner가 아니면 아무것도 못
   // 한다"*를 함수 모양에 박아 둔 것이라 editor에게 열린 첫 자리에서 깨진다.
-  if (role === 'editor') return { ...NOTHING, createSnapshot: true, editPageMeta: true }
+  if (role === 'editor') return { ...NOTHING, createSnapshot: true, editDesign: true }
   return NOTHING
 }

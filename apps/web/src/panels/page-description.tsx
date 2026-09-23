@@ -74,8 +74,8 @@
  * 그 판의 근거는 *"여기만 막으면 편집 표면의 첫 역할 게이트가 되고, 같은 물음에 답하는 자리가 둘이 된다"*였다.
  * **사용자가 «숨긴다»로 판정했고**(2026-09-22 — 장부 §3.19 «판정 — 이월 다섯»), 설계 §9 가 이미 그렇게 적는다.
  *
- * **역할을 아는 자리는 여전히 하나다** — `projects/project-actions.ts`의 `projectAbilities`에 `editPageMeta`를
- * 더했고, 셸(`routes/editor.tsx`)이 그것을 이 패널(`canEdit`)과 메뉴 트리의 이름 변경에 함께 내린다. 이 패널은
+ * **역할을 아는 자리는 여전히 하나다** — `projects/project-actions.ts`의 `projectAbilities.editDesign`(이월 M 의
+ * `editPageMeta`를 M′ 이 에디터 전체로 넓혔다)을 셸(`routes/editor.tsx`)이 이 패널(`canEdit`)과 나머지 입구에 함께 내린다. 이 패널은
  * 역할을 읽지 않는다(`test/role-access.test.ts`가 센다). **서버의 403 은 그대로다** — 화면이 숨기는 것은 입구이고,
  * 막는 것은 여전히 `projectGuard('editor')`다.
  *
@@ -593,14 +593,14 @@ export function PageDescriptionPanel(props: {
   projectId: string
   pageId: string | undefined
   /**
-   * 설명을 고칠 수 있는가 — `projectAbilities(role).editPageMeta`(셸이 내린다). **이 패널은 역할을 모른다**
-   * (머리말 «viewer 에게는 읽기 전용이다»). 안 주면 고칠 수 있다 — 셸 밖에서 이 패널을 세우는 케이스들의 값이다.
+   * 설명을 고칠 수 있는가 — `projectAbilities(role).editDesign`(셸이 내린다). **이 패널은 역할을 모른다**
+   * (머리말 «viewer 에게는 읽기 전용이다»). **반드시 받는다**(이월 M′) — 앞 판은 안 주면 열렸는데, 새 호출자가 빠뜨리면
+   * 조용히 열리는 쪽이라 닫았다. 셸 밖에서 이 패널을 세우는 케이스는 없다.
    */
-  canEdit?: boolean
+  canEdit: boolean
 }): ReactElement {
   const api = useApi()
-  const { projectId, pageId } = props
-  const canEdit = props.canEdit ?? true
+  const { projectId, pageId, canEdit } = props
   const { state, draft, setDraft, save, setSave, saving, replace, settleWith } = usePageDescription(projectId, pageId)
 
   const server = state.status === 'ready' ? (state.description ?? '') : ''

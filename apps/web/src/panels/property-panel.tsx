@@ -80,9 +80,26 @@ export function lockedNotice(userName: string): string {
   return `${userName}님이 편집 중이라 바꿀 수 없습니다`
 }
 
+/**
+ * **고칠 수 없는 역할이라 꺼졌다**(이월 M′ — §10 viewer). 남의 잠금과 **같은 자리 · 같은 꼴**이다(위 `lockedNotice`) —
+ * 이 패널의 «꺼진 이유» 관례가 그것이고, 위젯은 값의 표시이기도 해서 숨기지 않고 끈다(셸 `canEdit`의 표).
+ */
+export const VIEWER_NOTICE = '보기 권한(viewer)이라 바꿀 수 없습니다'
+
+/**
+ * 위젯이 꺼진 이유 한 줄 — 없으면 `null`. **역할이 잠금보다 앞선다**: 잠금은 풀리길 기다리면 되지만 역할은 안 풀린다 —
+ * 둘 다일 때 잠금을 말하면 풀린 뒤에도 여전히 못 고치는 까닭을 숨긴다. 상호작용 탭이 같은 것을 부른다(두 벌 금지).
+ */
+export function blockedNotice(canEdit: boolean, lock: { userName: string } | null): string | null {
+  if (!canEdit) return VIEWER_NOTICE
+  return lock === null ? null : lockedNotice(lock.userName)
+}
+
 export function PropertyPanel(props: {
   projectId: string
   pageId: string | undefined
+  /** 고칠 수 있는가 — 셸의 `canEdit`(`projectAbilities(role).editDesign`). `false`면 위젯이 꺼지고 이유가 선다. */
+  canEdit: boolean
 }): ReactElement {
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다(`use-editor-store.tsx`의 주석 — `(s) => s`는 테스트 전용이다).
@@ -146,7 +163,10 @@ export function PropertyPanel(props: {
   // 친 글자를 지워서도 안 된다** — 이 가드는 요청만 막으므로, 초안을 드는 위젯이 스스로
   // 지킨다(`controls/list-control.tsx`의 `commitDraft` — Chrome 에서 목록 칸이 그 blur에
   // 초안을 잃었다).
-  const blocked = lock !== null
+  //
+  // **고칠 수 없는 역할도 같은 값을 지난다**(이월 M′) — 끄는 것과 커밋을 막는 것이 한 값이라 blur 커밋도 요청을 안 만든다.
+  const blocked = lock !== null || !props.canEdit
+  const notice = blockedNotice(props.canEdit, lock)
 
   if (node === undefined) {
     return <p className="wb-shell-panel-notice">{NO_SELECTION}</p>
@@ -203,7 +223,7 @@ export function PropertyPanel(props: {
           {/* **꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다.** 위젯이 없으면 설명할
               회색도 없으므로 이 갈래 안에만 둔다 — 편집할 속성이 없는 컴포넌트
               (`Page`·`Slot`)에서는 위의 문장이 이미 그 자리를 설명한다. */}
-          {lock !== null && <p className="wb-shell-panel-notice">{lockedNotice(lock.userName)}</p>}
+          {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
           <dl className="wb-shell-props">
             {/* **변형이 맨 앞이다.** 개별 prop이 아니라 이 노드가 어떤 표현인가를 정하는
                 것이라 상위이고, §6.5도 `variants`를 `base`/`parts` 위의 층으로 둔다. */}

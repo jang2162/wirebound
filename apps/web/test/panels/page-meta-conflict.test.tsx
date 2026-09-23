@@ -287,20 +287,7 @@ describe('viewer 는 읽기 전용이다(이월 M)', () => {
     expect(screen.queryByRole('button', { name: '설명 저장' })).toBeNull()
   })
 
-  /**
-   * 혼자 죽는 변조: 메뉴 트리가 `canEditPageMeta`를 훅에 안 넘긴다(`treeAbilities`의 셋째 인자가 늘 열림). **메뉴의
-   * 이름 변경은 열려 있다** — 메뉴의 이름은 페이지 메타가 아니다(`projectAbilities`의 `editPageMeta` 주석).
-   */
-  it('메뉴 트리 — 페이지의 «이름 변경»이 닫히고, 메뉴의 것은 열려 있다', async () => {
-    const server = metaServer(START)
-    await openPage(DOC, { apiOverrides: { ...server.overrides, getProject: async () => VIEWER_PROJECT } })
-    const tree = screen.getByRole('region', { name: '메뉴·페이지 트리' })
-    const rename = (): HTMLButtonElement =>
-      within(within(tree).getByRole('group', { name: '메뉴 편집' })).getByRole('button', { name: '이름 변경' }) as HTMLButtonElement
-
-    // 열린 페이지가 골라져 있다.
-    await waitFor(() => expect(rename().disabled).toBe(true))
-    fireEvent.click(within(tree).getByRole('button', { name: '회원관리' }))
-    expect(rename().disabled).toBe(false)
-  })
+  // **메뉴 트리의 케이스는 여기 없다**(이월 M′). 앞 판은 *"페이지의 «이름 변경»만 닫히고 메뉴의 것은 열려 있다"*를
+  // 쟀는데 M′ 이 그 뒷절을 거짓으로 만들었다 — viewer 에게는 메뉴 편집 툴바 자체가 없다. 그 자리는
+  // `test/routes/viewer-entries.test.tsx`의 «메뉴 트리» 케이스가 갖는다.
 })

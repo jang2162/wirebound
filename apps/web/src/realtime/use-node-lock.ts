@@ -61,6 +61,15 @@
  * **편집이 무방비가 되는 것은 아니다.** 루트를 고른 채로 내는 편집도 서버의 2차 방어를
  * 그대로 지난다(`lockPointers(ops)` — 잠긴 서브트리를 건드리면 거절된다). 놓는 것은
  * *"내가 여기 있다"*는 표시뿐이고, 루트에서 그 표시는 페이지 전체 정지와 같은 말이었다.
+ *
+ * # 고칠 수 없는 사람은 잡지 않는다
+ *
+ * **viewer 는 고르기만 한다**(이월 M′ — 셸이 `canHold`에 `projectAbilities(role).editDesign`을 넘긴다). 고르기는
+ * 읽기(속성 · 코멘트를 보려고 고른다)지만 잠금은 쓰기다 — 서버는 `lock` · `unlock`을 editor 게이트로 받고 viewer 의 것은
+ * 조용히 버린다(`apps/api/src/ws/protocol.ts`의 `MIN_ROLE_FOR_FRAME`). 버려진다고 보내도 되는 것은 아니다: 보내는
+ * 것 자체가 «조회 전용»을 어긴 프레임이다. **놓는 것도 같은 길이다** — `false`면 «잡을 자리가 없다»로 넘기므로 앞에
+ * 잡고 있던 것이 있으면 놓고(역할은 새로고침해야 바뀌므로 오늘은 없는 판이다), 없으면 아무것도 안 보낸다
+ * (`lock-channel.ts`의 `hold` — 잡은 것이 없으면 `unlock`도 안 보낸다).
  */
 import { useEffect } from 'react'
 import { useLockChannel } from './context'
@@ -72,7 +81,7 @@ import {
   useOpenPage,
 } from '../store/use-editor-store'
 
-export function useNodeLock(pageId: string | undefined): void {
+export function useNodeLock(pageId: string | undefined, canHold: boolean): void {
   const store = useEditorStoreInstance()
   const channel = useLockChannel()
   const user = useSessionUser()
@@ -95,6 +104,6 @@ export function useNodeLock(pageId: string | undefined): void {
     // 아직 아무 자리도 안 고른 것에 가깝다 — 앞에 잡고 있던 것이 있으면 여기서 놓는다.
     const holdId = selectedNodeId === rootId ? null : selectedNodeId
     // 통로가 없으면 아무것도 안 한다 — `RealtimeProvider` 없이 도는 화면이 그 판이다.
-    channel?.hold(onThisPage ? pageId : null, holdId)
-  }, [channel, pageId, selectedNodeId, onThisPage, rootId])
+    channel?.hold(onThisPage && canHold ? pageId : null, holdId)
+  }, [channel, pageId, selectedNodeId, onThisPage, rootId, canHold])
 }

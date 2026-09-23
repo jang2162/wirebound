@@ -198,7 +198,7 @@ const PANEL_TABS: Record<EditorMode, readonly { id: PanelTab; label: string }[]>
 /** 탭 하나의 본문. **표 기반이라 탭이 늘어도 삼항이 깊어지지 않는다**(P5-1 이월 §5). */
 const PANEL_BODIES: Record<
   PanelTab,
-  // `canEdit`은 «페이지 설명»만 본다(이월 M) — 나머지 본문은 받지 않는다(역할을 안 보는 편집 표면이다).
+  // `canEdit`은 **넷 다** 본다(이월 M′ — 셸의 `canEdit` 주석). 앞 판(이월 M)은 «페이지 설명»만 봤다.
   (props: { projectId: string; pageId: string | undefined; canEdit: boolean }) => ReactElement
 > = {
   props: PropertyPanel,
@@ -302,6 +302,24 @@ export function EditorShellRoute(): ReactElement {
 function EditorShell(props: { project: ProjectDetail; pageId: string | undefined }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
+  /** 이 사람이 이 프로젝트에 무엇을 할 수 있나 — **역할을 읽는 곳은 이 셸의 이 줄이다**(`projects/project-actions.ts`). */
+  const abilities = projectAbilities(props.project.role)
+  /**
+   * **설계서를 고칠 수 있는가**(§10 — viewer 는 *"조회 전용 — 편집·코멘트 모두 불가"*. 이월 M′). 이 값 하나가 에디터의
+   * 쓰기 입구를 전부 가른다 — 받는 쪽은 역할을 모르고 이 불리언만 받는다.
+   *
+   * **숨기느냐 끄느냐는 자리의 종류로 가른다 — 한 자리에 한 관례다:**
+   *
+   * | 자리 | viewer 에게 | 왜 |
+   * |---|---|---|
+   * | **동작 입구** — 메뉴 편집 툴바 · 빈 트리의 «최상위 메뉴» · 페이지 JSON · 구조 편집 툴바(프리셋 · 패턴 포함) · 되돌리기 · 코멘트 폼 · 코멘트의 «수정» · «삭제» · 트리 두 곳의 단축키 | **숨긴다**(DOM 에서 뺀다) | 역할은 기다려서 풀리는 것이 아니다 — 켜질 길이 없는 회색 단추는 소음이다(스냅샷 복원의 D11 · 테마 파생 단추 · 이월 M 의 «페이지 설명»과 같은 판단). 뷰 모드가 편집 도구를 빼는 방식과도 같아서 viewer 의 편집 모드 좌측은 뷰 모드의 좌측과 같다 |
+   * | **값을 보이는 칸** — 속성 패널 · 상호작용 패널의 위젯 | **끄고 이유 한 줄**(`panels/property-panel.tsx`의 `VIEWER_NOTICE`) | 그 칸이 곧 값의 표시다 — 숨기면 viewer 가 읽을 것을 잃는다. 그리고 두 패널에는 «꺼진 이유» 관례가 이미 있다(남의 잠금 — `lockedNotice`). 테마 고르개가 owner 가 아니면 `disabled`로 서는 것과도 같다 |
+   * | **잠금** — 노드를 고르는 것 | **잡지 않는다**(`useNodeLock`) | 고르기는 읽기다(속성 · 코멘트를 보려고 고른다). 서버는 viewer 의 `lock`을 조용히 버리지만(`MIN_ROLE_FOR_FRAME`) 보내는 것 자체가 쓰기 프레임이다 |
+   *
+   * **조회는 그대로다** — 모드 토글 · 뷰포트 · 줌 · 페이지 옮기기 · 노드 고르기 · 코멘트 읽기 · 탭 · 내보내기 · 스냅샷 목록.
+   * 역할이 바뀌면 새로고침해야 여기 닿는다(앞 판부터 — 셸이 프로젝트를 한 번 읽는다).
+   */
+  const canEdit = abilities.editDesign
   /**
    * **고르개가 테마를 바꿨다는 신호**(P4b-3 P2). 값에는 뜻이 없고 오를 때마다 캔버스가
    * 테마를 다시 조회한다.
@@ -382,7 +400,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
    * 스토어의 `openPageId`를 쓰면 주소가 바뀐 뒤 한 커밋 동안 **앞 페이지의 노드를 새 주소에서
    * 잡는다**(`useOpenPage`의 머리말).
    */
-  useNodeLock(props.pageId)
+  useNodeLock(props.pageId, canEdit)
 
   /**
    * **좌측의 폭과 두 영역의 배분.** 값·한계·보존은 `shell/sidebar-layout.ts`가 갖고, 여기는
@@ -442,14 +460,15 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             **겹layer를 함께 되돌리는 쪽을 고르지 않았다:** 되돌릴 대상이 문서가 아니라
             시연 상태라 *"어디까지"*가 정의되지 않는다(undo 한 칸이 겹layer 몇 칸인가).
             **원인을 없애는 쪽이 정의가 필요 없다.** */}
-        {mode === 'edit' && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
+        {/* **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
+        {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
         <ShellTools canvasRef={canvasRef} frameRef={frameRef} />
         {/* **테마 고르개**(P4b-3 D2). 셸 머리에 두는 것은 이것이 화면 **전체**를 바꾸기
             때문이다 — 페이지 하나가 아니라 이 프로젝트의 모든 화면이 갈린다.
             `role`을 그대로 넘겨 owner가 아니면 읽기 전용으로 그린다(서버도 막는다). */}
         <ThemePicker
           projectId={props.project.id}
-          canChoose={projectAbilities(props.project.role).chooseTheme}
+          canChoose={abilities.chooseTheme}
           onChanged={() => setThemeReloadToken((token) => token + 1)}
         />
         {/* **스냅샷 팝오버**(앞 판은 셸 밖 별도 라우트였다 — 뒤집힌 근거는
@@ -516,13 +535,16 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
 
               **앞 판에는 이 값이 없었고, 그래서 뷰 모드가 반만 뷰 모드였다:** 구조 트리는
               접히는데 좌측의 편집 도구는 그대로 남아 눌렸다(브라우저 실측 —
-              `이름 변경`·`옮기기`). */}
+              `이름 변경`·`옮기기`).
+
+              **viewer 에게는 편집 모드에서도 `false`다**(이월 M′ — `canEdit`). 셋이 이 값 하나로 함께 가므로 역할도 여기
+              한 번만 얹는다. 앞 판(이월 M)은 **페이지** 이름 변경만 따로 닫았는데(`canEditPageMeta`) 이 값이 그것을 덮어
+              그 칸은 없앴다 — 두 벌이면 한쪽만 고쳐지는 자리가 생긴다. */}
           <MenuTree
             projectId={props.project.id}
             pageId={props.pageId}
             reloadToken={restoredToken}
-            editable={mode === 'edit'}
-            canEditPageMeta={projectAbilities(props.project.role).editPageMeta}
+            editable={mode === 'edit' && canEdit}
           />
         </ShellRegion>
         {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를
@@ -568,7 +590,8 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             >
               {/* `projectId`는 메뉴 트리와 같은 이유로 **조회해 온 프로젝트의 id**다.
                   구조 편집이 그것을 `PATCH /projects/:id/pages/:id/ops`의 경로로 쓴다. */}
-              <StructureTree projectId={props.project.id} pageId={props.pageId} />
+              {/* **트리는 viewer 도 본다**(읽기 — 노드를 골라 속성 · 코멘트를 본다). 툴바와 단축키만 `canEdit`으로 간다. */}
+              <StructureTree projectId={props.project.id} pageId={props.pageId} editable={canEdit} />
             </ShellRegion>
           </>
         )}
@@ -602,12 +625,8 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
       </main>
 
       <aside className="wb-shell-panel" aria-label="우측 패널">
-        {/* **제목 · 설명을 고칠 수 있는가**(이월 M) — 메뉴 트리와 같은 판정 하나를 둘에 내린다. */}
-        <RightPanel
-          projectId={props.project.id}
-          pageId={props.pageId}
-          canEditPageMeta={projectAbilities(props.project.role).editPageMeta}
-        />
+        {/* **본문 넷이 같은 `canEdit`을 받는다**(이월 M′) — 속성 · 상호작용은 끄고, 코멘트 폼 · 설명 편집기는 숨긴다. */}
+        <RightPanel projectId={props.project.id} pageId={props.pageId} canEdit={canEdit} />
       </aside>
     </div>
   )
@@ -647,7 +666,8 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
 function RightPanel(props: {
   projectId: string
   pageId: string | undefined
-  canEditPageMeta: boolean
+  /** 설계서를 고칠 수 있는가 — 셸의 `canEdit`. 본문에 그대로 내린다. */
+  canEdit: boolean
 }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
@@ -703,7 +723,7 @@ function RightPanel(props: {
         >
           {(() => {
             const Body = PANEL_BODIES[tab]
-            return <Body projectId={props.projectId} pageId={props.pageId} canEdit={props.canEditPageMeta} />
+            return <Body projectId={props.projectId} pageId={props.pageId} canEdit={props.canEdit} />
           })()}
         </div>
       </PanelDraftsProvider>

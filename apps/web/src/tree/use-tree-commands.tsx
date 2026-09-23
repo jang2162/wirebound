@@ -135,8 +135,6 @@ export function useTreeCommands(props: {
   pageId: string | undefined
   /** 오를 때마다 트리를 다시 받는다. 지금 올리는 것은 스냅샷 복원 하나다(아래 이펙트). */
   reloadToken: number
-  /** 페이지의 제목을 고칠 수 있는가(`projectAbilities(role).editPageMeta` — 이월 M). 안 주면 열린다. */
-  canEditPageMeta?: boolean
 }): TreeCommands {
   const api = useApi()
   // **이 단계가 앱의 첫 `useNavigate`다**(D8). 지금 앱의 이동은 전부 렌더 시점 판정이고
@@ -200,7 +198,7 @@ export function useTreeCommands(props: {
     picked ?? (pageId !== undefined ? { kind: 'page', id: pageId } : null)
 
   const menu = state.status === 'ready' ? state.menu : null
-  const abilities = treeAbilities(menu, selection, props.canEditPageMeta ?? true)
+  const abilities = treeAbilities(menu, selection)
 
   /**
    * 트리를 받는다. `reload`가 `true`면 `loading`으로 되돌리지 않는다 — 조작 뒤의 재조회에서

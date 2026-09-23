@@ -189,12 +189,6 @@ interface PageVisit {
 export function treeAbilities(
   menu: TreeMenuNode[] | null,
   selection: TreeSelection | null,
-  /**
-   * 페이지의 제목을 고칠 수 있는가 — `projectAbilities(role).editPageMeta`(이월 M). **이 파일은 역할을 모른다** —
-   * 셸이 판정한 값을 받는다. 닫히는 것은 **페이지의** 이름 변경뿐이다(메뉴의 이름은 페이지 메타가 아니다).
-   * 안 주면 열린다 — 역할을 모르는 호출자(케이스)의 값이다.
-   */
-  editPageMeta = true,
 ): TreeAbilities {
   if (menu === null || selection === null) return NOTHING
 
@@ -231,7 +225,7 @@ export function treeAbilities(
     // 페이지는 컨테이너가 아니다 — 안에 메뉴도 페이지도 담지 못한다.
     addMenu: false,
     addPage: false,
-    rename: editPageMeta,
+    rename: true,
     remove: true,
     moveUp: visit.index > 0,
     moveDown: visit.index < visit.siblings.length - 1,
