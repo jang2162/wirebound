@@ -148,8 +148,10 @@ import {
   deleteComment,
   findCommentById,
   findCommentByIdempotencyKey,
+  hasCommentTombstone,
   insertComment,
   listComments,
+  lockProjectForBurial,
   updateCommentBody,
   type CommentRecord,
 } from '../repos/comments'
@@ -319,10 +321,28 @@ const UpdateCommentBody = z.strictObject({ body: Body })
  * 낡음(`stale`) · 적용 불가(`http/edit-outcome.ts`). 셋 다 `code: 'conflict'`라 문장 말고는 가를 값이 없었다.
  * 웹은 이 409 를 **«그 키의 게시는 이미 달렸고 그 뒤 고쳐졌다»**로 읽는다 — 웹은 초안을 고치면 새 키를 지으므로,
  * 같은 키에 다른 글이 오는 길은 앞 행이 그 사이 **고쳐진** 판뿐이다(`apps/web/src/panels/comment-panel.tsx`의
- * `reusedKey`). 상태 · `code` · 문장은 그대로다 — 계약의 모양이 안 바뀐다(`issues`는 이미 선택 필드다).
+ * `keyVerdict`). 상태 · `code` · 문장은 그대로다 — 계약의 모양이 안 바뀐다(`issues`는 이미 선택 필드다).
  */
 export const REUSED_KEY = 'idempotency-key-reused'
 const REUSED_KEY_MESSAGE = '같은 멱등 키로 다른 코멘트가 이미 달렸습니다'
+
+/**
+ * **그 키의 게시는 달렸다가 그 뒤 지워졌다**(2026-09-23 — 이월 AC′, `0013-comment-tombstones`). `REUSED_KEY`와 같은
+ * 꼴(409 · `code: 'conflict'` · 이슈 하나)이고 이슈 코드만 다르다 — 웹은 이 코드 하나로 «이미 달렸고 그 뒤
+ * 지워졌다»로 끝낸다(초안 · 키 버림 · 목록 다시 받기 — `apps/web/src/panels/comment-panel.tsx`의 `keyVerdict`).
+ *
+ * **누가 지웠는지 말하지 않는다** — 묘비는 지운 사람을 적지 않는다. 제 손(다른 탭) · 남의 손 · 복원이 모두 같은
+ * 답이다(3차 `late`와 같은 원칙: 서버가 아는 것만 말한다).
+ *
+ * **글은 견주지 않는다** — 묘비는 본문을 들지 않는다(지문을 드는 것이 이월 AC 의 원래 처방이고, 판정으로 닫았다).
+ * 웹은 초안을 고치면 새 키를 지으므로 같은 키는 같은 글이다.
+ */
+export const DELETED_KEY = 'idempotency-key-deleted'
+const DELETED_KEY_MESSAGE = '같은 멱등 키로 달린 코멘트가 그 뒤 지워졌습니다'
+
+function deletedKey() {
+  return conflict(DELETED_KEY_MESSAGE, [{ path: 'idempotencyKey', message: DELETED_KEY_MESSAGE, code: DELETED_KEY }])
+}
 
 /**
  * **같은 키로 이미 달린 게시에 답한다 — 앞 행을 그대로 돌려준다.** 새 행도, 새 번호도,
@@ -400,7 +420,18 @@ export async function replayBeforeGuard(request: FastifyRequest, reply: FastifyR
 
   const db = request.server.db
   const existing = await findCommentByIdempotencyKey(db, pageId, currentUser.id, key)
-  if (existing === null) return undefined
+  if (existing === null) {
+    // **달렸다가 지워졌으면 그것도 여기서 말한다**(이월 AC′) — 재생과 같은 자리, 같은 순서다(행을 먼저 찾고
+    // 페이지를 나중에). 가드 뒤에서만 보면 그 사이 권한을 잃은 사람은 403·404 를 받고, 웹은 그것을 «안 달림»으로
+    // 확정한다 — 달렸고 지워졌다는 사실이 거짓으로 바뀐다. 묘비는 프로젝트에 매여(`0014`) 페이지가 지워져도 남는다 —
+    // 그래서 페이지를 **뒤에** 본다: 페이지가 없으면 여기서 빠지고 가드 · 핸들러가 404 를 낸다(복원이 되살리면 409).
+    // 두 조회 사이에 행이 지워지고 묘비가 서면(삭제가 커밋되면) 그 묘비를 본다 — 한 문장으로 지우고 묻으므로
+    // «행도 묘비도 없는» 틈은 삭제 쪽에 없다. 첫 게시가 아직 커밋 중이면 둘 다 없어 핸들러로 가고, 거기서 잠근 뒤
+    // 다시 본다.
+    if (!(await hasCommentTombstone(db, pageId, currentUser.id, key))) return undefined
+    if (!(await findPageById(db, projectId, pageId))) return undefined
+    throw deletedKey()
+  }
   const page = await findPageById(db, projectId, pageId)
   if (!page) return undefined
   let document: PageDocument
@@ -584,6 +615,12 @@ export function commentRoutes() {
         if (key !== undefined) {
           const existing = await findCommentByIdempotencyKey(trx, pageId, currentUser.id, key)
           if (existing !== null) return { replay: replayOf(existing, body, migrateDocument(locked.schema), locked.headSeq) }
+          // **달렸다가 지워졌다**(이월 AC′). 가드 앞에서 둘 다 못 본 것은 첫 게시가 아직 커밋 중이었기 때문이다 —
+          // 그 뒤 첫 게시와 삭제가 **이 요청보다 먼저** 페이지 행 잠금을 지나 커밋했으면 여기서 묘비를 본다. 삭제도
+          // 페이지 행을 먼저 잠그므로(`lockAndCheck` — 복원은 `lockProjectForRestore`) 이 조회와 겹칠 수 없다. 이
+          // 조회가 없으면 새 행을 세운다 — 되살림이다(`test/comment-tombstone.test.ts`의 동시성 판). 낡음보다 먼저인
+          // 이유는 재생과 같다.
+          if (await hasCommentTombstone(trx, pageId, currentUser.id, key)) throw deletedKey()
         }
         // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). 잠금 대기 동안 강등·제외됐으면
         // 여기서 가드와 같은 403·404 로 끝나고 아무것도 안 남는다. **재생 뒤다** — 이미 커밋된 자기 행은 권한을
@@ -742,6 +779,10 @@ export function commentRoutes() {
           // - **B5** — 앞의 요청이 번호를 지워 `head_seq`가 올랐으면 여기서 `stale`로
           //   끊긴다. **행을 지우기 전에** 끊기므로 *"409를 받았는데 코멘트가 사라져
           //   있다"*가 성립하지 않는다.
+          // **묻을 트랜잭션의 첫 잠금 — 페이지 행보다 먼저**(`repos/comments.ts`의 `lockProjectForBurial`). 묘비의 FK 가
+          // 프로젝트 행에 거는 `KEY SHARE`를 페이지 행을 쥔 뒤에 처음 잡으면 복원 · 프로젝트 삭제(프로젝트 → 페이지)와
+          // 고리가 된다(`test/comment-tombstone.test.ts`의 «코멘트 삭제 ∥ 복원»).
+          await lockProjectForBurial(trx, projectId)
           await lockAndCheck(trx, projectId, pageId, page.headSeq)
           // **커밋 순간의 권한**(이월 AA). 잠금 대기 뒤의 역할로 판정한다 — 게시와 같은 자리다.
           await recheckProjectRole(trx, request)

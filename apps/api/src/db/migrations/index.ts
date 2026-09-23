@@ -11,6 +11,8 @@ import { migration as m0009 } from './0009-snapshots'
 import { migration as m0010 } from './0010-presets'
 import { migration as m0011 } from './0011-api-tokens'
 import { migration as m0012 } from './0012-comment-idempotency-key'
+import { migration as m0013 } from './0013-comment-tombstones'
+import { migration as m0014 } from './0014-comment-tombstones-project'
 
 /**
  * 정적 마이그레이션 레지스트리.
@@ -37,6 +39,8 @@ export const MIGRATIONS: Record<string, Migration> = {
   '0010-presets': m0010,
   '0011-api-tokens': m0011,
   '0012-comment-idempotency-key': m0012,
+  '0013-comment-tombstones': m0013,
+  '0014-comment-tombstones-project': m0014,
 }
 
 export const migrationProvider: MigrationProvider = {

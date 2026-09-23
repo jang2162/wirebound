@@ -188,6 +188,27 @@ export async function findCommentByIdempotencyKey(
 }
 
 /**
+ * 그 사람이 그 키로 이 페이지에 단 게시가 **달렸다가 지워졌는가**(`0013-comment-tombstones` — 이월 AC′).
+ * 범위는 `findCommentByIdempotencyKey`와 같다 — 남의 묘비는 이 조회에 안 걸린다.
+ */
+export async function hasCommentTombstone(
+  db: DbHandle,
+  pageId: string,
+  authorId: string,
+  idempotencyKey: string,
+): Promise<boolean> {
+  const row = await db
+    .selectFrom('comment_tombstones')
+    .select('comment_id')
+    .where('page_id', '=', pageId)
+    .where('author_id', '=', authorId)
+    .where('idempotency_key', '=', idempotencyKey)
+    .executeTakeFirst()
+
+  return row !== undefined
+}
+
+/**
  * 이 노드에 붙은 코멘트 수. **D3의 *"마지막 코멘트를 지우면 번호가 사라진다"*를 판정하는
  * 자리다** — 라우트가 삭제 **뒤에** 이것을 세어 0이면 문서에서 `marker`를 지운다.
  *
@@ -270,24 +291,89 @@ export async function updateCommentBody(
 }
 
 /**
+ * **지우며 묻는다 — 코멘트를 지우는 문장은 이것 하나다**(`0013-comment-tombstones` · `0014` — 이월 AC′).
+ * `commentId`가 있으면 그 행 하나(`deleteComment`), 없으면 그 페이지의 행 전부(`deletePageComments`)다.
+ *
+ * **지우기와 묻기가 한 문장이다**(데이터를 바꾸는 CTE). 두 문장이면 둘 사이의 실패나, 트랜잭션 밖에서 이 함수를
+ * 부르는 날 «행은 지웠는데 묘비가 없다»가 설 수 있고, 그것이 곧 되살림이다. 부르는 자리가 전부 트랜잭션 안인
+ * 오늘도 그 순서에 기대지 않는다.
+ *
+ * **묘비의 `project_id`는 페이지에서 읽는다** — 코멘트는 프로젝트를 모른다(`listProjectComments`의 머리말). 그
+ * 페이지는 이 문장이 도는 동안 살아 있다: 페이지 삭제는 이것을 **먼저** 부르고 페이지를 지운다(`deletePage`).
+ *
+ * **부르는 트랜잭션은 프로젝트 행을 먼저 잡는다**(`lockProjectForBurial` · 페이지 삭제는 `lockProjectTree`) — 묘비 삽입이 FK 로 그 행에 거는
+ * `FOR KEY SHARE`가 페이지 행을 쥔 뒤에 처음 잡히면, 프로젝트 행 → 페이지 행 순으로 잡는 복원 · 프로젝트 삭제와
+ * 고리가 된다.
+ */
+async function deleteAndBury(db: DbHandle, pageId: string, commentId: string | null) {
+  const oneRow = commentId === null ? sql`` : sql`and id = ${commentId}`
+  const result = await sql<{ node_id: string }>`
+    with gone as (
+      delete from comments
+       where page_id = ${pageId} ${oneRow}
+      returning id, page_id, author_id, idempotency_key, node_id
+    ), buried as (
+      insert into comment_tombstones (comment_id, page_id, project_id, author_id, idempotency_key)
+      select g.id, g.page_id, p.project_id, g.author_id, g.idempotency_key
+        from gone g join pages p on p.id = g.page_id
+       where g.idempotency_key is not null
+    )
+    select node_id from gone
+  `.execute(db)
+  return result.rows
+}
+
+/**
  * 코멘트를 지운다. **하드 삭제다**(계획서 재라 #5) — 근거는 `routes/comments.ts`의 머리말에 있다.
  *
  * 없으면 `'not-found'`다. 지운 행의 `nodeId`를 함께 돌려주는 것은 라우트가 **그 노드에
  * 남은 코멘트가 있는지**를 세야 하기 때문이다(D3) — 지우고 나면 그 값을 다시 읽을 수 없다.
+ *
+ * **키가 있던 행이면 묘비를 남긴다**(`deleteAndBury`). 코멘트 하나를 지우는 길은 둘이고(라우트의 `DELETE` · 복원의
+ * `delete-comment`) 둘 다 이 함수를 지난다. 페이지째 지우는 길은 `deletePageComments`가 같은 문장으로 묻는다.
+ * 프로젝트 삭제의 CASCADE 는 묻지 않는다 — 묘비도 프로젝트와 함께 간다(`0014`).
  */
 export async function deleteComment(
   db: DbHandle,
   pageId: string,
   commentId: string,
 ): Promise<{ nodeId: string } | 'not-found'> {
-  const row = await db
-    .deleteFrom('comments')
-    .where('page_id', '=', pageId)
-    .where('id', '=', commentId)
-    .returning('node_id')
-    .executeTakeFirst()
-
+  const row = (await deleteAndBury(db, pageId, commentId))[0]
   return row ? { nodeId: row.node_id } : 'not-found'
+}
+
+/**
+ * 그 페이지의 코멘트를 전부 지우며 키 있는 행을 묻는다(`0014-comment-tombstones-project` — 리뷰 P4). **페이지 삭제가
+ * CASCADE 전에 부른다**(`repos/pages.ts`의 `deletePage`). CASCADE 에 맡기면 묘비 없이 사라져, 복원이 그 페이지를
+ * 되살린 뒤 같은 키 재전송이 되살림(201)이다.
+ *
+ * 부르는 자리는 그 페이지 행을 `FOR UPDATE`로 쥔 채 부른다 — 쥐지 않으면 이 문장과 페이지 `DELETE` 사이에 커밋된
+ * 게시가 묘비 없이 CASCADE 로 간다(`test/comment-tombstone.test.ts`의 동시성 판).
+ */
+export async function deletePageComments(trx: DbHandle, pageId: string): Promise<void> {
+  await deleteAndBury(trx, pageId, null)
+}
+
+/**
+ * **묻을 트랜잭션의 첫 잠금** — 프로젝트 행을 `FOR KEY SHARE`로 잡는다(`0014-comment-tombstones-project`).
+ *
+ * 묘비의 FK 가 프로젝트를 가리키므로 묘비 삽입은 어차피 이 잠금을 건다. 문제는 **언제**다 — 페이지 행을 쥔 뒤에
+ * 처음 잡으면, 프로젝트 행을 `FOR UPDATE`로 쥐고 페이지 행을 기다리는 복원(`lockProjectForRestore`) · 프로젝트 삭제
+ * (`routes/projects.ts`)와 서로를 기다린다. 그래서 페이지를 잡기 전에 먼저 잡는다 — 그쪽이 쥐고 있으면 페이지를
+ * 쥐기 전에 기다린다(고리가 아니다).
+ *
+ * 부르는 자리: 코멘트 `DELETE`(`routes/comments.ts`). **페이지 삭제(`repos/pages.ts`의 `deletePage`)는 이것을 안 부른다** —
+ * 트리 쓰기의 첫 잠금 `lockProjectTree`(`FOR NO KEY UPDATE` — 이월 5차 A)가 같은 자리에서 먼저 잡고, 그것은 제 트랜잭션의
+ * FK `KEY SHARE`와 안 부딪히며 복원 · 프로젝트 삭제의 `FOR UPDATE`와는 페이지를 잡기 전에 기다린다. 복원은 프로젝트
+ * 행을 이미 `FOR UPDATE`로 쥐고 묻는다. `KEY SHARE`는 다른 `KEY SHARE` · `FOR SHARE` · `NO KEY UPDATE`와 부딪히지
+ * 않는다 — 같은 프로젝트의 코멘트 삭제끼리는 줄을 서지 않는다.
+ *
+ * 대상이 없으면(그 사이 지워졌다) 아무것도 안 잡는다 — 뒤의 페이지 잠금(`lockAndCheck`)이 없음을 보고 404 가 된다.
+ * `lockProjectTree`처럼 `ProjectGoneError`를 던지지 않는 것은 뒤에 그 판정을 하는 자리가 이미 있어서다(답은 같은 404).
+ */
+export async function lockProjectForBurial(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectForBurial')
+  await trx.selectFrom('projects').select('id').where('id', '=', projectId).forKeyShare().execute()
 }
 
 /**
@@ -334,6 +420,18 @@ export async function insertCommentWithId(
     updatedAt: Date
   },
 ): Promise<void> {
+  // **지웠던 행을 같은 id 로 되살리면 키도 돌려준다**(`0013-comment-tombstones`). payload 에는 키가 없다 —
+  // 그 행의 키를 아는 것은 지울 때 남긴 묘비뿐이다. 묘비를 지우며 키를 되붙이므로 같은 키 재전송은 다시
+  // 재생(200)이 된다. 앞 판은 키가 `NULL`이라 재전송이 새 행을 세웠다(같은 글 두 행). 되붙이지 않고 묘비만
+  // 남기면 반대로 틀린다 — 행이 서 있는데 «그 뒤 지워졌다».
+  const buried = await trx
+    .deleteFrom('comment_tombstones')
+    .where('comment_id', '=', input.id)
+    .where('page_id', '=', input.pageId)
+    .where('author_id', '=', input.authorId)
+    .returning('idempotency_key')
+    .executeTakeFirst()
+
   await trx
     .insertInto('comments')
     .values({
@@ -344,6 +442,7 @@ export async function insertCommentWithId(
       author_id: input.authorId,
       created_at: input.createdAt,
       updated_at: input.updatedAt,
+      ...(buried === undefined ? {} : { idempotency_key: buried.idempotency_key }),
     })
     .execute()
 }
