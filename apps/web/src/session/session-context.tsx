@@ -78,7 +78,7 @@
  * - **다른 사람이면 목록이다 — 로그인 화면이 아니다.** 쿠키가 이미 새 사람의 것이라 로그인 화면은 «로그인한
  *   사람은 `/login`에 머물지 않는다»(`RedirectWhenAuthenticated`)와 어긋난다. 그 자리에 머물지도 않는다 — 앞 사람이
  *   치던 초안과 앞 사람의 권리로 받은 화면이 새 사람의 것으로 남으면, 돌아온 사람이 머리의 이름만 바뀐 화면에서
- *   **새 사람의 이름으로** 쓴다. 초안을 살리는 것은 이월 X(`sessionStorage`)의 몫이다.
+ *   **새 사람의 이름으로** 쓴다. 앞 사람의 초안은 탭의 저장소에서 지운다(아래 «초안의 사본» — 리뷰 (c)).
  * - **세션 확인(`me()`)이 도는 동안 소식이 오면 소식이 이긴다** — 그 확인은 소식보다 먼저 나갔으므로 낡은 쿠키를
  *   답했을 수 있다(`superseded`).
  *
@@ -86,6 +86,22 @@
  * 받아 세대를 올리기까지, 이 탭이 내는 요청은 새 쿠키로 나간다. 값과 닫는 길(서버가 «요청한 탭이 아는 사용자»를
  * 확인한다 — api 의 일)은 이 슬라이스의 보고서가 갖는다. **알림 없이 쿠키가 바뀌는 길**(앱 밖에서 부른
  * `/api/auth/login` — 개발자 도구 · 다른 도구)도 이것으로는 모른다.
+ *
+ * ## 초안의 사본 — 명시적 로그아웃에 지우고, 다른 사람이 들어오면 앞 사람의 것을 지운다 (2026-09-23, 이월 X · 리뷰 (c))
+ *
+ * 초안과 코멘트의 멱등 키는 탭의 `sessionStorage`에 비춰 둔다(`panels/draft-store.tsx`) — 새로고침과 세션 만료를
+ * 넘는다. **지우는 자리는 위 «탭 사이»가 이미 가진 신호 그대로다** — 새 신호를 세우지 않았다.
+ *
+ * | 끝 | 사본 | 까닭 |
+ * |---|---|---|
+ * | 로그아웃 단추(`signOut`) | **지운다**(사람을 가리지 않고 이 탭의 것 전부) · **세대를 올려** 그 번호를 소식에 싣는다(`forget`) | «로그아웃했다» 뒤에 그 사람의 글이 이 브라우저에 남으면 안 된다(공용 기기) |
+ * | 다른 탭의 로그아웃(`signed-out`) | **지운다** · 소식의 번호로 세대를 `max`만 한다(`forgetHeard`) | 같다. 듣는 탭이 번호를 지으면 늦게 들은 탭이 로그아웃 **뒤의** 사본을 지운다(리뷰 R2 — `draft-store.tsx`) |
+ * | 401(`invalidate`) | 둔다 | 원하지 않은 끝이다 — 같은 사람이 다시 들어오면 이어 쓴다. 쿠키가 정말 죽었는지도 모른다(위 표의 401 줄) |
+ * | 이 탭의 사람을 알았다 — 마운트의 `me()` · 이 탭의 로그인(`confirm`) · 다른 탭의 로그인(`signed-in`) | **그 사람이 아닌 칸을 지운다**(`admit`) | 앞 판은 칸이 갈려 안 보이기만 했다 — 앞 사람의 원문이 명시적 로그아웃까지 그 탭에 남았다(리뷰 (c)). 같은 사람이면 지울 것이 없다. **대가: 앞 사람이 그 탭에 돌아와도 초안은 없다** |
+ *
+ * `admit`을 **다른 사람일 때만** 부르지 않고 사람을 알 때마다 부른다 — 같은 사람이면 지울 칸이 없으므로 결과가
+ * 같고, 갈래를 여기서 한 번 더 고르면 `heard`와 판정이 두 벌이 된다. 마운트의 `me()`가 든 것은 **다른 사람의 쿠키로
+ * 다시 선 탭**(닫아 둔 탭을 다시 열었더니 그 사이 다른 탭이 밥으로 들어왔다 · 새로고침)도 같은 «들어옴»이라서다.
  */
 import {
   createContext,
@@ -100,6 +116,7 @@ import {
 } from 'react'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
+import { useDraftStore } from '../panels/draft-store'
 import type { SessionUser } from './../api/types'
 import { useTabChannel, type SessionNews } from './tab-channel'
 
@@ -179,6 +196,7 @@ const SessionContext = createContext<SessionContextValue | null>(null)
 export function SessionProvider(props: { children: ReactNode }): ReactElement {
   const api = useApi()
   const channel = useTabChannel()
+  const drafts = useDraftStore()
   const [session, setSession] = useState<Session>({ state: PENDING, user: null, epoch: 0, renewal: 0 })
   /** 다른 탭의 소식이 왔다 — 그보다 먼저 나간 마운트의 `me()` 답은 낡았을 수 있다(«탭 사이»). */
   const superseded = useRef(false)
@@ -191,6 +209,8 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
     api.me().then(
       (sessionUser) => {
         if (!alive || superseded.current) return
+        // **이 탭의 사람을 알았다** — 그 사람이 아닌 칸을 지운다(아래 «초안의 사본»).
+        drafts?.admit(sessionUser.id)
         setSession((current) => ({ ...current, state: AUTHENTICATED, user: sessionUser }))
       },
       (caught: unknown) => {
@@ -214,6 +234,8 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
     return () => {
       alive = false
     }
+    // `drafts`를 의존에 안 넣는다 — 문서가 사는 동안 하나이고(`main.tsx`), 넣으면 그것이 바뀔 때 `me()`가 다시 나간다
+    // (위 머리말 «`me()`는 마운트에 한 번뿐이다»).
   }, [api])
 
   // **순환을 닫는 다리는 아래 `current.state.status === 'anonymous' ? current : …`다.**
@@ -235,14 +257,19 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
   const announce = useCallback((news: SessionNews) => channel?.post(news), [channel])
 
   const signOut = useCallback(() => {
+    // **명시적 로그아웃이면 이 탭의 초안 사본을 지운다**(아래 «초안의 사본») — 세션을 끝내기 **전에**: 지운 뒤에
+    // 그 사람의 화면이 한 번 더 커밋돼도 저장소가 그것을 받지 않는다(`panels/draft-store.tsx`의 `generation`).
+    // **올린 세대를 소식에 싣는다** — 듣는 탭은 그 번호로 `max`만 한다(`panels/draft-store.tsx`의 «표지는 세대 번호다»).
+    const era = drafts?.forget()
     setSession(ended)
-    announce({ kind: 'signed-out' })
-  }, [announce])
+    announce(era === undefined ? { kind: 'signed-out' } : { kind: 'signed-out', era })
+  }, [announce, drafts])
 
   const confirm = useCallback(
     (sessionUser: SessionUser) => {
       // **세대는 안 올린다** — 앞 세션은 `invalidate`가 이미 끝냈고, 세션이 없는 동안에는 쓰기가 없다
-      // (위 머리말 «세션 세대»).
+      // (위 머리말 «세션 세대»). **이 탭의 사람을 알았다** — 그 사람이 아닌 칸을 지운다(위 머리말 «초안의 사본»).
+      drafts?.admit(sessionUser.id)
       setSession((current) =>
         current.state.status === 'authenticated'
           ? { ...current, user: sessionUser }
@@ -250,7 +277,7 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
       )
       announce({ kind: 'signed-in', user: sessionUser })
     },
-    [announce],
+    [announce, drafts],
   )
 
   // **다른 탭의 소식을 듣는다**(위 머리말 «탭 사이»). 갈래는 순수한 `heard`가 고르고, 받은 뒤로는 마운트의
@@ -259,9 +286,13 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
     if (channel === null) return undefined
     return channel.listen((news) => {
       superseded.current = true
+      // 다른 탭의 로그아웃도 명시적 로그아웃이다 — 이 탭의 초안 사본을 지운다(위 머리말 «초안의 사본»). 다른 탭의
+      // 로그인이면 이 탭의 사람이 그 사람이 된다 — 그 사람이 아닌 칸을 지운다.
+      if (news.kind === 'signed-out') drafts?.forgetHeard(news.era)
+      else drafts?.admit(news.user.id)
       setSession((current) => heard(current, news))
     })
-  }, [channel])
+  }, [channel, drafts])
 
   // **같은 사람의 새 세션을 알리면 단 것을 부른다** — 커밋 뒤에 부른다(업데이터는 순수해야 한다). 첫 값(0)에는
   // 부르지 않는다: 오른 적이 없다.

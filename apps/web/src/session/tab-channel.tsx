@@ -37,8 +37,16 @@
 import { createContext, useContext, type ReactElement, type ReactNode } from 'react'
 import type { SessionUser } from '../api/types'
 
-/** 다른 탭에 알리는 것. **이 탭에서 일어난 일**만 알린다 — 무엇을 내는지는 `session-context.tsx`의 «탭 사이». */
-export type SessionNews = { readonly kind: 'signed-in'; readonly user: SessionUser } | { readonly kind: 'signed-out' }
+/**
+ * 다른 탭에 알리는 것. **이 탭에서 일어난 일**만 알린다 — 무엇을 내는지는 `session-context.tsx`의 «탭 사이».
+ *
+ * `signed-out`의 `era`는 초안 사본의 **로그아웃 세대**다(`panels/draft-store.tsx`의 «표지는 세대 번호다»). 로그아웃한
+ * 탭만 번호를 짓고 듣는 탭은 그 번호로 `max`만 한다. **없을 수 있다** — 옛 판 탭의 소식이거나, 사본을 세우지 않은
+ * 앱(테스트)이다.
+ */
+export type SessionNews =
+  | { readonly kind: 'signed-in'; readonly user: SessionUser }
+  | { readonly kind: 'signed-out'; readonly era?: number }
 
 export interface TabChannel {
   /** 다른 탭들에 알린다. **보낸 탭에는 안 온다.** */
@@ -54,7 +62,13 @@ export const TAB_CHANNEL_NAME = 'wirebound-session'
 export function readNews(data: unknown): SessionNews | null {
   if (typeof data !== 'object' || data === null) return null
   const kind = (data as { kind?: unknown }).kind
-  if (kind === 'signed-out') return { kind }
+  if (kind === 'signed-out') {
+    // **번호가 없으면 옛 판의 소식이다 — 받는다**(로그아웃은 로그아웃이다). **있는데 세대의 모양(0 이상의 정수)이
+    // 아니면 버린다** — 모르는 번호로 표지를 올리면 그 브라우저의 초안이 전부 «로그아웃보다 앞선 것»이 된다.
+    if (!('era' in data)) return { kind }
+    const era = (data as { era?: unknown }).era
+    return Number.isSafeInteger(era) && (era as number) >= 0 ? { kind, era: era as number } : null
+  }
   if (kind !== 'signed-in') return null
   const user = (data as { user?: unknown }).user
   if (typeof user !== 'object' || user === null) return null

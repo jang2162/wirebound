@@ -374,6 +374,7 @@ describe('POST .../comments — 번호 부여(D2·D3)', () => {
  * |---|---|
  * | 재생도 번호 변화(`markerOps`)를 다시 싣는다 | *"같은 키가 다시 오면 …"* |
  * | 같은 키에 다른 글이어도 앞 행을 돌려준다 | *"같은 키에 다른 글이 오면 409 …"* |
+ * | 그 409 에서 이슈 코드(`REUSED_KEY`)를 뺀다 | *"첫 게시 뒤 그 코멘트가 고쳐졌으면 …"* |
  * | 키가 없어도 같은 (노드, 본문)이면 합친다 | *"키가 없으면 예전 그대로다 …"* |
  * | 키 값을 안 본다(내 키 있는 행이면 합친다) | *"키가 다르면 같은 말이어도 새 행이다"* |
  * | 키의 범위에서 작성자를 뺀다 | *"남이 같은 키를 실어도 …"* |
@@ -437,6 +438,32 @@ describe('POST .../comments — 멱등 키', () => {
       expect(edited.json().error.message).toBe('같은 멱등 키로 다른 코멘트가 이미 달렸습니다')
       expect(moved.statusCode, moved.body).toBe(409)
       expect((await rows(ctx, fx)).map((row) => row.body)).toEqual(['처음 쓴 말'])
+    })
+  })
+
+  it('첫 게시 뒤 그 코멘트가 고쳐졌으면 같은 키 · 처음 글도 409 — 이슈 코드로 «그 키의 게시는 이미 달렸다»를 가른다', async () => {
+    // **리뷰 R1**(2026-09-23). 웹이 되살린 키로 처음 글을 다시 보내는 사이 같은 사람이 다른 탭에서 그 코멘트를
+    // 고치면 이 409 다. 게시의 409 는 셋이 모두 `code: 'conflict'`라(`routes/comments.ts`의 `REUSED_KEY`) 웹은
+    // **이슈 코드**로만 이것을 «달림»으로 읽는다 — 문장은 가르는 값이 아니다.
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const first = await postKeyed(ctx, fx, fx.rootNodeId, '처음 쓴 말', 'key-1')
+      const patched = await ctx.app.inject({
+        method: 'PATCH',
+        url: `${commentsUrl(fx)}/${first.json().comment.id}`,
+        cookies: fx.cookie,
+        payload: { body: '다른 탭에서 고친 말' },
+      })
+      expect(patched.statusCode, patched.body).toBe(200)
+
+      const again = await postKeyed(ctx, fx, fx.rootNodeId, '처음 쓴 말', 'key-1')
+
+      expect(again.statusCode, again.body).toBe(409)
+      expect(again.json().error.code).toBe('conflict')
+      expect(again.json().error.issues).toEqual([
+        { path: 'idempotencyKey', message: '같은 멱등 키로 다른 코멘트가 이미 달렸습니다', code: 'idempotency-key-reused' },
+      ])
+      expect((await rows(ctx, fx)).map((row) => row.body)).toEqual(['다른 탭에서 고친 말'])
     })
   })
 

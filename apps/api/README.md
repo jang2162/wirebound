@@ -219,7 +219,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다(D11) |
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
 | `/api/projects/:projectId/pages/:pageId/comments` | GET | viewer | — | 200 코멘트 배열(`created_at` 오름차순). 항목은 `{ id, nodeId, body, authorId, authorName, createdAt, updatedAt }` |
-| `/api/projects/:projectId/pages/:pageId/comments` | POST | editor | `{ nodeId, body, idempotencyKey? }` | 201 `{ comment, marker, seq, markerOps }` — **번호가 없는 노드면 문서에 `marker`를 붙이고 revision을 남긴다**(아래 "코멘트와 번호"). 문서에 없는 노드는 404, 본문 1~2000자 밖·NUL은 400, 그 사이 남이 고쳤으면 409. **`idempotencyKey`**(영숫자·`-`·`_` 1~64자, 밖은 400): 같은 (페이지, 작성자, 키)로 **이미 달렸으면 200 으로 그 행을 그대로 돌려준다** — 새 행·새 번호·revision 이 없고 `markerOps: []`, `seq`는 지금의 `head_seq`, `marker`는 그 노드의 **지금** 번호(노드나 번호가 사라졌으면 `null`). **같은 키에 다른 `nodeId`·`body`면 409**. **키 판정은 인증 뒤 · 권한 가드 앞이다** — 첫 게시 뒤 역할이 내려가거나 멤버에서 빠져도 같은 키면 200 재생(아래 "멱등 키") |
+| `/api/projects/:projectId/pages/:pageId/comments` | POST | editor | `{ nodeId, body, idempotencyKey? }` | 201 `{ comment, marker, seq, markerOps }` — **번호가 없는 노드면 문서에 `marker`를 붙이고 revision을 남긴다**(아래 "코멘트와 번호"). 문서에 없는 노드는 404, 본문 1~2000자 밖·NUL은 400, 그 사이 남이 고쳤으면 409. **`idempotencyKey`**(영숫자·`-`·`_` 1~64자, 밖은 400): 같은 (페이지, 작성자, 키)로 **이미 달렸으면 200 으로 그 행을 그대로 돌려준다** — 새 행·새 번호·revision 이 없고 `markerOps: []`, `seq`는 지금의 `head_seq`, `marker`는 그 노드의 **지금** 번호(노드나 번호가 사라졌으면 `null`). **같은 키에 다른 `nodeId`·`body`면 409** — 이 409 에만 `issues: [{ path: "idempotencyKey", code: "idempotency-key-reused", … }]`가 실린다(게시의 다른 409 — 낡음 · 적용 불가 — 와 `code`가 같아 이것으로 가른다. 아래 "멱등 키"). **키 판정은 인증 뒤 · 권한 가드 앞이다** — 첫 게시 뒤 역할이 내려가거나 멤버에서 빠져도 같은 키면 200 재생(아래 "멱등 키") |
 | `/api/projects/:projectId/pages/:pageId/comments/:commentId` | PATCH | editor | `{ body }` | 200 코멘트. **작성자만 고칠 수 있다 — 남의 것은 403.** 문서를 안 바꾸므로 `seq`가 없다 |
 | `/api/projects/:projectId/pages/:pageId/comments/:commentId` | DELETE | editor | — | 200 `{ seq, markerOps }`(**204가 아니다** — 문서 변화를 실어야 한다). **그 노드의 마지막이면 `marker`도 지운다.** 남의 코멘트도 지울 수 있다 |
 | `/api/projects/:projectId/pages/:pageId/comments/renumber` | POST | editor | — | 200 `{ seq, markerOps }` — 문서 순서대로 1부터 재번호(§9). **한 revision이다.** 바꿀 것이 없으면 `markerOps: []`이고 revision도 안 쌓인다 |
@@ -674,8 +674,14 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 보내도 409 `같은 멱등 키로 다른 코멘트가 이미 달렸습니다`다(잰 값: 게시 201 → 본문 PATCH 200 → 같은 키 ·
 처음 글 → 409 · 리뷰 3번). 웹에서는 다시 보내기가 판정일 때만 나가고(`apps/web/src/panels/comment-panel.tsx`의
 `submit`) 그동안 상자는 잠겨 있어 이 화면이 고칠 수는 없다 — 같은 사람이 **다른 탭**에서 그 사이 고친
-판이다. 그러면 웹은 다시 보낸 것의 4xx 를 «달리지 않음»으로 확정한다(게시는 있다). 고치는 길은 키에
-처음 본문의 지문을 남겨 그것과 견주는 것이다 — 이번에 하지 않는다.
+판이다. **이 409 는 이슈 코드 `idempotency-key-reused`를 싣는다**(2026-09-23 — 리뷰 R1). 게시가 내는 409 는
+셋이고(같은 키 · 다른 글 · 낡음 · 적용 불가) 셋 다 `code: "conflict"`라 문장 말고는 가를 값이 없었다. 웹은 이
+이슈 코드가 실린 409 를 첫 보내기든 다시 보낸 것이든 **«그 키의 게시는 이미 달렸고 그 뒤 고쳐졌다»**로 읽어
+초안과 키를 버리고 목록을 다시 받는다(`apps/web/src/panels/comment-panel.tsx`의 `reusedKey`). 앞 판의 웹은 이것을
+«달리지 않음»으로 확정해 초안과 키를 남겼고, 초안이 탭의 저장소에 비친 뒤로는 **새로고침마다 같은 글 · 같은
+키가 되살아나** 누를 때마다 409 였다. 잰 값: `test/comments.test.ts`의 «첫 게시 뒤 그 코멘트가 고쳐졌으면 …».
+**그래도 서버는 처음 글이 무엇이었는지 모른다** — 고치는 길은 키에 처음 본문의 지문을 남겨 그것과 견주는
+것이다(이월 AC) — 이번에 하지 않는다.
 
 **웹이 키를 어디에 드는지**(초안이 성공할 때까지 같은 키 · 초안을 고치면 새 키 · 페이지를 떠나면
 버림)는 `apps/web/src/panels/comment-panel.tsx`의 `POST_KEYS`가 갖는다.

@@ -9,6 +9,7 @@
  * | 받은 것을 읽지 않고 그대로 넘긴다(`readNews`를 안 지난다) | *"모양이 틀린 소식은 버린다 …"* **혼자** |
  * | `readNews`가 사용자 칸을 안 본다 | *"사용자가 모자란 로그인 소식은 …"* **혼자** |
  * | 떼어도 계속 듣는다 | *"떼면 그만 받는다"* **혼자** |
+ * | `readNews`가 로그아웃의 번호 모양을 안 본다 | *"로그아웃 소식의 번호 …"* |
  */
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -97,6 +98,16 @@ describe('readNews', () => {
     expect(readNews({ kind: 'signed-in', user: { id: 'u-1', email: 'a@example.com' } })).toBeNull()
     expect(readNews({ kind: 'signed-in', user: { id: 1, email: 'a@example.com', name: 'a' } })).toBeNull()
     expect(readNews({ kind: 'signed-in', user: null })).toBeNull()
+  })
+
+  it('로그아웃 소식의 번호 — 없으면 옛 판의 소식으로 받고, 있는데 세대의 모양이 아니면 버린다', () => {
+    // 번호는 초안 사본의 로그아웃 세대다(`panels/draft-store.tsx`의 «표지는 세대 번호다» — 리뷰 R2).
+    expect(readNews({ kind: 'signed-out', era: 3, more: 1 })).toEqual({ kind: 'signed-out', era: 3 })
+    expect(readNews({ kind: 'signed-out' })).toEqual({ kind: 'signed-out' })
+    expect(readNews({ kind: 'signed-out', era: '3' })).toBeNull()
+    expect(readNews({ kind: 'signed-out', era: -1 })).toBeNull()
+    expect(readNews({ kind: 'signed-out', era: 1.5 })).toBeNull()
+    expect(readNews({ kind: 'signed-out', era: 1_700_000_000_000_000_000 })).toBeNull()
   })
 
   it('모양이 맞으면 필요한 칸만 옮긴다', () => {

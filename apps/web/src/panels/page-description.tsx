@@ -231,6 +231,13 @@
  * 설명 `PATCH`의 기대값이었고, 그것도 **이 항목과 함께 이월했다**(`write-ledger.tsx`의 «판정 뒤의
  * 늦은 커밋»). 코멘트는 충돌 모델이 아닌 멱등 키로 닫았다.
  *
+ * **이월 X(2026-09-23) 뒤로 초안이 새로고침·세션 만료를 넘는다**(`panel-drafts.tsx` 머리말 4) — 이 창이 문서
+ * 하나보다 길어진다. 새 부류는 아니다(탭 왕복에도 이미 초안이 남의 값을 가렸다). **달라진 것은 하나다 — 새로고침이
+ * 더는 남의 새 값을 보여 주지 않는다.** 앞 판에서 새로고침은 초안을 잃는 대가로 서버의 지금 값을 보였는데, 이제는
+ * 되살린 초안이 그것을 가린다. Chrome: 앨리스가 초안을 친 채 밥이 설명을 저장(200) → 앨리스가 새로고침 → 상자
+ * `"앨리스의 초안"` · 저장 단추 열림 · 통지 없음 → 누르면 DB `"앨리스의 초안"`(밥의 것을 덮음). 닫는 길은 그대로 이
+ * 항목이다(기대값 → 409 → «다른 사람이 바꿨습니다»).
+ *
  * **여기서만 충돌 감지를 넣지 않는 이유:** 그것이 이 앱의 **첫 충돌 모델**이 된다. 제목도
  * 같은 경로(`PATCH .../pages/:id`)로 덮이는데 거기엔 없고, 제대로 하려면 서버 계약(기대값)을
  * 바꿔야 한다. 한 자리에서 먼저 지으면 두 자리가 다른 규칙을 갖는다 — 위 «viewer에게 …»가
@@ -279,8 +286,11 @@ import { useEffect, type ReactElement } from 'react'
 import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import { lockSlot, slot, usePanelLock, usePanelSlot, type PanelLock } from './panel-drafts'
+import { lockSlot, slotsOf, usePanelLock, usePanelSlot, type PanelLock } from './panel-drafts'
 import { PendingNotice } from './pending-notice'
+
+/** 이 모듈의 칸을 선언한다 — 같은 모듈이 다시 불리면(HMR) 같은 칸을 돌려준다(`panel-drafts.tsx`의 `slotsOf`). */
+const slot = slotsOf(import.meta.url)
 
 /** 페이지를 열지 않았을 때. */
 const NO_PAGE = '페이지를 열면 설명이 보입니다'
@@ -344,7 +354,12 @@ const LOAD = slot<LoadState>('page-description/load', { status: 'loading' })
  * **초안은 «아직 안 쳤다»를 `null`로 든다.** 빈 문자열로 초기화하면 조회가 끝나기 전의
  * 빈 상자와 *"사용자가 지운 상자"*가 같은 값이 되어, 값이 도착할 때 지운 것을 되살린다.
  */
-const DRAFT = slot<string | null>('page-description/draft', null)
+const DRAFT = slot<string | null>('page-description/draft', null, {
+  // **저장소에 비춘다**(`panel-drafts.tsx`의 머리말 4) — 새로고침·세션 만료를 넘는다. 안 쳤으면(`null`)
+  // 비출 것이 없다.
+  save: (draft) => draft ?? undefined,
+  load: (raw) => (typeof raw === 'string' ? raw : undefined),
+})
 /** 마지막 저장의 통지. */
 const SAVE = slot<SaveState>('page-description/save', { status: 'idle' })
 /**
