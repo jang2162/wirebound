@@ -30,7 +30,7 @@
  * 테스트 하네스든) 전체가 aborted(`25P02`)로 빠진다(`src/db/tx.ts` 참고).
  */
 import { sql } from 'kysely'
-import type { PageDocument } from '@wirebound/schema'
+import { samePageMeta, type PageDocument } from '@wirebound/schema'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { assertLocking } from '../db/locking'
 import { assertNoNulBytes } from '../db/nul-guard'
@@ -92,10 +92,11 @@ export async function lockPageMeta(trx: DbHandle, projectId: string, pageId: str
 
 /**
  * `base`가 지금 값과 **다른 칸**. 빈 배열이면 통과다. **글자 그대로 견준다** — 서버가 제목 · 설명을 정규화하지
- * 않는다(`null`과 `''`도 다른 값이다 — `apps/web/src/api/client.ts`의 `updatePage` 표).
+ * 않는다. **하나만 뺀다 — 빈 값은 `''`든 `null`이든 같다**(`@wirebound/schema`의 `samePageMeta` — 화면의 판정과
+ * 같은 함수다. 저장은 둘을 가른다 — `apps/web/src/api/client.ts`의 `updatePage` 표).
  */
 export function staleMetaFields(base: Partial<PageMeta>, current: PageMeta): PageMetaField[] {
-  return (Object.keys(base) as PageMetaField[]).filter((field) => base[field] !== current[field])
+  return (Object.keys(base) as PageMetaField[]).filter((field) => !samePageMeta(base[field] ?? null, current[field]))
 }
 
 /** `menuNodeId`가 없거나(그 프로젝트 안에서) 다른 프로젝트 소속일 때 던진다. 호출자가 404로 매핑한다. */

@@ -127,9 +127,23 @@ const MetaBase = z.strictObject({
 /**
  * 필드가 전부 optional이므로, 빈 본문(`{}`)이 통과하지 않도록 `.refine`으로 따로 막는다(`routes/menu.ts`와 같은 관례).
  *
- * **`base`의 칸은 바꾸는 칸과 짝이어야 한다** — `{ description, base: { title } }`처럼 바꾸지 않는 칸의 바탕만
- * 오면 400 이다. 받아 주면 «제목이 그대로면 설명을 쓴다»는 **조건부 쓰기**가 되는데, 그것은 이 모델이 약속한
- * 것(«내가 고친 칸이 고치는 동안 안 바뀌었다»)이 아니다. `base`만 오는 것도 바꿀 값이 없는 것이라 같은 400 이다.
+ * **`base`가 오면 그 칸은 바꾸는 메타 칸(제목 · 설명)과 같은 집합이어야 한다** — 규칙이 셋이고 문장도 셋이다:
+ *
+ * 1. **바꾸지 않는 칸의 바탕은 400** — `{ description, base: { title } }`. 받아 주면 «제목이 그대로면 설명을 쓴다»는
+ *    **조건부 쓰기**가 되는데, 그것은 이 모델이 약속한 것(«내가 고친 칸이 고치는 동안 안 바뀌었다»)이 아니다.
+ *    `base`만 오는 것도 바꿀 값이 없는 것이라 같은 400 이다.
+ * 2. **바꾸는 메타 칸마다 바탕이 있어야 한다 — 없으면 400**(리뷰 F5). `{ description, base: {} }`는 «바탕 있음»의
+ *    길을 타고 **아무것도 견주지 않고** 썼다(`every`가 빈 집합에 참이다). 오늘 해는 없지만(바탕 없는 것과 같다),
+ *    클라이언트가 바탕 칸을 `undefined`로 떨구는 날(`JSON.stringify`가 키를 지운다) 그 결함이 400 이 아니라
+ *    **조용한 덮임**으로 나타난다. `{ title, description, base: { title } }`도 같다 — 설명은 견주지 않고 쓴다.
+ * 3. **순서 · 소속 메뉴(`sortOrder`·`menuNodeId`)는 바탕과 한 본문에 못 싣는다 — 400**(리뷰 F4). 바탕이 있으면
+ *    핸들러가 **이 행을 먼저** 잡고(`lockPageMeta`) 그 뒤 `updatePage`가 **형제 행**을 잡는다 — 바탕 없는 자리
+ *    옮기기(형제 → 이 행)와 잠금 순서가 거꾸로라, 동시에 오면 교착이 는다(리뷰 D1: 60 회에 31 · 바탕 없는 대조 8).
+ *    웹은 이 조합을 안 보낸다(이름 변경 · 설명 · 순서 · 이동이 각각 따로 간다). 막는 것이 잠금 순서를 고치는 것보다
+ *    싸다 — 그 둘은 이 모델 밖이다(아래 핸들러 머리말).
+ *
+ * **셋은 차례로 보고 처음 어긋난 하나만 말한다**(`abort`) — `{ description, base: { title } }`는 1 과 2 를 함께 어기는데,
+ * 둘을 다 말하면 고칠 것이 둘로 읽힌다(바탕 칸이 틀린 것 하나다).
  */
 const UpdatePageBody = z
   .strictObject({
@@ -143,6 +157,16 @@ const UpdatePageBody = z
   .refine(({ base, ...changes }) => Object.keys(base ?? {}).every((field) => field in changes), {
     path: ['base'],
     message: '바탕(base)은 바꾸는 칸에만 줄 수 있습니다',
+    abort: true,
+  })
+  .refine(
+    ({ base, title, description }) =>
+      base === undefined || ((title === undefined || 'title' in base) && (description === undefined || 'description' in base)),
+    { path: ['base'], message: '바탕(base)을 주면 바꾸는 제목 · 설명마다 바탕이 있어야 합니다', abort: true },
+  )
+  .refine(({ base, sortOrder, menuNodeId }) => base === undefined || (sortOrder === undefined && menuNodeId === undefined), {
+    path: ['base'],
+    message: '순서 · 메뉴 이동은 바탕(base)과 함께 보낼 수 없습니다 — 따로 보내십시오',
   })
 
 /**
@@ -359,7 +383,7 @@ export function pageRoutes() {
      *
      * | 지금 값 | 답 |
      * |---|---|
-     * | `base`와 같다 | 쓴다 — 200 |
+     * | `base`와 같다(빈 값은 `''`든 `null`이든 같다 — `@wirebound/schema`의 `samePageMeta`) | 쓴다 — 200 |
      * | `base`와 다르다 | **409** · 이슈 코드 `page-meta-changed` · 칸마다 이슈 하나(`path` = 칸 이름 · `current` = **지금 값**) — 쓰지 않는다 |
      * | `base`를 안 보냈다 | 쓴다 — 나중이 이긴다(오늘의 CLI · MCP · 가져오기 · 트리의 순서 · 메뉴 이동과 호환) |
      *
@@ -376,7 +400,8 @@ export function pageRoutes() {
      *
      * **순서 · 소속 메뉴(`sortOrder`·`menuNodeId`)는 이 모델 밖이다** — 바탕을 받지 않고(`MetaBase`에 칸이 없다)
      * 오늘처럼 나중이 이긴다. **바탕이 없으면 잠금을 먼저 잡지 않는다** — 자리 옮기기의 잠금 순서(형제 행 → 이
-     * 행)를 이 판이 바꾸지 않는다.
+     * 행)를 이 판이 바꾸지 않는다. **바탕이 있으면 자리 옮기기가 같은 본문에 못 온다**(`UpdatePageBody`의 셋째
+     * 규칙 — 400) — 한 본문에 실으면 이 행을 먼저 잡고 형제를 잡아 순서가 거꾸로 선다(리뷰 F4).
      *
      * **다른 창에 실시간으로 알리지 않는다** — 이 라우트는 방송하지 않는다(`notifyPageChanged`를 부르지 않는다 —
      * 그 방송은 문서의 `seq`를 나른다). 남이 바꾼 것은 저장할 때 409 로 안다.

@@ -66,6 +66,7 @@
  *
  * **빈 문자열을 보내지 않는다.** 서버는 `''`를 `''`로 저장하고 `null`과 가른다(실측 —
  * `api/client.ts`의 표). 화면에서 둘은 똑같이 보이므로, 눈에 안 보이는 차이를 만들지 않는다.
+ * (충돌 모델의 **견주기는** 둘을 같게 본다 — 아래 «남의 저장을 조용히 덮지 않는다».)
  *
  * ## viewer 에게는 읽기 전용이다 (이월 M · 2026-09-23)
  *
@@ -221,6 +222,15 @@
  * 이 함수를 지난다. 다른 사람이 바꿨으면 `panels/meta-conflict.tsx`가 그 사람의 값을 보이고 고르게 한다:
  * **«내 글로 덮기»**(그 값을 새 바탕으로 다시 보낸다) · **«내 글 버리기»**(그 값을 받는다).
  *
+ * **«저장되지 않았습니다» 뒤에 늦게 닿은 내 글은 «다른 사람»이 아니다**(리뷰 F2 · 2026-09-23). «모름»의 다시 읽기가
+ * 바탕을 봤어도 끊긴 요청이 서버에서 늦게 커밋할 수 있다. 그 뒤 더 쳐서 저장하면 409 의 지금 값이 **내 앞 글**인데,
+ * 앞 판은 그것을 «다른 사람이 이 설명을 바꿨습니다»로 보였다. 이제 그 판정의 보낸 글을 초안 칸에 **매달린 값**
+ * (`Draft`의 `pending`)으로 들고, 409 의 값이 그것이면 `judgeMeta`가 `'late'`를 낸다 — 같은 충돌 화면이 «앞서 보낸
+ * 설명이 늦게 저장됐습니다»로 서고 **덮기**(«지금 글로 덮기»)를 권한다.
+ *
+ * **빈 설명은 `''`든 `null`이든 같다**(리뷰 F3) — 저장은 둘을 가르지만 견주기는 같게 본다(`judgeMeta` · 서버가 같은
+ * 함수 `samePageMeta`를 부른다). 이 화면은 `''`를 안 보내지만 남(API)이 보낼 수 있다.
+ *
  * **충돌 통지는 치는 동안에도, 탭을 다녀와도 남는다** — 다른 통지와 다르다. «방금 저장했다»는 사건이지만 «남이
  * 바꿨다»는 초안과 서버 사이의 **지금 상태**라, 초안이 그대로인 한 참이다. 페이지를 옮기면 F1 대로 버린다.
  *
@@ -361,8 +371,11 @@ type SaveState =
   /**
    * **다른 사람이 바꿨다**(`judgeMeta`의 `'other'`) — 그 사람의 값을 들고 덮을지 버릴지 묻는다(머리말 «남의 저장을
    * 조용히 덮지 않는다»). **다른 통지와 달리 치는 동안 · 탭을 다녀와도 남는다**(아래 `keepConflict`).
+   *
+   * `late`면 그 값은 **앞서 보낸 내 글**이다(`judgeMeta`의 `'late'` — 아래 `Draft`의 `pending`). 같은 화면이 «다른
+   * 사람»이라 말하지 않고 덮기를 권한다(`panels/meta-conflict.tsx`).
    */
-  | { status: 'conflict'; theirs: string | null }
+  | { status: 'conflict'; theirs: string | null; late?: boolean }
 
 /**
  * **이 탭의 칸 넷.** 넷 다 `panel-drafts.tsx`의 칸이라 탭·모드를 오가도 산다 — 이 패널이
@@ -382,6 +395,14 @@ const LOAD = slot<LoadState>('page-description/load', { status: 'loading', at: 0
 interface Draft {
   text: string
   base: string | null
+  /**
+   * **매달린 내 값**(리뷰 F2) — «모름»의 판정이 «저장되지 않았습니다»(`judgeMeta`의 `'base'`)였던 쓰기가 보낸 글.
+   * 끊긴 요청도 서버가 이미 받았으면 **나중에 커밋한다**(Chrome: 행 잠금에 붙잡힌 PATCH 가 풀린 뒤 커밋). 그 뒤
+   * 더 쳐서 저장하면 409 의 지금 값이 이 글이다 — 들고 있지 않으면 **내 글이 «다른 사람의 값»으로** 보였다.
+   * 없으면 칸째 없다. **초안과 한 칸이라** 초안과 함께 버려지고(저장 성공 · 버리기 · F1), 덮기가 바탕을 옮길 때도
+   * 버려진다(그 값이 새 바탕이 된다 — 아래 `submit`).
+   */
+  pending?: (string | null)[]
 }
 
 /**
@@ -397,9 +418,15 @@ const DRAFT = slot<Draft | null>('page-description/draft', null, {
   // 쳐 둔 초안 하나다(이월 X 가 같은 날 들어왔다).
   load: (raw) => {
     if (typeof raw !== 'object' || raw === null) return undefined
-    const { text, base } = raw as Record<string, unknown>
+    const { text, base, pending } = raw as Record<string, unknown>
     if (typeof text !== 'string' || !(base === null || typeof base === 'string')) return undefined
-    return { text, base }
+    // 매달린 값은 **모양이 틀리면 그것만 버린다** — 초안과 바탕은 산다. 잃는 것은 귀속(늦은 내 글이 «다른 사람»으로
+    // 보인다)뿐이고 조용한 덮임이 아니다.
+    const hanging =
+      Array.isArray(pending) && pending.every((value) => value === null || typeof value === 'string')
+        ? (pending as (string | null)[])
+        : undefined
+    return hanging === undefined ? { text, base } : { text, base, pending: hanging }
   },
 })
 /** 마지막 저장의 통지. */
@@ -548,6 +575,8 @@ export function PageDescriptionPanel(props: {
     setSave(IDLE)
     // 빈 칸은 "설명을 지운다"(`null`)이고 그 밖은 친 그대로다(위 머리말).
     const next = draft.text === '' ? null : draft.text
+    // **바탕을 옮기면(덮기) 매달린 값을 버린다** — 덮기의 바탕이 보인 그 값이라, 늦은 내 글이었으면 이제 바탕이다.
+    const pending = base === draft.base ? (draft.pending ?? []) : []
     if (base !== draft.base) setDraft({ text: draft.text, base })
     const openPageId = pageId
 
@@ -558,14 +587,19 @@ export function PageDescriptionPanel(props: {
      * 서버가 바탕과 다르다고 이미 판정한 값이다.
      */
     function land(current: string | null, asked: 'verified' | 'rejected'): void {
-      const verdict = judgeMeta(current, next, base)
+      const verdict = judgeMeta(current, next, base, pending)
       if (verdict === 'mine') {
         setDraft(null)
         setSave({ status: asked === 'verified' ? 'matched' : 'same' })
       } else if (verdict === 'base' && asked === 'verified') {
         // **초안은 남긴다** — 서버 값만 갈아 끼웠으므로 상자는 친 글을 보이고 저장 버튼이 열린다. 다시 저장할 수
-        // 있다. 늦게 커밋되면 다음 저장이 409 의 `'mine'`으로 끝난다(바탕이 옛 값이라서).
+        // 있다. **보낸 글을 매달린 값으로 든다**(`Draft`의 `pending` — 리뷰 F2) — 끊긴 요청이 늦게 커밋될 수 있다.
+        // 그러면 글을 안 고치고 다시 누를 때 409 의 `'mine'`(«이미 같습니다»)이고, 더 쳐서 누를 때 `'late'`다.
+        setDraft((prev) => (prev === null ? prev : { ...prev, pending: [...(prev.pending ?? []), next] }))
         setSave({ status: 'failed', failure: { kind: 'message', message: NOT_SAVED } })
+      } else if (verdict === 'late') {
+        // **앞서 보낸 내 글이 늦게 닿았다** — «다른 사람»이 아니다. 같은 화면이 그렇게 말하고 덮기를 권한다.
+        setSave({ status: 'conflict', theirs: current, late: true })
       } else {
         // 다른 사람이 바꿨다. (409 의 값은 바탕과 다르다고 서버가 판정한 값이라 `'base'`로 오지 않는다 — 와도
         // 그 사람의 값을 보이는 쪽이 안전하다.)
@@ -691,7 +725,8 @@ export function PageDescriptionPanel(props: {
             disabled={saving.locked}
             onChange={(event) => {
               const text = event.target.value
-              setDraft((prev) => ({ text, base: prev === null ? startedFrom : prev.base }))
+              // 바탕과 매달린 값은 **첫 글자 때의 것을 그대로 든다** — 글만 갈아 끼운다.
+              setDraft((prev) => (prev === null ? { text, base: startedFrom } : { ...prev, text }))
               // **친 순간 앞의 통지를 지운다.** 남겨 두면 고치는 중에 "저장했습니다"가
               // 떠 있어, 지금 화면의 글이 저장된 것처럼 보인다. 잠금(`SAVING`)은 건드리지 않는다.
               // **충돌은 남긴다** — 고쳐 쓰는 동안 그 사람의 값을 보며 쓸 수 있게(`keepConflict`).
@@ -723,6 +758,7 @@ export function PageDescriptionPanel(props: {
         <MetaConflict
           what="설명"
           theirs={save.theirs}
+          late={save.late}
           disabled={saving.locked}
           onOverwrite={() => void submit(save.theirs)}
           onDiscard={discard}

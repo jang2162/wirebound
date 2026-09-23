@@ -116,6 +116,7 @@ export {
   pageJsonText,
   parsePageJson,
   readPageJson,
+  samePageMeta,
   toPageJson,
 } from './page-json/envelope'
 
