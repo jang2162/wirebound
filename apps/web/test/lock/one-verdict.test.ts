@@ -92,7 +92,11 @@ describe('판정은 한 벌이다 (D7)', () => {
     // *"누구의 잠금이 뜻이 있는가"*가 앱에 또 생기면, 서버가 막는 것과 화면이 막는 것이
     // 사람 단위/연결 단위로 갈릴 수 있다. 그 비교는 `locksAgainst` 하나다.
     expect(filesMatching(SCHEMA_SRC, COMPARES_OWNER)).toEqual(['lock.ts'])
-    expect(filesMatching(API_SRC, COMPARES_OWNER)).toEqual([])
+    // **`ws/notify.ts`는 잠금 소유자를 비교하지 않는다 — 판정한 예외다**(이월 5차). 그 줄은 멤버십이 바뀐 **그 사람의
+    // 연결**을 고르는 비교다(`notifyMembershipChanged`). 그 파일에 잠금 판정이 설 수 없는 까닭은 아래 «목록을 읽는 자리는
+    // 둘뿐»이 지킨다 — 소유자를 비교할 잠금 목록을 그 파일은 손에 쥐지 않는다. 비교를 글자에서 숨기는 우회(다른 연산자 ·
+    // `Object.is`)로 맞추지 않았다 — 자를 속이는 것이지 뜻이 바뀌는 것이 아니다.
+    expect(filesMatching(API_SRC, COMPARES_OWNER)).toEqual(['ws/notify.ts'])
     expect(filesMatching(WEB_SRC, COMPARES_OWNER)).toEqual([])
   })
 

@@ -23,8 +23,11 @@
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { PatchOp, ValidationIssue } from '@wirebound/schema'
+import { roleAtLeast } from '../auth/roles'
+import type { ProjectRole } from '../db/types'
 import type { BroadcastOrigin } from './broadcast'
-import type { EventActor } from './protocol'
+import { releaseLocksOf } from './lock'
+import { MIN_ROLE_FOR_FRAME, type EventActor, type ServerFrame } from './protocol'
 
 /**
  * 편집을 낸 클라이언트가 자기 WebSocket 연결을 가리키는 헤더.
@@ -112,4 +115,73 @@ export function notifyRestored(app: FastifyInstance, input: RestoredInput): void
     .catch((error: unknown) => {
       app.log.error({ err: error, projectId: input.projectId }, 'restored 알림 실패')
     })
+}
+
+export interface MembershipChangedInput {
+  projectId: string
+  /** 멤버십이 바뀐 사람. **그 사람의 연결에만** 간다 — 룸의 다른 사람은 이것으로 할 일이 없다. */
+  userId: string
+  /** 바뀐 뒤의 역할. **`null`이면 멤버에서 빠졌다.** 프레임에는 안 실린다(`protocol.ts`의 그 갈래). */
+  role: ProjectRole | null
+}
+
+/**
+ * 멤버 행이 바뀐 **커밋 뒤에** 부른다(`routes/members.ts` — 역할 변경 · 제거). 이월 5차.
+ *
+ * # 무엇을 하는가 — 그 사람의 연결마다
+ *
+ * | 바뀐 뒤 | 프레임 | 잠금 | 연결 |
+ * |---|---|---|---|
+ * | 잠금을 쥘 수 있는 역할(`MIN_ROLE_FOR_FRAME.lock` 이상) | `membership-changed` | 그대로 | 그대로 |
+ * | 그 아래(viewer) | `membership-changed` | **놓는다** | 그대로 — viewer 는 계속 받는다 |
+ * | 멤버가 아님 | `membership-changed` | **놓는다** | 여기서 안 닫는다 — 아래 «제거는 여기서 안 닫는다» |
+ *
+ * **잠금을 여기서 놓는 까닭(재서 알았다).** 앞 판은 강등된 연결의 잠금을 놓을 길이 없었다 — 그 연결이 보내는 `unlock`은
+ * `MIN_ROLE_FOR_FRAME.unlock`(editor)에 걸려 조용히 버려지고, 연결은 룸에 남으므로 닫힘도 안 온다(`protocol.ts`의 그 표
+ * 주석이 *"TTL 30초로 사라진다"*고 적었다). Chrome: 앨리스가 캐럴을 viewer 로 내린 뒤에도 앨리스의 구조 트리에
+ * «캐럴 편집 중»이 남아 앨리스가 그 카드를 **못 골랐다.** `unlock`의 문턱을 viewer 로 내리는 길도 있었지만, 그러면 강등을
+ * 모르는(프레임을 못 받은) 클라이언트는 여전히 쥔 채다 — 멤버십을 바꾼 서버가 놓는 것이 받는 쪽에 기대지 않는다.
+ *
+ * **제거는 알리되 여기서 안 닫는다.** 앞 판은 제거된 연결의 화면이 **다음 프레임까지** 아무것도 몰랐다(Chrome · 제거 2.5초
+ * 뒤 입구 전부). 이제 알림을 받은 웹은 다시 읽고 404 를 받아 셸째 내려가며 **자기 소켓을 닫는다.** 서버가 여기서 닫지 않는
+ * 까닭은 **나가 있던 편집의 답**이다(재서 알았다): 잠금에 줄 선 WS `patch`는 커밋 순간의 재확인이 404 를 `patch-error`로
+ * 답하는데(`test/guard-in-lock.test.ts`의 «멤버에서 빠지면 404»), 여기서 닫으면 그 답이 갈 길이 없어 낸 쪽은 «답을 못
+ * 받았다»(웹의 «모름»)로 끝난다 — 이미 확정된 거절을 모름으로 바꾸는 것이다. 닫는 일은 앞 판의 회수가 그대로 한다 — 그
+ * 연결이 무엇을 보내거나(`ws/routes.ts` · 하트비트 25초) 방송이 지나갈 때(`ws/broadcast.ts`의 `stillAllowed`) 4403 이고,
+ * **그 사이 그 연결로 프로젝트의 무엇도 나가지 않는다**(방송이 보내기 전에 자격을 본다). 잠금은 여기서 놓는다 — 닫힘을
+ * 기다리면 그동안 남의 선택을 막는다. **그 사람이 잠금을 쥐고 있었으면 놓는 `locks` 방송이 곧 그 회수다** — 방송이
+ * 그 연결의 자격을 보고 닫는다. 그 판에서는 줄 선 `patch`의 404 답이 여전히 길을 잃는다(남는 틈 — 웹은 다시 읽기의
+ * 404 로 셸째 내려가므로 그 편집의 «모름»은 화면에 안 남는다).
+ *
+ * **연결의 멤버십 세대도 여기서 올린다**(`RoomConnection.membershipEpoch` — 리뷰 R5). 그 연결이 보낸 `lock` 프레임이 자격을 보는
+ * 중(await)이면 여기서 놓아도 놓을 것이 아직 없고, 뒤이어 그 프레임이 잡는다 — 그 잠금은 TTL 까지 남는다. 프레임 경로가
+ * await 앞에서 읽은 세대와 견줘 바뀌었으면 잡지 않는다(`ws/routes.ts`의 `lock` 갈래). 지연을 넣은 변조(`stillAllowed`의
+ * editor 판정에 30ms)로 잰 값: 고치기 전 **29초까지** 남고 31초에 풀림 → 고친 뒤 **0.5초에 이미 없음**(보고).
+ *
+ * # 보내기 전에 권한을 다시 보지 않는다
+ *
+ * `broadcast.ts`의 `send`는 프레임마다 받을 자격(viewer)을 다시 본다 — 프로젝트의 내용이 실려서다. 이 프레임은
+ * `projectId` 하나뿐이고 받는 사람 **자신의** 멤버십이 바뀌었다는 사실이다. 제거된 사람도 받아야 뜻이 있다(자격을
+ * 보면 그 사람만 못 받는다). **세션은 연결이 붙을 때 이미 본 값이다** — 세션이 사라진 연결도 이것을 받을 수 있지만,
+ * 거기 실린 것은 그 연결이 이미 아는 `projectId`뿐이다.
+ *
+ * 던지지 않는다 — 멤버 행은 이미 커밋됐다(`notifyPageChanged`와 같은 자세).
+ */
+export function notifyMembershipChanged(app: FastifyInstance, input: MembershipChangedInput): void {
+  const frame: ServerFrame = { type: 'membership-changed', projectId: input.projectId }
+  const payload = JSON.stringify(frame)
+  const canHold = input.role !== null && roleAtLeast(input.role, MIN_ROLE_FOR_FRAME.lock)
+  const { rooms } = app.realtime
+  for (const connection of rooms.membersOf(input.projectId)) {
+    if (connection.userId !== input.userId) continue
+    // **세대를 먼저 올린다** — 자격을 보는 중이던 `lock` 프레임이 이 뒤에 잡지 않게(`RoomConnection.membershipEpoch`).
+    // 보내기가 던져도 오른 채다(아래 `try` 밖).
+    connection.membershipEpoch += 1
+    try {
+      connection.send(payload)
+      if (!canHold) releaseLocksOf(app, connection)
+    } catch (error) {
+      app.log.error({ err: error, projectId: input.projectId, connectionId: connection.id }, 'membership-changed 알림 실패')
+    }
+  }
 }

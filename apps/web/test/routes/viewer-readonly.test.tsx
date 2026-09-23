@@ -292,6 +292,17 @@ function mount(role: ProjectRole, draftStore?: DraftStore): Wire {
     })
   }
   Object.defineProperty(wire, 'open', { value: open })
+  // **실행 중에 내린다**(이월 5차) — 서버가 역할을 viewer 로 바꾸고 그 사람의 연결에 `membership-changed`를 보낸 판.
+  const demote = (): void => {
+    const socket = sockets.at(-1)
+    if (socket === undefined) return
+    const key = `/api/projects/${PROJECT_ID}`
+    table[key] = { ...(table[key] as object), role: 'viewer' }
+    act(() => {
+      socket.onmessage?.({ data: JSON.stringify({ type: 'membership-changed', projectId: PROJECT_ID }) })
+    })
+  }
+  Object.defineProperty(wire, 'demote', { value: demote })
   Object.defineProperty(wire, 'frames', {
     get: () =>
       sent
@@ -543,9 +554,23 @@ async function opened(wire: Wire): Promise<void> {
   await settle()
 }
 
-async function sweepEditor(role: ProjectRole, draftStore?: DraftStore): Promise<Wire> {
-  const wire = mount(role, draftStore)
+/**
+ * `live`면 **editor 로 열어 입구가 선 것을 본 뒤 실행 중에 viewer 로 내리고** 훑는다(이월 5차). 받는 쪽이 `canEdit`을 처음
+ * 값으로 굳히면 새로 연 viewer 판은 못 보고(처음 값이 곧 viewer) 이 판만 본다.
+ */
+async function sweepEditor(role: ProjectRole, draftStore?: DraftStore, live = false): Promise<Wire> {
+  const wire = mount(live ? 'editor' : role, draftStore)
   await opened(wire)
+  if (live) {
+    await toMode('편집 모드')
+    await screen.findByRole('group', { name: '메뉴 편집' })
+    ;(wire as unknown as { demote: () => void }).demote()
+    // 표지는 셸의 통지다 — 자리 하나(메뉴 툴바)를 표지로 삼으면 그 자리의 변조가 «내려가지 않았다»로 읽힌다(`viewer-entries`와 같다).
+    await waitFor(() =>
+      expect(screen.queryAllByRole('status').some((el) => (el.textContent ?? '').startsWith('편집 권한이 없어져'))).toBe(true),
+    )
+    await settle()
+  }
 
   for (const mode of ['편집 모드', '뷰 모드'] as const) {
     for (const selection of SELECTIONS) {
@@ -704,6 +729,25 @@ describe('viewer 는 에디터에서 쓰기를 내지 않는다(이월 M′)', (
     'viewer 로 훑으면 HTTP 쓰기 0 · WS 쓰기 프레임 0',
     async () => {
       const wire = await sweepEditor('viewer')
+      expect(wire.unrouted).toEqual([])
+      expect({ http: [...new Set(wire.http)].sort(), frames: [...new Set(wire.frames)].sort() }).toEqual({
+        http: [],
+        frames: [],
+      })
+    },
+    120_000,
+  )
+
+  /**
+   * **실행 중에 내린 viewer**(이월 5차) — editor 로 열어 둔 화면이 새로고침 없이 viewer 가 된 뒤 같은 훑기. 내리기 전에는 아무것도
+   * 안 눌렀다 — 루트는 잡지 않으므로 내리는 순간의 `unlock`도 없다(잡은 자리를 놓는 것은 `role-live.test.tsx`가 잰다).
+   *
+   * 혼자 죽는 변조: 코멘트 패널이 `canEdit`을 **마운트 때 값으로 굳힌다** — 새로 연 viewer 판은 못 본다(처음 값이 곧 거짓).
+   */
+  it(
+    'editor 로 연 화면을 실행 중에 viewer 로 내린 뒤 훑어도 HTTP 쓰기 0 · WS 쓰기 프레임 0',
+    async () => {
+      const wire = await sweepEditor('viewer', undefined, true)
       expect(wire.unrouted).toEqual([])
       expect({ http: [...new Set(wire.http)].sort(), frames: [...new Set(wire.frames)].sort() }).toEqual({
         http: [],

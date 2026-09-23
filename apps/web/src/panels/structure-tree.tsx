@@ -145,6 +145,9 @@ export function StructureTree(props: {
   // (여기와 속성 패널) 형제 둘 중 하나에 둘 수 없어졌다 — 그 사정과 «자리는 여전히 하나»는
   // `store/use-locked-by.ts`가 갖는다. **판정은 그때도 지금도 스토어가 한다**(D7).
   const lockOf = useLockedBy()
+  // **선택이 잠금을 거는가**(스토어의 `selectionClaims` — 이월 5차 F4). 값을 안 쓴다 — 바뀌면 다시 그리려고 구독한다.
+  // 줄의 `disabled`는 `store.selectionBlockedBy`가 정하고, 그 판정이 이 값을 본다.
+  useEditorStore(store, (s) => s.selectionClaims)
   // **조작을 여기서 한 번만 만든다.** 툴바에 내려 주고 아래 키 핸들러도 같은 것을 쓴다 —
   // 그것이 D8이 요구하는 "같은 함수"다.
   const commands = useStructureCommands({
@@ -223,6 +226,7 @@ export function StructureTree(props: {
           onSelect={store.selectNode}
           // 판정의 자리는 위 `lockOf` 선언이 갖는다 — 줄과 상태줄이 **같은 값**을 쓴다.
           lockOf={lockOf}
+          blockedOf={store.selectionBlockedBy}
         />
       </ul>
       {/* 툴바가 트리 **아래**인 것은 D4다. 스크롤되는 상자 안이라 `sticky`로 바닥에
@@ -277,6 +281,11 @@ function StructureNode(props: {
   onSelect: (nodeId: string) => void
   /** 그 노드를 막는 남의 잠금을 내는 함수(`store/use-locked-by.ts`). 없으면 `null`을 낸다. */
   lockOf: (nodeId: string) => NodeLock | null
+  /**
+   * 그 노드를 **고르는 것을** 막는 잠금(`store.selectionBlockedBy`). `lockOf`와 갈리는 것은 선택이 잠금을 걸지 않는
+   * 사람(viewer)뿐이다 — 그에게는 배지는 서고 줄은 눌린다(이월 5차 F4).
+   */
+  blockedOf: (nodeId: string) => NodeLock | null
 }): ReactElement {
   const { node } = props
   // **모양 가드 둘.** 검증 전 문서(P2b-2)에는 `children`이 배열이 아니거나 `type`이
@@ -311,7 +320,7 @@ function StructureNode(props: {
           // **누를 수 없다는 것이 보여야 한다**(§7.2의 *"선택이 차단된다"*). 막는 것 자체는
           // `store.selectNode`가 하고(캔버스도 그 함수를 지난다) 여기 `disabled`는 **왜
           // 안 되는지를 보이는 쪽**이다 — 같은 모양인데 반응만 없으면 고장으로 읽힌다.
-          disabled={lock !== null}
+          disabled={props.blockedOf(node.id) !== null}
           onClick={() => props.onSelect(node.id)}
         >
           {typeLabel}
@@ -344,6 +353,7 @@ function StructureNode(props: {
               selectedNodeId={props.selectedNodeId}
               onSelect={props.onSelect}
               lockOf={props.lockOf}
+              blockedOf={props.blockedOf}
             />
           ))}
         </ul>

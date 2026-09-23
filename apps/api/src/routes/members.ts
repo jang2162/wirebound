@@ -19,6 +19,7 @@ import { conflict, notFound } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import { DuplicateMemberError, LastOwnerError, insertMember, listMembers, removeMember, updateMemberRole } from '../repos/members'
 import { findUserByEmail } from '../repos/users'
+import { notifyMembershipChanged } from '../ws/notify'
 
 /**
  * `.email()`은 형식만 검증하고, 이메일 대소문자 무시는 이
@@ -91,6 +92,8 @@ export function memberRoutes() {
       if (!member) {
         throw notFound()
       }
+      // **커밋 뒤에** 그 사람의 켜 둔 화면에 알린다(이월 5차 — `ws/notify.ts`). 화면이 역할을 다시 읽는다.
+      notifyMembershipChanged(app, { projectId, userId, role: member.role })
       return member
     })
 
@@ -110,6 +113,7 @@ export function memberRoutes() {
       if (result === 'not-member') {
         throw notFound()
       }
+      notifyMembershipChanged(app, { projectId, userId, role: null })
       reply.code(204).send()
     })
   }
