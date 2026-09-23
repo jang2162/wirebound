@@ -1021,6 +1021,8 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
  * | 봉투 있는 500 을 첫 보내기에서도 모름으로 | *"api 가 낸 500(봉투) 은 확정이다 …"* · 멱등 키 절의 *"글을 고쳐 …"*·*"페이지를 떠나면 …"*(둘 다 api 의 500 으로 실패시킨다) — 축의 주인은 앞의 것 |
  * | 세션이 끝나 끊긴 실패도 판정으로 보낸다 | *"세션이 끝나 끊긴 게시는 …"* **혼자** |
  * | 다시 보낸 것도 봉투 500 을 확정으로(두 자리가 한 칸을 쓴다 — 앞 판) | R 절의 *"… api 가 500 으로 거절해도(봉투) 모른다 …"* **혼자** |
+ * | 다시 보낸 것이 `post`를 안 지난다(`reusedKey`를 안 본다 — 이월 AC 의 판정 길) | *"다시 보낸 것이 «같은 키 · 다른 글» 409 면 …"* **혼자** |
+ * | `reusedKey`가 늘 거짓(두 길 다) | 그것 · `draft-store.test.tsx`의 *"되살린 글을 달기 전에 …"* — 첫 보내기 길의 주인은 뒤의 것 |
  *
  * `http-client`가 봉투를 실은 실패에 `enveloped`를 세우는지는 `test/api/http-client.test.ts`의 *"api 의 오류
  * 봉투를 실은 실패만 …"*가 갖는다(세우지 않으면 그것 **혼자** 죽는다).
@@ -1037,6 +1039,42 @@ describe('시간 안의 모르는 실패 — 같은 키로 다시 보내 판정�
     await waitFor(() => expect(commentBox().value).toBe(''))
     return server
   }
+
+  it('다시 보낸 것이 «같은 키 · 다른 글» 409 면 이미 달렸고 그 뒤 고쳐진 것이다 — 초안과 키를 버리고 그렇다고 말한다', async () => {
+    // **이월 AC 의 고침 갈래 — 판정 길.** 첫 게시는 서버에 달렸는데 브라우저는 502 를 받았고, 같은 키로 다시 보내기
+    // 전에 같은 사람이 다른 탭에서 그 코멘트를 고쳤다(Chrome route: 재전송을 붙잡은 사이 다른 탭에서 고침 → 409 ·
+    // «이미 달렸고 …» · 상자 비움 · 저장소 `{}` · DB 고친 글 1행). 새로고침 뒤의 첫 보내기 길은 `draft-store.test.tsx`가
+    // 잠근다(리뷰 R1) — 여기는 **다시 보낸 것**이 같은 받는 자리(`submit`의 `post`)를 지나는지를 잠근다.
+    const sent: (string | undefined)[] = []
+    const reused = new ApiError(409, 'conflict', '같은 멱등 키로 다른 코멘트가 이미 달렸습니다', [
+      { path: 'idempotencyKey', message: '같은 멱등 키로 다른 코멘트가 이미 달렸습니다', code: 'idempotency-key-reused' },
+    ])
+    let listed: Comment[] = []
+    await openPage(DOC, {
+      apiOverrides: {
+        listComments: async () => listed,
+        createComment: async (_projectId, _pageId, body) => {
+          sent.push(body.idempotencyKey)
+          if (sent.length === 1) {
+            listed = [comment('c-1', '다른 탭에서 고친 글')]
+            throw new ApiError(502, 'internal', '서버 응답을 이해할 수 없습니다')
+          }
+          throw reused
+        },
+      },
+    })
+    await toCommentTab()
+    type(commentBox(), '원문')
+    fireEvent.click(submitButton())
+
+    await screen.findByText('이 글은 이미 달렸고, 그 뒤 다른 곳에서 고쳐졌습니다 — 목록의 글이 지금 글입니다')
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toBe(sent[0])
+    expect(commentBox().value).toBe('')
+    expect(commentBox().disabled).toBe(false)
+    await screen.findByText('다른 탭에서 고친 글')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
 
   it('502 — 서버가 이미 달았으면 같은 키로 다시 보내 그 행을 받는다: 한 행이고 고쳐 달 틈이 없다', async () => {
     const server = await lostAfterCommit(new ApiError(502, 'internal', '서버 응답을 이해할 수 없습니다'))
