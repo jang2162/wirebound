@@ -1,6 +1,6 @@
 import { buildApp } from './app'
 import { loadConfig } from './config'
-import { createDb, createPool } from './db/client'
+import { createDb, createPool, verifyDbTimeLimits } from './db/client'
 import { describeDatabaseTarget } from './db/describe-target'
 import { describeSchemaState, emptySchemaHint } from './db/describe-schema-state'
 import { countExecutedMigrations } from './db/migrate'
@@ -24,7 +24,9 @@ import { chromiumScreenRenderer } from './services/screen-render-chromium'
  */
 async function main(): Promise<void> {
   const config = loadConfig()
-  const pool = createPool(config.databaseUrl)
+  const pool = createPool(config.databaseUrl, undefined, config.dbTimeLimits)
+  // 실은 시간 제한이 걸리는지 한 번 잰다 — 앞단이 거절하면 여기서 멈춘다(`db/client.ts`의 `verifyDbTimeLimits`).
+  await verifyDbTimeLimits(pool, config.dbTimeLimits, (message) => console.warn(message))
   const db = createDb(pool)
   try {
     await listen(config, db)
