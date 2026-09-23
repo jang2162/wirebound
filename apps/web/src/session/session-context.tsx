@@ -87,6 +87,26 @@
  * 확인한다 — api 의 일)은 이 슬라이스의 보고서가 갖는다. **알림 없이 쿠키가 바뀌는 길**(앱 밖에서 부른
  * `/api/auth/login` — 개발자 도구 · 다른 도구)도 이것으로는 모른다.
  *
+ * ## 서버가 «쿠키의 사람이 다르다»고 답하면 — 쿠키의 사람을 다시 알아낸다 (2026-09-24, 이월 Y′)
+ *
+ * 위 창을 닫는 것은 서버다 — 요청마다 **이 탭이 아는 사람**을 싣고(`api/known-user.tsx` — 쓰는 자리는 아래 레이아웃 이펙트
+ * 하나), 서버가 쿠키의 사람과 다르면 409 `session-user-changed`로 거절한다(읽기 · 쓰기 · WS 핸드셰이크 — 판정은
+ * `apps/api/src/auth/plugin.ts` 하나). HTTP 클라이언트가 그 답을 알아채면(`KnownUserHolder.changed`) 여기서 **`me`로 쿠키의 사람을
+ * 다시 묻고**(`reconfirm`) 그 답으로 옮긴다(`learned`):
+ *
+ * | `me`의 답 | 이 탭이 |
+ * |---|---|
+ * | 다른 사람 | **탭 사이 알림의 «다른 사람» 줄과 같다** — 그 사람이 된다 · 세대가 오른다(나가 있던 쓰기를 끊는다) · 앞 사람의 초안 칸을 지운다(`admit`) · 목록으로(`RequireAuth`) |
+ * | 같은 사람(그 사이 쿠키가 되돌아왔다) | 아무것도 안 한다 — 거절된 요청은 제 실패 문장을 그렸고, 다시 하면 된다 |
+ * | 401 | 세션이 끝났다(`invalidate`와 같다) |
+ * | 그 밖의 실패 | 아무것도 안 한다 — 다음 거절이 다시 묻는다 |
+ *
+ * **알리지 않는다**(`announce` 안 부름) — 이 탭은 로그인하지 않았다. 쿠키를 바꾼 탭이 앱 안의 탭이면 그 탭이 이미 알렸다.
+ * 한 번에 거절이 여럿 와도(한 화면의 조회 넷) 묻는 것은 하나다(`asking`).
+ *
+ * **사람이 바뀐 것을 머리에서 말한다**(`useSessionSwitched` — `session/session-menu.tsx`). 탭 사이 알림으로 바뀌든 서버의 거절로
+ * 알든 같다 — 앞 판은 목록으로 옮기기만 해 사용자가 왜 목록에 와 있는지 몰랐다.
+ *
  * ## 초안의 사본 — 명시적 로그아웃에 지우고, 다른 사람이 들어오면 앞 사람의 것을 지운다 (2026-09-23, 이월 X · 리뷰 (c))
  *
  * 초안과 코멘트의 멱등 키는 탭의 `sessionStorage`에 비춰 둔다(`panels/draft-store.tsx`) — 새로고침과 세션 만료를
@@ -108,6 +128,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -116,6 +137,7 @@ import {
 } from 'react'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
+import { useKnownUserHolder } from '../api/known-user'
 import { useDraftStore } from '../panels/draft-store'
 import type { SessionUser } from './../api/types'
 import { useTabChannel, type SessionNews } from './tab-channel'
@@ -156,12 +178,14 @@ interface Session {
   epoch: number
   /** 같은 사람이 다른 탭에서 다시 들어올 때마다 오른다(«탭 사이») — 실시간 연결이 새 쿠키로 다시 붙는다. */
   renewal: number
+  /** 이 탭이 로그인하지 않았는데 **다른 사람이 됐다**(탭 사이 알림 · 서버의 거절 — 위 머리말). 이 탭이 로그인 · 로그아웃하면 지운다. */
+  switched: boolean
 }
 
 /** 세션이 끝났다 — 이미 `anonymous`면 **같은 참조**(아래 `invalidate`의 주석). */
 function ended(current: Session): Session {
   if (current.state.status === 'anonymous') return current
-  return { ...current, state: ANONYMOUS, user: null, epoch: current.epoch + 1 }
+  return { ...current, state: ANONYMOUS, user: null, epoch: current.epoch + 1, switched: false }
 }
 
 /** 다른 탭의 소식으로 옮긴다(위 머리말 «탭 사이»의 표). 순수하다 — 업데이터 안에서 돈다. */
@@ -169,7 +193,16 @@ function heard(current: Session, news: SessionNews): Session {
   if (news.kind === 'signed-out') return ended(current)
   if (current.state.status !== 'authenticated') return { ...current, state: AUTHENTICATED, user: news.user }
   if (current.user !== null && current.user.id === news.user.id) return { ...current, renewal: current.renewal + 1 }
-  return { ...current, user: news.user, epoch: current.epoch + 1 }
+  return { ...current, user: news.user, epoch: current.epoch + 1, switched: true }
+}
+
+/**
+ * 서버의 거절 뒤 `me`가 알려 준 쿠키의 사람으로 옮긴다(위 머리말 «서버가 … 답하면»). **다른 사람이면 `heard`의 «다른 사람»
+ * 줄과 같은 값이다** — 같은 판정을 두 벌로 짓지 않으려고 그 함수를 부른다. 같은 사람이거나 로그인해 있지 않으면 그대로다.
+ */
+function learned(current: Session, user: SessionUser): Session {
+  if (current.state.status !== 'authenticated' || current.user?.id === user.id) return current
+  return heard(current, { kind: 'signed-in', user })
 }
 
 interface SessionContextValue {
@@ -178,6 +211,8 @@ interface SessionContextValue {
   epoch: number
   /** 지금 로그인한 사람. `state`가 `authenticated`여도 아직 `null`일 수 있다(위 머리말). */
   user: SessionUser | null
+  /** 이 탭이 로그인하지 않았는데 다른 사람이 됐다(`Session.switched`). */
+  switched: boolean
   invalidate: () => void
   /** 이 탭에서 로그아웃했다 — 끊고 다른 탭에 알린다(«탭 사이»). */
   signOut: () => void
@@ -197,7 +232,8 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
   const api = useApi()
   const channel = useTabChannel()
   const drafts = useDraftStore()
-  const [session, setSession] = useState<Session>({ state: PENDING, user: null, epoch: 0, renewal: 0 })
+  const [session, setSession] = useState<Session>({ state: PENDING, user: null, epoch: 0, renewal: 0, switched: false })
+  const knownUser = useKnownUserHolder()
   /** 다른 탭의 소식이 왔다 — 그보다 먼저 나간 마운트의 `me()` 답은 낡았을 수 있다(«탭 사이»). */
   const superseded = useRef(false)
   const renewals = useRef(new Set<() => void>())
@@ -206,7 +242,10 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
     // 응답이 오기 전에 Provider가 사라지면 결과를 버린다. 사라진 컴포넌트의 상태를
     // 갱신하면 아무 일도 일어나지 않는다.
     let alive = true
-    api.me().then(
+    // **내려가면 요청째 끊는다**(이월 AD 잔여 — `ReadOptions.cancel`). 앱에서는 문서가 사는 동안 하나라 거의 안 도는 길이지만,
+    // 끊지 않는 읽기를 남기지 않는다(조회 이펙트 전부가 같은 장치다).
+    const leave = new AbortController()
+    api.me({ cancel: leave.signal }).then(
       (sessionUser) => {
         if (!alive || superseded.current) return
         // **이 탭의 사람을 알았다** — 그 사람이 아닌 칸을 지운다(아래 «초안의 사본»).
@@ -233,6 +272,7 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
     )
     return () => {
       alive = false
+      leave.abort()
     }
     // `drafts`를 의존에 안 넣는다 — 문서가 사는 동안 하나이고(`main.tsx`), 넣으면 그것이 바뀔 때 `me()`가 다시 나간다
     // (위 머리말 «`me()`는 마운트에 한 번뿐이다»).
@@ -272,8 +312,8 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
       drafts?.admit(sessionUser.id)
       setSession((current) =>
         current.state.status === 'authenticated'
-          ? { ...current, user: sessionUser }
-          : { ...current, state: AUTHENTICATED, user: sessionUser },
+          ? { ...current, user: sessionUser, switched: false }
+          : { ...current, state: AUTHENTICATED, user: sessionUser, switched: false },
       )
       announce({ kind: 'signed-in', user: sessionUser })
     },
@@ -294,6 +334,41 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
     })
   }, [channel, drafts])
 
+  // **이 탭이 아는 사람을 싣는 자리에 적는다 — 쓰는 자리는 여기 하나다**(`api/known-user.tsx`). **레이아웃 이펙트인 것이 요점이다** —
+  // 사람이 바뀐 커밋의 자식 조회 이펙트(수동 이펙트)보다 먼저 선다. 뒤에 서면 새 사람의 화면이 첫 조회에 **앞 사람의 id** 를 실어
+  // 거짓 거절을 받는다. (자식의 레이아웃 이펙트는 이것보다 먼저 돌지만 요청을 내는 것이 없다 — 받는 자리를 세우는 것뿐이다.)
+  const { user: sessionUser } = session
+  useLayoutEffect(() => {
+    knownUser?.set(sessionUser?.id)
+  }, [knownUser, sessionUser])
+
+  // **서버가 «쿠키의 사람이 다르다»고 답하면 쿠키의 사람을 다시 묻는다**(위 머리말 «서버가 … 답하면»). 묻는 것은 한 번에 하나다.
+  const asking = useRef(false)
+  useEffect(() => {
+    if (knownUser === null) return undefined
+    let alive = true
+    const stop = knownUser.onChanged(() => {
+      if (asking.current) return
+      asking.current = true
+      api.me().then(
+        (cookieUser) => {
+          asking.current = false
+          if (!alive) return
+          drafts?.admit(cookieUser.id)
+          setSession((current) => learned(current, cookieUser))
+        },
+        (caught: unknown) => {
+          asking.current = false
+          if (alive && toFailure(caught, UNKNOWN_SESSION_FAILURE).kind === 'signed-out') setSession(ended)
+        },
+      )
+    })
+    return () => {
+      alive = false
+      stop()
+    }
+  }, [api, drafts, knownUser])
+
   // **같은 사람의 새 세션을 알리면 단 것을 부른다** — 커밋 뒤에 부른다(업데이터는 순수해야 한다). 첫 값(0)에는
   // 부르지 않는다: 오른 적이 없다.
   const { renewal } = session
@@ -309,10 +384,10 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
     }
   }, [])
 
-  const { state, epoch, user } = session
+  const { state, epoch, user, switched } = session
   const value = useMemo(
-    () => ({ state, epoch, user, invalidate, signOut, confirm, onRenewal }),
-    [state, epoch, user, invalidate, signOut, confirm, onRenewal],
+    () => ({ state, epoch, user, switched, invalidate, signOut, confirm, onRenewal }),
+    [state, epoch, user, switched, invalidate, signOut, confirm, onRenewal],
   )
 
   return <SessionContext.Provider value={value}>{props.children}</SessionContext.Provider>
@@ -377,6 +452,14 @@ export function useSessionRenewal(): ((listener: () => void) => () => void) | nu
  */
 export function useSessionUser(): SessionUser | null {
   return useSessionContext().user
+}
+
+/**
+ * **이 탭이 로그인하지 않았는데 다른 사람이 됐는가**(위 머리말 «서버가 … 답하면») — 머리가 그렇다고 말한다(`session-menu.tsx`).
+ * 이 탭이 로그인하거나 로그아웃하면 거짓이 된다.
+ */
+export function useSessionSwitched(): boolean {
+  return useSessionContext().switched
 }
 
 export function useConfirmSession(): (user: SessionUser) => void {

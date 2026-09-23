@@ -148,6 +148,8 @@ import type { PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import { ApiError, type ApiClient } from '../api/client'
+import { isSessionUserChanged } from '../api/known-user'
+import type { WriteConclusion, WriteNote } from './write-ledger'
 import type { Comment, CommentCreated } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
 import { nodeTypeLabel } from './node-shape'
@@ -286,6 +288,7 @@ function keyVerdict(caught: unknown): KeyVerdict | null {
  * | **api 가 낸 500**(오류 봉투가 있다 — `ApiError.enveloped`) | **확정 안 됨** — 핸들러가 던진 것이고 커밋 전이다(아래) | **모른다** — 서버가 키를 **보기 전이나 도중에** 던졌을 수 있다. 그러면 앞 게시에 대해 아무것도 말하지 않는다(아래) |
  * | 연결 실패 · 502·503·504 · **봉투 없는 500** | **모른다** — 요청이 서버에 닿아 커밋됐을 수 있다 | **모른다** |
  * | **api 가 낸 503**(봉투가 있다) | **모른다** — DB 가 답하지 않았다(COMMIT 의 답을 잃었을 수 있다) | **모른다** |
+ * | **409 `session-user-changed`**(쿠키의 사람이 다르다 — 이월 Y′) | **확정 안 됨** — 인증 훅의 거절이다 | **모른다** — 키를 보기 전의 거절이다 |
  *
  * 401 은 두 칸 다 4xx 줄로 가지만 «안 달림»이 아니라 **«세션 끝»**이 된다 — `toFailure`가 로그인 화면으로
  * 바꾼다(`api/failure.tsx`). **이슈 코드 `idempotency-key-reused` · `idempotency-key-deleted`가 실린 409 는 이 표에 오지
@@ -328,6 +331,9 @@ function keyVerdict(caught: unknown): KeyVerdict | null {
  */
 function knownRejection(caught: unknown, asked: 'sent' | 'resent'): boolean {
   if (!(caught instanceof ApiError)) return false
+  // **«쿠키의 사람이 다르다»(409 `session-user-changed`)는 키를 보기 전의 거절이다**(이월 Y′ — 서버는 인증 훅에서, 키 판정보다
+  // 앞에서 낸다). 첫 보내기에는 «그 요청은 커밋 전»이 참이지만, 다시 보낸 것에는 앞 게시에 대해 아무것도 말하지 않는다 — 모른다.
+  if (asked === 'resent' && isSessionUserChanged(caught)) return false
   if (caught.status >= 400 && caught.status < 500) return true
   return asked === 'sent' && caught.status === 500 && caught.enveloped
 }
@@ -651,6 +657,16 @@ export function CommentPanel(props: {
     setRefreshing((prev) => (prev?.failure == null ? prev : null))
   }, [])
 
+  // **장부가 결말을 남기면 칸의 같은 통지를 지운다**(리뷰 F2 — `page-description.tsx`의 같은 자리). 장부는 통지를 그리는 갈래
+  // (폼 안의 `PendingNotice`)가 없으면 남기는데, 이 본문이 떠 있는 채 폼만 없던 판(강등된 viewer · 불러오는 중)에는 `settle`이 칸
+  // (`WRITE_ERROR` · `LANDED_SINCE_NOTICE`)에도 같은 결말을 썼다 — 폼이 돌아오면 둘 다 선다. 남기는 것은 칸 쓰기 뒤다.
+  const { missed } = busyLock
+  useEffect(() => {
+    if (missed === null) return
+    setWriteError(null)
+    setLandedSince(null)
+  }, [missed, setWriteError, setLandedSince])
+
   useEffect(() => {
     if (pageId === undefined) {
       setState({ status: 'ready', at: issue(), comments: [] })
@@ -712,9 +728,13 @@ export function CommentPanel(props: {
     <T, V>(op: {
       send: (client: ApiClient, openPageId: string, signal: AbortSignal) => Promise<T>
       verify: (client: ApiClient, openPageId: string, signal: AbortSignal) => Promise<V>
-      done: (value: T, openPageId: string) => Promise<void> | void
-      /** 판정을 화면에 옮긴다. 반영되지 않았으면 그 실패를 돌려준다 — 초안·편집 칸은 남는다. */
-      verified: (verdict: V, ownerLive: boolean, openPageId: string) => Promise<Failure | null> | Failure | null
+      /** 성공을 화면에 옮긴다. 실패가 아닌데 말할 것이 있으면(`WriteNote` — 게시의 «이미 달렸고 그 뒤 …») 그것을 돌려준다. */
+      done: (value: T, openPageId: string) => Promise<WriteNote | void> | WriteNote | void
+      /**
+       * 판정을 화면에 옮긴다. 반영되지 않았으면 그 실패를 돌려준다 — 초안·편집 칸은 남는다. 실패가 아닌데 말할 것이 있으면
+       * `WriteNote`다(`done`과 같다).
+       */
+      verified: (verdict: V, ownerLive: boolean, openPageId: string) => Promise<WriteConclusion> | WriteConclusion
       /** 시간 안에 실패했을 때 실패 통지 **말고** 더 할 일. 없으면 통지만 한다. */
       failed?: (openPageId: string) => void
       /** 모르는 실패면 판정으로 보낸다(`write-ledger.tsx`의 `TrackedWrite.uncertain`). 게시만 준다. */
@@ -726,8 +746,10 @@ export function CommentPanel(props: {
         send: (signal) => op.send(api, openPageId, signal),
         ...(op.uncertain === undefined ? {} : { uncertain: op.uncertain }),
         verify: (signal) => op.verify(api, openPageId, signal),
-        // **돌려주는 것은 칸에 그린 실패 그대로다** — 떠나 있는 동안 끝나면 장부가 이것을 남긴다(`write-ledger.tsx`의
-        // «떠나 있는 동안 끝난 실패» — 이월 S). «이미 달렸고 그 뒤 고쳐졌다 · 지워졌다»(`keyVerdict`)는 실패가 아니라 `done`으로 온다.
+        // **돌려주는 것은 칸에 그린 결말 그대로다** — 그리는 본문이 없는 동안 끝나면 장부가 이것을 남긴다(`write-ledger.tsx`의
+        // «떠나 있는 동안 끝난 실패» — 이월 S · «판정으로 끝난 쓰기도 전한다» — 이월 5차 2회). «이미 달렸고 그 뒤 고쳐졌다 · 지워졌다»
+        // (`keyVerdict`)는 실패가 아니라 `done`(다시 보낸 것이면 `verified`)으로 오고 `WriteNote`를 돌려준다 — 칸에는
+        // `LANDED_SINCE_NOTICE`로 그리고, 실패 칸(`WRITE_ERROR`)에는 안 쓴다.
         settle: async (outcome, ownerLive) => {
           try {
             if (outcome.kind === 'failed') {
@@ -735,13 +757,13 @@ export function CommentPanel(props: {
               throw outcome.caught
             }
             if (outcome.kind === 'done') {
-              await op.done(outcome.value, openPageId)
+              const said = await op.done(outcome.value, openPageId)
               setWriteError(null)
-              return null
+              return said ?? null
             }
-            const failure = await op.verified(outcome.verdict, ownerLive, openPageId)
-            setWriteError(failure)
-            return failure
+            const said = await op.verified(outcome.verdict, ownerLive, openPageId)
+            setWriteError(said?.kind === 'note' ? null : said)
+            return said
           } catch (caught) {
             const failure = toFailure(caught, WRITE_FAILED)
             setWriteError(failure)
@@ -800,7 +822,7 @@ export function CommentPanel(props: {
      * 달림이다**(`keyVerdict`) — 초안과 키를 버리고 목록을 다시 받고 그렇다고 말한다. 그 응답은 문서 변화를 싣지 않는다 —
      * 번호는 앞 게시가 붙였고 그 변화는 앞 게시의 응답이나 방송이 날랐다(어긋났는지 말할 값이 없다).
      */
-    const landed = (posted: Posted, openPageId: string, ownerLive: boolean): void => {
+    const landed = (posted: Posted, openPageId: string, ownerLive: boolean): WriteNote | void => {
       if (posted.kind === 'created') {
         // **문서 변화를 먼저 얹는다.** 목록을 다시 받아도 번호는 그 응답에 없다 —
         // 번호는 문서의 값이다(D1). 결과를 **버리지 않는다**(리뷰 ④).
@@ -829,6 +851,9 @@ export function CommentPanel(props: {
       // 게시가 나가 있는 동안 다른 노드를 골랐어도, 다른 노드에 써 둔 초안이 있어도.
       setDrafts((prev) => withDraft(prev, nodeId, ''))
       refresh(openPageId)
+      // **«이미 달렸고 그 뒤 …»는 실패가 아닌 결말이다** — 칸에는 위 `setLandedSince`가 그리고, 그리는 본문이 없으면 장부가 이것을
+      // 남긴다(`write-ledger.tsx`의 `WriteNote`). 특히 «지워졌다»는 목록 · 상자가 다 비어 이것 말고는 말할 자리가 없다(B 리뷰 A-side).
+      if (posted.kind !== 'created') return { kind: 'note', message: posted.kind === 'edited-since' ? EDITED_SINCE : DELETED_SINCE }
     }
 
     perform<Posted, Reposted>({
@@ -861,8 +886,7 @@ export function CommentPanel(props: {
       verified: (verdict, ownerLive, openPageId) => {
         // 거절됐으면 **초안과 키를 남긴다** — 같은 글을 다시 달면 같은 키다.
         if (!verdict.posted) return toFailure(verdict.caught, WRITE_FAILED)
-        landed(verdict.result, openPageId, ownerLive)
-        return null
+        return landed(verdict.result, openPageId, ownerLive) ?? null
       },
     })
   }

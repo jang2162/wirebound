@@ -13,6 +13,7 @@ import {
   type ReadOptions,
   type WriteOptions,
 } from './client'
+import { isSessionUserChanged, KNOWN_USER_HEADER, type KnownUserHolder } from './known-user'
 import type {
   Comment,
   CommentCreated,
@@ -92,6 +93,23 @@ const UNREACHABLE = '서버에 연결하지 못했습니다'
  * 페이지의 GET 이 `ERR_ABORTED` · 세 번째 페이지로 갈 때 매달린 요청 **0** · 그 GET 의 머리 0.4–0.5s · 거짓 통지 0(N=6 ·
  * N=7 둘 다). **받은 신호(`signal` — 판정용 다시 읽기)와는 다른
  * 키다** — 그쪽은 부른 쪽이 시간을 재고, 이쪽은 시간을 여기서 잰다(두 시계가 한 요청을 다투지 않는다).
+ *
+ * **끊는 자리 — 조회 이펙트 전부**(2026-09-24 이월 AD 잔여): 페이지 · 설명 · 코멘트 · 프리셋 · 테마 · 되돌리기 이력(3차) + **셸의
+ * 프로젝트**(`routes/editor.tsx` — 첫 조회 · 역할 다시 읽기) · **트리**(`tree/use-tree-commands.tsx` — 마운트 · 복원 신호 · 조작 뒤)
+ * · **세션 확인**(`session/session-context.tsx`의 `me`) · **편집 수습의 페이지**(`edit/use-edit-commit.tsx` — «떠남»은 스토어가 그
+ * 페이지를 더는 열고 있지 않은 것). 앞 판(Chrome · 조회를 4s 붙잡고 1s 에 목록으로): 프로젝트 · 트리 조회가 4.1s 에 200 으로 끝났다
+ * → 이 판: 떠나는 순간 `ERR_ABORTED`. **안 끊는 것**: 이름 변경 뒤의 트리 다시 받기(장부가 **지금 떠 있는** 트리에 배달한다 — 낸
+ * 트리가 떠나도 받을 트리가 있을 수 있다) · 스냅샷 패널 · 테마 편집기의 `getProject`(이 판이 안 건드린 자리).
+ *
+ * **남는 성질 둘 — 재서 적고 고치지 않았다(판정):**
+ *
+ * - **10초는 `fetch`를 부른 순간부터다 — 브라우저 안의 대기열 시간도 센다.** Chrome(HTTP/1.1 · 한 호스트 연결 6): 한 페이지 행을
+ *   DB 에서 잠가 둔 채 그 행의 설명 쓰기 여섯을 raw `fetch`로 내 연결 여섯을 쥐게 하고 프로젝트를 열었다 → `getProject` 둘(10.1s ·
+ *   20.1s 에 끊김) → **20.2s «서버가 응답하지 않습니다»**, api 로그에 그 `GET`은 **0건**(서버는 그 행을 안 보므로 곧바로 답할 수
+ *   있었다). 앱의 조회는 이제 떠나면 끊기므로 앱 스스로 연결을 쥐는 길은 좁아졌다 — 남는 것은 끊을 수 없는 요청(쓰기 · 다른 도구)이
+ *   연결을 쥔 판이다. 고치려면 «연결을 잡은 순간»부터 재야 하는데 `fetch`는 그 순간을 알려 주지 않는다.
+ * - **시간 초과 뒤 저절로 안 돌아온다.** 같은 판에서 잠금을 풀어(연결이 풀림) 6s 기다려도 «서버가 응답하지 않습니다» 그대로 · 에디터
+ *   안 섬 — 새로고침(또는 그 화면을 다시 여는 것)이 다시 읽는다. 앞 머리말의 «대가»와 같은 말이다.
  */
 export const READ_DEADLINE_MS = 10_000
 /** 일반 읽기를 보내는 횟수 — 첫 번째와 다시 시도 한 번. */
@@ -1064,10 +1082,14 @@ const CONNECTION_ID_HEADER = 'x-wb-connection-id'
  * @param fetchImpl 테스트가 가짜를 주입하는 자리. 기본값은 브라우저의 `fetch`다.
  * @param connectionId 지금 붙어 있는 WebSocket 연결의 id를 읽는 함수. 기본은 *"없다"*이고,
  *   그때는 헤더가 아예 붙지 않는다(위 상수 주석).
+ * @param knownUser **이 탭이 아는 사용자**(`api/known-user.tsx` — 이월 Y′). 있으면 요청마다 그 id 를 머리에 싣고
+ *   (`KNOWN_USER_HEADER`), 서버가 «쿠키의 사람이 다르다»(409 `session-user-changed`)로 답하면 `changed()`를 부른다 —
+ *   **알아채는 자리는 여기 하나다**(어느 화면의 요청이든). 없으면 싣지도 듣지도 않는다(앞 판 그대로).
  */
 export function createHttpClient(
   fetchImpl: typeof fetch = globalThis.fetch,
   connectionId: () => string | undefined = () => undefined,
+  knownUser: Pick<KnownUserHolder, 'get' | 'changed'> | null = null,
 ): ApiClient {
   /**
    * 일반 읽기를 **시간 제한 안에서** 보낸다 — 넘으면 끊고 한 번 더, 그래도 넘으면 «서버가 응답하지 않습니다»다
@@ -1116,9 +1138,12 @@ export function createHttpClient(
     // **쓰기가 낸 연결을 주면 그것이다**(`WriteOptions.connectionId`) — 없으면 지금 연결이다.
     const origin = options !== undefined && 'connectionId' in options ? options.connectionId : undefined
     const connection = origin ?? connectionId()
+    // **이 탭이 아는 사용자** — 모르면 키를 만들지 않는다(위 `connection`과 같은 이유). 보내는 순간의 값이다.
+    const known = knownUser?.get()
     const headers: Record<string, string> = {
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       ...(connection === undefined ? {} : { [CONNECTION_ID_HEADER]: connection }),
+      ...(known === undefined ? {} : { [KNOWN_USER_HEADER]: known }),
     }
 
     const init: RequestInit = {
@@ -1160,7 +1185,13 @@ export function createHttpClient(
       }
     }
 
-    if (!response.ok) throw await toApiError(response)
+    if (!response.ok) {
+      const error = await toApiError(response)
+      // **쿠키의 사람이 이 탭이 아는 사람과 다르다**(이월 Y′) — 세션이 쿠키의 사람을 다시 알아낸다. 실패는 그대로 던진다 —
+      // 부른 화면은 제 실패 자리에 서버 문장(«다른 사람으로 로그인됐습니다 …»)을 그린다.
+      if (isSessionUserChanged(error)) knownUser?.changed()
+      throw error
+    }
 
     // 204에는 본문이 없다. 파싱하면 실패하므로 아예 읽지 않는다.
     if (response.status === 204) return undefined as T
@@ -1200,10 +1231,10 @@ export function createHttpClient(
     login: (email, password) =>
       request<SessionUser>('POST', '/auth/login', SHAPES.sessionUser, { email, password }),
     logout: () => request<void>('POST', '/auth/logout', SHAPES.noBody),
-    me: () => request<SessionUser>('GET', '/auth/me', SHAPES.sessionUser),
+    me: (options) => request<SessionUser>('GET', '/auth/me', SHAPES.sessionUser, undefined, options),
     listProjects: () => request<ProjectDetail[]>('GET', '/projects', SHAPES.projectList),
-    getProject: (projectId) =>
-      request<ProjectDetail>('GET', projectPath(projectId), SHAPES.projectDetail),
+    getProject: (projectId, options) =>
+      request<ProjectDetail>('GET', projectPath(projectId), SHAPES.projectDetail, undefined, options),
     // 아래 셋이 P2b-5의 프로젝트 CRUD다. **생성 응답은 `ProjectDetail`이다** — `role`까지
     // 실려 온다(`api/types.ts`의 실측 표). 그래서 `SHAPES.projectDetail`을 그대로 지나는데,
     // 그 근거는 "모양이 같다"가 아니라 **`createProject`의 하중 `id`가 그 검사가 이미 보는

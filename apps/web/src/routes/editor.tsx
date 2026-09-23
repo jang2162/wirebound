@@ -267,6 +267,13 @@ export function EditorShellRoute(): ReactElement {
    * 한 줄이다.
    */
   const signalUnanswered = useRef(false)
+  /**
+   * **이 프로젝트를 떠나면 끊기는 신호**(이월 AD 잔여 · 2026-09-24) — 첫 조회와 다시 읽기(`reread`)가 함께 싣는다(`ReadOptions.cancel`).
+   * 앞 판은 답만 버려(`alive` · `reads`) 떠난 셸의 `getProject`가 끝까지 내려받혔다(Chrome: 조회를 4s 붙잡고 1s 에 목록으로 —
+   * 4.1s 에 200 둘). **차례 장치(`reads`)와 겹치지 않는다** — 끊는 것은 «떠남»(프로젝트가 바뀜 · 셸이 내려감) 하나이고, 늦게 낸
+   * 다시 읽기가 앞 것을 끊지는 않는다(앞 것의 답은 여전히 `reads`가 버린다). 끊긴 조회의 거절도 차례가 이미 지나 버려진다.
+   */
+  const leaving = useRef<AbortController | null>(null)
 
   /**
    * **켜 둔 셸이 프로젝트를 다시 읽는다**(이월 5차). 역할을 **실행 중에** 바꾸는 유일한 길이다 — 셸은 역할을 첫 조회의
@@ -291,7 +298,8 @@ export function EditorShellRoute(): ReactElement {
       const turn = ++reads.current
       if (cause === 'changed') signalUnanswered.current = true
       try {
-        const project = await api.getProject(projectId)
+        const cancel = leaving.current?.signal
+        const project = await api.getProject(projectId, cancel === undefined ? undefined : { cancel })
         if (reads.current !== turn) return
         signalUnanswered.current = false
         setState({ status: 'ready', project })
@@ -325,12 +333,15 @@ export function EditorShellRoute(): ReactElement {
     signalUnanswered.current = false
     // 앞 프로젝트로 나가 있던 다시 읽기의 답을 버린다(`reads`).
     const turn = ++reads.current
+    // 이 프로젝트를 떠나면 끊는다(`leaving`) — 첫 조회도 다시 읽기도.
+    const leave = new AbortController()
+    leaving.current = leave
 
     // `.then(ok, err)`이 아니라 try/catch인 것은 호출 자체가 그 자리에서 던질 수도 있기
     // 때문이다. 그 예외는 이펙트 밖으로 새어 나가 앱 트리를 통째로 죽인다.
     async function load(): Promise<void> {
       try {
-        const project = await api.getProject(projectId)
+        const project = await api.getProject(projectId, { cancel: leave.signal })
         if (alive && reads.current === turn) setState({ status: 'ready', project })
       } catch (caught) {
         if (!alive || reads.current !== turn) return
@@ -342,6 +353,7 @@ export function EditorShellRoute(): ReactElement {
     void load()
     return () => {
       alive = false
+      leave.abort()
     }
   }, [api, projectId, store])
 

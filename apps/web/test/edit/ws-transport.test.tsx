@@ -256,7 +256,8 @@ describe('WS가 붙어 있으면 편집이 그리로 나간다', () => {
     })
 
     await act(async () => {})
-    expect(board.getPage).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID)
+    // 수습의 다시 받기는 떠나면 끊을 신호를 싣는다(이월 AD 잔여 — `use-edit-commit.tsx`의 `recover`).
+    expect(board.getPage).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID, { cancel: expect.any(AbortSignal) })
     expect(board.store.getState().headSeq).toBe(9)
     expect(board.store.getState().editFailure).toEqual({
       kind: 'message',
@@ -497,7 +498,8 @@ describe('리베이스한 편집을 다시 낸다 (D3)', () => {
     await act(async () => {})
     // **다시 내지 않았다.** 프레임은 처음 하나뿐이다.
     expect(board.patchFrames()).toHaveLength(1)
-    expect(board.getPage).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID)
+    // 수습의 다시 받기는 떠나면 끊을 신호를 싣는다(이월 AD 잔여 — `use-edit-commit.tsx`의 `recover`).
+    expect(board.getPage).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID, { cancel: expect.any(AbortSignal) })
     const failure = board.store.getState().editFailure
     expect(failure?.kind === 'message' ? failure.message : '').toContain('편집 1개가 취소됐습니다')
   })
@@ -547,7 +549,8 @@ describe('리베이스한 편집을 다시 낸다 (D3)', () => {
     // op_2가 그 실패를 타고 나가지 않았다 — 프레임은 처음 하나뿐이다.
     expect(board.patchFrames()).toHaveLength(1)
     // 실패는 삼켜지지 않고 복구 경로로 갔다.
-    expect(board.getPage).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID)
+    // 수습의 다시 받기는 떠나면 끊을 신호를 싣는다(이월 AD 잔여 — `use-edit-commit.tsx`의 `recover`).
+    expect(board.getPage).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID, { cancel: expect.any(AbortSignal) })
   })
 })
 
