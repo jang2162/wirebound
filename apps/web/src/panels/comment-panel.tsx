@@ -577,6 +577,11 @@ export function CommentPanel(props: {
   const [editedSince, setEditedSince] = usePanelSlot(EDITED_SINCE_NOTICE)
   const [drafts, setDrafts] = usePanelSlot(DRAFTS)
   const [editingId, setEditingId] = usePanelSlot(EDITING_ID)
+  // **viewer 에게는 고치는 중인 글이 없다**(이월 M′ 리뷰 F1). 칸은 저장소에서 되살아나므로(`EDITING_ID`) editor 때 열어 둔
+  // 수정 상자가 강등 뒤 새로고침에 **그대로 섰다** — 켜진 «저장» · 403 · 실패 문장 없음(그 문장은 폼 안이다) · 제 글의 원문도
+  // 상자에 가렸다. «수정» 단추(칸을 **세우는** 입구)만 가려서는 모자라다 — 세워진 칸을 **그리는** 갈래와 **보내는** `saveEdit`이
+  // 이 한 값을 본다. 칸 자체는 **안 지운다** — 다시 editor 가 되면 초안이 돌아와야 한다(설명 초안 · 새 코멘트 초안과 같은 결정).
+  const editing = props.canEdit ? editingId : null
   const [editDraft, setEditDraft] = usePanelSlot(EDIT_DRAFT)
   const [postKeys, setPostKeys] = usePanelSlot(POST_KEYS)
   const [refreshing, setRefreshing] = usePanelSlot(REFRESH)
@@ -872,6 +877,8 @@ export function CommentPanel(props: {
   }
 
   const saveEdit = (commentId: string): void => {
+    // 그리는 갈래와 **같은 값**이다(`editing`) — 상자가 안 선 글은 보내지도 않는다.
+    if (editing !== commentId) return
     const body = editDraft.trim()
     if (body === '') return
 
@@ -946,7 +953,8 @@ export function CommentPanel(props: {
   return (
     <div className="wb-shell-comments">
       {/* **폼째 뺀다**(`canEdit`). 폼 안의 통지(실패 · 확인 중 · 어긋남)도 함께 가는데, 그것들은 전부 **내가 낸 쓰기**의
-          뒷말이라 쓰기를 못 내는 사람에게는 설 일이 없다. */}
+          뒷말이다. viewer 가 쓰기를 못 내는 것은 폼만의 일이 아니다 — 줄마다의 수정 상자도 `editing`(위)이 막아야 참이다.
+          앞 판은 저장소에서 되살아난 수정 상자가 폼 **밖**에서 쓰기를 냈고, 그 실패가 설 자리는 뺀 폼 안이었다(리뷰 F1). */}
       {props.canEdit && (
         <form
           className="wb-shell-comment-form"
@@ -1065,7 +1073,7 @@ export function CommentPanel(props: {
                 {group.comments.map((comment) => (
                   <li key={comment.id} className="wb-shell-comment">
                     <p className="wb-shell-comment-author">{comment.authorName}</p>
-                    {editingId === comment.id ? (
+                    {editing === comment.id ? (
                       <>
                         <label className="wb-shell-comment-label" htmlFor={`wb-comment-edit-${comment.id}`}>
                           코멘트 수정

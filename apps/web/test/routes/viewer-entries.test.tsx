@@ -8,7 +8,7 @@
  * **키보드 축은 이 파일에 없다** — 두 트리의 단축키는 그 자의 키 훑기가 소유한다(단축키를 지운 변조가 거기서만 죽는다).
  * 대조(editor 에게는 입구가 있다)는 이 파일이 따로 두지 않는다 — 하네스의 기본 역할이 owner 라 기존 케이스 전부가 그쪽이다.
  */
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import type { Comment, ProjectDetail } from '../../src/api/types'
@@ -17,10 +17,12 @@ import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime
 import { createEditChannel } from '../../src/realtime/edit-channel'
 import { createLockChannel } from '../../src/realtime/lock-channel'
 import { VIEWER_NOTICE } from '../../src/panels/property-panel'
+import { openDraftStore } from '../../src/panels/draft-store'
 import { openPage, pageDoc, PROJECT_ID, PROJECT_NAME, type EditorOptions } from '../editor-harness'
 import '../../src/catalog-setup'
 
 const VIEWER: ProjectDetail = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role: 'viewer' }
+const EDITOR: ProjectDetail = { ...VIEWER, role: 'editor' }
 
 const DOC: PageDocument = pageDoc({
   id: 'n-root',
@@ -43,6 +45,29 @@ const COMMENTS: Comment[] = [
   { id: 'c-2', nodeId: 'n-btn', body: '버튼 위치', authorId: 'u-2', authorName: '밥', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' },
 ]
 
+/** 탭 하나의 저장소 — 새로고침은 같은 저장소 위에 새 문서다(`page-meta-conflict.test.tsx`의 것과 같은 작은 판). */
+class MemoryStorage implements Storage {
+  readonly #items = new Map<string, string>()
+  get length(): number {
+    return this.#items.size
+  }
+  clear(): void {
+    this.#items.clear()
+  }
+  getItem(key: string): string | null {
+    return this.#items.get(key) ?? null
+  }
+  key(index: number): string | null {
+    return [...this.#items.keys()][index] ?? null
+  }
+  removeItem(key: string): void {
+    this.#items.delete(key)
+  }
+  setItem(key: string, value: string): void {
+    this.#items.set(key, String(value))
+  }
+}
+
 async function openAsViewer(options: EditorOptions = {}): Promise<void> {
   await openPage(DOC, {
     ...options,
@@ -61,8 +86,11 @@ function tab(name: string): void {
 }
 
 describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)', () => {
-  /** 혼자 죽는 변조: 셸이 메뉴 트리에 `editable={mode === 'edit'}`를 넘긴다(역할을 안 얹는다). */
-  it('메뉴 트리 — 편집 모드에서도 «메뉴 편집» 툴바 · «페이지 JSON»이 없다(숨김). 트리와 페이지 링크는 그대로다', async () => {
+  /**
+   * 혼자 죽는 변조: 셸이 메뉴 트리에 `editable={mode === 'edit'}`를 넘긴다(역할을 안 얹는다). 마지막 줄(메뉴를 눌러 고른다 —
+   * 읽기다)도 혼자 죽는 변조가 있다: 메뉴 트리가 `editable`이 아니면 `select`를 무동작으로 둔다(viewer 에게만 고르기가 꺼진다).
+   */
+  it('메뉴 트리 — 편집 모드에서도 «메뉴 편집» 툴바 · «페이지 JSON»이 없다(숨김). 트리 · 페이지 링크 · 메뉴 고르기는 그대로다', async () => {
     await openAsViewer()
     const tree = screen.getByRole('region', { name: '메뉴·페이지 트리' })
 
@@ -72,6 +100,9 @@ describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)
     // 읽기는 남는다 — 메뉴를 가리키고 페이지로 옮겨 간다.
     expect(within(tree).getByRole('button', { name: '회원관리' })).toBeTruthy()
     expect(within(tree).getByRole('link', { name: '회원 목록' })).toBeTruthy()
+    // 메뉴를 **눌러 고를 수 있다** — 고르기는 읽기다(선택 표시). 앞 판 `page-meta-conflict`의 M 메뉴 트리 케이스가 재던 ⓒ.
+    fireEvent.click(within(tree).getByRole('button', { name: '회원관리' }))
+    expect(within(tree).getByRole('button', { name: '회원관리' }).getAttribute('aria-pressed')).toBe('true')
   })
 
   /** 혼자 죽는 변조: 구조 트리가 툴바를 `editable`과 무관하게 그린다. */
@@ -132,6 +163,52 @@ describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)
       expect(within(panel).queryByRole('button', { name: '수정' }), mode).toBeNull()
       expect(within(panel).queryByRole('button', { name: '삭제' }), mode).toBeNull()
     }
+  })
+
+  /**
+   * **강등 → 새로고침 — 되살린 수정 상자**(리뷰 F1). editor 때 제 글의 «수정»을 눌러 고치던 글이 저장소에 남은 채(`comments/editing-id`
+   * · `comments/edit-draft`) viewer 로 다시 연다. viewer 에게는 **서버의 원문**이 보이고 상자가 없다. 그리고 **칸은 안 지운다** —
+   * 다시 editor 로 열면 고치던 글이 돌아온다.
+   *
+   * 혼자 죽는 변조: 목록 줄의 갈래가 역할을 안 본다(`editing === comment.id` → `editingId === comment.id`, `saveEdit`의 가드는
+   * 남김 — 상자는 서되 요청은 안 나가 `viewer-readonly`의 셋째 케이스는 산다). 셋째 단언(돌아온다)은 viewer 가 칸을 비우는
+   * 변조에서 이 케이스만 죽는다. 둘을 함께 되돌리면(`editing = editingId`) `viewer-readonly`의 셋째 케이스와 함께 죽는다 —
+   * **요청** 축은 그쪽이 소유한다.
+   */
+  it('코멘트 — 강등 뒤 새로고침에 되살린 수정 상자가 viewer 에게 안 서고 본문이 보인다. 다시 editor 면 고치던 글이 돌아온다', async () => {
+    const session = new MemoryStorage()
+    const shared = new MemoryStorage()
+    const withStore = { draftStore: openDraftStore(() => session, () => shared) }
+    const editing = (): HTMLTextAreaElement | null =>
+      within(screen.getByRole('tabpanel')).queryByRole('textbox', { name: '코멘트 수정' }) as HTMLTextAreaElement | null
+
+    // editor 때 — 제 글을 고치기 시작한다.
+    await openPage(DOC, { ...withStore, apiOverrides: { getProject: async () => EDITOR, listComments: async () => COMMENTS } })
+    pick('n-card')
+    tab('코멘트')
+    fireEvent.click(await within(screen.getByRole('tabpanel')).findByRole('button', { name: '수정' }))
+    fireEvent.change(editing()!, { target: { value: '강등 전에 고치던 글' } })
+    cleanup()
+
+    // 강등 뒤 새로고침 — 같은 저장소 위에 새 문서.
+    await openAsViewer({ draftStore: openDraftStore(() => session, () => shared) })
+    pick('n-card')
+    tab('코멘트')
+    const panel = screen.getByRole('tabpanel')
+    expect(await within(panel).findByText('카드 문구 확인')).toBeTruthy()
+    expect(editing()).toBeNull()
+    expect(within(panel).queryByRole('button', { name: '저장' })).toBeNull()
+    expect(within(panel).queryByRole('button', { name: '취소' })).toBeNull()
+    cleanup()
+
+    // 다시 editor — 고치던 글이 돌아온다.
+    await openPage(DOC, {
+      draftStore: openDraftStore(() => session, () => shared),
+      apiOverrides: { getProject: async () => EDITOR, listComments: async () => COMMENTS },
+    })
+    pick('n-card')
+    tab('코멘트')
+    await waitFor(() => expect(editing()?.value).toBe('강등 전에 고치던 글'))
   })
 
   /**
