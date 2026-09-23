@@ -1,0 +1,70 @@
+/**
+ * **내보내기 워커와 메인이 주고받는 메시지** — 두 쪽이 이 모양 하나를 본다(`export-worker.ts` · `export-worker-thread.ts`).
+ *
+ * 값만 담는다 — 워커 경계는 구조화 복제라 함수·클래스 인스턴스가 못 넘는다(`Error`는 넘지만 이름과 글만 남는다). 그래서
+ * 도메인 에러는 클래스가 아니라 `ExportJobFailure`의 갈래로 넘기고 메인이 같은 클래스로 되살린다.
+ */
+import type { BundleNodeError } from '@wirebound/exporter'
+import type { BrokenLink, BundleTheme, ExportedPageSummary } from './export-bundle'
+import type { ScreenFailure, ScreenTheme } from './export-pptx'
+import type { ExportRows } from './export-source'
+import type { ScreenRequest, ScreenResult } from './screen-render'
+
+/** 어떤 산출물을 만들지. `zipRoot`·`zip`이 없으면 **압축하지 않는다** — 미리보기가 그것이다. */
+export type ExportJobSpec =
+  | { kind: 'html'; theme: BundleTheme; zipRoot: string | null }
+  | { kind: 'pptx'; screenTheme: ScreenTheme | null; zip: boolean }
+
+export type HtmlJobResult = {
+  kind: 'html'
+  zip: Uint8Array | null
+  errors: BundleNodeError[]
+  pages: ExportedPageSummary[]
+  duplicateTargets: string[]
+  brokenLinks: BrokenLink[]
+  themeId: string | null
+}
+
+export type PptxJobResult = {
+  kind: 'pptx'
+  zip: Uint8Array | null
+  pages: ExportedPageSummary[]
+  screenless: string[]
+  screenFailures: ScreenFailure[]
+  fontWarning: string | null
+}
+
+export type ExportJobResult = HtmlJobResult | PptxJobResult
+
+/**
+ * 조립이 던진 것. **도메인 에러 둘은 갈래로 넘긴다** — 메인이 같은 클래스로 되살려 라우트의 `orFail`이 같은 스레드에서
+ * 던졌을 때와 같은 409 를 낸다. 나머지는 이름과 글만 넘기고 메인이 `Error`로 다시 던진다(→ 500).
+ */
+export type ExportJobFailure =
+  | { kind: 'empty' }
+  | { kind: 'unsupported-document'; pageTitle: string; reason: string }
+  | { kind: 'error'; name: string; message: string }
+
+/**
+ * 메인 → 워커.
+ *
+ * 행은 **여러 메시지로 쪼개 보낸다**(`rows`) — 메시지 하나를 복제하는 동안 메인의 루프가 멈추므로, 페이지 한 장씩 보내면
+ * 멈춤이 가장 큰 페이지 한 장의 복제 시간으로 묶인다. `run`이 오면 워커가 모은 행으로 일을 시작한다.
+ */
+export type ToWorker =
+  | { t: 'job'; spec: ExportJobSpec }
+  | { t: 'rows'; part: 'menu'; items: ExportRows['menu'] }
+  | { t: 'rows'; part: 'pages'; items: ExportRows['pages'] }
+  | { t: 'rows'; part: 'comments'; items: ExportRows['comments'] }
+  | { t: 'run' }
+  /** 그려 달라던 것의 답 — 한 장씩(`screen`) 오고 `screens-done`이 닫는다. */
+  | { t: 'screen'; index: number; result: ScreenResult }
+  | { t: 'screens-done'; fontWarning: string | null }
+  | { t: 'screens-failed'; error: unknown }
+
+/** 워커 → 메인. 그려 달라는 요청도 한 장씩(`screen-request`) 보내고 `render`가 닫는다. */
+export type FromWorker =
+  | { t: 'screen-request'; request: ScreenRequest }
+  | { t: 'render' }
+  | { t: 'done'; result: ExportJobResult }
+  | { t: 'failed'; failure: ExportJobFailure }

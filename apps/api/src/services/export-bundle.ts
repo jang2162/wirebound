@@ -9,8 +9,8 @@
  *
  * # 아래 순서 자체가 규격이다
  *
- * 1. `collectExportSource` — 메뉴·페이지·문서·코멘트·설명. **PPTX와 공유한다**(P10-1 D4).
- *    그 함수의 머리말이 수집 순서와 근거를 든다.
+ * 1. `readExportRows` → `assembleExportSource` — 메뉴·페이지·문서·코멘트·설명. **PPTX와 공유한다**(P10-1 D4).
+ *    `export-source.ts`의 머리말이 수집 순서와 근거를 든다.
  * 2. `currentProjectTheme` → `asResolvedTheme` — 캔버스가 보는 것과 **같은 사슬**이다.
  *    **PPTX도 같은 둘을 지난다**(P10-2). 앞 판에는 *"여기서만 읽는다"*고 적혀 있었는데
  *    그것은 PPTX가 §6의 테마를 **OOXML 색으로** 안 옮긴다는 뜻이었고, 이제 PPTX는 그
@@ -46,8 +46,8 @@ import {
   type TargetedPage,
 } from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
-import { collectExportSource } from './export-source'
-import { asResolvedTheme, currentProjectTheme } from './project-theme'
+import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
+import { asResolvedTheme, currentProjectTheme, type CurrentProjectTheme } from './project-theme'
 
 /**
  * **도메인 에러 둘을 `export-source`가 소유한다**(P10-1). 두 내보내기가 같은 수집을
@@ -99,15 +99,23 @@ export interface ProjectBundle {
 }
 
 /**
- * 프로젝트의 번들을 값으로 만든다. **파일을 쓰지 않고 zip도 만들지 않는다** —
+ * 프로젝트의 번들을 값으로 만든다 — **같은 스레드에서** 읽고 조립한다. **파일을 쓰지 않고 zip도 만들지 않는다** —
  * `exportBundle`이 파일 시스템을 모르는 것과 같은 이유다.
+ *
+ * 라우트는 이것을 안 부른다 — 읽기만 메인에서 하고 조립부터는 워커가 한다(`export-worker.ts`). 조립은 둘 다
+ * `buildProjectBundle` 하나를 지난다.
  */
 export async function exportProjectBundle(db: DbHandle, projectId: string): Promise<ProjectBundle> {
-  const { ordered, documentById, commentsById, descriptionById } = await collectExportSource(
-    db,
-    projectId,
-  )
-  const { themeId, theme } = await currentProjectTheme(db, projectId)
+  const rows = await readExportRows(db, projectId)
+  return buildProjectBundle(rows, await currentProjectTheme(db, projectId))
+}
+
+/** 번들이 싣는 테마 — `currentProjectTheme`이 낸 것 중 둘. */
+export type BundleTheme = Pick<CurrentProjectTheme, 'themeId' | 'theme'>
+
+/** 읽은 행과 테마로 번들을 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다. */
+export function buildProjectBundle(rows: ExportRows, { themeId, theme }: BundleTheme): ProjectBundle {
+  const { ordered, documentById, commentsById, descriptionById } = assembleExportSource(rows)
 
   const bundlePages: BundlePage[] = ordered.map((page) => ({
     /**

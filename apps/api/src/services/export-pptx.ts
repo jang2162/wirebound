@@ -8,7 +8,7 @@
  *
  * # 수집을 `export-bundle.ts`와 나눠 쓴다 (P10-1 D4)
  *
- * 둘 다 `collectExportSource`를 지난다. 그래야 **같은 프로젝트를 같은 순서로 같은
+ * 둘 다 `readExportRows` → `assembleExportSource`를 지난다(`export-source.ts`). 그래야 **같은 프로젝트를 같은 순서로 같은
  * 이름으로** 싣는다 — 두 파일을 나란히 열어 본 사람에게만 보이는 갈림을 막는 자리다.
  *
  * # 테마를 **래스터를 위해** 읽는다 (P10-2 D1·D2)
@@ -42,7 +42,8 @@
  */
 import { exportPage, exportPptx, type PptxPage, type PptxPart, type PptxScreen } from '@wirebound/exporter'
 import type { DbHandle } from '../db/tx'
-import { collectExportSource } from './export-source'
+import type { Theme } from '@wirebound/themes'
+import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
 import { asResolvedTheme, currentProjectTheme } from './project-theme'
 import {
   errorLine,
@@ -87,15 +88,54 @@ export interface ExportProjectPptxOptions {
   renderer?: ScreenRenderer
 }
 
+/**
+ * 프로젝트의 pptx 를 값으로 만든다 — **같은 스레드에서** 읽고 조립한다. 라우트는 이것을 안 부른다 — 읽기와 그리기만
+ * 메인에서 하고 조립부터는 워커가 한다(`export-worker.ts`). 조립은 둘 다 `buildProjectPptx` 하나를 지난다.
+ */
 export async function exportProjectPptx(
   db: DbHandle,
   projectId: string,
   options?: ExportProjectPptxOptions,
 ): Promise<ProjectPptx> {
-  const { ordered, documentById, commentsById, descriptionById } = await collectExportSource(
-    db,
-    projectId,
-  )
+  const rows = await readExportRows(db, projectId)
+  const renderer = options?.renderer
+  const screens: PptxScreenSource | undefined =
+    renderer === undefined
+      ? undefined
+      : { theme: await readScreenTheme(db, projectId), render: (requests) => renderer.render(requests) }
+  return buildProjectPptx(rows, screens)
+}
+
+/**
+ * 화면을 그리는 데 드는 것 — **메인 스레드에만 있는 둘**이다. 테마는 DB 에서 읽고, 그리는 자(브라우저)는 메인이 쥔다.
+ * 워커는 이것을 메시지로 흉내 낸다(`export-worker-thread.ts`).
+ */
+export interface PptxScreenSource {
+  /** 테마를 읽은 결과. **읽다 던진 것도 값이다** — 아래 `drawScreens`의 한 `try`가 그것을 받는다. */
+  theme: ScreenTheme
+  render(requests: readonly ScreenRequest[]): Promise<ScreenBatch>
+}
+
+export type ScreenTheme = { ok: true; theme: Theme | null } | { ok: false; error: unknown }
+
+/**
+ * 화면용 테마를 읽는다. **던지지 않는다** — 던진 것은 `{ ok: false }`로 담아 `drawScreens`의 한 `try`가 받게 한다 —
+ * 테마 읽기가 던져도 화면만 잃고 pptx 는 나온다(그 함수의 머리말 표 첫 줄).
+ */
+export async function readScreenTheme(db: DbHandle, projectId: string): Promise<ScreenTheme> {
+  try {
+    return { ok: true, theme: (await currentProjectTheme(db, projectId)).theme }
+  } catch (error) {
+    return { ok: false, error }
+  }
+}
+
+/** 읽은 행으로 pptx 를 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다. */
+export async function buildProjectPptx(
+  rows: ExportRows,
+  screenSource: PptxScreenSource | undefined,
+): Promise<ProjectPptx> {
+  const { ordered, documentById, commentsById, descriptionById } = assembleExportSource(rows)
 
   const pages: PptxPage[] = ordered.map((page) => ({
     /** **번들과 같은 이름이다**(`bundleTitle` — 조상 메뉴가 붙어 있다). P10-1 D3. */
@@ -105,7 +145,7 @@ export async function exportProjectPptx(
     comments: commentsById.get(page.id) ?? [],
   }))
 
-  const { screens, failures, fontWarning } = await drawScreens(db, projectId, pages, options?.renderer)
+  const { screens, failures, fontWarning } = await drawScreens(pages, screenSource)
 
   const { parts, screenless } = exportPptx({
     pages: pages.map((page, index) => ({ ...page, screen: screens[index] ?? null })),
@@ -166,27 +206,25 @@ interface DrawnScreens {
  * **대가를 적는다:** 한 페이지의 `exportPage`가 죽으면 **그 배치의 화면이 전부 빠진다.**
  * pptx 는 그래도 나온다 — 그것이 D5 가 지키려는 것이다.
  *
- * **`collectExportSource`는 여기 없다** — 그것은 P10-1부터 있던 자리이고 도메인 에러를
+ * **수집(`readExportRows` · `assembleExportSource`)은 여기 없다** — 그것은 P10-1부터 있던 자리이고 도메인 에러를
  * 라우트가 상태 코드로 옮긴다(`routes/export.ts`의 `orFail`). 그 갈래는 그대로 둔다.
  */
 async function drawScreens(
-  db: DbHandle,
-  projectId: string,
   pages: readonly PptxPage[],
-  renderer: ScreenRenderer | undefined,
+  source: PptxScreenSource | undefined,
 ): Promise<DrawnScreens> {
   const empty: DrawnScreens = { screens: pages.map(() => null), failures: [], fontWarning: null }
-  if (renderer === undefined || pages.length === 0) return empty
+  if (source === undefined || pages.length === 0) return empty
 
   let batch: ScreenBatch
   try {
-    const { theme } = await currentProjectTheme(db, projectId)
-    const resolved = asResolvedTheme(theme)
+    if (!source.theme.ok) throw source.theme.error
+    const resolved = asResolvedTheme(source.theme.theme)
     const requests: ScreenRequest[] = pages.map((page) => {
       const rendered = exportPage({ document: page.document, title: page.title, theme: resolved })
       return { title: page.title, html: rendered.html, css: rendered.css }
     })
-    batch = await renderer.render(requests)
+    batch = await source.render(requests)
   } catch (error) {
     // **그리는 길이 던졌다.** 화면은 전부 잃지만 **pptx 는 나온다** — 그것이 D5 다.
     return allFailed(pages, `${SCREEN_PATH_FAILED}: ${errorLine(error)}`)

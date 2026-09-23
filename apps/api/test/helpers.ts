@@ -176,6 +176,8 @@ export interface WithRealApiOptions {
    * (`Root plugin has already booted`) 이 하네스는 `listen`으로 부팅까지 하기 때문이다.
    */
   register?: (app: FastifyInstance) => Promise<void>
+  /** `buildApp`의 같은 이름 필드 — `WithApiOptions.loggerStream`과 같다. */
+  loggerStream?: Writable
 }
 
 /**
@@ -218,7 +220,7 @@ export async function withRealApi(
   options?: WithRealApiOptions,
 ): Promise<void> {
   const db = getTestDb()
-  const app = await buildApp({ db, config: options?.config ?? testConfig() })
+  const app = await buildApp({ db, config: options?.config ?? testConfig(), loggerStream: options?.loggerStream })
   if (options?.register) {
     await options.register(app)
   }
