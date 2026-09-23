@@ -28,6 +28,14 @@ function types(link: { sent: string[] }): string[] {
   return link.sent.map((raw) => (JSON.parse(raw) as { type: string }).type)
 }
 
+/** 마지막으로 나간 `lock`의 차례 — 서버의 거절이 되돌려주는 값이다. */
+function lastLockId(link: { sent: string[] }): number {
+  const locks = link.sent.map((raw) => JSON.parse(raw) as { type: string; lockId?: number }).filter((frame) => frame.type === 'lock')
+  const id = locks.at(-1)?.lockId
+  if (id === undefined) throw new Error('나간 lock 이 없다')
+  return id
+}
+
 describe('잡고 놓는다', () => {
   it('자리를 잡으면 프레임이 나간다', () => {
     const link = fakeLink()
@@ -36,7 +44,7 @@ describe('잡고 놓는다', () => {
 
     channel.hold('pg-1', 'n-a')
 
-    expect(link.sent.map((raw) => JSON.parse(raw))).toEqual([{ type: 'lock', pageId: 'pg-1', nodeId: 'n-a' }])
+    expect(link.sent.map((raw) => JSON.parse(raw))).toEqual([{ type: 'lock', pageId: 'pg-1', nodeId: 'n-a', lockId: 1 }])
   })
 
   it('**같은 자리를 다시 잡으면 아무것도 안 나간다** — 룸 전체가 목록을 다시 받는다', () => {
@@ -129,7 +137,8 @@ describe('하트비트와 다시 붙기', () => {
     channel.attach(second)
     channel.reannounce()
 
-    expect(second.sent.map((raw) => JSON.parse(raw))).toEqual([{ type: 'lock', pageId: 'pg-1', nodeId: 'n-a' }])
+    // 차례는 연결이 아니라 통로의 것이다 — 다시 붙어도 이어서 올린다(앞 연결의 거절이 늦게 닿아도 짝이 안 맞는다).
+    expect(second.sent.map((raw) => JSON.parse(raw))).toEqual([{ type: 'lock', pageId: 'pg-1', nodeId: 'n-a', lockId: 2 }])
   })
 
   it('연결이 없으면 조용하다 — 잠금을 못 잡은 것은 편집 실패가 아니다', () => {
@@ -159,7 +168,9 @@ describe('하트비트와 다시 붙기', () => {
  * 않고, 사용자의 다음 행동(다른 자리를 고름 · 첫 편집)이 잡는다. 섰는지는 서버가 거절로만 말한다 — 목록을 보지 않는다.
  */
 describe('잡지 않은 선택', () => {
-  const denial = (channel: ReturnType<typeof createLockChannel>, nodeId: string): void => channel.denied('pg-1', nodeId)
+  /** 마지막으로 보낸 `lock`의 거절 — 서버가 그 `lockId`를 되돌려준다. */
+  const denial = (channel: ReturnType<typeof createLockChannel>, link: { sent: string[] }, nodeId: string): void =>
+    channel.denied('pg-1', nodeId, lastLockId(link))
 
   /**
    * 세 경로(고르기 `hold` · 첫 편집 `refresh`의 잡기 · 다시 붙은 `reannounce`)가 보낸 `lock`이 **모두** 거절을 받는다.
@@ -175,20 +186,20 @@ describe('잡지 않은 선택', () => {
 
     // 고르기 → 거절
     channel.hold('pg-1', 'n-a')
-    denial(channel, 'n-a')
+    denial(channel, link, 'n-a')
     channel.reannounce()
     expect(types(link)).toEqual(['lock'])
 
     // 첫 편집이 잡는다 → 거절
     channel.refresh()
     expect(types(link)).toEqual(['lock', 'lock'])
-    denial(channel, 'n-a')
+    denial(channel, link, 'n-a')
 
     // 거절 뒤 다시 첫 편집 → 잡음 → 서버가 받음(거절 없음) → 다시 붙으면 다시 알린다 → 거절
     channel.refresh()
     channel.reannounce()
     expect(types(link)).toEqual(['lock', 'lock', 'lock', 'lock'])
-    denial(channel, 'n-a')
+    denial(channel, link, 'n-a')
 
     // 놓는다 — 서버는 거절하며 이미 놓았다
     channel.hold('pg-1', null)
@@ -201,12 +212,41 @@ describe('잡지 않은 선택', () => {
     const channel = createLockChannel()
     channel.attach(link)
     channel.hold('pg-1', 'n-a')
+    const aId = lastLockId(link)
     channel.hold('pg-1', 'n-b')
 
-    denial(channel, 'n-a')
-    channel.denied('pg-2', 'n-b')
+    channel.denied('pg-1', 'n-a', aId)
+    channel.denied('pg-2', 'n-b', lastLockId(link))
     channel.reannounce()
 
     expect(link.sent.map((raw) => (JSON.parse(raw) as { nodeId: string }).nodeId)).toEqual(['n-a', 'n-b', 'n-b'])
+  })
+
+  /**
+   * **거절은 그 `lock` 프레임과 짝짓는다**(`lock-channel.ts`의 그 절). 같은 자리를 다시 보낸 뒤 닿은 **앞** `lock`의 거절은 뒤 것의
+   * 답이 아니다 — 쥔 채로 두고, 놓을 때 `unlock`을 보낸다(서버는 뒤 `lock`을 쥐고 있다). 하트비트(같은 자리를 다시 보냄)도 같다.
+   * 마지막 것의 거절은 받는다. 혼자 죽는 변조: `denied`가 `lockId`를 안 본다(자리로만 짝짓는다).
+   */
+  it('옛 차례의 거절은 버린다 — X → Y → X 뒤 첫 X 의 거절이 닿아도 쥔 채이고, 놓을 때 `unlock`이 나간다', () => {
+    const link = fakeLink()
+    const channel = createLockChannel()
+    channel.attach(link)
+
+    channel.hold('pg-1', 'n-a')
+    const first = lastLockId(link)
+    channel.hold('pg-1', 'n-b')
+    channel.hold('pg-1', 'n-a')
+    channel.denied('pg-1', 'n-a', first)
+    channel.hold('pg-1', null)
+    expect(types(link)).toEqual(['lock', 'lock', 'lock', 'unlock'])
+
+    // 하트비트 — 같은 자리를 다시 보낸 뒤 닿은 앞 거절도 버리고, 마지막 것의 거절은 받는다(그 뒤 놓을 것이 없다).
+    channel.hold('pg-1', 'n-c')
+    const beat = lastLockId(link)
+    channel.refresh()
+    channel.denied('pg-1', 'n-c', beat)
+    channel.denied('pg-1', 'n-c', lastLockId(link))
+    channel.hold('pg-1', null)
+    expect(types(link)).toEqual(['lock', 'lock', 'lock', 'unlock', 'lock', 'lock'])
   })
 })

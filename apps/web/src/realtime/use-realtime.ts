@@ -160,7 +160,8 @@ export function useRealtime(
           case 'lock-denied':
             // **서버가 판정했다**(이월 5차 2회 LK). 목록으로 «내 것이 섰나»를 추정하지 않는다 — 앞 판의 `observe`가 거꾸로 닿는
             // 목록에 거짓 잃음을 냈다(`lock-channel.ts`의 머리말).
-            setup.lockChannel?.denied(frame.pageId, frame.nodeId)
+            // 거절은 그 `lock` 프레임과 짝짓는다(`lockId` — `lock-channel.ts`의 그 절).
+            setup.lockChannel?.denied(frame.pageId, frame.nodeId, frame.lockId)
             break
           case 'patch-ack':
           case 'patch-error':

@@ -393,7 +393,7 @@ describe('잠금을 잡는다 — 선택이 곧 잠금이다 (§7.2)', () => {
 
     fireEvent.click(treeButton('Section'))
 
-    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b' })
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b', lockId: expect.any(Number) })
   })
 
   /**
@@ -419,7 +419,7 @@ describe('잠금을 잡는다 — 선택이 곧 잠금이다 (§7.2)', () => {
   it('루트로 돌아오면 잡고 있던 것을 놓는다', async () => {
     const view = await board()
     fireEvent.click(treeButton('Section'))
-    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b' })
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b', lockId: expect.any(Number) })
 
     // 트리에서 루트 줄을 누른다. 잠글 자리를 고른 것이 아니므로 앞의 것을 놓아야 한다 —
     // 안 놓으면 사용자가 떠난 자리의 배지가 남의 화면에 남는다.
@@ -464,7 +464,7 @@ describe('잠금을 잡는다 — 선택이 곧 잠금이다 (§7.2)', () => {
     view.reconnect()
 
     expect(view.lockFrames().length).toBeGreaterThan(before)
-    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b' })
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b', lockId: expect.any(Number) })
   })
 })
 
@@ -503,7 +503,7 @@ describe('페이지를 옮길 때 (리뷰 §11)', () => {
   it('새 주소에 **앞 페이지의 노드로** 잠금이 나가지 않는다', async () => {
     const view = await board()
     fireEvent.click(treeButton('Section'))
-    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b' })
+    expect(view.lockFrames().at(-1)).toEqual({ type: 'lock', pageId: PAGE_ID, nodeId: 'n-b', lockId: expect.any(Number) })
 
     // 메뉴에서 다른 페이지로 옮긴다. 두 페이지의 문서는 노드 id가 같다(`board`가 그렇게 연다).
     fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))

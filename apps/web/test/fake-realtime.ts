@@ -19,6 +19,8 @@ export interface FakeRealtime {
   sent: string[]
   /** `ping`이 아닌 나간 프레임 — `type`(+ `nodeId`). */
   frames(): string[]
+  /** 마지막으로 나간 `lock`의 차례 — 서버의 거절(`lock-denied`)이 되돌려주는 값이다. */
+  lastLockId(): number
   /** 지금 소켓이 열렸다 — 서버가 `joined`로 답한 판까지. */
   open(): void
   /** 서버가 프레임 하나를 보낸다. */
@@ -99,6 +101,14 @@ export function fakeRealtime(projectId: string, userId: string): FakeRealtime {
         .map((raw) => JSON.parse(raw) as { type: string; nodeId?: string })
         .filter((frame) => frame.type !== 'ping')
         .map((frame) => (frame.nodeId === undefined ? frame.type : `${frame.type} ${frame.nodeId}`)),
+    lastLockId: () => {
+      const id = sent
+        .map((raw) => JSON.parse(raw) as { type: string; lockId?: number })
+        .filter((frame) => frame.type === 'lock')
+        .at(-1)?.lockId
+      if (id === undefined) throw new Error('나간 lock 이 없다')
+      return id
+    },
     open,
     deliver: (frame) => {
       const socket = current()

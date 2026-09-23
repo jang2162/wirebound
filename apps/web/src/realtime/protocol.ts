@@ -61,7 +61,14 @@ export type ServerFrame =
    * **내가 보낸 `lock`을 서버가 받지 않았다** — 겹치는 자리를 남이 쥐었거나 자격을 보는 사이 멤버십이 바뀌었다(이월 5차 2회
    * LK · 서버 `ws/lock.ts`의 표). 이 연결은 이제 아무것도 쥐지 않는다. 받는 자리는 `lock-channel.ts`의 `denied`다.
    */
-  | { type: 'lock-denied'; projectId: string; pageId: string; nodeId: string }
+  | {
+      type: 'lock-denied'
+      projectId: string
+      pageId: string
+      nodeId: string
+      /** 거절된 그 `lock`의 `lockId` — `lock-channel.ts`가 마지막으로 보낸 것과 견준다. */
+      lockId: number
+    }
   | {
       type: 'page-changed'
       projectId: string
@@ -127,6 +134,11 @@ export type ClientFrame =
       type: 'lock'
       pageId: string
       nodeId: string
+      /**
+       * **이 `lock`의 차례** — 거절(`lock-denied`)이 그대로 되돌려준다. `lock-channel.ts`가 보낼 때마다 올린다. 서버에서는
+       * 선택이다(에이전트는 안 싣는다).
+       */
+      lockId: number
     }
   | {
       /** 잡고 있는 것을 놓는다. **가리킬 값이 없다** — 연결 하나가 드는 잠금은 하나다. */
@@ -153,9 +165,9 @@ export function patchFrame(input: Omit<Extract<ClientFrame, { type: 'patch' }>, 
   return JSON.stringify({ type: 'patch', ...input } satisfies ClientFrame)
 }
 
-/** 잠금 하나를 잡거나 갱신할 문자열(§7.2). */
-export function lockFrame(pageId: string, nodeId: string): string {
-  return JSON.stringify({ type: 'lock', pageId, nodeId } satisfies ClientFrame)
+/** 잠금 하나를 잡거나 갱신할 문자열(§7.2). `lockId`는 거절과 짝지을 차례다. */
+export function lockFrame(pageId: string, nodeId: string, lockId: number): string {
+  return JSON.stringify({ type: 'lock', pageId, nodeId, lockId } satisfies ClientFrame)
 }
 
 /** 잡고 있는 것을 놓는다. 프레임마다 같은 값이라 미리 만들어 둔다. */
@@ -212,8 +224,9 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         ? { type: 'locks', projectId: value.projectId, locks: value.locks.filter(isLockView) }
         : null
     case 'lock-denied':
-      return str(value.projectId) && str(value.pageId) && str(value.nodeId)
-        ? { type: 'lock-denied', projectId: value.projectId, pageId: value.pageId, nodeId: value.nodeId }
+      // **`lockId`가 없으면 버린다** — 짝지을 수 없는 거절은 어느 `lock`의 것인지 모른다(`lock-channel.ts` 「거절은 그 `lock` 프레임과 짝짓는다」).
+      return str(value.projectId) && str(value.pageId) && str(value.nodeId) && typeof value.lockId === 'number'
+        ? { type: 'lock-denied', projectId: value.projectId, pageId: value.pageId, nodeId: value.nodeId, lockId: value.lockId }
         : null
     case 'page-changed':
       return str(value.projectId) &&

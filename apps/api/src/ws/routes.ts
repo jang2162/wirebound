@@ -203,8 +203,9 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
             case 'lock':
               // **자격을 보는 동안 멤버십이 바뀌었으면 잡지 않는다**(이월 5차 리뷰 R5). 위 await 사이에 강등이 커밋되고
               // `notifyMembershipChanged`가 먼저 놓으면(놓을 것이 아직 없다) 여기서 잡은 잠금은 **TTL 까지** 남는다 —
-              // viewer 가 된 주인의 `unlock`은 editor 문턱에 걸린다. 바뀐 쪽이 승격이어도 잡지 않는다 — 그 판정과 답
-              // (`lock-denied`)은 `ws/lock.ts`의 표가 소유한다(끝나는 순간에 본다 — 문서를 읽는 await 가 하나 더 있을 수 있다).
+              // viewer 가 된 주인의 `unlock`은 editor 문턱에 걸린다. 세대는 **쥘 수 없게 된 변경에만** 오른다(`ws/notify.ts`의
+              // `canHold`) — 그 판정과 답(`lock-denied`)은 `ws/lock.ts`의 표가 소유한다(끝나는 순간에 본다 —
+              // 문서를 읽는 await 가 하나 더 있을 수 있다).
               // **`patch`는 여기서 거르지 않는다** — 커밋 순간에 권한을 다시 본다(`ws/patch.ts` · 이월 AA).
               await handleLockFrame(app, connection, frame, { epoch, current })
               return

@@ -67,22 +67,21 @@ export async function handlePatchFrame(
   connection: RoomConnection,
   frame: PatchFrame,
 ): Promise<ServerFrame> {
-  // **§7.1의 순서다** — 권한 확인(`ws/routes.ts`)이 이미 지났고, 적용 전에 잠금을 본다(D2).
-  // 소유자는 **사람**이므로 같은 사람의 다른 탭이 잡은 것에는 막히지 않는다(D3).
-  const blocked = await lockConflictError(app, {
-    projectId: connection.projectId,
-    pageId: frame.pageId,
-    baseSeq: frame.baseSeq,
-    ops: frame.ops,
-    userId: connection.userId,
-  })
-  if (blocked !== null) {
-    return patchErrorFrame(connection.projectId, frame, blocked)
-  }
-
   let outcome
   try {
     outcome = await withTransaction(app.db, async (trx) => {
+      // **§7.1의 순서다** — 권한 확인(`ws/routes.ts`)이 이미 지났고, 적용 전에 잠금을 본다(D2). **판정은 이 트랜잭션 안에서
+      // 페이지 행을 잡고 한다** — 커밋까지 그 행을 쥐므로 판정 뒤 커밋 전에 겹치는 잠금이 서지 못한다(`lock/check.ts`의
+      // «판정은 페이지 행 안에서»). 소유자는 **사람**이므로 같은 사람의 다른 탭이 잡은 것에는 막히지 않는다(D3).
+      // 막히면 던진다 — 아직 아무것도 안 썼고, 아래 `catch`가 423 프레임으로 옮긴다.
+      const blocked = await lockConflictError(app, trx, {
+        projectId: connection.projectId,
+        pageId: frame.pageId,
+        baseSeq: frame.baseSeq,
+        ops: frame.ops,
+        userId: connection.userId,
+      })
+      if (blocked !== null) throw blocked
       const edited = await applyEdit(trx, {
         projectId: connection.projectId,
         pageId: frame.pageId,
@@ -107,7 +106,7 @@ export async function handlePatchFrame(
       return edited
     })
   } catch (error) {
-    // 재확인의 거절은 REST 봉투와 같은 값으로 낸 사람에게 돌려준다. 그 밖의 예외는 그대로 던진다 —
+    // 잠금 충돌(423)과 재확인의 거절은 REST 봉투와 같은 값으로 낸 사람에게 돌려준다. 그 밖의 예외는 그대로 던진다 —
     // `ws/routes.ts`의 `catch`가 500 프레임으로 답한다.
     if (error instanceof ApiError) return patchErrorFrame(connection.projectId, frame, error)
     throw error

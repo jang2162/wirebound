@@ -208,17 +208,23 @@ describe('잠금 프레임 (§7.2)', () => {
 
   /** 혼자 죽는 변조: 거절을 읽을 때 `nodeId`를 안 본다(어느 자리의 거절인지 모르는 프레임이 잠금 통로에 닿는다). */
   it('거절(`lock-denied`)은 어느 자리인지를 싣고 온다 — 없으면 버린다', () => {
-    expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeId: 'n_b' }))).toEqual({
+    expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeId: 'n_b', lockId: 3 }))).toEqual({
       type: 'lock-denied',
       projectId: 'p',
       pageId: 'g',
       nodeId: 'n_b',
+      lockId: 3,
     })
-    expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g' }))).toBeNull()
+    expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', lockId: 3 }))).toBeNull()
   })
 
-  it('잡는 프레임이 서버가 요구하는 것을 싣는다', () => {
-    expect(JSON.parse(lockFrame('g', 'n_b'))).toEqual({ type: 'lock', pageId: 'g', nodeId: 'n_b' })
+  /** 혼자 죽는 변조: 거절을 읽을 때 `lockId`를 안 본다(어느 `lock`의 거절인지 모르는 프레임이 통로에 닿는다). */
+  it('거절은 어느 `lock`의 것인지(`lockId`)를 싣고 온다 — 없으면 버린다', () => {
+    expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeId: 'n_b' }))).toBeNull()
+  })
+
+  it('잡는 프레임이 서버가 요구하는 것을 싣는다 — 거절과 짝지을 차례까지', () => {
+    expect(JSON.parse(lockFrame('g', 'n_b', 7))).toEqual({ type: 'lock', pageId: 'g', nodeId: 'n_b', lockId: 7 })
   })
 
   it('놓는 프레임에는 가리킬 값이 없다 — 연결 하나가 드는 잠금은 하나다', () => {

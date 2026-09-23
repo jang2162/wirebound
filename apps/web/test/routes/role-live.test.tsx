@@ -336,7 +336,7 @@ describe('잡는 시각을 사용자가 정한다(리뷰 R3 · 2회 LK)', () => 
     rt.reconnect()
     await waitFor(() => expect(server.reads).toBe(reads + 1))
     expect(rt.frames()).toEqual(['lock n-card', 'lock n-card'])
-    rt.deliver({ type: 'lock-denied', projectId: PROJECT_ID, pageId: PAGE_ID, nodeId: 'n-card' })
+    rt.deliver({ type: 'lock-denied', projectId: PROJECT_ID, pageId: PAGE_ID, nodeId: 'n-card', lockId: rt.lastLockId() })
     rt.deliver(bobHolds(PAGE_ID, 'n-card'))
     await waitFor(() => expect(titleBox().disabled).toBe(true))
     expect(treeRow('Card').getAttribute('aria-current')).toBe('true')

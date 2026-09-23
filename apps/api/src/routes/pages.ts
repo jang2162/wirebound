@@ -562,18 +562,17 @@ export function pageRoutes() {
       // `applyEdit`을 직접 부른다 — `test/lock-census.test.ts`가 그 둘을 별도 줄로 세면서
       // *"잠금을 안 본다"*고 판정한다. 앞 판의 주석이 그렇게 적었다가 같은 슬라이스의
       // 인구조사와 어긋났다.
-      const blocked = await lockConflictError(app, {
-        projectId,
-        pageId,
-        baseSeq: before.headSeq,
-        ops: putOps,
-        userId: currentUser.id,
-      })
-      if (blocked) {
-        throw blocked
-      }
-
       const outcome = await withTransaction(app.db, async (trx) => {
+        // **판정은 이 트랜잭션 안에서 페이지 행을 잡고 한다**(`lock/check.ts`의 «판정은 페이지 행 안에서»). 막히면
+        // 던진다 — 아직 아무것도 안 썼다.
+        const blocked = await lockConflictError(app, trx, {
+          projectId,
+          pageId,
+          baseSeq: before.headSeq,
+          ops: putOps,
+          userId: currentUser.id,
+        })
+        if (blocked) throw blocked
         const edited = await applyEdit(trx, {
           projectId,
           pageId,
@@ -647,18 +646,16 @@ export function pageRoutes() {
       // **§7.1의 순서다** — `projectGuard('editor')`가 권한을 봤고, 적용 전에 잠금을 본다(D2).
       // **§7.4의 MCP가 이 길로 들어온다:** 에이전트는 잠금을 걸지 않지만(§7.4) 남의 잠금에는
       // 막힌다 — 안 막으면 §7.2의 2차 방어가 접속 방식에 따라 갈린다.
-      const blocked = await lockConflictError(app, {
-        projectId,
-        pageId,
-        baseSeq: body.baseSeq,
-        ops: body.ops,
-        userId: currentUser.id,
-      })
-      if (blocked) {
-        throw blocked
-      }
-
       const outcome = await withTransaction(app.db, async (trx) => {
+        // 판정은 이 트랜잭션 안 — `PUT .../schema`와 같은 자리 · 같은 까닭이다.
+        const blocked = await lockConflictError(app, trx, {
+          projectId,
+          pageId,
+          baseSeq: body.baseSeq,
+          ops: body.ops,
+          userId: currentUser.id,
+        })
+        if (blocked) throw blocked
         const edited = await applyEdit(trx, {
           projectId,
           pageId,

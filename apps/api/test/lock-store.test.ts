@@ -189,6 +189,34 @@ describe('TTL 30초 — 읽을 때 판정한다 (D5)', () => {
   })
 })
 
+/**
+ * **걷은 것은 알린다 — 한 자리에서**(`lock/store.ts`의 그 절). 조용히 걷으면 배지가 다음 알림까지 남는다.
+ * 걷는 길(읽기 · 놓기 · 스위퍼)이 어디든 걷힌 잠금마다 그 프로젝트가 한 번 불린다. 혼자 죽는 변조: 걷는 자리(`liveAt`)가
+ * `onExpired`를 안 부른다(`ws-lock`의 «읽는 자가 없어도 걷히고…»도 함께 죽는다 — 그쪽은 스위퍼를 거는 축의 주인이다).
+ */
+describe('만료를 알린다', () => {
+  it('걷힌 잠금마다 그 프로젝트가 한 번 불린다 — 스위퍼 · 읽기 · 놓기 어디서 걷히든', () => {
+    const clock = fakeClock()
+    const expired: string[] = []
+    const store = createLockStore(clock.now, LOCK_TTL_MS, (projectId) => expired.push(projectId))
+    store.hold(claim({ connectionId: 'wsc_1' }))
+    store.hold(claim({ connectionId: 'wsc_2', projectId: OTHER_PROJECT }))
+    store.hold(claim({ connectionId: 'wsc_3' }))
+
+    store.sweep()
+    expect(expired).toEqual([])
+
+    clock.advance(LOCK_TTL_MS)
+    expect(store.release('wsc_3')).toBe(false)
+    expect(expired).toEqual([PROJECT])
+    store.sweep()
+    expect(expired.sort()).toEqual([OTHER_PROJECT, PROJECT, PROJECT].sort())
+    store.sweep()
+    store.liveIn(PROJECT)
+    expect(expired).toHaveLength(3)
+  })
+})
+
 describe('무엇이 바뀌었는지 낸다 — 안 바뀐 것을 룸에 알리지 않으려고', () => {
   it('새 노드를 잡으면 바뀌었다고 한다', () => {
     const store = createLockStore(fakeClock().now)

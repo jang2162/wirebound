@@ -29,6 +29,12 @@
  * 이 통로는 **보낸 `lock`이 섰다고 보고, 거절이 오면 그 자리를 «잡지 않은 선택»으로 옮긴다**(`denied`). 거절된 연결은 서버에서
  * 아무것도 안 쥔다(서버가 앞 자리도 놓는다) — 놓을 때 `unlock`을 보낼 것이 없다.
  *
+ * **거절은 그 `lock` 프레임과 짝짓는다.** 보낼 때마다 차례(`lockId`)를 올려 싣고, 서버가 거절에 그것을 되돌려준다 — **마지막으로
+ * 보낸 `lock`의 거절만** 받는다. «자리»로만 짝지으면 조용히 어긋난다: X → Y → X 를 거절 왕복 안에 보내면 첫 X 의 거절이 셋째 X 의
+ * 답으로 읽혀, 화면은 «잡지 않은 선택»인데 서버는 셋째 X 를 쥔다 — 그 화면이 빈 곳을 누르면 `unlock`을 안 보내 남의 화면에 배지가
+ * 남는다(재는 자리: `test/realtime/lock-channel.test.ts` 「옛 차례의 거절은 버린다」). 옛 차례의 거절을 버려도 되는 까닭: 뒤에 보낸 `lock`이 서버에서 자기 판정을 받는다(뒤에 받은
+ * 것이 이긴다 — 서버 `ws/lock.ts`) — 그 답은 따로 온다.
+ *
  * **앞 판의 추정 장치를 걷었다.** 서버가 거절하지 않던 판에서는 «내 것이 섰나 · 잃었나»를 룸의 `locks` 목록으로 추정했다 —
  * `observe`(목록에 «한 번 선 뒤» 빠지면 잃음) · `serverMayHold`(잃었다고 읽은 자리를 서버가 아직 쥘 수 있다) · 첫 편집 전에
  * 스토어에 «막혔나»를 묻는 `claimable`. 셋 다 **서버의 판정을 화면이 한 번 더 짓는 것**이었고 틀렸다: 목록이 확인 **뒤에**
@@ -79,10 +85,11 @@ export interface LockChannel {
    */
   reannounce(): void
   /**
-   * **서버가 그 `lock`을 받지 않았다**(`lock-denied`). 잡은 줄 아는 자리가 그것이면 «잡지 않은 선택»으로 옮긴다 — 프레임은 안
-   * 보낸다(서버는 이 연결이 쥔 것을 이미 놓았다). 다른 자리의 거절이면(그 사이 옮겨 갔다) 버린다.
+   * **서버가 그 `lock`을 받지 않았다**(`lock-denied`). **마지막으로 보낸 `lock`의 거절이고**(`lockId`) 잡은 줄 아는 자리가 그것이면
+   * «잡지 않은 선택»으로 옮긴다 — 프레임은 안 보낸다(서버는 이 연결이 쥔 것을 이미 놓았다). 옛 차례의 거절이거나(그 뒤에 또
+   * 보냈다) 다른 자리의 거절이면(그 사이 옮겨 갔다) 버린다.
    */
-  denied(pageId: string, nodeId: string): void
+  denied(pageId: string, nodeId: string, lockId: number): void
   /** 연결 하나를 붙인다. **여기서 보내지 않는다** — 붙었다고 열린 것은 아니다. */
   attach(link: RealtimeLink): void
   /** 연결을 뗀다. **잡고 있던 자리는 기억한다** — 다시 붙으면 그것을 다시 잡는다. */
@@ -101,6 +108,8 @@ export function createLockChannel(): LockChannel {
   let link: RealtimeLink | null = null
   let held: Spot | null = null
   let unclaimed: Spot | null = null
+  /** 마지막으로 보낸 `lock`의 차례. 거절은 이것과 같을 때만 받는다(머리말 «거절은 그 `lock` 프레임과 짝짓는다»). */
+  let lastLockId = 0
 
   const send = (payload: string): void => {
     // **못 보내도 조용하다.** 잠금을 못 잡은 것은 편집 실패가 아니고, 다시 붙으면
@@ -109,10 +118,16 @@ export function createLockChannel(): LockChannel {
     if (link !== null) link.send(payload)
   }
 
+  /** `lock` 하나 — 차례를 올려 싣는다. **이 통로의 `lock`은 전부 여기로 나간다**(고르기 · 첫 편집 · 하트비트 · 재알림). */
+  const sendLock = (at: Spot): void => {
+    lastLockId += 1
+    send(lockFrame(at.pageId, at.nodeId, lastLockId))
+  }
+
   const claim = (at: Spot): void => {
     held = { pageId: at.pageId, nodeId: at.nodeId }
     unclaimed = null
-    send(lockFrame(at.pageId, at.nodeId))
+    sendLock(at)
   }
 
   /** 잡은 것을 놓는다. 잡지 않은 선택은 서버에 없다(승격은 안 보냈고, 거절은 서버가 놓았다) — 보낼 것이 없다. */
@@ -140,18 +155,18 @@ export function createLockChannel(): LockChannel {
 
     refresh: () => {
       if (held !== null) {
-        send(lockFrame(held.pageId, held.nodeId))
+        sendLock(held)
         return
       }
       if (unclaimed !== null) claim(unclaimed)
     },
 
     reannounce: () => {
-      if (held !== null) send(lockFrame(held.pageId, held.nodeId))
+      if (held !== null) sendLock(held)
     },
 
-    denied: (pageId, nodeId) => {
-      if (!same(held, pageId, nodeId)) return
+    denied: (pageId, nodeId, lockId) => {
+      if (lockId !== lastLockId || !same(held, pageId, nodeId)) return
       held = null
       unclaimed = { pageId, nodeId }
     },

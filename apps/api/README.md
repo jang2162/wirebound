@@ -1283,7 +1283,7 @@ revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `
 | `patch-ack` | `patch` 프레임이 성공했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `seq` · `revisionId` · `inverse` · `warnings` |
 | `patch-error` | `patch` 프레임이 실패했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `status` · `code` · `message` · `issues` — **REST 에러 봉투와 같은 값이다** |
 | `locks` | 잠금이 바뀌었을 때와 **누가 들어올 때**, 룸 전체에 | `projectId` · `locks[{ pageId, nodeId, userId, userName }]` |
-| `lock-denied` | `lock` 프레임을 받지 않았을 때, **낸 사람에게만**(아래 «소프트 잠금») | `projectId` · `pageId` · `nodeId` |
+| `lock-denied` | `lock` 프레임을 받지 않았을 때, **낸 사람에게만**(아래 «소프트 잠금») | `projectId` · `pageId` · `nodeId` · (`lock`이 실어 왔으면) `lockId` |
 | `pong` | `ping`에 대한 답 | — |
 
 **클라이언트 → 서버**
@@ -1336,8 +1336,11 @@ id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청
 자손이든)를 **다른 사람**이 쥐고 있으면 `lock`을 받지 않고 **낸 연결에만** `lock-denied`로 답하며, 그
 연결이 앞서 쥐고 있던 것도 놓는다. 판정은 화면이 선택을 막는 것과 같은 함수다(`@wirebound/schema`의
 `findLockConflict`). **같은 사람의 다른 탭은 막지 않는다**(잠금 소유자는 사람이다). 자격을 보는 사이 그
-사람의 멤버십이 바뀌어도 같은 답이다. 그래서 `lock`의 답은 둘이다 — 섰으면 `locks` 목록, 안 섰으면
-`lock-denied`.
+사람의 멤버십이 잠금을 쥘 수 없게(viewer · 제거) 바뀌어도 같은 답이다. 그래서 `lock`의 답은 둘이다 — 섰으면
+`locks` 목록, 안 섰으면 `lock-denied`. `lock`에 `lockId`(음 아닌 정수 — 선택)를 실으면 거절이 그것을 되돌려준다
+— 화면은 마지막으로 보낸 `lock`의 거절만 받는다. **편집과 획득은 페이지 행에 줄 선다**(`src/lock/check.ts`) —
+같은 페이지에 남의 잠금이 있는 획득은 편집이 그 행을 쥔 동안 기다린다. TTL 로 걷힌 잠금은 그 방에 `locks`로
+알린다(스위퍼 주기는 `src/lock/store.ts`의 `LOCK_SWEEP_MS`).
 
 | 규칙 | 값 |
 |---|---|

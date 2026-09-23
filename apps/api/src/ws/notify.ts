@@ -153,10 +153,19 @@ export interface MembershipChangedInput {
  * 그 연결의 자격을 보고 닫는다. 그 판에서는 줄 선 `patch`의 404 답이 여전히 길을 잃는다(남는 틈 — 웹은 다시 읽기의
  * 404 로 셸째 내려가므로 그 편집의 «모름»은 화면에 안 남는다).
  *
- * **연결의 멤버십 세대도 여기서 올린다**(`RoomConnection.membershipEpoch` — 리뷰 R5). 그 연결이 보낸 `lock` 프레임이 자격을 보는
- * 중(await)이면 여기서 놓아도 놓을 것이 아직 없고, 뒤이어 그 프레임이 잡는다 — 그 잠금은 TTL 까지 남는다. 프레임 경로가
- * await 앞에서 읽은 세대와 견줘 바뀌었으면 잡지 않는다(`ws/routes.ts`의 `lock` 갈래). 지연을 넣은 변조(`stillAllowed`의
+ * **잠금을 쥘 수 없게 됐으면 연결의 멤버십 세대도 여기서 올린다**(`RoomConnection.membershipEpoch`). 그 연결이 보낸 `lock`
+ * 프레임이 자격을 보는 중(await)이면 여기서 놓아도 놓을 것이 아직 없고, 뒤이어 그 프레임이 잡는다 — 그 잠금은 TTL 까지 남는다.
+ * 프레임 경로가 await 앞에서 읽은 세대와 견줘 바뀌었으면 잡지 않는다(`ws/lock.ts`의 표). 지연을 넣은 변조(`stillAllowed`의
  * editor 판정에 30ms)로 잰 값: 고치기 전 **29초까지** 남고 31초에 풀림 → 고친 뒤 **0.5초에 이미 없음**(보고).
+ *
+ * **세대는 놓는 판정과 같은 값(`canHold`)으로만 올린다.** 세대가 바뀐 `lock`은 거절되며 쥔 것을 놓으므로, 모든 변경에 올리면
+ * **편집 권한이 그대로인 변경**(editor↔owner · 같은 역할의 PATCH) 사이에 닿은 하트비트 하나가 정당한 잠금을 놓는다 — 여기는
+ * «놓지 않음», 프레임은 «놓음»으로 두 자리가 갈린다. 쥘 수 있는 채로 남는 변경은 그 프레임이 잡아도 맞다 — 여기서도 안 놓는다.
+ * 재는 자리: `test/ws-membership.test.ts` 「editor → owner · 같은 역할의 PATCH 가…」.
+ *
+ * **역할이 그대로인 PATCH 에도 프레임은 간다** — 멤버 행 변경의 «그대로인가»는 라우트(`routes/members.ts`)가 옛 값을 읽어야 알고,
+ * 받는 화면의 다시 읽기(`membership-changed` → `reread`)는 그 신호를 무해하게 받는다(역할이 같으면 바뀌는 것이 없다). 잠금에는
+ * 이제 아무 일도 안 한다.
  *
  * # 보내기 전에 권한을 다시 보지 않는다
  *
@@ -175,8 +184,8 @@ export function notifyMembershipChanged(app: FastifyInstance, input: MembershipC
   for (const connection of rooms.membersOf(input.projectId)) {
     if (connection.userId !== input.userId) continue
     // **세대를 먼저 올린다** — 자격을 보는 중이던 `lock` 프레임이 이 뒤에 잡지 않게(`RoomConnection.membershipEpoch`).
-    // 보내기가 던져도 오른 채다(아래 `try` 밖).
-    connection.membershipEpoch += 1
+    // 보내기가 던져도 오른 채다(아래 `try` 밖). **쥘 수 없게 된 변경에만** — 아래 `releaseLocksOf`와 같은 값이다.
+    if (!canHold) connection.membershipEpoch += 1
     try {
       connection.send(payload)
       if (!canHold) releaseLocksOf(app, connection)
