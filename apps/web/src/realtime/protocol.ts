@@ -57,6 +57,11 @@ export type ServerFrame =
       /** **프로젝트의 살아 있는 잠금 전부다.** 받는 쪽이 자기 페이지의 것만 걸러 쓴다. */
       locks: NodeLockView[]
     }
+  /**
+   * **내가 보낸 `lock`을 서버가 받지 않았다** — 겹치는 자리를 남이 쥐었거나 자격을 보는 사이 멤버십이 바뀌었다(이월 5차 2회
+   * LK · 서버 `ws/lock.ts`의 표). 이 연결은 이제 아무것도 쥐지 않는다. 받는 자리는 `lock-channel.ts`의 `denied`다.
+   */
+  | { type: 'lock-denied'; projectId: string; pageId: string; nodeId: string }
   | {
       type: 'page-changed'
       projectId: string
@@ -205,6 +210,10 @@ export function parseServerFrame(raw: string): ServerFrame | null {
       // 같은 이유다.
       return str(value.projectId) && Array.isArray(value.locks)
         ? { type: 'locks', projectId: value.projectId, locks: value.locks.filter(isLockView) }
+        : null
+    case 'lock-denied':
+      return str(value.projectId) && str(value.pageId) && str(value.nodeId)
+        ? { type: 'lock-denied', projectId: value.projectId, pageId: value.pageId, nodeId: value.nodeId }
         : null
     case 'page-changed':
       return str(value.projectId) &&

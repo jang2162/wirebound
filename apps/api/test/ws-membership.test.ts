@@ -237,7 +237,16 @@ describe('자격을 본 뒤 hold 전에 끼는 강등', () => {
 
       await ownerTab.quiet()
       expect(locks.liveIn(fx.project.id)).toEqual([])
-      expect(ownerTab.received.filter((frame) => frame.type === 'locks' && frame.locks.length > 0)).toHaveLength(1)
+      // 버린 자리는 목록에 한 번도 안 선다. (앞 판은 «비어 있지 않은 목록이 하나»로 쟀다 — 목록을 보내는 순간 짓게 되면서
+      // (`ws/broadcast.ts` · 이월 5차 2회 LK) 늦게 닿은 참가 알림도 대조 판의 `n_card`를 실어 그 수가 흔들렸다.)
+      expect(
+        ownerTab.received.filter((frame) => frame.type === 'locks' && frame.locks.some((lock) => lock.nodeId === 'n_btn')),
+      ).toEqual([])
+      // **버린 것을 낸 쪽에 말한다**(이월 5차 2회 LK — C 리뷰 2 N3). 앞 판은 조용히 버려 그 화면은 쥔 줄 알았다. 대조 판(첫 `lock`)에는
+      // 거절이 없다.
+      expect(targetTab.received.filter((frame) => frame.type === 'lock-denied')).toEqual([
+        { type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_btn' },
+      ])
     })
   }, 30_000)
 })

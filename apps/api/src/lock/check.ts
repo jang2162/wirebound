@@ -29,8 +29,23 @@
  * 편집 하나당 페이지 조회가 하나 는다. **다만 그 페이지에 (나 아닌 사람의) 잠금이 하나라도
  * 있을 때만이다** — 혼자 편집하는 흔한 판에서는 조회가 늘지 않는다. *"누구의 잠금이 뜻이
  * 있는가"*는 여기서 다시 쓰지 않고 `@wirebound/schema`의 `locksAgainst`를 부른다(D7).
+ *
+ * # 획득의 판정도 이 파일이다 (이월 5차 2회 LK)
+ *
+ * 서버가 `lock`을 거절하게 되면서(`ws/lock.ts`의 머리말) 서버의 잠금 판정이 둘이 됐다 — 편집(`lockConflictError`)과
+ * 선택(`selectionVerdict`). **둘을 한 파일에 둔다:** 살아 있는 목록을 읽고(`liveIn`) 사람으로 좁히고(`locksAgainst`)
+ * `findLockConflict`를 부르는 자리가 `apps/api`에 이 파일 하나라는 것을 `apps/web`의 `test/lock/one-verdict.test.ts`가 센다.
+ * 넣는 포인터만 다르다 — 편집은 `lockPointers(ops)`, 선택은 `findNodePath(root, nodeId)` 하나(§7.2 · D7).
  */
-import { findLockConflict, locksAgainst, lockPointers, migrateDocument, type PatchOp } from '@wirebound/schema'
+import {
+  findLockConflict,
+  findNodePath,
+  locksAgainst,
+  lockPointers,
+  migrateDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
 import type { FastifyInstance } from 'fastify'
 import { locked, type ApiError } from '../errors'
 import { findPageById } from '../repos/pages'
@@ -82,4 +97,63 @@ export async function lockConflictError(app: FastifyInstance, input: LockCheckIn
   // 이 실패에 닿는 것은 **배지를 못 본 클라이언트**다(§7.4의 MCP·다른 도구) — 그쪽에는
   // 이 문장이 유일한 설명이다.
   return locked(`${conflict.userName}님이 편집 중인 영역입니다`)
+}
+
+export interface SelectionCheckInput {
+  projectId: string
+  pageId: string
+  /** 잡으려는 노드. **선택은 그 서브트리를 통째로 claim 한다**(§7.2) — 포인터는 그 노드의 경로 하나다. */
+  nodeId: string
+  /** 잡으려는 **사람**(D3) — 같은 사람의 다른 탭이 쥔 것에는 막히지 않는다. */
+  userId: string
+}
+
+/**
+ * `selectionVerdict`의 답. **`needs-document`는 판정이 아니라 부탁이다** — 같은 페이지에 남의 잠금이 있는데 문서를 아직 안
+ * 읽었다. 부르는 쪽이 `readSelectionRoot`로 읽고 **다시 묻는다**(`ws/lock.ts`).
+ */
+export type SelectionVerdict = 'free' | 'held' | 'needs-document'
+
+/**
+ * **이 자리를 잡아도 되는가** — 서버가 획득을 판정하는 자리(이월 5차 2회 LK · `ws/lock.ts`의 머리말). **동기다.**
+ *
+ * 판정은 화면의 1차 방어와 **같은 함수에 같은 포인터**를 넣는다 — `findLockConflict`에 `findNodePath(root, nodeId)` 하나
+ * (`apps/web`의 `store/editor-store.ts`의 `lockedBy`가 넣는 그것이다 · `packages/schema`의 `LockConflictInput.pointers`).
+ * 그래서 «화면이 고르게 둔 자리를 서버가 거절한다»는 **목록이 낡은 창**에서만 난다.
+ *
+ * **목록은 부를 때마다 지금 것을 읽는다.** 동기인 것이 요점이다: 부르는 쪽은 이 답과 `hold`를 **같은 틱에** 이어 붙여, 둘
+ * 사이에 다른 연결의 `hold`가 끼지 못하게 한다. 문서를 읽는 await 는 이 함수 **밖**에 있다 — 읽고 돌아와 다시 물으면 그 사이
+ * 선 잠금까지 본다.
+ *
+ * **남의 잠금이 그 페이지에 없으면 문서를 안 읽는다** — 혼자 고르는 흔한 판은 앞 판처럼 조회가 없다(`lockConflictError`와 같은
+ * 자세). **문서가 없거나 읽을 수 없으면(`root === null`) 막지 않는다** — 부딪칠 경로가 없다(`findLockConflict`의 «가리키는
+ * 노드가 문서에 없는 잠금은 아무것도 막지 못한다»와 같은 방향이다).
+ */
+export function selectionVerdict(
+  app: FastifyInstance,
+  input: SelectionCheckInput,
+  root: WbNode | null | undefined,
+): SelectionVerdict {
+  const onPage = app.realtime.locks.liveIn(input.projectId).filter((lock) => lock.pageId === input.pageId)
+  if (locksAgainst(onPage, input.userId).length === 0) return 'free'
+  if (root === undefined) return 'needs-document'
+  if (root === null) return 'free'
+
+  const path = findNodePath(root, input.nodeId)
+  if (path === undefined) return 'free'
+  return findLockConflict({ root, locks: onPage, pointers: [path], viewerUserId: input.userId }) === null ? 'free' : 'held'
+}
+
+/**
+ * `selectionVerdict`가 부탁한 문서. **없거나 읽을 수 없으면 `null`** — 그때 판정은 «막지 않는다»다(위). 올리는 기준은
+ * `lockConflictError`와 같다(`migrateDocument`) — 경로가 화면이 보는 문서의 것이어야 한다.
+ */
+export async function readSelectionRoot(app: FastifyInstance, projectId: string, pageId: string): Promise<WbNode | null> {
+  const page = await findPageById(app.db, projectId, pageId)
+  if (page === null) return null
+  try {
+    return migrateDocument(page.schema).root
+  } catch {
+    return null
+  }
 }

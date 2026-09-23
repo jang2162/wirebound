@@ -10,7 +10,8 @@
  * | `page-changed` | `store.applyRemoteChange` — 얹거나, **내 pending 위에 리베이스하거나**, 갈라졌다고 말한다 |
  * | `restored` | `store.markRestored` — 판이 통째로 갈렸다. 얹을 `ops`가 없다 |
  * | `patch-ack`·`patch-error` | 채널에 넘긴다 — 내가 낸 편집의 답이다 |
- * | `locks` | `store.setLocks` — §7.2의 배지와 선택 차단이 이 목록 위에 선다. 잠금 통로도 본다 — 내가 잡은 줄 아는 자리가 빠졌나(`lock-channel.ts`의 `observe` · 리뷰 R4) |
+ * | `locks` | `store.setLocks` — §7.2의 배지와 선택 차단이 이 목록 위에 선다. **잠금 통로는 이 목록을 안 본다** — 내 `lock`이 섰는지는 서버가 거절로 말한다(아래 줄 · 이월 5차 2회 LK) |
+ * | `lock-denied` | 잠금 통로의 `denied` — 서버가 내 `lock`을 받지 않았다. 그 자리는 «잡지 않은 선택»이 된다(`lock-channel.ts`) |
  * | `membership-changed` | `onMembership('changed')` — 셸이 프로젝트를 다시 읽는다(역할이 바뀌었거나 멤버에서 빠졌다 · 이월 5차) |
  * | `joined` | 연결 id 를 홀더에 · `onMembership('joined')` — 아래 «룸에 든 순간이 경계다» |
  * | `presence`·`pong` | 아무것도 안 한다 |
@@ -155,9 +156,11 @@ export function useRealtime(
             // **프로젝트 전체의 목록이다.** 어느 페이지의 것인지는 스토어가 `openPageId`로
             // 거른다(`lockedBy`) — 여기서 거르면 페이지를 옮길 때 목록이 낡는다.
             store.setLocks(frame.locks)
-            // 내가 잡은 줄 아는 자리가 빠졌으면 잃은 것이다(리뷰 R4 — 빠른 강등→승격 · TTL). 누구인지는 소유자 판정과
-            // 같은 값이다(`viewerUserId` — `useNodeLock`이 놓는다).
-            setup.lockChannel?.observe(frame.locks, store.getState().viewerUserId)
+            break
+          case 'lock-denied':
+            // **서버가 판정했다**(이월 5차 2회 LK). 목록으로 «내 것이 섰나»를 추정하지 않는다 — 앞 판의 `observe`가 거꾸로 닿는
+            // 목록에 거짓 잃음을 냈다(`lock-channel.ts`의 머리말).
+            setup.lockChannel?.denied(frame.pageId, frame.nodeId)
             break
           case 'patch-ack':
           case 'patch-error':
@@ -179,7 +182,8 @@ export function useRealtime(
           // **잡고 있던 자리를 다시 알린다**(§7.2). 끊기면 서버가 놓았고, 화면의 선택은 그
           // 사이 바뀌지 않았으므로 *"선택이 바뀔 때 보낸다"*만으로는 아무것도 안 나간다 —
           // 사용자는 노드를 고른 채인데 남의 화면에서 배지가 사라진다. 첫 `'open'`에서는
-          // 잡은 것이 없어 아무 일도 안 일어난다. **잡지 않은 선택은 잡지 않는다**(`reannounce` — 리뷰 R4).
+          // 잡은 것이 없어 아무 일도 안 일어난다. 그 사이 남이 잡았으면 서버가 거절한다(`lock-denied`). **잡지 않은 선택은
+          // 잡지 않는다**(`reannounce` — 리뷰 R4).
           setup.lockChannel?.reannounce()
           // **다시 붙은 것이 두 번째 이상이면 페이지를 다시 읽어야 한다**(D6). 끊긴 동안 남이
           // 낸 편집의 프레임은 사라졌고, 그것을 갭으로 알아채려면 **누군가 다음 편집을 내야

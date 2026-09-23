@@ -206,6 +206,17 @@ describe('잠금 프레임 (§7.2)', () => {
     expect(parseServerFrame(JSON.stringify({ type: 'locks', projectId: 'p', locks: {} }))).toBeNull()
   })
 
+  /** 혼자 죽는 변조: 거절을 읽을 때 `nodeId`를 안 본다(어느 자리의 거절인지 모르는 프레임이 잠금 통로에 닿는다). */
+  it('거절(`lock-denied`)은 어느 자리인지를 싣고 온다 — 없으면 버린다', () => {
+    expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g', nodeId: 'n_b' }))).toEqual({
+      type: 'lock-denied',
+      projectId: 'p',
+      pageId: 'g',
+      nodeId: 'n_b',
+    })
+    expect(parseServerFrame(JSON.stringify({ type: 'lock-denied', projectId: 'p', pageId: 'g' }))).toBeNull()
+  })
+
   it('잡는 프레임이 서버가 요구하는 것을 싣는다', () => {
     expect(JSON.parse(lockFrame('g', 'n_b'))).toEqual({ type: 'lock', pageId: 'g', nodeId: 'n_b' })
   })
