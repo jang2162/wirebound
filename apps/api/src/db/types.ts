@@ -215,12 +215,19 @@ export interface CommentsTable {
 /**
  * 지운 게시의 키(`0013-comment-tombstones` — 이월 AC′). `comments`에서 키가 있는 행을 지울 때
  * `repos/comments.ts`의 `deleteComment`가 한 줄을 남기고, 복원이 같은 id 로 되살리면
- * `insertCommentWithId`가 그 줄을 지우며 키를 되붙인다. 읽는 자리는 게시의 키 판정뿐이다.
+ * `insertCommentWithId`가 그 줄을 지우며 키를 되붙인다. 읽는 자리는 게시의 키 판정뿐이다. 페이지를 지우면
+ * CASCADE 전에 그 페이지의 키 있는 행도 같은 문장으로 묻는다(`deletePageComments` — `0014`).
  */
 export interface CommentTombstonesTable {
   /** 지운 코멘트의 id. FK 가 아니다 — 가리키는 행이 이미 없다. */
   comment_id: string
+  /**
+   * 판정이 찾는 칸이다. **FK 가 아니다**(`0014-comment-tombstones-project`) — 페이지가 지워져도 묘비는 남는다. 복원이
+   * 그 페이지를 같은 id 로 되살릴 수 있기 때문이다.
+   */
   page_id: string
+  /** 묘비의 수명(`0014` — `ON DELETE CASCADE`). 복원이 되살릴 수 있는 것의 바깥 경계가 프로젝트다. */
+  project_id: string
   author_id: string
   idempotency_key: string
   deleted_at: Generated<Date>

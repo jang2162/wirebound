@@ -34,6 +34,7 @@ import { samePageMeta, type PageDocument } from '@wirebound/schema'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { assertLocking } from '../db/locking'
 import { assertNoNulBytes } from '../db/nul-guard'
+import { deletePageComments } from './comments'
 import { lockProjectTree } from './projects'
 
 /** 제목·설명의 NUL 을 거절할 때 문장이 부르는 이름. 가져오기가 앞 판에 내던 문장과 같다. */
@@ -512,16 +513,20 @@ export async function writePageSchemaAtSeq(
  */
 export async function deletePage(db: DbHandle, projectId: string, pageId: string): Promise<'deleted' | 'not-found'> {
   return withTransaction(db, async (trx) => {
-    // 남은 형제를 당긴다 — 트리 쓰기의 첫 잠금이 먼저다(`repos/projects.ts`의 `lockProjectTree`).
+    // 남은 형제를 당긴다 — 트리 쓰기의 첫 잠금이 먼저다(`repos/projects.ts`의 `lockProjectTree`). **묘비를 묻을 트랜잭션의
+    // «프로젝트 행 먼저»도 이것이 채운다**(`repos/comments.ts`의 `lockProjectForBurial` — 묘비의 FK 가 거는 `KEY SHARE`와는
+    // 제 트랜잭션이라 안 부딪히고, 복원 · 프로젝트 삭제의 `FOR UPDATE`와는 페이지를 잡기 전에 기다린다).
     await lockProjectTree(trx, projectId)
     const current = await trx
       .selectFrom('pages')
       .select(['menu_node_id', 'sort_order'])
       .where('id', '=', pageId)
       .where('project_id', '=', projectId)
+      .forUpdate()
       .executeTakeFirst()
     if (!current) return 'not-found'
 
+    await deletePageComments(trx, pageId)
     await trx.deleteFrom('pages').where('id', '=', pageId).execute()
     await closeGap(trx, current.menu_node_id, current.sort_order)
 

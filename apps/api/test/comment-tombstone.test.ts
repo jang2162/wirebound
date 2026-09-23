@@ -1,5 +1,5 @@
 /**
- * **코멘트 묘비**(`0013-comment-tombstones` — 이월 AC′, 2026-09-23). 게시가 «모름»인 사이 그 행이
+ * **코멘트 묘비**(`0013-comment-tombstones` · `0014-comment-tombstones-project` — 이월 AC′, 2026-09-23). 게시가 «모름»인 사이 그 행이
  * 지워지면 같은 키 재전송이 **되살렸다** — 키가 행에 살아 행과 함께 사라졌기 때문이다. 이제 지운 행의
  * 키를 서버가 기억하고, 같은 키가 다시 오면 새 행을 세우지 않고 409 + 이슈 코드
  * `idempotency-key-deleted`로 답한다(`routes/comments.ts`의 `DELETED_KEY`).
@@ -11,10 +11,16 @@
  * | 복원이 지움 | 복원의 `delete-comment`도 묘비를 남긴다 | 복원이 `deleteComment` 대신 맨 `DELETE`를 쓴다 |
  * | 복원이 되살림 | 지운 행을 복원이 **같은 id 로** 되살리면 키가 돌아와 재생 200 | `insertCommentWithId`가 키를 안 되붙인다 |
  * | 강등 | 묘비 판정도 가드 앞 — 권한을 잃어도 409 | 가드 앞의 묘비 조회를 뺀다(잠금 안의 것이 있어 다른 케이스는 산다) |
- * | 수명 | 묘비가 페이지 · 프로젝트 삭제를 막지 않고 함께 간다 · 재전송은 404 | `page_id`의 FK 를 뺀다(묘비가 남는다). FK 를 `RESTRICT`로 두면 하네스 청소까지 깨져 13 건이 함께 죽는다 |
- * | 동시성 | 첫 게시가 쥐인 채 다시 보낸 것이 줄을 서고, 그 사이 커밋 · 삭제가 끼면 잠금 안에서 묘비를 본다 | 잠금 안의 묘비 조회를 뺀다 |
+ * | 페이지 삭제 뒤 복원(리뷰 P4) | 페이지 삭제가 CASCADE 전에 묻는다 — 되살린 행은 200 재생 · 없던 행은 409 · 없는 동안 404 | **없다** — `deletePage`가 안 묻으면 이것과 «페이지 삭제가 쥐인 첫 게시 뒤에»가 함께 죽는다. **그 축(페이지 삭제가 묻는다)의 주인이 이 케이스다** — 그쪽은 제 변조(`forUpdate()`)가 따로 있다 |
+ * | 복원의 페이지 삭제 뒤 복원(리뷰 P5) | 복원 1단계가 세운 묘비를 `delete-page`가 데려가지 않는다 | 복원의 `deletePageRow`가 그 페이지의 묘비를 지운다 |
+ * | 수명 | 묘비는 프로젝트와 함께 간다(고아 0) · 페이지가 없는 동안 재전송은 404 | `0014`의 `project_id`에서 FK 를 뺀다(프로젝트를 지워도 묘비가 남는다) |
+ * | 동시성 — 첫 게시 · 삭제 · 다시 보낸 것 | 첫 게시가 쥐인 채 다시 보낸 것이 줄을 서고, 그 사이 커밋 · 삭제가 끼면 잠금 안에서 묘비를 본다 | 잠금 안의 묘비 조회를 뺀다 |
+ * | 동시성 — 페이지 삭제가 쥐인 첫 게시 뒤에 | 페이지 삭제가 페이지 행을 **먼저** 쥐고 묻는다 | `deletePage`의 `forUpdate()`를 뺀다(묻기가 첫 게시의 커밋 전에 돌아 CASCADE 가 묘비 없이 데려간다 → 복원 뒤 201) |
+ * | 동시성 — 코멘트 삭제 ∥ 복원 | 묻는 길이 프로젝트 행을 먼저 잡는다(교착 없음) | 코멘트 `DELETE`의 `lockProjectForBurial`을 뺀다(교착 → 500) |
+ * | 동시성 — 페이지 삭제 ∥ 복원 | 같다 — 페이지 삭제는 트리 쓰기의 첫 잠금(`lockProjectTree`)이 그 자리를 채운다 | `deletePage`의 `lockProjectTree`를 뺀다(교착 → 500) |
  *
- * 묘비를 아예 안 남기면(`deleteComment`의 CTE 에서 `where false`) «범위»를 뺀 여섯이 함께 죽는다.
+ * 묘비를 아예 안 남기면(`deleteComment`의 CTE 에서 `where false`) «범위»를 뺀 여섯이 함께 죽는다(`0013` 판에서 잰 값).
+ * `0014`가 `page_id`의 FK(CASCADE)를 안 빼면 P4 · P5 · «페이지 삭제가 쥐인 첫 게시 뒤에» 셋이 함께 죽는다.
  *
  * ⚠️ 동시성 판은 `withRealApi`라 테스트 DB 에 **실제로 커밋한다**(`comments-concurrency.test.ts`의 머리말).
  */
@@ -97,6 +103,26 @@ function expectDeleted(res: { statusCode: number; body: string; json: () => unkn
   expect(error.issues).toEqual([DELETED_ISSUE])
 }
 
+async function snapshot(ctx: TestContext, fx: Fixture, tag: string): Promise<string> {
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${fx.projectId}/snapshots`,
+    cookies: fx.owner.cookie,
+    payload: { tag },
+  })
+  expect(res.statusCode, res.body).toBe(201)
+  return res.json().id
+}
+
+async function restore(ctx: TestContext, fx: Fixture, snapshotId: string): Promise<void> {
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${fx.projectId}/snapshots/${snapshotId}/restore`,
+    cookies: fx.owner.cookie,
+  })
+  expect(res.statusCode, res.body).toBe(200)
+}
+
 describe('지운 게시의 키 — 같은 키 재전송이 되살리지 않는다 (이월 AC′)', () => {
   it('제 손(다른 탭)으로 지워도 · 남이 지워도 같은 키 · 같은 글 → 409 idempotency-key-deleted · 행 0 — 문장은 누가 지웠는지 말하지 않는다', async () => {
     // 고치기 전 값: 둘 다 **201** · 지운 말이 새 id 로 다시 섰다. 제 손과 남의 손을 한 케이스에 둔다 — 서버에서 둘은
@@ -166,26 +192,6 @@ describe('지운 게시의 키 — 같은 키 재전송이 되살리지 않는�
 })
 
 describe('지우는 길 전부 — 복원 · 페이지 · 프로젝트', () => {
-  async function snapshot(ctx: TestContext, fx: Fixture, tag: string): Promise<string> {
-    const res = await ctx.app.inject({
-      method: 'POST',
-      url: `/api/projects/${fx.projectId}/snapshots`,
-      cookies: fx.owner.cookie,
-      payload: { tag },
-    })
-    expect(res.statusCode, res.body).toBe(201)
-    return res.json().id
-  }
-
-  async function restore(ctx: TestContext, fx: Fixture, snapshotId: string): Promise<void> {
-    const res = await ctx.app.inject({
-      method: 'POST',
-      url: `/api/projects/${fx.projectId}/snapshots/${snapshotId}/restore`,
-      cookies: fx.owner.cookie,
-    })
-    expect(res.statusCode, res.body).toBe(200)
-  }
-
   it('복원이 그 행을 지우면(스냅샷 뒤에 달렸다) 같은 키 → 409 · 행 0', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
@@ -220,47 +226,113 @@ describe('지우는 길 전부 — 복원 · 페이지 · 프로젝트', () => {
     })
   })
 
-  it('묘비의 수명은 페이지다 — 묘비가 선 페이지 · 프로젝트를 지우면 묘비도 함께 가고 재전송은 404', async () => {
-    // 묘비는 페이지에 매인다(CASCADE — `0013`의 «수명»). 페이지가 없으면 재전송이 설 자리가 없어 묘비 없이도 이미
-    // 404 다(고치기 전 값도 404). 여기서 잠그는 것은 **묘비가 페이지 · 프로젝트 삭제를 막지 않고 함께 간다**는 것이다.
-    // 페이지 판과 프로젝트 판을 한 케이스에 둔다 — 같은 축(«가리킨 것이 없다»)이다.
+  /** 프로젝트를 만들고 메뉴만 세운다 — 페이지가 스냅샷 **뒤에** 서야 하는 판(복원이 그 페이지를 지운다)을 위해서다. */
+  async function setupWithoutPage(ctx: TestContext) {
+    const owner = await signup(ctx)
+    const project = await createProject(ctx, owner.cookie)
+    const menu = await createMenuNode(ctx, owner.cookie, project.id)
+    const addPage = async (): Promise<Fixture> => {
+      const page = await createPage(ctx, owner.cookie, project.id, menu.id)
+      return { owner, projectId: project.id, pageId: page.id, nodeId: (page.schema as { root: { id: string } }).root.id }
+    }
+    return { owner, projectId: project.id, addPage }
+  }
+
+  it('페이지를 지운 뒤 복원이 그 페이지를 되살리면 — 되살린 코멘트는 키가 돌아와 재생 200 · 지운 채인 코멘트는 409 · 없는 동안은 404 (리뷰 P4)', async () => {
+    // 고치기 전 값(리뷰 P4): 묘비가 페이지에 매여 페이지 `DELETE`의 CASCADE 로 함께 갔다 — 되살린 A 는 키 `NULL`이라
+    // 재전송이 **201 · 같은 글 두 행**, 스냅샷에 없던 C 는 **201 · 되살림**. 페이지 삭제가 CASCADE 전에 묻고
+    // (`repos/pages.ts`의 `deletePage`) 묘비가 프로젝트에 매이면(`0014`) 둘 다 맞게 판정된다.
     await withApi(async (ctx) => {
-      // **`ctx.db`로 센다** — `withApi`는 케이스 전체가 트랜잭션 하나라 바깥 풀에서는 늘 0 이다(거짓 초록).
-      const tombstones = async (pageId: string) =>
-        (await ctx.db.selectFrom('comment_tombstones').select('comment_id').where('page_id', '=', pageId).execute()).length
       const fx = await setup(ctx)
-      const first = await postKeyed(ctx, fx, '페이지와 함께 갈 말', 'key-1')
-      expect(first.statusCode, first.body).toBe(201)
-      const buried = await postKeyed(ctx, fx, '먼저 지운 말', 'key-0')
-      await remove(ctx, fx, buried.json().comment.id)
-      expect(await tombstones(fx.pageId)).toBe(1)
+      const kept = await postKeyed(ctx, fx, '스냅샷에 든 말', 'key-a')
+      expect(kept.statusCode, kept.body).toBe(201)
+      const withKept = await snapshot(ctx, fx, 'with-kept')
+      const later = await postKeyed(ctx, fx, '스냅샷 뒤에 단 말', 'key-c')
+      expect(later.statusCode, later.body).toBe(201)
       const pageGone = await ctx.app.inject({
         method: 'DELETE',
         url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`,
         cookies: fx.owner.cookie,
       })
       expect(pageGone.statusCode, pageGone.body).toBe(204)
-      const afterPage = await postKeyed(ctx, fx, '페이지와 함께 갈 말', 'key-1')
+      expect((await postKeyed(ctx, fx, '스냅샷에 든 말', 'key-a')).statusCode).toBe(404)
+      expect((await postKeyed(ctx, fx, '스냅샷 뒤에 단 말', 'key-c')).statusCode).toBe(404)
+
+      await restore(ctx, fx, withKept)
+      const keptAgain = await postKeyed(ctx, fx, '스냅샷에 든 말', 'key-a')
+      const laterAgain = await postKeyed(ctx, fx, '스냅샷 뒤에 단 말', 'key-c')
+
+      expect(keptAgain.statusCode, keptAgain.body).toBe(200)
+      expect(keptAgain.json().comment.id).toBe(kept.json().comment.id)
+      expectDeleted(laterAgain)
+      expect(await bodies(ctx, fx)).toEqual(['스냅샷에 든 말'])
+    })
+  })
+
+  it('복원이 페이지를 지우고 다른 복원이 되살려도 같다 — 1단계가 세운 묘비를 `delete-page`가 데려가지 않는다 (리뷰 P5)', async () => {
+    // 고치기 전 값(리뷰 P5): 복원 S0 의 1단계(`delete-comment`)가 묘비를 세우지만 같은 트랜잭션의 `delete-page`가
+    // CASCADE 로 곧바로 지웠다 — 복원 S1 뒤 재전송이 **201 · 두 행**(A) · **201 · 되살림**(C).
+    await withApi(async (ctx) => {
+      const base = await setupWithoutPage(ctx)
+      const empty = await snapshot(ctx, { ...base, pageId: '', nodeId: '' }, 'no-page')
+      const fx = await base.addPage()
+      const kept = await postKeyed(ctx, fx, '스냅샷에 든 말', 'key-a')
+      expect(kept.statusCode, kept.body).toBe(201)
+      const withKept = await snapshot(ctx, fx, 'with-kept')
+      const later = await postKeyed(ctx, fx, '스냅샷 뒤에 단 말', 'key-c')
+      expect(later.statusCode, later.body).toBe(201)
+
+      await restore(ctx, fx, empty)
+      expect((await postKeyed(ctx, fx, '스냅샷에 든 말', 'key-a')).statusCode).toBe(404)
+      await restore(ctx, fx, withKept)
+      const keptAgain = await postKeyed(ctx, fx, '스냅샷에 든 말', 'key-a')
+      const laterAgain = await postKeyed(ctx, fx, '스냅샷 뒤에 단 말', 'key-c')
+
+      expect(keptAgain.statusCode, keptAgain.body).toBe(200)
+      expect(keptAgain.json().comment.id).toBe(kept.json().comment.id)
+      expectDeleted(laterAgain)
+      expect(await bodies(ctx, fx)).toEqual(['스냅샷에 든 말'])
+    })
+  })
+
+  it('묘비의 수명은 프로젝트다 — 페이지를 지워도 남고(재전송은 404) · 프로젝트를 지우면 함께 간다', async () => {
+    // `0013`은 묘비를 페이지에 매달았고 페이지 삭제의 CASCADE 가 데려갔다 — 그래서 복원이 페이지를 되살리면 가릴 것이
+    // 없었다(리뷰 P4 · P5 — 위 두 케이스). 이제 프로젝트에 매인다(`0014`). 여기서 잠그는 것은 **프로젝트 삭제가 묘비를
+    // 데려간다**(고아가 안 남는다)는 것과, 페이지가 없는 동안의 재전송이 묘비를 보고도 **404** 라는 것이다(페이지를
+    // 뒤에 본다 — `replayBeforeGuard`). 페이지 판과 프로젝트 판을 한 케이스에 둔다 — 같은 축(«가리킨 것이 없다»)이다.
+    // **페이지 삭제가 묻는다 · 묘비가 페이지 삭제를 넘어 산다는 여기서 세지 않는다** — 그 축의 주인은 위 P4 · P5 다.
+    await withApi(async (ctx) => {
+      // **`ctx.db`로 센다** — `withApi`는 케이스 전체가 트랜잭션 하나라 바깥 풀에서는 늘 0 이다(거짓 초록).
+      const tombstones = async (projectId: string) =>
+        (await ctx.db.selectFrom('comment_tombstones').select('comment_id').where('project_id', '=', projectId).execute())
+          .length
+      const fx = await setup(ctx)
+      const first = await postKeyed(ctx, fx, '페이지와 함께 묻힐 말', 'key-1')
+      expect(first.statusCode, first.body).toBe(201)
+      const buried = await postKeyed(ctx, fx, '먼저 지운 말', 'key-0')
+      await remove(ctx, fx, buried.json().comment.id)
+      expect(await tombstones(fx.projectId)).toBe(1)
+      const pageGone = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`,
+        cookies: fx.owner.cookie,
+      })
+      expect(pageGone.statusCode, pageGone.body).toBe(204)
+      const afterPage = await postKeyed(ctx, fx, '페이지와 함께 묻힐 말', 'key-1')
       const buriedAfterPage = await postKeyed(ctx, fx, '먼저 지운 말', 'key-0')
       expect(afterPage.statusCode, afterPage.body).toBe(404)
       expect(buriedAfterPage.statusCode, buriedAfterPage.body).toBe(404)
 
-      const other = await setup(ctx)
-      const second = await postKeyed(ctx, other, '프로젝트와 함께 갈 말', 'key-2')
-      expect(second.statusCode, second.body).toBe(201)
-      const buriedToo = await postKeyed(ctx, other, '먼저 지운 말', 'key-0')
-      await remove(ctx, other, buriedToo.json().comment.id)
-      expect(await tombstones(other.pageId)).toBe(1)
       const projectGone = await ctx.app.inject({
         method: 'DELETE',
-        url: `/api/projects/${other.projectId}`,
-        cookies: other.owner.cookie,
+        url: `/api/projects/${fx.projectId}`,
+        cookies: fx.owner.cookie,
       })
       expect(projectGone.statusCode, projectGone.body).toBe(204)
-      const afterProject = await postKeyed(ctx, other, '프로젝트와 함께 갈 말', 'key-2')
-      expect(afterProject.statusCode, afterProject.body).toBe(404)
-      expect(await tombstones(fx.pageId)).toBe(0)
-      expect(await tombstones(other.pageId)).toBe(0)
+      expect((await postKeyed(ctx, fx, '페이지와 함께 묻힐 말', 'key-1')).statusCode).toBe(404)
+      expect(await tombstones(fx.projectId)).toBe(0)
+      const anywhere = await ctx.db.selectFrom('comment_tombstones').select('comment_id').where('page_id', '=', fx.pageId).execute()
+      expect(anywhere).toEqual([])
     })
   })
 })
@@ -360,6 +432,103 @@ describe('동시성 — 삭제가 첫 게시와 다시 보낸 것 사이에 낀�
       expectDeleted(answer)
       const rows = await db.selectFrom('comments').select('body').where('page_id', '=', fx.pageId).execute()
       expect(rows.map((row) => row.body)).toEqual(['먼저 있던 말'])
+    })
+  }, 60_000)
+  const deletePageReq = (ctx: TestContext, fx: Fixture) =>
+    ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`, cookies: fx.owner.cookie })
+  const restoreReq = (ctx: TestContext, fx: Fixture, snapshotId: string) =>
+    ctx.app.inject({
+      method: 'POST',
+      url: `/api/projects/${fx.projectId}/snapshots/${snapshotId}/restore`,
+      cookies: fx.owner.cookie,
+    })
+
+  it('페이지 삭제가 쥐인 첫 게시 뒤에 줄을 서면 그 게시도 묻는다 — 복원이 페이지를 되살린 뒤 같은 키 → 409 · 행은 스냅샷의 것뿐 (리뷰 P4 동시성)', async () => {
+    // **페이지 행을 먼저 쥐고 묻는다**(`deletePage`의 `forUpdate()`). 쥐지 않으면 묻기가 첫 게시의 커밋 **전에** 돌아
+    // 아무것도 못 묻고, 페이지 `DELETE`만 줄을 섰다가 첫 게시가 커밋한 행을 묘비 없이 CASCADE 로 데려간다 — 복원 뒤
+    // 같은 키 재전송이 201(되살림)이다.
+    await withRealApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const earlier = await ctx.app.inject({
+        method: 'POST',
+        url: commentsUrl(fx),
+        cookies: fx.owner.cookie,
+        payload: { nodeId: fx.nodeId, body: '먼저 있던 말' },
+      })
+      expect(earlier.statusCode, earlier.body).toBe(201)
+      const before = await snapshot(ctx, fx, 'before')
+      const hold = queueOnPage(fx, async () => {})
+      await hold.acquired
+      let first: ReturnType<typeof postKeyed> | undefined
+      let gone: ReturnType<typeof deletePageReq> | undefined
+      try {
+        first = postKeyed(ctx, fx, '쥐인 게시', 'key-1')
+        await waitForLockWaiter(1)
+        gone = deletePageReq(ctx, fx)
+        await waitForLockWaiter(2)
+      } finally {
+        await hold.release()
+      }
+      const committed = await first
+      const deleted = await gone
+      if (committed === undefined || deleted === undefined) throw new Error('판이 서지 않았다')
+      expect(committed.statusCode, committed.body).toBe(201)
+      expect(deleted.statusCode, deleted.body).toBe(204)
+
+      await restore(ctx, fx, before)
+      const again = await postKeyed(ctx, fx, '쥐인 게시', 'key-1')
+
+      expectDeleted(again)
+      const rows = await db.selectFrom('comments').select('body').where('page_id', '=', fx.pageId).execute()
+      expect(rows.map((row) => row.body)).toEqual(['먼저 있던 말'])
+    })
+  }, 60_000)
+
+  /**
+   * **묻는 길이 프로젝트 행을 먼저 잡는다**(코멘트 삭제 `lockProjectForBurial` · 페이지 삭제 `lockProjectTree`). 페이지 행을 쥔 채 줄을 세워 두고 복원을 띄운다 —
+   * 복원은 프로젝트 행(`FOR UPDATE`) → 페이지 행 순이다. 묻는 쪽이 프로젝트 행을 안 잡았으면 복원이 그것을 쥐고
+   * 페이지를 기다리고, 묻는 쪽은 페이지를 쥔 뒤 묘비의 FK 가 프로젝트 행에 `KEY SHARE`를 청한다 — 고리다(교착 → 한쪽 500).
+   */
+  async function raceWithRestore(ctx: TestContext, fx: Fixture, burying: () => Promise<{ statusCode: number; body: string }>) {
+    const snap = await snapshot(ctx, fx, 'any')
+    const hold = queueOnPage(fx, async () => {})
+    await hold.acquired
+    let bury: ReturnType<typeof burying> | undefined
+    let restored: ReturnType<typeof restoreReq> | undefined
+    try {
+      bury = burying()
+      await waitForLockWaiter(1)
+      restored = restoreReq(ctx, fx, snap)
+      await waitForLockWaiter(2)
+    } finally {
+      await hold.release()
+    }
+    return { bury: await bury, restored: await restored }
+  }
+
+  it('코멘트 삭제 ∥ 복원 — 삭제가 페이지 행을 쥐고 묻어도 교착이 없다(프로젝트 행이 먼저)', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const first = await postKeyed(ctx, fx, '지울 말', 'key-1')
+      expect(first.statusCode, first.body).toBe(201)
+
+      const { bury, restored } = await raceWithRestore(ctx, fx, () => remove(ctx, fx, first.json().comment.id))
+
+      expect(bury?.statusCode, bury?.body).toBe(200)
+      expect(restored?.statusCode, restored?.body).toBe(200)
+    })
+  }, 60_000)
+
+  it('페이지 삭제 ∥ 복원 — 페이지 삭제가 페이지 행을 쥐고 묻어도 교착이 없다(프로젝트 행이 먼저)', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const first = await postKeyed(ctx, fx, '페이지와 묻힐 말', 'key-1')
+      expect(first.statusCode, first.body).toBe(201)
+
+      const { bury, restored } = await raceWithRestore(ctx, fx, () => deletePageReq(ctx, fx))
+
+      expect(bury?.statusCode, bury?.body).toBe(204)
+      expect(restored?.statusCode, restored?.body).toBe(200)
     })
   }, 60_000)
 })

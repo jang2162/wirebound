@@ -151,6 +151,7 @@ import {
   hasCommentTombstone,
   insertComment,
   listComments,
+  lockProjectForBurial,
   updateCommentBody,
   type CommentRecord,
 } from '../repos/comments'
@@ -422,7 +423,8 @@ export async function replayBeforeGuard(request: FastifyRequest, reply: FastifyR
   if (existing === null) {
     // **달렸다가 지워졌으면 그것도 여기서 말한다**(이월 AC′) — 재생과 같은 자리, 같은 순서다(행을 먼저 찾고
     // 페이지를 나중에). 가드 뒤에서만 보면 그 사이 권한을 잃은 사람은 403·404 를 받고, 웹은 그것을 «안 달림»으로
-    // 확정한다 — 달렸고 지워졌다는 사실이 거짓으로 바뀐다. 묘비는 페이지에 매여(CASCADE) 페이지가 없으면 없다.
+    // 확정한다 — 달렸고 지워졌다는 사실이 거짓으로 바뀐다. 묘비는 프로젝트에 매여(`0014`) 페이지가 지워져도 남는다 —
+    // 그래서 페이지를 **뒤에** 본다: 페이지가 없으면 여기서 빠지고 가드 · 핸들러가 404 를 낸다(복원이 되살리면 409).
     // 두 조회 사이에 행이 지워지고 묘비가 서면(삭제가 커밋되면) 그 묘비를 본다 — 한 문장으로 지우고 묻으므로
     // «행도 묘비도 없는» 틈은 삭제 쪽에 없다. 첫 게시가 아직 커밋 중이면 둘 다 없어 핸들러로 가고, 거기서 잠근 뒤
     // 다시 본다.
@@ -777,6 +779,10 @@ export function commentRoutes() {
           // - **B5** — 앞의 요청이 번호를 지워 `head_seq`가 올랐으면 여기서 `stale`로
           //   끊긴다. **행을 지우기 전에** 끊기므로 *"409를 받았는데 코멘트가 사라져
           //   있다"*가 성립하지 않는다.
+          // **묻을 트랜잭션의 첫 잠금 — 페이지 행보다 먼저**(`repos/comments.ts`의 `lockProjectForBurial`). 묘비의 FK 가
+          // 프로젝트 행에 거는 `KEY SHARE`를 페이지 행을 쥔 뒤에 처음 잡으면 복원 · 프로젝트 삭제(프로젝트 → 페이지)와
+          // 고리가 된다(`test/comment-tombstone.test.ts`의 «코멘트 삭제 ∥ 복원»).
+          await lockProjectForBurial(trx, projectId)
           await lockAndCheck(trx, projectId, pageId, page.headSeq)
           // **커밋 순간의 권한**(이월 AA). 잠금 대기 뒤의 역할로 판정한다 — 게시와 같은 자리다.
           await recheckProjectRole(trx, request)
