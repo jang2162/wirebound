@@ -582,16 +582,16 @@ PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "sch
 `POST .../pages/import`는 **파일 한 벌로 새 페이지를 만든다.** 절대 덮지 않는다 —
 대상은 **메뉴 노드**이고 페이지는 그 형제 그룹의 맨 끝에 붙는다.
 
-본문의 `file`이 §11.2의 봉투다. **구현이 §11.2의 예시와 갈리는 자리 둘**은
-`packages/schema/src/page-json/envelope.ts`의 머리말에 근거와 함께 있다:
+본문의 `file`이 §11.2의 봉투다. **눈여겨볼 자리 둘**(아래 ①②)의 근거는
+`packages/schema/src/page-json/envelope.ts`의 머리말에 있다:
 
 ```jsonc
 {
   "wireboundVersion": "1",
   "page": { "title": "회원 목록", "layoutRef": "admin-lnb", "description": null },
-  // ① 예시는 root 노드를 싣지만 여기는 **문서 봉투**다 — 문서 버전을 적을 자리가 필요하다
+  // ① root 노드가 아니라 **문서 봉투**다 — 문서 버전을 적을 자리가 필요하다
   "schema": { "version": 1, "root": { "id": "n_root", "type": "Page", "children": [] } },
-  // ② 예시의 `marker`는 받지 않는다 — 번호는 `schema` 안의 노드가 든다
+  // ② `marker`는 받지 않는다(400) — 번호는 `schema` 안의 노드가 든다
   "comments": [{ "nodeId": "n_7f3a", "body": "검색 조건은 AND 결합" }]
 }
 ```
@@ -1144,7 +1144,7 @@ description}`, 다른 쪽 `{id,name,description,version}`). 순서까지 보려�
 
 수집 **후** 지문을 읽는 그 문장에서 `clock_timestamp()`를 함께 읽어 `capturedAt`에 담고,
 삽입이 그 값을 `created_at`에 심는다. **따로 두면 어긋난다:** `capturedAt`을 Node의 `new Date()`로, `created_at`을 컬럼 기본값 `now()`로
-두면 두 값이 수십 ms 어긋난다. `now()`는
+두면 두 값이 어긋난다(수집에 든 시간과 트랜잭션 시작 시각의 차이만큼 — 수십~백 ms 대). `now()`는
 `transaction_timestamp()`라 트랜잭션 안에서 얼어 있고, 두 값은 애초에 다른 순간(수집 끝 vs
 삽입 트랜잭션 시작)이며, 시계도 둘(Node·Postgres)이다.
 
@@ -1309,9 +1309,11 @@ revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `
 **빠지는 것은 그 요청과 같은 세션의 연결뿐이다**(`src/ws/broadcast.ts`의 `sentBy`). 남의 연결
 id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청도 아무도 안 뺀다 — WS 는 쿠키로만 열리므로 그
 요청을 낸 연결이 없다(같은 사람의 연결을 빼면 에이전트의 편집을 그 사람의 브라우저가 못 받는다). 연결 id 는 무작위다
-(`wsc_<uuid>` — `src/ws/connection-id.ts`) — 형식에 기대지 마라. id 만 견주거나 id 가 카운터면,
+(`wsc_<uuid>` — `src/ws/connection-id.ts`) — 형식에 기대지 마라. id 만 견주고 id 가 카운터면,
 웹이 게시를 다시 보낼 때 싣는 첫 보내기의 id 가 api 재기동 뒤 **남의 새 연결**의 id 가 되어 그 사람이
-방송을 못 받는다. id 는 `presence`로 룸의 모두에게 보이므로 위조로도 같은 일이 난다 — 그래서 세션까지 견준다.
+방송을 못 받는다. 세션까지 견줘도 id 가 카운터면 재기동 뒤 **같은 사람의 새 연결**이 옛 id 를 받아, 옛 셸이
+낸 게시의 방송에서 새 셸이 빠진다. id 는 `presence`로 룸의 모두에게 보이므로 무작위여도 id 만 견주면 위조로
+남을 뺄 수 있다 — 그래서 **무작위 id 와 세션 대조 둘 다**다.
 
 **연결 도중 권한이 사라지면 그 연결이 닫힌다**(코드 `4403`). 확인 지점은 둘이다: 클라이언트가
 프레임을 보낼 때, 그리고 서버가 브로드캐스트를 흘릴 때. 읽을 수 없는 프레임은 `4400`이다.

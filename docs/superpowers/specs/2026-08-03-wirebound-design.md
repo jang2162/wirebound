@@ -58,7 +58,7 @@
 
 | 축 | 결정 | 근거 |
 |---|---|---|
-| DB 접근 | Kysely 쿼리 빌더 + 손으로 쓴 SQL 마이그레이션 | jsonb 컬럼(`schema`·`tokens`·`ops`)이 많고 §7.1의 트랜잭션 경계를 직접 제어해야 한다. ORM 추상화가 얻는 것이 없다 |
+| DB 접근 | Kysely 쿼리 빌더 + 손으로 쓴 SQL 마이그레이션 | JSON 컬럼(`schema`·`tokens`·`ops`)이 많고 §7.1의 트랜잭션 경계를 직접 제어해야 한다. ORM 추상화가 얻는 것이 없다 |
 | 인증 | HttpOnly 세션 쿠키 + DB 세션 (§10) | WebSocket 핸드셰이크가 같은 쿠키를 쓰고, 권한 회수가 즉시 반영된다 |
 | 비밀번호 | `node:crypto`의 scrypt (파라미터를 해시 문자열에 동봉) | 네이티브 의존 없이 OWASP 권장 KDF를 쓴다. 파라미터 동봉으로 나중에 비용을 올려도 기존 해시가 유효하다 |
 | 패키지 배포 | `schema`·`renderer`를 tsdown으로 빌드, `exports`는 `dist` | §3.3의 "Node와 브라우저 양쪽에서 동작"을 번들러 없이 만족시킨다. 개발·테스트는 `development` 조건으로 소스를 직접 본다 |
@@ -160,12 +160,13 @@ project_members(project_id, user_id, role, invited_at)
   PK (project_id, user_id)
   role ∈ ('owner','editor','viewer')
 
-api_tokens(id, project_id, name, token_hash, created_by, last_used_at, created_at)
+api_tokens(id, project_id, name, token_hash, user_id, last_used_at, created_at)
 
-themes(id, project_id, slug, name, description, extends_ref, version,
-       tokens jsonb, primitives jsonb, components jsonb,
-       patterns jsonb, assets jsonb, updated_at)
+themes(id, project_id, slug, name, description, extends_ref, version, preview,
+       tokens json, primitives json, components json,
+       patterns json, assets json, updated_at)
   project_id NULL = 시스템 테마 (읽기 전용)
+  절 컬럼은 json 이다 — jsonb 는 키를 정규화해 작성자가 적은 순서를 잃는다
   extends_ref = 'system:<slug>' 형식, 상속 깊이 1단계
   UNIQUE (project_id, slug)
 
@@ -178,8 +179,9 @@ pages(id, project_id, menu_node_id, title, sort_order, layout_id,
       description text, schema jsonb, schema_version int,
       head_seq bigint, updated_at)
 
-comments(id, page_id, marker int, node_id text, body text,
+comments(id, page_id, node_id text, body text,
          author_id, created_at, updated_at)
+  번호(marker)는 이 행이 아니라 페이지 문서의 노드가 든다 (§4.3)
 
 revisions(id, page_id, seq bigint, actor_type, actor_id, actor_label,
           ops jsonb, inverse jsonb, created_at)
@@ -751,11 +753,11 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 | **editor** | 메뉴·페이지·컴포넌트·코멘트·상호작용 편집, 스냅샷 생성 (복원 불가) |
 | **viewer** | 조회 전용 — 편집·코멘트 모두 불가. API 토큰 발급은 된다(토큰은 발급자의 권한을 넘지 않는다) |
 
-- 사용자 인증은 **HttpOnly 세션 쿠키**다. 쿠키에는 랜덤 토큰이 실리고 서버는 그 sha256 해시만 `sessions`에 보관한다. WebSocket 핸드셰이크도 같은 쿠키를 쓰므로 REST와 WS의 인증 경로가 하나다. 세션 행을 지우면 열려 있는 WS 연결의 권한도 즉시 회수된다.
+- 사용자 인증은 **HttpOnly 세션 쿠키**다. 쿠키에는 랜덤 토큰이 실리고 서버는 그 sha256 해시만 `sessions`에 보관한다. WebSocket 핸드셰이크도 같은 쿠키를 쓰므로 REST와 WS의 인증 경로가 하나다. 세션 행을 지우면 열려 있는 WS 연결의 권한도 즉시 회수된다. 계정은 `migrate`가 환경변수로 만든다 — 가입 엔드포인트는 없다.
 - 권한 체크는 REST와 WebSocket이 **동일한 가드 함수**를 쓴다.
 - WS는 룸 참가 시 한 번, 각 patch 수신 시 한 번 확인한다(연결 도중 권한 회수 대응).
 - 프로젝트 멤버가 아닌 사용자에게는 **404**를 준다(프로젝트 존재 자체를 숨긴다). 멤버지만 역할이 모자라면 **403**이다.
-- **이메일 존재 여부는 로그인 경로에서만 감춘다.** 로그인 실패는 "없는 계정"과 "틀린 비밀번호"를 구분하지 않고 응답 시간도 맞춘다 — 미인증 상태에서 무제한 시도가 가능한 유일한 표면이기 때문이다. 반면 **회원가입의 중복 409**와 **멤버 초대의 404/409**는 이메일이 가입되어 있는지를 그대로 드러낸다. 이는 인지된 트레이드오프다: 둘 다 계정이 있어야 도달할 수 있고, wirebound는 팀이 자체 호스팅하는 설계 도구이지 공개 가입 서비스가 아니다. "이미 가입/이미 멤버"라는 명확한 안내가 열거 방지보다 값지다. 인증된 사용자가 빈 프로젝트를 만들어 임의 이메일을 조회할 수 있다는 뜻이므로, 계정 발급이 통제되지 않는 배포에서는 이 결정을 재검토한다.
+- **이메일 존재 여부는 로그인 경로에서만 감춘다.** 로그인 실패는 "없는 계정"과 "틀린 비밀번호"를 구분하지 않고 응답 시간도 맞춘다 — 미인증 상태에서 무제한 시도가 가능한 유일한 표면이기 때문이다. 반면 **멤버 초대의 404/409**는 이메일이 가입되어 있는지를 그대로 드러낸다. 이는 인지된 트레이드오프다: 초대는 계정이 있어야 도달할 수 있고, wirebound는 팀이 자체 호스팅하는 설계 도구이지 공개 가입 서비스가 아니다. "없는 계정/이미 멤버"라는 명확한 안내가 열거 방지보다 값지다. 인증된 사용자가 빈 프로젝트를 만들어 임의 이메일을 조회할 수 있다는 뜻이므로, 계정 발급이 통제되지 않는 배포에서는 이 결정을 재검토한다.
 - API 토큰은 **발급자의 권한을 상속**한다. editor가 만든 토큰으로는 스냅샷 복원이 안 된다. 토큰 스코프는 프로젝트 단위다.
 
 테마·레이아웃 편집을 owner로 제한한 이유는 이 둘이 프로젝트 전체 페이지의 외형을 한 번에 바꾸는 전역 자원이기 때문이다. 시스템 테마는 누구도 편집할 수 없으며, 수정이 필요하면 `extends`로 파생 테마를 만든다(§6.9).
@@ -782,10 +784,12 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 {
   "wireboundVersion": "1",
   "page": { "title": "회원 목록", "layoutRef": "admin-lnb", "description": "..." },
-  "schema": { "id": "n_root", "type": "Page", "children": [ ... ] },
-  "comments": [ { "marker": 1, "nodeId": "n_7f3a", "body": "검색 조건은 AND 결합" } ]
+  "schema": { "version": 1, "root": { "id": "n_root", "type": "Page", "children": [ ... ] } },
+  "comments": [ { "nodeId": "n_7f3a", "body": "검색 조건은 AND 결합" } ]
 }
 ```
+
+`schema`는 root 노드가 아니라 문서 봉투(`{ version, root }`)다 — 버전이 없으면 가져오기가 옛 버전 문서를 마이그레이션 없이 지금 버전으로 받는다(§13.1). 코멘트의 번호는 `schema` 안의 노드가 든다(§4.3) — `comments[].marker`는 받지 않고 400으로 거절한다. 두 자리에 적으면 둘이 어긋날 때 무엇을 믿을지 정할 규칙이 없다.
 
 가져오기 시 노드 id를 재발급하되 코멘트의 `nodeId`와 상호작용의 `target`을 함께 리매핑한다. `wireboundVersion`은 스키마 마이그레이션 진입점이다.
 
@@ -882,7 +886,7 @@ wireb export --format html -o dir  정적 번들 생성
 | 상황 | 응답 | 클라이언트 동작 |
 |---|---|---|
 | 스키마 검증 실패 | 422 | 낙관적 적용 롤백 후 서버 상태로 재동기화 |
-| 잠금 충돌 | 423 `locked` + 점유자 정보 | UI 사전 차단이 1차 방어, 발생 시 안내 후 재시도 |
+| 잠금 충돌 | 423 `locked` + 점유자 정보 | UI 사전 차단이 1차 방어, 발생 시 안내 — 자동 재시도하지 않는다 |
 | baseSeq 불일치 | 409 | 페이지 재조회 후 재시도 |
 | 권한 없음 | 403 | WS는 룸에서 강제 퇴장, 읽기 전용 전환 |
 | undo 대상 소실 | 클라 사전 검사에 걸리면 에러 아님, 서버까지 오면 409 | 스택에서 제거하고 안내 |

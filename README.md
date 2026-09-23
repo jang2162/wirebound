@@ -287,7 +287,7 @@ apps/api/.env 에서 포트를 한 수로 맞춘다. 자기 Postgres 를 쓰면 
 | `PORT` | 둘째 서버가 `Error: listen EADDRINUSE: address already in use 127.0.0.1:3031` 로 죽는다. **종료 코드 1** |
 | `POSTGRES_PORT` | 둘째 `up -d` 가 `Bind for 0.0.0.0:<포트> failed: port is already allocated` 로 죽는다. **그런데 그대로 한 번 더 치면 종료 0 으로 "Started" 를 찍고 컨테이너가 뜬다 — 포트 없이.** 그때 `docker compose ps` 의 `PORTS` 칸이 **비어 있고**, 그 포트에 붙는 것은 전부 **옆 워크트리의 컨테이너**다(6.3) |
 | `DATABASE_URL` | 워크트리 B 에서 `migrate:down` 을 한 번 돌리자 **A 의 살아 있는 서버가** `500 {"error":{"code":"internal"}}` 을 내기 시작했다. A 의 로그에만 `relation "api_tokens" does not exist` 가 남았고 **B 는 아무 말도 안 했다**(한 컨테이너를 공유할 때의 값이다 — 워크트리마다 컨테이너를 가르면 이 갈래는 포트가 먼저 막는다) |
-| `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **둘 다 종료 코드 1**로 죽는다. **가르면 둘 다 전 케이스 통과 · 종료 0** 이고, 벽시계는 **혼자 돌리는 것보다 오히려 짧게 나온다**(두 워크트리에서 `time pnpm test` 를 동시에 돌려 혼자 돌린 값과 견준다). 깨지는 꼴은 셋이다 — 상대의 `globalSetup` 이 판을 내려서 나는 `relation "…" does not exist` · 상대가 커밋한 행과 부딪히는 `409` · 상대의 정리가 지워서 나는 FK 위반. **몇 개가 죽는지는 판마다 다르다**(경쟁 상태다) — **안 낡는 값은 종료 코드뿐이라 그것만 적는다** |
+| `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **둘 다 종료 코드 1**로 죽는다. **가르면 둘 다 전 케이스 통과 · 종료 0** 이고, 벽시계가 **혼자 돌리는 것보다 길지 않게 나오기도 한다** — 느려지는지는 기계와 부하가 정한다(재는 법: 두 워크트리에서 `time pnpm test` 를 동시에 돌려 혼자 돌린 값과 견준다). 깨지는 꼴은 셋이다 — 상대의 `globalSetup` 이 판을 내려서 나는 `relation "…" does not exist` · 상대가 커밋한 행과 부딪히는 `409` · 상대의 정리가 지워서 나는 FK 위반. **몇 개가 죽는지는 판마다 다르다**(경쟁 상태다) — **안 낡는 값은 종료 코드뿐이라 그것만 적는다** |
 
 > **`apps/api/.env`를 고쳤으면 서버 둘을 **다** 다시 띄워라.** `tsx watch`는 **소스만 본다** —
 > `.env`가 바뀌어도 다시 읽지 않는다. 이 기계에서 쟀다: `.env`에 없는 브라우저 경로를 심고
@@ -566,8 +566,8 @@ Error response from daemon: failed to set up container networking:
 
 > **워크트리를 지운 뒤 남은 컨테이너는 저장소 루트의 `docker compose down` 으로 못 찾는다.**
 > 라벨 `com.docker.compose.project=<워크트리명>` · `project.working_dir=…/.worktrees/<워크트리명>` 이
-> git 이 모르는 디렉터리를 가리키고, 거기 남은 것은 compose 의 바인드 마운트가 되살린 빈
-> `docker/postgres-init/` 뿐이라 `docker-compose.yml` 도 없다. 다루려면
+> git 이 모르는 디렉터리를 가리킨다 — `docker-compose.yml` 은 없고, 그 컨테이너를 다시 띄운 적이
+> 있으면 compose 의 바인드 마운트가 되살린 빈 `docker/postgres-init/` 만 있다. 다루려면
 > `docker compose -p <워크트리명> …` 이거나 `docker start/stop <컨테이너이름>` 이다(둘 다 이
 > 기계에서 확인했다). **그 빈 `postgres-init/` 은 그 프로젝트로 볼륨을 다시 만들면
 > `01-test-db.sql` 이 안 돈다는 뜻이기도 하다** — 6.4 의 함정이 그때 온다.
@@ -747,7 +747,7 @@ Claude Desktop·Cursor·Zed 등은 **이 문서가 등록해 보지 않았다.**
 node apps/api/node_modules/playwright-core/cli.js install chromium
 ```
 
-> **`node node_modules/playwright-core/cli.js …`는 이 저장소에서 안 된다.** pnpm 의 엄격한
+> **저장소 루트에서 `node node_modules/playwright-core/cli.js …`는 안 된다.** pnpm 의 엄격한
 > 배치라 `playwright-core`가 루트 `node_modules`에 없다 — 그대로 부르면
 > `Cannot find module`이다(이 기계에서 쟀다).
 
