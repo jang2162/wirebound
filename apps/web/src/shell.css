@@ -2759,8 +2759,10 @@
   margin: 6px 0 0;
 }
 
-/* 값은 코멘트 탭의 작은 버튼 그대로다(`.wb-shell-comment-save` 등) — 두 탭에 같은 크기로 선다. */
-.wb-shell-pending-recheck {
+/* 값은 코멘트 탭의 작은 버튼 그대로다(`.wb-shell-comment-save` 등) — 두 탭에 같은 크기로 선다.
+   «확인»(떠나 있는 동안 끝난 실패를 닫는다 — 이월 S)도 같은 단추다. */
+.wb-shell-pending-recheck,
+.wb-shell-pending-dismiss {
   appearance: none;
   border: 1px solid var(--wb-shell-line);
   border-radius: 4px;

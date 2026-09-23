@@ -1783,3 +1783,104 @@ describe('쓰기가 끝나면 잠금이 풀린다 — 목록 다시 받기는 �
     expect(server.stored()).toBe('매달린 저장 글')
   })
 })
+
+/**
+ * **S — 떠나 있는 동안 끝난 실패**(이월 S · `write-ledger.tsx`의 «떠나 있는 동안 끝난 실패»). 앞 판은 쓰기가 끝난 순간
+ * 그 페이지를 보는 방문이 없으면 칸의 통지가 버려져(`panel-drafts.tsx`의 2번) **조용했다** — Chrome: 설명·코멘트를
+ * 저장해 둔 채 옆 페이지로 가서 500 을 받으면 나에도 · 돌아온 가에도 통지 0, 401 이면 나에 그대로 머물다 다음 읽기에서야
+ * 로그인 화면.
+ *
+ * 혼자 죽는 변조(백업 → 한 줄 → web 전량 → 바이트 비교 복원):
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 장부가 남기지 않는다(`note(live.epoch, key, failure)` 를 뺀다) | 설명 · 코멘트 둘 — **함께 죽는다**. 그 축의 주인은 *"설명 — 옆 페이지에 가 있는 동안 …"* 이다(코멘트 케이스는 아래 줄의 축을 소유한다) |
+ * | 코멘트 패널이 실패 문장을 안 준다(`failedMessage: WRITE_FAILED`를 뺀다) | *"코멘트 — …"* **혼자** |
+ * | 401 을 남기기만 하고 세션을 안 끝낸다 | *"401 이면 …"* **혼자** |
+ * | 새 쓰기가 남긴 실패를 안 지운다(`run` 머리의 `note(…, null)`) | *"그 칸의 다음 쓰기가 …"* **혼자** |
+ * | «확인»이 안 지운다(`dismiss`를 비운다) | *"설명 — 옆 페이지에 가 있는 동안 …"* **혼자** |
+ * | `Receiver.sees`가 늘 거짓(보는 방문도 못 본 것으로 — 실패가 칸과 장부에 **두 번** 선다) | 이 절은 안 죽는다 — 앞 절들의 실패 케이스 일곱(`page-description-edit` 둘 · `draft-store` 하나 · 이 파일 넷)이 `alert` 둘로 죽는다 |
+ */
+describe('S — 페이지를 떠나 있는 동안 끝난 실패는 돌아오면 말한다 · 401 은 곧바로 로그인 화면이다', () => {
+  const MISSED = '이 페이지를 떠나 있는 동안 저장하지 못했습니다'
+
+  function toPage(title: string): void {
+    fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }))
+  }
+
+  /** 설명을 저장해 둔 채(붙잡힘) 옆 페이지로 간다. */
+  async function saveAndLeave(server: ReturnType<typeof descriptionServer>, text: string): Promise<void> {
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), text)
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(box().value).toBe(''))
+  }
+
+  it('설명 — 옆 페이지에 가 있는 동안 저장이 실패하면, 돌아온 가가 그렇다고 말한다 · «확인»이 닫는다', async () => {
+    const server = descriptionServer('서버 값')
+    await saveAndLeave(server, '실패할 글')
+    await server.fail(0, new ApiError(500, 'internal', '서버 오류가 발생했습니다'))
+    // 나는 가의 일을 말하지 않는다 — 나의 칸은 나의 것이다.
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    toPage(PAGE_TITLE)
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    // **앞 판은 여기서 통지가 없었다** — 상자는 서버 값이고 «실패할 글»은 떠날 때 버려졌다(F1).
+    expect(screen.getByRole('alert').textContent).toBe(`${MISSED} — 서버 오류가 발생했습니다`)
+    expect(box().disabled).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '확인' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('코멘트 — 옆 페이지에 가 있는 동안 삭제가 이유 없이 실패하면, 돌아온 가가 코멘트의 문장으로 말한다', async () => {
+    const server = commentServer([comment('c-1', '지울 말')])
+    let reject: (caught: unknown) => void = () => {}
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: DOC },
+      apiOverrides: { ...server.overrides, deleteComment: (() => new Promise((_resolve, fail) => (reject = fail))) as never },
+    })
+    await toCommentTab()
+    await screen.findByText('지울 말')
+    fireEvent.click(document.querySelector<HTMLButtonElement>('.wb-shell-comment-delete') as HTMLButtonElement)
+    await waitFor(() => expect(commentBox().disabled).toBe(true))
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+
+    // `ApiError`가 아닌 실패 — 문장은 쓰기가 준 것이다(`TrackedWrite.failedMessage`).
+    await act(async () => reject(new Error('알 수 없는 실패')))
+    toPage(PAGE_TITLE)
+    await screen.findByText('지울 말')
+
+    expect(screen.getByRole('alert').textContent).toBe(`${MISSED} — 코멘트를 저장하지 못했습니다`)
+  })
+
+  it('401 이면 옆 페이지에 머문 채 곧바로 로그인 화면이다 — 다음 읽기를 기다리지 않는다', async () => {
+    const server = descriptionServer('서버 값')
+    await saveAndLeave(server, '세션이 끝난 글')
+
+    await server.fail(0, new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
+
+    // **앞 판은 나에 그대로 머물렀다**(Chrome — 가로 돌아가 조회가 401 을 받고서야 로그인 화면).
+    await waitFor(() => expect(screen.queryByLabelText('이메일')).not.toBeNull())
+  })
+
+  it('그 칸의 다음 쓰기가 나가면 남긴 실패는 지워진다 — 성공한 뒤 다시 서지 않는다', async () => {
+    const server = descriptionServer('서버 값')
+    await saveAndLeave(server, '실패할 글')
+    await server.fail(0, new ApiError(500, 'internal', '서버 오류가 발생했습니다'))
+    toPage(PAGE_TITLE)
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(MISSED))
+
+    type(box(), '다시 쓴 글')
+    fireEvent.click(saveButton())
+    await server.respond(1)
+
+    await waitFor(() => expect(screen.queryByText('설명을 저장했습니다')).not.toBeNull())
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})

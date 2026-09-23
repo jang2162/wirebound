@@ -659,6 +659,8 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
       if (pageId === undefined || busy) return
       const openPageId = pageId
       void busyLock.run<T, V>({
+        // 떠나 있는 동안 실패하면 장부가 이 문장으로 남긴다(`write-ledger.tsx`의 «떠나 있는 동안 끝난 실패» — 이월 S).
+        failedMessage: WRITE_FAILED,
         send: (signal) => op.send(api, openPageId, signal),
         ...(op.uncertain === undefined ? {} : { uncertain: op.uncertain }),
         verify: (signal) => op.verify(api, openPageId, signal),

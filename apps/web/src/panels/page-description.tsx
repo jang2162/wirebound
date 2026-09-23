@@ -576,6 +576,8 @@ export function PageDescriptionPanel(props: {
     // **잠금은 장부가 쥐고 푼다**(`write-ledger.tsx`) — 그 페이지의 것을, 지금 어디에 가 있든
     // (머리말 3), 에디터를 떠났다 와도(이월 Q). 아래 `settle`이 끝나야 풀린다.
     await saving.run({
+      // 떠나 있는 동안 실패하면 장부가 이 문장으로 남긴다(`write-ledger.tsx`의 «떠나 있는 동안 끝난 실패» — 이월 S).
+      failedMessage: SAVE_FAILED,
       send: (signal) => api.updatePage(projectId, openPageId, { description: next, base: { description: base } }, { signal }),
       // **시간 안에 응답이 없으면 서버에서 다시 읽는다**(이월 R). 판정은 `land`가 한다 — 서버 값이 내 글이면
       // 원하던 상태, 바탕이면 안 닿음, 그 밖이면 **다른 사람이 바꿨다**(이월 P). 서버가 설명을 정규화하지
