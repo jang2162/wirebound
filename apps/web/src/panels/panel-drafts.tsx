@@ -208,6 +208,7 @@ import {
   type Receiver,
   type TrackedWrite,
   type WritePhase,
+  type WriteTarget,
 } from './write-ledger'
 
 /**
@@ -431,7 +432,7 @@ export function PanelDraftsProvider(props: {
   )
 
   const [token] = useState(() => Symbol('panel-drafts'))
-  const receiver = useMemo<Receiver>(() => ({ token, accept, sees }), [token, accept, sees])
+  const receiver = useMemo<Receiver>(() => ({ token, realm: 'page', accept, sees }), [token, accept, sees])
   const { receive } = ledger
   // **지금 떠 있는 provider 로 선다**(머리말 3) — 내려간 provider 로 시작한 쓰기의 응답이 여기
   // 닿는다. **레이아웃 이펙트인 것이 요점이다** — 자식의 이펙트(조회 걸기)가 먼저 돌면 그 쓰기가
@@ -499,7 +500,7 @@ export function usePanelLock(key: LockSlot): PanelLock {
   const { held, receiver } = useBox(key.name)
   const ledger = useWriteLedger()
   const { projectId, pageId } = held
-  const target = useMemo(() => ({ projectId, pageId, slot: key.name }), [projectId, pageId, key.name])
+  const target = useMemo<WriteTarget>(() => ({ projectId, pageId, slot: key.name, realm: 'page' }), [projectId, pageId, key.name])
   const entry = ledger.writes.get(writeKey(target))
   const { run: runOnLedger, dismiss: dismissOnLedger } = ledger
   const run = useCallback(

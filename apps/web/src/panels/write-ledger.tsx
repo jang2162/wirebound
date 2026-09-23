@@ -39,6 +39,11 @@
  * 응답이 **에디터 밖에 있는 동안** 오면 받을 provider 가 없어 버려진다. 잠금은 여기서 풀리므로,
  * 돌아오면 새 방문이 조회를 걸어 **커밋된 뒤의** 값을 읽는다.
  *
+ * **메뉴 트리도 받는 자리다**(A 리뷰 F1 · 2026-09-23). 받는 자리는 칸의 종류(`Realm`)마다 하나다 — 우측 패널(`'page'`)과
+ * 트리(`'tree'`). 트리 이름 변경의 판정(«바뀌지 않았습니다» · 충돌 · 다시 읽은 트리)이 앞 판에는 쓰기를 낸 트리의 state 로만 가서,
+ * 에디터를 떠났다 돌아온 **새 트리**에서는 말이 없었다. 무엇을 받고 무엇을 보는지는 `Receiver`의 계약이 갖는다 — 2차 D 트랙
+ * (판정으로 끝난 쓰기의 전달)이 그 위에 선다.
+ *
  * ## 세션을 넘지 않는다 — 세션이 끝나면 장부를 끊는다 (2026-09-21)
  *
  * 라우트 표 바깥에 섰더니 **로그아웃도 넘었다.** 같은 탭에서 앨리스가 저장 중 로그아웃하고 밥이
@@ -222,7 +227,8 @@
  *
  * **판정으로 끝난 쓰기는 남기지 않는다**(`'verified'` — «저장되지 않았습니다» · «다른 사람이 바꿨습니다» 같은 판정의 뜻은
  * 칸이 정한다). 떠나 있는 동안 판정이 끝나면 그 판정은 여전히 버려진다 — 남는 틈이다(판정이 가는 길은 시간 초과 ·
- * 모르는 실패뿐이라 드물다).
+ * 모르는 실패뿐이라 드물다). **받는 자리가 떠 있으면 버려지지 않는다** — 판정의 말은 칸 쓰기(`deliver`)라 지금 떠 있는 자리가
+ * 받는다(설명은 그 페이지를 보는 방문 · 트리는 그 프로젝트의 트리). 버려지는 것은 받을 자리가 **아예 없을** 때뿐이다.
  *
  * ## 이것이 막지 못하는 것
  *
@@ -300,7 +306,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
-import type { Failure } from '../api/failure'
+import { toFailure, type Failure } from '../api/failure'
 import { useInvalidateSession, useSessionEpoch } from '../session/session-context'
 
 /** 쓰기의 시간 제한. 값의 근거는 위 머리말의 표다. */
@@ -327,8 +333,10 @@ export interface WriteEntry {
 export interface WriteTarget {
   readonly projectId: string
   readonly pageId: string | undefined
-  /** 칸의 이름(`panel-drafts.tsx`의 `lockSlot`). */
+  /** 칸의 이름(`panel-drafts.tsx`의 `lockSlot` · 트리의 `RENAME_SLOT`). */
   readonly slot: string
+  /** 결말을 그릴 받는 자리의 종류(`Receiver`의 계약). 키에는 안 든다 — 칸 이름이 이미 가른다. */
+  readonly realm: Realm
 }
 
 /**
@@ -336,7 +344,8 @@ export interface WriteTarget {
  *
  * - `'done'` — 시간 안에 성공 응답을 받았다.
  * - `'failed'` — 시간 안에 실패했다(실패 응답 · 연결 실패). **결과를 안다: 안 됐다** — 쓰기가 «모르는
- *   실패»라고 한 것(`TrackedWrite.uncertain`)은 여기 안 오고 판정으로 간다.
+ *   실패»라고 한 것(`TrackedWrite.uncertain`)은 여기 안 오고 판정으로 간다. **판정용 다시 읽기가 401 이어도 여기다**
+ *   (`attempt` — `caught`는 그 401 이다). 결과는 모르지만 세션이 끝났다 — 칸은 그것을 `toFailure`로 읽어 로그인 화면으로 간다.
  * - `'verified'` — 시간 안에 응답이 없어 **다시 읽어 판정했다.** 판정의 모양은 칸이 정한다.
  */
 export type WriteOutcome<T, V> =
@@ -374,15 +383,6 @@ export interface TrackedWrite<T, V> {
    * 한다** — 따로 지으면 보고 있을 때와 떠나 있을 때의 말이 갈린다.
    */
   settle(outcome: WriteOutcome<T, V>, ownerLive: boolean): WriteConclusion | Promise<WriteConclusion>
-  /**
-   * **이 쓰기의 결말을 그릴 자리가 아직 떠 있는가**(이월 5차 ③ · 2026-09-23). 주면 떠나 있었는지(머리말 «떠나 있는 동안 끝난
-   * 실패»)를 **이것 하나로** 가른다 — 우측 패널의 `Receiver.sees`(그 페이지를 보는가)를 **대신한다**(둘을 섞지 않는다 —
-   * 판정이 두 벌이 된다). 안 주면 앞 판 그대로 `sees`다(설명 · 코멘트).
-   *
-   * 주는 것은 트리 이름 변경이다(`tree/use-tree-commands.tsx`의 `rename`). 트리는 **프로젝트** 단위로 보인다 — 어느 페이지에
-   * 있든 떠 있다. `sees`로 가르면 다른 페이지에 가 있는 동안 끝난 실패를 트리가 스스로 말하고 장부도 남겨 두 번 말한다.
-   */
-  seen?(): boolean
 }
 
 /**
@@ -391,12 +391,32 @@ export interface TrackedWrite<T, V> {
  */
 export type WriteConclusion = Failure | null
 
-/** 칸 쓰기가 닿을 곳 — 지금 떠 있는 `PanelDraftsProvider`. */
+/**
+ * 칸의 종류 — **받는 자리를 가른다**(아래 `Receiver`). `'page'`는 우측 패널(`PanelDraftsProvider` — 설명 · 코멘트), `'tree'`는
+ * 메뉴 트리(`tree/use-tree-commands.tsx` — 이름 변경).
+ */
+export type Realm = 'page' | 'tree'
+
+/**
+ * 칸 쓰기가 닿을 곳 — **지금 떠 있는 받는 자리**(A 리뷰 F1 · 2026-09-23 에 여럿이 됐다).
+ *
+ * ## 받는 자리의 계약
+ *
+ * - **칸의 종류(`realm`)마다 하나다.** 장부는 종류마다 마지막으로 선 자리 하나만 든다(`receive` — 앞 판의 `receiverRef`를
+ *   종류마다 둔 것이다). 쓰기(`WriteTarget.realm`)와 칸 쓰기(`deliver`의 `from.realm`)도 종류를 하나 갖는다 — 그래서 **한 쓰기를
+ *   보고 받는 자리는 많아야 하나다**(둘이 같은 결말을 함께 말하는 판이 구조로 없다). 설명 · 코멘트는 `'page'` 하나라 앞 판 그대로다.
+ * - **`accept`는 칸 쓰기를 받는다** — 자기가 그리는 자리(`at`)를 보고 있을 때만 쓰고, 아니면 버린다. 칸과 값의 모양은 받는
+ *   자리의 몫이다(`panel-drafts.tsx` · 트리).
+ * - **`sees`는 «이 쓰기의 결말을 지금 그릴 수 있나»다** — `accept`가 그 자리를 받는가와 **같은 판정**이어야 한다. 거짓이면
+ *   장부가 결말을 남긴다(머리말 «떠나 있는 동안 끝난 실패»). 우측 패널은 (프로젝트, 페이지)를, 트리는 프로젝트를 본다 — 트리는
+ *   그 프로젝트의 어느 페이지에서나 떠 있다.
+ */
 export interface Receiver {
   readonly token: symbol
-  /** `at`의 페이지를 보고 있으면 그 칸에 쓴다. 칸과 값의 모양은 `panel-drafts.tsx`의 몫이다. */
+  readonly realm: Realm
+  /** `at`을 보고 있으면 그 칸에 쓴다. 칸과 값의 모양은 받는 자리의 몫이다. */
   readonly accept: (at: PageAt, key: object, update: unknown) => void
-  /** 지금 `at`의 페이지를 보고 있는가 — 칸 쓰기가 닿을 곳이 있는가(`accept`가 받는가와 같은 판정). */
+  /** 지금 `at`을 보고 있는가 — 칸 쓰기가 닿을 곳이 있는가(`accept`가 받는가와 같은 판정). */
   readonly sees: (at: PageAt) => boolean
 }
 
@@ -429,10 +449,10 @@ interface Ledger {
    * 가드를 두지 않았다.
    */
   run<T, V>(target: WriteTarget, owner: symbol, write: TrackedWrite<T, V>): Promise<void>
-  /** 지금 떠 있는 provider 로 선다. 돌려주는 함수가 물러난다. */
+  /** 지금 떠 있는 받는 자리로 선다 — 같은 종류의 앞 자리를 갈아 끼운다. 돌려주는 함수가 물러난다. */
   receive(receiver: Receiver): () => void
   /**
-   * 칸 쓰기를 보낸다 — **지금 떠 있는 provider** 로(없거나 자기면 자기에게). **지난 세대의 것은
+   * 칸 쓰기를 보낸다 — **`from`과 같은 종류의 지금 떠 있는 받는 자리**로(없으면 `from`에게). **지난 세대의 것은
    * 버린다**(머리말 «세션을 넘지 않는다»).
    */
   deliver(from: Receiver, at: SlotAt, key: object, update: unknown): void
@@ -469,7 +489,8 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
   const epoch = useSessionEpoch()
   const invalidate = useInvalidateSession()
   const [book, setBook] = useState<Book>(() => ({ epoch, writes: new Map(), missed: NOTHING_MISSED }))
-  const receiverRef = useRef<Receiver | null>(null)
+  /** 종류마다 지금 떠 있는 받는 자리 하나(`Receiver`의 계약). */
+  const receiversRef = useRef(new Map<Realm, Receiver>())
   const liveRef = useRef<Live | null>(null)
 
   // **세대가 바뀌면 항목을 비운다 — 렌더 중에**(`panel-drafts.tsx`가 페이지가 바뀌면 칸을 버리는 것과
@@ -521,12 +542,12 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
         // **세대가 바뀌면 이 쓰기를 끊는다**(머리말 «세션을 넘지 않는다») — 보내기도 판정도 낸 세대의 신호에
         // 매인다(`race`). 끊긴 거절은 «실패»로 끝나고, 그 뒷일의 칸 쓰기는 `deliver`가 지난 세대라 버린다.
         const outcome = await attempt(write, report, live.signal)
-        // **그 페이지를 보는 방문이 있는가는 끝난 순간에 본다**(머리말 «떠나 있는 동안 끝난 실패») — 보고 있으면 칸이
-        // 말한다(`settle`의 칸 쓰기가 닿는다). 세션이 끝나 끊긴 실패는 뺀다 — 앞 세션의 일이다.
-        // 그릴 자리는 쓰기가 말하면 그것으로, 안 말하면 우측 패널로 본다(`TrackedWrite.seen`).
-        const shown = write.seen !== undefined ? write.seen() : receiverRef.current?.sees(target) === true
-        const unseen = outcome.kind === 'failed' && !live.signal.aborted && !shown
-        const conclusion = await write.settle(outcome, receiverRef.current?.token === owner)
+        // **그 자리를 보는 받는 자리가 있는가는 끝난 순간에 본다**(머리말 «떠나 있는 동안 끝난 실패») — 보고 있으면 칸이
+        // 말한다(`settle`의 칸 쓰기가 닿는다). 세션이 끝나 끊긴 실패는 뺀다 — 앞 세션의 일이다. 보는 자리는 **그 쓰기의
+        // 종류의 것 하나**다(`Receiver`의 계약).
+        const receiver = receiversRef.current.get(target.realm)
+        const unseen = outcome.kind === 'failed' && !live.signal.aborted && receiver?.sees(target) !== true
+        const conclusion = await write.settle(outcome, receiver?.token === owner)
         // **판정은 쓰기가 했다**(`settle`의 결말 — 머리말 «판정은 장부가 하지 않는다»). 실패가 아니면 남길 것이 없다.
         if (unseen && conclusion !== null) {
           // **세션은 페이지에 안 매인다** — 어디에 가 있든 로그인 화면으로 간다(`SignedOut`이 부르는 것과 같은 것).
@@ -546,9 +567,10 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
   }, [note])
 
   const receive = useCallback((receiver: Receiver) => {
-    receiverRef.current = receiver
+    const receivers = receiversRef.current
+    receivers.set(receiver.realm, receiver)
     return () => {
-      if (receiverRef.current === receiver) receiverRef.current = null
+      if (receivers.get(receiver.realm) === receiver) receivers.delete(receiver.realm)
     }
   }, [])
 
@@ -557,8 +579,7 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
     // 세션의 방문에 닿지 않는다. 401 을 로그인 화면으로 바꾸는 판정은 여전히 `api/failure.tsx` 한 곳이다 —
     // 여기는 그 판정에 닿을 **칸 쓰기**를 거른다.
     if (at.epoch !== liveRef.current?.epoch) return
-    const current = receiverRef.current
-    ;(current === null ? from : current).accept(at, key, update)
+    ;(receiversRef.current.get(from.realm) ?? from).accept(at, key, update)
   }, [])
 
   const { writes, missed } = book
@@ -645,6 +666,11 @@ async function attempt<T, V>(
     report(CHECKING)
     const checked = await race((signal) => write.verify(signal), session)
     if (checked !== EXPIRED && 'value' in checked) return { kind: 'verified', verdict: checked.value }
+    // **다시 읽기가 401 이면 «모름»이 아니다 — 세션이 끝났다**(A 리뷰 F3 · 2026-09-23). 앞 판은 이것도 «확인하지도 못했습니다»로
+    // 삼켜, 다른 탭에서 로그아웃한 사람이 «다시 확인»을 눌러도 잠긴 칸 앞에 머물렀다(Chrome — 트리는 조작 전부가 잠긴 채). 결말은
+    // `'failed'`에 그 401 을 싣는다 — 칸이 `toFailure`로 읽어 로그인 화면을 그리고, 보는 칸이 없으면 장부가 세션을 끝낸다(`run`).
+    // 401 의 판정은 여전히 `toFailure` 한 곳이다. 끊긴 요청(세대가 바뀌었다)은 여기 안 온다 — 끊긴 거절은 401 이 아니다.
+    if (checked !== EXPIRED && toFailure(checked.caught, '').kind === 'signed-out') return { kind: 'failed', caught: checked.caught }
     await new Promise<void>((resolve) => report({ phase: 'unknown', recheck: resolve }))
   }
 }

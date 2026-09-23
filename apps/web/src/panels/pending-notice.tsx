@@ -27,8 +27,8 @@ export function PendingNotice(props: {
   checking: string
   unknown: string
   /**
-   * 떠나 있는 동안 끝난 실패의 머리 — 없으면 «이 페이지를 떠나 있는 동안 …»이다. 트리는 **에디터**를 떠나 있었을 때만
-   * 남는다(`tree/use-tree-commands.tsx` — 트리는 프로젝트의 어느 페이지에서나 떠 있다).
+   * 떠나 있는 동안 끝난 실패의 머리 — 없으면 «이 페이지를 떠나 있는 동안 …»이다. 트리는 **그 프로젝트의 트리가 떠 있지
+   * 않았을 때만** 남는다(`tree/use-tree-commands.tsx` — 트리는 프로젝트의 어느 페이지에서나 떠 있다).
    */
   missedLead?: string
 }): ReactElement | null {

@@ -216,7 +216,7 @@ export async function lockProjectRow(trx: DbHandle, projectId: string): Promise<
  * 기다린다». 두 메뉴 사이 이동은 «옛 형제 → 새 형제» 순이라 맞바꾸면 거꾸로 선다. 형제 행을 id 순으로 먼저 잡는 길은
  * **빈 형제**(아직 행이 없는 메뉴 — 생성 · 옮겨 넣기)를 못 잠그고, 옮기는 사이 소속이 바뀐 행을 놓친다. 그래서 형제
  * 무리 전부의 위에 있는 행 하나 — 프로젝트 행 — 를 먼저 잡는다. 트리 쓰기끼리는 **줄을 선다**(프로젝트 하나에
- * 하나씩). 오래 걸리는 쓰기가 아니다(수 ms — `write-ledger.tsx`의 표).
+ * 하나씩). 대개 오래 걸리는 쓰기가 아니다(수 ms — `write-ledger.tsx`의 표). **가져오기는 예외다** — 아래 «대가».
  *
  * **잠금 순서는 «프로젝트 행 → 메뉴 · 페이지 행 → 멤버 행(재확인)»이다** — 복원(`lockProjectForRestore`) · 프로젝트
  * 삭제(`routes/projects.ts`)와 같은 방향이다. 그 둘의 `FOR UPDATE`와는 충돌해 **기다린다**(고리가 아니다 — 그쪽도
@@ -226,11 +226,39 @@ export async function lockProjectRow(trx: DbHandle, projectId: string): Promise<
  * 않는다. `FOR UPDATE`면 트리 쓰기 하나가 그 프로젝트의 모든 FK 삽입을 세운다. 프로젝트 수정(`UPDATE projects`)과는
  * 서로 기다린다.
  *
- * 대상이 없으면(그 사이 지워졌다) 아무것도 안 잡는다 — 뒤의 조회가 `null`을 보고 404 가 된다.
+ * **대상이 없으면(그 사이 지워졌다 — 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰다가 깨어났다) 던진다**(`ProjectGoneError` →
+ * `http/error-handler.ts`가 404). 앞 판은 «뒤의 조회가 `null`을 보고 404 가 된다»고 적었는데 **루트 메뉴 생성은 뒤에 조회가
+ * 없어** 형제 수를 세고 `INSERT` → FK 위반 500 이었다(A 리뷰 F4 — 20 판 중 11). 이제 여섯 자리가 이 한 규칙이다
+ * (`test/tree-project-gone.test.ts` — 여섯 자리와 가져오기 전부 404).
+ *
+ * **대가 — 가져오기는 이것을 트랜잭션 끝까지 쥔다**(A 리뷰 F2 · 이월). 가져오기(`services/page-import.ts`)는 한 트랜잭션에서
+ * `insertPage`(여기서 잡는다) → 본문 적용 → 댓글 삽입이라, **댓글 수만큼** 같은 프로젝트의 다른 트리 쓰기가 줄을 선다. 실측(진짜
+ * api · 풀 10칸 · 댓글 12000 가져오기 + 0.3s 뒤 루트 메뉴 생성 10 + 1s 뒤 다른 사람의 `GET /projects`): 가져오기 13.8s · 줄 선
+ * 생성 9 가 13.5s · 1 이 5.0s 에 503 · **무관한 조회도 5.0s 에 503**(풀이 찼다). 제목·설명만 바꾸는 쓰기는 안 기다린다.
+ *
+ * **잠금을 끝으로 옮기는 길은 막혔다**(원형을 재고 걷었다): 페이지 행을 먼저 넣고 트리 잠금 · 자리 매기기를 댓글 뒤로 두면 위 판이
+ * 가져오기 11.7s · 생성 10 이 26–51ms · 조회 200 3ms 로 풀리지만, **같은 메뉴의 삭제와 겹치면 5 판 중 5 가 교착**(가져오기
+ * 500 · `deadlocks` +5)이다 — 가져오기가 페이지 `INSERT`로 메뉴 행에 `KEY SHARE`를 쥔 채 프로젝트 행을 기다리고, 메뉴 삭제는
+ * 프로젝트 행을 쥔 채 그 메뉴 행의 `DELETE`에서 가져오기를 기다린다(앞 판은 409 «하위 메뉴나 페이지가 있어» · 교착 0). 풀려면
+ * 메뉴 삭제가 메뉴 행을 프로젝트 행보다 먼저 잡아야 해 위 잠금 순서가 흔들린다. 같은 메뉴 가져오기 둘 · 프로젝트 삭제와의 겹침은
+ * 원형에서도 멀쩡했다(`sort_order` 겹침 0 · 교착 0 — `sort_order`에는 유일 제약이 없다).
  */
 export async function lockProjectTree(trx: DbHandle, projectId: string): Promise<void> {
   assertLocking(trx, 'lockProjectTree')
-  await trx.selectFrom('projects').select('id').where('id', '=', projectId).forNoKeyUpdate().execute()
+  const rows = await trx.selectFrom('projects').select('id').where('id', '=', projectId).forNoKeyUpdate().execute()
+  if (rows.length === 0) throw new ProjectGoneError()
+}
+
+/**
+ * 트리 쓰기가 잠금을 기다리는 사이 프로젝트가 지워졌다(`lockProjectTree`). **HTTP 를 모르는 이 계층의 값이다** — 404 로
+ * 옮기는 것은 `http/error-handler.ts`(`NulByteError`와 같은 자리)다. 라우트마다 잡지 않는 것은 여섯 자리가 한 규칙이어야
+ * 해서다 — 한 자리가 빠지면 그 자리만 500 이다(앞 판의 루트 메뉴 생성).
+ */
+export class ProjectGoneError extends Error {
+  constructor() {
+    super('프로젝트를 찾을 수 없습니다')
+    this.name = 'ProjectGoneError'
+  }
 }
 
 /**
