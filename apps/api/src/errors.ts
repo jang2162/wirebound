@@ -63,6 +63,11 @@ export interface ApiErrorIssue {
    */
   severity?: 'error' | 'warning'
   nodeId?: string | null
+  /**
+   * **그 칸의 지금 값** — 페이지 메타 충돌(이슈 코드 `page-meta-changed` — `routes/pages.ts`의 `PATCH`)에만
+   * 실린다. 받는 쪽이 다시 읽지 않고 «다른 사람의 값»을 보이고, 그것을 새 바탕으로 덮을 수 있게.
+   */
+  current?: string | null
 }
 
 /**

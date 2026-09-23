@@ -185,7 +185,8 @@ describe('§9 — 설명을 저장한다', () => {
     type('새 설명')
     fireEvent.click(saveButton())
 
-    await waitFor(() => expect(api.bodies).toEqual([{ description: '새 설명' }]))
+    // **바탕도 실린다** — 첫 글자를 친 순간의 서버 값이다(이월 P — 판정 축은 `page-meta-conflict.test.tsx`).
+    await waitFor(() => expect(api.bodies).toEqual([{ description: '새 설명', base: { description: '옛 설명' } }]))
     await waitFor(() => expect(box().value).toBe('서버가 정한 값'))
   })
 
@@ -212,7 +213,7 @@ describe('§9 — 설명을 저장한다', () => {
     type('')
     fireEvent.click(saveButton())
 
-    await waitFor(() => expect(api.bodies).toEqual([{ description: null }]))
+    await waitFor(() => expect(api.bodies).toEqual([{ description: null, base: { description: '지울 설명' } }]))
   })
 
   it('바꾼 것이 없으면 저장 버튼이 눌리지 않는다', async () => {
@@ -358,7 +359,8 @@ describe('§9 — 페이지를 바꾸면 앞 페이지의 것을 버린다', () 
     type('이 페이지에서 친 글')
     fireEvent.click(saveButton())
     await waitFor(() =>
-      expect(api.bodies).toEqual([{ description: '이 페이지에서 친 글' }]),
+      // 바탕도 **이 페이지의** 서버 값이다 — 앞 페이지의 바탕이 따라오면 여기서 죽는다.
+      expect(api.bodies).toEqual([{ description: '이 페이지에서 친 글', base: { description: DESCRIPTION_OF[OTHER_PAGE_ID] } }]),
     )
     expect(api.pages).toEqual([OTHER_PAGE_ID])
   })
@@ -463,7 +465,9 @@ describe('§9 — 탭·모드를 오가도 저장하지 않은 초안이 남는�
     // 저장 버튼은 꺼져 있고 누를 수가 없다. 보내지는 것까지 본다.
     expect(saveButton().disabled).toBe(false)
     fireEvent.click(saveButton())
-    await waitFor(() => expect(api.bodies).toEqual([{ description: '아직 저장 안 한 초안' }]))
+    await waitFor(() =>
+      expect(api.bodies).toEqual([{ description: '아직 저장 안 한 초안', base: { description: '서버에 있는 설명' } }]),
+    )
     expect(api.pages).toEqual([PAGE_ID])
   })
 
@@ -486,7 +490,9 @@ describe('§9 — 탭·모드를 오가도 저장하지 않은 초안이 남는�
     expect(box().value).toBe('모드를 오갈 초안')
     expect(saveButton().disabled).toBe(false)
     fireEvent.click(saveButton())
-    await waitFor(() => expect(api.bodies).toEqual([{ description: '모드를 오갈 초안' }]))
+    await waitFor(() =>
+      expect(api.bodies).toEqual([{ description: '모드를 오갈 초안', base: { description: '서버에 있는 설명' } }]),
+    )
     expect(api.pages).toEqual([PAGE_ID])
   })
 })
@@ -611,7 +617,7 @@ describe('§9 — 저장이 나가 있는 동안 탭·페이지를 옮겨도 그
 
     // **양성 대조** — 응답이 오면 풀린다. 없으면 «언제나 잠근다»도 통과한다.
     expect(box().disabled).toBe(false)
-    expect(api.bodies).toEqual([{ description: '첫 저장 글' }])
+    expect(api.bodies).toEqual([{ description: '첫 저장 글', base: { description: '서버 값' } }])
   })
 
   it('저장이 나가 있는 동안 탭을 오가면 그 응답이 떠 있는 본문에 닿는다 — 낡은 서버 값을 보이지 않는다', async () => {
@@ -668,7 +674,7 @@ describe('§9 — 저장이 나가 있는 동안 탭·페이지를 옮겨도 그
     // 끝까지 간다 — 이 페이지에 저장하면 이 페이지의 글이 이 페이지로 간다.
     fireEvent.click(saveButton())
     await waitFor(() => expect(api.bodies).toHaveLength(2))
-    expect(api.bodies[1]).toEqual({ description: '옆 페이지에서 친 글' })
+    expect(api.bodies[1]).toEqual({ description: '옆 페이지에서 친 글', base: { description: DESCRIPTION_OF[OTHER_PAGE_ID] } })
     expect(api.pages).toEqual([PAGE_ID, OTHER_PAGE_ID])
     await api.release()
   })
@@ -704,7 +710,7 @@ describe('§9 — 저장이 나가 있는 동안 탭·페이지를 옮겨도 그
     expect(box().value).toBe('첫 저장 글')
     expect(box().disabled).toBe(false)
     expect(saveButton().disabled).toBe(true)
-    expect(api.bodies).toEqual([{ description: '첫 저장 글' }])
+    expect(api.bodies).toEqual([{ description: '첫 저장 글', base: { description: DESCRIPTION_OF[PAGE_ID] } }])
     expect(api.pages).toEqual([PAGE_ID])
   })
 

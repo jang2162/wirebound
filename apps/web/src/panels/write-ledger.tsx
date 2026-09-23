@@ -81,7 +81,9 @@
  * 1.9s 에 같은 설명을 저장): 밥의 `PATCH`가 같은 행 잠금 뒤에 줄을 서서 앨리스의 것 다음에 커밋됐다 —
  * 8.1s «설명을 저장했습니다» · 화면·DB `"밥이 저장한 글"`. **이 스택에서는 온 순서대로라 뒤가 이겼다.**
  * 서버 앞단이 순서를 바꾸면 앞 세션의 것이 뒤에 서서 덮는다 — 일반적인 보장이 아니다. 받아들인 것이다 —
- * 앞 사람의 쓰기로 다음 사람을 잠그는 것은 안 된다. 닫는 길은 이월 P(기대값)다.
+ * 앞 사람의 쓰기로 다음 사람을 잠그는 것은 안 된다. **설명은 이월 P(2026-09-23)가 닫았다** — 두 쓰기가 같은 바탕을
+ * 싣고 오므로 뒤에 선 것은 앞의 것이 커밋한 값을 보고 409 다(덮지 않는다 — `page-description.tsx`의 «남의 저장을
+ * 조용히 덮지 않는다»). 코멘트는 멱등 키가 닫는다.
  *
  * ## 시간 제한 — 넘으면 «풀림»이 아니라 «결과를 모름»이다 (이월 R)
  *
@@ -123,7 +125,7 @@
  * 막힌 것이다. 더 짧으면 느리지만 멀쩡한 서버에서 «모름»이 나서 아래 틈(판정 뒤 늦은 커밋)을
  * 스스로 연다. 더 길면 사용자가 꺼진 상자 앞에서 그만큼 기다린다.
  *
- * ## 판정 뒤의 늦은 커밋 — 코멘트는 서버가 닫는다, 설명은 이월 P 와 함께
+ * ## 판정 뒤의 늦은 커밋 — 코멘트는 멱등 키가, 설명은 바탕이 닫는다
  *
  * 다시 읽은 «서버 값이 보낸 값과 다르다»(설명 · 코멘트 수정·삭제의 판정)는 **그 순간 아직** 아니라는
  * 뜻이지 영영 아니라는 뜻이 아니다. 요청이 이미 서버에 있으면 판정 뒤에 커밋될 수 있다(Chrome — 서버가
@@ -164,12 +166,63 @@
  *   | 게시를 행 잠금에 막아 둔 채 **api 를 죽임** — Chrome(서버 안 지연) | 첫 게시 · 다시 보낸 것 둘 다 `500 text/plain`(Vite 빈 본문) → «모름» + «다시 확인» → api 를 다시 띄우고 누름 → 7.4s **201** · 풀림 · DB 1행(죽은 첫 요청은 롤백) |
  *   | 첫 게시를 붙잡은 채 로그아웃 — Chrome(route) | 로그아웃에 `ERR_ABORTED` · **다시 보내지 않았다**(POST 1건) · DB 0행 |
  *   | 첫 게시·다시 보낸 것 둘 다 503 → 가 → 나 → 가 — Chrome(route) | 돌아온 상자 꺼짐 · 초안 없음(F1) · «다시 확인» 그대로 → 누르면 201 · 풀림 · DB 1행 |
- * - **설명 — 이번에 닫지 않는다. 이월 P(창 둘의 덮어쓰기)와 한 항목으로 넘긴다.** 닫는 길은 설명
- *   `PATCH`가 기대값을 받아 늦은 쓰기를 409로 거절하는 것인데, 그것이 이 앱의 **첫 충돌 모델**이다.
- *   남는 위험은 좁다: 이 스택에서 같은 행 쓰기는 행 잠금으로 **온 순서대로** 커밋되어 늦게 커밋된
- *   앞 쓰기가 뒤 쓰기를 못 덮는다(Chrome — 새로고침 판에서 둘째가 이겼다). 이것은 일반적인 보장이
- *   아니다 — 서버 앞단이 순서를 바꾸면 선다. 그리고 충돌 모델을 넣는다면 **설명·제목(페이지 메타
- *   전체)에 한 번에** 따로 설계해 넣을 일이라(P 가 그 자리다) 여기만 먼저 짓지 않는다.
+ * - **설명 — 바탕이 닫는다(이월 P · 2026-09-23).** 설명 `PATCH`가 **고치기 전 값**(`base`)을 싣고, 서버가 행 잠금
+ *   안에서 지금 값과 견줘 다르면 409 다(계약: `apps/api/src/routes/pages.ts`). 그래서 판정 **뒤에** 서버에 선 쓰기도
+ *   커밋 순간에 견준다 — 그 사이 남이 저장했으면 늦은 쓰기는 409 로 떨어지고 **남의 값을 덮지 않는다.** 판정은 셋이다
+ *   (`api/page-meta.ts`의 `judgeMeta`): 다시 읽은 값이 내 글이면 원하던 상태 · 바탕이면 «안 저장됨»(초안을 남긴다) ·
+ *   그 밖이면 **다른 사람이 바꿨다**(충돌 화면). **«안 저장됨» 뒤에 늦게 커밋되는 길은 남는다** — 판정 순간 서버 값이
+ *   바탕이었고 늦은 쓰기의 바탕도 그 값이라 통과한다. 그 값은 **내 글**이라 남의 것을 덮지 않고, 다시 누르면 409 의
+ *   지금 값이 내 글이라 «이미 같습니다»로 끝난다. 앞 판에서 이 틈을 좁게 만들던 «행 잠금이 온 순서대로 커밋한다»는
+ *   이제 하중이 아니다 — 서버 앞단이 순서를 바꿔도 바탕이 판정한다.
+ *
+ * ## 떠나 있는 동안 끝난 실패 — 장부가 남기고, 돌아온 방문이 말한다 (이월 S · 2026-09-23)
+ *
+ * 칸 쓰기는 **그 페이지를 보는 방문**에만 닿는다(`panel-drafts.tsx`의 2번 — 남의 페이지를 오염시키지 않으려는 거름).
+ * 그래서 쓰기가 **끝난 순간** 그 페이지를 보는 방문이 없으면(옆 페이지 · 프로젝트 목록 · 테마 편집기에 가 있다) 실패
+ * 통지는 버려졌고, 401 도 `SignedOut`에 닿지 못했다. Chrome(앞 판 · 설명·코멘트 · 저장을 붙잡은 채 옆 페이지로):
+ * 500 → 나에도 · 돌아온 가에도 통지 0(보낸 글은 떠날 때 버려졌다 · DB 그대로), 401(서버가 세션 행을 지움) → 나에
+ * 그대로 머물다 **다음 읽기**에서야 로그인 화면.
+ *
+ * **새 통지 체계를 세우지 않았다 — 이 장부가 이미 «그 페이지 그 칸의 쓰기»를 들고, 돌아온 방문의 `PendingNotice`가
+ * 그것을 그린다.** 끝난 쓰기가 `'failed'`이고 그 순간 받는 방문이 그 페이지를 안 보면(`Receiver.sees`), **쓰기가
+ * `settle`에서 돌려준 결말**(`WriteConclusion`)을 본다:
+ *
+ * - **결말이 실패가 아니면(`null`) 아무것도 안 남긴다** — 실패 응답이 곧 실패인 것은 아니다. 설명의 409
+ *   `page-meta-changed`에 실린 지금 값이 내 글이면 원하던 상태다(`judgeMeta`의 `'mine'`).
+ * - **401 이면 곧바로 세션을 끝낸다**(`useInvalidateSession` — `SignedOut`이 부르는 것과 같다). 세션은 페이지에 안
+ *   매인다. 401 의 판정은 여전히 `toFailure` 하나다 — 쓰기가 칸에 그린 실패가 그 값이고, 여기서 상태 번호를 따로
+ *   보지 않는다.
+ * - **그 밖이면 실패를 남긴다**(`missed` — 키는 잠금과 같은 (프로젝트, 페이지, 칸)). 잠금이 아니다 — 칸은 열려 있다.
+ *   돌아온 방문이 «이 페이지를 떠나 있는 동안 저장하지 못했습니다 — <문장>»으로 말하고(`alert`), «확인»이나 **그 칸의
+ *   다음 쓰기**가 지운다. 세대가 바뀌면 장부와 함께 비워진다.
+ *
+ * 그 페이지를 보고 있으면 아무것도 안 남긴다 — 칸이 스스로 말한다(앞 판 그대로). 세션이 끝나 끊긴 실패도 뺀다.
+ *
+ * **판정은 장부가 하지 않는다 — 쓰기가 한다**(3차 통합 후속 · 2026-09-23). 앞 판은 장부가 실패 응답을 `toFailure`로
+ * 곧바로 읽었다(쓰기는 이유 없는 실패의 문장 `failedMessage`만 줬다). 그러면 설명의 409 는 칸의 판정(`judgeMeta`)을
+ * 안 지났다 — Chrome: 붙잡은 저장 · 그 사이 남이 **같은 글**을 씀 · 옆 페이지에 가 있음 → 돌아온 가에 «… 저장하지
+ * 못했습니다 — 다른 사람이 이 페이지를 먼저 바꿨습니다» · DB 는 내 글(보고 있었으면 «서버의 설명이 이미 이 글과
+ * 같습니다»). 이제 `settle`이 **칸에 그리는 바로 그 판정**의 결말을 돌려주고 장부는 그것을 남긴다 — 떠나 있든 보고
+ * 있든 결말은 판정 한 자리를 지난다.
+ *
+ * | 떠나 있는 동안 온 설명의 409(Chrome · 저장을 붙잡은 채 떠남) | 돌아온 가 |
+ * |---|---|
+ * | `'mine'` — 그 사이 남이 **같은 글**을 씀 | 통지 없음 · 상자 내 글 · DB 내 글(`'done'`이 떠나 있는 동안 끝난 판과 같다) |
+ * | `'other'` — 남이 다른 글 · 옆 페이지 경유 | «… 저장하지 못했습니다 — 다른 사람이 이 설명을 바꿨습니다 · 지금 저장된 설명: <그 값>» · 상자 그 값 |
+ * | `'other'` · 프로젝트 목록 경유 | 같은 문장 · 상자는 남은 내 초안 → 다시 저장하면 충돌 화면(덮기 / 버리기) |
+ * | `'late'` — «저장되지 않았습니다» 뒤 늦게 커밋된 내 앞 글 | «… — 지금 저장된 설명이 앞서 보낸 글과 같습니다 · 지금 저장된 설명: <앞 글>»(누가 썼는지는 말하지 않는다 — 리뷰 F2-F1) |
+ *
+ * | 판(Chrome) | 앞 판 | 이 판 |
+ * |---|---|---|
+ * | 설명 · 옆 페이지에서 500 | 통지 0 · 돌아온 상자 서버 값 | 돌아온 가에 위 문장 + «서버 오류가 발생했습니다» · 나에는 없음 |
+ * | 코멘트 게시 · 옆 페이지에서 500 | 통지 0 | 같음(문장 같음) |
+ * | 설명 · 코멘트 · 옆 페이지에서 401 | 나에 머묾 → 다음 읽기에 로그인 | 1.5s 안에 `/login` |
+ * | 설명 · 코멘트 · 프로젝트 목록에서 500 | 통지 0 | 목록에서 돌아온 가에 위 문장 · 초안은 그대로(이월 X — 사이에 연 페이지가 없다) |
+ * | 설명 · 프로젝트 목록에서 401 | 목록에 머묾 | `/login` |
+ *
+ * **판정으로 끝난 쓰기는 남기지 않는다**(`'verified'` — «저장되지 않았습니다» · «다른 사람이 바꿨습니다» 같은 판정의 뜻은
+ * 칸이 정한다). 떠나 있는 동안 판정이 끝나면 그 판정은 여전히 버려진다 — 남는 틈이다(판정이 가는 길은 시간 초과 ·
+ * 모르는 실패뿐이라 드물다).
  *
  * ## 이것이 막지 못하는 것
  *
@@ -210,11 +263,16 @@
  *   **닫지 못한 것은 둘이다** — 다른 탭의 로그인 응답이 쿠키를 바꾼 순간부터 이 탭이 소식을 받아 커밋하기까지(수 ms ·
  *   값은 이 슬라이스의 보고서) 이 탭이 내는 요청은 새 사람의 쿠키로 나가고, **앱을 지나지 않는 로그인**(개발자 도구의
  *   `fetch('/api/auth/login')` 같은 것)은 소식이 없어 모른다. 둘 다 서버가 «요청한 탭이 아는 사용자»를 확인해야 닫힌다.
- * - **같은 셸에서 게시 도중 WS 가 다시 붙은 판의 두 번 얹힘**(코드 읽기 · 재지 않음 — 이월). 다시 붙으면 연결 id 가
+ * - **같은 셸에서 게시 도중 WS 가 다시 붙은 판의 두 번 얹힘**(이월 AE — **2026-09-23 에 쟀다, 보이는 해 없음**. 아래 끝). 다시 붙으면 연결 id 가
  *   바뀌는데 게시는 **보낼 때의** id 를 싣는다(첫 보내기도 같은 키 재전송도 — `comment-panel.tsx`의 `submit`). 그러면
  *   서버의 방송이 그 셸의 새 연결에 닿고, 응답의 `markerOps`도 `landed`가 얹는다 — 같은 변화가 두 번 온다. 첫 보내기
  *   때부터 있던 모양이다. 얹는 것이 같은 `add`라 끝의 문서는 같다고 읽힌다(방송이 먼저면 `landed`가 같은 값을 다시
- *   얹고, 뒤면 `seq <= headSeq`로 건너뛴다). **그 사이 화면에 잠깐이라도 틀린 번호가 보이는지는 모른다.**
+ *   얹고, 뒤면 `seq <= headSeq`로 건너뛴다). ~~그 사이 화면에 잠깐이라도 틀린 번호가 보이는지는 모른다.~~ **쟀다**
+ *   (Chrome · `routeWebSocket`으로 게시를 붙잡은 채 살아 있는 WS 를 끊어 같은 셸에서 다시 붙인 뒤 놓았다 · 캔버스의
+ *   번호를 `MutationObserver`로 모두 기록): **두 번 온다** — 응답의 `markerOps`(seq 9)와 새 연결의 `page-changed`(seq 9)가
+ *   같은 `add`다. 응답이 먼저든(그대로 놓음) 방송이 먼저든(응답을 1.5s 붙잡음) 번호 칸의 변화는 `""` → `1` **한 번**뿐이고
+ *   «번호를 화면에 반영하지 못했습니다»도 없다. 서는 통지는 재연결 자체의 «연결이 다시 붙어 페이지를 서버 상태로 다시
+ *   불러왔습니다 …» 하나다. 고치지 않았다.
  * - **닫은 것**(리뷰 7번이 이 목록에 없다고 짚은 것): 계정 전환(위 «세션을 넘지 않는다») · «모름»이 계정을 넘는
  *   것(같은 절) · 쓰기 뒤의 다시 받기 매달림(`comment-panel.tsx`의 `refresh`) · 판정용 다시 읽기 매달림
  *   (`attempt`) · 같은 URL 의 HTTP 캐시 잠금(`api/http-client.ts`의 `getPage`) · 시간 안의 모르는 실패 뒤 고쳐
@@ -226,7 +284,8 @@
  *   500** 을 «안 달림»으로 확정하던 것(좁은 반증 4차 — 첫 게시는 커밋됐는데 가드 앞 재생의 DB 오류로 고쳐 달면
  *   두 행이었다. `comment-panel.tsx`의 `knownRejection`).
  * - **쓰기 뒤의 목록 다시 받기가 응답하지 않으면** «목록을 다시 불러오는 중»에 머문다 — 잠금은 풀려
- *   있고 쓰기는 끝났다. 일반 읽기에는 시간 제한을 두지 않는다(판정용 읽기에만 둔다 — `attempt`). 앞 판의
+ *   있고 쓰기는 끝났다. ~~일반 읽기에는 시간 제한을 두지 않는다~~ — **2026-09-23 이월 AD 부터 둔다**(`api/http-client.ts`의
+ *   `READ_DEADLINE_MS` — 10초 · 두 번 뒤 «서버가 응답하지 않습니다»로 목록 다시 받기의 실패가 선다). 앞 판의
  *   «다시 읽기가 응답하지 않으면 `'checking'`에 머문다»는 닫았다(`attempt`의 주석 — Chrome: 10s 판정 →
  *   그 판정도 매달려 20s 에 끊김 → «확인하지도 못했습니다» + «다시 확인» → 누르면 판정).
  */
@@ -241,7 +300,8 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
-import { useSessionEpoch } from '../session/session-context'
+import type { Failure } from '../api/failure'
+import { useInvalidateSession, useSessionEpoch } from '../session/session-context'
 
 /** 쓰기의 시간 제한. 값의 근거는 위 머리말의 표다. */
 export const WRITE_DEADLINE_MS = 10_000
@@ -308,15 +368,27 @@ export interface TrackedWrite<T, V> {
    * `ownerLive`는 **쓰기를 시작한 provider 가 아직 떠 있는가**다. 셸이 새로 섰으면 실시간 연결도
    * 새것이라 서버의 방송이 새 스토어에 닿는다 — 판정으로 끝난 코멘트 쓰기가 «번호를 못 얹었다»고
    * 말할지를 이것으로 가른다(`comment-panel.tsx`의 `perform`).
+   *
+   * **돌려주는 것은 이 쓰기의 결말이다**(`WriteConclusion`) — 칸에 그린 판정 그대로. 그 페이지를 보는 방문이 없으면
+   * 장부가 이것을 남긴다(머리말 «떠나 있는 동안 끝난 실패»). **칸에 그리는 자리와 돌려주는 자리가 같은 판정이어야
+   * 한다** — 따로 지으면 보고 있을 때와 떠나 있을 때의 말이 갈린다.
    */
-  settle(outcome: WriteOutcome<T, V>, ownerLive: boolean): void | Promise<void>
+  settle(outcome: WriteOutcome<T, V>, ownerLive: boolean): WriteConclusion | Promise<WriteConclusion>
 }
+
+/**
+ * 끝난 쓰기의 결말 — **실패면 그 실패, 아니면 `null`.** 문장은 쓰기가 칸에 그린 것과 같다(`toFailure`든 칸의 판정이
+ * 지은 문장이든). 장부는 이것을 읽기만 한다.
+ */
+export type WriteConclusion = Failure | null
 
 /** 칸 쓰기가 닿을 곳 — 지금 떠 있는 `PanelDraftsProvider`. */
 export interface Receiver {
   readonly token: symbol
   /** `at`의 페이지를 보고 있으면 그 칸에 쓴다. 칸과 값의 모양은 `panel-drafts.tsx`의 몫이다. */
   readonly accept: (at: PageAt, key: object, update: unknown) => void
+  /** 지금 `at`의 페이지를 보고 있는가 — 칸 쓰기가 닿을 곳이 있는가(`accept`가 받는가와 같은 판정). */
+  readonly sees: (at: PageAt) => boolean
 }
 
 export interface PageAt {
@@ -334,6 +406,13 @@ export interface SlotAt extends PageAt {
 
 interface Ledger {
   readonly writes: ReadonlyMap<string, WriteEntry>
+  /**
+   * **그 페이지를 보는 방문이 없을 때 끝난 실패**(머리말 «떠나 있는 동안 끝난 실패») — 키는 `writes`와 같다. 잠금이
+   * 아니다 — 그 칸은 열려 있다. 돌아온 방문이 말하고(`PendingNotice`), 닫거나 그 칸의 다음 쓰기가 지운다.
+   */
+  readonly missed: ReadonlyMap<string, Failure>
+  /** 남긴 실패를 지운다(«확인»). */
+  dismiss(target: WriteTarget): void
   /**
    * 쓰기를 올린다. **잠겨 있는지는 부르는 쪽이 먼저 본다**(`usePanelLock`의 `locked`) — 여기서
    * 한 번 더 막지 않는다. 막을 길을 찾아 봤는데 화면에서 닿는 길이 없었다: 클릭·제출은 React 가
@@ -354,6 +433,7 @@ interface Ledger {
 interface Book {
   readonly epoch: number
   readonly writes: ReadonlyMap<string, WriteEntry>
+  readonly missed: ReadonlyMap<string, Failure>
 }
 
 /** 지금 세대와, 그 세대의 쓰기를 한꺼번에 끊는 신호. */
@@ -374,15 +454,18 @@ const CHECKING: WriteEntry = { phase: 'checking', recheck: null }
 /** 시간 제한이 먼저 왔다는 표지. */
 const EXPIRED = Symbol('expired')
 
+const NOTHING_MISSED: ReadonlyMap<string, Failure> = new Map()
+
 export function WriteLedgerProvider(props: { children: ReactNode }): ReactElement {
   const epoch = useSessionEpoch()
-  const [book, setBook] = useState<Book>(() => ({ epoch, writes: new Map() }))
+  const invalidate = useInvalidateSession()
+  const [book, setBook] = useState<Book>(() => ({ epoch, writes: new Map(), missed: NOTHING_MISSED }))
   const receiverRef = useRef<Receiver | null>(null)
   const liveRef = useRef<Live | null>(null)
 
   // **세대가 바뀌면 항목을 비운다 — 렌더 중에**(`panel-drafts.tsx`가 페이지가 바뀌면 칸을 버리는 것과
   // 같은 모양). 이펙트로 비우면 새 세대의 첫 커밋 하나 동안 앞 세션의 잠금이 그려진다.
-  if (book.epoch !== epoch) setBook({ epoch, writes: new Map() })
+  if (book.epoch !== epoch) setBook({ epoch, writes: new Map(), missed: NOTHING_MISSED })
 
   // **그리고 앞 세대의 요청을 끊는다**(머리말 «세션을 넘지 않는다»). 쓰기는 낸 순간의 세대의 신호를
   // 받는다(`run`) — 세대가 바뀌면 이 정리가 그 신호를 끊는다.
@@ -400,7 +483,19 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
       const writes = new Map(prev.writes)
       if (entry === null) writes.delete(key)
       else writes.set(key, entry)
-      return { epoch: prev.epoch, writes }
+      return { ...prev, writes }
+    })
+  }, [])
+
+  /** 남긴 실패 하나를 고친다 — `put`과 같은 규칙(낸 세대의 장부일 때만). */
+  const note = useCallback((at: number, key: string, failure: Failure | null) => {
+    setBook((prev) => {
+      if (prev.epoch !== at) return prev
+      if (failure === null && !prev.missed.has(key)) return prev
+      const missed = new Map(prev.missed)
+      if (failure === null) missed.delete(key)
+      else missed.set(key, failure)
+      return { ...prev, missed }
     })
   }, [])
 
@@ -411,17 +506,34 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
       const key = writeKey(target)
       const report = (entry: WriteEntry | null): void => put(live.epoch, key, entry)
       report(SENDING)
+      // 그 칸의 새 쓰기가 나가면 앞 쓰기가 남긴 실패는 낡았다.
+      note(live.epoch, key, null)
       try {
         // **세대가 바뀌면 이 쓰기를 끊는다**(머리말 «세션을 넘지 않는다») — 보내기도 판정도 낸 세대의 신호에
         // 매인다(`race`). 끊긴 거절은 «실패»로 끝나고, 그 뒷일의 칸 쓰기는 `deliver`가 지난 세대라 버린다.
         const outcome = await attempt(write, report, live.signal)
-        await write.settle(outcome, receiverRef.current?.token === owner)
+        // **그 페이지를 보는 방문이 있는가는 끝난 순간에 본다**(머리말 «떠나 있는 동안 끝난 실패») — 보고 있으면 칸이
+        // 말한다(`settle`의 칸 쓰기가 닿는다). 세션이 끝나 끊긴 실패는 뺀다 — 앞 세션의 일이다.
+        const unseen =
+          outcome.kind === 'failed' && !live.signal.aborted && receiverRef.current?.sees(target) !== true
+        const conclusion = await write.settle(outcome, receiverRef.current?.token === owner)
+        // **판정은 쓰기가 했다**(`settle`의 결말 — 머리말 «판정은 장부가 하지 않는다»). 실패가 아니면 남길 것이 없다.
+        if (unseen && conclusion !== null) {
+          // **세션은 페이지에 안 매인다** — 어디에 가 있든 로그인 화면으로 간다(`SignedOut`이 부르는 것과 같은 것).
+          if (conclusion.kind === 'signed-out') invalidate()
+          else note(live.epoch, key, conclusion)
+        }
       } finally {
         report(null)
       }
     },
-    [put],
+    [put, note, invalidate],
   )
+
+  const dismiss = useCallback((target: WriteTarget) => {
+    const at = liveRef.current?.epoch
+    if (at !== undefined) note(at, writeKey(target), null)
+  }, [note])
 
   const receive = useCallback((receiver: Receiver) => {
     receiverRef.current = receiver
@@ -439,8 +551,11 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
     ;(current === null ? from : current).accept(at, key, update)
   }, [])
 
-  const { writes } = book
-  const ledger = useMemo<Ledger>(() => ({ writes, run, receive, deliver }), [writes, run, receive, deliver])
+  const { writes, missed } = book
+  const ledger = useMemo<Ledger>(
+    () => ({ writes, missed, dismiss, run, receive, deliver }),
+    [writes, missed, dismiss, run, receive, deliver],
+  )
   return <LedgerContext.Provider value={ledger}>{props.children}</LedgerContext.Provider>
 }
 
@@ -498,8 +613,8 @@ async function race<X>(start: (signal: AbortSignal) => Promise<X>, session: Abor
  *
  * **판정에도 시간 제한이 있다**(리뷰 2-4 (a) — 앞 판은 다시 읽기가 응답하지 않으면 `'checking'`에
  * 머물렀고 «다시 확인»도 없었다. F5 말고 탈출구가 없었고 초안을 잃었다). 넘으면 끊고 `'unknown'` —
- * «다시 확인»이 선다. **판정용 읽기에만 둔다** — 일반 읽기(조회 이펙트 · 쓰기 뒤의 목록 다시 받기)에는
- * 여전히 없다. 값은 쓰기와 같은 `WRITE_DEADLINE_MS`다 — 다시 읽기 GET 은 페이지 p99 6.7ms · 코멘트
+ * «다시 확인»이 선다. 일반 읽기(조회 이펙트 · 쓰기 뒤의 목록 다시 받기)의 시간 제한은 따로 있다 — `api/http-client.ts`의
+ * `READ_DEADLINE_MS`(이월 AD). 판정용 읽기는 신호를 싣고 가므로 그쪽이 안 걸고 여기가 잰다. 값은 쓰기와 같은 `WRITE_DEADLINE_MS`다 — 다시 읽기 GET 은 페이지 p99 6.7ms · 코멘트
  * 목록 p99 11.8ms 였고(이월 R 의 실측), 게시의 판정은 쓰기 그 자체다(같은 키로 다시 보낸다).
  */
 async function attempt<T, V>(

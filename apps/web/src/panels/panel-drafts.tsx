@@ -89,8 +89,10 @@
  *   버려져 있어 아래 «동시 저장»이 그대로 남는다.
  * - **«보낸 값 === 지금 칸 값»일 때만 비운다** — 친 글은 살지만 잠금이 버려진 채라 둘째 저장이
  *   나간다. 둘이 동시에 나가면 **응답의 순서가 서버가 쓴 순서라는 보장이 없어**(나중에 보낸
- *   것이 먼저 올 수 있다) 화면이 DB 와 다른 값을 보일 수 있다 — 서버에 기대값이 없으므로
- *   (`page-description.tsx`의 «남의 저장을 조용히 덮는다») 화면이 그 순서를 알 길이 없다.
+ *   것이 먼저 올 수 있다) 화면이 DB 와 다른 값을 보일 수 있다 — 그때 서버에 기대값이 없었으므로
+ *   화면이 그 순서를 알 길이 없었다(9차의 판단. 기대값은 2026-09-23 이월 P 가 더했다 — `page-description.tsx`의
+ *   «남의 저장을 조용히 덮지 않는다». 잠금은 그대로 둔다 — 같은 바탕의 두 저장은 뒤의 것이 409 라 같은 칸에 둘을
+ *   내보낼 까닭이 더 없다).
  *   이 갈래를 잠금과 **함께** 두면 비교가 도는 길이 사라진다 — 잠긴 칸은 고칠 수 없어 «보낸
  *   값»과 «지금 값»이 늘 같다. **재는 것이 없는 가드를 두지 않았다.**
  *
@@ -149,7 +151,8 @@
  *
  * ## 이것이 막지 못하는 것
  *
- * - **남의 저장을 조용히 덮는다**(리뷰 N3) — `panels/page-description.tsx`의 머리말이 갖는다.
+ * - ~~**남의 저장을 조용히 덮는다**(리뷰 N3)~~ — 2026-09-23 이월 P 가 닫았다. 초안(`page-description.tsx`의 `DRAFT`)이
+ *   제 바탕을 들고 이 provider · 저장소에 함께 산다 — 무엇을 왜는 그 파일의 «남의 저장을 조용히 덮지 않는다»가 갖는다.
  * - **새로고침·탭 닫기의 잠금** — provider 째 내려가는 길 가운데 **장부까지 사라지는** 둘이다(문서가
  *   새로 뜬다). **초안과 키는 이제 넘는다**(위 4) — 넘지 않는 것은 잠금과 «모름»이다. 브라우저는 나가 있던
  *   요청을 끊지만 **서버가 이미 받았으면 끊겨도 커밋한다.** 그 값과 남는 틈은 `write-ledger.tsx`의 머리말이
@@ -170,14 +173,16 @@
  *   않는다.
  *   설명·코멘트가 각자 무엇을 보이는지는 `page-description.tsx`의 «낡은 값이 보이는 길 둘»의
  *   첫째와 `comment-panel.tsx`의 «잠금이 막지 못하던 길»이 갖는다(9차 좁은 반증, Chrome). **코멘트
- *   목록은 2026-09-22 에 닫았다** — 늦게 낸 조회의 답만 받는다(그 파일의 `answered`). 설명은 그대로다.
- * - **다른 페이지에 가 있는 동안 저장이 실패하는 길** — 초안은 떠날 때 1번이 이미 버렸고
+ *   목록은 2026-09-22 에, 설명은 2026-09-23(이월 V)에 닫았다** — 둘 다 늦게 낸 조회의 답만 받는다(각 파일의 `answered`).
+ * - ~~**다른 페이지에 가 있는 동안 저장이 실패하는 길**~~ — **2026-09-23 이월 S 가 닫았다**: 장부가 그 실패를 남기고
+ *   돌아온 방문이 말한다 · 401 은 곧바로 로그인 화면(`write-ledger.tsx`의 «떠나 있는 동안 끝난 실패» — 거기가
+ *   `Receiver.sees`로 «보는 방문이 없다»를 가른다. 2번의 거름과 같은 값이다). 앞 판의 말: 초안은 떠날 때 1번이 이미 버렸고
  *   실패 통지는 2번이 버린다. 돌아와도 통지가 없다(상자는 서버 값 · 열림). 돌아와 있는 동안
  *   실패하면 통지(«서버 오류»)는 서지만 상자는 서버 값이다 — 보낸 글은 떠날 때 버렸다(9차 jsdom
  *   임시 계측, 500. 9차 좁은 반증의 Chrome 도 같다 — 설명·코멘트 · 500 과 네트워크 끊김).
  *   **떠나면 버린다는 1번의 규칙**이 나가 있는 저장에도 선 것이다 — 이 판이 바꾸지 않았고
  *   보고로 올린다.
- * - **다른 페이지에 가 있는 동안 쓰기가 401을 받는 길** — 실패 통지를 2번이 버리므로 «로그인»
+ * - ~~**다른 페이지에 가 있는 동안 쓰기가 401을 받는 길**~~(위와 같이 닫았다) — 앞 판의 말: 실패 통지를 2번이 버리므로 «로그인»
  *   화면(`SignedOut`)도 서지 않는다. 사용자는 세션이 끊긴 줄 모르고 옆 페이지에 머물고, 다음
  *   조회가 401을 받을 때에야 로그인 화면으로 간다(9차 좁은 반증, Chrome — 같은 세션을 다른
  *   탭에서 로그아웃한 판. 그 페이지에 머물러 있었으면 곧바로 로그인 화면으로 갔다).
@@ -188,10 +193,12 @@ import {
   useContext,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
 } from 'react'
+import type { Failure } from '../api/failure'
 import { useSessionEpoch, useSessionUser } from '../session/session-context'
 import { useDraftStore, type DraftStore } from './draft-store'
 import {
@@ -412,8 +419,19 @@ export function PanelDraftsProvider(props: {
     })
   }, [])
 
+  // **지금 보는 페이지** — `sees`가 읽는다. 커밋된 방문을 따른다(레이아웃 이펙트). `accept`의 거름(위 2번)과 같은
+  // 값이다: 같은 (프로젝트, 페이지)면 칸 쓰기가 닿는다.
+  const shownRef = useRef<PageAt>({ projectId: held.projectId, pageId: held.pageId })
+  useLayoutEffect(() => {
+    shownRef.current = { projectId: held.projectId, pageId: held.pageId }
+  }, [held.projectId, held.pageId])
+  const sees = useCallback(
+    (at: PageAt): boolean => shownRef.current.projectId === at.projectId && shownRef.current.pageId === at.pageId,
+    [],
+  )
+
   const [token] = useState(() => Symbol('panel-drafts'))
-  const receiver = useMemo<Receiver>(() => ({ token, accept }), [token, accept])
+  const receiver = useMemo<Receiver>(() => ({ token, accept, sees }), [token, accept, sees])
   const { receive } = ledger
   // **지금 떠 있는 provider 로 선다**(머리말 3) — 내려간 provider 로 시작한 쓰기의 응답이 여기
   // 닿는다. **레이아웃 이펙트인 것이 요점이다** — 자식의 이펙트(조회 걸기)가 먼저 돌면 그 쓰기가
@@ -463,6 +481,13 @@ export interface PanelLock {
   /** `'unknown'`일 때만 — 서버에서 다시 읽어 판정한다. */
   readonly recheck: (() => void) | null
   /**
+   * **이 페이지를 떠나 있는 동안 끝난 이 칸의 실패**(`write-ledger.tsx`의 «떠나 있는 동안 끝난 실패»). 없으면 `null`.
+   * 잠금이 아니다 — 칸은 열려 있다.
+   */
+  readonly missed: Failure | null
+  /** 그 실패를 지운다(«확인»). */
+  readonly dismiss: () => void
+  /**
    * 쓰기를 장부에 올려 보낸다. **이 렌더의 페이지를 단다.** **이미 나가 있는지는 여기서 안 본다** — 부르는
    * 쪽이 `locked`를 먼저 본다(설명의 `saving.locked` · 코멘트의 `busy`). 장부도 한 번 더 막지 않는다
    * (`write-ledger.tsx`의 `Ledger.run` — 화면에서 닿는 길이 없어 재는 것이 없는 가드를 두지 않았다).
@@ -476,10 +501,18 @@ export function usePanelLock(key: LockSlot): PanelLock {
   const { projectId, pageId } = held
   const target = useMemo(() => ({ projectId, pageId, slot: key.name }), [projectId, pageId, key.name])
   const entry = ledger.writes.get(writeKey(target))
-  const { run: runOnLedger } = ledger
+  const { run: runOnLedger, dismiss: dismissOnLedger } = ledger
   const run = useCallback(
     <T, V>(write: TrackedWrite<T, V>) => runOnLedger(target, receiver.token, write),
     [runOnLedger, target, receiver.token],
   )
-  return { locked: entry !== undefined, phase: entry?.phase ?? null, recheck: entry?.recheck ?? null, run }
+  const dismiss = useCallback(() => dismissOnLedger(target), [dismissOnLedger, target])
+  return {
+    locked: entry !== undefined,
+    phase: entry?.phase ?? null,
+    recheck: entry?.recheck ?? null,
+    missed: ledger.missed.get(writeKey(target)) ?? null,
+    dismiss,
+    run,
+  }
 }

@@ -478,7 +478,8 @@ describe('페이지 경계', () => {
     await waitForNode('n_a')
     await openCommentTab()
 
-    await waitFor(() => expect(listComments).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID))
+    // 조회는 떠날 때 끊을 신호를 싣는다(리뷰 AD-F1 — `api/http-client.ts`의 «떠난 조회는 끊는다»).
+    await waitFor(() => expect(listComments).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID, { cancel: expect.any(AbortSignal) }))
   })
 
   it('탭을 열기 전에는 조회하지 않는다', async () => {
@@ -930,5 +931,49 @@ describe('새 코멘트는 쓴 노드에만 달린다 (9차)', () => {
     // **응답은 보낸 노드의 초안만 비운다** — 다른 노드에 써 둔 글은 남는다.
     pick('b')
     expect(newBox().value).toBe('나에 대해 쓴 말')
+  })
+})
+
+/**
+ * **폼이 어느 노드에 다는지 말한다**(이월 T — `comment-panel.tsx`의 `targetOf`). 앞 판의 폼은 말하지 않았고 뷰 모드에는
+ * 아웃라인도 없었다(Chrome: 편집 모드에서 본문을 고르고 뷰 모드에서 제목을 누른 뒤 단 글이 본문에 달렸다).
+ *
+ * 혼자 죽는 변조(백업 → 한 줄 → web 전량 → 바이트 비교 복원):
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 폼에서 달 곳을 뺀다 | 둘 다 — 그 축의 주인은 *"편집 모드 — …"* 다 |
+ * | 달 곳을 고른 노드가 아니라 문서 루트에서 읽는다 | *"편집 모드 — …"* **혼자** |
+ * | 번호를 안 적는다 | *"편집 모드 — …"* **혼자** |
+ * | 편집 모드에서만 적는다 | *"뷰 모드 — …"* **혼자** |
+ */
+describe('달 곳 — 폼이 어느 노드에 다는지 말한다 (이월 T)', () => {
+  const target = (): string => document.body.querySelector('#wb-comment-target')?.textContent ?? '(없음)'
+
+  it('편집 모드 — 고른 노드의 번호 · 타입 · id 를 말하고, 다른 노드를 고르면 초안과 함께 바뀐다', async () => {
+    await openPage(pageDoc(three({ b: 2 })), { apiOverrides: { listComments: async () => [] } })
+    await openCommentTab()
+    const pick = (key: 'a' | 'b'): void => {
+      fireEvent.click(document.body.querySelector(`[data-wb-id="n_${key}"]`) as HTMLElement)
+    }
+    pick('a')
+    typeInto(await findNewBox(), '가에 대해')
+    expect(target()).toBe('달 곳: – Text (n_a)')
+
+    pick('b')
+    // **한 값에서** — 상자의 초안과 달 곳이 같이 바뀐다(9차 N-C 의 «노드마다»).
+    expect(target()).toBe('달 곳: 2 Text (n_b)')
+    expect(newBox().value).toBe('')
+    expect(newBox().getAttribute('aria-describedby')).toBe('wb-comment-target')
+  })
+
+  it('뷰 모드 — 아웃라인이 없어도 폼이 달 곳을 말한다', async () => {
+    await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
+    await openCommentTab()
+    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+    await findNewBox()
+
+    // 페이지를 열면 루트가 골라져 있다 — 뷰 모드에서는 캔버스가 선택을 안 바꾼다(`canvas.tsx`의 재라 #6).
+    expect(target()).toBe('달 곳: – Page (n_root)')
   })
 })

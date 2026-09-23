@@ -980,10 +980,11 @@ describe('createHttpClient', () => {
     }
   })
 
-  it('판정용 읽기 둘은 받은 `signal`을 fetch 에 싣는다 — 안 받으면 키를 만들지 않는다', async () => {
+  it('판정용 읽기 둘은 받은 `signal`을 fetch 에 그대로 싣는다 — 안 받으면 일반 읽기의 시간 제한 신호다', async () => {
     // 쓰기 장부가 **판정용 다시 읽기**에도 시간 제한을 두고 넘으면 이것으로 끊는다(`panels/write-ledger.tsx`의
-    // `race`). 빠지면 장부는 «모름»으로 가는데 매달린 읽기가 브라우저에 남는다. 일반 조회는 신호를 안
-    // 싣는다 — 안 받으면 키가 없는 것이 그 자리다(위 케이스와 같은 이유).
+    // `race`). 빠지면 장부는 «모름»으로 가는데 매달린 읽기가 브라우저에 남는다. **받은 신호가 있으면 여기서 시간을
+    // 안 건다** — 두 시계가 한 요청을 다투지 않게(`http-client.ts`의 `READ_DEADLINE_MS`). 앞 판은 안 받으면 키가
+    // 없었다 — 일반 읽기에 시간 제한이 없었다(이월 AD).
     const reads: [string, (client: ReturnType<typeof createHttpClient>, signal?: AbortSignal) => Promise<unknown>, () => Response][] = [
       ['getPage', (c, signal) => c.getPage('p1', 'pg1', signal && { signal }), () => jsonResponse(200, page)],
       ['listComments', (c, signal) => c.listComments('p1', 'pg1', signal && { signal }), () => jsonResponse(200, [comment])],
@@ -997,7 +998,8 @@ describe('createHttpClient', () => {
 
       const none = stubFetch(response())
       await call(createHttpClient(none.fetchImpl))
-      expect(Object.keys(none.calls[0]?.init ?? {}), name).not.toContain('signal')
+      expect(none.calls[0]?.init?.signal, name).toBeInstanceOf(AbortSignal)
+      expect(none.calls[0]?.init?.signal?.aborted, name).toBe(false)
     }
   })
 
@@ -2264,5 +2266,201 @@ describe('프로젝트 CRUD', () => {
 
     expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx')
     expect(stub.calls[1]?.url).toBe('/api/projects/p%201%2Fx')
+  })
+})
+
+/**
+ * **일반 읽기의 시간 제한**(이월 AD — `http-client.ts`의 `READ_DEADLINE_MS`). 앞 판은 서버가 답을 안 주면 걸린 읽기가
+ * 끝없이 «불러오는 중»이었다(Chrome · Postgres 컨테이너 `pause`: 세션 확인은 빈 흰 화면).
+ *
+ * 혼자 죽는 변조(백업 → 한 줄 → web 전량 → 바이트 비교 복원):
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 다 넘긴 거절을 `UNREACHABLE`로 | *"둘 다 넘으면 …"* **혼자** |
+ * | 한 번만 보낸다(`READ_ATTEMPTS = 1`) | *"첫 번째가 넘으면 …"* **혼자** |
+ * | PPTX 미리보기에도 건다(`{ deadline: false }`를 뺀다) | *"미리보기는 …"* **혼자** |
+ * | 받은 신호가 있어도 건다 | 위 절의 *"판정용 읽기 둘은 …"* **혼자** |
+ * | 쓰기에도 건다(`method === 'GET'`을 뺀다) | 위 절의 *"쓰기 다섯은 …"* **혼자** |
+ * | 머리가 와도 타이머를 안 치운다(`finally`의 `clearTimeout`을 뺀다 — 리뷰 변조 M4) | *"머리가 시간 안에 오면 …"* **혼자** |
+ * | 떠나도 요청을 안 끊는다(`cancel`에 귀를 안 단다) | *"떠나면 머리 전이든 …"* **혼자** |
+ * | 머리가 온 뒤에는 떠나도 안 끊는다(성공한 시도에서 귀를 뗀다) | *"떠나면 머리 전이든 …"* **혼자** |
+ * | 끊긴 조회를 다시 보낸다(시도 머리의 `gone()` 검사를 뺀다 → 시간 초과처럼 다음 시도) | *"끊긴 조회는 다시 보내지 않는다 …"* **혼자** |
+ */
+describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 넘으면 거절한다 (이월 AD)', () => {
+  const DEADLINE = 10_000
+
+  /** 차례대로 답하는 가짜 — `'hang'`이면 **끊길 때까지** 답하지 않는다(실제 `fetch`처럼 끊기면 거절한다). */
+  function hangingFetch(...answers: (Response | 'hang')[]): FetchStub {
+    const calls: RecordedCall[] = []
+    const fetchImpl: typeof fetch = (input, init) => {
+      calls.push({ url: String(input), init })
+      const answer = answers[calls.length - 1]
+      if (answer === undefined) return Promise.reject(new Error('준비된 답이 없다'))
+      if (answer !== 'hang') return Promise.resolve(answer)
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('요청을 끊었다', 'AbortError')))
+      })
+    }
+    return { fetchImpl, calls }
+  }
+
+  it('둘 다 넘으면 «서버가 응답하지 않습니다»로 거절한다 — 끝없이 기다리지 않는다', async () => {
+    vi.useFakeTimers()
+    try {
+      const stub = hangingFetch('hang', 'hang')
+      const settled = createHttpClient(stub.fetchImpl).me().then(
+        () => 'resolved',
+        (caught: unknown) => caught,
+      )
+      await vi.advanceTimersByTimeAsync(DEADLINE * 2)
+
+      const caught = await settled
+      expect(caught).toBeInstanceOf(ApiError)
+      expect((caught as ApiError).message).toBe('서버가 응답하지 않습니다 — 잠시 뒤 새로고침하세요')
+      // 매달린 요청을 남기지 않는다 — 보낸 것은 전부 끊었다.
+      expect(stub.calls.every((call) => call.init?.signal?.aborted === true)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('첫 번째가 넘으면 끊고 한 번 더 보낸다 — 둘째가 답하면 그 값이다', async () => {
+    vi.useFakeTimers()
+    try {
+      const stub = hangingFetch('hang', jsonResponse(200, user))
+      const answer = createHttpClient(stub.fetchImpl).me()
+      await vi.advanceTimersByTimeAsync(DEADLINE)
+
+      await expect(answer).resolves.toEqual(user)
+      expect(stub.calls).toHaveLength(2)
+      expect(stub.calls[0]?.init?.signal?.aborted).toBe(true)
+      expect(stub.calls[1]?.url).toBe(stub.calls[0]?.url)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * 머리는 곧바로 주고 **본문은 `bodyAfter` 뒤에** 주는 가짜 — 실제 `fetch`처럼 끊기면 본문 읽기가 거절된다(Chrome 의
+   * 스로틀이 이 모양이다: 머리는 지연 뒤 곧바로, 본문만 늦는다 — 리뷰 AD1).
+   */
+  function slowBodyFetch(body: unknown, bodyAfter: number): FetchStub {
+    const calls: RecordedCall[] = []
+    const fetchImpl: typeof fetch = (input, init) => {
+      calls.push({ url: String(input), init })
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const timer = setTimeout(() => {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify(body)))
+            controller.close()
+          }, bodyAfter)
+          init?.signal?.addEventListener('abort', () => {
+            clearTimeout(timer)
+            controller.error(new DOMException('요청을 끊었다', 'AbortError'))
+          })
+        },
+      })
+      return Promise.resolve(new Response(stream, { status: 200, headers: { 'content-type': 'application/json' } }))
+    }
+    return { fetchImpl, calls }
+  }
+
+  it('머리가 시간 안에 오면 본문이 10초를 넘어도 끊지 않는다 — 큰 문서 × 느린 망에서도 페이지가 선다', async () => {
+    // Chrome(40KB/s · 1MB 페이지)은 머리 2.2s · 본문 끝 27.4s 였다(`READ_DEADLINE_MS` 머리말 «응답 머리까지만 잰다»).
+    vi.useFakeTimers()
+    try {
+      const stub = slowBodyFetch(page, DEADLINE * 2.5)
+      const settled = createHttpClient(stub.fetchImpl).getPage('p1', 'pg1').then(
+        (value) => value,
+        (caught: unknown) => caught,
+      )
+      await vi.advanceTimersByTimeAsync(DEADLINE * 3)
+
+      expect(await settled).toEqual(page)
+      expect(stub.calls).toHaveLength(1)
+      expect(stub.calls[0]?.init?.signal?.aborted).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('떠나면 머리 전이든 본문을 읽는 중이든 요청을 끊는다 — 떠난 방문의 본문이 브라우저 연결을 쥐지 않는다', async () => {
+    // 리뷰 AD-F1: 끊지 않으면 버려진 1MB 본문 여섯이 Chrome 의 호스트당 연결 여섯을 쥐고, 다음 방문의 조회가 브라우저
+    // 안에서 줄을 서 «서버가 응답하지 않습니다»까지 갔다(`READ_DEADLINE_MS` 머리말 «떠난 조회는 끊는다»).
+    vi.useFakeTimers()
+    try {
+      // 머리 전 — 답이 없는 채 떠난다.
+      const before = hangingFetch('hang')
+      const beforeLeave = new AbortController()
+      const first = createHttpClient(before.fetchImpl)
+        .getPage('p1', 'pg1', { cancel: beforeLeave.signal })
+        .then(() => 'resolved', (caught: unknown) => caught)
+      await vi.advanceTimersByTimeAsync(1_000)
+      beforeLeave.abort()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(before.calls[0]?.init?.signal?.aborted).toBe(true)
+      expect(await first).toBeInstanceOf(ApiError)
+
+      // 본문을 읽는 중 — 머리는 왔고 본문이 내려오는 중에 떠난다.
+      const during = slowBodyFetch(page, DEADLINE * 2.5)
+      const duringLeave = new AbortController()
+      const second = createHttpClient(during.fetchImpl)
+        .getPage('p1', 'pg1', { cancel: duringLeave.signal })
+        .then(() => 'resolved', (caught: unknown) => caught)
+      // 머리는 왔고 본문이 내려오는 중이다 — 시간 제한과 엮이지 않게 10초 안에서 떠난다(그 축은 위 케이스의 것이다).
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(during.calls[0]?.init?.signal?.aborted).toBe(false)
+      duringLeave.abort()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(during.calls[0]?.init?.signal?.aborted).toBe(true)
+      expect(await second).toBeInstanceOf(ApiError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('끊긴 조회는 다시 보내지 않는다 — 10초가 지나도 요청은 하나다', async () => {
+    // 리뷰 AD-F1 의 4: 버려진 조회도 10초가 되면 다시 보내 줄을 더 길게 만들었다.
+    vi.useFakeTimers()
+    try {
+      const stub = hangingFetch('hang', 'hang')
+      const leave = new AbortController()
+      const settled = createHttpClient(stub.fetchImpl)
+        .getPage('p1', 'pg1', { cancel: leave.signal })
+        .then(() => 'resolved', (caught: unknown) => caught)
+      await vi.advanceTimersByTimeAsync(1_000)
+      leave.abort()
+      await vi.advanceTimersByTimeAsync(DEADLINE * 3)
+
+      expect(stub.calls).toHaveLength(1)
+      const caught = await settled
+      expect(caught).toBeInstanceOf(ApiError)
+      // 시간 초과로 읽히지 않는다 — 떠난 것이지 서버가 답을 안 한 것이 아니다.
+      expect((caught as ApiError).message).not.toBe('서버가 응답하지 않습니다 — 잠시 뒤 새로고침하세요')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('미리보기(PPTX 는 서버가 페이지를 그린다)에는 시간 제한을 안 건다 — 1분이 지나도 기다린다', async () => {
+    vi.useFakeTimers()
+    try {
+      const stub = hangingFetch('hang')
+      let settled = false
+      void createHttpClient(stub.fetchImpl)
+        .getExportPreview('p1', 'pptx')
+        .finally(() => {
+          settled = true
+        })
+        .catch(() => undefined)
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(settled).toBe(false)
+      expect(stub.calls).toHaveLength(1)
+      expect(Object.keys(stub.calls[0]?.init ?? {})).not.toContain('signal')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

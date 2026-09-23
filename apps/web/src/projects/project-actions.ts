@@ -93,6 +93,17 @@ export interface ProjectAbilities {
    * **owner가 아니면 버튼이 아예 없다**(계획서 D11 — 회색으로 만들어 두지 않는다).
    */
   restoreSnapshot: boolean
+  /**
+   * 페이지의 **제목 · 설명**을 고칠 수 있는가(`PATCH .../pages/:pageId` — 이월 M · 2026-09-23). 서버는
+   * `projectGuard('editor')`다(§10). **viewer 에게는 입구를 안 보인다** — «페이지 설명» 탭은 읽기 전용이 되고
+   * (`panels/page-description.tsx`), 메뉴 트리의 **페이지** 이름 변경이 닫힌다(`tree/tree-actions.ts`).
+   *
+   * **이것이 편집 표면의 첫 역할 게이트다.** 7차 판은 그 이유로 이 필드를 안 만들었다(구조 편집 · 트리의 다른
+   * 버튼이 역할을 안 보는데 여기만 보면 두 모드가 다른 말을 한다). 사용자가 «숨긴다»로 판정했다(장부 §3.19 «판정
+   * — 이월 다섯»). **범위는 제목 · 설명뿐이다** — 메뉴의 이름 · 페이지의 순서 · 구조 편집은 여전히 역할을 안 본다
+   * (서버가 403 을 낸다). 넓힐지는 이 필드가 정할 것이 아니다.
+   */
+  editPageMeta: boolean
 }
 
 /** 아무것도 못 하는 상태. 역할을 모르거나 계약 밖 값일 때의 답이다. */
@@ -103,6 +114,7 @@ const NOTHING: ProjectAbilities = {
   editTheme: false,
   createSnapshot: false,
   restoreSnapshot: false,
+  editPageMeta: false,
 }
 
 /**
@@ -154,11 +166,12 @@ export function projectAbilities(role: ProjectRole | undefined): ProjectAbilitie
       editTheme: true,
       createSnapshot: true,
       restoreSnapshot: true,
+      editPageMeta: true,
     }
   }
   // **editor가 열 수 있는 것이 오늘 하나다**(§10 — 스냅샷 생성). 앞서 이 함수는
   // `role !== 'owner'`면 곧장 `NOTHING`이었는데, 그 형태는 *"owner가 아니면 아무것도 못
   // 한다"*를 함수 모양에 박아 둔 것이라 editor에게 열린 첫 자리에서 깨진다.
-  if (role === 'editor') return { ...NOTHING, createSnapshot: true }
+  if (role === 'editor') return { ...NOTHING, createSnapshot: true, editPageMeta: true }
   return NOTHING
 }

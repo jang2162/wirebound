@@ -213,7 +213,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다 |
 | `/api/projects/:projectId/pages/import` | POST | editor | `{ menuNodeId, file, title? }` | 201 `{ page, comments: { inserted, dangling }, ignoredLayoutRef?, warnings? }` — **§11.2의 페이지 JSON으로 새 페이지를 만든다**(아래 "페이지 JSON 가져오기"). 봉투 위반·모르는 버전·NUL 400, 메뉴 없음 404, 카탈로그 **오류** 422 |
 | `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
-| `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder? }`(하나 이상, `schema`는 여기서 못 바꾼다) | 200 **페이지 여덟 키**(POST·GET과 같다) |
+| `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder?, base? }`(하나 이상, `schema`는 여기서 못 바꾼다) — **`base`는 고치기 전 값**(아래 «페이지 메타의 충돌 모델») | 200 **페이지 여덟 키**(POST·GET과 같다) · **409** `page-meta-changed`(바탕이 지금 값과 다르다) |
 | `/api/projects/:projectId/pages/:pageId/schema` | PUT | editor | `{ schema }`(문서 봉투 전체) | 200 페이지(봉투 위반 400, 카탈로그 **오류** 422, 실패 시 기존 스키마 보존). 경고가 있으면 `warnings`가 더 붙는다. 통째 교체도 revision을 남긴다 |
 | `/api/projects/:projectId/pages/:pageId/ops` | PATCH | editor | `{ baseSeq, ops[], clientOpId? }` | 200 `{ seq, revisionId, inverse, schemaVersion, clientOpId?, warnings? }`(본문·경로 제약 위반과 지원하지 않는 문서 버전·NUL 문자는 400, 페이지 없음 404, baseSeq 불일치·패치 실패 409, 카탈로그 **오류** 422) |
 | `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다(D11) |
@@ -520,6 +520,46 @@ POST  /pages       응답 그대로 → 400 인식할 수 없는 키: "id", "sor
 PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "schemaVersion", "schema", "headSeq"
 ```
 
+### 페이지 메타의 충돌 모델 — `base` (이월 P · 2026-09-23)
+
+**이 앱의 첫 충돌 모델이다.** 앞 판은 제목 · 설명을 나중에 저장한 쪽이 이겼다 — 창 둘이 같은 설명을 고치면 뒤의 것이
+앞의 것을 조용히 덮었다. 이제 `PATCH /pages/:pageId`가 **고치기 전 값**(`base` — 그 사람이 고치기 시작한 바탕)을 받는다.
+
+```jsonc
+{ "description": "앨리스의 글", "base": { "description": "처음 설명" } }   // base 의 칸은 바꾸는 메타 칸과 같은 집합이다
+```
+
+| 지금 값 | 답 |
+|---|---|
+| `base`와 같다 | 200 — 쓴다 |
+| `base`와 다르다 | **409** — 쓰지 않는다. 아래 봉투 |
+| `base`를 안 보냈다 | 200 — 나중이 이긴다(호환) |
+| 바꾸지 않는 칸의 바탕만 왔다(`{ description, base: { title } }`) | 400 `바탕(base)은 바꾸는 칸에만 줄 수 있습니다` |
+| 바꾸는 제목 · 설명의 바탕이 빠졌다(`{ description, base: {} }` · `{ title, description, base: { title } }`) | 400 `바탕(base)을 주면 바꾸는 제목 · 설명마다 바탕이 있어야 합니다` |
+| 바탕과 순서 · 메뉴 이동을 한 본문에 실었다(`{ title, sortOrder, base: { title } }`) | 400 `순서 · 메뉴 이동은 바탕(base)과 함께 보낼 수 없습니다 — 따로 보내십시오` — 한 본문이면 이 행을 먼저 잡고 형제 행을 잡아, 바탕 없는 자리 옮기기와 잠금 순서가 거꾸로 선다(교착) |
+
+```jsonc
+// 409 — 칸마다 이슈 하나. current 는 서버가 견준 바로 그 값이다(다시 읽지 않아도 된다).
+{ "error": { "code": "conflict", "message": "다른 사람이 이 페이지를 먼저 바꿨습니다",
+  "issues": [ { "path": "description", "code": "page-meta-changed",
+                "message": "다른 사람이 이 페이지를 먼저 바꿨습니다", "current": "밥의 글" } ] } }
+```
+
+- **값으로 가른다** — 이슈 코드 `page-meta-changed`(문장이 아니다). 코멘트의 `idempotency-key-reused`와 같은 자세다.
+- **견주기와 쓰기는 한 잠금 안이다** — 페이지 행을 `FOR UPDATE`로 잡고 읽고, 같은 트랜잭션이 쓴다. 둘이 같은 바탕으로
+  동시에 오면 하나만 200 이고 다른 하나는 앞의 것이 커밋한 값을 `current`로 받는다(`test/page-meta-conflict.test.ts`).
+- **권한 재확인(이월 AA)이 비교보다 먼저다** — 잠금을 기다리는 동안 멤버에서 빠지면 404 다. 409 로 지금 값을 흘리지 않는다.
+- **글자 그대로 견준다 — 빈 값 하나만 뺀다**: `null`과 `""`는 **같다**(`@wirebound/schema`의 `samePageMeta` — 웹의 판정도
+  같은 함수를 부른다). 저장은 둘을 가른다(`""`는 `""`로 되읽힌다) — 화면에서 둘이 똑같이 «설명 없음»이라, 견주기가 가르면
+  볼 수 없는 차이로 충돌이 선다. 바탕은 바꿀 값의 규칙(길이 상한)으로 재지 않는다 — 모양만 본다.
+- **순서 · 소속 메뉴(`sortOrder`·`menuNodeId`)는 이 모델 밖이다** — 바탕을 받지 않고 나중이 이긴다. 바탕과 한 본문에 못 싣는다(위 표).
+  바탕 없는 자리 옮기기 둘이 동시에 오면 교착이 날 수 있다(앞 판부터 — 재시도 없이 500).
+- **방송하지 않는다** — 이 라우트는 다른 창에 바뀐 것을 알리지 않는다. 남이 바꾼 것은 저장할 때 409 로 안다.
+
+**누가 바탕을 보내는가.** 웹의 «페이지 설명» 탭(설명)과 메뉴 트리의 이름 변경(페이지 제목)이 보낸다 — 그 판정과 화면은
+`apps/web/src/api/page-meta.ts`가 소유한다. **CLI · MCP 는 이 라우트를 부르지 않는다**(페이지 문서는 `PATCH .../ops`로
+고친다). 가져오기(`POST .../pages/import`)는 새 페이지를 만들 뿐이다. 웹의 순서 · 메뉴 이동은 바탕 없이 보낸다.
+
 ### 페이지 JSON 가져오기 (P7-3 — §11.2)
 
 `POST .../pages/import`는 **파일 한 벌로 새 페이지를 만든다.** 절대 덮지 않는다 —
@@ -681,7 +721,14 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 «달리지 않음»으로 확정해 초안과 키를 남겼고, 초안이 탭의 저장소에 비친 뒤로는 **새로고침마다 같은 글 · 같은
 키가 되살아나** 누를 때마다 409 였다. 잰 값: `test/comments.test.ts`의 «첫 게시 뒤 그 코멘트가 고쳐졌으면 …».
 **그래도 서버는 처음 글이 무엇이었는지 모른다** — 고치는 길은 키에 처음 본문의 지문을 남겨 그것과 견주는
-것이다(이월 AC) — 이번에 하지 않는다.
+것이다. **이월 AC 는 판정으로 닫았다**(2026-09-23 — 짓지 않는다): 웹에서 보이는 해가 없다. Chrome(route — 첫 게시를
+서버에 커밋시키고 브라우저엔 연결 끊김 → 같은 키 재전송을 붙잡은 사이 같은 사람이 다른 탭에서 고침): 재전송 409 ·
+이 이슈 코드 → «이미 달렸고 그 뒤 고쳐졌습니다» · 상자 비움 · 탭 저장소 `{}` · DB 고친 글 1행.
+
+**남는 틈(이월 AC′) — 그 사이 행이 지워지면 되살아난다.** 키는 **행에** 산다(`comments.idempotency_key`) — 행이
+지워지면 키도 사라지므로, 같은 키 재전송은 «앞 게시가 없다»로 보고 **새로 커밋한다(201 · 새 id)**. Chrome(같은 절차 ·
+그 사이 같은 사람이 다른 탭에서 지움 / **밥**(editor)이 지움): 둘 다 재전송 201 · 지운 코멘트가 다시 선다 · 통지
+없음. 닫으려면 서버가 **지운 행의 키를 기억**해야 한다(묘비 · 지문 — 위와 같은 부류) — 짓지 않았다.
 
 **웹이 키를 어디에 드는지**(초안이 성공할 때까지 같은 키 · 초안을 고치면 새 키 · 페이지를 떠나면
 버림)는 `apps/web/src/panels/comment-panel.tsx`의 `POST_KEYS`가 갖는다.

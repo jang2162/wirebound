@@ -198,7 +198,8 @@ const PANEL_TABS: Record<EditorMode, readonly { id: PanelTab; label: string }[]>
 /** 탭 하나의 본문. **표 기반이라 탭이 늘어도 삼항이 깊어지지 않는다**(P5-1 이월 §5). */
 const PANEL_BODIES: Record<
   PanelTab,
-  (props: { projectId: string; pageId: string | undefined }) => ReactElement
+  // `canEdit`은 «페이지 설명»만 본다(이월 M) — 나머지 본문은 받지 않는다(역할을 안 보는 편집 표면이다).
+  (props: { projectId: string; pageId: string | undefined; canEdit: boolean }) => ReactElement
 > = {
   props: PropertyPanel,
   page: PageDescriptionPanel,
@@ -521,6 +522,7 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             pageId={props.pageId}
             reloadToken={restoredToken}
             editable={mode === 'edit'}
+            canEditPageMeta={projectAbilities(props.project.role).editPageMeta}
           />
         </ShellRegion>
         {/* 구조 트리는 편집 모드에서만 있다. 뷰 모드에서는 접혀 메뉴 트리가 좌측 전체를
@@ -600,7 +602,12 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
       </main>
 
       <aside className="wb-shell-panel" aria-label="우측 패널">
-        <RightPanel projectId={props.project.id} pageId={props.pageId} />
+        {/* **제목 · 설명을 고칠 수 있는가**(이월 M) — 메뉴 트리와 같은 판정 하나를 둘에 내린다. */}
+        <RightPanel
+          projectId={props.project.id}
+          pageId={props.pageId}
+          canEditPageMeta={projectAbilities(props.project.role).editPageMeta}
+        />
       </aside>
     </div>
   )
@@ -637,7 +644,11 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
  * "탭 중 하나"를 알아야 나머지 탭이 있다는 것을 알린다 — `ShellTools`의 모드 토글이
  * 눌리지 않은 쪽에도 `aria-pressed`를 다는 것과 같은 이유다.
  */
-function RightPanel(props: { projectId: string; pageId: string | undefined }): ReactElement {
+function RightPanel(props: {
+  projectId: string
+  pageId: string | undefined
+  canEditPageMeta: boolean
+}): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
   const [chosen, setChosen] = useState<PanelTab>('props')
@@ -692,7 +703,7 @@ function RightPanel(props: { projectId: string; pageId: string | undefined }): R
         >
           {(() => {
             const Body = PANEL_BODIES[tab]
-            return <Body projectId={props.projectId} pageId={props.pageId} />
+            return <Body projectId={props.projectId} pageId={props.pageId} canEdit={props.canEditPageMeta} />
           })()}
         </div>
       </PanelDraftsProvider>
@@ -893,6 +904,9 @@ function CanvasFrame(props: {
     // 페이지의 문서가 뒤 페이지를 덮어쓴다(아래 성공 분기의 `if (!alive) return`이 그
     // 자리다 — 지우면 `앞 페이지의 응답이 늦게 와도…`가 죽는다. 위 JSDoc의 하중 3).
     let alive = true
+    // **떠나면 조회를 끊는다**(`ReadOptions.cancel` — 리뷰 AD-F1). `alive`만으로는 응답을 버릴 뿐 요청은 남아, 떠난
+    // 방문의 큰 본문이 브라우저 연결을 쥐고 다음 방문의 조회를 줄 세웠다(`api/http-client.ts`의 «떠난 조회는 끊는다»).
+    const leave = new AbortController()
     setState({ status: 'loading' })
     // **조회를 시작할 때 비운다.** 응답이 온 뒤에 갈아 끼우면 조회가 도는 동안 주소는 새
     // 페이지인데 스토어는 앞 페이지의 문서와 `headSeq`를 들고 있다(실측: 그 창에서
@@ -915,7 +929,7 @@ function CanvasFrame(props: {
      */
     async function restoreUndo(openPageId: string): Promise<void> {
       try {
-        const revisions = await api.listMyRevisions(projectId, openPageId)
+        const revisions = await api.listMyRevisions(projectId, openPageId, { cancel: leave.signal })
         // 늦게 온 응답이 새 페이지의 스택을 덮지 않게 한다(문서 조회와 같은 가드).
         if (!alive) return
         // 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 —
@@ -933,7 +947,7 @@ function CanvasFrame(props: {
     // `pageId`가 좁혀지지 않는다(호이스팅된 함수 선언이라 TS가 호출 시점을 모른다).
     async function load(openPageId: string): Promise<void> {
       try {
-        const page = await api.getPage(projectId, openPageId)
+        const page = await api.getPage(projectId, openPageId, { cancel: leave.signal })
         // 이 줄이 없으면 늦게 온 앞 페이지의 응답이 아래 `loadPage`로 흘러 **새 페이지의
         // 문서를 덮어쓴다.** 실측: 지우면 `앞 페이지의 응답이 늦게 와도 새 페이지의 문서를
         // 덮어쓰지 않는다` 하나가 죽는다.
@@ -972,6 +986,7 @@ function CanvasFrame(props: {
     void load(pageId)
     return () => {
       alive = false
+      leave.abort()
     }
   }, [api, projectId, pageId, store])
 
@@ -1034,9 +1049,11 @@ function CanvasFrame(props: {
     if (pageId === undefined) return
 
     let alive = true
+    // 떠나면 끊는다 — 위 이펙트와 같다(리뷰 AD-F1).
+    const leave = new AbortController()
     void (async () => {
       try {
-        const page = await api.getPage(projectId, pageId)
+        const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         if (!alive) return
         applyServerPage(pageId, page, RESYNC_LEAD)
       } catch {
@@ -1054,6 +1071,7 @@ function CanvasFrame(props: {
 
     return () => {
       alive = false
+      leave.abort()
     }
   }, [api, projectId, pageId, applyServerPage, resyncToken])
 
@@ -1095,9 +1113,11 @@ function CanvasFrame(props: {
     if (pageId === undefined) return
 
     let alive = true
+    // 떠나면 끊는다 — 위 이펙트와 같다(리뷰 AD-F1).
+    const leave = new AbortController()
     void (async () => {
       try {
-        const page = await api.getPage(projectId, pageId)
+        const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         if (!alive) return
         applyServerPage(pageId, page, RESTORED_LEAD)
         // 앞서 이 페이지의 조회가 실패해 있었을 수도 있다. 복원으로 다시 생긴 페이지를
@@ -1113,6 +1133,7 @@ function CanvasFrame(props: {
 
     return () => {
       alive = false
+      leave.abort()
     }
   }, [api, projectId, pageId, store, applyServerPage, restoredToken])
 
