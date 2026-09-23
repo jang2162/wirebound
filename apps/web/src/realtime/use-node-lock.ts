@@ -68,8 +68,22 @@
  * 읽기(속성 · 코멘트를 보려고 고른다)지만 잠금은 쓰기다 — 서버는 `lock` · `unlock`을 editor 게이트로 받고 viewer 의 것은
  * 조용히 버린다(`apps/api/src/ws/protocol.ts`의 `MIN_ROLE_FOR_FRAME`). 버려진다고 보내도 되는 것은 아니다: 보내는
  * 것 자체가 «조회 전용»을 어긴 프레임이다. **놓는 것도 같은 길이다** — `false`면 «잡을 자리가 없다»로 넘기므로 앞에
- * 잡고 있던 것이 있으면 놓고(역할은 새로고침해야 바뀌므로 오늘은 없는 판이다), 없으면 아무것도 안 보낸다
- * (`lock-channel.ts`의 `hold` — 잡은 것이 없으면 `unlock`도 안 보낸다).
+ * 잡고 있던 것이 있으면 놓고, 없으면 아무것도 안 보낸다(`lock-channel.ts`의 `hold` — 잡은 것이 없으면 `unlock`도 안 보낸다).
+ *
+ * # 역할이 실행 중에 바뀐다 (이월 5차)
+ *
+ * 셸이 역할을 다시 읽으면(`membership-changed` — `routes/editor.tsx`) `canHold`가 바뀐다. **같은 값이 스토어의
+ * `selectionClaims`도 정한다**(F4 — 선택이 잠금을 걸지 않는 사람은 남이 잡은 자리도 고른다). 두 값이 한 불리언에서 나오므로
+ * «잡지는 않는데 고르기는 막힌다» · «잡는데 막힌 자리를 골랐다»가 갈라 설 수 없다.
+ *
+ * | 순간 | 선택 | 잠금 |
+ * |---|---|---|
+ * | 강등(`true → false`) | 그대로 | 잡은 것을 **놓는다**(`unlock`). 서버는 viewer 의 `unlock`을 버리지만 강등을 알리는 그 자리에서 이미 놓았다(`apps/api/src/ws/notify.ts`의 `notifyMembershipChanged`) |
+ * | 승격(`false → true`) | 남의 잠금에 막히면 **놓는다**(`store.setSelectionClaims`) | 막히지 않으면 **잡는다** — 고른 자리가 곧 claim 이다(루트는 예외 그대로) |
+ *
+ * **승격의 한 커밋에 창이 있다.** 두 이펙트는 같은 커밋에서 순서대로 도는데, 앞의 것이 막힌 선택을 놓아도 뒤의 것이 든
+ * `selectedNodeId`는 렌더 때의 값(막힌 그 자리)이다 — 그대로 보내면 남이 잡은 자리에 `lock`이 한 번 나가 겹친 잠금이 선다.
+ * 그래서 보내기 전에 스토어에 **지금** 막혔는지 묻는다(`selectionBlockedBy` — 판정은 스토어 한 자리 그대로다).
  */
 import { useEffect } from 'react'
 import { useLockChannel } from './context'
@@ -99,11 +113,20 @@ export function useNodeLock(pageId: string | undefined, canHold: boolean): void 
     store.setViewer(user?.id ?? null)
   }, [store, user])
 
+  // **아래 이펙트보다 먼저 돈다** — 승격이면 막힌 선택이 여기서 놓인다(위 표).
+  useEffect(() => {
+    store.setSelectionClaims(canHold)
+  }, [store, canHold])
+
   useEffect(() => {
     // **루트는 claim 하지 않는다**(위 머리말). 루트를 고른 것은 잠글 자리를 고른 것이 아니라
     // 아직 아무 자리도 안 고른 것에 가깝다 — 앞에 잡고 있던 것이 있으면 여기서 놓는다.
-    const holdId = selectedNodeId === rootId ? null : selectedNodeId
+    // 막힌 자리는 잡지 않는다 — 위 «승격의 한 커밋» 창. 스토어가 지금 든 판정을 묻는다.
+    const holdId =
+      selectedNodeId === rootId || (selectedNodeId !== null && store.selectionBlockedBy(selectedNodeId) !== null)
+        ? null
+        : selectedNodeId
     // 통로가 없으면 아무것도 안 한다 — `RealtimeProvider` 없이 도는 화면이 그 판이다.
     channel?.hold(onThisPage && canHold ? pageId : null, holdId)
-  }, [channel, pageId, selectedNodeId, onThisPage, rootId, canHold])
+  }, [store, channel, pageId, selectedNodeId, onThisPage, rootId, canHold])
 }

@@ -67,6 +67,7 @@ export interface EventActor {
  * | `patch-ack` | **낸 사람에게만.** `patch` 프레임이 성공했다(§7.1의 *"[본인] ack(seq) 수신"*) |
  * | `patch-error` | **낸 사람에게만.** `patch` 프레임이 실패했다 |
  * | `locks` | 잠금 목록이 바뀌었을 때(그리고 누가 들어올 때), **룸 전체에** — §7.2 |
+ * | `membership-changed` | 그 사람의 역할이 바뀌었거나 멤버에서 빠졌을 때, **그 사람의 연결에만**(이월 5차 — `ws/notify.ts`) |
  */
 export type ServerFrame =
   | { type: 'joined'; projectId: string; connectionId: string; userId: string; role: ProjectRole }
@@ -123,6 +124,16 @@ export type ServerFrame =
       clientOpId?: string
     }
   | { type: 'restored'; projectId: string; snapshotId: string; actor: EventActor }
+  /**
+   * **이 연결의 주인의 멤버십이 바뀌었다 — 다시 읽어라**(이월 5차). 역할 변경 · 제거 · owner 넘기기(역할 변경의 한 판이다)가
+   * 전부 이것이다.
+   *
+   * **역할 값을 싣지 않는다 — 판정이다.** 웹의 역할은 `GET /projects/:id`의 응답 하나에서 온다(`apps/web`의
+   * `projects/project-actions.ts` · `test/role-access.test.ts`). 여기 값을 실으면 역할의 출처가 둘이 되고, 둘이 갈리는
+   * 순간(이 프레임과 그 조회가 엇갈려 온다) 어느 쪽이 맞는지를 화면이 다시 판정해야 한다. 신호만 보내면 화면은 언제나
+   * 조회 하나로 수렴한다 — 제거된 사람은 그 조회가 404 다. `joined`가 싣는 `role`을 웹이 안 읽는 것과 같은 까닭이다.
+   */
+  | { type: 'membership-changed'; projectId: string }
   | { type: 'pong' }
   | {
       type: 'patch-ack'

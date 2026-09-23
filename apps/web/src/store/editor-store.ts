@@ -182,6 +182,19 @@ export interface EditorState {
    */
   viewerUserId: string | null
   /**
+   * **이 사람의 선택이 잠금을 거는가**(§7.2 — *"노드를 선택하면 그 서브트리에 잠금을 건다"*). 셸의 `canEdit`에서 내린다
+   * (`realtime/use-node-lock.ts` — 같은 값으로 잠금도 잡는다). 이월 5차 F4.
+   *
+   * **`false`면 남의 잠금이 고르기를 막지 않는다.** 남이 잡은 자리를 못 고르게 하는 까닭은 고르기가 곧 서브트리 claim 이기
+   * 때문이다(두 사람이 같은 서브트리를 쥐면 서로 막힌다). viewer 는 고른 자리를 잡지 않으므로(M′) 막을 까닭이 없고, 막으면
+   * 남이 잡은 동안 그 노드의 속성을 **읽지** 못한다. **판정은 그대로 스토어 한 자리다** — `selectNode` · 여는 경로의 루트
+   * 자동 선택(`#selectionFor`) · 구조 트리의 `disabled`(`selectionBlockedBy`)가 이 값 하나를 본다. 배지(«○○ 편집 중»)와
+   * 편집 차단(`lockedBy`)은 이 값과 무관하다 — 누가 잡았는지는 viewer 에게도 보인다.
+   *
+   * **기본은 `true`다** — 셸 없이 스토어를 쓰는 자리(테스트 · 앞 판의 모든 화면)는 앞과 같다.
+   */
+  selectionClaims: boolean
+  /**
    * **남의 변경을 받았는데 화면에 못 얹었다**(P3-1 D6). 얹은 경우엔 `null`이다.
    *
    * **P3-1에는 *"미뤘다"*는 갈래가 있었다** — 그때는 편집이 REST로 나갔고 §7.1의 답
@@ -218,6 +231,7 @@ function initialState(): EditorState {
     editWarnings: NO_WARNINGS,
     locks: NO_LOCKS,
     viewerUserId: null,
+    selectionClaims: true,
     remoteStale: null,
   }
 }
@@ -510,7 +524,7 @@ export class EditorStore {
       return findNodePath(document.root, selectedNodeId) === undefined ? null : selectedNodeId
     }
     const rootId = document.root.id
-    return this.#lockConflictAt(pageId, document, rootId) === null ? rootId : null
+    return this.#blocksSelection(pageId, document, rootId) === null ? rootId : null
   }
 
   /**
@@ -1141,8 +1155,45 @@ export class EditorStore {
    * (`panels/structure-tree.tsx`) — 같은 판정에서 나온 것이라 둘이 어긋날 수 없다.
    */
   readonly selectNode = (nodeId: string | null): void => {
-    if (nodeId !== null && this.lockedBy(nodeId) !== null) return
+    if (nodeId !== null && this.selectionBlockedBy(nodeId) !== null) return
     this.#apply({ selectedNodeId: nodeId })
+  }
+
+  /**
+   * 그 노드를 **고르는 것을 막는** 남의 잠금 — `lockedBy`에 `selectionClaims`를 얹은 것이다(이월 5차 F4). 선택이 잠금을
+   * 걸지 않는 사람(viewer)에게는 늘 `null`이다. 구조 트리의 `disabled`가 이것을 본다 — 배지는 `lockedBy`를 그대로 본다.
+   */
+  readonly selectionBlockedBy = (nodeId: string): NodeLock | null => {
+    const { document, openPageId } = this.#state
+    if (document === null || openPageId === null) return null
+    return this.#blocksSelection(openPageId, document, nodeId)
+  }
+
+  /**
+   * 선택이 잠금을 거는지를 바꾼다(`selectionClaims` — 셸의 `canEdit`이 실행 중에 바뀌면 이리 온다).
+   *
+   * **켜지는 순간 들고 있던 선택이 남의 잠금에 막히면 놓는다**(승격 — 이월 5차). viewer 였을 때는 남이 잡은 자리를 고를 수
+   * 있었고, 그대로 두면 곧 셸이 그 자리를 잡아(`useNodeLock`) **겹친 잠금**이 선다 — 겹친 잠금은 양쪽 모두를 막으므로
+   * 올라온 사람이 먼저 잡고 있던 사람의 편집을 막는다(`apps/api/src/ws/lock.ts`의 «서버는 획득을 거절하지 않는다»).
+   * 루트로 옮기지 않는다 — `#selectionFor`의 «사라진 노드는 놓는다»와 같다(사용자가 안 한 일로 자리를 옮기지 않는다).
+   * 꺼지는 순간(강등)에는 선택을 그대로 둔다 — 막을 것이 줄 뿐이다.
+   */
+  readonly setSelectionClaims = (selectionClaims: boolean): void => {
+    const { selectedNodeId, document, openPageId } = this.#state
+    // 판정은 `#lockConflictAt` 그대로다 — 새 값이 켜짐일 때만 묻는다(`#blocksSelection`은 아직 앞 값을 본다). 한 번의
+    // `#apply`로 둘을 함께 놓는다 — 둘로 나누면 구독자가 «켜졌는데 막힌 자리를 고른 채»인 상태를 한 번 본다.
+    const blocked =
+      selectionClaims &&
+      selectedNodeId !== null &&
+      document !== null &&
+      openPageId !== null &&
+      this.#lockConflictAt(openPageId, document, selectedNodeId) !== null
+    this.#apply(blocked ? { selectionClaims, selectedNodeId: null } : { selectionClaims })
+  }
+
+  /** 고르기를 막는 잠금 — 판정의 자리는 `#lockConflictAt` 하나이고, 여기는 `selectionClaims`를 얹을 뿐이다. */
+  #blocksSelection(pageId: string, document: PageDocument, nodeId: string): NodeLock | null {
+    return this.#state.selectionClaims ? this.#lockConflictAt(pageId, document, nodeId) : null
   }
 
   /**

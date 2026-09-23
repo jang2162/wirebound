@@ -215,6 +215,20 @@ describe('잠금 프레임 (§7.2)', () => {
   })
 })
 
+describe('멤버십 프레임 (이월 5차)', () => {
+  /**
+   * 혼자 죽는 변조: 파서가 `projectId`를 안 본다. 역할 값이 실려 와도 옮기지 않는다 — 역할은 `getProject` 하나에서 읽는다
+   * (`joined`의 `role`과 같은 까닭).
+   */
+  it('projectId 만 옮긴다 — 실려 온 역할은 버리고, projectId 가 없으면 프레임째 버린다', () => {
+    expect(parseServerFrame(JSON.stringify({ type: 'membership-changed', projectId: 'p', role: 'viewer' }))).toEqual({
+      type: 'membership-changed',
+      projectId: 'p',
+    })
+    expect(parseServerFrame(JSON.stringify({ type: 'membership-changed' }))).toBeNull()
+  })
+})
+
 describe('주소', () => {
   it('http면 ws다', () => {
     expect(realtimeUrl('http://localhost:5173', 'p1')).toBe('ws://localhost:5173/api/projects/p1/ws')

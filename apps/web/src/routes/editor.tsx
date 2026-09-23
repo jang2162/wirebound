@@ -24,6 +24,7 @@ import {
   type RefObject,
 } from 'react'
 import { Link, useParams } from 'react-router'
+import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { PageDetail, ProjectDetail } from '../api/types'
@@ -159,6 +160,20 @@ function resyncNotice(lead: string, dropped: number, hadUndo: boolean): string {
   return parts.join(' ')
 }
 
+/**
+ * **켜 둔 화면의 편집 권한이 바뀌었다는 통지**(이월 5차). 셸의 `canEdit`이 실행 중에 바뀔 때 선다 — 역할 이름이 아니라
+ * «고칠 수 있는가»로 말한다(역할을 읽는 곳은 `projectAbilities` 하나다 · `test/role-access.test.ts`).
+ *
+ * **잃은 쪽이 «보내던 저장»을 말하는 까닭(재서 알았다).** 강등 순간 나가 있던 쓰기는 서버가 커밋 순간의 권한으로 403 을
+ * 내는데(이월 AA), 그 실패 문장이 설 자리는 이제 숨은 폼 안이다 — 코멘트 게시 · 설명 저장 둘 다 403 이 **화면에 안 선다**
+ * (Chrome · 보고 (c)). 문장을 폼 밖으로 옮기는 것은 그 패널의 일이라(코멘트는 옆 트랙) 여기서는 사용자가 «왜»를 알게 한다.
+ */
+const ROLE_NOTICE = {
+  lost: '편집 권한이 없어져 편집 도구를 닫았습니다. 보내던 저장이 있었다면 거절됐을 수 있습니다 — 친 글은 지우지 않았습니다.',
+  gained: '편집 권한이 생겨 편집 도구를 열었습니다.',
+  unknown: '권한이 바뀌었는데 확인하지 못해 편집 도구를 닫았습니다. 새로고침해 확인하세요.',
+} as const
+
 /** 재연결로 다시 읽었을 때의 앞머리(P3-2 D6). */
 const RESYNC_LEAD = '연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다.'
 /** 내가 스냅샷을 복원해 다시 읽었을 때의 앞머리. **재연결과 다른 사건이다.** */
@@ -235,6 +250,53 @@ export function EditorShellRoute(): ReactElement {
   if (storeRef.current === null) storeRef.current = new EditorStore()
   const store = storeRef.current
 
+  /**
+   * **역할을 아는가**(이월 5차). 멤버십이 바뀌었다는 신호를 받고 다시 읽기가 실패하면 `false`다 — 바뀐 것은 알고 무엇으로
+   * 바뀌었는지는 모른다. 그때 셸은 고칠 수 없는 쪽으로 선다(아래 `reread`의 표).
+   */
+  const [roleKnown, setRoleKnown] = useState(true)
+  /**
+   * 다시 읽기의 차례. **늦게 낸 것의 답만 받는다** — 신호가 둘 잇달아 오면(내렸다 올림) 두 조회의 답이 거꾸로 올 수 있고,
+   * 앞 것이 이기면 화면이 **지난 역할**로 선다. 첫 조회(아래 이펙트)도 차례를 올려 앞 프로젝트의 늦은 답을 버린다.
+   */
+  const reads = useRef(0)
+
+  /**
+   * **켜 둔 셸이 프로젝트를 다시 읽는다**(이월 5차). 역할을 **실행 중에** 바꾸는 유일한 길이다 — 셸은 역할을 첫 조회의
+   * 응답에서 읽고(`EditorShell`의 `abilities`), 여기서 그 응답을 갈아 끼운다. 역할을 읽는 줄은 그대로 하나다.
+   *
+   * | 무엇이 불렀나 | 읽는 동안 | 성공 | 401 | 404(멤버에서 빠졌다) | 그 밖(시간 제한 · 5xx · 연결) |
+   * |---|---|---|---|---|---|
+   * | `membership` — 서버가 «내 멤버십이 바뀌었다»를 보냈다 | **앞 역할 그대로**(한 번의 `GET` — 서버가 계속 판정한다) | 새 역할로 선다 | 로그인 화면(첫 조회와 같다) | «설계서를 열지 못했습니다»(첫 조회와 같다 — 셸째 내려간다) | **역할을 모른다** — 고칠 수 없는 쪽으로 서고 말한다(`ROLE_NOTICE.unknown`) |
+   * | `resync` — 연결이 다시 붙었다(끊긴 동안 바뀐 역할) | 앞 역할 그대로 | 새 역할로 선다(같으면 아무 일 없다) | 로그인 화면 | «설계서를 열지 못했습니다» | **조용히 둔다** — 바뀌었다는 신호가 없다(페이지 다시 읽기의 D6 와 같다) |
+   *
+   * **읽는 동안 입구를 닫지 않는다.** 닫으면 승격 · owner 넘기기에도 입구가 한 번 닫혔다 열리고, 그때 열린 편집 상자 ·
+   * 잡은 잠금이 함께 닫혔다 열린다(잠금은 그 사이 남에게 갈 수 있다). 앞 역할이 틀렸어도 그 창의 쓰기는 서버가 커밋 순간의
+   * 권한으로 거절한다(이월 AA).
+   */
+  const reread = useCallback(
+    async (cause: 'membership' | 'resync'): Promise<void> => {
+      const turn = ++reads.current
+      try {
+        const project = await api.getProject(projectId)
+        if (reads.current !== turn) return
+        setState({ status: 'ready', project })
+        setRoleKnown(true)
+      } catch (caught) {
+        if (reads.current !== turn) return
+        const failure = toFailure(caught, UNKNOWN_FAILURE)
+        if (failure.kind === 'signed-out' || (caught instanceof ApiError && caught.code === 'not-found')) {
+          setState({ status: 'failed', failure })
+          return
+        }
+        if (cause === 'membership') setRoleKnown(false)
+      }
+    },
+    [api, projectId],
+  )
+  const onMembershipChanged = useCallback(() => void reread('membership'), [reread])
+  const onReconnected = useCallback(() => void reread('resync'), [reread])
+
   useEffect(() => {
     // 응답이 오기 전에 화면이 바뀌면 결과를 버린다(`require-auth`와 같은 이유).
     let alive = true
@@ -245,15 +307,18 @@ export function EditorShellRoute(): ReactElement {
     // 앞 프로젝트의 이름이 새 주소에서 잠깐 보이는 것도 막는다. 라우터는 두 프로젝트
     // 주소 사이에서 같은 컴포넌트를 다시 쓰므로 상태가 그대로 남는다.
     setState({ status: 'loading' })
+    setRoleKnown(true)
+    // 앞 프로젝트로 나가 있던 다시 읽기의 답을 버린다(`reads`).
+    const turn = ++reads.current
 
     // `.then(ok, err)`이 아니라 try/catch인 것은 호출 자체가 그 자리에서 던질 수도 있기
     // 때문이다. 그 예외는 이펙트 밖으로 새어 나가 앱 트리를 통째로 죽인다.
     async function load(): Promise<void> {
       try {
         const project = await api.getProject(projectId)
-        if (alive) setState({ status: 'ready', project })
+        if (alive && reads.current === turn) setState({ status: 'ready', project })
       } catch (caught) {
-        if (!alive) return
+        if (!alive || reads.current !== turn) return
         // 실패 → 화면 규칙은 `api/failure.tsx`에 있다(D5). 여기서 다시 판정하지 않는다.
         setState({ status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) })
       }
@@ -293,17 +358,36 @@ export function EditorShellRoute(): ReactElement {
 
   return (
     <EditorStoreProvider store={store}>
-      <EditorShell project={state.project} pageId={params.pageId} />
+      <EditorShell
+        project={state.project}
+        roleKnown={roleKnown}
+        pageId={params.pageId}
+        onMembershipChanged={onMembershipChanged}
+        onReconnected={onReconnected}
+      />
     </EditorStoreProvider>
   )
 }
 
 /** 세 패널과 상단 도구. 스토어는 컨텍스트에서 꺼낸다. */
-function EditorShell(props: { project: ProjectDetail; pageId: string | undefined }): ReactElement {
+function EditorShell(props: {
+  project: ProjectDetail
+  /** 역할을 아는가 — 모르면 아무것도 못 하는 쪽으로 선다(`EditorShellRoute`의 `reread`). */
+  roleKnown: boolean
+  pageId: string | undefined
+  /** 서버가 «내 멤버십이 바뀌었다»를 보냈다 — 라우트가 프로젝트를 다시 읽는다(이월 5차). */
+  onMembershipChanged: () => void
+  /** 연결이 다시 붙었다 — 끊긴 동안 바뀐 역할을 다시 읽는다(이월 5차). */
+  onReconnected: () => void
+}): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
-  /** 이 사람이 이 프로젝트에 무엇을 할 수 있나 — **역할을 읽는 곳은 이 셸의 이 줄이다**(`projects/project-actions.ts`). */
-  const abilities = projectAbilities(props.project.role)
+  /**
+   * 이 사람이 이 프로젝트에 무엇을 할 수 있나 — **역할을 읽는 곳은 이 셸의 이 줄이다**(`projects/project-actions.ts`).
+   * 역할은 **실행 중에 바뀐다**(이월 5차) — 라우트가 프로젝트를 다시 읽으면 이 줄이 새 값으로 다시 돈다. 모르면
+   * (`roleKnown` 거짓) 판정 함수의 «모르는 값»(아무것도 못 한다)이다.
+   */
+  const abilities = projectAbilities(props.roleKnown ? props.project.role : undefined)
   /**
    * **설계서를 고칠 수 있는가**(§10 — viewer 는 *"조회 전용 — 편집·코멘트 모두 불가"*. 이월 M′). 이 값 하나가 에디터의
    * 쓰기 입구를 전부 가른다 — 받는 쪽은 역할을 모르고 이 불리언만 받는다.
@@ -317,9 +401,22 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
    * | **잠금** — 노드를 고르는 것 | **잡지 않는다**(`useNodeLock`) | 고르기는 읽기다(속성 · 코멘트를 보려고 고른다). 서버는 viewer 의 `lock`을 조용히 버리지만(`MIN_ROLE_FOR_FRAME`) 보내는 것 자체가 쓰기 프레임이다 |
    *
    * **조회는 그대로다** — 모드 토글 · 뷰포트 · 줌 · 페이지 옮기기 · 노드 고르기 · 코멘트 읽기 · 탭 · 내보내기 · 스냅샷 목록.
-   * 역할이 바뀌면 새로고침해야 여기 닿는다(앞 판부터 — 셸이 프로젝트를 한 번 읽는다).
+   * **역할이 바뀌면 새로고침 없이 여기 닿는다**(이월 5차 — 서버의 `membership-changed` → 라우트의 다시 읽기). 바뀌는 순간
+   * 무엇이 어떻게 되는지는 받는 쪽이 이미 갖는다 — 입구는 이 값으로 숨고 서고, 열린 편집 상자는 M′ 의 관례대로 안 그려지되
+   * 초안은 저장소에 남고(다시 editor 면 돌아온다), 잠금은 `useNodeLock`의 표대로 놓이고 잡힌다.
    */
   const canEdit = abilities.editDesign
+  /**
+   * **편집 권한이 바뀐 순간을 말한다**(`ROLE_NOTICE`). 처음 선 값에는 말하지 않는다 — 바뀐 것이 아니다. 다음 변화까지
+   * 남는다(새로고침하면 사라진다).
+   */
+  const [roleNotice, setRoleNotice] = useState<string | null>(null)
+  const shownCanEdit = useRef(canEdit)
+  useEffect(() => {
+    if (shownCanEdit.current === canEdit) return
+    shownCanEdit.current = canEdit
+    setRoleNotice(canEdit ? ROLE_NOTICE.gained : props.roleKnown ? ROLE_NOTICE.lost : ROLE_NOTICE.unknown)
+  }, [canEdit, props.roleKnown])
   /**
    * **고르개가 테마를 바꿨다는 신호**(P4b-3 P2). 값에는 뜻이 없고 오를 때마다 캔버스가
    * 테마를 다시 조회한다.
@@ -390,9 +487,15 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
    * 사람은 스스로 수렴하지 않는다**(P3-1 이월 §2.4). 다시 붙은 것 자체를 신호로 삼으면 그
    * 사람의 화면도 맞춰진다.
    */
+  const { onReconnected } = props
   useRealtime(
     props.project.id,
-    useCallback(() => setResyncToken((token) => token + 1), []),
+    useCallback(() => {
+      setResyncToken((token) => token + 1)
+      // **끊긴 동안 바뀐 역할도 다시 읽는다**(이월 5차) — 그 사이의 `membership-changed`는 사라졌다.
+      onReconnected()
+    }, [onReconnected]),
+    props.onMembershipChanged,
   )
 
   /**
@@ -509,6 +612,12 @@ function EditorShell(props: { project: ProjectDetail; pageId: string | undefined
             `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
             근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
         <RemoteAlert />
+        {/* **편집 권한이 바뀌었다**(이월 5차 — `ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
+        {roleNotice !== null && (
+          <p className="wb-shell-remote-alert" role="status">
+            {roleNotice}
+          </p>
+        )}
       </header>
 
       <nav

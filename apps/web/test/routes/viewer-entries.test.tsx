@@ -7,18 +7,19 @@
  *
  * **키보드 축은 이 파일에 없다** — 두 트리의 단축키는 그 자의 키 훑기가 소유한다(단축키를 지운 변조가 거기서만 죽는다).
  * 대조(editor 에게는 입구가 있다)는 이 파일이 따로 두지 않는다 — 하네스의 기본 역할이 owner 라 기존 케이스 전부가 그쪽이다.
+ *
+ * **두 판으로 돈다**(이월 5차) — viewer 로 **새로 연** 화면과, editor 로 열어 둔 화면을 **실행 중에 내린** 화면(서버의
+ * `membership-changed` → 셸이 다시 읽는다). 뒤의 판은 받는 쪽이 `canEdit`을 **처음 값으로 굳히는** 부류를 잡는다 — 새로 연 판은
+ * 그 부류를 못 본다(처음 값이 곧 viewer 다). 바뀌는 순간 그 자체(잠금 · 통지 · 다시 읽기의 실패)는 `role-live.test.tsx`가 잰다.
  */
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import type { Comment, ProjectDetail } from '../../src/api/types'
-import type { RealtimeSocket } from '../../src/realtime/connection'
-import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
-import { createEditChannel } from '../../src/realtime/edit-channel'
-import { createLockChannel } from '../../src/realtime/lock-channel'
 import { VIEWER_NOTICE } from '../../src/panels/property-panel'
 import { openDraftStore } from '../../src/panels/draft-store'
 import { openPage, pageDoc, PROJECT_ID, PROJECT_NAME, type EditorOptions } from '../editor-harness'
+import { fakeRealtime, type FakeRealtime } from '../fake-realtime'
 import '../../src/catalog-setup'
 
 const VIEWER: ProjectDetail = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role: 'viewer' }
@@ -68,11 +69,40 @@ class MemoryStorage implements Storage {
   }
 }
 
-async function openAsViewer(options: EditorOptions = {}): Promise<void> {
+/** viewer 가 된 두 길 — 새로 열었다 · 열어 둔 채 내려갔다(머리말). */
+const HOWS = ['새로 연 viewer', '실행 중에 내린 viewer'] as const
+type How = (typeof HOWS)[number]
+
+/**
+ * viewer 의 화면을 연다. `rt`를 주면 그 가짜 연결을 쓰고 열어 둔다(새로 연 판도). **실행 중에 내린 판**은 editor 로 열어
+ * 입구가 선 것을 본 뒤 서버가 역할을 바꾸고 `membership-changed`를 보낸다 — 입구가 숨을 때까지 기다린다.
+ */
+async function openAsViewer(how: How = '새로 연 viewer', options: EditorOptions = {}, rt?: FakeRealtime): Promise<void> {
+  if (how === '새로 연 viewer') {
+    await openPage(DOC, {
+      ...options,
+      ...(rt === undefined ? {} : { realtime: rt.realtime }),
+      apiOverrides: { getProject: async () => VIEWER, listComments: async () => COMMENTS, ...options.apiOverrides },
+    })
+    rt?.open()
+    return
+  }
+  const link = rt ?? fakeRealtime(PROJECT_ID, 'u-1')
+  let current = EDITOR
   await openPage(DOC, {
     ...options,
-    apiOverrides: { getProject: async () => VIEWER, listComments: async () => COMMENTS, ...options.apiOverrides },
+    realtime: link.realtime,
+    apiOverrides: { getProject: async () => current, listComments: async () => COMMENTS, ...options.apiOverrides },
   })
+  link.open()
+  await screen.findByRole('group', { name: '메뉴 편집' })
+  current = VIEWER
+  link.deliver({ type: 'membership-changed', projectId: PROJECT_ID })
+  // **«내려갔다»의 표지는 셸의 통지다 — 자리가 아니다.** 한 자리(메뉴 툴바)를 표지로 삼으면 그 자리의 변조가 이 판 전부를 죽여
+  // 어느 케이스가 무엇을 소유하는지가 흐려진다(재서 알았다 — «메뉴 트리가 처음 값» 변조가 일곱을 다 죽였다).
+  await waitFor(() =>
+    expect(screen.queryAllByRole('status').some((el) => (el.textContent ?? '').startsWith('편집 권한이 없어져'))).toBe(true),
+  )
 }
 
 function pick(nodeId: string): void {
@@ -85,13 +115,13 @@ function tab(name: string): void {
   fireEvent.click(screen.getByRole('tab', { name }))
 }
 
-describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)', () => {
+describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′) · %s', (how) => {
   /**
    * 혼자 죽는 변조: 셸이 메뉴 트리에 `editable={mode === 'edit'}`를 넘긴다(역할을 안 얹는다). 마지막 줄(메뉴를 눌러 고른다 —
    * 읽기다)도 혼자 죽는 변조가 있다: 메뉴 트리가 `editable`이 아니면 `select`를 무동작으로 둔다(viewer 에게만 고르기가 꺼진다).
    */
   it('메뉴 트리 — 편집 모드에서도 «메뉴 편집» 툴바 · «페이지 JSON»이 없다(숨김). 트리 · 페이지 링크 · 메뉴 고르기는 그대로다', async () => {
-    await openAsViewer()
+    await openAsViewer(how)
     const tree = screen.getByRole('region', { name: '메뉴·페이지 트리' })
 
     expect(screen.getByRole('button', { name: '편집 모드' }).getAttribute('aria-pressed')).toBe('true')
@@ -107,7 +137,7 @@ describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)
 
   /** 혼자 죽는 변조: 구조 트리가 툴바를 `editable`과 무관하게 그린다. */
   it('구조 트리 — 노드는 고를 수 있고 «구조 편집» 툴바가 없다(숨김)', async () => {
-    await openAsViewer()
+    await openAsViewer(how)
     const structure = screen.getByRole('region', { name: '구조 트리' })
 
     const card = within(structure).getByRole('button', { name: 'Card' })
@@ -120,7 +150,7 @@ describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)
 
   /** 혼자 죽는 변조: 속성 패널의 `blocked`가 역할을 안 본다(잠금만 본다). */
   it('속성 — 값은 보이고 위젯이 꺼지며 이유 한 줄이 선다(꺼짐)', async () => {
-    await openAsViewer()
+    await openAsViewer(how)
     pick('n-card')
 
     const panel = screen.getByRole('tabpanel')
@@ -132,7 +162,7 @@ describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)
 
   /** 혼자 죽는 변조: 상호작용 패널의 `blocked`가 역할을 안 본다. */
   it('상호작용 — 규칙은 보이고 위젯 · 추가 · 삭제가 꺼지며 이유 한 줄이 선다(꺼짐)', async () => {
-    await openAsViewer()
+    await openAsViewer(how)
     pick('n-btn')
     tab('상호작용')
 
@@ -148,7 +178,7 @@ describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)
    * 보고서 (f)). 두 모드 다 같다(뷰 모드에서도 코멘트 탭이 있다 — §9).
    */
   it('코멘트 — 목록은 읽히고 폼 · 재번호 · 줄마다의 «수정» · «삭제»가 없다(숨김) — 내 글이어도', async () => {
-    await openAsViewer()
+    await openAsViewer(how)
     pick('n-card')
 
     for (const mode of ['편집 모드', '뷰 모드'] as const) {
@@ -165,6 +195,32 @@ describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)
     }
   })
 
+  /**
+   * 혼자 죽는 변조: 셸이 되돌리기를 `mode === 'edit'`만 보고 그린다. **이 자리는 요청 자가 못 본다** — viewer 에게는
+   * 되돌릴 이력이 없어 두 단추가 늘 꺼져 있고, 꺼진 단추는 요청을 안 낸다.
+   */
+  it('되돌리기 — 편집 모드에서도 «편집 이력» 묶음이 없다(숨김)', async () => {
+    await openAsViewer(how)
+    expect(screen.getByRole('button', { name: '편집 모드' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('group', { name: '편집 이력' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '되돌리기' })).toBeNull()
+  })
+
+  /** 혼자 죽는 변조: `useNodeLock`이 `canHold`를 안 본다. */
+  it('잠금 — 노드를 골라도 `lock` 프레임을 안 보낸다', async () => {
+    const rt = fakeRealtime(PROJECT_ID, 'u-1')
+    await openAsViewer(how, {}, rt)
+
+    pick('n-card')
+    pick('n-btn')
+    await waitFor(() => expect(screen.getByRole('tabpanel').textContent).toContain('Button'))
+
+    // 고르기는 된다(읽기) — 그 사이에 나간 프레임은 하트비트뿐이다(내린 판도 editor 때 잡은 자리가 없다 — 루트는 잡지 않는다).
+    expect(rt.frames()).toEqual([])
+  })
+})
+
+describe('viewer 의 에디터 — 새로고침에 되살아나는 칸(이월 M′ 리뷰 F1)', () => {
   /**
    * **강등 → 새로고침 — 되살린 수정 상자**(리뷰 F1). editor 때 제 글의 «수정»을 눌러 고치던 글이 저장소에 남은 채(`comments/editing-id`
    * · `comments/edit-draft`) viewer 로 다시 연다. viewer 에게는 **서버의 원문**이 보이고 상자가 없다. 그리고 **칸은 안 지운다** —
@@ -191,7 +247,7 @@ describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)
     cleanup()
 
     // 강등 뒤 새로고침 — 같은 저장소 위에 새 문서.
-    await openAsViewer({ draftStore: openDraftStore(() => session, () => shared) })
+    await openAsViewer('새로 연 viewer', { draftStore: openDraftStore(() => session, () => shared) })
     pick('n-card')
     tab('코멘트')
     const panel = screen.getByRole('tabpanel')
@@ -211,55 +267,4 @@ describe('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′)
     await waitFor(() => expect(editing()?.value).toBe('강등 전에 고치던 글'))
   })
 
-  /**
-   * 혼자 죽는 변조: 셸이 되돌리기를 `mode === 'edit'`만 보고 그린다. **이 자리는 요청 자가 못 본다** — viewer 에게는
-   * 되돌릴 이력이 없어 두 단추가 늘 꺼져 있고, 꺼진 단추는 요청을 안 낸다.
-   */
-  it('되돌리기 — 편집 모드에서도 «편집 이력» 묶음이 없다(숨김)', async () => {
-    await openAsViewer()
-    expect(screen.getByRole('button', { name: '편집 모드' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.queryByRole('group', { name: '편집 이력' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '되돌리기' })).toBeNull()
-  })
-
-  /** 혼자 죽는 변조: `useNodeLock`이 `canHold`를 안 본다. */
-  it('잠금 — 노드를 골라도 `lock` 프레임을 안 보낸다', async () => {
-    const sent: string[] = []
-    const sockets: RealtimeSocket[] = []
-    const realtime: RealtimeSetup = {
-      holder: createConnectionIdHolder(),
-      channel: createEditChannel(),
-      lockChannel: createLockChannel(),
-      origin: 'http://localhost:5173',
-      connection: {
-        createSocket: () => {
-          const socket: RealtimeSocket = {
-            onopen: null,
-            onmessage: null,
-            onclose: null,
-            onerror: null,
-            send: (data: string) => {
-              sent.push(data)
-            },
-            close: () => {},
-          }
-          sockets.push(socket)
-          return socket
-        },
-        schedule: () => 0,
-        cancel: () => {},
-      },
-    }
-    await openAsViewer({ realtime })
-    act(() => {
-      sockets.at(-1)?.onopen?.()
-    })
-
-    pick('n-card')
-    pick('n-btn')
-    await waitFor(() => expect(screen.getByRole('tabpanel').textContent).toContain('Button'))
-
-    // 고르기는 된다(읽기) — 그 사이에 나간 프레임은 하트비트뿐이다.
-    expect(sent.map((raw) => (JSON.parse(raw) as { type: string }).type).filter((type) => type !== 'ping')).toEqual([])
-  })
 })

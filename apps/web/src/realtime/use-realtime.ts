@@ -11,6 +11,7 @@
  * | `restored` | `store.markRestored` — 판이 통째로 갈렸다. 얹을 `ops`가 없다 |
  * | `patch-ack`·`patch-error` | 채널에 넘긴다 — 내가 낸 편집의 답이다 |
  * | `locks` | `store.setLocks` — §7.2의 배지와 선택 차단이 이 목록 위에 선다 |
+ * | `membership-changed` | `onMembershipChanged` — 셸이 프로젝트를 다시 읽는다(역할이 바뀌었거나 멤버에서 빠졌다 · 이월 5차) |
  * | `presence`·`pong` | 아무것도 안 한다 |
  *
  * **`projectId`가 룸이다**(D2). 페이지를 옮겨도 연결은 그대로다 — 페이지마다 다시 붙으면
@@ -72,7 +73,15 @@ function droppedNotice(dropped: number): string {
  * 정리 함수가 `close()`를 부르는 것이 계약이다 — 안 부르면 프로젝트를 옮길 때마다 연결이
  * 하나씩 쌓이고, 그 연결들이 각자 재연결을 건다.
  */
-export function useRealtime(projectId: string | undefined, onResync?: () => void): void {
+export function useRealtime(
+  projectId: string | undefined,
+  onResync?: () => void,
+  /**
+   * **내 멤버십이 바뀌었다**(`membership-changed` — 이월 5차). 다시 읽는 **자리**는 여기가 아니라 셸이다
+   * (`routes/editor.tsx` — 역할을 읽는 곳이 거기 하나다). `onResync`와 같은 배치다.
+   */
+  onMembershipChanged?: () => void,
+): void {
   const store = useEditorStoreInstance()
   const setup = useRealtimeSetup()
   const onRenewal = useSessionRenewal()
@@ -116,6 +125,9 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
           }
           case 'restored':
             store.markRestored()
+            break
+          case 'membership-changed':
+            onMembershipChanged?.()
             break
           case 'locks':
             // **프로젝트 전체의 목록이다.** 어느 페이지의 것인지는 스토어가 `openPageId`로
@@ -179,5 +191,5 @@ export function useRealtime(projectId: string | undefined, onResync?: () => void
       setup.lockChannel?.detach()
       setup.holder.set(undefined)
     }
-  }, [projectId, setup, store, onResync, onRenewal])
+  }, [projectId, setup, store, onResync, onRenewal, onMembershipChanged])
 }

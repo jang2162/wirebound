@@ -72,6 +72,11 @@ export type ServerFrame =
       clientOpId?: string
     }
   | { type: 'restored'; projectId: string; snapshotId: string; actor: EventActor }
+  /**
+   * **내 멤버십이 바뀌었다 — 프로젝트를 다시 읽어라**(이월 5차). 역할 값은 안 온다 — 역할은 `getProject`의 응답 하나에서
+   * 읽는다(위 `joined`의 머리말과 같은 까닭 · 서버 `ws/protocol.ts`의 그 갈래).
+   */
+  | { type: 'membership-changed'; projectId: string }
   | { type: 'pong' }
   | {
       type: 'patch-ack'
@@ -229,6 +234,8 @@ export function parseServerFrame(raw: string): ServerFrame | null {
             actor: value.actor as unknown as EventActor,
           }
         : null
+    case 'membership-changed':
+      return str(value.projectId) ? { type: 'membership-changed', projectId: value.projectId } : null
     case 'pong':
       return { type: 'pong' }
     case 'patch-ack':
