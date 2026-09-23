@@ -108,7 +108,13 @@ export function projectRoutes() {
 
       let project
       try {
-        project = await updateProject(app.db, projectId, body)
+        project = await withTransaction(app.db, async (trx) => {
+          const updated = await updateProject(trx, projectId, body)
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). `UPDATE projects`가 복원 · 프로젝트 삭제의
+          // `FOR UPDATE`와 트리 쓰기의 첫 잠금(`FOR NO KEY UPDATE`) 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
+          if (updated) await recheckProjectRole(trx, request)
+          return updated
+        })
       } catch (error) {
         if (error instanceof DuplicateSlugError) {
           throw conflict(error.message)

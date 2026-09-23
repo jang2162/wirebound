@@ -188,12 +188,19 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
 
       let record: SnapshotDetail
       try {
-        record = await insertSnapshot(app.db, {
-          projectId,
-          tag: body.tag,
-          description: body.description ?? null,
-          payload: outcome.payload,
-          createdBy: currentUser.id,
+        record = await withTransaction(app.db, async (trx) => {
+          const inserted = await insertSnapshot(trx, {
+            projectId,
+            tag: body.tag,
+            description: body.description ?? null,
+            payload: outcome.payload,
+            createdBy: currentUser.id,
+          })
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는
+          // `KEY SHARE`가 복원 · 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다. 캡처는
+          // 이 트랜잭션 밖이다(위 머리말) — 재확인은 쓰는 자리에만 선다.
+          await recheckProjectRole(trx, request)
+          return inserted
         })
       } catch (error) {
         if (error instanceof SnapshotNulByteError) {

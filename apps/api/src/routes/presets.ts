@@ -70,8 +70,9 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { BUILTIN_PRESETS, WbNodeSchema, stripMarkers, type PagePreset } from '@wirebound/schema'
-import { projectGuard } from '../auth/roles'
+import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
+import { withTransaction } from '../db/tx'
 import { badRequest, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import { PresetNulByteError, deletePreset, insertPreset, listPresets, type PresetRecord } from '../repos/presets'
@@ -181,12 +182,18 @@ export function presetRoutes() {
 
       let record: PresetRecord
       try {
-        record = await insertPreset(app.db, {
-          projectId,
-          name: body.name,
-          description: body.description ?? null,
-          nodes: stripMarkers(body.schema),
-          createdBy: currentUser.id,
+        record = await withTransaction(app.db, async (trx) => {
+          const inserted = await insertPreset(trx, {
+            projectId,
+            name: body.name,
+            description: body.description ?? null,
+            nodes: stripMarkers(body.schema),
+            createdBy: currentUser.id,
+          })
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는
+          // `KEY SHARE`가 복원 · 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
+          await recheckProjectRole(trx, request)
+          return inserted
         })
       } catch (error) {
         if (error instanceof PresetNulByteError) {

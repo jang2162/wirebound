@@ -156,6 +156,7 @@ import {
   type CommentRecord,
 } from '../repos/comments'
 import { findPageById, lockPageForEdit } from '../repos/pages'
+import { lockProjectShared } from '../repos/projects'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
 import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
 
@@ -733,7 +734,16 @@ export function commentRoutes() {
         // 날 500이 되지 않도록 여기서 400으로 옮긴다(`routes/themes.ts`와 같은 관례).
         let updated
         try {
-          updated = await updateCommentBody(app.db, pageId, commentId, body.body)
+          updated = await withTransaction(app.db, async (trx) => {
+            // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`) — 아래 재확인이 멤버 행을 잡으므로, 코멘트
+            // 행부터 잡으면 프로젝트 삭제의 CASCADE 와 고리가 된다(그 함수의 머리말에 잰 값).
+            await lockProjectShared(trx, projectId)
+            const edited = await updateCommentBody(trx, pageId, commentId, body.body)
+            // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
+            // 있다 — 그 대기 뒤의 역할로 판정한다.
+            if (edited) await recheckProjectRole(trx, request)
+            return edited
+          })
         } catch (error) {
           if (error instanceof CommentNulByteError) throw badRequest(error.message)
           throw error

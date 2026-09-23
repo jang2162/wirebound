@@ -250,6 +250,32 @@ export async function lockProjectTree(trx: DbHandle, projectId: string): Promise
 }
 
 /**
+ * **자기 행만 쓰는 쓰기의 첫 잠금** — 프로젝트 행을 `FOR KEY SHARE`로 잡는다(이월 AA′ · 2026-09-24). 부르는 자리: 프로젝트
+ * 테마 고르기(`routes/themes.ts` — 레이아웃 행) · 코멘트 수정(`routes/comments.ts` — 코멘트 행).
+ *
+ * **왜 — 커밋 순간의 재확인이 잠금 순서를 요구한다.** 두 쓰기는 프로젝트 행을 안 잡고 자기 행만 잡는다(그 행은 복원이
+ * `lockProjectForRestore`로 잠근다 — 그래서 복원 뒤에 선다). 그 뒤에 재확인(`auth/roles.ts`의 `recheckProjectRole` — 멤버 행
+ * `FOR SHARE`)을 붙이면 «자기 행 → 멤버 행» 순이 되는데, 프로젝트 삭제는 «프로젝트 행 → 페이지 → CASCADE(멤버 행 → … →
+ * 레이아웃 · 코멘트 행)» 순이다 — 삭제가 멤버 행을 지운 채 이 쓰기의 행을 기다리고, 이 쓰기는 그 멤버 행을 기다린다.
+ * 잰 값(쓰기를 자기 행 뒤 · 재확인 앞에 세워 둔 채 삭제를 쏜다 — 5 판씩): **교착 5/5 · 삭제 500**(테마 · 코멘트 둘 다). 이것을
+ * 먼저 잡으면 삭제는 프로젝트 행에서 기다리고 **교착 0/5 · 삭제 204**. 순서가 «프로젝트 행 → 자기 행 → 멤버 행»이 된다 —
+ * 트리 쓰기(`lockProjectTree`) · FK 삽입(부모 행 `KEY SHARE`)과 같은 방향이다.
+ *
+ * **`KEY SHARE`인 까닭** — 복원 · 프로젝트 삭제의 `FOR UPDATE`와만 부딪힌다. 트리 쓰기의 `NO KEY UPDATE` · 프로젝트 수정 ·
+ * 다른 `KEY SHARE`와는 안 부딪혀 같은 프로젝트의 테마 고르기 · 코멘트 수정이 트리 쓰기 뒤에 줄을 서지 않는다(앞 판과 같다).
+ * 코멘트 삭제의 `lockProjectForBurial`(`repos/comments.ts`)과 같은 모드다 — 그쪽은 0 행이면 조용히 지나가는 계약이라(뒤의
+ * 페이지 잠금이 404 를 낸다) 합치지 않았다.
+ *
+ * **대상이 없으면(그 사이 지워졌다) 던진다**(`ProjectGoneError` → 404) — 테마 고르기는 뒤에서 레이아웃이 없음을 409 «기본
+ * 레이아웃이 없어»로 읽으므로, 여기서 끊지 않으면 지워진 프로젝트가 409 로 새어 나간다.
+ */
+export async function lockProjectShared(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectShared')
+  const rows = await trx.selectFrom('projects').select('id').where('id', '=', projectId).forKeyShare().execute()
+  if (rows.length === 0) throw new ProjectGoneError()
+}
+
+/**
  * 트리 쓰기가 잠금을 기다리는 사이 프로젝트가 지워졌다(`lockProjectTree`). **HTTP 를 모르는 이 계층의 값이다** — 404 로
  * 옮기는 것은 `http/error-handler.ts`(`NulByteError`와 같은 자리)다. 라우트마다 잡지 않는 것은 여섯 자리가 한 규칙이어야
  * 해서다 — 한 자리가 빠지면 그 자리만 500 이다(앞 판의 루트 메뉴 생성).

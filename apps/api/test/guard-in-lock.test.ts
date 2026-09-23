@@ -18,22 +18,31 @@
  * # 분모 — 페이지 잠금에 서는 쓰기
  *
  * 쓰기 라우트 전부를 페이지 행 잠금(`lockPageForEdit`) 아래에서 쏘아 **서는 것만** 골랐다(2026-09-22 · 창 700ms).
- * 아래 `분모` 절이 **등록된** 쓰기 라우트(Fastify 의 `onRoute` 값)와 WS 프레임 종류를 이 표와 `페이지 잠금에 안 서는
- * 쓰기` 목록 둘로 **빠짐없이** 가르게 한다 — 새 쓰기가 생기면 이 파일이 먼저 죽고, 사람이 «이것이 페이지 잠금에
- * 서는가»를 판정한다.
+ * 아래 `분모` 절이 **등록된** 쓰기 라우트(Fastify 의 `onRoute` 값)와 WS 프레임 종류를 «잠금에 선다»(이 표와 아래
+ * `PROJECT_PROBES`)와 «어느 잠금에도 안 선다»(`NOT_LOCKED`)로 **빠짐없이** 가르게 한다 — 새 쓰기가 생기면 이 파일이 먼저
+ * 죽고, 사람이 «이것이 잠금에 서는가»를 판정한다.
+ *
+ * # 프로젝트 잠금 뒤에 서는 쓰기 (이월 AA′)
+ *
+ * 페이지 행을 안 잡는 쓰기도 복원(`lockProjectForRestore`) · 트리 쓰기(`lockProjectTree`) 뒤에 선다 — 같은 판이다. 아래
+ * `프로젝트 잠금에 쥐인 쓰기` 절이 그 두 잠금을 진짜 함수로 쥔 채 라우트마다 잰다(`PROJECT_PROBES`).
  *
  * # 잠금 순서 — 재확인이 연 교착
  *
  * 프로젝트 삭제가 재확인을 위해 기다릴 것을 먼저 잡게 되면서 잠금 순서가 생겼다. 아래 `잠금 순서` 절이 그 순서가
- * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로 잰다.
+ * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 자기 행만 쓰는 쓰기의 재확인이 삭제의 CASCADE 와 고리를 안
+ * 만드는지(프로젝트 행 → 자기 행 → 멤버 행)를 두 판으로 잰다.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
 import type { RegisteredRoute } from '../src/app'
-import { withTransaction } from '../src/db/tx'
+import { withTransaction, type DbHandle } from '../src/db/tx'
+import { findMembership } from '../src/auth/roles'
 import { updateMemberRole } from '../src/repos/members'
 import { insertMenuNode } from '../src/repos/menu'
 import { lockPageForEdit } from '../src/repos/pages'
+import { lockProjectTree } from '../src/repos/projects'
+import { lockProjectForRestore } from '../src/repos/snapshots'
 import { MIN_ROLE_FOR_FRAME } from '../src/ws/protocol'
 import {
   addMember,
@@ -59,6 +68,8 @@ type BobRole = 'editor' | 'owner'
 
 interface Fx {
   projectId: string
+  /** 페이지 넷이 매인 메뉴. */
+  menuId: string
   pageId: string
   /** 코멘트가 없는 페이지 — 그 루트에 처음 다는 코멘트는 번호를 붙인다(`applyEdit` 갈래). */
   barePageId: string
@@ -125,6 +136,7 @@ async function fixture(ctx: RealApiContext, bobRole: BobRole): Promise<Fx> {
 
   return {
     projectId: project.id,
+    menuId: menu.id,
     pageId: page.id,
     barePageId: bare.id,
     sparePageId: spare.id,
@@ -140,9 +152,10 @@ async function fixture(ctx: RealApiContext, bobRole: BobRole): Promise<Fx> {
 
 /**
  * 그 프로젝트의 **쓰기가 닿을 수 있는 행 전부.** 라우트마다 무엇을 쓰는지 따로 적지 않는다 — 한 벌로
- * 전부를 보면 «거절했는데 곁에서 무엇이 커밋됐다»도 잡힌다. 멤버 행은 뺀다(강등이 그것을 바꾼다).
+ * 전부를 보면 «거절했는데 곁에서 무엇이 커밋됐다»도 잡힌다. 밥의 멤버 행은 뺀다(강등이 그것을 바꾼다) — 다른
+ * 멤버 행은 본다(초대가 쓴다). 토큰은 `last_used_at`을 뺀다(밥의 토큰 판이 쓰기만 해도 인증이 그것을 고친다).
  */
-async function projectState(projectId: string) {
+async function projectState({ projectId, bob }: Pick<Fx, 'projectId' | 'bob'>) {
   const project = await db.selectFrom('projects').selectAll().where('id', '=', projectId).executeTakeFirst()
   const pages = await db.selectFrom('pages').selectAll().where('project_id', '=', projectId).orderBy('id').execute()
   const pageIds = pages.map((page) => page.id)
@@ -159,6 +172,21 @@ async function projectState(projectId: string) {
     ),
     snapshots: await db.selectFrom('snapshots').select(['id', 'tag']).where('project_id', '=', projectId).orderBy('id').execute(),
     layouts: await db.selectFrom('layouts').selectAll().where('project_id', '=', projectId).orderBy('id').execute(),
+    members: await db
+      .selectFrom('project_members')
+      .selectAll()
+      .where('project_id', '=', projectId)
+      .where('user_id', '!=', bob.user.id)
+      .orderBy('user_id')
+      .execute(),
+    themes: await db.selectFrom('themes').selectAll().where('project_id', '=', projectId).orderBy('id').execute(),
+    presets: await db.selectFrom('presets').selectAll().where('project_id', '=', projectId).orderBy('id').execute(),
+    tokens: await db
+      .selectFrom('api_tokens')
+      .select(['id', 'user_id', 'name'])
+      .where('project_id', '=', projectId)
+      .orderBy('id')
+      .execute(),
   }
 }
 
@@ -397,10 +425,10 @@ interface QueuedLock {
 }
 
 /**
- * 페이지 행 하나를 **진짜 잠금 함수로** 잡으러 간다 — 잠금 SQL 을 베끼지 않는다(`restore-lock-census`와 같은 판단).
+ * 잠금을 **진짜 잠금 함수로** 잡으러 간다 — 잠금 SQL 을 베끼지 않는다(`restore-lock-census`와 같은 판단).
  * 기다리지 않고 돌아온다 — 남이 쥐고 있으면 이 트랜잭션은 **줄에 선다**(«같은 페이지의 다른 사람 편집»).
  */
-function queuePageLock(projectId: string, pageId: string): QueuedLock {
+function queueLock(take: (trx: DbHandle) => Promise<void>): QueuedLock {
   let release: () => void = () => {}
   const held = new Promise<void>((resolve) => {
     release = resolve
@@ -410,8 +438,7 @@ function queuePageLock(projectId: string, pageId: string): QueuedLock {
     markAcquired = resolve
   })
   const holder = withTransaction(db, async (trx) => {
-    const page = await lockPageForEdit(trx, projectId, pageId)
-    if (!page) throw new Error('잡을 페이지가 없습니다')
+    await take(trx)
     markAcquired()
     await held
   })
@@ -423,6 +450,14 @@ function queuePageLock(projectId: string, pageId: string): QueuedLock {
       await holder
     },
   }
+}
+
+/** 페이지 행 하나를 잡으러 간다(`queueLock`). */
+function queuePageLock(projectId: string, pageId: string): QueuedLock {
+  return queueLock(async (trx) => {
+    const page = await lockPageForEdit(trx, projectId, pageId)
+    if (!page) throw new Error('잡을 페이지가 없습니다')
+  })
 }
 
 /** 페이지 행 하나를 잡고 **잡을 때까지** 기다린다. 돌려준 `release`를 부르면 그 트랜잭션이 커밋된다. */
@@ -460,22 +495,29 @@ interface HeldOutcome {
   after: Awaited<ReturnType<typeof projectState>>
 }
 
-/** 잠금을 잡고 → 쏘고 → 그 요청이 잠금에 선 것을 확인하고 → (강등하고) → 푼다. */
-async function runHeld(ctx: RealApiContext, probe: Probe, kind: Demotion | null): Promise<HeldOutcome> {
-  const fx = await fixture(ctx, probe.bobRole)
-  const prepared = probe.prepare ? await probe.prepare(ctx, fx) : {}
-  const before = await projectState(fx.projectId)
-
-  const hold = await holdPageLock(fx.projectId, probe.lockPage(fx))
+/**
+ * 잠금을 잡고 → 쏘고 → 그 요청이 잠금에 선 것을 확인하고 → (강등하고) → 푼다. 페이지 잠금(`runHeld`)과 프로젝트
+ * 잠금(`runProjectHeld`)이 이 한 벌을 쓴다 — 무엇을 쥐는지만 다르다.
+ */
+async function heldWrite(
+  ctx: RealApiContext,
+  fx: Fx,
+  label: string,
+  bobRole: BobRole,
+  lock: QueuedLock,
+  fire: () => Promise<Fired>,
+  kind: Demotion | null,
+): Promise<Omit<HeldOutcome, 'before' | 'after'>> {
+  await lock.acquired
   let request: Fired | undefined
   let demotion: Promise<number> | null = null
   let demotedWhileHeld = false
   try {
-    request = await probe.fire(ctx, fx, prepared)
+    request = await fire()
     await waitForLockWaiter()
-    expect(request.done(), `${probe.label}: 잠금에 서지 않았다`).toBe(false)
+    expect(request.done(), `${label}: 잠금에 서지 않았다`).toBe(false)
     if (kind !== null) {
-      demotion = demote(ctx, fx, probe.bobRole, kind)
+      demotion = demote(ctx, fx, bobRole, kind)
       const early = await Promise.race([
         demotion.then(() => 'done' as const),
         new Promise<'blocked'>((resolve) => setTimeout(() => resolve('blocked'), 3_000)),
@@ -483,12 +525,25 @@ async function runHeld(ctx: RealApiContext, probe: Probe, kind: Demotion | null)
       demotedWhileHeld = early === 'done'
     }
   } finally {
-    await hold.release()
+    await lock.release()
   }
   const res = await request.promise
   const demotionStatus = demotion === null ? null : await demotion
-  prepared.socket?.close()
-  return { ...res, demotionStatus, demotedWhileHeld, before, after: await projectState(fx.projectId) }
+  return { ...res, demotionStatus, demotedWhileHeld }
+}
+
+/** 페이지 행을 쥔 채 `heldWrite`. */
+async function runHeld(ctx: RealApiContext, probe: Probe, kind: Demotion | null): Promise<HeldOutcome> {
+  const fx = await fixture(ctx, probe.bobRole)
+  const prepared = probe.prepare ? await probe.prepare(ctx, fx) : {}
+  const before = await projectState(fx)
+  try {
+    const lock = queuePageLock(fx.projectId, probe.lockPage(fx))
+    const outcome = await heldWrite(ctx, fx, probe.label, probe.bobRole, lock, () => probe.fire(ctx, fx, prepared), kind)
+    return { ...outcome, before, after: await projectState(fx) }
+  } finally {
+    prepared.socket?.close()
+  }
 }
 
 /** 가드가 같은 판에서 내는 것 — 역할이 모자라면 403, 멤버가 아니면 404(`requireProjectRole`의 표). */
@@ -787,7 +842,7 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
   async function underRoleChange(ctx: RealApiContext, probe: Probe, commit: boolean) {
     const fx = await fixture(ctx, 'editor')
     const prepared = probe.prepare ? await probe.prepare(ctx, fx) : {}
-    const before = await projectState(fx.projectId)
+    const before = await projectState(fx)
     const roleChange = await holdRoleChange(fx)
     let request: Fired | undefined
     let waitedOnRoleChange = false
@@ -801,7 +856,7 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
     }
     const res = await request.promise
     prepared.socket?.close()
-    return { ...res, waitedOnRoleChange, before, after: await projectState(fx.projectId) }
+    return { ...res, waitedOnRoleChange, before, after: await projectState(fx) }
   }
 
   for (const label of [BARE_COMMENT, WS_PATCH]) {
@@ -963,6 +1018,355 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
       expect(await deadlockCount()).toBe(deadlocksBefore)
     })
   }, 60_000)
+
+  /**
+   * E3 · E4 — 자기 행만 쓰는 쓰기(테마 고르기 · 코멘트 수정)의 재확인. 삭제의 CASCADE 가 밥의 멤버 행을 **먼저** 쥐게 세운다:
+   * 밥의 다른 쓰기가 재확인 중이다(그 행 `FOR SHARE` — `findMembership`) → 삭제가 CASCADE 에서 그 행에 선다 → 밥의 쓰기를 쏜다
+   * → 붙든 것을 푼다. 프로젝트 행을 먼저 잡지 않으면 그 쓰기는 자기 행을 쥔 채 재확인에서 삭제를 기다리고, 삭제는 그 행을
+   * 기다린다.
+   */
+  for (const probe of [
+    {
+      label: 'E3 — 테마 고르기',
+      bobRole: 'owner' as const,
+      fire: (ctx: RealApiContext, fx: ProjectFx) =>
+        fireRest(ctx, fx, 'PUT', `/api/projects/${fx.projectId}/theme`, { themeId: fx.themeId }),
+    },
+    {
+      label: 'E4 — 코멘트 수정',
+      bobRole: 'editor' as const,
+      fire: (ctx: RealApiContext, fx: ProjectFx) =>
+        fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`, {
+          body: '밥이 고친 말',
+        }),
+    },
+  ]) {
+    it(`${probe.label}: 삭제의 CASCADE 가 멤버 행을 쥔 채 서 있을 때 쏘면 — 삭제 204 · 쓰기는 프로젝트 행에서 기다렸다가 404 · 교착 0`, async () => {
+      await withRealApi(async (ctx) => {
+        const fx = await projectFixture(ctx, probe.bobRole)
+        const deadlocksBefore = await deadlockCount()
+        const recheck = queueLock(async (trx) => {
+          await findMembership(trx, fx.projectId, fx.bob.user.id, 'share')
+        })
+        await recheck.acquired
+        let removal: Fired | undefined
+        let write: Fired | undefined
+        try {
+          removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie }))
+          await waitForLockWaiter(1)
+          write = probe.fire(ctx, fx)
+          await waitForLockWaiter(2)
+        } finally {
+          await recheck.release()
+        }
+        const [removed, written] = await Promise.all([removal.promise, write.promise])
+
+        expect(removed.status, removed.body).toBe(204)
+        expect(written.status, written.body).toBe(404)
+        expect(await deadlockCount()).toBe(deadlocksBefore)
+      })
+    }, 60_000)
+  }
+})
+
+/**
+ * # 프로젝트 잠금 뒤에 서는 쓰기 — 커밋 순간의 권한 (이월 AA′)
+ *
+ * 위 표는 **페이지 행**에 서는 쓰기다. 페이지 행을 안 잡는 쓰기도 프로젝트를 통째로 쥐는 트랜잭션 뒤에 선다 — 복원
+ * (`lockProjectForRestore` — 프로젝트 행 `FOR UPDATE` + 메뉴 · 페이지 · 레이아웃 · 코멘트 행)과 트리 쓰기의 첫 잠금
+ * (`lockProjectTree` — 프로젝트 행 `FOR NO KEY UPDATE`)이다. 이 절이 그 둘을 **진짜 잠금 함수로** 쥔 채 같은 판을 잰다.
+ *
+ * **어디에 서나 — 잰 값**(2026-09-24 · 잠금을 쥔 채 쏘아 700ms 창 · 아래 `NOT_LOCKED`의 판정과 같은 판):
+ *
+ * | 쓰기 | 복원 잠금 뒤에 서는 자리 | 트리 잠금 뒤에 |
+ * |---|---|---|
+ * | 메뉴 생성 · 자리 옮기기 · 삭제 · 페이지 생성 · 자리 옮기기 · 삭제 · 가져오기 | 자기의 `lockProjectTree`(프로젝트 행) | 선다 |
+ * | 프로젝트 수정 | `UPDATE projects`(프로젝트 행) | 선다 |
+ * | 복원 · 프로젝트 삭제 | 자기의 `lockProjectRow`(프로젝트 행 `FOR UPDATE`) | 선다 |
+ * | 스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성 | `INSERT`의 FK 가 부모 행에 거는 `KEY SHARE` | 안 선다(`KEY SHARE`는 `NO KEY UPDATE`와 안 부딪힌다) |
+ * | 테마 고르기 · 코멘트 수정 | 자기의 `lockProjectShared`(프로젝트 행 `KEY SHARE` — 앞 판은 자기 행: 레이아웃 · 코멘트) | 안 선다 |
+ * | 코멘트 삭제 | 자기의 `lockProjectForBurial`(프로젝트 행 `KEY SHARE`) | 안 선다 |
+ *
+ * 프로젝트 삭제의 앞 잠금(`lockProjectRow` + `lockProjectPages`)은 복원 잠금의 부분이라 따로 세지 않는다 — 그 뒤에 서는
+ * 쓰기는 전부 위 «복원» 열에 있다.
+ *
+ * **고치기 전 값 — 56 판 중 17 이 빨강**(대조 28 은 전부 초록): 재확인이 없던 열둘(메뉴 생성 · 삭제 · 페이지 생성 · 가져오기 ·
+ * 프로젝트 수정 — 두 잠금 모두 · 테마 고르기 · 스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성 · 코멘트 수정)이 강등 **뒤에** 옛 권한으로
+ * 커밋했다(201 · 200 · 204 — 토큰은 멤버에서 빠진 뒤 원문까지 내줬다). 재확인이 있던 여섯(메뉴 · 페이지 자리 옮기기 · 페이지 ·
+ * 코멘트 삭제 · 복원 · 프로젝트 삭제)은 두 잠금 뒤에서도 이미 초록이었다 — 그 축은 위 `PROBES` 와 `menu-title-conflict.test.ts`
+ * 가 소유하고, 이 표는 «프로젝트 잠금 뒤에서도 선다»를 센다.
+ *
+ * **재확인 자리는 쓰기 뒤 · 같은 트랜잭션 안이다** — 기다림은 쓰는 문장에서 난다(FK 삽입 · `UPDATE projects`). 테마 고르기 ·
+ * 코멘트 수정만은 쓰기 앞에 프로젝트 행을 먼저 잡는다(`repos/projects.ts`의 `lockProjectShared`) — 아래 «잠금 순서» 절의
+ * E3 · E4 가 그 까닭을 잰다.
+ */
+type ProjectHolder = 'restore' | 'tree'
+
+/** 쥐는 자 — 잠금 SQL 을 베끼지 않고 프로덕션 함수를 부른다. */
+const PROJECT_HOLDERS: Record<ProjectHolder, { label: string; take: (trx: DbHandle, projectId: string) => Promise<void> }> = {
+  restore: { label: '복원 잠금', take: lockProjectForRestore },
+  tree: { label: '트리 잠금', take: lockProjectTree },
+}
+
+interface ProjectFx extends Fx {
+  /** 아무것도 안 매인 메뉴 — 지울 수 있다. 메뉴의 둘째 형제다. */
+  spareMenuId: string
+  /** 이 프로젝트의 테마 — 기본 레이아웃에 고를 수 있다. */
+  themeId: string
+  /** 계정은 있고 멤버는 아닌 사람 — 초대한다. */
+  inviteeEmail: string
+}
+
+async function projectFixture(ctx: RealApiContext, bobRole: BobRole): Promise<ProjectFx> {
+  const fx = await fixture(ctx, bobRole)
+  const spareMenu = await createMenuNode(ctx, fx.alice.cookie, fx.projectId, { title: '지울 메뉴' })
+  const theme = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/projects/${fx.projectId}/themes`,
+    cookies: fx.alice.cookie,
+    payload: { theme: { meta: { id: 'recheck-target', name: '고를 테마', version: '1.0.0' } } },
+  })
+  if (theme.statusCode !== 201) throw new Error(`테마 픽스처 실패: ${theme.body}`)
+  const invitee = await signup(ctx)
+  return {
+    ...fx,
+    spareMenuId: spareMenu.id,
+    themeId: (theme.json() as { id: string }).id,
+    inviteeEmail: invitee.user.email,
+  }
+}
+
+interface ProjectProbe {
+  /** 등록된 라우트의 키 — 아래 «분모» 절과 맞댄다. */
+  route: string
+  label: string
+  bobRole: BobRole
+  /** 강등의 모양. 가드가 `viewer`인 라우트(토큰 발급)는 한 단계 내릴 자리가 없어 멤버에서 뺀다 — 404 다. */
+  demotion: Demotion
+  /** 이 쓰기가 서는 잠금 — 재서 고른 것이다(위 표). 판마다 «잠금에 섰다»를 다시 단언한다. */
+  holders: readonly ProjectHolder[]
+  fire: (ctx: RealApiContext, fx: ProjectFx) => Fired
+  okStatus: number
+}
+
+const IMPORT_FILE = {
+  wireboundVersion: '1',
+  page: { title: '밥이 가져온 페이지' },
+  schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [] } },
+  comments: [],
+}
+
+const PROJECT_PROBES: ProjectProbe[] = [
+  {
+    route: 'POST /api/projects/:projectId/menu',
+    label: '메뉴 생성',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/menu`, { title: '밥의 메뉴' }),
+    okStatus: 201,
+  },
+  {
+    route: 'PATCH /api/projects/:projectId/menu/:nodeId',
+    label: '메뉴 자리 옮기기',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}/menu/${fx.spareMenuId}`, { sortOrder: 0 }),
+    okStatus: 200,
+  },
+  {
+    route: 'DELETE /api/projects/:projectId/menu/:nodeId',
+    label: '메뉴 삭제',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/menu/${fx.spareMenuId}`),
+    okStatus: 204,
+  },
+  {
+    route: 'POST /api/projects/:projectId/pages',
+    label: '페이지 생성',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/pages`, { menuNodeId: fx.menuId, title: '밥의 페이지' }),
+    okStatus: 201,
+  },
+  {
+    route: 'PATCH /api/projects/:projectId/pages/:pageId',
+    label: '페이지 자리 옮기기',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}/pages/${fx.sparePageId}`, { sortOrder: 0 }),
+    okStatus: 200,
+  },
+  {
+    route: 'DELETE /api/projects/:projectId/pages/:pageId',
+    label: '페이지 삭제',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/pages/${fx.sparePageId}`),
+    okStatus: 204,
+  },
+  {
+    route: 'POST /api/projects/:projectId/pages/import',
+    label: '페이지 가져오기',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/pages/import`, { menuNodeId: fx.menuId, file: IMPORT_FILE }),
+    okStatus: 201,
+  },
+  {
+    route: 'PATCH /api/projects/:projectId',
+    label: '프로젝트 수정',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}`, { name: '밥이 바꾼 이름' }),
+    okStatus: 200,
+  },
+  {
+    route: 'PUT /api/projects/:projectId/theme',
+    label: '프로젝트 테마 고르기',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'PUT', `/api/projects/${fx.projectId}/theme`, { themeId: fx.themeId }),
+    okStatus: 200,
+  },
+  {
+    route: 'POST /api/projects/:projectId/snapshots',
+    label: '스냅샷 생성',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/snapshots`, { tag: '밥의 스냅샷' }),
+    okStatus: 201,
+  },
+  {
+    route: 'POST /api/projects/:projectId/members',
+    label: '멤버 초대',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/members`, { email: fx.inviteeEmail, role: 'viewer' }),
+    okStatus: 201,
+  },
+  {
+    route: 'POST /api/projects/:projectId/themes',
+    label: '테마 생성',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/themes`, {
+        theme: { meta: { id: 'recheck-new', name: '밥의 테마', version: '1.0.0' } },
+      }),
+    okStatus: 201,
+  },
+  {
+    route: 'POST /api/projects/:projectId/presets',
+    label: '프리셋 저장',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/presets`, { name: '밥의 프리셋', schema: [] }),
+    okStatus: 201,
+  },
+  {
+    route: 'POST /api/projects/:projectId/tokens',
+    label: 'API 토큰 발급 (가드가 viewer — 멤버에서 뺀다)',
+    bobRole: 'editor',
+    demotion: 'member',
+    holders: ['restore'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/tokens`, { name: '밥의 토큰' }),
+    okStatus: 201,
+  },
+  {
+    route: 'PATCH /api/projects/:projectId/pages/:pageId/comments/:commentId',
+    label: '코멘트 수정',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`, {
+        body: '밥이 고친 말',
+      }),
+    okStatus: 200,
+  },
+  {
+    route: 'DELETE /api/projects/:projectId/pages/:pageId/comments/:commentId',
+    label: '코멘트 삭제',
+    bobRole: 'editor',
+    demotion: 'role',
+    holders: ['restore'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`),
+    okStatus: 200,
+  },
+  {
+    route: 'POST /api/projects/:projectId/snapshots/:snapshotId/restore',
+    label: '스냅샷 복원',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/snapshots/${fx.snapshotId}/restore`),
+    okStatus: 200,
+  },
+  {
+    route: 'DELETE /api/projects/:projectId',
+    label: '프로젝트 삭제',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}`),
+    okStatus: 204,
+  },
+]
+
+/** 프로젝트 잠금을 쥔 채 `heldWrite` — 그 사이 교착이 났는지도 센다(`pg_stat_database.deadlocks`). */
+async function runProjectHeld(ctx: RealApiContext, probe: ProjectProbe, holder: ProjectHolder, kind: Demotion | null) {
+  const fx = await projectFixture(ctx, probe.bobRole)
+  const before = await projectState(fx)
+  const deadlocksBefore = await deadlockCount()
+  const lock = queueLock((trx) => PROJECT_HOLDERS[holder].take(trx, fx.projectId))
+  const outcome = await heldWrite(ctx, fx, probe.label, probe.bobRole, lock, async () => probe.fire(ctx, fx), kind)
+  return { ...outcome, before, after: await projectState(fx), deadlocks: (await deadlockCount()) - deadlocksBefore }
+}
+
+describe('프로젝트 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로 판정한다 (이월 AA′)', () => {
+  for (const probe of PROJECT_PROBES) {
+    for (const holder of probe.holders) {
+      const held = PROJECT_HOLDERS[holder].label
+      describe(`${probe.route} — ${probe.label} · ${held}`, () => {
+        it(`대조 — 강등이 없으면 ${held}이 풀린 뒤 커밋되고 상태가 바뀐다`, async () => {
+          await withRealApi(async (ctx) => {
+            const outcome = await runProjectHeld(ctx, probe, holder, null)
+            expect(outcome.status, outcome.body).toBe(probe.okStatus)
+            expect(outcome.after).not.toEqual(outcome.before)
+            expect(outcome.deadlocks).toBe(0)
+          })
+        }, 60_000)
+
+        it(`${held}에 쥐인 채 강등되면 풀린 뒤 ${REFUSED[probe.demotion]} — 프로젝트의 행이 하나도 안 바뀐다 · 교착 0`, async () => {
+          await withRealApi(async (ctx) => {
+            const outcome = await runProjectHeld(ctx, probe, holder, probe.demotion)
+            expect(outcome.demotedWhileHeld, '강등이 쓰기의 잠금 대기에 막혔다').toBe(true)
+            expect(outcome.status, outcome.body).toBe(REFUSED[probe.demotion])
+            expect(outcome.after).toEqual(outcome.before)
+            expect(outcome.deadlocks).toBe(0)
+          })
+        }, 60_000)
+      })
+    }
+  }
 })
 
 /**
@@ -981,41 +1385,29 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
  * **WS 는 프레임 종류다** — `ws/protocol.ts`의 `MIN_ROLE_FOR_FRAME`의 키. 그 표는 `Record<ClientFrame['type'], …>`라
  * 프레임을 하나 더하면 거기서 컴파일이 막히고, 표에 더하면 이 절이 죽는다.
  *
- * 그 전부가 위 `PROBES`(페이지 잠금에 선다 → 재확인한다) 또는 아래 목록(안 선다) 중 **정확히 하나**에 있어야 한다.
- * 새 쓰기는 이 절을 먼저 죽이고, 사람이 어느 쪽인지 판정한다.
+ * 그 전부가 위 두 표 — `PROBES`(페이지 잠금에 선다) · `PROJECT_PROBES`(프로젝트 잠금에 선다) — 중 하나 이상, 또는 아래 목록
+ * (어느 잠금에도 안 선다) 중 **정확히 한쪽**에 있어야 한다. 새 쓰기는 이 절을 먼저 죽이고, 사람이 어느 쪽인지 판정한다.
  *
- * **아래 목록의 판정은 잰 값이다**(2026-09-22 — 쓰기 라우트 전부를 `lockPageForEdit` 아래에서 쏘아 700ms 창). WS 셋은
- * 코드로 판정했다 — 핸들러가 동기라 DB 잠금을 기다릴 자리가 없다. **이 파일은 그것을 다시 재지 않는다** — 목록에
- * 넣는 사람이 잰다. 페이지 잠금에 안 서도 **다른 잠금**(복원의 `lockProjectForRestore` · 자기 행의 행 잠금)에는 설 수
- * 있다 — 그 판의 틈은 이월로 적었다(장부 AA).
+ * **아래 목록의 판정은 잰 값이다** — 쓰기 라우트 전부를 페이지 행(`lockPageForEdit` · 2026-09-22)과 복원 잠금
+ * (`lockProjectForRestore`) · 트리 잠금(`lockProjectTree`) · 프로젝트 삭제의 앞 잠금(`lockProjectRow` + `lockProjectPages`)
+ * 아래에서 쏘아 700ms 창(2026-09-24). WS 셋은 코드로 판정했다 — 핸들러가 동기라 DB 잠금을 기다릴 자리가 없다. **이 파일은
+ * 목록을 다시 재지 않는다** — 목록에 넣는 사람이 잰다.
  *
- * **못 재는 것**: 플러그인의 `addHook`으로 단 훅이 페이지 잠금에 서는 쓰기 — 라우트가 아니라 분모에 안 든다(오늘
- * 없다 · `pre-guard-hook-census.test.ts`의 «못 재는 것»과 같은 부류). 라우트 **밖**의 쓰기 경로(예: 서버가 스스로 도는
- * 작업)도 같다.
+ * **못 재는 것**: 플러그인의 `addHook`으로 단 훅이 잠금에 서는 쓰기 — 라우트가 아니라 분모에 안 든다(오늘 없다 ·
+ * `pre-guard-hook-census.test.ts`의 «못 재는 것»과 같은 부류). 라우트 **밖**의 쓰기 경로(예: 서버가 스스로 도는 작업)도
+ * 같다. 그리고 **이 두 부류가 아닌 줄** — 아래 목록의 멤버 수정 · 삭제는 프로젝트 잠금에는 안 서지만 다른 owner 의 역할
+ * 변경(`repos/members.ts`의 `lockOwnerIds` — owner 행 `FOR UPDATE`)에는 선다. 그 판은 이 파일이 안 잰다(장부 이월).
  */
-const NOT_PAGE_LOCKED: Record<string, string> = {
+const NOT_LOCKED: Record<string, string> = {
   'POST /api/auth/login': '프로젝트 밖 — 세션 행만 쓴다',
   'POST /api/auth/logout': '프로젝트 밖 — 세션 행만 지운다',
-  'POST /api/projects': '새 프로젝트 — 남이 쥘 수 있는 페이지 행이 아직 없다',
-  'POST /api/projects/:projectId/menu': '메뉴 행만 쓴다',
-  'PATCH /api/projects/:projectId/menu/:nodeId': '메뉴 행만 쓴다',
-  'DELETE /api/projects/:projectId/menu/:nodeId': '페이지가 매인 메뉴는 RESTRICT 로 실패한다 — 쓰는 판은 페이지 행을 안 건드린다',
-  'POST /api/projects/:projectId/pages': '새 페이지 행을 넣는다 — 있는 페이지 행을 안 잡는다',
-  'POST /api/projects/:projectId/pages/import': '새 페이지를 만들고 **그 새 행**만 잠근다 — 남이 쥘 수 없는 행이다',
-  'PATCH /api/projects/:projectId/pages/:pageId/comments/:commentId': '코멘트 행만 고친다 — FK 열을 안 바꾸는 UPDATE 는 페이지 행을 안 잡는다',
-  'PUT /api/projects/:projectId/theme': '레이아웃 행만 쓴다',
-  'POST /api/projects/:projectId/snapshots': '페이지를 **읽기만** 한다 — `FOR UPDATE`는 읽기를 막지 않는다',
-  'PATCH /api/projects/:projectId': '프로젝트 행만 쓴다',
-  'POST /api/projects/:projectId/members': '멤버 행',
-  'PATCH /api/projects/:projectId/members/:userId': '멤버 행',
-  'DELETE /api/projects/:projectId/members/:userId': '멤버 행',
-  'POST /api/projects/:projectId/themes': '테마 행',
-  'PUT /api/projects/:projectId/themes/:themeId': '테마 행',
-  'DELETE /api/projects/:projectId/themes/:themeId': '테마 행',
-  'POST /api/projects/:projectId/presets': '프리셋 행',
-  'DELETE /api/projects/:projectId/presets/:presetId': '프리셋 행',
-  'POST /api/projects/:projectId/tokens': '토큰 행',
-  'DELETE /api/projects/:projectId/tokens/:tokenId': '토큰 행',
+  'POST /api/projects': '새 프로젝트 — 남이 쥘 수 있는 행이 아직 없다',
+  'PATCH /api/projects/:projectId/members/:userId': '멤버 행 — FK 열을 안 바꾸는 UPDATE 는 프로젝트 행을 안 잡는다',
+  'DELETE /api/projects/:projectId/members/:userId': '멤버 행 — 자식 행 삭제는 부모 행을 안 잡는다',
+  'PUT /api/projects/:projectId/themes/:themeId': '테마 행 — 복원은 테마 행을 안 잠근다',
+  'DELETE /api/projects/:projectId/themes/:themeId': '테마 행 — 자식 행 삭제는 부모 행을 안 잡는다',
+  'DELETE /api/projects/:projectId/presets/:presetId': '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡는다',
+  'DELETE /api/projects/:projectId/tokens/:tokenId': '토큰 행 — 자식 행 삭제는 부모 행을 안 잡는다',
   'WS ping': '아무것도 안 쓴다',
   'WS lock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
   'WS unlock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
@@ -1038,9 +1430,9 @@ function frameKinds(): string[] {
   return Object.keys(MIN_ROLE_FOR_FRAME).map((type) => `WS ${type}`)
 }
 
-describe('분모 — 등록된 쓰기가 두 목록 중 정확히 하나에 있다', () => {
-  const locked = new Set(PROBES.map((probe) => probe.route))
-  const free = new Set(Object.keys(NOT_PAGE_LOCKED))
+describe('분모 — 등록된 쓰기가 «잠금에 선다»(두 표) · «안 선다»(목록) 중 정확히 한쪽에 있다', () => {
+  const locked = new Set([...PROBES, ...PROJECT_PROBES].map((probe) => probe.route))
+  const free = new Set(Object.keys(NOT_LOCKED))
 
   it('분모를 실제로 만든다 — 이음매가 라우트와 프레임을 준다', async () => {
     // 이음매가 어긋나면 빈 집합에서 아래가 조용히 통과한다.

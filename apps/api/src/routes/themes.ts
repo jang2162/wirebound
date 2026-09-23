@@ -78,11 +78,13 @@ import {
   type ThemeIssue,
   type ThemePatch,
 } from '@wirebound/themes'
-import { projectGuard } from '../auth/roles'
+import { projectGuard, recheckProjectRole } from '../auth/roles'
+import { withTransaction } from '../db/tx'
 import { badRequest, conflict, forbidden, notFound, validationFailed } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import { withWarnings } from '../http/warnings'
 import { findDefaultLayout, updateLayoutTheme } from '../repos/layouts'
+import { lockProjectShared } from '../repos/projects'
 // **테마 사슬은 `services/project-theme.ts` 하나다**(P8-4 T2). 소비자가 셋이 되어
 // (캔버스·고르개·내보내기) 라우트 안의 비공개 함수로 둘 수 없게 됐다 — 두 벌이면
 // 캔버스가 보는 테마와 번들이 싣는 테마가 조용히 갈린다.
@@ -328,7 +330,17 @@ export function themeRoutes() {
       try {
         // 위 확인과 이 UPDATE 사이에 테마가 지워지는 경합. FK(0007)가 마지막 방벽이고
         // `updateTheme`의 같은 자리와 같은 취급이다 — 500이 아니라 404다.
-        if (!(await updateLayoutTheme(app.db, layout.id, themeId))) {
+        const updated = await withTransaction(app.db, async (trx) => {
+          // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`) — 아래 재확인이 멤버 행을 잡으므로, 레이아웃
+          // 행부터 잡으면 프로젝트 삭제의 CASCADE 와 고리가 된다(그 함수의 머리말에 잰 값).
+          await lockProjectShared(trx, projectId)
+          const chosen = await updateLayoutTheme(trx, layout.id, themeId)
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
+          // 있다 — 그 대기 뒤의 역할로 판정한다.
+          if (chosen) await recheckProjectRole(trx, request)
+          return chosen
+        })
+        if (!updated) {
           throw conflict('이 프로젝트에는 기본 레이아웃이 없어 테마를 고를 수 없습니다')
         }
       } catch (error) {
@@ -365,7 +377,13 @@ export function themeRoutes() {
 
       let record
       try {
-        record = await insertTheme(app.db, projectId, theme)
+        record = await withTransaction(app.db, async (trx) => {
+          const inserted = await insertTheme(trx, projectId, theme)
+          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는
+          // `KEY SHARE`가 복원 · 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
+          await recheckProjectRole(trx, request)
+          return inserted
+        })
       } catch (error) {
         if (error instanceof ThemeNulByteError) throw badRequest(error.message)
         if (isUniqueViolation(error)) throw conflict('이미 사용 중인 테마 id입니다')
