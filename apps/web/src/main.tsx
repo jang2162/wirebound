@@ -7,6 +7,7 @@ import { createHttpClient } from './api/http-client'
 import { RealtimeProvider, createConnectionIdHolder } from './realtime/context'
 import { createEditChannel } from './realtime/edit-channel'
 import { createLockChannel } from './realtime/lock-channel'
+import { DraftStoreProvider, openDraftStore } from './panels/draft-store'
 import { TabChannelProvider, openTabChannel } from './session/tab-channel'
 // 셸 CSS는 앱에서만 필요하다. 화면 테스트는 `App`을 직접 렌더하므로 이 파일을 지나지
 // 않고, 그래서 vitest가 CSS를 처리할 일이 없다.
@@ -37,6 +38,15 @@ const lockChannel = createLockChannel()
  */
 const tabChannel = openTabChannel()
 
+/**
+ * 초안의 사본(이월 X — `panels/draft-store.tsx`). **여는 자리는 여기 하나다** — 화면 테스트는 세우지 않거나 가짜를
+ * 끼운다. 저장소를 **꺼내는 것 자체가 던질 수 있어**(비공개 창 · 사이트 데이터 차단) 값이 아니라 함수로 넘긴다.
+ */
+const draftStore = openDraftStore(
+  () => globalThis.sessionStorage,
+  () => globalThis.localStorage,
+)
+
 // HTTP 구현을 고르는 자리는 여기 하나다. 아래 화면들은 `useApi()`로 인터페이스만 본다.
 // **실시간을 켜는 자리도 여기 하나다** — 화면 테스트는 `RealtimeProvider` 없이 트리를
 // 세우므로 소켓을 열지 않는다.
@@ -45,9 +55,11 @@ createRoot(root).render(
     <ApiProvider client={createHttpClient(globalThis.fetch, connectionIds.get)}>
       <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel, lockChannel }}>
         <TabChannelProvider channel={tabChannel}>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
+          <DraftStoreProvider store={draftStore}>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </DraftStoreProvider>
         </TabChannelProvider>
       </RealtimeProvider>
     </ApiProvider>

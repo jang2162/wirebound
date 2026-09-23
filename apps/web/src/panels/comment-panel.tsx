@@ -121,10 +121,10 @@
  *    쥐고 있으면 다시 보낸 것이 같은 행 잠금 뒤에 줄을 서서 재생을 받는다. 그동안 상자는 잠겨 있어
  *    고쳐 다시 달 수도, 떠났다 와서 새로 칠 수도 없다. 시간 안의 **모르는 실패**도 같은 판정으로 간다(무엇이
  *    모르는 실패인지는 `knownRejection`의 표가 소유한다 — 2026-09-22). **남는 입구는 초안과 키가 함께
- *    버려지는 길이다** — 새로고침·탭 닫기만이 아니다: 로그아웃 · 세션 만료(401)도 셸째 버린다. 다시 친 같은
- *    글이 새 키가 되어 두 행이 선다(Chrome). **입구의 목록과 값은 `write-ledger.tsx`의 «이것이 막지 못하는
- *    것»이 소유한다** — 여기 옮겨 적지 않는다(앞 판은 «남는 입구는 새로고침뿐»이라 적어 그 목록과 갈렸다 —
- *    좁은 반증 3차).
+ *    버려지는 길이다** — 새로고침 · 세션 만료는 2026-09-23 에 닫았고(초안과 키를 탭의 저장소에 비춘다 —
+ *    `panel-drafts.tsx` 머리말 4), 명시적 로그아웃은 일부러 지운다. **입구의 목록과 값은 `write-ledger.tsx`의
+ *    «이것이 막지 못하는 것»이 소유한다** — 여기 옮겨 적지 않는다(앞 판은 «남는 입구는 새로고침뿐»이라 적어 그
+ *    목록과 갈렸다 — 좁은 반증 3차).
  * 2. **타이밍 창.** 가 → 나 → 가로 돌아와 건 목록 조회가 **게시가 커밋되기 전에 읽고, 게시 뒤의
  *    다시 받기보다 늦게** 오면, 다시 받기가 세운 목록(방금 단 말이 있다)을 덮는다 — 같은 페이지라
  *    조회 이펙트의 `alive`가 참이다. 방금 단 말이 목록에서 사라지고 잠금은 이미 풀려 있다.
@@ -320,7 +320,14 @@ const MARKERS_DIVERGED = slot<boolean>('comments/diverged', false)
  * 새 코멘트 초안 — **노드마다**(위 머리말 «새 코멘트 초안은 노드마다 …»). 키는 노드 id이고 없으면
  * 빈 칸이다. **한 칸으로 들면 다른 노드를 고르는 순간 쓰던 글의 대상이 그 노드로 바뀐다.**
  */
-const DRAFTS = slot<ReadonlyMap<string, string>>('comments/drafts', new Map())
+const DRAFTS = slot<ReadonlyMap<string, string>>('comments/drafts', new Map(), {
+  // **저장소에 비춘다**(`panel-drafts.tsx`의 머리말 4) — 노드 id → 글의 짝 목록으로.
+  save: (drafts) => (drafts.size === 0 ? undefined : [...drafts]),
+  load: (raw) => {
+    const pairs = pairsOf(raw, (text): text is string => typeof text === 'string' && text !== '')
+    return pairs === undefined ? undefined : new Map(pairs)
+  },
+})
 /**
  * 새 코멘트 게시의 **멱등 키** — 노드마다, **그 글에** 매인다(`apps/api/README.md`의 «멱등 키»).
  *
@@ -335,22 +342,58 @@ const DRAFTS = slot<ReadonlyMap<string, string>>('comments/drafts', new Map())
  * | 실패·거절 뒤 **같은 글**을 다시 보낸다 | **같은 키** |
  * | 글을 고쳐 보낸다 | **새 키** — 고친 글은 다른 게시다. 같은 키로 보내면 서버가 409 로 막는다 |
  * | 달렸다(응답 · 다시 보낸 것의 응답) | **버린다** — 같은 말을 일부러 또 다는 것은 새 게시다 |
- * | 페이지를 떠난다 · 에디터를 떠난다 | 초안과 **함께** 버려진다(방문의 칸이다 — `panel-drafts.tsx`의 머리말 1) |
+ * | 다른 페이지를 연다 | 초안과 **함께** 버려진다(방문의 칸이다 — `panel-drafts.tsx`의 머리말 1) |
+ * | 새로고침 · 세션 만료 · 에디터를 떠났다 **같은 페이지로** | 초안과 **함께** 산다(탭의 저장소 — `panel-drafts.tsx`의 머리말 4) |
+ * | 명시적 로그아웃 | 초안과 **함께** 지워진다(`draft-store.tsx`) |
  *
  * **초안 쪽에 든다 — 장부가 아니다.** 키의 수명은 그 초안의 수명이다. 장부는 에디터를 떠나도
  * 살아, 거기 들면 초안이 버려진 뒤에도 키가 남는다 — 돌아와 같은 글을 새로 쳐 달면 앞 게시로
- * 합쳐진다. 일부러 같은 말을 다시 다는 사람의 게시가 사라지는 길이다. 대가도 적어 둔다: 떠났다
- * 오는 사이 늦게 커밋된 게시는 돌아와 새로 친 같은 글과 **합쳐지지 않는다**(새 키다). 시간 초과와 모르는
+ * 합쳐진다. 일부러 같은 말을 다시 다는 사람의 게시가 사라지는 길이다. 대가도 적어 둔다: **다른 페이지를
+ * 열었다** 오는 사이 늦게 커밋된 게시는 돌아와 새로 친 같은 글과 **합쳐지지 않는다**(새 키다). 시간 초과와 모르는
  * 실패의 판에서는 판정(같은 키로 다시 보내기)이 끝날 때까지 상자가 잠겨 있어 이 길이 안 선다 — 확정 실패
  * (`knownRejection`) 뒤라면 앞 게시가 안 달린 것이 확정이라 새 키여도 한 행이다(칸마다의 까닭과 예외는
- * `knownRejection`의 주석이 가리킨다). 서는 것은 **초안과 키가 셸째 버려지는 입구** 뒤다 — 새로고침만이 아니다
- * (로그아웃 · 세션 만료. 목록은 `write-ledger.tsx`의 «이것이 막지 못하는 것»).
+ * `knownRejection`의 주석이 가리킨다). 서는 것은 **초안과 키가 함께 버려지는 입구** 뒤다(명시적 로그아웃 ·
+ * 다른 페이지. 목록은 `write-ledger.tsx`의 «이것이 막지 못하는 것»).
  */
-const POST_KEYS = slot<ReadonlyMap<string, { body: string; key: string }>>('comments/post-keys', new Map())
-/** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. */
-const EDITING_ID = slot<string | null>('comments/editing-id', null)
-/** 고치던 코멘트의 초안. */
-const EDIT_DRAFT = slot<string>('comments/edit-draft', '')
+const POST_KEYS = slot<ReadonlyMap<string, { body: string; key: string }>>('comments/post-keys', new Map(), {
+  // **키도 초안과 함께 저장소에 비춘다**(이월 X) — 셸이 죽었다 와도 같은 글이면 같은 키다.
+  save: (keys) => (keys.size === 0 ? undefined : [...keys]),
+  load: (raw) => {
+    const pairs = pairsOf(
+      raw,
+      (held): held is { body: string; key: string } =>
+        typeof held === 'object' &&
+        held !== null &&
+        typeof (held as { body?: unknown }).body === 'string' &&
+        typeof (held as { key?: unknown }).key === 'string',
+    )
+    return pairs === undefined ? undefined : new Map(pairs.map(([nodeId, held]) => [nodeId, { body: held.body, key: held.key }]))
+  },
+})
+/** 지금 고치고 있는 코멘트의 id. `null`이면 아무것도 안 고치는 중이다. 저장소에 비춘다(위 `DRAFTS`). */
+const EDITING_ID = slot<string | null>('comments/editing-id', null, {
+  save: (id) => id ?? undefined,
+  load: (raw) => (typeof raw === 'string' ? raw : undefined),
+})
+/** 고치던 코멘트의 초안. 저장소에 비춘다(위 `DRAFTS`). */
+const EDIT_DRAFT = slot<string>('comments/edit-draft', '', {
+  save: (text) => (text === '' ? undefined : text),
+  load: (raw) => (typeof raw === 'string' ? raw : undefined),
+})
+
+/**
+ * 저장소에서 읽은 `[노드 id, 값]` 짝 목록 — **모양이 틀리면 칸째 버린다**(`undefined`). 짝 하나만 틀려도
+ * 버리는 것은, 반만 되살린 초안이 온전해 보이면 나머지를 잃은 것을 아무도 모르기 때문이다.
+ */
+function pairsOf<V>(raw: unknown, valid: (value: unknown) => value is V): [string, V][] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const pairs: [string, V][] = []
+  for (const pair of raw) {
+    if (!Array.isArray(pair) || pair.length !== 2 || typeof pair[0] !== 'string' || !valid(pair[1])) return undefined
+    pairs.push([pair[0], pair[1]])
+  }
+  return pairs
+}
 
 /** `drafts`에서 그 노드의 초안을 `text`로 바꾼 새 표. 빈 글이면 키를 지운다(없는 것과 같다). */
 function withDraft(drafts: ReadonlyMap<string, string>, nodeId: string, text: string): ReadonlyMap<string, string> {

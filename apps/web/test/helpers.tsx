@@ -15,6 +15,7 @@ import { ApiProvider } from '../src/api/context'
 import { RealtimeProvider, type RealtimeSetup } from '../src/realtime/context'
 import type { SessionUser } from '../src/api/types'
 import { TabChannelProvider, type SessionNews, type TabChannel } from '../src/session/tab-channel'
+import { DraftStoreProvider, type DraftStore } from '../src/panels/draft-store'
 
 /**
  * 스텁되지 않은 메서드 자리에 놓는 함수. **`undefined`를 돌려주지 않고 던진다.**
@@ -185,6 +186,12 @@ export interface RenderOptions {
    * 사이로 흐른다). 탭 사이를 재는 테스트만 `tabHub()`의 것을 준다.
    */
   tabChannel?: TabChannel
+  /**
+   * 초안의 사본(`src/panels/draft-store.tsx`). **생략하면 `DraftStoreProvider`를 안 세운다** — 초안이 메모리에만
+   * 사는 화면이다(그 파일 앞과 같다). jsdom 의 `sessionStorage`는 파일 안의 케이스끼리 이어지므로 기본으로 두면
+   * 앞 케이스의 초안이 뒤 케이스에 되살아난다. 사본을 재는 테스트만 준다(`test/panels/draft-store.test.tsx`).
+   */
+  draftStore?: DraftStore
 }
 
 /**
@@ -240,8 +247,10 @@ export function renderWithProviders(ui: ReactElement, options: RenderOptions = {
     </MemoryRouter>
   )
 
+  const stored =
+    options.draftStore === undefined ? routed : <DraftStoreProvider store={options.draftStore}>{routed}</DraftStoreProvider>
   const tabbed =
-    options.tabChannel === undefined ? routed : <TabChannelProvider channel={options.tabChannel}>{routed}</TabChannelProvider>
+    options.tabChannel === undefined ? stored : <TabChannelProvider channel={options.tabChannel}>{stored}</TabChannelProvider>
 
   render(
     <ApiProvider client={options.client ?? fakeApi()}>

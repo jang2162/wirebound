@@ -102,6 +102,42 @@
  * **잠금이 옆 페이지를 잠그지는 않는다** — 잠금은 가에 매였으므로 나에서는 바로 쓸 수 있다
  * (2번의 케이스가 그것도 본다).
  *
+ * ## 4. 저장소에 비춘다 — 셸이 죽어도 초안과 키가 산다 (이월 X, 2026-09-23)
+ *
+ * 이 provider 는 문서의 메모리에 산다. 그래서 새로고침 · 탭 닫기 · 세션 만료(401)에 초안과 코멘트의 멱등 키가
+ * 함께 죽었고, 키가 죽어 서버에 늦게 커밋된 앞 게시와 다시 단 같은 글이 두 행이 됐다(`write-ledger.tsx`
+ * «이것이 막지 못하는 것»). 이제 **칸이 `keeper`를 가지면**(`slot`의 셋째 인자) 방문을 탭의 저장소에 비춘다 —
+ * 무엇에 · 무엇을 · 언제 지우는지는 `draft-store.tsx`가 소유한다. 여기서 정하는 것은 셋이다.
+ *
+ * - **한 방향이다.** 진실은 여전히 이 provider 의 칸이다. **쓰는 자리는 레이아웃 이펙트 하나**(칸이 바뀔 때마다
+ *   방문을 옮겨 적는다), **읽는 자리는 방문을 새로 세우는 `fresh` 하나**다. 방문이 선 뒤로 칸은 저장소를 보지 않는다.
+ * - **사람으로 가른다.** 방문은 선 때의 사람(`Held.writer`)의 칸에만 읽고 쓴다. 이 provider 가 떠 있는 동안
+ *   사람이 바뀌는 길은 없다(문지기가 화면을 내린다) — 그래서 사람이 바뀌는 것을 따로 보지 않는다.
+ * - **F1 을 뒤집지 않는다 — 아래.**
+ *
+ * ### F1 과 저장소 — «페이지»는 **연** 페이지다
+ *
+ * F1 은 «페이지가 바뀌면 버린다»다 — 초안의 뜻의 절반이 그 페이지라서다(`page-description.tsx`). 저장소는 **한
+ * 사람에 방문 하나**, 이 탭이 마지막으로 **연** 페이지의 것만 든다. 규칙은 하나다:
+ *
+ * > **방문이 새로 설 때, 그 사람이 이 탭에서 마지막으로 연 페이지가 이 페이지면 이어 받는다. 다른 페이지를 열면
+ * > 그 방문이 저장소를 덮는다(초안이 없으면 지운다).** 페이지를 안 연 자리(프로젝트 목록 · 로그인 화면 · 테마
+ * > 편집기 · 페이지 없는 에디터 `/projects/:id`)는 페이지를 바꾸지 않는다 — 저장소를 읽지도 쓰지도 않는다.
+ *
+ * | 길 | 초안 | Chrome |
+ * |---|---|---|
+ * | 가 → 나 → 가(앱 안) | 버림 — 나를 연 순간 저장소가 나의 방문이 된다(F1 그대로) | 버림 · 칸 없음 |
+ * | 가 → 나 → 나에서 새로고침 → 가 | 버림 | 같음 |
+ * | 가 → 프로젝트 목록 → 다른 페이지 → 가 | 버림 | 같음 |
+ * | 가 → 새로고침 · 닫은 탭 다시 열기 | 이어 받음 | 이어 받음 |
+ * | 가 → 프로젝트 목록(또는 로그인 화면 · 테마 편집기) → 페이지 없는 에디터 → 가 | 이어 받음 — 사이에 연 페이지가 없다 | 이어 받음 |
+ *
+ * **앞 판과 갈리는 줄은 끝줄이다.** 앞 판은 그 길에서 초안을 잃었는데 **F1 때문이 아니라 메모리에 살아서였다** —
+ * provider 가 내려가는 것은 새로고침과 같은 입구다. 목록을 지나는 이 길이 **세션 만료 뒤 같은 사람이 돌아오는 길**
+ * 이기도 하다(로그인 화면 → 목록 → 프로젝트 → 페이지 — 로그인 뒤 원래 주소로 돌려보내는 길이 이 앱에 없다). 끝줄을
+ * «버림»으로 두면 세션 만료를 살린다는 판정이 설 자리가 없다. 저장소가 없으면(아래 «이것이 막지 못하는 것») 앞
+ * 판 그대로다.
+ *
  * ## «대상» 가드는 따로 없다
  *
  * 저장이 도는 동안 대상은 입력을 꺼서 못 바꾸게 한다(설명의 `SAVING`, 코멘트의 `BUSY`) —
@@ -113,14 +149,17 @@
  * ## 이것이 막지 못하는 것
  *
  * - **남의 저장을 조용히 덮는다**(리뷰 N3) — `panels/page-description.tsx`의 머리말이 갖는다.
- * - **새로고침·탭 닫기** — provider 째 내려가는 길 가운데 **장부까지 사라지는** 둘이다(문서가
- *   새로 뜬다). 잠금이 사라지고 브라우저는 나가 있던 요청을 끊지만, **서버가 이미 받았으면 끊겨도
- *   커밋한다.** 그 값과 남는 틈은 `write-ledger.tsx`의 머리말이 갖는다. (프로젝트 목록 · 다른
- *   프로젝트 · 테마 편집기는 **이제 막는다** — 위 3의 «잠금은 이 provider 보다 오래 산다». 9차 판에는
- *   그 셋과 로그아웃도 여기 있었다.)
- * - **로그아웃·세션 만료** — 잠금이 **일부러** 넘지 않는다. 세션이 끝나면 장부가 그 세션의 쓰기를
+ * - **새로고침·탭 닫기의 잠금** — provider 째 내려가는 길 가운데 **장부까지 사라지는** 둘이다(문서가
+ *   새로 뜬다). **초안과 키는 이제 넘는다**(위 4) — 넘지 않는 것은 잠금과 «모름»이다. 브라우저는 나가 있던
+ *   요청을 끊지만 **서버가 이미 받았으면 끊겨도 커밋한다.** 그 값과 남는 틈은 `write-ledger.tsx`의 머리말이
+ *   갖는다. (프로젝트 목록 · 다른 프로젝트 · 테마 편집기는 잠금도 막는다 — 위 3의 «잠금은 이 provider 보다
+ *   오래 산다».)
+ * - **저장소를 못 쓰는 브라우저**(사이트 데이터 차단 · 용량 초과) — 위 4 가 없던 때와 같다. 초안은 메모리에만
+ *   살고, 목록 왕복·새로고침·세션 만료에 사라진다(`draft-store.tsx`의 «못 쓰면 오늘처럼»).
+ * - **로그아웃·세션 만료의 잠금** — 잠금이 **일부러** 넘지 않는다. 세션이 끝나면 장부가 그 세션의 쓰기를
  *   끊고 비운다 — 앞 사람의 쓰기로 다음 사람을 잠그지 않는다(`write-ledger.tsx`의 «세션을 넘지 않는다»).
- *   대가로 서버에 이미 닿은 앞 세션의 쓰기가 새 세션의 쓰기 뒤에 늦게 커밋될 수 있다(그 절의 끝).
+ *   대가로 서버에 이미 닿은 앞 세션의 쓰기가 새 세션의 쓰기 뒤에 늦게 커밋될 수 있다(그 절의 끝). **초안은
+ *   세션 만료를 넘고 명시적 로그아웃에는 지워진다**(위 4 · `draft-store.tsx`).
  * - **응답이 늦는 쓰기의 판정 뒤 늦은 커밋** — 쓰기에 시간 제한이 생겼다(`write-ledger.tsx`의
  *   `WRITE_DEADLINE_MS`). 넘으면 끊고 서버에서 다시 읽어 판정하는데, 서버가 이미 받은 요청이면 판정
  *   **뒤에** 커밋될 수 있다. 9차 판에서는 시간 제한이 없어 잠금이 페이지·탭·모드 왕복에도 남고
@@ -152,7 +191,8 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
-import { useSessionEpoch } from '../session/session-context'
+import { useSessionEpoch, useSessionUser } from '../session/session-context'
+import { useDraftStore, type DraftStore } from './draft-store'
 import {
   useWriteLedger,
   writeKey,
@@ -174,10 +214,31 @@ import {
 export interface Slot<T> {
   readonly name: string
   readonly initial: T
+  /** 있으면 이 칸은 저장소에 비춘다(머리말 4). */
+  readonly keeper?: Keeper<T>
 }
 
-export function slot<T>(name: string, initial: T): Slot<T> {
-  return { name, initial }
+/**
+ * 칸을 저장소에 비추는 법 — **칸이 스스로 말한다.** `save`는 JSON 으로 옮길 값을 내고, 비출 것이 없으면
+ * (`initial`과 같은 뜻이면) `undefined`다. `load`는 읽은 값을 **믿지 않고** 모양을 보고, 틀리면 `undefined`다
+ * — 그 칸만 버린다(`draft-store.tsx`의 «못 쓰면 오늘처럼»).
+ */
+export interface Keeper<T> {
+  save(value: T): unknown
+  load(raw: unknown): T | undefined
+}
+
+/** 저장소에 비추는 칸 — 이름으로 찾는다. 읽은 사본의 칸 이름이 여기 없으면 버린다. */
+const KEPT = new Map<string, Slot<unknown>>()
+
+export function slot<T>(name: string, initial: T, keeper?: Keeper<T>): Slot<T> {
+  const declared: Slot<T> = keeper === undefined ? { name, initial } : { name, initial, keeper }
+  if (keeper !== undefined) {
+    // 이름이 겹치면 한 사본이 두 칸으로 되살아난다 — 요란하게 깨진다.
+    if (KEPT.has(name)) throw new Error(`저장소에 비추는 칸의 이름이 겹친다: ${name}`)
+    KEPT.set(name, declared as Slot<unknown>)
+  }
+  return declared
 }
 
 /**
@@ -197,6 +258,11 @@ export function lockSlot(name: string): LockSlot {
 export type SlotUpdate<T> = T | ((prev: T) => T)
 
 interface Held {
+  /**
+   * 이 칸들이 누구의 것인가 — 저장소의 칸을 사람으로 가른다(`draft-store.tsx`). `null`은 «아직 누구인지
+   * 모른다»이고 그때는 저장소를 읽지도 쓰지도 않는다.
+   */
+  writer: string | null
   /** 이 칸들이 가리키는 프로젝트와 페이지. */
   projectId: string
   pageId: string | undefined
@@ -213,6 +279,38 @@ const PanelDraftsContext = createContext<Box | null>(null)
 
 function read<T>(held: Held, key: Slot<T>): T {
   return (held.values.has(key) ? held.values.get(key) : key.initial) as T
+}
+
+/**
+ * **방문을 새로 세운다 — 저장소를 읽는 자리는 여기 하나다**(머리말 4). 그 사람이 이 탭에서
+ * 마지막으로 연 페이지가 이 페이지면 비춰 둔 초안을 이어 받고, 아니면 빈 방문이다. 페이지를 안 연 자리
+ * (`pageId`가 없다)는 읽지 않는다.
+ */
+function fresh(
+  store: DraftStore | null,
+  writer: string | null,
+  projectId: string,
+  pageId: string | undefined,
+): Held {
+  const values = new Map<Slot<unknown>, unknown>()
+  if (store !== null && writer !== null && pageId !== undefined) {
+    for (const [name, raw] of Object.entries(store.recall(writer, projectId, pageId))) {
+      const kept = KEPT.get(name)
+      const value = kept?.keeper?.load(raw)
+      if (kept !== undefined && value !== undefined) values.set(kept, value)
+    }
+  }
+  return { writer, projectId, pageId, values }
+}
+
+/** 방문에서 저장소에 비출 칸들 — 비출 것이 없는 칸은 뺀다. */
+function kept(held: Held): Record<string, unknown> {
+  const slots: Record<string, unknown> = {}
+  for (const [key, value] of held.values) {
+    const saved = key.keeper?.save(value)
+    if (saved !== undefined) slots[key.name] = saved
+  }
+  return slots
 }
 
 /** `update`를 앞 값에 적용한다(`useState`의 그것과 같다). */
@@ -232,14 +330,33 @@ export function PanelDraftsProvider(props: {
 }): ReactElement {
   const { projectId, pageId } = props
   const ledger = useWriteLedger()
-  const [held, setHeld] = useState<Held>(() => ({ projectId, pageId, values: new Map() }))
+  const store = useDraftStore()
+  // 이 칸들을 쓰는 사람 — 저장소의 칸을 가른다(`Held.writer`).
+  const writer = useSessionUser()?.id ?? null
+  // **이 provider 가 선 때의 저장소 세대** — 그 뒤에 명시적 로그아웃이 돌았으면 이 provider 는 저장소에 못 쓴다
+  // (`draft-store.tsx`의 «언제 지우는가»).
+  const [since] = useState(() => store?.generation ?? 0)
+  const [held, setHeld] = useState<Held>(() => fresh(store, writer, projectId, pageId))
 
   // **1. 페이지가 바뀌면 방문의 칸을 전부 버린다** — 렌더 중에(위 머리말). React가 이
   // 컴포넌트를 곧바로 다시 그리므로 자식은 앞 페이지의 칸을 한 번도 보지 않는다. 잠금은
-  // 여기 없으므로 건드릴 것이 없다(머리말 3 — 장부에 든다).
+  // 여기 없으므로 건드릴 것이 없다(머리말 3 — 장부에 든다). 새 방문은 저장소에서 이어 받을 것이 있으면
+  // 받는다(`fresh` — 머리말 4). **사람이 바뀌는 것은 여기 안 본다** — 이 provider 가 떠 있는 동안 사람이 바뀌는
+  // 길이 없다(같은 탭은 로그인 화면을 지나고, 다른 탭의 소식은 문지기가 화면을 내린다 — `routes/require-auth.tsx`).
+  // 방문은 선 때의 사람(`writer`)의 칸에만 쓴다.
   if (held.projectId !== projectId || held.pageId !== pageId) {
-    setHeld({ projectId, pageId, values: new Map() })
+    setHeld(fresh(store, writer, projectId, pageId))
   }
+
+  // **저장소에 비춘다 — 쓰는 자리는 여기 하나다**(머리말 4). 한 방향이다: 칸이 바뀔 때마다
+  // 이 방문을 그 사람의 칸에 옮겨 적는다. **레이아웃 이펙트로 둔다** — 커밋과 같은 작업 안에서 돌아, 커밋된 칸과
+  // 저장소 사이에 다른 작업(새로고침 · 로그아웃 소식)이 끼지 않는다. **재지는 않았다** — jsdom 의 `act`는 둘을
+  // 가르지 않고, 실브라우저에서 그 사이를 노리는 판을 짓지 않았다. 페이지를 안 연 자리는 쓰지 않는다 — 그 사람의
+  // 마지막 페이지가 그대로 남는다(머리말 4 의 «F1 과 저장소»).
+  useLayoutEffect(() => {
+    if (store === null || held.writer === null || held.pageId === undefined) return
+    store.keep(held.writer, { projectId: held.projectId, pageId: held.pageId, slots: kept(held) }, since)
+  }, [store, held, since])
 
   const accept = useCallback((at: PageAt, key: object, update: unknown): void => {
     setHeld((prev) => {
