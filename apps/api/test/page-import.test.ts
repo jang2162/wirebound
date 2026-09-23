@@ -8,7 +8,11 @@
  * **수를 산문에 적지 않는다** — 세야 하는 것은 케이스가 질의로 만든다.
  */
 import { describe, expect, it } from 'vitest'
+import type { KyselyPlugin } from 'kysely'
 import { WIREBOUND_PAGE_VERSION, type PageJson } from '@wirebound/schema'
+import type { DbHandle } from '../src/db/tx'
+import { listComments } from '../src/repos/comments'
+import { importPage as runImport } from '../src/services/page-import'
 import { createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 /** 파일 하나. 파일의 id는 **일부러 `n_` 형식이 아니다** — 재발급을 눈으로 가르기 위해서다. */
@@ -480,6 +484,69 @@ describe('실패하면 아무것도 남지 않는다 — P6-2 이월 §8', () =>
 
       expect(res.statusCode, res.body).toBe(400)
       expect(await pageRows(ctx, fx.projectId)).toEqual([])
+    })
+  })
+})
+
+/**
+ * **가져오기는 트리 쓰기다** — `insertPage`가 프로젝트 행을 잡고(`lockProjectTree`) 트랜잭션 끝까지 쥔다. 그 동안 같은 프로젝트의
+ * 다른 트리 쓰기가 줄을 서므로, 잠금 안의 일이 댓글 수를 따라가면 댓글 많은 파일 하나가 트리를 수 초 세운다(`repos/projects.ts`의
+ * `lockProjectTree` 머리말 «대가»). **시간이 아니라 문장 수로 잰다** — 시간은 기계 부하에 흔들린다.
+ */
+describe('트리 잠금을 쥔 동안의 일이 댓글 수를 따라가지 않는다', () => {
+  /** 서비스를 직접 부른다 — 트리 잠금을 잡고 쥐는 구간이 전부 `importPage` 안이다. 실행된 문장마다 `transformResult`가 한 번 불린다. */
+  async function statementsFor(ctx: TestContext, commentCount: number): Promise<number> {
+    const owner = await signup(ctx)
+    const project = await createProject(ctx, owner.cookie)
+    const menu = await createMenuNode(ctx, owner.cookie, project.id, { title: '회원' })
+    let executed = 0
+    const counter: KyselyPlugin = {
+      transformQuery: (args) => args.node,
+      transformResult: async (args) => {
+        executed += 1
+        return args.result
+      },
+    }
+    const comments = Array.from({ length: commentCount }, (_unused, index) => ({ nodeId: 'file_list', body: `말 ${index}` }))
+    const outcome = await runImport(ctx.db.withPlugin(counter) as DbHandle, {
+      projectId: project.id,
+      menuNodeId: menu.id,
+      file: file({ comments }),
+      actor: { type: 'user', id: owner.user.id, label: owner.user.name },
+      authorId: owner.user.id,
+    })
+    expect(outcome.kind).toBe('imported')
+    return executed
+  }
+
+  it('댓글 2 개와 40 개의 가져오기가 같은 수의 문장을 낸다', async () => {
+    await withApi(async (ctx) => {
+      const few = await statementsFor(ctx, 2)
+      const many = await statementsFor(ctx, 40)
+
+      expect(few).toBeGreaterThan(0)
+      expect(many).toBe(few)
+    })
+  })
+
+  /**
+   * **한 문장으로 넣어도 순서가 파일의 순서다**(`repos/comments.ts`의 `insertImportedComments` 머리말 — `created_at`을 직접 매긴다).
+   * 문장의 시각 하나를 모두에게 주면 동률이 나고 랜덤 `id`가 순서를 섞는다 — 이 케이스가 죽는다. 기본값 `clock_timestamp()`에
+   * 맡기는 판은 한 행이 1µs 넘게 걸리는 기계에서 이 케이스를 통과한다(그 판이 틀리는 기계를 여기서 만들 수 없다).
+   */
+  it('코멘트 200 개가 파일의 순서대로 읽힌다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const bodies = Array.from({ length: 200 }, (_unused, index) => `말 ${index}`)
+      const res = await importPage(ctx, fx, {
+        menuNodeId: fx.menuNodeId,
+        file: file({ comments: bodies.map((body, index) => ({ nodeId: index % 2 === 0 ? 'file_list' : 'file_form', body })) }),
+      })
+      expect(res.statusCode, res.body).toBe(201)
+
+      const pageId = (res.json() as { page: { id: string } }).page.id
+      const read = await listComments(ctx.db, pageId)
+      expect(read.map((comment) => comment.body)).toEqual(bodies)
     })
   })
 })

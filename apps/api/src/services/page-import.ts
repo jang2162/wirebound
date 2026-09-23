@@ -76,7 +76,7 @@ import {
   type ValidationIssue,
 } from '@wirebound/schema'
 import { withTransaction, type DbHandle } from '../db/tx'
-import { CommentNulByteError, insertComment } from '../repos/comments'
+import { CommentNulByteError, insertImportedComments } from '../repos/comments'
 import { MenuNodeNotFoundError, insertPage, type PageRecord } from '../repos/pages'
 import type { RevisionActor } from '../repos/revisions'
 import { applyEdit, type EditOutcome } from './edit-pipeline'
@@ -227,6 +227,9 @@ export async function importPage(db: DbHandle, input: PageImportInput): Promise<
  * *"번호를 부여하는 자리"*가 `routes/comments.ts` 말고 하나 더 생긴다(P5-1 D1·D2가 그 자리를
  * 하나로 묶어 둔 것을 뚫는 일이다). 번호가 없는 노드를 가리키는 코멘트는 **번호 없는 코멘트**가
  * 되고, 그것은 화면이 이미 갈라 보이는 정상 상태다(`comment-panel.tsx`의 무리 셋 중 둘째).
+ *
+ * **한 문장으로 넣는다** — 이 구간은 트리 잠금 안이라 행마다 넣으면 댓글 수만큼 같은 프로젝트의 트리 쓰기가 줄을 선다.
+ * 순서(`created_at`)를 어떻게 지키는지는 `repos/comments.ts`의 `insertImportedComments` 머리말.
  */
 async function insertComments(
   trx: DbHandle,
@@ -234,13 +237,11 @@ async function insertComments(
   authorId: string,
   comments: readonly { nodeId: string; body: string }[],
 ): Promise<void> {
-  for (const comment of comments) {
-    try {
-      await insertComment(trx, { pageId, nodeId: comment.nodeId, body: comment.body, authorId })
-    } catch (error) {
-      // **던져서 되돌린다** — 여기까지 오면 페이지·문서·revision이 이미 들어가 있다.
-      if (error instanceof CommentNulByteError) throw new PageImportAbort({ kind: 'comment-nul-byte' })
-      throw error
-    }
+  try {
+    await insertImportedComments(trx, { pageId, authorId, comments })
+  } catch (error) {
+    // **던져서 되돌린다** — 여기까지 오면 페이지·문서·revision이 이미 들어가 있다.
+    if (error instanceof CommentNulByteError) throw new PageImportAbort({ kind: 'comment-nul-byte' })
+    throw error
   }
 }

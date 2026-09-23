@@ -265,6 +265,40 @@ export async function insertComment(
 }
 
 /**
+ * **가져오기의 코멘트를 한 문장으로 넣는다**(`services/page-import.ts`의 `insertComments`). 가져오기는 트리 쓰기라
+ * 이 문장이 도는 동안 프로젝트 행을 쥐고 있다(`repos/projects.ts`의 `lockProjectTree` 머리말 «대가»). 행마다 `insertComment`를
+ * 부르면 문장이 댓글 수의 두 배라, 그 시간만큼 같은 프로젝트의 다른 트리 쓰기가 줄을 선다.
+ *
+ * **`created_at`을 직접 매긴다 — 순서가 곧 파일의 순서다.** 스레드의 순서는 `created_at`뿐이다(`selectComments`). 컬럼 기본값
+ * `clock_timestamp()`에 맡기면 순서가 두 가지에 기댄다 — 한 행을 넣는 데 1µs 넘게 걸린다는 것(더 빠르면 동률이 나고, 동률을 가르는
+ * 랜덤 `id`가 순서를 섞는다)과 `INSERT … SELECT`가 `unnest`의 순서대로 행을 넣는다는 것(SQL 이 보장하지 않는다). 둘 다 기대지
+ * 않으려고 문장의 시각 하나에서 **파일의 순번만큼 1µs 씩 거슬러** 매긴다 — 마지막 코멘트가 그 시각이고 앞의 것은 그보다 이르다.
+ * 앞으로(미래로) 매기지 않는 것은, 커밋 뒤 곧바로 달린 새 코멘트가 가져온 코멘트보다 앞에 설 수 있어서다. 이 페이지는 이
+ * 트랜잭션에서 만들어져 그보다 이른 코멘트가 없다.
+ *
+ * NUL 은 넣기 전에 전부 본다(`insertComment`와 같은 `CommentNulByteError` — 부르는 쪽이 트랜잭션을 되돌린다).
+ */
+export async function insertImportedComments(
+  trx: DbHandle,
+  input: { pageId: string; authorId: string; comments: readonly { nodeId: string; body: string }[] },
+): Promise<void> {
+  if (input.comments.length === 0) return
+  for (const comment of input.comments) assertNoNulByte(comment.body)
+
+  const nodeIds = input.comments.map((comment) => comment.nodeId)
+  const bodies = input.comments.map((comment) => comment.body)
+  await sql`
+    with base as (select clock_timestamp() as at)
+    insert into comments (page_id, node_id, body, author_id, created_at, updated_at)
+    select ${input.pageId}::uuid, c.node_id, c.body, ${input.authorId}::uuid, c.at, c.at
+      from (
+        select u.node_id, u.body, base.at - (${input.comments.length} - u.ord) * interval '1 microsecond' as at
+          from base, unnest(${nodeIds}::text[], ${bodies}::text[]) with ordinality as u(node_id, body, ord)
+      ) c
+  `.execute(trx)
+}
+
+/**
  * 본문을 고친다. 없으면 `null`이다.
  *
  * **`updated_at`을 함께 갱신한다** — `repos/pages.ts`·`repos/themes.ts`가 같은 자리에서
