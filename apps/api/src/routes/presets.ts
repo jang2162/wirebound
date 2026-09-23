@@ -76,6 +76,7 @@ import { withTransaction } from '../db/tx'
 import { badRequest, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import { PresetNulByteError, deletePreset, insertPreset, listPresets, type PresetRecord } from '../repos/presets'
+import { lockProjectShared } from '../repos/projects'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const PresetParams = z.object({ projectId: z.uuid(), presetId: z.uuid() })
@@ -183,6 +184,9 @@ export function presetRoutes() {
       let record: PresetRecord
       try {
         record = await withTransaction(app.db, async (trx) => {
+          // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`). 삽입의 FK 도 같은 `KEY SHARE`를 걸지만
+          // 그것은 프로젝트 삭제 뒤에 섰다가 깨면 23503 — 봉투 없는 500 이다(이월 AA′ 남는 틈 2). 먼저 잡으면 0 행 → 404.
+          await lockProjectShared(trx, projectId)
           const inserted = await insertPreset(trx, {
             projectId,
             name: body.name,

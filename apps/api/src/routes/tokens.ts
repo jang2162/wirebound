@@ -64,6 +64,7 @@ import { withTransaction } from '../db/tx'
 import { badRequest, forbidden, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
 import { deleteApiToken, insertApiToken, listApiTokens, type ApiTokenRecord } from '../repos/api-tokens'
+import { lockProjectShared } from '../repos/projects'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const TokenParams = z.object({ projectId: z.uuid(), tokenId: z.uuid() })
@@ -105,6 +106,9 @@ export function tokenRoutes() {
 
       const currentUser = requireSessionUser(request)
       const issued = await withTransaction(app.db, async (trx) => {
+        // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`). 삽입의 FK 도 같은 `KEY SHARE`를 걸지만
+        // 그것은 프로젝트 삭제 뒤에 섰다가 깨면 23503 — 봉투 없는 500 이다(이월 AA′ 남는 틈 2). 먼저 잡으면 0 행 → 404.
+        await lockProjectShared(trx, projectId)
         const inserted = await insertApiToken(trx, { projectId, userId: currentUser.id, name: body.name })
         // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는
         // `KEY SHARE`가 복원 · 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰을 수 있다 — 그 사이 멤버에서 빠졌으면 404 다(가드가

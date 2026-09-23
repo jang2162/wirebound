@@ -30,14 +30,16 @@
  * # 잠금 순서 — 재확인이 연 교착
  *
  * 프로젝트 삭제가 재확인을 위해 기다릴 것을 먼저 잡게 되면서 잠금 순서가 생겼다. 아래 `잠금 순서` 절이 그 순서가
- * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 자기 행만 쓰는 쓰기의 재확인이 삭제의 CASCADE 와 고리를 안
- * 만드는지(프로젝트 행 → 자기 행 → 멤버 행)를 두 판으로 잰다.
+ * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
+ * 삭제의 CASCADE 와 고리를 안 만드는지(프로젝트 행 → 자기 행 → 멤버 행)를 아홉 판(E3–E11)으로, 코멘트 수정이 코멘트 행을
+ * 지우는 두 쓰기 · 역할 변경과 3자 고리를 안 만드는지(프로젝트 행 → 페이지 행 → 멤버 행 → 코멘트 행)를 두 판(F3 · F3′)으로 잰다.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
 import type { RegisteredRoute } from '../src/app'
 import { withTransaction, type DbHandle } from '../src/db/tx'
 import { findMembership } from '../src/auth/roles'
+import { findDefaultLayout, updateLayoutTheme } from '../src/repos/layouts'
 import { updateMemberRole } from '../src/repos/members'
 import { insertMenuNode } from '../src/repos/menu'
 import { lockPageForEdit } from '../src/repos/pages'
@@ -332,6 +334,19 @@ const PROBES: Probe[] = [
     lockPage: (fx) => fx.pageId,
     fire: async (ctx, fx) =>
       fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`),
+    okStatus: 200,
+  },
+  {
+    // 코멘트 수정은 문서를 안 바꾸지만 페이지 행을 `KEY SHARE`로 잡는다(`repos/pages.ts`의 `lockPageShared` — 이월 AA′ 리뷰
+    // F3). 그 값으로 같은 페이지의 쓰기 뒤에 선다 — 이 판이 «선다 · 그 뒤의 역할로 판정한다»를 잰다.
+    route: 'PATCH /api/projects/:projectId/pages/:pageId/comments/:commentId',
+    label: '코멘트 수정 (작성자 — 페이지 행 KEY SHARE 로 선다)',
+    bobRole: 'editor',
+    lockPage: (fx) => fx.pageId,
+    fire: async (ctx, fx) =>
+      fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`, {
+        body: '밥이 고친 말',
+      }),
     okStatus: 200,
   },
   {
@@ -1020,7 +1035,8 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
   }, 60_000)
 
   /**
-   * E3 · E4 — 자기 행만 쓰는 쓰기(테마 고르기 · 코멘트 수정)의 재확인. 삭제의 CASCADE 가 밥의 멤버 행을 **먼저** 쥐게 세운다:
+   * E3 · E4 · E10 · E11 — 자기 행만 쓰는 쓰기(테마 고르기 · 코멘트 수정 · 테마 수정 · 삭제)의 재확인. 네 판 전부 아래
+   * 루프(E10 · E11 은 목록 끝)다. 삭제의 CASCADE 가 밥의 멤버 행을 **먼저** 쥐게 세운다:
    * 밥의 다른 쓰기가 재확인 중이다(그 행 `FOR SHARE` — `findMembership`) → 삭제가 CASCADE 에서 그 행에 선다 → 밥의 쓰기를 쏜다
    * → 붙든 것을 푼다. 프로젝트 행을 먼저 잡지 않으면 그 쓰기는 자기 행을 쥔 채 재확인에서 삭제를 기다리고, 삭제는 그 행을
    * 기다린다.
@@ -1039,6 +1055,21 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
         fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`, {
           body: '밥이 고친 말',
         }),
+    },
+    {
+      // 테마 수정 · 삭제의 `lockProjectShared`는 권한이 아니라 이 순서 때문이다 — 권한은 쓰기 뒤의 재확인이 잡는다(쓰기가
+      // 테마 행 · RI 검사에서 기다려도 재확인이 그 뒤다). 자기 행(테마)부터 잡으면 E3 · E4 와 같은 고리다.
+      label: 'E10 — 테마 수정',
+      bobRole: 'owner' as const,
+      fire: (ctx: RealApiContext, fx: ProjectFx) =>
+        fireRest(ctx, fx, 'PUT', `/api/projects/${fx.projectId}/themes/${fx.themeId}`, {
+          theme: { meta: { id: 'recheck-target', name: '밥이 고친 테마', version: '2.0.0' } },
+        }),
+    },
+    {
+      label: 'E11 — 테마 삭제',
+      bobRole: 'owner' as const,
+      fire: (ctx: RealApiContext, fx: ProjectFx) => fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/themes/${fx.themeId}`),
     },
   ]) {
     it(`${probe.label}: 삭제의 CASCADE 가 멤버 행을 쥔 채 서 있을 때 쏘면 — 삭제 204 · 쓰기는 프로젝트 행에서 기다렸다가 404 · 교착 0`, async () => {
@@ -1067,6 +1098,172 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
       })
     }, 60_000)
   }
+
+  /**
+   * E5–E9 — FK 삽입 다섯(스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성). 권한이 아니라 **봉투**의 판이다: 삽입의 FK 가 프로젝트
+   * 행에 거는 `KEY SHARE`만으로는 삭제의 `FOR UPDATE` 뒤에 섰다가 깨어나 23503 — 봉투 없는 500 이었다(이월 AA′ 남는 틈 2).
+   * 트랜잭션 맨 앞의 `lockProjectShared`가 0 행을 보고 404 로 옮긴다. 판은 E3 · E4 와 같다.
+   */
+  for (const probe of [
+    {
+      label: 'E5 — 스냅샷 생성',
+      bobRole: 'editor' as const,
+      fire: (ctx: RealApiContext, fx: ProjectFx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/snapshots`, { tag: '밥의 스냅샷' }),
+    },
+    {
+      label: 'E6 — 멤버 초대',
+      bobRole: 'owner' as const,
+      fire: (ctx: RealApiContext, fx: ProjectFx) =>
+        fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/members`, { email: fx.inviteeEmail, role: 'viewer' }),
+    },
+    {
+      label: 'E7 — 테마 생성',
+      bobRole: 'owner' as const,
+      fire: (ctx: RealApiContext, fx: ProjectFx) =>
+        fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/themes`, {
+          theme: { meta: { id: 'recheck-new', name: '밥의 테마', version: '1.0.0' } },
+        }),
+    },
+    {
+      label: 'E8 — 프리셋 저장',
+      bobRole: 'editor' as const,
+      fire: (ctx: RealApiContext, fx: ProjectFx) =>
+        fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/presets`, { name: '밥의 프리셋', schema: [] }),
+    },
+    {
+      label: 'E9 — API 토큰 발급',
+      bobRole: 'editor' as const,
+      fire: (ctx: RealApiContext, fx: ProjectFx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/tokens`, { name: '밥의 토큰' }),
+    },
+  ]) {
+    it(`${probe.label}: 삭제의 CASCADE 가 멤버 행을 쥔 채 서 있을 때 쏘면 — 삭제 204 · 쓰기는 봉투 있는 404 · 교착 0`, async () => {
+      await withRealApi(async (ctx) => {
+        const fx = await projectFixture(ctx, probe.bobRole)
+        const deadlocksBefore = await deadlockCount()
+        const recheck = queueLock(async (trx) => {
+          await findMembership(trx, fx.projectId, fx.bob.user.id, 'share')
+        })
+        await recheck.acquired
+        let removal: Fired | undefined
+        let write: Fired | undefined
+        try {
+          removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie }))
+          await waitForLockWaiter(1)
+          write = probe.fire(ctx, fx)
+          await waitForLockWaiter(2)
+        } finally {
+          await recheck.release()
+        }
+        const [removed, written] = await Promise.all([removal.promise, write.promise])
+
+        expect(removed.status, removed.body).toBe(204)
+        expect(written.status, written.body).toBe(404)
+        expect(JSON.parse(written.body)).toMatchObject({ error: { code: 'not-found' } })
+        expect(await deadlockCount()).toBe(deadlocksBefore)
+      })
+    }, 60_000)
+  }
+
+  /**
+   * F3 · F3′ — 코멘트 수정의 3자 고리(이월 AA′ 리뷰 F3). 코멘트 행 `c`를 지우는 두 쓰기가 `c`와 멤버 행을 **반대 순서로**
+   * 잡는다 — 코멘트 삭제는 «재확인 → `c`», 페이지 삭제는 «`c` → 끝의 재확인». 코멘트 수정이 둘 사이 어느 순서를 골라도 하나와
+   * 엇갈리고, 다른 owner 의 역할 변경(`lockOwnerIds` — owner 행을 힙 순서로 `FOR UPDATE`)이 셋째로 끼면 고리가 선다. 페이지 행을
+   * 먼저 잡으면(`repos/pages.ts`의 `lockPageShared`) 두 삭제 뒤에 줄을 서 고리가 안 선다.
+   *
+   * 판을 세우는 법(리뷰어의 스테이징): K 가 한 owner 의 멤버 행을 `FOR SHARE`로 쥔다(«그 사람의 다른 쓰기가 재확인을 지난
+   * 채») → 앨리스의 역할 변경이 K 앞에 선다 → 나머지 둘을 차례로 세운다 → K 를 푼다. 셋 다 선 것을 센 뒤에 푼다.
+   *
+   * | 코멘트 수정의 순서 | F3 | F3′ |
+   * |---|---|---|
+   * | 프로젝트 행 → `UPDATE c` → 재확인(앞 판) | 교착 · 수정 500 | 0 |
+   * | 프로젝트 행 → 재확인 → `UPDATE c`(리뷰어의 뒤 처방) | 0 | 교착 · 페이지 삭제 500 |
+   * | 프로젝트 행 → 페이지 행 → 재확인 → `UPDATE c`(지금) | 0 | 0 |
+   */
+  async function threeOwners(ctx: RealApiContext, heapOrder: 'bob-carol' | 'carol-bob') {
+    const alice = await signup(ctx)
+    const bob = await signup(ctx)
+    const carol = await signup(ctx)
+    const project = await createProject(ctx, alice.cookie)
+    // 멤버 행을 넣는 순서가 힙 순서 — `lockOwnerIds`(정렬 없음)가 잡는 순서다.
+    for (const member of heapOrder === 'bob-carol' ? [bob, carol] : [carol, bob]) {
+      await addMember(ctx, project.id, member.user.id, 'owner')
+    }
+    const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
+    const page = await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
+    const nodeId = (page.schema as { root: { id: string } }).root.id
+    const posted = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/projects/${project.id}/pages/${page.id}/comments`,
+      cookies: bob.cookie,
+      payload: { nodeId, body: '밥의 말' },
+    })
+    if (posted.statusCode !== 201) throw new Error(`코멘트 픽스처 실패: ${posted.body}`)
+    const commentId = (posted.json() as { comment: { id: string } }).comment.id
+    const base = `/api/projects/${project.id}`
+    return { alice, bob, carol, projectId: project.id, pageUrl: `${base}/pages/${page.id}`, commentUrl: `${base}/pages/${page.id}/comments/${commentId}` }
+  }
+
+  for (const scenario of [
+    {
+      label: 'F3 — 코멘트 수정 ∥ 같은 코멘트의 삭제 ∥ 수정자를 내리는 역할 변경(owner 행: 밥 → 캐럴)',
+      heapOrder: 'bob-carol' as const,
+      // 캐럴의 다른 쓰기가 재확인을 지난 채 — 역할 변경은 밥 행을 쥔 채 캐럴 행에 선다.
+      heldShare: 'carol' as const,
+      demote: 'bob' as const,
+      // 수정이 먼저 서고 삭제가 뒤에 선다.
+      order: ['edit', 'delete-comment'] as const,
+      // 수정은 삭제보다 먼저 서므로 보통 200 이지만, 순서가 이 판의 축은 아니다 — 축은 교착 · 5xx 다.
+      expected: { demote: [200], edit: [200, 404], other: [200] },
+    },
+    {
+      label: 'F3′ — 코멘트 수정 ∥ 그 페이지의 삭제 ∥ 삭제자를 내리는 역할 변경(owner 행: 캐럴 → 밥)',
+      heapOrder: 'carol-bob' as const,
+      // 밥의 다른 쓰기가 재확인을 지난 채 — 역할 변경은 캐럴 행을 쥔 채 밥 행에 선다.
+      heldShare: 'bob' as const,
+      demote: 'carol' as const,
+      // 페이지 삭제가 코멘트를 지운 채 끝의 재확인에 서고, 수정이 뒤에 선다.
+      order: ['delete-page', 'edit'] as const,
+      expected: { demote: [200], edit: [200, 404], other: [204] },
+    },
+  ]) {
+    it(`${scenario.label} — 교착 0`, async () => {
+      await withRealApi(async (ctx) => {
+        const fx = await threeOwners(ctx, scenario.heapOrder)
+        const deadlocksBefore = await deadlockCount()
+        const held = queueLock(async (trx) => {
+          await findMembership(trx, fx.projectId, fx[scenario.heldShare].user.id, 'share')
+        })
+        await held.acquired
+        const fired: Record<string, Fired> = {}
+        try {
+          fired.demote = track(
+            ctx.app.inject({
+              method: 'PATCH',
+              url: `/api/projects/${fx.projectId}/members/${fx[scenario.demote].user.id}`,
+              cookies: fx.alice.cookie,
+              payload: { role: 'editor' },
+            }),
+          )
+          await waitForLockWaiter(1)
+          for (const [index, step] of scenario.order.entries()) {
+            fired[step === 'edit' ? 'edit' : 'other'] =
+              step === 'edit'
+                ? track(ctx.app.inject({ method: 'PATCH', url: fx.commentUrl, cookies: fx.bob.cookie, payload: { body: '밥이 고친 말' } }))
+                : track(ctx.app.inject({ method: 'DELETE', url: step === 'delete-page' ? fx.pageUrl : fx.commentUrl, cookies: fx.carol.cookie }))
+            await waitForLockWaiter(index + 2)
+          }
+        } finally {
+          await held.release()
+        }
+        const [demoted, edited, other] = await Promise.all([fired.demote!.promise, fired.edit!.promise, fired.other!.promise])
+
+        expect(await deadlockCount()).toBe(deadlocksBefore)
+        expect(scenario.expected.demote, demoted.body).toContain(demoted.status)
+        expect(scenario.expected.edit, edited.body).toContain(edited.status)
+        expect(scenario.expected.other, other.body).toContain(other.status)
+      })
+    }, 60_000)
+  }
 })
 
 /**
@@ -1083,8 +1280,9 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
  * | 메뉴 생성 · 자리 옮기기 · 삭제 · 페이지 생성 · 자리 옮기기 · 삭제 · 가져오기 | 자기의 `lockProjectTree`(프로젝트 행) | 선다 |
  * | 프로젝트 수정 | `UPDATE projects`(프로젝트 행) | 선다 |
  * | 복원 · 프로젝트 삭제 | 자기의 `lockProjectRow`(프로젝트 행 `FOR UPDATE`) | 선다 |
- * | 스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성 | `INSERT`의 FK 가 부모 행에 거는 `KEY SHARE` | 안 선다(`KEY SHARE`는 `NO KEY UPDATE`와 안 부딪힌다) |
+ * | 스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성 | 자기의 `lockProjectShared`(앞 판은 `INSERT`의 FK 가 부모 행에 거는 `KEY SHARE` — 모드는 같고, 삭제 뒤에 깨면 500 이던 것이 404 가 됐다) | 안 선다(`KEY SHARE`는 `NO KEY UPDATE`와 안 부딪힌다) |
  * | 테마 고르기 · 코멘트 수정 | 자기의 `lockProjectShared`(프로젝트 행 `KEY SHARE` — 앞 판은 자기 행: 레이아웃 · 코멘트) | 안 선다 |
+ * | 테마 수정 · 삭제 | 자기의 `lockProjectShared`. **앞 판은 «안 선다»로 적었고 틀렸다** — 복원이 쓰는 판(`restore-write`)에서 삭제는 RI 검사가 레이아웃 행에, slug 를 바꾸는 수정은 테마 행 `KEY SHARE`에 섰다(리뷰 F1 · F2) | 안 선다 |
  * | 코멘트 삭제 | 자기의 `lockProjectForBurial`(프로젝트 행 `KEY SHARE`) | 안 선다 |
  *
  * 프로젝트 삭제의 앞 잠금(`lockProjectRow` + `lockProjectPages`)은 복원 잠금의 부분이라 따로 세지 않는다 — 그 뒤에 서는
@@ -1096,16 +1294,48 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
  * 코멘트 삭제 · 복원 · 프로젝트 삭제)은 두 잠금 뒤에서도 이미 초록이었다 — 그 축은 위 `PROBES` 와 `menu-title-conflict.test.ts`
  * 가 소유하고, 이 표는 «프로젝트 잠금 뒤에서도 선다»를 센다.
  *
- * **재확인 자리는 쓰기 뒤 · 같은 트랜잭션 안이다** — 기다림은 쓰는 문장에서 난다(FK 삽입 · `UPDATE projects`). 테마 고르기 ·
- * 코멘트 수정만은 쓰기 앞에 프로젝트 행을 먼저 잡는다(`repos/projects.ts`의 `lockProjectShared`) — 아래 «잠금 순서» 절의
- * E3 · E4 가 그 까닭을 잰다.
+ * **재확인 자리는 쓰기 뒤 · 같은 트랜잭션 안이다** — 기다림은 쓰는 문장에서 난다(트리 첫 잠금 · `UPDATE projects`). 프로젝트
+ * 행을 `KEY SHARE`로 먼저 잡는 자리(`repos/projects.ts`의 `lockProjectShared` — 테마 고르기 · 수정 · 삭제 · 코멘트 수정 · FK
+ * 삽입 다섯)도 재확인이 쓰기 뒤다 — **테마 수정 · 삭제는 그 잠금 뒤에도 자기 행에서 기다릴 수 있으므로**(남의 쓰기가 건 잠금)
+ * 권한은 그 뒤의 재확인이 잡는다(`lockProjectShared`를 떼도 아래 강등 판은 초록이다 — 그 줄은 «잠금 순서» 절의 E10 · E11 이
+ * 소유한다). **코멘트 수정만은 재확인이 `UPDATE` 앞이다** — 프로젝트 행 → 페이지 행(`repos/pages.ts`의 `lockPageShared`) →
+ * 재확인 → 코멘트 행. 그 까닭은 «잠금 순서» 절의 F3 · F3′.
  */
-type ProjectHolder = 'restore' | 'tree'
+type ProjectHolder = 'restore' | 'tree' | 'restore-write'
 
-/** 쥐는 자 — 잠금 SQL 을 베끼지 않고 프로덕션 함수를 부른다. */
-const PROJECT_HOLDERS: Record<ProjectHolder, { label: string; take: (trx: DbHandle, projectId: string) => Promise<void> }> = {
-  restore: { label: '복원 잠금', take: lockProjectForRestore },
-  tree: { label: '트리 잠금', take: lockProjectTree },
+/**
+ * 쥐는 자 — 잠금 SQL 을 베끼지 않고 프로덕션 함수를 부른다.
+ *
+ * **`restore-write`는 잠금만이 아니라 복원의 쓰기까지 쥔다**(이월 AA′ 리뷰 F1 · F2). 잠금 함수만 쥐면 쥔 자의 **쓰기**가 거는
+ * 잠금이 빠진다 — 복원의 마지막 단계 `set-layout-theme`(`services/restore-plan.ts`)는 레이아웃 행을 고치며 FK 로 새 테마
+ * 행에 `KEY SHARE`를 걸고, 옛 테마는 그 커밋 뒤에야 «안 쓰인다». 앞 판의 «테마 수정 · 삭제는 안 선다»는 잠금만 쥐고 · 쓰이지
+ * 않는 테마로 잰 값이었고 둘 다 틀렸다: 쓰이는 테마의 삭제는 `ON DELETE RESTRICT` 검사(`layouts`를 `FOR KEY SHARE`로 훑는다)가
+ * 복원이 쥔 레이아웃 행에 서고, slug 를 바꾸는 수정은 UNIQUE 키 갱신(`FOR UPDATE`)이라 그 `KEY SHARE`에 선다.
+ */
+type ProjectState = Awaited<ReturnType<typeof projectState>>
+
+const PROJECT_HOLDERS: Record<
+  ProjectHolder,
+  {
+    label: string
+    take: (trx: DbHandle, fx: ProjectFx) => Promise<void>
+    /** 쥔 자가 **스스로 커밋하는** 표 — 판의 «전 · 후»에서 뺀다(쓰기의 결과가 아니다). */
+    writes?: readonly (keyof ProjectState)[]
+  }
+> = {
+  restore: { label: '복원 잠금', take: (trx, fx) => lockProjectForRestore(trx, fx.projectId) },
+  tree: { label: '트리 잠금', take: (trx, fx) => lockProjectTree(trx, fx.projectId) },
+  'restore-write': {
+    label: '복원(레이아웃 테마 쓰기까지) 잠금',
+    take: async (trx, fx) => {
+      await lockProjectForRestore(trx, fx.projectId)
+      const layout = await findDefaultLayout(trx, fx.projectId)
+      if (!layout) throw new Error('기본 레이아웃이 없습니다')
+      // 복원의 `set-layout-theme`과 같은 함수 — 레이아웃을 (쓰이던 테마가 있으면 그것에서) `themeId`로 옮긴다.
+      await updateLayoutTheme(trx, layout.id, fx.themeId)
+    },
+    writes: ['layouts'],
+  },
 }
 
 interface ProjectFx extends Fx {
@@ -1115,6 +1345,8 @@ interface ProjectFx extends Fx {
   themeId: string
   /** 계정은 있고 멤버는 아닌 사람 — 초대한다. */
   inviteeEmail: string
+  /** 기본 레이아웃이 쓰고 있는 테마 — `prepare`가 세운 판에만 있다(쓰이는 테마의 삭제). */
+  usedThemeId?: string
 }
 
 async function projectFixture(ctx: RealApiContext, bobRole: BobRole): Promise<ProjectFx> {
@@ -1145,6 +1377,8 @@ interface ProjectProbe {
   demotion: Demotion
   /** 이 쓰기가 서는 잠금 — 재서 고른 것이다(위 표). 판마다 «잠금에 섰다»를 다시 단언한다. */
   holders: readonly ProjectHolder[]
+  /** 픽스처 위에 더 세울 것이 있는 판만 — 잠금을 잡기 **전에**, 그리고 «전» 상태를 뜨기 전에 돈다. */
+  prepare?: (ctx: RealApiContext, fx: ProjectFx) => Promise<Partial<ProjectFx>>
   fire: (ctx: RealApiContext, fx: ProjectFx) => Fired
   okStatus: number
 }
@@ -1241,6 +1475,47 @@ const PROJECT_PROBES: ProjectProbe[] = [
     okStatus: 200,
   },
   {
+    // slug(`meta.id`)를 바꾸는 판이다 — 같은 slug 면 `NO KEY UPDATE`라 테마 행의 `KEY SHARE`와 안 부딪힌다(리뷰 F2 의 대조).
+    route: 'PUT /api/projects/:projectId/themes/:themeId',
+    label: '테마 수정 (slug 를 바꾼다)',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore-write'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'PUT', `/api/projects/${fx.projectId}/themes/${fx.themeId}`, {
+        theme: { meta: { id: 'recheck-renamed', name: '밥이 고친 테마', version: '2.0.0' } },
+      }),
+    okStatus: 200,
+  },
+  {
+    // 레이아웃이 쓰던 테마를 지운다 — 쥔 자(복원)가 레이아웃을 다른 테마로 옮기므로 풀린 뒤에는 지울 수 있다(대조 204).
+    route: 'DELETE /api/projects/:projectId/themes/:themeId',
+    label: '테마 삭제 (쓰이던 테마 — 복원이 레이아웃을 뗀다)',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore-write'],
+    prepare: async (ctx, fx) => {
+      const created = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.projectId}/themes`,
+        cookies: fx.alice.cookie,
+        payload: { theme: { meta: { id: 'recheck-used', name: '쓰이던 테마', version: '1.0.0' } } },
+      })
+      if (created.statusCode !== 201) throw new Error(`테마 픽스처 실패: ${created.body}`)
+      const usedThemeId = (created.json() as { id: string }).id
+      const chosen = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${fx.projectId}/theme`,
+        cookies: fx.alice.cookie,
+        payload: { themeId: usedThemeId },
+      })
+      if (chosen.statusCode !== 200) throw new Error(`테마 고르기 픽스처 실패: ${chosen.body}`)
+      return { usedThemeId }
+    },
+    fire: (ctx, fx) => fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/themes/${fx.usedThemeId}`),
+    okStatus: 204,
+  },
+  {
     route: 'POST /api/projects/:projectId/snapshots',
     label: '스냅샷 생성',
     bobRole: 'editor',
@@ -1333,12 +1608,19 @@ const PROJECT_PROBES: ProjectProbe[] = [
 
 /** 프로젝트 잠금을 쥔 채 `heldWrite` — 그 사이 교착이 났는지도 센다(`pg_stat_database.deadlocks`). */
 async function runProjectHeld(ctx: RealApiContext, probe: ProjectProbe, holder: ProjectHolder, kind: Demotion | null) {
-  const fx = await projectFixture(ctx, probe.bobRole)
+  const base = await projectFixture(ctx, probe.bobRole)
+  const fx: ProjectFx = { ...base, ...(probe.prepare ? await probe.prepare(ctx, base) : {}) }
   const before = await projectState(fx)
   const deadlocksBefore = await deadlockCount()
-  const lock = queueLock((trx) => PROJECT_HOLDERS[holder].take(trx, fx.projectId))
+  const lock = queueLock((trx) => PROJECT_HOLDERS[holder].take(trx, fx))
   const outcome = await heldWrite(ctx, fx, probe.label, probe.bobRole, lock, async () => probe.fire(ctx, fx), kind)
-  return { ...outcome, before, after: await projectState(fx), deadlocks: (await deadlockCount()) - deadlocksBefore }
+  const after = await projectState(fx)
+  const own = (state: ProjectState) => {
+    const rest: Partial<ProjectState> = { ...state }
+    for (const key of PROJECT_HOLDERS[holder].writes ?? []) delete rest[key]
+    return rest
+  }
+  return { ...outcome, before: own(before), after: own(after), deadlocks: (await deadlockCount()) - deadlocksBefore }
 }
 
 describe('프로젝트 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로 판정한다 (이월 AA′)', () => {
@@ -1393,6 +1675,13 @@ describe('프로젝트 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로
  * 아래에서 쏘아 700ms 창(2026-09-24). WS 셋은 코드로 판정했다 — 핸들러가 동기라 DB 잠금을 기다릴 자리가 없다. **이 파일은
  * 목록을 다시 재지 않는다** — 목록에 넣는 사람이 잰다.
  *
+ * **잴 때는 쥔 자의 쓰기까지 쥔다 — 잠금 함수만으로는 모자랐다**(리뷰 F1 · F2: 앞 판의 테마 수정 · 삭제 두 줄이 그렇게 틀렸다).
+ * 다시 잰 판(2026-09-24 · 700ms 창): 진짜 복원(`restoreSnapshot` — 메뉴 · 제목 · 코멘트 · 레이아웃 테마 T→S 를 실제로 쓴다) ·
+ * 진짜 트리 쓰기(`deletePage` — 코멘트 달린 페이지 + `insertMenuNode`) · 진짜 프로젝트 삭제(`deleteProject`까지 — CASCADE)를
+ * 커밋 전에 쥐었다. 복원 · 트리 뒤에서 아래 목록은 **전부 안 섰다.** 프로젝트 삭제 뒤에서는 멤버 수정 · 삭제 · 프리셋 · 토큰
+ * 삭제가 **섰다**(CASCADE 가 그 행을 쥔다) — 풀리면 행이 없어 **404 · 아무것도 커밋 안 됨**이라 권한 판정의 자리가 아니다(그
+ * 사이의 강등도 같은 멤버 행에서 선다). «쓰이는 대상»의 판은 없다 — 멤버 · 프리셋 · 토큰 행은 어느 FK 도 가리키지 않는다.
+ *
  * **못 재는 것**: 플러그인의 `addHook`으로 단 훅이 잠금에 서는 쓰기 — 라우트가 아니라 분모에 안 든다(오늘 없다 ·
  * `pre-guard-hook-census.test.ts`의 «못 재는 것»과 같은 부류). 라우트 **밖**의 쓰기 경로(예: 서버가 스스로 도는 작업)도
  * 같다. 그리고 **이 두 부류가 아닌 줄** — 아래 목록의 멤버 수정 · 삭제는 프로젝트 잠금에는 안 서지만 다른 owner 의 역할
@@ -1402,12 +1691,14 @@ const NOT_LOCKED: Record<string, string> = {
   'POST /api/auth/login': '프로젝트 밖 — 세션 행만 쓴다',
   'POST /api/auth/logout': '프로젝트 밖 — 세션 행만 지운다',
   'POST /api/projects': '새 프로젝트 — 남이 쥘 수 있는 행이 아직 없다',
-  'PATCH /api/projects/:projectId/members/:userId': '멤버 행 — FK 열을 안 바꾸는 UPDATE 는 프로젝트 행을 안 잡는다',
-  'DELETE /api/projects/:projectId/members/:userId': '멤버 행 — 자식 행 삭제는 부모 행을 안 잡는다',
-  'PUT /api/projects/:projectId/themes/:themeId': '테마 행 — 복원은 테마 행을 안 잠근다',
-  'DELETE /api/projects/:projectId/themes/:themeId': '테마 행 — 자식 행 삭제는 부모 행을 안 잡는다',
-  'DELETE /api/projects/:projectId/presets/:presetId': '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡는다',
-  'DELETE /api/projects/:projectId/tokens/:tokenId': '토큰 행 — 자식 행 삭제는 부모 행을 안 잡는다',
+  'PATCH /api/projects/:projectId/members/:userId':
+    '멤버 행 — FK 열을 안 바꾸는 UPDATE 는 프로젝트 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
+  'DELETE /api/projects/:projectId/members/:userId':
+    '멤버 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
+  'DELETE /api/projects/:projectId/presets/:presetId':
+    '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
+  'DELETE /api/projects/:projectId/tokens/:tokenId':
+    '토큰 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
   'WS ping': '아무것도 안 쓴다',
   'WS lock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
   'WS unlock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',

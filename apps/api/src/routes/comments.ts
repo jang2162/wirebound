@@ -155,7 +155,7 @@ import {
   updateCommentBody,
   type CommentRecord,
 } from '../repos/comments'
-import { findPageById, lockPageForEdit } from '../repos/pages'
+import { findPageById, lockPageForEdit, lockPageShared } from '../repos/pages'
 import { lockProjectShared } from '../repos/projects'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
 import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
@@ -735,14 +735,17 @@ export function commentRoutes() {
         let updated
         try {
           updated = await withTransaction(app.db, async (trx) => {
-            // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`) — 아래 재확인이 멤버 행을 잡으므로, 코멘트
-            // 행부터 잡으면 프로젝트 삭제의 CASCADE 와 고리가 된다(그 함수의 머리말에 잰 값).
+            // **잠금 순서: 프로젝트 행 → 페이지 행 → 멤버 행(재확인) → 코멘트 행.** 프로젝트 행이 먼저인 것은 아래 재확인이
+            // 멤버 행을 잡으므로 코멘트 행부터 잡으면 프로젝트 삭제의 CASCADE 와 고리가 되어서다(`repos/projects.ts`의
+            // `lockProjectShared`). 페이지 행이 그다음인 것은 코멘트 행을 지우는 두 쓰기(코멘트 · 페이지 삭제)와 같은 줄에 서기
+            // 위해서다(`repos/pages.ts`의 `lockPageShared` — 둘이 코멘트 행 · 멤버 행을 반대 순서로 잡는다).
             await lockProjectShared(trx, projectId)
-            const edited = await updateCommentBody(trx, pageId, commentId, body.body)
-            // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
-            // 있다 — 그 대기 뒤의 역할로 판정한다.
-            if (edited) await recheckProjectRole(trx, request)
-            return edited
+            if (!(await lockPageShared(trx, projectId, pageId))) return null
+            // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 · 같은 페이지의
+            // 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다. 이 뒤의 대기(같은 코멘트 행)는 멤버 행을 `FOR SHARE`로
+            // 쥔 채라 그 사이의 강등은 이 쓰기의 커밋을 기다린다 — 판정이 커밋 순간의 것으로 남는다.
+            await recheckProjectRole(trx, request)
+            return updateCommentBody(trx, pageId, commentId, body.body)
           })
         } catch (error) {
           if (error instanceof CommentNulByteError) throw badRequest(error.message)

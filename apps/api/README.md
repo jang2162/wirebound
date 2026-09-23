@@ -766,6 +766,10 @@ Chrome: 제 손 · 남의 손 · 복원이 지운 판 전부). 이제 키가 있
 페이지 삭제는 프로젝트 행(`NO KEY UPDATE` — 제 FK `KEY SHARE`와 안 부딪힌다) → 페이지 행(`FOR UPDATE`) → 그
 페이지의 코멘트 삭제 + 묘비 삽입 → 페이지 행 삭제. 복원은 프로젝트 행(`FOR UPDATE`) → 페이지 행들 → 코멘트 행들
 (`lockProjectForRestore`) → 같은 문장. 게시는 페이지 행 → 키의 행 → 묘비(묘비를 넣지 않으므로 프로젝트 행을 안 잡는다).
+코멘트 **수정**은 묻지 않지만 같은 줄에 선다 — 프로젝트 행(`KEY SHARE` · `lockProjectShared`) → 페이지 행(`KEY SHARE` ·
+`repos/pages.ts`의 `lockPageShared`) → 멤버 행(재확인) → 코멘트 행 `UPDATE`(이월 AA′ 리뷰 F3). 페이지 행을 건너뛰면 코멘트
+삭제(재확인 → 코멘트 행)와 페이지 삭제(코멘트 행 → 재확인)가 코멘트 행 · 멤버 행을 **반대 순서로** 잡으므로 어느 순서를 골라도
+하나와 엇갈려, 다른 owner 의 역할 변경(`lockOwnerIds`)이 끼면 3자 교착이 선다 — 잰 값은 `test/guard-in-lock.test.ts`의 F3 · F3′.
 프로젝트 행을 나중에 잡으면 복원 · 프로젝트 삭제(프로젝트 → 페이지)와 **고리**가 된다 — 잰 값: 코멘트 삭제의
 `lockProjectForBurial` · 페이지 삭제의 `lockProjectTree`를 각각 떼면 `test/comment-tombstone.test.ts`의 «코멘트 삭제 ∥ 복원» ·
 «페이지 삭제 ∥ 복원»이 각자 교착(`40P01` → 500)으로 죽는다.
@@ -1384,6 +1388,10 @@ id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청
 - **프로젝트를 통째로 다루는 트랜잭션은 프로젝트 행을 먼저 잠근다**(`repos/projects.ts`의
   `lockProjectRow` — 복원과 프로젝트 삭제). 그다음이 페이지다. 한쪽이 페이지를 먼저 잡으면 둘이
   서로를 기다린다 — `test/guard-in-lock.test.ts`의 «잠금 순서» 절이 잰다.
+- **그 밖의 프로젝트 쓰기는 프로젝트 행을 `KEY SHARE`로 먼저 잡는다**(`repos/projects.ts`의
+  `lockProjectShared` — 테마 고르기 · 수정 · 삭제 · 코멘트 수정 · FK 삽입 다섯). 순서는 «프로젝트 행 →
+  자기 행 → 멤버 행(재확인)»이다 — 자기 행부터 잡으면 재확인이 프로젝트 삭제의 CASCADE 와 고리가 되고,
+  남의 쓰기가 건 잠금(복원의 레이아웃 행 · 테마 행 `KEY SHARE`)에 선 대기가 재확인보다 늦게 끝난다.
 
 ## P1·P2a가 만들지 않은 것
 

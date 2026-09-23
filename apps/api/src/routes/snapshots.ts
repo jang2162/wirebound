@@ -90,6 +90,7 @@ import {
   type SnapshotDetail,
   type SnapshotSummary,
 } from '../repos/snapshots'
+import { lockProjectShared } from '../repos/projects'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
 import { broadcastOrigin, notifyRestored } from '../ws/notify'
@@ -189,6 +190,9 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
       let record: SnapshotDetail
       try {
         record = await withTransaction(app.db, async (trx) => {
+          // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`). 삽입의 FK 도 같은 `KEY SHARE`를 걸지만
+          // 그것은 프로젝트 삭제 뒤에 섰다가 깨면 23503 — 봉투 없는 500 이다(이월 AA′ 남는 틈 2). 먼저 잡으면 0 행 → 404.
+          await lockProjectShared(trx, projectId)
           const inserted = await insertSnapshot(trx, {
             projectId,
             tag: body.tag,
