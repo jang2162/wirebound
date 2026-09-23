@@ -79,20 +79,24 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 
 | 걸음 | 시간 | 관측 |
 |---|---|---|
-| `pnpm install` | **1.2초** | 패키지 **357개**. **pnpm 스토어가 이미 따뜻한 기계다** — 처음 받는 기계는 내려받는 시간이 더 든다. `wireb` 관련 `WARN` 둘이 나오는데 **정상이다**(6.2) |
+| `pnpm install` | **1.2초** | 패키지 수는 명령의 끝 줄이 말한다. **pnpm 스토어가 이미 따뜻한 기계다** — 처음 받는 기계는 내려받는 시간이 더 든다. `wireb` 관련 `WARN` 둘이 나오는데 **정상이다**(6.2) |
 | `pnpm build` | **4.2초** | `packages/*` 여섯의 `dist` |
-| `migrate` | **1.5초** | 빈 DB 에 마이그레이션 **열하나**를 올렸다. **시딩은 안 켠 값이다** — 켜면 scrypt 해시 한 번이 더 든다 |
+| `migrate` | **1.5초** | 빈 DB 에 마이그레이션 전부(`ls apps/api/src/db/migrations/0*.ts \| wc -l` 개)를 올린 값이다. **시딩은 안 켠 값이다** — 켜면 scrypt 해시 한 번이 더 든다 |
+
+다시 재려면 각 걸음 앞에 `time` 을 붙인다.
 
 `docker compose … up -d`가 만드는 것은 Postgres 컨테이너 하나이고 **호스트 포트는
 `apps/api/.env` 의 `POSTGRES_PORT` 다. 기본값은 5433**이다(5432가 아니다 — 기계에 이미
 있는 Postgres 와 겹치지 않게 비켜 뒀다). 접속 문자열은 `.env.example`에 그 값으로 들어 있다.
 
 **컨테이너 이름은 고정이 아니다.** compose 가 `<프로젝트>-postgres-1` 로 짓고 **프로젝트
-이름은 디렉터리 이름**이다(**대문자는 소문자로 낮춘다** — 귀속: 리뷰 §4.2 가 `stageA` →
-`stagea` 로 쟀다) — 저장소 루트에서 띄우면 `wirebound-postgres-1`, 워크트리에서
+이름은 디렉터리 이름**이다(**대문자는 소문자로 낮춘다** — `stageA` →
+`stagea`) — 저장소 루트에서 띄우면 `wirebound-postgres-1`, 워크트리에서
 띄우면 `<워크트리이름>-postgres-1`. **볼륨도 같은 규칙으로 갈린다**(`<프로젝트>_wirebound-pgdata`).
 그래서 **워크트리마다 자기 컨테이너·자기 데이터**를 갖는다(3.1). 이름으로 컨테이너를 찾지
-말고 `docker compose …` 를 쓴다(6.3).
+말고 `docker compose …` 를 쓴다(6.3). **`docker-compose.yml` 에 `container_name` 을 박지 않는다** —
+박으면 둘째 워크트리의 `up` 이 `Conflict. The container name "/…" is already in use` 로 죽는다
+(`apps/api/test/port-agreement.test.ts` 가 그 부재를 잰다).
 
 > **`--env-file apps/api/.env` 를 빼면 포트가 기본값(5433)으로 되돌아간다.** 그러면
 > 컨테이너가 그 포트로 **다시 만들어지고**, `apps/api/.env` 의 접속 문자열은 다른 수를
@@ -140,7 +144,7 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 ```
 # 터미널 1 (API)
 {"level":30,…,"msg":"Server listening at http://127.0.0.1:3001"}
-{"level":30,…,"msg":"이 서버가 보는 DB: 127.0.0.1:5433/wirebound · 마이그레이션 11건"}
+{"level":30,…,"msg":"이 서버가 보는 DB: 127.0.0.1:5433/wirebound · 마이그레이션 N건"}
 
 # 터미널 2 (에디터)
   ➜  Local:   http://localhost:5173/
@@ -155,7 +159,8 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 > 3001 로 물러나면 api 는 (같은 값을 거부해서) 안 뜨는데 에디터만 떠서 원래 없애려던
 > 어긋남을 그대로 다시 만들기 때문이다.
 
-> **뒤에 붙는 `마이그레이션 N건` 은 이 DB 의 스키마 상태다.** 워크트리마다 컨테이너를
+> **뒤에 붙는 `마이그레이션 N건` 은 이 DB 의 스키마 상태다**(다 올렸으면
+> `ls apps/api/src/db/migrations/0*.ts | wc -l` 과 같다). 워크트리마다 컨테이너를
 > 띄우면 **빈 볼륨으로 뜨는 것이 정상 경로**가 되므로 그 갈림이 화면에 있어야 한다.
 > **0 건이면 서버가 아예 안 뜬다** — 부팅 중에 `themes` 에 쓰기 때문이다. 그때 나오는
 > 문장은 원문(`relation "themes" does not exist`)이 아니라 이것이다(이 기계에서 쟀다,
@@ -239,7 +244,7 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 **만든 DB 는 `wirebound` 와 소유자·인코딩·콜레이션이 같다**(이 기계에서 쟀다:
 `wirebound` / `UTF8` / `en_US.utf8`).
 
-> **왜 5번이 아직 남아 있나 — 볼륨이 새것이면 `wirebound`·`wirebound_test` 는 이미 있다.**
+> **5번이 왜 있나 — 볼륨이 새것이면 `wirebound`·`wirebound_test` 는 이미 있다.**
 > (이 기계에서 쟀다: 새 볼륨의 `psql \l` 에 둘 다 있다. `docker/postgres-init/01-test-db.sql`
 > 이 **볼륨을 처음 만들 때 돈다** — 6.4 의 함정이 워크트리마다 새 볼륨에서는 안 온다.)
 > 그 이름을 그대로 쓰면 5번을 지울 수 있다. **그래도 이름을 가르는 이유는 하나다:
@@ -281,9 +286,8 @@ apps/api/.env 에서 포트를 한 수로 맞춘다. 자기 Postgres 를 쓰면 
 |---|---|
 | `PORT` | 둘째 서버가 `Error: listen EADDRINUSE: address already in use 127.0.0.1:3031` 로 죽는다. **종료 코드 1** |
 | `POSTGRES_PORT` | 둘째 `up -d` 가 `Bind for 0.0.0.0:<포트> failed: port is already allocated` 로 죽는다. **그런데 그대로 한 번 더 치면 종료 0 으로 "Started" 를 찍고 컨테이너가 뜬다 — 포트 없이.** 그때 `docker compose ps` 의 `PORTS` 칸이 **비어 있고**, 그 포트에 붙는 것은 전부 **옆 워크트리의 컨테이너**다(6.3) |
-| `DATABASE_URL` | 워크트리 B 에서 `migrate:down` 을 한 번 돌리자 **A 의 살아 있는 서버가** `500 {"error":{"code":"internal"}}` 을 내기 시작했다. A 의 로그에만 `relation "api_tokens" does not exist` 가 남았고 **B 는 아무 말도 안 했다**(컨테이너를 공유하던 판에서 쟀다 — 이제 컨테이너를 가르면 이 갈래는 포트가 먼저 막는다) |
-| `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **둘 다 종료 코드 1**로 죽는다. **가르면 둘 다 전 케이스 통과 · 종료 0** 이고, 벽시계는 **혼자 돌리는 것보다 오히려 짧다**(리뷰어 판: 단독 94.02초 vs 동시 두 판이 각각 90.9초 — 귀속: 리뷰 §5). 깨지는 꼴은 셋이다 — 상대의 `globalSetup` 이 판을 내려서 나는 `relation "…" does not exist` · 상대가 커밋한 행과 부딪히는 `409` · 상대의 정리가 지워서 나는 FK 위반. **몇 개가 죽는지는 판마다 다르다**(경쟁 상태다. 두 사람이 각각 재서 13~18 파일 사이로 갈렸다) — **안 낡는 값은 종료 코드뿐이라 그것만 적는다** |
-| (예전) 프록시 대상 | **이제 안 부딪힌다.** 대상이 박혀 있던 시절에는 B 의 에디터에서 **B 의 계정이 401, A 의 계정이 200** 이었고 B 의 API 는 그 로그인을 **0 번** 봤다. vite 도 API 도 아무 말을 안 했다 |
+| `DATABASE_URL` | 워크트리 B 에서 `migrate:down` 을 한 번 돌리자 **A 의 살아 있는 서버가** `500 {"error":{"code":"internal"}}` 을 내기 시작했다. A 의 로그에만 `relation "api_tokens" does not exist` 가 남았고 **B 는 아무 말도 안 했다**(한 컨테이너를 공유할 때의 값이다 — 워크트리마다 컨테이너를 가르면 이 갈래는 포트가 먼저 막는다) |
+| `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **둘 다 종료 코드 1**로 죽는다. **가르면 둘 다 전 케이스 통과 · 종료 0** 이고, 벽시계가 **혼자 돌리는 것보다 길지 않게 나오기도 한다** — 느려지는지는 기계와 부하가 정한다(재는 법: 두 워크트리에서 `time pnpm test` 를 동시에 돌려 혼자 돌린 값과 견준다). 깨지는 꼴은 셋이다 — 상대의 `globalSetup` 이 판을 내려서 나는 `relation "…" does not exist` · 상대가 커밋한 행과 부딪히는 `409` · 상대의 정리가 지워서 나는 FK 위반. **몇 개가 죽는지는 판마다 다르다**(경쟁 상태다) — **안 낡는 값은 종료 코드뿐이라 그것만 적는다** |
 
 > **`apps/api/.env`를 고쳤으면 서버 둘을 **다** 다시 띄워라.** `tsx watch`는 **소스만 본다** —
 > `.env`가 바뀌어도 다시 읽지 않는다. 이 기계에서 쟀다: `.env`에 없는 브라우저 경로를 심고
@@ -383,8 +387,7 @@ pnpm uninstall --global @wirebound/cli @wirebound/mcp
 ```
 
 이것이 지우는 것은 `PATH`에 놓인 `wireb`·`wireb-mcp`뿐이다(`command -v wireb` → 없음).
-**pnpm 의 전역 저장소에 둘이 남는다**(이 기계에서 쟀다 — 이 자리를 리뷰가 지목했다:
-귀속: 리뷰 §5 C6):
+**pnpm 의 전역 저장소에 둘이 남는다**(이 기계에서 쟀다):
 
 | 남는 것 | 무엇이 담겨 있나 |
 |---|---|
@@ -418,7 +421,7 @@ echo "$비밀번호" | wireb login --email me@example.com
 | **0** | 정상. **`lint`는 결함이 있어도 0 이다** — 결함이 있는 것은 오류가 아니다 |
 | **2** | 설정·자격이 없다 → `wireb init` 또는 `wireb login` |
 | **3** | 서버가 거절했다(권한·잠금·검증) |
-| **4** | 서버에 못 닿았다 — **같은 주소의 서버가 죽었을 때**다. `.wirebound.json`의 `server`를 **다른 주소로 바꾸면 4가 아니라 2**가 나온다: 자격이 `(server, projectId)`에 매여 있어 네트워크를 타기 전에 끊긴다(귀속: 리뷰 §5 C4) |
+| **4** | 서버에 못 닿았다 — **같은 주소의 서버가 죽었을 때**다. `.wirebound.json`의 `server`를 **다른 주소로 바꾸면 4가 아니라 2**가 나온다: 자격이 `(server, projectId)`에 매여 있어 네트워크를 타기 전에 끊긴다 |
 | **10** | `lint --fail-on warning`에 걸렸다 (이 기계에서 쟀다) |
 
 ---
@@ -447,7 +450,7 @@ Error [ERR_MODULE_NOT_FOUND]: Cannot find module
 > **`--filter`를 빼지 마라.** 루트 `package.json`에 `start`가 없다 — 저장소 루트에서 그냥
 > `pnpm start`를 치면 `ERR_PNPM_NO_SCRIPT_OR_SERVER  Missing script start or file server.js`이고
 > **그것도 종료 코드 1이다.** 두 실패의 코드가 같아서 **위 문장을 확인해 본 사람이 확인했다고
-> 착각한다**(이 자리를 그렇게 잘못 적었다가 리뷰가 잡았다 — 귀속: 리뷰 §4 B2).
+> 착각한다** — 종료 코드가 아니라 찍힌 문장으로 가른다.
 
 **조치.** `pnpm build`. 스키마를 함께 고치며 개발할 때는 별도 터미널에
 `pnpm --filter @wirebound/schema build:watch`.
@@ -491,8 +494,8 @@ docker ps --filter name=postgres     # 이 기계의 전부
 ```
 
 > **`docker compose -p <이름> ps`의 `<이름>`은 그 컨테이너를 실제로 띄운 디렉터리의 이름**
-> 이어야 한다. 이 기계에서 쟀다: 떠 있던 컨테이너의 프로젝트가 `feat-p1-api`(지금은 git 이
-> 모르는 워크트리다)였고 `-p wirebound ps`가 **빈 표**를 냈다.
+> 이어야 한다. 이 기계에서 쟀다: 프로젝트가 `feat-p1-api` 인 컨테이너에 `-p wirebound ps` 를
+> 치면 **빈 표**다.
 
 **ⓑ `up -d` 가 포트 충돌로 죽는다.** 다른 워크트리가 같은 `POSTGRES_PORT` 를 이미 열었다
 (이 기계에서 쟀다):
@@ -522,7 +525,7 @@ Error response from daemon: failed to set up container networking:
 
 > **데이터가 있어야 하는데 비었으면 지우지 마라.** 데이터는 없어진 것이 아니라 **다른
 > 이름의 볼륨**에 있다. 프로젝트 이름이 다르면 compose 가 보는 볼륨도 다르기 때문이다.
-> 이 기계에서 쟀다 — **워크트리 컨테이너가 하나 떠 있는 상태다**:
+> 예시 출력이다 — **워크트리 컨테이너가 하나 떠 있는 기계**의 모양이다:
 >
 > ```
 > $ docker system df -v
@@ -534,12 +537,9 @@ Error response from daemon: failed to set up container networking:
 > ```
 >
 > **`LINKS` 로 고르지 마라 — 1 인 것이 여럿이다.** `LINKS` 는 *"지금 어떤 컨테이너가 이
-> 볼륨을 물고 있다"* 는 뜻일 뿐이고, **워크트리마다 컨테이너를 띄우는 것이 정상이 된 이상
-> 그런 볼륨이 여럿인 것도 정상이다**(위 표가 그 모양이다. 이 규칙이 한동안 *"`LINKS` 가
-> 1 인 것 하나를 고른다"* 로 적혀 있었는데 **이 슬라이스가 그것을 거짓으로 만들었고**
-> 리뷰어가 잡았다). **크기도 사는 수다** — 같은 볼륨을 네 번 재서 145.9MB · 316.4MB ·
-> 203.8MB · 186.5MB 를 봤다(Postgres 가 회수하는 공간이 그때그때 다르다. 가운데 둘은
-> 리뷰어와 앞 판이 쟀다).
+> 볼륨을 물고 있다"* 는 뜻일 뿐이고, **워크트리마다 컨테이너를 띄우는 것이 정상이므로
+> 그런 볼륨이 여럿인 것도 정상이다**(위 표가 그 모양이다). **크기도 사는 수다** — 같은
+> 볼륨을 다시 재면 크기가 달라진다(Postgres 가 회수하는 공간이 그때그때 다르다).
 >
 > **고르는 법은 이름이다.** 볼륨 이름의 `_` 앞이 **그 볼륨을 만든 디렉터리 이름**이다.
 >
@@ -564,15 +564,13 @@ Error response from daemon: failed to set up container networking:
 > 다시 띄우면 컨테이너는 `Recreated` 되고 볼륨은 그대로다**(이 기계에서 쟀다 — 임시
 > 프로젝트에 표를 하나 만들어 두고 포트를 바꿔 다시 띄웠더니 그 표가 그대로 있었다).
 
-> **오늘 이 기계의 컨테이너는 이 규칙보다 먼저 떠 있다.** 라벨이
-> `com.docker.compose.project=feat-p1-api`, `project.working_dir=…/.worktrees/feat-p1-api`
-> 인데 **그 워크트리는 이제 git 이 모르는 디렉터리다**(`git worktree list` 에 없고, 남은
-> 것은 compose 의 바인드 마운트가 되살린 빈 `docker/postgres-init/` 뿐이라
-> `docker-compose.yml` 도 없다). 그래서 저장소 루트에서 `docker compose down` 을 쳐도
-> **이 컨테이너를 못 찾는다.** 다루려면 `docker compose -p feat-p1-api …` 이거나
-> `docker start/stop <컨테이너이름>` 이다(둘 다 이 기계에서 확인했다). **그 빈
-> `postgres-init/` 은 그 프로젝트로 볼륨을 다시 만들면 `01-test-db.sql` 이 안 돈다는
-> 뜻이기도 하다** — 6.4 의 함정이 그때 온다.
+> **워크트리를 지운 뒤 남은 컨테이너는 저장소 루트의 `docker compose down` 으로 못 찾는다.**
+> 라벨 `com.docker.compose.project=<워크트리명>` · `project.working_dir=…/.worktrees/<워크트리명>` 이
+> git 이 모르는 디렉터리를 가리킨다 — `docker-compose.yml` 은 없고, 그 컨테이너를 다시 띄운 적이
+> 있으면 compose 의 바인드 마운트가 되살린 빈 `docker/postgres-init/` 만 있다. 다루려면
+> `docker compose -p <워크트리명> …` 이거나 `docker start/stop <컨테이너이름>` 이다(둘 다 이
+> 기계에서 확인했다). **그 빈 `postgres-init/` 은 그 프로젝트로 볼륨을 다시 만들면
+> `01-test-db.sql` 이 안 돈다는 뜻이기도 하다** — 6.4 의 함정이 그때 온다.
 
 ### 6.4 테스트가 이유를 알기 어려운 접속 에러로 죽는다
 
@@ -594,7 +592,7 @@ Error response from daemon: failed to set up container networking:
 docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wirebound_test;'
 ```
 
-> **이제 그 에러가 이 줄을 스스로 들고 온다.** `globalSetup` 이 SQLSTATE `3D000` 을 잡아
+> **그 에러가 이 줄을 스스로 들고 온다.** `globalSetup` 이 SQLSTATE `3D000` 을 잡아
 > **없는 DB 이름을 넣은 `CREATE DATABASE` 한 줄**을 붙여 던진다(이 기계에서 쟀다 —
 > 종료 코드 1). 워크트리마다 테스트 DB 를 가르면(3.1) 이 자리를 자주 지나기 때문이다.
 > **`3D000` 일 때만 붙인다** — 다른 실패에까지 붙이면 엉뚱한 곳을 보게 된다.
@@ -611,7 +609,7 @@ docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE w
 **갈래 넷이고 가르는 법이 다르다.** 앞의 셋은 *"로그인이 안 된다"*이고 마지막 하나는
 *"로그인은 되는데 목록만 비어 있다"*이다.
 
-**ⓞ 그 계정이 애초에 없다.** **가입 화면도 가입 엔드포인트도 없으므로**(2026-08-20)
+**ⓞ 그 계정이 애초에 없다.** **가입 화면도 가입 엔드포인트도 없으므로**
 계정은 2절 5번의 `migrate` 로만 생긴다 — 그 걸음에서 환경변수를 안 준 사람은 **DB 에
 사용자가 0명**인 채로 로그인 화면을 보고 있다.
 
@@ -628,7 +626,7 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 올바르지 않습니다"* 다(로그인은 *"없는 계정"* 과 *"틀린 비밀번호"* 를 구분하지 않는다 —
 설계 §10). 그래서 화면이 아니라 터미널에서 가른다.
 
-**ⓐ API 서버가 안 떠 있다(또는 다른 포트에 떠 있다).** 프록시 대상은 이제 `apps/api/.env`를
+**ⓐ API 서버가 안 떠 있다(또는 다른 포트에 떠 있다).** 프록시 대상은 `apps/api/.env`를
 따라가므로 **손으로 어긋나게 만들 수는 없지만**, `.env`를 고치고 **에디터를 다시 안 띄우면**
 옛 대상을 잡고 있다(3.1의 마지막 인용문).
 
@@ -707,7 +705,7 @@ approve)``를 낸다.
 
 ### 7.2 다른 호스트 — **안 해 봤다**
 
-Claude Desktop·Cursor·Zed 등은 **이 슬라이스가 등록해 보지 않았다.** stdio 서버를 받는
+Claude Desktop·Cursor·Zed 등은 **이 문서가 등록해 보지 않았다.** stdio 서버를 받는
 호스트라면 위와 같은 모양(`command` + `args` + 작업 디렉터리)일 것이나 **확인한 값이
 아니다.** 등록해 본 사람이 여기 한 줄을 더해라.
 
@@ -730,11 +728,11 @@ Claude Desktop·Cursor·Zed 등은 **이 슬라이스가 등록해 보지 않았
 | 어디 | 무엇이 보이나 |
 |---|---|
 | `GET .../export?format=pptx` | **HTTP 200 이고 파일은 나온다.** 던지지 않는다. 슬라이드의 화면 자리에 **"화면 이미지가 실리지 않았습니다"**가 있고 `ppt/media/`가 **비어 있다** |
-| `GET .../export/preview?format=pptx` | **여기에만 이유가 있다** — `screenFailures[].reason`:<br>`브라우저를 띄우지 못했습니다: browserType.launch: Executable doesn't exist at <경로>` |
-| 에디터 화면 | **아무것도 안 보인다.** `apps/web`이 아직 pptx 미리보기를 그리지 않는다 |
+| `GET .../export/preview?format=pptx` | **이유는 이 응답에만 있다** — `screenFailures[].reason`:<br>`브라우저를 띄우지 못했습니다: browserType.launch: Executable doesn't exist at <경로>` |
+| 에디터 화면 | 내보내기 패널에서 pptx 를 고르면 **위 미리보기의 `fontWarning`·`screenFailures`를 보인다**(`apps/web/src/shell/export-panel.tsx`) |
 | **서버 로그** | **아무것도 안 남는다**(쟀다 — `chromium`·`browser`·`screen`·`화면` 매치 **0** · `warn`·`error` 줄 **0**). 운영자가 지켜보는 자리에도 안 간다 |
 
-> **그래서 이유는 `GET .../export/preview?format=pptx`를 직접 불러야 보인다.**
+> **그래서 이유는 미리보기(에디터의 내보내기 패널, 또는 `GET .../export/preview?format=pptx` 직접 호출)로만 보인다.**
 > **`wireb export`로도 안 보인다** — 그 명령은 `/export` 하나만 부르므로 `screenFailures`가
 > **CLI 에 도달할 길이 없다**(`packages/cli/src` 전체에 그 이름이 **0건**이다). 이 기계에서
 > 쟀다: 실패 상태에서도 *"1개 파일을 썼습니다"* · **종료 코드 0** · **표준에러 0 바이트**이고
@@ -749,10 +747,9 @@ Claude Desktop·Cursor·Zed 등은 **이 슬라이스가 등록해 보지 않았
 node apps/api/node_modules/playwright-core/cli.js install chromium
 ```
 
-> **`node node_modules/playwright-core/cli.js …`는 이 저장소에서 안 된다.** pnpm 의 엄격한
+> **저장소 루트에서 `node node_modules/playwright-core/cli.js …`는 안 된다.** pnpm 의 엄격한
 > 배치라 `playwright-core`가 루트 `node_modules`에 없다 — 그대로 부르면
-> `Cannot find module`이다(이 기계에서 쟀다. 이 저장소의 앞선 문서가 루트 기준으로 적어
-> 뒀는데 그 줄이 틀렸다 — `docs/superpowers/plans/2026-08-17-p10-2-carryforward.md` §3.2).
+> `Cannot find module`이다(이 기계에서 쟀다).
 
 | 무엇 | 값 (이 기계에서 쟀다) |
 |---|---|
@@ -787,7 +784,7 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 
 > **경로를 틀리게 적으면 브라우저가 없는 것과 똑같이 보인다.** 이 기계에서 쟀다 — 없는 경로를
 > 주면 `export`는 **HTTP 200**에 **8,008 B**, `ppt/media` **0개**, 슬라이드는
-> *"화면 이미지가 실리지 않았습니다"* 뿐이다. **8.1의 「브라우저가 없을 때」와 바이트까지 같다.**
+> *"화면 이미지가 실리지 않았습니다"* 뿐이다. **8.1 「없으면 무엇이 보이나」의 브라우저가 없는 판과 바이트까지 같다.**
 > **서버 로그에도 안 남는다**(그 요청 뒤 로그에서 `chromium|browser|screen|화면` 매치 **0**,
 > `warn`·`error` 레벨 줄 **0**).
 >
@@ -803,7 +800,7 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 - **한글 글꼴이 없으면 한 장도 안 그린다.** 두부를 내보내지 않는 판정이고, 미리보기의 `fontWarning`이 그 사실을 낸다. 리눅스 컨테이너에는 보통 없다 — `fonts-noto-cjk` 부류를 넣어야 한다(**이 기계에서는 재지 못했다** — 10절).
 - **바깥으로 나가는 요청을 끊는다.** 테마의 `@font-face`·`url()`은 사용자가 적은 문자열이라 서버가 그것을 가져가면 안 된다. **대가:** 원격 웹폰트를 든 테마는 에디터 캔버스와 다르게 그려진다.
 - **긴 페이지는 조용히 실오라기가 된다.** 화면 전체를 찍으므로 높이가 내용을 따라가고, 슬라이드 위에서 폭이 줄어든다. 상한은 **페이지 장 수**이지 바이트가 아니다.
-- 자세한 값(화소·동시성·타임아웃·상한·요청끼리의 방벽 없음)은 [`apps/api/README.md`의 *"화면 이미지를 그리는 조건"*](apps/api/README.md#화면-이미지를-그리는-조건-p10-2)에 있다.
+- 자세한 값(화소·동시성·타임아웃·상한·요청끼리의 방벽 없음)은 [`apps/api/README.md`의 *"화면 이미지를 그리는 조건"*](apps/api/README.md#화면-이미지를-그리는-조건)에 있다.
 
 ---
 
@@ -822,16 +819,16 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 - **워크트리 둘이 `pnpm test`를 동시에 돌려도 된다 — 붙는 DB 가 다르면.** 워크트리마다 자기
   컨테이너를 띄우면 그것이 저절로 갈린다(포트가 다르므로). 한 컨테이너를 공유한다면
   `TEST_DATABASE_URL` 을 갈라야 한다. 3.1 이 그
-  절차다. 같으면 깨진다(3.1 의 표에 값이 있다). 가른 상태로 동시에 돌려 **둘 다 전 케이스
-  통과 · 종료 0** 을 확인했다(구현자와 리뷰어가 각각).
-- **`pnpm test`는 브라우저를 안 띄운다.** 진짜 브라우저를 재는 것은 `pnpm test:build` 하나이고, 브라우저가 없으면 **건너뛰고 그렇다고 말한다**(리뷰어가 빈 캐시로 재서 **종료 0 · 13 skipped** 를 확인했다 — 귀속: 리뷰 §7).
-- **`pnpm test:build`는 시작할 때 패키지를 다시 빌드한다**(`vitest.config.ts`가 *"tsdown 재빌드를 `beforeAll`에서 돈다"*고 적는다). 그래서 넷 중 이것만 다른 셋과 결이 다르다 — 이미 빌드된 자리에서도 **10~13초**였다(이쪽이 세 번, 리뷰어가 두 번 쟀다).
+  절차다. 같으면 깨진다(3.1 의 표에 값이 있다). 가른 상태로 동시에 돌리면 **둘 다 전 케이스
+  통과 · 종료 0** 이다.
+- **`pnpm test`는 브라우저를 안 띄운다.** 진짜 브라우저를 재는 것은 `pnpm test:build` 하나이고, 브라우저가 없으면 **건너뛰고 그렇다고 말한다**(빈 캐시로 돌리면 **종료 0** 이고 건너뛴 수를 `skipped` 로 찍는다).
+- **`pnpm test:build`는 시작할 때 패키지를 다시 빌드한다**(`vitest.config.ts`가 *"tsdown 재빌드를 `beforeAll`에서 돈다"*고 적는다). 그래서 넷 중 이것만 다른 셋과 결이 다르다 — 이미 빌드된 자리에서도 **10초 남짓** 든다(`time pnpm test:build` 로 잰다).
 - 파일 하나만 돌리려면 `pnpm vitest run <경로>`, api 만 돌리려면 `pnpm vitest run --project api`.
 
 > **브라우저가 없을 때 `test:build`가 찍는 줄은 `npx playwright install chromium`을 권한다.**
 > **그 명령을 쓰지 마라** — 이 저장소는 `playwright` 패키지를 일부러 안 들인다(그것이 브라우저를
 > 내려받는 postinstall 을 달고 온다). 브라우저를 넣는 자리는 **8.2** 하나다. 그 안내 문구
-> (`apps/api/build-test/screen-chromium.test.ts`)는 아직 안 맞췄다 — 귀속: 리뷰 §5 C5.
+> (`apps/api/build-test/screen-chromium.test.ts`)가 이 길과 어긋나 있다 — 문구를 믿지 말고 8.2 를 따른다.
 
 ---
 
@@ -843,17 +840,15 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 |---|---|
 | **리눅스·Windows** | 이 문서의 값은 전부 **macOS · Apple Silicon** 에서 쟀다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
 | **컨테이너의 한글 글꼴** | 8.4 의 *"없으면 한 장도 안 그린다"*를 **글꼴이 없는 기계에서 재 보지 못했다.** 이 기계에는 있다 |
-| **`Dockerfile`·배포** | **없다.** 배포 절차를 지어내지 않았다. 이미지를 만드는 사람은 **브라우저 바이너리와 한글 글꼴 둘 다** 넣어야 하고, 그 둘이 들었는지 재는 자를 함께 만들어야 한다 (`docs/superpowers/plans/2026-08-17-p10-2-carryforward.md` §3.2) |
+| **`Dockerfile`·배포** | **없다.** 배포 절차를 지어내지 않았다. 이미지를 만드는 사람은 **브라우저 바이너리와 한글 글꼴 둘 다** 넣어야 하고, 그 둘이 들었는지 재는 자를 함께 만들어야 한다 |
 | **npm 배포** | 패키지가 전부 `private`이다. `npm i -g wirebound` 같은 길은 **없다** — 5.1 이 그래서 두 길을 든다 |
 | **Claude Code 밖의 MCP 호스트** | 7.2 |
 | **`--with-deps`** | 리눅스에서만 의미가 있어 이 기계에서 안 썼다 |
 | **첫 설치의 내려받기 시간** | 2절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
 | **워크트리 셋 이상** | 3.1 의 값은 전부 **워크트리 둘**로 쟀다 |
-| **이름 충돌이 사라진 뒤의 볼륨 갈림** | **더는 추론이 아니다.** 2026-08-19(워크트리마다 컨테이너)가 임시 프로젝트 둘로 **끝까지 쟀다**: `container_name` 을 걷어내면 둘째 컨테이너가 `<프로젝트>-postgres-1` 로 뜨고 **자기 볼륨을 새로 만들며 그 DB 는 비어 있다.** 사용자의 컨테이너는 안 건드렸다 |
 | **옛 볼륨을 새 이름으로 옮기기** | 절차만 있고 **이 기계에서 아직 안 돌렸다** — `docs/superpowers/plans/2026-08-19-per-worktree-container-report.md` 가 든다(복사이지 이동이 아니다) |
 | **`--env-file` 을 뺀 `up -d` 가 무엇을 하는가** | **안 쟀다.** 기본값이 5433 이라 재려면 사용자의 컨테이너가 쓰는 포트를 건드려야 한다. **잰 것은 `docker compose config` 가 그때 5433 을 낸다는 것까지다** |
-| **컨테이너 이름 충돌의 원문** | 이제 안 난다(이름을 고정하지 않는다). 옛 원문 `Conflict. The container name "/wirebound-postgres" is already in use…` 는 **설치 매뉴얼 판이 이 기계에서 잰 값**이다 |
-| **`SCREEN_CHROMIUM_PATH`의 성공 방향에 자동 케이스가 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. ***"옳은 경로를 주면 그 실행 파일로 뜬다"*는 손으로만 쟀다** — 브라우저 둘이 있어야 세울 수 있는 자리다(이쪽과 리뷰어가 각각 손으로 확인했다) |
+| **`SCREEN_CHROMIUM_PATH`의 성공 방향에 자동 케이스가 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. ***"옳은 경로를 주면 그 실행 파일로 뜬다"*는 손으로만 쟀다** — 브라우저 둘이 있어야 세울 수 있는 자리다 |
 
 ---
 
@@ -864,7 +859,7 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 | **API 를 부른다** — 엔드포인트·에러 형식·권한·응답 형태 | [`apps/api/README.md`](apps/api/README.md) |
 | **에이전트에게 설계서를 읽힌다** | [`packages/mcp/skill/SKILL.md`](packages/mcp/skill/SKILL.md) |
 | **저장소 규칙**(워크트리·커밋·병렬 작업) | [`CLAUDE.md`](CLAUDE.md) |
-| **무엇이 왜 그렇게 서 있나** | `docs/superpowers/plans/2026-08-17-p10-2-carryforward.md` — 로드맵 전체와 미결 장부 |
+| **무엇이 왜 그렇게 서 있나** | `docs/superpowers/plans/` — 계획과 이월 장부. **시점 기록이다** — 지금 참인 규칙은 이 문서들과 설계 규격이 말한다 |
 | **설계 규격** | `docs/superpowers/specs/2026-08-03-wirebound-design.md` |
 
 ### 저장소 배치
