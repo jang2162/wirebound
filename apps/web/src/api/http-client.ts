@@ -43,6 +43,50 @@ const UNREADABLE = '서버 응답을 이해할 수 없습니다'
 const UNREACHABLE = '서버에 연결하지 못했습니다'
 
 /**
+ * **일반 읽기의 시간 제한**(이월 AD · 2026-09-23). 앞 판의 읽기에는 시간 제한이 없었다 — 판정용 다시 읽기에만 있었다
+ * (`panels/write-ledger.tsx`의 `race`). 서버가 답을 안 주면(Chrome · 이 워크트리의 Postgres 컨테이너를 `pause` —
+ * 1차 W′ 의 분할 모델: 세션 조회까지 풀에서 기다린다) 걸린 읽기가 **20초 내내** 이랬다:
+ *
+ * | 읽기 | 화면 |
+ * |---|---|
+ * | 세션 확인(`me` — 새로고침) | **빈 흰 화면**(문지기가 `pending`에서 아무것도 안 그린다) |
+ * | 프로젝트 목록(`listProjects`) | «불러오는 중…» |
+ * | 프로젝트 열기(`getProject` — 트리는 그 뒤라 안 나갔다) | «불러오는 중…» |
+ * | 페이지 옮기기(`getPage`) | «페이지를 불러오는 중…» |
+ * | 코멘트 탭(`listComments`) | «코멘트를 불러오는 중…» |
+ *
+ * 컨테이너를 풀면 저절로 돌아왔다 — 분할이 풀리지 않으면(죽은 상대를 서버가 알아챌 때까지 수 시간) 끝이 없다.
+ *
+ * 이 판(같은 절차 · 22초에 봄): 다섯 다 12s 와 22s 사이에 «서버가 응답하지 않습니다 — 잠시 뒤 새로고침하세요»(`alert`)를
+ * 그 화면의 실패 자리에 그린다 — 세션 확인은 «세션을 확인하지 못했습니다», 프로젝트 열기는 «설계서를 열지 못했습니다»
+ * 아래. 매달린 요청 0. **대가: 거절한 뒤에는 저절로 안 돌아온다** — 컨테이너를 풀어도 그 문장이 남고 새로고침(또는
+ * 페이지·탭을 다시 여는 것)이 다시 읽는다. 앞 판이 «풀리면 돌아온다»였던 것은 끝없이 기다렸기 때문이다.
+ *
+ * **값: 10초 · 두 번.** 이 읽기들이 실제로 걸리는 시간(Vite 프록시 없이 api 직접 · 순차 50회 · 이 기계)은 p50
+ * 4.0–6.2ms · 최대 9.2ms 다(`me` · 목록 · 프로젝트 · 트리 · 페이지 · 코멘트). 10초는 쓰기의 시간 제한과 같은
+ * 값이고(`WRITE_DEADLINE_MS` — 그 근거 표) 본 최대의 천 배를 넘는다. 넘으면 끊고 **한 번 더 보낸다** — 읽기는
+ * 되풀이해도 안전하고, 멈춘 것이 그 연결 하나(반쯤 죽은 프록시 연결 같은)면 새 요청이 산다. 둘째도 넘으면
+ * «서버가 응답하지 않습니다»로 거절한다 — 부른 화면은 제 실패 문장을 그린다(끝없는 «불러오는 중»이 아니다).
+ *
+ * **안 거는 읽기:**
+ *
+ * - **받은 신호가 있는 읽기** — 판정용 다시 읽기다(`getPage`·`listComments`의 `ReadOptions.signal`). 장부가 제
+ *   시간 제한으로 끊는다(`race`) — 여기서 한 번 더 걸면 두 시계가 한 요청을 다툰다.
+ * - **PPTX 미리보기**(`getExportPreview`) — 서버가 페이지를 한 장씩 그린다(이 기계 2페이지 515ms · 페이지 수에 비례).
+ *   HTML 미리보기(같은 판 최대 21.5ms)도 같은 함수라 함께 뺐다 — 한 형식만 거는 갈래를 두지 않았다.
+ * - **쓰기**(`GET` 이 아닌 것) — 우측 패널의 쓰기는 장부가 잰다(이월 R). 그 밖의 쓰기(메뉴 · 스냅샷 …)는 이 판이
+ *   다루지 않는다.
+ *
+ * **응답 머리까지만 잰다** — 본문을 읽는 동안은 재지 않는다. 이 api 는 JSON 을 한 번에 보내 머리 뒤에 멈출 자리가
+ * 없다고 보았다(재지 않았다).
+ */
+export const READ_DEADLINE_MS = 10_000
+/** 일반 읽기를 보내는 횟수 — 첫 번째와 다시 시도 한 번. */
+const READ_ATTEMPTS = 2
+/** 일반 읽기가 시간 제한을 다 넘겼을 때. 사용자에게 그대로 보인다. */
+const READ_TIMEOUT = '서버가 응답하지 않습니다 — 잠시 뒤 새로고침하세요'
+
+/**
  * 바꿀 값이 하나도 없는 갱신 요청을 막을 때 쓰는 메시지.
  *
  * **서버가 준 문장이 아니다** — 서버에 닿기 전에 막으므로 여기서 만든다. 서버는 같은
@@ -1007,12 +1051,35 @@ export function createHttpClient(
   fetchImpl: typeof fetch = globalThis.fetch,
   connectionId: () => string | undefined = () => undefined,
 ): ApiClient {
+  /**
+   * 일반 읽기를 **시간 제한 안에서** 보낸다 — 넘으면 끊고 한 번 더, 그래도 넘으면 «서버가 응답하지 않습니다»다
+   * (`READ_DEADLINE_MS`의 머리말). 시간 안에 온 연결 실패는 다시 보내지 않는다 — 앞 판과 같은 `UNREACHABLE`이다.
+   */
+  async function fetchInTime(url: string, init: RequestInit): Promise<Response> {
+    for (let attempt = 1; attempt <= READ_ATTEMPTS; attempt += 1) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), READ_DEADLINE_MS)
+      try {
+        return await fetchImpl(url, { ...init, signal: controller.signal })
+      } catch {
+        if (!controller.signal.aborted) throw new ApiError(NO_RESPONSE, 'internal', UNREACHABLE)
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+    throw new ApiError(NO_RESPONSE, 'internal', READ_TIMEOUT)
+  }
+
   async function request<T>(
     method: string,
     path: string,
     shape: Shape,
     body?: unknown,
-    options?: (WriteOptions | ReadOptions) & { readonly cache?: RequestCache },
+    options?: (WriteOptions | ReadOptions) & {
+      readonly cache?: RequestCache
+      /** `false`면 일반 읽기여도 시간 제한을 안 건다(`READ_DEADLINE_MS`의 «안 거는 읽기»). */
+      readonly deadline?: false
+    },
   ): Promise<T> {
     // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
     // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`broadcastOrigin`이 길이를 본다).
@@ -1047,13 +1114,19 @@ export function createHttpClient(
     // `err instanceof ApiError`로 분기하므로, 번역하지 않으면 그 분기가 통째로 빗나가
     // 네트워크 오류만 다른 부류로 새어 나간다. `fetch`를 부르는 곳이 여기 하나이므로
     // 번역할 자리도 여기 하나다.
+    // **일반 읽기에는 시간 제한을 건다**(`READ_DEADLINE_MS`) — 받은 신호가 있으면 부른 쪽이 시간을 잰다.
+    const timed = method === 'GET' && options?.signal === undefined && options?.deadline !== false
     let response: Response
-    try {
-      response = await fetchImpl(`${API_PREFIX}${path}`, init)
-    } catch {
-      // `code`는 `internal`이다 — 서버 에러 코드 집합(README "에러 형식")에 "연결 실패"가
-      // 없고, 화면이 `switch`로 가르는 값이라 계약 밖의 코드를 새로 만들지 않는다.
-      throw new ApiError(NO_RESPONSE, 'internal', UNREACHABLE)
+    if (timed) {
+      response = await fetchInTime(`${API_PREFIX}${path}`, init)
+    } else {
+      try {
+        response = await fetchImpl(`${API_PREFIX}${path}`, init)
+      } catch {
+        // `code`는 `internal`이다 — 서버 에러 코드 집합(README "에러 형식")에 "연결 실패"가
+        // 없고, 화면이 `switch`로 가르는 값이라 계약 밖의 코드를 새로 만들지 않는다.
+        throw new ApiError(NO_RESPONSE, 'internal', UNREACHABLE)
+      }
     }
 
     if (!response.ok) throw await toApiError(response)
@@ -1331,11 +1404,14 @@ export function createHttpClient(
         `${projectPath(projectId)}/snapshots/${snapshotId}/restore`,
         SHAPES.restoreResult,
       ),
+    // **시간 제한을 안 건다** — PPTX 는 서버가 페이지를 한 장씩 그린다(`READ_DEADLINE_MS`의 «안 거는 읽기»).
     getExportPreview: (projectId, format) =>
       request<ExportPreview>(
         'GET',
         `${projectPath(projectId)}/export/preview?format=${format}`,
         SHAPES.exportPreview,
+        undefined,
+        { deadline: false },
       ),
     // **요청을 보내지 않는다** — 앵커에 걸 주소를 만들 뿐이다. 그래도 여기 있는 것은
     // 주소를 아는 자리가 하나여야 하기 때문이다(`api/client.ts`의 머리말).
