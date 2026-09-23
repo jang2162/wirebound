@@ -32,6 +32,12 @@ export interface FaultProxy {
    * api 가 보낸 바이트는 버린다(서버 쪽은 이미 닫혔다).
    */
   holdClientAfterServerClose(ms: number): void
+  /**
+   * `fragment` 를 담은 질의를 **Postgres 에 넘긴 뒤 api 쪽 소켓만** 끊는다 — 서버 쪽 소켓은 `close()`까지 열어 둔다. 네트워크
+   * 분할 · NAT 유휴 끊김의 모양이다: api 는 곧바로 연결을 잃었다고 알고, 서버의 백엔드는 **상대가 떠난 줄 모른 채** 그 질의를
+   * 마치고 트랜잭션 안에서 쉰다(잠금을 쥔 채 — 고아). 2026-09-22 ① 리뷰 (b)의 `half-cut` 모드다.
+   */
+  halfCutOnQuery(fragment: string): void
   /** 무장이 쏴졌는가. */
   readonly fired: boolean
   close(): Promise<void>
@@ -41,6 +47,7 @@ type Arm =
   | { kind: 'commit-reply'; fragment: string }
   | { kind: 'query'; fragment: string }
   | { kind: 'corrupt'; fragment: string }
+  | { kind: 'half-cut'; fragment: string }
   | null
 
 const QUERY = 0x51 // 'Q' — 단순 질의
@@ -63,9 +70,11 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     let sawFragment = false
     let commitSent = false
     let serverGone = false
+    /** `halfCutOnQuery`가 쐈다 — 서버 쪽 소켓은 `close()`까지 둔다. */
+    let orphaned = false
     const cut = (): void => {
       client.destroy()
-      up.destroy()
+      if (!orphaned) up.destroy()
     }
     /** 서버 쪽이 닫혔다 — `holdClientAfterServerClose`가 있으면 api 쪽은 그만큼 뒤에 닫는다. */
     const onServerGone = (): void => {
@@ -84,6 +93,14 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
         cut()
         return
       }
+      if (arm?.kind === 'half-cut' && text.includes(arm.fragment)) {
+        arm = null
+        fired = true
+        orphaned = true
+        up.write(chunk)
+        client.destroy()
+        return
+      }
       if (arm?.kind === 'corrupt' && text.includes(arm.fragment)) {
         arm = null
         fired = true
@@ -100,6 +117,7 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
       up.write(chunk)
     })
     up.on('data', (chunk) => {
+      if (orphaned) return
       if (commitSent) {
         fired = true
         cut()
@@ -139,6 +157,9 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     },
     holdClientAfterServerClose: (ms) => {
       holdMs = ms
+    },
+    halfCutOnQuery: (fragment) => {
+      arm = { kind: 'half-cut', fragment: fragment.toLowerCase() }
     },
     get fired() {
       return fired

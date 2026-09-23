@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { getKoreanErrorMap } from '@wirebound/schema'
+import { DEFAULT_DB_TIME_LIMITS, type DbTimeLimits } from './db/client'
 import { portAgreementError } from './db/port-agreement'
 
 /**
@@ -25,6 +26,8 @@ export interface ApiConfig {
    * 한다). 그래서 배포판 chromium(`/usr/bin/chromium` 부류)을 쓰는 길이 이것뿐이다.
    */
   screenChromiumPath: string | undefined
+  /** 풀과 연결의 시간 제한 — 뜻과 기본값의 근거는 `db/client.ts`의 `createPool` 머리말 «네트워크 분할». */
+  dbTimeLimits: DbTimeLimits
 }
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const
@@ -71,6 +74,10 @@ const EnvSchema = z.object({
    * **없으면 아무것도 안 잰다** — 자기 Postgres 를 쓰는 사람이 깨지면 안 된다.
    */
   POSTGRES_PORT: z.string().optional(),
+  /** `db/client.ts`의 `DbTimeLimits` — 비면 `DEFAULT_DB_TIME_LIMITS`. 0 은 끈다. */
+  DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: numericEnv('DB_IDLE_IN_TRANSACTION_TIMEOUT_MS').default(DEFAULT_DB_TIME_LIMITS.idleInTransactionMs),
+  DB_POOL_WAIT_TIMEOUT_MS: numericEnv('DB_POOL_WAIT_TIMEOUT_MS').default(DEFAULT_DB_TIME_LIMITS.poolWaitMs),
+  DB_KEEPALIVE_IDLE_MS: numericEnv('DB_KEEPALIVE_IDLE_MS').default(DEFAULT_DB_TIME_LIMITS.keepAliveIdleMs),
 })
 
 /**
@@ -118,5 +125,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
       data.SCREEN_CHROMIUM_PATH === undefined || data.SCREEN_CHROMIUM_PATH === ''
         ? undefined
         : data.SCREEN_CHROMIUM_PATH,
+    dbTimeLimits: {
+      idleInTransactionMs: data.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS,
+      poolWaitMs: data.DB_POOL_WAIT_TIMEOUT_MS,
+      keepAliveIdleMs: data.DB_KEEPALIVE_IDLE_MS,
+    },
   }
 }

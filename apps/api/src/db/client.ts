@@ -26,6 +26,22 @@ const KYSELY_COMMIT = 'commit'
 /** 연결 오류를 적는 자리. 기본은 표준 오류 — `main.ts`는 Fastify 로거가 서기 전에 풀을 만든다. */
 export type PoolErrorSink = (error: unknown) => void
 
+/**
+ * **풀과 연결에 거는 시간 제한** — `createPool`의 머리말 «네트워크 분할». 값은 env 로 바꾼다(`config.ts`의
+ * `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` · `DB_POOL_WAIT_TIMEOUT_MS` · `DB_KEEPALIVE_IDLE_MS`). **0 은 끈다.**
+ */
+export interface DbTimeLimits {
+  /** 서버 쪽 `idle_in_transaction_session_timeout`(ms) — 트랜잭션 안에서 다음 문장을 이만큼 안 받으면 서버가 그 세션을 끝낸다. */
+  readonly idleInTransactionMs: number
+  /** 풀 `connectionTimeoutMillis`(ms) — 연결을 이만큼 못 얻으면 거절한다(→ 503). */
+  readonly poolWaitMs: number
+  /** 클라이언트 소켓의 TCP keepalive 첫 탐침까지(ms). 탐침 간격·횟수는 OS 값이다(Node 가 못 바꾼다). */
+  readonly keepAliveIdleMs: number
+}
+
+/** 기본값 — 근거는 `createPool`의 머리말 «네트워크 분할»의 표. env 가 비면 이것이다(`config.ts`). */
+export const DEFAULT_DB_TIME_LIMITS: DbTimeLimits = { idleInTransactionMs: 10_000, poolWaitMs: 5_000, keepAliveIdleMs: 10_000 }
+
 function writeToStderr(error: unknown): void {
   console.error('DB 연결 오류 — 그 연결을 버린다(프로세스는 계속 돈다):', error)
 }
@@ -73,10 +89,49 @@ function writeToStderr(error: unknown): void {
  * **pg 가 읽는 그대로 본다** — 접속 문자열 · `pg.defaults`를 pg 가 합친 값(`Client`의 `connectionParameters`)이다. 그 자리가
  * 없으면(pg 가 바꾼 날) 판정하지 못했다고 던진다 — 조용히 지나가지 않는다. **만든 뒤 `pool.options`에 넣는 것은 막지
  * 않는다** — 그렇게 하는 자는 이 둘을 따로 재는 케이스뿐이다(`test/db-connection-loss.test.ts`).
+ *
+ * # 네트워크 분할 — 고아 백엔드와 풀 대기 (2026-09-23 이월 W′)
+ *
+ * 트랜잭션 도중 api 쪽 연결만 끊기면(분할 · NAT 유휴 끊김) 서버의 백엔드는 **`idle in transaction`으로 잠금을 쥔 채**
+ * 남는다. 같은 페이지 쓰기가 그 잠금에 줄을 서 풀을 다 먹고 **다른 사용자 · 다른 프로젝트의 요청과 세션 조회까지** 매달린다.
+ * 서버 설정이 전부 0 이고 풀에 대기 시간 제한이 없던 앞 판은 **고아를 누가 끝낼 때까지** 그랬다(수 시간 — 서버가 죽은
+ * 상대를 알아챌 때까지). 잰 것(api 스크립트 · 프록시가 게시의 INSERT 를 서버에 넘기고 api 쪽만 끊는다 · 같은 페이지
+ * 게시 13 · 2초마다 다른 사람의 `/auth/me` · 다른 프로젝트 GET):
+ *
+ * | 판 | 고아 | 다른 사람의 요청 | 줄 선 게시 | DB |
+ * |---|---|---|---|---|
+ * | 앞 판 | 30s 에 손으로 끊을 때까지 잠금 23 | 30s 내내 답 없음 | 30s 에 풀림 | — |
+ * | 이 판 | **10s 에 서버가 끝낸다**(`25P03`) | 5s 에 **503**(풀 대기) → 10s 뒤 200 | 풀을 못 얻은 셋 5s 에 503 · 나머지 10s 에 풀림(먼저 잠금을 얻은 하나 201 · 나머지 409) | 두 행 없음 |
+ *
+ * 무엇을 걸었고 왜 그 값인가:
+ *
+ * | 설정 | 값 | 근거(잰 값) |
+ * |---|---|---|
+ * | 서버 `idle_in_transaction_session_timeout` | **10s** | 고아를 끝내는 직접 수단이다. **이 api 가 트랜잭션 안에서 정당하게 쉬는 시간은 이벤트 루프가 멈춘 시간이다** — 트랜잭션이 기다리는 바깥 일이 없다. 가장 긴 것: 큰 프로젝트(500KB 페이지 36 · 18MB)의 HTML 내보내기가 루프를 1.9s 멈출 때 옆 편집 트랜잭션 1.94s(12 페이지면 1.08s — 크기에 비례). `pnpm test` api 전량 0.72s(케이스가 일부러 쥔 잠금). 10s 를 넘는 멈춤이면 그 사이 모든 요청이 웹의 기한(10s — `apps/web`의 `WRITE_DEADLINE_MS`·`READ_DEADLINE_MS`)을 이미 넘긴다. 잘못 끊겨도 **503**(«모름»)이다 — 서버는 쉬는 중에만 끝내므로 `FATAL 25P03`은 진행 중인 질의 없이 와서 `'error'` → 표지 → 다음 문장(또는 COMMIT)이 «not queryable»로 간다(`connection-loss.ts`의 표 넷째 줄 · `test/db-partition.test.ts`). 값 300ms 로 같은 내보내기를 돌리면 옆 편집 12/12 가 503(기본값으로는 12/12 가 200) |
+ * | 풀 `connectionTimeoutMillis` | **5s** | 풀이 다 찼을 때 끝없이 기다리지 않고 503(«연결을 얻지 못함» — `connection-loss.ts`의 표 끝 줄). 정당한 대기: 동시 3000 요청 → 최대 3.0s · 503 0. 웹의 기한(10s)보다 짧아야 웹이 끊기 전에 답이 닿는다 |
+ * | 클라이언트 TCP keepalive | 켠다 · 첫 탐침 **10s** | 진짜 분할(`iptables` DROP)에서는 api 쪽도 끊긴 줄을 모른다 — 답을 기다리는 질의가 **끝없이** 풀 칸을 쥔다(60s 까지 봤다). 켜면 소켓이 `ETIMEDOUT` → `'error'` → 503. 걸리는 시간은 첫 탐침 + OS 의 간격 × 횟수다(잰 판은 2s × 3 으로 줄인 컨테이너에서 15.6s. 리눅스 기본은 75s × 9 — 약 11분). 탐침은 상대가 살아 있으면 답하므로 긴 잠금 대기를 끊지 않는다 |
+ * | 서버 `lock_timeout` · `statement_timeout` | **걸지 않는다** | 고아를 끝내지 못한다(3s 로 걸어도 고아는 10s 까지 산다) · **정당한 기다림을 끊는다** — 이 앱은 페이지 행 잠금에 일부러 줄을 선다. 20s 잠금 뒤의 게시·편집이 두 설정 다 5s 에 봉투 500(`55P03` · `57014` — 서버가 답했으니 확정 실패, 0행) · 안 걸면 19.5s 에 201 · 200. 분할 판에서는 줄 선 같은 페이지 게시 13 이 전부 500 이 되고 재전송도 500 이라 원문 0행 |
+ * | 서버 TCP keepalive | 걸지 않는다 | 잠금을 쥔 고아는 위 첫 줄이 끝낸다(진짜 분할에서도 10s — 잰 것). 트랜잭션 밖 고아는 잠금이 없다 — 연결 칸 하나를 OS 기본(약 2시간)까지 쥔다 |
+ *
+ * **클라이언트 쪽 `query_timeout`은 여전히 안 된다**(위 절). 서버 쪽 시간 제한의 오류는 서버가 SQLSTATE 로 답하므로
+ * `connection-loss.ts`의 경계 표 그대로 간다 — 연결을 끝내는 것은 «잃었다 → 503», 문장만 멈추는 것은 확정 실패 → 500.
  */
-export function createPool(databaseUrl: string, onError: PoolErrorSink = writeToStderr): Pool {
+export function createPool(
+  databaseUrl: string,
+  onError: PoolErrorSink = writeToStderr,
+  limits: DbTimeLimits = DEFAULT_DB_TIME_LIMITS,
+): Pool {
   refuseClientSideQueryTimeout(databaseUrl)
-  const pool = new Pool({ connectionString: databaseUrl })
+  refuseUrlLevelIdleTimeout(databaseUrl)
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    // pg 가 기동 메시지에 싣는다(`Client.getStartupConf`) — 서버가 그 세션에 건다. 0 이면 안 싣는다(서버 설정을 따른다).
+    idle_in_transaction_session_timeout: limits.idleInTransactionMs,
+    // pg-pool 이 대기 줄과 새 연결 맺기 둘 다에 쓴다. 0 이면 끝없이 기다린다(pg-pool 의 뜻).
+    connectionTimeoutMillis: limits.poolWaitMs,
+    keepAlive: limits.keepAliveIdleMs > 0,
+    keepAliveInitialDelayMillis: limits.keepAliveIdleMs,
+  })
   pool.on('connect', (client) => {
     client.on('error', (error) => {
       lostClients.add(client)
@@ -98,6 +153,25 @@ function refuseClientSideQueryTimeout(databaseUrl: string): void {
     throw new Error(
       `DB 접속 설정에 query_timeout(${String(resolved.query_timeout)})이 있습니다 — 클라이언트 쪽 시간 제한은 COMMIT 의 결과를 ` +
         '모르게 하고 끊긴 질의를 서버에 남깁니다. 서버 쪽 statement_timeout 을 쓰십시오(apps/api/src/db/client.ts 의 createPool)',
+    )
+  }
+}
+
+/**
+ * **접속 문자열의 `idle_in_transaction_session_timeout`은 받지 않는다** — pg 는 접속 문자열의 검색 인자를 설정 **위에**
+ * 얹으므로(`ConnectionParameters`의 `Object.assign(config, parse(connectionString))`) `?…=0` 한 줄이 env 값을 조용히 이긴다.
+ * 값은 한 자리(`DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`)에서만 온다. `?options=-c …`는 막지 않는다 — 기동 인자가 그것보다 늦게 적용돼 이긴다.
+ */
+function refuseUrlLevelIdleTimeout(databaseUrl: string): void {
+  const resolved = (new Client({ connectionString: databaseUrl }) as unknown as {
+    connectionParameters?: { idle_in_transaction_session_timeout?: unknown }
+  }).connectionParameters
+  // pg 의 기본값은 `false`다(`pg/lib/defaults.js`) — 그것이 «안 줬다». `?…=0`은 문자열 `'0'`이라 걸린다.
+  const fromUrl = resolved?.idle_in_transaction_session_timeout
+  if (fromUrl !== undefined && fromUrl !== false) {
+    throw new Error(
+      `DB 접속 설정에 idle_in_transaction_session_timeout(${String(fromUrl)})이 있습니다 — ` +
+        'env 의 DB_IDLE_IN_TRANSACTION_TIMEOUT_MS 로 주십시오(apps/api/src/db/client.ts 의 createPool)',
     )
   }
 }

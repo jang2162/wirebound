@@ -111,7 +111,7 @@ async function main(): Promise<void> {
   }
 
   const config = loadConfig()
-  const pool = createPool(config.databaseUrl)
+  const pool = createPool(config.databaseUrl, undefined, config.dbTimeLimits)
   const db = createDb(pool)
   try {
     try {

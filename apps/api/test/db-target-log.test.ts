@@ -165,8 +165,10 @@ describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', ()
 
   it('`config.databaseUrl` 을 받는 자가 둘뿐이다 — 붙는 자와 가려서 찍는 자', () => {
     // **목록을 손으로 적지 않고 소스에서 센다.** `app.log.info(config.databaseUrl)`가
-    // 들어오면 여기 `info`가 하나 더 붙어 이 케이스가 죽는다.
-    const receivers = [...main.matchAll(/(\w+)\(config\.databaseUrl\)/g)].map((match) => match[1]).sort()
+    // 들어오면 여기 `info`가 하나 더 붙어 이 케이스가 죽는다. **뒤에 인자가 더 붙어도 센다** —
+    // `createPool`이 시간 제한을 둘째·셋째로 받는다(2026-09-23 이월 W′). 앞 판의 `\)`는 그 호출을 못 봐 빨강이었고,
+    // 거꾸로 `app.log.info(config.databaseUrl, …)`도 못 봤다.
+    const receivers = [...main.matchAll(/(\w+)\(config\.databaseUrl[,)]/g)].map((match) => match[1]).sort()
     expect(receivers).toEqual(['createPool', 'describeDatabaseTarget'])
   })
 
