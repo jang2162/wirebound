@@ -19,12 +19,16 @@
  * `panels/menu-tree.tsx` 한 곳이고, 툴바는 그 결과를 prop으로 받는다.** 두 번째 호출자가
  * 생기면 잠금이 각자 것이 되므로, 그때는 잠금을 위로 올려야 한다.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
-import { judgeMeta, metaConflict } from '../api/page-meta'
+import { MENU_TITLE_CHANGED, PAGE_META_CHANGED, judgeMeta, metaConflict } from '../api/page-meta'
 import type { PageImported, TreeMenuNode } from '../api/types'
+import { metaConflictSentence } from '../panels/meta-conflict'
+import type { PanelLock } from '../panels/panel-drafts'
+import { useWriteLedger, writeKey, type PageAt, type Receiver, type WriteConclusion, type WriteTarget } from '../panels/write-ledger'
+import { useSessionEpoch } from '../session/session-context'
 import {
   flattenMenus,
   menuOutdentTarget,
@@ -43,6 +47,46 @@ const UNKNOWN_FAILURE = '메뉴를 불러오지 못했습니다'
  * 일이 다르기 때문이다 — 조회는 화면이 스스로 한 것이고 조작은 사용자가 누른 것이다.
  */
 const UNKNOWN_COMMAND_FAILURE = '요청을 처리하지 못했습니다'
+
+/**
+ * **트리 이름 변경의 장부 칸**(`panels/write-ledger.tsx` — 이월 5차 ③). 키는 (프로젝트, 페이지 없음, 이 칸) — **프로젝트에
+ * 하나다.** 트리 조작은 D2 대로 한 번에 하나이고, 이름 변경이 «모름»에 머무는 동안 그 프로젝트의 트리 조작 전부가 잠긴다
+ * (새로 선 트리도 — 에디터를 떠났다 와도). 페이지를 자리로 두지 않는 까닭은 `rename`의 머리말.
+ */
+const RENAME_SLOT = 'tree/rename'
+
+/**
+ * **트리의 칸 — 판정의 말이 닿는 자리**(A 리뷰 F1 · 2026-09-23). 이름 변경의 판정은 이것들을 **쓰기를 낸 인스턴스의 state 가
+ * 아니라** 장부의 `deliver`로 보낸다 — 지금 떠 있는 트리(`Receiver` — 종류 `'tree'`)가 받는다. 설명의 칸 쓰기와 같은 길이다
+ * (`panels/panel-drafts.tsx`의 `usePanelSlot`). 칸은 객체의 정체성으로 가른다.
+ */
+const TREE_FAILURE = { name: 'tree/failure' }
+const TREE_CONFLICT = { name: 'tree/conflict' }
+const TREE_STATE = { name: 'tree/state' }
+/** 매달린 내 제목 하나를 고친다 — `titles`가 `null`이면 지운다. */
+const TREE_HANGING = { name: 'tree/hanging' }
+interface HangingUpdate {
+  item: string
+  titles: string[] | null
+}
+
+/** 시간 안에 응답이 없어 다시 읽는 중(`PendingNotice`). 설명의 문장과 같은 결이다(`panels/page-description.tsx`). */
+const RENAME_CHECKING = '응답이 없어 이름이 바뀌었는지 서버에서 확인하는 중입니다'
+/** 다시 읽기도 실패했다 — «다시 확인»이 선다. */
+const RENAME_UNKNOWN = '응답이 없고, 이름이 바뀌었는지 확인하지도 못했습니다'
+/** 다시 읽었더니 서버의 제목이 바탕 그대로다(`judgeMeta`의 `'base'`). */
+const RENAME_NOT_SAVED = '응답이 없어 서버를 다시 읽었더니 이름이 바뀌지 않았습니다'
+/** 다시 읽었더니 그 항목이 트리에 없다(그 사이 지워졌다). */
+const RENAME_GONE = '응답이 없어 서버를 다시 읽었더니 그 항목이 트리에 없습니다'
+/**
+ * 떠나 있는 동안 끝난 실패의 머리 — **그 프로젝트의 트리가 떠 있지 않을 때** 남는다(트리의 `Receiver.sees`). 프로젝트 목록 ·
+ * 테마 편집기에 가 있었든 **에디터 안에서 다른 프로젝트**에 가 있었든 참인 문장이다(A 리뷰 F6 — 앞 판 «에디터를 떠나 있는
+ * 동안»은 뒤의 판에 거짓이었다). 설명의 «이 페이지를 떠나 있는 동안 저장하지 못했습니다»(`pending-notice.tsx`)와 같은 결이다.
+ */
+const RENAME_MISSED = '이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다'
+
+/** `run`의 `send`가 이것을 돌려주면 `run`이 트리를 다시 받지 않는다 — 이름 변경은 스스로 받아 떠 있는 트리로 보낸다(`rename`). */
+const NO_RELOAD = Symbol('no-reload')
 
 /** 인라인 입력이 무엇을 위해 열려 있는지. 닫혀 있으면 `null`. */
 export interface TreeEditing {
@@ -114,6 +158,13 @@ export interface TreeCommands {
   overwriteTitle: () => void
   /** «내 글 버리기» — 그 사람의 제목을 받는다(트리는 충돌 때 이미 다시 받았다). */
   discardTitle: () => void
+  /**
+   * **이름 변경의 장부 칸**(이월 5차 ③) — 단계(«확인 중» · «모름»과 «다시 확인») · 떠나 있는 동안 끝난 실패. 화면은 이것을
+   * `PendingNotice`로 그린다(`panels/menu-tree.tsx`). 이것이 서 있는 동안 `busy`도 선다.
+   */
+  renameLock: PanelLock
+  /** `PendingNotice`에 줄 문장 셋(«확인 중» · «모름» · 떠나 있는 동안의 머리). */
+  renameNotices: { checking: string; unknown: string; missedLead: string }
   /** 소속 메뉴 목록이 열려 있으면 고를 수 있는 것들. 닫혀 있으면 `null`. */
   reparenting: { id: string; path: string }[] | null
   openReparent: () => void
@@ -121,13 +172,16 @@ export interface TreeCommands {
   cancelReparent: () => void
 }
 
-/** 이름 변경이 만난 제목 충돌 — `TreeCommands.conflict`. */
+/** 이름 변경이 만난 제목 충돌 — `TreeCommands.conflict`. **메뉴도 같다**(이월 5차 ②). */
 export interface TitleConflict {
-  pageId: string
+  /** 무엇의 제목인가 — 메뉴 · 페이지. */
+  target: TreeSelection
   /** 내가 친 제목. */
   mine: string
   /** 서버가 견준 그 사람의 제목 — «내 글로 덮기»의 새 바탕이다. */
   theirs: string
+  /** 그 제목이 **앞서 보낸 내 제목과 같다**(`judgeMeta`의 `'late'`) — «다른 사람이 바꿨다»고 말하지 않는다. */
+  late: boolean
 }
 
 export function useTreeCommands(props: {
@@ -178,6 +232,33 @@ export function useTreeCommands(props: {
    * 실으면 성공이 실패처럼 보인다.
    */
   const [imported, setImported] = useState<PageImported | null>(null)
+
+  /**
+   * **이름 변경의 장부 칸**(이월 5차 ③ — `RENAME_SLOT`). 장부는 에디터보다 오래 살므로(`panels/write-ledger.tsx`), 이름
+   * 변경이 나가 있는 채 에디터를 떠났다 오면 **새로 선 트리도 잠긴 채** 선다 — 이 인스턴스의 `inFlight`는 새것이라 모른다.
+   */
+  const ledger = useWriteLedger()
+  const renameTarget = useMemo<WriteTarget>(
+    () => ({ projectId, pageId: undefined, slot: RENAME_SLOT, realm: 'tree' }),
+    [projectId],
+  )
+  const renameEntry = ledger.writes.get(writeKey(renameTarget))
+  const renameLocked = renameEntry !== undefined
+  const renameLock: PanelLock = {
+    locked: renameLocked,
+    phase: renameEntry?.phase ?? null,
+    recheck: renameEntry?.recheck ?? null,
+    missed: ledger.missed.get(writeKey(renameTarget)) ?? null,
+    dismiss: () => ledger.dismiss(renameTarget),
+    run: (write) => ledger.run(renameTarget, receiver.token, write),
+  }
+  /**
+   * **매달린 내 제목**(`api/page-meta.ts`의 `judgeMeta` — `'late'`). 판정이 «바뀌지 않았습니다»(`'base'`)였던 이름 변경이
+   * 보낸 제목을 항목마다 든다 — 끊긴 요청이 늦게 커밋되면 다음 이름 변경의 409 가 그 제목을 싣고 온다. 들지 않으면 **내
+   * 제목이 «다른 사람의 제목»으로** 보인다(설명의 `Draft.pending`과 같은 까닭). 이 인스턴스에 산다 — 에디터를 떠나면
+   * 버려진다(남는 틈).
+   */
+  const hanging = useRef(new Map<string, string[]>())
 
   /**
    * **선택은 파생값이다(D3).** `picked`가 `null`이면 주소가 말하는 페이지가 선택이다.
@@ -271,6 +352,38 @@ export function useTreeCommands(props: {
   }, [])
 
   /**
+   * **이 트리가 받는 자리로 선다**(`panels/write-ledger.tsx`의 `Receiver` — 종류 `'tree'`, A 리뷰 F1). 이름 변경의 판정이 끝났을 때
+   * 그 쓰기를 낸 트리가 내려가 있고 **새 트리가 떠 있으면**(에디터를 떠났다 돌아왔다) 판정의 말이 이 새 트리에 닿는다 — 앞 판은
+   * 낸 인스턴스의 state 에만 썼고(`if (alive()) …`) 새 트리는 «바뀌지 않았습니다»도 충돌 화면도 없이 잠금만 풀렸다(Chrome R1–R3).
+   *
+   * **보는 것은 프로젝트다** — 트리는 그 프로젝트의 어느 페이지에서나 떠 있고, 같은 프로젝트 안의 페이지 이동에 다시 마운트되지
+   * 않는다(앞 판 보고 — jsdom · Chrome). `accept`와 `sees`가 같은 판정이다. 우측 패널(종류 `'page'`)과 겹치지 않는다 — 한 쓰기를
+   * 보는 자리는 그 쓰기의 종류의 것 하나다.
+   */
+  const accept = useCallback(
+    (at: PageAt, key: object, update: unknown): void => {
+      if (unmounted.current || at.projectId !== projectId) return
+      if (key === TREE_FAILURE) setFailure(update as Failure | null)
+      else if (key === TREE_CONFLICT) setConflict(update as TitleConflict | null)
+      else if (key === TREE_STATE) setState(update as TreeLoadState)
+      else if (key === TREE_HANGING) {
+        const { item, titles } = update as HangingUpdate
+        if (titles === null) hanging.current.delete(item)
+        else hanging.current.set(item, titles)
+      }
+    },
+    [projectId],
+  )
+  const sees = useCallback((at: PageAt): boolean => !unmounted.current && at.projectId === projectId, [projectId])
+  const [token] = useState(() => Symbol('tree'))
+  const receiver = useMemo<Receiver>(() => ({ token, realm: 'tree', accept, sees }), [token, accept, sees])
+  const { receive } = ledger
+  // **레이아웃 이펙트다** — 우측 패널과 같은 까닭(`panel-drafts.tsx`): 자식 이펙트보다 먼저 선다.
+  useLayoutEffect(() => receive(receiver), [receive, receiver])
+  // 칸 쓰기의 주소 — 그 쓰기를 부른 렌더의 세션 세대를 단다(장부가 지난 세대의 것을 버린다).
+  const epoch = useSessionEpoch()
+
+  /**
    * 조작 하나를 보내고 **성공하면 트리를 다시 받는다(D1). 재조회가 곧 수렴이다.**
    *
    * `after`는 재조회 **뒤에** 부른다 — 주소를 옮기는 것(D8)이 그 자리다. 실패하면 부르지
@@ -294,16 +407,18 @@ export function useTreeCommands(props: {
    * `메뉴 트리 단축키 > busy인 동안 단축키가 걸리지 않는다`(화면을 지나는 케이스). 단축키는
    * 버튼의 `disabled`를 지나지 않으므로 `busy`가 서 있어도 핸들러에 닿는다.
    */
-  async function run(send: () => Promise<void>, after?: () => void): Promise<void> {
-    if (inFlight.current) return
+  async function run(send: () => Promise<unknown>, after?: () => void): Promise<void> {
+    // **장부에 이름 변경이 나가 있어도 잠긴다**(이월 5차 ③ — 에디터를 떠났다 와 새로 선 트리).
+    if (inFlight.current || renameLocked) return
     inFlight.current = true
     setBusy(true)
     setFailure(null)
     // **다음 조작이 시작되면 앞 충돌이 풀린다** — 실패 문장과 같은 자리다. «내 글로 덮기»도 여기를 지나고, 또
-    // 부딪히면 `renamePage`가 새 값으로 다시 세운다.
+    // 부딪히면 `rename`이 새 값으로 다시 세운다.
     setConflict(null)
     try {
-      await send()
+      // **다시 받지 않을 판**이면(`NO_RELOAD` — 이름 변경의 판정용 다시 읽기가 이미 받았거나 실패했다) 여기서 끝난다.
+      if ((await send()) === NO_RELOAD) return
       if (unmounted.current) return
       await load(() => !unmounted.current, true)
       if (unmounted.current) return
@@ -355,7 +470,7 @@ export function useTreeCommands(props: {
     //
     // **다음 웨이브의 키보드 단축키가 버튼을 지나지 않으므로 이 자리가 그 방벽이다**(계획서
     // Task 10 케이스 6).
-    if (inFlight.current) return
+    if (inFlight.current || renameLocked) return
     setFailure(null)
     setConflict(null)
     // **다른 조작을 시작하면 확인이 풀린다**(D7의 셋째 조건).
@@ -372,26 +487,98 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * **페이지 제목을 바탕과 함께 보낸다**(이월 P — `api/page-meta.ts`). 바탕은 입력이 열릴 때의 제목이다
-   * (`editing.initial` — 트리가 마지막으로 받은 값). 서버가 409 · `page-meta-changed`면:
+   * **이름을 바탕과 함께 보낸다 — 페이지도 메뉴도**(이월 P · 이월 5차 ②). 바탕은 입력이 열릴 때의 제목이다(`editing.initial`
+   * — 트리가 마지막으로 받은 값). 판정은 **설명과 같은 함수 둘**이다(`api/page-meta.ts`의 `metaConflict` · `judgeMeta`):
    *
-   * - 그 사람의 제목이 **내 제목과 같으면**(`judgeMeta`의 `'mine'`) 원하던 상태다 — 성공처럼 끝낸다(트리를 다시 받는다).
-   * - 아니면 **충돌**을 세운다(`conflict`) — 던지지 않으므로 `run`이 트리를 다시 받아 그 사람의 제목이 보인다.
+   * | 결말 | 화면 |
+   * |---|---|
+   * | 200 | 트리를 다시 받는다 |
+   * | 409(페이지 `page-meta-changed` · 메뉴 `menu-title-changed`) — 지금 값이 내 제목(`'mine'`) | 성공처럼 — 다시 받는다 |
+   * | 409 — `'late'` · `'other'` | 충돌(`conflict`) — «지금 글로 덮기 / 앞서 보낸 글로 두기» · «내 글로 덮기 / 내 글 버리기». 다시 받는다 |
+   * | 그 밖의 실패 | 실패 문장 — 다시 받지 않는다(앞 판 그대로) |
+   * | **10초 안에 응답이 없다**(이월 5차 ③) | 트리를 **다시 읽어** 판정한다 — `'mine'` 성공 · `'base'` «바뀌지 않았습니다» · 그 밖은 충돌. 다시 읽은 트리를 그대로 세운다 |
+   * | 다시 읽기도 실패 | «모름» + «다시 확인»(`renameLock` — 그동안 트리 조작 전부가 잠긴다) |
    *
-   * 그 밖의 실패는 던진다 — `run`이 실패 문장으로 옮긴다. **이 자리에는 시간 제한이 없다** — 트리 조작은 쓰기
-   * 장부를 안 지나므로 «모름»이 없다(설명과 갈리는 자리 — 보고의 «남는 틈»).
+   * **쓰기 장부를 그대로 탄다**(`panels/write-ledger.tsx` — 시간 제한 · «모름» · `settle` → `WriteConclusion` · 떠나 있는 동안
+   * 끝난 실패). **판정의 말은 장부의 `deliver`로 보낸다**(A 리뷰 F1) — 실패 문장 · 충돌 · 다시 읽은 트리 · 매달린 값이 이 인스턴스가
+   * 아니라 **지금 떠 있는 이 프로젝트의 트리**(위 `receiver`)에 닿는다. 에디터를 떠났다 돌아와 새 트리가 떠 있는 채 판정이 끝나도,
+   * 새 트리에서 «다시 확인»을 눌러도 그 트리가 말한다. 뒤의 다시 받기도 같은 길로 간다(`reload`).
+   *
+   * **받을 트리가 아예 없으면**(프로젝트 목록 · 테마 편집기 · 다른 프로젝트에 가 있는 채 끝났다) 장부가 `'failed'`만 남기고
+   * 돌아온 트리가 «이 화면을 떠나 있는 동안 …»으로 말한다. **판정으로 끝난 결말은 그때 안 남는다**(설명과 같은 틈 — 2차 D 몫).
    */
-  async function renamePage(id: string, title: string, base: string): Promise<void> {
-    try {
-      await api.updatePage(projectId, id, { title, base: { title: base } })
-    } catch (caught) {
-      const clash = metaConflict(caught, 'title')
-      if (clash === null) throw caught
-      // 제목은 `null`이 아니다(서버의 `Title`) — 계약 밖 `null`이 오면 빈 제목으로 보인다.
-      const theirs = clash.current ?? ''
-      if (judgeMeta(theirs, title, base) === 'mine') return
-      if (!unmounted.current) setConflict({ pageId: id, mine: title, theirs })
+  async function rename(target: TreeSelection, title: string, base: string): Promise<unknown> {
+    const key = `${target.kind}:${target.id}`
+    const pending = hanging.current.get(key) ?? []
+    const code = target.kind === 'menu' ? MENU_TITLE_CHANGED : PAGE_META_CHANGED
+    // **이 렌더의 받는 자리 · 세대로 부친다** — 받는 것은 그때 떠 있는 트리다(`Ledger.deliver`).
+    const from = receiver
+    const at = { projectId, pageId: undefined, epoch }
+    const put = (slot: object, update: unknown): void => ledger.deliver(from, at, slot, update)
+    const hang = (titles: string[] | null): void => put(TREE_HANGING, { item: key, titles } satisfies HangingUpdate)
+    let reload = true
+
+    /** 서버 제목 하나를 판정한다 — 409 의 지금 값과 다시 읽은 값이 같은 길을 지난다(설명의 `land`와 같은 모양). */
+    function land(current: string, asked: 'verified' | 'rejected'): WriteConclusion {
+      const verdict = judgeMeta(current, title, base, pending)
+      if (verdict === 'mine') {
+        hang(null)
+        return null
+      }
+      if (verdict === 'base' && asked === 'verified') {
+        // 끊긴 요청이 늦게 커밋될 수 있다 — 보낸 제목을 매달린 값으로 든다.
+        hang([...pending, title])
+        const failure: Failure = { kind: 'message', message: RENAME_NOT_SAVED }
+        put(TREE_FAILURE, failure)
+        return failure
+      }
+      const late = verdict === 'late'
+      put(TREE_CONFLICT, { target, mine: title, theirs: current, late } satisfies TitleConflict)
+      return { kind: 'message', message: metaConflictSentence('제목', current, late) }
     }
+
+    await renameLock.run<unknown, TreeMenuNode[]>({
+      send: (signal) =>
+        target.kind === 'menu'
+          ? api.updateMenu(projectId, target.id, { title, base: { title: base } }, { signal })
+          : api.updatePage(projectId, target.id, { title, base: { title: base } }, { signal }),
+      // **다시 읽는 것은 트리 하나다** — 메뉴도 페이지도 그 안에 제목이 있다. 받은 트리는 판정 뒤에 그대로 세운다.
+      verify: (signal) => api.getTree(projectId, { signal }),
+      settle: (outcome) => {
+        if (outcome.kind === 'done') {
+          hang(null)
+          return null
+        }
+        if (outcome.kind === 'failed') {
+          const clash = metaConflict(outcome.caught, 'title', code)
+          // 제목은 `null`이 아니다(서버의 `Title`) — 계약 밖 `null`이 오면 빈 제목으로 보인다.
+          if (clash !== null) return land(clash.current ?? '', 'rejected')
+          reload = false
+          const failure = toFailure(outcome.caught, UNKNOWN_COMMAND_FAILURE)
+          put(TREE_FAILURE, failure)
+          return failure
+        }
+        reload = false
+        put(TREE_STATE, { status: 'ready', menu: outcome.verdict } satisfies TreeLoadState)
+        const current = target.kind === 'menu' ? findMenuTitle(outcome.verdict, target.id) : findPageTitle(outcome.verdict, target.id)
+        if (current === null) {
+          const failure: Failure = { kind: 'message', message: RENAME_GONE }
+          put(TREE_FAILURE, failure)
+          return failure
+        }
+        return land(current, 'verified')
+      },
+    })
+    // **다시 받기도 떠 있는 트리로 보낸다**(`run`의 `load`는 이 인스턴스에만 쓴다 — 내려가 있으면 새 트리는 커밋 전에 읽은 제목에
+    // 머문다). 실패의 모양은 `load`와 같다.
+    if (reload) {
+      try {
+        put(TREE_STATE, { status: 'ready', menu: await api.getTree(projectId) } satisfies TreeLoadState)
+      } catch (caught) {
+        put(TREE_STATE, { status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) } satisfies TreeLoadState)
+      }
+    }
+    return NO_RELOAD
   }
 
   /**
@@ -445,13 +632,11 @@ export function useTreeCommands(props: {
     setEditing(null)
 
     if (kind === 'rename') {
-      // **메뉴와 페이지가 다른 엔드포인트다.** 선택의 `kind`가 그것을 가른다. **페이지만 바탕을 싣는다** — 페이지
-      // 제목은 페이지 메타의 충돌 모델 안이고(이월 P), 메뉴 제목은 밖이다(메뉴 라우트에 바탕이 없다).
+      // **메뉴와 페이지가 다른 엔드포인트다** — 선택의 `kind`가 가른다(`rename`). **둘 다 바탕을 싣는다**(이월 5차 ② — 앞
+      // 판은 페이지만 실었다. 메뉴 라우트에 바탕이 없었다).
       const base = editing.initial
-      void run(async () => {
-        if (selection.kind === 'menu') await api.updateMenu(projectId, selection.id, { title })
-        else await renamePage(selection.id, title, base)
-      })
+      const target = selection
+      void run(() => rename(target, title, base))
       return
     }
 
@@ -736,7 +921,7 @@ export function useTreeCommands(props: {
     selection,
     select,
     abilities,
-    busy,
+    busy: busy || renameLocked,
     failure,
     editing,
     openInput,
@@ -750,7 +935,7 @@ export function useTreeCommands(props: {
       //
       // **"여는" 셋이 같은 가드를 갖는다** — `openInput`·`openReparent`·여기. `cancel*`은
       // 반대로 **닫는** 것이라 잠금 중에도 열어 둔다: 취소를 막을 이유가 없다.
-      if (inFlight.current) return
+      if (inFlight.current || renameLocked) return
       // 확인을 걸면서 열려 있던 입력과 앞 실패를 함께 지운다 — 한 번에 하나만 진행한다.
       setFailure(null)
       setEditing(null)
@@ -764,12 +949,17 @@ export function useTreeCommands(props: {
     conflict,
     overwriteTitle: () => {
       if (conflict === null) return
-      void run(() => renamePage(conflict.pageId, conflict.mine, conflict.theirs))
+      // **바탕을 옮기면 매달린 값을 버린다**(설명의 `submit`과 같다) — 덮기의 바탕이 보인 그 값이라, 늦은 내 제목이었으면
+      // 이제 바탕이다.
+      hanging.current.delete(`${conflict.target.kind}:${conflict.target.id}`)
+      void run(() => rename(conflict.target, conflict.mine, conflict.theirs))
     },
     discardTitle: () => setConflict(null),
+    renameLock,
+    renameNotices: { checking: RENAME_CHECKING, unknown: RENAME_UNKNOWN, missedLead: RENAME_MISSED },
     reparenting,
     openReparent: () => {
-      if (inFlight.current) return
+      if (inFlight.current || renameLocked) return
       setFailure(null)
       setEditing(null)
       setConfirmingRemove(false)

@@ -22,6 +22,7 @@ import type { KeyboardEvent, ReactElement } from 'react'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
 import { MetaConflict } from './meta-conflict'
+import { PendingNotice } from './pending-notice'
 import type { TreeMenuNode, TreePage } from '../api/types'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
@@ -216,12 +217,21 @@ export function MenuTree(props: {
             {commands.failure.message}
           </p>
         ))}
-      {/* **페이지 제목의 충돌**(이월 P) — «페이지 설명»과 같은 화면이다(`panels/meta-conflict.tsx`). 이름 변경이
-          편집 도구라 편집 모드에서만 선다(툴바와 같은 자리). */}
+      {/* **이름 변경의 «확인 중» · «모름» · 떠나 있는 동안 끝난 실패**(이월 5차 ③) — «페이지 설명»과 같은 알림이다
+          (`panels/pending-notice.tsx`). 모드와 무관하게 선다 — 사용자가 낸 쓰기의 결말이다(실패 문장과 같은 자리). */}
+      <PendingNotice
+        lock={commands.renameLock}
+        checking={commands.renameNotices.checking}
+        unknown={commands.renameNotices.unknown}
+        missedLead={commands.renameNotices.missedLead}
+      />
+      {/* **제목의 충돌**(이월 P · 이월 5차 ② — 페이지도 메뉴도) — «페이지 설명»과 같은 화면이다(`panels/meta-conflict.tsx`).
+          이름 변경이 편집 도구라 편집 모드에서만 선다(툴바와 같은 자리). */}
       {props.editable && commands.conflict !== null && (
         <MetaConflict
           what="제목"
           theirs={commands.conflict.theirs}
+          late={commands.conflict.late}
           disabled={commands.busy}
           onOverwrite={commands.overwriteTitle}
           onDiscard={commands.discardTitle}

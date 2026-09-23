@@ -19,6 +19,7 @@ import { assertNoNulBytes } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { assertLocking } from '../db/locking'
 import type { MenuRow } from '../services/menu-tree'
+import { lockProjectTree } from './projects'
 
 export interface MenuNodeRecord {
   id: string
@@ -356,6 +357,9 @@ export async function insertMenuNode(
   // 제목의 NUL — 판정과 번역자는 `db/nul-guard.ts`의 `NulByteError`가 소유한다.
   assertNoNulBytes(MENU_TEXT, input.title)
   return withTransaction(db, async (trx) => {
+    // **트리 쓰기의 첫 잠금**(`repos/projects.ts`의 `lockProjectTree`) — 형제 수를 세고 그 자리에 넣는 사이에 옆 생성이
+    // 같은 수를 세지 않게.
+    await lockProjectTree(trx, projectId)
     if (input.parentId !== null) {
       await assertParentValid(trx, projectId, input.parentId)
     }
@@ -370,6 +374,30 @@ export async function insertMenuNode(
 
     return toRecord(row)
   })
+}
+
+/**
+ * 메뉴 제목을 **행 잠금을 잡고** 읽는다 — 메뉴 제목의 충돌 모델(이월 5차 ② — `routes/menu.ts`의 `PATCH` 머리말)이
+ * «지금 값»과 «고치기 전 값»(`base`)을 견주는 자리다. `repos/pages.ts`의 `lockPageMeta`와 같은 이유로 **견주기와 쓰기가
+ * 한 잠금 안**이어야 한다(잠금 없이 견주면 같은 바탕의 둘이 다 통과해 나중이 조용히 이긴다). 대상이 그 프로젝트
+ * 소속이 아니면 `null`이다.
+ *
+ * **`FOR NO KEY UPDATE`다**(`lockPageMeta`는 `FOR UPDATE`) — 제목 쓰기끼리만 줄을 세우면 된다. `FOR UPDATE`면 이 메뉴
+ * 밑에 페이지 · 하위 메뉴를 만드는 FK 삽입(부모 행에 `FOR KEY SHARE`)까지 제목 쓰기 뒤에 선다.
+ *
+ * **트리 쓰기의 첫 잠금(`lockProjectTree`)을 안 잡는다** — 제목은 형제를 안 건드린다. 그래서 바탕 경로는 자리 옮기기와
+ * 한 본문에 못 온다(`routes/menu.ts`의 `UpdateMenuBody` — 오면 «이 행 → 프로젝트 행»으로 거꾸로 선다).
+ */
+export async function lockMenuTitle(trx: DbHandle, projectId: string, nodeId: string): Promise<string | null> {
+  assertLocking(trx, 'lockMenuTitle')
+  const row = await trx
+    .selectFrom('menu_nodes')
+    .select('title')
+    .where('id', '=', nodeId)
+    .where('project_id', '=', projectId)
+    .forNoKeyUpdate()
+    .executeTakeFirst()
+  return row?.title ?? null
 }
 
 /**
@@ -394,6 +422,9 @@ export async function updateMenuNode(
 ): Promise<MenuNodeRecord | null> {
   assertNoNulBytes(MENU_TEXT, patch.title)
   return withTransaction(db, async (trx) => {
+    // **자리를 옮기면 트리 쓰기의 첫 잠금을 맨 먼저 잡는다**(`repos/projects.ts`의 `lockProjectTree`) — 형제를 다시
+    // 매기기 전에, 그리고 지금 자리를 읽기 전에(잠금 뒤에 읽어야 앞 쓰기가 옮긴 자리를 본다). 제목만 바꾸면 안 잡는다.
+    if (patch.parentId !== undefined || patch.sortOrder !== undefined) await lockProjectTree(trx, projectId)
     const current = await trx
       .selectFrom('menu_nodes')
       .select(['id', 'parent_id', 'sort_order'])
@@ -459,6 +490,8 @@ export async function updateMenuNode(
  */
 export async function deleteMenuNode(db: DbHandle, projectId: string, nodeId: string): Promise<'deleted' | 'not-found'> {
   return withTransaction(db, async (trx) => {
+    // 남은 형제를 당긴다 — 트리 쓰기의 첫 잠금이 먼저다(`repos/projects.ts`의 `lockProjectTree`).
+    await lockProjectTree(trx, projectId)
     const current = await trx
       .selectFrom('menu_nodes')
       .select(['parent_id', 'sort_order'])

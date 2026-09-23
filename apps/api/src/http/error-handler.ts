@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { DbConnectionLostError } from '../db/connection-loss'
 import { NulByteError } from '../db/nul-guard'
+import { ProjectGoneError } from '../repos/projects'
 import { ApiError, ERROR_STATUS, type ApiErrorIssue } from '../errors'
 
 interface ErrorBody {
@@ -49,6 +50,7 @@ function statusCodeOf(error: unknown): number | undefined {
  * - Fastify가 자체적으로 던지는 4xx 오류(깨진 JSON 본문 등)는 `bad-request`로 묶는다.
  * - **DB 가 답하지 않은 실패**(`DbConnectionLostError`)는 **503** — 결과를 모른다(`ERROR_STATUS_DB_UNREACHABLE`).
  * - **글자의 NUL**(`NulByteError`)은 400 `bad-request` — 쓰기 전에 거절했다.
+ * - **트리 쓰기가 기다리는 사이 지워진 프로젝트**(`ProjectGoneError`)는 404 `not-found`.
  * - 그 외 예상 못 한 예외는 500 `internal` 고정 메시지로 응답하고, 원본은 로그에만 남긴다.
  *   응답 본문에 원본 메시지를 실으면 내부 정보가 새어 나갈 수 있어 절대 쓰지 않는다.
  */
@@ -94,6 +96,13 @@ export function registerErrorHandler(app: FastifyInstance): void {
     // **사용자가 보낸 글자에 NUL 이 있다**(`db/nul-guard.ts`의 `NulByteError`) — 쓰기 전에 거절했다.
     if (error instanceof NulByteError) {
       send(reply, ERROR_STATUS['bad-request'], { code: 'bad-request', message: error.message })
+      return
+    }
+
+    // **트리 쓰기가 기다리는 사이 프로젝트가 지워졌다**(`repos/projects.ts`의 `lockProjectTree`) — 가드가 지워진 프로젝트에
+    // 내는 것과 같은 404 다(`auth/roles.ts`).
+    if (error instanceof ProjectGoneError) {
+      send(reply, ERROR_STATUS['not-found'], { code: 'not-found', message: error.message })
       return
     }
 

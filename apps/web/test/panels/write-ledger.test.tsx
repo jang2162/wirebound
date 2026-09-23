@@ -168,8 +168,8 @@ function descriptionServer(
   respond: (index?: number) => Promise<void>
   /** 붙잡힌 쓰기 하나를 그 실패로 끝낸다(서버에 안 쓴다). */
   fail: (index: number, error: ApiError) => Promise<void>
-  /** 다시 읽기를 실패시킨다. */
-  failReads: (on: boolean) => void
+  /** 다시 읽기를 실패시킨다 — `error`를 주면 그것으로(기본은 연결 실패). */
+  failReads: (on: boolean, error?: ApiError) => void
   /** 켜 있는 동안의 읽기를 붙잡는다 — 끈 뒤의 읽기는 곧바로 답한다. 붙잡힌 것은 `releaseReads`가 놓는다. */
   holdReads: (on: boolean) => void
   /**
@@ -188,6 +188,7 @@ function descriptionServer(
 } {
   let stored = initial
   let readsFail = false
+  let readError = new ApiError(0, 'internal', '서버에 연결하지 못했습니다')
   let readsHeld = false
   const heldReads: ((asIssued: boolean) => void)[] = []
   const readSignals: (AbortSignal | undefined)[] = []
@@ -207,8 +208,9 @@ function descriptionServer(
     readSignals,
     readCancels,
     stored: () => stored,
-    failReads: (on) => {
+    failReads: (on, error) => {
       readsFail = on
+      if (error !== undefined) readError = error
     },
     holdReads: (on) => {
       readsHeld = on
@@ -226,7 +228,7 @@ function descriptionServer(
       getPage: (async (_projectId: string, pageId: string, options?: ReadOptions) => {
         if (pageId === PAGE_ID) readSignals.push(options?.signal)
         if (pageId === PAGE_ID) readCancels.push(options?.cancel)
-        if (readsFail && pageId === PAGE_ID) throw new ApiError(0, 'internal', '서버에 연결하지 못했습니다')
+        if (readsFail && pageId === PAGE_ID) throw readError
         if (readsHeld && pageId === PAGE_ID) {
           // 붙잡힌 읽기도 **끊기면 실제 `fetch`처럼 거절한다**.
           return new Promise<PageDetail>((resolve, reject) => {
@@ -850,6 +852,29 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await waitFor(() => expect(screen.queryByText(MATCHED)).not.toBeNull())
     expect(box().disabled).toBe(false)
     expect(screen.queryByRole('button', { name: '다시 확인' })).toBeNull()
+  })
+
+  /**
+   * A 리뷰 F3 — «모름» 동안 세션이 끝났다(다른 탭의 로그아웃). «다시 확인»의 다시 읽기가 401 이면 «확인하지도 못했습니다»가 아니라
+   * 로그인 화면이다(장부 공통 — 트리도 같다: `menu-crud.test.tsx`의 ««모름» 동안 세션이 끝났으면 …»). 앞 판은 잠긴 상자 앞에 머물렀다.
+   *
+   * 혼자 죽는 변조: `attempt`가 다시 읽기의 401 을 «모름»으로 둔다(앞 판). 트리 케이스도 **함께** 죽는다 — 이 축의 주인은 이것이다.
+   */
+  it('«모름» 동안 세션이 끝났으면 «다시 확인»의 401 이 로그인 화면으로 간다 — «확인하지도 못했습니다»에 머물지 않는다', async () => {
+    const server = descriptionServer('서버 값')
+    await saveWithFakeTimers(server, '시간 넘긴 글')
+    server.failReads(true)
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 저장됐는지 확인하지도 못했습니다'),
+    )
+
+    server.failReads(true, new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
+    fireEvent.click(screen.getByRole('button', { name: '다시 확인' }))
+
+    await waitFor(() => expect(screen.queryByLabelText('이메일')).not.toBeNull())
   })
 
   it('판정용 다시 읽기에도 시간 제한이 있다 — 매달리면 끊고 모른다: «다시 확인»이 선다', async () => {

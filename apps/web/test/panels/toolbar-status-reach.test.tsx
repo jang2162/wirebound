@@ -223,6 +223,8 @@ function menuToolbar(input: { selection: TreeSelection | null; busy?: boolean })
     conflict: null,
     overwriteTitle: unused,
     discardTitle: unused,
+    renameLock: { locked: false, phase: null, recheck: null, missed: null, dismiss: unused, run: unused },
+    renameNotices: { checking: '', unknown: '', missedLead: '' },
     reparenting: null,
     openReparent: unused,
     reparentTo: unused,

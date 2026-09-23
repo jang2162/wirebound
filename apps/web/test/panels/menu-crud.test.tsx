@@ -8,12 +8,14 @@
  * **낙관 적용이 없다(D1).** 화면이 갱신되는 유일한 길이 재조회이므로, 거의 모든 케이스가
  * `getTree` 호출 수를 함께 센다 — 그 수가 곧 "수렴했는가"다.
  */
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, useNavigate } from 'react-router'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
+import { WRITE_DEADLINE_MS, WriteLedgerProvider } from '../../src/panels/write-ledger'
+import { SessionProvider } from '../../src/session/session-context'
 import { useTreeCommands, type TreeCommands } from '../../src/tree/use-tree-commands'
 import type { MenuNode, PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
@@ -299,7 +301,8 @@ describe('이름 변경', () => {
     typeAndEnter('회원')
 
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
-    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원' })
+    // **바탕도 실린다** — 메뉴도(이월 5차 ②). 넷째는 장부의 끊는 신호다(이월 5차 ③).
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원', base: { title: '회원관리' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
     expect(api.updatePage).not.toHaveBeenCalled()
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
   })
@@ -312,7 +315,7 @@ describe('이름 변경', () => {
 
     await waitFor(() => expect(api.updatePage).toHaveBeenCalledTimes(1))
     // **바탕도 실린다** — 입력이 열릴 때의 제목이다(이월 P — 판정 축은 `tree/title-conflict.test.tsx`).
-    expect(api.updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '회원 목록' } })
+    expect(api.updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '회원 목록' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
     expect(api.updateMenu).not.toHaveBeenCalled()
   })
 
@@ -349,7 +352,7 @@ describe('이름 변경', () => {
     typeAndEnter('회원관리')
 
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
-    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원관리' })
+    expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원관리', base: { title: '회원관리' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
   it('빈 문자열이면 나가지 않는다', async () => {
@@ -590,9 +593,14 @@ describe('조작 잠금', () => {
     const sink: { latest: TreeCommands | null } = { latest: null }
     render(
       <ApiProvider client={api.client}>
-        <MemoryRouter initialEntries={['/projects/p-1']}>
-          <Probe sink={sink} pageId={pageId} />
-        </MemoryRouter>
+        {/* 이름 변경은 쓰기 장부를 탄다(이월 5차 ③) — 장부는 세션 세대를 본다. */}
+        <SessionProvider>
+          <WriteLedgerProvider>
+            <MemoryRouter initialEntries={['/projects/p-1']}>
+              <Probe sink={sink} pageId={pageId} />
+            </MemoryRouter>
+          </WriteLedgerProvider>
+        </SessionProvider>
       </ApiProvider>,
     )
     await waitFor(() => expect(sink.latest?.state.status).toBe('ready'))
@@ -930,7 +938,7 @@ describe('이름 변경 — 페이지 제목의 충돌', () => {
 
     await waitFor(() => expect(conflictNotice()).not.toBeNull())
     expect(within(conflictNotice()!).getByText('밥의 제목')).toBeTruthy()
-    expect(updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '회원 목록' } })
+    expect(updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '회원 목록' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
     // 실패 문장(서버 문장)으로 서지 않는다 — 충돌은 고를 것이 있는 화면이다.
     expect(within(treeRegion()).queryByText(CHANGED)).toBeNull()
@@ -945,7 +953,7 @@ describe('이름 변경 — 페이지 제목의 충돌', () => {
     fireEvent.click(within(conflictNotice()!).getByRole('button', { name: '내 글로 덮기' }))
 
     await waitFor(() => expect(updatePage).toHaveBeenCalledTimes(2))
-    expect(updatePage).toHaveBeenLastCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '밥의 제목' } })
+    expect(updatePage).toHaveBeenLastCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '밥의 제목' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
     await waitFor(() => expect(conflictNotice()).toBeNull())
   })
 
@@ -961,7 +969,7 @@ describe('이름 변경 — 페이지 제목의 충돌', () => {
     expect(updatePage).toHaveBeenCalledTimes(1)
   })
 
-  /** 혼자 죽는 변조: `renamePage`가 `judgeMeta`의 `'mine'`을 안 보고 늘 충돌을 세운다. */
+  /** 혼자 죽는 변조: `rename`의 `land`가 `judgeMeta`의 `'mine'`을 안 보고 늘 충돌을 세운다(메뉴도 이 판정을 지난다 — 축의 주인은 이 케이스). */
   it('409 의 지금 제목이 내 제목과 같으면 원하던 상태다 — 충돌이 아니다', async () => {
     const updatePage = clashOnce('목록')
     const api = await renameInto('목록', updatePage)
@@ -969,5 +977,595 @@ describe('이름 변경 — 페이지 제목의 충돌', () => {
     await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
     expect(conflictNotice()).toBeNull()
     expect(within(treeRegion()).queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('이름 변경 — 메뉴 제목의 충돌(이월 5차 ②)', () => {
+  const CHANGED = '다른 사람이 이 메뉴를 먼저 바꿨습니다'
+  const clash = (current: string) =>
+    new ApiError(409, 'conflict', CHANGED, [{ path: 'title', code: 'menu-title-changed', message: CHANGED, current }], true)
+
+  function conflictNotice(): HTMLElement | null {
+    return within(treeRegion()).queryByText('다른 사람이 이 제목을 바꿨습니다')?.closest<HTMLElement>('[role="alert"]') ?? null
+  }
+
+  async function renameMenu(updateMenu: ApiClient['updateMenu']) {
+    const api = await open({ updateMenu })
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter('회원')
+    return api
+  }
+
+  /**
+   * 메뉴의 409 는 **페이지와 갈린 이슈 코드**(`menu-title-changed`)로 온다 — 페이지와 같은 화면이 선다.
+   *
+   * 혼자 죽는 변조: 없다 — `rename`이 메뉴에도 `PAGE_META_CHANGED`로 읽으면(코드를 안 가른다) 실패 문장으로 서고, 아래
+   * «덮기»와 시간 제한 절의 «늦게 커밋된 앞 제목»(메뉴의 409 를 쓴다)도 충돌이 안 서서 함께 죽는다. **이 축(코드를 가른다)의
+   * 주인은 이 케이스다.**
+   */
+  it('남이 먼저 바꿨으면 충돌 화면이 그 사람의 메뉴 제목을 보인다 — 바탕은 입력이 열릴 때의 제목이다', async () => {
+    const updateMenu = vi.fn<ApiClient['updateMenu']>(async () => {
+      throw clash('밥의 메뉴')
+    })
+    await renameMenu(updateMenu)
+
+    await waitFor(() => expect(conflictNotice()).not.toBeNull())
+    expect(within(conflictNotice()!).getByText('밥의 메뉴')).toBeTruthy()
+    expect(updateMenu).toHaveBeenCalledWith('p-1', 'm-member', { title: '회원', base: { title: '회원관리' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(within(treeRegion()).queryByText(CHANGED)).toBeNull()
+  })
+
+  /**
+   * 혼자 죽는 변조: 없다 — «덮기»가 내 제목을 바탕으로 실으면 페이지의 «내 글로 덮기»와 함께 죽는다(한 자리 —
+   * `overwriteTitle`). **그 축의 주인은 페이지의 케이스다.** 이 케이스가 따로 재는 것은 덮기가 **메뉴 라우트로** 나가는 것이다.
+   */
+  it('«내 글로 덮기» — 그 사람의 메뉴 제목을 바탕으로 메뉴 라우트에 다시 보낸다', async () => {
+    let calls = 0
+    const updateMenu = vi.fn<ApiClient['updateMenu']>(async () => {
+      calls += 1
+      if (calls === 1) throw clash('밥의 메뉴')
+      return menuNode('m-member', '회원')
+    })
+    const api = await renameMenu(updateMenu)
+    await waitFor(() => expect(conflictNotice()).not.toBeNull())
+
+    fireEvent.click(within(conflictNotice()!).getByRole('button', { name: '내 글로 덮기' }))
+
+    await waitFor(() => expect(updateMenu).toHaveBeenCalledTimes(2))
+    expect(updateMenu).toHaveBeenLastCalledWith('p-1', 'm-member', { title: '회원', base: { title: '밥의 메뉴' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(api.updatePage).not.toHaveBeenCalled()
+    await waitFor(() => expect(conflictNotice()).toBeNull())
+  })
+})
+
+/**
+ * **트리 이름 변경의 시간 제한 · «모름» · 떠나 있는 동안의 결말**(이월 5차 ③) — 설명 저장의 장치(쓰기 장부 — `panels/write-ledger.tsx`)를
+ * 그대로 탄다. 판정의 뜻은 `tree/use-tree-commands.tsx`의 `rename` 머리말이 소유한다.
+ *
+ * 가짜 타이머가 켜진 동안은 `waitFor`·`findBy*`를 안 쓴다(`write-ledger.test.tsx` 머리말과 같은 까닭).
+ */
+describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안(이월 5차 ③)', () => {
+  const SERVER_ERROR = '서버 오류가 발생했습니다'
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /**
+   * 트리 서버 흉내 — 이름 변경은 **붙잡힌다**: `commit`이 서버에 쓰고 `respond`/`fail`이 응답을 준다. `getTree`는 **지금 서버의
+   * 제목**을 낸다. 끊기면 실제 `fetch`처럼 거절한다.
+   */
+  function treeServer() {
+    const titles = new Map([
+      ['m-member', '회원관리'],
+      ['pg-list', '회원 목록'],
+    ])
+    const held: { id: string; title: string; resolve: (value: never) => void; reject: (reason: unknown) => void; signal?: AbortSignal }[] = []
+    let reads: 'ok' | 'fail' = 'ok'
+    let readError: unknown = new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true)
+    const readSignals: (AbortSignal | undefined)[] = []
+
+    function snapshot(): TreeMenuNode[] {
+      const menu = tree()
+      menu[0]!.title = titles.get('m-member')!
+      menu[0]!.pages[0]!.title = titles.get('pg-list')!
+      return menu
+    }
+    function take(id: string, title: string | undefined, signal: AbortSignal | undefined): Promise<never> {
+      return new Promise<never>((resolve, reject) => {
+        held.push({ id, title: title ?? '', resolve, reject, signal })
+        signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      })
+    }
+    const overrides: Partial<ApiClient> = {
+      getTree: vi.fn<ApiClient['getTree']>(async (_projectId, options) => {
+        if (options?.signal !== undefined) readSignals.push(options.signal)
+        if (reads === 'fail') throw readError
+        return snapshot()
+      }),
+      updateMenu: vi.fn<ApiClient['updateMenu']>(async (_projectId, nodeId, body, options) => take(nodeId, body.title, options?.signal)),
+      updatePage: vi.fn<ApiClient['updatePage']>(async (_projectId, pageId, body, options) => take(pageId, body.title, options?.signal)),
+      listProjects: async () => [PROJECT],
+    }
+    return {
+      overrides,
+      held,
+      readSignals,
+      /** 읽기를 실패시킨다 — `error`를 주면 그것으로(기본 500). */
+      failReads: (fail: boolean, error?: unknown) => {
+        reads = fail ? 'fail' : 'ok'
+        if (error !== undefined) readError = error
+      },
+      /** 붙잡힌 이름 변경을 서버에 쓴다. */
+      commit: (index = 0) => {
+        titles.set(held[index]!.id, held[index]!.title)
+      },
+      /** 남이 바꿨다. */
+      setTitle: (id: string, title: string) => {
+        titles.set(id, title)
+      },
+      respond: async (index = 0) => {
+        const entry = held[index]!
+        await act(async () => {
+          entry.resolve((entry.id.startsWith('m-') ? menuNode(entry.id, entry.title) : pageDetail(entry.id, entry.title)) as never)
+        })
+      },
+      fail: async (index: number, error: unknown) => {
+        await act(async () => {
+          held[index]!.reject(error)
+        })
+      },
+    }
+  }
+
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms)
+    })
+  }
+
+  /** 메뉴 «회원관리»의 이름을 바꾼다 — 요청이 붙잡힌다. `fake`면 보내기 직전에 가짜 타이머를 켠다. */
+  async function renameMenuHeld(server: ReturnType<typeof treeServer>, title: string, fake: boolean, route?: string) {
+    await open(server.overrides, route)
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    if (fake) vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    typeAndEnter(title)
+    expect(server.held).toHaveLength(1)
+  }
+
+  function alertText(): string | null {
+    return within(treeRegion()).queryByRole('alert')?.textContent ?? null
+  }
+
+  /**
+   * 혼자 죽는 변조: `settle`의 판정 갈래가 다시 읽은 트리를 안 세운다(`setState` 한 줄) — 트리가 옛 제목에 머문다.
+   */
+  it('시간 안에 응답이 없으면 끊고 트리를 다시 읽는다 — 서버 제목이 내 것이면 말없이 풀리고 그 제목이 선다', async () => {
+    const server = treeServer()
+    await renameMenuHeld(server, '회원', true)
+    server.commit()
+
+    await advance(WRITE_DEADLINE_MS - 1)
+    expect(tool('하위 메뉴').disabled).toBe(true)
+    expect(server.held[0]!.signal?.aborted).toBe(false)
+
+    await advance(1)
+    expect(server.held[0]!.signal?.aborted).toBe(true)
+    vi.useRealTimers()
+
+    await waitFor(() => expect(tool('하위 메뉴').disabled).toBe(false))
+    expect(server.readSignals).toHaveLength(1)
+    expect(menuButton('회원')).toBeTruthy()
+    expect(alertText()).toBeNull()
+  })
+
+  /**
+   * «바뀌지 않았습니다» 뒤 **끊긴 요청이 늦게 커밋한 판** — 다음 이름 변경의 409 는 다른 사람이 아니라 앞서 보낸 내 제목이다.
+   *
+   * 혼자 죽는 변조: `land`의 «안 바뀜» 갈래가 보낸 제목을 매달린 값(`hanging`)에 안 든다 — 둘째가 «다른 사람이 …»로 선다.
+   */
+  it('다시 읽은 제목이 바탕이면 «바뀌지 않았습니다» — 늦게 커밋된 앞 제목은 다음 409 에서 «앞서 보낸 글»이다', async () => {
+    const server = treeServer()
+    await renameMenuHeld(server, '회원', true)
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    await waitFor(() => expect(alertText()).toBe('응답이 없어 서버를 다시 읽었더니 이름이 바뀌지 않았습니다'))
+    expect(menuButton('회원관리')).toBeTruthy()
+
+    // 끊긴 요청이 서버에서 늦게 커밋한다. 트리는 아직 옛 제목이다 — 그 바탕으로 다시 바꾸면 서버는 409 에 내 앞 제목을 싣는다.
+    server.commit()
+    const CHANGED = '다른 사람이 이 메뉴를 먼저 바꿨습니다'
+    ;(server.overrides.updateMenu as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+      throw new ApiError(409, 'conflict', CHANGED, [{ path: 'title', code: 'menu-title-changed', message: CHANGED, current: '회원' }], true)
+    })
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter('회원 모음')
+
+    const lead = await within(treeRegion()).findByText('지금 저장된 제목이 앞서 보낸 글과 같습니다')
+    expect(within(lead.closest<HTMLElement>('[role="alert"]')!).getByText('회원')).toBeTruthy()
+    expect(within(treeRegion()).queryByText('다른 사람이 이 제목을 바꿨습니다')).toBeNull()
+  })
+
+  /**
+   * 혼자 죽는 변조: `land`의 «안 바뀜» 갈래가 `'base'`만이 아니라 다시 읽은 모든 판정을 받는다(`verdict !== 'mine'`) — 남의 제목이
+   * «바뀌지 않았습니다»로 선다.
+   */
+  it('다시 읽은 제목이 남의 것이면 충돌 화면이다', async () => {
+    const server = treeServer()
+    await renameMenuHeld(server, '회원', true)
+    server.setTitle('m-member', '밥의 메뉴')
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    const lead = await within(treeRegion()).findByText('다른 사람이 이 제목을 바꿨습니다')
+    expect(within(lead.closest<HTMLElement>('[role="alert"]')!).getByText('밥의 메뉴')).toBeTruthy()
+  })
+
+  /**
+   * 혼자 죽는 변조: 트리의 장부 칸이 `recheck`를 안 넘긴다(`recheck: null`) — «다시 확인»을 눌러도 판정하지 않는다.
+   */
+  it('다시 읽기도 실패하면 «모름» — 트리 조작이 잠긴 채 «다시 확인»이 판정한다', async () => {
+    const server = treeServer()
+    await renameMenuHeld(server, '회원', true)
+    server.failReads(true)
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    await waitFor(() => expect(alertText()).toBe('응답이 없고, 이름이 바뀌었는지 확인하지도 못했습니다'))
+    expect(tool('하위 메뉴').disabled).toBe(true)
+
+    server.failReads(false)
+    server.commit()
+    fireEvent.click(within(treeRegion()).getByRole('button', { name: '다시 확인' }))
+
+    await waitFor(() => expect(tool('하위 메뉴').disabled).toBe(false))
+    expect(alertText()).toBeNull()
+  })
+
+  /**
+   * **에디터를 떠나 있는 동안 끝난 실패** — 돌아온 트리가 말한다. 문장은 «이 화면을 떠나 있는 동안»이다(A 리뷰 F6 — 에디터 안에서
+   * 다른 프로젝트에 가 있었어도 참이다).
+   *
+   * 혼자 죽는 변조: 장부가 받는 자리가 **없으면** 본 것으로 친다(`receiver?.sees(target) !== true` →
+   * `receiver !== undefined && !receiver.sees(target)`) — 떠나 있는 동안 트리가 아예 없어 남기지 않는다. (트리의 `sees`를 늘 참으로
+   * 두는 변조는 이 판에 안 닿는다 — 받을 트리가 없다. 그 축은 아래 절의 «다른 프로젝트에 가 있는 동안 …»이 갖는다.)
+   */
+  it('에디터를 떠나 있는 동안 실패하면, 돌아온 트리가 «이 화면을 떠나 있는 동안 …»으로 말하고 «확인»이 닫는다', async () => {
+    const server = treeServer()
+    await renameMenuHeld(server, '회원', false)
+
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    await screen.findByRole('link', { name: PROJECT_NAME })
+    await server.fail(0, new ApiError(500, 'internal', SERVER_ERROR, [], true))
+    fireEvent.click(screen.getByRole('link', { name: PROJECT_NAME }))
+    await screen.findByText('회원관리')
+
+    await waitFor(() => expect(alertText()).toBe(`이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다 — ${SERVER_ERROR}`))
+    fireEvent.click(within(treeRegion()).getByRole('button', { name: '확인' }))
+    expect(alertText()).toBeNull()
+  })
+
+  /**
+   * **에디터를 떠났다 와도 나가 있는 이름 변경이 트리를 잠근다** — 새로 선 트리의 `inFlight`는 모른다.
+   *
+   * 혼자 죽는 변조: `busy`가 장부 칸을 안 본다(`busy: busy || renameLocked` → `busy`).
+   */
+  it('이름 변경이 나가 있는 채 에디터를 떠났다 오면 트리가 잠긴 채 서고, 응답이 오면 풀린다', async () => {
+    const server = treeServer()
+    await renameMenuHeld(server, '회원', false)
+
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(await screen.findByRole('link', { name: PROJECT_NAME }))
+    await screen.findByText('회원관리')
+    fireEvent.click(menuButton('회원관리'))
+    expect(tool('이름 변경').disabled).toBe(true)
+
+    server.commit()
+    await server.respond()
+    await waitFor(() => expect(tool('이름 변경').disabled).toBe(false))
+    expect(alertText()).toBeNull()
+  })
+
+  /**
+   * **트리는 같은 프로젝트 안의 페이지 이동에 다시 마운트되지 않는다**(코디네이터 물음 Q1 의 조건 — 재는 자리가 이것이다).
+   * 다른 페이지 · 프로젝트 첫 화면으로 옮긴 사이 끝난 실패를 트리가 **한 번** 말하고, «떠나 있는 동안»은 안 남는다.
+   *
+   * 혼자 죽는 변조: 장부가 받는 자리를 쓰기의 종류가 아니라 늘 우측 패널(`'page'`)로 고른다(`receiversRef.current.get('page')`) —
+   * 우측 패널은 다른 페이지를 보고 있어 «떠나 있었다»로 남긴다. 트리가 두 번 말한다.
+   */
+  it('같은 프로젝트의 다른 페이지로 옮긴 사이 실패해도 트리가 한 번만 말한다 — «떠나 있는 동안»을 남기지 않는다', async () => {
+    const server = treeServer()
+    await renameMenuHeld(server, '회원', false, '/projects/p-1/pages/pg-list')
+
+    fireEvent.click(within(treeRegion()).getByRole('link', { name: '회원 상세' }))
+    await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-detail'))
+    await server.fail(0, new ApiError(500, 'internal', SERVER_ERROR, [], true))
+
+    await waitFor(() => expect(alertText()).toBe(SERVER_ERROR))
+    expect(within(treeRegion()).getAllByRole('alert')).toHaveLength(1)
+    expect(within(treeRegion()).queryByText(/떠나 있는 동안/)).toBeNull()
+  })
+})
+
+/**
+ * ## 판정의 말이 **지금 떠 있는 트리**에 닿는다 (A 리뷰 F1 · 2026-09-23)
+ *
+ * 이름 변경을 낸 트리가 내려가고(에디터를 떠났다) **새 트리가 떠 있는 채** 판정이 끝나면, 앞 판은 낸 인스턴스의 state 에만
+ * 썼다 — 새 트리는 «바뀌지 않았습니다»도 충돌 화면도 없이 잠금만 풀렸다(리뷰 Chrome R1–R3). 이제 판정의 말은 장부의 `deliver`로
+ * 떠 있는 트리(`Receiver` — 종류 `'tree'`)에 간다. 고치기 전 판에서 여섯 다 빨강이었다(보고).
+ *
+ * 변조는 **그 칸 하나만** 앞 판처럼 낸 인스턴스에 쓰게 되돌린다(`put(칸, …)` → 낸 인스턴스의 `set…`) — 칸마다 그것을 새 트리에서
+ * 재는 케이스가 혼자 죽는다. 같은 인스턴스에서 재는 위 절은 안 죽는다.
+ */
+describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는다(A 리뷰 F1)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function server2() {
+    const titles = new Map([['m-member', '회원관리']])
+    const held: { id: string; title: string; resolve: (value: never) => void; reject: (reason: unknown) => void }[] = []
+    let readError: unknown = null
+    const updateMenu = vi.fn<ApiClient['updateMenu']>(
+      async (_projectId, nodeId, body, options) =>
+        new Promise<never>((resolve, reject) => {
+          held.push({ id: nodeId, title: body.title ?? '', resolve, reject })
+          options?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        }),
+    )
+    const overrides: Partial<ApiClient> = {
+      getTree: vi.fn<ApiClient['getTree']>(async () => {
+        if (readError !== null) throw readError
+        const menu = tree()
+        menu[0]!.title = titles.get('m-member')!
+        return menu
+      }),
+      updateMenu,
+      listProjects: async () => [PROJECT],
+    }
+    return {
+      overrides,
+      held,
+      updateMenu,
+      failReads: (error: unknown) => {
+        readError = error
+      },
+      commit: (index = 0) => titles.set(held[index]!.id, held[index]!.title),
+      setTitle: (title: string) => titles.set('m-member', title),
+      respond: async (index = 0) => {
+        const entry = held[index]!
+        await act(async () => entry.resolve(menuNode(entry.id, entry.title) as never))
+      },
+      fail: async (index: number, error: unknown) => {
+        await act(async () => held[index]!.reject(error))
+      },
+    }
+  }
+
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms)
+    })
+  }
+
+  function alertText(): string | null {
+    return within(treeRegion()).queryByRole('alert')?.textContent ?? null
+  }
+
+  /** «회원관리»의 이름을 바꾼다 — 요청이 붙잡힌다. `fake`면 보내기 직전에 가짜 타이머를 켠다(시간 제한의 타이머). */
+  async function renameHeld(server: ReturnType<typeof server2>, title: string, fake: boolean) {
+    await open(server.overrides)
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    if (fake) vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    typeAndEnter(title)
+    expect(server.held).toHaveLength(1)
+  }
+
+  /**
+   * 프로젝트 목록으로 갔다 돌아온다 — 셸째 내려갔다 선다(**새 트리**). 가짜 타이머 아래서도 돌게 타이머를 0 씩 밀며 기다린다
+   * (시간 제한까지는 안 민다).
+   */
+  async function leaveAndReturn(fake: boolean): Promise<void> {
+    const until = async (found: () => HTMLElement | null): Promise<HTMLElement> => {
+      if (!fake)
+        return waitFor(() => {
+          const element = found()
+          if (element === null) throw new Error('아직 없다')
+          return element
+        })
+      for (let i = 0; i < 50 && found() === null; i += 1) await advance(0)
+      const element = found()
+      expect(element).not.toBeNull()
+      return element!
+    }
+    const before = treeRegion()
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(await until(() => screen.queryByRole('link', { name: PROJECT_NAME })))
+    await until(() => (screen.queryByRole('region', { name: '메뉴·페이지 트리' }) === null ? null : within(treeRegion()).queryByText(/회원관리|밥의 메뉴/)))
+    // 셸째 새로 섰다 — 앞의 트리 영역은 문서에 없다.
+    expect(before.isConnected).toBe(false)
+  }
+
+  /**
+   * 리뷰 R1 — 새 트리가 떠 있는 채 판정이 `'base'`로 끝난다. «바뀌지 않았습니다»와 **매달린 값**이 새 트리에 닿는다.
+   *
+   * 혼자 죽는 변조 둘: `land`의 «바뀌지 않았습니다» 실패를 낸 인스턴스에 쓴다 · 매달린 값을 낸 인스턴스에 든다(뒤의 것은
+   * «앞서 보낸 글» 대신 «다른 사람이 …»가 선다).
+   */
+  it('R1 — 떠났다 돌아온 새 트리에서 판정이 «바뀌지 않았습니다»로 끝나면 새 트리가 말하고, 매달린 값도 새 트리가 든다', async () => {
+    const server = server2()
+    await renameHeld(server, '회원', true)
+    await leaveAndReturn(true)
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    await waitFor(() => expect(alertText()).toBe('응답이 없어 서버를 다시 읽었더니 이름이 바뀌지 않았습니다'))
+    expect(menuButton('회원관리')).toBeTruthy()
+
+    // 끊긴 요청이 늦게 커밋한다 — 새 트리에서 다시 바꾸면 409 가 앞서 보낸 내 제목을 싣는다.
+    server.commit()
+    const CHANGED = '다른 사람이 이 메뉴를 먼저 바꿨습니다'
+    server.updateMenu.mockImplementationOnce(async () => {
+      throw new ApiError(409, 'conflict', CHANGED, [{ path: 'title', code: 'menu-title-changed', message: CHANGED, current: '회원' }], true)
+    })
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter('회원 모음')
+    expect(await within(treeRegion()).findByText('지금 저장된 제목이 앞서 보낸 글과 같습니다')).toBeTruthy()
+    expect(within(treeRegion()).queryByText('다른 사람이 이 제목을 바꿨습니다')).toBeNull()
+  })
+
+  /**
+   * 리뷰 R2 — 그 사이 남이 바꿨다. 충돌 화면이 **새 트리**에 서고, «내 글로 덮기»가 새 트리에서 그 사람의 제목을 바탕으로 보낸다.
+   *
+   * 혼자 죽는 변조: `land`의 충돌을 낸 인스턴스에 쓴다.
+   */
+  it('R2 — 떠났다 돌아온 새 트리에서 판정이 «다른 사람이 바꿨다»로 끝나면 새 트리에 충돌 화면이 서고 덮기가 된다', async () => {
+    const server = server2()
+    await renameHeld(server, '앨리스의 메뉴', true)
+    server.setTitle('밥의 메뉴')
+    await leaveAndReturn(true)
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    const lead = await within(treeRegion()).findByText('다른 사람이 이 제목을 바꿨습니다')
+    expect(within(lead.closest<HTMLElement>('[role="alert"]')!).getByText('밥의 메뉴')).toBeTruthy()
+
+    fireEvent.click(within(treeRegion()).getByRole('button', { name: '내 글로 덮기' }))
+    await waitFor(() => expect(server.updateMenu).toHaveBeenCalledTimes(2))
+    expect(server.updateMenu.mock.calls[1]![2]).toEqual({ title: '앨리스의 메뉴', base: { title: '밥의 메뉴' } })
+  })
+
+  /**
+   * 리뷰 R3 — «모름»인 채 떠났다 돌아와 **새 트리의** «다시 확인»으로 판정한다. 판정용으로 다시 읽은 트리가 새 트리에 선다
+   * (새 트리는 커밋 전에 읽었다).
+   *
+   * 혼자 죽는 변조: 판정 갈래가 다시 읽은 트리를 낸 인스턴스에 세운다 — 새 트리가 옛 제목에 머문다.
+   */
+  it('R3 — «모름»으로 떠났다 돌아온 새 트리에서 «다시 확인»하면 다시 읽은 트리가 새 트리에 선다', async () => {
+    const server = server2()
+    await renameHeld(server, '회원', true)
+    server.failReads(new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true))
+    await advance(WRITE_DEADLINE_MS)
+    expect(alertText()).toBe('응답이 없고, 이름이 바뀌었는지 확인하지도 못했습니다')
+
+    server.failReads(null)
+    await leaveAndReturn(true)
+    vi.useRealTimers()
+    expect(alertText()).toBe('응답이 없고, 이름이 바뀌었는지 확인하지도 못했습니다')
+    expect(menuButton('회원관리')).toBeTruthy()
+
+    server.commit()
+    fireEvent.click(within(treeRegion()).getByRole('button', { name: '다시 확인' }))
+    await waitFor(() => expect(menuButton('회원')).toBeTruthy())
+    expect(alertText()).toBeNull()
+  })
+
+  /**
+   * 리뷰 R6 · F6 의 판 — **에디터 안에서 다른 프로젝트로** 가 있는 동안 끝난 실패. 그 프로젝트의 트리는 말하지 않고(남의 프로젝트의
+   * 이름 변경이다), 돌아온 트리가 «이 화면을 떠나 있는 동안 …»으로 말한다(«에디터를 떠나 있는 동안»은 이 판에 거짓이었다).
+   *
+   * 혼자 죽는 변조: 트리의 `sees`가 프로젝트를 안 본다(`() => true`) — 다른 프로젝트의 트리가 «보고 있다»고 답해 장부가 안 남기고,
+   * 그 트리의 `accept`는 프로젝트가 달라 버린다. 아무도 말하지 않는다. (위 «에디터를 떠나 있는 동안 …»은 이 변조에 안 죽는다 —
+   * 그 판에는 떠 있는 트리가 아예 없다.)
+   */
+  it('에디터 안에서 다른 프로젝트에 가 있는 동안 실패하면 그 트리는 말이 없고, 돌아온 트리가 «이 화면을 떠나 있는 동안 …»으로 말한다', async () => {
+    const server = server2()
+    const OTHER: ProjectDetail = { ...PROJECT, id: 'p-2', name: '이번 설계서', slug: 'proj-2' }
+    const getTree = server.overrides.getTree!
+    const harness = stubs({
+      ...server.overrides,
+      getProject: async (id: string) => (id === 'p-2' ? OTHER : PROJECT),
+      getTree: (async (projectId: string, options?: Parameters<ApiClient['getTree']>[1]) =>
+        projectId === 'p-2' ? [{ id: 'm-b', title: '비 메뉴', sortOrder: 0, pages: [], children: [] }] : getTree(projectId, options)) as ApiClient['getTree'],
+    })
+    function GoTo(props: { to: string; label: string }): ReactElement {
+      const navigate = useNavigate()
+      return (
+        <button type="button" onClick={() => navigate(props.to)}>
+          {props.label}
+        </button>
+      )
+    }
+    renderWithProviders(
+      <>
+        <App />
+        <GoTo to="/projects/p-2" label="이번으로" />
+        <GoTo to="/projects/p-1" label="일번으로" />
+      </>,
+      { client: harness.client, route: '/projects/p-1' },
+    )
+    await screen.findByText('회원관리')
+    fireEvent.click(menuButton('회원관리'))
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter('회원')
+    expect(server.held).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '이번으로' }))
+    await screen.findByText('비 메뉴')
+    await server.fail(0, new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true))
+    expect(within(treeRegion()).queryByRole('alert')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '일번으로' }))
+    await screen.findByText('회원관리')
+    await waitFor(() => expect(alertText()).toBe('이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다 — 서버 오류가 발생했습니다'))
+  })
+
+  /**
+   * 코디네이터 답 r1 의 조건 3 — 돌아온 **뒤에** 끝난 `'failed'`는 새 트리가 **보통 문장으로 한 번** 말한다(«떠나 있는 동안»이
+   * 아니다 — 설명이 돌아온 패널에서 보통 문장으로 말하는 것과 같다).
+   *
+   * 혼자 죽는 변조: `settle`의 실패 갈래가 실패를 낸 인스턴스에 쓴다 — 새 트리가 말이 없다.
+   */
+  it('돌아온 뒤에 실패하면 새 트리가 보통 문장으로 한 번 말한다', async () => {
+    const server = server2()
+    await renameHeld(server, '회원', false)
+    await leaveAndReturn(false)
+
+    await server.fail(0, new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true))
+    await waitFor(() => expect(alertText()).toBe('서버 오류가 발생했습니다'))
+    expect(within(treeRegion()).getAllByRole('alert')).toHaveLength(1)
+  })
+
+  /**
+   * 돌아온 뒤에 성공하면 **뒤의 다시 받기**도 새 트리에 닿는다 — 새 트리는 커밋 전에 읽어 옛 제목이었다.
+   *
+   * 혼자 죽는 변조: `rename`이 다시 받기를 `run`의 `load`(낸 인스턴스)에 맡긴다(`return reload ? undefined : NO_RELOAD`).
+   */
+  it('돌아온 뒤에 성공하면 뒤의 다시 받기가 새 트리에 닿는다 — 새 이름이 선다', async () => {
+    const server = server2()
+    await renameHeld(server, '회원', false)
+    await leaveAndReturn(false)
+    expect(menuButton('회원관리')).toBeTruthy()
+
+    server.commit()
+    await server.respond()
+    await waitFor(() => expect(menuButton('회원')).toBeTruthy())
+    expect(alertText()).toBeNull()
+  })
+
+  /**
+   * A 리뷰 F3 — «모름» 동안 세션이 끝났다(다른 탭의 로그아웃). «다시 확인»의 다시 읽기가 401 이면 «확인하지도 못했습니다»가 아니라
+   * 로그인 화면이다. 앞 판은 트리가 잠긴 채 머물렀다(리뷰 R4 · Chrome).
+   *
+   * 혼자 죽는 변조: 트리의 실패 갈래가 세션 끊김을 문장으로 바꿔 쓴다(`signed-out` → «요청을 처리하지 못했습니다»). 장부의 401
+   * 갈래(`attempt`)를 떼면 이것과 `write-ledger.test.tsx`의 설명 케이스가 **함께** 죽는다 — 그 축의 주인은 설명 케이스다.
+   */
+  it('«모름» 동안 세션이 끝났으면 «다시 확인»이 로그인 화면으로 간다', async () => {
+    const server = server2()
+    await renameHeld(server, '회원', true)
+    server.failReads(new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true))
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    expect(alertText()).toBe('응답이 없고, 이름이 바뀌었는지 확인하지도 못했습니다')
+
+    server.failReads(new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
+    fireEvent.click(within(treeRegion()).getByRole('button', { name: '다시 확인' }))
+    await waitFor(() => expect(screen.queryByLabelText('이메일')).not.toBeNull())
   })
 })
