@@ -25,14 +25,22 @@ export interface FakeRealtime {
   deliver(frame: Record<string, unknown>): void
   /** 연결이 끊겼다가 다시 붙는다(두 번째 `open` — 셸이 다시 읽는다). */
   reconnect(): void
+  /**
+   * 지금 시도 중인 연결이 **열리지 못하고 닫힌다** — 핸드셰이크 거절(멤버에서 빠졌으면 가드의 404 — 브라우저에는 1006 으로만
+   * 보인다). 재연결은 맡겨진 채 돌리지 않는다.
+   */
+  refuse(): void
   /** 지금 소켓이 앱 쪽에서 닫혔는가(셸이 내려가면 `close()`가 불린다). */
   closed(): boolean
+  /** 마지막으로 맡긴 일(끊긴 뒤면 재연결)이 아직 취소되지 않았는가 — 셸이 내려가면 `close()`가 취소한다. */
+  reconnectPending(): boolean
 }
 
 export function fakeRealtime(projectId: string, userId: string): FakeRealtime {
   const sent: string[] = []
   const sockets: (RealtimeSocket & { closedByApp: boolean })[] = []
   const tasks: (() => void)[] = []
+  const cancelled = new Set<unknown>()
   let joins = 0
 
   const realtime: RealtimeSetup = {
@@ -62,7 +70,9 @@ export function fakeRealtime(projectId: string, userId: string): FakeRealtime {
         tasks.push(run)
         return tasks.length
       },
-      cancel: () => {},
+      cancel: (handle) => {
+        cancelled.add(handle)
+      },
     },
   }
 
@@ -108,6 +118,13 @@ export function fakeRealtime(projectId: string, userId: string): FakeRealtime {
       })
       open()
     },
+    refuse: () => {
+      const socket = current()
+      act(() => {
+        socket.onclose?.()
+      })
+    },
     closed: () => current().closedByApp,
+    reconnectPending: () => tasks.length > 0 && !cancelled.has(tasks.length),
   }
 }

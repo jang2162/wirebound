@@ -79,13 +79,20 @@
  * | 순간 | 선택 | 잠금 |
  * |---|---|---|
  * | 강등(`true → false`) | 그대로 | 잡은 것을 **놓는다**(`unlock`). 서버는 viewer 의 `unlock`을 버리지만 강등을 알리는 그 자리에서 이미 놓았다(`apps/api/src/ws/notify.ts`의 `notifyMembershipChanged`) |
- * | 승격(`false → true`) | 남의 잠금에 막히면 **놓는다**(`store.setSelectionClaims`) | 막히지 않으면 **잡는다** — 고른 자리가 곧 claim 이다(루트는 예외 그대로) |
+ * | 승격(`false → true`) | 남의 잠금에 막히면 **놓는다**(`store.setSelectionClaims`) | **잡지 않는다** — 고른 자리는 «잡지 않은 선택»으로 남고, 사용자의 다음 행동(다른 자리를 고름 · 첫 편집)이 잡는다(`lock-channel.ts`의 `keepUnclaimed`) |
  *
- * **승격의 한 커밋에 창이 있다.** 두 이펙트는 같은 커밋에서 순서대로 도는데, 앞의 것이 막힌 선택을 놓아도 뒤의 것이 든
- * `selectedNodeId`는 렌더 때의 값(막힌 그 자리)이다 — 그대로 보내면 남이 잡은 자리에 `lock`이 한 번 나가 겹친 잠금이 선다.
- * 그래서 보내기 전에 스토어에 **지금** 막혔는지 묻는다(`selectionBlockedBy` — 판정은 스토어 한 자리 그대로다).
+ * **승격에 곧장 잡지 않는 까닭(리뷰 R3 — 재서 알았다).** 앞 판은 막히지 않은 자리면 승격 순간 잡았다. 그 시각은 캐럴이 아니라
+ * **앨리스의 PATCH → 신호 → 다시 읽기 → 렌더**가 정하고(PATCH 응답 뒤 약 15–45ms), 같은 순간 그 자리를 누른 밥은 그 시각을 볼
+ * 신호가 없다 — 밥의 `lock`이 서버에 먼저 닿아도 그 방송이 캐럴에게 닿기 전에 캐럴의 이펙트가 돌면 둘 다 잡는다. Chrome(밥이
+ * 승격 응답 뒤 d = 0…30ms 에 카드를 누름 · 각 3회): **겹침 17/48 → 고친 뒤 보고 (c)**. editor 둘이 d 간격으로 누르는 기준선은
+ * 1/48 이다. 잡지 않으면 잡는 시각을 늘 그 사람이 정한다 — 남은 그 순간을 보통 경합과 같은 조건으로 본다.
+ *
+ * 선택을 **놓지 않고** 남기는 것은 사용자가 보던 것(속성 · 코멘트)과 치던 글을 지키려는 것이다 — 선택을 놓으면 속성 패널이
+ * 내려가며 친 글이 사라진다. 막힌 자리를 놓는 앞 판의 규칙(첫 줄)은 그대로다.
+ *
+ * 잃은 잠금(서버의 `locks`에서 빠짐 — 리뷰 R4)도 같은 «잡지 않은 선택»으로 간다(`lock-channel.ts`의 `observe`) — 판정이 한 벌이다.
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useLockChannel } from './context'
 import { useSessionUser } from '../session/session-context'
 import {
@@ -118,15 +125,28 @@ export function useNodeLock(pageId: string | undefined, canHold: boolean): void 
     store.setSelectionClaims(canHold)
   }, [store, canHold])
 
+  // 잡지 않은 선택을 첫 편집이 잡을 때 **지금 막혔는지** 묻는 자리 — 판정은 스토어 한 자리 그대로다.
   useEffect(() => {
+    channel?.setClaimable((_pageId, nodeId) => store.selectionBlockedBy(nodeId) === null)
+    return () => channel?.setClaimable(null)
+  }, [store, channel])
+
+  /** 앞 커밋의 `canHold` — 이 커밋이 승격인지 가른다(위 표). */
+  const heldBefore = useRef(canHold)
+
+  useEffect(() => {
+    const promoted = !heldBefore.current && canHold
+    heldBefore.current = canHold
     // **루트는 claim 하지 않는다**(위 머리말). 루트를 고른 것은 잠글 자리를 고른 것이 아니라
     // 아직 아무 자리도 안 고른 것에 가깝다 — 앞에 잡고 있던 것이 있으면 여기서 놓는다.
-    // 막힌 자리는 잡지 않는다 — 위 «승격의 한 커밋» 창. 스토어가 지금 든 판정을 묻는다.
-    const holdId =
-      selectedNodeId === rootId || (selectedNodeId !== null && store.selectionBlockedBy(selectedNodeId) !== null)
-        ? null
-        : selectedNodeId
+    const holdId = selectedNodeId === rootId ? null : selectedNodeId
+    const holdPage = onThisPage && canHold ? pageId : null
+    // **승격은 잡지 않는다**(위 표). 막힌 선택은 앞 이펙트가 놓았다 — 다음 커밋이 `hold(…, null)`로 잡지 않은 선택도 지운다.
+    if (promoted && holdPage !== null && holdPage !== undefined && holdId !== null) {
+      channel?.keepUnclaimed(holdPage, holdId)
+      return
+    }
     // 통로가 없으면 아무것도 안 한다 — `RealtimeProvider` 없이 도는 화면이 그 판이다.
-    channel?.hold(onThisPage && canHold ? pageId : null, holdId)
-  }, [store, channel, pageId, selectedNodeId, onThisPage, rootId, canHold])
+    channel?.hold(holdPage, holdId)
+  }, [channel, pageId, selectedNodeId, onThisPage, rootId, canHold])
 }

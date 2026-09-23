@@ -179,3 +179,65 @@ describe('바뀌는 순간의 잠금과 연결', () => {
     })
   }, 30_000)
 })
+
+/**
+ * **자격을 본 뒤 `hold` 전에 강등이 끼는 창**(이월 5차 리뷰 R5). 프레임 경로는 «자격을 본다(DB 둘 — await)» → «`hold`» 순이라, 그
+ * await 사이에 멤버 행이 커밋되고 `notifyMembershipChanged`가 먼저 놓으면(놓을 것이 아직 없다) 뒤이어 `hold`가 선다 — 그
+ * 잠금은 **TTL 까지** 남고 viewer 가 된 주인은 놓을 수 없다(`unlock`이 editor 문턱에 걸린다).
+ *
+ * 창을 **문으로** 연다: 그 사람의 editor 자격 질의가 답을 낸 **뒤에** 문 앞에서 기다리게 하고(로컬 DB 는 창이 안 열린다 —
+ * 리뷰가 지연 없이 496회에 0), 그 사이 강등을 커밋한다. 방송(`send`)의 자격 질의는 브로드캐스터 안의 같은 함수를 직접 부르므로
+ * 문을 안 지난다.
+ */
+describe('자격을 본 뒤 hold 전에 끼는 강등', () => {
+  it('강등이 그 창에 끼면 `lock` 프레임은 잡지 않는다 — 대조: 끼지 않으면 잡는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const targetTab = track(await joinRoom(ctx.port, fx.project.id, fx.target.cookie.wb_session))
+      const ownerTab = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+
+      const { broadcast, locks } = ctx.app.realtime
+      const real = broadcast.stillAllowed
+      let gate: { entered: () => void; opened: Promise<void> } | null = null
+      broadcast.stillAllowed = async (connection, minRole) => {
+        const allowed = await real(connection, minRole)
+        const armed = gate
+        if (armed !== null && connection.userId === fx.target.user.id && minRole === 'editor') {
+          gate = null
+          armed.entered()
+          await armed.opened
+        }
+        return allowed
+      }
+      const arm = (): { entered: Promise<void>; open: () => void } => {
+        let entered = (): void => {}
+        let open = (): void => {}
+        const enteredP = new Promise<void>((resolve) => (entered = resolve))
+        const opened = new Promise<void>((resolve) => (open = resolve))
+        gate = { entered, opened }
+        return { entered: enteredP, open }
+      }
+
+      // 대조 먼저: 문을 지나도 그 사이 아무 일이 없으면 잡는다(문 자체가 잠금을 막지 않는다).
+      const first = arm()
+      targetTab.send(lockFrame(fx.page.id, 'n_card'))
+      await first.entered
+      first.open()
+      await locksWith(ownerTab, 'n_card')
+      targetTab.send(JSON.stringify({ type: 'unlock' }))
+      expect(await locksEmpty(ownerTab)).toEqual([])
+
+      // 그 창에 강등이 낀다 — 자격은 editor 로 읽혔다.
+      const second = arm()
+      targetTab.send(lockFrame(fx.page.id, 'n_btn'))
+      await second.entered
+      expect(await setRole(ctx, fx, fx.target.user.id, 'viewer')).toBe(200)
+      await targetTab.waitFor('membership-changed')
+      second.open()
+
+      await ownerTab.quiet()
+      expect(locks.liveIn(fx.project.id)).toEqual([])
+      expect(ownerTab.received.filter((frame) => frame.type === 'locks' && frame.locks.length > 0)).toHaveLength(1)
+    })
+  }, 30_000)
+})

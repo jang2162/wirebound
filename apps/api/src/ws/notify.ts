@@ -153,6 +153,11 @@ export interface MembershipChangedInput {
  * 그 연결의 자격을 보고 닫는다. 그 판에서는 줄 선 `patch`의 404 답이 여전히 길을 잃는다(남는 틈 — 웹은 다시 읽기의
  * 404 로 셸째 내려가므로 그 편집의 «모름»은 화면에 안 남는다).
  *
+ * **연결의 멤버십 세대도 여기서 올린다**(`RoomConnection.membershipEpoch` — 리뷰 R5). 그 연결이 보낸 `lock` 프레임이 자격을 보는
+ * 중(await)이면 여기서 놓아도 놓을 것이 아직 없고, 뒤이어 그 프레임이 잡는다 — 그 잠금은 TTL 까지 남는다. 프레임 경로가
+ * await 앞에서 읽은 세대와 견줘 바뀌었으면 잡지 않는다(`ws/routes.ts`의 `lock` 갈래). 지연을 넣은 변조(`stillAllowed`의
+ * editor 판정에 30ms)로 잰 값: 고치기 전 **29초까지** 남고 31초에 풀림 → 고친 뒤 **0.5초에 이미 없음**(보고).
+ *
  * # 보내기 전에 권한을 다시 보지 않는다
  *
  * `broadcast.ts`의 `send`는 프레임마다 받을 자격(viewer)을 다시 본다 — 프로젝트의 내용이 실려서다. 이 프레임은
@@ -169,6 +174,9 @@ export function notifyMembershipChanged(app: FastifyInstance, input: MembershipC
   const { rooms } = app.realtime
   for (const connection of rooms.membersOf(input.projectId)) {
     if (connection.userId !== input.userId) continue
+    // **세대를 먼저 올린다** — 자격을 보는 중이던 `lock` 프레임이 이 뒤에 잡지 않게(`RoomConnection.membershipEpoch`).
+    // 보내기가 던져도 오른 채다(아래 `try` 밖).
+    connection.membershipEpoch += 1
     try {
       connection.send(payload)
       if (!canHold) releaseLocksOf(app, connection)

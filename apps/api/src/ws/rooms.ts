@@ -43,6 +43,15 @@ export interface RoomConnection {
    * 수 있는 것은 *"이 행이 아직 있나"*뿐이다 — 쿠키를 만들 수는 없다.
    */
   readonly sessionId: string
+  /**
+   * **이 사람의 멤버십이 이 연결이 붙은 뒤 몇 번 바뀌었나**(이월 5차 리뷰 R5) — `ws/notify.ts`의 `notifyMembershipChanged`가
+   * 올린다. **역할 값이 아니라 세대다** — 역할은 여전히 DB 가 말한다(`broadcast.ts`의 `stillAllowed`).
+   *
+   * 프레임 경로(`ws/routes.ts`)는 자격을 보는 await **앞에서** 이 값을 읽고, 잠금을 잡기 직전에 다시 본다. 그 사이에 올랐으면
+   * 읽은 자격은 바뀌기 전의 것이다 — 잡지 않는다. DB 를 다시 읽지 않는 것이 요점이다: 다시 읽어도 그 뒤에 또 await 가 생겨
+   * 같은 창이 한 칸 뒤로 밀릴 뿐이고, 이 값은 알림과 같은 틱에 동기로 오른다.
+   */
+  membershipEpoch: number
   send(payload: string): void
   close(code: number, reason: string): void
 }

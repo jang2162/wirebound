@@ -108,6 +108,7 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         userId: currentUser.id,
         userName: currentUser.name,
         sessionId: hashSessionToken(token),
+        membershipEpoch: 0,
         send: (payload) => socket.send(payload),
         close: (code, reason) => socket.close(code, reason),
       }
@@ -149,6 +150,8 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         }
 
         void (async () => {
+          // **자격을 보기 전의 멤버십 세대**(`RoomConnection.membershipEpoch` — 이월 5차 리뷰 R5). 아래 `lock` 갈래가 본다.
+          const epoch = connection.membershipEpoch
           // 확인 지점 1 (머리말). 검사는 프레임 종류와 무관하게 **먼저** 돌고, 요구하는
           // 역할만 종류에서 온다(`MIN_ROLE_FOR_FRAME` — P3-2 D1).
           const minRole = MIN_ROLE_FOR_FRAME[frame.type]
@@ -189,6 +192,12 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
               push(await handlePatchFrame(app, connection, frame))
               return
             case 'lock':
+              // **자격을 보는 동안 멤버십이 바뀌었으면 잡지 않는다**(이월 5차 리뷰 R5). 위 await 사이에 강등이 커밋되고
+              // `notifyMembershipChanged`가 먼저 놓으면(놓을 것이 아직 없다) 여기서 잡은 잠금은 **TTL 까지** 남는다 —
+              // viewer 가 된 주인의 `unlock`은 editor 문턱에 걸린다. 바뀐 쪽이 승격이어도 잡지 않는다: 알림을 받은 화면이
+              // 다시 읽고, 그 화면의 다음 편집이 같은 자리를 다시 보낸다(`apps/web`의 `lock-channel.ts` — `refresh`).
+              // **`patch`는 여기서 거르지 않는다** — 커밋 순간에 권한을 다시 본다(`ws/patch.ts` · 이월 AA).
+              if (connection.membershipEpoch !== epoch) return
               // **답을 안 낸다**(D4). 답은 룸 전체로 나가는 `locks` 목록이고 낸 사람도 받는다.
               handleLockFrame(app, connection, frame)
               return

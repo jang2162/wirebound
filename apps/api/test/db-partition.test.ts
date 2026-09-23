@@ -427,6 +427,7 @@ describe('방송 — 한 연결의 권한을 못 재면 그 연결만 건너뛴�
           userId: owner.user.id,
           userName: owner.user.name,
           sessionId: hashSessionToken(owner.cookie.wb_session),
+          membershipEpoch: 0,
           send: () => {
             received.push(`c${i}`)
             if (i === 1) for (let k = 0; k < (pool.options.max ?? 10); k++) held.push(pool.connect())

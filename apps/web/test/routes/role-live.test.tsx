@@ -56,6 +56,13 @@ interface Server {
 }
 
 async function open(server: Server, docs: Record<string, PageDocument> = {}): Promise<FakeRealtime> {
+  const rt = await mount(server, docs)
+  rt.open()
+  return rt
+}
+
+/** 셸을 띄우되 **소켓은 아직 안 열렸다**(룸에 들기 전 — 리뷰 R1 의 여는 창). */
+async function mount(server: Server, docs: Record<string, PageDocument> = {}): Promise<FakeRealtime> {
   const rt = fakeRealtime(PROJECT_ID, ME)
   await openPage(DOC, {
     docs,
@@ -71,7 +78,6 @@ async function open(server: Server, docs: Record<string, PageDocument> = {}): Pr
       },
     },
   })
-  rt.open()
   return rt
 }
 
@@ -95,15 +101,17 @@ const treeRow = (label: string): HTMLButtonElement =>
 describe('역할이 실행 중에 바뀐다 — 새로고침 없이(이월 5차)', () => {
   /**
    * 혼자 죽는 변조 둘: 통지의 두 문장이 뒤바뀐다 · `useNodeLock`이 `canHold`가 거짓이면 잡은 자리를 **안 놓는다**
-   * (`viewer-entries` «잠금»은 **안 보냄**을 재고 이쪽은 **놓음**을 잰다 — 갈린다).
+   * (`viewer-entries` «잠금»은 **안 보냄**을 재고 이쪽은 **놓음**을 잰다 — 갈린다). 승격이 **곧장 다시 잡지 않는 것**은 아래 R3
+   * 케이스의 축이다(여기서도 함께 죽는다).
    */
-  it('editor → viewer → editor — 잡은 자리를 놓고 다시 잡고, 바뀐 순간을 말한다(입구는 viewer-entries 의 내린 판)', async () => {
+  it('editor → viewer → editor — 잡은 자리를 놓고, 올라와도 곧장 잡지 않고, 바뀐 순간을 말한다(입구는 viewer-entries 의 내린 판)', async () => {
     const server: Server = { role: 'editor', fail: null, reads: 0 }
     const rt = await open(server)
     pick('n-card')
     await waitFor(() => expect(rt.frames()).toEqual(['lock n-card']))
     expect(said('편집 권한')).toBe(false)
 
+    const readsBefore = server.reads
     server.role = 'viewer'
     rt.deliver(MEMBERSHIP)
     await waitFor(() => expect(said('편집 권한이 없어져')).toBe(true))
@@ -114,9 +122,10 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이(이월 5차)
     server.role = 'editor'
     rt.deliver(MEMBERSHIP)
     await waitFor(() => expect(said('편집 권한이 생겨')).toBe(true))
-    // 고른 자리를 **다시 잡는다** — 남이 안 쥐었다.
-    expect(rt.frames()).toEqual(['lock n-card', 'unlock', 'lock n-card'])
-    expect(server.reads).toBe(3)
+    // 선택 · 속성은 그대로다. 잡는 것은 사용자의 다음 행동이다 — 그 축은 아래 R3 케이스가 소유한다.
+    expect(titleBox().value).toBe('회원 정보')
+    // 신호마다 한 번 읽는다.
+    expect(server.reads - readsBefore).toBe(2)
   })
 
   /** 혼자 죽는 변조: 다시 읽기의 404 갈래를 지운다(그러면 «역할을 모른다»로 간다 — 셸이 남는다). */
@@ -166,8 +175,9 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이(이월 5차)
 
     // 조용한 실패 먼저.
     server.fail = new ApiError(0, 'internal', '서버에 연결할 수 없습니다')
+    const readsBefore = server.reads
     rt.reconnect()
-    await waitFor(() => expect(server.reads).toBe(2))
+    await waitFor(() => expect(server.reads).toBe(readsBefore + 1))
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(themeOn()).toBe(true)
     expect(notice().filter((text) => text.includes('권한'))).toEqual([])
@@ -189,15 +199,149 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이(이월 5차)
     server.hold = new Promise<void>((resolve) => {
       release = resolve
     })
+    const readsBefore = server.reads
     server.role = 'viewer'
     rt.deliver(MEMBERSHIP)
     server.role = 'owner'
     rt.deliver(MEMBERSHIP)
-    await waitFor(() => expect(server.reads).toBe(3))
+    await waitFor(() => expect(server.reads).toBe(readsBefore + 2))
     release()
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(themeOn()).toBe(true)
     expect(notice().filter((text) => text.includes('권한'))).toEqual([])
+  })
+})
+
+/**
+ * **리뷰 R1 · R2 — 신호가 닿지 않는 창.** 서버는 룸에 든 연결에만 `membership-changed`를 보낸다. 그래서 첫 조회의 답과 룸 참가 사이의
+ * 변경은 누구도 안 알리고(R1), 신호의 조회가 뒤의 조회에 밀려 그 조회가 실패하면 신호가 왔다는 사실이 사라졌다(R2).
+ */
+describe('신호가 닿지 않는 창(리뷰 R1 · R2)', () => {
+  /** 혼자 죽는 변조: 셸이 `joined`에 다시 읽지 않는다(`use-realtime.ts`의 `joined` 갈래). */
+  it('첫 조회와 룸 참가 사이에 강등되면 — 룸에 든 순간 다시 읽어 닿는다', async () => {
+    const server: Server = { role: 'owner', fail: null, reads: 0 }
+    const rt = await mount(server)
+    await waitFor(() => expect(themeOn()).toBe(true))
+
+    // 첫 조회의 답은 owner — 룸에 들기 전에 강등이 커밋됐다(신호는 룸에 든 연결에만 간다 — 이 연결은 못 받는다).
+    server.role = 'viewer'
+    rt.open()
+
+    await waitFor(() => expect(themeOn()).toBe(false))
+    expect(said('편집 권한이 없어져')).toBe(true)
+    expect(server.reads).toBe(2)
+  })
+
+  /** 혼자 죽는 변조: 셸이 핸드셰이크 거절(열리지 못하고 닫힘)에 다시 읽지 않는다. */
+  it('룸에 들기 전에 멤버에서 빠지면 — 핸드셰이크가 거절된 순간 다시 읽어 셸째 내려가고 재연결을 멈춘다', async () => {
+    const server: Server = { role: 'editor', fail: null, reads: 0 }
+    const rt = await mount(server)
+
+    server.fail = new ApiError(404, 'not-found', '프로젝트를 찾을 수 없습니다', [], true)
+    rt.refuse()
+    expect(rt.reconnectPending()).toBe(true)
+
+    expect(await screen.findByRole('heading', { name: '설계서를 열지 못했습니다' })).toBeTruthy()
+    // 셸이 내려가며 연결을 닫는다 — 맡겨 둔 재연결이 취소된다(`close()` — 앞 판은 13초에 5번 되풀이했다).
+    expect(rt.reconnectPending()).toBe(false)
+    expect(server.reads).toBe(2)
+  })
+
+  /**
+   * 신호의 조회가 붙잡힌 사이 끊겼다 붙고, 룸에 든 뒤의 조회가 실패한다 — 그 뒤 신호의 답(viewer)이 늦게 오지만 차례가 지나 버려진다.
+   * 혼자 죽는 변조: 실패의 판정이 **그 차례의 원인**만 본다(앞 판 — `signalUnanswered`를 안 본다).
+   */
+  it('신호의 조회가 밀리고 뒤의 조회가 실패하면 — 역할을 모른다(앞 역할로 조용히 서지 않는다)', async () => {
+    const server: Server = { role: 'owner', fail: null, reads: 0 }
+    const rt = await open(server)
+    await waitFor(() => expect(themeOn()).toBe(true))
+
+    let release = (): void => {}
+    server.hold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const readsBefore = server.reads
+    server.role = 'viewer'
+    rt.deliver(MEMBERSHIP)
+    server.fail = new ApiError(503, 'internal', '잠시 후 다시 시도해 주세요')
+    rt.reconnect()
+    await waitFor(() => expect(server.reads).toBe(readsBefore + 2))
+    release()
+
+    await waitFor(() => expect(themeOn()).toBe(false))
+    expect(said('권한이 바뀌었는데 확인하지 못해')).toBe(true)
+
+    // 다음 성공이 풀어 준다(그때의 역할로).
+    server.fail = null
+    server.role = 'owner'
+    rt.reconnect()
+    await waitFor(() => expect(themeOn()).toBe(true))
+  })
+})
+
+/**
+ * **리뷰 R3 · R4 — 잡는 시각을 사용자가 정한다.** 승격 · 잃은 잠금은 곧장 잡지 않고 «잡지 않은 선택»으로 남는다(`lock-channel.ts`).
+ * 채널 단독의 축(막혔으면 안 잡음 · 한 번 선 뒤에만 잃음)은 `realtime/lock-channel.test.ts`가 잰다 — 여기는 셸째로 잇는다.
+ */
+describe('잡는 시각을 사용자가 정한다(리뷰 R3 · R4)', () => {
+  const carolHolds = (nodeId: string): Record<string, unknown> => ({
+    type: 'locks',
+    projectId: PROJECT_ID,
+    locks: [{ pageId: PAGE_ID, nodeId, userId: ME, userName: '캐럴' }],
+  })
+  const noLocks = { type: 'locks', projectId: PROJECT_ID, locks: [] }
+
+  function editTitle(value: string): void {
+    const input = titleBox()
+    fireEvent.change(input, { target: { value } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+  }
+
+  /**
+   * 혼자 죽는 변조: `useNodeLock`이 승격 순간 막히지 않은 자리를 곧장 잡는다(앞 판). 잠금 통로의 `reannounce`가 잡지 않은 선택을
+   * 잡는 변조에는 `lock-channel`의 «한 번 선 뒤» · 아래 R4 케이스와 함께 죽는다(다시 붙는 축의 주인은 R4 케이스).
+   */
+  it('viewer → editor — 고른 카드는 잡지 않은 채 남고(다시 붙어도), 첫 편집이 `lock` 다음 `patch`로 잡는다', async () => {
+    const server: Server = { role: 'viewer', fail: null, reads: 0 }
+    const rt = await open(server)
+    pick('n-card')
+
+    server.role = 'editor'
+    rt.deliver(MEMBERSHIP)
+    await waitFor(() => expect(said('편집 권한이 생겨')).toBe(true))
+    expect(treeRow('Card').getAttribute('aria-current')).toBe('true')
+    expect(titleBox().disabled).toBe(false)
+    expect(rt.frames()).toEqual([])
+    rt.reconnect()
+    expect(rt.frames()).toEqual([])
+
+    editTitle('회원 정보2')
+    await waitFor(() => expect(rt.frames()).toEqual(['lock n-card', 'patch']))
+  })
+
+  /**
+   * 빠른 강등→승격(두 조회가 겹쳐 셸의 `canEdit`이 한 번도 안 바뀐다)으로 서버가 놓은 자리를 밥이 잡았다 — 다시 붙어도 그 자리를 다시
+   * 보내지 않는다(겹친 잠금). 밥이 놓은 뒤 캐럴의 첫 편집이 잡는다. 혼자 죽는 변조: `use-realtime`이 `locks`를 잠금 통로에 안 넘긴다.
+   */
+  it('잡은 자리가 서버 목록에서 빠지면 잃은 것이다 — 다시 붙어도 안 보내고, 첫 편집이 잡는다', async () => {
+    const server: Server = { role: 'editor', fail: null, reads: 0 }
+    const rt = await open(server)
+    pick('n-card')
+    rt.deliver(carolHolds('n-card'))
+    rt.deliver(noLocks)
+    rt.deliver(bobHolds(PAGE_ID, 'n-card'))
+    await waitFor(() => expect(titleBox().disabled).toBe(true))
+
+    const readsBefore = server.reads
+    rt.reconnect()
+    await waitFor(() => expect(server.reads).toBe(readsBefore + 1))
+    rt.deliver(bobHolds(PAGE_ID, 'n-card'))
+    expect(rt.frames()).toEqual(['lock n-card'])
+
+    rt.deliver(noLocks)
+    await waitFor(() => expect(titleBox().disabled).toBe(false))
+    editTitle('회원 정보3')
+    await waitFor(() => expect(rt.frames()).toEqual(['lock n-card', 'lock n-card', 'patch']))
   })
 })
 

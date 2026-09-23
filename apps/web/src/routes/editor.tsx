@@ -43,7 +43,7 @@ import { RemoteAlert } from '../shell/remote-alert'
 import { ShellResizer } from '../shell/shell-resizer'
 import { useSidebarLayout } from '../shell/sidebar-layout'
 import { useNodeLock } from '../realtime/use-node-lock'
-import { useRealtime } from '../realtime/use-realtime'
+import { useRealtime, type MembershipCause } from '../realtime/use-realtime'
 import { ExportPanel } from '../shell/export-panel'
 import { SnapshotsPanel } from '../shell/snapshots-panel'
 import { projectAbilities } from '../projects/project-actions'
@@ -260,6 +260,13 @@ export function EditorShellRoute(): ReactElement {
    * 앞 것이 이기면 화면이 **지난 역할**로 선다. 첫 조회(아래 이펙트)도 차례를 올려 앞 프로젝트의 늦은 답을 버린다.
    */
   const reads = useRef(0)
+  /**
+   * **답을 못 받은 멤버십 신호가 있다**(리뷰 R2). 신호의 조회가 뒤의 조회(`joined` · `refused`)에 차례를 뺏기면, 그 뒤의 조회가
+   * 실패했을 때 «바뀌었다는 신호가 없다»로 읽어 조용히 앞 역할을 두게 된다 — 신호는 **있었다.** 그래서 신호가 온 것을 차례와
+   * 따로 적어 두고, **어느 차례든 성공한 답이 올 때까지** 실패를 신호의 실패(«역할을 모른다»)로 읽는다. 판정은 아래 `reread`의
+   * 한 줄이다.
+   */
+  const signalUnanswered = useRef(false)
 
   /**
    * **켜 둔 셸이 프로젝트를 다시 읽는다**(이월 5차). 역할을 **실행 중에** 바꾸는 유일한 길이다 — 셸은 역할을 첫 조회의
@@ -267,19 +274,26 @@ export function EditorShellRoute(): ReactElement {
    *
    * | 무엇이 불렀나 | 읽는 동안 | 성공 | 401 | 404(멤버에서 빠졌다) | 그 밖(시간 제한 · 5xx · 연결) |
    * |---|---|---|---|---|---|
-   * | `membership` — 서버가 «내 멤버십이 바뀌었다»를 보냈다 | **앞 역할 그대로**(한 번의 `GET` — 서버가 계속 판정한다) | 새 역할로 선다 | 로그인 화면(첫 조회와 같다) | «설계서를 열지 못했습니다»(첫 조회와 같다 — 셸째 내려간다) | **역할을 모른다** — 고칠 수 없는 쪽으로 서고 말한다(`ROLE_NOTICE.unknown`) |
-   * | `resync` — 연결이 다시 붙었다(끊긴 동안 바뀐 역할) | 앞 역할 그대로 | 새 역할로 선다(같으면 아무 일 없다) | 로그인 화면 | «설계서를 열지 못했습니다» | **조용히 둔다** — 바뀌었다는 신호가 없다(페이지 다시 읽기의 D6 와 같다) |
+   * | `changed` — 서버가 «내 멤버십이 바뀌었다»를 보냈다 | **앞 역할 그대로**(한 번의 `GET` — 서버가 계속 판정한다) | 새 역할로 선다 | 로그인 화면(첫 조회와 같다) | «설계서를 열지 못했습니다»(첫 조회와 같다 — 셸째 내려간다) | **역할을 모른다** — 고칠 수 없는 쪽으로 서고 말한다(`ROLE_NOTICE.unknown`) |
+   * | `joined` — 룸에 들었다(처음 · 다시 붙음 — 리뷰 R1) | 앞 역할 그대로 | 새 역할로 선다(같으면 아무 일 없다) | 로그인 화면 | «설계서를 열지 못했습니다» | **조용히 둔다** — 바뀌었다는 신호가 없다(페이지 다시 읽기의 D6 와 같다). **답을 못 받은 `changed`가 있으면 그쪽으로 읽는다**(`signalUnanswered` — 리뷰 R2) |
+   * | `refused` — 연결이 열리지 못하고 닫혔다(리뷰 R1 의 제거판) | 앞 역할 그대로 | 같다 | 로그인 화면 | «설계서를 열지 못했습니다» — **셸째 내려가 재연결도 멈춘다** | `joined`와 같다 |
+   *
+   * **`joined`에 읽는 것이 여는 조회를 하나 늘린다** — 페이지를 열 때 `getProject`가 둘(첫 조회 + 룸에 든 뒤)이다. 재연결은 앞
+   * 판도 하나였다(두 번째 `open`에 읽던 것을 `joined`로 옮겼다 — 그 사이의 창도 R1 과 같은 모양이라서). `refused`는 거절마다
+   * 하나다 — 서버가 죽어 있으면 재연결 간격(끝 값 10초)마다 하나.
    *
    * **읽는 동안 입구를 닫지 않는다.** 닫으면 승격 · owner 넘기기에도 입구가 한 번 닫혔다 열리고, 그때 열린 편집 상자 ·
    * 잡은 잠금이 함께 닫혔다 열린다(잠금은 그 사이 남에게 갈 수 있다). 앞 역할이 틀렸어도 그 창의 쓰기는 서버가 커밋 순간의
    * 권한으로 거절한다(이월 AA).
    */
   const reread = useCallback(
-    async (cause: 'membership' | 'resync'): Promise<void> => {
+    async (cause: MembershipCause): Promise<void> => {
       const turn = ++reads.current
+      if (cause === 'changed') signalUnanswered.current = true
       try {
         const project = await api.getProject(projectId)
         if (reads.current !== turn) return
+        signalUnanswered.current = false
         setState({ status: 'ready', project })
         setRoleKnown(true)
       } catch (caught) {
@@ -289,13 +303,13 @@ export function EditorShellRoute(): ReactElement {
           setState({ status: 'failed', failure })
           return
         }
-        if (cause === 'membership') setRoleKnown(false)
+        // **판정은 이 한 줄이다**(리뷰 R2) — 이 차례가 무엇이었든, 답을 못 받은 신호가 있으면 역할을 모른다.
+        if (signalUnanswered.current) setRoleKnown(false)
       }
     },
     [api, projectId],
   )
-  const onMembershipChanged = useCallback(() => void reread('membership'), [reread])
-  const onReconnected = useCallback(() => void reread('resync'), [reread])
+  const onMembership = useCallback((cause: MembershipCause) => void reread(cause), [reread])
 
   useEffect(() => {
     // 응답이 오기 전에 화면이 바뀌면 결과를 버린다(`require-auth`와 같은 이유).
@@ -308,6 +322,7 @@ export function EditorShellRoute(): ReactElement {
     // 주소 사이에서 같은 컴포넌트를 다시 쓰므로 상태가 그대로 남는다.
     setState({ status: 'loading' })
     setRoleKnown(true)
+    signalUnanswered.current = false
     // 앞 프로젝트로 나가 있던 다시 읽기의 답을 버린다(`reads`).
     const turn = ++reads.current
 
@@ -362,8 +377,7 @@ export function EditorShellRoute(): ReactElement {
         project={state.project}
         roleKnown={roleKnown}
         pageId={params.pageId}
-        onMembershipChanged={onMembershipChanged}
-        onReconnected={onReconnected}
+        onMembership={onMembership}
       />
     </EditorStoreProvider>
   )
@@ -375,10 +389,8 @@ function EditorShell(props: {
   /** 역할을 아는가 — 모르면 아무것도 못 하는 쪽으로 선다(`EditorShellRoute`의 `reread`). */
   roleKnown: boolean
   pageId: string | undefined
-  /** 서버가 «내 멤버십이 바뀌었다»를 보냈다 — 라우트가 프로젝트를 다시 읽는다(이월 5차). */
-  onMembershipChanged: () => void
-  /** 연결이 다시 붙었다 — 끊긴 동안 바뀐 역할을 다시 읽는다(이월 5차). */
-  onReconnected: () => void
+  /** 역할을 다시 읽을 순간이다(신호 · 룸에 듦 · 핸드셰이크 거절 — `MembershipCause`) — 라우트가 프로젝트를 다시 읽는다(이월 5차). */
+  onMembership: (cause: MembershipCause) => void
 }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
@@ -487,15 +499,11 @@ function EditorShell(props: {
    * 사람은 스스로 수렴하지 않는다**(P3-1 이월 §2.4). 다시 붙은 것 자체를 신호로 삼으면 그
    * 사람의 화면도 맞춰진다.
    */
-  const { onReconnected } = props
   useRealtime(
     props.project.id,
-    useCallback(() => {
-      setResyncToken((token) => token + 1)
-      // **끊긴 동안 바뀐 역할도 다시 읽는다**(이월 5차) — 그 사이의 `membership-changed`는 사라졌다.
-      onReconnected()
-    }, [onReconnected]),
-    props.onMembershipChanged,
+    useCallback(() => setResyncToken((token) => token + 1), []),
+    // **역할은 룸에 들 때마다 다시 읽는다**(`MembershipCause` — 끊긴 동안의 `membership-changed`도 사라졌다).
+    props.onMembership,
   )
 
   /**
