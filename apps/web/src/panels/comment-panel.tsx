@@ -631,12 +631,14 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     // `panel-drafts.tsx`의 provider가.** 노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다.
     // 그 규칙이 «페이지 설명»의 F1과 **같은 자리에서 같은 값으로** 돈다.
     let alive = true
+    // 떠나면 요청째 끊는다(`ReadOptions.cancel` — 리뷰 AD-F1 · `routes/editor.tsx`의 페이지 조회와 같다).
+    const leave = new AbortController()
     const at = issue()
     setState({ status: 'loading', at })
 
     async function load(openPageId: string): Promise<void> {
       try {
-        const comments = await api.listComments(projectId, openPageId)
+        const comments = await api.listComments(projectId, openPageId, { cancel: leave.signal })
         if (!alive) return
         // **늦게 낸 다시 받기의 답이 이미 섰으면 버린다**(`answered`) — 돌아와 건 이 조회는 쓰기가
         // 커밋되기 전에 읽었을 수 있다(리뷰 N-E · 머리말 «잠금이 막지 못하는 길»의 2).
@@ -650,6 +652,7 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
     void load(pageId)
     return () => {
       alive = false
+      leave.abort()
     }
     // `setState`는 이 렌더의 페이지를 단 쓰기라 `pageId`와 함께만 바뀐다.
   }, [api, projectId, pageId])

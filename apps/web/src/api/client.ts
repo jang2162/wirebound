@@ -48,12 +48,18 @@ export interface WriteOptions {
 }
 
 /**
- * 읽기 하나에 얹는 선택 — **`signal`뿐이다.** 받는 것은 둘(`getPage` · `listComments`)이고, 쓰는 것은
- * **쓰기의 판정용 다시 읽기뿐이다**(`panels/write-ledger.tsx` — 판정에만 시간 제한을 둔다). 일반 조회는
- * 싣지 않는다 — 읽기에 시간 제한을 두지 않는 것은 그대로다.
+ * 읽기 하나에 얹는 선택. **신호가 둘이고 뜻이 다르다** — 누가 시간을 재는가가 갈린다.
+ *
+ * - **`signal`** — **판정용 다시 읽기**(`panels/write-ledger.tsx`의 `race`)가 싣는다. 부른 쪽이 제 시간 제한으로
+ *   끊으므로 **여기서는 시간을 안 건다** — 두 시계가 한 요청을 다투지 않게(`http-client.ts`의 `READ_DEADLINE_MS`).
+ * - **`cancel`** — **조회 이펙트**가 싣는다. 정리(떠남)가 끊는다 — 떠난 방문의 조회가 브라우저 연결을 쥐고
+ *   있지 않게(이월 AD-F1 · `http-client.ts`의 `READ_DEADLINE_MS` «떠난 조회는 끊는다»). **시간은 여전히 여기서
+ *   잰다**(일반 읽기의 10초) — 끊겼으면 다시 보내지 않는다. 끊긴 조회의 거절은 아무에게도 안 보인다(부른 쪽이
+ *   `alive`로 버린다).
  */
 export interface ReadOptions {
   readonly signal?: AbortSignal
+  readonly cancel?: AbortSignal
 }
 
 export interface ApiClient {
@@ -310,7 +316,7 @@ export interface ApiClient {
    * **`limit`을 붙이지 않는다.** 서버 기본값 50이 설계 §7.3의 "최근 50개"와 같고,
    * **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — `mine` 외에는 아무것도 붙일 수 없다.
    */
-  listMyRevisions(projectId: string, pageId: string): Promise<RevisionSummary[]>
+  listMyRevisions(projectId: string, pageId: string, options?: ReadOptions): Promise<RevisionSummary[]>
   /**
    * 이 프로젝트의 화면이 지금 써야 할 테마(설계 §4.2의 사슬을 서버가 따라간다).
    *
@@ -321,7 +327,7 @@ export interface ApiClient {
    * 인자를 맞출 필요가 없다 — `ThemeSource`가 `() => Theme | null`로 남는 이유다.
    * 편집용 형태(파생 문서 + `base`)는 다른 엔드포인트가 내고 이 화면은 쓰지 않는다.
    */
-  getProjectTheme(projectId: string): Promise<ProjectTheme>
+  getProjectTheme(projectId: string, options?: ReadOptions): Promise<ProjectTheme>
   /**
    * **이 프로젝트에서 고를 수 있는 테마 전부.** 시스템 테마가 함께 나오고 그것이 먼저다
    * (서버가 정렬한다 — 시스템 먼저, 각 무리 안에서 `slug` 순). 여기서 다시 정렬하지
@@ -454,7 +460,7 @@ export interface ApiClient {
    *
    * **프로젝트 프리셋이 하나도 없는 것이 기본 상태다.** 그때도 응답이 비지 않는다.
    */
-  listPresets(projectId: string): Promise<Preset[]>
+  listPresets(projectId: string, options?: ReadOptions): Promise<Preset[]>
   /**
    * **지금 페이지를 프리셋으로 남긴다**(§11.1). `nodes`는 root의 `children`이지 문서
    * 봉투가 아니다(D3).

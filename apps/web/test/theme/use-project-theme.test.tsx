@@ -74,7 +74,8 @@ describe('useProjectTheme', () => {
 
     await waitFor(() => expect(themeStyleText()).toContain('--wb-'))
     expect(getProjectTheme).toHaveBeenCalledTimes(1)
-    expect(getProjectTheme).toHaveBeenCalledWith('p1')
+    // 떠날 때 끊을 신호를 싣는다(리뷰 AD-F1 — `api/http-client.ts`의 «떠난 조회는 끊는다»).
+    expect(getProjectTheme).toHaveBeenCalledWith('p1', { cancel: expect.any(AbortSignal) })
   })
 
   /**

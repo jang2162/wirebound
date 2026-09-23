@@ -478,7 +478,8 @@ describe('페이지 경계', () => {
     await waitForNode('n_a')
     await openCommentTab()
 
-    await waitFor(() => expect(listComments).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID))
+    // 조회는 떠날 때 끊을 신호를 싣는다(리뷰 AD-F1 — `api/http-client.ts`의 «떠난 조회는 끊는다»).
+    await waitFor(() => expect(listComments).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID, { cancel: expect.any(AbortSignal) }))
   })
 
   it('탭을 열기 전에는 조회하지 않는다', async () => {

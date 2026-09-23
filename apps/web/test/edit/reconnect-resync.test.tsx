@@ -185,7 +185,8 @@ describe('다시 붙으면 다시 읽는다 (D6)', () => {
     view.drop(0)
     view.open(1)
 
-    await waitFor(() => expect(view.getPage).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID))
+    // 떠날 때 끊을 신호를 싣는다(리뷰 AD-F1 — `api/http-client.ts`의 «떠난 조회는 끊는다»).
+    await waitFor(() => expect(view.getPage).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID, { cancel: expect.any(AbortSignal) }))
     // **화면이 새 문서로 갈린다** — 조회를 셌다는 것만으로는 그것이 스토어에 닿았는지 모른다.
     await waitForNode('n-after-reconnect')
   })

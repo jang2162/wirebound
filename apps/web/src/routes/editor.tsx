@@ -904,6 +904,9 @@ function CanvasFrame(props: {
     // 페이지의 문서가 뒤 페이지를 덮어쓴다(아래 성공 분기의 `if (!alive) return`이 그
     // 자리다 — 지우면 `앞 페이지의 응답이 늦게 와도…`가 죽는다. 위 JSDoc의 하중 3).
     let alive = true
+    // **떠나면 조회를 끊는다**(`ReadOptions.cancel` — 리뷰 AD-F1). `alive`만으로는 응답을 버릴 뿐 요청은 남아, 떠난
+    // 방문의 큰 본문이 브라우저 연결을 쥐고 다음 방문의 조회를 줄 세웠다(`api/http-client.ts`의 «떠난 조회는 끊는다»).
+    const leave = new AbortController()
     setState({ status: 'loading' })
     // **조회를 시작할 때 비운다.** 응답이 온 뒤에 갈아 끼우면 조회가 도는 동안 주소는 새
     // 페이지인데 스토어는 앞 페이지의 문서와 `headSeq`를 들고 있다(실측: 그 창에서
@@ -926,7 +929,7 @@ function CanvasFrame(props: {
      */
     async function restoreUndo(openPageId: string): Promise<void> {
       try {
-        const revisions = await api.listMyRevisions(projectId, openPageId)
+        const revisions = await api.listMyRevisions(projectId, openPageId, { cancel: leave.signal })
         // 늦게 온 응답이 새 페이지의 스택을 덮지 않게 한다(문서 조회와 같은 가드).
         if (!alive) return
         // 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 —
@@ -944,7 +947,7 @@ function CanvasFrame(props: {
     // `pageId`가 좁혀지지 않는다(호이스팅된 함수 선언이라 TS가 호출 시점을 모른다).
     async function load(openPageId: string): Promise<void> {
       try {
-        const page = await api.getPage(projectId, openPageId)
+        const page = await api.getPage(projectId, openPageId, { cancel: leave.signal })
         // 이 줄이 없으면 늦게 온 앞 페이지의 응답이 아래 `loadPage`로 흘러 **새 페이지의
         // 문서를 덮어쓴다.** 실측: 지우면 `앞 페이지의 응답이 늦게 와도 새 페이지의 문서를
         // 덮어쓰지 않는다` 하나가 죽는다.
@@ -983,6 +986,7 @@ function CanvasFrame(props: {
     void load(pageId)
     return () => {
       alive = false
+      leave.abort()
     }
   }, [api, projectId, pageId, store])
 
@@ -1045,9 +1049,11 @@ function CanvasFrame(props: {
     if (pageId === undefined) return
 
     let alive = true
+    // 떠나면 끊는다 — 위 이펙트와 같다(리뷰 AD-F1).
+    const leave = new AbortController()
     void (async () => {
       try {
-        const page = await api.getPage(projectId, pageId)
+        const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         if (!alive) return
         applyServerPage(pageId, page, RESYNC_LEAD)
       } catch {
@@ -1065,6 +1071,7 @@ function CanvasFrame(props: {
 
     return () => {
       alive = false
+      leave.abort()
     }
   }, [api, projectId, pageId, applyServerPage, resyncToken])
 
@@ -1106,9 +1113,11 @@ function CanvasFrame(props: {
     if (pageId === undefined) return
 
     let alive = true
+    // 떠나면 끊는다 — 위 이펙트와 같다(리뷰 AD-F1).
+    const leave = new AbortController()
     void (async () => {
       try {
-        const page = await api.getPage(projectId, pageId)
+        const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         if (!alive) return
         applyServerPage(pageId, page, RESTORED_LEAD)
         // 앞서 이 페이지의 조회가 실패해 있었을 수도 있다. 복원으로 다시 생긴 페이지를
@@ -1124,6 +1133,7 @@ function CanvasFrame(props: {
 
     return () => {
       alive = false
+      leave.abort()
     }
   }, [api, projectId, pageId, store, applyServerPage, restoredToken])
 

@@ -472,6 +472,37 @@ describe('메뉴·페이지 트리', () => {
     expect(shellStore().getState().headSeq).toBe(12)
   })
 
+  it('페이지를 옮기면 앞 페이지의 조회를 요청째 끊는다 — 떠난 방문의 본문이 브라우저 연결을 쥐지 않는다', async () => {
+    // 리뷰 AD-F1(Chrome · 40KB/s · 1MB 페이지를 여섯 번 오감): 앞 판은 `alive`로 응답만 버려 본문이 계속 내려받혔고,
+    // 호스트당 연결 여섯이 다 차 다음 방문의 조회가 줄을 서 «서버가 응답하지 않습니다»까지 갔다. 여기는 **셸이 싣는
+    // 신호**를 잰다 — 끊는 일 자체는 `api/http-client.ts`가 한다(`test/api/http-client.test.ts`의 «떠나면 …»).
+    const cancels: Record<string, AbortSignal | undefined> = {}
+    await openEditor(
+      {
+        getPage: async (projectId, pageId, options) => {
+          asked.push([projectId, pageId])
+          cancels[pageId] = options?.cancel
+          return new Promise<PageDetail>(() => {})
+        },
+      },
+      '/projects/p-1/pages/pg-list',
+    )
+    await within(canvas()).findByText(LOADING_NOTICE)
+    expect(cancels['pg-list']?.aborted).toBe(false)
+
+    fireEvent.click(screen.getByRole('link', { name: '회원 상세' }))
+    await waitFor(() => {
+      expect(asked).toEqual([
+        ['p-1', 'pg-list'],
+        ['p-1', 'pg-detail'],
+      ])
+    })
+
+    // 떠난 방문의 것만 끊었다 — 지금 방문의 조회는 산다.
+    expect(cancels['pg-list']?.aborted).toBe(true)
+    expect(cancels['pg-detail']?.aborted).toBe(false)
+  })
+
   it('페이지를 떠나 pageId 없는 주소로 돌아오면 스토어의 문서가 비워진다', async () => {
     await openEditor({}, '/projects/p-1', <Back />)
 

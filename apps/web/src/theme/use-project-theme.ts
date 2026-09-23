@@ -124,10 +124,12 @@ export function useProjectThemeState(
     // 프로젝트가 바뀌는 동안 앞 요청의 응답이 늦게 도착해 새 프로젝트의 테마를 덮는
     // 것을 막는다. `routes/editor.tsx`의 조회들이 쓰는 것과 같은 형식이다.
     let alive = true
+    // 떠나면 요청째 끊는다(`ReadOptions.cancel` — 리뷰 AD-F1). 페이지를 옮길 때마다 다시 돈다(리뷰 로그: 방문마다 `theme` GET).
+    const leave = new AbortController()
 
     void (async () => {
       try {
-        const result = await api.getProjectTheme(projectId)
+        const result = await api.getProjectTheme(projectId, { cancel: leave.signal })
         if (!alive) return
 
         if (result.issues.length > 0) {
@@ -155,6 +157,7 @@ export function useProjectThemeState(
 
     return () => {
       alive = false
+      leave.abort()
     }
     // **`reloadToken`이 의존성에 있는 것이 고르개가 캔버스에 닿는 경로다**(P4b-3 P2).
     // 서버의 테마를 바꾸는 것은 이 훅 밖(`theme/theme-picker.tsx`)에서 일어나므로,

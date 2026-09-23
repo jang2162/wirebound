@@ -111,16 +111,18 @@ export function PresetPicker(props: {
     // 앞 프로젝트의 응답이 늦게 도착해 새 프로젝트의 목록을 덮는 것을 막는다
     // (`theme-picker.tsx`·`use-project-theme.ts`의 조회들과 같은 형식이다).
     let alive = true
+    // 떠나면 요청째 끊는다(`ReadOptions.cancel` — 리뷰 AD-F1).
+    const leave = new AbortController()
     setLoad({ status: 'loading' })
     void (async () => {
       try {
-        const presets = await api.listPresets(projectId)
+        const presets = await api.listPresets(projectId, { cancel: leave.signal })
         // **코멘트 조회의 실패는 프리셋 조회의 실패와 다르다.** 앞엣것이 없으면 고를 것이
         // 없지만, 뒤엣것이 없어도 고르고 적용할 수 있다 — 그래서 갈래를 갈라 잡는다.
         let commentNodes: string[] | null = null
         if (pageId !== undefined) {
           try {
-            commentNodes = (await api.listComments(projectId, pageId)).map((entry) => entry.nodeId)
+            commentNodes = (await api.listComments(projectId, pageId, { cancel: leave.signal })).map((entry) => entry.nodeId)
           } catch {
             commentNodes = null
           }
@@ -132,6 +134,7 @@ export function PresetPicker(props: {
     })()
     return () => {
       alive = false
+      leave.abort()
     }
   }, [api, projectId, pageId, reload])
 

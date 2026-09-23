@@ -225,8 +225,9 @@
  * **«저장되지 않았습니다» 뒤에 늦게 닿은 내 글은 «다른 사람»이 아니다**(리뷰 F2 · 2026-09-23). «모름»의 다시 읽기가
  * 바탕을 봤어도 끊긴 요청이 서버에서 늦게 커밋할 수 있다. 그 뒤 더 쳐서 저장하면 409 의 지금 값이 **내 앞 글**인데,
  * 앞 판은 그것을 «다른 사람이 이 설명을 바꿨습니다»로 보였다. 이제 그 판정의 보낸 글을 초안 칸에 **매달린 값**
- * (`Draft`의 `pending`)으로 들고, 409 의 값이 그것이면 `judgeMeta`가 `'late'`를 낸다 — 같은 충돌 화면이 «앞서 보낸
- * 설명이 늦게 저장됐습니다»로 서고 **덮기**(«지금 글로 덮기»)를 권한다.
+ * (`Draft`의 `pending`)으로 들고, 409 의 값이 그것이면 `judgeMeta`가 `'late'`를 낸다 — 같은 충돌 화면이 «지금 저장된
+ * 설명이 앞서 보낸 글과 같습니다»로 서고 **덮기**(«지금 글로 덮기»)를 권한다. **누가 썼는지는 말하지 않는다** — 남이
+ * 우연히 같은 글을 쓴 판과 못 가른다(리뷰 F2-F1 · `panels/meta-conflict.tsx`의 머리말).
  *
  * **빈 설명은 `''`든 `null`이든 같다**(리뷰 F3) — 저장은 둘을 가르지만 견주기는 같게 본다(`judgeMeta` · 서버가 같은
  * 함수 `samePageMeta`를 부른다). 이 화면은 `''`를 안 보내지만 남(API)이 보낼 수 있다.
@@ -329,7 +330,15 @@ const SAME = '서버의 설명이 이미 이 글과 같습니다'
  * 답만 받는다(`answered`). 까닭은 머리말 «낡은 값이 보이는 길 둘»의 1.
  */
 type LoadState =
-  | { status: 'loading'; at: number }
+  | {
+      status: 'loading'
+      at: number
+      /**
+       * **조회가 도는 동안 온 설명 하나**(409 의 지금 값 — `replace`). 제목이 없어 칸을 못 세우므로 들고 있다가 조회의
+       * 답이 오면 합친다: 제목은 조회의 것, 설명은 **더 늦게 낸 쪽**의 것(`answered`). 리뷰 V-F1.
+       */
+      known?: { at: number; description: string | null }
+    }
   | { status: 'ready'; at: number; title: string; description: string | null }
   | { status: 'failed'; at: number; failure: Failure }
 
@@ -347,9 +356,22 @@ function issue(): number {
   return issued
 }
 
-/** `at`에 낸 조회의 답을 칸에 쓰는 갱신 — **그보다 늦게 낸 것이 이미 서 있으면 버린다.** */
+/**
+ * `at`에 낸 조회의 답을 칸에 쓰는 갱신 — **그보다 늦게 낸 것이 이미 서 있으면 버린다.**
+ *
+ * 조회가 도는 동안 설명 하나가 먼저 와 있으면(`known` — 409 의 지금 값) **설명은 둘 중 늦게 낸 쪽의 것이다** — 409 를
+ * 받기 전에 낸 조회는 그 409 보다 먼저 읽었을 수 있다(저장의 응답과 같은 규칙: 받을 때 번호). 제목은 조회만 든다.
+ * 조회가 실패했으면 실패가 선다 — 제목 없이 설 칸이 없다.
+ */
 function answered(at: number, next: LoadState): (prev: LoadState) => LoadState {
-  return (prev) => (at < prev.at ? prev : next)
+  return (prev) => {
+    if (at < prev.at) return prev
+    const known = prev.status === 'loading' ? prev.known : undefined
+    if (known !== undefined && at < known.at && next.status === 'ready') {
+      return { ...next, at: known.at, description: known.description }
+    }
+    return next
+  }
 }
 
 /**
@@ -373,8 +395,8 @@ type SaveState =
    * **다른 사람이 바꿨다**(`judgeMeta`의 `'other'`) — 그 사람의 값을 들고 덮을지 버릴지 묻는다(머리말 «남의 저장을
    * 조용히 덮지 않는다»). **다른 통지와 달리 치는 동안 · 탭을 다녀와도 남는다**(아래 `keepConflict`).
    *
-   * `late`면 그 값은 **앞서 보낸 내 글**이다(`judgeMeta`의 `'late'` — 아래 `Draft`의 `pending`). 같은 화면이 «다른
-   * 사람»이라 말하지 않고 덮기를 권한다(`panels/meta-conflict.tsx`).
+   * `late`면 그 값이 **앞서 보낸 내 글과 같다**(`judgeMeta`의 `'late'` — 아래 `Draft`의 `pending`). 같은 화면이 «다른
+   * 사람이 바꿨다»고 말하지 않고 덮기를 권한다(`panels/meta-conflict.tsx`).
    */
   | { status: 'conflict'; theirs: string | null; late?: boolean }
 
@@ -504,12 +526,14 @@ function usePageDescription(
     // (`routes/editor.tsx`와 같은 가드). 페이지 쪽은 칸의 쓰기 가드도 막지만(`panel-drafts.tsx`),
     // 언마운트 쪽은 이것만 막는다 — 다음 마운트가 자기 조회를 다시 건다.
     let alive = true
+    // 떠나면 요청째 끊는다(`ReadOptions.cancel` — 리뷰 AD-F1 · `routes/editor.tsx`의 페이지 조회와 같다).
+    const leave = new AbortController()
     const at = issue()
     setState({ status: 'loading', at })
 
     async function load(openPageId: string): Promise<void> {
       try {
-        const page = await api.getPage(projectId, openPageId)
+        const page = await api.getPage(projectId, openPageId, { cancel: leave.signal })
         if (!alive) return
         // **늦게 낸 것의 답이 이미 섰으면 버린다**(`answered`) — 돌아와 건 이 조회는 저장이 커밋되기 전에 읽었을 수
         // 있다(머리말 «낡은 값이 보이는 길 둘»의 1).
@@ -524,6 +548,7 @@ function usePageDescription(
     void load(pageId)
     return () => {
       alive = false
+      leave.abort()
     }
     // `setState`는 이 렌더의 페이지를 단 쓰기라 `pageId`와 함께만 바뀐다.
   }, [api, projectId, pageId])
@@ -538,12 +563,26 @@ function usePageDescription(
   }
 
   /**
-   * 설명 하나만 아는 자리(409 에 실린 지금 값)가 부른다 — 제목이 없어 **조회에 성공한 상태에서만** 갈아 끼운다.
-   * 번호는 새로 받는다 — 그 앞에 낸 조회가 늦게 와서 이 값을 덮지 않게.
+   * 설명 하나만 아는 자리(409 에 실린 지금 값)가 부른다. 번호는 **받은 지금** 새로 받는다 — 그 앞에 낸 조회가 늦게
+   * 와서 이 값을 덮지 않게.
+   *
+   * **조회가 아직 돌면 들고 있다가 합친다**(`known` — 리뷰 V-F1 · 2026-09-23). 제목이 없어 칸을 못 세운다. 앞 판은
+   * 아무것도 안 해, 뒤이어 선 조회(커밋 전에 읽은 값)가 충돌 화면 옆 · «이미 같습니다» 옆에 섰다(Chrome · 조회 답을
+   * 붙잡은 채 409: 상자 `처음 설명` · DB `밥의 글`). **고르지 않은 갈래 — 409 뒤 다시 읽기:** 요청이 하나 늘고(페이지를
+   * «한 번만 읽는다»는 불변식 — 머리말 §9), 그 다시 읽기가 또 409 뒤의 값을 읽는다는 보장이 없어 같은 순서 문제를
+   * 한 겹 더 만든다. 들고 있는 값은 충돌 화면이 보이는 바로 그 값이라 상자와 화면이 갈리지 않는다.
+   * 실패한 조회 위에는 세우지 않는다 — 실패 문장이 선다. 이 판(Chrome · 리뷰 `v409.mjs` · 409 뒤에 조회 답을 놓음): 밥 = 다른
+   * 글 → 상자 `밥의 글` + 충돌 화면(«확인»뿐 — V-S1) · 밥 = 같은 글 → 상자 `앨리스 글` + «이미 같습니다». 이어 저장 200.
    */
   const replace = (description: string | null): void => {
     const at = issue()
-    setState((prev) => (prev.status === 'ready' ? { ...prev, at, description } : prev))
+    setState((prev) =>
+      prev.status === 'ready'
+        ? { ...prev, at, description }
+        : prev.status === 'loading'
+          ? { ...prev, known: { at, description } }
+          : prev,
+    )
   }
 
   return { state, draft, setDraft, save, setSave, saving, replace, settleWith }
@@ -608,7 +647,7 @@ export function PageDescriptionPanel(props: {
         setSave({ status: 'failed', failure })
         return failure
       }
-      // **앞서 보낸 내 글이 늦게 닿았다**(`'late'`) — «다른 사람»이 아니다. 같은 화면이 그렇게 말하고 덮기를 권한다.
+      // **지금 값이 앞서 보낸 내 글과 같다**(`'late'` — 대개 그 글이 늦게 닿았다). 같은 화면이 «같습니다»로 말하고 덮기를 권한다.
       // 그 밖은 다른 사람이 바꿨다. (409 의 값은 바탕과 다르다고 서버가 판정한 값이라 `'base'`로 오지 않는다 — 와도
       // 그 사람의 값을 보이는 쪽이 안전하다.) 떠나 있었으면 화면 대신 같은 뜻의 문장이 남는다(`metaConflictSentence`).
       const late = verdict === 'late'
@@ -664,8 +703,8 @@ export function PageDescriptionPanel(props: {
 
   /**
    * «내 글 버리기» — 그 사람의 값을 받는다. 서버 값은 충돌을 세울 때 이미 그 값으로 갈아 끼웠다 — `land`가 아니라
-   * 부르는 쪽이(409 는 `settle`의 `replace` · 다시 읽기는 `settleWith` — 이월 V 부터). 409 의 `replace`는 조회가
-   * `ready`일 때만 갈아 끼운다 — 조회가 도는 중에 온 충돌이면 뒤이어 선 조회 값이 보인다(이월 V 의 남는 틈).
+   * 부르는 쪽이(409 는 `settle`의 `replace` · 다시 읽기는 `settleWith` — 이월 V 부터). 조회가 도는 중에 온 충돌이면
+   * 그 값을 들고 있다가 조회의 답에 합친다(`replace`의 `known` — 리뷰 V-F1).
    */
   function discard(): void {
     setDraft(null)
@@ -775,7 +814,8 @@ export function PageDescriptionPanel(props: {
           theirs={save.theirs}
           late={save.late}
           disabled={saving.locked}
-          onOverwrite={() => void submit(save.theirs)}
+          // **덮을 내 글이 없으면 덮기를 안 준다**(리뷰 V-S1) — 보낸 글은 떠날 때 버려졌다(F1). 화면은 «확인» 하나다.
+          {...(draft === null ? {} : { onOverwrite: () => void submit(save.theirs) })}
           onDiscard={discard}
         />
       )}

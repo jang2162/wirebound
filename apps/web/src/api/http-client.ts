@@ -77,14 +77,32 @@ const UNREACHABLE = '서버에 연결하지 못했습니다'
  * - **쓰기**(`GET` 이 아닌 것) — 우측 패널의 쓰기는 장부가 잰다(이월 R). 그 밖의 쓰기(메뉴 · 스냅샷 …)는 이 판이
  *   다루지 않는다.
  *
- * **응답 머리까지만 잰다** — 본문을 읽는 동안은 재지 않는다. 이 api 는 JSON 을 한 번에 보내 머리 뒤에 멈출 자리가
- * 없다고 보았다(재지 않았다).
+ * **응답 머리까지만 잰다** — 본문을 읽는 동안은 재지 않는다. **이것이 큰 문서 × 느린 망에서 페이지를 여는가를
+ * 가른다**(리뷰 AD1 · Chrome · CDP 스로틀 40KB/s · 400ms · 1MB 페이지): 머리 2.2s → 본문 끝 27.4s → 그려짐. 본문까지
+ * 재면(`finally`의 `clearTimeout`을 빼는 한 줄 — 리뷰 변조 M4) 같은 판이 11.8s 에 끊겨 «서버 응답을 이해할 수
+ * 없습니다»다. 케이스: `test/api/http-client.test.ts`의 *"머리가 시간 안에 오면 본문이 10초를 넘어도 …"*.
+ *
+ * **떠난 조회는 끊는다**(리뷰 AD-F1 · 2026-09-23). 조회 이펙트가 `ReadOptions.cancel`을 싣고 정리에서 끊는다 — 끊기면
+ * 머리 앞이든 본문을 읽는 중이든 요청을 끊고 **다시 보내지 않는다**(`ABANDONED`). 앞 판은 이펙트의 정리가 응답을
+ * 버리기만 해서(`alive = false`) 떠난 방문의 1MB 본문이 계속 내려받혔다. Chrome 은 HTTP/1.1 호스트당 연결이
+ * **6개**라 버려진 본문 여섯이 여섯 연결을 쥐면 새 GET 이 **브라우저 안에서 줄을 서고**, 10초는 `fetch`를 부른
+ * 순간부터 재므로 **줄 선 시간까지 «서버가 답이 없다»로 셌다** — 같은 스로틀로 큰 페이지 ↔ 옆 페이지를 6번 오간 뒤
+ * 세 번째 페이지로 가면 40.3s 에 «서버가 응답하지 않습니다»(api 의 최대 `responseTime` 87ms — 서버는 다 답했다).
+ * 버려진 조회도 10초가 되면 다시 보내 줄을 더 길게 만들었다. 이 판(같은 절차 · 리뷰 `ad-queue.mjs`): 떠날 때마다 큰
+ * 페이지의 GET 이 `ERR_ABORTED` · 세 번째 페이지로 갈 때 매달린 요청 **0** · 그 GET 의 머리 0.4–0.5s · 거짓 통지 0(N=6 ·
+ * N=7 둘 다). **받은 신호(`signal` — 판정용 다시 읽기)와는 다른
+ * 키다** — 그쪽은 부른 쪽이 시간을 재고, 이쪽은 시간을 여기서 잰다(두 시계가 한 요청을 다투지 않는다).
  */
 export const READ_DEADLINE_MS = 10_000
 /** 일반 읽기를 보내는 횟수 — 첫 번째와 다시 시도 한 번. */
 const READ_ATTEMPTS = 2
 /** 일반 읽기가 시간 제한을 다 넘겼을 때. 사용자에게 그대로 보인다. */
 const READ_TIMEOUT = '서버가 응답하지 않습니다 — 잠시 뒤 새로고침하세요'
+/**
+ * 부른 쪽이 떠나 조회를 끊었을 때(`ReadOptions.cancel`). **아무에게도 안 보인다** — 끊은 이펙트는 이미 정리됐고
+ * 거절을 `alive`로 버린다. 그래도 `ApiError`로 던지는 것은 이 층이 내는 거절이 전부 그 부류라서다.
+ */
+const ABANDONED = '떠난 화면의 조회를 끊었습니다'
 
 /**
  * 바꿀 값이 하나도 없는 갱신 요청을 막을 때 쓰는 메시지.
@@ -1054,14 +1072,26 @@ export function createHttpClient(
   /**
    * 일반 읽기를 **시간 제한 안에서** 보낸다 — 넘으면 끊고 한 번 더, 그래도 넘으면 «서버가 응답하지 않습니다»다
    * (`READ_DEADLINE_MS`의 머리말). 시간 안에 온 연결 실패는 다시 보내지 않는다 — 앞 판과 같은 `UNREACHABLE`이다.
+   *
+   * `cancel`이 끊기면 그 시도를 끊고 **다시 보내지 않는다**(`ABANDONED` — 머리말 «떠난 조회는 끊는다»). 다시 보낼지는
+   * 시도의 머리 한 자리가 가른다 — 끊긴 시도는 연결 실패도 시간 초과도 아니게 그 자리로 돌아온다. **머리가 온 뒤에도
+   * 끊는 줄을 남긴다** — 연결을 쥐는 것은 본문을 내려받는 동안이다(1MB 페이지는 머리 0.5s · 본문 25s). 시간 제한은
+   * 머리에서 치운다(머리말 «응답 머리까지만 잰다»). 본문을 읽다 끊기면 거절은 `UNREADABLE`로 나간다 — 부른 쪽이
+   * 버리므로 문장은 가르지 않는다.
    */
-  async function fetchInTime(url: string, init: RequestInit): Promise<Response> {
+  async function fetchInTime(url: string, init: RequestInit, cancel: AbortSignal | undefined): Promise<Response> {
+    // 함수로 읽는다 — `await` 너머에서 바뀌는 값이라 한 번 본 값으로 좁히면 안 된다.
+    const gone = (): boolean => cancel?.aborted === true
     for (let attempt = 1; attempt <= READ_ATTEMPTS; attempt += 1) {
+      if (gone()) throw new ApiError(NO_RESPONSE, 'internal', ABANDONED)
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), READ_DEADLINE_MS)
+      const leave = (): void => controller.abort()
+      cancel?.addEventListener('abort', leave, { once: true })
       try {
         return await fetchImpl(url, { ...init, signal: controller.signal })
       } catch {
+        cancel?.removeEventListener('abort', leave)
         if (!controller.signal.aborted) throw new ApiError(NO_RESPONSE, 'internal', UNREACHABLE)
       } finally {
         clearTimeout(timer)
@@ -1117,8 +1147,9 @@ export function createHttpClient(
     // **일반 읽기에는 시간 제한을 건다**(`READ_DEADLINE_MS`) — 받은 신호가 있으면 부른 쪽이 시간을 잰다.
     const timed = method === 'GET' && options?.signal === undefined && options?.deadline !== false
     let response: Response
+    const cancel = options !== undefined && 'cancel' in options ? options.cancel : undefined
     if (timed) {
-      response = await fetchInTime(`${API_PREFIX}${path}`, init)
+      response = await fetchInTime(`${API_PREFIX}${path}`, init, cancel)
     } else {
       try {
         response = await fetchImpl(`${API_PREFIX}${path}`, init)
@@ -1299,8 +1330,8 @@ export function createHttpClient(
         // 바뀌지 않는 것을 재고 옮겼다**(선택 키 유무 두 갈래 전부).
         declaredOnly(body, BODY_KEYS.patchOps),
       ),
-    getProjectTheme: (projectId) =>
-      request<ProjectTheme>('GET', `${projectPath(projectId)}/theme`, SHAPES.projectTheme),
+    getProjectTheme: (projectId, options) =>
+      request<ProjectTheme>('GET', `${projectPath(projectId)}/theme`, SHAPES.projectTheme, undefined, options),
     listProjectThemes: (projectId) =>
       request<ThemeSummary[]>('GET', `${projectPath(projectId)}/themes`, SHAPES.themeList),
     setProjectTheme: (projectId, themeId) =>
@@ -1376,8 +1407,8 @@ export function createHttpClient(
         undefined,
         options,
       ),
-    listPresets: (projectId) =>
-      request<Preset[]>('GET', `${projectPath(projectId)}/presets`, SHAPES.presetList),
+    listPresets: (projectId, options) =>
+      request<Preset[]>('GET', `${projectPath(projectId)}/presets`, SHAPES.presetList, undefined, options),
     createPreset: (projectId, body) =>
       request<Preset>(
         'POST',
@@ -1421,13 +1452,15 @@ export function createHttpClient(
     // 길"* 둘이 생기고 어느 쪽이 도는지는 주소를 눈으로 봐야 안다. 붙는 값은 `ExportFormat`
     // 이라 인코딩이 필요한 글자가 애초에 못 들어간다.
     exportUrl: (projectId, format) => `${API_PREFIX}${projectPath(projectId)}/export?format=${format}`,
-    listMyRevisions: (projectId, pageId) =>
+    listMyRevisions: (projectId, pageId, options) =>
       request<RevisionSummary[]>(
         'GET',
         // `mine=true` 하나뿐이다. 선언하지 않은 쿼리 키는 400이므로(README) 캐시 버스터도
         // 붙일 수 없고, `limit`은 기본값 50이 설계 §7.3의 "최근 50개"와 같아 생략한다.
         `${pagePath(projectId, pageId)}/revisions?mine=true`,
         SHAPES.revisionList,
+        undefined,
+        options,
       ),
   }
 }

@@ -9,10 +9,21 @@
  * **그 사람의 값을 글 그대로 보인다** — 무엇을 덮는지 모르고 덮게 하지 않는다. 비었으면(`null`) 비었다고 적는다.
  * `role="alert"`인 것은 사용자가 방금 누른 저장이 **안 된** 것이라서다(실패 통지와 같은 자리).
  *
- * **판정이 `'late'`면(앞서 보낸 내 저장이 늦게 닿았다 — 리뷰 F2) 같은 화면이 «다른 사람»이라 말하지 않는다.** 지금
- * 저장된 값은 **내가 앞서 보낸 글**이다. 권하는 것은 **덮기**다 — 둘 다 이 창에서 보낸 글이고 뒤의 것이 지금 상자의
- * 글이라, 덮어도 남의 글을 지우지 않는다. 그래서 덮기가 먼저이고 단추 이름이 «지금 글로 덮기»다. 버리기는 «앞서 보낸
- * 글로 두기»다(그 뒤 더 친 글을 버린다). 덮기가 나가는 바탕은 같다 — 보이는 그 값이다(그 사이 남이 또 바꿨으면 409).
+ * **판정이 `'late'`면(지금 값이 앞서 보낸 내 글과 같다 — 리뷰 F2) 같은 화면이 «다른 사람이 바꿨다»고 말하지 않는다.**
+ * 권하는 것은 **덮기**다 — 지금 값은 이 창에서 앞서 보낸 글과 **같은 글자**이고 상자의 글은 그 뒤에 더 친 것이라, 덮어도
+ * 잃는 글이 없다. 그래서 덮기가 먼저이고 단추 이름이 «지금 글로 덮기»다. 버리기는 «앞서 보낸 글로 두기»다(그 뒤 더 친
+ * 글을 버린다). 덮기가 나가는 바탕은 같다 — 보이는 그 값이다(그 사이 남이 또 바꿨으면 409).
+ *
+ * **누가 썼는지는 말하지 않는다**(리뷰 F2-F1 · 2026-09-23). 앞 판은 «앞서 보낸 설명이 늦게 저장됐습니다 — 다른 사람이
+ * 바꾼 것이 아닙니다»였는데, 다른 사람이 우연히 같은 글을 쓴 판도 같은 값이다(Chrome · 리뷰 `f2.mjs`: psql 이 같은 글을
+ * 커밋하고 내 매달린 PATCH 는 409 · 커밋 안 함 → 화면은 «다른 사람이 바꾼 것이 아닙니다»). 이 화면이 아는 것은 **값이
+ * 같다**는 것뿐이다 — `'mine'`의 «이미 같습니다»와 같은 한계이고, 이제 같은 방식으로 말한다: «지금 저장된 설명이 앞서
+ * 보낸 글과 같습니다».
+ *
+ * **덮을 내 글이 없으면 덮기를 안 보인다**(`onOverwrite`를 안 준다 — 리뷰 V-S1 · 2026-09-23). 저장을 내 둔 채 옆 페이지를
+ * 다녀오면 보낸 글은 떠날 때 버려진다(F1). 결말이 **돌아온 뒤에** 오면 이 화면이 서는데, 앞 판은 거기 «내 글로 덮기»를
+ * 두어 눌러도 아무 일이 없었다(Chrome: 요청 0 · 통지 변화 0). 그때는 **«확인» 하나**다 — 결말이 **떠나 있는 동안**
+ * 온 판(아래 `metaConflictSentence` · «확인»뿐)과 같은 말이다: 다른 사람이 바꿨다 · 지금 저장된 값 · 확인.
  */
 import type { ReactElement } from 'react'
 
@@ -34,7 +45,7 @@ function shown(what: MetaWhat, theirs: string | null): string {
 export function metaConflictSentence(what: MetaWhat, theirs: string | null, late: boolean): string {
   const value = shown(what, theirs)
   return late
-    ? `앞서 보낸 ${what}이 늦게 저장됐습니다(다른 사람이 바꾼 것이 아닙니다) · 지금 저장된 ${what}: ${value}`
+    ? `지금 저장된 ${what}이 앞서 보낸 글과 같습니다 · 지금 저장된 ${what}: ${value}`
     : `다른 사람이 이 ${what}을 바꿨습니다 · 지금 저장된 ${what}: ${value}`
 }
 
@@ -42,9 +53,11 @@ export function MetaConflict(props: {
   what: MetaWhat
   /** 서버가 견준 그 사람의 값. */
   theirs: string | null
-  /** 그 값이 **앞서 보낸 내 글**이다(`judgeMeta`의 `'late'`) — «다른 사람»이라 말하지 않는다. */
+  /** 그 값이 **앞서 보낸 내 글과 같다**(`judgeMeta`의 `'late'`) — «다른 사람이 바꿨다»고 말하지 않는다(누가 썼는지도). */
   late?: boolean
-  onOverwrite: () => void
+  /** 덮을 내 글이 있을 때만 준다 — 없으면 덮기 · 버리기 대신 «확인» 하나다(머리말). */
+  onOverwrite?: () => void
+  /** 버리기 — 덮을 글이 없으면 «확인»이 이것을 부른다(통지를 닫는다). */
   onDiscard: () => void
   /** 덮기가 나가 있는 동안 둘 다 끈다. */
   disabled?: boolean
@@ -54,17 +67,25 @@ export function MetaConflict(props: {
   return (
     <div className="wb-shell-meta-conflict" role="alert">
       <p className="wb-shell-meta-conflict-lead">
-        {late ? `앞서 보낸 ${what}이 늦게 저장됐습니다 — 다른 사람이 바꾼 것이 아닙니다` : `다른 사람이 이 ${what}을 바꿨습니다`}
+        {late ? `지금 저장된 ${what}이 앞서 보낸 글과 같습니다` : `다른 사람이 이 ${what}을 바꿨습니다`}
       </p>
-      <p className="wb-shell-meta-conflict-label">{late ? `지금 저장된 ${what} — 앞서 보낸 글` : `지금 저장된 ${what}`}</p>
+      <p className="wb-shell-meta-conflict-label">지금 저장된 {what}</p>
       <p className="wb-shell-meta-conflict-theirs">{shown(what, theirs)}</p>
       <div className="wb-shell-meta-conflict-actions">
-        <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} onClick={props.onOverwrite}>
-          {late ? '지금 글로 덮기' : '내 글로 덮기'}
-        </button>
-        <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} onClick={props.onDiscard}>
-          {late ? '앞서 보낸 글로 두기' : '내 글 버리기'}
-        </button>
+        {props.onOverwrite === undefined ? (
+          <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} onClick={props.onDiscard}>
+            확인
+          </button>
+        ) : (
+          <>
+            <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} onClick={props.onOverwrite}>
+              {late ? '지금 글로 덮기' : '내 글로 덮기'}
+            </button>
+            <button type="button" className="wb-shell-meta-conflict-button" disabled={props.disabled} onClick={props.onDiscard}>
+              {late ? '앞서 보낸 글로 두기' : '내 글 버리기'}
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

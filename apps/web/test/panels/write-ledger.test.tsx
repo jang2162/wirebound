@@ -181,6 +181,8 @@ function descriptionServer(
   heldReads: () => number
   /** 읽기가 받은 신호 — 부른 순서대로(판정용 다시 읽기만 싣는다). */
   readSignals: (AbortSignal | undefined)[]
+  /** 읽기가 받은 **떠날 때 끊는** 신호(`ReadOptions.cancel`) — 부른 순서대로(조회 이펙트가 싣는다 · 리뷰 AD-F1). */
+  readCancels: (AbortSignal | undefined)[]
   /** 남이 서버의 설명을 바꾼다. */
   overwrite: (value: string | null) => void
 } {
@@ -189,6 +191,7 @@ function descriptionServer(
   let readsHeld = false
   const heldReads: ((asIssued: boolean) => void)[] = []
   const readSignals: (AbortSignal | undefined)[] = []
+  const readCancels: (AbortSignal | undefined)[] = []
   const sent: (string | null | undefined)[] = []
   const bases: unknown[] = []
   const signals: (AbortSignal | undefined)[] = []
@@ -202,6 +205,7 @@ function descriptionServer(
     bases,
     signals,
     readSignals,
+    readCancels,
     stored: () => stored,
     failReads: (on) => {
       readsFail = on
@@ -221,6 +225,7 @@ function descriptionServer(
     overrides: {
       getPage: (async (_projectId: string, pageId: string, options?: ReadOptions) => {
         if (pageId === PAGE_ID) readSignals.push(options?.signal)
+        if (pageId === PAGE_ID) readCancels.push(options?.cancel)
         if (readsFail && pageId === PAGE_ID) throw new ApiError(0, 'internal', '서버에 연결하지 못했습니다')
         if (readsHeld && pageId === PAGE_ID) {
           // 붙잡힌 읽기도 **끊기면 실제 `fetch`처럼 거절한다**.
@@ -286,6 +291,12 @@ function descriptionServer(
       })
     },
   }
+}
+
+/** 409 `page-meta-changed` — 서버가 견준 지금 값(`current`)을 싣는다(`api/page-meta.ts`의 `metaConflict`). */
+function metaChanged(current: string | null): ApiError {
+  const message = '다른 사람이 이 페이지를 먼저 바꿨습니다'
+  return new ApiError(409, 'conflict', message, [{ path: 'description', code: 'page-meta-changed', message, current }], true)
 }
 
 function comment(id: string, body: string): Comment {
@@ -778,7 +789,8 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
    * **«저장되지 않았습니다» 뒤 끊긴 쓰기가 늦게 커밋한 판**(리뷰 F2 · Chrome P1). 판정이 `'base'`였어도 서버가 이미 받은
    * 요청은 끊긴 뒤 커밋할 수 있다. 그 뒤 **더 쳐서** 저장하면 409 의 지금 값이 내 앞 글이다 — 앞 판은 그것을 «다른
    * 사람이 이 설명을 바꿨습니다 / 앞 글»로 보였다. 이제 그 판정이 보낸 글을 초안 칸에 매달린 값으로 들고, 409 의 값이
-   * 그것이면 «앞서 보낸 설명이 늦게 저장됐습니다»로 서고 덮기를 권한다. 덮기는 보인 그 값(앞 글)을 바탕으로 싣는다.
+   * 그것이면 «지금 저장된 설명이 앞서 보낸 글과 같습니다»로 서고 덮기를 권한다(누가 썼는지는 말하지 않는다 — 리뷰
+   * F2-F1). 덮기는 보인 그 값(앞 글)을 바탕으로 싣는다.
    *
    * 혼자 죽는 변조(각각): `land`의 «안 저장됨» 갈래가 매달린 값을 안 든다 · 상자의 `onChange`가 초안을 `{ text, base }`로
    * 새로 지어 매달린 값을 떨군다. (`judgeMeta`의 `'late'` 갈래를 지우면 `test/api/page-meta.test.ts`의 «매달린 내 값과
@@ -799,7 +811,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     type(box(), '앞 글에 더 친 글')
     fireEvent.click(saveButton())
 
-    const lead = await screen.findByText('앞서 보낸 설명이 늦게 저장됐습니다 — 다른 사람이 바꾼 것이 아닙니다')
+    const lead = await screen.findByText('지금 저장된 설명이 앞서 보낸 글과 같습니다')
     const conflict = lead.closest<HTMLElement>('[role="alert"]')
     expect(conflict).not.toBeNull()
     expect(screen.queryByText('다른 사람이 이 설명을 바꿨습니다')).toBeNull()
@@ -813,7 +825,7 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
 
     expect(await screen.findByText('설명을 저장했습니다')).toBeTruthy()
     expect(server.stored()).toBe('앞 글에 더 친 글')
-    expect(screen.queryByText('앞서 보낸 설명이 늦게 저장됐습니다 — 다른 사람이 바꾼 것이 아닙니다')).toBeNull()
+    expect(screen.queryByText('지금 저장된 설명이 앞서 보낸 글과 같습니다')).toBeNull()
   })
 
   it('다시 읽기도 실패하면 모른다 — 잠금을 쥔 채 «다시 확인»을 주고, 누르면 판정한다', async () => {
@@ -1879,6 +1891,138 @@ describe('쓰기가 끝나면 잠금이 풀린다 — 목록 다시 받기는 �
 })
 
 /**
+ * **설명 칸의 순서 — 409 · 판정용 다시 읽기**(리뷰 V-F1 · V-F2 · V-S1 · 2026-09-23). 이월 V 는 «저장의 응답은 받을 때 ·
+ * 조회는 보낼 때» 번호를 받게 했는데 두 자리가 남았다: 409 의 지금 값은 조회가 `ready`일 때만 섰고(V-F1 — 제목이 없어서),
+ * 판정용 다시 읽기의 «보낼 때 번호»는 규칙으로만 있었다(V-F2 — 리뷰 변조 M2 가 J 0 사망). 그리고 돌아온 방문에 선 충돌
+ * 화면이 덮을 초안이 없는데 «내 글로 덮기»를 보였다(V-S1).
+ *
+ * 혼자 죽는 변조(백업 → 한 곳 → 겨누는 파일만 → 바이트 비교 복원):
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | `replace`가 `loading`이면 아무것도 안 한다(앞 판) | *"409 가 돌아와 건 조회가 도는 중에 오면 …"* **혼자** |
+ * | `answered`가 `known`을 안 본다(들고 있던 409 값을 조회의 답이 덮는다) | *"409 가 돌아와 건 조회가 도는 중에 오면 …"* **혼자** |
+ * | 판정용 다시 읽기의 번호를 받을 때로(`settleWith(issue(), …)` — 리뷰 M2) | *"판정용 다시 읽기의 답이 …"* **혼자** |
+ * | 덮을 초안이 없어도 «내 글로 덮기»를 준다(앞 판) | *"돌아온 방문에 선 충돌에 덮을 초안이 없으면 …"* **혼자** |
+ * | 설명 조회 이펙트의 정리가 요청을 안 끊는다(`leave.abort()`를 뺀다 — 리뷰 AD-F1) | *"페이지를 옮기면 설명 조회를 …"* **혼자** |
+ * | `late` 화면의 머리를 앞 판으로(«앞서 보낸 설명이 늦게 저장됐습니다 — 다른 사람이 바꾼 것이 아닙니다» — 리뷰 F2-F1) | R 절 *"«저장되지 않았습니다» 뒤 끊긴 쓰기가 늦게 커밋되면 …"* **혼자** |
+ * | `late` 문장(떠나 있는 동안)을 앞 판으로 | S 절 *"설명 — «저장되지 않았습니다» 뒤 늦게 커밋된 내 앞 글을 …"* **혼자** |
+ */
+describe('설명 칸의 순서 — 409 · 판정용 다시 읽기 (리뷰 V-F1 · V-F2 · V-S1)', () => {
+  function toPage(title: string): void {
+    fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }))
+  }
+
+  it('409 가 돌아와 건 조회가 도는 중에 오면, 늦게 온 조회(409 전에 읽은 값)가 409 의 값을 덮지 않는다 — «이미 같습니다» 옆에 낡은 글이 서지 않는다', async () => {
+    // 리뷰 V-F1(Chrome route · `v409.mjs`): 앞 판은 409 가 조회 `loading` 중에 오면 `replace`가 아무것도 못 했고, 뒤이어 선
+    // 조회가 커밋 전 값을 «서버의 설명이 이미 이 글과 같습니다» 옆에 세웠다(상자 `처음 설명` · DB `앨리스 글`).
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '같은 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(box().value).toBe(''))
+    server.holdReads(true)
+    toPage(PAGE_TITLE)
+    await waitFor(() => expect(server.heldReads()).toBeGreaterThan(0))
+    server.holdReads(false)
+
+    // 그 사이 남이 같은 글을 저장했고, 내 저장은 409 로 그 값을 실어 온다 — 돌아와 건 조회는 아직이다.
+    server.overwrite('같은 글')
+    await server.fail(0, metaChanged('같은 글'))
+    // 조회가 이제 온다 — 409 **전에** 읽은 값이다.
+    await server.releaseReads(true)
+
+    await waitFor(() => expect(screen.queryByText('서버의 설명이 이미 이 글과 같습니다')).not.toBeNull())
+    expect(box().value).toBe('같은 글')
+    // 제목은 조회의 것이다 — 409 는 제목을 안 싣는다.
+    expect(screen.getByRole('heading', { name: PAGE_TITLE })).toBeTruthy()
+  })
+
+  it('판정용 다시 읽기의 답이 그 뒤에 낸 조회보다 늦게 와도 조회가 세운 값을 덮지 않는다 — 번호는 보낼 때다', async () => {
+    // 리뷰 V-F2: 판정용 다시 읽기는 **보낼 때** 번호를 받는다(`verify`의 `issue()`). 그 뒤에 떠났다 돌아와 건 조회가 더 늦게
+    // 읽었으므로 더 새것이다. 받을 때 번호를 주면(리뷰 변조 M2) 먼저 읽은 판정 값이 그것을 덮는다.
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    type(box(), '내 글')
+    fireEvent.click(saveButton())
+    // 서버는 썼는데 응답이 안 온다 — 시간이 되면 끊고 다시 읽는다. 그 다시 읽기(지금 값 `내 글`)를 붙잡는다.
+    server.commit()
+    server.holdReads(true)
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    expect(server.heldReads()).toBe(1)
+    server.holdReads(false)
+
+    // 그 뒤 남이 바꾸고, 사용자는 떠났다 돌아온다 — 돌아와 건 조회가 먼저 온다(`남의 글`).
+    server.overwrite('남의 글')
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(box().value).toBe(''))
+    toPage(PAGE_TITLE)
+    await waitFor(() => expect(box().value).toBe('남의 글'))
+
+    // 판정용 다시 읽기의 답이 이제 온다 — 보낸 순간의 값(`내 글`)이다.
+    await server.releaseReads(true)
+    await waitFor(() => expect(screen.queryByText(MATCHED)).not.toBeNull())
+    expect(box().value).toBe('남의 글')
+  })
+
+  it('페이지를 옮기면 설명 조회를 요청째 끊는다 — 떠난 방문의 본문이 브라우저 연결을 쥐지 않는다', async () => {
+    // 리뷰 AD-F1: 설명 패널의 조회도 `getPage`라 페이지 문서(Chrome 판 1MB)를 통째로 받는다 — 캔버스의 조회와 같은 무게다.
+    // 끊는 일 자체는 `api/http-client.ts`가 한다(`test/api/http-client.test.ts`의 «떠나면 …»). 여기는 패널이 싣고 끊는가.
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    server.holdReads(true)
+    fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
+    toView()
+    await waitFor(() => expect(server.heldReads()).toBe(1))
+    const lookup = server.readCancels.at(-1)
+    expect(lookup?.aborted).toBe(false)
+
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(lookup?.aborted).toBe(true))
+    server.holdReads(false)
+  })
+
+  it('돌아온 방문에 선 충돌에 덮을 초안이 없으면 «내 글로 덮기»를 안 보인다 — «확인» 하나다', async () => {
+    // 리뷰 V-S1(Chrome): 저장을 내 둔 채 옆 페이지를 다녀오면 보낸 글은 떠날 때 버려진다(F1). 결말이 돌아온 **뒤에** 오면
+    // 충돌 화면이 서는데, 앞 판은 거기 «내 글로 덮기»를 두어 눌러도 요청 0 · 통지 변화 0 이었다. 떠나 있는 **동안** 온
+    // 판(아래 S 절)은 «확인»뿐이다 — 두 판의 말을 맞춘다.
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '내 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(box().value).toBe(''))
+    toPage(PAGE_TITLE)
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+
+    server.overwrite('남의 글')
+    await server.fail(0, metaChanged('남의 글'))
+
+    const conflict = (await screen.findByText('다른 사람이 이 설명을 바꿨습니다')).closest<HTMLElement>('[role="alert"]')
+    expect(conflict).not.toBeNull()
+    expect(within(conflict!).queryByRole('button', { name: '내 글로 덮기' })).toBeNull()
+    expect(within(conflict!).queryByRole('button', { name: '내 글 버리기' })).toBeNull()
+    fireEvent.click(within(conflict!).getByRole('button', { name: '확인' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(server.sent).toHaveLength(1)
+  })
+})
+
+/**
  * **S — 떠나 있는 동안 끝난 실패**(이월 S · `write-ledger.tsx`의 «떠나 있는 동안 끝난 실패»). 앞 판은 쓰기가 끝난 순간
  * 그 페이지를 보는 방문이 없으면 칸의 통지가 버려져(`panel-drafts.tsx`의 2번) **조용했다** — Chrome: 설명·코멘트를
  * 저장해 둔 채 옆 페이지로 가서 500 을 받으면 나에도 · 돌아온 가에도 통지 0, 401 이면 나에 그대로 머물다 다음 읽기에서야
@@ -1936,12 +2080,6 @@ describe('S — 페이지를 떠나 있는 동안 끝난 실패는 돌아오면 
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  /** 409 `page-meta-changed` — 서버가 견준 지금 값(`current`)을 싣는다(`api/page-meta.ts`의 `metaConflict`). */
-  function metaChanged(current: string | null): ApiError {
-    const message = '다른 사람이 이 페이지를 먼저 바꿨습니다'
-    return new ApiError(409, 'conflict', message, [{ path: 'description', code: 'page-meta-changed', message, current }], true)
-  }
-
   /**
    * **떠나 있는 동안 온 409 도 판정을 지난다**(3차 통합 후속). 앞 판은 장부가 409 를 `toFailure`로 곧바로 읽어 «…
    * 저장하지 못했습니다 — 다른 사람이 이 페이지를 먼저 바꿨습니다»를 남겼다 — 서버에 내 글이 있는데도(Chrome).
@@ -1979,10 +2117,11 @@ describe('S — 페이지를 떠나 있는 동안 끝난 실패는 돌아오면 
   })
 
   /**
-   * `'late'`면 «다른 사람»이라 말하지 않는다 — 앞서 보낸 내 글이다(리뷰 F2 의 판을 떠나 있는 동안으로). 매달린 값은 보낸
+   * `'late'`면 «다른 사람이 바꿨다»고 말하지 않는다 — 앞서 보낸 글과 같다고만 말한다(리뷰 F2 의 판을 떠나 있는 동안으로 ·
+   * 누가 썼는지는 단정하지 않는다 — 리뷰 F2-F1). 매달린 값은 보낸
    * 순간의 초안에서 들고 간다 — 떠날 때 초안은 버려져도(F1) 그 쓰기의 판정은 그것을 안다.
    */
-  it('설명 — «저장되지 않았습니다» 뒤 늦게 커밋된 내 앞 글을 떠나 있는 동안 409 가 실어 오면, 돌아온 가가 다른 사람이 아니라고 말한다', async () => {
+  it('설명 — «저장되지 않았습니다» 뒤 늦게 커밋된 내 앞 글을 떠나 있는 동안 409 가 실어 오면, 돌아온 가가 «다른 사람이 바꿨다» 대신 앞서 보낸 글과 같다고 말한다', async () => {
     const server = descriptionServer('서버 값')
     await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
     toView()
@@ -2008,7 +2147,7 @@ describe('S — 페이지를 떠나 있는 동안 끝난 실패는 돌아오면 
     toPage(PAGE_TITLE)
     await waitFor(() => expect(box().value).toBe('앞 글'))
     expect(screen.getByRole('alert').textContent).toBe(
-      `${MISSED} — 앞서 보낸 설명이 늦게 저장됐습니다(다른 사람이 바꾼 것이 아닙니다) · 지금 저장된 설명: 앞 글`,
+      `${MISSED} — 지금 저장된 설명이 앞서 보낸 글과 같습니다 · 지금 저장된 설명: 앞 글`,
     )
   })
 
