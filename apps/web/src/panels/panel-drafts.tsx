@@ -112,7 +112,8 @@
  * - **한 방향이다.** 진실은 여전히 이 provider 의 칸이다. **쓰는 자리는 레이아웃 이펙트 하나**(칸이 바뀔 때마다
  *   방문을 옮겨 적는다), **읽는 자리는 방문을 새로 세우는 `fresh` 하나**다. 방문이 선 뒤로 칸은 저장소를 보지 않는다.
  * - **사람으로 가른다.** 방문은 선 때의 사람(`Held.writer`)의 칸에만 읽고 쓴다. 이 provider 가 떠 있는 동안
- *   사람이 바뀌는 길은 없다(문지기가 화면을 내린다) — 그래서 사람이 바뀌는 것을 따로 보지 않는다.
+ *   사람이 바뀌는 길은 없다(문지기가 화면을 내린다) — 그래서 사람이 바뀌는 것을 따로 보지 않는다. 다른 사람이
+ *   이 탭에 들어오면 앞 사람의 칸은 저장소가 지우고 그 뒤로 앞 사람의 칸에 쓰지 않는다(`draft-store.tsx`의 `admit`).
  * - **F1 을 뒤집지 않는다 — 아래.**
  *
  * ### F1 과 저장소 — «페이지»는 **연** 페이지다
@@ -203,8 +204,8 @@ import {
 } from './write-ledger'
 
 /**
- * 칸 하나의 선언. **모듈 최상위에 한 번 만든다** — 칸을 가리는 것은 이 객체의 정체성이다.
- * 이름은 사람이 읽으라고 있다(디버거에서 `Map`의 키를 볼 때).
+ * 칸 하나의 선언. **모듈 최상위에 한 번 만든다** — 칸을 가리는 것은 이 객체의 정체성이다(`Held.values`의 키).
+ * 이름은 사람이 읽으라고 있고, **같은 모듈이 다시 불렸을 때 같은 객체를 찾는 열쇠**다(아래 `slotsOf`).
  *
  * `initial`은 **공유되는 값**이라 고쳐 쓰지 않는다 — 쓰는 쪽은 언제나 새 값을 넣는다.
  *
@@ -228,17 +229,56 @@ export interface Keeper<T> {
   load(raw: unknown): T | undefined
 }
 
-/** 저장소에 비추는 칸 — 이름으로 찾는다. 읽은 사본의 칸 이름이 여기 없으면 버린다. */
-const KEPT = new Map<string, Slot<unknown>>()
+/** 선언한 모듈이 다시 불렸을 때 선언을 새것으로 갈아 끼우려고 — 밖에는 `Slot`(읽기 전용)으로만 나간다. */
+type Declared = { name: string; initial: unknown; keeper?: Keeper<unknown> }
 
-export function slot<T>(name: string, initial: T, keeper?: Keeper<T>): Slot<T> {
-  const declared: Slot<T> = keeper === undefined ? { name, initial } : { name, initial, keeper }
-  if (keeper !== undefined) {
-    // 이름이 겹치면 한 사본이 두 칸으로 되살아난다 — 요란하게 깨진다.
-    if (KEPT.has(name)) throw new Error(`저장소에 비추는 칸의 이름이 겹친다: ${name}`)
-    KEPT.set(name, declared as Slot<unknown>)
+/**
+ * 선언된 칸 전부 — **이름으로 찾는다.** 저장소에서 읽은 사본의 칸 이름을 여기서 찾고(`fresh` — 없거나 `keeper`가 없으면
+ * 버린다), 같은 모듈이 다시 불리면 여기서 **같은 객체**를 돌려준다(`slotsOf`).
+ */
+const DECLARED = new Map<string, { module: string; slot: Declared }>()
+
+/**
+ * 모듈의 주소에서 쿼리·조각을 뗀다 — 개발 서버는 HMR 로 다시 부른 모듈에 `?t=<시각>`을 붙인다(Vite). 떼고 나면 같은
+ * 파일은 같은 값이다.
+ */
+function moduleOf(owner: string): string {
+  return owner.replace(/[?#].*$/, '')
+}
+
+/**
+ * **칸을 선언하는 함수를 모듈마다 하나 받는다** — `const slot = slotsOf(import.meta.url)`. 선언한 모듈이 이름과 함께
+ * 남는다.
+ *
+ * - **두 모듈이 같은 이름을 쓰면 던진다** — 요란하게 깨진다. 비추는 칸이면 한 사본이 두 칸으로 되살아나고, 아래 둘째
+ *   줄 때문에 비추지 않는 칸이라도 두 모듈이 한 객체를 나눠 쓰게 된다.
+ * - **같은 모듈이 다시 불리면(개발 서버의 HMR) 같은 객체를 돌려준다** — 선언(`initial`·`keeper`)만 새것으로 갈아 끼운다.
+ *   provider 가 든 칸의 값은 이 객체를 키로 찾으므로(`Held.values`), 새 객체를 내면 **모든 칸이 첫 값으로 돌아간다**.
+ *
+ * (2026-09-23 — 리뷰 R4.) 앞 판은 비추는 칸의 이름이 겹치면 늘 던져, 모듈을 저장할 때마다 `Failed to reload`로 손
+ * 새로고침을 해야 했다(Chrome — `comment-panel.tsx`를 `touch`). 던지는 것만 뗐더니 모듈은 다시 불렸는데 **새 객체**라
+ * 코멘트 탭이 «코멘트를 불러오는 중…»에 멈추고 친 초안이 비었다(Chrome — 같은 `touch`). 그래서 이름으로 같은 객체를
+ * 찾는다. 고친 뒤(Chrome): `comment-panel.tsx`·`page-description.tsx`를 `touch` → 콘솔 오류 0 · 새로고침 없음 · 코멘트
+ * 상자의 글 그대로.
+ *
+ * **이 파일 자체가 다시 불리면 막지 못한다** — 칸 표 · provider · 컨텍스트가 전부 새것이라 화면의 칸이 첫 값이다
+ * (Chrome: 콘솔 오류 0 · 코멘트·설명 상자 `""`). 저장소의 사본은 그대로라 새로고침하면 돌아온다.
+ */
+export function slotsOf(owner: string): <T>(name: string, initial: T, keeper?: Keeper<T>) => Slot<T> {
+  const module = moduleOf(owner)
+  return <T,>(name: string, initial: T, keeper?: Keeper<T>): Slot<T> => {
+    const earlier = DECLARED.get(name)
+    if (earlier !== undefined) {
+      if (earlier.module !== module) throw new Error(`패널 칸의 이름이 겹친다: ${name}`)
+      earlier.slot.initial = initial
+      if (keeper === undefined) delete earlier.slot.keeper
+      else earlier.slot.keeper = keeper as Keeper<unknown>
+      return earlier.slot as Slot<T>
+    }
+    const declared: Declared = keeper === undefined ? { name, initial } : { name, initial, keeper: keeper as Keeper<unknown> }
+    DECLARED.set(name, { module, slot: declared })
+    return declared as Slot<T>
   }
-  return declared
 }
 
 /**
@@ -295,7 +335,7 @@ function fresh(
   const values = new Map<Slot<unknown>, unknown>()
   if (store !== null && writer !== null && pageId !== undefined) {
     for (const [name, raw] of Object.entries(store.recall(writer, projectId, pageId))) {
-      const kept = KEPT.get(name)
+      const kept = DECLARED.get(name)?.slot as Slot<unknown> | undefined
       const value = kept?.keeper?.load(raw)
       if (kept !== undefined && value !== undefined) values.set(kept, value)
     }

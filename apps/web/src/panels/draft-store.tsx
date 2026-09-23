@@ -19,7 +19,8 @@
  *
  * **섞은 것이 하나 있다 — 명시적 로그아웃의 표지만 `localStorage`에 든다**(`FORGOTTEN_KEY`). 닫아 둔 탭은 로그아웃
  * 소식을 못 받는데, 나중에 다시 열면 브라우저가 그 탭의 `sessionStorage`를 되살린다 — 로그아웃한 사람의 글이 그
- * 브라우저에 돌아온다. 표지는 **시각 하나**(사람도 글도 없다)이고, 그보다 앞서 쓰인 사본은 **두 자리에서 지운다**:
+ * 브라우저에 돌아온다. 표지는 **세대 번호 하나**(사람도 글도 없다 — 아래 «표지는 세대 번호다»)이고, 그보다 앞선
+ * 세대의 사본은 **두 자리에서 지운다**:
  *
  * - **문서가 설 때**(`openDraftStore` — 되살린 탭이 뜨는 순간) 이 탭의 사본을 다 훑는다. 읽을 때만 지우면 되살린 탭에
  *   **다른 사람이** 들어온 판에서 앞 사람의 칸을 아무도 안 읽어 그대로 남았다(Chromium 151 — 로그아웃 뒤 되살린
@@ -27,10 +28,56 @@
  * - **읽을 때**(`recall`) — 이 문서가 선 **뒤에** 다른 탭이 로그아웃했는데 소식이 안 닿은 판(`BroadcastChannel`이 없는
  *   브라우저)이다.
  *
+ * ### 표지는 세대 번호다 — 시계를 버렸다 (2026-09-23, 리뷰 R2 · R3)
+ *
+ * 앞 판의 표지는 **시각**이었고 사본에는 쓴 시각(`savedAt`)을 실어 `savedAt <= 표지`면 지웠다. 두 길로 친 초안이 사라졌다
+ * (Chrome — 리뷰 3):
+ *
+ * - **R2 — 표지가 «들은 시각»으로 덮였다.** 소식을 듣는 탭도 표지를 **자기가 들은 시각**으로 적었다. 로그아웃 뒤 같은
+ *   사람이 다시 들어와 친 사본이라도 다른 탭이 소식을 늦게 들으면 표지가 그보다 늦어져, 새로고침에 `""`이 됐다
+ *   (수신 4000ms 지연 주입).
+ * - **R3 — 벽시계를 견줬다.** 로그아웃 뒤 시계가 뒤로 가면(NTP 보정 · 수동 변경) 그 차이만큼 친 사본이 전부 «로그아웃보다
+ *   앞선 것»이 됐다(표지를 10분 앞당긴 흉내 — 새로고침 뒤 `""`).
+ *
+ * 이제 표지는 **로그아웃이 몇 번 있었나**다. 탭마다 **자기가 아는 세대**(`era`)를 들고:
+ *
+ * | 일 | 세대 |
+ * |---|---|
+ * | 문서가 선다 | 표지를 읽어 그것이 이 탭의 세대다 |
+ * | 이 탭에서 로그아웃(`forget`) | `max(표지, 이 탭의 세대) + 1` — **올리는 것은 로그아웃한 탭뿐이다.** 그 번호를 소식에 싣는다(`session-context.tsx`) |
+ * | 다른 탭의 로그아웃 소식(`forgetHeard`) | 소식의 번호로 — 표지도 이 탭의 세대도 **`max`로만** 적는다. 듣는 탭은 번호를 짓지 않는다 |
+ * | 사본을 쓴다(`keep`) | **이 탭의 세대**를 싣는다 — 표지를 다시 읽지 않는다 |
+ * | 사본을 본다(`sweep` · `recall`) | 사본의 세대가 `max(표지, 이 탭의 세대)`보다 **작으면** 지운다 |
+ *
+ * 쓸 때 표지를 다시 읽지 않는 것이 요점이다 — 로그아웃 소식을 못 들은 탭(얼린 탭 · 소식 없는 브라우저)이 **로그아웃
+ * 뒤에** 쓴 사본은 그 탭의 옛 세대를 실어 지워진다. 앞 판에서는 그 사본이 표지보다 늦은 시각이라 남았다(리뷰 (d)의
+ * 코드 읽기).
+ *
+ * **옛 판 탭의 소식에는 번호가 없다**(배포가 바뀌는 창 — `session/tab-channel.tsx`의 «받은 것은 믿지 않고 읽는다»).
+ * 그때 듣는 탭은 `이 탭의 세대 + 1`로 적는다 — 같은 세대를 아는 탭들이 같은 번호에 닿는다(각자 표지를 읽어 +1 하면
+ * 들은 탭 수만큼 부풀어, 먼저 들은 탭이 다시 들어와 친 사본이 R2 처럼 지워진다).
+ *
+ * ## 다른 사람이 들어오면 앞 사람의 칸을 지운다 (2026-09-23, 리뷰 (c))
+ *
+ * `admit` — 이 탭의 사람이 누구인지 알게 되는 자리에서 부른다(`session-context.tsx`: 마운트의 `me()` · 이 탭의 로그인 ·
+ * 다른 탭의 로그인 소식). **그 사람이 아닌 칸을 전부 지운다** — 앞 판은 칸이 사람으로 갈려 안 보이기만 했고, 명시적
+ * 로그아웃이 한 번 일어날 때까지 앞 사람의 원문이 그 탭(과 그 탭에서 복제한 탭)의 저장소에 남았다(공용 기기에서
+ * 앨리스가 로그아웃 없이 떠나 세션이 만료되고 밥이 그 탭을 쓰는 판 — Chrome · 리뷰 (c)).
+ *
+ * - **같은 사람이면 지울 것이 없다** — 세션 만료 뒤 같은 사람이 돌아오면 이어 쓴다(아래 «언제 지우는가»).
+ * - **대가: 앞 사람이 그 탭에 돌아와도 초안은 없다.** 앨리스 → (만료) → 밥 → (만료) → 앨리스면 앨리스의 초안은 밥이
+ *   들어온 순간 지워졌다.
+ * - `admit` 뒤로는 **그 사람의 칸에만 쓴다** — 다른 탭의 소식으로 사람이 바뀐 뒤 앞 사람의 화면이 한 번 더 커밋돼도
+ *   지운 칸을 다시 채우지 않는다(`forget`의 `generation`과 같은 까닭).
+ * - 칸을 지울 때 **읽지 않는다**(`getItem` 없이 키만 본다).
+ *
  * ## 칸 — 사람마다, 그리고 방문 하나
  *
- * 키는 `wirebound:drafts:<사용자 id>`다. **다른 사람의 칸은 읽지도 쓰지도 않는다** — provider 가 지금 사람의 id
- * 로만 부른다(`panel-drafts.tsx`). 한 사람의 칸에는 **이 탭이 마지막으로 연 페이지의 방문 하나**가 든다 —
+ * 키는 `wirebound:drafts:<사용자 id>`다. **다른 사람의 칸을 화면에 싣지도, 그 칸에 쓰지도 않는다** — provider 가 지금
+ * 사람의 id 로만 부른다(`panel-drafts.tsx`). **«읽지 않는다»는 아니다**(리뷰 R5): 문서가 설 때 `sweep`은 표지가 0 이
+ * 아니면 이 탭의 **모든 사람의 칸을 `getItem`** 한다 — 사본의 세대를 보려고다(화면에는 안 싣는다). 그때는 아직 이 탭의
+ * 사람을 모른다(`me()` 전). 사람을 안 뒤에 다른 사람의 칸을 지우는 `admit`은 읽지 않고 키만 본다 — 그래서 사람을 안
+ * 뒤로 이 탭에 남는 칸은 그 사람의 것 하나다. 한 사람의 칸에는 **이 탭이 마지막으로 연 페이지의 방문 하나**가 든다 —
  * (프로젝트, 페이지)와 그 방문의 초안 칸들. 페이지 하나만 드는 것이 F1 을 지키는 방법이다(`panel-drafts.tsx`
  * 머리말 4 의 «F1 과 저장소»).
  *
@@ -45,10 +92,10 @@
  *
  * ## 언제 지우는가 — 명시적 로그아웃에만
  *
- * `forget` — 이 탭의 초안 칸을 **사람을 가리지 않고** 전부 지우고 표지를 적는다. 부르는 자리는
+ * `forget` · `forgetHeard` — 이 탭의 초안 칸을 **사람을 가리지 않고** 전부 지우고 표지를 적는다. 부르는 자리는
  * `session/session-context.tsx`의 **로그아웃 두 신호** 그대로다(이 탭의 로그아웃 단추 · 다른 탭의 로그아웃
  * 소식) — 새 신호를 세우지 않았다. **401 은 지우지 않는다** — 원하지 않은 끝이고, 같은 사람이 다시 들어오면
- * 이어 쓴다. 다른 사람이 들어오는 것은 지울 일이 아니라 **칸이 갈려** 안 보인다.
+ * 이어 쓴다. 다른 사람이 들어오면 **앞 사람의 칸만** 지운다(위 `admit`).
  *
  * `forget` 뒤로 **그 전에 선 provider 는 쓰지 못한다**(`generation`). 로그아웃 소식과 화면이 내려가는 렌더
  * 사이에 친 글자 하나가 커밋되면 그 이펙트가 지운 칸을 다시 채운다 — 로그아웃 뒤에 그 사람의 글이 남는다.
@@ -65,11 +112,14 @@ import { createContext, useContext, type ReactElement, type ReactNode } from 're
 /** 사람마다의 칸 이름 앞머리. */
 export const DRAFT_KEY_PREFIX = 'wirebound:drafts:'
 
-/** 명시적 로그아웃의 시각(`localStorage` — 위 머리말 «섞은 것»). */
-export const FORGOTTEN_KEY = 'wirebound:drafts-forgotten-at'
+/**
+ * 명시적 로그아웃의 세대 번호(`localStorage` — 위 머리말 «표지는 세대 번호다»). 앞 판(시각)과 **이름이 다르다** — 같은
+ * 이름이면 옛 판이 남긴 시각(13자리 수)을 세대로 읽어 모든 사본을 지운다.
+ */
+export const FORGOTTEN_KEY = 'wirebound:drafts-signed-out-era'
 
-/** 사본의 모양이 바뀌면 올린다 — 모르는 판의 사본은 읽지 않는다. */
-const VERSION = 1
+/** 사본의 모양이 바뀌면 올린다 — 모르는 판의 사본은 읽지 않는다. 2: 쓴 시각 대신 세대(리뷰 R2 · R3). */
+const VERSION = 2
 
 /** 한 사람의 칸에 드는 것 — 방문 하나. `slots`의 값은 칸이 스스로 지은 JSON 값이다(`panel-drafts.tsx`). */
 export interface DraftVisit {
@@ -89,9 +139,19 @@ export interface DraftStore {
    * provider 가 선 때의 `generation`이다 — 그 뒤에 `forget`이 돌았으면 쓰지 않는다(위 머리말).
    */
   keep(userId: string, visit: DraftVisit, since: number): void
-  /** 명시적 로그아웃 — 이 탭의 초안 칸을 전부 지우고 표지를 적는다(위 머리말). */
-  forget(): void
-  /** `forget`이 돈 횟수. provider 가 설 때 읽어 `keep`에 싣는다. */
+  /**
+   * **이 탭의** 명시적 로그아웃 — 이 탭의 초안 칸을 전부 지우고 세대를 올려 표지에 적는다. 올린 번호를 낸다 — 다른
+   * 탭에 알리는 소식에 싣는다(위 머리말 «표지는 세대 번호다»).
+   */
+  forget(): number
+  /**
+   * **다른 탭의** 명시적 로그아웃을 들었다 — 이 탭의 초안 칸을 전부 지우고, 표지와 이 탭의 세대를 **그 번호로 `max`만**
+   * 한다. 번호가 없으면(옛 판 탭의 소식) 이 탭의 세대 + 1 이다.
+   */
+  forgetHeard(era: number | undefined): void
+  /** 이 탭의 사람은 그 사람이다 — **그 사람이 아닌 칸을 전부 지운다**(위 머리말 «다른 사람이 들어오면»). */
+  admit(userId: string): void
+  /** `forget`·`forgetHeard`가 돈 횟수. provider 가 설 때 읽어 `keep`에 싣는다. */
   readonly generation: number
 }
 
@@ -106,14 +166,24 @@ function open(source: StorageSource): Storage | null {
   }
 }
 
-/** 그 저장소의 시각 표지. 없거나 못 읽으면 `0`. */
-function forgottenAt(shared: Storage | null): number {
+/** 그 저장소의 세대 표지. 없거나 못 읽거나 세대의 모양(0 이상의 정수)이 아니면 `0`. */
+function signedOutEra(shared: Storage | null): number {
   if (shared === null) return 0
   try {
     const value = Number(shared.getItem(FORGOTTEN_KEY))
-    return Number.isFinite(value) ? value : 0
+    return Number.isSafeInteger(value) && value >= 0 ? value : 0
   } catch {
     return 0
+  }
+}
+
+/** 표지를 `era`까지 올린다 — **`max`로만**(위 머리말 «표지는 세대 번호다»). 못 적으면 남는 틈(`write-ledger.tsx`). */
+function raiseMarker(shared: Storage | null, era: number): void {
+  if (shared === null || signedOutEra(shared) >= era) return
+  try {
+    shared.setItem(FORGOTTEN_KEY, String(era))
+  } catch {
+    // 표지를 못 적으면 닫아 둔 탭의 사본이 남는다 — 남는 틈.
   }
 }
 
@@ -137,9 +207,9 @@ function draftKeys(storage: Storage): string[] {
   }
 }
 
-/** 로그아웃 표지보다 앞서 쓰인 사본을 지운다(위 머리말 «섞은 것»). */
-function sweep(storage: Storage | null, before: number): void {
-  if (storage === null || before === 0) return
+/** 로그아웃 표지보다 앞선 세대의 사본을 지운다(위 머리말 «섞은 것»). */
+function sweep(storage: Storage | null, era: number): void {
+  if (storage === null || era === 0) return
   for (const key of draftKeys(storage)) {
     let raw: string | null
     try {
@@ -148,13 +218,14 @@ function sweep(storage: Storage | null, before: number): void {
       continue
     }
     const stored = raw === null ? null : parse(raw)
-    if (stored !== null && stored.savedAt <= before) remove(storage, key)
+    if (stored !== null && stored.era < era) remove(storage, key)
   }
 }
 
 interface Stored {
   v: number
-  savedAt: number
+  /** 이 사본을 쓴 탭이 그때 알던 세대(위 머리말 «표지는 세대 번호다»). */
+  era: number
   projectId: string
   pageId: string
   slots: Record<string, unknown>
@@ -171,7 +242,7 @@ function parse(raw: string): Stored | null {
   if (typeof value !== 'object' || value === null) return null
   const record = value as Record<string, unknown>
   if (record.v !== VERSION) return null
-  if (typeof record.savedAt !== 'number' || typeof record.projectId !== 'string' || typeof record.pageId !== 'string') {
+  if (!Number.isSafeInteger(record.era) || typeof record.projectId !== 'string' || typeof record.pageId !== 'string') {
     return null
   }
   if (typeof record.slots !== 'object' || record.slots === null || Array.isArray(record.slots)) return null
@@ -181,11 +252,24 @@ function parse(raw: string): Stored | null {
 /**
  * 저장소를 연다. **여는 자리는 `main.tsx` 하나다** — 화면 테스트는 세우지 않거나 가짜를 끼운다(탭 사이의 통로
  * `session/tab-channel.tsx`와 같은 관례). `session`은 초안이 드는 곳, `shared`는 로그아웃 표지가 드는 곳이다.
- * `now`는 사본과 표지에 적는 시각이다(테스트가 준다).
  */
-export function openDraftStore(session: StorageSource, shared: StorageSource, now: () => number = Date.now): DraftStore {
+export function openDraftStore(session: StorageSource, shared: StorageSource): DraftStore {
   let generation = 0
-  sweep(open(session), forgottenAt(open(shared)))
+  /** 이 탭이 아는 세대 — 문서가 설 때의 표지에서 시작해 로그아웃마다 오른다(위 머리말 «표지는 세대 번호다»). */
+  let era = signedOutEra(open(shared))
+  /** 이 탭의 사람(`admit`). `null`이면 아직 모른다 — 그때는 사람으로 막지 않는다. */
+  let admitted: string | null = null
+  sweep(open(session), era)
+
+  /** 이 탭의 사본을 사람을 가리지 않고 전부 지우고, 세대를 `next`까지 올린다(`max`로만). */
+  const forgetAt = (next: number): void => {
+    generation += 1
+    admitted = null
+    const storage = open(session)
+    if (storage !== null) for (const key of draftKeys(storage)) remove(storage, key)
+    era = Math.max(era, next)
+    raiseMarker(open(shared), era)
+  }
 
   return {
     get generation() {
@@ -205,8 +289,8 @@ export function openDraftStore(session: StorageSource, shared: StorageSource, no
       if (raw === null) return {}
       const stored = parse(raw)
       if (stored === null) return {}
-      // **로그아웃보다 앞선 사본은 읽지 않고 지운다** — 닫아 둔 탭을 로그아웃 뒤에 다시 연 판이다(위 머리말).
-      if (stored.savedAt <= forgottenAt(open(shared))) {
+      // **로그아웃보다 앞선 세대의 사본은 읽지 않고 지운다** — 닫아 둔 탭을 로그아웃 뒤에 다시 연 판이다(위 머리말).
+      if (stored.era < Math.max(era, signedOutEra(open(shared)))) {
         remove(storage, key)
         return {}
       }
@@ -216,6 +300,7 @@ export function openDraftStore(session: StorageSource, shared: StorageSource, no
 
     keep(userId, visit, since) {
       if (since !== generation) return
+      if (admitted !== null && admitted !== userId) return
       const storage = open(session)
       if (storage === null) return
       const key = DRAFT_KEY_PREFIX + userId
@@ -225,7 +310,8 @@ export function openDraftStore(session: StorageSource, shared: StorageSource, no
       }
       const stored: Stored = {
         v: VERSION,
-        savedAt: now(),
+        // **이 탭의 세대다 — 표지를 다시 읽지 않는다**(위 머리말 «표지는 세대 번호다»).
+        era,
         projectId: visit.projectId,
         pageId: visit.pageId,
         slots: { ...visit.slots },
@@ -239,16 +325,22 @@ export function openDraftStore(session: StorageSource, shared: StorageSource, no
     },
 
     forget() {
-      generation += 1
+      // **올리는 것은 로그아웃한 탭뿐이다** — 표지와 이 탭의 세대 중 큰 것 + 1.
+      const next = Math.max(era, signedOutEra(open(shared))) + 1
+      forgetAt(next)
+      return next
+    },
+
+    forgetHeard(heard) {
+      forgetAt(heard ?? era + 1)
+    },
+
+    admit(userId) {
+      admitted = userId
       const storage = open(session)
-      if (storage !== null) for (const key of draftKeys(storage)) remove(storage, key)
-      const marker = open(shared)
-      if (marker === null) return
-      try {
-        marker.setItem(FORGOTTEN_KEY, String(now()))
-      } catch {
-        // 표지를 못 적으면 닫아 둔 탭의 사본이 남는다 — 남는 틈(`write-ledger.tsx`).
-      }
+      if (storage === null) return
+      const own = DRAFT_KEY_PREFIX + userId
+      for (const key of draftKeys(storage)) if (key !== own) remove(storage, key)
     },
   }
 }

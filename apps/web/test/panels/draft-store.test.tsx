@@ -15,7 +15,7 @@
  * 혼자 안 죽는 케이스는 **그 축의 주인**을 적었다.
  */
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient, WriteOptions } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
 import type { Comment, CommentCreated, PageDetail, ProjectDetail, SessionUser } from '../../src/api/types'
@@ -206,11 +206,14 @@ function server(): {
   commit: (index?: number) => void
   respond: (index?: number) => Promise<void>
   expire: () => void
+  edit: (id: string, body: string) => void
+  staleNext: () => void
 } {
   let description: string | null = '서버 값'
   let rows: Comment[] = []
   let next = 100
   let expired = false
+  let stale = false
   const byKey = new Map<string, Comment>()
   const keys: (string | undefined)[] = []
   const waiting: { commit: () => void; resolve: () => void }[] = []
@@ -228,12 +231,32 @@ function server(): {
     updatedAt: '2026-09-23T09:00:00.000Z',
   })
   const replay = (found: Comment): CommentCreated => ({ comment: found, marker: null, seq: HEAD_SEQ, markerOps: [] })
+  /**
+   * 같은 키에 다른 글이면 409 + 이슈 코드다(`apps/api`의 `replayOf` — 리뷰 R1). **행은 지금 값으로 견준다** — 그 사이
+   * 고쳐졌으면 처음 글을 다시 보내도 409 다.
+   */
+  const reused = (): ApiError =>
+    new ApiError(409, 'conflict', '같은 멱등 키로 다른 코멘트가 이미 달렸습니다', [
+      { path: 'idempotencyKey', message: '같은 멱등 키로 다른 코멘트가 이미 달렸습니다', code: 'idempotency-key-reused' },
+    ])
+  const current = (key: string): Comment | undefined => {
+    const found = byKey.get(key)
+    return found === undefined ? undefined : rows.find((one) => one.id === found.id)
+  }
   return {
     rows: () => rows,
     keys,
     description: () => description,
     expire: () => {
       expired = true
+    },
+    /** 같은 사람이 **다른 탭에서** 그 코멘트를 고친다(`PATCH` — 서버만 바뀐다). */
+    edit: (id, body) => {
+      rows = rows.map((one) => (one.id === id ? { ...one, body } : one))
+    },
+    /** 다음 게시가 낡음 409 를 받는다 — **이슈 코드가 없다**(`apps/api`의 `stale`). */
+    staleNext: () => {
+      stale = true
     },
     commit: (index = 0) => {
       const entry = waiting[index]
@@ -274,14 +297,20 @@ function server(): {
         options?: WriteOptions,
       ) => {
         keys.push(body.idempotencyKey)
-        const found = body.idempotencyKey === undefined ? undefined : byKey.get(body.idempotencyKey)
-        if (found !== undefined) return Promise.resolve(replay(found))
+        if (stale) {
+          stale = false
+          return Promise.reject(new ApiError(409, 'conflict', '페이지가 이미 변경되었습니다 (요청 baseSeq 1, 현재 2)'))
+        }
+        const found = body.idempotencyKey === undefined ? undefined : current(body.idempotencyKey)
+        if (found !== undefined) {
+          return found.body === body.body && found.nodeId === body.nodeId ? Promise.resolve(replay(found)) : Promise.reject(reused())
+        }
         return new Promise<CommentCreated>((resolve, reject) => {
           options?.signal?.addEventListener('abort', () => reject(new ApiError(0, 'internal', '서버에 연결하지 못했습니다')))
           let result: CommentCreated | undefined
           const commit = (): void => {
             if (result !== undefined) return
-            const first = body.idempotencyKey === undefined ? undefined : byKey.get(body.idempotencyKey)
+            const first = body.idempotencyKey === undefined ? undefined : current(body.idempotencyKey)
             if (first !== undefined) {
               result = replay(first)
               return
@@ -407,6 +436,63 @@ describe('새로고침 — 초안과 키를 살린다', () => {
 })
 
 /**
+ * ## 되살린 키 — 그 사이 그 코멘트가 고쳐졌으면 «달림»이다 (리뷰 R1)
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 웹이 이슈 코드를 안 본다(`reusedKey`가 늘 거짓 — 409 를 «안 달림»으로) | *"되살린 글을 달기 전에 …"* |
+ * | 웹이 이슈 코드 없이 409 면 «달림»(`reusedKey`가 `code === 'conflict'`만 본다) | *"이슈 코드가 없는 409(낡음)는 …"* |
+ *
+ * 혼자 죽는지는 보고서 (f)가 갖는다.
+ */
+describe('되살린 키 — 그 사이 고쳐졌으면 달림으로 끝낸다', () => {
+  it('되살린 글을 달기 전에 다른 탭이 그 코멘트를 고쳤다 — 409 를 «달림»으로: 상자 비움 · 알림 · 저장소에 없음 · 새로고침해도 안 돌아옴', async () => {
+    const backend = server()
+    let current = tab()
+    const options = await open(backend, current)
+    await toCommentTab()
+    type(commentBox(), '되살릴 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await waitFor(() => expect(backend.keys).toHaveLength(1))
+
+    current = await reload(current, options)
+    backend.commit(0)
+    // 같은 사람이 다른 탭에서 그 코멘트를 고친다(서버만 바뀐다).
+    backend.edit(backend.rows()[0]!.id, '다른 탭에서 고친 말')
+    await toCommentTab()
+    expect(commentBox().value).toBe('되살릴 말')
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+
+    await screen.findByText('이 글은 이미 달렸고, 그 뒤 다른 곳에서 고쳐졌습니다 — 목록의 글이 지금 글입니다')
+    expect(commentBox().value).toBe('')
+    expect(screen.queryByRole('alert')).toBeNull()
+    await screen.findByText('다른 탭에서 고친 말')
+    expect(current.session.draftKeys()).toEqual([])
+    expect(backend.keys[1]).toBe(backend.keys[0])
+    expect(backend.rows().map((row) => row.body)).toEqual(['다른 탭에서 고친 말'])
+
+    current = await reload(current, options)
+    await toCommentTab()
+    expect(commentBox().value).toBe('')
+  })
+
+  it('이슈 코드가 없는 409(낡음)는 «달림»이 아니다 — 초안과 키가 남고 실패를 말한다', async () => {
+    const backend = server()
+    const current = tab()
+    await open(backend, current)
+    await toCommentTab()
+    type(commentBox(), '낡음에 막힐 말')
+    backend.staleNext()
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('페이지가 이미 변경되었습니다')
+    expect(commentBox().value).toBe('낡음에 막힐 말')
+    expect(current.session.dump()).toContain('낡음에 막힐 말')
+    expect(backend.rows()).toEqual([])
+  })
+})
+
+/**
  * ## 세션 만료(401) — 같은 사람이 다시 들어오면 살린다
  *
  * | 변조 | 죽는 것 |
@@ -463,15 +549,16 @@ describe('세션 만료 — 같은 사람이 다시 들어오면 이어 쓴다',
  *
  * | 변조 | 죽는 것 |
  * |---|---|
- * | 로그아웃 단추(`signOut`)가 지우지 않는다 | 둘 — 첫 케이스와, 로그아웃 단추로 끝내는 *"로그아웃은 이 탭의 모든 …"*. **축의 주인은 첫 케이스** |
+ * | 로그아웃 단추(`signOut`)가 지우지 않는다(세대도 안 올린다) | 셋 — 첫 케이스와 «로그아웃 표지» 절의 *"로그아웃 소식은 올린 세대를 …"* · *"늦게 들은 탭이 …"*. **축의 주인은 첫 케이스** |
  * | 다른 탭의 로그아웃 소식이 지우지 않는다 | *"다른 탭의 로그아웃 — …"* **혼자** |
- * | 지우는 것이 **마지막 칸 하나**다(로그아웃하는 밥의 것만 — 앞 사람 칸이 남는다) | *"로그아웃은 이 탭의 모든 사람 칸을 지운다 …"* **혼자** |
- * | 문서가 설 때 표지보다 앞선 사본을 안 쓸어 낸다(`sweep`을 뗀다) | *"닫아 둔 탭 — …"* **혼자** |
+ * | 지우는 것이 **마지막 칸 하나**다(앞 사람 칸이 남는다) | *"로그아웃은 이 탭의 모든 사람 칸을 지운다 …"* **혼자** |
+ * | 문서가 설 때 표지보다 앞선 사본을 안 쓸어 낸다(`sweep`을 뗀다) | 둘 — *"닫아 둔 탭 — …"* · *"소식을 못 들은 탭이 …"*. **축의 주인은 *"닫아 둔 탭 — …"*** |
+ * | 사본에 이 탭의 세대 대신 **쓸 때 읽은 표지**를 싣는다(`keep`) | *"소식을 못 들은 탭이 …"* **혼자** |
  * | 읽을 때 표지를 안 본다(`recall`) | *"연 뒤에 다른 탭이 로그아웃해도 …"* **혼자** |
  * | 로그아웃 뒤에도 그 전에 선 provider 가 쓴다(`keep`이 `since`를 안 본다) | *"로그아웃 뒤에 커밋된 앞 화면은 …"* **혼자** |
  *
- * 앞 판의 셋째 케이스는 밥이 칸을 안 세워 **칸이 앨리스의 것 하나뿐**이었다 — «마지막 칸 하나만 지운다»가 앨리스의
- * 것을 지워 **0 사망**이었다. 밥도 치게 고쳤다.
+ * 셋째 케이스는 2026-09-23 에 화면 흐름(만료 → 밥 로그인 → 로그아웃)에서 사본 단위로 옮겼다 — 밥이 들어오는 순간
+ * 앨리스의 칸이 지워지므로(리뷰 (c)) 화면 흐름으로는 두 사람의 칸을 세울 수 없다.
  */
 describe('명시적 로그아웃 — 이 브라우저에 그 사람의 초안·키를 남기지 않는다', () => {
   it('로그아웃 단추 — 저장소에 초안 칸이 0 이고, 같은 사람이 다시 들어와도 빈 상자다', async () => {
@@ -511,58 +598,58 @@ describe('명시적 로그아웃 — 이 브라우저에 그 사람의 초안·�
     expect(current.session.draftKeys()).toEqual([])
   })
 
-  it('로그아웃은 이 탭의 모든 사람 칸을 지운다 — 만료로 남아 있던 앞 사람의 것도', async () => {
-    const backend = server()
-    const current = tab()
-    await open(backend, current)
-    toView()
-    await waitFor(() => expect(box().value).toBe('서버 값'))
-    type(box(), '앨리스가 만료 전에 친 설명')
-    await expireToLogin(backend)
-    await login(BOB)
-    await fromList()
-    toView()
-    await waitFor(() => expect(box().value).toBe('서버 값'))
-    type(box(), '밥이 친 설명')
-    // 두 사람의 칸이 다 있다 — 로그아웃하는 것은 밥이다.
-    expect(current.session.draftKeys().sort()).toEqual([`${DRAFT_KEY_PREFIX}${ALICE.id}`, `${DRAFT_KEY_PREFIX}${BOB.id}`])
+  it('로그아웃은 이 탭의 모든 사람 칸을 지운다 — 사람을 알기 전에 남아 있던 앞 사람의 것도', () => {
+    // 다른 사람이 들어오면 앞 사람의 칸은 그때 지워지므로(아래 «다른 사람» — 리뷰 (c)) 두 사람의 칸이 함께 있는 것은
+    // **이 탭의 사람을 알기 전**(`admit` 전 — 문서가 선 뒤 `me()`의 답 전)이거나 그 지우기가 던진 판이다.
+    const session = new MemoryStorage()
+    const store = openDraftStore(() => session, () => new MemoryStorage())
+    const visit = { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': '설명' } }
+    store.keep(ALICE.id, visit, store.generation)
+    store.keep(BOB.id, visit, store.generation)
+    expect(session.draftKeys().sort()).toEqual([`${DRAFT_KEY_PREFIX}${ALICE.id}`, `${DRAFT_KEY_PREFIX}${BOB.id}`])
 
-    await logout()
+    store.forget()
 
-    expect(current.session.draftKeys()).toEqual([])
+    expect(session.draftKeys()).toEqual([])
   })
 
   it('닫아 둔 탭 — 로그아웃 뒤에 다시 열면 그 탭의 사본을 열자마자 지운다', () => {
     // 탭 B 에 앨리스의 초안이 있고 B 를 닫았다 → 탭 A 에서 로그아웃 → B 를 다시 연다(Chrome 은 B 의
     // `sessionStorage`를 되살린다 — Chromium 151 의 값은 `write-ledger.tsx`의 입구 표). B 는 로그아웃 소식을 못 받았다.
     const shared = new MemoryStorage()
-    let clock = 1_000
-    const now = (): number => clock
     const bSession = new MemoryStorage()
-    const b = openDraftStore(() => bSession, () => shared, now)
+    const b = openDraftStore(() => bSession, () => shared)
     b.keep(ALICE.id, { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': 'B 의 설명' } }, b.generation)
-    clock = 2_000
-    const a = openDraftStore(() => new MemoryStorage(), () => shared, now)
-    a.forget()
-    clock = 3_000
+    const a = openDraftStore(() => new MemoryStorage(), () => shared)
+    expect(a.forget()).toBe(1)
 
     // **다시 열리는 것만으로 지운다** — 읽기를 기다리면 되살린 탭에 다른 사람이 들어온 판에서 아무도 안 읽는다.
-    openDraftStore(() => bSession, () => shared, now)
+    openDraftStore(() => bSession, () => shared)
     expect(bSession.draftKeys()).toEqual([])
-    expect(shared.getItem(FORGOTTEN_KEY)).toBe('2000')
+    expect(shared.getItem(FORGOTTEN_KEY)).toBe('1')
   })
 
   it('연 뒤에 다른 탭이 로그아웃해도(소식이 안 닿은 판) — 읽기 전에 표지를 본다', () => {
     const shared = new MemoryStorage()
-    let clock = 1_000
-    const now = (): number => clock
     const bSession = new MemoryStorage()
-    const b = openDraftStore(() => bSession, () => shared, now)
+    const b = openDraftStore(() => bSession, () => shared)
     b.keep(ALICE.id, { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': 'B 의 설명' } }, b.generation)
-    clock = 2_000
-    openDraftStore(() => new MemoryStorage(), () => shared, now).forget()
+    openDraftStore(() => new MemoryStorage(), () => shared).forget()
 
     expect(b.recall(ALICE.id, 'p-1', PAGE_ID)).toEqual({})
+    expect(bSession.draftKeys()).toEqual([])
+  })
+
+  it('소식을 못 들은 탭이 로그아웃 **뒤에** 쓴 사본도 — 그 탭의 옛 세대를 실어 지워진다', () => {
+    // 앞 판(시각)에서는 이 사본이 표지보다 늦은 시각이라 남았다(리뷰 (d)의 코드 읽기 — 얼린 탭). 이제 사본은 **쓴 탭이
+    // 아는 세대**를 싣는다 — 쓸 때 표지를 다시 읽지 않는다(`draft-store.tsx`의 «표지는 세대 번호다»).
+    const shared = new MemoryStorage()
+    const bSession = new MemoryStorage()
+    const b = openDraftStore(() => bSession, () => shared)
+    openDraftStore(() => new MemoryStorage(), () => shared).forget()
+    b.keep(ALICE.id, { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': '못 듣고 친 설명' } }, b.generation)
+
+    openDraftStore(() => bSession, () => shared)
     expect(bSession.draftKeys()).toEqual([])
   })
 
@@ -580,17 +667,104 @@ describe('명시적 로그아웃 — 이 브라우저에 그 사람의 초안·�
 })
 
 /**
- * ## 다른 사람 — 절대 안 보인다
+ * ## 로그아웃 표지는 세대 번호다 — 친 초안이 늦은 소식 · 시계에 사라지지 않는다 (리뷰 R2 · R3)
  *
  * | 변조 | 죽는 것 |
  * |---|---|
- * | 칸 키에서 사람을 뺀다(모두가 한 칸) | 다섯 — 이 절 둘과 로그아웃 절 셋(칸의 키를 이름으로 센다). **축의 주인은 이 절 첫 케이스** |
- * | 읽을 때 사람을 가리지 않고 **같은 페이지의 칸**을 찾아 읽는다 | 셋 — 이 절 둘과 *"로그아웃은 이 탭의 모든 …"*. 주인은 같다 |
+ * | 듣는 탭이 소식의 번호를 안 쓰고 스스로 올린다(`forgetHeard`가 `max(표지, 이 탭의 세대) + 1`) | *"늦게 들은 탭이 표지를 덮지 않는다 …"* |
+ * | 로그아웃 소식에 번호를 안 싣는다(`signOut`의 `announce`) | *"로그아웃 소식은 올린 세대를 싣는다"* |
+ * | 번호 없는 소식(옛 판)에 표지를 읽어 +1 한다 | *"옛 판 탭의 소식 …"* |
+ * | 표지 · 사본을 벽시계로 되돌린다(`forget`이 `Date.now()`를 적고 `keep`이 `Date.now()`를 싣는다) | *"로그아웃 뒤 시계가 뒤로 가도 …"* |
  *
- * **둘째 케이스(다른 탭)는 혼자 죽지 않는다** — 다른 탭의 소식은 문지기가 화면을 내리고(`routes/require-auth.tsx`) 밥이
- * 새로 연 방문이 저장소를 읽으므로 같은 탭과 같은 자리를 지난다. 이 입구가 브리프의 갈래라 남긴다.
+ * 혼자 죽는지는 보고서 (f)의 표가 갖는다(이 머리말은 변조와 그것을 재는 케이스만 적는다).
  */
-describe('다른 사람 — 앞 사람의 초안을 읽지도 쓰지도 않는다', () => {
+describe('로그아웃 표지 — 세대 번호', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('로그아웃 소식은 올린 세대를 싣는다 — 표지와 같은 번호', async () => {
+    const backend = server()
+    const hub = tabHub()
+    const current = tab()
+    await open(backend, current, { tabChannel: hub.channel })
+
+    await logout()
+
+    expect(hub.posted).toEqual([{ kind: 'signed-out', era: 1 }])
+    expect(current.shared.getItem(FORGOTTEN_KEY)).toBe('1')
+  })
+
+  it('늦게 들은 탭이 표지를 덮지 않는다 — 로그아웃 뒤 다시 들어와 친 초안이 새로고침을 넘는다', async () => {
+    // 리뷰 R2(Chrome · 수신 4000ms 지연 주입): 앞 판은 듣는 탭이 표지를 **들은 시각**으로 적어, 그 사이 같은 사람이
+    // 다시 들어와 친 사본이 «로그아웃보다 앞선 것»이 됐다 — 새로고침에 `""`.
+    const backend = server()
+    let current = tab()
+    // 다른 탭 B — 로그아웃 **전에** 떴고 소식을 늦게 듣는다.
+    const other = openDraftStore(() => new MemoryStorage(), () => current.shared)
+    const options = await open(backend, current)
+    await logout()
+    await login(ALICE)
+    await fromList()
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '다시 들어와 친 설명')
+
+    // B 가 이제야 로그아웃 소식(번호 1)을 듣는다.
+    other.forgetHeard(1)
+    current = await reload(current, options)
+    toView()
+
+    await waitFor(() => expect(box().value).toBe('다시 들어와 친 설명'))
+  })
+
+  it('옛 판 탭의 소식(번호 없음) — 들은 탭 둘이 같은 번호에 닿는다', () => {
+    const shared = new MemoryStorage()
+    const b = openDraftStore(() => new MemoryStorage(), () => shared)
+    const c = openDraftStore(() => new MemoryStorage(), () => shared)
+
+    b.forgetHeard(undefined)
+    c.forgetHeard(undefined)
+
+    // 각자 표지를 읽어 +1 하면 2 — 먼저 들은 B 가 다시 들어와 친 사본(세대 1)이 R2 처럼 지워진다.
+    expect(shared.getItem(FORGOTTEN_KEY)).toBe('1')
+  })
+
+  it('로그아웃 뒤 시계가 뒤로 가도(NTP 보정 · 수동 변경) — 다시 들어와 친 초안이 새로고침을 넘는다', async () => {
+    // 리뷰 R3(Chrome · 표지를 10분 앞당긴 흉내): 앞 판은 벽시계를 견줘 새로고침 뒤 `""`이었다.
+    const backend = server()
+    let current = tab()
+    const options = await open(backend, current)
+    await logout()
+    const real = Date.now.bind(Date)
+    vi.spyOn(Date, 'now').mockImplementation(() => real() - 600_000)
+    await login(ALICE)
+    await fromList()
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '시계가 뒤로 간 뒤 친 설명')
+
+    current = await reload(current, options)
+    toView()
+
+    await waitFor(() => expect(box().value).toBe('시계가 뒤로 간 뒤 친 설명'))
+  })
+})
+
+/**
+ * ## 다른 사람 — 절대 안 보이고, 들어오는 순간 앞 사람의 칸을 지운다 (리뷰 (c))
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 이 탭의 로그인(`confirm`)이 `admit`을 안 부른다 | *"같은 탭 — …"* |
+ * | 다른 탭의 로그인 소식이 `admit`을 안 부른다 | *"다른 탭이 밥으로 들어온다 …"* |
+ * | 마운트의 `me()`가 `admit`을 안 부른다 | *"새로 선 문서의 `me()`가 다른 사람 …"* |
+ * | `admit` 뒤에도 앞 사람의 칸에 쓴다(`keep`이 사람을 안 본다) | *"사람이 바뀐 뒤 앞 사람의 화면은 …"* |
+ * | `admit`이 아무것도 안 지운다 | 넷 — 이 절 전부. `admit`이 **자기 칸까지** 지우면 새로고침 · 세션 만료 · 로그아웃 표지 절의 여덟이 죽는다 |
+ *
+ * 앞 판의 이 절은 «앨리스의 칸은 그대로 남는다»를 단언했다 — 그것이 리뷰 (c)가 적은 결함이다. 혼자 죽는지는 보고서 (f)가 갖는다.
+ */
+describe('다른 사람 — 앞 사람의 초안을 읽지 않고, 들어오는 순간 지운다', () => {
   it('같은 탭 — 앨리스가 만료로 나간 뒤 밥이 들어와 같은 페이지: 빈 상자 · 앨리스의 칸을 안 읽는다', async () => {
     const backend = server()
     const current = tab()
@@ -602,14 +776,16 @@ describe('다른 사람 — 앞 사람의 초안을 읽지도 쓰지도 않는�
     current.session.reads.length = 0
 
     await login(BOB)
+    // **들어오는 순간 지운다** — 페이지를 열기 전이다.
+    expect(current.session.draftKeys()).toEqual([])
+    expect(current.session.dump()).not.toContain('앨리스의 설명')
     await fromList()
     toView()
 
     await waitFor(() => expect(box().value).toBe('서버 값'))
     expect(current.session.reads).not.toContain(`${DRAFT_KEY_PREFIX}${ALICE.id}`)
     type(box(), '밥의 설명')
-    expect(current.session.dump()).toContain('앨리스의 설명')
-    expect(current.session.draftKeys().sort()).toEqual([`${DRAFT_KEY_PREFIX}${ALICE.id}`, `${DRAFT_KEY_PREFIX}${BOB.id}`])
+    expect(current.session.draftKeys()).toEqual([`${DRAFT_KEY_PREFIX}${BOB.id}`])
   })
 
   it('다른 탭이 밥으로 들어온다 — 목록으로 가고, 밥이 그 페이지를 열어도 앨리스의 글이 없다', async () => {
@@ -624,11 +800,45 @@ describe('다른 사람 — 앞 사람의 초안을 읽지도 쓰지도 않는�
 
     await hub.fromOtherTab({ kind: 'signed-in', user: BOB })
     await screen.findByRole('link', { name: PROJECT_NAME })
+    // 소식을 들은 순간 앨리스의 칸이 없다 — 앨리스의 화면이 내려가며 한 번 더 커밋돼도 다시 서지 않는다.
+    expect(current.session.draftKeys()).toEqual([])
     await fromList()
     toView()
 
     await waitFor(() => expect(box().value).toBe('서버 값'))
     expect(current.session.reads).not.toContain(`${DRAFT_KEY_PREFIX}${ALICE.id}`)
+  })
+
+  it('새로 선 문서의 `me()`가 다른 사람 — 앞 사람의 칸을 지운다(닫아 둔 탭을 다시 열었더니 쿠키가 밥)', async () => {
+    const backend = server()
+    const current = tab()
+    current.store.keep(
+      ALICE.id,
+      { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': '앨리스의 설명' } },
+      current.store.generation,
+    )
+    expect(current.session.draftKeys()).toEqual([`${DRAFT_KEY_PREFIX}${ALICE.id}`])
+
+    await open(backend, current, { apiOverrides: { ...backend.overrides, me: async () => BOB } })
+    toView()
+
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    expect(current.session.draftKeys()).toEqual([])
+  })
+
+  it('사람이 바뀐 뒤 앞 사람의 화면은 앞 사람의 칸에 못 쓴다 — 소식과 화면이 내려가는 렌더 사이', () => {
+    const session = new MemoryStorage()
+    const store = openDraftStore(() => session, () => new MemoryStorage())
+    const visit = { projectId: 'p-1', pageId: PAGE_ID, slots: { 'page-description/draft': '앨리스의 늦은 글자' } }
+    store.admit(ALICE.id)
+    store.keep(ALICE.id, visit, store.generation)
+    expect(session.draftKeys()).toEqual([`${DRAFT_KEY_PREFIX}${ALICE.id}`])
+
+    store.admit(BOB.id)
+    expect(session.draftKeys()).toEqual([])
+    store.keep(ALICE.id, visit, store.generation)
+
+    expect(session.draftKeys()).toEqual([])
   })
 })
 
@@ -756,7 +966,7 @@ describe('저장소를 못 쓴다 — 앱은 이 파일 앞처럼 돈다', () =>
     cleanup()
     const future = JSON.stringify({
       v: 999,
-      savedAt: Date.now(),
+      era: 0,
       projectId: 'p-1',
       pageId: PAGE_ID,
       slots: { 'page-description/draft': '모르는 판의 글' },

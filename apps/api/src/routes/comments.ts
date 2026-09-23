@@ -315,6 +315,16 @@ const UpdateCommentBody = z.strictObject({ body: Body })
 
 /** API 계약이 노출하는 필드만 담는다 — `pageId`는 응답에 싣지 않는다(경로에 이미 있다). */
 /**
+ * **이 409 는 이슈 코드로 가른다**(2026-09-23 — 리뷰 R1). 게시가 내는 409 는 셋이다 — 같은 키 · 다른 글(여기) ·
+ * 낡음(`stale`) · 적용 불가(`http/edit-outcome.ts`). 셋 다 `code: 'conflict'`라 문장 말고는 가를 값이 없었다.
+ * 웹은 이 409 를 **«그 키의 게시는 이미 달렸고 그 뒤 고쳐졌다»**로 읽는다 — 웹은 초안을 고치면 새 키를 지으므로,
+ * 같은 키에 다른 글이 오는 길은 앞 행이 그 사이 **고쳐진** 판뿐이다(`apps/web/src/panels/comment-panel.tsx`의
+ * `reusedKey`). 상태 · `code` · 문장은 그대로다 — 계약의 모양이 안 바뀐다(`issues`는 이미 선택 필드다).
+ */
+export const REUSED_KEY = 'idempotency-key-reused'
+const REUSED_KEY_MESSAGE = '같은 멱등 키로 다른 코멘트가 이미 달렸습니다'
+
+/**
  * **같은 키로 이미 달린 게시에 답한다 — 앞 행을 그대로 돌려준다.** 새 행도, 새 번호도,
  * revision 도 없다(번호가 두 번 오르면 안 된다). 그래서:
  *
@@ -336,7 +346,7 @@ function replayOf(
   headSeq: number,
 ) {
   if (existing.nodeId !== request.nodeId || existing.body !== request.body) {
-    throw conflict('같은 멱등 키로 다른 코멘트가 이미 달렸습니다')
+    throw conflict(REUSED_KEY_MESSAGE, [{ path: 'idempotencyKey', message: REUSED_KEY_MESSAGE, code: REUSED_KEY }])
   }
   const marker = nodeAt(document, existing.nodeId)?.marker
   return {
