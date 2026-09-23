@@ -94,8 +94,8 @@
  * 쓰던 글이 그대로다. 그리고 그 판의 *"고른 노드의 무리에 붙는 표시가 함께 옮겨 가므로 화면이
  * 그것을 말한다"*는 **새 대상에 코멘트가 이미 있을 때만** 참이었다 — 없으면 표시가 사라질 뿐
  * 새 대상을 가리키지 않는다(리뷰 실측: `["1 n-tree"]` → `[]`). 9차에서는 상자의 글이 그 노드의
- * 것으로 바뀌어 대상이 바뀐 것이 보인다. **폼에 대상 이름을 적지는 않았다** — 뷰 모드에는
- * 아웃라인이 없어 대상이 아예 안 보이는 것(앞 판부터)과 함께 보고로 올린다.
+ * 것으로 바뀌어 대상이 바뀐 것이 보인다. ~~폼에 대상 이름을 적지는 않았다~~ — **2026-09-23 이월 T 가 적는다**:
+ * 폼이 «달 곳: 번호 타입 (id)»를 말한다(`targetOf` — 뷰 모드에는 아웃라인이 없어 대상이 아예 안 보이던 것도 함께).
  *
  * **페이지가 바뀌면 노드마다의 초안도 한 칸째 버린다** — 노드 id 는 그 페이지 안에서만 뜻이
  * 있다. 7차 F1과 이 규칙이 **같은 자리에서 같은 값으로** 도는 것은 그대로다(`DRAFTS`가 방문의
@@ -150,6 +150,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import { ApiError, type ApiClient } from '../api/client'
 import type { Comment, CommentCreated } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
+import { nodeTypeLabel } from './node-shape'
 import { useRealtimeSetup } from '../realtime/context'
 import { useSessionUser } from '../session/session-context'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -165,6 +166,8 @@ const NO_PAGE = '페이지를 열면 코멘트가 보입니다'
 const NO_COMMENTS = '아직 코멘트가 없습니다'
 /** 노드를 고르지 않아 새 코멘트를 달 수 없을 때. */
 const NO_TARGET = '코멘트를 달 노드를 캔버스나 구조 트리에서 고르세요'
+/** 새 코멘트가 달릴 노드의 머리(`targetOf`). */
+const TARGET = '달 곳'
 /** 조회가 이유 없이 실패했을 때. */
 const LOAD_FAILED = '코멘트를 불러오지 못했습니다'
 /** 쓰기 뒤의 목록 다시 받기가 도는 중(`refresh`). 쓰기는 끝났고 잠금은 풀렸다 — 표시만 아직이다. */
@@ -515,6 +518,31 @@ function rank(group: Group): number {
   if (group.present === 'unknown') return 1
   if (group.present === 'no') return 2
   return group.marker === null ? 1 : 0
+}
+
+/**
+ * **새 코멘트가 달릴 노드를 폼이 말한다**(이월 T · 2026-09-23). 앞 판의 폼은 «새 코멘트» 상자뿐이라 어느 노드에 다는지를
+ * 말하지 않았다 — 편집 모드에서는 캔버스의 아웃라인이 그것을 보였지만, **뷰 모드에는 아웃라인이 없고**(`canvas.tsx`의
+ * `outlinedNodeId`) 캔버스를 눌러도 선택이 안 바뀐다(재라 #6 — 그쪽 판정). Chrome(앞 판): 편집 모드에서 본문을 고르고
+ * 뷰 모드로 가 제목을 누른 뒤 달면 **본문에** 달렸고(DB `n_ga_body`), 폼은 어느 쪽인지 한 번도 말하지 않았다.
+ *
+ * **값은 초안의 열쇠와 같은 하나다** — 고른 노드(`selectedNodeId`). 상자가 보이는 초안(`DRAFTS`의 키)도, 달 곳(`submit`)도
+ * 그것이다(9차 N-C 의 «노드마다»). 다른 자리(아웃라인 · 호버)에서 읽으면 말하는 대상과 달리는 대상이 갈린다.
+ *
+ * **이름은 화면이 이미 쓰는 둘이다** — 번호와 id 는 아래 목록의 무리 머리가(`groupComments` — 번호가 없으면 `–`),
+ * 타입은 구조 트리가 쓰는 것이다(`nodeTypeLabel`). 새 이름 체계를 짓지 않았다. 문서를 못 읽었거나 그 노드가 문서에
+ * 없으면 id 만 말한다 — 모르는 번호·타입을 지어내지 않는다(리뷰 F 와 같은 결).
+ */
+function targetOf(document: PageDocument | null, nodeId: string): string {
+  if (document !== null) {
+    for (const visit of walkSafely(document.root)) {
+      if (visit.node.id !== nodeId) continue
+      const marker = visit.node.marker
+      const numbered = typeof marker === 'number' && Number.isInteger(marker) ? String(marker) : '–'
+      return `${TARGET}: ${numbered} ${nodeTypeLabel(visit.node)} (${nodeId})`
+    }
+  }
+  return `${TARGET}: ${nodeId}`
 }
 
 export function CommentPanel(props: { projectId: string; pageId: string | undefined }): ReactElement {
@@ -911,9 +939,16 @@ export function CommentPanel(props: { projectId: string; pageId: string | undefi
         <label className="wb-shell-comment-label" htmlFor="wb-comment-draft">
           새 코멘트
         </label>
+        {/* **어느 노드에 다는가** — 두 모드 다(`targetOf`). 상자의 이름(«새 코멘트»)은 그대로 두고 설명으로 잇는다. */}
+        {selectedNodeId !== null && (
+          <p id="wb-comment-target" className="wb-shell-comment-target">
+            {targetOf(document, selectedNodeId)}
+          </p>
+        )}
         <textarea
           id="wb-comment-draft"
           className="wb-shell-comment-input"
+          {...(selectedNodeId === null ? {} : { 'aria-describedby': 'wb-comment-target' })}
           value={draft}
           rows={3}
           // **고른 노드가 없으면 아예 쓸 수 없다.** 눌러 봐야 실패할 자리를 열어 두지
