@@ -67,41 +67,18 @@
  * **빈 문자열을 보내지 않는다.** 서버는 `''`를 `''`로 저장하고 `null`과 가른다(실측 —
  * `api/client.ts`의 표). 화면에서 둘은 똑같이 보이므로, 눈에 안 보이는 차이를 만들지 않는다.
  *
- * ## 권한을 화면이 판정하지 않는다
+ * ## viewer 에게는 읽기 전용이다 (이월 M · 2026-09-23)
  *
- * viewer가 보내면 서버가 403과 문장을 준다(`permission-matrix.test.ts`의 *"페이지 수정"*
- * 행이 그 축을 소유한다). **화면이 역할을 다시 보지 않는 것은 D5다** — `useEditCommit`을
- * 지나는 구조 편집도 역할을 안 보고 서버 문장을 그대로 옮긴다. 규칙을 두 곳에 두면 어긋난다.
+ * **앞 판은 viewer 에게도 편집기를 열어 두었다** — 누르면 서버가 403 과 «이 작업을 수행할 권한이 없습니다»를 냈다.
+ * 그 판의 근거는 *"여기만 막으면 편집 표면의 첫 역할 게이트가 되고, 같은 물음에 답하는 자리가 둘이 된다"*였다.
+ * **사용자가 «숨긴다»로 판정했고**(2026-09-22 — 장부 §3.19 «판정 — 이월 다섯»), 설계 §9 가 이미 그렇게 적는다.
  *
- * ### viewer에게 «열린 편집기»를 주는 것 — **그대로 둔다**(P10 리뷰 F7)
+ * **역할을 아는 자리는 여전히 하나다** — `projects/project-actions.ts`의 `projectAbilities`에 `editPageMeta`를
+ * 더했고, 셸(`routes/editor.tsx`)이 그것을 이 패널(`canEdit`)과 메뉴 트리의 이름 변경에 함께 내린다. 이 패널은
+ * 역할을 읽지 않는다(`test/role-access.test.ts`가 센다). **서버의 403 은 그대로다** — 화면이 숨기는 것은 입구이고,
+ * 막는 것은 여전히 `projectGuard('editor')`다.
  *
- * 리뷰가 물었다: 뷰 모드는 viewer가 가장 자주 오는 자리인데, 칠 수 있게 해 두고 누르면
- * 막는 것이 맞는가. **재고 «그대로 둔다»로 정했다. 근거는 값이다:**
- *
- * | 물음 | 잰 것 |
- * |---|---|
- * | 화면이 역할을 아는가 | `test/role-access.test.ts`가 `.role`을 읽는 자리를 **네 파일로 못박는다**. `panels/`는 없다 |
- * | 페이지 편집을 여는 판정이 있는가 | **없다.** `projectAbilities`의 필드 여섯 중 페이지 **내용**을 고치는 것이 하나도 없다 |
- * | 구조 편집이 역할을 보는가 | **안 본다.** `structureAbilities(document, nodeId, lock)`의 인자에 역할이 없다 |
- * | 그래서 viewer가 편집 모드를 열면 | **페이지를 바꾸는 버튼이 전부 활성이다**(실측 — `이름 변경`·`삭제`·`아래로`·`안에 추가`·`패턴 넣기`·`프리셋`·`페이지 JSON 가져오기`. 역할로 꺼지는 것이 하나도 없다) |
- * | 모드 토글이 역할을 보는가 | **안 본다.** viewer가 «편집 모드»를 누르는 것을 막는 것이 없다 |
- *
- * **그러므로 여기만 읽기 전용으로 만들면 그것이 편집 표면의 첫 역할 게이트가 된다.**
- * `ProjectAbilities`에 일곱째 필드를 더해야 하는데 그 소비자가 이 패널 하나이고, **같은
- * 물음(«viewer가 페이지를 고칠 수 있는가»)에 답하는 자리가 그 필드와 서버의
- * `projectGuard('editor')` 둘이 된다** — §7.2의 *"판정이 두 벌이면 갈린다"* 그대로다.
- * 바로 옆 버튼 일곱이 그 필드를 안 보는 채로 열려 있으니 **갈리는 것이 가정이 아니라
- * 오늘의 상태다.**
- *
- * **«뷰 모드가 viewer의 자리»는 관례이지 강제가 아니다**(위 표의 마지막 줄). 뷰 모드만
- * 잠그면 viewer를 지키는 것이 아니라 **두 모드가 서로 다른 말을 하게** 된다.
- *
- * **그대로 두어 잃는 것은 잰 만큼이다** — 누르면 서버 문장 «이 작업을 수행할 권한이
- * 없습니다»가 `role="alert"`로 서고 **친 글은 그대로 남는다**(케이스 *"저장이 실패하면 …"*
- * 이 그 둘을 잠근다). 다시 시도할 수 있고 잃는 글자가 없다.
- *
- * **바꿀 값이 있다면 이 자리가 아니다** — 편집 표면 전체(또는 모드 토글)를 역할로 가르는
- * 것이 그 슬라이스이고, 게이트가 하나면 두 벌이 안 된다. **이월로 올린다.**
+ * viewer 가 보는 것: 제목과 설명의 **글**(비었으면 «아직 설명이 없습니다») — 상자 · 단추 · 글자 수가 없다.
  *
  * ## 왜 스스로 조회하나
  *
@@ -215,33 +192,28 @@
  *    잠그고 통지하고 401 로 튕겼다(리뷰 1-1). 이제 세션이 끝나면 장부가 그 세션의 쓰기를 끊고 비운다.
  *    돌아온 상자는 **열려** 있다 — 그 판의 값과 대가는 `write-ledger.tsx`의 «세션을 넘지 않는다».
  *
- * ## 남의 저장을 조용히 덮는다 — **고치지 않는다. 이월한다** (리뷰 N3)
+ * ## 남의 저장을 조용히 덮지 않는다 — **고치기 전 값으로 판정한다** (이월 P = AB · 2026-09-23)
  *
- * **이 화면에는 페이지 메타(설명·제목)의 충돌 모델이 없다.** 서버의 `UpdatePageBody`는
- * `{ title?, description?, menuNodeId?, sortOrder? }`뿐이고 버전도 기대값도 없다 — 나중에
- * 저장한 쪽이 이긴다. 화면도 남이 설명을 저장한 것을 알리지 않는다.
+ * **앞 판은 나중에 저장한 쪽이 이겼다**(리뷰 N3). 내가 초안을 치는 동안 남이 같은 페이지의 설명을 저장하면 내
+ * 상자는 내 초안을 계속 보였고, 누르면 **남의 설명을 경고 없이 덮었다.** 이월 X 뒤로는 새로고침도 남의 새 값을
+ * 보여 주지 않았다(되살린 초안이 가렸다 — Chrome: 앨리스가 초안을 친 채 밥이 저장 → 앨리스 새로고침 → 누르면
+ * DB `"앨리스의 초안"`).
  *
- * **그래서 사용자가 겪는 것:** 내가 초안을 치는 동안 남이 같은 페이지의 설명을 저장하면, 내
- * 상자는 **내 초안을 계속 보이고** 저장 버튼이 열려 있다. 누르면 **남의 설명을 경고 없이
- * 덮는다.** 탭을 오가 다시 조회해도 초안이 그 값을 가린다(리뷰 실측 — Chrome·jsdom).
- * 7차 전에는 탭 왕복이 **우연히** 남의 새 값을 보여 줬다 — 내 초안을 잃는 대가로. 덮는 것
- * 자체는 탭을 안 오가도 7차 전부터 그랬다.
+ * **이제 초안이 제 바탕을 든다** — 첫 글자를 친 순간의 서버 값이다(`DRAFT`의 `base`). 저장은 그것을 함께 보내고
+ * (`base.description`), 서버는 행 잠금 안에서 지금 값과 견줘 다르면 409 다(계약: `apps/api/src/routes/pages.ts`).
+ * **바탕은 초안과 한 칸이다** — 초안이 사는 곳(칸 · 탭의 저장소)에 함께 살고 함께 버려진다. 그래서 새로고침으로
+ * 되살린 초안도 제 바탕을 들고, 그 사이 남이 저장했으면 409 로 안다(이월 X 의 (f)).
  *
- * **이월 Q·R 뒤에 같은 결정이 한 번 더 왔다** — 응답 없는 저장의 «판정 뒤 늦은 커밋»을 닫는 길도
- * 설명 `PATCH`의 기대값이었고, 그것도 **이 항목과 함께 이월했다**(`write-ledger.tsx`의 «판정 뒤의
- * 늦은 커밋»). 코멘트는 충돌 모델이 아닌 멱등 키로 닫았다.
+ * **판정은 `api/page-meta.ts`의 `judgeMeta` 하나다** — 서버 값이 «내 값»이면 원하던 상태, «바탕»이면 안 닿음,
+ * 그 밖이면 **다른 사람이 바꿨다.** 409 에 실린 지금 값도, 시간 초과 뒤 다시 읽은 값(«모름» — 아래 `verify`)도
+ * 이 함수를 지난다. 다른 사람이 바꿨으면 `panels/meta-conflict.tsx`가 그 사람의 값을 보이고 고르게 한다:
+ * **«내 글로 덮기»**(그 값을 새 바탕으로 다시 보낸다) · **«내 글 버리기»**(그 값을 받는다).
  *
- * **이월 X(2026-09-23) 뒤로 초안이 새로고침·세션 만료를 넘는다**(`panel-drafts.tsx` 머리말 4) — 이 창이 문서
- * 하나보다 길어진다. 새 부류는 아니다(탭 왕복에도 이미 초안이 남의 값을 가렸다). **달라진 것은 하나다 — 새로고침이
- * 더는 남의 새 값을 보여 주지 않는다.** 앞 판에서 새로고침은 초안을 잃는 대가로 서버의 지금 값을 보였는데, 이제는
- * 되살린 초안이 그것을 가린다. Chrome: 앨리스가 초안을 친 채 밥이 설명을 저장(200) → 앨리스가 새로고침 → 상자
- * `"앨리스의 초안"` · 저장 단추 열림 · 통지 없음 → 누르면 DB `"앨리스의 초안"`(밥의 것을 덮음). 닫는 길은 그대로 이
- * 항목이다(기대값 → 409 → «다른 사람이 바꿨습니다»).
+ * **충돌 통지는 치는 동안에도, 탭을 다녀와도 남는다** — 다른 통지와 다르다. «방금 저장했다»는 사건이지만 «남이
+ * 바꿨다»는 초안과 서버 사이의 **지금 상태**라, 초안이 그대로인 한 참이다. 페이지를 옮기면 F1 대로 버린다.
  *
- * **여기서만 충돌 감지를 넣지 않는 이유:** 그것이 이 앱의 **첫 충돌 모델**이 된다. 제목도
- * 같은 경로(`PATCH .../pages/:id`)로 덮이는데 거기엔 없고, 제대로 하려면 서버 계약(기대값)을
- * 바꿔야 한다. 한 자리에서 먼저 지으면 두 자리가 다른 규칙을 갖는다 — 위 «viewer에게 …»가
- * 역할 게이트를 한 자리에서 먼저 만들지 않은 것과 같은 이유다. **이월로 올린다.**
+ * **제목도 같은 모델이다** — 메뉴 트리의 이름 변경(`tree/use-tree-commands.tsx`)이 같은 판정 · 같은 화면을 지난다.
+ * **다른 창에 실시간으로 알리지는 않는다** — 그 라우트는 방송하지 않는다. 남이 바꾼 것은 저장할 때 안다.
  *
  * ## 페이지가 바뀌면 초안도 통지도 버린다 — **한 자리에서**
  *
@@ -286,6 +258,8 @@ import { useEffect, type ReactElement } from 'react'
 import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
+import { judgeMeta, metaConflict } from '../api/page-meta'
+import { MetaConflict } from './meta-conflict'
 import { lockSlot, slotsOf, usePanelLock, usePanelSlot, type PanelLock } from './panel-drafts'
 import { PendingNotice } from './pending-notice'
 
@@ -320,6 +294,12 @@ const NOT_SAVED = '응답이 없어 서버를 다시 읽었더니 이 설명은 
  * 달랐다(`dirty`), 같아진 것은 그 뒤다.
  */
 const MATCHED = '응답이 없어 서버를 다시 읽었더니 서버의 설명이 이 글과 같습니다'
+/**
+ * 409 에 실린 지금 값이 보낸 글과 **같다**(`judgeMeta`의 `'mine'`). 바탕은 달랐다 — 누가(내 앞 저장이 늦게
+ * 커밋됐거나 남이) 같은 글을 먼저 저장했다. 원하던 상태라 초안을 비운다. `MATCHED`와 같은 까닭으로 «저장했습니다»라고
+ * 하지 않는다.
+ */
+const SAME = '서버의 설명이 이미 이 글과 같습니다'
 
 type LoadState =
   | { status: 'loading' }
@@ -340,7 +320,14 @@ type SaveState =
   | { status: 'saved' }
   /** 다시 읽기로 판정했더니 서버 값이 같다 — «저장했다»가 아니다(`MATCHED`). */
   | { status: 'matched' }
+  /** 409 의 지금 값이 보낸 글과 같다(`SAME`). */
+  | { status: 'same' }
   | { status: 'failed'; failure: Failure }
+  /**
+   * **다른 사람이 바꿨다**(`judgeMeta`의 `'other'`) — 그 사람의 값을 들고 덮을지 버릴지 묻는다(머리말 «남의 저장을
+   * 조용히 덮지 않는다»). **다른 통지와 달리 치는 동안 · 탭을 다녀와도 남는다**(아래 `keepConflict`).
+   */
+  | { status: 'conflict'; theirs: string | null }
 
 /**
  * **이 탭의 칸 넷.** 넷 다 `panel-drafts.tsx`의 칸이라 탭·모드를 오가도 산다 — 이 패널이
@@ -351,14 +338,34 @@ type SaveState =
 /** 조회 값. 저장의 응답이 **여기를** 갈아 끼운다 — 그래서 조회 값도 마운트 밖에 든다. */
 const LOAD = slot<LoadState>('page-description/load', { status: 'loading' })
 /**
+ * 초안 — 친 글(`text`)과 **그 글의 바탕**(`base` — 첫 글자를 친 순간의 서버 값). 머리말 «남의 저장을 조용히
+ * 덮지 않는다».
+ *
+ * **둘이 한 칸인 것이 요점이다** — 바탕은 초안과 함께 살고(칸 · 탭의 저장소) 함께 버려진다(F1 · 로그아웃 · 저장
+ * 성공). 따로 들면 한쪽만 버려지는 날, 바탕 없는 초안(→ 조용히 덮음)이나 남의 초안의 바탕이 생긴다.
+ */
+interface Draft {
+  text: string
+  base: string | null
+}
+
+/**
  * **초안은 «아직 안 쳤다»를 `null`로 든다.** 빈 문자열로 초기화하면 조회가 끝나기 전의
  * 빈 상자와 *"사용자가 지운 상자"*가 같은 값이 되어, 값이 도착할 때 지운 것을 되살린다.
  */
-const DRAFT = slot<string | null>('page-description/draft', null, {
+const DRAFT = slot<Draft | null>('page-description/draft', null, {
   // **저장소에 비춘다**(`panel-drafts.tsx`의 머리말 4) — 새로고침·세션 만료를 넘는다. 안 쳤으면(`null`)
-  // 비출 것이 없다.
+  // 비출 것이 없다. **바탕도 함께 비춘다** — 되살린 초안이 제 바탕을 들어야 새로고침 뒤의 충돌을 잡는다.
   save: (draft) => draft ?? undefined,
-  load: (raw) => (typeof raw === 'string' ? raw : undefined),
+  // **앞 판의 사본(글만 든 문자열)은 버린다** — 바탕을 모르는 초안을 되살리면 저장이 바탕 없이(= 조용히 덮는
+  // 쪽으로) 가거나 지금 서버 값을 바탕으로 지어내야 한다. 둘 다 이 판이 막으려는 것이다. 잃는 것은 배포 직전에
+  // 쳐 둔 초안 하나다(이월 X 가 같은 날 들어왔다).
+  load: (raw) => {
+    if (typeof raw !== 'object' || raw === null) return undefined
+    const { text, base } = raw as Record<string, unknown>
+    if (typeof text !== 'string' || !(base === null || typeof base === 'string')) return undefined
+    return { text, base }
+  },
 })
 /** 마지막 저장의 통지. */
 const SAVE = slot<SaveState>('page-description/save', { status: 'idle' })
@@ -371,6 +378,11 @@ const SAVE = slot<SaveState>('page-description/save', { status: 'idle' })
 const SAVING = lockSlot('page-description/saving')
 
 const IDLE: SaveState = { status: 'idle' }
+
+/** 통지를 지우되 **충돌은 남긴다** — 충돌은 사건이 아니라 초안과 서버 사이의 지금 상태다(`SaveState`의 `conflict`). */
+function keepConflict(prev: SaveState): SaveState {
+  return prev.status === 'conflict' ? prev : IDLE
+}
 
 /**
  * **그 페이지의 것 넷을 함께 낸다** — 조회(`state`)·초안(`draft`)·통지(`save`)·잠금(`saving`).
@@ -390,10 +402,10 @@ function usePageDescription(
 ): {
   state: LoadState
   /** 아직 아무것도 안 쳤으면 `null`. 아래 컴포넌트의 `value`가 그것을 푼다. */
-  draft: string | null
-  setDraft: (draft: string | null) => void
+  draft: Draft | null
+  setDraft: (draft: Draft | null | ((prev: Draft | null) => Draft | null)) => void
   save: SaveState
-  setSave: (save: SaveState) => void
+  setSave: (save: SaveState | ((prev: SaveState) => SaveState)) => void
   /** 저장이 나가 있다 — 잠금. 장부에 든다(`write-ledger.tsx`). */
   saving: PanelLock
   replace: (description: string | null) => void
@@ -413,8 +425,10 @@ function usePageDescription(
   //
   // **의존이 비어 있는 것이 요점이다.** 페이지가 바뀔 때 통지를 버리는 것은 provider가
   // 한다(방문의 칸 셋을 함께) — 여기서 `pageId`에도 돌면 같은 일을 두 자리가 하게 된다.
+  //
+  // **충돌은 남긴다**(`keepConflict`) — 탭을 다녀와도 초안이 그대로면 «남이 바꿨다»도 그대로 참이다.
   useEffect(() => {
-    setSave(IDLE)
+    setSave(keepConflict)
     // 마운트될 때 한 번. 위 주석이 그 근거다.
   }, [])
 
@@ -455,35 +469,66 @@ function usePageDescription(
   return { state, draft, setDraft, save, setSave, saving, replace }
 }
 
-/** 뷰 모드 «페이지 설명» 탭의 본문. 읽고 고친다(위 머리말). */
+/** 뷰 모드 «페이지 설명» 탭의 본문. 읽고 고친다(위 머리말). viewer 에게는 읽기 전용이다(`canEdit`). */
 export function PageDescriptionPanel(props: {
   projectId: string
   pageId: string | undefined
+  /**
+   * 설명을 고칠 수 있는가 — `projectAbilities(role).editPageMeta`(셸이 내린다). **이 패널은 역할을 모른다**
+   * (머리말 «viewer 에게는 읽기 전용이다»). 안 주면 고칠 수 있다 — 셸 밖에서 이 패널을 세우는 케이스들의 값이다.
+   */
+  canEdit?: boolean
 }): ReactElement {
   const api = useApi()
   const { projectId, pageId } = props
+  const canEdit = props.canEdit ?? true
   const { state, draft, setDraft, save, setSave, saving, replace } = usePageDescription(projectId, pageId)
 
   const server = state.status === 'ready' ? (state.description ?? '') : ''
-  const value = draft ?? server
+  const value = draft?.text ?? server
 
-  async function submit(): Promise<void> {
-    if (pageId === undefined || saving.locked) return
+  /**
+   * 초안을 보낸다. `base`는 그 초안의 바탕이다 — **«내 글로 덮기»만 다른 바탕을 준다**(충돌 화면이 보인 그 사람의
+   * 값). 그때는 초안의 바탕도 그 값으로 옮긴다 — 덮기가 «모름»에 빠진 채 새로고침해도 되살린 초안이 새 바탕을 든다.
+   */
+  async function submit(base: string | null): Promise<void> {
+    if (pageId === undefined || saving.locked || draft === null) return
     setSave(IDLE)
     // 빈 칸은 "설명을 지운다"(`null`)이고 그 밖은 친 그대로다(위 머리말).
-    const next = value === '' ? null : value
+    const next = draft.text === '' ? null : draft.text
+    if (base !== draft.base) setDraft({ text: draft.text, base })
     const openPageId = pageId
+
+    /**
+     * 서버 값 하나를 판정해 칸에 적는다 — **409 의 지금 값과 다시 읽은 값이 같은 길을 지난다**(`judgeMeta`).
+     * `asked`는 그 값이 어디서 왔는가다: 다시 읽은 값이면(`'verified'`) «모름»의 판정이고, 409 면(`'rejected'`)
+     * 서버가 바탕과 다르다고 이미 판정한 값이다.
+     */
+    function land(current: string | null, asked: 'verified' | 'rejected'): void {
+      replace(current)
+      const verdict = judgeMeta(current, next, base)
+      if (verdict === 'mine') {
+        setDraft(null)
+        setSave({ status: asked === 'verified' ? 'matched' : 'same' })
+      } else if (verdict === 'base' && asked === 'verified') {
+        // **초안은 남긴다** — 서버 값만 갈아 끼웠으므로 상자는 친 글을 보이고 저장 버튼이 열린다. 다시 저장할 수
+        // 있다. 늦게 커밋되면 다음 저장이 409 의 `'mine'`으로 끝난다(바탕이 옛 값이라서).
+        setSave({ status: 'failed', failure: { kind: 'message', message: NOT_SAVED } })
+      } else {
+        // 다른 사람이 바꿨다. (409 의 값은 바탕과 다르다고 서버가 판정한 값이라 `'base'`로 오지 않는다 — 와도
+        // 그 사람의 값을 보이는 쪽이 안전하다.)
+        setSave({ status: 'conflict', theirs: current })
+      }
+    }
+
     // **잠금은 장부가 쥐고 푼다**(`write-ledger.tsx`) — 그 페이지의 것을, 지금 어디에 가 있든
     // (머리말 3), 에디터를 떠났다 와도(이월 Q). 아래 `settle`이 끝나야 풀린다.
     await saving.run({
-      send: (signal) => api.updatePage(projectId, openPageId, { description: next }, { signal }),
-      // **시간 안에 응답이 없으면 서버에서 다시 읽는다**(이월 R). 서버 값이 보낸 값과 같으면
-      // 원하던 상태다 — 서버가 설명을 정규화하지 않는다(`api/client.ts`의 `updatePage` 표:
-      // 보낸 그대로 되읽힌다). **이 쓰기가 커밋했다는 뜻은 아니다** — 그래서 통지가 다르다(`MATCHED`).
-      verify: async (signal) => {
-        const page = await api.getPage(projectId, openPageId, { signal })
-        return { description: page.description, committed: page.description === next }
-      },
+      send: (signal) => api.updatePage(projectId, openPageId, { description: next, base: { description: base } }, { signal }),
+      // **시간 안에 응답이 없으면 서버에서 다시 읽는다**(이월 R). 판정은 `land`가 한다 — 서버 값이 내 글이면
+      // 원하던 상태, 바탕이면 안 닿음, 그 밖이면 **다른 사람이 바꿨다**(이월 P). 서버가 설명을 정규화하지
+      // 않는다(`api/client.ts`의 `updatePage` 표: 보낸 그대로 되읽힌다).
+      verify: async (signal) => (await api.getPage(projectId, openPageId, { signal })).description,
       settle: (outcome) => {
         // **아래는 칸에 쓴다 — 이 클릭이 난 렌더의 페이지를 달고.** 그래서 응답이 오기 전에
         // 탭을 오갔으면 **지금 떠 있는 본문**에 닿고(리뷰 N1 — 7차 판은 셋 중 초안 비우기만
@@ -492,23 +537,27 @@ export function PageDescriptionPanel(props: {
         // 선 provider** 의 방문에 닿는다(이월 Q). 두 방문 다 잠금이 남아 있어 초안을 칠 수
         // 없었으므로 비우는 것은 **보낸 그것**뿐이다(리뷰 N-A — 머리말 3).
         if (outcome.kind === 'failed') {
-          setSave({ status: 'failed', failure: toFailure(outcome.caught, SAVE_FAILED) })
+          const clash = metaConflict(outcome.caught, 'description')
+          if (clash !== null) land(clash.current, 'rejected')
+          else setSave({ status: 'failed', failure: toFailure(outcome.caught, SAVE_FAILED) })
+          return
+        }
+        if (outcome.kind === 'verified') {
+          land(outcome.verdict, 'verified')
           return
         }
         // **서버가 준 값을 쓴다** — 보낸 것이 아니라. 서버가 정규화하면 화면이 그것을 본다.
-        // 다시 읽어 판정했으면 그 읽은 값이다.
-        const committed = outcome.kind === 'done' || outcome.verdict.committed
-        replace(outcome.kind === 'done' ? outcome.value.description : outcome.verdict.description)
-        if (committed) {
-          setDraft(null)
-          setSave({ status: outcome.kind === 'done' ? 'saved' : 'matched' })
-        } else {
-          // **초안은 남긴다** — 서버 값만 갈아 끼웠으므로 상자는 친 글을 보이고 저장 버튼이
-          // 열린다. 다시 저장할 수 있다.
-          setSave({ status: 'failed', failure: { kind: 'message', message: NOT_SAVED } })
-        }
+        replace(outcome.value.description)
+        setDraft(null)
+        setSave({ status: 'saved' })
       },
     })
+  }
+
+  /** «내 글 버리기» — 그 사람의 값을 받는다. 서버 값은 충돌이 이미 그 값으로 갈아 끼웠다(`land`). */
+  function discard(): void {
+    setDraft(null)
+    setSave(IDLE)
   }
 
   if (pageId === undefined) {
@@ -523,6 +572,20 @@ export function PageDescriptionPanel(props: {
     return <p className="wb-shell-panel-notice" role="alert">{state.failure.message}</p>
   }
 
+  // **viewer 는 읽는다**(머리말 «viewer 에게는 읽기 전용이다»). 상자·단추가 없으므로 초안·통지도 그리지 않는다.
+  if (!canEdit) {
+    return (
+      <>
+        <h2 className="wb-shell-panel-title">{state.title}</h2>
+        {state.description === null || state.description === '' ? (
+          <p className="wb-shell-panel-notice">{NO_DESCRIPTION}</p>
+        ) : (
+          <p className="wb-shell-page-description">{state.description}</p>
+        )}
+      </>
+    )
+  }
+
   // 저장 도중 세션이 끊긴 것도 같은 규칙이다 — 오류 문장이 아니라 로그인이다.
   const saveFailure = save.status === 'failed' ? save.failure : null
   if (saveFailure?.kind === 'signed-out') return <SignedOut />
@@ -530,6 +593,8 @@ export function PageDescriptionPanel(props: {
   // **바꾼 것이 없으면 보내지 않는다.** 서버가 빈 본문에 400을 내는 것과는 다른 이유다 —
   // 이 본문은 키가 하나라 비지 않는다. 누를 것이 없을 때 눌리는 버튼을 두지 않는 것뿐이다.
   const dirty = value !== server
+  // 첫 글자를 친 순간의 서버 값이 이 초안의 바탕이다 — 이미 초안이 있으면 그 바탕을 그대로 든다.
+  const startedFrom = state.description
 
   return (
     <>
@@ -542,7 +607,7 @@ export function PageDescriptionPanel(props: {
         aria-label="페이지 설명 저장"
         onSubmit={(event) => {
           event.preventDefault()
-          void submit()
+          if (draft !== null) void submit(draft.base)
         }}
       >
         <label className="wb-shell-page-description-field" htmlFor="wb-page-description">
@@ -562,10 +627,12 @@ export function PageDescriptionPanel(props: {
             value={value}
             disabled={saving.locked}
             onChange={(event) => {
-              setDraft(event.target.value)
+              const text = event.target.value
+              setDraft((prev) => ({ text, base: prev === null ? startedFrom : prev.base }))
               // **친 순간 앞의 통지를 지운다.** 남겨 두면 고치는 중에 "저장했습니다"가
               // 떠 있어, 지금 화면의 글이 저장된 것처럼 보인다. 잠금(`SAVING`)은 건드리지 않는다.
-              setSave(IDLE)
+              // **충돌은 남긴다** — 고쳐 쓰는 동안 그 사람의 값을 보며 쓸 수 있게(`keepConflict`).
+              setSave(keepConflict)
             }}
           />
         </label>
@@ -585,6 +652,18 @@ export function PageDescriptionPanel(props: {
       )}
       {save.status === 'matched' && (
         <p className="wb-shell-page-description-saved" role="status">{MATCHED}</p>
+      )}
+      {save.status === 'same' && (
+        <p className="wb-shell-page-description-saved" role="status">{SAME}</p>
+      )}
+      {save.status === 'conflict' && (
+        <MetaConflict
+          what="설명"
+          theirs={save.theirs}
+          disabled={saving.locked}
+          onOverwrite={() => void submit(save.theirs)}
+          onDiscard={discard}
+        />
       )}
       {saveFailure !== null && (
         // 서버 문장 그대로다(`api/failure.tsx`) — 400의 상한 문장·403의 권한 문장이 여기 온다.

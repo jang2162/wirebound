@@ -51,6 +51,7 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
     editTheme: true,
     createSnapshot: true,
     restoreSnapshot: true,
+    editPageMeta: true,
   },
   // **editor의 칸이 처음으로 전부 `false`가 아니게 됐다**(P6-1). §10이 스냅샷 **생성**을
   // editor에게 열었기 때문이다 — 스냅샷은 아무것도 바꾸지 않는다.
@@ -64,6 +65,8 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
     editTheme: false,
     createSnapshot: true,
     restoreSnapshot: false,
+    // **이월 M(2026-09-23)** — 페이지의 제목 · 설명. 서버의 `projectGuard('editor')`와 같은 선이다.
+    editPageMeta: true,
   },
   viewer: {
     rename: false,
@@ -72,6 +75,7 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
     editTheme: false,
     createSnapshot: false,
     restoreSnapshot: false,
+    editPageMeta: false,
   },
 }
 
@@ -82,6 +86,7 @@ const NOTHING: ProjectAbilities = {
   editTheme: false,
   createSnapshot: false,
   restoreSnapshot: false,
+  editPageMeta: false,
 }
 
 describe('projectAbilities', () => {
@@ -101,7 +106,7 @@ describe('projectAbilities', () => {
     // **P6-1이 이 케이스를 갈랐다.** 앞 판은 `toEqual(NOTHING)`이었고 그것은 *"owner가
     // 아니면 아무것도 못 한다"*가 참인 동안만 맞았다. §10이 스냅샷 생성을 editor에게
     // 열면서 거짓이 됐다.
-    expect(projectAbilities('editor')).toEqual({ ...NOTHING, createSnapshot: true })
+    expect(projectAbilities('editor')).toEqual({ ...NOTHING, createSnapshot: true, editPageMeta: true })
   })
 
   it('owner만 이름을 바꾸고 지울 수 있다', () => {
@@ -112,6 +117,7 @@ describe('projectAbilities', () => {
       editTheme: true,
       createSnapshot: true,
       restoreSnapshot: true,
+      editPageMeta: true,
     })
   })
 
@@ -153,6 +159,7 @@ describe('projectAbilities', () => {
       editTheme: true,
       createSnapshot: true,
       restoreSnapshot: true,
+      editPageMeta: true,
     })
 
     // **스냅샷 생성은 둘이 열린다**(owner·editor — §10). 위 `opened`가 `rename || remove`를
@@ -164,5 +171,9 @@ describe('projectAbilities', () => {
     // `createSnapshot`의 2와 여기 1이 **다른 것이 이 표에서 유일하게 갈리는 칸**이다 —
     // 두 수가 같아지는 날은 editor가 복원을 얻거나 잃은 날이고, 그때 §10을 다시 읽어야 한다.
     expect(Object.values(EXPECTED).filter((a) => a.restoreSnapshot)).toHaveLength(1)
+
+    // **페이지의 제목 · 설명은 둘이 연다**(owner · editor — 이월 M). viewer 에게 열리는 날은 서버의
+    // `projectGuard('editor')`가 바뀐 날이다.
+    expect(Object.values(EXPECTED).filter((a) => a.editPageMeta)).toHaveLength(2)
   })
 })

@@ -2701,6 +2701,54 @@
   color: #a11;
 }
 
+/* 페이지 메타 충돌 — «다른 사람이 이 설명(제목)을 바꿨습니다»(`panels/meta-conflict.tsx`). «페이지 설명» 탭과
+   메뉴 트리의 이름 변경이 같은 것을 쓴다. 실패 통지와 같은 붉은 글이되, **그 사람의 값**을 글 그대로 보이는 칸이
+   있다 — 무엇을 덮는지 모르고 덮지 않게. */
+.wb-shell-meta-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.wb-shell-meta-conflict-lead {
+  margin: 0;
+  color: #a11;
+}
+
+.wb-shell-meta-conflict-label {
+  margin: 0;
+  color: #678;
+}
+
+/* 그 사람의 값. 여러 줄 설명이 줄바꿈 그대로 보이게 하고, 긴 단어가 패널을 밀지 않게 한다. */
+.wb-shell-meta-conflict-theirs {
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  background: #fff;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-meta-conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wb-shell-meta-conflict-button {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* 나가 있는 쓰기가 시간 안에 응답을 못 받았을 때(`panels/pending-notice.tsx`) — «페이지 설명»과
    코멘트 탭이 같은 것을 쓴다. 결과를 모를 때 통지 옆에 «다시 확인» 단추가 선다. */
 .wb-shell-pending {

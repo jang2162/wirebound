@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure, type Failure } from '../api/failure'
+import { judgeMeta, metaConflict } from '../api/page-meta'
 import type { PageImported, TreeMenuNode } from '../api/types'
 import {
   flattenMenus,
@@ -104,6 +105,15 @@ export interface TreeCommands {
    * 시작되면 `null`이 된다.
    */
   imported: PageImported | null
+  /**
+   * **페이지 제목의 충돌**(이월 P — `api/page-meta.ts`). 이름 변경이 409 · `page-meta-changed`를 받았고 서버 값이
+   * 내 제목도 아니면 선다 — 그 사람의 제목(`theirs`)과 내가 친 제목(`mine`)을 든다. 다음 조작 · 다른 선택에 풀린다.
+   */
+  conflict: TitleConflict | null
+  /** «내 글로 덮기» — 그 사람의 제목을 새 바탕으로 내 제목을 다시 보낸다. */
+  overwriteTitle: () => void
+  /** «내 글 버리기» — 그 사람의 제목을 받는다(트리는 충돌 때 이미 다시 받았다). */
+  discardTitle: () => void
   /** 소속 메뉴 목록이 열려 있으면 고를 수 있는 것들. 닫혀 있으면 `null`. */
   reparenting: { id: string; path: string }[] | null
   openReparent: () => void
@@ -111,11 +121,22 @@ export interface TreeCommands {
   cancelReparent: () => void
 }
 
+/** 이름 변경이 만난 제목 충돌 — `TreeCommands.conflict`. */
+export interface TitleConflict {
+  pageId: string
+  /** 내가 친 제목. */
+  mine: string
+  /** 서버가 견준 그 사람의 제목 — «내 글로 덮기»의 새 바탕이다. */
+  theirs: string
+}
+
 export function useTreeCommands(props: {
   projectId: string
   pageId: string | undefined
   /** 오를 때마다 트리를 다시 받는다. 지금 올리는 것은 스냅샷 복원 하나다(아래 이펙트). */
   reloadToken: number
+  /** 페이지의 제목을 고칠 수 있는가(`projectAbilities(role).editPageMeta` — 이월 M). 안 주면 열린다. */
+  canEditPageMeta?: boolean
 }): TreeCommands {
   const api = useApi()
   // **이 단계가 앱의 첫 `useNavigate`다**(D8). 지금 앱의 이동은 전부 렌더 시점 판정이고
@@ -149,6 +170,7 @@ export function useTreeCommands(props: {
   const inFlight = useRef(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
+  const [conflict, setConflict] = useState<TitleConflict | null>(null)
   const [editing, setEditing] = useState<TreeEditing | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [pickingMenu, setPickingMenu] = useState(false)
@@ -178,7 +200,7 @@ export function useTreeCommands(props: {
     picked ?? (pageId !== undefined ? { kind: 'page', id: pageId } : null)
 
   const menu = state.status === 'ready' ? state.menu : null
-  const abilities = treeAbilities(menu, selection)
+  const abilities = treeAbilities(menu, selection, props.canEditPageMeta ?? true)
 
   /**
    * 트리를 받는다. `reload`가 `true`면 `loading`으로 되돌리지 않는다 — 조작 뒤의 재조회에서
@@ -279,6 +301,9 @@ export function useTreeCommands(props: {
     inFlight.current = true
     setBusy(true)
     setFailure(null)
+    // **다음 조작이 시작되면 앞 충돌이 풀린다** — 실패 문장과 같은 자리다. «내 글로 덮기»도 여기를 지나고, 또
+    // 부딪히면 `renamePage`가 새 값으로 다시 세운다.
+    setConflict(null)
     try {
       await send()
       if (unmounted.current) return
@@ -311,6 +336,8 @@ export function useTreeCommands(props: {
   function select(next: TreeSelection | null): void {
     setPicked(next)
     setEditing(null)
+    // 충돌 통지의 «이 제목»이 가리키는 것이 선택이다 — 다른 것을 고르면 무엇의 충돌인지가 화면에서 사라진다.
+    setConflict(null)
     setPickingMenu(false)
     // **삭제 확인이 함께 풀린다**(D7의 취소 조건 셋 중 하나) — 다른 항목에 대고 두 번째
     // 클릭이 되면 사용자가 확인한 것과 지워지는 것이 달라진다.
@@ -332,6 +359,7 @@ export function useTreeCommands(props: {
     // Task 10 케이스 6).
     if (inFlight.current) return
     setFailure(null)
+    setConflict(null)
     // **다른 조작을 시작하면 확인이 풀린다**(D7의 셋째 조건).
     setConfirmingRemove(false)
     setPickingMenu(false)
@@ -343,6 +371,29 @@ export function useTreeCommands(props: {
     if (menu === null || selection === null) return ''
     if (selection.kind === 'menu') return findMenuTitle(menu, selection.id) ?? ''
     return findPageTitle(menu, selection.id) ?? ''
+  }
+
+  /**
+   * **페이지 제목을 바탕과 함께 보낸다**(이월 P — `api/page-meta.ts`). 바탕은 입력이 열릴 때의 제목이다
+   * (`editing.initial` — 트리가 마지막으로 받은 값). 서버가 409 · `page-meta-changed`면:
+   *
+   * - 그 사람의 제목이 **내 제목과 같으면**(`judgeMeta`의 `'mine'`) 원하던 상태다 — 성공처럼 끝낸다(트리를 다시 받는다).
+   * - 아니면 **충돌**을 세운다(`conflict`) — 던지지 않으므로 `run`이 트리를 다시 받아 그 사람의 제목이 보인다.
+   *
+   * 그 밖의 실패는 던진다 — `run`이 실패 문장으로 옮긴다. **이 자리에는 시간 제한이 없다** — 트리 조작은 쓰기
+   * 장부를 안 지나므로 «모름»이 없다(설명과 갈리는 자리 — 보고의 «남는 틈»).
+   */
+  async function renamePage(id: string, title: string, base: string): Promise<void> {
+    try {
+      await api.updatePage(projectId, id, { title, base: { title: base } })
+    } catch (caught) {
+      const clash = metaConflict(caught, 'title')
+      if (clash === null) throw caught
+      // 제목은 `null`이 아니다(서버의 `Title`) — 계약 밖 `null`이 오면 빈 제목으로 보인다.
+      const theirs = clash.current ?? ''
+      if (judgeMeta(theirs, title, base) === 'mine') return
+      if (!unmounted.current) setConflict({ pageId: id, mine: title, theirs })
+    }
   }
 
   /**
@@ -396,10 +447,12 @@ export function useTreeCommands(props: {
     setEditing(null)
 
     if (kind === 'rename') {
-      // **메뉴와 페이지가 다른 엔드포인트다.** 선택의 `kind`가 그것을 가른다.
+      // **메뉴와 페이지가 다른 엔드포인트다.** 선택의 `kind`가 그것을 가른다. **페이지만 바탕을 싣는다** — 페이지
+      // 제목은 페이지 메타의 충돌 모델 안이고(이월 P), 메뉴 제목은 밖이다(메뉴 라우트에 바탕이 없다).
+      const base = editing.initial
       void run(async () => {
         if (selection.kind === 'menu') await api.updateMenu(projectId, selection.id, { title })
-        else await api.updatePage(projectId, selection.id, { title })
+        else await renamePage(selection.id, title, base)
       })
       return
     }
@@ -710,6 +763,12 @@ export function useTreeCommands(props: {
     move,
     indent,
     outdent,
+    conflict,
+    overwriteTitle: () => {
+      if (conflict === null) return
+      void run(() => renamePage(conflict.pageId, conflict.mine, conflict.theirs))
+    },
+    discardTitle: () => setConflict(null),
     reparenting,
     openReparent: () => {
       if (inFlight.current) return

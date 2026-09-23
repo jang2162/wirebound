@@ -66,7 +66,7 @@ import { requestActor, requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
-import { badRequest, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
+import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
 // **P5-1이 `http/edit-outcome.ts`로 옮겼다** — `routes/comments.ts`가 두 번째 소비자가
 // 됐다(코멘트가 번호를 부여하려고 같은 파이프라인을 부른다). `withWarnings`가 P4c-1에서
 // 같은 이유로 옮겨 간 것과 같은 자리다.
@@ -79,7 +79,16 @@ import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
 import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
 import { importPage, type PageImportOutcome } from '../services/page-import'
-import { MenuNodeNotFoundError, deletePage, findPageById, insertPage, updatePage, type PageRecord } from '../repos/pages'
+import {
+  MenuNodeNotFoundError,
+  deletePage,
+  findPageById,
+  insertPage,
+  lockPageMeta,
+  staleMetaFields,
+  updatePage,
+  type PageRecord,
+} from '../repos/pages'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
@@ -103,15 +112,46 @@ const CreatePageBody = z.strictObject({
   description: Description.optional(),
 })
 
-/** 필드가 전부 optional이므로, 빈 본문(`{}`)이 통과하지 않도록 `.refine`으로 따로 막는다(`routes/menu.ts`와 같은 관례). */
+/**
+ * **고치기 전 값**(이월 P — 아래 `PATCH` 핸들러의 머리말). 칸마다 선택이고, 준 칸만 견준다.
+ *
+ * **바꿀 값의 규칙(`Title`·`Description`)으로 재지 않는다** — 이것은 저장할 값이 아니라 **견줄 값**이다. 규칙이
+ * 바뀐 날(상한이 줄면) 옛 규칙으로 저장된 값을 바탕으로 보낸 요청이 400 이 되면, 그 값을 고칠 길이 막힌다.
+ * 모양만 본다 — 제목은 문자열, 설명은 문자열이나 `null`. 크기는 본문 상한이 막는다.
+ */
+const MetaBase = z.strictObject({
+  title: z.string().optional(),
+  description: z.string().nullable().optional(),
+})
+
+/**
+ * 필드가 전부 optional이므로, 빈 본문(`{}`)이 통과하지 않도록 `.refine`으로 따로 막는다(`routes/menu.ts`와 같은 관례).
+ *
+ * **`base`의 칸은 바꾸는 칸과 짝이어야 한다** — `{ description, base: { title } }`처럼 바꾸지 않는 칸의 바탕만
+ * 오면 400 이다. 받아 주면 «제목이 그대로면 설명을 쓴다»는 **조건부 쓰기**가 되는데, 그것은 이 모델이 약속한
+ * 것(«내가 고친 칸이 고치는 동안 안 바뀌었다»)이 아니다. `base`만 오는 것도 바꿀 값이 없는 것이라 같은 400 이다.
+ */
 const UpdatePageBody = z
   .strictObject({
     title: Title.optional(),
     description: Description.optional(),
     menuNodeId: z.uuid().optional(),
     sortOrder: SortOrder.optional(),
+    base: MetaBase.optional(),
   })
-  .refine((body) => Object.keys(body).length > 0, { message: '변경할 값이 없습니다' })
+  .refine(({ base: _base, ...changes }) => Object.keys(changes).length > 0, { message: '변경할 값이 없습니다' })
+  .refine(({ base, ...changes }) => Object.keys(base ?? {}).every((field) => field in changes), {
+    path: ['base'],
+    message: '바탕(base)은 바꾸는 칸에만 줄 수 있습니다',
+  })
+
+/**
+ * **페이지 메타 충돌의 이슈 코드**(이월 P). 이 라우트가 내는 409 는 이것뿐이지만 **코드로 가른다** — 문장으로
+ * 가르면 문장을 고치는 날 화면이 조용히 갈래를 잃는다(`routes/comments.ts`의 `REUSED_KEY`와 같은 자세).
+ * 웹은 이 코드를 `apps/web/src/api/page-meta.ts`의 `PAGE_META_CHANGED`로 같은 글자로 든다.
+ */
+export const PAGE_META_CHANGED = 'page-meta-changed'
+const PAGE_META_CHANGED_MESSAGE = '다른 사람이 이 페이지를 먼저 바꿨습니다'
 
 /**
  * `PUT .../schema`의 본문. `schema` 하나만 선언한다 — 그 밖의 키는 게이트 1단계에서
@@ -311,14 +351,63 @@ export function pageRoutes() {
       )
     })
 
+    /**
+     * **페이지 메타(제목 · 설명)의 충돌 모델 — 이 앱의 첫 충돌 모델이다**(이월 P = AB · 2026-09-23).
+     *
+     * 앞 판은 나중에 저장한 쪽이 이겼다 — 창 둘이 같은 설명을 고치면 뒤의 것이 앞의 것을 **조용히** 덮었다.
+     * 이제 요청이 **고치기 전 값**(`base` — 그 사람이 고치기 시작한 바탕)을 함께 보내면:
+     *
+     * | 지금 값 | 답 |
+     * |---|---|
+     * | `base`와 같다 | 쓴다 — 200 |
+     * | `base`와 다르다 | **409** · 이슈 코드 `page-meta-changed` · 칸마다 이슈 하나(`path` = 칸 이름 · `current` = **지금 값**) — 쓰지 않는다 |
+     * | `base`를 안 보냈다 | 쓴다 — 나중이 이긴다(오늘의 CLI · MCP · 가져오기 · 트리의 순서 · 메뉴 이동과 호환) |
+     *
+     * **견주기와 쓰기는 한 잠금 안이다** — `lockPageMeta`가 행을 잡고 읽고, 같은 트랜잭션이 쓴다. 둘이 같은 바탕으로
+     * 동시에 오면 뒤의 것은 앞의 것이 커밋한 값을 읽고 409 다(`test/pages.test.ts`의 «같은 바탕으로 동시에»).
+     *
+     * **지금 값을 409 에 싣는다 — 다시 읽게 하지 않는다.** 실린 값은 **서버가 견준 바로 그 값**이라, 화면이 보이는
+     * «다른 사람의 값»과 «내 글로 덮기»가 새 바탕으로 보낼 값이 같다. 다시 읽게 하면 요청이 하나 늘고, 그 읽기가
+     * 실패하는 갈래(값을 못 보인 충돌)가 화면에 하나 더 생긴다. 드러나는 것은 없다 — 이 요청을 낸 사람은 그 페이지를
+     * 읽을 수 있는 사람이고(아래 재확인이 비교보다 먼저다), 실리는 것은 그 사람이 GET 으로 볼 수 있는 칸뿐이다.
+     *
+     * **재확인(이월 AA)이 비교보다 먼저다** — 잠금을 기다리는 동안 멤버에서 빠진 사람에게 지금 값을 409 로 흘리지
+     * 않는다. 순서는 «행 잠금 → 재확인 → 견줌 → 씀»이다.
+     *
+     * **순서 · 소속 메뉴(`sortOrder`·`menuNodeId`)는 이 모델 밖이다** — 바탕을 받지 않고(`MetaBase`에 칸이 없다)
+     * 오늘처럼 나중이 이긴다. **바탕이 없으면 잠금을 먼저 잡지 않는다** — 자리 옮기기의 잠금 순서(형제 행 → 이
+     * 행)를 이 판이 바꾸지 않는다.
+     *
+     * **다른 창에 실시간으로 알리지 않는다** — 이 라우트는 방송하지 않는다(`notifyPageChanged`를 부르지 않는다 —
+     * 그 방송은 문서의 `seq`를 나른다). 남이 바꾼 것은 저장할 때 409 로 안다.
+     */
     app.patch('/:projectId/pages/:pageId', { preHandler: projectGuard('editor') }, async (request) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)
-      const body = parseBody(UpdatePageBody, request.body)
+      const { base, ...patch } = parseBody(UpdatePageBody, request.body)
 
       let page
       try {
         page = await withTransaction(app.db, async (trx) => {
-          const updated = await updatePage(trx, projectId, pageId, body)
+          if (base !== undefined) {
+            const current = await lockPageMeta(trx, projectId, pageId)
+            if (!current) return null
+            // **커밋 순간의 권한**(이월 AA) — 비교보다 먼저다(위 머리말).
+            await recheckProjectRole(trx, request)
+            const stale = staleMetaFields(base, current)
+            if (stale.length > 0) {
+              throw conflict(
+                PAGE_META_CHANGED_MESSAGE,
+                stale.map((field) => ({
+                  path: field,
+                  code: PAGE_META_CHANGED,
+                  message: PAGE_META_CHANGED_MESSAGE,
+                  current: current[field],
+                })),
+              )
+            }
+            return updatePage(trx, projectId, pageId, patch)
+          }
+          const updated = await updatePage(trx, projectId, pageId, patch)
           // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). 위 UPDATE 가 페이지 행
           // 잠금에 선다 — 그 대기 뒤의 역할로 판정한다.
           if (updated) await recheckProjectRole(trx, request)

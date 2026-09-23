@@ -311,7 +311,8 @@ describe('이름 변경', () => {
     typeAndEnter('목록')
 
     await waitFor(() => expect(api.updatePage).toHaveBeenCalledTimes(1))
-    expect(api.updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록' })
+    // **바탕도 실린다** — 입력이 열릴 때의 제목이다(이월 P — 판정 축은 `tree/title-conflict.test.tsx`).
+    expect(api.updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '회원 목록' } })
     expect(api.updateMenu).not.toHaveBeenCalled()
   })
 
@@ -887,5 +888,86 @@ describe('메뉴 툴바 — 상태줄', () => {
 
     expect(menuStatusLine().getAttribute('role')).toBeNull()
     expect(menuStatusLine().getAttribute('aria-live')).toBeNull()
+  })
+})
+
+/**
+ * **페이지 제목의 충돌**(이월 P · 2026-09-23) — 이름 변경이 바탕(입력이 열릴 때의 제목)을 싣고, 409 ·
+ * `page-meta-changed`면 «페이지 설명»과 같은 판정(`api/page-meta.ts`의 `judgeMeta`) · 같은 화면
+ * (`panels/meta-conflict.tsx`)을 지난다. 가짜 서버는 첫 부름만 409 로 답한다. jsdom 값이다.
+ */
+describe('이름 변경 — 페이지 제목의 충돌', () => {
+  const CHANGED = '다른 사람이 이 페이지를 먼저 바꿨습니다'
+  const clash = (current: string) =>
+    new ApiError(409, 'conflict', CHANGED, [{ path: 'title', code: 'page-meta-changed', message: CHANGED, current }], true)
+
+  /** 첫 부름은 `current`로 409, 그 뒤는 성공. */
+  function clashOnce(current: string) {
+    let calls = 0
+    return vi.fn(async () => {
+      calls += 1
+      if (calls === 1) throw clash(current)
+      return pageDetail('pg-list', '목록')
+    })
+  }
+
+  async function renameInto(title: string, updatePage: ReturnType<typeof clashOnce>) {
+    const api = await open({ updatePage }, '/projects/p-1/pages/pg-list')
+    fireEvent.click(tool('이름 변경'))
+    typeAndEnter(title)
+    await waitFor(() => expect(updatePage).toHaveBeenCalledTimes(1))
+    return api
+  }
+
+  function conflictNotice(): HTMLElement | null {
+    return within(treeRegion()).queryByText('다른 사람이 이 제목을 바꿨습니다')?.closest<HTMLElement>('[role="alert"]') ?? null
+  }
+
+  /** 혼자 죽는 변조: 메뉴 트리가 충돌 화면에 그 사람의 제목 대신 내 제목(`mine`)을 넘긴다. */
+  it('남이 먼저 바꿨으면 충돌 화면이 그 사람의 제목을 보이고, 트리를 다시 받는다', async () => {
+    const updatePage = clashOnce('밥의 제목')
+    const api = await renameInto('목록', updatePage)
+
+    await waitFor(() => expect(conflictNotice()).not.toBeNull())
+    expect(within(conflictNotice()!).getByText('밥의 제목')).toBeTruthy()
+    expect(updatePage).toHaveBeenCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '회원 목록' } })
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+    // 실패 문장(서버 문장)으로 서지 않는다 — 충돌은 고를 것이 있는 화면이다.
+    expect(within(treeRegion()).queryByText(CHANGED)).toBeNull()
+  })
+
+  /** 혼자 죽는 변조: «내 글로 덮기»가 그 사람의 제목 대신 내 제목을 바탕으로 싣는다. */
+  it('«내 글로 덮기» — 그 사람의 제목을 바탕으로 내 제목을 다시 보낸다', async () => {
+    const updatePage = clashOnce('밥의 제목')
+    await renameInto('목록', updatePage)
+    await waitFor(() => expect(conflictNotice()).not.toBeNull())
+
+    fireEvent.click(within(conflictNotice()!).getByRole('button', { name: '내 글로 덮기' }))
+
+    await waitFor(() => expect(updatePage).toHaveBeenCalledTimes(2))
+    expect(updatePage).toHaveBeenLastCalledWith('p-1', 'pg-list', { title: '목록', base: { title: '밥의 제목' } })
+    await waitFor(() => expect(conflictNotice()).toBeNull())
+  })
+
+  /** 혼자 죽는 변조: «내 글 버리기»가 충돌을 안 거둔다. */
+  it('«내 글 버리기» — 충돌을 거두고 아무것도 보내지 않는다', async () => {
+    const updatePage = clashOnce('밥의 제목')
+    await renameInto('목록', updatePage)
+    await waitFor(() => expect(conflictNotice()).not.toBeNull())
+
+    fireEvent.click(within(conflictNotice()!).getByRole('button', { name: '내 글 버리기' }))
+
+    expect(conflictNotice()).toBeNull()
+    expect(updatePage).toHaveBeenCalledTimes(1)
+  })
+
+  /** 혼자 죽는 변조: `renamePage`가 `judgeMeta`의 `'mine'`을 안 보고 늘 충돌을 세운다. */
+  it('409 의 지금 제목이 내 제목과 같으면 원하던 상태다 — 충돌이 아니다', async () => {
+    const updatePage = clashOnce('목록')
+    const api = await renameInto('목록', updatePage)
+
+    await waitFor(() => expect(api.getTree).toHaveBeenCalledTimes(2))
+    expect(conflictNotice()).toBeNull()
+    expect(within(treeRegion()).queryByRole('alert')).toBeNull()
   })
 })

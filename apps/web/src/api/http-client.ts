@@ -933,7 +933,8 @@ const BODY_KEYS = {
   // |---|---|
   // | `{description}` 하나 — 새 패널이 보내는 모양이다 | `declaredOnly`가 `{}`로 만들고 **`updateBody`가 `바꿀 내용이 없습니다`로 던진다. 요청이 아예 안 나간다** |
   // | 다른 선언된 키가 함께 — 예: 트리 훅의 `{title, menuNodeId, sortOrder}`에 얹는 경우 | 요청은 나가고 그 키만 조용히 빠진다 — **200이 오는데 값이 안 바뀐다** |
-  updatePage: { title: true, description: true, menuNodeId: true, sortOrder: true } satisfies Record<
+  // **`base`가 이월 P(2026-09-23)에서 늘었다** — 고치기 전 값(`api/page-meta.ts`).
+  updatePage: { title: true, description: true, menuNodeId: true, sortOrder: true, base: true } satisfies Record<
     keyof Parameters<ApiClient['updatePage']>[2],
     true
   >,

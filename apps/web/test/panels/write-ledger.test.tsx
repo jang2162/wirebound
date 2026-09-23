@@ -152,6 +152,8 @@ function descriptionServer(
   overrides: Partial<ApiClient>
   stored: () => string | null
   sent: (string | null | undefined)[]
+  /** 쓰기가 실은 바탕(이월 P) — 부른 순서대로. 이 가짜는 바탕을 견주지 않는다(견주는 가짜는 `page-meta-conflict.test.tsx`). */
+  bases: unknown[]
   signals: (AbortSignal | undefined)[]
   /** 붙잡힌 쓰기 하나를 서버에 쓴다(응답은 아직). */
   commit: (index?: number) => void
@@ -176,6 +178,7 @@ function descriptionServer(
   const heldReads: (() => void)[] = []
   const readSignals: (AbortSignal | undefined)[] = []
   const sent: (string | null | undefined)[] = []
+  const bases: unknown[] = []
   const signals: (AbortSignal | undefined)[] = []
   const waiting: { commit: () => void; resolve: () => void; reject: (caught: unknown) => void }[] = []
   const read = (pageId: string): PageDetail => ({
@@ -184,6 +187,7 @@ function descriptionServer(
   })
   return {
     sent,
+    bases,
     signals,
     readSignals,
     stored: () => stored,
@@ -214,8 +218,14 @@ function descriptionServer(
         }
         return read(pageId)
       }) as never,
-      updatePage: ((_projectId: string, pageId: string, body: { description?: string | null }, options?: WriteOptions) => {
+      updatePage: ((
+        _projectId: string,
+        pageId: string,
+        body: { description?: string | null; base?: unknown },
+        options?: WriteOptions,
+      ) => {
         sent.push(body.description)
+        bases.push(body.base)
         signals.push(options?.signal)
         const value = body.description ?? null
         return new Promise<PageDetail>((resolve, reject) => {
@@ -709,6 +719,38 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     expect(box().value).toBe('시간 넘긴 글')
     expect(saveButton().disabled).toBe(false)
     expect(screen.queryByText('설명을 저장했습니다')).toBeNull()
+  })
+
+  /**
+   * **셋째 갈래 — 서버 값이 내 글도 바탕도 아니다**(이월 P · `api/page-meta.ts`의 `judgeMeta`). 앞 판은 이 갈래를
+   * 위 «저장되지 않았다»로 읽어, 다시 누르면 **남의 값을 조용히 덮었다.** 혼자 죽는 변조: `page-description.tsx`의
+   * `land`에서 «안 저장됨» 조건을 `verdict !== 'mine'`으로 넓힌다(셋째를 둘째로 접는다) · 다시 읽은 갈래에서 충돌의
+   * 값을 다시 읽은 값 대신 내 글로 든다.
+   *
+   * **그 값을 화면의 글로 재지 않는다** — 충돌 화면이 그 사람의 값을 보이는가는 `page-meta-conflict.test.tsx`의 첫
+   * 케이스가 주인이다(여기서도 보면 그 축의 변조에 둘이 함께 죽는다). 여기서는 «내 글로 덮기»가 **다시 읽은 값을
+   * 바탕으로** 싣는가로 잰다.
+   */
+  it('서버 값이 내 글도 바탕도 아니면 다른 사람이 바꾼 것이다 — 충돌 화면이 서고, 덮기는 다시 읽은 값을 바탕으로 싣는다', async () => {
+    const server = descriptionServer('서버 값')
+    await saveWithFakeTimers(server, '시간 넘긴 글')
+    // 내 쓰기는 서버에 안 닿았고, 그 사이 남이 저장했다.
+    server.overwrite('남이 저장한 글')
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+
+    const lead = await screen.findByText('다른 사람이 이 설명을 바꿨습니다')
+    const conflict = lead.closest<HTMLElement>('[role="alert"]')
+    expect(conflict).not.toBeNull()
+    expect(screen.queryByText('응답이 없어 서버를 다시 읽었더니 이 설명은 저장되지 않았습니다')).toBeNull()
+    expect(box().disabled).toBe(false)
+    expect(box().value).toBe('시간 넘긴 글')
+
+    fireEvent.click(within(conflict!).getByRole('button', { name: '내 글로 덮기' }))
+    await waitFor(() => expect(server.bases).toHaveLength(2))
+    expect(server.bases).toEqual([{ description: '서버 값' }, { description: '남이 저장한 글' }])
+    await server.respond(1)
   })
 
   it('다시 읽기도 실패하면 모른다 — 잠금을 쥔 채 «다시 확인»을 주고, 누르면 판정한다', async () => {

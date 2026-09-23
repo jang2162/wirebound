@@ -59,6 +59,45 @@ export interface PagePatch {
   sortOrder?: number
 }
 
+/**
+ * **페이지 메타 — 제목 · 설명.** 충돌 모델(이월 P — `routes/pages.ts`의 `PATCH` 머리말)이 견주는 값이다.
+ * 순서 · 소속 메뉴는 여기 없다 — 그 둘은 이 모델 밖이다.
+ */
+export interface PageMeta {
+  title: string
+  description: string | null
+}
+
+/** 견줄 칸. 칸 이름이 `PageMeta`의 키와 같다 — 요청의 `base`가 그 키로 온다. */
+export type PageMetaField = keyof PageMeta
+
+/**
+ * 페이지 메타를 **행 잠금을 잡고** 읽는다 — `SELECT title, description … FOR UPDATE`.
+ *
+ * 충돌 모델이 «지금 값»과 «고치기 전 값»(`base`)을 견주는 자리다. **견주기와 쓰기가 한 잠금 안이어야 한다** —
+ * 잠금 없이 읽고 견주면 둘이 같은 바탕으로 동시에 와서 둘 다 통과한다(나중이 조용히 이긴다 — 고치려던 바로 그것).
+ * `lockPageForEdit`과 같은 이유로 트랜잭션 핸들만 받는다. 대상이 그 프로젝트 소속이 아니면 `null`이다.
+ */
+export async function lockPageMeta(trx: DbHandle, projectId: string, pageId: string): Promise<PageMeta | null> {
+  assertLocking(trx, 'lockPageMeta')
+  const row = await trx
+    .selectFrom('pages')
+    .select(['title', 'description'])
+    .where('id', '=', pageId)
+    .where('project_id', '=', projectId)
+    .forUpdate()
+    .executeTakeFirst()
+  return row ? { title: row.title, description: row.description } : null
+}
+
+/**
+ * `base`가 지금 값과 **다른 칸**. 빈 배열이면 통과다. **글자 그대로 견준다** — 서버가 제목 · 설명을 정규화하지
+ * 않는다(`null`과 `''`도 다른 값이다 — `apps/web/src/api/client.ts`의 `updatePage` 표).
+ */
+export function staleMetaFields(base: Partial<PageMeta>, current: PageMeta): PageMetaField[] {
+  return (Object.keys(base) as PageMetaField[]).filter((field) => base[field] !== current[field])
+}
+
 /** `menuNodeId`가 없거나(그 프로젝트 안에서) 다른 프로젝트 소속일 때 던진다. 호출자가 404로 매핑한다. */
 export class MenuNodeNotFoundError extends Error {
   constructor() {

@@ -230,7 +230,18 @@ export interface ApiClient {
   updatePage(
     projectId: string,
     pageId: string,
-    body: { title?: string; description?: string | null; menuNodeId?: string; sortOrder?: number },
+    body: {
+      title?: string
+      description?: string | null
+      menuNodeId?: string
+      sortOrder?: number
+      /**
+       * **고치기 전 값**(이월 P — 페이지 메타의 충돌 모델). 주면 서버가 지금 값과 견주고, 다르면 409 · 이슈 코드
+       * `page-meta-changed` · 칸마다 지금 값(`current`)이다. 안 주면 나중이 이긴다. 무엇을 싣고 409 를 어떻게 읽는지는
+       * `api/page-meta.ts`가 소유한다.
+       */
+      base?: { title?: string; description?: string | null }
+    },
     options?: WriteOptions,
   ): Promise<PageDetail>
   deletePage(projectId: string, pageId: string): Promise<void>
@@ -553,6 +564,8 @@ export interface ApiErrorIssue {
   message: string
   code?: string
   nodeId?: string | null
+  /** 그 칸의 지금 값 — 페이지 메타 충돌(`api/page-meta.ts`)에만 실린다. */
+  current?: string | null
 }
 
 /**

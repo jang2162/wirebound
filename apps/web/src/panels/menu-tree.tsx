@@ -21,6 +21,7 @@
 import type { KeyboardEvent, ReactElement } from 'react'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
+import { MetaConflict } from './meta-conflict'
 import type { TreeMenuNode, TreePage } from '../api/types'
 import type { TreeAbilities, TreeSelection } from '../tree/tree-actions'
 import { useTreeCommands, type TreeCommands } from '../tree/use-tree-commands'
@@ -110,6 +111,11 @@ export function MenuTree(props: {
    * 그대로 남아 뷰 모드에서 메뉴가 지워진다.
    */
   editable: boolean
+  /**
+   * 페이지의 제목을 고칠 수 있는가 — 셸이 `projectAbilities(role).editPageMeta`를 넘긴다(이월 M). `false`면 **페이지**
+   * 이름 변경이 닫힌다(툴바 · 단축키가 같은 판정을 본다). 안 주면 열린다.
+   */
+  canEditPageMeta?: boolean
 }): ReactElement {
   // **훅을 부르는 자리는 여기 하나다**(D2의 전제). 툴바는 결과를 prop으로 받는다 —
   // 두 번째 호출자가 생기면 `busy` 잠금이 각자 것이 된다.
@@ -212,6 +218,17 @@ export function MenuTree(props: {
             {commands.failure.message}
           </p>
         ))}
+      {/* **페이지 제목의 충돌**(이월 P) — «페이지 설명»과 같은 화면이다(`panels/meta-conflict.tsx`). 이름 변경이
+          편집 도구라 편집 모드에서만 선다(툴바와 같은 자리). */}
+      {props.editable && commands.conflict !== null && (
+        <MetaConflict
+          what="제목"
+          theirs={commands.conflict.theirs}
+          disabled={commands.busy}
+          onOverwrite={commands.overwriteTitle}
+          onDiscard={commands.discardTitle}
+        />
+      )}
       <ul className="wb-shell-tree">
         {byOrder(state.menu).map((node) => (
           // 키는 노드 id다. 인덱스를 쓰면 정렬이 바뀔 때 React가 앞 노드의 상태를 다른
