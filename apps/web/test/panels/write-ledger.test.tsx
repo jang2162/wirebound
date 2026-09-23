@@ -16,6 +16,7 @@
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { samePageMeta } from '@wirebound/schema'
 import type { ApiClient, ReadOptions, WriteOptions } from '../../src/api/client'
 import { ApiError } from '../../src/api/client'
 import type { Comment, CommentCreated, PageDetail, ProjectDetail, SessionUser } from '../../src/api/types'
@@ -144,10 +145,13 @@ async function advance(ms: number): Promise<void> {
  * **끊기면 실제 `fetch`처럼 거절한다**(`AbortError`) — 신호를 무시하는 가짜로는 «끊긴 요청의 거절이
  * 실패로 읽히는가»를 아무도 안 지난다. `ignoreAbort`는 **늦게 온 원래 응답**을 만들 때만 쓴다(실
  * 브라우저에서는 끊겨서 안 오지만, 신호를 안 보는 클라이언트가 늦게 풀려도 판정이 서야 한다).
+ *
+ * `compareBase`면 **바탕을 받는 순간 견준다**(이월 P) — 지금 값과 다르면 붙잡지 않고 곧바로 409 · `page-meta-changed`
+ * · 지금 값이다(진짜 서버는 행 잠금 안에서 견준다. 이 가짜는 붙잡힌 쓰기와 잠금을 다투지 않는다).
  */
 function descriptionServer(
   initial: string | null,
-  behavior: { ignoreAbort?: boolean } = {},
+  behavior: { ignoreAbort?: boolean; compareBase?: boolean } = {},
 ): {
   overrides: Partial<ApiClient>
   stored: () => string | null
@@ -228,6 +232,13 @@ function descriptionServer(
         bases.push(body.base)
         signals.push(options?.signal)
         const value = body.description ?? null
+        const base = body.base as { description?: string | null } | undefined
+        if ((behavior.compareBase ?? false) && base !== undefined && !samePageMeta(base.description ?? null, stored)) {
+          const message = '다른 사람이 이 페이지를 먼저 바꿨습니다'
+          return Promise.reject(
+            new ApiError(409, 'conflict', message, [{ path: 'description', code: 'page-meta-changed', message, current: stored }], true),
+          )
+        }
         return new Promise<PageDetail>((resolve, reject) => {
           if (options?.signal !== undefined && !(behavior.ignoreAbort ?? false)) {
             options.signal.addEventListener('abort', () =>
@@ -751,6 +762,48 @@ describe('R — 시간 안에 응답이 없으면 결과를 모르는 것이다 
     await waitFor(() => expect(server.bases).toHaveLength(2))
     expect(server.bases).toEqual([{ description: '서버 값' }, { description: '남이 저장한 글' }])
     await server.respond(1)
+  })
+
+  /**
+   * **«저장되지 않았습니다» 뒤 끊긴 쓰기가 늦게 커밋한 판**(리뷰 F2 · Chrome P1). 판정이 `'base'`였어도 서버가 이미 받은
+   * 요청은 끊긴 뒤 커밋할 수 있다. 그 뒤 **더 쳐서** 저장하면 409 의 지금 값이 내 앞 글이다 — 앞 판은 그것을 «다른
+   * 사람이 이 설명을 바꿨습니다 / 앞 글»로 보였다. 이제 그 판정이 보낸 글을 초안 칸에 매달린 값으로 들고, 409 의 값이
+   * 그것이면 «앞서 보낸 설명이 늦게 저장됐습니다»로 서고 덮기를 권한다. 덮기는 보인 그 값(앞 글)을 바탕으로 싣는다.
+   *
+   * 혼자 죽는 변조(각각): `land`의 «안 저장됨» 갈래가 매달린 값을 안 든다 · 상자의 `onChange`가 초안을 `{ text, base }`로
+   * 새로 지어 매달린 값을 떨군다. (`judgeMeta`의 `'late'` 갈래를 지우면 `test/api/page-meta.test.ts`의 «매달린 내 값과
+   * 같으면 late …»와 함께 죽는다 — 판정 표의 주인은 그쪽, 화면의 주인은 이것.)
+   */
+  it('«저장되지 않았습니다» 뒤 끊긴 쓰기가 늦게 커밋되면, 더 쳐서 저장한 409 는 다른 사람이 아니라 앞서 보낸 내 글이다 — 덮기로 더 친 글이 선다', async () => {
+    const server = descriptionServer('서버 값', { compareBase: true })
+    await saveWithFakeTimers(server, '앞 글')
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe('응답이 없어 서버를 다시 읽었더니 이 설명은 저장되지 않았습니다'),
+    )
+
+    // 끊긴 쓰기가 서버에서 늦게 커밋한다(Chrome: 행 잠금이 풀린 뒤).
+    server.commit(0)
+    type(box(), '앞 글에 더 친 글')
+    fireEvent.click(saveButton())
+
+    const lead = await screen.findByText('앞서 보낸 설명이 늦게 저장됐습니다 — 다른 사람이 바꾼 것이 아닙니다')
+    const conflict = lead.closest<HTMLElement>('[role="alert"]')
+    expect(conflict).not.toBeNull()
+    expect(screen.queryByText('다른 사람이 이 설명을 바꿨습니다')).toBeNull()
+    expect(within(conflict!).getByText('앞 글')).toBeTruthy()
+    expect(box().value).toBe('앞 글에 더 친 글')
+
+    fireEvent.click(within(conflict!).getByRole('button', { name: '지금 글로 덮기' }))
+    await waitFor(() => expect(server.bases).toHaveLength(3))
+    expect(server.bases).toEqual([{ description: '서버 값' }, { description: '서버 값' }, { description: '앞 글' }])
+    await server.respond(1)
+
+    expect(await screen.findByText('설명을 저장했습니다')).toBeTruthy()
+    expect(server.stored()).toBe('앞 글에 더 친 글')
+    expect(screen.queryByText('앞서 보낸 설명이 늦게 저장됐습니다 — 다른 사람이 바꾼 것이 아닙니다')).toBeNull()
   })
 
   it('다시 읽기도 실패하면 모른다 — 잠금을 쥔 채 «다시 확인»을 주고, 누르면 판정한다', async () => {

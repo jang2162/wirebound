@@ -8,6 +8,7 @@
  */
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { samePageMeta } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, ProjectDetail } from '../../src/api/types'
 import { openDraftStore } from '../../src/panels/draft-store'
@@ -20,7 +21,10 @@ const CHANGED = '다른 사람이 이 페이지를 먼저 바꿨습니다'
 
 type Body = { description?: string | null; base?: { description?: string | null } }
 
-/** 설명 하나를 드는 서버 — 바탕이 오면 견준다. `overwrite`는 **다른 사람의 저장**이다. */
+/**
+ * 설명 하나를 드는 서버 — 바탕이 오면 견준다(진짜 서버처럼 빈 값은 `''`든 `null`이든 같다 — `samePageMeta`).
+ * `overwrite`는 **다른 사람의 저장**이다.
+ */
 function metaServer(initial: string | null) {
   let stored = initial
   const bodies: Body[] = []
@@ -32,7 +36,7 @@ function metaServer(initial: string | null) {
     getPage: (async (_projectId: string, pageId: string) => detail(pageId)) as never,
     updatePage: (async (_projectId: string, pageId: string, body: Body) => {
       bodies.push(body)
-      if (body.base !== undefined && 'description' in body.base && body.base.description !== stored) {
+      if (body.base !== undefined && 'description' in body.base && !samePageMeta(body.base.description ?? null, stored)) {
         throw new ApiError(
           409,
           'conflict',
@@ -179,6 +183,31 @@ describe('설명 — 남이 먼저 저장했으면 409 로 안다(이월 P)', ()
     fireEvent.click(screen.getByRole('button', { name: '편집 모드' }))
     toView()
     await waitFor(() => expect(box().value).toBe('그 뒤 남이 고친 글'))
+  })
+})
+
+describe('설명 — 바탕은 조회가 준 값 그대로다(리뷰 F1)', () => {
+  /**
+   * **설명이 `null`인 페이지**(새 페이지의 기본값)에서 첫 저장의 바탕이 `null`인가. 앞 판의 케이스는 전부 설명이
+   * **문자열**인 페이지에서 시작해, 바탕을 상자의 값(`''`)으로 드는 변조가 웹 전량에서 0 사망이었다(리뷰 M-b).
+   * 그 변조는 오늘 서버에서는 거짓 충돌을 안 낸다(빈 값은 `''`든 `null`이든 같다 — 리뷰 F3) — **그래서 본문으로 잰다.**
+   * 바탕은 조회가 준 값 그대로여야 한다 — 화면이 값을 접으면 그 접기가 서버의 견주기와 두 벌이 된다.
+   *
+   * 혼자 죽는 변조: `page-description.tsx`의 `startedFrom`을 `state.description` 대신 `server`(`description ?? ''`)로.
+   */
+  it('설명이 없는(null) 페이지에서 치고 저장하면 바탕이 null 이다 — 빈 문자열로 접지 않는다', async () => {
+    const server = metaServer(null)
+    await openPage(DOC, { apiOverrides: server.overrides })
+    toView()
+    await waitFor(() => expect(saveButton().disabled).toBe(true))
+    expect(box().value).toBe('')
+    type('첫 설명')
+    fireEvent.click(saveButton())
+
+    expect(await screen.findByText('설명을 저장했습니다')).toBeTruthy()
+    expect(server.bodies).toHaveLength(1)
+    expect(server.bodies[0]!.base).toStrictEqual({ description: null })
+    expect(server.stored()).toBe('첫 설명')
   })
 })
 

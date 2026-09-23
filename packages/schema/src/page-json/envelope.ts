@@ -153,6 +153,24 @@ export const PageDescriptionSchema = z
   .max(PAGE_DESCRIPTION_MAX_LENGTH, `설명은 ${PAGE_DESCRIPTION_MAX_LENGTH}자 이하여야 합니다`)
   .nullable()
 
+/**
+ * **페이지 메타(제목 · 설명)의 충돌 모델이 두 값을 같다고 보는가** — 빈 값은 `''`든 `null`이든 «없음» 하나다.
+ *
+ * **저장은 둘을 가른다**(위 머리말 — `''`는 `''`로 저장된다). 이것은 **견줄 때만의 같음**이다: 화면에서 둘은
+ * 똑같이 «설명 없음»으로 보이는데, 견주기가 둘을 가르면 «다른 사람이 바꿨습니다 / (설명 없음)»이라는, 사용자가 볼
+ * 수 없는 차이로 선 충돌이 난다(리뷰 F3 — 나는 상자를 비웠고(`null`) 남은 `''`를 저장했다). 저장을 합치지(`''`→
+ * `null`) 않은 까닭: 쓰는 자리(만들기 · 고치기 · 가져오기 · 스냅샷 복원)와 이미 있는 행 · 스냅샷 안의 `''`까지
+ * 손대야 한다(마이그레이션). 이 함수는 견주는 두 자리가 **같은 것을 부른다** — 서버의 견주기(`apps/api`의
+ * `staleMetaFields`)와 화면의 판정(`apps/web`의 `judgeMeta`). 한 자리만 합치면 서버가 409 를 낸 값을 화면이
+ * «바탕»으로 읽는 판이 선다.
+ *
+ * **제목에는 닿지 않는다** — 제목은 비는 일이 없다(`Title`의 `min(1)`, `null` 불가). 두 자리가 칸을 가리지 않고
+ * 부르는 것은 그래서 안전하다.
+ */
+export function samePageMeta(a: string | null, b: string | null): boolean {
+  return (a === '' ? null : a) === (b === '' ? null : b)
+}
+
 /** 봉투의 `comments[]` 한 줄. **`marker`가 없다** — 위 D6 절. */
 export interface PageJsonComment {
   nodeId: string
