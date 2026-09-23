@@ -145,6 +145,11 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 - 인증 수단은 **둘이다: 세션 쿠키(`wb_session`, httpOnly)와 API 토큰**(`Authorization: Bearer <토큰>`).
   토큰은 **프로젝트 하위 라우트(`/:projectId/…`)에서만** 인증된다 — 아래 *"API 토큰"* 참고.
   둘 다 실리면 **쿠키가 이긴다**.
+- **요청한 탭이 아는 사용자**(이월 Y′ · 2026-09-24): 웹은 요청마다 `x-wb-known-user: <사용자 id>` 머리(WS 핸드셰이크는
+  쿼리 `?knownUser=<id>`)를 싣는다. 쿠키로 인증된 요청이 **다른 사람을 실으면 409 `conflict`** + `issues: [{ path: "session",
+  code: "session-user-changed", … }]` — 읽기 · 쓰기 · 핸드셰이크(101 전의 HTTP 409) 모두. **싣지 않은 요청**(CLI · MCP · 토큰 ·
+  옛 판 탭)은 앞 판 그대로 받고, `GET /api/auth/me` · `POST /api/auth/login`은 보지 않는다. 판정은 `src/auth/plugin.ts` 한 자리다
+  (머리말 «요청한 탭이 아는 사용자» — 왜 401 · 403 이 아닌지도 거기).
 - 성공 응답은 리소스(또는 그 배열)를 그대로 반환한다. 실패 응답은 아래 "에러 형식"을 따른다.
 - 요청 본문의 키는 camelCase다(`sortOrder`, `menuNodeId` 등). DB 컬럼(snake_case)과의
   변환은 서버 내부(`repos/`)에서만 일어난다 — API 밖으로 snake_case가 나가지 않는다.

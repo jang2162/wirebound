@@ -6,6 +6,7 @@
  * 하나뿐이므로, 여기서 그 인터페이스를 직접 만족시키는 편이 `fetch`를 흉내 내는 것보다
  * 짧고 무엇을 검사하는지가 분명하다.
  */
+import { KnownUserProvider, type KnownUserHolder } from '../src/api/known-user'
 import { act, render, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
@@ -187,6 +188,11 @@ export interface RenderOptions {
    */
   tabChannel?: TabChannel
   /**
+   * 이 탭이 아는 사용자(`src/api/known-user.tsx` — 이월 Y′). **생략하면 `KnownUserProvider`를 안 세운다** — 세션이 적지도 듣지도
+   * 않는다. 그 길을 재는 테스트만 준다.
+   */
+  knownUser?: KnownUserHolder
+  /**
    * 초안의 사본(`src/panels/draft-store.tsx`). **생략하면 `DraftStoreProvider`를 안 세운다** — 초안이 메모리에만
    * 사는 화면이다(그 파일 앞과 같다). jsdom 의 `sessionStorage`는 파일 안의 케이스끼리 이어지므로 기본으로 두면
    * 앞 케이스의 초안이 뒤 케이스에 되살아난다. 사본을 재는 테스트만 준다(`test/panels/draft-store.test.tsx`).
@@ -252,13 +258,11 @@ export function renderWithProviders(ui: ReactElement, options: RenderOptions = {
   const tabbed =
     options.tabChannel === undefined ? stored : <TabChannelProvider channel={options.tabChannel}>{stored}</TabChannelProvider>
 
+  const live =
+    options.realtime === undefined ? tabbed : <RealtimeProvider setup={options.realtime}>{tabbed}</RealtimeProvider>
   render(
     <ApiProvider client={options.client ?? fakeApi()}>
-      {options.realtime === undefined ? (
-        tabbed
-      ) : (
-        <RealtimeProvider setup={options.realtime}>{tabbed}</RealtimeProvider>
-      )}
+      {options.knownUser === undefined ? live : <KnownUserProvider holder={options.knownUser}>{live}</KnownUserProvider>}
     </ApiProvider>,
   )
 }

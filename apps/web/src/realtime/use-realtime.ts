@@ -54,6 +54,7 @@ import { useEffect } from 'react'
 import { openRealtime } from './connection'
 import { useRealtimeSetup } from './context'
 import { realtimeUrl } from './protocol'
+import { useKnownUserHolder } from '../api/known-user'
 import { useSessionRenewal } from '../session/session-context'
 import { useEditorStoreInstance } from '../store/use-editor-store'
 
@@ -95,6 +96,8 @@ export function useRealtime(
   const store = useEditorStoreInstance()
   const setup = useRealtimeSetup()
   const onRenewal = useSessionRenewal()
+  // **이 탭이 아는 사용자를 핸드셰이크에 싣는다**(`api/known-user.tsx` — 이월 Y′). 없으면(화면 테스트) 싣지 않는다.
+  const knownUser = useKnownUserHolder()
 
   useEffect(() => {
     if (!setup || !projectId) return
@@ -118,7 +121,7 @@ export function useRealtime(
     const origin = setup.origin ?? globalThis.location?.origin ?? ''
     const connection = openRealtime({
       ...setup.connection,
-      url: realtimeUrl(origin, projectId),
+      url: realtimeUrl(origin, projectId, knownUser?.get()),
       onFrame: (frame) => {
         switch (frame.type) {
           case 'joined':

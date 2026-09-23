@@ -198,12 +198,12 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
-import type { Failure } from '../api/failure'
 import { useSessionEpoch, useSessionUser } from '../session/session-context'
 import { useDraftStore, type DraftStore } from './draft-store'
 import {
   useWriteLedger,
   writeKey,
+  type Missed,
   type PageAt,
   type Receiver,
   type TrackedWrite,
@@ -321,6 +321,8 @@ interface Held {
 interface Box {
   held: Held
   receiver: Receiver
+  /** 이 잠금 칸의 결말을 그리는 본문이 떠 있는 동안 선다 — 돌려주는 함수가 물러난다(`Receiver.draws` · `usePanelLock`). */
+  draw: (slot: string) => () => void
 }
 
 const PanelDraftsContext = createContext<Box | null>(null)
@@ -431,15 +433,32 @@ export function PanelDraftsProvider(props: {
     [],
   )
 
+  /**
+   * **떠 있는 본문이 그리는 잠금 칸**(`Receiver.draws`) — 칸 이름마다 몇 번 섰는가. 본문은 탭 · 모드마다 내려가지만 이 provider 는
+   * 산다 — 그래서 «그 페이지를 본다»(`sees`)만으로는 결말이 말해질지 모른다(3차 이월 «S 의 넓이»). 세는 것은 같은 칸을 두 본문이
+   * 잠깐 함께 쥐는 판(StrictMode 의 이중 마운트) 때문이다.
+   */
+  const drawnRef = useRef(new Map<string, number>())
+  const draws = useCallback((slot: string): boolean => (drawnRef.current.get(slot) ?? 0) > 0, [])
+  const draw = useCallback((slot: string) => {
+    const drawn = drawnRef.current
+    drawn.set(slot, (drawn.get(slot) ?? 0) + 1)
+    return () => {
+      const left = (drawn.get(slot) ?? 1) - 1
+      if (left === 0) drawn.delete(slot)
+      else drawn.set(slot, left)
+    }
+  }, [])
+
   const [token] = useState(() => Symbol('panel-drafts'))
-  const receiver = useMemo<Receiver>(() => ({ token, realm: 'page', accept, sees }), [token, accept, sees])
+  const receiver = useMemo<Receiver>(() => ({ token, realm: 'page', accept, sees, draws }), [token, accept, sees, draws])
   const { receive } = ledger
   // **지금 떠 있는 provider 로 선다**(머리말 3) — 내려간 provider 로 시작한 쓰기의 응답이 여기
   // 닿는다. **레이아웃 이펙트인 것이 요점이다** — 자식의 이펙트(조회 걸기)가 먼저 돌면 그 쓰기가
   // 서기 전의 자리를 찾는다.
   useLayoutEffect(() => receive(receiver), [receive, receiver])
 
-  const box = useMemo<Box>(() => ({ held, receiver }), [held, receiver])
+  const box = useMemo<Box>(() => ({ held, receiver, draw }), [held, receiver, draw])
   return <PanelDraftsContext.Provider value={box}>{props.children}</PanelDraftsContext.Provider>
 }
 
@@ -482,10 +501,10 @@ export interface PanelLock {
   /** `'unknown'`일 때만 — 서버에서 다시 읽어 판정한다. */
   readonly recheck: (() => void) | null
   /**
-   * **이 페이지를 떠나 있는 동안 끝난 이 칸의 실패**(`write-ledger.tsx`의 «떠나 있는 동안 끝난 실패»). 없으면 `null`.
-   * 잠금이 아니다 — 칸은 열려 있다.
+   * **이 칸의 결말을 그리는 본문이 없는 동안 끝난 결말**(`write-ledger.tsx`의 «떠나 있는 동안 끝난 실패» · «판정으로 끝난 쓰기도
+   * 전한다»). 없으면 `null`. 잠금이 아니다 — 칸은 열려 있다.
    */
-  readonly missed: Failure | null
+  readonly missed: Missed | null
   /** 그 실패를 지운다(«확인»). */
   readonly dismiss: () => void
   /**
@@ -497,7 +516,10 @@ export interface PanelLock {
 }
 
 export function usePanelLock(key: LockSlot): PanelLock {
-  const { held, receiver } = useBox(key.name)
+  const { held, receiver, draw } = useBox(key.name)
+  // **이 칸의 결말을 그리는 본문이 여기 섰다**(`Receiver.draws`) — 이 훅을 부르는 본문이 그 칸의 `PendingNotice`를 그린다.
+  // 레이아웃 이펙트다 — 받는 자리(`receive`)와 같은 까닭으로, 본문이 서는 커밋 안에서 선다.
+  useLayoutEffect(() => draw(key.name), [draw, key.name])
   const ledger = useWriteLedger()
   const { projectId, pageId } = held
   const target = useMemo<WriteTarget>(() => ({ projectId, pageId, slot: key.name, realm: 'page' }), [projectId, pageId, key.name])

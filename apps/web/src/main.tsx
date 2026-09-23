@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router'
 import { App } from './app'
 import { ApiProvider } from './api/context'
 import { createHttpClient } from './api/http-client'
+import { KnownUserProvider, createKnownUserHolder } from './api/known-user'
 import { RealtimeProvider, createConnectionIdHolder } from './realtime/context'
 import { createEditChannel } from './realtime/edit-channel'
 import { createLockChannel } from './realtime/lock-channel'
@@ -47,21 +48,29 @@ const draftStore = openDraftStore(
   () => globalThis.localStorage,
 )
 
+/**
+ * **이 탭이 아는 사용자**(이월 Y′ — `api/known-user.tsx`). 세션이 쓰고(`SessionProvider`) HTTP 클라이언트 · 실시간 연결이
+ * 싣는다 — 연결 id 홀더와 같은 까닭으로 여기 하나를 만들어 양쪽에 준다.
+ */
+const knownUser = createKnownUserHolder()
+
 // HTTP 구현을 고르는 자리는 여기 하나다. 아래 화면들은 `useApi()`로 인터페이스만 본다.
 // **실시간을 켜는 자리도 여기 하나다** — 화면 테스트는 `RealtimeProvider` 없이 트리를
 // 세우므로 소켓을 열지 않는다.
 createRoot(root).render(
   <StrictMode>
-    <ApiProvider client={createHttpClient(globalThis.fetch, connectionIds.get)}>
-      <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel, lockChannel }}>
-        <TabChannelProvider channel={tabChannel}>
-          <DraftStoreProvider store={draftStore}>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
-          </DraftStoreProvider>
-        </TabChannelProvider>
-      </RealtimeProvider>
+    <ApiProvider client={createHttpClient(globalThis.fetch, connectionIds.get, knownUser)}>
+      <KnownUserProvider holder={knownUser}>
+        <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel, lockChannel }}>
+          <TabChannelProvider channel={tabChannel}>
+            <DraftStoreProvider store={draftStore}>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </DraftStoreProvider>
+          </TabChannelProvider>
+        </RealtimeProvider>
+      </KnownUserProvider>
     </ApiProvider>
   </StrictMode>,
 )

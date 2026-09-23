@@ -1556,6 +1556,59 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
    * 혼자 죽는 변조: 트리의 실패 갈래가 세션 끊김을 문장으로 바꿔 쓴다(`signed-out` → «요청을 처리하지 못했습니다»). 장부의 401
    * 갈래(`attempt`)를 떼면 이것과 `write-ledger.test.tsx`의 설명 케이스가 **함께** 죽는다 — 그 축의 주인은 설명 케이스다.
    */
+  /**
+   * 이월 5차 2회 D① — **받을 트리가 아예 없는 동안**(프로젝트 목록) 판정이 «바뀌지 않았습니다»로 끝나면 돌아온 트리가 말한다. 앞 판은
+   * 장부가 `'failed'`만 남겨 이 판정은 버려졌다(A r1 보고 (e)2 · Chrome `T-list-base` 통지 0).
+   *
+   * 혼자 죽는 변조: 트리 `land`의 `'base'` 갈래가 결말로 `null`을 돌려준다(떠 있는 트리에는 그대로 그린다).
+   */
+  it('D① — 목록에 가 있는 동안 판정이 «바뀌지 않았습니다»로 끝나면 돌아온 트리가 «이 화면을 떠나 있는 동안 …»으로 말한다', async () => {
+    const server = server2()
+    await renameHeld(server, '회원', true)
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    for (let i = 0; i < 50 && screen.queryByRole('link', { name: PROJECT_NAME }) === null; i += 1) await advance(0)
+    expect(screen.queryByRole('region', { name: '메뉴·페이지 트리' })).toBeNull()
+
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    fireEvent.click(screen.getByRole('link', { name: PROJECT_NAME }))
+    await waitFor(() => expect(menuButton('회원관리')).toBeTruthy())
+    expect(alertText()).toBe('이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다 — 응답이 없어 서버를 다시 읽었더니 이름이 바뀌지 않았습니다')
+  })
+
+  /**
+   * A r1 보고 (e)4 —**새 트리의 마운트 조회가 배달된 다시 받기보다 늦게 오면 옛 제목으로 덮었다**(트리엔 설명의 `answered` 같은
+   * 창 닫기가 없었다). 새 트리가 커밋 **전에** 건 마운트 조회를 붙잡아 두고, 이름 변경이 커밋된 뒤의 다시 받기(새 이름)가 먼저
+   * 닿게 한 뒤 마운트 조회(옛 이름)를 놓는다. 고치기 전: 새 트리가 `회원관리`로 돌아갔다.
+   *
+   * 혼자 죽는 변조: 트리의 «늦게 낸 조회의 답만» 판정(`use-tree-commands.tsx`의 `newer`)을 늘 참으로.
+   */
+  it('(e)4 — 새 트리의 마운트 조회가 배달된 다시 받기보다 늦게 와도 옛 제목으로 덮지 않는다', async () => {
+    const server = server2()
+    await renameHeld(server, '회원', false)
+    let releaseMount: () => void = () => {}
+    ;(server.overrides.getTree as ReturnType<typeof vi.fn<ApiClient['getTree']>>).mockImplementationOnce(
+      async () =>
+        new Promise<TreeMenuNode[]>((resolve) => {
+          // 커밋 **전에** 읽은 값 — 옛 제목이다.
+          const before = tree()
+          releaseMount = () => resolve(before)
+        }),
+    )
+    fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록으로 돌아가기' }))
+    fireEvent.click(await screen.findByRole('link', { name: PROJECT_NAME }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: '메뉴·페이지 트리' })).not.toBeNull())
+
+    server.commit()
+    await server.respond()
+    await waitFor(() => expect(menuButton('회원')).toBeTruthy())
+
+    await act(async () => releaseMount())
+    await act(async () => {})
+    expect(within(treeRegion()).queryByRole('button', { name: '회원관리' })).toBeNull()
+    expect(menuButton('회원')).toBeTruthy()
+  })
+
   it('«모름» 동안 세션이 끝났으면 «다시 확인»이 로그인 화면으로 간다', async () => {
     const server = server2()
     await renameHeld(server, '회원', true)

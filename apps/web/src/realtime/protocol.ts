@@ -14,6 +14,7 @@
  * **모르는 프레임은 `null`로 떨어뜨린다** — 던지지 않는 것은 서버가 새 `type`을 더했을 때
  * 낡은 클라이언트가 **연결째 죽지 않게** 하기 위해서다.
  */
+import { KNOWN_USER_QUERY } from '../api/known-user'
 import type { PatchOp, ValidationIssue } from '@wirebound/schema'
 import type { ApiErrorIssue } from '../api/client'
 
@@ -288,8 +289,12 @@ export function parseServerFrame(raw: string): ServerFrame | null {
  * 코드가 브라우저 전역을 알지 않게 한다.
  *
  * `https`면 `wss`다. 안 바꾸면 https 페이지에서 브라우저가 혼합 콘텐츠로 막는다.
+ *
+ * `knownUser`는 **이 탭이 아는 사용자**다(`api/known-user.tsx` — 이월 Y′). 브라우저 `WebSocket`은 머리를 못 달아 쿼리로
+ * 싣고, 서버가 쿠키의 사람과 다르면 핸드셰이크를 거절한다. 모르면 싣지 않는다(앞 판 그대로).
  */
-export function realtimeUrl(origin: string, projectId: string): string {
+export function realtimeUrl(origin: string, projectId: string, knownUser?: string): string {
   const scheme = origin.startsWith('https:') ? 'wss:' : 'ws:'
-  return `${scheme}//${origin.replace(/^https?:\/\//, '')}/api/projects/${projectId}/ws`
+  const query = knownUser === undefined ? '' : `?${KNOWN_USER_QUERY}=${encodeURIComponent(knownUser)}`
+  return `${scheme}//${origin.replace(/^https?:\/\//, '')}/api/projects/${projectId}/ws${query}`
 }

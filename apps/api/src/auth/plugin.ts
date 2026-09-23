@@ -62,11 +62,47 @@
  * **잃는 것** — DB 가 안 닿는 동안 **쿠키를 실은** 공개 라우트 요청도 실패한다. 공개 라우트는 `/health`·
  * `POST /api/auth/login` 둘이고 로그인은 어차피 DB 가 필요하다. `/health`는 DB 를 안 쓰지만 쿠키를 실어 부르는
  * 자가 없다(웹은 부르지 않는다).
+ *
+ * ---
+ *
+ * # 요청한 탭이 아는 사용자 (2026-09-24 — 이월 Y′)
+ *
+ * 쿠키는 브라우저에 하나다. 다른 탭이 다른 사람으로 로그인하면 이 탭의 쿠키도 그 사람의 것이 되는데, 탭의 화면은
+ * 그 사실을 **탭 사이 알림**(웹의 `session/session-context.tsx` «탭 사이»)으로만 안다. 알림이 늦게 닿거나 아예 안
+ * 오면 그 사이의 요청이 **새 사람의 이름으로** 나갔다(Chrome · 고치기 전: 알림 없는 로그인 — 같은 브라우저의 다른 탭에서
+ * raw `fetch('/api/auth/login')` — 뒤 앨리스로 믿는 탭의 코멘트가 **작성자 밥**으로 커밋 · 두 탭의 ms 안 동시 로그인
+ * 20회 중 7회 어긋남 — 어긋난 탭의 쓰기 7/7 이 쿠키 쪽 사람 이름 · 재연결한 WS 가 밥으로 붙어 앨리스 탭의 잠금이
+ * «밥 편집 중»). 셋 다 **서버가 요청마다 «이 탭이 아는 사용자»를 쿠키의 사용자와 견줘야** 닫힌다.
+ *
+ * 웹은 그 id 를 싣는다 — REST 는 머리(`KNOWN_USER_HEADER`), WS 핸드셰이크는 쿼리(`KNOWN_USER_QUERY` — 브라우저
+ * `WebSocket`은 머리를 못 단다). **판정은 여기 하나다**(`knownUserOf` · 훅의 한 줄):
+ *
+ * | 요청 | 이 훅 |
+ * |---|---|
+ * | 실린 id 가 **없다**(CLI · MCP · 토큰 · 옛 판 탭 · `curl`) | 지금처럼 받는다 |
+ * | 쿠키로 인증됐고 실린 id 가 **쿠키의 사용자와 같다** | 받는다 |
+ * | 쿠키로 인증됐고 **다르다** | **409 `conflict` + 이슈 코드 `session-user-changed`** — 읽기도 쓰기도 핸드셰이크도 |
+ * | 쿠키가 없다 · 만료 · 토큰 | 보지 않는다 — 앞 판 그대로(401 은 가드가 낸다) |
+ * | `GET /api/auth/me` · `POST /api/auth/login` | 보지 않는다 — `me`는 탭이 **쿠키의 사람을 알아내는** 길이고, 로그인은 쿠키를 바꾸는 요청이다 |
+ *
+ * **읽기도 거절한다.** 탭은 앞 사람의 화면(권리 · 초안 · 잠금)을 들고 있다 — 새 사람의 권리로 읽은 값을 앞 사람의 화면에
+ * 그리지 않는다. 그리고 거절받는 첫 요청이 곧 탭이 사람이 바뀐 것을 아는 순간이다(웹은 이 코드를 받으면 `me`로 쿠키의
+ * 사람을 다시 알아낸다 — `api/http-client.ts`). 쓰기만 막으면 알림 없는 판의 탭은 읽기만 하는 동안 영영 모른다.
+ *
+ * **핸드셰이크도 같은 판정이다** — 업그레이드 요청도 이 훅을 지난다(`ws/routes.ts` 머리말). 거절은 **101 전의 HTTP 409**
+ * 다 — 소켓이 서기 전이라 닫힘 코드가 없고, 브라우저에는 «열리지 못하고 닫힘»으로 보인다. 401 · 403 · 404 핸드셰이크 거절이
+ * 이미 그 모양이라(`requireSessionAuth` · `projectGuard`) 새 닫힘 코드를 짓지 않았다. 웹은 그 판을 `refused`로 읽어
+ * 프로젝트를 다시 읽고(`routes/editor.tsx`의 `reread`), 그 읽기가 머리 판정에 걸려 이 409 를 받는다.
+ *
+ * **409 인 까닭** — 401 이 아니다: 쿠키의 세션은 멀쩡하다. 401 을 내면 웹이 «세션 끝»으로 읽어 세대를 올리고 **로그인
+ * 화면**으로 가는데, 브라우저는 이미 다른 사람으로 로그인해 있다. 403 도 아니다: 권한이 아니라 «누구의 요청인가»가
+ * 어긋났다. 요청이 서버의 지금 상태와 부딪혔다는 409 의 뜻에 맞고, 이슈 코드로 가른다(코멘트의 `idempotency-key-reused`와
+ * 같은 관례 — 웹은 문장으로 가르지 않는다).
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import fastifyCookie, { type CookieSerializeOptions } from '@fastify/cookie'
 import type { ApiConfig } from '../config'
-import { unauthenticated } from '../errors'
+import { conflict, unauthenticated, type ApiError } from '../errors'
 import { findApiTokenByValue } from '../repos/api-tokens'
 import { hashSessionToken, resolveSession, type SessionUser } from './session'
 
@@ -84,6 +120,58 @@ export function bearerValue(header: string | undefined): string | null {
   if (header === undefined) return null
   const match = /^Bearer\s+(\S+)$/i.exec(header.trim())
   return match?.[1] ?? null
+}
+
+/**
+ * 탭이 아는 사용자 id 를 싣는 머리(REST)와 쿼리 키(WS 핸드셰이크) — 머리말 «요청한 탭이 아는 사용자». **이름은 웹의
+ * `api/http-client.ts`·`realtime/protocol.ts`와 같아야 한다**(연결 id 머리 `ws/notify.ts`의 `CONNECTION_ID_HEADER`와 같은 관례).
+ */
+export const KNOWN_USER_HEADER = 'x-wb-known-user'
+export const KNOWN_USER_QUERY = 'knownUser'
+
+/** 쿠키의 사용자가 탭이 아는 사용자와 다를 때의 이슈 코드. 웹은 이 코드 하나로 가른다. */
+export const SESSION_USER_CHANGED = 'session-user-changed'
+
+/** 탭이 아는 사용자를 확인하지 않는 라우트 — 쿠키의 사람을 알아내는 길과 쿠키를 바꾸는 길(머리말의 표). */
+const KNOWN_USER_EXEMPT = new Set(['GET /api/auth/me', 'POST /api/auth/login'])
+
+/**
+ * 요청이 실은 «탭이 아는 사용자» — 없으면 `null`(그때는 지금처럼 받는다). 머리가 먼저고, WS 핸드셰이크(`GET` · 패턴이
+ * `/ws`로 끝난다)만 쿼리를 본다 — REST 라우트의 쿼리는 라우트마다 선언된 키만 받는다(README «쿼리»). 빈 값은 없는 것이다.
+ */
+export function knownUserOf(request: FastifyRequest): string | null {
+  const header = request.headers[KNOWN_USER_HEADER]
+  const raw =
+    typeof header === 'string'
+      ? header
+      : request.method === 'GET' && request.routeOptions.url?.endsWith('/ws') === true
+        ? (request.query as Record<string, unknown> | undefined)?.[KNOWN_USER_QUERY]
+        : undefined
+  return typeof raw === 'string' && raw !== '' ? raw : null
+}
+
+/**
+ * **판정은 이것 하나다**(머리말의 표) — 쿠키로 인증된 요청이 다른 사용자를 안다고 하면 거절할 오류, 아니면 `null`.
+ * 훅이 쿠키 갈래에서 부른다(토큰 · 익명은 여기 안 온다).
+ */
+export function knownUserConflict(request: FastifyRequest, cookieUserId: string): ApiError | null {
+  if (KNOWN_USER_EXEMPT.has(`${request.method} ${request.routeOptions.url ?? ''}`)) return null
+  const known = knownUserOf(request)
+  if (known === null || known === cookieUserId) return null
+  const message = '다른 사람으로 로그인됐습니다 — 이 탭이 아는 사용자와 지금 로그인한 사용자가 다릅니다'
+  return conflict(message, [{ path: 'session', code: SESSION_USER_CHANGED, message }])
+}
+
+/**
+ * **이 훅에서 거절한 WS 업그레이드는 답을 보낸 뒤 소켓을 닫는다.** 업그레이드 소켓을 닫는 것은 `@fastify/websocket`의
+ * `onResponse` 훅인데, 그 훅은 **자기 `onRequest`가 돈 요청만** 닫는다(`request.ws`). 그 `onRequest`는 이 훅보다 뒤에
+ * 등록되므로(`app.ts` — 인증이 먼저다) 여기서 던지면 돌지 않고, 409 는 나가지만 TCP 소켓이 열린 채 남는다 — 재서
+ * 알았다: `withRealApi`의 `close`가 그 소켓을 기다려 케이스가 20초 시간 초과였다(`test/known-user.test.ts`). 브라우저는
+ * 실패한 핸드셰이크의 소켓을 스스로 닫지만 서버가 그것에 기대지 않는다.
+ */
+function closeUpgradeAfterReply(request: FastifyRequest, reply: FastifyReply): void {
+  if (request.headers.upgrade?.toLowerCase() !== 'websocket') return
+  reply.raw.once('finish', () => request.raw.socket.destroy())
 }
 
 declare module 'fastify' {
@@ -170,7 +258,7 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
   // `currentUser`를 `null`로 둔다. 토큰도 같다.
   //
   // **«확인하지 못했다»면 던진다**(2026-09-22 이월 W (i)) — 머리말 «자격이 없다 · 확인하지 못했다».
-  app.addHook('onRequest', async (request) => {
+  app.addHook('onRequest', async (request, reply) => {
     request.currentUser = null
     request.authKind = null
     request.tokenProjectId = null
@@ -186,6 +274,13 @@ export async function registerAuthPlugin(app: FastifyInstance, config: ApiConfig
       // 질의에 실린다). 던지면 아래 토큰 갈래로도 넘어가지 않는다 — 쿠키가 먼저인데 그 쿠키를 모른다.
       const user = await resolveSession(app.db, cookie)
       if (user) {
+        // **요청한 탭이 다른 사람을 안다면 거절한다**(머리말 «요청한 탭이 아는 사용자» — 이월 Y′). 쿠키 갈래에서만 —
+        // 쿠키가 먼저이고, 쿠키가 없으면 견줄 «쿠키의 사용자»가 없다.
+        const changed = knownUserConflict(request, user.id)
+        if (changed !== null) {
+          closeUpgradeAfterReply(request, reply)
+          throw changed
+        }
         request.currentUser = user
         request.authKind = 'session'
         request.sessionId = hashSessionToken(cookie)

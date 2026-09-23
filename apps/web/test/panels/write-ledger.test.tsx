@@ -1205,6 +1205,28 @@ describe('시간 안의 모르는 실패 — 같은 키로 다시 보내 판정�
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  /**
+   * 이월 Y′ — 다시 보낸 것이 409 `session-user-changed`(쿠키의 사람이 다르다)면 **앞 게시에 대해 아무것도 모른다** — 서버는 키를 보기
+   * 전(인증 훅)에 거절했다. 다른 4xx 처럼 «안 달림»으로 확정하면 앞 게시가 커밋됐어도 초안이 열려 고쳐 달면 두 행이다.
+   *
+   * 혼자 죽는 변조: `knownRejection`의 `session-user-changed` 줄을 뗀다.
+   */
+  it('다시 보낸 것이 «쿠키의 사람이 다르다» 409 면 모른다 — 확정하지 않고 «다시 확인»을 준다', async () => {
+    const server = commentServer()
+    await openPage(DOC, { apiOverrides: server.overrides })
+    await toCommentTab()
+    const message = '다른 사람으로 로그인됐습니다 — 이 탭이 아는 사용자와 지금 로그인한 사용자가 다릅니다'
+    server.failNext(new ApiError(0, 'internal', '서버에 연결하지 못했습니다'))
+    server.failNext(new ApiError(409, 'conflict', message, [{ path: 'session', code: 'session-user-changed', message }], true))
+    type(commentBox(), '모르는 말')
+    fireEvent.click(submitButton())
+
+    await waitFor(() => expect(server.keys).toHaveLength(2))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('응답이 없고, 반영됐는지 확인하지도 못했습니다'))
+    expect(screen.getByRole('button', { name: '다시 확인' })).toBeTruthy()
+    expect(commentBox().disabled).toBe(true)
+  })
+
   it('api 가 낸 500(봉투) 은 확정이다 — 다시 보내지 않고 그 문장과 초안을 남긴다', async () => {
     const server = commentServer()
     await openPage(DOC, { apiOverrides: server.overrides })
@@ -2221,5 +2243,165 @@ describe('S — 페이지를 떠나 있는 동안 끝난 실패는 돌아오면 
 
     await waitFor(() => expect(screen.queryByText('설명을 저장했습니다')).not.toBeNull())
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+/**
+ * **판정으로 끝난 쓰기도 전한다**(이월 5차 2회 D① — `write-ledger.tsx`의 «판정으로 끝난 쓰기도 전한다»). 앞 판은 받는 자리가 없을 때
+ * `'failed'`만 남겨, 시간 제한 → 다시 읽기로 **판정된** 결말(«저장되지 않았습니다» · «다른 사람이 바꿨습니다»)과 코멘트의 «이미 달렸고
+ * 그 뒤 지워졌다 · 고쳐졌다»(409 — `done` · `verified`로 온다)가 버려졌다. 특히 «지워졌다»는 목록 · 상자 · 통지가 다 비어 **말 없는
+ * 사라짐**이었다(B 리뷰 A-side · B-away — Chrome). 그리고 같은 페이지의 **다른 탭 · 모드**에 가 있는 동안 끝난 결말은 provider 에는
+ * 닿지만 돌아온 본문이 마운트에서 지웠다(3차 이월 «S 의 넓이» — Chrome 설명 · 코멘트 둘 다 통지 0).
+ */
+describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결말을 그릴 수 없을 때 (이월 5차 2회 D①)', () => {
+  const MISSED = '이 페이지를 떠나 있는 동안 저장하지 못했습니다'
+  const STAYED = '이 탭을 떠나 있는 동안 저장하지 못했습니다'
+  const DELETED_KEY = 'idempotency-key-deleted'
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function toPage(title: string): void {
+    fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: title }))
+  }
+
+  function keyDeleted(): ApiError {
+    const message = '같은 멱등 키로 달린 코멘트가 그 뒤 지워졌습니다'
+    return new ApiError(409, 'conflict', message, [{ path: 'idempotencyKey', code: DELETED_KEY, message }], true)
+  }
+
+  /**
+   * 설명 — 옆 페이지에 가 있는 동안 시간 제한 → 다시 읽기가 `'base'`(서버 값이 바탕 그대로) → 돌아온 가가 «저장되지 않았습니다»를 말한다.
+   * 고치기 전: 통지 0(Chrome `D-side-base` 도 같다).
+   *
+   * 혼자 죽는 변조: 설명 `land`의 `'base'` 갈래가 결말로 `null`을 돌려준다(칸에는 그대로 그린다).
+   */
+  it('설명 — 옆 페이지에 가 있는 동안 판정이 «저장되지 않았습니다»로 끝나면 돌아온 가가 그렇다고 말한다', async () => {
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { docs: { [OTHER_PAGE_ID]: DOC }, apiOverrides: server.overrides })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '안 닿을 글')
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    fireEvent.click(saveButton())
+    toPage(OTHER_PAGE_TITLE)
+    await advance(0)
+    await advance(WRITE_DEADLINE_MS)
+    vi.useRealTimers()
+    // 판정은 끝났다(잠금이 풀렸다) — 나는 가의 일을 말하지 않는다.
+    await waitFor(() => expect(box().value).toBe(''))
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    toPage(PAGE_TITLE)
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    expect(screen.getByRole('alert').textContent).toBe(`${MISSED} — 응답이 없어 서버를 다시 읽었더니 이 설명은 저장되지 않았습니다`)
+  })
+
+  /**
+   * 코멘트 — 옆 페이지에 가 있는 동안 게시가 409 `idempotency-key-deleted`(`done` 길 — 되살린 글의 첫 보내기가 그 판이다)로 끝나면
+   * 돌아온 가가 «이 글은 이미 달렸고, 그 뒤 지워졌습니다»를 말한다 — **실패가 아니라서 머리 없이 `status`**. 고치기 전: 목록 · 상자 ·
+   * 통지가 다 비었다(B 리뷰 B-away).
+   *
+   * 혼자 죽는 변조: 코멘트 `landed`가 `deleted-since`에 결말을 안 돌려준다.
+   */
+  it('코멘트 — 옆 페이지에 가 있는 동안 게시가 «이미 달렸고 그 뒤 지워졌다»로 끝나면 돌아온 가가 그렇다고 말한다', async () => {
+    const server = commentServer()
+    let reject: (caught: unknown) => void = () => {}
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: DOC },
+      apiOverrides: { ...server.overrides, createComment: (() => new Promise((_resolve, fail) => (reject = fail))) as never },
+    })
+    await toCommentTab()
+    type(commentBox(), '지워질 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(commentBox().disabled).toBe(true))
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+
+    await act(async () => reject(keyDeleted()))
+    expect(screen.queryByRole('status')).toBeNull()
+    toPage(PAGE_TITLE)
+    await waitFor(() => expect(commentBox().value).toBe(''))
+
+    expect(screen.getByRole('status').textContent).toBe('이 글은 이미 달렸고, 그 뒤 지워졌습니다')
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '확인' }))
+    expect(screen.queryByText('이 글은 이미 달렸고, 그 뒤 지워졌습니다')).toBeNull()
+  })
+
+  /**
+   * 같은 판을 **판정 길**(`verified`)로 — 첫 게시가 모르는 실패(연결 끊김)라 같은 키로 다시 보낸 것이 409 deleted(B 리뷰 A-side 의 모양).
+   *
+   * 혼자 죽는 변조: 코멘트 게시의 `verified`가 `landed`의 결말을 버리고 `null`을 돌려준다.
+   */
+  it('코멘트 — 같은 키로 다시 보낸 것(판정)이 떠나 있는 동안 «지워졌다»로 끝나도 돌아온 가가 말한다', async () => {
+    const server = commentServer()
+    const pending: ((caught: unknown) => void)[] = []
+    await openPage(DOC, {
+      docs: { [OTHER_PAGE_ID]: DOC },
+      apiOverrides: { ...server.overrides, createComment: (() => new Promise((_resolve, fail) => pending.push(fail))) as never },
+    })
+    await toCommentTab()
+    type(commentBox(), '지워질 말')
+    fireEvent.click(submitButton())
+    await waitFor(() => expect(pending).toHaveLength(1))
+    toPage(OTHER_PAGE_TITLE)
+    await waitFor(() => expect(commentBox().disabled).toBe(false))
+
+    await act(async () => pending[0]!(new ApiError(0, 'internal', '서버에 연결하지 못했습니다')))
+    await waitFor(() => expect(pending).toHaveLength(2))
+    await act(async () => pending[1]!(keyDeleted()))
+    toPage(PAGE_TITLE)
+    await waitFor(() => expect(screen.queryByRole('status')?.textContent).toBe('이 글은 이미 달렸고, 그 뒤 지워졌습니다'))
+  })
+
+  /**
+   * 같은 페이지의 **다른 탭**에 가 있는 동안 설명 저장이 실패하면 — provider 는 그 페이지를 보고 있지만 설명 본문은 내려가 있다. 돌아온
+   * 본문은 마운트에서 지난 통지를 지우므로 앞 판은 통지 0 이었다(3차 이월 «S 의 넓이»). 머리는 «이 탭을 떠나 있는 동안»이다.
+   *
+   * 혼자 죽는 변조: `PendingNotice`가 `stayed`를 안 보고 늘 «이 페이지를 떠나 있는 동안»을 쓴다. (`panel-drafts.tsx`의 `draws`를 늘 참으로
+   * 하면 이것과 아래 충돌 케이스가 **함께** 죽는다 — 그 축의 주인은 이것이다.)
+   */
+  it('설명 — 같은 페이지의 다른 탭에 가 있는 동안 저장이 실패하면 돌아온 설명 탭이 «이 탭을 떠나 있는 동안 …»으로 말한다', async () => {
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...commentServer().overrides } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '실패할 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+    await toCommentTab()
+    await server.fail(0, new ApiError(500, 'internal', '서버 오류가 발생했습니다'))
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+    await waitFor(() => expect(box().disabled).toBe(false))
+    expect(screen.getByRole('alert').textContent).toBe(`${STAYED} — 서버 오류가 발생했습니다`)
+  })
+
+  /**
+   * 같은 판에서 결말이 충돌(409 · 다른 사람의 글)이면 돌아온 탭은 **말만** 한다 — 충돌 화면을 다시 세우지 않는다(브리프의 기본값 —
+   * 같은 말이 두 번 서지 않게). 초안은 그대로다(같은 페이지라 버려지지 않았다) — 다시 저장하면 409 가 충돌 화면을 세운다.
+   *
+   * 혼자 죽는 변조: 설명 본문의 마운트 이펙트가 남긴 결말을 안 보고 늘 충돌을 남긴다(`keepConflict`).
+   */
+  it('설명 — 다른 탭에 가 있는 동안 저장이 충돌로 끝나면 돌아온 탭은 말만 하고 충돌 화면은 세우지 않는다 · 초안은 그대로다', async () => {
+    const server = descriptionServer('서버 값')
+    await openPage(DOC, { apiOverrides: { ...server.overrides, ...commentServer().overrides } })
+    toView()
+    await waitFor(() => expect(box().value).toBe('서버 값'))
+    type(box(), '내 글')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(server.sent).toHaveLength(1))
+    await toCommentTab()
+    server.overwrite('남의 글')
+    await server.fail(0, metaChanged('남의 글'))
+
+    fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+    await waitFor(() => expect(box().disabled).toBe(false))
+    expect(screen.getByRole('alert').textContent).toContain('다른 사람이 이 설명을 바꿨습니다 · 지금 저장된 설명: 남의 글')
+    expect(screen.queryByRole('button', { name: '내 글로 덮기' })).toBeNull()
+    expect(box().value).toBe('내 글')
   })
 })

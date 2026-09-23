@@ -43,14 +43,20 @@
 import { useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
-import { useSessionUser, useSignOut } from './session-context'
+import { useSessionSwitched, useSessionUser, useSignOut } from './session-context'
 
 /** 서버가 이유를 주지 않은 실패(네트워크 단절 등)에 쓸 문장. */
 const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
+/**
+ * 이 탭이 로그인하지 않았는데 다른 사람이 됐을 때(`useSessionSwitched` — 다른 탭의 로그인 · 서버의 «쿠키의 사람이 다르다» 거절).
+ * 목록으로 옮겨진 까닭을 말한다. **실패가 아니다** — 브라우저는 그 사람으로 로그인해 있다. 그래서 `status`다.
+ */
+export const SWITCHED_NOTICE = '다른 사람으로 로그인됐습니다 — 이 탭은 이제 머리의 사람의 화면입니다'
 
 export function SessionMenu(): ReactElement {
   const api = useApi()
   const user = useSessionUser()
+  const switched = useSessionSwitched()
   // **끊고 다른 탭에 알린다**(`session-context.tsx`의 «탭 사이») — 401 의 무효화와 갈린다.
   const signOut = useSignOut()
   /** 실패 문장. **`Failure`를 통째로 들지 않는다** — `signed-out`은 아래에서 성공으로
@@ -94,6 +100,11 @@ export function SessionMenu(): ReactElement {
           로그아웃
         </button>
       </div>
+      {switched && (
+        <p className="wb-shell-session-alert" role="status">
+          {SWITCHED_NOTICE}
+        </p>
+      )}
       {failure !== null && (
         <p className="wb-shell-session-alert" role="alert">
           {failure}

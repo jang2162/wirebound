@@ -513,9 +513,13 @@ function usePageDescription(
   // **의존이 비어 있는 것이 요점이다.** 페이지가 바뀔 때 통지를 버리는 것은 provider가
   // 한다(방문의 칸 셋을 함께) — 여기서 `pageId`에도 돌면 같은 일을 두 자리가 하게 된다.
   //
-  // **충돌은 남긴다**(`keepConflict`) — 탭을 다녀와도 초안이 그대로면 «남이 바꿨다»도 그대로 참이다.
+  // **충돌은 남긴다**(`keepConflict`) — 탭을 다녀와도 초안이 그대로면 «남이 바꿨다»도 그대로 참이다. **다만 이 본문이 내려가
+  // 있는 동안 끝난 결말을 장부가 남겼으면 충돌 화면은 세우지 않는다**(이월 5차 2회 — `write-ledger.tsx`의 «판정으로 끝난 쓰기도
+  // 전한다»). 그 결말이 «다른 사람이 이 설명을 바꿨습니다 · 지금 저장된 설명: …»로 말한다 — 둘을 함께 세우면 같은 말이 두 번이다.
+  // 덮기는 다시 저장하면 선다(초안은 그대로다 — 409 가 충돌 화면을 세운다).
+  const missedOnMount = saving.missed !== null
   useEffect(() => {
-    setSave(keepConflict)
+    setSave(missedOnMount ? IDLE : keepConflict)
     // 마운트될 때 한 번. 위 주석이 그 근거다.
   }, [])
 

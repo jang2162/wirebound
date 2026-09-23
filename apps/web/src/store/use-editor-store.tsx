@@ -119,6 +119,16 @@ export function useOpenPage(pageId: string | undefined): OpenPage | null {
 }
 
 /**
+ * **그 페이지가 지금 스토어에 열려 있는가 — 렌더 밖(비동기 뒤)에서 묻는 관문**(이월 AD 잔여 · 2026-09-24). 편집 실패의 수습
+ * (`edit/use-edit-commit.tsx`의 `recover`)이 다시 받기를 기다리는 동안 페이지를 떠났는지를 이것으로 가른다 — 떠났으면 조회를 끊고
+ * 늦게 온 답을 싣지 않는다. 훅(`useOpenPage`)은 렌더의 값이라 수습을 낸 본문이 내려간 뒤에는 낡는다. `openPageId`를 읽는 대조를
+ * 이 파일에 두는 까닭은 위 `useOpenPage`의 머리말과 같다(`test/store-access.test.ts` — 규칙을 정의하는 자리에서 넓힌다).
+ */
+export function isPageOpen(store: EditorStore, pageId: string): boolean {
+  return store.getState().openPageId === pageId
+}
+
+/**
  * 문서만 필요할 때. `useOpenPage`의 얇은 껍질이다 — 대조는 그쪽 한 곳에 있다.
  *
  * 세 화면(캔버스·구조 트리·속성 패널)이 이것을 쓴다. 편집이 붙기 전부터 있던 이름이라

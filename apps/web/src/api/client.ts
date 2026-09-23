@@ -65,10 +65,12 @@ export interface ReadOptions {
 export interface ApiClient {
   login(email: string, password: string): Promise<SessionUser>
   logout(): Promise<void>
-  me(): Promise<SessionUser>
+  /** `cancel`은 세션 문맥이 내려가면 끊는다(이월 AD 잔여 — `session/session-context.tsx`). */
+  me(options?: ReadOptions): Promise<SessionUser>
   /** 호출자가 속한 프로젝트 목록. 각 항목에 호출자의 `role`이 실려 온다. */
   listProjects(): Promise<ProjectDetail[]>
-  getProject(projectId: string): Promise<ProjectDetail>
+  /** `cancel`은 셸을 떠나면 끊는다(이월 AD 잔여 — `routes/editor.tsx`의 첫 조회 · `reread`). */
+  getProject(projectId: string, options?: ReadOptions): Promise<ProjectDetail>
   /**
    * 프로젝트를 만든다. **부른 사람이 owner가 된다**(서버가 같은 트랜잭션에서
    * `project_members`에 넣는다 — `repos/projects.ts`).

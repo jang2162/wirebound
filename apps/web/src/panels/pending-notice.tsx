@@ -11,6 +11,11 @@
  * 칸의 통지는 닿을 곳이 없어 버려졌다 — 장부가 그 실패를 남기고(`write-ledger.tsx`의 «떠나 있는 동안 끝난 실패»)
  * 돌아온 방문이 이 자리에서 말한다. **새 통지 체계가 아니다** — 장부가 드는 «그 페이지 그 칸의 쓰기»를 그리는 자리가
  * 이미 여기였다. 이것은 **실패**라 `alert`이고, «확인»으로 닫는다.
+ *
+ * **판정으로 끝난 결말도 여기서 말한다**(이월 5차 2회 — `write-ledger.tsx`의 «판정으로 끝난 쓰기도 전한다»). 실패가 아닌 결말
+ * (`WriteNote` — 코멘트의 «이미 달렸고 그 뒤 지워졌습니다»)은 머리 없이 그 문장만 `status`로 말한다. 그 페이지를 보고 있었고
+ * 그 칸의 본문만 내려가 있었으면(다른 탭 · 다른 모드 — `Missed.stayed`) 머리가 «이 탭을 떠나 있는 동안 …»이다 — «이 페이지를
+ * 떠나 있는 동안»은 그 판에 거짓이다.
  */
 import type { ReactElement } from 'react'
 import type { PanelLock } from './panel-drafts'
@@ -19,6 +24,8 @@ import type { PanelLock } from './panel-drafts'
 const RECHECK = '다시 확인'
 /** 떠나 있는 동안 끝난 실패의 머리. 뒤에 실패 문장이 붙는다. */
 const MISSED = '이 페이지를 떠나 있는 동안 저장하지 못했습니다'
+/** 같은 페이지의 다른 탭 · 다른 모드에 가 있는 동안 끝난 실패의 머리(`Missed.stayed`). */
+const MISSED_STAYED = '이 탭을 떠나 있는 동안 저장하지 못했습니다'
 /** 그 통지를 닫는 단추. */
 const DISMISS = '확인'
 
@@ -35,13 +42,27 @@ export function PendingNotice(props: {
   const { lock } = props
   // 잠금이 서 있으면 새 쓰기가 나간 것이다 — 남긴 실패는 그 쓰기가 이미 지웠다(`run`). 그래서 둘이 함께 서지 않는다.
   if (lock.missed !== null && lock.phase === null) {
-    const { missed } = lock
+    const { conclusion, stayed } = lock.missed
+    // **실패가 아닌 결말은 머리 없이 그 문장이다**(`WriteNote`) — «저장하지 못했습니다»가 거짓이다.
+    if (conclusion.kind === 'note') {
+      return (
+        <div className="wb-shell-pending">
+          <p className="wb-shell-panel-notice" role="status">
+            {conclusion.message}
+          </p>
+          <button type="button" className="wb-shell-pending-dismiss" onClick={lock.dismiss}>
+            {DISMISS}
+          </button>
+        </div>
+      )
+    }
     // **세션이 끝난 실패는 여기 오지 않는다** — 장부가 곧바로 세션을 끝낸다(`write-ledger.tsx`). 남는 것은 문장뿐이다.
-    const reason = missed.kind === 'message' ? missed.message : ''
+    const reason = conclusion.kind === 'message' ? conclusion.message : ''
+    const lead = stayed ? MISSED_STAYED : (props.missedLead ?? MISSED)
     return (
       <div className="wb-shell-pending">
         <p className="wb-shell-panel-notice" role="alert">
-          {reason === '' ? (props.missedLead ?? MISSED) : `${props.missedLead ?? MISSED} — ${reason}`}
+          {reason === '' ? lead : `${lead} — ${reason}`}
         </p>
         <button type="button" className="wb-shell-pending-dismiss" onClick={lock.dismiss}>
           {DISMISS}

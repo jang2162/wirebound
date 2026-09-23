@@ -62,7 +62,12 @@ const RENAME_SLOT = 'tree/rename'
  */
 const TREE_FAILURE = { name: 'tree/failure' }
 const TREE_CONFLICT = { name: 'tree/conflict' }
+/** 트리 칸 하나를 세운다 — `at`은 그 값을 낸 조회의 순서 번호다(`issueTreeRead`). */
 const TREE_STATE = { name: 'tree/state' }
+interface TreeStateUpdate {
+  at: number
+  state: TreeLoadState
+}
 /** 매달린 내 제목 하나를 고친다 — `titles`가 `null`이면 지운다. */
 const TREE_HANGING = { name: 'tree/hanging' }
 interface HangingUpdate {
@@ -84,6 +89,19 @@ const RENAME_GONE = '응답이 없어 서버를 다시 읽었더니 그 항목�
  * 동안»은 뒤의 판에 거짓이었다). 설명의 «이 페이지를 떠나 있는 동안 저장하지 못했습니다»(`pending-notice.tsx`)와 같은 결이다.
  */
 const RENAME_MISSED = '이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다'
+
+/**
+ * **트리 조회를 낸 순서**(A r1 보고 (e)4 — 이월 5차 2회). 트리 칸은 **늦게 낸 조회의 답만** 받는다(`newer`) — 도착 순서가 아니다.
+ * 앞 판은 에디터를 떠났다 돌아온 새 트리가 **커밋 전에** 건 마운트 조회가, 이름 변경이 커밋된 **뒤** 낸 다시 받기(장부가 새 트리에
+ * 배달한다 — `rename`)보다 늦게 오면 그 옛 제목으로 덮었다(jsdom — 새 트리 `회원` → 마운트 조회가 와서 `회원관리`). 설명의 조회가
+ * 같은 창을 `answered`로 닫은 것과 같은 규칙이다(`panels/page-description.tsx`). 트리 인스턴스가 바뀌어도(떠났다 돌아옴) 한 줄로
+ * 늘어야 하므로 모듈에 하나 둔다.
+ */
+let treeReads = 0
+function issueTreeRead(): number {
+  treeReads += 1
+  return treeReads
+}
 
 /** `run`의 `send`가 이것을 돌려주면 `run`이 트리를 다시 받지 않는다 — 이름 변경은 스스로 받아 떠 있는 트리로 보낸다(`rename`). */
 const NO_RELOAD = Symbol('no-reload')
@@ -200,6 +218,17 @@ export function useTreeCommands(props: {
   const { projectId, pageId, reloadToken } = props
 
   const [state, setState] = useState<TreeLoadState>({ status: 'loading' })
+  /**
+   * 이 트리 칸에 선 값의 조회 번호(`issueTreeRead`). **늦게 낸 조회의 답만 받는다** — 판정은 `newer` 한 줄이다. ref 인 것은
+   * 칸을 세우는 자리가 둘(이 인스턴스의 `load` · 장부가 배달하는 `accept`)이고 둘 다 렌더 밖의 비동기 뒤에 돌기 때문이다.
+   */
+  const shownAt = useRef(0)
+  /** `at`에 낸 조회의 답이 이 칸에 설 수 있는가 — 그보다 늦게 낸 조회의 답이 이미 섰으면 아니다. 서면 번호를 올린다. */
+  const newer = useCallback((at: number): boolean => {
+    if (at < shownAt.current) return false
+    shownAt.current = at
+    return true
+  }, [])
   const [picked, setPicked] = useState<TreeSelection | null>(null)
   /**
    * **잠금(`inFlight`)과 표시(`busy`)를 갈라 둔다.**
@@ -292,25 +321,32 @@ export function useTreeCommands(props: {
    * 때문이다.** 그 예외는 이펙트 밖으로 새어 나가 앱 트리를 통째로 죽인다.
    */
   const load = useCallback(
-    async (alive: () => boolean, reload: boolean): Promise<void> => {
+    async (alive: () => boolean, reload: boolean, cancel?: AbortSignal): Promise<void> => {
+      // **번호는 보낼 때 받는다**(`issueTreeRead`) — 그 뒤에 낸 조회의 답이 먼저 서 있으면 이 답은 낡았다(`newer`).
+      const at = issueTreeRead()
       if (!reload) setState({ status: 'loading' })
       try {
-        const next = await api.getTree(projectId)
-        if (alive()) setState({ status: 'ready', menu: next })
+        const next = await api.getTree(projectId, cancel === undefined ? undefined : { cancel })
+        if (alive() && newer(at)) setState({ status: 'ready', menu: next })
       } catch (caught) {
-        if (!alive()) return
+        if (!alive() || !newer(at)) return
         // 실패 → 화면 규칙은 `api/failure.tsx`에 있다(D5). 여기서 다시 판정하지 않는다.
         setState({ status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) })
       }
     },
-    [api, projectId],
+    [api, projectId, newer],
   )
 
   useEffect(() => {
     let alive = true
-    void load(() => alive, false)
+    // **떠나면 요청째 끊는다**(`ReadOptions.cancel` — 이월 AD 잔여 · 2026-09-24). 앞 판은 답만 버려(`alive`) 떠난 트리의 조회가
+    // 끝까지 내려받혔다(Chrome: 트리 조회를 4s 붙잡고 1s 에 목록으로 — 4.1s 에 200 으로 끝났다). 페이지 조회와 같은 장치다
+    // (`routes/editor.tsx`).
+    const leave = new AbortController()
+    void load(() => alive, false, leave.signal)
     return () => {
       alive = false
+      leave.abort()
     }
   }, [load])
 
@@ -332,9 +368,11 @@ export function useTreeCommands(props: {
     handledReload.current = reloadToken
 
     let alive = true
-    void load(() => alive, true)
+    const leave = new AbortController()
+    void load(() => alive, true, leave.signal)
     return () => {
       alive = false
+      leave.abort()
     }
   }, [load, reloadToken])
 
@@ -344,10 +382,15 @@ export function useTreeCommands(props: {
    * 알 방법이 그 클로저에 없다.
    */
   const unmounted = useRef(false)
+  /** 이 트리가 내려가면 끊기는 신호 — 조작 뒤의 다시 받기(`run`)가 싣는다(떠난 트리의 조회를 끊는다 — 위 마운트 조회와 같다). */
+  const gone = useRef(new AbortController())
   useEffect(() => {
     unmounted.current = false
+    gone.current = new AbortController()
+    const leaving = gone.current
     return () => {
       unmounted.current = true
+      leaving.abort()
     }
   }, [])
 
@@ -365,14 +408,18 @@ export function useTreeCommands(props: {
       if (unmounted.current || at.projectId !== projectId) return
       if (key === TREE_FAILURE) setFailure(update as Failure | null)
       else if (key === TREE_CONFLICT) setConflict(update as TitleConflict | null)
-      else if (key === TREE_STATE) setState(update as TreeLoadState)
+      else if (key === TREE_STATE) {
+        // **늦게 낸 조회의 답만**(`newer`) — 이 트리의 마운트 조회가 배달된 값보다 먼저 났으면 그 조회의 답은 여기서 버려진다.
+        const { at: readAt, state: next } = update as TreeStateUpdate
+        if (newer(readAt)) setState(next)
+      }
       else if (key === TREE_HANGING) {
         const { item, titles } = update as HangingUpdate
         if (titles === null) hanging.current.delete(item)
         else hanging.current.set(item, titles)
       }
     },
-    [projectId],
+    [projectId, newer],
   )
   const sees = useCallback((at: PageAt): boolean => !unmounted.current && at.projectId === projectId, [projectId])
   const [token] = useState(() => Symbol('tree'))
@@ -420,7 +467,7 @@ export function useTreeCommands(props: {
       // **다시 받지 않을 판**이면(`NO_RELOAD` — 이름 변경의 판정용 다시 읽기가 이미 받았거나 실패했다) 여기서 끝난다.
       if ((await send()) === NO_RELOAD) return
       if (unmounted.current) return
-      await load(() => !unmounted.current, true)
+      await load(() => !unmounted.current, true, gone.current.signal)
       if (unmounted.current) return
       after?.()
     } catch (caught) {
@@ -504,8 +551,10 @@ export function useTreeCommands(props: {
    * 아니라 **지금 떠 있는 이 프로젝트의 트리**(위 `receiver`)에 닿는다. 에디터를 떠났다 돌아와 새 트리가 떠 있는 채 판정이 끝나도,
    * 새 트리에서 «다시 확인»을 눌러도 그 트리가 말한다. 뒤의 다시 받기도 같은 길로 간다(`reload`).
    *
-   * **받을 트리가 아예 없으면**(프로젝트 목록 · 테마 편집기 · 다른 프로젝트에 가 있는 채 끝났다) 장부가 `'failed'`만 남기고
-   * 돌아온 트리가 «이 화면을 떠나 있는 동안 …»으로 말한다. **판정으로 끝난 결말은 그때 안 남는다**(설명과 같은 틈 — 2차 D 몫).
+   * **받을 트리가 아예 없으면**(프로젝트 목록 · 테마 편집기 · 다른 프로젝트에 가 있는 채 끝났다) 장부가 결말을 남기고 돌아온 트리가
+   * «이 화면을 떠나 있는 동안 …»으로 말한다 — **판정으로 끝난 결말도**(이월 5차 2회 D — `panels/write-ledger.tsx`의 «판정으로 끝난
+   * 쓰기도 전한다». Chrome: 목록에 가 있는 동안 `'base'` · `'other'` 둘 다 앞 판 통지 0 → 돌아온 트리가 말함). 충돌 화면과 매달린
+   * 값은 다시 세우지 않는다(같은 절의 판정).
    */
   async function rename(target: TreeSelection, title: string, base: string): Promise<unknown> {
     const key = `${target.kind}:${target.id}`
@@ -537,13 +586,17 @@ export function useTreeCommands(props: {
       return { kind: 'message', message: metaConflictSentence('제목', current, late) }
     }
 
-    await renameLock.run<unknown, TreeMenuNode[]>({
+    await renameLock.run<unknown, { at: number; menu: TreeMenuNode[] }>({
       send: (signal) =>
         target.kind === 'menu'
           ? api.updateMenu(projectId, target.id, { title, base: { title: base } }, { signal })
           : api.updatePage(projectId, target.id, { title, base: { title: base } }, { signal }),
       // **다시 읽는 것은 트리 하나다** — 메뉴도 페이지도 그 안에 제목이 있다. 받은 트리는 판정 뒤에 그대로 세운다.
-      verify: (signal) => api.getTree(projectId, { signal }),
+      // 번호는 **보낼 때** 받는다(`issueTreeRead`) — 판정 뒤에 세우는 트리도 «늦게 낸 조회의 답만» 규칙을 지난다.
+      verify: async (signal) => {
+        const at = issueTreeRead()
+        return { at, menu: await api.getTree(projectId, { signal }) }
+      },
       settle: (outcome) => {
         if (outcome.kind === 'done') {
           hang(null)
@@ -559,8 +612,9 @@ export function useTreeCommands(props: {
           return failure
         }
         reload = false
-        put(TREE_STATE, { status: 'ready', menu: outcome.verdict } satisfies TreeLoadState)
-        const current = target.kind === 'menu' ? findMenuTitle(outcome.verdict, target.id) : findPageTitle(outcome.verdict, target.id)
+        const { at: readAt, menu: read } = outcome.verdict
+        put(TREE_STATE, { at: readAt, state: { status: 'ready', menu: read } } satisfies TreeStateUpdate)
+        const current = target.kind === 'menu' ? findMenuTitle(read, target.id) : findPageTitle(read, target.id)
         if (current === null) {
           const failure: Failure = { kind: 'message', message: RENAME_GONE }
           put(TREE_FAILURE, failure)
@@ -572,10 +626,11 @@ export function useTreeCommands(props: {
     // **다시 받기도 떠 있는 트리로 보낸다**(`run`의 `load`는 이 인스턴스에만 쓴다 — 내려가 있으면 새 트리는 커밋 전에 읽은 제목에
     // 머문다). 실패의 모양은 `load`와 같다.
     if (reload) {
+      const at = issueTreeRead()
       try {
-        put(TREE_STATE, { status: 'ready', menu: await api.getTree(projectId) } satisfies TreeLoadState)
+        put(TREE_STATE, { at, state: { status: 'ready', menu: await api.getTree(projectId) } } satisfies TreeStateUpdate)
       } catch (caught) {
-        put(TREE_STATE, { status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) } satisfies TreeLoadState)
+        put(TREE_STATE, { at, state: { status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) } } satisfies TreeStateUpdate)
       }
     }
     return NO_RELOAD

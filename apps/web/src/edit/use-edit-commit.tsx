@@ -18,7 +18,7 @@ import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import { useEditChannel, useLockChannel } from '../realtime/context'
 import { UnansweredEditError } from '../realtime/edit-channel'
-import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
+import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import type { EditStatus, UndoAttempt } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
 
@@ -199,8 +199,22 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // (다시 불러와 서버 상태로) 말만 다르다 — 그 편집을 «취소됐다»고 하지 않는다(`unansweredNotice`).
       const unanswered = caught instanceof UnansweredEditError
       const dropped = store.failEdits()
+      /**
+       * **이 페이지를 떠나면 요청째 끊는다**(이월 AD 잔여 · 2026-09-24 — `ReadOptions.cancel`). «떠남»은 **스토어가 이 페이지를 더는
+       * 열고 있지 않은 것**이다(`openPageId`) — 이 훅을 부른 본문(속성 패널 …)은 탭마다 내려가지만 수습은 스토어의 일이라 본문의
+       * 수명에 매지 않는다. 앞 판은 끊지도 거르지도 않아, 이 조회(1MB 일 수 있다)가 도는 동안 옆 페이지로 가면 끝까지 내려받았고
+       * **늦게 온 답이 `loadPage`로 스토어를 앞 페이지로 되돌렸다**(jsdom — `test/edit/edit-recovery-leave.test.tsx`). 셸째 내려가면
+       * 스토어도 버려지므로 끊는 신호가 없다 — 그 조회는 끝까지 돈다(남는 틈).
+       */
+      const leave = new AbortController()
+      const stillOpen = (): boolean => isPageOpen(store, pageId)
+      const stop = store.subscribe(() => {
+        if (!stillOpen()) leave.abort()
+      })
       try {
-        const page = await api.getPage(projectId, pageId)
+        const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
+        // **떠났으면 싣지 않는다** — 끊기 전에 답이 와 있었을 수 있다. 버린 편집의 통지도 이제 이 화면의 말이 아니다.
+        if (!stillOpen()) return
         // **`loadPage`가 그 사이 들어온 편집까지 버리고 그것을 돌려준다.** 재조회는 왕복
         // 하나라 그 동안 새 편집이 큐에 쌓일 수 있고, 비우지 않으면 "취소됐다"고 알린 편집이
         // 나중에 새 `baseSeq` 위에서 서버로 나간다(`store/editor-store.ts`에 실측이 있다).
@@ -240,6 +254,9 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           message: `${failure.message} — 페이지를 서버 상태로 다시 불러왔고, 편집 ${lost}개가 취소됐습니다.`,
         })
       } catch (recoverCaught) {
+        // **떠났으면 말하지도 비우지도 않는다** — 끊긴 조회의 거절이거나 떠난 뒤의 실패다. 아래 `failEdits`는 **지금 열린 페이지의**
+        // 큐를 비운다 — 떠난 페이지의 수습이 옆 페이지의 편집을 버리면 안 된다.
+        if (!stillOpen()) return
         // **재조회를 기다리는 동안 들어온 편집은 여기서도 버린다.** 서버 상태를 모르는 채
         // 그것을 보내면 낡은 `baseSeq` 위에서 기록된다(실측: 이 줄이 없으면 그 편집이
         // `baseSeq 7`로 나간다 — 재조회가 성공한 판의 42와 달리 서버가 다시 409를 낼 값이다).
@@ -264,6 +281,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
                 { kind: 'message', message: `${recoverFailure.message} — ${UNRECOVERED_NOTICE}` },
         )
       } finally {
+        stop()
         store.setEditStatus('idle')
       }
     },

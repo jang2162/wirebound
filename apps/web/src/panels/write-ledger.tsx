@@ -225,10 +225,36 @@
  * | 설명 · 코멘트 · 프로젝트 목록에서 500 | 통지 0 | 목록에서 돌아온 가에 위 문장 · 초안은 그대로(이월 X — 사이에 연 페이지가 없다) |
  * | 설명 · 프로젝트 목록에서 401 | 목록에 머묾 | `/login` |
  *
- * **판정으로 끝난 쓰기는 남기지 않는다**(`'verified'` — «저장되지 않았습니다» · «다른 사람이 바꿨습니다» 같은 판정의 뜻은
- * 칸이 정한다). 떠나 있는 동안 판정이 끝나면 그 판정은 여전히 버려진다 — 남는 틈이다(판정이 가는 길은 시간 초과 ·
- * 모르는 실패뿐이라 드물다). **받는 자리가 떠 있으면 버려지지 않는다** — 판정의 말은 칸 쓰기(`deliver`)라 지금 떠 있는 자리가
- * 받는다(설명은 그 페이지를 보는 방문 · 트리는 그 프로젝트의 트리). 버려지는 것은 받을 자리가 **아예 없을** 때뿐이다.
+ * ## 판정으로 끝난 쓰기도 전한다 — 종류를 가리지 않는다 (이월 5차 2회 D · 2026-09-24)
+ *
+ * 앞 판은 `'failed'`만 남겼다. 시간 제한 → 다시 읽기로 **판정된** 결말(«저장되지 않았습니다» · «다른 사람이 바꿨습니다»)과 코멘트
+ * 게시의 «이미 달렸고 그 뒤 고쳐졌다 · 지워졌다»(409 `idempotency-key-reused` · `idempotency-key-deleted` — 실패가 아니라
+ * `'done'`·`'verified'`로 온다)는 받는 자리가 없으면 버려졌다. 특히 «지워졌다»는 목록 · 상자 · 통지가 다 비어 **말 없는 사라짐**
+ * 이었다(B 리뷰 A-side · B-away). 이제 **장부는 결말의 종류를 보지 않는다** — `settle`이 돌려준 `WriteConclusion`이 `null`이 아니면
+ * 남긴다(판정은 여전히 쓰기의 몫이다). 실패가 아닌 결말은 `WriteNote`(머리 없이 그 문장만 — `pending-notice.tsx`)다.
+ *
+ * **«받는 자리가 그린다»는 페이지만의 일이 아니다**(3차 이월 «S 의 넓이»). 우측 패널의 본문은 탭 · 모드마다 내려가고, 칸 쓰기는
+ * provider 에 닿지만 **돌아온 본문이 마운트에서 지난 통지를 지웠다** — 같은 페이지의 다른 탭 · 모드에 가 있는 동안 끝난 결말도
+ * 말없이 사라졌다. 그래서 «그릴 수 있나»는 `sees`(그 페이지를 보나)와 `draws`(그 칸의 본문이 떠 있나 — 잠금 칸을 쓰는 본문이
+ * 선다: `panel-drafts.tsx`의 `usePanelLock`) 둘이다. 그 판은 머리가 «이 탭을 떠나 있는 동안 …»이다(`Missed.stayed`).
+ *
+ * **돌아온 자리는 말만 한다 — 충돌 화면 · 매달린 값을 다시 세우지 않는다**(판정). 충돌은 «다른 사람이 이 설명을 바꿨습니다 · 지금
+ * 저장된 설명: …»(`metaConflictSentence`)으로 말하고, 초안이 남아 있으면(같은 페이지의 다른 탭 · 프로젝트 목록 경유) 그대로 둔다
+ * — 다시 저장하면 409 가 충돌 화면을 세운다. 같은 페이지의 다른 탭에서 돌아온 설명은 provider 에 충돌이 남아 있어도 세우지 않는다
+ * (`page-description.tsx`의 마운트 이펙트 — 같은 말이 두 번 서지 않게). **매달린 값**(설명 초안의 `pending` · 트리의 `hanging`)은
+ * 받는 자리가 없으면 버린다 — 옆 페이지 경유면 초안이 이미 떠날 때 버려졌고(F1), 트리는 그 인스턴스의 것이다. 대가: 그 뒤 늦게
+ * 커밋된 내 글이 다음 409 에서 «다른 사람이 …»로 읽힐 수 있다(앞 판 그대로 · 드물다 — 판정 **뒤** 늦은 커밋이 겹쳐야 선다).
+ *
+ * | 판(Chrome · 고치기 전 → 뒤) | 돌아온 자리 |
+ * |---|---|
+ * | 설명 · 옆 페이지 · 판정 `'base'` | 통지 0 → «이 페이지를 떠나 있는 동안 저장하지 못했습니다 — 응답이 없어 서버를 다시 읽었더니 이 설명은 저장되지 않았습니다» |
+ * | 설명 · 옆 페이지 · 그 사이 밥이 저장(`'other'`) | 통지 0 → «… — 다른 사람이 이 설명을 바꿨습니다 · 지금 저장된 설명: 밥 설명» · 상자 `밥 설명` |
+ * | 설명 · 프로젝트 목록 경유 · `'base'` | 통지 0 → 같은 문장 · 상자에 되살린 초안 `앨리스 설명` |
+ * | 코멘트 · 옆 페이지 · 다시 보낸 것이 409 deleted(A-side) | 목록 · 상자 · 통지 0 → «이 글은 이미 달렸고, 그 뒤 지워졌습니다»(`status`) |
+ * | 코멘트 · 같은 판 · 409 reused | 통지 0 → «이 글은 이미 달렸고, 그 뒤 다른 곳에서 고쳐졌습니다 — 목록의 글이 지금 글입니다» |
+ * | 트리 · 프로젝트 목록 · `'base'` · `'other'` | 통지 0 → «이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다 — 응답이 없어 … 바뀌지 않았습니다» · «… — 다른 사람이 이 제목을 바꿨습니다 · 지금 저장된 제목: 밥의 이름» |
+ * | 설명 · 같은 페이지의 코멘트 탭 · 500 | 통지 0 → «이 탭을 떠나 있는 동안 저장하지 못했습니다 — 서버 오류가 발생했습니다» |
+ * | 설명 · 편집 모드에 가 있음 · 500 · 코멘트 · 상호작용 탭 · 500 | 통지 0 → 같은 문장 |
  *
  * ## 이것이 막지 못하는 것
  *
@@ -262,7 +288,9 @@
  * - **세션 경계의 늦은 커밋** — 앞 세션의 쓰기가 서버에 이미 닿아 있었으면 새 세션의 쓰기와 겹친다(위 «세션을
  *   넘지 않는다»의 끝 — 설명은 이 스택에서 온 순서대로라 뒤가 이겼다). **코멘트는 세션 만료 뒤 같은 사람이면 같은
  *   키라 한 행이고, 명시적 로그아웃 뒤에는 두 행이다** — 값은 위 입구 표와 남는 틈.
- * - **다른 탭의 로그인이 알림보다 먼저 닿는 창**(이월 Y 를 닫은 뒤 남은 것). 다른 탭이 다른 사람으로 들어오면 이 탭이
+ * - ~~**다른 탭의 로그인이 알림보다 먼저 닿는 창**~~ — **2026-09-24 이월 Y′ 가 닫았다**: 서버가 «요청한 탭이 아는 사용자»를
+ *   쿠키의 사람과 견줘 다르면 409 `session-user-changed`로 거절한다(`apps/api/src/auth/plugin.ts` · 웹은 `api/known-user.tsx`).
+ *   아래는 앞 판의 말이다. **다른 탭의 로그인이 알림보다 먼저 닿는 창**(이월 Y 를 닫은 뒤 남은 것). 다른 탭이 다른 사람으로 들어오면 이 탭이
  *   그 소식을 받아 **세대를 올린다**(`session/session-context.tsx`의 «탭 사이» — 이월 Y 는 거기서 닫혔다. Chrome · 서버 안
  *   지연 24초: 앞 판은 앨리스 탭의 «다시 확인»이 같은 키로 201 → **DB alice · bob 두 행**, 고친 뒤는 다른 탭이 로그아웃하는
  *   순간 이 탭이 로그인 화면 · 장부 `[]` → 밥이 들어오면 목록 · 머리 «bob» · «다시 확인» 없음 · DB 앨리스의 행 하나).
@@ -386,10 +414,30 @@ export interface TrackedWrite<T, V> {
 }
 
 /**
- * 끝난 쓰기의 결말 — **실패면 그 실패, 아니면 `null`.** 문장은 쓰기가 칸에 그린 것과 같다(`toFailure`든 칸의 판정이
- * 지은 문장이든). 장부는 이것을 읽기만 한다.
+ * 끝난 쓰기의 결말 — **돌아온 자리가 말할 것.** 실패면 그 실패, 실패는 아니지만 말해야 하는 끝이면 `WriteNote`, 말할 것이
+ * 없으면 `null`. 문장은 쓰기가 칸에 그린 것과 같다(`toFailure`든 칸의 판정이 지은 문장이든). 장부는 이것을 읽기만 한다 —
+ * **종류를 가리지 않고 전한다**(머리말 «판정으로 끝난 쓰기도 전한다»).
  */
-export type WriteConclusion = Failure | null
+export type WriteConclusion = Failure | WriteNote | null
+
+/**
+ * **실패가 아닌 결말** — 쓰기는 끝났고(«안 됐다»가 아니다) 사용자가 알아야 할 것이 있다. 코멘트 게시의 «이미 달렸고 그 뒤
+ * 고쳐졌다 · 지워졌다»(`comment-panel.tsx`의 `keyVerdict`)가 이것이다 — 특히 «지워졌다»는 목록 · 상자 · 통지가 다 비어
+ * 이것 말고는 말할 자리가 없다. 돌아온 자리는 «… 저장하지 못했습니다» 머리 없이 이 문장만 말한다(`pending-notice.tsx`).
+ */
+export interface WriteNote {
+  readonly kind: 'note'
+  readonly message: string
+}
+
+/**
+ * 장부가 남긴 결말(`Ledger.missed`) — **받는 자리가 그 결말을 그릴 수 없을 때** 끝났다. `stayed`는 «그 페이지는 보고 있었고
+ * 그 칸을 그리는 본문만 내려가 있었다»(같은 페이지의 다른 탭 · 다른 모드 — `Receiver.draws`)다. 머리의 문장이 갈린다.
+ */
+export interface Missed {
+  readonly conclusion: Failure | WriteNote
+  readonly stayed: boolean
+}
 
 /**
  * 칸의 종류 — **받는 자리를 가른다**(아래 `Receiver`). `'page'`는 우측 패널(`PanelDraftsProvider` — 설명 · 코멘트), `'tree'`는
@@ -418,6 +466,14 @@ export interface Receiver {
   readonly accept: (at: PageAt, key: object, update: unknown) => void
   /** 지금 `at`을 보고 있는가 — 칸 쓰기가 닿을 곳이 있는가(`accept`가 받는가와 같은 판정). */
   readonly sees: (at: PageAt) => boolean
+  /**
+   * **그 칸의 결말을 그리는 본문이 지금 떠 있는가**(잠금 칸 이름 — `WriteTarget.slot`). 없으면 늘 떠 있다(트리 — 트리가 곧 그
+   * 본문이다). 우측 패널은 본문이 탭 · 모드마다 내려간다(`routes/editor.tsx`의 `RightPanel`) — 칸 쓰기는 provider 에 닿지만
+   * 돌아온 본문이 마운트에서 지난 통지를 지우므로(`page-description.tsx` · `comment-panel.tsx`의 마운트 이펙트) 그 결말은 말없이
+   * 사라졌다(3차 이월 «S 의 넓이» — Chrome: 설명 · 코멘트의 500 이 다른 탭 · 다른 모드에 가 있는 동안 끝나면 돌아와도 통지 0).
+   * 거짓이면 `sees`가 참이어도 장부가 결말을 남긴다.
+   */
+  readonly draws?: (slot: string) => boolean
 }
 
 export interface PageAt {
@@ -439,7 +495,7 @@ interface Ledger {
    * **그 페이지를 보는 방문이 없을 때 끝난 실패**(머리말 «떠나 있는 동안 끝난 실패») — 키는 `writes`와 같다. 잠금이
    * 아니다 — 그 칸은 열려 있다. 돌아온 방문이 말하고(`PendingNotice`), 닫거나 그 칸의 다음 쓰기가 지운다.
    */
-  readonly missed: ReadonlyMap<string, Failure>
+  readonly missed: ReadonlyMap<string, Missed>
   /** 남긴 실패를 지운다(«확인»). */
   dismiss(target: WriteTarget): void
   /**
@@ -462,7 +518,7 @@ interface Ledger {
 interface Book {
   readonly epoch: number
   readonly writes: ReadonlyMap<string, WriteEntry>
-  readonly missed: ReadonlyMap<string, Failure>
+  readonly missed: ReadonlyMap<string, Missed>
 }
 
 /** 지금 세대와, 그 세대의 쓰기를 한꺼번에 끊는 신호. */
@@ -483,7 +539,7 @@ const CHECKING: WriteEntry = { phase: 'checking', recheck: null }
 /** 시간 제한이 먼저 왔다는 표지. */
 const EXPIRED = Symbol('expired')
 
-const NOTHING_MISSED: ReadonlyMap<string, Failure> = new Map()
+const NOTHING_MISSED: ReadonlyMap<string, Missed> = new Map()
 
 export function WriteLedgerProvider(props: { children: ReactNode }): ReactElement {
   const epoch = useSessionEpoch()
@@ -518,13 +574,13 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
   }, [])
 
   /** 남긴 실패 하나를 고친다 — `put`과 같은 규칙(낸 세대의 장부일 때만). */
-  const note = useCallback((at: number, key: string, failure: Failure | null) => {
+  const note = useCallback((at: number, key: string, entry: Missed | null) => {
     setBook((prev) => {
       if (prev.epoch !== at) return prev
-      if (failure === null && !prev.missed.has(key)) return prev
+      if (entry === null && !prev.missed.has(key)) return prev
       const missed = new Map(prev.missed)
-      if (failure === null) missed.delete(key)
-      else missed.set(key, failure)
+      if (entry === null) missed.delete(key)
+      else missed.set(key, entry)
       return { ...prev, missed }
     })
   }, [])
@@ -545,14 +601,19 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
         // **그 자리를 보는 받는 자리가 있는가는 끝난 순간에 본다**(머리말 «떠나 있는 동안 끝난 실패») — 보고 있으면 칸이
         // 말한다(`settle`의 칸 쓰기가 닿는다). 세션이 끝나 끊긴 실패는 뺀다 — 앞 세션의 일이다. 보는 자리는 **그 쓰기의
         // 종류의 것 하나**다(`Receiver`의 계약).
+        //
+        // **결말의 종류는 가리지 않는다**(머리말 «판정으로 끝난 쓰기도 전한다» — 이월 5차 2회). 앞 판은 `'failed'`만 남겨 판정으로 끝난
+        // 결말(«저장되지 않았습니다» · «다른 사람이 바꿨습니다» · «이미 달렸고 그 뒤 지워졌습니다»)이 버려졌다.
         const receiver = receiversRef.current.get(target.realm)
-        const unseen = outcome.kind === 'failed' && !live.signal.aborted && receiver?.sees(target) !== true
+        const page = receiver?.sees(target) === true
+        const drawn = page && (receiver?.draws?.(target.slot) ?? true)
+        const unseen = !live.signal.aborted && !drawn
         const conclusion = await write.settle(outcome, receiver?.token === owner)
-        // **판정은 쓰기가 했다**(`settle`의 결말 — 머리말 «판정은 장부가 하지 않는다»). 실패가 아니면 남길 것이 없다.
+        // **판정은 쓰기가 했다**(`settle`의 결말 — 머리말 «판정은 장부가 하지 않는다»). 말할 것이 없으면(`null`) 남길 것도 없다.
         if (unseen && conclusion !== null) {
           // **세션은 페이지에 안 매인다** — 어디에 가 있든 로그인 화면으로 간다(`SignedOut`이 부르는 것과 같은 것).
           if (conclusion.kind === 'signed-out') invalidate()
-          else note(live.epoch, key, conclusion)
+          else note(live.epoch, key, { conclusion, stayed: page })
         }
       } finally {
         report(null)
