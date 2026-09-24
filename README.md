@@ -946,9 +946,10 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 
 > **브라우저가 없을 때 `test:build`가 찍는 줄은 「넣는 법」 절의 명령을 권한다.** 그 스모크
 > (`apps/api/build-test/screen-chromium.test.ts`)는 **브라우저를 실제로 띄워 보고** 안 뜨면 건너뛴다 — `--only-shell` 만
-> 넣은 기계에서도 돈다. **`SCREEN_CHROMIUM_PATH`는 안 본다** — playwright-core 캐시의 브라우저로만 돈다(그 값은 서버만
-> 쓴다 — 「기계에 이미 있는 브라우저를 쓰기」 절). `npx playwright install` 은 쓰지 마라 — 이 저장소는 `playwright`
-> 패키지를 일부러 안 들인다(그것이 브라우저를 내려받는 postinstall 을 달고 온다).
+> 넣은 기계에서도 돈다. **서버가 쓰는 브라우저로 돈다** — `SCREEN_CHROMIUM_PATH` 를 서버와 같은 순서(셸 → `apps/api/.env`)로
+> 읽고, 비면 playwright-core 캐시다(「기계에 이미 있는 브라우저를 쓰기」 절). 그 경로를 못 띄우면 건너뛰며 그 경로를 말한다.
+> `npx playwright install` 은 쓰지 마라 — 이 저장소는 `playwright` 패키지를 일부러 안 들인다(그것이 브라우저를 내려받는
+> postinstall 을 달고 온다).
 
 ---
 
@@ -968,7 +969,7 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 | **워크트리 셋 이상** | 「워크트리를 여럿 띄울 때」 절의 값은 전부 **워크트리 둘**로 쟀다 |
 | **옛 볼륨을 새 이름으로 옮기기** | **사용자 볼륨으로는 안 돌렸다** — 「옛 볼륨을 새 이름으로 복사한다」 절의 명령은 임시 compose 프로젝트 둘로만 돌려 봤다(복사이지 이동이 아니다) |
 | **`--env-file` 을 뺀 `up -d` 가 무엇을 하는가** | **안 쟀다.** 기본값이 5433 이라 재려면 사용자의 컨테이너가 쓰는 포트를 건드려야 한다. **잰 것은 `docker compose config` 가 그때 5433 을 낸다는 것까지다** |
-| **`SCREEN_CHROMIUM_PATH`의 성공 방향에 자동 케이스가 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. ***"옳은 경로를 주면 그 실행 파일로 뜬다"*는 손으로만 쟀다** — 브라우저 둘이 있어야 세울 수 있는 자리다 |
+| **`SCREEN_CHROMIUM_PATH`의 성공 방향이 게이트에 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. *"옳은 경로를 주면 그 실행 파일로 그린다"*는 **그 스모크를 그 값을 준 기계에서 돌릴 때만** 잰다(배포판 chromium 컨테이너에서 15 통과 — 「배포하려면」 절). 이 기계의 게이트는 그 값을 안 주고 돈다 |
 
 ---
 
