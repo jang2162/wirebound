@@ -40,6 +40,12 @@
  * html로 되돌리면 **먼저 보낸 pptx가 나중에 도착한다.** 표를 하나 들고 마지막 것이 아니면
  * 버린다 — 이것이 `useRef` 하나가 여기 있는 이유다.
  *
+ * **앞 요청은 끊는다.** 표는 늦은 답을 **화면에서** 버릴 뿐 요청은 그대로 둔다 — 서버는 연결이 닫힐 때까지 그
+ * 내보내기를 끝까지 돌고(pptx 는 페이지를 한 장씩 그린다), 그동안 이 사람의 다음 미리보기가 그 뒤에 선다(`apps/api`의
+ * `services/export-worker.ts` «칸이 둘이다»). 그래서 새로 부를 때 · 닫을 때 · 화면이 내려갈 때 앞 요청을 끊는다
+ * (`api/client.ts`의 `ReadOptions` «`cancel`»). 새로 불러 끊은 요청의 거절은 표가 버리고, 닫아 끊은 요청의 거절은
+ * 닫힌 상자에 떨어졌다가 다시 열 때의 `loading`이 덮는다.
+ *
  * **늦게 온 실패도 같은 표로 버린다** — `catch` 쪽의 표 검사가 `try` 쪽과 한 쌍이지 사족이
  * 아니다. 버리지 않으면 새 형식이 이미 그려진 자리를 **앞 형식의 오류 문장**이 덮는다:
  * 실패는 상자 전체를 `role="alert"` 하나로 바꾸므로 보고 있던 미리보기가 통째로 사라지고,
@@ -81,7 +87,7 @@
  *
  * `<button>`·`<a download>`·`useState`·`useRef`뿐이다.
  */
-import { useRef, useState, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type {
@@ -116,19 +122,38 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
    * `useState`가 아니라 `useRef`인 것은 이 값이 화면을 다시 그릴 이유가 아니기 때문이다.
    */
   const latest = useRef(0)
+  /** 부르는 중인 조회를 끊는 자 — 위 머리말 «앞 요청은 끊는다». */
+  const inflight = useRef<AbortController | null>(null)
+
+  function abandon(): void {
+    inflight.current?.abort()
+    inflight.current = null
+  }
+
+  function close(): void {
+    abandon()
+    setOpen(false)
+  }
+
+  // 화면이 내려가면(프로젝트를 떠남) 부르던 조회도 끊는다.
+  useEffect(() => abandon, [])
+
   /**
    * **토글까지 감싸는 상자에 건다.** 그래야 토글 위의 `mousedown`이 *"바깥"*이 아니고,
    * 닫는 일을 토글의 `onClick` 하나가 한다(그 훅의 머리말).
    */
-  const rootRef = usePopoverDismiss(open, () => setOpen(false))
+  const rootRef = usePopoverDismiss(open, close)
 
   async function load(next: ExportFormat): Promise<void> {
     const ticket = (latest.current += 1)
+    abandon()
+    const controller = new AbortController()
+    inflight.current = controller
     setFormat(next)
     // **여기서 앞 형식의 결과가 사라진다.** 두 갈래는 다른 것을 말하므로 섞여 보이면 안 된다.
     setState({ status: 'loading' })
     try {
-      const preview = await api.getExportPreview(props.projectId, next)
+      const preview = await api.getExportPreview(props.projectId, next, { cancel: controller.signal })
       if (latest.current !== ticket) return
       setState({ status: 'ready', preview })
     } catch (caught) {
@@ -154,11 +179,14 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
         className="wb-shell-export-toggle"
         aria-expanded={open}
         onClick={() => {
-          const next = !open
-          setOpen(next)
+          if (open) {
+            close()
+            return
+          }
+          setOpen(true)
           // **열 때마다 다시 본다.** 그 사이 페이지를 고쳤을 수 있고, 이 화면이 말하는 것은
           // 전부 *"지금 내보내면 무엇이 나오는가"*다 — 낡은 답을 보이면 D6이 뒤집힌다.
-          if (next) void load(DEFAULT_FORMAT)
+          void load(DEFAULT_FORMAT)
         }}
       >
         내보내기

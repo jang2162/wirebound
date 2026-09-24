@@ -348,6 +348,155 @@ describe('쉬는 워커', () => {
   }, 60_000)
 })
 
+const PPTX_NO_ZIP: Extract<ExportJobSpec, { kind: 'pptx' }> = { kind: 'pptx', screenTheme: { ok: true, theme: null }, zip: false }
+
+/** 풀어 줄 때까지 안 끝나는 그리는 자 — 지금 몇이 그리는 중인지 센다. */
+class HeldRenderer {
+  started = 0
+  active = 0
+  maxActive = 0
+  private readonly releases: (() => void)[] = []
+  readonly render = async (requests: readonly ScreenRequest[]): Promise<ScreenBatch> => {
+    this.started++
+    this.active++
+    this.maxActive = Math.max(this.maxActive, this.active)
+    await new Promise<void>((resolve) => this.releases.push(resolve))
+    this.active--
+    return { results: requests.map(() => ({ ok: true as const, bytes: PNG_1X1, width: 1, height: 1 })), fontWarning: null }
+  }
+  /** 그리는 중인 것 하나를 끝낸다(먼저 시작한 것부터). */
+  releaseOne(): void {
+    const release = this.releases.shift()
+    if (!release) throw new Error('그리는 중인 것이 없습니다')
+    release()
+  }
+  releaseAll(): void {
+    while (this.releases.length > 0) this.releaseOne()
+  }
+}
+
+/** 워커가 «그려 달라»고 한 수 — 메인이 받은 `render` 메시지를 센다. */
+function countRenderAsks(): { readonly count: number; restore(): void } {
+  let count = 0
+  const emit = Worker.prototype.emit
+  const spy = vi.spyOn(Worker.prototype, 'emit').mockImplementation(function (this: Worker, event, ...args) {
+    if (event === 'message' && (args[0] as { t?: string } | undefined)?.t === 'render') count++
+    return emit.call(this, event, ...args)
+  })
+  return {
+    get count() {
+      return count
+    },
+    restore: () => spy.mockRestore(),
+  }
+}
+
+/** `ms` 안에 안 끝나면 거절한다 — 줄에 선 채 안 끝나는 것을 «시간 초과»가 아니라 값으로 본다. */
+function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${ms}ms 안에 안 끝났습니다`)), ms)),
+  ])
+}
+
+describe('칸이 둘이다 — CPU 와 그리기', () => {
+  it('그리는 동안은 CPU 칸을 내놓는다 — pptx 가 그리는 중이어도 html 이 돈다', async () => {
+    const pool = new ExportWorkerPool({ limit: 1, renderLimit: 2 })
+    const renderer = new HeldRenderer()
+    try {
+      const pptx = pool.runPptx(syntheticRows(2, 1), PPTX_NO_ZIP, { render: renderer.render })
+      await vi.waitFor(() => expect(renderer.started).toBe(1), { timeout: 30_000 })
+
+      // CPU 칸이 하나뿐이다 — 그리는 pptx 가 그 칸을 쥐고 있으면 이 html 은 그리기가 끝날 때까지 줄을 선다.
+      await expect(within(pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP), 20_000)).resolves.toMatchObject({ kind: 'html' })
+      expect(renderer.active).toBe(1)
+
+      renderer.releaseAll()
+      await expect(pptx).resolves.toMatchObject({ kind: 'pptx', screenFailures: [] })
+    } finally {
+      renderer.releaseAll()
+      await pool.close()
+    }
+  }, 60_000)
+
+  it('동시에 그리는 것은 그리기 칸 수까지다 — 넘은 것은 기다렸다 그린다', async () => {
+    const pool = new ExportWorkerPool({ limit: 3, renderLimit: 2 })
+    const renderer = new HeldRenderer()
+    const asks = countRenderAsks()
+    try {
+      const jobs = [0, 1, 2].map(() => pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render }))
+      // 셋 다 그려 달라고 했다 — 그리기 칸이 CPU 칸과 같으면 셋이 함께 그린다.
+      await vi.waitFor(() => expect(asks.count).toBe(3), { timeout: 30_000 })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(renderer.started).toBe(2)
+
+      renderer.releaseOne()
+      await vi.waitFor(() => expect(renderer.started).toBe(3), { timeout: 10_000 })
+      renderer.releaseAll()
+      await expect(Promise.all(jobs)).resolves.toHaveLength(3)
+      expect(renderer.maxActive).toBe(2)
+    } finally {
+      asks.restore()
+      renderer.releaseAll()
+      await pool.close()
+    }
+  }, 60_000)
+
+  // 이 판은 앞 두 케이스의 축 위에 선다(가가 그리는 동안 CPU 칸을 내놓고, 나는 그리기 칸을 기다린다) — 그 두 축이
+  // 무너지면 이 케이스도 함께 죽는다. 축의 주인은 «그리는 동안은 CPU 칸을 내놓는다» · «동시에 그리는 것은 그리기 칸
+  // 수까지다»이고, 이 케이스가 혼자 재는 것은 «줄 맨 앞»과 «그리기 칸을 얻은 뒤에 CPU 칸을 내놓는다»다.
+  it('다 그린 일은 CPU 칸을 줄 맨 앞에서 다시 얻는다 — 뒤에 온 일보다 먼저 끝난다', async () => {
+    const pool = new ExportWorkerPool({ limit: 1, renderLimit: 1 })
+    const held = new HeldRenderer()
+    const asks = countRenderAsks()
+    const finished: string[] = []
+    try {
+      // 가: 그리는 중(그리기 칸을 쥐고 CPU 칸은 내놓았다).
+      const 가 = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: held.render }).then(() => finished.push('가'))
+      await vi.waitFor(() => expect(held.started).toBe(1), { timeout: 30_000 })
+      // 나: CPU 칸을 얻어 조립하고 그려 달라 한다 — 그리기 칸이 없어 CPU 칸을 쥔 채 기다린다.
+      const 나 = pool
+        .runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, {
+          render: async (requests) => ({ results: requests.map(() => ({ ok: true as const, bytes: PNG_1X1, width: 1, height: 1 })), fontWarning: null }),
+        })
+        .then(() => finished.push('나'))
+      await vi.waitFor(() => expect(asks.count).toBe(2), { timeout: 30_000 })
+      // 다: CPU 칸을 기다린다.
+      const 다 = pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP).then(() => finished.push('다'))
+      await vi.waitFor(() => expect(pool.stats.queued).toBe(1))
+
+      // 가가 다 그렸다 → 그리기 칸은 나에게, 나가 내놓은 CPU 칸은 줄 맨 앞에 선 가에게.
+      held.releaseOne()
+      await Promise.all([가, 나, 다])
+      expect(finished).toEqual(['가', '나', '다'])
+    } finally {
+      asks.restore()
+      held.releaseAll()
+      await pool.close()
+    }
+  }, 60_000)
+})
+
+describe('쉬는 동안 죽은 워커', () => {
+  it('꺼내지 않는다 — 다음 일은 새 워커로 된다', async () => {
+    const pool = new ExportWorkerPool({ limit: 1 })
+    try {
+      await pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP)
+      const idle = (pool as unknown as { idle: { worker: Worker }[] }).idle
+      expect(idle).toHaveLength(1)
+      const dead = idle[0]!.worker
+      await dead.terminate()
+      // `exit`이 처리될 때까지 — 그 뒤에 꺼내면 `converse`가 들을 `exit`이 다시 오지 않는다.
+      await new Promise((resolve) => setImmediate(resolve))
+
+      await expect(within(pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP), 20_000)).resolves.toMatchObject({ kind: 'html' })
+      expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0 })
+    } finally {
+      await pool.close()
+    }
+  }, 60_000)
+})
+
 describe('workerExecArgv', () => {
   it('메인의 --conditions 만 이어받고 tsx 로더를 싣는다', () => {
     const argv = workerExecArgv(['--require', '/x/preflight.cjs', '--conditions', 'development', '-C', 'node', '--conditions=custom', '--inspect'])

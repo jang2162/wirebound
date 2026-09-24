@@ -74,7 +74,9 @@ const UNREACHABLE = '서버에 연결하지 못했습니다'
  * - **받은 신호가 있는 읽기** — 판정용 다시 읽기다(`getPage`·`listComments`의 `ReadOptions.signal`). 장부가 제
  *   시간 제한으로 끊는다(`race`) — 여기서 한 번 더 걸면 두 시계가 한 요청을 다툰다.
  * - **PPTX 미리보기**(`getExportPreview`) — 서버가 페이지를 한 장씩 그린다(이 기계 2페이지 515ms · 페이지 수에 비례).
- *   HTML 미리보기(같은 판 최대 21.5ms)도 같은 함수라 함께 뺐다 — 한 형식만 거는 갈래를 두지 않았다.
+ *   HTML 미리보기(같은 판 최대 21.5ms)도 같은 함수라 함께 뺐다 — 한 형식만 거는 갈래를 두지 않았다. **`cancel`은
+ *   듣는다** — 떠나면(패널을 닫거나 다시 부르면) 끊고 다시 보내지 않는다. 안 끊으면 서버는 연결이 닫힐 때까지 그
+ *   내보내기를 끝까지 돌아(`apps/api`의 `routes/export.ts` «요청이 끊기면 일을 버린다») 다음 미리보기가 그 뒤에 선다.
  * - **쓰기**(`GET` 이 아닌 것) — 우측 패널의 쓰기는 장부가 잰다(이월 R). 그 밖의 쓰기(메뉴 · 스냅샷 …)는 이 판이
  *   다루지 않는다.
  *
@@ -1177,8 +1179,10 @@ export function createHttpClient(
       response = await fetchInTime(`${API_PREFIX}${path}`, init, cancel)
     } else {
       try {
-        response = await fetchImpl(`${API_PREFIX}${path}`, init)
+        // 시간 제한이 없는 읽기(PPTX 미리보기)도 떠나면 끊는다 — 끊을 신호가 곧 `fetch`의 신호다.
+        response = await fetchImpl(`${API_PREFIX}${path}`, cancel === undefined ? init : { ...init, signal: cancel })
       } catch {
+        if (cancel?.aborted === true) throw new ApiError(NO_RESPONSE, 'internal', ABANDONED)
         // `code`는 `internal`이다 — 서버 에러 코드 집합(README "에러 형식")에 "연결 실패"가
         // 없고, 화면이 `switch`로 가르는 값이라 계약 밖의 코드를 새로 만들지 않는다.
         throw new ApiError(NO_RESPONSE, 'internal', UNREACHABLE)
@@ -1470,13 +1474,13 @@ export function createHttpClient(
         SHAPES.restoreResult,
       ),
     // **시간 제한을 안 건다** — PPTX 는 서버가 페이지를 한 장씩 그린다(`READ_DEADLINE_MS`의 «안 거는 읽기»).
-    getExportPreview: (projectId, format) =>
+    getExportPreview: (projectId, format, options) =>
       request<ExportPreview>(
         'GET',
         `${projectPath(projectId)}/export/preview?format=${format}`,
         SHAPES.exportPreview,
         undefined,
-        { deadline: false },
+        { ...(options?.cancel === undefined ? {} : { cancel: options.cancel }), deadline: false },
       ),
     // **요청을 보내지 않는다** — 앵커에 걸 주소를 만들 뿐이다. 그래도 여기 있는 것은
     // 주소를 아는 자리가 하나여야 하기 때문이다(`api/client.ts`의 머리말).

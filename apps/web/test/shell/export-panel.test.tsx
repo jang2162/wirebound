@@ -627,6 +627,67 @@ describe('내보내기 화면', () => {
   })
 
   /**
+   * **앞 요청은 끊는다**(`shell/export-panel.tsx` 머리말 «앞 요청은 끊는다»). 표가 늦은 답을 화면에서 버려도 요청이
+   * 살아 있으면 서버는 그 내보내기를 끝까지 돌고, 이 사람의 다음 미리보기가 그 뒤에 선다. 재는 것은 **받은 끊는 신호가
+   * 끊겼는가**다 — 끊긴 요청이 서버에서 어떻게 되는지는 `apps/api`의 `export-worker-abort.test.ts`가 잰다.
+   */
+  describe('앞 요청은 끊는다', () => {
+    /** 부른 조회마다 받은 끊는 신호를 적는다. 끊길 때까지 답하지 않는다 — 끊기면 실제 요청처럼 거절한다. */
+    function 매달린() {
+      const 받은: { format: ExportFormat; cancel: AbortSignal | undefined }[] = []
+      const getExportPreview: ApiClient['getExportPreview'] = (_projectId, format, options) => {
+        받은.push({ format, cancel: options?.cancel })
+        return new Promise<ExportPreview>((_resolve, reject) => {
+          options?.cancel?.addEventListener('abort', () => reject(new ApiError(0, 'internal', '끊었다')))
+        })
+      }
+      return { overrides: { ...api(깨끗한), getExportPreview }, 받은 }
+    }
+
+    it('토글로 닫으면 부르던 조회를 끊는다', async () => {
+      const 가짜 = 매달린()
+      await open(가짜.overrides)
+      await waitFor(() => expect(가짜.받은).toHaveLength(1))
+      expect(가짜.받은[0]!.cancel?.aborted).toBe(false)
+
+      fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+      expect(가짜.받은[0]!.cancel?.aborted).toBe(true)
+    })
+
+    it('Escape 로 닫아도 끊는다 — 닫는 길이 공용 장치여도', async () => {
+      const 가짜 = 매달린()
+      await open(가짜.overrides)
+      await waitFor(() => expect(가짜.받은).toHaveLength(1))
+
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(screen.queryByRole('group', { name: '내보내기' })).toBeNull()
+      expect(가짜.받은[0]!.cancel?.aborted).toBe(true)
+    })
+
+    it('형식을 바꾸면 앞 형식의 조회를 끊고 새 조회는 살린다', async () => {
+      const 가짜 = 매달린()
+      const panel = await open(가짜.overrides)
+      await waitFor(() => expect(가짜.받은).toHaveLength(1))
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'PPTX' }))
+      await waitFor(() => expect(가짜.받은).toHaveLength(2))
+      expect(가짜.받은.map((call) => [call.format, call.cancel?.aborted])).toEqual([
+        ['html', true],
+        ['pptx', false],
+      ])
+    })
+
+    it('화면이 내려가면 끊는다', async () => {
+      const 가짜 = 매달린()
+      await open(가짜.overrides)
+      await waitFor(() => expect(가짜.받은).toHaveLength(1))
+
+      cleanup()
+      expect(가짜.받은[0]!.cancel?.aborted).toBe(true)
+    })
+  })
+
+  /**
    * **닫는 장치가 실제로 이 화면에 붙어 있는가.** 장치 자체(왜 `mousedown`인지·토글이 두 번
    * 처리되지 않는지·리스너가 남지 않는지)는 `popover-dismiss.test.tsx`가 재고, 여기서는
    * **배선**만 본다 — 훅이 있어도 ref를 안 걸면 아무것도 실패하지 않은 채 안 닫힌다.
