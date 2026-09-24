@@ -251,7 +251,7 @@ describe('배지 — *"○○ 편집 중"*', () => {
     expect(screen.getByText('보라 편집 중')).toBeTruthy()
   })
 
-  it('내가 잠근 것에는 안 뜬다 — 자기 이름이 뜨는 것은 뜻이 없다 (D3)', async () => {
+  it('내가 잠근 것에는 안 뜬다 — 자기 이름이 뜨는 것은 뜻이 없다', async () => {
     const view = await board()
 
     view.push(locksFrame([foreign('n-b', { userId: ME, userName: '테스터' })]))
@@ -342,7 +342,7 @@ describe('선택 차단 (1차 방어)', () => {
     expect(view.store.getState().selectedNodeId).toBe('n-a')
   })
 
-  it('내 잠금은 나를 막지 않는다 (D3)', async () => {
+  it('내 잠금은 나를 막지 않는다', async () => {
     const view = await board()
     view.push(locksFrame([foreign('n-b', { userId: ME, userName: '테스터' })]))
 

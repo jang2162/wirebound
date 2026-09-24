@@ -1,7 +1,7 @@
 /**
  * `apps/web/src`가 스토어의 **페이지 상태**를 `useOpenDocument`를 거치지 않고 읽는지 본다.
- * 규칙의 뜻과 근거는 `../src/store/use-editor-store.tsx`의 `useOpenDocument` 주석에 있고,
- * 여기 있는 것은 **그 규칙을 기계가 보는 형태**다. 심기 표는 `./store-access.test.ts`에 있다.
+ * 규칙의 뜻과 근거는 `../src/store/use-editor-store.tsx`의 `useOpenPage` 주석에 있고
+ * (`useOpenDocument`는 그 껍질이다), 여기 있는 것은 **그 규칙을 기계가 보는 형태**다. 심기 표는 `./store-access.test.ts`에 있다.
  *
  * **왜 소스 텍스트인가.** 이 규칙은 실행해서 잴 수 있는 것이 아니다 — 우회한 코드도 대개의
  * 케이스에서 정상으로 동작하고, 어긋나는 것은 주소가 바뀐 뒤 **커밋 하나** 동안뿐이다(그

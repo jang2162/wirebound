@@ -24,11 +24,11 @@
  * | 6 | `admin`이 내는 상태 층 | **8** |
  *
  * **주석이 아니라 케이스가 센다** — 여섯 줄 전부
- * `test/theme/gallery-document.test.ts`의 `재라 #5` 묶음이 단언한다. 값이 바뀌면 거기서 죽고,
- * 죽으면 이 표를 고치게 된다(주석에만 적은 수는 조용히 낡는다).
+ * `test/theme/gallery-document.test.ts`의 `왜 구조 옵션 45개를 늘어놓지 않는가` 묶음이 단언한다.
+ * 값이 바뀌면 거기서 죽고, 죽으면 이 표를 고치게 된다(주석에만 적은 수는 조용히 낡는다).
  *
  * 검산(워크트리 루트에서):
- * `pnpm vitest run --project web apps/web/test/theme/gallery-document.test.ts -t '재라 #5'`
+ * `pnpm vitest run --project web apps/web/test/theme/gallery-document.test.ts -t '구조 옵션 45개를 늘어놓지 않는가'`
  *
  * **4번이 판정의 근거다.** 방출이 컴포넌트 `base`를 내는 선택자는
  * `[data-wb-component="X"][data-wb-structure="Y"]`이고, **`Y`는 테마가 고른 구조 하나뿐**이다

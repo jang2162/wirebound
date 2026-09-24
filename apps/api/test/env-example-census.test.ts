@@ -75,7 +75,7 @@ describe('.env.example 이 무엇을 드나', () => {
     expect(EXAMPLE).not.toMatch(/^#?SEED_USER_PASSWORD=.+$/m)
   })
 
-  it('워크트리마다 갈라야 하는 값 **넷**이 전부 있다 — README 3.1 의 절차가 이 줄들을 든다', () => {
+  it('워크트리마다 갈라야 하는 값 **넷**이 전부 있다 — README 「워크트리를 여럿 띄울 때」의 절차가 이 줄들을 든다', () => {
     // `POSTGRES_PORT` 가 없으면 워크트리마다 컨테이너를 가르는 길 자체가 없다 — compose 가 읽는 유일한 값이다.
     expect(EXAMPLE).toMatch(/^POSTGRES_PORT=/m)
     expect(EXAMPLE).toMatch(/^DATABASE_URL=/m)

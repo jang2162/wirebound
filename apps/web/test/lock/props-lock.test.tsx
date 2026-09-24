@@ -676,7 +676,7 @@ describe('안 막는다 — 서버가 통과시킬 것은 그대로 나간다', 
     expect(view.status).toEqual([200])
   })
 
-  it('내 잠금에는 안 막힌다 (D3) — 소유자 판정도 스토어를 지난다', async () => {
+  it('내 잠금에는 안 막힌다 — 소유자 판정도 스토어를 지난다', async () => {
     const view = await board()
     select('Card')
     await settle()

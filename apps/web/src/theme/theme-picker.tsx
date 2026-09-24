@@ -22,8 +22,8 @@
  *
  * **owner가 아니면 `disabled`로 그린다.** 서버가 이미 403으로 막지만(설계서 「권한 모델」) 화면이 미리
  * 보여주는 편이 낫다. **판정은 여기서 하지 않는다** — 셸이 `projectAbilities`를 지나
- * `canChoose` 하나를 내려보낸다(`projects/project-actions.ts`의 *"`role === 'owner'`
- * 하나로 가르는 것이 요점이다"*, `test/role-access.test.ts`가 그 단일성을 실행으로 센다).
+ * `canChoose` 하나를 내려보낸다(`projects/project-actions.ts`의 `projectAbilities` — *"역할별 표를
+ * 두지 않는다"*, `test/role-access.test.ts`가 그 단일성을 실행으로 센다).
  *
  * ---
  *

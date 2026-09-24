@@ -4,8 +4,8 @@
  * 무엇을 지키는가. 주소가 바뀐 뒤 문서를 비우는 일은 `routes/editor.tsx`의 passive
  * `useEffect`에 있어 커밋보다 뒤에 돈다. 그 커밋 하나 동안 주소는 새 페이지인데 스토어는
  * 앞 페이지의 문서·`headSeq`·`openPageId`를 그대로 들고 있다. 그것을 걸러 내는 대조가
- * `store/use-editor-store.tsx`의 `useOpenDocument` 한 곳에 있고, **그 한 곳을 지나지 않는
- * 읽기는 대조가 없다.**
+ * `store/use-editor-store.tsx`의 `useOpenPage` 한 곳에 있고(`useOpenDocument`는 그 껍질이다),
+ * **그 한 곳을 지나지 않는 읽기는 대조가 없다.**
  *
  * **왜 테스트인가.** 주석만 있는 규칙은 조용히 깨지고, 깨지면 이 창(주소가 바뀐 커밋에 앞
  * 페이지가 그려진다)이 열린다. 이 저장소에는 린트 도구가 없으므로(설정 0,

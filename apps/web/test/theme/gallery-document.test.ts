@@ -12,8 +12,8 @@
  *
  * ---
  *
- * **§5의 수를 여기서 붙든다.** `gallery-document.ts` 머리말이 `재라 #5` 표에 수 여섯을
- * 적는데, 주석에 적은 수는 코드가 바뀌어도 아무것도 죽지 않아 조용히 낡는다.
+ * **갤러리 축을 고른 근거의 수를 여기서 붙든다.** `gallery-document.ts` 머리말
+ * 「축은 구조 옵션마다가 아니다」가 표에 수 여섯을 적는데, 주석에 적은 수는 코드가 바뀌어도 아무것도 죽지 않아 조용히 낡는다.
  * 그래서 **주석이 아니라 케이스가 센다** — 값이 바뀌면 여기서 죽고, 죽으면 머리말을 고치게 된다.
  */
 import { describe, expect, it } from 'vitest'
@@ -125,11 +125,11 @@ describe('갤러리 문서', () => {
 })
 
 /**
- * **재라 #5의 근거를 세는 자리.** `gallery-document.ts` 머리말의 표 여섯 줄이 그대로 여기 있다.
+ * **갤러리 축을 고른 근거를 세는 자리.** `gallery-document.ts` 머리말의 표 여섯 줄이 그대로 여기 있다.
  *
- * 검산: `pnpm vitest run --project web apps/web/test/theme/gallery-document.test.ts -t '재라 #5'`
+ * 검산: `pnpm vitest run --project web apps/web/test/theme/gallery-document.test.ts -t '구조 옵션 45개를 늘어놓지 않는가'`
  */
-describe('재라 #5 — 왜 구조 옵션 45개를 늘어놓지 않는가', () => {
+describe('왜 구조 옵션 45개를 늘어놓지 않는가', () => {
   const types = listComponents().map((def) => def.type)
 
   it('카탈로그는 타입 19개 · 구조 옵션 45개다', () => {

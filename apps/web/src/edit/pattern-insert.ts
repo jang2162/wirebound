@@ -87,7 +87,8 @@ export function patternInsert(
    * 패턴 삽입은 그것과 아무 상관이 없다.
    *
    * **`error`만 본다.** `ignored-variant` 같은 `warning`은 편집 파이프라인도 막지 않으므로
-   * (설계서 「정방향 흐름」) 여기서 막으면 화면만 서버보다 엄격해진다.
+   * (`apps/api/README.md` 「이슈의 severity — 무엇이 저장을 막는가」) 여기서 막으면 화면만
+   * 서버보다 엄격해진다.
    */
   const probe: PageDocument = {
     version: document.version,

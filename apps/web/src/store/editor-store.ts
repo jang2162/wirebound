@@ -1030,7 +1030,8 @@ export class EditorStore {
    *
    * **`baseSeq`를 여기서 붙이는 것이 요점이다.** 큐에 담긴 `PendingEdit.baseSeq`는 그
    * 편집을 **만들 때**의 값이라 앞 편집이 ack되며 이미 낡았다. 전송 시점의 `headSeq`를
-   * 읽어야 README 4단계(*"응답의 `seq`가 다음 요청의 `baseSeq`다"*)가 지켜진다.
+   * 읽어야 `apps/api/README.md` 「편집 파이프라인」 절의 4단계(*"응답의 `seq`가 다음 요청의
+   * `baseSeq`다"*)가 지켜진다.
    *
    * **부르는 쪽이 `headSeq`를 직접 읽지 않게 하려는 것이기도 하다.** 그 필드는 페이지와
    * 함께 실리고 함께 비워지므로 주소와 대조한 뒤에 써야 하는데(`test/store-access-guard.ts`),

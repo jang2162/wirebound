@@ -6,14 +6,14 @@
     "composite": true,
     "types": ["node"]
   },
-  // **`build-test`도 든다**(리뷰 §9). 안 들면 그 파일이 타입검사를 아예 안 받는다 —
-  // 리뷰가 명백한 타입 오류를 심어도 `pnpm typecheck`가 0을 내는 것을 값으로 보였다.
+  // **`build-test`도 든다.** 안 들면 그 파일이 타입검사를 아예 안 받는다 — 명백한 타입
+  // 오류를 심어도 `pnpm typecheck`가 0을 낸다.
   // `packages/exporter/tsconfig.test.json`이 같은 이유로 `build-test`를 든다.
   "include": ["src", "test", "build-test"],
   "references": [
     { "path": "../../packages/schema" },
     { "path": "../../packages/themes" },
-    // **`exporter`를 참조로 잡는다**(P8-4 T2). 참조가 없으면 tsc가 그 패키지의 소스를
+    // **`exporter`를 참조로 잡는다.** 참조가 없으면 tsc가 그 패키지의 소스를
     // 이 프로그램의 옵션(`lib: ES2022` · jsx 없음 · `types: ["node"]`)으로 컴파일해
     // 그쪽의 브라우저 파일과 `.tsx`에서 깨진다 — 참조로 잡으면 빌드된 선언만 본다.
     { "path": "../../packages/exporter" }
