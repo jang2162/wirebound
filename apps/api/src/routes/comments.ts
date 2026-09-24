@@ -147,6 +147,7 @@ import {
   deleteComment,
   findCommentById,
   findCommentByIdempotencyKey,
+  findPostRevision,
   hasCommentTombstone,
   insertComment,
   listComments,
@@ -218,6 +219,39 @@ function notifyMarkerChange(
     // 에이전트가 단 코멘트의 프레임이 사람이 단 것과 구별되지 않는다.
     actor: requestEventActor(request),
     origin: broadcastOrigin(request),
+  })
+}
+
+/**
+ * **재생이 앞 요청의 번호 프레임을 룸에 다시 보낸다.** 앞 요청이 그 게시로 노드에 번호를 붙였으면(`0015-comment-revision-seq`)
+ * 그 revision 을 `page-changed`로 보내고, 아니면 아무것도 안 보낸다.
+ *
+ * 왜 다시 보내나: COMMIT 답을 잃은 게시는 커밋됐는데 핸들러가 503 으로 끝나 `notifyMarkerChange`에 닿지 않는다. 웹은 같은
+ * 키로 다시 보내 재생을 받는다 — 재생마저 안 보내면 그 번호 프레임은 아무 연결에도 안 가고, 남의 화면은 다음 변경의 `seq`가
+ * 건너뛸 때 «연결이 끊긴 사이의 변경을 놓쳐…»를 띄운다(원인이 틀린 문장). 재생은 앞 요청이 방송했는지 모르므로 늘 보낸다 —
+ * 받는 쪽은 자기 `headSeq` 이하의 프레임을 건너뛴다(`apps/web/src/store/editor-store.ts`의 `applyRemoteChange`).
+ *
+ * **발신 연결을 빼지 않는다** — 쓴 사람의 화면도 그 프레임을 못 받았다(앞 요청의 방송이 났어도 그 연결은 빠졌고, 재생 응답의
+ * `markerOps`는 빈 배열이다 — `replayOf`). actor 는 revision 에 적힌 값이고 경고는 싣지 않는다(revision 이 경고를 안 든다).
+ *
+ * **던지지 않는다** — 재생은 이미 판정됐다. 조회가 실패하면 로그만 남긴다(`ws/notify.ts` 머리말 «던지지 않는다»와 같다).
+ */
+async function rebroadcastPostRevision(app: FastifyInstance, projectId: string, pageId: string, commentId: string): Promise<void> {
+  let revision
+  try {
+    revision = await findPostRevision(app.db, pageId, commentId)
+  } catch (error) {
+    app.log.error({ err: error, projectId, pageId, commentId }, '재생의 번호 프레임을 읽지 못했습니다')
+    return
+  }
+  if (revision === null) return
+  notifyPageChanged(app, {
+    projectId,
+    pageId,
+    seq: revision.seq,
+    ops: revision.ops,
+    warnings: NO_WARNINGS,
+    actor: { type: revision.actorType, label: revision.actorLabel },
   })
 }
 
@@ -439,7 +473,9 @@ export async function replayBeforeGuard(request: FastifyRequest, reply: FastifyR
   } catch {
     return undefined
   }
-  return reply.code(200).send(replayOf(existing, body.data, document, page.headSeq))
+  const replay = replayOf(existing, body.data, document, page.headSeq)
+  await rebroadcastPostRevision(request.server, projectId, pageId, existing.id)
+  return reply.code(200).send(replay)
 }
 
 function toResponse(comment: CommentRecord) {
@@ -669,12 +705,14 @@ export function commentRoutes() {
           body: body.body,
           authorId: currentUser.id,
           ...(key === undefined ? {} : { idempotencyKey: key }),
+          revisionSeq: outcome.seq,
         })
         return { comment, seq: outcome.seq, marker, markerOps: ops, warnings: outcome.warnings }
       })
 
-      // 잠금 안에서 같은 키를 찾았다 — 이 요청은 아무것도 안 바꿨다(알릴 것도 없다).
+      // 잠금 안에서 같은 키를 찾았다 — 이 요청은 아무것도 안 바꿨다. 앞 요청의 번호 프레임은 다시 보낸다(`rebroadcastPostRevision`).
       if ('replay' in result) {
+        await rebroadcastPostRevision(app, projectId, pageId, result.replay.comment.id)
         reply.code(200)
         return result.replay
       }

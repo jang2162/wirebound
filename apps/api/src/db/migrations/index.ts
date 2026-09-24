@@ -13,6 +13,7 @@ import { migration as m0011 } from './0011-api-tokens'
 import { migration as m0012 } from './0012-comment-idempotency-key'
 import { migration as m0013 } from './0013-comment-tombstones'
 import { migration as m0014 } from './0014-comment-tombstones-project'
+import { migration as m0015 } from './0015-comment-revision-seq'
 
 /**
  * 정적 마이그레이션 레지스트리.
@@ -41,6 +42,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '0012-comment-idempotency-key': m0012,
   '0013-comment-tombstones': m0013,
   '0014-comment-tombstones-project': m0014,
+  '0015-comment-revision-seq': m0015,
 }
 
 export const migrationProvider: MigrationProvider = {

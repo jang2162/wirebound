@@ -211,6 +211,11 @@ export interface CommentsTable {
    * 키 없는 게시·가져오기·복원. **고치지 않는다** — 같은 게시를 가리키는 이름이다.
    */
   idempotency_key: ColumnType<string | null, string | null | undefined, never>
+  /**
+   * 그 게시가 번호를 붙이며 만든 revision 의 `seq`(`0015-comment-revision-seq`). 번호를 새로 붙이지 않은 게시 · 가져오기 ·
+   * 복원은 `null`이다. 읽는 자리는 게시의 재생뿐이다. `bigint`라 pg 가 문자열로 준다(`revisions.seq`와 같다).
+   */
+  revision_seq: ColumnType<string | null, number | null | undefined, never>
 }
 
 /**
