@@ -268,6 +268,17 @@ describe('Tree·Media·Placeholder', () => {
     expect(dom.computed(placeholder, 'height')).toBe(`var(${nodeVar('placeholder', 'height')}, 120px)`)
   })
 
+  /**
+   * **`contained`의 칼럼은 가운데 선다** — 테마가 `inner`에 폭만 걸고 `marginX`를 빠뜨려도(헤드리스 Chrome · 1920 폭 ·
+   * `exportPage`: 960px 칼럼 좌 0 / 우 960 → 이 규칙으로 480 / 480). jsdom 은 레이아웃을 안 해 값이 실린 것까지만 잰다.
+   * 누가 받는지는 아래 수신자 표가 소유한다.
+   */
+  it('Section(contained)의 inner 가 좌우 auto 여백을 받는다', async () => {
+    // 구조를 안 주면 카탈로그의 첫 구조다 — `contained`.
+    const dom = await renderedProbe('Section', {})
+    expect(dom.computed('[data-wb-part="inner"]', 'margin-inline')).toBe('auto')
+  })
+
   it('테마가 Placeholder의 높이를 덮는다', async () => {
     const dom = await renderedProbe('Placeholder', { height: 240 }, [
       themeRule('Placeholder', 'default', 'height: 400px;'),
@@ -315,9 +326,11 @@ describe('P4b-2 ③ — 조각 규칙의 수신자', () => {
     // 넷 다 비율을 싣는다 — 좁히지 않는다. 하나라도 안 실으면 조용히 기본값으로 굳으므로
     // 규칙이 넷에 다 걸려 있는 편이 그 어긋남을 만들 자리를 없앤다.
     'Media [frame]': ['image', 'video', 'illustration', 'chart'],
+    // `:where(contained)`로 좁힌다 — `splitBg`의 `inner`는 격자 반쪽 칸이라 `auto` 여백을 받으면 내용 폭으로 줄어든다.
+    'Section [inner]': ['contained'],
   }
 
-  it('구조 기본 CSS의 조각 규칙은 이 넷뿐이다', () => {
+  it('구조 기본 CSS의 조각 규칙은 이 표의 것뿐이다', () => {
     const selectors = structureBaseCss()
       .split('\n')
       .filter((line) => line.endsWith('{') && line.includes('[data-wb-part='))
