@@ -96,20 +96,72 @@ describe('placePopover', () => {
   })
 })
 
-/** 열린 채 창 폭이 바뀌면 다시 잰다 — 머리가 다시 한 줄이 되면 토글이 오른쪽 끝으로 돌아간다. */
-it('열린 채 창 폭이 바뀌면 다시 고른다', async () => {
-  const anchor = { left: 16, right: 76 }
-  stubRects({ 'wb-shell-export': anchor, 'wb-shell-export-body': { width: 380 } })
-  await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
-  fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
-  expect(body('wb-shell-export-body').dataset.side).toBe('start')
+/** 한 프레임을 흘린다 — 열린 상자는 프레임마다 다시 잰다(`use-popover-side.ts` 머리말). */
+async function nextFrame(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  })
+}
 
-  anchor.right = 1424
-  act(() => {
-    window.dispatchEvent(new Event('resize'))
+/**
+ * **열린 채 다시 고른다** — 창 폭이 바뀌어도, 창 폭 그대로 토글만 옮겨 가도. 뒤의 것이 Chrome 에서 잰 고장 방식이다: 열린 채
+ * 역할이 바뀌어 머리의 되돌리기 묶음이 사라지면 토글이 1280 에서 16..61 → 1109..1154 로 가고, 옛 자리(`start`)의 상자가 243px
+ * 넘쳤다. `resize`는 없다.
+ */
+describe('열린 채 다시 고른다', () => {
+  it('창 폭 그대로 토글이 옮겨 가면 — 머리가 다시 접혀 오른쪽 끝으로 간다', async () => {
+    const anchor = { left: 16, right: 76 }
+    stubRects({ 'wb-shell-export': anchor, 'wb-shell-export-body': { width: 380 } }, 1280)
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
+    fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+    expect(body('wb-shell-export-body').dataset.side).toBe('start')
+    // 한 프레임을 먼저 흘린다 — 여는 때 한 번 · 첫 프레임 한 번만 재는 판을 가른다.
+    await nextFrame()
+
+    anchor.left = 1109
+    anchor.right = 1154
+    await nextFrame()
+
+    expect(body('wb-shell-export-body').dataset.side).toBe('end')
   })
 
-  expect(body('wb-shell-export-body').dataset.side).toBe('end')
+  /** 토글은 그대로이고 화면만 좁아진다 — 왼쪽 끝에 붙인 상자(300..680)가 600 화면을 넘어 끌어온다(220..600). */
+  it('토글 그대로 창 폭이 바뀌면', async () => {
+    let viewport = 1440
+    stubRects({ 'wb-shell-export': { left: 300, right: 360 }, 'wb-shell-export-body': { width: 380 } })
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, get: () => viewport })
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
+    fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+    expect(body('wb-shell-export-body').dataset.side).toBe('start')
+    expect(body('wb-shell-export-body').style.left).toBe('')
+    await nextFrame()
+
+    viewport = 600
+    await nextFrame()
+
+    expect(body('wb-shell-export-body').style.left).toBe('-80px')
+  })
+
+  /** **닫으면 재기를 멈춘다** — 닫힌 채 프레임마다 앵커를 읽지 않는다(`use-popover-dismiss.ts`와 같은 판단). */
+  it('닫으면 더 재지 않는다', async () => {
+    stubRects({ 'wb-shell-export': { left: 16, right: 76 }, 'wb-shell-export-body': { width: 380 } }, 1280)
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
+    const toggle = screen.getByRole('button', { name: '내보내기' })
+    fireEvent.click(toggle)
+    await nextFrame()
+    fireEvent.click(toggle)
+    expect(document.querySelector('.wb-shell-export-body')).toBeNull()
+
+    const reads = vi.mocked(Element.prototype.getBoundingClientRect)
+    const anchorReads = (): number =>
+      reads.mock.contexts.filter((element) => (element as Element).classList.contains('wb-shell-export')).length
+    const before = anchorReads()
+    await nextFrame()
+    await nextFrame()
+
+    expect(before).toBeGreaterThan(0)
+    expect(anchorReads()).toBe(before)
+  })
 })
 
 /**
@@ -134,5 +186,13 @@ describe.each(PANELS)('$body 의 붙일 쪽 규칙', (panel) => {
     const style = styleOf('start')
     expect(style.left).toBe('0px')
     expect(style.right).toBe('auto')
+  })
+
+  /**
+   * **화면보다 넓어지지 않는다** — 넓으면 끌어와도 오른쪽이 잘린다(Chrome — 390 폭에서 내보내기 24px · 스냅샷 164px, 480 스냅샷
+   * 74px. 이 값을 건 뒤 0). 폭이 화면에 맞춰 줄어드는 것은 jsdom 이 못 잰다 — 규칙이 걸리는 것만 잰다.
+   */
+  it('화면 폭에 맞춰 줄어든다 — 테두리까지 화면 − 16', () => {
+    expect(styleOf(null).maxWidth).toBe('calc(100vw - 50px)')
   })
 })
