@@ -1413,6 +1413,9 @@
    | 프리셋 **저장 결과** | 388.9px · 밖으로 2개 | 240px · 0개 |
    | 프리셋 **확인 단계** | 421.3px · 밖으로 5개 · `<select>` 2px | 240px · 0개 · `<select>` 204.9px |
 
+   **«감싸기» 칸은 옵션 글자가 짧은 판의 값이다.** 옵션이 길면 감싸도 고르개 **자체**가 도구모음을 넘친다 — 넘치는
+   기전이 다르고(자식이 아니라 고르개의 최소 폭) 그 자리는 아래 `min-width: 0`이 닫는다.
+
    **확인 단계는 가장 크게 터진 자리이지 유일한 원인이 아니다.** 프리셋 고르개는 기본
    상태에서 이미 371px다 — 자식이 일곱이고 그중 다섯이 auto 폭이라 240에 애초에 안 들어간다.
    확인 단계가 `flex-basis: 100%`인 안내문과 버튼 둘을 더해 그것을 421px까지 밀 뿐이다.
@@ -1449,9 +1452,30 @@
   display: flex;
   flex-wrap: wrap;
   flex-basis: 100%;
+  /* **구조 도구모음의 flex 항목이라 `min-width: auto`면 안 줄어든다** — 그 값은 내용의 최소 폭이고, 그 안의
+     `<select>`는 `flex: 1; min-width: 0`이어도 가장 긴 옵션 글자만큼의 최소 폭을 고르개에 싣는다. Chrome(264px
+     사이드바 · 프리셋 옵션 «검색 + 목록형 …»): 고르개 434px 로 240px 내용 폭을 넘어 영역에 가로 스크롤 182px
+     (`scrollWidth` 446 · `clientWidth` 264) — 사이드바를 360px 로 넓혀도 434px 그대로였다. 0 이면 240px(넓히면 336px)로
+     서고 넘침 0 이다. */
+  min-width: 0;
   align-items: center;
   gap: 4px;
   margin-top: 6px;
+}
+
+/* 고르개 안의 **한 줄** — 이름표와 칸, 또는 함께 누르는 단추들(`panels/preset-picker.tsx`). 줄을 마크업이 가른다:
+   CSS 만으로 감싸면 확인 단계의 `덮고 적용`·`적용 취소`와 `프리셋 이름` 이름표·입력이 한 줄에 섞이고(Chrome · 264px:
+   입력 46.9px), 기본 상태의 `<select>`가 `프리셋 적용`과 줄을 나눠 29.1px 로 짓눌린다. 줄마다 자기 줄을 받으면 칸이
+   남는 폭을 다 먹는다. */
+.wb-shell-picker-row {
+  display: flex;
+  /* 감싼다 — 칸(`<select>`·입력)은 `flex: 1; min-width: 0`이라 줄을 안 나누고, 단추만 있는 줄이 좁은 폭에서 다음 줄로
+     간다(넘치지 않는다). `test/shell-css-picker.test.ts`가 고르개 안의 flex 상자에 이 짝을 요구한다. */
+  flex-wrap: wrap;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .wb-shell-picker-label {

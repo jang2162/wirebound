@@ -261,6 +261,44 @@ describe('프리셋 고르개 — 기본 상태', () => {
   })
 })
 
+/**
+ * **줄을 마크업이 가른다**(`shell.css`의 `.wb-shell-picker-row`). CSS 만으로 감싸면 확인 단계의 단추 둘과 `프리셋 이름`
+ * 이름표 · 입력이 한 줄에 섞였다(Chrome · 264px 사이드바: 입력 46.9px). 줄이 갈리는지는 좌표가 아니라 **어느 줄 상자에
+ * 담겼나**로 잰다 — jsdom 에는 레이아웃이 없다. 폭의 값은 실브라우저의 것이다(`<select>` 204.9 · 입력 180.7px).
+ */
+describe('프리셋 고르개 — 줄', () => {
+  function rowOf(element: Element): Element {
+    const row = element.closest('.wb-shell-picker-row')
+    if (row === null) throw new Error('줄 상자 안이 아니다')
+    return row
+  }
+
+  it('확인 단계의 단추 둘은 자기 줄이다 — 이름 칸과 섞이지 않는다', async () => {
+    const backend = server()
+    await openPage(doc(), { apiOverrides: backend.api })
+    await openPicker()
+    fireEvent.click(pickerButton('프리셋 적용'))
+
+    const confirm = rowOf(await screen.findByRole('button', { name: '덮고 적용' }))
+
+    expect(confirm).toBe(rowOf(screen.getByRole('button', { name: '적용 취소' })))
+    expect(confirm.querySelector('input, select, label')).toBeNull()
+  })
+
+  it('이름표는 제 칸과 한 줄이고, 칸은 단추와 섞이지 않는다', async () => {
+    const backend = server()
+    await openPage(doc(), { apiOverrides: backend.api })
+    await openPicker()
+
+    for (const name of ['프리셋', '프리셋 이름']) {
+      const field = screen.getByLabelText(name)
+      const row = rowOf(field)
+      expect(row.querySelector('label')?.textContent).toBe(name)
+      expect(row.querySelector('button')).toBeNull()
+    }
+  })
+})
+
 describe('적용 — 덮는 것을 먼저 말한다', () => {
   it('바로 적용하지 않고 확인을 묻는다 — 그 사이 편집이 0건이다', async () => {
     const backend = server()

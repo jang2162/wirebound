@@ -198,25 +198,28 @@ export function PresetPicker(props: {
 
   return (
     <div className="wb-shell-picker" role="group" aria-label="프리셋 고르기">
-      <label className="wb-shell-picker-label" htmlFor="wb-shell-preset-picker">
-        프리셋
-      </label>
-      <select
-        id="wb-shell-preset-picker"
-        className="wb-shell-picker-select"
-        value={current}
-        onChange={(event) => {
-          setPicked(event.target.value)
-          // 고른 것이 바뀌면 확인은 무효다 — 확인 문장이 가리키던 프리셋이 아니다.
-          setConfirming(false)
-        }}
-      >
-        {load.presets.map((preset) => (
-          <option key={preset.id} value={preset.id}>
-            {optionLabel(preset)}
-          </option>
-        ))}
-      </select>
+      {/* **줄을 마크업이 가른다**(`shell.css`의 `.wb-shell-picker-row`) — 이름표와 칸이 한 줄, 함께 누르는 단추가 한 줄. */}
+      <div className="wb-shell-picker-row">
+        <label className="wb-shell-picker-label" htmlFor="wb-shell-preset-picker">
+          프리셋
+        </label>
+        <select
+          id="wb-shell-preset-picker"
+          className="wb-shell-picker-select"
+          value={current}
+          onChange={(event) => {
+            setPicked(event.target.value)
+            // 고른 것이 바뀌면 확인은 무효다 — 확인 문장이 가리키던 프리셋이 아니다.
+            setConfirming(false)
+          }}
+        >
+          {load.presets.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {optionLabel(preset)}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {confirming ? (
         <>
@@ -226,48 +229,56 @@ export function PresetPicker(props: {
           <p className="wb-shell-picker-notice">
             {overwriteNotice(orphanedCount(load.commentNodes, props.currentNodes))}
           </p>
-          <button type="button" className="wb-shell-picker-action" onClick={apply}>
-            덮고 적용
-          </button>
+          <div className="wb-shell-picker-row">
+            <button type="button" className="wb-shell-picker-action" onClick={apply}>
+              덮고 적용
+            </button>
+            <button
+              type="button"
+              className="wb-shell-picker-action"
+              onClick={() => setConfirming(false)}
+            >
+              적용 취소
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="wb-shell-picker-row">
           <button
             type="button"
             className="wb-shell-picker-action"
-            onClick={() => setConfirming(false)}
+            disabled={selected === undefined}
+            onClick={() => setConfirming(true)}
           >
-            적용 취소
+            프리셋 적용
           </button>
-        </>
-      ) : (
+        </div>
+      )}
+
+      <div className="wb-shell-picker-row">
+        <label className="wb-shell-picker-label" htmlFor="wb-shell-preset-name">
+          프리셋 이름
+        </label>
+        <input
+          id="wb-shell-preset-name"
+          className="wb-shell-picker-input"
+          value={name}
+          onChange={(event) => props.onNameChange(event.target.value)}
+        />
+      </div>
+      <div className="wb-shell-picker-row">
         <button
           type="button"
           className="wb-shell-picker-action"
-          disabled={selected === undefined}
-          onClick={() => setConfirming(true)}
+          // **이름이 비어 있으면 서버가 400이다**(1~60자). 보내 봐야 거절될 요청을 막는 것은
+          // 구조 툴바의 `disabled`와 같은 판단이다.
+          disabled={saving || props.currentNodes === null || name.trim() === ''}
+          title={props.currentNodes === null ? NO_DOCUMENT : ''}
+          onClick={() => void save()}
         >
-          프리셋 적용
+          현재 페이지를 프리셋으로 저장
         </button>
-      )}
-
-      <label className="wb-shell-picker-label" htmlFor="wb-shell-preset-name">
-        프리셋 이름
-      </label>
-      <input
-        id="wb-shell-preset-name"
-        className="wb-shell-picker-input"
-        value={name}
-        onChange={(event) => props.onNameChange(event.target.value)}
-      />
-      <button
-        type="button"
-        className="wb-shell-picker-action"
-        // **이름이 비어 있으면 서버가 400이다**(1~60자). 보내 봐야 거절될 요청을 막는 것은
-        // 구조 툴바의 `disabled`와 같은 판단이다.
-        disabled={saving || props.currentNodes === null || name.trim() === ''}
-        title={props.currentNodes === null ? NO_DOCUMENT : ''}
-        onClick={() => void save()}
-      >
-        현재 페이지를 프리셋으로 저장
-      </button>
+      </div>
       {saved !== null && <p className="wb-shell-picker-notice">{saved}</p>}
       {saveFailure !== null && (
         <p className="wb-shell-picker-notice">{failureMessage(saveFailure)}</p>
