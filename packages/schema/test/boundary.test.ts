@@ -8,10 +8,10 @@ import packageJson from '../package.json?raw'
 const sources = import.meta.glob('../src/**/*.ts', { query: '?raw', eager: true, import: 'default' })
 
 /**
- * **D2가 딛고 선 사실을 케이스로 든다.**
+ * **lint 규칙의 소유 판정이 딛고 선 사실을 케이스로 든다.**
  *
  * *"설계서 규칙은 `schema`, 테마 규칙은 `themes`"*라는 판정의 근거 전부가 이 경계다 —
- * §12.4는 *"규칙은 `schema` 패키지에 두어"*라고 적었고, 그 문장을 글자대로 지키려면 여기서
+ * 설계서 「lint 규칙」은 *"규칙은 `schema` 패키지에 두어"*라고 적었고, 그 문장을 글자대로 지키려면 여기서
  * `themes`를 봐야 하는데 그 순간 의존 방향이 뒤집힌다. 근거가 케이스 없이 주석으로만
  * 남아 있으면 다음 사람이 그 판정을 뒤집는 import 한 줄을 조용히 넣는다.
  */
@@ -26,10 +26,10 @@ describe('경계 — schema가 무엇을 보지 않는가', () => {
   /**
    * 금지된 모듈 지정자를 **어느 형태로 적어도** 잡는다.
    *
-   * **앞 판은 `/from '(…)/`였고 세 형태가 빠져나갔다**(리뷰가 변이로 쟀다):
+   * **`/from '(…)/`만 보면 세 형태가 빠져나간다:**
    * 쌍따옴표(`from "…"`) · 부수효과 import(`import '…'` — `from`이 없다) · 동적
-   * `import('…')`. 그중 부수효과 import는 **`pnpm typecheck`도 통과하므로** 게이트 넷 어느
-   * 것도 그 한 줄을 막지 못했다.
+   * `import('…')`. 그중 부수효과 import는 **`pnpm typecheck`도 통과하므로** 이 자 말고는
+   * 그 한 줄을 막는 게이트가 없다.
    *
    * **모듈 지정자 자리만 본다** — 인용부호에 감싸인 채 `from`·`import`·`require` 뒤에 오는
    * 것. 이름을 그냥 언급하는 주석(`index.ts`가 *"테마 규칙은 `@wirebound/themes`"*라고

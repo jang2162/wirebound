@@ -23,7 +23,7 @@ describe('lint 이슈를 만드는 자리', () => {
     expect(issue.nodeId).toBeNull()
   })
 
-  it('날라 온 이슈의 severity를 그대로 쓴다 (D4)', () => {
+  it('날라 온 이슈의 severity를 그대로 쓴다', () => {
     const relayed = relayLintIssue(
       'interaction-target',
       { pageId: 'p1', nodeId: 'n_000000000001' },

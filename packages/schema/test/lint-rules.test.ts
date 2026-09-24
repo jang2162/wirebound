@@ -3,7 +3,7 @@ import designDoc from '../../../docs/superpowers/specs/2026-08-03-wirebound-desi
 import { LINT_RULES, lintRule } from '../src/lint/rules'
 
 /**
- * §12.4의 두 소제목 아래 불릿을 **설계 문서에서 읽는다.** 손으로 옮긴 인용은 설계가 바뀌어도
+ * 설계서 「lint 규칙」의 두 소제목 아래 불릿을 **설계 문서에서 읽는다.** 손으로 옮긴 인용은 설계가 바뀌어도
  * 조용하다 — `component/catalog-vocabulary.test.ts`가 선례다.
  */
 function specLines(): { group: 'document' | 'theme'; text: string }[] {
@@ -21,7 +21,7 @@ function specLines(): { group: 'document' | 'theme'; text: string }[] {
   return found
 }
 
-describe('규칙 레지스트리가 §12.4를 센다 (D6)', () => {
+describe('규칙 레지스트리가 설계서 lint 규칙 절을 센다', () => {
   const lines = specLines()
 
   it('설계 문서에서 규칙 줄을 실제로 읽는다', () => {
@@ -38,7 +38,7 @@ describe('규칙 레지스트리가 §12.4를 센다 (D6)', () => {
     expect([...declared].sort()).toEqual([...expected].sort())
   })
 
-  it('§12.4 밖의 규칙은 그렇다고 선언하고 이유를 든다', () => {
+  it('lint 규칙 절 밖의 규칙은 그렇다고 선언하고 이유를 든다', () => {
     for (const rule of LINT_RULES) {
       if (rule.spec !== null) continue
       expect(rule.beyondSpec, rule.id).toBeTypeOf('string')
@@ -51,7 +51,7 @@ describe('규칙 레지스트리가 §12.4를 센다 (D6)', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('테마 규칙은 themes가, 설계서 규칙은 schema가 구현한다 (D2)', () => {
+  it('테마 규칙은 themes가, 설계서 규칙은 schema가 구현한다', () => {
     for (const rule of LINT_RULES) {
       expect(rule.owner, rule.id).toBe(rule.group === 'theme' ? 'themes' : 'schema')
     }

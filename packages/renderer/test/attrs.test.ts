@@ -55,7 +55,7 @@ describe('partAttrs', () => {
   })
 })
 
-describe('nodeAttrs의 variantFrom (P0 이월 #8)', () => {
+describe('nodeAttrs의 variantFrom', () => {
   it('enum prop 값이 data-wb-variant로 나온다', () => {
     const attrs = nodeAttrs({ id: 'n_000000000001', type: 'Text' }, TextDef, 'default', {
       role: 'h1',
@@ -78,7 +78,7 @@ describe('nodeAttrs의 variantFrom (P0 이월 #8)', () => {
   })
 
   /**
-   * **재라 #4 — `variantFrom`이 이긴다.**
+   * **`variantFrom`이 이긴다.**
    *
    * 셋 중에서 고른 근거:
    *
@@ -86,19 +86,18 @@ describe('nodeAttrs의 variantFrom (P0 이월 #8)', () => {
    *   `TextDefault`는 `role`로 태그를 고르므로(`ROLE_TAG`) `role:'h1'` + `variant:'caption'`은
    *   `<h1 data-wb-variant="caption">`이 된다 — 태그는 제목이라 하고 스타일은 캡션이라 한다.
    *   `variantFrom`을 만든 이유가 *"prop이 단일 진실"*인데 그것을 스스로 깬다.
-   * - **(c) 둘 다 있으면 검증 이슈**는 §7.1의 게이트가 편집을 **막는** 자리다. 표현 세부
-   *   하나 때문에 패치가 거부되는 것은 과하고, 아래 사실이 그 판단을 굳힌다 —
-   *   **오늘 `node.variant`를 설정할 수 있는 UI 경로가 없다**(속성 패널은 `editor`에서
-   *   자동 생성되고 어느 컴포넌트의 `editor`에도 `variant` 항목이 없다. `apps/web/src`
-   *   전체에서 `variant`를 쓰는 자리는 CSS의 `font-variant-numeric` 하나다).
-   *   즉 (c)가 막을 상태를 만들어 내는 경로가 제품 안에 없다.
+   * - **(c) 둘 다 있으면 막는 검증 이슈**는 설계서 「정방향 흐름」의 게이트가 편집을
+   *   **막는** 자리다. 표현 세부 하나 때문에 패치가 거부되는 것은 과하다 — 그래서 막지 않고
+   *   `ignored-variant`(warning)로 알린다(`validate.ts`). UI는 그 상태를 만들지 않는다 —
+   *   속성 패널은 `variantFrom`이 있는 컴포넌트에 변형 컨트롤을 내지 않는다
+   *   (`apps/web/src/panels/property-panel.tsx`의 `variantFieldOf`).
    *
-   * **`node.variant`가 이미 검증되고 있다**는 것은 확인했다 — `validatePage`가
-   * `def.variants`와 대조해 `unknown-variant` 이슈를 낸다(`validate.ts`). 그래서 여기서
-   * 지는 값도 카탈로그가 선언한 값이지 아무 문자열이 아니다.
+   * **`node.variant`는 검증된다** — `validatePage`가 `variantFrom`이 있는 컴포넌트에는 값이
+   * 무엇이든 `ignored-variant`를, 없는 컴포넌트에는 `def.variants`와 대조해 `unknown-variant`를
+   * 낸다(`validate.ts`).
    *
-   * **남는 대가:** MCP·CLI·가져오기로 들어온 `variant`가 조용히 무시된다. 그 경로가
-   * 실제로 쓰이기 시작하면 다시 재야 한다.
+   * **남는 대가:** MCP·CLI·가져오기로 들어온 `variant`는 버려진다. 조용하지는 않다 —
+   * `ignored-variant` 경고가 그것을 알린다.
    */
   it('variantFrom이 있으면 node.variant보다 prop이 이긴다', () => {
     const attrs = nodeAttrs(
@@ -121,7 +120,7 @@ describe('nodeAttrs의 variantFrom (P0 이월 #8)', () => {
   })
 
   it('prop 값이 문자열이 아니면 속성을 내지 않는다', () => {
-    // 렌더러는 검증 전 문서를 받을 수 있다(§7.1) — 값이 무엇이든 던지지 않는다.
+    // 렌더러는 검증 전 문서를 받을 수 있다(설계서 「정방향 흐름」) — 값이 무엇이든 던지지 않는다.
     const attrs = nodeAttrs({ id: 'n_000000000001', type: 'Text' }, TextDef, 'default', {
       role: 42,
     })

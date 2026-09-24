@@ -1,7 +1,7 @@
 import type { ComponentDef, WbNode } from '@wirebound/schema'
 import type { SyntheticEvent } from 'react'
 
-/** 렌더러와 테마 사이의 전체 계약. 설계 문서 §6.11 */
+/** 렌더러와 테마 사이의 전체 계약. 설계서 「컴파일」 */
 export interface WbAttrs {
   'data-wb-id': string
   'data-wb-component': string
@@ -11,12 +11,12 @@ export interface WbAttrs {
 }
 
 /**
- * 상호작용 런타임이 노드 루트에 얹는 이벤트 핸들러(§8.3, P5-3).
+ * 상호작용 런타임이 노드 루트에 얹는 이벤트 핸들러(설계서 「상호작용」의 「실행」).
  *
- * **§6.11의 속성 계약이 아니다 — 갈라 둔 이유가 그것이다.** 여섯 속성은 *"테마가 쓸 수
+ * **「컴파일」의 속성 계약이 아니다 — 갈라 둔 이유가 그것이다.** 여섯 속성은 *"테마가 쓸 수
  * 있는 어휘"*이고 DOM에 `data-*`로 나가 셀렉터가 된다. 이쪽은 DOM 속성이 아니라 React의
  * 이벤트 prop이라 **셀렉터로 겨냥할 수 없고 테마가 볼 일이 없다.** 한 인터페이스에 섞으면
- * *"여섯이 전체 계약"*이라는 §6.11의 문장이 읽는 사람에게 거짓으로 보인다.
+ * *"여섯이 전체 계약"*이라는 「컴파일」의 문장이 읽는 사람에게 거짓으로 보인다.
  *
  * **꺼져 있으면 키가 하나도 없다**(`render.tsx`의 `NO_HANDLERS`) — 상호작용을 켜지 않은
  * 렌더는 `nodeAttrs`가 낸 객체를 그대로 받는다.
@@ -64,13 +64,13 @@ export function nodeAttrs(
 /**
  * `data-wb-variant`에 실을 값.
  *
- * **재라 #4 — `variantFrom`이 `node.variant`를 이긴다.** 근거는
- * `test/attrs.test.ts`의 같은 이름 케이스에 적었다. 요지 둘:
+ * **`variantFrom`이 `node.variant`를 이긴다.** 근거는 `test/attrs.test.ts`의
+ * *"variantFrom이 있으면 node.variant보다 prop이 이긴다"* 케이스에 적었다. 요지 둘:
  * `variantFrom`이 있다는 것은 *"이 prop이 단일 진실"*이라는 선언이고, 지지 않으면
  * 같은 prop에서 파생된 것들끼리 어긋난다(`Text`는 `role`로 태그도 고른다).
  *
  * **prop 값이 문자열이 아니면 아무것도 내지 않는다.** 렌더러는 서버 검증 **전** 문서를
- * 받을 수 있으므로(§7.1) 값의 타입을 믿지 않는다 — 다른 자리(`readString`·`shapeError`)와
+ * 받을 수 있으므로(「정방향 흐름」) 값의 타입을 믿지 않는다 — 다른 자리(`readString`·`shapeError`)와
  * 같은 태도다.
  */
 function variantOf(

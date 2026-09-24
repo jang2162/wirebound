@@ -1,9 +1,9 @@
 /**
- * **액션·문서 그룹의 구조 구현체.** P4b-2 ② W4가 만드는 다섯 —
+ * **액션·문서 그룹의 구조 구현체.** 기본 구조 밖의 다섯 —
  * `Button:outline`·`Button:text`·`Media:video`·`Media:illustration`·`Media:chart`.
  *
- * **파일을 새로 만든 것은 병렬 때문이다.** 워커 넷이 동시에 도는 동안 기존 테스트 파일에
- * 절을 더하면 병합에서 부딪힌다. 이 파일은 W4만 만진다.
+ * **그룹마다 파일이 따로인 것은 병렬 때문이다.** 여럿이 동시에 도는 동안 한 테스트 파일에
+ * 절을 더하면 병합에서 부딪힌다.
  *
  * 여기서 재는 것은 셋이다 — **조각이 나오는가**, **계약 밖 속성이 없는가**(전수 가드는
  * `structures.test.tsx`에 있고 여기서는 이 그룹만 다시 못을 박는다), **조건부 조각이
@@ -65,7 +65,7 @@ describe('Button:outline', () => {
   })
 
   it('solid와 DOM이 같다 — data-wb-structure만 다르다', () => {
-    // **이것이 "쟀다"의 실행 가능한 형태다**(계획서 재라 #7). 셋을 가르는 것이 CSS뿐이라는
+    // **이것이 "쟀다"의 실행 가능한 형태다.** 셋을 가르는 것이 CSS뿐이라는
     // 판정을 산문으로만 두면 아무도 다시 재지 않는다. 셋 중 하나가 정말 다른 DOM을 갖게
     // 되는 날 이 케이스가 먼저 죽고, 그때 `ButtonBase`를 가르면 된다.
     const solid = render('Button', 'solid', { label: '저장', disabled: false })
@@ -96,12 +96,12 @@ describe('Button:text', () => {
   it('라벨 조각을 지우지 않는다 — 테마의 어휘가 구조마다 달라지면 안 된다', () => {
     // **`text`에서 라벨 조각을 빼고 싶은 유혹이 있다** — 겹칠 것이 없어 보이니까. 그러면
     // 테마의 `Button.parts.label` 규칙이 **`text` 구조에서만 조용히 안 걸린다.** 조각
-    // 이름은 테마의 어휘이고(§6.5) 어휘는 구조를 가로질러 같아야 한다.
+    // 이름은 테마의 어휘이고(설계서 「components — 구조 + 스킨」) 어휘는 구조를 가로질러 같아야 한다.
     expect(parts(render('Button', 'text', {}))).toEqual(parts(render('Button', 'solid', {})))
   })
 })
 
-describe('Button — 구조 셋의 DOM 동일성 (계획서 재라 #7)', () => {
+describe('Button — 구조 셋의 DOM 동일성', () => {
   const STRUCTURES = ['solid', 'outline', 'text'] as const
 
   it('카탈로그가 선언한 구조 셋이 전부 구현돼 있다', () => {
@@ -112,9 +112,9 @@ describe('Button — 구조 셋의 DOM 동일성 (계획서 재라 #7)', () => {
   })
 
   it('셋의 DOM이 data-wb-structure를 빼면 글자까지 같다', () => {
-    // **W4의 판정: `Button`의 셋은 구조가 아니라 스킨이다.** 그래도 구조 채널에 남긴 이유는
+    // **판정: `Button`의 셋은 구조가 아니라 스킨이다.** 그래도 구조 채널에 남긴 이유는
     // 그 채널이 나르는 것이 *"DOM이 다르다"*가 아니라 *"테마가 무엇을 골랐는가"*이기
-    // 때문이다(§6.11의 `data-wb-structure`). 아래 정규화는 그 한 속성만 지운다.
+    // 때문이다(설계서 「컴파일」의 `data-wb-structure`). 아래 정규화는 그 한 속성만 지운다.
     const normalize = (html: string): string => html.replace(/ data-wb-structure="[^"]*"/, '')
     const props = { label: '저장', disabled: false, loading: false }
 
@@ -188,9 +188,9 @@ describe('Media:illustration', () => {
     // **이 케이스가 없으면 "일러스트는 사실 이미지다"라는 판정을 그냥 지나친다.**
     // 넷 중 둘이 같은 DOM이면 `Media.kind` 판정의 근거가 갈리므로 그 사실이 재져야 한다.
     //
-    // > **폴백 가드가 먼저 있어야 한다.** 구현이 없을 때 이 케이스는 **구현 없이도
-    // > 초록**이었다 — 폴백 `<div data-wb-error>`가 `<figure>`와 당연히 다르기 때문이다.
-    // > 실제로 그 상태를 한 번 만들어 확인했다(구현 전 5 실패 중 이 케이스는 없었다).
+    // > **폴백 가드가 먼저 있어야 한다.** 가드가 없으면 이 케이스는 **구현 없이도
+    // > 초록**이다 — 폴백 `<div data-wb-error>`가 `<figure>`와 당연히 다르기 때문이다.
+    // > 아래 `isFallback` 단언이 그 가드다.
     // > *"측정이 예상과 다르면 대상이 아니라 측정 장치를 먼저 의심하라"*가 걸리는 자리다.
     const illustration = render('Media', 'illustration', {})
     const image = render('Media', 'image', {})
@@ -226,13 +226,13 @@ describe('Media:chart', () => {
 
   it('작도 영역과 범례를 낸다 — 넷 중 유일하게 틀 안이 둘로 갈린다', () => {
     // 차트는 나머지 셋과 달리 **틀 안이 구획된다.** 그림이 들어가는 자리와 그것을 읽는
-    // 자리가 따로 있고, 테마가 그 둘에 다른 규칙을 걸 수 있어야 §6.5의 `parts`가 뜻을 갖는다.
+    // 자리가 따로 있고, 테마가 그 둘에 다른 규칙을 걸 수 있어야 설계서 「components — 구조 + 스킨」의 `parts`가 뜻을 갖는다.
     const html = render('Media', 'chart', {})
     expect(parts(html)).toEqual(['frame', 'plot', 'legend'])
   })
 
   it('네 구조의 DOM이 서로 다르다', () => {
-    // **`Media.kind` 판정의 입력이다**(계획서 D3). *"넷이 서로 다르게 그리면 `kind`는
+    // **`Media.kind` 판정의 입력이다.** *"넷이 서로 다르게 그리면 `kind`는
     // 구조와 중복이다"*가 그 판정의 전제이므로, 그 전제를 여기서 실제로 잰다.
     const normalize = (html: string): string => html.replace(/ data-wb-structure="[^"]*"/, '')
     const rendered = ['image', 'video', 'illustration', 'chart'].map((structure) =>

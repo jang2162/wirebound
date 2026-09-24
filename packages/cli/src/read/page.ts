@@ -1,33 +1,32 @@
 /**
- * **스냅샷 하나에서 페이지를 읽는 조립.** `wireb page get`과 §12.2의 `get_page`·`list_pages`가
- * **이 파일 하나**를 부른다(P9-4 D1).
+ * **스냅샷 하나에서 페이지를 읽는 조립.** `wireb page get`과 설계서 「MCP 도구」의 `get_page`·`list_pages`가
+ * **이 파일 하나**를 부른다.
  *
  * ---
  *
  * # 왜 명령 안이 아니라 여기인가
  *
- * P9-3은 이 조립을 `commands/page-get.ts`에 뒀고, 그 파일의 머리말이 *"§12.2의 MCP
- * `get_page`가 같은 것을 내야 하므로 조립을 여기 두면 P9-4가 두 벌을 만든다"*고 **미리
- * 적어 뒀다.** P9-4가 그 자리다 — 옮기지 않으면 MCP가 `targetedPages`→`matchPageTargets`→
- * 0·1·다 갈래→`pageView`를 다시 쓴다.
+ * `get_page`가 `wireb page get`과 같은 것을 내야 한다. 조립을 `commands/page-get.ts`에 두면
+ * MCP가 `targetedPages`→`matchPageTargets`→0·1·다 갈래→`pageView`를 다시 쓰고, 두 벌이
+ * 갈리는 날 같은 경로에 두 도구가 다른 답을 낸다.
  *
  * **글자는 여기 없다.** 후보를 몇 개까지 보일지, 줄을 어떻게 들여쓸지는 부르는 쪽이 정한다 —
  * 터미널과 에이전트가 같은 것을 읽을 이유가 없다.
  *
  * # 못 찾은 것과 둘 이상을 **갈라 낸다**
  *
- * 겹치는 타겟은 실재한다(같은 메뉴 아래 같은 제목 · 제목에 든 `/` — P9-1 이월 §9).
+ * 겹치는 타겟은 실재한다(같은 메뉴 아래 같은 제목 · 제목에 든 `/`).
  * **하나를 골라 주면 어느 쪽인지 아무도 모른다.**
  *
- * # `migrateDocument`를 지난다 — **P9-3이 남긴 구멍을 여기서 닫는다**
+ * # `migrateDocument`를 지난다 — `lint`와 같은 판을 읽는다
  *
- * P9-3 이월 §6이 *"`page get`이 `migrateDocument`를 안 지난다. `lint`는 지난다"*를 구멍으로
- * 적었다(리뷰 N8). 오늘 `MIGRATIONS = []`이라 무해하지만 **첫 마이그레이션이 생기는 날 두
- * 명령이 같은 페이지를 다르게 읽는다.**
+ * `lint`는 `migrateDocument`를 지난다. `page get`이 안 지나면 `MIGRATIONS = []`인 동안은
+ * 무해하지만 **첫 마이그레이션이 생기는 날 두 명령이 같은 페이지를 다르게 읽는다.**
  *
- * 그 이월이 *"고치는 자리는 부르는 쪽"*이라고 적었고, **부르는 쪽이 하나가 된 것이 지금이다.**
+ * 고치는 자리는 부르는 쪽이고, **부르는 쪽이 이 파일 하나다.**
  * `snapshotToLintInput`과 같은 태도를 쓴다: **못 올리면 그대로 쓰고 말한다.** 막으면 새
- * 서버에 붙은 옛 판이 아무것도 못 읽는다(`snapshot/payload.ts`의 D3과 같은 근거).
+ * 서버에 붙은 옛 판이 아무것도 못 읽는다(`@wirebound/themes`의 `snapshot/payload.ts` —
+ * *"`payloadVersion`은 `PageDocument.version`과 다른 축이다"* 절과 같은 근거).
  */
 import {
   duplicateTargets,
@@ -45,7 +44,7 @@ import { prepareCatalog } from './catalog'
 
 /** 목록에 실리는 페이지 하나. **경로가 앞에 온다** — 그것이 다른 두 도구의 인자다. */
 export interface PageSummary {
-  /** `관리자/회원/목록`. 접두를 벗긴 §8.1의 경로다. */
+  /** `관리자/회원/목록`. 접두를 벗긴, 설계서 「상호작용」의 「모델」이 말하는 경로다. */
   path: string
   id: string
   title: string
@@ -66,7 +65,7 @@ export interface ProjectListing {
   pages: PageSummary[]
   /**
    * 둘 이상의 페이지가 든 경로. **비어 있지 않으면 그 경로로는 페이지를 못 고른다** —
-   * `duplicateTargets`가 이미 그 판정을 갖고 있다(P9-1 이월 §9).
+   * `duplicateTargets`가 이미 그 판정을 갖고 있다.
    */
   duplicatePaths: string[]
 }
@@ -82,9 +81,9 @@ export type PageLookup =
        * `pageView`가 만드는 것은 *"문서가 무엇인가"*이고 이것은 *"저장소가 어디까지
        * 왔는가"*라 성질이 다르다(payload의 `SnapshotPage.headSeq`에서 그대로 온다).
        *
-       * **§12.2가 *"`patch_page`(baseSeq 필수)"*라고 적었고 그 값을 에이전트가 알 길이
+       * **설계서 「MCP 도구」가 *"`patch_page`(baseSeq 필수)"*라고 적었고 그 값을 에이전트가 알 길이
        * 여기뿐이다.** 없으면 도구가 스스로 읽어야 하고, 그러면 *"내가 읽은 문서 위에
-       * 얹는다"*는 §7.4의 보증이 사라진다 — 도구가 자기가 방금 읽은 판으로 덮어쓴다.
+       * 얹는다"*는 「LLM 편집 경로」의 보증이 사라진다 — 도구가 자기가 방금 읽은 판으로 덮어쓴다.
        */
       headSeq: number
     }
@@ -105,8 +104,8 @@ export function listProject(payload: SnapshotPayload): ProjectListing {
       sortOrder: node.sortOrder,
     })),
     pages: ordered.map(summarize),
-    // **판정을 다시 짜지 않는다** — `duplicateTargets`가 이미 그것을 갖고 있다
-    // (P9-1 이월 §9). 접두만 벗겨 목록의 `path`와 같은 말로 만든다.
+    // **판정을 다시 짜지 않는다** — `duplicateTargets`가 이미 그것을 갖고 있다.
+    // 접두만 벗겨 목록의 `path`와 같은 말로 만든다.
     duplicatePaths: duplicateTargets(ordered).map(pageTargetPath),
   }
 }
@@ -126,11 +125,11 @@ export function projectPaths(payload: SnapshotPayload): string[] {
  *
  * **카탈로그를 여기서 세운다.** 안 부르면 상호작용 문장의 prop 라벨이 카탈로그 없이 나온다
  * (*"로딩 상태"* → *"loading"*, 실측 — `read/catalog.ts`의 표). **부르는 것을 부르는 쪽에
- * 맡기면 하나를 빠뜨린 소비자가 조용히 거짓을 낸다** — 소비자가 둘(`wireb`·MCP)이 된 것이
- * 이 슬라이스이고, 셋째가 생겨도 같다.
+ * 맡기면 하나를 빠뜨린 소비자가 조용히 거짓을 낸다** — 소비자가 둘(`wireb`·MCP)이고,
+ * 셋째가 생겨도 같다.
  *
  * `listProject`는 안 부른다 — 그것이 내는 것은 제목과 경로뿐이고 둘 다 payload에서 온다
- * (쟀다: 카탈로그 유무로 `nodes[].name`·`comments[].nodeName`이 안 바뀐다).
+ * (`read/catalog.ts`의 표: 카탈로그 유무로 `nodes[].name`·`comments[].nodeName`이 안 바뀐다).
  */
 export function lookupPage(payload: SnapshotPayload, path: string): PageLookup {
   prepareCatalog()

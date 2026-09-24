@@ -1,8 +1,8 @@
 /**
- * 페이지 JSON 봉투(§11.2 — P7-3 T1: D1·D2·D6). **읽기·쓰기·왕복을 화면 없이 잰다.**
+ * 페이지 JSON 봉투(설계서 「페이지 JSON」). **읽기·쓰기·왕복을 화면 없이 잰다.**
  *
  * **수를 산문에 적지 않는다.** 실패 갈래가 몇인지도 아래 케이스가 목록에서 만든다 —
- * 계획서의 전역 제약이 요구한 것이다.
+ * 산문에 적은 수는 갈래가 바뀔 때 함께 안 바뀌어 조용히 낡는다.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -25,7 +25,7 @@ const DOCUMENT: PageDocument = {
   },
 }
 
-/** §11.2의 봉투를 **이 구현이 읽는 모양으로** 만든다. 갈리는 두 자리는 D2·D6이 근거다. */
+/** 「페이지 JSON」의 봉투를 만든다 — `schema`는 문서 봉투(`{ version, root }`)이고 코멘트에 `marker`가 없다. */
 function envelope(patch: Partial<PageJson> = {}): PageJson {
   return {
     wireboundVersion: WIREBOUND_PAGE_VERSION,
@@ -46,7 +46,7 @@ function reasonOf(result: ReturnType<typeof readPageJson>): string {
 }
 
 describe('페이지 JSON 봉투를 읽는다', () => {
-  it('§11.2의 네 키를 그대로 읽는다', () => {
+  it('설계서 페이지 JSON의 네 키를 그대로 읽는다', () => {
     const result = read(envelope())
 
     expect(result.status).toBe('read')
@@ -103,8 +103,8 @@ describe('페이지 JSON 봉투를 읽는다', () => {
     expect(result.issues.map((issue) => issue.path)).toContain('알수없는키')
   })
 
-  it('D6 — comments[]의 marker는 봉투가 받지 않고, 문장이 노드를 가리킨다', () => {
-    // §11.2의 예시는 `{ marker: 1, nodeId, body }`인데 P5-1 D1이 번호를 노드로 옮겼다.
+  it('comments[]의 marker는 봉투가 받지 않고, 문장이 노드를 가리킨다', () => {
+    // 번호는 `schema` 안의 노드가 든다 — 두 자리에 적으면 어긋날 때 무엇을 믿을지 정할 규칙이 없다.
     const result = read({
       ...envelope(),
       comments: [{ marker: 1, nodeId: 'n_7f3a', body: '검색 조건은 AND 결합' }],
@@ -119,7 +119,7 @@ describe('페이지 JSON 봉투를 읽는다', () => {
   })
 
   it('D2 — schema가 root 노드뿐이면 문서 버전 축이 없어 거부한다', () => {
-    // §11.2의 예시가 `schema`에 노드를 싣는데, 그러면 `migrateDocument`가 걸 자리가 없다.
+    // `schema`에 노드만 실으면 `migrateDocument`가 걸 문서 버전이 없다 — 그래서 `schema`가 봉투다.
     const result = read({ ...envelope(), schema: DOCUMENT.root })
 
     expect(reasonOf(result)).toBe('bad-shape')
@@ -127,7 +127,7 @@ describe('페이지 JSON 봉투를 읽는다', () => {
     expect(result.issues.map((issue) => issue.path)).toContain('schema.version')
   })
 
-  it('재라 #7 — 코멘트 본문 상한이 봉투에도 걸린다', () => {
+  it('코멘트 본문 상한이 봉투에도 걸린다', () => {
     const long = read({ ...envelope(), comments: [{ nodeId: 'n_7f3a', body: 'ㄱ'.repeat(2001) }] })
     const empty = read({ ...envelope(), comments: [{ nodeId: 'n_7f3a', body: '' }] })
 
@@ -153,7 +153,7 @@ describe('페이지 JSON 봉투를 읽는다', () => {
     expect(reasonOf(read(rest))).toBe('bad-shape')
   })
 
-  it('D4 — layoutRef를 받아 그대로 싣는다(적용은 하지 않는다)', () => {
+  it('layoutRef를 받아 그대로 싣는다(적용은 하지 않는다)', () => {
     const result = read({ ...envelope(), page: { title: '회원 목록', layoutRef: 'admin-lnb' } })
 
     expect(result.status).toBe('read')
@@ -175,7 +175,7 @@ describe('페이지 JSON 봉투를 만든다', () => {
     expect(Object.keys(file)).toEqual(['wireboundVersion', 'page', 'schema', 'comments'])
   })
 
-  it('D4 — layoutRef를 만들어 내지 않는다', () => {
+  it('layoutRef를 만들어 내지 않는다', () => {
     const file = toPageJson({ page: { title: '회원 목록', description: null }, document: DOCUMENT, comments: [] })
 
     expect('layoutRef' in file.page).toBe(false)

@@ -1,15 +1,14 @@
 /**
  * **액션 하나가 실행 가능한가**를 판정하는 자리 **하나**.
  *
- * ## 왜 갈라 냈나 (P5-3 D3)
+ * ## 왜 `validate.ts`에서 갈라 두나
  *
- * P5-2가 이 판정을 `validate.ts`의 `checkInteractions` 안에 두었다. 그때는 소비자가
- * 하나였다 — 저장 게이트. **P5-3의 런타임이 둘째 소비자다:** 뷰 모드에서 버튼을 눌렀을 때
- * *"이 액션을 실행할 수 있는가"*는 검증기가 묻는 것과 **같은 물음**이다.
+ * 소비자가 둘이다 — 저장 게이트(`validate.ts`의 `checkInteractions`)와 **렌더러의 런타임**.
+ * 뷰 모드에서 버튼을 눌렀을 때 *"이 액션을 실행할 수 있는가"*는 검증기가 묻는 것과 **같은 물음**이다.
  *
  * **두 벌로 두면 갈린다.** 이 저장소에 이미 그 형태가 있다 — `사라진 노드`가
- * `apps/web`의 코멘트 탭과 `schema`의 문장화 두 곳에 있고 **오늘 글자가 같지만 대조하는
- * 케이스가 없다**(P5-2 이월 §8-6). 판정과 문장이 갈리면 사용자는 **같은 상태를 두 문제로**
+ * `apps/web`의 코멘트 탭과 `schema`의 문장화에 따로 적혀 있어, 글자가 같다는 것을 지키는 것이
+ * 사람의 기억뿐이다. 판정과 문장이 갈리면 사용자는 **같은 상태를 두 문제로**
  * 읽는다 — 저장할 때는 통과했는데 눌렀더니 다른 말이 나오는 식이다.
  *
  * 그래서 판정도 문장도 여기 하나이고, `validate.ts`와 `renderer`의 런타임이 **함께 부른다.**
@@ -21,13 +20,13 @@
  * (`InteractionIssue`)으로 감싼다. **둘의 소비자가 다르기 때문이다** — 검증 이슈는 저장
  * 게이트와 API 봉투를 지나고, 런타임 이슈는 그 자리에서 화면이 읽는다.
  *
- * ## `navigate`·`openModal`이 갈라져 있는 이유 (D4)
+ * ## `navigate`·`openModal`이 갈라져 있는 이유
  *
  * 그 둘의 `target`은 노드 id가 아니라 **페이지 경로**이고 그 페이지는 이 문서 안에 없다.
- * **검증기는 그 둘을 아예 보지 않는다**(P5-2 재라 #1: *"아무것도 안 한다"* — 형식을
+ * **검증기는 그 둘을 아예 보지 않는다**(`validate.ts`의 `checkInteractions` 머리말 — 형식을
  * 강제해도 그 페이지가 있다는 보장이 아니다). 런타임은 그보다 하나 더 알아야 한다 —
  * **타겟이 비어 있으면 이동할 곳이 없다.** 그 판정만 `checkPageAction`으로 따로 두고
- * **검증기는 그것을 부르지 않는다**: 부르면 재라 #1의 판정이 뒤집힌다.
+ * **검증기는 그것을 부르지 않는다**: 부르면 빈 페이지 타겟이 저장 경로에서 경고가 되기 시작한다.
  */
 import { propSchema } from '../component/define'
 import { getComponent } from '../component/registry'
@@ -50,13 +49,13 @@ export interface ActionProblem {
   message: string
 }
 
-/** 타겟이 **이 문서의 노드**인 액션 셋. 렌더러가 실행하는 것도 이 셋이다(D4). */
+/** 타겟이 **이 문서의 노드**인 액션 셋. 렌더러가 실행하는 것도 이 셋이다. */
 export type NodeTargetAction = Extract<
   InteractionAction,
   { type: 'setProp' } | { type: 'setVisible' } | { type: 'switchTab' }
 >
 
-/** 타겟이 **페이지 경로**인 액션 둘. 렌더러 밖이다(D4). */
+/** 타겟이 **페이지 경로**인 액션 둘. 렌더러 밖이다. */
 export type PageTargetAction = Extract<
   InteractionAction,
   { type: 'navigate' } | { type: 'openModal' }
@@ -71,8 +70,8 @@ export function isPageTargetAction(action: InteractionAction): action is PageTar
  * 노드를 겨냥하는 액션 하나를 문서·카탈로그와 대조한다.
  *
  * **`setVisible`은 언제나 `null`이다** — 대조할 계약이 없다. `visible`이라는 prop도 상태도
- * 어느 컴포넌트에 없어서(P5-2 이월 §8-4) *"이 노드가 숨겨질 수 있는가"*를 선언할 자리가
- * §5.1에 없다. **없는 계약을 여기서 지어내지 않는다.**
+ * 어느 컴포넌트에도 없어서 *"이 노드가 숨겨질 수 있는가"*를 선언할 자리가
+ * 설계서 「컴포넌트 정의 구조」에 없다. **없는 계약을 여기서 지어내지 않는다.**
  */
 export function checkNodeAction(
   nodes: ReadonlyMap<string, WbNode>,
@@ -100,8 +99,8 @@ export function checkNodeAction(
         message: `switchTab의 타겟은 Tabs여야 합니다 (현재: ${target.type})`,
       }
     }
-    // **`tab`은 `Tabs.active`와 같은 축의 값이므로 같은 규칙으로 본다**(P5-2 리뷰가 찾은
-    // 비대칭). 규칙을 베껴 적지 않고 카탈로그의 zod를 그대로 쓴다 — 베끼면 둘이 따로 썩는다.
+    // **`tab`은 `Tabs.active`와 같은 축의 값이므로 같은 규칙으로 본다**(아래 `checkPropValue`
+    // 머리말). 규칙을 베껴 적지 않고 카탈로그의 zod를 그대로 쓴다 — 베끼면 둘이 따로 썩는다.
     // **상한은 여전히 없다**(카탈로그가 `min(0)`만 정했다).
     return checkPropValue(target, 'active', action.tab, 'switchTab의 탭 번호')
   }
@@ -116,12 +115,12 @@ export function checkNodeAction(
 /**
  * 페이지 경로를 받는 액션 하나. **비어 있는지만 본다.**
  *
- * **문서 안에서 더 볼 수 없다**(P5-2 재라 #1) — 형식(`page:` 접두)을 강제하는 것은 규격에
+ * **문서 안에서 더 볼 수 없다** — 형식(`page:` 접두)을 강제하는 것은 규격에
  * 없는 규칙을 만드는 것이고, 맞춰도 그 페이지가 있다는 보장이 아니다.
  *
  * **빈 타겟만 다른 것은 그것이 *"아직 안 골랐다"*이기 때문이다.** 이동할 곳이 없는 규칙을
- * 실행하면 *"눌렀는데 아무 일도 안 일어난다"*가 되고, 그것이 이 저장소가 다섯 번 만난
- * 부류다(P5-1 이월 §1 · P5-2 이월 §1). 문장화도 같은 자리를 `아직 정해지지 않은 페이지`로
+ * 실행하면 *"눌렀는데 아무 일도 안 일어난다"*가 되고, 사용자는 미확정을 고장으로 읽는다.
+ * 문장화도 같은 자리를 `아직 정해지지 않은 페이지`로
  * 갈라 말한다.
  */
 export function checkPageAction(action: PageTargetAction): ActionProblem | null {
@@ -136,8 +135,8 @@ export function checkPageAction(action: PageTargetAction): ActionProblem | null 
  * 액션이 넣으려는 값을 타겟 컴포넌트의 **그 prop 계약**과 대조한다.
  *
  * **`setProp`과 `switchTab`이 함께 쓴다.** `switchTab.tab`은 이름만 다를 뿐 `Tabs.active`에
- * 넣는 값이라 같은 규칙을 받아야 한다 — P5-2의 앞 판은 그 자리를 안 봤고, 같은 값(`-3`·`1.5`)이
- * **prop 자리에서는 `invalid-props`(error)인데 액션 자리에서는 이슈 0건**이었다(리뷰가 쟀다).
+ * 넣는 값이라 같은 규칙을 받아야 한다 — 그 자리를 안 보면 같은 값(`-3`·`1.5`)이
+ * **prop 자리에서는 `invalid-props`(error)인데 액션 자리에서는 이슈 0건**이 된다.
  *
  * `label`은 메시지에 쓸 이름이다. 사용자가 적은 것은 `tab`이지 `active`가 아니므로,
  * 그쪽은 *"switchTab의 탭 번호"*라고 불러야 무엇을 고쳐야 하는지가 맞는다.

@@ -7,7 +7,7 @@ export interface StructureContext {
   /** 기본값이 채워진 props */
   props: Record<string, unknown>
   /**
-   * 노드 루트에 펼칠 것. **여섯 속성(§6.11)에 상호작용 핸들러가 얹힐 수 있다** — 뒤엣것은
+   * 노드 루트에 펼칠 것. **여섯 속성(설계서 「컴파일」)에 상호작용 핸들러가 얹힐 수 있다** — 뒤엣것은
    * 상호작용 런타임이 켜졌고 이 노드에 규칙이 있을 때만 있다(`attrs.ts`의 `WbHandlers`).
    * 구조 구현체는 둘을 가르지 않고 그대로 편다.
    */
@@ -25,7 +25,7 @@ export type StructureRenderer = (ctx: StructureContext) => ReactElement
  * 그룹 모듈이 내보내는 등록 항목 하나.
  *
  * **타입이 여기 있는 이유:** 그룹 다섯이 이 모양을 함께 쓰는데, 그중 하나에 두면 나머지
- * 넷이 그 그룹을 import하게 되어 **경계가 없는 것과 같아진다**(P4b-2 ①이 가른 것이 바로
+ * 넷이 그 그룹을 import하게 되어 **경계가 없는 것과 같아진다**(그룹 모듈을 가른 것이 바로
  * 그 경계다). 레지스트리는 다섯 모두가 이미 `StructureRenderer` 때문에 보는 자리다.
  */
 export type StructureEntry = [type: string, structure: string, render: StructureRenderer]

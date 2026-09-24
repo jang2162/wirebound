@@ -1,5 +1,6 @@
 /**
- * D4를 **타입으로** 지키는 자리. 런타임 가드(`lint-issue.test.ts`)는 표를 고친 뒤 남은 호출을
+ * *"표가 severity를 든 규칙은 `lintIssue`, 날라 온 severity를 쓰는 규칙은 `relayLintIssue`"*를
+ * **타입으로** 지키는 자리. 런타임 가드(`lint-issue.test.ts`)는 표를 고친 뒤 남은 호출을
  * 잡고, 여기는 그 호출이 애초에 컴파일되지 않게 한다.
  */
 import { lintIssue, relayLintIssue } from '../src/lint/issue'

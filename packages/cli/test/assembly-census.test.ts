@@ -1,19 +1,19 @@
 /**
- * **조립을 부르는 자리가 몇 개인가 (P9-4 D1).**
+ * **조립을 부르는 자리가 몇 개인가.**
  *
  * ---
  *
  * # 무엇을 지키나
  *
- * §12.2의 도구와 §12.3의 명령이 **같은 함수**를 부르는 것이 P9-4의 존재 이유다. 오늘
- * 그 자리는 `src/read/` 셋이고 `wireb page get`·`wireb lint`·MCP의 도구 셋이 전부 그것을
- * 부른다. **오늘 하나여도 유지하는 장치가 0이면 다음 사람이 조용히 두 벌로 만든다** —
+ * 설계서 「MCP 도구」의 도구와 「CLI」의 명령이 **같은 함수**를 부른다. 그 자리는
+ * `src/read/` 셋이고 `wireb page get`·`wireb lint`·MCP의 도구 셋이 전부 그것을
+ * 부른다. **지금 하나여도 유지하는 장치가 0이면 다음 사람이 조용히 두 벌로 만든다** —
  * 명령 파일에서 `pageView(`를 한 번 부르는 것은 다섯 줄이고, 그 다섯 줄이 갈리기 시작하면
  * 같은 프로젝트를 사람과 에이전트가 다르게 읽는다.
  *
  * # 왜 케이스로 확인할 수 없나
  *
- * 두 벌이 **오늘은 같은 값을 낸다.** 값을 재는 케이스로는 복제를 못 본다 — 복제가 값을
+ * 두 벌은 **처음에는 같은 값을 낸다.** 값을 재는 케이스로는 복제를 못 본다 — 복제가 값을
  * 바꾸는 것은 한쪽만 고쳐진 뒤이고 그때는 이미 늦었다. **소스를 세는 것이 유일한 방법이다**
  * (`test/io-boundary.test.ts`가 같은 부류다).
  *
@@ -21,7 +21,7 @@
  *
  * `packages/mcp` 쪽은 그 패키지의 케이스가 자기 뿌리를 훑는다
  * (`packages/mcp/test/assembly-census.test.ts`). **뿌리가 여럿인 검사를 한 파일에 두지
- * 않는다** — `apps/api`가 `source-census.ts`로 겪은 자리다(P3-3 이월 §6.9).
+ * 않는다** — 한 파일이 두 뿌리를 훑으면 한쪽 패키지의 케이스가 남의 소스를 읽게 된다.
  */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -35,8 +35,7 @@ const SRC = fileURLToPath(new URL('../src', import.meta.url))
  * 이것들을 **어느 순서로 어떻게 엮는가**가 곧 조립이다.
  *
  * `pageTargetPath`·`duplicateTargets`도 넣는다 — 접두를 벗기는 자리와 겹치는 타겟을 세는
- * 자리가 갈리면 사람이 읽는 경로와 에이전트가 받는 경로가 달라진다(P9-3이 스모크에서 실제로
- * 겪었다).
+ * 자리가 갈리면 사람이 읽는 경로와 에이전트가 받는 경로가 달라진다.
  */
 const ASSEMBLY = [
   'installCatalog',
@@ -72,7 +71,7 @@ function assembles(relative: string): boolean {
   return CALLS.test(stripComments(readFileSync(join(SRC, relative), 'utf8')))
 }
 
-describe('조립을 부르는 자리 (P9-4 D1)', () => {
+describe('조립을 부르는 자리', () => {
   it('훑을 소스를 실제로 읽는다', () => {
     // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다.**
     const files = sourceFiles()

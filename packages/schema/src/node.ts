@@ -1,4 +1,4 @@
-/** 상호작용 트리거. 설계 문서 §8.1 */
+/** 상호작용 트리거. 설계서 「모델」(상호작용) */
 export type InteractionTrigger = 'click' | 'change' | 'select' | 'submit'
 
 /** 상호작용 액션. 고정 5종이며 스크립트는 허용하지 않는다. */
@@ -43,7 +43,7 @@ export interface PageDocument {
   readonly [documentKind]?: 'page'
 }
 
-/** 레이아웃 문서. Slot 노드를 정확히 하나 품는다 (설계 §4.4). */
+/** 레이아웃 문서. Slot 노드를 정확히 하나 품는다 (설계서 「레이아웃」). */
 export interface LayoutDocument {
   version: number
   root: WbNode

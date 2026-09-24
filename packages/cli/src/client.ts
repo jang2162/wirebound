@@ -1,17 +1,17 @@
 /**
- * 서버를 부르는 한 자리. **HTTP 클라이언트를 들이지 않는다**(D10) — 전역 `fetch`를
+ * 서버를 부르는 한 자리. **HTTP 클라이언트를 들이지 않는다** — 전역 `fetch`를
  * `io`가 나른다.
  *
  * ---
  *
  * # 세 갈래를 여기서 가른다
  *
- * `wireb`의 값은 *"안 된다"*가 아니라 **왜 안 되는지**다(T6). 그 판정을 명령마다 다시
+ * `wireb`의 값은 *"안 된다"*가 아니라 **왜 안 되는지**다. 그 판정을 명령마다 다시
  * 짜면 갈리므로 여기 한 자리에 둔다.
  *
  * | 무엇 | 코드 | 어떻게 아는가 |
  * |---|---|---|
- * | 헤더에 실을 수 없는 자격이다 | 2 | 보내기 **전에** 본다(아래 `assertSendableHeaders` — 스모크에서 재서 알았다) |
+ * | 헤더에 실을 수 없는 자격이다 | 2 | 보내기 **전에** 본다(아래 `assertSendableHeaders`) |
  * | 서버에 닿지 못했다 | 4 | `fetch`가 **던진다**(DNS·연결 거부·타임아웃) |
  * | 서버가 거절했다 | 3 | 응답이 왔고 2xx가 아니다. **서버가 쓴 문장을 그대로 옮긴다** |
  * | 됐다 | 0 | 2xx |
@@ -20,9 +20,9 @@
  * 것(README의 *"두 409의 문장이 다르다"*)이 여기서 값을 낸다 — CLI가 자기 문장을 지어
  * 내면 그 노력이 버려진다.
  *
- * # 쿠키는 손으로 나른다 (재라 #4 — 쟀다)
+ * # 쿠키는 손으로 나른다
  *
- * Node의 전역 `fetch`에는 **쿠키 저장소가 없다.** 실측: `Set-Cookie`를 받은 뒤 같은
+ * Node의 전역 `fetch`에는 **쿠키 저장소가 없다.** 재는 법 — `Set-Cookie`를 받은 뒤 같은
  * 오리진으로 다시 요청해도 `Cookie` 헤더가 실리지 않고, `credentials: 'include'`를 줘도
  * 같으며, 리다이렉트 사이에서도 이어지지 않는다. 그래서 `login`이 응답에서 꺼내 다음
  * 요청에 직접 싣는다(`cookieHeader`).
@@ -31,14 +31,14 @@
  * `wb_session`을 여기 적으면 그 설정을 바꾼 배포에서 조용히 로그인이 안 된다. 받은 것을
  * 전부 그대로 되돌려 보낸다.
  *
- * # 자기 종류를 **모든 요청에** 싣는다 (P9-5 D1)
+ * # 자기 종류를 **모든 요청에** 싣는다
  *
- * `x-wb-client: cli|mcp`. 서버가 그 값으로 `revisions.actor_type`을 채운다(§7.4) —
+ * `x-wb-client: cli|mcp`. 서버가 그 값으로 `revisions.actor_type`을 채운다(설계서 「LLM 편집 경로」) —
  * **`wireb`도 실어야 `cli`가 채워진다.** 안 실으면 서버가 기본값을 쓰고, 그 기본값이
  * 무엇이든 *"헤더를 잊었다"*와 *"정말 그 종류다"*가 구별되지 않는다.
  *
  * **싣는 자리가 여기 하나인 것이 이 설계의 값이다** — MCP가 자기 HTTP 클라이언트를 안 갖고
- * 이 함수를 부르므로(P9-4 D3), 도구를 더해도 헤더를 빠뜨리는 경로가 없다.
+ * 이 함수를 부르므로, 도구를 더해도 헤더를 빠뜨리는 경로가 없다.
  */
 import { CliError, EXIT, configError, serverError, unreachableError } from './exit'
 import type { HttpRequestInit, HttpResponse, Io } from './io'
@@ -55,8 +55,8 @@ export const CLIENT_KIND_HEADER = 'x-wb-client'
 
 export interface ApiRequest {
   /**
-   * **`PATCH`가 있다**(P9-5). 없던 것을 P9-2 이월 §1이 예고하고 P9-3 이월 §6이 옮겼다 —
-   * §12.2의 `patch_page`가 `PATCH .../ops`를 부르는 자리에서 컴파일이 막혔을 것이다.
+   * **`PATCH`가 있다** — 설계서 「MCP 도구」의 `patch_page`가 `PATCH .../ops`를 부른다.
+   * 여기서 빠지면 그 자리가 컴파일되지 않는다.
    */
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   /** `/api/…`로 시작하는 경로. 서버 주소는 호출자가 준다. */
@@ -82,8 +82,8 @@ export interface ApiBytesResponse {
   /**
    * 서버가 `Content-Disposition`에 실어 준 파일 이름. 없으면 `null`.
    *
-   * **CLI가 이름을 지어내지 않는다**(P8-4 D7 — *"사람이 읽는 이름은 `Content-Disposition`과
-   * 미리보기의 `fileName`에만 있다"*). 지어내면 웹에서 내려받은 파일과 `wireb`가 쓴 파일의
+   * **CLI가 이름을 지어내지 않는다** — 사람이 읽는 이름은 `Content-Disposition`과
+   * 미리보기의 `fileName`에만 있다. 지어내면 웹에서 내려받은 파일과 `wireb`가 쓴 파일의
    * 이름이 갈리고, 같은 설계서의 두 사본이 서로를 못 알아본다.
    *
    * **`wireb export --format html`은 이 값을 안 쓴다** — zip을 풀어 디렉터리에 넣으므로
@@ -104,7 +104,7 @@ export async function callApi(io: Io, server: string, request: ApiRequest): Prom
 }
 
 /**
- * 본문을 **날 바이트로** 받는다(P9-3 D9 — `GET .../export`가 zip을 낸다).
+ * 본문을 **날 바이트로** 받는다(`GET .../export`가 zip을 낸다).
  *
  * **오류 응답은 여전히 글자로 읽는다.** 서버가 쓴 문장을 그대로 옮기는 것이 이 CLI의
  * 값이고(위 표), zip이 아닌 오류 봉투를 바이트로 받아 봐야 아무 말도 못 한다. 진짜
@@ -177,13 +177,13 @@ async function send(
 
 function assertOk(status: number, text: string, request: ApiRequest, url: string): void {
   if (status < 200 || status >= 300) {
-    // **상태 코드를 값으로도 나른다**(`CliError.status`의 머리말 — P9-5 D3). 문장은 그대로다.
+    // **상태 코드를 값으로도 나른다**(`CliError.status`의 머리말). 문장은 그대로다.
     throw new CliError(EXIT.server, `${serverMessage(text, status)} (${request.method} ${url})`, status)
   }
 }
 
 /**
- * **헤더에 실을 수 없는 값을 미리 잡는다 — 스모크에서 재서 알았다.**
+ * **헤더에 실을 수 없는 값을 미리 잡는다.**
  *
  * HTTP 헤더 값은 ByteString(코드 포인트 0~255)이라 `WIREB_TOKEN`에 한국어를 넣으면
  * `fetch`가 *"Cannot convert argument to a ByteString …"*으로 **던진다.** 그러면 아래

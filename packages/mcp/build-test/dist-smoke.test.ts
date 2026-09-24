@@ -1,13 +1,14 @@
 /**
- * **받는 쪽이 받는 것을 잰다 — 진짜 MCP 클라이언트로**(D9).
+ * **받는 쪽이 받는 것을 잰다 — 진짜 MCP 클라이언트로.**
  *
  * ---
  *
  * # 왜 `build-test`인가 (판정)
  *
  * `pnpm test`는 소스를 alias로 보므로 **프로토콜도 `dist`도 그 안에서 안 드러난다.**
- * P9-2가 그것을 실측했다: `tsdown.config.ts`의 `fixedExtension: false` 한 줄을 지우면
- * `test:build` 9건이 죽고 `pnpm test`는 **0건**이 죽는다. 여기가 재는 것 셋이 전부 그 부류다.
+ * `tsdown.config.ts`의 `fixedExtension: false` 한 줄을 지우면 `test:build`는 죽고 `pnpm test`는
+ * **아무것도 안 죽는다**(다시 재는 법: 그 줄을 지우고 둘을 돌린다). 여기가 재는 것 셋이 전부
+ * 그 부류다.
  *
  * | 무엇 | 소스 케이스가 보나 |
  * |---|---|
@@ -54,13 +55,13 @@ const seenAuth: string[] = []
 /**
  * 서버가 실제로 받은 `x-wb-client` 헤더.
  *
- * **이것을 재는 자가 여기밖에 없다**(P9-5 D1). `bin.ts`가 `io`를 조립하며 `client: 'mcp'`를
+ * **이것을 재는 자가 여기밖에 없다.** `bin.ts`가 `io`를 조립하며 `client: 'mcp'`를
  * 심는데, 단위 케이스는 그 파일을 안 지나고 자기 가짜 `io`를 세운다 — 그 한 줄을 지워도
  * `pnpm test`는 0 사망이다.
  */
 const seenClient: string[] = []
 /**
- * 쓰기 요청 하나가 실제로 받은 것. **받는 쪽이 받는 것을 재는 자리다**(D9).
+ * 쓰기 요청 하나가 실제로 받은 것. **받는 쪽이 받는 것을 재는 자리다.**
  *
  * 단위 케이스는 `callTool`을 직접 부르므로 **프로토콜을 건넌 인자**를 못 본다 —
  * `ops` 배열이 JSON-RPC를 지나 그대로 오는지, 한국어 본문이 안 깨지는지는 여기서만 잰다.
@@ -81,7 +82,7 @@ beforeAll(async () => {
       return
     }
 
-    // **쓰기 둘**(P9-5 T6). 본문을 다 받은 뒤에 답한다.
+    // **쓰기 둘.** 본문을 다 받은 뒤에 답한다.
     const write = /\/api\/projects\/[^/]+\/pages\/([^/]+)\/(ops|comments)$/.exec(request.url ?? '')
     if (write !== null) {
       const chunks: Buffer[] = []
@@ -123,7 +124,10 @@ afterAll(async () => {
   await new Promise<void>((done) => http.close(() => done()))
 })
 
-/** 쓰기 라우트가 낼 답. **문장은 `apps/api`가 실제로 내는 것을 옮긴다**(T1의 프로브가 잰 글자다). */
+/**
+ * 쓰기 라우트가 낼 답. **문장은 `apps/api`가 실제로 내는 것을 옮긴다** — 다시 잴 때는 `apps/api`가
+ * 낸 409·423 응답의 `message`와 대조한다.
+ */
 function writeAnswer(isOps: boolean): { status: number; body: unknown } {
   if (writeMode === 'stale') {
     return {
@@ -163,7 +167,7 @@ async function connect(env: Record<string, string> = {}): Promise<Client> {
     new StdioClientTransport({
       command: process.execPath,
       args: [binPath],
-      // **`cwd`가 바인딩을 정한다**(D4). 호스트가 리포에서 띄우는 것이 이 모양이다.
+      // **`cwd`가 바인딩을 정한다.** 호스트가 리포에서 띄우는 것이 이 모양이다.
       cwd: repo,
       env: { PATH: process.env.PATH ?? '', WIREB_CREDENTIALS: credentials, ...env },
     }),
@@ -176,7 +180,7 @@ async function connect(env: Record<string, string> = {}): Promise<Client> {
  *
  * **인자를 `unknown`으로 받는다** — SDK의 `CallToolResult`가 `content` 판과 옛
  * `toolResult` 판의 합집합이라, 좁은 모양으로 받으면 *"공통 속성이 없다"*로 컴파일이 막힌다
- * (`pnpm typecheck`가 그것을 잡았다). 우리가 내는 것은 언제나 `content` 판이다.
+ * (`pnpm typecheck`가 그것을 잡는다). 우리가 내는 것은 언제나 `content` 판이다.
  */
 function text(result: unknown): string {
   const content = (result as { content?: { type: string; text?: string }[] }).content
@@ -203,8 +207,8 @@ describe('빌드된 wireb-mcp', () => {
   })
 })
 
-describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
-  it('핸드셰이크가 서고 §12.2의 다섯이 보인다', async () => {
+describe('진짜 클라이언트가 붙어 도구를 부른다', () => {
+  it('핸드셰이크가 서고 설계서 「MCP 도구」의 다섯이 보인다', async () => {
     payload = snapshotPayload()
     const client = await connect()
     try {
@@ -233,7 +237,7 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
       }
       expect(listed.pages.map((p) => p.path)).toContain('관리자/회원/목록')
 
-      // **목록이 낸 경로를 그대로 다음 도구에 넣는다** — §12.5의 흐름이 그 모양이다.
+      // **목록이 낸 경로를 그대로 다음 도구에 넣는다** — 설계서 「스킬」의 흐름이 그 모양이다.
       const got = JSON.parse(
         text(await client.callTool({ name: 'get_page', arguments: { path: listed.pages[0]!.path } })),
       ) as { found: boolean; page: { interactions: { text: string }[] } }
@@ -254,7 +258,7 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
     }
   }, 60_000)
 
-  it('결함을 찾아도 오류가 아니다 — `isError`가 안 선다 (D8)', async () => {
+  it('결함을 찾아도 오류가 아니다 — `isError`가 안 선다', async () => {
     payload = 오류가_있는_프로젝트()
     const client = await connect()
     try {
@@ -266,7 +270,7 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
     }
   }, 60_000)
 
-  it('붙지 못한 것은 `isError` 결과다 — 예외가 아니다 (D8)', async () => {
+  it('붙지 못한 것은 `isError` 결과다 — 예외가 아니다', async () => {
     payload = snapshotPayload()
     // 자격 파일을 없는 자리로 돌린다. 서버는 정상이고 **자격만** 없다.
     const client = await connect({ WIREB_CREDENTIALS: join(repo, 'none.json') })
@@ -280,11 +284,11 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
     }
   }, 60_000)
 
-  it('모르는 도구는 JSON-RPC 오류다 — 결과가 아니다 (D8)', async () => {
+  it('모르는 도구는 JSON-RPC 오류다 — 결과가 아니다', async () => {
     payload = snapshotPayload()
     const client = await connect()
     try {
-      // **§12.2의 표에 없는 이름이다.** 표가 닫혔으므로 실재하지 않는 이름을 골랐다.
+      // **설계서 「MCP 도구」의 표에 없는 이름이다.** 표가 닫혔으므로 실재하지 않는 이름을 골랐다.
       await expect(client.callTool({ name: 'delete_project', arguments: {} })).rejects.toMatchObject({ code: -32601 })
       await expect(client.callTool({ name: 'get_page', arguments: {} })).rejects.toMatchObject({ code: -32602 })
     } finally {
@@ -307,7 +311,7 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
   }, 60_000)
 
   /**
-   * **자기를 `mcp`라고 말한다**(P9-5 D1 — §7.4의 `actor_type='mcp'`가 이 헤더에 매여 있다).
+   * **자기를 `mcp`라고 말한다**(설계서 「LLM 편집 경로」의 `actor_type='mcp'`가 이 헤더에 매여 있다).
    *
    * **`bin.ts`의 `client: 'mcp'` 한 줄을 볼 수 있는 자가 여기뿐이다.** 단위 케이스는 자기
    * 가짜 `io`를 세우므로 그 줄을 지워도 안 죽는다 — `dist`를 띄우는 이 파일만 그 조립을 지난다.
@@ -329,11 +333,10 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
   /**
    * **`payloadVersion`이 높아도 응답이 온다.**
    *
-   * 앞 판은 이 케이스의 이름이 *"서버가 표준출력을 더럽히지 않는다"*였는데 **그것을 안 쟀다** —
-   * 리뷰어가 실측했다(귀속: 리뷰어 R2): 리다이렉트를 지우고 `io.out`으로 한 줄을 실제로
-   * 찍어도 스모크 11/11이 초록이었다. `StdioClientTransport`가 개행으로 끝나는 이물 한 줄을
-   * 만나도 안 끊기기 때문이다. **그래서 이름에서 그 주장을 뺐고**, 표준출력을 재는 것은
-   * 아래 `표준출력이 JSON-RPC 프레임뿐이다` 절이 **날 스트림을 직접 읽어** 한다.
+   * **이 케이스는 표준출력을 재지 않는다** — 리다이렉트를 지우고 `io.out`으로 한 줄을 실제로
+   * 찍어도 `Client`로 재는 케이스는 전부 초록이다. `StdioClientTransport`가 개행으로 끝나는
+   * 이물 한 줄을 만나도 안 끊기기 때문이다. **그래서 이름에 그 주장을 싣지 않고**, 표준출력을
+   * 재는 것은 아래 `표준출력이 JSON-RPC 프레임뿐이다` 절이 **날 스트림을 직접 읽어** 한다.
    */
   it('payload 형식이 높아도 응답이 온다 — 경고가 읽기를 막지 않는다', async () => {
     payload = snapshotPayload({ payloadVersion: 99 })
@@ -363,7 +366,7 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
 })
 
 /**
- * **쓰기 둘이 실제로 서버에 닿는다** (P9-5 T6 · D9).
+ * **쓰기 둘이 실제로 서버에 닿는다.**
  *
  * ---
  *
@@ -374,7 +377,7 @@ describe('진짜 클라이언트가 붙어 도구를 부른다 (D9)', () => {
  * `PATCH`를 실제로 보내는가(유니온에 더한 것이 런타임까지 왔는가), (3) 쓰기 응답을 낸
  * **뒤에도** 표준출력이 프레임뿐인가.
  */
-describe('빌드된 서버가 실제로 쓴다 (T6)', () => {
+describe('빌드된 서버가 실제로 쓴다', () => {
   const OPS = [{ op: 'add', path: '/root/children/-', value: { id: 'n_smoke', type: 'Text', props: {} } }]
 
   it('`patch_page` 가 `PATCH .../ops` 를 보낸다 — 본문이 프로토콜을 건너 그대로 온다', async () => {
@@ -396,7 +399,7 @@ describe('빌드된 서버가 실제로 쓴다 (T6)', () => {
       expect(seenWrites[0]!.url).toContain('/ops')
       // **`ops`가 그대로 왔는가** — 도구가 다시 만들지 않는다.
       expect(seenWrites[0]!.body).toEqual({ baseSeq: 0, ops: OPS })
-      // **`actor_type`이 이 헤더에서 온다**(D1).
+      // **`actor_type`이 이 헤더에서 온다.**
       expect(seenWrites[0]!.client).toBe('mcp')
     } finally {
       await client.close()
@@ -443,7 +446,7 @@ describe('빌드된 서버가 실제로 쓴다 (T6)', () => {
       const said = JSON.parse(text(result)) as { reason: string; next: string; headSeq: number | null }
       expect(said.reason).toBe('stale')
       expect(said.next).toContain('get_page')
-      // 스냅샷을 다시 읽어 값으로 실었다(D4).
+      // 스냅샷을 다시 읽어 값으로 싣는다.
       expect(said.headSeq).toBe(0)
       // **한 번만 보냈다** — 재시도가 없다.
       expect(seenWrites.filter((one) => one.method === 'PATCH')).toHaveLength(1)
@@ -488,7 +491,7 @@ describe('빌드된 서버가 실제로 쓴다 (T6)', () => {
   }, 60_000)
 
   /**
-   * **쓰기 뒤에도 표준출력이 프레임뿐이다**(P9-4의 계약 둘 · 델타 D-1).
+   * **쓰기 뒤에도 표준출력이 프레임뿐이다.**
    *
    * 쓰기 경로는 응답 본문을 새로 읽고 갈래를 새로 가른다 — **로그 한 줄이 붙기 가장 쉬운
    * 자리**이고, 그 한 줄은 실서버에서 *다음* 프레임 앞에 붙는다.
@@ -523,27 +526,27 @@ describe('빌드된 서버가 실제로 쓴다 (T6)', () => {
 })
 
 /**
- * **표준출력이 JSON-RPC 프레임의 통로다 — 그것을 날 스트림에서 잰다** (리뷰 R2).
+ * **표준출력이 JSON-RPC 프레임의 통로다 — 그것을 날 스트림에서 잰다.**
  *
  * ---
  *
- * # 왜 `Client`로는 못 재나 — 리뷰어가 실측했다 (귀속: 리뷰어 R2)
+ * # 왜 `Client`로는 못 재나
  *
- * `bin.ts`의 리다이렉트를 지우고 `io.out`으로 한 줄을 실제로 찍어도 **스모크 11/11이
- * 초록이었다.** SDK 1.30.0의 `StdioClientTransport`가 **개행으로 끝나는 이물 한 줄을
+ * `bin.ts`의 리다이렉트를 지우고 `io.out`으로 한 줄을 실제로 찍어도 **`Client`로 재는
+ * 케이스는 전부 초록이다.** SDK 1.30.0의 `StdioClientTransport`가 **개행으로 끝나는 이물 한 줄을
  * 만나도 연결을 안 끊기** 때문이고, 무엇보다 그 전송이 **자식의 표준출력을 독점하므로**
  * 케이스가 원문을 볼 수 없다.
  *
  * **그래서 여기서는 `Client`를 안 쓴다.** `spawn`으로 직접 띄우고 JSON-RPC 프레임을 손으로
  * 써 넣은 뒤 **표준출력 전문**을 읽어 모든 줄을 검사한다.
  *
- * # 무엇이 위험한가 — 오늘 위험은 문서가 적은 것보다 낮다
+ * # 무엇이 위험한가 — 개행 없는 조각이다
  *
  * 이 SDK 판은 개행으로 끝나는 이물 줄에 관대하다. **그러나 개행 없는 조각**이 섞이면 다음
  * 프레임 앞에 붙어 그 프레임이 깨지고, **호스트마다 다르다.** 그래서 술어는 관대함에
  * 기대지 않고 *"모든 줄이 JSON-RPC 프레임이다"*로 둔다.
  */
-describe('표준출력이 JSON-RPC 프레임뿐이다 (리뷰 R2)', () => {
+describe('표준출력이 JSON-RPC 프레임뿐이다', () => {
   it('핸드셰이크와 도구 호출을 손으로 써 넣고 표준출력 전문을 읽는다', async () => {
     payload = snapshotPayload({ payloadVersion: 99 })
     const said = await rawStdout([
@@ -598,7 +601,7 @@ describe('표준출력이 JSON-RPC 프레임뿐이다 (리뷰 R2)', () => {
   }, 60_000)
 
   /**
-   * **응답을 낸 뒤에 찍히는 것도 본다** (델타 리뷰 D-1).
+   * **응답을 낸 뒤에 찍히는 것도 본다.**
    *
    * 위 둘이 이미 같은 창을 쓰지만, **창이 응답에서 끊기면 조용히 좁아지는 자리**이므로
    * 그 명제를 이름으로 남긴다 — 프로세스가 살아 있는 동안 나온 것이 전부 읽혔는가.
@@ -661,11 +664,10 @@ function strayLines(stdout: string): string[] {
  *
  * ---
  *
- * # 답을 받은 뒤에도 읽는다 — **창을 응답에서 끊지 않는다** (델타 리뷰 D-1)
+ * # 답을 받은 뒤에도 읽는다 — **창을 응답에서 끊지 않는다**
  *
- * 앞 판은 *"`id`를 든 요청 수만큼 프레임이 오면"* 곧바로 끝냈다. 리뷰어가 실측했다
- * (귀속: 리뷰어 D-1): 리다이렉트를 지우고 `setTimeout(() => io.out(…), 1500)`을 심으면
- * **14/14 초록**이다 — 응답 뒤에 찍히는 것을 아무도 안 읽었다.
+ * *"`id`를 든 요청 수만큼 프레임이 오면"* 곧바로 끝내면 응답 뒤에 찍히는 것을 아무도 안
+ * 읽는다 — 리다이렉트를 지우고 `setTimeout(() => io.out(…), 1500)`을 심어도 전부 초록이다.
  *
  * **실서버에서는 그쪽이 더 흔하다.** 호스트의 세션은 오래 살고 도구 호출이 이어지므로,
  * 응답 뒤에 찍는 줄은 **다음 프레임 앞에 붙는다.**

@@ -1,9 +1,9 @@
 /**
- * **페이지 하나를 "읽을 수 있는 값"으로 만든다**(P9-3 D4).
+ * **페이지 하나를 "읽을 수 있는 값"으로 만든다.**
  *
- * §12.2의 MCP 도구 `get_page`가 내야 하는 것이 *"페이지 스키마 + 코멘트 + 상호작용 문장"*
- * 이고, §12.3의 `wireb page get`이 내야 하는 것도 같은 셋이다. **P9-4가 같은 것을 낸다** —
- * 지금 CLI 안에서 조립하면 그때 두 벌이 되고, 그것이 P9-1·P9-3이 반복해서 막아 온 부류다.
+ * 설계서 「MCP 도구」의 `get_page`가 내야 하는 것이 *"페이지 스키마 + 코멘트 + 상호작용 문장"*
+ * 이고, 설계서 「CLI」의 `wireb page get`이 내야 하는 것도 같은 셋이다. **둘이 같은 것을 낸다** —
+ * CLI나 MCP 안에서 각자 조립하면 두 벌이 되고, 갈리는 날 두 도구가 같은 페이지를 다르게 말한다.
  *
  * ## 무엇이 여기 있고 무엇이 없나
  *
@@ -15,10 +15,10 @@
  *
  * ## 문장을 다시 짜지 않는다
  *
- * `listInteractionSentences`가 이미 §8.2의 문장을 만든다(그 파일이 소비자를 *"우측 패널,
+ * `listInteractionSentences`가 이미 설계서 「자동 문장화」의 문장을 만든다(그 파일이 소비자를 *"우측 패널,
  * HTML 번들, PPTX"*로 적었고 여기가 넷째다). **카탈로그가 설치돼 있어야 문장이 온전하다** —
- * 실측: 설치 전에는 `setProp`의 라벨이 `로딩 상태`가 아니라 `loading`으로 나온다(던지지는
- * 않는다). 설치는 **부르는 쪽**이 한다(`installCatalog`).
+ * 설치 전에 부르면 `setProp`의 라벨이 `로딩 상태`가 아니라 `loading`으로 나온다(던지지는
+ * 않는다 — `describe.ts`의 `propLabel`이 레지스트리에서 못 찾으면 prop 이름을 쓴다). 설치는 **부르는 쪽**이 한다(`installCatalog`).
  */
 import type { PageDocument, WbNode } from './node'
 import { MISSING_NODE_NAME, describeNode, listInteractionSentences, type InteractionSentence } from './interaction/describe'
@@ -71,7 +71,7 @@ export interface PageViewInput {
   id: string
   title: string
   description: string | null
-  /** §8.1의 타겟(`page:관리자/회원/목록`). `targetedPages`가 만든 것을 받는다. */
+  /** 설계서 「모델」(상호작용)의 타겟(`page:관리자/회원/목록`). `targetedPages`가 만든 것을 받는다. */
   target: string
   /** 조상 메뉴의 이름들. 뿌리가 앞이다. */
   menuPath: readonly string[]
@@ -84,7 +84,7 @@ export interface PageView {
   title: string
   description: string | null
   target: string
-  /** 접두를 벗긴 §8.1의 경로. **사람이 치는 것이 이 모양이다**(`wireb page get 관리자/회원/목록`). */
+  /** 접두를 벗긴 「모델」(상호작용)의 경로. **사람이 치는 것이 이 모양이다**(`wireb page get 관리자/회원/목록`). */
   path: string
   menuPath: readonly string[]
   /** 문서의 노드 수. **뿌리를 센다** — 빈 페이지도 1이다. */
@@ -93,7 +93,7 @@ export interface PageView {
   nodes: PageViewNode[]
   document: PageDocument
   comments: PageViewComment[]
-  /** §8.2의 문장들. 노드 순서다. */
+  /** 「자동 문장화」의 문장들. 노드 순서다. */
   interactions: InteractionSentence[]
 }
 

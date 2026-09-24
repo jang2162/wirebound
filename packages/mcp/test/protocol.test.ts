@@ -1,15 +1,14 @@
 /**
- * **프로토콜 매핑을 `pnpm test`가 본다** (리뷰 N2).
+ * **프로토콜 매핑을 `pnpm test`가 본다.**
  *
  * ---
  *
- * # 왜 생겼나 — 스모크에만 걸려 있었다
+ * # 왜 필요한가 — 스모크만으로는 `pnpm test`가 못 본다
  *
- * 리뷰어가 실측했다(귀속: 리뷰어 §5): `server.ts`가 결과에 `isError`를 안 싣게 바꾸면
- * **`pnpm test`는 84/84 초록이고 `pnpm test:build`만 1건 죽는다.** 단위 케이스가
- * `callTool`을 **직접** 부르므로 그 값이 프로토콜 응답의 어느 자리로 가는지는 아무도 안 봤다.
- * D8의 절반(*"못 붙은 것이 `isError`로 나간다"*)이 스모크에만 매여 있었고,
- * **스모크는 `pnpm test`에 안 들어간다**(`--project '!build'`).
+ * 단위 케이스는 `callTool`을 **직접** 부르므로 그 값이 프로토콜 응답의 어느 자리로 가는지는
+ * 안 본다. 이 파일이 없으면 `server.ts`가 결과에 `isError`를 안 싣게 바뀌어도 **`pnpm test`는
+ * 초록이고 `pnpm test:build`만 죽는다** — *"못 붙은 것이 `isError`로 나간다"*(`outcome.ts`의
+ * 표)가 스모크에만 매이고, **스모크는 `pnpm test`에 안 들어간다**(`--project '!build'`).
  *
  * # 스모크를 대신하지 않는다 — 자리가 다르다
  *
@@ -64,12 +63,12 @@ describe('도구 목록이 프로토콜을 건넌다', () => {
 })
 
 /**
- * **D8의 셋이 프로토콜의 어느 자리로 가는가.**
+ * **`outcome.ts`의 세 갈래가 프로토콜의 어느 자리로 가는가.**
  *
  * 단위 케이스는 `ToolOutcome.isError`를 보고, 여기서는 **응답 프레임의 `isError`**를 본다.
  * 그 둘을 잇는 코드가 `createServer`의 `CallToolRequestSchema` 핸들러 한 줄이다.
  */
-describe('D8의 셋이 프로토콜에서 갈린다 (리뷰 N2)', () => {
+describe('`outcome.ts`의 세 갈래가 프로토콜에서 갈린다', () => {
   it('못 붙은 것은 `isError: true` **결과**다 — 예외가 아니다', async () => {
     const client = await connect(harness({ binding: false }))
     try {
@@ -108,7 +107,7 @@ describe('D8의 셋이 프로토콜에서 갈린다 (리뷰 N2)', () => {
   it('모르는 도구는 JSON-RPC 오류다 — 결과가 아니다', async () => {
     const client = await connect(harness())
     try {
-      // **§12.2의 표에 없는 이름이다.** 표가 다섯을 다 덮으므로 실재하지 않는 이름을 골랐다.
+      // **설계서 「MCP 도구」의 표에 없는 이름이다.** 표가 다섯을 다 덮으므로 실재하지 않는 이름을 골랐다.
       await expect(client.callTool({ name: 'delete_project', arguments: {} })).rejects.toMatchObject({
         code: ErrorCode.MethodNotFound,
       })

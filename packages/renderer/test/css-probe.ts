@@ -1,9 +1,9 @@
 /**
  * jsdom으로 캐스케이드를 재는 프로브. **테스트 전용이고 런타임 의존이 아니다** —
  * `jsdom`은 저장소 루트의 devDependency이고 여기서만 동적 import로 쓴다
- * (P4a-1이 `packages/themes/test/emit-parse.test.ts`에서 세운 관례).
+ * (`packages/themes/test/emit-parse.test.ts`와 같은 관례).
  *
- * **이 프로브가 잴 수 있는 것과 없는 것을 먼저 적는다.** 아래 세 성질은 재서 확인했고
+ * **이 프로브가 잴 수 있는 것과 없는 것을 먼저 적는다.** 아래 네 성질은 재서 확인했고
  * (`structure-css.test.ts`가 케이스로 고정한다), 이것을 모르면 여기서 나온 값을 잘못 읽는다.
  *
  * | 성질 | jsdom 25 |
@@ -26,7 +26,7 @@ export interface Probe {
 
 /**
  * `<style>` 여러 장과 본문 HTML을 넣은 문서를 만든다. **시트의 순서가 인자 순서다** —
- * D5가 구조 기본 CSS를 먼저, 테마 CSS를 나중에 놓는 것을 이 순서로 흉내 낸다.
+ * 구조 기본 CSS를 먼저, 테마 CSS를 나중에 놓는 것을 이 순서로 흉내 낸다.
  */
 export async function probe(sheets: readonly string[], html: string): Promise<Probe> {
   const { JSDOM } = await import('jsdom')

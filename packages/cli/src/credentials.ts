@@ -1,5 +1,5 @@
 /**
- * 자격 저장소. **리포 밖, 홈 아래**(D6).
+ * 자격 저장소. **리포 밖, 홈 아래**.
  *
  * `.wirebound.json`은 커밋되는 파일이므로 토큰을 거기 쓰면 다음 `git push`에 실려 나간다.
  * `test/no-token-in-repo.test.ts`가 *"CLI가 리포 안에 쓴 파일 **전부**"*를 훑어 원문이
@@ -19,7 +19,7 @@
  *
  * # 서버 × 프로젝트로 여러 벌을 담는다
  *
- * 토큰 스코프가 프로젝트 단위이므로(§10) 리포 둘을 오가는 사람은 자격도 둘이다. 하나만
+ * 토큰 스코프가 프로젝트 단위이므로(설계서 「권한 모델」) 리포 둘을 오가는 사람은 자격도 둘이다. 하나만
  * 담으면 리포를 바꿀 때마다 다시 로그인해야 한다.
  */
 import { CliError, EXIT, configError } from './exit'
@@ -87,7 +87,7 @@ function isEntry(value: unknown): value is CredentialEntry {
  * 그 서버·프로젝트의 토큰. 없으면 `null`.
  *
  * **`WIREB_TOKEN`이 이긴다.** 그 변수는 서버·프로젝트를 말하지 않으므로 *"지금 부르려는
- * 그것"*에 그대로 쓴다 — 스코프가 틀렸으면 서버가 404로 말한다(D4).
+ * 그것"*에 그대로 쓴다 — 스코프가 틀렸으면 서버가 404로 말한다.
  */
 export async function findToken(io: Io, server: string, projectId: string): Promise<string | null> {
   const fromEnv = io.env.WIREB_TOKEN

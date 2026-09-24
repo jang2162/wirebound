@@ -1,7 +1,7 @@
 /**
- * 소프트 잠금의 **판정 한 벌**(설계 §7.2).
+ * 소프트 잠금의 **판정 한 벌**(설계서 「소프트 잠금」).
  *
- * §7.2는 방어를 둘로 나눴다 — *"잠긴 노드는 다른 사용자 화면에 배지가 뜨고 선택이
+ * 「소프트 잠금」은 방어를 둘로 나눴다 — *"잠긴 노드는 다른 사용자 화면에 배지가 뜨고 선택이
  * 차단된다(1차 방어)"*, *"서버는 patch 수신 시 잠금 소유자를 재확인한다(2차 방어)"*.
  * **나뉜 것은 방어이지 판정이 아니다.** 판정을 양쪽이 각자 쓰면 갈리고, 갈린 판정은 두
  * 방향으로 틀린다: 화면이 안 막는 것을 서버가 거절하면 사용자는 눌렀는데 아무 일도 안 나는
@@ -33,13 +33,13 @@ import { findNodePath } from './tree'
 /**
  * 살아 있는 잠금 하나. **서버가 준 그대로다** — 만료 판정은 서버가 이미 했다.
  *
- * `userName`이 있는 것은 §7.2의 *"○○ 편집 중"* 배지 때문이다. 화면이 `userId`로 참가자
- * 목록을 다시 뒤지게 하면 그 목록이 낡았을 때(P3-2 이월 §2.5) **잠금이 조용히 사라진다** —
+ * `userName`이 있는 것은 「소프트 잠금」의 *"○○ 편집 중"* 배지 때문이다. 화면이 `userId`로 참가자
+ * 목록을 다시 뒤지게 하면 그 목록이 낡았을 때 **잠금이 조용히 사라진다** —
  * 이름을 잠금이 직접 나르면 그 일이 없다.
  */
 export interface NodeLock {
   nodeId: string
-  /** **연결이 아니라 사람이다**(P3-3 D3). 같은 사람의 다른 탭은 서로를 막지 않는다. */
+  /** **연결이 아니라 사람이다.** 같은 사람의 다른 탭은 서로를 막지 않는다. */
   userId: string
   userName: string
 }
@@ -50,10 +50,10 @@ export interface LockConflictInput {
   /**
    * 문서 루트(`{version, root}`) 기준 JSON Pointer들. **편집이면 `lockPointers(ops)`이고
    * 선택이면 `findNodePath(root, nodeId)` 하나다** — 두 방어가 같은 함수에 다른 자리를
-   * 넣는 것이 D7이 요구한 형태다.
+   * 넣는다 — 판정이 한 벌이어야 하는 이유는 파일 머리말.
    */
   pointers: readonly string[]
-  /** 이 사람의 잠금은 부딪치지 않는다(D3). */
+  /** 이 사람의 잠금은 부딪치지 않는다(소유자는 사람이다 — `NodeLock.userId`). */
   viewerUserId: string
 }
 
@@ -83,12 +83,12 @@ export function findLockConflict(input: LockConflictInput): NodeLock | null {
 }
 
 /**
- * 이 사람에게 **뜻이 있는** 잠금만(D3 — 소유자는 사람이다).
+ * 이 사람에게 **뜻이 있는** 잠금만(소유자는 사람이다).
  *
  * **`findLockConflict`가 안에서 이것을 쓴다.** 밖으로도 내는 것은 부르는 쪽이 *"볼 잠금이
  * 하나라도 있나"*를 먼저 물어 **문서 조회를 건너뛸 수 있게** 하기 위해서다(`apps/api`의
  * `lock/check.ts`). 그 자리에서 `userId`를 다시 비교하면 **누구의 잠금이 뜻이 있는가**가
- * 두 벌이 되고, 그것이 D7이 닫은 형태다.
+ * 두 벌이 되고, 파일 머리말의 두 방향 틀림이 그 자리에서 다시 생긴다.
  */
 export function locksAgainst(locks: readonly NodeLock[], viewerUserId: string): NodeLock[] {
   return locks.filter((lock) => lock.userId !== viewerUserId)

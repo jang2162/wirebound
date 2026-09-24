@@ -12,7 +12,7 @@ import { strToU8, zipSync } from 'fflate'
 
 export const BUNDLE_ROOT = 'wirebound-export-my-project'
 
-/** §11.3의 트리를 흉내 낸 최소 번들. 파일 셋과 하위 디렉터리 하나. */
+/** 설계서 「HTML 정적 번들」의 트리를 흉내 낸 최소 번들. 파일 셋과 하위 디렉터리 하나. */
 export const BUNDLE_FILES: Record<string, string> = {
   'index.html': '<!doctype html><title>설계서</title>',
   'assets/theme.css': ':root { --wb-semantic-primary: #2563eb; }',
@@ -33,10 +33,10 @@ export function bundleZip(over: Record<string, string> = {}, root: string | null
 
 /**
  * **뿌리 폴더가 없는 한 파일짜리 번들.** `stripCommonRoot`의 `segments.length > 1` 가드가
- * 막는 것이 이 모양이다(리뷰 N5) — 벗기면 경로가 빈 문자열이 되어 `-o` 디렉터리 자체에
+ * 막는 것이 이 모양이다 — 벗기면 경로가 빈 문자열이 되어 `-o` 디렉터리 자체에
  * 쓰려 든다.
  *
- * 오늘 서버는 언제나 뿌리 폴더를 두지만 **CLI는 그 계약을 믿지 않기로 했다**(압축 안의
+ * 서버는 언제나 뿌리 폴더를 두지만 **CLI는 그 계약을 믿지 않는다**(압축 안의
  * 경로를 안 믿는 것과 같은 자세). 그래서 자가 있어야 한다.
  */
 export function singleFileZip(path = 'index.html', content = '한 파일짜리 번들'): Uint8Array {

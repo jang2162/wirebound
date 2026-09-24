@@ -1,5 +1,5 @@
 /**
- * `wireb init` — D5·D6.
+ * `wireb init`.
  *
  * **네트워크를 안 탄다**는 것을 *"요청이 0건이다"*로 잰다. 가짜 `io`가 요청을 전부
  * 기록하므로 그 수가 곧 그 명제다.
@@ -23,7 +23,7 @@ describe('wireb init', () => {
     })
   })
 
-  it('네트워크를 타지 않는다 (D5)', async () => {
+  it('네트워크를 타지 않는다', async () => {
     const io = createFakeIo()
     await run(ARGS, io)
 
@@ -38,15 +38,15 @@ describe('wireb init', () => {
   })
 
   /**
-   * **N7이 닫히는 자리.** 리뷰가 실행 관찰로 찾았다: `server`가 스킴이 없거나 오타면
-   * `fetch`가 던져 **코드 4**(*"서버에 연결할 수 없습니다"*)가 나갔다 — 원인은 사용자의
-   * 설정 한 줄인데. `a3c6d12`(헤더)와 같은 부류이고, 판정과 실측표는
+   * **쓸 수 없는 서버 주소는 쓰기 전에 끊는다.** 안 끊으면 `server`가 스킴이 없거나 오타일 때
+   * `fetch`가 던져 **코드 4**(*"서버에 연결할 수 없습니다"*)가 나간다 — 원인은 사용자의
+   * 설정 한 줄인데. `client.ts`의 `assertSendableHeaders`와 같은 부류이고, 판정과 실측표는
    * `binding.ts`의 `normalizeServer` 머리말에 있다.
    *
    * **`htp://`·`ftp://`는 `new URL()`을 통과한다** — 그래서 스킴까지 본다.
    * **`https://`는 호스트가 비어** `fetch`가 경로 첫 마디를 호스트로 읽는다.
    */
-  it('쓸 수 없는 서버 주소는 2이고 바인딩을 아예 안 쓴다 (N7)', async () => {
+  it('쓸 수 없는 서버 주소는 2이고 바인딩을 아예 안 쓴다', async () => {
     // **빈 문자열은 여기 없다** — 그것은 *"값을 안 줬다"*라 `runInit`이 먼저 1(사용법)로
     // 끊는다. 아래 *"--server 나 --project 가 없으면"*이 그 갈래를 든다.
     for (const server of ['wb.example.com', 'htp://wb.example.com', 'ftp://wb.example.com', 'https://']) {
@@ -103,7 +103,7 @@ describe('wireb init', () => {
     expect(JSON.parse(io.text('/repo/.wirebound.json') ?? '').projectId).toBe('old')
   })
 
-  it('--force 면 덮지만 모르는 절은 보존한다 — P9-3의 lint 절이 그 자리다', async () => {
+  it('--force 면 덮지만 모르는 절은 보존한다 — `lint` 절이 그 자리다', async () => {
     const io = createFakeIo({
       files: {
         '/repo/.wirebound.json': JSON.stringify({

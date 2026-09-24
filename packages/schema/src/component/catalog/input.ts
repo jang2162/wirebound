@@ -3,7 +3,7 @@ import { defineComponent } from '../define'
 
 export const SearchFormDef = defineComponent({
   type: 'SearchForm',
-  // **이름은 §9의 그림에서 빌려 왔다**(*"① 검색폼"*) — `List`와 같은 근거다.
+  // **이름은 설계서 「설계서 화면 구조」의 그림에서 빌려 왔다**(*"① 검색폼"*) — `List`와 같은 근거다.
   label: '검색폼',
   description: '목록을 거를 조건을 받는 검색 영역.',
   group: 'input',
@@ -12,7 +12,7 @@ export const SearchFormDef = defineComponent({
   }),
   editor: [{ prop: 'collapsed', control: 'switch', label: '접힌 상태' }],
   structures: ['inline', 'stacked', 'collapsible'],
-  // `row`는 `stacked`가 자식 하나마다 내는 줄이다. **테마는 §6.5에서 `parts`만 겨냥할 수
+  // `row`는 `stacked`가 자식 하나마다 내는 줄이다. **테마는 설계서 「components — 구조 + 스킨」에서 `parts`만 겨냥할 수
   // 있고 자식 컴포넌트를 직접 겨냥할 수 없으므로**, 줄이 조각으로 나오지 않으면 줄 사이
   // 간격·구분선에 손댈 길이 아예 없다 — `flex-direction: column`으로 대신할 수 없는 것이
   // 그 부분이고, `stacked`가 `inline`과 DOM으로 갈리는 근거다.
@@ -36,9 +36,9 @@ export const EntryFormDef = defineComponent({
   structures: ['labelLeft', 'labelTop', 'sectioned'],
   // `section`·`sectionTitle`은 `sectioned`가 자식 하나마다 내는 구획과 그 머리글이다.
   //
-  // **`control`은 오늘 어느 구조도 내지 않는다.** 선언만 있고 화면에 닿지 않는 이름이라
-  // `Field.help`와 같은 부류다 — 지우는 것은 테마 어휘를 좁히는 변경이므로 여기서 하지
-  // 않고 보고에 남긴다.
+  // **`control`은 어느 구조도 내지 않는다.** 선언만 있고 화면에 닿지 않는 이름이라
+  // `Field.help`와 같은 부류다 — 지우는 것은 테마 어휘를 좁히는 변경(그 이름에 스킨을 둔
+  // 테마가 검증에서 걸린다)이므로 여기서 하지 않는다. 어휘를 좁히기로 정할 때 함께 지운다.
   parts: ['row', 'label', 'control', 'actions', 'section', 'sectionTitle'],
   variants: [],
   states: [],
@@ -75,8 +75,7 @@ export const FieldDef = defineComponent({
   ],
   structures: ['outlined', 'filled', 'underlined'],
   parts: ['label', 'control', 'help'],
-  // `control`의 enum 값 그대로다. 계획서 표는 설계 §5의 문장에서 옮긴 것이었는데,
-  // 카탈로그의 실제 enum과 대조해 보니 아홉으로 일치했다.
+  // `control`의 enum 값 그대로다 — `defineComponent`가 두 집합이 같은지를 양방향으로 검사한다.
   variants: ['text', 'number', 'select', 'date', 'dateRange', 'checkbox', 'radio', 'textarea', 'file'],
   variantFrom: 'control',
   states: ['required', 'disabled', 'invalid'],

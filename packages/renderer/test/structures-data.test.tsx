@@ -1,9 +1,9 @@
 /**
- * **데이터 그룹의 구조 구현체** — `List`·`Tree`·`KeyValue` (P4b-2 ② W2).
+ * **데이터 그룹의 구조 구현체** — `List`·`Tree`·`KeyValue`.
  *
- * **새 파일인 이유:** 워커 넷이 동시에 돈다. 기존 `structures.test.tsx`에 절을 더하면
- * 넷이 같은 파일에 줄을 더해 병합에서 부딪힌다 — 준비 웨이브가 소스에서 가른 것과 같은
- * 이유로 케이스도 가른다.
+ * **파일이 따로인 이유:** 그룹마다 구조를 병렬로 만들 때 `structures.test.tsx` 하나에 절을
+ * 더하면 모두가 같은 파일에 줄을 더해 병합에서 부딪힌다 — 소스를 그룹 모듈로 가른 것과
+ * 같은 이유로 케이스도 가른다.
  *
  * **여기가 재지 않는 것:** 계약 밖 `data-*`·`style`의 일반 선언·선언되지 않은 part 이름은
  * `structures.test.tsx`의 **전수 가드 셋**이 등록된 모든 구조에 대해 이미 잰다. 그러니
@@ -105,13 +105,14 @@ describe('List:cardGrid', () => {
   })
 
   /**
-   * **재라 — `List:cardGrid`의 열 수를 무엇이 정하는가.**
+   * **`List:cardGrid`의 열 수를 무엇이 정하는가.**
    *
    * 답: **테마다.** 노드에는 열 수를 담을 prop이 없다 — `List.columns`는
    * `visibleWhen:{structure:'table'}`인 **컬럼 이름 목록**(`string[]`)이라 카드 그리드에서는
-   * 패널에 보이지도 않고 뜻도 다르다(P4a-3이 실측한 것). 그래서 구조 기본 CSS는
+   * 패널에 보이지도 않고 뜻도 다르다. 그래서 구조 기본 CSS는
    * **grid를 세우고 최소한의 트랙만** 주고, 실제 열 수는 테마의 `gridColumns` 어휘가 정한다
-   * (P4b-1이 그 어휘를 §6.8 밖으로 열면서 근거에 이 자리를 적어 두었다).
+   * (그 어휘는 설계서 「스타일 프로퍼티 화이트리스트」 밖이다 — 근거는
+   * `packages/themes/src/resolve/style.ts`의 `STYLE_PROPERTIES_BEYOND_SPEC`에 있다).
    *
    * **아래 두 케이스가 그 답의 실행 가능한 형태다.**
    */
@@ -198,8 +199,8 @@ describe('List:stackedList', () => {
   /**
    * **이름 있는 판정 — 이 구조는 기본 CSS를 갖지 않는다.**
    *
-   * 기본 CSS의 몫은 *"구조가 서기 위한 최소 선언"*이다(계약 3). `cardGrid`는 `display:grid`가
-   * 없으면 그리드가 아니라 세로 목록이 되어 **다른 구조와 구별되지 않으므로** 규칙이 필요했다.
+   * 기본 CSS의 몫은 *"구조가 서기 위한 최소 선언"*이다. `cardGrid`는 `display:grid`가
+   * 없으면 그리드가 아니라 세로 목록이 되어 **다른 구조와 구별되지 않으므로** 규칙이 필요하다.
    * 줄 목록은 반대다 — `<ul>/<li>`의 기본 흐름이 이미 그 구조이고, 여기서 여백·구분선을
    * 정하면 그것은 외형이라 테마의 몫이다.
    *
@@ -265,17 +266,14 @@ describe('List:mediaList', () => {
   })
 
   /**
-   * **이 판정이 뒤집혔다 — 케이스를 지우지 않고 반대 방향으로 다시 적는다** (P4b-3 ②).
+   * **`mediaList`는 구조 기본 CSS를 갖는다 — `:where()`로 좁혀서.**
    *
-   * P4b-2 W2가 여기 *"기본 CSS를 갖지 않는다. 이번에는 갖고 싶어도 못 갖는다"*고 적었고
-   * 근거는 특이도였다: 조각 규칙에 구조 이름을 맨 셀렉터로 넣으면 (0,3,0)이 되어
-   * `compileTheme`의 조각 규칙(0,2,0)을 이기고 **그 컴포넌트에서만 테마가 진다.**
-   * 구조 없이 걸면 `cardGrid`·`stackedList`의 `item`까지 받아 카드 안이 가로로 눕는다.
+   * 조각 규칙에 구조 이름을 맨 셀렉터로 넣으면 (0,3,0)이 되어 `compileTheme`의 조각
+   * 규칙(0,2,0)을 이기고 **그 컴포넌트에서만 테마가 진다.** 구조 없이 걸면
+   * `cardGrid`·`stackedList`의 `item`까지 받아 카드 안이 가로로 눕는다.
    *
-   * **그 전제가 같은 슬라이스 안에서 사라졌다.** P4b-2 ③이 `partRule`에 넷째 인자를 주어
-   * `:where()`로 구조를 가리게 했고, `:where()`는 특이도가 0이라 **(0,2,0)을 지키면서**
-   * 구조를 좁힌다. 그 판정이 스스로 *"P4b-3이 그 구조를 실제로 쓸 때 만드는 것이 맞다"*고
-   * 적어 두었고, `commerce` 테마가 `mediaList`를 고르면서 만들었다.
+   * `partRule`의 넷째 인자가 `:where()`로 구조를 가린다. `:where()`는 특이도가 0이라
+   * **(0,2,0)을 지키면서** 구조를 좁힌다.
    *
    * **아래 셋을 함께 본다.** 규칙이 생겼다는 것만 보면 좁히기가 풀려도 초록이다.
    */
@@ -296,7 +294,7 @@ describe('List:mediaList', () => {
     for (const selector of targeting) {
       expect(selector.replace(/:where\([^)]*\)/g, '').match(/\[[^\]]+\]/g)).toHaveLength(2)
     }
-    // (3) 앞 판정이 지키던 것 — `cardGrid`를 겨냥하는 규칙은 그대로 있다.
+    // (3) `cardGrid`를 겨냥하는 규칙도 그대로 있다.
     expect(css).toContain('[data-wb-structure="cardGrid"]')
   })
 
@@ -486,7 +484,7 @@ describe('KeyValue:cardGrid', () => {
    * 즉 여기서는 **노드가 열 수를 정할 수 있다** — `List.columns`(컬럼 **이름** 목록,
    * `table`에서만 보임)와 정반대다.
    *
-   * 그래서 여기에만 손잡이를 만든다: `--wb-node-keyvalue-columns`. **D4의 입력이다.**
+   * 그래서 여기에만 손잡이를 만든다: `--wb-node-keyvalue-columns`.
    */
   it('노드가 열 수를 커스텀 프로퍼티로 싣고 기본 CSS가 그것으로 트랙을 만든다', async () => {
     const dom = await probe([structureBaseCss()], render('KeyValue', 'cardGrid', { columns: 3 }))
@@ -520,17 +518,16 @@ describe('KeyValue:cardGrid', () => {
   })
 
   /**
-   * **새 손잡이는 P4b-1이 세운 부류에 그대로 들어간다 — 여기가 그 실측이다(D4의 입력).**
+   * **테마가 노드 손잡이를 덮으면 테마가 이긴다.**
    *
-   * 이월 문서의 표가 *"구조 기본 CSS가 노드 변수를 읽는 손잡이는 테마 어휘로 침묵
-   * 덮어쓰기 된다"*고 여덟을 세었고, 원인은 `STYLE_PROPERTIES`에 **컴포넌트 범위 개념이
-   * 없다**는 것이다. `gridColumns`를 `List:cardGrid` 때문에 열었더니 `Grid`에도 열렸고,
-   * 이제 `KeyValue`에도 열린다.
-   *
-   * 아래가 그 결과다: 노드는 `3`을 실었는데 **화면에는 7열이 그려지고 이슈는 0건이다.**
-   * **부류를 여기서 고치지 않는다**(계획서 D4 — 26개가 다 만들어진 뒤 판정한다).
+   * `STYLE_PROPERTIES`에 **컴포넌트 범위 개념이 없어** `gridColumns`가 `List:cardGrid`·
+   * `Grid`·`KeyValue` 어디에나 열린다. 아래가 그 결과다: 노드는 `3`을 실었는데 **화면에는
+   * 7열이 그려진다.** 테마가 이기는 것은 설계서 「components — 구조 + 스킨」대로 옳고,
+   * **조용하지는 않다** — 테마 검증이 `node-handle-overwrite`(warning)로 알린다. 그 표는
+   * `packages/themes/src/spec/handles.ts`의 `NODE_HANDLES`가 갖는다(`KeyValue`의
+   * `grid-template-columns`가 들어 있다). 이 케이스는 렌더러 쪽 사실만 잰다.
    */
-  it('테마의 gridColumns가 노드의 열 수를 침묵으로 덮는다 — D4가 판정할 부류다', async () => {
+  it('테마가 노드의 열 수를 덮는다 — 노드의 값은 실려 있고 읽히지 않는다', async () => {
     const html = render('KeyValue', 'cardGrid', { columns: 3 })
     const themeRule =
       '[data-wb-component="KeyValue"][data-wb-structure="cardGrid"]' +

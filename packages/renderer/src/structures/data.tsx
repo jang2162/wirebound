@@ -1,7 +1,7 @@
 /**
  * **데이터 그룹.** `List`·`Tree`·`KeyValue`.
  *
- * 카탈로그의 `component/catalog/data.ts`와 같은 경계다(P4b-2 D2). 등록(`DATA_ENTRIES`)과
+ * 카탈로그의 `component/catalog/data.ts`와 같은 경계다. 등록(`DATA_ENTRIES`)과
  * 기본 CSS(`dataCssBlocks`)를 이 파일이 소유한다. 공용 도구는 `../structure-css-tools`에
  * 있다 — 복사해 오지 마라.
  */
@@ -49,7 +49,7 @@ export const ListTable: StructureRenderer = ({ attrs, props, part }) => {
 
 /**
  * 카드 그리드. **`table`과 갈리는 지점은 조각의 어휘다** — 행·셀이 아니라 카드 하나
- * (`item`)가 단위이고 그 안이 `media`·`title`·`meta`로 나뉜다. §6.5의 `List:cardGrid`
+ * (`item`)가 단위이고 그 안이 `media`·`title`·`meta`로 나뉜다. 설계서 「components — 구조 + 스킨」의 `List:cardGrid`
  * 예시가 스타일을 거는 조각이 정확히 그 셋이다.
  *
  * **열 수는 이 구현체가 정하지 않는다** — 노드에 담을 자리가 없다. `List.columns`는
@@ -58,7 +58,7 @@ export const ListTable: StructureRenderer = ({ attrs, props, part }) => {
  * 테마의 `gridColumns`가 정한다(그 판정의 전문은 거기 있다).
  *
  * `pagination`은 `table`과 같은 조건으로 그린다. **구조마다 다른 prop을 무시하면 그것이
- * 곧 "조용히 틀린다"**이고(P4b-1이 `Media.kind`에서 겪은 부류), 이 prop에는 구조 조건이
+ * 곧 "조용히 틀린다"**이고, 이 prop에는 구조 조건이
  * 붙어 있지 않다.
  */
 export const ListCardGrid: StructureRenderer = ({ attrs, props, part }) => {
@@ -112,13 +112,10 @@ export const ListStackedList: StructureRenderer = ({ attrs, props, part }) => {
  * **어떤 테마도 표현할 수 없다.** 구조가 지는 몫은 그 배치를 표현 가능하게 만드는
  * 것까지이고 실제 배치는 테마다.
  *
- * **기본 CSS를 갖는다 — 앞서 *"갖고 싶어도 못 갖는다"*고 적었고 그것이 낡았다.**
- * P4b-2의 W2가 포기한 자리이고 이유가 특이도였다: 조각 규칙에 구조 이름을 맨 셀렉터로
+ * **기본 CSS를 갖는다.** 걸림돌은 특이도다: 조각 규칙에 구조 이름을 맨 셀렉터로
  * 넣으면 (0,3,0)이 되어 테마가 지고, 구조 없이 걸면 `cardGrid`·`stackedList`의 카드까지
- * 가로로 눕는다. **P4b-2 ③의 `:where()`가 그 벽을 없앴다** — `partRule`의 넷째 인자가
- * (0,2,0)을 지키면서 구조를 가린다. 그 판정이 스스로 *"P4b-3이 그 구조를 실제로 쓸 때
- * 만드는 것이 맞다"*고 적어 두었고, `commerce`가 그 구조를 쓰면서 만들었다.
- * 규칙과 근거는 아래 `dataCssBlocks`에 있다.
+ * 가로로 눕는다. **`partRule`의 넷째 인자(`:where()`)가** (0,2,0)을 지키면서 구조를
+ * 가린다. 규칙과 근거는 아래 `dataCssBlocks`에 있다.
  */
 export const ListMediaList: StructureRenderer = ({ attrs, props, part }) => {
   const items = props.items as number
@@ -144,9 +141,9 @@ export const TreeIndent: StructureRenderer = ({ attrs, props, part }) => {
   return (
     <ul {...attrs}>
       {items.map((label, index) => (
-        // 들여쓰기 **단계**만 나른다. 픽셀을 곱하는 것은 `structure-css.ts`이고, 그 곱셈의
-        // 다른 인자(`--wb-tree-indent`)가 테마의 손잡이가 될 자리다 — 오늘 그 손잡이에
-        // 값을 넣는 경로가 없다는 것은 `structure-css.ts`의 주석에 적었다.
+        // 들여쓰기 **단계**만 나른다. 픽셀을 곱하는 것은 아래 `dataCssBlocks`이고, 그 곱셈의
+        // 다른 인자(`--wb-tree-indent`)가 테마의 손잡이다 — `structure-css-tools.ts`의
+        // `TREE_INDENT_VAR`.
         <li
           key={`${label}-${index}`}
           {...part('node')}
@@ -165,9 +162,8 @@ export const TreeIndent: StructureRenderer = ({ attrs, props, part }) => {
  *
  * `indent`는 단계를 `--wb-node-tree-level`로 실어 보내고 구조 기본 CSS가 거기에 들여쓰기
  * 폭을 곱한다. 아코디언은 **DOM 중첩이 깊이 그 자체**이므로 그 값을 싣지 않는다 — 실으면
- * 중첩과 곱셈이 겹쳐 두 번 들여쓴다. `partRule('Tree','node', …)`이 구조를 가리지 않아
- * 여기 마디에도 걸리지만, 값을 안 실으면 `var()`의 기본값 0이 되어 0px가 된다
- * (`structure-css-tools`의 `partRule` 주석이 예고한 자리다).
+ * 중첩과 곱셈이 겹쳐 두 번 들여쓴다. `partRule('Tree','node', …)`은 `:where(indent)`로
+ * 좁혀 여기 마디에는 걸리지 않는다(아래 `dataCssBlocks`).
  *
  * **첫 마디만 펴져 있다.** 아코디언은 *"하나만 펴진 상태"*가 기본형이고, 전부 펴면
  * `indent`와 화면이 같아져 무엇을 그린 것인지 안 보인다.
@@ -237,8 +233,9 @@ export const KeyValueTable: StructureRenderer = ({ attrs, props, part }) => {
  * `<dt>`/`<dd>` 짝을 묶는 유일한 방법이다.
  *
  * **`columns`를 읽지 않는다.** 세로로 흐르는 정의 목록에서 열 수는 뜻이 없다. 그 prop이
- * 여기서 죽어 있는 것은 `editor` 항목에 `visibleWhen`이 없어서인데, **고치지 않고
- * 보고한다** — 패널의 동작을 바꾸는 것은 이 태스크의 범위 밖이다.
+ * 여기서 죽어 있는 것은 `editor` 항목에 `visibleWhen`이 없어서다 — 패널이 이 구조에서도
+ * 열 수를 보인다. **여기서 고치지 않는다**: 패널의 동작을 바꾸는 일이라 카탈로그의 `editor`
+ * 항목(`component/catalog/data.ts`)에 `visibleWhen`을 정할 때 닫힌다.
  */
 export const KeyValueDefinitionList: StructureRenderer = ({ attrs, props, part }) => {
   const pairs = props.pairs as { key: string; value: string }[]
@@ -261,10 +258,11 @@ export const KeyValueDefinitionList: StructureRenderer = ({ attrs, props, part }
  * 여기서는 **노드가 열 수를 정할 수 있다** — 컬럼 이름 목록인 `List.columns`와 정반대이고,
  * 그래서 여기에만 손잡이(`--wb-node-keyvalue-columns`)를 만든다.
  *
- * **그 손잡이는 P4b-1이 세운 부류에 그대로 들어간다** — 테마가 `gridColumns`를 쓰면
- * 노드의 값이 **침묵으로** 무시된다(케이스로 실측했다). 원인은 `STYLE_PROPERTIES`에
- * 컴포넌트 범위가 없다는 것이고, **여기서 고치지 않는다**(계획서 D4가 26개를 다 놓고
- * 판정한다).
+ * **그 손잡이는 침묵으로 덮일 수 있다** — 테마가 `gridColumns`를 쓰면 같은 특이도로 뒤에
+ * 와서 노드의 값이 무시된다. 원인은 `STYLE_PROPERTIES`에 컴포넌트 범위가 없다는 것이라
+ * 여기서 막지 못하고, 대신 `themes`의 노드 손잡이 표(`spec/handles.ts`의 `NODE_HANDLES`)가
+ * 그 조합에 경고를 붙인다. 손잡이를 더하면 그 표에도 등록한다 —
+ * `apps/web/test/theme/node-handles.test.ts`가 두 쪽을 대조한다.
  *
  * 조각은 `table`·`definitionList`와 같은 `row`·`key`·`value`다 — 재는 것이 같다.
  */
@@ -294,9 +292,9 @@ export function dataCssBlocks(): string[] {
 
   // ── List:cardGrid ─────────────────────────────────────────────────────────
   //
-  // **재라 — 열 수를 무엇이 정하는가. 답: 테마다.**
+  // **열 수를 무엇이 정하는가 — 테마다.**
   //
-  // 셋 다 재 봤다.
+  // 후보 셋:
   //
   // | 후보 | 왜 아닌가 |
   // |---|---|
@@ -306,7 +304,7 @@ export function dataCssBlocks(): string[] {
   //
   // 그래서 여기 값은 **2**다 — 그리드가 목록이 아니게 되는 최소값이고, 그보다 큰 수는
   // 취향이라 테마의 몫이다. **`var()`를 쓰지 않는 것이 요점이다**: 읽을 노드 변수를
-  // 만들어 두고 아무도 값을 안 실으면 죽은 손잡이가 하나 더 생긴다(`Media.kind` 부류).
+  // 만들어 두고 아무도 값을 안 실으면 죽은 손잡이가 하나 더 생긴다.
   blocks.push(
     componentRule('List', 'cardGrid', ['display: grid;', 'grid-template-columns: repeat(2, 1fr);']),
   )
@@ -314,16 +312,15 @@ export function dataCssBlocks(): string[] {
   // 페이지네이션은 카드가 아니다. 이 줄이 없으면 마지막 카드 옆 칸에 들어앉아 카드처럼
   // 읽힌다.
   //
-  // **`cardGrid`에만 건다 — P4b-2 ③이 `:where()`로 좁혔다.** 앞서는 조각 규칙에 구조를
-  // 넣을 방법이 없어(넣으면 0,3,0이 되어 테마가 진다) `table`·`stackedList`·`mediaList`의
-  // `pagination`까지 이 선언을 받았다. `:where()`는 특이도가 0이라 **(0,2,0)을 지키면서**
-  // 구조를 가린다 — 근거는 `structure-css-tools`의 `partRule` 주석(Chromium 실측표).
+  // **`cardGrid`에만 건다**(`:where()`). 구조를 맨 셀렉터로 넣으면 0,3,0이 되어 테마가
+  // 지고, 안 가리면 `table`·`stackedList`·`mediaList`의 `pagination`까지 이 선언을 받는다.
+  // `:where()`는 특이도가 0이라 **(0,2,0)을 지키면서** 구조를 가린다 — 근거는
+  // `structure-css-tools`의 `partRule` 주석(Chromium 실측표).
   //
-  // **좁히기 전 그 셋이 무해했던 것은 맞다 — ③이 Chromium으로 쟀다.** `List:table`의
+  // **그 셋이 이 선언을 받아도 무해하기는 하다 — Chromium으로 잰 값이다.** `List:table`의
   // `pagination`은 `<td>`(`display: table-cell`, 부모 `table-row`)라 그리드 항목이 아니고,
-  // 규칙을 넣은 판과 뺀 판에서 요소 24개의 `getBoundingClientRect`가 **전부 같았다**
-  // (계산값만 `1 / -1` ↔ `auto`로 갈렸다). 앞 주석이 *"규격이지 측정이 아니다"*라고
-  // 남긴 자리이고, 이제 잰 값이다. **그래도 좁히는 것은** 무해함이 `List:table`이
+  // 규칙을 넣은 판과 뺀 판에서 요소의 `getBoundingClientRect`가 **전부 같다**
+  // (계산값만 `1 / -1` ↔ `auto`로 갈린다). **그래도 좁히는 것은** 무해함이 `List:table`이
   // 표라는 사실에 매여 있어서다 — 테마가 `display: grid`를 걸면 그날 깨진다.
   blocks.push(partRule('List', 'pagination', ['grid-column: 1 / -1;'], ['cardGrid']))
 
@@ -351,14 +348,13 @@ export function dataCssBlocks(): string[] {
   // ── Tree ──────────────────────────────────────────────────────────────────
   //
   // 노드가 아니라 **조각**에 붙는 유일한 자리다. `(index % depth)` 단계를 `<li>`가 나르고
-  // 폭을 여기서 곱한다. 곱셈이 CSS에 있는 것은 §6.8이 금지한 `calc()`와 무관하다 —
-  // 그 금지는 **테마 문서의 값**에 걸리고, 이 파일은 렌더러가 소유한 CSS다.
+  // 폭을 여기서 곱한다. 곱셈이 CSS에 있는 것은 설계서 「스타일 프로퍼티 화이트리스트」가 금지한
+  // `calc()`와 무관하다 — 그 금지는 **테마 문서의 값**에 걸리고, 이 파일은 렌더러가 소유한 CSS다.
   //
-  // **`indent`에만 건다 — P4b-2 ③이 `:where()`로 좁혔다.** `accordion`은 들여쓰기를
+  // **`indent`에만 건다**(`:where()`). `accordion`은 들여쓰기를
   // **중첩**(`<li>` 안에 `<ul part="panel">`)으로 내므로 단계 변수를 아예 싣지 않는다.
-  // 좁히기 전에는 그 `node`도 이 규칙을 받아 `calc(0 * 16px)` = `0`으로 떨어졌다 —
-  // 값이 우연히 무해했을 뿐 **받으라고 쓴 규칙이 아니다.** P4a-2가 이 대가를 미리 적어
-  // 두었고(*"P4b의 `Tree:accordion`이 같은 규칙을 받는다"*) 이제 안 치른다.
+  // 안 가리면 그 `node`도 이 규칙을 받아 `calc(0 * 16px)` = `0`으로 떨어진다 —
+  // 값이 우연히 무해할 뿐 **받으라고 쓴 규칙이 아니다.**
   blocks.push(
     partRule(
       'Tree',
@@ -374,9 +370,9 @@ export function dataCssBlocks(): string[] {
   // 수(`1..4`)이고 `visibleWhen`이 없어 패널에서 늘 닿기 때문이다. 기본값 1은 `Grid`와
   // 같은 이유로 고른 것이다(값을 안 실은 노드가 있으면 한 줄로 흐르는 것이 안전하다).
   //
-  // **새 손잡이다: `--wb-node-keyvalue-columns`.** 테마의 `gridColumns`가 같은 특이도로
-  // 뒤에 와서 이 값을 침묵으로 덮는다 — P4b-1 이월의 손잡이 부류가 하나 는 것이고
-  // **③ 통합의 D4 판정 입력이다.** 여기서 고치지 않는다.
+  // **손잡이다: `--wb-node-keyvalue-columns`.** 테마의 `gridColumns`가 같은 특이도로
+  // 뒤에 와서 이 값을 침묵으로 덮는다 — 그 조합에는 `themes`의 `NODE_HANDLES`가 경고를
+  // 붙인다(위 `KeyValueCardGrid`의 머리말).
   blocks.push(
     componentRule('KeyValue', 'cardGrid', [
       'display: grid;',

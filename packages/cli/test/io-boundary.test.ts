@@ -1,8 +1,8 @@
 /**
- * **D9의 인구조사: 바깥 세계를 만지는 자리가 몇 개인가.**
+ * **`io` 경계의 인구조사: 바깥 세계를 만지는 자리가 몇 개인가.**
  *
- * 계획서가 *"`io`를 안 거치고 `node:fs`를 직접 부르는 자리가 남으면 그 케이스는 개발자
- * 기계에서만 통과한다"*고 적은 자리다. 케이스로 확인할 수 없는 명제이므로 — 그런 호출은
+ * `io`를 안 거치고 `node:fs`를 직접 부르는 자리가 남으면 그 케이스는 개발자 기계에서만
+ * 통과한다. 케이스로 확인할 수 없는 명제이므로 — 그런 호출은
  * 진짜 홈 디렉터리를 건드리고, 건드린 케이스는 **초록으로 통과한다** — **소스를 세는 것이
  * 유일한 방법이다.**
  *
@@ -22,8 +22,8 @@ const SRC = fileURLToPath(new URL('../src', import.meta.url))
  *
  * **`node:` 접두사는 선택이다.** `'fs/promises'`와 `'node:fs/promises'`는 같은 것을 준다.
  *
- * **`console.`이 아래 `EFFECTFUL`에 있다** (델타 리뷰 D-2). `packages/mcp` 쪽 같은 자에서
- * 온 물음이고 같은 답이다: `console.log` 한 줄은 `io`를 안 거치고 표준출력을 만진다 —
+ * **`console.`이 아래 `EFFECTFUL`에 있다.** `packages/mcp` 쪽 같은 자와 같은 답이다:
+ * `console.log` 한 줄은 `io`를 안 거치고 표준출력을 만진다 —
  * `--json`을 파이프로 받는 쪽이 그것에 섞이면 그 출력이 JSON이 아니게 된다(`project.ts`의
  * 머리말이 `out`이 아니라 `err`를 고른 것과 같은 근거).
  */
@@ -53,15 +53,15 @@ const EFFECTFUL_MODULES = [
 /**
  * **모듈 지정자 자리만 본다** — 인용부호에 감싸인 채 `from`·`import`·`require` 뒤에 오는 것.
  *
- * **앞 판은 `/from '(node:fs|…)'/`였고 형태 둘이 그대로 빠져나갔다**(리뷰 N4 — 리뷰어가
- * 변이로 쟀다: `'fs/promises'`(접두사 없음)와 `"node:fs/promises"`(큰따옴표)가 각각
- * **71건 중 0건**을 죽였다). **이 저장소에는 린터도 포매터도 없으므로**(리뷰어가
- * `eslint`·`biome`·`oxlint`·`prettier` 설정이 하나도 없는 것을 확인했다) 홑따옴표와
- * `node:` 접두사를 강제하는 것이 아무것도 없다 — 그 전제 위에 선 자는 서 있는 것이 아니다.
+ * **`/from '(node:fs|…)'/` 꼴로 좁히면 형태 둘이 그대로 빠져나간다** — `'fs/promises'`
+ * (접두사 없음)와 `"node:fs/promises"`(큰따옴표)를 소스에 심어도 아무 케이스도 안 죽는다.
+ * **이 저장소에는 린터도 포매터도 없으므로**(`eslint`·`biome`·`oxlint`·`prettier` 설정이
+ * 하나도 없다) 홑따옴표와 `node:` 접두사를 강제하는 것이 아무것도 없다 — 그 전제 위에 선
+ * 자는 서 있는 것이 아니다.
  *
- * **P9-1이 정확히 같은 부류로 당했고 같은 방식으로 닫았다**(`packages/schema/test/boundary.test.ts`
- * 의 `FORBIDDEN_SPECIFIER` — 그쪽은 쌍따옴표·부수효과 import·동적 import 셋이 빠져나갔고
- * 그중 부수효과 import는 `pnpm typecheck`도 통과했다). 그 모양을 그대로 가져온다.
+ * **`packages/schema/test/boundary.test.ts`의 `FORBIDDEN_SPECIFIER`가 같은 부류를 같은 방식으로
+ * 막는다** — 좁은 정규식이면 쌍따옴표·부수효과 import·동적 import 셋이 빠져나가고, 그중
+ * 부수효과 import는 `pnpm typecheck`도 통과한다. 그 모양을 그대로 가져온다.
  *
  * 이름을 그냥 언급하는 **주석은 잡지 않는다** — `paths.ts`가 *"`node:path`를 안 쓴다"*라고
  * 적기 때문이다. 아래 `stripComments`가 먼저 걷고, 그래도 남는 문자열 언급은 지정자
@@ -98,9 +98,9 @@ function touchesWorld(relative: string): boolean {
   return EFFECTFUL.some((pattern) => pattern.test(source))
 }
 
-describe('바깥 세계를 만지는 자리 (D9)', () => {
+describe('바깥 세계를 만지는 자리', () => {
   it('훑을 소스를 실제로 읽는다', () => {
-    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**(이 저장소가 여러 번 겪은 사고다).
+    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다.**
     const files = sourceFiles()
     expect(files.length).toBeGreaterThan(6)
     expect(files).toContain('node-io.ts')
@@ -126,15 +126,16 @@ describe('바깥 세계를 만지는 자리 (D9)', () => {
    * **자를 케이스 안에서 재 둔다**(전역 제약: 자를 구현 파일에 두지 마라). 정규식이 조용히
    * 좁아지면 위 케이스가 아무것도 안 잡는 채로 통과하므로 형태를 직접 먹여 본다.
    *
-   * **아래 여덟 줄 중 둘은 리뷰어가 실제로 소스에 심어 0 사망을 얻은 것이다**(N4).
+   * **아래 여덟 줄 중 둘(접두사 없음 · 큰따옴표)은 좁은 정규식이 놓치는 형태다** — 위
+   * `EFFECTFUL_SPECIFIER`의 머리말.
    */
   it('우회 형태를 전부 잡는다 — 이 정규식의 구분력', () => {
     const caught = [
       "import { readFile } from 'node:fs/promises'",
-      // 리뷰어가 심어 0 사망을 얻은 둘.
+      // 좁은 정규식이 놓치는 둘.
       "import { readFile } from 'fs/promises'",
       'import { readFile } from "node:fs/promises"',
-      // P9-1이 당한 셋과 같은 형태.
+      // `boundary.test.ts`의 `FORBIDDEN_SPECIFIER`가 막는 셋과 같은 형태.
       "import 'node:fs'",
       'import "child_process"',
       "const fs = await import('node:fs')",
@@ -151,7 +152,7 @@ describe('바깥 세계를 만지는 자리 (D9)', () => {
    * **지정자 밖의 셋.** 위 케이스들은 `EFFECTFUL_SPECIFIER` 하나만 재므로 `process.`·
    * `fetch(`·`console.`이 조용히 빠져도 안 보인다 — 술어 배열 전체를 여기서 잰다.
    *
-   * **`console.`이 여기 있다**(델타 리뷰 D-2). `console.log` 한 줄은 `io`를 안 거치고
+   * **`console.`이 여기 있다.** `console.log` 한 줄은 `io`를 안 거치고
    * 표준출력을 만진다 — `--json`을 파이프로 받는 쪽이 그것에 섞이면 JSON이 아니게 된다.
    */
   it('전역을 직접 만지는 형태도 잡는다', () => {

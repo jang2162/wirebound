@@ -1,23 +1,23 @@
 /**
- * **준비 웨이브(P4b-2 ①)가 가른 경계를 지키는 케이스.**
+ * **구조를 그룹 모듈 다섯으로 가른 경계를 지키는 케이스.**
  *
- * P4b-2는 구조 26개를 **워커 넷이 병렬로** 만든다. 가르기 전에는 넷이 동시에 만질 파일이
- * 둘이었다 — `structures/index.ts`의 `DEFAULTS` 배열 하나와 `structure-css.ts`의 규칙 배열
- * 하나. 지금은 **그룹 모듈 다섯**(`structures/structure.tsx`·`data.tsx`·`input.tsx`·
- * `action.tsx`·`document.tsx`)이 자기 등록과 자기 CSS를 소유하고, `structures/index.ts`와
- * `structure-css.ts`는 그것들을 **모으기만** 한다.
+ * **그룹 모듈 다섯**(`structures/structure.tsx`·`data.tsx`·`input.tsx`·`action.tsx`·
+ * `document.tsx`)이 자기 등록과 자기 CSS를 소유하고, `structures/index.ts`와
+ * `structure-css.ts`는 그것들을 **모으기만** 한다. 모으는 쪽이 항목을 직접 가지면
+ * (`DEFAULTS` 배열 하나 · 규칙 배열 하나) 구조를 병렬로 더하는 작업들이 그 배열
+ * 하나에서 부딪힌다.
  *
  * 그래서 이 파일이 지키는 것은 셋이다.
  *
  * 1. **모으는 쪽이 아무것도 빠뜨리지 않는다** — 그룹이 가진 항목과 레지스트리가 일치한다.
  * 2. **경계가 겹치지 않는다** — 두 그룹이 같은 키를 갖지 않는다.
- * 3. **CSS 규칙의 순서가 그대로다** — P4a-2가 *"시트 순서가 곧 우선순위"*를 못박았고
- *    (`structure-css.test.ts`의 캐스케이드 케이스들이 그 위에 얹혀 있다), 가르면서 순서가
+ * 3. **CSS 규칙의 순서가 그대로다** — *"시트 순서가 곧 우선순위"*이고
+ *    (`structure-css.test.ts`의 캐스케이드 케이스들이 그 위에 얹혀 있다), 순서가
  *    바뀌면 그 판정이 조용히 달라진다.
  *
- * **이 파일의 단언은 "늘어나는 것"에 죽지 않게 썼다.** 병렬 워커가 자기 그룹에 구조를
- * 더할 때마다 이 파일이 죽으면 넷이 서로를 막는다 — 그것이 가르기의 목적과 정반대다.
- * 그래서 수를 못박는 대신 **준비 웨이브의 것이 그대로 남아 있는지**를 본다.
+ * **이 파일의 단언은 "늘어나는 것"에 죽지 않게 썼다.** 그룹에 구조를 더할 때마다 이
+ * 파일이 죽으면 병렬 작업이 서로를 막는다 — 그것이 가르기의 목적과 정반대다.
+ * 그래서 수를 못박는 대신 **기준표(`p4b2-baseline.ts`)의 것이 그대로 남아 있는지**를 본다.
  */
 import { describe, expect, it } from 'vitest'
 import { structureBaseCss } from '../src/structure-css'
@@ -46,7 +46,7 @@ function keysOf(entries: readonly StructureEntry[]): string[] {
   return entries.map(([type, structure]) => `${type}:${structure}`)
 }
 
-describe('P4b-2 ① — 등록이 그룹 다섯으로 갈렸다', () => {
+describe('등록이 그룹 다섯으로 갈려 있다', () => {
   it('installStructures()가 다섯 그룹의 항목을 빠짐없이 등록한다', () => {
     resetStructures()
     installStructures()
@@ -75,7 +75,7 @@ describe('P4b-2 ① — 등록이 그룹 다섯으로 갈렸다', () => {
     expect(collisions).toEqual([])
   })
 
-  it('그룹이 가진 것을 하나도 잃지 않았다 — 준비 웨이브의 19개', () => {
+  it('그룹이 가진 것을 하나도 잃지 않았다 — 기준표의 19개', () => {
     for (const [name, entries] of GROUPS) {
       const keys = new Set(keysOf(entries))
       const lost = PREP_IMPLEMENTED[name]!.filter((key) => !keys.has(key))
@@ -86,7 +86,7 @@ describe('P4b-2 ① — 등록이 그룹 다섯으로 갈렸다', () => {
   })
 
   it('그룹 경계가 카탈로그 파일의 경계와 같다', () => {
-    // **D2가 이 경계에 기대어 워커 넷을 나눴다.** 카탈로그 파일이 같은 경계로 갈려 있어야
+    // **워커 분배(`p4b2-baseline.ts`)가 이 경계에 기댄다.** 카탈로그 파일이 같은 경계로 갈려 있어야
     // `parts`를 넓혀야 할 때도 서로 안 겹친다. 여기서는 그 대응을 **컴포넌트 타입**으로
     // 고정한다 — 그룹이 남의 컴포넌트를 등록하기 시작하면 그 전제가 깨진다.
     for (const [name, entries] of GROUPS) {
@@ -95,7 +95,7 @@ describe('P4b-2 ① — 등록이 그룹 다섯으로 갈렸다', () => {
     }
   })
 
-  it('installStructures()는 여전히 멱등하다', () => {
+  it('installStructures()는 멱등하다', () => {
     // `catalog-setup`이 import만으로 부르고, 테스트 여럿이 beforeAll에서 또 부른다.
     // `registerStructure` 자체는 중복 등록에 던지므로 이 멱등이 유일한 방어다.
     resetStructures()
@@ -108,16 +108,14 @@ describe('P4b-2 ① — 등록이 그룹 다섯으로 갈렸다', () => {
 })
 
 /**
- * **준비 웨이브가 가르기 직전의 구조 기본 CSS — 규칙 다섯이 글자까지 이대로였다.**
+ * **그룹으로 가르기 전의 구조 기본 CSS 규칙 다섯 — 글자까지 이대로다.**
  *
- * 가르는 것이 출력을 바꾸지 않았다는 실측: 가르기 전 `structureBaseCss()`가 789바이트 ·
- * sha256 `de5234db…`였고, 가른 뒤 같은 바이트·같은 해시였다. 그 대조는 한 번뿐이므로
- * **여기 규칙 본문을 적어 남긴다.**
+ * 가르기 전후의 출력 대조는 다시 할 수 없으므로 **여기 규칙 본문을 적어 둔다.**
  *
- * **전체 문자열을 못박지 않는 이유:** 병렬 워커가 자기 그룹에 규칙을 더하면 그때마다
- * 이 케이스가 죽고, 넷이 각자 이 상수를 고치면 **가르기가 없애려던 충돌이 이 파일에서
- * 그대로 되살아난다.** 그래서 **"이 다섯이 이 순서로 남아 있는가"**만 본다 — 캐스케이드가
- * 걸려 있는 것이 그 순서이지 전체 길이가 아니다(P4a-2: *"시트 순서가 곧 우선순위"*).
+ * **전체 문자열을 못박지 않는 이유:** 그룹에 규칙을 더할 때마다 이 케이스가 죽고,
+ * 병렬 작업이 각자 이 상수를 고치면 **가르기가 없애려던 충돌이 이 파일에서 그대로
+ * 되살아난다.** 그래서 **"이 다섯이 이 순서로 남아 있는가"**만 본다 — 캐스케이드가
+ * 걸려 있는 것이 그 순서이지 전체 길이가 아니다(*"시트 순서가 곧 우선순위"*).
  */
 const BASELINE_BLOCKS: [name: string, css: string][] = [
   [
@@ -138,12 +136,10 @@ const BASELINE_BLOCKS: [name: string, css: string][] = [
 }`,
   ],
   [
-    // **셀렉터가 갈렸다 — P4b-2 ③이 `:where(indent)`로 좁혔다.** 본문은 그대로다.
+    // **셀렉터는 `:where(indent)`로 좁혀져 있다.** 본문은 가르기 전 그대로다.
     //
-    // 이 상수의 목적은 *"병렬 워커가 준비 웨이브의 규칙을 건드리지 못하게"*이고,
-    // 이 변경은 워커가 아니라 ③의 판정이다. `accordion`이 들여쓰기를 **중첩**으로
-    // 내면서 단계 변수를 안 싣는데도 이 규칙을 받고 있었다 — P4a-2가 대가로 미리 적어
-    // 둔 자리이고, `:where()`가 특이도를 안 올리므로 이제 안 치른다. 근거는
+    // `accordion`은 들여쓰기를 **중첩**으로 내면서 단계 변수를 안 싣는다 — 셀렉터가 구조를
+    // 안 가리면 `accordion`도 이 규칙을 받는다. `:where()`는 특이도를 안 올린다. 근거는
     // `structure-css-tools`의 `partRule` 주석(Chromium 실측표)에 있다.
     'Tree',
     `[data-wb-component="Tree"]:where([data-wb-structure="indent"]) [data-wb-part="node"] {
@@ -164,7 +160,7 @@ const BASELINE_BLOCKS: [name: string, css: string][] = [
   ],
 ]
 
-describe('P4b-2 ① — 구조 기본 CSS가 그룹 다섯으로 갈렸다', () => {
+describe('구조 기본 CSS가 그룹 다섯으로 갈려 있다', () => {
   it('structureBaseCss()는 그룹 블록을 순서대로 이어 붙이기만 한다', () => {
     // 모으는 쪽이 자기 규칙을 몰래 끼워 넣으면 그 규칙은 **어느 그룹도 소유하지 않는다** —
     // 병렬 워커가 만질 수 없는 자리가 다시 생기는 것이다.
@@ -173,7 +169,7 @@ describe('P4b-2 ① — 구조 기본 CSS가 그룹 다섯으로 갈렸다', () 
     expect(structureBaseCss()).toBe(joined)
   })
 
-  it('준비 웨이브의 규칙 다섯이 글자까지 그대로 있다', () => {
+  it('기준 규칙 다섯이 글자까지 그대로 있다', () => {
     const css = structureBaseCss()
     const missing = BASELINE_BLOCKS.filter(([, block]) => !css.includes(block)).map(([name]) => name)
     expect(missing).toEqual([])
@@ -193,8 +189,8 @@ describe('P4b-2 ① — 구조 기본 CSS가 그룹 다섯으로 갈렸다', () 
   })
 
   it('그룹의 CSS는 자기 그룹의 컴포넌트만 겨냥한다', () => {
-    // **병렬 워커가 남의 컴포넌트에 규칙을 다는 것을 여기서 막는다.** 달아도 CSS는
-    // 멀쩡히 나가므로 화면으로는 안 보이고, 그러면 그 컴포넌트를 맡은 워커가 자기 규칙을
+    // **그룹이 남의 컴포넌트에 규칙을 다는 것을 여기서 막는다.** 달아도 CSS는
+    // 멀쩡히 나가므로 화면으로는 안 보이고, 그러면 그 컴포넌트의 그룹이 자기 규칙을
     // 다는 순간 두 규칙이 서로를 덮는다 — 순서에 따라 결과가 갈리는데 아무도 모른다.
     const offenders: string[] = []
 

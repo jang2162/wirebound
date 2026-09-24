@@ -1,8 +1,8 @@
 /**
- * **입력 그룹의 구조 구현체** — `SearchForm`·`EntryForm`·`Field` (P4b-2 ② W3).
+ * **입력 그룹의 구조 구현체** — `SearchForm`·`EntryForm`·`Field`.
  *
- * 파일을 새로 만든 것은 병렬 워커 넷이 `structures.test.tsx` 하나를 동시에 고치면
- * 충돌하기 때문이다(계획서 ②). 여기에는 **입력 그룹만** 든다.
+ * 파일이 따로인 것은 그룹마다 병렬로 `structures.test.tsx` 하나를 동시에 고치면
+ * 충돌하기 때문이다. 여기에는 **입력 그룹만** 든다.
  *
  * ---
  *
@@ -14,8 +14,8 @@
  * 않는다.** 이 그룹이 만드는 `SearchForm:stacked`의 `row`와 `EntryForm:sectioned`의
  * `section`·`sectionTitle`이 정확히 그 부류다 — 자식이 있어야만 나온다.
  *
- * 실측으로 확인했다: 두 구조를 만든 뒤에도 `structures.test.tsx`는 그 조각들을 한 번도
- * 스캔하지 않는다. 그래서 아래 `describe('W3 — 자식이 있을 때의 전수 가드')`가 같은 검사
+ * `structures.test.tsx`는 그 조각들을 한 번도 스캔하지 않는다. 그래서 아래
+ * `describe('자식이 있을 때의 전수 가드')`가 같은 검사
  * 셋을 **자식을 달아** 한 번 더 돌린다.
  */
 import { installCatalog, requireComponent } from '@wirebound/schema'
@@ -73,7 +73,7 @@ describe('SearchForm:stacked — 한 줄에 한 필드', () => {
   })
 
   it('자식 하나마다 row 조각을 하나씩 낸다', () => {
-    // **이것이 `inline`과 갈리는 지점이다.** 테마는 §6.5에서 `parts`만 겨냥할 수 있고
+    // **이것이 `inline`과 갈리는 지점이다.** 테마는 설계서 「components — 구조 + 스킨」에서 `parts`만 겨냥할 수 있고
     // 자식 컴포넌트를 직접 겨냥할 수 없으므로, 줄이 조각으로 나오지 않으면 테마가
     // 줄 사이 간격·구분선에 손댈 방법이 없다.
     for (const count of [0, 1, 3]) {
@@ -98,20 +98,19 @@ describe('SearchForm:stacked — 한 줄에 한 필드', () => {
 })
 
 /**
- * **`SearchForm.collapsed`는 오늘 죽어 있다 — `collapsible`이 그것을 살린다.**
+ * **`SearchForm.collapsed`를 읽는 구조는 `collapsible` 하나다.**
  *
- * `Media.kind`와 같은 부류였다(P4b-1 이월 1번): 속성 패널에 `접힌 상태` 스위치가 **있고**
- * 켜면 문서에 저장되고 검증도 통과하는데 **화면은 아무것도 바뀌지 않는다.** 실측 —
+ * `inline`·`stacked`에서는 `Media.kind`와 같은 부류다: 속성 패널에 `접힌 상태` 스위치가
+ * **있고** 켜면 문서에 저장되고 검증도 통과하는데 **화면은 아무것도 바뀌지 않는다** —
  * `SearchFormInline`이 `props`를 아예 받지 않는다(`attrs`·`part`·`children`뿐).
  *
- * **`Media.kind`와 갈리는 점:** 그쪽은 `kind`와 `structures`가 **같은 이름 넷**이라
- * 구조와 중복이었다. 여기서는 이름이 겹치지 않는다 — `collapsed`는 *"지금 접혀 있는가"*
+ * **`Media.kind`와 갈리는 점:** 그쪽은 `kind`와 `structures`가 **같은 이름 넷**이다. 여기서는 이름이 겹치지 않는다 — `collapsed`는 *"지금 접혀 있는가"*
  * 이고 `collapsible`은 *"접을 수 있는 형태인가"*다. 하나는 노드가 정하고 하나는 테마가
  * 고른다. 그래서 **지울 것이 아니라 읽어야 하는 prop**이고, 그것이 이 구조다.
  *
- * **`states`에는 더하지 않았다.** 더하면 `data-wb-state="collapsed"`가 `inline`·`stacked`
+ * **`states`에는 더하지 않는다.** 더하면 `data-wb-state="collapsed"`가 `inline`·`stacked`
  * 에서도 나가는데, 그 둘에는 접힘이라는 개념이 없어 테마가 켤 수 없는 상태 스킨이 하나
- * 생긴다(P4b-1이 닫은 도달성 구멍의 거울상이다). 접힘은 여기서 **DOM으로** 표현된다.
+ * 생긴다(UI에서 닿지 못하는 선언 — 도달성 구멍 — 의 거울상이다). 접힘은 여기서 **DOM으로** 표현된다.
  */
 describe('SearchForm:collapsible — 접힘을 DOM으로 표현한다', () => {
   it('toggle 조각을 낸다 — 접혀 있어도 이것은 남는다', () => {
@@ -136,8 +135,8 @@ describe('SearchForm:collapsible — 접힘을 DOM으로 표현한다', () => {
     expect(html).not.toContain('항목1')
   })
 
-  it('inline·stacked는 collapsed를 읽지 않는다 — 그것이 이 prop이 죽어 있던 모습이다', () => {
-    // **음성 대조이자 기록이다.** `collapsible`이 생기기 전에는 세 구조가 다 이랬다.
+  it('inline·stacked는 collapsed를 읽지 않는다 — 이 둘에서 이 prop은 죽어 있다', () => {
+    // **음성 대조다.** 머리말의 *"화면은 아무것도 바뀌지 않는다"*가 이것이다.
     for (const structure of ['inline', 'stacked']) {
       const open = render('SearchForm', structure, { collapsed: false }, fields(2))
       const shut = render('SearchForm', structure, { collapsed: true }, fields(2))
@@ -163,8 +162,7 @@ function sameDomIgnoringStructureName(html: string, other: string): boolean {
 
 /**
  * **발견: `EntryForm:labelTop`은 `labelLeft`와 DOM이 같다. 케이스가 그것을 실행 가능한
- * 형태로 고정한다** (계획서 "재라 #1"·"계획이 재지 않은 것 #5"가 `Field`에 대해 의심한
- * 것과 같은 부류이고, 여기서도 성립했다).
+ * 형태로 고정한다** (`Field`의 셋이 DOM이 같은 것과 같은 부류다 — 아래 `Field` 절).
  *
  * **원인은 소유권이다.** 라벨과 컨트롤의 짝은 `EntryForm`이 아니라 **자식 `Field` 안에**
  * 있다. `EntryForm`의 구조 구현체가 받는 `children`은 이미 그려진 ReactNode이고, 그 안쪽을
@@ -175,15 +173,16 @@ function sameDomIgnoringStructureName(html: string, other: string): boolean {
  * `components.Field.base`에 `flexDirection`을 쓸 수 있으므로, `labelTop`을 고르지 않고도
  * 라벨을 위에 두는 폼을 만들 수 있다.
  *
- * **그래도 구현한다** — 설계 §6.5가 구조 옵션으로 열거했고, 등록해 두면
- * `data-wb-structure="labelTop"`이라는 셀렉터 하나는 테마에 남는다. **판정은 P4b-3과
- * §6.5의 구조/변형 경계 재검토로 넘긴다.**
+ * **그래도 구현한다** — 설계서 「components — 구조 + 스킨」이 구조 옵션으로 열거했고,
+ * 등록해 두면 `data-wb-structure="labelTop"`이라는 셀렉터 하나는 테마에 남는다. **이 구조를
+ * 지울지는 그 절의 구조/변형 경계를 다시 정할 때 닫힌다.**
  *
  * > **후보 하나를 재고 버렸다:** `EntryForm` 루트가 커스텀 프로퍼티를 싣고 `Field`의
  * > 기본 CSS가 그것을 `var()`로 읽으면(커스텀 프로퍼티는 상속된다) DOM 없이도 부모가
- * > 자식 배치를 정할 수 있다. 버린 이유 둘 — (1) 손잡이가 하나 늘고 그것은 D4가 판정을
- * > 미뤄 둔 부류를 키운다, (2) `Field`의 기본 CSS에 `display:flex`를 넣게 되는데 그것은
- * > *"구조가 서기 위한 최소 선언"*이 아니라 스킨이다(§4.3 — 스타일 값은 테마에 있다).
+ * > 자식 배치를 정할 수 있다. 버린 이유 둘 — (1) 손잡이가 하나 늘고 그것은 테마가 덮을
+ * > 수 있는 노드 손잡이 부류를 키운다, (2) `Field`의 기본 CSS에 `display:flex`를 넣게 되는데
+ * > 그것은 *"구조가 서기 위한 최소 선언"*이 아니라 스킨이다(설계서 「페이지 스키마 노드」 —
+ * > 스타일 값은 테마에 있다).
  */
 describe('EntryForm:labelTop — DOM이 labelLeft와 같다(발견)', () => {
   it('label·row·actions 조각을 낸다', () => {
@@ -247,11 +246,11 @@ describe('EntryForm:sectioned — 자식 하나가 구획 하나다', () => {
 
   it('title은 labelLeft와 같은 자리에 남는다', () => {
     // 폼 제목은 구획과 무관하다 — `admin`이 `EntryForm.parts.label`에 스킨을 걸고 있으므로
-    // 여기서 이름을 바꾸면 그 스킨이 갈 곳을 잃는다(D5 — 화면이 바뀌면 안 된다).
+    // 여기서 이름을 바꾸면 그 스킨이 갈 곳을 잃는다(화면이 바뀌면 안 된다).
     //
     // **자식을 달지 않는다.** 자식 `Field`도 `label` 조각을 내므로 자식이 있으면 이 수는
-    // 폼의 제목을 세는 것이 아니게 된다 — 처음에 `fields(1)`로 쓰고 `2`를 받았다.
-    // (계획서: *"측정이 예상과 다르면 대상이 아니라 측정 장치를 먼저 의심하라."*)
+    // 폼의 제목을 세는 것이 아니게 된다 — `fields(1)`이면 `2`가 나온다.
+    // *"측정이 예상과 다르면 대상이 아니라 측정 장치를 먼저 의심하라."*
     const html = render('EntryForm', 'sectioned', { title: '회원 정보' }, fields(0))
     expect(html).toContain('회원 정보')
     expect(countOf(html, 'label')).toBe(1)
@@ -262,13 +261,13 @@ describe('EntryForm:sectioned — 자식 하나가 구획 하나다', () => {
 })
 
 /**
- * **발견: `Field`의 셋(`outlined`·`filled`·`underlined`)은 DOM이 같다.** 계획서
- * *"계획이 재지 않은 것 #5"*가 의심한 그대로였고, 여기서 재서 확인한다.
+ * **발견: `Field`의 셋(`outlined`·`filled`·`underlined`)은 DOM이 같다.** 여기서 재서
+ * 확인한다.
  *
- * **재는 방법은 "같은가"가 아니라 "다를 수 있는가"였다.** 후보를 하나씩 놓고 그 모습을
- * **테마가 오늘 DOM으로 만들 수 있는지** 봤다:
+ * **재는 방법은 "같은가"가 아니라 "다를 수 있는가"다.** 후보를 하나씩 놓고 그 모습을
+ * **테마가 지금 DOM으로 만들 수 있는지** 본다:
  *
- * | 후보 | 오늘 DOM으로 되는가 |
+ * | 후보 | 지금 DOM으로 되는가 |
  * |---|---|
  * | 채워진 상자 **안에** 라벨이 든 모습(Material filled) | **된다.** 루트가 이미 라벨과 컨트롤을 함께 담은 상자다 — 루트에 `bg`·`padding`을 주면 그것이 곧 채운 상자다 |
  * | 밑줄만 있는 모습 | **된다.** `control` 조각에 `borderBottom` 하나다 |
@@ -276,12 +275,12 @@ describe('EntryForm:sectioned — 자식 하나가 구획 하나다', () => {
  * | 라벨이 떠오르는 애니메이션 | 상호작용이라 범위 밖이다(구조는 와이어프레임이다) |
  *
  * **즉 셋의 차이는 테두리·배경·밑줄이고 전부 `base`·`parts` 스킨이다.** `SearchForm:stacked`
- * 와 갈리는 점이 여기다 — 그쪽은 조각이 없으면 테마가 **겨냥할 대상 자체가 없었고**,
+ * 와 갈리는 점이 여기다 — 그쪽은 조각이 없으면 테마가 **겨냥할 대상 자체가 없고**,
  * 여기서는 루트·`label`·`control` 셋으로 이미 다 겨냥된다.
  *
  * **그래서 셋이 함수 하나를 공유한다.** 남는 것은 `data-wb-structure` 셀렉터 하나뿐이고,
  * `Field`는 `variantFrom: 'control'`이라 변형 채널이 이미 차 있어 **변형으로 접을 수도
- * 없다.** §6.5의 구조/변형 경계를 다시 볼 때의 입력이다.
+ * 없다.** 설계서 「components — 구조 + 스킨」의 구조/변형 경계를 다시 볼 때의 입력이다.
  */
 describe('Field — 구조들의 DOM이 같다(발견)', () => {
   /**
@@ -344,7 +343,7 @@ describe('Field — 구조들의 DOM이 같다(발견)', () => {
  * **자식이 있을 때의 전수 가드.** 머리말에 적은 사각을 덮는다 — `structures.test.tsx`의
  * 순회는 자식 없는 노드만 그리므로, 자식을 감싸며 나오는 조각은 거기서 스캔되지 않는다.
  *
- * 검사 셋은 그쪽과 같은 것이다(§6.11의 여섯 속성 · 카탈로그의 `parts` · `style`의 커스텀
+ * 검사 셋은 그쪽과 같은 것이다(설계서 「컴파일」의 여섯 속성 · 카탈로그의 `parts` · `style`의 커스텀
  * 프로퍼티만). **분모를 손으로 적지 않는다** — 카탈로그의 `structures`를 훑으므로 이
  * 그룹에 구조가 늘면 자동으로 함께 검사된다.
  */
@@ -357,7 +356,7 @@ const CONTRACT_ATTRS = [
   'data-wb-state',
 ]
 
-describe('W3 — 자식이 있을 때의 전수 가드', () => {
+describe('자식이 있을 때의 전수 가드', () => {
   /**
    * 이 그룹의 모든 구조 × props 갈래 × 자식 수.
    *

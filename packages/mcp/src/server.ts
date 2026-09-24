@@ -1,27 +1,26 @@
 /**
- * MCP 서버 하나. **프로토콜을 다시 구현하지 않는다**(D2) — 공식 SDK가 stdio JSON-RPC와
+ * MCP 서버 하나. **프로토콜을 다시 구현하지 않는다** — 공식 SDK가 stdio JSON-RPC와
  * 핸드셰이크를 갖고 있고, 우리가 그것을 손으로 짜면 **남이 정한 계약의 두 벌**이 된다.
  *
  * ---
  *
  * # `io`를 인자로 받는다
  *
- * 바깥 세계를 만지는 자리를 값 하나로 묶는 것은 `packages/cli`의 D9이고, 그 자세를 그대로
- * 물려받는다 — 이 파일이 `node:*`를 부르면 케이스가 **진짜 홈 디렉터리와 진짜 서버**를
+ * 바깥 세계를 만지는 자리를 값 하나로 묶는 것은 `packages/cli`의 `io.ts`가 정한 자세이고,
+ * 그것을 그대로 물려받는다 — 이 파일이 `node:*`를 부르면 케이스가 **진짜 홈 디렉터리와 진짜 서버**를
  * 건드린다. `node:*`를 부르는 자리는 `bin.ts` 하나이고 `test/io-boundary.test.ts`가 센다.
  *
  * # 인자를 **표로** 검사한다
  *
- * 낮은 층의 `Server`는 `tools/call`의 인자를 검사하지 않는다(쟀다 — 핸들러가 날 `params`를
- * 받는다). 검사를 도구마다 손으로 짜면 표와 검사가 갈리므로 **`TOOLS`의 `inputSchema`
+ * 낮은 층의 `Server`는 `tools/call`의 인자를 검사하지 않는다(핸들러가 날 `params`를 받는다). 검사를 도구마다 손으로 짜면 표와 검사가 갈리므로 **`TOOLS`의 `inputSchema`
  * 하나에서 만든다.** 모르는 도구·모르는 인자·빠진 인자·문자열이 아닌 인자가 전부 여기서
- * **JSON-RPC 오류**가 된다(D8의 첫 줄).
+ * **JSON-RPC 오류**가 된다(`outcome.ts`의 표 첫 줄).
  *
  * # 도구를 부르는 자리와 프로토콜을 붙이는 자리를 가른다
  *
  * `callTool`은 `io`와 이름과 인자만 받는다. 그래서 단위 케이스가 **SDK 없이** 도구를 부를 수
  * 있고, 스모크는 반대로 **SDK를 통해서만** 부른다 — 둘이 같은 함수를 지나므로 스모크가
- * 잡는 것은 프로토콜 층뿐이다(D9).
+ * 잡는 것은 프로토콜 층뿐이다.
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
@@ -43,7 +42,7 @@ export const SERVER_VERSION = '0.0.0'
  * 도구 하나를 부른다. **프로토콜을 모른다** — 낸 것은 글자와 `isError`뿐이다.
  *
  * 던지는 것은 **JSON-RPC 오류**로 나갈 것들이다(모르는 이름 · 인자 모양). `CliError`는
- * 던지지 않고 `isError: true`로 접힌다(D8).
+ * 던지지 않고 `isError: true`로 접힌다(`outcome.ts`).
  */
 export async function callTool(io: Io, name: string, args: unknown): Promise<ToolOutcome> {
   const tool = findTool(name)
@@ -74,7 +73,7 @@ export async function callTool(io: Io, name: string, args: unknown): Promise<Too
  * 답했는지가 갈린다.
  *
  * **모양만 본다.** `ops`가 배열인지는 여기서 보고, 그 안이 옳은 JSON Patch인지는
- * **서버가 본다**(D5 — `tools.ts`의 머리말). 여기서 더 보면 검증이 두 벌이 된다.
+ * **서버가 본다**(`tools.ts`의 머리말). 여기서 더 보면 검증이 두 벌이 된다.
  */
 function readArgs(tool: ToolSpec, args: unknown): Record<string, unknown> {
   if (args === undefined || args === null) args = {}
@@ -107,9 +106,11 @@ function readArgs(tool: ToolSpec, args: unknown): Record<string, unknown> {
 }
 
 /**
- * 값 하나가 선언한 모양인가. **`ToolArgSchema`의 갈래마다 한 줄이고 `default`가 없다** —
- * 갈래를 더하면 *"값을 반환하지 않고 끝나는 경로가 있다"*로 컴파일이 막힌다. `default`를
- * 두면 새 갈래가 **검사 없이** 지나간다.
+ * 값 하나가 선언한 모양인가. **`ToolArgSchema`의 갈래마다 한 줄이다.**
+ *
+ * ⚠ **컴파일러가 빠진 갈래를 잡지 않는다.** 반환이 `void`라 `switch`에 없는 갈래는 오류 없이
+ * 끝으로 떨어지고, 그 모양은 **검사 없이** 지나간다(다시 재는 법: `ToolArgSchema`에 갈래 하나를
+ * 더하고 `pnpm typecheck` — 오류 0). `ToolArgSchema`에 갈래를 더하면 여기 한 줄을 함께 더한다.
  */
 function assertShape(tool: ToolSpec, key: string, schema: ToolArgSchema, value: unknown): void {
   const bad = (want: string): never => {

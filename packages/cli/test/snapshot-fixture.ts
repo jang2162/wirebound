@@ -8,7 +8,7 @@
  * 하나 있다 — 조상을 안 붙이는 조립은 그 자리에서 드러난다.
  *
  * **id가 uuid인 것이 요점이다.** `fetchSnapshot`이 `SnapshotPayloadSchema`로 검사하므로
- * (D2 — *"타입만 올리면 서버는 검사하고 CLI는 안 하는 상태가 된다"*) 아무 문자열이나 쓰면
+ * (*"타입만 올리면 서버는 검사하고 CLI는 안 하는 상태가 된다"*) 아무 문자열이나 쓰면
  * 명령이 서기 전에 규격에서 죽는다.
  */
 import type { SnapshotPayload } from '@wirebound/themes'
@@ -113,7 +113,7 @@ export function page(
 /**
  * 코멘트 없는 `List`가 든 페이지 하나를 더한다 — 규칙 ①이 `warning`을 낸다.
  *
- * **`packages/mcp`도 이것을 본다**(`@wirebound/cli/test-support`). `wireb lint`와 §12.2의
+ * **`packages/mcp`도 이것을 본다**(`@wirebound/cli/test-support`). `wireb lint`와 설계서 「MCP 도구」의
  * `validate`가 같은 함수를 부르므로 **같은 입력에 같은 값**이 나와야 하고, 픽스처가 두 벌이면
  * 그 대조가 *"어느 하네스에서 잰 값인가"*로 미끄러진다.
  */

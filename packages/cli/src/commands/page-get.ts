@@ -1,9 +1,9 @@
 /**
- * `wireb page get <경로> [--json]` — §12.3의 *"페이지 조회"*.
+ * `wireb page get <경로> [--json]` — 설계서 「CLI」의 *"페이지 조회"*.
  *
  * ---
  *
- * # 경로는 §8.1의 타겟 경로다
+ * # 경로는 설계서 「상호작용」의 「모델」이 말하는 타겟 경로다
  *
  * 사람이 치는 것은 `관리자/회원/목록`이고 `page:` 접두를 붙여도 된다. 그 경로를 푸는 자리는
  * **`packages/schema`의 `matchPageTargets` 하나**다 — 저작 화면이 상호작용 타겟으로 적는
@@ -16,15 +16,13 @@
  * | 그런 경로가 없다 | 1 | 사람이 인자를 고쳐야 한다. **가까운 후보를 함께 낸다** |
  * | 둘 이상이 그 경로다 | 1 | 겹치는 타겟은 실재한다(같은 메뉴 아래 같은 제목 · 제목에 든 `/`). **하나를 골라 주면 어느 쪽인지 아무도 모른다** |
  *
- * 겹치는 타겟이 있다는 것은 P9-1 이월 §9가 이미 적었고 `duplicateTargets`가 그 판정을
- * 갖고 있다.
+ * 겹치는 타겟은 `packages/schema`의 `duplicateTargets`가 판정한다.
  *
- * # 조립은 여기 없다 — `read/page.ts` 하나다 (P9-4 D1)
+ * # 조립은 여기 없다 — `read/page.ts` 하나다
  *
- * 앞 판은 이 파일이 `targetedPages`→`matchPageTargets`→0·1·다 갈래→`pageView`를 직접 했고,
- * 그때 이 머리말이 *"§12.2의 MCP `get_page`가 같은 것을 내야 하므로 조립을 여기 두면 P9-4가
- * 두 벌을 만든다"*고 적어 뒀다. **P9-4가 그 자리다** — 조립이 `read/page.ts`로 갔고
- * `get_page`가 같은 함수를 부른다. `test/assembly-census.test.ts`가 그것을 지킨다.
+ * `targetedPages`→`matchPageTargets`→0·1·다 갈래→`pageView`의 조립은 `read/page.ts`에 있고,
+ * 설계서 「MCP 도구」의 `get_page`가 같은 함수를 부른다. 조립을 여기 두면 두 벌이 되어 같은
+ * 경로에 CLI와 MCP가 다른 답을 낼 수 있다. `test/assembly-census.test.ts`가 그것을 지킨다.
  *
  * **이 파일에는 글자만 있다.** `--json`은 `lookupPage`가 낸 값을 **그대로** 낸다 — 사람이
  * 읽는 판과 기계가 읽는 판이 같은 값에서 나와야 갈리지 않는다.

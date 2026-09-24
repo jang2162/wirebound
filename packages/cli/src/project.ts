@@ -7,7 +7,7 @@
  *
  * ---
  *
- * # 스냅샷을 규격으로 검사한다 (D2)
+ * # 스냅샷을 규격으로 검사한다
  *
  * `SnapshotPayloadSchema`가 `packages/themes`로 올라온 이유의 절반이 이것이다 — 타입만
  * 올리면 **서버는 검사하고 CLI는 안 하는** 상태가 된다. 응답이 규격과 다르면 코드 3이다:
@@ -16,14 +16,15 @@
  * # 모르는 payload 형식을 **막지 않고 말한다**
  *
  * `payloadVersion`이 이 `wireb`가 아는 값보다 크면 서버가 더 새것이다. **읽기를 막지
- * 않는다** — 규격이 리터럴이 아닌 이유(`snapshot/payload.ts`의 D3 절)가 그것이고, 막으면
+ * 않는다** — 규격이 리터럴이 아닌 이유(`@wirebound/themes`의 `snapshot/payload.ts` —
+ * *"`payloadVersion`은 `PageDocument.version`과 다른 축이다"* 절)가 그것이고, 막으면
  * 새 서버에 붙은 옛 CLI가 아무것도 못 읽는다. 대신 **stderr로 말한다**: 이 판이 모르는
  * 절이 payload에 있어도 조용히 빠질 뿐이라는 것을 사람이 알아야 한다.
  *
  * **`out`이 아니라 `err`다.** `--json`을 파이프로 받는 쪽에 섞이면 그 출력이 JSON이
  * 아니게 된다.
  *
- * # `wireb pull`의 출력 파일을 읽지 않는다 (D7)
+ * # `wireb pull`의 출력 파일을 읽지 않는다
  *
  * `wirebound-snapshot.json`은 사람이 커밋할 수도 있는 산출물이라 **낡을 수 있고**, 낡은
  * 파일로 읽으면 *"없는 결함을 말하거나 있는 결함을 놓친다."* 그래서 언제나 서버를 부른다.

@@ -1,19 +1,20 @@
 /**
- * **§12.4의 설계서 규칙**. 프로젝트 하나를 값으로 받아 결함 목록을 낸다.
+ * **설계서 「lint 규칙」의 설계서 규칙**. 프로젝트 하나를 값으로 받아 결함 목록을 낸다.
+ * 번호 ①~⑦은 그 절의 설계서 규칙 순서다(`LINT_RULES`의 `group: 'document'` 순서와 같다).
  *
- * ## 이미 있는 것은 부른다 (D1)
+ * ## 이미 있는 것은 부른다
  *
- * T1에서 §12.4의 열셋을 하나씩 재고 이 파일의 범위를 정했다. 그래서 하는 일이 둘이다:
+ * 하는 일이 둘이다:
  *
- * 1. **이미 있는 판정을 부르고 나른다** — `validatePage`(③과 §12.4 밖) ·
+ * 1. **이미 있는 판정을 부르고 나른다** — `validatePage`(③과 「lint 규칙」 밖) ·
  *    `checkPageAction`(④의 *"아직 안 고름"*).
  * 2. **없는 것만 새로 판정한다** — ① ② ④의 **존재 검사** ⑤ ⑥ ⑦.
  *
  * 다시 짜면 두 벌이 되고, 갈리는 날 *"웹은 통과시키는데 lint는 막는다"*가 된다.
  *
  * **어느 쪽이 몇인지는 여기 적지 않는다.** 나르는 규칙은 `LINT_RULES`에서 `severity: null`이고
- * 새 판정은 값을 든다(D4) — 표가 그것을 들므로 산문이 다시 세면 갈린다. **앞 판이 여기에
- * 산술을 적었고 같은 파일 네 줄 아래와 어긋났다**(리뷰가 잡았다). T1이 잰 값은 보고서에 있다.
+ * 새 판정은 값을 든다 — 표가 그것을 들므로 산문이 다시 세면 갈린다(여기 산술을 적으면 표가
+ * 바뀔 때 같은 파일 안에서 어긋난다).
  *
  * ## 카탈로그를 여기서 설치하지 않는다
  *
@@ -21,7 +22,7 @@
  * 머리말도 같은 판단을 적었다). 설치하지 않은 채 부르면 모든 타입이 `unknown-type`이 되어
  * 나가고, 그것은 이슈로 보인다 — 조용히 통과하지 않는다.
  *
- * ## `partitionIssues`를 부르지 않는다 (D4)
+ * ## `partitionIssues`를 부르지 않는다
  *
  * 그 함수가 긋는 선의 뜻은 *"저장을 막는가"*이고 lint는 저장 게이트가 아니다. 이 목록을
  * 무엇으로 가를지(예: `wireb lint`의 종료 코드)는 소비자가 정한다.
@@ -36,7 +37,7 @@ import type { LintConfig, LintPage, LintProject } from './input'
 import type { RelayRuleId } from './rules'
 
 /**
- * §12.4가 이름으로 든 **주요 컴포넌트** 셋. 그 줄이 목록을 괄호로 못박았으므로 여기서
+ * 「lint 규칙」이 이름으로 든 **주요 컴포넌트** 셋. 그 줄이 목록을 괄호로 못박았으므로 여기서
  * 늘리거나 줄이지 않는다 — `test/lint-rules.test.ts`가 그 줄을 글자 그대로 대조한다.
  */
 const MAJOR_COMPONENTS: readonly string[] = ['List', 'EntryForm', 'SearchForm']
@@ -44,7 +45,7 @@ const MAJOR_COMPONENTS: readonly string[] = ['List', 'EntryForm', 'SearchForm']
 /**
  * ⑥ *"`EntryForm` 안에 `Field`가 하나도 없는 **등**"*의 표.
  *
- * **`등`을 여기서 지어내지 않는다.** 오늘 든 둘은 §12.4가 이름으로 든 `EntryForm`과, 같은
+ * **`등`을 여기서 지어내지 않는다.** 든 둘은 「lint 규칙」이 이름으로 든 `EntryForm`과, 같은
  * 근거가 그대로 서는 `SearchForm`이다 — 둘 다 카탈로그가 `children: 'many'`라 자식 0을
  * 허용하는데, **입력 칸이 하나도 없는 폼은 그 노드가 화면에서 하는 일이 없다.** 셋째를
  * 더하려면 같은 종류의 근거가 있어야 한다(*"그 컴포넌트가 무엇 없이는 빈 상자다"*).
@@ -61,12 +62,12 @@ const STRUCTURAL_GAPS: readonly { container: string; requires: string }[] = [
  * 항목이 없어 **타입체크가 먼저 죽는다**(`ISSUE_SEVERITY`와 같은 장치). 새 코드가 조용히
  * `document-invalid`로 떨어지는 경로가 없다.
  *
- * 상호작용 셋이 ③으로 가는 것은 §12.4의 줄(*"대상 노드가 삭제된 상호작용 규칙"*)이 그
- * 부류를 가리키기 때문이다. 셋을 갈라 세 규칙으로 두면 §12.4에 없는 줄이 둘 생긴다.
+ * 상호작용 셋이 ③으로 가는 것은 「lint 규칙」의 줄(*"대상 노드가 삭제된 상호작용 규칙"*)이 그
+ * 부류를 가리키기 때문이다. 셋을 갈라 세 규칙으로 두면 그 절에 없는 줄이 둘 생긴다.
  *
- * **테스트가 이 표를 통째로 못박는다**(`test/lint-mapping.test.ts`). 타입은 *"항목이 있는가"*만
- * 보므로 **오른쪽 값을 조용히 다른 줄로 옮기는 경로**가 남아 있었다 — 리뷰가 그 변이 여럿을
- * 심어 전부 0 사망인 것을 쟀다. 어느 코드가 §12.4의 어느 줄로 가는지는 **판단**이므로
+ * **테스트가 이 표를 통째로 못박는다**(`packages/themes/test/lint-mapping.test.ts` — 두 표를 함께 본다). 타입은 *"항목이 있는가"*만
+ * 보므로 **오른쪽 값을 조용히 다른 줄로 옮기는 경로**가 타입만으로는 남는다 — 그 변이는
+ * 아무 타입 오류도 안 낸다. 어느 코드가 「lint 규칙」의 어느 줄로 가는지는 **판단**이므로
  * 밖에서 볼 수 있어야 한다.
  */
 export const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
@@ -107,20 +108,20 @@ export function lintDesign(project: LintProject, config: LintConfig = {}): LintI
 function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: ReadonlySet<string>): LintIssue[] {
   const where = { pageId: page.id }
 
-  // ③ · §12.4 밖 — 이미 있는 판정을 그대로 나른다.
+  // ③ · 「lint 규칙」 밖 — 이미 있는 판정을 그대로 나른다.
   const validation = validatePage(page.document)
   const issues: LintIssue[] = validation.map((issue) => relayValidation(page.id, issue))
 
   /**
    * **봉투가 깨졌으면 여기서 끝난다.** `validate.ts`의 `validateEnvelope`가 그 계약을 이미
    * 적어 뒀다 — *"트리 순회(`walkNodes`)보다 먼저 돌아야 한다. root가 null이거나 형태가
-   * 깨져 있으면 walkNodes가 그대로 터지기 때문이다."* `validatePage`는 그 계약을 지키는데
-   * 이 함수가 안 지켜서 **이슈 대신 예외가 나갔다.**
+   * 깨져 있으면 walkNodes가 그대로 터지기 때문이다."* `validatePage`는 그 계약을 지키고,
+   * 이 함수도 지켜야 **이슈 대신 예외가 나가지 않는다.**
    *
    * **lint는 남이 준 것을 읽는 도구다.** `wireb pull`이 받은 JSON도 MCP가 받은 본문도
    * `JSON.parse`의 결과라 타입이 막아 주지 않는다 — 깨진 입력이 정상 입력이다. 던지면
    * 소비자 셋이 그 예외를 각자 다루게 되고 그것이 두 벌이 되는 자리다. 그리고 이 파일은
-   * 그 입력이 온다는 것을 **스스로 전제하고 있었다** — 아래 `VALIDATION_RULE` 표에
+   * 그 입력이 온다는 것을 **스스로 전제한다** — 아래 `VALIDATION_RULE` 표에
    * `bad-document` 줄이 있다.
    *
    * **`bad-document`가 곧 봉투 실패다.** 그 코드를 만드는 자리는 `validateEnvelope` 하나이고
@@ -185,8 +186,8 @@ function lintPage(page: LintPage, targets: ReadonlySet<string>, commented: Reado
  * ④ — 페이지 경로를 받는 액션 둘을 본다.
  *
  * **`checkPageAction`을 부르는 것이 `validatePage`와 다른 점이다.** 그 함수는 그것을 일부러
- * 부르지 않는데(*"부르면 재라 #1의 판정이 뒤집힌다 — 빈 페이지 타겟이 **저장 경로에서**
- * 경고가 되기 시작한다"*) **lint는 저장 경로가 아니다.** 그래서 그 판정이 여기서는 뒤집을
+ * 부르지 않는데(*"빈 페이지 타겟이 **저장 경로에서** 경고가 되기 시작한다"* — `validate.ts`의
+ * `checkInteractions` 머리말) **lint는 저장 경로가 아니다.** 그래서 그 판정이 여기서는 뒤집을
  * 것이 없고, *"아직 안 골랐다"*는 문장을 여기서 다시 쓰지 않아도 된다.
  *
  * **존재 검사는 새로 한다.** 그 함수가 못 하는 것이 그것이고(문서 하나만 보므로), 프로젝트
@@ -268,7 +269,7 @@ function unlinkedPages(project: LintProject): LintIssue[] {
 }
 
 /**
- * ⑦ — 설정이 있을 때만 돈다 (D5).
+ * ⑦ — 설정이 있을 때만 돈다.
  *
  * **정규식을 못 읽으면 그것을 이슈로 낸다.** 조용히 넘기면 설정을 잘못 적은 사람이
  * *"위반 0건"*을 보고 규칙이 도는 줄 안다 — 이 저장소가 반복해서 닫아 온 침묵이다.
@@ -319,7 +320,7 @@ function namingIssues(project: LintProject, config: LintConfig): LintIssue[] {
  *
  * **`node.marker`가 아니라 코멘트 목록을 진실로 삼는다.** 번호는 코멘트가 생길 때 파이프라인이
  * 노드에 심고 마지막 코멘트가 지워질 때 지운다(`apps/api`의 `routes/comments.ts`). 그런데
- * **번호만 남는 경로가 셋 있다** — undo, §11.2 JSON 가져오기, 사람이 손으로 넣은 `marker`
+ * **번호만 남는 경로가 셋 있다** — undo, 페이지 JSON 가져오기(설계서 「페이지 JSON」), 사람이 손으로 넣은 `marker`
  * (그 파일이 셋을 적어 두었다). 번호로 재면 그 셋이 *"코멘트가 있다"*로 읽혀 ①이 조용해진다.
  */
 function commentedNodes(project: LintProject): Map<string, Set<string>> {

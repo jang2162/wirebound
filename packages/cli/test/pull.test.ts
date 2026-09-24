@@ -1,5 +1,5 @@
 /**
- * `wireb pull` — T6·D8.
+ * `wireb pull`.
  *
  * **세 갈래를 각각 든다**(자격 없음·서버 거절·서버에 못 닿음). *"에러 처리"*로 뭉치지
  * 않는 것이 이 명령의 값이다.
@@ -39,7 +39,7 @@ function pullIo(options: { cwd?: string; token?: string; env?: Record<string, st
 }
 
 describe('wireb pull', () => {
-  it('단수 라우트를 부른다 — 복수는 쓰기다 (D8)', async () => {
+  it('단수 라우트를 부른다 — 복수는 쓰기다', async () => {
     const io = pullIo({ token: 'RAWTOKEN' })
     const code = await run(['pull'], io)
 
@@ -101,7 +101,7 @@ describe('wireb pull', () => {
   })
 })
 
-describe('세 갈래를 갈라 말한다 (T6)', () => {
+describe('세 갈래를 갈라 말한다', () => {
   it('① 자격이 없다 → 2, login을 가리킨다', async () => {
     const io = pullIo()
     const code = await run(['pull'], io)
@@ -146,7 +146,7 @@ describe('세 갈래를 갈라 말한다 (T6)', () => {
   })
 
   /**
-   * **스모크에서 재서 알았다.** HTTP 헤더 값은 ByteString이라 한국어가 든 `WIREB_TOKEN`은
+   * **진짜 `fetch`에서만 나는 실패다.** HTTP 헤더 값은 ByteString이라 한국어가 든 `WIREB_TOKEN`은
    * `fetch`가 던진다. 그것을 그대로 `catch`가 받으면 **"서버에 연결할 수 없습니다"(4)**가
    * 나가 사람이 네트워크를 들여다보게 된다 — 원인은 자기 환경 변수다.
    */
@@ -174,17 +174,17 @@ describe('세 갈래를 갈라 말한다 (T6)', () => {
   })
 
   /**
-   * **N8이 실제로 지목한 결말을 여기서 든다**(델타 리뷰 D4).
+   * **못 읽는 자격 파일이 명령 끝까지 어떻게 나가는지를 여기서 든다.**
    *
    * 자격 파일이 **있는데 못 읽는** 상태(`chmod 000`)는 *"자격이 없다"*가 **아니다.**
    * 접히면 이미 로그인했고 파일도 있는 사람이 *"`wireb login`을 먼저 실행하세요"*를 듣고
-   * 엉뚱한 곳을 본다 — 리뷰어가 진짜 `chmod 000`으로 그 결말을 실측했다.
+   * 엉뚱한 곳을 본다.
    *
    * **위 술어 케이스(`node-io.test.ts`)와 다른 것을 지킨다.** 그쪽은 `isNotFound`가
    * `EACCES`를 접지 않는 것을, 여기는 **그 위의 명령들이 그것을 다시 삼키지 않는 것**을
    * 든다 — `credentials.ts`가 `readStore`를 `try/catch`로 감싸는 판이 그 구멍이다.
    */
-  it('자격 파일을 못 읽는 것은 "자격이 없다"가 아니다 (N8)', async () => {
+  it('자격 파일을 못 읽는 것은 "자격이 없다"가 아니다', async () => {
     const denied = Object.assign(new Error("EACCES: permission denied, open '…/credentials.json'"), {
       code: 'EACCES',
     })

@@ -188,9 +188,9 @@ describe('④ navigate/openModal 대상 페이지가 존재하지 않음', () =>
   })
 
   /**
-   * **§12.4의 줄이 이름으로 든 둘 다 잰다.** 앞 판은 양성 케이스가 전부 `navigate`였고
-   * `openModal`은 *"내지 않는다"* 쪽에만 나왔다 — `isPageTargetAction`을 `navigate` 하나로
-   * 좁히는 변이가 **0 사망**이었다(리뷰가 쟀다).
+   * **설계서 「lint 규칙」의 줄이 이름으로 든 둘 다 잰다.** 양성 케이스가 전부 `navigate`고
+   * `openModal`이 *"내지 않는다"* 쪽에만 나오면, `isPageTargetAction`을 `navigate` 하나로
+   * 좁히는 변이가 **아무 케이스도 죽이지 못한다.** 이 케이스가 그 변이를 잡는 자리다.
    */
   it('openModal도 같은 규칙으로 낸다 — navigate 하나만 보지 않는다', () => {
     const opener = node('Button', {
@@ -310,7 +310,7 @@ describe('⑦ 프로젝트 명명 규칙 (설정 가능)', () => {
     page({ id: 'pg2', title: 'member_list', target: 'page:관리자/회원/member_list', document: doc([]) }),
   ]
 
-  it('설정을 안 주면 돌지 않는다 (D5) — 기본값을 지어내지 않는다', () => {
+  it('설정을 안 주면 돌지 않는다 — 기본값을 지어내지 않는다', () => {
     expect(rulesOf(lintDesign(project({ pages })))).not.toContain('naming')
   })
 
@@ -343,11 +343,11 @@ describe('⑦ 프로젝트 명명 규칙 (설정 가능)', () => {
   })
 
   /**
-   * **표의 `requiresConfig`에 소비자를 준다.** 앞 판은 그 필드를 지우는 변이가 **0 사망**이라
-   * 선언만 있고 아무도 안 읽는 상태였다(리뷰가 쟀다). 이제 이 케이스가 표에서 목록을 만들어
+   * **표의 `requiresConfig`에 소비자를 준다.** 소비자가 없으면 그 필드를 지우는 변이가
+   * **아무 케이스도 죽이지 못한다** — 선언만 있고 아무도 안 읽는 상태다. 이 케이스가 표에서 목록을 만들어
    * *"설정 없이는 하나도 안 난다"*를 잰다 — 필드를 지우면 목록이 비어 카나리아가 죽는다.
    */
-  describe('requiresConfig가 표에서 목록을 만든다 (D5)', () => {
+  describe('requiresConfig가 표에서 목록을 만든다', () => {
     // `LINT_RULES`는 `as const satisfies`라 항목마다 리터럴 타입이다(그래야 `OwnSeverityRuleId`가
     // severity로 갈린다). 공통 필드로 훑을 때는 선언 타입으로 넓혀서 본다.
     const configured = (LINT_RULES as readonly LintRule[]).filter((rule) => rule.requiresConfig === true)
@@ -384,7 +384,7 @@ describe('⑦ 프로젝트 명명 규칙 (설정 가능)', () => {
   })
 })
 
-describe('§12.4 밖 — validatePage의 나머지 이슈', () => {
+describe('설계서 lint 규칙 밖 — validatePage의 나머지 이슈', () => {
   it('알 수 없는 타입·중복 id를 document-invalid로 나른다', () => {
     const dup = nid()
     const issues = lintDesign(
@@ -416,7 +416,7 @@ describe('봉투가 깨진 문서 — 던지지 않고 이슈로 낸다', () => 
   /**
    * **lint는 남이 준 것을 읽는 도구다.** `wireb pull`이 받은 JSON도, MCP가 받은 본문도
    * `JSON.parse`의 결과라 타입이 막아 주지 않는다 — **깨진 입력이 정상 입력이다.**
-   * 던지면 CLI(P9-2)와 MCP(P9-3)가 그 예외를 각자 다루게 되고 그것이 두 벌이 되는 자리다.
+   * 던지면 CLI와 MCP가 그 예외를 각자 다루게 되고 그것이 두 벌이 되는 자리다.
    */
   const broken: { name: string; document: unknown }[] = [
     { name: 'root가 없다', document: { version: 1 } },

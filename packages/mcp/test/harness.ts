@@ -20,8 +20,8 @@ export const WRITE_PAGE = PAGE_LIST
 /**
  * 쓰기 라우트가 어떻게 답할지.
  *
- * **문장은 `apps/api`의 것을 옮긴다** — 진짜 서버가 무엇을 쓰는지 실제로 재서 옮겼다
- * (P9-5 T1의 프로브). 가짜가 자기 문장을 지어내면 도구가 *"서버 문장을 그대로 옮긴다"*를
+ * **문장은 `apps/api`의 것을 옮긴다** — 진짜 서버가 쓰는 글자다. 서버 문장이 바뀌면 여기도
+ * 함께 고친다. 가짜가 자기 문장을 지어내면 도구가 *"서버 문장을 그대로 옮긴다"*를
  * 지키는지 잴 수 없다.
  */
 export type WriteMode = 'ok' | 'stale' | 'locked' | 'invalid' | 'forbidden' | 'no-node' | 'none'
@@ -40,7 +40,7 @@ export interface HarnessOptions {
   /** `POST .../comments`가 어떻게 답할지. */
   comment?: WriteMode | 'existing-marker'
   /**
-   * 두 번째 스냅샷 응답. **409 뒤의 재조회가 무엇을 보는지 재는 자리다**(D4) — 그
+   * 두 번째 스냅샷 응답. **409 뒤의 재조회가 무엇을 보는지 재는 자리다** — 그
    * 요청만 다른 payload를 받아야 *"다시 읽었다"*와 *"처음 것을 재사용했다"*가 갈린다.
    */
   rereadPayload?: SnapshotPayload
@@ -120,8 +120,7 @@ function 코멘트행(): unknown {
 }
 
 /**
- * 쓰기 라우트 하나를 건다. **실패 문장은 `apps/api`가 실제로 내는 것을 옮긴다**(T1의 프로브가
- * 진짜 서버에서 받은 글자다).
+ * 쓰기 라우트 하나를 건다. **실패 문장은 `apps/api`가 실제로 내는 것을 옮긴다.**
  */
 function stubWrite(io: FakeIo, method: string, path: string, mode: WriteMode | 'existing-marker', ok: { status: number; body: unknown }): void {
   switch (mode) {

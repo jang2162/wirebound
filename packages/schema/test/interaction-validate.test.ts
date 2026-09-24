@@ -1,9 +1,6 @@
 /**
- * 상호작용 규칙의 정적 검증(설계 §8.1 — *"그래서 규칙을 정적으로 검증할 수 있고
+ * 상호작용 규칙의 정적 검증(설계서 「상호작용」의 「모델」 — *"그래서 규칙을 정적으로 검증할 수 있고
  * (타겟 존재 여부, prop 유효성)"*).
- *
- * **P5-2 전까지 이 검사가 0건이었다** — 모양(`Interaction`·`InteractionSchema`)은 P0가
- * 깔았고 `validate.ts`는 `interactions`를 아예 보지 않았다.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
@@ -38,7 +35,7 @@ function interactionIssues(doc: PageDocument): ReturnType<typeof validatePage> {
   return validatePage(doc).filter((issue) => issue.code.includes('interaction'))
 }
 
-describe('타겟 존재 (§8.1 · D1의 검사 1)', () => {
+describe('타겟 존재', () => {
   it('타겟이 문서에 있으면 이슈가 없다', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: false }] })
     expect(interactionIssues(doc)).toEqual([])
@@ -131,12 +128,11 @@ describe('타겟 존재 (§8.1 · D1의 검사 1)', () => {
 })
 
 /**
- * **재라 #1 — `navigate`·`openModal`의 `page:` 타겟.** §8.1의 예가
+ * **`navigate`·`openModal`의 `page:` 타겟.** 「모델」의 예가
  * `"page:관리자/회원/상세"`이고 **그 페이지는 이 문서 안에 없다.** 검증은 문서 하나만
- * 받으므로 여기서 풀 수 없다. **판정: 아무것도 하지 않는다**(계획서가 *"그것도 답이다"*로
- * 열어 둔 쪽).
+ * 받으므로 여기서 풀 수 없다 — **검사하지 않는다.**
  */
-describe('재라 #1 — navigate·openModal의 타겟은 검사하지 않는다', () => {
+describe('navigate·openModal의 타겟은 검사하지 않는다', () => {
   it('navigate의 페이지 경로는 이슈를 내지 않는다', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/회원/상세' }] })
     expect(interactionIssues(doc)).toEqual([])
@@ -157,7 +153,7 @@ describe('재라 #1 — navigate·openModal의 타겟은 검사하지 않는다'
   })
 })
 
-describe('대상 종류 (D1의 검사 3)', () => {
+describe('대상 종류', () => {
   it('switchTab의 타겟이 Tabs면 통과한다', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: 1 }] }, 'Tabs')
     expect(interactionIssues(doc)).toEqual([])
@@ -178,14 +174,13 @@ describe('대상 종류 (D1의 검사 3)', () => {
   })
 
   /**
-   * **`switchTab`의 `tab`은 `Tabs.active`와 같은 축의 값이다 — 같은 규칙으로 본다**
-   * (리뷰가 찾은 비대칭). 앞 판은 *"상한이 없어서 검사하지 않는다"*고 적었는데, **그 근거는
-   * 상한에만 해당한다** — `Tabs.active`의 zod는 `z.number().int().min(0)`이라 **하한과
-   * 정수성은 이미 규칙이 있고**, 같은 값이 prop 자리에서는 `invalid-props`(error)인데 액션
-   * 자리에서는 이슈 0건이었다.
+   * **`switchTab`의 `tab`은 `Tabs.active`와 같은 축의 값이다 — 같은 규칙으로 본다.**
+   * *"상한이 없어서 검사하지 않는다"*는 **상한에만 해당하는 근거다** — `Tabs.active`의 zod는
+   * `z.number().int().min(0)`이라 **하한과 정수성은 규칙이 있고**, 액션 자리가 그것을 안 보면
+   * 같은 값이 prop 자리에서는 `invalid-props`(error)인데 액션 자리에서는 이슈 0건이 된다.
    *
    * **그 zod를 그대로 재사용한다** — 규칙을 베껴 적으면 둘이 따로 썩는다.
-   * **상한은 여전히 없다**(카탈로그가 안 정했다) — 그 자리만 앞 판의 근거가 그대로 산다.
+   * **상한은 없다**(카탈로그가 안 정했다) — 그래서 큰 수는 통과한다.
    */
   it('switchTab의 탭 번호가 음수면 invalid-interaction-prop', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'switchTab', target: TARGET, tab: -3 }] }, 'Tabs')
@@ -207,7 +202,7 @@ describe('대상 종류 (D1의 검사 3)', () => {
   })
 
   /**
-   * **`Tabs.active`와 같은 값을 넣으면 같은 판정이 나온다** — 두 자리의 비대칭이 닫혔다는
+   * **`Tabs.active`와 같은 값을 넣으면 같은 판정이 나온다** — 두 자리가 갈리지 않는다는
    * 것을 값으로 고정한다. 상한은 둘 다 없으므로 큰 수는 둘 다 통과한다.
    */
   it('prop 자리와 액션 자리가 같은 값에 같은 판정을 낸다', () => {
@@ -229,10 +224,11 @@ describe('대상 종류 (D1의 검사 3)', () => {
   })
 
   /**
-   * **`setVisible`은 대상 종류를 가리지 않는다**(D1의 검사 4에 대한 판정). 숨기고 보이는
+   * **`setVisible`은 대상 종류를 가리지 않는다.** 숨기고 보이는
    * 것은 **모든 노드가 갖는 성질**이라 그것을 받을 자격을 따로 선언하는 자리가 카탈로그에
    * 없다 — `visible`이라는 prop도 상태도 어느 컴포넌트에 없다. 종류를 가리려면 그
-   * 자격 선언을 §5.1의 계약에 새로 더해야 하고, 그것은 이 슬라이스의 범위 밖이다.
+   * 자격 선언을 설계서 「컴포넌트 정의 구조」의 계약에 새로 더해야 하고, 그 선언이 생기기
+   * 전까지는 가리지 않는다.
    */
   it('setVisible은 어떤 종류의 노드든 받는다', () => {
     for (const type of ['List', 'Section', 'Tabs', 'Divider']) {
@@ -242,7 +238,7 @@ describe('대상 종류 (D1의 검사 3)', () => {
   })
 })
 
-describe('prop 유효성 (§8.1 · D1의 검사 2)', () => {
+describe('prop 유효성', () => {
   it('그 컴포넌트의 prop이고 값이 맞으면 통과한다', () => {
     const doc = pageWith({
       on: 'click',
@@ -314,12 +310,12 @@ describe('prop 유효성 (§8.1 · D1의 검사 2)', () => {
 })
 
 /**
- * **재라 #4 — 한 노드에 상호작용이 여럿일 때.** `interactions`가 배열이고 같은 `on`이
- * 둘일 수 있다. **판정: 막지 않는다.** §8.1이 금지하지 않았고, 같은 트리거 둘은 액션을
- * 이어 붙인 것과 결과가 같다(런타임은 P5-3). 다만 **검사는 배열 전부를 돈다** — 두
+ * **한 노드에 상호작용이 여럿일 때.** `interactions`가 배열이고 같은 `on`이
+ * 둘일 수 있다. **막지 않는다.** 「모델」이 금지하지 않았고, 같은 트리거 둘은 액션을
+ * 이어 붙인 것과 결과가 같다. 다만 **검사는 배열 전부를 돈다** — 두
  * 번째 상호작용의 끊긴 타겟이 조용히 지나가면 안 된다.
  */
-describe('재라 #4 — 같은 트리거가 둘이어도 막지 않는다', () => {
+describe('같은 트리거가 둘이어도 막지 않는다', () => {
   it('같은 on이 둘이어도 이슈가 아니다', () => {
     const doc = pageWith({ on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: false }] })
     doc.root.children?.[0]?.interactions?.push({
@@ -343,10 +339,10 @@ describe('재라 #4 — 같은 트리거가 둘이어도 막지 않는다', () =
 })
 
 /**
- * **재라 #2 — severity.** 판정과 근거는 `validate.ts`의 `ISSUE_SEVERITY` 머리말에 있다.
+ * **severity.** 판정과 근거는 `validate.ts`의 `ISSUE_SEVERITY` 머리말에 있다.
  * 여기서는 그 판정이 **무엇을 지키는지**를 잰다.
  */
-describe('재라 #2 — 셋 다 warning이다', () => {
+describe('셋 다 warning이다', () => {
   it('상호작용 코드 셋이 전부 warning이다', () => {
     expect(ISSUE_SEVERITY['missing-interaction-target']).toBe('warning')
     expect(ISSUE_SEVERITY['invalid-interaction-target']).toBe('warning')
@@ -354,12 +350,12 @@ describe('재라 #2 — 셋 다 warning이다', () => {
   })
 
   /**
-   * **이것이 `warning`의 결정적 근거다.** `error`로 두면 §7.1의 저장 게이트와
+   * **이것이 `warning`의 결정적 근거다.** `error`로 두면 설계서 「정방향 흐름」의 저장 게이트와
    * `edit-pipeline`의 6단계가 이 문서를 거부한다 — **노드를 지운 사용자가 자기 문서를
    * 저장할 수 없게 된다.** `partitionIssues`가 그 선을 긋는 유일한 자리이므로 여기서 잰다.
    */
   it('타겟이 된 노드를 지우는 편집이 막히지 않는다', () => {
-    // 타겟 노드를 지운 문서 — 참조만 남았다(D2).
+    // 타겟 노드를 지운 문서 — 참조만 남았다.
     const doc = pageWith({ on: 'click', actions: [{ type: 'setVisible', target: TARGET, value: false }] })
     doc.root.children = doc.root.children?.slice(0, 1)
 

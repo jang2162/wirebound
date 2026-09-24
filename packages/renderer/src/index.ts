@@ -1,7 +1,7 @@
 export type { WbAttrs, WbHandlers } from './attrs'
 export { activeStates, nodeAttrs, partAttrs } from './attrs'
 
-// **상호작용 런타임**(설계 §8.3). `RenderOptions.interaction`으로 켜고, 상태는 호출자가
+// **상호작용 런타임**(설계서 「상호작용」의 「실행」). `RenderOptions.interaction`으로 켜고, 상태는 호출자가
 // 든다 — 근거는 `interaction/runtime.ts`의 머리말에 있다.
 export type {
   InteractionIssue,
@@ -28,8 +28,8 @@ export {
 
 export { FallbackNode } from './fallback'
 
-// `TREE_INDENT_VAR`는 **테마가 값을 넣는 손잡이의 이름**이다(P4b-1의 `treeIndent` 어휘).
-// `themes`는 이 패키지를 볼 수 없으므로(§3.3) 두 문자열이 같은지는 `apps/web`이 대조한다 —
+// `TREE_INDENT_VAR`는 **테마가 값을 넣는 손잡이의 이름**이다(`themes`의 `treeIndent` 어휘).
+// `themes`는 이 패키지를 볼 수 없으므로(설계서 「각 패키지의 책임과 의존」) 두 문자열이 같은지는 `apps/web`이 대조한다 —
 // 그 케이스가 이 export를 쓴다.
 export { NODE_VAR_PREFIX, TREE_INDENT_VAR, nodeVar, structureBaseCss } from './structure-css'
 
