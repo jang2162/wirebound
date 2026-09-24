@@ -111,6 +111,7 @@ export interface Violation {
  * 8. `wb-shell-gallery-item` — 그 사슬 넷째. **여기 안에 갤러리가 `renderNode`로 그린 문서
  *    노드가 들어온다.** 캡션(`wb-shell-gallery-caption`)은 그 문서 노드의 **형제**라
  *    감싸는 상자가 아니다 — 그래서 이 목록에 없고 글자 속성을 마음대로 건다
+ * 9. `wb-shell-gallery-patterns` — 7번의 형제. 패턴 항목 상자(8번)들이 여기 들어온다
  *
  * > **문서를 감싸는 상자를 만드는 사람이 여기 한 줄을 더하는 것이 이 목록의 유일한 갱신
  * > 방법이다** — 목록에 없는 상자에 상속 속성을 걸면 **아무 케이스도 안 죽고**, 목록에 있으면
@@ -127,6 +128,7 @@ const WRAPPERS = new Set([
   'wb-shell-theme-gallery',
   'wb-shell-gallery-list',
   'wb-shell-gallery-item',
+  'wb-shell-gallery-patterns',
 ])
 
 /**

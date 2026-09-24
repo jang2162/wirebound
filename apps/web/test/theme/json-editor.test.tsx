@@ -13,10 +13,11 @@
  * **나머지 케이스의 축은 하나다 — 파싱 실패와 검증 실패의 선.** 그 선의 양쪽을 따로
  * 재고, **선 자체가 지켜지는지**(파싱 실패한 것이 초안에 안 들어가는지)를 따로 잰다.
  */
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { systemTheme, type Theme } from '@wirebound/themes'
 import { JsonEditor } from '../../src/theme/json-editor'
+import { openPage, pageDoc } from '../editor-harness'
 import { resolveDraft } from '../../src/theme/draft-css'
 import { ThemeDraftStore } from '../../src/store/theme-draft-store'
 import { ThemeDraftProvider } from '../../src/store/use-theme-draft'
@@ -247,11 +248,29 @@ describe('JsonEditor — 읽기 전용', () => {
 })
 
 describe('JsonEditor — 화면이 말하는 사실', () => {
-  it('patterns 상자가 갤러리에 안 나온다고 말한다', () => {
+  it('patterns 상자가 갤러리에 어떻게 나오는지 말한다 — 슬롯이 비고, 오류가 있으면 안 나온다', () => {
     mount({ meta: META })
 
     const section = screen.getByRole('region', { name: 'patterns' })
-    expect(within(section).getByText(/갤러리에 그려지지 않습니다/)).toBeTruthy()
+    expect(within(section).getByText(/슬롯은 비어 있음/)).toBeTruthy()
+    expect(within(section).getByText(/초안에 오류가 있으면 그리지 않습니다/)).toBeTruthy()
+  })
+
+  /**
+   * **안내가 부르는 버튼이 실제로 있다.** 문구의 「」 안 이름을 구조 툴바의 버튼 글자와 맞댄다 — 버튼 이름이 바뀌면
+   * 안내가 없는 버튼을 가리킨 채 초록인 것을 막는다.
+   */
+  it('안내의 「」 안 이름이 구조 툴바의 버튼 글자다', async () => {
+    mount({ meta: META })
+    const caveat = within(screen.getByRole('region', { name: 'patterns' })).getByText(/「.+?」/).textContent ?? ''
+    const named = /「(.+?)」/.exec(caveat)?.[1]
+    expect(named).toBeDefined()
+    cleanup()
+
+    await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
+
+    const toolbar = within(screen.getByRole('region', { name: '구조 트리' })).getByRole('group', { name: '구조 편집' })
+    expect(within(toolbar).getByRole('button', { name: named })).toBeTruthy()
   })
 
   it('assets 상자가 placeholder.style이 아무 일도 안 한다고 말한다', () => {

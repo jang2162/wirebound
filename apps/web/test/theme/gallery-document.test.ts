@@ -17,13 +17,14 @@
  * 그래서 **주석이 아니라 케이스가 센다** — 값이 바뀌면 여기서 죽고, 죽으면 머리말을 고치게 된다.
  */
 import { describe, expect, it } from 'vitest'
-import { getComponent, listComponents, validatePage } from '@wirebound/schema'
+import { getComponent, listComponents, validatePage, type WbNode } from '@wirebound/schema'
 import { compileTheme, resolveTheme, systemTheme, type Theme } from '@wirebound/themes'
 import {
   GALLERY_EXCLUDED,
   GALLERY_SAMPLE_TYPES,
   galleryDocument,
   galleryItems,
+  patternItems,
   structureCount,
   structureKey,
 } from '../../src/theme/gallery-document'
@@ -170,5 +171,37 @@ describe('왜 구조 옵션 45개를 늘어놓지 않는가', () => {
     const { theme } = resolveTheme(systemTheme('admin') as Theme)
     const silent = types.filter((type) => !theme!.components.has(type)).sort()
     expect(silent).toEqual([...GALLERY_EXCLUDED.keys()].sort())
+  })
+})
+
+/**
+ * **패턴 항목의 id 는 갤러리가 짓는다**(`patternItems`) — 렌더마다 같아야 React 가 항목을 다시 만들지 않고, 컴포넌트
+ * 항목과 안 겹쳐야 한 화면의 id 가 하나씩이다.
+ */
+describe('patternItems — id', () => {
+  // 시스템 테마 둘의 패턴을 한 초안에 모은다 — 하나씩은 패턴이 하나뿐이라 «패턴끼리»를 못 잰다.
+  const patterns = new Map([
+    ...resolveTheme(systemTheme('portal') as Theme).theme!.patterns,
+    ...resolveTheme(systemTheme('commerce') as Theme).theme!.patterns,
+  ])
+
+  function ids(node: WbNode | null): string[] {
+    if (node === null) return []
+    return [node.id, ...(node.children ?? []).flatMap((child) => ids(child))]
+  }
+
+  it('두 번 전개해도 같은 id 다', () => {
+    expect(patternItems(patterns).flatMap((item) => ids(item.node))).toEqual(
+      patternItems(patterns).flatMap((item) => ids(item.node)),
+    )
+  })
+
+  it('패턴끼리 · 컴포넌트 항목과 id 가 안 겹친다', () => {
+    const patternIds = patternItems(patterns).flatMap((item) => ids(item.node))
+    const componentIds = galleryItems().flatMap((item) => ids(item.node))
+    const all = [...patternIds, ...componentIds]
+
+    expect(patterns.size).toBeGreaterThan(1)
+    expect(new Set(all).size).toBe(all.length)
   })
 })

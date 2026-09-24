@@ -2427,7 +2427,7 @@
    그 상자에는 허용 목록의 속성만 걸 수 있다.** */
 
 /* **안내·오류·캡션은 감싸는 상자가 아니다.** 문서 노드를 품지 않으므로 글자 속성을 걸어도
-   머리말의 규칙이 깨지지 않는다 — `WRAPPERS`에 들어가는 것은 아래 `-list`와 `-item` 둘뿐이다. */
+   머리말의 규칙이 깨지지 않는다 — `WRAPPERS`에 들어가는 것은 아래 `-list` · `-item` · `-patterns` 셋이다. */
 .wb-shell-gallery-notice {
   margin: 0 0 12px;
   padding: 8px 10px;
@@ -2484,6 +2484,21 @@
   padding: 10px;
   background: #fff;
   box-shadow: 0 0 0 1px var(--wb-shell-line);
+}
+
+/* **감싸는 상자 3.** 패턴 항목 상자들이 여기 들어온다. 패턴은 섹션 하나라 컴포넌트 격자의 260px 칸에
+   넣으면 짓눌린다 — 한 줄에 하나씩 쌓는다(그리드의 기본 흐름). */
+.wb-shell-gallery-patterns {
+  display: grid;
+  gap: 12px;
+}
+
+/* 패턴 목록의 머리. 감싸는 상자가 아니다(문서 노드를 품지 않는다). */
+.wb-shell-gallery-heading {
+  margin: 20px 0 8px;
+  color: var(--wb-shell-ink);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* 캡션은 **항목 상자 안**에 있지만 감싸는 상자가 아니다 — 문서 노드는 그 형제로 들어온다.

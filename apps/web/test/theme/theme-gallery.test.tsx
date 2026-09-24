@@ -229,3 +229,52 @@ describe('GalleryBoundary', () => {
     silenced.mockRestore()
   })
 })
+
+/**
+ * **패턴을 페이지에 넣을 때와 같은 전개로 그린다**(`gallery-document.ts`의 `patternItems`). 슬롯은 비어 있다 — 넣은
+ * 직후의 모양이다.
+ */
+describe('ThemeGallery — 패턴', () => {
+  function commerce(): NonNullable<ReturnType<typeof resolveDraft>['resolved']> {
+    const { resolved } = resolveDraft(systemTheme('commerce') as Theme, null)
+    if (resolved === null) throw new Error('commerce 가 해석되지 않았습니다')
+    return resolved
+  }
+
+  it('초안의 패턴을 전개해 그린다 — 패턴마다 상자 하나 · 그 안에 문서 노드 하나', () => {
+    const resolved = commerce()
+    const view = render(<ThemeGallery resolved={resolved} />)
+
+    const boxes = view.container.querySelectorAll('.wb-shell-gallery-patterns > .wb-shell-gallery-item')
+    expect(boxes.length).toBe(resolved.patterns.size)
+    expect(boxes.length).toBeGreaterThan(0)
+    const product = [...boxes].find((box) => box.textContent?.includes('content.product'))
+    expect(product?.querySelectorAll(':scope > [data-wb-component="Section"]').length).toBe(1)
+    // 패턴의 버튼이 템플릿의 글자 그대로 선다 — 슬롯은 안 채운다.
+    expect(product?.textContent).toContain('장바구니 담기')
+  })
+
+  it('패턴이 없는 테마는 패턴 목록을 안 그린다', () => {
+    const view = render(<ThemeGallery resolved={admin()} />)
+
+    expect(view.container.querySelector('.wb-shell-gallery-patterns')).toBeNull()
+    expect(view.container.querySelector('.wb-shell-gallery-heading')).toBeNull()
+  })
+
+  /**
+   * **전개하지 못한 패턴도 자리를 남기고 까닭을 말한다** — 선언 안 된 슬롯 이름이면 «패턴이 안 보인다»로만 나타나
+   * 무엇이 틀렸는지 모른다. 저장 경계가 이 오타를 막으므로 해석된 초안에서는 닿지 않는 갈래라, 해석 결과에 직접 심는다.
+   */
+  it('전개하지 못한 패턴은 까닭을 말한다', () => {
+    const resolved = {
+      ...commerce(),
+      patterns: new Map([['content.bad', { name: '깨진 패턴', schema: { type: 'Section', slot: 'nope' } }]]),
+    }
+    const view = render(<ThemeGallery resolved={resolved} />)
+
+    const box = view.container.querySelector('.wb-shell-gallery-patterns > .wb-shell-gallery-item')
+    expect(box?.textContent).toContain('content.bad')
+    expect(box?.textContent).toContain('전개하지 못했습니다 — slots에 선언되지 않은 슬롯입니다: nope')
+    expect(box?.querySelector('[data-wb-component]')).toBeNull()
+  })
+})
