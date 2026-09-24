@@ -1,22 +1,22 @@
 /**
- * **이 슬라이스의 급소** — `docker compose` 가 여는 호스트 포트와 접속 문자열 안에 박힌
- * 포트가 어긋나면 **서버가 남의 컨테이너에 붙는다**(2026-08-19 D2).
+ * **이 파일이 지키는 급소** — `docker compose` 가 여는 호스트 포트와 접속 문자열 안에 박힌
+ * 포트가 어긋나면 **서버가 남의 컨테이너에 붙는다**.
  *
- * 앞 슬라이스가 프록시에서 닫은 것과 **같은 부류**다: 어긋나면 연결이 *실패*하는 게 아니라
- * **성공한다** — 그래서 조용하다(그때의 실측: B 의 에디터에서 B 의 계정이 401, A 의 계정이
- * 200 이었고 아무도 안 울었다. 귀속: 2026-08-19 보고 §2.2). 이번엔 DB 다.
+ * 에디터의 프록시 대상이 어긋날 때와 **같은 부류**다: 어긋나면 연결이 *실패*하는 게 아니라
+ * **성공한다** — 그래서 조용하다(프록시 쪽의 모양: B 의 에디터에서 B 의 계정이 401, A 의
+ * 계정이 200 이 되고 아무 에러도 안 난다). 여기서는 DB 다.
  *
- * **두 자리가 서로를 읽을 수는 없다 — 재고 확인했다.** compose 는 URL 에서 포트를 뽑을 수 없고,
- * Node 의 `--env-file` 도 `util.parseEnv` 도 `${...}` 를 펴지 않으므로(이 판이 쟀다:
- * `DATABASE_URL=…:${POSTGRES_PORT}/db` 가 **문자 그대로** 들어온다) `DATABASE_URL` 안에서
- * `POSTGRES_PORT` 를 참조할 수도 없다. 그래서 D2 의 두 번째 길을 간다: **어긋남을 자가 잡는다.**
- * (한 자리를 *없애는* 길은 따로 있고 이 슬라이스가 안 골랐다 — `src/db/port-agreement.ts` 머리말.)
+ * **두 자리가 서로를 읽을 수는 없다.** compose 는 URL 에서 포트를 뽑을 수 없고,
+ * Node 의 `--env-file` 도 `util.parseEnv` 도 `${...}` 를 펴지 않으므로
+ * (`DATABASE_URL=…:${POSTGRES_PORT}/db` 가 **문자 그대로** 들어온다) `DATABASE_URL` 안에서
+ * `POSTGRES_PORT` 를 참조할 수도 없다. 그래서 **어긋남을 자가 잡는다.**
+ * (한 자리를 *없애는* 길은 따로 있고 여기서는 안 골랐다 — `src/db/port-agreement.ts` 머리말.)
  *
  * 재는 축이 셋이다.
  * 1. **규칙** — `portAgreementError` 자체
  * 2. **배선** — `loadConfig` 와 `resolveTestDatabaseUrlFrom` 이 그 규칙을 **실제로 지나는가**
  *    (여기서는 인구조사가 아니라 **행동으로** 잰다 — 둘 다 부를 수 있는 함수다)
- * 3. **기본값** — `docker-compose.yml` 과 `.env.example` 이 **같은 수**를 드는가(D6).
+ * 3. **기본값** — `docker-compose.yml` 과 `.env.example` 이 **같은 수**를 드는가.
  *    이 둘은 실행할 수 없어 인구조사로 잰다. **주석을 걷고 센다.**
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -54,9 +54,9 @@ describe('규칙 — POSTGRES_PORT 와 접속 문자열의 포트가 같은가',
     expect(message).toContain('DATABASE_URL → 127.0.0.1:5433/wirebound')
   })
 
-  it('**자격 문자열은 안 싣는다** — 이 문장은 터미널에 남고 붙여넣어진다 (D4)', () => {
-    // 같은 규칙을 지키는 자가 `describeDatabaseTarget` 에만 걸려 있어서 변이가 살아남은
-    // 적이 있다(귀속: 리뷰 §9 R6). 새 경로를 열 때마다 이 자를 함께 세운다.
+  it('**자격 문자열은 안 싣는다** — 이 문장은 터미널에 남고 붙여넣어진다', () => {
+    // 같은 규칙을 지키는 자가 `describeDatabaseTarget` 에만 걸려 있으면 이 경로에서 자격을
+    // 싣는 변이가 살아남는다. 새 경로를 열 때마다 이 자를 함께 세운다.
     const message = portAgreementError({
       postgresPort: '5443',
       urls: { DATABASE_URL: 'postgres://someone:s3cr3t-pw@127.0.0.1:5433/prod' },
@@ -112,7 +112,7 @@ describe('규칙 — POSTGRES_PORT 와 접속 문자열의 포트가 같은가',
 /**
  * **배선 — 규칙을 세워 두고 안 꽂으면 아무 일도 안 일어난다.**
  *
- * 앞 슬라이스가 정확히 그 자리에서 변이 넷을 살렸다(귀속: 리뷰 §9). 여기서는 두 배선을
+ * 규칙만 재고 배선을 안 재면 배선을 뽑는 변이가 전부 산다. 여기서는 두 배선을
  * **행동으로** 잰다 — `loadConfig` 도 `resolveTestDatabaseUrlFrom` 도 인자를 받는 함수라
  * 글자를 세지 않고 실제로 부를 수 있다.
  */
@@ -129,7 +129,7 @@ describe('배선 ① — 서버가 뜨기 전에 죽는가 (loadConfig)', () => 
     expect(loadConfig({ ...기본환경, DATABASE_URL: 로컬('5443'), POSTGRES_PORT: '5443' }).databaseUrl).toBe(로컬('5443'))
   })
 
-  it('POSTGRES_PORT 가 없으면 오늘과 같다 — 아무도 안 깨진다 (D6)', () => {
+  it('POSTGRES_PORT 가 없으면 재지 않고 뜬다 — 아무도 안 깨진다', () => {
     expect(loadConfig({ ...기본환경, DATABASE_URL: 로컬('5432') }).databaseUrl).toBe(로컬('5432'))
   })
 
@@ -180,13 +180,12 @@ describe('배선 ② — 스위트가 남의 판을 지우기 전에 죽는가 (
   })
 
   it('**셸이 파일을 이긴다** — 둘에 다른 값이 동시에 있을 때', () => {
-    // 리뷰어가 이 자리를 열어 뒀다(귀속: 리뷰 §7.1 R9): 순서를 뒤집어도 **전체 스위트가
-    // 종료 0** 이었다. 위 케이스 둘은 ⓐ파일에만·ⓑ셸에만 있는 경우라 **어느 쪽이 이기든
-    // 결과가 같아서** 못 갈랐다.
+    // 이 케이스가 없으면 순서를 뒤집어도 **전체 스위트가 종료 0** 이다. 위 케이스 둘은
+    // ⓐ파일에만·ⓑ셸에만 있는 경우라 **어느 쪽이 이기든 결과가 같아서** 못 가른다.
     //
     // 실제 영향: `POSTGRES_PORT=15434 pnpm test` 로 다른 컨테이너를 겨냥한 셸 값이 조용히
     // 무시되는데, 서버 쪽(`config.ts`)은 `--env-file-if-exists` 를 타서 **셸이 이긴다** —
-    // 서버와 스위트가 서로 다른 값을 authoritative 로 삼는다. 이 슬라이스가 없애려던
+    // 서버와 스위트가 서로 다른 값을 authoritative 로 삼는다. 이 파일이 막는
     // *"값이 두 자리에 있다"* 부류 그 자체다.
     expect(resolvePostgresPort({ shellEnv: { POSTGRES_PORT: '5443' }, fileEnv: { POSTGRES_PORT: '5433' } })).toBe(
       '5443',
@@ -203,10 +202,10 @@ describe('배선 ② — 스위트가 남의 판을 지우기 전에 죽는가 (
 })
 
 /**
- * **기본값이 POSTGRES_PORT 를 따라간다** — 이 슬라이스가 새로 막는 조용한 자리다.
+ * **기본값이 POSTGRES_PORT 를 따라간다** — 조용히 깨지는 자리다.
  *
- * 옛 기본값은 5433 을 박고 있었다. 자기 컨테이너를 5443 에 띄운 사람이 `TEST_DATABASE_URL`
- * 을 **안 적으면** 스위트가 5433, 즉 **남의 컨테이너**의 `wirebound_test` 를 지우며 돈다 —
+ * 기본값이 수(5433)를 박고 있으면, 자기 컨테이너를 5443 에 띄운 사람이 `TEST_DATABASE_URL`
+ * 을 **안 적었을 때** 스위트가 5433, 즉 **남의 컨테이너**의 `wirebound_test` 를 지우며 돈다 —
  * 그 판은 아무 에러도 안 낸다(그쪽에도 같은 이름의 DB 가 있으므로).
  */
 describe('안 적은 사람의 기본값', () => {
@@ -214,7 +213,7 @@ describe('안 적은 사람의 기본값', () => {
     expect(resolveTestDatabaseUrl({ fileEnv: { POSTGRES_PORT: '5443' } })).toBe(로컬('5443', 'wirebound_test'))
   })
 
-  it('아무것도 없으면 오늘과 같다 (D6)', () => {
+  it('아무것도 없으면 compose 의 기본 포트를 본다', () => {
     expect(resolveTestDatabaseUrl({})).toBe(로컬(COMPOSE_DEFAULT_POSTGRES_PORT, 'wirebound_test'))
     expect(defaultTestDatabaseUrl()).toContain(`:${COMPOSE_DEFAULT_POSTGRES_PORT}/`)
   })
@@ -233,17 +232,16 @@ describe('안 적은 사람의 기본값', () => {
  * **인구조사 — 실행할 수 없는 두 파일이 같은 수를 드는가.**
  *
  * `docker-compose.yml` 은 `docker` 없이는 실행할 수 없고 `.env.example` 은 템플릿이다.
- * 그런데 **D6 이 서 있는 자리가 정확히 이 둘의 일치**다: 아무것도 안 바꾼 사람은
- * compose 의 기본값(5433)으로 컨테이너를 띄우고 `.env.example` 의 접속 문자열로 붙는다.
- * 한쪽만 움직이면 **어제까지 되던 것이 조용히 안 된다.**
+ * 그런데 **아무것도 안 바꾼 사람이 그대로 도는 것이 정확히 이 둘의 일치에 서 있다**:
+ * 그 사람은 compose 의 기본값(5433)으로 컨테이너를 띄우고 `.env.example` 의 접속 문자열로
+ * 붙는다. 한쪽만 움직이면 **되던 것이 조용히 안 된다.**
  */
 /**
  * **자를 재는 자.** 위의 인구조사는 `stripYamlComments` 를 믿고 서 있다 — 그것이 아무것도
- * 안 걷으면 *"옳은 줄을 주석에 남기고 아래에서 뒤집는"* 우회가 통째로 지나간다(이 저장소가
- * 이미 당했다: 귀속 리뷰 델타 W4·R4e·B4).
+ * 안 걷으면 *"옳은 줄을 주석에 남기고 아래에서 뒤집는"* 우회가 통째로 지나간다.
  *
- * 이 판이 심어 확인했다: 그 함수를 무동작으로 바꿔도 **아래 인구조사가 전부 초록이었다**
- * (변이 M18). compose 파일의 주석이 한글이라 우연히 안 걸렸을 뿐이다 — 그래서 자를 세운다.
+ * 그 함수를 무동작으로 바꿔도 **아래 인구조사는 전부 초록이다** — compose 파일의 주석이
+ * 한글이라 우연히 안 걸릴 뿐이다. 그래서 자를 세운다.
  */
 describe('stripYamlComments — 인구조사가 딛고 선 자', () => {
   it('줄 전체 주석을 걷는다', () => {
@@ -263,7 +261,7 @@ describe('stripYamlComments — 인구조사가 딛고 선 자', () => {
   })
 })
 
-describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 든다 (D6)', () => {
+describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 든다', () => {
   const REPO_ROOT = new URL('../../../', import.meta.url)
   const COMPOSE = stripYamlComments(readFileSync(new URL('docker-compose.yml', REPO_ROOT), 'utf8'))
   const EXAMPLE = readFileSync(new URL('../.env.example', import.meta.url), 'utf8')
@@ -271,7 +269,7 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
   const CLAUDE = readFileSync(new URL('CLAUDE.md', REPO_ROOT), 'utf8')
 
   it('자가 진짜 파일을 읽는다 — 빈 문자열이면 아래가 통째로 헛돈다', () => {
-    // `shell-css.test.ts` 가 빈 문자열로 초록이 됐던 사고와 같은 부류를 막는 카나리아다.
+    // 읽은 원문이 빈 문자열이면 아래 단언이 헛돌며 초록이 된다 — 그 부류를 막는 카나리아다.
     expect(existsSync(new URL('pnpm-workspace.yaml', REPO_ROOT))).toBe(true)
     expect(COMPOSE).toContain('services:')
     expect(COMPOSE.length).toBeGreaterThan(200)
@@ -281,7 +279,7 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
   })
 
   it('**컨테이너 이름을 고정하지 않는다** — 고정하면 워크트리 둘째가 안 뜬다', () => {
-    // 이 한 줄이 이 슬라이스의 시작이다. 주석으로 남긴 설명은 위에서 걷었다.
+    // compose 의 주석은 위(`COMPOSE`)에서 걷고 읽으므로 설명에 적힌 이름은 안 센다.
     expect(COMPOSE).not.toContain('container_name')
   })
 
@@ -296,7 +294,7 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
     expect(기본값).toBe(COMPOSE_DEFAULT_POSTGRES_PORT)
   })
 
-  it('`.env.example` 의 POSTGRES_PORT 도 그 수다 — 복사만 한 사람이 오늘처럼 돈다', () => {
+  it('`.env.example` 의 POSTGRES_PORT 도 그 수다 — 복사만 한 사람이 기본값대로 돈다', () => {
     expect(EXAMPLE).toMatch(new RegExp(`^POSTGRES_PORT=${COMPOSE_DEFAULT_POSTGRES_PORT}$`, 'm'))
   })
 
@@ -311,13 +309,12 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
   })
 
   it('**문서가 든 명령과 수도 같은 것을 든다** — 소유자만 안 재는 비대칭을 없앤다', () => {
-    // 리뷰어가 이 자리를 열어 뒀다(귀속: 리뷰 §7.2 R5·R6): README §2 의 `up` 명령에서
-    // `--env-file` 을 지워도, 거기 적힌 기본 포트를 5432 로 바꿔도 **게이트 넷이 초록**이었다.
-    // `.env.example` 은 인구조사가 글자까지 지키는데 **README 는 아무도 안 지켰다** —
-    // D5 가 *"README 가 소유하고 CLAUDE.md 가 가리킨다"* 로 정한 그 소유자다.
+    // 이 케이스가 없으면 `README.md` 「세우기 — 다섯 걸음」 절의 `up` 명령에서 `--env-file` 을
+    // 지워도, 거기 적힌 기본 포트를 5432 로 바꿔도 **게이트가 전부 초록**이다. `.env.example` 은
+    // 인구조사가 글자까지 지키는데 README 는 그 절차의 **소유자**다 — *"README 가 소유하고
+    // CLAUDE.md 가 가리킨다"*.
     //
-    // **재는 것은 산문이 아니라 명령과 수 둘뿐이다**(리뷰어의 권고 폭 그대로다. 산문까지
-    // 못박으면 문장을 못 고치게 된다).
+    // **재는 것은 산문이 아니라 명령과 수 둘뿐이다**(산문까지 못박으면 문장을 못 고치게 된다).
     for (const [이름, 원문] of [
       ['README.md', README],
       ['CLAUDE.md', CLAUDE],
@@ -334,14 +331,14 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
   })
 
   it('README 가 든 기본 포트가 `COMPOSE_DEFAULT_POSTGRES_PORT` 와 같다', () => {
-    // 문서의 수가 낡으면 따라 하는 사람이 막힌다. compose·`.env.example`·코드 셋은 이미
-    // 위에서 묶였고 **README 만 떨어져 있었다.**
+    // 문서의 수가 낡으면 따라 하는 사람이 막힌다. compose·`.env.example`·코드 셋은
+    // 위에서 묶이고 **README 는 이 케이스가 묶는다.**
     expect(README).toContain(`기본값은 ${COMPOSE_DEFAULT_POSTGRES_PORT}`)
   })
 
   it('초기화 스크립트가 만드는 DB 를 기본 테스트 URL 이 가리킨다 — 손으로 만드는 걸음을 없앤 근거다', () => {
     // 볼륨을 처음 만들 때만 도는 스크립트다. 워크트리마다 볼륨이 새로 생기면 **매번 돈다**
-    // (이 판이 쟀다: 새 볼륨의 psql `\l` 에 `wirebound_test` 가 있다).
+    // (다시 재는 법: 새 볼륨의 psql `\l` 에 `wirebound_test` 가 있다).
     const initSql = readFileSync(new URL('docker/postgres-init/01-test-db.sql', REPO_ROOT), 'utf8')
     const 만드는이름 = initSql.match(/CREATE DATABASE (\w+);/)?.[1]
     expect(만드는이름).toBeDefined()

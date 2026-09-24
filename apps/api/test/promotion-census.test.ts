@@ -1,14 +1,12 @@
 /**
- * **승격을 지키는 자**(P9-3 리뷰 N2).
+ * **승격을 지키는 자.**
  *
- * P9-3이 순수한데 `apps/api`에 살던 것 둘을 순수 패키지로 올렸다 — §8.1의 타겟 조립
- * (`packages/schema/src/page-target.ts`)과 스냅샷 payload 규격
- * (`packages/themes/src/snapshot/payload.ts`). 계획서가 그것을 *"이 슬라이스의 진짜
- * 무게"*라고 적었다.
+ * 순수한 것 둘이 `apps/api`가 아니라 순수 패키지에 산다 — 설계서 「상호작용」의 「모델」이
+ * 정한 타겟 조립(`packages/schema/src/page-target.ts`)과 스냅샷 payload 규격
+ * (`packages/themes/src/snapshot/payload.ts`).
  *
- * **그런데 오늘 그 무게를 지키는 장치가 0이었다.** 리뷰어가 근거를 값으로 냈다: 누가 내일
- * `apps/api/src/services/`에 `pageTarget`을 다시 짜고 `export-bundle.ts`가 그것을 부르게
- * 해도 **아무것도 안 죽는다.**
+ * **이 자가 없으면 그 자리를 지키는 장치가 없다.** 누가 `apps/api/src/services/`에
+ * `pageTarget`을 다시 짜고 `export-bundle.ts`가 그것을 부르게 해도 **아무것도 안 죽는다.**
  *
  * | 왜 아무도 못 잡나 | 근거 |
  * |---|---|
@@ -22,7 +20,7 @@
  * 같은 이유로 존재한다).
  *
  * **훑는 도구를 새로 만들지 않는다** — `source-census.ts`의 `sourceFiles`·`stripComments`를
- * 쓴다. 훑는 방식이 두 벌이면 한쪽만 넓어진다(그 파일 머리말이 그 사고를 적어 뒀다).
+ * 쓴다. 훑는 방식이 두 벌이면 한쪽만 넓어진다(그 파일 머리말).
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -38,11 +36,10 @@ function strippedSources(): [string, string][] {
 }
 
 /**
- * §8.1의 접두. **`packages/schema`의 `PAGE_TARGET_PREFIX`가 유일한 자리다.**
+ * 설계서 「모델」(상호작용)의 접두. **`packages/schema`의 `PAGE_TARGET_PREFIX`가 유일한 자리다.**
  *
- * 승격 전에는 이 리터럴이 세 자리에 있었다(`services/page-target.ts`의 상수 +
- * `interaction/describe.ts`가 **한 줄에 두 번** 인라인). 그것이 P9-1 이월 §2가 경고한
- * 상태이고, 여기 다시 나타나면 그 상태로 돌아간 것이다.
+ * 이 리터럴이 상수 하나와 인라인 여럿으로 흩어지면 한 자리만 고쳐져 조용히 갈라진다.
+ * 여기 다시 나타나면 그 상태다.
  */
 const PAGE_TARGET_LITERAL = /['"`]page:/
 
@@ -51,9 +48,8 @@ const PAGE_TARGET_LITERAL = /['"`]page:/
  *
  * **이름 뒤에 오는 글자로 선언과 import를 가른다.** 선언은 `= ` · `{` · `:` · `extends`가
  * 따라오고 import 절의 항목은 `,`나 ` }`가 따라온다 — 그것을 안 보면
- * `import { type SnapshotPayload } from '@wirebound/themes'`가 걸린다(**첫 판이 실제로
- * 그렇게 걸렸다** — `services/restore.ts`와 `services/snapshot-capture.ts` 둘이 잡혔고,
- * 그 둘은 올린 것을 **쓰는** 정상 코드다).
+ * `import { type SnapshotPayload } from '@wirebound/themes'`가 걸린다 — 그러면 올린 것을
+ * **쓰는** 정상 코드(`services/restore.ts`·`services/snapshot-capture.ts`)가 잡힌다.
  *
  * **이름을 열거하는 것이 판정이다.** `apps/api`에는 그 자신의 스냅샷 개념이 따로 있고
  * (`SnapshotSummary`·`SnapshotDetail`·`SnapshotsTable`·`SnapshotParams`·`SnapshotBody`)
@@ -63,9 +59,9 @@ const PAGE_TARGET_LITERAL = /['"`]page:/
 const PAYLOAD_DECLARATION =
   /\b(?:interface|type|const)\s+Snapshot(?:Payload|MenuNode|Page|Layout|LayoutTheme|Comment)\w*\s*(?:[={:<]|extends\b)/
 
-describe('승격이 두 벌로 갈리지 않는다 (P9-3)', () => {
+describe('승격이 두 벌로 갈리지 않는다', () => {
   it('훑을 소스를 실제로 읽는다', () => {
-    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다** — 이 저장소가 여러 번 겪은 사고다.
+    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**.
     const files = strippedSources()
     expect(files.length).toBeGreaterThan(20)
     expect(files.map(([relative]) => relative)).toContain('services/export-bundle.ts')
@@ -74,7 +70,7 @@ describe('승격이 두 벌로 갈리지 않는다 (P9-3)', () => {
   })
 
   /**
-   * **`apps/api`는 이제 그 문자열을 몰라도 된다.** 타겟을 만드는 것도 벗기는 것도
+   * **`apps/api`는 그 문자열을 몰라도 된다.** 타겟을 만드는 것도 벗기는 것도
    * `@wirebound/schema`가 한다 — `export-bundle.ts`는 `targetedPages`가 낸 값을 받을 뿐이다.
    */
   it('`page:` 접두를 다시 적은 자리가 없다', () => {
@@ -126,7 +122,7 @@ describe('승격이 두 벌로 갈리지 않는다 (P9-3)', () => {
     for (const line of [
       "import type { SnapshotPayload } from '@wirebound/themes'",
       "import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from '@wirebound/themes'",
-      // 여러 줄 import 절의 한 항목. **첫 판이 여기서 걸렸다.**
+      // 여러 줄 import 절의 한 항목. **import 를 선언으로 오인하는 술어가 여기서 걸린다.**
       '  type SnapshotLayoutTheme,',
       '  type SnapshotPayload,',
       "import { targetedPages, type TargetedPage } from '@wirebound/schema'",

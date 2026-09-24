@@ -1,11 +1,11 @@
 /**
- * 코멘트 라우트(P5-1). 설계 §9의 *"우측 코멘트 탭 + 캔버스 번호 마커"*의 서버 쪽이다.
+ * 코멘트 라우트. 설계서 「설계서 화면 구조」의 *"우측 코멘트 탭 + 캔버스 번호 마커"*의 서버 쪽이다.
  *
  * **이 파일이 재는 것의 축은 둘이다.**
  *
  * 1. **표의 일**(본문·작성자·시각) — 평범한 CRUD다.
  * 2. **문서의 일**(번호) — `POST`·`DELETE`·`renumber`가 편집 파이프라인을 지나
- *    `pages.schema`의 `marker`를 바꾸고 revision을 남긴다(계획서 D2). 그 둘이 **한
+ *    `pages.schema`의 `marker`를 바꾸고 revision을 남긴다. 그 둘이 **한
  *    트랜잭션 안에서** 움직이는지까지 본다.
  */
 import { describe, expect, it } from 'vitest'
@@ -151,7 +151,7 @@ describe('GET .../comments', () => {
 
   it('남의 프로젝트 페이지 id로는 볼 수 없다 — 페이지 존재를 먼저 본다', async () => {
     // `comments`에는 `project_id`가 없다. 이 확인이 없으면 자기 프로젝트 경로에 남의
-    // 페이지 id를 실어 그 페이지의 코멘트를 그대로 받는다(설계 §10).
+    // 페이지 id를 실어 그 페이지의 코멘트를 그대로 받는다(설계서 「권한 모델」).
     await withApi(async (ctx) => {
       const mine = await setup(ctx)
       const theirs = await setup(ctx)
@@ -167,7 +167,7 @@ describe('GET .../comments', () => {
     })
   })
 
-  it('viewer도 읽는다 — 조회는 viewer, 쓰기는 editor다(§10)', async () => {
+  it('viewer도 읽는다 — 조회는 viewer, 쓰기는 editor다(설계서 「권한 모델」)', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
       await postComment(ctx, fx, fx.rootNodeId)
@@ -184,7 +184,7 @@ describe('GET .../comments', () => {
   })
 })
 
-describe('POST .../comments — 번호 부여(D2·D3)', () => {
+describe('POST .../comments — 번호 부여', () => {
   it('첫 코멘트가 노드에 1번을 만들고 문서에 남긴다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
@@ -201,7 +201,7 @@ describe('POST .../comments — 번호 부여(D2·D3)', () => {
   })
 
   it('번호 부여가 revision을 남긴다 — undo가 그것을 되돌릴 수 있다는 뜻이다', async () => {
-    // **계획서 D2의 대가 1을 실제로 재는 자리다.** 파이프라인을 안 타면 이 케이스가
+    // **`routes/comments.ts` 머리말의 «대가 1»(undo가 번호를 되돌린다)을 실제로 재는 자리다.** 파이프라인을 안 타면 이 케이스가
     // 죽는다 — 그리고 `head_seq`가 안 올라 그 뒤 편집의 `baseSeq`가 틀어진다.
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
@@ -283,7 +283,7 @@ describe('POST .../comments — 번호 부여(D2·D3)', () => {
 
   it('본문의 NUL 문자를 400으로 막는다', async () => {
     // 막지 않으면 `text` 컬럼이 삽입 시점에 죽고 그것이 **500**으로 나간다
-    // (`repos/comments.ts`의 머리말 — P5-1이 쟀다).
+    // (`repos/comments.ts`의 머리말).
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
       const res = await postComment(ctx, fx, fx.rootNodeId, `가${String.fromCharCode(0)}나`)
@@ -294,17 +294,16 @@ describe('POST .../comments — 번호 부여(D2·D3)', () => {
   })
 
   /**
-   * **경계를 숫자로 박지 않고 상수에서 만든다(P7-3 리뷰가 잡았다).**
+   * **경계를 숫자로 박지 않고 상수에서 만든다.**
    *
-   * 같은 상한을 §11.2의 봉투도 걸어야 하는데(가져오기가 이 라우트를 지나지 않는다), 앞 판은
-   * 봉투에 상수를 두고 이 라우트는 `2000`을 그대로 박아 **값이 두 자리**였다. 그런데 이
-   * 케이스도 숫자를 박고 있어 그 갈림을 **잴 수 없었다** — 봉투의 상수를 3000으로 바꿔도
-   * 이 파일이 전부 통과했다(리뷰가 재현했고 나도 다시 쟀다).
+   * 같은 상한을 설계서 「페이지 JSON」의 봉투도 걸어야 한다(가져오기가 이 라우트를 지나지 않는다).
+   * 라우트가 상수 대신 `2000`을 그대로 박으면 **값이 두 자리**가 되는데, 이 케이스까지 숫자를
+   * 박으면 그 갈림을 **잴 수 없다** — 봉투의 상수를 바꿔도 이 파일이 전부 통과한다.
    *
    * **상수에서 만들면 그 변이가 죽는다:** 라우트가 이어져 있으면 경계가 함께 움직여 통과하고,
    * 누가 다시 박아 두면 두 값이 갈리는 순간 여기가 죽는다.
    */
-  it('빈 본문과 상한+1을 막고 상한은 받는다(재라 #4)', async () => {
+  it('빈 본문과 상한+1을 막고 상한은 받는다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
@@ -330,13 +329,13 @@ describe('POST .../comments — 번호 부여(D2·D3)', () => {
         payload: { nodeId: fx.rootNodeId, body: '가', marker: 7 },
       })
 
-      // **`marker`를 본문으로 받지 않는다는 것이 요점이다**(D1) — 번호를 정하는 것은
-      // 서버이고, 사람이 고치는 경로는 §9의 재번호 버튼이다.
+      // **`marker`를 본문으로 받지 않는다는 것이 요점이다** — 번호를 정하는 것은
+      // 서버이고, 사람이 고치는 경로는 설계서 「설계서 화면 구조」의 재번호 버튼이다.
       expect(res.statusCode).toBe(400)
     })
   })
 
-  it('그 사이 남이 고쳤으면 409다 — 밀어붙이지 않는다(재라 #1)', async () => {
+  it('그 사이 남이 고쳤으면 409다 — 밀어붙이지 않는다', async () => {
     // 서버가 `head_seq`를 **잠그기 전에** 읽어 `baseSeq`로 넘기므로 낙관적 잠금이 산다.
     // 잠근 뒤에 읽으면 이 케이스가 죽는다(그때는 `baseSeq === headSeq`가 항상 참이다).
     //
@@ -362,13 +361,13 @@ describe('POST .../comments — 번호 부여(D2·D3)', () => {
 })
 
 /**
- * **멱등 키**(`0012-comment-idempotency-key` — 이월 Q·R 뒤). 웹의 쓰기 장부가 응답 없는 게시를
- * 다시 읽어 «안 달림»으로 판정한 뒤 서버가 늦게 커밋하면, 다시 단 게시가 **같은 글의 둘째 행**이
- * 됐다(Chrome — `apps/web/src/panels/write-ledger.tsx`의 머리말). 같은 초안은 같은 키를 싣고,
+ * **멱등 키**(`0012-comment-idempotency-key`). 웹의 쓰기 장부가 응답 없는 게시를
+ * 다시 읽어 «안 달림»으로 판정한 뒤 서버가 늦게 커밋하면, 키가 없을 때 다시 단 게시가 **같은 글의 둘째 행**이
+ * 된다(`apps/web/src/panels/write-ledger.tsx`의 머리말). 같은 초안은 같은 키를 싣고,
  * 서버는 같은 키면 앞 행을 돌려준다. 무엇을 왜 하는지는 `routes/comments.ts`의 `replayOf`가 갖는다.
  *
- * **각 케이스가 혼자 죽는다** — 변조를 하나씩 심고 백업에서 바이트 비교로 복원하며 쟀다(이 절 ·
- * `comments-concurrency.test.ts` · `repos-comments.test.ts` · 웹 케이스를 함께 돌렸다):
+ * **각 케이스가 혼자 죽는다** — 변조를 하나씩 심고 백업에서 바이트 비교로 복원하며 잰다(이 절 ·
+ * `comments-concurrency.test.ts` · `repos-comments.test.ts` · 웹 케이스를 함께 돌린다):
  *
  * | 변조 | 혼자 죽는 것 |
  * |---|---|
@@ -442,7 +441,7 @@ describe('POST .../comments — 멱등 키', () => {
   })
 
   it('첫 게시 뒤 그 코멘트가 고쳐졌으면 같은 키 · 처음 글도 409 — 이슈 코드로 «그 키의 게시는 이미 달렸다»를 가른다', async () => {
-    // **리뷰 R1**(2026-09-23). 웹이 되살린 키로 처음 글을 다시 보내는 사이 같은 사람이 다른 탭에서 그 코멘트를
+    // 웹이 되살린 키로 처음 글을 다시 보내는 사이 같은 사람이 다른 탭에서 그 코멘트를
     // 고치면 이 409 다. 게시의 409 는 셋이 모두 `code: 'conflict'`라(`routes/comments.ts`의 `REUSED_KEY`) 웹은
     // **이슈 코드**로만 이것을 «달림»으로 읽는다 — 문장은 가르는 값이 아니다.
     await withApi(async (ctx) => {
@@ -533,9 +532,9 @@ describe('POST .../comments — 멱등 키', () => {
   })
 
   /**
-   * **키 판정이 권한 가드 앞이다**(`routes/comments.ts`의 `replayBeforeGuard` — 좁은 반증 3차). 앞 판은 가드
-   * 뒤라 여기가 403 · 404 였고, 웹은 다시 보낸 것의 4xx 를 «안 달림»으로 확정해 초안을 열었다 — 권한을 되찾아
-   * 고쳐 달면 두 행이었다(Chrome route).
+   * **키 판정이 권한 가드 앞이다**(`routes/comments.ts`의 `replayBeforeGuard`). 가드 뒤에서 보면
+   * 여기가 403 · 404 이고, 웹은 다시 보낸 것의 4xx 를 «안 달림»으로 확정해 초안을 연다 — 권한을 되찾아
+   * 고쳐 달면 두 행이다.
    *
    * 강등과 제외를 한 케이스에 둔다 — 같은 축(가드가 재생을 가리는가)이고 «키 판정을 가드 뒤로»가 둘을 함께
    * 죽인다. 끝의 새 키 둘은 **대조**다: 재생만 가드 앞이고 새 게시는 가드가 그대로 막는다.
@@ -702,7 +701,7 @@ describe('PATCH .../comments/:commentId — 본문 수정', () => {
   })
 })
 
-describe('DELETE .../comments/:commentId — 마지막이면 번호도 간다(D3)', () => {
+describe('DELETE .../comments/:commentId — 마지막이면 번호도 간다', () => {
   it('마지막 코멘트를 지우면 문서에서 번호가 사라진다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
@@ -741,7 +740,7 @@ describe('DELETE .../comments/:commentId — 마지막이면 번호도 간다(D3
     })
   })
 
-  it('editor는 남의 코멘트도 지운다 — 수정과 갈린다(재라 #2)', async () => {
+  it('editor는 남의 코멘트도 지운다 — 수정과 갈린다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
       const created = await postComment(ctx, fx, fx.rootNodeId)
@@ -771,7 +770,7 @@ describe('DELETE .../comments/:commentId — 마지막이면 번호도 간다(D3
     })
   })
 
-  it('노드가 이미 지워졌으면 지울 번호도 없다 — 문서를 안 건드린다(재라 #6의 반대쪽)', async () => {
+  it('노드가 이미 지워졌으면 지울 번호도 없다 — 문서를 안 건드린다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
       await putThree(ctx, fx)
@@ -802,7 +801,7 @@ describe('DELETE .../comments/:commentId — 마지막이면 번호도 간다(D3
   })
 })
 
-describe('POST .../comments/renumber — 문서 순서대로(D4)', () => {
+describe('POST .../comments/renumber — 문서 순서대로', () => {
   it('번호가 있는 노드를 1부터 한 patch로 다시 매긴다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
@@ -920,10 +919,9 @@ describe('표와 문서의 경계', () => {
   })
 
   it('번호는 남의 편집을 409로 만들고 본문은 아무 신호도 안 만든다', async () => {
-    // **계획이 "번호는 실시간이고 본문은 아니다"로 적은 비대칭을 오늘 코드에서 잰 것이다.**
-    // P3의 WS는 아직 없으므로(`apps/api/src`에 WebSocket 코드가 0건이다) *"실시간"*은
-    // 오늘 관찰되지 않는다. 대신 관찰되는 것은 **`head_seq`가 오르는가**이고, 그것이
-    // 남의 다음 편집을 409로 만들어 그쪽의 복구 재조회가 번호를 데려온다.
+    // **"번호는 실시간이고 본문은 아니다"의 비대칭을 HTTP 로 잰다.** 여기서 관찰하는 것은
+    // **`head_seq`가 오르는가**이고, 그것이 남의 다음 편집을 409로 만들어 그쪽의 복구
+    // 재조회가 번호를 데려온다.
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
       const headSeq = await putThree(ctx, fx)
@@ -963,7 +961,7 @@ describe('표와 문서의 경계', () => {
     })
   })
 
-  it('번호는 있는데 코멘트 행이 없는 노드가 성립한다(재라 #6)', async () => {
+  it('번호는 있는데 코멘트 행이 없는 노드가 성립한다', async () => {
     // 도달 경로는 셋이다(undo · JSON 가져오기 · 사람이 직접 편집). 여기서는 셋째를
     // 편집 경로로 만든다. **화면은 문서를 진실로 삼아 번호를 그리고**, 코멘트 탭에는
     // 그 번호 아래 아무것도 없다 — 서버는 그 상태를 고쳐 주지 않는다.

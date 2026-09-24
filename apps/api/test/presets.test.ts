@@ -1,10 +1,10 @@
 /**
- * `routes/presets.ts` — 세 엔드포인트와 오류 표(P7-2 T2).
+ * `routes/presets.ts` — 세 엔드포인트와 오류 표.
  *
  * 권한 세 등급은 `permission-matrix.test.ts`가 전수로 친다(그 파일의 완전성 검사가
  * `src/routes/`를 훑어 새 라우트를 강제로 표에 올린다). 여기서 재는 것은 **내용**이다:
- * 목록이 내장과 프로젝트 것을 함께 내는가(D2), 저장이 `marker`를 버리고 id를 그대로
- * 담는가(D4·D7), 그리고 NUL이 **어디서** 막히는가(계획서 T2가 요구한 관측).
+ * 목록이 내장과 프로젝트 것을 함께 내는가, 저장이 `marker`를 버리고 id를 그대로
+ * 담는가, 그리고 NUL이 **어디서** 막히는가.
  */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -43,7 +43,7 @@ async function list(ctx: TestContext, fx: Fixture) {
 }
 
 describe('GET /:projectId/presets', () => {
-  it('프로젝트 프리셋이 없어도 내장이 나온다 — 그것이 기본 상태다(D2)', async () => {
+  it('프로젝트 프리셋이 없어도 내장이 나온다 — 그것이 기본 상태다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
 
@@ -131,7 +131,7 @@ describe('POST /:projectId/presets', () => {
     })
   })
 
-  it('marker를 버린다 — 트리 어디에 있든(D4)', async () => {
+  it('marker를 버린다 — 트리 어디에 있든', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
 
@@ -152,7 +152,7 @@ describe('POST /:projectId/presets', () => {
     })
   })
 
-  it('id는 저장 시점 그대로 담는다 — 재발급은 적용이 한다(D7)', async () => {
+  it('id는 저장 시점 그대로 담는다 — 재발급은 적용이 한다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
 
@@ -162,7 +162,7 @@ describe('POST /:projectId/presets', () => {
     })
   })
 
-  it('빈 페이지도 프리셋이 된다 — 그것이 "치우기"다(D7)', async () => {
+  it('빈 페이지도 프리셋이 된다 — 그것이 "치우기"다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
 
@@ -173,7 +173,7 @@ describe('POST /:projectId/presets', () => {
     })
   })
 
-  it('같은 이름 둘을 막지 않는다 — 태그와 다르다(D2)', async () => {
+  it('같은 이름 둘을 막지 않는다 — 태그와 다르다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
 
@@ -189,7 +189,7 @@ describe('POST /:projectId/presets', () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
 
-      // §4.3의 *"노드는 스타일을 갖지 않는다"*를 `WbNodeSchema`가 strictObject로 지킨다.
+      // 설계서 「페이지 스키마 노드」의 *"노드는 스타일을 갖지 않는다"*를 `WbNodeSchema`가 strictObject로 지킨다.
       const res = await post(ctx, fx, { name: '스타일', schema: [{ id: 'a', type: 'List', style: 'red' }] })
 
       expect(res.statusCode).toBe(400)
@@ -240,10 +240,10 @@ describe('POST /:projectId/presets', () => {
   })
 
   /**
-   * **NUL이 어디서 막히는지 재는 자리다**(계획서 T2). 세 자리 전부에서 400이고, 그것은
+   * **NUL이 어디서 막히는지 재는 자리다.** 세 자리 전부에서 400이고, 그것은
    * 라우트의 `containsNulByte`가 잡기 때문이다 — 그 검사를 지우면 repo의
    * `PresetNulByteError`가 잡아 역시 400이 되고, **둘 다 지우면 `schema::jsonb` 캐스팅이
-   * `22P05`로 죽어 500**이 된다(T5의 변이 검사에 그 관측이 있다).
+   * `22P05`로 죽어 500**이 된다(다시 재는 법: 그 검사를 지우고 이 케이스를 돌린다).
    */
   it('이름·설명·노드 어디에 NUL이 있어도 400이다', async () => {
     await withApi(async (ctx) => {
@@ -353,21 +353,21 @@ describe('프로젝트가 사라지면 프리셋도 간다', () => {
 })
 
 /**
- * **`marker`를 버리는 자리가 하나인 것을 실행으로 지킨다**(P7-2 리뷰 (4) · 델타 리뷰 N4).
+ * **`marker`를 버리는 자리가 하나인 것을 실행으로 지킨다.**
  *
  * # 세는 단위
  *
  * > **`presets` 테이블에 행을 넣는 자리 하나당 하나.**
  *
- * **앞 판은 `insertPreset(` 호출만 셌고 그것은 단위보다 좁았다** — repo 함수를 지나지 않고
- * `insertInto('presets')`로 직접 쓰는 자리를 못 봤다(재현했다: 그런 파일을 하나 만들어
- * 두어도 케이스가 초록이었다). 지금은 **두 형태를 모두 센다.**
+ * **`insertPreset(` 호출만 세면 단위보다 좁다** — repo 함수를 지나지 않고
+ * `insertInto('presets')`로 직접 쓰는 자리를 조용히 못 본다(그런 파일을 하나 만들어
+ * 두어도 케이스가 초록이 된다). 그래서 **두 형태를 모두 센다.**
  *
  * # 분모 밖에 남는 것 — 이름으로 찾을 수 없는 쓰기
  *
  * - **원시 SQL**(`` sql`insert into presets …` ``)과 **동적 테이블 이름**. 문자열을 조립하면
  *   어떤 grep도 못 잡는다.
- * - **DB 안의 쓰기** — 트리거·기본값·다른 테이블의 CASCADE. 오늘 `presets`에는 없다.
+ * - **DB 안의 쓰기** — 트리거·기본값·다른 테이블의 CASCADE. 지금 `presets`에는 없다.
  *
  * 즉 이 케이스가 지키는 것은 *"코드에서 이름으로 드러나는 쓰기"*까지다. 그 밖의 경로를
  * 만드는 사람에게까지 신호를 주지는 못한다.
@@ -375,17 +375,18 @@ describe('프로젝트가 사라지면 프리셋도 간다', () => {
  * # 왜 NUL처럼 repo에 겹으로 두지 않는가
  *
  * **NUL이 겹인 이유는 저장 제약이기 때문이다.** 그 검사가 없으면 Postgres가 `22P05`로
- * 죽어 **500**이 된다(T5에서 세 판을 돌려 쟀다: 400 · 400 · 500). repo의 검사는 그
+ * 죽어 **500**이 된다(세 판: 둘 다 있음 400 · 라우트 검사만 지움 400 · 둘 다 지움 500 — 위
+ * *"이름·설명·노드 어디에 NUL이 있어도 400이다"*로 다시 잰다). repo의 검사는 그
  * 500을 400으로 바꾸는 마지막 방벽이고, `db/nul-guard.ts`가 `db/`에 사는 것도 그것이
  * 순전히 Postgres의 제약이기 때문이다.
  *
  * **`marker`에는 그런 바닥이 없다.** 그것은 저장 제약이 아니라 **도메인 규칙**이고
- * (D4 — 고아 marker를 만들지 않는다), 담겨도 DB는 아무 말도 하지 않는다. 그래서
+ * (고아 marker를 만들지 않는다), 담겨도 DB는 아무 말도 하지 않는다. 그래서
  * `repos/presets.ts`는 *"값의 뜻을 모르고 컬럼으로만 다룬다"*를 지키고, 규칙은 라우트
- * 하나가 갖는다 — README의 계층 규칙이 그은 선이다.
+ * 하나가 갖는다 — `apps/api/README.md` 「계층 규칙」 절이 그은 선이다.
  *
  * **대신 그 "하나"가 진짜 하나인지를 이 케이스가 센다.** 겹으로 두는 대신 **자리가 늘면
- * 죽는 것**을 골랐다: P9의 MCP·CLI가 두 번째 쓰기 경로를 만들면 여기가 먼저 죽고, 그때
+ * 죽는 것**을 골랐다: MCP·CLI 같은 쪽에 두 번째 쓰기 경로가 생기면 여기가 먼저 죽고, 그때
  * 사람이 *"`stripMarkers`를 어디에 둘 것인가"*를 다시 판정하게 된다.
  */
 const SRC_DIR = fileURLToPath(new URL('../src', import.meta.url))
@@ -409,7 +410,7 @@ function sourceFiles(): string[] {
 
 describe('marker 규칙의 자리가 하나다', () => {
   it('훑을 소스를 실제로 읽는다', () => {
-    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**(이 저장소가 여러 번 겪은 사고다).
+    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**.
     expect(sourceFiles().length).toBeGreaterThan(20)
   })
 

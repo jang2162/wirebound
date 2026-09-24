@@ -3,15 +3,15 @@
  *
  * ---
  *
- * # 왜 이 파일이 생겼나 — D3이 만든 빚을 갚는 자리
+ * # 왜 이 파일이 있나 — 브로드캐스트를 파이프라인 밖에 둔 대가
  *
- * P3-1 D3은 브로드캐스트를 **파이프라인 밖**에 두기로 했다. `services/`가 SQL도 HTTP도
+ * 브로드캐스트는 **파이프라인 밖**에 있다. `services/`가 SQL도 HTTP도
  * 모른다는 계약(`services/edit-pipeline.ts`)을 지키려면 `applyEdit` 안에서 알릴 수 없다.
  * 그러면 **호출자가 성공 결과를 받아 알리고, 호출자가 빠뜨릴 수 있다.** 그것이 이 결정의
  * 대가다.
  *
- * **P6-2가 `restore-lock-census.test.ts`로 같은 것을 했다.** 그쪽 머리말이 이 부류를
- * 적어 두었다: *"분모를 손으로 적으면 빠진 항목이 결과를 바꿔도 아무도 모른다."* 그래서
+ * **`restore-lock-census.test.ts`가 같은 자세다.** 그쪽 머리말이 이 부류를
+ * 적어 둔다: *"분모를 손으로 적으면 빠진 항목이 결과를 바꿔도 아무도 모른다."* 그래서
  * 여기도 **분모를 소스에서 만든다.**
  *
  * ---
@@ -22,9 +22,9 @@
  * > 하나당 한 줄이다.** 선언(`services/edit-pipeline.ts`의 `function applyEdit(`)은 호출이
  * > 아니므로 세지 않는다.
  *
- * **`src/` 전체를 재귀로 훑는 것이 리뷰가 뚫은 자리다.** 앞 판은 `routes`·`services` 둘만
- * 비재귀로 봤고, 그래서 **`src/ws/`의 호출자를 못 봤다** — P3-2의 patch 핸들러가 갈 자리가
- * 정확히 거기다. `훑는 범위가 src 전체다`가 그 범위를 실행으로 지킨다.
+ * **`src/` 전체를 재귀로 훑는다.** `routes`·`services` 둘만 비재귀로 보면
+ * **`src/ws/`의 호출자를 조용히 못 본다** — WS의 patch 핸들러가 정확히 거기 있다.
+ * `훑는 범위가 src 전체다`가 그 범위를 실행으로 지킨다.
  *
  * **왜 라우트가 아니라 호출 자리인가.** 알릴 것은 *"페이지 문서가 바뀌었다"*이고, 그것을
  * 만드는 것은 라우트가 아니라 `applyEdit`의 성공이다. 한 라우트가 그 함수를 두 번 부를 수
@@ -81,9 +81,9 @@ function track(probe: WsProbe): WsProbe {
  * 소스에 있는 `applyEdit` **호출** 자리를 파일별로 센다.
  *
  * **훑는 것은 `./source-census.ts`다** — `lock-census.test.ts`가 같은 분모를 쓰므로, 훑는
- * 방식을 두 벌로 두면 한쪽만 넓어진다. 앞 판이 `routes`·`services`만 비재귀로 훑어
- * `src/ws/`의 호출자를 못 봤고(리뷰가 **0 사망**으로 실증했다), 그 고침이 이 파일에만
- * 있으면 다음 census가 좁은 채로 태어난다.
+ * 방식을 두 벌로 두면 한쪽만 넓어진다. `routes`·`services`만 비재귀로 훑으면
+ * `src/ws/`의 호출자를 조용히 못 보고, 넓힌 범위가 이 파일에만 있으면 다음 census가
+ * 좁은 채로 태어난다.
  */
 function editCallSitesByFile(): Map<string, number> {
   return callSitesByFile('applyEdit')
@@ -200,8 +200,8 @@ const CALL_SITES: CallSite[] = [
     broadcasts: true,
     why: '§7.1의 본줄기가 WS로 들어오는 자리다(P3-2 D5). **REST와 같은 `applyEdit`·같은 `notifyPageChanged`를 부른다** — 다른 것은 발신자를 헤더가 아니라 **연결 자체**로 아는 것뿐이다(이월 §2.1)',
     drive: async (ctx, fx) => {
-      // **인구조사가 예고한 자리다.** 앞 판이 `routes`·`services`만 훑어 `src/ws/`의
-      // 호출자를 못 봤고, 리뷰가 그것을 실증하며 범위를 `src/` 전체로 넓혔다.
+      // **좁게 훑으면 놓치는 자리다.** `routes`·`services`만 훑으면 `src/ws/`의
+      // 호출자를 못 본다 — 그래서 범위가 `src/` 전체다.
       const author = track(await joinRoom(ctx.port, fx.projectId, fx.owner.cookie.wb_session))
       const row = await db.selectFrom('pages').select('head_seq').where('id', '=', fx.pageId).executeTakeFirstOrThrow()
       author.send(
@@ -258,14 +258,14 @@ const CALL_SITES: CallSite[] = [
 
 describe('분모를 소스에서 만든다', () => {
   it('훑을 소스를 실제로 읽는다', () => {
-    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**(이 저장소가 겪은 사고다).
+    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**.
     expect(sourceFiles().length).toBeGreaterThan(10)
     expect([...editCallSitesByFile().values()].reduce((sum, count) => sum + count, 0)).toBeGreaterThan(5)
   })
 
   /**
-   * **훑는 범위가 `src/` 전체다.** 앞 판이 `routes`·`services` 둘을 비재귀로 봤고, 리뷰가
-   * `src/ws/`에 호출을 심어 **0 사망**을 실증했다. 이 케이스는 *"거기까지 본다"*를
+   * **훑는 범위가 `src/` 전체다.** `routes`·`services` 둘을 비재귀로 보면 `src/ws/`에
+   * 호출을 심어도 아무것도 안 죽는다. 이 케이스는 *"거기까지 본다"*를
    * 디렉터리 이름이 아니라 **훑은 결과**로 확인한다 — `src/`의 모든 디렉터리가 결과에
    * 나타나야 한다.
    */
@@ -282,7 +282,7 @@ describe('분모를 소스에서 만든다', () => {
     )
 
     expect([...declared].filter((name) => !scanned.has(name))).toEqual([])
-    // **`ws`를 이름으로 못박는다** — 리뷰가 뚫은 자리이고, P3-2의 patch 핸들러가 거기 선다.
+    // **`ws`를 이름으로 못박는다** — 좁게 훑으면 놓치는 자리이고, WS의 patch 핸들러가 거기 선다.
     expect(scanned.has('ws')).toBe(true)
   })
 

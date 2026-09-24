@@ -1,13 +1,13 @@
 /**
- * **severity가 §7.1 게이트에서 실제로 갈리는가 (P4a-3 Task 1).**
+ * **severity가 설계서 「정방향 흐름」의 게이트에서 실제로 갈리는가.**
  *
- * P4a-2가 남긴 이월의 도달 경로를 그대로 재현한다: `edit-pipeline` 6단계가
- * `validatePage(after)`로 **문서 전체**를 검증하므로, 경고 하나(`ignored-variant`)가
- * 문서 어딘가에 있으면 **그 노드와 무관한 편집까지** 거부됐다.
+ * `edit-pipeline` 6단계가 `validatePage(after)`로 **문서 전체**를 검증하므로, 경고를
+ * `error`처럼 막으면 경고 하나(`ignored-variant`)가 문서 어딘가에 있을 때 **그 노드와
+ * 무관한 편집까지** 거부된다. 그 도달 경로를 그대로 재현한다.
  *
  * 이 파일이 고정하는 것 넷:
- * 1. 경고만 있는 문서는 `PUT .../schema`를 통과한다(전에는 422였다).
- * 2. 그 문서 위의 **무관한** 편집이 `PATCH .../ops`를 통과한다 — 이월이 지목한 그 경로다.
+ * 1. 경고만 있는 문서는 `PUT .../schema`를 통과한다(422가 아니다).
+ * 2. 그 문서 위의 **무관한** 편집이 `PATCH .../ops`를 통과한다 — 위 도달 경로 그 자체다.
  * 3. 통과한 응답이 경고를 **싣는다**(삼키면 severity를 만든 이유가 사라진다).
  * 4. `error`는 여전히 422이고, 그 응답의 `issues`에 **경고까지 함께** 실린다.
  */
@@ -33,8 +33,8 @@ async function createProjectWithPage(ctx: TestContext, owner: SignedUpUser) {
 /**
  * 경고 하나(`ignored-variant`)와 **그것과 무관한 노드 하나**를 담은 문서.
  *
- * `Text`는 `variantFrom: 'role'`이라 `node.variant`가 버려진다 — 그것이 오늘 유일한
- * 경고다(`ISSUE_SEVERITY`). 둘째 자식(`n_other`)이 편집 대상이고 첫째와 아무 관계가 없다.
+ * `Text`는 `variantFrom: 'role'`이라 `node.variant`가 버려진다 — 그것이 `warning`인
+ * `ignored-variant`다(`ISSUE_SEVERITY`). 둘째 자식(`n_other`)이 편집 대상이고 첫째와 아무 관계가 없다.
  */
 function docWithWarning(content = '처음') {
   return {
@@ -59,7 +59,7 @@ function putSchema(ctx: TestContext, projectId: string, pageId: string, cookie: 
   })
 }
 
-describe('경고는 편집을 막지 않는다 (P4a-2 이월)', () => {
+describe('경고는 편집을 막지 않는다', () => {
   it('PUT .../schema — 경고만 있는 문서는 200이고 저장된다', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
@@ -94,8 +94,8 @@ describe('경고는 편집을 막지 않는다 (P4a-2 이월)', () => {
   })
 
   /**
-   * **이월이 지목한 바로 그 경로다.** 경고를 문서에 심어 두고, 그것과 아무 관계 없는
-   * 노드의 `content`만 바꾼다. 전에는 6단계가 문서 전체를 보고 이 편집을 422로 거부했다.
+   * **머리말의 도달 경로 그 자체다.** 경고를 문서에 심어 두고, 그것과 아무 관계 없는
+   * 노드의 `content`만 바꾼다. 경고를 막으면 6단계가 문서 전체를 보고 이 편집을 422로 거부한다.
    */
   it('PATCH .../ops — 경고와 무관한 편집이 통과한다', async () => {
     await withApi(async (ctx) => {
@@ -215,18 +215,18 @@ describe('경고는 편집을 막지 않는다 (P4a-2 이월)', () => {
 })
 
 /**
- * **상호작용 이슈가 `warning`인 것이 여기서 값을 갖는다 (P5-2 재라 #2).**
+ * **상호작용 이슈가 `warning`인 것이 여기서 값을 갖는다.**
  *
  * 상호작용의 `target`은 **다른 노드를 가리키는 참조**라 그 노드가 사라지는 순간 이슈가
- * 된다(계획 D2 — *"노드를 지우면 그것을 가리키는 상호작용은 다른 노드에 그대로 남고
- * 타겟만 끊긴다"*). 그것을 `error`로 두면 **노드를 지우는 편집 자체가 422가 되어 사용자가
+ * 된다 — 노드를 지우면 그것을 가리키는 상호작용은 다른 노드에 그대로 남고 타겟만
+ * 끊긴다. 그것을 `error`로 두면 **노드를 지우는 편집 자체가 422가 되어 사용자가
  * 자기 문서를 못 고친다** — 위 `docWithWarning`이 잰 것과 같은 부류이고, 이쪽은 경고를
  * **편집이 만들어 낸다**는 점이 다르다.
  *
  * **이 파일이 그 인과를 재는 자리다.** `packages/schema`의 케이스는 `partitionIssues`의
  * 결과를 보지만, 실제로 편집을 거부하는 것은 `edit-pipeline`의 6단계다.
  */
-describe('상호작용 타겟이 끊겨도 편집을 막지 않는다 (P5-2)', () => {
+describe('상호작용 타겟이 끊겨도 편집을 막지 않는다', () => {
   /** `n_button`이 `n_list`를 가리킨다. 둘째 자식을 지우면 그 참조가 끊긴다. */
   function docWithInteraction() {
     return {

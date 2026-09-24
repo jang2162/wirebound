@@ -3,10 +3,10 @@
  *
  * ---
  *
- * # 멤버십이 바뀌면 그 사람의 켜 둔 화면에 알린다 (이월 5차 — `ws/notify.ts`의 `notifyMembershipChanged`)
+ * # 멤버십이 바뀌면 그 사람의 켜 둔 화면에 알린다 (`ws/notify.ts`의 `notifyMembershipChanged`)
  *
- * 앞 판은 역할 변경 · 제거를 룸에 아무도 몰랐다 — 화면은 새로고침 전까지 옛 역할로 섰고, 강등된 연결의 잠금은 그 연결이
- * 보내는 `unlock`이 editor 문턱에 걸려 TTL 까지 남았고, 제거된 연결은 다음 프레임까지 열려 있었다.
+ * 알리지 않으면 역할 변경 · 제거를 룸에 아무도 모른다 — 화면은 새로고침 전까지 옛 역할로 서고, 강등된 연결의 잠금은 그 연결이
+ * 보내는 `unlock`이 editor 문턱에 걸려 TTL 까지 남고, 제거된 연결은 다음 프레임까지 열려 있다.
  *
  * # 하나짜리로 재지 않는다
  *
@@ -121,7 +121,7 @@ describe('membership-changed — 누구에게 가나', () => {
       expect(await setRole(ctx, fx, fx.owner.user.id, 'editor')).toBe(409)
 
       // **창 전체를 본다** — `quiet()`는 부른 **뒤에** 온 것만 돌려주는데, 거절 **앞에** 알렸으면 프레임은 이미 와 있다
-      // (그렇게 적었다가 «알림을 변경 앞으로» 변조가 살았다).
+      // (부른 뒤만 보면 «알림을 변경 앞으로» 변조가 산다).
       await ownerTab.quiet()
       expect(ownerTab.received.filter((frame) => frame.type === 'membership-changed')).toEqual([])
       // 대조: 같은 요청이 통과하면(둘째 owner 가 있으면) 받는다.
@@ -147,7 +147,7 @@ describe('바뀌는 순간의 잠금과 연결', () => {
       await targetTab.waitFor('membership-changed')
       expect((await ownerTab.quiet()).filter((frame) => frame.type === 'locks')).toEqual([])
 
-      // viewer 로 내리면 놓는다 — 앞 판은 그 연결의 `unlock`이 editor 문턱에 걸려 TTL(30초)까지 남았다.
+      // viewer 로 내리면 놓는다 — 안 놓으면 그 연결의 `unlock`이 editor 문턱에 걸려 TTL(30초)까지 남는다.
       expect(await setRole(ctx, fx, fx.target.user.id, 'viewer')).toBe(200)
       expect(await locksEmpty(ownerTab)).toEqual([])
       expect(targetTab.closeInfo).toBeNull()
@@ -156,10 +156,10 @@ describe('바뀌는 순간의 잠금과 연결', () => {
 
   /**
    * 제거는 **알리고 잠금을 놓되 알림 자리에서 닫지 않는다** — 닫으면 잠금에 줄 선 WS `patch`의 404 답이 갈 길을 잃는다
-   * (`guard-in-lock.test.ts`의 «멤버에서 빠지면 404»가 그것을 잰다 — 첫 판이 닫았다가 그 케이스가 죽었다). 닫는 것은 앞 판의
-   * 회수다 — 잠금을 쥐었던 이 판에서는 **놓는 `locks` 방송이** 그 연결에 닿기 전에 자격을 보고 4403 으로 닫는다.
+   * (`guard-in-lock.test.ts`의 «멤버에서 빠지면 404»가 그것을 잰다 — 알림 자리에서 닫으면 그 케이스가 죽는다). 닫는 것은 방송
+   * 때의 회수(확인 지점 2)다 — 잠금을 쥐었던 이 판에서는 **놓는 `locks` 방송이** 그 연결에 닿기 전에 자격을 보고 4403 으로 닫는다.
    */
-  it('제거는 알리고 그 사람의 잠금을 놓는다 — 연결은 앞 판의 회수로 닫힌다', async () => {
+  it('제거는 알리고 그 사람의 잠금을 놓는다 — 연결은 방송 때의 회수로 닫힌다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const targetTab = track(await joinRoom(ctx.port, fx.project.id, fx.target.cookie.wb_session))
@@ -171,9 +171,9 @@ describe('바뀌는 순간의 잠금과 연결', () => {
       expect(await remove(ctx, fx, fx.target.user.id)).toBe(204)
 
       expect(await targetTab.waitFor('membership-changed')).toEqual({ type: 'membership-changed', projectId: fx.project.id })
-      // 잠금은 알림 자리에서 놓인다 — 앞 판은 그 연결이 다음 프레임을 보낼 때까지 남의 선택을 막았다.
+      // 잠금은 알림 자리에서 놓인다 — 거기서 안 놓으면 그 연결이 다음 프레임을 보낼 때까지 남의 선택을 막는다.
       expect(await locksEmpty(ownerTab)).toEqual([])
-      // 닫힘은 앞 판의 회수다(놓는 방송이 자격을 본다).
+      // 닫힘은 방송 때의 회수다(놓는 방송이 자격을 본다).
       expect((await targetTab.waitClosed()).code).toBe(WS_CLOSE.revoked)
       expect(ownerTab.closeInfo).toBeNull()
     })
@@ -181,12 +181,12 @@ describe('바뀌는 순간의 잠금과 연결', () => {
 })
 
 /**
- * **자격을 본 뒤 `hold` 전에 강등이 끼는 창**(이월 5차 리뷰 R5). 프레임 경로는 «자격을 본다(DB 둘 — await)» → «`hold`» 순이라, 그
+ * **자격을 본 뒤 `hold` 전에 강등이 끼는 창.** 프레임 경로는 «자격을 본다(DB 둘 — await)» → «`hold`» 순이라, 그
  * await 사이에 멤버 행이 커밋되고 `notifyMembershipChanged`가 먼저 놓으면(놓을 것이 아직 없다) 뒤이어 `hold`가 선다 — 그
  * 잠금은 **TTL 까지** 남고 viewer 가 된 주인은 놓을 수 없다(`unlock`이 editor 문턱에 걸린다).
  *
- * 창을 **문으로** 연다: 그 사람의 editor 자격 질의가 답을 낸 **뒤에** 문 앞에서 기다리게 하고(로컬 DB 는 창이 안 열린다 —
- * 리뷰가 지연 없이 496회에 0), 그 사이 강등을 커밋한다. 방송(`send`)의 자격 질의는 브로드캐스터 안의 같은 함수를 직접 부르므로
+ * 창을 **문으로** 연다: 그 사람의 editor 자격 질의가 답을 낸 **뒤에** 문 앞에서 기다리게 하고(로컬 DB 에서는 지연 없이
+ * 창이 안 열린다), 그 사이 강등을 커밋한다. 방송(`send`)의 자격 질의는 브로드캐스터 안의 같은 함수를 직접 부르므로
  * 문을 안 지난다.
  */
 describe('자격을 본 뒤 hold 전에 끼는 강등', () => {
@@ -237,12 +237,12 @@ describe('자격을 본 뒤 hold 전에 끼는 강등', () => {
 
       await ownerTab.quiet()
       expect(locks.liveIn(fx.project.id)).toEqual([])
-      // 버린 자리는 목록에 한 번도 안 선다. (앞 판은 «비어 있지 않은 목록이 하나»로 쟀다 — 목록을 보내는 순간 짓게 되면서
-      // (`ws/broadcast.ts` · 이월 5차 2회 LK) 늦게 닿은 참가 알림도 대조 판의 `n_card`를 실어 그 수가 흔들렸다.)
+      // 버린 자리는 목록에 한 번도 안 선다. («비어 있지 않은 목록이 하나»로 재면 안 된다 — 목록은 보내는 순간 지어지므로
+      // (`ws/broadcast.ts`) 늦게 닿은 참가 알림도 대조 판의 `n_card`를 실어 그 수가 흔들린다.)
       expect(
         ownerTab.received.filter((frame) => frame.type === 'locks' && frame.locks.some((lock) => lock.nodeId === 'n_btn')),
       ).toEqual([])
-      // **버린 것을 낸 쪽에 말한다**(이월 5차 2회 LK — C 리뷰 2 N3). 앞 판은 조용히 버려 그 화면은 쥔 줄 알았다. 대조 판(첫 `lock`)에는
+      // **버린 것을 낸 쪽에 말한다** — 조용히 버리면 그 화면은 쥔 줄 안다. 대조 판(첫 `lock`)에는
       // 거절이 없다.
       expect(targetTab.received.filter((frame) => frame.type === 'lock-denied')).toEqual([
         { type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_btn' },

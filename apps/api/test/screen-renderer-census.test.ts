@@ -1,7 +1,7 @@
 /**
- * **이음매를 안 지나는 길이 없는가**(P10-2 D3).
+ * **이음매를 안 지나는 길이 없는가.**
  *
- * D3의 판정은 *"`pnpm test`가 브라우저를 안 띄운다"*이고, 그것을 지키는 방법은 **진짜
+ * 판정은 *"`pnpm test`가 브라우저를 안 띄운다"*이고, 그것을 지키는 방법은 **진짜
  * 그리는 자를 `main.ts`에서만 만드는 것**이다. 그 방법에는 두 갈래의 사고가 붙는다:
  *
  * | 사고 | 결과 | 여기서 세는 것 |
@@ -84,8 +84,8 @@ describe('운영이 그리는 자를 실제로 받는가', () => {
  * **`packages/exporter`의 `src` 전부**. 뿌리 기준 상대 경로다.
  *
  * **`source-census.ts`의 `sourceFiles`를 안 쓴다** — 그쪽은 `.ts`만 세는데 이 패키지에는
- * `page.tsx`가 있다. 재사용하면 **분모에서 `.tsx`가 조용히 빠진다**(이 저장소가 census
- * 분모에서 이미 두 번 물린 부류다).
+ * `page.tsx`가 있다. 재사용하면 **분모에서 `.tsx`가 조용히 빠진다** — census 분모가
+ * 흔히 새는 부류다.
  */
 const EXPORTER_SRC = fileURLToPath(new URL('../../../packages/exporter/src', import.meta.url))
 
@@ -104,19 +104,18 @@ function exporterSources(dir: string = EXPORTER_SRC, prefix = ''): string[] {
 
 describe('순수한 쪽이 오염되지 않았는가', () => {
   /**
-   * **`packages/exporter`는 브라우저를 모른다**(전역 제약 · 계획서 D2).
+   * **`packages/exporter`는 브라우저를 모른다**(전역 제약).
    *
-   * **앞 판의 문서 셋이 *"census가 그것을 지킨다"*고 적었고 그것이 틀렸다** — 이 파일의
-   * 다른 census 는 `apps/api/src`만 훑으므로 그 패키지를 **볼 수조차 없었다**(귀속: 리뷰
-   * §10.1이 `SRC_ROOT`를 읽어 지목했다).
+   * **이 파일의 다른 census 는 그것을 못 지킨다** — 그쪽은 `apps/api/src`(`SRC_ROOT`)만
+   * 훑으므로 그 패키지를 **볼 수조차 없다.** *"census가 그것을 지킨다"*고 적으면 거짓이다.
    *
-   * **그 성질 자체는 지켜지고 있었다** — 리뷰가 실제로 import 를 심어 재 보니
-   * exporter 케이스 **다섯 파일**이 모듈 해석에서 죽고(pnpm 의 엄격한 `node_modules`),
-   * 의존을 `package.json`에 더하면 `public-api.test.ts`의 의존 목록이 죽는다.
+   * **이 자 없이도 그 성질은 다른 데서 막힌다** — exporter 에 import 를 심으면 exporter
+   * 케이스가 모듈 해석에서 죽고(pnpm 의 엄격한 `node_modules`), 의존을 `package.json`에
+   * 더하면 `public-api.test.ts`의 의존 목록이 죽는다.
    *
    * **그래도 자를 세운다.** 그 둘이 내는 말은 *"Cannot find package"*이지 *"브라우저가
-   * exporter 에 들어왔다"*가 아니고, 문서 셋이 가리키던 자가 실제로 있어야 다음 사람이
-   * 그 문장을 믿을 수 있다.
+   * exporter 에 들어왔다"*가 아니고, *"census가 지킨다"*고 적는 문서가 가리키는 자가 실제로
+   * 있어야 다음 사람이 그 문장을 믿을 수 있다.
    */
   it('`packages/exporter/src` 어디에도 브라우저 패키지가 없다', () => {
     const files = exporterSources()

@@ -17,14 +17,14 @@ import {
 
 /**
  * `services/edit-pipeline.ts`의 `applyEdit`을 라우트를 거치지 않고 직접 부르는
- * 테스트다 — HTTP 매핑(P3에서 추가될 WebSocket 핸들러 몫)과 파이프라인 규칙을
+ * 테스트다 — HTTP·WebSocket 핸들러의 매핑과 파이프라인 규칙을
  * 분리해서 검사하기 위해서다.
  *
  * 공통 픽스처(`setup`)는 사용자·프로젝트·메뉴·페이지를 만든다. 기본 페이지는
  * `{ version: 1, root: { id, type: 'Page', children: [] } }`이므로 대부분의
  * 케이스는 먼저 `add /root/children/0`으로 Text 노드를 넣은 상태(`seed`)에서
  * 시작한다. 그 준비 자체도 `applyEdit`으로 한다 — 준비가 성공한다는 사실 자체가
- * 이미 케이스 1의 신호와 같다.
+ * 이미 «첫 편집은 seq 1을 받는다»의 신호와 같다.
  */
 
 const NONEXISTENT_UUID = '00000000-0000-0000-0000-000000000000'
@@ -137,7 +137,7 @@ describe('applyEdit', () => {
 
       // schemaVersion은 after.version에서 파생돼야 한다 — 저장된 schema_version
       // 컬럼(locked.schemaVersion)을 그대로 흘려보내면 마이그레이션이 버전을 올리는
-      // 순간 두 값이 어긋난다. MIGRATIONS가 비어 있는 오늘은 두 값이 우연히 같으므로
+      // 순간 두 값이 어긋난다. MIGRATIONS가 비어 있는 동안은 두 값이 우연히 같으므로
       // 이 단언만으로는 파생 여부를 못 가른다 — outcome.schema.version과의 일치,
       // 그리고 실제로 저장된 schema_version 컬럼과의 일치를 함께 고정해 둔다.
       expect(outcome.schemaVersion).toBe(outcome.schema.version)
@@ -149,15 +149,15 @@ describe('applyEdit', () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
-      // **부족한 것은 단언이 아니라 픽스처였다.** 바로 위 테스트가 이미
+      // **가르는 것은 단언이 아니라 픽스처다.** 바로 위 테스트가 이미
       // `outcome.schemaVersion === outcome.schema.version`을 단언하지만, `MIGRATIONS`가
-      // 비어 있는 오늘은 저장된 `schema_version` 컬럼과 문서 `version`이 항상 같은
+      // 비어 있는 동안은 저장된 `schema_version` 컬럼과 문서 `version`이 항상 같은
       // 값이라 파이프라인이 어느 쪽에서 파생시켜도 그 단언이 통과한다.
       //
       // `pages.schema_version`에는 문서 `version`과 값을 묶는 제약이 없다
       // (마이그레이션 0004: 그냥 `integer NOT NULL`). 그래서 두 값을 일부러 갈라
       // 둘 수 있다 — 마이그레이션이 실제로 버전을 올리기 시작했을 때 벌어질 상황을
-      // 오늘 미리 만드는 것이다.
+      // 미리 만드는 것이다.
       await withTransaction(ctx.db, (trx) =>
         trx.updateTable('pages').set({ schema_version: 7 }).where('id', '=', fx.page.id).execute(),
       )
@@ -440,7 +440,7 @@ describe('applyEdit', () => {
       expect(Number(after.head_seq)).toBe(Number(before.head_seq))
       expect(after.schema).toEqual(before.schema)
 
-      // 10번(stale)·12번(patch-failed)과 대칭으로 revisions 행 수도 확인한다 —
+      // «stale이면 아무것도 쓰지 않는다»·«patch-failed면 아무것도 쓰지 않는다»와 대칭으로 revisions 행 수도 확인한다 —
       // head_seq·schema만 보면 insertRevision만 validatePage보다 앞으로 옮겨져도
       // (그래서 append-only 로그에 고아 행이 남아도) 이 테스트는 초록인 채로
       // 통과해 버린다.
@@ -475,7 +475,7 @@ describe('applyEdit', () => {
 
       // add로 NUL이 든 값을 넣고 같은 요청의 remove로 바로 되돌린다 — 결과 문서
       // (after)에는 NUL이 전혀 남지 않지만, ops 자체는 jsonb로 그대로 저장되므로
-      // 저장 시점에 22P05로 죽는다. 결과 문서만 검사하면 이 케이스를 놓친다(D8).
+      // 저장 시점에 22P05로 죽는다. 결과 문서만 검사하면 이 케이스를 놓친다.
       const ops: PatchOp[] = [
         { op: 'add', path: '/root/children/1', value: { id: 'n_niltemp001', type: 'Text', props: { content: `x${nul}y` } } },
         { op: 'remove', path: '/root/children/1' },

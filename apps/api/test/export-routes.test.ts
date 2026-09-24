@@ -1,17 +1,17 @@
 /**
- * **내보내기 라우트 둘**(P8-4 T4 · D4·D7).
+ * **내보내기 라우트 둘**.
  *
  * | 라우트 | 무엇 |
  * |---|---|
  * | `GET /:projectId/export/preview` | 내려받기 **전에** 화면이 말할 것 — 페이지·타겟·못 이은 링크·`errors` |
  * | `GET /:projectId/export` | zip 그 자체 |
  *
- * **URL에 파일 이름이 없다**(D7). 파일 이름은 안정한 열쇠가 아니라(P8-2 이월 §3) 페이지를
+ * **URL에 파일 이름이 없다**. 파일 이름은 안정한 열쇠가 아니라 페이지를
  * 하나 더하면 뒤에서 부딪히던 이름들의 번호가 밀린다 — 그것으로 URL을 만들면 남의
  * 북마크가 깨진다. 사람이 읽는 이름은 `Content-Disposition`에만 있다.
  *
  * 권한은 `test/permission-matrix.test.ts`가 전수로 잰다. 여기서는 **산출물이 화면보다 더
- * 담는 것이 없는지**(재라 #5)를 프로젝트 둘로 잰다.
+ * 담는 것이 없는지**를 프로젝트 둘로 잰다.
  */
 import { describe, expect, it } from 'vitest'
 import { strFromU8, unzipSync } from 'fflate'
@@ -66,7 +66,7 @@ interface Fixture {
 /**
  * **`errors`가 나는 상태를 만든다.** 정상 경로(`PUT .../schema`)는 모르는 컴포넌트를 422로
  * 막으므로 편집 파이프라인을 우회해 `pages.schema`에 직접 심는다 — **카탈로그에서
- * 컴포넌트가 빠지는 날 실제로 생기는 상태**다(P8-4 리뷰 발견 ④가 이 값을 재서 보였다).
+ * 컴포넌트가 빠지는 날 실제로 생기는 상태**다.
  */
 async function 그리지못할노드를심는다(ctx: TestContext, pageId: string, nodeId: string): Promise<void> {
   await ctx.db
@@ -108,7 +108,7 @@ async function 설계서(ctx: TestContext, slug: string): Promise<Fixture> {
 
 describe('GET /:projectId/export/preview', () => {
   /**
-   * **이름은 조상이 붙은 번들 이름이다**(리뷰 발견 ①③). 맨 제목이면 화면의 목록이
+   * **이름은 조상이 붙은 번들 이름이다**. 맨 제목이면 화면의 목록이
    * `목록`·`목록`으로 보이고, 같은 응답의 `errors[].title`(늘 번들 이름)과도 갈린다.
    */
   it('페이지마다 이름과 타겟을 낸다', async () => {
@@ -169,7 +169,7 @@ describe('GET /:projectId/export/preview', () => {
   })
 
   /**
-   * **D6이 기대는 배선을 여기서 누른다**(리뷰 발견 ④). 위 케이스는 `errors`가 **비어 있는
+   * **내려받기 전 경고가 기대는 배선을 여기서 누른다**. 위 케이스는 `errors`가 **비어 있는
    * 것**만 재는데, 그것은 `errors`를 통째로 버리는 라우트도 만족한다 —
    * *"내려받기 버튼이 조용히 성공하면 안 된다"*를 지키는 값이 이것이므로 **값이 실제로
    * 흐르는 것**을 잰다. 화면 쪽 케이스는 미리보기를 스텁으로 넣으므로 그쪽도 이 배선을
@@ -211,7 +211,7 @@ describe('GET /:projectId/export/preview', () => {
     })
   })
 
-  /** 남의 프로젝트 것이 새면 §10이 산출물에서 깨진다. */
+  /** 남의 프로젝트 것이 새면 설계서 「권한 모델」이 산출물에서 깨진다. */
   it('제 프로젝트의 페이지만 낸다', async () => {
     await withApi(async (ctx) => {
       const 하나 = await 설계서(ctx, 'one')
@@ -257,7 +257,7 @@ describe('GET /:projectId/export', () => {
     })
   })
 
-  it('§11.3의 트리를 담는다', async () => {
+  it('설계서 「HTML 정적 번들」의 트리를 담는다', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, 'one')
       const res = await ctx.app.inject({
@@ -275,7 +275,7 @@ describe('GET /:projectId/export', () => {
   })
 
   /**
-   * **zip 엔트리 → 그 파일의 내용**(P8-2 이월 §10의 다섯째). 이름과 내용이 어긋나도 눈으로는
+   * **zip 엔트리 → 그 파일의 내용**. 이름과 내용이 어긋나도 눈으로는
    * 그럴듯하므로, 페이지 셋을 넣고 **자리마다** 견준다.
    */
   it('엔트리마다 제 페이지가 들어 있다', async () => {

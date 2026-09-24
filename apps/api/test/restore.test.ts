@@ -1,9 +1,8 @@
 /**
- * 복원 — 설계 §4.5의 되돌리는 쪽(P6-2 T2~T6).
+ * 복원 — 설계서 「스냅샷」의 되돌리는 쪽.
  *
  * 권한 세 등급은 `permission-matrix.test.ts`가 전수로 친다(그 파일의 완전성 검사가
- * `src/routes/`를 훑어 새 라우트를 강제로 표에 올린다 — 이 라우트를 만들자 그것이 먼저
- * 죽었다). 여기서는 **무엇이 실제로 되돌아가는지**를 잰다.
+ * `src/routes/`를 훑어 새 라우트를 강제로 표에 올린다). 여기서는 **무엇이 실제로 되돌아가는지**를 잰다.
  *
  * ---
  *
@@ -130,7 +129,7 @@ describe('아무것도 바뀌지 않았으면 아무것도 쓰지 않는다 — 
     })
   })
 
-  it('그래도 안전망 스냅샷은 만든다 — 계획이 틀렸을 때를 위한 보험이다 (D2)', async () => {
+  it('그래도 안전망 스냅샷은 만든다 — 계획이 틀렸을 때를 위한 보험이다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const id = await snapshot(ctx, fx, 'v1')
@@ -145,12 +144,12 @@ describe('아무것도 바뀌지 않았으면 아무것도 쓰지 않는다 — 
   /**
    * **안전망 태그의 형식을 고정한다.**
    *
-   * 앞 판은 이 자리를 `tag.startsWith(SAFETY_TAG_PREFIX)`로 쟀고 **앞머리를 바꾸는 변이가
-   * 0 사망이었다** — 케이스가 구현과 같은 상수를 읽어 변이가 양쪽을 함께 움직였다. M14
-   * (`restoreActorLabel`)와 **같은 부류가 하나 더 남아 있던 것**이고, 리뷰가 잡았다.
+   * 이 자리를 `tag.startsWith(SAFETY_TAG_PREFIX)`로 재면 **앞머리를 바꾸는 변이가 안
+   * 죽는다** — 케이스가 구현과 같은 상수를 읽어 변이가 양쪽을 함께 움직인다. 아래
+   * *"복원이 만든 revision은 평범한 편집과 구분된다"*의 `restoreActorLabel`과 **같은 부류**다.
    *
    * 그래서 형식을 **리터럴로** 적는다. 그 명제 자체는 옳다 — 화면이 *"되돌리려면 이것"*을
-   * 가리키려면(D2·D11) 사람이 목록에서 그 줄을 알아볼 수 있어야 하고, 그러려면 앞머리가
+   * 가리키려면 사람이 목록에서 그 줄을 알아볼 수 있어야 하고, 그러려면 앞머리가
    * 고정돼 있어야 한다.
    */
   it('안전망 태그의 형식이 고정돼 있다 — `복원 전 <capturedAt>`', async () => {
@@ -190,7 +189,7 @@ describe('아무것도 바뀌지 않았으면 아무것도 쓰지 않는다 — 
     })
   })
 
-  it('내용이 같으면 revision을 만들지 않는다 — D4', async () => {
+  it('내용이 같으면 revision을 만들지 않는다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const id = await snapshot(ctx, fx, 'v1')
@@ -226,9 +225,9 @@ describe('되돌아가는 것들', () => {
   })
 
   /**
-   * **메타 갱신이 `description`을 실제로 쓰는가.** 계획 층에는 케이스가 있었지만
-   * (`페이지 설명만 달라도 메타를 갱신한다`) **repo가 그 값을 썼는지는 아무도 재지
-   * 않았다** — 리뷰가 지목한 0 사망 축이다. *"갱신한다고 계획했다"*와 *"그 값이 DB에
+   * **메타 갱신이 `description`을 실제로 쓰는가.** 계획 층의 케이스
+   * (`페이지 설명만 달라도 메타를 갱신한다`)는 **repo가 그 값을 썼는지는 재지 않는다** —
+   * 이 케이스가 없으면 그 값을 안 쓰는 변이가 산다. *"갱신한다고 계획했다"*와 *"그 값이 DB에
    * 들어갔다"*는 다른 명제다.
    */
   it('페이지 설명이 되돌아온다 — 계획이 아니라 DB에서 잰다', async () => {
@@ -256,8 +255,8 @@ describe('되돌아가는 것들', () => {
   })
 
   /**
-   * **부활한 메뉴의 `sort_order`.** 갱신 쪽은 `메뉴 순서가 되돌아온다`가 잡지만 **생성
-   * 쪽은 비어 있었다** — 리뷰가 지목한 축이다. 지운 메뉴가 되살아날 때 순서를 함께
+   * **부활한 메뉴의 `sort_order`.** 갱신 쪽은 `메뉴 순서가 되돌아온다`가 잡고 **생성
+   * 쪽은 이 케이스가 잡는다.** 지운 메뉴가 되살아날 때 순서를 함께
    * 되돌리지 않으면 형제 그룹의 불변식(0부터 연속)이 깨진다.
    */
   it('되살아난 메뉴가 그때의 순서로 돌아온다', async () => {
@@ -294,8 +293,8 @@ describe('되돌아가는 것들', () => {
   })
 
   /**
-   * **제목만 재면 `sort_order`를 쓰는지 알 수 없다** — 그 컬럼을 안 쓰는 변이가 **0 사망**
-   * 이었다. 겨냥을 옮겨 순서 자체를 잰다.
+   * **제목만 재면 `sort_order`를 쓰는지 알 수 없다** — 그 컬럼을 안 쓰는 변이가 **산다.**
+   * 그래서 순서 자체를 잰다.
    */
   it('메뉴 순서가 되돌아온다', async () => {
     await withApi(async (ctx) => {
@@ -345,11 +344,11 @@ describe('되돌아가는 것들', () => {
     })
   })
 
-  it('스냅샷 뒤에 지운 페이지가 **같은 id로** 되살아난다 — D3(복원이지 복제가 아니다)', async () => {
+  it('스냅샷 뒤에 지운 페이지가 **같은 id로** 되살아난다 — 복원이지 복제가 아니다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       // **설명과 순서를 기본값에서 벗겨 둔다** — 둘 다 기본값이면 되살리지 않아도 우연히
-      // 맞는다(리뷰가 잰 0 사망 둘이 정확히 그 형태였다).
+      // 맞아 그 필드를 안 되살리는 변이가 산다.
       await createPage(ctx, fx.owner.cookie, fx.project.id, fx.menu.id, { title: '앞자리 페이지' })
       await ctx.app.inject({
         method: 'PATCH',
@@ -369,10 +368,10 @@ describe('되돌아가는 것들', () => {
 
       expect(body.summary.pages.created).toBe(1)
       const page = await readPage(ctx, fx.page.id)
-      // **id가 같다.** 새 id를 발급하면 사람이 공유한 URL이 죽는다(D3).
+      // **id가 같다.** 새 id를 발급하면 사람이 공유한 URL이 죽는다.
       expect(page?.id).toBe(fx.page.id)
-      // **제목만 재면 나머지 필드를 되살리는지 알 수 없다** — 리뷰가 그 축 셋이 0 사망임을
-      // 지목했다(설명·순서·메뉴). 부활한 행 **전체**를 그때 값과 맞댄다.
+      // **제목만 재면 나머지 필드를 되살리는지 알 수 없다** — 설명·순서·메뉴 셋이 안 잰
+      // 축으로 남는다. 부활한 행 **전체**를 그때 값과 맞댄다.
       expect({
         title: page?.title,
         description: page?.description,
@@ -390,7 +389,7 @@ describe('되돌아가는 것들', () => {
   /**
    * **되살아난 페이지의 `head_seq`는 0이다.** payload의 값을 심으면 행이 없는 seq를
    * 가리킨다 — 그 페이지가 지워질 때 `revisions.page_id`의 CASCADE가 이력을 데려갔기
-   * 때문이다(재라 #3 실측). **복원이 되살릴 수 있는 것은 문서이지 이력이 아니다.**
+   * 때문이다. **복원이 되살릴 수 있는 것은 문서이지 이력이 아니다.**
    */
   it('되살아난 페이지는 head_seq 0에서 다시 시작한다 — 이력은 되살아나지 않는다', async () => {
     await withApi(async (ctx) => {
@@ -416,7 +415,7 @@ describe('되돌아가는 것들', () => {
     })
   })
 
-  it('페이지 문서가 되돌아오고 그 되돌림이 revision으로 남는다 — §4.5', async () => {
+  it('페이지 문서가 되돌아오고 그 되돌림이 revision으로 남는다 — 설계서 「스냅샷」', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       await editPage(ctx, fx, 'n_sec1')
@@ -428,12 +427,12 @@ describe('되돌아가는 것들', () => {
       expect(body.summary.pages.schemaChanged).toBe(1)
       const page = await readPage(ctx, fx.page.id)
       expect((page?.schema as PageDocument).root.children?.[0]?.id).toBe('n_sec1')
-      // 이력을 지우지 않는다 — 되돌림이 **새 revision**으로 append된다(§4.5).
+      // 이력을 지우지 않는다 — 되돌림이 **새 revision**으로 append된다(설계서 「스냅샷」).
       expect(Number(page?.head_seq)).toBe(3)
     })
   })
 
-  it('복원이 만든 revision은 평범한 편집과 구분된다 — D10', async () => {
+  it('복원이 만든 revision은 평범한 편집과 구분된다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const id = await snapshot(ctx, fx, 'v1')
@@ -449,9 +448,9 @@ describe('되돌아가는 것들', () => {
         .execute()
 
       // **형식을 리터럴로 적는다 — `restoreActorLabel('v1')`로 적으면 이 케이스가 죽지 않는다.**
-      // 재서 알았다: 그 함수가 `tag`를 그대로 내도록 변이를 심었더니 **0 사망**이었다.
-      // 케이스가 구현과 같은 함수를 불러 양쪽이 함께 움직였기 때문이다 — P6-1 이월 §2의
-      // *"불변량을 재는 케이스는 그 불변량이 고정하지 않는 축을 잴 수 없다"*와 같은 부류다.
+      // 그 함수가 `tag`를 그대로 내도록 변이를 심어도 **안 죽는다** — 케이스가 구현과 같은
+      // 함수를 불러 양쪽이 함께 움직이기 때문이다. *"불변량을 재는 케이스는 그 불변량이
+      // 고정하지 않는 축을 잴 수 없다"*와 같은 부류다.
       expect(rows.map((row) => row.actor_label)).toEqual([fx.owner.user.name, '복원: v1'])
       // 형식을 만드는 쪽과 케이스가 같은 값을 뜻하는지도 함께 본다(둘이 갈리면 여기가 죽는다).
       expect(restoreActorLabel('v1')).toBe('복원: v1')
@@ -461,7 +460,7 @@ describe('되돌아가는 것들', () => {
   })
 })
 
-describe('코멘트 — T4', () => {
+describe('코멘트', () => {
   it('스냅샷 뒤에 단 코멘트가 지워지고, 지운 코멘트가 같은 id로 되살아난다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -535,12 +534,12 @@ describe('코멘트 — T4', () => {
         .execute()
       expect(rows.map((row) => row.body)).toEqual(['첫째', '둘째'])
 
-      // **순서만 재면 이 케이스는 아무것도 고정하지 못한다 — 재서 알았다.** 시각을 심지
-      // 않는 변이(컬럼 기본값 `clock_timestamp()`에 맡긴다)를 심었더니 **0 사망**이었다:
+      // **순서만 재면 이 케이스는 아무것도 고정하지 못한다.** 시각을 심지 않는
+      // 변이(컬럼 기본값 `clock_timestamp()`에 맡긴다)를 심어도 **안 죽는다**:
       // 복원이 payload 순서대로 넣으므로 기본값도 같은 순서를 만든다. 순서는 두 선택지가
-      // **동시에 만족하는 불변량**이라 선택을 고정하지 못한다(P6-1 이월 §2).
+      // **동시에 만족하는 불변량**이라 선택을 고정하지 못한다.
       //
-      // **겨냥을 옮긴다 — 값 자체를 본다.** 복원된 `created_at`이 payload의 그 값이어야 한다.
+      // **그래서 값 자체를 본다.** 복원된 `created_at`이 payload의 그 값이어야 한다.
       const payload = (
         await ctx.db.selectFrom('snapshots').select('payload').where('id', '=', id).executeTakeFirstOrThrow()
       ).payload as { comments: Array<{ id: string; createdAt: string }> }
@@ -550,9 +549,9 @@ describe('코멘트 — T4', () => {
   })
 
   /**
-   * **문서의 `marker`와 코멘트 행이 같은 payload에서 온다**(T4가 확인을 요구한 자리).
-   * P5-1의 규칙(*"삭제 뒤 세어 0이면 문서에서 marker를 지운다"*)이 복원 경로에서도 깨지지
-   * 않는지 본다 — 코멘트를 되살렸는데 문서에 번호가 없으면 §4.3의 *"없으면 코멘트 없음"*이
+   * **문서의 `marker`와 코멘트 행이 같은 payload에서 온다.**
+   * 코멘트의 규칙(*"삭제 뒤 세어 0이면 문서에서 marker를 지운다"*)이 복원 경로에서도 깨지지
+   * 않는지 본다 — 코멘트를 되살렸는데 문서에 번호가 없으면 설계서 「페이지 스키마 노드」의 *"없으면 코멘트 없음"*이
    * 거짓이 된다.
    */
   it('코멘트를 되살리면 문서의 marker도 함께 돌아온다 — 같은 payload에서 온다', async () => {
@@ -561,7 +560,7 @@ describe('코멘트 — T4', () => {
       const commentId = await addComment(ctx, fx, '코멘트')
       const id = await snapshot(ctx, fx, 'v1')
 
-      // 마지막 코멘트를 지우면 라우트가 문서에서 marker를 지운다(P5-1 D3).
+      // 마지막 코멘트를 지우면 라우트가 문서에서 marker를 지운다.
       await ctx.app.inject({
         method: 'DELETE',
         url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/comments/${commentId}`,
@@ -580,7 +579,7 @@ describe('코멘트 — T4', () => {
   })
 })
 
-describe('FK 순서가 DB에서도 참인가 — 계획서 T1', () => {
+describe('FK 순서가 DB에서도 참인가', () => {
   /**
    * 계획의 케이스는 `steps`의 순서를 보고, 이 케이스는 **그 순서로 실제 SQL이 통과하는지**를
    * 본다. 순서를 뒤집으면 `menu_nodes_parent_id_fkey`로 죽는다.
@@ -638,7 +637,7 @@ describe('FK 순서가 DB에서도 참인가 — 계획서 T1', () => {
   })
 })
 
-describe('테마 — D6', () => {
+describe('테마', () => {
   it('테마 행을 건드리지 않고 참조만 되돌린다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -675,7 +674,7 @@ describe('테마 — D6', () => {
         .select(['id', 'theme_id'])
         .where('project_id', '=', fx.project.id)
         .executeTakeFirstOrThrow()
-      // 그 레이아웃이 가리키는 테마 문서를 바꾼다(시스템 테마라 라우트로는 못 고친다 — §6.10).
+      // 그 레이아웃이 가리키는 테마 문서를 바꾼다(시스템 테마라 라우트로는 못 고친다 — 설계서 「테마 관리」).
       await ctx.db
         .updateTable('themes')
         .set({ tokens: sql`'{"semantic":{"primary":"#123456"}}'::json` })
@@ -728,7 +727,7 @@ describe('막는 갈래 — 오류 표', () => {
     })
   })
 
-  it('모르는 payloadVersion은 400이다 — 게이트가 서는 자리(이월 §3)', async () => {
+  it('모르는 payloadVersion은 400이다 — 게이트가 서는 자리', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const id = await snapshot(ctx, fx, 'v1')
@@ -742,7 +741,7 @@ describe('막는 갈래 — 오류 표', () => {
 
       expect(res.statusCode).toBe(400)
       expect(res.body).toContain('형식 99')
-      // **조회는 여전히 열려 있다** — 태그는 지워지지 않는 기록이다(§4.5).
+      // **조회는 여전히 열려 있다** — 스냅샷은 삭제 없는 태그다(설계서 「스냅샷」).
       const get = await ctx.app.inject({
         method: 'GET',
         url: `/api/projects/${fx.project.id}/snapshots/${id}`,
@@ -752,11 +751,11 @@ describe('막는 갈래 — 오류 표', () => {
     })
   })
 
-  it('레이아웃 개수가 다르면 409다 — 조용히 맞추지 않는다 (D7)', async () => {
+  it('레이아웃 개수가 다르면 409다 — 조용히 맞추지 않는다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const id = await snapshot(ctx, fx, 'v1')
-      // 이월 §1: `layouts`에 `project_id` 유니크가 없어 두 번째가 실제로 들어간다.
+      // `layouts`에 `project_id` 유니크가 없어 두 번째가 실제로 들어간다.
       await ctx.db
         .insertInto('layouts')
         .values({
@@ -774,7 +773,7 @@ describe('막는 갈래 — 오류 표', () => {
     })
   })
 
-  /** D5의 두 방향. **§13.1을 여기서 닫는다 — 탈출구를 만들지 않는다.** */
+  /** 미지원 버전의 두 방향. **설계서 「스키마 마이그레이션」의 탈출구를 만들지 않는다.** */
   it('저장된 문서가 미지원 버전이면 400이고 어느 페이지인지 말한다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -815,7 +814,7 @@ describe('막는 갈래 — 오류 표', () => {
   /**
    * **만들어지는 페이지의 문서는 아무도 검증하지 않는 유일한 쓰기다** — 갱신 쪽은
    * `applyEdit` 6단계가 본다. 계획이 그 구멍을 `validatePage`로 막고, 이 케이스가 그것을
-   * 고정한다(그 검사를 지우는 변이는 이 케이스가 없으면 **0 사망**이었다).
+   * 고정한다(이 케이스가 없으면 그 검사를 지우는 변이가 **산다**).
    *
    * **`applyEdit`이 내는 422와 문장이 다르다** — 어느 경로가 막았는지 화면이 알 수 있어야 한다.
    */
@@ -915,16 +914,16 @@ describe('막는 갈래 — 오류 표', () => {
   })
 
   /**
-   * **`fingerprint-mismatch` 갈래 — 리뷰가 지목한 마지막 0 사망 축이다.**
+   * **`fingerprint-mismatch` 갈래.** 이 케이스가 없으면 이 갈래를 지우는 변이가 산다.
    *
    * 잠금이 대부분을 막는데도 이 갈래가 살아 있는 이유는 **복원이 테마 표를 잠그지 않기**
-   * 때문이다(D6 — 테마 **행**을 쓰지 않으므로). 그런데 지문에는 담기는 테마가 들어 있다.
+   * 때문이다(테마 **행**을 쓰지 않으므로). 그런데 지문에는 담기는 테마가 들어 있다.
    * 그래서 *"복원이 도는 동안 누가 테마를 고친다"*가 실제로 이 갈래를 낸다.
    *
-   * **레이스로 재면 비율이 테마를 고치는 속도를 따라간다**(12판씩): 복원을 쏜 뒤 한 번만
-   * 커밋하면 **4/12**, 복원이 끝날 때까지 쉬지 않고 고치면 **12/12**, 레이아웃이 **가리키지
-   * 않는** 테마를 고치면 **0/12**다(지문의 테마 절이 `layouts`를 조인한다). 그래서 레이스는
-   * 케이스가 될 수 없고, `captureHooks`로 그것을 결정적으로 만들었다.
+   * **레이스로 재면 성패가 테마를 고치는 속도를 따라간다**: 복원을 쏜 뒤 한 번만
+   * 커밋하면 **가끔**, 복원이 끝날 때까지 쉬지 않고 고치면 **늘** 이 갈래가 서고, 레이아웃이
+   * **가리키지 않는** 테마를 고치면 **안 선다**(지문의 테마 절이 `layouts`를 조인한다). 그래서
+   * 레이스는 케이스가 될 수 없고, `captureHooks`로 결정적으로 만든다.
    *
    * **끼어드는 자리가 `afterPages`인 것이 요점이다** — 수집의 한가운데여야 두 지문이 갈린다.
    */
@@ -1004,7 +1003,7 @@ describe('막는 갈래 — 오류 표', () => {
         url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/comments/${commentId}`,
         cookies: fx.owner.cookie,
       })
-      // 오늘 사용자를 지우는 경로는 0건이므로 payload의 작성자 id를 없는 것으로 바꿔 같은
+      // 사용자를 지우는 경로가 없으므로 payload의 작성자 id를 없는 것으로 바꿔 같은
       // 상태를 만든다 — 프로덕션을 고치지 않는다.
       await ctx.db
         .updateTable('snapshots')
@@ -1022,10 +1021,10 @@ describe('막는 갈래 — 오류 표', () => {
   })
 })
 
-describe('부분 성공을 만들지 않는다 — D1', () => {
+describe('부분 성공을 만들지 않는다', () => {
   /**
    * **실패하는 복원이 무엇도 남기지 않는가.** 실패를 값으로 돌려주면 `withTransaction`의
-   * 콜백이 정상 종료해 **바깥 트랜잭션이 커밋된다** — P5-1의 B5가 정확히 그 사고였다.
+   * 콜백이 정상 종료해 **바깥 트랜잭션이 커밋된다** — 부분 성공이 조용히 남는다.
    *
    * 여기서 고르는 실패는 **첫 쓰기보다 뒤**여야 뜻이 있다. 안전망 스냅샷이 이미 들어간 뒤
    * `applyEdit`이 죽는 판을 만든다: payload의 문서를 카탈로그가 거부하는 모양으로 바꿔
@@ -1051,8 +1050,8 @@ describe('부분 성공을 만들지 않는다 — D1', () => {
       const res = await restore(ctx, fx, id)
 
       expect(res.statusCode).toBe(422)
-      // **어느 페이지인지 말한다.** 앞 판은 `pageId`를 들고도 문장에서 버려, 프로젝트 전체가
-      // 막혔는데 어느 페이지 때문인지 알 수 없었다(리뷰가 잡았다).
+      // **어느 페이지인지 말한다.** `pageId`를 들고도 문장에서 버리면, 프로젝트 전체가
+      // 막혔는데 어느 페이지 때문인지 알 수 없다.
       expect(res.body).toContain('사용자 목록')
       // **안전망 스냅샷이 남지 않았다** — 그것이 첫 쓰기였는데 트랜잭션이 되돌렸다.
       const after = await listSnapshots(ctx.db, fx.project.id)
@@ -1092,7 +1091,7 @@ describe('부분 성공을 만들지 않는다 — D1', () => {
   })
 })
 
-describe('안전망이 실제로 되돌릴 수 있는가 — D2', () => {
+describe('안전망이 실제로 되돌릴 수 있는가', () => {
   it('복원을 복원하면 그 직전 상태로 돌아온다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -1102,7 +1101,7 @@ describe('안전망이 실제로 되돌릴 수 있는가 — D2', () => {
       const body = (await restore(ctx, fx, id)).json() as RestoreBody
       expect(await readPage(ctx, extra.id)).toBeUndefined()
 
-      // **안전망으로 되돌린다.** §4.5의 *"복원을 다시 되돌릴 수도 있다"*가 참인 자리다.
+      // **안전망으로 되돌린다.** 설계서 「스냅샷」의 *"복원을 다시 되돌릴 수도 있다"*가 참인 자리다.
       const back = await restore(ctx, fx, body.safetySnapshot.id)
 
       expect(back.statusCode).toBe(200)
@@ -1113,7 +1112,7 @@ describe('안전망이 실제로 되돌릴 수 있는가 — D2', () => {
   })
 })
 
-describe('권한 — §10', () => {
+describe('권한 — 설계서 「권한 모델」', () => {
   it('editor는 복원하지 못한다 (403) — 생성만 한다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)

@@ -23,8 +23,8 @@ export interface TestContext {
 let testDb: DbHandle | undefined
 
 /**
- * 하네스 풀의 시간 제한 — **idle 제한은 싣지 않는다.** `withApi`는 케이스 전체를 트랜잭션 하나로 감싸므로 붐비는 기계(옆 워커 ·
- * load 160+)에서 케이스 사이의 쉼이 기본값 10s 를 넘으면 하네스가 거짓으로 죽는다(`createPool` 머리말 «이 값들이 정당한 일을
+ * 하네스 풀의 시간 제한 — **idle 제한은 싣지 않는다.** `withApi`는 케이스 전체를 트랜잭션 하나로 감싸므로 붐비는 기계(옆 워커가
+ * 여럿 도는 판)에서 케이스 사이의 쉼이 기본값 10s 를 넘으면 하네스가 거짓으로 죽는다(`createPool` 머리말 «이 값들이 정당한 일을
  * 끊는 판»과 같은 기전). 그 제한을 재는 케이스는 제 풀을 따로 만든다(`db-partition.test.ts`).
  */
 const HARNESS_DB_TIME_LIMITS: DbTimeLimits = { ...DEFAULT_DB_TIME_LIMITS, idleInTransactionMs: 0 }
@@ -79,7 +79,7 @@ export interface WithApiOptions {
    */
   onRoute?: BuildAppOptions['onRoute']
   /**
-   * `buildApp`의 같은 이름 필드를 그대로 통과시킨다(P10-2 D3). **위의 셋과 방향이
+   * `buildApp`의 같은 이름 필드를 그대로 통과시킨다. **위의 셋과 방향이
    * 반대다** — 생략이 운영이 아니라 **채우는 것이 운영**이고, 여기서 채우는 것은 진짜
    * 브라우저가 아니라 가짜다. 그 판정의 근거는 `src/services/screen-render.ts`에 있다.
    */
@@ -105,8 +105,8 @@ export interface WithApiOptions {
  * **트랜잭션 오염에 주의.** `withApi`가 감싸는 것은 테스트 전체를 위한 하나의
  * Postgres 트랜잭션이다. 그 안에서 어떤 문장이든(제약 위반 등으로) 실패하면
  * Postgres가 트랜잭션 전체를 aborted 상태로 만들고, 이후 그 트랜잭션 위의 모든
- * 쿼리가 실제 내용과 무관하게 `25P02`로 실패한다. 그래서 이 태스크가 만드는 409
- * 경로(가입 시 중복 이메일 등, 전부 DB 제약 위반으로 구현된다) 같은 걸 테스트
+ * 쿼리가 실제 내용과 무관하게 `25P02`로 실패한다. 그래서 409 경로(중복 멤버 초대
+ * 등, DB 제약 위반으로 구현된다) 같은 걸 테스트
  * 안에서 직접(=raw `db`로) 유발하면, 그 실패 자체를 잡아도 트랜잭션은 이미
  * 오염돼 있어 같은 테스트에서 그 뒤에 무언가를 더 확인하려는 시도가 전부
  * 무너진다. `withTransaction`(`src/db/tx.ts`)이 SAVEPOINT로 구간을 격리해
@@ -117,9 +117,8 @@ export interface WithApiOptions {
  * 여러 테스트가 인증 훅 같은 것을 확인하려고 임시 라우트를 등록한다.
  * `inject()`가 첫 호출에서 알아서 ready를 태우므로 미리 부를 이유도 없다.
  *
- * `options`는 대부분의 호출자에게 필요 없다 — 생략하면 지금까지와 완전히 같게
- * `testConfig()`로 `buildApp`을 만든다. `test/logging.test.ts`만 `config`(로그 레벨을
- * `info`로)와 `loggerStream`(로그를 메모리로 캡처)을 넘긴다.
+ * `options`는 대부분의 호출자에게 필요 없다 — 생략하면 `testConfig()`로 `buildApp`을
+ * 만든다. 넘기는 필드마다 누가 왜 쓰는지는 `WithApiOptions`의 필드 주석이 적는다.
  */
 export async function withApi(fn: (ctx: TestContext) => Promise<void>, options?: WithApiOptions): Promise<void> {
   const db = getTestDb()
@@ -202,15 +201,13 @@ export async function resetRealData(): Promise<void> {
  * 세우므로 요청마다 서로 다른 커넥션을 잡고 각자 커밋한다. 그리고 **진짜 포트를 연다** —
  * `inject()`는 소켓을 만들지 않아 WebSocket 업그레이드를 태울 수 없다.
  *
- * **두 벌을 만들지 않는다(P3-1 D1).** 앞선 슬라이스들이 같은 것을 파일마다 복사해 두었고
- * (`revisions-concurrency`·`comments-concurrency`·`restore-concurrency`·
- * `restore-lock-census`의 지역 `withRealApi`, `snapshots-concurrency`의 `withProbeApi`),
- * P3의 WS 케이스가 여섯 번째 사본을 만들 자리였다. 그 사본들이 갈리면 *"어느 하네스에서
- * 잰 값인가"*가 매번 물음이 된다.
+ * **두 벌을 만들지 않는다.** 실커밋이 필요한 파일마다 지역 사본(`withRealApi`·
+ * `withProbeApi` 류)을 두면 그 사본들이 갈리고, 그러면 *"어느 하네스에서 잰 값인가"*가
+ * 매번 물음이 된다 — 실커밋이 필요한 파일은 이것을 쓴다.
  *
- * **`withApi`를 갈아엎지 않는다.** `db/tx.ts`가 P1 때 *"테스트마다 관련 테이블을
- * TRUNCATE하는 방식으로 격리 전략을 바꿔야 한다"*고 적었지만, 그 파일의 그 문단이 지금
- * 적고 있듯 실제로 선 것은 **두 번째 하네스**다.
+ * **`withApi`를 갈아엎지 않는다.** 실커밋이 필요한 성질 때문에 *"테스트마다 관련 테이블을
+ * TRUNCATE하는 방식으로 격리 전략을 바꿔야 한다"*로 가지 않는다 — 그 성질은 이 **두 번째
+ * 하네스**로 전부 얻는다(`db/tx.ts`가 같은 판단을 적는다).
  *
  * 청소는 호출자가 `resetRealData`를 `beforeEach`·`afterEach`에 걸어 한다 — 하네스가
  * 스스로 지우면 한 케이스가 하네스를 두 번 여는 시나리오(연결 둘)에서 중간에 판이 지워진다.
@@ -262,20 +259,17 @@ let signupCounter = 0
  * (모듈 스코프 카운터) — `withApi`가 테스트마다 롤백하므로 파일 간 충돌은 없지만,
  * 한 테스트 안에서 여러 사용자를 만드는 경우가 흔해 그 안에서도 겹치면 안 된다.
  *
- * **이름이 `signup`인 채로 남는다. 가입 라우트는 없다**(2026-08-20 D1·D2). 앞서 이
- * 픽스처는 *"`/api/auth/signup`을 **실제로** 호출한다(직접 `insertUser`를 부르지 않는다) —
- * 그래야 비밀번호 해시·세션 발급까지 실제 라우트가 하는 그대로 거친다"*고 적고 있었다.
- * **그 근거는 살아 있고 부르는 자만 바뀌었다** — 오늘 계정을 만드는 프로덕션 경로는
- * `db/seed-user.ts`의 `seedUser`이고(마이그레이션 뒤에 `migrate`가 부르는 바로 그 함수),
- * 세션을 내는 프로덕션 경로는 `POST /api/auth/login`이다. **그래서 둘을 잇는다:**
+ * **이름이 `signup`이지만 가입 라우트는 없다.** 직접 `insertUser`를 부르지 않고 프로덕션
+ * 경로를 그대로 거친다 — 그래야 비밀번호 해시·세션 발급까지 운영이 하는 그대로 거친다.
+ * 계정을 만드는 프로덕션 경로는 `db/seed-user.ts`의 `seedUser`이고(마이그레이션 뒤에
+ * `migrate`가 부르는 바로 그 함수), 세션을 내는 프로덕션 경로는 `POST /api/auth/login`이다.
+ * **그래서 둘을 잇는다:**
  *
- * 1. `seedUser` — 비밀번호 해시와 삽입. 옛 라우트가 하던 그 일이고, 지금 운영에서도
- *    계정은 이 함수로만 생긴다.
+ * 1. `seedUser` — 비밀번호 해시와 삽입. 운영에서도 계정은 이 함수로만 생긴다.
  * 2. `POST /api/auth/login` — 세션 발급. **시딩은 쿠키를 안 낸다**(HTTP 요청이 아니다).
  *
- * **호출자 쪽 계약은 그대로다** — 돌려주는 것도 `{ user, cookie, password }` 셋이고,
- * 첫 `inject`가 Fastify 인스턴스를 부팅시키는 성질도 그대로다(`roles.test.ts`가 그 순서에
- * 기대고 있다). 그래서 이 함수를 쓰는 파일 쉰셋을 한 줄도 안 고쳤다.
+ * **호출자 쪽 계약** — 돌려주는 것은 `{ user, cookie, password }` 셋이고, 첫 `inject`가
+ * Fastify 인스턴스를 부팅시킨다(`roles.test.ts`가 그 순서에 기대고 있다).
  *
  * **scrypt 비용은 `testConfig()`의 값(1024)을 쓴다.** 운영 기본값(32768)이면 해시 한 번에
  * 50ms 이상이라 이 픽스처가 등장하는 케이스마다 그 비용이 쌓인다. 다른 `config`로
@@ -329,9 +323,8 @@ let projectCounter = 0
 /**
  * 주어진 쿠키의 사용자를 owner로 하는 프로젝트를 만든다. slug는 호출마다 유일하다.
  *
- * `/api/projects`를 실제로 호출한다(`signup`과 같은 이유) — 이 태스크가 검증하는
- * 생성 경로(트랜잭션·slug 유니크 처리 포함)를 그대로 거쳐야 이후 태스크의
- * 픽스처가 실제 API와 어긋나지 않는다.
+ * `/api/projects`를 실제로 호출한다(`signup`과 같은 이유) — 생성 경로(트랜잭션·slug
+ * 유니크 처리 포함)를 그대로 거쳐야 이것을 쓰는 픽스처가 실제 API와 어긋나지 않는다.
  */
 export async function createProject(
   ctx: TestContext,
@@ -359,9 +352,8 @@ export async function createProject(
 /**
  * 이미 있는 프로젝트에 사용자를 특정 역할로 넣는다 (API를 거치지 않는다).
  *
- * 멤버 초대 API가 아직 없는 태스크(이 태스크 포함)에서도 권한 시나리오를 세울 수
- * 있어야 하므로 DB에 직접 쓴다. 초대 API(`POST .../members`)가 생긴 뒤에도 그대로 둔다 —
- * 픽스처가 검사 대상 API에 의존하면 그 API가 깨졌을 때 무관한 테스트가 전부 무너진다.
+ * 초대 API(`POST .../members`)를 거치지 않고 DB에 직접 쓴다 — 픽스처가 검사 대상 API에
+ * 의존하면 그 API가 깨졌을 때 무관한 테스트가 전부 무너진다.
  */
 export async function addMember(
   ctx: TestContext,
@@ -388,7 +380,7 @@ let menuNodeCounter = 0
 
 /**
  * 프로젝트에 메뉴 노드를 만든다. `POST /api/projects/:projectId/menu`를 실제로
- * 호출한다(`createProject`와 같은 이유) — 이 태스크가 검증하는 생성 경로
+ * 호출한다(`createProject`와 같은 이유) — 생성 경로
  * (형제 재번호·부모 검증 포함)를 그대로 거쳐야 이것을 쓰는 픽스처(`createPage`)가
  * 실제 API와 어긋나지 않는다.
  */
@@ -431,7 +423,7 @@ let pageCounter = 0
 
 /**
  * 프로젝트의 메뉴 노드 밑에 페이지를 만든다. `POST /api/projects/:projectId/pages`를
- * 실제로 호출한다(`createMenuNode`와 같은 이유) — 이 태스크가 검증하는 생성 경로
+ * 실제로 호출한다(`createMenuNode`와 같은 이유) — 생성 경로
  * (기본 스키마·정렬·카탈로그 게이트 포함)를 그대로 거쳐야 픽스처가 실제 API와
  * 어긋나지 않는다.
  */

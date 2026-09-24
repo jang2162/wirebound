@@ -35,9 +35,8 @@ import {
  * 기대 상태를 400(zod)으로 못박아야 zod 제약이 사라진 순간을 잡아낸다. 422(파이프라인)로
  * 느슨하게 기대하면 zod를 통째로 지워도 초록인 채로 남는다.
  *
- * **`/version`은 그 반대 방향으로 고정한다.** P2a 최종 리뷰에서 D6를 개정해 `PatchPath`가
- * `/version`을 허용하게 됐다(`PUT .../schema`가 만든 revision을 undo로 되돌릴 수 있어야
- * 하기 때문이다). 그래서 `/version`을 다른 값으로 바꾸는 편집의 기대는 400이 아니라
+ * **`/version`은 그 반대 방향으로 고정한다.** `PatchPath`는 `/version`을 허용한다
+ * (`PUT .../schema`가 만든 revision을 undo로 되돌릴 수 있어야 하기 때문이다). 그래서 `/version`을 다른 값으로 바꾸는 편집의 기대는 400이 아니라
  * **422**이고, 그 422를 못박는 것이 곧 "버전 변조 차단이 zod가 아니라 파이프라인
  * 7단계에 있다"를 고정하는 일이다.
  */
@@ -314,7 +313,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
-      // D6 개정(P2a 최종 리뷰) 이후 `/version`은 zod를 통과한다. 버전 변조를 막는
+      // `/version`은 zod를 통과한다. 버전 변조를 막는
       // 것은 파이프라인 7단계(`after.version !== before.version` → `invalid`)이고,
       // 이 케이스가 그 자리를 못박는다 — 7단계를 지우면 여기가 200이 된다.
       const res = await patchOps(
@@ -335,7 +334,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 
-      // D6 개정으로 `/version`이 zod를 통과하게 된 이상, `replace` 말고 `remove`·`move`도
+      // `/version`이 zod를 통과하므로, `replace` 말고 `remove`·`move`도
       // 그 경로를 탈 수 있다. 둘 다 문서에서 `version`을 없애므로 여기서 막히지 않으면
       // 저장된 문서가 봉투를 잃는다.
       const removed = await patchOps(
@@ -488,8 +487,8 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
       expect(res.json().error.code).toBe('not-found')
 
       // 라우트를 아예 등록하지 않아도 Fastify가 404를 주므로, 위 두 줄만으로는
-      // "라우트가 없다"와 "페이지가 없다"가 구분되지 않는다(실측: 핸들러를 만들기
-      // 전에도 이 테스트만 초록이었다). 같은 URL 모양이 실제 pageId로는 200이라는
+      // "라우트가 없다"와 "페이지가 없다"가 구분되지 않는다(핸들러가 없어도 이 두 줄만으로는
+      // 초록이다). 같은 URL 모양이 실제 pageId로는 200이라는
       // 것까지 확인해야 404가 페이지 부재를 뜻한다.
       const exists = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp()] }, fx.owner.cookie)
       expect(exists.statusCode, exists.body).toBe(200)
@@ -523,7 +522,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId/ops', () => {
       const res = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp()] }, outsider.cookie)
 
       // 프로젝트가 없는 경우와 구분하지 않는다 — 프로젝트 id의 존재가 비멤버에게
-      // 새어 나가면 안 된다(설계 §10).
+      // 새어 나가면 안 된다(설계서 「권한 모델」).
       expect(res.statusCode, res.body).toBe(404)
       expect(res.json().error.code).toBe('not-found')
 
@@ -631,14 +630,14 @@ async function editTimes(ctx: TestContext, fx: Fixture, count: number): Promise<
 /**
  * `GET /api/projects/:projectId/pages/:pageId/revisions`의 라우트 테스트다.
  *
- * 이 엔드포인트의 존재 이유는 설계 §7.3의 "새로고침 후 undo 스택 복원"이다 —
+ * 이 엔드포인트의 존재 이유는 설계서 「개인 undo/redo」의 "새로고침 후 undo 스택 복원"이다 —
  * 클라이언트가 페이지를 다시 열면 자기 actor의 최근 revision을 받아 그 `inverse`만으로
  * 스택을 재구성한다. 그래서 '`inverse`를 그대로 실어 준다'가 이 스위트의 중심이고,
  * 나머지는 그 주변의 계약(정렬·필터·상한·권한)이다.
  *
  * **404 케이스마다 양성 대조(같은 URL 모양이 정상 조건에서는 200)를 함께 둔다.**
  * 라우트를 아예 등록하지 않아도 Fastify가 404를 주므로, 상태 코드만 보는 404 테스트는
- * 라우트가 없어도 초록이다(이 저장소에서 실제로 그렇게 통과한 테스트가 있었다).
+ * 라우트가 없어도 초록이다.
  */
 describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
   it('기본은 그 페이지의 모든 revision을 seq 내림차순으로 준다', async () => {
@@ -755,7 +754,7 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
       const other = await patchOps(ctx, fx, { baseSeq: 1, ops: [textOp('n_other00003')] }, editor.cookie)
       expect(other.statusCode, other.body).toBe(200)
 
-      // 브리프의 18개 케이스에 없던 행이다. `mine=false`만 검사하면 "생략도 내 것만"
+      // `mine=false`만 검사하면 "생략도 내 것만"
       // (기본값을 mine으로 뒤집는 변이)이 아무 테스트에도 안 걸린다 — 다른 케이스는
       // 전부 한 사용자만 편집하기 때문이다.
       const res = await getRevisions(ctx, revisionsUrl(fx), fx.owner.cookie)
@@ -883,7 +882,7 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
       // '없는 페이지는 404다'가 그 경우다). 실재하는 남의 페이지에 이력까지 남겨 두는
       // 이유는 이 케이스가 **위 케이스와 다른 성질**을 고정하게 만들기 위해서다:
       // 존재 확인이 사라지는 순간 이 요청은 빈 배열이 아니라 200과 **남의 프로젝트
-      // 이력**을 돌려준다(설계 §10 — 다른 프로젝트의 id가 존재를 흘리면 안 된다).
+      // 이력**을 돌려준다(설계서 「권한 모델」 — 다른 프로젝트의 id가 존재를 흘리면 안 된다).
       const outsider = await signup(ctx)
       const otherProject = await createProject(ctx, outsider.cookie)
       const otherMenu = await createMenuNode(ctx, outsider.cookie, otherProject.id)
@@ -935,7 +934,7 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
 
       const res = await getRevisions(ctx, revisionsUrl(fx), outsider.cookie)
 
-      // 프로젝트가 없는 경우와 구분하지 않는다(설계 §10).
+      // 프로젝트가 없는 경우와 구분하지 않는다(설계서 「권한 모델」).
       expect(res.statusCode, res.body).toBe(404)
       expect(res.json().error.code).toBe('not-found')
 
@@ -978,7 +977,7 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
 
       expect(res.statusCode, res.body).toBe(200)
       const [first] = res.json() as RevisionResponse[]
-      // **이 단언이 이 엔드포인트의 존재 이유다**(설계 §7.3): 새로고침한 클라이언트가
+      // **이 단언이 이 엔드포인트의 존재 이유다**(설계서 「개인 undo/redo」): 새로고침한 클라이언트가
       // 여기서 받은 `inverse`를 그대로 `PATCH .../ops`로 되보내 undo를 한다.
       expect(first?.inverse).toEqual(edit.json().inverse)
       // 위 한 줄만으로는 양쪽이 나란히 빈 배열이어도 통과한다. 실제 역연산까지 못박는다.
@@ -999,7 +998,7 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
       const edit = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp('n_actor00001')] }, editor.cookie)
       expect(edit.statusCode, edit.body).toBe(200)
 
-      // 브리프의 18개 케이스에 없던 행이다. 나머지 케이스는 `actorId`만 보므로
+      // 나머지 케이스는 `actorId`만 보므로
       // 응답 투영이 `actorLabel`·`actorType`을 엉뚱한 필드에서 채워도 잡히지 않는다.
       // 편집자를 owner가 아닌 다른 사람으로 두어 "페이지 소유자를 실어 준다"는 오류도
       // 함께 배제한다.

@@ -100,11 +100,10 @@ describe('HTTP 계약', () => {
   })
 
   it('예상 못 한 예외는 500 internal이고 내부 메시지를 노출하지 않는다', async () => {
-    // 예전 하네스는 ready()를 먼저 불렀다. Fastify 5는 ready 이후
-    // 라우트 등록을 거부하므로, 이 테스트만 공용 withApp을 쓰지 못하고 자체 앱을
-    // 조립해 ready() 이전에 임시 라우트를 붙이는 식으로 우회했다. 지금의 withApi는
-    // ready()를 부르지 않으므로(inject()가 첫 호출에서 알아서 태운다) 그 우회가
-    // 필요 없다 — 다른 테스트와 똑같이 공용 헬퍼 위에서 임시 라우트를 등록한다.
+    // Fastify 5는 ready 이후 라우트 등록을 거부한다. withApi는 ready()를 부르지
+    // 않으므로(inject()가 첫 호출에서 알아서 태운다) 다른 테스트와 똑같이 공용 헬퍼
+    // 위에서 임시 라우트를 등록할 수 있다 — withApi가 ready()를 먼저 부르게 바뀌면
+    // 이 등록이 거부된다.
     await withApi(async ({ app }) => {
       app.get('/__boom', async () => {
         throw new Error('데이터베이스 비밀번호가 담긴 내부 메시지')

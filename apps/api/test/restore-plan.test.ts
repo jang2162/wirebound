@@ -1,7 +1,7 @@
 /**
- * `services/restore-plan.ts` — payload와 현재를 견주어 **조작 목록**을 만드는 순수 함수(P6-2 T1).
+ * `services/restore-plan.ts` — payload와 현재를 견주어 **조작 목록**을 만드는 순수 함수.
  *
- * **여기가 FK 순서를 고정하는 자리다.** 계획서 T1: *"지울 때는 페이지 먼저·자식 메뉴 먼저,
+ * **여기가 FK 순서를 고정하는 자리다** — *"지울 때는 페이지 먼저·자식 메뉴 먼저,
  * 만들 때는 부모 메뉴 먼저"*. 그 순서는 DB를 켜지 않고도 재진다 — `steps`의 `kind` 열이
  * 그대로 순서이므로 케이스가 그 열을 통째로 본다.
  */
@@ -23,9 +23,9 @@ const THEME_A = '99999999-9999-4999-8999-999999999999'
 const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 /**
- * 문서 하나. **`Page`의 props는 `z.strictObject({})`라 아무 키도 못 받는다** — 처음에
- * `props: { title }`로 문서를 갈랐다가 `invalid-props`로 전부 막혔다(계획이 아니라
- * `invalid-document`가 나왔다). 그래서 내용은 **자식 노드의 id**로 가른다.
+ * 문서 하나. **`Page`의 props는 `z.strictObject({})`라 아무 키도 못 받는다** —
+ * `props: { title }`로 문서를 가르면 `invalid-props`로 전부 막힌다(계획이 아니라
+ * `invalid-document`가 나온다). 그래서 내용은 **자식 노드의 id**로 가른다.
  */
 function doc(text: string, version = CURRENT_DOCUMENT_VERSION): PageDocument {
   return {
@@ -117,7 +117,7 @@ describe('아무것도 바뀌지 않았으면 조작이 없다', () => {
     })
   })
 
-  it('내용이 같은 페이지는 스키마를 쓰지 않는다 — D4', () => {
+  it('내용이 같은 페이지는 스키마를 쓰지 않는다', () => {
     const p = payload({ menu: [menuNode(MENU_A)], pages: [page(PAGE_A)] })
     const c = current({ menu: [menuNode(MENU_A)], pages: [page(PAGE_A)] })
 
@@ -128,7 +128,7 @@ describe('아무것도 바뀌지 않았으면 조작이 없다', () => {
     expect(plan.summary.pages.schemaChanged).toBe(0)
   })
 
-  it('headSeq만 달라도 내용이 같으면 쓰지 않는다 — D4의 "headSeq로 비교하지 마라"', () => {
+  it('headSeq만 달라도 내용이 같으면 쓰지 않는다 — "headSeq로 비교하지 마라"', () => {
     const p = payload({ menu: [menuNode(MENU_A)], pages: [page(PAGE_A, { headSeq: 3 })] })
     const c = current({ menu: [menuNode(MENU_A)], pages: [page(PAGE_A, { headSeq: 9 })] })
 
@@ -147,7 +147,7 @@ describe('아무것도 바뀌지 않았으면 조작이 없다', () => {
   })
 })
 
-describe('FK 순서 — 계획서 T1', () => {
+describe('FK 순서', () => {
   it('지울 때: 코멘트 → 페이지 → 메뉴', () => {
     const p = payload()
     const c = current({
@@ -255,7 +255,7 @@ describe('메뉴·페이지·코멘트의 변경 판정', () => {
   })
 })
 
-describe('레이아웃 — D6·D7', () => {
+describe('레이아웃', () => {
   it('레이아웃 id 집합이 다르면 계획을 내지 않는다 (409)', () => {
     const p = payload({ layouts: [{ id: LAYOUT_A, name: 'L', themeId: null, schema: doc('x') as never }] })
     const c = current({ layouts: [] })
@@ -280,7 +280,7 @@ describe('레이아웃 — D6·D7', () => {
   })
 })
 
-describe('미지원 문서 버전 — D5(§13.1 판정)', () => {
+describe('미지원 문서 버전 — 설계서 「스키마 마이그레이션」', () => {
   it('payload의 문서가 미지원이면 어느 페이지가 어떤 버전인지 낸다', () => {
     const p = payload({
       menu: [menuNode(MENU_A)],
@@ -314,12 +314,12 @@ describe('미지원 문서 버전 — D5(§13.1 판정)', () => {
   })
 
   /**
-   * **좁힘의 둘째 칸(리뷰가 잡았다).** 양쪽 문서가 **같아서 쓸 것이 없는** 페이지는 막지
+   * **좁힘의 둘째 칸.** 양쪽 문서가 **같아서 쓸 것이 없는** 페이지는 막지
    * 않는다. 막으면 그런 페이지가 하나 생긴 프로젝트는 **어떤 스냅샷으로도 되돌아갈 수 없게**
    * 된다 — 그 페이지와 무관한 복원까지 전부 400이다.
    *
-   * D4가 이미 *"내용이 같으면 아무것도 쓰지 않는다"*이므로, 쓰지 않는 페이지를 버전 때문에
-   * 막는 것은 그 결정과 일관되지 않는다.
+   * 복원은 이미 *"내용이 같으면 아무것도 쓰지 않는다"*(위 *"내용이 같은 페이지는 스키마를
+   * 쓰지 않는다"*)이므로, 쓰지 않는 페이지를 버전 때문에 막는 것은 그 결정과 일관되지 않는다.
    */
   it('양쪽이 같아 쓸 것이 없으면 미지원 버전이어도 막지 않는다', () => {
     const same = doc('x', 999)

@@ -644,7 +644,7 @@ describe('DELETE /api/projects/:projectId/menu/:nodeId', () => {
         cookies: owner.cookie,
       })
       expect(res.statusCode).toBe(409)
-      // 이 검사는 "자식 메뉴나 페이지" 둘 다를 센다(처음엔 자식 메뉴만 셌다)
+      // 이 검사는 "자식 메뉴나 페이지" 둘 다를 센다
       // (repos/menu.ts의 HasChildrenError). 이 테스트는 자식 메뉴 쪽 경로만 확인한다 —
       // 페이지 쪽 경로는 test/pages.test.ts의 "메뉴 연동" 테스트가 확인한다.
       expect(res.json().error.message).toBe('하위 메뉴나 페이지가 있어 삭제할 수 없습니다')
@@ -704,8 +704,8 @@ describe('DELETE /api/projects/:projectId/menu/:nodeId', () => {
 
       // 라우트·리포지토리(=사전 자식 확인)를 거치지 않고 DB에 직접 DELETE를 보낸다 —
       // `0003-menu-nodes` 마이그레이션의 `parent_id ... ON DELETE RESTRICT`가
-      // 애플리케이션 검사 없이도 실제로 막아 서는지 확인한다(브리프: "DB가 두
-      // 번째 방어선이 된다"). `withTransaction`으로 감싸 이 의도된 위반이
+      // 애플리케이션 검사 없이도 실제로 막아 서는지 확인한다 — DB가 두 번째
+      // 방어선이다. `withTransaction`으로 감싸 이 의도된 위반이
       // `withApi`의 바깥 트랜잭션을 오염시키지 않게 한다.
       await expect(
         withTransaction(ctx.db, (trx) => trx.deleteFrom('menu_nodes').where('id', '=', root.id).execute()),

@@ -4,17 +4,15 @@
  *
  * ---
  *
- * # 왜 이 파일이 생겼나 — **숫자가 맞아 보이는 채로 항목이 숨었다**
+ * # 왜 분모를 소스에서 만드나 — **숫자가 맞아 보이는 채로 항목이 숨는다**
  *
- * P6-2 보고서가 D8의 잠금을 *"오늘 쓰기 라우트 **아홉**"*에 대해 쟀다고 적었다. **그 아홉은
- * census가 아니었다** — 손으로 고른 아홉이었고, 리뷰가 세어 보니 실제로는 그보다 많았다.
- * 빠진 것들(`PUT .../schema` · `PATCH .../ops` · `DELETE .../pages` · `renumber` ·
- * `PUT /:projectId/theme` · `POST .../snapshots`)은 재 보니 **전부 막혀서** 결론은 오히려
- * 강해졌지만, 그것은 운이다. **분모를 손으로 적으면 빠진 항목이 결과를 바꿔도 아무도 모른다.**
+ * 복원 잠금을 잴 쓰기 라우트를 손으로 고르면 **수는 그럴듯한데 항목이 빠진다** — 복원이
+ * 페이지 문서를 되돌릴 때 타는 `PUT .../schema`나 `PATCH .../ops`처럼 가장 아픈 자리도
+ * 빠질 수 있다. 빠진 항목이 전부 막혀서 결론이 맞게 나와도 그것은 운이다. **분모를 손으로
+ * 적으면 빠진 항목이 결과를 바꿔도 아무도 모른다.**
  *
- * 이 저장소가 같은 부류를 반복해서 만났다 — `permission-matrix.test.ts`의 *"표가 라우트를
- * 하나도 빠뜨리지 않는다"*가 그 대응이었고(`GET /:projectId/theme`가 표에 빠져 가드를 아예
- * 없애도 0건이 죽었다), 여기가 그 두 번째다. **그래서 분모를 소스에서 만든다.**
+ * `permission-matrix.test.ts`의 *"표가 라우트를 하나도 빠뜨리지 않는다"*와 같은 부류다
+ * (표에서 빠진 라우트는 가드를 아예 없애도 0건이 죽는다). **그래서 분모를 소스에서 만든다.**
  *
  * ---
  *
@@ -22,7 +20,7 @@
  *
  * > **이 표가 세는 것은 `apps/api/src/routes/`에 선언된 라우트 중 `projectGuard`가 걸린
  * > 비-`GET` 라우트 하나당 한 줄이다.** 한 라우트가 **본문에 따라 잠금과 다르게 만나면**
- * > 그 갈래마다 한 줄을 더 둔다. **본문뿐 아니라 대상의 상태도 갈래를 만든다** — 재서 알았다:
+ * > 그 갈래마다 한 줄을 더 둔다. **본문뿐 아니라 대상의 상태도 갈래를 만든다**:
  * > `POST .../menu`는 `parentId`가 `null`이냐로 갈리고, `renumber`는 **바꿀 번호가 있느냐**로
  * > 갈린다(없으면 `ops.length === 0`에서 조기 반환해 **아무것도 쓰지 않고 아무것도 잠그지
  * > 않는다**).
@@ -31,11 +29,10 @@
  * 생성)는 **프로젝트 자원을 만지지 않으므로** 이 질문의 대상이 아니다. `GET`은 잠금과
  * 무관하다(`FOR UPDATE`는 읽기를 막지 않는다).
  *
- * **P8-4의 내보내기 둘(`GET .../export`·`GET .../export/preview`)이 이 표에 안 든다.**
- * 그 계획서 D4는 *"`restore-lock-census.test.ts`도 죽는다"*로 봤는데 **거짓이다** — 위
+ * **내보내기 둘(`GET .../export`·`GET .../export/preview`)은 이 표에 안 든다** — 위
  * 문장이 세는 단위를 비-`GET`으로 못박아 두었고, 내보내기는 프로젝트 전체를 **읽기만**
  * 한다. 복원이 쥔 `FOR UPDATE`는 읽기를 막지 않으므로 *"복원 중에 막히는가"*라는 이 표의
- * 물음 자체가 그 라우트에 대해 성립하지 않는다. 죽지 않는 것이 옳다.
+ * 물음 자체가 그 라우트에 대해 성립하지 않는다. 새 `GET` 라우트에 이 파일이 죽지 않는 것이 옳다.
  *
  * **아래 `분모를 소스에서 만든다` 케이스가 그 문장을 실행으로 지킨다.** 새 쓰기 라우트가
  * 생기면 이 파일이 **먼저 죽는다.**
@@ -55,8 +52,8 @@
  * | 잠금을 놓은 **뒤** 그 요청이 2xx로 끝나는가 | *"막힌 게 아니라 원래 실패하는 요청"* |
  * | 잠금 **없이** 같은 요청이 창 안에 끝나는가 | *"막힌 게 아니라 그냥 느리다"* |
  *
- * 앞 판에서 이 둘 중 하나가 없어 **거짓 두 줄**이 나올 뻔했다 — 코멘트 수정·삭제가
- * *"안 막힌다"*로 나왔는데 실은 픽스처가 `commentId`를 잘못 읽어 400이던 것이었다.
+ * 이 둘 중 하나가 없으면 **거짓 줄**이 선다 — 픽스처가 `commentId`를 잘못 읽어 400으로
+ * 끝나는 요청도 *"안 막힌다"*로 읽힌다.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
@@ -79,7 +76,7 @@ import {
 
 const db = getTestDb()
 
-// 청소도 하네스도 `helpers.ts`에 있다(P3-1 D1). 이 파일이 만드는 프로젝트 테마는
+// 청소도 하네스도 `helpers.ts`에 있다. 이 파일이 만드는 프로젝트 테마는
 // 프로젝트와 함께 CASCADE로 간다(0006).
 beforeEach(resetRealData)
 afterEach(resetRealData)
@@ -170,8 +167,7 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
-    // **P7-3이 더한 하나. 이 파일이 그것을 강제했다** — 라우트를 만든 커밋에서 이 케이스가
-    // 먼저 죽었고, 그래서 *"가져오기가 복원 중에 어떻게 되는가"*를 재게 됐다.
+    // **가져오기** — *"가져오기가 복원 중에 어떻게 되는가"*를 여기서 잰다.
     //
     // 복원이 되돌리는 행 셋(`pages`·`revisions`·`comments`)을 전부 쓰므로 `restoreWrites`가
     // 참이다. 막히지 않으면 **복원이 얼린 상태 옆에 새 페이지가 끼어든다.**
@@ -209,8 +205,8 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
-    // **앞 판의 표에서 빠져 있던 여섯 중 하나.** 복원이 페이지 문서를 되돌릴 때 타는
-    // 바로 그 경로이므로, 빠져 있었다는 것 자체가 가장 아픈 자리였다.
+    // **복원이 페이지 문서를 되돌릴 때 타는 바로 그 경로다** — 이 줄이 빠지면 가장 아픈
+    // 자리가 안 잰 채로 남는다.
     route: 'PUT /:projectId/pages/:pageId/schema',
     label: '페이지 스키마 저장 — 복원이 되돌릴 때 타는 그 경로다',
     method: 'PUT',
@@ -259,7 +255,7 @@ const PROBES: Probe[] = [
   },
   {
     // **바꿀 번호가 없으면 `ops.length === 0`에서 조기 반환한다** — `applyEdit`을 아예 부르지
-    // 않으므로 잠금도 안 잡는다. 재서 알았다(기대는 *"막힌다"*였고 틀렸다).
+    // 않으므로 잠금도 안 잡는다.
     // **그래도 안전하다:** 쓰지 않는 요청이 통과하는 것은 복원이 되돌릴 것을 만들지 않는다.
     route: 'POST /:projectId/pages/:pageId/comments/renumber',
     label: '코멘트 재번호 (바꿀 번호가 없다 — 아무것도 쓰지 않는다)',
@@ -277,8 +273,8 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
-    // **`layouts.theme_id`를 쓰는 유일한 라우트이고, 복원이 되돌리는 바로 그 컬럼이다**(D6).
-    // 앞 판의 표에 없었다 — *"테마 라우트"*로 묶여 *"복원이 안 건드리는 것"* 쪽으로 새어 있었다.
+    // **`layouts.theme_id`를 쓰는 유일한 라우트이고, 복원이 되돌리는 바로 그 컬럼이다.**
+    // *"테마 라우트"*로 묶으면 *"복원이 안 건드리는 것"* 쪽으로 새기 쉽다.
     route: 'PUT /:projectId/theme',
     label: '프로젝트 테마 고르기 — 복원이 되돌리는 layouts.theme_id를 쓴다',
     method: 'PUT',
@@ -301,9 +297,9 @@ const PROBES: Probe[] = [
     label: '복원 자신 — 두 복원이 겹치면 뒤엣것이 기다린다',
     method: 'POST',
     url: (ids) => `/api/projects/${ids.projectId}/snapshots/${ids.snapshotId}/restore`,
-    // **진짜 스냅샷이어야 한다.** 처음엔 없는 id를 줬는데(잠금이 404보다 먼저 걸리므로
-    // 판정은 옳게 나왔다) **놓은 뒤 2xx** 대조가 404로 죽었다 — 그 대조가 없었다면 이 줄은
-    // 초록인 채로 *"막힌다"*를 잘못된 근거로 주장했을 것이다.
+    // **진짜 스냅샷이어야 한다.** 없는 id를 주면 잠금이 404보다 먼저 걸려 판정은 옳게
+    // 나오지만 **놓은 뒤 2xx** 대조가 404로 죽는다 — 그 대조가 없으면 이 줄은 초록인 채로
+    // *"막힌다"*를 잘못된 근거로 주장한다.
     restoreWrites: true,
     blocked: true,
   },
@@ -353,7 +349,7 @@ const PROBES: Probe[] = [
     blocked: false,
   },
   {
-    // **막힌다 — 기대는 "안 막힌다"였고 틀렸다.** `themes.project_id`가 `projects(id)`를
+    // **막힌다.** `themes.project_id`가 `projects(id)`를
     // 참조하므로 삽입이 그 행에 `FOR KEY SHARE`를 걸고, 그것이 `FOR UPDATE`와 충돌한다.
     // **복원이 테마 행을 쓰지 않는데도 막힌다** — 부수 효과다(아래 `표가 스스로 세는 것`).
     route: 'POST /:projectId/themes',
@@ -365,11 +361,11 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
-    // **막힌다 — 이월 AA′(2026-09-24)부터.** 트랜잭션의 첫 잠금이 프로젝트 행 `KEY SHARE`(`repos/projects.ts`의
-    // `lockProjectShared`)라 `FOR UPDATE`와 충돌한다 — 부수 효과다. 앞 판은 «안 막힌다»였는데 그 값은 복원이 **테마를 안
-    // 쓰는** 판이었다: 복원의 `set-layout-theme`이 테마 행에 `KEY SHARE`를 걸면 slug 를 바꾸는 수정은 그 뒤에 섰고, 가드의
-    // 판정이 낡은 채 커밋됐다(리뷰 F2). 이제 기다림을 재확인 앞으로 끌어온다. **그 편집이 이기는 것은 그대로다** — 복원은
-    // 테마 행을 되돌리지 않으므로 풀린 뒤의 편집이 남는다.
+    // **막힌다.** 트랜잭션의 첫 잠금이 프로젝트 행 `KEY SHARE`(`repos/projects.ts`의
+    // `lockProjectShared`)라 `FOR UPDATE`와 충돌한다 — 부수 효과다. 복원이 **테마를 안 쓰는** 판만 보면 «안 막힌다»로
+    // 보이지만, 그 첫 잠금이 없으면 복원의 `set-layout-theme`이 테마 행에 `KEY SHARE`를 걸 때 slug 를 바꾸는 수정이 그 뒤에
+    // 서고 가드의 판정이 낡은 채 커밋된다 — 첫 잠금이 기다림을 재확인 앞으로 끌어온다. **그 편집이 이기는 것은 그대로다** —
+    // 복원은 테마 행을 되돌리지 않으므로 풀린 뒤의 편집이 남는다.
     route: 'PUT /:projectId/themes/:themeId',
     label: '테마 수정 — 복원이 도는 동안 고치면 기다렸다가 **그 편집이 이긴다**',
     method: 'PUT',
@@ -379,9 +375,9 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
-    // **막힌다 — 테마 수정과 같은 이유다.** 앞 판의 «안 막힌다»는 쓰이지 않는 테마의 값이었다 — 복원이 레이아웃을 그
-    // 테마에서 떼는 판이면 `ON DELETE RESTRICT` 검사가 복원이 쥔 레이아웃 행에 서고, 복원 커밋 뒤에 통과해 강등된 사람의
-    // 삭제가 커밋됐다(리뷰 F1).
+    // **막힌다 — 테마 수정과 같은 이유다.** 쓰이지 않는 테마만 보면 «안 막힌다»로 보이지만, 복원이 레이아웃을 그
+    // 테마에서 떼는 판이면 `ON DELETE RESTRICT` 검사가 복원이 쥔 레이아웃 행에 서고, 첫 잠금이 없으면 복원 커밋 뒤에
+    // 통과해 강등된 사람의 삭제가 커밋된다.
     route: 'DELETE /:projectId/themes/:themeId',
     label: '테마 삭제',
     method: 'DELETE',
@@ -390,8 +386,7 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
-    // **P7-2가 더한 둘. 이 파일이 그것을 강제했다** — 라우트를 만든 커밋에서 이
-    // 케이스가 먼저 죽었고, 그래서 *"프리셋 쓰기가 복원 중에 어떻게 되는가"*를 재게 됐다.
+    // **프리셋 쓰기 둘** — *"프리셋 쓰기가 복원 중에 어떻게 되는가"*를 여기서 잰다.
     //
     // **막힌다 — `POST .../themes`와 같은 이유다.** `presets.project_id`가 `projects(id)`를
     // 참조하므로 삽입이 그 행에 `FOR KEY SHARE`를 걸고 그것이 `FOR UPDATE`와 충돌한다.
@@ -416,8 +411,7 @@ const PROBES: Probe[] = [
     blocked: false,
   },
   {
-    // **P9-2가 더한 둘. 이 파일이 또 그것을 강제했다** — 라우트를 만든 커밋에서 이
-    // 케이스가 먼저 죽었다.
+    // **API 토큰 쓰기 둘.**
     //
     // **막힌다 — `POST .../presets`·`POST .../themes`와 같은 이유다.**
     // `api_tokens.project_id`가 `projects(id)`를 참조하므로 삽입이 그 행에
@@ -467,7 +461,7 @@ function declaredWriteRoutes(): string[] {
 
 describe('분모를 소스에서 만든다', () => {
   it('훑을 소스를 실제로 읽는다', () => {
-    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**(이 저장소가 세 번 겪은 사고다).
+    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**.
     expect(readdirSync(ROUTES_DIR).filter((file) => file.endsWith('.ts')).length).toBeGreaterThan(5)
     expect(declaredWriteRoutes().length).toBeGreaterThan(15)
   })
@@ -506,7 +500,7 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
   })
   if (commentRes.statusCode !== 201) throw new Error(`코멘트 픽스처 실패: ${commentRes.body}`)
 
-  // 시스템 테마는 쓸 수 없으므로(§6.10) 프로젝트 테마를 하나 만든다.
+  // 시스템 테마는 쓸 수 없으므로(설계서 「테마 관리」) 프로젝트 테마를 하나 만든다.
   const themeRes = await app.inject({
     method: 'POST',
     url: `/api/projects/${project.id}/themes`,
@@ -591,7 +585,7 @@ function fire(app: FastifyInstance, probe: Probe, ids: Ids) {
   return { done: () => settled, promise }
 }
 
-describe('복원 잠금이 무엇을 막는가 (D8)', () => {
+describe('복원 잠금이 무엇을 막는가', () => {
   it('잠금이 없으면 표의 모든 요청이 창 안에 끝난다 — 음성 대조', async () => {
     const slow: string[] = []
     await withRealApi(async ({ app }) => {
@@ -633,7 +627,7 @@ describe('복원 잠금이 무엇을 막는가 (D8)', () => {
           blocked = !request.done()
         } finally {
           // **놓아 주는 것이 `finally`에 있어야 한다** — 실패 경로에서 안 놓으면 `afterEach`의
-          // `deleteFrom('projects')`가 그 잠금을 기다리며 스위트 전체가 멈춘다(겪었다).
+          // `deleteFrom('projects')`가 그 잠금을 기다리며 스위트 전체가 멈춘다.
           release()
           await holder
         }
@@ -641,8 +635,8 @@ describe('복원 잠금이 무엇을 막는가 (D8)', () => {
         expect(blocked).toBe(probe.blocked)
 
         // **놓은 뒤에는 성공해야 한다.** 이것이 없으면 *"막혔다"*가 *"원래 실패하는 요청"*과
-        // 구분되지 않는다 — 앞 판에서 픽스처가 `commentId`를 잘못 읽어 400이던 것을 두 줄
-        // *"안 막힌다"*로 보고할 뻔했다.
+        // 구분되지 않는다 — 픽스처가 `commentId`를 잘못 읽어 400으로 끝나는 요청도
+        // *"안 막힌다"*로 읽힌다.
         const res = await request.promise
         expect(res.statusCode, `${probe.label}: ${res.body}`).toBeLessThan(400)
       })
@@ -652,7 +646,7 @@ describe('복원 잠금이 무엇을 막는가 (D8)', () => {
 
 describe('표가 스스로 세는 것', () => {
   /**
-   * **이것이 D8이 실제로 주장하는 명제다.** *"쓰기 라우트 전부가 막힌다"*가 아니다 —
+   * **이것이 복원 잠금이 실제로 주장하는 명제다.** *"쓰기 라우트 전부가 막힌다"*가 아니다 —
    * 그것은 참이 아니고(재번호의 무-op 갈래가 안 막힌다) 참일 필요도 없다.
    *
    * 주장은 **"복원이 되돌리는 행을 쓰는 라우트는 하나도 빠짐없이 막힌다"**이고, 그 분모는
@@ -673,11 +667,11 @@ describe('표가 스스로 세는 것', () => {
   it('막히지 않는 줄의 목록이 고정돼 있다', () => {
     expect(PROBES.filter((probe) => !probe.blocked).map((probe) => probe.route).sort()).toEqual([
       'DELETE /:projectId/members/:userId',
-      // **P7-2가 여섯째를 더했다.** 프리셋 삭제는 자식 행 삭제라 부모를 잡지 않는다 —
+      // **프리셋 삭제**는 자식 행 삭제라 부모를 잡지 않는다 —
       // 복원이 프리셋을 되돌리지 않으므로(payload에 프리셋 절이 없다) 해롭지 않다.
       'DELETE /:projectId/presets/:presetId',
-      // 테마 삭제 · 수정은 2026-09-24(이월 AA′)에 이 목록에서 나갔다 — 위 census 의 그 두 줄.
-      // **P9-2가 일곱째를 더했다.** 토큰 폐기도 자식 행 삭제라 부모를 잡지 않는다.
+      // 테마 삭제 · 수정은 이 목록에 없다 — 첫 잠금 때문에 막힌다(위 census 의 그 두 줄).
+      // **토큰 폐기**도 자식 행 삭제라 부모를 잡지 않는다.
       // 복원이 토큰을 되돌리지 않으므로 해롭지 않고, **오히려 막히면 안 되는 쪽이다** —
       // 폐기는 자격을 거두는 조작이라 복원이 도는 동안 기다려야 할 이유가 없다.
       'DELETE /:projectId/tokens/:tokenId',

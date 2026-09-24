@@ -1,5 +1,5 @@
 /**
- * **api 가 DB 오류를 어떻게 내는가**(2026-09-22 이월 W) — HTTP 로 잰다.
+ * **api 가 DB 오류를 어떻게 내는가** — HTTP 로 잰다.
  *
  * - (ii) **결과를 모르는 실패는 503 이다** — 봉투 있는 500(«그 요청은 커밋 전»)이 아니다. 웹의 코멘트 게시가 그 둘을
  *   가른다(`apps/web`의 `comment-panel.tsx`의 `knownRejection` 표). 경계는 `src/db/connection-loss.ts`가 소유한다.
@@ -10,18 +10,17 @@
  * (`pg-fault-proxy.ts`) 뒤의 풀 위에 세우고, 끝나면 `resetRealData`로 지운다. 세션 조회를 **서버가 답해 거절한** 판
  * (500)은 `session.test.ts`의 *"resolveSession 조회 자체가 실패하면 …"*이 갖는다.
  *
- * **잰 변조**(api 프로젝트 전량 · 백업 후 바이트 비교로 되돌렸다). 연결을 잃는 판의 넷과 *"게시의 COMMIT 이 클라이언트 쪽
+ * **변조와 죽는 것**(api 프로젝트 전량으로 잰다 · 변조는 백업 후 바이트 비교로 되돌린다). 연결을 잃는 판의 넷과 *"게시의 COMMIT 이 클라이언트 쪽
  * 시간 제한으로 …"*는 `db-connection-loss.test.ts`의 변조(듣는 자 · 표지 · 가르는 층 · COMMIT 줄)에서도 함께 죽는다 — 그 축의
- * 주인은 그쪽 표가 적는다. 아래 표의 **503 줄은 2026-09-22 리뷰 (e) 후속에서 다시 쟀고**, 인증 훅의 네 줄은 `ce4f6d7`에서 잰
- * 것이다(이 판은 `auth/plugin.ts`를 안 건드렸다).
+ * 주인은 그쪽 표가 적는다.
  *
  * | 변조 | 죽는 것 |
  * |---|---|
  * | 쿠키 조회가 던지면 토큰 갈래로 넘어간다 | *"쿠키 조회가 실패하면 …"* **혼자** |
- * | 토큰 조회의 예외를 앞 판처럼 삼킨다 | *"토큰 조회가 …"* **혼자** |
+ * | 토큰 조회의 예외를 삼킨다 | *"토큰 조회가 …"* **혼자** |
  * | 쿠키 조회의 예외 중 **연결을 잃은 것만** 던지고 나머지는 삼킨다 | `session.test.ts`의 *"resolveSession 조회 자체가 실패하면 …"* **혼자** |
- * | `DbConnectionLostError`를 503 으로 안 옮긴다(500 봉투) | 여기 다섯 — 축의 주인은 *"게시의 COMMIT 응답이 …"*. *"게시의 COMMIT 이 클라이언트 쪽 시간 제한으로 …"*는 **혼자 죽는 변조가 없다** — 이것과 COMMIT 줄(그쪽 주인 *"COMMIT 이 서버의 답 없이 …"*)에서 늘 함께 죽는다. 남긴 것은 리뷰 (e)의 절차를 HTTP·재생·행 수까지 한 판으로 재기 때문이다 |
- * | 쿠키 조회의 예외를 앞 판처럼 삼킨다 | *"세션 조회가 연결을 잃으면 …"* · *"쿠키 조회가 실패하면 …"* · `session.test.ts`의 *"resolveSession 조회 자체가 실패하면 …"* — 셋 다 401. 축의 주인은 *"세션 조회가 연결을 잃으면 …"* |
+ * | `DbConnectionLostError`를 503 으로 안 옮긴다(500 봉투) | 여기 다섯 — 축의 주인은 *"게시의 COMMIT 응답이 …"*. *"게시의 COMMIT 이 클라이언트 쪽 시간 제한으로 …"*는 **혼자 죽는 변조가 없다** — 이것과 COMMIT 줄(그쪽 주인 *"COMMIT 이 서버의 답 없이 …"*)에서 늘 함께 죽는다. 남긴 것은 COMMIT 을 서버 안에서 걸리게 하는 절차를 HTTP·재생·행 수까지 한 판으로 재기 때문이다 |
+ * | 쿠키 조회의 예외를 삼킨다 | *"세션 조회가 연결을 잃으면 …"* · *"쿠키 조회가 실패하면 …"* · `session.test.ts`의 *"resolveSession 조회 자체가 실패하면 …"* — 셋 다 401. 축의 주인은 *"세션 조회가 연결을 잃으면 …"* |
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
@@ -40,7 +39,7 @@ import {
 } from './helpers'
 import { startFaultProxy, type FaultProxy } from './pg-fault-proxy'
 
-/** 이 케이스 동안 난 `uncaughtException` — 앞 판에서 api 를 죽인 것이 이것이다(`db-connection-loss.test.ts`). */
+/** 이 케이스 동안 난 `uncaughtException` — 연결을 잃은 판에서 api 를 죽이는 것이 이것이다(`db-connection-loss.test.ts`). */
 const uncaught: unknown[] = []
 const record = (error: unknown): void => {
   uncaught.push(error)
@@ -121,7 +120,7 @@ describe('결과를 모르는 실패는 503 이다 — 봉투 있는 500 이 아
 
 describe('COMMIT 에 서버의 답이 아닌 거절이 오면 503 이다 — 표지(연결의 `\'error\'`)가 없어도', () => {
   it('게시의 COMMIT 이 클라이언트 쪽 시간 제한으로 거절되면 503 이다 — 커밋은 됐고(1행) 같은 키로 다시 보내면 재생된다', async () => {
-    // 리뷰 (e)의 절차 — COMMIT 을 서버 안에서 걸리게 하는 지연 제약 트리거 + `query_timeout`. `createPool`은 그 설정을
+    // 절차 — COMMIT 을 서버 안에서 걸리게 하는 지연 제약 트리거 + `query_timeout`. `createPool`은 그 설정을
     // 거절하므로 **만든 뒤 풀에 넣는다**(COMMIT 줄만 잰다 — `db-connection-loss.test.ts`의 머리말). 값: COMMIT 1.3s ·
     // 타이머 1.0s — 뒤따른 ROLLBACK 이 COMMIT 뒤에 답을 받으므로 던져지는 것은 COMMIT 의 거절이다.
     const admin = getTestDb()
@@ -148,7 +147,7 @@ describe('COMMIT 에 서버의 답이 아닌 거절이 오면 503 이다 — 표
       expect(first.statusCode, first.body).toBe(503)
       expect(envelope(first.body)?.code).toBe('internal')
       expect(uncaught).toEqual([])
-      // 앞 판은 여기서 봉투 500 이었다 — 웹이 «확정 안 달림»으로 읽고 고쳐 달면 두 행(리뷰 (e)).
+      // 여기서 봉투 500 이면 웹이 «확정 안 달림»으로 읽고 고쳐 달아 두 행이 된다.
       const { rows } = await sql<{ body: string }>`select body from comments where page_id = ${fx.pageId}`.execute(admin)
       expect(rows).toEqual([{ body: 'zz-slow-commit 원문' }])
 

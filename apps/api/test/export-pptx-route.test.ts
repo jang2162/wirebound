@@ -1,5 +1,5 @@
 /**
- * **`?format=pptx`가 붙은 내보내기 라우트 둘**(P10-1 T5 · D7).
+ * **`?format=pptx`가 붙은 내보내기 라우트 둘**.
  *
  * | 무엇 | 어디 |
  * |---|---|
@@ -171,7 +171,7 @@ describe('GET /:projectId/export?format=pptx', () => {
     })
   })
 
-  it('코멘트와 상호작용 문장을 싣는다 — §8.2', async () => {
+  it('코멘트와 상호작용 문장을 싣는다 — 설계서 「자동 문장화」', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, 'pptx-five')
       const res = await ctx.app.inject({
@@ -269,7 +269,7 @@ describe('GET /:projectId/export/preview?format=pptx', () => {
       expect(res.statusCode).toBe(200)
       expect(res.json().format).toBe('pptx')
       expect(res.json().fileName).toBe('wirebound-export-pptx-preview.pptx')
-      // **그리는 자를 안 넣었으므로 전부다**(P10-2 D3 — `withApi`가 기본으로 안 준다).
+      // **그리는 자를 안 넣었으므로 전부다**(`withApi`가 기본으로 안 준다).
       // 넣었을 때 무엇이 되는지는 `test/export-pptx-screens.test.ts`가 잰다.
       expect(res.json().screenless).toEqual([
         '관리자 대시보드',
@@ -280,12 +280,12 @@ describe('GET /:projectId/export/preview?format=pptx', () => {
   })
 
   /**
-   * **HTML 번들의 성질을 pptx 응답에 싣지 않는다**(P10-1 D7). PPTX는 페이지 사이 링크를
-   * 만들지 않고 §6의 테마를 OOXML 색으로 옮기지도 않는다 — 값이 있는데 그 값이 아무것도
+   * **HTML 번들의 성질을 pptx 응답에 싣지 않는다**. PPTX는 페이지 사이 링크를
+   * 만들지 않고 설계서 「테마 시스템」의 테마를 OOXML 색으로 옮기지도 않는다 — 값이 있는데 그 값이 아무것도
    * 안 가리키면 화면이 거짓을 말한다.
    *
-   * **P10-2가 셋을 더했다**(`screenFailures`·`fontWarning`은 그리는 자가 생겨서 값이
-   * 되었다). 그 셋이 무엇을 뜻하는지는 `test/export-pptx-screens.test.ts`가 잰다 —
+   * **pptx 만의 필드가 셋이다**(`screenless`·`screenFailures`·`fontWarning` — 그리는 자가
+   * 채운다). 그 셋이 무엇을 뜻하는지는 `test/export-pptx-screens.test.ts`가 잰다 —
    * **여기가 재는 것은 목록 자체**이고, 그것이 분모라 형식마다 자라는 것을 막는다.
    */
   it('html 전용 필드를 안 싣는다', async () => {

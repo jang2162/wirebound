@@ -48,8 +48,8 @@ describe('hashPassword', () => {
     '쓰기 경로도 읽기 경로와 같은 검증을 쓴다 — parseEncoded라면 거부할 파라미터(%s)는 해싱 전에 거부한다',
     async (_label, badParams) => {
       // 메시지까지 단언하는 이유: 그냥 rejects.toThrow()면 Node가 던진 영문 에러로도
-      // 통과해 버려, validateScryptParams를 지워도 초록이 된다(실제로 P1에서 이 표
-      // 전체가 그런 상태였다). 우리 검증 함수의 한국어 메시지를 고정한다.
+      // 통과해 버려, validateScryptParams를 지워도 초록이 된다. 우리 검증 함수의
+      // 한국어 메시지를 고정한다.
       await expect(hashPassword('아무비번', badParams)).rejects.toThrow(
         /scrypt 파라미터가 올바르지 않습니다/,
       )
@@ -91,8 +91,9 @@ describe('verifyPassword', () => {
     ['필드 수가 모자람', 'scrypt$1024$8$1$aaaa'],
     ['N이 숫자가 아님', 'scrypt$엔$8$1$aaaa$bbbb'],
     // 필드 수는 정확히 6개이지만 그 안의 세그먼트 자체가 깨진 경우들.
-    // 회귀: 해시 조각이 빈 문자열이면 0바이트 파생 키끼리 비교돼 timingSafeEqual이
-    // 항상 true를 내 아무 비밀번호나 통과했다(보안 회귀 테스트 참고).
+    // 해시 조각이 빈 문자열이면 0바이트 파생 키끼리 비교돼 timingSafeEqual이
+    // 항상 true를 내 아무 비밀번호나 통과한다(아래 *"보안 회귀 — 해시 조각이 잘려 비어
+    // 있으면 어떤 비밀번호도 통과되면 안 된다"* 참고).
     ['해시 조각이 비어 있음', ['scrypt', 1024, 8, 1, validSalt, ''].join('$')],
     ['salt 조각이 비어 있음', ['scrypt', 1024, 8, 1, '', validHash].join('$')],
     ['해시가 1바이트 짧음(31바이트)', ['scrypt', 1024, 8, 1, validSalt, shortHash].join('$')],
@@ -118,13 +119,12 @@ describe('verifyPassword', () => {
   })
 
   it('보안 회귀 — 해시 조각이 잘려 비어 있으면 어떤 비밀번호도 통과되면 안 된다', async () => {
-    // 코드 리뷰에서 재현된 인증 우회: 저장된 해시 문자열의 마지막 세그먼트가
-    // (컬럼 truncation 등으로) 통째로 잘려 빈 문자열이 되면, 예전 구현은 검증
-    // 시 파생 키 길이를 "저장된 해시의 바이트 길이"(0바이트)로 계산해 scrypt를
-    // 호출했다. 0바이트 파생 키끼리는 항상 같으므로 timingSafeEqual(빈 버퍼, 빈
-    // 버퍼)가 true를 내 어떤 비밀번호로도 인증이 통과됐다. 지금은 파생 키 길이를
-    // 항상 상수(KEY_LENGTH)로 고정하고, 저장된 salt/hash의 디코딩된 바이트 길이가
-    // 그 상수와 다르면 파싱 단계에서 던진다.
+    // 인증 우회: 저장된 해시 문자열의 마지막 세그먼트가 (컬럼 truncation 등으로)
+    // 통째로 잘려 빈 문자열이 됐을 때, 검증 시 파생 키 길이를 "저장된 해시의 바이트
+    // 길이"(0바이트)로 계산해 scrypt를 부르면 0바이트 파생 키끼리는 항상 같으므로
+    // timingSafeEqual(빈 버퍼, 빈 버퍼)가 true를 내 어떤 비밀번호로도 인증이 통과된다.
+    // 그래서 파생 키 길이를 항상 상수(KEY_LENGTH)로 고정하고, 저장된 salt/hash의
+    // 디코딩된 바이트 길이가 그 상수와 다르면 파싱 단계에서 던진다.
     const encoded = await hashPassword('진짜비밀번호', fast)
     const truncated = encoded.slice(0, encoded.lastIndexOf('$') + 1)
     expect(truncated.endsWith('$')).toBe(true) // 마지막 세그먼트가 실제로 비어 있는지 확인

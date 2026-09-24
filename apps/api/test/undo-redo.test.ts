@@ -19,8 +19,8 @@ import {
  * **왜 파이프라인을 직접 부르지 않는가.** `edit-pipeline.test.ts`가 이미 `applyEdit`을
  * 직접 부르며 각 단계를 하나씩 고정한다. 이 파일이 고정하는 것은 그 조각들이
  * **클라이언트가 실제로 쓰는 경로 위에서** undo/redo를 이루는가다: 서버에 undo라는
- * 개념은 없고(설계 결정 D2), 클라이언트는 저장된 `inverse`를 그냥 새 편집으로
- * 되보낼 뿐이다(설계 §7.3). 그 왕복이 성립하려면 파이프라인뿐 아니라 라우트의 zod
+ * 개념은 없고, 클라이언트는 저장된 `inverse`를 그냥 새 편집으로
+ * 되보낼 뿐이다(설계서 「개인 undo/redo」). 그 왕복이 성립하려면 파이프라인뿐 아니라 라우트의 zod
  * 경계·응답 조립까지 전부 맞아야 한다.
  *
  * `withApi`를 쓴다 — 이 파일의 시나리오는 전부 순차이므로 단일 트랜잭션으로 충분하다.
@@ -28,11 +28,11 @@ import {
  * `revisions-concurrency.test.ts`가 따로 본다.
  *
  * **이 파일이 라우트를 거치기 때문에 닫히는 구멍이 하나 있다.** 케이스 1의 세 번째
- * 편집이 `move`인데, 그 전까지 저장소 전체에서 `PATCH .../ops`에 **유효한** `move`를
- * 보내는 테스트가 없었다(`revisions.test.ts`의 `move` 케이스는 `from`이 `/root` 밖이라
- * 400을 기대한다). 그래서 `http/patch-ops.ts`의 `PatchOpBody`에서 `move` 변형을 통째로
- * 지워도 컴파일이 통과하고(좁아지는 쪽은 여전히 `PatchOp[]`에 대입 가능하다) 기존
- * 테스트도 전부 초록이었다. 이제 그러면 케이스 1이 400으로 죽는다.
+ * 편집이 `move`인데, 저장소에서 `PATCH .../ops`에 **유효한** `move`를 보내는 테스트는
+ * 이것뿐이다(`revisions.test.ts`의 `move` 케이스는 `from`이 `/root` 밖이라 400을
+ * 기대한다). 이것이 없으면 `http/patch-ops.ts`의 `PatchOpBody`에서 `move` 변형을 통째로
+ * 지워도 컴파일이 통과하고(좁아지는 쪽은 여전히 `PatchOp[]`에 대입 가능하다) 다른
+ * 테스트도 전부 초록이다. 지우면 케이스 1이 400으로 죽는다.
  */
 
 /**
@@ -183,13 +183,13 @@ describe('undo/redo 왕복', () => {
       const [e1, e2, e3] = await threeEdits(ctx, fx)
       await undoAll(ctx, fx, [e1.inverse, e2.inverse, e3.inverse], e3.seq)
 
-      // 편집 3 + undo 3 = 6. 서버에 undo라는 개념이 없다는 것(D2)이 여기서 드러난다 —
+      // 편집 3 + undo 3 = 6. 서버에 undo라는 개념이 없다는 것이 여기서 드러난다 —
       // undo는 seq를 3으로 되돌리는 것이 아니라 새 편집 세 개를 더 쌓는 일이다.
       const page = await getPage(ctx, fx)
       expect(page.headSeq).toBe(6)
 
       // head_seq만 보면 revision을 남기지 않고 head_seq만 올려도 통과하므로 이력
-      // 자체의 개수도 함께 못박는다(append-only 로그, 설계 §4.2).
+      // 자체의 개수도 함께 못박는다(append-only 로그, 설계서 「테이블 정의」).
       const revisions = await getRevisions(ctx, fx, '?limit=200')
       expect(revisions.map((r) => r.seq)).toEqual([6, 5, 4, 3, 2, 1])
     })
@@ -221,7 +221,7 @@ describe('undo/redo 왕복', () => {
       const initial = await getPage(ctx, fx)
 
       // **PATCH 응답을 일부러 버린다.** 새로고침한 클라이언트는 그 응답을 갖고
-      // 있지 않고 이력 조회만으로 undo 스택을 복원해야 한다(설계 §7.3) — 이
+      // 있지 않고 이력 조회만으로 undo 스택을 복원해야 한다(설계서 「개인 undo/redo」) — 이
       // 엔드포인트가 존재하는 이유 자체다.
       await threeEdits(ctx, fx)
 
@@ -247,8 +247,7 @@ describe('undo/redo 왕복', () => {
 
       // **이 왕복은 반드시 라우트를 거쳐야 한다.** `pages.test.ts`가 같은 성질을
       // 검사하지만 저장된 문서에 `applyOps`를 **직접** 적용하므로 zod 경계를 지나지
-      // 않는다 — 그래서 이 경로가 400으로 튕기던 동안에도 그 테스트는 초록이었다
-      // (P2a 최종 리뷰 I1).
+      // 않는다 — 그래서 이 경로가 400으로 튕겨도 그 테스트는 초록이다.
       const put = await ctx.app.inject({
         method: 'PUT',
         url: `${pageUrl(fx)}/schema`,
@@ -262,7 +261,7 @@ describe('undo/redo 왕복', () => {
       })
       expect(put.statusCode, put.body).toBe(200)
 
-      // 새로고침한 클라이언트처럼 이력에서만 inverse를 얻는다(설계 §7.3).
+      // 새로고침한 클라이언트처럼 이력에서만 inverse를 얻는다(설계서 「개인 undo/redo」).
       const revisions = await getRevisions(ctx, fx)
       expect(revisions.map((r) => r.seq)).toEqual([1])
       const inverse = revisions[0]?.inverse ?? []
@@ -287,7 +286,7 @@ describe('undo/redo 왕복', () => {
       await edit(ctx, fx, e1.seq, [{ op: 'remove', path: '/root/children/0' }])
 
       // seq 1의 inverse는 `remove /root/children/0`인데 그 자리는 이미 비어 있다.
-      // 클라이언트에게 "이 항목은 스택에서 빼라"는 신호다(설계 §7.3의 "적용 불가 시
+      // 클라이언트에게 "이 항목은 스택에서 빼라"는 신호다(설계서 「개인 undo/redo」의 "적용 불가 시
       // 정상 흐름").
       const res = await tryEdit(ctx, fx, 2, e1.inverse)
 

@@ -127,7 +127,7 @@ describe('repos/revisions', () => {
       const page = await createPage(ctx, owner.cookie, project.id, menu.id)
       const actor = actorFor(owner.user)
 
-      // 브리프가 제시하는 순서(2, 5, 1, 4, 3)로 삽입한다 — 삽입 순서의 앞 두 개
+      // 순서(2, 5, 1, 4, 3)로 삽입한다 — 삽입 순서의 앞 두 개
       // (2, 5)가 기대하는 정렬 결과의 앞 두 개(5, 4)와 다르므로, LIMIT과 ORDER BY
       // 둘 중 하나라도 빠지면 이 단언이 반드시 깨진다.
       for (const seq of [2, 5, 1, 4, 3]) {
@@ -326,7 +326,7 @@ describe('repos/revisions', () => {
 
   /**
    * `lockPageForEdit`·`writePageSchemaAtSeq`는 트랜잭션 밖에서 불리면 `FOR UPDATE`
-   * 잠금이 즉시 풀려 동시성 방어가 조용히 사라진다(브리프의 설계 의도, 두 함수의
+   * 잠금이 즉시 풀려 동시성 방어가 조용히 사라진다(두 함수의
    * 독스트링 참고). 그 실수를 크게 실패시키는 방어 코드가 있는지를 여기서 직접
    * 확인한다 — `getTestDb()`는 트랜잭션이 아닌 루트 핸들이다(`db.test.ts`의
    * "트랜잭션 밖에서는 새로 연다"와 같은 방법). 두 함수 모두 실제 쿼리를 날리기
