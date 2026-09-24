@@ -6,7 +6,7 @@
  * 의존 배열이 어긋나는 날 두 요청이 동시에 나간다. 큐에서 다음을 꺼내 보내는 일을 함수
  * 하나에 두고 편집이 들어올 때 그것을 부르면, 조건이 코드에 보인다.
  *
- * **in-flight는 항상 하나다**(D6). README가 요구한다 — *"앞 요청의 `seq`를 받아야 다음
+ * **in-flight는 항상 하나다.** README가 요구한다 — *"앞 요청의 `seq`를 받아야 다음
  * `baseSeq`가 정해지기 때문이다. 어기면 두 번째 요청이 409를 받는다."* 그것을 지키는 것은
  * 아래 `pumpingRef`와 **한 번에 하나씩 `await`하는 루프**다. 루프가 도는 동안 들어온 편집은
  * 큐에 쌓이고, 앞 요청이 끝난 뒤 같은 루프가 그것을 집는다.
@@ -29,7 +29,7 @@ const RECOVER_UNKNOWN_FAILURE = '편집에 실패한 뒤 페이지를 다시 불
 
 /**
  * **재조회까지 실패한 갈래에서 덧붙이는 문장** — *"실패했다고 말하는데 조작은 화면에
- * 남는다"*를 닫는 자리다(P5-2 리뷰가 찾았다. 이 저장소가 만난 그 부류의 **다섯째**).
+ * 남는다"*를 닫는 자리다.
  *
  * **이 갈래는 `loadPage`를 지나지 않는다.** 그래서 낙관적으로 적용된 편집이 문서에 그대로
  * 남고, 선택도 유지되어 화면이 아무것도 되돌리지 않는다 — 재조회가 **성공한** 갈래가
@@ -39,7 +39,7 @@ const RECOVER_UNKNOWN_FAILURE = '편집에 실패한 뒤 페이지를 다시 불
  * **되돌릴 문서가 없다 — 그것이 이 갈래의 성질이다.** 서버 상태를 못 읽었으므로 무엇으로
  * 되돌릴지 모른다. **문서를 비우는 쪽은 고르지 않았다:** 그러면 사용자가 보고 있던 것을
  * 통째로 잃고, 그 손실은 *"서버가 잠깐 답을 못 했다"*는 사유에 비해 너무 크다. **할 수
- * 있는 정직한 일은 그 상태를 말하는 것뿐이고**, 그것이 P5-1이 `'diverged'`에 내린 판정과
+ * 있는 정직한 일은 그 상태를 말하는 것뿐이고**, 그것이 `'diverged'`에 내린 판정과
  * 같은 형태다(*"서버엔 번호가 있는데 내 화면엔 없다 — 새로고침하면 맞춰집니다"*).
  *
  * **우리 쪽 문장에만 붙인다.** 서버 문장을 고치지 않는 경계(`api/failure.tsx`)는 그대로다.
@@ -48,16 +48,16 @@ const UNRECOVERED_NOTICE =
   '화면에 남아 있는 편집은 저장되지 않았습니다. 새로고침해 서버 상태를 확인하세요.'
 
 /**
- * **답을 기다리던 편집을 이 탭이 스스로 버린 연결과 함께 잃었을 때의 문장**(③ 리뷰 B1 — `UnansweredEditError`).
+ * **답을 기다리던 편집을 이 탭이 스스로 버린 연결과 함께 잃었을 때의 문장**(`UnansweredEditError`).
  *
  * **«취소됐다»도 «저장하지 못했다»도 거짓이다.** 그 연결은 열려 있었으므로 편집은 서버에 닿았다 — 결과만 모른다.
- * 앞 판은 끊김과 같은 문장(«편집을 저장하지 못했습니다 — … 편집 1개가 취소됐습니다»)을 냈고, 서버는 그것을
- * 커밋했으며 새 연결이 방송해 화면에도 섰다(Chrome · 행 잠금 5s). 사용자가 믿고 다시 하면 **두 번 선다.** 그래서
+ * 끊김과 같은 문장(«편집을 저장하지 못했습니다 — … 편집 1개가 취소됐습니다»)을 내면, 서버는 그것을 커밋하고
+ * 새 연결이 방송해 화면에도 선다(Chrome · 행 잠금 5s 로 잰 값). 사용자가 믿고 다시 하면 **두 번 선다.** 그래서
  * 모른다고 말하고, 반영됐다면 화면이 저절로 맞춰진다는 것을 말한다(까닭은 `realtime/use-realtime.ts`의 «쿠키가
  * 바뀌면»). 되돌리기 이력이 비는 것은 그대로다 — 답(`inverse`)을 못 받았다.
  *
  * **앞머리가 까닭을 말한다 — 부르는 곳이 하나라서다**(같은 사람이 다른 탭에서 다시 로그인했을 때의 재연결). 답을
- * 못 받은 편집은 하나다(D6 — 한 번에 하나). **아직 안 보낸 편집은 서버에 닿지 않았다** — 그것은 따로 세어 취소됐다고
+ * 못 받은 편집은 하나다(in-flight는 한 번에 하나). **아직 안 보낸 편집은 서버에 닿지 않았다** — 그것은 따로 세어 취소됐다고
  * 말한다.
  *
  * @param outcome 다시 불러왔으면 `cancelled`(그러며 버린 **안 보낸** 편집 수), 다시 불러오지도 못했으면 `reason`(그 까닭).
@@ -74,11 +74,11 @@ function unansweredNotice(outcome: { cancelled: number } | { reason: string }): 
 const UNANSWERED_RECOVER_FAILURE = '페이지를 다시 불러오지도 못했습니다'
 
 /**
- * 되돌릴 수 없는 항목을 건너뛰었을 때의 안내(설계 §7.3).
+ * 되돌릴 수 없는 항목을 건너뛰었을 때의 안내(설계서 「개인 undo/redo」).
  *
  * **에러가 아니라 정상 흐름이다** — 다른 사람이 그 노드를 지웠으면 내 `inverse`가 적용되지
  * 않는 것이 당연하고, 그때 할 일은 멈추는 것이 아니라 다음 항목으로 넘어가는 것이다.
- * 자리는 편집 실패와 같은 `role="alert"` 하나를 쓴다(D8) — 사용자가 누른 행동의 결과라는
+ * 자리는 편집 실패와 같은 `role="alert"` 하나를 쓴다 — 사용자가 누른 행동의 결과라는
  * 점이 같고, 자리를 나누면 그 하나뿐인 통지 규칙이 흩어진다.
  */
 function skippedNotice(skipped: number, applied: boolean): string {
@@ -87,7 +87,8 @@ function skippedNotice(skipped: number, applied: boolean): string {
 }
 
 /**
- * 남의 잠금에 막혀 되돌리지 못했을 때의 안내(§7.2 · 설계 §13의 *"안내 후 재시도"*).
+ * 남의 잠금에 막혀 되돌리지 못했을 때의 안내(설계서 「소프트 잠금」 · 「에러 처리」의 잠금 충돌 —
+ * *"발생 시 안내 — 자동 재시도하지 않는다"*. 다시 누르는 것은 사람이다).
  *
  * **위 `skippedNotice`와 갈라 적는다.** 그쪽은 *"그 편집은 이제 없다"*이고 이쪽은
  * *"지금은 안 된다"*다 — 사용자가 다음에 할 일이 다르므로(포기 / 기다림) 문장도 다르다.
@@ -98,8 +99,8 @@ function skippedNotice(skipped: number, applied: boolean): string {
  *
  * # 왜 상태줄이 아니라 여기인가
  *
- * 3차가 세운 상태줄(`panels/toolbar-status.ts`)이 «왜 회색인가»를 말하는 자리이고 §3.14가
- * 잠금을 그 사다리 맨 위에 올렸다. **되돌리기는 그 사다리에 안 올린다** — 그 줄이 답하는
+ * 상태줄(`panels/toolbar-status.ts`)이 «왜 회색인가»를 말하는 자리이고 잠금이 그 사다리
+ * 맨 위에 있다. **되돌리기는 그 사다리에 안 올린다** — 그 줄이 답하는
  * 물음이 *"지금 **고른 것**이 무엇이라서 그런가"*인데 되돌리기는 **선택과 무관**하고, 자리도
  * 구조 툴바가 아니라 셸 헤더의 `편집 이력` 묶음이다(`routes/editor.tsx`의 `UndoTools`).
  * 그 줄에 얹으면 사다리가 자기 것이 아닌 물음에 답하게 되고, 구조 툴바를 안 보고 있는
@@ -111,7 +112,7 @@ function lockedNotice(userName: string, skipped: number): string {
 }
 
 export interface EditCommit {
-  /** 노드의 prop 하나를 바꾼다. 적용할 수 없으면 아무 일도 일어나지 않는다(D7). */
+  /** 노드의 prop 하나를 바꾼다. 적용할 수 없으면 아무 일도 일어나지 않는다. */
   commitProp: (nodeId: string, prop: string, value: unknown) => void
   /**
    * 노드의 `variant`를 바꾼다. **`commitProp`과 갈라 두는 것이 요점이다** — `variant`는
@@ -120,11 +121,11 @@ export interface EditCommit {
    */
   commitVariant: (nodeId: string, variant: string | null) => void
   /**
-   * 노드의 `interactions`를 통째로 갈아 끼운다(설계 §8.1). **`commitVariant`와 같은 층이다** —
+   * 노드의 `interactions`를 통째로 갈아 끼운다(설계서 「상호작용」의 「모델」). **`commitVariant`와 같은 층이다** —
    * `interactions`도 props의 키가 아니라 봉투의 필드라 patch 경로가 한 단계 위다.
    * 빈 배열이면 키를 지운다(`edit/ops.ts`의 `interactionsOps`).
    *
-   * **새 계약이 아니다**(P5-2 D6). 상호작용은 **클라이언트가** 문서를 바꾸므로 P5-1의
+   * **새 계약이 아니다.** 상호작용은 **클라이언트가** 문서를 바꾸므로 코멘트의
    * `markerOps` 같은 서버 왕복이 필요 없고, 이미 있는 낙관적 편집 경로를 그대로 탄다.
    */
   commitInteractions: (nodeId: string, interactions: readonly Interaction[]) => void
@@ -132,23 +133,21 @@ export interface EditCommit {
    * 이미 만들어진 `ops`를 낸다. **낸 편집이 큐에 들어갔으면 `true`다.**
    *
    * `ops`가 `null`인 것은 `edit/ops.ts`의 생성기들이 "요청을 만들지 마라"를 말하는
-   * 방식이고(D7), 그대로 넘길 수 있게 받아 준다 — 부르는 쪽마다 `null` 검사를 두면
+   * 방식이고, 그대로 넘길 수 있게 받아 준다 — 부르는 쪽마다 `null` 검사를 두면
    * 그중 하나가 빠지는 날 잘못된 요청이 나간다.
    *
    * **반환값이 있는 것은 구조 편집 때문이다.** 삭제는 편집이 큐에 들어간 뒤에만 선택을
-   * 옮긴다(D5).
+   * 옮긴다.
    *
-   * **여기 처음 적었던 인과("실패했는데 옮기면 노드는 그대로인데 선택만 부모로 간다")는
-   * 거짓이다.** 툴바 쪽에서 같은 문장을 고치면서 이 자리를 놓쳤고 리뷰가 잡았다 —
-   * 한 사실을 말하는 다른 곳을 함께 고치지 않은 형태다. 잰 값 둘:
+   * **"실패했는데 옮기면 노드는 그대로인데 선택만 부모로 간다"는 인과는 거짓이다.**
+   * 툴바 쪽 주석과 같은 사실을 말하므로 한쪽만 고치면 둘이 갈린다. 잰 값 둘:
    *
    * - **서버 실패는 이 반환값과 무관하다.** `commitOps`는 큐에 넣고 `true`를 내며 409는
-   *   그 뒤에 온다. **그리고 그때 선택은 툴바가 옮겨 둔 부모 그대로다** — 앞 판은 여기가
-   *   `null`이었지만(재조회의 `loadPage`가 선택까지 재설정했다), `loadPage`가 **같은 페이지를
-   *   다시 싣는 경로에서는 선택을 건드리지 않게** 되면서 두 경로가 갈리지 않는다
+   *   그 뒤에 온다. **그리고 그때 선택은 툴바가 옮겨 둔 부모 그대로다** — `loadPage`가
+   *   **같은 페이지를 다시 싣는 경로에서는 선택을 건드리지 않으므로** 두 경로가 갈리지 않는다
    *   (`store/editor-store.ts`의 `#selectionFor`).
    * - **로컬 실패 경로는 호출자의 앞선 가드가 먼저 잡는다.** 그래서 이 반환값 검사는
-   *   지금 0 사망이다(`panels/structure-toolbar.tsx`의 `removeSelected`·`addNode` 주석에
+   *   지워도 죽는 케이스가 없다(`panels/structure-toolbar.tsx`의 `removeSelected`·`addNode` 주석에
    *   무엇이 덮는지 적어 두었다).
    */
   commitOps: (ops: PatchOp[] | null) => boolean
@@ -172,16 +171,16 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const canRedo = useEditorStore(store, (s) => s.redoStack.length > 0)
 
   /**
-   * 실패 하나를 수습한다. **실패 종류로 갈리지 않는다**(D4) — 409든 422든 네트워크든
-   * 페이지를 다시 받아 서버 상태로 수렴한다. 왜 항목별 롤백이 아닌지는 설계 §7.1에 있다:
+   * 실패 하나를 수습한다. **실패 종류로 갈리지 않는다** — 409든 422든 네트워크든
+   * 페이지를 다시 받아 서버 상태로 수렴한다. 왜 항목별 롤백이 아닌지는 설계서 「정방향 흐름」에 있다:
    * `inverse`를 서버가 만드는 것과 같은 이유로, 클라이언트가 계산한 되돌리기는 낙관적으로
    * 앞서 있는 만큼 틀릴 수 있다.
    *
    * **세션이 끊긴 실패 하나만 갈린다.** 다시 받아도 401이고 그 사이 요청만 쌓이므로
    * 재조회하지 않는다. 통지 자리(`shell/edit-alert.tsx`)가 그 값을 보고 `<SignedOut />`을
-   * 그리면 웨이브 1의 세션 무효화 경로로 이어진다.
+   * 그리면 세션 무효화 경로로 이어진다.
    *
-   * **문장만 갈리는 실패가 하나 있다 — 답을 못 받은 편집**(`UnansweredEditError` · ③ B1). 수습은 같고(다시 불러와
+   * **문장만 갈리는 실패가 하나 있다 — 답을 못 받은 편집**(`UnansweredEditError`). 수습은 같고(다시 불러와
    * 서버 상태로) 그 편집을 «취소됐다»고 말하지 않는다 — 서버에 닿았다(`unansweredNotice`).
    */
   const recover = useCallback(
@@ -195,15 +194,15 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         return
       }
 
-      // **답을 기다리던 편집을 이 탭이 스스로 버린 연결과 함께 잃었다 — 서버에 닿았다**(③ B1). 수습은 같고
+      // **답을 기다리던 편집을 이 탭이 스스로 버린 연결과 함께 잃었다 — 서버에 닿았다.** 수습은 같고
       // (다시 불러와 서버 상태로) 말만 다르다 — 그 편집을 «취소됐다»고 하지 않는다(`unansweredNotice`).
       const unanswered = caught instanceof UnansweredEditError
       const dropped = store.failEdits()
       /**
-       * **이 페이지를 떠나면 요청째 끊는다**(이월 AD 잔여 · 2026-09-24 — `ReadOptions.cancel`). «떠남»은 **스토어가 이 페이지를 더는
+       * **이 페이지를 떠나면 요청째 끊는다**(`ReadOptions.cancel`). «떠남»은 **스토어가 이 페이지를 더는
        * 열고 있지 않은 것**이다(`openPageId`) — 이 훅을 부른 본문(속성 패널 …)은 탭마다 내려가지만 수습은 스토어의 일이라 본문의
-       * 수명에 매지 않는다. 앞 판은 끊지도 거르지도 않아, 이 조회(1MB 일 수 있다)가 도는 동안 옆 페이지로 가면 끝까지 내려받았고
-       * **늦게 온 답이 `loadPage`로 스토어를 앞 페이지로 되돌렸다**(jsdom — `test/edit/edit-recovery-leave.test.tsx`). 셸째 내려가면
+       * 수명에 매지 않는다. 끊지도 거르지도 않으면, 이 조회(1MB 일 수 있다)가 도는 동안 옆 페이지로 가도 끝까지 내려받고
+       * **늦게 온 답이 `loadPage`로 스토어를 앞 페이지로 되돌린다**(jsdom — `test/edit/edit-recovery-leave.test.tsx`). 셸째 내려가면
        * 스토어도 버려지므로 끊는 신호가 없다 — 그 조회는 끝까지 돈다(남는 틈).
        */
       const leave = new AbortController()
@@ -232,7 +231,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // **서버 문장과 우리 문장 사이에 구분자를 둔다.** 공백 하나로 붙이면 두 문장이 한
           // 문장처럼 읽힌다 — 카탈로그 위반의 이유가 **타입 이름으로 끝나기** 때문에
           // `알 수 없는 컴포넌트 타입: 없는타입 페이지를 …`가 되어 **"없는타입 페이지를"이
-          // 하나의 명사구**가 된다(리뷰 W1).
+          // 하나의 명사구**가 된다.
           //
           // **`unknown-type` 하나의 문제가 아니다.** 이 경로가 실제로 받는 문장을 api 하네스로
           // 재 보니 **끝에 마침표를 두는 것이 하나도 없다:**
@@ -242,8 +241,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           //   422 `알 수 없는 컴포넌트 타입: 없는타입`                          ← 타입 이름으로 끝난다
           //   400 `잘못된 입력: 예상 타입은 array, 받은 타입은 undefined입니다`
           //
-          // **앞 판은 여기에 `다른 편집과 충돌했습니다`를 인용했는데 그런 문장은 서버에 없다**
-          // (리뷰 F2 — 지어낸 예였다). 실재 문장으로 갈고 나니 논지가 더 강해진다: 둘째 줄은
+          // **위 넷은 서버에 실재하는 문장이다** — 지어낸 예로 논지를 세우지 않는다. 둘째 줄은
           // **경로로 끝나서** 우리 문장과 붙으면 더 읽기 어렵다. 즉 어떤 문장이 와도 붙는다 —
           // **이어 붙이는 형태 자체가 이 부류를 만든다.**
           //
@@ -273,7 +271,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
               // 화면을 갈아 끼우므로 남아 있는 화면 자체가 없다.
               recoverFailure
             : unanswered
-              ? // **«저장되지 않았습니다»가 여기서도 거짓이다** — 답을 못 받은 편집은 서버에 닿았다(③ B1).
+              ? // **«저장되지 않았습니다»가 여기서도 거짓이다** — 답을 못 받은 편집은 서버에 닿았다.
                 { kind: 'message', message: unansweredNotice({ reason: recoverFailure.message }) }
               : // **성공 갈래와 같은 형식으로 우리 문장을 덧붙인다**(구분자 `—`도 같다).
                 // 서버 문장은 끝에 마침표를 두지 않으므로 그대로 이어 붙이면 두 문장이 한
@@ -291,7 +289,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const pump = useCallback(async (): Promise<void> => {
     // **가드는 스토어가 든다.** 훅의 `ref`에 두면 `useEditCommit`을 부르는 자리가 둘일 때
     // (속성 패널과 undo/redo 버튼) 각자 자기 것을 갖는다 — 실측: 그 트리에서 편집을 각각
-    // 내면 `maxInFlight`가 2가 되어 D6가 깨진다.
+    // 내면 `maxInFlight`가 2가 되어 «in-flight는 항상 하나»가 깨진다.
     if (!store.beginPump()) return
     try {
       for (;;) {
@@ -305,16 +303,16 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         }
 
         store.setEditStatus('sending')
-        // **§7.2의 *"편집 중 하트비트로 갱신"*.** 타이머를 두지 않고 **편집이 나가는 순간**에
-        // 매다는 것이 판정이다: §7.2가 갱신의 조건으로 적은 것이 *"편집 중"*이고, 타이머를
-        // 두면 케이스가 시간을 기다리게 된다(전역 제약). 잡은 것이 없으면 아무것도 안 나간다.
+        // **설계서 「소프트 잠금」의 *"편집 중 하트비트로 갱신"*.** 타이머를 두지 않고 **편집이 나가는 순간**에
+        // 매다는 것이 판정이다: 그 절이 갱신의 조건으로 적은 것이 *"편집 중"*이고, 타이머를
+        // 두면 케이스가 시간을 기다리게 된다. 잡은 것이 없으면 아무것도 안 나간다.
         //
         // **여기가 전송의 유일한 통로다** — 속성·구조·undo·redo가 전부 이 루프를 지난다.
         // `commitOps`에 달면 undo/redo가 빠진다.
         lockChannel?.refresh()
         try {
-          // **WS가 붙어 있으면 그리로 낸다**(§7.1 — P3-2 T3). 없으면 REST다: D5가 그 경로를
-          // 남겨 두었고(§7.4의 MCP가 REST로 들어온다), `RealtimeProvider` 없이 도는 화면은
+          // **WS가 붙어 있으면 그리로 낸다**(설계서 「정방향 흐름」). 없으면 REST다: 그 경로는
+          // 남아 있어야 하고(설계서 「LLM 편집 경로」의 MCP가 REST로 들어온다), `RealtimeProvider` 없이 도는 화면은
           // 여전히 그쪽으로 편집한다.
           //
           // **갈리는 것은 전송뿐이다.** 두 경로가 같은 `applyEdit`을 지나고(`ws/patch.ts`),
@@ -324,15 +322,15 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
             channel !== null && channel.ready()
               ? await channel.send({ pageId, ...request })
               : await api.patchOps(projectId, pageId, request)
-          // **응답의 `warnings`가 여기로 함께 들어간다**(P5-3 D6). 서버는 P4c-1부터
-          // 그것을 싣고 있었는데 P5-2까지 클라이언트가 그 필드를 몰라 **읽는 코드가 0건**
-          // 이었다(P5-2 이월 §3). 스토어가 ack와 **함께** 싣는 것이 요점이다 — 늦게 도착한
+          // **응답의 `warnings`가 여기로 함께 들어간다.** 서버는 응답에 그것을 싣는다 —
+          // 여기서 넘기지 않으면 **읽는 코드가 0건**이 되어 경고가 아무 데도 안 남는다.
+          // 스토어가 ack와 **함께** 싣는 것이 요점이다 — 늦게 도착한
           // 응답의 경고가 지금 문서의 것으로 실리지 않는다(`ackEdit`의 가드 뒤에 있다).
           store.ackEdit(request.clientOpId, result)
         } catch (caught) {
-          // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다**(P3-2 D3).
+          // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다.**
           //
-          // **이것이 없으면 리베이스가 서버에 닿지 않는다 — 재서 알았다.** 서버는 `baseSeq`가
+          // **이것이 없으면 리베이스가 서버에 닿지 않는다(실측).** 서버는 `baseSeq`가
           // `head_seq`와 정확히 같을 때만 받으므로, 내 편집이 떠 있는 동안 남의 편집이
           // 기록되면 내 것은 **반드시** 409를 받는다. 그 409를 곧바로 `recover`에 넘기면
           // 재조회가 큐를 통째로 비우므로, 방금 리베이스한 편집도 함께 사라진다. 즉
@@ -343,8 +341,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // 조건이 `headSeq`의 이동이므로 **끝난다:** 서버가 새 revision을 만들어야만 한 번
           // 더 시도하고, 아니면 그대로 `recover`로 간다.
           //
-          // **이 갈래는 프레임이 실패보다 먼저 올 때만 돈다 — 두 순서가 다 실재한다**(리뷰 F1이
-          // 진짜 서버로 실증했다).
+          // **이 갈래는 프레임이 실패보다 먼저 올 때만 돈다 — 두 순서가 다 실재한다**(진짜
+          // 서버로 실측).
           //
           // | 순서 | 언제 | 무엇이 도나 |
           // |---|---|---|
@@ -354,8 +352,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // **가르는 것은 두 편집 사이의 간격이다.** 뒤쪽이 나는 이유는 구조적이다 — 진 쪽의
           // 실패는 파이프라인 3단계에서 곧바로 나오는데, 이긴 쪽의 브로드캐스트는
           // fire-and-forget이고 룸 연결마다 조회 둘을 `await`한다. **다만 그 창은 좁다:**
-          // 간격을 변수로 두고 재 보니 십수 ms만 벌어져도 프레임이 먼저 온다(값은 이월 §2.2).
-          // 뒤쪽으로 가도 **덜 좋아질 뿐 틀리지 않는다** — 앞 슬라이스와 같은 재조회다.
+          // 간격을 변수로 두고 재 보면 십수 ms만 벌어져도 프레임이 먼저 온다.
+          // 뒤쪽으로 가도 **덜 좋아질 뿐 틀리지 않는다** — 아래 `recover`의 재조회다.
           // `test/edit/ws-transport.test.tsx`가 두 순서를 나란히 잰다.
           //
           // **409로 좁히는 것은 판정이다.** *"문서가 내 밑에서 움직였다"*는 부류가 그것뿐이고
@@ -386,12 +384,12 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * 스택에서 한 단계 꺼내 보낸다. undo와 redo가 같은 규칙을 쓰므로 한 곳에 둔다 —
    * 다른 것은 어느 스택을 보느냐뿐이고, 그 판단은 스토어 안에 있다.
    *
-   * **남의 잠금도 그 판단 안이다**(§7.2의 1차 방어). 여기서 `locks`를 뒤지지 않고 스토어가
+   * **남의 잠금도 그 판단 안이다**(「소프트 잠금」의 1차 방어). 여기서 `locks`를 뒤지지 않고 스토어가
    * 낸 `blocked`를 받는 것이 요점이다 — 화면이 잠금 목록을 손에 쥐는 자리는 하나여야 하고
    * (`test/lock/one-verdict.test.ts`), 되돌리기 버튼을 **비활성으로 만들지 않은 것도** 그
    * 규칙 때문이다: 비활성이 되려면 셸 헤더가 잠금 목록을 구독해 다시 그려야 한다.
    * 대신 **누르면 이 자리가 이유를 말한다** — undo가 이미 쓰는 통로이고(위 `skippedNotice`),
-   * 설계 §7.3이 *"적용 불가는 에러가 아니라 정상 흐름"*으로 정한 자리와 같다.
+   * 「개인 undo/redo」가 *"적용 불가는 에러가 아니라 정상 흐름"*으로 정한 자리와 같다.
    */
   const step = useCallback(
     (start: () => UndoAttempt): void => {
@@ -435,7 +433,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   }, [step, store])
 
   /**
-   * 편집 하나를 큐에 넣고 전송을 밟는다. **`commitProp`과 구조 편집(P2b-3의 툴바)이
+   * 편집 하나를 큐에 넣고 전송을 밟는다. **`commitProp`과 구조 편집(구조 툴바)이
    * 공유하는 유일한 통로다** — 둘이 각자 `applyEdit` + `pump`를 쓰면 그 사이에 끼는
    * 규칙(열린 페이지 대조·통지 치우기)이 두 벌이 되고, 한쪽만 고쳐지는 날이 온다.
    */
@@ -449,7 +447,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // **둘은 다른 것을 잡는다:** 가드는 소스 텍스트라 우회의 존재만 알고 무엇이
       // 잘못되는지 말하지 못하고, 동작 케이스는 그 반대다.
       if (open === null) return false
-      // 만드는 쪽이 "요청을 보내지 마라"라고 답한 것이다(D7).
+      // 만드는 쪽이 "요청을 보내지 마라"라고 답한 것이다(`edit/ops.ts` 머리말).
       if (ops === null) return false
       // 로컬 적용이 실패했다 — 클라이언트가 만든 잘못된 `ops`다. 보내 봐야 서버도 같은
       // 자리에서 거절한다.
@@ -475,7 +473,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // 자체는 `commitOps`가 다시 한다 — 그쪽이 그 규칙을 갖는 자리다.
       if (open === null) return
 
-      // 문서에 없는 노드면 `propOps`가 `null`을 내고 `commitOps`가 그 자리에서 돌아온다(D7).
+      // 문서에 없는 노드면 `propOps`가 `null`을 내고 `commitOps`가 그 자리에서 돌아온다.
       commitOps(propOps(open.document, nodeId, prop, value))
     },
     [open, commitOps],
@@ -487,7 +485,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // 열린 페이지 대조 자체는 `commitOps`가 다시 한다.
       if (open === null) return
 
-      // 지울 것이 없거나 노드가 문서에 없으면 `variantOps`가 `null`을 내고 그 자리에서 끝난다(D7).
+      // 지울 것이 없거나 노드가 문서에 없으면 `variantOps`가 `null`을 내고 그 자리에서 끝난다.
       commitOps(variantOps(open.document, nodeId, variant))
     },
     [open, commitOps],
@@ -499,7 +497,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // 열린 페이지 대조 자체는 `commitOps`가 다시 한다.
       if (open === null) return
 
-      // 지울 것이 없거나 노드가 문서에 없으면 `interactionsOps`가 `null`을 내고 그 자리에서 끝난다(D7).
+      // 지울 것이 없거나 노드가 문서에 없으면 `interactionsOps`가 `null`을 내고 그 자리에서 끝난다.
       commitOps(interactionsOps(open.document, nodeId, interactions))
     },
     [open, commitOps],

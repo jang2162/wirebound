@@ -36,7 +36,7 @@
  *
  * `preventDefault()`는 드래그가 **글자 선택으로 새는 것**을 막는다. 대신
  * `user-select: none`을 얹지 않는 것은 그것이 상속 속성이라 셸의 감싸는 상자에 걸 수 없기
- * 때문이다(D7의 4번) — 실측으로 `preventDefault()` 하나면 선택이 시작되지 않는다.
+ * 때문이다 — 실측으로 `preventDefault()` 하나면 선택이 시작되지 않는다.
  */
 import { useCallback, type KeyboardEvent, type PointerEvent, type ReactElement, type Ref } from 'react'
 import { RESIZE_STEP } from './sidebar-layout'

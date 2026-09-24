@@ -1,32 +1,32 @@
 /**
- * **토큰 GUI**(§6.10 — *"`tokens`는 전용 GUI(컬러 피커, 스케일 에디터, 타이포 미리보기)로
- * 편집한다"*). P4c-2 D7의 화면이고 ② W1이 채웠다.
+ * **토큰 GUI**(설계서 「테마 관리」 — *"`tokens`는 전용 GUI(컬러 피커, 스케일 에디터, 타이포 미리보기)로
+ * 편집한다"*).
  *
  * ---
  *
- * # 이 화면이 무엇을 보이는가 — §6.3의 3단
+ * # 이 화면이 무엇을 보이는가 — 설계서 「tokens — 3단 분리」
  *
  * `palette`(원시) → `semantic`(의미) → `scale`(치수·타이포·모션). **3단은 UI에서 보여야
- * 성립한다.** §6.3이 그 층을 둔 이유를 스스로 적었다 — *"다크 테마와 브랜드 교체 때문이다.
+ * 성립한다.** 그 절이 층을 둔 이유를 스스로 적었다 — *"다크 테마와 브랜드 교체 때문이다.
  * `semantic`만 갈아끼우면 전체가 바뀐다."* 그 성질은 **스타일이 `palette`를 직접 가리키지
- * 못할 때만** 유지되고(`resolve/style.ts`의 `STYLE_FORBIDDEN_NAMESPACES`), 그 규칙은 오늘
+ * 못할 때만** 유지되고(`resolve/style.ts`의 `STYLE_FORBIDDEN_NAMESPACES`), 그 규칙은
  * 검증기 안에만 있다. 그래서 이 화면이 셋으로 보인다:
  *
  * 1. **층마다 무엇을 값으로 받는지**를 머리에 적는다(`palette`=원시값만 /
  *    `semantic`=`palette`·`semantic` 참조 또는 리터럴 / `scale`=리터럴만).
- * 2. **`palette` 항목마다 그것을 가리키는 `semantic`의 수**를 센다. **0이면 그 색은 오늘
+ * 2. **`palette` 항목마다 그것을 가리키는 `semantic`의 수**를 센다. **0이면 그 색은
  *    어느 스타일에서도 쓸 수 없다** — 규칙을 문장으로 적는 것보다 이쪽이 규칙을 *보인다*.
  * 3. **`semantic`의 이름공간 드롭다운이 실제로 둘뿐이다.** 목록이 짧다는 사실 자체가 3단이다.
  *
  * ---
  *
- * # 재라 #4의 답 — **텍스트 입력이 진실이다. 컬러 피커는 파생이다**
+ * # **텍스트 입력이 진실이다. 컬러 피커는 파생이다**
  *
- * 계획서가 *"컬러 피커와 텍스트 입력 중 어느 쪽이 진실인가"*를 W1에 넘겼다.
+ * *"컬러 피커와 텍스트 입력 중 어느 쪽이 진실인가"*의 답이다.
  *
  * **`<input type="color">`는 값 공간이 문서보다 좁다 — 좁은 쪽을 진실로 두면 데이터가 죽는다.**
- * jsdom 25에서 재서 확인했다(**내가 쟀다.** 브라우저에서는 재지 못했다 — ③의 Chromium
- * 프로브가 잴 수 있다. 다만 이것은 jsdom의 버릇이 아니라 HTML의 value sanitization이다):
+ * jsdom 25에서 잰 값이다(브라우저에서는 재지 않았다 — 다만 이것은 jsdom의 버릇이 아니라
+ * HTML의 value sanitization이다):
  *
  * | # | 넣은 값 | `input.value`로 다시 읽은 값 |
  * |---|---|---|
@@ -37,12 +37,12 @@
  * | 5 | `#AABBCC` | **`#aabbcc`** — 대소문자가 조용히 바뀐다 |
  * | 6 | 같은 값을 `type="text"`에 | `palette.blue.600` 그대로 |
  *
- * **1이 §6.3의 3단을 무너뜨리는 자리다.** 피커가 진실이면 `semantic.primary:
+ * **1이 3단을 무너뜨리는 자리다.** 피커가 진실이면 `semantic.primary:
  * "palette.blue.600"`인 테마를 여는 것만으로 화면이 검정을 보이고, 한 번 만지면 참조가
  * `#000000`으로 바뀐다. 2·3·4는 **적법한 CSS 색**이 같은 길로 죽는 것이고, 5는 아무도 안
  * 고쳤는데 저장 버튼이 켜지는 자리다.
  *
- * **그래서 이렇게 갈랐다:**
+ * **그래서 이렇게 가른다:**
  *
  * - **텍스트 입력이 값을 든다.** 문서에 적힌 그대로이고, 쓰는 것도 이쪽 하나다.
  * - **컬러 피커는 값이 `#rrggbb`일 때만 나온다.** 담을 수 있는 값일 때만 나타나므로
@@ -56,12 +56,12 @@
  *
  * ---
  *
- * # 이름공간을 하드코딩하지 않는다 — **그리고 이 화면의 목록은 브리프의 표에 없다**
+ * # 이름공간을 손으로 적되 엔진에서 다시 잰다
  *
- * P4c-1 이월 §1이 잰 표는 **스타일 값**(토큰 7 + primitives 3 = 열)과 **`primitives` 값**
- * (토큰 7)과 `breakpoints`(없다)에 대한 것이다. **이 화면은 그 셋 중 어느 자리도 아니다** —
- * `tokens` 층의 값을 편집한다. 그 층의 어휘는 아무도 재지 않았으므로 **내가 쟀다**
- * (`resolveTokens`를 직접 돌려서. 절차와 값은 `test/theme/token-editor.test.tsx`가 다시 잰다):
+ * 이름공간 목록은 자리마다 다르다 — **스타일 값**(토큰 7 + primitives 3 = 열) · **`primitives` 값**
+ * (토큰 7) · `breakpoints`(없다). **이 화면은 그 셋 중 어느 자리도 아니다** —
+ * `tokens` 층의 값을 편집한다. 그 층의 어휘는 이렇다
+ * (`resolveTokens`를 직접 돌려 잰 값. 절차와 값은 `test/theme/token-editor.test.tsx`가 다시 잰다):
  *
  * | 자리 | 고를 수 있는 이름공간 | 수 |
  * |---|---|---|
@@ -70,15 +70,15 @@
  * | `scale.*` 값 | **없다** — 같은 코드 | 0 |
  *
  * **`SEMANTIC_NAMESPACES`를 손으로 적되 케이스가 엔진에서 다시 잰다.** `TOKEN_NAMESPACES`를
- * 그대로 쓰면 **일곱을 제안해 다섯이 조용히 리터럴이 되고**(아래 절), 상수를 `themes`에
- * 새로 내보내는 것은 이 슬라이스의 범위 밖이다(내 변경은 `apps/web`뿐이다). 그래서 목록은
+ * 그대로 쓰면 **일곱을 제안해 다섯이 조용히 리터럴이 되고**(아래 절), `themes`는 그
+ * 목록을 상수로 내보내지 않는다. 그래서 목록은
  * 여기 있고 **엔진과 갈리면 케이스가 죽는다.**
  *
  * ---
  *
- * # **`tokens` 층에는 `suspicious-literal`이 없다** — 재서 확인했고, 그래서 화면이 말한다
+ * # **`tokens` 층에는 `suspicious-literal`이 없다** — 그래서 화면이 말한다
  *
- * **내가 쟀다.** `semantic.primary`에 `"spce.4"`(오타)를 넣으면:
+ * `semantic.primary`에 `"spce.4"`(오타)를 넣으면:
  *
  * ```
  * resolveTokens({ semantic: { primary: 'spce.4' } })
@@ -86,51 +86,49 @@
  *   → table:  semantic.primary = "spce.4"   ← 리터럴로 실린다
  * ```
  *
- * `palette`·`scale.radius`에 같은 값을 넣어도 **이슈 0건**이다. P4c-1 F1이 닫은 것은
- * **primitives 층**이었고(그쪽이 쟀다), 토큰 층은 그대로 조용하다 — `REFERENCE_SHAPED`가
+ * `palette`·`scale.radius`에 같은 값을 넣어도 **이슈 0건**이다. `suspicious-literal`이 나는
+ * 것은 **primitives 층**까지이고, 토큰 층은 조용하다 — `REFERENCE_SHAPED`가
  * `resolve/style.ts`에만 있기 때문이다.
  *
- * **엔진을 고치는 것은 내 범위가 아니므로**(`apps/web`뿐이다) **화면이 그 자리에서 말한다:**
+ * **엔진이 말하지 않으므로 화면이 그 자리에서 말한다:**
  * 값이 참조처럼 생겼는데 이름공간이 목록 밖이면 *"리터럴로 실립니다"*라고 적는다.
  * **이것은 `ThemeIssue`가 아니다** — 엔진이 이슈를 안 내므로 이슈 패널과 겹칠 것이 없고,
- * 이 파일은 `severity`를 읽지도 `partitionIssues`를 부르지도 않는다(공유 제약 8).
- * **P4c-3이 이 판정을 엔진으로 옮길지 정한다** — 이월 §1-①이 primitives에 대해 남긴
- * 물음과 같은 모양이다.
+ * 이 파일은 `severity`를 읽지도 `partitionIssues`를 부르지도 않는다.
+ * **엔진이 토큰 층에서도 이 판정을 내게 되면 이 경고는 이슈 패널과 두 벌이 된다** — 그때
+ * 이 자리를 걷는다.
  *
  * ---
  *
- * # 재라 #6은 **안 만들었다** — 재료를 재서 판정했다
+ * # *"같은 값을 연결할까요?"* 제안은 이 화면에서 성립하지 않는다 — 재료를 재서 판정했다
  *
- * *"이 값이 `section.paddingY`와 같습니다. 연결할까요?"*(P4c-1 이월 §4).
+ * 제안의 모양: *"이 값이 `section.paddingY`와 같습니다. 연결할까요?"*
  *
  * 1. **그 재료가 이 화면에 없다.** 5/5로 겹치는 둘은 `components.Section.base.paddingY`
- *    ↔ `primitives.section.paddingY`다(P4c-1이 쟀다). 이 화면은 `tokens`를 편집하고,
- *    `components`·`primitives`는 D6이 **`<textarea>`**로 정했다(W2) — **값 하나를 짚을
- *    UI 자체가 이 슬라이스에 없다.** 만들려면 컴포넌트 스타일 GUI를 먼저 만들어야 한다.
+ *    ↔ `primitives.section.paddingY`다. 이 화면은 `tokens`를 편집하고,
+ *    `components`·`primitives`는 **`<textarea>`**(`theme/json-editor.tsx`)로 편집한다 — **값 하나를 짚을
+ *    UI 자체가 없다.** 만들려면 컴포넌트 스타일 GUI를 먼저 만들어야 한다.
  * 2. **이 화면에 있는 유일한 유사 재료는 0/5다.** 같은 모양의 제안을 토큰 층에서 세우면
  *    *"이 `semantic` 리터럴이 `palette.<x>`와 같은 값입니다"*가 된다. **시스템 테마 다섯을
- *    훑어 쟀다(내가 쟀다): 겹치는 항목 0건**(semantic 리터럴은 다섯 테마 합쳐 다섯 개뿐이고
+ *    훑어 잰 값: 겹치는 항목 0건**(semantic 리터럴은 다섯 테마 합쳐 다섯 개뿐이고
  *    그중 어느 것도 palette 값과 같지 않다).
  *
- * **그래서 판정은 이렇다: 계획서가 기대한 *"이 슬라이스에서 가장 영리한 기능"*은 이 화면에서
- * 성립하지 않는다.** 다만 **그 제안을 거는 자리 자체는 만들어 두었다**(아래 `paletteMatch`) —
- * 조건이 맞을 때만 나타나므로 오늘 코퍼스에서는 **한 번도 안 나타난다.** 값이 0건이라는
- * 사실과 함께 남긴다.
+ * **그래서 그 제안은 이 화면에서 성립하지 않는다.** 다만 **그 제안을 거는 자리 자체는
+ * 있다**(아래 `paletteMatch`) — 조건이 맞을 때만 나타나므로 시스템 테마에서는 **한 번도
+ * 안 나타난다.** 값이 0건이라는 사실과 함께 남긴다.
  *
  * ---
  *
- * # 계약 (①이 적어 둔 것 — 그대로 지켰다)
+ * # 계약
  *
- * - **초안은 `useThemeDraftStore()`에서 꺼낸다.** props로 받지 않는다(D3).
+ * - **초안은 `useThemeDraftStore()`에서 꺼낸다.** props로 받지 않는다.
  * - **쓰기는 `store.putSection('tokens', …)` 하나다.** 이 파일에 다른 쓰기 문이 없다.
  * - **서버를 부르지 않는다**(`api.*`가 없다). **`.role`을 읽지 않는다**(`locked` 하나만 본다).
- * - **이슈를 그리지 않는다** — `theme/theme-issues.tsx`가 한 곳에서 그린다(D4).
- * - **`routes/theme-editor.tsx`를 열지 않았다.**
+ * - **이슈를 그리지 않는다** — `theme/theme-issues.tsx`가 한 곳에서 그린다.
  *
  * > **입력의 접근성 이름이 이슈의 `path`와 글자까지 같다**(`tokens.palette.blue.600`).
- * > `theme-issues.tsx`가 *"누르면 그 자리로 가는 것은 안 만들었다 — ②가 붙일 자리"*라고
- * > 적어 두었는데, **그 배선에 필요한 것은 id 체계가 아니라 이 일치 하나다.** 오늘
- * > `onSelectPath`는 없다(그것은 `theme-issues.tsx`의 계약이고 내 파일이 아니다).
+ * > 이슈에서 그 자리로 가는 배선(`theme-issues.tsx` — 지금은 글자로만 짚는다)에 **필요한
+ * > 것은 id 체계가 아니라 이 일치 하나다.** `onSelectPath`는 없다 — 그것은
+ * > `theme-issues.tsx`의 계약이다.
  */
 import { useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import {
@@ -160,7 +158,7 @@ export const SEMANTIC_NAMESPACES = ['palette', 'semantic'] as const
  * 내보내지지 않으므로 여기 옮겨 적고 케이스가 `styleDeclarations`로 다시 잰다.**
  *
  * 이 목록이 있어야 *"이 타이포 항목을 `typography:`로 가리킬 수 있는가"*를 화면이 말할 수
- * 있다 — §6.3의 `typography.family`는 이 넷을 하나도 갖지 않아 **가리키면
+ * 있다 — 「tokens — 3단 분리」의 `typography.family`는 이 넷을 하나도 갖지 않아 **가리키면
  * `unknown-token`이 난다**(`resolve/style.ts`의 머리말이 그렇게 적었고 케이스가 다시 잰다).
  */
 export const TYPOGRAPHY_TEXT_KEYS = ['fontSize', 'lineHeight', 'fontWeight', 'letterSpacing'] as const
@@ -199,7 +197,7 @@ export function TokenEditor(props: { locked: boolean }): ReactElement | null {
   /**
    * **화면이 보이는 것은 병합 결과다 — 쓰는 것은 이 테마의 절이다.**
    *
-   * §6.9가 *"대부분의 프로젝트는 시스템 테마를 상속해 `semantic` 색 몇 개와
+   * 설계서 「상속과 병합」이 *"대부분의 프로젝트는 시스템 테마를 상속해 `semantic` 색 몇 개와
    * `typography.family`만 덮어쓴다"*고 적었으므로 **파생이 흔한 경우다.** 자기 절만 그리면
    * 그런 테마의 편집기는 줄 몇 개짜리 빈 화면이 되고, 물려받은 팔레트가 보이지 않아
    * *"이 테마가 무엇을 입고 있는지"*를 이 화면에서 알 수 없다.
@@ -242,8 +240,8 @@ export function TokenEditor(props: { locked: boolean }): ReactElement | null {
             locked={props.locked}
             overridden={own.palette?.[name] !== undefined}
             inheritable={base !== null}
-            // **이 색을 가리키는 semantic의 수.** 0이면 그 색은 오늘 어느 스타일에서도
-            // 쓸 수 없다 — 스타일이 palette를 직접 가리킬 수 없기 때문이다(§6.3).
+            // **이 색을 가리키는 semantic의 수.** 0이면 그 색은 어느 스타일에서도
+            // 쓸 수 없다 — 스타일이 palette를 직접 가리킬 수 없기 때문이다(「tokens — 3단 분리」).
             meta={referrerNote(semantic, `palette.${name}`)}
             onChange={(next) => write(putRecord(own, 'palette', name, next))}
             onReset={() => write(putRecord(own, 'palette', name, undefined))}
@@ -273,7 +271,7 @@ export function TokenEditor(props: { locked: boolean }): ReactElement | null {
             inheritable={base !== null}
             // **이름공간 드롭다운이 붙는 유일한 자리다** — 머리말의 표 참고.
             reference={{ targets: referenceTargets(effective, name) }}
-            // 재라 #6의 자리. 오늘 코퍼스에서 0건이다(머리말).
+            // *"같은 값을 연결할까요?"* 제안의 자리. 시스템 테마에서는 0건이다(머리말).
             promote={paletteMatch(effective, value)}
             onChange={(next) => write(putRecord(own, 'semantic', name, next))}
             onReset={() => write(putRecord(own, 'semantic', name, undefined))}
@@ -343,7 +341,7 @@ function EmptyNote(props: { what: string }): ReactElement {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   값 한 줄 — 재라 #4의 답이 이 컴포넌트다
+   값 한 줄 — «텍스트 입력이 진실, 컬러 피커는 파생»(머리말)이 이 컴포넌트다
    ──────────────────────────────────────────────────────────────────────────── */
 
 interface ReferenceChoice {
@@ -395,7 +393,7 @@ function ValueRow(props: {
         onChange={(event) => props.onChange(event.target.value)}
       />
 
-      {/* **컬러 피커는 담을 수 있을 때만 나온다**(재라 #4). 참조·`rgba()`·3자리 hex에는
+      {/* **컬러 피커는 담을 수 있을 때만 나온다**(머리말의 표). 참조·`rgba()`·3자리 hex에는
           나오지 않으므로, 보이는 색과 문서의 값이 갈릴 수 없다. */}
       {props.color === true && HEX6.test(value) && (
         <input
@@ -453,7 +451,7 @@ function ValueRow(props: {
  *
  * 이름공간과 이름을 **두 드롭다운으로 가른 것이 판정이다.** 하나로 합치면
  * (`palette.blue.600` 한 목록) 고르기는 편하지만 **고를 수 있는 이름공간이 둘뿐이라는
- * 사실이 화면에서 사라진다** — 그 짧은 목록이 §6.3의 3단을 보이는 자리다.
+ * 사실이 화면에서 사라진다** — 그 짧은 목록이 3단을 보이는 자리다.
  *
  * `semantic`이 자기 자신을 가리키면 순환이다. 목록에서 **자기 이름만** 뺀다 — 두 칸짜리
  * 순환(`a → b → a`)까지 여기서 막지 않는 것은 그것이 `circular-token`으로 이슈 패널에
@@ -547,11 +545,11 @@ function AddRow(props: {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   스케일 에디터 — D7의 *"그 파생을 보여 주는 것이 이 에디터의 쓸모다"*
+   스케일 에디터 — 그 파생을 보여 주는 것이 이 에디터의 쓸모다
    ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * `space.unit` 하나가 `space.1`~`space.24`를 낳는다(§6.3). **그 파생을 보인다.**
+ * `space.unit` 하나가 `space.1`~`space.24`를 낳는다(「tokens — 3단 분리」). **그 파생을 보인다.**
  *
  * **값을 여기서 곱하지 않는다** — `resolveTokens`가 낸 표에서 읽는다. 곱셈은 같아 보여도
  * 반올림(`round`의 유효숫자 12자리)과 단위 철자를 잇는 규칙이 엔진에 있고, 베끼면 그 둘이
@@ -682,7 +680,7 @@ function previewStyle(group: 'radius' | 'shadow' | 'motion', value: string): CSS
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   타이포 미리보기 — D7의 *"항목마다 실제 글자로"*
+   타이포 미리보기 — 항목마다 실제 글자로
    ──────────────────────────────────────────────────────────────────────────── */
 
 /** 미리보기에 쓰는 문장. 한글·라틴·수를 함께 둔다 — 세 벌의 자형이 한 줄에서 갈린다. */
@@ -691,7 +689,7 @@ const SAMPLE = '다람쥐 헌 쳇바퀴 Handgloves 0123'
 /**
  * `scale.typography`의 항목마다 **실제 글자로** 보인다.
  *
- * **항목의 모양이 두 가지다**(§6.3의 예시가 그렇다):
+ * **항목의 모양이 두 가지다**(「tokens — 3단 분리」의 예시가 그렇다):
  *
  * | 항목 | 키 | `typography: "이름"`으로 가리킬 수 있나 |
  * |---|---|---|
@@ -704,8 +702,8 @@ const SAMPLE = '다람쥐 헌 쳇바퀴 Handgloves 0123'
  * 그 폰트로 그린다.
  *
  * **그 사실을 화면이 말한다.** 폰트 토큰을 만들어 놓고 `typography: "family"`로 걸려다
- * 실패하는 것은 실제로 있었던 자리이고(`resolve/style.ts`가 *"폰트 토큰은 이미 만들어지는데
- * 그것을 가리킬 프로퍼티가 없던 것"*이라고 적었다), 오늘 그 답은 `fontFamily` 어휘로
+ * 실패하는 것은 실재하는 함정이고(`resolve/style.ts`가 *"폰트 토큰은 이미 만들어지는데
+ * 그것을 가리킬 프로퍼티가 없던 것"*이라고 적었다), 그 답은 `fontFamily` 어휘로
  * **토큰을 직접** 가리키는 것이다.
  */
 function Typography(props: {
@@ -789,7 +787,7 @@ function Typography(props: {
 /**
  * 항목 하나를 실제 글자 스타일로. **표에 없는 키는 선언하지 않는다** — 엔진의
  * `TYPOGRAPHY_KEYS`가 *"스케일 항목에 없는 키는 선언을 내지 않는다"*인 것과 같은 규칙이고,
- * 그래서 §6.3의 `body`처럼 `letterSpacing`이 없는 항목이 화면에서도 그것을 갖지 않는다.
+ * 그래서 「tokens — 3단 분리」의 `body`처럼 `letterSpacing`이 없는 항목이 화면에서도 그것을 갖지 않는다.
  *
  * **폰트는 지어내지 않는다.** 글자 스타일 항목에는 `family`가 없으므로 셸의 글꼴로 그린다 —
  * 임의로 `family.sans`를 끌어다 쓰면 화면이 문서에 없는 조합을 보이게 된다.
@@ -821,7 +819,7 @@ function keepShape(before: string | number, next: string): string | number {
 /**
  * **화면이 보이는 토큰.** 파생이면 상속 대상과 병합한 결과다.
  *
- * 병합을 손으로 하지 않고 `mergeTheme`을 부르는 것은 §6.9의 규칙 넷(깊은 병합 · 배열 교체 ·
+ * 병합을 손으로 하지 않고 `mergeTheme`을 부르는 것은 「상속과 병합」의 규칙 넷(깊은 병합 · 배열 교체 ·
  * `null` 삭제 · 깊이 1)을 이 파일이 다시 구현하면 **엔진과 갈릴 자리가 생기기 때문**이다.
  *
  * **병합이 실패하면 자기 절만 보인다.** 실패는 `bad-extends` 하나이고(상속 대상이 사라진
@@ -943,9 +941,10 @@ function referrerNote(semantic: [string, string][], reference: string): string {
 }
 
 /**
- * 리터럴 값과 **똑같은 값을 가진 `palette` 항목**. 있으면 참조로 바꾸자고 제안한다(재라 #6).
+ * 리터럴 값과 **똑같은 값을 가진 `palette` 항목**. 있으면 참조로 바꾸자고 제안한다(머리말의
+ * *"같은 값을 연결할까요?"*).
  *
- * **오늘 코퍼스에서 0건이다**(머리말 — 시스템 테마 다섯에서 겹치는 항목이 하나도 없다).
+ * **시스템 테마에서는 0건이다**(머리말 — 시스템 테마 다섯에서 겹치는 항목이 하나도 없다).
  * 색 표기가 다르면(`#FFF` vs `#ffffff`) 못 찾는다 — 표기를 정규화하지 않는 것은 그 규칙이
  * 이 화면의 것이 아니기 때문이다(엔진도 표기를 건드리지 않는다).
  */

@@ -1,15 +1,11 @@
 /**
  * 로그인 다음 화면. 내가 속한 프로젝트를 늘어놓고, 하나를 고르면 에디터로 들어간다.
- * **여기서 프로젝트를 만들고 고치고 지운다**(P2b-5).
- *
- * **앞 판의 머리말은 *"읽기 전용이다 — P2b-1의 범위는 보는 것까지다"*였다.** 그 범위가
- * 이 단계로 끝났으므로 지웠다. **옛 근거를 남겨 두면 다음 사람이 그것을 지키려다 되돌린다**
- * (P2b-4의 D4가 같은 자리였다).
+ * **여기서 프로젝트를 만들고 고치고 지운다.**
  *
  * **조회·잠금·조작은 `projects/use-project-commands.tsx`가 갖는다.** 이 파일은 그 결과를
  * 그리기만 한다 — 판정이 컴포넌트 안에 흩어지면 케이스가 화면을 지나야만 재진다.
  *
- * **삭제 확인은 Task 6이 붙인다.**
+ * **삭제 확인은 `projects/delete-confirm.tsx`의 `DeleteConfirm`이 그 항목 자리에 연다.**
  */
 import type { ReactElement } from 'react'
 import { Link } from 'react-router'
@@ -40,8 +36,7 @@ export function ProjectListRoute(): ReactElement {
     // `test/shell-css.test.ts`가 기계로 지킨다.
     <main className="wb-shell-project-list">
       {/* **여기에도 앱에서 나가는 길이 있어야 한다.** 셸 머리에만 두면 프로젝트를 하나
-          열지 않고는 로그아웃할 수 없다 — 원래 고장이 *"로그아웃 UI가 앱 전체에 하나도
-          없다"*였으므로 이 화면까지 닫아야 그 항목이 끝난다.
+          열지 않고는 로그아웃할 수 없다.
 
           **`SessionMenu`는 셸 전용이 아니다** — `projectId`를 받지 않고 세션 컨텍스트만
           본다(`session/session-menu.tsx`). 이 화면이 팔레트 루트 넷 중 하나라
@@ -52,8 +47,9 @@ export function ProjectListRoute(): ReactElement {
         <SessionMenu />
       </div>
 
-      {/* **여는 버튼도 잠근다(D2).** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
-          그것을 화면에 보이게 한다 — P2b-4에서 여는 쪽 하나가 빠져 사고가 났다. */}
+      {/* **여는 버튼도 잠근다.** 실제로 막는 것은 훅의 `inFlight`이고, 이 `disabled`는
+          그것을 화면에 보이게 한다 — 여는 쪽 하나라도 빠지면 그 버튼은 눌리는 것처럼 보이는데
+          조용히 아무 일도 안 한다. */}
       <button
         className="wb-shell-project-create"
         type="button"
@@ -63,7 +59,7 @@ export function ProjectListRoute(): ReactElement {
         새 프로젝트
       </button>
 
-      {/* 만들기 폼은 목록 **위**에 연다(D4). `key`가 있어야 만들기↔수정을 오갈 때 새
+      {/* 만들기 폼은 목록 **위**에 연다. `key`가 있어야 만들기↔수정을 오갈 때 새
           인스턴스가 마운트되고 초기값이 다시 잡힌다. */}
       {commands.form !== null && commands.form.project === null && (
         <ProjectForm
@@ -76,7 +72,7 @@ export function ProjectListRoute(): ReactElement {
         />
       )}
 
-      {/* **조작 실패는 조회 실패와 다른 자리에 낸다**(D8). 둘이 한 자리에 나오면 목록을
+      {/* **조작 실패는 조회 실패와 다른 자리에 낸다**. 둘이 한 자리에 나오면 목록을
           못 받은 사실이 조작 실패 문장에 덮인다. */}
       {commands.failure !== null && commands.failure.kind === 'message' && (
         <p className="wb-shell-project-alert" role="alert">
@@ -110,7 +106,8 @@ export function ProjectListRoute(): ReactElement {
 
 /**
  * 목록의 한 줄. **역할 판정을 여기서 다시 하지 않는다** — `projectAbilities` 하나가 그것을
- * 갖는다(D3). **`.role`을 읽는 자리가 이 한 곳이어야** 판정이 흩어지지 않는다.
+ * 갖는다. **`.role`은 `projectAbilities`의 인자 자리에서만 읽어야** 판정이 흩어지지 않는다
+ * (`test/role-access.test.ts`가 센다).
  */
 function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }): ReactElement {
   const { project, commands } = props
@@ -129,8 +126,8 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
         <p className="wb-shell-project-desc">{project.description}</p>
       )}
 
-      {/* **`owner`가 아니면 버튼 자체가 없다**(D3) — `editor`·`viewer`는 `PATCH`·`DELETE`
-          둘 다 403이다(웨이브 1 실측). 비활성으로 두지 않고 아예 그리지 않는 것은, 이 화면에서
+      {/* **`owner`가 아니면 버튼 자체가 없다** — `editor`·`viewer`는 `PATCH`·`DELETE`
+          둘 다 403이다(`projects/project-actions.ts` 머리말의 서버 응답 표). 비활성으로 두지 않고 아예 그리지 않는 것은, 이 화면에서
           역할이 바뀌는 길이 없어 "지금은 못 하지만 곧 될 수도 있다"가 아니기 때문이다. */}
       {abilities.rename && (
         <button
@@ -154,7 +151,7 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
         </button>
       )}
 
-      {/* 수정 폼은 **그 항목 자리에** 연다 — 만들기는 목록 위다(D4). */}
+      {/* 수정 폼은 **그 항목 자리에** 연다 — 만들기는 목록 위다. */}
       {editing && (
         <ProjectForm
           key={`edit-${project.id}`}
@@ -165,11 +162,10 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
           onCancel={commands.closeForm}
         />
       )}
-      {/* **`key`를 주지 않는다 — 재서 걷어냈다.** 앞 판은 *"`key`가 있어야 다른 항목으로
-          옮길 때 친 이름이 사라진다"*고 적었는데 **그것은 거짓이다**: 각 `DeleteConfirm`은
-          서로 다른 `<li>`(그쪽이 `key={project.id}`를 갖는다) 안에 있어, 항목을 옮기면
-          그 서브트리째 언마운트된다. `key`를 지워도 **0 사망**이고 친 이름은 그대로 사라진다.
-          **`<li>`의 `key`가 이미 하는 일을 한 겹 더 적은 것이었다.** */}
+      {/* **`key`를 주지 않는다.** *"`key`가 있어야 다른 항목으로 옮길 때 친 이름이
+          사라진다"*는 거짓이다: 각 `DeleteConfirm`은 서로 다른 `<li>`(그쪽이 `key={project.id}`를
+          갖는다) 안에 있어, 항목을 옮기면 그 서브트리째 언마운트되고 친 이름도 사라진다.
+          여기 `key`를 주는 것은 **`<li>`의 `key`가 이미 하는 일을 한 겹 더 적는 것이다.** */}
       {confirming && (
         <DeleteConfirm
           project={project}

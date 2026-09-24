@@ -53,7 +53,7 @@ export interface WriteOptions {
  * - **`signal`** — **판정용 다시 읽기**(`panels/write-ledger.tsx`의 `race`)가 싣는다. 부른 쪽이 제 시간 제한으로
  *   끊으므로 **여기서는 시간을 안 건다** — 두 시계가 한 요청을 다투지 않게(`http-client.ts`의 `READ_DEADLINE_MS`).
  * - **`cancel`** — **조회 이펙트**가 싣는다. 정리(떠남)가 끊는다 — 떠난 방문의 조회가 브라우저 연결을 쥐고
- *   있지 않게(이월 AD-F1 · `http-client.ts`의 `READ_DEADLINE_MS` «떠난 조회는 끊는다»). **시간은 여전히 여기서
+ *   있지 않게(`http-client.ts`의 `READ_DEADLINE_MS` «떠난 조회는 끊는다»). **시간은 여전히 여기서
  *   잰다**(일반 읽기의 10초) — 끊겼으면 다시 보내지 않는다. 끊긴 조회의 거절은 아무에게도 안 보인다(부른 쪽이
  *   `alive`로 버린다).
  */
@@ -65,21 +65,20 @@ export interface ReadOptions {
 export interface ApiClient {
   login(email: string, password: string): Promise<SessionUser>
   logout(): Promise<void>
-  /** `cancel`은 세션 문맥이 내려가면 끊는다(이월 AD 잔여 — `session/session-context.tsx`). */
+  /** `cancel`은 세션 문맥이 내려가면 끊는다(`session/session-context.tsx`). */
   me(options?: ReadOptions): Promise<SessionUser>
   /** 호출자가 속한 프로젝트 목록. 각 항목에 호출자의 `role`이 실려 온다. */
   listProjects(): Promise<ProjectDetail[]>
-  /** `cancel`은 셸을 떠나면 끊는다(이월 AD 잔여 — `routes/editor.tsx`의 첫 조회 · `reread`). */
+  /** `cancel`은 셸을 떠나면 끊는다(`routes/editor.tsx`의 첫 조회 · `reread`). */
   getProject(projectId: string, options?: ReadOptions): Promise<ProjectDetail>
   /**
    * 프로젝트를 만든다. **부른 사람이 owner가 된다**(서버가 같은 트랜잭션에서
    * `project_members`에 넣는다 — `repos/projects.ts`).
    *
-   * **응답이 `ProjectDetail`이다 — `role: "owner"`까지 실려 온다.** 계획서 D1이
-   * *"생성 응답에는 `role`이 없어 목록 항목과 다른 모양이다"*라고 적었던 것은 거짓이고,
+   * **응답이 `ProjectDetail`이다 — `role: "owner"`까지 실려 와 목록 항목과 모양이 같다.**
    * 그 근거는 `api/types.ts`의 `ProjectDetail` 주석에 실측 표로 있다.
    *
-   * **그래도 응답을 목록에 그대로 꽂지 않는다**(P2b-5 D1). 되돌릴 것이 목록 하나뿐이라
+   * **그래도 응답을 목록에 그대로 꽂지 않는다.** 되돌릴 것이 목록 하나뿐이라
    * undo가 없고, 성공하면 목록을 다시 받는 편이 곧 수렴이기 때문이다. **모양이 같다는
    * 것이 그 판단을 뒤집지는 않는다** — 뒤집는다면 그것은 이 층이 아니라 목록 화면의
    * 판단이다.
@@ -98,12 +97,12 @@ export interface ApiClient {
    *   **타입이 그것을 막지 못한다** — 스프레드 리터럴(`{ ...project }`)은 초과 속성 검사에
    *   걸리지 않는다(`declaredOnly` 머리말의 `tsc` 프로브 표).
    *
-   * **슬러그 형식을 클라이언트가 다시 보지 않는다**(D5). 서버가 400과 함께 문장을 주고,
+   * **슬러그 형식을 클라이언트가 다시 보지 않는다.** 서버가 400과 함께 문장을 주고,
    * 중복은 409다 — 규칙을 두 곳에 두면 어긋난다. **다만 그 문장이 무엇이 틀렸는지 다
    * 말해 주지는 않는다:** 형식·길이·빈 문자열이 **전부 같은 한 문장**이다(실측 —
    * `a`×65·`""`·`Abc`·`-abc`·`가나`가 모두 400 `"슬러그는 소문자·숫자·하이픈만 쓸 수 있고,
    * 하이픈으로 시작하거나 끝날 수 없습니다"`. `a`×64는 201이다). **길이 초과에서는 그
-   * 문장이 원인을 설명하지 못한다** — 화면(Task 4)이 그 한계를 안고 간다.
+   * 문장이 원인을 설명하지 못한다** — 화면이 그 한계를 안고 간다.
    */
   createProject(body: {
     name: string
@@ -133,7 +132,7 @@ export interface ApiClient {
    * 프로젝트를 지운다. **owner만 부를 수 있다.**
    *
    * **서버가 아무것도 막지 않는다** — 메뉴 삭제가 자식이 있으면 409를 내는 것과 다르다.
-   * 딸린 것이 함께 사라지는 범위는 Task 6이 재서 `projects/delete-confirm.tsx`에 적는다.
+   * 딸린 것이 함께 사라지는 범위는 `projects/delete-confirm.tsx`의 머리말이 적는다.
    */
   deleteProject(projectId: string): Promise<void>
   /**
@@ -154,7 +153,7 @@ export interface ApiClient {
    * 것이고, `updateMenu`의 `parentId: null`(내어쓰기로 루트에 보낸다)과 같은 모양이어야 한다.
    *
    * **응답을 트리에 그대로 꽂을 수 없다**(`MenuNode`에 `pages`·`children`이 없다). 부르는
-   * 쪽은 성공하면 `getTree`를 다시 부른다(P2b-4 D1).
+   * 쪽은 성공하면 `getTree`를 다시 부른다.
    */
   createMenu(projectId: string, body: { parentId: string | null; title: string }): Promise<MenuNode>
   /**
@@ -173,7 +172,7 @@ export interface ApiClient {
       parentId?: string | null
       sortOrder?: number
       /**
-       * **고치기 전 제목**(이월 5차 ② — 메뉴 제목의 충돌 모델). 주면 서버가 지금 제목과 견주고, 다르면 409 · 이슈 코드
+       * **고치기 전 제목**(메뉴 제목의 충돌 모델). 주면 서버가 지금 제목과 견주고, 다르면 409 · 이슈 코드
        * `menu-title-changed` · 지금 제목(`current`)이다. 안 주면 나중이 이긴다. 읽는 법은 `api/page-meta.ts`가 소유한다 —
        * 페이지 메타와 같은 함수다.
        */
@@ -186,14 +185,13 @@ export interface ApiClient {
    *
    * **실측**(api 하네스): 자식 메뉴만 있는 메뉴와 페이지만 있는 메뉴가 **둘 다** 409이고
    * 코드·문장이 같다(`conflict` / `하위 메뉴나 페이지가 있어 삭제할 수 없습니다`).
-   * 둘 다 없으면 204다. `tree/tree-actions.ts`의 `remove`가 두 배열을 다 보는 근거이고,
-   * 계획서의 재라 #4가 이것으로 닫힌다.
+   * 둘 다 없으면 204다. `tree/tree-actions.ts`의 `remove`가 두 배열을 다 보는 근거다.
    */
   deleteMenu(projectId: string, nodeId: string): Promise<void>
   /**
    * 페이지를 만든다. 서버가 빈 `Page` 문서를 기본 스키마로 채워 준다(README).
    *
-   * **`description`을 싣지 않는다** — 설계 §9가 그 편집을 우측 패널의 "페이지 설명" 탭에
+   * **`description`을 싣지 않는다** — 설계서 「설계서 화면 구조」가 그 편집을 우측 패널의 "페이지 설명" 탭에
    * 두기로 했고, 트리에서 만드는 자리는 제목만 묻는다.
    */
   createPage(projectId: string, body: { menuNodeId: string; title: string }): Promise<PageDetail>
@@ -202,13 +200,12 @@ export interface ApiClient {
    *
    * **`schema`는 여기서 못 바꾼다** — 서버가 `PUT .../schema`·`PATCH .../ops`로만 받는다.
    *
-   * ## `description`이 여기 있다 — 서버는 처음부터 받고 있었다
+   * ## `description`을 이 층에서 막을 수 있는 자리는 둘이다
    *
-   * **앞 판의 이 자리는 *"`description`은 여기서 못 바꾼다"*였고 그 근거를 *"이 단계 밖"*이라고
-   * 적었다.** 그 문장은 이 인터페이스에 대해서만 참이었다 — `routes/pages.ts`의
-   * `UpdatePageBody`는 **처음부터** `description`을 받았고 `repos/pages.ts`의 `updatePage`도
-   * 그것을 썼다. 막고 있던 것은 **여기 시그니처와 `http-client.ts`의 `BODY_KEYS.updatePage`
-   * 화이트리스트** 둘뿐이고, 후자가 `declaredOnly`로 그 키를 떨궈 냈다.
+   * 서버는 `description`을 받는다 — `routes/pages.ts`의 `UpdatePageBody`가 받고
+   * `repos/pages.ts`의 `updatePage`가 쓴다. 이 층에서 그 키를 막을 수 있는 자리는 **여기
+   * 시그니처와 `http-client.ts`의 `BODY_KEYS.updatePage` 화이트리스트** 둘이고, 후자에서 빠지면
+   * `declaredOnly`가 그 키를 떨궈 낸다(무엇이 보이는지는 그 줄의 주석).
    *
    * **실측**(api 하네스, `projectGuard('editor')`):
    *
@@ -223,7 +220,7 @@ export interface ApiClient {
    * | viewer가 보냄 | 403 |
    * | **남이 그 페이지의 노드를 잠근 동안** | **200** |
    *
-   * ### NUL은 500이다 — **`importPage`와 갈린다**(선재 결함, 이 슬라이스 밖)
+   * ### NUL은 500이다 — **`importPage`와 갈린다**(`apps/api` 쪽 결함)
    *
    * `description`도 `title`도 NUL(`U+0000`)이 들어가면 **400이 아니라 500**이다(실측 —
    * `POST .../pages`도 같다). Postgres가 `invalid byte sequence for encoding "UTF8": 0x00`
@@ -232,16 +229,14 @@ export interface ApiClient {
    *
    * **같은 값이 `importPage`로 오면 400이고 문장까지 있다** — `"페이지 제목·설명에 NUL
    * 문자(U+0000)를 포함할 수 없습니다"`(실측. 아래 `importPage`의 실패 표에도 그 갈래가
-   * 있다). **한 값에 두 답이 있는 것이고 새 발견이 아니다** —
-   * `docs/superpowers/plans/2026-08-12-p6-1-carryforward.md`가 *"NUL이 500을 내는 여섯
-   * 경로"*로 이미 적었다. **여기 적는 이유는 이 표를 읽는 사람이 그 갈래를 모르기
-   * 때문이다** — 고치는 것은 `apps/api` 쪽 일이라 이 슬라이스가 하지 않는다.
+   * 있다). **한 값에 두 답이 있다.** 여기 적는 이유는 이 표를 읽는 사람이 그 갈래를 모르기
+   * 때문이다 — 고치는 것은 `apps/api` 쪽 일이다.
    *
    * **화면은 이 갈래를 다시 판정하지 않는다.** 500이면 서버가 문장을 안 주므로
-   * `toFailure`가 `SAVE_FAILED`(*"설명을 저장하지 못했습니다"*)를 쓴다 — 그것이 D5이고,
-   * 화면이 NUL을 미리 막으면 서버와 규칙이 두 벌이 된다.
+   * `toFailure`가 `SAVE_FAILED`(*"설명을 저장하지 못했습니다"*)를 쓴다 — 화면이 NUL을
+   * 미리 막으면 서버와 규칙이 두 벌이 된다.
    *
-   * **잠금이 이 경로를 안 본다**(실측). §7.2의 `findLockConflict`는 **문서 안 포인터**를
+   * **잠금이 이 경로를 안 본다**(실측). 소프트 잠금(설계서 「소프트 잠금」)의 `findLockConflict`는 **문서 안 포인터**를
    * 보는데 `pages.description`은 문서 밖 컬럼이라, 이 라우트는 `lockConflictError`를 아예
    * 지나지 않는다. `title` 갱신도 같다. **그래서 화면이 잠금을 판정하지 않는다** — 없는
    * 실패를 화면이 지어내면 그것이 곧 두 번째 판정이다.
@@ -258,7 +253,7 @@ export interface ApiClient {
       menuNodeId?: string
       sortOrder?: number
       /**
-       * **고치기 전 값**(이월 P — 페이지 메타의 충돌 모델). 주면 서버가 지금 값과 견주고, 다르면 409 · 이슈 코드
+       * **고치기 전 값**(페이지 메타의 충돌 모델). 주면 서버가 지금 값과 견주고, 다르면 409 · 이슈 코드
        * `page-meta-changed` · 칸마다 지금 값(`current`)이다. 안 주면 나중이 이긴다. 무엇을 싣고 409 를 어떻게 읽는지는
        * `api/page-meta.ts`가 소유한다.
        */
@@ -268,7 +263,7 @@ export interface ApiClient {
   ): Promise<PageDetail>
   deletePage(projectId: string, pageId: string): Promise<void>
   /**
-   * **페이지 JSON 파일 한 벌로 새 페이지를 만든다**(§11.2 — P7-3). **덮지 않는다** —
+   * **페이지 JSON 파일 한 벌로 새 페이지를 만든다**(설계서 「페이지 JSON」). **덮지 않는다** —
    * `menuNodeId`가 가리키는 메뉴의 맨 끝에 붙는다.
    *
    * `file`이 봉투 전체다. **화면이 보내기 전에 서버와 같은 게이트 셋을 지난다** —
@@ -279,9 +274,8 @@ export interface ApiClient {
    * **그래도 서버만 아는 것이 남는다** — 대상 메뉴가 아직 있는지 · NUL · 본문 크기 ·
    * 권한, 그리고 배포 편차. 아래 표의 실패는 **미리보기를 지나고도 올 수 있다.**
    *
-   * > **앞 판은 여기에 *"그래야 화면이 통과시킨 파일을 서버가 다른 이유로 거절하는 일이
-   * > 없다"*고 적었고 그것은 거짓이었다**(리뷰가 셋을 실측했다 — 그때 미리보기는 봉투만
-   * > 봤다). P7-1 이월 §2가 이름 붙인 부류를 **이 주석 자신이 만들고 있었다.**
+   * > **"화면이 통과시킨 파일을 서버가 다른 이유로 거절하는 일은 없다"고 적지 마라** —
+   * > 위의 서버만 아는 것 때문에 거짓이다.
    *
    * `title`은 파일의 제목을 덮는다. **없으면 키를 만들지 않는다** — 페이지 제목에 유일
    * 제약이 없어 같은 파일을 두 번 가져오면 같은 이름 둘이 생기고, 그것을 가르는 것이
@@ -301,9 +295,10 @@ export interface ApiClient {
   ): Promise<PageImported>
   getPage(projectId: string, pageId: string, options?: ReadOptions): Promise<PageDetail>
   /**
-   * 편집 하나를 보낸다. **응답의 `seq`가 다음 호출의 `baseSeq`다**(README 4단계).
+   * 편집 하나를 보낸다. **응답의 `seq`가 다음 호출의 `baseSeq`다**(`apps/api/README.md` 「편집
+   * 파이프라인」의 4단계).
    *
-   * **호출은 직렬화해야 한다** — README가 *"in-flight 요청은 항상 하나여야 한다 — 앞
+   * **호출은 직렬화해야 한다** — 같은 절이 *"in-flight 요청은 항상 하나여야 한다 — 앞
    * 요청의 `seq`를 받아야 다음 `baseSeq`가 정해지기 때문이다. 어기면 두 번째 요청이
    * 409를 받는다"*라고 못박았다. 그 직렬화는 이 인터페이스가 아니라 부르는 쪽이 한다
    * (`edit/use-edit-commit.tsx`) — 여기서 큐를 들면 가짜를 끼우는 테스트마다 그 큐가
@@ -314,8 +309,8 @@ export interface ApiClient {
    * `PendingEdit.clientOpId`에 근거가 있다). 즉 `PatchResult.clientOpId`는 **계약에 있으니 타입에
    * 두지만 ack의 판정에는 쓰이지 않는 필드**다(`ApiError.status`와 같은 부류).
    *
-   * **"소비자가 아직 없다"로 적지 않는다** — 그 형태가 이 저장소에서 여러 번 저절로 낡았다
-   * (`test/api-consumers.test.ts`의 머리말). 위 문장은 **무엇이 무엇을 쓰는가**를 말하므로
+   * **"소비자가 아직 없다"로 적지 않는다** — 그 형태는 호출부가 생기는 순간 저절로 낡는다
+   * (호출부는 `test/api-consumers.test.ts`가 실행으로 센다). 위 문장은 **무엇이 무엇을 쓰는가**를 말하므로
    * 소비자가 생겨도 거짓이 되지 않는다.
    */
   patchOps(
@@ -324,17 +319,17 @@ export interface ApiClient {
     body: { baseSeq: number; ops: PatchOp[]; clientOpId?: string },
   ): Promise<PatchResult>
   /**
-   * 이 페이지에서 **내가** 만든 revision. 새로고침 뒤 undo 스택을 복원하는 데 쓴다(D10).
+   * 이 페이지에서 **내가** 만든 revision. 새로고침 뒤 undo 스택을 복원하는 데 쓴다.
    *
    * **응답은 `seq` 내림차순이고 여기서 뒤집지 않는다** — 스택으로 옮기는 자리가 그 순서를
    * 안다(`store/editor-store.ts`의 `restoreUndoStack`).
    *
-   * **`limit`을 붙이지 않는다.** 서버 기본값 50이 설계 §7.3의 "최근 50개"와 같고,
+   * **`limit`을 붙이지 않는다.** 서버 기본값 50이 설계서 「개인 undo/redo」의 "최근 50개"와 같고,
    * **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — `mine` 외에는 아무것도 붙일 수 없다.
    */
   listMyRevisions(projectId: string, pageId: string, options?: ReadOptions): Promise<RevisionSummary[]>
   /**
-   * 이 프로젝트의 화면이 지금 써야 할 테마(설계 §4.2의 사슬을 서버가 따라간다).
+   * 이 프로젝트의 화면이 지금 써야 할 테마(설계서 「테이블 정의」의 사슬을 서버가 따라간다).
    *
    * **`theme`이 `null`인 것은 실패가 아니다** — 테마를 고르지 않은 상태가 정상이고 그때
    * 화면은 구조 기본 CSS만으로 그려진다. 그래서 이 메서드는 그 경우에도 던지지 않는다.
@@ -358,27 +353,27 @@ export interface ApiClient {
    * 다시 조회할 필요가 없다 — 다만 캔버스는 자기 훅으로 읽으므로 화면을 갱신하려면
    * 그쪽에 알려야 한다(`theme/use-project-theme.ts`의 `reloadToken`).
    *
-   * **owner만 성공한다**(§10 — 테마 편집과 같은 등급). 서버가 막지만 화면도 미리 막는다.
+   * **owner만 성공한다**(설계서 「권한 모델」 — 테마 편집과 같은 등급). 서버가 막지만 화면도 미리 막는다.
    */
   setProjectTheme(projectId: string, themeId: string | null): Promise<ProjectTheme>
   /**
-   * **저작 UI가 편집할 테마 하나**(P4c-2 D1). `getProjectTheme`과 **다른 것을 낸다** —
+   * **저작 UI가 편집할 테마 하나.** `getProjectTheme`과 **다른 것을 낸다** —
    * 그쪽은 캔버스가 그대로 쓸 **홀로 서는 테마**이고, 이쪽은 **사람이 적은 파생 문서
    * 그대로 + `base`**다(서버 README의 소비자 표).
    *
-   * **viewer도 읽을 수 있다.** 편집을 막는 것은 쓰기 둘이고(§10), 이 라우트는 `viewer`
+   * **viewer도 읽을 수 있다.** 편집을 막는 것은 쓰기 둘이고(「권한 모델」), 이 라우트는 `viewer`
    * 게이트다 — 화면이 읽기 전용으로 그릴 수 있어야 하기 때문이다.
    *
    * **시스템 테마는 어느 프로젝트에서나 읽힌다**(`project_id IS NULL`). 남의 프로젝트
-   * 테마는 404다(설계 §10의 존재 숨김).
+   * 테마는 404다(「권한 모델」의 존재 숨김).
    */
   getTheme(projectId: string, themeId: string): Promise<ThemeDetail>
   /**
-   * 테마를 만든다. **owner만 부를 수 있다**(§10 — 테마 편집은 owner).
+   * 테마를 만든다. **owner만 부를 수 있다**(「권한 모델」 — 테마 편집은 owner).
    *
-   * D2의 *"이 테마를 바탕으로 새 테마 만들기"*가 부르는 자리다. 그때 본문은
+   * *"이 테마를 바탕으로 새 테마 만들기"*가 부르는 자리다. 그때 본문은
    * `{ theme: { meta: { id, name, extends: 'system:<slug>' } } }`뿐이고 나머지 절은 비운다 —
-   * **파생은 덮어쓸 것만 적는 것이 §6.9의 뜻**이다.
+   * **파생은 덮어쓸 것만 적는 것이 설계서 「상속과 병합」의 뜻**이다.
    *
    * **`meta.id`(slug)가 충돌하면 409다.** 유일성 단위가 `(project_id, slug)`이므로
    * 시스템 테마와 같은 slug는 충돌하지 않는다.
@@ -388,7 +383,7 @@ export interface ApiClient {
    */
   createTheme(projectId: string, body: { theme: Theme }): Promise<ThemeDetail>
   /**
-   * **통째 교체다**(D3). 서버의 `updateTheme`이 절 다섯을 전부 쓰므로 **본문에 없는 절은
+   * **통째 교체다.** 서버의 `updateTheme`이 절 다섯을 전부 쓰므로 **본문에 없는 절은
    * 실제로 비워진다** — 부분 갱신이 아니다. **owner만 부를 수 있고 시스템 테마는 403이다.**
    *
    * `updateProject` 부류와 달리 `updateBody`(빈 본문 차단)를 지나지 않는다 — 키가
@@ -399,18 +394,18 @@ export interface ApiClient {
    */
   updateTheme(projectId: string, themeId: string, body: { theme: Theme }): Promise<ThemeDetail>
   /**
-   * 이 페이지의 코멘트 전부(P5-1). **선택한 노드의 것만이 아니다** — 설계 §9의 우측
+   * 이 페이지의 코멘트 전부. **선택한 노드의 것만이 아니다** — 「설계서 화면 구조」의 우측
    * 목록이 *"① 검색폼 - … / ② 목록 - …"*로 **전부**를 보인다.
    *
    * **번호 순이 아니라 `createdAt` 오름차순으로 온다.** 서버는 번호를 모른다(번호는
    * 문서의 값이다). 번호로 묶고 늘어놓는 것은 문서를 든 화면의 일이다.
    *
-   * `viewer`도 읽는다 — 막는 것은 쓰기 넷이다(§10).
+   * `viewer`도 읽는다 — 막는 것은 쓰기 넷이다(「권한 모델」).
    */
   listComments(projectId: string, pageId: string, options?: ReadOptions): Promise<Comment[]>
   /**
    * 코멘트를 단다. **그 노드에 번호가 없으면 서버가 번호를 붙이고 revision을 남긴다**
-   * (계획서 D2 — `marker`는 페이지 문서의 값이므로 편집 파이프라인을 지나야 한다).
+   * (`marker`는 페이지 문서의 값이므로 편집 파이프라인을 지나야 한다).
    *
    * **`markerOps`를 화면이 자기 문서에 적용해야 한다.** 그러지 않으면 캔버스에 번호가
    * 뜨지 않고 `headSeq`가 서버보다 뒤처져 다음 편집이 409를 받는다. 그 적용은
@@ -432,8 +427,7 @@ export interface ApiClient {
     options?: WriteOptions,
   ): Promise<CommentCreated>
   /**
-   * 본문을 고친다. **작성자만 부를 수 있다** — 남의 것이면 403이다(서버 재라 #2:
-   * 남의 이름이 붙은 채 내용이 바뀌면 말을 지어내는 일이 된다).
+   * 본문을 고친다. **작성자만 부를 수 있다** — 남의 것이면 403이다(남의 이름이 붙은 채 내용이 바뀌면 말을 지어내는 일이 된다).
    *
    * **문서를 안 바꾸므로 `seq`가 없다.** 응답은 코멘트 하나뿐이다.
    */
@@ -445,7 +439,7 @@ export interface ApiClient {
     options?: WriteOptions,
   ): Promise<Comment>
   /**
-   * 코멘트를 지운다. **그 노드의 마지막이었으면 번호도 함께 사라진다**(§4.3의
+   * 코멘트를 지운다. **그 노드의 마지막이었으면 번호도 함께 사라진다**(설계서 「페이지 스키마 노드」의
    * *"없으면 코멘트 없음"*) — 그때 `markerOps`에 `remove`가 실려 온다.
    *
    * **204가 아니라 200에 본문이 온다** — 다른 `DELETE` 셋과 갈리는 이유는 이것이 문서를
@@ -453,7 +447,7 @@ export interface ApiClient {
    */
   deleteComment(projectId: string, pageId: string, commentId: string, options?: WriteOptions): Promise<MarkerChange>
   /**
-   * **문서 순서대로 재번호**(§9의 버튼). 번호가 **있는** 노드만 1부터 다시 매긴다 —
+   * **문서 순서대로 재번호**(「설계서 화면 구조」의 버튼). 번호가 **있는** 노드만 1부터 다시 매긴다 —
    * 번호가 없는 노드에 새로 주지 않는다.
    *
    * **한 revision이다.** 노드마다 따로 부르면 중간 상태에 번호가 겹친다.
@@ -461,16 +455,16 @@ export interface ApiClient {
    */
   renumberComments(projectId: string, pageId: string, options?: WriteOptions): Promise<MarkerChange>
   /**
-   * 이 프로젝트의 스냅샷 전부(P6-1). **최근 것이 먼저** 오고 동률이면 태그 순이다 —
+   * 이 프로젝트의 스냅샷 전부. **최근 것이 먼저** 오고 동률이면 태그 순이다 —
    * 순서가 서버의 계약이므로 여기서 다시 정렬하지 않는다(`listProjectThemes`와 같은 판단).
    *
-   * **`payload`가 실려 오지 않는다**(서버 D9) — 목록이 payload 전부를 나르면 프로젝트가
+   * **`payload`가 실려 오지 않는다** — 목록이 payload 전부를 나르면 프로젝트가
    * 커질수록 목록만으로 무거워진다. 크기(`payloadBytes`)만 온다.
    *
-   * `viewer`도 읽는다 — 막는 것은 생성 하나다(§10).
+   * `viewer`도 읽는다 — 막는 것은 생성 하나다(「권한 모델」).
    */
   /**
-   * **이 프로젝트에서 고를 수 있는 프리셋 전부**(§11.1 — P7-2 D2). 내장 3종이 먼저 오고
+   * **이 프로젝트에서 고를 수 있는 프리셋 전부**(설계서 「페이지 프리셋」). 내장 3종이 먼저 오고
    * 프로젝트 프리셋이 만든 순서대로 뒤에 붙는다 — **순서가 서버의 계약이므로 여기서 다시
    * 정렬하지 않는다**(`listProjectThemes`와 같은 판단).
    *
@@ -478,13 +472,13 @@ export interface ApiClient {
    */
   listPresets(projectId: string, options?: ReadOptions): Promise<Preset[]>
   /**
-   * **지금 페이지를 프리셋으로 남긴다**(§11.1). `nodes`는 root의 `children`이지 문서
-   * 봉투가 아니다(D3).
+   * **지금 페이지를 프리셋으로 남긴다**(「페이지 프리셋」). `nodes`는 root의 `children`이지 문서
+   * 봉투가 아니다.
    *
-   * **`marker`는 서버가 버린다**(D4) — 화면이 미리 지우지 않는 것은 그 규칙의 자리가
+   * **`marker`는 서버가 버린다** — 화면이 미리 지우지 않는 것은 그 규칙의 자리가
    * 하나여야 하기 때문이다. 응답의 `nodes`에는 이미 없다.
    *
-   * 이름 1~60자·설명 0~2000자 밖은 400이고, **이름 중복은 오류가 아니다**(D2).
+   * 이름 1~60자·설명 0~2000자 밖은 400이고, **이름 중복은 오류가 아니다.**
    */
   createPreset(
     projectId: string,
@@ -492,7 +486,7 @@ export interface ApiClient {
   ): Promise<Preset>
   listSnapshots(projectId: string): Promise<SnapshotSummary[]>
   /**
-   * **지금 상태를 태그 하나로 얼린다.** §10이 **editor**에게 연 자리다 — 테마 고르기가
+   * **지금 상태를 태그 하나로 얼린다.** 「권한 모델」이 **editor**에게 연 자리다 — 테마 고르기가
    * owner인 것과 갈리는 이유는 스냅샷이 **아무것도 바꾸지 않기** 때문이다.
    *
    * **409가 둘이고 서로 다른 문장이 온다.** 코드는 둘 다 `conflict`이라 화면은 `code`로
@@ -512,7 +506,7 @@ export interface ApiClient {
    */
   createSnapshot(projectId: string, body: { tag: string; description?: string | null }): Promise<SnapshotSummary>
   /**
-   * **그때로 되돌린다**(P6-2). §10이 **owner**에게만 연 자리다 — 생성이 editor까지 열린 것과
+   * **그때로 되돌린다.** 「권한 모델」이 **owner**에게만 연 자리다 — 생성이 editor까지 열린 것과
    * 갈리는 이유는 복원이 **프로젝트 전체를 바꾸기** 때문이다.
    *
    * **본문이 없다.** 되돌릴 대상은 주소가 다 말하고, 복원 직전 상태를 담는 안전망 스냅샷의
@@ -536,7 +530,7 @@ export interface ApiClient {
    */
   restoreSnapshot(projectId: string, snapshotId: string): Promise<RestoreResult>
   /**
-   * **내려받기 전에 화면이 말할 것**(§11.3 — P8-4). 번들을 실제로 만들어 보고 그 결과를
+   * **내려받기 전에 화면이 말할 것**(설계서 「HTML 정적 번들」). 번들을 실제로 만들어 보고 그 결과를
    * 값으로 낸다 — 그래서 **싸지 않다.** 화면을 열 때가 아니라 사람이 내보내기를 누를 때
    * 부른다.
    *
@@ -554,16 +548,16 @@ export interface ApiClient {
    * 파일을 받는 **주소**(zip 또는 pptx). 요청을 보내지 않는다 — 반환한 것을
    * `<a download href>`에 그대로 건다.
    *
-   * **`fetch`로 받아 blob으로 넘기지 않는 이유 둘.** 번들 전체가 페이지 수의 제곱이라
-   * (P8-2 이월 §4) 다 받아 메모리에 드는 것이 그대로 비용이 되고, `URL.createObjectURL`은
+   * **`fetch`로 받아 blob으로 넘기지 않는 이유 둘.** 번들 크기가 페이지 수의 제곱으로 커져
+   * 다 받아 메모리에 드는 것이 그대로 비용이 되고, `URL.createObjectURL`은
    * 이 저장소의 테스트 환경(jsdom)에 없어서 그 경로는 케이스가 닿지 못한다. 앵커는 브라우저가
    * 곧장 디스크로 흘려보내고 세션 쿠키도 그대로 실린다.
    *
    * **그래도 이 함수가 `ApiClient`에 있는 이유:** 주소를 아는 자리가 하나여야 한다.
    * 화면이 `/api/…`를 직접 적기 시작하면 경로가 두 곳이 된다.
    *
-   * **`format`에 기본값을 두지 않는다.** 서버는 기본이 `html`이지만(P8-4가 만든 URL이
-   * 인자 없이 계속 zip을 받아야 한다) **이쪽에서 생략을 허용하면** 형식을 고를 줄 아는
+   * **`format`에 기본값을 두지 않는다.** 서버는 기본이 `html`이지만(형식 없이 부르는 URL이
+   * 계속 zip을 받아야 한다) **이쪽에서 생략을 허용하면** 형식을 고를 줄 아는
    * 화면이 그 인자를 빠뜨렸을 때 *"pptx를 보고 zip을 받는"* 상태가 조용히 선다. 필수로
    * 두면 타입 검사가 모든 호출부에서 그것을 묻는다.
    */
@@ -578,7 +572,7 @@ export type ApiErrorCode =
   | 'not-found'
   | 'conflict'
   /**
-   * 소프트 잠금 충돌(설계 §7.2 · 423). **`conflict`와 갈라 두는 것이 P3-3 D1의 판정이다** —
+   * 소프트 잠금 충돌(「소프트 잠금」 · 423). **`conflict`와 갈라 둔다** —
    * `edit/use-edit-commit.tsx`의 조건부 재전송이 `status === 409`로 갈리는데, 잠금 충돌이
    * 409면 그 재전송이 돌아 **사용자가 막힌 줄 모르고 남의 구역을 편집한 것**이 된다.
    */
@@ -600,7 +594,7 @@ export interface ApiErrorIssue {
  * 요청이 실패했을 때 클라이언트가 던지는 오류.
  *
  * **화면은 `status`가 아니라 `code`로 분기한다.** 서버는 "프로젝트가 없음"과
- * "멤버가 아님"을 일부러 구분하지 않고 둘 다 404로 낸다(설계 §10 — 다른 프로젝트의
+ * "멤버가 아님"을 일부러 구분하지 않고 둘 다 404로 낸다(「권한 모델」 — 다른 프로젝트의
  * 존재를 흘리지 않기 위해서다). HTTP 숫자로 분기하면 그 의도가 화면에서 깨진다.
  * `status`는 로그·디버깅용으로만 싣는다.
  */

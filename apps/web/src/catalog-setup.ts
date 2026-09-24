@@ -14,8 +14,6 @@
  * 것은, 각자 부르면 **무엇이 설치돼 있는지가 실행 순서에 따라 달라지기** 때문이다.
  * 특히 `registerStructure`·`registerComponent` 자체는 중복 등록에 던지므로, 직접 부르는
  * 자리가 늘어나면 순서에 따라 던지는 경로가 생긴다.
- *
- * 테마가 실리는 P4a에서는 여기에 테마의 구조 구현체 등록이 함께 온다.
  */
 import { installStructures } from '@wirebound/renderer'
 import { installCatalog } from '@wirebound/schema'

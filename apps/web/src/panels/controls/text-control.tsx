@@ -1,10 +1,10 @@
 /**
- * `text`·`textarea`·`number` 세 control의 위젯. **값은 blur/Enter에 한 번 나간다**(D5).
+ * `text`·`textarea`·`number` 세 control의 위젯. **값은 blur/Enter에 한 번 나간다**.
  *
  * **왜 타이핑마다가 아닌가.** 근거 셋이다 — (1) undo 한 단계가 사람의 의도("이 필드를 이
  * 값으로 바꿨다")와 일치한다, (2) 요청 수가 최소다, (3) **디바운스 타이머가 없어 테스트가
- * 결정적이다.** 이월 문서가 `editor-shell.test.tsx`의 3/20 간헐 실패를 기록하고 있고,
- * 페이크 타이머 없이 타이머를 쓰면 같은 성질이 다시 생긴다.
+ * 결정적이다.** 페이크 타이머 없이 디바운스 타이머를 쓰면 타이머가 끝나는 때와 단언이
+ * 도는 때의 순서가 실행마다 갈려 셸 테스트(`editor-shell.test.tsx`)가 간헐적으로 실패한다.
  *
  * **타이핑 중에는 이 컴포넌트의 로컬 state만 바뀐다.** 그래서 노드가 바뀔 때 그 state를
  * 버릴 장치가 필요한데, 이 파일이 아니라 **부르는 쪽이 `key`로** 한다
@@ -21,7 +21,7 @@ export interface TextControlProps {
   id: string
   /**
    * 남이 잠근 자리라 못 바꾸는가(`../property-panel.tsx`). **선택 인자가 아니다** —
-   * 빠뜨리면 잠긴 자리에서 위젯이 조용히 되살아난다(§3.14가 툴바에서 만난 부류다).
+   * 빠뜨리면 잠긴 자리에서 위젯이 조용히 되살아난다(툴바도 같은 부류다).
    */
   disabled: boolean
   onCommit: (value: string | number) => void

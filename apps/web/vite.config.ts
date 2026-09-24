@@ -13,7 +13,7 @@ const API_ENV_URL = new URL('../api/.env', import.meta.url)
  * 같은 순서를 내지만 그쪽은 `process.env`를 통째로 바꾸므로 쓰지 않는다 — 접속 문자열이
  * vite 프로세스의 환경에 얹힌다.
  *
- * **파일이 없으면 빈 객체다.** `.env`를 안 만든 사람은 오늘과 똑같이 3001로 뜬다.
+ * **파일이 없으면 빈 객체다.** `.env`를 안 만든 사람은 기본값 3001로 뜬다.
  */
 function readApiEnvFile(): Record<string, string | undefined> {
   try {
@@ -29,7 +29,7 @@ export default defineConfig({
   plugins: [
     react(),
     {
-      // **뜰 때 어디로 보내는지 말한다**(D4). 터미널 둘을 나란히 놓은 사람이 눈으로
+      // **뜰 때 어디로 보내는지 말한다.** 터미널 둘을 나란히 놓은 사람이 눈으로
       // 가를 수 있어야 한다 — 프록시가 성공하면 vite는 그 뒤로 아무 말도 안 한다.
       name: 'wirebound:api-proxy-banner',
       configureServer(server) {
@@ -42,7 +42,7 @@ export default defineConfig({
     },
   ],
   server: {
-    // 개발 중 API를 같은 오리진으로 보이게 한다(설계 결정 D4).
+    // 개발 중 API를 같은 오리진으로 보이게 한다.
     // 그래야 세션 쿠키가 same-origin으로 실리고 서버에 CORS 설정이 필요 없다.
     proxy: {
       // **대상은 `apps/api/.env`의 `PORT`를 따라간다 — 손으로 맞추지 않는다.**
@@ -59,7 +59,7 @@ export default defineConfig({
       //
       // **`changeOrigin`은 WS에서도 `false`다.** http-proxy는 업그레이드 요청의 헤더를
       // 통째로 베끼고(`setupOutgoing`) `changeOrigin`이 손대는 것은 `Host` 하나뿐이라,
-      // 세션 쿠키는 same-origin으로 그대로 실린다 — D4의 근거가 그대로 선다. 그 쿠키가
+      // 세션 쿠키는 same-origin으로 그대로 실린다 — 위 같은 오리진의 근거가 그대로 선다. 그 쿠키가
       // 없으면 이 라우트의 `projectGuard('viewer')`가 막는다.
       '/api': { target: apiProxyTarget, changeOrigin: false, ws: true },
     },
