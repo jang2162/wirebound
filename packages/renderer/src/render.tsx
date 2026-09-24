@@ -113,7 +113,7 @@ export interface NodeRenderError {
   message: string
 }
 
-type StructureResolution = { ok: true; structure: string } | { ok: false; message: string }
+export type StructureResolution = { ok: true; structure: string } | { ok: false; message: string }
 
 /**
  * 구조 이름 결정의 실제 본체. 던지는 대신 결과를 돌려준다.
@@ -121,8 +121,12 @@ type StructureResolution = { ok: true; structure: string } | { ok: false; messag
  * `resolveStructure`를 try/catch로 감싸지 않는 이유: catch는 이 함수가 의도한 실패만이
  * 아니라 그 안에서 난 모든 예외를 똑같이 폴백으로 삼켜, 진짜 버그를 "구조를 못 찾았다"로
  * 위장한다.
+ *
+ * **공개한다 — 편집기의 속성 패널이 캔버스와 같은 구조를 보려고 부른다**
+ * (`apps/web/src/panels/property-panel.tsx`의 `currentStructure`). 패널이 구조 표를 스스로 읽으면
+ * 판정이 두 벌이 되어 캔버스와 갈린다. 패널은 오류 경계 밖이라 던지는 `resolveStructure` 대신 이것을 쓴다.
  */
-function resolveStructureOf(def: ComponentDef, options: RenderOptions): StructureResolution {
+export function resolveStructureOf(def: ComponentDef, options: RenderOptions): StructureResolution {
   const requested = options.structures?.[def.type]
   if (requested === undefined) return { ok: true, structure: defaultStructure(def) }
   if (!def.structures.includes(requested)) {

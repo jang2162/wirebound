@@ -25,13 +25,14 @@
  * 한 겹 더 놓거나다. 뷰 모드 탭은 자기 조회를 이미 갖고 있어 요청이 하나도 늘지 않는다.
  */
 import type { ReactElement } from 'react'
+import { resolveStructureOf } from '@wirebound/renderer'
 import {
-  defaultStructure,
   getComponent,
   type ComponentDef,
   type EditorField,
   type WbNode,
 } from '@wirebound/schema'
+import { useCanvasStructures } from '../canvas/canvas-structures'
 import { useEditCommit } from '../edit/use-edit-commit'
 // **schema의 `findNode`를 쓰지 않는다** — `children` 배열 안의 원소가 노드가 아니면
 // 던지고(`edit/safe-walk.ts` 머리말의 실측), 이 패널은 오류 경계 밖이라 그 예외가 셸을
@@ -110,6 +111,8 @@ export function PropertyPanel(props: {
   // 바뀔 때 다시 그리는 것과 그 답을 위젯에 잇는 것뿐이고, 목록을 손에 쥐는 자리는
   // `store/use-locked-by.ts` 하나다.
   const lockOf = useLockedBy()
+  // 캔버스가 그리는 구조 표. `visibleWhen`을 가를 때 쓴다(아래 `currentStructure`).
+  const structures = useCanvasStructures()
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
@@ -194,7 +197,7 @@ export function PropertyPanel(props: {
     )
   }
 
-  const fields = visibleFields(def)
+  const fields = visibleFields(def, structures)
   const variantField = variantFieldOf(def)
 
   // **props 검증 실패는 이 패널이 말하지 않는다.** 캔버스는 그리지 못한 이유 둘(알 수 없는
@@ -411,25 +414,26 @@ function PropControl(props: {
  * 지금 구조에서 보이는 필드만 남긴다(「컴포넌트 정의 구조」의 `visibleWhen`). 컬럼처럼 특정 구조에서만
  * 뜻이 있는 속성이 다른 구조에서 편집 가능한 것처럼 보이면 안 된다.
  */
-function visibleFields(def: ComponentDef): EditorField[] {
-  const structure = currentStructure(def)
+function visibleFields(def: ComponentDef, structures: Readonly<Record<string, string>>): EditorField[] {
+  const structure = currentStructure(def, structures)
   return def.editor.filter(
     (field) => field.visibleWhen === undefined || field.visibleWhen.structure === structure,
   )
 }
 
 /**
- * 이 노드가 **지금 그려지고 있는 구조**로 이 패널이 보는 값 — **카탈로그의 첫 구조**다.
- * 렌더러도 구조 표를 받지 못하면 같은 값을 고른다(`packages/renderer/src/render.tsx`의
- * `resolveStructureOf`).
+ * 이 노드가 **지금 그려지고 있는 구조** — 캔버스가 문서를 그릴 때 넘긴 **그 표**를 렌더러의 **그 함수**에
+ * 넣어 얻는다(`packages/renderer/src/render.tsx`의 `resolveStructureOf`). 표는 캔버스가 싣는다
+ * (`canvas/canvas-structures.tsx`). 테마를 여기서 따로 읽거나 첫 구조를 고르면 판정이 두 벌이 되어,
+ * 테마가 첫 구조가 아닌 것을 고른 컴포넌트에서 캔버스에 없는 속성을 내민다
+ * (`test/panels/panel-canvas-structure.test.tsx`).
  *
- * **캔버스는 테마의 구조 표를 넘긴다**(`canvas/canvas.tsx`의 `themeStructures(theme)`). 그래서
- * 테마가 첫 구조가 아닌 것을 고른 컴포넌트에서는 이 값과 캔버스가 갈린다 — 패널이 감춘
- * 속성이 화면에는 그려지는(또는 그 반대) 어긋남이고, 사용자에게는 "없는 속성"으로 보인다.
- * 닫으려면 여기도 캔버스와 같은 표를 봐야 한다.
+ * **테마가 없는 구조를 골랐으면 `null`이다.** 그때 캔버스는 폴백을 그리고 무엇이 없는지 말하므로,
+ * 어느 구조에도 속하지 않는 노드로 보고 `visibleWhen`이 붙은 필드를 전부 감춘다.
  */
-function currentStructure(def: ComponentDef): string {
-  return defaultStructure(def)
+function currentStructure(def: ComponentDef, structures: Readonly<Record<string, string>>): string | null {
+  const resolved = resolveStructureOf(def, { structures })
+  return resolved.ok ? resolved.structure : null
 }
 
 /** 노드의 props에서 값 하나. 없으면 `undefined`다 — 기본값을 대신 채우지 않는다(아래). */

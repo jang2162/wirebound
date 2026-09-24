@@ -38,8 +38,9 @@ export type {
   InteractionOptions,
   NodeRenderError,
   RenderOptions,
+  StructureResolution,
 } from './render'
-export { renderDocument, renderNode, resolveStructure } from './render'
+export { renderDocument, renderNode, resolveStructure, resolveStructureOf } from './render'
 
 export { installStructures } from './structures/index'
 
