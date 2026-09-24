@@ -205,6 +205,15 @@ export interface EditorState {
    * 같은 값이 된다.
    */
   remoteStale: RemoteStale | null
+  /**
+   * **문서를 통째로 실은 횟수**(`loadPage`마다 +1). 편집 · 남의 변경은 문서를 고쳐 가지만 이것은 안 바뀐다 — 이 값이
+   * 바뀌었다는 것은 **판이 서버 것으로 갈아 끼워졌다**는 뜻이다(페이지 열기 · 복원 · 재연결 재조회 · 실패 수습).
+   *
+   * 읽는 쪽은 캔버스의 상호작용 런타임 하나다(`canvas/canvas.tsx`의 `runtimeKey`) — 겹layer는 옛 문서 위의 시연이라,
+   * 복원이 같은 id 의 노드를 되살리면 옛 시연이 새 문서에 얹힌다(Chrome: 뷰 모드에서 글을 숨긴 뒤 복원하면 되살아난 글이
+   * 숨은 채였다).
+   */
+  documentLoads: number
 }
 
 /**
@@ -231,6 +240,7 @@ function initialState(): EditorState {
     viewerUserId: null,
     selectionClaims: true,
     remoteStale: null,
+    documentLoads: 0,
   }
 }
 
@@ -452,6 +462,7 @@ export class EditorStore {
       // 지나온 문서는 정의상 낡지 않았다. 안 풀면 *"새로고침하세요"*가 새로고침한 뒤에도
       // 남는다 — *"고쳤는데 고쳤다고 말하지 않는"* 부류다.
       remoteStale: null,
+      documentLoads: this.#state.documentLoads + 1,
     })
     return pending
   }
