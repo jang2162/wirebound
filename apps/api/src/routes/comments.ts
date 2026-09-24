@@ -36,22 +36,33 @@
  * 반대쪽(파이프라인을 안 타는 판)의 대가는 *"다음 편집이 전부 409"*라 성질이 다르다 —
  * 하나는 눈에 보이고 되돌릴 수 있는 어긋남이고, 하나는 편집 자체가 멈추는 고장이다.
  *
- * **대가 2 — `baseSeq`를 누가 주는가. 서버가 읽는다. 다만 잠그기 *전*에 읽는다.**
- *
- * *"서버가 읽으면 그 사이 남이 고쳤어도 밀어붙인다"*가 참인 것은
- * **잠근 뒤에 읽을 때**뿐이다(그러면 `baseSeq === headSeq`가 항상 참이라 3단계가 죽는다).
- * 여기서는 요청이 도착한 시점에 `findPageById`로 읽어 그 값을 `baseSeq`로 넘기므로,
- * 그 사이 다른 편집이 커밋되면 파이프라인이 `stale`을 내고 **409가 나간다.**
- * `PUT .../schema`가 같은 모양이고(그 라우트의 주석에 경합 창이 적혀 있다), 재시도 루프를
- * 넣지 않는 것도 같다.
+ * **대가 2 — `baseSeq`를 누가 주는가. 서버가 읽는다.**
  *
  * **클라이언트가 주게 하지 않는 이유:** 클라이언트의 `baseSeq`는 *"내 낙관적 문서가 어느
  * revision 위에 서 있는가"*인데, 코멘트는 낙관적으로 앞서지 않는다 — 번호 값도 노드
  * 경로도 **서버가 자기 문서에서** 계산한다. 클라이언트가 주면 코멘트와 무관한 이유
  * (내 화면이 조금 뒤처졌다)로 코멘트가 거절된다.
  *
- * **그래도 낙관적 잠금이 필요한 이유는 번호의 유일성이다.** 없으면 서로 다른 두 노드에
- * 동시에 달린 첫 코멘트가 **둘 다 1번**을 받는다.
+ * **삭제 · 재번호는 잠그기 *전*에 읽는다.** 요청이 도착한 시점에 `findPageById`로 읽어 그 값을
+ * `baseSeq`로 넘기므로, 그 사이 다른 편집이 커밋되면 `stale`로 **409가 나간다** — 두 요청은 잠그기
+ * 전에 읽은 문서로 지울 번호 · 매길 번호의 경로를 정하기 때문이다. `PUT .../schema`가 같은 모양이고
+ * (그 라우트의 주석에 경합 창이 적혀 있다), 재시도 루프를 넣지 않는 것도 같다.
+ *
+ * ## 게시는 잠근 뒤의 문서로 번호를 매긴다
+ *
+ * 게시는 번호(최댓값 + 1)와 *"노드에 번호가 이미 있는가"*를 **페이지 행을 잠근 뒤의 문서**에서 센다 —
+ * 그 문서가 곧 파이프라인의 `before`이고 `baseSeq`는 잠근 행의 `head_seq`다. 잠그기 전에 읽은 문서로
+ * 매기면 둘이 틀린다: 서로 다른 두 노드에 동시에 달린 첫 코멘트가 **둘 다 1번**을 받고, 남이 마지막
+ * 코멘트를 지워 번호를 없앤 직후라면 *"번호가 이미 있다"*로 판단해 **번호 없는 코멘트**를 세운다. 그 둘을
+ * 낡음(409)으로 거절하면 겹친 두 게시 중 하나가 까닭 없이 실패한다 — 게시가 문서에 내는 변화는 서버가
+ * 지금 문서에서 계산하므로 밀어붙일 남의 편집이 없다. 그래서 게시는 `stale`을 내지 않는다.
+ *
+ * **대가 — 응답의 `markerOps`·`seq`는 보낸 화면이 아직 못 받은 revision 뒤의 것일 수 있다.** 웹은 그 ops 를
+ * 제 문서에 얹고 `headSeq`를 `seq`로 옮긴다(`apps/web/src/store/editor-store.ts`의 `applyMarkerChange` —
+ * `seq`가 제 다음 번호인지 보지 않는다). 사이의 revision 프레임이 응답보다 늦게 닿으면 그 프레임은
+ * `seq ≤ headSeq`로 건너뛰어져 화면이 그 revision 을 잃는다. 앞 게시의 프레임은 그 커밋 직후에 나가고
+ * 뒤 게시의 응답은 제 트랜잭션을 마친 뒤에 나가므로 대개 프레임이 먼저 닿는다 — 잠그기 전에 읽을 때도
+ * 앞 게시가 커밋된 직후에 도착한 게시가 같은 순서에 놓였다. 닫는 것은 웹이 `seq`를 보는 것이다.
  *
  * ## 남의 코멘트를 고칠 수 있는가: 수정은 못 하고 삭제는 한다
  *
@@ -99,18 +110,17 @@
  * **같은 노드의 마지막 둘을 동시에 지우면 둘 다 *"마지막이 아니다"*로
  * 판정해 고아 번호가 남는다.**
  *
- * 그래서 `lockAndCheck`가 (1) 페이지 행을 `FOR UPDATE`로 잠가 **그 페이지의 코멘트 쓰기를
+ * 그래서 삭제는 `lockAndCheck`가 (1) 페이지 행을 `FOR UPDATE`로 잠가 **그 페이지의 코멘트 쓰기를
  * 직렬화**하고 (2) 잠근 뒤의 `head_seq`가 요청 시작에 읽은 값과 같은지 본다. 다르면
- * `stale`이다 — **문서를 안 바꾸는 갈래에도 낙관적 잠금을 적용하는 것이 요점이다.**
- * 없으면 이런 일이 난다: 남이 마지막 코멘트를 지워 번호를 없앤 직후에 내 `POST`가
- * *"번호가 이미 있으니 그대로 쓴다"*로 판단해 **번호 없는 코멘트**를 만든다.
+ * `stale`이다 — **문서를 안 바꾸는 갈래에도 낙관적 잠금을 적용하는 것이 요점이다.** 게시는 같은 잠금을
+ * 잡되 (2) 대신 잠근 뒤의 문서로 번호를 다시 센다(「게시는 잠근 뒤의 문서로 번호를 매긴다」).
  *
  * **비용은 쓰기 하나당 `SELECT … FOR UPDATE` 한 문장이다.** 코멘트 쓰기는 사람이 타이핑하는
  * 속도로 일어나므로 재지 않았다 — 재야 할 만큼 잦은 경로가 아니다.
  *
- * **`baseSeq`는 여전히 잠그기 *전*에 읽는다**(위 대가 2). 잠근 뒤의 값을 쓰면 비교가 항상
+ * **삭제의 `baseSeq`는 잠그기 *전*에 읽는다**(위 대가 2). 잠근 뒤의 값을 쓰면 비교가 항상
  * 참이 되어 낙관적 잠금이 죽는다 — 잠금은 **직렬화**를 위한 것이고 `baseSeq`는 **충돌
- * 감지**를 위한 것이라 둘의 시점이 달라야 한다.
+ * 감지**를 위한 것이라 둘의 시점이 달라야 한다. 게시는 충돌을 감지할 것이 없다 — 번호를 잠근 뒤에 센다.
  *
  * ## 번호는 있는데 코멘트 행이 없는 노드
  *
@@ -381,8 +391,9 @@ const UpdateCommentBody = z.strictObject({ body: Body })
 
 /** API 계약이 노출하는 필드만 담는다 — `pageId`는 응답에 싣지 않는다(경로에 이미 있다). */
 /**
- * **이 409 는 이슈 코드로 가른다.** 게시가 내는 409 는 셋이다 — 같은 키 · 다른 글(여기) ·
- * 낡음(`stale`) · 적용 불가(`http/edit-outcome.ts`). 셋 다 `code: 'conflict'`라 이슈 코드가 없으면 문장 말고는 가를 값이 없다.
+ * **이 409 는 이슈 코드로 가른다.** 게시가 내는 409 는 둘이다 — 같은 키 · 다른 글(여기) · 달렸다가 지워진
+ * 키(`deletedKey`). 게시는 번호를 잠근 뒤에 세므로 낡음(`stale`) · 적용 불가 409 를 내지 않는다(머리말 「게시는
+ * 잠근 뒤의 문서로 번호를 매긴다」). 둘 다 `code: 'conflict'`라 이슈 코드가 없으면 문장 말고는 가를 값이 없다.
  * 웹은 이 409 를 **«그 키의 게시는 이미 달렸고 그 뒤 고쳐졌다»**로 읽는다 — 웹은 초안을 고치면 새 키를 지으므로,
  * 같은 키에 다른 글이 오는 길은 앞 행이 그 사이 **고쳐진** 판뿐이다(`apps/web/src/panels/comment-panel.tsx`의
  * `keyVerdict`). 상태 · `code` · 문장은 다른 409 와 같은 꼴이다 — 코드는 선택 필드인 `issues`에 실린다.
@@ -658,26 +669,17 @@ export function commentRoutes() {
       // **이미 커밋된 같은 키는 여기 오지 않는다** — `replayBeforeGuard`가 가드 앞에서 재생했다(그것이
       // **노드를 보기 전**이기도 하다: 첫 게시 뒤 그 노드가 지워졌어도 게시는 있다. 노드부터 보면 404 로
       // «달렸는데 안 달렸다»가 된다). **아직 커밋 중인** 같은 키는 아래 잠금 안에서 한 번 더 본다.
-      const nodePath = findNodePath(document.root, body.nodeId)
-      const node = nodePath === undefined ? undefined : nodeAt(document, body.nodeId)
-      if (nodePath === undefined || node === undefined) {
-        // 페이지가 없는 것과 같은 404다 — 둘 다 *"가리킨 것이 없다"*이고, 코멘트를 달
-        // 대상이 없다는 점에서 사용자가 할 일도 같다(다시 고른다).
-        throw notFound('그 노드가 이 페이지에 없습니다')
-      }
-
-      const marker = node.marker ?? nextMarker(document)
-      const ops = setMarkerOps(node, nodePath, marker)
+      // 여기서 노드를 보는 것은 트랜잭션을 열기 전에 끊으려는 것이다 — 번호는 잠근 뒤의 문서로 다시 매긴다.
+      markerPlanOf(document, body.nodeId)
 
       // **문서 변경과 행 삽입이 한 트랜잭션 안에서 일어난다.** `withTransaction`은 이미
       // 트랜잭션 안이면 SAVEPOINT로 감싸므로(`db/tx.ts`), 안쪽의 `applyEdit`이 여는
       // 트랜잭션은 이 구간의 세이브포인트가 된다. 나누면 *"번호는 붙었는데 코멘트가
       // 없다"*(머리말 「번호는 있는데 코멘트 행이 없는 노드」의 상태)가 실패 경로에서 실제로 만들어진다.
       const result = await runWrite(app.db, page.headSeq, async (trx) => {
-        // **잠근다.** 그리고 **낡았는지 보기 전에** 같은 키를 한 번 더 본다 — 같은 키가 동시에
-        // 왔으면 앞 요청이 방금 커밋했다. 그 요청이 번호를 붙였으면 `head_seq`가 올라 있어,
-        // 순서를 바꾸면 이 요청이 재생 대신 **409(stale)** 를 받는다(같은 게시를 두 번 보낸 사람이
-        // «실패»를 듣는다). 페이지 행을 잠갔으므로 같은 페이지의 게시는 여기서 한 줄로 선다.
+        // **잠근다.** 그리고 같은 키를 한 번 더 본다 — 같은 키가 동시에 왔으면 앞 요청이 방금 커밋했다.
+        // 안 보면 이 요청이 같은 키로 둘째 행을 넣으려다 유일 색인에 걸려 **500** 이다(같은 게시를 두 번
+        // 보낸 사람이 «모름»을 듣는다). 페이지 행을 잠갔으므로 같은 페이지의 게시는 여기서 한 줄로 선다.
         const locked = await lockPageForEdit(trx, projectId, pageId)
         if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' })
         if (key !== undefined) {
@@ -686,8 +688,7 @@ export function commentRoutes() {
           // **달렸다가 지워졌다.** 가드 앞에서 둘 다 못 본 것은 첫 게시가 아직 커밋 중이었기 때문이다 —
           // 그 뒤 첫 게시와 삭제가 **이 요청보다 먼저** 페이지 행 잠금을 지나 커밋했으면 여기서 묘비를 본다. 삭제도
           // 페이지 행을 먼저 잠그므로(`lockAndCheck` — 복원은 `lockProjectForRestore`) 이 조회와 겹칠 수 없다. 이
-          // 조회가 없으면 새 행을 세운다 — 되살림이다(`test/comment-tombstone.test.ts`의 동시성 판). 낡음보다 먼저인
-          // 이유는 재생과 같다.
+          // 조회가 없으면 새 행을 세운다 — 되살림이다(`test/comment-tombstone.test.ts`의 동시성 판).
           if (await hasCommentTombstone(trx, pageId, currentUser.id, key)) throw deletedKey()
         }
         // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 잠금 대기 동안 강등·제외됐으면
@@ -698,12 +699,11 @@ export function commentRoutes() {
         // 잠금 획득 **사이에** 강등이 끼는 판이다 — 같은 페이지의 남의 쓰기가 둘 사이에 줄을 서면 선다(페이지 행의 잠금
         // 대기열은 도착 순이다). 이 줄을 재생 앞으로 옮기면 그 판에서 달린 게시가 403 을 받는다.
         await recheckProjectRole(trx, request)
-        // **그 사이 문서가 바뀌지 않았는지 본다**(규칙 2 — `lockAndCheck`와 같은 판정). `ops`가
-        // 비어도 지난다 — 남이 마지막 코멘트를 지워 번호를 없앤 직후라면 아래 *"이미 번호가
-        // 있다"*는 판단이 낡은 것이고, 그대로 두면 **번호 없는 코멘트**가 만들어진다.
-        if (locked.headSeq !== page.headSeq) {
-          throw new EditRollback({ ok: false, reason: 'stale', headSeq: locked.headSeq })
-        }
+        // **번호는 잠근 뒤의 문서로 매긴다**(머리말 「게시는 잠근 뒤의 문서로 번호를 매긴다」). 잠그기 전에
+        // 읽은 문서로 매기면 그 사이 남의 첫 코멘트가 같은 번호를 가져갔거나 마지막 코멘트를 지워 번호를 없앴을
+        // 수 있다 — 그 판을 409 로 거절하는 대신 지금 문서에서 다시 센다. 노드도 여기서 다시 본다.
+        const current = lockedDocument(locked.schema)
+        const { marker, ops } = markerPlanOf(current, body.nodeId)
 
         if (ops.length === 0) {
           // 이미 번호가 있는 노드다 — 문서를 안 바꾸므로 revision도 만들지 않는다.
@@ -717,13 +717,13 @@ export function commentRoutes() {
             authorId: currentUser.id,
             ...(key === undefined ? {} : { idempotencyKey: key }),
           })
-          return { comment, seq: page.headSeq, marker, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
+          return { comment, seq: locked.headSeq, marker, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
         }
 
         const outcome = await applyEdit(trx, {
           projectId,
           pageId,
-          baseSeq: page.headSeq,
+          baseSeq: locked.headSeq,
           ops,
           actor: requestActor(request),
         })
@@ -975,8 +975,9 @@ export function commentRoutes() {
  * `migrateDocument`에 태우므로, 여기서 안 올린 문서로 `findNodePath`를 하면 마이그레이션이
  * 트리 모양을 바꾸는 날 두 경로가 갈린다.
  *
- * **읽기와 잠금 사이에 경합 창이 있다** — 그 사이 다른 편집이 커밋되면 `applyEdit`이
- * `stale`을 내고 409가 된다(머리말의 대가 2).
+ * **읽기와 잠금 사이에 경합 창이 있다** — 삭제 · 재번호는 그 사이 다른 편집이 커밋되면 `applyEdit`이
+ * `stale`을 내고 409가 된다(머리말의 대가 2). 게시는 잠근 뒤에 다시 읽는다(머리말 「게시는 잠근 뒤의
+ * 문서로 번호를 매긴다」).
  */
 async function loadDocument(
   app: FastifyInstance,
@@ -990,6 +991,35 @@ async function loadDocument(
 
   try {
     return { document: migrateDocument(page.schema), page: { headSeq: page.headSeq } }
+  } catch (error) {
+    throw badRequest(error instanceof Error ? error.message : '지원하지 않는 문서 버전입니다')
+  }
+}
+
+/**
+ * 게시가 그 노드에 붙일 번호와 그 번호를 놓는 op. 노드가 없으면 404 를 던진다.
+ *
+ * 노드에 번호가 있으면 그대로 쓰고(스레드), 없으면 문서의 최댓값 + 1 이다(`nextMarker`).
+ */
+function markerPlanOf(document: PageDocument, nodeId: string): { marker: number; ops: PatchOp[] } {
+  const nodePath = findNodePath(document.root, nodeId)
+  const node = nodePath === undefined ? undefined : nodeAt(document, nodeId)
+  if (nodePath === undefined || node === undefined) {
+    // 페이지가 없는 것과 같은 404다 — 둘 다 *"가리킨 것이 없다"*이고, 코멘트를 달
+    // 대상이 없다는 점에서 사용자가 할 일도 같다(다시 고른다).
+    throw notFound('그 노드가 이 페이지에 없습니다')
+  }
+  const marker = node.marker ?? nextMarker(document)
+  return { marker, ops: setMarkerOps(node, nodePath, marker) }
+}
+
+/**
+ * 잠근 행의 문서를 최신 버전으로 올린다. 못 올리면 `loadDocument`와 같은 400 이다 — 잠그기 전에 읽은
+ * 문서가 이미 지났으므로 그 사이 저장된 문서가 못 올리는 버전이 된 판뿐이다.
+ */
+function lockedDocument(schema: PageDocument): PageDocument {
+  try {
+    return migrateDocument(schema)
   } catch (error) {
     throw badRequest(error instanceof Error ? error.message : '지원하지 않는 문서 버전입니다')
   }
