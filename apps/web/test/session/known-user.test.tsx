@@ -61,6 +61,35 @@ describe('HTTP 클라이언트 — 이 탭이 아는 사용자를 싣고, 거절
     expect(changed).toHaveBeenCalledTimes(1)
   })
 
+  /**
+   * **내려받기도 같은 문을 지난다**(`downloadExport` — 바이트를 읽는 것만 다르고 보내기는 `send` 한 자리다). 파일을 받는 요청이
+   * 머리를 안 실으면 다른 사람의 쿠키로 그 사람의 프로젝트를 받는다 — 머리가 있으면 서버가 409 로 막고 탭이 쿠키의 사람을
+   * 다시 알아낸다. 혼자 죽는 변조: 이 요청에서만 머리를 떼거나 · 이 요청의 409 에서만 `changed()`를 안 부른다.
+   */
+  it('내보내기 파일을 받을 때도 머리를 싣고, 409 session-user-changed 면 `changed()`를 부른다', async () => {
+    const holder = createKnownUserHolder()
+    holder.set(ALICE.id)
+    const changed = vi.fn()
+    holder.onChanged(changed)
+    const message = '다른 사람으로 로그인됐습니다 — 이 탭이 아는 사용자와 지금 로그인한 사용자가 다릅니다'
+    const calls: (RequestInit | undefined)[] = []
+    const client = createHttpClient(
+      async (_input, init) => {
+        calls.push(init)
+        return json(409, { error: { code: 'conflict', message, issues: [{ path: 'session', code: SESSION_USER_CHANGED, message }] } })
+      },
+      () => undefined,
+      holder,
+    )
+
+    const caught = await client.downloadExport('p1', 'html').catch((error: unknown) => error)
+
+    expect(headersOf(calls[0])[KNOWN_USER_HEADER]).toBe(ALICE.id)
+    expect(caught).toBeInstanceOf(ApiError)
+    expect((caught as ApiError).message).toBe(message)
+    expect(changed).toHaveBeenCalledTimes(1)
+  })
+
   /** 혼자 죽는 변조: `realtimeUrl`이 쿼리를 안 싣는다. */
   it('WS 주소는 아는 사람을 쿼리로 싣는다 — 모르면 쿼리가 없다', () => {
     expect(realtimeUrl('http://localhost:5173', 'p1', 'u a')).toBe('ws://localhost:5173/api/projects/p1/ws?knownUser=u%20a')
