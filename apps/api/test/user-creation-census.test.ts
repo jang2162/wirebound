@@ -180,8 +180,13 @@ describe('`signup` 을 든 테스트는 전부 픽스처를 지난다', () => {
 
   const testFiles = sourceFiles(TEST_ROOT).filter((name) => name.endsWith('.test.ts') && name !== SELF)
 
-  /** `import … from './helpers'` 문장 전문. **여러 줄에 걸친 것을 이어서** 잡는다. */
-  const HELPERS_IMPORT = /import\s+(?:type\s+)?\{[\s\S]*?\}\s*from\s+'\.\/helpers'/g
+  /**
+   * `import … from './helpers'` 문장 전문. **여러 줄에 걸친 것을 이어서** 잡는다. 동적 적재의 구조 분해
+   * (`const { … } = await import('./helpers')` — 모듈 목을 먹이려고 `vi.resetModules()` 뒤에 다시 적재하는 파일)도 같은 픽스처다.
+   * 그 꼴은 중괄호 안에 중괄호가 없는 것만 잡는다(`[^}]*` — 게으른 `[\s\S]*?`면 앞의 다른 `const {`부터 삼킨다).
+   */
+  const HELPERS_IMPORT =
+    /import\s+(?:type\s+)?\{[\s\S]*?\}\s*from\s+'\.\/helpers'|const\s+\{[^}]*\}\s*=\s*await\s+import\(\s*'\.\/helpers'\s*\)/g
 
   function importsSignupFixture(source: string): boolean {
     return [...source.matchAll(HELPERS_IMPORT)].some((match) => /\bsignup\b/.test(match[0]))

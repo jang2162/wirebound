@@ -74,11 +74,13 @@ beforeAll(async () => {
 afterAll(async () => {
   await helpers.closeTestDb()
 })
-beforeEach(() => helpers.resetRealData())
-afterEach(() => helpers.resetRealData())
+const resetRealData = (): Promise<void> => helpers.resetRealData()
+beforeEach(resetRealData)
+afterEach(resetRealData)
 
 it('테마 고르기 — 가드 뒤에 프로젝트 삭제가 커밋되면 404 다(«기본 레이아웃이 없다» 409 가 아니다)', async () => {
-  const { createProject, signup, withRealApi } = helpers
+  // `beforeAll`이 다시 적재한 그 모듈이다(모듈 목록에 남아 있다).
+  const { createProject, signup, withRealApi } = await import('./helpers')
   await withRealApi(async (ctx) => {
     const owner = await signup(ctx)
     const project = await createProject(ctx, owner.cookie)
