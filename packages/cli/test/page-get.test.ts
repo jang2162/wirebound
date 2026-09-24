@@ -1,5 +1,5 @@
 /**
- * `wireb page get <경로> [--json]` (P9-3 T4 · D4).
+ * `wireb page get <경로> [--json]`.
  *
  * 재는 것 셋: **경로를 무엇으로 푸는가**, **못 찾았을 때·둘 이상일 때**, 그리고
  * **사람이 읽는 판과 `--json`이 같은 값에서 나오는가.**
@@ -30,7 +30,7 @@ function 준비(payload: SnapshotPayload = snapshotPayload()): FakeIo {
   return io
 }
 
-describe('경로를 §8.1의 타겟으로 푼다', () => {
+describe('경로를 설계서 「모델」의 타겟으로 푼다', () => {
   it('조상 메뉴가 붙은 경로로 찾는다', async () => {
     const io = 준비()
     expect(await run(['page', 'get', '관리자/회원/목록'], io), io.stderr.join('\n')).toBe(EXIT.ok)
@@ -71,7 +71,7 @@ describe('못 찾았을 때·둘 이상일 때를 갈라 말한다', () => {
 
   /**
    * **겹치는 타겟은 실재한다** — 같은 메뉴 아래 같은 제목이면 조립 규칙이 같은 문자열을
-   * 만든다(P9-1 이월 §9 · `duplicateTargets`가 그 판정을 든다). 하나를 골라 주면 **어느
+   * 만든다(`duplicateTargets`가 그 판정을 든다). 하나를 골라 주면 **어느
    * 쪽인지 아무도 모른 채** 지나간다.
    */
   it('둘 이상이면 코드 1이고 **둘 다 이름으로 낸다**', async () => {
@@ -94,7 +94,7 @@ describe('못 찾았을 때·둘 이상일 때를 갈라 말한다', () => {
   })
 })
 
-describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (§12.2)', () => {
+describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (설계서 「MCP 도구」)', () => {
   it('구조를 노드 이름으로 편다', async () => {
     const io = 준비()
     await run(['page', 'get', '관리자/회원/목록'], io)
@@ -143,7 +143,7 @@ describe('무엇을 싣는가 — 스키마·코멘트·상호작용 문장 (§1
   })
 })
 
-describe('--json 은 같은 값을 낸다 (D4)', () => {
+describe('--json 은 같은 값을 낸다', () => {
   it('사람이 읽는 판과 같은 재료다', async () => {
     const io = 준비()
     expect(await run(['page', 'get', '관리자/회원/목록', '--json'], io), io.stderr.join('\n')).toBe(EXIT.ok)
@@ -178,7 +178,7 @@ describe('--json 은 같은 값을 낸다 (D4)', () => {
   })
 })
 
-describe('서버가 준 것을 규격으로 검사한다 (D2)', () => {
+describe('서버가 준 것을 규격으로 검사한다', () => {
   it('규격과 다르면 코드 3이다 — 서버 쪽 문제다', async () => {
     const io = 준비()
     stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, {
@@ -191,7 +191,8 @@ describe('서버가 준 것을 규격으로 검사한다 (D2)', () => {
   })
 
   /**
-   * **모르는 형식을 막지 않는다**(`snapshot/payload.ts`의 D3). 막으면 새 서버에 붙은 옛
+   * **모르는 형식을 막지 않는다**(`packages/themes/src/snapshot/payload.ts`의 `payloadVersion`
+   * 절). 막으면 새 서버에 붙은 옛
    * CLI가 아무것도 못 읽는다. 대신 **stderr로 말한다.**
    */
   it('모르는 payload 형식은 경고하고 계속한다', async () => {
@@ -219,12 +220,12 @@ describe('자격과 바인딩 (세 갈래는 client.ts가 가른다)', () => {
 })
 
 /**
- * **`migrateDocument`를 지난다 — P9-3 이월 §6의 구멍을 P9-4가 닫았다.**
+ * **`migrateDocument`를 지난다 — `lint`와 같은 길이다.**
  *
- * 앞 판은 `lint`만 그 길을 지났고 이 명령은 저장된 문서를 그대로 읽었다(리뷰 N8). 오늘
- * `MIGRATIONS = []`이라 올릴 것은 없지만 **못 올리는 문서는 오늘도 만들 수 있고**, 그때
+ * 이 명령이 저장된 문서를 그대로 읽으면 `lint`와 같은 페이지를 다르게 읽는다.
+ * `MIGRATIONS = []`이라 지금 올릴 것은 없지만 **못 올리는 문서는 지금도 만들 수 있고**, 그때
  * 두 명령이 같은 페이지를 다르게 읽으면 안 된다. 조립이 `read/page.ts` 하나이므로
- * §12.2의 `get_page`도 같은 말을 한다.
+ * 설계서 「MCP 도구」의 `get_page`도 같은 말을 한다.
  */
 describe('못 올리는 문서 버전을 말한다', () => {
   function 미래문서(): SnapshotPayload {

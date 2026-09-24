@@ -1,18 +1,19 @@
 /**
- * **스냅샷 하나에 lint 규칙을 돌리는 조립.** `wireb lint`와 §12.2의 `validate`가 **이 파일
- * 하나**를 부른다(P9-4 D1).
+ * **스냅샷 하나에 lint 규칙을 돌리는 조립.** `wireb lint`와 설계서 「MCP 도구」의 `validate`가 **이 파일
+ * 하나**를 부른다.
  *
  * ---
  *
  * # `[경로]`는 **출력 거르개**다
  *
- * §12.4의 규칙 여럿이 프로젝트 단위다. 입력을 좁히면 *"어느 메뉴에도 연결되지 않은 페이지"*나
+ * 설계서 「lint 규칙」의 규칙 여럿이 프로젝트 단위다. 입력을 좁히면 *"어느 메뉴에도 연결되지 않은 페이지"*나
  * *"`navigate` 대상 페이지가 존재하지 않음"*이 **거짓을 말한다.** 그래서 언제나 프로젝트
  * 전체를 검사하고 무엇을 보일지만 고른다.
  *
- * # 걸러진 것으로 답하되 **빠진 것을 값으로 말한다** (P9-4 D6)
+ * # 걸러진 것으로 답하되 **빠진 것을 값으로 말한다**
  *
- * `wireb lint <경로>`는 걸러진 것으로 종료 코드를 낸다(P9-3 §9의 판정). MCP도 **같게 답한다** —
+ * `wireb lint <경로>`는 걸러진 것으로 종료 코드를 낸다(`commands/lint.ts`의 *"종료 코드는
+ * 걸러진 것에서 낸다"*). MCP도 **같게 답한다** —
  * 다르게 정하면 같은 프로젝트를 두 도구가 다르게 말한다.
  *
  * **그러나 사람과 에이전트는 다르다.** CLI는 *"경로 밖에 error N건이 더 있습니다"*를 stderr
@@ -23,17 +24,17 @@
  * | `outsideErrors` | 경로 밖에 남은 `error` 개수 |
  * | `droppedProjectIssues` | **`pageId`가 `null`이라 경로 필터에서 통째로 빠진** 이슈 개수 |
  *
- * 둘째가 P9-3 이월 §6이 적은 구멍이다 — **테마 이슈와 메뉴 이름 이슈는 페이지에 안 매달려
+ * 둘째가 경로 필터의 구멍이다 — **테마 이슈와 메뉴 이름 이슈는 페이지에 안 매달려
  * 있어** 경로를 주는 순간 사라진다. 개수를 안 말하면 *"이 페이지는 깨끗하다"*가
  * *"프로젝트가 깨끗하다"*로 읽힌다.
  *
- * # `notes`를 버리지 않는다 (P9-4 D7)
+ * # `notes`를 버리지 않는다
  *
  * `snapshotToLintInput`이 낸 것이 *"검사에서 빠진 것"*이다 — 테마를 안 고른 레이아웃 ·
  * 상속이 끊긴 파생 테마 · 레이아웃이 둘이라 안 돈 ⑪ · 못 올린 문서 버전 · 메뉴를 잃은 페이지.
  * **버리면 그 전부가 *"결함 0건"*으로 위장된다.**
  *
- * # `LintConfig`는 리포의 파일에서만 온다 (P9-4 D5)
+ * # `LintConfig`는 리포의 파일에서만 온다
  *
  * 이 함수는 `LintConfig`를 **인자로 받는다.** 그것을 채우는 자리는 `readLintConfig`
  * 하나이고 그 함수는 `.wirebound.json`만 읽는다 — **세션이 정규식을 주는 길이 없다.**
@@ -67,7 +68,7 @@ export interface LintReport {
   droppedProjectIssues: number
   /** 검사에서 빠진 것. **버리지 않는다.** */
   notes: SnapshotLintNote[]
-  /** 페이지 id → §8.1 경로. 이슈를 사람이 읽는 자리로 옮기는 지도다. */
+  /** 페이지 id → 설계서 「상호작용」의 「모델」이 말하는 경로. 이슈를 사람이 읽는 자리로 옮기는 지도다. */
   pathOf: Map<string, string>
 }
 
@@ -133,7 +134,7 @@ export function lintReport(
       warnings: issues.length - errors,
       outsideErrors: countErrors(all) - errors,
       // **`filterLintIssues`가 `pageId`로만 거른다** — 테마 이슈와 메뉴 이름 이슈는
-      // `pageId`가 `null`이라 어느 경로를 줘도 빠진다(P9-3 이월 §6).
+      // `pageId`가 `null`이라 어느 경로를 줘도 빠진다.
       droppedProjectIssues: all.filter((issue) => issue.pageId === null).length,
       notes: plan.notes,
       pathOf,

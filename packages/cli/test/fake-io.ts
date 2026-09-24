@@ -1,8 +1,8 @@
 /**
- * 케이스가 쓰는 가짜 `Io` 하나. **파일도 소켓도 진짜를 건드리지 않는다**(D9).
+ * 케이스가 쓰는 가짜 `Io` 하나. **파일도 소켓도 진짜를 건드리지 않는다.**
  *
  * **두 벌을 만들지 않는다.** 명령마다 지역 가짜를 두면 *"어느 하네스에서 잰 값인가"*가
- * 매번 물음이 되고(`apps/api`가 하네스 다섯 벌로 겪은 일이다), 무엇보다 D6의 census가
+ * 매번 물음이 되고, 무엇보다 비밀을 훑는 자(`no-token-in-repo.test.ts`)가
  * **CLI가 리포에 쓴 파일 전부**를 훑으려면 그 기록이 한 곳에 모여 있어야 한다.
  */
 import type { ClientKind, HttpRequestInit, HttpResponse, Io } from '../src/io'
@@ -20,7 +20,7 @@ export interface StubResponse {
   /** 날 문자열 본문. `body`보다 우선한다 — JSON이 아닌 응답을 재는 자리다. */
   text?: string
   /**
-   * 날 바이트 본문. **`wireb export`가 받는 zip이 그것이다**(P9-3 D9).
+   * 날 바이트 본문. **`wireb export`가 받는 zip이 그것이다.**
    *
    * `text`·`body`와 **따로 둔다** — 문자열을 UTF-8로 되돌리는 대역을 쓰면 zip처럼
    * 문자열로 왕복할 수 없는 바이트를 재는 자가 조용히 다른 것을 재게 된다.
@@ -32,9 +32,9 @@ export interface StubResponse {
    * 흉내만 내면 된다).
    *
    * **`wireb export --format pptx`가 `content-disposition`에서 파일 이름을 읽는다.**
-   * 가짜가 헤더를 못 주면 그 자리를 재는 케이스 자체가 설 수 없다 — 리뷰 N2(*"가짜가
-   * 셋째 인자를 버려 권한을 못 본다"*)·N3(*"본문이 한 번만 읽힌다는 성질을 버렸다"*)와
-   * 같은 부류다.
+   * 가짜가 헤더를 못 주면 그 자리를 재는 케이스 자체가 설 수 없다 — 아래 `modes`
+   * (*"셋째 인자를 버리면 권한을 못 본다"*)·`createFakeIo`의 `consume`(*"본문은 한 번만
+   * 읽힌다"*)과 같은 부류다.
    */
   headers?: Record<string, string>
 }
@@ -45,10 +45,10 @@ export interface FakeIo extends Io {
   /**
    * 쓴 파일 전부. **디렉터리 개념이 없다** — 절대 경로가 키다.
    *
-   * **값이 글자일 수도 바이트일 수도 있다**(P10-1). `Io.files.write`가 그 둘을 받으므로
+   * **값이 글자일 수도 바이트일 수도 있다.** `Io.files.write`가 그 둘을 받으므로
    * 여기서 글자로 좁히면 **가짜가 진짜보다 좁아진다** — `wireb export --format pptx`가 쓴
-   * 바이트를 케이스가 관찰할 수단 자체가 없어진다(리뷰 N2가 `write`의 셋째 인자에서 겪은
-   * 것과 같은 부류다).
+   * 바이트를 케이스가 관찰할 수단 자체가 없어진다(아래 `modes`가 `write`의 셋째 인자에서
+   * 막는 것과 같은 부류다).
    */
   readonly fs: Map<string, string | Uint8Array>
   /**
@@ -68,10 +68,9 @@ export interface FakeIo extends Io {
   /**
    * `files.write`가 받은 **셋째 인자**를 경로별로 기록한다.
    *
-   * **앞 판은 이것을 버렸고 그래서 자가 눈을 감고 있었다**(리뷰 N2 — 리뷰어가 원인을
-   * 찾았다). `Io`의 계약은 `write(path, content, options?: { mode?, dirMode? })`인데
+   * **이것을 버리면 자가 눈을 감는다.** `Io`의 계약은 `write(path, content, options?: { mode?, dirMode? })`인데
    * 가짜가 셋째 인자를 아예 안 받으면 **단위 케이스가 권한을 관찰할 수단 자체가 없다** —
-   * D6이 명시한 0600/0700을 0644/0755로 바꿔도 71건 중 0건이 죽었다(리뷰어 실측 MC1).
+   * 자격 파일의 0600/0700을 0644/0755로 바꿔도 아무 케이스도 안 죽는다.
    */
   readonly modes: Map<string, { mode?: number; dirMode?: number }>
   readonly stdout: string[]
@@ -86,8 +85,8 @@ export interface FakeIoOptions {
    * 이 프로세스가 자기를 무엇이라 말하는가. 기본은 `'cli'`다 — `wireb`의 케이스가 다수다.
    *
    * **가짜가 이 필드를 버리면 자가 눈을 감는다.** `callApi`가 그것을 헤더로 싣는데
-   * (P9-5 D1) 가짜가 안 들면 *"헤더를 싣는다"*를 재는 케이스 자체가 설 수 없다 —
-   * 리뷰 N2가 `write`의 셋째 인자에서 겪은 것과 같은 부류다.
+   * 가짜가 안 들면 *"헤더를 싣는다"*를 재는 케이스 자체가 설 수 없다 —
+   * 위 `modes`가 `write`의 셋째 인자에서 막는 것과 같은 부류다.
    */
   client?: ClientKind
   cwd?: string
@@ -98,7 +97,7 @@ export interface FakeIoOptions {
   /**
    * 그 경로를 읽으면 **던진다.** 진짜 파일 시스템에서만 나는 실패(`EACCES`·`EPERM`…)를
    * 케이스가 만들 수 있게 하는 자리다 — `chmod 000`으로 재면 **root로 도는 판에서 그냥
-   * 읽혀** 값이 누가 돌리느냐에 갈린다(델타 리뷰 D4가 그 회피를 옳다고 봤다).
+   * 읽혀** 값이 누가 돌리느냐에 갈린다.
    *
    * `files`보다 **먼저** 본다: 파일이 있는데 못 읽는 상태가 재려는 것이다.
    */
@@ -140,13 +139,12 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
     const headers = outcome.headers ?? {}
 
     /**
-     * **본문은 한 번만 내준다** — 진짜 `Response`의 계약이다(리뷰 N3).
+     * **본문은 한 번만 내준다** — 진짜 `Response`의 계약이다.
      *
-     * 앞 판은 `text()`와 `bytes()`를 몇 번이든 내줬고, 그래서 `callApiBytes`가 2xx에서
-     * **둘 다** 부르게 바꿔도 케이스가 하나도 안 죽었다(리뷰어 실측 R25 — 1792건 중 0건).
-     * 그 코드는 실서버에서 즉시 깨진다. **가짜가 계약을 안 흉내 내면 자가 눈을 감는다** —
-     * P9-2 리뷰 N2(*"가짜가 셋째 인자를 버려 권한을 못 본다"*)와 같은 부류이고, 이번에
-     * 버린 것은 인자가 아니라 **한 번만 읽힌다는 성질**이다.
+     * `text()`와 `bytes()`를 몇 번이든 내주면 `callApiBytes`가 2xx에서 **둘 다** 부르게
+     * 바꿔도 케이스가 하나도 안 죽는다. 그 코드는 실서버에서 즉시 깨진다. **가짜가 계약을
+     * 안 흉내 내면 자가 눈을 감는다** — 위 `modes`(*"셋째 인자를 버리면 권한을 못 본다"*)와
+     * 같은 부류이고, 여기서 지키는 것은 인자가 아니라 **한 번만 읽힌다는 성질**이다.
      *
      * 문장은 진짜 `Response`의 것을 따른다(`TypeError: Body is unusable`).
      */

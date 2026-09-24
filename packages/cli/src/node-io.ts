@@ -1,11 +1,11 @@
 /**
- * 진짜 `Io` 하나. **`node:*`를 부르는 자리는 이 파일뿐이어야 한다**(D9 —
- * `test/io-boundary.test.ts`가 `src/`를 훑어 센다).
+ * 진짜 `Io` 하나. **`node:*`를 부르는 자리는 이 파일뿐이어야 한다**
+ * (`test/io-boundary.test.ts`가 `src/`를 훑어 센다).
  *
  * 이 파일은 케이스가 거의 못 덮는다(진짜 홈·진짜 소켓을 건드리기 때문이다). 그래서
  * **여기에는 판단을 두지 않는다** — 조립만 하고, 무엇을 어디에 쓸지는 전부 `commands/`가
  * 정한다. `build-test/dist-bin.test.ts`가 이 파일이 실제로 서는지(shebang·실행 권한·
- * `bin` 필드)를 빌드 결과물로 잰다(D11).
+ * `bin` 필드)를 빌드 결과물로 잰다.
  */
 import { createInterface } from 'node:readline'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
@@ -13,7 +13,7 @@ import { dirname } from 'node:path'
 import { homedir } from 'node:os'
 import type { HttpRequestInit, HttpResponse, Io } from './io'
 
-/** 자격 파일의 권한. 소유자만 읽고 쓴다(D6). */
+/** 자격 파일의 권한. 소유자만 읽고 쓴다. */
 export const CREDENTIALS_FILE_MODE = 0o600
 /** 자격 디렉터리의 권한. 소유자만 드나든다. */
 export const CREDENTIALS_DIR_MODE = 0o700
@@ -60,7 +60,7 @@ export function createNodeIo(): Io {
       },
     },
     fetch: async (url: string, init?: HttpRequestInit): Promise<HttpResponse> => {
-      // 전역 `fetch`를 그대로 쓴다 — HTTP 클라이언트를 새로 들이지 않는다(D10).
+      // 전역 `fetch`를 그대로 쓴다 — HTTP 클라이언트를 새로 들이지 않는다.
       // `Response`가 `HttpResponse`의 면을 이미 갖는다(`bytes()` 포함 — Node 22).
       return await fetch(url, init)
     },
@@ -90,17 +90,16 @@ export function createNodeIo(): Io {
  *
  * ---
  *
- * # 왜 export 하는가 — **대역이 대역이 아니었다** (델타 리뷰 D4)
+ * # 왜 export 하는가 — **`read()`를 통한 대역은 대역이 아니다**
  *
- * 앞 판은 이 술어를 `read()`를 통해서만 쟀다. `chmod 000`은 **root로 도는 판(흔한 CI
- * 컨테이너)에서 그냥 읽혀** 값이 누가 돌리느냐에 갈리므로, 대신 **디렉터리를 파일로 읽어
- * `EISDIR`**을 얻는 대역을 썼다. 그 회피 이유는 옳았다.
+ * 이 술어를 `read()`를 통해서만 재려면 대역이 필요하다. `chmod 000`은 **root로 도는 판(흔한
+ * CI 컨테이너)에서 그냥 읽혀** 값이 누가 돌리느냐에 갈리므로, **디렉터리를 파일로 읽어
+ * `EISDIR`**을 얻는 대역을 쓰게 된다. 그 회피 이유는 옳다.
  *
- * **그런데 그 대역이 원래 물음을 안 쟀다.** `EISDIR`은 *"ENOENT가 아닌 실패"*의 **한
- * 예일 뿐**이라, 자가 그 **한 코드**만 본다. 리뷰어가 `EISDIR`은 그대로 던지되
- * **`EACCES`·`EPERM`만** 접는 변이를 심었더니 **81건 중 0건**이 죽었고, 그때
- * `wireb pull`이 실제로 코드 2 *"`wireb login`을 먼저 실행하세요"*로 나갔다(리뷰어 실측).
- * **N8이 원래 지목한 결말 그대로다.**
+ * **그런데 그 대역은 원래 물음을 안 잰다.** `EISDIR`은 *"ENOENT가 아닌 실패"*의 **한
+ * 예일 뿐**이라, 자가 그 **한 코드**만 본다. `EISDIR`은 그대로 던지되 **`EACCES`·`EPERM`만**
+ * 접는 변이가 그 자를 통과하고, 그때 `wireb pull`이 코드 2 *"`wireb login`을 먼저
+ * 실행하세요"*로 나간다 — 위 문단이 막으려는 결말 그대로다.
  *
  * 그래서 술어를 **코드 표로 직접 잰다** — 파일 시스템도 `chmod`도 root 여부도 안 타므로
  * 피하려던 문제가 애초에 안 생긴다. `test/node-io.test.ts`가 그 표를 든다.
@@ -117,7 +116,7 @@ export function isNotFound(error: unknown): boolean {
  *
  * `readline`은 입력을 그대로 되비추므로 그 사이에 끼어들어 지운다 — 비밀번호가 화면에
  * 남으면 어깨너머로도 스크롤백으로도 새어 나간다. 이 저장소에 프롬프트 라이브러리가
- * 없고 들이지도 않는다(D10).
+ * 없고 들이지도 않는다.
  */
 async function readHidden(label: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true })

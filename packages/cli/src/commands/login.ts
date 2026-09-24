@@ -1,12 +1,12 @@
 /**
- * `wireb login` — **유일하게 자격을 만드는 명령**(D5).
+ * `wireb login` — **유일하게 자격을 만드는 명령**.
  *
  * 순서가 규격이다:
  *
  * 1. `.wirebound.json`을 읽는다(`--server`·`--project`가 덮는다)
  * 2. 이메일·비밀번호로 **세션**을 만든다 (`POST /api/auth/login`)
  * 3. 그 세션으로 **그 프로젝트의 토큰**을 발급받는다 (`POST /api/projects/:id/tokens`)
- * 4. 토큰을 홈 아래에 쓴다 (`credentials.ts` — 리포가 아니다, D6)
+ * 4. 토큰을 홈 아래에 쓴다 (`credentials.ts` — 리포가 아니다)
  * 5. **세션을 정리한다** (`POST /api/auth/logout`)
  *
  * **5가 있는 이유:** 여기서 만든 세션은 사람이 앉아 있지 않은 자격이고 이 실행 뒤로는
@@ -16,7 +16,7 @@
  *
  * ---
  *
- * # 비밀번호는 argv에 오지 않는다 (D7)
+ * # 비밀번호는 argv에 오지 않는다
  *
  * **`--password` 플래그를 만들지 않는다.** 셸 히스토리와 프로세스 목록(`ps`)에 원문이
  * 남는다. `parseArgs`가 strict라 그 플래그를 주면 *"인식할 수 없는 옵션"*으로 죽는다 —
@@ -66,7 +66,7 @@ export async function runLogin(io: Io, options: LoginOptions): Promise<number> {
     body: { email, password },
   })
 
-  // **쿠키를 손으로 나른다** — Node의 전역 `fetch`에 쿠키 저장소가 없다(재라 #4, 쟀다).
+  // **쿠키를 손으로 나른다** — Node의 전역 `fetch`에 쿠키 저장소가 없다(재는 법은 `client.ts`의 머리말).
   const cookie = cookieHeader(login.setCookie)
   if (cookie.length === 0) {
     throw serverError('로그인 응답에 세션 쿠키가 없습니다')

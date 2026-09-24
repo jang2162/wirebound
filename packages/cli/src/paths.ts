@@ -1,10 +1,10 @@
 /**
  * 경로 다루기. **`node:path`를 안 쓴다** — `src/`에서 `node:*`를 부르는 자리는
- * `node-io.ts` 하나여야 하고(D9), 여기서 필요한 것은 POSIX 문자열 조작뿐이다.
+ * `node-io.ts` 하나여야 하고, 여기서 필요한 것은 POSIX 문자열 조작뿐이다.
  *
- * **Windows를 오늘 다루지 않는다.** `engines`가 Node ≥ 22.9일 뿐 플랫폼을 좁히지는
- * 않지만, 이 슬라이스가 재 본 것은 macOS·Linux다. 역슬래시 구분자를 다루는 판정은
- * 근거가 설 때 한다 — 이월에 적는다.
+ * **Windows를 다루지 않는다.** `engines`가 Node ≥ 22.9일 뿐 플랫폼을 좁히지는
+ * 않지만, 재 본 것은 macOS·Linux다. 역슬래시 구분자를 다루는 판정은 Windows에서 잴
+ * 근거가 설 때 한다 — 그 전에 Windows에서 돌리면 상대 경로 풀이가 조용히 틀릴 수 있다.
  */
 
 export const SEPARATOR = '/'

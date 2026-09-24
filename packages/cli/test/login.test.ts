@@ -1,5 +1,5 @@
 /**
- * `wireb login` — D5·D6·D7과 재라 #4(쿠키를 손으로 나른다).
+ * `wireb login` — 자격을 만들고, 세션 쿠키를 손으로 나른다.
  */
 import { describe, expect, it } from 'vitest'
 import { run } from '../src/run'
@@ -31,7 +31,7 @@ function loginIo(overrides: { env?: Record<string, string | undefined>; secret?:
   return io
 }
 
-describe('wireb login — 자격을 만드는 유일한 명령 (D5)', () => {
+describe('wireb login — 자격을 만드는 유일한 명령', () => {
   it('세션을 만들고 토큰을 발급받아 홈 아래에 저장하고 세션을 정리한다', async () => {
     const io = loginIo()
     const code = await run(['login', '--email', 'a@example.com'], io)
@@ -51,12 +51,12 @@ describe('wireb login — 자격을 만드는 유일한 명령 (D5)', () => {
   })
 
   /**
-   * **재라 #4를 여기서 고정한다.** Node의 전역 `fetch`에는 쿠키 저장소가 없다(실측:
+   * **쿠키를 손으로 나르는 것을 여기서 고정한다.** Node의 전역 `fetch`에는 쿠키 저장소가 없다(실측:
    * `Set-Cookie`를 받은 뒤 같은 오리진으로 다시 요청해도 `Cookie`가 실리지 않고,
    * `credentials: 'include'`도 리다이렉트도 이어 주지 않는다). 그래서 `login`이 손으로
    * 날라야 하고, **안 나르면 토큰 발급이 401이 된다.**
    */
-  it('세션 쿠키를 손으로 날라 다음 두 요청에 싣는다 (재라 #4)', async () => {
+  it('세션 쿠키를 손으로 날라 다음 두 요청에 싣는다', async () => {
     const io = loginIo()
     await run(['login', '--email', 'a@example.com'], io)
 
@@ -142,7 +142,7 @@ describe('wireb login — 자격을 만드는 유일한 명령 (D5)', () => {
   })
 })
 
-describe('비밀번호는 argv에 오지 않는다 (D7)', () => {
+describe('비밀번호는 argv에 오지 않는다', () => {
   /** **없는 것을 케이스로 드는 자리다.** */
   it('--password 는 인식할 수 없는 옵션이다', async () => {
     const io = loginIo()
@@ -209,18 +209,18 @@ describe('비밀번호는 argv에 오지 않는다 (D7)', () => {
   })
 })
 
-describe('자격 저장소 (D6)', () => {
+describe('자격 저장소', () => {
   /**
-   * **D6이 명시한 것을 지키는 자가 없었다**(리뷰 N2). 프로덕션은 좁게 쓰는데
-   * (구현자의 스모크가 `drwx------`·`-rw-------`를 봤고 리뷰어가 다시 봤다) 그것은
-   * **다시 안 도는 관찰**이었고, 0600을 0644로 바꿔도 71건 중 0건이 죽었다(리뷰어 실측).
+   * **자격 파일의 권한을 지키는 자가 이것이다.** 프로덕션이 좁게 쓰는 것을 스모크로
+   * (`drwx------`·`-rw-------`) 보는 것은 **다시 안 도는 관찰**이고, 이 케이스가 없으면
+   * 0600을 0644로 바꿔도 아무 케이스도 안 죽는다.
    *
-   * 원인은 가짜 `io`가 `write`의 셋째 인자를 버린 것이었다 — `fake-io.ts`의 `modes`가
-   * 그것을 기록하게 하고 여기서 단언한다.
+   * 가짜 `io`가 `write`의 셋째 인자를 버리면 이 자가 설 수 없다 — `fake-io.ts`의 `modes`가
+   * 그것을 기록하고 여기서 단언한다.
    *
    * **8진수로 적는다.** `0o600`을 십진수 384로 적으면 사람이 그것이 무엇인지 못 읽는다.
    */
-  it('자격 파일은 0600, 그 디렉터리는 0700이다 (D6)', async () => {
+  it('자격 파일은 0600, 그 디렉터리는 0700이다', async () => {
     const io = loginIo()
     const code = await run(['login', '--email', 'a@example.com'], io)
 
@@ -232,7 +232,7 @@ describe('자격 저장소 (D6)', () => {
   })
 
   /**
-   * **바인딩 파일은 반대다 — 좁히지 않는다.** 그것은 커밋되는 선언이라(§12.1) 팀이 함께
+   * **바인딩 파일은 반대다 — 좁히지 않는다.** 그것은 커밋되는 선언이라(설계서 「리포 바인딩」) 팀이 함께
    * 읽고, 0600으로 쓰면 같은 기계의 다른 사용자·CI 러너가 못 읽는다. **없는 것을
    * 케이스가 든다** — 누가 두 파일에 같은 권한을 걸면 여기가 말한다.
    */

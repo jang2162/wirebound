@@ -1,9 +1,9 @@
 /**
- * `wireb export --format <html|pptx> -o <dir>` (P9-3 T6 · P10-1 T5 · D9·D10).
+ * `wireb export --format <html|pptx> -o <dir>`.
  *
  * 재는 것: **서버가 만든 것을 그대로 받는가** · **압축 안의 위험한 경로를 거부하는가** ·
  * **이미 있는 파일을 덮지 않는가** · **`--format`이 아는 값만 받는가** ·
- * **pptx 를 풀지 않고 파일 하나로 쓰는가**(P10-1).
+ * **pptx 를 풀지 않고 파일 하나로 쓰는가**.
  */
 import { describe, expect, it } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
@@ -36,7 +36,7 @@ function 쓴것(io: FakeIo): string[] {
   return [...io.fs.keys()].filter((path) => path.startsWith('/repo/dist/')).sort()
 }
 
-describe('서버가 만든 zip을 받아 푼다 (D9)', () => {
+describe('서버가 만든 zip을 받아 푼다', () => {
   it('번들을 다시 만들지 않는다 — 부르는 것은 GET .../export 하나다', async () => {
     const io = 준비()
     expect(await run(['export', '--format', 'html', '-o', 'dist'], io), io.stderr.join('\n')).toBe(EXIT.ok)
@@ -87,11 +87,11 @@ describe('서버가 만든 zip을 받아 푼다 (D9)', () => {
   })
 
   /**
-   * **뿌리 폴더가 없는 한 파일짜리 번들**(리뷰 N5). `segments.length > 1` 가드를 `>= 1`로
-   * 바꿔도 **0건이 죽었다**(리뷰어 실측 R19) — 그 가드가 막는 유일한 모양을 아무도 안 쟀다.
+   * **뿌리 폴더가 없는 한 파일짜리 번들.** 이 케이스가 없으면 `segments.length > 1` 가드를
+   * `>= 1`로 바꿔도 **아무 케이스도 안 죽는다** — 그 가드가 막는 유일한 모양이 이것이다.
    *
    * 벗기면 `'index.html'.slice(len + 1)`이 **빈 문자열**이 되어 `-o` 디렉터리 자체에 쓰려
-   * 든다. 오늘 서버는 언제나 뿌리 폴더를 두지만 **CLI는 그 계약을 안 믿기로 했다**(압축
+   * 든다. 서버는 언제나 뿌리 폴더를 두지만 **CLI는 그 계약을 안 믿는다**(압축
    * 안의 경로를 안 믿는 것과 같은 자세).
    */
   it('한 마디짜리 항목은 안 벗긴다 — 벗기면 경로가 빈 문자열이 된다', async () => {
@@ -134,8 +134,8 @@ describe('서버가 만든 zip을 받아 푼다 (D9)', () => {
 
 describe('압축 안의 경로를 믿지 않는다', () => {
   /**
-   * **이 명령은 *"서버가 준 archive를 사용자의 파일 시스템에 푸는 도구"*다.** 오늘 그 zip은
-   * 우리 서버가 만들지만 그 부류가 오래 겪어 온 사고가 zip-slip이다.
+   * **이 명령은 *"서버가 준 archive를 사용자의 파일 시스템에 푸는 도구"*다.** 그 zip은
+   * 우리 서버가 만들지만 그 부류의 도구가 오래 겪어 온 사고가 zip-slip이다.
    */
   it('`..`가 든 항목을 거부한다 — 걸러 내고 나머지를 풀지 않는다', async () => {
     const 나쁜 = zipSync({ 'index.html': strToU8('ok'), '../evil.sh': strToU8('rm -rf /') })
@@ -183,8 +183,8 @@ describe('압축 안의 경로를 믿지 않는다', () => {
 
 describe('이미 있는 파일을 덮지 않는다', () => {
   /**
-   * **충돌 파일이 압축의 *마지막* 항목이다**(리뷰 N4). 첫 항목(`index.html`)으로 재면
-   * 검사를 `files.slice(0, 1)`로 좁혀도 **0건이 죽는다**(리뷰어 실측 R20) — *"하나라도
+   * **충돌 파일이 압축의 *마지막* 항목이다.** 첫 항목(`index.html`)으로 재면
+   * 검사를 `files.slice(0, 1)`로 좁혀도 **아무 케이스도 안 죽는다** — *"하나라도
    * 있으면"*이 *"첫째가 있으면"*으로 조용히 바뀐다. **하나짜리로 재지 마라의 그 부류다.**
    */
   it('마지막 항목이 충돌해도 **아무것도 쓰기 전에** 멈춘다', async () => {
@@ -222,13 +222,13 @@ describe('이미 있는 파일을 덮지 않는다', () => {
 })
 
 /**
- * **`-o`가 디렉터리가 아닌 자리를 가리킬 때**(리뷰 N6).
+ * **`-o`가 디렉터리가 아닌 자리를 가리킬 때.**
  *
  * 안 끊으면 `mkdir`이 `ENOTDIR`로 던지고 `run.ts`의 마지막 갈래가 **70**
  * (*"버그다 — 사용자가 고칠 수 없다"*)으로 낸다. **사람이 할 일은 `-o` 한 글자를 고치는
  * 것**이므로 `exit.ts`의 표대로면 1이다.
  */
-describe('-o 가 파일을 가리키면 (리뷰 N6)', () => {
+describe('-o 가 파일을 가리키면', () => {
   it('쓰기 전에 끊고 코드 1이다 — 70이 아니다', async () => {
     const io = 준비(bundleZip(), { '/repo/dist': '사람이 만든 파일' })
 
@@ -259,10 +259,7 @@ describe('-o 가 파일을 가리키면 (리뷰 N6)', () => {
 })
 
 describe('쓰임말과 서버 거절', () => {
-  /**
-   * **P9-3 이 *"`--format` 은 `html` 만 받는다"* 로 고정해 둔 자리를 P10-1 이 연다.**
-   * 그때 케이스의 이름이 *"(P10이 다른 자리를 쓴다)"* 였고, 이것이 그 P10 이다.
-   */
+  /** **`--format` 은 `html`·`pptx` 만 받는다.** 그 밖의 값은 서버에 묻기 전에 끊는다. */
   it('--format 은 아는 값만 받는다 — 모르는 값은 네트워크를 타기 전에 끊긴다', async () => {
     const io = 준비()
     expect(await run(['export', '--format', 'pdf', '-o', 'dist'], io)).toBe(EXIT.usage)
@@ -304,7 +301,7 @@ describe('쓰임말과 서버 거절', () => {
   })
 })
 
-/* ------------------------------------------------------------- pptx (P10-1) */
+/* ------------------------------------------------------------------- pptx */
 
 /** pptx 를 흉내 내는 바이트. **내용을 안 본다** — CLI 는 이것을 풀지 않는다. */
 const PPTX_BYTES = Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0xff, 0xfe, 0x01, 0x02, 0x03])
@@ -331,7 +328,7 @@ function pptx준비(options: { fileName?: string | null; files?: Record<string, 
   return io
 }
 
-describe('--format pptx 는 파일 하나다 (P10-1 D7)', () => {
+describe('--format pptx 는 파일 하나다', () => {
   it('형식을 그대로 실어 부른다', async () => {
     const io = pptx준비()
     expect(await run(['export', '--format', 'pptx', '-o', 'dist'], io), io.stderr.join('\n')).toBe(
@@ -351,7 +348,7 @@ describe('--format pptx 는 파일 하나다 (P10-1 D7)', () => {
 
   /**
    * **바이트가 그대로다.** 문자열로 왕복시키면 UTF-8 로 못 되돌리는 바이트가 `U+FFFD` 가
-   * 되고, 그러면 받는 쪽이 그 pptx 를 못 연다 — P9-3 리뷰 N9 가 예고한 자리다.
+   * 되고, 그러면 받는 쪽이 그 pptx 를 못 연다.
    */
   it('바이트를 글자로 왕복시키지 않는다', async () => {
     const io = pptx준비()

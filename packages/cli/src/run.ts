@@ -1,27 +1,27 @@
 /**
- * `wireb`의 실행 진입점. **`run(argv, io)` 꼴이다**(D9) — 부수효과는 전부 `io`가 나르고,
+ * `wireb`의 실행 진입점. **`run(argv, io)` 꼴이다** — 부수효과는 전부 `io`가 나르고,
  * 종료 코드는 **값으로** 돌아간다(`process.exit`가 이 파일에 없다).
  *
  * ---
  *
- * # 인자 파서를 들이지 않는다 (D10)
+ * # 인자 파서를 들이지 않는다
  *
- * `node:util`의 `parseArgs`를 쓴다. **`wireb page get <경로>` 꼴을 다룰 수 있는지 쟀다**
- * (계획서 재라 #8 — *"Node 문서를 기억으로 쓴다"*):
+ * `node:util`의 `parseArgs`를 쓴다. **`wireb page get <경로>` 꼴을 다룰 수 있는지 잰 값이다**
+ * — Node 문서를 기억으로 쓰지 않고 돌려서 잰다(`test/args.test.ts`가 아래 줄 여럿을 든다):
  *
  * | 무엇 | 값 |
  * |---|---|
  * | `['page','get','관리자/회원/목록']` | `positionals`에 셋이 **순서대로** 들어온다 |
  * | 옵션이 위치 인자 뒤에 와도 | 잡힌다(`parseArgs`는 첫 위치 인자에서 멈추지 않는다) |
- * | 모르는 옵션(strict) | `ERR_PARSE_ARGS_UNKNOWN_OPTION`으로 **던진다** — D7이 이것에 기댄다 |
+ * | 모르는 옵션(strict) | `ERR_PARSE_ARGS_UNKNOWN_OPTION`으로 **던진다** — `--password`가 없는 것이 이것에 기댄다 |
  * | 명령마다 다른 옵션 | **한 번에 못 판다.** 옵션 표가 파싱 전체에 걸리므로 명령 마디를 먼저 떼야 한다 |
  *
  * 마지막 줄이 아래 `matchCommand`가 있는 이유다. **명령 마디는 맨 앞에 온다** —
  * `git`과 같은 규칙이고, 그러지 않으면 `--server https://x init`에서 값이 명령으로
  * 읽힌다(옵션 값은 `-`로 시작하지 않으므로 마디와 구분되지 않는다).
  *
- * **여러 마디 명령을 미리 다룬다.** P9-3이 `page get`을 더할 자리이고, 그때 이 파일의
- * 모양이 바뀌면 안 된다 — `test/args.test.ts`가 두 마디 명세로 그것을 잰다.
+ * **여러 마디 명령을 다룬다**(`page get`). 마디가 늘어도 이 파일의 모양이 바뀌면 안 된다 —
+ * `test/args.test.ts`가 두 마디 명세로 그것을 잰다.
  */
 import { parseArgs, type ParseArgsConfig } from 'node:util'
 import { runExport } from './commands/export'
@@ -46,7 +46,7 @@ export interface CommandSpec {
 }
 
 /**
- * **`--password`가 여기 없다**(D7). 없는 것을 `test/login.test.ts`가 케이스로 든다 —
+ * **`--password`가 여기 없다.** 없는 것을 `test/login.test.ts`가 케이스로 든다 —
  * strict 파싱이 그것을 *"인식할 수 없는 옵션"*으로 죽인다.
  */
 export const COMMANDS: CommandSpec[] = [
@@ -147,7 +147,7 @@ export function matchCommand(argv: string[], commands: CommandSpec[] = COMMANDS)
 
 /**
  * **이 함수는 던지지 않는다.** 종료 코드를 값으로 낸다 — 케이스가 그것을 읽을 수 있어야
- * 하고(D9), `bin.ts`는 그 값으로 끝내는 몇 줄이면 된다.
+ * 하고, `bin.ts`는 그 값으로 끝내는 몇 줄이면 된다.
  */
 export async function run(argv: string[], io: Io): Promise<number> {
   try {

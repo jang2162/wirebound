@@ -1,11 +1,11 @@
 /**
- * **모든 요청이 `x-wb-client`를 단다**(P9-5 D1 · 계획서 재라 #2).
+ * **모든 요청이 `x-wb-client`를 단다.**
  *
  * ---
  *
  * # 왜 필요한가 — `wireb`도 실어야 `cli`가 채워진다
  *
- * 서버는 이 헤더로 `revisions.actor_type`을 정한다(§7.4 · `apps/api/src/auth/actor.ts`).
+ * 서버는 이 헤더로 `revisions.actor_type`을 정한다(설계서 「LLM 편집 경로」 · `apps/api/src/auth/actor.ts`).
  * **안 실으면 서버가 기본값을 쓰고, 그때 *"헤더를 잊었다"*와 *"정말 그 종류다"*가
  * 구별되지 않는다.** 그리고 그 어긋남은 조용하다 — 편집은 200으로 끝나고 이력만 틀린다.
  *

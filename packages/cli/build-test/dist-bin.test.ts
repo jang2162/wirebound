@@ -1,5 +1,5 @@
 /**
- * **`wireb`가 실제로 서는가**(D11).
+ * **`wireb`가 실제로 서는가.**
  *
  * `pnpm test`는 소스를 alias로 보므로 **`dist`가 깨져도 초록이다.** shebang·실행 권한·
  * `bin` 필드·확장자는 **빌드 결과물에서만** 드러난다 — `packages/exporter/build-test/`가
@@ -7,10 +7,10 @@
  *
  * ---
  *
- * # 무엇이 여기서만 잡히나 — 쟀다 (계획서 재라 #5)
+ * # 무엇이 여기서만 잡히나 — 쟀다
  *
- * 계획서는 *"`tsdown`이 shebang과 `bin`을 다룰 수 있다"*를 **안 재고 썼다**(exporter가 그것을
- * 한 적이 없다). 실측:
+ * *"`tsdown`이 shebang과 `bin`을 다룰 수 있다"*는 재 봐야 안다(exporter는 그것을 쓰지
+ * 않는다). 실측 — 아래 케이스들이 빌드 결과물에서 다시 잰다:
  *
  * | 물음 | 값 |
  * |---|---|
@@ -92,8 +92,11 @@ describe('빌드된 wireb', () => {
     expect(result.stderr).toContain('모르는 명령입니다: nope')
   })
 
-  /** **D7이 실제 프로세스에서도 서는지.** 소스에서 재는 것과 여기서 재는 것이 갈릴 수 있다. */
-  it('--password 는 인식할 수 없는 옵션이다 (D7)', () => {
+  /**
+   * **비밀번호가 argv에 오지 않는다는 것이 실제 프로세스에서도 서는지.** 소스에서 재는 것과
+   * 여기서 재는 것이 갈릴 수 있다.
+   */
+  it('--password 는 인식할 수 없는 옵션이다', () => {
     const result = runBin(['login', '--email', 'a@example.com', '--password', 'pw'])
 
     expect(result.status).toBe(1)

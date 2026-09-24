@@ -1,15 +1,15 @@
 /**
- * 인자와 종료 코드 — T4·D9·D10.
+ * 인자와 종료 코드.
  *
- * **`parseArgs`로 `wireb page get <경로>` 꼴을 다룰 수 있는가**(계획서 재라 #8)를 여기서
- * 잰다. P9-3이 그 모양을 쓰므로 **그때 `run.ts`가 바뀌면 안 된다.**
+ * **`parseArgs`로 `wireb page get <경로>` 꼴을 다룰 수 있는가**를 여기서 잰다 — 두 마디
+ * 명령과 그 뒤의 위치 인자를 `run.ts`의 `matchCommand`가 명령 표와 무관하게 가른다.
  */
 import { describe, expect, it } from 'vitest'
 import { COMMANDS, matchCommand, run, usage, type CommandSpec } from '../src/run'
 import { EXIT } from '../src/exit'
 import { createFakeIo } from './fake-io'
 
-describe('종료 코드는 값으로 나온다 (D9)', () => {
+describe('종료 코드는 값으로 나온다', () => {
   it('인자가 없으면 쓰임말을 stderr에 내고 1이다', async () => {
     const io = createFakeIo()
     const code = await run([], io)
@@ -60,13 +60,13 @@ describe('종료 코드는 값으로 나온다 (D9)', () => {
 })
 
 /**
- * **P9-3이 쓸 모양을 미리 잰다**(재라 #8). 두 마디 명령이 실제로 골라지고, 그 뒤의 위치
- * 인자가 순서대로 오고, 옵션이 뒤에 와도 잡히는가.
+ * **두 마디 명령의 모양을 잰다.** 두 마디 명령이 실제로 골라지고, 그 뒤의 위치 인자가
+ * 순서대로 오고, 옵션이 뒤에 와도 잡히는가.
  *
- * 여기서 명세를 **지어서** 재는 것이 요점이다 — `page get`을 반쯤 만들어 넣으면 P9-3이
- * 그것을 지우거나 고쳐야 하고, 그 사이 반쪽 명령이 사람 손에 닿는다.
+ * 여기서 명세를 **지어서** 재는 것이 요점이다 — 실제 `page get` 명세에 기대면 그 명령의
+ * 옵션이 바뀔 때 `matchCommand`·`parseArgs`의 성질을 재는 자가 함께 흔들린다.
  */
-describe('여러 마디 명령 (P9-3의 `page get <경로>`)', () => {
+describe('여러 마디 명령 (`page get <경로>` 꼴)', () => {
   const seen: { positionals: string[]; json: unknown }[] = []
   const FAKE: CommandSpec[] = [
     {

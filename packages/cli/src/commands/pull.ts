@@ -1,9 +1,9 @@
 /**
- * `wireb pull` — §12.3의 *"프로젝트 스냅샷을 로컬 JSON으로 (읽기 전용)"*.
+ * `wireb pull` — 설계서 「CLI」의 *"프로젝트 스냅샷을 로컬 JSON으로 (읽기 전용)"*.
  *
  * `GET /api/projects/:projectId/snapshot`(**단수**)을 부른다. 복수(`POST .../snapshots`)는
  * **쓰기이고 editor 전용이며 지울 수 없는 태그를 남긴다** — 리포를 동기화할 때마다 그것을
- * 부르면 태그가 무한히 쌓인다(D8, `apps/api/README.md`의 표).
+ * 부르면 태그가 무한히 쌓인다(`apps/api/README.md` 「읽기 전용 프로젝트 덤프」 절의 표).
  *
  * ---
  *
@@ -22,10 +22,9 @@
  * # 자격이 리포에 남지 않는다
  *
  * 여기서 쓰는 것은 payload뿐이다. `test/no-token-in-repo.test.ts`가 **CLI가 리포 안에
- * 쓴 파일 전부**를 훑어 그것을 지킨다 — 이 파일이 하나 더 늘어난 지금도 그 자가 분모를
- * 스스로 만든다.
+ * 쓴 파일 전부**를 훑어 그것을 지킨다 — 쓰는 파일이 늘어도 그 자가 분모를 스스로 만든다.
  *
- * # 세 갈래를 말한다 (T6)
+ * # 세 갈래를 말한다
  *
  * | 무엇 | 코드 | 문장의 요지 |
  * |---|---|---|
@@ -50,7 +49,7 @@ export interface PullOptions {
 }
 
 export async function runPull(io: Io, options: PullOptions): Promise<number> {
-  // **자격을 찾는 자리는 `project.ts` 하나다**(P9-3). 명령마다 다시 짜면 *"자격이
+  // **자격을 찾는 자리는 `project.ts` 하나다.** 명령마다 다시 짜면 *"자격이
   // 없습니다"*의 문장이 갈린다.
   const { binding, token } = await requireProject(io)
 
