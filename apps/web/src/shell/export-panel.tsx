@@ -102,6 +102,7 @@ import type {
   PptxExportPreview,
 } from '../api/types'
 import { usePopoverDismiss } from './use-popover-dismiss'
+import { usePopoverSide } from './use-popover-side'
 
 /** 조회 상태. 성공과 실패를 판별 유니온으로 가른다(`routes/editor.tsx`와 같은 이유). */
 type PreviewState =
@@ -151,6 +152,8 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
    * 닫는 일을 토글의 `onClick` 하나가 한다(그 훅의 머리말).
    */
   const rootRef = usePopoverDismiss(open, close)
+  /** 머리가 접혀 토글이 줄 왼쪽에 서면 상자를 왼쪽 끝에 붙인다(`use-popover-side.ts`). */
+  const { side, bodyRef } = usePopoverSide(rootRef, open)
 
   async function load(next: ExportFormat): Promise<void> {
     const ticket = (latest.current += 1)
@@ -201,7 +204,7 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
       </button>
 
       {open && (
-        <div className="wb-shell-export-body" role="group" aria-label="내보내기">
+        <div className="wb-shell-export-body" role="group" aria-label="내보내기" ref={bodyRef} data-side={side}>
           {/* **맨 위다.** 아래의 모든 문장이 이 고름에 매여 있으므로, 읽기 전에 무엇을 읽는
               중인지 알아야 한다. 눌림은 **고른 것**을 따른다 — 응답을 기다리는 동안에도
               고름은 이미 정해져 있다. */}

@@ -2855,6 +2855,13 @@
   text-align: left;
 }
 
+/* **머리가 접혀 토글이 줄 왼쪽에 서면 왼쪽 끝에 붙는다**(`shell/use-popover-side.ts`가 열 때 재서 고른다 —
+   오른쪽 끝에 붙인 채면 상자가 화면 왼쪽 밖으로 나간다). 스냅샷 상자도 같은 규칙이다. */
+.wb-shell-export-body[data-side='start'] {
+  right: auto;
+  left: 0;
+}
+
 /* 형식 토글. **셸 머리의 `모드`(편집/뷰)와 같은 장치다** — `role="group"` 안의
    버튼 둘에 `aria-pressed`가 붙고 눌린 쪽이 강조된다.
 
@@ -2992,6 +2999,12 @@
   gap: 16px;
   font-size: 13px;
   text-align: left;
+}
+
+/* 붙일 쪽 — `.wb-shell-export-body[data-side='start']`와 같은 규칙이다. */
+.wb-shell-snapshots-body[data-side='start'] {
+  right: auto;
+  left: 0;
 }
 
 /* 목록을 통째로 못 받았을 때의 앞머리. **저장 실패(`-error`)와 색이 같고 굵기가 다르다** —
