@@ -393,21 +393,23 @@ describe('토큰은 역할을 얼리지 않는다', () => {
     })
   })
 
-  it('발급 뒤 멤버에서 제거하면 404가 된다 — 403이 아니다', async () => {
+  it('발급 뒤 멤버에서 제거하면 그 프로젝트 토큰이 지워진다(401) — 다시 멤버가 돼도 되살아나지 않는다', async () => {
+    // 남기면 비멤버인 동안 404 로 잠들었다가 다시 멤버가 되는 순간 통과한다(`repos/api-tokens.ts`의 `deleteMemberTokens`).
+    // 지우는 범위는 (그 프로젝트, 그 사람)이다 — 그 사람의 다른 프로젝트 토큰과 같은 프로젝트의 남의 토큰은 산다.
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
       const project = await createProject(ctx, owner.cookie)
+      const other = await createProject(ctx, owner.cookie)
       const editor = await signup(ctx)
       await addMember(ctx, project.id, editor.user.id, 'editor')
+      await addMember(ctx, other.id, editor.user.id, 'editor')
 
       const token = await issueToken(ctx, editor.cookie, project.id)
-
-      const before = await ctx.app.inject({
-        method: 'GET',
-        url: `/api/projects/${project.id}`,
-        headers: token.header,
-      })
-      expect(before.statusCode).toBe(200)
+      const elsewhere = await issueToken(ctx, editor.cookie, other.id)
+      const ownersToken = await issueToken(ctx, owner.cookie, project.id)
+      const read = (header: { authorization: string }, projectId = project.id) =>
+        ctx.app.inject({ method: 'GET', url: `/api/projects/${projectId}`, headers: header })
+      expect((await read(token.header)).statusCode).toBe(200)
 
       const removed = await ctx.app.inject({
         method: 'DELETE',
@@ -415,14 +417,32 @@ describe('토큰은 역할을 얼리지 않는다', () => {
         cookies: owner.cookie,
       })
       expect(removed.statusCode).toBe(204)
+      // 자격이 없다 — 403(역할)도 404(멤버십)도 아니다.
+      expect((await read(token.header)).statusCode).toBe(401)
+      const rows = await ctx.db.selectFrom('api_tokens').select('id').where('project_id', '=', project.id).where('user_id', '=', editor.user.id).execute()
+      expect(rows).toEqual([])
 
-      const after = await ctx.app.inject({
-        method: 'GET',
-        url: `/api/projects/${project.id}`,
-        headers: token.header,
+      await addMember(ctx, project.id, editor.user.id, 'editor')
+      expect((await read(token.header)).statusCode).toBe(401)
+
+      expect((await read(elsewhere.header, other.id)).statusCode).toBe(200)
+      expect((await read(ownersToken.header)).statusCode).toBe(200)
+    })
+  })
+
+  it('제거가 거절되면 토큰도 남는다 — 마지막 owner 는 못 빼고, 그 트랜잭션째 되돌아간다', async () => {
+    await withApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const token = await issueToken(ctx, owner.cookie, project.id)
+
+      const refused = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/projects/${project.id}/members/${owner.user.id}`,
+        cookies: owner.cookie,
       })
-      // 설계서 「권한 모델」의 *"비멤버에게 프로젝트 존재를 숨긴다"*. 토큰 행은 아직 살아 있다.
-      expect(after.statusCode).toBe(404)
+      expect(refused.statusCode).toBe(409)
+      expect((await ctx.app.inject({ method: 'GET', url: `/api/projects/${project.id}`, headers: token.header })).statusCode).toBe(200)
     })
   })
 })

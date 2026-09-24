@@ -139,10 +139,49 @@ export async function deleteApiToken(
 }
 
 /**
+ * **멤버에서 빠지는 사람의 그 프로젝트 토큰을 지운다** — 멤버 제거(`repos/members.ts`의 `removeMember`)가 같은 트랜잭션에서
+ * 부른다. 남겨 두면 비멤버인 동안은 404 로 잠들었다가 **다시 멤버가 되는 순간 되살아난다** — 거둔 줄 안 자격이 돌아온다.
+ * 그 사람의 다른 프로젝트 토큰은 안 건드린다(스코프가 프로젝트다).
+ *
+ * **지우기 전에 id 순으로 잡는다** — 여러 행을 잡는 두 트랜잭션이 같은 순서로 잡아야 서로를 기다리는 고리가 안 선다.
+ * 같은 행들을 잡는 다른 자리는 프로젝트 삭제의 `lockProjectTokens`(같은 순서)다. `DELETE`에는 순서를 줄 수 없다.
+ */
+export async function deleteMemberTokens(trx: DbHandle, projectId: string, userId: string): Promise<void> {
+  assertLocking(trx, 'deleteMemberTokens')
+  const rows = await trx
+    .selectFrom('api_tokens')
+    .select('id')
+    .where('project_id', '=', projectId)
+    .where('user_id', '=', userId)
+    .orderBy('id')
+    .forUpdate()
+    .execute()
+  if (rows.length === 0) return
+  await trx
+    .deleteFrom('api_tokens')
+    .where(
+      'id',
+      'in',
+      rows.map((row) => row.id),
+    )
+    .execute()
+}
+
+/**
+ * 프로젝트의 토큰 행 전부를 id 순으로 `FOR UPDATE`로 잠근다. **부르는 자리는 프로젝트 삭제 하나다**(`routes/projects.ts` —
+ * 멤버 제거의 `deleteMemberTokens`와 고리를 만들지 않으려고 CASCADE 보다 먼저 잡는다). `lockProjectPresets`와 같은 모양이다.
+ */
+export async function lockProjectTokens(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectTokens')
+  await trx.selectFrom('api_tokens').select('id').where('project_id', '=', projectId).orderBy('id').forUpdate().execute()
+}
+
+/**
  * 원문으로 토큰을 찾아 그 주체를 낸다. 없으면 `null`이다.
  *
  * **만료 조건이 없다 — `resolveSession`과 갈리는 자리이고 의도한 것이다**(0011의 머리말).
- * 이 표에는 `expires_at`이 없고, 자격을 거두는 수단은 폐기(DELETE)와 멤버십 제거 둘이다.
+ * 이 표에는 `expires_at`이 없고, 자격을 거두는 수단은 폐기(DELETE)와 멤버십 제거(그 프로젝트 토큰을 함께 지운다 —
+ * `deleteMemberTokens`) 둘이다.
  *
  * **`password_hash`를 select하지 않는다** — `resolveSession`과 같은 이유로 `users`에서
  * 세 컬럼만 명시적으로 고른다.

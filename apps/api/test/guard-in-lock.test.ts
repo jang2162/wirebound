@@ -40,7 +40,7 @@ import type { RegisteredRoute } from '../src/app'
 import { withTransaction, type DbHandle } from '../src/db/tx'
 import { findMembership } from '../src/auth/roles'
 import { findDefaultLayout, updateLayoutTheme } from '../src/repos/layouts'
-import { updateMemberRole } from '../src/repos/members'
+import { lockOwnerIds, updateMemberRole } from '../src/repos/members'
 import { insertMenuNode } from '../src/repos/menu'
 import { lockPageForEdit } from '../src/repos/pages'
 import { lockProjectTree } from '../src/repos/projects'
@@ -55,6 +55,7 @@ import {
   resetRealData,
   signup,
   withApi,
+  withProxiedRealApi,
   withRealApi,
   type RealApiContext,
   type SignedUpUser,
@@ -1676,6 +1677,121 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
 })
 
 /**
+ * **멤버 제거가 빠지는 사람의 그 프로젝트 토큰을 지운다**(`repos/members.ts`의 `removeMember` → `repos/api-tokens.ts`의
+ * `deleteMemberTokens`). 그 쓰기가 토큰 행을 잡으므로 토큰 행을 잡는 두 자리와 고리를 안 만드는지 잰다.
+ *
+ * - **토큰으로 쓰는 owner 를 뺀다.** 토큰 쓰기의 재확인은 «토큰 행(`KEY SHARE`) → 제 멤버 행(`SHARE`)»이다. 제거가 owner 행
+ *   (`lockOwnerIds` — 빠지는 owner 의 행도 든다) 뒤에 토큰을 지우면 고리가 선다. 판: 제거를 재확인 질의(앨리스 세션의
+ *   `KEY SHARE`)에서 붙잡아(프록시의 `holdQuery` — owner 행은 쥔 채) 그 사이 밥의 토큰 쓰기를 세운다.
+ * - **프로젝트 삭제와 겹친다.** 삭제가 토큰 행을 CASCADE 에서 처음 만나면 그때 owner 행을 쥐고 있다 — 토큰 행을 쥔 채 owner
+ *   행에 선 제거와 고리다. 판: owner 행을 테스트가 쥐고 둘을 차례로 줄 세운 뒤 푼다. 두 방향을 다 세운다(어느 쪽이 먼저
+ *   owner 행 줄에 서나).
+ *
+ * | 변조 | 죽는 것(전부 교착 +1 · 한쪽 500) |
+ * |---|---|
+ * | `deleteMemberTokens`를 `lockOwnerIds` · 재확인 **뒤로** | «토큰으로 쓰는 owner» · «제거가 먼저» — 뒤의 것은 삭제가 토큰 행을 owner 행 앞에서 잡아 순서가 엇갈린다 |
+ * | 프로젝트 삭제가 `lockProjectTokens`를 안 부른다 | «삭제가 먼저» 혼자 |
+ * | 위 둘을 함께 | «토큰으로 쓰는 owner» 혼자 |
+ *
+ * «제거가 먼저»는 혼자 죽는 변조가 없다 — 제거의 토큰 자리 축은 «토큰으로 쓰는 owner»가 소유하고, 이 판은 뒤집은 방향을 세우려고
+ * 둔다. 토큰을 안 지우던 판에서는 셋 다 교착 0 이다(제거가 토큰 행을 안 잡는다) — 고리는 토큰을 지우는 자리가 여는 것이다.
+ */
+describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리와 고리를 안 만든다', () => {
+  /** 앨리스(owner)의 프로젝트에 밥을 `bobRole`로 넣고 밥의 이 프로젝트 토큰 둘을 발급한다(여러 행을 잡는 순서까지 잰다). */
+  async function tokenFixture(ctx: RealApiContext, bobRole: 'editor' | 'owner') {
+    const alice = await signup(ctx)
+    const bob = await signup(ctx)
+    const project = await createProject(ctx, alice.cookie)
+    await addMember(ctx, project.id, bob.user.id, bobRole)
+    const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
+    const page = await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
+    const tokens: string[] = []
+    for (const name of ['첫 토큰', '둘째 토큰']) {
+      const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${project.id}/tokens`, cookies: bob.cookie, payload: { name } })
+      expect(issued.statusCode, issued.body).toBe(201)
+      tokens.push((issued.json() as { value: string }).value)
+    }
+    return { alice, bob, projectId: project.id, pageId: page.id, bobToken: `Bearer ${tokens[0]}` }
+  }
+
+  async function bobTokenRows(projectId: string, bobId: string): Promise<number> {
+    const rows = await db.selectFrom('api_tokens').select('id').where('project_id', '=', projectId).where('user_id', '=', bobId).execute()
+    return rows.length
+  }
+
+  it('토큰으로 쓰는 owner 를 빼면: 제거 204 · 쓰기 404 · 토큰 0 · 교착 0', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'owner')
+      const deadlocksBefore = await deadlockCount()
+      const recheck = ctx.proxy.holdQuery('statement_timestamp() for key share')
+      let removal: Fired | undefined
+      let write: Fired | undefined
+      try {
+        removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+        await recheck.held
+        write = track(
+          ctx.app.inject({
+            method: 'PATCH',
+            url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`,
+            headers: { authorization: fx.bobToken },
+            payload: { baseSeq: 0, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_bob', type: 'Text', props: {} } }] },
+          }),
+        )
+        await waitForLockWaiter(1)
+      } finally {
+        recheck.release()
+      }
+      const [removed, written] = await Promise.all([removal.promise, write.promise])
+
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect(removed.status, removed.body).toBe(204)
+      expect(written.status, written.body).toBe(404)
+      expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(0)
+      expect(await headSeqOf(fx.pageId)).toBe(0)
+    })
+  }, 60_000)
+
+  for (const first of ['삭제', '제거'] as const) {
+    it(`프로젝트 삭제와 겹치면 — ${first}가 먼저 owner 행 줄에: 교착 0`, async () => {
+      await withRealApi(async (ctx) => {
+        const fx = await tokenFixture(ctx, 'editor')
+        const deadlocksBefore = await deadlockCount()
+        const door = queueLock(async (trx) => {
+          await lockOwnerIds(trx, fx.projectId)
+        })
+        await door.acquired
+        const fireDeletion = () => track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie }))
+        const fireRemoval = () =>
+          track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+        let deletion: Fired | undefined
+        let removal: Fired | undefined
+        try {
+          if (first === '삭제') {
+            deletion = fireDeletion()
+            await waitForLockWaiter(1)
+            removal = fireRemoval()
+          } else {
+            removal = fireRemoval()
+            await waitForLockWaiter(1)
+            deletion = fireDeletion()
+          }
+          await waitForLockWaiter(2)
+        } finally {
+          await door.release()
+        }
+        const [deleted, removed] = await Promise.all([deletion.promise, removal.promise])
+
+        expect(await deadlockCount()).toBe(deadlocksBefore)
+        expect(deleted.status, deleted.body).toBe(204)
+        // 삭제가 먼저면 제거는 프로젝트가 사라진 뒤에 재확인한다 — 404. 제거가 먼저면 둘 다 선다.
+        expect(removed.status, removed.body).toBe(first === '삭제' ? 404 : 204)
+      })
+    }, 60_000)
+  }
+})
+
+
+/**
  * # 프로젝트 잠금 뒤에 서는 쓰기 — 커밋 순간의 권한
  *
  * 위 표는 **페이지 행**에 서는 쓰기다. 페이지 행을 안 잡는 쓰기도 프로젝트를 통째로 쥐는 트랜잭션 뒤에 선다 — 복원
@@ -2106,7 +2222,7 @@ const NOT_LOCKED: Record<string, string> = {
   'DELETE /api/projects/:projectId/presets/:presetId':
     '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제가 CASCADE 전에 쥔 프리셋 행에는 서지만 404 — «E15»). 가드와 커밋 사이는 재확인한다 — 위 «프리셋 삭제 — 가드와 커밋 사이»',
   'DELETE /api/projects/:projectId/tokens/:tokenId':
-    '토큰 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404). 재확인하지 않는다 — 지우는 것은 자기 토큰뿐(`deleteApiToken`의 `user_id`)이고 권한을 줄이는 쓰기다. 걸면 제외 · 로그아웃 직후의 폐기가 롤백돼, 멤버에서 빠져도 남는 토큰 행이 다시 멤버가 될 때 되살아난다',
+    '토큰 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제가 CASCADE 전에 쥔 토큰 행에는 서지만 404 — `lockProjectTokens`). 재확인하지 않는다 — 지우는 것은 자기 토큰뿐(`deleteApiToken`의 `user_id`)이고 권한을 줄이는 쓰기다. 걸면 강등 · 로그아웃 직후의 폐기가 롤백돼 거두려던 자격이 남는다',
   'WS ping': '아무것도 안 쓴다',
   'WS lock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
   'WS unlock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',

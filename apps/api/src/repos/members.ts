@@ -6,6 +6,7 @@
  */
 import { DatabaseError } from 'pg'
 import { withTransaction, type DbHandle } from '../db/tx'
+import { deleteMemberTokens } from './api-tokens'
 import type { ProjectRole } from '../db/types'
 
 export interface MemberRecord {
@@ -231,6 +232,14 @@ export async function removeMember(
   recheck: OwnerRecheck,
 ): Promise<'removed' | 'not-member'> {
   return withTransaction(db, async (trx) => {
+    // **그 사람의 이 프로젝트 토큰을 먼저 지운다**(`repos/api-tokens.ts`의 `deleteMemberTokens`) — 남기면 다시 멤버가 될 때 되살아난다.
+    // 아래에서 제거가 거절되면(마지막 owner · 재확인 · 멤버 아님) 트랜잭션째 되돌아가 토큰도 남는다.
+    //
+    // **owner 행보다 먼저인 까닭 — 토큰으로 쓰는 사람의 재확인은 «토큰 행(`KEY SHARE`) → 멤버 행(`SHARE`)» 순이다**
+    // (`auth/roles.ts`의 `recheckAtCommit`). owner 행(`lockOwnerIds` — `FOR UPDATE`) 뒤에 지우면, 빠지는 사람이 owner 이고
+    // 그 토큰으로 쓰는 중일 때 그 쓰기는 토큰 행을 쥔 채 이 제거가 쥔 제 멤버 행을, 이 제거는 그 토큰 행을 기다린다.
+    // 잰 값은 `test/guard-in-lock.test.ts`의 «멤버 제거가 토큰을 지운다».
+    await deleteMemberTokens(trx, projectId, userId)
     const ownerIds = await lockOwnerIds(trx, projectId)
     await recheck(trx)
 

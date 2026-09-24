@@ -25,6 +25,11 @@ export interface FaultProxy {
    */
   delayQuery(fragment: string, ms: number): void
   /**
+   * `fragment` 를 담은 질의를 **붙잡는다** — `release()`까지 Postgres 에 안 넘긴다. `held`는 그 질의가 붙잡혔을 때 풀린다.
+   * 요청 하나를 그 질의 앞에서 세워 두고(그 앞에서 잡은 잠금은 쥔 채) 다른 요청을 겹치는 자리다. `delayQuery`와 같은 칸을 쓴다.
+   */
+  holdQuery(fragment: string): { held: Promise<void>; release: () => void }
+  /**
    * `fragment` 를 담은 질의 **대신 잘못된 메시지**(형식 `z`)를 Postgres 에 보낸다 — 서버가 **진짜** `FATAL 08P01`
    * («invalid frontend message type 122»)로 답하고 연결을 닫는다 — `08` 부류를 서버에서 내게 하는 길이 이것뿐이다.
    */
@@ -102,7 +107,7 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
   let arm: Arm = null
   let fired = false
   let holdMs = 0
-  let delay: { fragment: string; ms: number } | null = null
+  let delay: { fragment: string; ms: number | Promise<void>; onHeld?: () => void } | null = null
   const startup: StartupPolicy = { reject: new Set(), drop: new Set() }
   const sockets = new Set<net.Socket>()
 
@@ -166,11 +171,14 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
         return
       }
       if (delay !== null && text.includes(delay.fragment)) {
-        const { ms } = delay
+        const { ms, onHeld } = delay
         delay = null
-        setTimeout(() => {
+        const forward = (): void => {
           if (!up.destroyed) up.write(chunk)
-        }, ms)
+        }
+        if (typeof ms === 'number') setTimeout(forward, ms)
+        else void ms.then(forward)
+        onHeld?.()
         return
       }
       if (arm?.kind === 'commit-reply') {
@@ -220,6 +228,18 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     },
     delayQuery: (fragment, ms) => {
       delay = { fragment: fragment.toLowerCase(), ms }
+    },
+    holdQuery: (fragment) => {
+      let release: () => void = () => {}
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let markHeld: () => void = () => {}
+      const held = new Promise<void>((resolve) => {
+        markHeld = resolve
+      })
+      delay = { fragment: fragment.toLowerCase(), ms: released, onHeld: markHeld }
+      return { held, release }
     },
     corruptQuery: (fragment) => {
       arm = { kind: 'corrupt', fragment: fragment.toLowerCase() }
