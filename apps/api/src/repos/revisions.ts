@@ -131,3 +131,26 @@ export async function listRevisions(
   const rows = await query.orderBy('seq', 'desc').limit(options.limit).execute()
   return rows.map(toRecord)
 }
+
+/** `findRevisionCommit`의 답. */
+export interface RevisionCommit {
+  /** 그 revision 행이 보인다 — 그것을 넣은 트랜잭션이 커밋됐다. */
+  committed: boolean
+  /** 그 페이지의 지금 `head_seq`. 페이지가 없으면 `null`. */
+  headSeq: number | null
+}
+
+/**
+ * **그 revision 이 커밋됐는가, 그 페이지의 머리는 어디인가** — 한 문장이라 두 값이 한 스냅숏이다. COMMIT 답을 잃은
+ * 편집을 새 연결로 확인하는 자리가 부른다(`services/lost-commit.ts`). revision 의 id 는 넣은 트랜잭션 안에서
+ * `insertRevision`이 이미 돌려줬으므로 그 행이 보이면 그 트랜잭션은 커밋된 것이다.
+ */
+export async function findRevisionCommit(db: DbHandle, pageId: string, revisionId: string): Promise<RevisionCommit> {
+  const row = await db
+    .selectNoFrom((eb) => [
+      eb.exists(eb.selectFrom('revisions').select('id').where('id', '=', revisionId).where('page_id', '=', pageId)).as('committed'),
+      eb.selectFrom('pages').select('head_seq').where('id', '=', pageId).as('head_seq'),
+    ])
+    .executeTakeFirstOrThrow()
+  return { committed: Boolean(row.committed), headSeq: row.head_seq === null ? null : Number(row.head_seq) }
+}

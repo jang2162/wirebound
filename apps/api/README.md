@@ -179,7 +179,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 | `locked` | **423** | **다른 사용자가 편집 중인 노드**(설계서 「소프트 잠금」)를 건드렸다. `message`가 누가 잡고 있는지 말한다. **`conflict`(409)와 갈라 둔 것이 계약이다** — 아래 *"소프트 잠금"* 참고 |
 | `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]` |
 | `internal` | 500 | 예상하지 못한 서버 오류. **그 요청은 커밋 전이다**(웹의 코멘트 게시가 그렇게 읽는다) |
-| `internal` | **503** | **DB 가 답하지 않았다** — 연결이 끊겼거나 닿지 못했거나, **COMMIT 에 서버의 답이 아닌 거절이 왔다**. **그 요청이 반영됐는지 모른다**(COMMIT 의 답만 잃었을 수 있다). 500 과 갈라 둔 것이 계약이다 — 경계는 `src/db/connection-loss.ts`, 번역은 `src/http/error-handler.ts`. **문장은 메서드로 갈린다** — 쓰는 요청은 «…요청이 반영됐는지 알 수 없습니다», GET · HEAD · OPTIONS 는 «…불러오지 못했습니다 — 잠시 뒤 다시 시도하세요»(읽기는 «반영»을 말하지 않는다). WS `patch`의 `patch-error`도 같은 판에 같은 `status` · 쓰기 문장이다(`http/error-handler.ts`의 `dbUnreachableFailure`). 가르는 값은 숫자다 — 문장은 사람에게만 간다 |
+| `internal` | **503** | **DB 가 답하지 않았다** — 연결이 끊겼거나 닿지 못했거나, **COMMIT 에 서버의 답이 아닌 거절이 왔다**. **그 요청이 반영됐는지 모른다**(COMMIT 의 답만 잃었을 수 있다). 500 과 갈라 둔 것이 계약이다 — 경계는 `src/db/connection-loss.ts`, 번역은 `src/http/error-handler.ts`. **문장은 메서드로 갈린다** — 쓰는 요청은 «…요청이 반영됐는지 알 수 없습니다», GET · HEAD · OPTIONS 는 «…불러오지 못했습니다 — 잠시 뒤 다시 시도하세요»(읽기는 «반영»을 말하지 않는다). WS `patch`의 `patch-error`도 같은 판에 같은 `status` · 쓰기 문장이다(`http/error-handler.ts`의 `dbUnreachableFailure`). 가르는 값은 숫자다 — 문장은 사람에게만 간다. **편집(`PATCH .../ops` · WS `patch`)은 COMMIT 답을 잃으면 먼저 확인한다** — 아래 "편집 파이프라인"의 «COMMIT 답을 잃은 편집» |
 | `internal` | **503** + `Retry-After` | **내보내기가 밀려 있다** — 떠 있는 내보내기가 한도(`EXPORT_JOB_LIMIT`)에 닿았거나 **그 사람의 것이** 한도(`EXPORT_PERSON_JOB_LIMIT`)에 닿아 **일을 받지 않았다**(내보내기 두 라우트만). 읽기뿐이라 `Retry-After`(초) 뒤 다시 보내도 안전하다. 두 한도는 문장으로 가른다(«내보내기가 밀려 있습니다 — …» · «내 내보내기가 이미 돌고 있습니다 — …»). 위 줄과는 머리와 문장으로 가른다 — 근거는 `src/services/export-worker.ts` 머리말 «줄은 길이로 묶는다» · «한 사람이 줄을 다 쥐지 않는다» |
 
 ### 이슈의 severity — 무엇이 저장을 막는가
@@ -1267,6 +1267,14 @@ revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `
 37ms 이고, `taskpolicy -b` 로 느린 CPU 를 흉내 내면 192ms · 104ms 다. 다시 재는 법: `withRealApi` 로
 연 앱에 **다른 프로세스**가 `/health` 를 20ms 마다 치게 두고, 문서를 `pages.schema` 에 직접 써 넣은
 뒤(1MB 는 본문 한도를 넘는다) `PATCH .../ops` 한 번 동안 가장 긴 `/health` 응답 시간을 본다.
+
+**COMMIT 답을 잃은 편집.** `PATCH .../ops`와 WS `patch`는 COMMIT 의 답을 잃으면(위 "에러 형식"의 503 판) 새 연결로 그 편집의
+revision 이 보이는지 **1초 안에** 본다. 보이면 커밋된 것이라 **원래 성공 응답**(`seq` · `revisionId` · `inverse`)을 내고, 그
+revision 이 아직 페이지의 머리(`head_seq`)면 **방송한다** — 머리가 더 나아갔으면 방송하지 않는다(룸은 뒤의 `seq`에서 이것을
+놓친 줄 이미 안다. 늦게 온 옛 번호를 받는 쪽이 «다음 번호»로 얹으면 뒤 revision 이 빠진 화면이 최신이 된다). 안 보이거나
+확인하지 못했거나 1초를 넘기면 503 «모름» 그대로다 — «안 보인다»는 «커밋 안 됨»이 아니다(끊긴 연결의 COMMIT 이 아직 돌 수
+있다). 다시 보낸 것을 알아보는 재생 키를 두지 않은 것은 편집을 내는 쪽이 다시 보내지 않기 때문이다 — 웹은 «모름»이면 페이지를
+다시 읽고, MCP 는 재시도하지 않는다. 근거는 `src/services/lost-commit.ts`, 잰 값은 `test/edit-lost-commit.test.ts`.
 
 **요청은 직렬화한다.** in-flight 요청은 항상 하나여야 한다 — 앞 요청의 `seq`를
 받아야 다음 `baseSeq`가 정해지기 때문이다. 어기면 두 번째 요청이 409를 받는다.

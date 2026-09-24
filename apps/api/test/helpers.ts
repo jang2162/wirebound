@@ -7,6 +7,7 @@ import { DEFAULT_DB_TIME_LIMITS, createDb, createPool, type DbTimeLimits } from 
 import { seedUser } from '../src/db/seed-user'
 import type { DbHandle } from '../src/db/tx'
 import type { ProjectRole } from '../src/db/types'
+import { startFaultProxy, type FaultProxy } from './pg-fault-proxy'
 import { resolveTestDatabaseUrlFrom } from './test-database-url'
 
 /**
@@ -234,6 +235,30 @@ export async function withRealApi(
     await fn({ app, db, port: address.port })
   } finally {
     await app.close()
+  }
+}
+
+export interface ProxiedRealApi extends RealApiContext {
+  proxy: FaultProxy
+}
+
+/**
+ * `withRealApi`와 같되 앱을 **TCP 프록시(`pg-fault-proxy.ts`) 뒤의 풀** 위에 세운다 — 케이스가 DB 연결을 원하는 순간에
+ * 끊거나(COMMIT 답 유실 등) 늦춘다. 포트를 열므로 WS 가 붙는다. 쓰는 것은 진짜로 커밋된다 — 청소는 `withRealApi`처럼 호출자가 한다.
+ */
+export async function withProxiedRealApi(fn: (ctx: ProxiedRealApi) => Promise<void>): Promise<void> {
+  const proxy = await startFaultProxy(TEST_DATABASE_URL)
+  const db = createDb(createPool(proxy.url, () => undefined))
+  const app = await buildApp({ db, config: testConfig() })
+  await app.listen({ port: 0, host: '127.0.0.1' })
+  const address = app.server.address()
+  if (address === null || typeof address === 'string') throw new Error('포트를 열지 못했습니다')
+  try {
+    await fn({ app, db, port: address.port, proxy })
+  } finally {
+    await app.close()
+    await db.destroy()
+    await proxy.close()
   }
 }
 

@@ -13,13 +13,10 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
-import { buildApp } from '../src/app'
-import { createDb, createPool } from '../src/db/client'
 import type { ServerFrame } from '../src/ws/protocol'
 import { lockPageForEdit } from '../src/repos/pages'
 import { withTransaction } from '../src/db/tx'
 import {
-  TEST_DATABASE_URL,
   addMember,
   getTestDb,
   createMenuNode,
@@ -27,32 +24,10 @@ import {
   createProject,
   resetRealData,
   signup,
-  testConfig,
-  type RealApiContext,
+  withProxiedRealApi,
+  type ProxiedRealApi,
 } from './helpers'
-import { startFaultProxy, type FaultProxy } from './pg-fault-proxy'
 import { joinRoom } from './ws-client'
-
-interface ProxiedRealApi extends RealApiContext {
-  proxy: FaultProxy
-}
-
-/** 앱을 TCP 프록시 뒤의 풀 위에 세우고 **포트를 연다**(WS 가 붙는다). 쓰는 것은 진짜로 커밋된다 — 끝나면 지운다. */
-async function withProxiedRealApi(fn: (ctx: ProxiedRealApi) => Promise<void>): Promise<void> {
-  const proxy = await startFaultProxy(TEST_DATABASE_URL)
-  const db = createDb(createPool(proxy.url, () => undefined))
-  const app = await buildApp({ db, config: testConfig() })
-  await app.listen({ port: 0, host: '127.0.0.1' })
-  const address = app.server.address()
-  if (address === null || typeof address === 'string') throw new Error('포트를 열지 못했습니다')
-  try {
-    await fn({ app, db, port: address.port, proxy })
-  } finally {
-    await app.close()
-    await db.destroy()
-    await proxy.close()
-  }
-}
 
 afterEach(async () => {
   await resetRealData()

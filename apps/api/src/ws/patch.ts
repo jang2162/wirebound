@@ -32,11 +32,11 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { recheckAtCommit } from '../auth/roles'
-import { withTransaction } from '../db/tx'
 import { ApiError } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
+import { runEditTransaction } from '../services/lost-commit'
 import { notifyPageChanged } from './notify'
 import { MIN_ROLE_FOR_FRAME, type ClientFrame, type ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
@@ -72,9 +72,10 @@ export async function handlePatchFrame(
   connection: RoomConnection,
   frame: PatchFrame,
 ): Promise<ServerFrame> {
-  let outcome
+  let settled
   try {
-    outcome = await withTransaction(app.db, async (trx) => {
+    // **COMMIT 답을 잃으면 그 자리에서 확인한다** — REST 와 같은 함수다(`services/lost-commit.ts`).
+    settled = await runEditTransaction(app.db, frame.pageId, async (trx) => {
       // **설계서 「정방향 흐름」의 순서다** — 권한 확인(`ws/routes.ts`)이 이미 지났고, 적용 전에 잠금을 본다. **판정은 이 트랜잭션 안에서
       // 페이지 행을 잡고 한다** — 커밋까지 그 행을 쥐므로 판정 뒤 커밋 전에 겹치는 잠금이 서지 못한다(`lock/check.ts`의
       // «판정은 페이지 행 안에서»). 소유자는 **사람**이므로 같은 사람의 다른 탭이 잡은 것에는 막히지 않는다.
@@ -123,11 +124,15 @@ export async function handlePatchFrame(
     throw error
   }
 
+  const outcome = settled.outcome
   if (!outcome.ok) {
     return patchErrorFrame(connection.projectId, frame, editOutcomeToApiError(outcome, frame.baseSeq))
   }
+  if (settled.confirmedAfterLoss) {
+    app.log.warn({ pageId: frame.pageId, seq: outcome.seq, broadcast: settled.broadcast }, 'COMMIT 답을 잃었지만 새 연결로 커밋을 확인했다')
+  }
 
-  notifyPageChanged(app, {
+  if (settled.broadcast) notifyPageChanged(app, {
     projectId: connection.projectId,
     pageId: frame.pageId,
     seq: outcome.seq,

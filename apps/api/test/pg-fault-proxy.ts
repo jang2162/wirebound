@@ -20,6 +20,11 @@ export interface FaultProxy {
   /** `fragment` 를 담은 질의를 **Postgres 에 넘기지 않고** 그 연결을 끊는다 — 그 질의는 서버에 안 닿았다. */
   dropOnQuery(fragment: string): void
   /**
+   * `fragment` 를 담은 질의를 **`ms` 뒤에** Postgres 에 넘긴다 — 그 질의의 스냅숏이 그만큼 늦게 잡힌다. 위 무장들과 따로
+   * 선다(함께 걸 수 있다). 한 번 쏘면 풀리고 `fired`에는 세지 않는다.
+   */
+  delayQuery(fragment: string, ms: number): void
+  /**
    * `fragment` 를 담은 질의 **대신 잘못된 메시지**(형식 `z`)를 Postgres 에 보낸다 — 서버가 **진짜** `FATAL 08P01`
    * («invalid frontend message type 122»)로 답하고 연결을 닫는다 — `08` 부류를 서버에서 내게 하는 길이 이것뿐이다.
    */
@@ -97,6 +102,7 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
   let arm: Arm = null
   let fired = false
   let holdMs = 0
+  let delay: { fragment: string; ms: number } | null = null
   const startup: StartupPolicy = { reject: new Set(), drop: new Set() }
   const sockets = new Set<net.Socket>()
 
@@ -159,6 +165,14 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
         up.write(INVALID_MESSAGE)
         return
       }
+      if (delay !== null && text.includes(delay.fragment)) {
+        const { ms } = delay
+        delay = null
+        setTimeout(() => {
+          if (!up.destroyed) up.write(chunk)
+        }, ms)
+        return
+      }
       if (arm?.kind === 'commit-reply') {
         if (text.includes(arm.fragment)) sawFragment = true
         if (sawFragment && chunk[0] === QUERY && text.slice(5).startsWith('commit')) {
@@ -203,6 +217,9 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     },
     dropOnQuery: (fragment) => {
       arm = { kind: 'query', fragment: fragment.toLowerCase() }
+    },
+    delayQuery: (fragment, ms) => {
+      delay = { fragment: fragment.toLowerCase(), ms }
     },
     corruptQuery: (fragment) => {
       arm = { kind: 'corrupt', fragment: fragment.toLowerCase() }
