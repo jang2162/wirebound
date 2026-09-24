@@ -14,7 +14,8 @@
  * 남아 있지 않은가.**
  *
  * **안 잰다:** 스키마(요소가 그 자리에 올 수 있는가) · 네임스페이스 선언 · DTD.
- * 그것을 재는 것은 **받는 쪽**이고, 이 저장소의 스모크가 그 자리다(보고서의 스모크 절).
+ * 그것을 재는 것은 **받는 쪽**이고, 이 저장소의 스모크(`build-test/dist-pptx.test.ts`)가
+ * 그 자리다.
  *
  * **곧 이 자는 *"우리가 만든 규칙에 우리가 맞춘 것"*의 아래쪽 절반이다.** 여기를 지나도
  * PowerPoint가 연다는 뜻이 아니다 — 여기서 죽으면 **확실히 안 열린다**는 뜻이다.
@@ -104,7 +105,7 @@ export function parseXml(source: string): XmlElement {
       if (character === '&') {
         const match = ENTITY.exec(text.slice(index))
         if (match === null) onFail('실체 참조가 아닌 & 가 텍스트에 있습니다')
-        // **되돌린 글자를 담는다.** 앞 판은 건너뛰기만 해서 `&amp;`가 텍스트에서 사라졌고,
+        // **되돌린 글자를 담는다.** 건너뛰기만 하면 `&amp;`가 텍스트에서 사라지고,
         // 그러면 이스케이프를 재는 케이스가 **원문을 못 보고** 통과한다.
         const owner = stack[stack.length - 1]
         if (owner !== undefined) owner.text += decode(match![0])

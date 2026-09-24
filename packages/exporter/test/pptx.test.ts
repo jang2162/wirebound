@@ -1,8 +1,8 @@
 /**
- * **`exportPptx`가 실은 것**(T3·T4 · D2·D3·D4).
+ * **`exportPptx`가 실은 것.**
  *
  * DOM 없이 돈다 — 슬라이드는 XML이고 `test-support`의 파서가 그것을 읽는다. 번들과 값을
- * 견주는 것은 `pptx-parity.test.ts`이고, 소스를 세는 것은 `duplicate-census.test.ts`다.
+ * 견주는 것은 `pptx-parity.test.tsx`이고, 소스를 세는 것은 `duplicate-census.test.ts`다.
  */
 import { findAll, parseXml, textOf, type XmlElement } from '@wirebound/exporter/test-support'
 import { describeNode, type PageDocument, type WbNode } from '@wirebound/schema'
@@ -55,7 +55,10 @@ const PAGES: PptxPage[] = [
   },
 ]
 
-/** 1×1 투명 PNG. **진짜 바이트다** — 자리만 만들고 안 재면 P10-2가 계약을 못 믿는다. */
+/**
+ * 1×1 투명 PNG. **진짜 바이트다** — 자리만 만들고 안 재면 이미지를 넣는 쪽(`apps/api`)이
+ * 계약을 못 믿는다.
+ */
 const PNG_1X1 = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
   0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
@@ -88,7 +91,7 @@ function texts(root: XmlElement): string[] {
 
 /* ------------------------------------------------------------------ 케이스 */
 
-describe('exportPptx — 페이지마다 슬라이드 한 장 (T3 · D3)', () => {
+describe('exportPptx — 페이지마다 슬라이드 한 장', () => {
   it('페이지가 없으면 던진다', () => {
     expect(() => exportPptx({ pages: [] })).toThrow('페이지가 없습니다')
   })
@@ -111,7 +114,7 @@ describe('exportPptx — 페이지마다 슬라이드 한 장 (T3 · D3)', () =>
     expect(texts(slide(parts, 1))).toContain('관리자 · 회원 · 목록')
   })
 
-  it('오른쪽 칸의 절 제목이 §9 탭 이름과 같다', () => {
+  it('오른쪽 칸의 절 제목이 설계서 「설계서 화면 구조」의 탭 이름과 같다', () => {
     const { parts } = exportPptx({ pages: PAGES })
     const 실린것 = texts(slide(parts, 1))
     expect(실린것).toContain(panelLabel('comments'))
@@ -125,7 +128,7 @@ describe('exportPptx — 페이지마다 슬라이드 한 장 (T3 · D3)', () =>
     expect(실린것).toContain('장 · 2026-08-17')
   })
 
-  it('상호작용 문장을 싣는다 — §8.2', () => {
+  it('상호작용 문장을 싣는다 — 설계서 「자동 문장화」', () => {
     const { parts } = exportPptx({ pages: PAGES })
     expect(texts(slide(parts, 1)).some((text) => text.includes('클릭 시'))).toBe(true)
   })
@@ -152,7 +155,7 @@ describe('exportPptx — 페이지마다 슬라이드 한 장 (T3 · D3)', () =>
   })
 })
 
-describe('노트가 전문을 받는다 (D3)', () => {
+describe('노트가 전문을 받는다', () => {
   it('슬라이드마다 노트가 하나씩 있다', () => {
     const { parts } = exportPptx({ pages: PAGES })
     expect(parts.filter((part) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(part.path))).toHaveLength(
@@ -185,7 +188,7 @@ describe('노트가 전문을 받는다 (D3)', () => {
   })
 })
 
-describe('이미지 자리 (T4 · D2)', () => {
+describe('이미지 자리', () => {
   it('이미지가 없으면 슬라이드가 그렇다고 말한다', () => {
     const { parts } = exportPptx({ pages: PAGES })
     expect(texts(slide(parts, 1))).toContain(NO_SCREEN)
@@ -257,12 +260,9 @@ describe('이미지 자리 (T4 · D2)', () => {
   /**
    * **못 읽은 화소가 오면 비율을 버리고 자리를 그대로 쓴다 — 곧 이미지가 늘어난다.**
    *
-   * P10-1 리뷰 §6.1이 이 갈래를 지목하고 *"그 갈래를 재는 케이스가 없다"*로 이월에
-   * 남겼다(§4.2). 여기가 그 자리다.
-   *
    * **이것은 옳은 동작을 재는 것이 아니라 값을 못 읽었을 때 무슨 일이 나는지를 고정하는
    * 것이다** — 늘어난 목업을 보고 만드는 사람이 잘못된 비율을 만들기 때문에, 이 값을 이
-   * 함수에 넣지 않는 것이 부르는 쪽의 몫이다(P10-2가 `apps/api` 쪽에서 그것을 지킨다).
+   * 함수에 넣지 않는 것이 부르는 쪽의 몫이다(`apps/api` 쪽이 그것을 지킨다).
    */
   it.each([
     ['0', 0, 0],
@@ -282,11 +282,12 @@ describe('이미지 자리 (T4 · D2)', () => {
   })
 })
 
-describe('여러 줄 코멘트 (리뷰 발견 3)', () => {
+describe('여러 줄 코멘트', () => {
   /**
-   * **날 줄바꿈을 `a:t` 에 남기면 PowerPoint 가 공백도 없이 붙여 버린다** — 리뷰어가
-   * 실측했다(귀속: 리뷰 §3): `첫째 줄둘째 줄셋째 줄`. HTML 번들은 같은 글자를 `<p>` 안에
-   * 넣어 브라우저가 공백으로 접으므로 **두 산출물이 같은 코멘트를 다르게 말했다.**
+   * **날 줄바꿈을 `a:t` 에 남기면 PowerPoint 가 공백도 없이 붙여 버린다** —
+   * `첫째 줄둘째 줄셋째 줄`(PowerPoint 로 다시 재는 법은 `build-test/dist-pptx.test.ts`
+   * 머리말). HTML 번들은 같은 글자를 `<p>` 안에 넣어 브라우저가 공백으로 접으므로 **두
+   * 산출물이 같은 코멘트를 다르게 말하게 된다.**
    */
   const 여러줄 = exportPptx({
     pages: [
@@ -374,7 +375,7 @@ describe('여러 줄 코멘트 (리뷰 발견 3)', () => {
   })
 })
 
-describe('XML 로 못 담는 글자 (D5)', () => {
+describe('XML 로 못 담는 글자', () => {
   it('코멘트에 든 제어 문자를 걷는다 — 남기면 pptx 가 통째로 안 열린다', () => {
     const { parts } = exportPptx({
       pages: [

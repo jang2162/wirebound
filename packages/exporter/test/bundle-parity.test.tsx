@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 /**
- * **번들의 목업이 `exportPage`가 낸 문서와 정확히 같은가**(T4 · D8).
+ * **번들의 목업이 `exportPage`가 낸 문서와 정확히 같은가.**
  *
  * ---
  *
  * # 왜 이 견주기가 *"화면과 같다"*를 잇는가
  *
- * 이 슬라이스는 `apps/web`을 건드리지 않으므로 캔버스와 직접 견줄 수 없다. 대신 **사슬**을
+ * `packages/exporter`는 `apps/web`의 캔버스를 볼 수 없으므로 직접 견줄 수 없다. 대신 **사슬**을
  * 잇는다:
  *
  * | 어디 | 무엇을 견주나 |
@@ -22,11 +22,12 @@
  *
  * `@wirebound/exporter/test-support`의 `describeTree`가 갈림 셋(㉠ `style`의 적는 꼴 ·
  * ㉡ 텍스트 노드 경계 · ㉢ 선언 없는 `style`)만 접는다. 두 벌을 두면 *"같다"*의 뜻이
- * 둘이 된다(P7-3 이월 §8.2 규칙 1).
+ * 둘이 된다.
  *
  * # 테마를 하나만 고르지 않는다 — `admin`은 특히
  *
- * `admin`은 카탈로그의 첫 구조와 다른 것을 **하나도 안 고른다**(P8-1 보고서 §7.2의 실측).
+ * `admin`은 카탈로그의 첫 구조와 다른 것을 **하나도 안 고른다**(아래 *"테마가 실제로 구조를
+ * 가르는지부터 본다"*가 값으로 든다).
  * 그 테마로만 재면 구조 배선이 끊겨도 안 죽는다. 시스템 테마 **전부**와 *"테마 없음"*을
  * 돌리고, 테마가 실제로 구조를 갈랐는지도 함께 잰다.
  */
@@ -66,7 +67,7 @@ function parse(html: string): globalThis.Document {
   return new DOMParser().parseFromString(html, 'text/html')
 }
 
-/** `exportPage`가 그린 문서 뿌리. `body`의 첫 원소가 곧 그것이다(P8-1의 계약). */
+/** `exportPage`가 그린 문서 뿌리. `body`의 첫 원소가 곧 그것이다(`exportPage`의 계약). */
 function pageRoot(page: PageDocument, theme: ResolvedTheme | null): Element {
   const { html } = exportPage({ document: page, title: '견주기', theme })
   const root = parse(html).body.firstElementChild
@@ -125,11 +126,10 @@ describe('번들의 목업이 exportPage의 문서와 같다', () => {
 /**
  * **번들의 가장 큰 약속** — 페이지 파일 하나를 열면 **그 페이지가** 그려져 있다.
  *
- * **이 자리가 비어 있었다.** 리뷰가 실측으로 짚었다: 셸에 넘기는 트리를
- * `rendered[index]`에서 `rendered[0]`으로 바꿔 **모든 페이지가 첫 페이지의 목업을 그리게
- * 해도** unit·web이 전부 통과했다(다시 심어 확인했다 — 사망 0). 원인은 그려진 문서를 재는
- * 자리 셋이 **전부 페이지 0을 보고 있었기** 때문이다: 위 견주기는 페이지 하나짜리 번들을
- * 만들고, `bundle.test.tsx`가 보던 둘(`index.html`·첫 페이지)도 같은 문서였다.
+ * **페이지 0만 보는 자로는 이것이 안 재진다.** 셸에 넘기는 트리를 `rendered[index]`에서
+ * `rendered[0]`으로 바꿔 **모든 페이지가 첫 페이지의 목업을 그리게 해도**, 페이지 하나짜리
+ * 번들(위 견주기)이나 `index.html`·첫 페이지만 보는 자리는 전부 통과한다 — 셋 다 같은
+ * 문서이기 때문이다.
  *
  * **세는 단위를 못박는다:** 페이지 파일의 **목록**을 자리까지 견주고(빠지거나 늘면 죽는다),
  * 그 다음 **자리마다** 그 페이지의 `exportPage`와 견준다.
@@ -157,8 +157,8 @@ describe('페이지가 여럿이어도 페이지마다 자기 문서를 그린�
 
     /**
      * **셋이 서로 다른 그림인지부터 본다.** 같으면 아래 반복이 *"자리마다 제 것"*을 재는
-     * 것이 아니라 **아무거나 그려도 통과하는 검사**가 된다 — 이 파일이 방금 메운 구멍이
-     * 정확히 그 모양이었다.
+     * 것이 아니라 **아무거나 그려도 통과하는 검사**가 된다 — 위 머리말의 구멍이 정확히
+     * 그 모양이다.
      */
     const expected = documents.map((page) => describeTree(pageRoot(page, theme)))
     expect(new Set(expected.map((lines) => lines.join('\n'))).size).toBe(expected.length)
@@ -173,7 +173,7 @@ describe('페이지가 여럿이어도 페이지마다 자기 문서를 그린�
     }
   })
 
-  /** `index.html`은 **첫 페이지**를 담는다(D2). 그것도 자리로 재 둔다. */
+  /** `index.html`은 **첫 페이지**를 담는다. 그것도 자리로 재 둔다. */
   it('index.html은 첫 페이지를 담는다 — 아무 페이지나가 아니다', () => {
     const theme = resolved('portal')
     const documents = MANY.map(([, make]) => make())

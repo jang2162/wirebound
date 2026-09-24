@@ -1,5 +1,5 @@
 /**
- * **D6이 견줄 문서와 테마, 그리고 무엇을 덮었는지 세는 자.**
+ * **견주기가 쓸 문서와 테마, 그리고 무엇을 덮었는지 세는 자.**
  *
  * `dom-compare.ts`와 같은 이유로 여기 산다 — `packages/exporter`의 견주기와 `apps/web`의
  * 캔버스↔번들 견주기가 **같은 문서·같은 테마**를 써야 두 결과를 나란히 읽을 수 있다.
@@ -11,7 +11,7 @@
  * **분모는 카탈로그**(`CATALOG_TYPES`가 선언한 타입·구조·variant)이고, **실제값은 그려진
  * DOM에서 읽는다.** 픽스처를 카탈로그에서 만들어도 census가 공허해지지 않는 이유가 그것이다 —
  * 덮였다고 세려면 렌더러가 실제로 `data-wb-structure`·`data-wb-variant`를 **내야** 하고,
- * §6.11의 그 계약이 깨지면 덮개가 줄어 census가 죽는다.
+ * 설계서 「컴파일」의 그 계약이 깨지면 덮개가 줄어 census가 죽는다.
  */
 import {
   CATALOG_TYPES,
@@ -31,12 +31,13 @@ function id(): string {
 }
 
 /**
- * **카탈로그의 컴포넌트를 넓게 쓰는 문서**(D6: *"문서 하나로 재지 마라"*).
+ * **카탈로그의 컴포넌트를 넓게 쓰는 문서**(*"문서 하나로 재지 마라"*).
  *
- * **`Slot`만 빠져 있고 그것은 강제된 것이다** — §4.4가 `Slot`을 레이아웃의 것으로 두었고
- * `validatePage`가 페이지에 있는 `Slot`을 `error`로 막는다. 그래서 `slotFixture()`가 따로 있다.
+ * **`Slot`만 빠져 있고 그것은 강제된 것이다** — 설계서 「레이아웃」이 `Slot`을 레이아웃의
+ * 것으로 두었고 `validatePage`가 페이지에 있는 `Slot`을 `error`로 막는다. 그래서
+ * `slotFixture()`가 따로 있다.
  *
- * props를 기본값으로 두지 않는 것은 §6.11의 여섯 속성 중 `data-wb-variant`·`data-wb-state`가
+ * props를 기본값으로 두지 않는 것은 「컴파일」의 여섯 속성 중 `data-wb-variant`·`data-wb-state`가
  * **기본 props에서는 안 나오기** 때문이다.
  */
 export function broadFixture(): PageDocument {
@@ -117,8 +118,8 @@ export function broadFixture(): PageDocument {
  * `Slot` 하나만 든 문서. **유효한 페이지가 아니다** — `validatePage`가 `slot-count`
  * `error`를 낸다(케이스가 그 문장을 값으로 든다).
  *
- * 그래도 견주는 이유: 렌더 경로는 검증을 지나지 않으므로 이 노드를 그리고, **P8-2가
- * 레이아웃을 번들에 넣을지 판정하는 자리**(P7-3 이월 §5)에서 이것이 첫 손님이 된다.
+ * 그래도 견주는 이유: 렌더 경로는 검증을 지나지 않으므로 이 노드를 그리고, **레이아웃을
+ * 번들에 넣게 되면**(지금 `exportPage`는 페이지 문서만 받는다) 이것이 첫 손님이 된다.
  */
 export function slotFixture(): PageDocument {
   nextId = 900
@@ -129,7 +130,7 @@ export function slotFixture(): PageDocument {
 }
 
 /**
- * `data-wb-variant`에 실릴 값을 노드에 어떻게 넣는지는 **컴포넌트마다 다르다**(P4a-1의
+ * `data-wb-variant`에 실릴 값을 노드에 어떻게 넣는지는 **컴포넌트마다 다르다**(카탈로그의
  * `variantFrom`). 그 갈래를 카탈로그에서 읽어 노드를 만든다.
  *
  * - `variantFrom`이 있으면 그 **prop**에 값을 넣는다(`Text.role`·`Divider.direction`·
@@ -147,7 +148,7 @@ function variantNode(def: ComponentDef, variant: string): WbNode {
  *
  * 카탈로그에서 만든다. **그래도 census가 공허하지 않다** — 덮였다고 세는 것은 이 문서가
  * 아니라 **그려진 DOM의 `data-wb-variant`**이고, 렌더러가 그 속성을 안 내면 덮개가 줄어
- * census가 죽는다(§6.11의 계약이 바로 그 자리다).
+ * census가 죽는다(「컴파일」의 계약이 바로 그 자리다).
  *
  * `children: 'none'`인 컴포넌트도 있으므로 **자식을 달지 않는다** — 달면
  * `children-not-allowed` `error`가 난다.
@@ -197,11 +198,12 @@ export interface CoverageThemeDocument {
 /**
  * **카탈로그가 선언한 구조를 전부 고르게 하는 테마 묶음.**
  *
- * 시스템 테마 다섯이 고르는 것만으로는 구조가 다 안 덮인다(실측: `Section:fullBleed` ·
- * `Tabs:vertical` · `SearchForm:stacked` · `Media:video` · `Media:chart`가 남았다). 구조를
+ * 시스템 테마 다섯이 고르는 것만으로는 구조가 다 안 덮인다(`Section:fullBleed` ·
+ * `Tabs:vertical` · `SearchForm:stacked` · `Media:video` · `Media:chart`가 남는다 —
+ * `test/parity.test.tsx`의 덮개 census에서 이 묶음을 빼고 돌리면 보인다). 구조를
  * 고르는 것은 **테마**이므로(`themeStructures`), 남은 것을 덮으려면 그것을 고르는 테마가
  * 있어야 한다 — `exportPage`에 구조를 직접 넘기는 인자를 만들지 않는 이유는 그러면 구조
- * 선택의 자리가 둘이 되기 때문이다(D6).
+ * 선택의 자리가 둘이 되기 때문이다.
  *
  * 테마 하나가 타입마다 구조 하나를 고르므로 **가장 많은 구조를 선언한 타입의 수만큼** 테마가
  * 필요하다. `i`번째 테마는 각 타입의 `structures[i]`를 고르고, 그 타입에 그만큼이 없으면
@@ -252,7 +254,7 @@ export function typesIn(document_: PageDocument): string[] {
 /**
  * 그려진 트리가 실제로 낸 `타입:구조`·`타입:variant`.
  *
- * **DOM에서 읽는 것이 요점이다** — 문서에 적힌 것이 아니라 §6.11의 속성으로 **나온 것**을
+ * **DOM에서 읽는 것이 요점이다** — 문서에 적힌 것이 아니라 「컴파일」의 속성으로 **나온 것**을
  * 센다. 렌더러가 그 속성을 안 내면 여기서 줄어든다.
  */
 export function renderedPairs(root: Element): { structures: string[]; variants: string[] } {

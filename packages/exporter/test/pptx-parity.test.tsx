@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * **번들과 PPTX가 같은 설계서를 같게 말하는가**(D4).
+ * **번들과 PPTX가 같은 설계서를 같게 말하는가.**
  *
- * §8.2가 *"우측 패널, HTML 번들, PPTX 모두 이 문장을 싣는다"*고 적었다. 두 산출물이 같은
+ * 설계서 「자동 문장화」가 *"우측 패널, HTML 번들, PPTX 모두 이 문장을 싣는다"*고 적었다. 두 산출물이 같은
  * 페이지에서 **다른 글자**를 내면 그 문장이 거짓이 되고, 설계서를 나란히 받은 사람이 어느
  * 쪽을 믿을지 모른다.
  *
@@ -51,7 +51,7 @@ function documentOf(children: WbNode[]): PageDocument {
 
 /**
  * **깨진 자식을 섞는다.** 문장화가 던지는 원인이고, 두 산출물이 그것을 다르게 견디면
- * 한쪽만 문장을 잃는다 — `sentences.ts`의 머리말이 그 사고를 적어 두었다.
+ * 한쪽만 문장을 잃는다 — `sentences.ts`의 머리말이 그 고장을 적는다.
  */
 const BROKEN = documentOf([BUTTON, { id: 'n_000000000009', type: 'Box', children: [null as never] }])
 
@@ -64,7 +64,7 @@ const PAGES = [
     comments: [
       { nodeId: 'n_000000000002', body: '검색 조건은 AND & OR', authorName: '장', createdAt: '2026-08-17' },
       { nodeId: 'n_000000000404', body: '<사라진> 노드에 달린 코멘트' },
-      // **여러 줄 코멘트**(리뷰 발견 3). 설계서 코멘트는 여러 줄인 것이 정상이다.
+      // **여러 줄 코멘트.** 설계서 코멘트는 여러 줄인 것이 정상이다.
       { nodeId: 'n_000000000003', body: '첫째 줄\n둘째 줄' },
     ],
   },
@@ -108,7 +108,7 @@ function noteTexts(index: number): string[] {
   return findAll(parseXml(notes.content as string), 'a:t').map(textOf)
 }
 
-describe('번들과 PPTX 가 같은 글자를 싣는다 (D4)', () => {
+describe('번들과 PPTX 가 같은 글자를 싣는다', () => {
   it('자가 실제로 읽는다 — 카나리아', () => {
     // 이 둘이 비면 아래 검사가 전부 공허하게 통과한다.
     expect(bundleTexts(0, 'comments').length).toBeGreaterThan(2)
@@ -126,7 +126,7 @@ describe('번들과 PPTX 가 같은 글자를 싣는다 (D4)', () => {
       const 슬라이드 = slideTexts(index)
       for (const text of bundleTexts(index, 'comments')) {
         // **줄마다 본다.** 번들은 여러 줄을 `<p>` 하나에 담고 pptx 는 문단 여럿으로 담는다 —
-        // 담는 모양이 다른 것이 옳고(리뷰 §3), 같아야 하는 것은 **줄의 글자**다.
+        // 담는 모양이 다른 것이 옳고, 같아야 하는 것은 **줄의 글자**다.
         for (const segment of lines(text)) {
           expect(슬라이드, `번들의 "${segment}"`).toContain(segment)
         }
@@ -154,7 +154,7 @@ describe('번들과 PPTX 가 같은 글자를 싣는다 (D4)', () => {
 
   /**
    * **깨진 자식을 둘이 같게 견딘다.** 한쪽이 던지거나 목록을 통째로 비우면 여기가 죽는다 —
-   * 그 갈림이 이 저장소가 여러 번 만난 부류다(`sentences.ts`의 머리말).
+   * 그 갈림은 `sentences.ts`의 머리말이 적는 부류다.
    */
   it('깨진 자식이 있어도 멀쩡한 규칙의 문장이 둘 다 산다', () => {
     const 문장 = bundleTexts(2, 'interactions')
@@ -163,7 +163,7 @@ describe('번들과 PPTX 가 같은 글자를 싣는다 (D4)', () => {
   })
 
   /**
-   * **앞 판의 자가 이것을 못 봤다**(리뷰 §3). 양쪽 글자에 똑같이 `\n` 이 들어 있으면
+   * **담긴 글자만 견주는 자는 이것을 못 본다.** 양쪽 글자에 똑같이 `\n` 이 들어 있으면
    * *"담긴 글자"* 는 같은데 **그린 결과가 갈린다** — 브라우저는 `\n` 을 공백으로 접고
    * PowerPoint 는 **공백도 없이 붙인다.** 그래서 여기서는 담긴 글자가 아니라
    * **그려질 모양**을 견준다: pptx 쪽에 날 줄바꿈이 없어야 하고, 문단을 공백으로 이으면

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * **D6 — *"같다"*를 실측한다. 이 슬라이스의 핵심이다.**
+ * **화면과 번들이 *"같다"*를 실측한다.** 이 파일이 exporter의 핵심 자다.
  *
- * §11.3이 적은 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*는 **설계의 주장**이다. 여기서
+ * 설계서 「HTML 정적 번들」이 적은 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*는 **설계의 주장**이다. 여기서
  * 잰다: 같은 문서 · 같은 테마 · 같은 카탈로그로 두 경로를 돌려 DOM을 견준다.
  *
  * | 경로 | 무엇 |
@@ -19,26 +19,29 @@
  *
  * 1. **자리** — 뿌리에서부터의 자식 인덱스 사슬(`0.2.1`). **순서가 여기 들어간다.**
  * 2. **태그 이름**(소문자). 원소가 아니면 `#text`다.
- * 3. **속성 전부** — 이름과 값을 짝으로, **이름으로 정렬해서.** §6.11의 여섯 속성이
+ * 3. **속성 전부** — 이름과 값을 짝으로, **이름으로 정렬해서.** 「컴파일」의 여섯 속성이
  *    여기 포함된다(아래 census가 여섯이 실제로 나오는지 따로 센다). 정렬하는 것은
  *    **속성의 출력 순서까지 계약으로 삼지 않기 위해서다** — HTML에서 속성 순서는 뜻이
  *    없고, SSR과 클라이언트가 그 순서를 다르게 낼 이유가 있다.
  * 4. **텍스트** — **이어 붙은 텍스트 노드는 한 덩이로 본다.**
  *
- * **정규화가 둘 있고 둘 다 재서 넣었다.** 그냥 넣은 것이 아니라 **두 경로가 실제로
- * 갈렸고, 갈린 원인을 판정한 결과**다. `style` 속성의 적는 꼴(`normalizeStyle`)과 위 4의
- * 텍스트 노드 경계(`childItems`)이고, 각각 아래 *"갈렸던 자리"* 절이 원문을 값으로 든다.
+ * **정규화가 셋 있고 셋 다 재서 넣었다.** 그냥 넣은 것이 아니라 **두 경로가 실제로
+ * 갈렸고, 갈린 원인을 판정한 결과**다. `style` 속성의 적는 꼴(`normalizeStyle`) · 위 4의
+ * 텍스트 노드 경계(`childItems`) · 선언 없는 `style` 속성(`attributeLine`)이고, 각각 아래
+ * *"갈렸던 자리"* 절(㉠·㉡·㉢)이 원문을 값으로 든다.
  * **조용히 맞추지 않았다는 근거가 그 절이다** — 정규화를 지우면 본론이 죽고, 정규화가
  * 지나치면 구분력 케이스가 죽는다.
  *
- * 보지 않는 것: 계산된 스타일(시트를 안 걸었다) · 이벤트 핸들러(상호작용은 P8-3이다).
+ * 보지 않는 것: 계산된 스타일(시트를 안 걸었다) · 이벤트 핸들러(상호작용 런타임은
+ * `runtime-bundle.test.ts`가 잰다).
  *
  * **`<head>`는 견주지 않는다 — 화면 쪽에 견줄 것이 없다.** 그래도 파서가 그것을 무엇으로
  * 읽는지는 여기서 잰다(아래 *"번들의 머리"* 절). 문자열 단언은 `page.test.ts`가 들고,
  * 그것만으로는 *"브라우저가 이대로 읽는다"*가 안 되기 때문이다.
  *
  * **여기의 화면 경로는 `renderDocument`를 직접 부른다 — 진짜 캔버스가 아니다.**
- * `packages/exporter`는 `apps/web`을 볼 수 없다(§3.3의 방향이 아니라 앱이라서다).
+ * `packages/exporter`는 `apps/web`을 볼 수 없다(설계서 「각 패키지의 책임과 의존」의 방향이
+ * 아니라 앱이라서다).
  * **캔버스에 묶는 견주기는 `apps/web/test/canvas/bundle-parity.test.tsx`가 든다** —
  * 거기서만 진짜 `<App/>`을 렌더할 수 있고, **견주는 자와 픽스처는 이 파일과 같은 것**
  * (`@wirebound/exporter/test-support`)을 쓴다. 이 파일이 재는 것은 *"exporter가 렌더
@@ -48,7 +51,7 @@
  * ## 이 파일이 무엇을 재고 무엇을 못 재는가
  *
  * **두 경로가 같은 `renderDocument`·같은 `themeStructures`를 부른다.** 그래서 그 둘을
- * 망가뜨리는 변이는 **양쪽을 함께 움직여** 여기서 안 죽는다(P7-3 이월 §9의 M14 쪽).
+ * 망가뜨리는 변이는 **양쪽을 함께 움직여** 여기서 안 죽는다.
  * 그것이 결함이 아니라 **이 파일이 재려는 것 자체**다 — *"한 벌인가"*를 재는 것이지
  * *"렌더러가 옳은가"*를 재는 것이 아니고, 렌더러의 옳음은 `packages/renderer/test`가 든다.
  *
@@ -96,7 +99,7 @@ import {
  *
  * 아래 `boards()`가 `it.each`의 인자라 **수집 시점**에 돈다 — 그때 테마를 해석하는데,
  * 카탈로그가 없으면 `checkThemeComponents`가 모든 타입을 `unknown-component`로 보고
- * 테마가 통째로 이슈가 된다(실측: 그렇게 죽었다). `beforeAll`은 수집이 끝난 뒤에 돈다.
+ * 테마가 통째로 이슈가 된다. `beforeAll`은 수집이 끝난 뒤에 돈다.
  */
 installCatalog()
 installStructures()
@@ -173,7 +176,7 @@ describe('견주는 자가 실제로 갈라낸다', () => {
   /**
    * **알려진 차이 아홉.** 하나라도 못 갈라내면 이 파일 전체가 그만큼 공허해진다.
    * 분모를 손으로 드는 것이 요점이다 — `describeElement`에서 끌어오면 그 함수가 무엇을
-   * 빠뜨려도 기대값이 함께 줄어든다(P7-3 이월 §9).
+   * 빠뜨려도 기대값이 함께 줄어든다.
    */
   const DIFFERENT: [name: string, html: string][] = [
     ['속성 값이 다르다', '<div data-wb-id="b" data-wb-component="List"><span>가</span><b>나</b></div>'],
@@ -332,9 +335,9 @@ describe('갈렸던 자리 ㉢ — 선언 없는 style 속성', () => {
 
 describe('갈렸던 자리 ㉡ — 텍스트 노드 경계', () => {
   /**
-   * **다섯 테마 중 `portal` 하나에서만 났다.** 그 테마만 `EntryForm:sectioned`를 고르고,
-   * 그 구조만 머리글을 자식 둘로 만든다. **문서 하나·테마 하나로 쟀으면 못 봤을 갈림이다**
-   * (D6이 *"넓게 덮어라"*를 적은 이유가 이것이다).
+   * **다섯 테마 중 `portal` 하나에서만 난다.** 그 테마만 `EntryForm:sectioned`를 고르고,
+   * 그 구조만 머리글을 자식 둘로 만든다. **문서 하나·테마 하나로 재면 못 보는 갈림이다**
+   * (*"넓게 덮어라"*의 이유가 이것이다).
    */
   function sectionTitleOf(root: Element): ChildNode[] {
     const found = root.querySelector('[data-wb-part="sectionTitle"]')
@@ -373,7 +376,7 @@ describe('갈렸던 자리 ㉡ — 텍스트 노드 경계', () => {
 
 /* ------------------------------------------------------------------ 번들의 머리 */
 
-describe('번들의 머리를 파서가 무엇으로 읽나 (D7)', () => {
+describe('번들의 머리를 파서가 무엇으로 읽나', () => {
   function parsed(): Document {
     const { html } = exportPage({ document: broadFixture(), title: '회원 <목록>', lang: 'ko' })
     return new DOMParser().parseFromString(html, 'text/html')
@@ -397,7 +400,7 @@ describe('번들의 머리를 파서가 무엇으로 읽나 (D7)', () => {
     expect(parsed().title).toBe('회원 <목록>')
   })
 
-  /** 머리에 셸이 없다(D7) — 스타일도 스크립트도 P8-2·P8-3의 것이다. */
+  /** 머리에 셸이 없다 — 스타일도 스크립트도 번들(`exportBundle`)이 건다. */
   it('머리에 style도 script도 link도 없다', () => {
     const head = parsed().head
     expect(head.querySelectorAll('style, script, link')).toHaveLength(0)
@@ -408,7 +411,7 @@ describe('번들의 머리를 파서가 무엇으로 읽나 (D7)', () => {
 
 /**
  * 픽스처와 테마를 **곱해** 돌린 뒤 그려진 DOM에서 `타입:구조`·`타입:variant`를 모은다.
- * 덮개의 실제값은 **문서가 아니라 DOM**이다 — 렌더러가 §6.11의 속성을 안 내면 여기서 준다.
+ * 덮개의 실제값은 **문서가 아니라 DOM**이다 — 렌더러가 「컴파일」의 속성을 안 내면 여기서 준다.
  */
 function coveredPairs(): { structures: string[]; variants: string[] } {
   const structures = new Set<string>()
@@ -428,7 +431,7 @@ function coveredPairs(): { structures: string[]; variants: string[] } {
   return { structures: [...structures].sort(), variants: [...variants].sort() }
 }
 
-describe('무엇을 덮었나 (D6: 문서 하나로 재지 마라)', () => {
+describe('무엇을 덮었나 (문서 하나로 재지 마라)', () => {
   it('픽스처가 합쳐 카탈로그의 컴포넌트를 전부 쓴다', () => {
     const covered = new Set(Object.values(FIXTURES).flatMap((make) => typesIn(make())))
     expect([...CATALOG_TYPES].filter((type) => !covered.has(type))).toEqual([])
@@ -451,13 +454,13 @@ describe('무엇을 덮었나 (D6: 문서 하나로 재지 마라)', () => {
   /**
    * **카탈로그가 선언한 구조를 전부 그린다.**
    *
-   * 시스템 테마 다섯만으로는 다섯이 남았다(`Section:fullBleed` · `Tabs:vertical` ·
+   * 시스템 테마 다섯만으로는 다섯이 남는다(`Section:fullBleed` · `Tabs:vertical` ·
    * `SearchForm:stacked` · `Media:video` · `Media:chart`). **구조를 고르는 것은 테마이므로**
    * (`themeStructures`) 남은 것을 덮으려면 그것을 고르는 테마가 있어야 한다 —
    * `coverageThemes()`가 카탈로그에서 그 묶음을 만든다.
    *
    * `exportPage`에 구조를 직접 넘기는 인자를 만들지 **않은** 것이 요점이다. 만들면 구조
-   * 선택의 자리가 둘이 되고, 이 슬라이스가 없애려던 갈림을 케이스가 스스로 만든다.
+   * 선택의 자리가 둘이 되고, 이 파일이 재는 화면↔번들의 갈림을 케이스가 스스로 만든다.
    */
   it('카탈로그가 선언한 구조를 전부 그린다', () => {
     expect(coveredPairs().structures).toEqual(declaredStructures())
@@ -486,8 +489,8 @@ describe('무엇을 덮었나 (D6: 문서 하나로 재지 마라)', () => {
   })
 
   /**
-   * **`Slot`을 가른 것이 편의가 아니라 강제라는 근거다.** 이 이슈가 사라지면(§4.4가
-   * 바뀌면) 픽스처를 하나로 합쳐야 하고, 그때 이 케이스가 먼저 죽어 알려 준다.
+   * **`Slot`을 가른 것이 편의가 아니라 강제라는 근거다.** 이 이슈가 사라지면(설계서
+   * 「레이아웃」이 바뀌면) 픽스처를 하나로 합쳐야 하고, 그때 이 케이스가 먼저 죽어 알려 준다.
    */
   it('Slot은 페이지 문서에 둘 수 없다 — 그래서 픽스처가 갈려 있다', () => {
     const errors = validatePage(slotFixture()).filter((issue) => issue.severity === 'error')
@@ -508,7 +511,7 @@ describe('무엇을 덮었나 (D6: 문서 하나로 재지 마라)', () => {
   })
 
   /**
-   * **§6.11의 여섯 속성이 실제로 나오는지 센다**(사실 6 · 재라 #3). 분모는 §6.11의 표에서
+   * **「컴파일」의 여섯 속성이 실제로 나오는지 센다.** 분모는 그 절의 표에서
    * 손으로 옮긴 여섯이다 — 렌더러의 `WbAttrs`에서 끌어오면 그쪽이 줄 때 기대값도 준다.
    */
   const CONTRACT_ATTRS = [
@@ -554,7 +557,7 @@ function boards(): [label: string, document_: PageDocument, theme: ResolvedTheme
   )
 }
 
-describe('화면과 번들이 같은 DOM을 낸다 (D6)', () => {
+describe('화면과 번들이 같은 DOM을 낸다', () => {
   it.each(boards().map((board) => [board[0], board[1], board[2]] as const))(
     '%s',
     (_label, document_, theme) => {
@@ -568,11 +571,11 @@ describe('화면과 번들이 같은 DOM을 낸다 (D6)', () => {
    * **판이 실제로 서로 다른 DOM을 내는지 센다.** 전부 같으면 위 반복이 한 판을 여러 번
    * 재는 것과 다르지 않다.
    *
-   * **기대값을 손으로 든다**(P7-3 이월 §9: 분모를 구현에서 끌어오지 마라). 값의 뜻:
+   * **기대값을 손으로 든다** — 분모를 구현에서 끌어오지 않는다. 값의 뜻:
    *
    * | 픽스처 | 서로 다른 DOM | 왜 |
    * |---|---|---|
-   * | 넓게 · variant | 테마 열하나 중 아홉 | `테마 없음`·`admin`·`덮개 테마 0`이 **같은 DOM으로 겹친다** — 셋 다 카탈로그의 첫 구조를 고른다(`admin`이 카탈로그 기본과 다른 것을 하나도 안 고른다는 실측이 보고서 §7.2에 있다) |
+   * | 넓게 · variant | 테마 열하나 중 아홉 | `테마 없음`·`admin`·`덮개 테마 0`이 **같은 DOM으로 겹친다** — 셋 다 카탈로그의 첫 구조를 고른다(`admin`이 카탈로그 기본과 다른 것을 하나도 안 고른다 — `bundle-parity.test.tsx`의 *"admin만 카탈로그 기본과 같다"*가 값으로 든다) |
    * | Slot | 하나 | `Page`·`Slot`이 선언한 구조가 `default` 하나뿐이라 테마가 고를 것이 없다 |
    * | 폴백 | 하나 | 폴백 상자는 `data-wb-structure`를 달지 않는다 — 렌더러가 구조를 못 고른 자리이기 때문이다 |
    *
@@ -600,7 +603,7 @@ describe('화면과 번들이 같은 DOM을 낸다 (D6)', () => {
 
   /**
    * **카탈로그가 안 설치된 자리에서도 같은가.** 화면은 `catalog-setup`이 import만으로
-   * 설치하고 번들은 `exportPage`가 설치한다(D4) — 출발이 다르므로 여기서 갈릴 수 있다.
+   * 설치하고 번들은 `exportPage`가 설치한다 — 출발이 다르므로 여기서 갈릴 수 있다.
    * 번들을 **먼저** 부르는 순서로 재는 것이 요점이다: `exportPage`가 설치하지 않으면
    * 화면 쪽이 빈 레지스트리를 만나 폴백을 그린다.
    */

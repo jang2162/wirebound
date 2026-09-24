@@ -1,18 +1,19 @@
 /**
- * **§11.3의 `assets/runtime.js`가 될 함수 하나**(D1·D2).
+ * **설계서 「HTML 정적 번들」의 `assets/runtime.js`가 될 함수 하나.**
  *
  * ---
  *
- * ## 이 파일이 브라우저로 나가는 방법 — `toString()`이다 (D3)
+ * ## 이 파일이 브라우저로 나가는 방법 — `toString()`이다
  *
- * `runtime/plan.ts`가 `installRuntime.toString()`을 IIFE로 감싸 문자열로 낸다. 계획서가
- * 든 후보 둘(*"별도 엔트리를 빌드해 문자열로 읽는다"* · *"문자열 상수로 손으로 쓴다"*)의
+ * `runtime/plan.ts`가 `installRuntime.toString()`을 IIFE로 감싸 문자열로 낸다. 다른
+ * 후보 둘(*"별도 엔트리를 빌드해 문자열로 읽는다"* · *"문자열 상수로 손으로 쓴다"*)의
  * 대가를 둘 다 피한다:
  *
  * - **타입 검사가 된다** — 이 파일은 TypeScript이고 `tsconfig.runtime.json`이 검사한다.
- * - **`dist`에 기대지 않는다** — 빌드 산출물을 읽지 않으므로 P8-2 이월 §8이 지목한
- *   *"`dist`가 로드되는지 지키는 케이스"*가 이 슬라이스에서 필요해지지 않는다.
- * - **`fs`를 부르지 않는다** — `exportBundle`의 D1이 그대로 산다.
+ * - **빌드 산출물을 파일로 읽지 않는다.** 단 받는 쪽이 받는 글자는 tsdown이 옮긴 것이라
+ *   vitest가 옮긴 것과 같지 않다 — `build-test/dist-runtime.test.ts`가 나가는 글자를 따로
+ *   잰다. tsdown은 함수 본문 안의 JSDoc 블록 주석까지 그 글자에 싣는다.
+ * - **`fs`를 부르지 않는다** — `exportBundle`의 「파일 시스템을 모른다」가 그대로 산다.
  *
  * **대가는 하나다: 이 함수는 바깥 스코프를 하나도 참조할 수 없다.** `toString()`은 본문만
  * 내고 클로저는 따라가지 않는다. 그래서 여기에는 **import가 없고**(타입 import는 컴파일에서
@@ -21,17 +22,16 @@
  * `test/runtime-bundle.test.ts`가 실제 번들을 jsdom에 올려 눌러 본다. 이름이 갈리면 그
  * 케이스가 죽는다.
  *
- * ## 왜 고전 스크립트인가 (D2 · 재라 #6)
+ * ## 왜 고전 스크립트인가
  *
- * **재서 정했다.** `file://`에서 `<script type="module" src=…>`는 **CORS로 막힌다**
+ * `file://`에서 `<script type="module" src=…>`는 **CORS로 막힌다**
  * (origin이 `null`이라 `chrome`·`data`·`http`·`https` 밖의 스킴은 허용되지 않는다).
  * 인라인 모듈은 도는데 외부 모듈은 안 돈다 — 자산으로 뺀 파일이라 이쪽이 우리 자리다.
- * 값은 보고서 §T1에 있다.
  *
- * **시트를 읽지 않는다**(사실 3). 같은 프로브에서 `styleSheets[i].cssRules`가 두 시트 모두
- * `SecurityError`를 던졌다 — 시트가 붙고 적용되는데도 그렇다. 이 파일에 `cssRules`가 없다.
+ * **시트를 읽지 않는다.** `file://`에서는 `styleSheets[i].cssRules`가 두 시트 모두
+ * `SecurityError`를 던진다 — 시트가 붙고 적용되는데도 그렇다. 이 파일에 `cssRules`가 없다.
  *
- * ## 판정하지 않는다 (D1)
+ * ## 판정하지 않는다
  *
  * **여기에는 `runInteraction`도 카탈로그도 zod도 없다.** 무엇이 일어나는지는 **내보낼 때
  * 이미 다 계산되어** 데이터로 실려 온다(`RuntimePlan`). 이 함수가 하는 것은 셋뿐이다:
@@ -51,9 +51,9 @@ export interface RuntimeWrite {
 }
 
 /**
- * 렌더러 밖에서 처리할 요청(설계 §8.1의 `navigate`·`openModal`).
+ * 렌더러 밖에서 처리할 요청(설계서 「상호작용」 「모델」의 `navigate`·`openModal`).
  *
- * **`href`가 이 슬라이스의 답이다**(D6) — 번들에 그 페이지가 있으면 상대 링크이고, 아니면
+ * **링크는 `href`가 든다** — 번들에 그 페이지가 있으면 상대 링크이고, 아니면
  * `null`이다. `null`을 조용히 넘기지 않는다.
  */
 export interface RuntimeRequest {
@@ -63,7 +63,7 @@ export interface RuntimeRequest {
   /**
    * 링크를 못 만든 이유. **`href`가 `null`이면 반드시 있고, 아니면 `null`이다.**
    *
-   * **문장을 내보내기가 짓는다**(D1). 못 가는 이유가 하나가 아니기 때문이다 — 그 타겟을
+   * **문장을 내보내기가 짓는다.** 못 가는 이유가 하나가 아니기 때문이다 — 그 타겟을
    * 가진 페이지가 **없는** 것과 **둘 이상인** 것은 읽는 사람이 할 일이 다르다. 런타임이
    * 문장을 지으면 그 갈래를 런타임이 알아야 하고, 그러면 판정이 두 벌이 된다.
    */
@@ -88,7 +88,7 @@ export interface RuntimeEvent {
   writes: RuntimeWrite[]
   requests: RuntimeRequest[]
   issues: RuntimeIssue[]
-  /** 반응한 **규칙**의 자리(`interactions` 배열의 인덱스). 문장화와 견주는 열쇠다(D9). */
+  /** 반응한 **규칙**의 자리(`interactions` 배열의 인덱스). 문장화와 견주는 열쇠다. */
   rules: number[]
 }
 
@@ -105,8 +105,8 @@ export interface RuntimePlan {
   /**
    * 계획을 실을 수 없었던 이유. `null`이면 정상이다.
    *
-   * **조용히 비우지 않는다** — 상호작용이 있는데 아무 일도 안 일어나는 화면은 이 저장소가
-   * 여섯 번 만난 부류다. 값이 있으면 런타임이 그것을 띄운 채로 시작한다.
+   * **조용히 비우지 않는다** — 상호작용이 있는데 아무 일도 안 일어나면 읽는 사람은 그것이
+   * 문서 탓인지 도구 탓인지 가를 수 없다. 값이 있으면 런타임이 그것을 띄운 채로 시작한다.
    */
   disabled: string | null
 }
@@ -221,11 +221,11 @@ export function installRuntime(): void {
     for (const line of lines) {
       const nodeId = line.getAttribute('data-wb-marker-for')
       const marker = line.getAttribute('data-wb-marker')
-      // **`marker`가 없으면 번호가 아니다 — 그것이 D4의 기준이고 자리가 여기 하나다.**
-      // 앞 판은 셀렉터에도 `[data-wb-marker]`를 넣어 이 줄과 **둘 다** 걸렀는데, 둘이
-      // 서로의 잉여라 어느 하나를 지워도 아무것도 안 죽었다(리뷰 발견 5). 타입이 이 줄을
-      // 요구하는 것도 아니다 — `textContent`가 `string | null`을 받고 템플릿 리터럴도
-      // `null`을 삼킨다(가드를 지우고 typecheck를 돌려 확인했다). **기준을 한 자리에 둔다.**
+      // **`marker`가 없으면 번호가 아니다 — 그것이 코멘트 탭의 기준이고 자리가 여기 하나다.**
+      // 셀렉터에도 `[data-wb-marker]`를 넣어 이 줄과 **둘 다** 거르면 둘이 서로의 잉여라
+      // 어느 하나를 지워도 아무것도 안 죽는다. 타입이 이 줄을 요구하는 것도 아니다 —
+      // `textContent`가 `string | null`을 받고 템플릿 리터럴도 `null`을 삼킨다(가드를 지워도
+      // typecheck가 통과한다). **기준을 한 자리에 둔다.**
       if (nodeId === null || marker === null || drawn.has(nodeId)) continue
       const target = nodes.get(nodeId)
       // 숨겨진 노드·그리지 못한 노드에는 마커가 없다. 캔버스도 같다.
@@ -344,7 +344,7 @@ export function installRuntime(): void {
       }
       for (const issue of hit.issues) lines.push(issue.message)
       for (const request of hit.requests) {
-        // **조용히 아무 일도 안 일어나게 두지 않고, 조용히 엉뚱한 데로도 안 간다**(D6).
+        // **조용히 아무 일도 안 일어나게 두지 않고, 조용히 엉뚱한 데로도 안 간다.**
         // 무엇이 잘못됐는지는 내보내기가 이미 문장으로 지어 뒀다.
         if (request.href !== null) {
           if (go === null) go = request.href

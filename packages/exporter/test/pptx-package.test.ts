@@ -1,5 +1,5 @@
 /**
- * **패키지가 닫혀 있는가**(T2 · D5).
+ * **패키지가 닫혀 있는가.**
  *
  * PPTX는 파트가 여럿이고 관계가 물려 있다. 어느 관계 하나가 없는 파트를 가리키면 받는
  * 쪽은 **그냥 안 연다** — 어느 파트가 문제인지 말해 주지 않는다. 그래서 여기서 **닫힘**을
@@ -32,9 +32,8 @@ const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x0
 
 /**
  * **매체를 표본에 넣는다** — 그러지 않으면 `[Content_Types].xml` 의 `Default` 를 재는 자가
- * 설 수 없다. **리뷰어가 그 사각을 실측했다**(귀속: 리뷰 §2 N3): `png` 의 `Default` 를 빼면
- * 우리 케이스도, macOS 의 Spotlight·QuickLook 둘도 **전부 통과하는데** PowerPoint 는
- * 거절한다. 분모가 *"매체가 없는 슬라이드만"* 이었던 것이 원인이다.
+ * 설 수 없다. 분모가 *"매체가 없는 슬라이드만"* 이면 `png` 의 `Default` 를 빼도 우리
+ * 케이스도, macOS 의 Spotlight·QuickLook 둘도 **전부 통과하는데** PowerPoint 는 거절한다.
  */
 function build(options: { notes?: boolean; media?: boolean } = {}): PptxPart[] {
   return pptxPackage(
@@ -82,7 +81,7 @@ function contentTypeDocument(parts: readonly PptxPart[]): XmlElement {
   return parseXml(textOfPart(parts, '[Content_Types].xml'))
 }
 
-describe('pptx 패키지 (T2)', () => {
+describe('pptx 패키지', () => {
   it('슬라이드가 없으면 던진다 — 빈 pptx 를 내지 않는다', () => {
     expect(() => pptxPackage([])).toThrow('슬라이드가 없습니다')
   })
@@ -233,19 +232,19 @@ describe('pptx 패키지 (T2)', () => {
 })
 
 /**
- * **파일이 열리는지를 재는 자들**(리뷰 발견 1·2).
+ * **파일이 열리는지를 재는 자들.**
  *
  * 위 절은 *"관계 → 파트"* 방향의 닫힘을 잰다. **그것만으로는 PowerPoint 가 거절하는 상태
- * 넷이 통과한다** — 리뷰어가 독립 변이로 셋을 찾았고(귀속: 리뷰 §2) 넷째가 발견 1이다.
+ * 넷이 통과한다**(PowerPoint 로 다시 재는 법은 `build-test/dist-pptx.test.ts` 머리말).
  * 여기 있는 것들은 전부 *"이것이 어긋나면 파일이 통째로 안 열린다"* 부류다.
  *
  * **받는 쪽 둘로는 대신할 수 없다.** 매체 `Default` 는 Spotlight·QuickLook 둘 다 안 보고,
  * 나머지 둘은 QuickLook 이 **빨강이 아니라 상한에 걸린 정지**로 알린다.
  */
-describe('파일이 열리는 조건 (리뷰 발견 1·2)', () => {
+describe('파일이 열리는 조건', () => {
   /**
-   * **발견 1.** 파트 하나를 두 마스터가 나눠 쓰면 PowerPoint 가 복구 대화상자를 띄운다
-   * (귀속: 리뷰 §1.2 — 재현 2/2). 파트를 가르면 열린다(2/2).
+   * 테마 파트 하나를 두 마스터가 나눠 쓰면 PowerPoint 가 복구 대화상자를 띄운다. 파트를
+   * 가르면 열린다.
    */
   it('마스터마다 테마 파트가 하나다 — 두 마스터가 같은 것을 가리키지 않는다', () => {
     const parts = build({ notes: true })
@@ -276,8 +275,8 @@ describe('파일이 열리는 조건 (리뷰 발견 1·2)', () => {
   })
 
   /**
-   * **N1.** 슬라이드가 레이아웃을 안 가리키면 PowerPoint 가 거절한다(귀속: 리뷰 §2 N1 —
-   * 우리 케이스 0 사망 · QuickLook 은 매달림 · PowerPoint 는 복구).
+   * 슬라이드가 레이아웃을 안 가리키면 PowerPoint 가 거절한다 — 위 절의 닫힘 검사는
+   * 통과하고 QuickLook 은 매달린다.
    */
   it('슬라이드마다 레이아웃 관계가 정확히 하나다', () => {
     const parts = build({ notes: true, media: true })
@@ -296,9 +295,9 @@ describe('파일이 열리는 조건 (리뷰 발견 1·2)', () => {
   })
 
   /**
-   * **N2 — 반대 방향이다.** 위 절의 닫힘은 *"관계 → 파트"* 만 본다. `presentation.xml` 이
+   * **반대 방향이다.** 위 절의 닫힘은 *"관계 → 파트"* 만 본다. `presentation.xml` 이
    * **관계에 없는 `r:id`** 를 들면(매달린 `r:id`) 그 검사는 통과하는데 PowerPoint 는
-   * 거절한다(귀속: 리뷰 §2 N2 — 우리 케이스 0 사망).
+   * 거절한다.
    */
   it('presentation 이 든 r:id 가 전부 관계로 있다 — 매달린 것이 없다', () => {
     const parts = build({ notes: true, media: true })
@@ -333,8 +332,8 @@ describe('파일이 열리는 조건 (리뷰 발견 1·2)', () => {
   })
 
   /**
-   * **N3 — 셋 중 아무도 못 보던 자리다.** `png` 의 `Default` 가 빠지면 우리 케이스도,
-   * Spotlight 도, QuickLook 도 통과하는데 PowerPoint 는 거절한다(귀속: 리뷰 §2 N3).
+   * **이 케이스 없이는 셋 중 아무도 못 보는 자리다.** `png` 의 `Default` 가 빠지면 나머지
+   * 우리 케이스도, Spotlight 도, QuickLook 도 통과하는데 PowerPoint 는 거절한다.
    */
   it('매체가 있으면 그 확장자의 Default 가 있다', () => {
     const parts = build({ notes: true, media: true })
