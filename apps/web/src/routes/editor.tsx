@@ -1212,6 +1212,10 @@ function CanvasFrame(props: {
         // 것일 때만 견주려는 것이다 — 그 대조만 떼도 지키는 케이스가 없다(여는 조회가 도는 중이면 그 조회가 싣는다).
         if (store.holdsServerPage(pageId, page.headSeq, page.schema)) return
         applyServerPage(pageId, page, RESYNC_LEAD)
+        // **여는 조회가 실패해 있었으면 캔버스를 되살린다** — 복원 재조회의 같은 줄과 같다. 판은 방금 스토어에 실려 구조
+        // 트리 · 속성 패널이 그리는데 캔버스만 실패 문장이면 세 자리가 다른 사실을 말한다. 위에서 넘어간 갈래는 스토어가
+        // 이미 이 페이지를 들고 있다는 뜻이고, 그 판을 실은 쪽이 `ready`를 놓았다(여는 조회는 실패하면 스토어를 비운 채다).
+        setState({ status: 'ready' })
       } catch {
         // **여기서 알리지 않는다.** 사용자가 요청한 조회가 아니고, 화면은 재연결 전과 같다 —
         // 되돌릴 것도 잃은 것도 없다.

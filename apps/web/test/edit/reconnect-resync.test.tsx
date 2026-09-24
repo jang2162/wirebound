@@ -17,6 +17,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../../src/api/client'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
@@ -27,9 +28,11 @@ import {
   OTHER_PAGE_ID,
   OTHER_PAGE_TITLE,
   PAGE_ID,
+  PAGE_ROUTE,
   PROJECT_ID,
   PROJECT_NAME,
   PROJECT_ROUTE,
+  canvasFrame,
   openPage,
   pageDoc,
   pageDetail,
@@ -425,6 +428,36 @@ describe('다시 붙으면 다시 읽는다', () => {
     await waitForNode('n-revived')
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('되돌리기 이력이 초기화됐습니다')
+  })
+})
+
+/**
+ * ## 여는 조회가 실패한 캔버스 — 다시 붙어 읽으면 되살아난다
+ *
+ * 여는 조회가 실패하면 캔버스는 실패 문장을 그린다. 그 뒤 재연결 재조회가 성공하면 스토어에 판이 실려 구조 트리 · 속성
+ * 패널은 문서를 그리는데, 캔버스만 실패 문장 그대로면 세 자리가 다른 사실을 말한다(Chrome: 여는 `GET` 에 503 을 심고 WS 를
+ * 끊었다 — 다시 붙은 뒤 트리에 Text 줄 1 · 캔버스는 실패 문장).
+ */
+describe('여는 조회가 실패한 캔버스', () => {
+  it('다시 붙어 읽으면 캔버스가 문서를 그린다', async () => {
+    let calls = 0
+    const getPage = vi.fn(async (_projectId: string, pageId: string) => {
+      calls += 1
+      if (calls === 1) throw new ApiError(503, 'internal', '잠깐 실패했습니다')
+      return pageDetail(pageId, doc('n-back'))
+    })
+    const wired = wiring()
+    renderEditor({ route: PAGE_ROUTE, realtime: wired.setup, apiOverrides: { getPage } })
+    await screen.findByRole('heading', { name: PROJECT_NAME })
+    await within(screen.getByRole('main', { name: '캔버스' })).findByText('잠깐 실패했습니다')
+
+    wired.open(0)
+    wired.drop(0)
+    wired.open(1)
+    // 다시 읽기가 돌았다 — 아래가 «재조회가 안 돌았다»로 빨강이 되지 않게 먼저 본다.
+    await waitFor(() => expect(getPage).toHaveBeenCalledTimes(2))
+
+    await waitFor(() => expect(canvasFrame().querySelector('[data-wb-id="n-back"]')).not.toBeNull())
   })
 })
 
