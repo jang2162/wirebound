@@ -42,7 +42,7 @@ import { forbidden, internal, unauthenticated } from '../errors'
 import { parseParams } from '../http/parse'
 import { z } from 'zod'
 import { nextConnectionId } from './connection-id'
-import { handleLockFrame, releaseLocksOf } from './lock'
+import { createLockLane, denyLock, releaseLocksOf } from './lock'
 import { handlePatchFrame, patchErrorFrame } from './patch'
 import { MIN_ROLE_FOR_FRAME, WS_CLOSE, parseClientFrame, type ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
@@ -139,6 +139,8 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
        * (`ws/lock.ts`의 «뒤에 온 것이 이긴다»).
        */
       let lockTurns = 0
+      /** 이 연결의 `lock` 트랜잭션 줄 — 한 번에 하나다(`ws/lock.ts`의 «연결 하나가 쥐는 풀 칸은 하나다»). */
+      const lockLane = createLockLane(app, connection)
 
       socket.on('message', (raw: unknown) => {
         // **읽기는 동기이므로 IIFE 밖에서 한다.** 아래 `catch`가 *"어느 편집이 실패했나"*를
@@ -206,7 +208,7 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
               // `canHold`) — 그 판정과 답(`lock-denied`)은 `ws/lock.ts`의 표가 소유한다(끝나는 순간에 본다 —
               // 문서를 읽는 await 가 하나 더 있을 수 있다).
               // **`patch`는 여기서 거르지 않는다** — 커밋 순간에 권한을 다시 본다(`ws/patch.ts`).
-              await handleLockFrame(app, connection, frame, { epoch, current })
+              await lockLane.run(frame, { epoch, current })
               return
             case 'unlock':
               // 뒤에 받은 `lock`이 이미 끝났으면 이 `unlock`은 그것을 놓으면 안 된다(`ws/lock.ts`의 «뒤에 온 것이 이긴다»).
@@ -219,9 +221,14 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
           // 오고, 클라이언트의 in-flight가 매달려 **다음 편집도 안 나간다**(펌프의 가드가 계속
           // 서 있다 — `apps/web`의 `edit-channel.ts` 머리말이 그 부류를 적었다). REST 경로는
           // 같은 예외에 500 봉투가 나가 복구가 돈다 — **두 진입점의 결말을 맞춘다.**
-          if (frame.type !== 'patch') return
+          //
+          // **`lock`도 답한다** — 서버는 아무것도 안 쥐었는데 답이 없으면 화면은 쥔 줄 안다. 거절과 같은 답을 낸다(`ws/lock.ts`의
+          // 표 «DB 오류로 끝내지 못했다»). **이 프레임이 아직 마지막일 때만** — 뒤 프레임이 있으면 그것이 자기 답을 한다.
+          // `unlock`·`ping`은 답하지 않는다: `unlock`이 못 놓은 잠금은 TTL 까지 남고, `pong`이 없으면 화면이 연결을 닫는다(닫힘이 놓는다).
+          if (frame.type !== 'patch' && frame.type !== 'lock') return
           try {
-            push(patchErrorFrame(projectId, frame, internal()))
+            if (frame.type === 'patch') push(patchErrorFrame(projectId, frame, internal()))
+            else if (current()) denyLock(app, connection, frame)
           } catch (pushError: unknown) {
             // 소켓이 이미 죽었으면 보낼 수 없다. 여기서 던지면 unhandled가 된다.
             //
