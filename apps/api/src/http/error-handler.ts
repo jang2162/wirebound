@@ -38,6 +38,19 @@ const ERROR_STATUS_PAYLOAD_TOO_LARGE = 413
 const ERROR_STATUS_DB_UNREACHABLE = 503
 
 /**
+ * 그 503 의 문장. **메서드로 가른다** — 쓰지 않는 요청(GET · HEAD)에 «반영됐는지 알 수 없습니다»를 말하면 사용자는
+ * «내가 무엇을 바꿨나»를 묻는다. 웹은 서버 문장을 그대로 그리므로(쓰기 장부 · 목록 · 조회) 여기 한 자리가 문장을 정한다.
+ * 웹이 이 503 을 가르는 값은 숫자다 — 문장은 사람에게만 간다(`README.md` 「에러 형식」).
+ */
+export const DB_UNREACHABLE_WRITE_MESSAGE = '데이터베이스와의 연결이 끊겨 요청이 반영됐는지 알 수 없습니다'
+export const DB_UNREACHABLE_READ_MESSAGE = '데이터베이스와의 연결이 끊겨 불러오지 못했습니다 — 잠시 뒤 다시 시도하세요'
+
+/** 쓰지 않는 요청인가 — 이 서버의 GET · HEAD 라우트는 사용자의 데이터를 바꾸지 않는다. */
+function dbUnreachableMessage(method: string): string {
+  return method === 'GET' || method === 'HEAD' ? DB_UNREACHABLE_READ_MESSAGE : DB_UNREACHABLE_WRITE_MESSAGE
+}
+
+/**
  * **내보내기 줄이 넘쳤다** — 일을 받지 않았다(`services/export-worker.ts`의 «줄은 길이로 묶는다»). DB 503 과 숫자가 같고
  * `code`도 같은 `internal`이다(위 상수의 근거) — 둘 다 «지금은 못 한다»이고, 가르는 것은 `Retry-After` 머리와 문장이다.
  * 내보내기는 읽기뿐이라 «반영됐는지 모른다»가 걸리지 않는다.
@@ -97,7 +110,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
       request.log.error(error, 'DB 연결을 잃었다 — 요청의 결과를 모른다')
       send(reply, ERROR_STATUS_DB_UNREACHABLE, {
         code: 'internal',
-        message: '데이터베이스와의 연결이 끊겨 요청이 반영됐는지 알 수 없습니다',
+        message: dbUnreachableMessage(request.method),
       })
       return
     }
