@@ -25,6 +25,7 @@ const shared = {
       '@wirebound/cli/test-support': src('./packages/cli/test-support/index.ts'),
       '@wirebound/cli/embed': src('./packages/cli/src/embed.ts'),
       '@wirebound/cli': src('./packages/cli/src/index.ts'),
+      '@wirebound/test-support': src('./packages/test-support/src/index.ts'),
     },
   },
 }

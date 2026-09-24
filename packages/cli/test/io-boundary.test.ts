@@ -12,7 +12,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { stripComments } from './strip-comments'
+import { stripComments } from '@wirebound/test-support'
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
 
@@ -90,7 +90,7 @@ function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   return found
 }
 
-/** 소스 글자 하나가 바깥 세계를 만지는가. 주석은 파서가 걷는다(`./strip-comments.ts`). */
+/** 소스 글자 하나가 바깥 세계를 만지는가. 주석은 파서가 걷는다(`@wirebound/test-support` 의 `stripComments`). */
 function sourceTouchesWorld(source: string): boolean {
   const code = stripComments(source)
   return EFFECTFUL.some((pattern) => pattern.test(code))
@@ -135,7 +135,7 @@ describe('바깥 세계를 만지는 자리', () => {
 
   /**
    * **구문 오류가 든 소스는 조용히 지나가지 않는다.** 파서의 복구가 코드를 지워 `process.`가 사라진다
-   * (`./strip-comments.ts` 머리말) — 걷는 자리가 던져야 빨강이 된다. 헬퍼 하나를 네 자가 함께 쓰므로 여기 한 자리에서 잰다.
+   * (`@wirebound/test-support` 의 `stripComments` 머리말) — 걷는 자리가 던져야 빨강이 된다. 헬퍼의 성질은 그 패키지의 케이스가 재고, 여기서는 이 자가 그 헬퍼를 지나 던지는지를 잰다.
    */
   it('구문 오류가 든 소스는 읽지 않고 던진다 — 복구가 지운 호출을 초록으로 넘기지 않는다', () => {
     expect(() => sourceTouchesWorld('@@@ process.exit(1)')).toThrow(/구문 오류/)

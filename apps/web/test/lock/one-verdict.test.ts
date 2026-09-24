@@ -17,14 +17,11 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '@wirebound/test-support'
 
 const API_SRC = fileURLToPath(new URL('../../../api/src', import.meta.url))
 const WEB_SRC = fileURLToPath(new URL('../../src', import.meta.url))
 const SCHEMA_SRC = fileURLToPath(new URL('../../../../packages/schema/src', import.meta.url))
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
 
 function sourceFiles(root: string, dir = root, prefix = ''): string[] {
   const found: string[] = []

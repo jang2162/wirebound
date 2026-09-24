@@ -14,13 +14,10 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '@wirebound/test-support'
 
 const API_PROTOCOL = fileURLToPath(new URL('../../../api/src/ws/protocol.ts', import.meta.url))
 const WEB_PROTOCOL = fileURLToPath(new URL('../../src/realtime/protocol.ts', import.meta.url))
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
 
 /**
  * 어떤 선언 **안에서만** `type: '…'`을 센다.

@@ -19,6 +19,7 @@
   "devDependencies": {
     "@testing-library/dom": "^10.4.0",
     "@wirebound/exporter": "workspace:*",
+    "@wirebound/test-support": "workspace:*",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^26.1.2",
     "@types/react": "^19.0.0",

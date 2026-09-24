@@ -40,8 +40,6 @@
  *   열거해서다.
  * - **필드 이름을 값으로 만드는 형태.** `store.getState()[key]`(실측 0건). 이쪽은 이름이
  *   소스에 아예 남지 않으므로 텍스트 검사로 닿을 수 있는 형태가 아니다.
- * - **정규식 리터럴.** 주석 걷기가 `/`를 나눗셈으로 보므로 `/a\/\/b/` 같은 형태 뒤가
- *   잘못 읽힐 수 있다. 지금 `apps/web/src`에는 정규식 리터럴이 없어 **재지 못했다.**
  * - **제외한 파일 둘 안에서의 우회**(아래 `EXEMPT`). 그 둘은 규칙을 정의하는 곳이라
  *   대상에서 빼는데, 그래서 `use-editor-store.tsx`에 우회를 새로 심어도 조용하다.
  *   대신 그 파일 안에 우회 형태가 실제로 있다는 사실을 **양성 대조로** 쓴다.
@@ -66,6 +64,8 @@
  *   효과다. 템플릿 안의 그것은 진짜로 실행되는 코드이므로 잡히는 편이 맞고, 실행되지 않는
  *   문자열에 우회 모양을 적을 이유는 없다.
  */
+
+import { stripComments } from '@wirebound/test-support'
 
 /** 검사 이름. 어느 규칙이 물었는지가 실패 메시지와 심기 표에 그대로 나온다. */
 export type CheckName =
@@ -154,7 +154,13 @@ export function scanSources(sources: Record<string, string>): FileViolation[] {
 /** 소스 전문에서 우회를 찾는다. 빈 배열이면 우회가 없다. */
 export function findViolations(source: string): Violation[] {
   const violations: Violation[] = []
-  const code = stripComments(source)
+  let code: string
+  try {
+    code = stripComments(source)
+  } catch (error) {
+    // 구문이 깨진 소스는 주석을 걷을 수 없다(파서의 복구가 코드를 지운다) — 읽지 못한 것을 조용히 넘기지 않는다.
+    return [{ check: 'unreadable', snippet: normalize(source.slice(-60)), message: (error as Error).message }]
+  }
 
   checkSelectors(code, violations)
   checkGetState(code, violations)
@@ -304,64 +310,13 @@ function isWholeState(selector: string): boolean {
 }
 
 /**
- * 주석을 걷는다. **문자열은 남긴다** — 지우면 `getState()['document']`의 이름까지 사라진다.
- * 문자열을 인식하기는 하므로 그 안의 `//`가 주석으로 읽히지는 않는다(`'http://…'`).
+ * 주석을 걷는다 — 워크스페이스에 하나인 자리(`@wirebound/test-support`)다. **문자열은 남긴다** — 지우면
+ * `getState()['document']`의 이름까지 사라진다. 문자열 · 정규식 리터럴 안의 `//`·`/*` 는 주석으로 읽히지 않는다.
  *
- * 걷은 자리를 공백으로 채우는 것은 앞뒤 토큰이 붙어 새 이름이 생기는 것을 막기 위해서다.
- *
- * **`role-access.test.ts`도 이것을 쓴다** — 소스에서 무언가를 세는 검사는 **주석을 걷지 않으면
- * 자기 자신을 센다**. 그래서 export 한다.
+ * **`role-access.test.ts` 등도 이것을 쓴다** — 소스에서 무언가를 세는 검사는 **주석을 걷지 않으면
+ * 자기 자신을 센다**. 그래서 내준다.
  */
-export function stripComments(source: string): string {
-  let out = ''
-  let index = 0
-
-  while (index < source.length) {
-    const char = source[index]
-    const next = source[index + 1]
-
-    if (char === '/' && next === '/') {
-      while (index < source.length && source[index] !== '\n') {
-        out += ' '
-        index += 1
-      }
-      continue
-    }
-
-    if (char === '/' && next === '*') {
-      const end = source.indexOf('*/', index + 2)
-      const stop = end === -1 ? source.length : end + 2
-      while (index < stop) {
-        out += source[index] === '\n' ? '\n' : ' '
-        index += 1
-      }
-      continue
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      const quote = char
-      out += char
-      index += 1
-      while (index < source.length) {
-        const inner = source[index]
-        out += inner
-        index += 1
-        if (inner === '\\' && index < source.length) {
-          out += source[index]
-          index += 1
-          continue
-        }
-        if (inner === quote) break
-      }
-      continue
-    }
-
-    out += char
-    index += 1
-  }
-
-  return out
-}
+export { stripComments }
 
 /** `open`의 `(`와 짝이 되는 `)`의 위치. 없으면 `-1`이다. */
 function matchParen(code: string, open: number): number {

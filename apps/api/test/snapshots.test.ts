@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '@wirebound/test-support'
 import { sql } from 'kysely'
 import { containsNulByte } from '../src/db/nul-guard'
 import { listSnapshots } from '../src/repos/snapshots'
@@ -413,8 +414,3 @@ describe('삭제 없는 태그', () => {
     expect(stripComments(SOURCE)).not.toContain('app.delete')
   })
 })
-
-/** `permission-matrix.test.ts`의 같은 이름 함수와 같은 규칙이다. */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
