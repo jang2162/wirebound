@@ -445,7 +445,7 @@ export async function readCaptureFingerprint(
  *
  * **수를 여기 적지 않는다 — `test/restore-lock-census.test.ts`가 센다.** 손으로 고른
  * 분모를 주석에 적으면 **빠진 항목이 결과를 바꿔도 아무도 모른다.** 그 파일이
- * 분모를 `src/routes/`에서 만들고, 라우트가 하나 늘면 먼저 죽는다.
+ * 분모를 등록된 라우트에서 만들고, 라우트가 하나 늘면 먼저 죽는다.
  *
  * **그 파일이 재서 고정한 것(값이 아니라 성질):**
  *
