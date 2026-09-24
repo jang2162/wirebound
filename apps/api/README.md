@@ -62,7 +62,7 @@ pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린
 |---|---|---|
 | `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | 10000 | 서버가 트랜잭션 안에서 이만큼 쉰 세션을 끝낸다 — 고아 백엔드가 이것으로 죽는다. **`DATABASE_URL`에 `?idle_in_transaction_session_timeout=`을 붙이면 api 가 뜨지 않는다**(값이 두 자리에서 오면 접속 문자열이 조용히 이긴다) |
 | `DB_POOL_WAIT_TIMEOUT_MS` | 5000 | 풀에서 연결을 이만큼 못 얻으면 **503** |
-| `DB_KEEPALIVE_IDLE_MS` | 10000 | DB 소켓의 TCP keepalive 첫 탐침까지. 진짜 분할에서 api 가 끊긴 줄을 아는 길이 이것뿐이다 — 걸리는 시간은 여기에 OS 의 간격 × 횟수가 붙는다(리눅스 기본 75s × 9) |
+| `DB_KEEPALIVE_IDLE_MS` | 10000 | DB 소켓의 TCP keepalive 첫 탐침까지. 진짜 분할에서 api 가 끊긴 줄을 아는 길이 이것뿐이다 — 걸리는 시간은 여기에 libuv 가 거는 간격 × 횟수(1s × 10)가 붙는다 — OS 의 기본값(리눅스 75s × 9)이 아니다. 잰 값과 재는 법은 `src/db/client.ts`의 `createPool` 머리말 «네트워크 분할» |
 
 비우면 기본값, **0 은 싣지 않는다 — 서버·DB 설정을 따른다**(범위 밖이면 api 가 뜨지 않는다 — `config.ts`의 `dbTimeLimitEnv`).
 **풀러(pgbouncer 부류) 뒤라면** 첫째 값은 기동 인자라 풀러가 거절하거나 버린다 — api·`migrate`가 기동 때 재서 거절이면
