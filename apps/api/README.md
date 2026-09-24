@@ -15,6 +15,7 @@ Fastify 5 기반 REST + WebSocket 서버. 설계서 편집을 지원하는 백�
 pnpm --filter @wirebound/api dev            # tsx watch 로 띄운다
 pnpm --filter @wirebound/api migrate        # 마이그레이션 최신화 + 계정 시딩 (아래)
 pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린다 (반복하면 0까지)
+pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바꾼다 — 터미널에서 숨겨 묻는다 (최상위 README 「비밀번호를 잊었다」)
 ```
 
 ### `migrate` 가 계정도 만든다 — **가입 라우트가 없기 때문이다**
@@ -44,7 +45,7 @@ pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린
 
 ### 이 서버가 env 를 읽는 방식
 
-`dev`·`start`·`migrate`·`migrate:down` 스크립트가 전부 `tsx`에
+`dev`·`start`·`migrate`·`migrate:down`·`reset-password` 스크립트가 전부 `tsx`에
 `--env-file-if-exists=.env`를 붙여 실행하므로(Node 22.9+, `apps/api/package.json`),
 `apps/api/.env`가 있으면 자동으로 읽는다 — 이 프로젝트는 `dotenv` 같은 별도 패키지를
 쓰지 않는다.
@@ -1407,6 +1408,7 @@ id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청
   파일을 static import로 모은다(동적 `import()` 기반 `FileMigrationProvider`를
   쓰지 않는 이유는 `index.ts`의 주석 참고).
 - `src/db/migrate.ts` — `migrate`/`migrate:down` CLI이자 `migrateToLatest` export.
+- `src/db/reset-password.ts` — `reset-password` CLI. 서버와 같은 규칙 · 해시 · 세션 삭제를 부른다.
 
 ## 계층 규칙
 
@@ -1474,6 +1476,7 @@ pnpm --filter @wirebound/api dev                   # 개발 서버 (tsx watch)
 pnpm --filter @wirebound/api start                 # 개발 서버 없이 한 번 띄운다
 pnpm --filter @wirebound/api migrate               # 마이그레이션 최신화
 pnpm --filter @wirebound/api migrate:down          # 마이그레이션 하나 내리기(반복 시 0까지)
+pnpm --filter @wirebound/api reset-password <이메일>  # 비밀번호 바꾸기(터미널에서 숨겨 묻는다)
 pnpm vitest run --project api                      # api 테스트만 실행 (컨테이너 필요)
 ```
 

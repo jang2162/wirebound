@@ -91,10 +91,10 @@ describe('계정을 만드는 사슬 — 층마다 호출자가 하나다', () =
     expect(callSites('seedAfterMigration')).toEqual({ 'db/migrate.ts': 1 })
   })
 
-  it('비밀번호를 해시하는 자는 시딩과 로그인의 더미 해시 둘뿐이다', () => {
-    // `routes/auth.ts` 의 1건은 타이밍 방어용 `dummyHash` 다. 라우트가 비밀번호를 한 번
+  it('비밀번호를 해시하는 자는 시딩 · 재설정 명령 · 로그인의 더미 해시 셋뿐이다', () => {
+    // `routes/auth.ts` 의 1건은 타이밍 방어용 `dummyHash` 다. `db/reset-password.ts` 는 서버에 손이 닿는 사람의 CLI 다. 라우트가 비밀번호를 한 번
     // 더 해시하기 시작하면(=자격을 받는 새 표면) 그 수가 늘고 여기서 죽는다.
-    expect(callSites('hashPassword')).toEqual({ 'db/seed-user.ts': 1, 'routes/auth.ts': 1 })
+    expect(callSites('hashPassword')).toEqual({ 'db/reset-password.ts': 1, 'db/seed-user.ts': 1, 'routes/auth.ts': 1 })
   })
 })
 
