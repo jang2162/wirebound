@@ -108,9 +108,10 @@ function readArgs(tool: ToolSpec, args: unknown): Record<string, unknown> {
 /**
  * 값 하나가 선언한 모양인가. **`ToolArgSchema`의 갈래마다 한 줄이다.**
  *
- * ⚠ **컴파일러가 빠진 갈래를 잡지 않는다.** 반환이 `void`라 `switch`에 없는 갈래는 오류 없이
- * 끝으로 떨어지고, 그 모양은 **검사 없이** 지나간다(다시 재는 법: `ToolArgSchema`에 갈래 하나를
- * 더하고 `pnpm typecheck` — 오류 0). `ToolArgSchema`에 갈래를 더하면 여기 한 줄을 함께 더한다.
+ * **빠진 갈래는 컴파일러가 잡는다 — `default`의 `never`가 그 자다.** 반환이 `void`라 `switch`에 없는
+ * 갈래는 오류 없이 끝으로 떨어지고, 그 모양은 **검사 없이** 지나간다. 쓰는 도구가 아직 없는 갈래는
+ * 어느 케이스도 부르지 않으므로 테스트로는 못 막는다. `default`를 걷거나 `never` 대입을 빼면 이 보증이
+ * 조용히 사라진다(다시 재는 법: `ToolArgSchema`에 갈래 하나를 더하고 `pnpm typecheck` — 오류가 나야 한다).
  */
 function assertShape(tool: ToolSpec, key: string, schema: ToolArgSchema, value: unknown): void {
   const bad = (want: string): never => {
@@ -131,6 +132,14 @@ function assertShape(tool: ToolSpec, key: string, schema: ToolArgSchema, value: 
     case 'array':
       if (!Array.isArray(value)) bad('배열')
       return
+    default: {
+      const unchecked: never = schema
+      // 타입이 막으므로 닿지 않는다. 표가 타입을 우회해 들어와도 검사 없이 지나가게 두지 않는다.
+      throw new McpError(
+        ErrorCode.InternalError,
+        `${tool.name}의 ${key}: 검사할 줄이 없는 모양입니다 (${JSON.stringify(unchecked)})`,
+      )
+    }
   }
 }
 
