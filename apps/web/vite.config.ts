@@ -61,7 +61,30 @@ export default defineConfig({
       // 통째로 베끼고(`setupOutgoing`) `changeOrigin`이 손대는 것은 `Host` 하나뿐이라,
       // 세션 쿠키는 same-origin으로 그대로 실린다 — 위 같은 오리진의 근거가 그대로 선다. 그 쿠키가
       // 없으면 이 라우트의 `projectGuard('viewer')`가 막는다.
-      '/api': { target: apiProxyTarget, changeOrigin: false, ws: true },
+      '/api': {
+        target: apiProxyTarget,
+        changeOrigin: false,
+        ws: true,
+        // **브라우저가 끊으면 api 쪽 연결도 끊는다 — 운영의 같은 오리진 앞단이 하는 일이다.**
+        // http-proxy 가 스스로 끊는 것은 둘뿐이다: 요청 본문을 다 받기 **전**의 끊김(`req`의
+        // `aborted`)과, 응답이 흐르기 **시작한 뒤**의 끊김(vite 의 `proxyRes` 훅). 그 사이 —
+        // **본문은 다 갔고 api 가 아직 답하지 않은 동안** — 끊으면 api 는 모른 채 끝까지 돈다.
+        // 이 훅이 없으면 끊긴 내보내기 미리보기가 api 에서 워커를 끝까지 쥔다(api 는 연결이 닫히면
+        // 일을 버리게 되어 있다 — `apps/api/src/services/export-worker.ts` 머리말의 표).
+        //
+        // **`req`가 아니라 `res`의 `close`를 듣는다.** `req`의 `close`는 본문을 다 읽으면 난다 —
+        // GET 이면 곧바로다. 거기 걸면 **모든 요청이 api 의 답 전에 끊긴다.**
+        // **다 보낸 뒤의 `close`는 가르지 않는다.** 그때 `destroy()`는 이미 끝난 요청에 닿아 아무
+        // 일도 안 한다 — 상류가 받은 본문 · 응답 · 소켓이 `!res.writableEnded` 가드를 둔 판과
+        // 같았다(쟀다: 느린 GET · 이른 응답 뒤에 본문이 이어지는 POST · 평범한 POST, 상류 연결을
+        // 다시 쓰는 에이전트에서도. 가드를 더해도 아래 자는 전부 초록이다).
+        // 이 훅의 자는 `test/api-proxy-abort.test.ts`다 — 무엇을 못 재는지도 거기 머리말에 있다.
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, _req, res) => {
+            res.on('close', () => proxyReq.destroy())
+          })
+        },
+      },
     },
   },
 })
