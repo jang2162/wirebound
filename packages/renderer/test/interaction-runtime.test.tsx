@@ -1,5 +1,5 @@
 /**
- * **§8.3의 상호작용 런타임** (P5-3 T1·T2).
+ * **설계서 「실행」의 상호작용 런타임.**
  *
  * **DOM이 없다.** 이 프로젝트(`unit`)는 jsdom을 걸지 않으므로 여기서 재는 것은
  * **엘리먼트 트리와 SSR 문자열**이다 — 핸들러가 붙었는지는 `element.props.onClick`으로
@@ -7,7 +7,8 @@
  * **진짜 DOM 이벤트(버블링·`submit`·`change`)는 `apps/web` 쪽 케이스가 잰다** — 그쪽이
  * jsdom이다.
  *
- * **여기가 지키는 가장 중요한 것은 D7이다:** *"상호작용을 끈 렌더는 오늘과 글자까지 같다."*
+ * **여기가 지키는 가장 중요한 것:** *"상호작용을 끈 렌더는 규칙이 없는 문서의 렌더와 글자까지
+ * 같다."*
  */
 import {
   installCatalog,
@@ -27,7 +28,7 @@ beforeAll(() => {
   installStructures()
 })
 
-/** §8.2의 예를 그대로 문서로 만든 것. *"① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"* */
+/** 설계서 「자동 문장화」의 예를 그대로 문서로 만든 것. *"① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"* */
 function example(interactions: Interaction[]): PageDocument {
   return {
     version: 1,
@@ -43,7 +44,7 @@ function example(interactions: Interaction[]): PageDocument {
   }
 }
 
-/** 규칙만 걷어 낸 같은 문서. **D7의 대조군이다.** */
+/** 규칙만 걷어 낸 같은 문서. **끈 렌더의 대조군이다.** */
 function stripped(doc: PageDocument): PageDocument {
   return {
     version: doc.version,
@@ -104,7 +105,7 @@ function markup(doc: PageDocument, overlay?: InteractionOverlay): string {
   )
 }
 
-describe('D7 — 끈 렌더는 바뀌지 않는다', () => {
+describe('끈 렌더는 바뀌지 않는다', () => {
   it('규칙이 있는 문서와 없는 문서가 글자까지 같은 HTML을 낸다', () => {
     const doc = example(CLICK_SETS_LOADING)
     // 상호작용은 **봉투의 필드**라 그리는 것에 아무 영향이 없어야 한다. 이 케이스가
@@ -114,7 +115,7 @@ describe('D7 — 끈 렌더는 바뀌지 않는다', () => {
 
   it('런타임을 켜도 HTML이 같다 — 핸들러는 DOM 속성이 아니다', () => {
     const doc = example(CLICK_SETS_LOADING)
-    // §6.11의 여섯 속성 계약을 넓히지 않았다는 것을 **렌더 결과에서** 재는 자리다.
+    // 설계서 「컴파일」의 여섯 속성 계약을 넓히지 않는다는 것을 **렌더 결과에서** 재는 자리다.
     // (원문을 세는 쪽은 `contract-attrs.test.ts`가 이미 한다.)
     expect(markup(doc, EMPTY_OVERLAY)).toBe(markup(doc))
   })
@@ -131,8 +132,8 @@ describe('D7 — 끈 렌더는 바뀌지 않는다', () => {
   })
 })
 
-describe('T1 — 셋을 실행한다', () => {
-  it('setProp이 §8.2의 예를 실제로 돌린다 — 목록이 로딩 상태가 된다', () => {
+describe('셋을 실행한다', () => {
+  it('setProp이 설계서 「자동 문장화」의 예를 실제로 돌린다 — 목록이 로딩 상태가 된다', () => {
     const doc = example(CLICK_SETS_LOADING)
     expect(markup(doc)).not.toContain('data-wb-state="loading"')
 
@@ -141,14 +142,14 @@ describe('T1 — 셋을 실행한다', () => {
     expect(markup(doc, overlay)).toContain('data-wb-state="loading"')
   })
 
-  it('문서는 한 글자도 안 바뀐다 — 겹layer가 그 위에 얹힐 뿐이다 (D1)', () => {
+  it('문서는 한 글자도 안 바뀐다 — 겹layer가 그 위에 얹힐 뿐이다', () => {
     const doc = example(CLICK_SETS_LOADING)
     const before = JSON.stringify(doc)
 
     const { overlay } = press(doc, 'n_btn')
 
     expect(JSON.stringify(doc)).toBe(before)
-    // 겹layer를 버리면 화면도 처음으로 돌아간다 — **모드가 리셋이다**(재라 #4).
+    // 겹layer를 버리면 화면도 처음으로 돌아간다 — **모드가 리셋이다**.
     expect(markup(doc, overlay)).not.toBe(markup(doc, EMPTY_OVERLAY))
     expect(markup(doc, EMPTY_OVERLAY)).toBe(markup(doc))
   })
@@ -214,7 +215,7 @@ describe('T1 — 셋을 실행한다', () => {
   })
 })
 
-describe('T1 — 순서 (재라 #5)', () => {
+describe('순서', () => {
   it('같은 on이 여럿이면 배열 순서대로 돌고 뒤가 이긴다', () => {
     const doc = example([
       { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'items', value: 3 }] },
@@ -254,7 +255,7 @@ describe('T1 — 순서 (재라 #5)', () => {
   })
 })
 
-describe('T1 — 트리거 4종이 DOM 이벤트에 붙는다', () => {
+describe('트리거 4종이 DOM 이벤트에 붙는다', () => {
   const attached = (on: Interaction['on'], dom: 'onClick' | 'onChange' | 'onSubmit'): boolean => {
     const doc = example([{ on, actions: [] }])
     const tree = renderDocument(doc, { interaction: {} })
@@ -278,9 +279,9 @@ describe('T1 — 트리거 4종이 DOM 이벤트에 붙는다', () => {
    * 부르는가"*이고, **그 결과(폼 제출이 페이지를 떠나지 않는다)는 jsdom에서 잴 수 없다** —
    * 거기서는 제출이 이동을 만들지 않는다.
    *
-   * **나머지 절반은 실브라우저에서 A/B/A로 쟀다**(P5-3 리뷰가 반증했고 다시 쟀다):
-   * 그 줄을 걷어 낸 번들은 실제로 `/landed.html`로 **이동한다.** 값과 장치는
-   * `render.tsx`의 그 자리 주석에 있다. **회귀가 그 갈래를 지키지 않는다.**
+   * **나머지 절반은 실브라우저 A/B/A로만 잰다:** 그 줄을 걷어 낸 번들은 실제로
+   * `/landed.html`로 **이동한다.** 값과 다시 재는 장치는 `render.tsx`의 그 자리 주석에
+   * 있다. **회귀가 그 갈래를 지키지 않는다.**
    */
   it('submit 규칙은 기본 동작을 막는다 — 이동까지는 여기서 못 잰다', () => {
     const doc = example([{ on: 'submit', actions: [] }])
@@ -318,7 +319,7 @@ describe('T1 — 트리거 4종이 DOM 이벤트에 붙는다', () => {
   })
 })
 
-describe('T2 — 깨진 규칙 (D3)', () => {
+describe('깨진 규칙', () => {
   /** 같은 문서를 검증기에 넣었을 때 나오는 그 액션의 문장. **런타임과 대조한다.** */
   function validationMessage(doc: PageDocument, code: string): string | undefined {
     return validatePage(doc).find((issue) => issue.code === code)?.message
@@ -453,7 +454,7 @@ describe('T2 — 깨진 규칙 (D3)', () => {
   })
 })
 
-describe('T1 — navigate·openModal은 렌더러 밖이다 (D4)', () => {
+describe('navigate·openModal은 렌더러 밖이다', () => {
   it('실행하지 않고 요청으로 낸다', () => {
     const doc = example([
       {
@@ -487,7 +488,7 @@ describe('T1 — navigate·openModal은 렌더러 밖이다 (D4)', () => {
 
     expect(events[0]?.requests).toHaveLength(0)
     expect(events[0]?.issues[0]?.message).toBe('navigate의 타겟을 아직 고르지 않았습니다')
-    // **검증기는 이 자리를 보지 않는다**(P5-2 재라 #1). 런타임만 본다 — 그쪽은 저장을
+    // **검증기는 이 자리를 보지 않는다.** 런타임만 본다 — 그쪽은 저장을
     // 막는 자리이고 이쪽은 "눌렀는데 아무 일도 안 일어난다"를 막는 자리다.
     expect(validatePage(doc)).toHaveLength(0)
   })
@@ -518,7 +519,7 @@ describe('runInteraction — 상태를 들지 않는 순수 함수', () => {
   })
 
   it('children에 노드 아닌 것이 섞여 있어도 던지지 않는다', () => {
-    // 검증 **전** 문서가 이 모양일 수 있다(§7.1). `walkNodes`는 여기서 던진다 —
+    // 검증 **전** 문서가 이 모양일 수 있다(설계서 「정방향 흐름」). `walkNodes`는 여기서 던진다 —
     // 그래서 런타임이 자기 순회를 든다(`nodeIndex`의 머리말).
     const doc = {
       version: 1,

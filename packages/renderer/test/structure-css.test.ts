@@ -23,7 +23,7 @@ async function renderedProbe(type: string, props: Record<string, unknown>, extra
   return probe([structureBaseCss(), ...extraSheets], html)
 }
 
-describe('Task 1 — 캐스케이드 층을 무엇으로 할지 잰 결과', () => {
+describe('캐스케이드 층을 무엇으로 할지 잰 결과', () => {
   /**
    * **(A) `@layer`를 고르지 않은 이유가 이 케이스다.**
    *
@@ -57,7 +57,7 @@ describe('Task 1 — 캐스케이드 층을 무엇으로 할지 잰 결과', () 
     expect(backward.computed('.x', 'display')).toBe('flex')
   })
 
-  /** D5의 전제. 시트를 둘로 나눠도 한 문자열 안의 순서와 결과가 같아야 한다. */
+  /** 구조 기본 CSS와 테마 CSS를 시트 둘로 두는 전제. 시트를 둘로 나눠도 한 문자열 안의 순서와 결과가 같아야 한다. */
   it('시트를 둘로 나눠도 순서의 결과가 같다', async () => {
     const forward = await probe(['.x { display: flex; }', '.x { display: grid; }'], '<div class="x"></div>')
     const backward = await probe(['.x { display: grid; }', '.x { display: flex; }'], '<div class="x"></div>')
@@ -66,9 +66,9 @@ describe('Task 1 — 캐스케이드 층을 무엇으로 할지 잰 결과', () 
   })
 
   /**
-   * **P0 이월 #7이 화면에서 어떻게 나타나는지.** 지금 `FlexDefault`가 내는 것과 같은
-   * inline 선언을 두면 테마가 진다 — `!important` 없이는 이길 수 없다는 그 문장의 실측이다.
-   * Task 2가 이 inline 선언을 걷어내면 아래 "테마가 이긴다" 케이스가 성립한다.
+   * **구조 구현이 inline 일반 선언을 내면 화면에서 어떻게 되는지.** inline 선언을 두면
+   * 테마가 진다 — `!important` 없이는 이길 수 없다. 그래서 구조 구현은 inline에 커스텀
+   * 프로퍼티만 싣고, 그때 아래 "테마가 이긴다" 케이스가 성립한다.
    */
   it('inline 일반 선언은 테마를 이긴다 — 걷어내야 하는 이유', async () => {
     const dom = await probe(
@@ -79,7 +79,7 @@ describe('Task 1 — 캐스케이드 층을 무엇으로 할지 잰 결과', () 
   })
 
   /**
-   * **D2의 근거.** 커스텀 프로퍼티만 실린 inline style은 캐스케이드에서 이길 것이 없다 —
+   * **구조가 inline에 커스텀 프로퍼티만 싣는 근거.** 커스텀 프로퍼티만 실린 inline style은 캐스케이드에서 이길 것이 없다 —
    * 그 자체로는 아무것도 그리지 않기 때문이다. 위 케이스와 같은 자리에서 결과가 뒤집힌다.
    */
   it('커스텀 프로퍼티만 실린 inline style은 테마를 이기지 않는다', async () => {
@@ -88,15 +88,15 @@ describe('Task 1 — 캐스케이드 층을 무엇으로 할지 잰 결과', () 
       '<div data-wb-component="Flex" data-wb-structure="default" style="--wb-node-flex-direction:column"></div>',
     )
     expect(dom.computed('[data-wb-component="Flex"]', 'display')).toBe('grid')
-    // 값은 그대로 실려 있다 — 지운 것이 아니라 통로로 바꾼 것이다.
+    // 값은 그대로 실려 있다 — 테마가 이겨도 노드의 값은 통로로 남는다.
     expect(dom.computed('[data-wb-component="Flex"]', '--wb-node-flex-direction')).toBe('column')
   })
 })
 
-describe('Task 1 — structureBaseCss', () => {
+describe('structureBaseCss', () => {
   it('테마와 같은 모양의 셀렉터를 쓴다', () => {
     // 같은 특이도여야 순서가 우선순위가 된다. 구조 기본 CSS가 더 구체적인 셀렉터를 쓰면
-    // 나중에 온 테마가 져서 이 계획 전체가 무너진다.
+    // 나중에 온 테마가 져서 테마가 구조를 덮는다는 약속 전체가 무너진다.
     expect(structureBaseCss()).toContain('[data-wb-component="Flex"][data-wb-structure="default"]')
   })
 
@@ -105,16 +105,12 @@ describe('Task 1 — structureBaseCss', () => {
   })
 
   /**
-   * 재라 #5. 노드가 나르는 값의 이름은 전부 `--wb-node-` 아래에 있어야 한다 —
+   * 노드가 나르는 값의 이름은 전부 `--wb-node-` 아래에 있어야 한다 —
    * 테마가 `cssVarName`으로 만드는 이름(`--wb-grid-columns` 등)과 겹치지 않게 하는 것이
    * 이 접두어의 전부다. **두 이름 집합이 실제로 겹치지 않는 것은 두 패키지를 함께 볼 수
-   * 있는 `apps/web/test/theme/system-theme.test.ts`의 `재라 #5` 절이 대조한다** —
-   * `renderer`는 `themes`를 보지 않는다(§3.3).
-   *
-   * > **2026-08-11(P4c-1 수정 웨이브, 전수 훑기): 여기가 `var-names.test.ts`를 가리키고
-   * > 있었고 그런 파일은 저장소에 없다.** F4(`themes-warning-routes.test.ts`)와 **같은
-   * > 부류**이고, 이쪽은 **P4c-1이 만든 것이 아니라 `05bfd1a`부터 있던 것**이다(내가
-   * > 이력으로 확인했다). 대조 자체는 살아 있었다 — **이름만 어긋나 있었다.**
+   * 있는 `apps/web/test/theme/system-theme.test.ts`의 *"렌더러의 변수 이름과 테마의 변수
+   * 이름이 겹치지 않는다"* 절이 대조한다** — `renderer`는 `themes`를 보지 않는다
+   * (설계서 「각 패키지의 책임과 의존」).
    */
   it('노드가 나르는 커스텀 프로퍼티는 전부 --wb-node- 아래에 있다', () => {
     // 노드가 나르지 **않는** 이름은 여기 적어 둔다. 이름이 있으므로 썩지 않는다 —
@@ -146,16 +142,16 @@ describe('Task 1 — structureBaseCss', () => {
   })
 
   /**
-   * **이 케이스가 이 계획 전체의 성공 판정이다.** 구조 기본 CSS가 낸 `display:flex`를
-   * 테마 CSS의 `display:grid`가 `!important` 없이 덮는다. §6.0의 약속(*"같은 페이지
+   * **이 케이스가 구조 기본 CSS 설계 전체의 성공 판정이다.** 구조 기본 CSS가 낸 `display:flex`를
+   * 테마 CSS의 `display:grid`가 `!important` 없이 덮는다. 설계서 「테마의 범위」의 약속(*"같은 페이지
    * 스키마가 테마에 따라 데이터 테이블로도, 카드 그리드로도"*)이 여기에 걸려 있다.
    */
   it('테마 CSS가 구조 기본 CSS를 덮는다 — !important 없이', async () => {
     const html = '<div data-wb-id="n_000000000001" data-wb-component="Flex" data-wb-structure="default"></div>'
 
     // **덮는 것을 재려면 먼저 덮일 것이 있어야 한다.** 이 줄이 없으면 구조 기본 CSS가
-    // 아예 안 맞을 때도 케이스가 초록이 된다 — 셀렉터에 `[data-wb-id]`를 더해 특이도를
-    // 올려 봤더니 실제로 그랬다(기본 CSS가 안 맞으니 테마가 거저 이겼다).
+    // 아예 안 맞을 때도 케이스가 초록이 된다 — 셀렉터를 바꾸는 변이에서 기본 CSS가 안
+    // 맞으면 테마가 거저 이긴다.
     const baseOnly = await probe([structureBaseCss()], html)
     expect(baseOnly.computed('[data-wb-component="Flex"]', 'display')).toBe('flex')
 
@@ -165,16 +161,16 @@ describe('Task 1 — structureBaseCss', () => {
 })
 
 /**
- * **값이 실제로 노드까지 흘러가는지.** 계획서가 *"계산된 스타일까지 간다"*를 요구하는데,
+ * **값이 실제로 노드까지 흘러가는지.** *"계산된 스타일까지 간다"*를 재려 해도
  * jsdom은 `var()`를 치환하지 못한다(`css-probe.ts`의 표) — 그래서 **두 조각으로 나눠 잰다.**
  *
  * 1. 노드에 커스텀 프로퍼티가 그 값으로 실렸는가 (계산된 스타일로 읽는다 — jsdom이 한다)
  * 2. 구조 기본 CSS의 선언이 그 이름을 가리키는가 (계산된 스타일이 `var(…)` 문자열로 나온다)
  *
  * 마지막 치환 한 걸음(브라우저가 1을 2에 꽂는 것)은 **이 저장소의 자동 테스트가 재지
- * 못한다.** 실제 브라우저로 따로 쟀고 그 결과는 이월 문서에 적는다.
+ * 못한다.** 실제 브라우저로 따로 재야 한다.
  */
-describe('Task 2 — Flex·Grid의 값이 커스텀 프로퍼티로 흘러간다', () => {
+describe('Flex·Grid의 값이 커스텀 프로퍼티로 흘러간다', () => {
   it('Flex의 네 prop이 전부 노드에 실린다', async () => {
     const dom = await renderedProbe('Flex', {
       direction: 'column',
@@ -201,7 +197,7 @@ describe('Task 2 — Flex·Grid의 값이 커스텀 프로퍼티로 흘러간다
   })
 
   it('Flex의 정렬 값은 flex-start가 아니라 start로 나간다', async () => {
-    // §6.0이 약속한 것 — 테마가 `display`를 grid로 덮을 수 있다. `flex-start`는 flexbox
+    // 설계서 「테마의 범위」가 약속한 것 — 테마가 `display`를 grid로 덮을 수 있다. `flex-start`는 flexbox
     // 밖에서 뜻이 흐려지고 `start`는 상자 정렬 어느 문맥에서나 같다.
     const dom = await renderedProbe('Flex', { align: 'start', justify: 'start' })
     const flex = '[data-wb-component="Flex"]'
@@ -229,15 +225,16 @@ describe('Task 2 — Flex·Grid의 값이 커스텀 프로퍼티로 흘러간다
   })
 })
 
-describe('Task 3 — Tree·Media·Placeholder', () => {
+describe('Tree·Media·Placeholder', () => {
   /**
    * **Tree가 다르다.** inline style이 노드가 아니라 `part('node')`인 `<li>`마다 붙는다.
    * 그래서 커스텀 프로퍼티도 그 `<li>`에 실리고, 기본 CSS는 조각 셀렉터로 읽는다.
    *
-   * 조각 규칙의 셀렉터에 `[data-wb-structure]`를 넣지 **않는다** — `compileTheme`의
+   * 조각 규칙의 셀렉터에 `[data-wb-structure]`를 **그대로** 넣지 않는다 — `compileTheme`의
    * 조각 규칙이 `[data-wb-component="X"] [data-wb-part="p"]`(특이도 0,2,0)이므로, 여기에
-   * 구조를 더하면 0,3,0이 되어 테마가 진다. 대가는 P4b의 `Tree:accordion`이 같은 규칙을
-   * 받는다는 것이고, 그때 `--wb-node-tree-level`을 안 실으면 기본값 0이 적용된다.
+   * 구조를 더하면 0,3,0이 되어 테마가 진다. 구조로 좁혀야 하면 `:where()`로 감싼다(특이도
+   * 0) — `Tree [node]`가 `:where(indent)`로 좁혀져 있어 `accordion`은 이 규칙을 받지 않는다
+   * (아래 수신자 표).
    */
   it('Tree의 들여쓰기 단계가 li마다 실린다', async () => {
     const dom = await renderedProbe('Tree', { items: ['가', '나', '다', '라'], depth: 3 })
@@ -280,20 +277,18 @@ describe('Task 3 — Tree·Media·Placeholder', () => {
 })
 
 /**
- * **조각 규칙을 누가 받는가 — 수신자 표.** P4b-2 ③이 만들었다.
+ * **조각 규칙을 누가 받는가 — 수신자 표.**
  *
  * **왜 이 표가 있어야 하는가.** 조각 규칙은 셀렉터에 구조가 안 들어가는 것이 기본이므로
  * (특이도 (0,2,0)을 지켜야 테마가 이긴다) **그 조각을 내는 다른 구조도 규칙을 받는다.**
- * 그 자체는 대가로 받아들인 것인데, **누가 받는지가 코드 어디에도 안 적혀 있었다.**
- * 그래서 구조가 하나 늘어 남의 규칙을 받기 시작해도 **아무 케이스도 안 죽는다.**
+ * 그 자체는 대가로 받아들인 것인데, **누가 받는지가 코드 어디에도 안 적혀 있으면**
+ * 구조가 하나 늘어 남의 규칙을 받기 시작해도 **아무 케이스도 안 죽는다** — 예를 들어
+ * `List:cardGrid`의 `pagination` 규칙이 `table`·`stackedList`·`mediaList`까지 가고,
+ * `Tree:accordion`이 `indent`의 들여쓰기 규칙을 받는다.
  *
- * **P4b-2 ②가 그 부류를 실제로 만들었다.** `List:cardGrid`를 만들며 더한
- * `pagination` 규칙이 `table`·`stackedList`·`mediaList`까지 갔고(③이 Chromium으로
- * 재서 무해함까지 확인했다), `Tree:accordion`은 `indent`의 들여쓰기 규칙을 받았다.
- *
- * **③이 그 둘을 `:where()`로 좁혔고, 이 표가 그것이 되돌아가는 것을 막는다.**
+ * **그 둘은 `:where()`로 좁혀져 있고, 이 표가 그것이 되돌아가는 것을 막는다.**
  * 표를 안 고치고 구조를 더하면 여기서 죽는다 — *"발견된 것만 닫으면 매번 하나가
- * 남는다"*(P4a-3)에 대한 이 자리의 답이다.
+ * 남는다"*에 대한 이 자리의 답이다.
  *
  * **재는 방법:** 실제로 그린 HTML에 실제 셀렉터를 걸어 본다. 조각 이름을 눈으로 세지
  * 않는 것은 **자식이 있어야만 나오는 조각**이 있어서다(그래서 자식을 단다).
@@ -308,14 +303,14 @@ describe('P4b-2 ③ — 조각 규칙의 수신자', () => {
   const RECEIVERS: Record<string, string[]> = {
     // 둘 다 미디어 상자를 원한다 — 좁히지 않는다.
     'Card [media]': ['mediaTop', 'horizontal'],
-    // `:where(cardGrid)`로 좁혔다. 페이지네이션 조각 자체는 네 구조가 다 낸다.
+    // `:where(cardGrid)`로 좁힌다. 페이지네이션 조각 자체는 네 구조가 다 낸다.
     'List [pagination]': ['cardGrid'],
-    // P4b-3 ②(commerce)가 더했다. `:where(mediaList)`로 좁혔다 — `item`은 네 구조 중
-    // 셋이 내고(`table`만 안 낸다) `media`는 `cardGrid`도 낸다. 가로 분할과 썸네일 크기를
-    // 원하는 것은 `mediaList` 하나뿐이라 좁혔다.
+    // `:where(mediaList)`로 좁힌다 — `item`은 네 구조 중 셋이 내고(`table`만 안 낸다)
+    // `media`는 `cardGrid`도 낸다. 가로 분할과 썸네일 크기를 원하는 것은 `mediaList`
+    // 하나뿐이다.
     'List [item]': ['mediaList'],
     'List [media]': ['mediaList'],
-    // `:where(indent)`로 좁혔다. `accordion`은 중첩으로 들여쓰므로 단계 변수를 안 싣는다.
+    // `:where(indent)`로 좁힌다. `accordion`은 중첩으로 들여쓰므로 단계 변수를 안 싣는다.
     'Tree [node]': ['indent'],
     // 넷 다 비율을 싣는다 — 좁히지 않는다. 하나라도 안 실으면 조용히 기본값으로 굳으므로
     // 규칙이 넷에 다 걸려 있는 편이 그 어긋남을 만들 자리를 없앤다.
@@ -376,18 +371,20 @@ describe('P4b-2 ③ — 조각 규칙의 수신자', () => {
 })
 
 /**
- * **특이도를 문자열로 잰다 — jsdom이 못 재는 것을 여기서 대신 막는다.** P4b-2 ③.
+ * **특이도를 문자열로 잰다 — jsdom이 못 재는 것을 여기서 대신 막는다.**
  *
- * **왜 필요한가.** 이 저장소가 캐스케이드를 두고 실측했다고 적은 모든 케이스는 계산된
- * 스타일을 jsdom으로 읽는데, **jsdom 25는 특이도를 아예 계산하지 않고 순서만 따른다.**
- * ③이 쟀다: `#v`(1,0,0)가 뒤에 온 `[data-wb-part]`(0,1,0)에게 진다. 대조 다섯(id vs 속성 ·
- * 속성 셋 vs 둘 · class vs 태그, 한 시트/두 시트)이 **전부 순서대로만** 갈렸다.
+ * **왜 필요한가.** 이 저장소가 캐스케이드를 두고 재는 케이스는 전부 계산된 스타일을
+ * jsdom으로 읽는데, **jsdom 25는 특이도를 아예 계산하지 않고 순서만 따른다.** 다시 재는
+ * 법: `css-probe.ts`의 `probe`에 `#v`(1,0,0) 규칙과 뒤에 온 `[data-wb-part]`(0,1,0) 규칙을
+ * 넣으면 `#v`가 진다. 대조 다섯(id vs 속성 · 속성 셋 vs 둘 · class vs 태그, 한 시트/두
+ * 시트)이 **전부 순서대로만** 갈린다.
  *
- * **그래서 이런 일이 난다 — 실측이다.** `componentRule`의 셀렉터를
+ * **그래서 이런 변이가 jsdom 케이스를 전부 통과한다.** `componentRule`의 셀렉터를
  * `[data-wb-component="X"][data-wb-component="X"][data-wb-structure="Y"]`로 바꾸면
  * (매칭은 한 글자도 안 변하고 특이도만 (0,2,0) → (0,3,0)) **실제 브라우저에서는 테마가
- * 진다**(Chromium 151: 테마의 `display: grid`가 구조의 `flex`에게 짐 — P4a-2 계획 전체가
- * 무너지는 그 고장이다). 그런데 **`--project unit`·`--project web` 1723건이 전부 초록이었다.**
+ * 진다**(Chromium 151: 테마의 `display: grid`가 구조의 `flex`에게 짐 — 테마가 구조를
+ * 덮는다는 약속 전체가 무너지는 고장이다). 그런데 jsdom으로 캐스케이드를 읽는
+ * `--project unit`·`--project web`의 케이스는 **전부 초록이다.**
  *
  * **이 케이스가 그 변이를 잡는다.** 브라우저 없이, 셀렉터 문자열만으로 잰다 — 우리가
  * 내는 셀렉터는 속성 선택자와 `:where()`뿐이라 특이도가 **셀 수 있다.**

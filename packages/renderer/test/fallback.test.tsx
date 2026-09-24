@@ -127,7 +127,7 @@ describe('렌더 실패 폴백', () => {
   })
 
   it('카탈로그에 없는 구조를 지정해도 폴백이다', () => {
-    // resolveStructure가 던지던 경로다. 테마가 오타난 구조를 지정해도 화면이 남아야 한다.
+    // 테마가 오타난 구조를 지정해도 화면이 남아야 한다 — 여기서 던지면 캔버스가 흰 화면이 된다.
     const html = markup(
       renderNode({ id: 'n_000000000001', type: 'List' }, { structures: { List: 'bogus' } }),
     )
@@ -182,7 +182,7 @@ describe('렌더 실패 폴백', () => {
   })
 
   it('폴백에도 data-wb-id가 있다', () => {
-    // 캔버스(태스크 9)가 id로 노드를 찾아 선택한다. 폴백에도 같은 엘리먼트에 있어야 한다.
+    // 캔버스가 id로 노드를 찾아 선택한다. 폴백에도 같은 엘리먼트에 있어야 한다.
     const html = markup(renderNode({ id: 'n_000000000042', type: 'NoSuchThing' }))
 
     expect(html).toMatch(/<div[^>]*data-wb-id="n_000000000042"[^>]*data-wb-error=/)
@@ -198,12 +198,12 @@ describe('렌더 실패 폴백', () => {
 
 /**
  * 여기부터는 "노드가 아닌 것"이 들어오는 경우다. 타입은 `WbNode`를 요구하지만 이 렌더러가
- * 받는 문서는 서버 검증 전에 낙관적 패치가 지나간 것이라(설계 §7.1) 일시적으로 타입을
+ * 받는 문서는 서버 검증 전에 낙관적 패치가 지나간 것이라(설계서 「정방향 흐름」) 일시적으로 타입을
  * 만족하지 않을 수 있다. 이 자리에서 던지면 캔버스가 흰 화면이 된다.
  */
 describe('모양이 깨진 노드', () => {
   it('root가 없는 문서도 던지지 않고 폴백을 그린다', () => {
-    // 낙관적 패치가 /root를 지운 중간 상태. 예전에는 여기서 TypeError가 났다.
+    // 낙관적 패치가 /root를 지운 중간 상태. 여기서 TypeError가 나면 캔버스가 흰 화면이 된다.
     const doc = { version: 1 } as PageDocument
 
     let html = ''
@@ -228,7 +228,7 @@ describe('모양이 깨진 노드', () => {
     const noId = { type: 'Text', props: { content: '무시된다' } } as unknown as WbNode
     const noIdHtml = markup(renderNode(noId))
     expect(errorMessages(noIdHtml)).toEqual(['노드의 id가 문자열이 아닙니다'])
-    // id를 읽지 못했으므로 data-wb-id는 빈 문자열이다. 캔버스(태스크 9)가 [data-wb-id]로
+    // id를 읽지 못했으므로 data-wb-id는 빈 문자열이다. 캔버스가 [data-wb-id]로
     // 훑는다면 빈 id를 선택 대상으로 삼지 않도록 걸러야 한다.
     expect(noIdHtml).toContain('data-wb-id=""')
 

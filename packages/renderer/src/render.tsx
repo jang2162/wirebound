@@ -56,12 +56,12 @@ export interface RenderOptions {
    */
   onNodeError?: (error: NodeRenderError) => void
   /**
-   * **상호작용 런타임을 켠다**(설계 §8.3, P5-3 D2). **없으면 꺼진 것이고 그것이 기본이다** —
+   * **상호작용 런타임을 켠다**(설계서 「상호작용」의 「실행」). **없으면 꺼진 것이고 그것이 기본이다** —
    * 이 키를 주지 않은 호출(편집 모드의 캔버스·테마 갤러리·기존 케이스 전부)은 **한 글자도
-   * 다르지 않게** 그려진다(D7).
+   * 다르지 않게** 그려진다.
    *
    * `renderer`가 이것을 소유하는 이유는 `interaction/runtime.ts`의 머리말에 있다 — 요지는
-   * §11.3의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*이고, `apps/web`에 두면 P8의
+   * 「HTML 정적 번들」의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*이고, `apps/web`에 두면
    * 정적 번들이 다른 런타임을 갖는다.
    */
   interaction?: InteractionOptions
@@ -69,24 +69,24 @@ export interface RenderOptions {
 
 /**
  * 상호작용 런타임의 입출력. **상태는 호출자가 든다** — 이 렌더러는 함수이지 컴포넌트가
- * 아니라 상태를 들 자리가 없고, §11.3의 정적 번들에는 React가 없을 수도 있다.
+ * 아니라 상태를 들 자리가 없고, 설계서 「HTML 정적 번들」에는 React가 없을 수도 있다.
  */
 export interface InteractionOptions {
   /**
-   * 지금 겹layer. **문서를 바꾸지 않고 그 위에 얹는다**(D1) — 뷰 모드에서 일어나는 것은
+   * 지금 겹layer. **문서를 바꾸지 않고 그 위에 얹는다** — 뷰 모드에서 일어나는 것은
    * 시연이지 편집이 아니다.
    *
-   * **모드를 나가거나 페이지를 옮기면 비우는 것은 호출자의 일이다**(재라 #4). 런타임은
+   * **모드를 나가거나 페이지를 옮기면 비우는 것은 호출자의 일이다.** 런타임은
    * 상태를 들지 않으므로 언제 리셋할지도 알 수 없다.
    */
   overlay?: InteractionOverlay
   /**
    * 노드에서 트리거가 일어났다. **`runInteraction`은 이미 여기서 돌았고, 그 결과가 인자다** —
    * 호출자가 할 일은 `result.overlay`를 다음 렌더에 되돌려 주고, `requests`를 처리하고
-   * (D4 — 라우팅은 렌더러 밖이다), `issues`를 말하는 것뿐이다(D3).
+   * (라우팅은 렌더러 밖이다), `issues`를 말하는 것뿐이다.
    *
    * **판정을 호출자에게 넘기지 않는 것이 요점이다.** 앱이 `runInteraction`을 직접 부르게
-   * 하면 웹 앱과 P8의 번들이 각자 부르는 자리를 갖고, 순서·리셋·오류 처리가 갈릴 수 있다.
+   * 하면 웹 앱과 정적 번들이 각자 부르는 자리를 갖고, 순서·리셋·오류 처리가 갈릴 수 있다.
    * 렌더러가 부르면 그 셋이 한 벌이다.
    *
    * **`onNodeError`와 달리 이 콜백 안에서는 `setState`를 불러도 된다.** 그쪽은 엘리먼트
@@ -132,7 +132,7 @@ function resolveStructureOf(def: ComponentDef, options: RenderOptions): Structur
 }
 
 /**
- * 던지는 공개 API. `renderNode`는 이제 이것을 쓰지 않고 폴백으로 흡수하지만,
+ * 던지는 공개 API. `renderNode`는 이것을 쓰지 않고 폴백으로 흡수하지만,
  * 구조 이름만 알고 싶은 호출자(테마 도구 등)에게는 실패가 예외인 편이 낫다.
  */
 export function resolveStructure(type: string, options: RenderOptions): string {
@@ -150,7 +150,7 @@ function readString(value: unknown): string {
  * `node`가 노드의 모양인지 본다. 아니면 그 이유를 한국어로 돌려주고, 맞으면 null이다.
  *
  * `WbNode` 타입을 믿지 않는 이유: 이 렌더러가 받는 문서는 서버 검증 **전에** 낙관적 패치가
- * 지나간 것이라(설계 §7.1) 일시적으로 타입을 만족하지 않을 수 있다. 컴파일러가 막아 주는
+ * 지나간 것이라(설계서 「정방향 흐름」) 일시적으로 타입을 만족하지 않을 수 있다. 컴파일러가 막아 주는
  * 것은 호출부의 타입뿐이고, 런타임에 들어오는 값이 아니다.
  */
 function shapeError(node: unknown): string | null {
@@ -170,8 +170,8 @@ function childKey(child: unknown, index: number): string {
 
 /**
  * 노드 하나를 그린다. **구조 구현체 본문에서 난 예외를 빼면 던지지 않는다** — 노드가
- * 잘못돼 있으면 그 자리에 폴백을 그린다(P0 이월 6번). 던지면 React가 서브트리를 통째로
- * 버리는데, P2b의 에디터는 서버 검증 전에 낙관적 패치를 적용하므로(설계 §7.1) 일시적으로
+ * 잘못돼 있으면 그 자리에 폴백을 그린다. 던지면 React가 서브트리를 통째로
+ * 버리는데, 에디터는 서버 검증 전에 낙관적 패치를 적용하므로(「정방향 흐름」) 일시적으로
  * 유효하지 않은 문서가 정상 상태다. 편집 중에 화면이 사라지면 안 된다.
  *
  * 폴백으로 흡수하는 것: 노드가 객체가 아니거나 `id`·`type`이 문자열이 아닌 경우,
@@ -187,7 +187,7 @@ function childKey(child: unknown, index: number): string {
 export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElement {
   // 상호작용 타겟을 풀려면 **트리 전체**가 필요한데(다른 노드를 가리킨다) 이 진입점이 받는
   // 것은 노드 하나다. 그 노드를 뿌리로 삼는다 — 부분 트리를 그리는 호출자에게는 그 부분이
-  // 곧 세계이고, 밖을 가리키는 타겟은 `사라진 노드`가 되어 D3의 경로로 간다.
+  // 곧 세계이고, 밖을 가리키는 타겟은 `사라진 노드`가 되어 `issues`로 말하는 경로로 간다.
   return renderNodeIn(node, node, options)
 }
 
@@ -195,7 +195,7 @@ export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElem
  * 재귀 본체. `root`는 **상호작용 타겟을 푸는 세계**이고 재귀 내내 같다.
  *
  * 공개 API에 `root`를 노출하지 않는 이유: 호출자가 문서와 다른 뿌리를 줄 수 있게 되면
- * *"이 액션의 타겟이 무엇인가"*가 호출자마다 갈린다 — §11.3의 *"렌더러가 하나뿐이라
+ * *"이 액션의 타겟이 무엇인가"*가 호출자마다 갈린다 — 「HTML 정적 번들」의 *"렌더러가 하나뿐이라
  * 결과가 어긋날 수 없다"*가 그 자리에서 깨진다.
  */
 function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): ReactElement {
@@ -249,11 +249,11 @@ function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): React
   const def = getComponent(type)
   if (!def) return fallback(`알 수 없는 컴포넌트 타입: ${type}`)
 
-  // **겹layer가 문서의 props를 덮는다**(D1). 겹layer에 이 노드가 없으면 `node.props`가
+  // **겹layer가 문서의 props를 덮는다.** 겹layer에 이 노드가 없으면 `node.props`가
   // 그대로 돌아오므로 꺼진 렌더는 이 줄을 지나도 같은 값이다.
   //
   // **덮은 값도 검증을 지난다.** 통과하지 못하면 이 노드는 폴백이 되는데, 그 상태는
-  // 겹layer에 닿기 전에 D3의 판정이 먼저 걸러 낸다 — `checkNodeAction`이 같은 카탈로그
+  // 겹layer에 닿기 전에 런타임의 판정이 먼저 걸러 낸다 — `checkNodeAction`이 같은 카탈로그
   // 스키마로 값을 보고 `invalid-interaction-prop`을 낸다. 즉 여기까지 오는 겹layer 값은
   // 이미 그 prop의 계약을 만족한다.
   const nodeProps = overlayProps(options.interaction?.overlay, nodeId, node.props)
@@ -284,7 +284,7 @@ function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): React
     node,
     props,
     // **꺼져 있으면 `nodeAttrs`가 낸 객체 그대로 넘어간다** — 스프레드로 새 객체를 만들지도
-    // 않는다(D7: 끈 렌더는 오늘과 같아야 한다).
+    // 않는다(끈 렌더는 상호작용이 없는 렌더와 한 글자도 달라서는 안 된다).
     attrs: options.interaction === undefined ? attrs : { ...attrs, ...handlersFor(root, node, options) },
     part: partAttrs,
     children,
@@ -296,25 +296,25 @@ function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): React
  * 트리거 4종 → DOM 이벤트.
  *
  * **`attrs`에 얹는 것이 요점이다.** 구조 구현체는 전부 `{...attrs}`를 자기 루트 태그에
- * 편다(19종 전수 — `structures/*.tsx`). 그래서 여기 핸들러를 넣으면 **구조 구현체를 한
+ * 편다(전수 — `structures/*.tsx`). 그래서 여기 핸들러를 넣으면 **구조 구현체를 한
  * 글자도 안 고치고** 모든 컴포넌트가 상호작용을 받는다.
  *
- * **§6.11의 여섯 속성 계약을 넓히지 않는다.** 이것들은 `data-*` 속성이 아니라 React의
+ * **설계서 「컴파일」의 여섯 속성 계약을 넓히지 않는다.** 이것들은 `data-*` 속성이 아니라 React의
  * 이벤트 prop이라 DOM에 속성으로 나가지 않고, 테마의 셀렉터 어휘에 아무것도 더하지
- * 않는다(`test/contract-attrs.test.ts`가 세는 것도 `data-wb-*`다). **일곱째 데이터 속성을
- * 만들어야 했다면 멈추고 물어야 했다** — 만들지 않았다.
+ * 않는다(`test/contract-attrs.test.ts`가 세는 것도 `data-wb-*`다). **일곱째 데이터 속성이
+ * 필요해지면 만들기 전에 멈추고 묻는다.**
  *
  * **`select`가 `onClick`인 것은 판정이다.** 와이어프레임 DOM에는 *"선택"*을 내는 네이티브
  * 이벤트원이 없다 — `Tabs`는 탭마다 `<span>`을 그리고(`structures/structure.tsx`) `List`도
- * 행이 `<div>`다. §8.2의 표본(*"③ 상세정보 탭 선택 시"*)이 실제로 뜻하는 조작은 **그 노드
+ * 행이 `<div>`다. 「자동 문장화」의 표본(*"③ 상세정보 탭 선택 시"*)이 실제로 뜻하는 조작은 **그 노드
  * 안을 누르는 것**이고, 그것이 루트로 버블링해 여기 닿는다. React의 `onSelect`(텍스트
  * 선택)는 그 조작이 아니다.
  *
- * **`change`·`submit`은 오늘 사용자 조작으로는 닿지 않는다** — `Field`가 `<input>`이 아니라
+ * **`change`·`submit`은 사용자 조작으로는 닿지 않는다** — `Field`가 `<input>`이 아니라
  * `<div>`를 그리고(와이어프레임이므로), 폼에는 제출 버튼이 없어 `<span>조회</span>`가
  * 아무것도 제출하지 않는다. **그래도 다는 것은** 그 이벤트가 나면 규칙이 돌아야 하고
- * (프로그램적 제출·미래의 실제 컨트롤), 달지 않으면 *"트리거 4종"*이라는 §8.1의 계약이
- * 화면에서 반만 참이 되기 때문이다. **재서 보고에 적었다.**
+ * (프로그램적 제출·미래의 실제 컨트롤), 달지 않으면 *"트리거 4종"*이라는 「모델」의 계약이
+ * 화면에서 반만 참이 되기 때문이다.
  */
 function handlersFor(root: WbNode, node: WbNode, options: RenderOptions): WbHandlers {
   const interactions = node.interactions
@@ -332,8 +332,8 @@ function handlersFor(root: WbNode, node: WbNode, options: RenderOptions): WbHand
       // **문서를 떠난다** — 그러면 겹layer(뷰 모드에서 눌러 만든 화면 상태)가 통째로 사라지고
       // 사용자는 *"눌렀더니 페이지가 리로드됐다"*를 본다.
       //
-      // **실브라우저에서 A/B/A로 쟀다**(P5-3 리뷰가 반증했고 다시 재서 확인했다).
-      // 렌더된 `<form>`에 `action`을 걸고 `<button type="submit">`을 꽂아 눌렀다:
+      // **실브라우저에서 A/B/A로 쟀다.** 렌더된 `<form>`에 `action`을 걸고
+      // `<button type="submit">`을 꽂아 눌렀다:
       //
       // | 번들 | 이동했나 | window 버블의 `defaultPrevented` |
       // |---|---|---|
@@ -341,11 +341,11 @@ function handlersFor(root: WbNode, node: WbNode, options: RenderOptions): WbHand
       // | B — 이 줄 없음 | **`/landed.html`로 이동한다**(JS 문맥이 파괴됐다) | `false` |
       // | A′ — 되돌림 | 안 한다 | `true` |
       //
-      // **앞 판의 주석은 이 자리에 *"하중 0 · React가 이미 막는다"*고 적었는데 거짓이었다.**
-      // 그때 잰 A/B 두 번들은 **바이트까지 같았다**(둘 다 1,243,664B) — 심은 것은
-      // `src/render.tsx`인데 번들러가 `package.json`의 `exports`를 따라 **`dist/`를**
-      // 봤기 때문이다. `--alias`로 `src`를 보게 하고 다시 재니 뒤집혔다. 즉 window 버블에서
-      // `true`였던 것은 React가 아니라 **React의 루트 리스너가 부른 이 핸들러**였다.
+      // **이 줄은 하중이 있다 — *"React가 이미 막는다"*가 아니다.** 잴 때 함정이 있다:
+      // `src/render.tsx`에 A/B를 심어도 번들러가 `package.json`의 `exports`를 따라
+      // **`dist/`를** 보면 두 번들이 **바이트까지 같아져** 이 줄이 하중 0으로 보인다.
+      // `--alias`로 `src`를 보게 하고 재야 한다. window 버블에서 `true`인 것은 React가
+      // 아니라 **React의 루트 리스너가 부른 이 핸들러**다.
       //
       // **jsdom으로는 이 갈래를 잴 수 없다** — 거기서는 제출이 이동을 만들지 않는다.
       // 그래서 회귀가 이 줄을 지키지 못한다(`test/interaction-runtime.test.tsx`의
@@ -364,7 +364,7 @@ function handlersFor(root: WbNode, node: WbNode, options: RenderOptions): WbHand
  * 노드에 둘을 건 사용자가 *"하나는 되고 하나는 안 되는"* 화면을 본다.
  *
  * **결과를 합칠 때 겹layer를 이어 붙인다** — 앞 트리거가 만든 겹layer 위에서 뒤 트리거가
- * 돌아야 순서(재라 #5)가 한 벌로 남는다.
+ * 돌아야 순서(`runInteraction`의 머리말 「순서」)가 한 벌로 남는다.
  */
 function fire(root: WbNode, node: WbNode, dom: keyof WbHandlers, options: RenderOptions): void {
   const onEvent = options.interaction?.onEvent

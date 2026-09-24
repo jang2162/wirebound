@@ -1,18 +1,18 @@
 /**
- * **구조 그룹(`structures/structure.tsx`)이 P4b-2 ②에서 더한 구조 아홉.**
+ * **구조 그룹(`structures/structure.tsx`)의 기본 밖 구조 아홉.**
  *
  * `Section` fullBleed·splitBg · `Card` bordered·elevated·mediaTop·horizontal ·
  * `Tabs` pill·enclosed·vertical.
  *
- * **왜 새 파일인가.** `structures.test.tsx`는 그룹 넷이 함께 쓰는 전수 가드가 있는 자리다.
- * 병렬 워커 넷이 동시에 거기에 절을 더하면 병합에서 부딪힌다 — 준비 웨이브가 등록과 CSS를
- * 그룹별로 가른 것과 같은 이유로 케이스도 그룹별 파일에 둔다.
+ * **왜 파일이 따로인가.** `structures.test.tsx`는 그룹 모두가 함께 쓰는 전수 가드가 있는
+ * 자리다. 여럿이 병렬로 거기에 절을 더하면 병합에서 부딪힌다 — 등록과 CSS를 그룹별로 가른
+ * 것과 같은 이유로 케이스도 그룹별 파일에 둔다.
  *
  * **이 파일이 재는 것은 셋이다.**
  *
  * 1. **조각이 나오는가** — 구조가 약속한 `data-wb-part`가 실제로 나오는가.
- * 2. **계약 밖 속성이 없는가** — §6.11의 여섯 말고는 아무것도 나가지 않는다.
- * 3. **DOM이 정말 다른가** — 재라 #7이 물은 것. 같은 것은 *같다고* 못박는다.
+ * 2. **계약 밖 속성이 없는가** — 설계서 「컴파일」의 여섯 말고는 아무것도 나가지 않는다.
+ * 3. **DOM이 정말 다른가** — 같은 것은 *같다고* 못박는다.
  *
  * 3번이 이 파일의 핵심이다. `Card:bordered`처럼 **`plain`과 DOM이 같은** 구조가 있고,
  * 그것은 숨길 것이 아니라 **재서 적어 둘 것**이다(아래 각 절의 머리말). 못박아 두면
@@ -32,7 +32,7 @@ beforeAll(() => {
   installStructures()
 })
 
-/** 렌더러가 테마에 노출하기로 한 속성 계약 전부. 설계 §6.11 */
+/** 렌더러가 테마에 노출하기로 한 속성 계약 전부. 설계서 「컴파일」 */
 const CONTRACT_ATTRS = [
   'data-wb-id',
   'data-wb-component',
@@ -78,12 +78,12 @@ function expectContractOnly(html: string): void {
   const attrs = [...html.matchAll(/\s(data-[\w-]+)=/gi)].map((match) => match[1]!)
   expect(attrs.length).toBeGreaterThan(0)
   expect([...new Set(attrs.filter((attr) => !CONTRACT_ATTRS.includes(attr)))]).toEqual([])
-  // 구조가 `style`에 일반 선언을 내지 않는다(P0 이월 #7). 이 그룹은 커스텀 프로퍼티조차
+  // 구조가 `style`에 일반 선언을 내지 않는다. 이 그룹은 커스텀 프로퍼티조차
   // 싣지 않으므로 `style` 속성 자체가 없어야 한다.
   expect([...html.matchAll(/\sstyle="([^"]*)"/g)].map((match) => match[1]!)).toEqual([])
 }
 
-/** 이 그룹이 내는 조각 이름은 전부 카탈로그에 선언돼 있어야 한다(작성 계약 2). */
+/** 이 그룹이 내는 조각 이름은 전부 카탈로그에 선언돼 있어야 한다. */
 function expectDeclaredParts(type: string, html: string): void {
   const declared = new Set(requireComponent(type).parts)
   expect([...new Set(parts(html).filter((part) => !declared.has(part)))]).toEqual([])
@@ -94,7 +94,7 @@ describe('Section:fullBleed — 안쪽 래퍼가 없다', () => {
    * **DOM이 `contained`와 다르다 — 조각 하나가 통째로 없다.**
    *
    * `contained`가 `div[part=inner]`로 자식을 감싸는 것은 **테마가 그 자리에 `maxWidth`를
-   * 걸어 폭을 가두기 위해서**다(§6.4의 `container.max`가 그 값이다). `fullBleed`는 폭을
+   * 걸어 폭을 가두기 위해서**다(설계서 「primitives — 사이트 골격」의 `container.max`가 그 값이다). `fullBleed`는 폭을
    * 가두지 않는 섹션이므로 **가둘 자리 자체가 없어야 한다** — 래퍼를 남긴 채
    * `max-width: none`을 거는 것은 테마가 매번 되돌려야 하는 기본값을 만드는 것이고,
    * 그러면 *"어느 테마에서 무엇이 이겼는가"*가 다시 조용해진다.
@@ -132,11 +132,11 @@ describe('Section:splitBg — 배경이 갈린 자리가 조각으로 있다', (
    * **DOM이 다르다 — `contained`에 없는 조각(`band`)이 하나 더 있다.**
    *
    * *"배경이 갈렸다"*를 테마가 그리려면 **갈린 쪽을 겨냥할 셀렉터가 있어야 한다.**
-   * 오늘 테마가 스타일할 수 있는 것은 컴포넌트 루트와 `parts`뿐이고(§5.1), 의사 요소는
+   * 테마가 스타일할 수 있는 것은 컴포넌트 루트와 `parts`뿐이고(설계서 「컴포넌트 정의 구조」), 의사 요소는
    * 어휘에 없다. 즉 조각 없이는 *"섹션의 절반만 다른 배경"*을 **표현할 방법이 아예 없다** —
    * CSS 차이가 아니라 **없던 표현이 생기는 것**이므로 구조가 맞다.
    *
-   * `band`는 비어 있는 상자다. 무엇을 그릴지는 테마가 정한다(§6.8의 `bg`·`bgImage`·
+   * `band`는 비어 있는 상자다. 무엇을 그릴지는 테마가 정한다(설계서 「스타일 프로퍼티 화이트리스트」의 `bg`·`bgImage`·
    * `bgGradient`가 이미 있는 어휘다) — 구현체는 색을 정하지 않는다.
    */
   it('band와 inner를 그 순서로 낸다', () => {
@@ -153,7 +153,7 @@ describe('Section:splitBg — 배경이 갈린 자리가 조각으로 있다', (
   })
 
   it('band는 카탈로그에 선언된 조각이다', () => {
-    // 선언되지 않은 이름을 내면 `structures.test.tsx`의 part 계약이 죽는다(작성 계약 2).
+    // 선언되지 않은 이름을 내면 `structures.test.tsx`의 part 계약이 죽는다.
     expect(requireComponent('Section').parts).toContain('band')
   })
 
@@ -166,10 +166,10 @@ describe('Section:splitBg — 배경이 갈린 자리가 조각으로 있다', (
   /**
    * **구조가 서기 위한 선언 — 두 조각이 나란히 서야 "갈렸다"가 된다.**
    *
-   * 규칙을 **루트에만** 둔다. `band`·`inner`에 규칙을 달면 `partRule`이 구조 이름을 넣지
-   * 않으므로(특이도 때문이다 — `structure-css-tools.ts`) `contained`의 `inner`까지 받아
-   * **오늘 화면이 바뀐다**(D5). 루트 규칙은 `componentRule`이 구조 이름을 넣으므로
-   * `splitBg`에만 닿는다.
+   * 규칙을 **루트에만** 둔다. `band`·`inner`에 구조 없는 조각 규칙을 달면(특이도 때문에
+   * 조각 규칙은 구조를 맨 셀렉터로 넣지 않는다 — `structure-css-tools.ts`) `contained`의
+   * `inner`까지 받아 **이미 있는 화면이 바뀐다.** 루트 규칙은 `componentRule`이 구조 이름을
+   * 넣으므로 `splitBg`에만 닿는다.
    *
    * **어휘를 골라 썼다.** `display`·`gridColumns` 둘 다 `STYLE_PROPERTIES`에 있으므로
    * **테마가 이 두 줄을 그대로 덮을 수 있다.** `flex-grow` 같은 것으로 갈랐으면 테마에
@@ -191,24 +191,24 @@ describe('Section:splitBg — 배경이 갈린 자리가 조각으로 있다', (
       '<section data-wb-component="Section" data-wb-structure="contained">' +
         '<div data-wb-part="inner"></div></section>',
     )
-    // `''`가 아니라 `'block'`이다 — jsdom이 `<section>`에 UA 기본값을 준다. 처음에 `''`로
-    // 적었다가 여기서 갈렸고, **대상이 아니라 장치가 틀린 쪽**이었다.
+    // `''`가 아니라 `'block'`이다 — jsdom이 `<section>`에 UA 기본값을 준다. `''`를 기대하면
+    // 여기서 갈리고, 그때는 **대상이 아니라 장치가 틀린 쪽**이다.
     expect(dom.computed('[data-wb-structure="contained"]', 'display')).toBe('block')
   })
 })
 
 /**
- * **`plain`과 DOM이 같은 구조를 여기서 못박는다 — 이것이 재라 #7의 답이다.**
+ * **`plain`과 DOM이 같은 구조를 여기서 못박는다.**
  *
- * `bordered`는 테두리, `elevated`는 그림자다. 둘 다 **§6.8이 이미 가진 어휘**로
+ * `bordered`는 테두리, `elevated`는 그림자다. 둘 다 **설계서 「스타일 프로퍼티 화이트리스트」이 이미 가진 어휘**로
  * 표현된다(`borderColor`·`borderWidth`·`borderStyle`·`shadow`). 즉 `plain`과 갈리는 것이
  * **스킨뿐이고 DOM은 한 글자도 다르지 않다.**
  *
- * **그래도 구현한다** — 설계 §6.5가 구조 옵션으로 열거했고, 구조 이름이 곧
+ * **그래도 구현한다** — 설계서 「components — 구조 + 스킨」이 구조 옵션으로 열거했고, 구조 이름이 곧
  * `data-wb-structure` 셀렉터라 **테마가 세 장의 스킨을 갈라 쓸 채널**이 된다. 다른 데서
  * 얻을 수 없는 것은 그 채널 하나이고, 그것이 이 구조들의 전부다.
  *
- * **P4b-3이 알아야 할 것이 이 사실이다.** 테마를 만들 때 이 셋을 `parts` 차이로 다루면
+ * **테마를 만들 때 알아야 할 것이 이 사실이다.** 이 셋을 `parts` 차이로 다루면
  * 안 된다 — 조각도 태그도 같으므로 `base`의 스킨만 갈라야 한다.
  *
  * 아래 케이스가 *"같다"*를 실행 가능한 형태로 고정한다. 누가 DOM을 갈라 놓으면 여기가
@@ -224,7 +224,7 @@ function expectSameDomAsPlain(structure: string, props: Record<string, unknown>)
   expect(mine).toContain(`data-wb-structure="${structure}"`)
 }
 
-describe('Card:bordered — plain과 DOM이 같다 (재라 #7)', () => {
+describe('Card:bordered — plain과 DOM이 같다', () => {
   it('plain과 글자까지 같다 — 구조 이름만 다르다', () => {
     expectSameDomAsPlain('bordered', { title: '제목', subtitle: '부제' })
   })
@@ -234,7 +234,7 @@ describe('Card:bordered — plain과 DOM이 같다 (재라 #7)', () => {
   })
 
   it('구조 기본 CSS가 테두리를 정하지 않는다', () => {
-    // **테두리는 스킨이다** — 구현체 안에서 색·여백을 정하지 말라는 작성 계약이 여기 걸린다.
+    // **테두리는 스킨이다** — 구현체 안에서 색·여백을 정하지 않는다는 규칙이 여기 걸린다.
     // 기본 CSS에 테두리를 넣으면 테마가 그것을 되돌려야 하고, 그러면 `bordered`가
     // *"테마가 고르는 스킨"*이 아니라 *"렌더러가 강요하는 모습"*이 된다.
     const css = structureCssBlocks().join('\n')
@@ -250,7 +250,7 @@ describe('Card:bordered — plain과 DOM이 같다 (재라 #7)', () => {
   })
 })
 
-describe('Card:elevated — plain과 DOM이 같다 (재라 #7)', () => {
+describe('Card:elevated — plain과 DOM이 같다', () => {
   it('plain과 글자까지 같다 — 구조 이름만 다르다', () => {
     expectSameDomAsPlain('elevated', { title: '제목', subtitle: '부제' })
   })
@@ -280,15 +280,15 @@ describe('Card:mediaTop — 미디어 자리가 조각으로 생긴다', () => {
   /**
    * **DOM이 다르다 — `plain`에 없는 조각(`media`)이 머리에 하나 더 있다.**
    *
-   * `bordered`·`elevated`와 갈리는 지점이 정확히 여기다. 저 둘은 §6.8의 어휘로 표현되는
+   * `bordered`·`elevated`와 갈리는 지점이 정확히 여기다. 저 둘은 설계서 「스타일 프로퍼티 화이트리스트」의 어휘로 표현되는
    * **스킨**이지만, *"카드 위에 이미지 자리가 있다"*는 **테마가 겨냥할 상자가 없으면
-   * 표현할 수 없다** — 조각도 어휘이므로(§6.5: *"`parts`가 headless 컴포넌트를 테마에
+   * 표현할 수 없다** — 조각도 어휘이므로(설계서 「components — 구조 + 스킨」: *"`parts`가 headless 컴포넌트를 테마에
    * 매핑하는 실제 지점"*) 없는 조각은 만들 방법이 아예 없다.
    *
-   * **`media`라는 이름을 골랐다.** `List`가 §5.1의 예시에서 이미
+   * **`media`라는 이름을 골랐다.** `List`가 설계서 「컴포넌트 정의 구조」의 예시에서 이미
    * `['header','row','rowAlt','cell','item','media','title','meta']`로 같은 뜻의 조각을
-   * `media`라 부른다 — 그룹마다 이름을 새로 지으면 테마 작성자가 외울 것이 는다
-   * ("계획이 재지 않은 것 #4"가 지목한 부채다). 있는 이름을 따랐다.
+   * `media`라 부른다 — 그룹마다 이름을 새로 지으면 테마 작성자가 외울 것이 는다.
+   * 있는 이름을 따랐다.
    */
   it('media·header·title·body를 그 순서로 낸다', () => {
     expect(parts(render('Card', 'mediaTop', { title: '제목' }))).toEqual([
@@ -307,10 +307,9 @@ describe('Card:mediaTop — 미디어 자리가 조각으로 생긴다', () => {
     const html = render('Card', 'mediaTop', { title: '제목' })
     const at = (part: string): number => html.indexOf(`data-wb-part="${part}"`)
 
-    // **둘 다 실제로 있는지부터 못박는다.** 처음에는 `at('media') < at('header')`만 적었고,
-    // `media`를 통째로 지우는 변이를 심었더니 **이 케이스가 살아남았다** — `indexOf`가
-    // `-1`을 돌려주는데 `-1`은 무엇보다 작기 때문이다. **대상이 아니라 장치가 틀린 쪽**
-    // 이었고, 변이를 심어 보지 않았으면 못 봤다.
+    // **둘 다 실제로 있는지부터 못박는다.** `at('media') < at('header')`만 적으면
+    // `media`를 통째로 지우는 변이에서 **이 케이스가 살아남는다** — `indexOf`가 `-1`을
+    // 돌려주는데 `-1`은 무엇보다 작기 때문이다. 변이를 심어 봐야 보이는 사각이다.
     expect(at('media')).toBeGreaterThanOrEqual(0)
     expect(at('header')).toBeGreaterThanOrEqual(0)
     expect(at('media')).toBeLessThan(at('header'))
@@ -345,7 +344,7 @@ describe('Card:mediaTop — 미디어 자리가 조각으로 생긴다', () => {
    *
    * **손잡이(`nodeVar`)를 만들지 않았다.** `Media`는 `ratio` prop이 있어 노드가 값을 나를
    * 수 있지만 `Card`에는 그런 prop이 없다 — 없는 값을 위해 통로만 뚫으면 **아무도 값을
-   * 안 넣는 죽은 손잡이**가 된다(P4b-1 이월의 `Media.kind`와 같은 부류다). 테마는
+   * 안 넣는 죽은 손잡이**가 된다(`Media.kind`와 같은 부류다). 테마는
    * `aspectRatio` 어휘로 이 값을 그대로 덮을 수 있다.
    *
    * **`partRule`이라 `horizontal`의 `media`도 이 규칙을 받는다.** `media`를 내는 구조가
@@ -423,9 +422,9 @@ describe('Card:horizontal — 미디어와 본문이 나란히 선다', () => {
 })
 
 /**
- * **`underline`과 DOM이 같은 구조 — `Card`의 셋과 같은 부류다** (재라 #7).
+ * **`underline`과 DOM이 같은 구조 — `Card`의 셋과 같은 부류다.**
  *
- * `pill`은 알약 모양, `enclosed`는 테두리로 감싼 모양이다. 둘 다 **§6.8이 이미 가진
+ * `pill`은 알약 모양, `enclosed`는 테두리로 감싼 모양이다. 둘 다 **설계서 「스타일 프로퍼티 화이트리스트」이 이미 가진
  * 어휘**로 표현된다(`radius`·`bg`·`borderColor`·`borderWidth`·`borderStyle`). 탭이 몇
  * 개인지, 무엇을 감싸는지는 하나도 달라지지 않으므로 **DOM이 한 글자도 다르지 않다.**
  *
@@ -441,7 +440,7 @@ function expectSameDomAsUnderline(structure: string, props: Record<string, unkno
   expect(mine).toContain(`data-wb-structure="${structure}"`)
 }
 
-describe('Tabs:pill — underline과 DOM이 같다 (재라 #7)', () => {
+describe('Tabs:pill — underline과 DOM이 같다', () => {
   it('underline과 글자까지 같다 — 구조 이름만 다르다', () => {
     expectSameDomAsUnderline('pill', { tabs: ['가', '나', '다'], active: 1 })
   })
@@ -462,7 +461,7 @@ describe('Tabs:pill — underline과 DOM이 같다 (재라 #7)', () => {
   })
 })
 
-describe('Tabs:enclosed — underline과 DOM이 같다 (재라 #7)', () => {
+describe('Tabs:enclosed — underline과 DOM이 같다', () => {
   it('underline과 글자까지 같다 — 구조 이름만 다르다', () => {
     expectSameDomAsUnderline('enclosed', { tabs: ['가', '나', '다'], active: 2 })
   })
@@ -487,17 +486,17 @@ describe('Tabs:enclosed — underline과 DOM이 같다 (재라 #7)', () => {
 
 describe('Tabs:vertical — 탭이 세로로 쌓이고 패널이 옆에 선다', () => {
   /**
-   * **재라 #7이 이름으로 지목한 구조다. 재서 정한 결과를 여기 적는다.**
+   * **재서 정한 결과를 여기 적는다.**
    *
    * 세로 탭에 필요한 것은 둘이다. (가) 루트가 가로로 서서 탭 목록과 패널이 나란히 놓인다,
    * (나) 목록 안의 탭이 세로로 쌓인다.
    *
-   * **(가)는 CSS로 되고 (나)는 안 된다 — 이 저장소에서는.** 이유가 도구에 있다:
-   * `partRule`은 **구조 이름을 셀렉터에 넣지 않는다**(`structure-css-tools.ts`). 테마의
-   * 조각 규칙이 `[data-wb-component="X"] [data-wb-part="p"]`(특이도 0,2,0)인데 구조를
-   * 더하면 0,3,0이 되어 **테마가 지기 때문**이다. 그래서 *"`vertical`의 `list`만 세로"*
-   * 라는 규칙을 렌더러가 낼 방법이 없다 — 내면 `underline`의 `list`까지 받아 **오늘 화면이
-   * 바뀐다**(D5).
+   * **(가)는 루트 규칙으로 되고 (나)는 DOM으로 푼다.** (나)를 CSS로 풀려면 *"`vertical`의
+   * `list`만 세로"*라는 조각 규칙이 필요하다. 테마의 조각 규칙이
+   * `[data-wb-component="X"] [data-wb-part="p"]`(특이도 0,2,0)라 구조를 맨 셀렉터로 더하면
+   * 0,3,0이 되어 **테마가 지고**, 구조 없이 걸면 `underline`의 `list`까지 받아 **이미 있는
+   * 화면이 바뀐다.** `partRule`의 넷째 인자(`:where()`)로 좁히는 길은 있다
+   * (`structure-css-tools.ts`의 `partRule`) — DOM으로 풀면 그 규칙조차 필요 없다.
    *
    * **그래서 (나)를 DOM으로 푼다.** `underline`의 탭은 `<span>`(인라인)이라 가로로 흐르고,
    * `vertical`의 탭은 `<div>`(블록)이라 그냥 쌓인다. **선언 하나 없이 선다.**
@@ -506,10 +505,10 @@ describe('Tabs:vertical — 탭이 세로로 쌓이고 패널이 옆에 선다',
    *
    * **정직하게 적어 둘 것:** 테마는 이것을 CSS로도 할 수 있다 —
    * `Tabs.base { display: flex }` + `Tabs.parts.list { display: flex, direction: column }`
-   * 은 오늘 어휘로 전부 표현된다. 즉 `vertical`은 *"CSS로는 불가능한 구조"*가 아니라
+   * 은 지금 어휘로 전부 표현된다. 즉 `vertical`은 *"CSS로는 불가능한 구조"*가 아니라
    * **"렌더러가 스스로 세우려면 DOM이 갈려야 하는 구조"**다. `Section:splitBg`(조각이 없으면
    * 표현 자체가 불가능)와는 등급이 다르고, `Card:bordered`(DOM이 같음)와도 다르다.
-   * **P4b-3이 알아야 할 것이 이 등급 차이다.**
+   * **테마를 만들 때 알아야 할 것이 이 등급 차이다.**
    */
   it('조각 이름은 underline과 같다 — 갈리는 것은 태그다', () => {
     const props = { tabs: ['가', '나'], active: 0 }
@@ -548,8 +547,9 @@ describe('Tabs:vertical — 탭이 세로로 쌓이고 패널이 옆에 선다',
   })
 
   it('구조 기본 CSS가 Tabs의 조각에는 규칙을 달지 않는다', () => {
-    // **이것이 위 판정을 지키는 케이스다.** `list`·`tab`에 규칙을 달면 구조 이름이 안 들어가
-    // `underline`까지 받고, 그러면 D5가 깨진다. 누가 그것을 하면 여기가 먼저 죽는다.
+    // **이것이 위 판정을 지키는 케이스다.** `list`·`tab`에 구조 없는 규칙을 달면
+    // `underline`까지 받고, 그러면 이미 있는 화면이 바뀐다. 누가 그것을 하면 여기가 먼저
+    // 죽는다(`:where()`로 좁힌 규칙은 이 단언에 안 걸린다 — 그쪽은 수신자 표가 본다).
     const css = structureCssBlocks().join('\n')
     expect(css).not.toMatch(/\[data-wb-component="Tabs"\] \[data-wb-part=/)
     // 헛돌지 않는 것 — 이 그룹은 조각 규칙을 실제로 갖고 있다(`Card`의 `media`).

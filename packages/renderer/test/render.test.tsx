@@ -77,10 +77,10 @@ describe('renderNode', () => {
     expect(html).toContain('data-wb-part="header"')
   })
 
-  // 아래 셋은 예전에 "던진다"를 검사했다. renderNode는 이제 폴백으로 흡수한다(P0 이월 6번).
-  // 폴백 자체의 계약은 fallback.test.tsx가 본다. 여기서는 renderNode가 그 경로로
-  // 빠지는지만 확인한다. `requireComponent`·`requireStructure`·`resolveStructure`가
-  // 여전히 던지는 것은 각각의 테스트가 그대로 지킨다.
+  // renderNode는 던지지 않고 폴백으로 흡수한다. 폴백 자체의 계약은 fallback.test.tsx가
+  // 본다. 여기서는 renderNode가 그 경로로 빠지는지만 확인한다.
+  // `requireComponent`·`requireStructure`·`resolveStructure`가 던지는 것은 각각의 테스트가
+  // 지킨다.
   it('알 수 없는 타입이면 폴백을 그린다', () => {
     const html = markup(renderNode({ id: 'n_000000000001', type: 'Nope' }))
     expect(html).toContain('data-wb-error="알 수 없는 컴포넌트 타입: Nope"')
@@ -124,8 +124,8 @@ describe('resolveStructure', () => {
     expect(resolveStructure('List', { structures: { List: 'stackedList' } })).toBe('stackedList')
   })
 
-  // renderNode에서 옮겨 왔다. renderNode는 폴백으로 흡수하지만 이 함수 자체는
-  // 여전히 던지고, 그 보증을 지키는 곳이 여기 말고는 없다.
+  // renderNode는 폴백으로 흡수하지만 이 함수 자체는 던지고, 그 보증을 지키는 곳이
+  // 여기 말고는 없다.
   it('카탈로그에 없는 구조를 지정하면 던진다', () => {
     expect(() => resolveStructure('List', { structures: { List: 'bogus' } })).toThrow(
       'List에 없는 구조입니다: bogus',

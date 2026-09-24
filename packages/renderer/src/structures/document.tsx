@@ -1,7 +1,7 @@
 /**
  * **문서 그룹.** `Text`·`Media`·`Divider`·`Placeholder`.
  *
- * 카탈로그의 `component/catalog/document.ts`와 같은 경계다(P4b-2 D2).
+ * 카탈로그의 `component/catalog/document.ts`와 같은 경계다.
  * 등록(`DOCUMENT_ENTRIES`)과 기본 CSS(`documentCssBlocks`)를 이 파일이 소유한다.
  * 공용 도구는 `../structure-css-tools`에 있다 — 복사해 오지 마라.
  */
@@ -21,7 +21,7 @@ const ROLE_TAG: Record<string, string> = {
   caption: 'small',
 }
 
-// `data-wb-role`은 없어졌다 — `role`이 `variantFrom`으로 `data-wb-variant`가 된다(P0 이월 #8).
+// `role`은 `variantFrom`으로 `data-wb-variant`가 된다 — 역할을 나르는 별도의 데이터 속성은 없다.
 // **`ROLE_TAG`는 그대로 둔다.** 태그를 바꾸는 것은 접근성과 문서 구조의 문제이지
 // 스타일 채널이 아니다 — `<h1>`이 `<p>`가 되면 개요(outline)가 달라진다.
 export const TextDefault: StructureRenderer = ({ attrs, props }) =>
@@ -72,10 +72,10 @@ export const MediaIllustration: StructureRenderer = (ctx) => (
 )
 
 // 차트만 **틀 안이 구획된다.** 그림이 들어가는 자리(`plot`)와 그것을 읽는 자리(`legend`)가
-// 따로 있어야 §6.5의 `parts`가 뜻을 갖는다 — 테마가 축·격자와 범례에 같은 규칙을 걸 수는 없다.
+// 따로 있어야 설계서 「components — 구조 + 스킨」의 `parts`가 뜻을 갖는다 — 테마가 축·격자와 범례에 같은 규칙을 걸 수는 없다.
 //
 // **축을 조각으로 내지 않는다.** 축선은 `plot`의 테두리로 그려지므로 조각을 더해도 테마가
-// 새로 할 수 있는 일이 없고, 계약만 는다(계획서 재라 #2 — 조각 이름은 늘리면 계약도 는다).
+// 새로 할 수 있는 일이 없고, 계약만 는다(조각 이름은 늘리면 계약도 는다).
 export const MediaChart: StructureRenderer = (ctx) =>
   mediaFigure(
     ctx,
