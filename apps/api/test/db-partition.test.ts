@@ -25,6 +25,7 @@
  * | 거절의 말을 «연결을 잃었습니다 — 반영됐는지 모릅니다»로 둔다 | *"앞단이 기동 인자를 거절하면 …"* **혼자** |
  * | 실은 값과 달라도 경고하지 않는다 | *"앞단이 기동 인자를 조용히 버리면 …"* **혼자** |
  * | 0 을 준 판도 잰다 | *"앞단이 기동 인자를 조용히 버리면 …"* **혼자**(서버·DB 설정 3s ≠ 0 이라 경고가 난다) |
+ * | 연결을 못 얻었을 때 · 점검 조회가 끊겼을 때 말없이 돌아온다 | *"DB 에 닿지 못하거나 …"* **혼자**(각각) |
  * | `broadcast.ts`의 `send`가 던지면 루프째 끝나게 둔다 | *"방송 도중 풀이 다 차 …"* **혼자** |
  * | 못 잰 연결에도 보낸다(인가 우회) · 못 잰 연결을 회수로 닫는다 | *"방송 도중 풀이 다 차 …"* **혼자**(각각) |
  * | `config.ts`가 빈 값을 기본값으로 안 바꾼다 | *"시간 제한 env 를 비우면 …"* **혼자** |
@@ -401,6 +402,48 @@ describe('기동 점검 — 실은 idle 제한이 걸렸는가', () => {
       }
     } finally {
       await proxy.close()
+    }
+  })
+
+  /**
+   * **못 재면 그렇다고 한 줄 말한다 — 던지지 않는다.** DB 에 닿지 못하는 판(분할)에서 점검은 풀 대기 한도만큼 쓰고 돌아온다.
+   * 말이 없으면 그 뒤 아무도 다시 재지 않으므로 «시간 제한이 걸렸다»로 읽힌다. 던지면 DB 가 안 떠 있다는 말(`main.ts`)을 가린다.
+   */
+  it('DB 에 닿지 못하거나 점검 조회가 끊기면 건너뛰었다고 경고하고 계속 뜬다', async () => {
+    // 받기만 하고 답하지 않는 서버 — 분할의 모양이다. 받은 소켓은 끝에 부순다(남으면 `close`가 기다린다).
+    const accepted: net.Socket[] = []
+    const mute = net.createServer((socket) => accepted.push(socket))
+    await new Promise<void>((resolve) => mute.listen(0, '127.0.0.1', resolve))
+    const address = mute.address()
+    if (address === null || typeof address === 'string') throw new Error('포트를 열지 못했습니다')
+    const unreachable = new URL(TEST_DATABASE_URL)
+    unreachable.port = String(address.port)
+    const limits = { ...DEFAULT_DB_TIME_LIMITS, poolWaitMs: 300 }
+    const proxy = await startFaultProxy(TEST_DATABASE_URL)
+    const warnedBy = async (url: string): Promise<string[]> => {
+      const warned: string[] = []
+      const pool = createPool(url, () => undefined, limits)
+      try {
+        await verifyDbTimeLimits(pool, limits, (message) => warned.push(message))
+      } finally {
+        await pool.end()
+      }
+      return warned
+    }
+    try {
+      const silent = await warnedBy(unreachable.toString())
+      expect(silent).toHaveLength(1)
+      expect(silent[0]).toMatch(new RegExp(`^기동 점검을 건너뜁니다 — DB 에 닿지 못해 ${IDLE} 이 실제로 걸렸는지 재지 못했습니다`))
+
+      proxy.dropOnQuery('from pg_settings')
+      const cut = await warnedBy(proxy.url)
+      expect(proxy.fired).toBe(true)
+      expect(cut).toHaveLength(1)
+      expect(cut[0]).toMatch(/^기동 점검을 건너뜁니다/)
+    } finally {
+      await proxy.close()
+      for (const socket of accepted) socket.destroy()
+      await new Promise<void>((resolve) => mute.close(() => resolve()))
     }
   })
 })

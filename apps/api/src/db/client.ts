@@ -197,9 +197,10 @@ function refuseUrlLevelIdleTimeout(databaseUrl: string): void {
  * | 기본 설정 — 모르는 기동 인자를 **거절**(`FATAL 08P01 unsupported startup parameter: …`) | api·migrate 가 첫 질의에서 죽고 첫 줄은 «연결을 잃었습니다 — 반영됐는지 모릅니다»(거절은 `cause`에만) | **무엇이 거절됐고 무엇을 하라**를 첫 줄에 말하고 **던진다**(기동을 멈춘다) |
  * | `ignore_startup_parameters`에 넣음 — 인자를 **조용히 버림** | 뜨고 세션 값은 `0` — 고아를 끝내는 수단이 통째로 없는데 아무 말도 없다 | 세션의 값을 읽어 **실은 값과 다르면 `warn`**(기동은 계속) |
  *
- * **0 을 준 판은 재지 않는다** — 싣지 않았으니 서버·DB 설정을 따르는 것이 뜻이다(연결도 열지 않는다). **그 밖의 연결 실패는
- * 삼킨다** — DB 가 안 떠 있는 판을 말하는 자리는 따로 있다(`main.ts`의 빈 DB 안내 · 첫 질의의 경계 표). 여기서 던지면 그 말을
- * 가린다.
+ * **0 을 준 판은 재지 않는다** — 싣지 않았으니 서버·DB 설정을 따르는 것이 뜻이다(연결도 열지 않는다). **그 밖의 연결 실패와
+ * 점검 조회의 실패는 던지지 않고 건너뛰었다고 `warn`한다** — DB 가 안 떠 있는 판을 말하는 자리는 따로 있고(`main.ts`의 빈 DB
+ * 안내 · 첫 질의의 경계 표) 여기서 던지면 그 말을 가린다. 말은 한다: 분할이면 풀 대기 한도(`poolWaitMs`)만큼 쓰고 돌아오는데,
+ * 이 점검은 기동 때 한 번뿐이라 말이 없으면 «제한이 걸렸다»로 읽힌다.
  */
 export async function verifyDbTimeLimits(pool: Pool, limits: DbTimeLimits, warn: (message: string) => void): Promise<void> {
   if (limits.idleInTransactionMs === 0) return
@@ -209,6 +210,7 @@ export async function verifyDbTimeLimits(pool: Pool, limits: DbTimeLimits, warn:
   } catch (error) {
     const rejected = rejectedStartupParameter(error)
     if (rejected !== undefined) throw new Error(describeStartupRejection(rejected), { cause: error })
+    warn(describeSkippedCheck(error))
     return
   }
   let applied: number
@@ -218,7 +220,8 @@ export async function verifyDbTimeLimits(pool: Pool, limits: DbTimeLimits, warn:
       `select setting from pg_settings where name = 'idle_in_transaction_session_timeout'`,
     )
     applied = Number(rows[0]?.setting)
-  } catch {
+  } catch (error) {
+    warn(describeSkippedCheck(error))
     return
   } finally {
     client.release()
@@ -230,6 +233,15 @@ export async function verifyDbTimeLimits(pool: Pool, limits: DbTimeLimits, warn:
         '분할에 남은 고아 백엔드를 이 값대로 끝내지 못합니다 — 서버·DB 쪽(ALTER DATABASE … SET · postgresql.conf)에 거십시오',
     )
   }
+}
+
+/** 점검을 못 한 까닭을 한 줄로 — 오류의 첫 줄만 싣는다. */
+function describeSkippedCheck(error: unknown): string {
+  const reason = error instanceof Error ? error.message.split('\n')[0] : String(error)
+  return (
+    `기동 점검을 건너뜁니다 — DB 에 닿지 못해 idle_in_transaction_session_timeout 이 실제로 걸렸는지 재지 못했습니다(${reason}). ` +
+    '이 점검은 기동 때 한 번뿐입니다 — DB 에 닿는 것을 확인한 뒤 다시 띄우면 잽니다. 근거: apps/api/src/db/client.ts 의 verifyDbTimeLimits'
+  )
 }
 
 /** 기동 인자 거절이면 그 인자 이름 — pgbouncer 의 `FATAL 08P01 unsupported startup parameter: <이름>`. */
