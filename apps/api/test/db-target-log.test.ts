@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
 import { describeDatabaseTarget } from '../src/db/describe-target'
 import { describeSchemaState, emptySchemaHint } from '../src/db/describe-schema-state'
 import { createDb, createPool } from '../src/db/client'
-import { countExecutedMigrations } from '../src/db/migrate'
+import { countExecutedMigrations, migrationTargetLine } from '../src/db/migrate'
 import { migrationProvider } from '../src/db/migrations/index'
 import { TEST_DATABASE_URL, getTestDb } from './helpers'
 import { SRC_ROOT, stripComments } from './source-census'
@@ -193,5 +193,32 @@ describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', ()
     // 다른 실패는 원문 그대로 올라가야 한다 — 이 자가 모든 실패를 삼키면 안 된다.
     expect(main).toMatch(/if \(hint === undefined\) \{\s*throw error/)
     expect(main).toContain('new Error(hint, { cause: error })')
+  })
+})
+
+/**
+ * **`migrate` 도 시작할 때 대상을 말한다.** 서버와 같은 값(`describeDatabaseTarget`)이고, 같은 이유로 자격 문자열을 안
+ * 싣는다. 값은 함수로 재고, `main()` 이 그것을 **첫 출력으로** 찍는지는 소스에서 센다.
+ */
+describe('migrate 가 시작할 때 대상 DB 를 말한다', () => {
+  const migrate = stripComments(readFileSync(join(SRC_ROOT, 'db/migrate.ts'), 'utf8'))
+
+  it('방향과 `호스트:포트/이름` 을 낸다 — 비밀번호는 없다', () => {
+    const line = migrationTargetLine('down', 'postgres://wirebound:s3cret-pw@127.0.0.1:5443/wb_feat')
+    expect(line).toBe('마이그레이션(down) 대상 DB: 127.0.0.1:5443/wb_feat')
+    expect(line).not.toContain('s3cret-pw')
+  })
+
+  it('`main()` 이 설정을 읽은 바로 다음에 그 줄을 찍는다 — 풀을 열기 전이다', () => {
+    const body = migrate.slice(migrate.indexOf('async function main()'))
+    const printed = body.indexOf('console.log(migrationTargetLine(direction, config.databaseUrl))')
+    expect(printed).toBeGreaterThan(body.indexOf('loadConfig()'))
+    expect(printed).toBeLessThan(body.indexOf('createPool('))
+  })
+
+  it('`config.databaseUrl` 을 받는 자가 둘뿐이다 — 붙는 자와 가려서 찍는 자', () => {
+    const receivers = [...migrate.matchAll(/(\w+)\((?:direction, )?config\.databaseUrl[,)]/g)].map((match) => match[1]).sort()
+    expect(receivers).toEqual(['createPool', 'migrationTargetLine'])
+    expect(migrate).not.toMatch(/\$\{\s*config\.databaseUrl\s*\}/)
   })
 })

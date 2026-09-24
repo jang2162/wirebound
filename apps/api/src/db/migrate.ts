@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url'
 import { Migrator, NO_MIGRATIONS, type MigrationResultSet } from 'kysely'
 import { loadConfig } from '../config'
 import { createDb, createPool, verifyDbTimeLimits } from './client'
+import { describeDatabaseTarget } from './describe-target'
 import { runSeedStep, type SeedReporter } from './seed-user'
 import type { DbHandle } from './tx'
 import { migrationProvider } from './migrations/index'
@@ -103,6 +104,21 @@ export async function seedAfterMigration(
   return runSeedStep(db, env, scryptN, report)
 }
 
+/**
+ * **시작할 때 어느 DB 를 바꾸는지 한 줄로 말한다** — `main()` 의 첫 출력이다.
+ *
+ * 워크트리마다 DB 가 갈리므로 «어느 DB 였나»가 사람이 가장 먼저 물을 것인데, 성공한 `migrate` 는 그것을 어디에도
+ * 안 남긴다 — 옆 워크트리의 `.env` 로 돌았어도 `마이그레이션 완료` 만 보인다. 서버가 뜰 때 찍는 `이 서버가 보는 DB:`
+ * (`main.ts`)와 같은 값이다. **자격 문자열은 안 싣는다** — `describeDatabaseTarget` 이 `호스트:포트/이름`만 낸다.
+ *
+ * **이 줄이 못 보는 것:** 같은 컨테이너 안에서 두 워크트리의 DB 이름이 겹치는 판 · 에디터의 프록시가 옆 워크트리
+ * api 에 붙는 판. 둘 다 이 줄이 «옳은 값»을 찍는 채로 일어나고, 워크트리 둘을 실제로 띄워야 보인다(README
+ * 「워크트리를 여럿 띄울 때」).
+ */
+export function migrationTargetLine(direction: MigrateDirection, databaseUrl: string): string {
+  return `마이그레이션(${direction}) 대상 DB: ${describeDatabaseTarget(databaseUrl)}`
+}
+
 async function main(): Promise<void> {
   const direction = process.argv[2]
   if (direction !== 'latest' && direction !== 'down') {
@@ -111,6 +127,7 @@ async function main(): Promise<void> {
   }
 
   const config = loadConfig()
+  console.log(migrationTargetLine(direction, config.databaseUrl))
   const pool = createPool(config.databaseUrl, undefined, config.dbTimeLimits)
   const db = createDb(pool)
   try {

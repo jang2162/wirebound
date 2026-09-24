@@ -184,8 +184,8 @@ curl http://127.0.0.1:3001/health        # {"status":"ok"}
 
 ### 3.1 워크트리를 여럿 띄울 때 — **워크트리마다 자기 컨테이너를 띄운다**
 
-git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자리가 다섯**이다. 둘은 시끄럽고
-**셋은 조용하다** — 조용한 쪽이 이 절이 있는 이유다.
+git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자리가 여섯**이다. 둘은 시끄럽고
+**넷은 조용하다** — 조용한 쪽이 이 절이 있는 이유다.
 
 | 부딪히는 것 | 어떻게 드러나나 | 가르는 법 |
 |---|---|---|
@@ -195,6 +195,7 @@ git 워크트리를 여럿 두고 각자 서버를 띄우면 **부딪히는 자�
 | 운영 DB | **조용하다.** 한쪽 마이그레이션이 다른 쪽 스키마를 바꾼다 | `DATABASE_URL` 의 **포트와 DB 이름** |
 | 테스트 DB | **조용하다.** 동시에 `pnpm test` 를 돌리면 서로의 판을 지운다 | `TEST_DATABASE_URL` |
 | 에디터 → API | **가장 조용하다.** B 의 화면이 A 의 API 에 붙는다 | (자동 — `PORT` 를 따라간다) |
+| 세션 쿠키 | **조용하다.** 쿠키는 포트를 가르지 않아서 한 브라우저로 B 에 로그인하면 A 의 세션이 덮인다 | `SESSION_COOKIE_NAME` |
 
 **컨테이너를 가른다.** 워크트리마다 `docker compose … up -d` 를 자기 디렉터리에서 친다 —
 컨테이너 이름도 볼륨도 **프로젝트 이름(디렉터리 이름)을 따라 저절로 갈린다**(「컨테이너를 못 찾는다」).
@@ -219,11 +220,12 @@ pnpm install && pnpm build
 # 2. 환경 파일
 cp apps/api/.env.example apps/api/.env
 
-# 3. apps/api/.env 의 값 넷을 그 워크트리 것으로 바꾼다
+# 3. apps/api/.env 의 값 다섯을 그 워크트리 것으로 바꾼다
 #      POSTGRES_PORT=<포트>                          ← compose 가 여는 포트
 #      DATABASE_URL=…<포트>/wb_<이름>                 ← 포트를 위와 같게
 #      TEST_DATABASE_URL=…<포트>/wb_<이름>_test       ← 주석 처리되어 있다. 주석을 푼다
 #      PORT=3002                                     ← 워크트리마다 다른 수
+#      SESSION_COOKIE_NAME=wb_session_3002           ← PORT 를 붙인다 — 에디터는 손댈 곳이 없다
 
 # 4. 이 워크트리의 컨테이너를 띄운다 — 이 디렉터리에서
 docker compose --env-file apps/api/.env up -d
@@ -268,12 +270,15 @@ apps/api/.env 에서 포트를 한 수로 맞춘다. 자기 Postgres 를 쓰면 
 **`pnpm test` 는 `TEST_DATABASE_URL` 에 같은 검사를 건다**(그 값은 서버가 안 쓰므로 서버는
 그것 때문에 안 죽는다). **`TEST_DATABASE_URL` 을 아예 안 적으면 기본값이
 `POSTGRES_PORT` 를 따라간다** — 즉 **자기 컨테이너의** `wirebound_test` 다.
+**워크트리에 `apps/api/.env` 가 아예 없으면 `pnpm test` 가 돌지 않고 멈춘다** — 그때 기본값은 compose 기본
+포트, 곧 **최상위 체크아웃의 컨테이너**를 가리켜 그 `wirebound_test` 를 지우기 때문이다. 멈추는 문장이 이 절을
+가리킨다. DB 가 필요 없으면 `pnpm test --project '!api'` 로 돈다. 셸에 `TEST_DATABASE_URL` 을 주면(CI) 이 검사를 지난다.
 
 3·5번을 빼먹으면 **먼저 6번이 죽는다.** 둘이 죽는 모양이 다르다(이 기계에서 쟀다):
 
 | 무엇 | 종료 코드 | 무엇을 찍나 |
 |---|---|---|
-| **6번** `pnpm --filter @wirebound/api migrate` | 1 | `마이그레이션 실패: error: database "…" does not exist` — **DB 이름만 말한다. 만드는 줄은 안 찍는다** |
+| **6번** `pnpm --filter @wirebound/api migrate` | 1 | 첫 줄 `마이그레이션(latest) 대상 DB: 127.0.0.1:<포트>/wb_<이름>` 뒤에 `마이그레이션 실패: error: database "…" does not exist` — **어느 DB 인지는 말하고 만드는 줄은 안 찍는다** |
 | `pnpm test` | 1 | 같은 문장에 **위 `CREATE DATABASE` 한 줄을 붙여서** 찍는다 |
 
 **절차대로 가면 6번을 먼저 만나므로 위 5번의 명령을 손에 들고 있어야 한다.** 조치가
@@ -287,6 +292,7 @@ apps/api/.env 에서 포트를 한 수로 맞춘다. 자기 Postgres 를 쓰면 
 | `PORT` | 둘째 서버가 `Error: listen EADDRINUSE: address already in use 127.0.0.1:3031` 로 죽는다. **종료 코드 1** |
 | `POSTGRES_PORT` | 둘째 `up -d` 가 `Bind for 0.0.0.0:<포트> failed: port is already allocated` 로 죽는다. **그런데 그대로 한 번 더 치면 종료 0 으로 "Started" 를 찍고 컨테이너가 뜬다 — 포트 없이.** 그때 `docker compose ps` 의 `PORTS` 칸이 **비어 있고**, 그 포트에 붙는 것은 전부 **옆 워크트리의 컨테이너**다(「컨테이너를 못 찾는다」) |
 | `DATABASE_URL` | 워크트리 B 에서 `migrate:down` 을 한 번 돌리자 **A 의 살아 있는 서버가** `500 {"error":{"code":"internal"}}` 을 내기 시작했다. A 의 로그에만 `relation "api_tokens" does not exist` 가 남았고 **B 는 아무 말도 안 했다**(한 컨테이너를 공유할 때의 값이다 — 워크트리마다 컨테이너를 가르면 이 갈래는 포트가 먼저 막는다) |
+| `SESSION_COOKIE_NAME` | 한 브라우저로 워크트리의 에디터에 로그인하자 같은 호스트에 있던 `wb_session`(다른 체크아웃의 세션)이 **새 세션으로 바뀌었다** — 에러도 경고도 없다. 이름을 가르면 그 쿠키가 그대로 남고, 에디터는 로그인 200 · 새로고침 뒤 `/api/auth/me` 200 이다(헤드리스 Chrome · 에디터 프록시 경유). **에디터는 이름을 몰라도 된다** — 같은 출처로 쿠키를 싣기만 한다(`credentials: 'same-origin'`) |
 | `TEST_DATABASE_URL` | 워크트리 둘이 동시에 `pnpm test` 를 돌리면 **둘 다 종료 코드 1**로 죽는다. **가르면 둘 다 전 케이스 통과 · 종료 0** 이고, 벽시계가 **혼자 돌리는 것보다 길지 않게 나오기도 한다** — 느려지는지는 기계와 부하가 정한다(재는 법: 두 워크트리에서 `time pnpm test` 를 동시에 돌려 혼자 돌린 값과 견준다). 깨지는 꼴은 셋이다 — 상대의 `globalSetup` 이 판을 내려서 나는 `relation "…" does not exist` · 상대가 커밋한 행과 부딪히는 `409` · 상대의 정리가 지워서 나는 FK 위반. **몇 개가 죽는지는 판마다 다르다**(경쟁 상태다) — **안 낡는 값은 종료 코드뿐이라 그것만 적는다** |
 
 > **`apps/api/.env`를 고쳤으면 서버 둘을 **다** 다시 띄워라.** `tsx watch`는 **소스만 본다** —

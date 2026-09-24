@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
 import { COMPOSE_DEFAULT_POSTGRES_PORT, portAgreementError } from '../src/db/port-agreement'
 
@@ -45,10 +46,11 @@ export function defaultTestDatabaseUrl(postgresPort: string = COMPOSE_DEFAULT_PO
  *
  * **내보내는 이유는 자를 대기 위해서다.** 이 상대 경로가 틀어지면 파일이 안 읽히고
  * 스위트가 **말없이 공용 `wirebound_test`로 돌아간다** — 이 모듈이 막으려는
- * *"공유 자원으로 조용히 떨어지는 것"* 그 자체다. 그런데 **파일이 없는 것 자체는
- * 정상이므로**(`.env`를 안 만든 사람이 깨지면 안 된다) 런타임에서 시끄럽게 할 수는
- * 없다. 가를 수 있는 것은 **가리키는 자리**다: 파일은 없어도 되지만 **디렉터리는
- * `apps/api` 여야 한다.** `test-database-url.test.ts`가 그것을 잰다.
+ * *"공유 자원으로 조용히 떨어지는 것"* 그 자체다. **최상위 체크아웃에서는 파일이 없는 것이
+ * 정상이므로**(`.env`를 안 만든 사람이 깨지면 안 된다) 거기서는 시끄럽게 할 수 없다 — 가를 수
+ * 있는 것은 **가리키는 자리**다: 파일은 없어도 되지만 **디렉터리는 `apps/api` 여야 한다.**
+ * `test-database-url.test.ts`가 그것을 잰다. **워크트리에서는 없는 것이 사고다** — 아래
+ * `missingWorktreeEnvError`.
  */
 export const API_ENV_URL = new URL('../.env', import.meta.url)
 
@@ -92,6 +94,35 @@ export function readApiEnvFile(envFileUrl: URL | string = API_ENV_URL): Record<s
 }
 
 /**
+ * **워크트리 안인데 `apps/api/.env` 가 없으면 무엇을 하라고 말한다.** 문제가 없으면 `undefined`.
+ *
+ * 왜 멈추나: 워크트리는 저마다 자기 컨테이너를 띄우는데(README 「워크트리를 여럿 띄울 때」) 그 포트는 `.env` 의
+ * `POSTGRES_PORT` 에만 있다. 파일이 없으면 기본값이 compose 기본 포트(`COMPOSE_DEFAULT_POSTGRES_PORT`)를 가리키고,
+ * 거기 떠 있는 것은 **최상위 체크아웃의 컨테이너**다 — 스위트가 그 `wirebound_test` 를 지우며 돈다(`resetRealData`).
+ * 붙는 데 성공하므로 아무 에러도 안 난다.
+ *
+ * - **워크트리인가**는 경로에 `.worktrees` 디렉터리가 끼었는가로 본다 — 워크트리를 만드는 자리가 그것 하나다
+ *   (`CLAUDE.md` 「워크트리 생성 규칙」). 그 밖의 체크아웃(최상위 · CI)은 이 검사를 안 지난다.
+ * - **셸이 `TEST_DATABASE_URL` 을 주면 지나간다** — 붙을 곳을 사람이 골랐다(CI 가 이 길이다).
+ */
+export function missingWorktreeEnvError(
+  envFilePath: string,
+  shellEnv: Record<string, string | undefined>,
+  fileExists: (path: string) => boolean = existsSync,
+): string | undefined {
+  if (pick(shellEnv.TEST_DATABASE_URL) !== undefined) return undefined
+  if (!envFilePath.split(/[\\/]/).includes('.worktrees')) return undefined
+  if (fileExists(envFilePath)) return undefined
+  return [
+    '이 워크트리에 apps/api/.env 가 없습니다 — 이대로 돌면 테스트가 compose 기본 포트' +
+      `(${COMPOSE_DEFAULT_POSTGRES_PORT})의 컨테이너, 곧 최상위 체크아웃의 wirebound_test 를 지웁니다.`,
+    `  찾은 자리: ${envFilePath}`,
+    'README.md 「워크트리를 여럿 띄울 때」 절대로 apps/api/.env 를 만들고 이 워크트리의 값(POSTGRES_PORT · TEST_DATABASE_URL · …)을 적는다.',
+    "DB 가 필요 없으면 api 프로젝트를 빼고 돌린다: pnpm test --project '!api'",
+  ].join('\n')
+}
+
+/**
  * **읽기와 순서를 합친 자리.** `helpers.ts`가 부르는 것이 이것 하나다.
  *
  * 왜 따로 있나: `helpers.ts`가 `resolveTestDatabaseUrl({shellEnv, fileEnv: readApiEnvFile()})`를
@@ -107,6 +138,10 @@ export function resolveTestDatabaseUrlFrom(
   shellEnv: Record<string, string | undefined>,
   envFileUrl: URL | string = API_ENV_URL,
 ): string {
+  const missing = missingWorktreeEnvError(typeof envFileUrl === 'string' ? envFileUrl : fileURLToPath(envFileUrl), shellEnv)
+  if (missing !== undefined) {
+    throw new Error(missing)
+  }
   const sources: TestDatabaseUrlSources = { shellEnv, fileEnv: readApiEnvFile(envFileUrl) }
   const testDatabaseUrl = resolveTestDatabaseUrl(sources)
   // **여기서 멈추는 것이 요점이다.** 어긋난 채로 돌면 스위트가 *남의 컨테이너*의 판을
