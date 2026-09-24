@@ -124,7 +124,7 @@ const CALL_SITES: CallSite[] = [
     file: 'routes/pages.ts',
     label: 'PUT .../schema — 문서 통째 교체',
     broadcasts: true,
-    why: '§7.1의 본줄기. 문서가 바뀌었고 다른 접속자가 그 위에서 편집한다',
+    why: '편집의 본줄기. 문서가 바뀌었고 다른 접속자가 그 위에서 편집한다',
     drive: async (ctx, fx) => {
       const res = await ctx.app.inject({
         method: 'PUT',
@@ -141,7 +141,7 @@ const CALL_SITES: CallSite[] = [
     file: 'routes/pages.ts',
     label: 'PATCH .../ops — 부분 편집',
     broadcasts: true,
-    why: '§7.1의 본줄기',
+    why: '편집의 본줄기 — 설계서 「정방향 흐름」의 REST 입구',
     drive: async (ctx, fx) => {
       await patchOps(ctx, fx.projectId, fx.owner, fx.pageId, [
         { op: 'add', path: '/root/children/-', value: { id: 'n_patched', type: 'Text', props: {} } },
@@ -152,7 +152,7 @@ const CALL_SITES: CallSite[] = [
     file: 'routes/comments.ts',
     label: 'POST .../comments — 번호를 붙이는 갈래',
     broadcasts: true,
-    why: '**번호는 문서에 산다**(사실 4 — P5-1 이월의 *"번호는 실시간"*이 이것으로 참이 된다). 코멘트 행 자체는 안 알린다(D4)',
+    why: '**번호는 문서에 산다** — 번호가 붙으면 페이지 문서가 바뀌므로 알려야 다른 접속자에게 번호가 실시간으로 보인다. 코멘트 행 자체는 안 알린다',
     drive: async (ctx, fx) => {
       const res = await ctx.app.inject({
         method: 'POST',
@@ -198,7 +198,7 @@ const CALL_SITES: CallSite[] = [
     file: 'ws/patch.ts',
     label: 'patch 프레임 — WS로 들어온 편집',
     broadcasts: true,
-    why: '§7.1의 본줄기가 WS로 들어오는 자리다(P3-2 D5). **REST와 같은 `applyEdit`·같은 `notifyPageChanged`를 부른다** — 다른 것은 발신자를 헤더가 아니라 **연결 자체**로 아는 것뿐이다(이월 §2.1)',
+    why: '편집의 본줄기가 WS로 들어오는 자리다. **REST와 같은 `applyEdit`·같은 `notifyPageChanged`를 부른다** — 다른 것은 발신자를 헤더가 아니라 **연결 자체**로 아는 것뿐이다',
     drive: async (ctx, fx) => {
       // **좁게 훑으면 놓치는 자리다.** `routes`·`services`만 훑으면 `src/ws/`의
       // 호출자를 못 본다 — 그래서 범위가 `src/` 전체다.
@@ -221,7 +221,7 @@ const CALL_SITES: CallSite[] = [
     file: 'services/restore.ts',
     label: '복원이 페이지 문서를 되돌리는 자리',
     broadcasts: false,
-    why: '**복원은 한 프레임(`restored`)으로 나간다**(D4). 이 호출은 복원 트랜잭션 **안**이라 그 자리에서 알리면 커밋 전이고, 페이지마다 프레임을 내면 받는 쪽이 그것을 평범한 편집으로 읽는다 — 복원은 페이지가 사라지고 생기기도 하는 사건이라 ops로 표현되지 않는다',
+    why: '**복원은 한 프레임(`restored`)으로 나간다.** 이 호출은 복원 트랜잭션 **안**이라 그 자리에서 알리면 커밋 전이고, 페이지마다 프레임을 내면 받는 쪽이 그것을 평범한 편집으로 읽는다 — 복원은 페이지가 사라지고 생기기도 하는 사건이라 ops로 표현되지 않는다',
     drive: async (ctx, fx) => {
       const res = await ctx.app.inject({
         method: 'POST',
@@ -235,7 +235,7 @@ const CALL_SITES: CallSite[] = [
     file: 'services/page-import.ts',
     label: '가져오기가 새 페이지의 첫 문서를 쓰는 자리',
     broadcasts: false,
-    why: '**한순간 전까지 없던 페이지다** — 어느 연결도 그것을 열어 두고 있을 수 없다. 남에게 필요한 것은 *"페이지가 생겼다"*이고 **페이지 CRUD는 이 슬라이스가 안 한다**(D4). P3-x가 그것을 알릴 때 이 줄을 다시 판정한다',
+    why: '**한순간 전까지 없던 페이지다** — 어느 연결도 그것을 열어 두고 있을 수 없다. 남에게 필요한 것은 *"페이지가 생겼다"*이고 **그것을 알리는 프레임은 없다**(`ws/protocol.ts`). 그런 프레임이 생기면 이 줄을 다시 판정한다',
     drive: async (ctx, fx) => {
       const res = await ctx.app.inject({
         method: 'POST',

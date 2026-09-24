@@ -89,13 +89,13 @@ const ALLOWED_EMBED: readonly { name: string; why: string }[] = [
   { name: 'EXIT', why: '〃 — 설정 갈래에만 찾은 자리를 덧붙인다' },
   { name: 'requireProject', why: 'session.ts 의 첫 걸음' },
   { name: 'fetchSnapshot', why: 'session.ts 의 둘째 걸음' },
-  { name: 'readLintConfig', why: 'D5 — LintConfig 는 .wirebound.json 에서만 온다' },
+  { name: 'readLintConfig', why: 'LintConfig 는 .wirebound.json 에서만 온다' },
   { name: 'listProject', why: '읽기 층의 진입점 — list_pages' },
   { name: 'lookupPage', why: '〃 — get_page' },
   { name: 'lintReport', why: '〃 — validate' },
-  { name: 'callApi', why: 'P9-5 D6 — 쓰기 둘이 REST 를 직접 부른다. wireb 에 명령을 안 만든다(§12.3 에 그 줄이 없다)' },
+  { name: 'callApi', why: '쓰기 둘이 REST 를 직접 부른다. wireb 에 명령을 안 만든다(설계서 「CLI」의 명령 목록에 그 줄이 없다)' },
   { name: 'parseJson', why: '〃 — 응답 본문을 읽는 자리도 packages/cli 의 것을 쓴다' },
-  { name: 'CliError', why: 'P9-5 D3 — 409·423 을 status 로 가른다. 문장에서 숫자를 되파면 서버가 문장을 바꾸는 날 조용히 틀린다' },
+  { name: 'CliError', why: '409·423 을 status 로 가른다. 문장에서 숫자를 되파면 서버가 문장을 바꾸는 날 조용히 틀린다' },
 ]
 
 describe('조립이 두 벌이 되는 길을 막는다', () => {

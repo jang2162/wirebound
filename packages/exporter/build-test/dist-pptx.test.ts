@@ -212,7 +212,7 @@ describe('dist 가 만든 pptx', () => {
     expect(existsSync(pptxPath)).toBe(true)
   })
 
-  it('이미지 없이 나갔다는 것을 값이 말한다 — 오늘은 전부다', () => {
+  it('이미지 없이 나갔다는 것을 값이 말한다 — 화면을 안 넘겼으니 전부다', () => {
     expect(screenless).toEqual(PAGES.map((page) => page.title))
     expect(noScreen.length).toBeGreaterThan(0)
   })
@@ -291,7 +291,7 @@ describe('무엇으로 쟀는지 말한다', () => {
     if (!HAS_MDIMPORT && !HAS_QLMANAGE) {
       // eslint 없는 저장소라 콘솔로 남긴다. **여기가 초록인 것은 *"안 쟀다"*는 뜻이다.**
       console.warn(
-        '[P10-1] mdimport·qlmanage 가 없어 받는 쪽 검사를 안 돌렸습니다 (macOS 밖). ' +
+        '[pptx 받는 쪽 검사] mdimport·qlmanage 가 없어 받는 쪽 검사를 안 돌렸습니다 (macOS 밖). ' +
           '패키지가 닫혀 있는지는 packages/exporter/test/pptx-package.test.ts 가 잽니다.',
       )
     }

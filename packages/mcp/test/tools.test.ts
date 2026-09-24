@@ -88,17 +88,17 @@ describe('도구 표가 설계서 「MCP 도구」를 센다', () => {
  * 적어라 — 그 순간이 *"이 값을 세션이 줘도 되는가"*를 다시 묻는 자리다.
  */
 const ALLOWED_ARGS: readonly { name: string; why: string }[] = [
-  { name: 'path', why: '§8.1의 페이지 경로. 세션이 만드는 값이 아니라 list_pages 가 낸 값이다' },
+  { name: 'path', why: '페이지 경로(관리자/회원/목록). 세션이 만드는 값이 아니라 list_pages 가 낸 값이다' },
   {
     name: 'baseSeq',
-    why: 'P9-5 D5 — §12.2가 "baseSeq 필수"라고 적었다. 도구가 스스로 읽으면 "에이전트가 읽은 문서 위에 얹는다"는 §7.4의 보증이 사라진다',
+    why: '설계서 「MCP 도구」가 "baseSeq 필수"라고 적었다. 도구가 스스로 읽으면 에이전트가 읽은 문서 위에 얹는다는 보증이 사라진다',
   },
   {
     name: 'ops',
-    why: 'P9-5 D5 — 그것이 patch_page 의 존재 이유다. **검증하는 자리는 서버다**(§7.4의 "사람 편집과 동일 경로") — 도구가 자기 검증을 더하면 두 벌이 된다',
+    why: '그것이 patch_page 의 존재 이유다. **검증하는 자리는 서버다**(설계서 「MCP 도구」의 "사람 편집과 동일 경로") — 도구가 자기 검증을 더하면 두 벌이 된다',
   },
-  { name: 'nodeId', why: 'P9-5 — 어느 노드에 말을 붙일지는 에이전트의 판단이다. get_page 가 낸 nodes[].id 가 그 값이다' },
-  { name: 'body', why: 'P9-5 — 코멘트 본문. 길이 상한은 서버가 든다(COMMENT_BODY_MAX_LENGTH)' },
+  { name: 'nodeId', why: '어느 노드에 말을 붙일지는 에이전트의 판단이다. get_page 가 낸 nodes[].id 가 그 값이다' },
+  { name: 'body', why: '코멘트 본문. 길이 상한은 서버가 든다(COMMENT_BODY_MAX_LENGTH)' },
 ]
 
 describe('인자 스키마에 **없는 것**이 판정이다', () => {

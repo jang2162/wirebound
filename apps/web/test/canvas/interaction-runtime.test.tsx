@@ -261,7 +261,7 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
     expect(requireNode('n-list').getAttribute('data-wb-state')).toBe('loading')
   })
 
-  it('change는 오늘 닿지 않는다 — Field가 입력을 그리지 않는다', async () => {
+  it('change는 닿지 않는다 — Field가 입력을 그리지 않는다', async () => {
     await openPage(
       pageDoc({
         id: 'n-root',
