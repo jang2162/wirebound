@@ -135,10 +135,11 @@ import {
   type WbNode,
 } from '@wirebound/schema'
 import { requestActor, requestClientKind, requestEventActor } from '../auth/actor'
-import { outOfTokenScope, projectGuard, recheckProjectRole } from '../auth/roles'
+import { outOfTokenScope, projectGuard, recheckProjectRole, requireProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
-import { badRequest, conflict, forbidden, notFound, unauthenticated } from '../errors'
+import type { ProjectRole } from '../db/types'
+import { ApiError, badRequest, conflict, forbidden, notFound, unauthenticated } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
 import {
@@ -220,6 +221,30 @@ function notifyMarkerChange(
     actor: requestEventActor(request),
     origin: broadcastOrigin(request),
   })
+}
+
+/** 게시의 가드가 요구하는 역할 — 라우트의 `projectGuard`와 가드 앞 재생의 재방송 판정(`passesPostGuardNow`)이 같은 값을 본다. */
+const POST_MIN_ROLE: ProjectRole = 'editor'
+
+/**
+ * **그 사람이 지금 게시의 가드를 지나는가** — 가드 앞 재생이 재방송하기 전에 본다. 술어는 가드와 같다(`requireProjectRole` ·
+ * `POST_MIN_ROLE` · 토큰 스코프). 재생 자체는 권한을 잃어도 돌려주지만(자기 행이다) **룸에 프레임을 내는 것은 룸에 쓰는
+ * 일**이라 가드를 지나는 사람만 한다 — 안 보면 멤버에서 빠진 사람이 자기가 없는 룸에 재생 한 번마다 프레임 하나를 낸다.
+ * 잠금 안 재생은 이미 가드를 지났으므로 보지 않는다.
+ *
+ * 대가: COMMIT 답을 잃은 사람이 재생 전에 권한까지 잃으면 그 번호 프레임은 아무 연결에도 안 간다 — 룸은 다음 프레임의 `seq`
+ * 에서 `gap`으로 알고 다시 읽는다. 두 사건이 겹쳐야 서는 드문 판이라 그렇게 둔다.
+ *
+ * **던지지 않는다** — 재생은 이미 판정됐다. 거절(`ApiError`)은 «안 지난다»이고, 권한을 못 쟀으면 로그를 남기고 안 보낸다.
+ */
+async function passesPostGuardNow(request: FastifyRequest, projectId: string, userId: string): Promise<boolean> {
+  try {
+    await requireProjectRole(request.server.db, projectId, userId, POST_MIN_ROLE, request.tokenProjectId)
+    return true
+  } catch (error) {
+    if (!(error instanceof ApiError)) request.log.error({ err: error, projectId }, '재생의 재방송 전에 권한을 재지 못했습니다')
+    return false
+  }
 }
 
 /**
@@ -481,7 +506,9 @@ export async function replayBeforeGuard(request: FastifyRequest, reply: FastifyR
     return undefined
   }
   const replay = replayOf(existing, body.data, document, page.headSeq)
-  await rebroadcastPostRevision(request.server, projectId, pageId, existing.id)
+  if (await passesPostGuardNow(request, projectId, currentUser.id)) {
+    await rebroadcastPostRevision(request.server, projectId, pageId, existing.id)
+  }
   return reply.code(200).send(replay)
 }
 
@@ -605,7 +632,7 @@ export function commentRoutes() {
      * 가드가 걸린 라우트를 세는 자들(`permission-matrix.test.ts` · `restore-lock-census.test.ts`)은 등록된 값으로 센다
      * (`test/guarded-routes.ts`).
      */
-    app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('editor'), preValidation: replayBeforeGuard }, async (request, reply) => {
+    app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard(POST_MIN_ROLE), preValidation: replayBeforeGuard }, async (request, reply) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)
       const body = parseBody(CreateCommentBody, request.body)
 

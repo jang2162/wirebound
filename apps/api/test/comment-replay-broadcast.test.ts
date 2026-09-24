@@ -145,6 +145,34 @@ describe('COMMIT 답을 잃은 게시의 번호 프레임', () => {
     })
   })
 
+  /**
+   * **권한을 잃은 사람의 재생은 200 이지만 룸에 프레임을 안 낸다** — 프레임을 내는 것은 룸에 쓰는 일이다(`routes/comments.ts`의
+   * `passesPostGuardNow`). 앞 게시가 번호를 붙였고 그 revision 이 머리라, 이 판정을 떼면 재생마다 프레임이 하나씩 나간다.
+   */
+  it.each(['viewer 로 강등', '멤버에서 제외'] as const)('%s된 사람의 재생은 200 이고 룸에 프레임을 안 낸다', async (loss) => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const payload = { nodeId: fx.rootNodeId, body: '빠지기 전의 말', idempotencyKey: 'replay-broadcast-lost' }
+      const posted = await ctx.app.inject({ method: 'POST', url: fx.url, cookies: fx.peer.cookie, payload })
+      expect(posted.statusCode, posted.body).toBe(201)
+      await fx.author.waitFor('page-changed')
+
+      const members = `/api/projects/${fx.projectId}/members/${fx.peer.user.id}`
+      const lost = await ctx.app.inject(
+        loss === 'viewer 로 강등'
+          ? { method: 'PATCH', url: members, cookies: fx.owner.cookie, payload: { role: 'viewer' } }
+          : { method: 'DELETE', url: members, cookies: fx.owner.cookie },
+      )
+      expect(lost.statusCode, lost.body).toBe(loss === 'viewer 로 강등' ? 200 : 204)
+      await fx.author.quiet()
+
+      const again = await ctx.app.inject({ method: 'POST', url: fx.url, cookies: fx.peer.cookie, payload })
+      expect(again.statusCode, again.body).toBe(200)
+      expect(pageChanged(await fx.author.quiet())).toEqual([])
+      expect(pageChanged(fx.author.received)).toHaveLength(1)
+    })
+  })
+
   it('번호를 새로 붙이지 않은 게시의 재생은 아무것도 보내지 않는다 — 앞 요청이 문서를 안 바꿨다', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
