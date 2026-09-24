@@ -1,22 +1,23 @@
 /**
- * 메뉴 트리의 조회·선택·조작을 한 곳에 모은 훅(P2b-4 D10). **화면이 부르는 유일한 관문이다.**
+ * 메뉴 트리의 조회·선택·조작을 한 곳에 모은 훅. **화면이 부르는 유일한 관문이다.**
  *
  * 조회가 컴포넌트 안에 있으면 툴바가 그것을 부를 길이 없다 — 조작이 끝나면 트리를 다시
- * 받아야 하는데(D1), 재조회 함수가 `MenuTree`의 `useEffect` 안에 갇혀 있기 때문이다.
+ * 받아야 하는데, 재조회 함수가 `MenuTree`의 `useEffect` 안에 갇혀 있기 때문이다.
  * `useStructureCommands` / `StructureToolbar`의 분리와 같은 모양이다.
  *
- * **낙관 적용을 하지 않는다(D1).** 요청 하나가 성공하면 트리를 통째로 다시 받는다. 근거는
- * 계획서에 셋이 있는데 그중 둘이 이 파일의 형태를 정한다 — 서버가 `sortOrder`를 재번호하고,
+ * **낙관 적용을 하지 않는다.** 요청 하나가 성공하면 트리를 통째로 다시 받는다. 이 파일의
+ * 형태를 정하는 근거는 둘이다 — 서버가 `sortOrder`를 재번호하고,
  * 생성 응답(`MenuNode`)에는 `pages`·`children`이 없어 트리에 그대로 꽂을 수 없다.
  *
- * **큐가 아니라 잠금이다(D2).** 조작이 나가 있는 동안 `busy`가 `true`이고 툴바 전체가
+ * **큐가 아니라 잠금이다.** 조작이 나가 있는 동안 `busy`가 `true`이고 툴바 전체가
  * 비활성이다. 구조 편집의 직렬화(`store/edit-queue.ts`)와 다른 장치인 이유는 여기 요청끼리
  * 의존이 없기 때문이다 — 막아야 하는 것은 같은 버튼 연타와 "재조회 중에 또 조작"뿐이다.
  *
- * **잠금을 `useState`에 두는 것이 안전한 것은 이 훅의 인스턴스가 하나이기 때문이다.**
- * P2b-2에서 `useEditCommit`의 펌프 가드를 훅의 `ref`에 두었다가 인스턴스가 둘이 되자
- * `maxInFlight`가 2가 된 사고가 있었다. **세어 봤다: 이 훅을 부르는 자리는
- * `panels/menu-tree.tsx` 한 곳이고, 툴바는 그 결과를 prop으로 받는다.** 두 번째 호출자가
+ * **잠금을 훅 안에 두는 것이 안전한 것은 이 훅의 인스턴스가 하나이기 때문이다.**
+ * 훅을 부르는 자리가 둘이 되면 잠금이 각자 것이 되어 요청이 겹쳐 나간다 — `useEditCommit`의
+ * 펌프 가드를 훅의 `ref`에 두면 인스턴스가 둘일 때 `maxInFlight`가 2가 되는 것과 같은 고장이다.
+ * **이 훅을 부르는 자리는 `panels/menu-tree.tsx` 한 곳이고(`useTreeCommands(` 호출 자리로
+ * 센다), 툴바는 그 결과를 prop으로 받는다.** 두 번째 호출자가
  * 생기면 잠금이 각자 것이 되므로, 그때는 잠금을 위로 올려야 한다.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -49,14 +50,14 @@ const UNKNOWN_FAILURE = '메뉴를 불러오지 못했습니다'
 const UNKNOWN_COMMAND_FAILURE = '요청을 처리하지 못했습니다'
 
 /**
- * **트리 이름 변경의 장부 칸**(`panels/write-ledger.tsx` — 이월 5차 ③). 키는 (프로젝트, 페이지 없음, 이 칸) — **프로젝트에
- * 하나다.** 트리 조작은 D2 대로 한 번에 하나이고, 이름 변경이 «모름»에 머무는 동안 그 프로젝트의 트리 조작 전부가 잠긴다
+ * **트리 이름 변경의 장부 칸**(`panels/write-ledger.tsx`). 키는 (프로젝트, 페이지 없음, 이 칸) — **프로젝트에
+ * 하나다.** 트리 조작은 잠금으로 한 번에 하나이고(`run`), 이름 변경이 «모름»에 머무는 동안 그 프로젝트의 트리 조작 전부가 잠긴다
  * (새로 선 트리도 — 에디터를 떠났다 와도). 페이지를 자리로 두지 않는 까닭은 `rename`의 머리말.
  */
 const RENAME_SLOT = 'tree/rename'
 
 /**
- * **트리의 칸 — 판정의 말이 닿는 자리**(A 리뷰 F1 · 2026-09-23). 이름 변경의 판정은 이것들을 **쓰기를 낸 인스턴스의 state 가
+ * **트리의 칸 — 판정의 말이 닿는 자리**. 이름 변경의 판정은 이것들을 **쓰기를 낸 인스턴스의 state 가
  * 아니라** 장부의 `deliver`로 보낸다 — 지금 떠 있는 트리(`Receiver` — 종류 `'tree'`)가 받는다. 설명의 칸 쓰기와 같은 길이다
  * (`panels/panel-drafts.tsx`의 `usePanelSlot`). 칸은 객체의 정체성으로 가른다.
  */
@@ -85,16 +86,16 @@ const RENAME_NOT_SAVED = '응답이 없어 서버를 다시 읽었더니 이름�
 const RENAME_GONE = '응답이 없어 서버를 다시 읽었더니 그 항목이 트리에 없습니다'
 /**
  * 떠나 있는 동안 끝난 실패의 머리 — **그 프로젝트의 트리가 떠 있지 않을 때** 남는다(트리의 `Receiver.sees`). 프로젝트 목록 ·
- * 테마 편집기에 가 있었든 **에디터 안에서 다른 프로젝트**에 가 있었든 참인 문장이다(A 리뷰 F6 — 앞 판 «에디터를 떠나 있는
- * 동안»은 뒤의 판에 거짓이었다). 설명의 «이 페이지를 떠나 있는 동안 저장하지 못했습니다»(`pending-notice.tsx`)와 같은 결이다.
+ * 테마 편집기에 가 있었든 **에디터 안에서 다른 프로젝트**에 가 있었든 참인 문장이다(«에디터를 떠나 있는 동안»이라 적으면
+ * 에디터 안의 다른 프로젝트에 가 있던 경우에 거짓이 된다). 설명의 «이 페이지를 떠나 있는 동안 저장하지 못했습니다»(`pending-notice.tsx`)와 같은 결이다.
  */
 const RENAME_MISSED = '이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다'
 
 /**
- * **트리 조회를 낸 순서**(A r1 보고 (e)4 — 이월 5차 2회). 트리 칸은 **늦게 낸 조회의 답만** 받는다(`newer`) — 도착 순서가 아니다.
- * 앞 판은 에디터를 떠났다 돌아온 새 트리가 **커밋 전에** 건 마운트 조회가, 이름 변경이 커밋된 **뒤** 낸 다시 받기(장부가 새 트리에
- * 배달한다 — `rename`)보다 늦게 오면 그 옛 제목으로 덮었다(jsdom — 새 트리 `회원` → 마운트 조회가 와서 `회원관리`). 설명의 조회가
- * 같은 창을 `answered`로 닫은 것과 같은 규칙이다(`panels/page-description.tsx`). 트리 인스턴스가 바뀌어도(떠났다 돌아옴) 한 줄로
+ * **트리 조회를 낸 순서**. 트리 칸은 **늦게 낸 조회의 답만** 받는다(`newer`) — 도착 순서가 아니다.
+ * 도착 순서로 받으면 에디터를 떠났다 돌아온 새 트리가 **커밋 전에** 건 마운트 조회가, 이름 변경이 커밋된 **뒤** 낸 다시 받기(장부가
+ * 새 트리에 배달한다 — `rename`)보다 늦게 올 때 그 옛 제목으로 덮는다(새 트리 `회원` → 마운트 조회가 와서 `회원관리`). 설명의 조회가
+ * 같은 창을 `answered`로 닫는 것과 같은 규칙이다(`panels/page-description.tsx`). 트리 인스턴스가 바뀌어도(떠났다 돌아옴) 한 줄로
  * 늘어야 하므로 모듈에 하나 둔다.
  */
 let treeReads = 0
@@ -110,7 +111,7 @@ const NO_RELOAD = Symbol('no-reload')
 export interface TreeEditing {
   /**
    * **`new-root-menu`만 선택을 보지 않는다.** 나머지 셋은 고른 것에 붙는 조작이라 선택이
-   * 없으면 성립하지 않는데(D5), 최상위 메뉴가 붙는 곳은 트리 자체다 — **빈 트리에는 고를
+   * 없으면 성립하지 않는데(`treeAbilities`), 최상위 메뉴가 붙는 곳은 트리 자체다 — **빈 트리에는 고를
    * 것이 없고, 그것이 이 갈래가 있는 이유다**(`panels/menu-tree.tsx`의 빈 상태).
    */
   kind: 'new-menu' | 'new-root-menu' | 'new-page' | 'rename'
@@ -130,19 +131,19 @@ export type TreeLoadState =
 export interface TreeCommands {
   state: TreeLoadState
   selection: TreeSelection | null
-  /** 메뉴를 고른다. `null`이면 "열린 페이지가 선택된 것"으로 되돌아간다(D3). */
+  /** 메뉴를 고른다. `null`이면 "열린 페이지가 선택된 것"으로 되돌아간다(선택은 파생값이다 — `selection`). */
   select: (selection: TreeSelection | null) => void
   abilities: TreeAbilities
-  /** 조작이 하나 나가 있는 동안 `true`. 툴바 전체가 비활성이다(D2). */
+  /** 조작이 하나 나가 있는 동안 `true`. 툴바 전체가 비활성이다. */
   busy: boolean
   /** 마지막 조작의 실패. 다음 조작이 시작되면 `null`이 된다. */
   failure: Failure | null
   editing: TreeEditing | null
   openInput: (kind: TreeEditing['kind']) => void
-  /** Enter로 확정. 빈 문자열이면 아무것도 하지 않는다(D6). */
+  /** Enter로 확정. 빈 문자열이면 아무것도 하지 않는다. */
   submitInput: (title: string) => void
   cancelInput: () => void
-  /** 삭제 확인이 걸려 있으면 `true`(D7). */
+  /** 삭제 확인(두 번 누르기의 첫 번째)이 걸려 있으면 `true`. */
   confirmingRemove: boolean
   askRemove: () => void
   confirmRemove: () => void
@@ -154,11 +155,11 @@ export interface TreeCommands {
   /** 한 단계 밖으로 — 부모의 다음 형제가 된다. */
   outdent: () => void
   /**
-   * **파일 한 벌로 페이지를 만든다**(§11.2 — P7-3 T5). 고른 **메뉴** 밑에 붙는다.
+   * **파일 한 벌로 페이지를 만든다**(설계서 「페이지 JSON」). 고른 **메뉴** 밑에 붙는다.
    *
    * **`submitInput('new-page')`와 같은 잠금·재조회·이동을 지난다** — 가져오기도 트리를
    * 바꾸는 조작이고, 여기에 자기 잠금을 따로 두면 트리 조작 하나가 나가 있는 동안 가져오기가
-   * 겹쳐 나간다(D2가 막는 그것).
+   * 겹쳐 나간다(트리 조작의 잠금이 막는 그것).
    */
   importJson: (file: unknown, title?: string) => void
   /**
@@ -168,7 +169,7 @@ export interface TreeCommands {
    */
   imported: PageImported | null
   /**
-   * **페이지 제목의 충돌**(이월 P — `api/page-meta.ts`). 이름 변경이 409 · `page-meta-changed`를 받았고 서버 값이
+   * **페이지 제목의 충돌**(`api/page-meta.ts`). 이름 변경이 409 · `page-meta-changed`를 받았고 서버 값이
    * 내 제목도 아니면 선다 — 그 사람의 제목(`theirs`)과 내가 친 제목(`mine`)을 든다. 다음 조작 · 다른 선택에 풀린다.
    */
   conflict: TitleConflict | null
@@ -177,7 +178,7 @@ export interface TreeCommands {
   /** «내 글 버리기» — 그 사람의 제목을 받는다(트리는 충돌 때 이미 다시 받았다). */
   discardTitle: () => void
   /**
-   * **이름 변경의 장부 칸**(이월 5차 ③) — 단계(«확인 중» · «모름»과 «다시 확인») · 떠나 있는 동안 끝난 실패. 화면은 이것을
+   * **이름 변경의 장부 칸** — 단계(«확인 중» · «모름»과 «다시 확인») · 떠나 있는 동안 끝난 실패. 화면은 이것을
    * `PendingNotice`로 그린다(`panels/menu-tree.tsx`). 이것이 서 있는 동안 `busy`도 선다.
    */
   renameLock: PanelLock
@@ -190,7 +191,7 @@ export interface TreeCommands {
   cancelReparent: () => void
 }
 
-/** 이름 변경이 만난 제목 충돌 — `TreeCommands.conflict`. **메뉴도 같다**(이월 5차 ②). */
+/** 이름 변경이 만난 제목 충돌 — `TreeCommands.conflict`. **메뉴도 같다.** */
 export interface TitleConflict {
   /** 무엇의 제목인가 — 메뉴 · 페이지. */
   target: TreeSelection
@@ -209,8 +210,8 @@ export function useTreeCommands(props: {
   reloadToken: number
 }): TreeCommands {
   const api = useApi()
-  // **이 단계가 앱의 첫 `useNavigate`다**(D8). 지금 앱의 이동은 전부 렌더 시점 판정이고
-  // (`<Navigate>` 컴포넌트 — `api/failure.tsx`의 *"컴포넌트인 것이 요점이다"*), 그 관용구는
+  // **렌더 시점 판정이 아니라 명령형 이동(`useNavigate`)이다.** 렌더 시점 판정
+  // (`<Navigate>` 컴포넌트 — `api/failure.tsx`의 *"컴포넌트인 것이 요점이다"*)의 관용구는
   // "이 상태면 저기로 간다"를 말한다. 여기 이동은 **비동기 조작이 끝난 뒤의 명령형 이동**이라
   // 그렇게 표현되지 않는다: 만들기가 성공한 그 순간에만 한 번 일어나고, 렌더가 다시 돌 때
   // 같은 판정을 되풀이하면 안 된다.
@@ -236,16 +237,17 @@ export function useTreeCommands(props: {
    * - `inFlight`는 **제어 플래그**다. 조작이 나가 있는 동안 두 번째 요청을 막는다.
    * - `busy`는 **관측 상태**다. 버튼을 비활성으로 그리려면 렌더가 그것을 봐야 한다.
    *
-   * **잠금이 `ref`여야 하는 이유는 잰 것이다.** 앞 판은 `useState`의 `busy` 하나로 둘을 다
-   * 했는데, `run`이 매 렌더 새로 만들어지고 `busy`를 **그 렌더의 값으로 닫으므로** 같은
+   * **잠금이 `ref`여야 하는 이유는 잰 것이다.** `useState`의 `busy` 하나로 둘을 다
+   * 하면, `run`이 매 렌더 새로 만들어지고 `busy`를 **그 렌더의 값으로 닫으므로** 같은
    * 클로저에서 오는 두 번째 호출은 여전히 `false`를 본다(`setBusy(true)`는 다음 렌더에야
-   * 보인다). 실측: 한 렌더의 `commands`를 붙잡고 같은 tick에 `submitInput`을 두 번 부르면
-   * `createMenu`가 **2회** 나갔다. 렌더를 사이에 두면 1회다 — 즉 그 가드가 막던 것은
-   * 버튼의 `disabled`가 이미 막는 부류뿐이었다.
+   * 보인다). 한 렌더의 `commands`를 붙잡고 같은 tick에 `submitInput`을 두 번 부르면
+   * `createMenu`가 **2회** 나간다(`조작 잠금 > 같은 tick에 두 번 확정해도 요청은 한 번이다`가
+   * 잰다). 렌더를 사이에 두면 1회다 — 즉 state 가드가 막는 것은
+   * 버튼의 `disabled`가 이미 막는 부류뿐이다.
    *
-   * **`editor-store.ts`의 `#pumping`과 같은 부류이되 원인이 다르다.** 그쪽이 스토어로 간
-   * 것은 `useEditCommit`을 부르는 자리가 **여럿**(지금 셋)이라 훅의 `ref`로도 부족했기
-   * 때문이고(`maxInFlight`가 2가 됐다), 여기는 훅 인스턴스가 하나이므로 훅의 `ref`로 닫힌다.
+   * **`editor-store.ts`의 `#pumping`과 같은 부류이되 원인이 다르다.** 그쪽이 스토어에 있는
+   * 것은 `useEditCommit`을 부르는 자리가 **여럿**이라 훅의 `ref`로는 인스턴스마다 가드가 따로
+   * 서기 때문이고(`maxInFlight`가 2가 된다), 여기는 훅 인스턴스가 하나이므로 훅의 `ref`로 닫힌다.
    * 공통점은 "상태로는 동기 재진입을 막지 못한다"이다.
    */
   const inFlight = useRef(false)
@@ -256,14 +258,14 @@ export function useTreeCommands(props: {
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [pickingMenu, setPickingMenu] = useState(false)
   /**
-   * 마지막 가져오기의 결과(P7-3). **`failure`와 다른 축이라 상태가 따로다** — 성공했는데도
+   * 마지막 가져오기의 결과. **`failure`와 다른 축이라 상태가 따로다** — 성공했는데도
    * 말해야 하는 것이 있고(고아가 된 코멘트 · 쓰지 않은 `layoutRef`), 그것을 `failure`에
    * 실으면 성공이 실패처럼 보인다.
    */
   const [imported, setImported] = useState<PageImported | null>(null)
 
   /**
-   * **이름 변경의 장부 칸**(이월 5차 ③ — `RENAME_SLOT`). 장부는 에디터보다 오래 살므로(`panels/write-ledger.tsx`), 이름
+   * **이름 변경의 장부 칸**(`RENAME_SLOT`). 장부는 에디터보다 오래 살므로(`panels/write-ledger.tsx`), 이름
    * 변경이 나가 있는 채 에디터를 떠났다 오면 **새로 선 트리도 잠긴 채** 선다 — 이 인스턴스의 `inFlight`는 새것이라 모른다.
    */
   const ledger = useWriteLedger()
@@ -290,19 +292,19 @@ export function useTreeCommands(props: {
   const hanging = useRef(new Map<string, string[]>())
 
   /**
-   * **선택은 파생값이다(D3).** `picked`가 `null`이면 주소가 말하는 페이지가 선택이다.
+   * **선택은 파생값이다.** `picked`가 `null`이면 주소가 말하는 페이지가 선택이다.
    *
    * 이펙트로 동기화하지 않는다. 그렇게 하면 주소가 바뀔 때마다 렌더가 한 번 더 돌고,
    * 그 사이에 "주소는 새 페이지인데 선택은 아직 옛 것"인 렌더가 낀다.
    *
-   * **다만 그 창을 이 저장소의 테스트로는 재지 못했다.** 이 자리를
-   * `useState` + `useEffect` 동기화로 바꿔 재니 **`--project web` 전량이 0 사망**이었다.
+   * **다만 그 창을 이 저장소의 테스트로는 재지 못한다.** 이 자리를
+   * `useState` + `useEffect` 동기화로 바꿔도 **`--project web` 전량에서 죽는 케이스가 없다.**
    * RTL의 `fireEvent`가 `act` 안에서 돌아 이펙트를 **동기적으로 flush**하므로, 클릭
-   * 다음 줄에서 읽는 시점에는 이미 이펙트가 지나간 뒤다 — 계획서가 말한 "한 프레임"은
+   * 다음 줄에서 읽는 시점에는 이미 이펙트가 지나간 뒤다 — 그 "한 프레임"은
    * 실제 브라우저의 페인트 사이 창이고 jsdom에는 그 사이가 없다.
    *
    * 그래서 파생을 고르는 근거는 **잰 것이 아니라 형태다**: 상태가 하나 줄고, 주소와
-   * 선택이 어긋날 수 있는 중간 상태 자체가 없다. 창의 크기는 재지 못했다.
+   * 선택이 어긋날 수 있는 중간 상태 자체가 없다. 창의 크기는 재지 않았다.
    */
   const selection: TreeSelection | null =
     picked ?? (pageId !== undefined ? { kind: 'page', id: pageId } : null)
@@ -330,7 +332,7 @@ export function useTreeCommands(props: {
         if (alive() && newer(at)) setState({ status: 'ready', menu: next })
       } catch (caught) {
         if (!alive() || !newer(at)) return
-        // 실패 → 화면 규칙은 `api/failure.tsx`에 있다(D5). 여기서 다시 판정하지 않는다.
+        // 실패 → 화면 규칙은 `api/failure.tsx`에 있다. 여기서 다시 판정하지 않는다.
         setState({ status: 'failed', failure: toFailure(caught, UNKNOWN_FAILURE) })
       }
     },
@@ -339,8 +341,8 @@ export function useTreeCommands(props: {
 
   useEffect(() => {
     let alive = true
-    // **떠나면 요청째 끊는다**(`ReadOptions.cancel` — 이월 AD 잔여 · 2026-09-24). 앞 판은 답만 버려(`alive`) 떠난 트리의 조회가
-    // 끝까지 내려받혔다(Chrome: 트리 조회를 4s 붙잡고 1s 에 목록으로 — 4.1s 에 200 으로 끝났다). 페이지 조회와 같은 장치다
+    // **떠나면 요청째 끊는다**(`ReadOptions.cancel`). 답만 버리면(`alive`) 떠난 트리의 조회가
+    // 끝까지 내려받힌다(Chrome: 트리 조회를 붙잡아 둔 채 목록으로 가도 그 조회가 200 으로 끝까지 온다). 페이지 조회와 같은 장치다
     // (`routes/editor.tsx`).
     const leave = new AbortController()
     void load(() => alive, false, leave.signal)
@@ -351,7 +353,7 @@ export function useTreeCommands(props: {
   }, [load])
 
   /**
-   * **바깥이 신호를 올리면 다시 받는다.** 오늘 올리는 것은 **스냅샷 복원**이다(셸의
+   * **바깥이 신호를 올리면 다시 받는다.** 지금 올리는 것은 **스냅샷 복원**이다(셸의
    * `restoredToken`) — 복원은 페이지를 지우고 만들므로 이 목록 자체가 바뀐다.
    *
    * **`reload: true`다.** 위 이펙트와 갈리는 자리가 그것이고, 조작 뒤 재조회와 같은
@@ -395,12 +397,12 @@ export function useTreeCommands(props: {
   }, [])
 
   /**
-   * **이 트리가 받는 자리로 선다**(`panels/write-ledger.tsx`의 `Receiver` — 종류 `'tree'`, A 리뷰 F1). 이름 변경의 판정이 끝났을 때
-   * 그 쓰기를 낸 트리가 내려가 있고 **새 트리가 떠 있으면**(에디터를 떠났다 돌아왔다) 판정의 말이 이 새 트리에 닿는다 — 앞 판은
-   * 낸 인스턴스의 state 에만 썼고(`if (alive()) …`) 새 트리는 «바뀌지 않았습니다»도 충돌 화면도 없이 잠금만 풀렸다(Chrome R1–R3).
+   * **이 트리가 받는 자리로 선다**(`panels/write-ledger.tsx`의 `Receiver` — 종류 `'tree'`). 이름 변경의 판정이 끝났을 때
+   * 그 쓰기를 낸 트리가 내려가 있고 **새 트리가 떠 있으면**(에디터를 떠났다 돌아왔다) 판정의 말이 이 새 트리에 닿는다 — 낸
+   * 인스턴스의 state 에만 쓰면(`if (alive()) …`) 새 트리는 «바뀌지 않았습니다»도 충돌 화면도 없이 잠금만 풀린다.
    *
    * **보는 것은 프로젝트다** — 트리는 그 프로젝트의 어느 페이지에서나 떠 있고, 같은 프로젝트 안의 페이지 이동에 다시 마운트되지
-   * 않는다(앞 판 보고 — jsdom · Chrome). `accept`와 `sees`가 같은 판정이다. 우측 패널(종류 `'page'`)과 겹치지 않는다 — 한 쓰기를
+   * 않는다(jsdom · Chrome 둘 다). `accept`와 `sees`가 같은 판정이다. 우측 패널(종류 `'page'`)과 겹치지 않는다 — 한 쓰기를
    * 보는 자리는 그 쓰기의 종류의 것 하나다.
    */
   const accept = useCallback(
@@ -431,16 +433,16 @@ export function useTreeCommands(props: {
   const epoch = useSessionEpoch()
 
   /**
-   * 조작 하나를 보내고 **성공하면 트리를 다시 받는다(D1). 재조회가 곧 수렴이다.**
+   * 조작 하나를 보내고 **성공하면 트리를 다시 받는다. 재조회가 곧 수렴이다.**
    *
-   * `after`는 재조회 **뒤에** 부른다 — 주소를 옮기는 것(D8)이 그 자리다. 실패하면 부르지
+   * `after`는 재조회 **뒤에** 부른다 — 주소를 옮기는 것이 그 자리다. 실패하면 부르지
    * 않는다: 만들지 못한 페이지로 가면 안 된다.
    *
    * **실패해도 트리를 다시 받지 않는다.** 근거는 앞 문장 하나다 — 서버가 거절했다는 것은
    * 트리가 그대로라는 뜻이라 받아 봐야 같은 것이 온다.
    *
-   * **앞 판은 여기에 "재조회하면 실패 문장이 조회 상태에 덮인다"를 덧붙였는데 조건이
-   * 빠져 있었다.** 실패 뒤에도 재조회하도록 바꿔 재니 **재조회가 성공하면 실패 문장이 그대로
+   * **"재조회하면 실패 문장이 조회 상태에 덮인다"는 근거로 쓰지 않는다 — 조건이 빠진
+   * 문장이다.** 실패 뒤에도 재조회하도록 바꿔 재면 **재조회가 성공하면 실패 문장이 그대로
    * 보이고**(`getTree` 2회, 트리도 그려진다) **재조회까지 실패했을 때만** 덮인다.
    * `failure`와 `state`가 서로 다른 상태이고 `menu-tree.tsx`가 둘을 독립적으로 그리기
    * 때문이다 — `state`가 `failed`가 될 때만 조기 반환이 걸려 조작 실패 문장이 함께 사라진다.
@@ -448,14 +450,13 @@ export function useTreeCommands(props: {
    * **재진입을 막는 것은 `inFlight`(ref)이지 `busy`(state)가 아니다** — 위 선언의 실측을
    * 보라.
    *
-   * **웨이브 2에서 "화면 버튼으로는 이 경로를 만들 수 없다"고 적었고, 그 예측대로 Task 10의
-   * 단축키가 그 방벽을 벗겼다 — 이제 잰 것이다.** 이 가드를 지우면 **2 사망**이다:
+   * **단축키가 버튼의 방벽을 벗기므로 이 가드는 잰 것이다.** 이 가드를 지우면 죽는 케이스는
    * `조작 잠금 > 같은 tick에 두 번 확정해도 요청은 한 번이다`(훅을 직접 태우는 케이스)와
-   * `메뉴 트리 단축키 > busy인 동안 단축키가 걸리지 않는다`(화면을 지나는 케이스). 단축키는
+   * `메뉴 트리 단축키 > busy인 동안 단축키가 걸리지 않는다`(화면을 지나는 케이스)다. 단축키는
    * 버튼의 `disabled`를 지나지 않으므로 `busy`가 서 있어도 핸들러에 닿는다.
    */
   async function run(send: () => Promise<unknown>, after?: () => void): Promise<void> {
-    // **장부에 이름 변경이 나가 있어도 잠긴다**(이월 5차 ③ — 에디터를 떠났다 와 새로 선 트리).
+    // **장부에 이름 변경이 나가 있어도 잠긴다**(에디터를 떠났다 와 새로 선 트리도).
     if (inFlight.current || renameLocked) return
     inFlight.current = true
     setBusy(true)
@@ -478,16 +479,15 @@ export function useTreeCommands(props: {
       // 놓치면 그 인스턴스가 영구히 잠긴다. 표시(`setBusy`)만 마운트 여부를 본다.
       //
       // **이 줄은 케이스가 지킨다 — 지우면 잠금이 영구히 걸려 `조작 잠금` 묶음과 "여는"
-      // 가드를 재는 케이스들이 함께 죽는다.** 앞 판은 "1 사망"이라 적었는데 그 수는 그때의
-      // 케이스 수였고 지금은 더 크다 — **수를 적으면 그 수가 틀린다**(웨이브 1의 F8과 같은
-      // 부류라 갈래만 적는다). 잠금이지 영구 차단이 아니라는 것이 그 케이스들의 하중이다.
+      // 가드를 재는 케이스들이 함께 죽는다.** 죽는 수는 적지 않는다 — 케이스가 늘면
+      // **그 수가 틀리므로** 갈래만 적는다. 잠금이지 영구 차단이 아니라는 것이 그 케이스들의 하중이다.
       inFlight.current = false
       if (!unmounted.current) setBusy(false)
     }
   }
 
   /**
-   * 선택을 바꾼다. 메뉴를 누르면 그 메뉴가, 페이지를 누르면 `null`이 들어온다(D3) —
+   * 선택을 바꾼다. 메뉴를 누르면 그 메뉴가, 페이지를 누르면 `null`이 들어온다 —
    * 후자는 "주소가 말하는 것으로 되돌아간다"는 뜻이다.
    *
    * **열려 있던 입력을 함께 닫는다.** 다른 것을 고른 뒤에도 입력이 남아 있으면 그 입력이
@@ -499,7 +499,7 @@ export function useTreeCommands(props: {
     // 충돌 통지의 «이 제목»이 가리키는 것이 선택이다 — 다른 것을 고르면 무엇의 충돌인지가 화면에서 사라진다.
     setConflict(null)
     setPickingMenu(false)
-    // **삭제 확인이 함께 풀린다**(D7의 취소 조건 셋 중 하나) — 다른 항목에 대고 두 번째
+    // **삭제 확인이 함께 풀린다**(확인이 풀리는 조건 중 하나) — 다른 항목에 대고 두 번째
     // 클릭이 되면 사용자가 확인한 것과 지워지는 것이 달라진다.
     setConfirmingRemove(false)
   }
@@ -510,17 +510,16 @@ export function useTreeCommands(props: {
    * **이름 변경만 초기값을 채운다.** 바꾸려는 것을 지우고 다시 치게 하면 안 된다.
    */
   function openInput(kind: TreeEditing['kind']): void {
-    // **조작이 나가 있으면 열지 않는다(D2의 잠금).** 화면에서는 툴바가 비활성이라 이 경로가
+    // **조작이 나가 있으면 열지 않는다(`run`과 같은 잠금).** 화면에서는 툴바가 비활성이라 이 경로가
     // 없지만 훅 API로는 열리는데, 그때 친 제목은 **요청도 못 나가고 조용히 사라진다** —
     // `submitInput`이 `run`에 닿아도 `inFlight`가 서 있어 되돌아오기 때문이다(실측).
     // 입력을 비활성으로 그리는 것으로는 그것을 막지 못해 여기서 막는다.
     //
-    // **다음 웨이브의 키보드 단축키가 버튼을 지나지 않으므로 이 자리가 그 방벽이다**(계획서
-    // Task 10 케이스 6).
+    // **키보드 단축키가 버튼을 지나지 않으므로 이 자리가 그 방벽이다.**
     if (inFlight.current || renameLocked) return
     setFailure(null)
     setConflict(null)
-    // **다른 조작을 시작하면 확인이 풀린다**(D7의 셋째 조건).
+    // **다른 조작을 시작하면 확인이 풀린다.**
     setConfirmingRemove(false)
     setPickingMenu(false)
     setEditing({ kind, initial: kind === 'rename' ? currentTitle() : '' })
@@ -534,7 +533,7 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * **이름을 바탕과 함께 보낸다 — 페이지도 메뉴도**(이월 P · 이월 5차 ②). 바탕은 입력이 열릴 때의 제목이다(`editing.initial`
+   * **이름을 바탕과 함께 보낸다 — 페이지도 메뉴도.** 바탕은 입력이 열릴 때의 제목이다(`editing.initial`
    * — 트리가 마지막으로 받은 값). 판정은 **설명과 같은 함수 둘**이다(`api/page-meta.ts`의 `metaConflict` · `judgeMeta`):
    *
    * | 결말 | 화면 |
@@ -542,19 +541,19 @@ export function useTreeCommands(props: {
    * | 200 | 트리를 다시 받는다 |
    * | 409(페이지 `page-meta-changed` · 메뉴 `menu-title-changed`) — 지금 값이 내 제목(`'mine'`) | 성공처럼 — 다시 받는다 |
    * | 409 — `'late'` · `'other'` | 충돌(`conflict`) — «지금 글로 덮기 / 앞서 보낸 글로 두기» · «내 글로 덮기 / 내 글 버리기». 다시 받는다 |
-   * | 그 밖의 실패 | 실패 문장 — 다시 받지 않는다(앞 판 그대로) |
-   * | **10초 안에 응답이 없다**(이월 5차 ③) | 트리를 **다시 읽어** 판정한다 — `'mine'` 성공 · `'base'` «바뀌지 않았습니다» · 그 밖은 충돌. 다시 읽은 트리를 그대로 세운다 |
+   * | 그 밖의 실패 | 실패 문장 — 다시 받지 않는다(`run`의 실패와 같다) |
+   * | **10초 안에 응답이 없다** | 트리를 **다시 읽어** 판정한다 — `'mine'` 성공 · `'base'` «바뀌지 않았습니다» · 그 밖은 충돌. 다시 읽은 트리를 그대로 세운다 |
    * | 다시 읽기도 실패 | «모름» + «다시 확인»(`renameLock` — 그동안 트리 조작 전부가 잠긴다) |
    *
    * **쓰기 장부를 그대로 탄다**(`panels/write-ledger.tsx` — 시간 제한 · «모름» · `settle` → `WriteConclusion` · 떠나 있는 동안
-   * 끝난 실패). **판정의 말은 장부의 `deliver`로 보낸다**(A 리뷰 F1) — 실패 문장 · 충돌 · 다시 읽은 트리 · 매달린 값이 이 인스턴스가
+   * 끝난 실패). **판정의 말은 장부의 `deliver`로 보낸다** — 실패 문장 · 충돌 · 다시 읽은 트리 · 매달린 값이 이 인스턴스가
    * 아니라 **지금 떠 있는 이 프로젝트의 트리**(위 `receiver`)에 닿는다. 에디터를 떠났다 돌아와 새 트리가 떠 있는 채 판정이 끝나도,
    * 새 트리에서 «다시 확인»을 눌러도 그 트리가 말한다. 뒤의 다시 받기도 같은 길로 간다(`reload`).
    *
    * **받을 트리가 아예 없으면**(프로젝트 목록 · 테마 편집기 · 다른 프로젝트에 가 있는 채 끝났다) 장부가 결말을 남기고 돌아온 트리가
-   * «이 화면을 떠나 있는 동안 …»으로 말한다 — **판정으로 끝난 결말도**(이월 5차 2회 D — `panels/write-ledger.tsx`의 «판정으로 끝난
-   * 쓰기도 전한다». Chrome: 목록에 가 있는 동안 `'base'` · `'other'` 둘 다 앞 판 통지 0 → 돌아온 트리가 말함). 충돌 화면과 매달린
-   * 값은 다시 세우지 않는다(같은 절의 판정).
+   * «이 화면을 떠나 있는 동안 …»으로 말한다 — **판정으로 끝난 결말도**(`panels/write-ledger.tsx`의 «판정으로 끝난 쓰기도
+   * 전한다» — 실패만 남기면 목록에 가 있는 동안 `'base'` · `'other'`로 끝난 이름 변경을 돌아온 트리가 한마디도 하지 않는다).
+   * 충돌 화면과 매달린 값은 다시 세우지 않는다(같은 절의 판정).
    */
   async function rename(target: TreeSelection, title: string, base: string): Promise<unknown> {
     const key = `${target.kind}:${target.id}`
@@ -637,23 +636,22 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * 입력을 확정한다. **빈 문자열이면 아무것도 하지 않고 입력을 열어 둔다**(D6) — 서버의
+   * 입력을 확정한다. **빈 문자열이면 아무것도 하지 않고 입력을 열어 둔다** — 서버의
    * `Title`이 `z.string().min(1)`이라 400이 되는데 그 왕복을 만들지 않는다. 닫지 않는 것은
    * 닫으면 사용자가 무엇이 잘못됐는지 모른 채 입력을 잃기 때문이다.
    *
    * **제목 중복을 검사하지 않는다.** 서버에 유일성 제약이 없다 — 같은 제목의 메뉴를 형제로도
-   * 자식으로도 만들 수 있다(웨이브 1 실측, `tree/tree-actions.ts`의 `flattenMenus` 주석).
+   * 자식으로도 만들 수 있다(`tree/tree-actions.ts`의 `flattenMenus` 주석).
    *
-   * **값이 바뀌었는지도 비교하지 않는다(계획서 Task 5 케이스 5).** 서버가 제목을 정규화하는지
-   * 재고 그 결과를 여기 적는다 — **정규화하지 않는다.** api 하네스 실측(임시 파일을 두고
-   * 지웠다): `' 회원관리'`·`'회원관리 '`·`'  회원  관리  '`·`'\t회원관리\n'`을 `PATCH`로
+   * **값이 바뀌었는지도 비교하지 않는다.** 서버는 제목을 **정규화하지 않는다** — api 하네스로
+   * `' 회원관리'`·`'회원관리 '`·`'  회원  관리  '`·`'\t회원관리\n'`을 `PATCH`로
    * 보내면 넷 다 200이고 **받은 값이 보낸 값과 글자까지 같다**(페이지도 같다). 그러므로
    * `' 회원관리'`와 `'회원관리'`는 서버에서 다른 값이고, 클라이언트가 "같으니 보내지 않는다"로
    * 막으면 **사용자가 그 공백을 지울 방법이 없어진다.**
    *
    * (부수 관찰: `'   '`처럼 공백만인 제목도 200이다 — `z.string().min(1)`이 길이만 본다.
-   * 여기서 막지 않는 것은 D6이 정한 것이 빈 문자열 하나이기 때문이고, 그 밖의 정책을 이
-   * 단계가 새로 만들지 않는다.)
+   * 여기서 막지 않는 것은 화면이 막기로 한 것이 빈 문자열 하나이기 때문이고, 그 밖의 정책을
+   * 화면이 새로 만들지 않는다.)
    */
   function submitInput(title: string): void {
     if (editing === null) return
@@ -664,16 +662,16 @@ export function useTreeCommands(props: {
     // **최상위 메뉴는 선택을 보지 않는다 — 여기가 이 갈래의 전부다.** 아래 셋과 갈리는
     // 자리가 그것이고, 그래서 선택 가드보다 **위**에 선다.
     //
-    // **빈 트리가 막다른 길이었다.** 메뉴 노드가 0개인 새 프로젝트
+    // **이 갈래가 없으면 빈 트리가 막다른 길이다.** 메뉴 노드가 0개인 새 프로젝트
     // (`apps/api/src/repos/projects.ts`의 `insertProject`는 프로젝트·멤버·기본 레이아웃만
     // 만든다)에서는 고를 메뉴가 없어 `treeAbilities`가 아홉을 전부 끄고, 페이지는
-    // `menuNodeId`가 필수라 페이지도 만들 수 없었다. **구멍은 화면에만 있었다** — 서버는
-    // 처음부터 루트를 받는다(`apps/api/src/routes/menu.ts`의
-    // `parentId: z.uuid().nullable().optional()` · `body.parentId ?? null`)고,
+    // `menuNodeId`가 필수라 페이지도 만들 수 없다. 서버는 루트를 받는다
+    // (`apps/api/src/routes/menu.ts`의
+    // `parentId: z.uuid().nullable().optional()` · `body.parentId ?? null`) —
     // `api/http-client.ts`의 `createMenu`도 *"`parentId`는 `null`이어도 그대로 싣는다"*를
-    // 이미 적고 있었다.
+    // 적고 있다.
     //
-    // **`title === ''` 가드보다는 아래다** — 빈 제목은 이 갈래에서도 나가지 않는다(D6).
+    // **`title === ''` 가드보다는 아래다** — 빈 제목은 이 갈래에서도 나가지 않는다.
     if (kind === 'new-root-menu') {
       setEditing(null)
       void run(async () => {
@@ -687,15 +685,14 @@ export function useTreeCommands(props: {
     setEditing(null)
 
     if (kind === 'rename') {
-      // **메뉴와 페이지가 다른 엔드포인트다** — 선택의 `kind`가 가른다(`rename`). **둘 다 바탕을 싣는다**(이월 5차 ② — 앞
-      // 판은 페이지만 실었다. 메뉴 라우트에 바탕이 없었다).
+      // **메뉴와 페이지가 다른 엔드포인트다** — 선택의 `kind`가 가른다(`rename`). **둘 다 바탕을 싣는다.**
       const base = editing.initial
       const target = selection
       void run(() => rename(target, title, base))
       return
     }
 
-    // 새로 만들기는 **메뉴를 고른 상태에서만** 열린다(D5의 판정) — 여기 오는 선택은 메뉴다.
+    // 새로 만들기는 **메뉴를 고른 상태에서만** 열린다(`treeAbilities`의 판정) — 여기 오는 선택은 메뉴다.
     if (selection.kind !== 'menu') return
     const parentId = selection.id
 
@@ -706,8 +703,8 @@ export function useTreeCommands(props: {
       return
     }
 
-    // **만든 페이지로 이동한다(D8).** 응답의 `id`가 주소에 들어간다 — 빈 문자열은
-    // `SHAPES.pageDetail`이 이미 막았으므로(웨이브 1) 여기서 다시 보지 않는다.
+    // **만든 페이지로 이동한다.** 응답의 `id`가 주소에 들어간다 — 빈 문자열은
+    // `SHAPES.pageDetail`이 막으므로 여기서 다시 보지 않는다.
     let created: string | null = null
     void run(
       async () => {
@@ -721,16 +718,16 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * **파일 한 벌로 페이지를 만든다**(§11.2 — P7-3 T5).
+   * **파일 한 벌로 페이지를 만든다**(「페이지 JSON」).
    *
    * **`submitInput`의 `new-page` 갈래와 같은 모양이다** — `run`을 지나므로 잠금·재조회·
    * 이동이 그대로 따라온다. 그 셋을 여기서 다시 짜지 않는 것이 요점이다: 가져오기가 자기
-   * 잠금을 가지면 트리 조작과 겹쳐 나가고(D2), 재조회를 빠뜨리면 만든 페이지가 트리에
+   * 잠금을 가지면 트리 조작과 겹쳐 나가고, 재조회를 빠뜨리면 만든 페이지가 트리에
    * 안 보인다.
    *
    * **`abilities.addPage`를 지난다.** 가져오기는 **페이지를 만드는 것**이므로 판정이
    * `페이지 추가`와 같다 — 메뉴를 고르지 않았으면 할 수 없다. 판정을 여기서 새로 짜면
-   * 그 표가 두 벌이 된다(D5가 막는 것).
+   * 그 표가 두 벌이 된다(판정은 `treeAbilities` 한 곳이 한다).
    *
    * **봉투를 여기서 읽지 않는다.** 화면이 미리보기를 그리느라 이미 읽었고(`parsePageJson`),
    * 여기서 다시 읽으면 같은 판정이 두 자리가 된다. 서버도 같은 함수를 쓴다.
@@ -762,11 +759,10 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * 형제 사이에서 한 칸 옮긴다(Task 7). `delta`가 `-1`이면 위로, `+1`이면 아래로다.
+   * 형제 사이에서 한 칸 옮긴다. `delta`가 `-1`이면 위로, `+1`이면 아래로다.
    *
    * **목적지가 `index + delta`이고 방향 보정이 없는 것은 서버가 결과 배열 기준이기
-   * 때문이다 — 잰 값이다**(계획서 "계획이 재지 않은 것" #1. api 하네스로 재고 임시 파일을
-   * 지웠다):
+   * 때문이다 — 잰 값이다**(api 하네스로 `PATCH`를 보내 잰다):
    *
    * ```
    * 메뉴   [A:0 B:1 C:2] 에 PATCH {sortOrder: 2} (A)  →  [B:0 C:1 A:2]   결과 기준
@@ -774,11 +770,11 @@ export function useTreeCommands(props: {
    * 메뉴   [A:0 B:1 C:2] 에 PATCH {sortOrder: 0} (B)  →  [B:0 A:1 C:2]   반대 방향도 맞는다
    * ```
    *
-   * **메뉴와 페이지를 각각 쟀다** — 서로 다른 저장소 함수를 지나므로(`repos/menu.ts` vs
-   * `repos/pages.ts`) 한쪽만 재고 양쪽에 쓸 수 없었다. 값은 같았다.
+   * **메뉴와 페이지를 각각 잰다** — 서로 다른 저장소 함수를 지나므로(`repos/menu.ts` vs
+   * `repos/pages.ts`) 한쪽만 재고 양쪽에 쓸 수 없다. 값은 같다.
    *
    * **`treeSpot.index`를 쓰지 `node.sortOrder`를 쓰지 않는다.** 그 인덱스는 `sortOrder`
-   * 오름차순으로 정렬한 뒤의 자리이고(웨이브 1), 서버가 0부터 연속으로 재번호한다는 것은
+   * 오름차순으로 정렬한 뒤의 자리이고, 서버가 0부터 연속으로 재번호한다는 것은
    * **서버의 불변식이지 이 화면이 지킬 수 있는 것이 아니다.**
    * `sortOrder가 0부터 연속이 아닌 트리에서도 목적지가 맞는다`가 그것을 못박는다.
    *
@@ -795,11 +791,11 @@ export function useTreeCommands(props: {
 
     const target = selection.id
     const sortOrder = spot.index + delta
-    // **범위 밖이면 되돌아온다.** `indent`·`outdent`는 목적지가 없을 때 그렇게 하는데
-    // `move`만 그 가드가 없었다(리뷰가 잡았다) — 판정을 벗기고 첫째에서 `move(-1)`을 부르면
+    // **범위 밖이면 되돌아온다.** `indent`·`outdent`가 목적지가 없을 때 그렇게 하는 것과
+    // 같다 — 이 가드가 없으면 판정을 벗기고 첫째에서 `move(-1)`을 부를 때
     // `sortOrder: -1`이 나가고 서버가 400을 낸다(`SortOrder`가 `z.int().min(0)`이다).
     //
-    // 화면·단축키는 둘 다 `treeAbilities.moveUp`/`moveDown`을 지나므로 오늘 이 자리에
+    // 화면·단축키는 둘 다 `treeAbilities.moveUp`/`moveDown`을 지나므로 이 자리에
     // 닿지 않는다. 남기는 것은 그것이 벗겨졌을 때의 방벽이고, 훅을 직접 태우는 케이스가
     // 그것을 지킨다(`조작 잠금`의 형태와 같다).
     if (sortOrder < 0 || sortOrder >= spot.siblingCount) return
@@ -810,26 +806,26 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * 한 단계 안으로 — **앞 형제 메뉴의 마지막 자식**이 된다(Task 8).
+   * 한 단계 안으로 — **앞 형제 메뉴의 마지막 자식**이 된다.
    *
-   * **`sortOrder`를 주지 않는다 — 잰 값이다**(계획서 "계획이 재지 않은 것" #2. api 하네스로
-   * 재고 임시 파일을 지웠다): `PATCH {parentId}`만 주면 **새 부모의 맨 뒤**로 간다.
+   * **`sortOrder`를 주지 않는다 — 잰 값이다**(api 하네스로 잰다): `PATCH {parentId}`만 주면
+   * **새 부모의 맨 뒤**로 간다.
    *
    * ```
    * M1(자식1:0 자식2:1) 에 M2를 PATCH {parentId: M1}  →  자식1:0 자식2:1 M2:2
    * ```
    *
-   * 들여쓰기의 정의가 *"앞 형제의 **마지막** 자식"*(P2b-3의 정의를 그대로 쓴다)이므로 그
+   * 들여쓰기의 정의가 *"앞 형제의 **마지막** 자식"*(구조 트리의 들여쓰기와 같은 정의)이므로 그
    * 기본 동작이 곧 목적지다 — 자리를 지목할 필요가 없다.
    *
-   * **`previousMenuSibling`이 `null`이면 되돌아온다 — 그 가드는 0 사망이다.** 단축키가
-   * 붙은 뒤 다시 쟀는데도 0이다(웨이브 안에서 두 번 쟀다). 덮는 것은 `treeAbilities.indent`
+   * **`previousMenuSibling`이 `null`이면 되돌아온다 — 그 가드를 지워도 죽는 케이스가 없다**
+   * (단축키가 붙어 있어도 그렇다). 덮는 것은 `treeAbilities.indent`
    * 이고, 그것이 버튼의 `disabled`와 **단축키의 판정 통과 둘 다**에 걸린다 — 단축키도
    * `if (!abilities[…]) return`을 지나기 때문이다(`panels/menu-tree.tsx`).
-   * **P2b-3에서 구조 트리의 같은 자리가 같은 이유로 0 사망이었다.**
+   * **구조 트리의 같은 자리도 같은 이유로 죽는 케이스가 없다.**
    *
-   * **잠금 가드와 갈린 자리다.** 그쪽은 단축키가 `disabled`를 우회하면서 하중이 생겼는데
-   * (2 사망), 판정은 단축키도 지나므로 우회로가 없다.
+   * **잠금 가드와 갈린 자리다.** 그쪽은 단축키가 `disabled`를 우회하므로 하중이 있는데
+   * (`run`의 머리말), 판정은 단축키도 지나므로 우회로가 없다.
    *
    * 남기는 것은 그것이 벗겨졌을 때의 `TypeError` 방벽이기 때문이다 — `previous.id`를 읽는
    * 순간 던지고, 이 트리에는 오류 경계가 없다. **닫는 케이스는 만들지 못했다:** 판정을
@@ -847,11 +843,11 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * 한 단계 밖으로 — **부모의 다음 형제**가 된다(Task 8).
+   * 한 단계 밖으로 — **부모의 다음 형제**가 된다.
    *
    * **여기는 `sortOrder`를 함께 준다.** `parentId`만 주면 맨 뒤로 가는데(위 실측) 내어쓰기는
    * 자리를 지목해야 하기 때문이다. **둘을 함께 주면 그 값이 새 부모의 형제 배열 기준으로
-   * 삽입된다 — 그것도 쟀다:**
+   * 삽입된다 — 그것도 잰 값이다:**
    *
    * ```
    * M1(자식1:0 자식2:1) 에 M3을 PATCH {parentId: M1, sortOrder: 1}  →  자식1:0 M3:1 자식2:2
@@ -861,8 +857,8 @@ export function useTreeCommands(props: {
    * 것은 그 함수가 자리만 알려 주고 `sortOrder`를 만들지 않기로 했기 때문이다.
    *
    * **역방향이 항등이 아니다** — 내어썼다가 들여쓰면 제자리가 아니다(들여쓰기가 언제나
-   * 마지막 자식으로 가므로). P2b-3에서 구조 트리가 같은 성질을 못박았고 여기서도 케이스로
-   * 고정했다.
+   * 마지막 자식으로 가므로). 구조 트리도 같은 성질이고, 여기서도 케이스가 그것을
+   * 못박는다.
    */
   function outdent(): void {
     if (menu === null || selection === null || selection.kind !== 'menu') return
@@ -879,7 +875,7 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * 소속 메뉴 목록을 연다(Task 9). **지금 소속을 목록에서 뺀다** — 고를 이유가 없다.
+   * 소속 메뉴 목록을 연다. **지금 소속을 목록에서 뺀다** — 고를 이유가 없다.
    *
    * 목록은 `flattenMenus`가 만든다(손목록을 두지 않는다). 지금 소속은 `treeSpot`이 준
    * `parentId`이고, 페이지의 그 값은 소속 메뉴 id다.
@@ -893,8 +889,7 @@ export function useTreeCommands(props: {
   /**
    * 고른 메뉴로 페이지를 옮긴다.
    *
-   * **`sortOrder`를 주지 않는다 — 잰 값이다**(계획서 "계획이 재지 않은 것" #5. api 하네스로
-   * 재고 임시 파일을 지웠다):
+   * **`sortOrder`를 주지 않는다 — 잰 값이다**(api 하네스로 잰다):
    *
    * ```
    * TO(T1:0 T2:1) 에 PATCH {menuNodeId: TO}               →  T1:0 T2:1 옮길것:2   (맨 뒤)
@@ -904,9 +899,9 @@ export function useTreeCommands(props: {
    * 옮기는 사람이 자리를 지목하지 않았으므로 맨 뒤가 맞다 — 지목하고 싶으면 옮긴 뒤
    * 위/아래로 옮기면 된다.
    *
-   * **선택을 옮기지 않는다.** 페이지 선택은 주소에서만 오고(D3의 귀결) 이 조작은 주소를
-   * 건드리지 않으므로, 옮긴 뒤에도 같은 페이지가 열린 채 선택으로 남는다 — **웨이브 2가
-   * 지운 `wasOpen` 가지가 되살아나지 않는다.**
+   * **선택을 옮기지 않는다.** 페이지 선택은 주소에서만 오고(선택이 파생값이라서) 이 조작은 주소를
+   * 건드리지 않으므로, 옮긴 뒤에도 같은 페이지가 열린 채 선택으로 남는다 — **`confirmRemove`의
+   * 페이지 갈래가 `wasOpen` 조건 없이 서는 전제가 이것이다.**
    */
   function reparentTo(menuId: string): void {
     if (selection === null || selection.kind !== 'page') return
@@ -918,7 +913,7 @@ export function useTreeCommands(props: {
   }
 
   /**
-   * 삭제를 실행한다(D7의 두 번째 클릭).
+   * 삭제를 실행한다(두 번 누르기의 두 번째 클릭).
    *
    * **지우기 전에 자리를 먼저 읽는다** — 지운 뒤에는 그 노드가 트리에 없어 `treeSpot`이
    * `null`이고 부모를 알 길이 없다. `StructureToolbar`의 `removeSelected`가 같은 형태다.
@@ -927,7 +922,7 @@ export function useTreeCommands(props: {
    * 작동하는 상태가 되고, `treeAbilities`가 전부 `false`를 내므로 사용자는 아무것도 못 하는
    * 채로 자기 위치를 잃는다. 루트 메뉴였으면 갈 부모가 없어 `null`이다.
    *
-   * **페이지를 지우면 프로젝트 루트로 `replace` 이동한다(D8).** `replace`인 것은 뒤로
+   * **페이지를 지우면 프로젝트 루트로 `replace` 이동한다.** `replace`인 것은 뒤로
    * 가기가 지워진 페이지로 돌아가면 404를 만나기 때문이다. **조건이 없는 이유는 아래
    * `deletePage` 갈래의 주석에 있다** — 지울 수 있는 페이지가 곧 열려 있는 페이지다.
    */
@@ -947,19 +942,17 @@ export function useTreeCommands(props: {
       return
     }
 
-    // **페이지를 지우면 언제나 프로젝트 루트로 간다** — 조건이 없는 것이 D3의 귀결이다.
-    // 페이지 선택은 주소에서만 오기 때문이다: `select`/`setPicked`를 부르는 자리를 전수로
-    // 세니 `{kind:'menu'}`와 `null` 둘뿐이고(`apps/web/src` 실측), 그래서
+    // **페이지를 지우면 언제나 프로젝트 루트로 간다** — 조건이 없는 것은 선택이 파생값이기
+    // 때문이다. 페이지 선택은 주소에서만 온다: `select`/`setPicked`를 부르는 자리를 전수로
+    // 세면 `{kind:'menu'}`와 `null` 둘뿐이고(`apps/web/src`에서 센다), 그래서
     // `selection.kind === 'page'`이면 `picked === null`이고 곧 `selection.id === pageId`다.
     //
-    // **앞 판은 여기 `wasOpen = pageId === target` 가지를 두고 "열지 않은 페이지를 지우면
-    // 주소를 건드리지 않는다"고 적었는데, 그 조건은 거짓이 될 수 없었다** — 리뷰가 잡았고
-    // `wasOpen`을 항상 `true`로 고정해도 0 사망인 것을 재현했다. 계획서 Task 7~10을 읽어도
-    // 페이지 선택을 만드는 경로가 없다(Task 7은 *"선택은 그대로다"*, Task 9의 `reparent`는
-    // 소속만 바꾸고 주소를 두므로 선택이 파생으로 따라온다).
+    // **`wasOpen = pageId === target` 가지("열지 않은 페이지를 지우면 주소를 건드리지
+    // 않는다")를 두지 않는다 — 그 조건은 거짓이 될 수 없다.** `wasOpen`을 항상 `true`로
+    // 고정해도 죽는 케이스가 없고, 페이지 선택을 만드는 경로가 없다(`move`는 선택을 그대로
+    // 두고, `reparentTo`는 소속만 바꾸고 주소를 두므로 선택이 파생으로 따라온다).
     //
-    // **그래서 지운다.** 웨이브 1에서 `previousMenuSibling`의 잉여 가드를 걷어낸 것과 같은
-    // 판단이다. 다시 필요해지는 조건은 명확하다 — **누군가 `select({kind:'page', …})`를
+    // 다시 필요해지는 조건은 명확하다 — **누군가 `select({kind:'page', …})`를
     // 부르는 순간**이고, 그때 이 자리에 조건이 돌아와야 한다.
     const target = selection.id
     void run(
@@ -984,9 +977,9 @@ export function useTreeCommands(props: {
     cancelInput: () => setEditing(null),
     confirmingRemove,
     askRemove: () => {
-      // **조작이 나가 있으면 확인도 걸지 않는다(D2의 잠금).** 이것이 빠져 있었고 리뷰가
-      // 잡았다 — `busy` 중 `Delete`가 확인을 걸면 그 확인이 **잠금이 풀린 뒤까지 살아남아**
-      // 클릭 한 번에 삭제가 나간다(실측). D7의 두 번 누르기가 사실상 한 번이 되고 undo가 없다.
+      // **조작이 나가 있으면 확인도 걸지 않는다(`run`과 같은 잠금).** 이 가드가 없으면
+      // `busy` 중 `Delete`가 확인을 걸 때 그 확인이 **잠금이 풀린 뒤까지 살아남아**
+      // 클릭 한 번에 삭제가 나간다(실측). 삭제의 두 번 누르기가 사실상 한 번이 되고 undo가 없다.
       //
       // **"여는" 셋이 같은 가드를 갖는다** — `openInput`·`openReparent`·여기. `cancel*`은
       // 반대로 **닫는** 것이라 잠금 중에도 열어 둔다: 취소를 막을 이유가 없다.
@@ -1031,12 +1024,12 @@ export function useTreeCommands(props: {
  * 메뉴 제목 하나. **`tree-actions.ts`의 `byOrder` 관문을 지나지 않는다** — 그 파일이 세운
  * "던지지 않는다" 계약 밖에서 배열을 직접 돈다.
  *
- * **그런데도 안전한 근거는 둘이고, 둘 다 잰 것이다.** 앞 판은 *"표시용이기 때문에 그 계약이
- * 필요한 자리가 아니다"*라고 적었는데 그것은 근거가 아니다 — 계약이 필요한지를 정하는 것은
- * "표시용인가"가 아니라 **"렌더에서 나쁜 값에 닿는가"**다(리뷰가 잡았다).
+ * **그런데도 안전한 근거는 둘이고, 둘 다 잰 것이다.** *"표시용이기 때문에 그 계약이
+ * 필요한 자리가 아니다"*는 근거가 아니다 — 계약이 필요한지를 정하는 것은
+ * "표시용인가"가 아니라 **"렌더에서 나쁜 값에 닿는가"**다.
  *
  * 1. **관문이 세 배열을 이미 보장한다.** `SHAPES.treeEnvelope`가 `isTreeMenuNode`로 재귀
- *    검사하며 `pages`·`children`이 배열인지까지 본다(웨이브 1 실측). **`tree-actions.ts`가
+ *    검사하며 `pages`·`children`이 배열인지까지 본다. **`tree-actions.ts`가
  *    일부러 기대지 않기로 한 바로 그 보장이다** — 그쪽은 관문과 다른 커밋에서 바뀔 수 있어
  *    스스로 닫았고, 여기는 그 보장 위에 선다.
  * 2. **여기는 렌더가 아니라 이벤트 핸들러다.** `currentTitle()`은 `openInput`에서만 불리고

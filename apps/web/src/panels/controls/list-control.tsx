@@ -4,17 +4,17 @@
  * **배열을 통째로 `replace`한다 — 항목마다 인덱스를 조작하지 않는다.** JSON Patch의 배열
  * 인덱스(`add /…/columns/-`·`remove /…/columns/1`)는 동시 편집에서 어긋나기 쉽다: 다른
  * 사람이 앞쪽 항목을 지운 뒤 내 `remove /…/1`이 도착하면 **엉뚱한 항목이 지워진다.** 그
- * 부류를 다루는 것은 P3의 리베이스이고, 이 단계는 `baseSeq`가 어긋나면 409를 받아 재조회로
- * 수렴하는 것이 전부다(D4). 통째 교체는 그 안에서 안전하다 — 내 배열이 낡았으면 `baseSeq`가
+ * 부류는 리베이스(설계서 「정방향 흐름」)가 다루고, 서버는 `baseSeq`가 어긋나면 409로 거절해
+ * 재조회로 수렴시킨다. 통째 교체는 그 안에서 안전하다 — 내 배열이 낡았으면 `baseSeq`가
  * 어긋나 요청 자체가 거절된다.
  *
  * **커밋 규칙은 조작 종류에 따라 갈린다.** 추가·삭제는 중간 상태가 없으므로 즉시 커밋하고
- * (스위치와 같다), 항목 텍스트 수정은 blur에 한 번 커밋한다(텍스트와 같다 — D5).
+ * (스위치와 같다), 항목 텍스트 수정은 blur에 한 번 커밋한다(텍스트와 같다).
  *
  * **배열이 아닌 값과 모양이 깨진 원소를 흡수한다.** 이 패널은 캔버스의 오류 경계 **밖**이라
  * (`apps/web/src` 전체에서 경계는 `CanvasBoundary` 하나뿐) 여기서 던지면 셸 전체가 흰
  * 화면이 된다 — `../property-panel.tsx`의 `stringify`가 같은 이유로 있다. 검증을 통과하지
- * 못한 문서가 스토어에 실리는 창(D4의 재조회 전)이 그 유입 지점이다.
+ * 못한 문서가 스토어에 실리는 창(재조회 전)이 그 유입 지점이다.
  */
 import { useState, type ReactElement } from 'react'
 import type { EditorField } from '@wirebound/schema'
@@ -93,8 +93,8 @@ export function ListControl(props: ListControlProps): ReactElement {
     // `focusout INPUT → null`, `activeElement`는 `BODY`). 커밋은 부르는 쪽의 가드가 막지만
     // (`../property-panel.tsx`의 `blocked`), 그 전에 여기서 초안을 `null`로 비우면 **친 글자가
     // 그 자리에서 사라진다** — 실측: `"새 항목"`을 치던 중 잠금이 오면 칸이 `"옛 항목"`이었다.
-    // `TextControl`은 커밋이 막혀도 초안을 들고 있으므로 이 갈림이 없다. §3.16 E의
-    // *"친 글자는 잠금이 오가도 남는다"*를 두 위젯이 같게 지킨다.
+    // `TextControl`은 커밋이 막혀도 초안을 들고 있으므로 이 갈림이 없다.
+    // *"친 글자는 잠금이 오가도 남는다"*(`test/lock/props-lock.test.tsx`)를 두 위젯이 같게 지킨다.
     if (disabled) return
     const current = items[draft.index]
     setDraft(null)
@@ -127,11 +127,11 @@ export function ListControl(props: ListControlProps): ReactElement {
         aria-label={label}
         value={textOf(index, part)}
         onChange={(event) => {
-          // **다른 칸의 초안이 남아 있으면 먼저 낸다**(9차, 리뷰 N-D). 초안은 한 칸 몫이라 새 칸의
+          // **다른 칸의 초안이 남아 있으면 먼저 낸다.** 초안은 한 칸 몫이라 새 칸의
           // 초안이 앞 칸의 것을 덮는다. 평소에는 앞 칸의 blur가 먼저 커밋해 여기 올 때 초안이
-          // 비어 있지만, **잠금이 오면 포커스 없는 초안이 남는다**(위 `commitDraft`의 가드 — Chrome
-          // 실측: 풀린 뒤 같은 목록의 다른 칸에 한 글자 치면 앞 칸의 `"새 항목"`이 커밋 없이
-          // `"옛 항목"`으로 돌아갔다). 그 초안을 blur가 냈을 값 그대로 먼저 낸다 — 9차 Chrome:
+          // 비어 있지만, **잠금이 오면 포커스 없는 초안이 남는다**(위 `commitDraft`의 가드). 먼저
+          // 내지 않으면 풀린 뒤 같은 목록의 다른 칸에 한 글자 칠 때 앞 칸의 `"새 항목"`이 커밋 없이
+          // `"옛 항목"`으로 돌아간다(Chrome 실측). 그 초안을 blur가 냈을 값 그대로 먼저 낸다 — Chrome:
           // `x`를 치는 순간 `["새 항목","항목 2"]` 1건, 떠나면 `["새 항목","항목 2x"]` 1건.
           if (draft !== null && (draft.index !== index || draft.part !== part)) commitDraft()
           setDraft({ index, part, text: event.target.value })

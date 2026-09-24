@@ -1,33 +1,33 @@
 /**
- * 테마 저작 화면(P4c-2 D1). 주소는 `/projects/:projectId/themes/:themeId`이고
+ * 테마 저작 화면. 주소는 `/projects/:projectId/themes/:themeId`이고
  * **에디터 셸 안이 아니다.**
  *
- * 근거 셋은 계획서 D1에 있다 — 요지는 ㉠ §9의 3분할에 테마 편집이 들어갈 자리가 없고
+ * 근거 셋 — ㉠ 설계서 「설계서 화면 구조」의 3분할에 테마 편집이 들어갈 자리가 없고
  * ㉡ 갤러리와 캔버스가 *"화면 전체를 쓰는 미리보기"* 자리를 다투며 ㉢ 주소가 있어야
- * 공유·새로고침이 된다는 것이다.
+ * 공유·새로고침이 된다.
  *
  * ---
  *
- * # 재라 #1의 답 — **좌우 2분할.** 왼쪽 편집 패널(탭 둘), 오른쪽 갤러리
+ * # **좌우 2분할.** 왼쪽 편집 패널(탭 둘), 오른쪽 갤러리
  *
- * 계획서는 *"셋(토큰·JSON·갤러리)을 탭으로 가를지 좌우로 둘지"*를 ①에 넘겼다. **좌우다.**
+ * 셋(토큰·JSON·갤러리)을 탭으로 가르지 않고 **좌우로 둔다.**
  *
- * 1. **D5의 *"실시간으로 그린다"*는 둘이 동시에 보여야 성립한다.** 갤러리를 탭으로 가르면
+ * 1. **갤러리가 *"실시간으로 그린다"*는 것은 둘이 동시에 보여야 성립한다.** 갤러리를 탭으로 가르면
  *    입력과 결과가 같은 화면에 없어 그 성질이 사라진다 — 그러면 갤러리는 미리보기가 아니라
  *    "확인 화면"이 된다.
  * 2. **토큰 GUI와 JSON 에디터는 동시에 볼 이유가 약하다.** 둘은 **같은 초안의 다른 절**을
- *    편집한다(§6.3의 3단 vs `components`·`patterns`·`primitives`). 그래서 그 둘 **사이**는
+ *    편집한다(설계서 「tokens — 3단 분리」 vs `components`·`patterns`·`primitives`). 그래서 그 둘 **사이**는
  *    탭이다 — 나란히 두면 세로로 긴 폼 둘이 각자 절반 폭으로 좁아진다.
- * 3. **셸(§9)이 이미 같은 골격이다** — 좌측에 편집 도구, 큰 자리에 미리보기.
+ * 3. **셸(「설계서 화면 구조」)이 이미 같은 골격이다** — 좌측에 편집 도구, 큰 자리에 미리보기.
  *
- * **오늘 이 파일이 그리는 것은 그 골격과 저장·이슈까지다.** 왼쪽 탭의 내용(토큰 GUI·JSON
- * 에디터)과 오른쪽 갤러리는 ②의 W1·W2·W3이 채운다 — 여기 있는 것은 **자리와 배선**이다.
+ * **이 파일이 그리는 것은 그 골격과 저장·이슈까지다.** 왼쪽 탭의 내용은 `TokenEditor`·`JsonEditor`,
+ * 오른쪽 갤러리는 `ThemeGallery`가 채운다 — 여기 있는 것은 **자리와 배선**이다.
  *
  * ---
  *
  * # 권한 — 읽기는 열고 쓰기는 owner다
  *
- * §10은 *"테마 편집은 owner"*이고 서버가 그렇게 만들어져 있다: 읽기(`GET .../themes/:themeId`)는
+ * 설계서 「권한 모델」은 *"테마 편집은 owner"*이고 서버가 그렇게 만들어져 있다: 읽기(`GET .../themes/:themeId`)는
  * **viewer 게이트**, 쓰기 둘은 **owner 게이트**. 화면도 그 선을 그대로 쓴다 —
  * **못 들어오게 하지 않고 읽기 전용으로 보여 준다.** 막으면 owner가 아닌 사람이 *"이
  * 프로젝트가 무엇을 입고 있는지"*조차 못 본다.
@@ -38,19 +38,17 @@
  *
  * ---
  *
- * # 재라 #3의 답 — **알리되 막지 않는다**
- *
- * 계획서는 *"저장 안 한 변경을 들고 나갈 때 막을지 알릴지 그냥 둘지"*를 ①에 넘겼다.
+ * # 저장 안 한 변경을 들고 나갈 때 — **알리되 막지 않는다**
  *
  * - **알린다.** 제목 옆에 *"저장 안 함"*이 늘 보이고 저장 버튼이 활성이다.
  * - **막지 않는다.** react-router의 `useBlocker`는 **데이터 라우터**(`createBrowserRouter`)
  *   에서만 돌고 이 앱은 `<BrowserRouter>` + `<Routes>`다(`main.tsx`). 막으려면 라우터 구성을
- *   바꿔야 하고 그것은 이 슬라이스보다 크다.
+ *   바꿔야 하고 그것은 이 화면 하나의 일보다 크다.
  * - **`beforeunload`도 안 건다.** 그것은 **탭을 닫는 것만** 잡고 앱 안 이동은 못 잡는다 —
  *   **반만 막는 것이 안 막는 것보다 나쁘다**(사용자가 막힌다고 믿게 된다).
  *
  * > **그러므로 이 라우트를 떠나면 초안이 사라진다.** 스토어가 라우트와 함께 살고 죽기
- * > 때문이다(아래 `storeRef`). 보존(localStorage 등)은 이 슬라이스 밖이다.
+ * > 때문이다(아래 `storeRef`). 보존(localStorage 등)은 없다.
  */
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -127,7 +125,7 @@ export function ThemeEditorRoute(): ReactElement {
         if (!alive) return
         store.loadTheme(detail.id, detail.theme, {
           base: detail.base ?? null,
-          // **시스템 테마는 읽기 전용이다**(§6.10). 역할과 다른 축이다 —
+          // **시스템 테마는 읽기 전용이다**(설계서 「테마 관리」). 역할과 다른 축이다 —
           // `ThemeDraftState.readOnly`의 주석 참고.
           readOnly: detail.system,
         })
@@ -153,7 +151,7 @@ export function ThemeEditorRoute(): ReactElement {
   }
 
   if (state.status === 'failed') {
-    // 세션이 끊겼으면 오류가 아니라 로그인이다(D5). 셸과 같은 판정이다.
+    // 세션이 끊겼으면 오류가 아니라 로그인이다(`api/failure.tsx`). 셸과 같은 판정이다.
     if (state.failure.kind === 'signed-out') return <SignedOut />
     return (
       <main className="wb-shell-notice">
@@ -172,9 +170,9 @@ export function ThemeEditorRoute(): ReactElement {
 }
 
 /**
- * 화면 본체. **좌우 2분할이고 왼쪽 안이 탭 둘이다**(재라 #1).
+ * 화면 본체. **좌우 2분할이고 왼쪽 안이 탭 둘이다**(머리말 «좌우 2분할»).
  *
- * ②의 셋이 채울 자리를 `data-wb-slot`으로 이름 지어 둔다 — 그 속성은 **셸의 것이지 문서의
+ * 편집기·갤러리가 드는 자리를 `data-wb-slot`으로 이름 지어 둔다 — 그 속성은 **셸의 것이지 문서의
  * 것이 아니다**(문서 노드는 `data-wb-component`를 쓴다. 렌더러만 그것을 낸다).
  */
 function ThemeEditor(props: { project: ProjectDetail; detail: ThemeDetail }): ReactElement {
@@ -187,7 +185,7 @@ function ThemeEditor(props: { project: ProjectDetail; detail: ThemeDetail }): Re
 
   const canEdit = projectAbilities(props.project.role).editTheme
   // **읽기 전용의 이유가 둘이고 화면이 그것을 갈라 말한다.** 시스템 테마는 파생을 만들 길이
-  // 있고(D2) 권한이 모자란 것은 그 길도 없다 — 한 필드로 뭉치면 그 갈림이 사라진다.
+  // 있고(`DeriveButton`) 권한이 모자란 것은 그 길도 없다 — 한 필드로 뭉치면 그 갈림이 사라진다.
   const locked = readOnly || !canEdit
 
   /**
@@ -195,9 +193,9 @@ function ThemeEditor(props: { project: ProjectDetail; detail: ThemeDetail }): Re
    * 결과가 갈릴 자리가 생긴다(`draft-css.ts`의 `resolveDraft` 주석).
    *
    * **`useMemo`를 안 쓴다.** 초안이 바뀔 때마다 다시 해석하는 것이 이 화면의 일이고
-   * (D6 — *"입력마다 `resolveTheme`을 돌린다"*), 초안이 안 바뀌면 이 컴포넌트가 다시 그려질
-   * 이유도 거의 없다. **비싸면 그때 재고 판단하라** — 계획서가 *"먼저 재지 말고 단순하게
-   * 만든 뒤 느리면 그때 고쳐라"*라고 적은 자리다.
+   * (*"입력마다 `resolveTheme`을 돌린다"*), 초안이 안 바뀌면 이 컴포넌트가 다시 그려질
+   * 이유도 거의 없다. **비싸면 그때 재고 판단하라** — 먼저 재지 말고 단순하게 두고,
+   * 느리면 그때 고친다.
    */
   const resolved = resolveDraft(draft, base)
   useDraftCss(resolved)
@@ -215,10 +213,10 @@ function ThemeEditor(props: { project: ProjectDetail; detail: ThemeDetail }): Re
         </Link>
         <ReadOnlyNotice project={props.project} detail={props.detail} canEdit={canEdit} />
         <SaveTools projectId={props.project.id} locked={locked} issues={resolved.issues} />
-        {/* **가져오기·내보내기·되돌리기**(P4c-3). **문서 전체에 대한 조작이라 저장 옆이다** —
+        {/* **가져오기·내보내기·되돌리기.** **문서 전체에 대한 조작이라 저장 옆이다** —
             왼쪽 칸은 절 단위 편집이다(`theme-io-panel.tsx`의 머리말).
 
-            **서버 호출은 여기서 준다**(D3) — 그 화면은 초안 스토어만 만진다. `DeriveButton`이
+            **서버 호출은 여기서 준다** — 그 화면은 초안 스토어만 만진다. `DeriveButton`이
             같은 자리에서 `createTheme`을 부르는 것과 같은 배치이고, `test/api-consumers.test.ts`가
             *"테마 저작 셋은 이 파일에서만 불린다"*를 실행으로 지킨다. */}
         <ThemeIoPanel
@@ -235,20 +233,20 @@ function ThemeEditor(props: { project: ProjectDetail; detail: ThemeDetail }): Re
       </header>
 
       <section className="wb-shell-theme-edit" aria-label="테마 편집">
-        {/* **②의 W1·W2가 채운다.** 탭 둘(토큰 GUI / JSON 에디터)이 여기 들어온다. */}
+        {/* 탭 둘(토큰 GUI / JSON 에디터)이 여기 들어온다. */}
         <div className="wb-shell-theme-panes" data-wb-slot="editors">
           <ThemeSlot name="토큰"><TokenEditor locked={locked} /></ThemeSlot>
           <ThemeSlot name="JSON"><JsonEditor locked={locked} /></ThemeSlot>
         </div>
-        {/* **편집 중 이슈는 클라이언트가 계산한 것이다**(D4). 서버가 판정한 것은 아래 저장
-            응답 쪽이고, 둘을 같은 상자에 뭉치지 않는다 — 갈리면 그 자체가 결함이고 ③이 대조한다. */}
+        {/* **편집 중 이슈는 클라이언트가 계산한 것이다.** 서버가 판정한 것은 아래 저장
+            응답 쪽이고, 둘을 같은 상자에 뭉치지 않는다 — 갈리면 그 자체가 결함이고, 뭉치면 갈린 것이 안 보인다. */}
         <ThemeIssueList title="편집 중 검증" issues={resolved.issues} />
         <ServerWarnings />
       </section>
 
-      {/* **갤러리 자리.** ②의 W3이 채운다. 문서 노드가 여기 들어오므로 `shell.css`가 이
-          상자에 상속되는 속성을 걸면 D7이 깨진다 — `test/shell-css-guard.ts`의 `WRAPPERS`에
-          이 클래스가 있는 이유다. */}
+      {/* **갤러리 자리**(`ThemeGallery`). 문서 노드가 여기 들어오므로 `shell.css`가 이
+          상자에 상속되는 속성을 걸면 `shell.css` 머리말의 규칙(셸 규칙이 문서 안까지 닿지 않는다)이
+          깨진다 — `test/shell-css-guard.ts`의 `WRAPPERS`에 이 클래스가 있는 이유다. */}
       <main className="wb-shell-theme-gallery" aria-label="테마 갤러리" data-wb-slot="gallery">
         <ThemeGallery resolved={resolved.resolved} />
       </main>
@@ -259,14 +257,10 @@ function ThemeEditor(props: { project: ProjectDetail; detail: ThemeDetail }): Re
 /**
  * 테마 이름(`meta.name`)을 고친다.
  *
- * **재라 #7의 절반이다.** 계획서가 *"`meta` 편집(이름·설명·버전)을 어느 화면에 둘지"*를
- * 넘겼고, **이름은 머리에 둔다** — 그것이 이 화면이 편집하는 대상의 정체이고, 토큰 GUI나
- * JSON 에디터 어느 쪽의 절도 아니기 때문이다. **`version`과 `meta.id`(slug)는 안 만들었다:**
+ * **이름은 머리에 둔다** — 그것이 이 화면이 편집하는 대상의 정체이고, 토큰 GUI나
+ * JSON 에디터 어느 쪽의 절도 아니기 때문이다. **`version`과 `meta.id`(slug)는 고치는 자리가 없다:**
  * 전자는 누가 언제 올리는지 규격이 정하지 않았고, 후자는 바꾸면 `(project_id, slug)`가
- * 움직여 409가 날 수 있어 *"이름 바꾸기"*와 손해의 모양이 다르다. **②가 판정한다.**
- *
- * **이 자리가 ①에 있는 이유는 다른 데 있다 — 저장 경로를 실증할 입력이 하나는 있어야 한다.**
- * 없으면 `beginSave`가 켜지는 길이 없어 P3의 배선이 ②까지 한 번도 안 돈 채로 남는다.
+ * 움직여 409가 날 수 있어 *"이름 바꾸기"*와 손해의 모양이 다르다.
  */
 function ThemeNameField(props: { locked: boolean }): ReactElement {
   const store = useThemeDraftStore()
@@ -280,7 +274,7 @@ function ThemeNameField(props: { locked: boolean }): ReactElement {
         className="wb-shell-theme-input"
         value={draft.meta.name}
         disabled={props.locked}
-        // **절 하나를 통째로 갈아 끼운다** — 스토어의 쓰기 문이 그것 하나다(D3).
+        // **절 하나를 통째로 갈아 끼운다** — 스토어의 쓰기 문이 그것 하나다(`putSection`).
         onChange={(event) =>
           store.putSection('meta', { ...draft.meta, name: event.target.value })
         }
@@ -290,12 +284,12 @@ function ThemeNameField(props: { locked: boolean }): ReactElement {
 }
 
 /**
- * 왜 못 고치는지 말하고, **막다른 길로 만들지 않는다**(D2).
+ * 왜 못 고치는지 말하고, **막다른 길로 만들지 않는다**(`DeriveButton`).
  *
- * §6.10: *"시스템 테마는 누구도 편집할 수 없으며, 수정이 필요하면 `extends`로 파생 테마를
+ * 설계서 「권한 모델」: *"시스템 테마는 누구도 편집할 수 없으며, 수정이 필요하면 `extends`로 파생 테마를
  * 만든다."* 서버가 이미 막지만(`requireWritableTheme`) 화면은 그 다음 길을 준다.
  *
- * **파생의 파생은 없다**(§6.9 — 상속 깊이 1). **화면이 그 규칙을 반복하지 않고
+ * **파생의 파생은 없다**(설계서 「상속과 병합」 — 상속 깊이 1). **화면이 그 규칙을 반복하지 않고
  * `detail.system`으로 판정한다** — 시스템 테마가 아닌 것은 파생이거나 홀로 서는 것이고 둘 다
  * `extends`의 대상이 될 수 없다(`EXTENDS_PATTERN`이 `system:`만 받는다).
  */
@@ -324,15 +318,15 @@ function ReadOnlyNotice(props: {
 }
 
 /**
- * *"이 테마를 바탕으로 새 테마 만들기"*(D2).
+ * *"이 테마를 바탕으로 새 테마 만들기"*.
  *
  * **`{ meta: { id, name, extends } }`만 든 파생을 만든다** — 나머지 절은 비운다. 파생은
- * **덮어쓸 것만 적는 것**이 §6.9의 뜻이고, 시스템 테마 전문을 복사해 넣으면 그 순간부터
+ * **덮어쓸 것만 적는 것**이 「상속과 병합」의 뜻이고, 시스템 테마 전문을 복사해 넣으면 그 순간부터
  * 원본이 고쳐져도 따라가지 않는다.
  *
- * **slug를 사용자가 정한다**(D2). 충돌하면 서버가 409를 내고 **그 문안을 화면이 그대로
+ * **slug를 사용자가 정한다.** 충돌하면 서버가 409를 내고 **그 문안을 화면이 그대로
  * 보여 준다** — 규칙을 클라이언트가 다시 두지 않는 것은 `createProject`의 슬러그와 같은
- * 판단이다(D5 — 두 곳에 두면 어긋난다).
+ * 판단이다(두 곳에 두면 어긋난다 — `api/failure.tsx`의 `toFailure`).
  */
 function DeriveButton(props: { project: ProjectDetail; detail: ThemeDetail }): ReactElement {
   const api = useApi()
@@ -377,7 +371,7 @@ function DeriveButton(props: { project: ProjectDetail; detail: ThemeDetail }): R
         />
       </label>
       {/* **빈 slug로는 못 누른다.** 서버가 400을 내지만(`meta.id`가 `[A-Za-z0-9_-]{1,64}`),
-          형식 전체를 클라이언트가 다시 보지는 않는다 — 규칙을 두 곳에 두지 않는다는 D5 그대로다. */}
+          형식 전체를 클라이언트가 다시 보지는 않는다 — 규칙을 두 곳에 두지 않는다. */}
       <button
         type="button"
         className="wb-shell-theme-action"
@@ -392,19 +386,18 @@ function DeriveButton(props: { project: ProjectDetail; detail: ThemeDetail }): R
 }
 
 /**
- * 저장 버튼과 그 상태(D3·D4).
+ * 저장 버튼과 그 상태.
  *
  * **저장은 `PUT` 통째 교체다**(서버가 그렇게 만들어져 있다). 부분 갱신이 아니므로 초안의
- * 절이 하나 빠지면 **서버에서도 빠진다** — 그 사실이 D3의 *"초안 하나가 테마 문서 전체다"*를
+ * 절이 하나 빠지면 **서버에서도 빠진다** — 그 사실이 *"초안 하나가 테마 문서 전체다"*를
  * 강제한다.
  *
  * **막는 조건 넷을 갈라 둔다:** 읽기 전용/권한(`locked`) · 저장할 것 없음(`beginSave`가
- * 판정한다) · `error` 있음(`blocksSave`) · **읽지 못한 JSON이 있음**(P4c-3 D6 — `beginSave`가
+ * 판정한다) · `error` 있음(`blocksSave`) · **읽지 못한 JSON이 있음**(`beginSave`가
  * 함께 판정한다). 넷을 한 불린으로 합치면 **왜 못 누르는지**를 화면이 말할 수 없다.
  *
- * **넷째가 P4c-3이 더한 것이고 W2가 남긴 공백을 닫는다.** 그 전에는 파싱 실패 중에도 버튼이
- * 살아 있었고 눌리면 **마지막으로 읽힌 값**이 서버로 갔다 — P4c-3이 그것을 고치기 전에
- * 재현했다(`ThemeDraftState.unreadable`의 주석).
+ * **넷째가 빠지면** 파싱 실패 중에도 버튼이 살아 있고 눌리면 **마지막으로 읽힌 값**이
+ * 서버로 간다(`ThemeDraftState.unreadable`의 주석).
  */
 function SaveTools(props: {
   projectId: string
@@ -429,15 +422,15 @@ function SaveTools(props: {
 
     try {
       const saved = await api.updateTheme(props.projectId, openThemeId, { theme: draft })
-      // **`warnings` 키가 없을 수 있다**(P4c-1). 스토어가 `[]`로 정규화한다.
+      // **`warnings` 키가 없을 수 있다.** 스토어가 `[]`로 정규화한다.
       store.ackSave(saved.theme, saved.warnings)
     } catch (caught) {
       const failed = toFailure(caught, SAVE_FAILURE)
       store.failSave({
         kind: failed.kind,
         message: failed.kind === 'message' ? failed.message : SAVE_FAILURE,
-        // **422의 이슈를 그대로 싣는다** — D4가 *"저장이 막힐 때 무엇 때문인지 보여라"*로
-        // 못박은 자리다. `ApiErrorIssue`는 `ThemeIssue`의 부분집합이 아니므로 캐스트가
+        // **422의 이슈를 그대로 싣는다** — 저장이 막힐 때 무엇 때문인지 보여야 하는
+        // 자리다. `ApiErrorIssue`는 `ThemeIssue`의 부분집합이 아니므로 캐스트가
         // 필요한데, 서버가 `ThemeIssue[]`를 그대로 실어 보낸다(`themeValidationFailed`).
         issues: caught instanceof ApiError ? (caught.issues as never[]) : [],
       })
@@ -446,7 +439,7 @@ function SaveTools(props: {
 
   return (
     <div className="wb-shell-theme-save" role="group" aria-label="저장">
-      {/* **저장 안 한 변경을 늘 보이게 한다**(재라 #3 — 알리되 막지 않는다). */}
+      {/* **저장 안 한 변경을 늘 보이게 한다**(머리말 «알리되 막지 않는다»). */}
       {dirty && !props.locked && (
         <span className="wb-shell-theme-dirty" role="status">
           저장 안 함
@@ -469,7 +462,7 @@ function SaveTools(props: {
           오류를 고쳐야 저장할 수 있습니다
         </span>
       )}
-      {/* **읽지 못한 절을 이름으로 말한다**(D6). 상자가 넷이라 *"어딘가 잘못됐다"*로는
+      {/* **읽지 못한 절을 이름으로 말한다.** 상자가 넷이라 *"어딘가 잘못됐다"*로는
           어느 상자를 봐야 하는지 알 수 없다. 그 상자의 경보(*"JSON을 읽지 못했습니다"*)와
           짝이 되는 문장이다. */}
       {unreadable.length > 0 && !props.locked && (
@@ -481,7 +474,7 @@ function SaveTools(props: {
       {failure !== null && failure.kind === 'message' && (
         <div className="wb-shell-theme-save-failure">
           <p role="alert">{failure.message}</p>
-          {/* **서버가 준 이슈다 — 클라이언트가 계산한 것과 다른 채널이다**(D4). */}
+          {/* **서버가 준 이슈다 — 클라이언트가 계산한 것과 다른 채널이다**(`ServerWarnings`). */}
           <ThemeIssueList title="서버가 거절한 이유" issues={failure.issues} />
           <button type="button" onClick={store.clearSaveFailure}>
             닫기
@@ -494,7 +487,7 @@ function SaveTools(props: {
 
 /**
  * 마지막 저장 응답의 `warnings`. **서버의 판정이고 편집 중 검증과 다른 채널이다**
- * (P4c-1 이월 §2의 표 — 두 채널이 있고 모양이 다르다).
+ * (두 채널이 있고 모양이 다르다).
  *
  * **키가 없으면 빈 배열이다**(스토어가 정규화한다). 그래서 여기서 `undefined`를 다시 보지
  * 않는다 — 그 구분을 화면마다 하면 한 곳이 빠진다.
@@ -505,7 +498,7 @@ function ServerWarnings(): ReactElement | null {
   return <ThemeIssueList title="마지막 저장에 대한 서버의 판정" issues={warnings} />
 }
 
-/** 자리 이름이 붙은 상자. ②가 채울 때까지 비어 있다. */
+/** 자리 이름이 붙은 상자. 내용은 `children`으로 받는다. */
 export function ThemeSlot(props: { name: string; children?: ReactNode }): ReactElement {
   return (
     <section className="wb-shell-theme-slot" aria-label={props.name}>

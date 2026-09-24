@@ -3,7 +3,7 @@
  * 상태는 `editor-store.ts`가 갖고, 여기 있는 것은 그 상태를 어떻게 옮기는가다. 큐 로직만
  * 따로 재려고 뽑았다.
  *
- * **지키는 것은 D6다: in-flight는 항상 하나.** README가 요구한다 — *"앞 요청의 `seq`를
+ * **지키는 것: in-flight는 항상 하나.** `apps/api/README.md` 「편집 파이프라인」이 요구한다 — *"앞 요청의 `seq`를
  * 받아야 다음 `baseSeq`가 정해지기 때문이다. 어기면 두 번째 요청이 409를 받는다."*
  * 그래서 배열의 `[0]`이 전송 중인 것이고, ack가 오면 그것만 빠진다.
  */
@@ -23,7 +23,7 @@ export interface PendingEdit {
    * **ack를 가르는 것은 이 값과 큐의 `[0]`이지 서버 응답의 에코가 아니다.** 서버가
    * `clientOpId`를 되돌려 주지만(`api/types.ts`의 `PatchResult`) 클라이언트는 그것을 읽지
    * 않는다 — `edit/use-edit-commit.tsx`가 `store.ackEdit(request.clientOpId, result)`로
-   * **보낸 요청의** id를 넘긴다. D6로 in-flight가 하나이므로 응답은 반드시 그 요청의
+   * **보낸 요청의** id를 넘긴다. in-flight가 하나이므로 응답은 반드시 그 요청의
    * 것이고, **요청 id로 맞추는 편이 서버 에코를 믿는 것보다 견고하다** — 서버가 엉뚱한
    * 값을 되돌려 줘도 ack가 어긋나지 않는다(실측: 그렇게 해도 `headSeq`·큐·undo 스택이
    * 정상으로 움직인다).
@@ -37,9 +37,9 @@ export interface PendingEdit {
    * `headSeq`를 다시 읽는다 — 앞 편집이 ack되며 `headSeq`가 올랐으면 이 값은 이미 낡았다.
    * 여기 담아 두는 것은 이 편집이 어느 revision 위에서 만들어졌는지를 남기기 위한 것이다.
    *
-   * **앞 판이 *"P3의 리베이스가 그것을 쓴다"*고 적었는데 거짓이었다(P3-2 재라 #2).** 리베이스는
+   * **리베이스도 이 값을 쓰지 않는다.** 리베이스는
    * 서버가 확인해 준 문서(`editor-store.ts`의 `baseDocument`)에 남의 `ops`를 얹고 그 위에
-   * **`ops`만** 다시 올린다 — 어느 revision 위에서 만들어졌는지는 필요하지 않다. 오늘 이
+   * **`ops`만** 다시 올린다 — 어느 revision 위에서 만들어졌는지는 필요하지 않다. 이
    * 값을 읽는 코드는 **없다.**
    */
   baseSeq: number
@@ -65,10 +65,10 @@ export function ackPending(pending: readonly PendingEdit[], clientOpId: string):
 }
 
 /**
- * 큐를 비우고 **버린 것을 함께 돌려준다.** 버린 목록이 필요한 이유는 통지다(D8) —
+ * 큐를 비우고 **버린 것을 함께 돌려준다.** 버린 목록이 필요한 이유는 통지다 —
  * 사용자는 보내지 못한 편집이 있었다는 것을 알아야 한다.
  *
- * 문서를 되돌리는 일은 여기서 하지 않는다. 실패는 **어떤 종류든** 재조회로 수렴한다(D4).
+ * 문서를 되돌리는 일은 여기서 하지 않는다. 실패는 **어떤 종류든** 재조회로 수렴한다.
  */
 export function clearPending(pending: readonly PendingEdit[]): {
   pending: PendingEdit[]

@@ -1,54 +1,53 @@
 /**
- * **JSON 에디터**(P4c-2 D6 — ② W2). §6.10의 *"`components`·`patterns`·`primitives`는 스키마
+ * **JSON 에디터.** 설계서 「테마 관리」의 *"`components`·`patterns`·`primitives`는 스키마
  * 검증이 붙은 JSON 에디터로 편집한다"*가 이 파일이다.
  *
- * 이 파일이 왜 자리부터 있었는지는 `token-editor.tsx` 머리말에 있다(①의 P5가 밟아서 만든
- * 자리다 — 셋이 한 파일에서 등록하면 병합이 충돌하고 **그 충돌은 회귀가 못 잡는다**).
- * **`routes/theme-editor.tsx`를 열지 않았다.**
+ * 이 파일이 `token-editor.tsx`와 따로 있는 까닭: 편집기 셋을 한 파일에서 등록하면 병합이
+ * 충돌하고 **그 충돌은 회귀가 못 잡는다**.
  *
  * ---
  *
- * # 계약 (①이 적어 둔 것 그대로)
+ * # 계약
  *
- * - **초안은 `useThemeDraftStore()`에서 꺼내고 쓰기는 `putSection` 하나다**(D3).
- * - **`<textarea>`다. 새 런타임 의존을 더하지 않는다**(D6 — 사용자가 정했다). 구문 강조·접기는 없다.
- * - **서버를 부르지 않는다**(D3). `test/api-consumers.test.ts`가 실행으로 지킨다.
+ * - **초안은 `useThemeDraftStore()`에서 꺼내고 쓰기는 `putSection` 하나다.**
+ * - **`<textarea>`다. 새 런타임 의존을 더하지 않는다**(사용자가 정한 것이다). 구문 강조·접기는 없다.
+ * - **서버를 부르지 않는다.** `test/api-consumers.test.ts`가 실행으로 지킨다.
  * - **검증 이슈를 여기서 그리지 않는다** — `theme/theme-issues.tsx`가 `path`까지 갖춰 한 곳에서
- *   그린다(D4). 여기서 그리는 것은 **파싱 실패 하나**이고, 그것은 이슈 채널에 **없는** 정보다.
+ *   그린다. 여기서 그리는 것은 **파싱 실패 하나**이고, 그것은 이슈 채널에 **없는** 정보다.
  *
  * ---
  *
- * # 상자를 절마다 가른 것 — **넷이다**(계약은 셋이었다. 재라 #8이 넷째다)
+ * # 상자를 절마다 가른다 — **넷이다**
  *
- * `components` · `patterns` · `primitives`가 계약의 셋이고, **`assets`를 더했다.**
- * **재라 #8(*"`assets` 편집을 JSON 에디터에 넣을지 GUI로 뺄지"*)의 답이다 — 넣는다.**
+ * `components` · `patterns` · `primitives`가 계약의 셋이고, **`assets`도 여기서 편집한다** —
+ * GUI로 빼지 않는다:
  *
- * 1. **§6.1의 여섯 절 중 오늘 편집할 길이 없는 유일한 절이었다.** `meta`는 라우트의 이름
- *    입력이, `tokens`는 W1이, 나머지 셋은 이 파일이 연다. `assets`만 남으면 **저장이
+ * 1. **설계서 「테마 규격」의 여섯 절 중 여기 말고는 편집할 길이 없는 절이다.** `meta`는 라우트의 이름
+ *    입력이, `tokens`는 토큰 편집기(`token-editor.tsx`)가, 나머지 셋은 이 파일이 연다. `assets`가 빠지면 **저장이
  *    통째 교체(`PUT`)이므로 값은 살아남지만 고칠 수단이 없다.**
- * 2. **GUI로 빼는 값이 이 슬라이스보다 크다.** `fonts[]`는 `family`·`src`·`weights[]`의
+ * 2. **GUI로 빼는 비용이 크다.** `fonts[]`는 `family`·`src`·`weights[]`의
  *    배열이고 `src`는 `url(...) format("woff2")` 꼴을 받는다(`FONT_SRC_FUNCTIONS`) —
  *    폼으로 만들면 그 문법을 다시 구현하는 일이 된다.
  * 3. **비용이 상자 하나다.** 아래 `SectionEditor`가 절 이름 하나로 도는 형태라 넷째 항목이다.
  *
- * > **`placeholder.style`은 오늘 컴파일되지 않는다** — 계획서 재라 #8이 *"넣으면 그 사실을
- * > 적어라"*고 했고, 아래 `SECTIONS`의 `assets` 항목이 그것을 **화면에** 적는다.
+ * > **`placeholder.style`은 컴파일되지 않는다** — 편집은 되는데 아무 일도 안 일어나므로
+ * > 아래 `SECTIONS`의 `assets` 항목이 그 사실을 **화면에** 적는다.
  *
  * ---
  *
- * # 파싱 실패와 검증 실패를 가른다 (D6) — **그 선이 이 파일의 뼈대다**
+ * # 파싱 실패와 검증 실패를 가른다 — **그 선이 이 파일의 뼈대다**
  *
  * | 무엇 | 언제 | 초안에 | 어디에 보이나 |
  * |---|---|---|---|
  * | **파싱 실패** | `JSON.parse`가 던진다 | **안 넣는다** | **여기.** `role="alert"` |
  * | **검증 실패** | 파싱은 됐다 | **넣는다** | 이슈 패널(`theme-issues.tsx`) |
  *
- * **파싱 실패한 것을 초안에 넣지 않는 이유**는 ①이 판정했다: 못 읽은 것을 초안으로 만들면
+ * **파싱 실패한 것을 초안에 넣지 않는 이유**: 못 읽은 것을 초안으로 만들면
  * 갤러리가 앞 값으로 남아 *"고쳤는데 안 바뀐다"*가 된다. **그런데 넣지 않는 것만으로는 그
  * 사고가 안 닫힌다** — 갤러리는 여전히 앞 값이고 사용자는 이유를 모른다. 그래서 경보가
  * *"지금 보이는 것은 마지막으로 읽힌 값이다"*까지 말한다.
  *
- * **`bad-spec`이 셋째 부류가 아니라는 것은 재서 확인했다**(내가 쟀다). 모양이 어긋난 값
+ * **`bad-spec`은 셋째 부류가 아니다 — 잰 것이다.** 모양이 어긋난 값
  * (`components: 42` · `patterns: null` · 배열)을 초안에 넣어도 `resolveTheme`은 **던지지 않고**
  * `bad-spec`(`error`)을 낸다 — 그 함수가 입력을 `unknown`으로 받아 `ThemeSchema.safeParse`를
  * 경계로 두기 때문이다. 즉 **모양 위반은 검증 실패이고 이슈 패널의 몫이다.** 케이스가
@@ -73,7 +72,7 @@ import { useState, type ReactElement } from 'react'
 import type { Theme } from '@wirebound/themes'
 import { useThemeDraft, useThemeDraftStore } from '../store/use-theme-draft'
 
-/** 이 화면이 여는 절. **`meta`·`tokens`는 여기 없다** — 라우트와 W1의 것이다. */
+/** 이 화면이 여는 절. **`meta`·`tokens`는 여기 없다** — 라우트와 토큰 편집기의 것이다. */
 type JsonSection = 'components' | 'patterns' | 'primitives' | 'assets'
 
 interface SectionSpec {
@@ -88,7 +87,7 @@ interface SectionSpec {
 }
 
 /**
- * 상자 넷과 그 순서. **계약의 셋을 먼저, 재라 #8이 더한 `assets`를 뒤에 둔다.**
+ * 상자 넷과 그 순서. **계약의 셋을 먼저, `assets`를 뒤에 둔다.**
  *
  * `caveat`이 붙은 둘이 요점이다 — 둘 다 ***"편집은 되는데 아무 일도 안 일어난다"***이고,
  * 그것은 이슈 채널에 **없는** 정보다(경고가 안 난다). 이 화면이 말하지 않으면 아무도 말하지
@@ -102,9 +101,8 @@ const SECTIONS: readonly SectionSpec[] = [
   {
     section: 'patterns',
     gloss: '재사용 패턴(§6.6) — `<범주>.<변형>`이 키입니다.',
-    // **W2의 판정이다**(계획서가 *"그 사실을 UI가 말해야 하는지는 W2가 판정한다"*로 넘겼다).
-    // **말한다.** 이 화면의 약속이 *"고치면 오른쪽에 바로 보인다"*(D5)인데 이 절만 그 약속
-    // 밖이다. 침묵하면 파싱 실패에서 ①이 판정한 *"고쳤는데 안 바뀐다"*가 **정상 동작으로**
+    // **그 사실을 UI가 말한다.** 이 화면의 약속이 *"고치면 오른쪽에 바로 보인다"*인데 이 절만 그 약속
+    // 밖이다. 침묵하면 파싱 실패에서 막은 *"고쳤는데 안 바뀐다"*가 **정상 동작으로**
     // 재생산된다 — 그쪽은 경보라도 뜨지만 여기는 아무것도 안 뜬다.
     caveat:
       '패턴은 오늘 갤러리에 그려지지 않습니다 — 전개가 아직 없습니다(P7). ' +
@@ -113,7 +111,7 @@ const SECTIONS: readonly SectionSpec[] = [
   {
     section: 'primitives',
     gloss: '사이트 골격(§6.4) — 컨테이너·그리드·섹션·브레이크포인트.',
-    // P4c-1 이월 §1이 쟀다. **이슈 패널은 틀린 뒤에만 말한다** — 이 문장은 틀리기 전에 말한다.
+    // **이슈 패널은 틀린 뒤에만 말한다**(판정은 `resolveTheme`이 이슈로 낸다) — 이 문장은 틀리기 전에 말한다.
     caveat:
       '이 절의 값은 토큰만 가리킬 수 있습니다 — primitives끼리 가리키면 오류입니다. ' +
       'breakpoints는 어느 자리에서도 가리킬 수 없습니다(변수로 나가지 않습니다).',
@@ -121,9 +119,9 @@ const SECTIONS: readonly SectionSpec[] = [
   {
     section: 'assets',
     gloss: '폰트·아이콘·placeholder(§6.7).',
-    // **계획서 재라 #8이 *"넣으면 그 사실을 적어라"*고 한 자리다.** P4b-3 §E.6이 쟀고
-    // (다섯 중 둘이 `'photo'`를 선언했고 아무 일도 안 일어난다) 나는 이 워크트리에서
-    // 그 둘의 선언과 `emit/`의 0건을 grep으로 재확인했다.
+    // **편집은 되는데 아무 일도 안 일어나는 절이라 그 사실을 적는다.** 다시 재는 법: 시스템 테마
+    // (`packages/themes/src/system/`) 중 `'photo'`를 선언한 것이 있고, `packages/themes/src/emit/`에서
+    // `placeholder`를 grep 하면 0건이다.
     caveat:
       'placeholder.style은 오늘 아무 일도 하지 않습니다 — 검증은 지나지만 CSS로 나가지 ' +
       '않습니다(미구현). fonts는 @font-face로 나갑니다.',
@@ -131,7 +129,7 @@ const SECTIONS: readonly SectionSpec[] = [
 ]
 
 /**
- * 절 넷을 각각의 상자로 그린다. **한 상자에 몰지 않는다**(D6) — 서로 다른 절이고 이슈 경로도
+ * 절 넷을 각각의 상자로 그린다. **한 상자에 몰지 않는다** — 서로 다른 절이고 이슈 경로도
  * 갈린다. 한 덩어리로 두면 한 절의 문법 오류가 나머지 셋의 편집까지 막는다.
  *
  * **초안이 없으면 아무것도 안 그린다.** 라우트는 조회가 끝난 뒤에만 이 컴포넌트를 그리지만
@@ -146,15 +144,15 @@ export function JsonEditor(props: { locked: boolean }): ReactElement | null {
   // (`use-theme-draft.tsx`의 규칙).
   const isDerived = useThemeDraft(store, (s) => s.base !== null)
   /**
-   * **초안이 통째로 갈아 끼워진 횟수**(P4c-3 D5). 상자의 `key`에 실어 **다시 마운트**시킨다.
+   * **초안이 통째로 갈아 끼워진 횟수.** 상자의 `key`에 실어 **다시 마운트**시킨다.
    *
    * 아래 `SectionEditor`의 교정(`editing.source !== value`)만으로는 **없는 절이 안 걸린다** —
    * 가져오기 전후로 그 절이 둘 다 `undefined`면 참조가 같아서, 읽지 못한 글자를 든 상자가
    * 새 문서 위에 그대로 남는다. 그러면 스토어의 `unreadable`(가져오기가 비운다)과 화면이
-   * 갈리고, **사실 2가 그 구석에서 되살아난다.**
+   * 갈리고, **화면은 읽지 못한 글자를 드는데 스토어는 읽지 못한 절이 없다고 본다.**
    *
-   * `putSection`은 이 수를 안 올리므로 **타자 중에는 다시 마운트되지 않는다** — W2가 막아
-   * 둔 것(*"내가 친 글자를 왕복으로 다시 포맷하지 않는다"*)이 그대로 산다.
+   * `putSection`은 이 수를 안 올리므로 **타자 중에는 다시 마운트되지 않는다** —
+   * *"내가 친 글자를 왕복으로 다시 포맷하지 않는다"*가 그대로 산다.
    */
   const draftEpoch = useThemeDraft(store, (s) => s.draftEpoch)
 
@@ -216,7 +214,7 @@ function SectionEditor(props: { spec: SectionSpec; locked: boolean }): ReactElem
   function change(text: string): void {
     /**
      * **빈 상자는 *"이 절을 안 쓴다"*이고 `{}`는 *"빈 절"*이다.** 저장이 통째 교체라 그
-     * 차이가 서버까지 간다(`putSection`의 주석이 그것을 못박았다). 공백만 남은 것도 빈 것으로
+     * 차이가 서버까지 간다(`putSection`의 주석이 그것을 못박는다). 공백만 남은 것도 빈 것으로
      * 본다 — `JSON.parse('  ')`는 *"입력이 갑자기 끝났다"*를 던지는데, 그 문장은 지금
      * 사용자가 한 일(지웠다)을 설명하지 못한다.
      */
@@ -236,9 +234,8 @@ function SectionEditor(props: { spec: SectionSpec; locked: boolean }): ReactElem
       // **초안을 건드리지 않는다.** `source`를 그대로 들고 있으므로 위 교정이 이 텍스트를
       // 덮지 않는다 — 초안이 안 바뀌었기 때문이다.
       //
-      // **그리고 스토어에 그 사실을 알린다**(P4c-3 D6). 화면에 경보를 띄우는 것만으로는
-      // 저장이 안 막힌다 — W2가 *"오늘 이 화면이 할 수 있는 것은 그렇게 말하는 것뿐"*이라고
-      // 적은 그 자리이고, 계약이 스토어에 생겼으므로 이제 여기서 그것을 채운다.
+      // **그리고 스토어에 그 사실을 알린다.** 화면에 경보를 띄우는 것만으로는
+      // 저장이 안 막힌다 — 스토어가 읽지 못한 절을 알아야 `beginSave`가 막는다.
       store.setUnreadable(section, true)
       setEditing((previous) => ({
         source: previous.source,
@@ -250,7 +247,7 @@ function SectionEditor(props: { spec: SectionSpec; locked: boolean }): ReactElem
 
     /**
      * **모양을 여기서 보지 않는다.** `ThemeSchema`로 걸러 되돌리면 *"검증 실패는 초안에
-     * 들어간다"*(D6)가 깨지고, 이슈 패널이 가리킬 값이 사라져 **어디를 고쳐야 하는지가
+     * 들어간다"*가 깨지고, 이슈 패널이 가리킬 값이 사라져 **어디를 고쳐야 하는지가
      * 사라진다.** 넣어도 안전하다는 것은 머리말의 `bad-spec` 절에서 재서 적었다.
      *
      * 캐스트가 필요한 것은 그 판단의 결과다 — `JSON.parse`는 `any`를 내고 절의 타입은
@@ -293,10 +290,10 @@ function SectionEditor(props: { spec: SectionSpec; locked: boolean }): ReactElem
       />
       {editing.parseError !== null && (
         /**
-         * **여기서 그리는 유일한 것이다**(D6). 이슈 채널에 없는 정보이므로 이슈 패널이 이것을
+         * **여기서 그리는 유일한 것이다.** 이슈 채널에 없는 정보이므로 이슈 패널이 이것을
          * 대신 말할 수 없다 — `resolveTheme`은 **읽힌 문서**를 받고, 이것은 읽히지 않은 글자다.
          *
-         * **둘째 문장이 ①의 판정을 닫는다.** 초안에 안 넣는 것만으로는 갤러리가 앞 값으로
+         * **둘째 문장이 머리말 «파싱 실패와 검증 실패를 가른다»의 구멍을 닫는다.** 초안에 안 넣는 것만으로는 갤러리가 앞 값으로
          * 남는 것이 안 고쳐진다. 그 사실을 말해야 *"고쳤는데 안 바뀐다"*가 아니라
          * *"아직 안 고쳐졌다"*로 읽힌다.
          */
@@ -315,10 +312,10 @@ function SectionEditor(props: { spec: SectionSpec; locked: boolean }): ReactElem
  * 던져진 것에서 보여 줄 문장을 꺼낸다.
  *
  * **메시지를 파싱하지 않는다.** V8의 문장은 자리를 실을 때도 있고 아닐 때도 있다
- * (내가 이 워크트리의 Node 22.23.1에서 넷을 재 봤다: `Expected ':' after property name in
- * JSON at position 5 (line 1 column 6)`는 실었고 `Unexpected end of JSON input`은 안 실었다).
- * 줄·칸을 우리가 다시 세면 **그 문장이 실을 때와 어긋날 수 있고**, 이 저장소가 반복해 깨진
- * 부류가 정확히 *"두 곳이 같은 것을 따로 말하다가 갈리는 것"*이다. **엔진이 아는 만큼만
+ * (Node 22.23.1 에서 깨진 입력을 `JSON.parse`에 넣어 재면: `Expected ':' after property name in
+ * JSON at position 5 (line 1 column 6)`는 싣고 `Unexpected end of JSON input`은 안 싣는다).
+ * 줄·칸을 우리가 다시 세면 **그 문장이 실을 때와 어긋날 수 있다** — *"두 곳이 같은 것을
+ * 따로 말하다가 갈리는"* 부류다. **엔진이 아는 만큼만
  * 그대로 옮긴다.**
  */
 function parseMessage(caught: unknown): string {

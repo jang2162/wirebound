@@ -1,7 +1,7 @@
 /**
  * `ApiClient`의 실제 구현. `fetch`를 부르는 곳은 이 파일 하나다.
  *
- * 서버와 같은 오리진으로 붙는다(설계 D4 — 개발 중에는 Vite 프록시가, 배포에서는
+ * 서버와 같은 오리진으로 붙는다(개발 중에는 Vite 프록시가, 배포에서는
  * 정적 파일을 함께 서빙하는 서버가 그렇게 만든다). 그래서 절대 URL을 만들지 않고
  * `/api`로 시작하는 경로만 쓴다.
  */
@@ -44,24 +44,24 @@ const UNREADABLE = '서버 응답을 이해할 수 없습니다'
 const UNREACHABLE = '서버에 연결하지 못했습니다'
 
 /**
- * **일반 읽기의 시간 제한**(이월 AD · 2026-09-23). 앞 판의 읽기에는 시간 제한이 없었다 — 판정용 다시 읽기에만 있었다
- * (`panels/write-ledger.tsx`의 `race`). 서버가 답을 안 주면(Chrome · 이 워크트리의 Postgres 컨테이너를 `pause` —
- * 1차 W′ 의 분할 모델: 세션 조회까지 풀에서 기다린다) 걸린 읽기가 **20초 내내** 이랬다:
+ * **일반 읽기의 시간 제한.** 시간 제한이 없으면 서버가 답을 안 줄 때 걸린 읽기가 끝없이 기다린다(Chrome · 그
+ * 워크트리의 Postgres 컨테이너를 `pause` 해 재현한다 — 세션 조회까지 풀에서 기다린다). 그동안 화면은 이렇다:
  *
  * | 읽기 | 화면 |
  * |---|---|
  * | 세션 확인(`me` — 새로고침) | **빈 흰 화면**(문지기가 `pending`에서 아무것도 안 그린다) |
  * | 프로젝트 목록(`listProjects`) | «불러오는 중…» |
- * | 프로젝트 열기(`getProject` — 트리는 그 뒤라 안 나갔다) | «불러오는 중…» |
+ * | 프로젝트 열기(`getProject` — 트리는 그 뒤라 안 나간다) | «불러오는 중…» |
  * | 페이지 옮기기(`getPage`) | «페이지를 불러오는 중…» |
  * | 코멘트 탭(`listComments`) | «코멘트를 불러오는 중…» |
  *
- * 컨테이너를 풀면 저절로 돌아왔다 — 분할이 풀리지 않으면(죽은 상대를 서버가 알아챌 때까지 수 시간) 끝이 없다.
+ * 컨테이너를 풀면 저절로 돌아오지만 분할이 풀리지 않으면(죽은 상대를 서버가 알아챌 때까지 수 시간) 끝이 없다.
  *
- * 이 판(같은 절차 · 22초에 봄): 다섯 다 12s 와 22s 사이에 «서버가 응답하지 않습니다 — 잠시 뒤 새로고침하세요»(`alert`)를
- * 그 화면의 실패 자리에 그린다 — 세션 확인은 «세션을 확인하지 못했습니다», 프로젝트 열기는 «설계서를 열지 못했습니다»
- * 아래. 매달린 요청 0. **대가: 거절한 뒤에는 저절로 안 돌아온다** — 컨테이너를 풀어도 그 문장이 남고 새로고침(또는
- * 페이지·탭을 다시 여는 것)이 다시 읽는다. 앞 판이 «풀리면 돌아온다»였던 것은 끝없이 기다렸기 때문이다.
+ * 시간 제한이 있으면(같은 절차 · 22초에 본 값): 다섯 다 12s 와 22s 사이에 «서버가 응답하지 않습니다 — 잠시 뒤
+ * 새로고침하세요»(`alert`)를 그 화면의 실패 자리에 그린다 — 세션 확인은 «세션을 확인하지 못했습니다», 프로젝트 열기는
+ * «설계서를 열지 못했습니다» 아래. 매달린 요청 0. **대가: 거절한 뒤에는 저절로 안 돌아온다** — 컨테이너를 풀어도 그
+ * 문장이 남고 새로고침(또는 페이지·탭을 다시 여는 것)이 다시 읽는다. 끝없이 기다리면 풀리는 순간 돌아오지만, 안
+ * 풀리면 영영 «불러오는 중»이다.
  *
  * **값: 10초 · 두 번.** 이 읽기들이 실제로 걸리는 시간(Vite 프록시 없이 api 직접 · 순차 50회 · 이 기계)은 p50
  * 4.0–6.2ms · 최대 9.2ms 다(`me` · 목록 · 프로젝트 · 트리 · 페이지 · 코멘트). 10초는 쓰기의 시간 제한과 같은
@@ -74,44 +74,45 @@ const UNREACHABLE = '서버에 연결하지 못했습니다'
  * - **받은 신호가 있는 읽기** — 판정용 다시 읽기다(`getPage`·`listComments`의 `ReadOptions.signal`). 장부가 제
  *   시간 제한으로 끊는다(`race`) — 여기서 한 번 더 걸면 두 시계가 한 요청을 다툰다.
  * - **PPTX 미리보기**(`getExportPreview`) — 서버가 페이지를 한 장씩 그린다(이 기계 2페이지 515ms · 페이지 수에 비례).
- *   HTML 미리보기(같은 판 최대 21.5ms)도 같은 함수라 함께 뺐다 — 한 형식만 거는 갈래를 두지 않았다. **`cancel`은
+ *   HTML 미리보기(같은 절차 최대 21.5ms)도 같은 함수라 함께 뺀다 — 한 형식만 거는 갈래를 두지 않는다. **`cancel`은
  *   듣는다** — 떠나면(패널을 닫거나 다시 부르면) 끊고 다시 보내지 않는다. 안 끊으면 서버는 연결이 닫힐 때까지 그
  *   내보내기를 끝까지 돌아(`apps/api`의 `routes/export.ts` «요청이 끊기면 일을 버린다») 다음 미리보기가 그 뒤에 선다.
- * - **쓰기**(`GET` 이 아닌 것) — 우측 패널의 쓰기는 장부가 잰다(이월 R). 그 밖의 쓰기(메뉴 · 스냅샷 …)는 이 판이
- *   다루지 않는다.
+ * - **쓰기**(`GET` 이 아닌 것) — 우측 패널의 쓰기는 장부가 잰다. 그 밖의 쓰기(메뉴 · 스냅샷 …)에는 시간 제한이
+ *   없다.
  *
  * **응답 머리까지만 잰다** — 본문을 읽는 동안은 재지 않는다. **이것이 큰 문서 × 느린 망에서 페이지를 여는가를
- * 가른다**(리뷰 AD1 · Chrome · CDP 스로틀 40KB/s · 400ms · 1MB 페이지): 머리 2.2s → 본문 끝 27.4s → 그려짐. 본문까지
- * 재면(`finally`의 `clearTimeout`을 빼는 한 줄 — 리뷰 변조 M4) 같은 판이 11.8s 에 끊겨 «서버 응답을 이해할 수
+ * 가른다**(Chrome · CDP 스로틀 40KB/s · 400ms · 1MB 페이지): 머리 2.2s → 본문 끝 27.4s → 그려짐. 본문까지
+ * 재면(`finally`의 `clearTimeout`을 빼는 한 줄) 같은 절차가 11.8s 에 끊겨 «서버 응답을 이해할 수
  * 없습니다»다. 케이스: `test/api/http-client.test.ts`의 *"머리가 시간 안에 오면 본문이 10초를 넘어도 …"*.
  *
- * **떠난 조회는 끊는다**(리뷰 AD-F1 · 2026-09-23). 조회 이펙트가 `ReadOptions.cancel`을 싣고 정리에서 끊는다 — 끊기면
- * 머리 앞이든 본문을 읽는 중이든 요청을 끊고 **다시 보내지 않는다**(`ABANDONED`). 앞 판은 이펙트의 정리가 응답을
- * 버리기만 해서(`alive = false`) 떠난 방문의 1MB 본문이 계속 내려받혔다. Chrome 은 HTTP/1.1 호스트당 연결이
+ * **떠난 조회는 끊는다.** 조회 이펙트가 `ReadOptions.cancel`을 싣고 정리에서 끊는다 — 끊기면
+ * 머리 앞이든 본문을 읽는 중이든 요청을 끊고 **다시 보내지 않는다**(`ABANDONED`). 이펙트의 정리가 응답을
+ * 버리기만 하면(`alive = false`) 떠난 방문의 1MB 본문이 계속 내려받힌다. Chrome 은 HTTP/1.1 호스트당 연결이
  * **6개**라 버려진 본문 여섯이 여섯 연결을 쥐면 새 GET 이 **브라우저 안에서 줄을 서고**, 10초는 `fetch`를 부른
- * 순간부터 재므로 **줄 선 시간까지 «서버가 답이 없다»로 셌다** — 같은 스로틀로 큰 페이지 ↔ 옆 페이지를 6번 오간 뒤
+ * 순간부터 재므로 **줄 선 시간까지 «서버가 답이 없다»로 센다** — 같은 스로틀로 큰 페이지 ↔ 옆 페이지를 6번 오간 뒤
  * 세 번째 페이지로 가면 40.3s 에 «서버가 응답하지 않습니다»(api 의 최대 `responseTime` 87ms — 서버는 다 답했다).
- * 버려진 조회도 10초가 되면 다시 보내 줄을 더 길게 만들었다. 이 판(같은 절차 · 리뷰 `ad-queue.mjs`): 떠날 때마다 큰
+ * 버려진 조회도 10초가 되면 다시 보내 줄을 더 길게 만든다. 끊으면(같은 절차): 떠날 때마다 큰
  * 페이지의 GET 이 `ERR_ABORTED` · 세 번째 페이지로 갈 때 매달린 요청 **0** · 그 GET 의 머리 0.4–0.5s · 거짓 통지 0(N=6 ·
  * N=7 둘 다). **받은 신호(`signal` — 판정용 다시 읽기)와는 다른
  * 키다** — 그쪽은 부른 쪽이 시간을 재고, 이쪽은 시간을 여기서 잰다(두 시계가 한 요청을 다투지 않는다).
  *
- * **끊는 자리 — 조회 이펙트 전부**(2026-09-24 이월 AD 잔여): 페이지 · 설명 · 코멘트 · 프리셋 · 테마 · 되돌리기 이력(3차) + **셸의
+ * **끊는 자리 — 조회 이펙트 전부**: 페이지 · 설명 · 코멘트 · 프리셋 · 테마 · 되돌리기 이력 + **셸의
  * 프로젝트**(`routes/editor.tsx` — 첫 조회 · 역할 다시 읽기) · **트리**(`tree/use-tree-commands.tsx` — 마운트 · 복원 신호 · 조작 뒤)
  * · **세션 확인**(`session/session-context.tsx`의 `me`) · **편집 수습의 페이지**(`edit/use-edit-commit.tsx` — «떠남»은 스토어가 그
- * 페이지를 더는 열고 있지 않은 것). 앞 판(Chrome · 조회를 4s 붙잡고 1s 에 목록으로): 프로젝트 · 트리 조회가 4.1s 에 200 으로 끝났다
- * → 이 판: 떠나는 순간 `ERR_ABORTED`. **안 끊는 것**: 이름 변경 뒤의 트리 다시 받기(장부가 **지금 떠 있는** 트리에 배달한다 — 낸
- * 트리가 떠나도 받을 트리가 있을 수 있다) · 스냅샷 패널 · 테마 편집기의 `getProject`(이 판이 안 건드린 자리).
+ * 페이지를 더는 열고 있지 않은 것). 끊지 않으면(Chrome · 조회를 4s 붙잡고 1s 에 목록으로) 프로젝트 · 트리 조회가 4.1s 에
+ * 200 으로 끝나고, 끊으면 떠나는 순간 `ERR_ABORTED`다. **안 끊는 것**: 이름 변경 뒤의 트리 다시 받기(장부가 **지금 떠 있는**
+ * 트리에 배달한다 — 낸 트리가 떠나도 받을 트리가 있을 수 있다) · 스냅샷 패널 · 테마 편집기의 `getProject`(뒤 둘은 끊을
+ * 이유가 없어서가 아니라 `cancel`을 싣지 않은 자리다).
  *
- * **남는 성질 둘 — 재서 적고 고치지 않았다(판정):**
+ * **남는 성질 둘 — 재서 적고 고치지 않는다:**
  *
  * - **10초는 `fetch`를 부른 순간부터다 — 브라우저 안의 대기열 시간도 센다.** Chrome(HTTP/1.1 · 한 호스트 연결 6): 한 페이지 행을
  *   DB 에서 잠가 둔 채 그 행의 설명 쓰기 여섯을 raw `fetch`로 내 연결 여섯을 쥐게 하고 프로젝트를 열었다 → `getProject` 둘(10.1s ·
  *   20.1s 에 끊김) → **20.2s «서버가 응답하지 않습니다»**, api 로그에 그 `GET`은 **0건**(서버는 그 행을 안 보므로 곧바로 답할 수
- *   있었다). 앱의 조회는 이제 떠나면 끊기므로 앱 스스로 연결을 쥐는 길은 좁아졌다 — 남는 것은 끊을 수 없는 요청(쓰기 · 다른 도구)이
+ *   있었다). 앱의 조회는 떠나면 끊기므로 앱 스스로 연결을 쥐는 길은 좁다 — 남는 것은 끊을 수 없는 요청(쓰기 · 다른 도구)이
  *   연결을 쥔 판이다. 고치려면 «연결을 잡은 순간»부터 재야 하는데 `fetch`는 그 순간을 알려 주지 않는다.
- * - **시간 초과 뒤 저절로 안 돌아온다.** 같은 판에서 잠금을 풀어(연결이 풀림) 6s 기다려도 «서버가 응답하지 않습니다» 그대로 · 에디터
- *   안 섬 — 새로고침(또는 그 화면을 다시 여는 것)이 다시 읽는다. 앞 머리말의 «대가»와 같은 말이다.
+ * - **시간 초과 뒤 저절로 안 돌아온다.** 같은 절차에서 잠금을 풀어(연결이 풀림) 6s 기다려도 «서버가 응답하지 않습니다» 그대로 · 에디터
+ *   안 섬 — 새로고침(또는 그 화면을 다시 여는 것)이 다시 읽는다. 위 «대가»와 같은 말이다.
  */
 export const READ_DEADLINE_MS = 10_000
 /** 일반 읽기를 보내는 횟수 — 첫 번째와 다시 시도 한 번. */
@@ -142,11 +143,11 @@ const EMPTY_UPDATE = '바꿀 내용이 없습니다'
  *
  * **이 값이 화면의 분기를 가르지는 않는다.** `client.ts`의 `ApiError` 주석이
  * *"`status`는 로그·디버깅용으로만 싣는다"*로 같은 사실을 적고 있고, 두 경우를 실제로 가르는
- * 것은 `code`다(연결 실패 `internal` / 빈 본문 차단 `bad-request`). 앞 판은 근거를 *"로그에서
- * 서버가 0을 냈다고 읽힐 여지가 없다"*로 적었는데 그것은 **읽는 사람**에 기댄 잴 수 없는
- * 문장이었다.
+ * 것은 `code`다(연결 실패 `internal` / 빈 본문 차단 `bad-request`). 근거를 *"로그에서
+ * 서버가 0을 냈다고 읽힐 여지가 없다"*로 두지 않는다 — **읽는 사람**에 기댄 잴 수 없는
+ * 문장이다.
  *
- * **여기 "읽는 자리가 몇이다"를 적지 않는다** — 그 부류가 이 파일에서 여러 번 낡았고, 수가
+ * **여기 "읽는 자리가 몇이다"를 적지 않는다** — 그런 수는 호출부가 바뀌면 조용히 낡고, 수가
  * 필요하면 세는 것은 사람이 아니라 테스트여야 한다(`test/api-consumers.test.ts`의 머리말).
  */
 const NO_RESPONSE = 0
@@ -157,7 +158,7 @@ const NO_RESPONSE = 0
  * **`Record<ApiErrorCode, true>`인 것이 요점이다** — 배열이면 이 목록과 `ApiErrorCode`
  * 유니온이 컴파일러로 이어지지 않아, 오타가 나거나 유니온에 코드를 더하고 여기 안 넣으면 그
  * 코드가 조용히 `internal`로 흡수된다(`toApiError`의 `: 'internal'`). 레코드로 두면
- * **빠뜨림과 오타가 양방향으로 컴파일 에러**가 된다. P2b-2가 `conflict`(리베이스)·
+ * **빠뜨림과 오타가 양방향으로 컴파일 에러**가 된다. 편집 경로가 `conflict`(리베이스)·
  * `validation-failed`(서버 검증 실패)로 분기하므로 그 둘이 조용히 틀어지면 안 된다.
  */
 const API_ERROR_CODES: Record<ApiErrorCode, true> = {
@@ -184,7 +185,7 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
  * **성공 응답의 얕은 형태 검사.** 요청 자리가 각자 보지 않고 여기 모은다 — 자리가 늘어도
  * 표에 한 줄을 더하면 되고, `request`가 이 인자를 **필수로** 받으므로 빠뜨리면 컴파일
  * 에러다(`API_ERROR_CODES`를 레코드로 둔 것과 같은 이유). **조회만 지나는 관문이 아니다:**
- * P2b-4의 CRUD 여섯도 여기를 지난다(생성·갱신 응답이 그대로 다음 조작의 입력이 된다).
+ * 트리의 CRUD 여섯도 여기를 지난다(생성·갱신 응답이 그대로 다음 조작의 입력이 된다).
  *
  * **왜 필요한가.** `!response.ok`와 JSON 파싱은 이미 막혀 있지만, 서버가 200과 함께 계약에
  * 없는 모양을 내면 그 값이 그대로 화면까지 간다. 실측(`test/api/response-shape.test.tsx`의
@@ -194,7 +195,7 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
  *
  * **얕게 본다.** 배열인가·객체인가·계약이 약속한 필드가 그 타입인가까지다. 문서 안쪽
  * (`schema.root`의 자식들)은 **일부러 보지 않는다** — 렌더러가 검증 실패 노드를 폴백으로
- * 그리고 `onNodeError`로 알리므로(D8), 여기서 막으면 그릴 수 있는 문서를 못 그리게 된다.
+ * 그리고 `onNodeError`로 알리므로, 여기서 막으면 그릴 수 있는 문서를 못 그리게 된다.
  * 트리만 재귀로 내려가는데, `MenuItem`이 자식 메뉴를 같은 코드로 그려서 깊이와 상관없이
  * 같은 자리에서 죽기 때문이다.
  */
@@ -253,15 +254,13 @@ function isTreePage(value: unknown): boolean {
  * |---|---|---|
  * | `listProjects` | `id`(목록 `<Link>`의 주소) · `name`(줄의 글자) · **`description`(줄의 `<p>` 자식)** | 빈 문자열이면 `/projects/`가 되고 화면이 통째로 빈다 |
  * | `getProject` | `id`(셸이 트리에 넘기는 `projectId`) · `name`(셸 제목) | 같은 부류 — `/projects/pages/pg1` |
- * | `createProject` | `id`가 **주소가 된다**(D7 — 만든 뒤 그리로 이동한다) | 201 성공 경로로 잘못된 주소가 만들어진다 |
+ * | `createProject` | `id`가 **주소가 된다**(만든 뒤 그리로 이동한다) | 201 성공 경로로 잘못된 주소가 만들어진다 |
  * | `updateProject` | (없음 — 성공 여부만 본다) | — |
  * | 넷 모두 | `role`은 **여기서 보지 않는다** | `projects/project-actions.ts`가 계약 밖 값을 닫는다 |
  *
- * > **왜 시점을 주석에서 뺐나.** 앞 판은 이 표에 *"아직 없다(호출부 0건)"* 열을 두고
- * > *"웨이브 2 Task 4 때 갱신하라"*고 적었다. **그 시점이 같은 브랜치 안에서 지나갔고 열은
- * > 안 고쳐졌다.** 같은 부류가 이 저장소에서 **네 번** 낡았다(그 목록은
- * > `test/api-consumers.test.ts` 머리말에 있다). **"다음에 갱신하라"로는 닫히지 않는다** —
- * > 실행으로 재면 낡지 않는다.
+ * > **왜 시점을 주석에 두지 않나.** 표에 *"아직 없다(호출부 0건)"* 열을 두고 *"다음
+ * > 단계에서 갱신하라"*고 적어 두면, 그 시점이 지나가도 열은 안 고쳐진다. **"다음에
+ * > 갱신하라"로는 닫히지 않는다** — 실행으로 재면 낡지 않는다(`test/api-consumers.test.ts`).
  *
  * **`createProject`가 이 검사를 그대로 지나는 것은 "모양이 같아서"가 아니다.** 그쪽 하중
  * `id`(주소)가 이 검사가 이미 보는 것의 **부분집합**이라서다 — 실측으로 네 응답의 키 집합이
@@ -269,8 +268,8 @@ function isTreePage(value: unknown): boolean {
  * `ProjectDetail` 표). 별도 shape를 두면 내용이 같은 둘이 생겨 한쪽만 고쳐지는 자리가 되고,
  * 더 약한 쪽이 같은 계약을 통과시키게 된다.
  *
- * **무엇을 막고 무엇을 통과시키는지는 "어겼을 때 화면이 통째로 비는가"로 가른다 — 재서 정했다**
- * (리뷰 W6). 검사 밖이던 셋을 진짜 `<App />`에 태워 보니 갈렸다:
+ * **무엇을 막고 무엇을 통과시키는지는 "어겼을 때 화면이 통째로 비는가"로 가른다 — 재서 정했다.**
+ * 검사 밖의 셋을 진짜 `<App />`에 태우면 갈린다:
  *
  * | 키 | 계약 밖 값이 닿는 곳 | 관측 | 판단 |
  * |---|---|---|---|
@@ -278,9 +277,9 @@ function isTreePage(value: unknown): boolean {
  * | `slug` | 수정 폼의 `<input value>` | 폼이 열리고 화면이 산다(629자) | 둔다 |
  * | `role` | `projectAbilities`의 `!== 'owner'` 비교 | 버튼만 닫히고 화면이 산다(190자) | 둔다 |
  *
- * **죽는 것은 "React가 자식으로 그리지 못하는 객체가 닿을 때"다 — 부류를 재서 좁혔다**(리뷰 F3).
- * 앞 판은 *"객체를 품었을 때"*로 적었는데 **함수·Symbol·`Map`이 반례다.** 관문을 우회해
- * `<App />`까지 태워 보니 갈리는 축은 **이터러블인가**였다:
+ * **죽는 것은 "React가 자식으로 그리지 못하는 객체가 닿을 때"다 — 부류를 재서 좁혔다.**
+ * *"객체를 품었을 때"*로 적으면 틀린다 — **함수·Symbol·`Map`이 반례다.** 관문을 우회해
+ * `<App />`까지 태우면 갈리는 축은 **이터러블인가**다:
  *
  * | 값 | 관측 |
  * |---|---|
@@ -341,7 +340,7 @@ function isProjectDetail(value: unknown): boolean {
 }
 
 /**
- * 내보내기 미리보기(P8-4 · P10-1 D7). **배열들과 `fileName`이 실제로 그 모양인지 본다.**
+ * 내보내기 미리보기. **배열들과 `fileName`이 실제로 그 모양인지 본다.**
  *
  * 화면이 배열을 전부 전개하고 `fileName`을 `<a download>`에 그대로 건다 — 배열이 아니면
  * 그 자리에서 던지고 이 화면을 감싸는 오류 경계가 없다(`apps/web`의 경계는 캔버스 하나다).
@@ -388,43 +387,36 @@ const SHAPES = {
   /**
    * 메뉴 노드 하나(`POST`·`PATCH .../menu`).
    *
-   * **이 응답의 필드를 읽는 자리는 지금도 0건이다.** 근거 둘 중 **하나는 낡아서 갈아 끼웠다**
-   * (P2b-5 웨이브 1 리뷰 F7 — 이 주석은 P2b-4 웨이브 1에 쓰였고 그 뒤 웨이브 2·3이 호출부를
-   * 만들었다):
+   * **이 응답의 필드를 읽는 자리는 없다.** `createMenu`·`updateMenu`를 부르는 자리는
+   * `tree/use-tree-commands.tsx`에 있고 전부 응답을 `await`만 하고 버린다(성공하면 트리를
+   * 다시 받는다) — `MenuNode`를 값으로 읽는 자리가 없다. 결론(얕게 둔다)을 떠받치는 것은 이
+   * 절이다.
    *
-   * - ~~`rg`로 CRUD 여섯을 부르는 자리 **0건**~~ → **부르는 자리가 생겼다.** 전부
-   *   `tree/use-tree-commands.tsx` 한 파일에 있다. **수를 여기 적지 않는다** — 그 수는
-   *   **같은 브랜치 안에서도** 낡고(아래), 세는 명령을 적으면 그 명령이 이 주석을 함께 센다.
-   *   지금 값이 필요하면 그 파일을 열어 세라.
-   * - **`MenuNode`를 값으로 읽는 자리 0건 — 이쪽은 여전히 참이다**(실측: 여섯 중 응답을 변수에
-   *   받는 자리는 `createPage` 하나뿐이고 그것은 `PageDetail`이다. 나머지 열은 `await`만 하고
-   *   버린다). 결론(얕게 둔다)을 떠받치는 것은 이 절이다.
+   * **부르는 자리의 수를 여기 적지 않는다** — 그 수는 호출부가 바뀌면 낡고, 세는 명령을 적으면
+   * 그 명령이 이 주석을 함께 센다. 지금 값이 필요하면 `test/api-consumers.test.ts`를 보거나 그
+   * 파일을 열어 세라.
    *
-   * > **소스 텍스트를 세는 주석은 자기 자신을 센다.** 이 저장소에서 두 번 났다 — 처음에는
-   * > *"`rg` 히트는 12"*라 적었고, 그 수를 고치며 쓴 *"열둘째는 인용이다"*라는 **문장이 심볼을
-   * > 인용해 13이 됐다.** 그래서 *"세는 범위를 한 파일로 좁혀라"*로 처방했는데 **그것도
-   * > 안 닫혔다**(리뷰 W3): 좁힌 파일 안에 그 문장이 있으면 같은 일이 난다.
-   * > **닫는 방법은 둘이다 — 수를 안 적거나, 주석을 걷고 실행으로 세는 것**(D3의 `.role`은
-   * > `test/role-access.test.ts`가 그렇게 한다). 여기는 그 수가 계약을 떠받치지 않으므로
+   * > **소스 텍스트를 세는 주석은 자기 자신을 센다.** `rg` 히트 수를 적으면, 그 수를 고치며 쓴
+   * > 문장이 심볼을 인용해 수가 하나 는다. 세는 범위를 한 파일로 좁혀도 그 파일 안에 그 문장이
+   * > 있으면 같은 일이 난다. **닫는 방법은 둘이다 — 수를 안 적거나, 주석을 걷고 실행으로 세는 것**
+   * > (`.role`은 `test/role-access.test.ts`가 그렇게 한다). 여기는 그 수가 계약을 떠받치지 않으므로
    * > 앞쪽을 골랐다.
    *
-   * > **"오늘 0건"류 문장은 시간이 지나면 저절로 거짓이 된다.** 이 자리가 그 사례다 — 무엇이
-   * > 그것을 갱신하게 만드는지까지 적지 않으면 아무도 갱신하지 않는다. 위 `isProjectDetail`의
-   * > "오늘 도달" 열에 갱신 시점(웨이브 2 Task 4)을 함께 적어 둔 것이 그 대응이다.
+   * > **"오늘 0건"류 문장은 시간이 지나면 저절로 거짓이 된다** — 무엇이 그것을 갱신하게 만드는지까지
+   * > 적지 않으면 아무도 갱신하지 않는다. 그래서 호출부는 `test/api-consumers.test.ts`가 실행으로 센다.
    *
-   * **앞서 여기에 "그 `sortOrder`가 위/아래 이동의 목적지 계산에 들어간다"고 적었던 것은
-   * 거짓이었다** — 계획서 Task 7 케이스 7과 `tree/tree-actions.ts`의 `treeSpot` 주석이
-   * 정반대를 못박는다(목적지는 `node.sortOrder`가 아니라 `byOrder` 정렬 뒤의 `index`다).
-   * 리뷰가 잡았고, 원인은 계획서 산문을 그대로 옮긴 것이다.
+   * **이 응답의 `sortOrder`는 위/아래 이동의 목적지 계산에 들어가지 않는다** — 목적지는
+   * `node.sortOrder`가 아니라 `byOrder` 정렬 뒤의 `index`다(`tree/tree-actions.ts`의 `treeSpot`
+   * 주석).
    *
    * **읽는 자리가 없는데도 검사를 두는 이유는 둘이다.**
    *
    * 1. `request`가 shape를 **필수로** 받는다(이 표의 설계). 자리를 비울 수 없으니 무엇을
    *    볼지는 정해야 하고, `id`·`sortOrder`는 이 리소스의 계약이 약속한 값이다.
-   * 2. **새 소비자가 붙을 때 이 표를 갱신하지 않는 것이 실제로 일어난다.** 바로 아래
-   *    `pageDetail`이 그 사례다 — `getPage`만 보던 시절의 하중만 적혀 있다가 `createPage`가
-   *    붙으면서 `id`가 빠진 채로 지나갔다(리뷰가 잡았다). 검사가 아예 없는 것보다 얕게라도
-   *    있는 편이 그 순간의 손해가 작다.
+   * 2. **새 소비자가 붙을 때 이 표를 갱신하지 않는 일이 생긴다.** 바로 아래
+   *    `pageDetail`이 그 자리다 — `getPage`가 읽는 하중만 적혀 있으면 `createPage`가 붙을 때
+   *    `id`가 빠진 채로 지나간다. 검사가 아예 없는 것보다 얕게라도 있는 편이 그 순간의 손해가
+   *    작다.
    *
    * **그러므로 "무엇을 지키는가"를 미래형으로 적지 않는다.** 읽는 자리가 생기면 그때
    * 무엇을 읽는지 세어 이 표에 줄을 더한다.
@@ -436,17 +428,17 @@ const SHAPES = {
    *
    * | 소비자 | 읽는 값 | 어긋나면 |
    * |---|---|---|
-   * | `getPage`(P2b-2) | `headSeq` | 편집이 어느 revision 위에서 만들어졌는지가 조용히 틀어진다 |
-   * | `getPage`(P2b-2) | `schema.root` | 캔버스가 `root.children`을 읽다 렌더 도중 던진다 |
-   * | `createPage`(P2b-4) | `id` | 만든 페이지로 이동하는 주소에 그대로 들어간다(D8) |
-   * | `updatePage`(P2b-4) | (없음 — 성공 여부만 본다) | — |
+   * | `getPage` | `headSeq` | 편집이 어느 revision 위에서 만들어졌는지가 조용히 틀어진다 |
+   * | `getPage` | `schema.root` | 캔버스가 `root.children`을 읽다 렌더 도중 던진다 |
+   * | `createPage` | `id` | 만든 페이지로 이동하는 주소에 그대로 들어간다 |
+   * | `updatePage` | (없음 — 성공 여부만 본다) | — |
    *
-   * **`id`는 뒤늦게 더했다.** `createPage`가 이 shape에 붙을 때 표를 갱신하지 않아
-   * `id` 키 없음·`42`·`null`이 전부 통과했고 리뷰가 잡았다(F2). **모양이 같은 것과 읽는
+   * **`id`를 보는 것은 `createPage`의 몫이다.** `createPage`가 이 shape에 붙을 때 표를
+   * 갱신하지 않으면 `id` 키 없음·`42`·`null`이 전부 통과한다. **모양이 같은 것과 읽는
    * 필드가 같은 것은 다르다** — 세 엔드포인트가 서버의 `toResponse` 하나로 같은 여덟 키를
    * 내는 것은 참이지만, 그것이 "같은 검사로 충분하다"를 뜻하지 않는다.
    *
-   * **실측(가짜 `fetch`로 `createPage` 응답을 망가뜨려 D8의 주소 조립에 태웠다** —
+   * **실측(가짜 `fetch`로 `createPage` 응답을 망가뜨려 만든 뒤 이동하는 주소 조립에 태웠다** —
    * 조립 형태는 `panels/menu-tree.tsx`의 `PageLink`가 이미 쓰는
    * `` `/projects/${projectId}/pages/${page.id}` `` 그대로다**):**
    *
@@ -465,24 +457,16 @@ const SHAPES = {
    * | `/projects/p1` | 1730자 | 있음 |
    * | `/projects/p1/pages/%20`(공백 한 칸) | 2752자 | 있음 |
    *
-   * `app.tsx`에 `*` 라우트가 없어 `<Routes>`가 아무것도 그리지 않는다. **앞 판의 이 자리는
-   * 그것을 "다른 라우트가 받는다"로 적었고 그것은 거짓이었다** — 손해를 실제보다 가볍게
-   * 적은 셈이다. 빈 화면은 `tree/tree-actions.ts` 머리말이 피하려는 바로 그 사고와 같은
+   * `app.tsx`에 `*` 라우트가 없어 `<Routes>`가 아무것도 그리지 않는다 — **"다른 라우트가
+   * 받는다"가 아니다**(그렇게 적으면 손해를 실제보다 가볍게 적는 셈이다). 빈 화면은 `tree/tree-actions.ts` 머리말이 피하려는 바로 그 사고와 같은
    * 결과다.
    *
-   * **어느 id를 빈 문자열까지 막는지는 "그 값이 주소가 되는가"로 가른다.** 주소가 만들어지는
-   * 자리를 `rg`로 다시 세니 `apps/web/src`에 **넷**이다:
-   *
-   * - `panels/menu-tree.tsx`의 `PageLink` — `/projects/:projectId/pages/:pageId`
-   * - `routes/project-list.tsx`의 `<Link>` — `/projects/:projectId`
-   * - `tree/use-tree-commands.tsx`의 `navigate` — 페이지를 **만든 뒤** 그리로 간다
-   * - `tree/use-tree-commands.tsx`의 `navigate` — 페이지를 **지운 뒤** `/projects/:projectId`로 간다
-   *
-   * **뒤 둘은 P2b-4 웨이브 2가 만들었고 이 표는 그때 갱신되지 않았다**(P2b-5 리뷰 F7과 같은
-   * 부류 — "오늘 0건"류 문장이 저절로 낡은 것이다). **앞 판의 이 문단은 "셋"이라 적었고 그것도
-   * 틀렸다** — 지운 뒤의 `navigate`를 빠뜨렸다. 넷째가 주소에 넣는 값도 `projectDetail.id`다
-   * (`routes/editor.tsx`가 **조회해 온** id를 트리에 넘기고 그 훅이 그대로 쓴다). 거기 들어가는
-   * shape 값을 표로 적는다.
+   * **어느 id를 빈 문자열까지 막는지는 "그 값이 주소가 되는가"로 가른다.** 주소를 만드는
+   * 자리는 여럿이고 **그 목록을 여기 적지 않는다** — 적은 목록은 호출부가 늘면 조용히 낡는다.
+   * 아래 표는 이 shape의 값이 주소가 되는 자리이고, `pageImported`·`themeDetail`·`createProject`의
+   * 주소는 각자의 주석이 적는다. 페이지를 **지운 뒤** `/projects/:projectId`로 가는
+   * `tree/use-tree-commands.tsx`의 `navigate`가 넣는 값도 `projectDetail.id`다(`routes/editor.tsx`가
+   * **조회해 온** id를 트리에 넘기고 그 훅이 그대로 쓴다).
    *
    * | shape의 값 | 주소가 되는 자리 | 오늘 도달 | 빈 문자열 |
    * |---|---|---|---|
@@ -493,13 +477,10 @@ const SHAPES = {
    * | `treeEnvelope`의 `TreeMenuNode.id` | (없음 — React key와 판정 키뿐) | — | 둔다 |
    * | `sessionUser.id` · `menuNode.id` | (없음 — 읽는 자리 0건) | — | 둔다 |
    *
-   * **앞 판은 이 규칙을 "`treeEnvelope`는 주소가 되지 않는다"로 적었고 거짓이었다.** 실측:
-   * `TreePage.id: ''`가 관문을 통과해 `PageLink`가 `/projects/p1/pages/`를 만들고, 그 주소가
-   * 위 표의 빈 화면이 된다. **`projectDetail`·`projectList`도 같다** — `id: ''`면 각각
-   * `/projects/pages/pg1`·`/projects/`가 되고 둘 다 innerHTML 0자·`.wb-shell` 없음이었다.
-   * 즉 앞 판은 **아직 도달하지 않는 자리를 막고 오늘 도달하는 셋을 열어 두었다.**
-   * **그 "아직 도달하지 않는 자리"가 이제 도달한다** — 위 표 첫 줄이 그것이고, 가드는 그때
-   * 이미 있었으므로 손해는 없었다. **기록만 낡았다.**
+   * **`treeEnvelope`도 주소가 된다.** 실측: `TreePage.id: ''`가 관문을 통과하면 `PageLink`가
+   * `/projects/p1/pages/`를 만들고, 그 주소가 위 표의 빈 화면이 된다. **`projectDetail`·
+   * `projectList`도 같다** — `id: ''`면 각각 `/projects/pages/pg1`·`/projects/`가 되고 둘 다
+   * innerHTML 0자·`.wb-shell` 없음이다.
    *
    * **읽는 축이 둘이라는 것이 요점이다** — 그 값이 주소가 되는가(하중)와 그 경로가 지금
    * 도달하는가(시점). 얕음을 일괄로 맞추지 않고 **이 표의 위 넷만** 깊게 한다.
@@ -508,13 +489,13 @@ const SHAPES = {
    * `isArrayOf`가 `every`라 한 항목의 `id`가 빈 문자열이면 배열째 `ApiError`가 되고,
    * 사용자는 멀쩡한 다른 프로젝트도 열지 못한다. **그래도 그 손해가 옳다:** 통과시키면
    * 그 줄의 링크가 `/projects/`가 되고, 그 주소는 `app.tsx`의 어느 라우트도 잡지 않아
-   * **화면이 통째로 빈다**(웨이브 1 실측). 목록 전체가 막히는 것은 이유가 화면에 남고
+   * **화면이 통째로 빈다**(위 실측 표). 목록 전체가 막히는 것은 이유가 화면에 남고
    * 새로고침으로 복구되지만, 빈 화면은 사용자가 무엇이 잘못됐는지 알 수도 되돌릴 수도 없다.
    * **보이고 복구되는 실패가 조용한 빈 화면보다 낫다.**
    */
   pageDetail: isPageDetail,
   /**
-   * 가져오기 응답(P7-3 — §11.2). **`page`에 같은 검사를 다시 건다** — 그 값이 `pageDetail`과
+   * 가져오기 응답(설계서 「페이지 JSON」). **`page`에 같은 검사를 다시 건다** — 그 값이 `pageDetail`과
    * 같은 여덟 키이고(서버의 `toResponse` 하나가 만든다) **주소가 되는 값**(`page.id`)이
    * 여기서도 그대로 주소로 들어간다: 가져오기가 성공하면 화면이 그 페이지로 옮긴다.
    * 그래서 검사를 얕게 두면 `/projects/p1/pages/`로 옮겨 **화면이 통째로 빈다**(위
@@ -539,14 +520,14 @@ const SHAPES = {
    * 둘 다 값이 그대로 큐와 undo 스택에 실리므로, 계약을 어긴 값이 지나가면 `baseSeq`가
    * 조용히 어긋나거나 undo가 배열이 아닌 것을 `ops`로 보내다 죽는다.
    *
-   * **`inverse` 안쪽은 보지 않는다**(D11). 그것은 서버가 만든 `PatchOp[]`이고 그 안까지
+   * **`inverse` 안쪽은 보지 않는다.** 그것은 서버가 만든 `PatchOp[]`이고 그 안까지
    * 보는 것은 `@wirebound/schema`의 일이다 — `schema.root` 안쪽을 보지 않는 것과 같은
-   * 경계다(D8).
+   * 경계다.
    */
   /**
    * revision 목록. **각 항목의 `inverse`가 배열인지까지 본다** — 그 값이 그대로 undo
    * 스택에 실리고, 배열이 아니면 undo가 그것을 `ops`로 보내다 죽는다. `inverse` **안쪽**은
-   * 보지 않는다(D11 — `patchResult`와 같은 경계).
+   * 보지 않는다(`patchResult`와 같은 경계).
    */
   revisionList: (value) =>
     isArrayOf(
@@ -562,7 +543,7 @@ const SHAPES = {
     typeof value['seq'] === 'number' &&
     typeof value['revisionId'] === 'string' &&
     Array.isArray(value['inverse']) &&
-    // **`warnings`는 없을 수 있고, 있으면 배열이어야 한다**(P5-3 D6 — 테마 쪽 `themeDetail`과
+    // **`warnings`는 없을 수 있고, 있으면 배열이어야 한다**(테마 쪽 `themeDetail`과
     // 같은 관례). 서버는 경고가 없으면 키를 만들지 않으므로 `undefined`를 통과시켜야 하고,
     // 배열이 아닌 것을 통과시키면 셸 머리의 통지가 `.map`을 부르다 던진다 — 그 자리는
     // 오류 경계 **밖**이라 셸 전체가 흰 화면이 된다(`shell/edit-warnings.tsx`).
@@ -606,12 +587,12 @@ const SHAPES = {
           'string',
     ),
   /**
-   * 테마 하나 — 저작 UI가 편집하는 것(P4c-2). **소비자가 셋이고 읽는 값이 다르다.**
+   * 테마 하나 — 저작 UI가 편집하는 것. **소비자가 셋이고 읽는 값이 다르다.**
    *
    * | 소비자 | 읽는 값과 그 값이 되는 것 | 어긋나면 |
    * |---|---|---|
    * | `getTheme` | `theme`(초안 스토어에 실린다) · `base`(`resolveTheme`의 둘째 인자) · `system`(읽기 전용 판정) | 초안이 테마가 아닌 것을 들고, 파생의 검증이 `bad-extends`로 통째로 죽는다 |
-   * | `createTheme` | **`id`가 주소가 된다**(D2 — 파생을 만든 뒤 그 편집 화면으로 간다) | `/projects/p1/themes/`가 되고 그 주소는 어느 라우트도 잡지 않는다 |
+   * | `createTheme` | **`id`가 주소가 된다**(파생을 만든 뒤 그 편집 화면으로 간다) | `/projects/p1/themes/`가 되고 그 주소는 어느 라우트도 잡지 않는다 |
    * | `updateTheme` | `warnings`(화면에 그린다) · `theme`(저장된 것으로 초안 기준을 갱신) | 배열이 아닌 것을 `.map`하다 저장 성공 경로에서 던진다 |
    *
    * **`theme` 안쪽은 보지 않는다** — `projectTheme`·`themeList`와 같은 경계다.
@@ -637,7 +618,7 @@ const SHAPES = {
     (value['base'] === undefined || isRecord(value['base'])) &&
     (value['warnings'] === undefined || Array.isArray(value['warnings'])),
   /**
-   * 코멘트 하나(P5-1). 넷을 본다.
+   * 코멘트 하나. 넷을 본다.
    *
    * | 값 | 그 값이 되는 것 | 어긋나면 |
    * |---|---|---|
@@ -666,7 +647,7 @@ const SHAPES = {
   /** 삭제·재번호의 결과. 문서 변화만 온다. */
   markerChange: isMarkerChange,
   /**
-   * 스냅샷 하나(P6-1). **읽는 자리가 무엇을 하는지로 무엇을 볼지 정한다** —
+   * 스냅샷 하나. **읽는 자리가 무엇을 하는지로 무엇을 볼지 정한다** —
    * `test/api-consumers.test.ts`가 그 자리를 실행으로 센다.
    *
    * | 필드 | 화면이 무엇을 하는가 | 어긋나면 |
@@ -680,13 +661,13 @@ const SHAPES = {
    * 그대로 그린다) 어긋나도 던지지 않는다. `comment`가 같은 자리에서 같은 판단을 했다:
    * *"가설적인 경로에 가드를 달고 살아 있는 경로를 열어 두지 않는다."*
    *
-   * **`payload`를 보지 않는 것도 같은 이유다** — 목록 응답에는 애초에 없고(서버 D9),
-   * 생성 응답에는 있지만 **이 화면이 읽지 않는다**(복원이 없다 — 계획서 D1).
+   * **`payload`를 보지 않는 것도 같은 이유다** — 목록 응답에는 애초에 없고,
+   * 생성 응답에는 있지만 **이 화면이 읽지 않는다**(복원은 서버가 스냅샷 id로 한다 — `restoreSnapshot`).
    */
   snapshot: isSnapshot,
   snapshotList: (value) => isArrayOf(value, isSnapshot),
   /**
-   * 프리셋 하나(P7-2). **읽는 자리가 무엇을 하는지로 무엇을 볼지 정한다** —
+   * 프리셋 하나. **읽는 자리가 무엇을 하는지로 무엇을 볼지 정한다** —
    * `test/api-consumers.test.ts`가 그 자리를 실행으로 센다.
    *
    * | 필드 | 화면이 무엇을 하는가 | 어긋나면 |
@@ -722,7 +703,7 @@ function isComment(value: unknown): boolean {
 }
 
 /**
- * 복원 결과의 모양(P6-2).
+ * 복원 결과의 모양.
  *
  * **여기서 보는 것이 화면이 실제로 읽는 값이다.** 그 밖(자원별 세부 수, `themes[].layoutId`)은
  * 보지 않는다 — 이 표의 관례대로 **오늘 읽는 것의 상위집합**만 본다.
@@ -856,7 +837,7 @@ function definedOnly<T extends object>(body: T): Partial<T> {
 /**
  * 갱신 요청의 본문을 만든다. `undefined`인 키를 빼고, **남은 것이 없으면 던진다.**
  *
- * **서버 실측**(api 하네스, 임시 파일을 두고 지웠다):
+ * **서버 실측**(다시 재는 법: api 를 띄우고 두 경로에 빈 본문 `{}` 을 `PATCH` 한다):
  *
  * ```
  * PATCH /menu/:id  {} → 400 {"code":"bad-request","message":"요청을 처리할 수 없습니다",
@@ -864,13 +845,12 @@ function definedOnly<T extends object>(body: T): Partial<T> {
  * PATCH /pages/:id {} → 400 (코드·문장 같음)
  * ```
  *
- * **그러므로 보내지 않는다.** 눌러 봐야 실패할 버튼을 활성으로 두지 않는 것(D5·P2b-2 D7)과
+ * **그러므로 보내지 않는다.** 눌러 봐야 실패할 버튼을 활성으로 두지 않는 것과
  * 같은 판단을 이 층에 적용한 것이다. `code`를 `bad-request`로 두는 것은 서버가 같은 본문에
  * 내는 코드와 맞추기 위해서다 — 계약 밖의 코드를 새로 만들지 않는다는 이 파일의 규칙과도 맞다.
  *
  * **도달 경로는 `test/api-consumers.test.ts`가 센다** — 이 여섯을 부르는 자리가 어디인지
- * 그 표에 있다(오늘은 `tree/use-tree-commands.tsx` 한 파일이다). ~~앞 판은 여기에
- * *"오늘 0건"*이라 적었고~~ 그것도, 그것을 고쳐 적은 수도 낡았다 — **수를 주석에 두지 않는다.**
+ * 그 표에 있다. **수와 자리를 주석에 두지 않는다** — 호출부가 바뀌면 조용히 낡는다.
  * **그 자리들이 전부 리터럴로 키를 적어 넘기므로 빈 본문이 나가는 경로는 없다**(읽어서 봤다).
  * 실제 위험은 **계산된 값이 `undefined`가 되는 경로**다:
  * `previousMenuSibling`·`menuOutdentTarget`이 `null`을 낼 수 있고 호출부가 그것을 옵셔널
@@ -927,19 +907,18 @@ function updateBody<T extends object>(body: T): Partial<T> {
  * `{ email, password }`를 그 자리에서 만든다. 규칙이 닿지 않는 것이 아니라 위반할 수단이 없다.
  *
  * **한 함수로 일곱 자리를 덮는 이유.** 자리마다 함수를 두면 **같은 위험에 대한 규칙이 일곱 벌**이
- * 되고, 이 저장소가 반복해 겪은 *"한 곳만 고치고 다른 곳을 놓치는"* 결함이 정확히 거기서 난다
- * (P2b-5 웨이브 1은 프로젝트 셋만 고쳐 규칙을 둘로 갈라 놨었고, 그것이 이 커밋의 계기다).
- * `patchOps`는 원래 삼항으로 키 목록을 적고 있었다 — **규칙은 이미 같았고 표현만 달랐다.**
+ * 되고, *"한 곳만 고치고 다른 곳을 놓치는"* 결함이 정확히 거기서 난다 — 일부 자리만 고치면
+ * 규칙이 둘로 갈린다. `patchOps`도 규칙이 같으므로 삼항으로 키 목록을 따로 적지 않고 여기를 지난다.
  *
  * **과도 차단을 쟀다.** 정상 본문 **48조합**(`createMenu` 6 · `updateMenu` 17 · `createPage` 6 ·
- * `updatePage` 11 · `patchOps` 8)에서 나가는 바이트가 옛 구현과 **하나도 다르지 않았고**, 살아
- * 있는 호출부가 쓰는 본문 모양 **열**도 전부 같았다. **다만 "바이트가 늘 같다"는 아니다** —
+ * `updatePage` 11 · `patchOps` 8)과 살아 있는 호출부가 쓰는 본문 모양 **열**에서, 나가는 바이트가
+ * `definedOnly`만 지난 본문과 **하나도 다르지 않다.** **다만 "바이트가 늘 같다"는 아니다** —
  * 나가는 키 순서가 아래 `BODY_KEYS`의 순서로 정규화되므로 **호출자가 역순으로 적은 본문은
- * 바이트가 달라진다**(재서 확인했다: `{sortOrder, title}`을 넘기면 옛 구현은
- * `{"sortOrder":…,"title":…}`, 지금은 `{"title":…,"sortOrder":…}`). JSON 객체의 키 순서는 뜻을
+ * 바이트가 달라진다**(`{sortOrder, title}`을 넘기면 `definedOnly`만으로는
+ * `{"sortOrder":…,"title":…}`, 여기를 지나면 `{"title":…,"sortOrder":…}`). JSON 객체의 키 순서는 뜻을
  * 바꾸지 않고 서버의 zod도 보지 않는다 — **`나가는 키 순서는 …` 케이스가 그 동작을 고정한다.**
  *
- * **구분력 — 변이를 걸어 쟀다**(`pnpm vitest run --project web`, 매번 복구했다):
+ * **구분력 — 변이를 걸어 잰다**(`pnpm vitest run --project web`, 변이마다 복구한다):
  *
  * | 변이 | 사망 |
  * |---|---|
@@ -948,15 +927,14 @@ function updateBody<T extends object>(body: T): Partial<T> {
  * | 같은 변이 — `updateProject`·`updatePage` | 각 **2** |
  * | 안쪽 `definedOnly`를 항등으로 바꾼다(`undefined`인 키가 남는다) | **0** |
  *
- * **일곱 자리를 다 재서 적는다.** 앞 판은 다섯만 적어 `createProject`·`updateProject`를
- * 빠뜨렸고, 첫 줄의 **5**는 `patchOps` 케이스를 더하기 전의 수였다(케이스가 늘어 6이 됐다).
+ * **일곱 자리를 다 재서 적는다** — 빠진 자리는 표에서 무방비로 읽힌다.
  *
  * **키를 고르는 쪽은 자리마다 닫혔고, `undefined` 필터는 여전히 닫히지 않는다.** 뒤쪽이 0인
  * 원인은 `definedOnly` 머리말이 적은 것과 같다 — 나가는 본문의 유일한 관찰 지점이
  * `JSON.stringify`가 만든 문자열이고 그것이 값이 `undefined`인 키를 지워 준다.
- * **`patchOps`는 케이스를 더하기 전에 0 사망이었다** — 그 자리는 응답을 되보내는 것을 타입이
- * 이미 막아(응답에 `baseSeq`·`ops`가 없다) 다른 여섯과 위험의 모양이 다르기 때문이다.
- * 규칙을 한 벌로 두는 이상 그 자리도 닫는 케이스가 있어야 해서 하나 더했다.
+ * **`patchOps`는 다른 여섯과 위험의 모양이 다르다** — 응답을 되보내는 것을 타입이 이미
+ * 막는다(응답에 `baseSeq`·`ops`가 없다). 그래서 그 자리만 겨누는 케이스가 없으면 0 사망이다.
+ * 규칙을 한 벌로 두는 이상 그 자리도 닫는 케이스가 있어야 한다(표의 `patchOps` 1 사망).
  *
  * **키 목록을 `Record<keyof …, true>`로 두는 것이 요점이다** — 배열이면 목록과 타입이 컴파일러로
  * 이어지지 않아, `ApiClient`가 키를 하나 더 받게 됐을 때 그 키가 **조용히 안 나간다.** 레코드로
@@ -970,7 +948,7 @@ function updateBody<T extends object>(body: T): Partial<T> {
  * | 아래 목록에 계약에 없는 키를 더한다 | `TS2353: … 'bogus' does not exist in type …` |
  *
  * (앞 둘이 `TS2739`가 아니라 `TS1360`인 것은 애너테이션이 아니라 `satisfies`로 검사하기
- * 때문이다. **그 코드는 심어서 읽은 것이다** — 처음엔 기억으로 `TS2739`를 적었고 틀렸다.)
+ * 때문이다. **그 코드는 심어서 읽은 것이다** — 기억으로 적으면 `TS2739`로 틀리기 쉽다.)
  *
  * **키 목록을 `Parameters<ApiClient[…]>`에서 끌어오는 것도 요점이다.** 본문 타입을 여기 다시
  * 적으면 인터페이스와 어긋날 수 있고, 그 어긋남은 컴파일러가 못 잡는다.
@@ -1005,17 +983,16 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['createPage']>[1],
     true
   >,
-  // **`description`이 P10에서 늘었다.** 이 줄이 그 키를 막고 있던 두 자리 중 하나다
-  // (다른 하나는 `ApiClient['updatePage']`의 시그니처) — 서버는 처음부터 받고 있었다.
+  // **이 줄이 `description` 키를 막을 수 있는 두 자리 중 하나다**(다른 하나는
+  // `ApiClient['updatePage']`의 시그니처) — 서버는 그 키를 받는다.
   //
-  // **여기 안 더하면 무엇이 나는지는 본문의 모양에 따라 갈린다**(둘 다 이 줄을 지우고 쟀다.
-  // 앞 판은 아래 둘째 줄만 적어 과장이었다):
+  // **여기서 빠지면 무엇이 나는지는 본문의 모양에 따라 갈린다**(둘 다 이 줄에서 그 키를 지우고 쟀다):
   //
   // | 본문 | 관측 |
   // |---|---|
   // | `{description}` 하나 — 새 패널이 보내는 모양이다 | `declaredOnly`가 `{}`로 만들고 **`updateBody`가 `바꿀 내용이 없습니다`로 던진다. 요청이 아예 안 나간다** |
   // | 다른 선언된 키가 함께 — 예: 트리 훅의 `{title, menuNodeId, sortOrder}`에 얹는 경우 | 요청은 나가고 그 키만 조용히 빠진다 — **200이 오는데 값이 안 바뀐다** |
-  // **`base`가 이월 P(2026-09-23)에서 늘었다** — 고치기 전 값(`api/page-meta.ts`).
+  // `base`는 고치기 전 값이다(`api/page-meta.ts`).
   updatePage: { title: true, description: true, menuNodeId: true, sortOrder: true, base: true } satisfies Record<
     keyof Parameters<ApiClient['updatePage']>[2],
     true
@@ -1024,7 +1001,7 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['patchOps']>[2],
     true
   >,
-  // 페이지 가져오기(P7-3). 서버의 `ImportPageBody`가 `z.strictObject`라 선언되지 않은 키는
+  // 페이지 가져오기. 서버의 `ImportPageBody`가 `z.strictObject`라 선언되지 않은 키는
   // 그 자체로 400이다. **`title`이 없으면 키를 만들지 않는 것이 요점이다** — `undefined`를
   // 실은 키는 `JSON.stringify`가 지워 주지만 그 우연에 기대지 않는다(`patchOps`와 같은 자리).
   // **`file` 안쪽은 걸러지지 않는다** — 그것은 봉투 하나이고, 그 안의 초과 키를 거부하는
@@ -1041,7 +1018,7 @@ const BODY_KEYS = {
   // `ThemeBody`가 `z.strictObject`라 그 본문은 400이다.
   createTheme: { theme: true } satisfies Record<keyof Parameters<ApiClient['createTheme']>[1], true>,
   updateTheme: { theme: true } satisfies Record<keyof Parameters<ApiClient['updateTheme']>[2], true>,
-  // 코멘트 쓰기 둘(P5-1). 서버의 본문 스키마가 `z.strictObject`라 선언되지 않은 키는
+  // 코멘트 쓰기 둘. 서버의 본문 스키마가 `z.strictObject`라 선언되지 않은 키는
   // 그 자체로 400이고, **`marker`가 그 자리다** — 번호를 정하는 것은 서버이므로
   // 코멘트 응답(`{ id, nodeId, body, authorId, authorName, … }`)을 그대로 되보내면
   // `id`·`authorId` 따위가 400을 부른다.
@@ -1050,14 +1027,14 @@ const BODY_KEYS = {
     true
   >,
   updateComment: { body: true } satisfies Record<keyof Parameters<ApiClient['updateComment']>[3], true>,
-  // 스냅샷 생성(P6-1). 서버의 `SnapshotBody`가 `z.strictObject`라 선언되지 않은 키는 그
+  // 스냅샷 생성. 서버의 `SnapshotBody`가 `z.strictObject`라 선언되지 않은 키는 그
   // 자체로 400이고, **`payload`가 그 자리다** — 생성 응답에 그 키가 실려 오므로 응답 객체를
   // 그대로 되보내는 실수가 실제로 있을 법하다(`createTheme`이 같은 자리에서 같은 판단).
   createSnapshot: { tag: true, description: true } satisfies Record<
     keyof Parameters<ApiClient['createSnapshot']>[1],
     true
   >,
-  // 프리셋 저장(P7-2). 서버의 `PresetBody`가 `z.strictObject`라 선언되지 않은 키는 그
+  // 프리셋 저장. 서버의 `PresetBody`가 `z.strictObject`라 선언되지 않은 키는 그
   // 자체로 400이고, **`id`·`source`·`nodes`가 그 자리다** — 목록 항목을 그대로 되보내는
   // 실수가 실제로 있을 법하다(`createSnapshot`이 같은 자리에서 같은 판단).
   createPreset: { name: true, description: true, schema: true } satisfies Record<
@@ -1067,10 +1044,10 @@ const BODY_KEYS = {
 }
 
 /**
- * 편집을 낸 클라이언트가 자기 WebSocket 연결을 가리키는 헤더(P3-1).
+ * 편집을 낸 클라이언트가 자기 WebSocket 연결을 가리키는 헤더.
  *
- * **서버가 이 연결을 브로드캐스트에서 뺀다** — §7.1의 *"[본인] ack / [타인] ops"*다. 이
- * 슬라이스의 편집은 REST로 나가므로 서버는 그 요청이 어느 연결의 주인이 낸 것인지 달리 알
+ * **서버가 이 연결을 브로드캐스트에서 뺀다** — 설계서 「정방향 흐름」의 *"[본인] ack / [타인] ops"*다.
+ * REST로 나가는 요청은 서버가 그것이 어느 연결의 주인이 낸 것인지 달리 알
  * 방법이 없다. **안 실어도 동작한다**: 그때는 자기 편집이 한 번 더 돌아오고, 그 프레임이
  * HTTP 응답보다 먼저 도착하면 화면이 낡았다고 잘못 말한다.
  *
@@ -1084,9 +1061,9 @@ const CONNECTION_ID_HEADER = 'x-wb-connection-id'
  * @param fetchImpl 테스트가 가짜를 주입하는 자리. 기본값은 브라우저의 `fetch`다.
  * @param connectionId 지금 붙어 있는 WebSocket 연결의 id를 읽는 함수. 기본은 *"없다"*이고,
  *   그때는 헤더가 아예 붙지 않는다(위 상수 주석).
- * @param knownUser **이 탭이 아는 사용자**(`api/known-user.tsx` — 이월 Y′). 있으면 요청마다 그 id 를 머리에 싣고
+ * @param knownUser **이 탭이 아는 사용자**(`api/known-user.tsx`). 있으면 요청마다 그 id 를 머리에 싣고
  *   (`KNOWN_USER_HEADER`), 서버가 «쿠키의 사람이 다르다»(409 `session-user-changed`)로 답하면 `changed()`를 부른다 —
- *   **알아채는 자리는 여기 하나다**(어느 화면의 요청이든). 없으면 싣지도 듣지도 않는다(앞 판 그대로).
+ *   **알아채는 자리는 여기 하나다**(어느 화면의 요청이든). 없으면 싣지도 듣지도 않는다.
  */
 export function createHttpClient(
   fetchImpl: typeof fetch = globalThis.fetch,
@@ -1095,7 +1072,7 @@ export function createHttpClient(
 ): ApiClient {
   /**
    * 일반 읽기를 **시간 제한 안에서** 보낸다 — 넘으면 끊고 한 번 더, 그래도 넘으면 «서버가 응답하지 않습니다»다
-   * (`READ_DEADLINE_MS`의 머리말). 시간 안에 온 연결 실패는 다시 보내지 않는다 — 앞 판과 같은 `UNREACHABLE`이다.
+   * (`READ_DEADLINE_MS`의 머리말). 시간 안에 온 연결 실패는 다시 보내지 않는다 — 시간 제한 없는 요청과 같은 `UNREACHABLE`이다.
    *
    * `cancel`이 끊기면 그 시도를 끊고 **다시 보내지 않는다**(`ABANDONED` — 머리말 «떠난 조회는 끊는다»). 다시 보낼지는
    * 시도의 머리 한 자리가 가른다 — 끊긴 시도는 연결 실패도 시간 초과도 아니게 그 자리로 돌아온다. **머리가 온 뒤에도
@@ -1191,7 +1168,7 @@ export function createHttpClient(
 
     if (!response.ok) {
       const error = await toApiError(response)
-      // **쿠키의 사람이 이 탭이 아는 사람과 다르다**(이월 Y′) — 세션이 쿠키의 사람을 다시 알아낸다. 실패는 그대로 던진다 —
+      // **쿠키의 사람이 이 탭이 아는 사람과 다르다** — 세션이 쿠키의 사람을 다시 알아낸다. 실패는 그대로 던진다 —
       // 부른 화면은 제 실패 자리에 서버 문장(«다른 사람으로 로그인됐습니다 …»)을 그린다.
       if (isSessionUserChanged(error)) knownUser?.changed()
       throw error
@@ -1239,7 +1216,7 @@ export function createHttpClient(
     listProjects: () => request<ProjectDetail[]>('GET', '/projects', SHAPES.projectList),
     getProject: (projectId, options) =>
       request<ProjectDetail>('GET', projectPath(projectId), SHAPES.projectDetail, undefined, options),
-    // 아래 셋이 P2b-5의 프로젝트 CRUD다. **생성 응답은 `ProjectDetail`이다** — `role`까지
+    // 아래 셋이 프로젝트 CRUD다. **생성 응답은 `ProjectDetail`이다** — `role`까지
     // 실려 온다(`api/types.ts`의 실측 표). 그래서 `SHAPES.projectDetail`을 그대로 지나는데,
     // 그 근거는 "모양이 같다"가 아니라 **`createProject`의 하중 `id`가 그 검사가 이미 보는
     // 것의 부분집합**이라는 것이다(`isProjectDetail`의 소비자 표).
@@ -1260,9 +1237,8 @@ export function createHttpClient(
     // **`declaredOnly`를 먼저 지난 뒤 `updateBody`가 센다.** 순서가 요점이다 — 미선언 키를
     // 먼저 떨어내지 않으면 `{id, role}`만 담긴 본문이 "빈 본문이 아니다"로 통과해 400이 된다.
     // **갱신 셋이 같은 순서이고, 셋 다 그 순서를 케이스가 지킨다**(자리마다 "선언되지 않은 키만
-    // 담긴 갱신 본문" 케이스가 하나씩 있다 — 뒤집으면 각 1 사망이다). **앞 판은 여기에 "셋이
-    // 전부 이 순서다"라고만 적었는데, 그때는 뒤집어도 죽는 것이 `updateProject` 하나뿐이었다** —
-    // 나머지 둘은 설계가 달라서가 아니라 케이스가 없어서였다(리뷰 V5).
+    // 담긴 갱신 본문" 케이스가 하나씩 있다 — 뒤집으면 각 1 사망이다). 순서를 적어 두기만 하고
+    // 케이스가 없으면 뒤집어도 아무것도 안 죽는다.
     updateProject: async (projectId, body) =>
       request<ProjectDetail>(
         'PATCH',
@@ -1273,8 +1249,8 @@ export function createHttpClient(
     deleteProject: (projectId) => request<void>('DELETE', projectPath(projectId), SHAPES.noBody),
     // `{ menu }` 봉투를 벗기는 유일한 지점이다 — 그 관용구를 앱 안으로 들이지 않는다.
     // 봉투가 계약대로인 것은 `request`가 이미 확인했다(`SHAPES.treeEnvelope`). 그래서 여기서
-    // `body.menu`를 곧장 읽어도 던지지 않는다 — 앞서는 이 줄이 본문이 `null`일 때 raw
-    // `TypeError`를 냈고, 그것은 `ApiError`가 아니라 호출자의 분기를 빗나갔다.
+    // `body.menu`를 곧장 읽어도 던지지 않는다 — 검사 없이 읽으면 본문이 `null`일 때 raw
+    // `TypeError`가 나고, 그것은 `ApiError`가 아니라 호출자의 분기를 빗나간다.
     getTree: async (projectId, options) => {
       const body = await request<{ menu: TreeMenuNode[] }>(
         'GET',
@@ -1285,9 +1261,9 @@ export function createHttpClient(
       )
       return body.menu
     },
-    // 아래 여섯이 P2b-4의 CRUD다. **생성·갱신 응답을 트리에 꽂지 않는다** — `MenuNode`에는
+    // 아래 여섯이 트리의 CRUD다. **생성·갱신 응답을 트리에 꽂지 않는다** — `MenuNode`에는
     // `pages`·`children`이 없고(`api/types.ts`), 서버가 `sort_order`를 재번호하므로
-    // 부르는 쪽은 성공하면 `getTree`를 다시 부른다(D1). 그래서 여기서 응답을 가공하지 않는다.
+    // 부르는 쪽은 성공하면 `getTree`를 다시 부른다. 그래서 여기서 응답을 가공하지 않는다.
     createMenu: (projectId, body) =>
       // `parentId`는 `null`이어도 그대로 싣는다 — `null`은 "루트에 만든다"는 값이다.
       // `declaredOnly` 안의 `definedOnly`가 거르는 것은 `undefined`뿐이라 그 값은 살아남는다
@@ -1314,7 +1290,7 @@ export function createHttpClient(
       // 응답은 `GET .../pages/:pageId`와 같은 여덟 키다 — 서버의 `toResponse` 하나가
       // 조회·생성·갱신 셋을 다 만든다(`apps/api/src/routes/pages.ts`). **그래서 같은 shape를
       // 쓰지만, 같은 모양이 곧 같은 하중은 아니다** — 이 자리가 새 필드(`id`)를 읽으므로
-      // `SHAPES.pageDetail`의 표에 그 줄을 더했다(F2의 원인이 정확히 그 구별을 놓친 것이다).
+      // `SHAPES.pageDetail`의 표에 그 줄이 있다 — 그 구별을 놓치면 `id`가 검사 없이 주소로 간다.
       request<PageDetail>(
         'POST',
         `${projectPath(projectId)}/pages`,
@@ -1342,14 +1318,14 @@ export function createHttpClient(
       ),
     // **HTTP 캐시를 안 지난다**(`no-store`). 설명 저장(`PATCH`)과 **같은 URL** 이라, 저장이 서버에 매달린
     // 동안 이 GET 이 Chrome 의 HTTP 캐시 잠금에 선다 — 같은 브라우저의 **모든 탭**에서 그 페이지(캔버스의
-    // 문서 · 설명)가 안 열렸다(리뷰 1-3). 잰 값(Chrome · 캐시 켬 · 서버 안 지연 · 그 URL 을 먼저 한 번 읽어
+    // 문서 · 설명)가 안 열린다. 잰 값(Chrome · 캐시 켬 · 서버 안 지연 · 그 URL 을 먼저 한 번 읽어
     // 둔 판): 기본 모드 GET **20016ms**(PATCH 60초 매달림 — 잠금의 상한이 약 20초다) · `no-store` **10ms**.
-    // 앱에서는(서버 안 지연 12초) 옆 탭의 설명 상자가 **9.8s** 뒤에 떴다(쓰기의 10초 시간 제한이 PATCH 를
-    // 끊을 때까지) → 고친 뒤 **0.0s**. 같은 탭 가 → 나 → 가도 앞 판은 페이지 전체가 10초 «페이지를 불러오는
-    // 중…»이었고(리뷰 5번 끝) 고친 뒤 1.5s 에 꺼진 상자가 선다. 시간 제한이 없던 판(이월 R 전)이었어도
-    // 무한이 아니라 GET 하나에 약 20초였다(위 값). 이 응답에는 캐시 헤더가 없어 원래도 매번 서버에 물었다 —
+    // 앱에서는(서버 안 지연 12초) 기본 모드면 옆 탭의 설명 상자가 **9.8s** 뒤에 뜨고(쓰기의 10초 시간 제한이
+    // PATCH 를 끊을 때까지) `no-store` 면 **0.0s**. 같은 탭 가 → 나 → 가도 기본 모드면 페이지 전체가 10초
+    // «페이지를 불러오는 중…»이고 `no-store` 면 1.5s 에 꺼진 상자가 선다. 쓰기에 시간 제한이 없어도
+    // 무한이 아니라 GET 하나에 약 20초다(위 값). 이 응답에는 캐시 헤더가 없어 기본 모드도 매번 서버에 묻는다 —
     // 잃는 것이 없다. **다른 읽기에는 안 준다**: 코멘트 목록
-    // (`GET …/comments`)은 게시(`POST`)와 같은 URL 이지만 `POST`는 잠금을 안 걸었다(같은 판 12ms).
+    // (`GET …/comments`)은 게시(`POST`)와 같은 URL 이지만 `POST`는 잠금을 안 건다(같은 절차 12ms).
     getPage: (projectId, pageId, options) =>
       request<PageDetail>('GET', pagePath(projectId, pageId), SHAPES.pageDetail, undefined, {
         ...options,
@@ -1363,9 +1339,8 @@ export function createHttpClient(
         // `clientOpId`가 없으면 **키를 만들지 않는다.** `undefined`를 실은 키는
         // `JSON.stringify`가 지워 주므로 오늘은 통과하지만 그 우연에 기대지 않는다.
         //
-        // **앞서 여기에 삼항으로 키 목록을 적어 두었다.** `declaredOnly`가 같은 일을 하고
-        // 목록이 `ApiClient`와 컴파일러로 이어지므로 그쪽으로 옮겼다 — **나가는 바이트가
-        // 바뀌지 않는 것을 재고 옮겼다**(선택 키 유무 두 갈래 전부).
+        // **삼항으로 키 목록을 따로 적지 않고 `declaredOnly`를 지난다** — 목록이 `ApiClient`와
+        // 컴파일러로 이어지고, **나가는 바이트는 삼항으로 적은 것과 같다**(선택 키 유무 두 갈래 전부).
         declaredOnly(body, BODY_KEYS.patchOps),
       ),
     getProjectTheme: (projectId, options) =>
@@ -1382,7 +1357,7 @@ export function createHttpClient(
         // 하나다 — 초과 키가 생길 자리가 없다.
         { themeId },
       ),
-    // 아래 셋이 P4c-2의 테마 저작 경로다. **`getProjectTheme`과 경로가 한 글자 다르다**
+    // 아래 셋이 테마 저작 경로다. **`getProjectTheme`과 경로가 한 글자 다르다**
     // (`/theme` vs `/themes/:id`) — 소비자도 내는 것도 다르다(서버 README의 소비자 표).
     getTheme: (projectId, themeId) =>
       request<ThemeDetail>('GET', themePath(projectId, themeId), SHAPES.themeDetail),
@@ -1403,7 +1378,7 @@ export function createHttpClient(
         SHAPES.themeDetail,
         declaredOnly(body, BODY_KEYS.updateTheme),
       ),
-    // 코멘트 다섯(P5-1). **경로가 전부 `.../pages/:pageId/comments` 아래다** — 코멘트는
+    // 코멘트 다섯. **경로가 전부 `.../pages/:pageId/comments` 아래다** — 코멘트는
     // 프로젝트가 아니라 **페이지의 노드**에 붙는다(노드 id는 그 문서 안에서만 뜻이 있다).
     listComments: (projectId, pageId, options) =>
       request<Comment[]>('GET', commentsPath(projectId, pageId), SHAPES.commentList, undefined, options),
@@ -1494,7 +1469,7 @@ export function createHttpClient(
       request<RevisionSummary[]>(
         'GET',
         // `mine=true` 하나뿐이다. 선언하지 않은 쿼리 키는 400이므로(README) 캐시 버스터도
-        // 붙일 수 없고, `limit`은 기본값 50이 설계 §7.3의 "최근 50개"와 같아 생략한다.
+        // 붙일 수 없고, `limit`은 기본값 50이 설계서 「개인 undo/redo」의 "최근 50개"와 같아 생략한다.
         `${pagePath(projectId, pageId)}/revisions?mine=true`,
         SHAPES.revisionList,
         undefined,

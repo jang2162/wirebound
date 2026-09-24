@@ -4,9 +4,9 @@
  *
  * 두 갈래가 산다 — prop 편집(`propOps`)과 구조 편집(`insertNodeOps`·`removeNodeOps`·
  * `moveNodeOps`). **파이프라인은 하나다:** 어느 쪽이든 만든 `ops`를 `useEditCommit`에
- * 넘기면 낙관적 적용·직렬 전송·실패 수렴·undo가 그대로 따라온다(P2b-2 이월 문서).
+ * 넘기면 낙관적 적용·직렬 전송·실패 수렴·undo가 그대로 따라온다.
  *
- * **여기 있는 함수가 `null`을 내는 것은 전부 같은 뜻이다: 요청을 만들지 마라(D7).**
+ * **여기 있는 함수가 `null`을 내는 것은 전부 같은 뜻이다: 요청을 만들지 마라.**
  * 던지지 않는 것도 같은 이유다 — 이 함수들은 렌더 도중에도 불릴 수 있고, 속성 패널과
  * 구조 트리는 오류 경계 밖이라 던지면 셸 전체가 흰 화면이 된다.
  */
@@ -20,7 +20,7 @@ import {
 } from '@wirebound/schema'
 // **schema의 `findNodePath`·`findNode`·`walkNodes`를 쓰지 않는다.** 셋 다 `walkNodes`를
 // 지나고 그것이 `children` 배열 안의 `null` 원소에서 던진다 — 이 파일의 계약("던지지
-// 않는다")이 거기서 깨졌다(리뷰가 찾았고 나도 재현했다. `./safe-walk.ts` 머리말에 실측).
+// 않는다")이 거기서 깨진다(`./safe-walk.ts` 머리말에 실측).
 import { findNodePathSafely, findNodeSafely, walkSafely } from './safe-walk'
 
 /**
@@ -32,10 +32,10 @@ const ROOT_PATH = '/root'
 
 /**
  * 노드의 prop 하나를 바꾸는 op. 문서에서 노드 경로를 찾아 조립한다.
- * 그 노드가 문서에 없으면 `null`이다 — **요청을 보내지 않는 신호다**(D7).
+ * 그 노드가 문서에 없으면 `null`이다 — **요청을 보내지 않는 신호다.**
  *
  * **갈래가 셋인 것은 `applyOps`가 그렇게 던지기 때문이다.** 소스(`packages/schema/src/
- * patch/apply.ts`)를 읽고 실측해 확정했다:
+ * patch/apply.ts`)를 읽고 실측한 값이다:
  *
  * | 노드 상태 | `replace /…/props/<prop>` | 그래서 쓰는 op |
  * |---|---|---|
@@ -43,9 +43,9 @@ const ROOT_PATH = '/root'
  * | `props`는 있고 그 키가 없다 | `replaceAt`의 `Object.hasOwn`에 걸려 `바꿀 키가 없습니다` | `add /…/props/<prop>` |
  * | `props`에 그 키가 있다 | 통과한다 | `replace /…/props/<prop>` |
  *
- * 가운데 줄이 **계획서가 빠뜨린 갈래다.** 계획서는 "`props`가 없으면 통째 `add`, 있으면
- * `replace`" 두 갈래로 적었는데, 그러면 `props`는 있고 그 **키**만 없는 노드에서
- * `applyOps`가 던지고 D7이 요청을 막아 **값이 없던 prop을 처음 켜는 편집이 아예 나가지
+ * 가운데 줄이 **빠뜨리기 쉬운 갈래다.** "`props`가 없으면 통째 `add`, 있으면
+ * `replace`" 두 갈래로만 두면 `props`는 있고 그 **키**만 없는 노드에서
+ * `applyOps`가 던지고 로컬 적용이 던진 편집은 나가지 않으므로 **값이 없던 prop을 처음 켜는 편집이 아예 나가지
  * 못한다.** 통째 `add`로 합치는 것도 답이 아니다 — 그러면 그 노드의 다른 prop이 지워진다.
  *
  * **op을 하나로 유지하는 것은 의도다.** 둘로 나누면 서버가 만들 `inverse`도 둘이 된다.
@@ -87,7 +87,7 @@ export function propOps(
  * 노드의 `variant`를 바꾸는 op. **경로를 가르는 자리는 여기 하나다.**
  *
  * **`/props/variant`가 아니라 `/…/variant`다.** `variant`는 props의 키가 아니라 **노드 봉투의
- * 필드**이고(§4.3: `{ id, type, props, variant, marker, interactions, children }`), 그래서
+ * 필드**이고(설계서 「페이지 스키마 노드」: `{ id, type, props, variant, marker, interactions, children }`), 그래서
  * `propOps`를 재사용할 수 없다. 재사용하면 `props` 안에 `variant`라는 키가 생겨
  * `z.strictObject`인 컴포넌트에서 `invalid-props`가 되고, 그렇지 않은 컴포넌트에서는
  * **아무 데도 안 쓰이는 값이 조용히 저장된다.**
@@ -96,7 +96,7 @@ export function propOps(
  * `z.string().optional()`이라 `null`은 유효한 값이 아니다. 비울 수 없으면 사용자가 한 번
  * 고른 변형에 갇힌다.
  *
- * **거절되는 코드는 422다 — 400이 아니다(앞 판의 이 자리는 400이라 적었고 거짓이었다).**
+ * **거절되는 코드는 422다 — 400이 아니다.**
  * 실측: `validatePage`가 그 문서에 `bad-document`(severity `error`)를 내고
  * (*"잘못된 입력: 예상 타입은 string, 받은 타입은 null입니다"*, path `/root/…/variant`),
  * `edit-pipeline`이 그것을 `reason: 'invalid'`로 올려 라우트가 **422 `validation-failed`**로
@@ -109,7 +109,7 @@ export function propOps(
  * | `variant` 키가 있다 | 문자열 | `replace /…/variant` |
  * | `variant` 키가 없다 | 문자열 | `add /…/variant` |
  * | `variant` 키가 있다 | `null` | `remove /…/variant` |
- * | `variant` 키가 없다 | `null` | **`null`** — 지울 것이 없다(D7) |
+ * | `variant` 키가 없다 | `null` | **`null`** — 지울 것이 없다 |
  */
 export function variantOps(
   document: PageDocument,
@@ -133,11 +133,11 @@ export function variantOps(
 }
 
 /**
- * 노드의 `interactions`를 통째로 갈아 끼우는 op(설계 §8.1). **`variantOps`와 같은 층이다** —
- * `interactions`도 props의 키가 아니라 **노드 봉투의 필드**라 경로가 한 단계 위다(§4.3).
+ * 노드의 `interactions`를 통째로 갈아 끼우는 op(설계서 「상호작용」의 「모델」 절). **`variantOps`와 같은 층이다** —
+ * `interactions`도 props의 키가 아니라 **노드 봉투의 필드**라 경로가 한 단계 위다(「페이지 스키마 노드」).
  *
- * **P5-1과 다른 점**(계획 D6): 코멘트는 **서버가** 문서의 `marker`를 바꿔야 해서 새 계약
- * (`markerOps`)이 필요했다. **상호작용은 클라이언트가 바꾸므로 그것이 필요 없다** —
+ * **코멘트와 다른 점:** 코멘트는 **서버가** 문서의 `marker`를 바꿔야 해서 새 계약
+ * (`markerOps`)이 필요하다. **상호작용은 클라이언트가 바꾸므로 그것이 필요 없다** —
  * 이미 있는 낙관적 편집 경로(`useEditCommit` → `PATCH .../ops`)를 그대로 탄다.
  *
  * **배열을 통째로 다루는 것은 의도다.** 액션 하나만 겨냥한 세밀한 op을 만들면 저작 UI의
@@ -152,7 +152,7 @@ export function variantOps(
  * | `interactions` 키가 있다 | 비어 있지 않은 배열 | `replace /…/interactions` |
  * | 키가 없다 | 비어 있지 않은 배열 | `add /…/interactions` |
  * | 키가 있다 | **빈 배열** | `remove /…/interactions` |
- * | 키가 없다 | 빈 배열 | **`null`** — 지울 것이 없다(D7) |
+ * | 키가 없다 | 빈 배열 | **`null`** — 지울 것이 없다 |
  *
  * **빈 배열을 `remove`로 옮기는 이유:** 남기면 *"상호작용 없음"*의 표현이 두 벌(키 없음 /
  * 빈 배열)이 된다. `WbNodeSchema.interactions`가 `.optional()`이라 키가 없는 것이 정상이다.
@@ -184,7 +184,7 @@ export function interactionsOps(
  * **`children` 키가 없는 부모에는 배열째 넣는다 — `propOps`의 첫 갈래와 같은 성질이고
  * 실측했다.** `children`이 없는 노드에 `add /…/children/0`을 주면 `applyOps`의
  * `resolveSlot`이 마지막 토큰만 남기고 따라 내려가다 `parent`를 `undefined`로 만들어
- * `경로를 찾을 수 없습니다`로 던진다(실측). 그러면 D7이 요청을 막아 **빈 컨테이너에
+ * `경로를 찾을 수 없습니다`로 던진다(실측). 그러면 로컬 적용이 던진 편집은 나가지 않으므로 **빈 컨테이너에
  * 첫 자식을 넣는 편집이 아예 나가지 못한다.** 그 배열째 `add`의 `inverse`는
  * `[remove /…/children]` 하나다(실측) — undo가 키까지 지워 원본과 완전히 같아진다.
  *
@@ -251,10 +251,10 @@ export function removeNodeOps(document: PageDocument, nodeId: string): PatchOp[]
  * "한 칸 아래로"를 `index + 1`, "앞 형제 안 마지막"을 `앞형제.children.length`로 적을 수
  * 있다 — 방향에 따라 보정을 나눌 필요가 없다.
  *
- * **목적지 경로도 값을 뺀 뒤 문서에서 찾는다 — 계획서가 재지 않은 자리다.** 소스가 목적지
+ * **목적지 경로도 값을 뺀 뒤 문서에서 찾는다.** 소스가 목적지
  * 부모보다 앞에 있으면 뺀 순간 부모의 인덱스가 당겨진다. 원본 기준 경로를 그대로 쓰면
- * `applyOps`가 `경로를 찾을 수 없습니다`로 던지고(실측) D7이 편집을 삼킨다. 계획서는 이
- * 보정을 "같은 배열 안에서 뒤로 옮길 때"로 좁게 적었는데, **부모가 다를 때도 난다.**
+ * `applyOps`가 `경로를 찾을 수 없습니다`로 던지고(실측) 편집이 나가지 않는다. 이
+ * 보정은 "같은 배열 안에서 뒤로 옮길 때"만의 일이 아니다 — **부모가 다를 때도 난다.**
  *
  * **목적지에 `children` 키가 없으면 빈 배열을 먼저 놓는다**(`insertNodeOps`의 같은 갈래와
  * 같은 원인 — 실측으로 던지는 것을 봤다). 그때만 op이 둘이 되고, **그 둘의 경로 기준이
@@ -262,19 +262,18 @@ export function removeNodeOps(document: PageDocument, nodeId: string): PatchOp[]
  * 기준이다. 한쪽으로 통일하면 둘 중 하나가 다른 노드를 가리킨다(테스트가 그 두 값이
  * 실제로 갈리는 문서로 고정한다).
  *
- * op을 둘로 나누는 것이 D2를 어기지 않는 이유: **편집 하나는 revision 하나**이고 서버가
+ * op을 둘로 나누어도 «이동은 편집 하나»를 어기지 않는 이유: **편집 하나는 revision 하나**이고 서버가
  * `invertOps(before, ops)`로 배열째 역을 만든다(`apps/api/src/services/edit-pipeline.ts`).
- * 그 사이에 다른 편집이 끼지 않는다. D2가 막으려던 것은 이동을 `remove`+`add` **두 편집**
+ * 그 사이에 다른 편집이 끼지 않는다. 막아야 하는 것은 이동을 `remove`+`add` **두 편집**
  * 으로 쪼개는 쪽이다.
  *
  * `null`을 내는 자리: 노드가 없거나 루트다 · 부모가 없다 · **자기 자신이나 자기 자손을
  * 부모로 삼는다**(그 op은 `applyOps`가 던진다 — 아래) · 인덱스가 범위 밖이다 ·
  * 목적지 `children`이 배열이 아니다.
  *
- * **자손 판정이 막는 것은 "끊어진 트리"가 아니다** — 처음 그렇게 적었다가 리뷰가
- * 반증했고 나도 재현했다. `move`가 `from`을 먼저 빼므로 목적지 경로가 그 순간 문서에서
+ * **자손 판정이 막는 것은 "끊어진 트리"가 아니다.** `move`가 `from`을 먼저 빼므로 목적지 경로가 그 순간 문서에서
  * 사라지고 `applyOps`가 `경로를 찾을 수 없습니다`로 던진다. 즉 이 판정의 값어치는
- * **적용해 보기 전에 끊는 것**(D7)이고, 그마저도 `EditorStore.applyEdit`의 `try/catch`가
+ * **적용해 보기 전에 끊는 것**이고, 그마저도 `EditorStore.applyEdit`의 `try/catch`가
  * 뒤에서 잡는다(`test/edit/ops.test.ts`의 `자손을 부모로 주면 null이다 —`).
  */
 export function moveNodeOps(
@@ -292,13 +291,13 @@ export function moveNodeOps(
   // 자기 서브트리 안으로는 못 옮긴다. `walkNodes`는 자기 자신부터 내므로 "자신을 부모로"도
   // 같은 검사에 걸린다.
   //
-  // **이 루프와 위 루트 판정은 서로를 덮는다 — 하나씩 지우면 둘 다 0 사망이다(실측).**
+  // **이 루프와 위 루트 판정은 서로를 덮는다 — 하나씩 지우면 어느 쪽도 죽는 케이스가 없다(실측).**
   // 이 루프만 지우면 자손을 부모로 준 편집은 아래 `parentPathAfter === undefined`가 잡고
   // (자손은 뺀 문서에 없다), 루트 판정만 지우면 **루트는 모든 노드의 조상이므로** 어떤
-  // 부모를 줘도 이 루프에 걸린다. 케이스를 더해 하나만 죽이는 입력을 만들지 못했다 —
+  // 부모를 줘도 이 루프에 걸린다. 케이스를 더해도 하나만 죽이는 입력은 없다 —
   // 정상 문서에서 둘이 잡는 입력 집합이 같다.
   //
-  // **그래도 둘 다 남긴 것은 함께 지우면 던지기 때문이다(실측).** 둘 다 없애고 루트를
+  // **그래도 둘 다 남기는 것은 함께 지우면 던지기 때문이다(실측).** 둘 다 없애고 루트를
   // 옮기려 하면 아래 `remove /root`가 문서에서 root를 지우고, 그 문서를 `findNodePath`에
   // 넣은 `walkNodes`가 `Cannot read properties of undefined (reading 'id')`로 던진다 —
   // 여기는 오류 경계 밖이라 그 예외가 셸을 통째로 지운다.

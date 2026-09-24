@@ -30,10 +30,10 @@ export interface EventActor {
 }
 
 /**
- * 살아 있는 잠금 하나(§7.2). **서버의 `LiveLock`의 거울이다.**
+ * 살아 있는 잠금 하나(설계서 「소프트 잠금」). **서버의 `LiveLock`의 거울이다.**
  *
  * `userName`이 실려 오므로 배지가 참가자 목록을 다시 뒤지지 않는다 — 그 목록은 낡을 수
- * 있고(P3-2 이월 §2.5), 뒤지게 두면 낡은 한 프레임 동안 배지가 **이름 없이** 사라진다.
+ * 있고, 뒤지게 두면 낡은 한 프레임 동안 배지가 **이름 없이** 사라진다.
  */
 export interface NodeLockView {
   pageId: string
@@ -58,8 +58,8 @@ export type ServerFrame =
       locks: NodeLockView[]
     }
   /**
-   * **내가 보낸 `lock`을 서버가 받지 않았다** — 겹치는 자리를 남이 쥐었거나 자격을 보는 사이 멤버십이 바뀌었다(이월 5차 2회
-   * LK · 서버 `ws/lock.ts`의 표). 이 연결은 이제 아무것도 쥐지 않는다. 받는 자리는 `lock-channel.ts`의 `denied`다.
+   * **내가 보낸 `lock`을 서버가 받지 않았다** — 겹치는 자리를 남이 쥐었거나 자격을 보는 사이 멤버십이 바뀌었다
+   * (서버 `ws/lock.ts`의 표). 이 연결은 이제 아무것도 쥐지 않는다. 받는 자리는 `lock-channel.ts`의 `denied`다.
    */
   | {
       type: 'lock-denied'
@@ -86,7 +86,7 @@ export type ServerFrame =
     }
   | { type: 'restored'; projectId: string; snapshotId: string; actor: EventActor }
   /**
-   * **내 멤버십이 바뀌었다 — 프로젝트를 다시 읽어라**(이월 5차). 역할 값은 안 온다 — 역할은 `getProject`의 응답 하나에서
+   * **내 멤버십이 바뀌었다 — 프로젝트를 다시 읽어라.** 역할 값은 안 온다 — 역할은 `getProject`의 응답 하나에서
    * 읽는다(위 `joined`의 머리말과 같은 까닭 · 서버 `ws/protocol.ts`의 그 갈래).
    */
   | { type: 'membership-changed'; projectId: string }
@@ -118,7 +118,7 @@ export type ServerFrame =
     }
 
 /**
- * 클라이언트가 보내는 것. **둘이다** — 하트비트와 편집 전송(P3-2).
+ * 클라이언트가 보내는 것 — 하트비트(`ping`) · 잠금(`lock` · `unlock`) · 편집 전송(`patch`).
  *
  * **서버의 `ClientFrame`(zod)의 거울이다.** 그쪽은 `http/patch-ops.ts`의 `OpsBody`를 넓혀
  * 만들고, 여기서는 같은 모양을 타입으로 적는다 — `test/realtime/protocol-parity.test.ts`가
@@ -128,7 +128,7 @@ export type ClientFrame =
   | { type: 'ping' }
   | {
       /**
-       * 노드 하나를 잡는다(§7.2). **같은 노드를 다시 보내는 것이 하트비트다** — 갱신용
+       * 노드 하나를 잡는다(「소프트 잠금」). **같은 노드를 다시 보내는 것이 하트비트다** — 갱신용
        * 프레임이 따로 없다.
        */
       type: 'lock'
@@ -165,7 +165,7 @@ export function patchFrame(input: Omit<Extract<ClientFrame, { type: 'patch' }>, 
   return JSON.stringify({ type: 'patch', ...input } satisfies ClientFrame)
 }
 
-/** 잠금 하나를 잡거나 갱신할 문자열(§7.2). `lockId`는 거절과 짝지을 차례다. */
+/** 잠금 하나를 잡거나 갱신할 문자열(「소프트 잠금」). `lockId`는 거절과 짝지을 차례다. */
 export function lockFrame(pageId: string, nodeId: string, lockId: number): string {
   return JSON.stringify({ type: 'lock', pageId, nodeId, lockId } satisfies ClientFrame)
 }
@@ -312,8 +312,8 @@ export function parseServerFrame(raw: string): ServerFrame | null {
  *
  * `https`면 `wss`다. 안 바꾸면 https 페이지에서 브라우저가 혼합 콘텐츠로 막는다.
  *
- * `knownUser`는 **이 탭이 아는 사용자**다(`api/known-user.tsx` — 이월 Y′). 브라우저 `WebSocket`은 머리를 못 달아 쿼리로
- * 싣고, 서버가 쿠키의 사람과 다르면 핸드셰이크를 거절한다. 모르면 싣지 않는다(앞 판 그대로).
+ * `knownUser`는 **이 탭이 아는 사용자**다(`api/known-user.tsx`). 브라우저 `WebSocket`은 머리를 못 달아 쿼리로
+ * 싣고, 서버가 쿠키의 사람과 다르면 핸드셰이크를 거절한다. 모르면 쿼리 없이 연결한다.
  */
 export function realtimeUrl(origin: string, projectId: string, knownUser?: string): string {
   const scheme = origin.startsWith('https:') ? 'wss:' : 'ws:'

@@ -1,5 +1,5 @@
 /**
- * 라우트 표(설계 D6). 라우터 자체는 여기서 만들지 않는다 — 앱은 `main.tsx`가
+ * 라우트 표. 라우터 자체는 여기서 만들지 않는다 — 앱은 `main.tsx`가
  * `BrowserRouter`를, 테스트는 메모리 라우터를 씌운다. 그래야 테스트가 주소를 정하고
  * 읽을 수 있다.
  */
@@ -17,10 +17,10 @@ export function App(): ReactElement {
   return (
     // 라우트 표 **바깥**이다 — 주소가 바뀌어도 세션 상태가 살아 있어야 한다.
     //
-    // **"안쪽에 두면 순환이 난다"는 관측되지 않았다.** Provider를 두 라우트 `element`
-    // 안쪽으로 옮겨 재봤더니(`/login`의 `RedirectWhenAuthenticated`와 보호 레이아웃의
+    // **"안쪽에 두면 순환이 난다"는 관측되지 않는다.** Provider를 두 라우트 `element`
+    // 안쪽으로 옮겨 재면(`/login`의 `RedirectWhenAuthenticated`와 보호 레이아웃의
     // `RequireAuth`를 각각 감싸는 배치) 순환 하네스에서 `me`=1·`list`=1로 `/login`에
-    // 정착하고 web 전량이 그대로 통과했다(0 사망). 왕복 8홉에서도 `me`=1이다 —
+    // 정착하고 web 전량이 그대로 통과한다(죽는 케이스가 없다). 왕복 8홉에서도 `me`=1이다 —
     // react-router가 두 배치를 같은 슬롯의 같은 컴포넌트 타입으로 렌더하므로 React가
     // 재조정으로 인스턴스를 보존하고, 언마운트가 없으니 `me()` 이펙트가 다시 돌지 않는다.
     //
@@ -59,23 +59,22 @@ export function App(): ReactElement {
                 그대로 이어진다. */}
             <Route path="/projects/:projectId" element={<EditorShellRoute />} />
             <Route path="/projects/:projectId/pages/:pageId" element={<EditorShellRoute />} />
-            {/* **테마 저작은 셸 밖의 별도 라우트다**(P4c-2 D1). 셸 안에 두지 않는 이유 셋은
+            {/* **테마 저작은 셸 밖의 별도 라우트다.** 셸 안에 두지 않는 이유 셋은
                 `routes/theme-editor.tsx` 머리말에 있다 — 요지는 갤러리와 캔버스가 *"화면 전체를
                 쓰는 미리보기"* 자리를 다툰다는 것이다.
 
-                **`:themeId`는 행 id다**(P4b-3이 정했다). slug가 아니다 — 유일성 단위가
+                **`:themeId`는 행 id다.** slug가 아니다 — 유일성 단위가
                 `(project_id, slug)`라 시스템 테마와 프로젝트 테마가 같은 slug를 가질 수 있다.
 
                 **문지기 안이다** — 위 `RequireAuth` 아래에 있으므로 로그인 없이는 못 온다.
                 owner인지는 화면이 판정한다(읽기는 viewer도 된다 — 그 파일의 권한 절). */}
             <Route path="/projects/:projectId/themes/:themeId" element={<ThemeEditorRoute />} />
-            {/* **스냅샷에는 주소가 없다.** P6-1은 그것도 셸 밖 라우트로 두었는데(D10),
-                이 판이 그 근거 둘을 뒤집고 **셸 머리의 팝오버**로 옮겼다
-                (`shell/snapshots-panel.tsx` 머리말의 표가 그 둘을 짝지어 적고 있다).
-                요지: §9는 머리에 무엇이 오는지 말하지 않고, 스냅샷 목록은 링크로 건네는
+            {/* **스냅샷에는 주소가 없다** — 셸 밖 라우트가 아니라 **셸 머리의 팝오버**다
+                (`shell/snapshots-panel.tsx` 머리말의 표가 라우트로 둘 근거 둘과 그것이 서지 않는 까닭을 짝지어 적고 있다).
+                요지: 설계서 「설계서 화면 구조」는 머리에 무엇이 오는지 말하지 않고, 스냅샷 목록은 링크로 건네는
                 화면이 아니다.
 
-                **테마 저작은 그대로 라우트다** — 그쪽 근거는 갈리지 않았다: 갤러리와
+                **테마 저작은 라우트다** — 그쪽 근거는 스냅샷과 갈린다: 갤러리와
                 캔버스가 *"화면 전체를 쓰는 미리보기"* 자리를 다툰다(`routes/theme-editor.tsx`).
                 팝오버 안에 들어갈 크기가 아니라는 뜻이므로 스냅샷과 같은 판단을 하지 않는다. */}
           </Route>

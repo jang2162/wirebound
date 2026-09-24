@@ -1,50 +1,50 @@
 /**
- * 프레임을 스토어로 옮기는 자리. **P3-2가 보내는 쪽을 얹었다** — 편집이 이 연결로 나가고
+ * 프레임을 스토어로 옮기는 자리. **보내는 쪽도 이 연결이다** — 편집이 이 연결로 나가고
  * (`realtime/edit-channel.ts`) 그 답이 `patch-ack`/`patch-error`로 돌아온다.
  *
  * # 무엇을 하는가
  *
  * | 프레임 | 하는 일 |
  * |---|---|
- * | `joined` | 연결 id를 홀더에 넣는다 — REST로 나가는 편집이 그것을 헤더로 실어 **자기 편집을 되받지 않는다**(§7.4의 MCP 경로가 남는다) |
+ * | `joined` | 연결 id를 홀더에 넣는다 — REST로 나가는 편집이 그것을 헤더로 실어 **자기 편집을 되받지 않는다**(설계서 「LLM 편집 경로」의 MCP 경로가 남는다) |
  * | `page-changed` | `store.applyRemoteChange` — 얹거나, **내 pending 위에 리베이스하거나**, 갈라졌다고 말한다 |
  * | `restored` | `store.markRestored` — 판이 통째로 갈렸다. 얹을 `ops`가 없다 |
  * | `patch-ack`·`patch-error` | 채널에 넘긴다 — 내가 낸 편집의 답이다 |
- * | `locks` | `store.setLocks` — §7.2의 배지와 선택 차단이 이 목록 위에 선다. **잠금 통로는 이 목록을 안 본다** — 내 `lock`이 섰는지는 서버가 거절로 말한다(아래 줄 · 이월 5차 2회 LK) |
+ * | `locks` | `store.setLocks` — 설계서 「소프트 잠금」의 배지와 선택 차단이 이 목록 위에 선다. **잠금 통로는 이 목록을 안 본다** — 내 `lock`이 섰는지는 서버가 거절로 말한다(아래 줄) |
  * | `lock-denied` | 잠금 통로의 `denied` — 서버가 내 `lock`을 받지 않았다. 그 자리는 «잡지 않은 선택»이 된다(`lock-channel.ts`) |
- * | `membership-changed` | `onMembership('changed')` — 셸이 프로젝트를 다시 읽는다(역할이 바뀌었거나 멤버에서 빠졌다 · 이월 5차) |
+ * | `membership-changed` | `onMembership('changed')` — 셸이 프로젝트를 다시 읽는다(역할이 바뀌었거나 멤버에서 빠졌다) |
  * | `joined` | 연결 id 를 홀더에 · `onMembership('joined')` — 아래 «룸에 든 순간이 경계다» |
  * | `presence`·`pong` | 아무것도 안 한다 |
  *
- * **`projectId`가 룸이다**(D2). 페이지를 옮겨도 연결은 그대로다 — 페이지마다 다시 붙으면
+ * **`projectId`가 룸이다.** 페이지를 옮겨도 연결은 그대로다 — 페이지마다 다시 붙으면
  * 페이지를 옮기는 동안 남의 변경을 놓친다.
  *
- * # 다시 붙은 것 자체가 재조회 신호다 (D6)
+ * # 다시 붙은 것 자체가 재조회 신호다
  *
- * `onResync`는 **두 번째 이후의 `'open'`**에 불린다. 이월 §2.4가 그 판정을 제안했고 근거도
- * 적었다: 끊긴 동안의 프레임은 어차피 사라졌으므로 갭을 기다리는 것보다 빠르다. **그리고
+ * `onResync`는 **두 번째 이후의 `'open'`**에 불린다. 근거: 끊긴 동안의 프레임은 어차피
+ * 사라졌으므로 갭을 기다리는 것보다 빠르다. **그리고
  * 갭은 편집을 내야만 수렴한다** — 아무것도 안 내고 보고만 있는 사람의 화면은 스스로
  * 맞춰지지 않는다. 다시 읽는 **자리**는 여기가 아니라 `routes/editor.tsx`다(`loadPage`를
  * 부르는 경로를 둘로 만들지 않는다).
  *
- * # 쿠키가 바뀌면 다시 붙는다 (이월 Z, 2026-09-22)
+ * # 쿠키가 바뀌면 다시 붙는다
  *
  * 다른 탭이 **같은 사람으로 다시 들어오면**(옛 세션은 산다) 이 탭의 HTTP 는 새 세션, WS 는 옛 세션이다. 서버의 방송은
  * 요청과 같은 세션의 연결만 빼므로(`apps/api/src/ws/broadcast.ts`의 `sentBy`) **자기 방송을 되받는다** — 복원이면
- * 본인에게 «다른 사람이 스냅샷을 복원했습니다»(4차 리뷰 b-3 · Chrome). 세션이 그것을 알리면(`useSessionRenewal` —
+ * 본인에게 «다른 사람이 스냅샷을 복원했습니다»(Chrome). 세션이 그것을 알리면(`useSessionRenewal` —
  * `session/session-context.tsx`의 «탭 사이») 옛 소켓을 버리고 곧바로 다시 붙는다(`connection.ts`의 `reconnect`). 끊긴
- * 것과 같은 길이라 **두 번째 `'open'`이 다시 읽는다**(D6) — 버린 소켓과 새 소켓 사이의 프레임은 사라졌다. **대가도
- * 끊긴 것과 같다** — 다시 읽기가 되돌리기 이력을 비우면 그렇다고 말한다(`routes/editor.tsx`의 D6).
+ * 것과 같은 길이라 **두 번째 `'open'`이 다시 읽는다** — 버린 소켓과 새 소켓 사이의 프레임은 사라진다. **대가도
+ * 끊긴 것과 같다** — 다시 읽기가 되돌리기 이력을 비우면 그렇다고 말한다(`routes/editor.tsx`의 `resyncNotice`).
  *
- * **옛 소켓으로 답을 기다리던 편집은 끊긴 것과 갈린다**(③ 리뷰 B1). 그 소켓은 열려 있었으므로 편집은 **이미 서버에
- * 닿았다** — 앞 판은 끊김과 같게 끝내(`failInFlight`) «편집 1개가 취소됐습니다» 를 냈는데 서버는 그것을 커밋했고 새
- * 연결이 방송해 화면에도 섰다(Chrome · 행 잠금 5s). 믿고 다시 하면 두 번 선다. 이제 버리기 전에 `abandonInFlight`로
+ * **옛 소켓으로 답을 기다리던 편집은 끊긴 것과 갈린다.** 그 소켓은 열려 있었으므로 편집은 **이미 서버에
+ * 닿았다** — 끊김과 같게 끝내면(`failInFlight`) «편집 1개가 취소됐습니다» 를 내는데 서버는 그것을 커밋하고 새
+ * 연결이 방송해 화면에도 선다(Chrome — 행 잠금으로 답을 붙잡아 재현한다). 믿고 다시 하면 두 번 선다. 그래서 버리기 전에 `abandonInFlight`로
  * «답을 못 받았다»로 끝내고, 편집 경로가 «반영됐는지 모른다 — 반영됐다면 곧 나타난다»를 말한다
  * (`edit/use-edit-commit.tsx`의 `unansweredNotice`). 반영됐으면 화면은 저절로 맞춰진다: 새 연결이 붙은 뒤의 커밋은
  * 방송으로 오고(방송이 빼는 것은 보낸 연결 하나다 — 새 연결은 id 가 달라 안 빠진다, `apps/api/src/ws/broadcast.ts`의
  * `sentBy`), 그 전의 커밋은 두 번째 `'open'`의 다시 읽기가 가져온다.
  *
- * **새 소켓을 먼저 붙이고 옛 것은 답을 받은 뒤 닫는 겹침은 짓지 않았다.** 겹치면 답은 받지만 그것으로 끝나지 않는다 —
+ * **새 소켓을 먼저 붙이고 옛 것은 답을 받은 뒤 닫는 겹침은 짓지 않는다.** 겹치면 답은 받지만 그것으로 끝나지 않는다 —
  * 새 소켓의 두 번째 `'open'`이 다시 읽기(`loadPage`)로 기다리던 편집을 큐째 버리므로 늦게 온 답은 모르는 편집의
  * 답이 되고(`ackEdit`의 가드), 그것을 피하려면 다시 읽기를 옛 소켓이 정리될 때까지 미뤄야 한다. 옛 소켓의
  * 하트비트·잠금·프레임 중복도 따로 다뤄야 하고, 답이 끝내 안 오는 판(시간 제한)은 결국 «모른다»로 끝난다 — 겹침은
@@ -60,11 +60,11 @@ import { useSessionRenewal } from '../session/session-context'
 import { useEditorStoreInstance } from '../store/use-editor-store'
 
 /**
- * 리베이스가 얹지 못해 버린 편집을 말하는 문장(설계 §7.3의 *"적용 불가"*와 같은 성질).
+ * 리베이스가 얹지 못해 버린 편집을 말하는 문장(설계서 「개인 undo/redo」의 *"적용 불가"*와 같은 성질).
  *
  * **에러가 아니다 — 그래도 말한다.** 남이 그 자리를 지웠으면 내 편집이 얹히지 않는 것이
  * 당연하지만, 사용자가 친 값이 사라졌다는 사실은 남는다. 자리는 편집 실패와 같은 통지
- * 하나를 쓴다(D8) — 사용자가 낸 편집의 운명이라는 점이 같다.
+ * 하나를 쓴다 — 사용자가 낸 편집의 운명이라는 점이 같다.
  */
 function droppedNotice(dropped: number): string {
   return `다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 ${dropped}개를 버렸습니다.`
@@ -77,14 +77,14 @@ function droppedNotice(dropped: number): string {
  * 하나씩 쌓이고, 그 연결들이 각자 재연결을 건다.
  */
 /**
- * 셸이 역할을 **다시 읽어야 하는** 순간(이월 5차). 다시 읽는 **자리**는 여기가 아니라 셸이다(`routes/editor.tsx` — 역할을 읽는
+ * 셸이 역할을 **다시 읽어야 하는** 순간. 다시 읽는 **자리**는 여기가 아니라 셸이다(`routes/editor.tsx` — 역할을 읽는
  * 곳이 거기 하나다).
  *
  * | 값 | 언제 | 왜 |
  * |---|---|---|
  * | `changed` | `membership-changed`를 받았다 | 서버가 «네 멤버십이 바뀌었다»고 말했다 |
- * | `joined` | 룸에 들었다(`joined` — 처음이든 다시 붙은 것이든) | **이 순간부터의 변경만 신호로 온다**(서버의 `notifyMembershipChanged`는 룸에 든 연결에만 보낸다). 첫 조회의 답과 이 순간 사이에 커밋된 변경은 누구도 안 알린다 — 여기서 한 번 읽어야 닿는다(리뷰 R1) |
- * | `refused` | 연결이 **열리지 못하고** 닫혔다(핸드셰이크 거절 — 멤버에서 빠졌으면 가드가 404 다) | 제거가 위 창에 끼면 `joined`가 영영 안 온다 — 재연결만 되풀이된다(Chrome: 13초에 5번). 브라우저는 거절의 HTTP 상태를 안 보여 주므로(닫힘 코드 1006) 셸이 조회로 묻는다 |
+ * | `joined` | 룸에 들었다(`joined` — 처음이든 다시 붙은 것이든) | **이 순간부터의 변경만 신호로 온다**(서버의 `notifyMembershipChanged`는 룸에 든 연결에만 보낸다). 첫 조회의 답과 이 순간 사이에 커밋된 변경은 누구도 안 알린다 — 여기서 한 번 읽어야 닿는다 |
+ * | `refused` | 연결이 **열리지 못하고** 닫혔다(핸드셰이크 거절 — 멤버에서 빠졌으면 가드가 404 다) | 제거가 위 창에 끼면 `joined`가 영영 안 온다 — 재연결만 되풀이된다(Chrome). 브라우저는 거절의 HTTP 상태를 안 보여 주므로(닫힘 코드 1006) 셸이 조회로 묻는다 |
  */
 export type MembershipCause = 'changed' | 'joined' | 'refused'
 
@@ -97,15 +97,15 @@ export function useRealtime(
   const store = useEditorStoreInstance()
   const setup = useRealtimeSetup()
   const onRenewal = useSessionRenewal()
-  // **이 탭이 아는 사용자를 핸드셰이크에 싣는다**(`api/known-user.tsx` — 이월 Y′). 없으면(화면 테스트) 싣지 않는다.
+  // **이 탭이 아는 사용자를 핸드셰이크에 싣는다**(`api/known-user.tsx`). 없으면(화면 테스트) 싣지 않는다.
   const knownUser = useKnownUserHolder()
 
   useEffect(() => {
     if (!setup || !projectId) return
 
     /**
-     * 이 이펙트가 붙은 뒤 `open`을 한 번이라도 지났는가. **재라 #6이 물은 것이 이것이다** —
-     * `onStatus`가 두 번째 `'open'`인지 알 수 있나. 알 수 있다: 상태 콜백은 이 클로저 안이고,
+     * 이 이펙트가 붙은 뒤 `open`을 한 번이라도 지났는가. `onStatus`가 두 번째 `'open'`인지는
+     * 알 수 있다: 상태 콜백은 이 클로저 안이고,
      * 클로저는 연결과 수명이 같다(정리 함수가 `close()`를 부른다).
      *
      * **첫 `'open'`에 다시 읽지 않는 것이 요점이다.** 그때는 `loadPage`가 방금 서버 문서를
@@ -127,7 +127,7 @@ export function useRealtime(
         switch (frame.type) {
           case 'joined':
             setup.holder.set(frame.connectionId)
-            // **룸에 든 순간이 경계다**(`MembershipCause`의 `joined` · 리뷰 R1). `frame.role`은 읽지 않는다 — 역할의 출처는
+            // **룸에 든 순간이 경계다**(`MembershipCause`의 `joined`). `frame.role`은 읽지 않는다 — 역할의 출처는
             // 셸의 `getProject` 하나다(`protocol.ts`의 `joined` 주석).
             onMembership?.('joined')
             break
@@ -138,7 +138,7 @@ export function useRealtime(
               warnings: frame.warnings,
               ...(frame.clientOpId === undefined ? {} : { clientOpId: frame.clientOpId }),
             })
-            // **리베이스가 버린 편집을 말한다**(D3 · §7.3의 *"적용 불가"*와 같은 성질).
+            // **리베이스가 버린 편집을 말한다**(「개인 undo/redo」의 *"적용 불가"*와 같은 성질).
             // 스토어는 무엇이 버려졌는지만 돌려주고 문안은 여기서 만든다 — `startUndo`의
             // `skipped`를 화면이 문장으로 바꾸는 것과 같은 배치다.
             if (change.dropped.length > 0) {
@@ -158,8 +158,8 @@ export function useRealtime(
             store.setLocks(frame.locks)
             break
           case 'lock-denied':
-            // **서버가 판정했다**(이월 5차 2회 LK). 목록으로 «내 것이 섰나»를 추정하지 않는다 — 앞 판의 `observe`가 거꾸로 닿는
-            // 목록에 거짓 잃음을 냈다(`lock-channel.ts`의 머리말).
+            // **서버가 판정했다.** 목록으로 «내 것이 섰나»를 추정하지 않는다 — 목록은 거꾸로 닿을 수 있어 추정하면
+            // 거짓 잃음을 낸다(`lock-channel.ts`의 머리말).
             // 거절은 그 `lock` 프레임과 짝짓는다(`lockId` — `lock-channel.ts`의 그 절).
             setup.lockChannel?.denied(frame.pageId, frame.nodeId, frame.lockId)
             break
@@ -180,15 +180,15 @@ export function useRealtime(
         }
         if (status === 'open') {
           attemptOpened = true
-          // **잡고 있던 자리를 다시 알린다**(§7.2). 끊기면 서버가 놓았고, 화면의 선택은 그
+          // **잡고 있던 자리를 다시 알린다**(「소프트 잠금」). 끊기면 서버가 놓았고, 화면의 선택은 그
           // 사이 바뀌지 않았으므로 *"선택이 바뀔 때 보낸다"*만으로는 아무것도 안 나간다 —
           // 사용자는 노드를 고른 채인데 남의 화면에서 배지가 사라진다. 첫 `'open'`에서는
           // 잡은 것이 없어 아무 일도 안 일어난다. 그 사이 남이 잡았으면 서버가 거절한다(`lock-denied`). **잡지 않은 선택은
-          // 잡지 않는다**(`reannounce` — 리뷰 R4).
+          // 잡지 않는다**(`reannounce`).
           setup.lockChannel?.reannounce()
-          // **다시 붙은 것이 두 번째 이상이면 페이지를 다시 읽어야 한다**(D6). 끊긴 동안 남이
+          // **다시 붙은 것이 두 번째 이상이면 페이지를 다시 읽어야 한다.** 끊긴 동안 남이
           // 낸 편집의 프레임은 사라졌고, 그것을 갭으로 알아채려면 **누군가 다음 편집을 내야
-          // 한다** — 보고만 있는 사람은 스스로 수렴하지 않는다(P3-1 이월 §2.4).
+          // 한다** — 보고만 있는 사람은 스스로 수렴하지 않는다.
           if (opened) onResync?.()
           opened = true
           return
@@ -203,8 +203,8 @@ export function useRealtime(
         // (`panels/comment-panel.tsx`의 `submit` — 같은 요청이라서). 그 낡은 id 가 **남을** 빼지 않는
         // 것은 홀더가 아니라 서버가 막는다: id 는 무작위라 재기동을 넘어 안 겹치고
         // (`apps/api/src/ws/connection-id.ts`), 방송은 요청과 같은 세션의 연결만 뺀다(`ws/broadcast.ts`의
-        // `sentBy`). 앞 판의 *"서버가 그 id로 아무도 못 찾으면 무해하다"*는 **같은 프로세스 안에서만**
-        // 참이었다 — 재기동 뒤 옛 id 를 받은 남의 연결이 빠졌다(좁은 반증 3차 · Chrome).
+        // `sentBy`). *"서버가 그 id로 아무도 못 찾으면 무해하다"*는 **같은 프로세스 안에서만**
+        // 참이다 — id 가 재기동을 넘어 겹치면 재기동 뒤 옛 id 를 받은 남의 연결이 빠진다.
         setup.holder.set(undefined)
         // 답을 기다리던 편집은 이 연결과 함께 끝났다. 안 끝내면 펌프가 거기 매달려 **다음
         // 편집도 안 나간다**(`realtime/edit-channel.ts`).
