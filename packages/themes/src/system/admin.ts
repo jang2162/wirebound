@@ -86,11 +86,18 @@ export const ADMIN_THEME: Theme = {
   },
 
   /**
-   * 「primitives — 사이트 골격」: *"실제 사이트처럼 보이는 인상의 절반은 여기서 나온다."* 관리자 화면이므로
-   * 넓은 컨테이너와 **좁은** 섹션 여백을 쓴다.
+   * 「primitives — 사이트 골격」: *"관리자 화면은 `maxWidth: fluid`에 좁은 섹션 여백을, 마케팅 사이트는 `1200px`에
+   * 넉넉한 여백을 쓴다."* 관리자 화면은 표·폼이 화면 폭을 다 쓰므로 칼럼 폭을 가두지 않는다.
+   *
+   * **`fluid`는 CSS 값이 아니라 `'none'`으로 적는다.** 이 값은 `:root`의 `--wb-container-maxWidth`로 나가고
+   * `Section.parts.inner`가 `max-width: var(--wb-container-maxWidth)`로 받는다 — `none`이 그 자리에서 폭 제한을
+   * 없애는 유효한 값이다. `'100%'`는 지금 구조에서 같은 폭을 내지만(`inner`가 `width: auto`라 묶이지 않는다)
+   * 「제한 없음」이 아니라 「부모 폭까지」라는 제한이어서, `inner`의 `width`·`box-sizing`을 바꾸는 층이 생기면
+   * `paddingX`와 겹쳐 뜻이 달라진다. 재는 법: 헤드리스 Chrome 에서 `exportPage`로 `Page > Section > Text`를 뽑아
+   * `setContent`하고 1920 폭에서 잰다 — `inner`의 안쪽 폭이 섹션 폭 `− 2 × paddingX`, 좌우 여백이 `paddingX`뿐이다.
    */
   primitives: {
-    container: { maxWidth: '1440px', gutter: 'space.6' },
+    container: { maxWidth: 'none', gutter: 'space.6' },
     grid: { columns: 12, gap: 'space.5' },
     section: { paddingY: 'space.8', paddingYCompact: 'space.4' },
     breakpoints: { sm: 640, md: 768, lg: 1024 },
@@ -104,8 +111,14 @@ export const ADMIN_THEME: Theme = {
       // **`marginX: 'auto'`가 가둔 칼럼을 가운데로 둔다.** 설계서 「컴포넌트 카탈로그」가 `Section`을
       // *"화면 전체 폭 배경 + 가운데 정렬된 콘텐츠"*로 정한다. 빠뜨려도 아무것도 실패하지 않고, 뷰포트가
       // `maxWidth`보다 넓을 때 칼럼이 왼쪽에 붙어 오른쪽에만 빈 띠가 선다(`maxWidth`를 거는 시스템 테마
-      // 다섯이 이 줄을 같이 갖는다). 재는 법: `exportPage`로 `Section` 하나를 뽑아 실브라우저 1920 폭에서
-      // `inner`와 섹션의 좌우 간격을 잰다 — 가운데면 둘이 같다. jsdom 은 레이아웃을 안 해 못 잰다.
+      // 다섯이 이 줄을 같이 갖는다). 재는 법: `exportPage`로 `Section` 하나를 뽑아 실브라우저에서 뷰포트를
+      // 칼럼 폭보다 넓게 두고 `inner`와 섹션의 좌우 간격을 잰다 — 가운데면 둘이 같다(1920 폭에서 `portal`
+      // 292 / 292). jsdom 은 레이아웃을 안 해 못 잰다.
+      //
+      // **이 테마에서는 칼럼이 가둬지지 않는다** — `container.maxWidth`가 `none`이라(위 `primitives`) `auto`가
+      // 0 으로 계산되어 1920 폭에서도 좌우 간격이 0 / 0 이다. 그래도 이 줄을 둔다: `container.maxWidth`를 유한한
+      // 폭으로 바꾸는 파생 테마가 가운데 정렬을 그대로 물려받고, `test/system-section-centered.test.ts`가
+      // 값과 무관하게 `maxWidth`를 거는 층마다 이 줄을 요구한다.
       parts: { inner: { maxWidth: 'container.maxWidth', marginX: 'auto', paddingX: 'space.6' } },
       variants: {
         hero: { bg: 'semantic.primarySoft', paddingY: 'space.16' },

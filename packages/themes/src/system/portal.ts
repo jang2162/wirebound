@@ -10,7 +10,7 @@ import type { Theme } from '../spec/theme'
  *
  * 1. **읽는 화면이지 조작하는 화면이 아니다.** `admin`의 목록은 **표**(행렬을 훑는다)이고
  *    포털의 목록은 **제목 + 날짜 줄**(하나를 골라 들어간다)이다. 그래서 `List:stackedList`,
- *    본문 `body`가 14px/1.6이 아니라 **15px/1.7**, 좌우 폭이 1440px이 아니라 **1280px**이다.
+ *    본문 `body`가 14px/1.6이 아니라 **15px/1.7**, 좌우 폭을 **1280px**로 가둔다(`admin`은 가두지 않는다).
  *    간격 씨앗(`space.unit`)은 `admin`과 **같은 4px다** — 밀도가 실제로 비슷하다는 사실을
  *    다른 수로 덮지 않았다.
  * 2. **면이 아니라 선으로 나눈다.** `admin`은 카드에 그림자와 10px 모서리를 준다. 기관
@@ -146,7 +146,7 @@ export const PORTAL_THEME: Theme = {
    * `Section.parts.inner`가 `container.maxWidth`로 가리킨다(머리말).
    */
   primitives: {
-    // `admin`은 1440이다. 포털은 좌측 분류 + 본문 2단이 들어가도 글줄이 길어지지 않는 폭이다.
+    // `admin`은 폭을 가두지 않는다(`none`). 포털은 좌측 분류 + 본문 2단이 들어가도 글줄이 길어지지 않는 폭이다.
     container: { maxWidth: '1280px', gutter: 'space.5' },
     grid: { columns: 12, gap: 'space.5' },
     section: { paddingY: 'space.10', paddingYCompact: 'space.5' },

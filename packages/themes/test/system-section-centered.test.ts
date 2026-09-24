@@ -8,9 +8,22 @@
  * **테마의 값을 잰다 — 레이아웃이 아니다.** 이 파일은 DOM 없이 돌고 jsdom 도 레이아웃을 하지 않으므로,
  * 화면에서 실제로 가운데 오는지는 여기서 못 잰다. `marginX` 대신 다른 수단(`justifySelf` 등)으로 가운데를
  * 만든 테마는 여기서 빨강이 된다 — 그때는 이 자를 고쳐야 한다. 사용자 테마는 재지 않는다.
+ *
+ * **폭의 값은 보지 않는다 — `maxWidth`가 걸렸는지만 본다.** `admin`은 `container.maxWidth`가 `none`이라 칼럼이
+ * 가둬지지 않고 `marginX: 'auto'`는 0 으로 계산된다(실브라우저 1920 폭 좌우 간격 0 / 0). 뜻은 없지만 무해하므로
+ * 그대로 요구한다: 그 폭은 `:root` 변수 하나이고 `primitives`만 덮는 파생 테마가 그것을 유한한 폭으로 바꾸는 순간
+ * 가운데 정렬이 필요해진다. 그래서 `admin`이 fluid 라는 사실은 이 자가 아니라 아래 `admin의 컨테이너` 케이스가 잠근다.
  */
-import { describe, expect, it } from 'vitest'
+import { installCatalog } from '@wirebound/schema'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { compileTheme } from '../src/emit/index'
+import { resolveTheme } from '../src/resolve/index'
 import { SYSTEM_THEME_IDS, systemTheme } from '../src/system/index'
+
+beforeAll(() => {
+  // `resolveTheme`이 컴포넌트를 카탈로그와 대조한다 — 없으면 전부 `unknown-component`다.
+  installCatalog()
+})
 
 /**
  * `Section`의 `inner`가 층마다 **실제로 갖는** 스타일 — 기본 층, 그리고 변형 · 상태 · 반응형 층을 하나씩 기본 층
@@ -42,5 +55,20 @@ describe('시스템 테마의 Section', () => {
     expect(bounded.map((layer) => [layer.where, layer.style['marginX']])).toEqual(
       bounded.map((layer) => [layer.where, 'auto']),
     )
+  })
+})
+
+/**
+ * **`admin`은 칼럼 폭을 가두지 않는다.** 설계서 「primitives — 사이트 골격」: *"관리자 화면은 `maxWidth: fluid`에 좁은
+ * 섹션 여백을, 마케팅 사이트는 `1200px`에 넉넉한 여백을 쓴다."* `fluid`는 CSS 값이 아니어서 `none`으로 적는다 — 그
+ * 까닭은 `src/system/admin.ts`의 `primitives` 주석에 있다. 위 자는 폭의 값을 안 보므로 이 값을 잠그는 자리는 여기
+ * 하나다.
+ */
+describe('admin의 컨테이너', () => {
+  it('fluid다 — container.maxWidth가 none으로 :root에 나간다', () => {
+    expect(systemTheme('admin')?.primitives?.container?.maxWidth).toBe('none')
+    const { theme, issues } = resolveTheme(systemTheme('admin')!)
+    expect(issues).toEqual([])
+    expect(compileTheme(theme!)).toContain('--wb-container-maxWidth: none;')
   })
 })

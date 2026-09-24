@@ -500,12 +500,14 @@ describe('설계서 「테마의 범위」의 약속과 마케팅 골격', () =>
 
   /**
    * **골격의 수가 `admin`과 갈린다.** 설계서 「primitives — 사이트 골격」이 이 둘을 이름으로 들어 적었다 —
-   * *"관리자 화면은 좁은 섹션 여백을, 마케팅 사이트는 `1200px`에 넉넉한 여백을."*
+   * *"관리자 화면은 `maxWidth: fluid`에 좁은 섹션 여백을, 마케팅 사이트는 `1200px`에 넉넉한 여백을 쓴다."*
+   * `admin`의 폭이 fluid(`none`)인 것은 `packages/themes/test/system-section-centered.test.ts`의
+   * `admin의 컨테이너` 케이스가 잠근다 — 여기서는 둘이 갈리는 것만 본다.
    */
   it('컨테이너 폭과 섹션 리듬이 admin과 다르다', () => {
     const value = (id: string, path: string) => resolved(id).primitives.get(path)
-    expect(value('admin', 'container.maxWidth')).toBe('1440px')
     expect(value(MARKETING, 'container.maxWidth')).toBe('1200px')
+    expect(value('admin', 'container.maxWidth')).not.toBe(value(MARKETING, 'container.maxWidth'))
     // `space.20` = 80px vs `space.8` = 32px. 같은 눈금(4px)에서 다른 단계를 쓴다.
     expect(resolved('admin').tokens.get('space.8')).toBe('32px')
     expect(resolved(MARKETING).tokens.get('space.20')).toBe('80px')
