@@ -124,7 +124,7 @@ function toOtherPage(): void {
  * `updatePage` 호출을 받아 적는 가짜. 응답의 `description`은 부르는 쪽이 정한다.
  *
  * **본문과 함께 «어느 페이지에 보냈나»도 적는다** — 본문만 보면 앞 페이지의 글이 이
- * 페이지로 나간 것과 이 페이지의 글이 나간 것이 같아 보인다(그것이 F1이다).
+ * 페이지로 나간 것과 이 페이지의 글이 나간 것이 같아 보인다(앞의 것을 «페이지가 바뀌면 버린다»가 막는다).
  */
 function recordingApi(reply?: (description: string | null) => PageDetail): {
   overrides: Partial<ApiClient>

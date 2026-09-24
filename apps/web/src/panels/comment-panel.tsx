@@ -674,7 +674,7 @@ export function CommentPanel(props: {
     //
     // **페이지가 바뀌면 앞 페이지에 쓰던 초안·고치던 것도 버린다 — 여기가 아니라
     // `panel-drafts.tsx`의 provider가.** 노드 id도 코멘트 id도 그 페이지 안에서만 뜻이 있다.
-    // 그 규칙이 «페이지 설명»의 F1과 **같은 자리에서 같은 값으로** 돈다.
+    // 그 규칙이 «페이지 설명»의 «페이지가 바뀌면 버린다»와 **같은 자리에서 같은 값으로** 돈다.
     let alive = true
     // 떠나면 요청째 끊는다(`ReadOptions.cancel` · `routes/editor.tsx`의 페이지 조회와 같다).
     const leave = new AbortController()
