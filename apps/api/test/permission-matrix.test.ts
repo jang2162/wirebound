@@ -1,6 +1,3 @@
-import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { roleAtLeast } from '../src/auth/roles'
 import type { ProjectRole } from '../src/db/types'
@@ -10,6 +7,7 @@ import { insertSnapshot } from '../src/repos/snapshots'
 import { insertTheme } from '../src/repos/themes'
 import { captureSnapshot } from '../src/services/snapshot-capture'
 import { SNAPSHOT_PAYLOAD_VERSION } from '@wirebound/themes'
+import { type GuardedRoute, routeCensus } from './guarded-routes'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 type Actor = ProjectRole | 'outsider' | 'anonymous'
@@ -613,54 +611,14 @@ const CASES: Case[] = [
 ]
 
 /**
- * `src/routes/`의 원문. **`projectGuard`가 걸린 라우트를 전수로 세어 위 `CASES`와 맞대기
- * 위해서다** — 아래 *"표가 라우트를 하나도 빠뜨리지 않는다"* 참고.
+ * **표에 줄로 둘 수 없는 가드 라우트** — 이름 있는 예외다. 값은 그 라우트의 최소 역할이고 아래 케이스가 등록된
+ * 값과 견준다(예외로 빼도 역할은 잠긴다).
  *
- * `apps/web/test/api-consumers.test.ts`와 같은 배치다: 소스를 훑는 검사가 **`test/`에
- * 살아야** 자기 자신을 훑지 않는다. 여기서는 `src/routes/`만 보므로 그 위험이 애초에
- * 없지만, 같은 이유로 **주석은 걷는다**(주석 안의 라우트 인용이 세어지면 안 된다).
- *
- * **`import.meta.glob`이 아니라 `node:fs`로 읽는다.** 그것은 Vite가 주는 것이고
- * `apps/api`의 tsconfig에는 `vite/client` 타입이 없다(`types: ["node"]`) — 웹 쪽 선례를
- * 그대로 옮기면 컴파일이 깨진다. 여기는 Node 앱이므로
- * 파일을 그냥 읽는 편이 결이 맞는다.
- *
- * 경로는 **이 파일 기준**으로 잡는다 — vitest의 cwd는 저장소 루트라 상대 경로로 적으면
- * 실행 위치에 묶인다.
+ * WS 입장은 업그레이드라 HTTP 상태로 허용을 가를 수 없다 — 업그레이드가 아닌 GET 은 가드를 지난 멤버에게도 404 다
+ * (`@fastify/websocket` 이 답한다 · owner · viewer 404, 익명 401). 입장 판정은 `ws-auth.test.ts` 가 소켓으로 잰다.
  */
-const ROUTES_DIR = fileURLToPath(new URL('../src/routes', import.meta.url))
-
-const ROUTE_SOURCES: Record<string, string> = Object.fromEntries(
-  readdirSync(ROUTES_DIR)
-    .filter((name) => name.endsWith('.ts'))
-    .map((name) => [name, readFileSync(join(ROUTES_DIR, name), 'utf8')]),
-)
-
-/**
- * 블록·줄 주석을 걷는다. 문자열 안의 `//`를 주석으로 오인할 수 있지만, 여기서 찾는 것은
- * `app.get('…', { preHandler: projectGuard('…') }` 꼴이고 그 앞에 `//`가 든 문자열이 올
- * 자리가 없다 — 오인해서 지워도 **라우트를 놓치는 쪽으로만** 틀리고, 그러면 아래 검사가
- * 죽어 사람이 본다(조용히 통과하는 방향이 아니다).
- */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
-
-/** 소스에 실제로 선언된, `projectGuard`가 걸린 라우트. */
-function declaredRoutes(): { method: string; url: string; min: ProjectRole }[] {
-  const found: { method: string; url: string; min: ProjectRole }[] = []
-  for (const source of Object.values(ROUTE_SOURCES)) {
-    const pattern = /app\.(get|post|patch|put|delete)\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\('(\w+)'\)/g
-    for (const match of stripComments(source).matchAll(pattern)) {
-      found.push({
-        method: match[1]!.toUpperCase(),
-        // 라우트는 `/api/projects` prefix로 등록된다(`app.ts`).
-        url: `/api/projects${match[2]}`,
-        min: match[3] as ProjectRole,
-      })
-    }
-  }
-  return found
+const NOT_IN_TABLE: Record<string, ProjectRole> = {
+  'GET /api/projects/:projectId/ws': 'viewer',
 }
 
 const ACTORS: Actor[] = ['owner', 'editor', 'viewer', 'outsider', 'anonymous']
@@ -682,40 +640,59 @@ function expectedRejection(actor: Actor): number {
  * *"새 라우트를 만들면 이 표에 등록한다"*를 사람의 기억에 맡기면 하나가 빠져도 아무도
  * 모른다. 세는 것을 실행으로 옮기면 빠지지 않는다.
  *
- * **분모를 손으로 적지 않는다** — `src/routes/`를 훑어 `projectGuard`가 걸린 라우트를
- * 전수로 뽑는다. 새 라우트가 생기면 여기가 먼저 죽는다.
+ * **분모를 손으로 적지 않는다** — Fastify 가 등록한 라우트에서 가드가 걸린 것을 전수로 뽑는다(`guarded-routes.ts` —
+ * 라우트도 최소 역할도 값이다). 새 라우트가 생기면 여기가 먼저 죽는다.
  */
 describe('표의 완전성', () => {
-  it('훑을 소스를 실제로 읽는다', () => {
-    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**.
-    expect(Object.keys(ROUTE_SOURCES).length).toBeGreaterThan(5)
-    expect(declaredRoutes().length).toBeGreaterThan(20)
+  const key = (route: GuardedRoute): string => `${route.method} ${route.url}`
+
+  it('분모를 실제로 만든다 — 이음매가 가드 라우트와 최소 역할을 준다', async () => {
+    // 이음매가 어긋나면 **빈 집합에서 아래가 조용히 통과한다**.
+    const { guarded } = await routeCensus()
+    expect(guarded.length).toBeGreaterThan(20)
+    expect(new Set(guarded.map((route) => route.min))).toEqual(new Set(['owner', 'editor', 'viewer']))
   })
 
-  it('projectGuard가 걸린 라우트가 전부 표에 있다', () => {
-    const registered = new Set(CASES.map((testCase) => `${testCase.method} ${testCase.url}`))
-    const missing = declaredRoutes()
-      .map((route) => `${route.method} ${route.url}`)
-      .filter((key) => !registered.has(key))
+  it('`:projectId` 라우트는 전부 가드를 지난다 — 가드를 못 알아보면 분모에서 빠지는 대신 여기서 죽는다', async () => {
+    expect((await routeCensus()).unguardedProjectRoutes).toEqual([])
+  })
+
+  it('projectGuard가 걸린 라우트가 전부 표에 있다', async () => {
+    const registered = new Set([...CASES.map((testCase) => `${testCase.method} ${testCase.url}`), ...Object.keys(NOT_IN_TABLE)])
+    const missing = (await routeCensus()).guarded.map(key).filter((route) => !registered.has(route))
 
     expect(missing).toEqual([])
   })
 
+  it('표와 예외에 등록되지 않은 라우트를 적어 두지 않았다 — 반대편', async () => {
+    const declared = new Set((await routeCensus()).guarded.map(key))
+    const extra = [...CASES.map((testCase) => `${testCase.method} ${testCase.url}`), ...Object.keys(NOT_IN_TABLE)].filter(
+      (route) => !declared.has(route),
+    )
+
+    expect(extra).toEqual([])
+  })
+
   /**
-   * **`allowed`가 소스의 최소 역할과 같은가.** 표에 줄은 있는데 `allowed`가 틀리면
+   * **`allowed`가 등록된 가드의 최소 역할과 같은가.** 표에 줄은 있는데 `allowed`가 틀리면
    * 그 줄은 **틀린 것을 지킨다** — 등록 여부만 세는 위 케이스가 못 잡는 자리다.
    *
    * 역할 순위 비교는 `auth/roles.ts`의 `roleAtLeast` 하나만 쓴다(README의 계층 규칙).
    */
-  it('표의 allowed가 소스가 선언한 최소 역할과 일치한다', () => {
+  it('표의 allowed가 가드의 최소 역할과 일치한다', async () => {
     const byKey = new Map(CASES.map((testCase) => [`${testCase.method} ${testCase.url}`, testCase]))
 
-    for (const route of declaredRoutes()) {
-      const testCase = byKey.get(`${route.method} ${route.url}`)
+    for (const route of (await routeCensus()).guarded) {
+      const exempt = NOT_IN_TABLE[key(route)]
+      if (exempt !== undefined) {
+        expect(route.min, key(route)).toBe(exempt)
+        continue
+      }
+      const testCase = byKey.get(key(route))
       if (testCase === undefined) continue // 위 케이스가 잡는다
 
       const expected = (['owner', 'editor', 'viewer'] as const).filter((role) => roleAtLeast(role, route.min))
-      expect([...testCase.allowed].sort(), `${route.method} ${route.url}`).toEqual([...expected].sort())
+      expect([...testCase.allowed].sort(), key(route)).toEqual([...expected].sort())
     }
   })
 })
