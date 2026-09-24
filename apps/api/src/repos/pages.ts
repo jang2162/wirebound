@@ -415,8 +415,11 @@ export async function updatePage(
       .where('id', '=', pageId)
       .execute()
 
-    const updated = await trx.selectFrom('pages').select(PAGE_COLUMNS).where('id', '=', pageId).executeTakeFirstOrThrow()
-    return toRecord(updated)
+    // **위 `current`는 잠그지 않고 읽었다** — 제목 · 설명만 바꾸는 판은 행 잠금을 `UPDATE`에서 처음 잡는다. 그 사이 프로젝트
+    // 삭제가 이 행을 쥐었으면 `UPDATE`가 그 커밋을 기다렸다가 0 행을 쓰고, 여기서 행이 없다 — 앞의 `null`과 같은 404 다
+    // (던지면 봉투 없는 500).
+    const updated = await trx.selectFrom('pages').select(PAGE_COLUMNS).where('id', '=', pageId).executeTakeFirst()
+    return updated ? toRecord(updated) : null
   })
 }
 

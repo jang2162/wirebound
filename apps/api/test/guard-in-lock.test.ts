@@ -30,7 +30,7 @@
  * # 잠금 순서 — 재확인이 연 교착
  *
  * 프로젝트 삭제는 재확인을 위해 기다릴 것을 먼저 잡으므로 잠금 순서가 있다. 아래 `잠금 순서` 절이 그 순서가
- * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 삭제가 owner 행을 멤버 쓰기와 같은 순서로 재확인 앞에서 잡는지를 한 판(E12)으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
+ * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 삭제가 owner 행을 멤버 쓰기와 같은 순서로 재확인 앞에서 잡는지를 한 판(E12)으로, 메뉴 행을 owner 행 앞에서 잡아 메뉴 제목 쓰기와 고리를 안 만드는지를 세 판(E13)으로, 삭제가 쥔 행에 선 바탕 없는 제목 쓰기가 404 인지를 두 판(E14)으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
  * 삭제의 CASCADE 와 고리를 안 만드는지(프로젝트 행 → 자기 행 → 멤버 행)를 아홉 판(E3–E11)으로, 코멘트 수정이 코멘트 행을
  * 지우는 두 쓰기 · 역할 변경과 3자 고리를 안 만드는지(프로젝트 행 → 페이지 행 → 멤버 행 → 코멘트 행)를 두 판(F3 · F3′)으로 잰다.
  */
@@ -1083,6 +1083,113 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
       expect(changed.status, changed.body).toBe(404)
     })
   }, 60_000)
+
+  /**
+   * **E13 — 메뉴 제목 쓰기가 메뉴 행을 쥔 채 재확인에 서 있을 때 프로젝트 삭제.** 제목 쓰기는 프로젝트 행을 안 잡고 «메뉴 행 →
+   * 재확인(자기 멤버 행 `FOR SHARE`)» 순이다(`routes/menu.ts`의 `PATCH`). 삭제가 메뉴 행을 CASCADE 에서 처음 만나면 그때 쓰는 사람의
+   * 멤버 행을 이미 쥐고 있다 — owner 면 `lockOwnerIds`가, editor 면 CASCADE 가 먼저 지운 멤버 행이다. 판을 세우는 문: 쓰는 사람의
+   * 멤버 행을 테스트 트랜잭션이 `FOR UPDATE`로 쥔 채 삭제를 먼저(그 행에 선다), 제목 쓰기를 다음에 세우고 푼다. 삭제가 메뉴 행을
+   * owner 행 **앞에서** 잡으면(`routes/projects.ts` — `lockProjectMenuNodes`) 제목 쓰기가 메뉴 행에서 삭제를 기다렸다가 0 행 → 404 다.
+   * 셋은 같은 변조에 함께 죽는다 — 삭제가 `lockProjectMenuNodes`를 안 부르면 교착 +1 · 한쪽 500. 셋을 두는 것은 쓰는 사람이
+   * 삭제에 잡히는 자리(owner 행 · CASCADE)와 쓰기 경로(바탕 · 바탕 없음)가 갈려서다.
+   */
+  for (const probe of [
+    { label: 'owner · 바탕 있는 제목', writer: 'bob' as const, base: true },
+    { label: 'owner · 바탕 없는 제목', writer: 'bob' as const, base: false },
+    { label: 'editor · 바탕 있는 제목', writer: 'carol' as const, base: true },
+  ]) {
+    it(`E13 — 메뉴 제목 쓰기(${probe.label})가 메뉴 행을 쥔 채 재확인에 섰을 때 삭제: 삭제 204 · 쓰기 404 · 교착 0`, async () => {
+      await withRealApi(async (ctx) => {
+        const alice = await signup(ctx)
+        const bob = await signup(ctx)
+        const carol = await signup(ctx)
+        const project = await createProject(ctx, alice.cookie)
+        await addMember(ctx, project.id, bob.user.id, 'owner')
+        await addMember(ctx, project.id, carol.user.id, 'editor')
+        const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
+        await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
+        const writer = probe.writer === 'bob' ? bob : carol
+
+        const deadlocksBefore = await deadlockCount()
+        const door = queueLock(async (trx) => {
+          await sql`select 1 from project_members where project_id = ${project.id} and user_id = ${writer.user.id} for update`.execute(trx)
+        })
+        await door.acquired
+        let removal: Fired | undefined
+        let rename: Fired | undefined
+        try {
+          removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${project.id}`, cookies: alice.cookie }))
+          await waitForLockWaiter(1)
+          rename = track(
+            ctx.app.inject({
+              method: 'PATCH',
+              url: `/api/projects/${project.id}/menu/${menu.id}`,
+              cookies: writer.cookie,
+              payload: probe.base ? { title: '고친 제목', base: { title: '메뉴' } } : { title: '고친 제목' },
+            }),
+          )
+          await waitForLockWaiter(2)
+        } finally {
+          await door.release()
+        }
+        const [removed, renamed] = await Promise.all([removal.promise, rename.promise])
+
+        expect(await deadlockCount()).toBe(deadlocksBefore)
+        expect(removed.status, removed.body).toBe(204)
+        expect(renamed.status, renamed.body).toBe(404)
+      })
+    }, 60_000)
+  }
+
+  /**
+   * **E14 — 바탕 없는 제목 쓰기가 행을 읽은 뒤 삭제가 그 행을 쥐고 커밋하면 404 다(500 이 아니다).** 그 경로는 행을 잠그지 않고
+   * 읽고 `UPDATE`에서 처음 잡는다 — 삭제의 커밋을 기다렸다가 0 행을 쓴다(`repos/menu.ts`의 `updateMenuNode` ·
+   * `repos/pages.ts`의 `updatePage` 끝의 조회). 판을 세우는 문: 삭제하는 앨리스의 멤버 행을 쥐어 삭제를 `lockOwnerIds`에 세운다
+   * (페이지 · 메뉴 행은 이미 쥔 뒤다). 변조: 그 끝의 조회를 `executeTakeFirstOrThrow`로 — 페이지 판은 혼자 500, 메뉴 판은 E13 의
+   * «바탕 없는 제목»과 함께 500(그 판도 메뉴 행에서 삭제를 기다렸다가 0 행을 쓴다). 삭제의 `lockProjectMenuNodes`를 떼면 메뉴 판은
+   * 쓰기가 서지 않고 먼저 커밋해 판이 안 선다.
+   */
+  for (const probe of [
+    { label: '페이지 제목', target: 'page' as const },
+    { label: '메뉴 제목', target: 'menu' as const },
+  ]) {
+    it(`E14 — 바탕 없는 ${probe.label} 쓰기가 삭제가 쥔 행에 서면: 삭제 204 · 쓰기 404`, async () => {
+      await withRealApi(async (ctx) => {
+        const alice = await signup(ctx)
+        const carol = await signup(ctx)
+        const project = await createProject(ctx, alice.cookie)
+        await addMember(ctx, project.id, carol.user.id, 'editor')
+        const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
+        const page = await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
+
+        const door = queueLock(async (trx) => {
+          await sql`select 1 from project_members where project_id = ${project.id} and user_id = ${alice.user.id} for update`.execute(trx)
+        })
+        await door.acquired
+        let removal: Fired | undefined
+        let rename: Fired | undefined
+        try {
+          removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${project.id}`, cookies: alice.cookie }))
+          await waitForLockWaiter(1)
+          rename = track(
+            ctx.app.inject({
+              method: 'PATCH',
+              url: probe.target === 'page' ? `/api/projects/${project.id}/pages/${page.id}` : `/api/projects/${project.id}/menu/${menu.id}`,
+              cookies: carol.cookie,
+              payload: { title: '고친 제목' },
+            }),
+          )
+          await waitForLockWaiter(2)
+        } finally {
+          await door.release()
+        }
+        const [removed, renamed] = await Promise.all([removal.promise, rename.promise])
+
+        expect(removed.status, removed.body).toBe(204)
+        expect(renamed.status, renamed.body).toBe(404)
+      })
+    }, 60_000)
+  }
 
   /**
    * E3 · E4 · E10 · E11 — 자기 행만 쓰는 쓰기(테마 고르기 · 코멘트 수정 · 테마 수정 · 삭제)의 재확인. 네 판 전부 아래
