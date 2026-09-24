@@ -236,7 +236,7 @@ describe('세션·토큰을 확인하지 못했으면 401 이 아니다 — 자�
 })
 
 /**
- * **503 의 문장은 메서드로 갈린다** — 쓰지 않는 요청(GET · HEAD)에 «반영됐는지 알 수 없습니다»를 말하면 사용자는 «내가 무엇을
+ * **503 의 문장은 메서드로 갈린다** — 쓰지 않는 요청(GET · HEAD · OPTIONS)에 «반영됐는지 알 수 없습니다»를 말하면 사용자는 «내가 무엇을
  * 바꿨나»를 묻는다. 웹은 서버 문장을 그대로 그리므로 문장이 서버 한 자리(`http/error-handler.ts`)에서 정해진다. 판정만 잰다 —
  * 라우트가 `DbConnectionLostError`를 던지는 앱을 세운다(연결을 실제로 끊는 판은 위 «게시의 COMMIT 응답이 …» · «세션 조회가 …»).
  */
@@ -244,6 +244,7 @@ describe('DB 가 답하지 않은 503 의 문장 — 읽기는 «반영»을 말
   it.each([
     ['GET', DB_UNREACHABLE_READ_MESSAGE],
     ['HEAD', DB_UNREACHABLE_READ_MESSAGE],
+    ['OPTIONS', DB_UNREACHABLE_READ_MESSAGE],
     ['POST', DB_UNREACHABLE_WRITE_MESSAGE],
     ['PUT', DB_UNREACHABLE_WRITE_MESSAGE],
     ['PATCH', DB_UNREACHABLE_WRITE_MESSAGE],
@@ -253,7 +254,7 @@ describe('DB 가 답하지 않은 503 의 문장 — 읽기는 «반영»을 말
     registerErrorHandler(app)
     // HEAD 는 GET 라우트가 받는다(Fastify 의 `exposeHeadRoutes`) — 본문은 버려지므로 `content-length`로 문장의 길이를 본다.
     app.route({
-      method: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+      method: ['GET', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'],
       url: '/lost',
       handler: async () => {
         throw new DbConnectionLostError(new Error('끊겼다'))
