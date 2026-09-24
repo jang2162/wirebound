@@ -3,16 +3,16 @@
  *
  * ---
  *
- * # 다시 짜지 않는다 (D3)
+ * # 다시 짜지 않는다
  *
  * 넷(`.wirebound.json` · 자격 · `callApi` · `io`)이 `packages/cli`에 이미 순수하게 갈라져
  * 있다. **여기서 다시 짜면 자격을 읽고 쓰는 자리가 두 벌이 되고**, 한쪽만 고쳐지는 날
  * 토큰이 안 읽히거나 엉뚱한 자리에 쓰인다. 이 파일은 `requireProject`·`fetchSnapshot`을
  * 부르는 몇 줄이다 — `wireb page get`·`wireb lint`가 부르는 것과 **같은 함수**다.
  *
- * # 프로젝트를 세션이 정하지 않는다 (D4)
+ * # 프로젝트를 세션이 정하지 않는다
  *
- * §12.1이 *"이 리포가 어느 설계 프로젝트에 대응하는가"*를 `.wirebound.json`에 담았고
+ * 설계서 「리포 바인딩」이 *"이 리포가 어느 설계 프로젝트에 대응하는가"*를 `.wirebound.json`에 담았고
  * 그것이 리포 바인딩의 존재 이유다. 도구는 `projectId`를 **인자로 안 받는다**
  * (`tools.ts`의 머리말). 어디서부터 찾는지도 CLI가 이미 정했다 — `io.cwd`에서 위로.
  *
@@ -20,11 +20,11 @@
  *
  * 에이전트는 `get_page`로 읽고 구현하고 한참 뒤에 `validate`를 부른다. 그 사이에 사람이
  * 설계서를 고치면 **캐시한 판은 없는 결함을 말하거나 있는 결함을 놓친다** — `wireb lint`가
- * `pull`의 출력 파일을 안 읽기로 한 것과 **같은 근거**다(P9-3 D7).
+ * `pull`의 출력 파일을 안 읽기로 한 것과 **같은 근거**다.
  *
- * **대가는 쟀다고 말할 수 없다.** P9-2 이월 §4가 *"페이지가 수백 개인 프로젝트에서
- * `GET .../snapshot`이 얼마나 도는지 안 쟀다"*를 열어 뒀고 여기서도 안 쟀다 — 다만
- * **에이전트가 사람보다 자주 부른다**는 것이 새로 생긴 사정이므로 이월에 적는다.
+ * **대가는 안 쟀다** — 페이지가 수백 개인 프로젝트에서 `GET .../snapshot`이 얼마나 도는지
+ * 모른다. **에이전트가 사람보다 자주 부르므로** 그 대가가 `wireb lint`보다 먼저 드러날
+ * 자리다.
  */
 import {
   callApi,
@@ -46,7 +46,7 @@ export interface OpenProject {
  * 바인딩·자격을 찾고 스냅샷을 받는다.
  *
  * **던지는 것은 전부 `CliError`다** — 바인딩이 없다(2) · 자격이 없다(2) · 서버가 거절했다(3) ·
- * 서버에 못 닿았다(4). `server.ts`가 그것을 `isError: true` 결과로 접는다(D8).
+ * 서버에 못 닿았다(4). `server.ts`가 그것을 `isError: true` 결과로 접는다(`outcome.ts`).
  */
 export async function openProject(io: Io): Promise<OpenProject> {
   const access = await requireProject(io)
@@ -69,17 +69,17 @@ export function projectHead(open: OpenProject): { server: string; projectId: str
 }
 
 /**
- * 열린 프로젝트에 요청 하나. **쓰기 둘이 서버를 부르는 자리다**(P9-5 D6).
+ * 열린 프로젝트에 요청 하나. **쓰기 둘이 서버를 부르는 자리다.**
  *
  * ---
  *
  * # `wireb`에 명령을 만들지 않는다
  *
- * §12.3의 표에 `wireb patch`도 `wireb comment`도 없다. **§12.2와 §12.3은 서로 다른 표이고**
- * 도구가 CLI 명령을 흉내 내면 종료 코드를 도구 결과로 옮기는 층이 하나 더 생긴다
- * (`embed.ts`의 *"`bin`은 안 내준다"* 절과 같은 근거). 그래서 `callApi`를 직접 부른다 —
- * `packages/cli`가 **HTTP 클라이언트를 내준다**는 것이 P9-4 D3의 요지이고, 도구가 자기
- * 클라이언트를 갖지 않는 한 자격·헤더·오류 갈래가 한 벌로 남는다.
+ * 설계서 「CLI」의 표에 `wireb patch`도 `wireb comment`도 없다. **「MCP 도구」와 「CLI」는
+ * 서로 다른 표이고** 도구가 CLI 명령을 흉내 내면 종료 코드를 도구 결과로 옮기는 층이 하나 더
+ * 생긴다(`embed.ts`의 *"`bin`은 안 내준다"* 절과 같은 근거). 그래서 `callApi`를 직접 부른다 —
+ * `packages/cli`가 **HTTP 클라이언트를 내주고**(`embed.ts`), 도구가 자기 클라이언트를 갖지
+ * 않는 한 자격·헤더·오류 갈래가 한 벌로 남는다.
  *
  * # 서버 주소와 토큰을 부르는 쪽이 조립하지 않는다
  *
@@ -94,8 +94,8 @@ export async function callProject(io: Io, open: OpenProject, request: Omit<ApiRe
 /**
  * 그 페이지가 지금 선 revision 번호를 **다시** 읽는다. 없으면 `null`.
  *
- * **409를 받은 뒤에만 부른다**(D4). §7.4의 *"재조회 후 재시도"*를 도구가 지원하는 방법이
- * 이것이다 — 새 번호를 산문이 아니라 **값으로** 실어야 에이전트가 그것으로 다음 걸음을
+ * **409를 받은 뒤에만 부른다**(`handlers.ts`의 *"재시도하지 않는다"*). 설계서 「LLM 편집
+ * 경로」의 *"재조회 후 재시도"*를 도구가 지원하는 방법이 이것이다 — 새 번호를 산문이 아니라 **값으로** 실어야 에이전트가 그것으로 다음 걸음을
  * 정한다. **성공 갈래에서는 안 부른다:** 그때는 응답의 `seq`가 곧 새 `headSeq`다.
  */
 export async function rereadHeadSeq(io: Io, open: OpenProject, pageId: string): Promise<number | null> {

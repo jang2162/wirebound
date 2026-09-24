@@ -1,12 +1,12 @@
 /**
- * **§12.2의 도구 표를 설계 문서에서 읽어 대조한다.** 손으로 옮긴 인용은 설계가 바뀌어도
- * 조용하다 — `packages/schema/test/lint-rules.test.ts`가 선례다.
+ * **설계서 「MCP 도구」의 도구 표를 설계 문서에서 읽어 대조한다.** 손으로 옮긴 인용은 설계가
+ * 바뀌어도 조용하다 — `packages/schema/test/lint-rules.test.ts`가 선례다.
  *
  * 이 파일이 드는 것 셋:
  *
- * 1. 표가 §12.2의 **다섯을 빠짐없이** 덮는다. **P9-5가 쓰기 둘을 더해 표가 닫혔다** —
- *    앞 판의 *"쓰기 둘은 아직 없다"*가 뒤집힌 자리이고, 지운 것이 아니라 **뒤집었다.**
- * 2. **없는 것** — `validate`가 `LintConfig`를 안 받고(D5) 어느 도구도 `projectId`를 안 받는다(D4).
+ * 1. 표가 「MCP 도구」의 **다섯을 빠짐없이** 덮는다 — 쓰기 둘도 표에 있다.
+ * 2. **없는 것** — `validate`가 `LintConfig`를 안 받고 어느 도구도 `projectId`를 안 받는다
+ *    (`tools.ts`의 머리말).
  * 3. 인자 검사가 **표에서 나온다** — 도구마다 손으로 짠 검사가 아니다.
  */
 import { describe, expect, it } from 'vitest'
@@ -17,7 +17,7 @@ import { HANDLERS } from '../src/handlers'
 import { callTool } from '../src/server'
 import { TOOLS, findTool } from '../src/tools'
 
-/** §12.2의 표에서 `| 도구 | 용도 |` 줄을 읽는다. */
+/** 「MCP 도구」의 표에서 `| 도구 | 용도 |` 줄을 읽는다. */
 function specTools(): { name: string; use: string }[] {
   const section = designDoc.slice(
     designDoc.indexOf('### 12.2 MCP 도구'),
@@ -31,11 +31,11 @@ function specTools(): { name: string; use: string }[] {
   return found
 }
 
-describe('도구 표가 §12.2를 센다', () => {
+describe('도구 표가 설계서 「MCP 도구」를 센다', () => {
   const spec = specTools()
 
   it('설계 문서에서 도구 줄을 실제로 읽는다', () => {
-    // 파서가 어긋나면 **빈 집합에서 아래가 조용히 통과한다**(이 저장소가 여러 번 겪은 사고다).
+    // 파서가 어긋나면 **빈 집합에서 아래가 조용히 통과한다.**
     expect(spec.map((tool) => tool.name)).toEqual([
       'list_pages',
       'get_page',
@@ -45,16 +45,16 @@ describe('도구 표가 §12.2를 센다', () => {
     ])
   })
 
-  it('§12.2의 다섯을 빠짐없이 덮는다 — 이름도 용도도 문서에서 온다', () => {
+  it('「MCP 도구」의 다섯을 빠짐없이 덮는다 — 이름도 용도도 문서에서 온다', () => {
     // **수를 여기 적지 않는다.** 문서가 든 줄이 곧 기대값이고 **순서까지 같다.**
     expect(TOOLS.map((tool) => ({ name: tool.name, use: tool.spec }))).toEqual(
       spec.map((tool) => ({ name: tool.name, use: tool.use })),
     )
   })
 
-  it('쓰기 둘이 실재한다 — 앞 판의 *"아직 없다"*를 뒤집은 자리다', () => {
-    // **앞 슬라이스의 케이스를 지우지 않고 뒤집었다**(P9-4 이월 §2.1). 지우면 §12.2의
-    // 표가 다시 좁아져도 아무도 안 죽는다.
+  it('쓰기 둘이 실재한다 — 표가 다시 좁아지면 죽는다', () => {
+    // **이 케이스를 지우지 않는다.** 지우면 「MCP 도구」의 표와 `TOOLS`가 함께 좁아져도
+    // 아무도 안 죽는다.
     for (const name of ['patch_page', 'add_comment']) {
       expect(findTool(name), name).toBeDefined()
     }
@@ -75,19 +75,17 @@ describe('도구 표가 §12.2를 센다', () => {
 })
 
 /**
- * **도구가 받아도 되는 인자 이름 — 전체 목록이다** (리뷰 R4).
+ * **도구가 받아도 되는 인자 이름 — 전체 목록이다.**
  *
- * 앞 판은 이 자리를 **도구 이름 셋을 손으로 적은 화이트리스트**와 **위험한 이름 여섯을 적은
- * 블랙리스트**로 지켰다. 리뷰어가 실측했다(귀속: 리뷰어 R4): `validate`에 `namingRule`을
- * 더하면 **화이트리스트 1건만 죽고 블랙리스트는 못 잡았다**(이름을 정확히 맞추는 목록이므로).
- * **그리고 새 도구를 더하면 그 도구의 인자는 어느 화이트리스트에도 안 걸린다** —
- * P9-5가 `patch_page`·`add_comment` 둘을 더하므로 여기를 바로 밟는다.
+ * **위험한 이름을 적은 블랙리스트만으로는 못 지킨다** — 이름을 정확히 맞추는 목록이라
+ * `validate`에 `namingRule`을 더해도 안 잡는다. **도구 이름을 손으로 적은 화이트리스트도
+ * 못 지킨다** — 새 도구를 더하면 그 도구의 인자는 어느 줄에도 안 걸린다.
  *
  * **그래서 분모를 `TOOLS`에서 만든다.** 도구가 몇 개든, 이름이 무엇이든, 이 목록 밖의 인자를
  * 받으면 죽는다.
  *
- * **줄을 더하는 것은 판정이다.** `patch_page`가 `ops`·`baseSeq`를 받아야 하면 그때 여기에
- * 이유와 함께 적어라 — 그 순간이 *"이 값을 세션이 줘도 되는가"*를 다시 묻는 자리다.
+ * **줄을 더하는 것은 판정이다.** 도구가 새 인자를 받아야 하면 그때 여기에 이유와 함께
+ * 적어라 — 그 순간이 *"이 값을 세션이 줘도 되는가"*를 다시 묻는 자리다.
  */
 const ALLOWED_ARGS: readonly { name: string; why: string }[] = [
   { name: 'path', why: '§8.1의 페이지 경로. 세션이 만드는 값이 아니라 list_pages 가 낸 값이다' },
@@ -105,14 +103,11 @@ const ALLOWED_ARGS: readonly { name: string; why: string }[] = [
 
 describe('인자 스키마에 **없는 것**이 판정이다', () => {
   /**
-   * **D5 — 정규식의 신뢰 경계를 열지 않는다. D4 — 프로젝트는 리포가 정한다.**
-   *
-   * P9-1 이월 §5.2가 묻고 P9-2 이월 §2가 넘기고 P9-3 이월 §3이 *"경계가 바뀌는 날이
-   * P9-4다"*로 적었다. **답은 열지 않는다이고, 그 부재를 이 케이스가 든다** — P9-2가
-   * `--password`에서 한 것과 같은 자리다.
+   * **정규식의 신뢰 경계를 열지 않는다. 프로젝트는 리포가 정한다**(`tools.ts`의 머리말).
+   * **그 부재를 이 케이스가 든다.**
    *
    * 여는 순간 에이전트가 만든 문자열이 `new RegExp`에 들어간다. 그때 필요한 것(길이 상한 ·
-   * 백트래킹 · 타임아웃)은 이 슬라이스 밖이다.
+   * 백트래킹 · 타임아웃)을 이 서버가 갖추지 않았다.
    */
   it('어느 도구도 허용 목록 밖의 인자를 안 받는다 (D4·D5)', () => {
     const allowed = ALLOWED_ARGS.map((entry) => entry.name)
@@ -135,9 +130,10 @@ describe('인자 스키마에 **없는 것**이 판정이다', () => {
 
   /**
    * **위험한 이름을 따로도 든다.** 위 화이트리스트가 이미 그것을 덮지만, 이 줄들이
-   * **왜 닫혀 있는지**를 이름으로 남긴다 — D5가 무엇을 막는 판정인지 다음 사람이 읽는다.
+   * **왜 닫혀 있는지**를 이름으로 남긴다 — 정규식의 신뢰 경계가 무엇을 막는 판정인지 다음
+   * 사람이 읽는다.
    */
-  it('정규식·프로젝트·자격을 이름으로도 막는다 (D4·D5)', () => {
+  it('정규식·프로젝트·자격을 이름으로도 막는다', () => {
     for (const tool of TOOLS) {
       const keys = Object.keys(tool.inputSchema.properties)
       for (const forbidden of ['config', 'lint', 'naming', 'pattern', 'regex', 'rules', 'projectId', 'project', 'server', 'token', 'cwd']) {
@@ -170,12 +166,12 @@ describe('인자 스키마에 **없는 것**이 판정이다', () => {
 })
 
 /**
- * **D8의 첫 줄** — *"명령을 잘못 썼다"*(CLI 코드 1)는 JSON-RPC 오류다. 결과가 아니다.
+ * **`outcome.ts` 표의 첫 줄** — *"명령을 잘못 썼다"*(CLI 코드 1)는 JSON-RPC 오류다. 결과가 아니다.
  *
  * 검사가 **표에서 나오는지**를 함께 잰다: 도구마다 손으로 짠 검사면 표에 줄을 더할 때
  * 검사를 빠뜨리는 경로가 생긴다.
  */
-describe('인자 검사는 표에서 나온다 (D8)', () => {
+describe('인자 검사는 표에서 나온다', () => {
   const io = createFakeIo()
 
   it('모르는 도구는 MethodNotFound다', async () => {

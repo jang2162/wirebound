@@ -1,5 +1,5 @@
 /**
- * `validate` (T5 · D5·D6·D7·D8).
+ * `validate`.
  *
  * 재는 것 다섯: **결함이 오류가 아닌 것** · **카탈로그를 안 부르면 결과가 통째로 거짓이 되는
  * 것** · **경로가 출력 거르개인 것과 그때 빠지는 것을 값으로 말하는 것** · **`notes`를
@@ -25,7 +25,7 @@ interface Report {
 
 const 명명규칙 = { server: SERVER, projectId: PROJECT, lint: { naming: { page: '^[A-Z]+$', menu: '^[A-Z]+$' } } }
 
-describe('결함을 찾은 것은 오류가 아니다 (D8)', () => {
+describe('결함을 찾은 것은 오류가 아니다', () => {
   it('error 가 있어도 정상 결과이고 `failing`이 값이다', async () => {
     const outcome = await callTool(harness({ payload: 오류가_있는_프로젝트() }), 'validate', {})
 
@@ -59,8 +59,8 @@ describe('결함을 찾은 것은 오류가 아니다 (D8)', () => {
 
 describe('installCatalog 를 부른다 — 안 부르면 결과가 통째로 거짓이다', () => {
   /**
-   * **실측**: 카탈로그 없이 `lintProject`를 돌리면 이 픽스처가 `document-invalid:error`
-   * **5건**을 낸다(*"알 수 없는 컴포넌트 타입: Page·Button·List"*). 조용히 통과하지는 않지만
+   * 카탈로그 없이 `lintProject`를 돌리면 이 픽스처가 `document-invalid:error`를 낸다
+   * (*"알 수 없는 컴포넌트 타입: Page·Button·List"* — 아래 케이스가 그 문장을 본다). 조용히 통과하지는 않지만
    * **전부 `error`라 `failing`까지 뒤집힌다** — 결함이 없는 프로젝트가 실패로 보고된다.
    *
    * 부르는 자리는 `read/catalog.ts` **하나**이고 `wireb lint`도 그것을 지난다.
@@ -77,7 +77,7 @@ describe('installCatalog 를 부른다 — 안 부르면 결과가 통째로 거
   })
 })
 
-describe('경로는 출력 거르개다 — 빠진 것을 **값으로** 말한다 (D6)', () => {
+describe('경로는 출력 거르개다 — 빠진 것을 **값으로** 말한다', () => {
   it('걸러진 것으로 답하되 전체 개수를 함께 낸다', async () => {
     const said = (await callJson(harness({ payload: 오류가_있는_프로젝트() }), 'validate', {
       path: '관리자/회원/목록',
@@ -89,7 +89,8 @@ describe('경로는 출력 거르개다 — 빠진 것을 **값으로** 말한�
   })
 
   /**
-   * **`wireb lint <경로>`가 0으로 끝나면서 프로젝트에 `error`가 남아 있을 수 있다**(P9-3 §9).
+   * **`wireb lint <경로>`가 0으로 끝나면서 프로젝트에 `error`가 남아 있을 수 있다**
+   * (`commands/lint.ts`).
    * CLI는 그것을 stderr 한 줄로 말하는데 **에이전트는 그 줄을 놓치기 쉽다** — 그래서 필드다.
    */
   it('경로 밖에 남은 error 개수를 필드로 낸다 — 산문이 아니다', async () => {
@@ -110,7 +111,7 @@ describe('경로는 출력 거르개다 — 빠진 것을 **값으로** 말한�
 
   /**
    * **`filterLintIssues`가 `pageId`로만 거른다** — 테마 이슈와 메뉴 이름 이슈는 `pageId`가
-   * `null`이라 **어느 경로를 줘도 통째로 빠진다**(P9-3 이월 §6). 개수를 안 말하면
+   * `null`이라 **어느 경로를 줘도 통째로 빠진다.** 개수를 안 말하면
    * *"이 페이지는 깨끗하다"*가 *"프로젝트가 깨끗하다"*로 읽힌다.
    */
   it('페이지에 안 매달린 이슈가 몇 건 빠졌는지 말한다', async () => {
@@ -140,12 +141,12 @@ describe('경로는 출력 거르개다 — 빠진 것을 **값으로** 말한�
 })
 
 /**
- * **`notes`를 버리지 않는다 (D7).** 버리면 테마를 안 고른 레이아웃·상속이 끊긴 파생 테마·
+ * **`notes`를 버리지 않는다.** 버리면 테마를 안 고른 레이아웃·상속이 끊긴 파생 테마·
  * 안 돈 ⑪·못 올린 문서 버전·메뉴를 잃은 페이지가 전부 *"결함 0건"*으로 위장된다.
  *
  * **하나짜리로 재지 않는다** — 다섯 모양 중 넷을 각각 만들어 잰다.
  */
-describe('검사에서 빠진 것을 싣는다 (D7)', () => {
+describe('검사에서 빠진 것을 싣는다', () => {
   it('상속이 끊긴 파생 테마 — 기본 픽스처가 이미 그 상태다', async () => {
     const said = (await callJson(harness(), 'validate')) as Report
     expect(said.issues).toEqual([])
@@ -192,12 +193,12 @@ describe('검사에서 빠진 것을 싣는다 (D7)', () => {
 })
 
 /**
- * **D5 — 정규식의 신뢰 경계를 열지 않는다.**
+ * **정규식의 신뢰 경계를 열지 않는다.**
  *
  * `LintConfig`는 리포의 `.wirebound.json`에서만 온다. 도구 스키마에 그 자리가 **없는 것**은
  * `test/tools.test.ts`가 들고, 여기서는 **그 부재가 동작으로도 참인지**를 잰다.
  */
-describe('명명 규칙은 리포의 파일이 정한다 — 세션이 아니다 (D5)', () => {
+describe('명명 규칙은 리포의 파일이 정한다 — 세션이 아니다', () => {
   it('`.wirebound.json`의 lint 절이 그 축을 돌린다', async () => {
     const said = (await callJson(harness({ binding: 명명규칙 }), 'validate')) as Report
     expect(said.issues.filter((i) => i.rule === 'naming')).toHaveLength(6)
@@ -234,7 +235,7 @@ describe('명명 규칙은 리포의 파일이 정한다 — 세션이 아니다
 })
 
 describe('이슈가 다음 걸음을 든다', () => {
-  it('`pageId`를 §8.1 경로로도 옮긴다 — 그대로 `get_page`에 넣을 수 있다', async () => {
+  it('`pageId`를 페이지 경로로도 옮긴다 — 그대로 `get_page`에 넣을 수 있다', async () => {
     const said = (await callJson(harness({ payload: 오류가_있는_프로젝트() }), 'validate')) as Report
     const 오류 = said.issues.find((i) => i.rule === 'document-invalid')!
     expect(오류.pagePath).toBe('관리자/회원/오류')

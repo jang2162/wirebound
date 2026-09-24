@@ -4,7 +4,7 @@
  *
  * ---
  *
- * # 여기 조립이 없다 (D1)
+ * # 여기 조립이 없다
  *
  * `targetedPages` · `matchPageTargets` · `pageView` · `snapshotToLintInput` · `lintProject` ·
  * `filterLintIssues` · `installCatalog`을 **이 패키지가 부르지 않는다.** 부르는 것은
@@ -27,14 +27,15 @@ import { callProject, openProject, projectHead, rereadHeadSeq, type OpenProject 
 export type ToolHandler = (io: Io, args: Record<string, unknown>) => Promise<ToolOutcome>
 
 /**
- * §12.2 *"프로젝트 메뉴/페이지 트리 조회"*.
+ * 설계서 「MCP 도구」 *"프로젝트 메뉴/페이지 트리 조회"*.
  *
  * **경로를 앞에 싣는다.** 그것이 `get_page`·`validate`가 받는 인자이고, 에이전트가 이 응답을
  * 읽고 바로 다음 도구를 부를 수 있어야 한다 — `wireb lint`가 이슈 줄에 `페이지 <uuid>`가
- * 아니라 §8.1 경로를 쓰는 것과 같은 근거다.
+ * 아니라 페이지 경로(설계서 「상호작용」의 「모델」 절의 `page:` 타겟)를 쓰는 것과 같은
+ * 근거다.
  *
  * **겹치는 경로를 말한다.** 같은 메뉴 아래 같은 제목이거나 제목에 `/`가 들면 두 페이지가
- * 같은 타겟을 든다(P9-1 이월 §9). 그 경로로는 `get_page`가 하나를 고를 수 없으므로
+ * 같은 타겟을 든다(`duplicateTargets`가 그 판정을 갖고 있다). 그 경로로는 `get_page`가 하나를 고를 수 없으므로
  * **부르기 전에 알아야 한다** — `wireb lint`는 이 상태를 아직 규칙으로 안 본다.
  */
 const listPages: ToolHandler = async (io) => {
@@ -44,7 +45,7 @@ const listPages: ToolHandler = async (io) => {
 }
 
 /**
- * §12.2 *"페이지 스키마 + 코멘트 + 상호작용 문장 조회"*.
+ * 「MCP 도구」 *"페이지 스키마 + 코멘트 + 상호작용 문장 조회"*.
  *
  * # 못 찾은 것과 둘 이상을 **결과로 낸다** — 오류가 아니다
  *
@@ -59,7 +60,7 @@ const listPages: ToolHandler = async (io) => {
  * # 무엇을 싣나
  *
  * `pageView`가 정한 것 전부다 — 노드 개요·문서 전문·코멘트·상호작용 문장. **문서 전문을
- * 뺄 이유가 없다:** §12.5의 흐름이 *"`get_page`로 스키마·코멘트·상호작용을 읽는다"*이고
+ * 뺄 이유가 없다:** 설계서 「스킬」의 흐름이 *"`get_page`로 스키마·코멘트·상호작용을 읽는다"*이고
  * 그것을 읽는 것이 에이전트의 일이다. 사람에게 쏟지 않으려고 개요를 따로 두는 것은 CLI의
  * 사정이다.
  *
@@ -96,28 +97,28 @@ const getPage: ToolHandler = async (io, args) => {
 }
 
 /**
- * §12.2 *"lint 규칙 실행"*.
+ * 「MCP 도구」 *"lint 규칙 실행"*.
  *
- * # 결함을 찾은 것은 **오류가 아니다** (D8)
+ * # 결함을 찾은 것은 **오류가 아니다**
  *
  * `wireb lint`는 그것을 코드 10으로 말하는데 그 번호가 1~4와 **멀리 떨어져 있는 것이
  * 판정이다**(`exit.ts`): *"명령이 서지 못했다"*와 *"제대로 서서 결함을 찾았다"*를 스크립트가
  * 갈라야 한다. 여기서도 같다 — `isError`를 세우면 에이전트가 *"도구가 고장났다"*로 읽고
  * 재시도한다. 대신 **`failing`을 값으로 낸다.**
  *
- * # 걸러진 것으로 답하되 **빠진 것을 필드로 말한다** (D6)
+ * # 걸러진 것으로 답하되 **빠진 것을 필드로 말한다**
  *
- * `wireb lint <경로>`가 걸러진 것으로 종료 코드를 내는 판정(P9-3 §9)을 그대로 쓴다 —
+ * `wireb lint <경로>`가 걸러진 것으로 종료 코드를 내는 판정(`commands/lint.ts`)을 그대로 쓴다 —
  * 다르게 정하면 같은 프로젝트를 두 도구가 다르게 말한다. **그러나 CLI가 stderr 한 줄로
  * 말하는 것을 에이전트는 놓친다.** 그래서 `outsideErrors`·`droppedProjectIssues`가 산문이
  * 아니라 필드다.
  *
- * # `LintConfig`는 리포의 파일에서만 온다 (D5)
+ * # `LintConfig`는 리포의 파일에서만 온다
  *
  * `readLintConfig(binding)` 하나가 그 값을 만든다. **도구 인자에 그 자리가 없다** —
  * 근거는 `tools.ts`의 머리말이고 `test/tools.test.ts`가 그 부재를 든다.
  *
- * # `notes`를 버리지 않는다 (D7)
+ * # `notes`를 버리지 않는다
  *
  * *"검사에서 빠진 것"*이다. 버리면 테마를 안 고른 레이아웃·상속이 끊긴 파생 테마·안 돈 ⑪·
  * 못 올린 문서 버전·메뉴를 잃은 페이지가 전부 **"결함 0건"으로 위장된다.**
@@ -202,29 +203,29 @@ function resolvePage(
 }
 
 /**
- * §12.2 *"사람 편집과 동일 경로의 수정 (baseSeq 필수)"*.
+ * 「MCP 도구」 *"사람 편집과 동일 경로의 수정 (baseSeq 필수)"*.
  *
  * ---
  *
- * # REST를 직접 부른다 — `wireb`의 명령을 안 지난다 (D6)
+ * # REST를 직접 부른다 — `wireb`의 명령을 안 지난다
  *
- * §7.4: *"WebSocket 대신 REST로 들어오지만 그 뒤 파이프라인(검증 → revision →
+ * 설계서 「LLM 편집 경로」: *"WebSocket 대신 REST로 들어오지만 그 뒤 파이프라인(검증 → revision →
  * 브로드캐스트)은 완전히 같다."* 그 문장이 참인 것은 `PATCH .../ops`가 사람의 편집이
  * 들어오는 **바로 그 라우트**이기 때문이다. 도구가 자기 검증이나 자기 이력을 더하면
  * 그 문장이 거짓이 된다.
  *
- * # 재시도하지 않는다 (D4)
+ * # 재시도하지 않는다
  *
  * 409를 받으면 문서를 **다시 읽고 patch를 다시 만들어야** 한다. 그것은 에이전트의
  * 판단이다 — 도구가 몰래 재시도하면 **에이전트가 만든 patch가 다른 문서에 얹힌다.**
  * 그 편집은 200으로 끝나고, 무엇이 잘못됐는지 아무도 모른다.
  *
- * **대신 새 `headSeq`를 실어 준다.** §7.4의 *"재조회 후 재시도"*를 도구가 지원하는
+ * **대신 새 `headSeq`를 실어 준다.** 「LLM 편집 경로」의 *"재조회 후 재시도"*를 도구가 지원하는
  * 방법이 그것이다 — 산문으로 *"다시 읽으세요"*만 말하면 에이전트가 그 번호를 어디서
  * 얻는지 모른다. `test/write-tools.test.ts`가 **도구가 서버를 두 번 부르지 않는 것**을
  * 든다(409 뒤의 재조회 하나는 세고, 두 번째 `PATCH`는 없어야 한다).
  *
- * # 409와 423은 **다른 말을 한다** (D3)
+ * # 409와 423은 **다른 말을 한다**
  *
  * | 상태 | `reason` | 에이전트가 할 일 |
  * |---|---|---|
@@ -253,7 +254,7 @@ const patchPage: ToolHandler = async (io, args) => {
     const said = (await callProject(io, open, {
       method: 'PATCH',
       path: `/api/projects/${open.access.binding.projectId}/pages/${resolved.pageId}/ops`,
-      // **`ops`를 그대로 넘긴다** — 검증하는 자리는 서버다(D5).
+      // **`ops`를 그대로 넘긴다** — 검증하는 자리는 서버다(`tools.ts`의 머리말).
       body: { baseSeq, ops: args.ops },
     })) as { seq: number; revisionId: string; warnings?: unknown[] }
 
@@ -279,7 +280,7 @@ const patchPage: ToolHandler = async (io, args) => {
         reason: 'locked',
         status: 423,
         message,
-        // **409와 글자가 달라야 한다**(D3). 같으면 에이전트가 재시도 루프를 돈다.
+        // **409와 글자가 달라야 한다**(위 표). 같으면 에이전트가 재시도 루프를 돈다.
         next: '사람이 그 영역을 편집 중입니다. 재조회해도 풀리지 않습니다 — 잠금이 풀릴 때까지 기다렸다 다시 하거나 다른 페이지를 먼저 하세요. 문장에 누가 잡고 있는지가 있습니다.',
       })
     }
@@ -309,29 +310,29 @@ const patchPage: ToolHandler = async (io, args) => {
 }
 
 /**
- * §12.2 *"구현 중 발견한 이슈를 설계서에 기록"*. §12.5 흐름의 4단계다.
+ * 「MCP 도구」 *"구현 중 발견한 이슈를 설계서에 기록"*. 「스킬」 흐름의 4단계다.
  *
  * ---
  *
- * # 문서를 바꾼다는 것을 숨기지 않는다 (D7)
+ * # 문서를 바꾼다는 것을 숨기지 않는다
  *
  * 번호가 없던 노드에 코멘트를 달면 서버가 `marker`를 붙이고 **그것은 문서 편집이라
- * revision이 쌓이고 `headSeq`가 오른다**(P5-1 D2 — 그래야 undo가 되고 그 뒤 편집의
- * `baseSeq`가 안 틀어진다).
+ * revision이 쌓이고 `headSeq`가 오른다**(그래야 undo가 되고 그 뒤 편집의 `baseSeq`가 안
+ * 틀어진다).
  *
  * **에이전트가 그것을 모르면 자기가 들고 있던 `baseSeq`로 다음 `patch_page`를 불러 409를
  * 받는다.** 그 순간 원인이 **자기 코멘트**라는 것을 알 수 없다 — 남이 고친 것으로 읽고
  * 문서를 다시 읽는다. 그래서 응답이 `documentChanged`와 새 `headSeq`를 **필드로** 낸다.
  *
- * **쟀다:** 번호가 없던 노드에 첫 코멘트를 달면 `headSeq`가 1→2로 오르고 옛 `baseSeq`의
- * patch가 **409**다. 이미 번호가 있는 노드에 하나 더 달면 `markerOps`가 비고 `headSeq`가
+ * **진짜 서버의 값이다**(다시 재는 곳: `apps/api/test/agent-flow.test.ts`): 번호가 없던
+ * 노드에 첫 코멘트를 달면 `headSeq`가 1→2로 오르고 옛 `baseSeq`의 patch가 **409**다. 이미 번호가 있는 노드에 하나 더 달면 `markerOps`가 비고 `headSeq`가
  * **안 오른다**(2→2) — 그때는 옛 `baseSeq`가 여전히 유효하다. **두 갈래가 갈리므로**
  * 응답이 그것을 말하지 않으면 에이전트가 어느 쪽인지 알 수 없다.
  *
  * # 작성자는 사람이다
  *
  * `comments.author_id`가 `users(id)`에 FK를 걸므로 코멘트 행의 작성자는 **토큰 발급자**다.
- * 도구가 만든 **revision**의 actor는 `mcp`다(§7.4) — 둘이 다른 물음에 답한다.
+ * 도구가 만든 **revision**의 actor는 `mcp`다(「LLM 편집 경로」) — 둘이 다른 물음에 답한다.
  */
 const addComment: ToolHandler = async (io, args) => {
   const open = await openProject(io)
@@ -354,9 +355,9 @@ const addComment: ToolHandler = async (io, args) => {
       path: path(args),
       pageId: resolved.pageId,
       commentId: said.comment.id,
-      /** 그 노드의 번호(§4.3의 `marker`). 스레드가 이 번호를 공유한다. */
+      /** 그 노드의 번호(설계서 「페이지 스키마 노드」의 `marker`). 스레드가 이 번호를 공유한다. */
       marker: said.marker,
-      /** **문서가 바뀌었는가**(D7). 번호를 새로 붙였으면 `true`다. */
+      /** **문서가 바뀌었는가**(위 머리말). 번호를 새로 붙였으면 `true`다. */
       documentChanged: changed,
       /** 지금의 `headSeq`. **다음 `patch_page`의 `baseSeq`가 이 값이다.** */
       headSeq: said.seq,

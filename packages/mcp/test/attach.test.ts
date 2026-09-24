@@ -1,5 +1,5 @@
 /**
- * **못 붙었을 때 무엇을 말하는가** — T3의 값이 이것이다(D3·D4·D8).
+ * **못 붙었을 때 무엇을 말하는가.**
  *
  * 에이전트는 사람과 다르다. `wireb`를 친 사람은 자기가 어느 디렉터리에서 쳤는지 알고
  * 종료 코드를 셸이 보여 주지만, **에이전트가 보는 것은 도구가 낸 글자 하나**다. 그 글자가
@@ -11,8 +11,8 @@ import { callTool } from '../src/server'
 import { TOOLS } from '../src/tools'
 import { PROJECT, SERVER, TOKEN, harness } from './harness'
 
-describe('붙지 못한 것은 결과이지 프로토콜 오류가 아니다 (D8)', () => {
-  it('바인딩이 없으면 `wireb init`을 치라고 말한다 (D4)', async () => {
+describe('붙지 못한 것은 결과이지 프로토콜 오류가 아니다', () => {
+  it('바인딩이 없으면 `wireb init`을 치라고 말한다', async () => {
     const io = harness({ binding: false })
     const outcome = await callTool(io, 'list_pages', {})
 
@@ -70,7 +70,7 @@ describe('붙지 못한 것은 결과이지 프로토콜 오류가 아니다 (D8
   })
 })
 
-describe('자격을 다시 짜지 않는다 (D3)', () => {
+describe('자격을 다시 짜지 않는다', () => {
   it('`.wirebound.json`을 cwd에서 **위로** 찾는다 — CLI가 정한 규칙 그대로', async () => {
     // 파일은 `/repo`에 있고 서버는 `/repo/apps/web`에서 돈다.
     const io = harness({ cwd: '/repo/apps/web' })
@@ -95,9 +95,8 @@ describe('자격을 다시 짜지 않는다 (D3)', () => {
   })
 
   /**
-   * **분모가 `TOOLS`다**(리뷰 §6). 앞 판은 `list_pages` 하나로 쟀다 — 오늘 셋 다 안 쓰므로
-   * 무해했지만, 도구가 늘면 그 도구는 아무도 안 본다. `no-token-in-response.test.ts`가
-   * 분모를 표에서 만든 것과 같은 자세로 맞춘다.
+   * **분모가 `TOOLS`다.** 도구 하나로 재면 도구가 늘 때 새 도구는 아무도 안 본다.
+   * `no-token-in-response.test.ts`가 분모를 표에서 만든 것과 같은 자세다.
    */
   it('어느 도구도 리포에 파일을 안 쓴다 — 쓰기 둘도 서버로만 쓴다', async () => {
     for (const tool of TOOLS) {
@@ -115,9 +114,7 @@ describe('자격을 다시 짜지 않는다 (D3)', () => {
 
 /**
  * 도구마다 성공 갈래를 부를 인자. **표를 분모로 쓰므로 여기 없는 도구가 생기면 죽는다.**
- *
- * **P9-4 이월 §4가 이 표를 안 적었다** — §2.1이 `no-token-in-response`의 같은 표는
- * 적었는데 이쪽은 빠졌다. P9-5가 도구를 더하며 실제로 밟았고(2 사망), 그래서 여기 적는다.
+ * 도구를 더하면 `no-token-in-response.test.ts`의 `ARGS`와 함께 여기에도 줄을 더한다.
  */
 const READ_ARGS: Record<string, Record<string, unknown>> = {
   list_pages: {},

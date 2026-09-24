@@ -1,9 +1,9 @@
 /**
- * `list_pages` · `get_page` (T4).
+ * `list_pages` · `get_page`.
  *
  * 재는 것 넷: **목록이 다음 도구의 인자를 내는가**, **못 찾은 것·둘 이상을 갈라 내는가**,
  * **`pageView`가 정한 것을 빠짐없이 싣는가**, 그리고 **`wireb page get`과 같은 값을
- * 내는가**(D1 — 조립이 하나라는 것의 관측이다).
+ * 내는가**(조립이 하나라는 것의 관측이다).
  *
  * **하나짜리로 재지 않는다.** 픽스처가 메뉴 둘·깊이 둘·페이지 셋이고 서로 다른 메뉴에 같은
  * 제목이 하나 있다 — 조상을 안 붙이는 조립은 그 자리에서 드러난다.
@@ -16,7 +16,7 @@ import { callTool } from '../src/server'
 import { PROJECT, SERVER, callJson, harness } from './harness'
 
 describe('list_pages — 다음 도구의 인자를 낸다', () => {
-  it('트리 순서로 페이지를 내고 각 줄이 §8.1 경로를 든다', async () => {
+  it('트리 순서로 페이지를 내고 각 줄이 페이지 경로를 든다', async () => {
     const listing = (await callJson(harness(), 'list_pages')) as {
       pages: { path: string; title: string; menuPath: string[] }[]
     }
@@ -47,7 +47,7 @@ describe('list_pages — 다음 도구의 인자를 낸다', () => {
 
   /**
    * **겹치는 타겟은 실재한다** — 같은 메뉴 아래 같은 제목이면 조립 규칙이 같은 문자열을
-   * 만든다(P9-1 이월 §9). 그 경로로는 `get_page`가 하나를 못 고르므로 **부르기 전에**
+   * 만든다(`duplicateTargets`가 그 판정을 갖고 있다). 그 경로로는 `get_page`가 하나를 못 고르므로 **부르기 전에**
    * 알아야 한다. `wireb lint`는 이 상태를 아직 규칙으로 안 본다.
    */
   it('겹치는 경로를 말한다 — 안 겹치면 빈 배열이다', async () => {
@@ -74,7 +74,7 @@ describe('get_page — 무엇을 싣나', () => {
       page: Record<string, unknown>
     }
     expect(said.found).toBe(true)
-    // **문서 전문을 뺀 판을 만들지 않는다** — §12.5의 흐름이 스키마를 읽으라고 적었다.
+    // **문서 전문을 뺀 판을 만들지 않는다** — 설계서 「스킬」의 흐름이 스키마를 읽으라고 적었다.
     expect(Object.keys(said.page).sort()).toEqual(
       [
         'comments',
@@ -93,7 +93,8 @@ describe('get_page — 무엇을 싣나', () => {
   })
 
   /**
-   * **카탈로그가 서 있어야 문장이 온전하다**(실측: 안 서면 `로딩 상태`가 `loading`이 된다).
+   * **카탈로그가 서 있어야 문장이 온전하다** — 안 서면 `로딩 상태`가 `loading`이 되고 이
+   * 케이스가 죽는다.
    * 설치하는 자리는 `read/catalog.ts` 하나이고 도구는 그것을 모른다.
    */
   it('상호작용 문장이 카탈로그의 라벨을 쓴다', async () => {
@@ -165,10 +166,10 @@ describe('get_page — 못 찾은 것과 둘 이상을 갈라 낸다', () => {
 })
 
 /**
- * **`migrateDocument`를 지난다** — P9-3 이월 §6이 남긴 구멍을 `read/page.ts`가 닫았고,
- * `wireb page get`과 `get_page`가 **같은 함수**를 부르므로 둘 다 지난다.
+ * **`migrateDocument`를 지난다** — 부르는 자리는 `read/page.ts`이고, `wireb page get`과
+ * `get_page`가 **같은 함수**를 부르므로 둘 다 지난다.
  *
- * 오늘 `MIGRATIONS = []`이라 올릴 것이 없지만, **못 올리는 문서는 오늘도 만들 수 있다** —
+ * `MIGRATIONS`가 비어 올릴 것이 없어도 **못 올리는 문서는 만들 수 있다** —
  * `migrateDocument`가 `version > CURRENT`에서 던진다.
  */
 describe('못 올리는 문서 버전을 말한다 — 조용히 넘어가지 않는다', () => {
@@ -203,17 +204,16 @@ describe('못 올리는 문서 버전을 말한다 — 조용히 넘어가지 �
 })
 
 /**
- * **CLI와 MCP가 같은 값을 낸다** — 조립이 하나라는 것의 직접 관측이다(D1).
+ * **CLI와 MCP가 같은 값을 낸다** — 조립이 하나라는 것의 직접 관측이다.
  *
  * 자(`assembly-census`)는 *"부르는 자리가 하나다"*를 지키고 이 케이스는 *"그래서 값이
  * 같다"*를 잰다. 둘 다 필요하다: 자만 있으면 읽기 층 안에서 갈래를 나눠도 안 걸린다.
  *
- * **명령을 실제로 돌린다**(리뷰 §6). 앞 판은 `lookupPage`를 직접 불렀는데 그것은 *"같은
- * 함수가 같은 값을 낸다"*라는 동어반복에 가까웠다 — 명령 파일에 후처리가 생기는 날 그
- * 케이스가 그것을 못 본다. 이제 `run(['page','get',…,'--json'])`의 **표준출력**을 읽어
- * 도구의 응답과 맞댄다.
+ * **명령을 실제로 돌린다** — `run(['page','get',…,'--json'])`의 **표준출력**을 읽어 도구의
+ * 응답과 맞댄다. `lookupPage`를 직접 부르면 *"같은 함수가 같은 값을 낸다"*는 동어반복이 되어,
+ * 명령 파일에 후처리가 생겨도 못 본다.
  */
-describe('`wireb page get --json`과 `get_page`가 같은 값을 본다 (D1)', () => {
+describe('`wireb page get --json`과 `get_page`가 같은 값을 본다', () => {
   it('페이지 값이 글자 하나까지 같다', async () => {
     const 도구 = harness()
     const said = (await callJson(도구, 'get_page', { path: '관리자/회원/목록' })) as { page: unknown }

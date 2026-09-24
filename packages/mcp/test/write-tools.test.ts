@@ -1,13 +1,13 @@
 /**
- * `patch_page` · `add_comment` (T3·T4).
+ * `patch_page` · `add_comment`.
  *
- * 재는 것 다섯:
+ * 재는 것 다섯(근거는 `src/handlers.ts`의 각 머리말):
  *
- * 1. **사람 편집과 같은 라우트로 간다**(D6) — `PATCH .../ops`이고 `wireb` 명령을 안 지난다.
- * 2. **재시도하지 않는다**(D4) — 거절당해도 서버를 두 번 안 부른다.
- * 3. **409와 423이 다른 말을 한다**(D3) — 글자가 같아지면 죽는다.
- * 4. **`ops`를 도구가 검증하지 않는다**(D5) — 서버가 든다.
- * 5. **코멘트가 문서를 바꾼다는 것을 숨기지 않는다**(D7).
+ * 1. **사람 편집과 같은 라우트로 간다** — `PATCH .../ops`이고 `wireb` 명령을 안 지난다.
+ * 2. **재시도하지 않는다** — 거절당해도 서버를 두 번 안 부른다.
+ * 3. **409와 423이 다른 말을 한다** — 글자가 같아지면 죽는다.
+ * 4. **`ops`를 도구가 검증하지 않는다** — 서버가 든다.
+ * 5. **코멘트가 문서를 바꾼다는 것을 숨기지 않는다**.
  */
 import { describe, expect, it } from 'vitest'
 import { snapshotPayload, page, PAGE_DETAIL, MENU_ADMIN } from '@wirebound/cli/test-support'
@@ -21,7 +21,7 @@ const OPS = [{ op: 'remove', path: '/root/children/1' }]
 const OPS_URL = `${SERVER}/api/projects/${PROJECT}/pages/${WRITE_PAGE}/ops`
 const COMMENTS_URL = `${SERVER}/api/projects/${PROJECT}/pages/${WRITE_PAGE}/comments`
 
-describe('patch_page — 사람 편집과 같은 라우트로 간다 (D6)', () => {
+describe('patch_page — 사람 편집과 같은 라우트로 간다', () => {
   it('경로를 페이지로 풀어 `PATCH .../ops` 를 부른다', async () => {
     const io = harness()
     await callJson(io, 'patch_page', { path: PATH, baseSeq: 0, ops: OPS })
@@ -33,7 +33,7 @@ describe('patch_page — 사람 편집과 같은 라우트로 간다 (D6)', () =
     expect(JSON.parse(written[0]!.body ?? '')).toEqual({ baseSeq: 0, ops: OPS })
   })
 
-  it('자기 종류를 서버에 말한다 — actor_type 이 이 헤더에서 온다 (D1)', async () => {
+  it('자기 종류를 서버에 말한다 — actor_type 이 이 헤더에서 온다', async () => {
     // `bin.ts`가 심는 값은 스모크가 잰다. 여기서는 **헤더가 쓰기 요청에도 실린다**를 든다.
     const io = harness()
     await callJson(io, 'patch_page', { path: PATH, baseSeq: 0, ops: OPS })
@@ -57,7 +57,7 @@ describe('patch_page — 사람 편집과 같은 라우트로 간다 (D6)', () =
   })
 
   /**
-   * **`ops`를 검증하는 자리는 서버다**(D5 — §7.4의 *"사람 편집과 동일 경로"*).
+   * **`ops`를 검증하는 자리는 서버다**(설계서 「LLM 편집 경로」의 *"사람 편집과 동일 경로"*).
    *
    * 도구가 자기 검증을 더하면 두 벌이 되고, 두 벌은 **오늘 같은 답을 내므로** 값을 재는
    * 케이스가 갈림을 못 본다. 여기서는 *"도구를 못 지나가는 `ops`가 없다"*를 든다.
@@ -80,7 +80,7 @@ describe('patch_page — 사람 편집과 같은 라우트로 간다 (D6)', () =
   })
 })
 
-describe('patch_page — 재시도하지 않는다 (D4)', () => {
+describe('patch_page — 재시도하지 않는다', () => {
   it('409 를 받아도 `PATCH` 를 두 번 안 부른다', async () => {
     const io = harness({ patch: 'stale' })
     const outcome = await callTool(io, 'patch_page', { path: PATH, baseSeq: 0, ops: OPS })
@@ -97,7 +97,7 @@ describe('patch_page — 재시도하지 않는다 (D4)', () => {
   })
 
   /**
-   * **새 `headSeq`를 실어 준다**(D4). §7.4의 *"재조회 후 재시도"*를 도구가 지원하는 방법이
+   * **새 `headSeq`를 실어 준다.** 「LLM 편집 경로」의 *"재조회 후 재시도"*를 도구가 지원하는 방법이
    * 그것이다 — 그리고 그 값은 **다시 읽은 것**이어야 한다.
    */
   it('409 의 `headSeq` 는 **다시 읽은 값**이다 — 처음 것을 재사용하지 않는다', async () => {
@@ -131,13 +131,13 @@ describe('patch_page — 재시도하지 않는다 (D4)', () => {
 })
 
 /**
- * **409와 423이 같은 말을 하면 안 된다** (D3).
+ * **409와 423이 같은 말을 하면 안 된다.**
  *
- * §7.4는 **409에 대해서만** *"재조회 후 재시도"*를 적었다. 423은 재조회해도 안 풀린다 —
+ * 「LLM 편집 경로」는 **409에 대해서만** *"재조회 후 재시도"*를 적었다. 423은 재조회해도 안 풀린다 —
  * 문서가 아니라 사람이 막고 있다. `apps/api/README.md`가 *"자동 재시도를 짜지 마라"*를
  * 계약으로 적었고, **그 계약을 지킬 수 있게 하는 것이 두 문장의 갈림이다.**
  */
-describe('patch_page — 423 은 넷째 갈래다 (D3)', () => {
+describe('patch_page — 423 은 넷째 갈래다', () => {
   it('409 는 `stale` 이고 다시 읽으라고 말한다', async () => {
     const outcome = await callTool(harness({ patch: 'stale' }), 'patch_page', { path: PATH, baseSeq: 0, ops: OPS })
     const said = JSON.parse(outcome.text) as { applied: boolean; reason: string; status: number; next: string }
@@ -175,8 +175,7 @@ describe('patch_page — 423 은 넷째 갈래다 (D3)', () => {
   })
 
   /**
-   * **423의 문장이 누가 잡고 있는지를 말한다** (계획서 재라 #5 — *"그 문장이 도구 응답까지
-   * 오는지는 안 쟀다"*).
+   * **423의 문장이 누가 잡고 있는지를 말한다.**
    *
    * 서버가 그것을 문장에 싣고(`lock/check.ts`), `callApi`가 서버 문장을 그대로 옮기고
    * (`client.ts`의 표), 도구가 그것을 `message`로 낸다. **셋 중 하나라도 문장을 지어내면
@@ -235,14 +234,14 @@ describe('patch_page — 못 찾은 것과 둘 이상은 결과다', () => {
 })
 
 /**
- * **코멘트가 문서를 바꾼다는 것을 숨기지 않는다** (D7).
+ * **코멘트가 문서를 바꾼다는 것을 숨기지 않는다.**
  *
- * 값은 진짜 서버에서 쟀다(T1의 프로브 · `apps/api/test/agent-flow.test.ts`가 그것을 든다):
+ * 값은 진짜 서버의 것이다(`apps/api/test/agent-flow.test.ts`가 든다):
  * 번호가 없던 노드면 `headSeq`가 1→2로 오르고 옛 `baseSeq`의 patch가 **409**다. 이미
  * 번호가 있으면 `markerOps`가 비고 `headSeq`가 **안 오른다.** 두 갈래가 갈리므로
  * 응답이 그것을 말하지 않으면 에이전트가 어느 쪽인지 알 수 없다.
  */
-describe('add_comment — 문서가 바뀌었는지를 말한다 (D7)', () => {
+describe('add_comment — 문서가 바뀌었는지를 말한다', () => {
   it('번호를 새로 붙이면 `documentChanged` 가 서고 `headSeq` 가 오른다', async () => {
     const io = harness()
     const said = (await callJson(io, 'add_comment', { path: PATH, nodeId: 'list', body: '정렬 기준이 없습니다' })) as {
@@ -306,7 +305,7 @@ describe('add_comment — 문서가 바뀌었는지를 말한다 (D7)', () => {
 })
 
 /**
- * **`get_page`가 `baseSeq`가 될 값을 낸다** — 없으면 §12.2의 *"baseSeq 필수"*를 지킬 길이
+ * **`get_page`가 `baseSeq`가 될 값을 낸다** — 없으면 설계서 「MCP 도구」의 *"baseSeq 필수"*를 지킬 길이
  * 에이전트에게 없다.
  */
 describe('get_page 가 `headSeq` 를 낸다 — 쓰기의 입력이 읽기의 출력이다', () => {
@@ -322,7 +321,7 @@ describe('get_page 가 `headSeq` 를 낸다 — 쓰기의 입력이 읽기의 �
     expect(said.headSeq).toBe(42)
   })
 
-  it('그 값을 그대로 `patch_page` 에 넣을 수 있다 — §12.5의 흐름이 그 모양이다', async () => {
+  it('그 값을 그대로 `patch_page` 에 넣을 수 있다 — 설계서 「스킬」의 흐름이 그 모양이다', async () => {
     const io = harness()
     const got = (await callJson(io, 'get_page', { path: PATH })) as { headSeq: number; page: { path: string } }
     await callJson(io, 'patch_page', { path: got.page.path, baseSeq: got.headSeq, ops: OPS })

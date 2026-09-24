@@ -1,11 +1,12 @@
 /**
- * **이 패키지는 조립을 하지 않는다 (P9-4 D1) — 그것을 두 층으로 지킨다.**
+ * **이 패키지는 조립을 하지 않는다 — 그것을 세 층으로 지킨다.**
  *
  * ---
  *
  * # 왜 자가 필요한가
  *
- * §12.2의 도구와 §12.3의 명령이 **같은 함수**를 부르는 것이 이 슬라이스의 존재 이유다.
+ * 설계서 「MCP 도구」의 도구와 「CLI」의 명령이 **같은 함수**를 부르는 것이 이 패키지의 존재
+ * 이유다.
  * 오늘 자리가 하나여도 **유지하는 장치가 0이면 다음 사람이 조용히 두 벌로 만든다** —
  * 그리고 두 벌은 **오늘 같은 값을 내므로** 값을 재는 케이스가 그것을 못 본다.
  *
@@ -19,20 +20,19 @@
  *
  * 의존이 없어도 값을 넘겨받아 **여기서 다시 엮는** 길은 남는다. 그래서 소스도 훑는다.
  *
- * # 층 셋 — **`embed`가 내주는 이름의 허용 목록** (리뷰 R3)
+ * # 층 셋 — **`embed`가 내주는 이름의 허용 목록**
  *
- * **층 둘이 이것을 못 봤다.** 리뷰어가 실측했다(귀속: 리뷰어 R3): `handlers.ts`가
- * `orderedPages`로 목록을 다시 엮어도 **84/84 초록**이었다. 층 둘의 분모(`ASSEMBLY`)가
- * `@wirebound/schema`·`@wirebound/themes`의 이름 열 개뿐이라, **읽기 층이 값으로 내주는
- * 이름들**(`orderedPages`·`projectPaths`·`countErrors`·`prepareCatalog`)이 거기 하나도
- * 없었기 때문이다.
+ * **층 둘은 이것을 못 본다.** 층 둘의 분모(`ASSEMBLY`)가 `@wirebound/schema`·
+ * `@wirebound/themes`의 이름 열 개뿐이라, **읽기 층이 값으로 내주는 이름들**(`orderedPages`·
+ * `projectPaths`·`countErrors`·`prepareCatalog`)이 거기 하나도 없다 — `handlers.ts`가
+ * `orderedPages`로 목록을 다시 엮어도 층 둘은 초록이다.
  *
  * **그래서 분모를 손으로 안 적는다.** `import * as embed`로 **런타임 export 전부**를 받아
  * 그중 아래 허용 목록 밖의 이름이 소스에 나타나면 죽는다. `embed`에 이름이 늘어도 분모가
  * 저절로 는다.
  *
  * **분모는 `packages/mcp` 하나다.** `packages/cli` 쪽은 그 패키지의 케이스가 자기 뿌리를
- * 훑는다(P3-3 이월 §6.9: *"뿌리가 여럿인 검사는 그 파일을 못 쓴다"*).
+ * 훑는다 — 한 파일이 두 뿌리를 훑으면 한쪽 패키지의 케이스가 남의 소스를 읽게 된다.
  */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -98,7 +98,7 @@ const ALLOWED_EMBED: readonly { name: string; why: string }[] = [
   { name: 'CliError', why: 'P9-5 D3 — 409·423 을 status 로 가른다. 문장에서 숫자를 되파면 서버가 문장을 바꾸는 날 조용히 틀린다' },
 ]
 
-describe('조립이 두 벌이 되는 길을 막는다 (D1)', () => {
+describe('조립이 두 벌이 되는 길을 막는다', () => {
   it('런타임 의존이 둘뿐이다 — 순수 패키지를 직접 의존하지 않는다', () => {
     const parsed = JSON.parse(manifest) as { dependencies: Record<string, string> }
     expect(Object.keys(parsed.dependencies).sort()).toEqual(['@modelcontextprotocol/sdk', '@wirebound/cli'])
@@ -130,13 +130,13 @@ describe('조립이 두 벌이 되는 길을 막는다 (D1)', () => {
 })
 
 /**
- * **층 셋** — 읽기 층을 여기서 다시 엮는 길을 막는다(리뷰 R3).
+ * **층 셋** — 읽기 층을 여기서 다시 엮는 길을 막는다.
  *
  * 층 둘은 *"순수 패키지의 원시를 직접 부르는가"*를 보고, 여기서는 *"`embed`가 값으로 내주는
- * 재료를 부르는가"*를 본다. **A2 변이**(`orderedPages`로 목록을 다시 엮는다)가 층 둘을
- * 그대로 통과했던 자리다.
+ * 재료를 부르는가"*를 본다. `orderedPages`로 목록을 다시 엮는 변이가 층 둘을 그대로 통과하는
+ * 자리다.
  */
-describe('`embed`의 면 중 부르는 것이 허용 목록뿐이다 (리뷰 R3)', () => {
+describe('`embed`의 면 중 부르는 것이 허용 목록뿐이다', () => {
   const allowed = ALLOWED_EMBED.map((entry) => entry.name)
   /** **분모를 손으로 안 적는다** — 런타임 export 전부다. */
   const exported = Object.keys(embed).sort()
