@@ -195,7 +195,8 @@ export interface EditorState {
    */
   selectionClaims: boolean
   /**
-   * **남의 변경을 받았는데 화면에 못 얹었다.** 얹은 경우엔 `null`이다.
+   * **남의 변경을 받았는데 화면에 못 얹었다.** 못 얹은 적이 없으면 `null`이다. **한 번 서면 `loadPage`·`clearPage`만
+   * 푼다** — 뒤이어 온 프레임을 얹어도 못 받은 revision 은 여전히 없다(`applyRemoteChange`의 `#rebaseOnto` 앞 주석).
    *
    * **`pending`이 차 있는 것은 못 얹는 이유가 아니다** — 남의 ops는 내 pending 위에 리베이스해
    * 얹는다(「정방향 흐름」). 못 얹는 이유는 셋뿐이고 전부 *"내 바탕이 서버 문서가 아니다"*에서
@@ -655,9 +656,9 @@ export class EditorStore {
    * 같은 순서로 같은 ops를 적용하기 때문이다).
    *
    * **그 등식이 지켜지는 조건이 갭 검사다.** 바탕이 서버 문서와 같아야 하므로, 이 프레임이
-   * 내 다음 번호일 때만 얹는다. **그 전제를 `remoteStale === null`로 읽으면 안 된다** — 낡음이 풀렸다는 것은 *"바로 다음 번호를 얹었다"*는 뜻일 뿐이고,
-   * 서버가 가진 것을 내가 다 받았다는 뜻이 아니다. 그래서 검사하는 것은 낡음이 아니라
-   * `change.seq === headSeq + 1`이다.
+   * 내 다음 번호일 때만 얹는다. **그 전제를 `remoteStale === null`로 읽으면 안 된다** — 낡음이 없다는 것은 *"못 받은 것을
+   * 아직 알아채지 못했다"*는 뜻일 뿐이고(끊긴 동안의 프레임은 번호 차이로 드러나기 전까지 안 보인다), 반대로 낡음이 선
+   * 뒤에도 다음 번호는 온다. 그래서 검사하는 것은 낡음이 아니라 `change.seq === headSeq + 1`이다.
    *
    * **갭은 pending이 있든 없든 검사한다** — **갭이 난 바탕 위에 내 pending을 다시 얹으면
    * 서버와 다른 문서가 나오고, 그것은 조용하다.**
@@ -687,8 +688,8 @@ export class EditorStore {
    * | `'skipped'` | 다른 페이지가 열려 있거나 문서가 없거나 **이미 아는 seq**이거나 **내가 낸 편집이 되돌아왔다** | 그대로 |
    * | `'gap'` | **`seq`가 내 다음 번호가 아니다** | `'gap'` |
    * | `'diverged'` | 바탕에 `applyOps`가 던졌다 | `'diverged'` |
-   * | `'applied'` | 얹었다. pending이 없었다 | `null`로 푼다 |
-   * | `'rebased'` | 얹고 내 pending을 그 위에 다시 올렸다 | `null`로 푼다 |
+   * | `'applied'` | 얹었다. pending이 없었다 | 그대로 — **프레임은 낡음을 풀지 않는다**(푸는 것은 `loadPage`·`clearPage`) |
+   * | `'rebased'` | 얹고 내 pending을 그 위에 다시 올렸다 | 그대로 |
    *
    * ## 자기 편집이 되돌아오는 창 — 리베이스가 그것을 두 배로 만든다
    *
@@ -747,14 +748,18 @@ export class EditorStore {
     // (`editWarnings`의 계약), 얹었다는 것은 내 바탕이 그 문서가 됐다는 뜻이다. 안 갈면
     // 남이 만든 경고를 **편집을 낸 사람만** 보게 되어, 접속 방식 대신 *"누가 냈느냐"*로
     // 갈라짐이 되살아난다.
-    // **`'restored'`는 얹었다고 풀리지 않는다**(위 `RemoteStale`의 세기 표). 복원은
-    // **프로젝트** 사건이라 페이지 다섯 자원이 한꺼번에 갈렸다는 뜻이고, 이 페이지의 프레임
-    // 하나를 잘 얹은 것이 그것을 해결하지 않는다. 푸는 것은 `loadPage`·`clearPage` 둘이다.
     //
-    // **같은 객체를 그대로 넘긴다** — 새로 만들면 참조가 달라져 구독자가 헛일을 한다.
-    const stale = this.#state.remoteStale
+    // **낡음(`remoteStale`)은 건드리지 않는다 — 프레임은 얹혀도 낡음을 풀지 않는다.** 푸는 것은 판을 서버 것으로 놓는
+    // `loadPage`·`clearPage` 둘뿐이다. 낡음이 섰다는 것은 **이 탭이 끝내 못 받은 revision 이 있다**는 뜻이다 — 갭이면
+    // 번호가 건너뛴 프레임을 버렸고(서버는 지난 프레임을 다시 보내지 않는다), 갈라짐이면 제 번호의 프레임을 못 얹었고,
+    // 복원이면 판이 통째로 갈렸다. 그 뒤 «다음 번호» 프레임이 와도 빠진 것은 여전히 빠져 있다 — 늦게 온 그 번호(서버가
+    // 순서를 바꿔 보냈거나, 커밋 답을 잃은 편집을 다시 낸 재방송)를 얹고 낡음을 풀면 **빠진 revision 을 남긴 채 화면이
+    // 최신처럼 보인다**(jsdom: `loadPage(…, 4)` → 6 → 늦은 5 가 `applied` · head 5 · 낡음 `null` · 6 의 노드 없음).
+    //
+    // **그 프레임은 얹는다 — 버리지 않는다.** 번호가 이어지므로 바탕 + 그 ops 는 서버의 그 revision 문서와 같다(리베이스의
+    // 등식이 검사하는 것은 낡음이 아니라 번호다 — 위 머리말). 얹으면 화면이 서버에 한 걸음 더 가깝고 낡았다는 말은
+    // 그대로 서 있다. 버려도 낡음은 그대로라 얻는 것이 없다.
     const dropped = this.#rebaseOnto(nextBase, change.seq, {
-      remoteStale: stale !== null && stale.reason === 'restored' ? stale : null,
       editWarnings: change.warnings.length === 0 ? NO_WARNINGS : change.warnings,
     })
     return { result: pending.length === 0 ? 'applied' : 'rebased', dropped }
