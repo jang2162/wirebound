@@ -93,6 +93,24 @@ describe('resolveDraft', () => {
     expect(result.issues.length).toBeGreaterThan(0)
   })
 
+  /**
+   * **패턴이 깊어 해석이 호출 스택을 넘겨도 던지지 않는다 — 이슈로 낸다.** 패턴 노드의 검증(zod)이 재귀라, 깊이가 스택을
+   * 넘으면 `RangeError`가 테마 편집 화면째 흰 화면으로 만든다(Chrome: 한 줄로 이은 `Flex` 패턴 깊이 1500 에서 body 가 빈다
+   * — 넘는 깊이는 엔진 · 스택 크기에 따라 갈린다). 여기서는 넘는 깊이를 넉넉히 준다.
+   */
+  it('패턴이 깊어 해석이 스택을 넘기면 이슈로 낸다 — 던지지 않는다', () => {
+    let node: Record<string, unknown> = { type: 'Text', props: { content: '잎' } }
+    for (let i = 0; i < 20000; i += 1) node = { type: 'Flex', children: [node] }
+    const deep = { ...structuredClone(admin), patterns: { 'content.deep': { name: '깊은 패턴', schema: node } } } as unknown as Theme
+
+    const result = resolveDraft(deep, null)
+
+    expect(result.resolved).toBeNull()
+    expect(result.css).toBe('')
+    expect(result.issues.map((one) => [one.code, one.severity])).toEqual([['bad-spec', 'error']])
+    expect(result.issues[0]?.message).toContain('너무 깊')
+  })
+
   it('base 없이 파생을 해석하면 bad-extends로 거절된다 — 그것을 막지 않고 보여 준다', () => {
     const derived: Theme = {
       meta: { id: 'brand', name: '브랜드', version: '1.0.0', extends: 'system:admin' },
