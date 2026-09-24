@@ -152,9 +152,11 @@ describe('픽스처가 프로덕션 경로를 지난다', () => {
   })
 
   it('그리고 그 아래 층을 **건너뛰지 않는다** — 직접 삽입·직접 해시가 없다', () => {
-    expect(HELPERS).not.toContain("insertInto('users')")
-    expect(HELPERS).not.toContain('insertUser(')
-    expect(HELPERS).not.toContain('hashPassword(')
+    // **글자가 아니라 정규식이다** — 걷은 주석은 공백으로 남으므로(`insertUser /* 직접 */ (` → `insertUser        (`)
+    // 글자 `insertUser(` 로 재면 주석 하나 · 줄바꿈 하나로 비켜 간다.
+    expect(HELPERS).not.toMatch(/\binsertInto\s*\(\s*['"`]users['"`]\s*\)/)
+    expect(HELPERS).not.toMatch(/\binsertUser\s*\(/)
+    expect(HELPERS).not.toMatch(/\bhashPassword\s*\(/)
   })
 })
 
