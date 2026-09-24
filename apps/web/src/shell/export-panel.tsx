@@ -153,8 +153,8 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
    * 닫는 일을 토글의 `onClick` 하나가 한다(그 훅의 머리말).
    */
   const rootRef = usePopoverDismiss(open, close)
-  /** 머리가 접혀 토글이 줄 왼쪽에 서면 상자를 왼쪽 끝에 붙인다(`use-popover-side.ts`). */
-  const { side, bodyRef } = usePopoverSide(rootRef, open)
+  /** 머리가 접혀 상자가 화면 밖으로 나가면 붙일 쪽을 바꾸거나 끌어온다(`use-popover-side.ts`). */
+  const { placement, bodyRef } = usePopoverSide(rootRef, open)
 
   async function load(next: ExportFormat): Promise<void> {
     const ticket = (latest.current += 1)
@@ -205,7 +205,14 @@ export function ExportPanel(props: { projectId: string }): ReactElement {
       </button>
 
       {open && (
-        <div className="wb-shell-export-body" role="group" aria-label="내보내기" ref={bodyRef} data-side={side}>
+        <div
+          className="wb-shell-export-body"
+          role="group"
+          aria-label="내보내기"
+          ref={bodyRef}
+          data-side={placement.side}
+          style={placement.style}
+        >
           {/* **맨 위다.** 아래의 모든 문장이 이 고름에 매여 있으므로, 읽기 전에 무엇을 읽는
               중인지 알아야 한다. 눌림은 **고른 것**을 따른다 — 응답을 기다리는 동안에도
               고름은 이미 정해져 있다. */}

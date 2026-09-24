@@ -2879,8 +2879,9 @@
   text-align: left;
 }
 
-/* **머리가 접혀 토글이 줄 왼쪽에 서면 왼쪽 끝에 붙는다**(`shell/use-popover-side.ts`가 열 때 재서 고른다 —
-   오른쪽 끝에 붙인 채면 상자가 화면 왼쪽 밖으로 나간다). 스냅샷 상자도 같은 규칙이다. */
+/* **오른쪽 끝에 붙인 채 화면 밖으로 나가면 왼쪽 끝에 붙는다**(`shell/use-popover-side.ts`가 열 때 재서 고른다 — 그
+   파일 머리말의 표). 그쪽도 넘치면 훅이 인라인 `left`로 화면 안에 끌어온다 — 이 규칙의 `left: 0`을 덮는다. 스냅샷
+   상자도 같은 규칙이다. */
 .wb-shell-export-body[data-side='start'] {
   right: auto;
   left: 0;

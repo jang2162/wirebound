@@ -118,7 +118,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ProjectDetail, RestoreResult, SnapshotSummary } from '../api/types'
 import { projectAbilities } from '../projects/project-actions'
 import { usePopoverDismiss } from './use-popover-dismiss'
-import { usePopoverSide, type PopoverSide } from './use-popover-side'
+import { usePopoverSide, type PopoverPlacement } from './use-popover-side'
 
 /** 조회가 이유 없이 실패했을 때. 셸·테마 화면과 다른 문장이다 — 무엇을 못 불러왔는지가 다르다. */
 const UNKNOWN_FAILURE = '스냅샷을 불러오지 못했습니다'
@@ -180,8 +180,8 @@ export function SnapshotsPanel(props: {
   const [open, setOpen] = useState(false)
   /** **토글까지 감싸는 상자에 건다** — 그 배치가 훅의 계약이다(`use-popover-dismiss.ts`). */
   const rootRef = usePopoverDismiss(open, () => setOpen(false))
-  /** 머리가 접혀 토글이 줄 왼쪽에 서면 상자를 왼쪽 끝에 붙인다(`use-popover-side.ts`). */
-  const { side, bodyRef } = usePopoverSide(rootRef, open)
+  /** 머리가 접혀 상자가 화면 밖으로 나가면 붙일 쪽을 바꾸거나 끌어온다(`use-popover-side.ts`). */
+  const { placement, bodyRef } = usePopoverSide(rootRef, open)
 
   return (
     <div className="wb-shell-snapshots" ref={rootRef}>
@@ -194,7 +194,7 @@ export function SnapshotsPanel(props: {
         스냅샷
       </button>
       {open && (
-        <SnapshotsBody projectId={props.projectId} onRestored={props.onRestored} side={side} bodyRef={bodyRef} />
+        <SnapshotsBody projectId={props.projectId} onRestored={props.onRestored} placement={placement} bodyRef={bodyRef} />
       )}
     </div>
   )
@@ -204,8 +204,8 @@ export function SnapshotsPanel(props: {
 function SnapshotsBody(props: {
   projectId: string
   onRestored: () => void
-  /** 붙일 쪽과 잴 상자 — 토글을 감싼 쪽이 고른다(`use-popover-side.ts`). */
-  side: PopoverSide
+  /** 붙일 자리와 잴 상자 — 토글을 감싼 쪽이 고른다(`use-popover-side.ts`). */
+  placement: PopoverPlacement
   bodyRef: RefObject<HTMLDivElement | null>
 }): ReactElement {
   const { projectId } = props
@@ -270,7 +270,14 @@ function SnapshotsBody(props: {
    * 이름은 토글 버튼의 글자가 나른다.
    */
   return (
-    <div className="wb-shell-snapshots-body" role="group" aria-label="스냅샷" ref={props.bodyRef} data-side={props.side}>
+    <div
+      className="wb-shell-snapshots-body"
+      role="group"
+      aria-label="스냅샷"
+      ref={props.bodyRef}
+      data-side={props.placement.side}
+      style={props.placement.style}
+    >
       {state.status === 'loading' && <p role="status">불러오는 중…</p>}
       {state.status === 'failed' &&
         // 세션이 끊겼으면 오류가 아니라 로그인이다(`api/failure.tsx`). 셸·테마 화면과 같은 판정이다.
