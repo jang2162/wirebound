@@ -1,14 +1,14 @@
 /**
- * 페이지 JSON 패널(§11.2 — P7-3 T5: D10·D11).
+ * 페이지 JSON 패널(설계서 「페이지 JSON」).
  *
- * **이 파일의 첫 하중은 D11이다** — 이 패널의 입력 칸이 메뉴 트리의 단축키 상자 **안**에
- * 있으므로, 거기서 친 `Backspace`가 **메뉴 삭제 확인**을 걸면 안 된다. P7-2 이월 §2가
- * 구조 트리에서 실측한 사고가 여기서 되풀이될 자리다.
+ * **이 파일의 첫 하중은 «이 패널의 키가 트리 단축키로 새지 않는다»이다** — 이 패널의 입력 칸이
+ * 메뉴 트리의 단축키 상자 **안**에 있으므로, 거기서 친 `Backspace`가 **메뉴 삭제 확인**을 걸면
+ * 안 된다. 입력 칸에서 친 키가 단축키 상자로 버블되어 트리 조작이 걸리는 고장(구조 트리에서
+ * 잰 것)이 여기서 되풀이될 자리다.
  *
  * # 내려받기를 어떻게 재는가 — **절반은 대역이다**
  *
- * jsdom에 `URL.createObjectURL`이 없다(P4c-3이 쟀고 `files/file-io.ts`의 머리말에 표가
- * 있다). 아래 `withDownloadCapture`는 `theme-io-panel.test.ts`의 것과 **같은 장치**이고,
+ * jsdom에 `URL.createObjectURL`이 없다(`files/file-io.ts`의 머리말에 잰 표가 있다). 아래 `withDownloadCapture`는 `theme-io-panel.test.ts`의 것과 **같은 장치**이고,
  * 재는 것도 같다 — Blob에 실린 글자·앵커의 `download` 이름·클릭 한 번. **재지 못하는
  * 것은 브라우저가 실제로 파일을 저장하는지**다.
  */
@@ -226,7 +226,7 @@ async function withDownloadCapture(run: () => void): Promise<Download> {
   return { fileName, text, clicks }
 }
 
-describe('D11 — 이 패널의 키가 트리 단축키로 새지 않는다', () => {
+describe('이 패널의 키가 트리 단축키로 새지 않는다', () => {
   it('제목 칸의 Backspace가 메뉴 삭제 확인을 걸지 않고 글자도 지워진다', async () => {
     const api = await open()
     // **삭제가 실제로 가능한 메뉴를 고른다.** 자식이 있는 메뉴를 고르면 `abilities.remove`가
@@ -276,7 +276,7 @@ describe('미리보기', () => {
     expect(within(panel()).getByRole('status').textContent).toContain('코멘트 1개')
   })
 
-  it('D5 — 끊긴 코멘트를 세어 미리 말한다', async () => {
+  it('끊긴 코멘트를 세어 미리 말한다', async () => {
     await open()
     paste(JSON.stringify(file({ comments: [{ nodeId: 'file_gone', body: '가' }] })))
 
@@ -284,15 +284,15 @@ describe('미리보기', () => {
   })
 
   it('끊긴 것이 없으면 그 문장을 그리지 않는다 — 음성 대조', async () => {
-    // **이 줄이 없으면 "끊긴 수 = 코멘트 수"로 세는 변이가 살아남는다**(재서 알았다).
-    // 앞 케이스의 파일은 코멘트가 전부 끊겨 있어 두 수가 같았다.
+    // **이 줄이 없으면 "끊긴 수 = 코멘트 수"로 세는 변이가 살아남는다.**
+    // 앞 케이스의 파일은 코멘트가 전부 끊겨 있어 두 수가 같다.
     await open()
     paste(JSON.stringify(file()))
 
     expect(panel().textContent).not.toContain('이 파일의 트리에 없는 노드를 가리킵니다')
   })
 
-  it('D4 — layoutRef를 쓰지 않는다고 미리 말한다', async () => {
+  it('layoutRef를 쓰지 않는다고 미리 말한다', async () => {
     await open()
     paste(JSON.stringify(file({ page: { title: '가져온 목록', layoutRef: 'admin-lnb' } })))
 
@@ -301,12 +301,12 @@ describe('미리보기', () => {
   })
 })
 
-describe('③ 미리보기가 서버와 같은 게이트를 지난다', () => {
+describe('미리보기가 서버와 같은 게이트를 지난다', () => {
   /**
-   * **P7-1 이월 §2가 경고한 그 부류다** — *"화면은 괜찮다고 했는데 저장이 거부됐다."*
-   * 리뷰가 셋을 실측했다: 미리보기는 `ready`인데 서버가 400/422를 낸다.
+   * **이 부류를 막는다** — *"화면은 괜찮다고 했는데 저장이 거부됐다."* 아래 셋은 미리보기가
+   * 서버의 게이트를 안 지나면 `ready`인데 서버가 400/422를 내는 자리다.
    *
-   * 고칠 수 있는 이유는 **셋 다 순수 함수이고 같은 패키지에 있기** 때문이다 —
+   * 같은 게이트를 지날 수 있는 이유는 **셋 다 순수 함수이고 같은 패키지에 있기** 때문이다 —
    * `migrateDocument`·`validatePage`가 브라우저에서도 돌고 카탈로그도 같은 것이다.
    */
   it('지원하지 않는 문서 버전을 미리 막는다 — 서버는 400이다', async () => {
@@ -332,7 +332,7 @@ describe('③ 미리보기가 서버와 같은 게이트를 지난다', () => {
     )
 
     expect(within(panel()).getByRole('alert')).toBeDefined()
-    // 사용자에게 남는 것은 파일뿐이므로 파일에서 찾을 수 있는 id여야 한다(D8).
+    // 사용자에게 남는 것은 파일뿐이므로 파일에서 찾을 수 있는 id여야 한다.
     expect(panel().textContent).toContain('file_odd')
     expect(importButton().disabled).toBe(true)
   })
@@ -364,7 +364,7 @@ describe('③ 미리보기가 서버와 같은 게이트를 지난다', () => {
 
   it('경고만 있으면 막지 않는다 — 화면이 서버보다 엄격해지면 안 된다', async () => {
     // `Field`는 `variantFrom: 'control'`이라 노드가 든 `variant`가 버려지고
-    // `ignored-variant`(warning)가 난다. 서버는 그것으로 막지 않는다(P7-1 이월 §7).
+    // `ignored-variant`(warning)가 난다. 서버는 그것으로 막지 않는다.
     await open()
     fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('button', { name: '주문관리' }))
     paste(
@@ -388,11 +388,11 @@ describe('③ 미리보기가 서버와 같은 게이트를 지난다', () => {
   })
 
   /**
-   * **넷을 하나씩 잰다(델타 리뷰 (4)).** 앞 판은 접두(*"보내 봐야 아는 것"*) 하나만 봐서,
-   * 뒤의 목록을 통째로 지워도 통과했다 — 문장이 있다는 것과 **무엇을 말한다는 것**은 다르다.
+   * **넷을 하나씩 잰다.** 접두(*"보내 봐야 아는 것"*) 하나만 보면
+   * 뒤의 목록을 통째로 지워도 통과한다 — 문장이 있다는 것과 **무엇을 말한다는 것**은 다르다.
    *
    * **목록을 여기 손으로 적는 것이 의도다.** 화면 쪽 상수에서 끌어오면 거기서 하나를
-   * 지울 때 이 케이스의 분모도 함께 줄어 **또 0 사망**이 된다(M14가 그 모양이었다).
+   * 지울 때 이 케이스의 분모도 함께 줄어 **0 사망**이 된다.
    * 여기 있는 넷이 **규격**이고 화면이 구현이다 — 갈리면 죽는다.
    *
    * 넷의 근거는 `previewPageJson`의 *"서버만 아는 것"* 표다.
@@ -431,7 +431,7 @@ describe('읽기 실패를 갈라 말한다', () => {
     await open()
     paste(JSON.stringify({ wireboundVersion: '1', theme: { meta: { id: 'admin' } } }))
 
-    // 봉투 안쪽이 규격이 아닌 것이므로 **자리를 보인다**(D8).
+    // 봉투 안쪽이 규격이 아닌 것이므로 **자리를 보인다**.
     expect(within(panel()).getByRole('alert')).toBeDefined()
     expect(panel().textContent).toContain('page')
   })
@@ -443,7 +443,7 @@ describe('읽기 실패를 갈라 말한다', () => {
     expect(within(panel()).getByRole('alert').textContent).toContain('9')
   })
 
-  it('D6·D8 — comments[]의 marker는 거절하고 파일의 자리를 보인다', async () => {
+  it('comments[]의 marker는 거절하고 파일의 자리를 보인다', async () => {
     await open()
     paste(JSON.stringify({ ...file(), comments: [{ marker: 1, nodeId: 'file_list', body: '가' }] }))
 
@@ -524,7 +524,7 @@ describe('내보내기', () => {
     const parsed = JSON.parse(download.text) as PageJson
     expect(parsed.wireboundVersion).toBe(WIREBOUND_PAGE_VERSION)
     expect(parsed.page).toEqual({ title: '회원 목록', description: '가입한 회원을 본다' })
-    // **번호는 문서에 실려 나가고 코멘트에는 없다**(D6).
+    // **번호는 문서에 실려 나가고 코멘트에는 없다**(설계서 「페이지 JSON」).
     expect(parsed.schema.root.children?.[0]?.marker).toBe(1)
     expect(parsed.comments).toEqual([{ nodeId: 'n_00000000000b', body: '목록은 10개씩' }])
   })
@@ -538,7 +538,7 @@ describe('내보내기', () => {
   })
 })
 
-describe('파일 읽기가 실패하면 대기 글자가 남지 않는다 — P4c-3이 닫은 자리', () => {
+describe('파일 읽기가 실패하면 대기 글자가 남지 않는다', () => {
   /**
    * **읽을 수 없는 파일.** `readAsText`는 Blob이 아닌 것에 던지고, 그것이 `readTextFile`의
    * Promise를 거절시킨다 — 실브라우저에서 권한·삭제로 나는 거절과 같은 갈래로 들어온다
@@ -583,20 +583,19 @@ describe('파일 읽기가 실패하면 대기 글자가 남지 않는다 — P4
 })
 
 /**
- * **접힘**(2026-09-02). 드물게 쓰는 폼이 좌측 264px의 한복판을 상시 점유하던 것을 접었다.
+ * **접힘.** 드물게 쓰는 폼이 좌측 264px의 한복판을 상시 점유하지 않게 기본을 접힘으로 둔다.
  *
  * **세로 값은 여기서 재지 않는다** — jsdom에는 레이아웃이 없다. 진짜 크로미움에서 잰 값은
  * 패널의 머리말에 있다: 패널 **235px → 33px**, 작은 설계서에서 상자의 콘텐츠
  * **506px → 425px**(= 상자의 `clientHeight`라 **스크롤이 사라진다**). **«몇 줄 보인다»로는
- * 적지 않는다** — 창 크기·글꼴에 흔들리는 수라 근거가 못 된다(앞 판의 커밋 메시지가 그렇게
- * 적었고 리뷰가 뒤집었다). 여기서 재는 것은 **무엇이 DOM에 있고 없는가**이고, 그것이 저 값을
+ * 적지 않는다** — 창 크기·글꼴에 흔들리는 수라 근거가 못 된다. 여기서 재는 것은 **무엇이 DOM에 있고 없는가**이고, 그것이 저 값을
  * 만드는 원인이다.
  *
- * **되돌려 재면 이 다섯 중 넷이 죽고, 넷 다 같은 이유다** — 토글(`페이지 JSON 가져오기`)을
+ * **접힘을 걷으면(기본을 펼침으로) 이 다섯 중 넷이 죽고, 넷 다 같은 이유다** — 토글(`페이지 JSON 가져오기`)을
  * 못 찾는다. 남는 하나(*"접힘 밖"*)는 그 버튼을 접힘 **안**으로 옮기는 다른 변조로 죽는다.
- * **«세 파일 84개 중 49개가 죽는다»는 수를 근거로 쓰지 마라** — 그 49개도 전부 이 한 이유이고
- * (남의 케이스는 뜻이 바뀐 것이 아니라 헬퍼에 *"편다"* 한 걸음이 붙었을 뿐이다), 하나를
- * 49번 센 수다.
+ * **접힘을 걷을 때 다른 파일에서 함께 죽는 케이스 수를 근거로 쓰지 마라** — 그것도 전부 이 한
+ * 이유이고(남의 케이스는 뜻이 바뀐 것이 아니라 헬퍼에 *"편다"* 한 걸음이 붙었을 뿐이다), 한
+ * 이유를 여러 번 센 수다.
  */
 describe('가져오기 폼은 기본이 접혀 있다', () => {
   it('폼의 칸 셋과 실행 버튼이 DOM에 아예 없다', async () => {

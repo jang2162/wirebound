@@ -7,9 +7,9 @@
  * 검사를 지나지 않는다.** 이 파일만 두 층을 함께 지난다 — 가짜 `fetch` → 진짜
  * `createHttpClient` → 진짜 화면.
  *
- * 잰 것(수정 전, 이 파일의 하네스 그대로):
+ * `http-client`의 형태 검사가 없으면 무엇이 되는가(이 파일의 하네스 그대로 — 검사를 빼고 돌리면 다시 잰다):
  *
- * | 조회 | 계약 위반 본문 | 수정 전 |
+ * | 조회 | 계약 위반 본문 | 검사가 없으면 |
  * |---|---|---|
  * | `getTree` | `{}` · `{menu:'x'}` · `{menu:[{}]}` | **화면 전체 사망**(`byOrder`의 전개에서 `items is not iterable`) |
  * | `listProjects` | `null` | **화면 전체 사망**(`state.projects.length`) |
@@ -17,12 +17,12 @@
  * | `getPage` | `{schema:{}}` | **화면 전체 사망**(렌더러가 `root.children`을 읽는다) |
  * | `getPage` | `null` | 살아남는다 — `load()`의 `try`가 흡수해 "페이지를 불러오지 못했습니다"가 뜬다 |
  *
- * 마지막 줄이 나머지와 갈리는 이유는 그 접근만 `try` 안에 있기 때문이다. **수정 뒤에는
+ * 마지막 줄이 나머지와 갈리는 이유는 그 접근만 `try` 안에 있기 때문이다. **검사가 있으면
  * 다섯 줄이 같은 경로로 모인다** — `ApiError('internal', '서버 응답을 이해할 수 없습니다')`가
- * 되어 D5의 실패 → 화면 규칙(`api/failure.tsx`)을 그대로 지난다. 그래서 `getPage`가 `null`인
- * 경우의 **문안만** 바뀐다(이유가 더 정확해진다). 셸이 사는 것은 그대로다.
+ * 되어 실패 → 화면 규칙(`api/failure.tsx`)을 그대로 지난다. 그래서 `getPage`가 `null`인
+ * 경우는 **문안만** 다르다(이유가 더 정확하다). 셸이 사는 것은 같다.
  *
- * `schema.root` **안쪽**을 보지 않는 것은 렌더러가 거기서부터 폴백으로 흡수하기 때문이다(D8).
+ * `schema.root` **안쪽**을 보지 않는 것은 렌더러가 거기서부터 폴백으로 흡수하기 때문이다.
  * 실측: `{root:{id:'n-root',type:99}}`는 봉투 검사를 지나 캔버스까지 가고, 거기서
  * `.wb-shell-canvas-surface`가 그려진 채 `노드 1개를 그리지 못했습니다`와
  * `data-wb-error="노드의 type이 문자열이 아닙니다"`가 붙는다. 아래
@@ -57,7 +57,7 @@ const PAGE = {
 }
 
 /**
- * `PATCH .../ops`의 계약대로인 응답. **`inverse` 안쪽은 보지 않는다**(D11) — 그것은 서버가
+ * `PATCH .../ops`의 계약대로인 응답. **`inverse` 안쪽은 보지 않는다** — 그것은 서버가
  * 만든 `PatchOp[]`이고 거기서부터는 `@wirebound/schema`의 일이다.
  */
 const PATCH_RESULT = {
@@ -264,7 +264,7 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
       route: '/projects/p-1',
     })
 
-    // 셸은 그대로다. 수정 전에는 여기서 `document.body`가 통째로 비었다.
+    // 셸은 그대로다. 형태 검사가 없으면 여기서 `document.body`가 통째로 빈다.
     await screen.findByRole('heading', { name: PROJECT.name })
     expect(await screen.findAllByRole('alert')).not.toHaveLength(0)
     expect(screen.getAllByText(UNREADABLE).length).toBeGreaterThan(0)
@@ -282,13 +282,13 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
   })
 
   it('프로젝트 목록의 description이 객체여도 화면이 산다', async () => {
-    // **관문을 고치기 전에는 이 자리가 화면을 통째로 비웠다**(리뷰 W6). `description`이
-    // `isProjectDetail`의 검사 밖이라 목록까지 닿았고, 줄의 `<p>{project.description}</p>`가
-    // 그 값을 React 자식으로 그리다 `Objects are not valid as a React child`를 던졌다.
-    // **목록에는 오류 경계가 없다** — `apps/web/src`의 경계는 캔버스의 `CanvasBoundary` 하나다.
+    // **`description`이 `isProjectDetail`의 검사 밖이면 이 자리가 화면을 통째로 비운다.** 값이
+    // 목록까지 닿고, 줄의 `<p>{project.description}</p>`가 그 값을 React 자식으로 그리다
+    // `Objects are not valid as a React child`를 던진다. **목록에는 오류 경계가 없다** —
+    // `apps/web/src`의 경계는 캔버스의 `CanvasBoundary`와 테마 갤러리의 `GalleryBoundary`뿐이다.
     //
-    // **고치기 전 실측:** `<main>` 없음 · `innerHTML` **11자**. 고친 뒤에는 다른 계약 위반과
-    // 같은 경로(`ApiError('internal')` → D5)로 모여 **셸이 살고 문장이 남는다.**
+    // **검사를 빼고 잰 값:** `<main>` 없음 · `innerHTML` **11자**. 관문이 막으면 다른 계약 위반과
+    // 같은 경로(`ApiError('internal')` → 실패 → 화면 규칙)로 모여 **셸이 살고 문장이 남는다.**
     renderWithProviders(<App />, {
       client: client({ '/api/auth/me': USER, '/api/projects': [{ ...PROJECT, description: { x: 1 } }] }),
       route: '/',
@@ -306,7 +306,7 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
       route: '/projects/p-1',
     })
 
-    // 셸 **대신** 오류 화면이다(`routes/editor.tsx`의 판정). 수정 전에는 흰 화면이었다.
+    // 셸 **대신** 오류 화면이다(`routes/editor.tsx`의 판정). 형태 검사가 없으면 흰 화면이다.
     await screen.findByRole('heading', { name: '설계서를 열지 못했습니다' })
     screen.getByText(UNREADABLE)
   })
@@ -329,7 +329,7 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
   })
 
   it('문서 노드가 깨진 것은 렌더러가 흡수한다', async () => {
-    // 봉투 검사가 `schema.root` **안쪽**까지 내려가면 안 된다는 반대편이다(D8).
+    // 봉투 검사가 `schema.root` **안쪽**까지 내려가면 안 된다는 반대편이다.
     // 여기까지 막으면 그릴 수 있는 문서를 못 그리게 된다.
     renderWithProviders(<App />, {
       client: client({

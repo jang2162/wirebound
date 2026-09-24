@@ -1,15 +1,14 @@
 /**
- * **서버가 편집 응답에 실어 보낸 문서 경고를 화면이 읽는가** (P5-3 T4·D6).
+ * **서버가 편집 응답에 실어 보낸 문서 경고를 화면이 읽는가.**
  *
  * ## 이 파일이 닫는 것
  *
- * P5-2 이월 §3이 셋을 **0건**으로 쟀다: `PatchResult`의 `warnings` 키 선언 0 · 페이지 편집
- * 경고를 읽는 코드 0 · 저작 화면의 자기 검증 0. **앞의 둘을 P5-3이 닫는다**(셋째는 그대로
- * 남고 보고서에 적었다).
+ * `PatchResult`의 `warnings` 키와, 그것을 읽어 페이지 편집 경고로 그리는 화면. 저작 화면의
+ * 자기 검증은 여기 범위가 아니다.
  *
- * **그 대가가 P5-2의 이슈 셋이었다.** 상호작용 이슈 셋이 전부 `warning`이라
- * (그쪽 재라 #2 — `error`면 타겟이 된 노드를 지우는 편집이 422가 된다) **끊긴 타겟이
- * 문서에 남은 채 저장되는데 오늘 아무도 그것을 볼 수 없었다.**
+ * **읽지 않으면 끊긴 타겟이 보이지 않는다.** 상호작용 이슈 셋이 전부 `warning`이라
+ * (`error`면 타겟이 된 노드를 지우는 편집이 422가 된다) **끊긴 타겟이 문서에 남은 채
+ * 저장되고, 화면이 `warnings`를 안 그리면 아무도 그것을 볼 수 없다.**
  *
  * ## 여기가 재지 않는 것
  *
@@ -51,8 +50,8 @@ function patchResult(warnings?: ValidationIssue[]): PatchResult {
  * 노드를 골라 속성 하나를 고친다 — 편집 하나를 서버로 보내는 가장 짧은 길이다.
  *
  * **값을 인자로 받는 것이 중요하다.** 같은 값을 두 번 넣으면 `TextControl`이 커밋하지
- * 않아 두 번째 편집이 나가지 않는다(실측: 같은 값으로 두 번 부르니 `warnings`가 첫
- * 응답의 것에서 바뀌지 않았다).
+ * 않아 두 번째 편집이 나가지 않는다(실측: 같은 값으로 두 번 부르면 `warnings`가 첫
+ * 응답의 것에서 바뀌지 않는다).
  */
 async function editSomething(value: string): Promise<void> {
   fireEvent.click(requireNode('n-btn'))
@@ -149,8 +148,8 @@ describe('편집 응답의 warnings', () => {
 
   /**
    * **배열이 아닌 `warnings`를 막는 것은 여기가 아니다.** 이 파일의 가짜 `ApiClient`는
-   * `http-client`를 지나지 않으므로 응답 검사가 걸리지 않는다 — 심어 보니 그 값이 그대로
-   * 스토어를 지나 `.map`에서 던졌다(`TypeError: warnings.map is not a function`, 렌더 도중).
+   * `http-client`를 지나지 않으므로 응답 검사가 걸리지 않는다 — 심으면 그 값이 그대로
+   * 스토어를 지나 `.map`에서 던진다(`TypeError: warnings.map is not a function`, 렌더 도중).
    * **그 가드를 재는 자리는 `test/api/http-client.test.ts`의
    * `warnings가 배열이 아니면 막는다`다.**
    */

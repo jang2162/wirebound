@@ -5,8 +5,8 @@
  * `panels/controls/list-control.tsx`에 있다.
  *
  * **케이스 `배열이 아닌 값이면 빈 목록으로 시작한다`가 이 파일의 방어선이다.** 속성 패널은
- * 캔버스의 오류 경계 **밖**이라(`apps/web/src` 전체에서 경계는 `CanvasBoundary` 하나뿐)
- * 여기서 던지면 셸 전체가 흰 화면이 된다.
+ * 캔버스의 오류 경계 **밖**이라(`apps/web/src`의 경계는 캔버스의 `CanvasBoundary`와 테마
+ * 갤러리의 `GalleryBoundary`뿐이고 속성 패널은 어느 쪽 안에도 없다) 여기서 던지면 셸 전체가 흰 화면이 된다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -35,7 +35,7 @@ const DOC = pageDoc({
   ],
 })
 
-/** `columns`가 배열이 **아닌** 문서. 검증을 통과하지 못한 문서가 스토어에 실리는 창이다(D4). */
+/** `columns`가 배열이 **아닌** 문서. 검증을 통과하지 못한 문서가 스토어에 실리는 창이다. */
 const BROKEN_DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
@@ -133,7 +133,7 @@ describe('속성 패널 — 목록 컨트롤', () => {
   })
 
   it('항목을 고치면 blur에 나간다', async () => {
-    // 텍스트와 같은 규칙이다(D5) — 글자마다 요청하면 undo 한 단계가 글자 하나가 된다.
+    // 텍스트와 같은 규칙이다 — 글자마다 요청하면 undo 한 단계가 글자 하나가 된다.
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
 

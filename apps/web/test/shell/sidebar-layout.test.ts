@@ -5,7 +5,7 @@
  * ## 무엇을 재고 무엇을 못 재는가
  *
  * **jsdom에는 레이아웃이 없다.** 이 파일이 다루는 함수들은 그래서 전부 순수 함수이고,
- * 화면의 치수는 **인자로 준다**. 브라우저에서 잰 값(1440×900, Chrome, 2026-09-03)을 그
+ * 화면의 치수는 **인자로 준다**. 브라우저에서 잰 값(1440×900, Chrome)을 그
  * 인자로 쓰므로, 여기 통과하는 것은 *"그 치수에서 이 식이 이 답을 낸다"*이지
  * *"화면이 그렇게 그려진다"*가 아니다. **화면 쪽은 브라우저에서 재야 한다** —
  * `shell-css-picker.test.ts` 머리말이 같은 경계를 적고 있다.
@@ -105,7 +105,7 @@ describe('비율 → `flex-grow` 환산', () => {
   it('여백을 되돌려 상자의 세로가 `비율 × 나눌 공간`이 된다', () => {
     // **이 케이스가 이 파일의 핵심이다.** 비율을 `flex-grow`에 그대로 실으면 여백 20px이
     // 배분 밖에 남아 경계가 포인터보다 4.8% 뒤처진다(브라우저 실측: 200px 밀었을 때
-    // 190.4px). 보정을 넣은 뒤 같은 드래그가 정확히 200.0px을 움직였다.
+    // 190.4px). 보정이 있으면 같은 드래그가 정확히 200.0px을 움직인다.
     for (const ratio of [0.1, 0.25, 0.5, 0.75, 0.9]) {
       expect(rendered(regionGrow(ratio, MEASURED))).toBeCloseTo(ratio * MEASURED.shared, 6)
     }
@@ -117,7 +117,7 @@ describe('비율 → `flex-grow` 환산', () => {
   })
 
   it('하한에서 상자가 실제로 `REGION_MIN_HEIGHT`가 된다', () => {
-    // 여백 보정이 없으면 이 값이 92px이었다(20 + 72). 화면에서도 88.5px로 보였다.
+    // 여백 보정이 없으면 이 값이 92px이 된다(20 + 72). 화면에서는 88.5px로 보인다(Chrome).
     const min = regionRatioMin(MEASURED.shared)
     expect(rendered(regionGrow(min, MEASURED))).toBeCloseTo(REGION_MIN_HEIGHT, 6)
   })
@@ -209,7 +209,7 @@ describe('보존', () => {
   })
 
   it('읽기가 던져도 터지지 않는다', () => {
-    // 브라우저에서 실제로 만났다: `about:blank`에서 `localStorage`를 읽으면
+    // 브라우저에서 실제로 난다: `about:blank`에서 `localStorage`를 읽으면
     // `SecurityError: Access is denied for this document`가 난다.
     expect(readLayout(hostileStorage())).toEqual({})
   })
@@ -262,10 +262,10 @@ describe('`shell.css`와의 짝', () => {
   })
 
   it('두 영역 사이 손잡이가 `flex: none`이다 — 지우면 좁은 창에서 사라진다', () => {
-    // **근거가 앞 판과 다르다 — 다시 쟀다.** 두 영역이 `flex-basis: 0`이라 일상 구간에서는
-    // 지워도 6px 그대로다. 그런데 여백(위아래 10px씩)이 `flex-basis` 밖이라 기본 크기의
-    // 합이 48px이고, **그 아래로는 줄일 것을 가진 항목이 손잡이뿐**이 된다 — 지운 판의
-    // 실측이 47px에서 5 · 46px에서 4 · 40px 아래로 0이다(Chrome 2026-09-03).
+    // 두 영역이 `flex-basis: 0`이라 일상 구간에서는 지워도 6px 그대로다. 그런데
+    // 여백(위아래 10px씩)이 `flex-basis` 밖이라 기본 크기의 합이 48px이고, **그 아래로는
+    // 줄일 것을 가진 항목이 손잡이뿐**이 된다 — 지우면 손잡이가 47px에서 5 · 46px에서 4 ·
+    // 40px 아래로 0이 된다(Chrome에서 잰 값).
     // `.wb-shell-region`이 `flex-basis: 0`을 잃기만 해도 모든 크기에서 그렇게 된다
     // (850.5px에서 4.82px). 근거 전문은 `shell.css`의 그 규칙 위에 있다.
     expect(shellCss).toMatch(/\.wb-shell-region-resizer \{[^}]*\n  flex: none;/)

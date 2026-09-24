@@ -1,10 +1,10 @@
 /**
- * D7 — 셸 CSS가 캔버스 안으로 새지 않는지 본다. 규칙과 근거는 `../src/shell.css` 머리말에,
+ * 누수 검사 — 셸 CSS가 캔버스 안으로 새지 않는지 본다. 규칙과 근거는 `../src/shell.css` 머리말에,
  * 규칙을 기계가 보는 형태는 `./shell-css-guard.ts`에 있다.
  *
- * **테스트로 옮긴 이유.** 앞 라운드까지 이 검사는 `shell.css` 주석에 적힌 `rg` 명령 셋이었다.
- * 사람이 기억해서 돌려야 하는 검사이고, 게다가 리뷰가 표로 적은 위반 열넷을 심어 보니 **열넷 다
- * 빠져나갔다.** 다음 단계(P4a)가 이 경계를 직접 만지므로 `pnpm test`가 계속 보게 옮겼다.
+ * **왜 테스트인가.** `shell.css` 주석에 `rg` 명령을 적어 두면 사람이 기억해서 돌려야 하는
+ * 검사가 되고, 게다가 아래 심기 표의 위반 열넷이 **다 빠져나간다**(`shell-css-guard.ts`
+ * 머리말). 테마 CSS가 이 경계 바로 안쪽을 그리므로 `pnpm test`가 계속 본다.
  *
  * 아래 **심기 표가 이 파일의 요점이다.** "검사가 0건을 낸다"는 검사가 일한다는 증거가
  * 아니다 — 위반을 하나씩 심어 **그 위반이 실제로 걸리는지**를 함께 잰다. 반대편(거짓 양성)은
@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
 import shellCss from '../src/shell.css?raw'
 import { findViolations, type CheckName } from './shell-css-guard'
 
-/** 심은 위반과, 그것을 물어야 하는 검사. 열넷은 리뷰가 재서 "안 잡힌다"고 한 그 열넷이다. */
+/** 심은 위반과, 그것을 물어야 하는 검사. 앞의 열넷은 `rg` 명령으로 재면 "안 잡히는" 형태다. */
 const PLANTED: { css: string; check: CheckName }[] = [
   // 상속 속성 — 선택자가 문서 노드를 겨냥하지 않아도 자식으로 물려 내려간다.
   { css: '.wb-shell-canvas-frame { font-weight: 700 }', check: 'wrapper-property' },
@@ -28,8 +28,8 @@ const PLANTED: { css: string; check: CheckName }[] = [
   { css: '.wb-shell-canvas-surface { pointer-events: none }', check: 'wrapper-property' },
   { css: '.wb-shell-canvas-frame { overflow-wrap: anywhere }', check: 'wrapper-property' },
   { css: '.wb-shell-canvas-frame { tab-size: 8 }', check: 'wrapper-property' },
-  // `{` 앞에 공백이 없다. 앞 라운드의 `rg` 검사는 이미 목록에 있던 `color`조차 이 형태에서
-  // 놓쳤다 — 포맷에 매여 있었다는 뜻이다.
+  // `{` 앞에 공백이 없다. `rg` 정규식은 목록에 있는 `color`조차 이 형태에서 놓친다 —
+  // 포맷에 매인다는 뜻이다.
   { css: '.wb-shell-canvas-surface{ color: red }', check: 'wrapper-property' },
 
   // 선택자 — 셸의 상자 안쪽을 겨냥하는 네 형태.
@@ -38,7 +38,7 @@ const PLANTED: { css: string; check: CheckName }[] = [
   { css: '.wb-shell-canvas-surface :is(div) { color: red }', check: 'selector-function' },
   { css: '[data-wb-id] { color: red }', check: 'selector-prefix' },
 
-  // 앞 라운드의 심기 표 여섯. 그때 잡히던 것이 지금도 잡히는지 함께 본다.
+  // `rg` 정규식으로도 잡히는 여섯. 파서가 그것을 놓치지 않는지 함께 본다.
   { css: 'div { color: red; }', check: 'selector-prefix' },
   { css: '.wb-shell-canvas-surface .planted { color: red; }', check: 'selector-combinator' },
   { css: '.wb-shell-canvas-frame { font-family: serif; }', check: 'wrapper-property' },
@@ -46,8 +46,8 @@ const PLANTED: { css: string; check: CheckName }[] = [
   { css: '.wb-shell-canvas { font-size: 9px; }', check: 'wrapper-property' },
   { css: '.wb-shell { color: red; }', check: 'wrapper-property' },
 
-  // 접두어 없는 커스텀 프로퍼티. 상속 속성이라 문서 안까지 내려간다 — 앞 라운드의 검사는
-  // 속성 이름 목록을 훑는 형태라 `--*`를 아예 보지 못했고, 머리말도 그렇게 적고 있었다.
+  // 접두어 없는 커스텀 프로퍼티. 상속 속성이라 문서 안까지 내려간다 — 속성 이름 목록을
+  // 훑는 `rg` 정규식은 `--*`를 아예 보지 못한다.
   { css: '.wb-shell { --leak: red; }', check: 'wrapper-variable' },
 
   // 감싸는 상자가 선택자의 **뒤쪽** 클래스여도 선언은 그 상자에 걸린다.
@@ -93,15 +93,15 @@ const ALLOWED: string[] = [
   // 안에 규칙을 품는 at-rule은 안으로 들어가서 본다.
   '@media (min-width: 800px) { .wb-shell-canvas-frame { margin: 0 auto; } }',
   // `@keyframes` 안의 `from`·`to`·`50%`는 선택자가 아니다. 규칙으로 세면 정당한 CSS가
-  // `` `.wb-shell…`로 시작하지 않는다 ``로 막힌다(수정 전 실측: 2건).
+  // `` `.wb-shell…`로 시작하지 않는다 ``로 막힌다(건너뛰지 않으면 아래 첫 줄이 2건을 낸다).
   '@keyframes wb-shell-spin { from { opacity: 0 } to { opacity: 1 } }',
   '@keyframes wb-shell-pulse { 0% { opacity: 0 } 50% { opacity: .5 } 100% { opacity: 1 } }',
   '@-webkit-keyframes wb-shell-spin { from { opacity: 0 } to { opacity: 1 } }',
-  // `@media` 안에 든 것도 같다. 수정 전 실측: 1건.
+  // `@media` 안에 든 것도 같다(건너뛰지 않으면 1건을 낸다).
   '@media (min-width: 900px) { @keyframes wb-shell-fade { from { opacity: 0 } to { opacity: 1 } } }',
 ]
 
-describe('shell.css D7 검사', () => {
+describe('shell.css 누수 검사', () => {
   it('검사가 진짜 shell.css를 읽는다', () => {
     // 경로가 어긋나거나 파일이 비면 아래 표가 통째로 헛돈다. 실제 클래스 이름으로 확인한다.
     expect(shellCss).toContain('.wb-shell-canvas-surface {')

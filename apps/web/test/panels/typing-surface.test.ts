@@ -1,12 +1,12 @@
 /**
- * `panels/typing-surface.ts` — *"이 키가 값을 넣거나 고르는 표면에서 났는가"*(델타 리뷰 N1).
+ * `panels/typing-surface.ts` — *"이 키가 값을 넣거나 고르는 표면에서 났는가"*.
  *
  * **화면 없이 잰다.** 순수 함수라 요소를 직접 만들어 넣는다 — 이 판정이 **화면에 실제로
  * 걸리는지**는 `structure-keyboard.test.tsx`가 상자에 노드를 붙여 잰다. 둘은 다른 것을
  * 잰다: 여기는 *"무엇을 표면으로 보는가"*, 저기는 *"그 판정이 핸들러를 지나는가"*.
  *
- * **앞 판이 태그 이름으로 갈랐고 그 목록 밖에서 사고가 재현됐다.** 그래서 아래 표는
- * **목록에 없던 것들을 먼저** 적는다.
+ * **태그 이름으로 가르면 그 목록 밖에서 사고가 재현된다**(shadow root · `contenteditable` ·
+ * 편집 `role`). 그래서 아래 표는 **태그 목록 밖의 것들을 먼저** 적는다.
  */
 import { describe, expect, it } from 'vitest'
 import { EDITABLE_ROLES, isTypingSurface } from '../../src/panels/typing-surface'
@@ -29,7 +29,7 @@ describe('isTypingSurface', () => {
    * **한계를 값으로 고정한다.** `mode: 'closed'`면 호스트의 `shadowRoot`가 `null`이라
    * ㉣가 그것을 못 본다 — **리타게팅은 mode와 무관하게 일어나므로 구멍은 실재한다.**
    * 여는 방법이 없어서 남긴 것이지 괜찮아서가 아니다(`attachShadow`를 다시 불러 던지는지
-   * 보는 것은 DOM을 바꾸는 판정이라 쓸 수 없다). 이월에 같은 문장을 적었다.
+   * 보는 것은 DOM을 바꾸는 판정이라 쓸 수 없다).
    */
   it('닫힌 shadow root는 잡지 못한다 — 재서 확인한 한계다', () => {
     const host = el('span')
@@ -64,7 +64,7 @@ describe('isTypingSurface', () => {
   })
 
   it('role을 덧씌운 입력 칸도 여전히 표면이다', () => {
-    // 앞 판은 태그 이름만 봤으므로 이 자리는 그때도 참이었다. **`role`이 판정을 뒤집지
+    // 태그 이름만 보는 판정에서도 참인 자리다. **`role`이 판정을 뒤집지
     // 않는 것**을 못박아 둔다 — 갈래 넷 중 하나만 만족해도 표면이다.
     expect(isTypingSurface(el('input', { role: 'button' }))).toBe(true)
   })

@@ -2,7 +2,7 @@
  * **코드가 붙인 클래스에 `shell.css` 규칙이 있는가.** 규칙을 기계가 보는 형태는
  * `./shell-css-coverage.ts`에 있고, **무엇을 못 보는지도 그 파일 머리말이 갖는다.**
  *
- * `shell-css.test.ts`와 짝이다. 그쪽은 *"셸 규칙이 캔버스 안으로 새는가"*(D7)를 보고
+ * `shell-css.test.ts`와 짝이다. 그쪽은 *"셸 규칙이 캔버스 안으로 새는가"*를 보고
  * 이쪽은 *"규칙이 없어 조용히 무스타일이 되는가"*를 본다. 두 방향이 다 필요한 이유는
  * `shell.css`가 **요소 선택자를 쓰지 않기** 때문이다 — 클래스가 유일한 연결 고리라
  * 한쪽이 끊기면 아무것도 실패하지 않은 채 화면만 브라우저 기본이 된다.
@@ -42,9 +42,8 @@ const SOURCES: [string, string][] = Object.entries(RAW)
 const RULED = ruledClasses(shellCss)
 
 /**
- * 규칙이 있어야 하는데 없는 소스. **`className`으로 붙는 네 형태를 하나씩 심는다** —
- * 특히 셋째(`className:` 객체 리터럴)가 이번 사고에서 `.wb-shell-control`을 통째로
- * 빠져나가게 한 형태다.
+ * 규칙이 있어야 하는데 없는 소스. **`className`으로 붙는 형태를 하나씩 심는다** —
+ * 특히 셋째(`className:` 객체 리터럴)를 놓치면 `.wb-shell-control`이 통째로 빠져나간다.
  */
 const PLANTED: { label: string; source: string }[] = [
   { label: 'JSX 속성', source: `<div className="wb-shell-planted" />` },
@@ -62,9 +61,9 @@ const PLANTED: { label: string; source: string }[] = [
   { label: '따옴표 종류가 섞인 자리', source: `<div className='wb-shell-planted' />` },
   { label: '줄바꿈이 낀 자리', source: `<div\n  className="wb-shell-planted"\n/>` },
 
-  // ── 리뷰가 뚫은 구멍(N1)을 고정하는 넷 ────────────────────────────────────────────
-  // 앞 판은 `className:`의 값이 `{`·따옴표가 **아니면** 그 자리를 통째로 버렸다. JSX 속성은
-  // 문법상 늘 둘 중 하나라 무사했지만 객체 속성은 아니다. 아래 셋이 그 가지를 밟는다.
+  // ── `className:`의 값이 식인 넷 ───────────────────────────────────────────────────
+  // `className:`의 값이 `{`·따옴표가 **아니면** 그 자리를 통째로 버리는 스캐너는 JSX 속성에서는
+  // 무사하지만(문법상 늘 둘 중 하나다) 객체 속성에서는 아니다. 아래 넷이 그 가지를 밟는다.
   {
     label: '[N1] 객체 리터럴의 값이 조건식 — 리뷰가 실증한 형태',
     source: `const s = { className: on ? 'wb-shell-panel' : 'wb-shell-planted' }`,
@@ -78,14 +77,14 @@ const PLANTED: { label: string; source: string }[] = [
     source: `const s = { className: on && 'wb-shell-planted', onBlur: commit }`,
   },
   {
-    // 리뷰가 실제 파일(`text-control.tsx:85`)에 심었던 그 형태 그대로.
+    // 실제 파일(`text-control.tsx`)의 `className:` 줄에 그대로 심을 수 있는 형태.
     label: '[N1] 리뷰가 심은 그 줄 — `isTextarea ? … : …`',
     source: `    className: isTextarea ? 'wb-shell-planted' : 'wb-shell-control',`,
   },
 
-  // ── 리뷰가 "잡힌다"고 확인한 둘. 되돌아가지 않게 고정한다 ─────────────────────────
+  // ── 잡히는 것을 못박는 둘 ─────────────────────────────────────────────────────────
   {
-    // 리뷰: 워커의 실증이 planted 를 늘 **맨 뒤**에 놓았다. 가운데도 잡히는지 못박는다.
+    // 위 표는 planted 를 늘 **맨 뒤**에 놓는다. 가운데도 잡히는지 못박는다.
     label: '[리뷰] 한 문자열 안 여러 클래스 중 **가운데** 토큰',
     source: `<div className="wb-shell-interaction wb-shell-planted wb-shell-panel-subtitle" />`,
   },
@@ -110,7 +109,7 @@ const NOT_SEEN: { label: string; source: string }[] = [
     source: `const s = { className: PREFIX + 'planted' }`,
   },
   {
-    // ★ **이 케이스가 `=` 가지를 안 넓힌 결정의 유일한 자물쇠다** (델타 리뷰 B2).
+    // ★ **이 케이스가 `=` 가지를 안 넓힌 결정의 유일한 자물쇠다.**
     //
     // 닻과 무관하게 fallback 을 넓힌 판에 이 소스를 먹이면 `["wb-shell-planted"]` 가 나온다
     // (지금 구현은 `[]`). 위 `ALLOWED` 의 JSX 케이스 셋은 두 구현에서 결과가 같아 이 결정을
@@ -132,7 +131,7 @@ const NOT_SEEN: { label: string; source: string }[] = [
 const ALLOWED: { label: string; source: string }[] = [
   {
     // **이 넷이 진짜로 저장소에 있는 형태다**(`preset-picker`·`pattern-picker`·`type-picker`).
-    // D7이 id 선택자를 금지하므로 여기에 규칙이 있으면 오히려 틀린 것이다.
+    // `shell.css`가 id 선택자를 금지하므로 여기에 규칙이 있으면 오히려 틀린 것이다.
     label: '`id`·`htmlFor`로 쓰는 이름은 클래스가 아니다',
     source: `<label htmlFor="wb-shell-preset-name" /><select id="wb-shell-preset-name" />`,
   },
@@ -157,19 +156,18 @@ const ALLOWED: { label: string; source: string }[] = [
     label: '넘겨받는 `className`은 값이 리터럴이 아니다 — 부르는 쪽이 대신 걸린다',
     source: `<section className={props.className} />`,
   },
-  // ── 아래 셋의 귀속을 바로잡는다 (델타 리뷰 B2) ──────────────────────────────────
+  // ── 닻의 좁기를 재는 셋 ───────────────────────────────────────────────────────────
   //
   // **이 셋은 `=` 결정도 `;` 종결자도 재지 못한다.** 세 구현(지금 것 / 닻과 무관하게 넓힌 것
-  // / `;`를 종결자에서 뺀 것)에 셋을 다 먹여 봤고 **아홉 결과가 전부 같았다.** 즉 실패할 수
-  // 없는 케이스다 — 앞 판은 이 자리에 *"`=` 가지를 안 넓힌 근거"*라고 적고 있었고 그것은
-  // 틀렸다(애초에 `htmlFor` 삼킴이 일어나지 않는다. `shell-css-coverage.ts`의 `readValue`
-  // 머리말에 그 자취를 남겼다).
+  // / `;`를 종결자에서 뺀 것)에 셋을 다 먹이면 **아홉 결과가 전부 같다.** 그 결정 둘에 대해서는
+  // 실패할 수 없는 케이스이므로 *"`=` 가지를 안 넓힌 근거"*로 읽지 마라(애초에 `htmlFor`
+  // 삼킴이 일어나지 않는다 — `shell-css-coverage.ts`의 `readValue` 머리말).
   //
-  // **`=` 결정을 잠그는 것은 아래 `NOT_SEEN` 3번이다.**
+  // **`=` 결정을 잠그는 것은 위 `NOT_SEEN` 3번이다.**
   //
   // 그래도 셋을 두는 값은 있다: `id`·`htmlFor` 로 쓰는 `wb-shell-…` 이름 넷을 클래스로 세지
-  // 않는다는 성질(이 스캐너 설계의 요점이고 "32가 아니라 28"이 거기서 나왔다)이 **닻 정규식이
-  // 넓어지는 어떤 변경에도** 지켜지는지를 본다. 재는 대상이 `=` 결정이 아니라 **닻의 좁기**다.
+  // 않는다는 성질(이 스캐너 설계의 요점이다)이 **닻 정규식이 넓어지는 어떤 변경에도**
+  // 지켜지는지를 본다. 재는 대상이 `=` 결정이 아니라 **닻의 좁기**다.
   {
     label: '[닻] JSX 속성 뒤에 `htmlFor` 로 온 `wb-shell-…` 이름은 클래스가 아니다',
     source: `<label className="wb-shell-picker-label" htmlFor="wb-shell-preset-name">이름</label>`,
@@ -200,7 +198,7 @@ describe('shell.css 커버리지 — 코드가 붙인 클래스에 규칙이 있
   })
 
   it('다섯 위젯이 공유하는 `.wb-shell-control`을 실제로 본다', () => {
-    // **이 한 자리가 이번 사고의 최대 범위였다** — `text-control.tsx`가 `className:`으로
+    // **이 한 자리를 놓치면 범위가 가장 넓다** — `text-control.tsx`가 `className:`으로
     // 붙이므로 `className=`만 보는 검사는 여기를 통째로 지나친다. 위 표의 심기가 그 형태를
     // 재지만, 진짜 파일에서도 그런지는 여기서 본다.
     const [, source] = SOURCES.find(([file]) => file === 'panels/controls/text-control.tsx') ?? []

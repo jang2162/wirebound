@@ -25,7 +25,7 @@ function signedIn(): ApiClient {
   return fakeApi({ me: async () => USER, listProjects: async () => PROJECTS })
 }
 
-// 로그인 화면의 8번("me()가 401이면 로그인 화면이 보인다")은 `/login`에서 돌기 때문에
+// `login.test.tsx`의 «me()가 401이면 로그인 화면이 보인다»는 `/login`에서 돌기 때문에
 // 문지기의 리다이렉트를 지워도 통과한다 — 이미 로그인 화면에 있으니까. 인증이 필요한
 // 라우트에서 시작하는 이 파일이 그 공백을 메운다.
 describe('인증 문지기', () => {
@@ -114,7 +114,7 @@ describe('인증 문지기', () => {
   it('네트워크가 끊겨 ApiError조차 아니어도 로그인 폼이 보인다', async () => {
     // `fetch`는 응답을 받지 못하면 raw `TypeError`로 reject한다. `http-client`가 그것을
     // `ApiError`로 번역하지만, 화면은 `ApiError`가 아닌 값도 받을 수 있어야 한다 —
-    // 이 경로가 이 버그의 실제 유입 지점이었으므로 따로 못박는다.
+    // `ApiError`가 아닌 값이 실제로 들어오는 자리가 이 경로이므로 따로 못박는다.
     renderWithProviders(<App />, {
       client: fakeApi({ me: async () => Promise.reject(new TypeError('Failed to fetch')) }),
       route: '/login',

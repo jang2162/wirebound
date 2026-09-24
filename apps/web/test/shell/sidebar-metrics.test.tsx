@@ -2,9 +2,9 @@
  * **훅이 화면에서 재는 것** — `useSidebarLayout`의 `measure()`와 그것이 만드는 배분.
  *
  * `sidebar-layout.test.ts`는 **순수 함수**를 본다: 치수를 인자로 주고 식이 무엇을 내는지
- * 잰다. 그 파일이 못 보는 것이 **치수 자체가 어디서 오는가**이고, 이 커밋의 대표 고장이
- * 정확히 거기 있었다 — `regionGrow`의 식은 맞는데 `measure()`가 여백을 0으로 넘기면
- * 손잡이가 다시 포인터를 놓친다(브라우저 실측: 포인터 200px에 경계 190px대).
+ * 잰다. 그 파일이 못 보는 것이 **치수 자체가 어디서 오는가**이고, 이 부류의 대표 고장이
+ * 정확히 거기 있다 — `regionGrow`의 식은 맞는데 `measure()`가 여백을 0으로 넘기면
+ * 손잡이가 포인터를 놓친다(브라우저 실측: 포인터 200px에 경계 190px대).
  *
  * ## 어떻게 재는가 — jsdom에 없는 것만 주입한다
  *
@@ -44,7 +44,7 @@ interface Screen {
 }
 
 /**
- * 1440×900 크롬에서 잰 화면(2026-09-03). `sidebar-layout.test.ts`의 `MEASURED`와 같은
+ * 1440×900 크롬에서 잰 화면. `sidebar-layout.test.ts`의 `MEASURED`와 같은
  * 자리에서 왔고, 그 파일이 인자로 주는 것을 여기서는 **DOM에 실어** 훅이 직접 재게 한다.
  */
 const SCREEN: Screen = { sideHeight: 850.5, resizerHeight: 6, rowGap: 1, padding: 10 }
@@ -151,7 +151,7 @@ function open(screen: Screen): Holder {
 describe('여백 보정 — 사람이 정한 높이가 그대로 그려진다', () => {
   it('**이 파일의 핵심이다.** 정한 높이가 flex를 지나 같은 수로 돌아온다', () => {
     // 보정이 없으면(`measure()`가 `inset: 0`을 내면) 이 왕복이 깨진다 — 300px을 정했는데
-    // 화면은 305.76px을 그린다. 그것이 이 커밋이 고친 고장이다.
+    // 화면은 305.76px을 그린다.
     const holder = open(SCREEN)
     for (const height of [100, 300, 421.25, 600, 750]) {
       act(() => layoutOf(holder).setRegionHeight(height))
@@ -160,8 +160,8 @@ describe('여백 보정 — 사람이 정한 높이가 그대로 그려진다', 
   })
 
   it('포인터를 200px 밀면 경계도 200.0px 간다', () => {
-    // 커밋 메시지가 든 그 드래그다. 보정 전 브라우저 실측이 190.4px이었고, 이 치수에
-    // 보정을 빼면 190.5px가 나온다.
+    // 보정이 없으면 브라우저 실측이 190.4px이고, 이 치수에서 보정을 빼면 190.5px가
+    // 나온다.
     const holder = open(SCREEN)
     const before = rendered(layoutOf(holder).regionGrow)
     const from = layoutOf(holder).grabRegionHeight()
@@ -171,7 +171,7 @@ describe('여백 보정 — 사람이 정한 높이가 그대로 그려진다', 
 
   it('여백이 바뀌면 보정이 따라온다 — 상수로 적지 않은 근거다', () => {
     // `shell.css`의 `.wb-shell-region`이 여백을 고치면 환산이 저절로 맞는다. 상수로 두면
-    // 그날 손잡이가 조용히 어긋난다.
+    // 여백이 바뀌는 순간 손잡이가 조용히 어긋난다.
     const holder = open({ ...SCREEN, padding: 16 })
     act(() => layoutOf(holder).setRegionHeight(300))
     expect(rendered(layoutOf(holder).regionGrow, 32)).toBeCloseTo(300, 6)

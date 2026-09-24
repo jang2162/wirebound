@@ -1,8 +1,8 @@
 /**
- * 패턴 삽입의 화면 흐름(P7-1 T4 — D4·D5·D9). **`<App />`을 라우트째 렌더한다.**
+ * 패턴 삽입의 화면 흐름. **`<App />`을 라우트째 렌더한다.**
  *
  * **자리 규칙 자체는 여기서 재지 않는다** — `../edit/pattern-insert.test.ts`가 문서로
- * 직접 잰다. 여기서 재는 것은 그 결과가 **기존 커밋 경로를 그대로 타는가**(D4)와
+ * 직접 잰다. 여기서 재는 것은 그 결과가 **기존 커밋 경로를 그대로 타는가**와
  * **실패 갈래마다 무엇이 되돌아가는가**다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -107,7 +107,7 @@ async function insertPattern(): Promise<void> {
   fireEvent.click(screen.getByRole('button', { name: '패턴 추가' }))
 }
 
-describe('패턴 삽입 — D4: 기존 커밋 경로를 탄다', () => {
+describe('패턴 삽입 — 기존 커밋 경로를 탄다', () => {
   it('편집 하나로 나가고 op은 꽂은 노드 수만큼이다', async () => {
     const backend = server()
     await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
@@ -170,7 +170,7 @@ describe('패턴 삽입 — D4: 기존 커밋 경로를 탄다', () => {
   })
 })
 
-describe('패턴 삽입 — D5: 꽂는 자리', () => {
+describe('패턴 삽입 — 꽂는 자리', () => {
   it('자식을 받는 노드를 골랐으면 그 안에 들어간다', async () => {
     const backend = server()
     await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
@@ -212,7 +212,7 @@ describe('패턴 삽입 — D5: 꽂는 자리', () => {
   })
 })
 
-describe('패턴 삽입 — 꽂은 뒤 선택 (D3의 흐름)', () => {
+describe('패턴 삽입 — 꽂은 뒤 선택', () => {
   it('첫 슬롯 노드로 선택이 옮겨진다 — 그것을 골라야 슬롯을 채운다', async () => {
     const backend = server()
     await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
@@ -244,7 +244,7 @@ describe('패턴 삽입 — 꽂은 뒤 선택 (D3의 흐름)', () => {
   })
 })
 
-describe('패턴 삽입 — D9: 실패 갈래마다 무엇이 되돌아가는가', () => {
+describe('패턴 삽입 — 실패 갈래마다 무엇이 되돌아가는가', () => {
   it('카탈로그에 없는 타입을 담은 패턴은 편집을 만들지 않고 이유를 말한다', async () => {
     const backend = server()
     const broken: Theme = {
@@ -291,10 +291,9 @@ describe('패턴 삽입 — D9: 실패 갈래마다 무엇이 되돌아가는가
   })
 
   /**
-   * **이 케이스는 겨냥을 바꿔 두 번째로 잰 것이다.** 첫 판에는 `'no-spot'` 문장을 재는
-   * 화면 케이스가 없었고, 그래서 *"`no-spot`과 `invalid`를 같은 문장으로 합친다"*는 변이가
-   * **0 사망**이었다 — D9가 요구한 *"패턴이 잘못됐다"*와 *"내가 잘못 눌렀다"*의 구분 중
-   * **뒤엣것이 케이스 밖**이었다는 뜻이다.
+   * **`'no-spot'` 문장을 재는 화면 케이스는 이것뿐이다.** 이것이 없으면 *"`no-spot`과
+   * `invalid`를 같은 문장으로 합친다"*는 변이가 **0 사망**이다 — *"패턴이 잘못됐다"*와
+   * *"내가 잘못 눌렀다"*의 구분 중 **뒤엣것이 케이스 밖**이 된다.
    *
    * 화면에서 그 갈래에 닿는 길: **`children`이 배열이 아닌 문서.** `insertNodeOps`가
    * 그 부모를 `null`로 막으므로(*"깨진 문서를 조용히 덮지 않는다"* — 그쪽 실측)
@@ -304,10 +303,10 @@ describe('패턴 삽입 — D9: 실패 갈래마다 무엇이 되돌아가는가
   it('꽂을 자리가 없으면 자리 문제라고 말한다 — 패턴 탓으로 돌리지 않는다', async () => {
     const backend = server()
     const brokenDoc = pageDoc({ id: 'n-root', type: 'Page', children: '배열이아니다' } as never)
-    // **`backend.api`를 통째로 펼치지 않는다 — 처음에 그렇게 짰고 케이스가 거짓 초록이
-    // 됐다.** `server()`의 `getPage`는 자기 `held`(정상 문서)를 돌려주므로 여기서 준
-    // 깨진 문서를 덮는다. 실측: 그때 구조 트리에 패턴이 **정상적으로 꽂혔고**
-    // (`Section`·`SearchForm`·`List`가 보였다) 알림은 `null`이었다.
+    // **`backend.api`를 통째로 펼치지 않는다 — 펼치면 케이스가 거짓 초록이 된다.**
+    // `server()`의 `getPage`는 자기 `held`(정상 문서)를 돌려주므로 여기서 준 깨진 문서를
+    // 덮는다. 그러면 구조 트리에 패턴이 **정상적으로 꽂히고**(`Section`·`SearchForm`·`List`가
+    // 보인다) 알림은 `null`이다.
     await openPage(brokenDoc, {
       apiOverrides: { patchOps: backend.api.patchOps!, ...themeApi(systemTheme('portal')!) },
     })
@@ -335,7 +334,8 @@ describe('패턴 삽입 — D9: 실패 갈래마다 무엇이 되돌아가는가
       expect(alertText()).toContain('페이지가 이미 변경되었습니다')
     })
     expect(structureTypes()).toEqual(['Page', 'Text', 'Card'])
-    // 선택은 `loadPage`가 재설정한다(P2b-2 이월 §1) — 부모가 아니라 `null`이다.
+    // 선택은 `loadPage`가 다시 정한다 — 꽂은 노드는 서버 문서에 없으므로 부모가 아니라
+    // `null`이다(`store/editor-store.ts`의 `#selectionFor` «사라진 노드는 놓는다»).
     expect(selectedType()).toBeNull()
   })
 })

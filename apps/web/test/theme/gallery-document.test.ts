@@ -1,18 +1,19 @@
 /**
- * **갤러리가 그릴 문서**(② W3). React를 안 쓰는 순수 데이터 케이스라 `theme-gallery.test.tsx`와
+ * **갤러리가 그릴 문서.** React를 안 쓰는 순수 데이터 케이스라 `theme-gallery.test.tsx`와
  * 갈라 두었다 — 그쪽은 렌더링을 잰다.
  *
  * **가르는 데는 이유가 하나 더 있다.** 이 파일은 `src/theme/gallery-document`와
  * `@wirebound/schema`·`@wirebound/themes`만 import한다. 그래서 그 모듈의
  * `import '../catalog-setup'`이 **카탈로그가 설치되는 유일한 경로**이고, 그 줄을 지우면
- * 아래 케이스가 죽는다(재서 확인했다 — 보고서의 변조 표). `theme-gallery.test.tsx`는
+ * 아래 케이스가 죽는다. `theme-gallery.test.tsx`는
  * `draft-css`를 import하는데 **그쪽이 카탈로그를 또 끌어오므로** 같은 구분력을 얻지 못한다 —
- * ①이 `draft-css.ts`에서 만난 것과 같은 부류다(그쪽 0 사망).
+ * `draft-css.test.tsx`의 *"이 파일이 도는 시점에 카탈로그가 설치돼 있다"*와 같은 부류다
+ * (그쪽은 `draft-css.ts`의 그 import를 지워도 죽는 케이스가 없다).
  *
  * ---
  *
- * **§5의 수를 여기서 붙든다.** `gallery-document.ts` 머리말이 재라 #5의 근거로 수 여섯을
- * 적었는데, 그 수가 낡는 것이 이 저장소에서 반복된 실패다(P4c-1 이월 §5 · ①의 보고서 §7-2).
+ * **§5의 수를 여기서 붙든다.** `gallery-document.ts` 머리말이 `재라 #5` 표에 수 여섯을
+ * 적는데, 주석에 적은 수는 코드가 바뀌어도 아무것도 죽지 않아 조용히 낡는다.
  * 그래서 **주석이 아니라 케이스가 센다** — 값이 바뀌면 여기서 죽고, 죽으면 머리말을 고치게 된다.
  */
 import { describe, expect, it } from 'vitest'

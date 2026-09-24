@@ -2,7 +2,7 @@
 /**
  * `EditorStore`의 계약 테스트. **React를 import하지 않고 DOM 없는 환경에서 돈다.**
  *
- * P2b-2가 이 스토어 위에 낙관적 적용·롤백·리베이스·pending 큐·undo/redo를 얹는다.
+ * 이 스토어는 낙관적 적용·롤백·리베이스·pending 큐·undo/redo를 든다.
  * 그 로직을 브라우저 없이 단위 테스트할 수 있어야 하므로, 스토어가 React·DOM에
  * 손대지 않는 것이 이 파일의 전제다.
  *
@@ -12,7 +12,7 @@
  * (`use-editor-store.tsx`)의 테스트는 jsdom이 필요하므로 따로 있다.
  *
  * **그 지시자를 이 주석에 그대로 옮겨 적지 마라.** vitest는 파일 어디에 있든 그
- * 토큰을 찾는다(파일 끝 줄 주석으로도 먹히는 것을 실측했다). 산문에 한 번 더 적으면
+ * 토큰을 찾는다(파일 끝 줄 주석으로도 먹힌다 — 실측). 산문에 한 번 더 적으면
  * 맨 윗줄을 지워도 환경이 그대로라, 아래 첫 테스트가 그 사고를 잡지 못한다.
  */
 import {
@@ -94,11 +94,11 @@ describe('EditorStore', () => {
   /**
    * **페이지를 열면 루트가 고른 상태로 시작한다.**
    *
-   * 앞 판은 여기서 선택을 `null`로 비웠고, 그래서 페이지를 연 직후가 **죽은 화면**이었다 —
+   * 여기서 선택을 `null`로 비우면 페이지를 연 직후가 **죽은 화면**이 된다 —
    * 브라우저에서 잰 값: 구조 편집 도구 9개 중 7개가 꺼지고(`안에 추가`의 `title`이
    * *"자식을 담을 수 있는 타입이어야 하고, children이 배열이어야 합니다"*, `아래 추가`·`삭제`가
-   * *"루트가 아닌 노드를 고르세요"*), 속성 패널은 *"노드를 고르면 속성이 보입니다"*만 그렸다.
-   * 트리에서 루트를 한 번 누르면 그 자리에서 풀렸다 — **클릭 한 번으로 풀리는 것**이 곧
+   * *"루트가 아닌 노드를 고르세요"*), 속성 패널은 *"노드를 고르면 속성이 보입니다"*만 그린다.
+   * 트리에서 루트를 한 번 누르면 그 자리에서 풀린다 — **클릭 한 번으로 풀리는 것**이 곧
    * 스토어가 그 선택을 스스로 놓을 수 있다는 근거다.
    *
    * **`null`이 뜻하는 것이 갈리는 것이 이 묶음의 요점이다.** 페이지를 여는 것은 "아직 아무
@@ -128,10 +128,10 @@ describe('EditorStore', () => {
     it('`clearPage` 뒤에 **같은** 페이지를 다시 열어도 루트를 고른다', () => {
       const store = new EditorStore()
       store.loadPage('pg-a', withChild('n_root', 'n_a'), 1)
-      // **루트가 아닌 자리를 고른다.** 앞 판은 여기서 `doc('n_a')`를 써 루트 id와 고른 id가
-      // 같았고, 그래서 마지막 단언이 *"루트를 골랐다"*와 *"앞 선택이 남았다"*를 **가르지
-      // 못했다** — 통과하는 이유가 둘 중 무엇인지 케이스가 말하지 못했다. 이제 갈린다:
-      // 재조회 갈래로 새면 `n_a`(또는 `null`)이고, 여는 갈래라야 `n_root`다.
+      // **루트가 아닌 자리를 고른다.** 루트 id와 고른 id가 같으면(`doc('n_a')`) 마지막 단언이
+      // *"루트를 골랐다"*와 *"앞 선택이 남았다"*를 **가르지 못한다** — 통과하는 이유가 둘 중
+      // 무엇인지 케이스가 말하지 못한다. 여기서는 갈린다: 재조회 갈래로 새면 `n_a`(또는
+      // `null`)이고, 여는 갈래라야 `n_root`다.
       store.selectNode('n_a')
       // 화면이 페이지를 여는 경로에서 실제로 하는 순서다 — 조회를 시작할 때 비우고
       // (`routes/editor.tsx`의 `CanvasFrame`), 응답이 오면 싣는다. 페이지 id가 그대로여도
@@ -140,9 +140,9 @@ describe('EditorStore', () => {
 
       store.loadPage('pg-a', withChild('n_root', 'n_a'), 2)
 
-      // **재는 것은 `pageId`만 보는 구현을 가르는 힘이다 — 심어서 확인했다.** 갈림을
-      // *"마지막으로 실은 `pageId`"*를 따로 들고 그것만 비교하는 구현으로 바꾸면 이 케이스가
-      // 죽는다(전량에서 2 사망: 이것과 아래 잠금 대조). 지금 구현이 통과하는 이유는
+      // **재는 것은 `pageId`만 보는 구현을 가르는 힘이다.** 갈림을
+      // *"마지막으로 실은 `pageId`"*를 따로 들고 그것만 비교하는 구현으로 바꾸면 이 케이스와
+      // 아래 잠금 대조가 죽는다. 지금 구현이 통과하는 이유는
       // **`clearPage`가 `openPageId`를 문서·선택과 함께 비우기 때문**이고, 그 성질은
       // `clearPage는 openPageId·문서·headSeq·선택을 비운다`가 따로 지킨다.
       expect(store.getState().selectedNodeId).toBe('n_root')
@@ -151,14 +151,14 @@ describe('EditorStore', () => {
     it('남이 잠근 자리는 자동으로도 고르지 않는다 — 1차 방어를 우회하지 않는다', () => {
       const store = new EditorStore()
       store.setViewer('u_dahye')
-      // 남이 페이지 안 어디든 잡고 있으면 **루트가 그 조상이라** 부딪친다(§7.2는 서브트리를
-      // 잠근다). `selectNode`가 막는 것을 `loadPage`가 뒷문으로 통과시키면 판정이 두 벌이 된다.
+      // 남이 페이지 안 어디든 잡고 있으면 **루트가 그 조상이라** 부딪친다(설계서
+      // 「소프트 잠금」은 서브트리를 잠근다). `selectNode`가 막는 것을 `loadPage`가 뒷문으로 통과시키면 판정이 두 벌이 된다.
       store.setLocks([{ pageId: 'pg-1', nodeId: 'n_a', userId: 'u_bora', userName: '보라' }])
 
       store.loadPage('pg-1', withChild('n_root', 'n_a'), 1)
 
       expect(store.getState().selectedNodeId).toBeNull()
-      // 대조: 그 잠금이 내 것이면 막히지 않는다(D3 — 소유자는 사람이다).
+      // 대조: 그 잠금이 내 것이면 막히지 않는다(잠금 소유자는 사람이다).
       store.setViewer('u_bora')
       store.clearPage()
       store.loadPage('pg-1', withChild('n_root', 'n_a'), 1)
@@ -225,7 +225,7 @@ describe('EditorStore', () => {
     // 그릴 문서를 못 받는다. 둘은 함께 움직여야 한다.
     expect(store.getState().openPageId).toBeNull()
     expect(store.getState().document).toBeNull()
-    // `headSeq`를 함께 본다 — P2b-2가 그 값을 `baseSeq`로 쓰므로, 문서만 비우고 seq를
+    // `headSeq`를 함께 본다 — 편집이 그 값을 `baseSeq`로 쓰므로, 문서만 비우고 seq를
     // 남기면 열린 페이지 없이 편집 요청이 만들어진다.
     expect(store.getState().headSeq).toBe(0)
     // 노드 id는 문서 안에서만 뜻이 있다. 문서를 비웠는데 선택이 남으면 존재하지 않는
@@ -384,8 +384,8 @@ describe('EditorStore', () => {
 
     store.reset()
 
-    // 필드를 하나씩 세지 않고 새 스토어와 통째로 비교한다 — P2b-2가 상태에 필드를
-    // 더했을 때 `reset`이 그것을 빠뜨리면 여기서 드러난다.
+    // 필드를 하나씩 세지 않고 새 스토어와 통째로 비교한다 — 상태에 필드를
+    // 더할 때 `reset`이 그것을 빠뜨리면 여기서 드러난다.
     expect(store.getState()).toEqual(new EditorStore().getState())
   })
 
@@ -410,15 +410,15 @@ const TITLE_OPS: PatchOp[] = [
   { op: 'add', path: '/root/props', value: { title: '새 제목' } },
 ]
 
-/** `applyOps`가 던지는 ops. 없는 경로다 — D7의 신호를 만드는 값이다. */
+/** `applyOps`가 던지는 ops. 없는 경로다 — *"클라이언트가 만든 잘못된 ops"*의 신호를 만드는 값이다. */
 const BROKEN_OPS: PatchOp[] = [
   { op: 'replace', path: '/root/children/9/props/title', value: 'x' },
 ]
 
 /**
- * 서버가 준 ack. `inverse`는 서버가 만든 것이다(설계 §7.1).
+ * 서버가 준 ack. `inverse`는 서버가 만든 것이다(설계서 「정방향 흐름」).
  *
- * 기본값은 `TITLE_OPS`(통째 `add`)의 역인 `remove /root/props`다 — 웨이브 2가 잰 값이다.
+ * 기본값은 `TITLE_OPS`(통째 `add`)의 역인 `remove /root/props`다.
  * undo가 만든 revision의 역은 그 반대이므로 케이스가 직접 준다.
  */
 function ack(
@@ -429,8 +429,8 @@ function ack(
 }
 
 /**
- * 서버가 편집 응답에 실어 보내는 경고 하나(P5-3 D6). **저장은 성공했다** — severity가
- * `warning`인 이슈는 저장을 막지 않고 문서에 남는다(P5-2 재라 #2).
+ * 서버가 편집 응답에 실어 보내는 경고 하나. **저장은 성공했다** — severity가
+ * `warning`인 이슈는 저장을 막지 않고 문서에 남는다.
  */
 const WARNING: ValidationIssue = {
   code: 'missing-interaction-target',
@@ -474,7 +474,7 @@ describe('EditorStore의 편집 상태', () => {
     expect(clientOpId).toBe('op-1')
     // 낙관적 적용 — 서버에 묻기 전에 문서가 이미 바뀌어 있다.
     expect(store.getState().document?.root.props).toEqual({ title: '새 제목' })
-    // `kind`는 ack가 어느 스택에 쌓을지를 가르는 표시다(Task 10).
+    // `kind`는 ack가 어느 스택에 쌓을지를 가르는 표시다.
     expect(store.getState().pending).toEqual([
       { clientOpId: 'op-1', ops: TITLE_OPS, baseSeq: 7, kind: 'edit' },
     ])
@@ -484,7 +484,7 @@ describe('EditorStore의 편집 상태', () => {
   })
 
   it('적용할 수 없는 ops는 큐를 건드리지 않는다', () => {
-    // D7 — `applyOps`가 던지는 것은 클라이언트가 만든 잘못된 ops다. 서버에 보내 봐야
+    // `applyOps`가 던지는 것은 클라이언트가 만든 잘못된 ops다. 서버에 보내 봐야
     // 409/422를 받고 재조회 비용만 든다.
     const store = loaded()
     const before = store.getState()
@@ -520,14 +520,14 @@ describe('EditorStore의 편집 상태', () => {
 
     expect(store.getState().headSeq).toBe(8)
     expect(store.getState().pending).toEqual([])
-    // **`inverse`는 서버가 준 그대로 쌓인다**(설계 §7.1). 클라이언트가 계산하지 않는다.
+    // **`inverse`는 서버가 준 그대로 쌓인다**(설계서 「정방향 흐름」). 클라이언트가 계산하지 않는다.
     expect(store.getState().undoStack).toEqual([
       { revisionId: 'rev-8', inverse: [{ op: 'remove', path: '/root/props' }] },
     ])
   })
 
   /**
-   * **경고는 ack와 함께 움직인다**(P5-3 D6). 서버가 편집 응답에 실어 보내는
+   * **경고는 ack와 함께 움직인다.** 서버가 편집 응답에 실어 보내는
    * `warnings`가 여기로 들어오고, 그것을 그리는 자리는 셸 머리다
    * (`shell/edit-warnings.tsx`).
    */
@@ -622,9 +622,9 @@ describe('EditorStore의 편집 상태', () => {
   })
 
   it('실패해도 문서는 되돌리지 않는다', () => {
-    // D4 — 롤백 경로는 재조회 하나뿐이다. 여기서 로컬 `inverse`로 되돌리면 클라이언트가
-    // 낙관적으로 앞서 있는 만큼 서버와 어긋난다(설계 §7.1이 `inverse`를 서버가 만들게
-    // 한 것과 같은 이유).
+    // 롤백 경로는 재조회 하나뿐이다. 여기서 로컬 `inverse`로 되돌리면 클라이언트가
+    // 낙관적으로 앞서 있는 만큼 서버와 어긋난다(설계서 「정방향 흐름」이 `inverse`를 서버가
+    // 만들게 한 것과 같은 이유).
     const store = loaded()
     store.applyEdit(TITLE_OPS)
 
@@ -737,14 +737,14 @@ describe('EditorStore의 편집 상태', () => {
     const before = store.getState()
 
     // **모양을 통째로 못박는다** — 필드가 늘면 여기가 먼저 죽고 그때 사람이 본다.
-    // `blocked`는 남의 잠금에 막힌 항목이다(§7.2 · `test/lock/undo-locks.test.tsx`).
+    // `blocked`는 남의 잠금에 막힌 항목이다(설계서 「소프트 잠금」 · `test/lock/undo-locks.test.tsx`).
     expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 0, blocked: null })
 
     expect(store.getState()).toBe(before)
   })
 
   it('적용할 수 없는 inverse는 스택에서 빼고 다음으로 넘어간다', () => {
-    // **설계 §7.3의 계약이다 — 에러가 아니라 정상 흐름이다.** 그 경로가 없으면 다른
+    // **설계서 「개인 undo/redo」의 계약이다 — 에러가 아니라 정상 흐름이다.** 그 경로가 없으면 다른
     // 사람이 지운 노드를 undo할 때 스택 맨 위에 갇힌다.
     const store = loaded()
     // **인자는 최신이 앞이다**(서버 응답 순서). 그러므로 `rev-bad`가 스택 top이다.
@@ -779,8 +779,8 @@ describe('EditorStore의 편집 상태', () => {
   it('restoreUndoStack은 최신이 top이 되게 싣는다', () => {
     // 서버 응답은 `seq` 내림차순(최신이 앞)이고, 이 스토어의 스택은 **끝이 top**이다
     // (`ackEdit`이 `[...undoStack, ref]`로 쌓는다). 그래서 싣는 쪽이 뒤집는다 —
-    // **계획서는 "뒤집지 마라"고 적었는데 그것은 스택을 "앞이 top"으로 두는 표현을
-    // 전제한 말이다.** 여기서 재는 것은 배열 모양이 아니라 **어느 것이 먼저 undo되는가**다.
+    // ***"뒤집지 마라"*는 스택을 "앞이 top"으로 두는 표현에서만 맞는 말이다.** 여기서 재는
+    // 것은 배열 모양이 아니라 **어느 것이 먼저 undo되는가**다.
     const store = loaded()
     store.restoreUndoStack([
       { revisionId: 'rev-최신', inverse: [{ op: 'add', path: '/root/props', value: { title: '최신' } }] },
@@ -797,7 +797,7 @@ describe('EditorStore의 편집 상태', () => {
   })
 
   it('restoreUndoStack은 redo 스택을 비운다', () => {
-    // D10 — 복원한 항목은 redo를 갖지 않는다. redo 스택은 세션 안에서 undo를 눌러야 생긴다.
+    // 복원한 항목은 redo를 갖지 않는다. redo 스택은 세션 안에서 undo를 눌러야 생긴다.
     const store = loaded()
     store.applyEdit(TITLE_OPS)
     store.ackEdit('op-1', ack(8))
@@ -824,7 +824,7 @@ describe('EditorStore의 편집 상태', () => {
   })
 
   it('펌프는 한 번에 하나만 돈다', () => {
-    // **훅 인스턴스가 둘이어도 D6가 지켜져야 한다.** 실측: 펌프 가드가 훅의 ref에 있으면
+    // **훅 인스턴스가 둘이어도 in-flight는 하나여야 한다.** 실측: 펌프 가드가 훅의 ref에 있으면
     // `useEditCommit`을 두 번 부른 트리에서 `maxInFlight`가 2가 된다. 가드를 스토어에 두면
     // 인스턴스 수와 무관해진다 — undo/redo 버튼이 속성 패널과 다른 인스턴스를 쓰기 때문에
     // 이 자리가 실재하는 경로다.
@@ -839,7 +839,7 @@ describe('EditorStore의 편집 상태', () => {
 })
 
 /**
- * **코멘트가 낸 문서 변화를 받는 자리**(P5-1, 계획서 D2).
+ * **코멘트가 낸 문서 변화를 받는 자리.**
  *
  * 코멘트를 달거나 지우거나 재번호하면 서버가 노드의 `marker`를 바꾸고 revision을 남긴다.
  * 그 변화는 `PATCH .../ops`의 ack가 아니라 코멘트 응답으로 오므로 `ackEdit`이 아니라
@@ -901,7 +901,7 @@ describe('EditorStore의 마커 반영', () => {
     const store = new EditorStore()
     store.loadPage('pg-2', withChild(), 3)
 
-    // **`'skipped'`다 — `'diverged'`가 아니다**(리뷰 ④). 그 화면은 이미 다른 페이지를
+    // **`'skipped'`다 — `'diverged'`가 아니다.** 그 화면은 이미 다른 페이지를
     // 보고 있으므로 말할 것이 없다.
     expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('skipped')
     expect(store.getState().headSeq).toBe(3)
@@ -916,7 +916,7 @@ describe('EditorStore의 마커 반영', () => {
     store.loadPage('pg-1', withChild(), 7)
     store.applyEdit([{ op: 'remove', path: '/root/children/0' }])
 
-    // **`'diverged'`다 — 화면이 이것을 말해야 한다**(리뷰 ④). 서버에는 번호가 있는데
+    // **`'diverged'`다 — 화면이 이것을 말해야 한다.** 서버에는 번호가 있는데
     // 내 문서에는 없는 상태이고, 조용히 넘기면 아무도 그 어긋남을 모른다.
     expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('diverged')
     expect(store.getState().headSeq).toBe(7)
@@ -926,7 +926,7 @@ describe('EditorStore의 마커 반영', () => {
     // 이미 번호가 있는 노드에 코멘트를 더 달았거나, 마지막이 아닌 코멘트를 지웠거나,
     // 바꿀 것 없는 재번호다.
     //
-    // **응답의 `seq`를 받아들이지 않는 것이 요점이다**(리뷰 ④의 곁가지). 그 값은 서버가
+    // **응답의 `seq`를 받아들이지 않는 것이 요점이다.** 그 값은 서버가
     // 요청을 받은 시점의 `head_seq`이고 **내 문서가 그 revision 위에 서 있다는 뜻이
     // 아니다.** 내가 뒤처져 있으면 그것을 받아 "나는 최신이다"라고 믿게 되고, 앞서
     // 있으면 값이 **내려간다** — 여기서는 내려가는 쪽을 잰다.
@@ -945,7 +945,7 @@ describe('EditorStore의 마커 반영', () => {
   })
 
   /**
-   * **번호를 바탕에도 남긴다**(P3-2 D3). 이 변경은 서버가 이미 기록한 것이므로, 바탕이
+   * **번호를 바탕에도 남긴다.** 이 변경은 서버가 이미 기록한 것이므로, 바탕이
    * 그것을 모르면 **다음 리베이스가 번호 없는 문서 위에서 만들어져** 캔버스에서 번호가
    * 사라진다. 바탕은 스토어 밖에서 읽지 않으므로(`test/store-access-guard.ts`), 재는 것은
    * 그 값이 아니라 **다음 리베이스의 결과**다.
@@ -967,10 +967,10 @@ describe('EditorStore의 마커 반영', () => {
 })
 
 /**
- * **밖에서 온 루트 잠금은 그대로 존중한다 — `lockedBy`에 예외를 두지 않았다.**
+ * **밖에서 온 루트 잠금은 그대로 존중한다 — `lockedBy`에 예외를 두지 않는다.**
  *
  * 화면은 루트로 잠금을 **보내지 않는다**(`realtime/use-node-lock.ts` — 루트 잠금은 페이지
- * 전체 잠금이고 §7.2의 서브트리 잠금이 뜻한 것이 아니다). 그래서 *"루트는 어차피 안
+ * 전체 잠금이고 설계서 「소프트 잠금」의 서브트리 잠금이 뜻한 것이 아니다). 그래서 *"루트는 어차피 안
  * 잠기니 `lockedBy`도 예외로 두면 깔끔하다"*가 다음 사람에게 자연스러운 정리로 보인다.
  * **이 묶음이 그 정리를 막는 자리다.**
  *
@@ -980,13 +980,13 @@ describe('EditorStore의 마커 반영', () => {
  * 사용자는 값을 쳤는데 저장이 안 되고 **왜인지는 화면에 없다.**
  *
  * **그리고 루트 잠금은 실제로 도착할 수 있다.** 서버는 받은 것을 그대로 브로드캐스트하므로
- * (`apps/api/src/ws/lock.ts` — 루트 예외가 없다) 안 고친 탭·다른 클라이언트·옛 세션이 남긴
- * 것이 온다. **보내는 쪽을 고친 것이 받는 쪽의 계약을 바꾸지는 않는다.**
+ * (`apps/api/src/ws/lock.ts` — 루트 예외가 없다) 루트를 보내는 옛 코드의 탭·다른 클라이언트·
+ * 지난 세션이 남긴 것이 온다. **보내는 쪽이 안 보낸다고 받는 쪽의 계약이 바뀌지는 않는다.**
  *
- * **이 묶음이 서기 전에는 그 예외가 0 사망이었다** — 밖에서 온 루트 잠금을 쏘는 케이스가
- * 테스트 전체에 없었다(리뷰가 예외를 심어 보고 잡았다).
+ * **이 묶음이 없으면 그 예외를 심어도 죽는 케이스가 없다** — 밖에서 온 루트 잠금을 쏘는
+ * 자리가 이 묶음이다.
  */
-describe('밖에서 온 루트 잠금 (§7.2 — 화면은 안 보내지만 받는다)', () => {
+describe('밖에서 온 루트 잠금 (설계서 「소프트 잠금」 — 화면은 안 보내지만 받는다)', () => {
   const ROOT_LOCK = { pageId: 'pg-1', nodeId: 'n_root', userId: 'u_bora', userName: '보라' }
 
   it('이미 도착해 있으면 자동 선택도 막힌다 — 페이지 전체가 남의 것이다', () => {
@@ -1023,7 +1023,7 @@ describe('밖에서 온 루트 잠금 (§7.2 — 화면은 안 보내지만 받�
     // 이미 고른 자리를 스토어가 되돌리지는 않는다(`setLocks`는 선택을 안 건드린다) — 대신
     // **어디로도 옮겨가지 못한다.**
     //
-    // **그 상태가 화면에서 어떻게 보이는지는 이제 도구모음 아래 상태줄이 말한다**
+    // **그 상태가 화면에서 어떻게 보이는지는 도구모음 아래 상태줄이 말한다**
     // (*"○○님이 편집 중이라 고를 수 없습니다"* — `panels/toolbar-status.ts`).
     //
     // **여기 잠금은 고른 노드 «자신»을 가리킨다** — `ROOT_LOCK.nodeId`가 곧 고른 `n_root`다.
@@ -1033,19 +1033,17 @@ describe('밖에서 온 루트 잠금 (§7.2 — 화면은 안 보내지만 받�
     //
     // **배지가 안 붙는 경우는 따로 있다 — 그것과 이것은 다르다.** 남이 «자손»을 잡아 루트가
     // «조상»으로 막히는 때다(배지는 잠금이 **가리키는** 노드에만 붙는다). 그때는 상태줄이
-    // 화면의 유일한 단서이고, 그것이 P10-2 이월이 연 자리다(같은 파일의 *"잠긴 조상의 이유는
-    // 배지가 아니라 여기 있다"*). **두 경우의 문장은 같다** — 이 줄이 답하는 질문이
-    // *"고른 것이 무엇이라서 그런가"*이고 그 답이 둘 다 *"남이 편집 중이라서"*이기 때문이다.
+    // 화면의 유일한 단서다(같은 파일의 *"잠긴 조상의 이유는 배지가 아니라 여기 있다"*).
+    // **두 경우의 문장은 같다** — 이 줄이 답하는 질문이 *"고른 것이 무엇이라서 그런가"*이고
+    // 그 답이 둘 다 *"남이 편집 중이라서"*이기 때문이다.
     //
-    // **앞 판은 이 자리에 거짓을 두 번 적었다.** 처음에는 *"이월에 적었다"*(장부
-    // `docs/superpowers/plans/2026-08-17-p10-2-carryforward.md`에 그 줄이 없었다), 고치면서
-    // *"트리 줄에 배지가 없다"*(이 상황에서는 붙는다 — 리뷰 실측). 둘째 거짓은 «조상» 경우의
-    // 문장을 «자신» 경우의 자리에 그대로 옮겨 적어서 났다.
+    // **«조상» 경우의 문장을 «자신» 경우의 자리에 옮겨 적지 마라** — *"트리 줄에 배지가
+    // 없다"*는 «조상» 경우에만 참이고, 이 상황에서는 배지가 붙는다.
     store.selectNode('n_a')
     expect(store.getState().selectedNodeId).toBe('n_root')
   })
 
-  it('내가 잡은 루트 잠금은 나를 막지 않는다 — 대조 (D3)', () => {
+  it('내가 잡은 루트 잠금은 나를 막지 않는다 — 대조', () => {
     const store = new EditorStore()
     store.setViewer('u_bora')
     store.setLocks([ROOT_LOCK])
@@ -1059,16 +1057,17 @@ describe('밖에서 온 루트 잠금 (§7.2 — 화면은 안 보내지만 받�
   })
 })
 /**
- * **잠금 판정은 *"내가 누구인가"*를 모를 때 막는 쪽으로 기운다**(설계 §7.2 · P3-3 D3).
+ * **잠금 판정은 *"내가 누구인가"*를 모를 때 막는 쪽으로 기운다**(설계서 「소프트 잠금」).
  *
  * 화면에서 `setViewer`는 이펙트라 **첫 렌더에 한 커밋 늦는다** — 그 창에서 `locks` 프레임이
- * 먼저 닿으면 `viewerUserId`가 아직 `null`이다. 그때 *"모르니까 통과시킨다"*로 두면 §7.2의
+ * 먼저 닿으면 `viewerUserId`가 아직 `null`이다. 그때 *"모르니까 통과시킨다"*로 두면 그 절의
  * 1차 방어가 그 커밋 동안 통째로 사라지고, 사용자는 남이 편집 중인 노드를 고른다.
  *
  * **셸로는 이 갈래를 잴 수 없다** — `useNodeLock`이 언제나 `setViewer`를 부르므로 그 창이
- * 케이스로 재현되지 않는다(리뷰의 W5가 **0 사망**이던 이유다). 스토어를 직접 쥐면 잰다.
+ * 케이스로 재현되지 않는다(셸 쪽에서 이 판정을 바꿔도 죽는 케이스가 없다). 스토어를 직접
+ * 쥐면 잰다.
  */
-describe('내가 누구인지 모를 때 (P3-3 D3)', () => {
+describe('내가 누구인지 모를 때', () => {
   const LOCK = { pageId: 'pg-1', nodeId: 'n_a', userId: 'u_bora', userName: '보라' }
 
   function locked(): EditorStore {

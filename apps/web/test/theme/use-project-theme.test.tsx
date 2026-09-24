@@ -1,10 +1,9 @@
 /**
  * 서버에서 테마를 읽는 `ThemeSource`.
  *
- * **컴파일 횟수를 실제로 센다.** P4a-2가 이월에 *"`ThemeSource`를 안정 참조로 유지해야
- * 한다"*고 적었는데, 참조 동일성만 단언하면 *"그래서 재컴파일이 실제로 줄었는가"*를
- * 재지 않는다. `vi.mock`으로 `compileTheme`을 감싸 **부른 횟수**를 세면 그 질문에
- * 직접 답한다 — 재는 방법을 이것으로 정했다(계획서 Task 9 Step 1).
+ * **컴파일 횟수를 실제로 센다.** `ThemeSource`는 안정 참조로 유지해야 하는데, 참조
+ * 동일성만 단언하면 *"그래서 재컴파일이 실제로 줄었는가"*를 재지 않는다. `vi.mock`으로
+ * `compileTheme`을 감싸 **부른 횟수**를 세면 그 질문에 직접 답한다.
  *
  * `importOriginal`로 나머지를 그대로 통과시키므로 해석·방출은 진짜 구현이 돈다.
  */
@@ -74,7 +73,7 @@ describe('useProjectTheme', () => {
 
     await waitFor(() => expect(themeStyleText()).toContain('--wb-'))
     expect(getProjectTheme).toHaveBeenCalledTimes(1)
-    // 떠날 때 끊을 신호를 싣는다(리뷰 AD-F1 — `api/http-client.ts`의 «떠난 조회는 끊는다»).
+    // 떠날 때 끊을 신호를 싣는다(`api/http-client.ts`의 «떠난 조회는 끊는다»).
     expect(getProjectTheme).toHaveBeenCalledWith('p1', { cancel: expect.any(AbortSignal) })
   })
 
@@ -153,12 +152,12 @@ describe('useProjectTheme', () => {
   })
 
   /**
-   * **상태를 문장으로 옮기는 쪽(P7-1의 패턴 고르개)이 이 갈래를 필요로 한다.**
+   * **상태를 문장으로 옮기는 쪽(패턴 고르개)이 이 갈래를 필요로 한다.**
    * `ThemeSource`는 `ready`가 아닌 상태를 전부 `null` 하나로 좁히므로 여기서만 잴 수 있다.
    *
-   * **`no-project`가 `unset`에서 갈라진 것이 델타 리뷰의 지적이다.** 앞 판은 `projectId`가
-   * 없을 때도 `unset`을 냈고, 그러면 화면이 *"이 **프로젝트는** 테마를 고르지 않았습니다"*로
-   * 없는 프로젝트를 가리켜 말한다. **오늘 도달하지 않지만**(화면이 받는 `projectId`는 전부
+   * **`no-project`는 `unset`과 갈린다.** `projectId`가 없을 때 `unset`을 내면 화면이
+   * *"이 **프로젝트는** 테마를 고르지 않았습니다"*로 없는 프로젝트를 가리켜 말한다.
+   * **지금 화면에서는 도달하지 않지만**(화면이 받는 `projectId`는 전부
    * 조회해 온 `ProjectDetail.id`이고 `isProjectDetail`이 `id !== ''`를 검사한다)
    * **훅은 화면 없이 부를 수 있으므로 케이스로 고정할 수 있다.**
    */
@@ -223,8 +222,8 @@ describe('useProjectTheme', () => {
   })
 
   /**
-   * **이슈는 콘솔에만 남긴다** — P4a-2의 재라 #12 결정 그대로다. 화면에 뿌리면
-   * 근원 하나를 나머지가 가린다(토큰 하나를 어긋내면 이슈 6건이 나는 것을 그때 쟀다).
+   * **이슈는 콘솔에만 남긴다.** 화면에 뿌리면 근원 하나를 나머지가 가린다(토큰 하나를
+   * 어긋내면 그것을 가리키는 자리마다 이슈가 난다).
    */
   it('서버가 이슈를 내면 콘솔에만 남긴다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})

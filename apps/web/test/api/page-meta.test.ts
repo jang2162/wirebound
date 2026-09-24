@@ -1,6 +1,6 @@
 /**
  * `api/page-meta.ts` — 페이지 메타 충돌의 **판정 하나**(`judgeMeta`)와 **409 를 읽는 법**(`metaConflict`). 화면을 안
- * 지나고 잰다. 화면의 갈래는 `panels/page-meta-conflict.test.tsx` · `write-ledger.test.tsx`의 R 절 ·
+ * 지나고 잰다. 화면의 갈래는 `panels/page-meta-conflict.test.tsx` · `write-ledger.test.tsx`의 «시간 안에 응답이 없으면 결과를 모르는 것이다» 절 ·
  * `menu-crud.test.tsx`의 «페이지 제목의 충돌»이 잰다.
  */
 import { describe, expect, it } from 'vitest'
@@ -21,7 +21,7 @@ describe('judgeMeta — 서버 값 하나를 네 갈래로', () => {
   })
 
   /**
-   * **빈 값은 `''`든 `null`이든 같다**(리뷰 F3 — `@wirebound/schema`의 `samePageMeta`, 서버의 견주기와 같은 함수).
+   * **빈 값은 `''`든 `null`이든 같다**(`@wirebound/schema`의 `samePageMeta` — 서버의 견주기와 같은 함수).
    * 혼자 죽는 변조: `judgeMeta`가 `samePageMeta` 대신 `===`로 견준다.
    */
   it('null 과 빈 문자열을 같게 본다 — 화면에서 둘 다 «설명 없음»이고 서버도 같게 견준다', () => {
@@ -34,7 +34,7 @@ describe('judgeMeta — 서버 값 하나를 네 갈래로', () => {
   })
 
   /**
-   * **매달린 내 값이면 late**(리뷰 F2). 화면의 축(«저장되지 않았습니다» 뒤 늦게 닿은 글)은 `write-ledger.test.tsx`의 R 절
+   * **매달린 내 값이면 late.** 화면의 축(«저장되지 않았습니다» 뒤 늦게 닿은 글)은 `write-ledger.test.tsx`의 «시간 안에 응답이 없으면 결과를 모르는 것이다» 절
    * «… 늦게 커밋되면 …»이 주인이다 — `'late'` 갈래를 지우면 둘이 함께 죽는다.
    */
   it('매달린 내 값과 같으면 late — mine · base 가 먼저다', () => {

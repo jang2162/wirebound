@@ -40,7 +40,7 @@ import {
 /**
  * 셸이 만든 `EditorStore`를 손에 쥐는 장치. **화면만 보는 단언으로는 "선택이 스토어에
  * 들어간다"를 지킬 수 없다** — 캔버스가 선택을 자기 `useState`로 들어도 아웃라인은
- * 똑같이 붙는다(실측은 태스크 9 보고서의 변이 표에 있다). 장치의 생김새와 이유는
+ * 똑같이 붙는다. 장치의 생김새와 이유는
  * `../routes/editor-shell.test.tsx` 머리말에 길게 적혀 있다.
  *
  * `vi.mock`은 **적힌 파일에서만** 호이스팅되므로 공용 harness로 옮길 수 없다(실측:
@@ -66,11 +66,10 @@ beforeEach(() => {
 })
 
 /**
- * **캔버스가 서버가 준 테마를 싣는가 (P4a-3 Task 10).**
+ * **캔버스가 서버가 준 테마를 싣는가.**
  *
- * 이 절이 없으면 캔버스의 `useThemeCss(useProjectTheme(projectId))`를 `useThemeCss()`로
- * 되돌려도 **웹 테스트 858개가 전부 통과한다**(심어서 확인했다). 배선을 지키는 것이
- * 아무것도 없었다는 뜻이고, 이 두 케이스가 그 자리다.
+ * 이 절이 없으면 캔버스의 `useThemeCss(useProjectTheme(…))`를 `useThemeCss()`로
+ * 바꿔도 **웹 테스트가 전부 통과한다** — 그 배선을 지키는 것이 이 두 케이스다.
  *
  * 서버가 준 테마에만 있는 값을 심어 `<style>`에서 찾는다 — 내장 폴백(`defaultThemeSource`,
  * 시스템 `admin`)에는 없는 값이라 배선이 끊기면 사라진다.
@@ -85,8 +84,8 @@ describe('캔버스와 프로젝트 테마', () => {
 
   /**
    * `List`의 **둘째 구현체.** 카탈로그는 `['table','cardGrid','stackedList','mediaList']`를
-   * 선언하는데 렌더러는 오늘 `table` 하나만 등록한다 — 테마가 고른 것이 실제로 쓰이는지
-   * 보려면 고를 수 있는 것이 둘이어야 한다.
+   * 선언하고 렌더러가 넷을 다 싣는다 — 테마가 고른 것이 실제로 쓰이는지 보려면 카탈로그의
+   * 첫 구조(`table`)가 아닌 것을 골라야 한다.
    */
   const ALT_STRUCTURE = 'cardGrid'
 
@@ -131,9 +130,8 @@ describe('캔버스와 프로젝트 테마', () => {
    * **셸이 조회해 온 프로젝트의 id로 요청한다** — `routes/editor.tsx`가 트리·패널에
    * 넘기는 것과 같은 값이다.
    *
-   * 처음에 이 단언을 `expect.any(String)`으로 적었는데 **주석이 말하는 것을 지키지
-   * 못했다** — 문자열이면 무엇이든 통과하므로 셸이 엉뚱한 id를 넘겨도 웹 861케이스가
-   * 전부 통과했다(리뷰가 심어 죽은 수 **0**). 실제 id로 좁힌다.
+   * **이 단언을 `expect.any(String)`으로 넓히지 마라** — 문자열이면 무엇이든 통과하므로
+   * 셸이 엉뚱한 id를 넘겨도 웹 전량이 통과한다. 실제 id로 좁힌다.
    */
   it('셸이 조회해 온 프로젝트의 id로 테마를 요청한다', async () => {
     const getProjectTheme = vi.fn(async () => ({ themeId: null, theme: SERVER_THEME, issues: [] }))
@@ -144,14 +142,13 @@ describe('캔버스와 프로젝트 테마', () => {
   })
 
   /**
-   * **W3 — 캔버스가 테마가 고른 구조를 렌더러에 넘기는가.**
+   * **캔버스가 테마가 고른 구조를 렌더러에 넘기는가.**
    *
    * `theme-structures.test.tsx`는 **함수**(`themeStructures`)를 재고, 캔버스가 그 결과를
-   * **쓴다**는 것은 아무도 재지 않고 있었다 — `structures={themeStructures(theme)}`를
-   * `{}`로 바꿔도 웹 861케이스가 전부 통과했다(죽은 수 **0**). W1과 같은 파일 한 줄 아래다.
+   * **쓴다**는 것은 여기서만 잰다 — 이 케이스가 없으면 `structures={themeStructures(theme)}`를
+   * `{}`로 바꿔도 웹 전량이 통과한다.
    *
-   * 오늘 컴포넌트마다 구현체가 하나씩뿐이라(P4b가 채운다) 갈아 끼울 것이 없으므로,
-   * **여기서 둘째 구현체를 등록해** 테마가 그것을 고르게 한다. 배선이 끊기면 렌더러가
+   * 테마가 카탈로그의 첫 구조가 아닌 **둘째 구현체**를 고르게 한다. 배선이 끊기면 렌더러가
    * 카탈로그의 첫 구조(`table`)로 떨어져 `data-wb-structure`가 갈린다.
    */
   it('테마가 고른 구조를 렌더러에 넘긴다', async () => {
@@ -227,16 +224,17 @@ registerStructure(BOOM_TYPE, 'table', () => {
 })
 
 /**
- * `List`의 둘째 구현체. 테마가 고른 구조가 실제로 쓰이는지 보려면 고를 수 있는 것이
- * 둘이어야 하는데, 렌더러가 `List`에 `table` 하나만 등록해 두었다. `data-wb-structure`는
- * 렌더러가 붙이므로 본문은 최소로 둔다.
+ * `List`의 둘째 구현체 — 렌더러가 그것을 싣지 않는 판을 위한 보험이다. 렌더러는
+ * `installStructures()`로 `List`의 네 구조를 다 싣고(`packages/renderer/src/structures/data.tsx`),
+ * `src/canvas/canvas.tsx`가 `catalog-setup`을 import하므로 그것이 이 파일의 본문보다 먼저
+ * 돈다 — 그래서 지금 이 등록은 건너뛴다. `data-wb-structure`는 렌더러가 붙이므로 본문은
+ * 최소로 둔다.
  *
- * **이미 있으면 등록하지 않는다 (P4b-2 ① D1).** `registerStructure`는 중복 등록에
- * **던지고**, 이 줄은 모듈 평가 시점에 돈다 — `installStructures()`가 `List:cardGrid`를
- * 싣는 순간 이 파일이 통째로 죽는다(케이스 하나가 아니라 파일 전체다). P4b-2 ②의 W2가
- * 바로 그 구조를 만들므로, 준비 웨이브에서 실측해 여기를 막아 둔다. **본문이 렌더러의
- * 것으로 바뀌어도 위 케이스는 성립한다** — 재는 것이 `data-wb-structure` 속성 하나이고
- * 그 속성은 렌더러가 붙인다.
+ * **이미 있으면 등록하지 않는다.** `registerStructure`는 중복 등록에 **던지고**, 이 줄은
+ * 모듈 평가 시점에 돈다 — 가드를 빼면 `installStructures()`가 이미 실은 `List:cardGrid`와
+ * 겹쳐 이 파일이 통째로 죽는다(케이스 하나가 아니라 파일 전체다). **본문이 렌더러의 것이어도
+ * 위 케이스는 성립한다** — 재는 것이 `data-wb-structure` 속성 하나이고 그 속성은 렌더러가
+ * 붙인다.
  */
 if (!getStructure('List', 'cardGrid')) {
   registerStructure('List', 'cardGrid', ({ attrs }) => <div {...attrs} />)
@@ -346,7 +344,7 @@ describe('캔버스', () => {
 
     expect(canvasFrame().style.width).toBe('375px')
     expect(shellStore().getState().viewportWidth).toBe(375)
-    // 폭은 **상자**가 갖는다(D10). 문서가 다시 그려지거나 사라지면 안 된다.
+    // 폭은 **상자**가 갖는다. 문서가 다시 그려지거나 사라지면 안 된다.
     expect(nodeElement('n-list')).not.toBeNull()
   })
 
@@ -360,7 +358,7 @@ describe('캔버스', () => {
 
     expect(canvasFrame().style.transform).toBe('scale(1.25)')
     expect(shellStore().getState().zoom).toBe(1.25)
-    // **문서를 건드리지 않는다**(D10). 노드에 배율이 실리면 같은 문서가 줌마다 다른
+    // **문서를 건드리지 않는다.** 노드에 배율이 실리면 같은 문서가 줌마다 다른
     // 스키마가 된다.
     expect(requireNode('n-flex').getAttribute('style')).toBe(before)
     expect(requireNode('n-flex').getAttribute('style')).not.toContain('scale')
@@ -499,7 +497,7 @@ describe('캔버스', () => {
 })
 
 /**
- * 브리프에는 없는 두 케이스다. 렌더러가 **캔버스에 요구하는** 것이라 넣었다 —
+ * 렌더러가 **캔버스에 요구하는** 두 케이스다 —
  * 경계가 없으면 구조 구현체 하나의 예외가 앱 트리를 통째로 흰 화면으로 만든다.
  */
 describe('캔버스의 오류 경계', () => {

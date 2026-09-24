@@ -29,12 +29,12 @@ describe('useEditorStore', () => {
     // **이 selector 모양은 여기서만 쓴다. 화면 코드에서 흉내 내지 마라** — 상태
     // 객체 전체를 고르면 그 컴포넌트가 모든 상태 변경에 묶인다. 실측: 같은 프로브를
     // 두고 `setZoom`·`setMode`·`setViewportWidth`·`selectNode`·`loadPage` 다섯을
-    // 차례로 부르면 다섯 번 다 다시 그렸고, selector만 `(s) => s.zoom`으로 바꾼
-    // 대조군은 `setZoom` 하나에서만 그렸다. 여기서 쓰는 것은 참조 안정성을 재는
+    // 차례로 부르면 다섯 번 다 다시 그리고, selector만 `(s) => s.zoom`으로 바꾼
+    // 대조군은 `setZoom` 하나에서만 그린다. 여기서 쓰는 것은 참조 안정성을 재는
     // 것이 목적이어서지 권장하는 형태여서가 아니다 — 화면은
     // `use-editor-store.tsx` 독스트링대로 필요한 필드만 고른다.
     //
-    // 변이로 확인했다: `getState`를 `() => ({ ...this.#state })`로 바꾸면 web
+    // 변이: `getState`를 `() => ({ ...this.#state })`로 바꾸면 web
     // 프로젝트에서 이 테스트와 `editor-store.test.ts`의
     // `getState는 매번 같은 참조를 준다(변경 없으면)` 둘만 죽는다. 나머지 바인딩
     // 테스트는 전부 통과한다 — 넷은 selector가 원시값이라(`s.zoom`·
@@ -43,9 +43,8 @@ describe('useEditorStore', () => {
     //
     // 아래 두 단언은 마운트 렌더가 1회인 것과 기본 `zoom`이 React까지 흘러가는
     // 것도 함께 본다(실측: `initialState()`의 `zoom`을 0.75로 바꾸면 `getByText`가
-    // 죽는다). 같은 것만 보던 별도 프로브가 있었으나 **태스크 6의 변이 표 20개 어디에서도**
-    // 잡히지 않아 지웠다 — 바로 위의 `zoom 0.75` 변이는 표 밖의 것이고, 그 변이에서는
-    // 지운 프로브도 죽었다.
+    // 죽는다). 같은 것만 보는 별도 프로브는 두지 않는다 — 그 프로브는 이 케이스가 죽는
+    // 변이에서만 함께 죽어 혼자 재는 것이 없다.
     const store = new EditorStore()
     let renders = 0
     function Probe(): ReactElement {
@@ -207,7 +206,7 @@ describe('useOpenPage', () => {
     const { seen } = renderOpenPage(store, PAGE_ID)
 
     // 주소가 바뀐 뒤 문서를 비우는 이펙트가 돌기까지의 커밋 하나를 막는 대조다.
-    // `headSeq`도 같은 대조를 받아야 한다 — 그것이 P2b-2의 `baseSeq`이고, 앞 페이지의
+    // `headSeq`도 같은 대조를 받아야 한다 — 그것이 편집의 `baseSeq`이고, 앞 페이지의
     // seq로 편집을 보내면 서버가 409를 낸다.
     expect(seen.at(-1)).toBeNull()
   })
@@ -262,9 +261,9 @@ describe('useOpenPage', () => {
   })
 
   it('headSeq만 바뀌어도 새 객체를 낸다', () => {
-    // 계획서의 표에 없는 케이스다. **`headSeq`가 혼자 오르는 경로가 실제로 생긴다** —
+    // **`headSeq`가 혼자 오르는 경로가 실제로 있다** —
     // 편집이 ack되면 문서는 이미 낙관적으로 바뀐 뒤라 그대로이고 `headSeq`만 오른다
-    // (P2b-2 Task 4의 `ackEdit`). 의존 배열에서 `headSeq`를 빠뜨린 구현은 위 두 케이스를
+    // (`ackEdit`). 의존 배열에서 `headSeq`를 빠뜨린 구현은 위 두 케이스를
     // 통과하고 여기서만 죽는다 — 그리고 그 결함은 다음 편집의 `baseSeq`가 낡는 형태로
     // 나타난다.
     const store = new EditorStore()

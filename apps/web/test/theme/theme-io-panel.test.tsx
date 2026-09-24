@@ -1,16 +1,15 @@
 /**
- * 가져오기·내보내기·되돌리기 화면(P4c-3 T2·T3·T5, D3·D5).
+ * 가져오기·내보내기·되돌리기 화면.
  *
  * **라우트 전체를 띄워서 잰다** — `theme-editor.test.tsx`와 같은 형식이다. 배선(라우트가
- * 내려주는 `onImportAsNew`·`canCreate`)이 이 슬라이스의 절반이라 화면만 떼어 재면 그 절반이
+ * 내려주는 `onImportAsNew`·`canCreate`)이 이 화면의 절반이라 화면만 떼어 재면 그 절반이
  * 안 잡힌다.
  *
  * ---
  *
  * # jsdom이 내려받기를 어떻게 재는가 — **절반은 대역이다. 그렇게 적는다**
  *
- * 계획서 T2가 *"`URL.createObjectURL`이 jsdom에 없을 수 있다 — 재고 판단하라"*고 했다.
- * **쟀다**(내가 이 워크트리에서 쟀다): `URL.createObjectURL`·`URL.revokeObjectURL`이
+ * jsdom에서는 `URL.createObjectURL`·`URL.revokeObjectURL`이
  * **둘 다 `undefined`**이고, `Blob.prototype`에 **`text()`도 `arrayBuffer()`도 없다**
  * (`constructor`·`slice`·`size`·`type` 넷뿐이다). `FileReader`와 `HTMLAnchorElement.click`은
  * 있다.
@@ -20,10 +19,10 @@
  * ㉢ 클릭이 한 번 일어난 것 ㉣ revoke가 그 URL로 불린 것. **재지 못하는 것은 브라우저가
  * 실제로 파일을 저장하는지**이고 그것은 실브라우저의 몫이다.
  *
- * > **측정 장치의 함정 하나를 실제로 밟았다.** Blob의 글자를 `await new Response(blob).text()`로
- * > 읽어 봤더니 **던지지 않고 `"[object Blob]"`을 냈다**(내가 쟀다) — Node의 전역 `Response`가
+ * > **측정 장치의 함정 하나.** Blob의 글자를 `await new Response(blob).text()`로
+ * > 읽으면 **던지지 않고 `"[object Blob]"`을 낸다** — Node의 전역 `Response`가
  * > jsdom의 `Blob`을 문자열로 바꾼 것이다. **초록인 채로 거짓을 재는 형태**라 `FileReader`로
- * > 장치를 바꿨다(P4c-2 §3.2의 교훈).
+ * > 읽는다.
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
@@ -94,7 +93,7 @@ interface Download {
  * `URL.createObjectURL`·`revokeObjectURL`에 **대역을 심고** 그 안에서 부른다.
  *
  * **원본 전문을 먼저 들고 `finally`에서 되쓴다** — 없던 속성이면 지운다. 확인이 실패해도
- * 복구가 도는 배치이고, 그 형식은 P4c-2 ③의 변조 하네스와 같은 근거다.
+ * 복구가 도는 배치다.
  */
 async function withDownloadCapture(run: () => void): Promise<Download> {
   const url = URL as unknown as Record<string, unknown>
@@ -171,7 +170,7 @@ function paste(text: string): void {
   fireEvent.change(screen.getByRole('textbox', { name: '테마 JSON' }), { target: { value: text } })
 }
 
-describe('내보내기 (T2)', () => {
+describe('내보내기', () => {
   it('버튼을 누르면 봉투에 담긴 글자가 파일 이름과 함께 나간다', async () => {
     open()
     const button = await screen.findByRole('button', { name: '내보내기' })
@@ -206,7 +205,7 @@ describe('내보내기 (T2)', () => {
     expect(document.querySelectorAll('a[download]').length).toBe(0)
   })
 
-  it('읽기 전용 테마도 내보낼 수 있다 — §6.10의 재사용이 여기서 시작한다', async () => {
+  it('읽기 전용 테마도 내보낼 수 있다 — 설계서 「테마 관리」의 재사용이 여기서 시작한다', async () => {
     open({ detail: { ...standalone(systemTheme('admin') as Theme), id: 't1', system: true } })
 
     const button = await screen.findByRole('button', { name: '내보내기' })
@@ -214,7 +213,7 @@ describe('내보내기 (T2)', () => {
     expect((button as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('파생이면 받는 쪽의 내장 테마가 다를 수 있다고 말한다 (재라 #2)', async () => {
+  it('파생이면 받는 쪽의 내장 테마가 다를 수 있다고 말한다', async () => {
     open()
     await screen.findByRole('button', { name: '내보내기' })
 
@@ -234,7 +233,7 @@ describe('내보내기 (T2)', () => {
   })
 })
 
-describe('가져오기 A — 초안으로 (T3, D3-A)', () => {
+describe('가져오기 A — 초안으로', () => {
   it('왕복 — 내보낸 글자를 그대로 다시 넣으면 같은 문서다', async () => {
     open()
     const button = await screen.findByRole('button', { name: '내보내기' })
@@ -264,7 +263,7 @@ describe('가져오기 A — 초안으로 (T3, D3-A)', () => {
           meta: { id: 'solo', name: '가져온 이름', version: '2.0.0' },
           // **리터럴이다** — 이 테마에는 `tokens`가 없어 `semantic.primary`를 쓰면
           // 참조가 안 풀려 `error`가 나고, 그러면 이 케이스가 재려던 것(넣기)이 아니라
-          // 거절을 재게 된다. (처음 판이 실제로 그렇게 죽었다.)
+          // 거절을 재게 된다.
           components: { Button: { base: { bg: '#123456' } } },
         },
       }),
@@ -311,7 +310,7 @@ describe('가져오기 A — 초안으로 (T3, D3-A)', () => {
     expect(screen.getByRole('textbox', { name: '테마 이름' })).toHaveProperty('value', '브랜드')
   })
 
-  it('error를 내는 문서는 안 넣고 그 이슈를 path까지 보인다 (D3)', async () => {
+  it('error를 내는 문서는 안 넣고 그 이슈를 path까지 보인다', async () => {
     open({ detail: standalone() })
     await screen.findByRole('button', { name: '내보내기' })
 
@@ -328,7 +327,7 @@ describe('가져오기 A — 초안으로 (T3, D3-A)', () => {
 
     // **초안이 안 바뀌었다.**
     expect(screen.getByRole('textbox', { name: '테마 이름' })).toHaveProperty('value', '홀로')
-    // **거절한 이유가 자기 제목을 달고 나온다** — D7이 세운 `<h2>`가 여기서 하중이 된다.
+    // **거절한 이유가 자기 제목을 달고 나온다** — 이슈 목록의 `<h2>`가 여기서 하중이 된다.
     expect(screen.getByRole('heading', { name: '가져오기가 거절한 이유' })).toBeTruthy()
     expect(screen.getByText('components.Button.base.color')).toBeTruthy()
   })
@@ -351,7 +350,7 @@ describe('가져오기 A — 초안으로 (T3, D3-A)', () => {
     expect(screen.getByRole('textbox', { name: '테마 이름' })).toHaveProperty('value', '브랜드')
   })
 
-  it('테마 id가 바뀌면 저장에서 409가 날 수 있다고 말한다 (재라 #3)', async () => {
+  it('테마 id가 바뀌면 저장에서 409가 날 수 있다고 말한다', async () => {
     open({ detail: standalone() })
     await screen.findByRole('button', { name: '내보내기' })
 
@@ -367,7 +366,7 @@ describe('가져오기 A — 초안으로 (T3, D3-A)', () => {
     expect(screen.getByText(/테마 id가 solo에서 other로 바뀝니다/)).toBeTruthy()
   })
 
-  it('폰트를 선언한 테마면 리소스가 함께 오지 않는다고 말한다 (재라 #6)', async () => {
+  it('폰트를 선언한 테마면 리소스가 함께 오지 않는다고 말한다', async () => {
     open({ detail: standalone() })
     await screen.findByRole('button', { name: '내보내기' })
 
@@ -417,7 +416,7 @@ describe('가져오기 A — 초안으로 (T3, D3-A)', () => {
   })
 })
 
-describe('되돌리기 (D5 · 재라 #4)', () => {
+describe('되돌리기', () => {
   it('저장할 것이 없으면 못 누른다', async () => {
     open()
     await screen.findByRole('button', { name: '내보내기' })
@@ -484,7 +483,7 @@ describe('되돌리기 (D5 · 재라 #4)', () => {
   })
 })
 
-describe('가져오기 B — 새 테마로 (T5, D3-B · D4)', () => {
+describe('가져오기 B — 새 테마로', () => {
   const FILE = JSON.stringify({
     wireboundVersion: '1',
     theme: { meta: { id: 'brand', name: '가져온 테마', version: '1.0.0' } },
@@ -503,7 +502,7 @@ describe('가져오기 B — 새 테마로 (T5, D3-B · D4)', () => {
       expect(currentPath()).toBe('/projects/p1/themes/t-new')
     })
     const sent = (createTheme as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as { theme: Theme }
-    // **파일의 id가 아니라 사용자가 고른 id다**(D4 — 409를 사용자가 풀 수 있게).
+    // **파일의 id가 아니라 사용자가 고른 id다**(409를 사용자가 풀 수 있게).
     expect(sent.theme.meta.id).toBe('copied')
     expect(sent.theme.meta.name).toBe('가져온 테마')
   })
@@ -578,10 +577,10 @@ describe('가져오기 B — 새 테마로 (T5, D3-B · D4)', () => {
 })
 
 // ────────────────────────────────────────────────────────────────────────────────
-// 여기부터 리뷰가 찾은 둘(① ⑤).
+// 파일 읽기 실패 · 파싱 실패에서의 되돌리기.
 // ────────────────────────────────────────────────────────────────────────────────
 
-describe('리뷰 ① — 파일 읽기가 실패하면 대기 글자가 남지 않는다', () => {
+describe('파일 읽기가 실패하면 대기 글자가 남지 않는다', () => {
   /**
    * **읽을 수 없는 파일.** `readAsText`는 Blob이 아닌 것에 던지고, 그것이
    * `readTextFile`의 Promise를 거절시킨다 — 실제 브라우저에서 권한·삭제로 나는 거절과
@@ -614,7 +613,7 @@ describe('리뷰 ① — 파일 읽기가 실패하면 대기 글자가 남지 �
     // **넣을 것이 없으므로 버튼도 꺼진다** — 화면이 "못 읽었다"고 말하는데 조작이
     // 마지막으로 읽힌 값에 대해 일어나는 자리를 없앤다.
     expect((screen.getByRole('button', { name: '초안에 넣기' }) as HTMLButtonElement).disabled).toBe(true)
-    // **고치기 전에는 이 셋이 87 · false · '앞의 것'이었다**(P4c-3이 프로브로 쟀다).
+    // **대기 글자를 비웠는지를 세 자리에서 본다** — 상자 · 버튼 · 이름 칸.
     expect(screen.getByRole('textbox', { name: '테마 이름' })).toHaveProperty('value', '홀로')
   })
 
@@ -630,8 +629,8 @@ describe('리뷰 ① — 파일 읽기가 실패하면 대기 글자가 남지 �
   })
 })
 
-describe('리뷰 ⑤ — 파싱 실패에서도 되돌릴 수 있다', () => {
-  /** 파싱 실패는 초안을 안 바꾸므로 `dirty`가 아니다. 그런데 저장은 막혀 있다(D6). */
+describe('파싱 실패에서도 되돌릴 수 있다', () => {
+  /** 파싱 실패는 초안을 안 바꾸므로 `dirty`가 아니다. 그런데 저장은 막혀 있다. */
   function breakBox(): void {
     fireEvent.change(screen.getByRole('textbox', { name: 'components' }), {
       target: { value: '{"Button":' },
@@ -692,14 +691,14 @@ describe('리뷰 ⑤ — 파싱 실패에서도 되돌릴 수 있다', () => {
 })
 
 /**
- * **접힘**(2026-09-02). 이 화면의 머리를 큰 상자로 점유하던 가져오기 쪽을 접었다 — 진짜
- * 크로미움에서 잰 이 상자의 `clientHeight`가 **262.5px → 56px**이다(jsdom에는 레이아웃이
- * 없어 여기서 재지 못한다. 여기서 재는 것은 그 값을 만드는 **DOM의 있고 없음**이다).
+ * **접힘.** 가져오기 쪽을 기본으로 접는다 — 펴 두면 큰 상자가 이 화면의 머리를 점유한다
+ * (Chromium에서 잰 이 상자의 `clientHeight`: 편 채 **262.5px**, 접은 채 **56px**. jsdom에는
+ * 레이아웃이 없어 여기서 재지 못한다. 여기서 재는 것은 그 값을 만드는 **DOM의 있고 없음**이다).
  *
  * 형태와 근거는 `panels/page-json-panel.tsx`와 같고(그쪽 머리말이 근거를 갖는다), 여기서
  * 재는 것은 **이 화면에서만 다른 것** — 접힘 밖에 남아야 하는 것 셋이다.
  *
- * **되돌려 재면 이 다섯 중 넷이 죽고, 넷 다 같은 이유다** — 토글(`테마 JSON 가져오기`)을
+ * **접힘을 걷으면 이 다섯 중 넷이 죽고, 넷 다 같은 이유다** — 토글(`테마 JSON 가져오기`)을
  * 못 찾는다. 남는 하나(*"접힘 밖에 셋이 남는다"*)는 그 셋을 접힘 **안**으로 옮기는 다른
  * 변조로 죽는다.
  */
@@ -718,7 +717,7 @@ describe('가져오기 쪽은 기본이 접혀 있다', () => {
 
   it('접힘 밖에 셋이 남는다 — 내보내기·파일 이름·되돌리기', async () => {
     // **셋 다 저장·내보내기 축이라 밖이다**(화면 머리말). 되돌리기가 밖인 것은
-    // *"읽지 못한 글자에서 빠져나오는 유일한 문"*이라서가 **아니다**(그 문장은 거짓이었다 —
+    // *"읽지 못한 글자에서 빠져나오는 유일한 문"*이라서가 **아니다**(유일한 문이 아니다 —
     // 상자를 비우거나 JSON을 고쳐도 빠져나온다). **저장의 짝**이라서다.
     open()
     await screen.findByRole('button', { name: '내보내기' })

@@ -7,10 +7,10 @@
  * `store/use-editor-store.tsx`의 `useOpenDocument` 한 곳에 있고, **그 한 곳을 지나지 않는
  * 읽기는 대조가 없다.**
  *
- * **왜 테스트인가.** 지금까지 그것을 막는 것은 주석뿐이었다 — 그리고 주석만 있는 규칙이
- * 깨진 것이 이 창(I2)을 만든 경위다. 이 저장소에는 린트 도구가 없으므로(설정 0,
+ * **왜 테스트인가.** 주석만 있는 규칙은 조용히 깨지고, 깨지면 이 창(주소가 바뀐 커밋에 앞
+ * 페이지가 그려진다)이 열린다. 이 저장소에는 린트 도구가 없으므로(설정 0,
  * `scripts` 항목 0) `pnpm test`가 보는 형태로 둔다. 검사 로직은 `./store-access-guard.ts`에
- * 있고, 선례는 D7의 `shell-css.test.ts` + `shell-css-guard.ts`다.
+ * 있고, 선례는 셸 CSS 누수 검사(`shell-css.test.ts` + `shell-css-guard.ts`)다.
  *
  * 아래 **심기 표가 이 파일의 요점이다.** "지금 트리에 0건"은 검사가 일한다는 증거가
  * 아니다 — 우회를 하나씩 심어 그것이 실제로 걸리는지를 함께 잰다. 반대편(거짓 양성)은
@@ -31,9 +31,9 @@ import {
  * `apps/web/src`의 소스 전문. **`?raw`로 원문을 그대로 읽는다** — vite가 파일 내용을
  * 문자열로 넣어 준다.
  *
- * 경로가 어긋나거나 파일이 비면 아래 표가 통째로 헛돈다(D7 검사에서 실제로 난 사고다 —
- * `shell.css?raw`가 빈 문자열이라 심기 37개가 전부 초록이었다). `검사가 진짜 소스를
- * 읽는다`가 그것을 잡는다.
+ * 경로가 어긋나거나 파일이 비면 아래 표가 통째로 헛돈다(`?raw`가 빈 문자열을 넣으면 심기
+ * 표가 전부 초록이 된다 — 우회를 빈 소스 뒤에 심어도 잡히는 것은 그대로라 표만으로는 그
+ * 사실이 안 보인다). `검사가 진짜 소스를 읽는다`가 그것을 잡는다.
  */
 const SOURCES = import.meta.glob('../src/**/*.{ts,tsx}', {
   query: '?raw',
@@ -43,7 +43,7 @@ const SOURCES = import.meta.glob('../src/**/*.{ts,tsx}', {
 
 /** 심은 우회와, 그것을 물어야 하는 검사. */
 const PLANTED: { code: string; check: CheckName }[] = [
-  // 셀렉터로 페이지 필드를 곧장 고르는 형태. I2를 되살리는 가장 짧은 길이다.
+  // 셀렉터로 페이지 필드를 곧장 고르는 형태. 앞 페이지가 그려지는 창을 되살리는 가장 짧은 길이다.
   { code: 'const doc = useEditorStore(store, (s) => s.document)', check: 'selector-page-field' },
   { code: 'const seq = useEditorStore(store, (s) => s.headSeq)', check: 'selector-page-field' },
   { code: 'const open = useEditorStore(store, (s) => s.openPageId)', check: 'selector-page-field' },
@@ -145,9 +145,9 @@ describe('스토어 페이지 상태 우회 검사', () => {
 
   it('검사가 도는 파일이 열 개를 넘고 그중에 아는 파일이 있다', () => {
     // 위 케이스가 "0건"인 이유가 **파일을 하나도 안 봤기 때문**일 수 있다. glob이 아무것도
-    // 잡지 못하면 `scanSources`는 조용히 빈 배열을 낸다. 수를 못박지 않는 것은 P2b-2가
-    // 파일을 더할 때 이 케이스가 이유 없이 깨지지 않게 하기 위해서다 — 이름도 단언이
-    // 실제로 재는 만큼만 말한다(지금 스캔 대상은 17개지만 그 수를 지키지는 않는다).
+    // 잡지 못하면 `scanSources`는 조용히 빈 배열을 낸다. 수를 못박지 않는 것은 파일을
+    // 더할 때 이 케이스가 이유 없이 깨지지 않게 하기 위해서다 — 이름도 단언이 실제로 재는
+    // 만큼만 말한다.
     const scanned = Object.keys(SOURCES).filter((path) => !isExempt(path))
 
     expect(scanned.length).toBeGreaterThan(10)
@@ -171,24 +171,24 @@ describe('스토어 페이지 상태 우회 검사', () => {
   it('위반 메시지가 갈 수 있는 길을 지목한다', () => {
     // **가드가 길을 지목하지 못하면 다음 사람은 가드를 무력화한다.** `useOpenDocument`는
     // `PageDocument | null`만 내주므로 `headSeq`·`openPageId`에는 그 훅이 답이 아니고,
-    // 이월 문서 §3이 P2b-2의 `baseSeq`를 `headSeq`라고 못박았으므로 **P2b-2는 그 자리에서
-    // 반드시 걸린다.** 위 심기 표는 `check` 이름만 보므로 메시지가 조용히 되돌아가도
-    // 알려 주지 않는다 — 그래서 여기서 따로 잡는다.
+    // 편집이 `headSeq`를 `baseSeq`로 쓰므로 **그것을 곧장 읽는 자리는 반드시 걸린다.**
+    // 위 심기 표는 `check` 이름만 보므로 메시지가 조용히 되돌아가도 알려 주지 않는다 —
+    // 그래서 여기서 따로 잡는다.
     for (const field of ['headSeq', 'openPageId']) {
       const violations = findViolations(`useEditorStore(store, (s) => s.${field})`)
       expect(violations[0]?.message, field).toContain('src/store/use-editor-store.tsx')
     }
 
-    // `document`에는 오늘 길이 있으므로 그쪽을 지목한다. **둘이 갈리는 것이 요점이다** —
+    // `document`에는 곧장 쓸 훅이 있으므로 그쪽을 지목한다. **둘이 갈리는 것이 요점이다** —
     // 한 문장으로 뭉뚱그리면 `headSeq`를 읽는 사람이 없는 훅을 찾아 헤맨다.
     const document = findViolations('useEditorStore(store, (s) => s.document)')
     expect(document[0]?.message).toContain('useOpenDocument(pageId)')
     expect(document[0]?.message).not.toContain('src/store/use-editor-store.tsx')
 
     // **메시지를 만드는 자리는 셋이다** — selector 하나와 `getState()` 둘(프로퍼티 접근,
-    // 구조 분해). 자리마다 문장을 따로 조립하므로 **셋을 각각 봐야 한다**: 앞 판은 둘만
-    // 봤고, 그래서 구조 분해 자리의 메시지는 조용히 되돌아갈 수 있었다(실측: 그 자리만
-    // 옛 문장으로 되돌리면 264개가 전부 통과했다).
+    // 구조 분해). 자리마다 문장을 따로 조립하므로 **셋을 각각 봐야 한다**: 둘만 보면 구조
+    // 분해 자리의 메시지는 조용히 되돌아갈 수 있다(그 자리만 관문을 가리키지 않는 문장으로
+    // 바꾸면 아래 둘째 단언만 죽는다).
     expect(findViolations('const s = store.getState().headSeq')[0]?.message).toContain(
       'src/store/use-editor-store.tsx',
     )

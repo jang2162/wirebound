@@ -2,8 +2,8 @@
  * 캔버스·구조 트리·속성 패널 테스트의 공통 배선.
  *
  * 세 화면 모두 **`<App />`을 라우트째로 렌더해서** 본다. 셸을 떼어 내고 스토어를 직접
- * 쥐면 케이스가 짧아지지만, 그러면 조회가 실패한 화면 위에서도 단언이 통과한다 — 이
- * 브랜치에서 실제로 난 사고다(`routes/editor-shell.test.tsx` 머리말). 그래서
+ * 쥐면 케이스가 짧아지지만, 그러면 조회가 실패한 화면 위에서도 단언이 통과한다(그 고장
+ * 방식은 `routes/editor-shell.test.tsx` 머리말이 적는다). 그래서
  * `openPage()`는 **성공 대역에서만 나오는 것 둘**을 차례로 기다린다.
  *
  * 1. 프로젝트 이름(`getProject`가 성공해야 나온다)
@@ -46,9 +46,10 @@ export const PAGE_ROUTE = `${PROJECT_ROUTE}/pages/${PAGE_ID}`
 export const OTHER_PAGE_ROUTE = `${PROJECT_ROUTE}/pages/${OTHER_PAGE_ID}`
 
 /**
- * 서버가 준 `headSeq`. 이 값이 스토어로 들어가는지는 태스크 8의 케이스가 본다.
+ * 서버가 준 `headSeq`. 서버의 `headSeq`가 스토어로 들어가는지는 `panels/menu-tree.test.tsx`의
+ * `페이지를 누르면 스토어에 문서와 headSeq가 실린다`가 자기 픽스처로 본다.
  *
- * P2b-2가 이것을 첫 편집의 `baseSeq`로 기대므로 내보낸다 —
+ * 첫 편집의 `baseSeq`가 이 값이어야 하므로 내보낸다 —
  * `test/edit/use-edit-commit.test.tsx`의 `baseSeq는 지금 headSeq다`가 이 값을 단언한다.
  */
 export const HEAD_SEQ = 7
@@ -75,7 +76,7 @@ const TREE: TreeMenuNode[] = [
   },
 ]
 
-/** 문서 봉투. 버전은 스키마가 가진 현재 값을 그대로 쓴다 — 마이그레이션은 이 태스크 밖이다. */
+/** 문서 봉투. 버전은 스키마가 가진 현재 값을 그대로 쓴다 — 마이그레이션은 이 하네스의 몫이 아니다. */
 export function pageDoc(root: WbNode): PageDocument {
   return { version: CURRENT_DOCUMENT_VERSION, root }
 }
@@ -104,7 +105,7 @@ export interface EditorOptions {
   /**
    * 가짜 `ApiClient`에 덮어씌울 메서드. 기본값 **뒤에** 펼쳐지므로 여기 준 것이 이긴다.
    *
-   * P2b-2의 편집 테스트가 `patchOps`를 주입하는 자리이고, 재조회를 세는 테스트가
+   * 편집 테스트가 `patchOps`를 주입하는 자리이고, 재조회를 세는 테스트가
    * `getPage`를 감싸는 자리이기도 하다.
    */
   apiOverrides?: Partial<ApiClient>
@@ -140,7 +141,7 @@ export function renderEditor(options: EditorOptions = {}): void {
           }
           return pageDetail(pageId, schema)
         },
-        // 페이지를 열면 셸이 undo 스택을 복원하려고 부른다(D10). 기본은 빈 목록이다 —
+        // 페이지를 열면 셸이 undo 스택을 복원하려고 부른다. 기본은 빈 목록이다 —
         // 스텁하지 않으면 `notStubbed`가 던지고, 그 예외는 복원 쪽 `catch`가 삼켜서
         // **아무 일도 안 일어난 것과 구별되지 않는다.**
         listMyRevisions: async () => [],
@@ -182,7 +183,7 @@ export async function waitForNode(nodeId: string): Promise<HTMLElement> {
   return waitFor(() => requireNode(nodeId))
 }
 
-/** 캔버스 프레임. 뷰포트 폭·줌이 실제 치수로 이어졌는지 보는 자리다(태스크 7과 같은 방식). */
+/** 캔버스 프레임. 뷰포트 폭·줌이 실제 치수로 이어졌는지 보는 자리다. */
 export function canvasFrame(): HTMLElement {
   const frame = screen
     .getByRole('main', { name: '캔버스' })
@@ -277,8 +278,7 @@ export interface CommitObservation {
  *
  * **재지 못하는 것:** 그 커밋이 브라우저에 실제로 **페인트되는지**는 이 장치로도 알 수 없다
  * (jsdom에 페인트가 없다). 그래서 커밋을 DOM에 꽂은 뒤 레이아웃 이펙트로 지우는 형태의
- * 수정은 이 장치에 **고쳐진 것으로 보이지 않는다** — 실측으로 확인했고, P2b-1 최종 fix
- * 보고서의 I2 절에 적었다.
+ * 수정은 이 장치에 **고쳐진 것으로 보이지 않는다**(실측으로 확인한 한계다).
  */
 export function CommitProbe(props: { sink: CommitObservation[] }): null {
   const location = useLocation()

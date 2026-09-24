@@ -71,7 +71,7 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
       * 테스트가 무엇을 그리는지 정하지 않았다는 뜻이다. 그런데 `getProjectTheme`은
       * 캔버스가 **테스트가 요청하지 않아도** 부른다(`canvas.tsx`가 `useProjectTheme`을
       * 쓴다). 여기서 던지면 캔버스를 지나가기만 하는 테스트 수십 개가 무관한 이유로
-      * 콘솔을 채우고(실측: 221줄), 그 소음이 진짜 오류를 가린다.
+      * 콘솔을 채우고, 그 소음이 진짜 오류를 가린다.
       *
       * **기본값이 시스템 `admin`인 것도 근거가 있다** — 서버가 프로젝트를 만들 때 기본
       * 레이아웃을 시스템 `admin`에 걸어 두므로(`repos/projects.ts`), 새 프로젝트의
@@ -118,9 +118,10 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     createTheme: notStubbed('createTheme'),
     updateTheme: notStubbed('updateTheme'),
     /**
-     * **둘 다 `notStubbed`다.** 위 두 예외(`getProjectTheme`·`listProjectThemes`)의 근거는
-     * *"테스트가 요청하지 않아도 화면이 부른다"*인데, 스냅샷 둘을 부르는 화면은 스냅샷
-     * 라우트 하나뿐이고 **그 주소로 가는 테스트만 그것을 지난다**(테마 저작 셋과 같다).
+     * **셋 다 `notStubbed`다.** 위 두 예외(`getProjectTheme`·`listProjectThemes`)의 근거는
+     * *"테스트가 요청하지 않아도 화면이 부른다"*인데, 스냅샷 셋을 부르는 화면은 셸 머리의
+     * 스냅샷 팝오버 하나뿐이고 팝오버를 **열어야** 부른다 — **그것을 여는 테스트만 그것을
+     * 지난다**(테마 저작 셋과 같다).
      */
     listSnapshots: notStubbed('listSnapshots'),
     createSnapshot: notStubbed('createSnapshot'),
@@ -141,7 +142,8 @@ export function unauthenticatedError(message = '로그인이 필요합니다'): 
  *
  * 재현하는 상황은 "화면에 들어와 있는 동안 서버가 세션을 지웠다"이다 — 문지기
  * (`routes/require-auth.tsx`)는 첫 호출로 이미 통과했고, 그다음 조회부터 401이 온다.
- * D5의 `code` 분기가 문지기 하나에만 있으면 사용자는 그 화면에 갇힌다.
+ * 401 의 `code`(`unauthenticated`)를 보고 로그인으로 돌려보내는 분기가 문지기 하나에만 있으면
+ * 사용자는 그 화면에 갇힌다.
  *
  * **뒤 호출까지 성공하게 두면 안 된다.** 로그인 화면의 `RedirectWhenAuthenticated`가 다시
  * `me()`를 부르는데, 그것이 성공하면 목록으로 되돌려 보내고 그 목록이 다시 401을 받아
@@ -178,7 +180,7 @@ export interface RenderOptions {
   /**
    * 실시간 연결 설정. **생략하면 `RealtimeProvider`를 아예 안 세운다** — 그것이 화면
    * 테스트가 소켓을 열지 않는 이유이고(`src/realtime/context.tsx`), 편집이 REST로 나가는
-   * 이유이기도 하다(P3-2 D5). 재연결·WS 전송을 재는 테스트만 이것을 준다.
+   * 이유이기도 하다. 재연결·WS 전송을 재는 테스트만 이것을 준다.
    */
   realtime?: RealtimeSetup
   /**
@@ -188,13 +190,13 @@ export interface RenderOptions {
    */
   tabChannel?: TabChannel
   /**
-   * 이 탭이 아는 사용자(`src/api/known-user.tsx` — 이월 Y′). **생략하면 `KnownUserProvider`를 안 세운다** — 세션이 적지도 듣지도
+   * 이 탭이 아는 사용자(`src/api/known-user.tsx`). **생략하면 `KnownUserProvider`를 안 세운다** — 세션이 적지도 듣지도
    * 않는다. 그 길을 재는 테스트만 준다.
    */
   knownUser?: KnownUserHolder
   /**
    * 초안의 사본(`src/panels/draft-store.tsx`). **생략하면 `DraftStoreProvider`를 안 세운다** — 초안이 메모리에만
-   * 사는 화면이다(그 파일 앞과 같다). jsdom 의 `sessionStorage`는 파일 안의 케이스끼리 이어지므로 기본으로 두면
+   * 사는 화면이다. jsdom 의 `sessionStorage`는 파일 안의 케이스끼리 이어지므로 기본으로 두면
    * 앞 케이스의 초안이 뒤 케이스에 되살아난다. 사본을 재는 테스트만 준다(`test/panels/draft-store.test.tsx`).
    */
   draftStore?: DraftStore
