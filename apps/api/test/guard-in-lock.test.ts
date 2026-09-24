@@ -838,7 +838,8 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
     })
     let updated = false
     const holder = withTransaction(db, async (trx) => {
-      const member = await updateMemberRole(trx, fx.projectId, fx.bob.user.id, 'viewer')
+      // 요청한 사람이 없는 픽스처라 권한은 다시 보지 않는다 — 이 판이 재는 것은 강등이 커밋 전인 동안의 남의 쓰기다.
+      const member = await updateMemberRole(trx, fx.projectId, fx.bob.user.id, 'viewer', async () => {})
       if (member?.role !== 'viewer') throw new Error('역할 변경 픽스처 실패')
       updated = true
       if (!(await decision)) throw new RollbackRoleChange()

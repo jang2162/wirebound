@@ -71,6 +71,9 @@ function isMemberPkViolation(error: unknown): boolean {
  *
  * 호출자는 이미 `withTransaction` 안에서 이 함수를 불러야 한다 — 잠금은 트랜잭션이
  * 끝날 때(COMMIT/ROLLBACK, 또는 세이브포인트 RELEASE/ROLLBACK)까지만 유지된다.
+ *
+ * **요청한 사람의 권한도 이 잠금 뒤에 다시 본다**(`OwnerRecheck`). 가드는 이 잠금 **앞**에서 읽었으므로, 다른 owner 가 요청한
+ * 사람을 내리는 쓰기가 먼저 이 행들을 쥐었으면 그 커밋 뒤에 여기 서는 요청은 **이미 owner 가 아닌 사람**의 것이다.
  */
 async function lockOwnerIds(trx: DbHandle, projectId: string): Promise<Set<string>> {
   const rows = await trx
@@ -141,6 +144,17 @@ export async function insertMember(
 }
 
 /**
+ * owner 행을 잡은 **뒤 · 쓰기 전에** 요청한 사람의 권한을 다시 보는 자리 — 부르는 쪽(`routes/members.ts`)이 `auth/roles.ts`의
+ * `recheckProjectRole`을 넘긴다. 권한이 없으면 던진다(403 · 멤버가 아니면 404).
+ *
+ * **왜 쓰기 전인가.** 다른 쓰기처럼 쓰기 **뒤에** 보면 owner 가 자기를 내리거나 빼는 정당한 요청이 자기 쓰기에 막힌다. 쓰기 전이어도
+ * 판정은 최종이다 — 요청한 사람이 owner 면 그 행은 `lockOwnerIds`가 이미 쥐어 커밋까지 아무도 못 바꾼다. 없으면(가드 뒤 강등 ·
+ * 제거 — [api] A 가 B 를 내리는 요청과 B 가 C 를 owner 로 올리는 요청을 함께 보내 30회 중 24회, B 가 내려간 뒤에 C 가 owner 가 됐다)
+ * 이미 owner 가 아닌 사람이 멤버를 바꾼다.
+ */
+export type OwnerRecheck = (trx: DbHandle) => Promise<unknown>
+
+/**
  * 멤버의 역할을 바꾼다. 대상이 멤버가 아니면 `null`을 돌려준다 — 호출자가 404로
  * 매핑한다.
  *
@@ -156,9 +170,11 @@ export async function updateMemberRole(
   projectId: string,
   userId: string,
   role: ProjectRole,
+  recheck: OwnerRecheck,
 ): Promise<MemberRecord | null> {
   return withTransaction(db, async (trx) => {
     const ownerIds = await lockOwnerIds(trx, projectId)
+    await recheck(trx)
 
     const current = await trx
       .selectFrom('project_members')
@@ -196,15 +212,17 @@ export async function updateMemberRole(
  * 멤버를 제거한다. 대상이 멤버가 아니면 `'not-member'`를 돌려준다(호출자가 404로
  * 매핑한다). 마지막 owner 검사는 `updateMemberRole`과 완전히 같은 방식(같은
  * 트랜잭션 안에서 `lockOwnerIds`로 owner 행을 먼저 잠근 뒤 판단)이다 — 강등과
- * 제거 두 경로가 같은 불변식을 같은 방법으로 지킨다.
+ * 제거 두 경로가 같은 불변식을 같은 방법으로 지킨다. 요청한 사람의 권한도 같은 자리에서 본다(`OwnerRecheck`).
  */
 export async function removeMember(
   db: DbHandle,
   projectId: string,
   userId: string,
+  recheck: OwnerRecheck,
 ): Promise<'removed' | 'not-member'> {
   return withTransaction(db, async (trx) => {
     const ownerIds = await lockOwnerIds(trx, projectId)
+    await recheck(trx)
 
     const current = await trx
       .selectFrom('project_members')
