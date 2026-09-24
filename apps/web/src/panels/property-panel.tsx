@@ -326,7 +326,7 @@ export function variantFieldOf(
  * 위젯으로 그리지 못하는 자리(`options`가 없는 `select`, 위젯이 없는 control)는 `formatValue`가
  * 그린 글자로 남는다 — `formatValue`를 남겨 둔 이유가 그것이고, 카탈로그 밖 값(검증을 통과하지
  * 못한 문서)을 그리는 데도 쓴다. 덮은 것과 남은 것은 `test/panels/property-panel.test.tsx`의
- * `카탈로그의 control마다 대응하는 위젯이 있다`가 카탈로그를 세어 대조한다.
+ * `카탈로그의 control 일곱에 전부 대응하는 위젯이 있다`가 카탈로그를 세어 대조한다.
  *
  * **노드가 바뀔 때 로컬 초안을 버리는 일은 부르는 쪽의 `key`가 한다.** 이펙트로 동기화하는
  * 대신 `key`를 고른 근거와, **그 장치가 실제로 언제 일하는가**:

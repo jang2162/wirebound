@@ -15,8 +15,8 @@
  * 판정의 선례가 있고 그 근거가 이미 적혀 있기 때문**이다 — `packages/schema/src/patch/pointer.ts`
  * (*"프로토타입 체인은 타지 않는다"*)·`apply.ts`·`inverse.ts`가 같은 형태이고,
  * `apps/web/src/api/http-client.ts`가 *"`in`은 프로토타입까지 본다"*를 근거로 적었다.
- * 표를 `Map`으로 바꾸면 `test/style.test.ts`의 `§6.8 대조`(설계서 「스타일 프로퍼티 화이트리스트」와
- * 맞대는 테스트 — `Object.keys(STYLE_PROPERTIES)`)와 규격 선언의
+ * 표를 `Map`으로 바꾸면 `test/style.test.ts`의 `설계서 「스타일 프로퍼티 화이트리스트」 대조`(설계서 목록과
+ * `Object.keys(STYLE_PROPERTIES)`를 맞대는 묶음)와 규격 선언의
  * 읽는 맛이 함께 바뀌는데, 그 비용을 낼 근거가 없다.
  */
 export function own<T>(record: Readonly<Record<string, T>>, key: string): T | undefined {

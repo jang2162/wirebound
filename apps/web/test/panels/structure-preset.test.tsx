@@ -430,7 +430,7 @@ describe('적용 — 기존 커밋 경로를 탄다', () => {
     expect(structureTypes()).not.toContain('Card')
   })
 
-  it('undo 하나가 페이지 전체를 되돌린다(D3)', async () => {
+  it('undo 하나가 페이지 전체를 되돌린다', async () => {
     const backend = server({ presets: [PROJECT_PRESET] })
     await openPage(doc(), { apiOverrides: backend.api })
 

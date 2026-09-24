@@ -160,7 +160,7 @@ describe('설계서 「설계서 화면 구조」 — 편집 도구는 편집 �
   })
 })
 
-describe('§9 — 페이지 설명 탭', () => {
+describe('설계서 「설계서 화면 구조」 — 페이지 설명 탭', () => {
   it('서버가 준 제목과 설명을 보인다', async () => {
     await openPage(DOC, { apiOverrides: withDescription('회원을 찾고 고치는 화면') })
 
