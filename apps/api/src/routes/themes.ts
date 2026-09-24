@@ -307,24 +307,25 @@ export function themeRoutes() {
       const { projectId } = parseParams(ProjectIdParams, request.params)
       const { themeId } = parseBody(ChooseThemeBody, request.body)
 
-      const layout = await findDefaultLayout(app.db, projectId)
-      if (!layout) throw conflict('이 프로젝트에는 기본 레이아웃이 없어 테마를 고를 수 없습니다')
-
-      if (themeId !== null) {
-        const record = await findThemeById(app.db, themeId)
-        // `listThemes`의 술어와 같다 — 시스템 테마이거나 이 프로젝트의 것.
-        if (!record || (record.projectId !== null && record.projectId !== projectId)) {
-          throw notFound('테마를 찾을 수 없습니다')
-        }
-      }
-
       try {
-        // 위 확인과 이 UPDATE 사이에 테마가 지워지는 경합. FK(0007)가 마지막 방벽이고
+        // 테마 확인과 이 UPDATE 사이에 테마가 지워지는 경합. FK(0007)가 마지막 방벽이고
         // `updateTheme`의 같은 자리와 같은 취급이다 — 500이 아니라 404다.
         const updated = await withTransaction(app.db, async (trx) => {
           // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`) — 아래 재확인이 멤버 행을 잡으므로, 레이아웃
           // 행부터 잡으면 프로젝트 삭제의 CASCADE 와 고리가 된다(그 함수의 머리말에 잰 값).
+          //
+          // **기본 레이아웃과 테마도 그 뒤에 읽는다.** 잠금 앞에서 읽으면 가드 뒤 커밋된 프로젝트 삭제를 «기본 레이아웃이
+          // 없다»로 읽어 404 대신 409 다([api] 삭제와 경주시킨 200회에 10회). 잠금 뒤면 삭제가 먼저 섰을 때 0 행 → 404 다.
           await lockProjectShared(trx, projectId)
+          const layout = await findDefaultLayout(trx, projectId)
+          if (!layout) throw conflict('이 프로젝트에는 기본 레이아웃이 없어 테마를 고를 수 없습니다')
+          if (themeId !== null) {
+            const record = await findThemeById(trx, themeId)
+            // `listThemes`의 술어와 같다 — 시스템 테마이거나 이 프로젝트의 것.
+            if (!record || (record.projectId !== null && record.projectId !== projectId)) {
+              throw notFound('테마를 찾을 수 없습니다')
+            }
+          }
           const chosen = await updateLayoutTheme(trx, layout.id, themeId)
           // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
           // 있다 — 그 대기 뒤의 역할로 판정한다.
