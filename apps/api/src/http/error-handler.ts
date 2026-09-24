@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify'
 import { DbConnectionLostError } from '../db/connection-loss'
 import { NulByteError } from '../db/nul-guard'
 import { ProjectGoneError } from '../repos/projects'
+import { ExportBusyError } from '../services/export-worker'
 import { ApiError, ERROR_STATUS, type ApiErrorIssue } from '../errors'
 
 interface ErrorBody {
@@ -36,6 +37,13 @@ const ERROR_STATUS_PAYLOAD_TOO_LARGE = 413
  */
 const ERROR_STATUS_DB_UNREACHABLE = 503
 
+/**
+ * **내보내기 줄이 넘쳤다** — 일을 받지 않았다(`services/export-worker.ts`의 «줄은 길이로 묶는다»). DB 503 과 숫자가 같고
+ * `code`도 같은 `internal`이다(위 상수의 근거) — 둘 다 «지금은 못 한다»이고, 가르는 것은 `Retry-After` 머리와 문장이다.
+ * 내보내기는 읽기뿐이라 «반영됐는지 모른다»가 걸리지 않는다.
+ */
+const ERROR_STATUS_EXPORT_BUSY = 503
+
 /** Fastify 내부 오류(잘못된 JSON 등)가 갖는 `statusCode`를 안전하게 읽는다. */
 function statusCodeOf(error: unknown): number | undefined {
   if (typeof error !== 'object' || error === null || !('statusCode' in error)) return undefined
@@ -49,6 +57,7 @@ function statusCodeOf(error: unknown): number | undefined {
  * - `ApiError`는 자신의 status·code·message(있으면 issues)를 그대로 응답한다.
  * - Fastify가 자체적으로 던지는 4xx 오류(깨진 JSON 본문 등)는 `bad-request`로 묶는다.
  * - **DB 가 답하지 않은 실패**(`DbConnectionLostError`)는 **503** — 결과를 모른다(`ERROR_STATUS_DB_UNREACHABLE`).
+ * - **내보내기 줄이 넘침**(`ExportBusyError`)은 **503** + `Retry-After` — 일을 받지 않았다(`ERROR_STATUS_EXPORT_BUSY`).
  * - **글자의 NUL**(`NulByteError`)은 400 `bad-request` — 쓰기 전에 거절했다.
  * - **트리 쓰기가 기다리는 사이 지워진 프로젝트**(`ProjectGoneError`)는 404 `not-found`.
  * - 그 외 예상 못 한 예외는 500 `internal` 고정 메시지로 응답하고, 원본은 로그에만 남긴다.
@@ -90,6 +99,12 @@ export function registerErrorHandler(app: FastifyInstance): void {
         code: 'internal',
         message: '데이터베이스와의 연결이 끊겨 요청이 반영됐는지 알 수 없습니다',
       })
+      return
+    }
+
+    if (error instanceof ExportBusyError) {
+      reply.header('retry-after', String(error.retryAfterSeconds))
+      send(reply, ERROR_STATUS_EXPORT_BUSY, { code: 'internal', message: error.message })
       return
     }
 

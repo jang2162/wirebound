@@ -62,8 +62,12 @@ export type ToWorker =
   | { t: 'screens-done'; fontWarning: string | null }
   | { t: 'screens-failed'; error: unknown }
 
-/** 워커 → 메인. 그려 달라는 요청도 한 장씩(`screen-request`) 보내고 `render`가 닫는다. */
+/**
+ * 워커 → 메인. 그려 달라는 요청도 한 장씩(`screen-request`) 보내고 `render`가 닫는다. `accepted`는 `job`을 받자마자
+ * 보낸다 — 메인이 «쉬는 동안 죽어 있던 워커»와 «이 일을 하다 죽은 워커»를 가른다(`export-worker.ts`).
+ */
 export type FromWorker =
+  | { t: 'accepted' }
   | { t: 'screen-request'; request: ScreenRequest }
   | { t: 'render' }
   | { t: 'done'; result: ExportJobResult }
