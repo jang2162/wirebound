@@ -74,8 +74,18 @@ function isMemberPkViolation(error: unknown): boolean {
  *
  * **요청한 사람의 권한도 이 잠금 뒤에 다시 본다**(`OwnerRecheck`). 가드는 이 잠금 **앞**에서 읽었으므로, 다른 owner 가 요청한
  * 사람을 내리는 쓰기가 먼저 이 행들을 쥐었으면 그 커밋 뒤에 여기 서는 요청은 **이미 owner 가 아닌 사람**의 것이다.
+ *
+ * **프로젝트 삭제도 이 함수로 owner 행을 잡는다**(`routes/projects.ts` — 페이지 뒤 · 재확인 앞). 같은 함수라 같은 문장 · 같은 순서(힙
+ * 순서)다 — **`ORDER BY`를 달지 않는다**: `test/guard-in-lock.test.ts`의 F3 · F3′가 «넣은 순서로 잡는다»에 기대 고리를 세우므로, 순서를
+ * `user_id`로 바꾸면 그 두 판이 uuid 에 따라 뜻한 순서를 못 세운다(고친 순서를 재는 케이스도 없다). 삭제는 재확인에서
+ * 삭제자의 멤버 행을 `FOR SHARE`로 쥐고 CASCADE 에서 멤버 행 전부를 지우므로, 삭제가 이것 없이 재확인부터 하면 **먼저 들어온
+ * owner 가 쓰고 나중 owner 가 지우는** 판에서 쓰기는 자기 행을 쥔 채 삭제자 행에 서고 CASCADE 는 그 쥔 행에 서서 교착이다 — [api]
+ * 두 요청을 −2…+4ms 간격으로 280 라운드(역할 변경 · 제거 넷을 돌려 가며): 교착 32 · 500 32(재는 자: `test/guard-in-lock.test.ts`의
+ * «E12»). 같은 함수 · 같은 순서로 잡으면 owner 행에서 먼저 잡은 쪽이 이기고, 진 쪽은 아무것도 안 쥔 채 선다. **멤버 쓰기의 첫 잠금을
+ * 프로젝트 행(`lockProjectShared`)으로 두어 닫지 않는 까닭** — 그러면 멤버 수정 · 삭제가 복원 · 삭제가 쥔 프로젝트 행 뒤에 서서, 복원이
+ * 도는 동안 회수가 서지 않는다(`apps/api/README.md` 「복원은 자기가 쓰는 동안 남이 못 고치게 한다」의 «막히지 않는 것»).
  */
-async function lockOwnerIds(trx: DbHandle, projectId: string): Promise<Set<string>> {
+export async function lockOwnerIds(trx: DbHandle, projectId: string): Promise<Set<string>> {
   const rows = await trx
     .selectFrom('project_members')
     .select('user_id')
