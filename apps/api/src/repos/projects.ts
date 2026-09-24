@@ -56,7 +56,7 @@ function isSlugUniqueViolation(error: unknown): boolean {
 
 /**
  * 기본 레이아웃이 가리킬 시스템 테마의 slug. `packages/themes`의 `SYSTEM_THEME_IDS`에
- * 있는 이름이고 오늘 시스템 테마는 이것 하나다(P4a-2의 D7).
+ * 있는 이름이다.
  *
  * `apps/web`의 `DEFAULT_THEME_ID`와 같은 값인데 **두 상수를 잇지 않는다** — 서버가
  * 고르는 것은 *"새 프로젝트의 기본값"*이고 웹의 것은 *"서버가 테마를 주지 못할 때의
@@ -69,12 +69,12 @@ const DEFAULT_THEME_SLUG = 'admin'
  * 전부 같은 트랜잭션 안에서다.
  *
  * 셋 중 하나만 성공하는 상태가 생기면 안 된다. 주인 없는 프로젝트는 아무도 접근할 수
- * 없는 채로 영원히 남고(설계 §10), 레이아웃 없는 프로젝트는 테마를 가리킬 방법이 없는데
- * **레이아웃을 만들어 주는 다른 경로가 없다**(레이아웃 에디터는 D7로 빠졌다).
+ * 없는 채로 영원히 남고(설계서 「권한 모델」), 레이아웃 없는 프로젝트는 테마를 가리킬 방법이 없는데
+ * **레이아웃을 만들어 주는 다른 경로가 없다**(레이아웃을 만드는 라우트가 없다).
  *
  * ---
  *
- * **순환 참조를 여는 순서(계획서 D5).** `projects.default_layout_id`와
+ * **순환 참조를 여는 순서.** `projects.default_layout_id`와
  * `layouts.project_id`가 서로를 가리키므로 어느 쪽도 먼저 완성될 수 없다. 그래서
  * **세 문장**으로 닫는다:
  *
@@ -85,11 +85,10 @@ const DEFAULT_THEME_SLUG = 'admin'
  * 한 트랜잭션 안이므로 밖에서는 세 문장이 보이지 않는다. 이 순서가 아니면(레이아웃을
  * 먼저 만들려 하면) `project_id`의 NOT NULL FK를 만족시킬 수 없다.
  *
- * **`repos`가 `repos`를 부르는 것이 여기서 처음은 아니다.** 이 함수는 이미
- * `project_members`를 함께 넣고 있었다 — *"프로젝트가 만들어질 때 반드시 함께 서야 하는
- * 것"*을 한 트랜잭션에 모으는 것이 이 함수의 일이고, 기본 레이아웃이 그 목록에 하나
- * 늘었을 뿐이다. (README의 계층 규칙은 여러 repo를 조율하는 로직을 `services/`에 두라고
- * 하는데, 그 규칙과 이 함수의 기존 형태가 부딪힌다. 조율을 밖으로 빼면 "프로젝트 생성"이
+ * **이 함수는 여러 표를 함께 넣는다.** `project_members`와 기본 레이아웃이 그것이다 —
+ * *"프로젝트가 만들어질 때 반드시 함께 서야 하는 것"*을 한 트랜잭션에 모으는 것이
+ * 이 함수의 일이다. (`apps/api/README.md` 「계층 규칙」 절은 여러 repo를 조율하는 로직을
+ * `services/`에 두라고 하는데, 이 함수는 그 예외다. 조율을 밖으로 빼면 "프로젝트 생성"이
  * 두 자리로 갈라져 한쪽만 부르는 경로가 생길 수 있어 여기 둔다.)
  *
  * **기본 레이아웃의 `theme_id`는 시스템 `admin`을 가리킨다.** 그 행은 기동 동기화가
@@ -125,9 +124,9 @@ export async function insertProject(
         .values({ project_id: project.id, user_id: ownerId, role: 'owner' })
         .execute()
 
-      // 2단계: 기본 레이아웃. 문서는 `Page` 하나와 `Slot` 하나다(D5) — 참조(`theme_id`)를
-      // 나르는 그릇의 최소본이다. **그 `schema`를 오늘 그리는 코드는 없다**(D6 반증 —
-      // `repos/layouts.ts`의 `defaultLayoutDocument` 주석 참고).
+      // 2단계: 기본 레이아웃. 문서는 `Page` 하나와 `Slot` 하나다 — 참조(`theme_id`)를
+      // 나르는 그릇의 최소본이다. **그 `schema`를 그리는 코드는 없다** —
+      // `repos/layouts.ts`의 `defaultLayoutDocument` 주석 참고.
       const theme = await findThemeBySlug(trx, null, DEFAULT_THEME_SLUG)
       const layout = await insertLayout(trx, {
         projectId: project.id,
@@ -156,7 +155,7 @@ export async function insertProject(
 /**
  * 사용자가 멤버인 프로젝트만 조회한다(`project_members`를 조인한다). 각 행에
  * 그 사용자 자신의 역할을 함께 싣는다 — `GET /api/projects` 응답이 메뉴를
- * 그리려면 role이 필요하다(설계 §10).
+ * 그리려면 role이 필요하다(설계서 「권한 모델」).
  */
 export async function listProjectsForUser(db: DbHandle, userId: string): Promise<ProjectWithRole[]> {
   return db
@@ -197,19 +196,19 @@ export async function lockProjectRow(trx: DbHandle, projectId: string): Promise<
 }
 
 /**
- * **트리 쓰기의 첫 잠금** — 프로젝트 행을 `FOR NO KEY UPDATE`로 잡는다(이월 5차 · 2026-09-23). 형제의 `sort_order`를
+ * **트리 쓰기의 첫 잠금** — 프로젝트 행을 `FOR NO KEY UPDATE`로 잡는다. 형제의 `sort_order`를
  * 다시 매기는 쓰기는 **전부 이것을 맨 먼저** 잡는다: 메뉴 · 페이지의 생성 · 순서 이동 · 소속 이동 · 삭제
  * (`repos/menu.ts` · `repos/pages.ts`). 제목 · 설명만 바꾸는 쓰기는 안 잡는다 — 형제를 안 건드린다.
  *
- * **왜 형제 행이 아니라 프로젝트 행인가 — 고치기 전 값**(api · 실커밋 하네스 · 같은 메뉴 여섯 · 60 회 · 둘이 동시에):
+ * **왜 형제 행이 아니라 프로젝트 행인가** — 이 잠금 없이 둘이 동시에 오면(같은 메뉴 · 실커밋 하네스):
  *
- * | 판 | 교착(`pg_stat_database.deadlocks`) · 500 |
+ * | 판 | 이 잠금이 없으면 |
  * |---|---|
- * | 페이지 맨 앞 → 맨 뒤 ∥ 맨 뒤 → 맨 앞 | 11 |
- * | 메뉴(루트) 같은 판 | 35 |
- * | 페이지 두 메뉴 사이 맞바꿈(가 → 나 ∥ 나 → 가) | 51 |
- * | 페이지 순서 이동 ∥ 같은 메뉴의 페이지 삭제 | 21 |
- * | 같은 메뉴에 페이지 생성 둘 | 0 — 대신 **`sort_order`가 겹쳤다**(둘 다 형제 수를 세고 같은 자리에 넣는다) |
+ * | 페이지 맨 앞 → 맨 뒤 ∥ 맨 뒤 → 맨 앞 | 교착(`pg_stat_database.deadlocks`) · 500 |
+ * | 메뉴(루트) 같은 판 | 〃 |
+ * | 페이지 두 메뉴 사이 맞바꿈(가 → 나 ∥ 나 → 가) | 〃 |
+ * | 페이지 순서 이동 ∥ 같은 메뉴의 페이지 삭제 | 〃 |
+ * | 같은 메뉴에 페이지 생성 둘 | 교착은 없다 — 대신 **`sort_order`가 겹친다**(둘 다 형제 수를 세고 같은 자리에 넣는다) |
  *
  * 원인은 하나다 — 형제를 다시 매기는 `UPDATE … WHERE sort_order BETWEEN …`이 **범위의 행을 스캔 순서로** 잠그고, 옮기는
  * 행은 **맨 끝에** 따로 잠근다. 맨 앞 → 맨 뒤는 «1–5 를 잡고 0 을 기다리고», 맨 뒤 → 맨 앞은 «0–4 를 잡고 5 를
@@ -227,8 +226,8 @@ export async function lockProjectRow(trx: DbHandle, projectId: string): Promise<
  * 서로 기다린다.
  *
  * **대상이 없으면(그 사이 지워졌다 — 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰다가 깨어났다) 던진다**(`ProjectGoneError` →
- * `http/error-handler.ts`가 404). 앞 판은 «뒤의 조회가 `null`을 보고 404 가 된다»고 적었는데 **루트 메뉴 생성은 뒤에 조회가
- * 없어** 형제 수를 세고 `INSERT` → FK 위반 500 이었다(A 리뷰 F4 — 20 판 중 11). 이제 여섯 자리가 이 한 규칙이다
+ * `http/error-handler.ts`가 404). «뒤의 조회가 `null`을 보고 404 가 된다»에 기대면 **루트 메뉴 생성은 뒤에 조회가
+ * 없어** 형제 수를 세고 `INSERT` → FK 위반 500 이 된다. 그래서 여섯 자리가 이 한 규칙이다
  * (`test/tree-project-gone.test.ts` — 여섯 자리와 가져오기 전부 404).
  *
  * **대가 — 가져오기는 이것을 트랜잭션 끝까지 쥔다.** 가져오기(`services/page-import.ts`)는 한 트랜잭션에서 `insertPage`(여기서
@@ -261,18 +260,18 @@ export async function lockProjectTree(trx: DbHandle, projectId: string): Promise
 }
 
 /**
- * **자기 행만 쓰는 쓰기의 첫 잠금** — 프로젝트 행을 `FOR KEY SHARE`로 잡는다(이월 AA′ · 2026-09-24). 부르는 자리: 프로젝트
+ * **자기 행만 쓰는 쓰기의 첫 잠금** — 프로젝트 행을 `FOR KEY SHARE`로 잡는다. 부르는 자리: 프로젝트
  * 테마 고르기(`routes/themes.ts` — 레이아웃 행) · 코멘트 수정(`routes/comments.ts` — 코멘트 행) · 테마 수정 · 삭제
  * (`routes/themes.ts` — 테마 행) · FK 삽입 다섯(스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성).
  *
- * **테마 수정 · 삭제도 복원 뒤에 선다 — 자기 행이 아니라 남의 쓰기가 건 잠금에서**(이월 AA′ 리뷰 F1 · F2). 삭제의
+ * **테마 수정 · 삭제도 복원 뒤에 선다 — 자기 행이 아니라 남의 쓰기가 건 잠금에서.** 삭제의
  * `ON DELETE RESTRICT` 검사는 `layouts`를 `FOR KEY SHARE`로 훑어 복원이 `FOR UPDATE`로 쥔 레이아웃 행에 서고, slug 를
  * 바꾸는 수정은 UNIQUE 키 갱신이라 `FOR UPDATE`여서 복원의 `set-layout-theme` · 테마 고르기의 FK 가 테마 행에 건
- * `KEY SHARE`에 선다. 그 대기가 재확인보다 늦게 끝나면 강등 뒤에 커밋됐다 — 이것을 먼저 잡아 복원의 프로젝트 행 대기를
+ * `KEY SHARE`에 선다. 그 대기가 재확인보다 늦게 끝나면 강등 뒤에 커밋된다 — 이것을 먼저 잡아 복원의 프로젝트 행 대기를
  * 재확인 앞으로 끌어온다.
  *
  * **FK 삽입 다섯은 권한이 아니라 봉투 때문이다.** 삽입의 FK 도 같은 `KEY SHARE`를 걸지만 그것은 프로젝트 삭제 뒤에 섰다가
- * 깨면 23503 — 봉투 없는 500 이었다. 이것으로 먼저 잡으면 0 행 → 404(트리 쓰기 · 테마 고르기와 같은 답).
+ * 깨면 23503 — 봉투 없는 500 이다. 이것으로 먼저 잡으면 0 행 → 404(트리 쓰기 · 테마 고르기와 같은 답).
  *
  * **왜 — 커밋 순간의 재확인이 잠금 순서를 요구한다.** 두 쓰기는 프로젝트 행을 안 잡고 자기 행만 잡는다(그 행은 복원이
  * `lockProjectForRestore`로 잠근다 — 그래서 복원 뒤에 선다). 그 뒤에 재확인(`auth/roles.ts`의 `recheckProjectRole` — 멤버 행
@@ -283,12 +282,12 @@ export async function lockProjectTree(trx: DbHandle, projectId: string): Promise
  * 트리 쓰기(`lockProjectTree`) · FK 삽입(부모 행 `KEY SHARE`)과 같은 방향이다.
  *
  * **`KEY SHARE`인 까닭** — 복원 · 프로젝트 삭제의 `FOR UPDATE`와 부딪힌다. 트리 쓰기의 `NO KEY UPDATE` · 다른 `KEY SHARE`와는
- * 안 부딪혀 같은 프로젝트의 테마 고르기 · 코멘트 수정이 트리 쓰기 뒤에 줄을 서지 않는다(앞 판과 같다). **프로젝트 수정은
+ * 안 부딪혀 같은 프로젝트의 테마 고르기 · 코멘트 수정이 트리 쓰기 뒤에 줄을 서지 않는다. **프로젝트 수정은
  * 갈린다** — 이름 · 설명만 바꾸면 `NO KEY UPDATE`라 안 부딪히고, **`slug`(UNIQUE)를 바꾸면 키 갱신이라 `FOR UPDATE`여서
- * 부딪힌다**(리뷰 S2 — 그 수정을 쥔 채 테마 고르기 · 스냅샷 · 토큰 발급이 섰다가 풀린 뒤 200/201). 그 대기는 이것에서 나므로
+ * 부딪힌다**(그 수정을 쥔 채 테마 고르기 · 스냅샷 · 토큰 발급을 보내면 섰다가 풀린 뒤 200/201). 그 대기는 이것에서 나므로
  * 뒤의 재확인이 그 뒤의 역할로 판정한다 — 권한 구멍이 아니라 기다림의 폭이다.
  * 코멘트 삭제의 `lockProjectForBurial`(`repos/comments.ts`)과 같은 모드다 — 그쪽은 0 행이면 조용히 지나가는 계약이라(뒤의
- * 페이지 잠금이 404 를 낸다) 합치지 않았다.
+ * 페이지 잠금이 404 를 낸다) 합치지 않는다.
  *
  * **대상이 없으면(그 사이 지워졌다) 던진다**(`ProjectGoneError` → 404) — 테마 고르기는 뒤에서 레이아웃이 없음을 409 «기본
  * 레이아웃이 없어»로 읽으므로, 여기서 끊지 않으면 지워진 프로젝트가 409 로 새어 나간다.
@@ -302,7 +301,7 @@ export async function lockProjectShared(trx: DbHandle, projectId: string): Promi
 /**
  * 트리 쓰기가 잠금을 기다리는 사이 프로젝트가 지워졌다(`lockProjectTree`). **HTTP 를 모르는 이 계층의 값이다** — 404 로
  * 옮기는 것은 `http/error-handler.ts`(`NulByteError`와 같은 자리)다. 라우트마다 잡지 않는 것은 여섯 자리가 한 규칙이어야
- * 해서다 — 한 자리가 빠지면 그 자리만 500 이다(앞 판의 루트 메뉴 생성).
+ * 해서다 — 한 자리가 빠지면 그 자리만 500 이다(뒤에 조회가 없는 루트 메뉴 생성이 그 꼴이다).
  */
 export class ProjectGoneError extends Error {
   constructor() {
@@ -323,7 +322,7 @@ export class ProjectGoneError extends Error {
  * UPDATE 사이에 그 프로젝트가 삭제되는 경합이 나면 대상 행이 없어 정상적으로
  * 아무것도 갱신하지 못한다. 이때 `null`을 돌려준다: `GET /:projectId`
  * (`routes/projects.ts`)가 같은 경합을 `notFound()`로 다루는 것과 같은 취급이다 —
- * `OrThrow`로 던지게 두면 호출자가 잡지 않는 예외가 되어 500이 났다.
+ * `OrThrow`로 던지게 두면 호출자가 잡지 않는 예외가 되어 500이 난다.
  */
 export async function updateProject(
   db: DbHandle,
@@ -353,14 +352,13 @@ export async function updateProject(
  * 프로젝트를 지운다. `ON DELETE CASCADE`가 `project_members`·`menu_nodes`·`pages`를
  * 함께 지운다 — 이 함수는 그 사실을 알 필요 없이 `projects` 행 하나만 지우면 된다.
  *
- * `withTransaction`으로 감싼다. 이 함수가 처음 쓰였을 때는 `projects`를 RESTRICT로
- * 참조하는 테이블이 없어 실제로 감쌀 이유가 없었지만, 이후 `menu_nodes.parent_id`·
- * `pages.menu_node_id`에 `ON DELETE RESTRICT` FK가 생겼다(`0003-menu-nodes`·
- * `0004-pages`). 이 DELETE 자체는 여전히 살아 있다 — `menu_nodes`/`pages`는
+ * `withTransaction`으로 감싼다. `menu_nodes.parent_id`·
+ * `pages.menu_node_id`에 `ON DELETE RESTRICT` FK가 있다(`0003-menu-nodes`·
+ * `0004-pages`). 이 DELETE 자체는 성공한다 — `menu_nodes`/`pages`는
  * `project_id`를 통해 CASCADE로 참조하므로, Postgres가 그 CASCADE로 큐에 넣은
  * 삭제들을 RESTRICT 제약 검사보다 먼저 처리해 실측으로도 매번 성공한다(중첩
  * 메뉴 트리·페이지가 있어도). 그래도 감싸는 이유는 `repos/`의 다른 쓰기 경로와
- * 같다 — 이 문장이 실패할 수 있는 경로(FK 제약)가 이제 존재하는 이상, 세이브포인트
+ * 같다 — 이 문장이 실패할 수 있는 경로(FK 제약)가 존재하는 이상, 세이브포인트
  * 없이 실패하면 호출자의 트랜잭션이 `25P02`로 오염된다는 사실 자체가 이 함수를
  * 예외로 둘 근거를 없앤다(`src/db/tx.ts` 참고).
  */

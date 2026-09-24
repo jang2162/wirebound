@@ -1,7 +1,7 @@
 /**
  * WebSocket 핸드셰이크와 룸 참가·이탈. **`GET /api/projects/:projectId/ws`** 하나다.
  *
- * # 인증은 REST와 같은 경로다 (P3-1 D5 · §10)
+ * # 인증은 REST와 같은 경로다 (설계서 「권한 모델」)
  *
  * *"WebSocket 핸드셰이크도 같은 쿠키를 쓰므로 REST와 WS의 인증 경로가 하나다. 권한 체크는
  * REST와 WebSocket이 **동일한 가드 함수**를 쓴다."*
@@ -10,26 +10,25 @@
  *
  * | 층 | 무엇이 하나인가 |
  * |---|---|
- * | 쿠키 → 사용자 | `auth/plugin.ts`의 `onRequest` 훅. **업그레이드 요청에도 그대로 돈다** — 재서 알았다 |
- * | 프로젝트 권한 | `projectGuard('viewer')`. `auth/roles.ts`가 *"P3의 WebSocket은 `requireProjectRole`을 직접 재사용해 자신만의 껍데기를 만든다"*고 예상했지만, **껍데기가 필요 없었다**(아래) |
+ * | 쿠키 → 사용자 | `auth/plugin.ts`의 `onRequest` 훅. **업그레이드 요청에도 그대로 돈다** |
+ * | 프로젝트 권한 | `projectGuard('viewer')`. `requireProjectRole`을 직접 감싼 WebSocket 전용 껍데기가 **필요 없다**(아래) |
  *
  * **`projectGuard`를 그대로 preHandler로 쓸 수 있다** — `@fastify/websocket`은 업그레이드
  * 요청을 평범한 라우트로 태우고 훅을 전부 돌린 뒤에야 소켓을 넘긴다. 가드가 던지면
- * 업그레이드가 성립하지 않고 클라이언트는 101 대신 HTTP 오류를 본다. 그래서 §10의
+ * 업그레이드가 성립하지 않고 클라이언트는 101 대신 HTTP 오류를 본다. 그래서 「권한 모델」의
  * *"룸 참가 시 한 번"*이 REST와 **글자 그대로 같은 함수**로 지켜진다.
  * (`test/ws-auth.test.ts`가 미로그인·비멤버·뷰어 셋을 각각 잰다.)
  *
  * # 참가 이후의 권한 — 확인 지점이 둘이다
  *
- * §10은 *"룸 참가 시 한 번, 각 patch 수신 시 한 번"*이라고 적었다. **P3-2가 patch 수신을
- * 얹으면서 그 문장이 글자 그대로 참이 됐다.** 회수를 실행하는 자리는 둘이다:
+ * 「권한 모델」은 *"룸 참가 시 한 번, 각 patch 수신 시 한 번"*이라고 적는다. 회수를 실행하는 자리는 둘이다:
  *
  * 1. **프레임을 받을 때마다** — 이 파일. `ping`도 `patch`도 같은 줄을 지나고, **요구하는
- *    역할만 프레임 종류에서 온다**(`protocol.ts`의 `MIN_ROLE_FOR_FRAME` — D1).
+ *    역할만 프레임 종류에서 온다**(`protocol.ts`의 `MIN_ROLE_FOR_FRAME`).
  * 2. **보낼 때마다** — `broadcast.ts`. 아무것도 안 보내는 연결이 있으므로 1만으로는
  *    부족하다. 그쪽 머리말에 *"즉시"*가 어디까지인지 적어 두었다.
  *
- * # 편집을 처리하는 것은 이 파일이 아니다 (D5)
+ * # 편집을 처리하는 것은 이 파일이 아니다
  *
  * `patch` 프레임의 본줄기는 `ws/patch.ts`에 있다. 이 파일은 **프레임을 읽고 자격을 보고
  * 갈래로 보내는 것**까지다 — 규칙을 여기 두면 REST와 갈린다.
@@ -56,22 +55,22 @@ const WsParams = z.object({ projectId: z.uuid() })
  * 한쪽만 바뀌는 날 **권한이 없는데 연결이 남거나 있는데 끊긴다.**
  *
  * `broadcast.ts`의 `MIN_ROLE_TO_RECEIVE`와 같은 값이지만 **같은 것이 아니다**: 저쪽은
- * *"프레임을 받을 자격"*이고 이쪽은 *"방에 있을 자격"*이다. 지금 둘이 같은 이유는 §10이
+ * *"프레임을 받을 자격"*이고 이쪽은 *"방에 있을 자격"*이다. 지금 둘이 같은 이유는 「권한 모델」이
  * viewer에게 조회를 열어 두기 때문이고, 갈릴 이유가 생기면 그때 따로 움직인다.
  */
 const MIN_ROLE_TO_JOIN: ProjectRole = 'viewer'
 
 /**
- * **WS는 쿠키만이다**(P9-2 D4).
+ * **WS는 쿠키만이다.**
  *
- * §10이 *"WS 핸드셰이크도 같은 쿠키를 쓰므로 REST와 WS의 인증 경로가 하나다"*라고 적었고,
+ * 「권한 모델」이 *"WS 핸드셰이크도 같은 쿠키를 쓰므로 REST와 WS의 인증 경로가 하나다"*라고 적었고,
  * API 토큰을 여기 얹으면 그 **하나가 둘**이 된다. 이 라우트는 `:projectId`를 가지므로
- * 토큰 훅이 `currentUser`를 채우고 `projectGuard`도 통과한다 — **재서 알았다**(그러기
- * 전에는 101이 선 뒤 소켓 콜백의 쿠키 검사가 곧바로 닫았다: 핸드셰이크는 성공하고 연결만
- * 죽는 어중간한 상태였다). 그래서 가드 **앞**에서 끊는다.
+ * 토큰 훅이 `currentUser`를 채우고 `projectGuard`도 통과한다 — 가드 앞에서 안 끊으면
+ * 101이 선 뒤 소켓 콜백의 쿠키 검사가 곧바로 닫는다: 핸드셰이크는 성공하고 연결만
+ * 죽는 어중간한 상태다. 그래서 가드 **앞**에서 끊는다.
  *
  * 아래 소켓 콜백의 쿠키 검사를 지우지 않는다 — 그쪽은 `sessionId`를 만들어야 하고
- * (§10의 *"세션 행을 지우면 권한도 즉시 회수된다"*), 마지막 방벽이기도 하다.
+ * (「권한 모델」의 *"세션 행을 지우면 권한도 즉시 회수된다"*), 마지막 방벽이기도 하다.
  *
  * **가드 앞에 도는 훅이라 허용 목록에 있다** — `test/pre-guard-hook-census.test.ts`가 참조로 견주려고 내보낸다.
  */
@@ -128,7 +127,7 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
       }
       announce()
       // **참가할 때 잠금 목록을 한 번 흘린다.** 잠금은 바뀔 때만 흐르므로, 여기서 안
-      // 흘리면 들어온 화면의 배지가 **다음 누군가의 선택까지** 비어 있다 — 그동안 §7.2의
+      // 흘리면 들어온 화면의 배지가 **다음 누군가의 선택까지** 비어 있다 — 그동안 설계서 「소프트 잠금」의
       // 1차 방어가 서지 않는다. 이탈에서는 부르지 않는다: 그 연결이 잠금을 들고 있었으면
       // `releaseLocksOf`가 알리고, 안 들고 있었으면 목록이 안 바뀌었다.
       void broadcast.announceLocks(projectId).catch((error: unknown) => {
@@ -145,8 +144,8 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         // **읽기는 동기이므로 IIFE 밖에서 한다.** 아래 `catch`가 *"어느 편집이 실패했나"*를
         // 알려면 프레임을 손에 쥐고 있어야 한다.
         //
-        // **여기서 던지면 감싸는 `catch`가 없어 unhandled가 된다** — 리뷰가 지적한 자리다.
-        // 재현 가능한 입력을 못 찾았다: `JSON.parse`는 `parseClientFrame` 안에서 막혀 있고
+        // **여기서 던지면 감싸는 `catch`가 없어 unhandled가 된다.**
+        // 던지는 입력은 알려져 있지 않다: `JSON.parse`는 `parseClientFrame` 안에서 막혀 있고
         // `ClientFrameSchema`에 재귀 멤버가 없어 zod가 스택으로 던질 자리도 없다.
         // **프레임 갈래에 재귀 스키마를 더하면 그 전제가 깨진다.**
         const frame = parseClientFrame(String(raw))
@@ -159,10 +158,10 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         const current = (): boolean => turn === lockTurns
 
         void (async () => {
-          // **자격을 보기 전의 멤버십 세대**(`RoomConnection.membershipEpoch` — 이월 5차 리뷰 R5). 아래 `lock` 갈래가 본다.
+          // **자격을 보기 전의 멤버십 세대**(`RoomConnection.membershipEpoch`). 아래 `lock` 갈래가 본다.
           const epoch = connection.membershipEpoch
           // 확인 지점 1 (머리말). 검사는 프레임 종류와 무관하게 **먼저** 돌고, 요구하는
-          // 역할만 종류에서 온다(`MIN_ROLE_FOR_FRAME` — P3-2 D1).
+          // 역할만 종류에서 온다(`MIN_ROLE_FOR_FRAME`).
           const minRole = MIN_ROLE_FOR_FRAME[frame.type]
           if (!(await broadcast.stillAllowed(connection, minRole))) {
             // **왜 한 번 더 보는가.** 검사 하나로는 *"권한이 회수됐다"*와 *"뷰어가 편집을
@@ -170,8 +169,8 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
             // 끊기고 다시 로그인해야 하는 것이고, 뒤의 것은 **연결이 살아 있는 것이
             // 맞다**(뷰어는 계속 받아야 한다 — `broadcast.ts`의 `MIN_ROLE_TO_RECEIVE`).
             //
-            // **두 번째 조회는 거절된 프레임에만 붙는다.** 통과하는 프레임의 비용은 앞
-            // 슬라이스와 같은 조회 두 건이다.
+            // **두 번째 조회는 거절된 프레임에만 붙는다.** 통과하는 프레임의 비용은
+            // 조회 두 건 그대로다.
             if (minRole !== MIN_ROLE_TO_JOIN && (await broadcast.stillAllowed(connection, MIN_ROLE_TO_JOIN))) {
               if (frame.type === 'patch') {
                 push(patchErrorFrame(projectId, frame, forbidden('편집 권한이 없습니다')))
@@ -180,10 +179,10 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
             }
             rooms.leave(projectId, connection.id)
             socket.close(WS_CLOSE.revoked, '권한이 회수되었습니다')
-            // **회수도 연결 종료다** — §7.2의 *"연결 종료 시 즉시 해제"*가 여기도 선다.
+            // **회수도 연결 종료다** — 「소프트 잠금」의 *"연결 종료 시 즉시 해제"*가 여기도 선다.
             // `close` 이벤트가 뒤따르지만 그 자리에서 다시 놓아도 조용히 지난다.
             //
-            // **그래서 이 줄은 0 사망이다(리뷰 N9).** 바로 위 `socket.close()`가 부르는
+            // **그래서 이 줄을 지워도 죽는 케이스가 없다.** 바로 위 `socket.close()`가 부르는
             // `close` 핸들러가 같은 일을 하므로 지워도 아무것도 안 죽는다. **지워도 되는
             // 신호로 읽지 마라:** 이것은 둘째 방어이고, `close` 이벤트가 안 오는 구현으로
             // 갈아 끼우는 날 유일한 해제가 된다(`ws/patch.ts`의 `clientOpId`·`connection.ts`의
@@ -201,12 +200,12 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
               push(await handlePatchFrame(app, connection, frame))
               return
             case 'lock':
-              // **자격을 보는 동안 멤버십이 바뀌었으면 잡지 않는다**(이월 5차 리뷰 R5). 위 await 사이에 강등이 커밋되고
+              // **자격을 보는 동안 멤버십이 바뀌었으면 잡지 않는다.** 위 await 사이에 강등이 커밋되고
               // `notifyMembershipChanged`가 먼저 놓으면(놓을 것이 아직 없다) 여기서 잡은 잠금은 **TTL 까지** 남는다 —
               // viewer 가 된 주인의 `unlock`은 editor 문턱에 걸린다. 세대는 **쥘 수 없게 된 변경에만** 오른다(`ws/notify.ts`의
               // `canHold`) — 그 판정과 답(`lock-denied`)은 `ws/lock.ts`의 표가 소유한다(끝나는 순간에 본다 —
               // 문서를 읽는 await 가 하나 더 있을 수 있다).
-              // **`patch`는 여기서 거르지 않는다** — 커밋 순간에 권한을 다시 본다(`ws/patch.ts` · 이월 AA).
+              // **`patch`는 여기서 거르지 않는다** — 커밋 순간에 권한을 다시 본다(`ws/patch.ts`).
               await handleLockFrame(app, connection, frame, { epoch, current })
               return
             case 'unlock':
@@ -226,7 +225,7 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
           } catch (pushError: unknown) {
             // 소켓이 이미 죽었으면 보낼 수 없다. 여기서 던지면 unhandled가 된다.
             //
-            // **이 안쪽 `catch`는 0 사망이다(리뷰 변이 M-N9).** 그것이 도는 판은 *"핸들러가
+            // **이 안쪽 `catch`를 지워도 죽는 케이스가 없다.** 그것이 도는 판은 *"핸들러가
             // 던졌고 **그 순간 소켓도 이미 죽어** `push`까지 던진다"*인데, 그 둘을 함께
             // 만드는 케이스가 없다. `connection.ts`의 `stopped`·`ackEdit`의 접기 실패와 같은
             // 부류다 — **지워도 되는 신호로 읽지 마라.** 지금 안 죽는 이유는 두 사건이 겹치는
@@ -238,7 +237,7 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
 
       socket.on('close', () => {
         rooms.leave(projectId, connection.id)
-        // **§7.2의 *"WS 연결 종료 시 즉시 해제"*가 서는 자리다.** 룸에서 뺀 **뒤에** 놓는다 —
+        // **「소프트 잠금」의 *"WS 연결 종료 시 즉시 해제"*가 서는 자리다.** 룸에서 뺀 **뒤에** 놓는다 —
         // 그래야 나가는 연결이 자기 해제 프레임을 받지 않는다.
         releaseLocksOf(app, connection)
         announce()

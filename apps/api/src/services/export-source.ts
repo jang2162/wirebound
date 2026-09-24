@@ -1,7 +1,7 @@
 /**
- * **내보내기 둘이 공유하는 수집**(P10-1 D4 · P8-4 D1).
+ * **내보내기 둘이 공유하는 수집.**
  *
- * §11.3의 HTML 번들과 §15의 PPTX가 **같은 프로젝트를 같은 순서로 같은 이름으로** 실어야
+ * 설계서 「HTML 정적 번들」의 HTML 번들과 「로드맵」의 PPTX가 **같은 프로젝트를 같은 순서로 같은 이름으로** 실어야
  * 한다. 수집을 두 벌 두면 *"어느 산출물이 무엇을 실었나"*가 갈리고, 그 갈림은 두 파일을
  * 나란히 열어 본 사람에게만 보인다.
  *
@@ -10,7 +10,7 @@
  *
  * ---
  *
- * # 아래 순서 자체가 규격이다 (P8-4 D1을 그대로 이어받는다)
+ * # 아래 순서 자체가 규격이다
  *
  * 1. `listMenuRows` · `listPages` — 메뉴와 페이지(문서 포함).
  * 2. `targetedPages` — **한 번의 순회가 순서이자 페이지마다의 조상**이다. 둘을 따로
@@ -19,9 +19,9 @@
  *    왕복하면 그 사이에 다른 페이지의 코멘트가 바뀌어 **한 시점에 존재한 적 없는 조합**이
  *    산출물에 담긴다.
  *
- * **테마는 여기서 안 읽는다.** PPTX는 §6의 테마를 쓰지 않는다(§2.1이 도형 변환을 포기했고
- * 슬라이드에 실릴 화면이 래스터이므로 그 이미지가 이미 테마를 담는다). 쓰지 않는 쪽이
- * 질의를 하나 더 도는 것은 비용이지 계약이 아니다 — 읽는 쪽이 읽는다.
+ * **테마는 여기서 안 읽는다.** PPTX는 테마를 OOXML 색으로 옮기지 않고(설계서 「명시적으로 제외한 것 (YAGNI)」이
+ * 도형 변환을 포기했다) 화면을 그릴 때만 읽는다(`export-pptx.ts`의 「테마를 래스터를 위해 읽는다」). 화면 없는
+ * 쪽까지 질의를 하나 더 도는 것은 비용이지 계약이 아니다 — 읽는 쪽이 읽는다.
  */
 import type { BundleComment } from '@wirebound/exporter'
 import { migrateDocument, targetedPages, type PageDocument, type TargetedPage } from '@wirebound/schema'
@@ -44,7 +44,7 @@ export class EmptyProjectError extends Error {
  *
  * **산출물을 내지 않는 쪽을 골랐다.** `GET .../pages/:id`가 같은 상태에서 400이므로 그
  * 페이지는 이미 저작 화면에서도 안 열린다. 그리지 못한 채로 내보내면 **눈으로는
- * 그럴듯한 한 장**이 남에게 전달되고, 그것이 이 저장소가 반복해서 막아 온 부류다.
+ * 그럴듯한 한 장**이 남에게 전달되고, 그것이 이 저장소가 막는 부류다.
  */
 export class UnsupportedDocumentError extends Error {
   constructor(readonly pageTitle: string, readonly reason: string) {
@@ -98,9 +98,8 @@ export function assembleExportSource(rows: ExportRows): ExportSource {
   if (pageRecords.length === 0) throw new EmptyProjectError()
 
   /**
-   * **평평한 행을 그대로 넘긴다**(P9-3 T2). 승격 전에는 `buildMenuTree`로 트리를 만들어
-   * 넘겼는데, `targetedPages`가 `packages/schema`로 올라가며 입력이 평평해졌다 — 그래야
-   * CLI·MCP가 스냅샷 payload에서 트리를 다시 조립하지 않는다.
+   * **평평한 행을 그대로 넘긴다.** `targetedPages`는 `packages/schema`에 있고 평평한 입력을
+   * 받는다 — 그래야 CLI·MCP가 스냅샷 payload에서 트리를 다시 조립하지 않는다.
    */
   const ordered = targetedPages({
     menu: menuRows.map((row) => ({
@@ -122,10 +121,10 @@ export function assembleExportSource(rows: ExportRows): ExportSource {
    * 순환에 갇힌 노드를 조용히 버리는데, 버려진 페이지는 산출물에서 **말없이 빠진다.**
    * 조용히 빠지는 것이 이 산출물에서 가장 나쁜 실패다.
    *
-   * **FK가 이 상태를 막지 않는다**(P8-4 리뷰가 재서 보였다). `pages_menu_node_id_fkey`는
+   * **FK가 이 상태를 막지 않는다.** `pages_menu_node_id_fkey`는
    * `menu_nodes(id)`만 참조하고 **프로젝트를 안 본다** — 프로젝트 A의 페이지가 프로젝트 B의
    * 메뉴를 가리켜도 FK는 통과하고, `listMenuRows(A)`가 그 메뉴를 안 내므로 페이지가 고아가
-   * 된다. 그러므로 이 갈래는 *"오늘 닿지 않는 것"*이 아니라 **닿는 것**이고 케이스가 든다.
+   * 된다. 그러므로 이 갈래는 *"실제로는 닿지 않는 것"*이 아니라 **닿는 것**이고 케이스가 든다.
    */
   if (ordered.length !== pageRecords.length) {
     throw new Error(

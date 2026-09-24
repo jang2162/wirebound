@@ -2,7 +2,7 @@ import type { Kysely, Migration } from 'kysely'
 import { sql } from 'kysely'
 
 /**
- * `pages` 테이블을 만든다 — 설계 §7.1의 서버 검증 게이트가 지키는 문서(설계 §13)를
+ * `pages` 테이블을 만든다 — 설계서 「정방향 흐름」의 서버 검증 게이트가 지키는 문서(「에러 처리」)를
  * 담는 테이블이다. 메뉴 트리(`0003-menu-nodes`)의 리프에 매달린다.
  *
  * `project_id`는 `projects(id)`를 `ON DELETE CASCADE`로 참조한다 — 프로젝트가

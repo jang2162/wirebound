@@ -1,20 +1,19 @@
 /**
- * **빈 DB 로 뜬 것이 조용하면 안 된다**(2026-08-19 D3).
+ * **빈 DB 로 뜬 것이 조용하면 안 된다**.
  *
- * 오늘까지 *"빈 볼륨이 마운트되는 것"*을 막고 있던 것은 `docker-compose.yml` 의
- * `container_name` 이 고정이라는 사실 하나였다 — 둘째 컨테이너가 이름 충돌로 안 떠서
- * 거기까지 못 갔다(README 6.3). **이 슬라이스가 그 방어를 걷어냈다.** 워크트리마다
- * 컨테이너를 띄우기로 한 이상 **빈 DB 는 정상이다** — 다만 사람이 그것을 *"설계서가
- * 사라졌다"* 로 읽는 길이 열린다. 데이터는 사라진 것이 아니라 **다른 이름의 볼륨**에 있다.
+ * 워크트리마다 컨테이너를 띄우므로(`docker-compose.yml` 이 `container_name` 을 고정하지
+ * 않는다) **빈 DB 는 정상이다** — 다만 사람이 그것을 *"설계서가 사라졌다"* 로 읽는 길이
+ * 열린다. 데이터는 사라진 것이 아니라 **다른 이름의 볼륨**에 있다(`README.md` 「컨테이너를
+ * 못 찾는다 / 포트가 이미 잡혀 있다 / 빈 DB 가 떴다」 절).
  *
  * 그래서 서버가 **자기가 보는 스키마가 비었는지**를 말한다. 재는 값은 *적용된 마이그레이션
  * 수*다 — 스키마가 비었다는 것을 한 수로 말하는 것이 그것뿐이다.
  *
- * **말하는 자리가 둘이다. 계획서는 하나만 봤고 그것은 틀렸다.**
- * 계획서 D3 은 *"서버가 뜰 때 마이그레이션이 0 건인지 말하게 하라"* 였는데, 이 판이 재 보니
- * **빈 DB 에서는 서버가 뜨지 못한다** — `buildApp` 이 부팅 중에 `themes` 에 쓰고 그 표가
- * 없어 `relation "themes" does not exist`(SQLSTATE `42P01`)로 죽는다(이 기계에서 쟀다,
- * 종료 코드 1). 즉 **뜬 뒤에 찍는 줄은 0 건을 영영 못 본다.** 그래서:
+ * **말하는 자리가 둘이다.** *"서버가 뜰 때 마이그레이션이 0 건인지 말한다"* 하나로는
+ * 모자라다 — **빈 DB 에서는 서버가 뜨지 못한다**: `buildApp` 이 부팅 중에 `themes` 에 쓰고
+ * 그 표가 없어 `relation "themes" does not exist`(SQLSTATE `42P01`)로 죽는다(종료 코드 1 —
+ * 빈 DB 에 `pnpm --filter @wirebound/api dev` 로 다시 잰다). 즉 **뜬 뒤에 찍는 줄은 0 건을
+ * 영영 못 본다.** 그래서:
  *
  * 1. **뜬 뒤** — `describeSchemaState` 가 `이 서버가 보는 DB:` 줄에 수를 붙인다. 워크트리
  *    둘을 나란히 놓은 사람이 *"내 쪽이 몇 건인가"* 를 가른다.
@@ -23,7 +22,8 @@
  *    비었다면 지우지 말고 다른 볼륨을 찾아라.*
  *
  * **이 자가 못 잡는 것을 적어 둔다:** *마이그레이션은 올렸는데 데이터만 없는* 볼륨은
- * 여기서 안 걸린다(수가 0 이 아니다). 그쪽은 README 6.6 이 *"목록이 비어 있다"* 로 든다.
+ * 여기서 안 걸린다(수가 0 이 아니다). 그쪽은 `README.md` 「에디터가 뜨는데 로그인이 안 된다 /
+ * 목록이 비어 있다」 절이 든다.
  */
 import { describeDatabaseTarget } from './describe-target'
 
@@ -56,7 +56,7 @@ export function describeSchemaState(executedMigrations: number | undefined): str
  * 0 건이 아니면 `undefined` — 다른 실패에까지 이 말을 붙이면 엉뚱한 곳을 보게 된다
  * (`missing-database-hint.ts` 가 `3D000` 에만 붙이는 것과 같은 규칙이다).
  *
- * **자격 문자열은 안 싣는다** — `describeDatabaseTarget` 을 지난 값만 든다(D4).
+ * **자격 문자열은 안 싣는다** — `describeDatabaseTarget` 을 지난 값만 든다.
  */
 export function emptySchemaHint(executedMigrations: number | undefined, databaseUrl: string): string | undefined {
   if (executedMigrations !== EMPTY_SCHEMA) {

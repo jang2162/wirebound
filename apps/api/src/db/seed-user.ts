@@ -1,13 +1,12 @@
 /**
  * **계정 시딩 — 마이그레이션이 다 올라간 뒤에 환경변수로 계정 하나를 만든다.**
  *
- * 공개 가입 라우트를 지우면서(2026-08-20) **계정을 만드는 길이 이것 하나가 됐다.**
- * 그래서 이 파일은 앞서 `routes/auth.ts`의 `POST /signup`이 하던 일 중 **해시와 삽입**을
- * 그대로 물려받는다. 물려받지 않은 것은 **세션 발급**이다 — 시딩은 쿠키를 낼 상대가
+ * 공개 가입 라우트는 없다 — **계정을 만드는 길은 이것 하나다.** 이 파일이 하는 일은
+ * **해시와 삽입**이고, **세션 발급**은 하지 않는다 — 시딩은 쿠키를 낼 상대가
  * 없다(HTTP 요청이 아니다). 그 계정으로 붙는 길은 `POST /api/auth/login`이다.
  *
- * **마이그레이션 파일 안에 넣지 않는다**(D3). 마이그레이션은 스키마이고 계정은 데이터라,
- * `0012-seed-user.ts` 같은 것을 만들면 `migrate:down`이 계정을 지우게 되고 롤백의 뜻이
+ * **마이그레이션 파일 안에 넣지 않는다**. 마이그레이션은 스키마이고 계정은 데이터라,
+ * `seed-user` 마이그레이션 같은 것을 만들면 `migrate:down`이 계정을 지우게 되고 롤백의 뜻이
  * 흐려진다. 그래서 시딩을 부르는 자는 `migrate.ts`의 **CLI 진입점**이지
  * `migrateToLatest`가 아니다 — `test/seed-user.test.ts`가 그 갈림을 잰다.
  *
@@ -45,7 +44,7 @@ const REQUIRED_KEYS = ['SEED_USER_EMAIL', 'SEED_USER_PASSWORD'] as const
 const ALL_KEYS = ['SEED_USER_EMAIL', 'SEED_USER_NAME', 'SEED_USER_PASSWORD'] as const
 
 /**
- * 시딩이 값 때문에 멈췄을 때 던진다. **`message`에 비밀번호를 담지 않는다**(D5) —
+ * 시딩이 값 때문에 멈췄을 때 던진다. **`message`에 비밀번호를 담지 않는다** —
  * 이 메시지는 그대로 콘솔로 나간다.
  */
 export class SeedUserError extends Error {
@@ -55,7 +54,7 @@ export class SeedUserError extends Error {
   }
 }
 
-/** 시딩이 한 일. **셋 다 말한다**(D4) — 조용한 갈래를 두지 않는다. */
+/** 시딩이 한 일. **셋 다 말한다** — 조용한 갈래를 두지 않는다. */
 export type SeedUserOutcome =
   | { kind: 'skipped' }
   | { kind: 'created'; email: string }
@@ -134,7 +133,7 @@ function defaultNameFor(email: string): string {
 }
 
 /**
- * **없으면 만들고, 이미 있으면 그대로 둔다**(D4). 멱등이다.
+ * **없으면 만들고, 이미 있으면 그대로 둔다**. 멱등이다.
  *
  * **비밀번호를 덮어쓰지 않는다.** `migrate`를 두 번 돌렸다고 남의 비밀번호가 바뀌면
  * 안 된다 — 그래서 이미 있는 이메일에는 해시를 계산조차 하지 않고 돌아선다.
@@ -187,9 +186,9 @@ export async function seedUserFromEnv(
 }
 
 /**
- * 결과를 사람이 읽는 한 줄로. **이메일은 싣고 비밀번호는 안 싣는다**(D5).
+ * 결과를 사람이 읽는 한 줄로. **이메일은 싣고 비밀번호는 안 싣는다**.
  *
- * 건너뛴 갈래도 한 줄을 낸다 — 오늘 개발자 대부분이 그 갈래인데, 아무 말도 없으면
+ * 건너뛴 갈래도 한 줄을 낸다 — 개발자 대부분이 그 갈래인데, 아무 말도 없으면
  * *"계정이 생겼겠거니"* 하고 로그인 화면에서 막힌다.
  */
 export function describeSeedOutcome(outcome: SeedUserOutcome): string {
@@ -203,7 +202,7 @@ export function describeSeedOutcome(outcome: SeedUserOutcome): string {
   }
 }
 
-/** 콘솔을 그대로 받지 않고 이음매로 받는다 — 케이스가 출력 전문을 읽어 D5를 잴 수 있다. */
+/** 콘솔을 그대로 받지 않고 이음매로 받는다 — 케이스가 출력 전문을 읽어 비밀번호가 안 실리는지 잴 수 있다. */
 export interface SeedReporter {
   log: (line: string) => void
   error: (line: string) => void
@@ -212,7 +211,7 @@ export interface SeedReporter {
 /**
  * **`migrate latest`가 마지막에 부르는 한 걸음.** 결과를 말하고, 실패면 `false`다.
  *
- * 실패 문장이 *"마이그레이션은 올렸다"*를 함께 말하는 것이 요점이다(D4) — 이 지점은
+ * 실패 문장이 *"마이그레이션은 올렸다"*를 함께 말하는 것이 요점이다 — 이 지점은
  * 스키마가 이미 최신인 자리라, 그냥 *"실패"*라고만 하면 사람이 마이그레이션을 다시
  * 돌려야 하는지 알 수 없다.
  */

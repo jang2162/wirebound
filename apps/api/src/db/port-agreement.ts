@@ -3,21 +3,21 @@ import { describeDatabaseTarget } from './describe-target'
 /**
  * **포트가 두 자리에 있고, 어긋나면 조용하다** — 이 파일이 그것을 시끄럽게 만든다.
  *
- * 워크트리마다 자기 Postgres 컨테이너를 띄우게 되면서 호스트 포트가 **두 곳**에 산다:
+ * 워크트리마다 자기 Postgres 컨테이너를 띄우므로 호스트 포트가 **두 곳**에 산다:
  * `docker compose` 가 여는 포트(`POSTGRES_PORT`)와 접속 문자열 안에 박힌 포트다.
- * **두 자리가 서로를 읽을 수는 없다** — 재고 확인했다: Node 의 `--env-file` 도 `util.parseEnv`
- * 도 `${...}` 를 펴지 않으므로(2026-08-19 재라 #1) `DATABASE_URL` 안에서 `POSTGRES_PORT`
+ * **두 자리가 서로를 읽을 수는 없다** — Node 의 `--env-file` 도 `util.parseEnv`
+ * 도 `${...}` 를 펴지 않으므로 `DATABASE_URL` 안에서 `POSTGRES_PORT`
  * 를 참조할 수 없고, compose 는 URL 에서 포트를 뽑아낼 수 없다.
  *
- * **한 자리를 *없애는* 길은 있다 — 이 슬라이스가 안 골랐을 뿐이다**(귀속: 리뷰 §3.2).
+ * **한 자리를 *없애는* 길은 있다 — 고르지 않았을 뿐이다**.
  * `.env` 가 포트와 DB 이름만 들고 `DATABASE_URL` 을 이 패키지가 조립하면 어긋날 자리가
  * 애초에 안 생긴다. 안 고른 이유는 **`DATABASE_URL` 을 직접 적는 사람**(자기 Postgres·원격
  * DB)에게는 이 검사가 여전히 필요하고, 그 키를 필수에서 선택으로 바꾸는 것이 기존 사용자의
- * 계약을 건드리기 때문이다. 미결 장부(`2026-08-17-p10-2-carryforward.md` §3.10)가 든다.
+ * 계약을 건드리기 때문이다.
  *
  * **어긋나면 연결이 실패하는 것이 아니라 성공한다.** 그 포트는 대개 비어 있지 않고
- * *옆 워크트리의 컨테이너*가 잡고 있다 — 앞 슬라이스가 프록시에서 잡은 것과 같은 부류이고
- * (에디터가 옆 워크트리 API 에 붙어도 아무도 안 울었다: 2026-08-19 보고 §2.2) 이번엔 DB 다.
+ * *옆 워크트리의 컨테이너*가 잡고 있다 — 에디터의 프록시가 옆 워크트리 API 에 붙어도 아무도
+ * 안 우는 것과 같은 부류이고, 여기서는 DB 다.
  *
  * 그래서 **값이 있으면 서버가 아예 안 뜬다.** 조용히 물러나면 남의 DB 를 열어 놓고
  * "잘 떴다"고 읽게 된다.
@@ -26,8 +26,8 @@ import { describeDatabaseTarget } from './describe-target'
 /**
  * `docker-compose.yml` 의 `${POSTGRES_PORT:-5433}` 이 쓰는 기본값.
  *
- * **`.env.example` 의 접속 문자열도 이 수를 든다** — 아무것도 안 바꾼 사람이 오늘과 같이
- * 도는 것이 그 둘이 같기 때문이다(D6). 셋 중 하나가 움직이면 `port-agreement.test.ts`
+ * **`.env.example` 의 접속 문자열도 이 수를 든다** — 아무것도 안 바꾼 사람의 서버가 그대로
+ * 도는 것은 그 둘이 같기 때문이다. 셋 중 하나가 움직이면 `port-agreement.test.ts`
  * 의 인구조사가 죽는다.
  */
 export const COMPOSE_DEFAULT_POSTGRES_PORT = '5433'
@@ -75,8 +75,8 @@ function loopbackPortOf(databaseUrl: string): string | undefined {
  * 어긋난 자리가 있으면 **사람이 고칠 수 있는 문장**을, 없으면 `undefined` 를 낸다.
  *
  * **나가는 값에 자격 문자열이 없다** — `describeDatabaseTarget` 을 지나 `호스트:포트/이름`
- * 만 싣는다(2026-08-19 D4. 이 규칙이 `missing-database-hint.ts` 밖에 없어서 변이가
- * 살아남은 적이 있다 — 귀속: 리뷰 §9 R6).
+ * 만 싣는다(이 규칙을 `missing-database-hint.ts` 한 곳만 지키면 여기서 원문을 싣는 변조를
+ * 아무 케이스도 못 잡는다).
  */
 export function portAgreementError(sources: PortAgreementSources): string | undefined {
   const postgresPort = pick(sources.postgresPort)

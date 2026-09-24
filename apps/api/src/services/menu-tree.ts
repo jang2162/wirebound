@@ -1,20 +1,19 @@
 /**
- * 메뉴 트리 조립. `repos/menu.ts`에서 옮겨 왔다.
+ * 메뉴 트리 조립.
  *
  * 이 함수는 SQL을 한 줄도 쓰지 않는 **순수 함수**다 — 호출자가 이미 조회해 둔
- * 평평한 행 배열 두 개를 받아 메모리에서 트리를 만든다. 원래 `repos/menu.ts`에
- * 있었던 이유는 "라우트는 SQL을 직접 쓰지 않는다"는 계층 규칙을 만족시키기
- * 위해서였는데, SQL이 없으므로 그 규칙이 애초에 적용되지 않았다.
+ * 평평한 행 배열 두 개를 받아 메모리에서 트리를 만든다. SQL이 없으므로 "라우트는 SQL을
+ * 직접 쓰지 않는다"는 계층 규칙 때문에 `repos/`에 둘 까닭이 없다.
  *
  * `services/`는 SQL을 직접 쓰지 않고 HTTP도 모르는 계층이다 — 순수 도메인 함수와
  * repo 조율이 여기 산다.
  */
 
 /**
- * 통합 트리(`routes/tree.ts`, 설계 §9)의 페이지 노드. `repos/pages.ts`의
+ * 통합 트리(`routes/tree.ts`, 설계서 「설계서 화면 구조」)의 페이지 노드. `repos/pages.ts`의
  * 전체 `PageRecord`와 달리 `id`·`title`·`sortOrder` 셋만 담는다 — 트리 응답에
- * `schema`가 실리면 프로젝트가 커질수록 응답이 무거워진다(브리프: 목록이 무거워지면
- * 안 된다). `routes/tree.ts`의 SELECT 자체가 `schema` 컬럼을 고르지 않는다.
+ * `schema`가 실리면 프로젝트가 커질수록 응답이 무거워진다. `repos/pages.ts`의
+ * `listPageRows` 자체가 `schema` 컬럼을 고르지 않는다.
  */
 export interface TreePage {
   id: string
@@ -32,7 +31,7 @@ export interface TreeMenuNode {
 }
 
 /**
- * `buildMenuTree`가 받는 메뉴 행. `routes/tree.ts`가 `menu_nodes`를 한 번
+ * `buildMenuTree`가 받는 메뉴 행. `repos/menu.ts`의 `listMenuRows`가 `menu_nodes`를 한 번
  * SELECT한 결과(camelCase 변환 없이, DB 컬럼 이름 그대로)를 그대로 넘긴다.
  */
 export interface MenuRow {
@@ -56,7 +55,7 @@ export interface PageRow {
 
 /**
  * 메뉴 트리와 페이지 목록을 각각 한 번씩 받아 메모리에서 하나의 트리로 조립한다
- * (설계 §9, `routes/tree.ts`가 호출자). `listMenuTree`와 달리 **순수 함수**다 — DB
+ * (설계서 「설계서 화면 구조」, `routes/tree.ts`가 호출자). `listMenuTree`와 달리 **순수 함수**다 — DB
  * 핸들을 받지 않고, 호출자가 이미 한 번씩 조회해 둔 평평한 행 배열만 받는다. 노드마다
  * 페이지를 다시 조회하면 N+1이 되므로, 이 함수가 메모리에서 두 목록을 이어 붙이는
  * 대가로 그 조회 비용을 없앤다.
@@ -76,7 +75,7 @@ export interface PageRow {
  *   뿐, 그 자체가 무한 루프를 일으키지 않는다.
  *
  * 정렬은 입력 배열의 순서에 기대지 않고 이 함수가 직접 `sort_order`로 정렬한다 —
- * 형제 그룹 안에서 `sort_order`는 0부터 시작하는 연속 정수라는 불변식(파일 헤더 참고)이
+ * 형제 그룹 안에서 `sort_order`는 0부터 시작하는 연속 정수라는 불변식(`repos/menu.ts`의 머리말)이
  * 있으므로, 전체를 한 번 정렬해도 같은 부모 밑 형제들의 상대 순서가 그대로 보존된다
  * (`Array.prototype.sort`는 안정 정렬이다 — 서로 다른 부모에 속한 노드들이 우연히
  * 같은 `sort_order` 값을 가져도 형제 그룹 내부 순서에는 영향이 없다).

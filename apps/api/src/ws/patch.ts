@@ -1,9 +1,9 @@
 /**
- * `patch` 프레임 하나를 처리한다 — §7.1의 서버 쪽 절반이 WebSocket으로 들어오는 자리다.
+ * `patch` 프레임 하나를 처리한다 — 설계서 「정방향 흐름」의 서버 쪽 절반이 WebSocket으로 들어오는 자리다.
  *
- * # 두 진입점이 같은 것을 쓴다 (P3-2 D5 · §7.4)
+ * # 두 진입점이 같은 것을 쓴다 (설계서 「LLM 편집 경로」)
  *
- * §7.4가 *"MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이프라인은 완전히
+ * 「LLM 편집 경로」가 *"MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이프라인은 완전히
  * 같다"*고 적었다. 그래서 이 파일에는 **규칙이 없다.** 하는 일은 셋뿐이다:
  *
  * | 하는 일 | 어디에 있는 규칙인가 |
@@ -12,22 +12,23 @@
  * | 실패 → 봉투 | `http/edit-outcome.ts`의 `editOutcomeToApiError` — REST가 상태 코드를 만드는 그 표다 |
  * | 알림 | `ws/notify.ts`의 `notifyPageChanged` — REST가 부르는 그 함수다 |
  *
- * **`applyEdit`을 여기서 부르므로 `test/broadcast-census.test.ts`가 먼저 죽는다.** 그것이
- * P3-1 D3의 설계다(브로드캐스트가 파이프라인 밖에 있으니 호출자가 빠뜨릴 수 있다). 앞
- * 슬라이스의 리뷰가 인구조사의 훑는 범위를 `src/` 전체로 넓힌 이유가 **정확히 이 파일**이다.
+ * **`applyEdit`을 여기서 부르므로 `test/broadcast-census.test.ts`가 먼저 죽는다.** 브로드캐스트가
+ * 파이프라인 밖에 있으니 호출자가 빠뜨릴 수 있다(`ws/notify.ts`의 「왜 파이프라인 밖인가」). 인구조사가
+ * `routes/`만이 아니라 `src/` 전체를 훑는 이유가 **정확히 이 파일**이다 — `routes/`만 훑으면 이 호출자를
+ * 조용히 못 본다.
  *
- * # 발신자 제외는 헤더가 아니라 연결이다 (이월 §2.1)
+ * # 발신자 제외는 헤더가 아니라 연결이다
  *
  * REST로 편집이 들어올 때는 서버가 *"이 요청이 어느 WS 연결의 것인가"*를 알 수 없어
- * `x-wb-connection-id` 헤더로 알렸다. **여기서는 그 연결이 곧 발신자다** — 헤더가 필요 없다.
- * 헤더 자체는 지우지 않는다(§7.4의 MCP가 REST로 들어온다).
+ * `x-wb-connection-id` 헤더로 알린다. **여기서는 그 연결이 곧 발신자다** — 헤더가 필요 없다.
+ * 헤더 자체는 지우지 않는다(「LLM 편집 경로」의 MCP가 REST로 들어온다).
  *
  * # 알림이 ack를 늦추지 않는다
  *
  * `notifyPageChanged`는 fire-and-forget이다(`ws/notify.ts`) — 룸의 연결마다 도는 조회
  * 두 건은 이 함수가 ack 프레임을 돌려준 **뒤에** 이어진다. 그래서 낸 사람의 pending 큐가
  * 룸 크기에 비례해 늦게 비지 않는다. 그 큐가 비어야 다음 편집의 `baseSeq`가 정해진다
- * (README 4단계).
+ * (`apps/api/README.md` 「편집 파이프라인 (`PATCH .../ops`)」 절의 4단계).
  */
 import type { FastifyInstance } from 'fastify'
 import { requireProjectRole } from '../auth/roles'
@@ -70,9 +71,9 @@ export async function handlePatchFrame(
   let outcome
   try {
     outcome = await withTransaction(app.db, async (trx) => {
-      // **§7.1의 순서다** — 권한 확인(`ws/routes.ts`)이 이미 지났고, 적용 전에 잠금을 본다(D2). **판정은 이 트랜잭션 안에서
+      // **설계서 「정방향 흐름」의 순서다** — 권한 확인(`ws/routes.ts`)이 이미 지났고, 적용 전에 잠금을 본다. **판정은 이 트랜잭션 안에서
       // 페이지 행을 잡고 한다** — 커밋까지 그 행을 쥐므로 판정 뒤 커밋 전에 겹치는 잠금이 서지 못한다(`lock/check.ts`의
-      // «판정은 페이지 행 안에서»). 소유자는 **사람**이므로 같은 사람의 다른 탭이 잡은 것에는 막히지 않는다(D3).
+      // «판정은 페이지 행 안에서»). 소유자는 **사람**이므로 같은 사람의 다른 탭이 잡은 것에는 막히지 않는다.
       // 막히면 던진다 — 아직 아무것도 안 썼고, 아래 `catch`가 423 프레임으로 옮긴다.
       const blocked = await lockConflictError(app, trx, {
         projectId: connection.projectId,
@@ -87,16 +88,16 @@ export async function handlePatchFrame(
         pageId: frame.pageId,
         baseSeq: frame.baseSeq,
         ops: frame.ops,
-        // **actor는 연결이 든다.** 핸드셰이크가 세션 쿠키로 정한 값이고(§10 — REST와 WS의 인증
+        // **actor는 연결이 든다.** 핸드셰이크가 세션 쿠키로 정한 값이고(설계서 「권한 모델」 — REST와 WS의 인증
         // 경로가 하나다), 프레임이 실어 온 값이 아니다.
         //
         // **`auth/actor.ts`의 `requestActor`를 안 쓴다 — 여기에는 요청이 없다.** 그리고 쓸
-        // 이유도 없다: **WS는 쿠키만이다**(§10 · `ws/routes.ts`의 `requireSessionAuth`가 토큰이
+        // 이유도 없다: **WS는 쿠키만이다**(「권한 모델」 · `ws/routes.ts`의 `requireSessionAuth`가 토큰이
         // 실린 핸드셰이크를 401로 끊는다). 토큰이 이 자리에 닿을 수 없으므로 언제나 `'user'`가
         // 맞고, `test/actor-census.test.ts`가 그 판정을 표에 한 줄로 든다.
         actor: { type: 'user', id: connection.userId, label: connection.userName },
       })
-      // **커밋 순간의 권한**(이월 AA — REST 는 `auth/roles.ts`의 `recheckProjectRole`). 프레임을 받을 때의
+      // **커밋 순간의 권한**(REST 는 `auth/roles.ts`의 `recheckProjectRole`). 프레임을 받을 때의
       // 확인(`ws/routes.ts`의 `stillAllowed`)은 잠금 **밖**이다 — `applyEdit`이 페이지 잠금에 선 동안 강등되면
       // 그 확인은 낡는다. 술어는 가드와 같은 `requireProjectRole`, 최소 역할은 프레임 수신과 같은 표의 값,
       // 스코프는 없다(WS 는 쿠키만이다). 멤버 행을 잡는 까닭은 REST 와 같다.
@@ -125,10 +126,10 @@ export async function handlePatchFrame(
     actor: { type: 'user', label: connection.userName },
     origin: { connectionId: connection.id, sessionId: connection.sessionId },
     // 이 경로에서는 연결이 곧 발신자라 제외가 언제나 성립한다. 그래도 싣는 것은 **프레임의
-    // 모양을 진입점에 따라 가르지 않기 위해서**다(D5) — 받는 쪽이 어느 경로로 만들어진
+    // 모양을 진입점에 따라 가르지 않기 위해서**다 — 받는 쪽이 어느 경로로 만들어진
     // 프레임인지 알 필요가 없어야 한다.
     //
-    // **그래서 이 줄은 0 사망이다(리뷰 변이 N6).** 이 값을 관측할 연결이 없다 — 되받는
+    // **그래서 이 줄을 지워도 죽는 케이스가 없다.** 이 값을 관측할 연결이 없다 — 되받는
     // 사람이 없으므로 아무도 그것을 읽지 않는다. **지워도 되는 신호로 읽지 마라:** 발신자
     // 제외가 성립하지 않는 경로(`routes/pages.ts`의 REST)는 같은 값을 싣고 그쪽은 케이스가
     // 있다. 두 진입점이 같은 프레임을 내는 것이 이 줄의 이유다.
@@ -143,7 +144,7 @@ export async function handlePatchFrame(
     seq: outcome.seq,
     revisionId: outcome.revisionId,
     inverse: outcome.inverse,
-    // **경고를 반드시 싣는다**(P4a-3). REST 응답만 나르면 사용자가 보는 것이 접속 방식에
+    // **경고를 반드시 싣는다.** REST 응답만 나르면 사용자가 보는 것이 접속 방식에
     // 따라 갈린다 — `edit-pipeline.ts`의 성공 갈래가 그것을 계약으로 적었다.
     warnings: outcome.warnings,
   }

@@ -4,8 +4,8 @@
  * HTTP·쿠키·zod 검증은 여기서 다루고, SQL은 전부 `repos/users.ts`와 `auth/session.ts`에
  * 맡긴다 — 이 파일은 postgres 에러 코드도 세션 테이블 구조도 알지 못한다.
  *
- * **계정을 만드는 라우트는 없다**(2026-08-20 D1). `POST /signup`이 있던 자리이고,
- * 그 부재를 `test/auth-routes.test.ts`가 **404로 든다** — 그냥 지우면 다음 사람이
+ * **계정을 만드는 라우트는 없다.** 그 부재(`POST /signup`)를
+ * `test/auth-routes.test.ts`가 **404로 든다** — 부재를 잠그는 케이스가 없으면 다음 사람이
  * 조용히 되살린다. 계정을 만드는 길은 `db/seed-user.ts`(마이그레이션 뒤의 시딩)
  * 하나이고, 이미 계정이 있는 사람을 프로젝트에 넣는 길이 멤버 초대다.
  */
@@ -79,7 +79,7 @@ export function authRoutes(config: ApiConfig) {
       }
 
       // 로그인은 새 세션을 만들 뿐, 그 계정의 다른 세션에는 손대지 않는다 — 한
-      // 계정이 동시에 여러 기기·탭에서 로그인해 있을 수 있다(설계 §10, P3의
+      // 계정이 동시에 여러 기기·탭에서 로그인해 있을 수 있다(설계서 「권한 모델」,
       // WebSocket 인증도 이를 전제한다). "전부 로그아웃"이 필요하면
       // `destroyUserSessions`를 별도 경로(예: 비밀번호 변경)에서 명시적으로 쓴다.
       const { token, expiresAt } = await createSession(app.db, found.id, config.sessionTtlHours)

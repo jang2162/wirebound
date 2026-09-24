@@ -5,9 +5,9 @@
  *
  * ---
  *
- * # `payloadBytes`를 세는 단위는 **`payload::text`의 옥텟 수** 하나다 (계획서 D9)
+ * # `payloadBytes`를 세는 단위는 **`payload::text`의 옥텟 수** 하나다
  *
- * §16의 열린 항목(*"스냅샷 보관 정책 — 개수 제한 또는 보관 기간. 실사용 데이터가 쌓인 뒤
+ * 설계서 「열린 질문 (구현 중 결정)」의 항목(*"스냅샷 보관 정책 — 개수 제한 또는 보관 기간. 실사용 데이터가 쌓인 뒤
  * 결정한다"*)은 **관측 없이는 영원히 못 정한다.** 그래서 생성·목록·상세 셋 다 이 값을 낸다.
  *
  * **세 응답이 같은 SQL 식(`octet_length(payload::text)`)을 쓴다** — 아래 `PAYLOAD_BYTES`
@@ -23,14 +23,14 @@
  *
  * ---
  *
- * # 목록은 payload 본문을 싣지 않는다 (D9)
+ * # 목록은 payload 본문을 싣지 않는다
  *
  * 목록이 payload 전부를 나르면 프로젝트가 커질수록 목록만으로 무거워진다. `listSnapshots`가
  * `payload` 컬럼을 **애초에 select하지 않고** 크기만 계산해 낸다 — 본문은 상세만 준다.
  *
  * ---
  *
- * # NUL(U+0000)을 여기서 막는다 (계획서 D7)
+ * # NUL(U+0000)을 여기서 막는다
  *
  * **`payload`(jsonb)와 `tag`·`description`(text)의 실패 방식이 다르다.** 둘 다 저장에
  * 실패하지만 SQLSTATE가 갈리고(`22P05` vs `22021`), 어느 쪽이든 `pg`가 던지는 raw 예외라
@@ -38,15 +38,14 @@
  * 500(서버가 잘못했다)이 아니라 400이어야 하므로 그 예외가 나기 전에 여기서 끊는다 —
  * `repos/comments.ts`와 같은 판단이다.
  *
- * ## payload 검사는 **죽은 코드가 아니다** — 도달 경로가 실재한다 (G-2)
+ * ## payload 검사는 **죽은 코드가 아니다** — 도달 경로가 실재한다
  *
- * **앞 판은 여기에 *"DB가 삽입 시점에 막으니 payload의 도달 경로는 0"*이라고 적어 두었고,
- * 그것은 거짓 근거였다.** 그 문장대로면 이 검사는 지워도 되는 줄이 되고, 다음 사람이
- * 지운다. **리뷰어가 도달 경로를 지목했고 내가 재현했다.**
+ * ***"DB가 삽입 시점에 막으니 payload의 도달 경로는 0"*은 거짓 근거다.** 그 문장대로면
+ * 이 검사는 지워도 되는 줄이 되고, 다음 사람이 지운다.
  *
  * 구멍은 `themes`다. 그 표의 절 다섯은 `jsonb`가 아니라 **`json`** 컬럼이고(0006 — 키 순서
- * 계약 때문에 그렇게 골랐다), **`json`은 NUL을 받는다.** 같은 값으로 두 캐스팅을 나란히 쳐
- * 갈랐다:
+ * 계약 때문에 그렇게 골랐다), **`json`은 NUL을 받는다.** 같은 값으로 두 캐스팅을 나란히 치면
+ * 갈린다:
  *
  * | 대상 | 결과 |
  * |---|---|
@@ -58,7 +57,7 @@
  * 통과하고, `jsonb`는 파싱하면서 그 이스케이프를 실제 문자로 풀기 때문에 죽는다.
  *
  * **그래서 그 절을 막는 것은 DB가 아니라 `repos/themes.ts`의 `assertNoNulByte` 한 줄뿐이다.**
- * 그 줄을 꺼서 전체 사슬을 재현했다(변이로 심고 복구했다):
+ * 그 줄을 끄면(변이로 심는다) 전체 사슬이 이렇게 간다:
  *
  * ```
  * POST /themes            → 201            (가드가 켜져 있으면 400)
@@ -78,10 +77,9 @@
  *
  * ---
  *
- * **재라 #3에서 함께 쟀던 것(관련은 있으나 다른 이야기):** 페이지 제목·페이지 설명·메뉴
- * 제목·프로젝트 이름·프로젝트 설명·사용자 이름 여섯은 **아무도 막지 않아** NUL을 넣으면
- * **500**이다. 그쪽은 `text`·`jsonb` 컬럼이라 값이 저장되지 못하므로 payload로는 못 오지만,
- * *"사용자 입력 때문에 500"*이라는 문제는 그대로 남아 있다(P6-1 이월 문서에 적었다).
+ * **관련은 있으나 다른 이야기:** 페이지·메뉴·프로젝트의 제목·이름·설명의 NUL 은 저장소의 쓰기
+ * 함수가 막는다(`db/nul-guard.ts`의 `NulByteError` — 칸별 표가 그 머리말에 있다). 그쪽은
+ * `text`·`jsonb` 컬럼이라 값이 저장되지 못하므로 payload로는 못 온다.
  */
 import { sql } from 'kysely'
 import { assertLocking } from '../db/locking'
@@ -123,7 +121,7 @@ export interface SnapshotDetail extends SnapshotSummary {
 
 /**
  * payload의 크기를 세는 **유일한 식**. 생성·목록·상세 셋이 이것을 공유한다 — 흩어지면
- * 세 응답이 서로 다른 수를 낼 수 있고, 그러면 §16을 닫을 근거가 셋으로 갈린다.
+ * 세 응답이 서로 다른 수를 낼 수 있고, 그러면 보관 정책(「열린 질문」)을 닫을 근거가 셋으로 갈린다.
  */
 const PAYLOAD_BYTES = sql<number>`octet_length(snapshots.payload::text)`
 
@@ -172,7 +170,7 @@ function toSummary(row: SummaryRow): SnapshotSummary {
  * `repos/comments.ts`가 `id`로 가르는 것과 갈리는 이유는 그쪽 표에는 유일한 2차 키가
  * 없기 때문이다.
  *
- * **동률은 오늘 자연히 생기지 않는다.** `created_at`이 `insertSnapshot`이 심는
+ * **동률은 자연히 생기지 않는다.** `created_at`이 `insertSnapshot`이 심는
  * `payload.capturedAt`이고 그 값은 `clock_timestamp()`라 요청마다 다르다(아래 머리말).
  * 그래도 2차 키를 두는 것은 **정렬이 결정적이어야 하기 때문**이고, 케이스가 두 행에 같은
  * `capturedAt`을 심어 그 자리를 실제로 잰다.
@@ -198,31 +196,29 @@ function selectSnapshots(db: DbHandle) {
  *
  * # `created_at`을 컬럼 기본값에 맡기지 않고 **`payload.capturedAt`에서 심는다**
  *
- * **앞 판은 그 둘이 *"같은 트랜잭션의 같은 시점"*이라고 적어 두었고 거짓이었다.** 재 보니
- * `capturedAt - created_at = +103ms`였다(api 하네스. 리뷰어는 같은 어긋남을 라우트 경로에서
- * **+25ms**로 쟀다 — 부호와 크기가 경로마다 다르다는 것이 오히려 요점이다). 원인은 셋이
- * 겹친 것이다:
+ * **둘을 따로 두면 *"같은 트랜잭션의 같은 시점"*이 아니다** — 어긋나고, 그 부호와 크기가
+ * 경로(api 하네스 · 라우트)마다 다르다. 원인은 셋이 겹친 것이다:
  *
- * 1. `capturedAt`은 **수집이 끝난 시각**이고 `created_at`은 **삽입 트랜잭션이 시작한
+ * 1. `capturedAt`은 **수집이 끝난 시각**이고 기본값의 `created_at`은 **삽입 트랜잭션이 시작한
  *    시각**이다. 그 사이에 수집 여섯 질의와 payload 조립이 들어간다.
  * 2. 컬럼 기본값이 `now()`, 즉 **`transaction_timestamp()`**다. 한 트랜잭션 안에서는 얼어
  *    있으므로 *"삽입 시각"*조차 아니다 — api 하네스처럼 테스트 하나를 트랜잭션 하나로
- *    감싸면 **테스트가 시작한 시각**이 박힌다(위 +103ms가 그것이다).
- * 3. 앞 판의 `capturedAt`은 **Node의 시계**(`new Date()`)였고 `created_at`은 **Postgres의
- *    시계**였다. 두 시계가 같다는 보장이 없다.
+ *    감싸면 **테스트가 시작한 시각**이 박힌다.
+ * 3. `capturedAt`을 **Node의 시계**(`new Date()`)로 읽으면 `created_at`은 **Postgres의
+ *    시계**다. 두 시계가 같다는 보장이 없다.
  *
  * **그래서 값을 하나로 만든다.** `capturedAt`은 캡처가 `clock_timestamp()`로 읽고
  * (`services/snapshot-capture.ts`), 이 함수가 **그 값을 `created_at`에 그대로 심는다.**
  * 셋이 한꺼번에 닫힌다: 시점이 하나이고, 시계가 하나이고, 트랜잭션 시작 시각이 끼어들지
- * 않는다. **컬럼 기본값(`now()`)은 오늘 도달하지 않는다** — 이 함수가 `snapshots`에 쓰는
+ * 않는다. **컬럼 기본값(`now()`)은 도달하지 않는다** — 이 함수가 `snapshots`에 쓰는
  * 유일한 경로이고 언제나 값을 싣는다.
  *
  * **왜 반대 방향(= `created_at`을 읽어 `capturedAt`에 넣기)이 아닌가.** payload는 삽입
  * **전에** 완성돼야 한다(그것이 `insertSnapshot`의 인자다). 삽입 뒤에 payload를 고치면
  * 저장된 jsonb와 응답이 갈릴 자리가 생긴다.
  *
- * **P6-2에게:** *"그때"*로 읽어야 하는 값은 **`payload.capturedAt`**이다. `created_at`은
- * 이제 그것의 사본이고, 둘이 갈리는 유일한 경로는 누군가 이 함수를 지나지 않고 행을
+ * **복원이 *"그때"*로 읽어야 하는 값은 `payload.capturedAt`이다.** `created_at`은
+ * 그것과 같은 값이고, 둘이 갈리는 유일한 경로는 누군가 이 함수를 지나지 않고 행을
  * 넣는 것이다.
  */
 export async function insertSnapshot(
@@ -299,16 +295,16 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
 }
 
 /**
- * # 캡처가 자기가 본 것이 한 시점인지 확인하는 지문 (계획서 D6)
+ * # 캡처가 자기가 본 것이 한 시점인지 확인하는 지문
  *
- * `withTransaction`은 격리 수준을 올리지 **못할 수 있다.** 재라 #1을 재서 갈랐다:
+ * `withTransaction`은 격리 수준을 올리지 **못할 수 있다.** 경로에 따라 갈린다:
  *
  * | 경로 | `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ` |
  * |---|---|
  * | 트랜잭션 **밖**에서 시작(`db.transaction().execute`) | **성공한다** — 첫 문장이므로 |
  * | 이미 트랜잭션 안(SAVEPOINT 경로) | **`25001 SET TRANSACTION ISOLATION LEVEL must be called before any query`** |
  *
- * 즉 계획서의 *"`withTransaction`이 격리 수준을 못 올린다"*는 **한쪽만 참이다.** 그런데
+ * 즉 *"`withTransaction`이 격리 수준을 못 올린다"*는 **한쪽만 참이다.** 그런데
  * 라우트는 자기가 어느 쪽인지 **모른다** — 운영에서는 `app.db`가 풀 핸들이라 앞쪽이지만,
  * api 테스트 하네스(`withApi`)는 테스트 하나를 통째로 트랜잭션에 감싸므로 뒤쪽이다. 격리
  * 수준에 기대면 **테스트가 재는 것과 운영에서 도는 것이 갈린다.**
@@ -317,22 +313,21 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  * SELECT마다 스냅샷이 새로 잡히므로 **한 번도 함께 존재한 적 없는 조합**이 payload에 담길 수
  * 있다: 페이지 A는 seq 5, 페이지 B는 seq 3인데 그 둘이 동시에 그랬던 적은 없는 상태.
  *
- * ## 계획서 D6의 지문(개수 + 시각)을 **내용 지문으로 바꿨다 — 재서 구멍 둘을 찾았다**
+ * ## 지문은 개수 + 시각이 아니라 **내용**이다
  *
- * D6은 지문을 *"`count` + `max(updated_at)`"* 꼴로 적었다. 그대로 짜서 재 보니 **변화를
- * 못 보는 자리가 둘** 나왔다.
+ * 지문을 *"`count` + `max(updated_at)`"* 꼴로 짜면 **변화를 못 보는 자리가 둘**이다.
  *
  * | 구멍 | 관찰된 값 | 원인 | 운영에서도 참인가 |
  * |---|---|---|---|
  * | 수집 도중 **테마를 고쳐도** 지문이 같다 | `captureSnapshot` → `'captured'`(기대: `'fingerprint-mismatch'`) | `updateTheme`이 `updated_at`을 **`now()`**(=트랜잭션 시작 시각)로 쓴다. api 테스트 하네스는 테스트 하나를 트랜잭션 하나로 감싸므로 그 값이 **얼어 있다** | **아니다** — 요청마다 트랜잭션이 갈리는 운영에서는 값이 움직인다. 이것은 **측정 장치(하네스)의 성질**이다 |
- * | 수집 도중 **메뉴 제목을 고쳐도** 지문이 같다 | 〃 | `menu_nodes`에 **`updated_at` 컬럼이 아예 없다**(`0003-menu-nodes.ts`). `count`도 `max(created_at)`도 제목 변경에 반응하지 않는다 | **그렇다** — 하네스와 무관한 D6의 실제 구멍이다 |
+ * | 수집 도중 **메뉴 제목을 고쳐도** 지문이 같다 | 〃 | `menu_nodes`에 **`updated_at` 컬럼이 아예 없다**(`0003-menu-nodes.ts`). `count`도 `max(created_at)`도 제목 변경에 반응하지 않는다 | **그렇다** — 하네스와 무관한 시각 지문의 실제 구멍이다 |
  *
  * 앞쪽은 하네스의 성질이지만 **그 성질 때문에 케이스로 고정할 수 없다**는 점이 그대로
  * 대가다(잴 수 없는 방어는 다음 사람이 지우기 쉽다). 뒤쪽은 운영에서도 참인 구멍이다.
- * 그래서 시각에 기대는 것을 그만두고 **payload에 실릴 내용 자체를 지문으로 삼는다.**
+ * 그래서 시각에 기대지 않고 **payload에 실릴 내용 자체를 지문으로 삼는다.**
  *
  * 그러면 지문의 뜻이 한 문장이 된다: **"payload에 들어갈 값 중 무엇도 바뀌지 않았다."**
- * `count`+시각은 그 명제의 **근사**였고, 근사이므로 구멍이 있었다.
+ * `count`+시각은 그 명제의 **근사**이고, 근사이므로 구멍이 있다.
  *
  * **지문에 들어가는 것(세는 단위: 테이블 하나당 한 줄):**
  *
@@ -345,7 +340,7 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  * | 5 | `comments` | `(id, md5(행 전체), 작성자 이름)` 목록 | `comments[]` 전부 |
  *
  * **4가 "프로젝트의 테마 전부"가 아니라 "담기는 테마"인 것이 요점이다.** payload에 얼리는
- * 것은 레이아웃이 가리키는 테마뿐이므로(D5), 그 조인을 지문이 그대로 쓴다. 프로젝트의 다른
+ * 것은 레이아웃이 가리키는 테마뿐이므로, 그 조인을 지문이 그대로 쓴다. 프로젝트의 다른
  * 테마를 함께 넣으면 캡처와 무관한 편집이 409를 만든다. 반대로 **파생 테마의 base는 넣지
  * 않는다** — base는 DB 행이 아니라 **코드의 시스템 테마**이고(`systemTheme()`), 코드는 한
  * 요청 동안 바뀌지 않는다.
@@ -362,7 +357,7 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  * 그 파일이 바뀌면 여기가 조용히 헐거워진다.
  *
  * **전후가 다르면 409로 끝낸다. 재시도 루프를 넣지 않는다** — `PUT .../schema`가 같은
- * 자리에서 같은 판단을 했다(*"`stale`을 조용히 삼켜 덮어쓰면 무엇을 덮어썼는지 모르는
+ * 자리에서 같은 판단을 한다(*"`stale`을 조용히 삼켜 덮어쓰면 무엇을 덮어썼는지 모르는
  * 상황이 된다"*).
  *
  * **지문 자체는 문자열 하나다.** 구조체로 내면 비교가 호출자마다 갈릴 수 있고(깊은 비교를
@@ -379,8 +374,8 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  *
  * **`now()`가 아니라 `clock_timestamp()`인 것이 요점이다.** `now()`는
  * `transaction_timestamp()`라 트랜잭션 안에서 얼어 있고, api 테스트 하네스는 테스트 하나를
- * 트랜잭션 하나로 감싸므로 그 값이 **테스트 시작 시각**이 된다(실측: `now()` 07:16:20.160 vs
- * `clock_timestamp()` 07:16:20.295 — 같은 트랜잭션의 같은 순간에 읽은 두 값이다).
+ * 트랜잭션 하나로 감싸므로 그 값이 **테스트 시작 시각**이 된다(같은 트랜잭션의 같은 순간에
+ * 둘을 나란히 읽으면 `now()`가 더 이르다).
  *
  * **그래서 `capturedAt`의 뜻이 정확히 이것이다:** *"캡처가 payload의 내용을 마지막으로
  * 확인한 순간(Postgres의 시계)."* `insertSnapshot`이 그 값을 `created_at`에 그대로 심으므로
@@ -439,20 +434,17 @@ export async function readCaptureFingerprint(
 }
 
 /**
- * # 복원이 쓰는 동안 남이 못 고치게 잠근다 (P6-2 D8)
+ * # 복원이 쓰는 동안 남이 못 고치게 잠근다
  *
  * 캡처는 **아무것도 쓰지 않아서** 지문 확인만으로 버텼다. 복원은 쓴다 — 확인과 쓰기
  * 사이가 또 열려 있으므로 잠금이 필요하다.
  *
  * ## 실측 — 무엇이 막히고 무엇이 안 막히나
  *
- * **계획서 재라 #5는 *"막지 못할 가능성이 높다"*고 봤다. 재 보니 반대였다** — 다만
- * **`projects` 행을 함께 잠글 때만** 그렇다.
+ * **행 잠금이 새 행 삽입까지 막는다** — 다만 **`projects` 행을 함께 잠글 때만** 그렇다.
  *
- * **수를 여기 적지 않는다 — `test/restore-lock-census.test.ts`가 센다.** 앞 판은 이 자리에
- * *"오늘의 쓰기 라우트 아홉"*이라 적었고, **그 아홉은 census가 아니라 손으로 고른 아홉**
- * 이었다(리뷰가 잡았다). 빠진 여섯은 재 보니 전부 막혀서 결론이 오히려 강해졌지만 그건
- * 운이다 — **분모를 주석에 적으면 빠진 항목이 결과를 바꿔도 아무도 모른다.** 그 파일이
+ * **수를 여기 적지 않는다 — `test/restore-lock-census.test.ts`가 센다.** 손으로 고른
+ * 분모를 주석에 적으면 **빠진 항목이 결과를 바꿔도 아무도 모른다.** 그 파일이
  * 분모를 `src/routes/`에서 만들고, 라우트가 하나 늘면 먼저 죽는다.
  *
  * **그 파일이 재서 고정한 것(값이 아니라 성질):**
@@ -470,8 +462,8 @@ export async function readCaptureFingerprint(
  * 자식 행을 넣으면 Postgres가 **참조되는 부모 행에 `FOR KEY SHARE`를 건다.**
  * `FOR UPDATE`는 그것과 충돌한다.
  *
- * 그러므로 남는 구멍은 **잠긴 어떤 행도 참조하지 않는 삽입**이었고, 네 표(메뉴·페이지·
- * 레이아웃·코멘트)만 잠갔을 때 오늘 그 모양은 `parent_id`가 `NULL`인 메뉴 노드 하나였다.
+ * 그러므로 남는 구멍은 **잠긴 어떤 행도 참조하지 않는 삽입**이다 — 네 표(메뉴·페이지·
+ * 레이아웃·코멘트)만 잠그면 `parent_id`가 `NULL`인 메뉴 노드 삽입이 그 모양이다.
  * `projects` 행을 잠그면 그것도 막힌다 — `menu_nodes.project_id`가 `projects(id)`를
  * 참조하므로 그 삽입도 `projects` 행에 `FOR KEY SHARE`를 걸기 때문이다.
  * `pages`·`layouts`·`snapshots`·`themes`도 같은 컬럼을 갖는다.
@@ -483,7 +475,7 @@ export async function readCaptureFingerprint(
  *
  * ## 남는 구멍 — 정직하게
  *
- * - **테마 표는 잠그지 않는다.** 복원이 테마 **행**을 쓰지 않기 때문이다(D6). 그래서
+ * - **테마 표는 잠그지 않는다.** 복원이 테마 **행**을 쓰지 않기 때문이다. 그래서
  *   `PUT .../themes/:themeId`·`DELETE .../themes/:themeId`는 **통과한다** — 복원이 도는
  *   동안 누가 테마 문서를 고치면 그 편집이 이긴다. **다만 `POST .../themes`는 막힌다**
  *   (`themes.project_id`가 `projects`를 참조한다) — *"테마 표를 안 잠근다"*를 *"테마
@@ -496,9 +488,9 @@ export async function readCaptureFingerprint(
  *
  * ## 순서
  *
- * `projects`를 **먼저** 잠근다(`repos/projects.ts`의 `lockProjectRow`). **두 번째 경로가 생겼다 — 프로젝트
- * 삭제**(`routes/projects.ts`, 이월 AA). 그 판이 처음엔 페이지를 먼저 잠가 이 순서와 엇갈렸고, 복원과 삭제가
- * 서로를 기다리는 교착이 났다(2026-09-22 리뷰 E1 — 복원이 ~1s 에 500). 지금은 삭제도 `projects` → 페이지다.
+ * `projects`를 **먼저** 잠근다(`repos/projects.ts`의 `lockProjectRow`). **프로젝트 삭제**(`routes/projects.ts`)도
+ * 같은 순서(`projects` → 페이지)다 — 삭제가 페이지를 먼저 잠그면 이 순서와 엇갈려 복원과 삭제가 서로를
+ * 기다리는 교착이 나고 복원이 500 으로 끝난다.
  * 그 순서를 재는 자는 `test/guard-in-lock.test.ts`의 «잠금 순서» 절이다.
  */
 export async function lockProjectForRestore(trx: DbHandle, projectId: string): Promise<void> {

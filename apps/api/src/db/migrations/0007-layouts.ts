@@ -2,12 +2,12 @@ import type { Kysely, Migration } from 'kysely'
 import { sql } from 'kysely'
 
 /**
- * `layouts` 테이블과 `projects.default_layout_id`를 만든다 — 설계 §4.2가 정한
+ * `layouts` 테이블과 `projects.default_layout_id`를 만든다 — 설계서 「테이블 정의」가 정한
  * 참조 사슬 `projects.default_layout_id → layouts.theme_id → themes`의 나머지 절반이다.
  *
  * **테마는 프로젝트가 아니라 레이아웃이 가리킨다.** 그래서 테마 저장이 `layouts`를
  * 함께 만든다. 다만 여기 `layouts`는 **참조를 나르고 `Slot`을 담는 최소본**이고,
- * 레이아웃을 편집하는 화면은 만들지 않는다(계획서 D7 — §4.4의 레이아웃 에디터는 뒤 단계다).
+ * 레이아웃을 편집하는 화면은 없다(설계서 「레이아웃」의 레이아웃 편집기는 서지 않았다).
  *
  * ---
  *
@@ -16,20 +16,20 @@ import { sql } from 'kysely'
  * 순서 계약이 걸리는 것은 **테마의 절**뿐이기 때문이다(`compileTheme`이 `states`·스타일
  * 맵의 문서 키 순서를 우선순위로 쓴다). 레이아웃의 `schema`는 노드 트리이고 그 안에서
  * 순서를 나르는 것은 `children` **배열**이다 — 배열 순서는 `jsonb`도 보존한다.
- * `pages.schema`가 `jsonb`인 것과 같은 이유이고, §4.2도 여기서는 `jsonb`라고 적었다.
+ * `pages.schema`가 `jsonb`인 것과 같은 이유이고, 「테이블 정의」도 여기서는 `jsonb`라고 적는다.
  *
- * **`schema_version` 컬럼을 두지 않는다.** §4.2의 `layouts` 목록에 없고(`pages`에는 있다),
+ * **`schema_version` 컬럼을 두지 않는다.** 「테이블 정의」의 `layouts` 목록에 없고(`pages`에는 있다),
  * 버전은 문서 봉투 안의 `version`이 이미 나른다. `pages.schema_version`은 그 값을
  * 비정규화해 둔 것이라 둘이 어긋날 자리가 있는데(그래서 `routes/pages.ts`가 응답의
  * 두 값을 한 번의 `migrateDocument`에서 파생시킨다), 여기서는 그 자리를 만들지 않는다.
  *
  * ---
  *
- * **`theme_id`는 `NULL`을 받는다 — 재라 #7의 답이다.**
+ * **`theme_id`는 `NULL`을 받는다.**
  *
  * 허용하는 근거: 테마를 고르지 않은 상태가 **이미 정상 경로**다. `apps/web`의
  * `ThemeSource`가 `null`을 낼 수 있고 그때 화면은 구조 기본 CSS만으로 그려진다
- * (P4a-2의 D5가 시트를 둘로 나눈 이유). 컬럼을 `NOT NULL`로 두면 레이아웃을 만들려면
+ * (구조 CSS와 테마 CSS가 두 시트로 갈린 이유). 컬럼을 `NOT NULL`로 두면 레이아웃을 만들려면
  * 반드시 테마가 먼저 있어야 하고, 그러면 "테마가 없는 프로젝트"라는 정상 상태를
  * 스키마가 금지하게 된다.
  *
@@ -52,11 +52,11 @@ import { sql } from 'kysely'
  *
  * ---
  *
- * **재라 #8 — 이미 있는 프로젝트에 기본 레이아웃을 만들어 주지 않는다.**
+ * **이미 있는 프로젝트에 기본 레이아웃을 만들어 주지 않는다.**
  *
  * 관찰: **이 마이그레이션이 도는 시점에 `themes`는 반드시 비어 있다.** 0006이 같은
  * 실행에서 테이블을 막 만들었고, 시스템 테마를 넣는 것은 마이그레이션이 아니라
- * **기동 시 동기화**이기 때문이다(계획서 D4). 그러므로 여기서 만들 수 있는 것은
+ * **기동 시 동기화**이기 때문이다(`services/system-themes.ts`). 그러므로 여기서 만들 수 있는 것은
  * **`theme_id`가 `NULL`인 레이아웃**뿐이다.
  *
  * 결정: 만들지 않는다. `theme_id`가 `NULL`인 레이아웃과 레이아웃이 아예 없는 것은
@@ -65,9 +65,8 @@ import { sql } from 'kysely'
  * 프로젝트가 많은 DB에서 전체 스캔 + 삽입을 도는 비용만 남는다.
  *
  * **대가:** 이 마이그레이션 이전에 만들어진 프로젝트는 `default_layout_id`가 `NULL`로
- * 남고, 그 프로젝트에 레이아웃을 주는 경로가 **아직 없다**(레이아웃 에디터가 D7로
- * 빠졌다). 오늘 그런 DB가 실재하지 않아 도달하지 않지만, 실재하게 되면 그것을 채우는
- * 것은 마이그레이션이 아니라 관리 경로의 일이다.
+ * 남고, 그 프로젝트에 레이아웃을 주는 경로가 **없다**(레이아웃 편집기가 없다). 그런 DB가
+ * 실재하게 되면 그것을 채우는 것은 마이그레이션이 아니라 관리 경로의 일이다.
  */
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
@@ -76,7 +75,7 @@ export const migration: Migration = {
       .addColumn('id', 'uuid', (col) => col.primaryKey().defaultTo(sql`gen_random_uuid()`))
       .addColumn('project_id', 'uuid', (col) => col.notNull().references('projects.id').onDelete('cascade'))
       .addColumn('name', 'text', (col) => col.notNull())
-      // NULL = 테마를 고르지 않았다(구조 기본 CSS만으로 그린다). 위 재라 #7 참고.
+      // NULL = 테마를 고르지 않았다(구조 기본 CSS만으로 그린다). 위 머리말의 "`NULL`을 받는다" 참고.
       .addColumn('theme_id', 'uuid', (col) => col.references('themes.id').onDelete('restrict'))
       .addColumn('schema', 'jsonb', (col) => col.notNull())
       .addColumn('created_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))

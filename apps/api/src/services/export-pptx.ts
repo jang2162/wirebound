@@ -1,35 +1,34 @@
 /**
- * **프로젝트 하나를 §15의 PPTX로 만든다**(P10-1 T5 · P10-2 T3·T4).
+ * **프로젝트 하나를 설계서 「로드맵」의 PPTX로 만든다.**
  *
  * `services/`는 SQL을 직접 쓰지 않고 HTTP도 모른다. **zip도 여기서 만들지 않는다**
  * (`export-zip.ts`) — `@wirebound/exporter`가 파트 목록을 내고 압축은 그쪽이 한다.
  *
  * ---
  *
- * # 수집을 `export-bundle.ts`와 나눠 쓴다 (P10-1 D4)
+ * # 수집을 `export-bundle.ts`와 나눠 쓴다
  *
  * 둘 다 `readExportRows` → `assembleExportSource`를 지난다(`export-source.ts`). 그래야 **같은 프로젝트를 같은 순서로 같은
  * 이름으로** 싣는다 — 두 파일을 나란히 열어 본 사람에게만 보이는 갈림을 막는 자리다.
  *
- * # 테마를 **래스터를 위해** 읽는다 (P10-2 D1·D2)
+ * # 테마를 **래스터를 위해** 읽는다
  *
- * **앞 판은 테마를 안 읽었고 그것이 옳았다** — §2.1이 도형 변환을 명시적으로 포기했으므로
- * `a:clrScheme`으로 옮길 이유가 없었다. 그 이유는 지금도 그대로다.
+ * **테마를 OOXML 색으로는 옮기지 않는다** — 설계서 「명시적으로 제외한 것 (YAGNI)」이 도형 변환을
+ * 포기했으므로 `a:clrScheme`으로 옮길 이유가 없다.
  *
- * **그런데 그때의 머리말이 든 근거가 이 슬라이스를 가리키고 있었다:** *"슬라이드에 실릴
- * 화면은 래스터이고 그 이미지가 이미 테마 색을 담는다."* 그 이미지를 만드는 것이 여기이므로
- * **그리는 입력으로서의 테마는 읽어야 한다.** 읽는 사슬은 번들과 같은 하나다
+ * **그리는 입력으로서의 테마는 읽는다:** 슬라이드에 실릴 화면은 래스터이고 그 이미지가
+ * 테마 색을 담는데, 그 이미지를 만드는 것이 여기다. 읽는 사슬은 번들과 같은 하나다
  * (`currentProjectTheme` → `asResolvedTheme`) — 두 산출물이 다른 테마를 싣지 않는다.
  *
- * # 그리는 것은 이음매 뒤다 (D2·D3)
+ * # 그리는 것은 이음매 뒤다
  *
  * `renderer`를 **안 주면 아무것도 안 그린다.** 그때 슬라이드는 `NO_SCREEN` 상자를 그리고
- * `screenless`가 그 페이지들을 낸다 — P10-1이 만든 그대로다.
+ * `screenless`가 그 페이지들을 낸다.
  *
  * **주는 자리는 `main.ts` 하나다**(`screen-render.ts`의 머리말). `pnpm test`는 가짜를 넣어
  * 재고 진짜 브라우저는 `pnpm test:build`가 잡는다.
  *
- * # `screenless`와 실패를 가른다 (D5)
+ * # `screenless`와 실패를 가른다
  *
  * | 값 | 뜻 |
  * |---|---|
@@ -38,7 +37,7 @@
  *
  * **둘은 서로 겹치지 않는다.** `exportPptx`가 내는 *"이미지 없는 페이지"*의 합집합이 이
  * 둘이고, 이유가 있는 쪽을 덜어 낸 나머지가 `screenless`다. 한 값에 접으면 화면이
- * *"아직 안 만들었다"*와 *"만들려다 실패했다"*를 같은 말로 하게 된다(P10-1 이월 §2.3).
+ * *"아직 안 만들었다"*와 *"만들려다 실패했다"*를 같은 말로 하게 된다.
  */
 import { exportPage, exportPptx, type PptxPage, type PptxPart, type PptxScreen } from '@wirebound/exporter'
 import type { DbHandle } from '../db/tx'
@@ -53,7 +52,7 @@ import {
   type ScreenRequest,
 } from './screen-render'
 
-/** 화면 이미지를 못 그린 페이지 하나와 그 이유(D5). */
+/** 화면 이미지를 못 그린 페이지 하나와 그 이유(머리말 「`screenless`와 실패를 가른다」). */
 export interface ScreenFailure {
   /** 페이지의 번들 이름. **`pages[].title`·`screenless[]`와 같은 이름이다.** */
   title: string
@@ -67,18 +66,18 @@ export interface ProjectPptx {
   /** 슬라이드에 실린 페이지들. **번들의 `pages`와 같은 모양·같은 이름이다.** */
   pages: { id: string; title: string; target: string }[]
   /**
-   * **아무도 그리지 않은** 페이지 이름들(D5).
+   * **아무도 그리지 않은** 페이지 이름들(머리말 「`screenless`와 실패를 가른다」).
    *
    * 그리는 자가 없으면 전부이고, 있으면 비고, 실패한 것은 여기 오지 않고
    * `screenFailures`로 간다.
    */
   screenless: string[]
-  /** **그리려다 죽은** 페이지들(D5). `screenless`와 겹치지 않는다. */
+  /** **그리려다 죽은** 페이지들. `screenless`와 겹치지 않는다. */
   screenFailures: ScreenFailure[]
   /**
-   * 그린 기계에 한글 글꼴이 없었다(D4). 없으면 `null`이다.
+   * 그린 기계에 한글 글꼴이 없었다. 없으면 `null`이다.
    *
-   * **미리보기가 이것을 그대로 낸다** — 내려받기 버튼이 조용히 성공하면 안 된다(D6).
+   * **미리보기가 이것을 그대로 낸다** — 내려받기 버튼이 조용히 성공하면 안 된다.
    */
   fontWarning: string | null
 }
@@ -138,7 +137,7 @@ export async function buildProjectPptx(
   const { ordered, documentById, commentsById, descriptionById } = assembleExportSource(rows)
 
   const pages: PptxPage[] = ordered.map((page) => ({
-    /** **번들과 같은 이름이다**(`bundleTitle` — 조상 메뉴가 붙어 있다). P10-1 D3. */
+    /** **번들과 같은 이름이다**(`bundleTitle` — 조상 메뉴가 붙어 있다). */
     title: page.bundleTitle,
     document: documentById.get(page.id)!,
     description: descriptionById.get(page.id) ?? null,
@@ -155,7 +154,7 @@ export async function buildProjectPptx(
   return {
     parts,
     pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
-    // **이유가 있는 것은 덜어 낸다**(D5). 남는 것이 *"아무도 안 그렸다"*이다.
+    // **이유가 있는 것은 덜어 낸다**(머리말 「`screenless`와 실패를 가른다」). 남는 것이 *"아무도 안 그렸다"*이다.
     screenless: screenless.filter((title) => !failed.has(title)),
     screenFailures: failures,
     fontWarning,
@@ -170,44 +169,42 @@ interface DrawnScreens {
 }
 
 /**
- * 페이지들의 화면 이미지를 그린다. **이 함수는 던지지 않는다** — D5가 규율이 아니라
+ * 페이지들의 화면 이미지를 그린다. **이 함수는 던지지 않는다** — 머리말 「`screenless`와 실패를 가른다」가 규율이 아니라
  * **구조**가 되는 자리다.
  *
- * **`exportPage`가 낸 HTML을 그대로 넘긴다**(D2) — 새 HTML을 만들면 화면·번들·PPTX가
- * 세 벌이 되고 §11.3의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*가 거짓이 된다.
+ * **`exportPage`가 낸 HTML을 그대로 넘긴다** — 새 HTML을 만들면 화면·번들·PPTX가
+ * 세 벌이 되고 설계서 「HTML 정적 번들」의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*가 거짓이 된다.
  *
- * **화소가 0이면 그린 것으로 치지 않는다**(D8). 이음매가 이미 걸러 내지만 여기서 한 번 더
+ * **화소가 0이면 그린 것으로 치지 않는다**. 이음매가 이미 걸러 내지만 여기서 한 번 더
  * 본다 — 이 함수가 `PptxScreen`을 **만드는** 자리이고, `fitInto`가 그 값을 믿는다.
  *
  * ---
  *
- * # 그리는 길에서 던지는 것을 전부 값으로 바꾼다 (D5)
+ * # 그리는 길에서 던지는 것을 전부 값으로 바꾼다
  *
- * **이 슬라이스가 이 부류에 두 번 물렸다.** 한 번은 글꼴 물음의 예외가 `render` 밖으로
- * 샌 것(스모크가 잡았다)이고, 한 번은 **`render` 자체가 던지면 라우트 둘이 500이 된 것**
- * 이다(귀속: 리뷰 §2 — 던지는 구현을 넣어 값으로 봤다).
+ * **이 부류는 두 길로 샌다.** 글꼴 물음의 예외가 `render` 밖으로 새는 길, 그리고
+ * **`render` 자체가 던지면 라우트 둘이 500이 되는 길**이다.
  *
- * 그래서 **P10-2가 새로 들인 자리 셋을 한 `try` 안에 넣었다.** 셋 다 `exportProjectPptx`가
- * P10-1까지는 **부르지도 않던** 것이라, 감싸지 않으면 *"화면 때문에 pptx 전체를 잃는다"*가
- * 새로 생긴다.
+ * 그래서 **화면을 그리는 길의 자리 셋을 한 `try` 안에 넣는다.** 셋 다 화면 없는 pptx 는
+ * **부르지도 않는** 것이라, 감싸지 않으면 *"화면 때문에 pptx 전체를 잃는다"*가 생긴다.
  *
- * | 자리 | P10-1 에 있었나 |
+ * | 자리 | 화면 없는 pptx 도 부르나 |
  * |---|---|
- * | `currentProjectTheme` · `asResolvedTheme` | **없었다** — PPTX 는 테마를 안 읽었다 |
- * | `exportPage` | **없었다** — 그리지 않았으므로 부를 일이 없었다 |
- * | `renderer.render` | **없었다** — 이음매의 타입은 *"던지지 않는다"*를 강제하지 못한다 |
+ * | `currentProjectTheme` · `asResolvedTheme` | **안 부른다** — 화면이 없으면 PPTX 는 테마를 안 읽는다 |
+ * | `exportPage` | **안 부른다** — 그리지 않으므로 부를 일이 없다 |
+ * | `renderer.render` | **안 부른다** — 이음매의 타입은 *"던지지 않는다"*를 강제하지 못한다 |
  *
  * **한 덩어리로 감싼다 — 자리마다 나누지 않는다.** 나누면 갈래마다 이유가 달라져 보기에
- * 좋지만 **그 갈래를 재는 자를 못 만든다**(오늘 이 저장소에서 `exportPage`나 테마 읽기를
+ * 좋지만 **그 갈래를 재는 자를 못 만든다**(이 저장소에서 `exportPage`나 테마 읽기를
  * 던지게 만드는 길이 라우트 밖에 없다). **재지 못하는 갈래를 늘리지 않는 것이 이 저장소의
  * 결이다** — 대신 셋 전부가 *"화면을 그리지 못했습니다"* 하나로 모이고, 그 하나를
  * `export-pptx-screens.test.ts`가 죽인다.
  *
  * **대가를 적는다:** 한 페이지의 `exportPage`가 죽으면 **그 배치의 화면이 전부 빠진다.**
- * pptx 는 그래도 나온다 — 그것이 D5 가 지키려는 것이다.
+ * pptx 는 그래도 나온다 — 그것이 머리말 「`screenless`와 실패를 가른다」가 지키려는 것이다.
  *
- * **수집(`readExportRows` · `assembleExportSource`)은 여기 없다** — 그것은 P10-1부터 있던 자리이고 도메인 에러를
- * 라우트가 상태 코드로 옮긴다(`routes/export.ts`의 `orFail`). 그 갈래는 그대로 둔다.
+ * **수집(`readExportRows` · `assembleExportSource`)은 여기 없다** — 화면과 무관하게 pptx 를 만드는 자리이고 도메인 에러를
+ * 라우트가 상태 코드로 옮긴다(`routes/export.ts`의 `orFail`). 그 갈래는 이 `try`가 삼키지 않는다.
  */
 async function drawScreens(
   pages: readonly PptxPage[],
@@ -226,7 +223,7 @@ async function drawScreens(
     })
     batch = await source.render(requests)
   } catch (error) {
-    // **그리는 길이 던졌다.** 화면은 전부 잃지만 **pptx 는 나온다** — 그것이 D5 다.
+    // **그리는 길이 던졌다.** 화면은 전부 잃지만 **pptx 는 나온다**.
     return allFailed(pages, `${SCREEN_PATH_FAILED}: ${errorLine(error)}`)
   }
 
@@ -267,7 +264,7 @@ async function drawScreens(
  */
 export const SCREEN_PATH_FAILED = '화면을 그리지 못했습니다'
 
-/** 페이지 전부를 같은 이유로 실패시킨다. **pptx 는 그래도 나온다**(D5). */
+/** 페이지 전부를 같은 이유로 실패시킨다. **pptx 는 그래도 나온다**. */
 function allFailed(pages: readonly PptxPage[], reason: string): DrawnScreens {
   return {
     screens: pages.map(() => null),

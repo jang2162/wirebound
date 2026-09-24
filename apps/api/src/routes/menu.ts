@@ -37,7 +37,7 @@ const Title = z.string().min(1, '제목을 입력하세요').max(200, '제목은
 
 /**
  * `sortOrder`는 `z.int().min(0)`이다 — 음수는 여기서 400으로 걸러지고, 형제
- * 수보다 큰 값은 `repos/menu.ts`가 클램프한다(브리프 "정렬 규칙" 절: 큰 값은
+ * 수보다 큰 값은 `repos/menu.ts`가 클램프한다(큰 값은
  * "맨 뒤로 보내라"는 흔한 의도라 오류로 다루지 않는다).
  */
 const SortOrder = z.int().min(0)
@@ -49,7 +49,7 @@ const CreateMenuBody = z.strictObject({
 })
 
 /**
- * **고치기 전 제목**(이월 5차 ② — 아래 `PATCH` 핸들러의 머리말). 페이지의 `MetaBase`(`routes/pages.ts`)와 같은 자세다 —
+ * **고치기 전 제목**(아래 `PATCH` 핸들러의 머리말). 페이지의 `MetaBase`(`routes/pages.ts`)와 같은 자세다 —
  * 바꿀 값의 규칙(`Title`)으로 재지 않는다. 이것은 저장할 값이 아니라 **견줄 값**이다.
  */
 const MenuBase = z.strictObject({ title: z.string().optional() })
@@ -87,7 +87,7 @@ const UpdateMenuBody = z
   })
 
 /**
- * **메뉴 제목 충돌의 이슈 코드**(이월 5차 ②). 페이지의 `page-meta-changed`와 **갈라 둔다** — 웹은 코드로 갈래를 고르므로
+ * **메뉴 제목 충돌의 이슈 코드.** 페이지의 `page-meta-changed`와 **갈라 둔다** — 웹은 코드로 갈래를 고르므로
  * (`apps/web/src/api/page-meta.ts`의 `metaConflict`) 한 코드면 메뉴의 409 가 페이지 제목의 충돌로 읽힐 수 있다. 웹은 같은
  * 글자를 `MENU_TITLE_CHANGED`로 든다.
  */
@@ -110,7 +110,7 @@ export function menuRoutes() {
       try {
         node = await withTransaction(app.db, async (trx) => {
           const inserted = await insertMenuNode(trx, projectId, { parentId: body.parentId ?? null, title: body.title })
-          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
+          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
           // 복원 · 프로젝트 삭제 · 다른 트리 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
           await recheckProjectRole(trx, request)
           return inserted
@@ -127,18 +127,18 @@ export function menuRoutes() {
     })
 
     /**
-     * **메뉴 제목의 충돌 모델 — 페이지 메타(`routes/pages.ts`의 `PATCH` 머리말)와 같은 모델이다**(이월 5차 ② · 2026-09-23).
+     * **메뉴 제목의 충돌 모델 — 페이지 메타(`routes/pages.ts`의 `PATCH` 머리말)와 같은 모델이다.**
      * 요청이 **고치기 전 제목**(`base`)을 함께 보내면 «행 잠금 → 권한 재확인 → 견줌 → 씀» 한 트랜잭션이다:
      *
      * | 지금 제목 | 답 |
      * |---|---|
      * | `base`와 같다(`@wirebound/schema`의 `samePageMeta` — 화면의 판정과 같은 함수) | 쓴다 — 200 |
      * | `base`와 다르다 | **409** · 이슈 코드 `menu-title-changed` · 이슈 하나(`path` = `title` · `current` = **지금 제목**) — 쓰지 않는다 |
-     * | `base`를 안 보냈다 | 쓴다 — 나중이 이긴다(옛 클라이언트 · 순서 · 부모 이동. 페이지와 같은 결정) |
+     * | `base`를 안 보냈다 | 쓴다 — 나중이 이긴다(바탕을 안 보내는 클라이언트 · 순서 · 부모 이동. 페이지와 같은 결정) |
      *
      * **재확인이 견줌보다 먼저다** — 잠금을 기다리는 동안 멤버에서 빠진 사람에게 지금 제목을 409 로 흘리지 않는다.
-     * **바탕 없는 경로도 쓴 뒤 재확인한다**(페이지와 같다) — 앞 판에는 이 라우트에 재확인이 없었다. 메뉴 `POST` ·
-     * `DELETE`도 쓴 뒤 재확인한다(이월 AA′).
+     * **바탕 없는 경로도 쓴 뒤 재확인한다**(페이지와 같다). 메뉴 `POST` ·
+     * `DELETE`도 쓴 뒤 재확인한다.
      *
      * 방송하지 않는다 — 남이 바꾼 것은 저장할 때 409 로 안다(페이지와 같다).
      */
@@ -152,7 +152,7 @@ export function menuRoutes() {
           if (base !== undefined) {
             const current = await lockMenuTitle(trx, projectId, nodeId)
             if (current === null) return null
-            // **커밋 순간의 권한**(이월 AA) — 비교보다 먼저다(위 머리말).
+            // **커밋 순간의 권한** — 비교보다 먼저다(위 머리말).
             await recheckProjectRole(trx, request)
             if (base.title !== undefined && !samePageMeta(base.title, current)) {
               throw conflict(MENU_TITLE_CHANGED_MESSAGE, [
@@ -162,7 +162,7 @@ export function menuRoutes() {
             return updateMenuNode(trx, projectId, nodeId, patch)
           }
           const updated = await updateMenuNode(trx, projectId, nodeId, patch)
-          // **커밋 순간의 권한**(이월 AA) — 자리 옮기기는 트리 쓰기의 첫 잠금(프로젝트 행)을 기다릴 수 있다.
+          // **커밋 순간의 권한** — 자리 옮기기는 트리 쓰기의 첫 잠금(프로젝트 행)을 기다릴 수 있다.
           if (updated) await recheckProjectRole(trx, request)
           return updated
         })
@@ -189,7 +189,7 @@ export function menuRoutes() {
       try {
         result = await withTransaction(app.db, async (trx) => {
           const deleted = await deleteMenuNode(trx, projectId, nodeId)
-          // **커밋 순간의 권한**(이월 AA′) — 생성과 같은 자리다(트리 쓰기의 첫 잠금 뒤).
+          // **커밋 순간의 권한** — 생성과 같은 자리다(트리 쓰기의 첫 잠금 뒤).
           if (deleted === 'deleted') await recheckProjectRole(trx, request)
           return deleted
         })

@@ -95,7 +95,7 @@ export async function insertUser(
 }
 
 /**
- * 주어진 id 중 **실제로 있는 것**만 낸다(P6-2의 복원이 부른다).
+ * 주어진 id 중 **실제로 있는 것**만 낸다(복원이 부른다).
  *
  * 복원은 payload의 코멘트를 되살릴 때 `author_id`를 그대로 쓰는데, 그 컬럼이
  * `ON DELETE RESTRICT`라(0008) 없는 사용자로 삽입하면 `23503`이고 그것은 `pg`의 raw

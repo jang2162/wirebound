@@ -58,7 +58,7 @@ function toRecord(row: RevisionRow): RevisionRecord {
   return {
     id: row.id,
     // seq는 pg가 문자열로 주는 bigint다 — 호출자(파이프라인·API 응답)는 number를
-    // 기대하므로 저장소 경계에서 변환한다(`repos/pages.ts`의 head_seq와 같은 이유, D9).
+    // 기대하므로 저장소 경계에서 변환한다(`repos/pages.ts`의 head_seq와 같은 이유).
     seq: Number(row.seq),
     actorType: row.actor_type,
     actorId: row.actor_id,
@@ -115,9 +115,7 @@ export interface ListRevisionsOptions {
  * `options.actorId`가 있으면 `actor_type = 'user'` 조건을 함께 건다. `actor_id`는
  * `actor_type`이 `'mcp'`·`'cli'`일 때 `users.id`가 아니라 `api_tokens.id`(마이그레이션
  * 0005 주석)를 가리키므로, `actor_type`을 걸지 않으면 값이 우연히 겹칠 때 남의
- * 이력이 섞인다. 오늘은 `'mcp'`·`'cli'` 행이 없어 겹칠 수 없지만(P9가 그 행을
- * 만들기 시작한다), 그때 가서 이 조건을 추가하면 이미 배포된 잘못된 조회 결과를
- * 되돌릴 수 없으므로 지금 걸어 둔다.
+ * 이력이 섞인다.
  */
 export async function listRevisions(
   db: DbHandle,

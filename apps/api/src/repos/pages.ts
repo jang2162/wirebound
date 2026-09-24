@@ -5,7 +5,7 @@
  * 넘긴다.
  *
  * **`schema`를 쓰는 함수는 `writePageSchemaAtSeq` 하나뿐이고, 그 유일한 호출자는
- * 편집 파이프라인이다(설계 결정 D1).** revision 없이 `schema`만 갱신하는 함수를
+ * 편집 파이프라인이다.** revision 없이 `schema`만 갱신하는 함수를
  * 여기 두지 않는다 — 그런 함수가 있으면 나중에 누군가 그것을 부르는 순간 `head_seq`와
  * 문서가 조용히 어긋나고, 그 페이지의 undo가 엉뚱한 문서 위에서 돈다.
  *
@@ -37,7 +37,7 @@ import { assertNoNulBytes } from '../db/nul-guard'
 import { deletePageComments } from './comments'
 import { lockProjectTree } from './projects'
 
-/** 제목·설명의 NUL 을 거절할 때 문장이 부르는 이름. 가져오기가 앞 판에 내던 문장과 같다. */
+/** 제목·설명의 NUL 을 거절할 때 문장이 부르는 이름. 가져오기도 같은 문장을 낸다(같은 `insertPage`를 지난다). */
 const PAGE_TEXT = '페이지 제목·설명'
 
 export interface PageRecord {
@@ -62,7 +62,7 @@ export interface PagePatch {
 }
 
 /**
- * **페이지 메타 — 제목 · 설명.** 충돌 모델(이월 P — `routes/pages.ts`의 `PATCH` 머리말)이 견주는 값이다.
+ * **페이지 메타 — 제목 · 설명.** 충돌 모델(`routes/pages.ts`의 `PATCH` 머리말)이 견주는 값이다.
  * 순서 · 소속 메뉴는 여기 없다 — 그 둘은 이 모델 밖이다.
  */
 export interface PageMeta {
@@ -144,7 +144,7 @@ function toRecord(row: PageRow): PageRecord {
     sortOrder: row.sort_order,
     schemaVersion: row.schema_version,
     schema: row.schema,
-    // head_seq는 pg가 문자열로 주는 bigint다 — API 응답은 number여야 하므로 경계에서 변환한다(D9).
+    // head_seq는 pg가 문자열로 주는 bigint다 — API 응답은 number여야 하므로 경계에서 변환한다.
     headSeq: Number(row.head_seq),
   }
 }
@@ -241,7 +241,7 @@ export async function insertPage(
   assertNoNulBytes(PAGE_TEXT, input.title, input.description)
   return withTransaction(db, async (trx) => {
     // **트리 쓰기의 첫 잠금**(`repos/projects.ts`의 `lockProjectTree`) — 형제 수를 세고 그 자리에 넣는 사이에 옆 생성이
-    // 같은 수를 세지 않게(고치기 전: 같은 메뉴에 둘이 동시에 오면 `sort_order`가 겹쳤다).
+    // 같은 수를 세지 않게(잠그지 않으면 같은 메뉴에 둘이 동시에 올 때 `sort_order`가 겹친다).
     await lockProjectTree(trx, projectId)
     await assertMenuNodeValid(trx, projectId, input.menuNodeId)
 
@@ -285,7 +285,7 @@ export async function findPageById(db: DbHandle, projectId: string, pageId: stri
  * 이름이 겹치므로 그 타입을 직접 import하지 않고 인라인으로 선언한다.
  *
  * `routes/tree.ts`가 이 함수를 부른다 — routes는 SQL을 직접 쓰지 않는다는
- * 계층 규칙(README "계층 규칙" 절)을 지킨다.
+ * 계층 규칙(`apps/api/README.md` 「계층 규칙」 절)을 지킨다.
  */
 export async function listPageRows(
   db: DbHandle,
@@ -299,17 +299,17 @@ export async function listPageRows(
 }
 
 /**
- * 프로젝트의 페이지 전부를 **`schema`까지 담아** 낸다(P6-1 스냅샷 캡처가 부른다).
+ * 프로젝트의 페이지 전부를 **`schema`까지 담아** 낸다(스냅샷 캡처가 부른다).
  *
  * **`listPageRows`와 갈리는 지점이 `schema` 하나다.** 그쪽은 트리 응답용이라 스키마를
  * 애초에 select하지 않는다(*"통합 트리 응답에 스키마가 실리면 프로젝트가 커질수록
  * 무거워진다"*). 캡처는 반대로 **문서 자체가 담을 것**이라 빼면 스냅샷이 아무것도 얼리지
  * 못한다.
  *
- * **마이그레이션하지 않는다 — 계획서 D4.** 이 파일의 다른 읽기와 마찬가지로 `schema`를
+ * **마이그레이션하지 않는다.** 이 파일의 다른 읽기와 마찬가지로 `schema`를
  * DB에 있는 그대로 낸다. 저장된 버전이 `CURRENT_DOCUMENT_VERSION`보다 큰 페이지가 하나만
  * 있어도 캡처 전체가 실패하는 일이 없어야 하기 때문이고, 그 성질은 이 파일이 애초에
- * `@wirebound/schema`의 `migrateDocument`를 부르지 않는 데서 나온다(재라 #5를 재서 확인했다:
+ * `@wirebound/schema`의 `migrateDocument`를 부르지 않는 데서 나온다(재는 법:
  * `schema_version`을 999로 심으면 `findPageById`는 999를 그대로 내고 `GET` 라우트만 400이다).
  *
  * **정렬이 결정적이어야 한다** — `listMenuNodes`와 같은 이유다.
@@ -458,7 +458,7 @@ export async function lockPageForEdit(trx: DbHandle, projectId: string, pageId: 
     id: row.id,
     schema: row.schema,
     schemaVersion: row.schema_version,
-    // head_seq는 pg가 문자열로 주는 bigint다 — repos/pages.ts의 toRecord와 같은 이유로 변환한다(D9).
+    // head_seq는 pg가 문자열로 주는 bigint다 — repos/pages.ts의 toRecord와 같은 이유로 변환한다.
     headSeq: Number(row.head_seq),
   }
 }
@@ -535,17 +535,18 @@ export async function deletePage(db: DbHandle, projectId: string, pageId: string
 }
 
 /**
- * **코멘트 수정의 둘째 잠금** — 페이지 행 하나를 `FOR KEY SHARE`로 잡는다(이월 AA′ 리뷰 F3 · 2026-09-24). 부르는 자리는
+ * **코멘트 수정의 둘째 잠금** — 페이지 행 하나를 `FOR KEY SHARE`로 잡는다. 부르는 자리는
  * 하나다: 코멘트 수정(`routes/comments.ts` — 프로젝트 행(`repos/projects.ts`의 `lockProjectShared`) 뒤 · 재확인 앞).
  *
  * **왜 페이지 행을 먼저 — 코멘트 행을 지우는 두 쓰기가 둘 다 페이지 행 `FOR UPDATE`를 먼저 잡는다.** 코멘트 삭제는
  * «페이지 행(`lockPageForEdit`) → 재확인(멤버 행 `FOR SHARE`) → 코멘트 행», 페이지 삭제(`deletePage`)는 «페이지 행 →
  * 코멘트 행(`deletePageComments`) → 끝의 재확인»이다 — 코멘트 행과 멤버 행의 순서가 **둘이 반대다.** 그래서 코멘트
  * 수정이 코멘트 행과 재확인을 어느 순서로 두어도 둘 중 하나와 엇갈리고, 다른 owner 의 역할 변경(`repos/members.ts`의
- * `lockOwnerIds` — owner 행을 차례로 `FOR UPDATE`)이 셋째로 끼면 고리가 선다. 잰 값(스테이징 — 남의 다른 쓰기가 재확인을
- * 지난 채 멤버 행을 `FOR SHARE`로 쥔 판): «`UPDATE` → 재확인»이면 코멘트 삭제와 **교착 · 수정 500**, «재확인 →
+ * `lockOwnerIds` — owner 행을 차례로 `FOR UPDATE`)이 셋째로 끼면 고리가 선다. 남의 다른 쓰기가 재확인을
+ * 지난 채 멤버 행을 `FOR SHARE`로 쥔 판에서: «`UPDATE` → 재확인»이면 코멘트 삭제와 **교착 · 수정 500**, «재확인 →
  * `UPDATE`»이면 페이지 삭제와 **교착 · 삭제 500**. 페이지 행을 먼저 잡으면 두 삭제 뒤에 줄을 서므로 — 코멘트 행을 쥔
- * 자가 멤버 행을 기다리는 동안 코멘트 수정은 아무 멤버 행도 안 쥔다 — **둘 다 0**(`test/guard-in-lock.test.ts`의 F3 · F3′).
+ * 자가 멤버 행을 기다리는 동안 코멘트 수정은 아무 멤버 행도 안 쥔다 — **교착이 없다**(`test/guard-in-lock.test.ts`의
+ * «코멘트 수정의 3자 고리» 두 판이 잰다).
  *
  * **`KEY SHARE`인 까닭** — `FOR UPDATE`(두 삭제 · 문서 편집 · 코멘트 게시의 `lockPageForEdit`)와만 부딪힌다. 그래서 코멘트
  * 수정이 같은 페이지의 문서 편집 뒤에도 선다(그 판이 `PROBES`에 있다) — 그 값을 치르고 산 것이 위 순서다.
@@ -565,12 +566,12 @@ export async function lockPageShared(trx: DbHandle, projectId: string, pageId: s
 }
 
 /**
- * 프로젝트의 페이지 행 전부를 `FOR UPDATE`로 잠근다(P6-2 D8). 복원의 근거와 실측표는 `repos/snapshots.ts`의
+ * 프로젝트의 페이지 행 전부를 `FOR UPDATE`로 잠근다. 복원의 근거와 실측표는 `repos/snapshots.ts`의
  * `lockProjectForRestore` 머리말에 있다.
  *
  * **부르는 자리가 둘이다** — 복원과 프로젝트 삭제(`routes/projects.ts`). 삭제는 CASCADE 가 멤버 행을 페이지보다
  * 먼저 지우므로, 페이지 대기를 이것으로 **먼저** 치러야 커밋 순간의 재확인(`auth/roles.ts`의
- * `recheckProjectRole`)이 제 멤버 행을 보고, 역할 변경이 그 대기에 묶이지 않는다(이월 AA).
+ * `recheckProjectRole`)이 제 멤버 행을 보고, 역할 변경이 그 대기에 묶이지 않는다.
  *
  * **두 자리 다 이것보다 프로젝트 행을 먼저 잡는다**(`repos/projects.ts`의 `lockProjectRow`) — 한쪽이 이것을 먼저
  * 잡으면 둘이 서로를 기다린다(`routes/projects.ts`의 삭제 주석).
@@ -581,19 +582,19 @@ export async function lockProjectPages(trx: DbHandle, projectId: string): Promis
 }
 
 /**
- * **id와 문서를 함께 받아** 페이지를 만든다(P6-2 D3 — id를 보존한다).
+ * **id와 문서를 함께 받아** 페이지를 만든다(id를 보존한다).
  *
  * `insertPage`와 갈리는 지점 셋: id를 발급하지 않고, `sort_order`를 계산하지 않고,
  * `menu_node_id`의 유효성을 확인하지 않는다(계획이 판정했고 FK가 마지막 방벽이다).
  *
  * **`head_seq`를 심지 않는다 — 컬럼 기본값 0이다.** payload의 `headSeq`(예: 7)를 심으면
  * **행이 없는 seq를 가리키는 페이지**가 된다: 그 페이지가 지워질 때 `revisions.page_id`의
- * CASCADE가 이력을 함께 데려갔기 때문이다(재라 #3을 재서 확인했다 — 삭제 전 1 → 삭제 후 0).
+ * CASCADE가 이력을 함께 데려갔기 때문이다(재는 법: 삭제 전후로 그 페이지의 `revisions` 행 수를 센다 — 0 이 된다).
  * 그 상태에서는 그 페이지의 undo가 빈 이력 위에서 돈다. **복원이 되살릴 수 있는 것은
  * 문서이지 이력이 아니다.**
  *
- * **그래서 이 경로는 revision을 남기지 않는다.** D1(*"모든 스키마 변경이 revision을
- * 남긴다"*)과 어긋나지 않는다 — `POST .../pages`가 이미 문서를 들고 태어나며 revision을
+ * **그래서 이 경로는 revision을 남기지 않는다.** *"모든 스키마 변경이 revision을
+ * 남긴다"*(이 파일의 머리말)와 어긋나지 않는다 — `POST .../pages`가 이미 문서를 들고 태어나며 revision을
  * 만들지 않는다. 생성은 *"변경"*이 아니다. 대신 그 문서는 아무도 검증하지 않는 유일한
  * 쓰기가 되므로 `services/restore-plan.ts`가 `validatePage`로 본다.
  */

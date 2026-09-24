@@ -44,16 +44,16 @@ function numericEnv(fieldName: string) {
 }
 
 /**
- * **DB 시간 제한 env**(`db/client.ts`의 `DbTimeLimits`) — 2026-09-23 W′ 리뷰 F6.
+ * **DB 시간 제한 env**(`db/client.ts`의 `DbTimeLimits`).
  *
- * - **빈 값(`KEY=`)은 기본값이다** — `.env.example`이 «비우면 기본값»이라 적었고 사람이 주석만 풀고 값을 비우는 자리다. 앞 판은
- *   그것이 `…은 숫자여야 합니다`로 기동 거절이었다(문서와 동작이 갈렸다).
+ * - **빈 값(`KEY=`)은 기본값이다** — `.env.example`이 «비우면 기본값»이라 적었고 사람이 주석만 풀고 값을 비우는 자리다.
+ *   그것을 `…은 숫자여야 합니다`로 기동 거절하면 문서와 동작이 갈린다.
  * - **0 은 싣지 않는다** — 서버·DB 설정(idle) · pg 기본(풀 대기는 끝없음 · keepalive 는 OS 기본)을 따른다.
  * - **상한을 넘으면 기동 거절**이다 — 넘긴 값이 조용히 다른 뜻이 된다: 풀 대기는 Node 타이머가 2^31−1 을 넘으면 1ms 로 걸어
- *   **모든 연결이 1ms 에 시간 제한**(«연결을 잃었습니다»로 죽어 설정 탓이라는 말이 없다 — 리뷰 F6), idle 은 서버가
+ *   **모든 연결이 1ms 에 시간 제한**(«연결을 잃었습니다»로 죽어 설정 탓이라는 말이 없다), idle 은 서버가
  *   `22023 … exceeds integer range`로 모든 연결을 거절한다.
  * - keepalive 는 Node 가 **초로 내려** 건다(`setKeepAlive` → `~~(ms / 1000)`) — 1–999 는 0초라 첫 탐침이 조용히 OS 기본으로
- *   간다(코드 읽기 — 리뷰 F6). 리눅스 `TCP_KEEPIDLE` 상한은 32767초다.
+ *   간다(코드 읽기). 리눅스 `TCP_KEEPIDLE` 상한은 32767초다.
  */
 const DB_TIME_LIMIT_MAX_MS = 2_147_483_647
 const DB_KEEPALIVE_IDLE_MIN_MS = 1_000
@@ -75,7 +75,7 @@ const DATABASE_URL_MESSAGE = 'DATABASE_URL이 필요합니다'
  * DATABASE_URL은 필수다. `z.string().min(1, ...)`만 쓰면 값이 아예 없을 때(undefined)
  * `.min()`이 아니라 base 타입 체크(invalid_type)가 먼저 걸려 로케일의 일반 메시지가 나가고,
  * 우리가 원하는 메시지는 빈 문자열("")을 넣었을 때만 나온다 — 실제 운영 실수(키 자체가 없는
- * 경우)에서는 정작 이 메시지를 보지 못하는 상황이었다. undefined를 빈 문자열로 미리
+ * 경우)에서는 정작 이 메시지를 보지 못한다. undefined를 빈 문자열로 미리
  * 치환해 두 경우 모두 같은 `.min()` 검사 하나로 수렴시킨다.
  */
 const RequiredDatabaseUrl = z.preprocess(
@@ -133,7 +133,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   const data = parsed.data
 
   // **포트가 어긋나면 여기서 멈춘다.** 조용히 뜨면 옆 워크트리의 DB 를 열어 놓고
-  // "잘 떴다"고 읽게 된다 — `db/port-agreement.ts` 의 머리말이 그 실측을 든다.
+  // "잘 떴다"고 읽게 된다 — `db/port-agreement.ts` 의 머리말이 그 고장 방식을 든다.
   // **`TEST_DATABASE_URL` 은 여기서 안 잰다** — 그 값은 `pnpm test` 만 쓰므로
   // 재는 자리도 거기다(`test/test-database-url.ts`). 테스트 값 하나 때문에 도는
   // 서버가 안 뜨면 그것대로 잘못이다.

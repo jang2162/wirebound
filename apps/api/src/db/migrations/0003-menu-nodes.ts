@@ -2,7 +2,7 @@ import type { Kysely, Migration } from 'kysely'
 import { sql } from 'kysely'
 
 /**
- * `menu_nodes` 테이블을 만든다 — 설계 §9 좌측 패널의 폴더 트리.
+ * `menu_nodes` 테이블을 만든다 — 설계서 「설계서 화면 구조」의 좌측 패널 폴더 트리.
  * 페이지(`0004-pages`)는 이 트리의 리프에 매달린다.
  *
  * `project_id`는 `projects(id)`를 `ON DELETE CASCADE`로 참조한다 — 프로젝트가
@@ -17,8 +17,8 @@ import { sql } from 'kysely'
  * `(project_id, parent_id, sort_order)` 인덱스는 트리 조회(`listMenuTree`)와
  * 형제 재번호(`repos/menu.ts`의 `closeGap`/`openGap`/`reorderWithinSiblings`)가 매번
  * "이 프로젝트의 이 부모 밑 형제들을 sort_order 순으로"라는 형태로 필터링하므로
- * 그 접근 패턴을 그대로 커버한다. UNIQUE로 걸지 않는다 — 브리프가 sort_order를
- * 형제 안에서 0부터 연속한 정수로 못박긴 했지만, 그 불변식을 지키는 것은 이
+ * 그 접근 패턴을 그대로 커버한다. UNIQUE로 걸지 않는다 — sort_order는
+ * 형제 안에서 0부터 연속한 정수여야 하지만, 그 불변식을 지키는 것은 이
  * 테이블 위의 애플리케이션 코드(재번호 로직)의 책임이지 DB 제약의 책임이 아니다.
  * 재번호는 "형제 여럿의 sort_order를 한 트랜잭션 안에서 순차적으로 갱신"하는
  * 방식이라, UNIQUE 제약을 걸면 갱신 중간 단계에서 일시적으로 값이 겹치는

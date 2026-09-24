@@ -1,11 +1,11 @@
 /**
- * `api_tokens` 테이블의 SQL(P9-2 T2). HTTP도 zod도 여기 없다 — 그것은 `routes/tokens.ts`다.
+ * `api_tokens` 테이블의 SQL. HTTP도 zod도 여기 없다 — 그것은 `routes/tokens.ts`다.
  *
  * **원문을 저장하지 않는다.** `insertApiToken`이 원문을 **만들어서 돌려주고** 표에는
  * sha256 hex만 넣는다(`auth/token-hash.ts` — `sessions`와 같은 함수). 그래서 **원문이 실릴
  * 수 있는 자리는 발급 응답 하나뿐이고**, 목록·조회는 그것을 낼 수단 자체가 없다.
  *
- * **역할을 담지 않는다(D3).** 이 파일이 아는 것은 *"누가"*(`user_id`)와 *"어느
+ * **역할을 담지 않는다.** 이 파일이 아는 것은 *"누가"*(`user_id`)와 *"어느
  * 프로젝트"*(`project_id`)뿐이다 — 역할 판정은 요청 시점에 `auth/roles.ts`가 한다.
  */
 import { sql } from 'kysely'
@@ -26,7 +26,7 @@ export interface ApiTokenRecord {
 /**
  * 인증 훅이 쓰는 조회 결과. 자격이 누구의 것이고 어느 프로젝트에 묶였는지만 든다.
  *
- * **`tokenName`이 여기 있는 이유는 §7.4다** — `actor_label='<토큰명>'`이 설계가 정한 값이고
+ * **`tokenName`이 여기 있는 이유는 설계서 「LLM 편집 경로」다** — `actor_label='<토큰명>'`이 설계가 정한 값이고
  * 그것을 아는 것은 서버뿐이다(`auth/actor.ts`). 이 필드가 없으면 그 문장이 참이 될 수 없다.
  */
 export interface ApiTokenPrincipal {
@@ -98,7 +98,7 @@ export async function insertApiToken(
  * 그 프로젝트에서 **그 사용자가 만든** 토큰 전부. 오래된 것이 먼저다(`listPresets`와 같은
  * 이유 — *"내가 어제 만든 것"*의 자리가 움직이지 않는다).
  *
- * **`userId`로 거르는 것이 계약이다**(`routes/tokens.ts`의 D2 절). 프로젝트 단위로 열면
+ * **`userId`로 거르는 것이 계약이다**(`routes/tokens.ts`의 «목록·폐기는 자기 것만 본다» 절). 프로젝트 단위로 열면
  * viewer가 owner의 토큰 목록을 보고 지울 수 있다.
  */
 export async function listApiTokens(db: DbHandle, projectId: string, userId: string): Promise<ApiTokenRecord[]> {

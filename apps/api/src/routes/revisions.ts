@@ -3,16 +3,16 @@
  * `pageRoutes`(`routes/pages.ts`)와 같은 `/api/projects` prefix로 등록한다(`app.ts`) —
  * 파일은 분리하되 URL 네임스페이스는 공유한다(`routes/tree.ts`와 같은 관례).
  *
- * **이 엔드포인트의 존재 이유는 설계 §7.3의 "새로고침 후 undo 스택 복원"이다.**
+ * **이 엔드포인트의 존재 이유는 설계서 「개인 undo/redo」의 "새로고침 후 undo 스택 복원"이다.**
  * 클라이언트가 페이지를 다시 열면 자기 actor의 최근 revision을 받아, 그 `inverse`를
  * 그대로 `PATCH .../ops`로 되보내는 것만으로 undo를 한다 — 서버에 undo라는 개념은
- * 없다(설계 결정 D2). 그래서 응답은 `inverse`를 **가공 없이** 실어 준다.
+ * 없다. 그래서 응답은 `inverse`를 **가공 없이** 실어 준다.
  *
- * 조회 전용이므로 `projectGuard('viewer')`다(설계 §10). 이력은 프로젝트 멤버 모두가
+ * 조회 전용이므로 `projectGuard('viewer')`다(설계서 「권한 모델」). 이력은 프로젝트 멤버 모두가
  * 읽을 수 있고, `mine=true`는 권한이 아니라 편의(자기 스택 복원)를 위한 필터다.
  *
  * HTTP·zod만 다룬다 — SQL은 `repos/revisions.ts`(`listRevisions`)와
- * `repos/pages.ts`(`findPageById`)에 맡긴다(README "계층 규칙").
+ * `repos/pages.ts`(`findPageById`)에 맡긴다(`apps/api/README.md` 「계층 규칙」 절).
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
@@ -27,14 +27,14 @@ const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
 /** `z.strictObject`라 선언되지 않은 쿼리 키가 오면 그 자체로 400이다(본문 스키마와 같은 관례). */
 const RevisionQuery = z.strictObject({
   /**
-   * `'true'`면 호출자 자신의 revision만 고른다(설계 §7.3의 개인 undo 스택 복원).
+   * `'true'`면 호출자 자신의 revision만 고른다(설계서 「개인 undo/redo」의 스택 복원).
    * 쿼리스트링 값은 언제나 문자열이므로 `z.boolean()`이 아니라 리터럴 두 개를 받는다.
    * 생략하면 그 페이지의 이력 전체다 — 기본을 `mine`으로 두면 "누가 무엇을 고쳤는지"를
-   * 보는 쪽(P2b의 이력 패널)이 매번 명시적으로 꺼야 한다.
+   * 보는 쪽(이력 패널)이 매번 명시적으로 꺼야 한다.
    */
   mine: z.enum(['true', 'false']).optional(),
   /**
-   * 상한 200. 설계 §7.3이 요구하는 것은 50이고, 그 몇 배까지 열어 둔다.
+   * 상한 200. 설계서 「개인 undo/redo」가 요구하는 것은 50이고, 그 몇 배까지 열어 둔다.
    * jsonb 두 컬럼(`ops`·`inverse`)을 함께 싣기 때문에 응답이 항목 수에 비례해 무거워진다.
    */
   limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -89,7 +89,7 @@ export function revisionRoutes() {
       // **페이지 존재를 먼저 확인한다.** 이 확인이 없으면 남의 프로젝트 페이지 id로
       // 조회했을 때 `listRevisions`가 그 페이지의 이력을 그대로 돌려준다 —
       // `revisions`에는 `project_id`가 없어 `page_id`만으로 좁히기 때문이다. 즉
-      // 프로젝트 경계가 이 확인 하나에 걸려 있다(설계 §10: 다른 프로젝트의 id가
+      // 프로젝트 경계가 이 확인 하나에 걸려 있다(설계서 「권한 모델」: 다른 프로젝트의 id가
       // 존재를 흘리면 안 된다).
       //
       // `findPageById`는 `schema` 컬럼까지 함께 읽어 온다 — 존재 확인에는 과하지만,
