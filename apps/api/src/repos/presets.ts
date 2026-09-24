@@ -9,6 +9,7 @@
  */
 import { sql } from 'kysely'
 import type { WbNode } from '@wirebound/schema'
+import { assertLocking } from '../db/locking'
 import { containsNulByte } from '../db/nul-guard'
 import type { DbHandle } from '../db/tx'
 import { withTransaction } from '../db/tx'
@@ -175,4 +176,13 @@ export async function deletePreset(db: DbHandle, projectId: string, presetId: st
     .executeTakeFirst()
 
   return (result.numDeletedRows ?? 0n) > 0n
+}
+
+/**
+ * 프로젝트의 프리셋 행 전부를 `FOR UPDATE`로 잠근다. **부르는 자리는 프로젝트 삭제 하나다**(`routes/projects.ts` — 프리셋 삭제와
+ * 고리를 만들지 않으려고 CASCADE 보다 먼저 잡는다. 까닭은 그 삭제 주석). `lockProjectMenuNodes`와 같은 모양 · 같은 까닭이다.
+ */
+export async function lockProjectPresets(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectPresets')
+  await trx.selectFrom('presets').select('id').where('project_id', '=', projectId).forUpdate().execute()
 }

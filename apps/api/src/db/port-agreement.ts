@@ -55,9 +55,9 @@ function pick(value: string | undefined): string | undefined {
 
 /**
  * 접속 문자열이 실제로 붙을 포트. **해석할 수 없거나 다른 호스트면 `undefined`** —
- * 그때는 잴 것이 없다.
+ * 그때는 잴 것이 없다. 테스트 DB 가 최상위 컨테이너를 가리키는지 보는 자리(`test/test-database-url.ts`)도 이것을 쓴다.
  */
-function loopbackPortOf(databaseUrl: string): string | undefined {
+export function loopbackPortOf(databaseUrl: string): string | undefined {
   let url: URL
   try {
     url = new URL(databaseUrl)

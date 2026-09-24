@@ -32,9 +32,11 @@
  * `본문의 NUL 문자를 400으로 막는다`가 그 구분력을 지킨다).
  */
 import { sql } from 'kysely'
+import type { PatchOp } from '@wirebound/schema'
 import { assertLocking } from '../db/locking'
 import { containsNulByte } from '../db/nul-guard'
 import type { DbHandle } from '../db/tx'
+import type { RevisionActorType } from '../db/types'
 
 export interface CommentRecord {
   id: string
@@ -187,6 +189,43 @@ export async function findCommentByIdempotencyKey(
   return row ? toRecord(row as CommentRow) : null
 }
 
+/** 게시가 번호를 붙이며 만든 revision — 재생이 룸에 다시 보내는 것(`findPostRevision`). */
+export interface PostRevision {
+  seq: number
+  ops: PatchOp[]
+  actorType: RevisionActorType
+  actorLabel: string
+  /** 같은 문장에서 읽은 그 페이지의 지금 `head_seq` — 뒤에 revision 이 더 있는지(`seq`보다 큰지) 가른다. */
+  pageHeadSeq: number
+}
+
+/**
+ * 그 게시가 노드에 번호를 붙이며 만든 revision(`0015-comment-revision-seq`). 번호를 새로 붙이지 않은 게시 · 가져오기 ·
+ * 복원이 넣은 행이면 `null`이다. 읽는 자리는 게시의 재생뿐이다 — COMMIT 답을 잃은 게시가 못 한 방송을 잇는다.
+ */
+export async function findPostRevision(db: DbHandle, pageId: string, commentId: string): Promise<PostRevision | null> {
+  const row = await db
+    .selectFrom('comments')
+    .innerJoin('revisions', (join) =>
+      join.onRef('revisions.page_id', '=', 'comments.page_id').onRef('revisions.seq', '=', 'comments.revision_seq'),
+    )
+    .innerJoin('pages', 'pages.id', 'comments.page_id')
+    .select(['revisions.seq', 'revisions.ops', 'revisions.actor_type', 'revisions.actor_label', 'pages.head_seq'])
+    .where('comments.page_id', '=', pageId)
+    .where('comments.id', '=', commentId)
+    .executeTakeFirst()
+
+  return row
+    ? {
+        seq: Number(row.seq),
+        ops: row.ops,
+        actorType: row.actor_type,
+        actorLabel: row.actor_label,
+        pageHeadSeq: Number(row.head_seq),
+      }
+    : null
+}
+
 /**
  * 그 사람이 그 키로 이 페이지에 단 게시가 **달렸다가 지워졌는가**(`0013-comment-tombstones`).
  * 범위는 `findCommentByIdempotencyKey`와 같다 — 남의 묘비는 이 조회에 안 걸린다.
@@ -238,7 +277,7 @@ export async function countNodeComments(db: DbHandle, pageId: string, nodeId: st
  */
 export async function insertComment(
   db: DbHandle,
-  input: { pageId: string; nodeId: string; body: string; authorId: string; idempotencyKey?: string },
+  input: { pageId: string; nodeId: string; body: string; authorId: string; idempotencyKey?: string; revisionSeq?: number },
 ): Promise<CommentRecord> {
   assertNoNulByte(input.body)
 
@@ -251,6 +290,8 @@ export async function insertComment(
       author_id: input.authorId,
       // 없으면 키를 만들지 않는다 — 컬럼의 기본값(`NULL`)이 «키 없는 게시»다(0012).
       ...(input.idempotencyKey === undefined ? {} : { idempotency_key: input.idempotencyKey }),
+      // 번호를 붙인 게시만 싣는다 — 그 revision 을 재생이 다시 보낸다(0015).
+      ...(input.revisionSeq === undefined ? {} : { revision_seq: input.revisionSeq }),
     })
     .returning('id')
     .executeTakeFirstOrThrow()

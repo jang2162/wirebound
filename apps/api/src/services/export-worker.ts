@@ -75,7 +75,11 @@
  * **다시 얻을 때 줄 맨 앞인 것**은 뒤에 서면 그 사이 새 일이 칸을 얻어 떠 있는 일이 늘기 때문이다. 이미 자원을 쥔 일을
  * 먼저 끝낸다.
  *
- * 끊긴 일의 그리기는 메인에서 끝까지 돌고 버려지는데, **그동안 그리기 칸을 쥔다** — 브라우저가 떠 있는 동안이다.
+ * 끊긴 일의 그리기는 메인에서 끝까지 돌고 버려지는데, **그동안 그리기 칸을 쥔다** — 브라우저가 떠 있는 동안이다. **그
+ * 그리기는 자리(전체 · 사람)에 안 센다** — 자리는 일이 끝날 때(끊김 포함) 내놓고, 떠난 그리기는 그리기 칸만 쥔다. 그래서 한
+ * 사람이 pptx 를 띄웠다 끊기를 되풀이하면 떠난 그리기가 그리기 칸 둘을 다 쥘 수 있다 — 그동안 남의 pptx 는 그리기 칸을
+ * 기다린다(html 은 CPU 칸만 쓰므로 안 선다). 위를 묶는 것은 그리기 칸 수와 그리기 한 번의 길이다. 사람 몫에 세지 않은 까닭:
+ * 세면 끊은 사람의 다음 미리보기가 떠난 그리기가 끝날 때까지 «내 내보내기» 503 이다 — 형식을 바꾸는 정상 사용이 막힌다.
  *
  * 잰 값(api 스크립트 · 500KB 페이지 72 장 프로젝트의 pptx 미리보기 둘을 진짜 Chromium 으로 돌리는 중에 페이지 한 장짜리 html
  * 미리보기 · 같은 기계 · 큰 둘은 각 9s 안팎):
@@ -118,7 +122,8 @@
  * 200ms 간격으로): 사람마다 상한이 없으면 B 가 0.3–8.9s 동안 503 42 번, 상한이 2 면 B 가 503 0 번이고 A 의 셋째부터가
  * «내 내보내기» 503 이다. 그래서 **자리를 사람마다도 센다**(`admit(person)`) — 사람은 세션의 사용자이고 토큰이면 그 토큰의
  * 사용자다(`routes/export.ts`). 넘으면 전체가 찼을 때와 **같은 503 · `Retry-After`** 이되 문장을 가른다 — «밀려
- * 있다»를 읽은 사람은 기다리지만 이 거절은 자기 앞 일이 끝나야 풀린다.
+ * 있다»를 읽은 사람은 기다리지만 이 거절은 자기 앞 일이 끝나야 풀린다. **끊긴 요청은 끊긴 순간 사람 몫을 돌려준다**
+ * (`ExportAdmission`의 `leave`) — 전체 자리는 행 읽기가 끝날 때까지 쥔다.
  *
  * **왜 2 인가.** 사람 하나의 정상 사용이 동시에 띄우는 것은 탭 하나에 하나다 — 패널은 새로 부를 때 앞 미리보기를 끊고
  * 받는 동안 내려받기 버튼을 잠그며(`apps/web`의 `shell/export-panel.tsx`), 내려받기는 미리보기가 끝난 뒤에 선다. 탭 둘로
@@ -244,9 +249,14 @@ export class ExportBusyError extends Error {
 /**
  * 잡은 자리(`ExportWorkerPool.admit`). 일이 끝나면 풀이 스스로 내놓는다. 일을 넘기기 전에 그만두면(읽기 실패 등) 잡은
  * 쪽이 `release`한다 — 두 번 불러도 한 번만 내놓는다. `start`는 풀이 부른다(CPU 칸을 처음 얻어 줄에서 나왔다).
+ *
+ * `leave`는 **사람 몫만** 먼저 돌려준다 — 요청이 끊긴 순간 잡은 쪽이 부른다(`routes/export.ts`의 `admitted`). 끊긴 일은 그 뒤
+ * 행 읽기가 끝날 때까지 남는데, 그동안 사람 몫을 쥐면 형식을 빠르게 바꾼 사람의 다음 요청이 «내 내보내기» 503 이다. 전체 자리
+ * (`jobs`)는 `release`까지 쥔다 — 읽는 동안의 메모리는 그대로 세야 한다(머리말 «줄은 길이로 묶는다»). 두 번 불러도 한 번만 돌려준다.
  */
 export interface ExportAdmission {
   start(): void
+  leave(): void
   release(): void
 }
 
@@ -444,21 +454,26 @@ export class ExportWorkerPool {
     if (person !== undefined) this.perPerson.set(person, mine + 1)
     let waiting = true
     let held = true
+    let counted = person !== undefined
     const admission: ExportAdmission = {
       start: () => {
         if (!waiting) return
         waiting = false
         this.queued--
       },
-      release: () => {
-        admission.start()
-        if (!held) return
-        held = false
-        this.jobs--
-        if (person === undefined) return
+      leave: () => {
+        if (!counted || person === undefined) return
+        counted = false
         const left = (this.perPerson.get(person) ?? 1) - 1
         if (left === 0) this.perPerson.delete(person)
         else this.perPerson.set(person, left)
+      },
+      release: () => {
+        admission.start()
+        admission.leave()
+        if (!held) return
+        held = false
+        this.jobs--
       },
     }
     return admission
@@ -659,8 +674,10 @@ export class ExportWorkerPool {
             return
           case 'render':
             // **둘째 부탁은 받지 않는다** — 칸은 한 번 그릴 몫만 얻어 두었다(`run`). 받으면 그리기 칸을 하나 더 얻고, 이미
-            // 내놓은 CPU 칸을 한 번 더 내놓아 CPU 칸이 하나 는 것처럼 돈다. 그리기 칸을 얻어 두지 않은 일(html)의 부탁도
-            // 같다. 워커가 틀린 것이라 그 워커째 버린다.
+            // 내놓은 CPU 칸을 한 번 더 내놓아 CPU 칸이 하나 는 것처럼 돈다. 그리는 자를 받았는데 그리기 칸을 얻어 두지 않은
+            // 일의 부탁도 같다. 워커가 틀린 것이라 그 워커째 버린다. **그리는 자가 없는 일**(html · 그리는 자 없는 pptx —
+            // 라우트가 `render`를 안 넘긴다)의 부탁은 여기서 끝내지 않는다 — `renderFor`가 칸을 건드리지 않고 «그리지 못함»
+            // (`screens-failed`)으로 답한다.
             if (options?.render !== undefined && (asked || job.draw !== 'held')) {
               died(new ExportWorkerError('내보내기 워커가 화면을 두 번 그려 달라고 했습니다'))
               return

@@ -110,11 +110,14 @@ export async function sessionIsLive(
    */
   lock: 'none' | 'key-share' = 'none',
 ): Promise<boolean> {
+  // **`now()`가 아니라 `statement_timestamp()`다.** 트랜잭션 안의 `now()`는 그 트랜잭션이 열린 시각이다 — 커밋 순간의
+  // 재확인은 페이지 잠금을 기다린 **뒤**에 도므로, `now()`로 보면 기다리는 동안 다한 수명을 산 것으로 읽고 커밋한다
+  // (`test/guard-in-lock.test.ts`의 «세션 만료 시각이 지나면»). 트랜잭션 밖(방송의 `stillAllowed`)에서는 둘이 같다.
   const query = db
     .selectFrom('sessions')
     .select('id')
     .where('id', '=', sessionId)
-    .where('expires_at', '>', sql<Date>`now()`)
+    .where('expires_at', '>', sql<Date>`statement_timestamp()`)
   if (lock === 'key-share') assertLocking(db, 'sessionIsLive')
   const row = await (lock === 'key-share' ? query.forKeyShare() : query).executeTakeFirst()
 

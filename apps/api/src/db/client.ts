@@ -37,7 +37,7 @@ export interface DbTimeLimits {
   readonly idleInTransactionMs: number
   /** 풀 `connectionTimeoutMillis`(ms) — 연결을 이만큼 못 얻으면 거절한다(→ 503). */
   readonly poolWaitMs: number
-  /** 클라이언트 소켓의 TCP keepalive 첫 탐침까지(ms). 탐침 간격·횟수는 OS 값이다(Node 가 못 바꾼다). */
+  /** 클라이언트 소켓의 TCP keepalive 첫 탐침까지(ms). 탐침 간격 · 횟수는 libuv 가 건다(`createPool` 머리말 «네트워크 분할»). */
   readonly keepAliveIdleMs: number
 }
 
@@ -111,7 +111,7 @@ function writeToStderr(error: unknown): void {
  * |---|---|---|
  * | 서버 `idle_in_transaction_session_timeout` | **10s** | 고아를 끝내는 직접 수단이다. **이 api 가 트랜잭션 안에서 정당하게 쉬는 시간은 이벤트 루프가 멈춘 시간이다** — 트랜잭션이 기다리는 바깥 일이 없다. 큰 내보내기는 루프를 멈추지 않는다(조립 · 렌더 · 압축이 워커 스레드에서 돈다 — `services/export-worker.ts`): 보통 CPU · 500KB 페이지 36(18MB) HTML 내보내기 동안 옆 편집 트랜잭션의 쉼 최장 0.03s · `/health` 최장 33ms(재는 법은 아래 «정당한 일을 끊는 판» 표의 첫 줄). `pnpm test` api 전량 0.72s(케이스가 일부러 쥔 잠금). 10s 를 넘는 멈춤이면 그 사이 모든 요청이 웹의 기한(10s — `apps/web`의 `WRITE_DEADLINE_MS`·`READ_DEADLINE_MS`)을 이미 넘긴다. 잘못 끊겨도 **503**(«모름»)이다 — 서버는 쉬는 중에만 끝내므로 `FATAL 25P03`은 진행 중인 질의 없이 와서 `'error'` → 표지 → 다음 문장(또는 COMMIT)이 «not queryable»로 간다(`connection-loss.ts`의 표 넷째 줄 · `test/db-partition.test.ts`). 값 300ms 로 띄워 같은 판을 돌려도 옆 편집 124/124 가 200(쉼 최장 0.025s) |
  * | 풀 `connectionTimeoutMillis` | **5s** | 풀이 다 찼을 때 끝없이 기다리지 않고 503(«연결을 얻지 못함» — `connection-loss.ts`의 표 끝 줄). 정당한 대기: 동시 3000 요청 → 최대 3.0s · 503 0. 웹의 기한(10s)보다 짧아야 웹이 끊기 전에 답이 닿는다 |
- * | 클라이언트 TCP keepalive | 켠다 · 첫 탐침 **10s** | 진짜 분할(`iptables` DROP)에서는 api 쪽도 끊긴 줄을 모른다 — 답을 기다리는 질의가 **끝없이** 풀 칸을 쥔다(60s 까지 봤다). 켜면 소켓이 `ETIMEDOUT` → `'error'` → 503. 걸리는 시간은 첫 탐침 + OS 의 간격 × 횟수다(잰 판은 2s × 3 으로 줄인 컨테이너에서 15.6s. 리눅스 기본은 75s × 9 — 약 11분). 탐침은 상대가 살아 있으면 답하므로 긴 잠금 대기를 끊지 않는다 |
+ * | 클라이언트 TCP keepalive | 켠다 · 첫 탐침 **10s** | 진짜 분할(`iptables` DROP)에서는 api 쪽도 끊긴 줄을 모른다 — 답을 기다리는 질의가 **끝없이** 풀 칸을 쥔다(60s 까지 봤다). 켜면 소켓이 `ETIMEDOUT` → `'error'` → 503. 걸리는 시간은 첫 탐침 + 간격 × 횟수이고, **간격 · 횟수는 libuv 가 keepalive 를 켤 때 1s × 10 으로 건다** — OS 의 기본값(리눅스 75s × 9)을 따르지 않는다. 잰 값: 리눅스 컨테이너(`--cap-add NET_ADMIN`) · 같은 망의 Postgres · `select pg_sleep(900)`을 기다리는 pg 연결 · 1.5s 뒤 `iptables` 로 양방향 DROP — Node 22.9.0(libuv 1.48) · 22.23 · 24.21 모두 질의를 보낸 지 **20.3–20.6s** 에 `ETIMEDOUT`(커널 값 75 · 9 그대로). macOS 는 재지 않았다(분할에 root 가 든다). 탐침은 상대가 살아 있으면 답하므로 긴 잠금 대기를 끊지 않는다 |
  * | 서버 `lock_timeout` · `statement_timeout` | **걸지 않는다** | 고아를 끝내지 못한다(3s 로 걸어도 고아는 10s 까지 산다) · **정당한 기다림을 끊는다** — 이 앱은 페이지 행 잠금에 일부러 줄을 선다. 20s 잠금 뒤의 게시·편집이 두 설정 다 5s 에 봉투 500(`55P03` · `57014` — 서버가 답했으니 확정 실패, 0행) · 안 걸면 19.5s 에 201 · 200. 분할 판에서는 줄 선 같은 페이지 게시 13 이 전부 500 이 되고 재전송도 500 이라 원문 0행 |
  * | 서버 TCP keepalive | 걸지 않는다 | 잠금을 쥔 고아는 위 첫 줄이 끝낸다(진짜 분할에서도 10s — 잰 것). 트랜잭션 밖 고아는 잠금이 없다 — 연결 칸 하나를 OS 기본(약 2시간)까지 쥔다 |
  *

@@ -19,10 +19,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   API_ENV_URL,
   DEFAULT_TEST_DATABASE_URL,
-  missingWorktreeEnvError,
+  isInsideGitWorktree,
   readApiEnvFile,
   resolveTestDatabaseUrl,
   resolveTestDatabaseUrlFrom,
+  worktreeEnvError,
 } from './test-database-url'
 import { stripComments } from './source-census'
 
@@ -123,45 +124,80 @@ describe('배선 — 진짜 파일을 읽어 그 순서에 넣는가', () => {
 })
 
 /**
- * **워크트리에 `apps/api/.env` 가 없으면 멈춘다.** 없으면 기본값이 compose 기본 포트 — 최상위 체크아웃의
- * 컨테이너 — 를 가리켜 스위트가 그 `wirebound_test` 를 지운다(`missingWorktreeEnvError` 머리말). 판정만 재고 DB 에는
- * 붙지 않는다 — 임시 디렉터리 아래에 `.worktrees/…/apps/api` 경로를 만든다.
+ * **워크트리에서 테스트가 최상위 체크아웃의 컨테이너로 떨어지면 멈춘다** — `.env` 가 없거나, 최상위 값을 그대로 복사해
+ * compose 기본 포트를 가리키는 판(`worktreeEnvError` 머리말). 판정만 재고 DB 에는 붙지 않는다 — 임시 디렉터리 아래에
+ * 체크아웃 뿌리(`.git` 파일이면 워크트리 · 디렉터리면 최상위)와 `apps/api` 를 만든다.
  */
-describe('워크트리에 apps/api/.env 가 없으면 무엇을 하라고 말하고 멈춘다', () => {
+describe('워크트리에서 테스트 DB 가 최상위 컨테이너로 떨어지면 무엇을 하라고 말하고 멈춘다', () => {
   let root: string
-  let worktreeEnv: string
+
+  /** `rel` 에 체크아웃 뿌리를 세우고 그 `apps/api/.env` 경로를 낸다. `env` 를 주면 그 내용으로 파일을 쓴다. */
+  function checkout(rel: string, kind: 'worktree' | 'clone', env?: string): string {
+    const top = join(root, rel)
+    mkdirSync(join(top, 'apps', 'api'), { recursive: true })
+    if (kind === 'worktree') writeFileSync(join(top, '.git'), `gitdir: ${join(root, 'main', '.git', 'worktrees', 'x')}\n`)
+    else mkdirSync(join(top, '.git'), { recursive: true })
+    const envFile = join(top, 'apps', 'api', '.env')
+    if (env !== undefined) writeFileSync(envFile, env)
+    return envFile
+  }
 
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), 'wb-wt-'))
-    worktreeEnv = join(root, '.worktrees', 'wt-a', 'apps', 'api', '.env')
-    mkdirSync(join(root, '.worktrees', 'wt-a', 'apps', 'api'), { recursive: true })
   })
   afterAll(() => {
     rmSync(root, { recursive: true, force: true })
   })
 
-  it('던지고, README 의 절 이름과 DB 없이 도는 길을 말한다 — 기본 포트로 떨어지지 않는다', () => {
-    expect(() => resolveTestDatabaseUrlFrom({}, worktreeEnv)).toThrow(/README\.md 「워크트리를 여럿 띄울 때」/)
-    expect(missingWorktreeEnvError(worktreeEnv, {})).toContain("pnpm test --project '!api'")
+  it('.env 가 없으면 던지고, README 의 절 이름과 DB 없이 도는 길을 말한다 — 기본 포트로 떨어지지 않는다', () => {
+    const envFile = checkout('main/.worktrees/wt-a', 'worktree')
+    expect(() => resolveTestDatabaseUrlFrom({}, envFile)).toThrow(/apps\/api\/\.env 가 없습니다/)
+    expect(() => resolveTestDatabaseUrlFrom({}, envFile)).toThrow(/README\.md 「워크트리를 여럿 띄울 때」/)
+    expect(worktreeEnvError(envFile, {})).toContain("pnpm test --project '!api'")
   })
 
-  it('셸이 TEST_DATABASE_URL 을 주면 지나간다 — CI 의 길이다', () => {
-    expect(resolveTestDatabaseUrlFrom({ TEST_DATABASE_URL: B }, worktreeEnv)).toBe(B)
+  it.each([
+    ['.claude/worktrees 아래', 'main/.claude/worktrees/wt-b'],
+    ['저장소 옆 형제 디렉터리', 'wirebound-feat'],
+    ['대소문자가 다른 .Worktrees', 'main/.Worktrees/wt-c'],
+  ])('워크트리를 어디에 만들었든 .git 이 파일이면 워크트리다 — %s', (_, rel) => {
+    const envFile = checkout(rel, 'worktree')
+    expect(() => resolveTestDatabaseUrlFrom({}, envFile)).toThrow(/apps\/api\/\.env 가 없습니다/)
   })
 
-  it('파일을 만들면 그 값을 읽는다', () => {
-    writeFileSync(worktreeEnv, `TEST_DATABASE_URL=${A}\n`)
-    try {
-      expect(resolveTestDatabaseUrlFrom({}, worktreeEnv)).toBe(A)
-    } finally {
-      rmSync(worktreeEnv, { force: true })
-    }
+  it.each([
+    ['POSTGRES_PORT=5433', 'POSTGRES_PORT=5433\n'],
+    ['포트도 URL 도 없음 — 기본 URL', 'PORT=3001\n'],
+    ['5433 을 적은 TEST_DATABASE_URL', 'TEST_DATABASE_URL=postgres://wirebound:wirebound@127.0.0.1:5433/wirebound_test\n'],
+  ])('최상위 값을 그대로 복사한 .env 도 멈춘다 — %s', (_, env) => {
+    const envFile = checkout(`main/.worktrees/copied-${env.length}`, 'worktree', env)
+    expect(() => resolveTestDatabaseUrlFrom({}, envFile)).toThrow(/compose 기본 포트\(5433\)를 가리킵니다/)
+    expect(worktreeEnvError(envFile, {})).toContain('127.0.0.1:5433/wirebound_test')
   })
 
-  it('워크트리 밖(최상위 · CI 체크아웃)은 그대로다 — 파일이 없으면 기본값이다', () => {
-    expect(resolveTestDatabaseUrlFrom({}, join(root, 'apps', 'api', '.env'))).toBe(DEFAULT_TEST_DATABASE_URL)
-    // 이름에 `.worktrees` 가 **들기만** 한 디렉터리는 워크트리가 아니다 — 경로 조각으로 본다.
-    expect(missingWorktreeEnvError(join(root, 'x.worktrees', 'apps', 'api', '.env'), {})).toBeUndefined()
+  it('셸이 TEST_DATABASE_URL 을 주면 지나간다 — CI 와 컨테이너를 일부러 함께 쓰는 사람의 길이다', () => {
+    expect(resolveTestDatabaseUrlFrom({ TEST_DATABASE_URL: B }, checkout('main/.worktrees/wt-d', 'worktree'))).toBe(B)
+    expect(resolveTestDatabaseUrlFrom({ TEST_DATABASE_URL: B }, checkout('main/.worktrees/wt-e', 'worktree', 'POSTGRES_PORT=5433\n'))).toBe(B)
+  })
+
+  it('자기 포트를 적은 .env 는 그 값을 읽는다', () => {
+    const own = 'postgres://wirebound:wirebound@127.0.0.1:5443/wb_a_test'
+    expect(resolveTestDatabaseUrlFrom({}, checkout('main/.worktrees/wt-f', 'worktree', `TEST_DATABASE_URL=${own}\n`))).toBe(own)
+    expect(resolveTestDatabaseUrlFrom({}, checkout('main/.worktrees/wt-g', 'worktree', 'POSTGRES_PORT=5443\n'))).toBe(
+      'postgres://wirebound:wirebound@127.0.0.1:5443/wirebound_test',
+    )
+  })
+
+  it('.git 이 디렉터리인 체크아웃(최상위 · CI)은 그대로다 — 경로에 .worktrees 가 끼어도 파일이 없으면 기본값이다', () => {
+    expect(resolveTestDatabaseUrlFrom({}, checkout('top', 'clone'))).toBe(DEFAULT_TEST_DATABASE_URL)
+    expect(resolveTestDatabaseUrlFrom({}, checkout('other/.worktrees/cloned', 'clone'))).toBe(DEFAULT_TEST_DATABASE_URL)
+    expect(isInsideGitWorktree(join(root, 'top', 'apps', 'api'))).toBe(false)
+  })
+
+  it('.git 을 못 찾으면 워크트리가 아니다 — 압축본으로 푼 소스', () => {
+    mkdirSync(join(root, 'tarball', 'apps', 'api'), { recursive: true })
+    expect(isInsideGitWorktree(join(root, 'tarball', 'apps', 'api'))).toBe(false)
+    expect(worktreeEnvError(join(root, 'tarball', 'apps', 'api', '.env'), {})).toBeUndefined()
   })
 })
 

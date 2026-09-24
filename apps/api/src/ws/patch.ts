@@ -47,7 +47,11 @@ export type PatchFrame = Extract<ClientFrame, { type: 'patch' }>
  * 실패 하나를 낸 사람에게 되돌려 줄 프레임으로. **`ApiError`를 그대로 펼친다** — 상태·코드·
  * 문장·이슈가 REST 봉투와 같은 값이라 받는 쪽이 접속 방식을 몰라도 된다.
  */
-export function patchErrorFrame(projectId: string, frame: PatchFrame, error: ApiError): ServerFrame {
+export function patchErrorFrame(
+  projectId: string,
+  frame: PatchFrame,
+  error: Pick<ApiError, 'status' | 'code' | 'message' | 'issues'>,
+): ServerFrame {
   return {
     type: 'patch-error',
     projectId,

@@ -20,12 +20,16 @@
  * | 토큰 조회의 예외를 삼킨다 | *"토큰 조회가 …"* **혼자** |
  * | 쿠키 조회의 예외 중 **연결을 잃은 것만** 던지고 나머지는 삼킨다 | `session.test.ts`의 *"resolveSession 조회 자체가 실패하면 …"* **혼자** |
  * | `DbConnectionLostError`를 503 으로 안 옮긴다(500 봉투) | 여기 다섯 — 축의 주인은 *"게시의 COMMIT 응답이 …"*. *"게시의 COMMIT 이 클라이언트 쪽 시간 제한으로 …"*는 **혼자 죽는 변조가 없다** — 이것과 COMMIT 줄(그쪽 주인 *"COMMIT 이 서버의 답 없이 …"*)에서 늘 함께 죽는다. 남긴 것은 COMMIT 을 서버 안에서 걸리게 하는 절차를 HTTP·재생·행 수까지 한 판으로 재기 때문이다 |
+ * | WS 프레임의 `catch`(`ws/routes.ts`)가 `DbConnectionLostError`도 `internal()`로 싣는다 | *"patch 의 COMMIT 응답이 유실되면 …"* **혼자** |
  * | 쿠키 조회의 예외를 삼킨다 | *"세션 조회가 연결을 잃으면 …"* · *"쿠키 조회가 실패하면 …"* · `session.test.ts`의 *"resolveSession 조회 자체가 실패하면 …"* — 셋 다 401. 축의 주인은 *"세션 조회가 연결을 잃으면 …"* |
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
 import { buildApp } from '../src/app'
+import Fastify from 'fastify'
 import { createDb, createPool } from '../src/db/client'
+import { DbConnectionLostError } from '../src/db/connection-loss'
+import { DB_UNREACHABLE_READ_MESSAGE, DB_UNREACHABLE_WRITE_MESSAGE, registerErrorHandler } from '../src/http/error-handler'
 import {
   TEST_DATABASE_URL,
   createMenuNode,
@@ -38,6 +42,7 @@ import {
   type TestContext,
 } from './helpers'
 import { startFaultProxy, type FaultProxy } from './pg-fault-proxy'
+import { joinRoom } from './ws-client'
 
 /** 이 케이스 동안 난 `uncaughtException` — 연결을 잃은 판에서 api 를 죽이는 것이 이것이다(`db-connection-loss.test.ts`). */
 const uncaught: unknown[] = []
@@ -105,6 +110,8 @@ describe('결과를 모르는 실패는 503 이다 — 봉투 있는 500 이 아
       expect(ctx.proxy.fired).toBe(true)
       expect(first.statusCode, first.body).toBe(503)
       expect(envelope(first.body)?.code).toBe('internal')
+      // 쓰는 요청이다 — 반영됐는지 모른다는 문장이다(`http/error-handler.ts`의 `dbUnreachableFailure`).
+      expect(envelope(first.body)?.message).toBe(DB_UNREACHABLE_WRITE_MESSAGE)
       expect(uncaught).toEqual([])
       const { rows } = await sql<{ body: string }>`select body from comments where page_id = ${fx.pageId}`.execute(ctx.db)
       expect(rows).toEqual([{ body: '닿았던 말' }])
@@ -114,6 +121,39 @@ describe('결과를 모르는 실패는 503 이다 — 봉투 있는 500 이 아
       expect(again.statusCode, again.body).toBe(200)
       const { rows: after } = await sql<{ n: string }>`select count(*) as n from comments where page_id = ${fx.pageId}`.execute(ctx.db)
       expect(after).toEqual([{ n: '1' }])
+    })
+  })
+})
+
+describe('WS patch 도 결과를 모르는 실패는 503 이다 — REST 와 같은 판정', () => {
+  it('patch 의 COMMIT 응답이 유실되면 patch-error 503 · 쓰기 문장이다 — 커밋은 됐다(head 0 → 1)', async () => {
+    await withProxiedApi(async (ctx) => {
+      const fx = await pageWithRoot(ctx)
+      await ctx.app.listen({ port: 0, host: '127.0.0.1' })
+      const address = ctx.app.server.address()
+      if (address === null || typeof address === 'string') throw new Error('포트를 열지 못했습니다')
+      const socket = await joinRoom(address.port, fx.projectId, fx.owner.cookie.wb_session)
+      try {
+        await socket.waitFor('joined')
+        ctx.proxy.dropCommitReplyAfter('insert into "revisions"')
+        socket.send(
+          JSON.stringify({
+            type: 'patch',
+            pageId: fx.pageId,
+            clientOpId: 'op_commit_lost',
+            baseSeq: 0,
+            ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_lost', type: 'Text', props: {} } }],
+          }),
+        )
+        const answer = await socket.waitFor('patch-error')
+        expect(ctx.proxy.fired).toBe(true)
+        expect(answer).toMatchObject({ clientOpId: 'op_commit_lost', status: 503, code: 'internal', message: DB_UNREACHABLE_WRITE_MESSAGE })
+        expect(uncaught).toEqual([])
+        const { rows } = await sql<{ h: number }>`select head_seq::int as h from pages where id = ${fx.pageId}`.execute(getTestDb())
+        expect(rows).toEqual([{ h: 1 }])
+      } finally {
+        socket.close()
+      }
     })
   })
 })
@@ -174,6 +214,8 @@ describe('세션·토큰을 확인하지 못했으면 401 이 아니다 — 자�
       const lost = await ctx.app.inject({ method: 'GET', url: '/api/auth/me', cookies: alice.cookie })
       expect(ctx.proxy.fired).toBe(true)
       expect(lost.statusCode, lost.body).toBe(503)
+      // 읽기다 — «반영»을 말하지 않는다.
+      expect(envelope(lost.body)?.message).toBe(DB_UNREACHABLE_READ_MESSAGE)
 
       const me = await ctx.app.inject({ method: 'GET', url: '/api/auth/me', cookies: alice.cookie })
       expect(me.statusCode, me.body).toBe(200)
@@ -225,5 +267,47 @@ describe('세션·토큰을 확인하지 못했으면 401 이 아니다 — 자�
       expect(ctx.proxy.fired).toBe(true)
       expect(lost.statusCode, lost.body).toBe(503)
     })
+  })
+})
+
+/**
+ * **503 의 문장은 메서드로 갈린다** — 쓰지 않는 요청(GET · HEAD · OPTIONS)에 «반영됐는지 알 수 없습니다»를 말하면 사용자는 «내가 무엇을
+ * 바꿨나»를 묻는다. 웹은 서버 문장을 그대로 그리므로 문장이 서버 한 자리(`http/error-handler.ts`)에서 정해진다. 판정만 잰다 —
+ * 라우트가 `DbConnectionLostError`를 던지는 앱을 세운다(연결을 실제로 끊는 판은 위 «게시의 COMMIT 응답이 …» · «세션 조회가 …»).
+ */
+describe('DB 가 답하지 않은 503 의 문장 — 읽기는 «반영»을 말하지 않는다', () => {
+  it.each([
+    ['GET', DB_UNREACHABLE_READ_MESSAGE],
+    ['HEAD', DB_UNREACHABLE_READ_MESSAGE],
+    ['OPTIONS', DB_UNREACHABLE_READ_MESSAGE],
+    ['POST', DB_UNREACHABLE_WRITE_MESSAGE],
+    ['PUT', DB_UNREACHABLE_WRITE_MESSAGE],
+    ['PATCH', DB_UNREACHABLE_WRITE_MESSAGE],
+    ['DELETE', DB_UNREACHABLE_WRITE_MESSAGE],
+  ] as const)('%s → 503 · 그 문장', async (method, message) => {
+    const app = Fastify({ logger: false })
+    registerErrorHandler(app)
+    // HEAD 는 GET 라우트가 받는다(Fastify 의 `exposeHeadRoutes`) — 본문은 버려지므로 `content-length`로 문장의 길이를 본다.
+    app.route({
+      method: ['GET', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'],
+      url: '/lost',
+      handler: async () => {
+        throw new DbConnectionLostError(new Error('끊겼다'))
+      },
+    })
+    try {
+      const res = await app.inject({ method, url: '/lost' })
+      expect(res.statusCode).toBe(503)
+      const expected = JSON.stringify({ error: { code: 'internal', message } })
+      if (method === 'HEAD') expect(res.headers['content-length']).toBe(String(Buffer.byteLength(expected)))
+      else expect(envelope(res.body)).toEqual({ code: 'internal', message })
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('읽기 문장은 «반영»을 말하지 않는다 · 쓰기 문장은 모른다고 말한다', () => {
+    expect(DB_UNREACHABLE_READ_MESSAGE).not.toContain('반영')
+    expect(DB_UNREACHABLE_WRITE_MESSAGE).toContain('반영됐는지 알 수 없습니다')
   })
 })

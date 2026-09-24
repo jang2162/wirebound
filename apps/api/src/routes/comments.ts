@@ -135,10 +135,11 @@ import {
   type WbNode,
 } from '@wirebound/schema'
 import { requestActor, requestClientKind, requestEventActor } from '../auth/actor'
-import { outOfTokenScope, projectGuard, recheckProjectRole } from '../auth/roles'
+import { outOfTokenScope, projectGuard, recheckProjectRole, requireProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
-import { badRequest, conflict, forbidden, notFound, unauthenticated } from '../errors'
+import type { ProjectRole } from '../db/types'
+import { ApiError, badRequest, conflict, forbidden, notFound, unauthenticated } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
 import {
@@ -147,6 +148,7 @@ import {
   deleteComment,
   findCommentById,
   findCommentByIdempotencyKey,
+  findPostRevision,
   hasCommentTombstone,
   insertComment,
   listComments,
@@ -218,6 +220,70 @@ function notifyMarkerChange(
     // 에이전트가 단 코멘트의 프레임이 사람이 단 것과 구별되지 않는다.
     actor: requestEventActor(request),
     origin: broadcastOrigin(request),
+  })
+}
+
+/** 게시의 가드가 요구하는 역할 — 라우트의 `projectGuard`와 가드 앞 재생의 재방송 판정(`passesPostGuardNow`)이 같은 값을 본다. */
+const POST_MIN_ROLE: ProjectRole = 'editor'
+
+/**
+ * **그 사람이 지금 게시의 가드를 지나는가** — 가드 앞 재생이 재방송하기 전에 본다. 술어는 가드와 같다(`requireProjectRole` ·
+ * `POST_MIN_ROLE` · 토큰 스코프). 재생 자체는 권한을 잃어도 돌려주지만(자기 행이다) **룸에 프레임을 내는 것은 룸에 쓰는
+ * 일**이라 가드를 지나는 사람만 한다 — 안 보면 멤버에서 빠진 사람이 자기가 없는 룸에 재생 한 번마다 프레임 하나를 낸다.
+ * 잠금 안 재생은 이미 가드를 지났으므로 보지 않는다.
+ *
+ * 대가: COMMIT 답을 잃은 사람이 재생 전에 권한까지 잃으면 그 번호 프레임은 아무 연결에도 안 간다 — 룸은 다음 프레임의 `seq`
+ * 에서 `gap`으로 알고 다시 읽는다. 두 사건이 겹쳐야 서는 드문 판이라 그렇게 둔다.
+ *
+ * **던지지 않는다** — 재생은 이미 판정됐다. 거절(`ApiError`)은 «안 지난다»이고, 권한을 못 쟀으면 로그를 남기고 안 보낸다.
+ */
+async function passesPostGuardNow(request: FastifyRequest, projectId: string, userId: string): Promise<boolean> {
+  try {
+    await requireProjectRole(request.server.db, projectId, userId, POST_MIN_ROLE, request.tokenProjectId)
+    return true
+  } catch (error) {
+    if (!(error instanceof ApiError)) request.log.error({ err: error, projectId }, '재생의 재방송 전에 권한을 재지 못했습니다')
+    return false
+  }
+}
+
+/**
+ * **재생이 앞 요청의 번호 프레임을 룸에 다시 보낸다.** 앞 요청이 그 게시로 노드에 번호를 붙였으면(`0015-comment-revision-seq`)
+ * 그 revision 을 `page-changed`로 보내고, 아니면 아무것도 안 보낸다.
+ *
+ * 왜 다시 보내나: COMMIT 답을 잃은 게시는 커밋됐는데 핸들러가 503 으로 끝나 `notifyMarkerChange`에 닿지 않는다. 웹은 같은
+ * 키로 다시 보내 재생을 받는다 — 재생마저 안 보내면 그 번호 프레임은 아무 연결에도 안 가고, 남의 화면은 다음 변경의 `seq`가
+ * 건너뛸 때 «연결이 끊긴 사이의 변경을 놓쳐…»를 띄운다(원인이 틀린 문장). 재생은 앞 요청이 방송했는지 모르므로 다시 보낸다 —
+ * 받는 쪽은 자기 `headSeq` 이하의 프레임을 건너뛴다(`apps/web/src/store/editor-store.ts`의 `applyRemoteChange`).
+ *
+ * **발신 연결을 빼지 않는다** — 쓴 사람의 화면도 그 프레임을 못 받았다(앞 요청의 방송이 났어도 그 연결은 빠졌고, 재생 응답의
+ * `markerOps`는 빈 배열이다 — `replayOf`). actor 는 revision 에 적힌 값이고 경고는 싣지 않는다(revision 이 경고를 안 든다).
+ *
+ * **그 revision 이 지금 페이지의 머리일 때만 보낸다**(`pageHeadSeq === seq`). 뒤에 revision 이 더 있으면 그것의 방송이 이미
+ * 나갔거나 나가는 중이다 — 이 번호 프레임을 놓친 연결은 그 `seq`가 건너뛰는 것을 보고 이미 `gap`이다(다시 읽기를 기다린다).
+ * 그때 옛 `seq`를 보내면 받는 쪽은 그것을 «다음 번호»로 얹고 `gap`을 풀어, 뒤의 revision 이 빠진 화면을 최신으로 둔다
+ * (`test/comment-replay-broadcast.test.ts`의 «뒤에 남의 revision 이 있으면»). 머리를 읽는 것과 보내는 것 사이에 남의 편집이
+ * 커밋되면 그 방송과 이 방송이 연결마다 앞서거니 뒤서거니 한다(`ws/broadcast.ts`의 `deliver`가 연결마다 권한을 재고 보낸다) —
+ * 두 방송이 겹치면 늘 있는 성질이고, 이 조건이 좁히는 것은 «재생이 늦게 와서 옛 번호를 보내는» 판이다.
+ *
+ * **던지지 않는다** — 재생은 이미 판정됐다. 조회가 실패하면 로그만 남긴다(`ws/notify.ts` 머리말 «던지지 않는다»와 같다).
+ */
+async function rebroadcastPostRevision(app: FastifyInstance, projectId: string, pageId: string, commentId: string): Promise<void> {
+  let revision
+  try {
+    revision = await findPostRevision(app.db, pageId, commentId)
+  } catch (error) {
+    app.log.error({ err: error, projectId, pageId, commentId }, '재생의 번호 프레임을 읽지 못했습니다')
+    return
+  }
+  if (revision === null || revision.pageHeadSeq !== revision.seq) return
+  notifyPageChanged(app, {
+    projectId,
+    pageId,
+    seq: revision.seq,
+    ops: revision.ops,
+    warnings: NO_WARNINGS,
+    actor: { type: revision.actorType, label: revision.actorLabel },
   })
 }
 
@@ -439,7 +505,11 @@ export async function replayBeforeGuard(request: FastifyRequest, reply: FastifyR
   } catch {
     return undefined
   }
-  return reply.code(200).send(replayOf(existing, body.data, document, page.headSeq))
+  const replay = replayOf(existing, body.data, document, page.headSeq)
+  if (await passesPostGuardNow(request, projectId, currentUser.id)) {
+    await rebroadcastPostRevision(request.server, projectId, pageId, existing.id)
+  }
+  return reply.code(200).send(replay)
 }
 
 function toResponse(comment: CommentRecord) {
@@ -558,11 +628,11 @@ export function commentRoutes() {
      * 이미 달렸으면 앞 행을 200 으로 돌려준다(`replayOf`, `0012-comment-idempotency-key`). **그 판정은
      * 권한 가드보다 먼저다**(`preValidation` — `replayBeforeGuard`). 적는 순서와 도는 순서가 반대다:
      * Fastify 는 `preValidation`을 `preHandler`보다 먼저 돌린다. **가드 앞에 무엇이 달렸는지는 값으로 잰다** —
-     * `test/pre-guard-hook-census.test.ts`의 허용 목록에 이 훅이 이 라우트의 것으로 있다. `preHandler`를 먼저
-     * 적는 것은 가드가 걸린 라우트를 소스에서 세는 자들(`permission-matrix.test.ts` · `restore-lock-census.test.ts`)의
-     * 글꼴이다 — 뒤집으면 뒤의 것만 «반대편»으로 죽고 앞의 것은 이 라우트를 분모에서 조용히 잃는다.
+     * `test/pre-guard-hook-census.test.ts`의 허용 목록에 이 훅이 이 라우트의 것으로 있다. 옵션을 적는 순서는 뜻이 없다 —
+     * 가드가 걸린 라우트를 세는 자들(`permission-matrix.test.ts` · `restore-lock-census.test.ts`)은 등록된 값으로 센다
+     * (`test/guarded-routes.ts`).
      */
-    app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard('editor'), preValidation: replayBeforeGuard }, async (request, reply) => {
+    app.post('/:projectId/pages/:pageId/comments', { preHandler: projectGuard(POST_MIN_ROLE), preValidation: replayBeforeGuard }, async (request, reply) => {
       const { projectId, pageId } = parseParams(PageParams, request.params)
       const body = parseBody(CreateCommentBody, request.body)
 
@@ -669,12 +739,14 @@ export function commentRoutes() {
           body: body.body,
           authorId: currentUser.id,
           ...(key === undefined ? {} : { idempotencyKey: key }),
+          revisionSeq: outcome.seq,
         })
         return { comment, seq: outcome.seq, marker, markerOps: ops, warnings: outcome.warnings }
       })
 
-      // 잠금 안에서 같은 키를 찾았다 — 이 요청은 아무것도 안 바꿨다(알릴 것도 없다).
-      if ('replay' in result) {
+      // 잠금 안에서 같은 키를 찾았다 — 이 요청은 아무것도 안 바꿨다. 앞 요청의 번호 프레임은 다시 보낸다(`rebroadcastPostRevision`).
+      if ('replay' in result && result.replay !== undefined) {
+        await rebroadcastPostRevision(app, projectId, pageId, result.replay.comment.id)
         reply.code(200)
         return result.replay
       }
