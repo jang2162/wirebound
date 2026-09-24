@@ -1,0 +1,13 @@
+{
+  // **내보내기 워커 스레드가 tsx 로 소스를 실을 때만 읽는다**(`src/services/export-worker.ts`의 `spawn`이 `TSX_TSCONFIG_PATH`로 준다).
+  // 타입검사 · 빌드는 이것을 안 본다 — **이름이 `tsconfig*.json`이 아닌 까닭이다.** 루트 `pnpm typecheck`가 `apps/*/tsconfig*.json`을
+  // 전부 `tsc --build`하는데, 이것이 거기 걸리면 `outDir` 없이 `packages/*/src`까지 들어 소스 옆에 `.js`·`.d.ts`를 수백 개 내보내고
+  // 브라우저 파일(`packages/exporter/src/runtime/browser.ts`)에서 `window`를 못 찾아 실패한다.
+  //
+  // vitest 포크처럼 `--conditions development`로 뜨면 워커가 `packages/*/src`의 `.tsx`까지 싣는데, tsx 는 tsconfig 의 `include`에 든
+  // 파일에만 `jsx`를 건다 — 여기 안 들면 고전 변환(`React.createElement`)으로 떨어져 워커가 «React is not defined»로 죽는다.
+  // `tsx src/main.ts`로 도는 api 에서는 워커가 `packages/*`의 `dist`를 실으므로 여기 걸릴 `.tsx`가 없다.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "jsx": "react-jsx", "noEmit": true },
+  "include": ["src", "../../packages/*/src"]
+}

@@ -26,9 +26,10 @@
 import type { BundleComment } from '@wirebound/exporter'
 import { migrateDocument, targetedPages, type PageDocument, type TargetedPage } from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
-import { listProjectComments } from '../repos/comments'
+import { listProjectComments, type CommentRecord } from '../repos/comments'
 import { listMenuRows } from '../repos/menu'
 import { listPages, type PageRecord } from '../repos/pages'
+import type { MenuRow } from './menu-tree'
 
 /** 페이지가 하나도 없는 프로젝트. 호출자가 409로 매핑한다. */
 export class EmptyProjectError extends Error {
@@ -63,13 +64,37 @@ export interface ExportSource {
   descriptionById: Map<string, string | null>
 }
 
-/** 두 내보내기가 함께 쓰는 입력을 모은다. */
-export async function collectExportSource(
-  db: DbHandle,
-  projectId: string,
-): Promise<ExportSource> {
-  const menuRows = await listMenuRows(db, projectId)
-  const pageRecords = await listPages(db, projectId)
+/**
+ * **DB 에서 읽은 그대로** — 조립 전의 행들. 메인 스레드가 읽고 내보내기 워커로 넘긴다(`export-worker.ts`).
+ *
+ * **읽기와 조립을 가른 이유:** 조립(`assembleExportSource` — 문서 마이그레이션)부터 그 뒤의 렌더·압축까지는 순수 CPU
+ * 이고 크기에 비례해 이벤트 루프를 멈춘다. 그 몫을 워커로 보내려면 워커가 받을 값이 DB 를 모르는 값이어야 한다 —
+ * 워커는 풀도 트랜잭션도 갖지 않는다.
+ */
+export interface ExportRows {
+  menu: MenuRow[]
+  /** `listPages` 그대로 — 문서는 **마이그레이션 전**이다. */
+  pages: PageRecord[]
+  comments: CommentRecord[]
+}
+
+/**
+ * 두 내보내기가 함께 쓰는 행을 읽는다. **페이지가 없으면 여기서 멈춘다**(`EmptyProjectError`) — 워커를 부를 일이 없다.
+ *
+ * 순서는 머리말 «아래 순서 자체가 규격이다»의 1 · 3 이다. 2 는 `assembleExportSource`가 한다.
+ */
+export async function readExportRows(db: DbHandle, projectId: string): Promise<ExportRows> {
+  const menu = await listMenuRows(db, projectId)
+  const pages = await listPages(db, projectId)
+  if (pages.length === 0) throw new EmptyProjectError()
+  return { menu, pages, comments: await listProjectComments(db, projectId) }
+}
+
+/**
+ * 읽은 행을 두 내보내기의 입력으로 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다.
+ */
+export function assembleExportSource(rows: ExportRows): ExportSource {
+  const { menu: menuRows, pages: pageRecords } = rows
   if (pageRecords.length === 0) throw new EmptyProjectError()
 
   /**
@@ -111,7 +136,7 @@ export async function collectExportSource(
   return {
     ordered,
     documentById: documentsByPageId(pageRecords, ordered),
-    commentsById: await commentsByPageId(db, projectId),
+    commentsById: commentsByPageId(rows.comments),
     descriptionById: new Map(pageRecords.map((record) => [record.id, record.description ?? null])),
   }
 }
@@ -144,16 +169,12 @@ function documentsByPageId(
 }
 
 /**
- * 프로젝트의 코멘트를 **한 문장으로** 받아 페이지별로 가른다.
+ * 프로젝트의 코멘트(**한 문장으로** 받은 것 — `readExportRows`)를 페이지별로 가른다.
  *
  * `createdAt`은 ISO 문자열로 낸다 — `BundleComment`가 문자열을 받고, 산출물은 그것을
  * 그대로 싣는다(정렬은 `listProjectComments`의 계약이 이미 정했다).
  */
-async function commentsByPageId(
-  db: DbHandle,
-  projectId: string,
-): Promise<Map<string, BundleComment[]>> {
-  const rows = await listProjectComments(db, projectId)
+function commentsByPageId(rows: readonly CommentRecord[]): Map<string, BundleComment[]> {
   const byPage = new Map<string, BundleComment[]>()
   for (const row of rows) {
     const entries = byPage.get(row.pageId) ?? []

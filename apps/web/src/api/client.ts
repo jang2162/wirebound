@@ -542,8 +542,14 @@ export interface ApiClient {
    *
    * **페이지가 하나도 없으면 409다.** 빈 번들을 내면 받는 사람이 푼 뒤에야 비었다는 것을
    * 안다.
+   *
+   * **시간 제한은 없고 `cancel`은 듣는다** — 패널이 닫히거나 다시 부르면 끊는다(`shell/export-panel.tsx`의 `load`).
    */
-  getExportPreview(projectId: string, format: ExportFormat): Promise<ExportPreview>
+  getExportPreview(
+    projectId: string,
+    format: ExportFormat,
+    options?: Pick<ReadOptions, 'cancel'>,
+  ): Promise<ExportPreview>
   /**
    * 파일을 받는 **주소**(zip 또는 pptx). 요청을 보내지 않는다 — 반환한 것을
    * `<a download href>`에 그대로 건다.

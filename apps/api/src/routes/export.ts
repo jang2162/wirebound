@@ -7,7 +7,8 @@
  * | `GET /:projectId/export[?format=]` | 파일 그 자체 (zip 또는 pptx) | viewer |
  *
  * HTTP·zod 검증만 다룬다 — SQL은 `repos/`가, 조립은 `services/export-bundle.ts`가,
- * 압축은 `services/export-zip.ts`가 한다(README "계층 규칙").
+ * 압축은 `services/export-zip.ts`가 한다(README "계층 규칙"). **조립과 압축은 워커 스레드에서 돈다** —
+ * 여기서는 읽기만 하고 넘긴다(`services/export-worker.ts`).
  *
  * ---
  *
@@ -92,27 +93,23 @@
  * 테마 고르기). 페이지를 하나 만들면 되는 **고쳐질 수 있는 상태**다. 404는 *"없다"*로
  * 끝나고 `projectGuard`가 outsider에게 이미 그것을 낸다.
  */
-import type { FastifyInstance, FastifyReply } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { projectGuard } from '../auth/roles'
 import { conflict, notFound } from '../errors'
 import { parseParams, parseQuery } from '../http/parse'
 import { findProjectById } from '../repos/projects'
-import {
-  EmptyProjectError,
-  UnsupportedDocumentError,
-  exportProjectBundle,
-  type ProjectBundle,
-} from '../services/export-bundle'
-import { exportProjectPptx, type ProjectPptx } from '../services/export-pptx'
+import { EmptyProjectError, UnsupportedDocumentError, readExportRows } from '../services/export-source'
+import { readScreenTheme } from '../services/export-pptx'
+import { ExportAbortedError, ExportWorkerPool } from '../services/export-worker'
+import type { HtmlJobResult, PptxJobResult } from '../services/export-worker-protocol'
+import { currentProjectTheme } from '../services/project-theme'
 import type { ScreenRenderer } from '../services/screen-render'
 import {
   PPTX_CONTENT_TYPE,
   bundleFileName,
   bundleRootDirectory,
   pptxFileName,
-  zipBundle,
-  zipParts,
 } from '../services/export-zip'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
@@ -152,16 +149,84 @@ async function orFail<T>(build: () => Promise<T>): Promise<T> {
   }
 }
 
-function buildOrFail(app: FastifyInstance, projectId: string): Promise<ProjectBundle> {
-  return orFail(() => exportProjectBundle(app.db, projectId))
+/**
+ * **읽기는 여기(메인)서, 조립부터는 워커가** 한다 — `services/export-worker.ts`의 머리말. 읽기는 트랜잭션 밖 단문이라
+ * 워커에 넘길 때 쥔 연결이 없다.
+ *
+ * `zipRoot`가 `null`이면 압축하지 않는다(미리보기).
+ */
+function buildHtmlOrFail(
+  app: FastifyInstance,
+  workers: ExportWorkerPool,
+  projectId: string,
+  zipRoot: string | null,
+  signal: AbortSignal,
+): Promise<HtmlJobResult> {
+  return orFail(async () => {
+    const rows = await readExportRows(app.db, projectId)
+    const { themeId, theme } = await currentProjectTheme(app.db, projectId)
+    return workers.runHtml(rows, { kind: 'html', theme: { themeId, theme }, zipRoot }, { signal })
+  })
 }
 
+/**
+ * pptx 도 같다 — 다만 **테마 읽기와 그리기는 메인에 남는다**(DB 와 브라우저를 메인이 쥔다). 워커가 그려 달라면 여기서
+ * `renderer`를 부른다. 그리는 자가 없으면 테마도 안 읽는다(`services/export-pptx.ts`의 «그리는 것은 이음매 뒤다»).
+ */
 function buildPptxOrFail(
   app: FastifyInstance,
+  workers: ExportWorkerPool,
   projectId: string,
   renderer: ScreenRenderer | undefined,
-): Promise<ProjectPptx> {
-  return orFail(() => exportProjectPptx(app.db, projectId, { renderer }))
+  zip: boolean,
+  signal: AbortSignal,
+): Promise<PptxJobResult> {
+  return orFail(async () => {
+    const rows = await readExportRows(app.db, projectId)
+    const screenTheme = renderer === undefined ? null : await readScreenTheme(app.db, projectId)
+    return workers.runPptx(
+      rows,
+      { kind: 'pptx', screenTheme, zip },
+      { signal, ...(renderer === undefined ? {} : { render: (requests) => renderer.render(requests) }) },
+    )
+  })
+}
+
+/**
+ * **요청이 끊기면 일을 버린다**(`services/export-worker.ts`의 표). 응답을 끝내기 전에 연결이 닫힌 것이 «끊김»이다 —
+ * 다 보낸 뒤의 `close`는 아니다.
+ */
+function abortOnClientGone(request: FastifyRequest, reply: FastifyReply): AbortSignal {
+  const controller = new AbortController()
+  // 가드(`projectGuard`)가 DB 를 읽는 사이에 이미 끊겼으면 `close`는 지나갔다 — 기다려도 안 온다.
+  if (request.raw.socket?.destroyed === true) {
+    controller.abort()
+    return controller.signal
+  }
+  reply.raw.once('close', () => {
+    if (!reply.raw.writableFinished) controller.abort()
+  })
+  return controller.signal
+}
+
+/**
+ * 끊긴 요청에는 **답하지 않는다** — 받을 사람이 없다. 오류 처리기로 보내면 «처리되지 않은 예외»로 적히고 닫힌 연결에
+ * 500 을 쓰려 한다.
+ */
+function quietWhenGone<R>(
+  handler: (request: FastifyRequest, reply: FastifyReply) => Promise<R>,
+): (request: FastifyRequest, reply: FastifyReply) => Promise<R | FastifyReply> {
+  return async (request, reply) => {
+    try {
+      return await handler(request, reply)
+    } catch (error) {
+      if (!(error instanceof ExportAbortedError)) throw error
+      request.log.info('요청이 끊겨 내보내기를 멈췄다')
+      reply.hijack()
+      reply.raw.destroy()
+      return reply
+    }
+  }
 }
 
 /**
@@ -184,6 +249,10 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
   const screenRenderer = options?.screenRenderer
 
   return async function plugin(app: FastifyInstance): Promise<void> {
+    // **앱 하나에 풀 하나** — 앱이 닫히면 워커도 끝낸다. 워커는 처음 내보낼 때 뜬다(`services/export-worker.ts`).
+    const workers = new ExportWorkerPool()
+    app.addHook('onClose', () => workers.close())
+
     /**
      * **내려받기 버튼이 조용히 성공하면 안 된다**(D6 · P8-2 이월 §7).
      *
@@ -202,12 +271,13 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
      * 거짓을 말한다. P8-3이 *"번들 자신이 말한다"*로 닫은 그대로 둔다(그 페이지의 상태
      * 줄에 이유가 뜬다).
      */
-    app.get('/:projectId/export/preview', { preHandler: projectGuard('viewer') }, async (request) => {
+    app.get('/:projectId/export/preview', { preHandler: projectGuard('viewer') }, quietWhenGone(async (request, reply) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
       const { format } = parseQuery(FormatQuery, request.query)
+      const signal = abortOnClientGone(request, reply)
 
       if (format === 'pptx') {
-        const pptx = await buildPptxOrFail(app, projectId, screenRenderer)
+        const pptx = await buildPptxOrFail(app, workers, projectId, screenRenderer, false, signal)
         return {
           format,
           pages: pptx.pages,
@@ -225,7 +295,7 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
         }
       }
 
-      const bundle = await buildOrFail(app, projectId)
+      const bundle = await buildHtmlOrFail(app, workers, projectId, null, signal)
 
       return {
         format,
@@ -239,7 +309,7 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
         /** 내려받을 때 붙을 이름. **화면이 이것을 지어내지 않는다** — 두 벌이면 갈린다. */
         fileName: bundleFileName(await projectSlug(app, projectId)),
       }
-    })
+    }))
 
     /**
      * **zip 그 자체.**
@@ -252,28 +322,22 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
      * **요청** 쪽이고 응답에는 걸리지 않는다). 번들 전체가 페이지 수의 제곱이므로
      * (P8-2 이월 §4) 언젠가 이 자리가 물음이 된다 — 이월에 적는다.
      */
-    app.get('/:projectId/export', { preHandler: projectGuard('viewer') }, async (request, reply: FastifyReply) => {
+    app.get('/:projectId/export', { preHandler: projectGuard('viewer') }, quietWhenGone(async (request, reply) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
       const { format } = parseQuery(FormatQuery, request.query)
       const slug = await projectSlug(app, projectId)
+      const signal = abortOnClientGone(request, reply)
 
       if (format === 'pptx') {
-        const pptx = await buildPptxOrFail(app, projectId, screenRenderer)
-        /**
-         * **뿌리 폴더가 없다.** `[Content_Types].xml`이 패키지 뿌리에 있어야 하고,
-         * 폴더 하나를 씌우면 받는 쪽이 그것을 못 찾아 **파일이 통째로 안 열린다.**
-         */
-        return sendFile(reply, zipParts(pptx.parts), PPTX_CONTENT_TYPE, pptxFileName(slug))
+        // **뿌리 폴더가 없다** — 워커가 `zipParts`로 묶는다(`services/export-job.ts`). `[Content_Types].xml`이 패키지
+        // 뿌리에 있어야 하고, 폴더 하나를 씌우면 받는 쪽이 그것을 못 찾아 **파일이 통째로 안 열린다.**
+        const pptx = await buildPptxOrFail(app, workers, projectId, screenRenderer, true, signal)
+        return sendFile(reply, pptx.zip!, PPTX_CONTENT_TYPE, pptxFileName(slug))
       }
 
-      const bundle = await buildOrFail(app, projectId)
-      return sendFile(
-        reply,
-        zipBundle(bundle.files, bundleRootDirectory(slug)),
-        'application/zip',
-        bundleFileName(slug),
-      )
-    })
+      const bundle = await buildHtmlOrFail(app, workers, projectId, bundleRootDirectory(slug), signal)
+      return sendFile(reply, bundle.zip!, 'application/zip', bundleFileName(slug))
+    }))
   }
 }
 
@@ -295,5 +359,6 @@ function sendFile(
 ): Buffer {
   reply.header('content-type', contentType)
   reply.header('content-disposition', `attachment; filename="${fileName}"`)
-  return Buffer.from(bytes)
+  // 워커가 옮겨 준 버퍼를 그대로 감싼다 — 복제하지 않는다.
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 }

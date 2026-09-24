@@ -2463,4 +2463,30 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
       vi.useRealTimers()
     }
   })
+
+  it('미리보기도 떠나면 끊는다 — 시간 제한 없이 기다리다가, 끊기면 다시 보내지 않는다', async () => {
+    // 끊지 않으면 서버는 연결이 닫힐 때까지 그 내보내기를 끝까지 돌고 다음 미리보기가 그 뒤에 선다
+    // (`shell/export-panel.tsx` 머리말 «앞 요청은 끊는다»).
+    vi.useFakeTimers()
+    try {
+      const stub = hangingFetch('hang', 'hang')
+      const leave = new AbortController()
+      const settled = createHttpClient(stub.fetchImpl)
+        .getExportPreview('p1', 'pptx', { cancel: leave.signal })
+        .then(() => 'resolved', (caught: unknown) => caught)
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(stub.calls[0]?.init?.signal?.aborted).toBe(false)
+
+      leave.abort()
+      await vi.advanceTimersByTimeAsync(DEADLINE * 3)
+      expect(stub.calls).toHaveLength(1)
+      expect(stub.calls[0]?.init?.signal?.aborted).toBe(true)
+      const caught = await settled
+      expect(caught).toBeInstanceOf(ApiError)
+      // 연결 실패로 읽히지 않는다 — 떠난 것이다.
+      expect((caught as ApiError).message).toBe('떠난 화면의 조회를 끊었습니다')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
