@@ -141,7 +141,14 @@ export const KNOWN_USER_QUERY = 'knownUser'
 /** 쿠키의 사용자가 탭이 아는 사용자와 다를 때의 이슈 코드. 웹은 이 코드 하나로 가른다. */
 export const SESSION_USER_CHANGED = 'session-user-changed'
 
-/** 탭이 아는 사용자를 확인하지 않는 라우트 — 쿠키의 사람을 알아내는 길과 쿠키를 바꾸는 길(로그인 · 로그아웃 — 머리말의 표). */
+/**
+ * 탭이 아는 사용자를 확인하지 않는 라우트 — 쿠키의 사람을 알아내는 길과 쿠키를 바꾸는 길(로그인 · 로그아웃 — 머리말의 표).
+ *
+ * **견주는 것은 요청 경로가 아니라 등록된 패턴이다**(`routeOptions.url`). 그 핸들러에 닿는 요청은 쿼리가 붙어도 늘 이 글자다. 끝 슬래시 ·
+ * 겹 슬래시 경로(`/api/auth/logout/`)는 어느 라우트에도 안 닿는 404 라(Fastify `ignoreTrailingSlash` 기본값 — [api] 머리 없이 404,
+ * 머리가 다르면 이 확인의 409) 면제 밖이어도 로그아웃이 막히지 않는다. 접두사를 바꾸면 이 글자도 함께 바꾼다 — 안 바꾸면 면제가
+ * 조용히 사라진다(`test/known-user.test.ts`의 로그아웃 · 로그인 · `me` 케이스가 죽는다).
+ */
 const KNOWN_USER_EXEMPT = new Set(['GET /api/auth/me', 'POST /api/auth/login', 'POST /api/auth/logout'])
 
 /**
