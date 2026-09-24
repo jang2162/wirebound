@@ -221,6 +221,7 @@ export function presetRoutes() {
         // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 이 쓰기는 기다리는 잠금이 거의 없지만 가드와 `DELETE`
         // 사이는 있다 — 그 사이 viewer 로 내려가거나 빠졌으면 가드와 같은 403 · 404 로 되돌린다(`test/guard-in-lock.test.ts`의
         // «프리셋 삭제 — 가드와 커밋 사이»). 행을 잡은 **뒤**에 본다 — 멤버 행 `FOR SHARE`가 그 뒤의 역할 변경을 이 커밋 뒤로 세운다.
+        // «프리셋 행 → 멤버 행» 순이라 프로젝트 삭제가 CASCADE 전에 프리셋 행을 먼저 잡는다(`routes/projects.ts`의 삭제 주석).
         if (gone) await recheckProjectRole(trx, request)
         return gone
       })

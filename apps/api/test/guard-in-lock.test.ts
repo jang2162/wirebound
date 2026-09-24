@@ -30,7 +30,7 @@
  * # 잠금 순서 — 재확인이 연 교착
  *
  * 프로젝트 삭제는 재확인을 위해 기다릴 것을 먼저 잡으므로 잠금 순서가 있다. 아래 `잠금 순서` 절이 그 순서가
- * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 삭제가 owner 행을 멤버 쓰기와 같은 순서로 재확인 앞에서 잡는지를 한 판(E12)으로, 메뉴 행을 owner 행 앞에서 잡아 메뉴 제목 쓰기와 고리를 안 만드는지를 세 판(E13)으로, 삭제가 쥔 행에 선 바탕 없는 제목 쓰기가 404 인지를 두 판(E14)으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
+ * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 삭제가 owner 행을 멤버 쓰기와 같은 순서로 재확인 앞에서 잡는지를 한 판(E12)으로, 메뉴 행을 owner 행 앞에서 잡아 메뉴 제목 쓰기와 고리를 안 만드는지를 세 판(E13)으로, 프리셋 행을 같은 자리에서 잡아 프리셋 삭제와 고리를 안 만드는지를 두 판(E15)으로, 삭제가 쥔 행에 선 바탕 없는 제목 쓰기가 404 인지를 두 판(E14)으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
  * 삭제의 CASCADE 와 고리를 안 만드는지(프로젝트 행 → 자기 행 → 멤버 행)를 아홉 판(E3–E11)으로, 코멘트 수정이 코멘트 행을
  * 지우는 두 쓰기 · 역할 변경과 3자 고리를 안 만드는지(프로젝트 행 → 페이지 행 → 멤버 행 → 코멘트 행)를 두 판(F3 · F3′)으로 잰다.
  */
@@ -825,11 +825,13 @@ describe('프리셋 삭제 — 가드와 커밋 사이의 강등도 커밋 순�
     await sql`create trigger zz_slow_preset_delete before delete on presets for each row execute function zz_slow_preset_delete()`.execute(db)
     try {
       const removal = fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/presets/${presetId}`)
-      // 트리거의 잠에 든 것을 본다 — 가드는 이미 지났다.
+      // 트리거의 잠에 든 것을 본다 — 가드는 이미 지났다. `query`로 찾지 않는다: 그 칸은 최상위 문장(`delete from presets …`)이라
+      // 트리거 안의 글자가 안 보이고, 찾는 글자를 담은 이 조회문 자신에 걸려 잠든 쓰기가 없어도 1 을 센다. 잠은 `wait_event`로 본다.
       const deadline = Date.now() + 5_000
       for (;;) {
         const { rows } = await sql<{ n: number }>`
-          select count(*)::int as n from pg_stat_activity where datname = current_database() and query like '%pg_sleep(1)%' and state = 'active'
+          select count(*)::int as n from pg_stat_activity
+           where datname = current_database() and wait_event = 'PgSleep' and pid <> pg_backend_pid()
         `.execute(db)
         if ((rows[0]?.n ?? 0) >= 1) break
         if (Date.now() > deadline) throw new Error('삭제가 트리거에 서지 않았다 — 판이 서지 않았다')
@@ -1371,6 +1373,72 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
 
         expect(removed.status, removed.body).toBe(204)
         expect(renamed.status, renamed.body).toBe(404)
+      })
+    }, 60_000)
+  }
+
+  /**
+   * **E15 — 프리셋 삭제가 프리셋 행을 쥔 채 재확인에 서 있을 때 프로젝트 삭제.** 프리셋 삭제는 프로젝트 행을 안 잡고 «프리셋 행
+   * (`DELETE`) → 재확인(자기 멤버 행 `FOR SHARE`)» 순이다(`routes/presets.ts`) — E13 의 메뉴 제목 쓰기와 같은 모양이다. 판을 세우는
+   * 문도 E13 과 같다: 쓰는 사람의 멤버 행을 쥔 채 삭제를 먼저(그 행에 선다), 프리셋 삭제를 다음에 세우고 푼다. 삭제가 프리셋 행을
+   * owner 행 **앞에서** 잡으면(`routes/projects.ts` — `lockProjectPresets`) 프리셋 삭제가 그 행에서 삭제를 기다렸다가 0 행 → 404 다.
+   *
+   * | 변조(`routes/projects.ts`) | 죽는 것 |
+   * |---|---|
+   * | 삭제가 `lockProjectPresets`를 안 부른다 | 둘 다 — 교착 +1 · 한쪽 500 |
+   * | `lockProjectPresets`를 `lockOwnerIds` **뒤로** | **owner 판 혼자** — owner 는 `lockOwnerIds`에서 이미 잡혀 있어 그 뒤의 프리셋 대기가 고리를 닫는다. editor 는 CASCADE 에서 잡히므로 그 앞이면 된다 |
+   *
+   * editor 판은 혼자 죽는 변조가 없다 — 그 판이 따로 재는 것은 쓰는 사람이 CASCADE 에서 잡히는 자리인데, 그 자리보다 늦게 잡는
+   * 변조는 owner 판의 자리(`lockOwnerIds`)보다도 늦다. 잠금 자리의 축은 owner 판이 소유한다.
+   *
+   * 재확인을 `DELETE` **앞**으로 옮기는 길은 이 판에서는 초록이지만 고르지 않았다 — 그 까닭은 삭제 주석(CASCADE 순서).
+   */
+  for (const probe of [
+    { label: 'owner', writer: 'bob' as const },
+    { label: 'editor', writer: 'carol' as const },
+  ]) {
+    it(`E15 — 프리셋 삭제(${probe.label})가 프리셋 행을 쥔 채 재확인에 섰을 때 삭제: 삭제 204 · 프리셋 삭제 404 · 교착 0`, async () => {
+      await withRealApi(async (ctx) => {
+        const alice = await signup(ctx)
+        const bob = await signup(ctx)
+        const carol = await signup(ctx)
+        const project = await createProject(ctx, alice.cookie)
+        await addMember(ctx, project.id, bob.user.id, 'owner')
+        await addMember(ctx, project.id, carol.user.id, 'editor')
+        const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
+        await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
+        const writer = probe.writer === 'bob' ? bob : carol
+        const made = await ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${project.id}/presets`,
+          cookies: writer.cookie,
+          payload: { name: '지울 프리셋', schema: [] },
+        })
+        expect(made.statusCode, made.body).toBe(201)
+        const presetId = (made.json() as { id: string }).id
+
+        const deadlocksBefore = await deadlockCount()
+        const door = queueLock(async (trx) => {
+          await sql`select 1 from project_members where project_id = ${project.id} and user_id = ${writer.user.id} for update`.execute(trx)
+        })
+        await door.acquired
+        let removal: Fired | undefined
+        let presetRemoval: Fired | undefined
+        try {
+          removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${project.id}`, cookies: alice.cookie }))
+          await waitForLockWaiter(1)
+          presetRemoval = track(
+            ctx.app.inject({ method: 'DELETE', url: `/api/projects/${project.id}/presets/${presetId}`, cookies: writer.cookie }),
+          )
+          await waitForLockWaiter(2)
+        } finally {
+          await door.release()
+        }
+        const [removed, presetRemoved] = await Promise.all([removal.promise, presetRemoval.promise])
+
+        expect(await deadlockCount()).toBe(deadlocksBefore)
+        expect(removed.status, removed.body).toBe(204)
+        expect(presetRemoved.status, presetRemoved.body).toBe(404)
       })
     }, 60_000)
   }
@@ -2036,7 +2104,7 @@ const NOT_LOCKED: Record<string, string> = {
   'DELETE /api/projects/:projectId/members/:userId':
     '멤버 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
   'DELETE /api/projects/:projectId/presets/:presetId':
-    '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404). 가드와 커밋 사이는 재확인한다 — 위 «프리셋 삭제 — 가드와 커밋 사이»',
+    '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제가 CASCADE 전에 쥔 프리셋 행에는 서지만 404 — «E15»). 가드와 커밋 사이는 재확인한다 — 위 «프리셋 삭제 — 가드와 커밋 사이»',
   'DELETE /api/projects/:projectId/tokens/:tokenId':
     '토큰 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404). 재확인하지 않는다 — 지우는 것은 자기 토큰뿐(`deleteApiToken`의 `user_id`)이고 권한을 줄이는 쓰기다. 걸면 제외 · 로그아웃 직후의 폐기가 롤백돼, 멤버에서 빠져도 남는 토큰 행이 다시 멤버가 될 때 되살아난다',
   'WS ping': '아무것도 안 쓴다',
