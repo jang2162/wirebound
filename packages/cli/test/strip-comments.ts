@@ -11,12 +11,22 @@
  * `io.fetch('x')`). 따옴표는 원문 그대로다(`setParentNodes`가 원문 리터럴을 찾게 한다). 그래서 이 출력에
  * 거는 술어는 공백을 `\s*`로 받는 꼴이어야 하고, 줄 번호를 세면 안 된다.
  *
- * **못 걷는 것: 파일 맨 앞의 `/*!` 주석.** 프린터가 고정 주석으로 보고 남긴다(실측 — 중간의 `/*!`는
- * 걷힌다). 그 안의 글자는 거짓 빨강만 낼 수 있다 — 코드를 지우는 방향이 아니다.
+ * **못 걷는 것: 파일 맨 앞의 `/*!` 주석 가운데 뒤에 빈 줄이 오는 것.** 프린터가 떨어진 고정 주석으로 보고
+ * 남긴다(실측 — 코드가 바로 붙으면 걷히고, 중간의 `/*!`도 걷힌다). 그 안의 글자는 거짓 빨강만 낼 수 있다 —
+ * 코드를 지우는 방향이 아니다.
+ *
+ * **구문 오류가 든 소스는 읽지 않고 던진다.** 파서는 오류를 건너뛰며 트리를 복구하는데, 그 복구가 **코드를
+ * 지운다** — `@@@ process.exit(1)`은 빈 글자로, `const x = ) process.exit(1)`은 `process, exit`로 찍혀 술어가
+ * 못 본다(실측). 그 소스는 `pnpm typecheck`가 따로 막지만, 자를 혼자 돌리면 거짓 초록이다. 판정은 `transpileModule`
+ * 의 구문 진단이다 — 타입 오류는 여기서 보지 않는다.
  */
 import ts from 'typescript'
 
 export function stripComments(source: string): string {
+  const [broken] = ts.transpileModule(source, { fileName: 'source.ts', reportDiagnostics: true }).diagnostics ?? []
+  if (broken !== undefined) {
+    throw new Error(`구문 오류가 든 소스는 주석을 걷지 않는다: ${ts.flattenDiagnosticMessageText(broken.messageText, '\n')}`)
+  }
   const file = ts.createSourceFile('source.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   return ts.createPrinter({ removeComments: true }).printFile(file)
 }
