@@ -158,7 +158,7 @@ export function findViolations(source: string): Violation[] {
   try {
     code = stripComments(source)
   } catch (error) {
-    // 구문이 깨진 소스는 주석을 걷을 수 없다(파서의 복구가 코드를 지운다) — 읽지 못한 것을 조용히 넘기지 않는다.
+    // 구문이 깨진 소스는 주석 구간을 믿을 수 없다(닫히지 않은 블록 주석은 뒤의 코드까지 지운다 — `stripComments` 머리말). 읽지 못한 것을 조용히 넘기지 않는다.
     return [{ check: 'unreadable', snippet: normalize(source.slice(-60)), message: (error as Error).message }]
   }
 
