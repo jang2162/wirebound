@@ -1541,6 +1541,39 @@ N-A 를 막을 때 리뷰어가 제시한 두 안을 **둘 다 안 골랐다** �
 
 3회의 **VP** 와 낮은 이월, 2회의 이월(F5 · `lockOwnerIds` 창 등), 7차의 **H · K** 는 그대로다.
 
+### 3.28 **개발 프록시가 끊음을 전한다 · 코드 문자열이 지금을 말한다 · 결함 후보 넷(2026-09-24)** — 이월 6차 1회
+
+> 세 트랙을 나란히 — VP `fix/vite-proxy-abort`(웹 개발 서버 설정) · CS `fix/code-strings`(문자열 26 파일) · DR `fix/defect-repro`(속성 패널 · 시스템 테마 · mcp · cli 테스트).
+> 병합 순서 VP `c5e6647` → CS `0ce8568` → DR `989a12b`(DR 은 앞 둘 위로 rebase — 충돌 0).
+> VP · CS 는 **리뷰 없이** 병합했다. VP 는 개발 서버 설정 한 줄이고 전후 값 · 쓰기 결과가 재어져 있다. CS 는 문자열만 바꿨고, 파일마다 문자열을 자리표로 바꾼 AST 비교로 `다른 코드 0` 을 증명했다. 이 비교가 못 보는 «값으로 쓰이는 문자열»은 바뀐 61 개를 한 줄씩 읽어 메웠다.
+> DR 은 새 통로(캔버스 → 패널 구조 표)를 세워서 좁은 리뷰를 한 번 돌렸다. 리뷰의 높음은 0 이다. 낮은 거짓 초록 둘은 리뷰어가 테스트 파일만 고쳐 닫았다 — 구문 오류 소스에서 파서 복구가 코드를 지우는 것, 층 하나만 떼어 보는 가운데 정렬 자. 멈춘 기준은 «새 장치에서 높은 무게가 안 나왔다»다.
+
+#### 닫은 것
+
+| 이월 | 오늘 값(고치기 전) | 막은 방법 · 값 |
+|---|---|---|
+| **VP** 개발 프록시가 클라이언트 끊김을 api 로 전하지 않는다 | [api 값 · 무거운 미리보기 · 400ms 에 끊음] 프록시 경유는 끊음을 모른 채 793ms 에 완료, api 직접은 404ms 에 멈춤. 원인: http-proxy 는 본문을 다 보내기 전과 응답이 흐르기 시작한 뒤만 끊고, «본문은 갔고 답은 아직» 사이는 전할 자가 없다 | `vite.config.ts` 의 `'/api'` 에 `proxyReq` 훅을 걸어 `res` 의 `close` 에서 `proxyReq.destroy()`. 50 · 400 · 800ms 에 끊어도 개발 = 직접. 끊긴 쓰기(설명 · 코멘트)는 훅 전 · 후 · 직접 셋 다 온전히 커밋하고 반쯤 된 판 0. WS 업그레이드는 영향 없음. `writableEnded` 가드는 관측 차이가 없어 넣지 않았다. 새 테스트 1 파일 3 케이스(실제 Vite 개발 서버 + 가짜 상류, 훅을 지우면 혼자 죽는다) |
+| **CS** 코드 문자열의 `§N` · 연대기 | 문자열 속 `§` 42 줄 · 연대기 78 줄 | `§` 0 · 연대기 15(plans 가 부르는 테스트 이름 14 · 색 `D97706` 1). 사용자 글은 번호 대신 할 말로: cli `--help` · 테마 편집기 gloss · 페이지 JSON 패널. «전개가 아직 없습니다(P7)»는 거짓이었다 — 갤러리는 컴포넌트만 늘어놓고 전개는 「패턴 넣기」가 한다. 오류 · 경고 문장과 인구조사 `why:` · `SHELL_CSS` · `installRuntime` JSDoc · 로그도 걷었다 |
+| 속성 패널이 캔버스에 없는 필드를 보인다 | [jsdom] 테마 넷(saas-marketing · portal · commerce · docs)에서 `List` 를 고르면 캔버스는 `table` 이 아닌데 패널에 «컬럼»이 보였다. 판정이 두 벌이었다(패널은 카탈로그 첫 구조, 캔버스는 테마 구조) | 캔버스가 쓰는 구조 표를 `canvas/canvas-structures.tsx` 통로로 싣고, 패널은 렌더러와 같은 함수 `resolveStructureOf` 로 판정한다(**`packages/renderer` export +1**). 셸 리렌더 수는 그대로다(리뷰가 렌더 수로 쟀다). 새 케이스 7 |
+| admin · commerce 섹션이 왼쪽에 붙는다 | [실브라우저 · 헤드리스 Chrome · `exportPage` + `setContent`] 1920 폭 좌 / 우 admin 0 / 416 · commerce 0 / 656 | `Section.parts.inner` 에 `marginX: 'auto'`. 후 admin 208 / 208 · commerce 328 / 328. 의도 아님의 근거: 설계서 「컴포넌트 카탈로그」의 «가운데 정렬된 콘텐츠». 자는 층마다 기본 `inner` 위에 겹친 값을 잰다(리뷰 대응) |
+| mcp 모양 검사가 새 갈래를 조용히 통과시킨다 | 갈래를 더하고 `assertShape` 줄을 안 더하면 typecheck 0 · 테스트 171 통과 | `default` 에서 `never` 로 막는다. 이제 typecheck 오류가 난다. 런타임에 닿으면 JSON-RPC `-32603` 이다. 정당한 입력으로는 닿지 않는다(리뷰가 쟀다) |
+| 소스를 읽는 자가 주석에 흔들린다 | cli 넷(`embed-surface` · `assembly-census` · `client-kind` · `io-boundary`). 주석만 바꾸면 거짓 빨강이 났다. 줄 주석 속 `/*` 가 뒤따르는 JSDoc 끝까지 코드를 지워 진짜 위반이 초록인 거짓 초록도 있었다 | `packages/cli/test/strip-comments.ts` 로 TypeScript 프린터가 주석을 걷는다. 구문 진단이 있으면 던진다(리뷰 대응 — 파서 복구가 코드를 지운다). 새 케이스 5 |
+
+#### 게이트
+
+`main` `989a12b` — **334파일 6240케이스**(등식: 기준 `f41a520` 331 · 6220 + VP 1 · 3 + CS 0 · 0 + DR 2 · 16 + 리뷰 0 · 1). DR 리뷰어가 rebase 한 판에서 쟀다. typecheck 0. build · `test:build` 6 · 72 는 CS · DR 이 각자 쟀다. **마이그레이션 없음** · `packages/renderer` export +1(`resolveStructureOf` · `StructureResolution`).
+
+#### 이월
+
+| # | 무엇 | 사정 |
+|---|---|---|
+| **AW** | admin 테마 `container.maxWidth` 가 `1440px` 인데 설계서 「primitives — 사이트 골격」은 «관리자 화면은 `maxWidth: fluid`» | 테마와 설계서 중 어느 쪽을 고칠지 사용자 판정 |
+| **SC** | 같은 정규식 `stripComments` 가 자 10 자리에 더 있다(api 5 · web 2 · exporter 1 · mcp 2), 변종 둘(`contract-attrs` · `store-access-guard`) | cli 와 같은 거짓 초록 구멍. 모으려면 헬퍼를 패키지 밖 공용 테스트 지원으로 옮기고 `throw` 도 함께 가져간다 |
+| **CK** | 워크트리마다 `SESSION_COOKIE_NAME` 이 `wb_session` 으로 같다. 쿠키는 포트를 가르지 않아, 공유 브라우저로 워크트리에 로그인하면 사용자의 최상위 세션을 덮는다. 그래서 VP 는 실브라우저 확인을 못 했다 | README 「워크트리를 여럿 띄울 때」에 쿠키 이름을 더하는 문장 · 에디터가 쿠키 이름을 몰라도 되는지 확인 |
+| — | 테마 갤러리가 패턴을 안 그린다(`expandPattern` + `renderNode` 로 그릴 수 있다) · 새 안내 문구의 「패턴 넣기」를 재는 단언이 없다 · 사용자 테마의 `Section` 가운데 정렬은 안 잰다(뿌리는 렌더러 구조 CSS 의 `margin-inline: auto`) · mcp 도구와 구현의 짝은 테스트만 막는다 · 소스를 읽는 자가 원래부터 못 잡는 꼴(`io['fetch']` · `from './run.js'`) · 구현 없는 구조에서 패널과 캔버스가 갈린다(탐침에서만) · 실브라우저 끊음 전파 확인 | 낮음 |
+
+5차의 이월(LK2 쪽: F5 · `lockOwnerIds` 창 · 문서 조회 `lock` · 강등 결말 머리 · `lockId` · Y′ 의 틈 / EX2 쪽: 그리기 칸 · 워커 메모리 · 죽은 워커 500 · 워커 줄 한도 · `app.close()` 72s)은 2차로 간다. 7차의 **H · K** 는 그대로다.
+
 ---
 
 ## 6. 게이트
