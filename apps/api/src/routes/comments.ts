@@ -228,11 +228,18 @@ function notifyMarkerChange(
  *
  * 왜 다시 보내나: COMMIT 답을 잃은 게시는 커밋됐는데 핸들러가 503 으로 끝나 `notifyMarkerChange`에 닿지 않는다. 웹은 같은
  * 키로 다시 보내 재생을 받는다 — 재생마저 안 보내면 그 번호 프레임은 아무 연결에도 안 가고, 남의 화면은 다음 변경의 `seq`가
- * 건너뛸 때 «연결이 끊긴 사이의 변경을 놓쳐…»를 띄운다(원인이 틀린 문장). 재생은 앞 요청이 방송했는지 모르므로 늘 보낸다 —
+ * 건너뛸 때 «연결이 끊긴 사이의 변경을 놓쳐…»를 띄운다(원인이 틀린 문장). 재생은 앞 요청이 방송했는지 모르므로 다시 보낸다 —
  * 받는 쪽은 자기 `headSeq` 이하의 프레임을 건너뛴다(`apps/web/src/store/editor-store.ts`의 `applyRemoteChange`).
  *
  * **발신 연결을 빼지 않는다** — 쓴 사람의 화면도 그 프레임을 못 받았다(앞 요청의 방송이 났어도 그 연결은 빠졌고, 재생 응답의
  * `markerOps`는 빈 배열이다 — `replayOf`). actor 는 revision 에 적힌 값이고 경고는 싣지 않는다(revision 이 경고를 안 든다).
+ *
+ * **그 revision 이 지금 페이지의 머리일 때만 보낸다**(`pageHeadSeq === seq`). 뒤에 revision 이 더 있으면 그것의 방송이 이미
+ * 나갔거나 나가는 중이다 — 이 번호 프레임을 놓친 연결은 그 `seq`가 건너뛰는 것을 보고 이미 `gap`이다(다시 읽기를 기다린다).
+ * 그때 옛 `seq`를 보내면 받는 쪽은 그것을 «다음 번호»로 얹고 `gap`을 풀어, 뒤의 revision 이 빠진 화면을 최신으로 둔다
+ * (`test/comment-replay-broadcast.test.ts`의 «뒤에 남의 revision 이 있으면»). 머리를 읽는 것과 보내는 것 사이에 남의 편집이
+ * 커밋되면 그 방송과 이 방송이 연결마다 앞서거니 뒤서거니 한다(`ws/broadcast.ts`의 `deliver`가 연결마다 권한을 재고 보낸다) —
+ * 두 방송이 겹치면 늘 있는 성질이고, 이 조건이 좁히는 것은 «재생이 늦게 와서 옛 번호를 보내는» 판이다.
  *
  * **던지지 않는다** — 재생은 이미 판정됐다. 조회가 실패하면 로그만 남긴다(`ws/notify.ts` 머리말 «던지지 않는다»와 같다).
  */
@@ -244,7 +251,7 @@ async function rebroadcastPostRevision(app: FastifyInstance, projectId: string, 
     app.log.error({ err: error, projectId, pageId, commentId }, '재생의 번호 프레임을 읽지 못했습니다')
     return
   }
-  if (revision === null) return
+  if (revision === null || revision.pageHeadSeq !== revision.seq) return
   notifyPageChanged(app, {
     projectId,
     pageId,

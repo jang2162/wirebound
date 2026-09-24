@@ -71,6 +71,7 @@ async function fixture(ctx: ProxiedRealApi) {
   const watcher = await joinRoom(ctx.port, project.id, peer.cookie.wb_session)
   return {
     owner,
+    peer,
     author,
     watcher,
     url: `/api/projects/${project.id}/pages/${page.id}/comments`,
@@ -110,6 +111,37 @@ describe('COMMIT 답을 잃은 게시의 번호 프레임', () => {
       // 한 번이다 — 재생 하나에 프레임 하나.
       expect(pageChanged(await fx.watcher.quiet())).toEqual([])
       expect(pageChanged(fx.watcher.received)).toHaveLength(1)
+    })
+  })
+
+  /**
+   * **뒤에 남의 revision 이 있으면 옛 번호 프레임을 다시 보내지 않는다.** 그 프레임을 놓친 연결은 남의 프레임(`seq` 2)에서 이미
+   * `gap`이다 — 늦게 온 1 을 웹은 «다음 번호»로 얹고 `gap`을 풀어, 2 가 빠진 화면을 최신으로 둔다. 머리 조건(`routes/comments.ts`의
+   * `rebroadcastPostRevision`)을 떼면 룸이 `[2, 1]`을 받는다. 위 첫 케이스가 그 조건이 «늘 안 보낸다»로 무너지는 것을 잡는다.
+   */
+  it('뒤에 남의 revision 이 있으면 재생은 옛 번호 프레임을 보내지 않는다 — 룸은 남의 것만 받는다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const payload = { nodeId: fx.rootNodeId, body: '닿았던 말', idempotencyKey: 'replay-broadcast-behind' }
+
+      ctx.proxy.dropCommitReplyAfter('insert into "comments"')
+      const first = await ctx.app.inject({ method: 'POST', url: fx.url, cookies: fx.owner.cookie, payload })
+      expect(first.statusCode, first.body).toBe(503)
+      const edited = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`,
+        cookies: fx.peer.cookie,
+        payload: { baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_peer', type: 'Text', props: {} } }] },
+      })
+      expect(edited.statusCode, edited.body).toBe(200)
+      for (const probe of [fx.watcher, fx.author]) expect((await probe.waitFor('page-changed')).seq).toBe(2)
+
+      const again = await ctx.app.inject({ method: 'POST', url: fx.url, cookies: fx.owner.cookie, payload })
+      expect(again.statusCode, again.body).toBe(200)
+      for (const probe of [fx.watcher, fx.author]) {
+        await probe.quiet()
+        expect(pageChanged(probe.received).map((frame) => frame.seq)).toEqual([2])
+      }
     })
   })
 
