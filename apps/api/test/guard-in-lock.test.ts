@@ -483,7 +483,7 @@ async function holdPageLock(projectId: string, pageId: string): Promise<{ releas
 }
 
 /** 쓰기가 잠금에 쥐인 동안 밥에게 일어나는 것 — 권한이 줄거나(`role` · `member`) 요청의 자격이 죽는다(`logout` · `revoke`). */
-type Demotion = 'role' | 'member' | 'logout' | 'revoke'
+type Demotion = 'role' | 'member' | 'logout' | 'revoke' | 'expire'
 
 /**
  * 앨리스가 밥을 **API 로** 내린다 — 역할 한 단계(editor → viewer · owner → editor) 또는 멤버에서 뺀다. `logout` · `revoke`는
@@ -492,6 +492,13 @@ type Demotion = 'role' | 'member' | 'logout' | 'revoke'
  */
 async function demote(ctx: RealApiContext, fx: Fx, bobRole: BobRole, kind: Demotion): Promise<number> {
   const url = `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`
+  if (kind === 'expire') {
+    // **세션의 수명이 잠금을 기다리는 동안 다한다** — 만료 시각을 곧(200ms 뒤)으로 당기고 그 시각이 지날 때까지 기다린다. 쓰기의
+    // 트랜잭션은 그보다 **먼저** 열렸다 — 그 트랜잭션의 `now()`로 보면 아직 산 세션이다. 답할 상태 코드가 없는 일이라 0 이다.
+    await sql`update sessions set expires_at = clock_timestamp() + interval '200 milliseconds' where user_id = ${fx.bob.user.id}`.execute(db)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    return 0
+  }
   if (kind === 'logout') {
     return (await ctx.app.inject({ method: 'POST', url: '/api/auth/logout', cookies: fx.bob.cookie })).statusCode
   }
@@ -577,7 +584,7 @@ async function runHeld(ctx: RealApiContext, probe: Probe, kind: Demotion | null)
  * 가드가 같은 판에서 내는 것 — 역할이 모자라면 403, 멤버가 아니면 404(`requireProjectRole`의 표), 자격이 죽었으면 401
  * (`projectGuard`의 «로그인하지 않았으면»).
  */
-const REFUSED: Record<Demotion, number> = { role: 403, member: 404, logout: 401, revoke: 401 }
+const REFUSED: Record<Demotion, number> = { role: 403, member: 404, logout: 401, revoke: 401, expire: 401 }
 
 describe('페이지 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로 판정한다', () => {
   for (const probe of PROBES) {
@@ -725,6 +732,22 @@ describe('자격이 잠금을 기다리는 동안 죽으면 401 — 커밋 순�
   }
 
   /**
+   * **세션의 수명(TTL)이 잠금을 기다리는 동안 다해도 401 이다.** 만료는 행을 지우지 않는다 — 시각이 지날 뿐이다. 생사의
+   * 술어(`sessionIsLive`)가 트랜잭션 안의 `now()`로 보면 그것은 **트랜잭션이 열린 시각**(잠금 대기 전)이라 이미 지난 만료를
+   * 산 것으로 읽고 커밋한다. 혼자 죽는 변조: `sessionIsLive`의 시각을 `statement_timestamp()`에서 `now()`로 되돌린다.
+   */
+  for (const label of [BARE_COMMENT, WS_PATCH] as const) {
+    it(`${label}: 잠금에 쥐인 채 세션 만료 시각이 지나면 풀린 뒤 401 — 아무것도 안 바뀐다`, async () => {
+      await withRealApi(async (ctx) => {
+        const outcome = await runHeld(ctx, probeLabeled(label), 'expire')
+        expect(outcome.demotedWhileHeld).toBe(true)
+        expect(outcome.status, outcome.body).toBe(REFUSED.expire)
+        expect(outcome.after).toEqual(outcome.before)
+      })
+    }, 60_000)
+  }
+
+  /**
    * **재확인 뒤의 로그아웃은 이 커밋을 기다린다** — 재확인이 세션 행을 `FOR KEY SHARE`로 잡는 까닭이다. 재확인 뒤에 기다림이
    * 남는 쓰기는 코멘트 수정이다(프로젝트 행 → 페이지 행 → 재확인 → 코멘트 행 — `routes/comments.ts`). 코멘트 행을 쥔 채 밥의
    * 수정을 세우고 밥이 로그아웃하면: 잡으면 로그아웃이 수정의 커밋까지 서고(수정 200 이 먼저), 안 잡으면 로그아웃 204 가 먼저
@@ -775,6 +798,67 @@ describe('자격이 잠금을 기다리는 동안 죽으면 401 — 커밋 순�
       // 폐기가 지운 토큰 행 말고는 아무것도 안 바뀐다.
       expect(outcome.after.tokens).toEqual([])
       expect({ ...outcome.after, tokens: [] }).toEqual({ ...outcome.before, tokens: [] })
+    })
+  }, 60_000)
+})
+
+/**
+ * **잠금에 안 서는 쓰기도 가드와 커밋 사이가 있다 — 프리셋 삭제.** 이 쓰기는 기다리는 잠금이 없어(아래 «분모»의 `NOT_LOCKED`)
+ * 가드와 `DELETE` 사이는 수 ms 다. 그 사이 강등 · 제외가 커밋되면 가드의 옛 판정으로 지운다 — viewer 가 된 사람이 프리셋을
+ * 지운다. 그 틈을 매번 서게 하려고 `BEFORE DELETE` 트리거가 1s 를 끼운다(행은 이미 잡혔다). 재확인은 `DELETE` 뒤 같은
+ * 트랜잭션에서 돈다(`routes/presets.ts`). 혼자 죽는 변조: 그 재확인 한 줄을 뗀다.
+ */
+describe('프리셋 삭제 — 가드와 커밋 사이의 강등도 커밋 순간에 본다', () => {
+  async function presetDeleteRace(ctx: RealApiContext, demotion: Demotion | null) {
+    const fx = await fixture(ctx, 'editor')
+    const made = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/projects/${fx.projectId}/presets`,
+      cookies: fx.alice.cookie,
+      payload: { name: '앨리스의 프리셋', schema: [] },
+    })
+    expect(made.statusCode, made.body).toBe(201)
+    const presetId = (made.json() as { id: string }).id
+    await sql.raw(
+      `create function zz_slow_preset_delete() returns trigger language plpgsql as $$ begin perform pg_sleep(1); return old; end $$`,
+    ).execute(db)
+    await sql`create trigger zz_slow_preset_delete before delete on presets for each row execute function zz_slow_preset_delete()`.execute(db)
+    try {
+      const removal = fireRest(ctx, fx, 'DELETE', `/api/projects/${fx.projectId}/presets/${presetId}`)
+      // 트리거의 잠에 든 것을 본다 — 가드는 이미 지났다.
+      const deadline = Date.now() + 5_000
+      for (;;) {
+        const { rows } = await sql<{ n: number }>`
+          select count(*)::int as n from pg_stat_activity where datname = current_database() and query like '%pg_sleep(1)%' and state = 'active'
+        `.execute(db)
+        if ((rows[0]?.n ?? 0) >= 1) break
+        if (Date.now() > deadline) throw new Error('삭제가 트리거에 서지 않았다 — 판이 서지 않았다')
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      const demoted = demotion === null ? null : await demote(ctx, fx, 'editor', demotion)
+      const res = await removal.promise
+      const left = await db.selectFrom('presets').select('id').where('id', '=', presetId).execute()
+      return { res, demoted, left: left.length }
+    } finally {
+      await sql`drop trigger if exists zz_slow_preset_delete on presets`.execute(db)
+      await sql`drop function if exists zz_slow_preset_delete()`.execute(db)
+    }
+  }
+
+  it('대조 — 강등이 없으면 지운다(204 · 행 0)', async () => {
+    await withRealApi(async (ctx) => {
+      const { res, left } = await presetDeleteRace(ctx, null)
+      expect(res.status, res.body).toBe(204)
+      expect(left).toBe(0)
+    })
+  }, 60_000)
+
+  it('가드 뒤 · 커밋 전에 viewer 로 내려가면 403 — 프리셋이 남는다', async () => {
+    await withRealApi(async (ctx) => {
+      const { res, demoted, left } = await presetDeleteRace(ctx, 'role')
+      expect(demoted).toBe(200)
+      expect(res.status, res.body).toBe(REFUSED.role)
+      expect(left).toBe(1)
     })
   }, 60_000)
 })
@@ -1952,9 +2036,9 @@ const NOT_LOCKED: Record<string, string> = {
   'DELETE /api/projects/:projectId/members/:userId':
     '멤버 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
   'DELETE /api/projects/:projectId/presets/:presetId':
-    '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
+    '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404). 가드와 커밋 사이는 재확인한다 — 위 «프리셋 삭제 — 가드와 커밋 사이»',
   'DELETE /api/projects/:projectId/tokens/:tokenId':
-    '토큰 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404)',
+    '토큰 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제 뒤에는 서지만 404). 재확인하지 않는다 — 지우는 것은 자기 토큰뿐(`deleteApiToken`의 `user_id`)이고 권한을 줄이는 쓰기다. 걸면 제외 · 로그아웃 직후의 폐기가 롤백돼, 멤버에서 빠져도 남는 토큰 행이 다시 멤버가 될 때 되살아난다',
   'WS ping': '아무것도 안 쓴다',
   'WS lock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
   'WS unlock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
