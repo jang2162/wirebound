@@ -24,6 +24,8 @@ import type { DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
 import { forbidden, notFound, unauthenticated } from '../errors'
 import { requestClientKind } from './actor'
+import { sessionIsLive } from './session'
+import { tokenIsLive } from '../repos/api-tokens'
 import { parseParams } from '../http/parse'
 
 /** 컬럼 타입과 도메인 타입이 갈라지지 않도록 `db/types.ts`의 타입을 그대로 재수출한다. */
@@ -229,6 +231,9 @@ export function projectGuard(min: ProjectRole): preHandlerHookHandler {
  * 넣어 잰다(코멘트 게시 · 250ms 에 강등): 잡지 않으면 **강등 200 @292ms → 쓰기 201 @856ms**
  * (viewer 이름의 행), 잡으면 **쓰기 201 @837ms → 강등 200 @840ms**.
  *
+ * **자격(세션 · 토큰 행)도 본다 — 역할보다 먼저다.** 몸통은 WS 와 함께 쓰는 `recheckAtCommit`(아래)이고, 이 함수는 입력을
+ * 요청에서 읽는 껍데기다.
+ *
  * **재생은 이것을 부르지 않는다.** 같은 키로 이미 커밋된 자기 행은 권한을 잃어도 돌려준다 — 가드 앞 재생
  * (`routes/comments.ts`의 `replayBeforeGuard`)과 같은 판정이다. 쓰는 갈래만 부른다.
  */
@@ -241,7 +246,53 @@ export async function recheckProjectRole(trx: DbHandle, request: FastifyRequest)
     throw new Error('recheckProjectRole은 projectGuard를 지난 요청에서만 부른다')
   }
   const { projectId } = parseParams(ProjectParams, request.params)
-  return requireProjectRole(trx, projectId, currentUser.id, min, request.tokenProjectId, 'share')
+  return recheckAtCommit(trx, {
+    projectId,
+    userId: currentUser.id,
+    min,
+    scopeProjectId: request.tokenProjectId,
+    credential: requestCredential(request),
+  })
+}
+
+/**
+ * 요청을 채운 자격 — 세션이면 그 행의 id, 토큰이면 토큰 행의 id(`auth/plugin.ts`가 채운 값). 둘 다 없으면 가드를 안 지난
+ * 요청이다(프로그래밍 오류).
+ */
+function requestCredential(request: FastifyRequest): Credential {
+  if (request.authKind === 'session' && request.sessionId !== null) return { kind: 'session', id: request.sessionId }
+  if (request.authKind === 'token' && request.tokenActor !== null) return { kind: 'token', id: request.tokenActor.tokenId }
+  throw new Error('recheckProjectRole은 자격(세션 · 토큰)으로 들어온 요청에서만 부른다')
+}
+
+/** 이 쓰기를 낸 자격의 행 — 세션(`sessions.id`) 또는 API 토큰(`api_tokens.id`). */
+export type Credential = { kind: 'session' | 'token'; id: string }
+
+/**
+ * **커밋 순간의 재확인 몸통 — REST(`recheckProjectRole`)와 WS `patch`(`ws/patch.ts`)가 이 한 함수를 부른다.** 입력만
+ * 갈린다: REST 는 요청에서, WS 는 연결(`RoomConnection`)에서 읽는다.
+ *
+ * **자격이 먼저다 — 죽었으면 401**(`unauthenticated` — 가드가 로그인하지 않은 요청에 내는 값). 가드는 자격을 핸들러 앞에서
+ * 한 번 본다. 쓰기가 잠금에 쥐인 동안 로그아웃 · 토큰 폐기가 커밋돼도 역할 · 멤버십은 그대로라, 멤버 행만 다시 보면
+ * **죽은 자격으로 커밋된다**(`test/guard-in-lock.test.ts`의 «자격이 잠금을 기다리는 동안 죽으면»). 생사의 술어는 그 행의 주인이
+ * 갖는다 — 세션은 `sessionIsLive`(방송의 `stillAllowed`와 같은 함수), 토큰은 `tokenIsLive`.
+ *
+ * **그 행을 `FOR KEY SHARE`로 잡는다** — 멤버 행을 `FOR SHARE`로 잡는 것(`recheckProjectRole` 머리말)과 같은 까닭이다: 안
+ * 잡으면 «재확인 → 로그아웃 204 → 이 쓰기의 커밋»이 선다. 잡으면 로그아웃이 이 커밋을 기다린다 — **재확인 뒤 커밋까지만**
+ * 이다. 잠금을 기다리는 동안에는 이 쓰기가 그 행을 안 쥐었으므로 로그아웃은 안 기다린다. `KEY SHARE`는 요청마다 도는
+ * `last_seen_at` · `last_used_at` 갱신(`FOR NO KEY UPDATE`)과 안 부딪힌다.
+ */
+export async function recheckAtCommit(
+  trx: DbHandle,
+  input: { projectId: string; userId: string; min: ProjectRole; scopeProjectId: string | null; credential: Credential },
+): Promise<ProjectRole> {
+  assertLocking(trx, 'recheckAtCommit')
+  const live =
+    input.credential.kind === 'session'
+      ? await sessionIsLive(trx, input.credential.id, 'key-share')
+      : await tokenIsLive(trx, input.credential.id)
+  if (!live) throw unauthenticated()
+  return requireProjectRole(trx, input.projectId, input.userId, input.min, input.scopeProjectId, 'share')
 }
 
 /**

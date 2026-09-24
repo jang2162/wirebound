@@ -41,6 +41,7 @@
  * | viewer 가 보냈다 | 답 없음(`ws/routes.ts`) | 웹은 viewer 로 보내지 않는다. 강등이 끼면 `membership-changed`가 가고 화면이 놓는다 |
  * | 이 연결이 **뒤에 보낸** `lock`·`unlock`이 있다 | 답 없음 · 아무것도 안 한다 | 아래 «뒤에 온 것이 이긴다» |
  * | **DB 오류로 끝내지 못했다**(풀 대기 초과 · 연결 잃음 — 자격 확인이든 이 트랜잭션이든) | `lock-denied` · 이 연결이 쥔 것도 놓는다(`ws/routes.ts`의 `catch` → `denyLock`) | 서버는 아무것도 안 쥐었는데 답이 없으면 **화면은 쥔 줄 안다** — 남의 화면에는 배지가 없어 그 자리를 잡고 고칠 수 있다. 거절을 받은 화면은 «잡지 않은 선택»에 서고 다음 편집이 다시 보낸다. 뒤 프레임이 있으면 답하지 않는다(윗줄) |
+ * | **페이지 행을 한도(`LOCK_ROW_WAIT_MS`) 넘게 기다렸다** | `lock-denied` · 이 연결이 쥔 것도 놓는다(`handleLockFrame`) | 행이 오래 쥐인 동안 함께 고르는 연결마다 풀 칸을 쥐고 서면 서버 전체가 503 이다(그 상수의 표). 답은 윗줄과 같다 |
  *
  * **거절은 그 `lock` 프레임과 짝지어진다.** 프레임이 `lockId`를 실어 오면 `lock-denied`가 그것을 되돌려준다 — 화면은 **마지막으로
  * 보낸 `lock`의 거절만** 받아들인다(`apps/web`의 `lock-channel.ts` 「거절은 그 `lock` 프레임과 짝짓는다」).
@@ -67,8 +68,8 @@
  * 끝날 때(`settle` — 윗절). 밀려난 프레임은 답이 없다 — 위 표의 «뒤에 보낸 것이 있다» 줄이다. **줄은 행을 건너뛰는 길이 아니다**:
  * 도는 프레임은 전부 아래 «페이지 행 안»을 지난다.
  *
- * 남는 것: **줄은 연결마다다.** 같은 페이지에서 여럿이 함께 고르면 사람 수만큼 칸을 쥔다 — 풀 10 칸이면 행이 쥐인 동안 아홉 연결이
- * 함께 고르는 판에서 다시 찬다(코드로 판단한 것이다 — 따로 재지 않는다).
+ * **줄은 연결마다다.** 같은 페이지에서 여럿이 함께 고르면 사람 수만큼 칸을 쥔다 — 그 칸을 오래 쥐지 않게 하는 것이 행 대기의
+ * 한도다(`LOCK_ROW_WAIT_MS`).
  *
  * # 판정과 잡기는 같은 틱이다 — 그리고 페이지 행 안이다
  *
@@ -97,6 +98,8 @@
  */
 import type { WbNode } from '@wirebound/schema'
 import type { FastifyInstance } from 'fastify'
+import { sql } from 'kysely'
+import { DatabaseError } from 'pg'
 import { withTransaction } from '../db/tx'
 import { readSelectionRoot, selectionVerdict } from '../lock/check'
 import { lockPageShared } from '../repos/pages'
@@ -104,6 +107,34 @@ import type { ClientFrame, ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
 
 export type LockFrame = Extract<ClientFrame, { type: 'lock' }>
+
+/**
+ * **`lock` 트랜잭션이 페이지 행을 기다리는 한도(ms).** 넘으면 그 `lock`은 `lock-denied`다(위 표의 «행을 한도 넘게 기다렸다»).
+ *
+ * **왜 두는가 — 한 페이지에서 여럿이 함께 고르면 풀이 찬다.** 줄은 연결마다라(위 «연결 하나가 쥐는 풀 칸은 하나다») 행이 쥐인 동안
+ * 아홉 연결이 함께 고르면 아홉 칸이 행을 기다린다. [api] 테스트 트랜잭션이 페이지 행을 `FOR UPDATE`로 8s 쥔 채 editor 아홉이 같은
+ * 페이지에서 `lock`을 보내고 1.2s 에 다른 사람이 다른 프로젝트를 `GET` 하면(풀 10칸 · 대기 5s):
+ *
+ * | 한도 | 그 `GET` | `lock` 아홉의 답 |
+ * |---|---|---|
+ * | 없음 | **503 · 5.0s** | 행이 풀린 8.0s 에 거절 여덟 |
+ * | 500 | 200 · 4ms | 0.5s 에 거절 아홉 |
+ * | 1000 | 200 · 6ms | 1.0s 에 거절 아홉 |
+ * | **2000** | 200 · 0.8s | 2.0s 에 거절 아홉 |
+ * | 3000 | 200 · 1.8s | 3.0s 에 거절 아홉 |
+ *
+ * **값은 정당한 기다림의 위에 둔다.** 같은 페이지의 편집 하나가 행을 쥐는 시간은 문서 800KB(노드 7000)에서 요청 통째로 p50 38ms ·
+ * 최대 60ms 다(같은 노드의 `PATCH .../ops` 15번). 2000 은 그 30배 넘게 여유를 두고 풀 대기(5s — `db/client.ts`의 `createPool`)의 절반
+ * 아래라, 풀이 차도 남의 요청은 한도 안에 칸을 얻는다. 넘는 기다림은 복원 같은 큰 쓰기다 — 그때 거절된 화면은 «잡지 않은 선택»에 서고
+ * 다음 편집이 다시 보낸다(편집 자신은 한도 없이 줄 선다).
+ *
+ * **서버 전체에 걸지 않는다** — 편집 · 게시의 정당한 줄까지 끊는다(`db/client.ts`의 `createPool` 머리말 표의 `lock_timeout` 줄). 이
+ * 트랜잭션에만 건다(`set_config(…, true)` — 트랜잭션이 끝나면 사라진다).
+ */
+export const LOCK_ROW_WAIT_MS = 2000
+
+/** Postgres `lock_not_available` — `lock_timeout`을 넘긴 잠금 대기가 받는 SQLSTATE. */
+const LOCK_NOT_AVAILABLE = '55P03'
 
 /**
  * 프레임 하나가 **끝나는 순간** 아직 뜻이 있는가 — 받는 순간 `ws/routes.ts`가 매겨 넘긴다(위 «뒤에 온 것이 이긴다» · 표의
@@ -212,7 +243,9 @@ export function createLockLane(app: FastifyInstance, connection: RoomConnection)
     let job: Job | null = first
     while (job !== null) {
       try {
-        if (job.turn.current()) await handleLockFrame(app, connection, job.frame, job.turn)
+        // **닫힌 연결의 «다음에 할 것»은 트랜잭션을 안 연다** — 닫힘의 해제는 이미 지나갔고 잡아도 `settle`이 버린다(룸에 없다). 열면
+        // 풀 칸 하나가 행을 기다린다.
+        if (job.turn.current() && inRoom(app, connection)) await handleLockFrame(app, connection, job.frame, job.turn)
         job.resolve()
       } catch (error: unknown) {
         job.reject(error)
@@ -256,11 +289,19 @@ export async function handleLockFrame(
   frame: LockFrame,
   turn: LockTurn,
 ): Promise<void> {
-  await withTransaction(app.db, async (trx) => {
-    const page = await lockPageShared(trx, connection.projectId, frame.pageId)
-    if (settle(app, connection, frame, turn, page ? undefined : null) === 'settled') return
-    settle(app, connection, frame, turn, await readSelectionRoot(trx, connection.projectId, frame.pageId))
-  })
+  try {
+    await withTransaction(app.db, async (trx) => {
+      await sql`select set_config('lock_timeout', ${`${LOCK_ROW_WAIT_MS}ms`}, true)`.execute(trx)
+      const page = await lockPageShared(trx, connection.projectId, frame.pageId)
+      if (settle(app, connection, frame, turn, page ? undefined : null) === 'settled') return
+      settle(app, connection, frame, turn, await readSelectionRoot(trx, connection.projectId, frame.pageId))
+    })
+  } catch (error) {
+    // **행을 한도 넘게 기다렸다**(`LOCK_ROW_WAIT_MS`) — 예외가 아니라 판정이다. 끝내지 못한 `lock`과 같은 답이고 같은 조건이다
+    // (위 표 · `ws/routes.ts`의 `catch` — 뒤 프레임이 없을 때만). 룸에 없으면 답할 곳이 없다.
+    if (!(error instanceof DatabaseError && error.code === LOCK_NOT_AVAILABLE)) throw error
+    if (turn.current() && inRoom(app, connection)) denyLock(app, connection, frame)
+  }
 }
 
 /**

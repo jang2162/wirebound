@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { withTransaction } from '../db/tx'
 import { lockOwnerIds } from '../repos/members'
+import { lockProjectMenuNodes } from '../repos/menu'
 import { lockProjectPages } from '../repos/pages'
 import { conflict, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
@@ -165,8 +166,16 @@ export function projectRoutes() {
         // **owner 행은 페이지 뒤 · 재확인 앞이다**(`repos/members.ts`의 `lockOwnerIds` — 멤버 쓰기와 같은 함수 · 같은 순서). 재확인이 쥐는
         // 삭제자 행과 CASCADE 가 지우는 멤버 행이 멤버 쓰기와 고리를 만들지 않게 한다(재는 자: `test/guard-in-lock.test.ts`의 «E12»).
         // 페이지 **뒤**인 까닭은 위 «페이지를 CASCADE 보다 먼저» 그대로다 — 페이지를 기다리는 동안 쥐면 역할 변경이 이 삭제를 기다린다.
+        //
+        // **메뉴 행은 페이지 뒤 · owner 행 앞이다**(`repos/menu.ts`의 `lockProjectMenuNodes`). 메뉴 제목 쓰기는 프로젝트 행을
+        // 안 잡고 «메뉴 행 → 재확인(멤버 행 `FOR SHARE`)» 순으로 잡는다(`routes/menu.ts`의 `PATCH`). 삭제가 메뉴 행을
+        // CASCADE 에서 처음 만나면 그때 이미 owner 행(`lockOwnerIds`)이나 CASCADE 로 지운 멤버 행을 쥐고 있어 그 재확인과
+        // 서로를 기다린다 — 희생자 쪽이 500 이다. 먼저 잡으면 삭제는 멤버 행을 하나도 안 쥔 채 메뉴 행에서 기다리고, 제목
+        // 쓰기는 재확인을 지나 커밋한다(삭제가 먼저 잡았으면 제목 쓰기가 기다렸다가 0 행 → 404). 재는 자는
+        // `test/guard-in-lock.test.ts`의 «메뉴 제목 쓰기가 메뉴 행을 쥔 채».
         await lockProjectRow(trx, projectId)
         await lockProjectPages(trx, projectId)
+        await lockProjectMenuNodes(trx, projectId)
         await lockOwnerIds(trx, projectId)
         await recheckProjectRole(trx, request)
         await deleteProject(trx, projectId)

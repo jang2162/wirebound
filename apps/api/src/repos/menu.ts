@@ -463,12 +463,15 @@ export async function updateMenuNode(
       await trx.updateTable('menu_nodes').set({ title: patch.title }).where('id', '=', nodeId).execute()
     }
 
+    // **위 `current`는 잠그지 않고 읽었다** — 제목만 바꾸는 판은 행 잠금을 `UPDATE`에서 처음 잡는다. 그 사이 프로젝트 삭제가
+    // 이 행을 쥐었으면 `UPDATE`가 그 커밋을 기다렸다가 0 행을 쓰고, 여기서 행이 없다 — 앞의 `null`과 같은 404 다(던지면
+    // 봉투 없는 500).
     const updated = await trx
       .selectFrom('menu_nodes')
       .select(['id', 'project_id', 'parent_id', 'title', 'sort_order'])
       .where('id', '=', nodeId)
-      .executeTakeFirstOrThrow()
-    return toRecord(updated)
+      .executeTakeFirst()
+    return updated ? toRecord(updated) : null
   })
 }
 
@@ -522,7 +525,9 @@ export async function deleteMenuNode(db: DbHandle, projectId: string, nodeId: st
 }
 
 /**
- * 프로젝트의 메뉴 행 전부를 `FOR UPDATE`로 잠근다. **복원 전용이다.**
+ * 프로젝트의 메뉴 행 전부를 `FOR UPDATE`로 잠근다. **부르는 자리가 둘이다** — 복원과 프로젝트 삭제(`routes/projects.ts` —
+ * 메뉴 제목 쓰기와 고리를 만들지 않으려고 CASCADE 보다 먼저 잡는다. 까닭은 그 삭제 주석). 두 자리 다 이것보다 프로젝트
+ * 행과 페이지를 먼저 잡는다.
  *
  * 잠금이 실제로 무엇을 막는지는 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말에
  * 실측표로 있다 — 이 함수 하나만으로는 **새 루트 메뉴 삽입을 못 막는다**(잠금은 이미

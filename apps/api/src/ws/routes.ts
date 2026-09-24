@@ -224,7 +224,14 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
           //
           // **`lock`도 답한다** — 서버는 아무것도 안 쥐었는데 답이 없으면 화면은 쥔 줄 안다. 거절과 같은 답을 낸다(`ws/lock.ts`의
           // 표 «DB 오류로 끝내지 못했다»). **이 프레임이 아직 마지막일 때만** — 뒤 프레임이 있으면 그것이 자기 답을 한다.
-          // `unlock`·`ping`은 답하지 않는다: `unlock`이 못 놓은 잠금은 TTL 까지 남고, `pong`이 없으면 화면이 연결을 닫는다(닫힘이 놓는다).
+          // `unlock`·`ping`은 답하지 않는다: `unlock`은 답 대신 놓고(아래), `pong`이 없으면 화면이 연결을 닫는다(닫힘이 놓는다).
+          //
+          // **끝내지 못한 `unlock`은 놓는다**(이 프레임이 아직 마지막일 때만) — 놓기는 자격이 필요 없는 일이다(연결 종료도 자격 없이
+          // 놓는다). 안 놓으면 화면이 놓은 자리의 배지가 TTL 까지 남아 남이 그 자리를 못 잡는다.
+          if (frame.type === 'unlock') {
+            if (current()) releaseLocksOf(app, connection)
+            return
+          }
           if (frame.type !== 'patch' && frame.type !== 'lock') return
           try {
             if (frame.type === 'patch') push(patchErrorFrame(projectId, frame, internal()))

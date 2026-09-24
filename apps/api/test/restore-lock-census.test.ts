@@ -647,9 +647,15 @@ describe('표가 스스로 세는 것', () => {
    * **막히지 않는 줄은 전부 "아무것도 쓰지 않거나, 복원이 되돌리지 않는 것을 쓰는" 줄이다.**
    * 그 목록을 손으로 적는다 — 새 줄이 여기 들어오면 사람이 *"이것이 정말 안 막혀도 되나"*를
    * 다시 판정하게 된다.
+   *
+   * **이 목록이 «복원 중에 막히지 않는 쓰기»의 정본이다** — `apps/api/README.md` 「복원은 자기가 쓰는 동안 남이 못 고치게
+   * 한다」와 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말은 이 케이스를 가리키기만 한다. 줄마다의 까닭은 아래 주석과
+   * 위 census 의 그 줄이 갖는다.
    */
   it('막히지 않는 줄의 목록이 고정돼 있다', () => {
     expect(PROBES.filter((probe) => !probe.blocked).map((probe) => probe.route).sort()).toEqual([
+      // **멤버 수정 · 삭제**는 `project_members`의 UPDATE · DELETE 라 부모 행을 안 잡는다. 복원은 멤버를 되돌리지 않고, **막히면
+      // 안 되는 쪽이다** — 막히면 복원이 도는 동안 회수(강등 · 제외)가 서지 않는다(`repos/members.ts`의 `lockOwnerIds` 머리말).
       'DELETE /:projectId/members/:userId',
       // **프리셋 삭제**는 자식 행 삭제라 부모를 잡지 않는다 —
       // 복원이 프리셋을 되돌리지 않으므로(payload에 프리셋 절이 없다) 해롭지 않다.
@@ -660,6 +666,7 @@ describe('표가 스스로 세는 것', () => {
       // 폐기는 자격을 거두는 조작이라 복원이 도는 동안 기다려야 할 이유가 없다.
       'DELETE /:projectId/tokens/:tokenId',
       'PATCH /:projectId/members/:userId',
+      // **바꿀 번호가 없는 재번호**는 아무것도 쓰지 않는다 — 바꿀 번호가 있는 갈래는 막힌다(위 census 의 두 줄).
       'POST /:projectId/pages/:pageId/comments/renumber',
     ])
   })
