@@ -2954,6 +2954,17 @@
   cursor: progress;
 }
 
+/* 받는 동안의 «받기 취소»(`shell/export-panel.tsx`의 `DownloadButton`). 문장 안의 글자 단추라 토글과 같은 모양이다. */
+.wb-shell-export-cancel {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wb-shell-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* ── 스냅샷 팝오버 ────────────────────────────────────────────────────
    **셸 머리의 팝오버다.** 자리·크기
    규칙은 바로 위 내보내기와 같다 — 두 팝오버가 나란히 있는데 생김새가 다르면 사용자가

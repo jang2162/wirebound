@@ -409,6 +409,10 @@ type DownloadState = { status: 'idle' } | { status: 'running' } | { status: 'fai
  * **상자를 닫아도 받던 것은 끝까지 받아 저장한다** — 앵커로 받을 때와 같다(누른 것은 파일이다). 닫힌 상자에는 실패를
  * 적을 자리가 없으므로 그때의 실패는 말하지 못한다.
  *
+ * **받는 동안은 «받기 취소»로 멈춘다** — 요청째 끊는다(`downloadExport`의 `cancel`). 끊긴 요청은 서버가 그 일을 워커째 끝내고
+ * 사람마다 둘인 내보내기 자리를 돌려준다(`apps/api`의 `routes/export.ts`). 그것이 없으면 잘못 누른 큰 pptx 를 멈출 길이
+ * 새로고침뿐이고, 그동안 그 사람의 자리 하나가 묶인다. 취소는 실패가 아니라 말하지 않는다.
+ *
  * **받아 온 뒤 저장하는 대가**(실브라우저 — 독립 헤드리스 Chrome · 같은 기계 · Chrome 프로세스 전부의 RSS 최고 대 누르기 전 ·
  * 같은 파일을 앵커로 받은 판과 번갈아 두 번씩):
  *
@@ -425,15 +429,22 @@ function DownloadButton(props: { preview: ExportPreview; projectId: string }): R
   const api = useApi()
   const { preview } = props
   const [state, setState] = useState<DownloadState>({ status: 'idle' })
+  /** 받는 중인 요청을 끊을 신호. **언마운트에 끊지 않는다** — 상자를 닫아도 끝까지 받는다(위 머리말). */
+  const cancelRef = useRef<AbortController | null>(null)
 
   async function save(): Promise<void> {
+    const cancel = new AbortController()
+    cancelRef.current = cancel
     setState({ status: 'running' })
     try {
-      const blob = await api.downloadExport(props.projectId, preview.format)
+      const blob = await api.downloadExport(props.projectId, preview.format, { cancel: cancel.signal })
       saveBlob(blob, preview.fileName)
       setState({ status: 'idle' })
     } catch (caught) {
-      setState({ status: 'failed', failure: toFailure(caught, DOWNLOAD_FAILURE) })
+      // **사람이 끊었으면 실패가 아니다** — 말할 것이 없다.
+      setState(cancel.signal.aborted ? { status: 'idle' } : { status: 'failed', failure: toFailure(caught, DOWNLOAD_FAILURE) })
+    } finally {
+      if (cancelRef.current === cancel) cancelRef.current = null
     }
   }
 
@@ -447,7 +458,14 @@ function DownloadButton(props: { preview: ExportPreview; projectId: string }): R
       >
         {preview.fileName} 내려받기
       </button>
-      {state.status === 'running' && <p role="status">파일을 만드는 중…</p>}
+      {state.status === 'running' && (
+        <p role="status">
+          파일을 만드는 중…{' '}
+          <button type="button" className="wb-shell-export-cancel" onClick={() => cancelRef.current?.abort()}>
+            받기 취소
+          </button>
+        </p>
+      )}
       {/* 세션이 끊겼으면 문장이 아니라 로그인이다 — 미리보기의 실패와 같은 규칙(위 `ExportPanel`). */}
       {state.status === 'failed' &&
         (state.failure.kind === 'signed-out' ? <SignedOut /> : <p role="alert">{state.failure.message}</p>)}

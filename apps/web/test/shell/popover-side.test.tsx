@@ -60,7 +60,7 @@ describe.each(PANELS)('$toggle 상자', (panel) => {
 
 /** 열린 채 창 폭이 바뀌면 다시 잰다 — 머리가 다시 한 줄이 되면 토글이 오른쪽 끝으로 돌아간다. */
 it('열린 채 창 폭이 바뀌면 다시 고른다', async () => {
-  const anchor: Partial<DOMRect> = { left: 16, right: 76 }
+  const anchor = { left: 16, right: 76 }
   stubRects({ 'wb-shell-export': anchor, 'wb-shell-export-body': { width: 380 } })
   await openPage(pageDoc({ id: 'n-root', type: 'Page', children: [] }))
   fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
