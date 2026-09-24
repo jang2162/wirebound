@@ -166,6 +166,17 @@ describe('픽스처가 프로덕션 경로를 지난다', () => {
  * 그래서 **수를 적는 대신 성질을 든다** — *"`signup` 을 든 테스트 파일은 전부 그것을
  * 픽스처에서 가져온다"*. 수를 박지 않으므로 파일이 늘어도 안 낡고, 누가 픽스처를 안
  * 지나는 두 번째 길을 만들면 죽는다.
+ *
+ * **«든다» · «가져온다» 둘 다 주석을 걷은 소스로 잰다**(`stripComments`) — 원문으로 재면 주석 속
+ * `import { signup } from './helpers'` 가 픽스처로 읽혀 지역 `signup` 을 쓰는 파일이 초록이다.
+ *
+ * **못 보는 것 — 글자로 재는 자의 한계다.** 이 자는 «파일이 그 import 글자를 가졌나»만 보고, 쓰는 `signup` 이
+ * 그 import 의 것인지는 안 본다. 그래서 셋이 지역 `signup` 을 쓰면서 초록이다: ① 안 불리는 함수 안의
+ * `const { signup } = await import('./helpers')`(죽은 스코프) ② `import { signup as fixture } from './helpers'`(별칭 —
+ * 가져온 이름은 `fixture` 인데 `signup` 글자가 든다) ③ 문자열 속의 import 글자. 그리고 걷는 `stripComments` 는
+ * 정규식 판이다 — 문자열 · 줄 끝 주석 속 `/*` 를 블록 시작으로 읽어 다음 `*\/` 까지 코드째 지운다. 지워진 자리에
+ * import 와 `signup` 이 함께 있으면 그 파일은 두 집합에서 함께 빠진다(거짓 초록). 이 셋과 그 하나는 파서로 재야 닫힌다 —
+ * 이 자를 한 판 더 짓지 않는다.
  */
 describe('`signup` 을 든 테스트는 전부 픽스처를 지난다', () => {
   const TEST_ROOT = fileURLToPath(new URL('.', import.meta.url))
@@ -188,8 +199,9 @@ describe('`signup` 을 든 테스트는 전부 픽스처를 지난다', () => {
   const HELPERS_IMPORT =
     /import\s+(?:type\s+)?\{[\s\S]*?\}\s*from\s+'\.\/helpers'|const\s+\{[^}]*\}\s*=\s*await\s+import\(\s*'\.\/helpers'\s*\)/g
 
-  function importsSignupFixture(source: string): boolean {
-    return [...source.matchAll(HELPERS_IMPORT)].some((match) => /\bsignup\b/.test(match[0]))
+  /** **주석을 걷은** 소스를 받는다(위 머리말). */
+  function importsSignupFixture(stripped: string): boolean {
+    return [...stripped.matchAll(HELPERS_IMPORT)].some((match) => /\bsignup\b/.test(match[0]))
   }
 
   it('분모가 헛돌지 않는다 — 파일도 여러 줄 import 도 실제로 있다', () => {
@@ -206,9 +218,9 @@ describe('`signup` 을 든 테스트는 전부 픽스처를 지난다', () => {
     const mentions: string[] = []
     const imports: string[] = []
     for (const name of testFiles) {
-      const source = readFileSync(join(TEST_ROOT, name), 'utf8')
-      if (/\bsignup\b/.test(stripComments(source))) mentions.push(name)
-      if (importsSignupFixture(source)) imports.push(name)
+      const stripped = stripComments(readFileSync(join(TEST_ROOT, name), 'utf8'))
+      if (/\bsignup\b/.test(stripped)) mentions.push(name)
+      if (importsSignupFixture(stripped)) imports.push(name)
     }
     expect(mentions.length).toBeGreaterThan(40)
     // 집합으로 단언한다 — 어느 파일이 어긋났는지 실패 메시지가 그대로 말한다.
