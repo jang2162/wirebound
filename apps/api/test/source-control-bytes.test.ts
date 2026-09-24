@@ -42,8 +42,8 @@
  * # 왜 `apps/api/test/`인가
  *
  * 훑는 범위는 저장소 전체인데 파일은 여기 있다. `apps/api`가 이미 `node:fs`로 소스를
- * 훑는 검사 셋을 갖고 있어(`permission-matrix` · `restore-lock-census` ·
- * `write-path-invariant`) 그 관례를 따르는 것이 가장 싸다. 패키지 쪽 테스트 디렉터리에
+ * 훑는 검사들을 갖고 있어(`source-census.ts` 를 지나는 인구조사 · `write-path-invariant`) 그 관례를 따르는 것이
+ * 가장 싸다. 패키지 쪽 테스트 디렉터리에
  * 두면 그 프로젝트가 `apps/`를 들여다보게 되어 의존 방향의 결을 흐린다.
  */
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'

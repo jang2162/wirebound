@@ -24,7 +24,7 @@ import { CLIENT_KIND_HEADER, callApi, callApiBytes } from '../src/client'
 import { CliError } from '../src/exit'
 import { run } from '../src/run'
 import { createFakeIo, stub, type FakeIo } from './fake-io'
-import { stripComments } from './strip-comments'
+import { stripComments } from '@wirebound/test-support'
 
 const SERVER = 'https://wb.example.com'
 const PROJECT = 'prj_a1b2'
@@ -40,7 +40,7 @@ function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   return found
 }
 
-/** 소스 글자 하나가 `io.fetch(`를 부르는가. 주석은 파서가 걷는다(`./strip-comments.ts`). */
+/** 소스 글자 하나가 `io.fetch(`를 부르는가. 주석은 파서가 걷는다(`@wirebound/test-support` 의 `stripComments`). */
 function callsFetch(source: string): boolean {
   return /\bio\.fetch\s*\(/.test(stripComments(source))
 }

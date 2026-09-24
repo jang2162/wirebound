@@ -10,6 +10,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { stripComments } from '@wirebound/test-support'
 
 /**
  * 훑을 뿌리. **`src/` 전체이고 재귀한다.**
@@ -19,9 +20,8 @@ import { fileURLToPath } from 'node:url'
  */
 export const SRC_ROOT = fileURLToPath(new URL('../src', import.meta.url))
 
-export function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
+/** 주석을 걷는 자리는 워크스페이스에 하나다 — 이 파일을 지나는 자들이 그것을 쓰게 여기서 내준다. */
+export { stripComments }
 
 /**
  * YAML 의 주석(`#`)을 걷는다. **`docker-compose.yml` 을 재는 자가 쓴다.**

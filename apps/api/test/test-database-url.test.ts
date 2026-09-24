@@ -12,13 +12,14 @@
  * **걸린 시간도 비교 기준이 못 된다** — 공유한 판이 단독 실행보다 빨라 보이는 것은
  * **실패하는 판이라 일이 덜 들어서**다.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   API_ENV_URL,
   DEFAULT_TEST_DATABASE_URL,
+  missingWorktreeEnvError,
   readApiEnvFile,
   resolveTestDatabaseUrl,
   resolveTestDatabaseUrlFrom,
@@ -118,6 +119,49 @@ describe('배선 — 진짜 파일을 읽어 그 순서에 넣는가', () => {
     writeFileSync(envFile, 'PORT=3011\nTEST_DATABASE_URL=x\n')
     expect(readApiEnvFile(envFile)).toMatchObject({ PORT: '3011', TEST_DATABASE_URL: 'x' })
     expect(readApiEnvFile(join(dir, '없는파일.env'))).toEqual({})
+  })
+})
+
+/**
+ * **워크트리에 `apps/api/.env` 가 없으면 멈춘다.** 없으면 기본값이 compose 기본 포트 — 최상위 체크아웃의
+ * 컨테이너 — 를 가리켜 스위트가 그 `wirebound_test` 를 지운다(`missingWorktreeEnvError` 머리말). 판정만 재고 DB 에는
+ * 붙지 않는다 — 임시 디렉터리 아래에 `.worktrees/…/apps/api` 경로를 만든다.
+ */
+describe('워크트리에 apps/api/.env 가 없으면 무엇을 하라고 말하고 멈춘다', () => {
+  let root: string
+  let worktreeEnv: string
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), 'wb-wt-'))
+    worktreeEnv = join(root, '.worktrees', 'wt-a', 'apps', 'api', '.env')
+    mkdirSync(join(root, '.worktrees', 'wt-a', 'apps', 'api'), { recursive: true })
+  })
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('던지고, README 의 절 이름과 DB 없이 도는 길을 말한다 — 기본 포트로 떨어지지 않는다', () => {
+    expect(() => resolveTestDatabaseUrlFrom({}, worktreeEnv)).toThrow(/README\.md 「워크트리를 여럿 띄울 때」/)
+    expect(missingWorktreeEnvError(worktreeEnv, {})).toContain("pnpm test --project '!api'")
+  })
+
+  it('셸이 TEST_DATABASE_URL 을 주면 지나간다 — CI 의 길이다', () => {
+    expect(resolveTestDatabaseUrlFrom({ TEST_DATABASE_URL: B }, worktreeEnv)).toBe(B)
+  })
+
+  it('파일을 만들면 그 값을 읽는다', () => {
+    writeFileSync(worktreeEnv, `TEST_DATABASE_URL=${A}\n`)
+    try {
+      expect(resolveTestDatabaseUrlFrom({}, worktreeEnv)).toBe(A)
+    } finally {
+      rmSync(worktreeEnv, { force: true })
+    }
+  })
+
+  it('워크트리 밖(최상위 · CI 체크아웃)은 그대로다 — 파일이 없으면 기본값이다', () => {
+    expect(resolveTestDatabaseUrlFrom({}, join(root, 'apps', 'api', '.env'))).toBe(DEFAULT_TEST_DATABASE_URL)
+    // 이름에 `.worktrees` 가 **들기만** 한 디렉터리는 워크트리가 아니다 — 경로 조각으로 본다.
+    expect(missingWorktreeEnvError(join(root, 'x.worktrees', 'apps', 'api', '.env'), {})).toBeUndefined()
   })
 })
 

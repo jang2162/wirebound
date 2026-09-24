@@ -35,6 +35,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as schema from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '@wirebound/test-support'
 import {
   EMPTY_COMMENTS,
   EMPTY_DESCRIPTION,
@@ -57,12 +58,8 @@ function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   return found
 }
 
-/** **주석은 안 센다.** 이름을 설명하는 머리말이 위반으로 잡히면 아무도 머리말을 안 쓴다. */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
-
 const FILES = sourceFiles()
+/** **주석은 안 센다.** 이름을 설명하는 머리말이 위반으로 잡히면 아무도 머리말을 안 쓴다. */
 const BODIES = new Map(
   FILES.map((relative) => [relative, stripComments(readFileSync(join(SRC, relative), 'utf8'))]),
 )

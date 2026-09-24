@@ -10,6 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '@wirebound/test-support'
 import { BUILTIN_PRESETS, type WbNode } from '@wirebound/schema'
 import { listPresets } from '../src/repos/presets'
 import { createProject, signup, withApi, type TestContext } from './helpers'
@@ -396,10 +397,6 @@ const WRITE_FORMS: { label: string; pattern: RegExp }[] = [
   { label: 'repo 함수', pattern: /\binsertPreset\s*\(/ },
   { label: '테이블 직접', pattern: /\binsertInto\s*\(\s*['"`]presets['"`]\s*\)/ },
 ]
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
 
 /** `src` 아래의 `.ts` 전부. 경로는 `src` 기준 상대다. */
 function sourceFiles(): string[] {

@@ -23,14 +23,14 @@
  * 1. **런타임 면** — `import * as`로 실제 export 목록을 받아 금지된 이름이 없는지 본다.
  * 2. **소스** — `embed.ts`가 `./run`에서 재수출하지 않는지 본다. 이름을 바꿔 내주는 길
  *    (`export { run as start }`)을 축 1이 못 보기 때문이다. 주석은 파서가 걷고 본다
- *    (`./strip-comments.ts`) — 머리말이 `from './run'`을 인용해도 재수출이 아니다.
+ *    (`@wirebound/test-support` 의 `stripComments`) — 머리말이 `from './run'`을 인용해도 재수출이 아니다.
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import * as embed from '../src/embed'
 import * as index from '../src/index'
-import { stripComments } from './strip-comments'
+import { stripComments } from '@wirebound/test-support'
 
 const EMBED_SOURCE = readFileSync(fileURLToPath(new URL('../src/embed.ts', import.meta.url)), 'utf8')
 

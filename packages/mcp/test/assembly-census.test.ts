@@ -38,6 +38,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '@wirebound/test-support'
 import * as embed from '@wirebound/cli/embed'
 import manifest from '../package.json?raw'
 
@@ -58,10 +59,6 @@ const ASSEMBLY = [
 ]
 
 const CALLS = new RegExp(`(?:^|[^\\w$.])(?:${ASSEMBLY.join('|')})\\s*\\(`)
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
 
 function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   const found: string[] = []

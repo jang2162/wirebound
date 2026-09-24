@@ -10,8 +10,8 @@
  *
  * | 변조 | 다른 네 자 |
  * |---|---|
- * | 새 라우트 + 가드 앞 훅(`x-probe`가 있으면 200)을 **자연 순서**(`{ preValidation, preHandler }`)로 | **네 파일 전부 통과** — 원문 자 둘(`permission-matrix` · `restore-lock-census`)은 `{ preHandler: projectGuard(` 글꼴로 세서 라우트를 못 보고, `onRoute` 자 둘(`token-route-census` · `actor-census`)은 라우트는 보지만 픽스처가 `x-probe`를 안 실어 훅이 안 답한다 |
- * | 같은 새 라우트를 훅 없이 기존 글꼴로 | 둘이 죽는다 — 가르는 것은 **옵션을 적는 순서** 하나다 |
+ * | **이미 표에 있는** 라우트(프리셋 목록 `GET`)에 가드 앞 훅(`x-probe`가 있으면 200)을 단다 | **넷 다 통과** — 값 분모 둘(`permission-matrix` · `restore-lock-census` — `guarded-routes.ts`)은 라우트 집합과 최소 역할만 보고, `onRoute` 자 둘(`token-route-census` · `actor-census`)은 라우트는 보지만 픽스처가 `x-probe`를 안 실어 훅이 안 답한다 |
+ * | **새** 라우트 + 같은 훅 | 값 분모 둘이 죽는다 — 훅이 아니라 **표에 없는 라우트**라서다. 사람이 표에 한 줄 더하면 초록이 되고 훅은 여전히 안 본다 |
  *
  * 행동으로 재는 자(매트릭스)도 이것을 못 잡는다 — 가드 앞 훅은 «조건이 맞을 때만 답한다»는 모양이라 픽스처가 그
  * 조건을 안 만들면 안 답한다. 그래서 **어디에 달렸는가**를 구조로 잰다.
@@ -47,7 +47,7 @@
  * | 새는 훅의 이름을 `replayBeforeGuard`로 짓는다(다른 함수) | 같은 케이스 **혼자** — 이름이 아니라 참조로 견준다 |
  * | 무해한 `onRequest`를 코멘트 목록 `GET`에 단다 | 같은 케이스 **혼자** — 거짓 빨강의 방향이다 |
  * | 게시 라우트에서 `replayBeforeGuard`를 뗀다 | 같은 케이스(반대편) · `comments.test.ts`의 *"역할이 내려가거나 멤버에서 빠진 뒤에도 …"*·*"첫 게시 뒤 그 노드가 지워졌어도 …"* — 행동의 주인은 뒤의 둘 |
- * | 게시 라우트의 옵션 순서만 뒤집는다 | **0** — 값이 같다. `restore-lock-census.test.ts`의 *"… 반대편"*만 죽는다 |
+ * | 게시 라우트의 옵션 순서만 뒤집는다 | **0** — 값이 같다. 라우트를 값으로 세는 다른 자들도 안 죽는다 |
  * | 코멘트 플러그인에 `addHook('preValidation', 새는 훅)` | **0** — api 전량이 통과한다(아래 «못 재는 것»의 첫 줄) |
  *
  * # 못 재는 것
@@ -61,8 +61,6 @@
  * - **허용된 훅이 무엇을 하는가** — 이 자는 어디에 달렸는지만 본다. `replayBeforeGuard`의 행동(남의 행 · 스코프 밖 ·
  *   키 없음이면 가드로 넘긴다)은 `comments.test.ts`의 «멱등 키» 절이 잰다.
  * - **가드 뒤에 돌지만 가드의 답을 바꾸는 훅**(`onSend` · `preSerialization`) — 가드 앞이 아니라 이 물음 밖이다.
- * - **옵션 순서가 뒤집힌 라우트를 `permission-matrix.test.ts`가 분모에서 조용히 잃는 것** —
- *   값이 같아 이 자는 안 죽는다. 그쪽의 원문 글꼴 문제다.
  */
 import { describe, expect, it } from 'vitest'
 import type { RegisteredRoute } from '../src/app'

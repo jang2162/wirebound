@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "@wirebound/test-support": "workspace:*",
     "tsdown": "^0.22.14"
   }
 }

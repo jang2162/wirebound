@@ -12,20 +12,20 @@
  * 적으면 빠진 항목이 결과를 바꿔도 아무도 모른다.**
  *
  * `permission-matrix.test.ts`의 *"표가 라우트를 하나도 빠뜨리지 않는다"*와 같은 부류다
- * (표에서 빠진 라우트는 가드를 아예 없애도 0건이 죽는다). **그래서 분모를 소스에서 만든다.**
+ * (표에서 빠진 라우트는 가드를 아예 없애도 0건이 죽는다). **그래서 분모를 등록된 라우트에서 만든다.**
  *
  * ---
  *
  * # 세는 단위 — 한 문장으로 못박는다
  *
- * > **이 표가 세는 것은 `apps/api/src/routes/`에 선언된 라우트 중 `projectGuard`가 걸린
+ * > **이 표가 세는 것은 Fastify 가 등록한 라우트 중 `projectGuard`가 걸린
  * > 비-`GET` 라우트 하나당 한 줄이다.** 한 라우트가 **본문에 따라 잠금과 다르게 만나면**
  * > 그 갈래마다 한 줄을 더 둔다. **본문뿐 아니라 대상의 상태도 갈래를 만든다**:
  * > `POST .../menu`는 `parentId`가 `null`이냐로 갈리고, `renumber`는 **바꿀 번호가 있느냐**로
  * > 갈린다(없으면 `ops.length === 0`에서 조기 반환해 **아무것도 쓰지 않고 아무것도 잠그지
  * > 않는다**).
  *
- * `projectGuard`가 없는 비-`GET` 라우트(`/signup`·`/login`·`/logout`·`POST /` 프로젝트
+ * `projectGuard`가 없는 비-`GET` 라우트(`/login`·`/logout`·`POST /` 프로젝트
  * 생성)는 **프로젝트 자원을 만지지 않으므로** 이 질문의 대상이 아니다. `GET`은 잠금과
  * 무관하다(`FOR UPDATE`는 읽기를 막지 않는다).
  *
@@ -34,7 +34,7 @@
  * 한다. 복원이 쥔 `FOR UPDATE`는 읽기를 막지 않으므로 *"복원 중에 막히는가"*라는 이 표의
  * 물음 자체가 그 라우트에 대해 성립하지 않는다. 새 `GET` 라우트에 이 파일이 죽지 않는 것이 옳다.
  *
- * **아래 `분모를 소스에서 만든다` 케이스가 그 문장을 실행으로 지킨다.** 새 쓰기 라우트가
+ * **아래 `분모를 등록된 라우트에서 만든다` 절이 그 문장을 실행으로 지킨다**(`guarded-routes.ts` — 라우트를 값으로 센다). 새 쓰기 라우트가
  * 생기면 이 파일이 **먼저 죽는다.**
  *
  * ---
@@ -57,12 +57,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
-import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { FastifyInstance } from 'fastify'
 import { withTransaction } from '../src/db/tx'
 import { lockProjectForRestore } from '../src/repos/snapshots'
+import { routeCensus } from './guarded-routes'
 import {
   createMenuNode,
   createPage,
@@ -439,42 +437,28 @@ const PROBES: Probe[] = [
   },
 ]
 
-/** `src/routes/`의 원문. 분모를 여기서 만든다(`permission-matrix.test.ts`와 같은 배치). */
-const ROUTES_DIR = fileURLToPath(new URL('../src/routes', import.meta.url))
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+/** 등록된 **`projectGuard`가 걸린 비-`GET`** 라우트 전부(위 "세는 단위") — `METHOD /:projectId/…`(표의 `route` 꼴). */
+async function declaredWriteRoutes(): Promise<string[]> {
+  return (await routeCensus()).guarded
+    .filter((route) => route.method !== 'GET')
+    .map((route) => `${route.method} ${route.url.replace(/^\/api\/projects/, '')}`)
 }
 
-/** 소스에 선언된 **`projectGuard`가 걸린 비-`GET`** 라우트 전부(위 "세는 단위"). */
-function declaredWriteRoutes(): string[] {
-  const found: string[] = []
-  for (const name of readdirSync(ROUTES_DIR).filter((file) => file.endsWith('.ts'))) {
-    const source = stripComments(readFileSync(join(ROUTES_DIR, name), 'utf8'))
-    const pattern = /app\.(post|patch|put|delete)\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\('\w+'\)/g
-    for (const match of source.matchAll(pattern)) {
-      found.push(`${match[1]!.toUpperCase()} ${match[2]}`)
-    }
-  }
-  return found
-}
-
-describe('분모를 소스에서 만든다', () => {
-  it('훑을 소스를 실제로 읽는다', () => {
-    // 글롭이 어긋나면 **빈 집합에서 아래가 조용히 통과한다**.
-    expect(readdirSync(ROUTES_DIR).filter((file) => file.endsWith('.ts')).length).toBeGreaterThan(5)
-    expect(declaredWriteRoutes().length).toBeGreaterThan(15)
+describe('분모를 등록된 라우트에서 만든다', () => {
+  it('분모를 실제로 만든다', async () => {
+    // 이음매가 어긋나면 **빈 집합에서 아래가 조용히 통과한다**.
+    expect((await declaredWriteRoutes()).length).toBeGreaterThan(15)
   })
 
-  it('쓰기 라우트가 하나도 빠지지 않았다 — 이 파일이 생긴 이유다', () => {
+  it('쓰기 라우트가 하나도 빠지지 않았다 — 이 파일이 생긴 이유다', async () => {
     const covered = new Set(PROBES.map((probe) => probe.route))
-    const missing = [...new Set(declaredWriteRoutes())].filter((route) => !covered.has(route))
+    const missing = [...new Set(await declaredWriteRoutes())].filter((route) => !covered.has(route))
 
     expect(missing).toEqual([])
   })
 
-  it('표에 소스에 없는 라우트를 적어 두지 않았다 — 반대편', () => {
-    const declared = new Set(declaredWriteRoutes())
+  it('표에 등록되지 않은 라우트를 적어 두지 않았다 — 반대편', async () => {
+    const declared = new Set(await declaredWriteRoutes())
     const extra = [...new Set(PROBES.map((probe) => probe.route))].filter((route) => !declared.has(route))
 
     expect(extra).toEqual([])

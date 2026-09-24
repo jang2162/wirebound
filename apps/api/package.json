@@ -25,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^26.1.2",
     "@types/pg": "^8.11.0",
+    "@wirebound/test-support": "workspace:*",
     "tsx": "^4.19.0"
   }
 }

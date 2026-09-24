@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '@wirebound/test-support'
 
 /**
  * **설계서 「컴파일」의 여섯 속성 계약을 세는 가드.**
@@ -46,35 +47,15 @@ const CONTRACT_ATTRS = [
 const ALLOWED_OUTSIDE_CONTRACT = ['data-wb-error']
 
 /**
- * 주석을 걷는다. 줄 주석과 블록 주석 둘 다.
+ * 원문에서 `data-…` 리터럴을 모은다. JSX 속성과 문자열 키를 함께 잡는다.
  *
- * ---
+ * **주석은 파서가 걷는다**(`@wirebound/test-support` 의 `stripComments`) — 문자열 · 템플릿 안의 `//` · `/*` 는 글자로
+ * 남으므로 `{...{ 'https://x': '', 'data-wb-foo': '1' }}` 의 뒤쪽 속성도 센다.
  *
- * **문자열 안의 `//`를 주석으로 오인한다**(`'https://…'`). **이것은 실재하는 사각이다** —
- * *"놓치면 `expect(scanned)`와 카나리아가 걸린다"*가 아니다. 심어서 재면:
- *
- * | 심은 것 | 이 가드 | 렌더 결과 가드 |
- * |---|---|---|
- * | `PageDefault`에 `{...{ 'https://x': '', 'data-wb-foo': '1' }}` | **놓친다** | 잡는다 |
- * | **조건부** `<figcaption>`에 `{...{ 'x://y': '', 'data-wb-bad': '1' }}` | **놓친다** | 잡는다(비기본 props로 그릴 때만) |
- *
- * `scanned`는 **다른 파일들이 올려 주므로** 0이 되지 않고, 카나리아는 손으로 만든
- * 문자열만 보므로 `src/`의 실제 사각을 대신 재지 못한다. 즉 **두 장치 다 이 부류를
- * 잡지 못한다.**
- *
- * **이 사각을 덮는 것은 이 함수가 아니다.** 문자열 인지형 파서로 바꾸는 대신 **렌더 결과
- * 가드가 비기본 props로 돈다**(`structures.test.tsx`의 *"비기본 props로 전수 렌더해도…"*).
- * 그쪽은 원문을 읽지 않고 **실제로 나온 HTML**을 보므로 주석·문자열 문제가 원리적으로
- * 없고, 조건부 조각까지 지나간다. 기본 props로만 그리면 표의 둘째 줄을 놓친다.
- *
- * **그래서 이 가드가 덮는 범위는 이렇다:** 렌더되지 않는 자리(주석 아닌 코드에 적힌
- * 속성 리터럴, 아직 안 쓰이는 구조)까지 본다. **문자열 안에 `//`가 든 줄은 못 본다.**
+ * **이 가드가 덮는 범위:** 렌더되지 않는 자리(주석 아닌 코드에 적힌 속성 리터럴, 아직 안 쓰이는 구조)까지 본다.
+ * 조건부 조각이 **실제로 내는** 속성은 렌더 결과 가드가 비기본 props로 돌며 본다(`structures.test.tsx`의
+ * *"비기본 props로 전수 렌더해도…"*) — 둘은 서로를 대신하지 않는다.
  */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-}
-
-/** 원문에서 `data-…` 리터럴을 모은다. JSX 속성과 문자열 키를 함께 잡는다. */
 function dataAttrs(source: string): string[] {
   return [...stripComments(source).matchAll(/['"\s{](data-[\w-]+)['"\s=:]/g)].map((m) => m[1]!)
 }
@@ -98,6 +79,12 @@ describe('설계서 「컴파일」 여섯 속성 계약', () => {
     expect(dataAttrs('/* data-control="x" */\nconst a = 1')).toEqual([])
     // 걷은 뒤에도 진짜 속성은 보인다.
     expect(dataAttrs('<div data-wb-id="n" />')).toEqual(['data-wb-id'])
+  })
+
+  it('문자열 속 `//` · 주석 속 `/*` 가 뒤따르는 속성을 지우지 않는다', () => {
+    // 주석을 정규식으로 걷으면 둘 다 뒤를 지운다 — 앞의 것은 줄 끝까지, 뒤의 것은 다음 `*/` 까지.
+    expect(dataAttrs("const a = { 'https://x': '', 'data-wb-bad': '1' }")).toEqual(['data-wb-bad'])
+    expect(dataAttrs("// 글롭 예: src/*\nconst a = { 'data-wb-bad': '1' }\n/** 끝 */")).toEqual(['data-wb-bad'])
   })
 
   it('src의 data-* 속성이 계약 여섯과 이름 있는 예외뿐이다', () => {

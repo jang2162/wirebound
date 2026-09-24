@@ -25,6 +25,7 @@ const shared = {
       '@wirebound/cli/test-support': src('./packages/cli/test-support/index.ts'),
       '@wirebound/cli/embed': src('./packages/cli/src/embed.ts'),
       '@wirebound/cli': src('./packages/cli/src/index.ts'),
+      '@wirebound/test-support': src('./packages/test-support/src/index.ts'),
     },
   },
 }
@@ -134,6 +135,12 @@ export default defineConfig({
           // 느려진다. 이 프로젝트만 `pnpm test:build`로 따로 돌린다.
           testTimeout: 300_000,
           hookTimeout: 300_000,
+          // **파일을 한 포크에서 차례로 돌린다.** 파일마다 `beforeAll`에서 `packages/*`를 재빌드하고 tsdown 이 `dist`를
+          // 비운 뒤 채우므로, 둘이 나란히 돌면 한쪽이 읽는 `dist`를 다른 쪽이 지운다(`Cannot find module …/dist/index.js`
+          // — `--maxWorkers=25%`로 돌리면 mcp `dist-smoke`가 죽는다). 워커 수를 CLI 로 얼마를 주든 이 줄이 막는다.
+          // `fileParallelism`은 여기 쓰면 조용히 무시된다(위 api 프로젝트 주석) — 같은 이유로 `singleFork`다.
+          pool: 'forks',
+          poolOptions: { forks: { singleFork: true } },
         },
       },
     ],

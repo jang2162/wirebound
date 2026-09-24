@@ -27,7 +27,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { stripComments } from './strip-comments'
+import { stripComments } from '@wirebound/test-support'
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
 
@@ -64,7 +64,7 @@ function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   return found
 }
 
-/** 소스 글자 하나가 조립을 부르는가. 주석은 파서가 걷는다(`./strip-comments.ts`). */
+/** 소스 글자 하나가 조립을 부르는가. 주석은 파서가 걷는다(`@wirebound/test-support` 의 `stripComments`). */
 function callsAssembly(source: string): boolean {
   return CALLS.test(stripComments(source))
 }
