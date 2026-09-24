@@ -60,7 +60,7 @@
 /** 번들 안에서 이 시트가 사는 자리. */
 export const SHELL_CSS_PATH = 'assets/shell.css'
 
-export const SHELL_CSS = `/* wirebound 뷰어 셸 — 설계 §9의 3분할. 이 파일은 문서를 꾸미지 않는다. */
+export const SHELL_CSS = `/* wirebound 뷰어 셸 — 좌 트리 · 중 목업 · 우 탭의 3분할. 이 파일은 문서를 꾸미지 않는다. */
 
 html,
 body {
@@ -129,7 +129,7 @@ body {
   min-width: 0;
 }
 
-/* **\`position: relative\`는 겹layer의 자리다**(P8-3 D4). 번호 마커는 문서 **옆에** 절대
+/* **\`position: relative\`는 겹layer의 자리다.** 번호 마커는 문서 **옆에** 절대
    좌표로 놓이고, 그 좌표의 기준이 이 상자다. 상속되는 속성이 아니므로 문서 안으로 흘러
    들어가지 않는다 — 위 규율의 허용 목록에 \`position\`이 있는 이유가 그것이다.
    **스크립트가 없으면 겹layer 자체가 없다**(런타임이 만든다) — 그때 이 줄은 아무것도 안 한다. */
@@ -143,7 +143,7 @@ body {
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
 }
 
-/* 번호 마커 겹layer(P8-3 D4). 런타임이 만들고 자리를 잰다.
+/* 번호 마커 겹layer. 런타임이 만들고 자리를 잰다.
    **문서를 가리지 않는다** — \`pointer-events: none\`이라 누르는 것은 그대로 문서로 간다. */
 .wb-export-markers {
   position: absolute;
@@ -166,7 +166,7 @@ body {
   text-align: center;
 }
 
-/* 못 한 것을 말하는 줄(P8-3 D1·D6). **런타임이 없으면 비어 있고 \`hidden\`이라 안 보인다.** */
+/* 못 한 것을 말하는 줄. **런타임이 없으면 비어 있고 \`hidden\`이라 안 보인다.** */
 .wb-export-status {
   margin-top: 0.75rem;
   padding: 0.625rem 0.875rem;

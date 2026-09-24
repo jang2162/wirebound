@@ -61,7 +61,7 @@ describe('WbNodeSchema — interactions', () => {
     interactions,
   })
 
-  it('설계 §8.1의 5종 액션을 전부 통과시킨다', () => {
+  it('설계서 상호작용 「모델」의 5종 액션을 전부 통과시킨다', () => {
     const node = withInteraction([
       {
         on: 'click',

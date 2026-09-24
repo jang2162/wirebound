@@ -92,7 +92,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     words: ['export'],
-    summary: 'wireb export --format html|pptx -o <dir>     §11.3 번들 또는 §15 pptx 를 그 디렉터리에',
+    summary: 'wireb export --format html|pptx -o <dir>     정적 HTML 번들(파일 여럿) 또는 pptx 파일 하나를 그 디렉터리에',
     options: {
       format: { type: 'string' },
       out: { type: 'string', short: 'o' },
@@ -107,7 +107,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     words: ['lint'],
-    summary: 'wireb lint [경로] [--fail-on warning]        §12.4 규칙 검증 (결함이 있으면 코드 10)',
+    summary: 'wireb lint [경로] [--fail-on warning]        페이지·테마의 결함 검사 (결함이 있으면 코드 10)',
     options: {
       'fail-on': { type: 'string' },
     },

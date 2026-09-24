@@ -121,16 +121,16 @@ const CALL_SITES: LockSite[] = [
   },
   {
     file: 'routes/pages.ts',
-    label: 'PATCH .../ops — 부분 편집 (§7.4의 MCP가 이 길로 온다)',
+    label: 'PATCH .../ops — 부분 편집 (MCP가 이 길로 온다)',
     checksLock: true,
-    why: '§7.1의 본줄기. **에이전트는 잠금을 걸지 않지만(§7.4) 남의 잠금에는 막힌다** — 안 막으면 2차 방어가 접속 방식에 따라 갈린다',
+    why: '편집의 본줄기. **에이전트는 잠금을 걸지 않지만(설계서 「LLM 편집 경로」) 남의 잠금에는 막힌다** — 안 막으면 2차 방어가 접속 방식에 따라 갈린다',
     drive: async (ctx, fx) => patchOps(ctx, fx, insideLock()),
   },
   {
     file: 'routes/comments.ts',
     label: 'POST .../comments — 번호를 붙이는 갈래',
     checksLock: false,
-    why: '**코멘트는 노드 편집이 아니다.** 바꾸는 것은 서버가 매기는 `marker` 하나이고(P5-1 D2) 사람이 그 필드를 고르지 않는다. 막으면 *"남이 편집 중이라 코멘트를 못 단다"*가 되는데 §7.2 어디에도 그런 말이 없고, 코멘트는 편집을 멈추지 않고 다는 것이 P5-1의 자세다',
+    why: '**코멘트는 노드 편집이 아니다.** 바꾸는 것은 서버가 매기는 `marker` 하나이고 사람이 그 필드를 고르지 않는다. 설계서 「소프트 잠금」이 *"코멘트는 잠금 대상이 아니다"*라고 적었다 — 막으면 *"남이 편집 중이라 코멘트를 못 단다"*가 된다',
     drive: async (ctx, fx) => {
       const res = await ctx.app.inject({
         method: 'POST',
@@ -176,7 +176,7 @@ const CALL_SITES: LockSite[] = [
     file: 'ws/patch.ts',
     label: 'patch 프레임 — WS로 들어온 편집',
     checksLock: true,
-    why: '§7.1의 본줄기가 WS로 들어오는 자리다(P3-2 D5). **REST와 같은 실패 봉투를 낸다** — 사용자가 보는 것이 접속 방식에 따라 갈리지 않는다',
+    why: '편집의 본줄기가 WS로 들어오는 자리다. **REST와 같은 실패 봉투를 낸다** — 사용자가 보는 것이 접속 방식에 따라 갈리지 않는다',
     drive: async (ctx, fx) => {
       const author = track(await joinRoom(ctx.port, fx.projectId, fx.actor.cookie.wb_session))
       author.send(
@@ -199,7 +199,7 @@ const CALL_SITES: LockSite[] = [
     file: 'services/restore.ts',
     label: '복원이 페이지 문서를 되돌리는 자리',
     checksLock: false,
-    why: '**복원은 프로젝트 전체를 되돌리는 owner 조작이고(§10) 잠금과 대응하는 단위가 없다** — 페이지가 사라지고 생기기도 하므로 *"어느 서브트리"*가 성립하지 않는다. 알림도 `restored` 한 프레임으로 *"판이 갈렸다"*를 말하지 페이지 편집으로 말하지 않는다(P3-1 D4). 그리고 이 호출은 복원 트랜잭션 **안**이라 여기서 조회를 더 하면 그 행 잠금을 든 채 기다린다',
+    why: '**복원은 프로젝트 전체를 되돌리는 owner 조작이고(설계서 「권한 모델」) 잠금과 대응하는 단위가 없다** — 페이지가 사라지고 생기기도 하므로 *"어느 서브트리"*가 성립하지 않는다. 알림도 `restored` 한 프레임으로 *"판이 갈렸다"*를 말하지 페이지 편집으로 말하지 않는다. 그리고 이 호출은 복원 트랜잭션 **안**이라 여기서 조회를 더 하면 그 행 잠금을 든 채 기다린다',
     drive: async (ctx, fx) => {
       const res = await ctx.app.inject({
         method: 'POST',

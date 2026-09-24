@@ -490,8 +490,8 @@ function PreviewView(props: { preview: Preview }): ReactElement {
           전에 아는 편이 낫다. */}
       {preview.file.page.layoutRef !== undefined && (
         <p>
-          이 파일은 레이아웃 <code>{preview.file.page.layoutRef}</code>을 가리키지만, 오늘
-          페이지가 레이아웃을 고르는 경로가 없어 <strong>쓰지 않습니다.</strong>
+          이 파일은 레이아웃 <code>{preview.file.page.layoutRef}</code>을 가리키지만, 페이지는
+          프로젝트의 기본 레이아웃을 쓰고 따로 고를 수 없어 <strong>쓰지 않습니다.</strong>
         </p>
       )}
       {/* **미리보기가 다 걸러 준다고 말하지 않는다.** 위 `previewPageJson`의 표가 무엇을

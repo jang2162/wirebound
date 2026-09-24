@@ -180,7 +180,7 @@ const REFERENCE_SHAPED = /^[A-Za-z][A-Za-z0-9_-]*\.[A-Za-z0-9_.-]+$/
 const LAYER_RULES = {
   palette: '원시값만 받습니다 — 참조를 쓰면 오류입니다. 스타일은 palette를 직접 가리킬 수 없고 semantic을 거칩니다.',
   semantic:
-    'palette·semantic 참조 또는 리터럴을 받습니다. 스타일이 색을 가리키는 자리는 여기 하나입니다 — semantic만 갈아 끼우면 전체가 바뀝니다(§6.3).',
+    'palette·semantic 참조 또는 리터럴을 받습니다. 스타일이 색을 가리키는 자리는 여기 하나입니다 — semantic만 갈아 끼우면 전체가 바뀝니다.',
   scale: '리터럴만 받습니다 — 참조를 쓰면 오류입니다.',
 } as const
 

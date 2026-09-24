@@ -118,7 +118,7 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
     // 고르개가 거는 말. **이 짝이 어긋나면 줄이 터진다**(머리말의 표).
     child: 'wb-shell-picker-notice',
     container: 'wb-shell-picker',
-    where: 'panels/preset-picker.tsx(조회 갈래·D6 확인 문장·저장 결과) · pattern-picker.tsx(조회 갈래)',
+    where: 'panels/preset-picker.tsx(조회 갈래·덮어쓰기 확인 문장·저장 결과) · pattern-picker.tsx(조회 갈래)',
   },
   {
     // **같은 클래스인데 담기는 상자가 다른 자리.** 타입 고르개는 "고를 것이 없을 때"
@@ -185,15 +185,15 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
 const ONE_LINE: { name: string; why: string }[] = [
   {
     name: 'wb-shell-menu-picker-label',
-    why: '자식 둘이 다 줄어든다 — `<select>`에 `min-width: 0`, 라벨은 한국어 텍스트라 아무 데서나 끊긴다. 감싸기를 줘 봤고 아무것도 안 바뀌었다(리뷰 실측: 앞 판이 적은 "나뉘면 select와 갈린다"를 그 실측이 반증했다)',
+    why: '자식 둘이 다 줄어든다 — `<select>`에 `min-width: 0`, 라벨은 한국어 텍스트라 아무 데서나 끊긴다. 감싸기를 줘 봤고 아무것도 안 바뀌었다(브라우저 실측 — "나뉘면 select와 갈린다"는 참이 아니다)',
   },
   {
     name: 'wb-shell-theme-picker',
-    why: '같은 이유로 넘칠 것이 없다 — 자식이 라벨 텍스트와 `<select>`뿐이다. 감싸기를 줘 봐도 안 넘치고 높이만 21→32px로 늘었다(리뷰 실측: 자식에 `flex-basis: 100%`를 심어 본 판)',
+    why: '같은 이유로 넘칠 것이 없다 — 자식이 라벨 텍스트와 `<select>`뿐이다. 감싸기를 줘 봐도 안 넘치고 높이만 21→32px로 늘었다(자식에 `flex-basis: 100%`를 심어 브라우저로 잰 값)',
   },
   {
     name: 'wb-shell-theme-picker-group',
-    why: '같다 — 고르개와 편집 링크 둘 다 줄어든다. 다만 **`theme.meta.name`이 길면 이 줄이 실제로 넘친다** — 그것은 감싸기로 안 고쳐지고 원인이 다르다(P10-2 이월 §3.12 D)',
+    why: '같다 — 고르개와 편집 링크 둘 다 줄어든다. 다만 **`theme.meta.name`이 길면 이 줄이 실제로 넘친다** — 그것은 감싸기로 안 고쳐지고 원인이 다르다',
   },
 ]
 

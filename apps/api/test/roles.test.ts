@@ -14,7 +14,7 @@ async function seedProject(db: DbHandle, ownerId: string): Promise<string> {
 }
 
 describe('roleAtLeast', () => {
-  it('설계 §10의 순위를 지킨다', () => {
+  it('설계서 「권한 모델」의 순위를 지킨다', () => {
     expect(ROLE_RANK.viewer).toBeLessThan(ROLE_RANK.editor)
     expect(ROLE_RANK.editor).toBeLessThan(ROLE_RANK.owner)
   })

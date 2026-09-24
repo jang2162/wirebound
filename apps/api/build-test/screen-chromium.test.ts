@@ -55,7 +55,7 @@ const 있다 = EXECUTABLE !== null
 
 if (!있다) {
   // eslint-disable-next-line no-console
-  console.log('[P10-2 스모크] 이 기계에 Chromium 이 없어 건너뛴다 — `npx playwright install chromium`')
+  console.log('[screen-chromium 스모크] 이 기계에 Chromium 이 없어 건너뛴다 — `npx playwright install chromium`')
 }
 
 const theme = resolveTheme(systemTheme('admin')!).theme

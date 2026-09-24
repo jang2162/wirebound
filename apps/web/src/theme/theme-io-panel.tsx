@@ -332,7 +332,7 @@ function ThemeIoBody(props: PanelProps & { draft: Theme }): ReactElement {
           (`theme-io.ts`의 머리말이 후보 셋을 놓고 고른 근거를 든다). */}
       {derivedFrom !== null && (
         <p className="wb-shell-theme-io-note">
-          이 테마는 <code>{derivedFrom}</code>을 상속합니다 — 파생 문서 그대로 나갑니다(§6.9).
+          이 테마는 <code>{derivedFrom}</code>을 상속합니다 — 합치지 않고 덮어쓴 값만 나갑니다.
           받는 쪽의 내장 테마가 다르면 <strong>같은 파일이 다른 테마가 됩니다.</strong>
         </p>
       )}

@@ -177,7 +177,7 @@ export function handleOverwriteMessage(handle: NodeHandle, prop: string): string
     `${prop}가 ${handle.component}${handle.part === null ? '' : `의 ${handle.part} 조각`}에서 ` +
     `구조 기본 CSS의 ${handle.property}를 덮어씁니다 — ` +
     `그 규칙이 걸리는 자리에서는 ${handle.carries}가 화면에 반영되지 않습니다 ` +
-    '(§6.5대로 테마가 이깁니다. 오늘 고른 구조가 그 규칙을 안 내더라도 ' +
+    '(테마 스타일이 구조 기본 CSS를 이깁니다. 테마가 고른 구조가 그 규칙을 안 내더라도 ' +
     '구조를 바꾸면 그렇게 됩니다 — 의도한 것이면 그대로 두세요)'
   )
 }

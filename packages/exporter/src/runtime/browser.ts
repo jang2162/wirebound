@@ -167,7 +167,7 @@ export function installRuntime(): void {
     return keys.length === 0 ? '' : JSON.stringify(keys.map((key) => [key, record[key]]))
   }
 
-  /** 겹layer. 문서를 안 바꾸고 그 위에 얹는다(P5-3 D1). */
+  /** 겹layer. 문서를 안 바꾸고 그 위에 얹는다. */
   const overlay: Record<string, RuntimeRecord> = {}
 
   /** 아무도 누르기 전의 캔버스. **매 적용을 여기서 다시 시작한다** — 되돌릴 것이 없다. */
@@ -191,16 +191,16 @@ export function installRuntime(): void {
   }
 
   /**
-   * **번호 마커를 목업 위에 겹쳐 그린다**(D4).
+   * **번호 마커를 목업 위에 겹쳐 그린다.**
    *
    * 짝은 이미 실려 있다 — 코멘트 탭의 각 줄이 `data-wb-marker-for`(노드 id)와
    * `data-wb-marker`(번호)를 든다. **문서를 다시 읽지 않는다.**
    *
-   * **기준을 여기서 다시 정하지 않는 것이 요점이다**(D4). 줄에 `data-wb-marker`가 있으면
+   * **기준을 여기서 다시 정하지 않는 것이 요점이다.** 줄에 `data-wb-marker`가 있으면
    * 번호이고 없으면 아니다 — 즉 코멘트 탭이 쓴 기준을 그대로 따른다. 캔버스가 쓰는
    * `Number.isInteger`(0과 음수도 그린다)를 옮겨 오면 **같은 번들 안에서 두 줄이 갈린다.**
    *
-   * 자리는 **그린 뒤에 잰다** — 정적 HTML에는 그 값이 없다(P8-2 이월 §5.2).
+   * 자리는 **그린 뒤에 잰다** — 정적 HTML에는 그 값이 없다(좌표는 브라우저가 그려야 생긴다).
    */
   const drawMarkers = (): void => {
     const old = canvas.querySelector('.wb-export-markers')
