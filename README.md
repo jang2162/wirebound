@@ -742,28 +742,41 @@ A 의 사용자를 돌려줬고 **B 의 API 는 그 로그인을 0 번 봤다.**
 지워지면 **멤버십이 함께 지워진다** — 그 사람이 owner 였던 프로젝트는 멤버가 0 이 되고, 다시 시딩한
 계정의 목록은 빈다(이 기계에서 쟀다: 멤버 0 · `GET /api/projects` → `[]`).
 
-**그 계정의 해시만 서버와 같은 함수로 바꾼다** — 저장소(또는 워크트리) 루트에서:
+**그 계정의 해시만 서버와 같은 함수로 바꾼다** — **그 서버가 읽는 `apps/api/.env` 가 있는 루트**(그 서버를
+띄운 저장소나 워크트리)에서 친다. compose 는 `--env-file` 이 아니라 **명령을 친 디렉터리로 컨테이너를 고른다** —
+다른 체크아웃에서 치면 그쪽 DB 의 같은 이메일이 바뀌고 `UPDATE 1` 이 나오는데, 띄운 서버의 비밀번호는 그대로다.
+고칠 자리는 둘이다 — 이메일, 그리고 `-d`(그 `.env` 의 `DATABASE_URL` 끝의 DB 이름. 워크트리면 `wb_<이름>`).
 
 ```bash
-# 1. 새 비밀번호를 셸 변수로 받는다 — 명령 글자와 셸 기록에 남지 않게
-read -rs NEW_PASSWORD && export NEW_PASSWORD
-
-# 2. 서버가 쓰는 hashPassword 로 해시를 만든다
-HASH=$(cd apps/api && pnpm exec tsx -e "import('./src/auth/password.ts').then(async (m) => console.log(await m.hashPassword(process.env.NEW_PASSWORD)))")
-
-# 3. 그 계정의 해시를 바꾸고 열려 있던 세션을 닫는다
-#    -d 는 apps/api/.env 의 DATABASE_URL 끝의 DB 이름이다(워크트리면 wb_<이름>)
-docker compose --env-file apps/api/.env exec -T postgres \
-  psql -U wirebound -d wirebound -v email=me@example.com -v hash="$HASH" <<'SQL'
+(
+  printf '새 비밀번호(8–200자, 친 글자는 안 보인다): ' && read -rs NEW_PASSWORD && echo && export NEW_PASSWORD &&
+  HASH=$(cd apps/api && pnpm exec tsx -e "Promise.all([import('./src/auth/credentials.ts'), import('./src/auth/password.ts')]).then(async ([c, m]) => console.log(await m.hashPassword(c.RawPassword.parse(process.env.NEW_PASSWORD))))") &&
+  docker compose --env-file apps/api/.env exec -T postgres \
+    psql -U wirebound -d wirebound -v email=me@example.com -v hash="$HASH" <<'SQL'
 update users set password_hash = :'hash' where email = :'email';
 delete from sessions where user_id = (select id from users where email = :'email');
 SQL
-unset NEW_PASSWORD HASH
+)
 ```
 
-**`UPDATE 1` 이 나와야 한다.** `UPDATE 0` 이면 그 이메일의 계정이 그 DB 에 없다 — 「에디터가 뜨는데
+- **비밀번호는 `read -rs` 로 받는다** — 명령 글자와 셸 기록에 남지 않는다. 받은 값은 해시를 만드는 동안 그
+  자식 프로세스의 환경에 있고(같은 사용자의 `ps -E` 에는 보인다), 괄호(서브셸)가 끝나면 변수도 사라진다.
+  해시는 `psql -v` 인자라 그 명령이 도는 동안 호스트와 컨테이너의 `ps` 에 보인다.
+- **통째로 붙여 넣어도 된다 — 괄호가 그것을 위해 있다.** 셸이 닫는 괄호까지 다 읽은 뒤에 실행하므로 `read` 가
+  붙여 넣은 다음 줄이 아니라 사람이 치는 것을 기다린다. 괄호 없이 줄들을 붙여 넣으면 `read` 가 **붙여 넣은 다음
+  줄(빈 줄)을 비밀번호로 먹어** 해시가 빈 비밀번호의 것이 되고(로그인 본문 검증이 8자 미만을 400 으로 막아 아무도
+  못 들어간다), 사람이 이어서 친 비밀번호는 **명령으로 실행돼 셸 기록에 남는다**. 블록 안에 `#` 주석을 두지 않는 것도
+  같은 까닭이다 — `interactivecomments` 가 꺼진 zsh 는 붙여 넣은 주석 줄의 `(` · `<` 에서 구문 오류를 낸다.
+- **서버의 규칙(`src/auth/credentials.ts` 의 `RawPassword`, 8–200자)을 먼저 지난다.** 어기면 `ZodError` 로 멈추고
+  (오류는 비밀번호를 찍지 않는다) `&&` 가 DB 줄을 막는다. 규칙 밖의 비밀번호를 넣으면 로그인 본문 검증이 400 을 내
+  **아무도 못 쓰는 계정**이 된다. `read` 에서 Ctrl-D 를 누르면 `read` 에서 멈춘다 — 줄들이 `&&` 로 이어지지 않으면
+  빈 해시가 들어가 `UPDATE 1` 인데 로그인이 500 이 된다.
+
+**`UPDATE 1` 이 나와야 한다.** `UPDATE` 줄이 안 나오고 오류가 찍혔으면 DB 는 그대로다. `UPDATE 0` 이면 그 이메일의
+계정이 그 DB 에 없다 — 이메일은 소문자로 저장되므로 대문자를 섞어 치면 `UPDATE 0` 이다. 그 밖이면 「에디터가 뜨는데
 로그인이 안 된다」 절의 ⓞ · ⓑ 를 본다. 서버는 내리지 않아도 된다. 이 기계에서 쟀다: 명령 그대로 돌린 뒤 새
-비밀번호 200 · 옛 비밀번호 401 · 그 전에 로그인해 둔 세션 401, 프로젝트와 멤버십은 그대로다.
+비밀번호 200 · 옛 비밀번호 401 · 그 전에 로그인해 둔 세션 401, 프로젝트와 멤버십은 그대로다 — zsh · bash 에 한 줄씩
+친 판과 통째로 붙여 넣은 판 모두.
 
 **세션 삭제 줄을 빼면 옛 세션이 산다** — 해시를 바꾼 뒤에도 그 전에 로그인한 브라우저의
 `/api/auth/me` 가 200 이었다. 옛 비밀번호가 새어 바꾸는 것이면 그 줄을 빼지 마라.
