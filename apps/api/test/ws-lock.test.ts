@@ -39,6 +39,7 @@ import type { DbHandle } from '../src/db/tx'
 import { lockPageForEdit } from '../src/repos/pages'
 import { LOCK_TTL_MS, createLockStore } from '../src/lock/store'
 import { createBroadcaster } from '../src/ws/broadcast'
+import { LOCK_ROW_WAIT_MS } from '../src/ws/lock'
 import { WS_CLOSE, type ServerFrame } from '../src/ws/protocol'
 import { InMemoryRoomRegistry } from '../src/ws/rooms'
 import { WsProbe, joinRoom, locksEmpty, locksUntil, locksWith } from './ws-client'
@@ -913,6 +914,116 @@ describe('`lock`의 줄과 실패의 답', () => {
       expect(denials(dahyeTab)[1]).toEqual({ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_b1', lockId: 4 })
       expect(failVerdict).toBe(false)
       await until('앞서 쥔 `n_c`가 놓인다', () => nodesOf(ctx, fx.project.id).length === 0)
+    })
+  }, 30_000)
+
+  /**
+   * **끝내지 못한 `unlock`도 놓는다**(`ws/routes.ts`의 `catch`) — 놓기는 자격이 필요 없다. 안 놓으면 화면이 놓은 자리의 배지가 TTL(30s)까지
+   * 남는다. 던지는 자리는 자격 확인(`stillAllowed`)이다. 혼자 죽는 변조: `catch`가 `unlock`에 아무것도 안 한다.
+   */
+  it('끝내지 못한 `unlock`도 놓는다 — 배지가 TTL 까지 남지 않는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      const { broadcast } = ctx.app.realtime
+      dahyeTab.send(lockFrame(fx.page.id, 'n_a'))
+      await locksWith(watcher, 'n_a')
+      await locksWith(dahyeTab, 'n_a')
+      const real = broadcast.stillAllowed
+      let thrown = 0
+      broadcast.stillAllowed = async (connection, minRole) => {
+        if (thrown === 0 && connection.userId === fx.dahye.user.id && minRole === 'editor') {
+          thrown += 1
+          throw new Error('자격 확인이 풀 칸을 못 얻었다(흉내)')
+        }
+        return real(connection, minRole)
+      }
+
+      dahyeTab.send(UNLOCK_FRAME)
+
+      expect(await locksEmpty(watcher)).toEqual([])
+      expect(thrown).toBe(1)
+      expect(nodesOf(ctx, fx.project.id)).toEqual([])
+    })
+  }, 30_000)
+
+  /**
+   * **행을 한도 넘게 기다린 `lock`은 거절된다**(`ws/lock.ts`의 `LOCK_ROW_WAIT_MS`) — 풀 칸을 행이 풀릴 때까지 쥐지 않는다. 행을 한도보다
+   * 3s 더 쥔 채 고르면, 쥔 동안 `lock-denied`가 오고 행을 기다리는 트랜잭션이 사라지며 앞서 쥔 것도 놓인다. 거절은 판정이라 «WS 프레임
+   * 처리 실패» 로그를 안 남긴다. 혼자 죽는 변조: 이 트랜잭션에 `lock_timeout`을 안 건다(거절이 행이 풀린 뒤에야 온다) · 시간 초과를
+   * `handleLockFrame`에서 안 잡는다(답은 `ws/routes.ts`의 `catch`가 같게 하지만 그 로그가 남는다).
+   */
+  it('행을 한도 넘게 기다린 `lock`은 그동안 거절된다 — 풀 칸을 놓고 앞서 쥔 것도 놓는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      dahyeTab.send(lockWithId(fx.spare.id, 'n_x', 1))
+      await locksWith(watcher, 'n_x')
+      const failures = vi.spyOn(ctx.app.log, 'error')
+      const row = await rowHolder(fx.page.id)
+      let deniedWhileHeld = false
+      let waitersAfter = -1
+      try {
+        const sent = Date.now()
+        dahyeTab.send(lockWithId(fx.page.id, 'n_a', 2))
+        await until('`lock`이 행에 줄 선다', async () => (await blockedBy(row.pid)) >= 1)
+        await until('쥔 동안 거절이 온다', () => denials(dahyeTab).length === 1, LOCK_ROW_WAIT_MS + 2_000)
+        deniedWhileHeld = Date.now() - sent < LOCK_ROW_WAIT_MS + 3_000
+        waitersAfter = await blockedBy(row.pid)
+      } finally {
+        await row.release()
+      }
+
+      expect(deniedWhileHeld).toBe(true)
+      expect(waitersAfter).toBe(0)
+      expect(denials(dahyeTab)).toEqual([{ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_a', lockId: 2 }])
+      expect(await locksEmpty(watcher)).toEqual([])
+      expect(failures.mock.calls.filter(([, message]) => message === 'WS 프레임 처리 실패')).toEqual([])
+    })
+  }, 30_000)
+
+  /**
+   * **닫힌 연결의 «다음에 할 것»은 트랜잭션을 안 연다**(`ws/lock.ts`의 `createLockLane` — `drain`). 첫 `lock`을 행 A 에 세우고 다음 것(페이지 B)을
+   * 줄에 넣은 뒤 연결을 닫고 A 를 푼다. B 의 행도 쥐어 두면 트랜잭션을 연 판은 그 행에 선다(=풀 칸 하나). 혼자 죽는 변조: `drain`이 룸을
+   * 안 본다.
+   */
+  it('닫힌 연결의 줄에 남은 `lock`은 트랜잭션을 안 연다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const dahyeTab = WsProbe.open(ctx.port, fx.project.id, fx.dahye.cookie.wb_session)
+      await dahyeTab.waitFor('joined')
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      const { broadcast, rooms } = ctx.app.realtime
+      const real = broadcast.stillAllowed
+      let checked = 0
+      broadcast.stillAllowed = async (connection, minRole) => {
+        const allowed = await real(connection, minRole)
+        if (connection.userId === fx.dahye.user.id && minRole === 'editor') checked += 1
+        return allowed
+      }
+      const rowA = await rowHolder(fx.page.id)
+      const rowB = await rowHolder(fx.spare.id)
+      let waitingOnB = -1
+      try {
+        dahyeTab.send(lockFrame(fx.page.id, 'n_a'))
+        await until('첫 `lock`이 행 A 에 줄 선다', async () => (await blockedBy(rowA.pid)) >= 1)
+        dahyeTab.send(lockFrame(fx.spare.id, 'n_x'))
+        await until('둘째가 자격 확인을 지나 줄에 선다', () => checked === 2)
+        dahyeTab.close()
+        await dahyeTab.waitClosed()
+        await until('연결이 룸에서 빠진다', () => !rooms.membersOf(fx.project.id).some((member) => member.userId === fx.dahye.user.id))
+        await rowA.release()
+        waitingOnB = await peak(() => blockedBy(rowB.pid), 400)
+      } finally {
+        await rowA.release()
+        await rowB.release()
+      }
+
+      expect(waitingOnB).toBe(0)
+      await watcher.quiet()
+      expect(nodesOf(ctx, fx.project.id)).toEqual([])
     })
   }, 30_000)
 
