@@ -96,21 +96,21 @@ interface SectionSpec {
 const SECTIONS: readonly SectionSpec[] = [
   {
     section: 'components',
-    gloss: '컴포넌트별 스타일(§6.5) — 카탈로그의 컴포넌트 이름이 키입니다.',
+    gloss: '컴포넌트별 구조와 스타일 — 카탈로그의 컴포넌트 이름이 키입니다.',
   },
   {
     section: 'patterns',
-    gloss: '재사용 패턴(§6.6) — `<범주>.<변형>`이 키입니다.',
+    gloss: '재사용 패턴 — `<범주>.<변형>`이 키입니다.',
     // **그 사실을 UI가 말한다.** 이 화면의 약속이 *"고치면 오른쪽에 바로 보인다"*인데 이 절만 그 약속
     // 밖이다. 침묵하면 파싱 실패에서 막은 *"고쳤는데 안 바뀐다"*가 **정상 동작으로**
     // 재생산된다 — 그쪽은 경보라도 뜨지만 여기는 아무것도 안 뜬다.
     caveat:
-      '패턴은 오늘 갤러리에 그려지지 않습니다 — 전개가 아직 없습니다(P7). ' +
-      '편집·검증·저장은 됩니다.',
+      '패턴은 갤러리에 그려지지 않습니다 — 갤러리는 컴포넌트만 늘어놓습니다. ' +
+      '편집·검증·저장은 됩니다. 저장한 뒤 이 테마를 쓰는 프로젝트의 페이지에서 「패턴 넣기」로 넣어 보세요.',
   },
   {
     section: 'primitives',
-    gloss: '사이트 골격(§6.4) — 컨테이너·그리드·섹션·브레이크포인트.',
+    gloss: '사이트 골격 — 컨테이너·그리드·섹션·브레이크포인트.',
     // **이슈 패널은 틀린 뒤에만 말한다**(판정은 `resolveTheme`이 이슈로 낸다) — 이 문장은 틀리기 전에 말한다.
     caveat:
       '이 절의 값은 토큰만 가리킬 수 있습니다 — primitives끼리 가리키면 오류입니다. ' +
@@ -118,12 +118,12 @@ const SECTIONS: readonly SectionSpec[] = [
   },
   {
     section: 'assets',
-    gloss: '폰트·아이콘·placeholder(§6.7).',
+    gloss: '폰트·아이콘·placeholder.',
     // **편집은 되는데 아무 일도 안 일어나는 절이라 그 사실을 적는다.** 다시 재는 법: 시스템 테마
     // (`packages/themes/src/system/`) 중 `'photo'`를 선언한 것이 있고, `packages/themes/src/emit/`에서
     // `placeholder`를 grep 하면 0건이다.
     caveat:
-      'placeholder.style은 오늘 아무 일도 하지 않습니다 — 검증은 지나지만 CSS로 나가지 ' +
+      'placeholder.style은 아무 일도 하지 않습니다 — 검증은 지나지만 CSS로 나가지 ' +
       '않습니다(미구현). fonts는 @font-face로 나갑니다.',
   },
 ]
@@ -162,7 +162,7 @@ export function JsonEditor(props: { locked: boolean }): ReactElement | null {
     <div className="wb-shell-theme-json">
       {isDerived && (
         <p className="wb-shell-theme-json-derived" role="status">
-          파생 테마입니다 — <strong>덮어쓸 것만</strong> 적습니다(§6.9). 상자를 비우면 상속한
+          파생 테마입니다 — <strong>덮어쓸 것만</strong> 적습니다. 상자를 비우면 상속한
           값이 그대로 옵니다. 상속한 것을 <strong>지우려면 `null`</strong>을 적습니다.
         </p>
       )}
