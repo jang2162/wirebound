@@ -561,8 +561,71 @@ Error response from daemon: failed to set up container networking:
 > **`docker compose down -v` 를 치지 마라** — 그 한 줄이 지금 보고 있는 빈 볼륨이 아니라
 > **찾고 있는 볼륨까지** 지운다.
 >
-> **옛 볼륨의 데이터를 새 이름으로 옮기는 것은 복사이지 이동이 아니다** — 옛 볼륨을 지우지
-> 않는 절차가 `docs/superpowers/plans/2026-08-19-per-worktree-container-report.md` 「선택 — 옛 볼륨을 새 이름으로 "복사"한다」 절에 있다.
+> **옛 볼륨의 데이터를 이 디렉터리의 볼륨으로 옮기는 것은 복사이지 이동이 아니다** — 아래
+> 「옛 볼륨을 새 이름으로 복사한다」.
+
+#### 옛 볼륨을 새 이름으로 복사한다
+
+**하지 않아도 아무것도 안 깨진다.** 옛 컨테이너는 옛 볼륨을 계속 본다. 이 절차는 *"이 디렉터리의
+`docker compose` 로 그 데이터를 다루고 싶다"* 일 때만 친다. **옛 볼륨은 지우지 않는다** — 그것이 되돌릴 수 있는
+근거다. **그 서버를 아무도 안 쓰는 때에 친다** — 3번이 옛 컨테이너를 멈춘다.
+
+임시 compose 프로젝트 둘(옛 · 새, 같은 포트)로 아래 명령을 한 줄씩 그대로 돌려 봤다. **사용자 볼륨으로는
+돌리지 않았다.** 이 디렉터리(데이터를 받을 쪽)에서 친다:
+
+```bash
+# 0. 옛 볼륨의 이름(위 「고르는 법」)과 그것을 문 컨테이너. 대조할 수를 먼저 적어 둔다
+OLD_VOLUME=<옛프로젝트>_wirebound-pgdata
+OLD_CONTAINER=$(docker ps -a --filter volume=$OLD_VOLUME --format '{{.Names}}')
+docker exec "$OLD_CONTAINER" psql -U wirebound -d wirebound -tAc \
+  'SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM projects), (SELECT count(*) FROM pages);'
+#   → 수 셋이 한 줄로 나온다(예: 3|5|11). -d 는 옛 컨테이너가 쓰던 DB 이름이다
+
+# 1. 받을 볼륨의 이름 — compose 가 이 디렉터리에서 쓸 것. apps/api/.env 가 없으면 여기서 종료 1 이다
+NEW_VOLUME="$(docker compose --env-file apps/api/.env config | sed -n 's/^name: //p')_wirebound-pgdata"
+
+# 2. 받을 볼륨이 **비었는지** 본다 — 0 이 아니면 **멈춘다**(남의 PGDATA 위에 섞인다)
+docker volume create "$NEW_VOLUME"
+docker run --rm -v "$NEW_VOLUME":/t:ro alpine sh -c 'ls -A /t | wc -l'      # → 0
+
+# 3. 옛 컨테이너를 멈추고 통째로 복사한다(옛 것은 읽기 전용으로 연다)
+docker stop "$OLD_CONTAINER"
+docker ps -a --filter name="^${OLD_CONTAINER}\$" --format '{{.Status}}'    # → Exited (…) 여야 한다
+docker run --rm -v "$OLD_VOLUME":/from:ro -v "$NEW_VOLUME":/to alpine sh -c 'cd /from && cp -a . /to/'
+docker run --rm -v "$NEW_VOLUME":/t:ro alpine sh -c 'ls -A /t | wc -l'      # → 0 이 아니어야 한다
+
+# 4. 이 디렉터리에서 띄운다
+docker compose --env-file apps/api/.env up -d
+docker compose ps        # healthy 이고 PORTS 칸에 포트가 보여야 한다(위 ⓑ 의 빈 PORTS)
+
+# 5. 대조한다 — 0번과 같은 한 줄이어야 한다
+docker compose exec postgres psql -U wirebound -d wirebound -tAc \
+  'SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM projects), (SELECT count(*) FROM pages);'
+```
+
+- **3번의 `Exited` 줄을 건너뛰지 마라.** 돌고 있는 PGDATA 를 복사해도 새 컨테이너는 healthy 로 뜨고, 수만
+  어긋난다.
+- **복사가 들어갔나를 가르는 것은 셋이다** — 3번 끝의 `ls -A`(2번의 0 과 짝), 5번의 수 대조(복사를 건너뛰면
+  `relation "users" does not exist` · 종료 1), 서버가 찍는 `이 서버가 보는 DB: … 마이그레이션 N건`(0건이면 빈 볼륨이라
+  안 뜬다). `PORTS` 칸과 `wirebound_test` 의 목록은 **복사를 건너뛰어도 똑같이 나와** 가르지 못한다 — 테스트 DB 는
+  옛 볼륨의 것이 그대로 온다(`docker/postgres-init` 은 PGDATA 가 빌 때만 돈다).
+
+**되돌리기 — 순서가 전부다.** 새 것을 먼저 내리고 옛 것을 켠다:
+
+```bash
+docker compose down                          # 이 디렉터리에서 — 새로 띄운 것
+docker start "$OLD_CONTAINER"
+docker ps --filter name="^${OLD_CONTAINER}\$" --format '{{.Names}}\t{{.Ports}}'   # PORTS 가 비면 안 돌아간 것이다
+```
+
+> **✱ 새 것이 포트를 쥔 채 `docker start` 를 치면 첫 번만 `port is already allocated` 로 죽고, 다시 치면 종료 0 ·
+> `Up (healthy)` 인데 `PORTS` 가 빈 칸이다** — 그 포트에 붙는 것은 새 컨테이너다. 그 상태의 옛 컨테이너는
+> `stop` · `start` · `restart` 로 안 돌아온다(설정의 `PortBindings` 는 그대로인데 바인딩만 빈다). **컨테이너를 다시
+> 만드는 것이 유일한 길이다** — 옛 컨테이너를 만든 compose 프로젝트의 디렉터리에서, 옛 포트를 든 `apps/api/.env` 로
+> `docker compose --env-file apps/api/.env up -d --force-recreate`. **그 디렉터리가 없으면**(지운 워크트리) 같은
+> 이름의 디렉터리를 만들고 `docker-compose.yml` · `docker/postgres-init/` · 그 `apps/api/.env` 를 두고 거기서 같은
+> 명령을 친다 — 볼륨 이름이 디렉터리 이름을 따르므로 옛 볼륨이 그대로 붙는다. **어느 판에서도 데이터는 옛 볼륨에 그대로 있다.**
+> 다시 재는 법: 임시 프로젝트 둘로, 새 것을 띄운 채 옛 것에 `docker start` 를 두 번 치고 `docker ps` 의 `PORTS` 를 본다.
 
 > **`--env-file apps/api/.env` 는 `up` 에서 빼지 마라.** 빼면 포트가 기본값(5433)으로
 > 되돌아가 컨테이너가 **그 포트로 다시 만들어진다.** `ps`·`logs`·`exec`·`down` 은 프로젝트
@@ -894,7 +957,7 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 | **`--with-deps`** | 리눅스에서만 의미가 있어 이 기계에서 안 썼다 |
 | **첫 설치의 내려받기 시간** | 「세우기」 절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
 | **워크트리 셋 이상** | 「워크트리를 여럿 띄울 때」 절의 값은 전부 **워크트리 둘**로 쟀다 |
-| **옛 볼륨을 새 이름으로 옮기기** | 절차만 있고 **이 기계에서 안 돌렸다** — `docs/superpowers/plans/2026-08-19-per-worktree-container-report.md` 「선택 — 옛 볼륨을 새 이름으로 "복사"한다」 절이 든다(복사이지 이동이 아니다) |
+| **옛 볼륨을 새 이름으로 옮기기** | **사용자 볼륨으로는 안 돌렸다** — 「옛 볼륨을 새 이름으로 복사한다」 절의 명령은 임시 compose 프로젝트 둘로만 돌려 봤다(복사이지 이동이 아니다) |
 | **`--env-file` 을 뺀 `up -d` 가 무엇을 하는가** | **안 쟀다.** 기본값이 5433 이라 재려면 사용자의 컨테이너가 쓰는 포트를 건드려야 한다. **잰 것은 `docker compose config` 가 그때 5433 을 낸다는 것까지다** |
 | **`SCREEN_CHROMIUM_PATH`의 성공 방향에 자동 케이스가 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. ***"옳은 경로를 주면 그 실행 파일로 뜬다"*는 손으로만 쟀다** — 브라우저 둘이 있어야 세울 수 있는 자리다 |
 
