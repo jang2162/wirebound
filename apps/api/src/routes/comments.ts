@@ -711,7 +711,7 @@ export function commentRoutes() {
       })
 
       // 잠금 안에서 같은 키를 찾았다 — 이 요청은 아무것도 안 바꿨다. 앞 요청의 번호 프레임은 다시 보낸다(`rebroadcastPostRevision`).
-      if ('replay' in result) {
+      if ('replay' in result && result.replay !== undefined) {
         await rebroadcastPostRevision(app, projectId, pageId, result.replay.comment.id)
         reply.code(200)
         return result.replay

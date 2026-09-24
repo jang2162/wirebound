@@ -884,6 +884,26 @@ describe('한 사람이 줄을 다 쥐지 않는다', () => {
     }
   })
 
+  it('`leave`는 사람 몫만 돌려준다 — 전체 자리는 `release`까지 남고, 뒤의 `release`가 사람 몫을 두 번 돌려주지 않는다', () => {
+    const pool = new ExportWorkerPool({ jobLimit: 3, personJobLimit: 2 })
+    try {
+      const a1 = pool.admit('가')
+      const a2 = pool.admit('가')
+      a1.leave()
+      a1.leave()
+      // 사람 몫이 하나 돌아왔다 — 셋째를 잡는다. 전체는 셋이 찼다(a1 은 아직 전체 자리를 쥔다).
+      const a3 = pool.admit('가')
+      expect(() => pool.admit('나')).toThrow(expect.objectContaining({ scope: 'server' }))
+      // 끊긴 일이 끝났다 — 전체 자리가 돌아온다. 사람 몫은 이미 돌려줬으므로 또 돌려주지 않는다: 가는 여전히 둘이다.
+      a1.release()
+      expect(() => pool.admit('가')).toThrow(expect.objectContaining({ scope: 'person' }))
+      pool.admit('나')
+      for (const admission of [a2, a3]) admission.release()
+    } finally {
+      void pool.close()
+    }
+  })
+
   it('라우트 — 한 사람의 셋째는 «내 내보내기» 503 이고, 같은 사람의 토큰도 그 몫이며, 남은 막히지 않는다', async () => {
     const renderer = new HeldRenderer()
     try {

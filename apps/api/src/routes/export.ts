@@ -174,7 +174,7 @@ function buildHtmlOrFail(
   signal: AbortSignal,
 ): Promise<HtmlJobResult> {
   return orFail(() =>
-    admitted(workers, request, async (admission) => {
+    admitted(workers, request, signal, async (admission) => {
       const rows = await readExportRows(app.db, projectId)
       const { themeId, theme } = await currentProjectTheme(app.db, projectId)
       return workers.runHtml(rows, { kind: 'html', theme: { themeId, theme }, zipRoot }, { signal, admission })
@@ -196,7 +196,7 @@ function buildPptxOrFail(
   signal: AbortSignal,
 ): Promise<PptxJobResult> {
   return orFail(() =>
-    admitted(workers, request, async (admission) => {
+    admitted(workers, request, signal, async (admission) => {
       const rows = await readExportRows(app.db, projectId)
       const screenTheme = renderer === undefined ? null : await readScreenTheme(app.db, projectId)
       return workers.runPptx(
@@ -218,15 +218,24 @@ function buildPptxOrFail(
 async function admitted<T>(
   workers: ExportWorkerPool,
   request: FastifyRequest,
+  signal: AbortSignal,
   build: (admission: ExportAdmission) => Promise<T>,
 ): Promise<T> {
   // `projectGuard`를 지난 요청이라 늘 있다 — 없으면 가드를 안 건 라우트가 부른 것이다(프로그래밍 오류).
   const person = request.currentUser?.id
   if (person === undefined) throw new Error('내보내기의 자리는 projectGuard 를 지난 요청에서만 잡는다')
+  // **이미 끊겼으면 자리를 잡지 않는다** — 잡으면 행을 다 읽을 때까지 전체 자리를 쥔다(읽고 나서야 풀이 끊김을 본다).
+  if (signal.aborted) throw new ExportAbortedError()
   const admission = workers.admit(person)
+  // **끊긴 순간 사람 몫을 돌려준다**(`ExportAdmission`의 `leave`). 웹 패널은 형식을 바꾸면 앞 미리보기를 끊고 곧바로 새로
+  // 부른다 — 끊긴 일이 행을 읽는 동안 사람 몫을 쥐면 빠르게 두 번 바꾼 셋째가 «내 내보내기» 503 이다
+  // (`test/export-abort-slot.test.ts`). 전체 자리는 읽기가 끝나 `release`할 때까지 쥔다.
+  const leave = (): void => admission.leave()
+  signal.addEventListener('abort', leave, { once: true })
   try {
     return await build(admission)
   } finally {
+    signal.removeEventListener('abort', leave)
     admission.release()
   }
 }
