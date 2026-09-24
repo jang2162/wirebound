@@ -127,7 +127,7 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     createSnapshot: notStubbed('createSnapshot'),
     restoreSnapshot: notStubbed('restoreSnapshot'),
     getExportPreview: notStubbed('getExportPreview'),
-    exportUrl: notStubbed('exportUrl'),
+    downloadExport: notStubbed('downloadExport'),
     ...overrides,
   }
 }

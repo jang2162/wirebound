@@ -53,15 +53,20 @@
  * *"html 실패는 표를 안 보고 띄운다"*가 쉽게 쓰인다. 그것을 심으면 늦은 pptx 실패만 재는
  * 케이스는 전부 통과한다. 그래서 케이스가 **양쪽 방향**으로 있다.
  *
- * ## 내려받기는 앵커다 — `fetch` + blob이 아니다
+ * ## 내려받기는 받아 온 뒤 저장한다 — 앵커가 아니다
  *
- * 이유 둘. 번들 전체가 페이지 수의 제곱이라 다 받아 메모리에 드는 것이
- * 그대로 비용이 되고, `URL.createObjectURL`이 이 저장소의 테스트 환경에 없어 그 경로는
- * 케이스가 닿지 못한다. 앵커는 브라우저가 곧장 디스크로 흘려보내고 세션 쿠키(`httpOnly`)도
- * 그대로 실린다.
+ * 앵커(`<a download href>`)로 받으면 **실패를 화면이 모른다.** 미리보기가 된 뒤 내려받기가 503(내보내기가 밀려 있다 · 내 것이
+ * 이미 돈다) · 409(그 사이 페이지가 다 지워졌다)로 끝나도 브라우저의 내려받기 목록에만 `canceled`가 남고 이 상자는 말이 없다
+ * (실브라우저 — 독립 헤드리스 Chrome 으로 셋 다 쟀다: `download.failure()`가 `canceled` · 상자의 `alert` 0). 그래서
+ * `api.downloadExport()`로 **받아 오고**, 되면 저장하고, 안 되면 그 문장을 이 상자에 적는다. 받는 동안은 버튼을 잠근다 —
+ * 두 번 누르면 서버의 일이 둘이 되고 사람마다의 한도(`apps/api`의 `services/export-worker.ts` «한 사람이 줄을 다 쥐지
+ * 않는다»)를 혼자 채운다.
  *
- * **주소는 `api.exportUrl()`이 만든다** — 화면이 `/api/…`를 적기 시작하면 경로가 두 곳이
- * 된다. 파일 이름도 서버가 준 것을 그대로 쓴다(같은 이유).
+ * **대가 — 파일이 저장되기 전에 한 벌 통째로 브라우저에 든다.** 앵커는 디스크로 흘려보낸다. 잰 값은 `DownloadButton`의
+ * 머리말이 갖는다. 서버는 어차피 파일을 다 만든 뒤에 보내므로(압축을 워커가 한 번에 한다) 흘려보내도 첫 바이트가 빨라지지
+ * 않는다 — 잃는 것은 메모리뿐이다.
+ *
+ * 파일 이름은 서버가 준 것(`preview.fileName`)을 그대로 쓴다 — 화면이 지으면 두 벌이 된다.
  *
  * ## 타겟을 보이는 것이 이 화면의 둘째 몫이다 — **HTML 번들에서만**
  *
@@ -85,7 +90,7 @@
  *
  * ## 새 런타임 의존이 없다
  *
- * `<button>`·`<a download>`·`useState`·`useRef`뿐이다.
+ * `<button>`·`URL.createObjectURL`·`useState`·`useRef`뿐이다.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { useApi } from '../api/context'
@@ -107,6 +112,9 @@ type PreviewState =
 
 /** 서버가 이유를 주지 않은 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '내보낼 것을 확인하지 못했습니다'
+
+/** 내려받기가 서버의 이유 없이 실패했을 때의 문장. */
+const DOWNLOAD_FAILURE = '파일을 내려받지 못했습니다'
 
 /** 열 때의 형식. **기억하지 않는다** — 위 머리말의 근거. */
 const DEFAULT_FORMAT: ExportFormat = 'html'
@@ -306,7 +314,7 @@ function HtmlSummary(props: { preview: HtmlExportPreview; projectId: string }): 
         </ul>
       </section>
 
-      <DownloadLink preview={preview} projectId={props.projectId} />
+      <DownloadButton preview={preview} projectId={props.projectId} />
     </>
   )
 }
@@ -378,30 +386,87 @@ function PptxSummary(props: { preview: PptxExportPreview; projectId: string }): 
         </ul>
       </section>
 
-      <DownloadLink preview={preview} projectId={props.projectId} />
+      <DownloadButton preview={preview} projectId={props.projectId} />
+    </>
+  )
+}
+
+/** 내려받기의 상태. 미리보기의 `PreviewState`와 같은 판별 유니온이다. */
+type DownloadState = { status: 'idle' } | { status: 'running' } | { status: 'failed'; failure: Failure }
+
+/**
+ * 내려받기 버튼. **형식마다 다시 적지 않는다** — 받고 저장하고 실패를 말하는 규칙이 두 벌이 되면
+ * 한쪽만 낡는다(`routes/export.ts`의 `sendFile`이 서버 쪽에서 같은 판단을 한다).
+ *
+ * **형식은 `preview.format`에서 온다 — 고른 형식이 아니다.** 그래야 위에 그려진 경고와
+ * 이 버튼이 **같은 응답**에서 나온 것이 된다. 파일 이름도 서버가 준 것을 그대로
+ * 쓴다 — 지어내면 두 벌이 된다.
+ *
+ * **상자를 닫아도 받던 것은 끝까지 받아 저장한다** — 앵커로 받을 때와 같다(누른 것은 파일이다). 닫힌 상자에는 실패를
+ * 적을 자리가 없으므로 그때의 실패는 말하지 못한다.
+ *
+ * **받아 온 뒤 저장하는 대가**(실브라우저 — 독립 헤드리스 Chrome · 같은 기계 · Chrome 프로세스 전부의 RSS 최고 대 누르기 전 ·
+ * 같은 파일을 앵커로 받은 판과 번갈아 두 번씩):
+ *
+ * | 파일 | 앵커 | 이 버튼 | 걸린 시간 |
+ * |---|---|---|---|
+ * | html zip 2.8MB | +1MB | +6MB | 같다(3.4–4.2s — 서버가 만드는 시간) |
+ * | pptx 33.5MB | +0MB | +0 · +5MB | 같다(7.9–9.8s) |
+ * | pptx 100.6MB | +0 · +1MB | +87 · +89MB | 같다(24–27s) |
+ *
+ * 저장된 파일의 엔트리(이름 · 순서 · 내용)는 서버가 낸 것과 같았다. 다시 재는 법: 같은 프로젝트를 앵커(`<a download
+ * href=…/export?format=…>`)와 이 버튼으로 번갈아 받으며 `ps`로 Chrome 프로세스의 RSS 를 50ms 마다 본다.
+ */
+function DownloadButton(props: { preview: ExportPreview; projectId: string }): ReactElement {
+  const api = useApi()
+  const { preview } = props
+  const [state, setState] = useState<DownloadState>({ status: 'idle' })
+
+  async function save(): Promise<void> {
+    setState({ status: 'running' })
+    try {
+      const blob = await api.downloadExport(props.projectId, preview.format)
+      saveBlob(blob, preview.fileName)
+      setState({ status: 'idle' })
+    } catch (caught) {
+      setState({ status: 'failed', failure: toFailure(caught, DOWNLOAD_FAILURE) })
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="wb-shell-export-download"
+        disabled={state.status === 'running'}
+        onClick={() => void save()}
+      >
+        {preview.fileName} 내려받기
+      </button>
+      {state.status === 'running' && <p role="status">파일을 만드는 중…</p>}
+      {/* 세션이 끊겼으면 문장이 아니라 로그인이다 — 미리보기의 실패와 같은 규칙(위 `ExportPanel`). */}
+      {state.status === 'failed' &&
+        (state.failure.kind === 'signed-out' ? <SignedOut /> : <p role="alert">{state.failure.message}</p>)}
     </>
   )
 }
 
 /**
- * 내려받기 앵커. **형식마다 다시 적지 않는다** — 이름과 주소를 짓는 규칙이 두 벌이 되면
- * 한쪽만 낡는다(`routes/export.ts`의 `sendFile`이 서버 쪽에서 같은 판단을 한다).
- *
- * **형식은 `preview.format`에서 온다 — 고른 형식이 아니다.** 그래야 위에 그려진 경고와
- * 이 링크가 **같은 응답**에서 나온 것이 된다. 파일 이름도 주소도 서버가 준 것을 그대로
- * 쓴다 — 지어내면 두 벌이 된다.
+ * 받아 온 바이트를 파일로 저장한다 — 임시 앵커에 blob 주소를 걸어 누른다. **주소는 곧바로 놓지 않는다** — `click()`은
+ * 내려받기를 시작만 하고 돌아오므로, 그 자리에서 놓으면 브라우저가 그 주소를 읽기 전에 사라질 수 있다(놓는 때를 재지는
+ * 않았다 — 늦게 놓아 잃는 것은 그 분 동안의 메모리뿐이다).
  */
-function DownloadLink(props: { preview: ExportPreview; projectId: string }): ReactElement {
-  const api = useApi()
-  const { preview } = props
-
-  return (
-    <a
-      className="wb-shell-export-download"
-      href={api.exportUrl(props.projectId, preview.format)}
-      download={preview.fileName}
-    >
-      {preview.fileName} 내려받기
-    </a>
-  )
+function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fileName
+  anchor.style.display = 'none'
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_LIFETIME_MS)
 }
+
+/** 저장에 건 blob 주소를 놓기까지(ms) — `saveBlob`. */
+const BLOB_URL_LIFETIME_MS = 60_000

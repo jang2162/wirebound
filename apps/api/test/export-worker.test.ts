@@ -24,6 +24,7 @@ import { exportProjectPptx } from '../src/services/export-pptx'
 import { UnsupportedDocumentError, type ExportRows } from '../src/services/export-source'
 import {
   EXPORT_JOB_LIMIT,
+  EXPORT_PERSON_JOB_LIMIT,
   EXPORT_RENDER_LIMIT,
   EXPORT_RETRY_AFTER_S,
   ExportAbortedError,
@@ -36,6 +37,7 @@ import type { ExportJobSpec } from '../src/services/export-worker-protocol'
 import { bundleRootDirectory, zipBundle, zipParts } from '../src/services/export-zip'
 import type { ScreenBatch, ScreenRenderer, ScreenRequest } from '../src/services/screen-render'
 import {
+  addMember,
   createMenuNode,
   createPage,
   createProject,
@@ -138,6 +140,20 @@ async function 설계서(ctx: TestContext, slug: string): Promise<{ cookie: { wb
   await addComment(ctx, cookie, project.id, 목록.id, 'l_b', '목록 코멘트 하나')
   await addComment(ctx, cookie, project.id, 목록.id, 'l_r', '목록 코멘트 둘')
   return { cookie, projectId: project.id, slug }
+}
+
+/**
+ * 전체 한도를 채울 사람들 — 그 프로젝트의 viewer 들이다. **한 사람으로는 못 채운다**(사람마다 한도
+ * `EXPORT_PERSON_JOB_LIMIT`). `i` 번째 요청은 `people[i % people.length]`가 보낸다.
+ */
+async function 채울사람들(ctx: TestContext, projectId: string): Promise<{ wb_session: string }[]> {
+  const people: { wb_session: string }[] = []
+  for (let i = 0; i < Math.ceil(EXPORT_JOB_LIMIT / EXPORT_PERSON_JOB_LIMIT); i++) {
+    const person = await signup(ctx)
+    await addMember(ctx, projectId, person.user.id, 'viewer')
+    people.push(person.cookie)
+  }
+  return people
 }
 
 /** 페이지마다 **다른 크기**를 답하는 가짜 그리는 자 — 그림이 엉뚱한 페이지에 붙으면 슬라이드가 갈린다. */
@@ -283,7 +299,7 @@ describe('풀', () => {
     expect((failure as UnsupportedDocumentError).pageTitle).toBe('메뉴 p1')
 
     // 멀쩡히 답한 워커다 — 버리지 않는다.
-    expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0 })
+    expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0, drawSlots: 0 })
     await expect(pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP)).resolves.toMatchObject({ kind: 'html' })
   })
 
@@ -293,7 +309,7 @@ describe('풀', () => {
     await new Promise((resolve) => setImmediate(resolve))
     expect(pool.stats).toMatchObject({ threads: 1, busy: 1, queued: 1 })
     await expect(Promise.all([first, second])).resolves.toHaveLength(2)
-    expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0 })
+    expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0, drawSlots: 0 })
   }, 60_000)
 
 })
@@ -316,7 +332,7 @@ describe('끊김', () => {
 
       running.abort()
       expect(await first).toBeInstanceOf(ExportAbortedError)
-      await vi.waitFor(() => expect(pool.stats).toEqual({ threads: 0, busy: 0, queued: 0 }))
+      await vi.waitFor(() => expect(pool.stats).toEqual({ threads: 0, busy: 0, queued: 0, drawSlots: 0 }))
 
       // 다음 일은 새 워커로 된다.
       await expect(pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP)).resolves.toMatchObject({ kind: 'html' })
@@ -332,7 +348,7 @@ describe('워커가 죽는다', () => {
     try {
       const failure = await pool.runHtml(syntheticRows(12, 7000), HTML_ZIP).catch((error: unknown) => error)
       expect(failure).toBeInstanceOf(ExportWorkerError)
-      expect(pool.stats).toEqual({ threads: 0, busy: 0, queued: 0 })
+      expect(pool.stats).toEqual({ threads: 0, busy: 0, queued: 0, drawSlots: 0 })
       await expect(pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP)).resolves.toMatchObject({ kind: 'html' })
     } finally {
       await pool.close()
@@ -347,7 +363,7 @@ describe('쉬는 워커', () => {
       await Promise.all([pool.runHtml(syntheticRows(2, 2000), HTML_ZIP), pool.runHtml(syntheticRows(2, 2000), HTML_ZIP)])
       expect(pool.stats.threads).toBe(2)
       await new Promise((resolve) => setTimeout(resolve, 600))
-      expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0 })
+      expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0, drawSlots: 0 })
     } finally {
       await pool.close()
     }
@@ -522,6 +538,77 @@ describe('칸이 둘이다 — CPU 와 그리기', () => {
       await pool.close()
     }
   }, 60_000)
+
+  it('stats 가 쥔 그리기 칸을 센다 — 그리는 중 · 끊긴 일의 브라우저가 떠 있는 동안 · 다 그린 뒤', async () => {
+    const pool = new ExportWorkerPool({ limit: 2, renderLimit: 2 })
+    const renderer = new HeldRenderer()
+    try {
+      expect(pool.stats.drawSlots).toBe(0)
+      const gone = new AbortController()
+      const cut = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render, signal: gone.signal }).catch((error: unknown) => error)
+      const kept = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render })
+      await vi.waitFor(() => expect(renderer.started).toBe(2), { timeout: 30_000 })
+      expect(pool.stats.drawSlots).toBe(2)
+
+      // 끊긴 일은 끝났지만 그 브라우저는 아직 그린다 — 칸도 쥐인 채다.
+      gone.abort()
+      expect(await cut).toBeInstanceOf(ExportAbortedError)
+      expect(pool.stats.drawSlots).toBe(2)
+
+      renderer.releaseAll()
+      await kept
+      expect(pool.stats.drawSlots).toBe(0)
+    } finally {
+      renderer.releaseAll()
+      await pool.close()
+    }
+  }, 60_000)
+
+  /**
+   * **워커가 그림을 두 번 부탁하면 그 일을 끝낸다.** 조립은 한 번만 부탁하므로(`buildProjectPptx`) 오늘의 워커로는 닿지
+   * 않는 갈래다 — 그래서 메인이 받은 첫 `render`를 한 번 더 흘려 흉내 낸다. 받아 주면 칸 셈이 어긋난다: 둘째 부탁이
+   * 그리기 칸을 하나 더 얻고, 이미 내놓은 CPU 칸을 **한 번 더** 내놓아 CPU 칸이 하나 늘어난 것처럼 돈다.
+   */
+  it('둘째 그리기 부탁은 그 일을 ExportWorkerError 로 끝낸다 — CPU 칸을 두 번 내놓지 않는다', async () => {
+    const pool = new ExportWorkerPool({ limit: 1, renderLimit: 2 })
+    const renderer = new HeldRenderer()
+    const emit = Worker.prototype.emit
+    let doubled = false
+    const spy = vi.spyOn(Worker.prototype, 'emit').mockImplementation(function (this: Worker, event, ...args) {
+      const out = emit.call(this, event, ...args)
+      if (!doubled && event === 'message' && (args[0] as { t?: string } | undefined)?.t === 'render') {
+        doubled = true
+        emit.call(this, event, ...args)
+      }
+      return out
+    })
+    try {
+      const pptx = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render }).catch((error: unknown) => error)
+      await vi.waitFor(() => expect(doubled).toBe(true), { timeout: 30_000 })
+      spy.mockRestore()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      // CPU 칸이 하나다 — 큰 html 이 그것을 쥐면 작은 html 은 줄에 선다. 칸이 두 번 풀렸으면 둘 다 돈다.
+      const big = pool.runHtml(syntheticRows(8, 7000), HTML_ZIP)
+      const small = pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(pool.stats.queued).toBe(1)
+
+      const failure = await within(pptx, 20_000)
+      expect(failure).toBeInstanceOf(ExportWorkerError)
+      expect((failure as Error).message).toBe('내보내기 워커가 화면을 두 번 그려 달라고 했습니다')
+      // 둘째 부탁은 그리지 않았다 — 첫 부탁의 브라우저만 떠 있다.
+      expect(renderer.started).toBe(1)
+
+      renderer.releaseAll()
+      await expect(Promise.all([big, small])).resolves.toHaveLength(2)
+      await vi.waitFor(() => expect(pool.stats).toMatchObject({ busy: 0, queued: 0, drawSlots: 0 }))
+    } finally {
+      spy.mockRestore()
+      renderer.releaseAll()
+      await pool.close()
+    }
+  }, 60_000)
 })
 
 describe('쉬는 동안 죽은 워커', () => {
@@ -537,7 +624,7 @@ describe('쉬는 동안 죽은 워커', () => {
       await new Promise((resolve) => setImmediate(resolve))
 
       await expect(within(pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP), 20_000)).resolves.toMatchObject({ kind: 'html' })
-      expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0 })
+      expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0, drawSlots: 0 })
     } finally {
       await pool.close()
     }
@@ -558,7 +645,7 @@ describe('쉬는 동안 죽은 워커', () => {
         kill(idle[0]!.worker)
 
         await expect(within(pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP), 20_000)).resolves.toMatchObject({ kind: 'html' })
-        expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0 })
+        expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0, drawSlots: 0 })
       } finally {
         await pool.close()
       }
@@ -669,9 +756,12 @@ describe('줄은 길이로 묶는다', () => {
       await withApi(
         async (ctx) => {
           const fixture = await 설계서(ctx, 'worker-busy')
+          const people = await 채울사람들(ctx, fixture.projectId)
           const url = `/api/projects/${fixture.projectId}/export/preview?format=pptx`
-          // 둘이 그리고, 나머지는 그리기 칸을 기다린다 — 떠 있는 일이 한도에 닿는다.
-          const filling = Array.from({ length: EXPORT_JOB_LIMIT }, () => ctx.app.inject({ method: 'GET', url, cookies: fixture.cookie }))
+          // 둘이 그리고, 나머지는 그리기 칸을 기다린다 — 떠 있는 일이 한도에 닿는다. 묻는 사람(`fixture`)은 떠 있는 일이 없다.
+          const filling = Array.from({ length: EXPORT_JOB_LIMIT }, (_, i) =>
+            ctx.app.inject({ method: 'GET', url, cookies: people[i % people.length]! }),
+          )
           await vi.waitFor(() => expect(renderer.started).toBe(EXPORT_RENDER_LIMIT), { timeout: 30_000 })
 
           // 채우는 요청들이 아직 가드를 지나는 중이면 이 요청이 들어가 돈다 — 한도가 찰 때까지 다시 본다.
@@ -715,8 +805,9 @@ describe('줄은 길이로 묶는다', () => {
           const idle = await ctx.app.inject({ method: 'GET', url: `/api/projects/${empty.id}/export/preview?format=pptx`, cookies: fixture.cookie })
           expect(idle.statusCode).toBe(409)
 
-          const filling = Array.from({ length: EXPORT_JOB_LIMIT }, () =>
-            ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`, cookies: fixture.cookie }),
+          const people = await 채울사람들(ctx, fixture.projectId)
+          const filling = Array.from({ length: EXPORT_JOB_LIMIT }, (_, i) =>
+            ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`, cookies: people[i % people.length]! }),
           )
           await vi.waitFor(() => expect(renderer.started).toBe(EXPORT_RENDER_LIMIT), { timeout: 30_000 })
           // 채우는 요청들이 아직 가드를 지나는 중이면 이 요청이 들어가 읽는다 — 한도가 찰 때까지 다시 본다.
@@ -738,6 +829,99 @@ describe('줄은 길이로 묶는다', () => {
             await new Promise((resolve) => setTimeout(resolve, 20))
           }
           expect((await settled).map((res) => res.statusCode)).toEqual(filling.map(() => 200))
+        },
+        { screenRenderer: { render: renderer.render } },
+      )
+    } finally {
+      renderer.releaseAll()
+    }
+  }, 120_000)
+})
+
+describe('한 사람이 줄을 다 쥐지 않는다', () => {
+  it('사람마다 떠 있는 일을 센다 — 넘으면 «내 내보내기» 이고 남의 자리는 그대로다', () => {
+    const pool = new ExportWorkerPool({ jobLimit: 4, personJobLimit: 2 })
+    try {
+      const a1 = pool.admit('가')
+      const a2 = pool.admit('가')
+      const mine = (() => {
+        try {
+          pool.admit('가')
+        } catch (error) {
+          return error
+        }
+      })()
+      expect(mine).toBeInstanceOf(ExportBusyError)
+      expect((mine as ExportBusyError).scope).toBe('person')
+      expect((mine as ExportBusyError).message).toBe('내 내보내기가 이미 돌고 있습니다 — 앞의 것이 끝난 뒤 다시 시도하세요')
+      expect((mine as ExportBusyError).retryAfterSeconds).toBe(EXPORT_RETRY_AFTER_S)
+
+      // 남은 그대로 잡는다 — 전체가 차면 그때는 «밀려 있다»다.
+      const b1 = pool.admit('나')
+      const b2 = pool.admit('나')
+      const full = (() => {
+        try {
+          pool.admit('다')
+        } catch (error) {
+          return error
+        }
+      })()
+      expect((full as ExportBusyError).scope).toBe('server')
+      expect((full as ExportBusyError).message).toBe('내보내기가 밀려 있습니다 — 잠시 뒤 다시 시도하세요')
+
+      // 놓으면 그 사람의 몫이 돌아온다 — 두 번 놓아도 한 번이다. 이때 전체도 차 있다(넷) — 그래서 **누구의 한도로**
+      // 거절했는지까지 본다: 두 번 놓은 것을 두 번 돌려주면 그 사람의 몫은 남고 전체 한도로만 거절된다.
+      a1.release()
+      a1.release()
+      const a3 = pool.admit('가')
+      expect(() => pool.admit('가')).toThrow(expect.objectContaining({ scope: 'person' }))
+      for (const admission of [a2, a3, b1, b2]) admission.release()
+      // 다 놓았으면 사람마다의 셈이 비었다 — 한 사람이 다시 둘을 잡는다.
+      pool.admit('가')
+      pool.admit('가')
+    } finally {
+      void pool.close()
+    }
+  })
+
+  it('라우트 — 한 사람의 셋째는 «내 내보내기» 503 이고, 같은 사람의 토큰도 그 몫이며, 남은 막히지 않는다', async () => {
+    const renderer = new HeldRenderer()
+    try {
+      await withApi(
+        async (ctx) => {
+          const fixture = await 설계서(ctx, 'worker-person')
+          const other = await signup(ctx)
+          await addMember(ctx, fixture.projectId, other.user.id, 'viewer')
+          const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fixture.projectId}/tokens`, cookies: fixture.cookie, payload: { name: '내 토큰' } })
+          expect(issued.statusCode).toBe(201)
+          const token = (issued.json() as { value: string }).value
+
+          // 한 사람이 둘을 띄운다(탭 둘) — 둘 다 그리는 중이다.
+          const url = `/api/projects/${fixture.projectId}/export/preview?format=pptx`
+          const mine = Array.from({ length: EXPORT_PERSON_JOB_LIMIT }, () => ctx.app.inject({ method: 'GET', url, cookies: fixture.cookie }))
+          await vi.waitFor(() => expect(renderer.started).toBe(EXPORT_PERSON_JOB_LIMIT), { timeout: 30_000 })
+
+          const third = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })
+          expect(third.statusCode).toBe(503)
+          expect(third.headers['retry-after']).toBe(String(EXPORT_RETRY_AFTER_S))
+          expect(third.json()).toEqual({ error: { code: 'internal', message: '내 내보내기가 이미 돌고 있습니다 — 앞의 것이 끝난 뒤 다시 시도하세요' } })
+
+          const byToken = await ctx.app.inject({
+            method: 'GET',
+            url: `/api/projects/${fixture.projectId}/export?format=html`,
+            headers: { authorization: `Bearer ${token}` },
+          })
+          expect(byToken.statusCode).toBe(503)
+          expect((byToken.json() as { error: { message: string } }).error.message).toMatch(/^내 내보내기/)
+
+          const others = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: other.cookie })
+          expect(others.statusCode).toBe(200)
+
+          renderer.releaseAll()
+          expect((await Promise.all(mine)).map((res) => res.statusCode)).toEqual(mine.map(() => 200))
+          // 앞의 것이 끝나면 다시 된다.
+          const again = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })
+          expect(again.statusCode).toBe(200)
         },
         { screenRenderer: { render: renderer.render } },
       )

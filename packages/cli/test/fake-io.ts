@@ -76,6 +76,8 @@ export interface FakeIo extends Io {
   readonly stdout: string[]
   readonly stderr: string[]
   readonly requests: RecordedRequest[]
+  /** `sleep`이 받은 값(ms) — 기다리지 않고 적기만 한다. */
+  readonly sleeps: number[]
   /** `METHOD /경로` → 응답. 없으면 404를 낸다. */
   readonly routes: Map<string, Route>
 }
@@ -114,6 +116,7 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
   const stdout: string[] = []
   const stderr: string[] = []
   const requests: RecordedRequest[] = []
+  const sleeps: number[] = []
   const routes = new Map<string, Route>()
 
   const fetchImpl = async (url: string, init?: HttpRequestInit): Promise<HttpResponse> => {
@@ -217,6 +220,9 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
     fetch: fetchImpl,
     promptSecret: async () => options.secret ?? null,
     readStdin: async () => options.stdin ?? null,
+    sleep: async (ms) => {
+      sleeps.push(ms)
+    },
     fs,
     text: (path) => {
       const found = fs.get(path)
@@ -232,6 +238,7 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
     stdout,
     stderr,
     requests,
+    sleeps,
     routes,
   }
 }

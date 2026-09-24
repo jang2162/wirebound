@@ -34,6 +34,7 @@ import type {
   PptxExportPreview,
 } from '../../src/api/types'
 import { PROJECT_ID, openPage, pageDoc } from '../editor-harness'
+import { currentPath, expiringSession } from '../helpers'
 
 /**
  * **`title`은 서버가 조립한 번들 이름이다**(조상 메뉴가 붙어 있다).
@@ -123,9 +124,8 @@ function api(
   return {
     getExportPreview:
       typeof preview === 'function' ? (_projectId, format) => preview(format) : async () => preview,
-    // **주소를 만드는 자리는 하나다**(`api/client.ts`). 가짜도 그 계약대로 형식을 받는다 —
-    // 여기서 형식을 무시하면 *"pptx를 보고 zip을 받는"* 상태를 케이스가 못 잡는다.
-    exportUrl: (projectId, format) => `/api/projects/${projectId}/export?format=${format}`,
+    // 받은 형식을 바이트에 싣는다 — 형식을 무시하면 *"pptx를 보고 zip을 받는"* 상태를 케이스가 못 잡는다.
+    downloadExport: async (_projectId, format) => new Blob([format]),
   }
 }
 
@@ -187,12 +187,50 @@ async function openPptx(overrides: Partial<ApiClient>): Promise<HTMLElement> {
  * 고쳐진 채 남는다. 갈래마다 다른 것은 경고의 **이름들**뿐이므로 그것만 받는다.
  */
 function 경고가링크보다앞(panel: HTMLElement, 이름들: readonly string[]): void {
-  const link = within(panel).getByRole('link', { name: /내려받기$/ })
+  const link = within(panel).getByRole('button', { name: /내려받기$/ })
 
   for (const 이름 of 이름들) {
     const 구역 = within(panel).getByRole('region', { name: 이름 })
     // `DOCUMENT_POSITION_FOLLOWING`(4) — 링크가 구역보다 **뒤에** 있다.
     expect(구역.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  }
+}
+
+/**
+ * **저장을 본다** — 화면은 받은 blob 에 주소를 걸어 임시 앵커를 누른다(`saveBlob`). jsdom 에는 `URL.createObjectURL`이 없고
+ * 앵커를 눌러도 아무 데도 가지 않으므로 둘을 갈아 끼워 **무엇을 어떤 이름으로 저장했나**를 적는다. 끝나면 되돌린다.
+ */
+function 저장을본다(): { 저장한(): { fileName: string; text: string }[]; 되돌리기(): void } {
+  const blobs = new Map<string, Blob>()
+  let clicked = 0
+  const texts: { fileName: string; text: string }[] = []
+  const created = URL.createObjectURL
+  const revoked = URL.revokeObjectURL
+  const click = HTMLAnchorElement.prototype.click
+  URL.createObjectURL = (blob: Blob) => {
+    const url = `blob:test/${blobs.size}`
+    blobs.set(url, blob)
+    return url
+  }
+  URL.revokeObjectURL = () => undefined
+  HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+    const blob = blobs.get(this.href)
+    if (blob === undefined) return click.call(this)
+    clicked += 1
+    const fileName = this.download
+    // jsdom 의 `Blob`에는 `text()`가 없다 — `FileReader`로 읽는다.
+    const reader = new FileReader()
+    reader.onload = () => texts.push({ fileName, text: String(reader.result) })
+    reader.readAsText(blob)
+  }
+  return {
+    // 글자를 다 읽은 뒤에만 낸다 — 읽는 중에 재면 «저장 안 함»으로 읽힌다.
+    저장한: () => (texts.length === clicked ? texts : []),
+    되돌리기: () => {
+      URL.createObjectURL = created
+      URL.revokeObjectURL = revoked
+      HTMLAnchorElement.prototype.click = click
+    },
   }
 }
 
@@ -227,12 +265,15 @@ describe('내보내기 화면', () => {
   })
 
   it('서버가 준 이름으로 내려받는다 — 화면이 짓지 않는다', async () => {
-    const panel = await open(api(깨끗한))
-    const link = await within(panel).findByRole('link', {
-      name: 'wirebound-export-admin-console.zip 내려받기',
-    })
-    expect(link.getAttribute('download')).toBe('wirebound-export-admin-console.zip')
-    expect(link.getAttribute('href')).toBe(`/api/projects/${PROJECT_ID}/export?format=html`)
+    const 저장 = 저장을본다()
+    try {
+      const panel = await open(api(깨끗한))
+      fireEvent.click(await within(panel).findByRole('button', { name: 'wirebound-export-admin-console.zip 내려받기' }))
+      await waitFor(() => expect(저장.저장한()).toHaveLength(1))
+      expect(저장.저장한()[0]).toEqual({ fileName: 'wirebound-export-admin-console.zip', text: 'html' })
+    } finally {
+      저장.되돌리기()
+    }
   })
 
   it('깨끗하면 경고를 하나도 안 그린다', async () => {
@@ -273,7 +314,7 @@ describe('내보내기 화면', () => {
     it('어긋난 것이 있어도 내려받을 수는 있다', async () => {
       const panel = await open(api(어긋난))
       expect(
-        await within(panel).findByRole('link', { name: /내려받기$/ }),
+        await within(panel).findByRole('button', { name: /내려받기$/ }),
       ).toBeTruthy()
     })
 
@@ -464,14 +505,16 @@ describe('내보내기 화면', () => {
       expect(panel.textContent).not.toContain('page:관리자/회원/목록')
     })
 
-    it('내려받기 주소와 이름이 pptx를 따른다', async () => {
-      const panel = await openPptx(api(형식별(깨끗한, pptx깨끗한)))
-
-      const link = within(panel).getByRole('link', {
-        name: 'wirebound-export-admin-console.pptx 내려받기',
-      })
-      expect(link.getAttribute('download')).toBe('wirebound-export-admin-console.pptx')
-      expect(link.getAttribute('href')).toBe(`/api/projects/${PROJECT_ID}/export?format=pptx`)
+    it('내려받는 형식과 이름이 pptx를 따른다', async () => {
+      const 저장 = 저장을본다()
+      try {
+        const panel = await openPptx(api(형식별(깨끗한, pptx깨끗한)))
+        fireEvent.click(within(panel).getByRole('button', { name: 'wirebound-export-admin-console.pptx 내려받기' }))
+        await waitFor(() => expect(저장.저장한()).toHaveLength(1))
+        expect(저장.저장한()[0]).toEqual({ fileName: 'wirebound-export-admin-console.pptx', text: 'pptx' })
+      } finally {
+        저장.되돌리기()
+      }
     })
   })
 
@@ -488,7 +531,7 @@ describe('내보내기 화면', () => {
       expect(within(panel).queryByRole('region', { name: '그리지 못한 노드' })).toBeNull()
       expect(within(panel).queryByRole('region', { name: '겹친 페이지 경로' })).toBeNull()
       expect(within(panel).queryByRole('region', { name: '이어지지 않는 링크' })).toBeNull()
-      expect(within(panel).getByRole('link', { name: /\.pptx 내려받기$/ })).toBeTruthy()
+      expect(within(panel).getByRole('button', { name: /\.pptx 내려받기$/ })).toBeTruthy()
     })
 
     it('부르는 동안엔 앞 형식의 결과가 이미 없다', async () => {
@@ -500,7 +543,7 @@ describe('내보내기 화면', () => {
 
       // 아직 아무 답도 안 왔는데 앞 형식의 것이 남아 있으면 안 된다.
       expect(within(panel).queryByRole('region', { name: '페이지 경로' })).toBeNull()
-      expect(within(panel).queryByRole('link', { name: /내려받기$/ })).toBeNull()
+      expect(within(panel).queryByRole('button', { name: /내려받기$/ })).toBeNull()
       expect(within(panel).getByRole('status')).toBeTruthy()
 
       늦은.놓아주기()
@@ -555,7 +598,7 @@ describe('내보내기 화면', () => {
 
       expect(within(panel).queryByRole('region', { name: '페이지 경로' })).toBeNull()
       expect(within(panel).getByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeTruthy()
-      expect(within(panel).getByRole('link', { name: /\.pptx 내려받기$/ })).toBeTruthy()
+      expect(within(panel).getByRole('button', { name: /\.pptx 내려받기$/ })).toBeTruthy()
       expect(within(panel).getByRole('button', { name: 'PPTX' }).getAttribute('aria-pressed')).toBe(
         'true',
       )
@@ -591,7 +634,7 @@ describe('내보내기 화면', () => {
       expect(within(panel).queryByRole('alert')).toBeNull()
       expect(panel.textContent).not.toContain(늦은실패)
       expect(within(panel).getByRole('region', { name: '페이지 경로' })).toBeTruthy()
-      expect(within(panel).getByRole('link', { name: /\.zip 내려받기$/ })).toBeTruthy()
+      expect(within(panel).getByRole('button', { name: /\.zip 내려받기$/ })).toBeTruthy()
     })
 
     /**
@@ -623,7 +666,7 @@ describe('내보내기 화면', () => {
       expect(within(panel).queryByRole('alert')).toBeNull()
       expect(panel.textContent).not.toContain(늦은실패)
       expect(within(panel).getByRole('region', { name: '슬라이드에 실릴 페이지' })).toBeTruthy()
-      expect(within(panel).getByRole('link', { name: /\.pptx 내려받기$/ })).toBeTruthy()
+      expect(within(panel).getByRole('button', { name: /\.pptx 내려받기$/ })).toBeTruthy()
     })
   })
 
@@ -685,6 +728,80 @@ describe('내보내기 화면', () => {
 
       cleanup()
       expect(가짜.받은[0]!.cancel?.aborted).toBe(true)
+    })
+  })
+
+  /**
+   * **내려받기의 실패를 이 상자가 말한다**(`shell/export-panel.tsx` «내려받기는 받아 온 뒤 저장한다»). 앵커로 받을 때는 그
+   * 실패가 브라우저의 내려받기 목록에만 `canceled`로 남았다 — 미리보기가 된 뒤 서버가 503 · 409 로 거절하는 판이 그것이다.
+   */
+  describe('내려받기가 실패하면 그 이유를 말한다', () => {
+    function 거절하는(error: unknown) {
+      const 받은: { projectId: string; format: ExportFormat }[] = []
+      const downloadExport: ApiClient['downloadExport'] = async (projectId, format) => {
+        받은.push({ projectId, format })
+        throw error
+      }
+      return { overrides: { ...api(깨끗한), downloadExport }, 받은 }
+    }
+
+    it('서버의 문장을 그대로 말하고 저장하지 않는다 — 503 · 409', async () => {
+      for (const error of [
+        new ApiError(503, 'internal', '내 내보내기가 이미 돌고 있습니다 — 앞의 것이 끝난 뒤 다시 시도하세요'),
+        new ApiError(409, 'conflict', '내보낼 페이지가 없습니다'),
+      ]) {
+        const 저장 = 저장을본다()
+        try {
+          const 가짜 = 거절하는(error)
+          const panel = await open(가짜.overrides)
+          fireEvent.click(await within(panel).findByRole('button', { name: /내려받기$/ }))
+          expect(await within(panel).findByRole('alert')).toHaveProperty('textContent', error.message)
+          expect(가짜.받은).toEqual([{ projectId: PROJECT_ID, format: 'html' }])
+          expect(저장.저장한()).toEqual([])
+          // 미리보기는 그대로다 — 실패한 것은 내려받기이지 미리보기가 아니다.
+          expect(within(panel).getByText('페이지 2장을 내보냅니다')).toBeTruthy()
+        } finally {
+          저장.되돌리기()
+          cleanup()
+        }
+      }
+    })
+
+    it('세션이 끊겼으면 문장이 아니라 로그인이다', async () => {
+      const 가짜 = 거절하는(new ApiError(401, 'unauthenticated', '로그인이 필요합니다'))
+      // 하네스의 사람과 같은 값이다(`editor-harness.tsx`의 `USER`) — 첫 `me`만 살고 뒤는 401 이다.
+      const panel = await open({ ...가짜.overrides, me: expiringSession({ id: 'u-1', email: 'me@example.com', name: '테스터' }) })
+      fireEvent.click(await within(panel).findByRole('button', { name: /내려받기$/ }))
+      await waitFor(() => expect(currentPath()).toBe('/login'))
+      expect(screen.queryByText('로그인이 필요합니다')).toBeNull()
+    })
+
+    it('받는 동안 버튼을 잠근다 — 두 번 누르면 서버의 일이 둘이 된다', async () => {
+      let 풀기: ((blob: Blob) => void) | undefined
+      let 불린 = 0
+      const downloadExport: ApiClient['downloadExport'] = () => {
+        불린 += 1
+        return new Promise<Blob>((resolve) => {
+          풀기 = resolve
+        })
+      }
+      const 저장 = 저장을본다()
+      try {
+        const panel = await open({ ...api(깨끗한), downloadExport })
+        const button = await within(panel).findByRole('button', { name: /내려받기$/ })
+        fireEvent.click(button)
+        expect(await within(panel).findByRole('status')).toHaveProperty('textContent', '파일을 만드는 중…')
+        expect(button).toHaveProperty('disabled', true)
+        fireEvent.click(button)
+        expect(불린).toBe(1)
+
+        풀기?.(new Blob(['html']))
+        await waitFor(() => expect(저장.저장한()).toHaveLength(1))
+        expect(button).toHaveProperty('disabled', false)
+        expect(within(panel).queryByRole('status')).toBeNull()
+      } finally {
+        저장.되돌리기()
+      }
     })
   })
 

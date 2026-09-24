@@ -733,16 +733,16 @@ Claude Desktop·Cursor·Zed 등은 **이 문서가 등록해 보지 않았다.**
 
 | 어디 | 무엇이 보이나 |
 |---|---|
-| `GET .../export?format=pptx` | **HTTP 200 이고 파일은 나온다.** 던지지 않는다. 슬라이드의 화면 자리에 **"화면 이미지가 실리지 않았습니다"**가 있고 `ppt/media/`가 **비어 있다** |
+| `GET .../export?format=pptx` | **HTTP 200 이고 파일은 나온다.** 던지지 않는다. 슬라이드의 화면 자리에 **"화면 이미지가 실리지 않았습니다"**가 있고 `ppt/media/`가 **비어 있다**. 응답 머리 `x-wb-screen-failures`가 못 그린 장 수를 싣는다(이유는 싣지 않는다) |
 | `GET .../export/preview?format=pptx` | **이유는 이 응답에만 있다** — `screenFailures[].reason`:<br>`브라우저를 띄우지 못했습니다: browserType.launch: Executable doesn't exist at <경로>` |
 | 에디터 화면 | 내보내기 패널에서 pptx 를 고르면 **위 미리보기의 `fontWarning`·`screenFailures`를 보인다**(`apps/web/src/shell/export-panel.tsx`) |
 | **서버 로그** | **아무것도 안 남는다**(쟀다 — `chromium`·`browser`·`screen`·`화면` 매치 **0** · `warn`·`error` 줄 **0**). 운영자가 지켜보는 자리에도 안 간다 |
 
 > **그래서 이유는 미리보기(에디터의 내보내기 패널, 또는 `GET .../export/preview?format=pptx` 직접 호출)로만 보인다.**
-> **`wireb export`로도 안 보인다** — 그 명령은 `/export` 하나만 부르므로 `screenFailures`가
-> **CLI 에 도달할 길이 없다**(`packages/cli/src` 전체에 그 이름이 **0건**이다). 이 기계에서
-> 쟀다: 실패 상태에서도 *"1개 파일을 썼습니다"* · **종료 코드 0** · **표준에러 0 바이트**이고
-> 그림 없는 pptx 가 그대로 나온다. **파일만 받은 사람은 *"그림이 없다"*까지만 안다.**
+> **`wireb export`는 수만 말한다** — 그 명령은 `/export` 하나만 부르고, 파일 응답의 머리가 싣는 수를 읽어 표준에러에
+> *"경고: 화면 이미지 N장을 그리지 못해 그 슬라이드에는 글자만 실렸습니다 …"*를 적는다. 파일은 그대로 쓰고 **종료 코드는 0**
+> 이다. 이유(`screenFailures[].reason`)는 미리보기에만 있다 — 명령이 미리보기를 함께 부르면 서버가 같은 판정으로 한 번 더
+> 그리기 때문이다(`packages/cli/src/commands/export.ts`의 «그림이 빠진 pptx 를 조용히 쓰지 않는다»).
 
 **오류 문장이 자기가 찾던 경로와 리비전을 그대로 말한다** — 그것이 아래 명령이 채우는
 자리다.

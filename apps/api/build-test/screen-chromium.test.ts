@@ -419,8 +419,10 @@ describe.skipIf(!있다)('시트가 그림에 반영되나', () => {
     if (!a!.ok || !b!.ok) return
 
     expect(a!.width).toBe(b!.width)
-    // 800px 을 더했고 배율이 2배다. 넉넉히 잡아도 1000 화소는 넘어야 한다.
-    expect(b!.height - a!.height).toBeGreaterThan(1000)
+    // 800px 을 더했고 배율이 2배다 — 시트가 반영됐으면 `b`는 그것만으로 1600 화소를 넘는다. **차이로 재지 않는다** — `a`는 짧은
+    // 문서라 뷰포트 높이(552 → 1104)에 눌려 있어, 차이는 내용 높이에 따라 800 × 2 보다 작다. 시트가 무시되면 `b`도 1104 다.
+    expect(a!.height).toBeLessThan(1600)
+    expect(b!.height).toBeGreaterThan(1600)
   })
 })
 

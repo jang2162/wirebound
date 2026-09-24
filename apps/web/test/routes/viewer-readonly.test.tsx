@@ -40,8 +40,8 @@
  *   않는다). 새 칸을 달면 `fillDraftsAsEditor`에 그 칸을 채우는 한 걸음을 더하라.
  * - **끌기 · 포인터 제스처**: 손잡이(`ShellResizer`)는 폭만 바꾸고 저장소는 브라우저다. 뷰 모드 캔버스의 시연 제스처는
  *   문서를 안 바꾼다. 둘 다 누르기만 하고 끌지는 않는다.
- * - **에디터 밖으로 나가는 길**: «프로젝트 목록으로 돌아가기» · 테마 저작 화면 링크 · 내려받기 링크는 따라가지 않는다
- *   (각자 제 판정이 있다 — `projectAbilities`의 `rename`·`editTheme`). **로그아웃**(`POST /auth/logout`)은 누르지 않는다 —
+ * - **에디터 밖으로 나가는 길**: «프로젝트 목록으로 돌아가기» · 테마 저작 화면 링크는 따라가지 않는다
+ *   (각자 제 판정이 있다 — `projectAbilities`의 `rename`·`editTheme`). 내려받기 버튼은 누른다 — `GET`이라 쓰기가 아니다. **로그아웃**(`POST /auth/logout`)은 누르지 않는다 —
  *   세션 쓰기지 설계서 쓰기가 아니고, 누르면 훑기가 끝난다.
  * - **고르는 상태는 다섯뿐**: 선택 없음 · 루트 · 자식 · 손자 · 메뉴(아래 `SELECTIONS`) × 두 모드. 그 밖의 노드 종류가
  *   여는 속성 위젯은 이 문서에 든 종류만큼이다.
@@ -250,6 +250,10 @@ function mount(role: ProjectRole, draftStore?: DraftStore): Wire {
           ? { format, pages, screenless: [], screenFailures: [], fontWarning: null, fileName: 'deck.pptx' }
           : { format: 'html', pages, duplicateTargets: [], brokenLinks: [], errors: [], themeId: null, fileName: 'site.zip' },
       )
+    }
+    // 내려받기 — 파일 그 자체. jsdom 에는 `URL.createObjectURL`이 없어 저장은 거기서 실패하지만 이 자가 세는 것은 쓰기다.
+    if (path === `/api/projects/${PROJECT_ID}/export`) {
+      return new Response(new Uint8Array([0x50, 0x4b]), { status: 200, headers: { 'content-type': 'application/zip' } })
     }
     wire.unrouted.push(path)
     return json(404, { code: 'not-found', message: '없습니다' })

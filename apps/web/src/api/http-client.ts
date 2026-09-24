@@ -40,6 +40,9 @@ const API_PREFIX = '/api'
 /** 응답을 읽지 못했을 때 쓰는 메시지. 서버가 준 문장이 아니므로 한 곳에만 둔다. */
 const UNREADABLE = '서버 응답을 이해할 수 없습니다'
 
+/** 내려받기 응답으로 받는 형식 — 서버의 `routes/export.ts`가 내는 둘(zip · pptx)이다(`downloadExport`). */
+const EXPORT_FILE_TYPES = ['application/zip', 'application/vnd.openxmlformats-officedocument.presentationml.presentation']
+
 /** 요청이 서버에 닿지도 못했을 때 쓰는 메시지. 사용자에게 그대로 보여도 되는 문장이어야 한다. */
 const UNREACHABLE = '서버에 연결하지 못했습니다'
 
@@ -1101,17 +1104,20 @@ export function createHttpClient(
     throw new ApiError(NO_RESPONSE, 'internal', READ_TIMEOUT)
   }
 
-  async function request<T>(
+  /**
+   * **보내고 실패를 `ApiError`로 옮기기까지** — 머리 · 쿠키 · 시간 제한 · 끊기 · 사람 바뀜을 여기 한 자리가 한다. 본문을 읽는
+   * 것은 부른 쪽이다(`request`는 JSON, `downloadExport`는 바이트).
+   */
+  async function send(
     method: string,
     path: string,
-    shape: Shape,
     body?: unknown,
     options?: (WriteOptions | ReadOptions) & {
       readonly cache?: RequestCache
       /** `false`면 일반 읽기여도 시간 제한을 안 건다(`READ_DEADLINE_MS`의 «안 거는 읽기»). */
       readonly deadline?: false
     },
-  ): Promise<T> {
+  ): Promise<Response> {
     // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
     // 빈 문자열은 서버가 *"연결 id를 줬다"*로 읽는다(`broadcastOrigin`이 길이를 본다).
     // **쓰기가 낸 연결을 주면 그것이다**(`WriteOptions.connectionId`) — 없으면 지금 연결이다.
@@ -1173,6 +1179,17 @@ export function createHttpClient(
       if (isSessionUserChanged(error)) knownUser?.changed()
       throw error
     }
+    return response
+  }
+
+  async function request<T>(
+    method: string,
+    path: string,
+    shape: Shape,
+    body?: unknown,
+    options?: Parameters<typeof send>[3],
+  ): Promise<T> {
+    const response = await send(method, path, body, options)
 
     // 204에는 본문이 없다. 파싱하면 실패하므로 아예 읽지 않는다.
     if (response.status === 204) return undefined as T
@@ -1457,14 +1474,30 @@ export function createHttpClient(
         undefined,
         { ...(options?.cancel === undefined ? {} : { cancel: options.cancel }), deadline: false },
       ),
-    // **요청을 보내지 않는다** — 앵커에 걸 주소를 만들 뿐이다. 그래도 여기 있는 것은
-    // 주소를 아는 자리가 하나여야 하기 때문이다(`api/client.ts`의 머리말).
-    //
     // **`html`에도 `?format=`을 붙인다.** 서버의 기본값이 `html`이라 생략해도 같은 것을
     // 받지만(`routes/export.ts`), 생략하는 가지를 두면 *"형식을 붙이는 길"*과 *"안 붙이는
     // 길"* 둘이 생기고 어느 쪽이 도는지는 주소를 눈으로 봐야 안다. 붙는 값은 `ExportFormat`
     // 이라 인코딩이 필요한 글자가 애초에 못 들어간다.
-    exportUrl: (projectId, format) => `${API_PREFIX}${projectPath(projectId)}/export?format=${format}`,
+    //
+    // **시간 제한을 안 건다** — 미리보기와 같은 이유다(pptx 는 페이지를 그린다). **받은 것의 형식을 본다** — 개발 중 프록시가
+    // 빠지면 Vite 가 `/api/*`에 `index.html`을 200 으로 내고, 그것을 파일로 저장하면 사람은 열어 봐야 안다(`request`가 JSON 이
+    // 아닌 200 을 막는 것과 같은 자리다).
+    downloadExport: async (projectId, format, options) => {
+      const response = await send('GET', `${projectPath(projectId)}/export?format=${format}`, undefined, {
+        ...(options?.cancel === undefined ? {} : { cancel: options.cancel }),
+        deadline: false,
+      })
+      const type = response.headers.get('content-type') ?? ''
+      if (!EXPORT_FILE_TYPES.some((expected) => type.startsWith(expected))) {
+        throw new ApiError(response.status, 'internal', UNREADABLE)
+      }
+      try {
+        return await response.blob()
+      } catch {
+        if (options?.cancel?.aborted === true) throw new ApiError(NO_RESPONSE, 'internal', ABANDONED)
+        throw new ApiError(response.status, 'internal', UNREADABLE)
+      }
+    },
     listMyRevisions: (projectId, pageId, options) =>
       request<RevisionSummary[]>(
         'GET',

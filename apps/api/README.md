@@ -174,7 +174,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 | `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]` |
 | `internal` | 500 | 예상하지 못한 서버 오류. **그 요청은 커밋 전이다**(웹의 코멘트 게시가 그렇게 읽는다) |
 | `internal` | **503** | **DB 가 답하지 않았다** — 연결이 끊겼거나 닿지 못했거나, **COMMIT 에 서버의 답이 아닌 거절이 왔다**. **그 요청이 반영됐는지 모른다**(COMMIT 의 답만 잃었을 수 있다). 500 과 갈라 둔 것이 계약이다 — 경계는 `src/db/connection-loss.ts`, 번역은 `src/http/error-handler.ts` |
-| `internal` | **503** + `Retry-After` | **내보내기가 밀려 있다** — 떠 있는 내보내기가 한도(`EXPORT_JOB_LIMIT`)에 닿아 **일을 받지 않았다**(내보내기 두 라우트만). 읽기뿐이라 `Retry-After`(초) 뒤 다시 보내도 안전하다. 위 줄과는 머리와 문장으로 가른다 — 근거는 `src/services/export-worker.ts` 머리말 «줄은 길이로 묶는다» |
+| `internal` | **503** + `Retry-After` | **내보내기가 밀려 있다** — 떠 있는 내보내기가 한도(`EXPORT_JOB_LIMIT`)에 닿았거나 **그 사람의 것이** 한도(`EXPORT_PERSON_JOB_LIMIT`)에 닿아 **일을 받지 않았다**(내보내기 두 라우트만). 읽기뿐이라 `Retry-After`(초) 뒤 다시 보내도 안전하다. 두 한도는 문장으로 가른다(«내보내기가 밀려 있습니다 — …» · «내 내보내기가 이미 돌고 있습니다 — …»). 위 줄과는 머리와 문장으로 가른다 — 근거는 `src/services/export-worker.ts` 머리말 «줄은 길이로 묶는다» · «한 사람이 줄을 다 쥐지 않는다» |
 
 ### 이슈의 severity — 무엇이 저장을 막는가
 
@@ -289,8 +289,9 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 **조립 · 렌더 · 압축은 워커 스레드에서 돈다** — 큰 내보내기가 이벤트 루프를 멈추면 옆 사람의 편집 트랜잭션이 그
 멈춤을 «트랜잭션 안의 쉼»으로 겪고 `idle_in_transaction_session_timeout`에 끊긴다(503). 메인이 쥐는 것은 DB 읽기와 pptx
 화면 그리기(브라우저)뿐이다. **요청이 끊기면 그 일을 버린다** — 응답 전에 연결이 닫히면 워커를 끝내고 답하지 않는다.
-**떠 있는 내보내기(읽는 중 · 줄 선 · 도는)는 `EXPORT_JOB_LIMIT`(8)까지다** — 넘은 요청은 행을 읽기 전에 503 +
-`Retry-After`로 거절한다(위 「에러 형식」). 근거 · 값 · 동시성은 `services/export-worker.ts` 머리말이 갖는다.
+**떠 있는 내보내기(읽는 중 · 줄 선 · 도는)는 `EXPORT_JOB_LIMIT`(8)까지 · 사람마다 `EXPORT_PERSON_JOB_LIMIT`(2)까지다** —
+넘은 요청은 행을 읽기 전에 503 + `Retry-After`로 거절한다(위 「에러 형식」). 사람은 세션의 사용자이고, 토큰이면 그 토큰을
+만든 사용자다 — 토큰을 더 만들어도 몫이 늘지 않는다. 근거 · 값 · 동시성은 `services/export-worker.ts` 머리말이 갖는다.
 
 #### `?format=html` — 정적 번들
 
@@ -358,6 +359,16 @@ ppt/slideMasters/ · ppt/slideLayouts/ · ppt/theme/
 ppt/slides/slideN.xml             페이지 N — 제목 · 화면 자리 · 코멘트 · 상호작용
 ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 ```
+
+**응답 머리가 화면 이미지의 수를 싣는다** — 본문은 그대로 pptx 다.
+
+| 머리 | 값 |
+|---|---|
+| `x-wb-screen-failures` | **그리려다 실패한** 장 수(`screenFailures`의 길이). 글꼴이 없어 안 그린 장도 여기다 |
+| `x-wb-screenless` | **아무도 안 그린** 장 수(`screenless`의 길이) — 그리는 자가 없는 서버다 |
+
+**늘 싣는다(0 도).** 받는 쪽이 «0 장»과 «이 머리를 모르는 서버»를 가른다. **이유는 싣지 않는다** — 머리는 ByteString 이라
+한국어를 못 싣고, 이유는 미리보기가 갖는다. 미리보기를 안 부르는 `wireb export`가 이것을 읽어 경고한다. html 에는 없다.
 
 **zip이지만 뿌리 폴더가 없다.** html 번들은 `wirebound-export-<슬러그>/` 아래에 담는데
 (푼 자리에 파일이 흩뿌려지지 않게), pptx에 같은 폴더를 씌우면 받는 쪽이

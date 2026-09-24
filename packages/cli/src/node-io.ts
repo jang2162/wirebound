@@ -69,6 +69,7 @@ export function createNodeIo(): Io {
       if (!process.stdin.isTTY) return null
       return await readHidden(label)
     },
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     readStdin: async () => {
       if (process.stdin.isTTY) return null
       const chunks: Buffer[] = []
