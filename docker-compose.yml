@@ -1,28 +1,28 @@
 services:
   postgres:
     image: postgres:16-alpine
-    # **컨테이너 이름을 고정하지 않는다.** 고정하면 워크트리 둘째가 이름 충돌로 안 뜬다
-    # (그것이 오늘까지의 상태였다). 이름은 compose 가 `<프로젝트>-postgres-1` 로 짓고
+    # **컨테이너 이름을 고정하지 않는다.** 고정하면 워크트리 둘째가 이름 충돌로 안 뜬다.
+    # 이름은 compose 가 `<프로젝트>-postgres-1` 로 짓고
     # **프로젝트 이름은 디렉터리 이름**이라 워크트리마다 저절로 갈린다 — 볼륨도 같다
     # (`<프로젝트>_wirebound-pgdata`). 즉 워크트리마다 **자기 컨테이너·자기 데이터**다.
-    # 이름으로 컨테이너를 찾던 자리는 전부 `docker compose …` 로 바뀌었다(README 6.3).
+    # 컨테이너는 이름이 아니라 `docker compose …` 로 찾는다(README 「컨테이너를 못 찾는다」 절).
     environment:
       POSTGRES_USER: wirebound
       POSTGRES_PASSWORD: wirebound
       POSTGRES_DB: wirebound
     ports:
       # **호스트 포트만 `apps/api/.env` 에서 온다.** compose 는 그 파일을 스스로 찾지
-      # 못하므로 `--env-file` 로 준다(README 3.1):
+      # 못하므로 `--env-file` 로 준다(README 「워크트리를 여럿 띄울 때」 절):
       #
       #   docker compose --env-file apps/api/.env up -d
       #
       # **기본값은 5433 이고 `.env.example` 의 접속 문자열이 그 수를 든다** — 아무것도
-      # 안 바꾼 사람은 오늘과 똑같이 돈다. 이 기본값이 바뀌면
+      # 안 바꾼 사람은 이 기본값 하나로 돈다. 이 기본값이 바뀌면
       # `apps/api/test/port-agreement.test.ts` 가 죽는다.
       #
       # **`--env-file` 을 빼먹으면 이 기본값으로 되돌아간다.** 그때 컨테이너가 5433 으로
-      # 다시 만들어지므로(공유 컨테이너를 쓰던 자리다) 그 플래그는 `up` 에서 생략하지
-      # 않는다. `ps`·`logs`·`exec`·`down` 은 프로젝트 이름으로 찾으므로 플래그가 없어도 된다.
+      # 다시 만들어져 기본값을 쓰는 다른 체크아웃과 포트가 부딪히므로 그 플래그는 `up` 에서
+      # 생략하지 않는다. `ps`·`logs`·`exec`·`down` 은 프로젝트 이름으로 찾으므로 플래그가 없어도 된다.
       - '${POSTGRES_PORT:-5433}:5432'
     volumes:
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro

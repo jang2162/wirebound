@@ -1,4 +1,4 @@
-/* P0 확인용 최소 스타일. 실제 테마는 P4a에서 CSS로 컴파일된다. */
+/* 렌더러 확인용 최소 스타일. 실제 테마는 `@wirebound/themes`가 CSS로 컴파일한다. */
 body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: #1f2937; }
 [data-wb-component] { outline: 1px dashed #cbd5e1; outline-offset: -1px; }
 [data-wb-component="Page"] { padding: 12px; }

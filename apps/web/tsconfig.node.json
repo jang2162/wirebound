@@ -5,11 +5,10 @@
   //
   // **이것이 브라우저 코드에서 Node 전역을 막아 주지는 않는다 — 쟀다.** `apps/web/src`의
   // `.tsx`에 `process.env.FOO`·`Buffer.from()`을 심어도 `pnpm typecheck`가 **종료 0**이다.
-  // 이 판 이전(`@types/node`가 `apps/web`에 없던 main)에서도 같았다(귀속: 리뷰 §9 R8,
-  // 이쪽에서 다시 확인했다) — 어느 의존의 `/// <reference types="node" />`를 타고 들어온다.
-  // **앞 판의 주석은 그것을 막는다고 적었고 그것이 거짓이었다.** 가른 것이 해롭지는 않고
+  // `@types/node`가 `apps/web`의 의존에 없어도 같다 — 어느 의존의
+  // `/// <reference types="node" />`를 타고 들어온다. 가른 것이 해롭지는 않고
   // 넓힌 글롭이 실제로 먹는 것은 `vite.config.ts`의 타입 오류가 종료 2를 내는 것으로
-  // 확인된다. **합칠지는 안 정했다** — 미결 장부 §3.7 이 든다.
+  // 확인된다. **합칠지는 안 정했다.**
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
