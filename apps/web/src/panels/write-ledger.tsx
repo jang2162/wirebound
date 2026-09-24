@@ -234,7 +234,14 @@
  * 동안 끝난 결말도 말없이 사라진다. 그래서 «그릴 수 있나»는 `sees`(그 페이지를 보나)와 `draws`(그 칸의 결말을 그리는 갈래가 떠 있나 — 그 칸의
  * `PendingNotice`가 선다: `panel-drafts.tsx`의 `PanelLock.draw`) 둘이다. **본문이 아니라 갈래다** — 본문이 떠 있어도 통지를
  * 안 그리는 갈래(설명의 viewer · 코멘트의 폼 밖 · 조기 반환)면 남긴다. 그때 칸에도 같은 결말이 쓰였으므로 받는 자리가 칸의 통지를
- * 지운다(`page-description.tsx` · `comment-panel.tsx` — 남긴 결말이 서면) — 같은 말이 두 번 서지 않게. 그 판은 머리가 «이 탭을 떠나 있는 동안 …»이다(`Missed.stayed`).
+ * 지운다(`page-description.tsx` · `comment-panel.tsx` — 남긴 결말이 서면) — 같은 말이 두 번 서지 않게.
+ *
+ * **머리는 끝난 순간 어디 있었나를 말한다**(`Missed.where`) — 셋을 가르는 것은 `sees`(그 페이지를 보나) · `hosts`(그 칸의 본문이 떠
+ * 있나) · `draws`(통지 갈래가 떠 있나)다. 본문이 내려가 있었으면(같은 페이지의 다른 탭 · 모드) «이 탭을 떠나 있는 동안 …», 본문은
+ * 떠 있고 **갈래만** 없었으면(제자리에서 viewer 로 강등 · 불러오는 중) 떠난 적이 없으니 머리 없이 «저장하지 못했습니다 — …»다. 둘을
+ * 한 값(«그 페이지는 보고 있었다»)으로 치면 제자리 강등이 «이 탭을 떠나 있는 동안»으로 말한다([jsdom] 강등된 채 저장이 500 → 제자리
+ * 승격 뒤 머리가 그것이었다). **viewer 갈래도 남긴 결말은 말한다**(`MissedNotice` — 통지 갈래로 치지 않는다). 승격을 기다리면
+ * viewer 인 채 끝까지 아무도 못 본다([jsdom] viewer 갈래 통지 0).
  *
  * **돌아온 자리는 말만 한다 — 충돌 화면 · 매달린 값을 다시 세우지 않는다.** 충돌은 «다른 사람이 이 설명을 바꿨습니다 · 지금
  * 저장된 설명: …»(`metaConflictSentence`)으로 말하고, 초안이 남아 있으면(같은 페이지의 다른 탭 · 프로젝트 목록 경유) 그대로 둔다
@@ -428,13 +435,24 @@ export interface WriteNote {
 }
 
 /**
- * 장부가 남긴 결말(`Ledger.missed`) — **받는 자리가 그 결말을 그릴 수 없을 때** 끝났다. `stayed`는 «그 페이지는 보고 있었고
- * 그 칸을 그리는 본문만 내려가 있었다»(같은 페이지의 다른 탭 · 다른 모드 — `Receiver.draws`)다. 머리의 문장이 갈린다.
+ * 장부가 남긴 결말(`Ledger.missed`) — **받는 자리가 그 결말을 그릴 수 없을 때** 끝났다. `where`는 그 순간 어디 있었나다 — 머리의
+ * 문장이 갈린다(머리말 «판정으로 끝난 쓰기도 전한다»의 끝).
  */
 export interface Missed {
   readonly conclusion: Failure | WriteNote
-  readonly stayed: boolean
+  readonly where: MissedAt
 }
+
+/**
+ * 결말이 끝난 순간 어디 있었나.
+ *
+ * | 값 | 뜻 | 가르는 것 |
+ * |---|---|---|
+ * | `'page'` | 그 페이지(트리는 그 프로젝트)를 안 보고 있었다 | `Receiver.sees` 거짓 |
+ * | `'tab'` | 그 페이지는 보는데 그 칸의 본문이 내려가 있었다(다른 탭 · 다른 모드) | `Receiver.hosts` 거짓 |
+ * | `'here'` | 본문은 떠 있고 통지 갈래만 없었다(viewer 갈래 · 코멘트의 폼 밖 · 불러오는 중) | `Receiver.draws` 거짓 |
+ */
+export type MissedAt = 'page' | 'tab' | 'here'
 
 /**
  * 칸의 종류 — **받는 자리를 가른다**(아래 `Receiver`). `'page'`는 우측 패널(`PanelDraftsProvider` — 설명 · 코멘트), `'tree'`는
@@ -471,6 +489,11 @@ export interface Receiver {
    * 거짓이면 `sees`가 참이어도 장부가 결말을 남긴다.
    */
   readonly draws?: (slot: string) => boolean
+  /**
+   * **그 칸의 본문이 지금 떠 있는가** — 통지 갈래가 없을 때 «본문째 내려갔다»(`'tab'`)와 «갈래만 없다»(`'here'`)를 가른다(`MissedAt`).
+   * 없으면 `draws`와 같다고 본다(트리 — 본문이 곧 갈래다).
+   */
+  readonly hosts?: (slot: string) => boolean
 }
 
 export interface PageAt {
@@ -610,7 +633,7 @@ export function WriteLedgerProvider(props: { children: ReactNode }): ReactElemen
         if (unseen && conclusion !== null) {
           // **세션은 페이지에 안 매인다** — 어디에 가 있든 로그인 화면으로 간다(`SignedOut`이 부르는 것과 같은 것).
           if (conclusion.kind === 'signed-out') invalidate()
-          else note(live.epoch, key, { conclusion, stayed: page })
+          else note(live.epoch, key, { conclusion, where: !page ? 'page' : receiver?.hosts?.(target.slot) === true ? 'here' : 'tab' })
         }
       } finally {
         report(null)

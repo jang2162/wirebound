@@ -13,13 +13,17 @@
  * 여기다. 이것은 **실패**라 `alert`이고, «확인»으로 닫는다.
  *
  * **판정으로 끝난 결말도 여기서 말한다**(`write-ledger.tsx`의 «판정으로 끝난 쓰기도 전한다»). 실패가 아닌 결말
- * (`WriteNote` — 코멘트의 «이미 달렸고 그 뒤 지워졌습니다»)은 머리 없이 그 문장만 `status`로 말한다. 그 페이지를 보고 있었고
- * 그 칸의 본문만 내려가 있었으면(다른 탭 · 다른 모드 — `Missed.stayed`) 머리가 «이 탭을 떠나 있는 동안 …»이다 — «이 페이지를
- * 떠나 있는 동안»은 그 판에 거짓이다.
+ * (`WriteNote` — 코멘트의 «이미 달렸고 그 뒤 지워졌습니다»)은 머리 없이 그 문장만 `status`로 말한다. 실패의 머리는 끝난 순간 어디
+ * 있었나를 말한다(`Missed.where`): 페이지를 떠나 있었으면 «이 페이지를 떠나 있는 동안 …», 같은 페이지의 다른 탭 · 모드에 가 있었으면
+ * «이 탭을 떠나 있는 동안 …», 떠난 적 없이 통지 갈래만 없었으면(제자리 강등) «저장하지 못했습니다 — …»다. 어느 하나로 다른 판을
+ * 말하면 그 판에 거짓이다.
  *
  * **이 컴포넌트가 떠 있는 것이 곧 «그 칸의 결말을 그린다»다**(`PanelLock.draw` · 장부의 `Receiver.draws`). 설명 · 코멘트는
  * 그 칸의 저장 통지(칸 `SAVE` · `WRITE_ERROR` · `LANDED_SINCE_NOTICE`)를 이것의 형제로 그리므로, 이것이 없는 갈래(viewer · 코멘트의
  * 폼 밖 · 조기 반환)에서 끝난 결말은 장부가 남긴다. 본문이 서는 것으로 «그린다»를 삼으면 통지 자리가 없는 갈래에서 결말을 잃는다.
+ *
+ * **남긴 결말만 그리는 자리는 따로 있다**(`MissedNotice`) — viewer 갈래 · 코멘트의 폼 밖이 그것을 그린다. 통지 갈래로 치지 않으므로
+ * 그 갈래에서 끝나는 결말은 여전히 장부가 남기고, 남긴 것은 그 자리에서 곧바로 보인다(승격을 기다리지 않는다).
  */
 import { useLayoutEffect, type ReactElement } from 'react'
 import type { PanelLock } from './panel-drafts'
@@ -28,8 +32,10 @@ import type { PanelLock } from './panel-drafts'
 const RECHECK = '다시 확인'
 /** 떠나 있는 동안 끝난 실패의 머리. 뒤에 실패 문장이 붙는다. */
 const MISSED = '이 페이지를 떠나 있는 동안 저장하지 못했습니다'
-/** 같은 페이지의 다른 탭 · 다른 모드에 가 있는 동안 끝난 실패의 머리(`Missed.stayed`). */
+/** 같은 페이지의 다른 탭 · 다른 모드에 가 있는 동안 끝난 실패의 머리(`Missed.where`의 `'tab'`). */
 const MISSED_STAYED = '이 탭을 떠나 있는 동안 저장하지 못했습니다'
+/** 본문은 떠 있고 통지 갈래만 없는 동안 끝난 실패의 머리(`'here'` — 떠난 적이 없다). */
+const MISSED_HERE = '저장하지 못했습니다'
 /** 그 통지를 닫는 단추. */
 const DISMISS = '확인'
 
@@ -48,35 +54,7 @@ export function PendingNotice(props: {
   const { draw } = lock
   useLayoutEffect(() => draw?.(), [draw])
   // 잠금이 서 있으면 새 쓰기가 나간 것이다 — 남긴 실패는 그 쓰기가 이미 지웠다(`run`). 그래서 둘이 함께 서지 않는다.
-  if (lock.missed !== null && lock.phase === null) {
-    const { conclusion, stayed } = lock.missed
-    // **실패가 아닌 결말은 머리 없이 그 문장이다**(`WriteNote`) — «저장하지 못했습니다»가 거짓이다.
-    if (conclusion.kind === 'note') {
-      return (
-        <div className="wb-shell-pending">
-          <p className="wb-shell-panel-notice" role="status">
-            {conclusion.message}
-          </p>
-          <button type="button" className="wb-shell-pending-dismiss" onClick={lock.dismiss}>
-            {DISMISS}
-          </button>
-        </div>
-      )
-    }
-    // **세션이 끝난 실패는 여기 오지 않는다** — 장부가 곧바로 세션을 끝낸다(`write-ledger.tsx`). 남는 것은 문장뿐이다.
-    const reason = conclusion.kind === 'message' ? conclusion.message : ''
-    const lead = stayed ? MISSED_STAYED : (props.missedLead ?? MISSED)
-    return (
-      <div className="wb-shell-pending">
-        <p className="wb-shell-panel-notice" role="alert">
-          {reason === '' ? lead : `${lead} — ${reason}`}
-        </p>
-        <button type="button" className="wb-shell-pending-dismiss" onClick={lock.dismiss}>
-          {DISMISS}
-        </button>
-      </div>
-    )
-  }
+  if (lock.missed !== null && lock.phase === null) return <MissedNotice lock={lock} missedLead={props.missedLead} />
   if (lock.phase === 'checking') {
     return (
       <p className="wb-shell-panel-notice" role="status">
@@ -97,4 +75,40 @@ export function PendingNotice(props: {
     )
   }
   return null
+}
+
+/**
+ * **장부가 남긴 결말만** 그린다(`PanelLock.missed`) — 통지 갈래로 치지 않는다(`draw`를 안 부른다). `PendingNotice`가 그 몫을 이것에
+ * 맡기고, 통지 갈래가 없는 본문(viewer 갈래 · 코멘트의 폼 밖)이 이것만 둔다(위 머리말).
+ */
+export function MissedNotice(props: { lock: PanelLock; missedLead?: string | undefined }): ReactElement | null {
+  const { lock } = props
+  if (lock.missed === null || lock.phase !== null) return null
+  const { conclusion, where } = lock.missed
+  // **실패가 아닌 결말은 머리 없이 그 문장이다**(`WriteNote`) — «저장하지 못했습니다»가 거짓이다.
+  if (conclusion.kind === 'note') {
+    return (
+      <div className="wb-shell-pending">
+        <p className="wb-shell-panel-notice" role="status">
+          {conclusion.message}
+        </p>
+        <button type="button" className="wb-shell-pending-dismiss" onClick={lock.dismiss}>
+          {DISMISS}
+        </button>
+      </div>
+    )
+  }
+  // **세션이 끝난 실패는 여기 오지 않는다** — 장부가 곧바로 세션을 끝낸다(`write-ledger.tsx`). 남는 것은 문장뿐이다.
+  const reason = conclusion.kind === 'message' ? conclusion.message : ''
+  const lead = where === 'tab' ? MISSED_STAYED : where === 'here' ? MISSED_HERE : (props.missedLead ?? MISSED)
+  return (
+    <div className="wb-shell-pending">
+      <p className="wb-shell-panel-notice" role="alert">
+        {reason === '' ? lead : `${lead} — ${reason}`}
+      </p>
+      <button type="button" className="wb-shell-pending-dismiss" onClick={lock.dismiss}>
+        {DISMISS}
+      </button>
+    </div>
+  )
 }
