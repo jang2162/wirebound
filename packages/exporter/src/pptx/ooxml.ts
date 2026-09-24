@@ -1,5 +1,5 @@
 /**
- * **OOXML 패키지의 뼈대**(D1·D5). 슬라이드 글자를 받아 **파트 목록**을 낸다.
+ * **OOXML 패키지의 뼈대.** 슬라이드 글자를 받아 **파트 목록**을 낸다.
  *
  * ```
  * [Content_Types].xml
@@ -14,16 +14,16 @@
  *
  * ---
  *
- * # D1 — zip을 모른다
+ * # zip을 모른다
  *
  * `exportBundle`과 같은 규칙이다(그 파일의 머리말). **pptx는 zip이지만 이 패키지가 그
- * 압축을 하지 않는다** — `apps/api`가 `fflate`로 이미 그것을 하고 있고, 여기서 또 하면
+ * 압축을 하지 않는다** — `apps/api`가 `fflate`로 그것을 하고, 여기서 또 하면
  * 압축하는 자리가 둘이 된다.
  *
  * **`BundleFile`을 쓰지 않고 `PptxPart`를 따로 둔다 — 판정이다.** 근거는 `PptxPart`의
  * 주석에 있다.
  *
- * # D5 — 파트가 여럿이고 관계가 물려 있다
+ * # 파트가 여럿이고 관계가 물려 있다
  *
  * 어느 관계 하나가 없는 파트를 가리키면 **pptx는 그냥 안 열린다** — 어느 파트가 문제인지
  * 받는 쪽이 말해 주지 않는다. 그래서 **관계와 콘텐츠 타입을 만드는 자리를 하나로 둔다.**
@@ -42,20 +42,20 @@ import { XML_DECL, xmlAttr } from './xml'
  *
  * ---
  *
- * # `BundleFile`을 넓히지 않고 이 타입을 따로 둔다 (D1의 판정)
+ * # `BundleFile`을 넓히지 않고 이 타입을 따로 둔다
  *
- * 계획서 D1은 `BundleFile.content`를 바이너리까지 넓히는 것을 첫 파장으로 봤다. **넓혀
- * 보고 쟀다: `pnpm typecheck`가 34자리에서 죽고 그중 프로덕션은 하나뿐이다**(보고서 §1).
- * 나머지 33은 **`.content`를 문자열로 읽는 케이스**들이라, 고치는 일이 *"케이스를 고쳐
- * 넘기는 것"*이 된다.
+ * `BundleFile.content`를 바이너리까지 넓히면 **`.content`를 문자열로 읽는 자리들이 타입에서
+ * 죽고 그 대부분이 케이스**라, 고치는 일이 *"케이스를 고쳐 넘기는 것"*이 된다(다시 재는 법:
+ * `BundleFile.content`를 `string | Uint8Array`로 넓히고 `pnpm typecheck`).
  *
- * **값보다 뜻이 먼저다.** `BundleFile`은 §11.3 번들 **뿌리 기준의 산출물 파일**이고
+ * **값보다 뜻이 먼저다.** `BundleFile`은 번들(설계서 「HTML 정적 번들」) **뿌리 기준의 산출물
+ * 파일**이고
  * (`wirebound-export-<슬러그>/` 아래로 들어간다) `PptxPart`는 **파일 하나의 안쪽**이다.
  * 같은 타입으로 두면 그 계약 문장이 한쪽에 대해 거짓이 되고, `ProjectBundle.files`에
  * pptx 파트를 실을 수 있는 길이 타입으로 열린다.
  *
- * **모양은 같다** — D1이 요구한 것은 *"순수 함수가 `경로 → 바이트`를 내고 압축은 부르는
- * 쪽이 한다"*이고 그것은 지켜진다.
+ * **모양은 같다** — 지키는 규칙은 *"순수 함수가 `경로 → 바이트`를 내고 압축은 부르는
+ * 쪽이 한다"*이고 이 타입도 그것을 따른다.
  */
 export interface PptxPart {
   path: string
@@ -76,7 +76,7 @@ export interface SlideSource {
    */
   notes?: string
   /**
-   * 이 슬라이드가 쓰는 매체(오늘은 화면 이미지 하나). **경로는 패키지 안의 것이고**
+   * 이 슬라이드가 쓰는 매체(화면 이미지 하나). **경로는 패키지 안의 것이고**
    * `rId`는 이 파일이 붙인다 — 슬라이드가 자기 관계 번호를 지어내면 노트 관계와 부딪친다.
    */
   media?: SlideMedia
@@ -111,7 +111,7 @@ const PML = 'application/vnd.openxmlformats-officedocument.presentationml'
 /**
  * 확장자 → 콘텐츠 타입. **`[Content_Types].xml`의 `Default`가 되는 표다.**
  *
- * `png` 하나만 있다 — 이 슬라이스가 만드는 이미지 자리의 계약이 PNG이기 때문이다(D2·T4).
+ * `png` 하나만 있다 — 이미지 자리의 계약(`PptxScreen`)이 PNG이기 때문이다.
  * 다른 형식을 받으려면 **여기 한 줄**이고, 그 줄이 없으면 그 이미지를 담은 pptx가 안 열린다.
  */
 const MEDIA_TYPES: Record<string, string> = {
@@ -121,14 +121,12 @@ const MEDIA_TYPES: Record<string, string> = {
 /**
  * **마스터마다 테마 파트가 하나다 — 나눠 쓰지 마라.**
  *
- * 앞 판은 파트 하나를 슬라이드 마스터와 노트 마스터가 함께 가리켰다. 근거는
- * *"규격은 마스터마다 테마 파트를 요구하지만 같은 파트를 둘이 가리키는 것을 막지 않는다"*
- * 였고, 그 문장 뒤에 *"받는 쪽이 그것을 받아들이는지 쟀다"*가 붙어 있었다.
+ * 규격은 마스터마다 테마 파트를 요구하지만 같은 파트를 둘이 가리키는 것을 막지 않는다.
+ * **그래도 PowerPoint 는 거절한다** — 파트 하나를 슬라이드 마스터와 노트 마스터가 함께
+ * 가리키면 **복구 대화상자**가 뜨고, 노트 마스터에게 자기 테마 파트를 주면 **열린다**
+ * (PowerPoint 16.112 로 쟀다 · 이미지를 실은 것도).
  *
- * **그 「쟀다」가 거짓이었다.** 잰 자는 macOS 의 Spotlight·QuickLook 둘인데 **둘 다 이것을
- * 안 본다.** 진짜 소비자는 거절한다 — 리뷰어가 PowerPoint 16.112 로 실측했다(귀속: 리뷰
- * §1.2): 파트를 나눠 쓰면 **복구 대화상자**가 뜨고(재현 2/2), 노트 마스터에게 자기 테마
- * 파트를 주면 **열린다**(재현 2/2, 이미지를 실은 것도).
+ * **macOS 의 Spotlight·QuickLook 으로는 못 잰다** — 둘 다 이것을 안 보고 나눠 쓴 파일도 연다.
  *
  * **글자는 여전히 한 자리에서 나온다.** 두 파트가 같은 `THEME_XML` 을 쓰므로 색이 갈릴
  * 길이 없다 — 갈리는 것은 파트 경로뿐이다.
@@ -156,7 +154,7 @@ function relationships(entries: readonly string[]): string {
   return `${XML_DECL}<Relationships ${REL_NS}>${entries.join('')}</Relationships>`
 }
 
-/** 빈 도형 트리. 마스터·레이아웃이 이것만으로 선다 — 자리 표시자를 두지 않는다(D3). */
+/** 빈 도형 트리. 마스터·레이아웃이 이것만으로 선다 — 자리 표시자를 두지 않는다. */
 const EMPTY_SP_TREE =
   '<p:spTree>' +
   '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
@@ -176,8 +174,8 @@ const CLR_MAP =
 /**
  * 마스터의 바탕. **흰색을 못 박는다.**
  *
- * 안 적으면 받는 쪽이 자기 기본값으로 칠한다 — macOS QuickLook 이 회색으로 그리는 것을
- * 봤다(T2 실측). 설계서는 문서이지 발표 자료가 아니므로 바탕은 종이색이어야 하고,
+ * 안 적으면 받는 쪽이 자기 기본값으로 칠한다 — macOS QuickLook 은 회색으로 그린다.
+ * 설계서는 문서이지 발표 자료가 아니므로 바탕은 종이색이어야 하고,
  * **받는 쪽마다 다른 색이 나오는 것 자체가** 이 산출물이 피하려는 상태다.
  */
 const WHITE_BACKGROUND =
@@ -193,9 +191,9 @@ const SLIDE_MASTER_XML =
 
 /**
  * **빈 레이아웃 하나**(`type="blank"`). 슬라이드가 자리 표시자를 안 쓰므로 레이아웃이
- * 담을 것이 없다 — 도형은 슬라이드가 직접 든다(D3의 배치가 슬라이드마다 같기 때문에
+ * 담을 것이 없다 — 도형은 슬라이드가 직접 든다(배치가 슬라이드마다 같기 때문에
  * 레이아웃으로 올릴 이득이 있지만, 그러면 **자리 표시자 상속**이 걸려 슬라이드가 안 열릴
- * 때 원인이 한 겹 늘어난다. D5가 막는 부류다).
+ * 때 원인이 한 겹 늘어난다. 위 「파트가 여럿이고 관계가 물려 있다」가 막는 부류다).
  */
 const SLIDE_LAYOUT_XML =
   XML_DECL +
@@ -287,7 +285,7 @@ export function pptxPackage(slides: readonly SlideSource[]): PptxPart[] {
   if (hasNotes) {
     parts.push({ path: 'ppt/notesMasters/notesMaster1.xml', content: NOTES_MASTER_XML })
     parts.push({
-      // **노트 마스터가 자기 테마 파트를 갖는다** — 위 `THEMES` 의 머리말이 값과 근거다.
+      // **노트 마스터가 자기 테마 파트를 갖는다** — 위 `SLIDE_MASTER_THEME` 의 머리말이 값과 근거다.
       path: NOTES_MASTER_THEME,
       content: THEME_XML,
     })
@@ -378,7 +376,7 @@ function contentTypes(parts: readonly PptxPart[]): string {
 
 /**
  * 그 XML 파트의 콘텐츠 타입. `null`이면 `Default`(`application/xml`)로 족한 파트다 —
- * 오늘 그런 XML 파트는 없지만 **모르는 경로를 조용히 흘려보내지 않으려고** 갈래를 남긴다.
+ * 지금 그런 XML 파트는 없지만 **모르는 경로를 조용히 흘려보내지 않으려고** 갈래를 남긴다.
  */
 function overrideType(path: string): string | null {
   if (path === 'ppt/presentation.xml') return `${PML}.presentation.main+xml`

@@ -43,7 +43,7 @@ async function ruleCount(css: string): Promise<number | 'sheet-missing'> {
   return sheet == null ? 'sheet-missing' : sheet.cssRules.length
 }
 
-describe('H2 — 짝이 맞지 않는 따옴표가 스타일시트를 통째로 못 쓰게 한다', () => {
+describe('짝이 맞지 않는 따옴표가 스타일시트를 통째로 못 쓰게 한다', () => {
   it('프로브가 정상 CSS에서는 규칙을 센다', async () => {
     // 카나리아. 이것이 없으면 아래 케이스가 "언제나 sheet-missing"이어도 통과한다.
     expect(await ruleCount(cssBypassingValidation('#fff'))).toBeGreaterThan(0)
@@ -79,7 +79,7 @@ describe('H2 — 짝이 맞지 않는 따옴표가 스타일시트를 통째로 
 
   it('가드가 개행을 이슈로 낸다', () => {
     // 위 케이스는 가드를 **우회해서** 방출기의 줄 성질을 봤다. 가드 자체를 지나는 입력도
-    // 함께 두어야 위험 문자 목록에서 개행을 빼는 변이가 죽는다(처음에 0 사망이었다).
+    // 함께 두어야 위험 문자 목록에서 개행을 빼는 변이가 죽는다.
     const tokens = new Map<string, string>()
     for (const control of [NEWLINE, String.fromCharCode(13), String.fromCharCode(12)]) {
       expect(
@@ -92,7 +92,7 @@ describe('H2 — 짝이 맞지 않는 따옴표가 스타일시트를 통째로 
   })
 
   it('개행은 방출기 자신의 줄 성질을 깬다', () => {
-    // jsdom은 개행에 관대했다(규칙 수가 줄지 않았다). 그래서 근거는 파서가 아니라
+    // jsdom은 개행에 관대하다(규칙 수가 줄지 않는다). 그래서 근거는 파서가 아니라
     // **방출기가 선언마다 한 줄을 쓴다**는 성질이다 — 값에 개행이 있으면 세미콜론 없이
     // 끝나는 줄이 생긴다(아래에서 그것을 관측한다).
     const css = cssBypassingValidation(`red${NEWLINE}color:blue`)
@@ -104,7 +104,7 @@ describe('H2 — 짝이 맞지 않는 따옴표가 스타일시트를 통째로 
   })
 })
 
-describe('재라 #7 — 상태가 이기는 것을 실제로 잰다', () => {
+describe('상태가 이기는 것을 실제로 잰다', () => {
   const both = {
     ...MINIMAL_THEME,
     components: {
@@ -130,12 +130,9 @@ describe('재라 #7 — 상태가 이기는 것을 실제로 잰다', () => {
   }
 
   it('같은 조각을 건드리면 상태 쪽 값이 남는다', async () => {
-    // 앞 웨이브는 여기 *"뒤에 온 것이 이긴다는 CSS 규칙은 이 패키지가 재지 못한다"*고 적었고,
-    // 그 뒤 판이 *"jsdom이 캐스케이드를 계산하므로 잴 수 있었다"*로 고쳤다.
-    //
-    // **그 전제가 틀렸다 — P4b-2 ③이 쟀다.** jsdom 25는 **특이도를 계산하지 않고 순서만
-    // 본다**(`#v`(1,0,0)가 뒤에 온 `[data-wb-part]`(0,1,0)에게 진다 — 대조 다섯이 전부
-    // 순서대로만 갈렸다). 즉 이 프로브가 재는 것은 **캐스케이드가 아니라 방출 순서**다.
+    // **jsdom이 캐스케이드를 계산한다고 보면 안 된다.** jsdom 25는 **특이도를 계산하지 않고
+    // 순서만 본다**(`#v`(1,0,0)가 뒤에 온 `[data-wb-part]`(0,1,0)에게 진다). 즉 이 프로브가
+    // 재는 것은 **캐스케이드가 아니라 방출 순서**다.
     //
     // **그래도 이 케이스의 결론은 옳다.** 두 규칙
     // (`[c="List"][variant="featured"] [part="item"]`와 `[c="List"][state~="selected"] [part="item"]`)이

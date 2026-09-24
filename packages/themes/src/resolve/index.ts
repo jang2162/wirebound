@@ -14,30 +14,20 @@ import { resolveTokens } from './tokens'
 /**
  * 테마 문서 하나를 해석해 `ResolvedTheme`을 낸다. **던지지 않는다** — 이슈를 모아서 낸다.
  *
- * **입력을 `unknown`으로 받는다.** 계획서의 시그니처는 `(theme: Theme, base?: Theme)`였지만
- * 두 가지가 그것을 막는다. (1) 파생 문서는 `Theme`이 아니다 — 재라 #5에서 규격이 `null`을
- * 받지 않는 것을 쟀고 §6.9는 `null`이 삭제 지시라고 한다. (2) 이 함수가 **경계**다.
- * 웨이브 1이 남긴 관찰 그대로, 조각 검증기들은 zod를 통과한 값을 받는 것이 계약이라
- * 그 앞에 아무것도 없으면 계약 밖 입력이 그대로 들어간다. 여기서 파싱하면 `null`·`42`·
+ * **입력을 `unknown`으로 받는다.** `Theme`으로 받지 않는 이유가 둘이다. (1) 파생 문서는
+ * `Theme`이 아니다 — 규격은 `null`을 받지 않는데 설계서 「상속과 병합」은 `null`이 삭제
+ * 지시라고 한다. (2) 이 함수가 **경계**다. 조각 검증기들은 zod를 통과한 값을 받는 것이
+ * 계약이라 그 앞에 아무것도 없으면 계약 밖 입력이 그대로 들어간다. 여기서 파싱하면 `null`·`42`·
  * 배열 같은 것이 **이슈가 되어** 나간다(케이스로 고정했다).
  *
  * 층을 **끝까지 다 돈다.** 토큰이 깨져도 primitives·components·patterns를 마저 보고 이슈를
- * 모은다 — P4c의 저작 UI가 한 번에 고칠 수 있어야 한다(D2의 이유 1). 그래서 **토큰 하나가
+ * 모은다 — 저작 UI가 한 번에 고칠 수 있어야 한다. 그래서 **토큰 하나가
  * 깨지면 그것을 가리키는 스타일마다 `unknown-token`이 따라 나온다.** 근원을 가리는 것이
  * 아니라 함께 보이는 쪽을 골랐다.
  *
  * **`error`가 하나라도 있으면 `theme`은 `null`이다** — 반쯤 해석된 것을 내보내면 `emit`이
- * 그것을 CSS로 만든다.
- *
- * ---
- *
- * **2026-08-11(P4c-1 T2): *"이슈가 하나라도 있으면"*이 *"`error`가 하나라도 있으면"*이 됐다.
- * 지우지 않고 무엇이 왜 바뀌었는지 남긴다.**
- *
- * P4a-1의 D2가 *"이슈가 하나라도 있으면 `null`"*로 정했고, `issue.ts`의 재라 #3이 그것을
- * **경고가 하나도 없다는 사실 위에** 세워 두고 이렇게 적었다: *"`themes`에 첫 `warning`이
- * 생기는 날 그 규칙을 `partitionIssues` 기준으로 고쳐야 한다."* 오늘 그 경고가 생겼다
- * (`suspicious-literal`·`node-handle-overwrite`).
+ * 그것을 CSS로 만든다. `warning`(`suspicious-literal`·`node-handle-overwrite`)은 해석을
+ * 막지 않는다.
  *
  * **선을 긋는 것은 `partitionIssues` 하나다**(`schema`). 여기서 `filter`를 다시 쓰면
  * `apps/api`의 `assertResolvable`·`edit-pipeline`과 갈릴 수 있고, 그 함수의 머리말이
@@ -62,9 +52,9 @@ export function resolveTheme(
   const primitives = checkPrimitives(theme.primitives ?? {}, tokens.table)
   issues.push(...primitives.issues)
 
-  // **컴포넌트 스타일이 primitives를 가리킬 수 있게 하는 배선이다**(P4c-1 T1).
+  // **컴포넌트 스타일이 primitives를 가리킬 수 있게 하는 배선이다.**
   // 넘기는 것은 값이 아니라 **선언된 경로의 집합**이다 — 값을 넘기면 컴파일러가
-  // 그것을 인라인하고 싶어지는데, D2가 `var(--wb-<경로>)`로 내기로 정했다
+  // 그것을 인라인하고 싶어지는데, 그 참조는 `var(--wb-<경로>)`로 낸다
   // (파생 테마가 primitives만 덮어써도 컴포넌트 스타일이 따라온다).
   const components = checkThemeComponents(
     theme.components ?? {},
@@ -77,10 +67,8 @@ export function resolveTheme(
   const patterns = checkPatterns(theme.patterns ?? {})
   issues.push(...patterns.issues)
 
-  // **`assets`가 층을 하나 더 얻었다**(P4b-3 D5). P4a-1까지 `assets`는 통과만 했다 —
-  // `ResolvedTheme.assets`에 담기고 아무도 읽지 않았다. 이제 `compileTheme`이 그것으로
-  // `@font-face`를 내므로 **CSS로 나가는 문자열**이 되었고, 그 순간 다른 스타일 값과 같은
-  // 탈출 검사를 지나야 한다(`checkAssets`의 머리말).
+  // **`assets`도 검사한다.** `compileTheme`이 그것으로 `@font-face`를 내므로 **CSS로 나가는
+  // 문자열**이고, 다른 스타일 값과 같은 탈출 검사를 지나야 한다(`checkAssets`의 머리말).
   issues.push(...checkAssets(theme.assets))
 
   issues.push(...collidingVariables(tokens.table, primitives.values))
@@ -148,9 +136,10 @@ function specIssues(entries: readonly { path: readonly PropertyKey[]; message: s
 /**
  * 서로 다른 경로가 같은 CSS 변수 이름으로 접히는지 본다.
  *
- * `cssVarName`이 경로의 `.`을 `-`로 바꾸는데(D6) **토큰 이름 자체가 `.`과 `-`를 모두 쓸 수
- * 있다** — §6.3의 `palette` 키가 `"blue.500"`인 것이 그 예다. 그래서 `blue.500`과
- * `blue-500`이 같은 변수가 되고, 심어 보니 이슈 없이 `:root`에 같은 이름이 두 번 나갔다.
+ * `cssVarName`이 경로의 `.`을 `-`로 바꾸는데 **토큰 이름 자체가 `.`과 `-`를 모두 쓸 수
+ * 있다** — 설계서 「tokens — 3단 분리」의 `palette` 키가 `"blue.500"`인 것이 그 예다. 그래서
+ * `blue.500`과 `blue-500`이 같은 변수가 되고, 이 검사가 없으면 이슈 없이 `:root`에 같은
+ * 이름이 두 번 나간다.
  * CSS는 나중 선언이 이기므로 앞의 토큰이 조용히 사라진다.
  *
  * 두 층을 합쳐서 본다. 토큰 경로는 이름공간(`palette`·`semantic`·…)으로 시작하고

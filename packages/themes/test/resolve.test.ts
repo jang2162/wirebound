@@ -76,9 +76,9 @@ describe('resolveTheme — 픽스처', () => {
   })
 })
 
-describe('resolveTheme — D2의 성질', () => {
+describe('resolveTheme — 해석과 방출을 가른 성질', () => {
   it('해석 결과의 var(--wb-…)가 전부 자기 tokens·primitives 안이다', () => {
-    // **이것이 D2가 해석과 방출을 가른 이유다.** 검증을 지나지 않은 참조가 남아 있으면
+    // **이것이 해석과 방출을 가른 이유다.** 검증을 지나지 않은 참조가 남아 있으면
     // 방출이 그것을 var()로 내보내고 정의되지 않은 변수가 CSS에 실린다.
     const { theme } = resolveTheme(MINIMAL_THEME)
     expect(theme).not.toBeNull()
@@ -109,10 +109,9 @@ describe('resolveTheme — D2의 성질', () => {
   })
 
   /**
-   * **2026-08-11(P4c-1 수정 웨이브 F6): 이름이 *"이슈가 하나라도 있으면"*이었고 거짓이
-   * 됐다.** `themes`에 첫 `warning`이 생겨 기준이 `error`로 바뀌었다(`resolve/index.ts`).
-   * 케이스가 쓰는 값(`space.99` → `unknown-token`)이 `error`라 **단언은 계속 통과했고,
-   * 그래서 이름만 조용히 거짓이 됐다** — 경고만 있는 갈래는
+   * **케이스가 쓰는 값(`space.99` → `unknown-token`)은 `error`라, `null`의 기준
+   * (`resolve/index.ts`)이 *"이슈가 있으면"*이든 *"`error`가 있으면"*이든 단언은 통과한다** —
+   * 기준이 바뀌어도 이름만 조용히 거짓이 된다. 경고만 있는 갈래는
    * `warning-channel.test.ts`가 따로 본다.
    */
   it('error가 하나라도 있으면 theme이 null이다 — 반쯤 해석된 것을 내보내지 않는다', () => {

@@ -1,5 +1,5 @@
 /**
- * **셸 CSS의 규율과 코멘트 줄 만들기**(T2 · D3·D4·D6).
+ * **셸 CSS의 규율과 코멘트 줄 만들기.**
  *
  * DOM 없이 돈다 — CSS는 글자로 훑고 코멘트 줄은 순수 함수다. 셸이 **그린 것**을 재는 것은
  * `bundle.test.tsx`이고 그 파일만 jsdom을 쓴다.
@@ -19,8 +19,8 @@ import { SHELL_CSS } from '../src/bundle/shell-css'
 /**
  * **자는 여기 산다. 구현에서 import하지 않는다.**
  *
- * 앞 판은 이 둘을 `shell-css.ts`가 수출하고 여기서 import했는데, 리뷰가 실측으로 짚었다:
- * 구현의 접두어를 `wb`로 느슨하게 하면 **자도 함께 느슨해져 아무것도 안 죽는다.** 자와
+ * 이 둘을 `shell-css.ts`가 수출하고 여기서 import하면, 구현의 접두어를 `wb`로 느슨하게
+ * 할 때 **자도 함께 느슨해져 아무것도 안 죽는다.** 자와
  * 대상이 같은 파일에 있으면 한 손이 둘을 같이 고칠 수 있고, 그러면 재는 것이 없다.
  *
  * 글자로 적혀 있으므로 시트의 이름이 바뀌면 **여기가 먼저 죽는다** — 그것이 의도다.
@@ -88,10 +88,10 @@ describe('셸 CSS — 자가 실제로 시트를 읽는다', () => {
   })
 })
 
-describe('셸 CSS — 문서에 못 닿는다 (D6)', () => {
+describe('셸 CSS — 문서에 못 닿는다', () => {
   /**
    * **갈림 ㉢이 화면으로 보이는 것을 막는다.** 빈 `style` 속성은 `[style]` 셀렉터에
-   * 매칭된다(P8-1 이월 §3의 실측). 캔버스에는 그 속성이 남고 번들에는 없으므로, 셸이
+   * 매칭된다. 캔버스에는 그 속성이 남고 번들에는 없으므로, 셸이
    * `[style]`을 하나 걸면 같은 노드가 두 경로에서 **다르게 보인다.**
    */
   it('[style] 셀렉터가 없다', () => {
@@ -100,7 +100,7 @@ describe('셸 CSS — 문서에 못 닿는다 (D6)', () => {
     }
   })
 
-  /** §6.11의 여섯은 **테마의 어휘**다. 셸이 그것으로 적으면 셸이 문서를 꾸미게 된다. */
+  /** 설계서 「컴파일」의 여섯 속성은 **테마의 어휘**다. 셸이 그것으로 적으면 셸이 문서를 꾸미게 된다. */
   it('data-wb-* 셀렉터가 없다', () => {
     for (const rule of RULES) {
       for (const selector of rule.selectors) expect(selector).not.toContain('[data-wb-')
@@ -128,7 +128,7 @@ describe('셸 CSS — 문서에 못 닿는다 (D6)', () => {
   })
 })
 
-describe('셸 CSS — 감싸는 상자에 상속되는 속성을 걸지 않는다 (D6)', () => {
+describe('셸 CSS — 감싸는 상자에 상속되는 속성을 걸지 않는다', () => {
   /**
    * 문서를 감싸는 상자에 걸 수 있는 속성. **여기 없는 것은 전부 위반이다.** 전부 상속되지
    * 않는 속성이고, 새 속성이 필요하면 **상속되지 않는지 확인한 뒤** 여기 더한다 — 그
@@ -181,10 +181,11 @@ describe('셸 CSS — 감싸는 상자에 상속되는 속성을 걸지 않는�
   })
 })
 
-describe('셸 CSS — 스크립트 없이 탭을 바꾼다 (D3 · 재라 #4)', () => {
+describe('셸 CSS — 스크립트 없이 탭을 바꾼다', () => {
   /**
-   * **라디오 + `:checked ~`다.** `<details>`는 셋이 동시에 열릴 수 있어 §9의 그림과 다르다.
-   * 브라우저에서 실제로 바뀌는지는 `docs/…-p8-2-report.md`가 잰 값을 든다.
+   * **라디오 + `:checked ~`다.** `<details>`는 셋이 동시에 열릴 수 있어
+   * 설계서 「설계서 화면 구조」의 그림과 다르다. 브라우저에서 실제로 바뀌는지는 이 파일이
+   * 재지 않는다(DOM 없이 시트를 글자로 훑는다).
    */
   it.each(['description', 'comments', 'interactions'])('%s 탭의 규칙이 있다', (tab) => {
     expect(SHELL_CSS).toContain(`#wb-export-tab-${tab}:checked ~ #wb-export-panel-${tab}`)
@@ -209,7 +210,7 @@ describe('셸 CSS — 스크립트 없이 탭을 바꾼다 (D3 · 재라 #4)', (
   })
 })
 
-/* ------------------------------------------------------------- 코멘트 줄 (D4) */
+/* ------------------------------------------------------------------ 코멘트 줄 */
 
 function node(id: string, extra: Partial<WbNode> = {}): WbNode {
   return { id, type: 'Text', props: { content: id }, ...extra }
@@ -221,7 +222,7 @@ function documentOf(children: WbNode[]): PageDocument {
 
 const COMMENT: BundleComment = { nodeId: 'n_000000000002', body: '검색 조건은 AND 결합' }
 
-describe('commentEntries — 번호와 코멘트를 맞춘다 (D4)', () => {
+describe('commentEntries — 번호와 코멘트를 맞춘다', () => {
   it('번호가 붙은 노드의 코멘트를 그 이름으로 든다', () => {
     const page = documentOf([node('n_000000000002', { marker: 1 })])
     expect(commentEntries(page, [COMMENT])).toEqual([

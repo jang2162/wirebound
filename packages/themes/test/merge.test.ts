@@ -29,7 +29,7 @@ const patch = (extra: Record<string, unknown> = {}): ThemePatch & Record<string,
   ...extra,
 })
 
-describe('재라 #5 — null 삭제를 규격이 받는가', () => {
+describe('null 삭제를 규격이 받는가', () => {
   it('ThemeSchema는 어느 층에서도 null을 받지 않는다', () => {
     // 그래서 파생 문서를 `ThemeSchema`로 검사할 수 없고 별도 규격이 필요하다.
     const base = { meta: BASE.meta }
@@ -60,7 +60,7 @@ describe('재라 #5 — null 삭제를 규격이 받는가', () => {
   })
 })
 
-describe('mergeTheme — §6.9의 규칙 넷', () => {
+describe('mergeTheme — 설계서 「상속과 병합」의 규칙 넷', () => {
   it('객체는 깊은 병합이다', () => {
     const { theme, issues } = mergeTheme(BASE, patch({ tokens: { semantic: { primary: '#111111' } } }))
     expect(issues).toEqual([])
@@ -120,7 +120,7 @@ describe('mergeTheme — §6.9의 규칙 넷', () => {
 describe('mergeTheme — meta는 병합하지 않는다', () => {
   it('파생의 meta가 그대로이되 extends는 빠진다', () => {
     // 병합 결과는 더 이상 파생 테마가 아니다 — 홀로 선다. `extends`를 지닌 채 저장하면
-    // 그것은 여전히 참조이고, 복원이 그때의 base를 다시 요구한다(§4.5가 막으려던 일이다).
+    // 그것은 여전히 참조이고, 복원이 그때의 base를 다시 요구한다(설계서 「스냅샷」이 막으려던 일이다).
     const { theme } = mergeTheme(BASE, patch())
     expect(theme?.meta).toEqual({ id: 'acme-portal', name: 'ACME 포털', version: '2.0.0' })
     expect('extends' in (theme?.meta ?? {})).toBe(false)
@@ -168,7 +168,7 @@ describe('mergeTheme — 원본을 변형하지 않는다', () => {
   })
 
   it('결과를 깊이 고쳐도 base가 따라 바뀌지 않는다 — 구조를 공유하지 않는다', () => {
-    // 시스템 테마는 읽기 전용이고(§6.10) P4b가 모듈 상수로 둘 것이므로,
+    // 시스템 테마는 읽기 전용이고(「테마 관리」) 모듈 상수이므로,
     // 결과가 base의 하위 객체를 그대로 물고 있으면 한 번의 실수가 그것을 오염시킨다.
     const { theme } = mergeTheme(BASE, patch())
     expect(theme).not.toBeNull()
@@ -235,7 +235,7 @@ describe('mergeTheme — 결과가 규격을 지키는지 본다', () => {
   })
 })
 
-describe('§4.5 — 병합 결과가 홀로 서서 왕복한다', () => {
+describe('「스냅샷」 — 병합 결과가 홀로 서서 왕복한다', () => {
   const compile = (document: unknown, base?: Theme) => {
     const { theme, issues } = resolveTheme(document, base)
     expect(issues, JSON.stringify(issues)).toEqual([])
@@ -267,7 +267,7 @@ describe('§4.5 — 병합 결과가 홀로 서서 왕복한다', () => {
   })
 
   it('ResolvedTheme은 저장 대상이 아니다 — 직렬화하면 절이 비고 컴파일이 던진다', () => {
-    // D2가 "ResolvedTheme이 그 자체로 §4.5의 산출물"이라고 적었던 자리다.
+    // `ResolvedTheme`을 「스냅샷」의 산출물로 저장하면 안 된다 — 절이 `Map`이라 직렬화되지 않는다.
     const { theme } = resolveTheme(BASE)
     const back = JSON.parse(JSON.stringify(theme)) as ResolvedTheme
     for (const section of ['tokens', 'primitives', 'breakpoints', 'components', 'patterns'] as const) {

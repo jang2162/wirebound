@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-// 경로가 어긋나면 여기서 죽는다. 아래 `§6.8을 실제로 읽는다`가 내용까지 확인한다.
+// 경로가 어긋나면 여기서 죽는다. 아래 `「스타일 프로퍼티 화이트리스트」를 실제로 읽는다`가 내용까지 확인한다.
 import designDoc from '../../../docs/superpowers/specs/2026-08-03-wirebound-design.md?raw'
 import {
   STYLE_PROPERTIES,
@@ -22,7 +22,7 @@ const TOKENS: TokenTable = new Map([
   ['typography.body.fontSize', '14px'],
   ['typography.body.lineHeight', '1.5'],
   ['typography.body.fontWeight', '400'],
-  // §6.3의 `scale.typography.family`. `resolveTokens`가 다른 타이포 항목과 같은 규칙으로
+  // 설계서 「tokens — 3단 분리」의 `scale.typography.family`. `resolveTokens`가 다른 타이포 항목과 같은 규칙으로
   // 평평하게 편다(`typography.<항목>.<키>`) — 이 표에 있는 것이 그 결과다.
   ['typography.family.sans', 'Pretendard, sans-serif'],
   ['typography.family.mono', 'D2Coding, monospace'],
@@ -32,7 +32,7 @@ const codes = (issues: { code: string }[]) => issues.map((i) => i.code).sort()
 const decl = (prop: string, value: unknown) => styleDeclarations(prop, value, TOKENS)
 
 /**
- * §6.8의 코드 블록에서 프로퍼티 이름을 뽑는다.
+ * 설계서 「스타일 프로퍼티 화이트리스트」의 코드 블록에서 프로퍼티 이름을 뽑는다.
  *
  * **손으로 옮긴 표가 그 절을 덮는지 기계가 보게 하려는 것이다.** 절이 늘거나 줄면
  * 아래 대조 케이스가 죽는다 — 사람이 기억해서 맞출 필요가 없다.
@@ -52,7 +52,7 @@ function propertiesInSpec(): string[] {
 }
 
 describe('§6.8 대조', () => {
-  it('§6.8을 실제로 읽는다', () => {
+  it('「스타일 프로퍼티 화이트리스트」를 실제로 읽는다', () => {
     // 파싱이 깨지면 목록이 비고, 빈 집합끼리는 아래 대조가 조용히 통과한다.
     // 그래서 절의 첫 항목과 마지막 항목을 카나리아로 둔다.
     const names = propertiesInSpec()
@@ -60,32 +60,32 @@ describe('§6.8 대조', () => {
     expect(names.at(-1)).toBe('transition')
   })
 
-  it('§6.8의 이름을 하나도 빠뜨리지 않는다', () => {
+  it('「스타일 프로퍼티 화이트리스트」의 이름을 하나도 빠뜨리지 않는다', () => {
     const table = new Set(Object.keys(STYLE_PROPERTIES))
 
     expect(propertiesInSpec().filter((name) => !table.has(name))).toEqual([])
   })
 
   /**
-   * **§6.8을 넘어선 어휘는 등록해야 한다.**
+   * **「스타일 프로퍼티 화이트리스트」를 넘어선 어휘는 등록해야 한다.**
    *
-   * 앞서 이 자리는 *"화이트리스트가 §6.8과 정확히 같다"*였고, P4b-1이 §6.8에 **없는** 어휘를
-   * 더하면서 죽었다. **설계 문서는 고치지 않는다**(P4a-1이 세운 원칙) — 대신 대조를 둘로 가른다:
+   * *"화이트리스트가 그 절과 정확히 같다"* 한 케이스로 두면 절에 **없는** 어휘를 더하는 순간
+   * 죽는다. **설계서의 절은 그대로 두고** 대조를 둘로 가른다:
    * 위 케이스가 *"절의 이름이 빠지지 않았는가"*를 보고, 이 케이스가 *"절에 없는 것이 몰래
    * 들어오지 않았는가"*를 본다.
    *
    * **양방향이 유지된다는 것이 요점이다.** 하나로 두면 어휘를 더할 때 케이스를 지우게 되고,
-   * 그러면 §6.8과의 연결이 통째로 끊긴다. 갈라 두면 어휘를 더하는 사람이 `BEYOND_SPEC`에
+   * 그러면 그 절과의 연결이 통째로 끊긴다. 갈라 두면 어휘를 더하는 사람이 `BEYOND_SPEC`에
    * 이름을 적고 **근거를 함께 남겨야** 한다.
    */
-  it('§6.8에 없는 어휘는 BEYOND_SPEC에 등록된 것뿐이다', () => {
+  it('「스타일 프로퍼티 화이트리스트」에 없는 어휘는 BEYOND_SPEC에 등록된 것뿐이다', () => {
     const spec = new Set(propertiesInSpec())
     const extra = Object.keys(STYLE_PROPERTIES).filter((name) => !spec.has(name))
 
     expect([...extra].sort()).toEqual([...STYLE_PROPERTIES_BEYOND_SPEC].sort())
   })
 
-  it('BEYOND_SPEC에 §6.8이 이미 가진 이름을 넣지 않는다', () => {
+  it('BEYOND_SPEC에 「스타일 프로퍼티 화이트리스트」가 이미 가진 이름을 넣지 않는다', () => {
     // 반대 방향. 절에 있는 이름을 여기 적으면 **위 케이스가 그 이름을 봐주게 된다** —
     // 표에서 그 이름이 사라져도 조용해진다.
     const spec = new Set(propertiesInSpec())
@@ -102,8 +102,7 @@ describe('§6.8 대조', () => {
 
 describe('styleDeclarations — 이름', () => {
   it('화이트리스트 밖의 이름은 이슈다', () => {
-    // **`fontFamily`가 여기 있었다.** P4b-1이 그것을 어휘로 열었다 — 아래
-    // `§6.8을 넘어선 어휘` 절이 그 이유를 든다.
+    // **`fontFamily`는 여기 없다** — 어휘다. 아래 `fontFamily` 절이 그 이유를 든다.
     for (const prop of ['content', 'cursor', 'backdropFilter', 'maxHeight']) {
       const { css, issues } = decl(prop, '1px')
       expect(codes(issues), prop).toEqual(['unknown-style-prop'])
@@ -123,16 +122,16 @@ describe('styleDeclarations — 이름', () => {
   })
 
   /**
-   * **§6.7의 `assets.fonts`가 닿는 곳이 여기다.** 그 절이 폰트를 선언하게 해 두었는데
-   * §6.8에 폰트를 **거는** 어휘가 없어 *"선언은 있는데 쓸 길이 없는"* 상태였다(P4a-2 이월).
+   * **「assets」의 `assets.fonts`가 닿는 곳이 여기다.** 그 절이 폰트를 선언하게 해 두었으므로
+   * 폰트를 **거는** 어휘가 없으면 *"선언은 있는데 쓸 길이 없는"* 상태가 된다.
    *
-   * **값은 둘 다 받는다 — 토큰 참조와 리터럴.** §6.3의 `scale.typography.family`가
+   * **값은 둘 다 받는다 — 토큰 참조와 리터럴.** 「tokens — 3단 분리」의 `scale.typography.family`가
    * `{ sans, serif, mono }`를 갖고 있고 `resolveTokens`가 그것을 `typography.family.sans`로
-   * 편다. 그래서 **토큰이 이미 있는데 가리킬 프로퍼티가 없던 것**이기도 하다.
-   * 리터럴을 막지 않는 이유는 §6.8이 값 규칙을 *"토큰 참조 또는 리터럴"*로 못박았고
+   * 편다. 그 토큰을 가리킬 프로퍼티가 이것이다.
+   * 리터럴을 막지 않는 이유는 「스타일 프로퍼티 화이트리스트」가 값 규칙을 *"토큰 참조 또는 리터럴"*로 못박았고
    * 폰트 스택은 그 자체가 CSS 리터럴 관용구이기 때문이다.
    */
-  describe('fontFamily (§6.8에 없는 어휘 — P4b-1)', () => {
+  describe('fontFamily (「스타일 프로퍼티 화이트리스트」에 없는 어휘)', () => {
     it('리터럴 폰트 스택이 그대로 나간다', () => {
       expect(decl('fontFamily', 'Pretendard, sans-serif').css).toEqual([
         ['font-family', 'Pretendard, sans-serif'],
@@ -162,37 +161,37 @@ describe('styleDeclarations — 이름', () => {
     })
 
     it('함수는 여전히 막는다', () => {
-      // 어휘를 여는 것과 값 규칙을 넓히는 것은 다른 일이다(전역 제약).
+      // 어휘를 여는 것과 값 규칙을 넓히는 것은 다른 일이다.
       expect(codes(decl('fontFamily', 'var(--x)').issues)).toEqual(['bad-style-value'])
     })
   })
 
   /**
-   * **§6.11의 예시가 요구한다** —
+   * **「컴파일」의 예시가 요구한다** —
    * `[data-wb-component="List"][data-wb-structure="cardGrid"] { display: grid; gap: … }`.
    * 트랙 선언이 없으면 그 규칙이 만드는 것은 **1열 그리드**다. `List.columns`는
    * `visibleWhen: { structure: 'table' }`인 **컬럼 이름 목록**이지 열 수가 아니므로
    * 노드도 그것을 못 정한다.
    *
-   * **재라 #3 — 어휘의 모양: `gridColumns: <양의 정수>` 하나.**
+   * **어휘의 모양: `gridColumns: <양의 정수>` 하나.**
    *
-   * `grid-template-columns`를 그대로 열면 §6.8이 스스로 적은 제한 이유 둘이 **동시에**
+   * `grid-template-columns`를 그대로 열면 「스타일 프로퍼티 화이트리스트」가 스스로 적은 제한 이유 둘이 **동시에**
    * 깨진다 — 임의 문자열이라 값을 검증할 수 없고(`repeat(auto-fill, minmax(…))`부터
    * `subgrid`까지), GUI 편집도 불가능하며, 그 자리가 곧 무제한 스타일 튜닝의 입구가 된다.
    * 수 하나는 정수 범위로 검증되고 숫자 입력 하나로 편집된다.
    *
    * **`auto-fill`/`minmax`를 표현하지 못하는 것을 알고 고른다.** 반응형 카드 그리드는
-   * §6.5의 `responsive`가 브레이크포인트마다 다른 `gridColumns`를 주는 것으로 표현된다 —
+   * 「components — 구조 + 스킨」의 `responsive`가 브레이크포인트마다 다른 `gridColumns`를 주는 것으로 표현된다 —
    * 어휘를 넓히지 않고도 같은 화면에 닿는 길이 이미 있다.
    */
-  describe('gridColumns (§6.8에 없는 어휘 — P4b-1)', () => {
+  describe('gridColumns (「스타일 프로퍼티 화이트리스트」에 없는 어휘)', () => {
     it('열 수가 repeat(N, 1fr)로 펼쳐진다', () => {
       expect(decl('gridColumns', 3).css).toEqual([['grid-template-columns', 'repeat(3, 1fr)']])
       expect(decl('gridColumns', 1).css).toEqual([['grid-template-columns', 'repeat(1, 1fr)']])
     })
 
     it('양의 정수가 아니면 이슈다', () => {
-      // **검증할 수 있다는 것이 이 어휘를 고른 이유다**(§6.8의 제한 이유 1).
+      // **검증할 수 있다는 것이 이 어휘를 고른 이유다**(「스타일 프로퍼티 화이트리스트」의 제한 이유 1).
       for (const value of [0, -1, 2.5, '3', 'space.6', '', true, null, {}, [3]]) {
         const { css, issues } = decl('gridColumns', value)
         expect(codes(issues), JSON.stringify(value)).toEqual(['bad-style-value'])
@@ -200,7 +199,7 @@ describe('styleDeclarations — 이름', () => {
       }
     })
 
-    it('임의 트랙 문자열을 받지 않는다 — §6.8의 제한 이유 둘이 걸린다', () => {
+    it('임의 트랙 문자열을 받지 않는다 — 「스타일 프로퍼티 화이트리스트」의 제한 이유 둘이 걸린다', () => {
       for (const value of ['repeat(auto-fill, minmax(200px, 1fr))', '1fr 2fr', 'subgrid']) {
         expect(codes(decl('gridColumns', value).issues), value).toEqual(['bad-style-value'])
       }
@@ -213,19 +212,19 @@ describe('styleDeclarations — 이름', () => {
   })
 
   /**
-   * **재라 #5 — 커스텀 프로퍼티 채널.**
+   * **커스텀 프로퍼티 채널.**
    *
-   * 구조 기본 CSS가 `--wb-tree-indent`를 손잡이로 남겼는데 테마가 그 이름에 값을 넣을 길이
-   * 없었다(P4a-2가 계획서의 *"테마의 손잡이가 된다"*를 구현 중 반증했다).
+   * 구조 기본 CSS가 `--wb-tree-indent`를 손잡이로 남기므로 테마가 그 이름에 값을 넣을 길이
+   * 있어야 한다 — 채널이 없으면 손잡이는 이름뿐이다.
    *
-   * **임의 커스텀 프로퍼티를 열지 않는다.** 열면 §6.8의 화이트리스트가 무의미해진다 —
+   * **임의 커스텀 프로퍼티를 열지 않는다.** 열면 화이트리스트가 무의미해진다 —
    * 무엇이든 `--x`로 내보낼 수 있고, 그 값을 읽는 규칙이 저쪽에 있으면 화이트리스트를
    * 우회해 임의 스타일을 거는 길이 된다. **손잡이마다 별칭 어휘 하나**를 여는 쪽이 그
-   * 제한을 지키면서 §6.8의 관용구(camelCase 이름 → CSS 프로퍼티)를 그대로 쓴다.
+   * 제한을 지키면서 「스타일 프로퍼티 화이트리스트」의 관용구(camelCase 이름 → CSS 프로퍼티)를 그대로 쓴다.
    *
    * **값 규칙도 그대로다** — 토큰 참조와 리터럴, 함수 금지. 새 규칙을 만들지 않는다.
    */
-  describe('treeIndent (§6.8에 없는 어휘 — P4b-1)', () => {
+  describe('treeIndent (「스타일 프로퍼티 화이트리스트」에 없는 어휘)', () => {
     it('구조 기본 CSS가 읽는 커스텀 프로퍼티로 나간다', () => {
       expect(decl('treeIndent', '8px').css).toEqual([['--wb-tree-indent', '8px']])
     })
@@ -298,7 +297,7 @@ describe('styleDeclarations — 값', () => {
   })
 })
 
-describe('styleDeclarations — 함수 (§6.8)', () => {
+describe('styleDeclarations — 함수 (「스타일 프로퍼티 화이트리스트」)', () => {
   it('임의 함수는 이슈다', () => {
     for (const value of ['calc(100% - 8px)', 'rgba(0,0,0,.5)', 'clamp(1rem, 2vw, 3rem)', 'var(--x)']) {
       const { css, issues } = decl('width', value)
@@ -351,8 +350,8 @@ describe('styleDeclarations — 함수 (§6.8)', () => {
   })
 
   it('괄호 앞에 함수 이름이 없으면 이슈다', () => {
-    // 이름을 못 찾으면 `names`가 비어 함수 검사 자체를 건너뛴다 — §6.8의 금지가
-    // 공백 하나로 지나갔다(재서 확인했다).
+    // 이름을 못 찾으면 `names`가 비어 함수 검사 자체를 건너뛴다 — 함수 금지가
+    // 공백 하나로 지나간다.
     for (const value of ['calc (1px)', '(1px)', 'calc\t(1px)', 'calc\n(1px)', '  (1px)  ']) {
       const { css, issues } = decl('width', value)
       expect(codes(issues), JSON.stringify(value)).toEqual(['bad-style-value'])
@@ -375,7 +374,7 @@ describe('styleDeclarations — 함수 (§6.8)', () => {
   })
 })
 
-describe('styleDeclarations — typography (§6.5의 parts.title)', () => {
+describe('styleDeclarations — typography (「components — 구조 + 스킨」의 parts.title)', () => {
   it('넷으로 펼쳐진다', () => {
     expect(decl('typography', 'h3').css).toEqual([
       ['font-size', 'var(--wb-typography-h3-fontSize)'],
@@ -386,7 +385,7 @@ describe('styleDeclarations — typography (§6.5의 parts.title)', () => {
   })
 
   it('스케일 항목에 없는 것은 선언을 내지 않는다', () => {
-    // §6.3의 `body`가 letterSpacing을 갖지 않는다.
+    // 「tokens — 3단 분리」의 `body`가 letterSpacing을 갖지 않는다.
     const { css, issues } = decl('typography', 'body')
     expect(issues).toEqual([])
     expect(css.map(([name]) => name)).toEqual(['font-size', 'line-height', 'font-weight'])
@@ -394,7 +393,7 @@ describe('styleDeclarations — typography (§6.5의 parts.title)', () => {
 
   it('문자열이 아닌 값은 이슈다 — 조용히 사라지지 않는다', () => {
     // 수 갈래가 `typography` 갈래보다 먼저 돌면 `STYLE_PROPERTIES.typography`가 빈 배열이라
-    // 선언도 이슈도 없이 사라진다. "css가 비면 이슈가 있다"의 역이 성립하지 않던 자리다.
+    // 선언도 이슈도 없이 사라진다. "css가 비면 이슈가 있다"의 역이 깨지는 자리다.
     for (const value of [700, 0, true, null, {}]) {
       const { css, issues } = decl('typography', value)
       expect(codes(issues), JSON.stringify(value)).toEqual(['bad-style-value'])
@@ -418,13 +417,13 @@ describe('styleDeclarations — typography (§6.5의 parts.title)', () => {
     expect(codes(decl('typography', 'h9').issues)).toEqual(['unknown-token'])
   })
 
-  it('이름공간을 붙여 쓰면 이슈다 — §6.5는 항목 이름만 적는다', () => {
+  it('이름공간을 붙여 쓰면 이슈다 — 「components — 구조 + 스킨」은 항목 이름만 적는다', () => {
     expect(codes(decl('typography', 'typography.h3').issues)).toEqual(['unknown-token'])
   })
 })
 
 describe('cssVarName', () => {
-  it('경로의 점이 하이픈이 된다 (D6)', () => {
+  it('경로의 점이 하이픈이 된다', () => {
     expect(cssVarName('semantic.primary')).toBe('--wb-semantic-primary')
     expect(cssVarName('space.6')).toBe('--wb-space-6')
     expect(cssVarName('typography.h3.fontSize')).toBe('--wb-typography-h3-fontSize')
@@ -467,7 +466,7 @@ describe('프로토타입 키 — 규격을 통과한 입력이 검증기를 죽
   })
 })
 
-describe('스타일 값은 palette를 직접 가리키지 못한다 (D3)', () => {
+describe('스타일 값은 palette를 직접 가리키지 못한다', () => {
   const PALETTE: TokenTable = new Map([
     ['palette.blue.500', '#3b82f6'],
     ['semantic.primary', '#2563eb'],
@@ -577,18 +576,18 @@ describe('참조 판정이 URL 안의 경로를 삼키지 않는다 (거짓 양�
   })
 })
 
-describe('§6.4~6.6의 값 자리에 palette 참조가 있는가 (F4 판정의 근거)', () => {
+describe('설계서 「primitives」·「components」·「patterns」의 값 자리에 palette 참조가 있는가 (palette 금지의 근거)', () => {
   const sectionBetween = (from: string, to: string) => {
     const after = designDoc.split(from)[1] ?? ''
     return after.split(to)[0] ?? ''
   }
 
-  it('§6.3에는 palette 참조가 있다 — 파싱이 살아 있는지 보는 카나리아', () => {
+  it('「tokens」에는 palette 참조가 있다 — 파싱이 살아 있는지 보는 카나리아', () => {
     expect(sectionBetween('### 6.3 tokens', '### 6.4')).toContain('"palette.')
   })
 
-  it('§6.4~6.6의 값 자리에는 없다', () => {
-    // 있으면 D3의 규칙(스타일 층은 의미 계층만 본다)이 설계와 어긋나는 것이므로
+  it('「primitives」·「components」·「patterns」의 값 자리에는 없다', () => {
+    // 있으면 스타일 층은 의미 계층만 본다는 규칙이 설계와 어긋나는 것이므로
     // `STYLE_FORBIDDEN_NAMESPACES`를 다시 판정해야 한다.
     for (const [from, to] of [
       ['### 6.4 primitives', '### 6.5'],

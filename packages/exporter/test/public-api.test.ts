@@ -1,10 +1,8 @@
 /**
- * **경계와 공개 표면이 계약이다.** `packages/themes/test/public-api.test.ts`가 선례이고
- * 그 배치를 그대로 따른다 — P8-1 리뷰가 *"exporter의 `tsconfig`가 `src`에 DOM을 안 주는
- * 것을 지키는 케이스가 없다"*고 지목한 자리다.
+ * **경계와 공개 표면이 계약이다.** `packages/themes/test/public-api.test.ts`와 같은 배치다.
  *
  * **이 파일이 `test/`에 사는 것이 중요하다** — 소스를 훑는 검사를 `src/`에 두면 그 검사가
- * 자기 자신을 훑는다. 이 저장소에서 같은 사고가 두 번 났다.
+ * 자기 자신을 훑는다.
  */
 import { describe, expect, it } from 'vitest'
 import packageJson from '../package.json?raw'
@@ -14,11 +12,11 @@ import tsconfigTestJson from '../tsconfig.test.json?raw'
 import * as api from '../src/index'
 
 /**
- * **DOM을 봐도 되는 자리. 목록이 여기 사는 것이 요점이다**(P8-2 이월 §11).
+ * **DOM을 봐도 되는 자리. 목록이 여기 사는 것이 요점이다.**
  *
- * P8-3이 `assets/runtime.js`를 붙이며 브라우저에서 도는 파일 하나가 생겼다. 그 파일은
- * `src`에 살지만 **Node에서는 한 줄도 돌지 않고**(글자로 나가 브라우저가 판다) 자기
- * `tsconfig`가 따로 검사한다. 명제를 지우지 않고 *"정확히 이것 하나가 예외다"*로 바꾼다 —
+ * `assets/runtime.js`를 만드는 파일 하나는 브라우저에서 돈다. 그 파일은 `src`에 살지만
+ * **Node에서는 한 줄도 돌지 않고**(글자로 나가 브라우저가 판다) 자기 `tsconfig`가 따로
+ * 검사한다. 명제를 지우지 않고 *"정확히 이것 하나가 예외다"*로 센다 —
  * 목록이 `src`에 있으면 파일을 더하는 손이 목록도 함께 고쳐 아무것도 안 재게 된다.
  */
 const BROWSER_SOURCES = ['../src/runtime/browser.ts']
@@ -39,10 +37,10 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
   })
 
   /**
-   * **`src`의 `tsconfig`가 DOM을 들이지 않는다**(D2).
+   * **`src`의 `tsconfig`가 DOM을 들이지 않는다.**
    *
-   * 이 설정이 실제로 막는 것을 양방향으로 쟀다: `src/page.tsx`에 `document.title`을 적으면
-   * `TS2584`로 죽고, `lib`에 `"DOM"`을 되넣으면 같은 줄이 통과했다. 여기서는 그 설정이
+   * 이 설정이 실제로 막는 것은 양방향으로 잴 수 있다: `src/page.tsx`에 `document.title`을
+   * 적으면 `TS2584`로 죽고, `lib`에 `"DOM"`을 되넣으면 같은 줄이 통과한다. 여기서는 그 설정이
    * 그대로인지만 본다 — **컴파일러가 지키는 것을 케이스가 다시 재려 하면 베끼는 것이 된다.**
    *
    * **케이스 쪽(`tsconfig.test.json`)은 DOM을 받는다.** 견주기가 jsdom의 DOM을 다루기
@@ -58,7 +56,7 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
   })
 
   /**
-   * **브라우저로 나가는 파일만 DOM을 받는다**(D2·D3). `src`의 금지를 그 한 파일이 깨는
+   * **브라우저로 나가는 파일만 DOM을 받는다.** `src`의 금지를 그 한 파일이 깨는
    * 것이 아니라 **다른 프로젝트가 그 파일을 맡는다** — 그래서 나머지 `src`는 여전히
    * `document`라는 이름조차 컴파일할 수 없다.
    */
@@ -101,8 +99,8 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
   })
 
   /**
-   * **`src`가 `node:` 모듈을 부르지 않는다**(D2: *"Node 전용 API를 최소로"*). P9의 CLI가
-   * 같은 함수를 부르고, 파일로 쓰는 것은 D1대로 호출자의 일이다.
+   * **`src`가 `node:` 모듈을 부르지 않는다**(*"Node 전용 API를 최소로"*). 파일로 쓰는 것은
+   * 호출자(`apps/api`)의 일이다.
    */
   it('src가 node: 모듈을 부르지 않는다', () => {
     for (const [path, source] of Object.entries(sources)) {
@@ -111,9 +109,9 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
   })
 
   /**
-   * **`src`가 zip을 모른다**(P10-1 전역 제약 · D1).
+   * **`src`가 zip을 모른다.**
    *
-   * PPTX가 zip(OOXML)이라 **압축을 여기서 하고 싶어지는 순간이 실제로 생겼다.** 하면
+   * PPTX가 zip(OOXML)이라 **압축을 여기서 하고 싶어진다.** 하면
    * 이 패키지가 파일 하나를 통째로 만들게 되고, 압축하는 자리가 `apps/api`와 둘이 된다 —
    * `exportBundle`이 파일 시스템을 모르는 것과 같은 이유로 막는다.
    *
@@ -127,7 +125,7 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
   })
 
   /**
-   * **`react-dom`이 진짜 의존이다**(D2). `renderer`는 그것을 devDependency로만 두는데,
+   * **`react-dom`이 진짜 의존이다.** `renderer`는 그것을 devDependency로만 두는데,
    * 이 패키지는 `renderToStaticMarkup`을 **부르므로** 받는 쪽에 함께 가야 한다.
    */
   it('package.json이 렌더에 필요한 것을 의존으로 든다', () => {
@@ -166,8 +164,8 @@ describe('공개 표면이 계약이다', () => {
     'exportBundle',
     'exportPage',
     'scriptJson',
-    // P10-1 — §15의 P10. `NO_SCREEN`은 **화면 이미지가 없는 자리의 말**이고, 라우트·CLI가
-    // 사람에게 그 상태를 말할 때 같은 글자를 쓰라고 밖으로 낸다(두 벌이 되는 것을 막는다).
+    // `NO_SCREEN`은 **화면 이미지가 없는 자리의 말**이고, 라우트·CLI가 사람에게 그 상태를
+    // 말할 때 같은 글자를 쓰라고 밖으로 낸다(두 벌이 되는 것을 막는다).
     'exportPptx',
     'NO_SCREEN',
   ].sort()

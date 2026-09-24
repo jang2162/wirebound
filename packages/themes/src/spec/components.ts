@@ -8,16 +8,17 @@ import type { TokenTable } from '../resolve/tokens'
 import type { CssDeclaration, ResolvedComponent, ResolvedLayer } from '../resolved'
 import { handleOverwriteMessage, overwrittenHandles } from './handles'
 
-/** 스타일 어휘 → 값. 이름이 §6.8 안인지는 zod가 아니라 `styleDeclarations`가 본다. */
+/** 스타일 어휘 → 값. 이름이 설계서 「스타일 프로퍼티 화이트리스트」 안인지는 zod가 아니라 `styleDeclarations`가 본다. */
 const StyleMapSchema = z.record(z.string(), z.union([z.string(), z.number()]))
 
 /**
  * `variants`·`states`·`responsive`의 항목 하나.
  *
- * `base`·`parts` 말고 **스타일 프로퍼티를 바로 쓰는 축약**을 받는다. §6.5의
+ * `base`·`parts` 말고 **스타일 프로퍼티를 바로 쓰는 축약**을 받는다. 설계서 「components —
+ * 구조 + 스킨」의
  * `states.disabled`가 `{ "opacity": 0.5 }`이고 `responsive.md`가 `{ "base": { … } }`이므로
  * 둘 다 받아야 예시가 통과한다. **모호하지 않은 근거는 두 키 집합이 서로 겹치지 않는다는
- * 것**이다 — `base`·`parts`는 §6.8의 프로퍼티 이름이 아니다(`test/spec-components.test.ts`가
+ * 것**이다 — `base`·`parts`는 「스타일 프로퍼티 화이트리스트」의 프로퍼티 이름이 아니다(`test/spec-components.test.ts`가
  * 그것을 잰다).
  */
 const LayerSchema = z
@@ -43,7 +44,7 @@ export interface ThemeComponent {
   variants?: Record<string, ThemeLayer>
   states?: Record<string, ThemeLayer>
   /**
-   * 브레이크포인트별 오버라이드. §6.5의 예시가 `base`만 보여 주므로 **`variants`·`states`를
+   * 브레이크포인트별 오버라이드. 「components — 구조 + 스킨」의 예시가 `base`만 보여 주므로 **`variants`·`states`를
    * 안쪽에 다시 받지 않는다** — 층을 겹치는 것은 설계가 주지 않은 확장이다.
    */
   responsive?: Record<string, ThemeLayer>
@@ -64,16 +65,16 @@ export const ComponentsSchema: z.ZodType<Record<string, ThemeComponent>> = z.rec
 )
 
 /**
- * 테마의 `components`를 **카탈로그와 대조**한다. 이것이 D1을 실현하는 자리다.
+ * 테마의 `components`를 **카탈로그와 대조**한다.
  *
  * 대조 대상은 `schema`의 `ComponentDef`다 — `structures`·`parts`·`variants`·`states`를
- * **선언**하는 것이 거기이고(§5.1: *"여기 선언된 것이 곧 테마가 쓸 수 있는 어휘다"*),
+ * **선언**하는 것이 거기이고(설계서 「컴포넌트 정의 구조」: *"여기 선언된 것이 곧 테마가 쓸 수 있는 어휘다"*),
  * 렌더러의 레지스트리는 그 선언을 구현할 뿐이다. 그래서 `themes`는 `renderer`를 보지 않고
- * §3.3의 의존 방향(`themes` → `schema`)이 지켜진다.
+ * 설계서 「각 패키지의 책임과 의존」의 의존 방향(`themes` → `schema`)이 지켜진다.
  *
  * **선언과 구현이 어긋나는 경우는 여기서 다루지 않는다.** 테마가 `cardGrid`를 골랐는데
  * 렌더러가 그 구조를 등록하지 않았다면 렌더 시점에 드러난다(`requireStructure`가 던진다).
- * 그 대조는 P4a-2 이후의 일이다.
+ * 그 대조는 `renderer`를 볼 수 있는 쪽의 일이다.
  *
  * 카탈로그를 여기서 설치하지 않는다 — `schema`의 `validatePage`가 `getComponent`를 그냥
  * 부르는 것과 같은 자리다. 설치하지 않은 채 부르면 이름이 `unknown-component`로 떨어진다
@@ -245,7 +246,7 @@ function checkStyleMap(
 }
 
 /**
- * **노드 손잡이를 덮어쓰는지 본다**(P4c-1 T4). 표와 판정은 `spec/handles.ts`가 소유한다.
+ * **노드 손잡이를 덮어쓰는지 본다**. 표와 판정은 `spec/handles.ts`가 소유한다.
  *
  * **값이 무엇인지는 보지 않는다.** 손잡이를 죽이는 것은 값이 아니라 **선언이 존재한다는
  * 사실**이다 — `flex-direction: var(--wb-node-flex-direction, row)`를 덮는 것은 뒤에 오는

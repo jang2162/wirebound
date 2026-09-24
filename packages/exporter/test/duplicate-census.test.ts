@@ -1,30 +1,30 @@
 /**
- * **두 벌이 되는 것을 막는다**(P10-1 D4).
+ * **두 벌이 되는 것을 막는다.**
  *
- * §11.3의 번들과 §15의 PPTX가 **같은 설계서를 말한다.** 코멘트 줄·상호작용 문장·빈 상태의
+ * 설계서 「HTML 정적 번들」의 번들과 「로드맵」의 PPTX가 **같은 설계서를 말한다.** 코멘트 줄·상호작용 문장·빈 상태의
  * 말을 두 산출물이 각자 만들면 **오늘은 같은 값이 나오고** 한쪽만 고쳐진 날 갈린다.
  *
  * ---
  *
  * # 왜 값을 재는 케이스로는 못 보나
  *
- * 두 벌이 **오늘은 같은 값을 낸다.** 값을 재는 자(`pptx-parity.test.ts`)는 복제가 값을
+ * 두 벌이 **오늘은 같은 값을 낸다.** 값을 재는 자(`pptx-parity.test.tsx`)는 복제가 값을
  * 바꾼 뒤에야 죽고, 그때는 이미 늦었다. **소스를 세는 것이 유일한 방법이다** —
  * `packages/cli/test/assembly-census.test.ts`·`test/io-boundary.test.ts`가 같은 부류다.
  *
  * # 분모는 `packages/exporter/src` 하나다
  *
  * 이 패키지 밖(`apps/web`의 우측 패널)은 자기 뿌리를 훑는 자가 따로 있어야 한다.
- * **뿌리가 여럿인 검사를 한 파일에 두지 않는다**(P3-3 이월 §6.9가 이름 붙인 자리).
+ * **뿌리가 여럿인 검사를 한 파일에 두지 않는다.**
  *
  * # 이름 목록이 분모다 — **한 겹 아래로 내려가는 길을 막는다**
  *
- * 앞 판은 이름을 케이스마다 하나씩 박아 두었고, **한 겹 아래(`describeInteraction`)로 내려가
- * 다시 엮으면 안 보였다.** 리뷰어가 실측했다(귀속: 리뷰 §4): `pptx/index.ts`가 `walkNodes` +
- * `describeInteraction`으로 문장을 직접 만들면 **0 사망**이었다.
+ * 이름을 케이스마다 하나씩 박아 두면 **한 겹 아래(`describeInteraction`)로 내려가 다시
+ * 엮는 것이 안 보인다** — `pptx/index.ts`가 `walkNodes` + `describeInteraction`으로 문장을
+ * 직접 만들어도 아무것도 안 죽는다.
  *
  * 그래서 아래 `PRIMITIVES` 를 **표**로 둔다 — `packages/cli/test/assembly-census.test.ts`의
- * `ASSEMBLY`가 선례다. 원시를 하나 더하면 한 줄이고, 그 원시로 내려가 조립을 다시 짜면
+ * `ASSEMBLY`와 같은 꼴이다. 원시를 하나 더하면 한 줄이고, 그 원시로 내려가 조립을 다시 짜면
  * **거기서 죽는다.**
  *
  * **표의 이름이 실재하는지도 잰다.** 오타 난 이름은 부르는 자리가 0이라 **조용히 통과한다** —
@@ -70,9 +70,9 @@ const BODIES = new Map(
 /**
  * 그 이름을 **부르는 자리** 전부. 파일 하나가 두 번 부르면 두 줄이다.
  *
- * **파일 이름만 세지 않는다 — 실측이 그 자를 반증했다.** 앞 판은 `[파일…]`을 냈고, 변이로
- * `sentences.ts` **안에** 두 번째 문장화 함수를 심었더니 **13건 중 0건이 죽었다**(목록이
- * 여전히 `['sentences.ts']`였다). 두 벌은 **다른 파일에서만** 생기는 것이 아니다.
+ * **파일 이름만 세지 않는다.** `[파일…]`을 내는 자는 `sentences.ts` **안에** 두 번째
+ * 문장화 함수를 심어도 목록이 여전히 `['sentences.ts']`라 아무것도 안 죽는다. 두 벌은
+ * **다른 파일에서만** 생기는 것이 아니다.
  *
  * 정의한 자리(`function 이름(`)는 부름이 아니므로 뺀다.
  */
@@ -116,7 +116,7 @@ const PRIMITIVES: readonly (readonly [string, readonly string[]])[] = [
 /** `packages/schema`가 내는 이름들. **표의 오타를 잡는 자다.** */
 const SCHEMA_EXPORTS = new Set(Object.keys(schema))
 
-describe('만드는 자리가 하나다 (D4)', () => {
+describe('만드는 자리가 하나다', () => {
   it('훑을 소스를 실제로 읽는다 — 카나리아', () => {
     expect(FILES.length).toBeGreaterThan(8)
     expect(FILES).toContain('pptx/index.ts')
@@ -159,7 +159,7 @@ describe('만드는 자리가 하나다 (D4)', () => {
   }
 })
 
-describe('같은 상태를 한 말로 부른다 (D4)', () => {
+describe('같은 상태를 한 말로 부른다', () => {
   for (const text of [
     EMPTY_DESCRIPTION,
     EMPTY_COMMENTS,

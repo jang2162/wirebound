@@ -19,7 +19,7 @@ const shared = {
       // `…/src/index.ts/test-support`로 바뀐다.
       '@wirebound/exporter/test-support': src('./packages/exporter/test-support/index.ts'),
       '@wirebound/exporter': src('./packages/exporter/src/index.ts'),
-      // 같은 규칙이 `@wirebound/cli`에도 걸린다 — **좁은 둘이 먼저다**(P9-4 D3).
+      // 같은 규칙이 `@wirebound/cli`에도 걸린다 — **좁은 둘이 먼저다**.
       // `./embed`은 `packages/mcp`가 쓰는 **붙는 자리**이고 `./test-support`는 가짜 `io`와
       // 스냅샷 픽스처다. 순서를 뒤집으면 `…/src/index.ts/embed`가 된다.
       '@wirebound/cli/test-support': src('./packages/cli/test-support/index.ts'),
@@ -39,7 +39,9 @@ export default defineConfig({
     // 워커 수와 거의 무관하다(파일마다 새 포크·jsdom·모듈 그래프를 세우는 비용이 몸통이다).
     // 실측(15코어, 다른 실행이 없을 때): 기본값(14)과 50%(8)의 벽시계가 같은 폭 안이고
     // CPU 시간도 비슷한데, web 전량을 연달아 돌리면 기본값은 1분 load 가 코어 수의 몇 배로
-    // 계속 오르고 50%는 그 절반쯤에서 멈췄다. 25%(4)부터는 벽시계가 눈에 띄게 는다.
+    // 계속 오르고 50%는 그 절반쯤에서 멈춘다. 25%(4)부터는 벽시계가 눈에 띄게 는다.
+    // 다시 재는 법: `pnpm vitest run --project web --maxWorkers=<값>`의 벽시계와 그동안의
+    // `uptime` 1분 load 를 견준다.
     //
     // **프로젝트 자리에 쓰면 안 된다 — 조용히 무시된다.** 포크 풀은 모든 프로젝트가 하나를
     // 나눠 쓰고 그 크기를 루트 설정에서만 읽는다(아래 api 의 `fileParallelism`과 같은 함정.
@@ -69,8 +71,8 @@ export default defineConfig({
           // **`fileParallelism: false`를 여기 쓰면 안 된다 — 조용히 무시된다.**
           // 그 옵션은 프로젝트 설정이 아니라 루트 전용이라, 여기 적어 두면 에러도
           // 경고도 없이 그냥 파일이 병렬로 돈다(실측: 이 자리에 `fileParallelism: false`를
-          // 둔 채 `revisions-concurrency.test.ts`를 추가하니 매 실행마다 서로 다른
-          // 파일 5~6개가 깨졌고, CLI로 `--no-file-parallelism`을 주면 전부 통과했다).
+          // 두고 `revisions-concurrency.test.ts`가 든 api 전량을 돌리면 매 실행마다 서로 다른
+          // 파일 몇 개가 깨지고, CLI로 `--no-file-parallelism`을 주면 전부 통과한다).
           // `poolOptions.forks.singleFork`는 프로젝트 단위로 먹히고 같은 결과를 낸다 —
           // 이 프로젝트의 파일 전부가 포크 하나에서 차례로 돈다.
           //
@@ -104,13 +106,13 @@ export default defineConfig({
           // `Cannot find package 'jsdom'`으로 죽는다(실측).
           environment: 'jsdom',
           // CSS 임포트를 실제로 처리한다. **`shell-css.test.ts`가 이것에 매여 있다** —
-          // 그 파일은 `../src/shell.css?raw`로 원문을 읽어 D7 검사를 돌리는데, 이 옵션이
-          // 꺼져 있으면(기본값) vitest가 CSS 임포트를 **빈 문자열**로 바꾼다. 그러면 검사가
+          // 그 파일은 `../src/shell.css?raw`로 원문을 읽어 셸 CSS가 캔버스로 새는지 검사하는데,
+          // 이 옵션이 꺼져 있으면(기본값) vitest가 CSS 임포트를 **빈 문자열**로 바꾼다. 그러면 검사가
           // 빈 파일을 훑어 위반 0건을 내고, 심어 둔 위반만 걸리는 초록이 된다.
-          // (실측: 이 줄을 넣기 전 `검사가 진짜 shell.css를 읽는다` **한 케이스만** 실패했고
-          // 나머지는 전부 통과했다 — 그 한 케이스가 없었으면 못 알아챘다. 분모를 적지 않는
+          // (실측: 이 줄을 빼면 `검사가 진짜 shell.css를 읽는다` **한 케이스만** 실패하고
+          // 나머지는 전부 통과한다 — 그 카나리아가 없으면 못 알아챈다. 분모를 적지 않는
           // 것은 그 파일에 케이스를 더할 때마다 어긋나기 때문이다. 지키려는 것은
-          // "카나리아 한 줄만 실패했다"이지 분모가 아니다.)
+          // "카나리아 한 줄만 실패한다"이지 분모가 아니다.)
           css: true,
           // 파일마다: RTL의 DOM cleanup을 afterEach에 등록한다. 이 저장소는
           // `globals`를 켜지 않아 RTL이 스스로 등록하지 못한다 — 자세한 이유는
@@ -122,9 +124,9 @@ export default defineConfig({
         ...shared,
         test: {
           name: 'build',
-          // `apps/*`도 든다(P10-2). 여기 담기는 것의 공통점은 **무거워서 `pnpm test`에
+          // `apps/*`도 든다. 여기 담기는 것의 공통점은 **무거워서 `pnpm test`에
           // 못 두는 것**이지 패키지인지 앱인지가 아니다 — `apps/api/build-test`가 진짜
-          // 브라우저를 띄운다(D3). 그쪽은 `dist`가 아니라 소스를 보지만(앱에는 `dist`가
+          // 브라우저를 띄운다. 그쪽은 `dist`가 아니라 소스를 보지만(앱에는 `dist`가
           // 없다) 재려는 것이 *"빌드된 것"*이 아니라 *"진짜 브라우저"*라 결이 같다.
           include: ['packages/*/build-test/**/*.test.ts', 'apps/*/build-test/**/*.test.ts'],
           // tsdown 재빌드를 beforeAll에서 돈다. 기본 테스트 실행에서 분리한 이유:

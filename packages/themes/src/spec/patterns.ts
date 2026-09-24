@@ -4,7 +4,7 @@ import type { ThemeIssue } from '../issue'
 import { issue } from '../issue'
 
 /**
- * 패턴 이름의 범주. §6.6에서 그대로 옮겼다(*"범주는 고정 목록이다"*).
+ * 패턴 이름의 범주. 설계서 「patterns — 테마가 소유한 구성 레시피」에서 그대로 옮겼다(*"범주는 고정 목록이다"*).
  * 개수를 적지 않는다 — 목록이 바뀌면 이 배열이 바뀌지 저 문장이 바뀌지 않는다.
  */
 export const PATTERN_CATEGORIES = [
@@ -23,9 +23,9 @@ export const PATTERN_CATEGORIES = [
 ] as const
 
 /**
- * 슬롯 타입. §6.6의 예시가 쓰는 셋이다.
+ * 슬롯 타입. 「patterns — 테마가 소유한 구성 레시피」의 예시가 쓰는 셋이다.
  *
- * **§16이 이 목록을 열어 뒀다** — *"패턴 슬롯 타입 체계 — `text`·`media`·`action` 정도로
+ * **설계서 「열린 질문 (구현 중 결정)」이 이 목록을 열어 뒀다** — *"패턴 슬롯 타입 체계 — `text`·`media`·`action` 정도로
  * 시작하되, 실제 패턴을 만들며 필요한 타입을 확정한다."* 지금 닫아 두는 것은 오타를
  * 막기 위해서이고, 늘어나는 자리는 여기다.
  */
@@ -35,12 +35,12 @@ export const SLOT_TYPES = ['text', 'media', 'action'] as const
  * **슬롯 타입은 노드 타입과 대조하지 않는다.** `image` 슬롯을 `"media"`로 선언해 두고
  * `Text` 노드에 붙여도 이슈가 나지 않는다(재서 확인했다).
  *
- * 대조하지 않는 이유는 **설계가 타입과 컴포넌트의 대응을 주지 않기 때문**이다. §6.6은
- * 슬롯 타입을 예시로만 보이고, §16이 그 체계를 *"실제 패턴을 만들며 필요한 타입을
- * 확정한다"*로 열어 뒀다. 지금 대응표를 지어 넣으면 §16이 열어 둔 것을 이 단계가 닫는
- * 것이고, P4b가 시스템 테마를 만들며 정할 것을 앞질러 새기는 것이다.
+ * 대조하지 않는 이유는 **설계가 타입과 컴포넌트의 대응을 주지 않기 때문**이다. 「patterns」는
+ * 슬롯 타입을 예시로만 보이고, 「열린 질문」이 그 체계를 *"실제 패턴을 만들며 필요한 타입을
+ * 확정한다"*로 열어 뒀다. 지금 대응표를 지어 넣으면 「열린 질문」이 열어 둔 것을 이 단계가
+ * 닫는 것이다.
  *
- * 그래서 지금 `slots`의 타입은 **저작 UI(§6.6: "우측 속성 패널에서 채운다")를 위한 선언**일
+ * 그래서 지금 `slots`의 타입은 **저작 UI(「patterns」: "우측 속성 패널에서 채운다")를 위한 선언**일
  * 뿐 검증에 쓰이지 않는다. 대응표가 정해지면 `checkNode`가 그것을 본다.
  */
 
@@ -49,12 +49,13 @@ export type SlotType = (typeof SLOT_TYPES)[number]
 const PATTERN_NAME = new RegExp(`^(${PATTERN_CATEGORIES.join('|')})\\.[A-Za-z0-9_-]+$`)
 
 /**
- * 패턴 템플릿의 노드. **`WbNode`와 두 가지가 다르다**(§6.6):
+ * 패턴 템플릿의 노드. **`WbNode`와 두 가지가 다르다**(「patterns — 테마가 소유한 구성 레시피」):
  * - `slot`이 붙을 수 있다 — *"`slot` 필드는 패턴 템플릿에만 존재한다."*
  * - **`id`가 없다** — *"패턴을 페이지에 넣으면 `schema`가 전개되고 노드 `id`가 새로 발급된다."*
- *   §6.6의 예시에도 `id`가 하나도 없다.
+ *   그 절의 예시에도 `id`가 하나도 없다.
  *
- * `marker`·`interactions`도 받지 않는다. `marker`는 코멘트 번호(§9)라 저작 중에 붙고,
+ * `marker`·`interactions`도 받지 않는다. `marker`는 코멘트 번호(설계서 「설계서 화면 구조」의
+ * 번호 마커)라 저작 중에 붙고,
  * `interactions`의 `target`은 노드 id를 가리키는데 템플릿에는 그 id가 없다.
  */
 export interface PatternNode {
@@ -108,7 +109,8 @@ export const PatternsSchema: z.ZodType<Record<string, ThemePattern>> = z.record(
 )
 
 /**
- * 패턴을 검증한다. **전개는 만들지 않는다**(D7) — 이름·슬롯 계약·`schema` 조각의 정합성까지다.
+ * 패턴을 검증한다. **전개는 여기서 하지 않는다**(`pattern/expand.ts`) — 이름·슬롯 계약·`schema`
+ * 조각의 정합성까지다.
  *
  * **`validatePage`를 재사용하지 않는다.** 재서 확인한 이유 둘:
  * 1. `WbNodeSchema`가 `z.strictObject`라 `slot`이 인식되지 않는 키다. 그리고 봉투 이슈가
@@ -117,7 +119,7 @@ export const PatternsSchema: z.ZodType<Record<string, ThemePattern>> = z.record(
  *
  * **`props`는 카탈로그의 zod로 검증한다.** 여기서 보지 않으면 잘못된 패턴이 규격을 통과해
  * 전개 시점이나 렌더 폴백에서야 드러난다 — 검증기를 늦은 쪽에 두는 것이다. 카탈로그가
- * 단일 진실이므로(§3.2) 카탈로그와 어긋나는 예시는 예시 쪽이 틀린 것으로 본다.
+ * 단일 진실이므로(설계서 「핵심 원칙」) 카탈로그와 어긋나는 예시는 예시 쪽이 틀린 것으로 본다.
  */
 export function checkPatterns(patterns: Record<string, ThemePattern>): { issues: ThemeIssue[] } {
   const issues: ThemeIssue[] = []
@@ -159,9 +161,9 @@ function checkNode(
   issues: ThemeIssue[],
 ): void {
   if (node.slot !== undefined) {
-    // 한 슬롯 이름을 노드 둘이 쓰는 것을 막지 않는다 — §6.6이 그 경우를 말하지 않았고,
-    // 전개(다음 단계)가 슬롯 하나를 노드 둘에 어떻게 채우는지도 정해져 있지 않다.
-    // 여기서 막으면 그 정하지 않은 것을 이 단계가 정하는 셈이 된다.
+    // 한 슬롯 이름을 노드 둘이 쓰는 것을 막지 않는다 — 「patterns」가 그 경우를 말하지 않았다.
+    // 여기서 막으면 그 정하지 않은 것을 이 단계가 정하는 셈이 된다(전개는 처음 만난 노드를
+    // 고른다 — `pattern/expand.ts`의 `expandNode`).
     used.add(node.slot)
     if (!declared.has(node.slot)) {
       issues.push(
@@ -184,7 +186,7 @@ function checkNode(
     )
     // 자식은 계속 본다. 여기서 멈추면 **타입 오타 하나가 그 밑의 이슈를 가린다** —
     // `schema`의 `validateTree`도 알 수 없는 타입에서 `continue`할 뿐 순회를 멈추지 않는다.
-    // (처음에 멈추도록 짰다가 "첫 이슈에서 멈추지 않는다" 케이스가 1건만 내는 것을 보고 고쳤다.)
+    // (`test/spec-patterns.test.ts`의 `첫 이슈에서 멈추지 않는다`가 지킨다.)
     recurse()
     return
   }

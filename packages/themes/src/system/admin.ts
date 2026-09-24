@@ -3,23 +3,19 @@ import type { Theme } from '../spec/theme'
 /**
  * 내장 시스템 테마 — 관리자 화면.
  *
- * **D7: 오늘 구현체가 있는 구조만 고른다.** 렌더러의 `DEFAULTS` 19개가 그 목록이고,
- * 없는 구조를 고르면 렌더러가 *"구현되지 않은 구조"* 폴백을 그린다. 그 대조는 두 패키지를
- * 함께 볼 수 있는 `apps/web/test/theme/system-theme.test.ts`가 한다 — `themes`는
- * `renderer`를 보지 않는다(§3.3).
+ * **렌더러에 구현체가 있는 구조만 고른다.** 없는 구조를 고르면 렌더러가 *"구현되지 않은
+ * 구조"* 폴백을 그린다. 그 대조는 두 패키지를 함께 볼 수 있는
+ * `apps/web/test/theme/system-theme.test.ts`가 렌더러의 `listStructureKeys()`로 한다 —
+ * `themes`는 `renderer`를 보지 않는다(설계서 「각 패키지의 책임과 의존」).
  *
- * **`meta.id`가 `system:admin`이 아니라 `admin`이다.** 계획서가 `'system:admin'`이라고
- * 적었는데 **규격이 그것을 받지 않는다** — `THEME_ID_PATTERN`이 `[A-Za-z0-9_-]`라 콜론이
- * 없다(P4a-1이 정한 것: 이 값이 파일 이름과 `extends` 문자열에 실린다). `system:` 접두어는
- * **가리키는 쪽의 문법**이고(`EXTENDS_PATTERN`) 테마 자신의 이름이 아니다.
- * `test/fixtures/minimal.ts`가 이미 그 꼴이다(`id: 'portal'` ← `extends: 'system:portal'`).
+ * **`meta.id`가 `system:admin`이 아니라 `admin`이다.** **규격이 콜론을 받지 않는다** —
+ * `THEME_ID_PATTERN`이 `[A-Za-z0-9_-]`라 콜론이 없다(이 값이 파일 이름과 `extends` 문자열에
+ * 실린다). `system:` 접두어는 **가리키는 쪽의 문법**이고(`EXTENDS_PATTERN`) 테마 자신의
+ * 이름이 아니다. `test/fixtures/minimal.ts`가 그 꼴이다(`id: 'portal'` ← `extends: 'system:portal'`).
  *
  * **최소본이되 외형이 실제로 바뀌는 것이 보여야 한다.** 그래서 색·간격·타이포·모서리가
- * 전부 토큰에서 나오고, `Text`의 변형이 타이포 스케일을 건다 — `variantFrom`(P4a-2 Task 5)이
+ * 전부 토큰에서 나오고, `Text`의 변형이 타이포 스케일을 건다 — `variantFrom`이
  * 실제로 쓸모 있는지 보이는 자리다.
- *
- * **다섯 종을 만들지 않는다.** §6.10이 `admin`·`saas-marketing`·`portal`·`commerce`·`docs`를
- * 열거하지만 나머지 넷은 P4b다.
  */
 export const ADMIN_THEME: Theme = {
   meta: {
@@ -31,7 +27,7 @@ export const ADMIN_THEME: Theme = {
 
   tokens: {
     // 원시 팔레트. **스타일이 이것을 직접 가리킬 수 없다** — `semantic`만 갈아끼워
-    // 다크 테마·브랜드 교체가 되게 하는 것이 §6.3의 3단 분리다.
+    // 다크 테마·브랜드 교체가 되게 하는 것이 설계서 「tokens — 3단 분리」다.
     palette: {
       'gray.50': '#f8fafc',
       'gray.100': '#f1f5f9',
@@ -56,7 +52,7 @@ export const ADMIN_THEME: Theme = {
       danger: 'palette.red.500',
     },
     scale: {
-      // §6.3: `unit`만 정의하면 `space.1`~`space.24`가 배수로 파생된다.
+      // 「tokens — 3단 분리」: `unit`만 정의하면 `space.1`~`space.24`가 배수로 파생된다.
       space: { unit: '4px' },
       radius: { sm: '4px', md: '6px', lg: '10px' },
       shadow: {
@@ -68,14 +64,11 @@ export const ADMIN_THEME: Theme = {
        * `role` 값을 `data-wb-variant`로 내보내므로 아래 `Text.variants.<이름>`이
        * `typography: '<이름>'`을 걸면 스케일이 그대로 붙는다.
        *
-       * **`family`를 넣지 않았다 — 근거가 바뀌었다.**
-       *
-       * 앞서 여기 *"그것을 CSS로 낼 어휘가 없다 — §6.8에 `fontFamily`가 없다"*고 적었는데
-       * **P4b-1이 그 어휘를 열었다**(`STYLE_PROPERTIES_BEYOND_SPEC`). 이제 걸 수 있다.
-       *
-       * **그래도 이 최소본은 쓰지 않는다.** P4b-1은 *"어휘를 열 뿐 쓰는 것은 P4b-3"*이고,
-       * `admin`이 새 어휘를 하나도 쓰지 않는 것을 그 슬라이스가 확인했다. **시스템 테마
-       * 다섯을 만들 때 여기에 `family`와 `fontFamily`가 함께 온다.**
+       * **`family`를 넣지 않는다 — 이 최소본은 서체를 선언하지 않는다.** 그래서 글자는
+       * 물려받은 서체 그대로 그려진다. 서체를 걸려면 두 층이 다 있어야 한다 — `family`
+       * 토큰과, 그것을 컴포넌트에 거는 `fontFamily` 어휘(설계서 「스타일 프로퍼티
+       * 화이트리스트」 밖의 어휘다 — `STYLE_PROPERTIES_BEYOND_SPEC`). 나머지 네 시스템
+       * 테마가 그 꼴이다.
        */
       typography: {
         display: { fontSize: '32px', lineHeight: 1.2, fontWeight: 700 },
@@ -93,7 +86,7 @@ export const ADMIN_THEME: Theme = {
   },
 
   /**
-   * §6.4: *"실제 사이트처럼 보이는 인상의 절반은 여기서 나온다."* 관리자 화면이므로
+   * 「primitives — 사이트 골격」: *"실제 사이트처럼 보이는 인상의 절반은 여기서 나온다."* 관리자 화면이므로
    * 넓은 컨테이너와 **좁은** 섹션 여백을 쓴다.
    */
   primitives: {
@@ -155,7 +148,7 @@ export const ADMIN_THEME: Theme = {
       },
       variants: { compact: { parts: { cell: { paddingY: 'space.1' } } } },
       states: {
-        // §6.5가 상태 스킨의 쓸모로 든 예 그대로다 — *"선택된 행 강조"*.
+        // 「components — 구조 + 스킨」이 상태 스킨의 쓸모로 든 예 그대로다 — *"선택된 행 강조"*.
         selected: { parts: { row: { bg: 'semantic.primarySoft' } } },
         disabled: { opacity: 0.5 },
       },
@@ -255,7 +248,7 @@ export const ADMIN_THEME: Theme = {
 
     // ── 문서 ────────────────────────────────────────────────────────────────
     /**
-     * **D4가 실제로 쓸모 있는지 보이는 자리.** `role`이 `data-wb-variant`가 되므로
+     * **`variantFrom: 'role'`이 실제로 쓸모 있는지 보이는 자리.** `role`이 `data-wb-variant`가 되므로
      * 타이포 스케일을 변형에 걸 수 있다. 이 채널이 없으면 `Text`는 아홉 역할이 전부
      * 같은 스킨을 받거나 계약 밖 속성(`data-wb-role`)이 필요했다.
      */

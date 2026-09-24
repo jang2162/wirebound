@@ -11,37 +11,29 @@ import type { Theme } from '../spec/theme'
  *
  * ---
  *
- * **§6.0이 이름으로 지목한 자리가 여기다.** *"같은 `List` 노드가 관리자 테마에서는
+ * **설계서 「페이지 스키마 노드」가 이름으로 지목한 자리가 여기다.** *"같은 `List` 노드가 관리자 테마에서는
  * 테이블로, 마케팅 테마에서는 카드 그리드로."* 그 문장의 오른쪽 절반이
  * `List: { structure: 'cardGrid' }` 한 줄이다.
  *
  * ---
  *
- * **구조는 용도로 골랐지 개수로 고르지 않았다**(P4b-3 D3). 커버리지를 채우려고 어색한
- * 구조를 고르면 §16이 받을 입력(*"안 쓰는 구조를 뺀다"*)이 오염된다. 안 고른 것과 그 이유는
+ * **구조는 용도로 골랐지 개수로 고르지 않았다.** 커버리지를 채우려고 어색한
+ * 구조를 고르면 설계서 「열린 질문」이 받을 입력(*"안 쓰는 구조를 뺀다"*)이 오염된다. 안 고른 것과 그 이유는
  * 이 파일 아래쪽 각 컴포넌트의 주석에 적었다.
  *
- * **DOM이 같은 다섯 묶음은 스킨이 전부다**(P4b-3 D4 — P4b-2 ③이 전수로 쟀다).
+ * **DOM이 같은 다섯 묶음은 스킨이 전부다.**
  * `Card:elevated`·`Tabs:pill`·`EntryForm:labelTop`·`Field:filled`·`Button:outline` 다섯이
  * 그 묶음에서 고른 것이고, 이 다섯은 `data-wb-structure` 값 말고는 `admin`이 고른 것과
  * DOM이 글자까지 같다. **그래서 다섯 자리의 인상은 전부 아래 `base`·`parts`가 만든다.**
  *
  * ---
  *
- * **`primitives`를 컴포넌트 스타일이 가리킨다** (2026-08-11, P4c-1 T1이 열었다).
+ * **`primitives`를 컴포넌트 스타일이 가리킨다.**
  *
  * `Section.parts.inner.maxWidth`가 `'container.maxWidth'`이고, 그 값은 `primitives`에
- * 한 번만 적힌다. **P4b-3까지는 반대였고, 지우지 않고 남긴다:**
- *
- * > *"`admin`이 `Section.parts.inner`에 `maxWidth: 'container.maxWidth'`, `Grid.base`에
- * > `gap: 'grid.gap'`을 적었는데 **둘 다 참조로 해석되지 않는다.** `TOKEN_NAMESPACES`에
- * > `container`·`grid`·`section`이 없어 `isTokenReference`가 거짓이고 … 값이 리터럴로
- * > 그대로 실린다 — `max-width: container.maxWidth;`라는 무효 선언이 나가고 이슈는 0건이다.
- * > **그래서 이 테마는 그 자리에 리터럴을 쓴다**(`maxWidth: '1200px'`)."*
- *
- * T1이 **스타일 전용** 이름공간 셋을 열었다(`STYLE_PRIMITIVE_NAMESPACES` — 토큰 표와
- * 표가 다르므로 `TOKEN_NAMESPACES`에 더하지 않았다). 컴파일 결과는
- * `max-width: 1200px` → `max-width: var(--wb-container-maxWidth)`이고 **계산값은 같다.**
+ * 한 번만 적힌다. 컴파일 결과는 `max-width: var(--wb-container-maxWidth)`다. 그 문법은
+ * **스타일 전용** 이름공간 셋(`STYLE_PRIMITIVE_NAMESPACES`)이 연다 — 토큰 표와 표가
+ * 다르므로 `TOKEN_NAMESPACES`에 더하지 않았다.
  */
 export const SAAS_MARKETING_THEME: Theme = {
   meta: {
@@ -54,11 +46,11 @@ export const SAAS_MARKETING_THEME: Theme = {
 
   tokens: {
     /**
-     * 원시 팔레트. 스타일이 이것을 직접 가리킬 수 없다(§6.3의 3단 분리).
+     * 원시 팔레트. 스타일이 이것을 직접 가리킬 수 없다(설계서 「tokens — 3단 분리」).
      *
      * **`admin`의 slate/blue와 겹치지 않게 골랐다** — 중성색에 보라 기가 도는 잉크 계열과
      * 보라 브랜드색이다. 두 테마를 나란히 놓았을 때 색만으로도 갈리는 것이 목적이고,
-     * 그것이 §6.3이 `semantic`을 둔 이유(*"브랜드 교체"*)의 실사용례다.
+     * 그것이 「tokens — 3단 분리」가 `semantic`을 둔 이유(*"브랜드 교체"*)의 실사용례다.
      */
     palette: {
       'ink.900': '#0b0b14',
@@ -101,7 +93,7 @@ export const SAAS_MARKETING_THEME: Theme = {
        * `space.8`(32px)을 쓴다는 것이다.
        */
       space: { unit: '4px' },
-      // 크게 굴린다. `admin`은 4/6/10이다. `full`은 §6.3의 예시가 든 이름이고
+      // 크게 굴린다. `admin`은 4/6/10이다. `full`은 「tokens — 3단 분리」의 예시가 든 이름이고
       // 알약 버튼·필 탭이 그것을 쓴다.
       radius: { sm: '8px', md: '14px', lg: '24px', full: '999px' },
       /**
@@ -117,10 +109,8 @@ export const SAAS_MARKETING_THEME: Theme = {
       /**
        * 타이포 스케일. **항목 이름이 `Text.variants`와 같다**(`variantFrom: 'role'`).
        *
-       * **`family`가 여기 왔다 — `admin`이 예고한 자리다.** 그 파일이 *"시스템 테마 다섯을
-       * 만들 때 여기에 `family`와 `fontFamily`가 함께 온다"*고 적어 두었고, P4b-3 ①이
-       * `assets.fonts` → `@font-face` 경로를 열어 나머지 절반을 채웠다. **두 층이 갈려
-       * 있고 둘 다 있어야 화면에 보인다** — `assets.fonts`가 서체를 싣고, 이 토큰을
+       * **`family`가 여기 있다 — `admin`에는 없다.** **두 층이 갈려 있고 둘 다 있어야
+       * 화면에 보인다** — `assets.fonts`가 서체를 싣고(`@font-face`), 이 토큰을
        * `fontFamily` 어휘가 가리켜 컴포넌트에 건다.
        *
        * **`admin`과 가장 크게 갈리는 수가 여기 있다.** `display` 32px → 64px,
@@ -148,7 +138,7 @@ export const SAAS_MARKETING_THEME: Theme = {
   },
 
   /**
-   * §6.4가 이 테마를 이름으로 들어 적었다 — *"관리자 화면은 `maxWidth: fluid`에 좁은 섹션
+   * 설계서 「primitives — 사이트 골격」이 이 테마를 이름으로 들어 적었다 — *"관리자 화면은 `maxWidth: fluid`에 좁은 섹션
    * 여백을, 마케팅 사이트는 `1200px`에 넉넉한 여백을 쓴다."* 그대로 옮겼다.
    * `admin`은 1440px · `space.8`(32px)이다.
    */
@@ -160,22 +150,21 @@ export const SAAS_MARKETING_THEME: Theme = {
   },
 
   /**
-   * **`@font-face`로 나가는 층**(P4b-3 D5 — ①이 만들었다).
+   * **`@font-face`로 나가는 층.**
    *
-   * **`src`가 `local()`이고 네트워크를 쓰지 않는다.** ①이 `local()`과 data URI를 둘 다
-   * Chromium으로 재서 둘 다 통과했고(둘 다 요청 0건), `local()`을 고른 이유는 폰트
-   * 바이너리를 소스에 심지 않아도 되기 때문이다. **한계도 그쪽이 쟀다** — 그 이름의 로컬
-   * 폰트가 없으면 face의 `status`가 `error`가 된다(등록은 되고 로드만 실패한다). 그때는
-   * 위 `typography.family`의 뒷줄(`system-ui` 이하)이 그려진다.
+   * **`src`가 `local()`이고 네트워크를 쓰지 않는다.** data URI도 네트워크 없이 되지만
+   * `local()`을 고른 이유는 폰트 바이너리를 소스에 심지 않아도 되기 때문이다. **한계:** 그
+   * 이름의 로컬 폰트가 없으면 face의 `status`가 `error`가 된다(등록은 되고 로드만 실패한다).
+   * 그때는 위 `typography.family`의 뒷줄(`system-ui` 이하)이 그려진다.
    *
-   * **`weights`는 값마다 블록 하나가 나간다**(범위로 안 접는다 — ①의 판정). 그래서 아래
-   * 둘이 `@font-face` **넷**이 된다. 가변 폰트 이름을 `src`의 맨 앞에 둔 것은 ①이 적은
-   * 부류를 피하려는 것이다 — 정적 400 폰트를 700 face의 `src`로 주면 굵게가 말없이 사라진다.
+   * **`weights`는 값마다 블록 하나가 나간다**(범위로 안 접는다). 그래서 아래 둘이
+   * `@font-face` **넷**이 된다. 가변 폰트 이름을 `src`의 맨 앞에 둔 것은 이 부류를 피하려는
+   * 것이다 — 정적 400 폰트를 700 face의 `src`로 주면 굵게가 말없이 사라진다.
    *
    * **`icons`·`placeholder`는 CSS로 나가지 않는다.** `placeholder.style: 'photo'`는
-   * §6.7이 *"실제 사이트에 가깝게 보여야 하면 `photo`"*라고 적은 그 값이고 이 테마가
-   * 실제로 원하는 것인데, **오늘 컴파일되지 않는다**(D5 — 테마→렌더러 채널이 `structures`
-   * 하나뿐이다). 선언만 남겨 두는 것은 ③이 *"넷 중 몇이 이 값을 필요로 했는가"*를 셀 수
+   * 설계서 「assets」가 *"실제 사이트에 가깝게 보여야 하면 `photo`"*라고 적은 그 값이고 이
+   * 테마가 실제로 원하는 것인데, **컴파일되지 않는다**(테마→렌더러 채널이 `structures`
+   * 하나뿐이다). 선언만 남겨 두는 것은 시스템 테마 중 몇이 이 값을 필요로 하는지 셀 수
    * 있게 하려는 것이다.
    */
   assets: {
@@ -197,7 +186,7 @@ export const SAAS_MARKETING_THEME: Theme = {
 
   /**
    * **순서가 곧 우선순위다**(`emit/index.ts`). 조각 규칙이 자손 결합자라 중첩된 컴포넌트의
-   * 같은 이름 조각까지 받으므로(P4b-2 이월 4-1), **바깥이 되기 쉬운 것을 먼저, 안이 되기
+   * 같은 이름 조각까지 받으므로, **바깥이 되기 쉬운 것을 먼저, 안이 되기
    * 쉬운 것을 나중에** 둔다 — `admin`과 같은 그룹 순서(골격 → 데이터 → 입력 → 액션 → 문서)가
    * 그 성질을 이미 갖고 있어 그대로 따랐다.
    */
@@ -237,8 +226,8 @@ export const SAAS_MARKETING_THEME: Theme = {
      * 갈랐으면 되돌릴 길이 없는 선언이 된다."* 즉 좌우 반분은 이 구조의 **기본값**이지
      * 계약이 아니다.
      *
-     * **그 대신 치른 것**(D6의 벽 1): 구조 선택이 컴포넌트 타입 단위라, 히어로만 진짜
-     * 좌우 분할로 두고 나머지 섹션은 워시로 두는 것을 **못 한다.** 보고에 적었다.
+     * **그 대신 치른 것:** 구조 선택이 컴포넌트 타입 단위라, 히어로만 진짜
+     * 좌우 분할로 두고 나머지 섹션은 워시로 두는 것을 **못 한다.**
      */
     Section: {
       structure: 'splitBg',
@@ -261,7 +250,6 @@ export const SAAS_MARKETING_THEME: Theme = {
         inner: {
           position: 'relative',
           zIndex: 1,
-          // **P4c-1 T1이 이 참조를 열었다.** 머리말의 판정이 낡았다 — 거기 적어 두었다.
           maxWidth: 'container.maxWidth',
           marginX: 'auto',
           paddingX: 'space.6',
@@ -294,22 +282,19 @@ export const SAAS_MARKETING_THEME: Theme = {
     },
 
     /**
-     * **손잡이 어휘를 쓰지 않는다**(P4b-2 이월 5번 — 손잡이 9/9 침묵 덮어쓰기).
-     * `Flex:default`의 `direction`·`align`·`justify`·`wrap` 넷이 노드가 나르는 값을
-     * **같은 셀렉터에서 조용히** 덮으므로, 여기서는 `gap`만 정한다. 방향과 정렬은 문서의
+     * **손잡이 어휘를 쓰지 않는다.** `Flex:default`의 `direction`·`align`·`justify`·`wrap`
+     * 넷이 노드 손잡이(`NODE_HANDLES`)라, 테마가 같은 셀렉터에서 그 프로퍼티를 내면 노드가
+     * 나르는 값을 덮는다(`node-handle-overwrite` 경고). 그래서 여기서는 `gap`만 정한다. 방향과 정렬은 문서의
      * 것이다.
      */
     Flex: { structure: 'default', base: { gap: 'space.6' } },
     /**
      * 같은 이유로 `gridColumns`를 안 쓴다 — `Grid.columns`가 노드 prop이다.
-     *
-     * **`gap`이 리터럴 토큰 참조다.** `admin`이 여기 `'grid.gap'`이라고 적었는데 그것은
-     * 참조로 풀리지 않아 `gap: grid.gap`이라는 무효 선언이 된다(머리말의 판정).
      */
     Grid: { structure: 'default', base: { gap: 'space.8' } },
 
     /**
-     * **`elevated`를 고른다 — `admin`은 `plain`이다.** DOM은 글자까지 같고(P4b-2 ③),
+     * **`elevated`를 고른다 — `admin`은 `plain`이다.** DOM은 글자까지 같고,
      * 갈리는 것은 **그림자와 여백과 굴림**뿐이다. 그래서 이 자리의 판정은 *"구조를 골랐다"*가
      * 아니라 *"`data-wb-structure="elevated"` 셀렉터에 어떤 스킨을 얹었는가"*이다.
      */
@@ -367,17 +352,17 @@ export const SAAS_MARKETING_THEME: Theme = {
 
     // ── 데이터 ──────────────────────────────────────────────────────────────
     /**
-     * **§6.0의 약속이 이 한 줄이다.** *"같은 `List` 노드가 관리자 테마에서는 테이블로,
+     * **「페이지 스키마 노드」의 약속이 이 한 줄이다.** *"같은 `List` 노드가 관리자 테마에서는 테이블로,
      * 마케팅 테마에서는 카드 그리드로."*
      *
-     * §6.5가 `List:cardGrid`의 예시로 든 조각이 `item`·`media`·`title` 셋이고 이 테마가
+     * 설계서 「components — 구조 + 스킨」이 `List:cardGrid`의 예시로 든 조각이 `item`·`media`·`title` 셋이고 이 테마가
      * 그 셋을 그대로 쓴다. `meta`는 그 예시에 없지만 구현체가 내는 조각이라 함께 잡았다 —
      * 안 잡으면 카드마다 스킨 없는 줄이 하나씩 남는다.
      *
      * **`gridColumns: 3`은 손잡이를 덮지 않는다.** `List:cardGrid`의 기본 CSS는 트랙을
      * **리터럴 `repeat(2, 1fr)`**로 내지 노드 변수를 읽지 않는다(구현체가 *"열 수는 이
-     * 구현체가 정하지 않는다 … 테마가 정한다"*고 적었다). 침묵 덮어쓰기 부류의 `gridColumns`는
-     * `Grid:default`와 `KeyValue:cardGrid` 둘이고 이 테마는 그 둘에서 이 어휘를 안 쓴다.
+     * 구현체가 정하지 않는다 … 테마가 정한다"*고 적었다). `gridColumns`가 노드 손잡이를 덮는
+     * 자리는 `Grid:default`와 `KeyValue:cardGrid` 둘이고 이 테마는 그 둘에서 이 어휘를 안 쓴다.
      */
     List: {
       structure: 'cardGrid',
@@ -424,10 +409,10 @@ export const SAAS_MARKETING_THEME: Theme = {
      * **`accordion`을 고른다 — `admin`은 `indent`다.** 랜딩 페이지에서 트리 모양으로
      * 쓰이는 것은 파일 트리가 아니라 **FAQ**이고, 그 모양이 아코디언이다.
      *
-     * **덤이 하나 있다:** `indent`의 들여쓰기 규칙(`--wb-node-tree-level` × `--wb-tree-indent`)이
-     * P4b-2 ③에서 `:where(indent)`로 좁혀졌으므로 **이 테마에는 아예 안 걸린다.**
-     * 즉 침묵 덮어쓰기 손잡이 아홉 중 `paddingX`(= `Tree [node]`) 한 자리는 이 테마에서
-     * 성립하지 않는다 — 구조를 고른 것만으로 부류 하나가 사라졌다.
+     * **덤이 하나 있다:** `indent`의 들여쓰기 규칙(`--wb-node-tree-level` × `--wb-tree-indent`)은
+     * `:where([data-wb-structure="indent"])`로 좁혀져 있어 **이 테마에는 아예 안 걸린다.**
+     * 즉 노드 손잡이 중 `paddingX`(= `Tree [node]`) 한 자리는 이 테마에서 덮일 것이
+     * 없다 — 구조를 고른 것만으로 부류 하나가 사라진다.
      */
     Tree: {
       structure: 'accordion',
@@ -449,8 +434,8 @@ export const SAAS_MARKETING_THEME: Theme = {
      * 아니라 **지표 타일**(`99.9%` / `가동률`)이라 격자에 큰 수를 놓는다.
      *
      * **`gridColumns`를 안 쓴다.** 이 구조는 `KeyValue.columns`(1..4) 노드 prop을
-     * `--wb-node-keyvalue-columns`로 읽는데, 테마가 `gridColumns`를 쓰면 그 값이 **침묵으로**
-     * 무시된다(P4b-2 이월 5번의 아홉 중 하나). 열 수는 문서의 것으로 둔다.
+     * `--wb-node-keyvalue-columns`로 읽는데, 테마가 `gridColumns`를 쓰면 그 값이
+     * 무시된다(노드 손잡이 — `NODE_HANDLES`). 열 수는 문서의 것으로 둔다.
      */
     KeyValue: {
       structure: 'cardGrid',
@@ -479,7 +464,7 @@ export const SAAS_MARKETING_THEME: Theme = {
     /**
      * **`inline`이다 — 이 자리만 `admin`과 구조가 같다.**
      *
-     * 억지로 다른 것을 고르지 않았다(D3: *"테마가 정직해야 한다"*). 마케팅 사이트의
+     * 억지로 다른 것을 고르지 않았다(머리말 — 구조는 용도로 고른다). 마케팅 사이트의
      * 검색 폼은 히어로의 **한 줄짜리 입력 + 버튼**이고 그것이 `inline`이다. `stacked`는
      * 필터 패널의 모양이고 `collapsible`은 접히는 조건 검색이라 둘 다 이 사이트에 없다.
      *
@@ -507,13 +492,13 @@ export const SAAS_MARKETING_THEME: Theme = {
     },
 
     /**
-     * **`labelTop`을 고른다 — `admin`은 `labelLeft`다.** DOM은 같고(P4b-2 W3이 쟀다)
+     * **`labelTop`을 고른다 — `admin`은 `labelLeft`다.** DOM은 같고
      * 갈리는 것은 `Field` 루트의 흐름이다 — 아래 `Field.base`가 `display: grid`라 라벨이
      * 컨트롤 위에 선다. 문의·데모 신청 폼이 한 열로 흐르는 것이 이 사이트의 폼이다.
      *
      * **`parts.label`이 폼 제목을 담는다**(구현체의 판정 — 필드의 라벨과 이름이 같다).
-     * 그래서 이 규칙이 **중첩된 `Field`·`Button`의 `label`에도 걸린다**(P4b-2 이월 4-1의
-     * 자손 결합자). 아래 `Field.parts.label`·`Button.parts.label`이 같은 프로퍼티를
+     * 그래서 이 규칙이 **중첩된 `Field`·`Button`의 `label`에도 걸린다**(조각 규칙이
+     * 자손 결합자다). 아래 `Field.parts.label`·`Button.parts.label`이 같은 프로퍼티를
      * **뒤에서** 다시 선언해 막는다 — 모델이 아니라 카탈로그 순서가 막고 있는 것이고,
      * 그 실측은 `apps/web/test/theme/saas-marketing.test.tsx`에 있다.
      */
@@ -547,8 +532,8 @@ export const SAAS_MARKETING_THEME: Theme = {
      * 판정의 근거로 들었다(*"채워진 상자 안에 라벨이 든 모습 — 된다"*).
      *
      * `label`에 `fontFamily`를 다시 선언한 것은 위 `EntryForm.parts.label`의 누수를
-     * 막기 위해서다. **중복이지만 오늘 다른 방법이 없다**(§6.5의 `parts` 모델에 *"내 것"*을
-     * 말하는 문법이 없다 — P4b-2 이월 4-1).
+     * 막기 위해서다. **중복이지만 다른 방법이 없다**(「components — 구조 + 스킨」의 `parts`
+     * 모델에 *"내 것"*을 말하는 문법이 없다).
      */
     Field: {
       structure: 'filled',
@@ -597,8 +582,8 @@ export const SAAS_MARKETING_THEME: Theme = {
      * 랜딩 페이지의 버튼은 대부분 보조 행동(`더 알아보기`·`문서 보기`)이고 **주 CTA 하나만**
      * 채워져 있다. 구조는 *"이 사이트의 버튼이 무엇인가"*(테마가 정한다)이고 변형은
      * *"이 버튼 하나가 무엇인가"*(노드가 정한다)이므로, 기본을 아웃라인으로 두고
-     * `primary` 변형이 채우는 것이 그 두 채널을 정확히 쓰는 모양이다. P4b-2의 구현체가
-     * 든 예 그대로다 — *"이 사이트의 버튼은 전부 아웃라인이고, 그중 이 버튼만 danger."*
+     * `primary` 변형이 채우는 것이 그 두 채널을 정확히 쓰는 모양이다. 구현체
+     * (`structures/action.tsx`)가 든 예 그대로다 — *"이 사이트의 버튼은 전부 아웃라인이고, 그중 이 버튼만 danger."*
      */
     Button: {
       structure: 'outline',
@@ -672,8 +657,8 @@ export const SAAS_MARKETING_THEME: Theme = {
      * 이 테마가 실제로 피한다 — 조각을 쓰지 않을 구조를 고르면 그 판단이 화면에 안 남는다.
      *
      * **`frame`에 `aspectRatio`를 걸지 않는다.** 그 셀렉터가 `--wb-node-media-ratio`를
-     * 읽는 규칙과 같아서, 걸면 노드의 `ratio` prop이 **침묵으로** 무시된다
-     * (P4b-2 이월 5번의 아홉 중 하나). 비율은 문서의 것이다.
+     * 읽는 규칙과 같아서, 걸면 노드의 `ratio` prop이 무시된다
+     * (노드 손잡이 — `NODE_HANDLES`). 비율은 문서의 것이다.
      */
     Media: {
       structure: 'illustration',
@@ -714,10 +699,10 @@ export const SAAS_MARKETING_THEME: Theme = {
     },
     /**
      * **`height`를 안 쓴다** — `Placeholder:default`의 루트 규칙이 `--wb-node-placeholder-height`를
-     * 읽는 자리이고 그것이 노드의 `height` prop이다(침묵 덮어쓰기 아홉 중 하나).
+     * 읽는 자리이고 그것이 노드의 `height` prop이다(노드 손잡이 — `NODE_HANDLES`).
      *
      * 점선 상자 대신 **부드러운 채움**으로 둔 것은 `assets.placeholder.style: 'photo'`와
-     * 같은 방향이다 — 다만 그 선언은 오늘 컴파일되지 않으므로(D5) 여기서 손으로 흉내 낸다.
+     * 같은 방향이다 — 다만 그 선언은 컴파일되지 않으므로(위 `assets`) 여기서 손으로 흉내 낸다.
      */
     Placeholder: {
       structure: 'default',

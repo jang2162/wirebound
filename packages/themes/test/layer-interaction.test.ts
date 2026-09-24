@@ -24,7 +24,7 @@ function orderOf(source: string, first: string, second: string): 'first-then-sec
 }
 
 /**
- * **재라 #6 — `bgGradient`와 `bgImage`가 같은 CSS 프로퍼티다.**
+ * **`bgGradient`와 `bgImage`가 같은 CSS 프로퍼티다.**
  *
  * **잰 것:** 둘 다 있으면 `background-image` 선언이 **둘 나가고, 문서에 나중에 적힌 쪽이
  * 이긴다.** 순서를 바꿔 값이 뒤집히는 것을 확인했다(실제 브라우저가 아니라 방출 순서로
@@ -34,19 +34,16 @@ function orderOf(source: string, first: string, second: string): 'first-then-sec
  * `checkStyleMap`이 `Object.entries` 순서로 선언을 쌓는다. 즉 **우선순위를 정하는 것은
  * 테마 작성자의 JSON 키 순서**다.
  *
- * **판정: 이슈로 내지 않고 그대로 둔다.** 근거 셋.
+ * **판정: 이슈로 내지 않고 그대로 둔다.** 근거 둘.
  *
  * 1. 같은 프로퍼티를 두 번 적는 것은 CSS의 정상적인 관용구(폴백)이고, 나중이 이기는 것은
- *    규칙대로다. 여기서 이슈를 내면 오늘 잘 그려지는 문서가 거부된다.
- * 2. **진짜 문제는 순서가 저장을 못 견딘다는 것**이고 그것은 이 자리의 문제가 아니다 —
- *    P4a-1이 Postgres `jsonb`가 객체 키 순서를 (길이, 바이트)로 정규화하는 것을 컨테이너에서
- *    쟀다. 저장을 거치면 `bgGradient`(10자)와 `bgImage`(7자) 중 **짧은 `bgImage`가 앞으로
- *    가서 `bgGradient`가 이긴다** — 작성자가 무엇을 적었든. 고치려면 순서를 계약에서
- *    빼거나 저장 형식을 바꿔야 하고, **그 판단의 맥락은 P4a-3에 있다**(`states` 순서와
- *    같은 부류이므로 함께 정해야 한다).
- * 3. 지금 이슈를 만들면 P4a-3이 그것을 되돌려야 할 수 있다.
+ *    규칙대로다. 여기서 이슈를 내면 잘 그려지는 문서가 거부된다.
+ * 2. **작성자가 적은 순서가 저장을 거쳐도 남는다** — `themes` 테이블이 절을 `json` 컬럼에
+ *    담아 원문 순서를 보관한다. 그 컬럼이 `jsonb`면 키가 (길이, 바이트)로 정규화되어
+ *    **짧은 `bgImage`(7자)가 앞으로 가서 `bgGradient`(10자)가 이긴다** — 작성자가 무엇을
+ *    적었든. `states` 순서와 같은 부류다(`src/emit/index.ts`의 `compileTheme` 주석).
  */
-describe('재라 #6 — bgGradient와 bgImage가 같은 프로퍼티다', () => {
+describe('bgGradient와 bgImage가 같은 프로퍼티다', () => {
   const withBoth = (keys: Record<string, string>): string =>
     css({
       meta: { id: 'x', name: 'x', version: '1' },
@@ -77,7 +74,7 @@ describe('재라 #6 — bgGradient와 bgImage가 같은 프로퍼티다', () => 
 })
 
 /**
- * **재라 #7 — `@media`가 `states`를 덮는다. 실제로 덮는 것을 확인했다.**
+ * **`@media`가 `states`를 덮는다. 실제로 덮는 것을 확인했다.**
  *
  * **잰 것:** 실제 브라우저(Chromium)에서 `states.disabled`가 `opacity: 0.5`, 같은
  * 컴포넌트의 `responsive.<bp>.base`가 `opacity: 0.9`일 때, 브레이크포인트가 맞는 폭에서
@@ -92,12 +89,13 @@ describe('재라 #6 — bgGradient와 bgImage가 같은 프로퍼티다', () => 
  * 언제나 참인 조건으로 확인했다). 그래서 여기서는 **방출 순서**만 고정하고, 그 순서가
  * 실제로 만드는 결과는 위에 적은 브라우저 측정이 근거다.
  *
- * **판정: 순서를 바꾸지 않는다.** §6.5가 이 상호작용을 말하지 않지만, 반응형이 마지막에
- * 오는 것은 §6.11의 예시가 `@media`를 맨 뒤에 둔 모양 그대로이고 CSS 관례이기도 하다.
+ * **판정: 순서를 바꾸지 않는다.** 설계서 「components — 구조 + 스킨」이 이 상호작용을 말하지
+ * 않지만, 반응형이 마지막에 오는 것은 「컴파일」의 예시가 `@media`를 맨 뒤에 둔 모양 그대로이고
+ * CSS 관례이기도 하다.
  * 상태가 반응형을 이겨야 한다는 요구는 설계 어디에도 없다. **바꾸려면 근거가 필요한 쪽은
  * 바꾸자는 쪽이다.**
  */
-describe('재라 #7 — @media가 states보다 뒤에 온다', () => {
+describe('@media가 states보다 뒤에 온다', () => {
   const out = (): string =>
     css({
       meta: { id: 'x', name: 'x', version: '1' },
@@ -128,24 +126,17 @@ describe('재라 #7 — @media가 states보다 뒤에 온다', () => {
 })
 
 /**
- * **재라 #10 — `assets.fonts`가 이제 `@font-face`를 낸다. P4b-3이 뒤집었다.**
+ * **`assets.fonts`가 `@font-face`를 낸다.**
  *
- * 앞서 이 자리가 *"내지 않는다"*를 고정하며 근거를 둘 들었다. **둘 중 하나가 이미
- * 거짓이 되어 있었다:**
+ * 폰트를 **가리킬 어휘**(`fontFamily` — `STYLE_PROPERTIES`의 `fontFamily: ['font-family']`,
+ * 「스타일 프로퍼티 화이트리스트」 밖이라 `STYLE_PROPERTIES_BEYOND_SPEC`)와 **실을 경로**
+ * (`@font-face`)가 둘 다 있어야 폰트가 보인다. 경로가 없으면 `font-family`만 나가 시스템
+ * 폰트로 폴백한다. 서체는 시스템 테마 다섯의 인상 차이에서 가장 큰 몫이다.
  *
- * | 그때의 근거 | 오늘 |
- * |---|---|
- * | P8이 URL을 다시 쓰므로 지금 만들면 되돌려야 한다 | **여전히 참이다** — `@font-face`가 정적 번들에서 어떻게 나가는지는 P4b-3도 안 잰다(계획서 "계획이 재지 않은 것" 3) |
- * | §6.8 화이트리스트에 `fontFamily`가 **없어서** 폰트를 컴포넌트에 걸 수 없다 | **거짓이다.** P4b-1이 `fontFamily`를 열었다(`STYLE_PROPERTIES`의 `fontFamily: ['font-family']`, `STYLE_PROPERTIES_BEYOND_SPEC`) |
- *
- * 즉 *"로드는 되는데 아무도 안 쓰는 CSS"*라는 판정의 전제가 사라졌고, 남은 것은
- * **반대 방향의 구멍**이었다 — 폰트를 **가리킬 어휘는 있는데 실을 경로가 없다.** P4b-3의
- * D5가 그것을 닫는다(서체는 시스템 테마 다섯의 인상 차이에서 가장 큰 몫이다).
- *
- * **P4a-1 이월의 문장** *"`font-family`는 나가므로 시스템 폰트로 눈에 보이게 폴백한다"*는
- * 이제 참이다 — 그때는 낼 어휘가 없어 거짓이었다.
+ * **재지 않은 것:** `@font-face`가 정적 번들에서 어떻게 나가는지(URL을 다시 써야 하는지)는
+ * 이 파일이 재지 않는다.
  */
-describe('재라 #10 — assets.fonts가 @font-face를 낸다 (P4b-3 D5)', () => {
+describe('assets.fonts가 @font-face를 낸다', () => {
   it('fonts가 있으면 @font-face가 나가고 그것뿐이다', () => {
     const out = css({
       meta: { id: 'x', name: 'x', version: '1' },
@@ -156,27 +147,28 @@ describe('재라 #10 — assets.fonts가 @font-face를 낸다 (P4b-3 D5)', () =>
   })
 
   it('fonts가 없으면 여전히 빈 문자열이다', () => {
-    // **D7의 근거다** — `admin`에 `assets`가 없으므로 새 층이 그 테마의 CSS를 한 글자도
-    // 바꾸지 않는다. 자세한 것은 `test/font-face.test.ts`.
+    // **`admin`의 CSS가 그대로인 근거다** — `admin`에 `assets`가 없으므로 새 층이 그 테마의
+    // CSS를 한 글자도 바꾸지 않는다. 자세한 것은 `test/font-face.test.ts`.
     expect(css({ meta: { id: 'x', name: 'x', version: '1' } })).toBe('')
   })
 })
 
 /**
- * **재라 #11 — `url()`의 대상을 검증하지 않는다. 실제 브라우저에서 확인했다.**
+ * **`url()`의 대상을 검증하지 않는다. 실제 브라우저에서 확인했다.**
  *
  * **잰 것:** 외부 호스트(`url(https://…)`)가 CSS에 그대로 실려 나가고, 브라우저가 실제로
  * **그 주소로 요청을 보낸다**(Chromium에서 `net::ERR_NAME_NOT_RESOLVED`가 났다 — 즉 막힌
  * 것이 아니라 요청이 나갔다가 이름 해석에 실패했다). `data:` URI도 그대로 적용된다.
  *
  * **CSP는 아무것도 막지 않는다 — 이 앱에 CSP가 없기 때문이다.** `apps/web/index.html`·
- * `vite.config.ts`·`apps/api/src`를 훑었는데 `Content-Security-Policy`를 세우는 자리가
- * 없다. 즉 *"CSP가 무엇을 막는가"*의 답은 **"막을 CSP가 아직 없다"**이고, 그것을 세우는
- * 것은 이 태스크의 범위 밖이다(P5 내보내기·배포가 함께 정할 일이다).
+ * `vite.config.ts`·`apps/api/src`에 `Content-Security-Policy`를 세우는 자리가 없다
+ * (`git grep -i content-security-policy -- apps packages`로 다시 잰다). 즉 *"CSP가 무엇을
+ * 막는가"*의 답은 **"막을 CSP가 없다"**이고, 그것을 세우는 것은 이 패키지의 일이 아니다 —
+ * 앱과 내보낸 번들을 내놓는 쪽이 정한다.
  *
  * 여기서는 **값이 손대지 않은 채 나간다**는 것만 고정한다.
  */
-describe('재라 #11 — url()의 대상이 그대로 나간다', () => {
+describe('url()의 대상이 그대로 나간다', () => {
   it('외부 호스트와 data: URI가 손대지 않은 채 실린다', () => {
     const external = css({
       meta: { id: 'x', name: 'x', version: '1' },

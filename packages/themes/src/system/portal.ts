@@ -26,26 +26,18 @@ import type { Theme } from '../spec/theme'
  * `SearchForm:collapsible` · `EntryForm:sectioned`. 나머지
  * (`Section:contained`·`Field:outlined`·`Button:solid`·`Media:image`)는 **`admin`과 같다.**
  * 우연이 아니라 판단이다 — 기관 포털의 입력칸은 흰 바탕에 회색 테두리이고 주요 버튼은
- * 채운 버튼이다. **커버리지를 채우려고 다른 것을 고르면 §16이 받을 입력이 오염된다**(D3).
+ * 채운 버튼이다. **커버리지를 채우려고 다른 것을 고르면 설계서 「열린 질문」이 받을 입력이
+ * 오염된다.**
  *
  * ---
  *
- * **`primitives`를 스타일 값이 가리킨다** (2026-08-11, P4c-1 T1이 열었다).
+ * **`primitives`를 스타일 값이 가리킨다.**
  *
  * `Section.parts.inner.maxWidth: 'container.maxWidth'`가 `primitives`의 1280px을 가리키고,
- * 폭은 한 곳에만 적힌다. **P4b-3까지는 반대였고, 지우지 않고 남긴다:**
+ * 폭은 한 곳에만 적힌다. 스타일 전용 이름공간 셋(`STYLE_PRIMITIVE_NAMESPACES`)이 그 문법을
+ * 열고, 컴파일 결과는 `max-width: var(--wb-container-maxWidth)`다.
  *
- * > *"`TOKEN_NAMESPACES`에 `container`·`grid`·`section`이 **없다.** 그래서 그 값은 참조로
- * > 인식되지 않고 **글자 그대로** CSS에 실린다 — 컴파일해서 봤다:
- * > `max-width: container.maxWidth;` · `gap: grid.gap;` **둘 다 무효 선언이다.**
- * > … **그래서 이 테마는 폭을 리터럴로 적고 `primitives`에 같은 값을 함께 선언한다.**"*
- *
- * T1이 스타일 전용 이름공간 셋을 열어 그 대가를 없앴다. 컴파일 결과는
- * `max-width: 1280px` → `max-width: var(--wb-container-maxWidth)`이고 **계산값은 같다.**
- * (`:root`의 `--wb-container-*`를 **읽는 첫 코드**가 이것이다 — P4b-3 이월이 *"읽는 쪽도
- * 0건이다"*라고 적은 자리다.)
- *
- * **방향별 테두리 어휘도 없다.** §6.8에 `borderTop` 같은 이름이 없다. 대신 `borderWidth`가
+ * **방향별 테두리 어휘가 없다.** 설계서 「스타일 프로퍼티 화이트리스트」에 `borderTop` 같은 이름이 없다. 대신 `borderWidth`가
  * `border-width`로 그대로 나가므로 **다중값 shorthand**(`'0 0 1px'`)로 적는다 — 포털의
  * 인상 절반이 그 한 줄에 걸려 있다(목록의 행 구분선·박스 탭·카드 머리 띠).
  */
@@ -59,12 +51,12 @@ export const PORTAL_THEME: Theme = {
   },
 
   /**
-   * **서체가 두 층이다.** 아래 `assets.fonts`가 `@font-face`를 내고(P4b-3 ①), 여기
+   * **서체가 두 층이다.** 아래 `assets.fonts`가 `@font-face`를 내고, 여기
    * `typography.family.sans`가 그것을 가리킬 토큰을 만들며, 컴포넌트가 `fontFamily`로 건다.
    * **셋 다 있어야 화면에 보인다.**
    */
   tokens: {
-    // 원시 팔레트. 스타일은 이것을 직접 가리킬 수 없다(§6.3의 3단 분리).
+    // 원시 팔레트. 스타일은 이것을 직접 가리킬 수 없다(설계서 「tokens — 3단 분리」).
     //
     // **채도를 낮춘 남색이 이 테마의 색이다.** `admin`의 `blue.600`(#2563eb)은 밝고 선명해서
     // 조작 화면의 강조에 맞는다. 기관 포털의 남색은 그보다 어둡고 탁하다 — 글이 오래
@@ -113,7 +105,8 @@ export const PORTAL_THEME: Theme = {
       // 버튼 하나에나 쓰이고 구역에는 안 쓰인다.
       radius: { none: '0', sm: '2px', md: '3px', lg: '4px' },
       // **선언은 하되 컴포넌트가 한 번도 안 쓴다.** 이 테마가 면을 띄우지 않기 때문이다.
-      // 지우지 않는 것은 파생 프로젝트 테마(§6.10)가 강조 카드 하나쯤 띄울 때 쓸 자리라서다.
+      // 지우지 않는 것은 파생 프로젝트 테마(설계서 「테마 관리」)가 강조 카드 하나쯤
+      // 띄울 때 쓸 자리라서다.
       shadow: {
         sm: '0 1px 0 rgba(11,37,69,.05)',
         md: '0 2px 8px rgba(11,37,69,.08)',
@@ -129,7 +122,7 @@ export const PORTAL_THEME: Theme = {
        * `family`는 항목 하나가 되어 `typography.family.sans` 토큰을 만든다.
        * **`typography: 'family'`로는 쓸 수 없다** — 그 어휘가 펼치는 넷
        * (`fontSize`·`lineHeight`·`fontWeight`·`letterSpacing`) 중 아무것도 아니라서다.
-       * 거는 것은 `fontFamily` 어휘다(P4b-1이 열었다).
+       * 거는 것은 `fontFamily` 어휘다(`STYLE_PROPERTIES_BEYOND_SPEC`).
        */
       typography: {
         family: { sans: '"Portal Sans", "Noto Sans KR", system-ui, sans-serif' },
@@ -149,9 +142,8 @@ export const PORTAL_THEME: Theme = {
   },
 
   /**
-   * §6.4. **여기 적은 값을 컴포넌트가 가리킬 수 없다**(머리말 참고) — 그래서 폭·여백은
-   * 아래 `components`에 리터럴로 한 번 더 적혀 있다. 이 절을 지우지 않는 것은 §6.4가
-   * 사이트 골격을 여기 선언하라고 정했고 `:root` 변수로는 정상적으로 나가기 때문이다.
+   * 설계서 「primitives — 사이트 골격」. 여기 적은 값은 `:root` 변수로 나가고, 폭은
+   * `Section.parts.inner`가 `container.maxWidth`로 가리킨다(머리말).
    */
   primitives: {
     // `admin`은 1440이다. 포털은 좌측 분류 + 본문 2단이 들어가도 글줄이 길어지지 않는 폭이다.
@@ -185,7 +177,7 @@ export const PORTAL_THEME: Theme = {
       structure: 'contained',
       base: { bg: 'semantic.canvas', paddingY: 'space.10' },
       // **`marginX: 'auto'`가 `admin`에 없다.** 폭을 가둬도 가운데로 안 오면 가둔 것이
-      // 보이지 않는다. (`admin`은 `maxWidth`가 무효 선언이라 이 문제를 만난 적이 없다.)
+      // 보이지 않는다.
       parts: { inner: { maxWidth: 'container.maxWidth', marginX: 'auto', paddingX: 'space.5' } },
       variants: {
         // 포털 첫 화면의 상단 띠. 진한 남색 바탕에 흰 글씨가 기관 사이트의 표지다.
@@ -198,12 +190,12 @@ export const PORTAL_THEME: Theme = {
     },
     Flex: { structure: 'default', base: { gap: 'space.4' } },
     // **`gridColumns`를 안 쓴다** — 열 수는 노드가 나르는 값이고(`--wb-node-grid-columns`)
-    // 테마가 같은 셀렉터에서 그 프로퍼티를 내면 노드의 값이 침묵으로 사라진다
-    // (P4b-2가 전수로 잰 손잡이 부류). 간격만 정한다.
+    // 테마가 같은 셀렉터에서 그 프로퍼티를 내면 노드의 값이 사라진다
+    // (노드 손잡이 — `NODE_HANDLES`, `node-handle-overwrite` 경고). 간격만 정한다.
     Grid: { structure: 'default', base: { gap: 'space.5' } },
     /**
-     * **`bordered` — `plain`과 DOM이 글자까지 같다**(P4b-2 ③이 전수로 쟀다. 나는 다시 재지
-     * 않았고, 갈리는지만 렌더해서 확인했다). 그러므로 갈리는 모습은 **전부 여기 스킨이 만든다.**
+     * **`bordered` — `plain`과 DOM이 글자까지 같다.** 그러므로 갈리는 모습은 **전부 여기
+     * 스킨이 만든다.**
      *
      * 만드는 모습: **머리에 회색 띠가 있고 테두리로 닫힌 상자.** `admin`의 `plain`은
      * 상자 전체에 여백을 주고 제목이 본문과 같은 면 위에 뜬다. 포털의 정보 구역은
@@ -248,7 +240,7 @@ export const PORTAL_THEME: Theme = {
       },
     },
     /**
-     * **`enclosed` — `underline`·`pill`과 DOM이 같다**(P4b-2 ③이 쟀다). 박스 탭은
+     * **`enclosed` — `underline`·`pill`과 DOM이 같다.** 박스 탭은
      * 스킨으로만 만들어진다: 탭마다 위·좌·우 테두리와 회색 바탕, 목록 아래 진한 선,
      * 패널을 그 선에 이어 붙이는 좌·우·아래 테두리.
      *
@@ -256,7 +248,7 @@ export const PORTAL_THEME: Theme = {
      * `aria-selected`를 내지만 `Tabs`의 카탈로그에 `states`도 `variants`도 없고 조각도
      * `tab` 하나뿐이라, 테마가 활성 탭만 겨냥할 셀렉터가 **아예 없다.** 박스 탭에서
      * *"활성 탭이 패널과 이어진다"*가 그 구조의 요점인데 그것을 표현할 어휘가 없다.
-     * **§16이 받을 입력이고 보고에 적었다.**
+     * **설계서 「열린 질문」이 받을 입력이다.**
      */
     Tabs: {
       structure: 'enclosed',
@@ -300,11 +292,11 @@ export const PORTAL_THEME: Theme = {
      * 구조"*). 그래서 브라우저 기본값을 걷어내는 것부터 테마의 몫이다 — `<ul>`의
      * `margin`·`padding-inline-start`, 그리고 **불릿.**
      *
-     * **불릿을 끌 어휘가 §6.8에 없다**(`listStyle`이 없다). `item`에 `display: 'flex'`를
+     * **불릿을 끌 어휘가 「스타일 프로퍼티 화이트리스트」에 없다**(`listStyle`이 없다). `item`에 `display: 'flex'`를
      * 걸면 `<li>`가 `list-item`이 아니게 되어 마커가 사라지는데, **그것은 부수 효과이지
      * 어휘가 아니다** — 가로 배치를 원하지 않는 목록이었다면 끌 방법이 없었다.
      * `apps/playground/src/debug.css`가 `[data-wb-component="Tree"] { list-style: none }`을
-     * 손으로 적어 같은 구멍을 메우고 있다. **§16이 받을 입력이다.**
+     * 손으로 적어 같은 구멍을 메우고 있다. **「열린 질문」이 받을 입력이다.**
      */
     List: {
       structure: 'stackedList',
@@ -357,11 +349,11 @@ export const PORTAL_THEME: Theme = {
      * **`accordion` — `indent`와 진짜로 DOM이 다른 구조다.** 깊이를 커스텀 프로퍼티가
      * 아니라 **중첩**이 나른다.
      *
-     * **`paddingX`를 `node`에 건다.** 이 어휘는 P4b-2가 센 손잡이 여덟 중 하나이고
-     * (`--wb-node-tree-level`을 읽는 `padding-left`를 같은 셀렉터에서 덮는다), 여기가
-     * 정확히 그 자리다. **그런데 이 테마에서는 덮을 것이 없다** — 그 규칙은 P4b-2 ③이
-     * `:where(indent)`로 좁혔고 이 테마는 `accordion`을 고르므로 규칙이 아예 안 맞는다.
-     * 렌더해서 확인한 값은 보고에 적었다.
+     * **`paddingX`를 `node`에 건다.** 이 어휘는 노드 손잡이(`NODE_HANDLES`) 중 하나를
+     * 덮고(`--wb-node-tree-level`을 읽는 `padding-left`를 같은 셀렉터에서 덮는다), 여기가
+     * 정확히 그 자리다. **그런데 이 테마에서는 덮을 것이 없다** — 그 규칙은
+     * `:where([data-wb-structure="indent"])`로 좁혀져 있고 이 테마는 `accordion`을 고르므로
+     * 규칙이 아예 안 맞는다. `node-handle-overwrite` 경고는 구조를 안 보므로 여기서도 난다.
      */
     Tree: {
       structure: 'accordion',
@@ -392,7 +384,7 @@ export const PORTAL_THEME: Theme = {
         //
         // `padding: '0'`·`borderWidth: '0'`은 **되돌리기다** — 조각 이름 `panel`을 `Tabs`도
         // 쓰므로, 탭 안에 트리를 넣으면 `Tabs.parts.panel`의 테두리와 여백이 자손
-        // 결합자를 타고 여기까지 온다(실측: `border-width: 0 1px 1px`). 탭 안의 분류
+        // 결합자를 타고 여기까지 온다(`border-width: 0 1px 1px`). 탭 안의 분류
         // 트리는 포털에서 흔한 구성이라 그냥 두면 눈에 보인다.
         panel: {
           display: 'block',
@@ -486,7 +478,7 @@ export const PORTAL_THEME: Theme = {
      * **`label`이 폼 제목이다**(구현체가 `props.title`을 여기 담는다 — 필드의 라벨과 이름이
      * 같다). 조각 규칙이 자손 결합자라 **이 스킨이 안에 든 `Field`·`Button`의 `label`에도
      * 걸린다.** 그래서 아래 `Field.parts.label`·`Button.parts.label`이 여백과 테두리를
-     * **되돌린다** — 렌더해서 잰 값과 되돌리기 전의 값은 보고에 적었다(D6의 벽 둘째).
+     * **되돌린다.**
      */
     EntryForm: {
       structure: 'sectioned',
@@ -541,7 +533,7 @@ export const PORTAL_THEME: Theme = {
       base: { display: 'flex', direction: 'column', gap: 'space.1' },
       parts: {
         // `padding`·`borderWidth`는 **되돌리기다** — `EntryForm.parts.label`이 자손 결합자로
-        // 여기까지 오기 때문이다. 지우면 폼 안의 필드 라벨이 폼 제목처럼 그려진다(실측).
+        // 여기까지 오기 때문이다. 지우면 폼 안의 필드 라벨이 폼 제목처럼 그려진다.
         label: {
           typography: 'h6',
           fg: 'semantic.textMuted',
@@ -630,11 +622,12 @@ export const PORTAL_THEME: Theme = {
      * 포털 첫 화면의 상단 띠는 진한 남색 바탕에 흰 글씨다. 그 흰색은 `Section.variants.hero`가
      * 정하고 **상속으로** 안쪽 글자에 닿는데, `Text`가 자기 규칙에서 색을 선언하면 그
      * 상속이 끊긴다 — 요소 자신에 붙은 규칙이 물려받은 값을 이긴다. 그러면 남색 위에
-     * 남색 제목이 그려진다(고치기 전 그 값을 쟀다).
+     * 남색 제목이 그려진다.
      *
-     * **테마가 *"이 섹션 안의 Text"*를 겨냥할 방법이 없다.** 조각도 상태도 아니고 §6.5의
-     * 어휘에 자손 셀렉터를 쓰는 문법이 없다. 그래서 답은 *"색을 선언하지 않는 것"*이고,
-     * 색은 `Page.base`에서 상속된다(`semantic.text`). **§16이 받을 입력이다.**
+     * **테마가 *"이 섹션 안의 Text"*를 겨냥할 방법이 없다.** 조각도 상태도 아니고
+     * 「components — 구조 + 스킨」의 어휘에 자손 셀렉터를 쓰는 문법이 없다. 그래서 답은
+     * *"색을 선언하지 않는 것"*이고, 색은 `Page.base`에서 상속된다(`semantic.text`).
+     * **「열린 질문」이 받을 입력이다.**
      *
      * `h6`·`caption`만 색을 갖는다 — 그 둘은 본문보다 흐린 것이 뜻이라 상속을 끊는 값이
      * 맞고, hero 안에 캡션을 두면 흐린 회색이 되는 것은 이 테마가 받아들인 대가다.
@@ -660,7 +653,7 @@ export const PORTAL_THEME: Theme = {
       base: { margin: '0' },
       parts: {
         // **`aspectRatio`를 안 쓴다** — 그 어휘는 `Media [frame]`에서 노드의 `ratio` prop을
-        // 침묵으로 덮는다(손잡이 여덟 중 하나). 비율은 노드가 정할 값이다.
+        // 덮는다(노드 손잡이 — `NODE_HANDLES`). 비율은 노드가 정할 값이다.
         frame: {
           bg: 'semantic.surfaceMuted',
           borderWidth: '1px',
@@ -688,7 +681,7 @@ export const PORTAL_THEME: Theme = {
     },
     Placeholder: {
       structure: 'default',
-      // **`height`를 안 쓴다** — 그 어휘는 노드의 `height` prop을 침묵으로 덮는다.
+      // **`height`를 안 쓴다** — 그 어휘는 노드의 `height` prop을 덮는다(노드 손잡이).
       base: {
         bg: 'semantic.surfaceMuted',
         borderWidth: '1px',
@@ -705,15 +698,9 @@ export const PORTAL_THEME: Theme = {
   },
 
   /**
-   * **패턴 하나를 선언한다**(재라 #6 — 워커가 판단한다).
-   *
-   * 오늘 전개하는 코드가 없고(§6.6의 전개는 P7이다) `checkPatterns`가 검증만 한다.
-   * 그래도 하나를 두는 이유: **포털에서 가장 반복되는 페이지가 "검색 + 목록"이고**,
-   * P7이 전개를 만들 때 실제 시스템 테마가 소유한 패턴이 하나도 없으면 그 기능은
-   * 손으로 만든 표본 위에서 만들어진다. 이 하나가 그 표본이다.
-   *
-   * **더 두지 않았다.** 전개도 저작 UI도 없는 절에 내용을 쌓으면 다음 사람이 그것이
-   * 화면에 닿는다고 믿는다.
+   * **패턴 하나를 선언한다.** `checkPatterns`가 검증하고 `expandPattern`이 노드로 전개한다
+   * (설계서 「patterns — 테마가 소유한 구성 레시피」). **포털에서 가장 반복되는 페이지가
+   * "검색 + 목록"이고** 이 하나가 그것이다.
    */
   patterns: {
     'content.noticeBoard': {
@@ -737,13 +724,12 @@ export const PORTAL_THEME: Theme = {
   },
 
   /**
-   * **§6.7의 `assets`. `fonts`가 이제 `@font-face`로 나간다**(P4b-3 ①이 만들었다).
+   * **설계서 「assets」의 `assets`. `fonts`가 `@font-face`로 나간다.**
    *
-   * **`src`가 `local()`뿐이다 — 네트워크를 쓰지 않는다.** ①이 `local()`과 data URI를 둘 다
-   * Chromium으로 재서 둘 다 통과했고(그쪽이 쟀다), `local()`을 고르면 폰트 바이너리를
-   * 소스에 심지 않아도 된다. **그 한계도 ①이 쟀다:** 그 이름의 로컬 폰트가 없으면 face가
-   * 등록은 되고 로드만 실패한다(`status: 'error'`) — 그때는 아래 `family` 토큰의 뒤쪽
-   * 폴백(`"Noto Sans KR", system-ui, sans-serif`)이 그린다.
+   * **`src`가 `local()`뿐이다 — 네트워크를 쓰지 않는다.** data URI도 네트워크 없이 되지만
+   * `local()`을 고르면 폰트 바이너리를 소스에 심지 않아도 된다. **한계:** 그 이름의 로컬
+   * 폰트가 없으면 face가 등록은 되고 로드만 실패한다(`status: 'error'`) — 그때는 위
+   * `family` 토큰의 뒤쪽 폴백(`"Noto Sans KR", system-ui, sans-serif`)이 그린다.
    *
    * **항목이 둘인데 `family`가 같다.** 굵기마다 다른 파일(=다른 `local()` 이름)을 가리키는
    * 방법이 이것뿐이다 — `ThemeFont`는 `src` 하나에 `weights` 여럿이라, 한 항목으로 적으면
@@ -764,7 +750,7 @@ export const PORTAL_THEME: Theme = {
       },
     ],
     icons: 'lucide',
-    // **`placeholder`를 안 쓴다.** D5가 컴파일하지 않는다고 못박았고, 이 테마는
+    // **`placeholder`를 안 쓴다.** `placeholder.style`은 컴파일되지 않고, 이 테마는
     // `Placeholder`·`Media`의 모습을 `base`·`parts` 스킨으로 전부 표현했다 —
     // 없어서 못 한 것이 없다.
   },

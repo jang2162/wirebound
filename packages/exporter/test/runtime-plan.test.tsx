@@ -1,10 +1,10 @@
 /**
- * **내보내기가 판정하고 실행한다**(T2 · D1·D2·D3).
+ * **내보내기가 판정하고 실행한다.**
  *
  * 이 파일이 지키는 것 중 **하나가 다른 것들을 떠받친다:** *"`runInteraction`의 답은 지금
  * 겹layer와 무관하다."* 그것이 참이라 미리 돌려 둔 쓰기 목록을 나중 겹layer에 얹어도 같은
  * 답이 나오고, 그래서 런타임이 그 함수를 브라우저로 데려갈 필요가 없다(`runtime/plan.ts`의
- * 머리말 ①). **그 케이스가 죽으면 이 슬라이스의 설계가 무너진다.**
+ * 머리말 ①). **그 케이스가 죽으면 런타임의 설계가 무너진다.**
  *
  * 여기서 **안 재는 것**: 실제 DOM에서 눌러 본 것(`runtime-bundle.test.ts`) · 번들 파일에
  * 무엇이 실렸는지(`bundle.test.tsx`).
@@ -66,7 +66,7 @@ function plan(document: PageDocument, hrefs: ReadonlyMap<string, string | null> 
  * (가) 그 겹layer를 넣고 함수를 부른 것, (나) **빈 겹layer**에서 얻은 쓰기 목록을 그
  * 겹layer에 얹은 것.
  */
-describe('runInteraction의 답이 지금 겹layer와 무관하다 (D1이 여기 걸려 있다)', () => {
+describe('runInteraction의 답이 지금 겹layer와 무관하다 (판정을 내보내기에 두는 설계가 여기 걸려 있다)', () => {
   const RULES: Interaction[] = [
     {
       on: 'click',
@@ -213,7 +213,7 @@ describe('상태 열쇠 (browser.ts와 두 벌이다)', () => {
   })
 })
 
-describe('계획이 무엇을 담나 (D1)', () => {
+describe('계획이 무엇을 담나', () => {
   const RULES: Interaction[] = [
     { on: 'click', actions: [{ type: 'setProp', target: 'n_list', prop: 'loading', value: true }] },
   ]
@@ -251,7 +251,7 @@ describe('계획이 무엇을 담나 (D1)', () => {
     ])
   })
 
-  /** **저장 게이트가 쓰는 것과 같은 함수가 만든 문장이다**(사실 10 · 재라 #7). */
+  /** **저장 게이트가 쓰는 것과 같은 함수가 만든 문장이다.** */
   it('그 문장이 schema의 검증기가 내는 것과 같다', () => {
     const document = page({
       n_btn: [
@@ -272,7 +272,7 @@ describe('계획이 무엇을 담나 (D1)', () => {
     )
   })
 
-  it('페이지 액션은 요청이 되고 링크가 붙는다 (D6)', () => {
+  it('페이지 액션은 요청이 되고 링크가 붙는다', () => {
     const { plan: built } = plan(
       page({
         n_btn: [
@@ -299,9 +299,9 @@ describe('계획이 무엇을 담나 (D1)', () => {
   })
 
   /**
-   * **못 가는 이유가 둘이고 문장이 갈린다**(리뷰 발견 D). 없는 것과 둘 이상인 것은 읽는
+   * **못 가는 이유가 둘이고 문장이 갈린다.** 없는 것과 둘 이상인 것은 읽는
    * 사람이 할 일이 다르다 — 없으면 그 페이지를 함께 내보내야 하고, 둘 이상이면 타겟을
-   * 짓는 쪽이 겹치게 만든 것이다. **판정도 문장도 내보내기가 짓는다**(D1).
+   * 짓는 쪽이 겹치게 만든 것이다. **판정도 문장도 내보내기가 짓는다.**
    */
   it('타겟을 가진 페이지가 둘 이상이면 링크가 없고 다른 말을 한다', () => {
     const { plan: built } = plan(
@@ -373,7 +373,7 @@ describe('계획이 무엇을 담나 (D1)', () => {
   })
 
   /**
-   * **카탈로그 없이 판정하면 침묵이 돌아온다**(사실 9 · P5-3 이월 §3.2).
+   * **카탈로그 없이 판정하면 침묵이 돌아온다.**
    *
    * `checkNodeAction`은 `getComponent`가 빈손이면 **문제가 없다고 답한다** — 대조할 계약이
    * 없기 때문이다. 그러면 깨진 규칙이 이슈 0건으로 지나가고 **쓰기까지 실린다.**
@@ -409,7 +409,7 @@ describe('계획이 무엇을 담나 (D1)', () => {
  * 이것이 *"상호작용이 동작한다"*의 알맹이다 — 갈리면 누른 뒤의 화면이 웹 앱과 다르다.
  * **자리마다 견준다:** 겹layer가 닿는 노드마다 그 자리의 HTML을 뽑아 견준다.
  */
-describe('미리 그린 판이 렌더러의 답과 같다 (§11.3)', () => {
+describe('미리 그린 판이 렌더러의 답과 같다 (설계서 「HTML 정적 번들」)', () => {
   const RULES: Interaction[] = [
     {
       on: 'click',
@@ -474,8 +474,8 @@ describe('상태가 너무 많으면 끈다', () => {
   it('끈 계획은 항목도 판도 비어 있고 이유를 든다', () => {
     // **상한을 몰라도 넘길 수 있게 짠다** — 자가 구현의 수를 import하면 함께 움직인다.
     //
-    // **버튼을 여럿 둔다.** 한 버튼에 규칙을 몰면 한 번에 다 눌리므로 닿는 상태가 **하나**다
-    // (그것도 이 케이스가 알려 준 것이다). 버튼이 갈리면 순서가 자유로워져 조합이 **곱**으로
+    // **버튼을 여럿 둔다.** 한 버튼에 규칙을 몰면 한 번에 다 눌리므로 닿는 상태가 **하나**다.
+    // 버튼이 갈리면 순서가 자유로워져 조합이 **곱**으로
     // 는다 — 그 곱이 실제 위험이다.
     const props = ['pagination', 'selectable', 'selected', 'disabled', 'loading', 'empty']
     const buttons = props.flatMap((prop, index) =>
@@ -504,25 +504,26 @@ describe('상태가 너무 많으면 끈다', () => {
 })
 
 /**
- * **런타임 파일은 고전 스크립트다**(D2 · 재라 #6). `file://`에서 외부 모듈 스크립트가
- * CORS로 막히는 것을 실브라우저로 쟀다(보고서 §T1).
+ * **런타임 파일은 고전 스크립트다.** `file://`에서 외부 모듈 스크립트는 CORS로 막힌다
+ * (실브라우저에서 `file://`로 연 번들에 `type="module"`을 걸면 재현된다).
  *
  * 그리고 **바깥 스코프를 참조하지 않는다** — `toString()`으로 나가므로 클로저가 따라가지
  * 않는다. 아무것도 없는 문맥에서 실제로 돌려 본다.
  */
-describe('assets/runtime.js (D2·D3)', () => {
+describe('assets/runtime.js', () => {
   it('모듈 문법이 없다', () => {
     expect(RUNTIME_JS).not.toMatch(/\bimport\s/)
     expect(RUNTIME_JS).not.toMatch(/\bexport\s/)
     expect(RUNTIME_JS).not.toContain('require(')
   })
 
-  it('시트를 읽지 않는다 (사실 3)', () => {
+  /** `file://`에서 `cssRules`가 던진다 — 근거는 `runtime/browser.ts`의 머리말. */
+  it('시트를 읽지 않는다', () => {
     expect(RUNTIME_JS).not.toContain('cssRules')
     expect(RUNTIME_JS).not.toContain('styleSheets')
   })
 
-  /** 카탈로그도 zod도 안 실린다 — 판정이 내보내기로 갔기 때문이다(D1). */
+  /** 카탈로그도 zod도 안 실린다 — 판정은 내보내기가 하기 때문이다. */
   it('판정하는 코드를 싣지 않는다', () => {
     expect(RUNTIME_JS).not.toContain('safeParse')
     expect(RUNTIME_JS).not.toContain('checkNodeAction')

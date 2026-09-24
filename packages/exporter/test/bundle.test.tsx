@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * **`exportBundle`이 낸 파일들**(T3 · D1·D2·D4·D6·D9).
+ * **`exportBundle`이 낸 파일들.**
  *
  * `DOMParser`로 파서를 지나게 한다 — **글자로만 재면 브라우저가 그것을 무엇으로 읽는지는
  * 안 재진다.** `parity.test.tsx`가 같은 이유로 같은 길을 쓴다.
@@ -98,8 +98,8 @@ function documentRoot(html: string): Element {
   return root
 }
 
-describe('exportBundle — 파일 트리 (D1 · §11.3)', () => {
-  it('§11.3의 파일 트리를 낸다', () => {
+describe('exportBundle — 파일 트리', () => {
+  it('설계서 「HTML 정적 번들」의 파일 트리를 낸다', () => {
     expect(twoPages().files.map((file) => file.path)).toEqual([
       'index.html',
       'pages/회원-목록.html',
@@ -124,7 +124,7 @@ describe('exportBundle — 파일 트리 (D1 · §11.3)', () => {
   })
 })
 
-describe('exportBundle — CSS (D6 · P8-1 이월 §5)', () => {
+describe('exportBundle — CSS', () => {
   it('테마 시트가 exportPage의 css와 같은 한 장이다', () => {
     const theme = resolved('portal')
     expect(fileAt(twoPages(), 'assets/theme.css')).toBe(
@@ -144,10 +144,10 @@ describe('exportBundle — CSS (D6 · P8-1 이월 §5)', () => {
   })
 })
 
-describe('exportBundle — <head> (D6 · D8)', () => {
+describe('exportBundle — <head>', () => {
   /**
-   * **P8-1은 `<head>`에 `style`·`script`·`link`가 0개인 것을 지켰다.** 셸이 시트를 걸므로
-   * 그 명제가 여기서 *"정확히 이 둘이다"*로 바뀐다 — **개수까지 센다.** 0을 세지 않고
+   * **`exportPage`의 `<head>`에는 `style`·`script`·`link`가 0개다**(`page.test.ts`). 번들은
+   * 셸이 시트를 걸므로 여기서는 *"정확히 이 둘이다"*를 센다 — **개수까지 센다.** 0을 세지 않고
    * *"link가 있다"*만 재면 시트가 하나 더 새어도 안 죽는다.
    */
   it.each(['index.html', 'pages/회원-목록.html'])('%s의 head에 스타일시트 링크 둘뿐이다', (path) => {
@@ -180,13 +180,12 @@ describe('exportBundle — <head> (D6 · D8)', () => {
   })
 
   /**
-   * **P8-2는 *"`<script>`를 하나도 안 낸다"*를 지켰다.** P8-3이 런타임을 붙이면서 그
-   * 명제가 **거짓이 되는 것이 아니라 좁아진다** — *"정확히 이 둘을 낸다"*로 바꾼다
-   * (P8-2가 P8-1의 케이스 둘에 한 것과 같다).
+   * **명제는 *"스크립트가 없다"*가 아니라 *"정확히 이 둘을 낸다"*다** — 런타임이 붙어도
+   * 명제를 지우지 않고 좁혀 센다(위 `<head>` 케이스와 같다).
    *
    * **개수와 정체를 함께 센다.** *"스크립트가 있다"*만 재면 셋째가 새어도 안 죽는다.
    * 하나는 **실행되지 않는 데이터**(`application/json`)이고 하나는 **자산을 가리키는
-   * 고전 스크립트**다 — `type="module"`이면 `file://`에서 통째로 죽는다(T1의 실측).
+   * 고전 스크립트**다 — `type="module"`이면 `file://`에서 통째로 죽는다.
    */
   it.each(['index.html', 'pages/회원-목록.html', 'pages/회원-상세.html'])(
     '%s가 스크립트를 정확히 둘 낸다 — 데이터 하나와 runtime.js 하나',
@@ -213,7 +212,7 @@ describe('exportBundle — <head> (D6 · D8)', () => {
     }
   })
 
-  /** 데이터가 스크립트를 끊지 않는다 — `scriptJson`이 든 규칙이다(D8). */
+  /** 데이터가 스크립트를 끊지 않는다 — `scriptJson`이 든 규칙이다. */
   it('데이터가 <를 이스케이프해 실린다', () => {
     const bundle = exportBundle({
       pages: [{ title: '주입', document: LIST_PAGE, comments: [] }],
@@ -225,10 +224,10 @@ describe('exportBundle — <head> (D6 · D8)', () => {
   })
 })
 
-describe('exportBundle — 셸이 문서를 감싼다 (D8)', () => {
+describe('exportBundle — 셸이 문서를 감싼다', () => {
   /**
-   * **P8-1은 *"문서 뿌리를 아무것도 감싸지 않는다"*를 지켰다.** 번들에서는 감싼다. 명제를
-   * 지우지 않고 **정확히 무엇이 감싸는지**로 바꾼다 — 그러지 않으면 그 축이 사라진다.
+   * **`exportPage`는 문서 뿌리를 아무것도 감싸지 않고, 번들은 감싼다.** 그래서 명제를
+   * 지우지 않고 **정확히 무엇이 감싸는지**로 센다 — 그러지 않으면 그 축이 사라진다.
    */
   it.each(['index.html', 'pages/회원-목록.html'])('%s에서 감싸개가 정확히 셋이다', (path) => {
     const root = documentRoot(fileAt(twoPages(), path))
@@ -256,7 +255,7 @@ describe('exportBundle — 셸이 문서를 감싼다 (D8)', () => {
   })
 })
 
-describe('exportBundle — 좌측 트리 (D2·D3)', () => {
+describe('exportBundle — 좌측 트리', () => {
   it('index.html이 첫 페이지를 같은 셸에 담는다 — 리디렉트가 아니다', () => {
     const index = fileAt(twoPages(), 'index.html')
     expect(index).not.toContain('http-equiv')
@@ -264,8 +263,8 @@ describe('exportBundle — 좌측 트리 (D2·D3)', () => {
   })
 
   /**
-   * **페이지 파일마다 그 페이지가 그려져 있다.** 리뷰가 실측으로 짚은 구멍이다 — 셸에
-   * 넘기는 트리를 `rendered[index]`에서 `rendered[0]`으로 바꿔도 아무것도 안 죽었다.
+   * **페이지 파일마다 그 페이지가 그려져 있다.** 뿌리를 자리마다 안 보면 셸에 넘기는
+   * 트리를 `rendered[index]`에서 `rendered[0]`으로 바꿔도 아무것도 안 죽는다.
    *
    * **세는 단위를 HTML 파일 전부로 못박는다** — 자리마다 어느 문서의 뿌리인지를 한 목록으로
    * 견주므로 파일이 빠지거나 늘어도, 자리가 섞여도 죽는다. 그림 전체를 견주는 것은
@@ -310,14 +309,14 @@ describe('exportBundle — 좌측 트리 (D2·D3)', () => {
   })
 })
 
-describe('exportBundle — 우측 탭 셋 (D3 · 재라 #2)', () => {
+describe('exportBundle — 우측 탭 셋', () => {
   function panel(html: string): Element {
     const found = parse(html).querySelector('.wb-export-panel')
     if (found === null) throw new Error('우측 패널이 없습니다')
     return found
   }
 
-  it('§9의 뷰 모드와 같은 셋이다', () => {
+  it('설계서 「설계서 화면 구조」의 뷰 모드와 같은 셋이다', () => {
     const labels = [...panel(fileAt(twoPages(), 'index.html')).querySelectorAll('.wb-export-tab')]
     expect(labels.map((label) => label.textContent)).toEqual([
       '페이지 설명',
@@ -363,7 +362,7 @@ describe('exportBundle — 우측 탭 셋 (D3 · 재라 #2)', () => {
   })
 })
 
-describe('exportBundle — 코멘트 탭 (D4)', () => {
+describe('exportBundle — 코멘트 탭', () => {
   function entries(path: string): Element[] {
     return [
       ...parse(fileAt(twoPages(), path)).querySelectorAll('#wb-export-panel-comments .wb-export-entry'),
@@ -388,9 +387,8 @@ describe('exportBundle — 코멘트 탭 (D4)', () => {
   })
 
   /**
-   * **D4의 *"안 오면 안 그린다"*를 그린 것에서 잰다.** 값만 재면(`authorName === null`)
-   * 셸이 그 `null`로 **빈 줄을 그려도** 안 죽는다 — 실제로 변이 *"작성자가 없어도 자리를
-   * 그린다"*가 사망 0이었고, 이 케이스가 그 자리를 메운다.
+   * **작성자·시각이 안 오면 그 줄을 안 그린다 — 그린 것에서 잰다.** 값만 재면
+   * (`authorName === null`) 셸이 그 `null`로 **빈 줄을 그려도** 안 죽는다.
    */
   it('작성자·시각이 안 오면 그 줄을 그리지 않는다', () => {
     const line = entries('pages/회원-목록.html')[1]!
@@ -426,7 +424,7 @@ describe('exportBundle — 코멘트 탭 (D4)', () => {
   })
 })
 
-describe('exportBundle — 상호작용 탭 (D3 · 재라 #1)', () => {
+describe('exportBundle — 상호작용 탭', () => {
   it('describeInteraction의 문장을 그린다', () => {
     const lines = [
       ...parse(fileAt(twoPages(), 'pages/회원-목록.html')).querySelectorAll(
@@ -447,7 +445,7 @@ describe('exportBundle — 상호작용 탭 (D3 · 재라 #1)', () => {
   })
 })
 
-describe('exportBundle — errors를 삼키지 않는다 (D9)', () => {
+describe('exportBundle — errors를 삼키지 않는다', () => {
   const BROKEN: PageDocument = {
     version: 1,
     root: {
@@ -490,8 +488,8 @@ describe('exportBundle — errors를 삼키지 않는다 (D9)', () => {
   /**
    * **그릴 수 있는 문서면 번들이 나온다.** 노드가 아닌 자식은 렌더 경로가 폴백으로 그리고
    * `errors`로 이름 붙이는데, 문장화(`listInteractionSentences` → `walkNodes`)는 노드가
-   * 객체라고 믿고 거기서 던진다. 그것 때문에 **그린 페이지가 통째로 사라지면** D9가 지키려던
-   * 것이 반대로 뒤집힌다.
+   * 객체라고 믿고 거기서 던진다. 그것 때문에 **그린 페이지가 통째로 사라지면**
+   * *"errors를 삼키지 않는다"*가 지키려던 것이 반대로 뒤집힌다.
    */
   it('노드가 아닌 자식이 있어도 번들이 나온다 — 그 노드는 errors가 이름을 든다', () => {
     const withNull: PageDocument = {

@@ -30,7 +30,7 @@ function entries(over: Partial<LintThemeEntry>[]): LintThemeEntry[] {
 
 const rulesOf = (issues: readonly { rule: string }[]): string[] => issues.map((issue) => issue.rule)
 
-describe('resolveTheme의 판정을 규칙으로 나른다 (D1)', () => {
+describe('resolveTheme의 판정을 규칙으로 나른다', () => {
   it('⑧ 컴포넌트 정의에 없는 structure·part·state 참조', () => {
     const issues = lintThemes({
       themes: entries([
@@ -56,7 +56,7 @@ describe('resolveTheme의 판정을 규칙으로 나른다 (D1)', () => {
     expect(vocab.every((issue) => issue.pageId === null)).toBe(true)
   })
 
-  it('⑨ 존재하지 않는 토큰 참조 — severity를 그대로 나른다 (D4)', () => {
+  it('⑨ 존재하지 않는 토큰 참조 — severity를 그대로 나른다', () => {
     const issues = lintThemes({
       themes: entries([{ document: { meta: meta('th1'), tokens: { semantic: { primary: 'semantic.없는것' } } } }, {}]),
     }).filter((issue) => issue.rule === 'theme-token')
@@ -124,7 +124,7 @@ describe('resolveTheme의 판정을 규칙으로 나른다 (D1)', () => {
     expect(issues[0]!.message).toContain('상속 깊이')
   })
 
-  it('§12.4 밖의 §6 판정도 버리지 않는다', () => {
+  it('설계서 「lint 규칙」 밖의 「테마 시스템」 판정도 버리지 않는다', () => {
     const issues = lintThemes({ themes: entries([{ document: { meta: meta('th1'), tokens: 42 } }, {}]) }).filter(
       (issue) => issue.rule === 'theme-other',
     )
@@ -190,10 +190,10 @@ describe('⑪ 노드가 쓰는 variant를 테마가 정의하지 않음 — 새�
     expect(rulesOf(issues)).not.toContain('theme-node-variant')
   })
 
-  it('파생 변형(variantFrom)은 이 슬라이스가 보지 않는다 — 못박아 둔다', () => {
+  it('파생 변형(variantFrom)은 ⑪이 보지 않는다 — 못박아 둔다', () => {
     // `Field`는 `variantFrom: 'control'`이라 노드의 `variant`가 화면에 닿지 않는다.
-    // 파생 규칙의 구현은 `renderer`에 있고 `themes`는 그것을 볼 수 없다(§3.3) — 여기 옮겨
-    // 적으면 두 벌이 된다. 그래서 **안 본다**를 케이스로 고정한다(보고서·이월에 적었다).
+    // 파생 규칙의 구현은 `renderer`에 있고 `themes`는 그것을 볼 수 없다(설계서 「각 패키지의
+    // 책임과 의존」) — 여기 옮겨 적으면 두 벌이 된다. 그래서 **안 본다**를 케이스로 고정한다.
     const withVariantFrom = CATALOG_TYPES.filter((type) => getComponent(type)?.variantFrom !== undefined)
     expect(withVariantFrom.length).toBeGreaterThan(0)
 
@@ -214,8 +214,8 @@ describe('⑪ 노드가 쓰는 variant를 테마가 정의하지 않음 — 새�
 
   /**
    * 카탈로그가 이미 거부한 변형을 ⑪이 한 번 더 말하면 **한 노드의 같은 필드를 두 severity로**
-   * 말하는 목록이 된다(`unknown-variant:error` + `theme-node-variant:warning`). 리뷰가 그
-   * 상태를 재서 잡았다. 고칠 곳이 다르지도 않다 — 둘 다 `variant` 한 글자다.
+   * 말하는 목록이 된다(`unknown-variant:error` + `theme-node-variant:warning`).
+   * 고칠 곳이 다르지도 않다 — 둘 다 `variant` 한 글자다.
    */
   it('카탈로그가 거부한 변형은 보지 않는다 — validatePage가 이미 error로 말한다', () => {
     const bogus: WbNode = { id: nid(), type: 'Button', variant: '없는변형' }
@@ -284,7 +284,7 @@ describe('⑪ — 봉투가 깨진 페이지 문서에서 던지지 않는다', 
   })
 })
 
-describe('표를 덮는다 (D6)', () => {
+describe('표를 덮는다', () => {
   const owned = LINT_RULES.filter((rule) => rule.owner === 'themes')
 
   it('themes가 소유한 규칙이 하나도 빠짐없이 실제로 난다', () => {

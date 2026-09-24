@@ -1,5 +1,5 @@
 /**
- * **뷰어 셸의 마크업**(D2·D3·D6). §9의 3분할을 정적 HTML로 세운다.
+ * **뷰어 셸의 마크업.** 설계서 「설계서 화면 구조」의 3분할을 정적 HTML로 세운다.
  *
  * ```
  * ┌──────────────┬────────────────────────────┬──────────────────┐
@@ -9,9 +9,9 @@
  *
  * ---
  *
- * ## D2 — 페이지마다 셸을 통째로 갖는다
+ * ## 페이지마다 셸을 통째로 갖는다
  *
- * §11.3의 파일 목록은 *"`index.html`이 셸이고 페이지를 싣는다"*로도 읽히지만 그쪽은
+ * 설계서 「HTML 정적 번들」의 파일 목록은 *"`index.html`이 셸이고 페이지를 싣는다"*로도 읽히지만 그쪽은
  * `file://`에서 iframe 제약이 크고, 무엇보다 **번들에는 서버가 없다.** 각 페이지가 셸을
  * 가지면 **페이지 하나를 열면 그것만으로 완전하다** — 링크를 그대로 남에게 줄 수 있다.
  *
@@ -19,29 +19,30 @@
  * **한 페이지의 크기가 페이지 수에 비례한다** — 번들 전체로는 제곱이다. 그 값을 실제로
  * 재서 `test/bundle-size.test.ts`가 든다.
  *
- * ## D3 — 우측 탭 셋과 번호 마커
+ * ## 우측 탭 셋과 번호 마커
  *
- * 탭은 §9의 **뷰 모드** 구성이다: 페이지 설명 · 코멘트 · 상호작용. `apps/web`의
- * `PANEL_TABS.view`가 같은 셋이라는 것을 재서 확인했다(재라 #2).
+ * 탭은 「설계서 화면 구조」의 **뷰 모드** 구성이다: 페이지 설명 · 코멘트 · 상호작용.
+ * `apps/web`의 `PANEL_TABS.view`와 같은 셋이다.
  *
- * **번호 마커를 목업 위에 겹쳐 그리지 않는다 — 판정이다.** 겹layer는 노드의 **자리**를
+ * **셸은 번호 마커를 목업 위에 겹쳐 그리지 않는다 — 판정이다.** 겹layer는 노드의 **자리**를
  * 알아야 하는데 그 자리는 문서에 없다. 캔버스는 그린 뒤에 `getBoundingClientRect`로 잰다
  * (`apps/web`의 `canvas.tsx`). 정적 HTML은 그릴 때 그 값을 모른다.
  *
- * - 문서에 있는 것은 **번호와 노드 id**이고(§4.3의 `marker`), 그 둘로 할 수 있는 것은
- *   **목록**이다. 코멘트 탭이 그것을 그린다.
- * - 겹layer는 P8-3의 `runtime.js`가 잰다. 그래서 이 셸은 각 줄에 `data-wb-marker-for`와
+ * - 문서에 있는 것은 **번호와 노드 id**이고(설계서 「페이지 스키마 노드」의 `marker`), 그
+ *   둘로 할 수 있는 것은 **목록**이다. 코멘트 탭이 그것을 그린다.
+ * - 겹layer는 `runtime.js`가 그린 뒤에 잰다. 그래서 이 셸은 각 줄에 `data-wb-marker-for`와
  *   `data-wb-marker`를 실어 **번호와 노드를 짝지어 둔다** — 런타임이 문서를 다시 읽지 않아도
  *   된다.
  *
- * **상호작용 탭은 `describeInteraction`의 문장을 그린다**(§8.2가 *"HTML 번들도 이 문장을
- * 싣는다"*고 적었다). 실제 동작은 P8-3이고, **문장화는 순수 함수라 런타임과 무관하다.**
+ * **상호작용 탭은 `schema`의 문장화가 낸 문장을 그린다**(`../sentences`의 `pageSentences` —
+ * 설계서 「자동 문장화」가 *"우측 패널, HTML 번들, PPTX 모두 이 문장을 싣는다"*고 적는다).
+ * 실제 동작은 `runtime.js`이고, **문장화는 순수 함수라 런타임과 무관하다.**
  */
 import type { InteractionSentence } from '@wirebound/schema'
 import type { ReactElement, ReactNode } from 'react'
 import type { PageDocument } from '@wirebound/schema'
 import type { CommentEntry } from './comments'
-// **문장화는 `../sentences`가 한 자리에서 한다**(P10-1 D4) — 여기서 다시 짜면 PPTX와 갈린다.
+// **문장화는 `../sentences`가 한 자리에서 한다** — 여기서 다시 짜면 PPTX와 갈린다.
 import {
   EMPTY_COMMENTS,
   EMPTY_DESCRIPTION,
@@ -63,31 +64,31 @@ export interface ShellNavItem {
 
 export interface ShellInput {
   nav: readonly ShellNavItem[]
-  /** §11.2 봉투의 `page.description`. **없으면 빈 상태를 말한다** — 탭 자체는 §9가 든다. */
+  /**
+   * 「페이지 JSON」 봉투의 `page.description`. **없으면 빈 상태를 말한다** — 탭 자체는
+   * 「설계서 화면 구조」가 든다.
+   */
   description: string | null
   comments: readonly CommentEntry[]
   /** 문장화의 재료. 셸이 문서를 받아 스스로 문장을 만든다 — 호출자가 두 번 순회하지 않는다. */
   page: PageDocument
   /** 가운데에 놓을 그려진 문서. `exportPage`와 **같은 렌더 경로**에서 온 것이다. */
   documentTree: ReactNode
-  /** `<body>` 끝에 얹을 `<script>` 둘(P8-3 D7). `shellScripts`가 만든다. */
+  /** `<body>` 끝에 얹을 `<script>` 둘. `shellScripts`가 만든다. */
   scripts: ReactNode
 }
 
 /**
- * `<body>` 끝에 얹는 **`<script>` 정확히 둘**(P8-3 D7·D8).
- *
- * 앞 슬라이스는 *"`<script>`를 하나도 안 낸다"*를 지켰다. 상호작용 런타임이 오면서 그
- * 명제가 **거짓이 되는 것이 아니라 좁아진다** — *"정확히 이 둘을 낸다"*로 바꾼다.
+ * `<body>` 끝에 얹는 **`<script>` 정확히 둘.** 셸이 내는 스크립트는 이 둘뿐이다.
  *
  * | 무엇 | 왜 |
  * |---|---|
  * | `type="application/json"`인 데이터 | **실행되지 않는다.** 판정 결과와 미리 그린 판이 값이므로 코드일 이유가 없다 |
- * | `assets/runtime.js`를 가리키는 고전 스크립트 | `file://`에서 **외부 모듈 스크립트가 CORS로 막힌다**(T1의 실측). `type="module"`을 쓰지 않는다 |
+ * | `assets/runtime.js`를 가리키는 고전 스크립트 | `file://`에서 **외부 모듈 스크립트가 CORS로 막힌다**(`runtime/browser.ts` 머리말). `type="module"`을 쓰지 않는다 |
  *
- * **데이터를 `scriptJson`으로 심는다**(D8). `<script>`는 raw text 요소라 파서가 문자열
- * 안을 안 보고 `</script>`에서 그대로 끊긴다 — 그 규칙은 이월의 스니펫이 아니라 그 함수가
- * 든다. `type="application/json"`이어도 파서에게는 같은 raw text다.
+ * **데이터를 `scriptJson`으로 심는다.** `<script>`는 raw text 요소라 파서가 문자열
+ * 안을 안 보고 `</script>`에서 그대로 끊긴다 — 그 규칙은 그 함수가 든다.
+ * `type="application/json"`이어도 파서에게는 같은 raw text다.
  */
 export function shellScripts(input: { dataJson: string; runtimeHref: string }): ReactElement {
   return (
@@ -104,7 +105,7 @@ export function shellScripts(input: { dataJson: string; runtimeHref: string }): 
   )
 }
 
-/** `<head>`에 얹는 것. **오늘은 스타일시트 링크뿐이다**(D6 — CSS를 인라인하지 않는다). */
+/** `<head>`에 얹는 것. **스타일시트 링크뿐이다** — CSS를 인라인하지 않는다. */
 export function shellHead(stylesheets: readonly string[]): ReactElement {
   return (
     <>
@@ -116,8 +117,9 @@ export function shellHead(stylesheets: readonly string[]): ReactElement {
 }
 
 /**
- * 탭 셋. **`../labels`가 소유한다**(P10-1 D4) — PPTX가 같은 이름을 절 제목으로 쓰므로
- * 여기 사본을 두면 둘이 갈린다. §9가 탭을 늘리면 그 파일 한 줄이지 조건이 아니다.
+ * 탭 셋. **`../labels`가 소유한다** — PPTX가 같은 이름을 절 제목으로 쓰므로
+ * 여기 사본을 두면 둘이 갈린다. 「설계서 화면 구조」가 탭을 늘리면 그 파일 한 줄이지 조건이
+ * 아니다.
  */
 const TABS = PANEL_TABS
 
@@ -157,8 +159,8 @@ export function shellBody(input: ShellInput): ReactElement {
       </nav>
       <main className="wb-export-mockup">
         <div className="wb-export-canvas">{input.documentTree}</div>
-        {/* **런타임이 못 한 것을 말하는 자리**(P8-3 D1·D6). 비어 있고 `hidden`이므로
-            스크립트가 없으면 아무것도 아니다 — 그것이 D5다. */}
+        {/* **런타임이 못 한 것을 말하는 자리.** 비어 있고 `hidden`이므로
+            스크립트가 없으면 아무것도 아니다 — 번들은 스크립트 없이도 그대로 읽힌다. */}
         <div className="wb-export-status" role="status" aria-live="polite" hidden />
       </main>
       <aside className="wb-export-panel">
@@ -205,7 +207,7 @@ function DescriptionTab({ description }: { description: string | null }): ReactE
 }
 
 /**
- * 코멘트 탭. **고아 마커도 줄을 갖는다**(D4) — 목업에 ①이 찍혀 있는데 목록이 비어 있으면
+ * 코멘트 탭. **고아 마커도 줄을 갖는다** — 목업에 ①이 찍혀 있는데 목록이 비어 있으면
  * 읽는 사람이 *"내가 못 찾은 것"*으로 읽는다.
  */
 function CommentTab({ entries }: { entries: readonly CommentEntry[] }): ReactElement {
@@ -235,7 +237,7 @@ function CommentTab({ entries }: { entries: readonly CommentEntry[] }): ReactEle
 }
 
 /**
- * 작성자·시각. **둘 다 없으면 줄 자체를 안 그린다**(D4) — 빈 자리를 두면 *"이름이 없는
+ * 작성자·시각. **둘 다 없으면 줄 자체를 안 그린다** — 빈 자리를 두면 *"이름이 없는
  * 사람"*과 *"이름을 안 실은 경로"*가 같은 화면이 된다.
  */
 function CommentMeta({

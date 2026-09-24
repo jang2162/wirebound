@@ -19,31 +19,24 @@ import type { Theme } from '../spec/theme'
  * **`List`를 `mediaList`로 고른 이유 — 그리고 그 대가.**
  *
  * 커머스에서 `List`가 필요한 자리는 둘이다: **상품 격자**(PLP)와 **줄 목록**(장바구니·주문
- * 내역·검색 결과). **구조 선택이 컴포넌트 타입 단위라 둘을 한 문서에 둘 수 없다**
- * (P4b-2 이월 1번 — *그쪽이 쟀다*).
+ * 내역·검색 결과). **구조 선택이 컴포넌트 타입 단위라 둘을 한 문서에 둘 수 없다.**
  *
  * 격자를 포기한 것이 아니라 **다른 길이 있어서** 줄 목록을 골랐다. 상품 격자는
  * `Grid` + `Card:mediaTop`으로 조립된다(둘 다 이 테마가 스킨을 갖는다). 반대로 줄 목록의
  * *"썸네일 옆에 제목 위 가격"*은 `mediaList`의 `body` 조각이 없으면 **어떤 테마도 표현할 수
- * 없다** — `cardGrid`·`stackedList`에는 그 조각이 아예 없다(카탈로그를 확인했다).
+ * 없다** — `cardGrid`·`stackedList`에는 그 조각이 아예 없다.
  *
  * **대가는 `List.items` 손잡이다.** 격자를 `Grid`로 조립하면 카드 수를 노드 하나로 정할 수
  * 없어 `Card`를 그 수만큼 두어야 한다.
  *
  * ---
  *
- * **`primitives`를 스타일 값이 가리킨다** (2026-08-11, P4c-1 T1이 열었다).
+ * **`primitives`를 스타일 값이 가리킨다.**
  *
- * `Section.parts.inner.maxWidth: 'container.maxWidth'`가 `primitives`의 1200px을 가리킨다.
- * **P4b-3까지는 반대였고, 지우지 않고 남긴다:**
- *
- * > *"**참조 이름공간 일곱에 `container`가 없다.** 그래서 `maxWidth: "container.maxWidth"`라고
- * > 쓰면 참조로 인식되지 않고 **리터럴 그대로** CSS에 실린다(무효 선언). …
- * > 여기서는 같은 값을 리터럴로 두 번 적는다(`primitives`에 한 번,
- * > `Section.parts.inner`에 한 번)."*
- *
- * T1이 스타일 전용 이름공간 셋(`container`·`grid`·`section`)을 열었다. 컴파일 결과는
- * `max-width: 1200px` → `max-width: var(--wb-container-maxWidth)`이고 **계산값은 같다.**
+ * `Section.parts.inner.maxWidth: 'container.maxWidth'`가 `primitives`의 1200px을 가리키고,
+ * 폭은 한 곳에만 적힌다. 스타일 전용 이름공간 셋(`container`·`grid`·`section` —
+ * `STYLE_PRIMITIVE_NAMESPACES`)이 그 문법을 열고, 컴파일 결과는
+ * `max-width: var(--wb-container-maxWidth)`다.
  */
 export const COMMERCE_THEME: Theme = {
   meta: {
@@ -93,10 +86,9 @@ export const COMMERCE_THEME: Theme = {
         lg: '0 16px 40px rgba(28,25,23,.12)',
       },
       /**
-       * **`family`가 여기 있고 `assets.fonts`가 그것을 싣는다.** `admin`이 예고한
-       * *"시스템 테마 다섯을 만들 때 여기에 `family`와 `fontFamily`가 함께 온다"*가 이것이다.
+       * **`family`가 여기 있고 `assets.fonts`가 그것을 싣는다.** `admin`에는 둘 다 없다.
        *
-       * **두 층이 갈려 있고 둘 다 있어야 화면에 보인다**(P4b-3 ① — *그쪽이 쟀다*):
+       * **두 층이 갈려 있고 둘 다 있어야 화면에 보인다:**
        * `assets.fonts`는 `@font-face`를 내고, 그것을 **컴포넌트에 거는 것은 `fontFamily`
        * 어휘**다. 아래 `Page.base`가 그 한 자리이고 상속으로 문서 전체에 퍼진다.
        *
@@ -121,7 +113,7 @@ export const COMMERCE_THEME: Theme = {
   },
 
   /**
-   * §6.4: *"실제 사이트처럼 보이는 인상의 절반은 여기서 나온다."* 커머스는 관리자보다
+   * 설계서 「primitives — 사이트 골격」: *"실제 사이트처럼 보이는 인상의 절반은 여기서 나온다."* 커머스는 관리자보다
    * **좁고 높다** — 폭을 가둬 카드 폭을 고르게 하고, 섹션 여백을 넉넉히 줘 상품 묶음이
    * 서로 밀리지 않게 한다.
    *
@@ -136,17 +128,17 @@ export const COMMERCE_THEME: Theme = {
   },
 
   /**
-   * §6.7. **`placeholder.style`은 오늘 컴파일되지 않는다**(P4b-3 D5) — 선언은 검증을
+   * 설계서 「assets」. **`placeholder.style`은 컴파일되지 않는다** — 선언은 검증을
    * 지나지만 CSS로 나가는 경로가 없다. 그래도 `photo`를 적어 둔 것은 **커머스가 그것을
    * 실제로 필요로 하는 테마**이기 때문이다: 상품 목록의 빈 상자가 점선 스켈레톤이면
-   * 설계서가 쇼핑몰로 안 읽힌다. ③이 세는 입력이다.
+   * 설계서가 쇼핑몰로 안 읽힌다.
    *
-   * **`src`는 `local()`뿐이다 — 네트워크를 쓰지 않는다.** ①이 두 꼴(`local()`·data URI)을
-   * 다 재서 둘 다 통과하는 것을 확인했고 `local()`을 골랐다(*그쪽이 쟀다*). 그 한계도
-   * 그쪽이 쟀다: **그 이름의 로컬 폰트가 없으면 face가 등록은 되고 로드만 실패한다.**
-   * 그래서 `typography.family.sans`의 폴백 사슬이 실제로 쓰인다.
+   * **`src`는 `local()`뿐이다 — 네트워크를 쓰지 않는다.** data URI도 네트워크 없이 되지만
+   * `local()`이면 폰트 바이너리를 소스에 심지 않아도 된다. 한계: **그 이름의 로컬 폰트가
+   * 없으면 face가 등록은 되고 로드만 실패한다.** 그래서 `typography.family.sans`의 폴백
+   * 사슬이 실제로 쓰인다.
    *
-   * `weights`는 **값마다 `@font-face` 블록 하나**가 나간다(범위로 접지 않는다 — ① D5).
+   * `weights`는 **값마다 `@font-face` 블록 하나**가 나간다(범위로 접지 않는다).
    */
   assets: {
     fonts: [
@@ -161,14 +153,14 @@ export const COMMERCE_THEME: Theme = {
   },
 
   /**
-   * §6.6. **패턴은 오늘 검증만 되고 아무도 전개하지 않는다**(P7의 몫). 그럼에도 하나를
-   * 선언해 둔 것은 커머스의 대표 화면이 **정확히 한 덩어리**이기 때문이다 —
-   * *"큰 이미지 옆에 이름·가격·담기"*. 이름 범주는 §6.6의 고정 목록 안이다(`content`).
+   * 설계서 「patterns — 테마가 소유한 구성 레시피」. 하나를 선언해 둔 것은 커머스의 대표
+   * 화면이 **정확히 한 덩어리**이기 때문이다 — *"큰 이미지 옆에 이름·가격·담기"*. 이름
+   * 범주는 그 절의 고정 목록 안이다(`content`).
    *
    * **props를 카탈로그 그대로 적었다.** `checkPatterns`가 카탈로그의 zod로 `props`를
    * 보므로, 없는 prop 하나가 `bad-pattern-node`가 되어 **이 테마 전체가 해석되지 않는다**
-   * (`STYLE_PROPERTIES_BEYOND_SPEC`의 재라 #8이 §6.6 예시의 `Grid.props.gap`으로 그 부류를
-   * 이미 겪었다). 그래서 `Grid`에는 `columns`만, `Flex`에는 `direction`만 준다.
+   * (그 절의 예시에 있는 `Grid.props.gap`이 그 부류다 — 카탈로그에 없는 prop이라 그대로
+   * 옮기면 이 오류가 난다). 그래서 `Grid`에는 `columns`만, `Flex`에는 `direction`만 준다.
    */
   patterns: {
     'content.product': {
@@ -204,16 +196,16 @@ export const COMMERCE_THEME: Theme = {
   },
 
   /**
-   * **순서가 곧 캐스케이드다**(§6.11 — 같은 특이도에서 나중이 이긴다). 그리고 조각 규칙이
-   * **자손 결합자**라 그 순서가 중첩된 컴포넌트의 같은 이름 조각에서 승패를 정한다
-   * (P4b-2 이월 4-1 — *그쪽이 쟀다*). 이 테마에서 실제로 겹치는 짝은 아래 주석에 적었다.
+   * **순서가 곧 캐스케이드다**(설계서 「컴파일」 — 같은 특이도에서 나중이 이긴다). 그리고
+   * 조각 규칙이 **자손 결합자**라 그 순서가 중첩된 컴포넌트의 같은 이름 조각에서 승패를
+   * 정한다. 이 테마에서 실제로 겹치는 짝은 아래 주석에 적었다.
    */
   components: {
     // ── 골격 ────────────────────────────────────────────────────────────────
     /**
      * **`admin`이 매핑하지 않는 컴포넌트다.** 여기 두는 이유는 하나 — **선언한 서체를 문서
      * 전체에 거는 자리가 여기뿐**이기 때문이다. 테마가 스타일할 수 있는 것은 컴포넌트
-     * 루트와 조각뿐이라(§6.5) `:root`나 `body`에 손댈 어휘가 없고, `Page`가 문서의 유일한
+     * 루트와 조각뿐이라(「components — 구조 + 스킨」) `:root`나 `body`에 손댈 어휘가 없고, `Page`가 문서의 유일한
      * 최상위 상자다. `font-family`는 상속되므로 한 줄이 전부에 퍼진다.
      */
     Page: {
@@ -228,7 +220,6 @@ export const COMMERCE_THEME: Theme = {
     Section: {
       structure: 'contained',
       base: { bg: 'semantic.canvas', paddingY: 'space.14' },
-      // **P4c-1 T1이 이 참조를 열었다** — 파일 머리말의 이유가 낡았다.
       parts: { inner: { maxWidth: 'container.maxWidth', paddingX: 'space.6' } },
       variants: {
         hero: { bg: 'semantic.primarySoft', paddingY: 'space.20' },
@@ -249,7 +240,7 @@ export const COMMERCE_THEME: Theme = {
      * 상품 이미지는 정사각 격자가 기본형이다. **이것은 노드 손잡이를 덮는 것이 아니다** —
      * `Card`에는 `ratio` prop이 없어 그 규칙의 값이 상수이고, 렌더러가 스스로
      * *"테마는 `aspectRatio` 어휘로 이 값을 그대로 덮는다"*고 적어 둔 자리다.
-     * (같은 어휘를 `Media.parts.frame`에 걸면 그때는 **노드의 `ratio`가 침묵으로 죽는다** —
+     * (같은 어휘를 `Media.parts.frame`에 걸면 그때는 **노드의 `ratio`가 죽는다** —
      * 그래서 아래 `Media`에서는 안 건다.)
      *
      * **중첩 주의:** `Card.parts.media`·`title`·`body`는 자손 결합자라 **카드 안에 넣은
@@ -279,8 +270,8 @@ export const COMMERCE_THEME: Theme = {
       responsive: { sm: { parts: { header: { paddingX: 'space.3' } } } },
     },
     /**
-     * **알약 탭.** `underline`·`pill`·`enclosed`는 **DOM이 글자까지 같다**(P4b-2 ③이 전수로
-     * 쟀다 — *그쪽이 쟀다*). 그러므로 `structure: 'pill'`만으로는 화면이 한 글자도 안 바뀌고,
+     * **알약 탭.** `underline`·`pill`·`enclosed`는 **DOM이 글자까지 같다.**
+     * 그러므로 `structure: 'pill'`만으로는 화면이 한 글자도 안 바뀌고,
      * 갈리는 모습은 **전부 아래 스킨이 만든다** — 둥근 배경과 테두리를 얹은 `tab` 조각이 그것이다.
      *
      * 커머스가 알약을 고르는 이유: 카테고리·필터 칩이 이 사이트 형태의 기본 어휘다.
@@ -310,8 +301,7 @@ export const COMMERCE_THEME: Theme = {
      * **미디어 줄 목록.** 장바구니·주문 내역·검색 결과가 전부 이 모양이다.
      *
      * **`display: flex`를 여기서 안 낸다.** 그것은 스킨이 아니라 *"미디어가 옆에 선다"*는
-     * 구조의 이름이라 **구조 기본 CSS가 낸다**(`structures/data.tsx` — 이 슬라이스에서
-     * 만들었다). 테마가 내는 것은 간격·색·굵기다. `Flex`·`Grid`가 이미 같은 분담이다.
+     * 구조의 이름이라 **구조 기본 CSS가 낸다**(`structures/data.tsx`). 테마가 내는 것은 간격·색·굵기다. `Flex`·`Grid`가 이미 같은 분담이다.
      *
      * `meta`가 가격 자리다 — `typography: 'price'`가 그 자리를 본문과 갈라 놓는다.
      */
@@ -354,7 +344,7 @@ export const COMMERCE_THEME: Theme = {
      *
      * **`paddingX`를 `node`에 걸지 않는다.** 그 조각의 `padding-left`는 `indent`의 단계
      * 손잡이(`--wb-node-tree-level`)가 쓰는 자리다 — 여기서 `accordion`을 고르므로 그
-     * 규칙이 애초에 안 걸리지만, 어휘를 그 조각에 두면 구조를 바꾸는 날 조용히 덮는다.
+     * 규칙이 애초에 안 걸리지만, 어휘를 그 조각에 두면 구조를 바꾸는 날 덮는다.
      */
     Tree: {
       structure: 'accordion',
@@ -382,8 +372,8 @@ export const COMMERCE_THEME: Theme = {
      *
      * **`gridColumns`를 쓰지 않는다 — 판단이고 근거가 있다.** `KeyValue.columns`는 수(1~4)이고
      * 속성 패널에서 늘 닿는 **노드의 손잡이**다(`--wb-node-keyvalue-columns`). 테마가
-     * `gridColumns`를 걸면 같은 셀렉터에서 그 값을 **침묵으로** 덮는다(P4b-2 이월 5번 —
-     * *그쪽이 전수로 쟀다*). 열 수는 페이지마다 다른 것이 옳으므로 노드에 남긴다.
+     * `gridColumns`를 걸면 같은 셀렉터에서 그 값을 덮는다(노드 손잡이 — `NODE_HANDLES`,
+     * `node-handle-overwrite` 경고). 열 수는 페이지마다 다른 것이 옳으므로 노드에 남긴다.
      */
     KeyValue: {
       structure: 'cardGrid',
@@ -436,11 +426,11 @@ export const COMMERCE_THEME: Theme = {
     },
     /**
      * **라벨이 위에 오는 폼.** 주문서·회원가입은 모바일에서 채워지므로 라벨을 왼쪽에 두면
-     * 입력 폭이 남지 않는다. `labelLeft`와 **DOM이 같다**(P4b-2 ③이 쟀다 — *그쪽이 쟀다*) —
+     * 입력 폭이 남지 않는다. `labelLeft`와 **DOM이 같다** —
      * 갈리는 모습은 아래 `Field.base`의 세로 쌓기가 만든다.
      *
      * **`parts.label`이 자손 결합자라 중첩된 `Field`·`Button`·`Tree`의 `label`까지 받는다**
-     * (P4b-2 이월 4-1). 이 테마에서는 `Field`·`Button`이 **뒤에 와서** 자기 라벨을 되찾는다 —
+     * 이 테마에서는 `Field`·`Button`이 **뒤에 와서** 자기 라벨을 되찾는다 —
      * `Tree`는 앞에 있어 되찾지 못한다(폼 안의 트리는 이 테마의 정상 구성이 아니지만,
      * **막은 것은 모델이 아니라 순서**라는 사실은 그대로다).
      */
@@ -461,7 +451,7 @@ export const COMMERCE_THEME: Theme = {
       },
     },
     /**
-     * **채워진 입력.** `outlined`·`filled`·`underlined`는 **DOM이 글자까지 같다**(P4b-2 ③).
+     * **채워진 입력.** `outlined`·`filled`·`underlined`는 **DOM이 글자까지 같다.**
      * 그러므로 갈리는 것은 전부 스킨이다 — 여기서는 **면을 채우고 아래만 굵게** 그어
      * `admin`의 사면 테두리와 반대로 간다.
      */
@@ -510,8 +500,7 @@ export const COMMERCE_THEME: Theme = {
     // ── 액션 ────────────────────────────────────────────────────────────────
     /**
      * **구매 버튼.** `solid`를 고른 것은 커머스의 주요 액션이 *"담기"*·*"구매"*이고 그것이
-     * 화면에서 가장 진해야 하기 때문이다 — 계획서 D3의 참고 표가 `outline`을 적었지만
-     * **참고이지 지시가 아니고**(D3), 아웃라인 구매 버튼은 이 사이트 형태에 없다.
+     * 화면에서 가장 진해야 하기 때문이다 — 아웃라인 구매 버튼은 이 사이트 형태에 없다.
      *
      * `admin`도 `solid`이므로 **구조로는 안 갈린다.** 갈리는 것은 전부 스킨이다 —
      * 알약 모서리·넓은 좌우 여백·주황·그림자.
@@ -577,13 +566,13 @@ export const COMMERCE_THEME: Theme = {
       },
     },
     /**
-     * **`parts.frame`에 `aspectRatio`를 걸지 않는다 — 걸고 싶었고, 그래서 이 자리가 실측이다.**
+     * **`parts.frame`에 `aspectRatio`를 걸지 않는다 — 걸고 싶은 자리다.**
      *
      * 상품 이미지는 정사각 격자가 기본형이라 `aspectRatio: "1 / 1"`이 커머스의 자연스러운
      * 선택이다. **그런데 그 규칙이 읽는 값이 노드의 손잡이다** — `Media.ratio` prop이
      * `--wb-node-media-ratio`로 실리고 구조 기본 CSS가 `aspect-ratio: var(…)`로 읽는다.
      * 테마 어휘가 **같은 셀렉터에서** 같은 CSS 프로퍼티를 내므로 시트 순서로 늘 이기고,
-     * **저자가 패널에서 고른 비율이 이슈 하나 없이 사라진다**(P4b-2 이월 5번의 9/9 부류).
+     * **저자가 패널에서 고른 비율이 사라진다**(노드 손잡이 — `NODE_HANDLES`).
      *
      * 그래서 안 건다. 카드 안의 이미지 자리는 `Card.parts.media`가 정사각으로 잡으므로
      * 격자의 인상은 그쪽에서 얻는다 — 그 조각에는 노드 손잡이가 없다.

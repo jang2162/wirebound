@@ -1,5 +1,5 @@
 /**
- * **`exportBundle` — §11.3의 번들을 값으로 낸다**(D1·D2·D4·D9).
+ * **`exportBundle` — 설계서 「HTML 정적 번들」의 번들을 값으로 낸다.**
  *
  * ```
  * wirebound-export/
@@ -7,28 +7,29 @@
  *   pages/….html          페이지마다 셸을 통째로
  *   assets/shell.css      뷰어 셸의 CSS
  *   assets/theme.css      구조 기본 CSS + 테마 컴파일 결과
+ *   assets/runtime.js     상호작용 런타임 (`runtime/plan.ts`)
  * ```
  *
  * ---
  *
- * ## D1 — 파일 시스템을 모른다
+ * ## 파일 시스템을 모른다
  *
- * P8-1의 `exportPage`와 같은 규칙이다. 소비자가 셋이 될 것이기 때문이다 — P8-3의 api
- * 라우트(zip으로 흘려보낸다) · P9의 CLI(디렉터리에 쓴다) · 케이스(메모리에서 견준다).
- * `fs`를 부르면 자리가 하나가 되고 케이스가 임시 디렉터리를 만들어야 한다.
+ * `exportPage`와 같은 규칙이다. 소비자마다 결과를 쓰는 자리가 다르다 — api(zip으로
+ * 흘려보낸다) · 케이스(메모리에서 견준다). `fs`를 부르면 자리가 하나가 되고 케이스가 임시
+ * 디렉터리를 만들어야 한다.
  *
- * ## D9 — `errors`를 삼키지 않는다
+ * ## `errors`를 삼키지 않는다
  *
  * `exportPage`가 그리지 못한 노드를 `errors`로 낸다. 번들은 그것을 **페이지 이름과 함께**
  * 모아 낸다. 폴백이 든 HTML도 눈으로는 그럴듯한 한 장이고 **번들은 그것을 남에게 전달한다** —
- * 여기서 값을 잃으면 P8-3이 화면에서 그것을 말할 수 없다.
+ * 여기서 값을 잃으면 호출자가 화면에서 그것을 말할 수 없다.
  *
- * ## `assets/shell.css`는 §11.3의 목록에 없다 — 더한 것이고 근거가 있다
+ * ## `assets/shell.css`는 「HTML 정적 번들」의 목록에 없다 — 더한 것이고 근거가 있다
  *
- * §11.3의 예시는 `theme.css`와 `runtime.js`만 든다. 셸 CSS를 테마 CSS에 섞으면 P8-1 이월
- * §5의 순서 계약(*"구조 기본 CSS → 테마"*)에 셸이 끼어들고, 페이지마다 `<style>`로 인라인하면
- * D2의 중복이 CSS만큼 더 커진다. **§11.3의 목록은 예시이지 닫힌 목록이 아니다**(페이지도
- * 하나만 적혀 있다). 설계 문서는 고치지 않았다.
+ * 설계서의 예시는 `theme.css`와 `runtime.js`만 든다. 셸 CSS를 테마 CSS에 섞으면 `pageCss`의
+ * 순서 계약(*"구조 기본 CSS → 테마"*)에 셸이 끼어들고, 페이지마다 `<style>`로 인라인하면
+ * 페이지마다 셸을 통째로 싣는 중복(`bundle/shell.tsx` 머리말)이 CSS만큼 더 커진다.
+ * **설계서의 목록은 예시이지 닫힌 목록이 아니다**(페이지도 둘만 적혀 있다).
  */
 import type { NodeRenderError } from '@wirebound/renderer'
 import type { PageDocument } from '@wirebound/schema'
@@ -43,36 +44,37 @@ import { shellBody, shellHead, shellScripts, type ShellNavItem } from './shell'
 
 /** 번들에 실을 페이지 하나. */
 export interface BundlePage {
-  /** `<title>`·좌측 트리의 이름이자 **파일 이름의 재료**다(D5). */
+  /** `<title>`·좌측 트리의 이름이자 **파일 이름의 재료**다. */
   title: string
   /** 그릴 문서. `exportPage`와 같은 `PageDocument`다. */
   document: PageDocument
   /**
-   * §11.2 봉투의 `page.description`. 우측 *"페이지 설명"* 탭이 그린다.
-   * 없으면 탭이 **없다고 말한다** — 탭 자체는 §9가 든다.
+   * 설계서 「페이지 JSON」 봉투의 `page.description`. 우측 *"페이지 설명"* 탭이 그린다.
+   * 없으면 탭이 **없다고 말한다** — 탭 자체는 설계서 「설계서 화면 구조」가 든다.
    */
   description?: string | null
   /**
-   * 이 페이지의 코멘트(D4). **어디서 오는지는 호출자가 정한다** — P7-3 이월 §1이 출처를
-   * 셋으로 갈라 두었고 성질이 다르다.
+   * 이 페이지의 코멘트. **어디서 오는지는 호출자가 정한다** — 출처가 셋이고 성질이 다르다
+   * (`bundle/comments.ts` 머리말).
    */
   comments?: readonly BundleComment[]
   /**
-   * 이 페이지를 가리키는 **상호작용 타겟**(§8.1의 `navigate`·`openModal`의 `target`).
+   * 이 페이지를 가리키는 **상호작용 타겟**(설계서 「상호작용」 「모델」이 정한
+   * `navigate`·`openModal`의 `target`).
    * 예: `'page:관리자/회원/상세'`.
    *
    * **없으면 이 페이지로 오는 링크가 안 생긴다** — 그것도 정상이다. 타겟은 페이지 경로이고
-   * (P5-2 재라 #1이 형식을 강제하지 않기로 판정했다) 번들이 드는 것은 제목뿐이라, **어느
+   * (검증기가 형식을 강제하지 않는다) 번들이 드는 것은 제목뿐이라, **어느
    * 문자열이 이 페이지를 가리키는지는 번들이 알 수 없다.** 제목으로 짐작하지 않는다 —
    * 짐작이 맞으면 링크가 되고 틀리면 조용히 아무 데도 안 가는데, 그 둘이 화면에서 같다.
    *
-   * 링크가 안 생기면 **런타임이 그렇게 말한다**(D6) — 조용히 아무 일도 안 일어나지 않는다.
+   * 링크가 안 생기면 **런타임이 그렇게 말한다** — 조용히 아무 일도 안 일어나지 않는다.
    */
   target?: string
 }
 
 export interface ExportBundleOptions {
-  /** 페이지 목록. **순서가 곧 좌측 트리의 순서이고 파일 이름의 결정성이다**(D5.3). */
+  /** 페이지 목록. **순서가 곧 좌측 트리의 순서이고 파일 이름의 결정성이다.** */
   pages: readonly BundlePage[]
   /** 해석이 끝난 테마. 없는 것이 정상이다 — `exportPage`와 같은 계약이다. */
   theme?: ResolvedTheme | null
@@ -109,7 +111,7 @@ const THEME_CSS_PATH = 'assets/theme.css'
  *
  * **페이지가 하나도 없으면 던진다.** 빈 번들을 내면 받는 사람이 그것을 푼 뒤에야 비었다는
  * 것을 안다 — *"페이지 여럿을 오가며 본다"*가 이 산출물의 존재 이유이고 0개는 그 대상이
- * 아니다. 빈 프로젝트를 무엇으로 말할지는 **화면의 판정**이므로(P8-3) 순수 패키지는 그
+ * 아니다. 빈 프로젝트를 무엇으로 말할지는 **화면의 판정**이므로 순수 패키지는 그
  * 상태를 값으로 위장하지 않고 호출자에게 되돌린다.
  */
 export function exportBundle(options: ExportBundleOptions): ExportedBundle {
@@ -123,7 +125,7 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
   )
 
   /**
-   * **페이지마다 한 번만 그린다.** `index.html`이 첫 페이지를 담지만(D2) 같은 트리를 다시
+   * **페이지마다 한 번만 그린다.** `index.html`이 첫 페이지를 담지만 같은 트리를 다시
    * 쓴다 — 두 번 그리면 `errors`가 두 벌이 되어 **같은 노드가 두 번 세어진다.**
    */
   const rendered = pages.map((page) => renderPageTree(page.document, theme))
@@ -138,11 +140,11 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
     if (page.target === undefined) continue
     // **먼저 온 것을 이기게 두지 않는다.** 둘 이상이면 `null`이고, 그러면 링크가 안 생기며
     // 런타임이 *"둘 이상"*이라고 말한다 — 조용히 첫 페이지로 가면 읽는 사람이 그것을
-    // 알아챌 방법이 없다(리뷰 발견 D).
+    // 알아챌 방법이 없다.
     targets.set(page.target, targets.has(page.target) ? null : paths[index]!)
   }
 
-  /** **판정과 실행이 여기서 일어난다**(D1). 브라우저로 나가는 것은 그 답이다. */
+  /** **판정과 실행이 여기서 일어난다.** 브라우저로 나가는 것은 그 답이다. */
   const plans = pages.map((page, index) =>
     buildRuntimePlan({
       page: page.document,
@@ -178,7 +180,7 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
  * 계획의 링크를 **이 파일에서 보는 상대 경로**로 바꾼다.
  *
  * 계획은 번들 뿌리 기준의 경로를 든다. `index.html`과 `pages/….html`이 같은 페이지를 다른
- * 자리에서 가리키므로 링크는 파일마다 다르다 — 시트 링크가 그런 것과 같다(D6).
+ * 자리에서 가리키므로 링크는 파일마다 다르다 — 시트 링크가 그런 것과 같다.
  */
 function localized(plan: RuntimePlan, at: string): RuntimePlan {
   return {
@@ -195,7 +197,7 @@ function localized(plan: RuntimePlan, at: string): RuntimePlan {
 
 /**
  * 파일 하나의 HTML. `at`이 이 파일이 사는 자리이고, 링크가 전부 거기서부터 계산된다 —
- * `index.html`과 `pages/….html`이 **같은 셸을 다른 자리에서** 그린다(D6).
+ * `index.html`과 `pages/….html`이 **같은 셸을 다른 자리에서** 그린다.
  */
 function pageHtml(
   options: ExportBundleOptions,
@@ -215,7 +217,7 @@ function pageHtml(
   return renderHtmlDocument({
     lang,
     title: page.title,
-    /** **셸 → 테마 순서다**(D6). 셸이 먼저이므로 같은 특이도에서 테마가 이긴다. */
+    /** **셸 → 테마 순서다.** 셸이 먼저이므로 같은 특이도에서 테마가 이긴다. */
     head: shellHead([bundleHref(at, SHELL_CSS_PATH), bundleHref(at, THEME_CSS_PATH)]),
     body: shellBody({
       nav,

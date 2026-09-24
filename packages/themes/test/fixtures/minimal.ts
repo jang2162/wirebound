@@ -4,10 +4,10 @@ import type { Theme } from '../../src/spec/theme'
 /**
  * 테스트가 쓰는 최소 시스템 테마.
  *
- * **`src/`가 아니라 `test/fixtures/`에 둔다**(D8) — `src/`에 있으면 시스템 테마로 오인되고
- * 시스템 테마 5종을 만드는 P4b가 이것을 지우거나 덮어야 한다.
+ * **`src/`가 아니라 `test/fixtures/`에 둔다** — `src/`에 있으면 시스템 테마로 오인되고
+ * 시스템 테마를 늘릴 때 이것을 지우거나 덮게 된다.
  *
- * "최소"는 §6.1의 여섯 절을 **한 항목씩** 갖는다는 뜻이다. 절을 하나라도 빼면 해석의
+ * "최소"는 설계서 「테마 규격」의 여섯 절을 **한 항목씩** 갖는다는 뜻이다. 절을 하나라도 빼면 해석의
  * 그 갈래를 이 픽스처로 잴 수 없다.
  */
 export const MINIMAL_THEME: Theme = {
@@ -73,7 +73,7 @@ export const MINIMAL_THEME: Theme = {
   },
 }
 
-/** §6.9가 말한 전형적인 파생 — *"`semantic` 색 몇 개와 `typography.family`만 덮어쓴다."* */
+/** 설계서 「상속과 병합」이 말한 전형적인 파생 — *"`semantic` 색 몇 개와 `typography.family`만 덮어쓴다."* */
 export const DERIVED_PATCH: ThemePatch = {
   meta: { id: 'acme-portal', name: 'ACME 포털', version: '2.0.0', extends: 'system:portal' },
   tokens: {

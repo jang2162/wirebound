@@ -1,5 +1,5 @@
 /**
- * 번들 안의 **파일 이름과 링크**(D5·D6).
+ * 번들 안의 **파일 이름과 링크.**
  *
  * **이 파일은 DOM 없이 돈다** — `unit` 프로젝트에 `environment`가 없다. 순수 함수이므로
  * 그것이 맞다.
@@ -19,10 +19,10 @@
  *
  * 즉 **APFS는 UTF-16 코드유닛으로 센다.** 반면 Linux의 ext4는 `NAME_MAX`가 **바이트**
  * 255다(이 기계에서 잰 값이 아니다 — 옮겨 온 사실이다). 번들을 만드는 쪽과 쓰는 쪽이 다른
- * 기계일 수 있으므로(P8-3의 api는 서버에서 돈다) **더 엄한 쪽인 UTF-8 바이트로 자른다.**
+ * 기계일 수 있으므로(api는 서버에서 돈다) **더 엄한 쪽인 UTF-8 바이트로 자른다.**
  * 그래야 *"같은 입력이 같은 번들을 낸다"*가 기계를 건너서도 참이다.
  *
- * **㉯ `file://`에서 한글 파일명 링크가 열린다**(재라 #3). Chrome 헤드리스로 실제로 열어
+ * **㉯ `file://`에서 한글 파일명 링크가 열린다.** Chrome 헤드리스로 실제로 열어
  * 봤다. 그리고 **원시 한글 `href`와 퍼센트 인코딩한 `href`가 같은 URL로 해석된다**
  * (`a.href`를 읽어 견주니 같았다). 그래도 **퍼센트 인코딩을 하는 쪽을 골랐다** — 이름에
  * `#`·`?`가 남을 수 있고 그 둘은 원시로 적으면 **경로가 아니라 조각·질의가 된다.**
@@ -36,8 +36,8 @@ function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).length
 }
 
-describe('pageFileName — 한글을 유지한다 (D5)', () => {
-  it('§11.3의 예시 이름을 낸다', () => {
+describe('pageFileName — 한글을 유지한다', () => {
+  it('설계서 「HTML 정적 번들」의 예시 이름을 낸다', () => {
     expect(pageFileName('관리자 회원 목록')).toBe('관리자-회원-목록.html')
   })
 
@@ -46,7 +46,7 @@ describe('pageFileName — 한글을 유지한다 (D5)', () => {
   })
 })
 
-describe('pageFileName — 위험한 문자 (D5.1)', () => {
+describe('pageFileName — 위험한 문자', () => {
   /**
    * 분모를 손으로 든다. Windows가 막는 아홉과 제어문자·NUL이다. **구현에서 끌어오면
    * 목록을 줄여도 케이스가 함께 줄어든다.**
@@ -69,7 +69,7 @@ describe('pageFileName — 위험한 문자 (D5.1)', () => {
   })
 })
 
-describe('pageFileName — 빈 이름·점·예약어 (D5.4)', () => {
+describe('pageFileName — 빈 이름·점·예약어', () => {
   it('남는 글자가 없으면 대체 이름을 쓴다', () => {
     expect(pageFileName('')).toBe('페이지.html')
     expect(pageFileName('///')).toBe('페이지.html')
@@ -105,7 +105,7 @@ describe('pageFileName — 빈 이름·점·예약어 (D5.4)', () => {
   })
 })
 
-describe('pageFileName — 길이 상한 (D5.2)', () => {
+describe('pageFileName — 길이 상한', () => {
   const LIMIT = 255
 
   it('한글 긴 제목을 UTF-8 바이트 상한 안으로 자른다', () => {
@@ -137,7 +137,7 @@ describe('pageFileName — 길이 상한 (D5.2)', () => {
   })
 })
 
-describe('pageFileName — 유니코드 정규화 (D5.3)', () => {
+describe('pageFileName — 유니코드 정규화', () => {
   /**
    * **NFC로 맞춘다.** 같은 글자를 두 꼴로 적은 제목이 macOS에서는 같은 파일을 가리키고
    * (APFS가 정규화를 안 가린다) Linux에서는 다른 파일이 된다. 접어 두면 두 기계에서
@@ -150,7 +150,7 @@ describe('pageFileName — 유니코드 정규화 (D5.3)', () => {
   })
 })
 
-describe('pageFileNames — 충돌을 결정적으로 푼다 (D5.3)', () => {
+describe('pageFileNames — 충돌을 결정적으로 푼다', () => {
   it('같은 제목 셋이 서로 다른 이름을 받는다', () => {
     expect(pageFileNames(['회원 목록', '회원 목록', '회원 목록'])).toEqual([
       '회원-목록.html',
@@ -196,7 +196,7 @@ describe('pageFileNames — 충돌을 결정적으로 푼다 (D5.3)', () => {
   })
 })
 
-describe('bundleHref — 번들 안의 상대 링크 (D6)', () => {
+describe('bundleHref — 번들 안의 상대 링크', () => {
   it('index.html에서 페이지와 자산으로', () => {
     expect(bundleHref('index.html', 'pages/회원-목록.html')).toBe(
       'pages/%ED%9A%8C%EC%9B%90-%EB%AA%A9%EB%A1%9D.html',
@@ -217,7 +217,7 @@ describe('bundleHref — 번들 안의 상대 링크 (D6)', () => {
   })
 
   /**
-   * **퍼센트 인코딩이 요점이다**(재라 #3). `#`·`?`를 원시로 적으면 브라우저가 조각·질의로
+   * **퍼센트 인코딩이 요점이다.** `#`·`?`를 원시로 적으면 브라우저가 조각·질의로
    * 읽어 **파일에 닿지 않는다.** 아래 값은 Chrome이 실제로 그렇게 해석한 것과 같은 꼴이다.
    */
   it('경로에서 뜻을 갖는 글자를 인코딩한다', () => {
