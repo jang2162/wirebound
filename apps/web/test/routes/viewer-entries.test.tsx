@@ -1,5 +1,5 @@
 /**
- * **viewer 의 에디터 — 자리마다 입구가 숨었나 · 꺼졌나**(이월 M′ · 셸 `canEdit`의 표).
+ * **viewer 의 에디터 — 자리마다 입구가 숨었나 · 꺼졌나**(셸 `canEdit`의 표).
  *
  * 전량은 `./viewer-readonly.test.tsx`가 잰다 — 닿는 컨트롤을 전부 누르고 키를 보내 **쓰기 요청 0**을 센다. 이 파일은
  * 그 자가 못 말하는 것을 잰다: **어느 자리가 어느 관례로 닫혔나**(숨김 / 꺼짐 + 이유)와, 그 자가 요청으로는 못 보는 것
@@ -8,7 +8,7 @@
  * **키보드 축은 이 파일에 없다** — 두 트리의 단축키는 그 자의 키 훑기가 소유한다(단축키를 지운 변조가 거기서만 죽는다).
  * 대조(editor 에게는 입구가 있다)는 이 파일이 따로 두지 않는다 — 하네스의 기본 역할이 owner 라 기존 케이스 전부가 그쪽이다.
  *
- * **두 판으로 돈다**(이월 5차) — viewer 로 **새로 연** 화면과, editor 로 열어 둔 화면을 **실행 중에 내린** 화면(서버의
+ * **두 판으로 돈다** — viewer 로 **새로 연** 화면과, editor 로 열어 둔 화면을 **실행 중에 내린** 화면(서버의
  * `membership-changed` → 셸이 다시 읽는다). 뒤의 판은 받는 쪽이 `canEdit`을 **처음 값으로 굳히는** 부류를 잡는다 — 새로 연 판은
  * 그 부류를 못 본다(처음 값이 곧 viewer 다). 바뀌는 순간 그 자체(잠금 · 통지 · 다시 읽기의 실패)는 `role-live.test.tsx`가 잰다.
  */
@@ -99,7 +99,7 @@ async function openAsViewer(how: How = '새로 연 viewer', options: EditorOptio
   current = VIEWER
   link.deliver({ type: 'membership-changed', projectId: PROJECT_ID })
   // **«내려갔다»의 표지는 셸의 통지다 — 자리가 아니다.** 한 자리(메뉴 툴바)를 표지로 삼으면 그 자리의 변조가 이 판 전부를 죽여
-  // 어느 케이스가 무엇을 소유하는지가 흐려진다(재서 알았다 — «메뉴 트리가 처음 값» 변조가 일곱을 다 죽였다).
+  // 어느 케이스가 무엇을 소유하는지가 흐려진다(메뉴 툴바를 표지로 삼으면 «메뉴 트리가 처음 값» 변조가 이 판의 케이스를 다 죽인다).
   await waitFor(() =>
     expect(screen.queryAllByRole('status').some((el) => (el.textContent ?? '').startsWith('편집 권한이 없어져'))).toBe(true),
   )
@@ -115,7 +115,7 @@ function tab(name: string): void {
   fireEvent.click(screen.getByRole('tab', { name }))
 }
 
-describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다(이월 M′) · %s', (how) => {
+describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다 · %s', (how) => {
   /**
    * 혼자 죽는 변조: 셸이 메뉴 트리에 `editable={mode === 'edit'}`를 넘긴다(역할을 안 얹는다). 마지막 줄(메뉴를 눌러 고른다 —
    * 읽기다)도 혼자 죽는 변조가 있다: 메뉴 트리가 `editable`이 아니면 `select`를 무동작으로 둔다(viewer 에게만 고르기가 꺼진다).
@@ -130,7 +130,7 @@ describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다(�
     // 읽기는 남는다 — 메뉴를 가리키고 페이지로 옮겨 간다.
     expect(within(tree).getByRole('button', { name: '회원관리' })).toBeTruthy()
     expect(within(tree).getByRole('link', { name: '회원 목록' })).toBeTruthy()
-    // 메뉴를 **눌러 고를 수 있다** — 고르기는 읽기다(선택 표시). 앞 판 `page-meta-conflict`의 M 메뉴 트리 케이스가 재던 ⓒ.
+    // 메뉴를 **눌러 고를 수 있다** — 고르기는 읽기다(선택 표시).
     fireEvent.click(within(tree).getByRole('button', { name: '회원관리' }))
     expect(within(tree).getByRole('button', { name: '회원관리' }).getAttribute('aria-pressed')).toBe('true')
   })
@@ -174,8 +174,8 @@ describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다(�
   })
 
   /**
-   * 혼자 죽는 변조 셋 — 폼의 `canEdit` 가드 · «수정»의 가드 · «삭제»의 가드를 하나씩 지운다(셋 다 이 케이스만 죽는다 —
-   * 보고서 (f)). 두 모드 다 같다(뷰 모드에서도 코멘트 탭이 있다 — §9).
+   * 혼자 죽는 변조 셋 — 폼의 `canEdit` 가드 · «수정»의 가드 · «삭제»의 가드를 하나씩 지운다(셋 다 이 케이스만 죽는다).
+   * 두 모드 다 같다(뷰 모드에서도 코멘트 탭이 있다 — 설계서 「설계서 화면 구조」).
    */
   it('코멘트 — 목록은 읽히고 폼 · 재번호 · 줄마다의 «수정» · «삭제»가 없다(숨김) — 내 글이어도', async () => {
     await openAsViewer(how)
@@ -220,15 +220,16 @@ describe.each(HOWS)('viewer 의 에디터 — 입구가 자리마다 닫힌다(�
   })
 })
 
-describe('viewer 의 에디터 — 새로고침에 되살아나는 칸(이월 M′ 리뷰 F1)', () => {
+describe('viewer 의 에디터 — 새로고침에 되살아나는 칸', () => {
   /**
-   * **강등 → 새로고침 — 되살린 수정 상자**(리뷰 F1). editor 때 제 글의 «수정»을 눌러 고치던 글이 저장소에 남은 채(`comments/editing-id`
+   * **강등 → 새로고침 — 되살린 수정 상자.** editor 때 제 글의 «수정»을 눌러 고치던 글이 저장소에 남은 채(`comments/editing-id`
    * · `comments/edit-draft`) viewer 로 다시 연다. viewer 에게는 **서버의 원문**이 보이고 상자가 없다. 그리고 **칸은 안 지운다** —
    * 다시 editor 로 열면 고치던 글이 돌아온다.
    *
    * 혼자 죽는 변조: 목록 줄의 갈래가 역할을 안 본다(`editing === comment.id` → `editingId === comment.id`, `saveEdit`의 가드는
-   * 남김 — 상자는 서되 요청은 안 나가 `viewer-readonly`의 셋째 케이스는 산다). 셋째 단언(돌아온다)은 viewer 가 칸을 비우는
-   * 변조에서 이 케이스만 죽는다. 둘을 함께 되돌리면(`editing = editingId`) `viewer-readonly`의 셋째 케이스와 함께 죽는다 —
+   * 남김 — 상자는 서되 요청은 안 나가 `viewer-readonly`의 «저장소에 editor 때의 초안 칸 다섯을 둔 채 …»는 산다). 셋째
+   * 단언(돌아온다)은 viewer 가 칸을 비우는 변조에서 이 케이스만 죽는다. 둘을 함께 되돌리면(`editing = editingId`) 그
+   * 케이스와 함께 죽는다 —
    * **요청** 축은 그쪽이 소유한다.
    */
   it('코멘트 — 강등 뒤 새로고침에 되살린 수정 상자가 viewer 에게 안 서고 본문이 보인다. 다시 editor 면 고치던 글이 돌아온다', async () => {

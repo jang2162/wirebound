@@ -1,8 +1,8 @@
 /**
- * **역할이 켜 둔 화면에 닿는다**(이월 5차) — 서버가 그 사람의 연결에 `membership-changed`를 보내면 셸이 프로젝트를 다시 읽고
- * `canEdit`이 새 값으로 선다. 그리고 **F4** — 선택이 잠금을 걸지 않는 사람(viewer)은 남이 잡은 노드와 그 조상도 고른다.
+ * **역할이 켜 둔 화면에 닿는다** — 서버가 그 사람의 연결에 `membership-changed`를 보내면 셸이 프로젝트를 다시 읽고
+ * `canEdit`이 새 값으로 선다. 그리고 선택이 잠금을 걸지 않는 사람(viewer)은 남이 잡은 노드와 그 조상도 고른다.
  *
- * 값은 [jsdom]이다. 같은 절차의 Chrome 값은 보고 (e) — 여기 적지 않는다(두 벌).
+ * 값은 [jsdom]이다 — 실브라우저 값이 아니다.
  *
  * 자리 케이스(«어느 입구가 숨었나 · 꺼졌나»)는 `viewer-entries.test.tsx`가 **실행 중에 내린 판**으로도 잰다. 이 파일은 그
  * 판이 못 말하는 것 — **바뀌는 순간**(잠금 · 통지 · 다시 읽기가 실패하면 · 끊겼다 붙으면 · 답이 엇갈려 오면)을 잰다.
@@ -61,7 +61,7 @@ async function open(server: Server, docs: Record<string, PageDocument> = {}): Pr
   return rt
 }
 
-/** 셸을 띄우되 **소켓은 아직 안 열렸다**(룸에 들기 전 — 리뷰 R1 의 여는 창). */
+/** 셸을 띄우되 **소켓은 아직 안 열렸다**(룸에 들기 전 — 첫 조회의 답과 룸 참가 사이의 창). */
 async function mount(server: Server, docs: Record<string, PageDocument> = {}): Promise<FakeRealtime> {
   const rt = fakeRealtime(PROJECT_ID, ME)
   await openPage(DOC, {
@@ -98,11 +98,11 @@ const notice = (): string[] => screen.queryAllByRole('status').map((el) => el.te
 const treeRow = (label: string): HTMLButtonElement =>
   within(screen.getByRole('region', { name: '구조 트리' })).getByRole('button', { name: label }) as HTMLButtonElement
 
-describe('역할이 실행 중에 바뀐다 — 새로고침 없이(이월 5차)', () => {
+describe('역할이 실행 중에 바뀐다 — 새로고침 없이', () => {
   /**
    * 혼자 죽는 변조 둘: 통지의 두 문장이 뒤바뀐다 · `useNodeLock`이 `canHold`가 거짓이면 잡은 자리를 **안 놓는다**
-   * (`viewer-entries` «잠금»은 **안 보냄**을 재고 이쪽은 **놓음**을 잰다 — 갈린다). 승격이 **곧장 다시 잡지 않는 것**은 아래 R3
-   * 케이스의 축이다(여기서도 함께 죽는다).
+   * (`viewer-entries` «잠금»은 **안 보냄**을 재고 이쪽은 **놓음**을 잰다 — 갈린다). 승격이 **곧장 다시 잡지 않는 것**은 아래
+   * «잡는 시각을 사용자가 정한다» 묶음의 축이다(여기서도 함께 죽는다).
    */
   it('editor → viewer → editor — 잡은 자리를 놓고, 올라와도 곧장 잡지 않고, 바뀐 순간을 말한다(입구는 viewer-entries 의 내린 판)', async () => {
     const server: Server = { role: 'editor', fail: null, reads: 0 }
@@ -122,7 +122,7 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이(이월 5차)
     server.role = 'editor'
     rt.deliver(MEMBERSHIP)
     await waitFor(() => expect(said('편집 권한이 생겨')).toBe(true))
-    // 선택 · 속성은 그대로다. 잡는 것은 사용자의 다음 행동이다 — 그 축은 아래 R3 케이스가 소유한다.
+    // 선택 · 속성은 그대로다. 잡는 것은 사용자의 다음 행동이다 — 그 축은 아래 «잡는 시각을 사용자가 정한다» 묶음이 소유한다.
     expect(titleBox().value).toBe('회원 정보')
     // 신호마다 한 번 읽는다.
     expect(server.reads - readsBefore).toBe(2)
@@ -213,10 +213,10 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이(이월 5차)
 })
 
 /**
- * **리뷰 R1 · R2 — 신호가 닿지 않는 창.** 서버는 룸에 든 연결에만 `membership-changed`를 보낸다. 그래서 첫 조회의 답과 룸 참가 사이의
- * 변경은 누구도 안 알리고(R1), 신호의 조회가 뒤의 조회에 밀려 그 조회가 실패하면 신호가 왔다는 사실이 사라졌다(R2).
+ * **신호가 닿지 않는 창.** 서버는 룸에 든 연결에만 `membership-changed`를 보낸다. 그래서 첫 조회의 답과 룸 참가 사이의
+ * 변경은 누구도 안 알리고, 신호의 조회가 뒤의 조회에 밀려 그 조회가 실패하면 신호가 왔다는 사실을 따로 들지 않는 한 사라진다.
  */
-describe('신호가 닿지 않는 창(리뷰 R1 · R2)', () => {
+describe('신호가 닿지 않는 창', () => {
   /** 혼자 죽는 변조: 셸이 `joined`에 다시 읽지 않는다(`use-realtime.ts`의 `joined` 갈래). */
   it('첫 조회와 룸 참가 사이에 강등되면 — 룸에 든 순간 다시 읽어 닿는다', async () => {
     const server: Server = { role: 'owner', fail: null, reads: 0 }
@@ -242,14 +242,14 @@ describe('신호가 닿지 않는 창(리뷰 R1 · R2)', () => {
     expect(rt.reconnectPending()).toBe(true)
 
     expect(await screen.findByRole('heading', { name: '설계서를 열지 못했습니다' })).toBeTruthy()
-    // 셸이 내려가며 연결을 닫는다 — 맡겨 둔 재연결이 취소된다(`close()` — 앞 판은 13초에 5번 되풀이했다).
+    // 셸이 내려가며 연결을 닫는다 — 맡겨 둔 재연결이 취소된다(`close()` — 닫지 않으면 재연결이 되풀이된다).
     expect(rt.reconnectPending()).toBe(false)
     expect(server.reads).toBe(2)
   })
 
   /**
    * 신호의 조회가 붙잡힌 사이 끊겼다 붙고, 룸에 든 뒤의 조회가 실패한다 — 그 뒤 신호의 답(viewer)이 늦게 오지만 차례가 지나 버려진다.
-   * 혼자 죽는 변조: 실패의 판정이 **그 차례의 원인**만 본다(앞 판 — `signalUnanswered`를 안 본다).
+   * 혼자 죽는 변조: 실패의 판정이 **그 차례의 원인**만 본다(`signalUnanswered`를 안 본다).
    */
   it('신호의 조회가 밀리고 뒤의 조회가 실패하면 — 역할을 모른다(앞 역할로 조용히 서지 않는다)', async () => {
     const server: Server = { role: 'owner', fail: null, reads: 0 }
@@ -280,10 +280,10 @@ describe('신호가 닿지 않는 창(리뷰 R1 · R2)', () => {
 })
 
 /**
- * **리뷰 R3 · 2회 LK — 잡는 시각을 사용자가 정한다.** 승격 · 서버가 거절한 잠금은 곧장 잡지 않고 «잡지 않은 선택»으로 남는다
+ * **잡는 시각을 사용자가 정한다.** 승격 · 서버가 거절한 잠금은 곧장 잡지 않고 «잡지 않은 선택»으로 남는다
  * (`lock-channel.ts`). 채널 단독의 축(거절의 세 경로 · 옮겨 간 뒤의 거절)은 `realtime/lock-channel.test.ts`가 잰다 — 여기는 셸째로 잇는다.
  */
-describe('잡는 시각을 사용자가 정한다(리뷰 R3 · 2회 LK)', () => {
+describe('잡는 시각을 사용자가 정한다', () => {
   const carolHolds = (nodeId: string): Record<string, unknown> => ({
     type: 'locks',
     projectId: PROJECT_ID,
@@ -298,7 +298,7 @@ describe('잡는 시각을 사용자가 정한다(리뷰 R3 · 2회 LK)', () => 
   }
 
   /**
-   * 혼자 죽는 변조: `useNodeLock`이 승격 순간 막히지 않은 자리를 곧장 잡는다(앞 판). 잠금 통로의 `reannounce`가 잡지 않은 선택을
+   * 혼자 죽는 변조: `useNodeLock`이 승격 순간 막히지 않은 자리를 곧장 잡는다. 잠금 통로의 `reannounce`가 잡지 않은 선택을
    * 잡는 변조에는 `lock-channel`의 «거절된 자리» · 아래 거절 케이스와 함께 죽는다(다시 붙는 축의 주인은 아래 거절 케이스).
    */
   it('viewer → editor — 고른 카드는 잡지 않은 채 남고(다시 붙어도), 첫 편집이 `lock` 다음 `patch`로 잡는다', async () => {
@@ -320,10 +320,10 @@ describe('잡는 시각을 사용자가 정한다(리뷰 R3 · 2회 LK)', () => 
   })
 
   /**
-   * **다시 붙어 보낸 `lock`을 서버가 거절한다**(이월 5차 2회 LK — C 리뷰 2 N1 의 셸 판). 끊긴 동안 밥이 카드를 잡았다 — 캐럴의
+   * **다시 붙어 보낸 `lock`을 서버가 거절한다**(`lock-channel`의 거절을 셸째로 잇는 판). 끊긴 동안 밥이 카드를 잡았다 — 캐럴의
    * 재알림은 그대로 나가고(`reannounce`) 서버가 거절하면 «잡지 않은 선택»이 된다: 또 다시 붙어도 안 보내고, 루트로 옮겨도 놓을
-   * 것이 없고(서버가 이미 놓았다), 밥이 놓은 뒤 첫 편집이 잡는다. 앞 판의 R4(목록에서 빠지면 잃음 — `observe`)는 이 판으로
-   * 바뀌었다 — 서버가 판정하므로 목록을 보지 않는다. 혼자 죽는 변조: `use-realtime`이 `lock-denied`를 잠금 통로에 안 넘긴다.
+   * 것이 없고(서버가 이미 놓았다), 밥이 놓은 뒤 첫 편집이 잡는다. 잡지 않은 선택은 잠금 목록을 보지
+   * 않는다 — 서버가 판정하므로 목록에서 빠지는 것으로 선택을 잃지 않는다. 혼자 죽는 변조: `use-realtime`이 `lock-denied`를 잠금 통로에 안 넘긴다.
    */
   it('다시 붙어 보낸 `lock`을 서버가 거절하면 잡지 않은 선택이다 — 또 붙어도 안 보내고, 밥이 놓은 뒤 첫 편집이 잡는다', async () => {
     const server: Server = { role: 'editor', fail: null, reads: 0 }
@@ -354,7 +354,7 @@ describe('잡는 시각을 사용자가 정한다(리뷰 R3 · 2회 LK)', () => 
   })
 })
 
-describe('F4 — 선택이 잠금을 걸지 않는 사람은 남이 잡은 자리도 고른다', () => {
+describe('선택이 잠금을 걸지 않는 사람은 남이 잡은 자리도 고른다', () => {
   /** 혼자 죽는 변조 둘: `selectNode`가 `selectionClaims`를 안 본다 · 구조 트리의 `disabled`가 `lockOf`를 본다. */
   it('viewer — 밥이 쥔 카드를 캔버스 · 구조 트리에서 고르고 속성 값을 읽는다. 배지는 선다 · 프레임 0', async () => {
     const server: Server = { role: 'viewer', fail: null, reads: 0 }
@@ -372,7 +372,7 @@ describe('F4 — 선택이 잠금을 걸지 않는 사람은 남이 잡은 자�
     expect(titleBox().value).toBe('회원 정보')
     expect(rt.frames()).toEqual([])
 
-    // 대조: editor 에게는 막힌다(앞 판 그대로).
+    // 대조: editor 에게는 막힌다.
     cleanup()
     const editor: Server = { role: 'editor', fail: null, reads: 0 }
     const rt2 = await open(editor)
@@ -383,7 +383,7 @@ describe('F4 — 선택이 잠금을 걸지 않는 사람은 남이 잡은 자�
   })
 
   /** 혼자 죽는 변조: 여는 경로의 루트 자동 선택(`#selectionFor`)이 `selectionClaims`를 안 본다. */
-  it('viewer — 밥이 쥔 페이지를 열어도 루트를 고른 채 시작한다(editor 는 앞 판대로 비어 시작한다)', async () => {
+  it('viewer — 밥이 쥔 페이지를 열어도 루트를 고른 채 시작한다(editor 는 비어 시작한다)', async () => {
     for (const [role, rootPicked] of [
       ['viewer', 'true'],
       ['editor', null],

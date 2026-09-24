@@ -1,6 +1,7 @@
 /**
  * 우측의 속성 패널. 선택 노드의 속성을 **카탈로그의 `editor` 명세에서 자동 생성해**
- * 보여 준다(설계 §5.1·§9). 이 단계는 **읽기 전용**이다 — 값을 바꾸는 것은 P2b-2다.
+ * 보여 준다(설계서 「컴포넌트 정의 구조」·「설계서 화면 구조」). 값을 바꾸는 위젯도 이 패널이
+ * 그린다 — 읽기(첫 절)와 편집(뒤 절들)을 함께 잰다.
  *
  * 노드를 고르는 일은 구조 트리를 눌러서 한다. 스토어를 직접 건드리지 않는 것은 의도다 —
  * 사용자가 실제로 지나는 길(트리 → 스토어 → 패널)이 이어져 있는지 함께 보게 된다.
@@ -83,7 +84,7 @@ registerComponent(
     label: NO_OPTIONS_TYPE,
     editor: [{ prop: 'items', control: 'select', label: '선택지 없는 필드' }],
     // **`states`를 비운다.** `ListDef`의 `editor`를 통째로 갈았으므로 그대로 두면
-    // P4b-1의 도달성 검사가 *"states가 editor에 없다"*로 던진다 — 이 프로브가 재려는 것은
+    // `defineComponent`의 도달성 검사가 *"states가 editor에 없다"*로 던진다 — 이 프로브가 재려는 것은
     // `options` 없는 `select`이지 상태 도달성이 아니다.
     states: [],
   }),
@@ -137,22 +138,22 @@ const THROWING_DOC = pageDoc({
  *
  * - `n-bare`는 `props`가 아예 없다. **스키마가 허용하는 정상 문서다**
  *   (`packages/schema/src/node.ts`의 `props?: Record<string, unknown>` — optional).
- * - `n-null`은 `props`가 `null`이다. 타입은 막지만 런타임에는 들어온다. **오늘 실재하는
- *   경로는 "서버가 계약을 어긴 문서를 200으로 낸다"이다**(실측: `SHAPES.pageDetail`은
+ * - `n-null`은 `props`가 `null`이다. 타입은 막지만 런타임에는 들어온다. **실재하는
+ *   경로 하나는 "서버가 계약을 어긴 문서를 200으로 낸다"이다**(실측: `SHAPES.pageDetail`은
  *   `schema.root`가 객체인지까지만 보고 자식으로 내려가지 않으므로, `root.children`에
  *   `props: null`인 노드를 담은 응답이 `getPage`를 그대로 지난다 — `api/http-client.ts`).
- *   P2b-2의 낙관적 패치가 두 번째 경로를 더하겠지만 그것은 아직 없는 코드다.
+ *   편집의 낙관적 적용은 검증 전 문서를 스토어에 싣는다 — 두 번째 경로가 될 수 있다.
  *
  * 둘 다 `editor`가 비지 않은 타입이어야 뜻이 있다. `Page`·`Slot`처럼 `editor`가 빈
  * 컴포넌트를 고르면 `readProp`이 한 번도 불리지 않는다.
  *
- * **이 파일에 케이스가 없었을 뿐, 하중이 0이었던 것은 아니다.** 실측: `?.`를 걷어내면
+ * **이 둘이 없어도 하중이 0은 아니다.** `?.`를 걷어내면
  * (`node.props![prop]`) 이 둘 없이도 넷이 죽는다 — `canvas.test.tsx`의 `편집 모드에서
  * 선택 노드에 아웃라인이 붙는다`(`n-search`가 `props` 없는 `SearchForm`이고, 그 클릭이
  * 패널에 `collapsed`를 읽게 한다)와 `structure-tree.test.tsx`의 셋(`n-list`가 `props` 없는
  * `List`다). **다만 그 넷은 다른 성질을 재는 케이스라 죽어도 무엇이 깨졌는지가 이름에
  * 나오지 않는다.** 여기 둘은 그것을 이름으로 고정한다. `props`가 **객체가 아닌** 경우
- * (`n-null`)는 지금 트리에서 이 파일이 유일한 하중이다.
+ * (`n-null`)는 이 파일이 유일한 하중이다.
  */
 const NO_PROPS_DOC = pageDoc({
   id: 'n-root',
@@ -167,7 +168,7 @@ const NO_PROPS_DOC = pageDoc({
  * `type`이 문자열이 **아닌** 노드. 렌더러는 폴백으로 흡수하지만(`shapeError`), 그것을 그대로
  * `{node.type}`으로 그리는 화면은 React가 렌더 도중 던진다. 이 패널은 캔버스의 오류 경계
  * **밖**이라 그 예외는 셸 전체를 지운다 — `값을 문자열로 만들 수 없어도…`와 같은 부류이고,
- * 이쪽이 더 흔한 경로다(P2b-2의 낙관적 패치가 만드는 검증 전 문서).
+ * 이쪽이 더 흔한 경로다(편집의 낙관적 적용이 만드는 검증 전 문서).
  */
 const BROKEN_TYPE_DOC = pageDoc({
   id: 'n-root',
@@ -175,7 +176,7 @@ const BROKEN_TYPE_DOC = pageDoc({
   children: [{ id: 'n-bad', type: { broken: true }, children: [] } as never],
 })
 
-/** 이 웨이브에서 위젯이 생긴 control. Task 8·9가 여기로 옮겨 온다. */
+/** 위젯이 있는 control. */
 const WIDGET_CONTROLS: EditorControl[] = [
   'text',
   'textarea',
@@ -186,8 +187,8 @@ const WIDGET_CONTROLS: EditorControl[] = [
   'pairList',
 ]
 /**
- * 아직 위젯이 없어 `formatValue`가 글자로만 그리는 control. **지금은 비어 있다** —
- * 웨이브 3이 일곱을 전부 덮었다. 카탈로그에 여덟 번째가 생기면 아래 대조가 그것을 잡는다.
+ * 위젯이 없어 `formatValue`가 글자로만 그리는 control. **비어 있다** —
+ * 위젯이 일곱을 전부 덮는다. 카탈로그에 여덟 번째가 생기면 아래 대조가 그것을 잡는다.
  */
 const NOT_YET: EditorControl[] = []
 
@@ -296,7 +297,7 @@ describe('속성 패널', () => {
     // `FieldDef`를 import해 그대로 훑기만 해도 통과하는 단언을 만들지 않기 위해서다 —
     // 순서가 잘못 바뀌면 이 줄이 죽어야 한다.
     expect(labels()).toEqual(['라벨', '입력 종류', '안내 문구', '필수', '비활성', '오류 상태'])
-    // 어느 컴포넌트의 속성인지도 보여 준다(설계 §9의 패널 머리).
+    // 어느 컴포넌트의 속성인지도 보여 준다(설계서 「설계서 화면 구조」의 패널 머리).
     expect(within(panel()).getByRole('heading').textContent).toBe('Field')
   })
 
@@ -311,8 +312,8 @@ describe('속성 패널', () => {
       { label: '안내 문구', value: '검색어' },
       // 켜짐/꺼짐으로 보여 준다. `true`를 그대로 찍으면 사용자가 읽을 문장이 아니다.
       { label: '필수', value: '켜짐' },
-      // **값이 없는 스위치는 "꺼짐"으로 보인다.** 앞 판에서 이 둘이 빈 문자열이었던 것은
-      // `formatValue(undefined)`가 그렸기 때문이고, 이제는 체크박스가 그린다. 체크박스에는
+      // **값이 없는 스위치는 "꺼짐"으로 보인다** — 체크박스가 그리기 때문이다
+      // (`formatValue(undefined)`가 그리면 빈 문자열이 된다). 체크박스에는
       // "값 없음"을 표현할 자리가 없어 **화면에서는 `false`와 구분되지 않는다** — 문서
       // 안에서는 그대로 갈린다(값이 없던 prop을 켜면 `replace`가 아니라 `add`가 나가는
       // 것을 `값이 없던 prop을 켜면 true가 들어간다`가 지킨다).
@@ -329,7 +330,7 @@ describe('속성 패널', () => {
     // `title`만 있고 `subtitle`은 없는 노드다. 없는 값을 그대로 찍으면 "undefined"가
     // 사용자에게 보인다.
     //
-    // **맨 앞의 `변형`은 P4b-1이 더했다**(재라 #4) — `Card`는 `variants`가 있고
+    // **맨 앞의 `변형` 줄** — `Card`는 `variants`가 있고
     // `variantFrom`이 없어 컨트롤이 나온다. 노드에 `variant`가 없으므로 빈 칸이다.
     expect(propRows()).toEqual([
       { label: '변형', value: '' },
@@ -359,15 +360,14 @@ describe('속성 패널', () => {
     // 같은 `editor` 명세인데 이쪽은 현재 구조가 `table`이라 보인다. 위 케이스와 짝이다 —
     // 둘이 함께 통과해야 필터가 구조를 실제로 보고 있다고 할 수 있다.
     expect(labels()).toContain('컬럼')
-    // 값은 이제 목록 위젯이 그린다(Task 9). 한 줄로 이어 붙인 글자가 아니라 칸마다 하나다.
+    // 값은 목록 위젯이 그린다. 한 줄로 이어 붙인 글자가 아니라 칸마다 하나다.
     const cells = [...panel().querySelectorAll<HTMLInputElement>('.wb-shell-list-cell')]
     expect(cells.map((cell) => cell.value)).toEqual(['이름', '이메일'])
   })
 
   it('pairList는 키와 값을 각각 칸으로 그린다', async () => {
-    // **앞 판에서는 `한 줄로 이어 보여 준다`였다.** `formatValue`가 그리던 자리를 Task 9의
-    // 목록 위젯이 가져갔으므로 재는 대상이 바뀐다 — 지키는 성질(`[object Object]`가
-    // 보이지 않는다)은 그대로다.
+    // **지키는 성질은 `[object Object]`가 보이지 않는 것이다.** 이 자리는 `formatValue`가
+    // 아니라 목록 위젯이 그리므로 칸마다 값을 본다.
     await openPage(DOC)
 
     select('KeyValue')
@@ -422,12 +422,10 @@ describe('속성 패널', () => {
   })
 
   it('카탈로그의 control 일곱에 전부 대응하는 위젯이 있다', async () => {
-    // **P2b-1의 `이 단계에서는 입력이 없다`를 대체한 케이스다.** 이월 문서가
-    // *"그 테스트를 바꾸는 것이 '편집이 생겼다'는 신호다"*라고 못박았고, 이것이 그
-    // 반대 방향이다 — 경계를 "입력이 없다"에서 "control마다 위젯이 있다"로 뒤집는다.
+    // **경계는 "control마다 위젯이 있다"이다.**
     //
-    // **일곱을 전부 덮었다 — 그리고 그 "일곱"은 아래에서 세어 나온 값이다.** `NOT_YET`이
-    // 비어 있는 것이 그 상태의 표시이고, 카탈로그에 새 control이 생기면 두 목록의 합이
+    // **그 "일곱"은 아래에서 세어 나온 값이다.** `NOT_YET`이 비어 있는 것이 전부 덮였다는
+    // 표시이고, 카탈로그에 새 control이 생기면 두 목록의 합이
     // 어긋나 여기서 죽는다.
     await openPage(CONTROLS_DOC)
 
@@ -452,15 +450,14 @@ describe('속성 패널', () => {
 
     select('Card')
 
-    // **지키는 성질은 그대로이고 지키는 자리가 옮겨 갔다.** `Card.title`은 `text` control이라
-    // 이제 위젯이 그리고, 위젯은 객체 값을 빈 칸으로 시작한다(`controls/text-control.tsx`의
-    // `toDraft`) — `JSON.stringify`를 부르지 않으므로 던질 일이 없다. 앞 판에서 이 줄이
-    // `(표시할 수 없는 값)`이었던 것은 `formatValue`가 그렸기 때문이다.
+    // **`Card.title`은 `text` control이라 위젯이 그리고**, 위젯은 객체 값을 빈 칸으로
+    // 시작한다(`controls/text-control.tsx`의 `toDraft`) — `JSON.stringify`를 부르지 않으므로
+    // 던질 일이 없다(`formatValue`가 그리는 자리라면 `(표시할 수 없는 값)`이 나온다).
     //
     // 나머지 줄이 그대로인 것이 양성 대조다 — 패널이 통째로 무너지거나 아무것도 그리지
     // 않는 구현은 이 단언을 통과할 수 없다.
     expect(propRows()).toEqual([
-      // P4b-1의 변형 줄. `Card`는 `variants`가 있고 노드에 `variant`가 없어 빈 칸이다.
+      // 변형 줄. `Card`는 `variants`가 있고 노드에 `variant`가 없어 빈 칸이다.
       { label: '변형', value: '' },
       { label: '제목', value: '' },
       { label: '부제', value: '부제' },
@@ -484,11 +481,10 @@ describe('속성 패널', () => {
   })
 
   it('children 배열 안에 노드가 아닌 원소가 있어도 노드를 고를 수 있다', async () => {
-    // **웨이브 3 정정이 `<App />` 층에서 절반만 닫혀 있던 자리다 — 리뷰가 찾았고 나도
-    // 재현했다.** `edit/`와 구조 트리는 `safe-walk`·`isNodeShaped`로 닫혔는데 이 패널만
-    // schema의 `findNode`를 쓰고 있었다.
+    // **이 패널도 `edit/`·구조 트리처럼 `safe-walk`로 노드를 찾는다** — schema의
+    // `findNode`를 쓰면 `<App />` 층에서 이 자리만 열린다.
     //
-    // 실측한 갈래: 그 문서로 **열기만** 하면 셸이 산다(패널이 노드를 찾지 않는다).
+    // `findNode`로 되돌리면: 그 문서로 **열기만** 하면 셸이 산다(패널이 노드를 찾지 않는다).
     // **노드를 고르는 순간** `reading 'id'`로 던지고 `.wb-shell`이 DOM에서 사라진다.
     //
     // **도달 경로는 없다** — 서버가 봉투를 검증하고 `WbNodeSchema`가 `children` 원소를
@@ -636,7 +632,7 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
   })
 
   it('타이핑만으로는 나가지 않는다', async () => {
-    // **D5의 핵심이다.** 글자마다 요청하는 구현을 잡는다 — 그런 구현은 undo 한 단계가
+    // **텍스트 커밋 규칙(blur/Enter)의 핵심이다.** 글자마다 요청하는 구현을 잡는다 — 그런 구현은 undo 한 단계가
     // 글자 하나가 되어 이력이 무의미해지고, 요청 수가 타이핑 속도에 비례한다.
     const { calls, api } = editable()
     await openPage(EDIT_DOC, { apiOverrides: api })
@@ -724,7 +720,7 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
   })
 
   it('textarea에서 Enter는 커밋이 아니라 줄바꿈이다', async () => {
-    // 계획서 표에 없는 케이스다. `Enter`가 모든 control에서 커밋이면 여러 줄을 칠 수 없다 —
+    // `Enter`가 모든 control에서 커밋이면 여러 줄을 칠 수 없다 —
     // 케이스 `textarea는 여러 줄을 담는다`는 `fireEvent.change`로 값을 통째로 넣으므로
     // 그 함정을 지나간다.
     const { calls, api } = editable()
@@ -772,11 +768,10 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     // blur 없이 선택이 바뀌고, 그때 `key`가 초안을 버린다(근거는 `panels/property-panel.tsx`의
     // `PropControl` 주석).
     //
-    // **앞 판은 여기에 거꾸로 적었다** — *"구조 트리로 고르면 … blur가 나고 커밋된다(실측).
-    // 캔버스는 `<div onClick>`이라 포커스가 옮겨 가지 않아 blur가 없다."* jsdom 에서는 둘 다
-    // blur 가 없고(트리 판이 잰다), **Chrome 에서는 둘 다 blur 가 난다** — 캔버스의 `<div>`를
-    // 누르면 포커스가 `BODY`로 가며 `focusout TEXTAREA → null`이 나고 원래 노드로 커밋된다
-    // (8차 실측). 실브라우저의 클릭은 아래 «실브라우저의 클릭은 …» 절이 잰다.
+    // ***"구조 트리로 고르면 blur가 나고, 캔버스는 `<div onClick>`이라 blur가 없다"*고 읽으면
+    // 거꾸로다** — jsdom 에서는 둘 다 blur 가 없고(트리 판이 잰다), **Chrome 에서는 둘 다
+    // blur 가 난다** — 캔버스의 `<div>`를 누르면 포커스가 `BODY`로 가며 `focusout TEXTAREA → null`이
+    // 나고 원래 노드로 커밋된다(Chrome 실측). 실브라우저의 클릭은 아래 «실브라우저의 클릭은 …» 절이 잰다.
     const { calls, api } = editable()
     await openPage(EDIT_DOC, { apiOverrides: api })
 
@@ -794,25 +789,25 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
 })
 
 /**
- * **실브라우저의 클릭은 선택이 바뀌기 전에 커밋한다**(8차 Chrome 실측 — `panels/
+ * **실브라우저의 클릭은 선택이 바뀌기 전에 커밋한다**(Chrome 실측 — `panels/
  * property-panel.tsx`의 `PropControl` 주석의 표). 위 절의 «포커스가 안 옮겨 간 채 …» 둘은
  * `fireEvent.click`이 포커스를 안 옮겨서 생기는 **장치의 값**이고, 이 절이 **사용자가 겪는
  * 값**을 잰다. 흉내는 `test/click-as-browser.ts`의 `clickAsBrowser`다.
  *
- * **그 흉내가 맞는지는 Chrome 표로 대조했다** — 위젯 다섯 × 클릭 갈래 다섯, 25칸 전부에서
- * 나간 편집 수 · 페이지 · 경로 · 돌아와 본 값 · focusout 순서가 같았다(대조용 가짜 서버는
- * 커밋을 기억하게 했다). `fireEvent.click`으로 재면 25칸 전부 «0건 · 옛 값»이다. 키(Enter·
- * Tab·Esc)와 창 닫기·뒤로 가기는 이 흉내의 밖이다. **9차에 흉내를 고친 뒤 다시 댔고 25칸이 또
- * 같았다**(갈래까지의 값은 `test/click-as-browser.ts`의 머리말).
+ * **그 흉내가 맞는지는 Chrome 표로 대조한다** — 위젯 다섯 × 클릭 갈래 다섯, 25칸 전부에서
+ * 나간 편집 수 · 페이지 · 경로 · 돌아와 본 값 · focusout 순서가 같다(대조용 가짜 서버는
+ * 커밋을 기억하게 한다). `fireEvent.click`으로 재면 25칸 전부 «0건 · 옛 값»이다. 키(Enter·
+ * Tab·Esc)와 창 닫기·뒤로 가기는 이 흉내의 밖이다. **흉내를 고치면 표를 다시 댄다**(갈래까지의
+ * 값은 `test/click-as-browser.ts`의 머리말).
  *
  * **이 절이 잡는 회귀는 «누르면 포커스를 안 빼앗게» 하는 손질이다** — 누른 요소의
  * **`pointerdown`이나 `mousedown`**에 `preventDefault()`를 걸면 실브라우저에서 blur 가 안 나 친
- * 글자가 사라진다. 흉내도 그때 포커스를 안 옮긴다(`clickAsBrowser`의 1·2번). **8차 판은
- * `mousedown`만 알았다** — 탭·캔버스의 `onPointerDown`에 걸면 Chrome 은 편집 0건 · 옛 값인데 이
- * 절은 살았다(리뷰 N-B — web 2145 중 0 사망). 이 앱에 이미 그 꼴이 있다(`ShellResizer`).
+ * 글자가 사라진다. 흉내도 그때 포커스를 안 옮긴다(`clickAsBrowser`의 1·2번). **`mousedown`만
+ * 존중하는 흉내로는 모자란다** — 탭·캔버스의 `onPointerDown`에 걸면 Chrome 은 편집 0건 · 옛 값인데
+ * 그 흉내로는 이 절이 산다(web 전량 0 사망). 이 앱에 이미 그 꼴이 있다(`ShellResizer`).
  *
- * **다섯이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 쟀다.
- * 줄마다 `onMouseDown` 판과 `onPointerDown` 판을 **따로** 심었고 둘 다 그 케이스 하나만 죽였다(9차):
+ * **다섯이 각각 혼자 죽는다** — 변조를 하나씩 심고 매번 복구해서 `--project web` 전체로 잰다.
+ * 줄마다 `onMouseDown` 판과 `onPointerDown` 판을 **따로** 심고, 둘 다 그 케이스 하나만 죽인다:
  *
  * | 변조 — 그 자리의 누르는 이벤트에 `preventDefault()` | 혼자 죽는 것 |
  * |---|---|
@@ -830,15 +825,14 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
  *
  * | 변조 — 흉내를 약하게 | 혼자 죽는 것 |
  * |---|---|
- * | `pointerdown`의 `preventDefault()`를 무시한다(또는 8차 판의 흉내로 되돌린다) | *"… `pointerdown`을 막으면 커밋이 없다 …"* |
+ * | `pointerdown`의 `preventDefault()`를 무시한다(또는 `mousedown`만 존중하는 흉내로 되돌린다) | *"… `pointerdown`을 막으면 커밋이 없다 …"* |
  * | `mousedown`의 `preventDefault()`를 무시한다 | *"… `mousedown`을 막으면 커밋이 없다 …"* |
  *
- * **8차 판에서는 흉내를 약하게 해도 아무것도 안 죽었고**, 제품 회귀와 겹치면(탭 `mousedown` 막음 +
- * 흉내가 그것을 무시) 그 회귀도 안 잡혔다(리뷰 M1+M6 — 0 사망). 9차에는 두 겹침 모두 흉내 검사가
- * 혼자 죽는다.
+ * **이 검사 둘이 없으면 흉내를 약하게 해도 아무것도 안 죽고**, 제품 회귀와 겹치면(탭 `mousedown` 막음 +
+ * 흉내가 그것을 무시) 그 회귀도 안 잡힌다(0 사망). 두 겹침 모두 흉내 검사가 혼자 죽는다.
  *
- * **실패 방향도 대조했다** — 위 표의 탭·캔버스 변조(두 이벤트 다)를 Chrome 에 런타임 리스너로
- * 심으니 실제로 편집 0건 · 돌아와 본 칸이 옛 값이었다. 곧 이 절이 죽는 자리에서 사용자도 글자를
+ * **실패 방향도 대조한다** — 위 표의 탭·캔버스 변조(두 이벤트 다)를 Chrome 에 런타임 리스너로
+ * 심으면 실제로 편집 0건 · 돌아와 본 칸이 옛 값이다. 곧 이 절이 죽는 자리에서 사용자도 글자를
  * 잃는다.
  */
 describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전에 원래 노드로 커밋한다', () => {
@@ -931,17 +925,17 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
       }),
     )
     await waitFor(() => expect(calls).toHaveLength(1))
-    // **페이지가 앞 페이지다.** 옆 페이지로 갔다면 남의 페이지에 그 글이 들어간다(F1 부류).
+    // **페이지가 앞 페이지다.** 옆 페이지로 갔다면 남의 페이지에 그 글이 들어간다.
     expect(calls[0]).toEqual({ pageId: PAGE_ID, ops: FIRST_TEXT })
   })
 
   /**
-   * **흉내 자신의 검사 둘**(9차, 리뷰 N-B). 위 다섯은 흉내가 «커밋된다»고 말하는 쪽만 재서, 흉내가
+   * **흉내 자신의 검사 둘.** 위 다섯은 흉내가 «커밋된다»고 말하는 쪽만 재므로, 흉내가
    * 누르는 이벤트의 `preventDefault()`를 **존중하는지** — 이 절이 잡으려는 회귀가 그것에 달려
-   * 있다 — 는 아무도 안 쟀다(리뷰: 그 가지를 지워도 web 2145 중 0 사망).
+   * 있다 — 는 이 둘이 없으면 아무도 안 잰다(그 가지를 지워도 web 전량 0 사망).
    *
-   * 막는 것은 **런타임의 네이티브 리스너**다 — 리뷰가 Chrome 에 심은 것과 같은 꼴이라 두 값을
-   * 나란히 댈 수 있다. Chrome 값(리뷰 5번 · 9차 재대조): 탭 + `pointerdown` 막음 → 편집 0 ·
+   * 막는 것은 **런타임의 네이티브 리스너**다 — Chrome 에 심는 것과 같은 꼴이라 두 값을
+   * 나란히 댈 수 있다. Chrome 값: 탭 + `pointerdown` 막음 → 편집 0 ·
    * 돌아오면 옛 값. 탭 + `mousedown` 막음 → 같음. 막지 않으면 위 *"다른 탭을 누르면 …"* — 1건.
    */
   async function noCommitAfter(block: 'pointerdown' | 'mousedown'): Promise<void> {
@@ -983,7 +977,7 @@ const SWITCH_DOC = pageDoc({
 
 describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
   it('스위치를 누르면 즉시 편집이 나간다', async () => {
-    // blur를 기다리지 않는다 — 중간 상태가 없는 조작이라 미룰 이유가 없다(D5).
+    // blur를 기다리지 않는다 — 중간 상태가 없는 조작이라 미룰 이유가 없다.
     const { calls, api } = editable()
     await openPage(SWITCH_DOC, { apiOverrides: api })
 
@@ -1009,7 +1003,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
 
   it('값이 없던 prop을 켜면 true가 들어간다', async () => {
     // **`props`가 없는 노드다.** `propOps`의 세 갈래 중 통째 `add`가 지나는 자리이고,
-    // 그 갈래가 없으면 `applyOps`가 던져 D7이 요청을 막는다(웨이브 2가 실측했다).
+    // 그 갈래가 없으면 `applyOps`가 던지고, 로컬 적용이 던진 편집은 요청으로 나가지 않는다.
     const { calls, api } = editable()
     await openPage(SWITCH_DOC, { apiOverrides: api })
 
@@ -1068,7 +1062,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
     // 값을 볼 수 없다.
     //
     // **`select`를 세는 대신 그 줄의 위젯을 본다.** 이 프로브는 `ListDef`를 빌려 만들었고
-    // 그쪽 `variants`가 비어 있지 않아 P4b-1의 변형 컨트롤이 `<select>` 하나를 그린다 —
+    // 그쪽 `variants`가 비어 있지 않아 변형 컨트롤이 `<select>` 하나를 그린다 —
     // 패널 전체에서 `select`를 세면 그것에 걸린다. 이 케이스가 지키는 것은
     // **options 없는 필드의 위젯**이므로 그 줄만 본다.
     expect(controlWidget('선택지 없는 필드')).toBeNull()
@@ -1080,14 +1074,12 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
   })
 
   it('편집이 실패하면 재조회가 서버 값을 되비춘다 — 고르던 자리는 그대로다', async () => {
-    // **앞 판은 여기서 선택이 지워졌다.** `loadPage`가 `selectedNodeId`를 비웠으므로 위젯이
-    // 아예 사라졌고, 그래서 *"재조회 경로에서는 스위치가 문서를 비추는지 볼 수 없다"*고
-    // 적혀 있었다. 이제 `loadPage`는 **같은 페이지를 다시 싣는 경로에서 선택을 건드리지
-    // 않으므로**(`store/editor-store.ts`의 `#selectionFor`) 위젯이 마운트된 채 문서만
-    // 갈린다 — 이 케이스가 그것을 직접 잰다.
+    // `loadPage`는 **같은 페이지를 다시 싣는 경로에서 선택을 건드리지 않으므로**
+    // (`store/editor-store.ts`의 `#selectionFor`) 위젯이 마운트된 채 문서만 갈린다 — 이
+    // 케이스가 그것을 직접 잰다. 재조회가 선택을 비우면 위젯이 아예 사라져, 재조회 경로에서
+    // 스위치가 문서를 비추는지 볼 수 없게 된다.
     //
-    // **그래서 재는 것이 세졌다.** 앞 판이 고정하던 것은 *"사용자가 고르던 노드를 잃는다"*
-    // 였고, 지금 고정하는 것은 *"고르던 자리에 남은 채 서버 값이 되비친다"*이다. 위젯이
+    // **고정하는 것은 *"고르던 자리에 남은 채 서버 값이 되비친다"*이다.** 위젯이
     // 자기 `useState`만 보고 그리는 구현은 여기서 죽는다(꺼진 채로 남는다) — 아래
     // `문서가 밖에서 바뀌면 스위치가 새 값을 비춘다`와 같은 자리를 실패 경로에서 잡는다.
     let getPageCalls = 0
@@ -1116,7 +1108,7 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
   })
 
   it('연속으로 두 번 누르면 두 편집이 순서대로 나간다', async () => {
-    // D6가 스위치에도 적용된다 — 두 요청이 겹치지 않고 순서대로 나간다.
+    // 편집 큐의 순서 규칙이 스위치에도 적용된다 — 두 요청이 겹치지 않고 순서대로 나간다.
     const { calls, api } = editable()
     await openPage(SWITCH_DOC, { apiOverrides: api })
 
@@ -1152,10 +1144,11 @@ describe('속성 패널 — 스위치·선택 (즉시 커밋)', () => {
  *
  * 스토어 API만으로 만든다 — 프로덕션 코드를 건드리지 않고, `loadPage`와 `selectNode`를
  * **한 `act()` 배치**에 넣어 React가 둘을 함께 커밋하게 한다. 그러면 `key`(= 노드 id)가
- * 그대로라 언마운트가 없다. 순차로 부르면 `loadPage`가 선택을 비워 위젯이 사라진다(위
- * `편집이 실패하면 재조회가 선택을 지운다`가 그 경로다).
+ * 그대로라 언마운트가 없다. (`loadPage`는 같은 페이지를 다시 실을 때 새 문서에 그 노드가
+ * 있으면 선택을 둔다 — `store/editor-store.ts`의 `#selectionFor`. 선택이 비는 것은 그 노드가
+ * 새 문서에 없을 때다.)
  *
- * **Task 10이 이 자리를 실제 경로로 만들었다** — `applyEdit`은 `selectedNodeId`를 건드리지
+ * **undo가 이 자리의 실제 경로다** — `applyEdit`은 `selectedNodeId`를 건드리지
  * 않으므로 undo가 문서를 갈아 끼울 때 위젯이 마운트된 채 남는다. 그쪽은
  * `test/edit/undo-redo.test.tsx`의 `undo하면 속성 패널의 스위치도 되돌아간다`가 잡는다.
  */
@@ -1188,7 +1181,7 @@ describe('문서가 밖에서 바뀔 때', () => {
 
     expect((screen.getByLabelText('필수') as HTMLInputElement).checked).toBe(true)
 
-    // **한 배치다.** 나눠 부르면 `loadPage`가 선택을 비워 위젯이 사라진다.
+    // **한 배치다** — 둘을 한 커밋에 넣는다(위 머리말).
     act(() => {
       store.loadPage('pg-1', fieldDoc(false, '이름'), 9)
       store.selectNode(NODE_ID)
@@ -1224,8 +1217,8 @@ describe('문서가 밖에서 바뀔 때', () => {
     // 도는데, 두 노드의 그 prop 값이 같으면 값이 안 바뀌므로 도지 않는다 — 그때 초안이
     // 다음 노드로 넘어간다. 노드가 바뀔 때 위젯을 다시 만드는 것이 그것을 막는다.
     //
-    // **초안 버리기를 넣은 뒤 `key`의 하중이 0이 됐다가 이 케이스로 돌아왔다**(실측:
-    // `key`를 걷는 변이가 438개 전량 통과였고, 이 케이스를 더하니 죽는다).
+    // **초안 버리기만으로는 `key`의 하중이 0이다 — 이 케이스가 그 하중을 진다**(`key`를
+    // 걷는 변이는 이 케이스 없이는 web 전량을 통과하고, 이 케이스에서 죽는다).
     const store = new EditorStore()
     const twin = pageDoc({
       id: 'n-root',
@@ -1262,7 +1255,7 @@ const VARIANT_DOC = pageDoc({
     { id: 'n-card', type: 'Card', props: { title: '카드' }, variant: 'featured' },
     // 같은 부류인데 노드에 `variant`가 없다 → 빈 칸이고, 고르면 `add`가 나간다.
     { id: 'n-card2', type: 'Card', props: { title: '둘째' } },
-    // `variantFrom: 'role'` → 컨트롤이 **나오면 안 된다**(P4a-3의 `ignored-variant`를 UI가 유도하는 셈이다).
+    // `variantFrom: 'role'` → 컨트롤이 **나오면 안 된다**(`ignored-variant`를 UI가 유도하는 셈이다).
     { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
     // `variants: []` → 나올 것이 없다.
     { id: 'n-tree', type: 'Tree', props: { depth: 2 } },
@@ -1270,31 +1263,32 @@ const VARIANT_DOC = pageDoc({
 })
 
 /**
- * **재라 #4 — `variant`를 패널에 여는 법: 패널이 특수 취급한다(A안).**
+ * **`variant`를 패널에 여는 법: 패널이 특수 취급한다.**
  *
  * `EditorField.prop`은 **props의 키**를 가리키는데 `variant`는 **노드 봉투의 필드**다
- * (§4.3). 그래서 `editor`에 적을 수 없고 — 적으면 `defineComponent`가
- * *"editor가 스키마에 없는 prop을 가리킵니다"*로 던진다 — 도달 경로가 아예 없었다.
- * **`Button`·`Link`·`List`·`Section`·`Card`의 변형 열넷이 UI에서 하나도 닿지 않았다.**
+ * (설계서 「페이지 스키마 노드」). 그래서 `editor`에 적을 수 없고 — 적으면 `defineComponent`가
+ * *"editor가 스키마에 없는 prop을 가리킵니다"*로 던진다 — 패널이 특수 취급하지 않으면 도달
+ * 경로가 아예 없다. **`Button`·`Link`·`List`·`Section`·`Card`의 변형이 UI에서 하나도 닿지 않는다.**
  *
- * **A안의 대가는 계획서가 적은 것보다 작다.** 패널이 읽는 것은 `def.variants`·
+ * **이 특수 취급의 대가는 작다.** 패널이 읽는 것은 `def.variants`·
  * `def.variantFrom`으로 **전부 카탈로그의 값**이고, 새로 갖는 지식은 *"variant는 봉투의
- * 필드다"* 하나인데 그것은 §4.3·§6.11이 정한 **모델의 사실**이지 컴포넌트별 지식이 아니다.
- * §5.1·§9가 말하는 *"컴포넌트 **정의**에서 자동 생성"*은 그대로 성립한다 — 카탈로그가
- * 늘어도 이 패널은 안 바뀐다(아래 전수 케이스가 그것을 센다).
+ * 필드다"* 하나인데 그것은 설계서 「페이지 스키마 노드」·「컴파일」이 정한 **모델의 사실**이지
+ * 컴포넌트별 지식이 아니다. 「컴포넌트 정의 구조」·「설계서 화면 구조」가 말하는 *"컴포넌트
+ * **정의**에서 자동 생성"*은 그대로 성립한다 — 카탈로그가 늘어도 이 패널은 안 바뀐다(아래 전수
+ * 케이스가 그것을 센다).
  *
- * **B안(`ComponentDef`에 `variantField` 선언)을 고르지 않은 것은** 그 선언이 담을 정보가
+ * **`ComponentDef`에 `variantField`를 선언하는 안을 고르지 않은 것은** 그 선언이 담을 정보가
  * **라벨 하나**뿐이기 때문이다 — 나올지 말지는 `variants.length > 0 && variantFrom === undefined`로
- * 카탈로그에서 이미 유도된다. 라벨 하나를 위해 §5.1의 계약을 넓히지 않는다.
+ * 카탈로그에서 이미 유도된다. 라벨 하나를 위해 「컴포넌트 정의 구조」의 계약을 넓히지 않는다.
  */
-describe('속성 패널 — 변형 (재라 #4)', () => {
+describe('속성 패널 — 변형', () => {
   it('variants가 있는 컴포넌트에 변형 컨트롤이 나온다', async () => {
     await openPage(VARIANT_DOC)
 
     selectAt('Card', 0)
 
     // **맨 앞이다.** `variant`는 이 노드가 어떤 표현인가를 정하는 것이라 개별 prop보다
-    // 상위이고, §6.5도 `variants`를 `base`/`parts` 위의 층으로 둔다.
+    // 상위이고, 설계서 「components — 구조 + 스킨」도 `variants`를 `base`/`parts` 위의 층으로 둔다.
     expect(labels()).toEqual(['변형', '제목', '부제'])
     expect((requireWidget('변형') as HTMLSelectElement).value).toBe('featured')
   })
@@ -1310,7 +1304,7 @@ describe('속성 패널 — 변형 (재라 #4)', () => {
   })
 
   it('variantFrom을 가진 컴포넌트에는 나오지 않는다', async () => {
-    // 나오면 `ignored-variant`(P4a-2가 만든 경고)를 **UI가 유도하는 셈**이다.
+    // 나오면 `ignored-variant` 경고를 **UI가 유도하는 셈**이다.
     await openPage(VARIANT_DOC)
 
     selectAt('Text', 0)
@@ -1370,7 +1364,7 @@ describe('속성 패널 — 변형 (재라 #4)', () => {
   })
 
   it('없는 variant를 비우면 요청이 나가지 않는다', async () => {
-    // 지울 것이 없다. D7 — 보내 봐야 서버가 같은 자리에서 거절한다.
+    // 지울 것이 없다. 보내 봐야 서버가 같은 자리에서 거절한다.
     const { calls, api } = editable()
     await openPage(VARIANT_DOC, { apiOverrides: api })
 
@@ -1382,13 +1376,13 @@ describe('속성 패널 — 변형 (재라 #4)', () => {
   })
 
   /**
-   * **코디네이터가 지목한 자리 — `/variant`가 편집 파이프라인의 게이트를 그대로 지나는가.**
+   * **`/variant`가 편집 파이프라인의 게이트를 그대로 지나는가.**
    *
-   * `validatePage`에는 `variant`에 걸리는 코드가 둘 있다(P4a-2·P4a-3이 만들었다):
+   * `validatePage`에는 `variant`에 걸리는 코드가 둘 있다:
    *
    * | 코드 | 조건 | severity |
    * |---|---|---|
-   * | `unknown-variant` | `variants`에 없는 값 | **error** — §7.1의 게이트가 편집을 422로 막는다 |
+   * | `unknown-variant` | `variants`에 없는 값 | **error** — 설계서 「정방향 흐름」의 검증 게이트가 편집을 422로 막는다 |
    * | `ignored-variant` | `variantFrom`이 있는데 `variant`를 적음 | warning |
    *
    * **패널이 낼 수 있는 값으로는 둘 다 만들 수 없어야 한다.** 앞의 것은 선택지가
@@ -1456,12 +1450,11 @@ describe('속성 패널 — 변형 (재라 #4)', () => {
   })
 
   /**
-   * **부류를 닫는 자리다.** 계획서 D2는 *"`defineComponent`가 검사하면 부류가 닫힌다"*고
-   * 적었는데, A안에서는 `defineComponent`가 검사할 것이 없다 — 패널이 카탈로그를 보고
-   * **자동으로** 여닫으므로 어긋날 자리 자체가 없다. **그 대신 이 케이스가 카탈로그를
+   * **부류를 닫는 자리다.** 패널이 카탈로그를 보고 **자동으로** 여닫으므로 `defineComponent`가
+   * 검사할 것이 없다 — 어긋날 자리 자체가 없다. **그 대신 이 케이스가 카탈로그를
    * 전수로 돌아 그 성질을 확인한다.**
    *
-   * P4b-2·P4b-3이 컴포넌트를 늘리면 여기가 분모를 다시 세므로 같은 구멍이 안 난다.
+   * 컴포넌트가 늘면 여기가 분모를 다시 세므로 같은 구멍이 안 난다.
    */
   it('카탈로그 전수 — variants가 비어 있지 않고 variantFrom이 없으면 반드시 컨트롤이 나온다', async () => {
     const expectedOpen = CATALOG_TYPES.filter((type) => {

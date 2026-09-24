@@ -1,13 +1,13 @@
 /**
- * **뷰 모드에서 상호작용이 실제로 도는가** (설계 §8.3, P5-3 T1·T2).
+ * **뷰 모드에서 상호작용이 실제로 도는가** (설계서 「실행」).
  *
  * **여기가 진짜 DOM 이벤트를 재는 유일한 자리다.** 렌더러 쪽 케이스
  * (`packages/renderer/test/interaction-runtime.test.tsx`)는 `unit` 프로젝트라 DOM이 없어
  * 핸들러를 **직접 불러** 확인한다. 이 파일은 jsdom에서 **누른다** — 버블링·`submit`·
  * `change`가 실제로 어떻게 도는지는 그렇게만 알 수 있다.
  *
- * **실브라우저는 여전히 0건이다.** jsdom의 클릭과 실브라우저의 클릭이 갈리는 자리를
- * 이 슬라이스도 재지 못했다 — 보고서에 무엇을 못 쟀는지 적었다.
+ * **실브라우저로는 재지 않는다.** jsdom의 클릭과 실브라우저의 클릭이 갈리는 자리는 이
+ * 파일이 못 본다.
  */
 import { fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
@@ -36,7 +36,7 @@ function shellStore(): EditorStore {
   return store as EditorStore
 }
 
-/** §8.2의 예를 그대로 옮긴 문서. *"① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"* */
+/** 설계서 「자동 문장화」의 예를 그대로 옮긴 문서. *"① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"* */
 const DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
@@ -69,7 +69,7 @@ function notices(): string[] {
   )
 }
 
-describe('§8.3 — 편집 모드에서는 동작하지 않는다', () => {
+describe('설계서 「실행」 — 편집 모드에서는 동작하지 않는다', () => {
   it('편집 모드에서 버튼을 눌러도 아무 상태도 바뀌지 않는다', async () => {
     await openPage(DOC)
 
@@ -88,7 +88,7 @@ describe('§8.3 — 편집 모드에서는 동작하지 않는다', () => {
   })
 })
 
-describe('§8.3 — 뷰 모드에서 실제로 동작한다', () => {
+describe('설계서 「실행」 — 뷰 모드에서 실제로 동작한다', () => {
   it('버튼을 누르면 목록이 로딩 상태가 된다', async () => {
     await openPage(DOC)
     toView()
@@ -100,7 +100,7 @@ describe('§8.3 — 뷰 모드에서 실제로 동작한다', () => {
     expect(requireNode('n-list').getAttribute('data-wb-state')).toBe('loading')
   })
 
-  it('문서는 바뀌지 않는다 — 편집이 아니라 시연이다 (D1)', async () => {
+  it('문서는 바뀌지 않는다 — 편집이 아니라 시연이다', async () => {
     await openPage(DOC)
     const before = JSON.stringify(shellStore().getState().document)
     toView()
@@ -113,7 +113,7 @@ describe('§8.3 — 뷰 모드에서 실제로 동작한다', () => {
     expect(shellStore().getState().undoStack).toHaveLength(0)
   })
 
-  it('뷰 모드에서는 선택을 바꾸지 않는다 (재라 #6)', async () => {
+  it('뷰 모드에서는 선택을 바꾸지 않는다', async () => {
     await openPage(DOC)
     fireEvent.click(requireNode('n-list'))
     expect(shellStore().getState().selectedNodeId).toBe('n-list')
@@ -292,7 +292,7 @@ describe('트리거 4종이 실제로 닿는가 — 재서 적는다', () => {
   })
 })
 
-describe('T2 — 깨진 규칙을 조용히 지나가지 않는다 (D3)', () => {
+describe('깨진 규칙을 조용히 지나가지 않는다', () => {
   it('끊긴 타겟을 만나면 그렇다고 말한다', async () => {
     await openPage(
       pageDoc({
@@ -407,7 +407,7 @@ describe('T2 — 깨진 규칙을 조용히 지나가지 않는다 (D3)', () => 
   })
 })
 
-describe('T1 — navigate·openModal은 알리고 움직이지 않는다 (D4·재라 #2)', () => {
+describe('navigate·openModal은 알리고 움직이지 않는다', () => {
   const DOC_NAV = pageDoc({
     id: 'n-root',
     type: 'Page',
@@ -463,7 +463,7 @@ describe('T1 — navigate·openModal은 알리고 움직이지 않는다 (D4·�
   })
 })
 
-describe('알림은 "마지막 조작이 만든 것"이다 (리뷰 ②)', () => {
+describe('알림은 "마지막 조작이 만든 것"이다', () => {
   /** 깨진 규칙 하나와 멀쩡한 규칙 하나, 그리고 **규칙이 없는 노드** 하나. */
   const DOC_MIX = pageDoc({
     id: 'n-root',
@@ -483,7 +483,7 @@ describe('알림은 "마지막 조작이 만든 것"이다 (리뷰 ②)', () => 
   })
 
   it('규칙이 없는 노드를 누르면 앞 알림이 사라진다', async () => {
-    // **앞 판은 여기서 알림이 남았다**(`matched === 0`이라 `onEvent`가 안 불린다) —
+    // **알림을 `onEvent`에서만 비우면 여기서 알림이 남는다**(`matched === 0`이라 `onEvent`가 안 불린다) —
     // 사용자는 방금 누른 것과 아무 상관 없는 말을 계속 본다.
     await openPage(DOC_MIX)
     toView()
@@ -508,7 +508,7 @@ describe('알림은 "마지막 조작이 만든 것"이다 (리뷰 ②)', () => 
   })
 
   it('한 클릭에 트리거 둘이 걸리면 둘의 말이 다 남는다', async () => {
-    // **앞 판은 뒤 트리거가 앞 것을 덮어** `click`의 이슈 문장이 사라졌다.
+    // **트리거마다 알림을 새로 쓰면 뒤 트리거가 앞 것을 덮어** `click`의 이슈 문장이 사라진다.
     await openPage(
       pageDoc({
         id: 'n-root',
@@ -547,15 +547,14 @@ describe('알림은 "마지막 조작이 만든 것"이다 (리뷰 ②)', () => 
   })
 })
 
-describe('겹layer가 안 바뀐 조작도 자리를 다시 잰다 (리뷰 ②-1)', () => {
+describe('겹layer가 안 바뀐 조작도 자리를 다시 잰다', () => {
   it('알림 줄이 뜨면 마커를 다시 잰다', async () => {
     // **알림 줄은 문서 위에 그려져 문서를 아래로 민다.** 겹layer가 안 바뀐 조작
     // (`applied === 0`)에서는 참조가 그대로라, 의존성에 `notices`가 없으면 이 이펙트가
     // 안 돌고 **마커가 옛 자리에 남는다.**
     //
     // jsdom의 `getBoundingClientRect`는 전부 0이라 자리를 그대로는 잴 수 없다 —
-    // **알림 줄이 있는지에 따라 다른 값을 내는 가짜 상자**를 심어 잰다(리뷰가 쓴 장치와
-    // 같은 형식이다).
+    // **알림 줄이 있는지에 따라 다른 값을 내는 가짜 상자**를 심어 잰다.
     const rect = (top: number): DOMRect => ({ top, left: 0, width: 10, height: 10, right: 10, bottom: top + 10, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
     const original = Element.prototype.getBoundingClientRect
     Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
@@ -598,7 +597,7 @@ describe('겹layer가 안 바뀐 조작도 자리를 다시 잰다 (리뷰 ②-1
   })
 })
 
-describe('재라 #4 — 런타임 상태는 언제 사라지는가', () => {
+describe('런타임 상태는 언제 사라지는가', () => {
   it('모드를 나가면 사라진다', async () => {
     await openPage(DOC)
     toView()

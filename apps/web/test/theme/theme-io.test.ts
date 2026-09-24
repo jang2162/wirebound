@@ -1,9 +1,8 @@
 /**
- * 봉투와 직렬화(P4c-3 T1). **DOM을 한 번도 안 쓴다** — `theme-io.ts`가 순수 함수라는 계약이
+ * 봉투와 직렬화. **DOM을 한 번도 안 쓴다** — `theme-io.ts`가 순수 함수라는 계약이
  * 이 파일이 `.ts`인 것으로 지켜진다(`render`도 `document`도 없다).
  *
- * **이 파일의 중심은 왕복이다**(계획서 *"계획이 재지 않은 것"* 1 — *"잴 수 있는 것은
- * '내보낸 것을 다시 가져오면 같다'까지다. 왕복 케이스를 반드시 만들어라"*).
+ * **이 파일의 중심은 왕복이다** — 잴 수 있는 것은 *"내보낸 것을 다시 가져오면 같다"*까지다.
  */
 import { describe, expect, it } from 'vitest'
 import { SYSTEM_THEME_IDS, systemTheme, type Theme } from '@wirebound/themes'
@@ -22,7 +21,7 @@ function theme(overrides: Partial<Theme> = {}): Theme {
   return { meta: { ...META }, ...overrides } as Theme
 }
 
-describe('봉투 (D1)', () => {
+describe('봉투', () => {
   it('키 둘을 든다 — wireboundVersion과 theme', () => {
     const source = theme()
     const envelope = toExport(source)
@@ -60,7 +59,7 @@ describe('왕복 — 이 슬라이스의 중심 단언', () => {
     expect(exportText(back.theme)).toBe(exportText(source))
   })
 
-  it('파생 문서는 파생 그대로 나가고 그대로 돌아온다 (D2)', () => {
+  it('파생 문서는 파생 그대로 나가고 그대로 돌아온다', () => {
     const derived = theme({ meta: { ...META, extends: 'system:admin' } } as Partial<Theme>)
 
     const back = fromImport(exportText(derived))
@@ -70,7 +69,7 @@ describe('왕복 — 이 슬라이스의 중심 단언', () => {
     expect(back.status === 'read' && 'components' in back.theme).toBe(false)
   })
 
-  it('meta.version을 이 슬라이스가 안 만든다 — 실려 나가고 그대로 들어온다 (D4)', () => {
+  it('meta.version을 이 슬라이스가 안 만든다 — 실려 나가고 그대로 들어온다', () => {
     const back = fromImport(exportText(theme({ meta: { ...META, version: '7.7.7' } } as Partial<Theme>)))
     expect(back.status === 'read' && back.theme.meta.version).toBe('7.7.7')
   })
@@ -78,8 +77,8 @@ describe('왕복 — 이 슬라이스의 중심 단언', () => {
 
 describe('키 순서가 계약이다', () => {
   /**
-   * **P4a-3이 저장 쪽에서 이것을 지키려고 절 컬럼을 `json`으로 골랐다**(`jsonb`가 키를
-   * (길이, 바이트)로 정규화하는 것을 P4a-3이 컨테이너에서 쟀다 — PostgreSQL 16.14).
+   * **저장 쪽도 이것을 지키려고 절 컬럼을 `json`으로 둔다**(`jsonb`는 키를 (길이, 바이트)로
+   * 정규화한다 — PostgreSQL 16.14 컨테이너에서 잰 동작).
    * 내보내기도 같은 계약 아래 있다.
    */
   const STATES = '{"selected":1,"disabled":2,"loading":3,"empty":4}'
@@ -115,12 +114,12 @@ describe('키 순서가 계약이다', () => {
   })
 })
 
-describe('읽기 실패를 셋으로 가른다 (T1)', () => {
+describe('읽기 실패를 셋으로 가른다', () => {
   it('JSON이 아니면 unreadable이고 엔진의 문장을 그대로 옮긴다', () => {
     const result = fromImport('{"wireboundVersion":')
 
     expect(result.status === 'failed' && result.reason).toBe('unreadable')
-    // **문장을 우리가 만들지 않는다**(W2의 판정 — 줄·칸을 다시 세면 엔진과 갈린다).
+    // **문장을 우리가 만들지 않는다** — 줄·칸을 다시 세면 엔진과 갈린다.
     expect(result.status === 'failed' && result.message).toBe(
       (() => {
         try {
@@ -142,7 +141,7 @@ describe('읽기 실패를 셋으로 가른다 (T1)', () => {
   })
 
   it('날 테마 문서는 봉투가 아니다', () => {
-    // **봉투를 두기로 한 D1이 여기서 값을 한다** — 봉투가 없으면 이 물음 자체를 못 던진다.
+    // **봉투가 여기서 값을 한다** — 봉투가 없으면 이 물음 자체를 못 던진다.
     const result = fromImport(JSON.stringify(theme()))
     expect(result.status === 'failed' && result.reason).toBe('not-envelope')
   })
@@ -153,7 +152,7 @@ describe('읽기 실패를 셋으로 가른다 (T1)', () => {
     }
   })
 
-  it('페이지 JSON은 봉투인데 테마가 없다 — 그렇게 말한다 (§11.2)', () => {
+  it('페이지 JSON은 봉투인데 테마가 없다 — 그렇게 말한다 (설계서 「페이지 JSON」)', () => {
     const page = JSON.stringify({
       wireboundVersion: '1',
       page: { title: '회원 목록' },
@@ -168,7 +167,7 @@ describe('읽기 실패를 셋으로 가른다 (T1)', () => {
     expect(result.status === 'failed' && result.message).toContain('페이지 JSON')
   })
 
-  it('모르는 버전은 따로 가르고 찾은 값을 싣는다 (§13.1)', () => {
+  it('모르는 버전은 따로 가르고 찾은 값을 싣는다 (설계서 「스키마 마이그레이션」)', () => {
     const result = fromImport(JSON.stringify({ wireboundVersion: '2', theme: theme() }))
 
     expect(result.status === 'failed' && result.reason).toBe('unknown-version')
@@ -183,7 +182,7 @@ describe('읽기 실패를 셋으로 가른다 (T1)', () => {
   })
 })
 
-describe('파일 이름 (재라 #5)', () => {
+describe('파일 이름', () => {
   it('<meta.id>.wirebound-theme.json이다', () => {
     expect(exportFileName(theme())).toBe(`brand${EXPORT_FILE_SUFFIX}`)
     expect(exportFileName(theme())).toBe('brand.wirebound-theme.json')
@@ -194,7 +193,7 @@ describe('파일 이름 (재라 #5)', () => {
   })
 
   it('id가 규격 밖이면 이름만 바꾼다 — 내보내기를 막지 않는다', () => {
-    // 초안은 검증을 안 지난 문서를 담을 수 있다(D6의 계약). `/`가 이름에 들어가면
+    // 초안은 검증을 안 지난 문서를 담을 수 있다. `/`가 이름에 들어가면
     // 브라우저가 그것을 경로로 읽는다.
     const broken = { meta: { id: '../../etc/passwd', name: 'x', version: '1' } } as unknown as Theme
     expect(exportFileName(broken)).toBe(`theme${EXPORT_FILE_SUFFIX}`)
@@ -206,10 +205,10 @@ describe('파일 이름 (재라 #5)', () => {
 })
 
 describe('봉투 버전 상수', () => {
-  it('§11.2의 페이지 봉투와 같은 문자열이다', () => {
-    // **값은 같고 뜻은 다르다**(재라 #1 — `theme-io.ts`의 머리말이 근거 셋을 든다).
-    // 오늘 페이지 쪽 봉투를 만드는 코드가 없으므로 이 케이스가 대조하는 것은 §11.2의
-    // 규격이 적은 값 하나다.
+  it('설계서 「페이지 JSON」의 페이지 봉투와 같은 문자열이다', () => {
+    // **값은 같고 뜻은 다르다**(`theme-io.ts`의 머리말이 근거 셋을 든다).
+    // 이 케이스가 대조하는 것은 설계서 「페이지 JSON」이 적은 값 하나다 — 페이지 쪽 상수는
+    // `@wirebound/schema`의 `WIREBOUND_PAGE_VERSION`이 따로 갖는다.
     expect(THEME_EXPORT_VERSION).toBe('1')
   })
 })

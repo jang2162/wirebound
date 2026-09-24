@@ -1,9 +1,10 @@
 /**
- * **끊지 않는 읽기를 끊는다**(이월 AD 잔여 · 2026-09-24). 3차 AD 가 세운 장치(`ReadOptions.cancel` — 조회 이펙트가 싣고 정리가 끊는다)를
- * 남은 조회에 태웠다: 셸의 프로젝트(`routes/editor.tsx` — 첫 조회 · `reread`) · 트리(`tree/use-tree-commands.tsx`) · 세션 확인(`me`).
+ * **끊지 않는 읽기를 끊는다.** 조회 이펙트가 `ReadOptions.cancel`을 싣고 정리가 끊는다 — 셸의 프로젝트(`routes/editor.tsx` —
+ * 첫 조회 · `reread`) · 트리(`tree/use-tree-commands.tsx`) · 세션 확인(`me`)이 그렇다.
  * 편집 수습의 `getPage`는 `test/edit/edit-recovery-leave.test.tsx`가 잰다.
  *
- * 고치기 전(Chrome — 조회를 4s 붙잡고 1s 에 목록으로): 프로젝트 · 트리 조회가 떠난 뒤 4.1s 에 200 으로 끝났다(끊기지 않았다).
+ * 정리가 끊지 않으면 프로젝트 · 트리 조회가 떠난 뒤에도 200 으로 끝난다(Chrome 에서 잰 고장 방식 — 조회를 4s 붙잡고 1s 에
+ * 목록으로 떠나면 4.1s 에 끝난다).
  */
 import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'

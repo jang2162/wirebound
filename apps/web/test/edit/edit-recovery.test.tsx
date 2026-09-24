@@ -1,9 +1,9 @@
 /**
- * 편집이 실패했을 때. **어떤 실패든 같은 경로로 수렴한다**(D4) — 페이지를 다시 받아
+ * 편집이 실패했을 때. **어떤 실패든 같은 경로로 수렴한다** — 페이지를 다시 받아
  * 문서와 `headSeq`를 서버 상태로 맞추고, 보내지 못한 편집을 버리고, 사용자에게 알린다.
  *
  * **세션이 끊긴 실패만 갈린다.** 그것은 재조회로 나아지지 않는다 — 다시 받아도 401이고,
- * 그 사이 요청만 쌓인다. 그 하나는 웨이브 1이 만든 세션 무효화 경로로 보낸다.
+ * 그 사이 요청만 쌓인다. 그 하나는 세션 무효화 경로로 보낸다.
  *
  * 하네스는 `use-edit-commit.test.tsx`와 같다 — 셸을 `<App />`으로 띄우고 셸이 만든 바로
  * 그 스토어에 드라이버를 붙인다. **`vi.mock`은 파일마다 있어야 한다**(호이스팅이 그것이
@@ -154,7 +154,7 @@ async function openWithFailure(options: {
   return { getPageCalls: () => getPageCalls, patchCalls: () => patchCalls }
 }
 
-/** 실패를 만드는 손잡이들. 셋이 **같은 경로로** 수렴해야 한다(D4). */
+/** 실패를 만드는 손잡이들. 셋이 **같은 경로로** 수렴해야 한다. */
 const CONFLICT = (): Promise<PatchResult> =>
   Promise.reject(new ApiError(409, 'conflict', SERVER_REASON))
 const VALIDATION = (): Promise<PatchResult> =>
@@ -186,7 +186,7 @@ describe('편집 실패는 재조회로 수렴한다', () => {
     await waitFor(() => expect(harness.getPageCalls()).toBe(2))
 
     // 낙관적으로 넣은 값이 서버 값으로 되돌아갔다. **로컬 `inverse`로 되돌리는 구현과
-    // 갈린다** — 그쪽은 `OLD_TEXT`가 되지 `SERVER_TEXT`가 되지 않는다(D4).
+    // 갈린다** — 그쪽은 `OLD_TEXT`가 되지 `SERVER_TEXT`가 되지 않는다.
     await waitFor(() => expect(canvasText()).toBe(SERVER_TEXT))
 
     // `headSeq`도 서버 것이다. 다음 편집이 그 위에서 만들어져야 또 409를 받지 않는다.
@@ -195,7 +195,7 @@ describe('편집 실패는 재조회로 수렴한다', () => {
   })
 
   it('422를 받아도 같은 경로로 수렴한다', async () => {
-    // **D4의 요지다** — 실패 종류마다 다르게 복구하는 구현을 막는다.
+    // **이 파일의 요지다** — 실패 종류마다 다르게 복구하는 구현을 막는다.
     const harness = await openWithFailure({ patch: VALIDATION })
 
     commit(NEW_TEXT)
@@ -220,7 +220,7 @@ describe('편집 실패는 재조회로 수렴한다', () => {
     commit(NEW_TEXT)
     await waitFor(() => expect(harness.getPageCalls()).toBe(2))
 
-    // **`role="alert"` 하나다**(D8). 어느 화면에서 시작됐든 결과가 같으므로 자리를 나눌
+    // **`role="alert"` 하나다.** 어느 화면에서 시작됐든 결과가 같으므로 자리를 나눌
     // 이유가 없다.
     await waitFor(() => expect(alertTexts()).toHaveLength(1))
     expect(alertTexts()[0]).toContain(SERVER_REASON)
@@ -278,8 +278,8 @@ describe('편집 실패는 재조회로 수렴한다', () => {
   })
 
   it('세션이 끊긴 실패는 로그인으로 보낸다', async () => {
-    // **재조회하지 않는다.** 다시 받아도 401이고 그 사이 요청만 쌓인다. 웨이브 1이 만든
-    // 세션 무효화 경로로 보내는 것이 답이다(D5의 `SignedOut`).
+    // **재조회하지 않는다.** 다시 받아도 401이고 그 사이 요청만 쌓인다. 세션 무효화
+    // 경로로 보내는 것이 답이다(`api/failure.tsx`의 `SignedOut`).
     const harness = await openWithFailure({
       patch: () => Promise.reject(new ApiError(401, 'unauthenticated', '로그인이 필요합니다')),
     })
@@ -305,7 +305,7 @@ describe('편집 실패는 재조회로 수렴한다', () => {
   })
 
   it('재조회마저 실패하면 그 이유를 알리고 멈춘다', async () => {
-    // 계획서 Step 2의 3번 — 재조회가 실패하면 `idle`로 두고 조회 실패 문안을 낸다.
+    // 재조회가 실패하면 `idle`로 두고 조회 실패 문안을 낸다.
     // 여기서 다시 재조회하면 서버가 계속 실패하는 동안 요청이 쌓인다.
     const harness = await openWithFailure({ patch: CONFLICT, refetchFails: true })
 
@@ -320,8 +320,8 @@ describe('편집 실패는 재조회로 수렴한다', () => {
   })
 
   /**
-   * **이 갈래는 화면을 되돌리지 않는다 — 그러니 그렇다고 말해야 한다**(P5-2 리뷰가 찾았다.
-   * *"실패했다고 말하는데 조작은 일어났다"* 부류의 **다섯째**).
+   * **이 갈래는 화면을 되돌리지 않는다 — 그러니 그렇다고 말해야 한다**(*"실패했다고 말하는데
+   * 조작은 일어났다"* 부류다).
    *
    * 재조회가 **성공**하면 `loadPage`가 문서·선택·큐를 서버 것으로 놓는다. **실패하면 그
    * 셋을 아무것도 안 놓는다** — `failEdits`는 큐만 비우므로 **낙관적으로 적용된 편집이
@@ -329,7 +329,7 @@ describe('편집 실패는 재조회로 수렴한다', () => {
    * 화면을 고칠 수는 없고, **할 수 있는 정직한 일은 그 상태를 말하는 것뿐이다.**
    *
    * **위 케이스는 이 사실을 못 잡는다** — `toContain('[T6-refetch]')`이라 우리 문장을
-   * 덧붙이든 말든 통과한다(P5-2가 쟀다: 문구를 더해도 `--project web` 전량이 그대로 통과).
+   * 덧붙이든 말든 통과한다.
    */
   it('재조회마저 실패하면 화면에 남은 편집이 저장되지 않았다고 말한다', async () => {
     const harness = await openWithFailure({ patch: CONFLICT, refetchFails: true })
@@ -373,8 +373,8 @@ describe('편집 실패는 재조회로 수렴한다', () => {
   })
 
   it('재조회를 기다리는 동안 낸 편집은 서버로 나가지 않는다', async () => {
-    // **재조회 창의 고아 편집.** 실측한 결함이다 — 고치기 전에는 그 편집이 큐에 남아
-    // 있다가 다음 편집이 펌프를 깨울 때 **재조회 이후의 `baseSeq` 위에서** 서버로 나갔다
+    // **재조회 창의 고아 편집.** 재조회가 창의 편집을 버리지 않으면 그 편집이 큐에 남아
+    // 있다가 다음 편집이 펌프를 깨울 때 **재조회 이후의 `baseSeq` 위에서** 서버로 나간다
     // (요청 자취 `{baseSeq:7,"편집A"} {baseSeq:42,"편집B"} {baseSeq:42,"편집C"}`).
     // 사용자는 "취소됐다"고 들은 편집이 적용된 문서를 보게 된다.
     let release = (): void => {}
@@ -435,8 +435,8 @@ describe('편집 실패는 재조회로 수렴한다', () => {
   })
 
   it('재조회 창의 편집은 undo 스택에도 쌓이지 않는다', async () => {
-    // 고치기 전에는 편집B가 나중에 ack되며 undo 스택에 실렸다(실측: `undo=2`).
-    // 되돌릴 수 없는 편집이 스택에 있으면 Task 10의 undo가 서버 상태와 어긋난다.
+    // 창의 편집을 버리지 않으면 편집B가 나중에 ack되며 undo 스택에 실린다(실측: `undo=2`).
+    // 되돌릴 수 없는 편집이 스택에 있으면 undo가 서버 상태와 어긋난다.
     let release = (): void => {}
     const blocked = new Promise<void>((resolve) => {
       release = resolve
@@ -483,13 +483,13 @@ describe('편집 실패는 재조회로 수렴한다', () => {
     await waitFor(() => expect(patchCalls).toBe(2))
     await act(async () => {})
 
-    // 편집C 하나뿐이다 — 고치기 전에는 둘이었다.
+    // 편집C 하나뿐이다 — 창의 편집을 버리지 않으면 둘이다.
     expect(shellStore().getState().undoStack).toHaveLength(1)
   })
 
   it('알림은 재조회 창의 편집까지 세어 말한다', async () => {
-    // 고치기 전에는 `failEdits()`가 센 값만 써서 `편집 1개가 취소됐습니다`였다 —
-    // 실제로 영향받은 것은 둘이었다.
+    // `failEdits()`가 센 값만 쓰면 `편집 1개가 취소됐습니다`가 된다 — 창에서 들어온
+    // 편집이 수에서 빠진다.
     let release = (): void => {}
     const blocked = new Promise<void>((resolve) => {
       release = resolve
@@ -528,7 +528,7 @@ describe('편집 실패는 재조회로 수렴한다', () => {
   })
 
   it('서버 문장과 우리 문장이 이어 붙어 명사구로 읽히지 않는다', async () => {
-    // **`toFailure`가 `issues`를 쓰기 시작하면서 드러난 자리다**(리뷰 W1). 카탈로그 위반의
+    // **`toFailure`가 `issues`를 쓰기 때문에 생기는 자리다.** 카탈로그 위반의
     // `issues[0].message`가 **타입 이름으로 끝난다** — `알 수 없는 컴포넌트 타입: 없는타입`.
     // 그 뒤에 우리 문장을 공백 하나로 붙이면
     //
@@ -537,7 +537,7 @@ describe('편집 실패는 재조회로 수렴한다', () => {
     // 가 되어 **"없는타입 페이지를"이 하나의 명사구로 읽힌다.**
     //
     // **이것은 `unknown-type` 하나의 문제가 아니다 — 이어 붙이는 형태가 만드는 부류다.**
-    // 이 경로가 실제로 받는 문장을 api 하네스로 재 보니 **끝에 마침표를 두는 것이 하나도 없다:**
+    // 이 경로가 실제로 받는 문장을 api 하네스로 재면 **끝에 마침표를 두는 것이 하나도 없다:**
     // 409가 `…(요청 baseSeq 99, 현재 0)`(괄호)와 `편집을 적용할 수 없습니다: … /root/…`(**경로**),
     // 422가 타입 이름, 400이 `…undefined입니다`. 즉 **어떤 서버 문장이 와도 두 문장이 한
     // 문장처럼 붙는다.** 구분자가 그 부류를 닫는다.
@@ -569,7 +569,7 @@ describe('편집 실패는 재조회로 수렴한다', () => {
   it('재조회가 실패해도 창의 편집이 남지 않는다', async () => {
     // 재조회가 실패하면 서버 상태를 모르므로 문서를 되돌리지 못한다. 그래도 창의 편집은
     // 버린다 — 남기면 **낡은 `baseSeq` 위에서** 나가고 서버가 다시 409를 낸다
-    // (실측: 고치기 전 그 편집이 `baseSeq 7`로 나갔다. 재조회가 성공한 판의 42와 다르다).
+    // (실측: 버리지 않으면 그 편집이 `baseSeq 7`로 나간다. 재조회가 성공한 판의 42와 다르다).
     let release = (): void => {}
     const blocked = new Promise<void>((resolve) => {
       release = resolve
@@ -623,14 +623,14 @@ describe('편집 실패는 재조회로 수렴한다', () => {
   })
 
   it('재조회는 그 전에 성공한 편집의 undo 스택도 비운다', async () => {
-    // **앞 케이스가 못 잡던 자리다.** `재조회 창의 편집은 undo 스택에도 쌓이지 않는다`는
+    // **앞 케이스가 못 잡는 자리다.** `재조회 창의 편집은 undo 스택에도 쌓이지 않는다`는
     // 그 시나리오에서 재조회 시점의 스택이 이미 비어 있어(성공한 편집이 없다) `loadPage`의
-    // undo 비우기를 되돌려도 죽지 않았다(실측 0 사망). 여기서는 **성공한 편집을 하나 먼저**
+    // undo 비우기를 되돌려도 죽지 않는다. 여기서는 **성공한 편집을 하나 먼저**
     // 만들어 스택을 채운 뒤 실패시킨다.
     //
     // 왜 비워야 하나: 문서가 서버 것으로 되돌아갔으므로 그 전 revision의 `inverse`를
-    // 되보내면 서버 상태와 어긋난다. 새로고침 뒤의 복원은 Task 11이
-    // `GET .../revisions?mine=true`로 따로 채운다.
+    // 되보내면 서버 상태와 어긋난다. 새로고침 뒤의 복원은
+    // `GET .../revisions?mine=true`가 따로 채운다.
     let getPageCalls = 0
     let patchCalls = 0
 

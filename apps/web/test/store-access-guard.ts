@@ -15,11 +15,12 @@
  * 없다). 그래서 검사도 그 둘만 본다. 이름이 같은 다른 것(`api/types.ts`의 `headSeq`,
  * `main.tsx`의 전역 `document`)에 걸리지 않는 이유가 그것이다 — 관문 안에서만 이름을 본다.
  *
- * **걸렸으면 어디로 가야 하나.** `document`에는 오늘 길이 있다(`useOpenDocument`). **`headSeq`·
- * `openPageId`에는 없다** — 그 훅은 `PageDocument | null`만 내주므로 **P2b-2는 `baseSeq`
- * (= `headSeq`, 이월 문서 §3)를 읽는 순간 반드시 여기 걸린다.** 그때 할 일은 가드를 우회하는
- * 것이 아니라 `src/store/use-editor-store.tsx`에 같은 대조를 하는 관문을 하나 더 두는
- * 것이다. 자세한 것은 아래 `fixHint`에 있고, 위반 메시지가 그것을 그대로 말한다.
+ * **걸렸으면 어디로 가야 하나.** `document`에는 `useOpenDocument`가 있다. **`headSeq`·
+ * `openPageId`는 그 훅이 내주지 않는다** — 편집이 `headSeq`를 `baseSeq`로 쓰므로 그것을
+ * 스토어에서 곧장 읽는 자리는 반드시 여기 걸린다. 그때 할 일은 가드를 우회하는 것이 아니라
+ * `src/store/use-editor-store.tsx`의 관문을 쓰거나(문서와 `headSeq`를 함께 내주는 `useOpenPage`)
+ * 거기에 같은 대조를 하는 관문을 하나 더 두는 것이다. 자세한 것은 아래 `fixHint`에 있고,
+ * 위반 메시지가 그 파일을 가리킨다.
  *
  * **이 검사가 보지 못하는 것**(고의로 열어 둔 것이 아니라, 심어서 재보니 0건이던 것):
  *
@@ -47,8 +48,8 @@
  *
  * **이 목록이 사각의 전부라는 뜻이 아니다** — 심어서 잰 것만 적었다. 잡는 형태는 심기 표가
  * 열일곱 줄로 열거하는데, 마찬가지로 **그 표에 없는 형태가 안전하다는 뜻은 아니다.**
- * (`getState()` 쪽 정규식을 넓히는 것은 이월했다 — 지금 트리에 그 형태가 0건이라 오늘 새는
- * 것이 없고, 넓히면 구분력을 새로 실증해야 한다.)
+ * (`getState()` 쪽 정규식은 넓히지 않는다 — 지금 트리에 그 형태가 0건이라 지금 새는 것이
+ * 없고, 넓히면 구분력을 새로 실증해야 한다.)
  *
  * **거짓 양성으로 남겨 둔 것**(전부 잰 값이다):
  *
@@ -94,9 +95,9 @@ export interface FileViolation extends Violation {
  * 뜻이 있어서 앞 페이지의 id가 남아도 `findNode`가 못 찾고 끝난다(`property-panel.tsx`).
  * 대조 없이 읽어도 앞 페이지의 **내용이 그려지지는** 않는다.
  *
- * **`baseDocument`는 P3-2가 더했다**(리베이스의 바탕 — `editor-store.ts`). 같은 호출로
- * 실리고 비워지고, 그리고 **더 위험하다**: 그것은 서버가 확인해 준 문서라 화면이 그리면
- * 사용자가 방금 친 값이 빠진 문서를 보게 된다. 오늘 스토어 밖에서 그것을 읽는 자리는 없다.
+ * **`baseDocument`**(리베이스의 바탕 — `editor-store.ts`)도 같은 호출로 실리고 비워지고,
+ * 그리고 **더 위험하다**: 그것은 서버가 확인해 준 문서라 화면이 그리면 사용자가 방금 친
+ * 값이 빠진 문서를 보게 된다. 지금 스토어 밖에서 그것을 읽는 자리는 없다.
  */
 const PAGE_FIELDS = new Set(['openPageId', 'document', 'baseDocument', 'headSeq'])
 
@@ -116,17 +117,16 @@ export function isExempt(path: string): boolean {
 
 /**
  * 걸렸을 때 **합법적으로 갈 수 있는 길**. 가드가 길을 지목하지 못하면 다음 사람은 가드를
- * 무력화한다 — 이월 문서가 경계한 자리가 정확히 그것이다.
+ * 무력화한다.
  *
- * **`document`에는 오늘 그 길이 있다**(`useOpenDocument`). **`headSeq`·`openPageId`에는
- * 없다** — 그 훅의 반환 타입은 `PageDocument | null`이라 나머지 둘을 내주지 않는다.
- * 이월 문서 §3이 P2b-2의 `baseSeq`를 `headSeq`라고 못박았으므로, **P2b-2는 `baseSeq`를 읽는
- * 순간 반드시 여기 걸린다.**
+ * **`document`에는 그 길이 `useOpenDocument`다.** **`headSeq`·`openPageId`는 그 훅이 내주지
+ * 않는다** — 반환 타입이 `PageDocument | null`이다. 편집이 `headSeq`를 `baseSeq`로 쓰므로
+ * 그것을 스토어에서 곧장 읽는 자리는 반드시 여기 걸린다.
  *
- * 그때 할 일은 가드를 우회하는 것이 아니라 `src/store/use-editor-store.tsx`에 **같은 대조를
- * 하는 관문을 하나 더 두는 것**이다(예: 문서와 `headSeq`를 함께 내주는 훅). 그 파일이 제외
- * 대상인 이유가 그것이다 — 규칙을 정의하는 자리이므로 규칙을 넓히는 것도 거기서 한다.
- * **훅을 지금 만들어 두지 않은 것은 쓸 자리가 아직 없어서다**(P2b-2가 그 모양을 정한다).
+ * 그때 할 일은 가드를 우회하는 것이 아니라 `src/store/use-editor-store.tsx`의 관문을 쓰거나
+ * (문서와 `headSeq`를 함께 내주는 `useOpenPage`) 거기에 **같은 대조를 하는 관문을 하나 더
+ * 두는 것**이다. 그 파일이 제외 대상인 이유가 그것이다 — 규칙을 정의하는 자리이므로 규칙을
+ * 넓히는 것도 거기서 한다.
  */
 function fixHint(name: string): string {
   return name === 'document'
@@ -180,7 +180,7 @@ export function findViolations(source: string): Violation[] {
  * 심어서 잰 다섯(전부 `selector-page-field`):
  *
  * ```ts
- * (s) => s.undoStack.at(-1)?.document        // P2b-2의 undo/redo에서 나올 모양이다
+ * (s) => s.undoStack.at(-1)?.document        // undo/redo가 쓰는 모양이다
  * (s) => s.snapshots.map((snap) => snap.document)
  * (s) => s.pending.filter((p) => p.openPageId === id)
  * (s) => s.pending.some((p) => p.headSeq < base)
@@ -195,7 +195,7 @@ export function findViolations(source: string): Violation[] {
  * **사각이 하나 남는다** — `(s) => { const t = s; return t.document }`. selector 안에서 변수를
  * 한 번 거치는 형태이고, 값이 어디서 왔는지를 알아야 하므로 정규식으로 닫을 수 있는 종류가
  * 아니다. (`(s = init) => s.document`와 `(s) => (s as EditorState).document`는 그 판에서도
- * **잡힌다** — 앞 판이 사각으로 적었던 것은 내 파라미터 추출이 기본값 문법을 못 넘어서였다.)
+ * **잡힌다** — 파라미터 추출이 기본값 문법을 넘어야 그렇다.)
  *
  * **거래는 "오탐 다섯 ↔ 사각 하나"인데도 좁히지 않는 이유는 수가 아니라 성질이다.** 남는
  * 사각이 하필 이 검사의 **핵심 형태**(스토어의 `document`를 곧장 읽기) 위에 나고,
@@ -310,7 +310,7 @@ function isWholeState(selector: string): boolean {
  * 걷은 자리를 공백으로 채우는 것은 앞뒤 토큰이 붙어 새 이름이 생기는 것을 막기 위해서다.
  *
  * **`role-access.test.ts`도 이것을 쓴다** — 소스에서 무언가를 세는 검사는 **주석을 걷지 않으면
- * 자기 자신을 센다**(P2b-5에서 그 사고가 두 번 났다). 그래서 export 한다.
+ * 자기 자신을 센다**. 그래서 export 한다.
  */
 export function stripComments(source: string): string {
   let out = ''

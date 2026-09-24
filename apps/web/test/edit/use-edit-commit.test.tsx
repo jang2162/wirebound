@@ -1,10 +1,9 @@
 /**
  * 편집이 서버로 나가는 경로. **셸은 `<App />`을 라우트째 렌더해서 띄운다**
  * (`editor-harness.tsx`의 관례) — 그러지 않으면 조회가 실패한 화면 위에서도 단언이
- * 통과한다(P2b-1에서 실제로 난 사고).
+ * 통과한다.
  *
- * **편집을 내는 위젯은 아직 없다**(Task 7~9가 만든다). 그래서 이 파일은 셸이 만든
- * **바로 그 스토어**에 `useEditCommit`을 붙인 작은 드라이버를 곁에 띄워 편집을 낸다 —
+ * **이 파일은 편집을 내는 위젯을 거치지 않는다.** 셸이 만든 **바로 그 스토어**에 `useEditCommit`을 붙인 작은 드라이버를 곁에 띄워 편집을 낸다 —
  * 스토어가 같으므로 낙관적 적용은 진짜 캔버스에 그려지고, 요청은 진짜 `ApiClient`
  * 가짜를 지난다. 스토어를 새로 만들어 쥐면 그 대조가 사라진다.
  *
@@ -79,7 +78,7 @@ function textDoc(content = OLD_TEXT): ReturnType<typeof pageDoc> {
   })
 }
 
-/** 서버가 낼 성공 응답. `inverse`는 서버가 만든 것이다(설계 §7.1). */
+/** 서버가 낼 성공 응답. `inverse`는 서버가 만든 것이다(설계서 「정방향 흐름」). */
 function patchResult(seq: number, clientOpId: string): PatchResult {
   return {
     seq,
@@ -101,7 +100,7 @@ interface RecordedPatch {
 
 /**
  * 응답을 **테스트가 직접 흘려 주는** `patchOps`. 요청이 떠 있는 동안을 볼 수 있어야
- * D6(in-flight는 하나)를 잴 수 있다 — 곧바로 resolve하는 가짜로는 두 요청이 겹치는
+ * *"in-flight는 하나"*를 잴 수 있다 — 곧바로 resolve하는 가짜로는 두 요청이 겹치는
  * 순간이 존재하지 않아 병렬 전송 구현도 통과한다.
  */
 function deferredPatchOps(): { calls: RecordedPatch[]; patchOps: ApiClient['patchOps'] } {
@@ -197,7 +196,7 @@ describe('useEditCommit', () => {
   })
 
   it('ack를 받으면 다음 baseSeq가 응답의 seq다', async () => {
-    // README 4단계 — *"응답의 `seq`가 다음 요청의 `baseSeq`다."* 이것이 어긋나면 두 번째
+    // `apps/api/README.md` 「편집 파이프라인」 절 — *"응답의 `seq`가 다음 요청의 `baseSeq`다."* 이것이 어긋나면 두 번째
     // 편집이 409를 받는다.
     const { calls, patchOps } = deferredPatchOps()
     await openPage(textDoc(), { apiOverrides: { patchOps } })
@@ -215,7 +214,7 @@ describe('useEditCommit', () => {
   })
 
   it('in-flight 중의 편집은 기다린다', async () => {
-    // **이 케이스가 D6의 전부다.** README: *"in-flight 요청은 항상 하나여야 한다 — 앞
+    // **이 케이스가 *"in-flight는 하나"*의 전부다.** README: *"in-flight 요청은 항상 하나여야 한다 — 앞
     // 요청의 `seq`를 받아야 다음 `baseSeq`가 정해지기 때문이다. 어기면 두 번째 요청이
     // 409를 받는다."* 없으면 병렬 전송 구현이 나머지를 전부 통과한다.
     const { calls, patchOps } = deferredPatchOps()
@@ -259,7 +258,7 @@ describe('useEditCommit', () => {
   })
 
   it('적용할 수 없는 편집은 요청을 만들지 않는다', async () => {
-    // D7 — 없는 노드다. `propOps`가 `null`을 내고 거기서 멈춘다.
+    // 없는 노드다. `propOps`가 `null`을 내고 거기서 멈춘다.
     const { calls, patchOps } = deferredPatchOps()
     await openPage(textDoc(), { apiOverrides: { patchOps } })
     mountDriver({ patchOps } as unknown as ApiClient)
@@ -344,14 +343,13 @@ describe('useEditCommit', () => {
   })
 
   it('스토어가 다른 페이지를 들고 있으면 편집이 나가지 않는다', async () => {
-    // **주소 대조의 동작 케이스다.** 앞서 이 자리를 지키는 것은 `store-access.test.ts`의
-    // 가드 하나뿐이었다 — 대조를 스토어 직접 읽기로 바꾸는 변이에서 죽는 동작 케이스가
-    // 0개였다. **둘은 다른 것을 잡는다:** 가드는 소스 텍스트라 "우회를 썼다"는 사실만
+    // **주소 대조의 동작 케이스다.** `store-access.test.ts`의 가드만 있으면 대조를 스토어
+    // 직접 읽기로 바꾸는 변이에서 죽는 동작 케이스가 없다. **둘은 다른 것을 잡는다:** 가드는 소스 텍스트라 "우회를 썼다"는 사실만
     // 알고, 이 케이스는 "우회하면 무엇이 잘못되는가"를 잡는다.
     //
     // 잘못되는 것: 대조가 없으면 **앞 페이지의 ops가 다음 페이지 경로로, 앞 페이지의
     // revision을 `baseSeq`로 달고** 나간다(실측: 우회 판에서 `PATCH …/pages/pg-2/ops`가
-    // `baseSeq 7`로 1건 나갔고 ops의 경로는 `pg-1` 문서에서 만든 것이었다). 두 페이지의
+    // `baseSeq 7`로 1건 나가고 ops의 경로는 `pg-1` 문서에서 만든 것이다). 두 페이지의
     // 구조가 겹치면 서버가 엉뚱한 페이지에 편집을 적용한다.
     const { calls, patchOps } = deferredPatchOps()
     await openPage(textDoc(), { apiOverrides: { patchOps } })

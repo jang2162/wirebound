@@ -1,5 +1,5 @@
 /**
- * **이 탭이 아는 사용자**(이월 Y′ — `src/api/known-user.tsx`). 웹은 요청마다 탭이 아는 사람의 id 를 싣고(REST 머리 · WS 쿼리),
+ * **이 탭이 아는 사용자**(`src/api/known-user.tsx`). 웹은 요청마다 탭이 아는 사람의 id 를 싣고(REST 머리 · WS 쿼리),
  * 서버가 쿠키의 사람과 다르다고 409 `session-user-changed`로 답하면 `me`로 쿠키의 사람을 다시 알아내 그 사람이 된다.
  */
 import { act, screen } from '@testing-library/react'
@@ -62,7 +62,7 @@ describe('HTTP 클라이언트 — 이 탭이 아는 사용자를 싣고, 거절
   })
 
   /** 혼자 죽는 변조: `realtimeUrl`이 쿼리를 안 싣는다. */
-  it('WS 주소는 아는 사람을 쿼리로 싣는다 — 모르면 앞 판 그대로', () => {
+  it('WS 주소는 아는 사람을 쿼리로 싣는다 — 모르면 쿼리가 없다', () => {
     expect(realtimeUrl('http://localhost:5173', 'p1', 'u a')).toBe('ws://localhost:5173/api/projects/p1/ws?knownUser=u%20a')
     expect(realtimeUrl('http://localhost:5173', 'p1')).toBe('ws://localhost:5173/api/projects/p1/ws')
   })
@@ -87,8 +87,8 @@ describe('세션 — 쿠키의 사람이 다르다는 답을 받으면 다시 �
   })
 
   /**
-   * 고치기 전에는 이 길이 없었다 — 탭은 알림을 못 받으면 영영 앞 사람의 화면이었다(Chrome: 알림 없는 로그인 뒤 앨리스로 믿는 탭의
-   * 코멘트가 작성자 밥으로 커밋).
+   * 이 길이 없으면 탭은 알림을 못 받았을 때 영영 앞 사람의 화면이다(Chrome 에서 잰 고장 방식: 알림 없는 로그인 뒤 앨리스로 믿는
+   * 탭의 코멘트가 작성자 밥으로 커밋된다).
    *
    * 혼자 죽는 변조: `learned`가 늘 지금 세션 그대로다(다시 알아낸 사람으로 옮기지 않는다).
    */

@@ -1,8 +1,8 @@
 /**
- * 메뉴 트리의 키보드 단축키와 통합(P2b-4 Task 10).
+ * 메뉴 트리의 키보드 단축키와 통합.
  *
  * **단축키는 버튼을 지나지 않는다** — `disabled`가 막던 것을 여기서는 **판정과 잠금**이
- * 막아야 한다(D2·D8). 그것이 이 파일의 하중이다.
+ * 막아야 한다. 그것이 이 파일의 하중이다.
  *
  * `structure-keyboard.test.tsx`가 선례지만 **표는 따로 둔다** — 두 트리가 한 화면에 있고
  * 조작이 다르다.
@@ -86,7 +86,7 @@ function stubs(overrides: Partial<ApiClient> = {}) {
   })
 
   // **덮어쓴 것이 있으면 그것을 돌려준다.** 자기가 만든 스텁을 그대로 내면 케이스가
-  // 부르지도 않은 함수의 호출 수를 세게 된다(실제로 그렇게 두 케이스가 0회를 봤다).
+  // 부르지도 않은 함수의 호출 수를 세게 된다(덮어쓴 함수로 부른 케이스가 늘 0회를 본다).
   return {
     client,
     getTree: (overrides.getTree ?? getTree) as typeof getTree,
@@ -127,7 +127,7 @@ function keyTarget(): HTMLElement {
 
 describe('메뉴 트리 단축키', () => {
   it('Delete와 Backspace가 삭제 확인을 건다', async () => {
-    // **바로 지우지 않는다 — D7이 단축키에도 걸린다.** 키 하나로 사라지면 되돌릴 길이 없다.
+    // **바로 지우지 않는다 — 두 번 누르는 삭제 확인이 단축키에도 걸린다.** 키 하나로 사라지면 되돌릴 길이 없다.
     for (const key of ['Delete', 'Backspace']) {
       const api = await open()
       fireEvent.click(menuButton('권한'))
@@ -179,7 +179,7 @@ describe('메뉴 트리 단축키', () => {
   it('입력이 열려 있는 동안에는 단축키가 걸리지 않는다', async () => {
     // **제목에 `Backspace`를 치는 것이 삭제가 되면 안 된다.** `structure-tree.tsx`는 상자에
     // 핸들러를 붙이는데 그쪽에는 인라인 입력이 없다 — 여기서는 그 방법만으로는 입력에서 친
-    // 키가 버블되어 상자로 온다(재 봤다). 그래서 열려 있는 동안 아예 지나가게 한다.
+    // 키가 버블되어 상자로 온다. 그래서 열려 있는 동안 아예 지나가게 한다.
     const api = await open()
 
     fireEvent.click(menuButton('권한'))
@@ -198,7 +198,7 @@ describe('메뉴 트리 단축키', () => {
   })
 
   it('busy인 동안 단축키가 걸리지 않는다', async () => {
-    // D2 — 잠금은 `ref`이고 단축키는 버튼을 지나지 않는다.
+    // 잠금은 `ref`이고 단축키는 버튼을 지나지 않는다.
     const gate: { release: (() => void) | null } = { release: null }
     const api = await open({
       updateMenu: vi.fn(
@@ -223,12 +223,12 @@ describe('메뉴 트리 단축키', () => {
   })
 
   it('busy인 동안 Delete가 삭제 확인을 걸지 않는다', async () => {
-    // **D7의 두 번 누르기가 사실상 한 번이 되는 자리다.** 잠금 중에 확인이 걸리면 그 확인이
-    // **잠금이 풀린 뒤까지 살아남아** 클릭 한 번에 삭제가 나간다(재현했다: `deleteMenu` 1회).
-    // undo가 없으므로 복구 불가다.
+    // **삭제 확인의 두 번 누르기가 사실상 한 번이 되는 자리다.** 잠금 중에 확인이 걸리면 그
+    // 확인이 **잠금이 풀린 뒤까지 살아남아** 클릭 한 번에 삭제가 나간다(`askRemove`의 가드를
+    // 빼면 이 케이스에서 `deleteMenu`가 1회 나간다). undo가 없으므로 복구 불가다.
     //
-    // `askRemove`만 `run`을 지나지 않아 가드가 없었다 — `openInput`·`openReparent`는 갖고
-    // 있었다. "여는" 셋이 같은 가드를 갖는 것이 D2의 잠금이다.
+    // `askRemove`는 `run`을 지나지 않으므로 가드를 따로 든다 — `openInput`·`openReparent`와
+    // 같다. "여는" 셋이 같은 가드를 갖는 것이 조작 잠금이다.
     const gate: { release: (() => void) | null } = { release: null }
     const api = await open({
       updateMenu: vi.fn(
@@ -278,7 +278,7 @@ describe('메뉴 트리 단축키', () => {
   })
 
   it('Tab은 빼앗지 않는다', async () => {
-    // 그러면 키보드 사용자가 트리를 빠져나갈 수 없다(계획서 Task 8 케이스 4와 같은 근거).
+    // 그러면 키보드 사용자가 트리를 빠져나갈 수 없다.
     const api = await open()
 
     fireEvent.click(menuButton('등급'))
@@ -309,7 +309,7 @@ describe('통합', () => {
     fireEvent.change(rename, { target: { value: '등급 정책' } })
     fireEvent.keyDown(rename, { key: 'Enter' })
     await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
-    // 메뉴도 바탕을 싣고(이월 5차 ②) 장부의 끊는 신호를 받는다(이월 5차 ③).
+    // 메뉴도 바탕을 싣고 장부의 끊는 신호를 받는다.
     expect(api.updateMenu).toHaveBeenCalledWith('p-1', 'm-grade', { title: '등급 정책', base: { title: '등급' } }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
 
     // 옮기기(순서)
@@ -359,19 +359,19 @@ describe('통합', () => {
   })
 })
 
-describe('뷰 모드에서는 단축키가 듣지 않는다 (§9)', () => {
+describe('뷰 모드에서는 단축키가 듣지 않는다', () => {
   /**
    * **툴바를 감추는 것만으로는 안 닫힌다.** 단축키는 `disabled`를 지나지 않으므로
    * (위 `비활성인 조작은 단축키로도 실행되지 않는다`가 재는 그 성질) 툴바가 DOM에서
    * 빠져도 키는 그대로 살아 있다 — 화면에 아무 단추도 없는데 `Delete`가 메뉴를 지운다.
-   * 그래서 `MenuTree`가 `editable`로 셋(툴바·페이지 JSON·이 핸들러)을 함께 가른다.
+   * 그래서 `MenuTree`가 `editable`로 셋(툴바·페이지 JSON·이 핸들러)을 함께 가른다(구조 편집은
+   * 편집 모드에서만 한다 — 설계서 「설계서 화면 구조」).
    *
-   * ## 표를 순회한다 — 셋만 재던 것을 여섯으로 넓혔다 (리뷰가 지목했다)
+   * ## 표를 순회한다 — 여섯 조합을 다 누른다
    *
-   * 앞 판은 `Delete`·`Alt+↑`·`Alt+Shift+→` **셋**만 눌렀다. 나머지 셋(`Backspace`·`Alt+↓`·
-   * `Alt+Shift+←`)도 그때 이미 죽고 있었지만 **지금 옳은 것과 앞으로 지켜지는 것은 다르다** —
-   * 케이스가 없으면 `handleKeyDown`에 키를 하나 더할 때 그것이 뷰 모드에서도 사는지 아무도
-   * 묻지 않는다.
+   * 일부(예: `Delete`·`Alt+↑`·`Alt+Shift+→` 셋)만 누르면, 나머지가 지금 뷰 모드에서 죽고
+   * 있어도 **지금 옳은 것과 앞으로 지켜지는 것은 다르다** — 케이스가 없으면 `handleKeyDown`에
+   * 키를 하나 더할 때 그것이 뷰 모드에서도 사는지 아무도 묻지 않는다.
    *
    * **`SHORTCUTS`를 import해서 순회하지 않는다 — 그럴 수 없다.** 그 표가 드는 것은
    * `match: (event) => …`라는 **술어**이고, 술어에서 `fireEvent.keyDown`에 넘길 이벤트를
@@ -389,7 +389,7 @@ describe('뷰 모드에서는 단축키가 듣지 않는다 (§9)', () => {
    * (앞뒤 형제가 있고 · 앞 형제가 메뉴이며 · 부모가 있고 · 하위가 없다).
    *
    * `arms`는 **편집 모드에서 무엇이 관측되는가**다 — 양성 대조가 그것을 본다.
-   * 옮기기 넷은 `updateMenu`가 나가고, 삭제 둘은 요청 대신 **확인이 걸린다**(D7).
+   * 옮기기 넷은 `updateMenu`가 나가고, 삭제 둘은 요청 대신 **확인이 걸린다**.
    */
   const SHORTCUT_KEYS = [
     { name: 'Delete', init: { key: 'Delete' }, arms: 'confirm' },
@@ -423,7 +423,7 @@ describe('뷰 모드에서는 단축키가 듣지 않는다 (§9)', () => {
       if (arms === 'request') {
         await waitFor(() => expect(api.updateMenu).toHaveBeenCalledTimes(1))
       } else {
-        // 삭제는 요청을 내지 않는다 — 한 번 더 눌러야 나간다(D7).
+        // 삭제는 요청을 내지 않는다 — 한 번 더 눌러야 나간다.
         expect(confirmArmed()).toBe(true)
         expect(api.deleteMenu).not.toHaveBeenCalled()
       }

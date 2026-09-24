@@ -1,16 +1,16 @@
 /**
- * **토큰 GUI(② W1).** ①이 자리를 만들었고 W1이 채웠다.
+ * **토큰 GUI.**
  *
- * 셋이 병렬로 일하므로 **각자 자기 케이스 파일에만 쓴다.** `test/routes/theme-editor.test.tsx`는
- * 라우트·권한·저장의 케이스 파일이고 ②가 열면 셋이 같은 파일에서 부딪힌다 — ①의 P5가
- * 그 충돌을 회귀가 못 잡는다는 것을 밟아서 확인했다.
+ * **토큰 GUI의 케이스는 이 파일에만 쓴다.** `test/routes/theme-editor.test.tsx`는
+ * 라우트·권한·저장의 케이스 파일이다 — 여럿이 병렬로 한 파일에 케이스를 더하면 같은 자리에서
+ * 부딪히고, 그 충돌은 회귀가 못 잡는다.
  *
  * ---
  *
  * **이 파일에서 값이 두 번 나오는 케이스 둘이 요점이다**(`§어휘`). 화면이 든 상수를
- * **엔진에서 다시 재서** 대조한다 — 브리프의 *"이름공간 드롭다운을 하드코딩하지 마라"*를
- * 지키는 방법이 `apps/web`에서는 그것뿐이기 때문이다(상수를 `themes`에 새로 내보내는 것은
- * 이 슬라이스의 범위 밖이다). **엔진이 하나라도 더 받거나 덜 받으면 그 케이스가 죽는다.**
+ * **엔진에서 다시 재서** 대조한다 — *"이름공간 드롭다운을 하드코딩하지 않는다"*를
+ * 지키는 방법이 `apps/web`에서는 그것뿐이기 때문이다(이 상수들은 `themes`가 내보내지 않고
+ * 화면이 든다). **엔진이 하나라도 더 받거나 덜 받으면 그 케이스가 죽는다.**
  */
 import { fireEvent, render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -115,7 +115,7 @@ describe('TokenEditor', () => {
     }
 
     expect(accepted).toEqual([...SEMANTIC_NAMESPACES])
-    // 브리프의 표(스타일 값 = 열)와 **다른 자리**라는 것이 이 단언의 뜻이다.
+    // 스타일 값이 받는 이름공간(열)과 **다른 자리**라는 것이 이 단언의 뜻이다.
     expect(accepted).toHaveLength(2)
     expect(TOKEN_NAMESPACES).toHaveLength(7)
   })
@@ -132,7 +132,7 @@ describe('TokenEditor', () => {
     expect(expands.sort()).toEqual([...TYPOGRAPHY_TEXT_KEYS].sort())
   })
 
-  /* ── D7 — 3단을 그대로 보인다 ──────────────────────────────────────────────── */
+  /* ── 3단을 그대로 보인다 ────────────────────────────────────────────────────── */
 
   it('세 층을 각각의 상자로 보이고 층마다 무엇을 받는지 적는다', () => {
     const { view } = mount(theme({ palette: { 'blue.600': '#2563eb' } }))
@@ -141,7 +141,7 @@ describe('TokenEditor', () => {
     const semantic = view.getByLabelText('semantic — 의미')
     const scale = view.getByLabelText('scale — 치수·타이포·모션')
 
-    // **`palette`를 스타일이 직접 가리킬 수 없다는 것이 화면에 있다**(D7).
+    // **`palette`를 스타일이 직접 가리킬 수 없다는 것이 화면에 있다.**
     expect(palette.textContent).toContain('스타일은 palette를 직접 가리킬 수 없')
     expect(semantic.textContent).toContain('palette·semantic 참조 또는 리터럴')
     expect(scale.textContent).toContain('리터럴만')
@@ -189,14 +189,14 @@ describe('TokenEditor', () => {
     expect(store.getState().draft?.tokens?.semantic?.['primary']).toBe('palette.blue.600')
   })
 
-  /* ── 재라 #4 — 텍스트 입력이 진실이다 ─────────────────────────────────────── */
+  /* ── 텍스트 입력이 진실이다 ─────────────────────────────────────────────── */
 
   it('참조 값은 텍스트 입력에 그대로 있고 컬러 피커가 나오지 않는다', () => {
     const { view } = mount(
       theme({ palette: { 'blue.600': '#2563eb' }, semantic: { primary: 'palette.blue.600' } }),
     )
 
-    // **`<input type="color">`가 진실이면 이 값이 `#000000`이 된다**(머리말의 실측 1).
+    // **`<input type="color">`가 진실이면 이 값이 `#000000`이 된다**(`token-editor.tsx` 머리말 표의 1번).
     expect(field(view, 'tokens.semantic.primary').value).toBe('palette.blue.600')
     expect(view.queryByLabelText('tokens.semantic.primary 색 고르기')).toBeNull()
   })
@@ -209,12 +209,12 @@ describe('TokenEditor', () => {
     )
 
     const picker = view.getByLabelText('tokens.palette.hex6 색 고르기') as HTMLInputElement
-    // 피커는 소문자만 담는다(실측 5). **문서의 값은 대문자 그대로다** — 그것이 텍스트 입력이
+    // 피커는 소문자만 담는다(같은 표의 5번). **문서의 값은 대문자 그대로다** — 그것이 텍스트 입력이
     // 진실이라는 뜻이고, 피커를 안 만지는 한 저장 버튼이 켜지지 않는다.
     expect(picker.value).toBe('#2563eb')
     expect(field(view, 'tokens.palette.hex6').value).toBe('#2563EB')
 
-    // 3자리 hex와 `rgba()`는 피커가 담지 못한다(실측 2·3).
+    // 3자리 hex와 `rgba()`는 피커가 담지 못한다(같은 표의 2·3번).
     expect(view.queryByLabelText('tokens.palette.short 색 고르기')).toBeNull()
     expect(view.queryByLabelText('tokens.palette.soft 색 고르기')).toBeNull()
   })
@@ -404,7 +404,7 @@ describe('TokenEditor', () => {
     expect(field(view, 'tokens.scale.space.unit').disabled).toBe(true)
     expect(view.queryByLabelText('palette 토큰 추가')).toBeNull()
     expect(view.queryByLabelText('tokens.semantic.primary 이름공간')).toBeNull()
-    // 잠겨도 **보이는 것은 그대로다** — 읽기 전용으로 여는 것이 D2의 길이다.
+    // 잠겨도 **보이는 것은 그대로다** — 잠긴 테마는 읽기 전용으로 연다.
     expect(view.getByLabelText('space.1~space.24')).toBeTruthy()
   })
 })

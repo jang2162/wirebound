@@ -101,7 +101,7 @@ describe('readNews', () => {
   })
 
   it('로그아웃 소식의 번호 — 없으면 옛 판의 소식으로 받고, 있는데 세대의 모양이 아니면 버린다', () => {
-    // 번호는 초안 사본의 로그아웃 세대다(`panels/draft-store.tsx`의 «표지는 세대 번호다» — 리뷰 R2).
+    // 번호는 초안 사본의 로그아웃 세대다(`panels/draft-store.tsx`의 «표지는 세대 번호다»).
     expect(readNews({ kind: 'signed-out', era: 3, more: 1 })).toEqual({ kind: 'signed-out', era: 3 })
     expect(readNews({ kind: 'signed-out' })).toEqual({ kind: 'signed-out' })
     expect(readNews({ kind: 'signed-out', era: '3' })).toBeNull()

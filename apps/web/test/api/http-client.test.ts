@@ -82,7 +82,7 @@ const projectTheme: ProjectTheme = { themeId: null, theme: { meta: { id: 'admin'
 }
 
 /**
- * `GET·POST·PUT .../themes[/:themeId]`의 응답(P4c-2). **조건부 두 키를 일부러 안 담았다** —
+ * `GET·POST·PUT .../themes[/:themeId]`의 응답. **조건부 두 키를 일부러 안 담았다** —
  * 그것이 서버의 흔한 응답이고(`base`는 파생일 때만, `warnings`는 경고가 있을 때만),
  * *"없는 것이 정상"*을 통과시키는 것이 `SHAPES.themeDetail`의 절반이다.
  */
@@ -99,7 +99,7 @@ const treeNode: TreeMenuNode = {
   pages: [{ id: 'pg1', title: '목록', sortOrder: 0 }],
   children: [{ id: 'm2', title: '권한', sortOrder: 0, pages: [], children: [] }],
 }
-/** `PATCH .../ops` 성공 응답. `inverse`는 **서버가** 만든 것이다(설계 §7.1). */
+/** `PATCH .../ops` 성공 응답. `inverse`는 **서버가** 만든 것이다(설계서 「정방향 흐름」). */
 const patchResult = {
   seq: 8,
   revisionId: 'rev-1',
@@ -120,15 +120,15 @@ const page: PageDetail = {
 }
 
 /**
- * `POST /pages/import`의 응답(P7-3). **`page`가 위 `page`와 같은 여덟 키다** — 서버의 같은
+ * `POST /pages/import`의 응답. **`page`가 위 `page`와 같은 여덟 키다** — 서버의 같은
  * `toResponse`가 만든다.
  */
 const pageImported: PageImported = { page, comments: { inserted: 2, dangling: 1 } }
 
-/** `POST /menu`·`PATCH /menu/:nodeId`의 응답. 트리 노드와 달리 `pages`·`children`이 없다(D1). */
+/** `POST /menu`·`PATCH /menu/:nodeId`의 응답. 트리 노드와 달리 `pages`·`children`이 없다. */
 const menuNode: MenuNode = { id: 'm1', projectId: 'p1', parentId: null, title: '회원관리', sortOrder: 0 }
 
-/** 코멘트 하나. `marker`가 **없는 것이 요점이다** — 번호는 노드의 값이다(§4.3). */
+/** 코멘트 하나. `marker`가 **없는 것이 요점이다** — 번호는 노드의 값이다(설계서 「페이지 스키마 노드」). */
 const comment = {
   id: 'c1',
   nodeId: 'n_000000000001',
@@ -151,9 +151,9 @@ const commentCreated = {
 const markerChange = { seq: 9, markerOps: [{ op: 'remove', path: '/root/children/0/marker' }] }
 
 /**
- * `GET .../snapshots`의 항목 하나(P6-1). **`payload`가 없다** — 목록은 크기만 낸다(서버 D9).
+ * `GET .../snapshots`의 항목 하나. **`payload`가 없다** — 목록은 크기만 낸다.
  * 생성 응답에는 `payload`가 더 붙지만 `SHAPES.snapshot`이 그것을 보지 않고 통과시킨다:
- * 이 화면은 payload를 읽지 않는다(복원이 없다 — 계획서 D1).
+ * 이 화면은 payload를 읽지 않는다(복원도 payload를 읽는 것은 서버다 — 아래 `restoreSnapshot` 줄).
  */
 const snapshot = {
   id: 's1',
@@ -165,11 +165,7 @@ const snapshot = {
   payloadBytes: 8123,
 }
 
-/**
- * 복원 결과(P6-2). **화면이 읽는 것만 담지 않는다** — 서버가 실제로 내는 모양 그대로여야
- * `ok` 판이 *"과도 차단을 재는 자리"*가 된다.
- */
-/** 프리셋 하나(P7-2). 목록·생성이 같은 모양이다 — 서버의 응답 두 벌이 같은 키를 낸다. */
+/** 프리셋 하나. 목록·생성이 같은 모양이다 — 서버의 응답 두 벌이 같은 키를 낸다. */
 const preset = {
   id: 'builtin:search-list',
   source: 'builtin',
@@ -178,6 +174,10 @@ const preset = {
   nodes: [{ id: 'sl_list', type: 'List' }],
 }
 
+/**
+ * 복원 결과. **화면이 읽는 것만 담지 않는다** — 서버가 실제로 내는 모양 그대로여야
+ * `ok` 판이 *"과도 차단을 재는 자리"*가 된다.
+ */
 const restoreResult = {
   summary: {
     menu: { created: 0, updated: 1, deleted: 0 },
@@ -189,7 +189,7 @@ const restoreResult = {
   themes: [{ layoutId: 'l1', themeId: 't1', differs: false }],
 }
 
-/** `GET .../export/preview?format=html`의 응답(P8-4). */
+/** `GET .../export/preview?format=html`의 응답. */
 const exportPreview = {
   format: 'html',
   pages: [{ id: 'pg1', title: '회원 목록', target: 'page:관리자/회원/목록' }],
@@ -201,7 +201,7 @@ const exportPreview = {
 }
 
 /**
- * `GET .../export/preview?format=pptx`의 응답(P10-1 D7). **위와 다른 모양이다** —
+ * `GET .../export/preview?format=pptx`의 응답. **위와 다른 모양이다** —
  * 형식마다 다른 것을 말하므로 shape 검사도 갈래마다 재야 한다.
  */
 const pptxPreview = {
@@ -278,8 +278,8 @@ const ENDPOINTS: Array<{
     body: [themeSummary],
     call: (c) => c.listProjectThemes('p1'),
   },
-  // --- 아래 열하나는 이 표에 없었다. **각자 자기 describe에서 URL이 단언되고 있었지만
-  // 이 표에는 없었고**, 그 사실을 세는 절이 없어 아무도 몰랐다(위 `표의 완전성` 머리말). ---
+  // --- 아래 줄들은 **각자 자기 describe에서도 URL이 단언되지만 이 표에도 있어야 한다** —
+  // 표에서 빠진 것은 `표의 완전성`이 세고, 그 절이 없으면 아무도 모른다(`표의 완전성` 머리말). ---
   {
     client: 'createProject',
     url: '/api/projects',
@@ -368,7 +368,7 @@ const ENDPOINTS: Array<{
     body: [revision],
     call: (c) => c.listMyRevisions('p1', 'pg1'),
   },
-  // **테마 저작 셋(P4c-2).** `getProjectTheme`의 `/theme`과 한 글자 차이인 `/themes/:id`다 —
+  // **테마 저작 셋.** `getProjectTheme`의 `/theme`과 한 글자 차이인 `/themes/:id`다 —
   // 두 줄이 나란히 있어야 그 차이가 표에서 보인다.
   {
     client: 'getTheme',
@@ -392,9 +392,9 @@ const ENDPOINTS: Array<{
     call: (c) =>
       c.updateTheme('p1', 't1', { theme: { meta: { id: 'brand', name: '브랜드', version: '1.0.0' } } }),
   },
-  // **코멘트 다섯(P5-1).** 전부 `.../pages/:pageId/comments` 아래다 — 코멘트는 프로젝트가
-  // 아니라 **페이지의 노드**에 붙는다. 이 다섯 줄이 없어서 `표의 완전성`의 두 케이스가
-  // 죽는 것을 먼저 봤다(P5-1이 쟀다).
+  // **코멘트 다섯.** 전부 `.../pages/:pageId/comments` 아래다 — 코멘트는 프로젝트가
+  // 아니라 **페이지의 노드**에 붙는다. 이 다섯 줄을 빼면 `표의 완전성`의 두 케이스가
+  // 죽는다.
   {
     client: 'listComments',
     url: '/api/projects/p1/pages/pg1/comments',
@@ -433,8 +433,8 @@ const ENDPOINTS: Array<{
     body: markerChange,
     call: (c) => c.renumberComments('p1', 'pg1'),
   },
-  // **스냅샷 둘(P6-1).** 프로젝트 아래이고 페이지를 지나지 않는다 — 스냅샷은 프로젝트
-  // **전체** 상태를 얼린다(§4.5).
+  // **스냅샷 둘.** 프로젝트 아래이고 페이지를 지나지 않는다 — 스냅샷은 프로젝트
+  // **전체** 상태를 얼린다(설계서 「스냅샷」).
   {
     client: 'listSnapshots',
     url: '/api/projects/p1/snapshots',
@@ -449,7 +449,7 @@ const ENDPOINTS: Array<{
     body: snapshot,
     call: (c) => c.createSnapshot('p1', { tag: 'v1', description: '첫 릴리스 직전' }),
   },
-  // **프리셋 둘(P7-2).** 스냅샷과 같은 자리(프로젝트 아래, 페이지를 지나지 않는다)이고
+  // **프리셋 둘.** 스냅샷과 같은 자리(프로젝트 아래, 페이지를 지나지 않는다)이고
   // 이유도 같다 — 프리셋은 **페이지를 건너 다니는** 템플릿이라 특정 페이지에 매이지 않는다.
   {
     client: 'listPresets',
@@ -465,7 +465,7 @@ const ENDPOINTS: Array<{
     body: preset,
     call: (c) => c.createPreset('p1', { name: '내 프리셋', schema: [{ id: 'a', type: 'List' }] }),
   },
-  // **복원(P6-2)은 `:snapshotId` 아래의 정적 세그먼트다** — `GET .../snapshots/:id`(상세)와
+  // **복원은 `:snapshotId` 아래의 정적 세그먼트다** — `GET .../snapshots/:id`(상세)와
   // 한 칸 차이인데 그쪽은 `ApiClient`에 없다(payload를 읽는 것은 서버다).
   {
     client: 'restoreSnapshot',
@@ -474,7 +474,7 @@ const ENDPOINTS: Array<{
     body: restoreResult,
     call: (c) => c.restoreSnapshot('p1', 's1'),
   },
-  // **형식이 쿼리로 간다**(P10-1 D7 — 새 라우트가 아니라 `?format=`이다). `html`에도 붙는다:
+  // **형식이 쿼리로 간다**(새 라우트가 아니라 `?format=`이다). `html`에도 붙는다:
   // 생략하는 가지를 두면 형식을 붙이는 길과 안 붙이는 길이 둘 생긴다(`http-client.ts`).
   {
     client: 'getExportPreview',
@@ -548,7 +548,7 @@ const SHAPE_CASES: Array<{
     ok: themeDetail,
     call: (c) => c.getTheme('p1', 't1'),
   },
-  // --- 아래 셋은 케이스가 **없었다.** 세는 절이 이것을 찾아냈다. ---
+  // --- 아래 셋이 빠지면 세는 절(`표의 완전성`)이 찾아낸다. ---
   // `sessionUser.id`는 세션 문맥이 그대로 들고 다니는 값이다(`session/session-context.tsx`).
   { shape: 'sessionUser', broken: { id: 42 }, ok: user, call: (c) => c.me() },
   // **`inverse`가 배열이 아니면 undo가 그것을 `ops`로 보내다 죽는다**(그 shape의 주석).
@@ -569,7 +569,7 @@ const SHAPE_CASES: Array<{
         ops: [{ op: 'replace', path: '/root/children/0/props/title', value: '가' }],
       }),
   },
-  // --- 코멘트 넷(P5-1). ---
+  // --- 코멘트 넷. ---
   // **`nodeId`가 문자열이 아니면 막는다** — 그 값이 문서에서 노드를 찾는 키이고, 어긋나면
   // 모든 코멘트가 "사라진 노드" 무리로 떨어져 번호가 하나도 안 붙는다.
   { shape: 'comment', broken: { ...comment, nodeId: 42 }, ok: comment, call: (c) => c.updateComment('p1', 'pg1', 'c1', { body: '가' }) },
@@ -591,7 +591,7 @@ const SHAPE_CASES: Array<{
     ok: markerChange,
     call: (c) => c.deleteComment('p1', 'pg1', 'c1'),
   },
-  // --- 스냅샷 둘(P6-1). ---
+  // --- 스냅샷 둘. ---
   // **`payloadBytes`가 숫자가 아니면 막는다** — 화면이 그 값에 `toLocaleString`을 부르므로
   // 문자열이 오면 그 자리에서 던진다(이 화면은 오류 경계 밖이다).
   {
@@ -607,7 +607,7 @@ const SHAPE_CASES: Array<{
     ok: [snapshot],
     call: (c) => c.listSnapshots('p1'),
   },
-  // --- 프리셋 둘(P7-2). ---
+  // --- 프리셋 둘. ---
   // **`nodes`가 배열이 아니면 막는다** — 그 값이 `presetApply`에 그대로 들어가고 그
   // 함수가 `[...nodes]`에서 던진다(구조 트리는 오류 경계 밖이다).
   {
@@ -624,7 +624,7 @@ const SHAPE_CASES: Array<{
     ok: [preset],
     call: (c) => c.listPresets('p1'),
   },
-  // --- 복원(P6-2). ---
+  // --- 복원. ---
   // **`themes`가 배열이 아니면 막는다** — 결과 알림이 `.some(...)`으로 훑으므로 배열이
   // 아니면 **렌더 도중 던진다.** 다른 두 값(바뀐 수·안전망 태그)은 이상한 글자가 보일 뿐이라
   // 손해의 등급이 다르다(`pageDetail`의 `schema.root`가 같은 부류다).
@@ -636,14 +636,14 @@ const SHAPE_CASES: Array<{
   },
   {
     // **`brokenLinks`가 배열이 아니면 화면이 전개하다 던진다** — 이 화면을 감싸는 오류
-    // 경계가 없다(`apps/web`의 경계는 캔버스 하나다).
+    // 경계가 없다(`apps/web`의 경계는 캔버스와 테마 갤러리뿐이다).
     shape: 'exportPreview',
     broken: { ...exportPreview, brokenLinks: null },
     ok: exportPreview,
     call: (c) => c.getExportPreview('p1', 'html'),
   },
   {
-    // **pptx 갈래는 다른 배열들을 든다**(P10-1 D7). `format`을 안 보고 통과시키면 화면이
+    // **pptx 갈래는 다른 배열들을 든다.** `format`을 안 보고 통과시키면 화면이
     // 그것을 pptx로 그리다 `undefined.map`에서 죽는다.
     shape: 'exportPreview',
     broken: { ...pptxPreview, screenFailures: null },
@@ -682,15 +682,14 @@ const API_SOURCES = import.meta.glob('../../src/api/*.ts', {
 /**
  * **표가 스스로 센다.**
  *
- * P4a-3에서 새 엔드포인트(`getProjectTheme`)가 이 파일의 두 표 어디에도 등록되지 않아
- * **두 자리가 초록인 채로 무방비**였고, 그 사실은 리뷰가 변이를 심어서야 드러났다.
- * *"찾은 것을 닫는"* 것으로는 매번 하나가 남는다 — 남는 개수가 리뷰의 성실함에 달려 있고
- * 코드의 안전성과는 관계가 없기 때문이다. `permission-matrix.test.ts`가 같은 이유로
- * 이 절을 얻었고, 여기가 그 나머지 둘이다.
+ * 새 엔드포인트가 이 파일의 두 표 어디에도 등록되지 않으면 **두 자리가 초록인 채로
+ * 무방비**이고, 변이를 심기 전에는 드러나지 않는다. *"찾은 것을 닫는"* 것으로는 매번 하나가
+ * 남는다 — 남는 개수가 리뷰의 성실함에 달려 있고 코드의 안전성과는 관계가 없기 때문이다.
+ * `apps/api/test/permission-matrix.test.ts`가 같은 이유로 같은 이름의 절을 갖는다.
  */
 describe('표의 완전성', () => {
   it('훑을 소스를 실제로 읽는다', () => {
-    // 글롭이 어긋나면 **빈 문자열에서 아래가 조용히 통과한다**(이 저장소가 세 번 겪은 사고다).
+    // 글롭이 어긋나면 **빈 문자열에서 아래가 조용히 통과한다.**
     expect(Object.keys(API_SOURCES).length).toBeGreaterThan(1)
     expect(declaredMethods().length).toBeGreaterThan(10)
     expect(declaredShapes().length).toBeGreaterThan(5)
@@ -791,7 +790,7 @@ describe('createHttpClient', () => {
     expect(result).toEqual([treeNode])
   })
 
-  // **아래 셋은 오늘 매 렌더마다 주소가 된다.** 실측(진짜 `<App />`):
+  // **아래 셋은 매 렌더마다 주소가 된다.** 관문이 없으면(진짜 `<App />`로 잰 값):
   //
   //   `TreePage.id: ''`      → `PageLink`가 `/projects/p1/pages/`     → innerHTML 0자, `.wb-shell` 없음
   //   `ProjectDetail.id: ''` → 같은 `PageLink`가 `/projects/pages/pg1` → 0자, 없음
@@ -832,10 +831,10 @@ describe('createHttpClient', () => {
   })
 
   it('프로젝트의 description이 문자열도 null도 아니면 ApiError를 던진다', async () => {
-    // **이것만 화면을 통째로 비운다**(리뷰 W6). 목록의 `<p>{project.description}</p>`가 그 값을
+    // **이것만 화면을 통째로 비운다.** 목록의 `<p>{project.description}</p>`가 그 값을
     // React 자식으로 그리는데, **React가 그리지 못하는 객체가 닿으면** React가
     // `Objects are not valid as a React child`를 던지고 **목록에 오류 경계가 없다**
-    // (`apps/web/src`에서 경계는 캔버스의 `CanvasBoundary` 하나다).
+    // (`apps/web/src`에서 경계는 캔버스의 `CanvasBoundary`와 테마 갤러리의 `GalleryBoundary`뿐이다).
     //
     // **실측(진짜 `<App />`, 계약 밖 값을 관문에 태워 목록까지 보냈다):**
     //
@@ -845,11 +844,11 @@ describe('createHttpClient', () => {
     // | `[1,2]` · `42` · `true` · 키 없음 | 있음 | 277~279자 |
     // | `null` · `''` · 공백 · 2000자 | 있음 | 270~2277자 |
     //
-    // **갈리는 축은 "이터러블인가"다**(리뷰 F3에서 좁혔다). 이터러블이 아닌 객체(`{}`·`Date`·
+    // **갈리는 축은 "이터러블인가"다.** 이터러블이 아닌 객체(`{}`·`Date`·
     // 정규식·`Object.create(null)`)와 그런 객체를 **담은** 이터러블(`[{x:1}]`·`Set([{x:1}])`)이
     // 죽고, 원소가 그릴 수 있는 이터러블(`[1,2]`·`Map([['a',1]])`·제너레이터·빈 것들)은 산다.
-    // **함수와 Symbol도 산다** — React가 그리지 않고 지나간다. 앞 판의 *"객체를 품으면"*은
-    // 그 셋이 반례였다.
+    // **함수와 Symbol도 산다** — React가 그리지 않고 지나간다. 축을 *"객체를 품으면"*으로
+    // 잡으면 이 사는 값들이 반례가 된다.
     //
     // 그래도 검사는 "문자열이거나 `null`"로 두고 나머지를 전부 막는다: 계약이 그 둘뿐이고,
     // 통과시킬 이유가 있는 값이 그 밖에 없다.
@@ -881,7 +880,7 @@ describe('createHttpClient', () => {
   })
 
   it('slug와 role은 계약을 어겨도 통과시킨다', async () => {
-    // **과도 차단을 재는 자리이자 범위를 못박는 자리다.** 셋 다 검사 밖이었는데
+    // **과도 차단을 재는 자리이자 범위를 못박는 자리다.** 셋 다 같은 레코드의 키인데
     // `description`만 막는다 — **그 셋이 화면에서 갈리기 때문이다**(전부 진짜 `<App />`로 쟀다):
     //
     // | 키 | 계약 밖 값이 닿는 곳 | 관측 |
@@ -913,7 +912,7 @@ describe('createHttpClient', () => {
   })
 
   it('정상 description은 그대로 통과한다', async () => {
-    // 음성 대조. 위 검사가 좁아졌으므로 정상값이 막히지 않는지 따로 본다.
+    // 음성 대조. 위 검사가 좁으므로 정상값이 막히지 않는지 따로 본다.
     for (const description of [null, '', '   ', 'ㄱ'.repeat(2000), '줄\n바꿈']) {
       const stub = stubFetch(jsonResponse(200, [{ ...project, description }]))
       await expect(
@@ -924,7 +923,7 @@ describe('createHttpClient', () => {
   })
 
   it('비어 있지 않은 id는 그대로 통과한다', async () => {
-    // **과도 차단을 재는 자리다.** 위 검사가 "문자열이면 통과"보다 좁아졌으므로, 정상 id가
+    // **과도 차단을 재는 자리다.** 위 검사가 "문자열이면 통과"보다 좁으므로, 정상 id가
     // 막히지 않는지 따로 본다. 공백 한 칸은 통과해야 한다 — 실측으로 그 주소는 라우트가
     // 잡히고 셸이 산다(`/projects/p1/pages/%20`).
     const ids = ['pg1', ' ', '0', '한글', '../x', '/', 'a'.repeat(200), '3f2504e0-4f89-11d3-9a0c-0305e82c3301']
@@ -983,8 +982,8 @@ describe('createHttpClient', () => {
   it('판정용 읽기 둘은 받은 `signal`을 fetch 에 그대로 싣는다 — 안 받으면 일반 읽기의 시간 제한 신호다', async () => {
     // 쓰기 장부가 **판정용 다시 읽기**에도 시간 제한을 두고 넘으면 이것으로 끊는다(`panels/write-ledger.tsx`의
     // `race`). 빠지면 장부는 «모름»으로 가는데 매달린 읽기가 브라우저에 남는다. **받은 신호가 있으면 여기서 시간을
-    // 안 건다** — 두 시계가 한 요청을 다투지 않게(`http-client.ts`의 `READ_DEADLINE_MS`). 앞 판은 안 받으면 키가
-    // 없었다 — 일반 읽기에 시간 제한이 없었다(이월 AD).
+    // 안 건다** — 두 시계가 한 요청을 다투지 않게(`http-client.ts`의 `READ_DEADLINE_MS`). 안 받으면 일반 읽기의
+    // 시간 제한 신호가 실린다 — 키가 없으면 매달린 읽기가 끝없이 남는다.
     const reads: [string, (client: ReturnType<typeof createHttpClient>, signal?: AbortSignal) => Promise<unknown>, () => Response][] = [
       ['getPage', (c, signal) => c.getPage('p1', 'pg1', signal && { signal }), () => jsonResponse(200, page)],
       ['listComments', (c, signal) => c.listComments('p1', 'pg1', signal && { signal }), () => jsonResponse(200, [comment])],
@@ -1006,7 +1005,7 @@ describe('createHttpClient', () => {
   it("getPage 는 HTTP 캐시를 안 지난다(`cache: 'no-store'`) — 다른 읽기는 캐시 모드를 안 싣는다", async () => {
     // 설명 저장(`PATCH …/pages/:id`)과 같은 URL 이라, 기본 모드면 저장이 서버에 매달린 동안 Chrome 의 HTTP
     // 캐시 잠금에 선다(`http-client.ts`의 `getPage` 주석 — 20016ms vs 10ms). **목록은 안 싣는다** — 게시
-    // (`POST`)는 잠금을 안 걸었다(같은 판 12ms). 번지지 않았는지를 같이 본다.
+    // (`POST`)는 잠금을 안 건다(같은 측정에서 12ms). 번지지 않았는지를 같이 본다.
     const pageFetch = stubFetch(jsonResponse(200, page))
     await createHttpClient(pageFetch.fetchImpl).getPage('p1', 'pg1')
     expect(pageFetch.calls[0]?.init?.cache).toBe('no-store')
@@ -1117,7 +1116,7 @@ describe('createHttpClient', () => {
   })
 
   it('getPage는 headSeq를 그대로 싣는다', async () => {
-    // P2b-2가 이 값을 편집 요청의 baseSeq로 쓴다.
+    // 편집 요청이 이 값을 baseSeq로 쓴다.
     const stub = stubFetch(jsonResponse(200, page))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -1129,7 +1128,7 @@ describe('createHttpClient', () => {
     expect(result).toEqual(page)
   })
 
-  // --- 아래는 브리프의 9개 케이스 뒤에 변이가 없던 지점을 메우려고 더한 것들이다 ---
+  // --- 아래는 위 케이스들만으로는 변이가 살아남는 지점을 메운다 ---
 
   it('각 메서드는 계약된 경로와 HTTP 메서드로 요청한다', async () => {
     // 경로 오타나 메서드 뒤바뀜은 위 케이스들이 login·getTree 말고는 잡지 못한다.
@@ -1167,8 +1166,8 @@ describe('createHttpClient', () => {
 
   /**
    * **`SHAPES.projectTheme`이 실제로 막는가.** 이 모양 검사가 `() => true`로 퇴행해도
-   * 리뷰 시점에는 **웹 861케이스가 전부 통과했다**(죽은 수 0) — 이 파일에 `theme`이라는
-   * 글자가 한 번도 나오지 않았기 때문이다.
+   * 이 shape에 계약 밖 응답을 태우는 케이스가 없으면 **웹 전량이 초록이다** — 화면 테스트는
+   * `fakeApi`로 이 층을 지나지 않는다.
    *
    * 무엇을 막는지는 좁다(그 shape의 주석 참고): `theme`이 객체이거나 `null`인가,
    * `issues`가 배열인가. **테마 안쪽은 일부러 보지 않는다** — `resolveTheme`이 그것을
@@ -1208,9 +1207,9 @@ describe('createHttpClient', () => {
   })
 
   /**
-   * **자기 편집을 자기가 되받지 않게 하는 값**(P3-1 · §7.1의 *"[본인] ack / [타인] ops"*).
-   * 이 슬라이스의 편집은 REST로 나가므로 서버는 그 요청이 어느 WebSocket 연결의 주인이
-   * 낸 것인지 달리 알 방법이 없다.
+   * **자기 편집을 자기가 되받지 않게 하는 값**(설계서 「정방향 흐름」의 *"[본인] ack / [타인] ops"*).
+   * REST로 나가는 요청은 서버가 그것이 어느 WebSocket 연결의 주인이 낸 것인지 달리 알
+   * 방법이 없다.
    */
   it('연결 id가 있으면 모든 요청에 헤더로 붙는다', async () => {
     // 본문이 있는 요청과 없는 요청을 섞는다 — 한 갈래에만 붙인 구현이 통과하지 못하게.
@@ -1303,7 +1302,7 @@ describe('createHttpClient', () => {
 
   it('알 수 없는 code는 internal로 바꾼다', async () => {
     // 화면은 상태 코드가 아니라 `code`로 분기한다(404가 "없음"과 "비멤버"를 일부러
-    // 구분하지 않기 때문이다 — 설계 §10). 계약에 없는 문자열이 `code`에 그대로
+    // 구분하지 않기 때문이다 — 설계서 「권한 모델」). 계약에 없는 문자열이 `code`에 그대로
     // 실리면 그 분기의 exhaustive switch가 거짓말이 된다.
     const stub = stubFetch(jsonResponse(418, { error: { code: 'teapot', message: '나는 주전자다' } }))
     const client = createHttpClient(stub.fetchImpl)
@@ -1321,11 +1320,10 @@ describe('createHttpClient', () => {
     // 못한 문자열은 위 케이스가 보듯 `internal`로 흡수된다 — 즉 목록에서 하나가 빠지거나
     // 오타가 나면 그 코드가 조용히 `internal`이 되고 화면의 분기가 닿지 않는다.
     //
-    // **`Record<ApiErrorCode, true>`의 키를 훑는다 — 배열을 손으로 적지 않는다.** 앞 판은
-    // 배열이었고 그 주석이 *"유니온에 코드가 늘면 이 배열이 컴파일 에러가 된다"*고 적었는데
-    // **거짓이었다**: `ApiErrorCode[]`는 원소가 부족해도 멀쩡한 타입이다(P3-3이 `locked`를
-    // 더하며 재서 알았다 — 배열을 안 고쳐도 컴파일이 지났다). 레코드로 두면 빠뜨림이
-    // **양방향으로** 컴파일 에러가 되고, 케이스 이름에 수를 적을 일도 없어진다.
+    // **`Record<ApiErrorCode, true>`의 키를 훑는다 — 배열을 손으로 적지 않는다.** 배열로 두면
+    // *"유니온에 코드가 늘면 이 배열이 컴파일 에러가 된다"*가 **거짓이다**: `ApiErrorCode[]`는
+    // 원소가 부족해도 멀쩡한 타입이라 유니온에 코드를 더하고 배열을 안 고쳐도 컴파일이 지난다.
+    // 레코드로 두면 빠뜨림이 **양방향으로** 컴파일 에러가 되고, 케이스 이름에 수를 적을 일도 없다.
     const codes = Object.keys({
       'bad-request': true,
       unauthenticated: true,
@@ -1432,7 +1430,7 @@ describe('patchOps', () => {
   })
 
   /**
-   * **`warnings`는 없을 수 있고, 있으면 배열이어야 한다**(P5-3 D6 — 테마 쪽과 같은 관례).
+   * **`warnings`는 없을 수 있고, 있으면 배열이어야 한다**(테마 쪽과 같은 관례).
    *
    * **왜 이 가드가 필요한가:** 그 값이 스토어를 지나 셸 머리의 통지로 가고, 거기서
    * `.map`이 불린다. 그 자리는 오류 경계 **밖**이라 배열이 아닌 것이 지나가면 셸 전체가
@@ -1459,7 +1457,7 @@ describe('patchOps', () => {
 
   it('응답의 seq와 inverse를 그대로 낸다', async () => {
     // **봉투를 벗기지 않는다** — 서버 응답이 곧 `PatchResult`다. `inverse`는 서버가 적용
-    // 직전 상태를 보고 만든 것이고(설계 §7.1), 클라이언트는 그것을 그대로 되보내는 것
+    // 직전 상태를 보고 만든 것이고(설계서 「정방향 흐름」), 클라이언트는 그것을 그대로 되보내는 것
     // 말고는 아무것도 하지 않는다.
     const stub = stubFetch(jsonResponse(200, patchResult))
     const client = createHttpClient(stub.fetchImpl)
@@ -1472,7 +1470,7 @@ describe('patchOps', () => {
 
   it('baseSeq 불일치는 conflict 코드로 온다', async () => {
     // 서버는 리베이스를 시도하지 않고 곧바로 409를 낸다(README). 화면은 그것을 재조회로
-    // 수렴시킨다(D4).
+    // 수렴시킨다.
     const stub = stubFetch(
       jsonResponse(409, { error: { code: 'conflict', message: '문서가 이미 바뀌었습니다' } }),
     )
@@ -1516,7 +1514,7 @@ describe('patchOps', () => {
 
 describe('listMyRevisions', () => {
   it('mine=true만 붙여 GET한다', async () => {
-    // **`limit`을 붙이지 않는다.** 기본값 50이 설계 §7.3의 "최근 50개"와 같고,
+    // **`limit`을 붙이지 않는다.** 기본값 50이 설계서 「개인 undo/redo」의 "최근 50개"와 같고,
     // **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — 캐시 버스터도 거부된다.
     const stub = stubFetch(jsonResponse(200, [revision]))
     const client = createHttpClient(stub.fetchImpl)
@@ -1550,7 +1548,7 @@ describe('listMyRevisions', () => {
 })
 
 /**
- * 메뉴·페이지 CRUD 여섯(P2b-4 Task 1).
+ * 메뉴·페이지 CRUD 여섯.
  *
  * **이 여섯이 지켜야 하는 것은 본문 조립이다.** 서버의 `CreateMenuBody`·`UpdateMenuBody`·
  * `CreatePageBody`·`UpdatePageBody`가 전부 `z.strictObject`이고, 갱신 둘은
@@ -1587,7 +1585,7 @@ describe('메뉴 CRUD', () => {
 
   it('선언되지 않은 키를 만들지 않는다 — undefined인 필드는 본문에서 빠진다', async () => {
     // 서버의 `UpdateMenuBody`는 `z.strictObject`다 — 선언되지 않은 키는 그 자체로 400이고,
-    // `undefined`를 실은 키가 오늘 통과하는 것은 `JSON.stringify`가 지워 주는 우연이다
+    // `undefined`를 실은 키가 통과하는 것은 `JSON.stringify`가 지워 주는 우연이다
     // (`patchOps`가 같은 이유로 `clientOpId` 키를 만들지 않는다). 그 우연에 기대면
     // 본문 조립이 바뀔 때 조용히 어긋나므로 나가는 본문을 직접 본다.
     const stub = stubFetch(jsonResponse(200, { ...menuNode, title: '가' }))
@@ -1602,7 +1600,7 @@ describe('메뉴 CRUD', () => {
 
   it('updateMenu는 parentId: null을 싣는다 — 키 없음과 다른 뜻이다', async () => {
     // 키가 없으면 "부모를 바꾸지 않는다", `null`이면 "루트로 옮긴다"이다(내어쓰기의
-    // 목적지가 루트 목록일 때 나가는 본문이다 — Task 8). `undefined`만 걸러야 하고
+    // 목적지가 루트 목록일 때 나가는 본문이다). `undefined`만 걸러야 하고
     // falsy 전체를 걸러서는 안 된다.
     const stub = stubFetch(jsonResponse(200, menuNode))
     const client = createHttpClient(stub.fetchImpl)
@@ -1638,10 +1636,9 @@ describe('메뉴 CRUD', () => {
   })
 
   it('빈 갱신 본문은 서버에 보내지 않고 ApiError로 막는다', async () => {
-    // **서버 실측**(api 하네스, 임시 파일을 두고 지웠다): `PATCH /menu {}`·`PATCH /pages {}`가
+    // **서버 실측**(api 하네스 — 임시 테스트로 두 요청을 보내 다시 잰다): `PATCH /menu {}`·`PATCH /pages {}`가
     // 둘 다 `400 {"code":"bad-request", …, "issues":[{"path":"","message":"변경할 값이
-    // 없습니다"}]}`다. 보내 봐야 400인 요청은 만들지 않는다 — D5·P2b-2 D7이 버튼에 쓴 정신을
-    // 이 층에 적용한 것이다.
+    // 없습니다"}]}`다. 보내 봐야 400인 요청은 만들지 않는다.
     //
     // **`fetch`가 아예 불리지 않는 것까지 본다.** 던지기만 하고 요청이 나가면 서버에 쓸모없는
     // 왕복이 남는다.
@@ -1657,8 +1654,8 @@ describe('메뉴 CRUD', () => {
 
   it('undefined만 담긴 갱신 본문도 같다', async () => {
     // `definedOnly`가 이것을 `{}`로 **만들어 낸다** — 타입이 세 키를 전부 optional로 두므로
-    // 호출부가 계산한 값이 `undefined`가 되는 경로가 실제로 열려 있다(계획서 Task 8이
-    // `previousMenuSibling`·`menuOutdentTarget`의 `null`을 다루는 자리다).
+    // 호출부가 계산한 값이 `undefined`가 되는 경로가 실제로 열려 있다(`tree/tree-actions.ts`의
+    // `previousMenuSibling`·`menuOutdentTarget`이 `null`을 내는 자리다).
     const stub = stubFetch()
     const client = createHttpClient(stub.fetchImpl)
 
@@ -1697,10 +1694,9 @@ describe('메뉴 CRUD', () => {
   })
 
   it('메뉴 응답이 계약과 다른 모양이면 ApiError를 던진다', async () => {
-    // `sortOrder`가 문자열인 응답. **이 값을 읽는 자리는 지금 0건이다** — 앞서 여기에
-    // "위/아래 이동의 목적지 계산에 들어간다"고 적었던 것은 거짓이었다(계획서 Task 7
-    // 케이스 7이 `node.sortOrder`를 쓰지 말라고 못박는다). 그런데도 계약을 벗어난 응답을
-    // 통과시키지 않는 것은 `SHAPES.menuNode` 주석의 근거 둘 때문이다.
+    // `sortOrder`가 문자열인 응답. **이 응답의 이 값을 읽는 자리는 없다** — 위/아래 이동의
+    // 목적지 계산도 `node.sortOrder`가 아니라 정렬한 뒤의 자리(`index`)를 쓴다(`tree/tree-actions.ts`).
+    // 그런데도 계약을 벗어난 응답을 통과시키지 않는 것은 `SHAPES.menuNode` 주석의 근거 둘 때문이다.
     const stub = stubFetch(jsonResponse(200, { ...menuNode, sortOrder: '0' }))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -1777,8 +1773,8 @@ describe('메뉴 CRUD', () => {
 
 describe('페이지 CRUD', () => {
   it('createPage는 menuNodeId와 title을 싣는다', async () => {
-    // `description`은 이 단계가 만들지 않는다 — 설계 §9가 그것을 우측 패널의
-    // "페이지 설명" 탭에 두기로 했다. 그래서 본문에 그 키가 아예 없다.
+    // `description`은 만들 때 싣지 않는다 — 설계서 「설계서 화면 구조」가 그것을 우측 패널의
+    // "페이지 설명" 탭에 둔다. 그래서 본문에 그 키가 아예 없다.
     const stub = stubFetch(jsonResponse(201, page))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -1787,7 +1783,7 @@ describe('페이지 CRUD', () => {
     expect(stub.calls[0]?.url).toBe('/api/projects/p1/pages')
     expect(stub.calls[0]?.init?.method).toBe('POST')
     expect(JSON.parse(String(stub.calls[0]?.init?.body))).toEqual({ menuNodeId: 'm1', title: '목록' })
-    // 만든 페이지로 이동하려면 응답의 `id`가 필요하다(D8).
+    // 만든 페이지로 이동하려면 응답의 `id`가 필요하다.
     expect(result.id).toBe('pg1')
   })
 
@@ -1809,9 +1805,9 @@ describe('페이지 CRUD', () => {
     // 그쪽 픽스처가 `description`을 우연히 들고 있어 겹칠 뿐이라, 그 픽스처가 좁아지면
     // 이 자리만 남는다.
     //
-    // **이 케이스가 서기 전까지 `BODY_KEYS.updatePage`에 `description`이 없었다** —
-    // 시그니처만 넓히면 `declaredOnly`가 그 키를 조용히 떨궈 낸다. 서버는 처음부터 그 키를
-    // 받고 있었다(`apps/api/test/pages.test.ts`).
+    // **`BODY_KEYS.updatePage`에 `description`이 없으면** 시그니처만 넓혀도 `declaredOnly`가
+    // 그 키를 조용히 떨궈 낸다 — 서버는 그 키를 받는데(`apps/api/test/pages.test.ts`) 클라이언트가
+    // 안 보낸다.
     //
     // **그때 무엇이 나는지는 본문의 모양에 따라 갈린다.** 이 케이스처럼 `{description}`
     // 하나면 `declaredOnly`가 `{}`로 만들어 **`updateBody`가 `바꿀 내용이 없습니다`로 던지고
@@ -1841,7 +1837,7 @@ describe('페이지 CRUD', () => {
   })
 
   it('updatePage는 소속 메뉴만 바꿀 때 다른 키를 만들지 않는다', async () => {
-    // `reparent`가 내는 본문이다(Task 9). `title`이 섞여 나가면 사용자가 바꾸지 않은
+    // `reparent`가 내는 본문이다. `title`이 섞여 나가면 사용자가 바꾸지 않은
     // 값을 덮어쓴다.
     const stub = stubFetch(jsonResponse(200, page))
     const client = createHttpClient(stub.fetchImpl)
@@ -1889,7 +1885,7 @@ describe('페이지 CRUD', () => {
   })
 
   it('만든 페이지의 id가 계약과 다르면 ApiError를 던진다', async () => {
-    // **D8이 이 값을 주소에 넣는다** — 만들고 나서 그 페이지로 이동한다. 통과시키면
+    // **이 값이 주소에 들어간다** — 만들고 나서 그 페이지로 이동한다. 통과시키면
     // `ApiError`가 아니라 **200 성공 경로로** 잘못된 주소가 만들어진다.
     //
     // 실측(가짜 소비자를 세워 `PageLink`와 같은 형태로 조립했다):
@@ -1898,7 +1894,6 @@ describe('페이지 CRUD', () => {
     //
     // **빈 문자열이 가장 나쁘다** — 진짜 `<App />`을 그 주소로 렌더하면 `innerHTML`이
     // 0자이고 `.wb-shell`이 없다(`app.tsx`에 `*` 라우트가 없어 아무 라우트도 안 잡힌다).
-    // 앞 판은 그것을 "다른 라우트가 받는다"로 적었고 거짓이었다.
     const { id: _dropped, ...withoutId } = page
     const broken: unknown[] = [
       withoutId,
@@ -1939,9 +1934,9 @@ describe('페이지 CRUD', () => {
     // **이 자리는 다른 넷과 위험의 모양이 다르다.** 응답(`PatchResult`)에는 `baseSeq`·`ops`가
     // 없어 그것을 되보내는 것은 타입이 이미 막는다. 그런데도 같은 관용구를 쓰는 것은
     // **규칙을 한 벌로 두기 위해서다** — 자리마다 방식이 다르면 다음 사람이 자기가 먼저 본
-    // 쪽을 따르고, 이 저장소가 반복해 겪은 "한 곳만 고치고 다른 곳을 놓치는" 결함이 거기서 난다.
+    // 쪽을 따르고, "한 곳만 고치고 다른 곳을 놓치는" 결함이 거기서 난다.
     //
-    // **닫는 케이스가 없으면 그 관용구가 지켜지는지 알 수 없어 여기 둔다.** 오늘 부르는 자리는
+    // **닫는 케이스가 없으면 그 관용구가 지켜지는지 알 수 없어 여기 둔다.** 부르는 자리는
     // `edit/use-edit-commit.tsx` 하나이고 `store.nextRequest()`가 정확히 세 키를 주므로,
     // 이 케이스가 재는 것은 **호출부가 아니라 이 층의 계약**이다.
     const stub = stubFetch(jsonResponse(200, patchResult))
@@ -1969,9 +1964,9 @@ describe('페이지 CRUD', () => {
     // **`schema`가 섞여 나가는 것이 특히 나쁘다** — 서버는 그것을 `PUT .../schema`·
     // `PATCH .../ops`로만 받는다(`api/client.ts`의 `updatePage` 주석).
     //
-    // **P10이 `updatePage`의 기대를 한 줄 늘렸다.** `description`이 선언된 키가 됐으므로
-    // 이제 **나가는 것이 맞다** — 이 케이스가 재는 것은 *"미선언 키가 안 나간다"*이지
-    // *"세 키만 나간다"*가 아니다. `createPage`는 그대로 둘이다(그 자리는 §9가 제목만 묻는다).
+    // **`updatePage`에는 `description`도 선언된 키라 나가는 것이 맞다** — 이 케이스가 재는 것은
+    // *"미선언 키가 안 나간다"*이지 *"세 키만 나간다"*가 아니다. `createPage`는 둘이다(설명은
+    // 설계서 「설계서 화면 구조」대로 우측 패널에서 쓰므로 만들 때는 제목만 묻는다).
     const stub = stubFetch(jsonResponse(201, page), jsonResponse(200, page))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -1992,9 +1987,9 @@ describe('페이지 CRUD', () => {
     // 정규화되므로, 호출자가 어떤 순서로 적든 같은 바이트가 나간다. JSON 객체의 키 순서는
     // 뜻을 바꾸지 않고 서버의 zod도 보지 않는다.
     //
-    // **이것을 케이스로 두는 것은 "바이트가 그대로다"라고 적지 않기 위해서다** — 옛 구현은
-    // 호출자가 적은 순서를 그대로 냈다. 정상 본문 48조합에서 값과 키 집합은 하나도 바뀌지
-    // 않았지만, **역순으로 적은 본문은 바이트가 다르다**(재서 확인했다).
+    // **이것을 케이스로 두는 것은 "바이트가 그대로다"라고 적지 않기 위해서다** — 호출자가 적은
+    // 순서를 그대로 내는 구현과 견주면 값과 키 집합은 같아도 **역순으로 적은 본문은 바이트가
+    // 다르다**(아래 두 호출이 그것을 잰다).
     const stub = stubFetch(jsonResponse(200, page), jsonResponse(200, page))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -2018,9 +2013,9 @@ describe('페이지 CRUD', () => {
 })
 
 /**
- * 프로젝트 CRUD 셋(P2b-5 Task 1).
+ * 프로젝트 CRUD 셋.
  *
- * **서버 실측**(api 하네스, `apps/api/test/`에 임시 파일을 두고 재고 지웠다):
+ * **서버 실측**(api 하네스 — `apps/api/test/`에 임시 테스트를 두고 보내 다시 잰다):
  *
  * ```
  * POST   /projects {name,slug}                → 201 {"id","name","slug","description":null,"role":"owner"}
@@ -2033,9 +2028,8 @@ describe('페이지 CRUD', () => {
  *
  * **읽어야 할 것 둘.**
  *
- * 1. **생성 응답에 `role`이 실려 온다** — 계획서 D1 이 *"`role`이 없어 목록 항목과 다른
- *    모양이다"*라고 적었던 것은 거짓이다(`repos/projects.ts`의 `insertProject`가
- *    `.returning([…])` 뒤에 `{ ...project, role: 'owner' }`로 감싼다). 그래서 반환 타입이
+ * 1. **생성 응답에 `role`이 실려 온다** — 목록 항목과 같은 모양이다(`apps/api/src/repos/projects.ts`의
+ *    `insertProject`가 `.returning([…])` 뒤에 `{ ...project, role: 'owner' }`로 감싼다). 그래서 반환 타입이
  *    `ProjectSummary`가 아니라 `ProjectDetail`이고, 응답 검사도 `SHAPES.projectDetail`을
  *    같이 쓴다.
  * 2. **그런데도 응답을 그대로 요청 본문으로 되보낼 수 없다** — `role` 키가 있으면 서버의
@@ -2055,7 +2049,7 @@ describe('프로젝트 CRUD', () => {
       slug: 'proj',
       description: '설명',
     })
-    // 만든 프로젝트로 이동하려면 응답의 `id`가 필요하다(D7).
+    // 만든 프로젝트로 이동하려면 응답의 `id`가 필요하다.
     expect(result.id).toBe('p1')
   })
 
@@ -2064,8 +2058,8 @@ describe('프로젝트 CRUD', () => {
     // 기대지 않는다(`patchOps`의 `clientOpId`와 같은 판단).
     //
     // **이 케이스만으로는 `declaredOnly`가 키를 고르지 않게 바꿔도 죽지 않는다** — 관찰 지점이
-    // 직렬화된 문자열 하나뿐이라 두 구현의 바이트가 같아진다(선언된 세 키의 39조합에서
-    // 차이 0을 쟀다). 그것을 닫는 것은 **아래 "응답 객체를 그대로 넘겨도" 케이스**다.
+    // 직렬화된 문자열 하나뿐이라 두 구현의 바이트가 같아진다(선언된 세 키의 조합을 전부
+    // 돌려 두 구현을 견주면 차이가 없다). 그것을 닫는 것은 **아래 "응답 객체를 그대로 넘겨도" 케이스**다.
     const stub = stubFetch(jsonResponse(201, project))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -2077,7 +2071,7 @@ describe('프로젝트 CRUD', () => {
   it('응답 객체를 그대로 넘겨도 선언된 세 키만 나간다', async () => {
     // **여기가 `declaredOnly`를 닫는 자리다.** 서버의 `CreateProjectBody`는 `z.strictObject`라
     // 선언되지 않은 키가 그 자체로 400인데, **`definedOnly`는 미선언 키를 하나도 거르지
-    // 않는다** — 값이 `undefined`인 키만 뺀다. 두 장치가 막는 실패가 다르다(리뷰 F1).
+    // 않는다** — 값이 `undefined`인 키만 뺀다. 두 장치가 막는 실패가 다르다.
     //
     // **실측(api 하네스):** `{id,name,slug,description,role}`을 실제로 보내면 `POST`·`PATCH`
     // 둘 다 `400 bad-request` / issues `[{"path":"","message":"인식할 수 없는 키: \"id\",
@@ -2141,12 +2135,12 @@ describe('프로젝트 CRUD', () => {
   })
 
   it('만든 프로젝트의 id가 계약과 다르면 ApiError를 던진다', async () => {
-    // **그 값이 곧 주소가 된다**(D7) — 만들고 나서 그 프로젝트로 이동한다. 통과시키면
+    // **그 값이 곧 주소가 된다** — 만들고 나서 그 프로젝트로 이동한다. 통과시키면
     // `ApiError`가 아니라 **201 성공 경로로** 잘못된 주소가 만들어진다.
     //
-    // **빈 문자열이 가장 나쁘다.** P2b-4가 진짜 `<App />`으로 쟀다: `/projects/`는
+    // **빈 문자열이 가장 나쁘다.** 진짜 `<App />`으로 재면 `/projects/`는
     // `innerHTML` 0자·`.wb-shell` 없음이다(`app.tsx`에 `*` 라우트가 없다). 같은 근거로
-    // `TreePage.id`·`projectDetail.id`·`projectList[].id` 셋을 이미 막고 있고,
+    // `TreePage.id`·`projectDetail.id`·`projectList[].id` 셋을 막고 있고,
     // **`createProject`가 그 셋을 지키는 `isProjectDetail`을 그대로 지난다.**
     const { id: _dropped, ...withoutId } = project
     const broken: unknown[] = [withoutId, { ...project, id: 42 }, { ...project, id: null }, { ...project, id: '' }]
@@ -2199,10 +2193,10 @@ describe('프로젝트 CRUD', () => {
   })
 
   it('빈 갱신 본문은 그 자리에서 거절한다', async () => {
-    // **재라 #4를 프로젝트 쪽에서도 쟀다**: `PATCH /projects/:id {}`가
+    // **프로젝트 쪽도 같다**(위 머리말의 실측): `PATCH /projects/:id {}`가
     // `400 {"code":"bad-request", …, "issues":[{"path":"","message":"변경할 값이 없습니다"}]}`로
     // 메뉴·페이지와 **같은 코드·문장**이다. 보내 봐야 400인 요청은 만들지 않는다 —
-    // P2b-4가 `updateBody`에 적용한 판단을 그대로 쓴다(**새로 만들지 않았다**).
+    // 메뉴·페이지와 같은 `updateBody`를 쓴다(**따로 만들지 않는다**).
     const stub = stubFetch()
     const client = createHttpClient(stub.fetchImpl)
 
@@ -2235,7 +2229,7 @@ describe('프로젝트 CRUD', () => {
 
   it('갱신 응답도 프로젝트 계약을 지난다', async () => {
     // `PATCH`의 응답은 `GET /:projectId`와 같은 다섯 키다(실측). 조회만 검사하고 쓰기를
-    // 통과시키면 같은 계약이 반쪽만 지켜진다 — `pageDetail`이 겪은 자리와 같은 부류다.
+    // 통과시키면 같은 계약이 반쪽만 지켜진다 — `pageDetail`과 같은 부류다.
     const stub = stubFetch(jsonResponse(200, { ...project, id: '' }))
     const client = createHttpClient(stub.fetchImpl)
 
@@ -2270,8 +2264,8 @@ describe('프로젝트 CRUD', () => {
 })
 
 /**
- * **일반 읽기의 시간 제한**(이월 AD — `http-client.ts`의 `READ_DEADLINE_MS`). 앞 판은 서버가 답을 안 주면 걸린 읽기가
- * 끝없이 «불러오는 중»이었다(Chrome · Postgres 컨테이너 `pause`: 세션 확인은 빈 흰 화면).
+ * **일반 읽기의 시간 제한**(`http-client.ts`의 `READ_DEADLINE_MS`). 시간 제한이 없으면 서버가 답을 안 줄 때 걸린 읽기가
+ * 끝없이 «불러오는 중»이다(Chrome 에서 잰 고장 방식 · Postgres 컨테이너 `pause`: 세션 확인은 빈 흰 화면).
  *
  * 혼자 죽는 변조(백업 → 한 줄 → web 전량 → 바이트 비교 복원):
  *
@@ -2282,12 +2276,12 @@ describe('프로젝트 CRUD', () => {
  * | PPTX 미리보기에도 건다(`{ deadline: false }`를 뺀다) | *"미리보기는 …"* **혼자** |
  * | 받은 신호가 있어도 건다 | 위 절의 *"판정용 읽기 둘은 …"* **혼자** |
  * | 쓰기에도 건다(`method === 'GET'`을 뺀다) | 위 절의 *"쓰기 다섯은 …"* **혼자** |
- * | 머리가 와도 타이머를 안 치운다(`finally`의 `clearTimeout`을 뺀다 — 리뷰 변조 M4) | *"머리가 시간 안에 오면 …"* **혼자** |
+ * | 머리가 와도 타이머를 안 치운다(`finally`의 `clearTimeout`을 뺀다) | *"머리가 시간 안에 오면 …"* **혼자** |
  * | 떠나도 요청을 안 끊는다(`cancel`에 귀를 안 단다) | *"떠나면 머리 전이든 …"* **혼자** |
  * | 머리가 온 뒤에는 떠나도 안 끊는다(성공한 시도에서 귀를 뗀다) | *"떠나면 머리 전이든 …"* **혼자** |
  * | 끊긴 조회를 다시 보낸다(시도 머리의 `gone()` 검사를 뺀다 → 시간 초과처럼 다음 시도) | *"끊긴 조회는 다시 보내지 않는다 …"* **혼자** |
  */
-describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 넘으면 거절한다 (이월 AD)', () => {
+describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 넘으면 거절한다', () => {
   const DEADLINE = 10_000
 
   /** 차례대로 답하는 가짜 — `'hang'`이면 **끊길 때까지** 답하지 않는다(실제 `fetch`처럼 끊기면 거절한다). */
@@ -2343,7 +2337,7 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
 
   /**
    * 머리는 곧바로 주고 **본문은 `bodyAfter` 뒤에** 주는 가짜 — 실제 `fetch`처럼 끊기면 본문 읽기가 거절된다(Chrome 의
-   * 스로틀이 이 모양이다: 머리는 지연 뒤 곧바로, 본문만 늦는다 — 리뷰 AD1).
+   * 스로틀이 이 모양이다: 머리는 지연 뒤 곧바로, 본문만 늦는다).
    */
   function slowBodyFetch(body: unknown, bodyAfter: number): FetchStub {
     const calls: RecordedCall[] = []
@@ -2367,7 +2361,7 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
   }
 
   it('머리가 시간 안에 오면 본문이 10초를 넘어도 끊지 않는다 — 큰 문서 × 느린 망에서도 페이지가 선다', async () => {
-    // Chrome(40KB/s · 1MB 페이지)은 머리 2.2s · 본문 끝 27.4s 였다(`READ_DEADLINE_MS` 머리말 «응답 머리까지만 잰다»).
+    // Chrome(40KB/s · 1MB 페이지)에서 머리 2.2s · 본문 끝 27.4s 다(`READ_DEADLINE_MS` 머리말 «응답 머리까지만 잰다»).
     vi.useFakeTimers()
     try {
       const stub = slowBodyFetch(page, DEADLINE * 2.5)
@@ -2386,8 +2380,8 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
   })
 
   it('떠나면 머리 전이든 본문을 읽는 중이든 요청을 끊는다 — 떠난 방문의 본문이 브라우저 연결을 쥐지 않는다', async () => {
-    // 리뷰 AD-F1: 끊지 않으면 버려진 1MB 본문 여섯이 Chrome 의 호스트당 연결 여섯을 쥐고, 다음 방문의 조회가 브라우저
-    // 안에서 줄을 서 «서버가 응답하지 않습니다»까지 갔다(`READ_DEADLINE_MS` 머리말 «떠난 조회는 끊는다»).
+    // 끊지 않으면 버려진 1MB 본문 여섯이 Chrome 의 호스트당 연결 여섯을 쥐고, 다음 방문의 조회가 브라우저
+    // 안에서 줄을 서 «서버가 응답하지 않습니다»까지 간다(`READ_DEADLINE_MS` 머리말 «떠난 조회는 끊는다»).
     vi.useFakeTimers()
     try {
       // 머리 전 — 답이 없는 채 떠난다.
@@ -2421,7 +2415,7 @@ describe('일반 읽기의 시간 제한 — 넘으면 한 번 더, 그래도 �
   })
 
   it('끊긴 조회는 다시 보내지 않는다 — 10초가 지나도 요청은 하나다', async () => {
-    // 리뷰 AD-F1 의 4: 버려진 조회도 10초가 되면 다시 보내 줄을 더 길게 만들었다.
+    // 끊긴 조회를 다시 보내면 버려진 조회도 10초가 되면 다시 나가 줄을 더 길게 만든다.
     vi.useFakeTimers()
     try {
       const stub = hangingFetch('hang', 'hang')

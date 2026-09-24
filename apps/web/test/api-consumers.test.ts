@@ -1,21 +1,15 @@
 /**
  * **`ApiClient`의 어느 메서드를 어디서 부르는지 세는 것을 사람이 아니라 이 파일이 한다.**
  *
- * ## 왜 테스트인가 — 같은 부류가 네 번 낡았다
+ * ## 왜 테스트인가 — 주석에 적은 수는 호출부가 생기는 순간 낡는다
  *
  * `api/http-client.ts`의 shape 주석들은 *"이 응답을 읽는 자리가 지금 몇인가"*를 근거로 무엇을
  * 얼마나 깊게 검사할지 정한다(*"가설적인 경로에 가드를 달고 살아 있는 경로를 열어 두지
- * 않는다"* — P2b-4의 판정). **그 근거는 참인데, 그것을 주석에 수로 적은 것이 문제였다:**
- *
- * | 적어 둔 것 | 무엇이 낡게 했나 |
- * |---|---|
- * | `menuNode`의 *"CRUD 여섯 호출부 0건"* | P2b-4 웨이브 2·3이 호출부를 만들었다 |
- * | `pageDetail`의 *"`pageDetail.id`는 아직 주소가 되지 않는다"* | 같은 웨이브가 `navigate`를 만들었다 |
- * | `isProjectDetail`의 *"`createProject`… 아직 없다(호출부 0건)"* | **같은 브랜치의** P2b-5 웨이브 2가 만들었다 |
- * | `project-actions.ts`의 *"두 버튼을 그리는 화면은 아직 없다"* | 같은 브랜치의 Task 5·6이 만들었다 |
- *
- * **셋째·넷째가 요점이다 — 갱신 시점을 적어 둔 그 시점이 같은 브랜치 안에서 지나갔다.**
- * *"다음 단계에서 갱신하라"*는 형태로는 닫히지 않는다. 실행으로 재면 낡지 않는다.
+ * 않는다"*). **그 근거는 참인데, 그것을 주석에 수로 적으면 조용히 거짓이 된다** —
+ * *"호출부 0건"* · *"아직 주소가 되지 않는다"* · *"그리는 화면은 아직 없다"* 꼴의 문장은
+ * 호출부를 만드는 커밋이 그 주석을 열지 않으므로 그대로 남는다. 갱신 시점을 적어 둬도
+ * 그 시점이 **같은 브랜치 안에서** 지나간다 — *"다음 단계에서 갱신하라"*는 형태로는 닫히지
+ * 않는다. 실행으로 재면 낡지 않는다.
  *
  * ## 자기 자신을 세지 않는 배치
  *
@@ -25,7 +19,8 @@
  * 2. **`stripComments`로 주석을 걷는다** — `src` 안의 주석이 메서드 이름을 인용해도 세어지지
  *    않는다(`http-client.ts`의 표들이 실제로 인용한다).
  *
- * `role-access.test.ts`가 같은 배치이고, 그 파일에 이 함정을 두 번 겪은 기록이 있다.
+ * `role-access.test.ts`가 같은 배치이고, 그 파일 머리말이 이 함정의 고장 방식(세는 문장이
+ * 자기 자신을 센다)을 적는다.
  */
 import { describe, expect, it } from 'vitest'
 import { stripComments } from './store-access-guard'
@@ -79,7 +74,7 @@ function consumers(): Map<string, string[]> {
 }
 
 /**
- * **오늘 누가 무엇을 부르는가.** 이 표가 `http-client.ts`의 shape 주석들이 근거로 삼는 값이다 —
+ * **지금 누가 무엇을 부르는가.** 이 표가 `http-client.ts`의 shape 주석들이 근거로 삼는 값이다 —
  * 그 주석들은 수를 들고 있지 않고 이 파일을 가리킨다.
  *
  * 값이 `[]`인 줄은 **부르는 자리가 없다**는 뜻이고, 그것이 shape를 얕게 두는 근거가 된다.
@@ -88,9 +83,7 @@ function consumers(): Map<string, string[]> {
  */
 const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   login: ['../src/routes/login.tsx'],
-  // **앞 판은 `[]`였다 — *"화면에 로그아웃이 없다(P2b가 만들지 않았다). 로그아웃 단추를
-  // 만들면 이 줄이 먼저 죽는다"*고 적혀 있었고 그대로 됐다.** 셸 머리의 계정 묶음이
-  // 그 자리다(`session/session-menu.tsx`).
+  // 셸 머리의 계정 묶음이 그 자리다(`session/session-menu.tsx`).
   //
   // **부르는 자리가 하나인 것이 요점이다.** 세션을 끊는 길이 둘이 되면 한쪽만
   // `invalidate()`를 부르는 판이 생기고, 그러면 쿠키는 지워졌는데 화면은 로그인한 줄
@@ -99,9 +92,9 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   me: ['../src/session/session-context.tsx'],
   listProjects: ['../src/projects/use-project-commands.tsx'],
   // **소비자가 둘이고 읽는 것이 다르다.** 셸은 `name`·`id`를 그리려고 부르고, 테마 저작
-  // 화면은 **`role`** 때문에 부른다(§10 — 쓰기가 owner 게이트라 읽기 전용인지 알아야 한다).
-  // **셋째가 생겼다(P6-1).** 스냅샷 화면도 `role` 때문에 부른다 — §10이 생성을 editor에게
-  // 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다).
+  // 화면은 **`role`** 때문에 부른다(설계서 「권한 모델」 — 쓰기가 owner 게이트라 읽기 전용인지
+  // 알아야 한다). **셋째는 스냅샷 화면이고** 역시 `role` 때문에 부른다 — 「권한 모델」이 생성을
+  // editor에게 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다).
   getProject: [
     '../src/routes/editor.tsx',
     '../src/routes/theme-editor.tsx',
@@ -115,21 +108,21 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   updateMenu: ['../src/tree/use-tree-commands.tsx'],
   deleteMenu: ['../src/tree/use-tree-commands.tsx'],
   createPage: ['../src/tree/use-tree-commands.tsx'],
-  // **부르는 자리가 둘이다(P10).** 트리 훅은 제목·소속 메뉴·순서를 고치고, 설명 탭은
+  // **부르는 자리가 둘이다.** 트리 훅은 제목·소속 메뉴·순서를 고치고, 설명 탭은
   // `description` 하나를 고친다 — **본문의 키가 겹치지 않아** 두 자리가 서로의 값을
   // 덮지 않는다(`declaredOnly`가 준 키만 싣는다). 겹치기 시작하면 이 줄이 먼저 눈에 띈다.
   updatePage: ['../src/panels/page-description.tsx', '../src/tree/use-tree-commands.tsx'],
   deletePage: ['../src/tree/use-tree-commands.tsx'],
-  // 페이지 가져오기(P7-3). **트리 훅 하나에서만 불린다** — 가져오기는 트리를 바꾸는
-  // 조작이므로 `createPage`와 같은 잠금·재조회·이동을 지나야 하고(D2·D8), 그 셋이 그 훅에
+  // 페이지 가져오기. **트리 훅 하나에서만 불린다** — 가져오기는 트리를 바꾸는
+  // 조작이므로 `createPage`와 같은 잠금·재조회·이동을 지나야 하고, 그 셋이 그 훅에
   // 있다. **화면(`panels/page-json-panel.tsx`)이 직접 부르기 시작하면 여기가 죽는다** —
   // 그때는 그 셋이 두 벌이 된 것이다.
   importPage: ['../src/tree/use-tree-commands.tsx'],
   // **셋이고 서로 다른 것을 읽는다.** 셸(`routes/editor.tsx`)은 `schema`·`headSeq`를
   // 스토어에 싣고, 편집 훅은 실패 뒤 재조회로 같은 둘을 다시 받고, **뷰 모드의 페이지
-  // 설명 탭은 `title`·`description`을 읽는다**(P5-3). 셋째가 자기 조회를 갖는 근거는
+  // 설명 탭은 `title`·`description`을 읽는다**. 셋째가 자기 조회를 갖는 근거는
   // `panels/page-description.tsx`의 머리말에 있다 — 요지는 앞 둘이 그 두 키를 버린다는 것이다.
-  // **넷째가 생겼다(P7-3).** 페이지 JSON 내보내기가 `title`·`description`·`schema`를 읽는다 —
+  // **넷째는 페이지 JSON 내보내기다.** `title`·`description`·`schema`를 읽는다 —
   // 파일의 `page` 절과 `schema` 절이 그 셋이다. **스토어의 문서를 쓰지 않는 근거**는
   // `edit/page-export.ts`의 머리말에 있다: 코멘트와 문서를 **같은 순간의 서버 상태**에서
   // 읽어야 파일이 끊긴 참조를 담지 않는다.
@@ -141,36 +134,33 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   ],
   patchOps: ['../src/edit/use-edit-commit.tsx'],
   listMyRevisions: ['../src/routes/editor.tsx'],
-  // **소비자가 둘이고 서로 다른 것을 읽는다**(P4b-3 P2). 캔버스 쪽 훅은 `theme`을
+  // **소비자가 둘이고 서로 다른 것을 읽는다.** 캔버스 쪽 훅은 `theme`을
   // 읽어 그리고, 고르개는 같은 응답의 `themeId`를 읽어 *"지금 무엇이 골라져 있는가"*를
   // 그린다 — 목록(`listProjectThemes`)만으로는 그것을 알 수 없다.
   getProjectTheme: ['../src/theme/use-project-theme.ts', '../src/theme/theme-picker.tsx'],
   listProjectThemes: ['../src/theme/theme-picker.tsx'],
   setProjectTheme: ['../src/theme/theme-picker.tsx'],
-  // 테마 저작 셋(P4c-2). **셋 다 한 파일에서만 불린다** — ②의 셋(토큰 GUI·JSON
-  // 에디터·갤러리)은 초안 스토어만 만지고 서버에는 닿지 않는다는 것이 D3의 뜻이고,
+  // 테마 저작 셋. **셋 다 한 파일에서만 불린다** — 저작 화면의 세 편집기(토큰 GUI·JSON
+  // 에디터·갤러리)는 초안 스토어만 만지고 서버에는 닿지 않는다는 것이 규칙이고,
   // **이 줄이 그것을 실행으로 지킨다:** 어느 워커가 자기 화면에서 직접 저장하면 여기가 죽는다.
   getTheme: ['../src/routes/theme-editor.tsx'],
   createTheme: ['../src/routes/theme-editor.tsx'],
   updateTheme: ['../src/routes/theme-editor.tsx'],
-  // 코멘트 다섯(P5-1). **다섯 다 한 파일에서만 불린다** — 코멘트 탭이 표(본문)와
-  // 문서(번호)를 잇는 유일한 자리라는 것이 D1의 뜻이고, **이 줄이 그것을 실행으로 지킨다:**
+  // 코멘트 다섯. **쓰기 넷은 한 파일에서만 불린다** — 코멘트 탭이 표(본문)와
+  // 문서(번호)를 잇는 유일한 자리라는 것이 규칙이고, **이 줄들이 그것을 실행으로 지킨다:**
   // 캔버스나 구조 트리가 직접 코멘트를 부르기 시작하면 여기가 죽는다.
   //
   // **캔버스가 `listComments`를 부르지 않는 것이 요점이다.** 마커는 코멘트 목록이 아니라
-  // **문서의 `marker`**에서 나온다(D1) — 그래야 내보낸 HTML 번들(§11.3)도 같은 것을 그린다.
-  // **P7-2가 둘째 소비자를 만들었다 — 이 줄이 먼저 죽어서 알았다.** 프리셋 고르개가
-  // 적용 전에 *"코멘트 몇 개가 고아가 되는가"*를 세려고 부른다(D6). **위 문장(*"다섯 다
-  // 한 파일"*)은 이제 넷에만 참이다.**
+  // **문서의 `marker`**에서 나온다 — 그래야 내보낸 HTML 번들(설계서 「HTML 정적 번들」)도
+  // 같은 것을 그린다.
   //
-  // **D1을 어기지 않는다.** 그 결정이 막는 것은 *"번호와 본문을 잇는 자리가 둘이 되는
-  // 것"*이고, 고르개는 **세기만 한다** — 노드를 찾지도, `marker`를 읽지도, 코멘트를
-  // 만들거나 지우지도 않는다. 쓰기 넷은 여전히 코멘트 탭 하나다.
-  //
-  // **셋째가 생겼다(P7-3).** 페이지 JSON 내보내기가 파일의 `comments` 절을 채우려고 부른다.
-  // **D1을 어기지 않는 이유는 프리셋 고르개와 같다** — 내보내기는 `nodeId`·`body`만 실어
-  // 내고 번호를 읽지도 잇지도 않는다(번호는 `schema` 안의 노드가 나른다 — P7-3 D6).
-  // 쓰기 넷은 여전히 코멘트 탭 하나다.
+  // **`listComments`의 둘째·셋째 소비자는 그 규칙을 어기지 않는다.** 규칙이 막는 것은
+  // *"번호와 본문을 잇는 자리가 둘이 되는 것"*이다. 프리셋 고르개는 적용 전에 *"코멘트 몇
+  // 개가 고아가 되는가"*를 **세기만 한다** — 노드를 찾지도, `marker`를 읽지도, 코멘트를
+  // 만들거나 지우지도 않는다. 페이지 JSON 내보내기는 파일의 `comments` 절을 채우려고
+  // 부르고 `nodeId`·`body`만 실어 낸다 — 번호를 읽지도 잇지도 않는다(번호는 `schema` 안의
+  // 노드가 나른다 — 설계서 「페이지 JSON」). 넷째 소비자가 생기면 이 줄이 먼저 죽는다 —
+  // 그때 그것이 번호와 본문을 잇는지 본다.
   listComments: [
     '../src/panels/comment-panel.tsx',
     '../src/panels/preset-picker.tsx',
@@ -180,38 +170,30 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   updateComment: ['../src/panels/comment-panel.tsx'],
   deleteComment: ['../src/panels/comment-panel.tsx'],
   renumberComments: ['../src/panels/comment-panel.tsx'],
-  // 스냅샷 둘(P6-1). **둘 다 한 파일에서만 불린다** — D10이 *"웹은 라우트 하나다"*로 정한
-  // 그것이고, **이 줄이 그것을 실행으로 지킨다:** 셸이나 다른 화면이 직접 스냅샷을 부르기
-  // 시작하면 여기가 죽는다.
-  //
-  // **그 한 파일이 라우트를 그만뒀다** — 셸 머리의 팝오버가 됐다
-  // (`src/shell/snapshots-panel.tsx` 머리말이 뒤집힌 근거 둘을 적고 있다). D10의 *"한
-  // 자리"*는 그대로다: 셸은 팝오버를 그리기만 하고 스냅샷 API를 직접 부르지 않는다.
+  // 스냅샷 셋(목록·생성·복원). **셋 다 한 파일에서만 불린다** — 스냅샷 화면은 한 자리라는
+  // 규칙이고, **이 줄들이 그것을 실행으로 지킨다:** 셸이나 다른 화면이 직접 스냅샷을 부르기
+  // 시작하면 여기가 죽는다. 그 한 자리는 셸 머리의 팝오버다(`src/shell/snapshots-panel.tsx`
+  // 머리말이 라우트가 아니라 팝오버인 근거를 적는다) — 셸은 팝오버를 그리기만 하고 스냅샷
+  // API를 직접 부르지 않는다.
   //
   // **`getSnapshot`(상세)이 목록에 아예 없는 것이 요점이다.** 서버에는 그 엔드포인트가
-  // 있지만 `ApiClient`에 두지 않았다 — payload를 읽을 자리가 복원(P6-2)이고 그것이 아직
-  // 없다. 부르는 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도
-  // 확인하지 않은 채 남는다.
+  // 있지만 `ApiClient`에 두지 않는다 — payload를 읽는 것은 **서버**이고(복원 라우트가 스냅샷
+  // id만 받는다), 화면은 그 결과 요약만 본다. 부르는 자리가 없는 메서드를 두면 그 응답의
+  // shape가 무엇을 지키는지 아무도 확인하지 않은 채 남는다.
   listSnapshots: ['../src/shell/snapshots-panel.tsx'],
   createSnapshot: ['../src/shell/snapshots-panel.tsx'],
-  // **복원도 같은 한 파일이다**(P6-2). 셋이 한 화면에 모여 있는 것이 D10의 *"웹은 라우트
-  // 하나다"*이고, 이 줄이 그것을 실행으로 지킨다.
-  //
-  // **`getSnapshot`(상세)은 여전히 목록에 없다.** 복원이 왔는데도 그렇다 — payload를 읽는
-  // 것은 **서버**이고(라우트가 스냅샷 id만 받는다), 화면은 그 결과 요약만 본다. 부르는
-  // 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도 확인하지 않은 채 남는다.
   restoreSnapshot: ['../src/shell/snapshots-panel.tsx'],
-  // 프리셋 둘(P7-2). **둘 다 고르개 하나에서만 불린다** — 고를 목록과 저장이 한 자리에
-  // 있는 것이 T4의 꼴이고, **이 줄이 그것을 실행으로 지킨다:** 툴바나 셸이 직접 프리셋을
+  // 프리셋 둘. **둘 다 고르개 하나에서만 불린다** — 고를 목록과 저장이 한 자리에
+  // 있는 것이 그 화면의 꼴이고, **이 줄이 그것을 실행으로 지킨다:** 툴바나 셸이 직접 프리셋을
   // 부르기 시작하면 여기가 죽는다.
   //
   // **`deletePreset`이 목록에 아예 없는 것이 요점이다.** 서버에는 그 라우트가 있지만
-  // (D2가 *"프리셋은 지울 수 있다"*로 이름의 유일 제약을 뺐다) 화면에 지우는 자리가 아직
+  // (*"프리셋은 지울 수 있다"*는 규칙이라 이름에 유일 제약이 없다) 화면에 지우는 자리가
   // 없다 — 부르는 자리가 없는 메서드를 두면 그 응답의 shape가 무엇을 지키는지 아무도
   // 확인하지 않은 채 남는다(`getSnapshot`이 같은 자리에서 같은 판단).
   listPresets: ['../src/panels/preset-picker.tsx'],
   createPreset: ['../src/panels/preset-picker.tsx'],
-  // 내보내기(P8-4). 둘 다 같은 한 화면이 부른다 — 미리보기가 무엇이 실릴지 말하고
+  // 내보내기. 둘 다 같은 한 화면이 부른다 — 미리보기가 무엇이 실릴지 말하고
   // 그 다음에 앵커가 zip을 받는다.
   getExportPreview: ['../src/shell/export-panel.tsx'],
   exportUrl: ['../src/shell/export-panel.tsx'],
@@ -219,7 +201,8 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
 
 describe('ApiClient의 소비자', () => {
   it('검사가 진짜 소스를 읽는다', () => {
-    // 이것이 없으면 `SOURCES`가 비어도 아래가 초록이다(D7 검사에서 실제로 난 사고다).
+    // 글롭 경로가 어긋나면 `SOURCES`가 빈다. 그때 아래 케이스들은 *"표와 다르다"*로만
+    // 죽고(표의 `[]`인 줄은 오히려 통과한다) 원인을 말하지 못한다 — 이 케이스가 그것을 이름으로 말한다.
     expect(Object.keys(SOURCES).length).toBeGreaterThan(20)
     expect(Object.values(SOURCES).every((text) => text.length > 0)).toBe(true)
   })
@@ -237,7 +220,7 @@ describe('ApiClient의 소비자', () => {
     const source = SOURCES['../src/api/client.ts'] ?? ''
     const body = stripComments(source)
     // 인터페이스의 닫는 중괄호까지만 자른다 — 더 가면 아래 `class ApiError`의 `constructor`가
-    // 메서드로 세어진다(처음에 그렇게 적었다가 이 케이스가 잡았다).
+    // 메서드로 세어진다.
     const start = body.indexOf('export interface ApiClient {')
     const declaration = body.slice(start, body.indexOf('\n}', start))
     const declared = [...declaration.matchAll(/^ {2}(\w+)\s*[(<]/gm)].map((m) => m[1])

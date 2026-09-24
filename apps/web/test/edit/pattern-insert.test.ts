@@ -1,5 +1,5 @@
 /**
- * 패턴 삽입의 자리 규칙(P7-1 T4 — D4·D5·D9). **화면 없이 재는 자리다** — `patternInsert`가
+ * 패턴 삽입의 자리 규칙. **화면 없이 재는 자리다** — `patternInsert`가
  * 순수 함수이고, 화면을 지나는 흐름은 `../panels/structure-pattern.test.tsx`가 잰다.
  */
 import { describe, expect, it } from 'vitest'
@@ -61,16 +61,16 @@ function childIds(document: PageDocument, nodeId: string): string[] {
   return (find(document.root)?.children ?? []).map((child) => child.id)
 }
 
-describe('재라 #6 — 카탈로그가 자식 허용 여부를 안다', () => {
+describe('카탈로그가 자식 허용 여부를 안다', () => {
   it('ComponentDef.children이 none·many를 말한다', () => {
-    // 계획서가 *"추론이다"*로 남긴 자리. D5의 *"자식을 못 받으면 형제 뒤"*가 이 값에 걸려 있다.
+    // 아래 «꽂는 자리»의 *"자식을 못 받으면 형제 뒤"*가 이 값에 걸려 있다 — 추론으로 두지 않고 잰다.
     expect(getComponent('Text')?.children).toBe('none')
     expect(getComponent('Card')?.children).toBe('many')
     expect(getComponent('Page')?.children).toBe('many')
   })
 })
 
-describe('D5 — 꽂는 자리', () => {
+describe('꽂는 자리', () => {
   it('선택이 없으면 root의 자식 끝이다', () => {
     const before = doc()
     const { insert } = patternInsert(before, null, expanded([ONE()]))
@@ -149,7 +149,7 @@ describe('D5 — 꽂는 자리', () => {
   })
 })
 
-describe('재라 #4 — ops 여럿이 편집 하나다 (D4)', () => {
+describe('ops 여럿이 편집 하나다', () => {
   it('노드 셋이 ops 셋이고 배열 하나로 나간다', () => {
     // **세는 단위: `PatchOp` 하나.** 편집의 수가 아니라 op의 수다 — 편집은 `commitOps`
     // 호출 하나이고, 그것을 재는 자리는 `../panels/structure-pattern.test.tsx`다.
@@ -183,8 +183,8 @@ describe('재라 #4 — ops 여럿이 편집 하나다 (D4)', () => {
   })
 })
 
-describe('T4 — 꽂은 뒤 선택이 어디로 가는가', () => {
-  it('슬롯이 있으면 첫 슬롯 노드다 — 그것을 골라야 채울 수 있다(D3)', () => {
+describe('꽂은 뒤 선택이 어디로 가는가', () => {
+  it('슬롯이 있으면 첫 슬롯 노드다 — 그것을 골라야 채울 수 있다', () => {
     const { insert } = patternInsert(
       doc(),
       'n-box',
@@ -216,7 +216,7 @@ describe('T4 — 꽂은 뒤 선택이 어디로 가는가', () => {
   })
 })
 
-describe('D9 — 패턴이 잘못됐다와 내가 잘못 눌렀다를 가른다', () => {
+describe('패턴이 잘못됐다와 내가 잘못 눌렀다를 가른다', () => {
   it('카탈로그에 없는 타입을 담은 패턴은 꽂지 않는다', () => {
     const { insert, reason, issues } = patternInsert(
       doc(),

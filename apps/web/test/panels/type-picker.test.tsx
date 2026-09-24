@@ -1,9 +1,9 @@
 /**
- * 타입 목록과 노드 추가(Task 7). **`<App />`을 라우트째 렌더한다**(`../editor-harness`).
+ * 타입 목록과 노드 추가. **`<App />`을 라우트째 렌더한다**(`../editor-harness`).
  *
- * **`페이지에 둘 수 있는 모든 타입이 목록에 있다`가 D6의 하중이다** — 분모를 손으로 적지
- * 않고 `listComponents()`에서 계산하므로, 카탈로그에 컴포넌트가 늘면 여기서 죽는다.
- * 그것이 "그룹 표를 손으로 두지 않는다"는 D6의 판단을 지키는 자리다.
+ * **`페이지에 둘 수 있는 모든 타입이 목록에 있다`가 이 파일의 하중이다** — 분모를 손으로
+ * 적지 않고 `listComponents()`에서 계산하므로, 카탈로그에 컴포넌트가 늘면 여기서 죽는다.
+ * 그것이 "그룹 표를 손으로 두지 않는다"는 판단을 지키는 자리다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -144,8 +144,8 @@ function undoButton(): HTMLButtonElement {
 
 /**
  * 페이지 문서에 둘 수 있는 타입. **손으로 적지 않는다** — 카탈로그를 훑어 실제로
- * `validatePage`를 통과하는 것만 남긴다(웨이브 1의 `페이지에 둘 수 없는 타입은 Slot뿐이다`와
- * 같은 계산이다).
+ * `validatePage`를 통과하는 것만 남긴다(`../edit/create-node.test.ts`의 `페이지에 둘 수 없는
+ * 타입은 Slot뿐이다`와 같은 계산이다).
  */
 function placeableTypes(): string[] {
   return listComponents()
@@ -161,7 +161,7 @@ function placeableTypes(): string[] {
 
 describe('타입 목록과 노드 추가', () => {
   it('페이지에 둘 수 있는 모든 타입이 목록에 있다', async () => {
-    // **D6의 하중이다.** 분모가 `listComponents()`에서 계산되므로 카탈로그에 컴포넌트가
+    // **이 파일의 하중이다.** 분모가 `listComponents()`에서 계산되므로 카탈로그에 컴포넌트가
     // 늘면 여기서 죽는다 — 그것이 "그룹 표를 손으로 두지 않는다"는 판단을 지킨다.
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
@@ -172,8 +172,9 @@ describe('타입 목록과 노드 추가', () => {
   })
 
   it('페이지에 둘 수 없는 타입은 목록에 없다', async () => {
-    // 웨이브 1이 잰 것: `Slot`은 어디에 넣어도 `slot-count`가 난다(설계 §4.4). 목록에
-    // 두면 고르는 순간 서버가 422를 내므로 **보내 봐야 실패할 편집을 만들지 않는다**(D7).
+    // `Slot`은 어디에 넣어도 `slot-count`가 난다(설계서 「레이아웃」 — `Slot`은 레이아웃
+    // 전용이다). 목록에 두면 고르는 순간 서버가 422를 내므로 **보내 봐야 실패할 편집을
+    // 만들지 않는다**.
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
     fireEvent.click(toolButton('안에 추가'))
@@ -189,8 +190,8 @@ describe('타입 목록과 노드 추가', () => {
   })
 
   it('옵션 글자가 영문 타입명이 아니라 카탈로그의 한국어 이름이다', async () => {
-    // **이것이 P10-3이 고치는 고장이다.** 한국어 UI가 `EntryForm`·`KeyValue`를 그대로
-    // 냈고 *"그것이 무엇인가"*를 화면이 답하지 않았다. 분모를 손으로 적지 않는다 —
+    // **한국어 UI가 `EntryForm`·`KeyValue`를 그대로 내면** *"그것이 무엇인가"*를 화면이
+    // 답하지 않는다. 분모를 손으로 적지 않는다 —
     // 카탈로그의 `def.label`과 대조하므로 이름을 고치면 여기가 따라간다.
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
@@ -200,7 +201,7 @@ describe('타입 목록과 노드 추가', () => {
     for (const option of typeSelect().options) {
       const label = labels.get(option.value)!
       expect(option.textContent?.startsWith(label), option.value).toBe(true)
-      // 영문 타입명이 옵션에 남아 있으면 고친 것이 아니다. `Text`처럼 이름이 짧은 것도
+      // 영문 타입명이 옵션에 남아 있으면 안 된다. `Text`처럼 이름이 짧은 것도
       // 있으므로 **정확히 그 타입명이 낱말로** 들어 있는지 본다.
       expect(option.textContent, option.value).not.toContain(option.value)
     }
@@ -208,8 +209,8 @@ describe('타입 목록과 노드 추가', () => {
 
   it('갈래별로 optgroup이 서고 라벨이 한국어다', async () => {
     // **손으로 둔 표가 없다는 것을 여기서 잰다.** 그룹도 그룹 이름도 카탈로그가 준다
-    // (`def.group` · `COMPONENT_GROUP_LABELS`) — D6이 그룹을 만들지 않기로 한 근거가
-    // *"그 분류가 런타임에 없다"*였고, 그 전제가 없어져서 뒤집혔다.
+    // (`def.group` · `COMPONENT_GROUP_LABELS`) — 그 분류가 런타임에 있으므로 화면은 그룹
+    // 표를 손으로 두지 않고 카탈로그에서 optgroup을 세운다.
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
     fireEvent.click(toolButton('안에 추가'))
@@ -230,16 +231,15 @@ describe('타입 목록과 노드 추가', () => {
 
   it('그룹 안은 한국어 이름순이다', async () => {
     // **영문 타입명순이 아니다.** 보이는 글자와 순서가 갈리면 목록을 훑는 사람이 어디를
-    // 봐야 할지 모른다 — 앞 판의 *"이름순 한 목록"*이 지키려던 것이 그것이고, 이름이
-    // 한국어가 되면서 정렬 기준도 함께 옮겨야 한다.
+    // 봐야 할지 모른다 — 보이는 이름이 한국어이므로 정렬 기준도 한국어 이름이다.
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
     fireEvent.click(toolButton('안에 추가'))
 
     const labels = new Map(listComponents().map((def) => [def.type, def.label]))
     const groups = [...typeSelect().querySelectorAll('optgroup')]
-    // **분모가 0이면 이 케이스는 아무것도 재지 않는다.** 구분력 실증에서 실제로 그랬다 —
-    // `<optgroup>`을 없앤 판에서 루프가 0번 돌아 조용히 통과했다. 여기서 막는다.
+    // **분모가 0이면 이 케이스는 아무것도 재지 않는다** — `<optgroup>`을 없앤 판에서는
+    // 루프가 0번 돌아 조용히 통과한다. 여기서 막는다.
     expect(groups.length).toBeGreaterThan(0)
 
     let differsFromTypeOrder = 0
@@ -257,8 +257,8 @@ describe('타입 목록과 노드 추가', () => {
   })
 
   it('옵션 글자에 설명을 붙이지 않는다', async () => {
-    // **3차의 고장을 다시 만들지 않는 자리다** — 프리셋 고르개가 긴 옵션으로 240px 좌측
-    // 패널을 터뜨렸다(`<select>` 2px, `shell.css`의 표). `<option>`은 잘려도 아무 신호가
+    // **긴 옵션이 좌측 패널을 터뜨리는 고장을 막는 자리다** — 옵션 글자가 길면 `<select>`가
+    // 240px 좌측 패널을 넘친다(`<select>` 2px, `shell.css`의 표). `<option>`은 잘려도 아무 신호가
     // 없으므로 설명은 아래 자기 줄로 간다.
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
@@ -304,7 +304,7 @@ describe('타입 목록과 노드 추가', () => {
   })
 
   it('자식을 담을 수 있는 타입이 표시된다', async () => {
-    // **런타임 정보로 가르는 것은 D6이 허용한 것이다** — `def.children === 'many'`.
+    // **런타임 정보로 가른다** — `def.children === 'many'`.
     // 이름과 표시를 갈라 두어야(`value`는 타입 이름, 보이는 글자에만 표시) 위 대조가
     // 표시 문구에 흔들리지 않는다.
     await openPage(doc(), { apiOverrides: server().api })
@@ -362,8 +362,8 @@ describe('타입 목록과 노드 추가', () => {
   })
 
   it('children 키가 없는 컨테이너에는 배열째 add한다', async () => {
-    // **웨이브 1이 잰 갈래다.** `createNode`가 `children`을 만들지 않으므로 새로 만든
-    // 컨테이너는 전부 이 경로를 지난다 — 그것이 Task 7에서 처음 실제로 쓰인다.
+    // **`children` 키가 없으면 배열째 add하는 갈래다.** `createNode`가 `children`을 만들지
+    // 않으므로 새로 만든 컨테이너는 전부 이 경로를 지난다.
     const srv = server()
     await openPage(doc(), { apiOverrides: srv.api })
     select('Section')
@@ -389,7 +389,7 @@ describe('타입 목록과 노드 추가', () => {
   })
 
   it('추가한 노드에 속성 패널이 그 타입의 필드를 보인다', async () => {
-    // **P2b-2와 이어진다는 증거다** — 새로 만든 노드가 카탈로그의 `editor` 명세를 지나
+    // **속성 편집과 이어진다는 증거다** — 새로 만든 노드가 카탈로그의 `editor` 명세를 지나
     // 위젯으로 그려진다.
     await openPage(doc(), { apiOverrides: server().api })
     select('Card')
@@ -421,21 +421,21 @@ describe('타입 목록과 노드 추가', () => {
    * **목록을 연 «뒤에» 선택이 움직일 수 있다** — 목록은 툴바 안에 있지만 트리 줄은 그
    * 옆에 그대로 있으므로, 열어 둔 채 다른 노드를 누르는 것이 흔한 경로다.
    *
-   * **앞 판은 목록이 남았고, 그때 고르면 «옮긴 뒤의 선택»에 꽂혔다** — `addNode`가 클릭
-   * 시점의 `selectedNodeId`를 보기 때문이다. **그것이 얼마나 나빴는지는 잰 값이 있다:**
+   * **목록이 남으면 그때 고른 것이 «옮긴 뒤의 선택»에 꽂힌다** — `addNode`가 클릭
+   * 시점의 `selectedNodeId`를 보기 때문이다. **잰 값:**
    * `Card`에서 목록을 열고 `Text`(카탈로그가 `children: 'none'`)로 옮긴 뒤 고르면
    *
    * ```
    * add /root/children/0/children  value: [Divider]
    * ```
    *
-   * 이 나갔다 — **`Text`에 `children` 배열을 만드는 편집**이고, 그 결과 문서에
+   * 이 나간다 — **`Text`에 `children` 배열을 만드는 편집**이고, 그 결과 문서에
    * `validatePage`가 `children-not-allowed`(**error**)를 낸다. 즉 서버의 편집 파이프라인
    * 6단계가 `invalid`로 거절하는 편집이다(`apps/api/src/services/edit-pipeline.ts` —
    * 소스로 확인했고 DB가 없어 실행으로는 재지 않았다). *"보내 봐야 거절될 편집은 만들지
    * 않는다"*(`edit/structure-actions.ts` 머리말)가 막으려던 부류 그대로다.
    *
-   * **지금은 목록이 닫힌다.** 그것을 고른 것이 `panels/structure-toolbar.tsx`의
+   * **그래서 목록이 닫힌다.** 그것을 정하는 것이 `panels/structure-toolbar.tsx`의
    * `visiblePicker`이고, 거기 조건이 `abilities.addInside`라 **잠금만이 아니라 이 전이도
    * 함께 답한다.** 잠금 쪽 케이스는 `../lock/toolbar-abilities.test.tsx`가 갖고, 잠금이
    * 아닌 이 축을 재는 것이 여기 하나다.

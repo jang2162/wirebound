@@ -103,10 +103,10 @@ describe('propOps', () => {
   })
 
   it('props는 있는데 그 prop이 없으면 그 키만 add한다', () => {
-    // **계획서의 표에 없던 갈래다.** 계획서는 "`props`가 있으면 `replace`"라고만 적었는데,
-    // `props`는 있고 그 **키**가 없는 노드에 `replace`를 주면 `applyOps`의 `replaceAt`이
-    // `Object.hasOwn`을 보고 `바꿀 키가 없습니다`로 던진다(실측). 그러면 D7이 요청을
-    // 막으므로 **값이 없던 prop을 처음 켜는 편집이 아예 나가지 못한다.**
+    // **"`props`가 있으면 `replace`"만으로는 모자란 갈래다.** `props`는 있고 그 **키**가 없는
+    // 노드에 `replace`를 주면 `applyOps`의 `replaceAt`이 `Object.hasOwn`을 보고 `바꿀 키가
+    // 없습니다`로 던진다(실측). 그러면 낙관적 적용이 실패해 요청이 막히므로 **값이 없던
+    // prop을 처음 켜는 편집이 아예 나가지 못한다.**
     //
     // 통째 `add`도 답이 아니다 — 그러면 아래 단언의 `other`가 지워진다.
     const document = withChild({ other: 1 })
@@ -117,7 +117,7 @@ describe('propOps', () => {
   })
 
   it('없는 노드면 null이다', () => {
-    // 요청을 보내지 않는 신호다(D7). 여기서 던지면 화면이 렌더 도중 죽는다.
+    // 요청을 보내지 않는 신호다. 여기서 던지면 화면이 렌더 도중 죽는다.
     expect(propOps(withChild({ title: 'x' }), 'n_missing', 'title', '새 제목')).toBeNull()
   })
 
@@ -156,7 +156,7 @@ describe('propOps', () => {
   })
 
   it('불리언·수·배열도 그대로 실린다', () => {
-    // 컨트롤 위젯(Task 7~9)이 문자열 아닌 값을 낸다. 여기서 문자열로 굳히면 그때 막힌다.
+    // 컨트롤 위젯이 문자열 아닌 값을 낸다. 여기서 문자열로 굳히면 그때 막힌다.
     const document = withChild({ title: 'x' })
 
     for (const value of [true, 3, ['a', 'b'], null]) {
@@ -167,10 +167,9 @@ describe('propOps', () => {
   })
 
   it('서버가 만들 inverse를 여기서 재 둔다', () => {
-    // **계획서가 답을 정하지 않은 자리다** — "`props`를 통째로 `add`한 편집의 `inverse`가
-    // 무엇인지 재지 않았다". 서버는 `packages/schema`의 `invertOps`를 그대로 쓰므로
-    // (`apps/api/src/services/edit-pipeline.ts`) 여기서 잰 값이 서버가 낼 값이다.
-    // Task 10(undo)이 이 모양에 기댄다.
+    // **`props`를 통째로 `add`한 편집의 `inverse`가 무엇인지 여기서 잰다.** 서버는
+    // `packages/schema`의 `invertOps`를 그대로 쓰므로(`apps/api/src/services/edit-pipeline.ts`)
+    // 여기서 잰 값이 서버가 낼 값이다. undo가 이 모양에 기댄다.
     const noProps = withChild()
     expect(invertOps(noProps, propOps(noProps, 'n_a', 'title', '새 제목') ?? [])).toEqual([
       { op: 'remove', path: '/root/children/0/props' },
@@ -199,7 +198,7 @@ describe('propOps', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 구조 편집 — 여기부터 P2b-3
+// 구조 편집
 // ---------------------------------------------------------------------------
 
 /** 형제 셋을 단 루트. 순서·인덱스를 재는 케이스가 이것을 쓴다. */
@@ -282,7 +281,7 @@ describe('insertNodeOps', () => {
   })
 
   it('없는 부모면 null이다', () => {
-    // 요청을 만들지 않는 신호다(D7). 여기서 던지면 화면이 렌더 도중 죽는다.
+    // 요청을 만들지 않는 신호다. 여기서 던지면 화면이 렌더 도중 죽는다.
     expect(insertNodeOps(withSiblings(), 'n_missing', 0, NEW_NODE)).toBeNull()
   })
 
@@ -301,10 +300,10 @@ describe('insertNodeOps', () => {
     // `add /root/children/0/children/0`을 주면 `applyOps`의 `resolveSlot`이 마지막
     // 토큰만 남기고 따라 내려가다 `parent`를 `undefined`로 만들어
     // `경로를 찾을 수 없습니다: /root/children/0/children/0`으로 던진다(실측).
-    // 그러면 D7이 요청을 막아 **빈 컨테이너에 첫 자식을 넣는 편집이 아예 나가지 못한다.**
+    // 그러면 낙관적 적용이 실패해 요청이 막혀 **빈 컨테이너에 첫 자식을 넣는 편집이 아예 나가지 못한다.**
     //
     // 그래서 배열째 `add`한다. 카탈로그가 `many`인 타입이어도 문서에 `children` 키가
-    // 없을 수 있다는 것은 `create-node.ts`가 그렇게 만들기 때문이다(같은 웨이브).
+    // 없을 수 있다는 것은 `create-node.ts`가 그렇게 만들기 때문이다.
     const document = doc({
       id: 'n_root',
       type: 'Page',
@@ -326,7 +325,7 @@ describe('insertNodeOps', () => {
   })
 
   it('범위 밖 인덱스면 null이다', () => {
-    // 보내 봐야 `applyOps`가 던지고 D7에 막힌다 — 그 전에 `null`로 끊는다.
+    // 보내 봐야 `applyOps`가 던지고 낙관적 적용에서 막힌다 — 그 전에 `null`로 끊는다.
     // 실측: 형제가 셋일 때 `add /root/children/4`는 `배열 인덱스가 범위를 벗어납니다`다.
     expect(insertNodeOps(withSiblings(), 'n_root', 4, NEW_NODE)).toBeNull()
     expect(insertNodeOps(withSiblings(), 'n_root', -1, NEW_NODE)).toBeNull()
@@ -412,7 +411,7 @@ describe('moveNodeOps', () => {
   })
 
   it('같은 부모 안에서 뒤로 옮긴다', () => {
-    // **계획서가 답을 정하지 않은 자리다 — 재서 확정했다.** `[A,B,C]`에서 A를 인덱스 2로
+    // **재서 정한 계약이다.** `[A,B,C]`에서 A를 인덱스 2로
     // 옮기면 `[B,C,A]`다(실측). `move`는 remove 후 add이므로 목적지 인덱스는 **값을 뺀
     // 배열**을 기준으로 읽히고, 그래서 결과 배열에서 그 노드가 놓이는 자리와 같아진다.
     //
@@ -426,7 +425,7 @@ describe('moveNodeOps', () => {
   })
 
   it('한 칸 아래로는 index + 1이다', () => {
-    // 위 계약이 툴바에서 쓰이는 모양이다(Task 5). `n_a`가 0번이므로 1을 준다.
+    // 위 계약이 툴바에서 쓰이는 모양이다. `n_a`가 0번이므로 1을 준다.
     const document = withSiblings()
 
     expect(childIds(applied(document, moveNodeOps(document, 'n_a', 'n_root', 1)), 'n_root'))
@@ -442,7 +441,7 @@ describe('moveNodeOps', () => {
   })
 
   it('목적지 부모가 뒤에 있으면 경로가 밀린 것을 보정한다', () => {
-    // **계획서가 재지 않은 자리다 — 실측으로 찾았다.** `move`는 remove 후 add이므로
+    // **실측으로만 보이는 자리다.** `move`는 remove 후 add이므로
     // 목적지 경로도 **값을 뺀 뒤** 문서를 기준으로 잡아야 한다. 소스가 목적지 부모보다
     // 앞에 있으면 뺀 순간 부모의 인덱스가 당겨지는데, 원본 기준 경로를 그대로 쓰면
     // `applyOps`가 `경로를 찾을 수 없습니다: /root/children/1/children/0`으로 던진다(실측).
@@ -475,7 +474,7 @@ describe('moveNodeOps', () => {
     // `move`의 `path`는 그 앞의 remove가 지나간 뒤 기준이다. 여기서는 소스(`n_lead`,
     // 인덱스 0)가 목적지 부모(`n_empty`, 인덱스 1)보다 앞이라 둘이 실제로 갈린다 —
     // `add`는 `/root/children/1/children`, `move`는 `/root/children/0/children/0`이다.
-    // 한 기준으로 통일하면 둘 중 하나가 다른 노드를 가리킨다.
+    // 한 기준으로 통일하면 둘 다 던진다(아래 `경로 기준을 한쪽으로 통일하면 둘 다 던진다`).
     const document = doc({
       id: 'n_root',
       type: 'Page',
@@ -557,11 +556,11 @@ describe('moveNodeOps', () => {
   })
 
   it('서버가 만들 inverse를 여기서 재 둔다', () => {
-    // **계획서 D2가 소스를 읽고 낸 추론을 여기서 잰다** — *"목적지가 배열이면 덮어쓸 값이
+    // **소스를 읽으면 나오는 추론을 여기서 잰다** — *"목적지가 배열이면 덮어쓸 값이
     // 없으므로 반대 방향 `move` 하나"*. 서버는 `packages/schema`의 `invertOps`를 그대로
     // 쓰므로(`apps/api/src/services/edit-pipeline.ts`) 여기서 잰 값이 서버가 낼 값이다.
     //
-    // **잰 결과 D2가 맞다** — 아래 셋이 전부 `move` 하나다. 다만 그것은 `move` op **하나만**
+    // **그 추론이 맞다** — 아래 셋이 전부 `move` 하나다. 다만 그것은 `move` op **하나만**
     // 낼 때의 이야기이고, `children` 배열을 먼저 만드는 갈래는 `inverse`도 둘이다(그 다음
     // 케이스). 이 함수가 재는 것은 "목적지가 배열인 `move`"까지다.
     const back = withSiblings()
@@ -588,8 +587,8 @@ describe('moveNodeOps', () => {
     // **역의 두 경로도 서로 다른 시점을 기준으로 읽힌다.** `invertOps`는 묶음 순서만
     // 뒤집으므로 먼저 `move`가 `n_lead`를 루트 인덱스 0으로 돌려놓고, 그 순간 `n_empty`가
     // 인덱스 1로 밀린 뒤에 `remove /root/children/1/children`이 온다. 아래 값은 **잰
-    // 것이다** — 처음에 `/root/children/0/children`이라고 적었다가 실행이 반증했고, 그때
-    // 참고한 실측은 소스가 목적지보다 **뒤**에 있던 다른 문서의 값이었다.
+    // 것이다** — 소스가 목적지보다 **뒤**에 있는 문서에서 잰 값(`/root/children/0/children`)을
+    // 옮겨 적으면 틀린다.
     const document = doc({
       id: 'n_root',
       type: 'Page',
@@ -607,13 +606,13 @@ describe('moveNodeOps', () => {
   })
 
   it('자손을 부모로 주면 null이다 — applyOps가 던지는 것을 미리 끊는다', () => {
-    // **처음 적은 근거("트리가 끊어진다")는 리뷰가 반증했고 나도 재현했다.** 가드를
+    // **근거는 "트리가 끊어진다"가 아니다.** 가드를
     // 우회해 그 op을 직접 만들면 끊어진 트리가 **만들어지지 않는다** — `move`가 `from`을
     // 먼저 빼므로 목적지 경로가 그 순간 문서에서 사라지고 `applyOps`가 던진다(실측).
     //
     // 그러니 이 판정이 막는 것은 "끊어진 트리"가 아니라 **`PatchError`**다. 그마저도
     // `EditorStore.applyEdit`이 `try/catch`로 잡아 `null`을 내므로 화면이 죽지는 않는다 —
-    // 이 판정의 값어치는 **적용해 보기 전에 끊는 것**(D7)까지다.
+    // 이 판정의 값어치는 **적용해 보기 전에 끊는 것**까지다.
     const document = withSubtree()
 
     expect(moveNodeOps(document, 'n_box', 'n_1', 0)).toBeNull()
@@ -627,9 +626,8 @@ describe('moveNodeOps', () => {
 
   it('경로 기준을 한쪽으로 통일하면 둘 다 던진다', () => {
     // **`children` 키를 만드는 갈래에서 `add`와 `move`의 기준이 갈린다는 근거다.**
-    // 처음에는 *"한쪽으로 통일하면 둘 중 하나가 다른 노드를 가리킨다"*라고 적었는데,
-    // 리뷰가 반증했고 나도 재현했다 — **다른 노드를 가리키는 것이 아니라 둘 다 던진다.**
-    // 결론(기준을 갈라야 한다)은 그대로다.
+    // 한쪽으로 통일하면 *"둘 중 하나가 다른 노드를 가리킨다"*가 아니라 **둘 다 던진다.**
+    // 결론(기준을 갈라야 한다)은 같다.
     const document = doc({
       id: 'n_root',
       type: 'Page',
@@ -651,7 +649,7 @@ describe('moveNodeOps', () => {
         { op: 'move', from: '/root/children/0', path: '/root/children/0/children/0' },
       ]),
     ).toThrow(/경로를 찾을 수 없습니다/)
-    // 갈라 쓰는 현 구현만 지나간다.
+    // 갈라 쓰는 지금 구현만 지나간다.
     expect(childIds(applied(document, moveNodeOps(document, 'n_lead', 'n_empty', 0)), 'n_empty'))
       .toEqual(['n_lead'])
   })
@@ -685,13 +683,12 @@ describe('moveNodeOps', () => {
 
 describe('ops.ts의 방어선 — children 배열 안에 노드가 아닌 원소', () => {
   /**
-   * **리뷰가 찾은 입력이고, 재보니 범위가 리뷰가 지목한 둘보다 넓었다.**
-   * 리뷰는 `moveNodeOps`만 던진다고 적었는데 그것은 대상 노드가 `null` 원소보다 **앞**에
-   * 있는 문서에서 잰 값이었다. 대상이 뒤에 있으면 `propOps`·`removeNodeOps`도 던진다 —
-   * 셋 다 `findNodePath`를 지나고 그것이 `walkNodes`를 쓰기 때문이다(실측).
+   * **방어선이 없으면 넷이 다 던질 수 있다.** 대상 노드가 `null` 원소보다 **앞**에 있는
+   * 문서에서는 `moveNodeOps`만 던지지만, 대상이 뒤에 있으면 `propOps`·`removeNodeOps`도
+   * 던진다 — 셋 다 `findNodePath`를 지나고 그것이 `walkNodes`를 쓰기 때문이다(실측).
    *
-   * `insertNodeOps(…, 'n_root', …)`만 던지지 않았는데, 루트가 첫 방문이라 순회가
-   * `null`에 닿기 전에 반환하기 때문이다 — 그 노드가 뒤에 있으면 그쪽도 던진다.
+   * `insertNodeOps(…, 'n_root', …)`는 루트가 첫 방문이라 순회가 `null`에 닿기 전에
+   * 반환해 던지지 않는다 — 그 노드가 뒤에 있으면 그쪽도 던진다.
    */
   const afterNull = (): PageDocument =>
     doc({
@@ -776,9 +773,9 @@ describe('ops.ts의 방어선 — children 배열 안에 노드가 아닌 원소
 })
 
 /**
- * **`variantOps` — 경로를 가르는 자리(재라 #4).**
+ * **`variantOps` — 경로를 가르는 자리.**
  *
- * `variant`는 props의 키가 아니라 **노드 봉투의 필드**다(§4.3). `propOps`를 재사용하면
+ * `variant`는 props의 키가 아니라 **노드 봉투의 필드**다(설계서 「페이지 스키마 노드」). `propOps`를 재사용하면
  * `props` 안에 `variant`라는 키가 생겨 `z.strictObject`인 컴포넌트에서 `invalid-props`가
  * 되고, 그렇지 않은 곳에서는 **아무 데도 안 쓰이는 값이 조용히 저장된다.**
  */
@@ -801,7 +798,7 @@ describe('variantOps', () => {
   })
 
   it('키가 없으면 add다', () => {
-    // `replace`를 주면 `applyOps`가 `바꿀 키가 없습니다`로 던지고 D7이 편집을 삼킨다
+    // `replace`를 주면 `applyOps`가 `바꿀 키가 없습니다`로 던지고 낙관적 적용이 편집을 삼킨다
     // (`propOps`의 가운데 갈래와 같은 원인).
     expect(variantOps(withVariant(), 'n_a', 'featured')).toEqual([
       { op: 'add', path: '/root/children/0/variant', value: 'featured' },
@@ -817,10 +814,10 @@ describe('variantOps', () => {
 
   it('그 근거 — replace null인 문서가 실제로 거절된다', () => {
     // **`edit/ops.ts`의 주석이 상태 코드를 적고 있다(422).** 그 근거가 되는 것은
-    // `validatePage`가 내는 **코드와 severity**다 — `error`여야 §7.1의 게이트가 편집을
-    // 막는다(`warning`이면 통과한다). 산문으로만 두면 아무도 다시 재지 않는다.
+    // `validatePage`가 내는 **코드와 severity**다 — `error`여야 설계서 「정방향 흐름」의 게이트가
+    // 편집을 막는다(`warning`이면 통과한다). 산문으로만 두면 아무도 다시 재지 않는다.
     //
-    // **앞 판은 그 자리를 `400`이라 적었고 거짓이었다.** 리뷰가 잡았다.
+    // **그 자리는 `400`이 아니다** — 검증 게이트가 막는 것은 422다.
     const broken = applyOps(withVariant('default'), [
       { op: 'replace', path: '/root/children/0/variant', value: null },
     ])
@@ -836,7 +833,7 @@ describe('variantOps', () => {
     expect(validatePage(removed)).toEqual([])
   })
 
-  it('없는 것을 지우려 하면 null이다 — 요청을 만들지 않는다(D7)', () => {
+  it('없는 것을 지우려 하면 null이다 — 요청을 만들지 않는다', () => {
     expect(variantOps(withVariant(), 'n_a', null)).toBeNull()
   })
 
@@ -889,12 +886,12 @@ describe('variantOps', () => {
 })
 
 /**
- * **`interactionsOps` — 상호작용은 노드 봉투의 필드다**(§4.3의
+ * **`interactionsOps` — 상호작용은 노드 봉투의 필드다**(설계서 「페이지 스키마 노드」의
  * `{ id, type, props, variant, marker, interactions, children }`). 그래서 `variantOps`와
  * **같은 층**이고 경로도 한 단계 위다(`/…/interactions`, `/…/props/…`가 아니다).
  *
- * **P5-1과 다른 점**(계획 D6): 코멘트는 서버가 문서를 바꿔야 해서 새 계약(`markerOps`)이
- * 필요했지만, **상호작용은 클라이언트가 바꾼다** — 이미 있는 낙관적 편집 경로를 그대로 탄다.
+ * **코멘트와 다른 점:** 코멘트는 서버가 문서를 바꿔야 해서 따로 계약(`markerOps`)이
+ * 있지만, **상호작용은 클라이언트가 바꾼다** — 이미 있는 낙관적 편집 경로를 그대로 탄다.
  *
  * **한 노드의 배열을 통째로 갈아 끼운다.** 액션 하나만 겨냥한 세밀한 op(`/…/interactions/0/
  * actions/1/prop`)을 만들지 않는 이유: 저작 UI가 하는 일이 *"이 노드의 규칙 목록을 이렇게
@@ -924,7 +921,7 @@ describe('interactionsOps', () => {
 
   it('키가 없으면 add다', () => {
     // `variantOps`와 같은 원인 — `replace`를 주면 `applyOps`가 `바꿀 키가 없습니다`로
-    // 던지고 D7이 편집을 삼킨다.
+    // 던지고 낙관적 적용이 편집을 삼킨다.
     expect(interactionsOps(withInteractions(), 'n_a', [RULE])).toEqual([
       { op: 'add', path: '/root/children/0/interactions', value: [RULE] },
     ])

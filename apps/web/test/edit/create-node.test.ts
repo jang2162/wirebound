@@ -24,8 +24,8 @@ function pageWith(node: WbNode): PageDocument {
 
 /**
  * 노드 자체의 검증 이슈만. `slot-count`는 **노드가 아니라 문서 종류의 제약**이라
- * 가른다 — 페이지에는 `Slot`을 둘 수 없다(설계 §4.4). 그것은 `createNode`가 무엇을
- * 만드느냐의 문제가 아니고, 타입 목록이 무엇을 보이느냐의 문제다(Task 7).
+ * 가른다 — 페이지에는 `Slot`을 둘 수 없다(설계서 「레이아웃」). 그것은 `createNode`가 무엇을
+ * 만드느냐의 문제가 아니고, 타입 목록이 무엇을 보이느냐의 문제다.
  */
 function nodeIssues(document: PageDocument): ValidationIssue[] {
   return validatePage(document).filter((issue) => issue.code !== 'slot-count')
@@ -85,7 +85,7 @@ describe('createNode', () => {
   })
 
   it('.default()가 없는 필수 prop을 가진 컴포넌트가 없다', () => {
-    // **계획서가 재라고 남긴 자리다(D7) — 재서 0이었다.** 카탈로그 전부가
+    // **그런 컴포넌트의 수를 재는 자리다 — 0이어야 한다.** 카탈로그 전부가
     // `props.safeParse({})`를 통과하므로 `createNode`는 `{ id, type }`만 만들면 된다.
     // 손으로 기본값 표를 두지 않는 근거가 이것이고, **하나라도 생기면 여기서 죽는다** —
     // 그때 채울 값은 `props.parse({})`가 주는 것을 그대로 쓰는 편이 정확하다.
@@ -109,14 +109,14 @@ describe('createNode', () => {
   })
 
   it('children이 many인 타입도 빈 children을 갖지 않는다', () => {
-    // **재서 정했다.** 어느 쪽이든 검증은 통과한다(실측: `children: []`을 붙인 판도
-    // 이슈 0이다). 갖지 않는 쪽을 고른 것은 `insertNodeOps`가 `children` 키가 없는
-    // 부모에 **배열째 넣는 갈래를 이미 갖기** 때문이다(그쪽 실측).
+    // 어느 쪽이든 검증은 통과한다(실측: `children: []`을 붙인 판도 이슈 0이다). 갖지 않는
+    // 쪽을 고른 것은 `insertNodeOps`가 `children` 키가 없는 부모에 **배열째 넣는 갈래를
+    // 갖기** 때문이다(그쪽 실측).
     //
-    // **처음 여기 적었던 두 번째 근거는 틀렸다** — *"빈 배열을 미리 두면 undo 왕복 뒤
-    // 그 키가 남아 원본과 달라진다"*. 재보니 **두 판 모두 왕복이 자기 원본과 같다.**
-    // 잔여물은 오히려 현 구현 쪽에 있고(넣은 뒤 `removeNodeOps`로 지우면 `children: []`이
-    // 남는다) 그것도 무해하다. 자세한 값은 `src/edit/create-node.ts` 머리말에 있다.
+    // **"빈 배열을 미리 두면 undo 왕복 뒤 그 키가 남아 원본과 달라진다"는 근거가 못 된다** —
+    // 재 보면 **두 판 모두 왕복이 자기 원본과 같다.** 잔여물은 오히려 지금 구현 쪽에 있고
+    // (넣은 뒤 `removeNodeOps`로 지우면 `children: []`이 남는다) 그것도 무해하다. 자세한 값은
+    // `src/edit/create-node.ts` 머리말에 있다.
     const many = listComponents().filter((def) => def.children === 'many')
 
     // 분모가 0이면 이 케이스는 아무것도 재지 않는다.
@@ -127,8 +127,8 @@ describe('createNode', () => {
   })
 
   it('페이지에 둘 수 없는 타입은 Slot뿐이다', () => {
-    // `createNode`의 계약이 아니라 **카탈로그의 성질**이다. 타입 목록(Task 7)이 무엇을
-    // 걸러야 하는지가 여기서 나온다 — 설계 §4.4가 Slot을 레이아웃 전용으로 정했고,
+    // `createNode`의 계약이 아니라 **카탈로그의 성질**이다. 타입 목록이 무엇을
+    // 걸러야 하는지가 여기서 나온다 — 설계서 「레이아웃」이 Slot을 레이아웃 전용으로 두고,
     // `validatePage`가 `slot-count`로 거절한다(실측). 카탈로그에 그런 타입이 더 생기면
     // 여기서 죽어야 한다.
     const blocked = listComponents()

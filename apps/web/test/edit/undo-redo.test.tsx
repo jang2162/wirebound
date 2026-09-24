@@ -1,6 +1,6 @@
 /**
  * undo / redo. **서버에 undo 개념은 없다** — 되돌리기도 새 편집으로 나가고, 보내는 ops는
- * 서버가 준 `inverse` 그대로다(설계 §7.1). 클라이언트는 `invertOps`를 부르지 않는다.
+ * 서버가 준 `inverse` 그대로다(설계서 「정방향 흐름」). 클라이언트는 `invertOps`를 부르지 않는다.
  *
  * 화면은 `<App />`을 라우트째 띄운다. 되돌리기 버튼은 셸의 `편집 이력` 묶음에 있고,
  * 편집은 속성 패널의 컨트롤로 낸다 — **사용자가 실제로 지나는 길 그대로다.**
@@ -110,7 +110,7 @@ function canvasTextOf(nodeId: string): string {
   return node.textContent ?? ''
 }
 
-/** 텍스트 컨트롤에 값을 넣고 blur로 커밋한다(D5). */
+/** 텍스트 컨트롤에 값을 넣고 blur로 커밋한다. */
 function typeAndCommit(label: string, value: string): void {
   const input = widget(label)
   fireEvent.change(input, { target: { value } })
@@ -153,7 +153,7 @@ describe('undo / redo', () => {
   })
 
   it('undo가 보내는 ops는 서버가 준 inverse 그대로다', async () => {
-    // **설계 §7.1의 계약이다.** 로컬에서 `invertOps`를 부르는 구현을 잡는다 — 여기서는
+    // **설계서 「정방향 흐름」의 계약이다.** 로컬에서 `invertOps`를 부르는 구현을 잡는다 — 여기서는
     // 서버 대역이 **자기가 든 문서**에서 `inverse`를 만들고, 클라이언트의 낙관적 사본과
     // 다른 값이 나오도록 첫 편집 전에 서버 쪽을 미리 바꿔 둔다.
     const { calls, api } = server()
@@ -172,9 +172,9 @@ describe('undo / redo', () => {
   })
 
   it('props가 없던 노드도 undo로 돌아간다', async () => {
-    // **계획서가 남긴 위험이다** — 통째 `add`한 편집의 `inverse`는 `[remove /…/props]`
-    // 하나이고(웨이브 2 실측), 그것으로 원래 상태(= `props` 없음)에 정확히 돌아가는지는
-    // 재지 않았다. 여기서 잰다.
+    // 통째 `add`한 편집의 `inverse`는 `[remove /…/props]` 하나이고(`ops.test.ts`의 `propOps` 절
+    // `서버가 만들 inverse를 여기서 재 둔다`), 그것으로 원래 상태(= `props` 없음)에 정확히
+    // 돌아가는지를 여기서 잰다.
     const calls: { ops: PatchOp[] }[] = []
     let held = BARE_DOC
     let seq = 7
@@ -251,7 +251,7 @@ describe('undo / redo', () => {
   })
 
   it('적용할 수 없는 inverse는 스택에서 빼고 안내한다', async () => {
-    // **설계 §7.3의 계약 — 에러가 아니라 정상 흐름이다.** 다른 사람이 그 노드를 지웠으면
+    // **설계서 「개인 undo/redo」의 계약 — 에러가 아니라 정상 흐름이다.** 다른 사람이 그 노드를 지웠으면
     // 내 `inverse`가 적용되지 않는 것이 당연하고, 그때 멈추면 스택 맨 위에 갇힌다.
     // 서버가 없는 경로를 가리키는 `inverse`를 주도록 대역을 바꾼다.
     const calls: { ops: PatchOp[] }[] = []
@@ -303,7 +303,7 @@ describe('undo / redo', () => {
   })
 
   it('편집이 실패하면 스택이 오염되지 않는다', async () => {
-    // Task 6의 재조회 뒤다. 문서가 서버 것으로 되돌아갔으므로 그 전 revision의 `inverse`를
+    // 편집 실패의 재조회 뒤다. 문서가 서버 것으로 되돌아갔으므로 그 전 revision의 `inverse`를
     // 되보내면 서버 상태와 어긋난다.
     const { calls, api } = server({ failAt: 2 })
     await openPage(DOC, { apiOverrides: api })
@@ -354,13 +354,12 @@ describe('undo / redo', () => {
   })
 
   it('undo하면 텍스트 컨트롤의 입력칸도 되돌아간다', async () => {
-    // **앞 판에서는 이것이 깨져 있었다.** `TextControl`은 로컬 초안을 드는데 undo는
-    // `selectedNodeId`를 건드리지 않아 위젯이 마운트된 채 문서만 갈리고, `key`도 그대로라
-    // 초안이 다시 읽히지 않았다. 실측: 캔버스는 되돌아갔는데 입력칸은 `"새 내용"`을
-    // 붙들었고, 거기서 blur하면 `draft !== original`이라 **되돌린 편집이 다시 나갔다**
-    // (요청이 셋이 되고 마지막 ops가 방금 취소한 값이었다).
-    //
-    // 이제 문서 값이 밖에서 바뀌면 초안을 버린다(`controls/text-control.tsx`에 근거가 있다).
+    // **문서 값이 밖에서 바뀌면 초안을 버린다**(`controls/text-control.tsx`에 근거가 있다).
+    // `TextControl`은 로컬 초안을 드는데 undo는 `selectedNodeId`를 건드리지 않아 위젯이
+    // 마운트된 채 문서만 갈리고, `key`도 그대로다 — 초안을 안 버리면 다시 읽히지 않는다.
+    // 그러면 캔버스는 되돌아가는데 입력칸은 `"새 내용"`을 붙들고, 거기서 blur하면
+    // `draft !== original`이라 **되돌린 편집이 다시 나간다**(요청이 셋이 되고 마지막 ops가
+    // 방금 취소한 값이다).
     const { calls, api } = server()
     await openPage(DOC, { apiOverrides: api })
 
@@ -408,11 +407,11 @@ describe('undo / redo', () => {
     // 먼저 바뀐다 — 그때 `PropertyPanel`의 `key={node.id}`가 앞 노드의 초안을 **새 노드로
     // 옮겨 가지 않고 버리는지**를 잠근다.
     //
-    // **실브라우저(Chrome, 8차 실측)의 클릭은 다르다** — `mousedown`이 입력의 포커스를 거두어
+    // **실브라우저(Chrome 실측)의 클릭은 다르다** — `mousedown`이 입력의 포커스를 거두어
     // 그 blur 가 **원래 노드로** 커밋한 뒤에 선택이 바뀐다. 그 행동은 `test/panels/
-    // property-panel.test.tsx`의 «실브라우저의 클릭은 …» 절이 `clickAsBrowser`로 잰다. 앞
-    // 판은 이 케이스의 이름을 *"구조 트리를 클릭해 … 사라진다"*로 달아 jsdom 값을 행동처럼
-    // 적었다(`panels/property-panel.tsx`의 `PropControl` 주석).
+    // property-panel.test.tsx`의 «실브라우저의 클릭은 …» 절이 `clickAsBrowser`로 잰다. 이
+    // 케이스의 이름을 *"구조 트리를 클릭해 … 사라진다"*처럼 달면 jsdom 값을 행동처럼 적는
+    // 것이 된다(`panels/property-panel.tsx`의 `PropControl` 주석).
     const { calls, api } = server()
     await openPage(DOC, { apiOverrides: api })
 
@@ -434,7 +433,7 @@ describe('undo / redo', () => {
   })
 
   it('같은 틱에 편집과 undo가 들어와도 요청이 하나씩 나간다', async () => {
-    // **D6를 지키는 것은 스토어의 펌프 가드다.** undo/redo 버튼은 속성 패널과 **다른**
+    // **한 번에 요청 하나를 지키는 것은 스토어의 펌프 가드다.** undo/redo 버튼은 속성 패널과 **다른**
     // `useEditCommit` 인스턴스를 쓰므로, 가드가 훅의 `ref`에 있으면 둘이 각자 자기 것을
     // 갖는다. 그 판에서 재면 요청이 셋이 되고 `maxInFlight`가 2이며 **같은 `clientOpId`가
     // 두 요청에 실린다** — 서버는 그 둘째를 409로 거절한다(README: 앞 요청의 `seq`를

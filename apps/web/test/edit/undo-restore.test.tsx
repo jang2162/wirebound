@@ -1,5 +1,5 @@
 /**
- * 새로고침 뒤 undo 스택 복원(D10). 페이지를 열면 `GET .../revisions?mine=true`로 내
+ * 새로고침 뒤 undo 스택 복원. 페이지를 열면 `GET .../revisions?mine=true`로 내
  * revision을 받아 스택을 채운다.
  *
  * **순서가 계약이다** — `loadPage`가 페이지 상태를 서버 것으로 놓으면서 스택을 비우므로,
@@ -115,7 +115,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
   })
 
   it('응답 순서가 곧 스택 순서다 — 최신이 먼저 되돌아간다', async () => {
-    // 서버는 `seq` 내림차순으로 준다(D10). **재는 것은 배열 모양이 아니라 어느 것이 먼저
+    // 서버는 `seq` 내림차순으로 준다. **재는 것은 배열 모양이 아니라 어느 것이 먼저
     // undo되는가**다 — 스택 표현은 구현이 정할 일이다.
     const h = harness({ revisions: [revision(9, '최신 되돌림'), revision(8, '옛 되돌림')] })
     await openPage(DOC, { apiOverrides: h.api })
@@ -142,7 +142,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
   })
 
   it('복원 직후에는 redo가 비어 있다', async () => {
-    // D10 — 복원한 항목은 redo를 갖지 않는다. redo는 세션 안에서 undo를 눌러야 생긴다.
+    // 복원한 항목은 redo를 갖지 않는다. redo는 세션 안에서 undo를 눌러야 생긴다.
     const h = harness({ revisions: [revision(8, OLD_TEXT)] })
     await openPage(DOC, { apiOverrides: h.api })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
@@ -151,7 +151,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
   })
 
   it('revision 조회가 실패해도 페이지는 열린다', async () => {
-    // **이 태스크의 방어선이다.** undo 복원은 부가 기능이므로 그것 때문에 문서를 못 보면 안 된다.
+    // **복원의 방어선이다.** undo 복원은 부가 기능이므로 그것 때문에 문서를 못 보면 안 된다.
     const h = harness({ revisionsFail: true })
     await openPage(DOC, { apiOverrides: h.api })
 
@@ -163,7 +163,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
     screen.getByRole('heading', { name: PROJECT_NAME })
     // 되돌릴 것만 없다.
     expect(undoButton().disabled).toBe(true)
-    // **알리지 않는다** — 사용자가 할 수 있는 일이 없고, 편집 실패 통지 자리(D8)를 부가
+    // **알리지 않는다** — 사용자가 할 수 있는 일이 없고, 편집 실패 통지 자리를 부가
     // 기능의 실패로 채우면 진짜 편집 실패가 묻힌다.
     expect(screen.queryAllByRole('alert')).toHaveLength(0)
   })
@@ -200,10 +200,10 @@ describe('새로고침 뒤 undo 스택 복원', () => {
   })
 
   it('편집이 실패해 재조회하면 스택을 다시 채우지 않는다', async () => {
-    // **재조회 경로의 판정이다(계획서가 답을 정하지 않은 자리).** 재조회는 서버가 내 것과
+    // **재조회 경로의 판정이다.** 재조회는 서버가 내 것과
     // 갈라졌다는 뜻이고, 그때 옛 `inverse`를 되살리면 **남의 편집을 조용히 덮는다** —
     // 실측: 내가 `A→B`로 바꾼 뒤 남이 `C`로 바꾼 문서에 내 `inverse`(`replace … ← "A"`)를
-    // 적용하면 던지지 않고 그대로 `A`가 되어 `C`가 사라진다. §7.3의 건너뛰기는 **노드가
+    // 적용하면 던지지 않고 그대로 `A`가 되어 `C`가 사라진다. 설계서 「개인 undo/redo」의 건너뛰기는 **노드가
     // 지워진 경우만** 잡는다(`경로를 찾을 수 없습니다`). 값이 갈린 흔한 경우는 못 잡는다.
     //
     // 그래서 충돌 뒤에는 스택을 비운 채 두고, 사용자가 새로고침으로 되찾게 한다.

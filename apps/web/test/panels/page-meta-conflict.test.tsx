@@ -1,10 +1,11 @@
 /**
- * **페이지 설명의 충돌 모델 — 화면**(이월 P = AB · M · 2026-09-23). 서버는 가짜다 — 바탕(`base`)을 받아 지금 값과
+ * **페이지 설명의 충돌 모델 — 화면**. 서버는 가짜다 — 바탕(`base`)을 받아 지금 값과
  * 견주고, 다르면 409 · 이슈 코드 `page-meta-changed` · 지금 값을 낸다(진짜 서버의 계약은
- * `apps/api/test/page-meta-conflict.test.ts`가 잰다). **jsdom 값이다** — Chrome 값은 보고서가 따로 적는다.
+ * `apps/api/test/page-meta-conflict.test.ts`가 잰다). **여기 값은 전부 jsdom 이다** — 실브라우저에서 잰 값이 아니다.
  *
  * 갈래와 그것만 혼자 죽이는 변조는 케이스의 주석에 있다. «모름»(시간 초과 → 다시 읽기)의 셋째 갈래(«다른 사람이
- * 바꿨다»)는 `write-ledger.test.tsx`의 R 절에 있다 — 그 가짜 서버와 가짜 타이머가 거기 있다.
+ * 바꿨다»)는 `write-ledger.test.tsx`의 R 절(«시간 안에 응답이 없으면 결과를 모르는 것이다 …»)에 있다 — 그 가짜
+ * 서버와 가짜 타이머가 거기 있다.
  */
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -95,7 +96,7 @@ async function collide(server: ReturnType<typeof metaServer>, options: EditorOpt
   return findConflict()
 }
 
-describe('설명 — 남이 먼저 저장했으면 409 로 안다(이월 P)', () => {
+describe('설명 — 남이 먼저 저장했으면 409 로 안다', () => {
   /**
    * 혼자 죽는 변조: «페이지 설명»이 충돌 화면에 그 사람의 값 대신 내 초안을 넘긴다(표시만 — 덮기는 옳은 값을 싣는다).
    * **409 의 값을 칸에 잘못 들면**(`land`가 `theirs`를 내 글로) 이 케이스와 «내 글로 덮기»가 함께 죽는다 — 덮기의
@@ -186,11 +187,11 @@ describe('설명 — 남이 먼저 저장했으면 409 로 안다(이월 P)', ()
   })
 })
 
-describe('설명 — 바탕은 조회가 준 값 그대로다(리뷰 F1)', () => {
+describe('설명 — 바탕은 조회가 준 값 그대로다', () => {
   /**
-   * **설명이 `null`인 페이지**(새 페이지의 기본값)에서 첫 저장의 바탕이 `null`인가. 앞 판의 케이스는 전부 설명이
-   * **문자열**인 페이지에서 시작해, 바탕을 상자의 값(`''`)으로 드는 변조가 웹 전량에서 0 사망이었다(리뷰 M-b).
-   * 그 변조는 오늘 서버에서는 거짓 충돌을 안 낸다(빈 값은 `''`든 `null`이든 같다 — 리뷰 F3) — **그래서 본문으로 잰다.**
+   * **설명이 `null`인 페이지**(새 페이지의 기본값)에서 첫 저장의 바탕이 `null`인가. 다른 케이스는 전부 설명이
+   * **문자열**인 페이지에서 시작한다 — 이 케이스가 없으면 바탕을 상자의 값(`''`)으로 드는 변조를 아무도 못 잡는다.
+   * 그 변조는 서버에서 거짓 충돌을 안 낸다(빈 값은 `''`든 `null`이든 같다) — **그래서 본문으로 잰다.**
    * 바탕은 조회가 준 값 그대로여야 한다 — 화면이 값을 접으면 그 접기가 서버의 견주기와 두 벌이 된다.
    *
    * 혼자 죽는 변조: `page-description.tsx`의 `startedFrom`을 `state.description` 대신 `server`(`description ?? ''`)로.
@@ -234,7 +235,7 @@ class MemoryStorage implements Storage {
   }
 }
 
-describe('설명 — 되살린 초안은 제 바탕을 든다(이월 X 의 (f))', () => {
+describe('설명 — 되살린 초안은 제 바탕을 든다', () => {
   /**
    * 혼자 죽는 변조: 초안 칸의 `keeper.load`가 되살린 바탕을 버린다(`base: null`). 바탕을 아예 안 비추면(`keeper.save`가
    * `{ text }`만) 되살릴 때 모양이 틀려 초안째 버려져 `draft-store.test.tsx`의 «새로고침 · 세션 만료» 케이스 다섯과
@@ -267,7 +268,7 @@ describe('설명 — 되살린 초안은 제 바탕을 든다(이월 X 의 (f))'
   })
 })
 
-describe('viewer 는 읽기 전용이다(이월 M)', () => {
+describe('viewer 는 읽기 전용이다', () => {
   const VIEWER_PROJECT: ProjectDetail = {
     id: PROJECT_ID,
     name: PROJECT_NAME,
@@ -287,7 +288,6 @@ describe('viewer 는 읽기 전용이다(이월 M)', () => {
     expect(screen.queryByRole('button', { name: '설명 저장' })).toBeNull()
   })
 
-  // **메뉴 트리의 케이스는 여기 없다**(이월 M′). 앞 판은 *"페이지의 «이름 변경»만 닫히고 메뉴의 것은 열려 있다"*를
-  // 쟀는데 M′ 이 그 뒷절을 거짓으로 만들었다 — viewer 에게는 메뉴 편집 툴바 자체가 없다. 그 자리는
-  // `test/routes/viewer-entries.test.tsx`의 «메뉴 트리» 케이스가 갖는다.
+  // **메뉴 트리의 케이스는 여기 없다** — viewer 에게는 메뉴 편집 툴바 자체가 없어 메뉴의 «이름 변경»을 누를 자리가
+  // 없다. 그 축은 `test/routes/viewer-entries.test.tsx`의 «메뉴 트리 — …» 케이스가 갖는다.
 })

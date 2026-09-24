@@ -1,6 +1,6 @@
 /**
  * 좌측 하단의 구조 트리. 열린 페이지의 컴포넌트 트리를 그리고, 캔버스와 **같은 선택**을
- * 보여 준다(설계 §9).
+ * 보여 준다(설계서 「설계서 화면 구조」).
  *
  * 캔버스 테스트와 같은 이유로 `<App />`을 라우트째로 렌더한다 — `../editor-harness` 머리말.
  */
@@ -69,14 +69,14 @@ const DOC = pageDoc({
   ],
 })
 
-/** 구조 트리 자리. 편집 모드에서만 DOM에 있다(태스크 7). */
+/** 구조 트리 자리. 편집 모드에서만 DOM에 있다. */
 function structureRegion(): HTMLElement {
   return screen.getByRole('region', { name: '구조 트리' })
 }
 
 /**
- * 노드 줄이 들어 있는 목록. **region이 아니라 이것으로 좁히는 것은 P2b-3의 툴바 때문이다** —
- * 조작 버튼이 트리와 같은 region 안에 산다(D4). region 전체에서 버튼을 세면 그 버튼들이
+ * 노드 줄이 들어 있는 목록. **region이 아니라 이것으로 좁히는 것은 구조 툴바 때문이다** —
+ * 조작 버튼이 트리와 같은 region 안에 산다. region 전체에서 버튼을 세면 그 버튼들이
  * 노드 줄로 섞인다.
  *
  * 문서가 없으면 목록 자체가 없다(`열린 페이지가 없습니다`). 그때는 `null`이고, 아래
@@ -130,10 +130,9 @@ describe('구조 트리', () => {
   })
 
   it('children 배열 안에 노드가 아닌 원소가 있어도 셸은 살아 있다', async () => {
-    // **리뷰가 `<App />` 층에서 찾은 자리다.** 웨이브 1 정정이 `structureAbilities`의
-    // 순회를 고쳤지만, 이 문서에서는 **선택이 아직 없어 그 함수가 불리지도 않는다** —
-    // 던지는 것은 `StructureNode`의 `isSelectable(null)`이고 그것은 P2b-3 이전부터
-    // 그 자리에 있던 코드다. 여기는 오류 경계 밖이라 던지면 셸이 통째로 사라진다.
+    // **`<App />` 층의 자리다.** `structureAbilities`의 순회가 노드 아닌 원소를 견뎌도
+    // 그것만으로는 모자란다 — 줄을 그리는 `StructureNode`가 원소마다 `isSelectable`을
+    // 부르므로 거기서 `null`에 던질 수 있다. 여기는 오류 경계 밖이라 던지면 셸이 통째로 사라진다.
     await openPage(
       pageDoc({
         id: 'n-root',
@@ -240,7 +239,7 @@ describe('구조 트리', () => {
     // 렌더러가 폴백으로 흡수하는 값이다(`packages/renderer/src/render.tsx`의 `shapeError`).
     // 여기서 그대로 `{node.type}`을 그리면 React가 `Objects are not valid as a React child`로
     // 렌더 도중 던지는데, 이 패널은 캔버스와 달리 **오류 경계 밖**이라 그 예외는 캔버스만이
-    // 아니라 셸 전체를 지운다. P2b-2가 검증 전 문서를 스토어에 싣기 시작하면 도달한다.
+    // 아니라 셸 전체를 지운다. 편집의 낙관적 적용이 검증 전 문서를 스토어에 싣는 경로로 도달할 수 있다.
     await openPage(
       pageDoc({
         id: 'n-root',

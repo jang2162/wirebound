@@ -1,8 +1,8 @@
 /**
- * 테마 저작 화면(P4c-2 P1·P3). **라우트·권한·읽기 전용·저장·이슈 표시**를 본다.
+ * 테마 저작 화면. **라우트·권한·읽기 전용·저장·이슈 표시**를 본다.
  *
- * 왼쪽 탭의 내용(토큰 GUI·JSON 에디터)과 오른쪽 갤러리는 ②가 채운다 — 여기서 보는 것은
- * **자리와 배선**이고, 그 둘이 붙어도 이 파일의 단언은 그대로 유효해야 한다.
+ * 왼쪽 탭의 내용(토큰 GUI·JSON 에디터)과 오른쪽 갤러리는 각자의 파일이 잰다 — 여기서 보는
+ * 것은 **자리와 배선**이고, 그 둘의 내용이 바뀌어도 이 파일의 단언은 그대로 유효해야 한다.
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
@@ -73,7 +73,7 @@ describe('테마 저작 라우트', () => {
     open({})
 
     expect(await screen.findByRole('heading', { name: '브랜드' })).toBeTruthy()
-    // **②가 채울 자리 둘이 이름으로 있다**(재라 #1 — 좌우 2분할).
+    // **좌우 2분할 — 자리 둘이 이름으로 있다.**
     expect(screen.getByLabelText('테마 편집')).toBeTruthy()
     expect(screen.getByLabelText('테마 갤러리')).toBeTruthy()
   })
@@ -114,7 +114,7 @@ describe('권한 — 읽기는 열고 쓰기는 owner다', () => {
     expect(screen.getByRole('button', { name: '저장' })).toHaveProperty('disabled', true)
   })
 
-  it('editor도 못 고친다 — 테마는 페이지와 등급이 다르다(§10)', async () => {
+  it('editor도 못 고친다 — 테마는 페이지와 등급이 다르다(설계서 「권한 모델」)', async () => {
     open({ role: 'editor' })
 
     expect(await screen.findByText('이 프로젝트의 owner만 테마를 고칠 수 있습니다.')).toBeTruthy()
@@ -128,7 +128,7 @@ describe('권한 — 읽기는 열고 쓰기는 owner다', () => {
   })
 })
 
-describe('D2 — 시스템 테마는 막다른 길이 아니다', () => {
+describe('시스템 테마는 막다른 길이 아니다', () => {
   it('내장 테마는 읽기 전용이고 파생 만들기가 있다', async () => {
     open({ detail: system() })
 
@@ -136,7 +136,7 @@ describe('D2 — 시스템 테마는 막다른 길이 아니다', () => {
     expect(screen.getByRole('button', { name: '이 테마를 바탕으로 새 테마 만들기' })).toBeTruthy()
   })
 
-  it('파생 테마에는 그 버튼이 없다 — 파생의 파생은 없다(§6.9)', async () => {
+  it('파생 테마에는 그 버튼이 없다 — 파생의 파생은 없다(설계서 「상속과 병합」)', async () => {
     open({ detail: derived() })
 
     await screen.findByRole('heading', { name: '브랜드' })
@@ -161,7 +161,7 @@ describe('D2 — 시스템 테마는 막다른 길이 아니다', () => {
     await waitFor(() => {
       expect(createTheme).toHaveBeenCalledTimes(1)
     })
-    // **덮어쓸 것만 적는 것이 §6.9의 뜻이다** — 시스템 테마 전문을 복사해 넣지 않는다.
+    // **덮어쓸 것만 적는 것이 설계서 「상속과 병합」의 뜻이다** — 시스템 테마 전문을 복사해 넣지 않는다.
     expect(createTheme.mock.calls[0]![1]).toEqual({
       theme: {
         meta: {
@@ -201,7 +201,7 @@ describe('D2 — 시스템 테마는 막다른 길이 아니다', () => {
   })
 })
 
-describe('D3 — 초안은 저장 전까지 서버에 안 간다', () => {
+describe('초안은 저장 전까지 서버에 안 간다', () => {
   it('막 열었을 때는 저장할 것이 없다', async () => {
     open({})
 
@@ -218,14 +218,14 @@ describe('D3 — 초안은 저장 전까지 서버에 안 간다', () => {
   })
 })
 
-describe('D4 — 이슈는 severity로 갈라서 보인다', () => {
+describe('이슈는 severity로 갈라서 보인다', () => {
   it('error가 있으면 저장이 막히고 이유가 화면에 있다', async () => {
     const broken = structuredClone(systemTheme('admin')) as Theme
     ;(broken.tokens as Record<string, Record<string, string>>)['semantic']!['primary'] =
       'palette.그런건없다'
     open({ detail: derived({ theme: broken, base: undefined }) })
 
-    // **편집 중 검증은 클라이언트가 돈다**(D4) — 서버에 묻지 않았는데도 화면에 나온다.
+    // **편집 중 검증은 클라이언트가 돈다** — 서버에 묻지 않았는데도 화면에 나온다.
     const issues = await screen.findByLabelText('편집 중 검증')
     expect(issues.textContent).toContain('tokens.semantic.primary')
     expect(screen.getByRole('button', { name: '저장' })).toHaveProperty('disabled', true)
@@ -254,13 +254,13 @@ describe('D4 — 이슈는 severity로 갈라서 보인다', () => {
     open({})
 
     await screen.findByRole('heading', { name: '브랜드' })
-    // 상자 이름이 갈라져 있어야 어느 채널의 말인지 알 수 있다(P4c-1 이월 §2의 두 채널).
+    // 상자 이름이 갈라져 있어야 어느 채널의 말인지 알 수 있다(편집 중 검증과 서버의 판정 — 두 채널).
     expect(screen.queryByLabelText('마지막 저장에 대한 서버의 판정')).toBeNull()
   })
 })
 
-describe('P3 — 저장과 두 채널', () => {
-  /** 이름을 고쳐 초안을 더럽힌다. **오늘 화면에 있는 유일한 입력이다**(②가 나머지를 만든다). */
+describe('저장과 두 채널', () => {
+  /** 이름을 고쳐 초안을 더럽힌다. */
   function rename(value: string): void {
     fireEvent.change(screen.getByLabelText('테마 이름'), { target: { value } })
   }
@@ -305,7 +305,7 @@ describe('P3 — 저장과 두 채널', () => {
   })
 
   it('warnings 키가 없어도 죽지 않는다 — 서버가 그렇게 낸다', async () => {
-    // **P4c-1이 *"경고가 없으면 키 자체가 없다"*로 만들었다.** 그 응답이 여기 그대로 온다.
+    // **서버는 경고가 없으면 키 자체를 싣지 않는다.** 그 응답이 여기 그대로 온다.
     open({ updateTheme: async () => derived() })
     await screen.findByRole('heading', { name: '브랜드' })
 
@@ -332,7 +332,7 @@ describe('P3 — 저장과 두 채널', () => {
 
     const box = await screen.findByLabelText('마지막 저장에 대한 서버의 판정')
     expect(box.textContent).toContain('components.Flex.base.display')
-    // **의도된 동작이라고 말한다** — 빨간 배지로 내면 소음이 된다(P4c-1 이월 §2).
+    // **의도된 동작이라고 말한다** — 빨간 배지로 내면 소음이 된다.
     expect(box.textContent).toContain('의도된 동작입니다')
     // **오류가 아니다** — 저장은 됐다.
     expect(box.textContent).toContain('저장은 됩니다')
@@ -398,22 +398,21 @@ describe('P3 — 저장과 두 채널', () => {
     const field = screen.getByLabelText('테마 이름')
     expect(field).toHaveProperty('disabled', true)
     // **값까지 단언한다.** `disabled`만 보면 잠겼을 때 빈 값을 그려도 초록이다
-    // (재서 확인했다 — 그 변조가 0 사망이었고 이 줄을 더해 닫았다).
+    // (이 줄이 없으면 그 변조를 심어도 아무것도 안 죽는다).
     expect(field).toHaveProperty('value', '관리자')
   })
 })
 
 // ────────────────────────────────────────────────────────────────────────────────
-// 여기부터 P4c-3.
+// 여기부터 JSON 에디터의 파싱 실패와 이슈 상자의 제목.
 // ────────────────────────────────────────────────────────────────────────────────
 
 /**
- * **저장 버튼이 파싱 실패를 안다**(D6 — 이월 §12.1-1). W2가 남긴 공백이고, 그것이 실제로
- * 열려 있었다는 것을 **고치기 전에 재현했다**(P4c-3 보고서 §3): 상자에 읽히는 값을 넣고
- * 이어서 읽히지 않는 글자를 친 뒤 저장을 누르니 버튼이 `disabled=false`였고 `updateTheme`이
- * **앞의 값**을 받았다.
+ * **저장 버튼이 파싱 실패를 안다.** 모르면 이렇게 깨진다: 상자에 읽히는 값을 넣고 이어서
+ * 읽히지 않는 글자를 친 뒤 저장을 누르면 버튼이 `disabled=false`이고 `updateTheme`이
+ * **앞의 값**을 받는다.
  */
-describe('P4c-3 — 읽지 못한 JSON이 저장을 막는다 (D6)', () => {
+describe('읽지 못한 JSON이 저장을 막는다', () => {
   /** 상자에 값을 넣는다. `<textarea>`의 값 교체 하나가 그 화면의 유일한 입력이다. */
   function typeJson(section: string, text: string): void {
     fireEvent.change(screen.getByRole('textbox', { name: section }), { target: { value: text } })
@@ -467,11 +466,10 @@ describe('P4c-3 — 읽지 못한 JSON이 저장을 막는다 (D6)', () => {
 })
 
 /**
- * **두 이슈 상자를 눈으로 가른다**(D7 — 이월 §12.1-5). P4c-2 ③이 쟀다: `title`이
- * `aria-label`로만 나가 *"보조 기술은 가르고 눈은 못 가른다"*였다(두 상자의 **보이는 글자가
- * 글자까지 같았다**).
+ * **두 이슈 상자를 눈으로 가른다.** `title`이 `aria-label`로만 나가면 *"보조 기술은 가르고
+ * 눈은 못 가른다"* — 두 상자의 **보이는 글자가 글자까지 같다**.
  */
-describe('P4c-3 — 이슈 상자의 제목이 눈에 보인다 (D7)', () => {
+describe('이슈 상자의 제목이 눈에 보인다', () => {
   it('제목이 heading으로 나오고 접근성 이름도 그대로다', async () => {
     const warning = themeIssue(
       'node-handle-overwrite',
@@ -484,7 +482,7 @@ describe('P4c-3 — 이슈 상자의 제목이 눈에 보인다 (D7)', () => {
     fireEvent.change(screen.getByLabelText('테마 이름'), { target: { value: '브랜드 2' } })
     fireEvent.click(screen.getByRole('button', { name: '저장' }))
 
-    // **보이는 제목이다** — `aria-label`이었을 때는 `getByRole('heading')`으로 못 찾았다.
+    // **보이는 제목이다** — `aria-label`이면 `getByRole('heading')`으로 못 찾는다.
     expect(await screen.findByRole('heading', { name: '마지막 저장에 대한 서버의 판정' })).toBeTruthy()
     // 접근성 이름은 `aria-labelledby`로 그대로 남는다 — 기존 케이스들이 그것을 쓴다.
     expect(screen.getByLabelText('마지막 저장에 대한 서버의 판정')).toBeTruthy()

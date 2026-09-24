@@ -1,18 +1,17 @@
 /**
- * **JSON 에디터(② W2) — 케이스 자리.** ①이 미리 만들어 두었다.
+ * **JSON 에디터 — 케이스 자리.**
  *
- * 셋이 병렬로 일하므로 **각자 자기 케이스 파일에만 쓴다.** `test/routes/theme-editor.test.tsx`는
- * 라우트·권한·저장의 케이스 파일이고 ②가 열면 셋이 같은 파일에서 부딪힌다 — ①의 P5가
- * 그 충돌을 회귀가 못 잡는다는 것을 밟아서 확인했다.
+ * **JSON 에디터의 케이스는 이 파일에만 쓴다.** `test/routes/theme-editor.test.tsx`는
+ * 라우트·권한·저장의 케이스 파일이다 — 여럿이 병렬로 한 파일에 케이스를 더하면 같은 자리에서
+ * 부딪히고, 그 충돌은 회귀가 못 잡는다.
  *
- * 아래 케이스는 **계약 하나**를 잡는다: 이 컴포넌트는 초안 스토어 문맥 안에서 산다.
- * 채우고 나서도 참이어야 하므로 지우지 말고 **아래에 더해라.**
+ * 첫 케이스는 **계약 하나**를 잡는다: 이 컴포넌트는 초안 스토어 문맥 안에서 산다.
+ * 다른 케이스가 무엇을 더해도 참이어야 하므로 지우지 않는다.
  *
  * ---
  *
- * **W2가 더한 것의 축은 하나다 — 파싱 실패와 검증 실패의 선**(D6). 그 선의 양쪽을 따로
+ * **나머지 케이스의 축은 하나다 — 파싱 실패와 검증 실패의 선.** 그 선의 양쪽을 따로
  * 재고, **선 자체가 지켜지는지**(파싱 실패한 것이 초안에 안 들어가는지)를 따로 잰다.
- * 구분력은 보고서에 있다.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -38,12 +37,12 @@ describe('JsonEditor', () => {
 })
 
 // ────────────────────────────────────────────────────────────────────────────────
-// 여기부터 ② W2.
+// 절 넷의 상자 — 파싱 실패와 검증 실패의 선.
 // ────────────────────────────────────────────────────────────────────────────────
 
 const META: Theme['meta'] = { id: 'brand', name: '브랜드', version: '1.0.0' }
 
-/** 절 넷을 여는 화면. **한 상자에 몰지 않는 것이 D6**이므로 케이스도 절 이름으로 찾는다. */
+/** 절 넷을 여는 화면. **절을 한 상자에 몰지 않으므로** 케이스도 절 이름으로 찾는다. */
 function mount(theme: Theme, options: { locked?: boolean; base?: Theme } = {}): ThemeDraftStore {
   const store = new ThemeDraftStore()
   store.loadTheme('t1', theme, options.base === undefined ? {} : { base: options.base })
@@ -68,7 +67,7 @@ describe('JsonEditor — 절마다 상자', () => {
   it('네 절이 각각 다른 상자다', () => {
     mount({ meta: META })
 
-    // **셋이 아니라 넷이다** — `assets`가 재라 #8의 답이다(보고서 참고).
+    // **셋이 아니라 넷이다** — `assets`도 자기 상자를 갖는다.
     for (const section of ['components', 'patterns', 'primitives', 'assets']) {
       expect(box(section)).toBeTruthy()
     }
@@ -139,19 +138,19 @@ describe('JsonEditor — 파싱 실패 (여기서 그리는 유일한 것)', () 
 
     type('components', '{"Button":')
 
-    // **초안이 참조까지 그대로다** — 못 읽은 것을 초안으로 만들지 않는다(D6).
+    // **초안이 참조까지 그대로다** — 못 읽은 것을 초안으로 만들지 않는다.
     expect(store.getState().draft).toBe(before)
 
     const alert = screen.getByRole('alert')
     expect(alert.textContent).toContain('JSON을 읽지 못했습니다')
     // **경보가 갤러리의 상태까지 말한다.** 초안에 안 넣는 것만으로는 *"고쳤는데 안 바뀐다"*가
-    // 안 닫힌다 — 갤러리는 여전히 앞 값이고 사용자는 이유를 모른다(①의 판정).
+    // 안 닫힌다 — 갤러리는 여전히 앞 값이고 사용자는 이유를 모른다.
     expect(alert.textContent).toContain('마지막으로 읽힌 값')
     // 친 글자는 상자에 남는다 — 되돌리면 사용자가 방금 적은 것을 지우는 셈이다.
     expect(box('components').value).toBe('{"Button":')
 
-    // **상자와 경보가 이어져 있다.** 처음에는 이 두 줄이 없었고 `aria-invalid`를 `false`로
-    // 변조해도 **0 사망**이었다(내가 쟀다 — ①이 이름 입력에서 겪은 §5.1과 같은 부류다).
+    // **상자와 경보가 이어져 있다.** 이 두 줄이 없으면 `aria-invalid`를 `false`로
+    // 변조해도 죽는 케이스가 없다.
     // 보조 기술에서는 경보가 화면 어디에 떠 있는 것과 *"지금 이 상자가 잘못됐다"*가 다르다.
     expect(box('components').getAttribute('aria-invalid')).toBe('true')
     expect(box('components').getAttribute('aria-describedby')).toContain(alert.id)
@@ -179,7 +178,7 @@ describe('JsonEditor — 파싱 실패 (여기서 그리는 유일한 것)', () 
   })
 })
 
-describe('JsonEditor — 검증 실패는 다른 부류다 (D6의 선)', () => {
+describe('JsonEditor — 검증 실패는 다른 부류다 (파싱 실패와의 선)', () => {
   it('스키마를 어겨도 초안에 들어가고 여기서는 경보가 안 뜬다', () => {
     const store = mount({ meta: META })
 
@@ -187,7 +186,7 @@ describe('JsonEditor — 검증 실패는 다른 부류다 (D6의 선)', () => {
     type('components', '{"Button":{"base":42}}')
 
     expect(store.getState().draft?.components).toEqual({ Button: { base: 42 } })
-    // **여기서 그릴 것이 아니다** — 이슈 패널이 `path`까지 갖춰 그린다(D4).
+    // **여기서 그릴 것이 아니다** — 이슈 패널이 `path`까지 갖춰 그린다.
     expect(screen.queryAllByRole('alert')).toHaveLength(0)
   })
 
@@ -217,8 +216,8 @@ describe('JsonEditor — 밖에서 초안이 갈릴 때', () => {
 
     // 서버가 돌려준 문서를 싣는다(`ackSave`가 `draft`까지 갈아 끼운다).
     // **`act`가 필요하다** — 이벤트 밖에서 스토어를 바꾸면 리렌더가 흐르지 않은 채로
-    // 단언이 돈다(이 저장소의 `use-project-commands.test.tsx`가 쓰는 형식 그대로다.
-    // 처음에 안 감쌌더니 상자가 앞 텍스트를 든 채였다 — **측정 장치 쪽이었다**).
+    // 단언이 돈다(`use-project-commands.test.tsx`가 쓰는 형식 그대로다. 안 감싸면
+    // 상자가 앞 텍스트를 든 채로 남는데, 그것은 결함이 아니라 **측정 장치 쪽의 문제다**).
     act(() => store.ackSave({ meta: META, components: { Card: {} } }))
 
     expect(box('components').value).toBe(JSON.stringify({ Card: {} }, null, 2))
@@ -242,8 +241,7 @@ describe('JsonEditor — 읽기 전용', () => {
 
     const input = box('primitives')
     expect(input.disabled).toBe(true)
-    // **값까지 단언한다.** ①이 이름 입력에서 `disabled`만 보는 케이스가 **0 사망**인 것을
-    // 쟀다(그쪽 보고서 §5.1) — 잠겼을 때 빈 값을 그려도 초록이었다.
+    // **값까지 단언한다.** `disabled`만 보면 잠겼을 때 빈 값을 그려도 초록이다.
     expect(input.value).toBe(JSON.stringify({ container: { gutter: 'space.6' } }, null, 2))
   })
 })
@@ -271,7 +269,7 @@ describe('JsonEditor — 화면이 말하는 사실', () => {
     expect(screen.getByText(/지우려면/)).toBeTruthy()
 
     // **문장이 참인지를 화면이 아니라 병합으로 잰다.** 안 적으면 상속값이 그대로 오고,
-    // `null`을 적으면 사라진다(§6.9).
+    // `null`을 적으면 사라진다(설계서 「상속과 병합」).
     const inherited = resolveDraft(store.getState().draft, base)
     expect(inherited.resolved?.components.size).toBeGreaterThan(0)
 
@@ -287,21 +285,20 @@ describe('JsonEditor — 화면이 말하는 사실', () => {
 })
 
 // ────────────────────────────────────────────────────────────────────────────────
-// 여기부터 P4c-3 (D6) — **파싱 실패를 스토어에 알린다.**
+// **파싱 실패를 스토어에 알린다.**
 //
-// W2가 여기까지 왔다: 경보를 그리고 초안을 안 건드리는 것. **그런데 저장은 안 막혔다** —
-// 계약이 스토어에 없었기 때문이다(W2 §7-3: *"오늘 이 화면이 할 수 있는 것은 그렇게 말하는
-// 것뿐이다"*). 그 계약이 생겼으므로 이제 이 화면이 그것을 채운다.
+// 경보를 그리고 초안을 안 건드리는 것만으로는 **저장이 안 막힌다** — 읽지 못한 절을
+// 스토어가 알아야 막을 수 있다. 그 계약(`unreadable`)을 이 화면이 채운다.
 // ────────────────────────────────────────────────────────────────────────────────
 
-describe('JsonEditor — 읽지 못한 절을 스토어에 알린다 (P4c-3 D6)', () => {
+describe('JsonEditor — 읽지 못한 절을 스토어에 알린다', () => {
   it('파싱이 실패하면 그 절의 이름이 스토어에 실린다', () => {
     const store = mount({ meta: META, components: { Button: {} } })
 
     type('components', '{"Button":')
 
     expect(store.getState().unreadable).toEqual(['components'])
-    // **초안은 그대로다** — W2의 선은 그대로 지켜진다.
+    // **초안은 그대로다** — 파싱 실패와 검증 실패의 선은 그대로 지켜진다.
     expect(store.getState().draft?.components).toEqual({ Button: {} })
   })
 

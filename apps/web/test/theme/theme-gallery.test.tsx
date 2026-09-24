@@ -1,15 +1,14 @@
 /**
- * **테마 갤러리(② W3) — 케이스 자리.** ①이 미리 만들어 두었다.
+ * **테마 갤러리 — 케이스 자리.**
  *
- * 셋이 병렬로 일하므로 **각자 자기 케이스 파일에만 쓴다.** 이유는
- * `token-editor.test.tsx` 머리말에 있다.
+ * **갤러리의 케이스는 이 파일에만 쓴다.** 이유는 `token-editor.test.tsx` 머리말에 있다.
  *
- * 아래 케이스는 **계약 하나**를 잡는다: 갤러리는 `resolved`를 **props로 받고 스스로
- * 해석하지 않는다.** 채우고 나서도 참이어야 한다 — 지우지 말고 아래에 더해라.
+ * 첫 케이스는 **계약 하나**를 잡는다: 갤러리는 `resolved`를 **props로 받고 스스로
+ * 해석하지 않는다.** 다른 케이스가 무엇을 더해도 참이어야 하므로 지우지 않는다.
  *
  * ---
  *
- * **W3이 더한 것은 렌더링이다.** 문서 데이터 쪽(`validatePage`·항목 수·재라 #5의 근거)은
+ * **이 파일이 재는 것은 렌더링이다.** 문서 데이터 쪽(`validatePage`·항목 수·`재라 #5` 묶음)은
  * `gallery-document.test.ts`에 있다. 가른 이유는 그 파일 머리말에 있다 — 요지는 그쪽이
  * `draft-css`를 import하지 않아 **`catalog-setup` import의 구분력을 잴 수 있다**는 것이다.
  */
@@ -53,18 +52,18 @@ describe('ThemeGallery', () => {
 
     const boxes = view.container.querySelectorAll('.wb-shell-gallery-item')
     expect(boxes.length).toBe(galleryItems().length)
-    // 상자마다 문서 노드가 정확히 하나 — 캡션은 그 형제다(D7: 캡션은 감싸는 상자가 아니다).
+    // 상자마다 문서 노드가 정확히 하나 — 캡션은 그 형제다(캡션은 감싸는 상자가 아니다).
     for (const box of boxes) {
       expect(box.querySelectorAll(':scope > [data-wb-component]').length).toBe(1)
     }
   })
 
   /**
-   * **`admin`으로 쓰면 이 케이스는 구분력이 0이다 — 재서 알았다.**
+   * **`admin`으로 쓰면 이 케이스는 구분력이 0이다.**
    *
    * `admin`은 **열일곱 타입 전부 카탈로그의 첫 구조를 고른다.** 그래서 *"테마가 고른 구조로
    * 그린다"*를 그 테마로 재면, 구조를 통째로 무시하고 카탈로그 기본만 쓰는 갤러리도 초록이다
-   * (처음에 `admin`으로 적었다가 아래 `not.toBe`가 죽어서 알았다). `portal`은 일곱 타입에서
+   * (`admin`으로 바꾸면 아래 `not.toBe`가 죽는다). `portal`은 일곱 타입에서
    * 갈린다 — 그중 `Card: plain → bordered`를 쓴다.
    *
    * **아래 `not.toBe`를 지우지 마라.** 테마가 바뀌어 다시 같아지면 그 줄이 죽어서 알려 준다.
@@ -150,8 +149,8 @@ describe('ThemeGallery', () => {
   /**
    * **경계를 실제 경로로 잰다.** 아래 `GalleryBoundary` 묶음은 경계 자체를 직접 재는데,
    * 그것만으로는 **`ThemeGallery`가 그 경계를 두르고 있는지**를 아무도 안 본다 —
-   * 재서 확인했다: `ThemeGallery`에서 `<GalleryBoundary>`를 걷어내면 `--project web`
-   * 1031케이스가 **0 사망**이었다. 이 케이스가 그 사각을 닫는다(그 변조가 이제 1 사망이다).
+   * `ThemeGallery`에서 `<GalleryBoundary>`를 걷어내면 이 케이스 말고는 `--project web`에서
+   * 죽는 케이스가 없다. 이 케이스가 그 사각을 닫는다.
    *
    * 레지스트리를 비웠다 되돌리는 것은 `registerStructure`가 중복에 던지기 때문이다. 같은
    * 케이스 안에서 `finally`로 되돌리므로 파일의 다른 케이스에 남지 않는다.

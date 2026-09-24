@@ -173,7 +173,7 @@ describe('보내는 것', () => {
   })
 })
 
-describe('잠금 프레임 (§7.2)', () => {
+describe('잠금 프레임 (설계서 「소프트 잠금」)', () => {
   const LOCK = { pageId: 'g', nodeId: 'n_b', userId: 'u_1', userName: '보라' }
 
   it('목록을 그대로 읽는다', () => {
@@ -232,7 +232,7 @@ describe('잠금 프레임 (§7.2)', () => {
   })
 })
 
-describe('멤버십 프레임 (이월 5차)', () => {
+describe('멤버십 프레임', () => {
   /**
    * 혼자 죽는 변조: 파서가 `projectId`를 안 본다. 역할 값이 실려 와도 옮기지 않는다 — 역할은 `getProject` 하나에서 읽는다
    * (`joined`의 `role`과 같은 까닭).

@@ -1,7 +1,7 @@
 /**
- * 패턴 고르개(P7-1 T3 — D7·D8). **`<App />`을 라우트째 렌더한다**(`../editor-harness`).
+ * 패턴 고르개. **`<App />`을 라우트째 렌더한다**(`../editor-harness`).
  *
- * **여기서 재는 것은 목록이지 삽입이 아니다.** 꽂는 자리와 선택 이동은 T4의
+ * **여기서 재는 것은 목록이지 삽입이 아니다.** 꽂는 자리와 선택 이동은
  * `../edit/pattern-insert.test.ts`·`./structure-pattern.test.tsx`가 잰다.
  */
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -48,13 +48,13 @@ async function openPicker(overrides: Partial<ApiClient>): Promise<void> {
   fireEvent.click(toolButton('패턴 넣기'))
 }
 
-describe('패턴 고르개 — 여는 자리 (D8)', () => {
+describe('패턴 고르개 — 여는 자리', () => {
   it('구조 툴바에 패턴 넣기 버튼이 있다', async () => {
     await openPage(doc(), { apiOverrides: themeApi('portal') })
     expect(toolButton('패턴 넣기')).toBeTruthy()
   })
 
-  it('선택이 없어도 누를 수 있다 — 선택 없이도 root에 꽂기 때문이다(D5)', async () => {
+  it('선택이 없어도 누를 수 있다 — 선택 없이도 root에 꽂기 때문이다', async () => {
     await openPage(doc(), { apiOverrides: themeApi('portal') })
     // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
     // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
@@ -88,11 +88,11 @@ describe('패턴 고르개 — 여는 자리 (D8)', () => {
   })
 })
 
-describe('패턴 고르개 — 목록이 보이는 것 (D8)', () => {
+describe('패턴 고르개 — 목록이 보이는 것', () => {
   /**
-   * **리뷰가 지목한 사각 ㉡을 닫는다.** 앞 판의 단언은 `toContain('content')`였는데
-   * 그것은 **키 전체(`content.noticeBoard`)에 포섭된다** — 범주를 자르지 않고 키를
-   * 그대로 보여 줘도 통과한다. 라벨 전문을 단언해 그 축을 갈랐다.
+   * **라벨 전문을 단언한다.** `toContain('content')`는 **키 전체(`content.noticeBoard`)에
+   * 포섭된다** — 범주를 자르지 않고 키를 그대로 보여 줘도 통과한다. 전문이어야 그 축이
+   * 갈린다.
    */
   it('패턴 이름·범주·슬롯 이름을 보인다 — 범주는 키의 앞부분이다', async () => {
     await openPicker(themeApi('portal'))
@@ -136,7 +136,7 @@ describe('패턴 고르개 — 목록이 보이는 것 (D8)', () => {
 
   it('슬롯이 없는 패턴은 슬롯 없음이라고 말한다', async () => {
     // 시스템 테마 둘 다 슬롯을 갖는다. 슬롯 없는 패턴을 실제 테마에 새로 만들지 않고
-    // (D7 — 패턴 저작은 §6.10의 일이다) 대역이 준 테마로 그 갈래만 본다.
+    // (패턴 저작은 설계서 「테마 관리」의 일이다) 대역이 준 테마로 그 갈래만 본다.
     const withoutSlots = {
       ...systemTheme('portal')!,
       patterns: { 'hero.plain': { name: '민 히어로', schema: { type: 'Section' } } },
@@ -157,14 +157,14 @@ describe('패턴 고르개 — 목록이 보이는 것 (D8)', () => {
 })
 
 /**
- * **리뷰가 지목한 결함을 닫는 절이다.** 앞 판은 테마를 못 얻은 상태 넷을 문장 하나로
- * 덮었고, 그중 `theme: null`은 **서버가 낸 답**(*"테마를 고르지 않았다"*)이지 정보의
- * 부재가 아니었다 — D7이 세운 구분을 한 층 위에서 되살린 형태다.
+ * **테마를 못 얻은 상태 넷을 문장 하나로 덮지 않는다.** 그중 `theme: null`은 **서버가 낸
+ * 답**(*"테마를 고르지 않았다"*)이지 정보의 부재가 아니다 — 덮으면 서버가 세운 구분을
+ * 화면이 한 층 위에서 지운다.
  *
  * **문장이 서로를 덮지 않는 것을 케이스가 잰다.** 화면을 지나는 것은 `noticeOf`가 모으고,
  * 화면에서 만들 수 없는 상태(`no-project`)까지는 `NOTICE` 표를 직접 보는 케이스가 잰다.
  */
-describe('패턴 고르개 — D7: 상태마다 갈라 말한다', () => {
+describe('패턴 고르개 — 상태마다 갈라 말한다', () => {
   /** 서버 응답 하나를 주고, 고르개가 낸 안내 문장을 돌려준다. */
   async function noticeOf(overrides: Partial<ApiClient>): Promise<string> {
     await openPicker(overrides)
@@ -240,7 +240,7 @@ describe('패턴 고르개 — D7: 상태마다 갈라 말한다', () => {
     //
     // **`cleanup()`을 사이에 넣는 것이 필수다.** RTL의 자동 정리는 케이스 **사이**에만
     // 돌므로, 한 케이스에서 `openPage`를 거듭 부르면 셸이 겹쳐 쌓이고 `getByRole`이
-    // *"Found multiple elements"*로 죽는다(실측 — 처음에 그렇게 짰다).
+    // *"Found multiple elements"*로 죽는다.
     const cases: Partial<ApiClient>[] = [
       themeApi('admin'),
       themeResponse(null, null),
@@ -279,14 +279,14 @@ describe('패턴 고르개 — D7: 상태마다 갈라 말한다', () => {
   })
 
   it('프로젝트가 없을 때의 문장은 프로젝트를 가리켜 말하지 않는다', () => {
-    // **델타 리뷰가 지목한 자리.** 앞 판은 이 상태가 `unset`이라
-    // *"이 **프로젝트는** 테마를 고르지 않았습니다"*가 나갔다.
+    // 이 상태를 `unset`으로 접으면 *"이 **프로젝트는** 테마를 고르지 않았습니다"*가
+    // 나간다 — 프로젝트가 없는데 프로젝트를 가리킨다.
     expect(NOTICE['no-project']).not.toContain('이 프로젝트')
     expect(NOTICE['no-project']).not.toBe(NOTICE.unset)
   })
 
   it('테마가 없는 어느 상태에서도 목록을 닫을 수 있다', async () => {
-    // 앞 판은 이 갈래에서 `<p>` 하나만 내서 `패턴 취소`가 사라졌다.
+    // 이 갈래에서 `<p>` 하나만 내면 `패턴 취소`가 사라진다.
     await openPicker(themeResponse(null, null))
     await screen.findByText(/테마를 고르지 않았습니다/)
     fireEvent.click(screen.getByRole('button', { name: '패턴 취소' }))

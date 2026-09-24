@@ -4,7 +4,7 @@ import { fakeApi } from './helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
-// `fakeApi`의 안전장치는 뒤 태스크의 화면들이 기대는 성질인데, 지금 화면들은 스텁한
+// `fakeApi`의 안전장치는 화면 테스트들이 기대는 성질인데, 화면 테스트는 스텁한
 // 메서드만 부르므로 어떤 화면 테스트도 이것을 건드리지 않는다. 안전장치가 조용히
 // 사라지는 일이 없도록 여기서 직접 본다.
 describe('fakeApi', () => {

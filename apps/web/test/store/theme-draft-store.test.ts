@@ -2,7 +2,7 @@
 /**
  * `ThemeDraftStore`의 계약 테스트. **React를 import하지 않고 DOM 없는 환경에서 돈다.**
  *
- * D3이 요구한 것이 그것이다 — *"화면 없이 단위 테스트할 수 있어야 한다"*. 맨 윗줄의 환경
+ * 이 스토어의 계약이 그것이다 — *"화면 없이 단위 테스트할 수 있어야 한다"*. 맨 윗줄의 환경
  * 지정이 그 전제를 실제로 강제한다: 이 저장소의 `web` 프로젝트는 기본이 jsdom이라
  * (루트 `vitest.config.ts`) 그 줄이 없으면 스토어가 `document`를 만져도 초록으로 남는다.
  *
@@ -149,7 +149,7 @@ describe('ThemeDraftStore', () => {
     store.putSection('tokens', {})
     store.beginSave()
 
-    // **인자를 아예 안 준다.** P4c-1이 *"경고가 없으면 키 자체가 없다"*로 만들었으므로
+    // **인자를 아예 안 준다.** 서버가 *"경고가 없으면 키 자체가 없다"*로 내므로
     // 화면이 받는 값이 `undefined`다 — 그 구분을 화면마다 하지 않게 여기서 닫는다.
     store.ackSave(theme('brand'))
 
@@ -306,13 +306,13 @@ describe('ThemeDraftStore', () => {
 })
 
 /**
- * **파싱 실패 계약**(P4c-3 D6 — 이월 §12.1-1). W2가 남긴 사실: *"저장 버튼이 파싱 실패를
- * 모른다. 파싱 실패 중에 저장하면 **마지막으로 읽힌 값**이 서버로 간다."*
+ * **파싱 실패 계약.** 저장이 파싱 실패를 모르면, 파싱 실패 중에 저장했을 때 **마지막으로
+ * 읽힌 값**이 서버로 간다.
  *
- * **자리가 스토어인 근거는 W2가 적고 P4c-2 ③이 동의했다** — *"이슈로 만들면
- * `ThemeIssueCode`에 문서가 아니라 편집기의 상태가 섞인다."*
+ * **자리가 스토어인 근거** — 이슈로 만들면 `ThemeIssueCode`에 문서가 아니라 편집기의 상태가
+ * 섞인다.
  */
-describe('읽지 못한 절 (D6)', () => {
+describe('읽지 못한 절', () => {
   it('처음에는 아무 절도 안 어긋나 있다', () => {
     expect(new ThemeDraftStore().getState().unreadable).toEqual([])
   })
@@ -385,10 +385,10 @@ describe('읽지 못한 절 (D6)', () => {
 })
 
 /**
- * **초안을 통째로 갈아 끼우는 문이 하나다**(D5). `replaceDraft`가 그것이고 P4c-3이
- * 부르는 자리를 만들었다 — 가져오기와 되돌리기가 같은 문을 쓴다.
+ * **초안을 통째로 갈아 끼우는 문이 하나다.** `replaceDraft`가 그것이고 가져오기와
+ * 되돌리기가 같은 문을 쓴다.
  */
-describe('replaceDraft와 draftEpoch (D5)', () => {
+describe('replaceDraft와 draftEpoch', () => {
   it('없어진 절이 실제로 지워진다 — putSection 여러 번으로는 못 하는 일이다', () => {
     const store = new ThemeDraftStore()
     store.loadTheme('t1', { ...theme('brand'), components: { Button: {} }, patterns: {} })
@@ -451,13 +451,13 @@ describe('replaceDraft와 draftEpoch (D5)', () => {
 })
 
 /**
- * **되돌리기가 파싱 실패에서도 상자를 다시 만들게 한다**(P4c-3 리뷰 ⑤).
+ * **되돌리기가 파싱 실패에서도 상자를 다시 만들게 한다.**
  *
  * 파싱 실패는 초안을 안 바꾸므로 `replaceDraft(saved)`의 인자가 **지금 초안과 같은 참조**다.
  * 참조만 보면 `draftEpoch`가 안 올라가고, `unreadable`은 비워지는데 상자는 못 읽은 글자를
  * 그대로 들어 **둘이 갈린다.**
  */
-describe('replaceDraft — 문서가 그대로여도 상자를 다시 만들어야 할 때 (리뷰 ⑤)', () => {
+describe('replaceDraft — 문서가 그대로여도 상자를 다시 만들어야 할 때', () => {
   it('읽지 못한 절이 있으면 같은 문서로 되돌려도 epoch가 오른다', () => {
     const store = new ThemeDraftStore()
     const brand = theme('brand')

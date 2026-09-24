@@ -1,12 +1,12 @@
 /**
- * `edit/preset-apply.ts` — 프리셋을 페이지에 놓는 편집(P7-2 T3 · D3·D4·D5).
+ * `edit/preset-apply.ts` — 프리셋을 페이지에 놓는 편집.
  *
  * **화면 없이 잰다.** 순수 함수라 문서를 직접 만들어 넣고 op과 이유를 값으로 본다 —
  * 화면 흐름(확인·알림·선택 이동)은 `../panels/structure-preset.test.tsx`가 잰다.
  *
  * **패치 엔진을 실제로 돌린다.** 편집 파이프라인의 4·5단계가 `invertOps` → `applyOps`
  * 순서인 것과 같게 왕복시킨다(`apps/api/src/services/edit-pipeline.ts`) — op 모양만 보면
- * *"서버가 받아 준다"*를 재지 못한다. 재라 #1이 겨냥한 자리가 이것이다.
+ * *"서버가 받아 준다"*를 재지 못한다.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -46,7 +46,7 @@ function counter(): () => string {
 const LIST: WbNode = { id: 'sl_list', type: 'List', props: { items: 3 } }
 
 describe('presetApply', () => {
-  it('op이 하나이고 root의 children을 바꾼다(D3)', () => {
+  it('op이 하나이고 root의 children을 바꾼다', () => {
     const result = presetApply(page(), [LIST], counter())
 
     expect(result.reason).toBeNull()
@@ -55,7 +55,7 @@ describe('presetApply', () => {
     ])
   })
 
-  it('root 자체는 바꾸지 않는다 — id·type·props가 그 페이지의 것이다(D3)', () => {
+  it('root 자체는 바꾸지 않는다 — id·type·props가 그 페이지의 것이다', () => {
     const before = doc({ id: 'n_root00000001', type: 'Page', props: {}, children: [] })
 
     const result = presetApply(before, [LIST], counter())
@@ -66,7 +66,7 @@ describe('presetApply', () => {
     expect(after.root.props).toEqual({})
   })
 
-  it('undo 하나가 페이지 전체를 되돌린다(D3)', () => {
+  it('undo 하나가 페이지 전체를 되돌린다', () => {
     const before = page([
       { id: 'n_a00000000001', type: 'Card', children: [{ id: 'n_b00000000001', type: 'Text' }] },
       { id: 'n_c00000000001', type: 'List' },
@@ -84,7 +84,7 @@ describe('presetApply', () => {
   })
 
   /**
-   * **재라 #1 — 계획서 D3의 `replace`가 절반만 참이다.** root에 `children` 키가 없으면
+   * **`replace` 하나로는 절반만 참이다.** root에 `children` 키가 없으면
    * `replace`는 `applyOp`·`invertOps` 양쪽에서 던진다. 그래서 `add`로 갈린다.
    */
   it('root에 children 키가 없으면 add로 낸다 — replace는 던진다', () => {
@@ -119,7 +119,7 @@ describe('presetApply', () => {
     ])
   })
 
-  it('노드 id를 새로 발급한다(§11.1)', () => {
+  it('노드 id를 새로 발급한다(설계서 「페이지 프리셋」)', () => {
     const result = presetApply(page(), [LIST], counter())
 
     const placed = (result.apply!.ops[0] as { value: WbNode[] }).value
@@ -175,8 +175,8 @@ describe('presetApply', () => {
   })
 
   /**
-   * **D5의 핵심 — 판정을 결과 문서로 한다.** 패턴은 프로브를 쓰므로 문서와의 관계를
-   * 못 보지만(P7-1 이월 §2), 프리셋은 결과 문서를 보므로 그 축이 저절로 덮인다.
+   * **판정을 결과 문서로 한다.** 패턴은 프로브를 쓰므로 문서와의 관계를
+   * 못 보지만, 프리셋은 결과 문서를 보므로 그 축이 저절로 덮인다.
    */
   it('프리셋 안에 중복 id가 있으면 duplicate-id로 막는다 — 프로브는 못 보는 축이다', () => {
     const nodes: WbNode[] = [
@@ -191,8 +191,8 @@ describe('presetApply', () => {
     expect(result.apply).toBeNull()
   })
 
-  it('이미 깨진 문서라도 프리셋이 멀쩡하면 놓을 수 있다 — 치워지기 때문이다(D5)', () => {
-    // 알 수 없는 타입이 있는 문서. **패턴 삽입이 프로브를 쓰는 이유가 이 상태였다** —
+  it('이미 깨진 문서라도 프리셋이 멀쩡하면 놓을 수 있다 — 치워지기 때문이다', () => {
+    // 알 수 없는 타입이 있는 문서. **패턴 삽입이 프로브를 쓰는 이유가 이 상태다** —
     // 프리셋은 그 노드를 통째로 치우므로 결과 문서에 남지 않는다.
     const before = page([{ id: 'n_bad00000001', type: '없는타입' }])
     expect(validatePage(before).some((issue) => issue.code === 'unknown-type')).toBe(true)
@@ -204,9 +204,9 @@ describe('presetApply', () => {
   })
 
   /**
-   * **리뷰 (1) — D5 근거의 경계.** 계획 D5는 *"교체하면 깨진 부분이 결과에 남지 않는다"*를
-   * 근거로 결과 문서 전체를 판정하게 했는데, **root는 교체 대상이 아니다.** 그래서 root가
-   * 깨진 문서에서는 멀쩡한 프리셋이 막히고, 문장이 프리셋을 탓한다.
+   * **결과 문서 판정의 경계.** 결과 문서 전체를 판정하는 근거가 *"교체하면 깨진 부분이
+   * 결과에 남지 않는다"*인데, **root는 교체 대상이 아니다.** 그래서 결과 문서로만 판정하면
+   * root가 깨진 문서에서 멀쩡한 프리셋이 막히고, 문장이 프리셋을 탓한다 — 갈래를 따로 둔다.
    */
   it('root가 깨진 문서는 프리셋을 탓하지 않는다 — 갈래가 다르다', () => {
     const before = doc({ id: 'n_root00000001', type: 'Card', children: [] })
@@ -248,7 +248,7 @@ describe('presetApply', () => {
     expect(result.issues.map((issue) => issue.code)).toContain('slot-count')
   })
 
-  it('빈 프리셋은 실패가 아니라 "치우기"다(D7)', () => {
+  it('빈 프리셋은 실패가 아니라 "치우기"다', () => {
     const before = page([{ id: 'n_old00000001', type: 'Text' }])
 
     const result = presetApply(before, [], counter())
@@ -282,10 +282,10 @@ describe('presetApply', () => {
   })
 
   /**
-   * **D4를 값으로 고정한다.** 버리는 자리는 **저장**이고(서버의 `POST .../presets`)
+   * **`marker`를 버리는 자리를 값으로 고정한다.** 버리는 자리는 **저장**이고(서버의 `POST .../presets`)
    * 적용이 아니다 — 여기서 몰래 버리기 시작하면 저장 쪽 규칙이 느슨해져도 아무도 모른다.
    */
-  it('적용은 marker를 손대지 않는다 — 버리는 자리는 저장이다(D4)', () => {
+  it('적용은 marker를 손대지 않는다 — 버리는 자리는 저장이다', () => {
     const result = presetApply(page(), [{ id: 'x', type: 'List', marker: 2 }], counter())
 
     const placed = (result.apply!.ops[0] as { value: WbNode[] }).value
@@ -293,7 +293,7 @@ describe('presetApply', () => {
   })
 
   /**
-   * **P7-1 리뷰가 `expandPattern`에서 실증한 결함과 같은 부류다.** `remapNodeIds`는 노드를
+   * **`expandPattern`에서 실증된 결함과 같은 부류다.** `remapNodeIds`는 노드를
    * 새 객체로 만들지만 `props`는 참조 그대로 옮긴다 — 내장 프리셋은 **모듈 상수**라
    * 그 공유가 프로세스 수명 내내 남는다.
    */
@@ -319,9 +319,9 @@ describe('presetApply', () => {
 })
 
 /**
- * **P7-1 이월 §3이 지목한 모양을 재는 자리다.** 그쪽은 툴바가 문장을 만들어 화면을
- * 지나야만 도달했고, 그래서 *"케이스를 쓸 수 없다"*가 이월의 이유였다. 여기서는 문장
- * 생성이 순수 함수라 **빈 이유 목록을 직접 넣어** 잴 수 있다.
+ * **이유가 빈 실패 문장의 모양을 재는 자리다.** 툴바가 문장을 만들면 화면을 지나야만
+ * 도달해 케이스를 쓸 수 없다. 여기서는 문장 생성이 순수 함수라 **빈 이유 목록을 직접
+ * 넣어** 잴 수 있다.
  */
 describe('presetFailureNotice', () => {
   it('이유가 있으면 콜론 뒤에 잇는다', () => {
