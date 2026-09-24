@@ -1514,6 +1514,33 @@ N-A 를 막을 때 리뷰어가 제시한 두 안을 **둘 다 안 골랐다** �
 
 2회의 이월(F5 · `lockOwnerIds` 창 · 강등 결말 머리 · Y′ 의 남는 틈 · 문서 조회 `lock` 의 편집 지연) · 7차의 **H · K** 는 그대로다.
 
+### 3.27 **코드 주석이 지금을 말한다(2026-09-24)** — 이월 5차 4회 (CC 차수)
+
+> 다섯 트랙을 나란히 — cc-api(`apps/api/src`·`test`) · cc-web-src(`apps/web/src`·`vite.config.ts`) · cc-web-test(`apps/web/test`) · cc-pkg-a(schema · renderer · cli · mcp) · cc-pkg-b(themes · exporter · 루트 `.ts` · `README.md` · `apps/api/README.md`) — 저마다 자기 디렉터리만 고쳤고, 병합 뒤 통합 워커 하나가 트랙 사이 이음새 · 맡은 곳 밖 · 모호 판정 · 전량 게이트를 돌았다.
+> 병합 순서 cc-pkg-a `6d56ff7` → cc-web-src `663f104` → cc-api `801d2e0` → cc-pkg-b `e23dd03` → cc-web-test `f321c71` → 통합 `2850931`(충돌 0 — 디렉터리가 겹치지 않는다).
+> **리뷰 없이 병합했다** — 코드는 한 글자도 안 바꿨고 그것을 트랙마다 기계로 증명했다(esbuild 로 주석을 버린 출력 비교 → 다르면 테스트 이름 첫 인자를 자리표로 바꿔 다시 비교). 전 트랙 합 `다른 코드 0`. 차이는 테스트 이름 문자열뿐이고 바꾸기 전에 그 이름을 다른 파일이 글자로 부르는지 `git grep -F` 로 보았다.
+
+#### 닫은 것
+
+| 이월 | 오늘 값(고치기 전) | 막은 방법 · 값 |
+|---|---|---|
+| **CC** 코드 주석의 연대기 · 설계서 `§N` 인용 · README 번호 인용 · H 로 거짓이 된 주석 여섯 | [표지 식 · 추적 파일 전부 − plans · guideline · specs · `git grep -hcP` 와 파이썬 `re` 두 방법 같은 값] **8776 줄** · `§` 든 줄 2247 | **1076 줄** · `§` 55. 남은 것의 결: 규칙 낱말(«어긋나면» 433 · «뒤집으면» 125 · «1차 방어» 67) · 픽스처 값(uuid · 날짜) · `F5` 키와 케이스 라벨 · 코드 문자열(아래 이월) · plans 만 부르는 테스트 이름. 바꾼 테스트 이름 합 675(api 158 · web-test 182 · pkg-a 157 · pkg-b 160 · 통합 18). 거짓 주석 여섯 + 트랙이 찾은 것(없는 함수 이름 `assertRendersCleanly` · `useOpenDocument` → `useOpenPage` · `projects.ts` 삭제 «대가»의 500 → 404 — 초대 · 스냅샷 · 토큰 · 메뉴 · 페이지 삽입이 모두 `lockProjectShared`/`lockProjectTree` 를 먼저 잡는다) · `apps/api/README.md` 제목의 `(§N)` 꼬리 12 를 떼고 인용 자리(설계서 포함)를 같은 커밋에 · 검산 명령 `-t` 넷이 모두 1건 이상 고른다 |
+
+#### 게이트
+
+`main` `2850931` — **331파일 6220케이스**(기준 `9d2c9fb` 과 같다 — 이 차수는 케이스를 더하지도 빼지도 않았다) · typecheck 0 · build 0 · `test:build` 6 파일 72. **마이그레이션 없음** · `packages/*` export 변화 없음.
+
+#### 이월
+
+| # | 무엇 | 사정 |
+|---|---|---|
+| **CS** | **코드 문자열 · 화면 문구의 `§N` · 연대기** — 인구조사 표 `why:`/`label:`(api `actor`·`broadcast`·`lock-census` · mcp `tools`·`assembly-census` · web `shell-css-picker`) · cli `--help` 의 `§11.3`·`§15`·`§12.4` · schema 오류 문장(`define.ts` · `lint/rules.ts` `beyondSpec` · `COMMENT_MARKER_MESSAGE`) · themes 오류 · 경고 문장(`resolve/style.ts` · `spec/handles.ts` «오늘 고른 구조») · web 테마 편집기 gloss · JSX 의 `§6.x` 와 **«전개가 아직 없습니다(P7)»**(이유가 낡았다 — `expandPattern` 이 있다) · exporter `SHELL_CSS` · 로그 문자열 둘 · dist 에 실리는 `installRuntime` 본문 JSDoc | 코드 변경이라 주석 차수 밖. 사용자에게 보이는 것(cli · 화면 · 오류)이 먼저 |
+| — | plans 만 부르는 테스트 이름 약 20(`(리뷰 B5)` · `(D3)` · `재라 #11` · `설계 §10` 등) | 트랙마다 판단이 갈렸다(바꾼 것도 둔 것도 있다) — 그대로 둔다. 이력 문서의 옛 이름은 끊겨도 해가 없다 |
+| — | 코드 결함 후보(재지 않음): 속성 패널 `currentStructure` 가 카탈로그 첫 구조를 써 테마가 고른 구조와 갈릴 수 있다 · admin 테마 `Section.parts.inner` 에 `marginX: 'auto'` 가 없다 · 캔버스 `runtimeKey` 가 문서 동일성을 안 본다 · mcp 도구 갈래를 빠뜨려도 컴파일 · 테스트가 안 막는다 | 재현이 먼저 |
+| — | 소스 읽는 자의 주석 민감도(`embed-surface` 가 주석째 읽는다 · `stripComments` 가 줄 끝 `//` 을 안 걷는다) · `F1` 이라는 규칙 이름(리뷰 꼬리 기원 · 25 줄) · «테마가 이긴다 — 설계서 「components — 구조 + 스킨」» 다섯 자리가 설계서 글자가 아니라 해석 · README 가 plans 절을 절차의 자리로 가리킨다 · 이력 문서를 걷으며 옮기지 못한 근거 일곱(`api/client.ts` «NUL 이 500 을 내는 여섯 경로» 등) | 낮음 |
+
+3회의 **VP** 와 낮은 이월, 2회의 이월(F5 · `lockOwnerIds` 창 등), 7차의 **H · K** 는 그대로다.
+
 ---
 
 ## 6. 게이트
