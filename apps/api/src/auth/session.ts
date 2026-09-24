@@ -8,6 +8,7 @@
  * 별도로 얻지 못하는 한 해시만으로는 로그인 상태를 재현할 수 없다.
  */
 import { sql } from 'kysely'
+import { assertLocking } from '../db/locking'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { hashTokenValue, randomTokenValue } from './token-hash'
 
@@ -100,13 +101,22 @@ export async function resolveSession(db: DbHandle, token: string): Promise<Sessi
  * 사용자의 활동이 아니다. 그것을 활동으로 세면 아무도 안 만지는 화면의 세션이 남의 편집만으로
  * 계속 살아난다.
  */
-export async function sessionIsLive(db: DbHandle, sessionId: string): Promise<boolean> {
-  const row = await db
+export async function sessionIsLive(
+  db: DbHandle,
+  sessionId: string,
+  /**
+   * `'key-share'`면 그 세션 행을 `FOR KEY SHARE`로 잡는다 — 커밋 순간의 재확인만 쓴다(`auth/roles.ts`의 `recheckAtCommit`).
+   * 로그아웃의 `DELETE`와만 부딪히고, 요청마다 도는 `last_seen_at` 갱신(`resolveSession`)과는 안 부딪힌다.
+   */
+  lock: 'none' | 'key-share' = 'none',
+): Promise<boolean> {
+  const query = db
     .selectFrom('sessions')
     .select('id')
     .where('id', '=', sessionId)
     .where('expires_at', '>', sql<Date>`now()`)
-    .executeTakeFirst()
+  if (lock === 'key-share') assertLocking(db, 'sessionIsLive')
+  const row = await (lock === 'key-share' ? query.forKeyShare() : query).executeTakeFirst()
 
   return row !== undefined
 }

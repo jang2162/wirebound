@@ -10,6 +10,7 @@
  */
 import { sql } from 'kysely'
 import { hashTokenValue, randomTokenValue } from '../auth/token-hash'
+import { assertLocking } from '../db/locking'
 import type { DbHandle } from '../db/tx'
 import { withTransaction } from '../db/tx'
 
@@ -179,4 +180,17 @@ export async function findApiTokenByValue(db: DbHandle, value: string): Promise<
     projectId: row.project_id,
     user: { id: row.user_id, email: row.email, name: row.name },
   }
+}
+
+/**
+ * 토큰 행이 아직 있는지만 본다 — 커밋 순간의 재확인이 쓴다(`auth/roles.ts`의 `recheckAtCommit`). **토큰의 생사는 행의 있고
+ * 없음이다** — 만료가 없고 거두는 수단은 폐기(`deleteApiToken`)와 프로젝트 삭제의 CASCADE 다(`findApiTokenByValue` 머리말).
+ *
+ * 행을 `FOR KEY SHARE`로 잡는다 — 재확인 뒤 커밋까지 폐기가 이 커밋을 기다린다. 인증마다 도는 `last_used_at` 갱신과는 안
+ * 부딪힌다.
+ */
+export async function tokenIsLive(trx: DbHandle, tokenId: string): Promise<boolean> {
+  assertLocking(trx, 'tokenIsLive')
+  const row = await trx.selectFrom('api_tokens').select('id').where('id', '=', tokenId).forKeyShare().executeTakeFirst()
+  return row !== undefined
 }

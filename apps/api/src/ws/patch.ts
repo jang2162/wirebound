@@ -31,7 +31,7 @@
  * (`apps/api/README.md` 「편집 파이프라인 (`PATCH .../ops`)」 절의 4단계).
  */
 import type { FastifyInstance } from 'fastify'
-import { requireProjectRole } from '../auth/roles'
+import { recheckAtCommit } from '../auth/roles'
 import { withTransaction } from '../db/tx'
 import { ApiError } from '../errors'
 import { editOutcomeToApiError } from '../http/edit-outcome'
@@ -97,12 +97,18 @@ export async function handlePatchFrame(
         // 맞고, `test/actor-census.test.ts`가 그 판정을 표에 한 줄로 든다.
         actor: { type: 'user', id: connection.userId, label: connection.userName },
       })
-      // **커밋 순간의 권한**(REST 는 `auth/roles.ts`의 `recheckProjectRole`). 프레임을 받을 때의
-      // 확인(`ws/routes.ts`의 `stillAllowed`)은 잠금 **밖**이다 — `applyEdit`이 페이지 잠금에 선 동안 강등되면
-      // 그 확인은 낡는다. 술어는 가드와 같은 `requireProjectRole`, 최소 역할은 프레임 수신과 같은 표의 값,
-      // 스코프는 없다(WS 는 쿠키만이다). 멤버 행을 잡는 까닭은 REST 와 같다.
+      // **커밋 순간의 권한 · 자격** — REST 와 같은 함수다(`auth/roles.ts`의 `recheckAtCommit`). 프레임을 받을 때의
+      // 확인(`ws/routes.ts`의 `stillAllowed`)은 잠금 **밖**이다 — `applyEdit`이 페이지 잠금에 선 동안 강등되거나
+      // 로그아웃하면 그 확인은 낡는다. 최소 역할은 프레임 수신과 같은 표의 값, 스코프는 없고 자격은 연결이 든 세션이다
+      // (WS 는 쿠키만이다).
       if (edited.ok) {
-        await requireProjectRole(trx, connection.projectId, connection.userId, MIN_ROLE_FOR_FRAME.patch, null, 'share')
+        await recheckAtCommit(trx, {
+          projectId: connection.projectId,
+          userId: connection.userId,
+          min: MIN_ROLE_FOR_FRAME.patch,
+          scopeProjectId: null,
+          credential: { kind: 'session', id: connection.sessionId },
+        })
       }
       return edited
     })

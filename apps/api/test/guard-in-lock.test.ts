@@ -482,22 +482,34 @@ async function holdPageLock(projectId: string, pageId: string): Promise<{ releas
   return lock
 }
 
-type Demotion = 'role' | 'member'
+/** 쓰기가 잠금에 쥐인 동안 밥에게 일어나는 것 — 권한이 줄거나(`role` · `member`) 요청의 자격이 죽는다(`logout` · `revoke`). */
+type Demotion = 'role' | 'member' | 'logout' | 'revoke'
 
 /**
- * 앨리스가 밥을 **API 로** 내린다 — 역할 한 단계(editor → viewer · owner → editor) 또는 멤버에서 뺀다.
+ * 앨리스가 밥을 **API 로** 내린다 — 역할 한 단계(editor → viewer · owner → editor) 또는 멤버에서 뺀다. `logout` · `revoke`는
+ * 밥 자신이 쿠키로 로그아웃하거나 이 프로젝트의 자기 토큰을 폐기한다.
  * 막히면 그것도 값이다: 3s 안에 안 끝나면 `blocked`로 적고 잠금을 푼 뒤 결과를 받는다.
  */
-function demote(ctx: RealApiContext, fx: Fx, bobRole: BobRole, kind: Demotion) {
+async function demote(ctx: RealApiContext, fx: Fx, bobRole: BobRole, kind: Demotion): Promise<number> {
   const url = `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`
-  const promise = ctx.app
-    .inject(
-      kind === 'role'
-        ? { method: 'PATCH', url, cookies: fx.alice.cookie, payload: { role: bobRole === 'owner' ? 'editor' : 'viewer' } }
-        : { method: 'DELETE', url, cookies: fx.alice.cookie },
-    )
-    .then((res) => res.statusCode)
-  return promise
+  if (kind === 'logout') {
+    return (await ctx.app.inject({ method: 'POST', url: '/api/auth/logout', cookies: fx.bob.cookie })).statusCode
+  }
+  if (kind === 'revoke') {
+    const token = await db
+      .selectFrom('api_tokens')
+      .select('id')
+      .where('project_id', '=', fx.projectId)
+      .where('user_id', '=', fx.bob.user.id)
+      .executeTakeFirstOrThrow()
+    return (await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/tokens/${token.id}`, cookies: fx.bob.cookie })).statusCode
+  }
+  const res = await ctx.app.inject(
+    kind === 'role'
+      ? { method: 'PATCH', url, cookies: fx.alice.cookie, payload: { role: bobRole === 'owner' ? 'editor' : 'viewer' } }
+      : { method: 'DELETE', url, cookies: fx.alice.cookie },
+  )
+  return res.statusCode
 }
 
 interface HeldOutcome {
@@ -561,8 +573,11 @@ async function runHeld(ctx: RealApiContext, probe: Probe, kind: Demotion | null)
   }
 }
 
-/** 가드가 같은 판에서 내는 것 — 역할이 모자라면 403, 멤버가 아니면 404(`requireProjectRole`의 표). */
-const REFUSED: Record<Demotion, number> = { role: 403, member: 404 }
+/**
+ * 가드가 같은 판에서 내는 것 — 역할이 모자라면 403, 멤버가 아니면 404(`requireProjectRole`의 표), 자격이 죽었으면 401
+ * (`projectGuard`의 «로그인하지 않았으면»).
+ */
+const REFUSED: Record<Demotion, number> = { role: 403, member: 404, logout: 401, revoke: 401 }
 
 describe('페이지 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로 판정한다', () => {
   for (const probe of PROBES) {
@@ -622,6 +637,34 @@ describe('멤버에서 빠지면 404 — 가드와 같은 상태 코드', () => 
   }
 })
 
+/** 밥의 토큰으로 낸 `PATCH .../ops` — 아래 두 절이 쓴다. */
+const TOKEN_PROBE: Probe = {
+  ...probeLabeled(OPS_EDIT),
+  label: '페이지 ops 편집 — 토큰',
+  prepare: async (ctx, fx) => {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/projects/${fx.projectId}/tokens`,
+      cookies: fx.bob.cookie,
+      payload: { name: '밥의 토큰' },
+    })
+    if (res.statusCode !== 201) throw new Error(`토큰 픽스처 실패: ${res.body}`)
+    return { authorization: `Bearer ${(res.json() as { value: string }).value}` }
+  },
+  fire: async (ctx, fx, prepared) =>
+    fireRest(
+      ctx,
+      fx,
+      'PATCH',
+      `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`,
+      {
+        baseSeq: await headSeqOf(fx.pageId),
+        ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_bob_token', type: 'Text', props: {} } }],
+      },
+      prepared,
+    ),
+}
+
 /**
  * **토큰 요청도 같은 재확인을 지난다.** MCP·`wireb`는 토큰으로 쓴다(`currentUser`는 토큰 훅이 채운다). 재확인의
  * 입력은 가드와 같은 자리에서 읽으므로 토큰 갈래를 따로 두지 않는다 — «토큰이면 가드의 판정을 그대로 쓴다» 같은
@@ -634,36 +677,10 @@ describe('멤버에서 빠지면 404 — 가드와 같은 상태 코드', () => 
  * 판이 소유한다.
  */
 describe('토큰 요청도 커밋 순간의 권한으로 판정한다', () => {
-  const tokenProbe: Probe = {
-    ...probeLabeled(OPS_EDIT),
-    label: '페이지 ops 편집 — 토큰',
-    prepare: async (ctx, fx) => {
-      const res = await ctx.app.inject({
-        method: 'POST',
-        url: `/api/projects/${fx.projectId}/tokens`,
-        cookies: fx.bob.cookie,
-        payload: { name: '밥의 토큰' },
-      })
-      if (res.statusCode !== 201) throw new Error(`토큰 픽스처 실패: ${res.body}`)
-      return { authorization: `Bearer ${(res.json() as { value: string }).value}` }
-    },
-    fire: async (ctx, fx, prepared) =>
-      fireRest(
-        ctx,
-        fx,
-        'PATCH',
-        `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`,
-        {
-          baseSeq: await headSeqOf(fx.pageId),
-          ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_bob_token', type: 'Text', props: {} } }],
-        },
-        prepared,
-      ),
-  }
 
   it('대조 — 강등이 없으면 토큰의 편집이 커밋된다', async () => {
     await withRealApi(async (ctx) => {
-      const outcome = await runHeld(ctx, tokenProbe, null)
+      const outcome = await runHeld(ctx, TOKEN_PROBE, null)
       expect(outcome.status, outcome.body).toBe(200)
       expect(outcome.after).not.toEqual(outcome.before)
     })
@@ -671,10 +688,93 @@ describe('토큰 요청도 커밋 순간의 권한으로 판정한다', () => {
 
   it('잠금에 쥐인 채 토큰 주인이 강등되면 풀린 뒤 403 — 아무것도 안 바뀐다', async () => {
     await withRealApi(async (ctx) => {
-      const outcome = await runHeld(ctx, tokenProbe, 'role')
+      const outcome = await runHeld(ctx, TOKEN_PROBE, 'role')
       expect(outcome.demotedWhileHeld).toBe(true)
       expect(outcome.status, outcome.body).toBe(REFUSED.role)
       expect(outcome.after).toEqual(outcome.before)
+    })
+  }, 60_000)
+})
+
+/**
+ * **자격이 잠금을 기다리는 동안 죽으면 401 — 가드가 로그인하지 않은 요청에 내는 값이다.** 가드는 자격(세션 · 토큰)을 핸들러 앞에서
+ * 한 번 본다. 쓰기가 잠금에 쥐인 동안 그 사람이 로그아웃하거나 토큰을 폐기해도 역할 · 멤버십은 그대로라, 재확인이 멤버 행만
+ * 보면 풀린 뒤 **죽은 자격으로 커밋된다.** 그래서 재확인이 같은 트랜잭션에서 요청의 세션 · 토큰 행도 본다
+ * (`auth/roles.ts`의 `recheckAtCommit` — REST 와 WS 가 같은 함수다).
+ *
+ * **로그아웃 · 폐기는 쓰기의 잠금 대기에 막히지 않는다** — 쓰기는 재확인 **전**이라 그 행을 아직 안 쥐었다(`…WhileHeld`).
+ * 재확인이 그 행을 잡는 것은 커밋까지다(`FOR KEY SHARE` — 로그아웃의 `DELETE`와만 부딪힌다).
+ *
+ * 세 판은 자격이 사는 자리가 갈린다 — 요청의 쿠키(REST) · 연결이 든 세션(WS) · 토큰. 대조(자격이 살아 있으면 커밋)는 표의 같은 판이
+ * 소유한다(`코멘트 게시 (번호를 붙인다 …)` · `WS patch 프레임` · 위 `토큰 요청도 …`의 대조).
+ */
+describe('자격이 잠금을 기다리는 동안 죽으면 401 — 커밋 순간에 세션 · 토큰도 본다', () => {
+  for (const [label, kind] of [
+    [BARE_COMMENT, 'logout'],
+    [WS_PATCH, 'logout'],
+  ] as const) {
+    it(`${label}: 잠금에 쥐인 채 로그아웃하면 풀린 뒤 401 — 아무것도 안 바뀐다`, async () => {
+      await withRealApi(async (ctx) => {
+        const outcome = await runHeld(ctx, probeLabeled(label), kind)
+        expect(outcome.demotedWhileHeld, '로그아웃이 쓰기의 잠금 대기에 막혔다').toBe(true)
+        expect(outcome.demotionStatus).toBe(204)
+        expect(outcome.status, outcome.body).toBe(REFUSED[kind])
+        expect(outcome.after).toEqual(outcome.before)
+      })
+    }, 60_000)
+  }
+
+  /**
+   * **재확인 뒤의 로그아웃은 이 커밋을 기다린다** — 재확인이 세션 행을 `FOR KEY SHARE`로 잡는 까닭이다. 재확인 뒤에 기다림이
+   * 남는 쓰기는 코멘트 수정이다(프로젝트 행 → 페이지 행 → 재확인 → 코멘트 행 — `routes/comments.ts`). 코멘트 행을 쥔 채 밥의
+   * 수정을 세우고 밥이 로그아웃하면: 잡으면 로그아웃이 수정의 커밋까지 서고(수정 200 이 먼저), 안 잡으면 로그아웃 204 가 먼저
+   * 끝나고 **그 뒤에 죽은 세션의 수정이 커밋된다.** 혼자 죽는 변조: `sessionIsLive`의 `'key-share'` 갈래가 행을 안 잡는다.
+   */
+  it('재확인을 지나 코멘트 행에 선 수정 — 그동안의 로그아웃은 그 커밋을 기다린다(수정 200 → 로그아웃 204)', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await fixture(ctx, 'editor')
+      const door = queueLock(async (trx) => {
+        await sql`select 1 from comments where id = ${fx.bobCommentId} for update`.execute(trx)
+      })
+      await door.acquired
+      const order: string[] = []
+      let edit: Fired | undefined
+      let logout: Promise<number> | undefined
+      let loggedOutWhileHeld = true
+      try {
+        edit = fireRest(ctx, fx, 'PATCH', `/api/projects/${fx.projectId}/pages/${fx.pageId}/comments/${fx.bobCommentId}`, {
+          body: '밥이 고친 말',
+        })
+        void edit.promise.then(() => order.push('edit'))
+        await waitForLockWaiter(1)
+        logout = ctx.app
+          .inject({ method: 'POST', url: '/api/auth/logout', cookies: fx.bob.cookie })
+          .then((res) => (order.push('logout'), res.statusCode))
+        loggedOutWhileHeld = await Promise.race([
+          logout.then(() => true),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 700)),
+        ])
+      } finally {
+        await door.release()
+      }
+      const [edited, loggedOut] = await Promise.all([edit.promise, logout])
+
+      expect(loggedOutWhileHeld, '로그아웃이 재확인을 지난 수정을 앞질렀다').toBe(false)
+      expect(edited.status, edited.body).toBe(200)
+      expect(loggedOut).toBe(204)
+      expect(order).toEqual(['edit', 'logout'])
+    })
+  }, 60_000)
+
+  it('페이지 ops 편집 — 토큰: 잠금에 쥐인 채 그 토큰을 폐기하면 풀린 뒤 401 — 아무것도 안 바뀐다', async () => {
+    await withRealApi(async (ctx) => {
+      const outcome = await runHeld(ctx, TOKEN_PROBE, 'revoke')
+      expect(outcome.demotedWhileHeld, '폐기가 쓰기의 잠금 대기에 막혔다').toBe(true)
+      expect(outcome.demotionStatus).toBe(204)
+      expect(outcome.status, outcome.body).toBe(REFUSED.revoke)
+      // 폐기가 지운 토큰 행 말고는 아무것도 안 바뀐다.
+      expect(outcome.after.tokens).toEqual([])
+      expect({ ...outcome.after, tokens: [] }).toEqual({ ...outcome.before, tokens: [] })
     })
   }, 60_000)
 })
