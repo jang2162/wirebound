@@ -807,6 +807,15 @@ describe('downloadExport', () => {
     }
   })
 
+  /**
+   * **형식 이름은 대소문자를 안 가린다**(MIME 의 타입 · 하위 타입은 대소문자 무관 — RFC 9110 「Media Type」). 서버는 소문자로
+   * 내지만 앞단(프록시 · CDN)이 바꿔 실어도 멀쩡한 파일을 «이해할 수 없다»로 버리면 안 된다.
+   */
+  it('형식 이름의 대소문자가 달라도 받는다', async () => {
+    const stub = stubFetch(new Response(new Uint8Array([1, 2]), { status: 200, headers: { 'content-type': 'Application/ZIP' } }))
+    await expect(createHttpClient(stub.fetchImpl).downloadExport('p1', 'html')).resolves.toBeInstanceOf(Blob)
+  })
+
   it('200 이어도 파일 형식이 아니면 끊는다 — 프록시가 빠진 개발 서버의 index.html 을 파일로 저장하지 않는다', async () => {
     const stub = stubFetch(htmlResponse(200))
     const error = asApiError(await createHttpClient(stub.fetchImpl).downloadExport('p1', 'html').catch((e: unknown) => e))
