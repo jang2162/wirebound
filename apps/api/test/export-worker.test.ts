@@ -8,6 +8,7 @@
  * | 입력을 한 장씩 넘긴다 | 워커로 가는 메시지를 센다 |
  * | 도메인 에러 · 끊김 · 워커의 죽음 · 상한 · 쉬는 워커 · 칸 배정 · 떠 있는 일의 한도 | 풀을 직접 부른다 |
  * | 한도를 넘은 요청이 503 + `Retry-After`다 | 라우트를 `inject`로 — 그리는 자가 붙잡아 한도를 채운다 |
+ * | 자리를 행을 읽기 **전에** 잡는다 | 찼을 때 빈 프로젝트(읽기가 409 를 던진다)가 503 이다 |
  * | 끊긴 요청이 라우트에서 일을 버린다 | 진짜 포트가 든다 — `test/export-worker-abort.test.ts` |
  *
  * **zip 바이트를 통째로 견주지 않는다** — `fflate`가 엔트리마다 지금 시각(DOS 시각 · 2초 단위)을 적어서 두 번 만들면
@@ -684,6 +685,50 @@ describe('줄은 길이로 묶는다', () => {
           )
           expect(busy.headers['retry-after']).toBe(String(EXPORT_RETRY_AFTER_S))
           expect(busy.json()).toEqual({ error: { code: 'internal', message: '내보내기가 밀려 있습니다 — 잠시 뒤 다시 시도하세요' } })
+
+          const settled = Promise.all(filling)
+          let done = false
+          void settled.then(() => (done = true))
+          while (!done) {
+            renderer.releaseAll()
+            await new Promise((resolve) => setTimeout(resolve, 20))
+          }
+          expect((await settled).map((res) => res.statusCode)).toEqual(filling.map(() => 200))
+        },
+        { screenRenderer: { render: renderer.render } },
+      )
+    } finally {
+      renderer.releaseAll()
+    }
+  }, 120_000)
+
+  // 읽은 뒤에 자리를 잡아도 503 은 나온다 — 다만 거절할 요청이 행을 다 읽은 뒤에 나와 한도가 메모리를 묶지 못한다. 그
+  // 순서를 답으로 보는 길이 빈 프로젝트다: 읽기가 `EmptyProjectError`(→ 409)를 던지므로, 읽기 전에 거절하면 503 이다.
+  it('라우트 — 자리는 행을 읽기 전에 잡는다: 찼을 때 빈 프로젝트는 409 가 아니라 503 이다', async () => {
+    const renderer = new HeldRenderer()
+    try {
+      await withApi(
+        async (ctx) => {
+          const fixture = await 설계서(ctx, 'worker-busy-before-read')
+          const empty = await createProject(ctx, fixture.cookie, { name: '빈 설계서', slug: 'worker-busy-empty' })
+          // 한가할 때는 409 다 — 이 프로젝트의 읽기가 정말 던진다.
+          const idle = await ctx.app.inject({ method: 'GET', url: `/api/projects/${empty.id}/export/preview?format=pptx`, cookies: fixture.cookie })
+          expect(idle.statusCode).toBe(409)
+
+          const filling = Array.from({ length: EXPORT_JOB_LIMIT }, () =>
+            ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`, cookies: fixture.cookie }),
+          )
+          await vi.waitFor(() => expect(renderer.started).toBe(EXPORT_RENDER_LIMIT), { timeout: 30_000 })
+          // 채우는 요청들이 아직 가드를 지나는 중이면 이 요청이 들어가 읽는다 — 한도가 찰 때까지 다시 본다.
+          await vi.waitFor(
+            async () => {
+              const html = await ctx.app.inject({ method: 'GET', url: `/api/projects/${empty.id}/export/preview`, cookies: fixture.cookie })
+              expect(html.statusCode).toBe(503)
+            },
+            { timeout: 30_000 },
+          )
+          const pptx = await ctx.app.inject({ method: 'GET', url: `/api/projects/${empty.id}/export?format=pptx`, cookies: fixture.cookie })
+          expect(pptx.statusCode).toBe(503)
 
           const settled = Promise.all(filling)
           let done = false
