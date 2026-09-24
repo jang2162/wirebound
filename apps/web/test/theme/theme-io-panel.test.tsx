@@ -16,7 +16,7 @@
  *
  * **그래서 아래 `withDownloadCapture`가 그 둘에 대역을 심고 Blob을 붙잡아 `FileReader`로
  * 읽는다.** 실제로 재는 것은 넷이다 — ㉠ Blob에 실린 **글자** ㉡ 앵커의 `download` 이름
- * ㉢ 클릭이 한 번 일어난 것 ㉣ revoke가 그 URL로 불린 것. **재지 못하는 것은 브라우저가
+ * ㉢ 클릭이 한 번 일어난 것 ㉣ revoke가 정한 시간 뒤에 그 URL로 불린 것. **재지 못하는 것은 브라우저가
  * 실제로 파일을 저장하는지**이고 그것은 실브라우저의 몫이다.
  *
  * > **측정 장치의 함정 하나.** Blob의 글자를 `await new Response(blob).text()`로
@@ -28,6 +28,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { systemTheme, type Theme } from '@wirebound/themes'
 import { App } from '../../src/app'
+import { BLOB_URL_LIFETIME_MS } from '../../src/files/file-io'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { ProjectDetail, ThemeDetail } from '../../src/api/types'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
@@ -86,6 +87,9 @@ interface Download {
   href: string
   text: string
   clicks: number
+  /** 누른 그 자리에서 놓인 주소. */
+  revokedAtOnce: string[]
+  /** `BLOB_URL_LIFETIME_MS`가 지난 뒤까지 놓인 주소(`files/file-io.ts`의 `saveBlob`). */
   revoked: string[]
 }
 
@@ -104,6 +108,7 @@ async function withDownloadCapture(run: () => void): Promise<Download> {
 
   const blobs = new Map<string, Blob>()
   const revoked: string[] = []
+  let revokedAtOnce: string[] = []
   let clicks = 0
   let fileName = ''
   let href = ''
@@ -129,8 +134,13 @@ async function withDownloadCapture(run: () => void): Promise<Download> {
       revoked.push(value)
     }
     document.addEventListener('click', onClick, true)
+    // **놓는 때를 잰다** — 도우미는 누른 뒤 곧바로가 아니라 정한 시간 뒤에 놓는다. 가짜 타이머는 이 조작 동안만이다.
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
     run()
+    revokedAtOnce = [...revoked]
+    vi.advanceTimersByTime(BLOB_URL_LIFETIME_MS)
   } finally {
+    vi.useRealTimers()
     document.removeEventListener('click', onClick, true)
     if (hadCreate) url.createObjectURL = originalCreate
     else delete url.createObjectURL
@@ -149,7 +159,7 @@ async function withDownloadCapture(run: () => void): Promise<Download> {
           reader.readAsText(blob)
         })
 
-  return { fileName, href, text, clicks, revoked }
+  return { fileName, href, text, clicks, revokedAtOnce, revoked }
 }
 
 /** 가져오기 쪽의 토글. **접힌 채로도 늘 있다.** */
@@ -184,12 +194,17 @@ describe('내보내기', () => {
     expect(JSON.parse(download.text).wireboundVersion).toBe('1')
   })
 
-  it('만든 URL을 되돌려 준다 — 안 하면 문서가 사는 동안 Blob이 남는다', async () => {
+  /**
+   * **곧바로 놓지 않고 정한 시간 뒤에 놓는다**(`files/file-io.ts`의 `saveBlob` — 곧바로 놓아 잃는 것은 파일, 늦게 놓아 잃는
+   * 것은 그동안의 메모리뿐이다). 안 놓으면 문서가 사는 동안 Blob 이 남는다.
+   */
+  it('만든 URL을 정한 시간 뒤에 되돌려 준다 — 누른 자리에서는 안 놓는다', async () => {
     open()
     const button = await screen.findByRole('button', { name: '내보내기' })
 
     const download = await withDownloadCapture(() => fireEvent.click(button))
 
+    expect(download.revokedAtOnce).toEqual([])
     expect(download.revoked).toEqual([download.href])
   })
 

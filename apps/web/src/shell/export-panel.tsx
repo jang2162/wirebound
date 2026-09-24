@@ -101,6 +101,7 @@ import type {
   HtmlExportPreview,
   PptxExportPreview,
 } from '../api/types'
+import { saveBlob } from '../files/file-io'
 import { usePopoverDismiss } from './use-popover-dismiss'
 import { usePopoverSide } from './use-popover-side'
 
@@ -453,23 +454,3 @@ function DownloadButton(props: { preview: ExportPreview; projectId: string }): R
     </>
   )
 }
-
-/**
- * 받아 온 바이트를 파일로 저장한다 — 임시 앵커에 blob 주소를 걸어 누른다. **주소는 곧바로 놓지 않는다** — `click()`은
- * 내려받기를 시작만 하고 돌아오므로, 그 자리에서 놓으면 브라우저가 그 주소를 읽기 전에 사라질 수 있다(놓는 때를 재지는
- * 않았다 — 늦게 놓아 잃는 것은 그 분 동안의 메모리뿐이다).
- */
-function saveBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = fileName
-  anchor.style.display = 'none'
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_LIFETIME_MS)
-}
-
-/** 저장에 건 blob 주소를 놓기까지(ms) — `saveBlob`. */
-const BLOB_URL_LIFETIME_MS = 60_000
