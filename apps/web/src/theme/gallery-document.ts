@@ -75,6 +75,7 @@ import {
   type PageDocument,
   type WbNode,
 } from '@wirebound/schema'
+import { expandPattern, type ThemePattern } from '@wirebound/themes'
 /**
  * **카탈로그가 설치돼 있어야 이 파일이 일한다.** `listComponents()`가 빈 배열이면 갤러리가
  * 통째로 사라지고, 설치 전에 그린 노드는 전부 *"알 수 없는 컴포넌트 타입"* 폴백이 된다
@@ -327,4 +328,43 @@ export function structureKey(structures: Record<string, string>): string {
  */
 export function structureCount(type: string): number {
   return getComponent(type)?.structures.length ?? 0
+}
+
+/**
+ * 패턴 항목 하나 — 테마 `patterns`의 키 하나. 전개가 실패하면 `node`가 `null`이고 `issues`가 그 까닭이다.
+ */
+export interface PatternGalleryItem {
+  /** `patterns`의 키(`content.product`) — 패턴의 식별자다. */
+  key: string
+  /** 사람이 읽는 이름. */
+  name: string
+  node: WbNode | null
+  issues: readonly string[]
+}
+
+/**
+ * 테마의 패턴을 **페이지에 넣을 때와 같은 전개**로 노드로 만든다(`expandPattern` — 「패턴 넣기」가 부르는 것).
+ *
+ * **슬롯은 비운 채다.** 전개는 슬롯 값을 채우지 않는다(`ExpandedPattern.slots`의 주석 — 슬롯 값이 어느 prop 에
+ * 들어가는지는 규격에 없다). 그래서 여기 그려지는 것은 **넣은 직후의 모양**이다 — 테마를 고치는 사람이 보는 것과
+ * 페이지에 넣은 사람이 처음 보는 것이 같다.
+ *
+ * **id 는 여기서 짓는다** — 항목마다 앞머리가 달라 컴포넌트 항목(`g-<n>-<type>`)과도 서로와도 안 겹친다. 전개의
+ * 기본 생성기(무작위)를 쓰면 렌더마다 id 가 바뀌어 React 가 항목을 매번 새로 만든다.
+ *
+ * **전개가 실패해도 항목을 버리지 않는다** — 슬롯 이름 오타 하나가 «패턴이 안 보인다»로만 나타나면 무엇이 틀렸는지
+ * 모른다(`expandPattern`의 머리말과 같은 이유). 저장 경계는 그 오타를 이미 오류로 막으므로(`checkPatterns`) 초안이
+ * 해석된 판에서는 닿지 않는 갈래다.
+ */
+export function patternItems(patterns: ReadonlyMap<string, ThemePattern>): PatternGalleryItem[] {
+  return [...patterns].map(([key, pattern], index) => {
+    let serial = 0
+    const { expanded, issues } = expandPattern(pattern, () => `g-pattern-${index}-${(serial += 1)}`)
+    return {
+      key,
+      name: pattern.name,
+      node: expanded?.nodes[0] ?? null,
+      issues: issues.map((entry) => entry.message),
+    }
+  })
 }

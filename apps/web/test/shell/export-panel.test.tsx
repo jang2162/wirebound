@@ -790,7 +790,7 @@ describe('내보내기 화면', () => {
         const panel = await open({ ...api(깨끗한), downloadExport })
         const button = await within(panel).findByRole('button', { name: /내려받기$/ })
         fireEvent.click(button)
-        expect(await within(panel).findByRole('status')).toHaveProperty('textContent', '파일을 만드는 중…')
+        expect(await within(panel).findByRole('status')).toHaveProperty('textContent', '파일을 만드는 중… 받기 취소')
         expect(button).toHaveProperty('disabled', true)
         fireEvent.click(button)
         expect(불린).toBe(1)
@@ -802,6 +802,58 @@ describe('내보내기 화면', () => {
       } finally {
         저장.되돌리기()
       }
+    })
+  })
+
+  /**
+   * **받는 동안 «받기 취소»로 요청째 끊는다**(`DownloadButton`의 머리말). 끊긴 요청은 서버가 그 일을 끝내고 사람마다의 자리를
+   * 돌려준다 — 그것이 없으면 잘못 누른 큰 pptx 를 멈출 길이 새로고침뿐이다. 취소는 실패가 아니라 말하지 않는다.
+   */
+  describe('받는 동안 취소한다', () => {
+    /** 끊을 신호를 받아 두고, 끊기면 클라이언트처럼 «떠난 화면»으로 거절하는 가짜. */
+    function 붙잡는() {
+      const 신호: AbortSignal[] = []
+      const downloadExport: ApiClient['downloadExport'] = (_projectId, _format, options) =>
+        new Promise<Blob>((_resolve, reject) => {
+          if (options?.cancel !== undefined) 신호.push(options.cancel)
+          options?.cancel?.addEventListener('abort', () =>
+            reject(new ApiError(0, 'internal', '떠난 화면의 조회를 끊었습니다')),
+          )
+        })
+      return { overrides: { ...api(깨끗한), downloadExport }, 신호 }
+    }
+
+    it('«받기 취소»가 요청을 끊고, 실패로 말하지 않고, 저장하지 않는다', async () => {
+      const 저장 = 저장을본다()
+      try {
+        const 가짜 = 붙잡는()
+        const panel = await open(가짜.overrides)
+        const button = await within(panel).findByRole('button', { name: /내려받기$/ })
+        fireEvent.click(button)
+
+        fireEvent.click(await within(panel).findByRole('button', { name: '받기 취소' }))
+
+        await waitFor(() => expect(button).toHaveProperty('disabled', false))
+        expect(가짜.신호.map((signal) => signal.aborted)).toEqual([true])
+        expect(within(panel).queryByRole('alert')).toBeNull()
+        expect(within(panel).queryByRole('status')).toBeNull()
+        expect(저장.저장한()).toEqual([])
+      } finally {
+        저장.되돌리기()
+      }
+    })
+
+    /** **상자를 닫는 것은 취소가 아니다** — 누른 것은 파일이라 끝까지 받는다(원래 성질을 잠근다). */
+    it('상자를 닫아도 끊지 않는다', async () => {
+      const 가짜 = 붙잡는()
+      const panel = await open(가짜.overrides)
+      fireEvent.click(await within(panel).findByRole('button', { name: /내려받기$/ }))
+      await within(panel).findByRole('button', { name: '받기 취소' })
+
+      fireEvent.click(screen.getByRole('button', { name: '내보내기' }))
+
+      expect(screen.queryByRole('group', { name: '내보내기' })).toBeNull()
+      expect(가짜.신호.map((signal) => signal.aborted)).toEqual([false])
     })
   })
 

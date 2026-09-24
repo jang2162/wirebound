@@ -22,6 +22,8 @@
  * | 패턴/프리셋 **안내문 갈래** | 안내문이 버튼에 눌려 183.6·177.2px | 안내문 240px 자기 줄, 버튼 아랫줄 |
  * | 타입·패턴 **목록** | 240px 한 줄 | **똑같다** |
  *
+ * **«감싸기 있음» 칸은 옵션 글자가 짧은 판의 값이다** — 옵션이 길면 고르개 자체가 넘친다(5번이 그 선언을 본다).
+ *
  * **넘치는 것은 확인 단계만이 아니다** — 프리셋 고르개는 기본 상태에서 이미 371px다.
  * 확인 단계는 가장 크게 벌리는 방아쇠이지 유일한 원인이 아니다. 그리고 하필 그 화면이
  * 프리셋 적용을 확인받는 안전장치라 *"덮는다"*는 확인을 안 보이는 버튼으로 받게 된다.
@@ -126,6 +128,12 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
     child: 'wb-shell-picker-notice',
     container: 'wb-shell-structure-toolbar',
     where: 'panels/type-picker.tsx — `groups.length === 0`이면 `<p>` 하나만 반환한다',
+  },
+  {
+    // 프리셋 고르개의 한 줄 — 이름표와 칸, 또는 함께 누르는 단추들. 줄을 마크업이 가른다(`shell.css`의 그 규칙 주석).
+    child: 'wb-shell-picker-row',
+    container: 'wb-shell-picker',
+    where: 'panels/preset-picker.tsx — 고르개 `<div>` 안의 `<div className="wb-shell-picker-row">` 다섯',
   },
   {
     // 고른 타입의 설명. **`-notice`와 같은 모양이지만 다른 클래스다** — 이유는
@@ -316,6 +324,15 @@ describe('고르개는 감싼다 — `flex-basis: 100%`와 `flex-wrap`의 짝', 
     ).map((entry) => entry.name)
 
     expect(stale).toEqual([])
+  })
+
+  /**
+   * **고르개는 도구모음 안에서 줄어든다**(`min-width: 0`). flex 항목의 기본 `min-width: auto`는 내용의 최소 폭이라, 안의
+   * `<select>`가 가장 긴 옵션만큼의 폭을 싣는다 — Chrome(264px 사이드바): 프리셋 고르개 434px · 영역 가로 스크롤 182px,
+   * 패턴 고르개 244px. 이 값이 그 폭을 담기는 자리(240px)로 되돌린다. 넘침이 0 이 되는지는 여기서 못 잰다(머리말).
+   */
+  it('5 · 고르개 상자는 min-width 0 이다 — 가장 긴 옵션이 도구모음을 벌리지 않는다', () => {
+    expect(declared('wb-shell-picker', 'min-width')).toBe('0')
   })
 
   it('4 · 자기 줄을 요구하는 고르개 클래스는 전부 위 표에 있다', () => {

@@ -195,7 +195,8 @@ export interface EditorState {
    */
   selectionClaims: boolean
   /**
-   * **남의 변경을 받았는데 화면에 못 얹었다.** 얹은 경우엔 `null`이다.
+   * **남의 변경을 받았는데 화면에 못 얹었다.** 못 얹은 적이 없으면 `null`이다. **한 번 서면 `loadPage`·`clearPage`만
+   * 푼다** — 뒤이어 온 프레임을 얹어도 못 받은 revision 은 여전히 없다(`applyRemoteChange`의 `#rebaseOnto` 앞 주석).
    *
    * **`pending`이 차 있는 것은 못 얹는 이유가 아니다** — 남의 ops는 내 pending 위에 리베이스해
    * 얹는다(「정방향 흐름」). 못 얹는 이유는 셋뿐이고 전부 *"내 바탕이 서버 문서가 아니다"*에서
@@ -205,6 +206,15 @@ export interface EditorState {
    * 같은 값이 된다.
    */
   remoteStale: RemoteStale | null
+  /**
+   * **문서를 통째로 실은 횟수**(`loadPage`마다 +1). 편집 · 남의 변경은 문서를 고쳐 가지만 이것은 안 바뀐다 — 이 값이
+   * 바뀌었다는 것은 **판이 서버 것으로 갈아 끼워졌다**는 뜻이다(페이지 열기 · 복원 · 재연결 재조회 · 실패 수습).
+   *
+   * 읽는 쪽은 캔버스의 상호작용 런타임 하나다(`canvas/canvas.tsx`의 `runtimeKey`) — 겹layer는 옛 문서 위의 시연이라,
+   * 복원이 같은 id 의 노드를 되살리면 옛 시연이 새 문서에 얹힌다(Chrome: 뷰 모드에서 글을 숨긴 뒤 복원하면 되살아난 글이
+   * 숨은 채였다).
+   */
+  documentLoads: number
 }
 
 /**
@@ -231,6 +241,7 @@ function initialState(): EditorState {
     viewerUserId: null,
     selectionClaims: true,
     remoteStale: null,
+    documentLoads: 0,
   }
 }
 
@@ -263,7 +274,7 @@ export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged'
  * 자리도 **풀 낡음 자체가 안 서므로** 성립하지 않는다.
  *
  * **`'gap'`과 `'diverged'`를 접지 마라.** 둘 다 *"못 얹었다"*지만 원인이 정반대다 —
- * `'gap'`은 **못 받은 것이 있다**(연결이 끊겼다)이고 `'diverged'`는 **받은 것을 내 문서가
+ * `'gap'`은 **못 받은 것이 있다**(연결이 끊겼거나 서버가 방송을 빠뜨렸다 — 이 탭은 어느 쪽인지 모른다)이고 `'diverged'`는 **받은 것을 내 문서가
  * 못 받아들인다**(보내지 않은 구조 편집과 부딪쳤다)이다. 진단이 다르면 다음 사람이 보는
  * 것도 달라야 한다.
  *
@@ -271,8 +282,8 @@ export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged'
  *
  * `#markStale`이 **같은 이유일 때만** 건너뛰고 이유 사이에 순위가 없으면, 복원 뒤 첫 편집
  * 프레임 하나가 `'restored'`를 `'gap'`으로 덮는다 — 복원이 `head_seq`를 밀어 올렸으므로 그
- * 프레임의 `seq`는 당연히 내 `headSeq + 1`이 아니다. **화면이 *"연결이 끊긴 사이의 변경을
- * 놓쳐"*라고 말하는데 끊긴 적이 없다.** 겪지 않은 실패를 말하는 부류다.
+ * 프레임의 `seq`는 당연히 내 `headSeq + 1`이 아니다. **화면이 *"받지 못한 변경이 있다"*고
+ * 말하는데 받지 못한 것이 없다** — 판이 통째로 갈렸다. 겪지 않은 실패를 말하는 부류다.
  *
  * **세기는 *"무엇이 무엇을 설명하는가"*로 정한다.**
  *
@@ -328,6 +339,44 @@ const NO_DROPPED: PendingEdit[] = []
 
 function unchanged(result: RemoteChangeResult): RemoteChange {
   return { result, dropped: NO_DROPPED }
+}
+
+/**
+ * JSON 값 둘이 같은가(`holdsServerPage`). **객체의 키 순서를 보지 않는다** — 서버는 문서를 JSONB 로 두어 키 순서를 제
+ * 규칙으로 바꿔 돌려주고, 내 바탕은 `applyOps`가 키를 붙인 순서다. `JSON.stringify`로 견주면 같은 문서가 «다르다»가 되어
+ * 재조회가 늘 싣는다(되돌리기 이력을 이유 없이 잃는다). **값이 `undefined`인 키는 없는 키로 본다** — 직렬화하면 사라지는
+ * 키라 서버 판에는 없다. 배열은 순서째 견준다(자식 순서가 곧 문서다).
+ *
+ * **재귀하지 않는다** — 깊은 문서에서 호출 스택을 쓰지 않게 훑을 쌍을 배열에 쌓는다.
+ *
+ * **비용은 같은 본문의 `JSON.parse`와 같은 급이다** — 같은 판이면 끝까지 훑는다(다르면 처음 어긋난 자리에서 멈춘다).
+ * Node(V8) · Text 노드 N 개를 한 Section 에 둔 문서를 JSON 왕복하며 키 순서를 뒤집어 `holdsServerPage`로 견준 중앙값
+ * (25 회): 1000 개(102KB) 0.23ms · 5000 개(512KB) 1.2ms · 20000 개(2MB) 5.5ms — 같은 본문의 `JSON.parse`는 0.21 · 1.0 ·
+ * 4.2ms.
+ */
+function sameJson(left: unknown, right: unknown): boolean {
+  const pairs: [unknown, unknown][] = [[left, right]]
+  for (let pair = pairs.pop(); pair !== undefined; pair = pairs.pop()) {
+    const [a, b] = pair
+    if (a === b) continue
+    if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+    if (Array.isArray(a) !== Array.isArray(b)) return false
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) return false
+      for (let i = 0; i < a.length; i += 1) pairs.push([a[i], b[i]])
+      continue
+    }
+    const aRecord = a as Record<string, unknown>
+    const bRecord = b as Record<string, unknown>
+    const aKeys = Object.keys(aRecord).filter((key) => aRecord[key] !== undefined)
+    const bKeys = Object.keys(bRecord).filter((key) => bRecord[key] !== undefined)
+    if (aKeys.length !== bKeys.length) return false
+    for (const key of aKeys) {
+      if (!Object.hasOwn(bRecord, key)) return false
+      pairs.push([aRecord[key], bRecord[key]])
+    }
+  }
+  return true
 }
 
 /** `startUndo`·`startRedo`의 결과. 건너뛴 수는 「개인 undo/redo」의 안내에 쓴다. */
@@ -452,8 +501,30 @@ export class EditorStore {
       // 지나온 문서는 정의상 낡지 않았다. 안 풀면 *"새로고침하세요"*가 새로고침한 뒤에도
       // 남는다 — *"고쳤는데 고쳤다고 말하지 않는"* 부류다.
       remoteStale: null,
+      documentLoads: this.#state.documentLoads + 1,
     })
     return pending
+  }
+
+  /**
+   * **내 바탕이 곧 이 서버 판인가** — 같은 페이지 · 같은 `headSeq` · **같은 문서**일 때만 참이다. 재연결 재조회가 다시
+   * 읽은 판을 싣지 않고 넘어가도 되는지를 이것 하나로 묻는다(`routes/editor.tsx`의 재연결 이펙트).
+   *
+   * **`headSeq`만으로는 모자란다 — 한 페이지 id 안에서도 단조가 아니다.** 지워진 페이지를 스냅샷 복원이 되살리면 같은
+   * id 로 `head_seq` 0 부터 다시 센다. 끊긴 사이 그렇게 되살아나 남이 편집하면 번호가 우연히 내 것과 같아지고, 번호만
+   * 보는 판은 옛 문서를 둔다 — 편집 경로가 자리(index) 기반이라 다음 편집이 **남의 노드를 덮는다**(Chrome: 되살아난
+   * 페이지 앞에 남이 글을 넣어 head 1 == 내 head 1 → 안 싣고 통지 0, 내가 «원문»을 고치자 서버에서는 남의 글이 바뀌었다).
+   * 복원 방송(`restored`)은 끊긴 동안 온 것이라 받지 못했다.
+   *
+   * **견주는 것은 `baseDocument`다 — `document`가 아니다.** 바탕이 서버가 기록한 문서이고(내 낙관적 편집이 안 섞였다),
+   * `document`는 보내지 않은 편집만큼 앞서 있다.
+   *
+   * **비용**: 문서를 한 번 훑는다(`sameJson`) — 같은 본문의 `JSON.parse`와 같은 급이다(잰 값은 `sameJson`의 머리말).
+   * 재조회는 연결이 다시 붙을 때만 돌고, 그 조회가 이미 같은 문서를 내려받아 파싱했다 — 비용이 그만큼 한 번 더 든다.
+   */
+  readonly holdsServerPage = (pageId: string, headSeq: number, document: PageDocument): boolean => {
+    const { openPageId, baseDocument } = this.#state
+    return openPageId === pageId && this.#state.headSeq === headSeq && sameJson(baseDocument, document)
   }
 
   /**
@@ -644,9 +715,9 @@ export class EditorStore {
    * 같은 순서로 같은 ops를 적용하기 때문이다).
    *
    * **그 등식이 지켜지는 조건이 갭 검사다.** 바탕이 서버 문서와 같아야 하므로, 이 프레임이
-   * 내 다음 번호일 때만 얹는다. **그 전제를 `remoteStale === null`로 읽으면 안 된다** — 낡음이 풀렸다는 것은 *"바로 다음 번호를 얹었다"*는 뜻일 뿐이고,
-   * 서버가 가진 것을 내가 다 받았다는 뜻이 아니다. 그래서 검사하는 것은 낡음이 아니라
-   * `change.seq === headSeq + 1`이다.
+   * 내 다음 번호일 때만 얹는다. **그 전제를 `remoteStale === null`로 읽으면 안 된다** — 낡음이 없다는 것은 *"못 받은 것을
+   * 아직 알아채지 못했다"*는 뜻일 뿐이고(끊긴 동안의 프레임은 번호 차이로 드러나기 전까지 안 보인다), 반대로 낡음이 선
+   * 뒤에도 다음 번호는 온다. 그래서 검사하는 것은 낡음이 아니라 `change.seq === headSeq + 1`이다.
    *
    * **갭은 pending이 있든 없든 검사한다** — **갭이 난 바탕 위에 내 pending을 다시 얹으면
    * 서버와 다른 문서가 나오고, 그것은 조용하다.**
@@ -676,8 +747,8 @@ export class EditorStore {
    * | `'skipped'` | 다른 페이지가 열려 있거나 문서가 없거나 **이미 아는 seq**이거나 **내가 낸 편집이 되돌아왔다** | 그대로 |
    * | `'gap'` | **`seq`가 내 다음 번호가 아니다** | `'gap'` |
    * | `'diverged'` | 바탕에 `applyOps`가 던졌다 | `'diverged'` |
-   * | `'applied'` | 얹었다. pending이 없었다 | `null`로 푼다 |
-   * | `'rebased'` | 얹고 내 pending을 그 위에 다시 올렸다 | `null`로 푼다 |
+   * | `'applied'` | 얹었다. pending이 없었다 | 그대로 — **프레임은 낡음을 풀지 않는다**(푸는 것은 `loadPage`·`clearPage`) |
+   * | `'rebased'` | 얹고 내 pending을 그 위에 다시 올렸다 | 그대로 |
    *
    * ## 자기 편집이 되돌아오는 창 — 리베이스가 그것을 두 배로 만든다
    *
@@ -736,14 +807,18 @@ export class EditorStore {
     // (`editWarnings`의 계약), 얹었다는 것은 내 바탕이 그 문서가 됐다는 뜻이다. 안 갈면
     // 남이 만든 경고를 **편집을 낸 사람만** 보게 되어, 접속 방식 대신 *"누가 냈느냐"*로
     // 갈라짐이 되살아난다.
-    // **`'restored'`는 얹었다고 풀리지 않는다**(위 `RemoteStale`의 세기 표). 복원은
-    // **프로젝트** 사건이라 페이지 다섯 자원이 한꺼번에 갈렸다는 뜻이고, 이 페이지의 프레임
-    // 하나를 잘 얹은 것이 그것을 해결하지 않는다. 푸는 것은 `loadPage`·`clearPage` 둘이다.
     //
-    // **같은 객체를 그대로 넘긴다** — 새로 만들면 참조가 달라져 구독자가 헛일을 한다.
-    const stale = this.#state.remoteStale
+    // **낡음(`remoteStale`)은 건드리지 않는다 — 프레임은 얹혀도 낡음을 풀지 않는다.** 푸는 것은 판을 서버 것으로 놓는
+    // `loadPage`·`clearPage` 둘뿐이다. 낡음이 섰다는 것은 **이 탭이 끝내 못 받은 revision 이 있다**는 뜻이다 — 갭이면
+    // 번호가 건너뛴 프레임을 버렸고(서버는 지난 프레임을 다시 보내지 않는다), 갈라짐이면 제 번호의 프레임을 못 얹었고,
+    // 복원이면 판이 통째로 갈렸다. 그 뒤 «다음 번호» 프레임이 와도 빠진 것은 여전히 빠져 있다 — 늦게 온 그 번호(서버가
+    // 순서를 바꿔 보냈거나, 커밋 답을 잃은 편집을 다시 낸 재방송)를 얹고 낡음을 풀면 **빠진 revision 을 남긴 채 화면이
+    // 최신처럼 보인다**(jsdom: `loadPage(…, 4)` → 6 → 늦은 5 가 `applied` · head 5 · 낡음 `null` · 6 의 노드 없음).
+    //
+    // **그 프레임은 얹는다 — 버리지 않는다.** 번호가 이어지므로 바탕 + 그 ops 는 서버의 그 revision 문서와 같다(리베이스의
+    // 등식이 검사하는 것은 낡음이 아니라 번호다 — 위 머리말). 얹으면 화면이 서버에 한 걸음 더 가깝고 낡았다는 말은
+    // 그대로 서 있다. 버려도 낡음은 그대로라 얻는 것이 없다.
     const dropped = this.#rebaseOnto(nextBase, change.seq, {
-      remoteStale: stale !== null && stale.reason === 'restored' ? stale : null,
       editWarnings: change.warnings.length === 0 ? NO_WARNINGS : change.warnings,
     })
     return { result: pending.length === 0 ? 'applied' : 'rebased', dropped }

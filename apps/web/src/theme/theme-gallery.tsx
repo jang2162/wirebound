@@ -1,6 +1,8 @@
 /**
  * **테마 갤러리**(설계서 「테마 관리」의 «미리보기»). 카탈로그의 모든 컴포넌트를 한 화면에 늘어놓고
- * **초안이 고른 구조로** 그린다. 사용자가 왼쪽에서 값 하나를 고치면 여기 예순 개가 함께 변한다.
+ * **초안이 고른 구조로** 그린다. 사용자가 왼쪽에서 값 하나를 고치면 여기 예순 개가 함께 변한다. 그 아래에 초안의
+ * **패턴**을 페이지에 넣을 때와 같은 전개로 그린다(`gallery-document.ts`의 `patternItems`) — 초안에 오류가 있으면
+ * 패턴은 없다(해석된 테마에서만 읽는다).
  *
  * ---
  *
@@ -40,15 +42,15 @@
  * 위장된다). 경계가 없으면 **구현체 하나의 버그가 테마 저작 화면 전체를 흰 화면으로 만든다.**
  * 갤러리는 항목이 예순 개라 그 확률이 캔버스보다 높다.
  *
- * **리셋 키가 `structureKey`인 것이 판정이다.** 노드는 상수이므로 결과를 바꿀 수 있는 입력은
- * `options.structures` 하나다 — 토큰 값을 고칠 때마다 되살리면 던지는 구현체가 그 자리에서
- * 계속 다시 던지고, 아무 때도 안 되살리면 구조를 바꿔 고친 뒤에도 오류 문장이 남는다.
+ * **리셋 키가 `structureKey`와 패턴인 것이 판정이다.** 컴포넌트 노드는 상수이므로 결과를 바꿀 수 있는 입력은
+ * `options.structures`와 초안의 `patterns` 둘이다 — 토큰 값을 고칠 때마다 되살리면 던지는 구현체가 그 자리에서
+ * 계속 다시 던지고, 아무 때도 안 되살리면 구조나 패턴을 바꿔 고친 뒤에도 오류 문장이 남는다.
  *
  * ---
  *
- * # 이 파일이 만드는 **감싸는 상자 둘**
+ * # 이 파일이 만드는 **감싸는 상자 셋**
  *
- * `.wb-shell-gallery-list`와 `.wb-shell-gallery-item` 안에 문서 노드가 들어온다. 그래서 둘 다
+ * `.wb-shell-gallery-list` · `.wb-shell-gallery-patterns`와 그 안의 `.wb-shell-gallery-item` 안에 문서 노드가 들어온다. 그래서 셋 다
  * `test/shell-css-guard.ts`의 `WRAPPERS`에 **들어 있다** — 목록에서 빠지면 그 상자에 건 상속
  * 속성 위반을 아무 케이스도 잡지 못한다. 즉 빠뜨리면 감싸는 상자의 상속 속성 위반이 조용히
  * 지나간다. **캡션·안내·오류 배너는 감싸는 상자가 아니다**(문서 노드를 품지 않는다) —
@@ -56,8 +58,15 @@
  */
 import { Component, type ErrorInfo, type ReactElement, type ReactNode } from 'react'
 import { renderNode, type NodeRenderError, type RenderOptions } from '@wirebound/renderer'
-import { themeStructures, type ResolvedTheme } from '@wirebound/themes'
-import { galleryItems, structureCount, structureKey, type GalleryItem } from './gallery-document'
+import { themeStructures, type ResolvedTheme, type ThemePattern } from '@wirebound/themes'
+import {
+  galleryItems,
+  patternItems,
+  structureCount,
+  structureKey,
+  type GalleryItem,
+  type PatternGalleryItem,
+} from './gallery-document'
 /**
  * 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다(`canvas/canvas.tsx`가 같은
  * 줄을 같은 이유로 갖고 있다).
@@ -77,8 +86,12 @@ const AXIS_LABEL: Readonly<Record<GalleryItem['axis'], string>> = {
   state: '상태',
 }
 
+/** 해석하지 못한 초안에는 패턴이 없다 — 오류가 있으면 `resolveTheme`이 `null`을 낸다. */
+const NO_PATTERNS: ReadonlyMap<string, ThemePattern> = new Map<string, ThemePattern>()
+
 export function ThemeGallery(props: { resolved: ResolvedTheme | null }): ReactElement {
   const structures = themeStructures(props.resolved)
+  const patterns = patternItems(props.resolved?.patterns ?? NO_PATTERNS)
 
   return (
     <>
@@ -87,8 +100,8 @@ export function ThemeGallery(props: { resolved: ResolvedTheme | null }): ReactEl
           테마에 오류가 있어 지금은 테마 CSS 없이 그립니다. 오류를 고치면 다시 입혀집니다.
         </p>
       )}
-      <GalleryBoundary resetKey={structureKey(structures)}>
-        <GalleryBody structures={structures} />
+      <GalleryBoundary resetKey={`${structureKey(structures)}#${JSON.stringify([...(props.resolved?.patterns ?? NO_PATTERNS)])}`}>
+        <GalleryBody structures={structures} patterns={patterns} />
       </GalleryBoundary>
     </>
   )
@@ -99,7 +112,10 @@ export function ThemeGallery(props: { resolved: ResolvedTheme | null }): ReactEl
  * `renderNode`는 엘리먼트를 만드는 함수이지 컴포넌트가 아니므로, 그 호출이 경계보다 위에
  * 있으면 경계가 잡지 못한다(`canvas/canvas.tsx`의 `CanvasDocument`와 같은 이유).
  */
-function GalleryBody(props: { structures: Record<string, string> }): ReactElement {
+function GalleryBody(props: {
+  structures: Record<string, string>
+  patterns: readonly PatternGalleryItem[]
+}): ReactElement {
   /**
    * 렌더 중에 모은다. `onNodeError` 안에서 `setState`를 부르면 안 되고(렌더러 주석),
    * `renderNode`가 돌아온 시점에는 그 서브트리의 오류가 이미 이 배열에 들어 있다.
@@ -113,6 +129,11 @@ function GalleryBody(props: { structures: Record<string, string> }): ReactElemen
   }
 
   const drawn = galleryItems().map((item) => ({ item, tree: renderNode(item.node, options) }))
+  // **같은 `options`로 그린다** — 패턴 안의 노드도 초안이 고른 구조를 입고, 그리다 난 오류도 같은 배너에 모인다.
+  const drawnPatterns = props.patterns.map((item) => ({
+    item,
+    tree: item.node === null ? null : renderNode(item.node, options),
+  }))
 
   return (
     <>
@@ -140,6 +161,28 @@ function GalleryBody(props: { structures: Record<string, string> }): ReactElemen
           </div>
         ))}
       </div>
+      {drawnPatterns.length > 0 && (
+        <>
+          <p className="wb-shell-gallery-heading">
+            패턴 {drawnPatterns.length}개 — 페이지에 넣은 직후의 모양입니다(슬롯은 비어 있습니다)
+          </p>
+          <div className="wb-shell-gallery-patterns">
+            {drawnPatterns.map(({ item, tree }) => (
+              <div key={item.key} className="wb-shell-gallery-item">
+                <p className="wb-shell-gallery-caption">
+                  <span className="wb-shell-gallery-type">{item.key}</span>
+                  <span className="wb-shell-gallery-structure">{item.name}</span>
+                </p>
+                {tree ?? (
+                  <p className="wb-shell-gallery-error-item">
+                    전개하지 못했습니다 — {item.issues.join(' / ')}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </>
   )
 }

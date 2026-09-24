@@ -142,7 +142,7 @@
 import { useCallback, useEffect, type ReactElement } from 'react'
 import type { PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
-import { SignedOut, toFailure, type Failure } from '../api/failure'
+import { refusedBeforeCommit, SignedOut, toFailure, type Failure } from '../api/failure'
 import { ApiError, type ApiClient } from '../api/client'
 import { isSessionUserChanged } from '../api/known-user'
 import type { WriteConclusion, WriteNote } from './write-ledger'
@@ -276,7 +276,8 @@ function keyVerdict(caught: unknown): KeyVerdict | null {
  * 게시의 실패가 **안 달렸다고 확정할 수 있는** 실패인가 — **무엇에 대해 묻는가**로 칸이 갈린다. 첫 보내기의
  * 실패(`uncertain` — `'sent'`)는 **그 요청 자신이** 커밋됐는가를, 같은 키로 다시 보낸 것의 실패(`verify` —
  * `'resent'`)는 **앞 게시가** 달렸는가를 묻는다. **두 칸의 가름은 이 표 하나가 소유한다** — 두 자리가 따로
- * 가르면 한쪽만 낡는다(`write-ledger.tsx`·`apps/api/README.md`의 «멱등 키»는 여기를 가리킨다).
+ * 가르면 한쪽만 낡는다(`write-ledger.tsx`·`apps/api/README.md`의 «멱등 키»는 여기를 가리킨다). **첫 보내기 칸은 멱등 키와
+ * 무관한 «그 요청이 커밋됐나»라서 편집 전송의 실패도 같은 함수로 가른다**(`api/failure.tsx`의 `refusedBeforeCommit`).
  *
  * | 실패 | 첫 보내기(`'sent'`) — 이 요청이 커밋됐나 | 다시 보낸 것(`'resent'`) — 앞 게시가 달렸나 |
  * |---|---|---|
@@ -326,12 +327,13 @@ function keyVerdict(caught: unknown): KeyVerdict | null {
  * TCP 프록시)의 값은 그 파일이 든다.
  */
 function knownRejection(caught: unknown, asked: 'sent' | 'resent'): boolean {
+  // **첫 보내기 칸은 쓰기 전체의 «모름» 판정 그대로다**(`api/failure.tsx`의 `refusedBeforeCommit` — 편집 전송도 그것을 부른다).
+  if (asked === 'sent') return refusedBeforeCommit(caught)
   if (!(caught instanceof ApiError)) return false
   // **«쿠키의 사람이 다르다»(409 `session-user-changed`)는 키를 보기 전의 거절이다**(서버는 인증 훅에서, 키 판정보다
   // 앞에서 낸다). 첫 보내기에는 «그 요청은 커밋 전»이 참이지만, 다시 보낸 것에는 앞 게시에 대해 아무것도 말하지 않는다 — 모른다.
-  if (asked === 'resent' && isSessionUserChanged(caught)) return false
-  if (caught.status >= 400 && caught.status < 500) return true
-  return asked === 'sent' && caught.status === 500 && caught.enveloped
+  if (isSessionUserChanged(caught)) return false
+  return caught.status >= 400 && caught.status < 500
 }
 
 /**

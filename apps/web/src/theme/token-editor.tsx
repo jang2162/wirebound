@@ -822,15 +822,23 @@ function keepShape(before: string | number, next: string): string | number {
  * 병합을 손으로 하지 않고 `mergeTheme`을 부르는 것은 「상속과 병합」의 규칙 넷(깊은 병합 · 배열 교체 ·
  * `null` 삭제 · 깊이 1)을 이 파일이 다시 구현하면 **엔진과 갈릴 자리가 생기기 때문**이다.
  *
- * **병합이 실패하면 자기 절만 보인다.** 실패는 `bad-extends` 하나이고(상속 대상이 사라진
- * 파생), 그 사실은 이슈 패널이 말한다 — 여기서 다시 말하면 같은 것을 두 번 말하게 된다.
+ * **병합이 실패하면 자기 절만 보인다.** 실패는 `bad-extends`(상속 대상이 사라진 파생)와 **병합 결과의 검사가 호출 스택을
+ * 넘긴 것**(`RangeError` — 패턴을 한 줄로 깊이 이은 초안. 병합은 결과를 `ThemeSchema`로 검사하고 그 검사가 재귀다) 둘이고,
+ * 그 사실은 이슈 패널이 말한다(`draft-css.ts`의 `resolveDraft` — 같은 초안을 해석하다 같은 자리에서 넘긴다). 여기서 다시
+ * 말하면 같은 것을 두 번 말하게 된다. **`RangeError`를 잡지 않으면 이 화면째 흰 화면이다**(Chrome: 파생 테마에 깊이 1700 의
+ * `Flex` 패턴 — 해석 쪽을 잡은 뒤에도 이 자리가 던졌다). 그 밖의 던짐은 덮지 않는다.
  */
 export function effectiveTokens(draft: Theme, base: Theme | null): ThemeTokens {
   const own = draft.tokens ?? {}
   if (base === null || draft.meta.extends === undefined) return own
 
-  const merged = mergeTheme(base, draft)
-  return merged.theme?.tokens ?? own
+  try {
+    const merged = mergeTheme(base, draft)
+    return merged.theme?.tokens ?? own
+  } catch (caught) {
+    if (!(caught instanceof RangeError)) throw caught
+    return own
+  }
 }
 
 /** 키 순서를 지킨다 — 다시 정렬하면 편집 중에 줄이 뛴다. */

@@ -427,16 +427,14 @@ describe('applyRemoteChange — 프레임을 놓친 갈래', () => {
   })
 
   /**
-   * **놓친 seq가 뒤늦게 도착하면 그것은 얹힌다.** 서버가 순서를 뒤바꿔 보낸 경우다 —
-   * `headSeq + 1`이므로 갭이 아니고, 얹고 나면 낡음이 풀린다.
+   * **놓친 seq가 뒤늦게 도착하면 그것은 얹힌다 — 그런데 낡음은 남는다.** 서버가 순서를 뒤바꿔 보냈거나, 커밋 답을 잃은
+   * 편집을 다시 낸 재방송이 남의 revision 뒤에 온 판이다. `headSeq + 1`이므로 갭이 아니고, 바탕 + 그 ops 는 서버의 그
+   * revision 문서와 같다(리베이스의 등식은 낡음이 아니라 번호를 본다).
    *
-   * **그리고 그 순간 조용해지는데 revision 하나는 여전히 없다.**
-   *
-   * **리베이스와의 관계:** 이 상태에서 낡음이 풀렸다고 해서 *"서버가 가진 것을 다
-   * 받았다"*가 되지는 않는다. **그래서 리베이스가 검사하는 것은 낡음이 아니라 프레임의
-   * 번호다** — 이 판에서도 바탕은 **내 문서와 같은 앞부분**이므로 리베이스의 등식은 지켜진다.
+   * **seq 6 은 여전히 없다** — 서버는 버린 프레임을 다시 보내지 않는다. 여기서 낡음을 풀면 화면이 조용해지는데 revision
+   * 하나가 빠져 있다(`#rebaseOnto` 앞 주석). 낡음을 푸는 것은 `loadPage`뿐이다(아래 «낡음은 풀린다»).
    */
-  it('놓쳤던 번호가 뒤늦게 오면 얹고 낡음을 푼다 — 그런데 하나는 여전히 없다', () => {
+  it('놓쳤던 번호가 뒤늦게 오면 얹되 낡음은 남는다 — 하나가 여전히 없다', () => {
     const store = opened()
     store.applyRemoteChange('page_1', { seq: 6, ops: append('n_six'), warnings: NO_WARNINGS })
 
@@ -444,9 +442,8 @@ describe('applyRemoteChange — 프레임을 놓친 갈래', () => {
 
     expect(late.result).toBe('applied')
     expect(store.getState().headSeq).toBe(5)
-    // **조용해진다** — 화면은 더 이상 아무 말도 안 한다.
-    expect(store.getState().remoteStale).toBeNull()
-    // **그런데 seq 6이 없다.** 서버 문서는 ['n_five','n_six']이고 내 것은 앞부분뿐이다.
+    // **말을 거두지 않는다** — 서버 문서는 ['n_five','n_six']이고 내 것은 앞부분뿐이다.
+    expect(store.getState().remoteStale).toEqual({ reason: 'gap' })
     expect(ids(store)).toEqual(['n_five'])
   })
 })
@@ -512,6 +509,10 @@ describe('낡음 이유에는 세기가 있다', () => {
   /**
    * **복원은 얹었다고 풀리지 않는다.** 복원은 프로젝트 사건이라 이 페이지의 프레임 하나를
    * 잘 얹은 것이 그것을 해결하지 않는다 — 다섯 자원이 한꺼번에 갈렸다.
+   *
+   * 프레임이 어떤 낡음도 풀지 않는 규칙의 복원 몫이다 — 갭 몫은 위 «놓쳤던 번호가 뒤늦게 오면 얹되 낡음은 남는다»가
+   * 잰다. 둘이 따로 서는 것은 변조가 한쪽만 풀 수 있어서다 — «복원만 남기고 나머지는 푼다»는 갭 몫이, «복원만 푼다»는
+   * 이 케이스가 혼자 잡는다.
    */
   it('복원 뒤 프레임을 잘 얹어도 복원 진단이 남는다', () => {
     const store = opened()
@@ -522,15 +523,6 @@ describe('낡음 이유에는 세기가 있다', () => {
     expect(change.result).toBe('applied')
     expect(store.getState().headSeq).toBe(5)
     expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
-  })
-
-  it('복원이 아닌 낡음은 얹으면 풀린다 — 음성 대조', () => {
-    const store = opened()
-    store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
-
-    store.applyRemoteChange('page_1', { seq: 5, ops: ADD_ONE, warnings: NO_WARNINGS })
-
-    expect(store.getState().remoteStale).toBeNull()
   })
 
   it('같은 이유가 이어지면 구독자를 다시 부르지 않는다 — 세기 비교가 그것도 한다', () => {
@@ -609,5 +601,63 @@ describe('markRestored', () => {
     store.markRestored()
 
     expect(notified).toBe(afterFirst)
+  })
+})
+
+/**
+ * **내 바탕이 곧 이 서버 판인가**(`holdsServerPage`). 재연결 재조회가 이것으로 «다시 싣지 않아도 되나»를 묻는다 —
+ * 판을 번호째 · 문서째 보는 까닭은 그 머리말, 번호가 같고 문서가 다른 판은 `test/edit/reconnect-resync.test.tsx`의
+ * «번호가 같아도 문서가 다르면 싣는다»가 잰다. 여기 셋은 **같은 판을 «다르다»고 읽지 않는가**다 — 그러면 재조회가 늘
+ * 싣어 되돌리기 이력을 이유 없이 잃는다.
+ */
+describe('holdsServerPage', () => {
+  /** 서버가 돌려주는 모양 — JSONB 는 키 순서를 제 규칙으로 바꾼다. 값은 `doc()`과 같다. */
+  function reordered(children: { id: string }[] = []): PageDocument {
+    return JSON.parse(
+      JSON.stringify({
+        root: { children: children.map((c) => ({ type: 'Container', id: c.id })), type: 'Container', id: 'n_root' },
+        version: CURRENT_DOCUMENT_VERSION,
+      }),
+    ) as PageDocument
+  }
+
+  it('키 순서만 다른 같은 문서는 같은 판이다', () => {
+    const store = opened()
+
+    expect(store.holdsServerPage('page_1', 4, reordered())).toBe(true)
+  })
+
+  /** 값이 `undefined`인 키는 직렬화하면 사라진다 — 서버 판에는 없는 키다. */
+  it('값이 undefined 인 키는 없는 키로 본다', () => {
+    const store = new EditorStore()
+    const mine = doc([{ id: 'n_a' }])
+    ;(mine.root.children![0] as unknown as Record<string, unknown>)['props'] = undefined
+    store.loadPage('page_1', mine, 4)
+
+    // 서버 판은 키 순서가 내 것과 같게 둔다 — 이 케이스는 `undefined` 키 하나만 잰다(키 순서는 위 케이스).
+    const server = JSON.parse(JSON.stringify(doc([{ id: 'n_a' }]))) as PageDocument
+
+    expect(store.holdsServerPage('page_1', 4, server)).toBe(true)
+  })
+
+  /** 견주는 것은 바탕이다 — 보내지 않은 내 편집만큼 앞선 `document`가 아니다. */
+  it('보내지 않은 편집이 있어도 바탕이 서버 판이면 같은 판이다', () => {
+    const store = opened()
+    store.applyEdit(append('n_mine'))
+
+    // 키 순서는 내 것과 같게 둔다 — 이 케이스는 바탕인가 낙관 문서인가만 잰다.
+    expect(store.holdsServerPage('page_1', 4, doc())).toBe(true)
+  })
+
+  /**
+   * 음성 대조 — 위 셋이 «늘 참»으로 통과하지 않는다. **문서가 다른 판은 여기서 재지 않는다** — 그 축은 재조회째 여는
+   * `test/edit/reconnect-resync.test.tsx`의 «번호가 같아도 문서가 다르면 싣는다»가 갖는다(여기서도 재면 대조를 뗀 변조에
+   * 둘이 함께 죽는다).
+   */
+  it('번호나 페이지가 다르면 다른 판이다 — 음성 대조', () => {
+    const store = opened()
+
+    expect(store.holdsServerPage('page_1', 5, reordered())).toBe(false)
+    expect(store.holdsServerPage('page_2', 4, reordered())).toBe(false)
   })
 })

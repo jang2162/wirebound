@@ -9,10 +9,10 @@
  * **실브라우저로는 재지 않는다.** jsdom의 클릭과 실브라우저의 클릭이 갈리는 자리는 이
  * 파일이 못 본다.
  */
-import { fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { EditorStore } from '../../src/store/editor-store'
-import { PAGE_ID, canvasSurface, nodeElement, openPage, pageDoc, requireNode } from '../editor-harness'
+import { HEAD_SEQ, PAGE_ID, canvasSurface, nodeElement, openPage, pageDoc, requireNode } from '../editor-harness'
 
 /** 셸이 만든 스토어를 쥔다. 근거는 `canvas.test.tsx`의 같은 장치 주석. */
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
@@ -641,5 +641,44 @@ describe('런타임 상태는 언제 사라지는가', () => {
     toView()
 
     expect(notices()).toEqual([])
+  })
+
+  /**
+   * **문서를 통째로 실으면 사라진다**(`canvas.tsx`의 `runtimeKey` — 스토어의 `documentLoads`). 복원은 같은 id 의 노드를
+   * 되살리므로 페이지 축만으로는 옛 시연이 새 문서에 얹힌다(Chrome: 뷰 모드에서 글을 숨긴 뒤 복원하면 되살아난 글이 숨은
+   * 채였다). 여기서는 복원 · 재연결 재조회가 부르는 `loadPage`를 곧바로 부른다.
+   */
+  it('같은 페이지의 문서를 통째로 다시 실으면 사라진다 — 복원이 같은 id 를 되살려도', async () => {
+    await openPage(DOC)
+    toView()
+    fireEvent.click(requireNode('n-search'))
+    expect(requireNode('n-list').getAttribute('data-wb-state')).toBe('loading')
+
+    act(() => {
+      shellStore().loadPage(PAGE_ID, DOC, HEAD_SEQ + 1)
+    })
+
+    expect(requireNode('n-list').getAttribute('data-wb-state')).toBeNull()
+  })
+
+  /**
+   * **남의 편집은 시연을 버리지 않는다** — 문서를 고쳐 갈 뿐 판을 갈아 끼우지 않는다. 편집 하나로 버리면 남이 글자
+   * 하나 고칠 때마다 보던 시연이 사라진다(위 케이스의 음성 대조 — 축이 «문서가 바뀌었다»가 아니라 «통째로 실었다»다).
+   */
+  it('남의 편집이 문서를 고쳐도 남는다', async () => {
+    await openPage(DOC)
+    toView()
+    fireEvent.click(requireNode('n-search'))
+
+    act(() => {
+      shellStore().applyRemoteChange(PAGE_ID, {
+        seq: HEAD_SEQ + 1,
+        ops: [{ op: 'replace', path: '/root/children/0/props/label', value: '찾기' }],
+        warnings: [],
+      })
+    })
+
+    expect(requireNode('n-search').textContent).toContain('찾기')
+    expect(requireNode('n-list').getAttribute('data-wb-state')).toBe('loading')
   })
 })

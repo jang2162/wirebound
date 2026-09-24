@@ -371,6 +371,19 @@ export function structureCssBlocks(): string[] {
 
   blocks.push(componentRule('Tabs', 'vertical', ['display: flex;']))
 
+  // ── Section:contained 의 inner ────────────────────────────────────────────
+  //
+  // **가둔 칼럼을 가운데 둔다.** 설계서 「컴포넌트 카탈로그」가 `Section`을 *"화면 전체 폭 배경 + 가운데
+  // 정렬된 콘텐츠"*로 정한다 — 그것은 구조가 약속하는 모양이지 테마가 매번 적어야 하는 스킨이 아니다. 테마가
+  // `inner`에 `maxWidth`만 걸고 `marginX`를 빠뜨리면 아무것도 실패하지 않은 채 칼럼이 왼쪽에 붙는다(헤드리스 Chrome ·
+  // 1920 폭 · `exportPage`로 `Page > Section > Text`: `inner`에 960px 만 건 사용자 테마 좌 0 / 우 960, 이 줄이 있으면
+  // 480 / 480). 폭을 안 가두면 `auto`가 0 으로 계산되어 아무것도 안 바뀐다.
+  //
+  // **`:where(contained)`로 좁힌다.** `splitBg`의 `inner`는 격자의 반쪽 칸이라 `auto` 여백을 받으면 칸 안에서 내용
+  // 폭으로 줄어든다 — 받는 구조는 `contained` 하나다(수신자 표 — `test/structure-css.test.ts`). 특이도는 (0,2,0) 그대로라
+  // 테마가 `marginX`를 적으면 테마가 이긴다(`partRule`의 머리말 표).
+  blocks.push(partRule('Section', 'inner', ['margin-inline: auto;'], ['contained']))
+
   return blocks
 }
 

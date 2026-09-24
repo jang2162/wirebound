@@ -15,7 +15,12 @@ import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../src/api/client'
 import { toFailure } from '../../src/api/failure'
 import type { RealtimeLink } from '../../src/realtime/connection'
-import { createEditChannel, type EditChannel } from '../../src/realtime/edit-channel'
+import {
+  createEditChannel,
+  EditNotSentError,
+  UnansweredEditError,
+  type EditChannel,
+} from '../../src/realtime/edit-channel'
 import type { ServerFrame } from '../../src/realtime/protocol'
 
 const OPS: PatchOp[] = [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }]
@@ -106,7 +111,8 @@ describe('붙어 있어야 낸다', () => {
 
     const caught = await inFlight(channel, 'op_1', 4)
 
-    expect(caught).toBeInstanceOf(Error)
+    // **나가지 못했다 — 서버에 안 닿았다.** 편집 경로는 이것을 «안 됐다»로 읽는다(끊겨서 답을 못 받은 것과 갈린다).
+    expect(caught).toBeInstanceOf(EditNotSentError)
     expect(link.sent).toEqual([])
   })
 })
@@ -205,11 +211,10 @@ describe('실패의 모양이 REST와 같다', () => {
   })
 
   /**
-   * **연결이 끊긴 것은 서버의 판정이 아니다.** 되세울 봉투가 없으므로 `ApiError`가 아니고,
-   * 화면은 그것을 *"편집을 저장하지 못했습니다"*로 읽는다 — **REST에서 네트워크가 끊겼을
-   * 때와 같은 문장**이다.
+   * **연결이 끊긴 것은 서버의 판정이 아니다.** 되세울 봉투가 없으므로 `ApiError`가 아니다. 나간 프레임은 서버에 닿았을 수
+   * 있으므로 «답을 못 받았다»(`UnansweredEditError`)로 끝난다 — 편집 경로가 «취소됐다» 대신 «반영됐는지 모른다»를 말한다.
    */
-  it('연결이 끊기면 기다리던 것이 전부 실패한다 — 매달아 두지 않는다', async () => {
+  it('연결이 끊기면 기다리던 것이 전부 «답을 못 받았다»로 끝난다 — 매달아 두지 않는다', async () => {
     const { channel } = attached()
     const first = inFlight(channel, 'op_1', 4)
     const second = inFlight(channel, 'op_2', 5)
@@ -218,11 +223,20 @@ describe('실패의 모양이 REST와 같다', () => {
 
     for (const caught of [await first, await second]) {
       expect(caught).not.toBeInstanceOf(ApiError)
-      expect(toFailure(caught, '편집을 저장하지 못했습니다')).toEqual({
-        kind: 'message',
-        message: '편집을 저장하지 못했습니다',
-      })
+      expect(caught).toBeInstanceOf(UnansweredEditError)
+      expect((caught as UnansweredEditError).why).toBe('lost')
     }
+  })
+
+  it('스스로 버린 연결은 까닭이 갈린다 — 판정은 같다', async () => {
+    const { channel } = attached()
+    const one = inFlight(channel, 'op_1', 4)
+
+    channel.abandonInFlight()
+
+    const caught = await one
+    expect(caught).toBeInstanceOf(UnansweredEditError)
+    expect((caught as UnansweredEditError).why).toBe('renewed')
   })
 
   it('연결을 떼도 같은 자리에서 끝난다', async () => {

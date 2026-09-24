@@ -36,11 +36,11 @@
  * 것과 같은 길이라 **두 번째 `'open'`이 다시 읽는다** — 버린 소켓과 새 소켓 사이의 프레임은 사라진다. **대가도
  * 끊긴 것과 같다** — 다시 읽기가 되돌리기 이력을 비우면 그렇다고 말한다(`routes/editor.tsx`의 `resyncNotice`).
  *
- * **옛 소켓으로 답을 기다리던 편집은 끊긴 것과 갈린다.** 그 소켓은 열려 있었으므로 편집은 **이미 서버에
- * 닿았다** — 끊김과 같게 끝내면(`failInFlight`) «편집 1개가 취소됐습니다» 를 내는데 서버는 그것을 커밋하고 새
- * 연결이 방송해 화면에도 선다(Chrome — 행 잠금으로 답을 붙잡아 재현한다). 믿고 다시 하면 두 번 선다. 그래서 버리기 전에 `abandonInFlight`로
- * «답을 못 받았다»로 끝내고, 편집 경로가 «반영됐는지 모른다 — 반영됐다면 곧 나타난다»를 말한다
- * (`edit/use-edit-commit.tsx`의 `unansweredNotice`). 반영됐으면 화면은 저절로 맞춰진다: 새 연결이 붙은 뒤의 커밋은
+ * **옛 소켓으로 답을 기다리던 편집은 «답을 못 받았다»로 끝난다.** 그 소켓은 열려 있었으므로 편집은 **이미 서버에
+ * 닿았다** — «취소됐다»고 하면 서버는 그것을 커밋하고 새 연결이 방송해 화면에도 선다(Chrome — 행 잠금으로 답을
+ * 붙잡아 재현한다). 믿고 다시 하면 두 번 선다. 끊긴 연결(`failInFlight`)도 같은 판정이고 까닭만 다르다 — 그래서 버리기
+ * 전에 `abandonInFlight`로 끝내 까닭(«다른 탭에서 다시 로그인해»)을 싣고, 편집 경로가 «반영됐는지 모른다»를 말한다
+ * (`edit/use-edit-commit.tsx`의 `unknownNotice` — 꼬리는 그때 실시간이 열려 있는지로 갈린다). 새 연결이 붙으면 화면은 저절로 맞춰진다: 붙은 뒤의 커밋은
  * 방송으로 오고(방송이 빼는 것은 보낸 연결 하나다 — 새 연결은 id 가 달라 안 빠진다, `apps/api/src/ws/broadcast.ts`의
  * `sentBy`), 그 전의 커밋은 두 번째 `'open'`의 다시 읽기가 가져온다.
  *
@@ -215,7 +215,7 @@ export function useRealtime(
     setup.channel?.attach(connection)
     setup.lockChannel?.attach(connection)
     // **쿠키가 바뀌면 다시 붙는다**(위 머리말 «쿠키가 바뀌면»). 답을 기다리던 편집은 **소켓을 버리기 전에**
-    // «답을 못 받았다»로 끝낸다 — 버린 뒤의 `'closed'`가 부르는 `failInFlight`는 끊김의 실패를 내므로, 먼저 비워
+    // 까닭(`'renewed'`)을 실어 끝낸다 — 버린 뒤의 `'closed'`가 부르는 `failInFlight`는 끊김의 까닭을 싣으므로, 먼저 비워
     // 두지 않으면 그것이 이긴다.
     const stopRenewal = onRenewal?.(() => {
       setup.channel?.abandonInFlight()

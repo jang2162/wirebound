@@ -75,6 +75,7 @@ import { structureBaseCss } from '@wirebound/renderer'
 import {
   compileTheme,
   resolveTheme,
+  themeIssue,
   type ResolvedTheme,
   type Theme,
   type ThemeIssue,
@@ -120,7 +121,8 @@ const NOTHING: ResolvedDraft = { resolved: null, issues: [], css: '' }
  * 생긴다 — `use-theme-css.ts`의 `CompiledCss.resolved`가 같은 이유로 셋을 함께 낸다.
  *
  * **던지지 않는다.** 해석이 실패해도 이슈를 실어 돌려준다 — 저작 UI에서 그것을 **보여 주는
- * 것이 자기 일**이기 때문이다(`theme-issues.tsx`의 머리말). 콘솔에 남기지도 않는다: 화면에 나오는 것을 콘솔에 또
+ * 것이 자기 일**이기 때문이다(`theme-issues.tsx`의 머리말). **해석이 호출 스택을 넘긴 것도 이슈다**(`RangeError` — 아래
+ * `TOO_DEEP`). 콘솔에 남기지도 않는다: 화면에 나오는 것을 콘솔에 또
  * 남기면 같은 사실을 두 번 말하게 된다(`use-theme-css.ts`의 `console.error`는 **보여 줄
  * 화면이 없는** 캔버스의 이야기다).
  *
@@ -131,12 +133,32 @@ const NOTHING: ResolvedDraft = { resolved: null, issues: [], css: '' }
 export function resolveDraft(draft: Theme | null, base: Theme | null): ResolvedDraft {
   if (draft === null) return NOTHING
 
-  const { theme, issues } = resolveTheme(draft, base ?? undefined)
-  if (theme === null) return { resolved: null, issues, css: '' }
+  try {
+    const { theme, issues } = resolveTheme(draft, base ?? undefined)
+    if (theme === null) return { resolved: null, issues, css: '' }
 
-  const resolved = theme as ResolvedTheme
-  return { resolved, issues, css: compileTheme(resolved) }
+    const resolved = theme as ResolvedTheme
+    return { resolved, issues, css: compileTheme(resolved) }
+  } catch (caught) {
+    // **호출 스택을 넘긴 것만 잡는다** — 그 밖의 던짐은 해석기의 결함이라 덮지 않는다.
+    if (!(caught instanceof RangeError)) throw caught
+    return { resolved: null, issues: [TOO_DEEP], css: '' }
+  }
 }
+
+/**
+ * **해석이 호출 스택을 넘겼을 때의 이슈.** 패턴 노드의 검증(zod)이 재귀라 한 줄로 깊이 이은 패턴이 스택을 넘기면
+ * `RangeError`가 난다 — 잡지 않으면 테마 편집 화면이 통째로 흰 화면이 된다(Chrome: `children` 하나씩으로 이은 `Flex` 깊이
+ * 1500 에서 body 가 빈다 — 넘는 깊이는 엔진 · 스택 크기에 따라 갈린다). **자리(`path`)를 모른다** — 스택을 넘긴 곳을
+ * 해석기가 알려 주지 않는다. 코드는 `bad-spec`(`error`)이다 — 해석되지 않은 초안이다. **같은 초안을 병합하는
+ * `token-editor.tsx`의 `effectiveTokens`도 같은 검증에서 넘긴다** — 둘 다 잡아야 화면이 산다(Chrome: 여기만 잡은 판은 깊이
+ * 1700 에서 그쪽이 던져 흰 화면이었다). 말하는 것은 이 이슈 하나다.
+ */
+const TOO_DEEP: ThemeIssue = themeIssue(
+  'bad-spec',
+  '',
+  '테마를 해석하지 못했습니다 — 중첩이 너무 깊습니다(패턴의 자식을 한 줄로 깊이 이었으면 줄이세요)',
+)
 
 /**
  * 초안 CSS를 `document.head`의 **갤러리 전용 시트**에 싣는다.

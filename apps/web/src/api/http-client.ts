@@ -1487,7 +1487,8 @@ export function createHttpClient(
         ...(options?.cancel === undefined ? {} : { cancel: options.cancel }),
         deadline: false,
       })
-      const type = response.headers.get('content-type') ?? ''
+      // **소문자로 견준다** — MIME 의 타입 이름은 대소문자를 안 가린다(RFC 9110 「Media Type」). 앞단이 바꿔 실어도 받는다.
+      const type = (response.headers.get('content-type') ?? '').toLowerCase()
       if (!EXPORT_FILE_TYPES.some((expected) => type.startsWith(expected))) {
         throw new ApiError(response.status, 'internal', UNREADABLE)
       }

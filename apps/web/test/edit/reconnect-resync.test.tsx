@@ -17,6 +17,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../../src/api/client'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
@@ -27,9 +28,11 @@ import {
   OTHER_PAGE_ID,
   OTHER_PAGE_TITLE,
   PAGE_ID,
+  PAGE_ROUTE,
   PROJECT_ID,
   PROJECT_NAME,
   PROJECT_ROUTE,
+  canvasFrame,
   openPage,
   pageDoc,
   pageDetail,
@@ -319,10 +322,20 @@ describe('다시 붙으면 다시 읽는다', () => {
    * 리베이스는 갭을 고치지 못하고(바탕이 서버 문서와 같아야 한다), 재조회는 오히려
    * 재연결마다 돈다. 그래서 문장을 낸다.
    */
-  it('되돌리기 이력이 있었으면 초기화됐다고 말한다', async () => {
+  /**
+   * 되돌리기 이력을 채운 채 연결을 한 번 끊었다 다시 붙인다. 재조회가 돌려주는 판은 `resyncSeq` · `resyncDoc`이다 — 처음
+   * 여는 조회는 `HEAD_SEQ` · `n-first`다.
+   */
+  async function reconnectWithUndo(resyncSeq: number, resyncDoc = doc('n-first')): Promise<ReturnType<typeof vi.fn>> {
     const sockets: FakeSocket[] = []
     const scheduled: (() => void)[] = []
-    const getPage = vi.fn(async (_projectId: string, pageId: string) => pageDetail(pageId, doc('n-first')))
+    let calls = 0
+    const getPage = vi.fn(async (_projectId: string, pageId: string) => {
+      calls += 1
+      return calls === 1
+        ? { ...pageDetail(pageId, doc('n-first')), headSeq: HEAD_SEQ }
+        : { ...pageDetail(pageId, resyncDoc), headSeq: resyncSeq }
+    })
     const setup: RealtimeSetup = {
       holder: createConnectionIdHolder(),
       channel: createEditChannel(),
@@ -377,10 +390,74 @@ describe('다시 붙으면 다시 읽는다', () => {
     act(() => {
       sockets[1]?.onopen?.()
     })
+    await waitFor(() => expect(getPage).toHaveBeenCalledTimes(2))
+    return getPage
+  }
+
+  it('되돌리기 이력이 있었으면 초기화됐다고 말한다 — 끊긴 동안 서버 판이 움직였다', async () => {
+    await reconnectWithUndo(HEAD_SEQ + 1)
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('되돌리기 이력이 초기화됐습니다')
     expect(alert.textContent).toContain('연결이 다시 붙어')
+  })
+
+  /**
+   * **서버 판이 그대로면 되돌리기 이력을 지킨다.** 같은 `headSeq`에 보내지 않은 편집이 없으면 내 문서가 곧 서버 문서라
+   * 스택의 `inverse`가 남의 편집을 덮을 길이 없다. 다시 붙기만 한 판이 흔하다 — 같은 사람이 다른 탭에서 다시 로그인하면
+   * 여기 온다(Chrome: 싣던 판은 «되돌리기 이력이 초기화됐습니다» · 되돌리기 꺼짐).
+   */
+  it('서버 판이 그대로면 되돌리기 이력을 지키고 아무 말도 안 한다', async () => {
+    await reconnectWithUndo(HEAD_SEQ)
+
+    // 재조회가 끝난 뒤의 판이다(`reconnectWithUndo`가 둘째 조회를 기다렸다) — 응답을 싣는 마이크로태스크까지 흘린다.
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: '되돌리기' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  /**
+   * **번호가 같아도 문서가 다르면 싣는다.** 끊긴 사이 페이지가 지워졌다가 스냅샷 복원으로 같은 id 로 되살아나면 `head_seq`가
+   * 0 부터 다시 세고, 남이 편집해 번호가 내 것과 같아질 수 있다 — 복원 방송은 끊긴 동안 와서 못 받았다. 번호만 보고 안
+   * 싣으면 옛 문서가 남고, 자리(index) 기반인 다음 편집이 남의 노드를 덮는다(Chrome — `store/editor-store.ts`의
+   * `holdsServerPage` 머리말). 위 케이스와 **번호가 같고 문서만 다르다.**
+   */
+  it('번호가 같아도 문서가 다르면 싣는다 — 끊긴 사이 지워졌다 되살아난 페이지', async () => {
+    await reconnectWithUndo(HEAD_SEQ, doc('n-revived'))
+
+    await waitForNode('n-revived')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('되돌리기 이력이 초기화됐습니다')
+  })
+})
+
+/**
+ * ## 여는 조회가 실패한 캔버스 — 다시 붙어 읽으면 되살아난다
+ *
+ * 여는 조회가 실패하면 캔버스는 실패 문장을 그린다. 그 뒤 재연결 재조회가 성공하면 스토어에 판이 실려 구조 트리 · 속성
+ * 패널은 문서를 그리는데, 캔버스만 실패 문장 그대로면 세 자리가 다른 사실을 말한다(Chrome: 여는 `GET` 에 503 을 심고 WS 를
+ * 끊었다 — 다시 붙은 뒤 트리에 Text 줄 1 · 캔버스는 실패 문장).
+ */
+describe('여는 조회가 실패한 캔버스', () => {
+  it('다시 붙어 읽으면 캔버스가 문서를 그린다', async () => {
+    let calls = 0
+    const getPage = vi.fn(async (_projectId: string, pageId: string) => {
+      calls += 1
+      if (calls === 1) throw new ApiError(503, 'internal', '잠깐 실패했습니다')
+      return pageDetail(pageId, doc('n-back'))
+    })
+    const wired = wiring()
+    renderEditor({ route: PAGE_ROUTE, realtime: wired.setup, apiOverrides: { getPage } })
+    await screen.findByRole('heading', { name: PROJECT_NAME })
+    await within(screen.getByRole('main', { name: '캔버스' })).findByText('잠깐 실패했습니다')
+
+    wired.open(0)
+    wired.drop(0)
+    wired.open(1)
+    // 다시 읽기가 돌았다 — 아래가 «재조회가 안 돌았다»로 빨강이 되지 않게 먼저 본다.
+    await waitFor(() => expect(getPage).toHaveBeenCalledTimes(2))
+
+    await waitFor(() => expect(canvasFrame().querySelector('[data-wb-id="n-back"]')).not.toBeNull())
   })
 })
 
@@ -419,10 +496,10 @@ describe('다른 탭이 같은 사람으로 다시 들어오면', () => {
  * ## 스스로 버린 소켓으로 답을 기다리던 편집 — «취소됐다» 고 말하지 않는다
  *
  * 위의 `reconnect()`는 **이 탭이 스스로** 옛 소켓을 버린다. 그 소켓은 열려 있었으므로 답을 기다리던 편집은 **이미
- * 서버에 닿았다** — 결과를 모를 뿐이다. 그것을 끊김과 같게 끝내면 «편집을 저장하지 못했습니다 — … 편집 1개가
- * 취소됐습니다» 를 내는데, 서버는 그 편집을 커밋하고 새 연결이 그것을 방송해 화면에도 선다(Chrome 에서 잰 고장 방식 —
+ * 서버에 닿았다** — 결과를 모를 뿐이다. 그것을 «편집을 저장하지 못했습니다 — … 편집 1개가
+ * 취소됐습니다» 로 말하면, 서버는 그 편집을 커밋하고 새 연결이 그것을 방송해 화면에도 선다(Chrome 에서 잰 고장 방식 —
  * 행 잠금 5s). 사용자가 그 문장을 믿고 다시 하면 **두 번 선다.** 문장은 `edit/use-edit-commit.tsx`의
- * `unansweredNotice`가 갖는다.
+ * `unknownNotice`가 갖는다.
  *
  * | 변조 | 죽는 것 |
  * |---|---|
@@ -430,6 +507,7 @@ describe('다른 탭이 같은 사람으로 다시 들어오면', () => {
  * | 취소한 수가 0 이어도 취소 문장을 붙인다 | 첫째 **혼자** |
  * | 아직 안 보낸 편집의 취소를 말하지 않는다 | 둘째 **혼자** |
  * | 다시 불러오지도 못한 판이 «저장되지 않았습니다» 로 끝난다 | 셋째 **혼자** |
+ * | 실시간이 다시 열려 있어도 «새로고침해 확인하세요»(`unknownNotice`의 `live`를 늘 거짓으로) | 첫째 **혼자** |
  */
 describe('스스로 버린 소켓으로 답을 기다리던 편집', () => {
   /** «아래로»·«위로»가 설 형제 둘. 트리의 줄 이름이 타입이라 둘의 타입이 달라야 한다. */
@@ -477,12 +555,27 @@ describe('스스로 버린 소켓으로 답을 기다리던 편집', () => {
 
   const sameUser = { kind: 'signed-in' as const, user: { id: 'u-1', email: 'me@example.com', name: '테스터' } }
 
+  /**
+   * 새 소켓이 **다시 불러오기가 끝나기 전에** 열린다 — 그러면 뒤늦은 커밋은 방송으로 화면에 서므로 «곧 화면에 나타납니다»가
+   * 참이다. 실시간이 닫힌 채 내는 문장은 `test/edit/ws-transport.test.tsx`의 «결과를 모르는 실패» 표가 잰다.
+   */
   it('답을 기다리던 편집은 반영됐는지 모른다고 말한다 — 취소됐다고 하지 않는다', async () => {
-    const { wired, hub } = await inFlight(async () => pageDetail(PAGE_ID, pair()))
+    let release = (): void => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { wired, hub } = await inFlight(async () => {
+      await held
+      return pageDetail(PAGE_ID, pair())
+    })
 
     await hub.fromOtherTab(sameUser)
-
     expect(wired.sockets[0]?.closed).toBe(true)
+    wired.open(1)
+    await act(async () => {
+      release()
+    })
+
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe(
       '다른 탭에서 다시 로그인해 실시간 연결을 새로 붙이느라 보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 ' +

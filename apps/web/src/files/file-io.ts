@@ -1,10 +1,10 @@
 /**
- * 브라우저로 **파일을 내려받고 읽는** 두 함수. 무엇을 나르는지 모른다 —
+ * 브라우저로 **파일을 내려받고 읽는** 함수들. 무엇을 나르는지 모른다 —
  * 글자와 파일만 안다. 순수 층(`theme/theme-io.ts` · `packages/schema`의 페이지 봉투)과
  * 화면 사이에 이 파일이 있는 이유는 **여기만 브라우저 API에 매여 있기** 때문이다.
  *
- * **`theme/`이 아니라 `files/`에 둔다.** 소비자가 둘이다 — 테마 가져오기·내보내기와
- * **페이지 JSON**(설계서 「페이지 JSON」)이다. 이 파일은 테마를 모르므로 둘이 같이 쓰고, 두
+ * **`theme/`이 아니라 `files/`에 둔다.** 소비자가 셋이다 — 테마 가져오기·내보내기 · **페이지 JSON**(설계서
+ * 「페이지 JSON」) · 내보내기 번들(`shell/export-panel.tsx`)이다. 이 파일은 테마를 모르므로 둘이 같이 쓰고, 두
  * 벌을 만들지 않는다. `theme/` 아래 두고 페이지 화면이 그것을 import하면 자리가 뜻을 잃는다.
  *
  * **새 런타임 의존을 더하지 않는다**(사용자가 정한 제약이다). `Blob` +
@@ -40,27 +40,40 @@
 const JSON_MIME = 'application/json'
 
 /**
- * 글자 한 벌을 파일로 내려받는다.
- *
- * **`<a download>`를 만들고 눌렀다가 버린다.** 화면에 남기지 않는 것은 이 조작이
- * *"버튼을 눌렀다"*의 결과이지 화면의 일부가 아니기 때문이다 — 남기면 두 번째 내보내기에서
- * 앵커가 둘이 된다.
- *
- * **`revokeObjectURL`을 반드시 부른다.** 안 부르면 그 Blob이 문서가 사는 동안 메모리에
- * 남는다. 브라우저가 내려받기를 **동기적으로 시작하므로**(클릭 핸들러 안에서 URL을 이미
- * 읽었다) 곧바로 revoke해도 안전하다.
+ * 글자 한 벌을 파일로 내려받는다(`saveBlob`).
  */
 export function downloadTextFile(fileName: string, text: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: JSON_MIME }))
+  saveBlob(new Blob([text], { type: JSON_MIME }), fileName)
+}
+
+/**
+ * 바이트를 파일로 저장한다 — **브라우저에 파일을 내려주는 자리는 이 함수 하나다**(테마 · 페이지 JSON 의 글자와 내보내기
+ * 번들이 함께 지난다). 임시 `<a download>`에 blob 주소를 걸어 누르고 버린다 — 화면에 남기지 않는 것은 이 조작이
+ * *"버튼을 눌렀다"*의 결과이지 화면의 일부가 아니기 때문이다(남기면 두 번째 저장에서 앵커가 둘이 된다).
+ *
+ * **주소는 누른 뒤 곧바로 놓지 않고 `BLOB_URL_LIFETIME_MS` 뒤에 놓는다.** `click()`은 내려받기를 시작만 하고 돌아온다.
+ * Chrome 은 곧바로 놓아도 온전히 저장했다(독립 헤드리스 Chrome · 3MB · 100MB × 새 컨텍스트 5번씩 · 곧바로 · 60s 뒤 둘 다
+ * 5/5 — 저장된 크기가 보낸 크기와 같다). Firefox · Safari 는 이 기계에서 못 쟀다 — 곧바로 놓아 잃는 것은 **파일**이고
+ * 늦게 놓아 잃는 것은 그동안의 **메모리**(보낸 크기만큼)뿐이라 늦게 놓는다. 다시 재는 법: 페이지에서 크기별 blob 을 이
+ * 방식으로 누르고 곧바로 / 늦게 놓아 Playwright 의 `download` 로 저장된 크기를 본다.
+ *
+ * **놓기는 반드시 한다.** 안 놓으면 그 blob 이 문서가 사는 동안 메모리에 남는다.
+ */
+export function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = fileName
+  anchor.style.display = 'none'
   // **`body`에 붙였다 뗀다.** 붙지 않은 노드의 클릭을 무시하는 브라우저가 있다.
   document.body.append(anchor)
   anchor.click()
   anchor.remove()
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_LIFETIME_MS)
 }
+
+/** 저장에 건 blob 주소를 놓기까지(ms) — `saveBlob`. */
+export const BLOB_URL_LIFETIME_MS = 60_000
 
 /**
  * 고른 파일의 글자를 읽는다.

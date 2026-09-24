@@ -112,12 +112,13 @@
  * > 이미 되돌아간 상태 위에 안전망 스냅샷이 하나 더 쌓이고, **스냅샷은 지울 수 없다**(「스냅샷」).
  * > 같은 `onSaved`·`reloadFailure` 경로를 타므로 분기를 새로 만들지 않는다.
  */
-import { useEffect, useState, type FormEvent, type ReactElement } from 'react'
+import { useEffect, useState, type FormEvent, type ReactElement, type RefObject } from 'react'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ProjectDetail, RestoreResult, SnapshotSummary } from '../api/types'
 import { projectAbilities } from '../projects/project-actions'
 import { usePopoverDismiss } from './use-popover-dismiss'
+import { usePopoverSide, type PopoverPlacement } from './use-popover-side'
 
 /** 조회가 이유 없이 실패했을 때. 셸·테마 화면과 다른 문장이다 — 무엇을 못 불러왔는지가 다르다. */
 const UNKNOWN_FAILURE = '스냅샷을 불러오지 못했습니다'
@@ -179,6 +180,8 @@ export function SnapshotsPanel(props: {
   const [open, setOpen] = useState(false)
   /** **토글까지 감싸는 상자에 건다** — 그 배치가 훅의 계약이다(`use-popover-dismiss.ts`). */
   const rootRef = usePopoverDismiss(open, () => setOpen(false))
+  /** 머리가 접혀 상자가 화면 밖으로 나가면 붙일 쪽을 바꾸거나 끌어온다(`use-popover-side.ts`). */
+  const { placement, bodyRef } = usePopoverSide(rootRef, open)
 
   return (
     <div className="wb-shell-snapshots" ref={rootRef}>
@@ -190,13 +193,21 @@ export function SnapshotsPanel(props: {
       >
         스냅샷
       </button>
-      {open && <SnapshotsBody projectId={props.projectId} onRestored={props.onRestored} />}
+      {open && (
+        <SnapshotsBody projectId={props.projectId} onRestored={props.onRestored} placement={placement} bodyRef={bodyRef} />
+      )}
     </div>
   )
 }
 
 /** 조회와 그 실패를 든다. 열려 있는 동안만 산다 — 마운트가 곧 조회다(위 머리말). */
-function SnapshotsBody(props: { projectId: string; onRestored: () => void }): ReactElement {
+function SnapshotsBody(props: {
+  projectId: string
+  onRestored: () => void
+  /** 붙일 자리와 잴 상자 — 토글을 감싼 쪽이 고른다(`use-popover-side.ts`). */
+  placement: PopoverPlacement
+  bodyRef: RefObject<HTMLDivElement | null>
+}): ReactElement {
   const { projectId } = props
   const api = useApi()
   const [state, setState] = useState<LoadState>({ status: 'loading' })
@@ -259,7 +270,14 @@ function SnapshotsBody(props: { projectId: string; onRestored: () => void }): Re
    * 이름은 토글 버튼의 글자가 나른다.
    */
   return (
-    <div className="wb-shell-snapshots-body" role="group" aria-label="스냅샷">
+    <div
+      className="wb-shell-snapshots-body"
+      role="group"
+      aria-label="스냅샷"
+      ref={props.bodyRef}
+      data-side={props.placement.side}
+      style={props.placement.style}
+    >
       {state.status === 'loading' && <p role="status">불러오는 중…</p>}
       {state.status === 'failed' &&
         // 세션이 끊겼으면 오류가 아니라 로그인이다(`api/failure.tsx`). 셸·테마 화면과 같은 판정이다.

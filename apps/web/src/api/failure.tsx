@@ -49,6 +49,20 @@ export function toFailure(caught: unknown, unknownMessage: string): Failure {
 }
 
 /**
+ * 쓰기 요청 하나의 실패가 **그 요청이 커밋되지 않았다고 확정하는** 실패인가. 거짓이면 결과를 모른다 — 요청이 서버에 닿아
+ * 커밋됐을 수 있다(연결 실패 · 502·503·504 · 봉투 없는 500).
+ *
+ * **쓰기의 «모름» 판정은 이 함수 하나다** — 코멘트 게시의 첫 보내기(`panels/comment-panel.tsx`의 `knownRejection` 표의
+ * `'sent'` 칸 — 줄마다의 까닭은 그 표가 소유한다)와 편집 전송의 실패(`edit/use-edit-commit.tsx`의 `recover`)가 함께
+ * 부른다. 따로 가르면 같은 실패를 한쪽은 «안 됐다», 다른 쪽은 «모른다»로 말한다.
+ */
+export function refusedBeforeCommit(caught: unknown): boolean {
+  if (!(caught instanceof ApiError)) return false
+  if (caught.status >= 400 && caught.status < 500) return true
+  return caught.status === 500 && caught.enveloped
+}
+
+/**
  * `ApiError` 하나를 사용자에게 보일 한 문장으로. **`issues`가 있으면 그것이 이유다.**
  *
  * **왜 봉투(`error.message`)만으로는 안 되는가.** 서버는 무엇이 왜 틀렸는지를

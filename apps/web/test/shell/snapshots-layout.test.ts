@@ -46,33 +46,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import shellCss from '../../src/shell.css?raw'
+import { classDeclarations } from '../shell-css-guard'
 
 /**
- * 규칙 하나의 선언들. **주석을 먼저 걷는다** — 이 파일의 CSS 주석이 클래스 이름을 그대로
- * 적고 있어서 안 걷으면 주석 안의 문장이 규칙으로 잡힌다.
- *
- * **이 함수가 따로 있을 근거는 없다.** `shell-css-guard.ts`의 `classDeclarations`가
- * **선언을 내준다**(고르개 감싸기 검사가 그것을 쓴다) — 이 함수는 아직 그쪽으로 안 옮겼을
- * 뿐이다. 옮길 때 볼 차이는 둘뿐이고 둘 다 작다:
- *
- * ㉠ **없는 클래스에 `{}`가 아니라 `undefined`를 낸다** — 아래 카나리아가 `{}` 형태에 기댄다.
- * ㉡ **같은 클래스에 규칙이 둘일 때 이쪽은 첫 매치를, 그쪽은 마지막을 쓴다**(캐스케이드는
- *    그쪽이 맞다). 지금 이 파일이 보는 클래스에 단독 규칙이 둘인 것은 없어 결과가 갈리지 않는다.
- *
- * **다음에 이 파일을 만지는 사람이 옮겨라.** 여기 남을 이유가 있어서 남은 것이 아니다.
+ * 규칙 하나의 선언들 — `shell-css-guard.ts`의 `classDeclarations`(주석을 걷고 `.x` 하나뿐인 선택자만 담는다 · 같은 클래스에
+ * 규칙이 둘이면 뒤의 것 — 캐스케이드와 같다). 없는 클래스는 빈 객체다 — 아래 카나리아가 그 모양에 기댄다.
  */
 function declarations(css: string, className: string): Record<string, string> {
-  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, ' ')
-  const match = new RegExp(`\\.${className}\\s*\\{([^}]*)\\}`).exec(withoutComments)
-  if (match?.[1] === undefined) return {}
-
-  const out: Record<string, string> = {}
-  for (const line of match[1].split(';')) {
-    const at = line.indexOf(':')
-    if (at === -1) continue
-    out[line.slice(0, at).trim()] = line.slice(at + 1).trim()
-  }
-  return out
+  return Object.fromEntries(classDeclarations(css).get(className) ?? [])
 }
 
 /**

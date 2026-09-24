@@ -317,6 +317,26 @@ describe('TokenEditor', () => {
     )
   })
 
+  /**
+   * **병합 결과의 검사가 호출 스택을 넘겨도 던지지 않는다 — 자기 절만 보인다.** 파생 초안에 패턴을 한 줄로 깊이 이으면
+   * 병합이 결과를 `ThemeSchema`로 검사하다 `RangeError`를 낸다 — 잡지 않으면 테마 편집 화면째 흰 화면이다(Chrome:
+   * `resolveDraft`를 잡은 뒤에도 이 자리가 던졌다). 그 사실을 말하는 것은 이슈 패널이다(`resolveDraft`의 `TOO_DEEP`).
+   */
+  it('파생 초안의 병합이 스택을 넘기면 자기 절만 보인다 — 던지지 않는다', () => {
+    const base = systemTheme('admin') as Theme
+    let node: Record<string, unknown> = { type: 'Text', props: { content: '잎' } }
+    for (let i = 0; i < 20000; i += 1) node = { type: 'Flex', children: [node] }
+    const draft = {
+      ...theme(
+        { palette: { brand: '#010203' } },
+        { meta: { id: 'brand', name: '브랜드', version: '1.0.0', extends: 'system:admin' } },
+      ),
+      patterns: { 'content.deep': { name: '깊은 패턴', schema: node } },
+    } as unknown as Theme
+
+    expect(effectiveTokens(draft, base)).toEqual({ palette: { brand: '#010203' } })
+  })
+
   /* ── 스케일 에디터 — 파생을 보인다 ───────────────────────────────────────── */
 
   it('space.unit 하나가 space.1~space.24를 낳는 것을 보인다', () => {

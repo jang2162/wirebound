@@ -73,7 +73,7 @@ const NO_MARKERS: MarkerBox[] = []
 /**
  * 상호작용 런타임이 캔버스에 남기는 상태.
  *
- * `key`는 **리셋 축**이다 — `{모드}:{페이지}`. 근거는 `Canvas` 안의 `runtimeKey` 주석.
+ * `key`는 **리셋 축**이다 — `{모드}:{페이지}:{문서를 실은 횟수}`. 근거는 `Canvas` 안의 `runtimeKey` 주석.
  */
 interface RuntimeState {
   key: string
@@ -170,6 +170,7 @@ export function Canvas(props: {
   const doc = useOpenDocument(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const mode = useEditorStore(store, (s) => s.mode)
+  const documentLoads = useEditorStore(store, (s) => s.documentLoads)
   const zoom = useEditorStore(store, (s) => s.zoom)
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
 
@@ -187,18 +188,25 @@ export function Canvas(props: {
    * `openPageId`가 닫는 것과 같은 창이다(`routes/editor.tsx`의 `CanvasFrame`
    * 주석). 렌더 중에 키를 대조하면 그 창이 없다.
    *
-   * **리셋의 축을 둘로 둔 근거:** 모드는 「실행」이 정한 경계이고(편집 모드에서는 안 돈다),
+   * **리셋의 축이 셋이다.** 모드는 「실행」이 정한 경계이고(편집 모드에서는 안 돈다),
    * 페이지는 노드 id의 유효 범위다 — 겹layer의 키가 노드 id라 다른 페이지에서는 뜻이 없다.
-   * **문서가 바뀌는 것은 축이 아니다.** 뷰 모드에서 사용자는 편집하지 않는다 — 되돌리기·
+   * **문서를 통째로 실은 것**(스토어의 `documentLoads` — 복원 · 재연결 재조회)도 축이다 — 겹layer는
+   * 옛 문서 위의 시연이다. 복원은 같은 id 의 노드를 되살리므로 페이지 축만으로는 옛 시연이 새 문서에 얹힌다
+   * (Chrome: 뷰 모드에서 버튼으로 글을 숨긴 뒤 스냅샷으로 복원하면 되살아난 글이 숨은 채였고, 모드를 오가야 보였다).
+   *
+   * **문서를 고쳐 가는 것은 축이 아니다.** 뷰 모드에서 사용자는 편집하지 않는다 — 되돌리기·
    * 다시 실행을 포함한 편집 도구는 편집 모드에만 있다(`routes/editor.tsx`). 뷰 모드에 편집
    * 도구가 하나라도 살아 있으면 이 전제가 깨진다. 코멘트가 바꾸는 것은 `marker`뿐이라
-   * 겹layer가 덮는 값과 겹치지 않는다.
+   * 겹layer가 덮는 값과 겹치지 않는다. **남의 편집은 실시간으로 온다**(WS 편집 채널 — `main.tsx`의
+   * `createEditChannel`) — 그 편집이 문서를 고쳐도 겹layer는 남는다. 편집 하나로 시연을 버리면 남이 글자 하나 고칠
+   * 때마다 보던 시연이 사라진다.
    *
-   * **남의 편집은 실시간으로 온다**(WS 편집 채널 — `main.tsx`의 `createEditChannel`). 그
-   * 편집이 문서를 바꿔도 이 키는 그대로라 겹layer가 남는다 — 문서 동일성을 축에 넣을지는
-   * 정하지 않은 물음이다.
+   * **실시간으로 온 남의 편집은 축이 아니다 · 끊긴 사이를 따라잡는 재조회는 축이다.** 재조회는 판을 통째로 싣는다
+   * (`loadPage`) — 끊긴 사이 무엇이 바뀌었는지(편집 몇 개인지, 복원으로 판이 갈렸는지) 모른 채 서버 판으로 갈아 끼우므로
+   * 시연도 새로 시작한다. 그래서 같은 남의 편집이 실시간으로 오면 시연이 남고 끊긴 사이 오면 사라진다 — 받아들인 대가다.
+   * 서버 판이 그대로면 재조회가 싣지 않아 시연도 남는다(`routes/editor.tsx`의 재연결 이펙트 — `holdsServerPage`).
    */
-  const runtimeKey = `${mode}:${props.pageId ?? ''}`
+  const runtimeKey = `${mode}:${props.pageId ?? ''}:${documentLoads}`
   const [runtime, setRuntime] = useState<RuntimeState>(() => emptyRuntime(runtimeKey))
   // **버리는 것까지 해야 리셋이다.** 아래 `live`처럼 렌더 중에 대조만 하고 상태를
   // 그대로 두면 **키가 되돌아오는 축이라 안 닫힌다** — 뷰 → 편집 → 뷰로 오가면 키가 다시
