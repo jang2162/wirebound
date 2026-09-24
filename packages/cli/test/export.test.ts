@@ -8,8 +8,14 @@
 import { describe, expect, it } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
 import { EXIT } from '../src/exit'
+import {
+  EXPORT_BUSY_RETRIES,
+  EXPORT_BUSY_WAIT_LIMIT_S,
+  SCREENLESS_HEADER,
+  SCREEN_FAILURES_HEADER,
+} from '../src/commands/export'
 import { run } from '../src/run'
-import { createFakeIo, stub, type FakeIo } from './fake-io'
+import { createFakeIo, stub, type FakeIo, type StubResponse } from './fake-io'
 import { BUNDLE_FILES, BUNDLE_ROOT, bundleZip, singleFileZip } from './bundle-fixture'
 
 const SERVER = 'https://wb.example.com'
@@ -390,5 +396,107 @@ describe('--format pptx 는 파일 하나다', () => {
     const io = pptx준비()
     expect(await run(['export', '--format', 'pptx'], io)).toBe(EXIT.usage)
     expect(io.stderr.join('\n')).toContain('pptx')
+  })
+})
+
+/* ------------------------------------------------------------------- 밀려 있을 때 · 빠진 화면 */
+
+const BUSY: StubResponse = {
+  status: 503,
+  headers: { 'retry-after': '5' },
+  body: { error: { code: 'internal', message: '내보내기가 밀려 있습니다 — 잠시 뒤 다시 시도하세요' } },
+}
+
+/** 처음 `busyCount`번은 `busy`를, 그 뒤로는 `ok`를 낸다. */
+function 차례로(busyCount: number, busy: StubResponse, ok: StubResponse): () => StubResponse {
+  let seen = 0
+  return () => (seen++ < busyCount ? busy : ok)
+}
+
+describe('밀려 있으면 Retry-After 를 따라 다시 보낸다', () => {
+  it('503 + Retry-After 면 그 초만큼 쉬고 다시 보내 쓴다 — 기다릴 때마다 한 줄을 적는다', async () => {
+    const io = 준비()
+    stub(io, 'GET', `/api/projects/${PROJECT}/export?format=html`, 차례로(2, BUSY, { status: 200, bytes: bundleZip() }))
+
+    expect(await run(['export', '-o', 'dist'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.requests).toHaveLength(3)
+    expect(io.sleeps).toEqual([5000, 5000])
+    expect(io.stderr).toHaveLength(2)
+    expect(io.stderr[0]).toContain('내보내기가 밀려 있습니다')
+    expect(io.stderr[0]).toContain('5초 뒤 다시 보냅니다 (1/3)')
+    expect(쓴것(io)).toContain('/repo/dist/index.html')
+  })
+
+  it(`${EXPORT_BUSY_RETRIES}번 다시 보내도 밀려 있으면 마지막 거절을 그대로 낸다 — 코드 3`, async () => {
+    const io = 준비()
+    stub(io, 'GET', `/api/projects/${PROJECT}/export?format=html`, BUSY)
+
+    expect(await run(['export', '-o', 'dist'], io)).toBe(EXIT.server)
+    expect(io.requests).toHaveLength(EXPORT_BUSY_RETRIES + 1)
+    expect(io.sleeps).toEqual(Array.from({ length: EXPORT_BUSY_RETRIES }, () => 5000))
+    expect(io.stderr.at(-1)).toContain('서버가 거절했습니다 (503): 내보내기가 밀려 있습니다')
+    expect(쓴것(io)).toEqual([])
+  })
+
+  it('Retry-After 가 없는 503 은 다시 보내지 않는다 — 서버가 «언제»를 말하지 않았다', async () => {
+    const io = 준비()
+    stub(io, 'GET', `/api/projects/${PROJECT}/export?format=html`, { ...BUSY, headers: {} })
+
+    expect(await run(['export', '-o', 'dist'], io)).toBe(EXIT.server)
+    expect(io.requests).toHaveLength(1)
+    expect(io.sleeps).toEqual([])
+  })
+
+  it(`${EXPORT_BUSY_WAIT_LIMIT_S}초보다 긴 Retry-After 는 따르지 않는다 · 503 이 아닌 거절도 다시 보내지 않는다`, async () => {
+    const long = 준비()
+    stub(long, 'GET', `/api/projects/${PROJECT}/export?format=html`, { ...BUSY, headers: { 'retry-after': String(EXPORT_BUSY_WAIT_LIMIT_S + 1) } })
+    expect(await run(['export', '-o', 'dist'], long)).toBe(EXIT.server)
+    expect(long.requests).toHaveLength(1)
+
+    const conflict = 준비()
+    stub(conflict, 'GET', `/api/projects/${PROJECT}/export?format=html`, {
+      status: 409,
+      headers: { 'retry-after': '5' },
+      body: { error: { code: 'conflict', message: '내보낼 페이지가 없습니다' } },
+    })
+    expect(await run(['export', '-o', 'dist'], conflict)).toBe(EXIT.server)
+    expect(conflict.requests).toHaveLength(1)
+  })
+})
+
+describe('--format pptx 가 빠진 화면을 말한다', () => {
+  function 화면(headers: Record<string, string>): FakeIo {
+    const io = pptx준비()
+    stub(io, 'GET', `/api/projects/${PROJECT}/export?format=pptx`, {
+      status: 200,
+      bytes: PPTX_BYTES,
+      headers: { 'content-disposition': 'attachment; filename="wirebound-export-foo.pptx"', ...headers },
+    })
+    return io
+  }
+
+  it('그리려다 실패한 장이 있으면 파일은 쓰고 표준에러에 경고한다 — 코드는 0 이다', async () => {
+    const io = 화면({ [SCREEN_FAILURES_HEADER]: '3', [SCREENLESS_HEADER]: '0' })
+    expect(await run(['export', '--format', 'pptx', '-o', 'dist'], io)).toBe(EXIT.ok)
+    expect(쓴것(io)).toEqual(['/repo/dist/wirebound-export-foo.pptx'])
+    expect(io.stderr).toEqual([
+      '경고: 화면 이미지 3장을 그리지 못해 그 슬라이드에는 글자만 실렸습니다. 이유는 웹의 내보내기 창에서 PPTX 를 고르면 보입니다',
+    ])
+  })
+
+  it('아무도 안 그린 장이 있으면 그것도 말한다', async () => {
+    const io = 화면({ [SCREEN_FAILURES_HEADER]: '0', [SCREENLESS_HEADER]: '2' })
+    expect(await run(['export', '--format', 'pptx', '-o', 'dist'], io)).toBe(EXIT.ok)
+    expect(io.stderr).toEqual(['경고: 서버가 화면 이미지를 그리지 않아 2장이 글자만 실렸습니다'])
+  })
+
+  it('둘 다 0 이거나 머리가 없으면(그 머리를 모르는 서버) 아무 말도 하지 않는다', async () => {
+    const zero = 화면({ [SCREEN_FAILURES_HEADER]: '0', [SCREENLESS_HEADER]: '0' })
+    expect(await run(['export', '--format', 'pptx', '-o', 'dist'], zero)).toBe(EXIT.ok)
+    expect(zero.stderr).toEqual([])
+
+    const old = 화면({})
+    expect(await run(['export', '--format', 'pptx', '-o', 'dist'], old)).toBe(EXIT.ok)
+    expect(old.stderr).toEqual([])
   })
 })

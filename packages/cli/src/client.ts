@@ -90,6 +90,8 @@ export interface ApiBytesResponse {
    * 이름이 필요 없다. 쓰는 것은 pptx처럼 **파일 하나로 떨어지는** 형식이다.
    */
   fileName: string | null
+  /** 응답 머리 하나. 없으면 `null`. `wireb export --format pptx`가 화면 이미지의 수를 읽는다. */
+  header(name: string): string | null
 }
 
 /**
@@ -99,7 +101,7 @@ export interface ApiBytesResponse {
 export async function callApi(io: Io, server: string, request: ApiRequest): Promise<ApiResponse> {
   const { url, response } = await send(io, server, request)
   const text = await response.text()
-  assertOk(response.status, text, request, url)
+  assertOk(response, text, request, url)
   return { status: response.status, text, setCookie: response.headers.getSetCookie() }
 }
 
@@ -117,12 +119,13 @@ export async function callApiBytes(
 ): Promise<ApiBytesResponse> {
   const { url, response } = await send(io, server, request)
   if (response.status < 200 || response.status >= 300) {
-    assertOk(response.status, await response.text(), request, url)
+    assertOk(response, await response.text(), request, url)
   }
   return {
     status: response.status,
     bytes: await response.bytes(),
     fileName: dispositionFileName(response.headers.get('content-disposition')),
+    header: (name) => response.headers.get(name),
   }
 }
 
@@ -175,11 +178,23 @@ async function send(
   }
 }
 
-function assertOk(status: number, text: string, request: ApiRequest, url: string): void {
+function assertOk(response: HttpResponse, text: string, request: ApiRequest, url: string): void {
+  const status = response.status
   if (status < 200 || status >= 300) {
     // **상태 코드를 값으로도 나른다**(`CliError.status`의 머리말). 문장은 그대로다.
-    throw new CliError(EXIT.server, `${serverMessage(text, status)} (${request.method} ${url})`, status)
+    throw new CliError(
+      EXIT.server,
+      `${serverMessage(text, status)} (${request.method} ${url})`,
+      status,
+      retryAfterSeconds(response.headers.get('retry-after')),
+    )
   }
+}
+
+/** `Retry-After`의 초. 음이 아닌 정수만 읽는다 — 날짜 꼴과 깨진 값은 `undefined`(`CliError.retryAfterSeconds`). */
+function retryAfterSeconds(header: string | null): number | undefined {
+  if (header === null || !/^\d+$/.test(header.trim())) return undefined
+  return Number(header.trim())
 }
 
 /**

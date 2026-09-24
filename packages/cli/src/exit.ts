@@ -82,11 +82,18 @@ export class CliError extends Error {
    */
   readonly status: number | undefined
 
-  constructor(code: ExitCode, message: string, status?: number) {
+  /**
+   * 서버가 거절하며 준 `Retry-After`(초). 없거나 초가 아니면 `undefined`다. `wireb export`가 이것을 따라 다시 보낸다
+   * (`commands/export.ts`의 «밀려 있으면 몇 번 다시 보낸다»). **HTTP 날짜 꼴은 안 읽는다** — 우리 서버는 초만 쓴다.
+   */
+  readonly retryAfterSeconds: number | undefined
+
+  constructor(code: ExitCode, message: string, status?: number, retryAfterSeconds?: number) {
     super(message)
     this.name = 'CliError'
     this.code = code
     this.status = status
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 

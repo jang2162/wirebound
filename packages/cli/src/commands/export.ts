@@ -41,6 +41,24 @@
  * 경로가 든 항목 하나면 `-o` 바깥이 덮인다. **거부하고 멈춘다** — 걸러 내고 나머지를 풀면
  * 사람은 *"다 풀렸다"*고 읽는다.
  *
+ * # 밀려 있으면 몇 번 다시 보낸다
+ *
+ * 서버의 내보내기는 떠 있는 수가 묶여 있어 넘으면 503 + `Retry-After`로 **일을 받지 않는다**(`apps/api` README 「에러 형식」).
+ * 읽기뿐이라 다시 보내도 안전하다. 그래서 그 머리가 있는 503 이면 **그 초만큼 쉬고 다시 보낸다** — `EXPORT_BUSY_RETRIES`
+ * 번까지. 넘으면 마지막 거절을 그대로 낸다(코드 3). 기다릴 때마다 표준에러에 한 줄을 적는다 — 조용히 멈춘 것처럼 보이지 않게.
+ *
+ * - **`Retry-After`가 없는 503 은 다시 보내지 않는다.** DB 에 닿지 못한 503 은 머리가 없다 — 서버가 «언제»를 말하지 않은
+ *   거절을 기계가 두드리지 않는다.
+ * - **`EXPORT_BUSY_WAIT_LIMIT_S`보다 긴 `Retry-After`는 따르지 않는다** — 그만큼 조용히 서 있는 명령은 멈춘 것과 같다.
+ *
+ * # 그림이 빠진 pptx 를 조용히 쓰지 않는다
+ *
+ * pptx 의 화면 이미지는 서버가 브라우저로 그린다. 브라우저가 없거나 글꼴이 없으면 파일은 200 으로 나오고 그 슬라이드에는 글자만
+ * 실린다 — **이유는 미리보기가 말하는데 이 명령은 미리보기를 안 부른다**(부르면 서버가 같은 판정으로 한 번 더 그린다). 그래서
+ * 서버가 파일 응답의 머리에 수를 싣고(`SCREEN_FAILURES_HEADER` · `SCREENLESS_HEADER` — `apps/api`의 `routes/export.ts`에 같은
+ * 글자가 있다) 이 명령이 그것을 **경고로** 말한다. 파일은 그대로 쓰고 코드도 0 이다 — 쓴 것은 쓸 만한 pptx 이고, 사람이 알아야
+ * 할 것은 무엇이 빠졌는지다.
+ *
  * # 이미 있는 파일을 덮지 않는다
  *
  * `-o`를 지난 실행의 자리로 다시 겨누는 것은 흔한데, **덮어쓰기는 되돌릴 수 없다.**
@@ -57,8 +75,8 @@
  * 파일의 바이트는 건드리지 않는다.
  */
 import { strFromU8, unzipSync } from 'fflate'
-import { callApiBytes } from '../client'
-import { EXIT, serverError, usageError } from '../exit'
+import { callApiBytes, type ApiBytesResponse, type ApiRequest } from '../client'
+import { CliError, EXIT, serverError, usageError } from '../exit'
 import type { Io } from '../io'
 import { join, resolveFrom } from '../paths'
 import { requireProject } from '../project'
@@ -87,6 +105,16 @@ export interface ExportOptions {
 /** 이미 있는 파일을 몇 개까지 이름으로 보일지. */
 const CONFLICT_LIMIT = 5
 
+/** 밀려 있다는 503 에 몇 번 다시 보내나 — 머리말 «밀려 있으면 몇 번 다시 보낸다». */
+export const EXPORT_BUSY_RETRIES = 3
+
+/** 이보다 긴 `Retry-After`는 따르지 않는다(초) — 같은 절. */
+export const EXPORT_BUSY_WAIT_LIMIT_S = 60
+
+/** pptx 파일 응답의 머리 — 머리말 «그림이 빠진 pptx 를 조용히 쓰지 않는다». */
+export const SCREEN_FAILURES_HEADER = 'x-wb-screen-failures'
+export const SCREENLESS_HEADER = 'x-wb-screenless'
+
 export async function runExport(io: Io, options: ExportOptions): Promise<number> {
   const format = options.format ?? EXPORT_FORMATS[0]
   if (!(EXPORT_FORMATS as readonly string[]).includes(format)) {
@@ -97,7 +125,7 @@ export async function runExport(io: Io, options: ExportOptions): Promise<number>
   }
 
   const access = await requireProject(io)
-  const response = await callApiBytes(io, access.binding.server, {
+  const response = await fetchExport(io, access.binding.server, {
     method: 'GET',
     // **형식을 그대로 싣는다.** 서버가 아는 값이 아니면 그쪽이 400을 내고 그 문장이 나온다.
     path: `/api/projects/${access.binding.projectId}/export?format=${format}`,
@@ -148,7 +176,41 @@ export async function runExport(io: Io, options: ExportOptions): Promise<number>
   }
 
   io.out(`${target} 에 ${files.length}개 파일을 썼습니다`)
+  if (format === 'pptx') warnMissingScreens(io, response)
   return EXIT.ok
+}
+
+/** 내보내기를 받는다 — 밀려 있다는 503 이면 머리말 «밀려 있으면 몇 번 다시 보낸다»대로 다시 보낸다. */
+async function fetchExport(io: Io, server: string, request: ApiRequest): Promise<ApiBytesResponse> {
+  for (let retry = 0; ; retry++) {
+    try {
+      return await callApiBytes(io, server, request)
+    } catch (error) {
+      const wait = error instanceof CliError && error.status === 503 ? error.retryAfterSeconds : undefined
+      if (wait === undefined || wait > EXPORT_BUSY_WAIT_LIMIT_S || retry >= EXPORT_BUSY_RETRIES) throw error
+      io.err(`${(error as CliError).message} — ${wait}초 뒤 다시 보냅니다 (${retry + 1}/${EXPORT_BUSY_RETRIES})`)
+      await io.sleep(wait * 1000)
+    }
+  }
+}
+
+/**
+ * 머리의 수가 0 이 아니면 경고한다 — 머리말 «그림이 빠진 pptx 를 조용히 쓰지 않는다». 머리가 없으면(이 머리를 모르는 서버)
+ * 아무 말도 하지 않는다 — 모르는 것을 «0 장»으로 읽지 않는다.
+ */
+function warnMissingScreens(io: Io, response: ApiBytesResponse): void {
+  const count = (name: string): number => {
+    const value = response.header(name)
+    return value !== null && /^\d+$/.test(value) ? Number(value) : 0
+  }
+  const failed = count(SCREEN_FAILURES_HEADER)
+  const skipped = count(SCREENLESS_HEADER)
+  if (failed > 0) {
+    io.err(`경고: 화면 이미지 ${failed}장을 그리지 못해 그 슬라이드에는 글자만 실렸습니다. 이유는 웹의 내보내기 창에서 PPTX 를 고르면 보입니다`)
+  }
+  if (skipped > 0) {
+    io.err(`경고: 서버가 화면 이미지를 그리지 않아 ${skipped}장이 글자만 실렸습니다`)
+  }
 }
 
 /**
