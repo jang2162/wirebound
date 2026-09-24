@@ -99,7 +99,7 @@ import { parseParams, parseQuery } from '../http/parse'
 import { findProjectById } from '../repos/projects'
 import { EmptyProjectError, UnsupportedDocumentError, readExportRows } from '../services/export-source'
 import { readScreenTheme } from '../services/export-pptx'
-import { ExportAbortedError, ExportWorkerPool } from '../services/export-worker'
+import { ExportAbortedError, ExportWorkerPool, type ExportAdmission } from '../services/export-worker'
 import type { HtmlJobResult, PptxJobResult } from '../services/export-worker-protocol'
 import { currentProjectTheme } from '../services/project-theme'
 import type { ScreenRenderer } from '../services/screen-render'
@@ -160,11 +160,13 @@ function buildHtmlOrFail(
   zipRoot: string | null,
   signal: AbortSignal,
 ): Promise<HtmlJobResult> {
-  return orFail(async () => {
-    const rows = await readExportRows(app.db, projectId)
-    const { themeId, theme } = await currentProjectTheme(app.db, projectId)
-    return workers.runHtml(rows, { kind: 'html', theme: { themeId, theme }, zipRoot }, { signal })
-  })
+  return orFail(() =>
+    admitted(workers, async (admission) => {
+      const rows = await readExportRows(app.db, projectId)
+      const { themeId, theme } = await currentProjectTheme(app.db, projectId)
+      return workers.runHtml(rows, { kind: 'html', theme: { themeId, theme }, zipRoot }, { signal, admission })
+    }),
+  )
 }
 
 /**
@@ -179,15 +181,30 @@ function buildPptxOrFail(
   zip: boolean,
   signal: AbortSignal,
 ): Promise<PptxJobResult> {
-  return orFail(async () => {
-    const rows = await readExportRows(app.db, projectId)
-    const screenTheme = renderer === undefined ? null : await readScreenTheme(app.db, projectId)
-    return workers.runPptx(
-      rows,
-      { kind: 'pptx', screenTheme, zip },
-      { signal, ...(renderer === undefined ? {} : { render: (requests) => renderer.render(requests) }) },
-    )
-  })
+  return orFail(() =>
+    admitted(workers, async (admission) => {
+      const rows = await readExportRows(app.db, projectId)
+      const screenTheme = renderer === undefined ? null : await readScreenTheme(app.db, projectId)
+      return workers.runPptx(
+        rows,
+        { kind: 'pptx', screenTheme, zip },
+        { signal, admission, ...(renderer === undefined ? {} : { render: (requests) => renderer.render(requests) }) },
+      )
+    }),
+  )
+}
+
+/**
+ * **읽기 전에 자리를 잡는다** — 떠 있는 일이 차면 `ExportBusyError`(→ 503)로 곧바로 거절해 36MB 를 읽지 않는다
+ * (`services/export-worker.ts`의 «줄은 길이로 묶는다»). 일을 넘기기 전에 던지면 여기서 자리를 내놓는다.
+ */
+async function admitted<T>(workers: ExportWorkerPool, build: (admission: ExportAdmission) => Promise<T>): Promise<T> {
+  const admission = workers.admit()
+  try {
+    return await build(admission)
+  } finally {
+    admission.release()
+  }
 }
 
 /**

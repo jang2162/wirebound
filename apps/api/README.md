@@ -174,6 +174,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 | `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]` |
 | `internal` | 500 | 예상하지 못한 서버 오류. **그 요청은 커밋 전이다**(웹의 코멘트 게시가 그렇게 읽는다) |
 | `internal` | **503** | **DB 가 답하지 않았다** — 연결이 끊겼거나 닿지 못했거나, **COMMIT 에 서버의 답이 아닌 거절이 왔다**. **그 요청이 반영됐는지 모른다**(COMMIT 의 답만 잃었을 수 있다). 500 과 갈라 둔 것이 계약이다 — 경계는 `src/db/connection-loss.ts`, 번역은 `src/http/error-handler.ts` |
+| `internal` | **503** + `Retry-After` | **내보내기가 밀려 있다** — 떠 있는 내보내기가 한도(`EXPORT_JOB_LIMIT`)에 닿아 **일을 받지 않았다**(내보내기 두 라우트만). 읽기뿐이라 `Retry-After`(초) 뒤 다시 보내도 안전하다. 위 줄과는 머리와 문장으로 가른다 — 근거는 `src/services/export-worker.ts` 머리말 «줄은 길이로 묶는다» |
 
 ### 이슈의 severity — 무엇이 저장을 막는가
 
@@ -261,8 +262,8 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/presets` | GET | viewer | — | 200 프리셋 배열 — **내장 3종이 함께 나온다**(아래 "프리셋 응답 형태"). 내장이 먼저, 그 뒤로 프로젝트 프리셋이 만든 순서대로 |
 | `/api/projects/:projectId/presets` | POST | **editor** | `{ name, schema: WbNode[], description? }` | 201 프리셋. **`schema`는 문서 봉투가 아니라 root의 `children`이다.** `marker`는 저장하며 버린다. 이름 1~60자·설명 0~2000자 밖과 노드 봉투 위반·NUL은 400. **이름 중복은 오류가 아니다** |
 | `/api/projects/:projectId/presets/:presetId` | DELETE | **editor** | — | 204. 없는 id·남의 프로젝트의 id는 404, **내장 id(`builtin:…`)는 400**(경로가 uuid를 요구한다) |
-| `/api/projects/:projectId/export/preview` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — **내려받기 전에 화면이 말할 것**(아래 "내보내기"). **형식마다 답이 다르다**: html은 `{ format, pages, duplicateTargets, brokenLinks, errors, themeId, fileName }`, pptx는 `{ format, pages, screenless, screenFailures, fontWarning, fileName }`. 페이지가 없으면 409, 모르는 형식은 400 |
-| `/api/projects/:projectId/export` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — html이면 `application/zip`(설계서 「HTML 정적 번들」), pptx면 `application/vnd.openxmlformats-officedocument.presentationml.presentation`(설계서 「로드맵」). 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409, 모르는 형식은 400 |
+| `/api/projects/:projectId/export/preview` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — **내려받기 전에 화면이 말할 것**(아래 "내보내기"). **형식마다 답이 다르다**: html은 `{ format, pages, duplicateTargets, brokenLinks, errors, themeId, fileName }`, pptx는 `{ format, pages, screenless, screenFailures, fontWarning, fileName }`. 페이지가 없으면 409, 모르는 형식은 400, 내보내기가 밀려 있으면 503 + `Retry-After` |
+| `/api/projects/:projectId/export` | GET | viewer | `?format=html\|pptx`(기본 `html`) | 200 — html이면 `application/zip`(설계서 「HTML 정적 번들」), pptx면 `application/vnd.openxmlformats-officedocument.presentationml.presentation`(설계서 「로드맵」). 이름은 `Content-Disposition`에만 있다. 페이지가 없으면 409, 모르는 형식은 400, 내보내기가 밀려 있으면 503 + `Retry-After` |
 | `/api/projects/:projectId/ws` | GET(업그레이드) | viewer | — | **101** — WebSocket. 아래 "실시간(WebSocket)" 참고. 업그레이드가 아닌 평범한 GET에도 같은 가드가 먼저 돈다(비멤버 404) |
 | `/api/projects/:projectId/tokens` | POST | viewer | `{ name }`(1~60자) | 201 `{ id, name, createdAt, lastUsedAt, value }` — **`value`(원문)가 실리는 유일한 응답이다.** 아래 "API 토큰". 토큰으로 부르면 403 |
 | `/api/projects/:projectId/tokens` | GET | viewer | — | 200 `{ id, name, createdAt, lastUsedAt }[]` — **자기가 만든 것만**, 오래된 것 먼저. **원문이 없다.** 토큰으로 부르면 403 |
@@ -288,7 +289,8 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 **조립 · 렌더 · 압축은 워커 스레드에서 돈다** — 큰 내보내기가 이벤트 루프를 멈추면 옆 사람의 편집 트랜잭션이 그
 멈춤을 «트랜잭션 안의 쉼»으로 겪고 `idle_in_transaction_session_timeout`에 끊긴다(503). 메인이 쥐는 것은 DB 읽기와 pptx
 화면 그리기(브라우저)뿐이다. **요청이 끊기면 그 일을 버린다** — 응답 전에 연결이 닫히면 워커를 끝내고 답하지 않는다.
-근거 · 값 · 동시성은 `services/export-worker.ts` 머리말이 갖는다.
+**떠 있는 내보내기(읽는 중 · 줄 선 · 도는)는 `EXPORT_JOB_LIMIT`(8)까지다** — 넘은 요청은 행을 읽기 전에 503 +
+`Retry-After`로 거절한다(위 「에러 형식」). 근거 · 값 · 동시성은 `services/export-worker.ts` 머리말이 갖는다.
 
 #### `?format=html` — 정적 번들
 
@@ -381,7 +383,7 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 | 화소 | 뷰포트 720×552 · 배율 2배 → **1440×1104**. 페이지가 길면 **전체를 찍으므로 높이가 는다** |
 | 상한 | 페이지 **200장**. 넘은 장은 실패가 되고 **이유가 분모를 함께 말한다** |
 | 동시성·타임아웃 | 동시 **4장** · 한 장 **10초**. 브라우저는 내보내기 **한 번의 수명**이다 |
-| **요청끼리는 둘까지** | 위의 4장은 **한 번의 내보내기 안**이다. 요청끼리는 `services/export-worker.ts`의 풀이 가른다 — **그리기 칸**(`EXPORT_RENDER_LIMIT` — 2)이 따로 있어 **동시에 뜨는 브라우저는 둘까지**이고, 넘은 요청은 줄을 선다(거절하지 않는다). **그리는 동안은 CPU 칸을 내놓는다** — pptx 둘이 그리는 동안에도 다른 내보내기(html 미리보기 포함)가 돈다. 다만 그리기 칸을 기다리는 pptx 는 CPU 칸(`EXPORT_WORKER_LIMIT` — 2, 코어가 둘 이하면 1)을 쥔 채 기다리므로 **셋 이상이 동시에 그리려 하면 그동안 다른 내보내기도 선다**(그 파일 머리말 «칸이 둘이다») |
+| **요청끼리는 둘까지** | 위의 4장은 **한 번의 내보내기 안**이다. 요청끼리는 `services/export-worker.ts`의 풀이 가른다 — **그리기 칸**(`EXPORT_RENDER_LIMIT` — 2)이 따로 있어 **동시에 뜨는 브라우저는 둘까지**이고, 넘은 pptx 는 **조립 전에** 줄을 선다(워커도 CPU 칸도 안 쥔다). **그리는 동안은 CPU 칸을 내놓는다** — pptx 가 몇이 그리거나 기다리든 다른 내보내기(html 미리보기 포함)는 CPU 칸(`EXPORT_WORKER_LIMIT` — 2, 코어가 둘 이하면 1)만 기다린다(그 파일 머리말 «칸이 둘이다»). 줄의 길이는 위 «떠 있는 내보내기» 한도가 묶는다 |
 | **긴 페이지** | 화면 전체를 찍으므로 **높이가 내용을 따라간다.** 200행짜리 페이지는 1440×**16112**가 되고 슬라이드 위에서 폭 **≈37pt**(자리의 7%)로 줄어든다 — 던지지 않고 **조용히 실오라기가 된다.** 상한 200장이 재는 것은 **장 수이지 바이트가 아니다** |
 | 바깥 요청 | **끊는다.** 테마의 `@font-face`·`url()`은 사용자가 적은 문자열이라 서버가 그것을 가져가면 안 된다. `data:`는 네트워크를 안 타므로 그대로 산다 |
 | 한글 글꼴 | **없으면 한 장도 안 그린다**(두부를 내보내지 않는다). `fontWarning`이 그 사실을 낸다 |

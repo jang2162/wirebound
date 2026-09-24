@@ -61,6 +61,7 @@ port.on('message', (message: ToWorker) => {
     case 'job':
       spec = message.spec
       rows = { menu: [], pages: [], comments: [] }
+      send({ t: 'accepted' })
       return
     case 'rows':
       if (message.part === 'menu') rows.menu.push(...message.items)

@@ -35,13 +35,15 @@
  *
  * | 무엇 | 값 | 왜 |
  * |---|---|---|
- * | CPU 칸 | `EXPORT_WORKER_LIMIT`(2 · 코어가 둘 이하면 1) | 내보내기는 드물고 하나가 크다 — 위 «대가»의 메모리가 일마다 붙는다. 칸을 못 얻은 일은 **줄을 선다**(거절하지 않는다) |
+ * | CPU 칸 | `EXPORT_WORKER_LIMIT`(2 · 코어가 둘 이하면 1) | 내보내기는 드물고 하나가 크다 — 위 «대가»의 메모리가 일마다 붙는다. 칸을 못 얻은 일은 **줄을 선다** |
  * | 그리기 칸 | `EXPORT_RENDER_LIMIT`(2) — **동시에 뜨는 브라우저 수**다 | 아래 «칸이 둘이다» |
  * | 워커 스레드 수 | CPU 칸 + 그리기 칸까지 | 아래 «칸이 둘이다» |
+ * | 떠 있는 일 | `EXPORT_JOB_LIMIT`(8)까지(읽는 중 · 줄 선 · 도는) — 넘으면 `ExportBusyError`(→ 503 · `Retry-After: EXPORT_RETRY_AFTER_S`) | 아래 «줄은 길이로 묶는다» |
  * | 쉬는 워커 | `EXPORT_WORKER_IDLE_MS`(60s) 뒤 끝낸다 — **마지막 하나는 새 워커로 갈아 둔다** | 큰 일 뒤의 힙을 쥔 채 남지 않게. 갈아 둔 하나는 늘 따뜻해서, 띄우는 비용(작은 프로젝트의 첫 내보내기가 +0.1–0.3s — `apps/api` 를 띄운 뒤 첫 번 대 둘째 번)은 **프로세스가 뜬 뒤 처음 한 번만** 낸다 |
  * | 요청이 끊기면 | 줄에서 빼거나 **워커를 끝낸다**(`terminate`) | 받을 사람이 없는 일을 끝까지 돌지 않는다. 그리던 브라우저 일은 메인에 남아 끝나고 버려진다 |
  * | 큰 입력의 메모리 | 워커 힙은 V8 기본 한도다(메인과 같은 규칙) | 넘으면 **그 워커만** 죽고(`ERR_WORKER_OUT_OF_MEMORY`) 메인은 산다 → 500 |
  * | 워커가 죽으면 | 그 일은 `ExportWorkerError`(→ 500 · 원인은 로그) · 워커는 버리고 다음 일은 새로 띄운다 | 결과를 모르는 게 아니라 **안 만들어졌다** — 읽기뿐이라 다시 눌러도 안전하다 |
+ * | 쉬던 워커가 일을 받기 전에 죽어 있었으면 | **새 워커로 한 번 더** 한다 — 그 일의 탓이 아니다 | 아래 «쉬는 동안 죽은 워커» |
  * | 도메인 에러 | 워커가 갈래로 넘기고 여기서 같은 클래스로 되살린다 | 라우트의 `orFail`이 같은 스레드에서 던졌을 때와 같은 409 를 낸다 |
  *
  * # 칸이 둘이다 — CPU 와 그리기
@@ -50,15 +52,27 @@
  * CPU 칸을 쥐고 있으면 pptx 둘이 그리는 동안(장마다 최대 10s — `screen-render-chromium.ts`의 `SCREEN_DEFAULTS`) 이 프로세스의
  * 다른 내보내기가 전부 줄을 선다 — 작은 html 미리보기까지. 그래서 칸을 가른다:
  *
- * 1. 일은 **CPU 칸**을 얻어 시작한다. 워커 스레드는 일에 붙어 일 상태(받은 행 · 조립 중인 값)를 끝까지 쥔다.
- * 2. 워커가 그려 달라면 **그리기 칸을 먼저 얻고, 그다음 CPU 칸을 내놓는다.** 그리는 동안 그 CPU 칸으로 다른 일이 돈다.
+ * 1. **그릴 일(그리는 자를 받은 pptx)은 그리기 칸을 먼저 얻고**, 그다음 **CPU 칸**을 얻어 시작한다. html 은 CPU 칸만
+ *    얻는다. 워커 스레드는 일에 붙어 일 상태(받은 행 · 조립 중인 값)를 끝까지 쥔다.
+ * 2. 워커가 그려 달라면 **CPU 칸을 내놓고** 그린다. 그리는 동안 그 CPU 칸으로 다른 일이 돈다.
  * 3. 다 그렸으면 그리기 칸을 내놓고 **CPU 칸을 줄 맨 앞에서** 다시 얻은 뒤 그림을 넘긴다(슬라이드 조립 · 압축은 CPU 다).
  *
- * **그리기 칸을 기다리는 동안은 CPU 칸을 쥔다** — 내놓고 기다리면 그 칸으로 새 일이 들어와 워커가 또 뜨고, 그리기를
- * 기다리는 일(각자 워커 하나와 문서 한 벌)이 끝없이 쌓인다. 쥐고 기다리면 떠 있는 일이 CPU 칸 + 그리기 칸으로 묶인다.
- * 대가: pptx 가 그리기 칸 수보다 많이 동시에 그리려 하면 넘은 것이 CPU 칸을 쥔 채 서서 그동안 html 도 선다.
- * **다시 얻을 때 줄 맨 앞인 것**도 같은 까닭이다 — 뒤에 서면 그 사이 새 일이 칸을 얻어 떠 있는 일이 는다. 이미 자원을
- * 쥔 일을 먼저 끝낸다.
+ * **그리기 칸을 CPU 칸보다 먼저 얻는 이유:** 조립을 마친 뒤에 그리기 칸을 기다리면 그동안 무엇을 쥘지 둘 다 나쁘다.
+ * CPU 칸을 쥐고 기다리면 pptx 가 그리기 칸 수보다 많을 때 넘은 것이 CPU 칸을 다 쥐고 서서 **html 까지 선다**. CPU 칸을
+ * 내놓고 기다리면 그 칸으로 새 일이 들어와 워커가 또 뜨고, 그리기를 기다리는 일(각자 워커 하나와 문서 한 벌)이 끝없이
+ * 쌓인다. 먼저 얻으면 그리기를 기다리는 일은 **워커도 CPU 칸도 없이** 줄에 서고, 떠 있는 워커는 CPU 칸 + 그리기 칸으로
+ * 묶인다. 대가: 그리기 칸을 기다리는 pptx 는 앞 pptx 가 그리는 동안 조립을 미리 해 두지 못한다.
+ *
+ * 잰 값(api 스크립트 · 300 노드 페이지 24 장 pptx 미리보기 넷을 동시에 진짜 Chromium 으로 · 그동안 한 장짜리 html 미리보기를
+ * 100ms 간격으로 · 같은 기계 · 세 번씩):
+ *
+ * | | html 최대 | 셋째 · 넷째 pptx | api RSS 최고 |
+ * |---|---|---|---|
+ * | 조립을 마친 뒤 CPU 칸을 쥐고 그리기 칸을 기다릴 때 | 7.3 · 8.4 · 10.3s(넷째가 칸을 내놓을 때까지) | 16.3–19.7s | 1.0–1.2GB |
+ * | 그리기 칸을 먼저 얻을 때 | 0.19 · 0.22 · 0.62s | 17.1–22.1s | 0.8–0.9GB |
+ *
+ * **다시 얻을 때 줄 맨 앞인 것**은 뒤에 서면 그 사이 새 일이 칸을 얻어 떠 있는 일이 늘기 때문이다. 이미 자원을 쥔 일을
+ * 먼저 끝낸다.
  *
  * 끊긴 일의 그리기는 메인에서 끝까지 돌고 버려지는데, **그동안 그리기 칸을 쥔다** — 브라우저가 떠 있는 동안이다.
  *
@@ -69,6 +83,38 @@
  * |---|---|---|---|
  * | 1.5s — 큰 둘이 아직 CPU 몫(`exportPage` × 72)을 도는 중 | 7.4s(큰 둘이 끝날 때 같이 끝남) | 1.4–1.7s(큰 둘이 그리기로 넘어가 칸을 내놓을 때까지) | 2.0s(루프 멈춤) |
  * | 4.5s — 큰 둘이 그리는 중 | 4.9–5.1s | 54–665ms(첫 번은 셋째 워커를 띄우는 비용) | — |
+ *
+ * # 줄은 길이로 묶는다
+ *
+ * 줄에 선 일은 **라우트가 읽은 행을 쥐고** 선다 — 줄이 길어지는 만큼 메인의 힙이 자라고 뒤에 선 일의 기다림이 는다.
+ * 잰 값(api 스크립트 · 500KB 페이지 72 장(36MB) 프로젝트의 HTML zip 을 동시에 N 개 · 같은 기계 · CPU 칸 2 · 한도 없이):
+ *
+ * | N | 마지막 답 | api RSS 최고 |
+ * |---|---|---|
+ * | 2 | 3.8s | 3.6GB |
+ * | 8 | 16.4s | 4.4GB |
+ * | 16 | 32.5s | 5.2GB |
+ * | 32 | 65.3s | 6.8GB |
+ *
+ * 일 하나가 약 0.1GB(36MB 문서의 행)와 앞 일 수만큼의 기다림을 더한다. 그래서 **떠 있는 일(읽는 중 · 줄 선 · 도는)의 수를
+ * 묶고 넘으면 곧바로 거절한다** — `EXPORT_JOB_LIMIT`(8)은 위 표의 N=8 줄이다. 작은 프로젝트는 일 하나가 수십 ms 라 8 에 닿을
+ * 일이 진짜 몰림뿐이다. **자리는 읽기 전에 잡는다**(`admit`) — 거절할 요청이 36MB 를 읽지 않게. **도는 일까지 세는
+ * 이유:** 줄 선 일만 세면 한꺼번에 들어온 요청들이 칸을 얻기 전(읽는 중)에 서로를 줄로 세어, 칸이 비어 있는데 거절된다.
+ * 거절은 503 + `Retry-After`다(`http/error-handler.ts`) — 읽기뿐이라 다시 보내도 안전하다. pptx 는 일 하나가 그리기로
+ * 9s 안팎이라 같은 8 이 더 긴 기다림이다(그리기 칸 2 · 뒤의 여섯이 세 차례 — 30s 안팎).
+ *
+ * **기한(줄에서 이만큼 기다리면 거절)은 두지 않는다.** 기다린 뒤의 거절은 이미 기다린 시간을 버리고, 수가 묶이면
+ * 기다림도 «앞 일 수 × 일 하나»로 묶인다. 사람이 떠나면 웹이 요청을 끊고 끊긴 일은 줄에서 빠진다(«요청이 끊기면»).
+ *
+ * 다시 재는 법: api 를 띄우고 그 프로젝트의 `GET /api/projects/:id/export`를 동시에 N 개 보내 마지막 답의 시간과 api 프로세스의
+ * RSS(`ps -o rss=`)를 100ms 마다 본다(한도를 넘는 N 은 503 이 섞인다).
+ *
+ * # 쉬는 동안 죽은 워커
+ *
+ * 쉬는 워커가 죽으면 `exit`이 그 자리를 비운다(`spawn`). 그런데 스레드가 죽은 뒤 메인이 `exit`을 처리하기 전에 일이
+ * 그 워커를 꺼내면, 일은 죽은 워커에 행을 보내고 뒤늦은 `exit`을 받는다 — 꺼낼 때 살았는지 동기로 물을 길이 없다.
+ * 그래서 워커는 일을 받으면 먼저 **받았다고 답하고**(`accepted`), 쉬던 워커가 그 답 전에 죽으면 그 일의 탓이 아니므로
+ * 새 워커로 한 번 더 한다. 받은 뒤의 죽음(메모리 한도 등)은 그 일의 탓이라 다시 하지 않는다 — 같은 일은 또 죽는다.
  *
  * # 워커가 싣는 코드는 메인과 같다
  *
@@ -109,6 +155,12 @@ export const EXPORT_RENDER_LIMIT = 2
 /** 쉬는 워커를 끝내기까지(ms) — 머리말의 표. */
 export const EXPORT_WORKER_IDLE_MS = 60_000
 
+/** 떠 있을 수 있는 일(읽는 중 · 줄 선 · 도는)의 수 — 머리말 «줄은 길이로 묶는다». */
+export const EXPORT_JOB_LIMIT = 8
+
+/** 줄이 넘쳐 거절할 때 몇 초 뒤 다시 보내라고 하나(`Retry-After`). 36MB 프로젝트의 HTML 일 하나가 3.5s 안팎이다. */
+export const EXPORT_RETRY_AFTER_S = 5
+
 /** 코멘트를 한 메시지에 몇 개씩 싣나. 코멘트 하나는 작다 — 페이지처럼 한 개씩 보낼 까닭이 없다. */
 const COMMENTS_PER_MESSAGE = 1_000
 
@@ -128,11 +180,30 @@ export class ExportAbortedError extends Error {
   }
 }
 
+/** 줄이 넘쳤다 — 일을 받지 않았다(머리말 «줄은 길이로 묶는다»). `http/error-handler.ts`가 503 + `Retry-After`로 옮긴다. */
+export class ExportBusyError extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super('내보내기가 밀려 있습니다 — 잠시 뒤 다시 시도하세요')
+    this.name = 'ExportBusyError'
+  }
+}
+
+/**
+ * 잡은 자리(`ExportWorkerPool.admit`). 일이 끝나면 풀이 스스로 내놓는다. 일을 넘기기 전에 그만두면(읽기 실패 등) 잡은
+ * 쪽이 `release`한다 — 두 번 불러도 한 번만 내놓는다. `start`는 풀이 부른다(CPU 칸을 처음 얻어 줄에서 나왔다).
+ */
+export interface ExportAdmission {
+  start(): void
+  release(): void
+}
+
 export interface ExportRunOptions {
   /** 끊기면 일을 버린다 — 머리말의 표. */
   signal?: AbortSignal
   /** pptx 의 화면을 그리는 자. 워커가 부르면 메인에서 돈다(브라우저를 메인이 쥔다). */
   render?: (requests: readonly ScreenRequest[]) => Promise<ScreenBatch>
+  /** 먼저 잡아 둔 자리(`admit`). 없으면 여기서 잡는다 — 넘치면 `ExportBusyError`. 일이 끝나면 풀이 내놓는다. */
+  admission?: ExportAdmission
 }
 
 export interface ExportWorkerPoolOptions {
@@ -140,6 +211,8 @@ export interface ExportWorkerPoolOptions {
   limit?: number
   /** 그리기 칸 수. */
   renderLimit?: number
+  /** 떠 있을 수 있는 일의 수. */
+  jobLimit?: number
   idleMs?: number
   /** 워커 하나의 힙 한도. 없으면 V8 기본이다 — 머리말의 표. 케이스가 한도를 좁혀 «워커만 죽는다»를 잰다. */
   resourceLimits?: ResourceLimits
@@ -177,9 +250,22 @@ interface Slot {
   idleTimer: NodeJS.Timeout | null
 }
 
-/** 일 하나가 지금 CPU 칸을 쥐었나 — 그리는 동안 내놓았다가 다시 얻는다(머리말 «칸이 둘이다»). */
+/**
+ * 일 하나가 지금 쥔 칸(머리말 «칸이 둘이다»). CPU 칸은 그리는 동안 내놓았다가 다시 얻는다. 그리기 칸은 `held`(쥐었다 —
+ * 일이 끝날 때 `run`이 내놓는다) · `drawing`(그리는 중 — 그리기가 끝날 때 `renderFor`가 내놓는다. 그 사이 일이 끝나도
+ * 브라우저가 떠 있는 동안은 쥔다) · `none`.
+ */
 interface Job {
   cpu: boolean
+  draw: 'none' | 'held' | 'drawing'
+}
+
+/** 쉬던 워커가 일을 받기 전에 이미 죽어 있었다 — 그 일의 탓이 아니다(머리말 «쉬는 동안 죽은 워커»). 풀 밖으로 안 나간다. */
+class StaleWorkerError extends Error {
+  constructor(readonly failure: ExportWorkerError) {
+    super(failure.message)
+    this.name = 'StaleWorkerError'
+  }
 }
 
 interface GateWaiter {
@@ -251,25 +337,58 @@ class Gate {
 export class ExportWorkerPool {
   private readonly cpu: Gate
   private readonly draw: Gate
+  private readonly jobLimit: number
   private readonly idleMs: number
   private readonly resourceLimits: ResourceLimits | undefined
   private readonly idle: Slot[] = []
   private readonly busy = new Set<Slot>()
+  /** 자리를 잡고 아직 안 끝난 일 — 읽는 중 · 줄 선 · 도는(머리말 «줄은 길이로 묶는다»). */
+  private jobs = 0
+  /** 그중 CPU 칸을 아직 처음 얻지 못한 일 — 읽는 중이거나 칸을 기다린다. */
+  private queued = 0
   private closed = false
 
   constructor(options?: ExportWorkerPoolOptions) {
     this.cpu = new Gate(Math.max(1, options?.limit ?? EXPORT_WORKER_LIMIT))
     this.draw = new Gate(Math.max(1, options?.renderLimit ?? EXPORT_RENDER_LIMIT))
+    this.jobLimit = Math.max(1, options?.jobLimit ?? EXPORT_JOB_LIMIT)
     this.idleMs = options?.idleMs ?? EXPORT_WORKER_IDLE_MS
     this.resourceLimits = options?.resourceLimits
   }
 
   /**
-   * 떠 있는 워커 · 일에 붙은 워커(그리는 중인 일 포함) · CPU 칸을 기다리는 일. 케이스가 «끊기면 워커를 끝낸다»를 이것으로
-   * 잰다.
+   * 떠 있는 워커 · 일에 붙은 워커(그리는 중인 일 포함) · 줄에 선 일(자리를 잡고 CPU 칸을 처음 얻기 전 — 그리기 칸을
+   * 기다리는 일 포함). 케이스가 «끊기면 워커를 끝낸다»를 이것으로 잰다.
    */
   get stats(): { threads: number; busy: number; queued: number } {
-    return { threads: this.idle.length + this.busy.size, busy: this.busy.size, queued: this.cpu.queued }
+    return { threads: this.idle.length + this.busy.size, busy: this.busy.size, queued: this.queued }
+  }
+
+  /**
+   * **자리를 잡는다** — 떠 있는 일이 `jobLimit`이면 `ExportBusyError`다. 라우트는 행을 **읽기 전에** 부른다(머리말 «줄은
+   * 길이로 묶는다»).
+   */
+  admit(): ExportAdmission {
+    if (this.closed) throw new ExportWorkerError('내보내기 워커 풀이 닫혔습니다')
+    if (this.jobs >= this.jobLimit) throw new ExportBusyError(EXPORT_RETRY_AFTER_S)
+    this.jobs++
+    this.queued++
+    let waiting = true
+    let held = true
+    const admission: ExportAdmission = {
+      start: () => {
+        if (!waiting) return
+        waiting = false
+        this.queued--
+      },
+      release: () => {
+        admission.start()
+        if (!held) return
+        held = false
+        this.jobs--
+      },
+    }
+    return admission
   }
 
   async runHtml(
@@ -300,13 +419,34 @@ export class ExportWorkerPool {
   }
 
   private async run(rows: ExportRows, spec: ExportJobSpec, options?: ExportRunOptions): Promise<ExportJobResult> {
-    await this.cpu.acquire(options?.signal)
-    const job: Job = { cpu: true }
+    const signal = options?.signal
+    const admission = options?.admission ?? this.admit()
+    const job: Job = { cpu: false, draw: 'none' }
     let healthy = false
     let slot: Slot | undefined
     try {
-      slot = this.take()
-      const result = await this.converse(slot.worker, job, rows, spec, options)
+      // 그릴 일은 그리기 칸이 먼저다 — 머리말 «칸이 둘이다»의 1.
+      if (spec.kind === 'pptx' && options?.render !== undefined) {
+        await this.draw.acquire(signal)
+        job.draw = 'held'
+      }
+      await this.cpu.acquire(signal)
+      job.cpu = true
+      admission.start()
+
+      const taken = this.take()
+      slot = taken.slot
+      let result: ExportJobResult
+      try {
+        result = await this.converse(slot.worker, taken.reused, job, rows, spec, options)
+      } catch (error) {
+        if (!(error instanceof StaleWorkerError)) throw error
+        // 쉬는 동안 죽어 있던 워커다 — 새 워커로 한 번 더(머리말 «쉬는 동안 죽은 워커»).
+        this.putBack(slot, false)
+        slot = undefined
+        slot = this.take({ fresh: true }).slot
+        result = await this.converse(slot.worker, false, job, rows, spec, options)
+      }
       healthy = true
       return result
     } catch (error) {
@@ -315,22 +455,36 @@ export class ExportWorkerPool {
       throw error
     } finally {
       if (slot !== undefined) this.putBack(slot, healthy)
-      if (job.cpu) {
-        job.cpu = false
-        this.cpu.release()
-      }
+      this.releaseSlots(job)
+      admission.release()
     }
   }
 
-  /** 일에 붙일 워커 — 쉬는 것이 있으면 그것, 없으면 새로 띄운다. 일하는 동안은 프로세스를 붙잡는다. */
-  private take(): Slot {
+  /** 일이 끝났다 — 쥔 칸을 내놓는다. **그리는 중인 그리기 칸은 두고 간다** — `renderFor`가 그리기가 끝날 때 내놓는다. */
+  private releaseSlots(job: Job): void {
+    if (job.cpu) {
+      job.cpu = false
+      this.cpu.release()
+    }
+    if (job.draw === 'held') {
+      job.draw = 'none'
+      this.draw.release()
+    }
+  }
+
+  /**
+   * 일에 붙일 워커 — 쉬는 것이 있으면 그것, 없으면(또는 `fresh`면) 새로 띄운다. 일하는 동안은 프로세스를 붙잡는다.
+   * `reused`는 쉬던 워커를 꺼냈다는 뜻이다(머리말 «쉬는 동안 죽은 워커»).
+   */
+  private take(options?: { fresh?: boolean }): { slot: Slot; reused: boolean } {
     if (this.closed) throw new ExportWorkerError('내보내기 워커 풀이 닫혔습니다')
-    const slot = this.idle.pop() ?? this.spawn()
+    const reusable = options?.fresh === true ? undefined : this.idle.pop()
+    const slot = reusable ?? this.spawn()
     if (slot.idleTimer !== null) clearTimeout(slot.idleTimer)
     slot.idleTimer = null
     slot.worker.ref()
     this.busy.add(slot)
-    return slot
+    return { slot, reused: reusable !== undefined }
   }
 
   private putBack(slot: Slot, healthy: boolean): void {
@@ -360,8 +514,8 @@ export class ExportWorkerPool {
     // 쉬는 워커는 프로세스를 붙잡지 않는다 — 일하는 동안만 붙잡는다(`take` · `putBack`). 약속은 프로세스를 붙잡지 않는다.
     worker.unref()
     // **쉬는 동안 죽으면 그 자리를 비운다** — 안 비우면 다음 일이 죽은 워커를 꺼내고, 그 `exit`은 이미 지나가 `converse`가
-    // 못 들어 그 일이 끝없이 기다린다. `exit`이 처리되기 전에 꺼낸 일은 `converse`가 뒤늦은 `exit`을 받아 `ExportWorkerError`다.
-    // 일하는 동안의 죽음은 `converse`가 받는다.
+    // 못 들어 그 일이 끝없이 기다린다. `exit`이 처리되기 전에 꺼낸 일은 `converse`가 뒤늦은 `exit`을 받고 풀이 새 워커로 한 번
+    // 더 한다(머리말 «쉬는 동안 죽은 워커»). 일하는 동안의 죽음은 `converse`가 받는다.
     const slot: Slot = { worker, idleTimer: null }
     worker.on('error', () => undefined)
     worker.once('exit', () => {
@@ -383,6 +537,7 @@ export class ExportWorkerPool {
   /** 일 하나를 주고받는다 — 행을 한 장씩 보내고, 그려 달라면 그려 주고, 답을 받는다. */
   private converse(
     worker: Worker,
+    reused: boolean,
     job: Job,
     rows: ExportRows,
     spec: ExportJobSpec,
@@ -393,6 +548,8 @@ export class ExportWorkerPool {
     const ended = new AbortController()
     return new Promise<ExportJobResult>((resolve, reject) => {
       const requests: ScreenRequest[] = []
+      /** 워커가 이 일을 받았다고 답했다 — 그 전의 죽음은 쉬는 동안의 죽음이다(머리말 «쉬는 동안 죽은 워커»). */
+      let accepted = false
 
       const finish = (outcome: () => void): void => {
         if (ended.signal.aborted) return
@@ -403,11 +560,15 @@ export class ExportWorkerPool {
         signal?.removeEventListener('abort', onAbort)
         outcome()
       }
+      /** 워커가 죽었다 — 쉬던 워커가 이 일을 받기 전이면 풀이 새 워커로 한 번 더 한다(`run`). */
+      const died = (error: ExportWorkerError): void => {
+        finish(() => reject(reused && !accepted ? new StaleWorkerError(error) : error))
+      }
       const onError = (error: unknown): void => {
-        finish(() => reject(new ExportWorkerError(`내보내기 워커가 죽었습니다: ${errorLine(error)}`, { cause: error })))
+        died(new ExportWorkerError(`내보내기 워커가 죽었습니다: ${errorLine(error)}`, { cause: error }))
       }
       const onExit = (code: number): void => {
-        finish(() => reject(new ExportWorkerError(`내보내기 워커가 일하는 중에 끝났습니다(종료 코드 ${code})`)))
+        died(new ExportWorkerError(`내보내기 워커가 일하는 중에 끝났습니다(종료 코드 ${code})`))
       }
       const onAbort = (): void => {
         // `putBack`이 이 워커를 버린다(healthy 가 아니다) — 받을 사람이 없는 일을 끝까지 돌지 않는다.
@@ -415,6 +576,9 @@ export class ExportWorkerPool {
       }
       const onMessage = (message: FromWorker): void => {
         switch (message.t) {
+          case 'accepted':
+            accepted = true
+            return
           case 'screen-request':
             requests.push(message.request)
             return
@@ -440,7 +604,7 @@ export class ExportWorkerPool {
       }
 
       void this.feed(worker, rows, spec, () => ended.signal.aborted).catch((error: unknown) => {
-        finish(() => reject(new ExportWorkerError(`내보내기 워커에 입력을 넘기지 못했습니다: ${errorLine(error)}`, { cause: error })))
+        died(new ExportWorkerError(`내보내기 워커에 입력을 넘기지 못했습니다: ${errorLine(error)}`, { cause: error }))
       })
     })
   }
@@ -468,6 +632,9 @@ export class ExportWorkerPool {
    * 워커가 그려 달란 것을 메인에서 그리고 **한 장씩** 돌려준다. 그리는 동안은 CPU 칸을 내놓는다 — 머리말 «칸이 둘이다».
    * 그리는 자가 없으면 워커는 애초에 부르지 않는다.
    *
+   * 그리기 칸은 일이 시작할 때 얻어 두었다(`run`). 조립은 한 번만 그려 달라고 하므로(`buildProjectPptx`) 둘째 부탁은 없다 —
+   * 오면 그때는 CPU 칸을 쥔 채 그리기 칸을 기다린다(떠 있는 워커가 칸 수로 묶이게).
+   *
    * 칸을 얻고 난 뒤에는 늘 `ended`를 다시 본다 — 칸이 넘어온 뒤 이어서 돌기 전에 일이 끝났을 수 있고, 그때 `run`의
    * `finally`는 이미 지나갔다(`job.cpu`로 무엇을 돌려줄지 가른다).
    */
@@ -486,15 +653,20 @@ export class ExportWorkerPool {
       } satisfies ToWorker)
       return
     }
-    try {
-      await this.draw.acquire(ended)
-    } catch {
-      return
+    if (job.draw !== 'held') {
+      try {
+        await this.draw.acquire(ended)
+      } catch {
+        return
+      }
+      if (ended.aborted) {
+        this.draw.release()
+        return
+      }
+      job.draw = 'held'
     }
-    if (ended.aborted) {
-      this.draw.release()
-      return
-    }
+    if (ended.aborted) return
+    job.draw = 'drawing'
     job.cpu = false
     this.cpu.release()
 
@@ -505,6 +677,7 @@ export class ExportWorkerPool {
     } catch (error) {
       failure = error
     } finally {
+      job.draw = 'none'
       this.draw.release()
     }
 

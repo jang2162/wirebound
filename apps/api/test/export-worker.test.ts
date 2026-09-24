@@ -6,7 +6,9 @@
  * | 워커가 낸 것이 같은 스레드에서 낸 것과 **바이트로 같다** | 라우트(워커)의 zip 을 풀어 `exportProjectBundle`·`exportProjectPptx`(같은 스레드)의 파일과 엔트리마다 견준다 |
  * | 메인의 루프가 서지 않는다 | 같은 일을 같은 스레드에서 돈 시간과, 워커로 도는 동안 메인의 타이머가 벌어진 최장 간격을 견준다 |
  * | 입력을 한 장씩 넘긴다 | 워커로 가는 메시지를 센다 |
- * | 도메인 에러 · 끊김 · 워커의 죽음 · 상한 · 쉬는 워커 | 풀을 직접 부른다 |
+ * | 도메인 에러 · 끊김 · 워커의 죽음 · 상한 · 쉬는 워커 · 칸 배정 · 떠 있는 일의 한도 | 풀을 직접 부른다 |
+ * | 한도를 넘은 요청이 503 + `Retry-After`다 | 라우트를 `inject`로 — 그리는 자가 붙잡아 한도를 채운다 |
+ * | 자리를 행을 읽기 **전에** 잡는다 | 찼을 때 빈 프로젝트(읽기가 409 를 던진다)가 503 이다 |
  * | 끊긴 요청이 라우트에서 일을 버린다 | 진짜 포트가 든다 — `test/export-worker-abort.test.ts` |
  *
  * **zip 바이트를 통째로 견주지 않는다** — `fflate`가 엔트리마다 지금 시각(DOS 시각 · 2초 단위)을 적어서 두 번 만들면
@@ -21,7 +23,11 @@ import { runExportJob } from '../src/services/export-job'
 import { exportProjectPptx } from '../src/services/export-pptx'
 import { UnsupportedDocumentError, type ExportRows } from '../src/services/export-source'
 import {
+  EXPORT_JOB_LIMIT,
+  EXPORT_RENDER_LIMIT,
+  EXPORT_RETRY_AFTER_S,
   ExportAbortedError,
+  ExportBusyError,
   ExportWorkerError,
   ExportWorkerPool,
   workerExecArgv,
@@ -419,19 +425,20 @@ describe('칸이 둘이다 — CPU 와 그리기', () => {
     }
   }, 60_000)
 
-  it('동시에 그리는 것은 그리기 칸 수까지다 — 넘은 것은 기다렸다 그린다', async () => {
+  it('동시에 그리는 것은 그리기 칸 수까지다 — 넘은 것은 워커 없이 줄을 서고 칸이 나면 그린다', async () => {
     const pool = new ExportWorkerPool({ limit: 3, renderLimit: 2 })
     const renderer = new HeldRenderer()
     const asks = countRenderAsks()
     try {
       const jobs = [0, 1, 2].map(() => pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render }))
-      // 셋 다 그려 달라고 했다 — 그리기 칸이 CPU 칸과 같으면 셋이 함께 그린다.
-      await vi.waitFor(() => expect(asks.count).toBe(3), { timeout: 30_000 })
+      await vi.waitFor(() => expect(renderer.started).toBe(2), { timeout: 30_000 })
       await new Promise((resolve) => setTimeout(resolve, 50))
-      expect(renderer.started).toBe(2)
+      // 셋째는 그리기 칸을 기다린다 — CPU 칸이 남아도 조립하지 않고 워커도 없다.
+      expect(asks.count).toBe(2)
+      expect(pool.stats).toMatchObject({ busy: 2, queued: 1 })
 
       renderer.releaseOne()
-      await vi.waitFor(() => expect(renderer.started).toBe(3), { timeout: 10_000 })
+      await vi.waitFor(() => expect(renderer.started).toBe(3), { timeout: 30_000 })
       renderer.releaseAll()
       await expect(Promise.all(jobs)).resolves.toHaveLength(3)
       expect(renderer.maxActive).toBe(2)
@@ -442,36 +449,76 @@ describe('칸이 둘이다 — CPU 와 그리기', () => {
     }
   }, 60_000)
 
-  // 이 판은 앞 두 케이스의 축 위에 선다(가가 그리는 동안 CPU 칸을 내놓고, 나는 그리기 칸을 기다린다) — 그 두 축이
-  // 무너지면 이 케이스도 함께 죽는다. 축의 주인은 «그리는 동안은 CPU 칸을 내놓는다» · «동시에 그리는 것은 그리기 칸
-  // 수까지다»이고, 이 케이스가 혼자 재는 것은 «줄 맨 앞»과 «그리기 칸을 얻은 뒤에 CPU 칸을 내놓는다»다.
-  it('다 그린 일은 CPU 칸을 줄 맨 앞에서 다시 얻는다 — 뒤에 온 일보다 먼저 끝난다', async () => {
+  it('그리기를 기다리는 pptx 는 CPU 칸을 쥐지 않는다 — pptx 가 그리기 칸보다 많아도 html 이 돈다', async () => {
+    const pool = new ExportWorkerPool({ limit: 1, renderLimit: 1 })
+    const renderer = new HeldRenderer()
+    try {
+      const drawing = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render })
+      await vi.waitFor(() => expect(renderer.started).toBe(1), { timeout: 30_000 })
+      const waiting = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render })
+      await vi.waitFor(() => expect(pool.stats.queued).toBe(1))
+
+      // 둘째 pptx 가 CPU 칸 하나를 쥐고 그리기 칸을 기다리면 이 html 은 첫째가 다 그릴 때까지 줄을 선다.
+      await expect(within(pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP), 20_000)).resolves.toMatchObject({ kind: 'html' })
+      expect(renderer.started).toBe(1)
+
+      renderer.releaseOne()
+      await vi.waitFor(() => expect(renderer.started).toBe(2), { timeout: 30_000 })
+      renderer.releaseAll()
+      await expect(Promise.all([drawing, waiting])).resolves.toHaveLength(2)
+    } finally {
+      renderer.releaseAll()
+      await pool.close()
+    }
+  }, 60_000)
+
+  it('다 그린 일은 CPU 칸을 줄 맨 앞에서 다시 얻는다 — 먼저 줄 선 일보다 먼저 끝난다', async () => {
     const pool = new ExportWorkerPool({ limit: 1, renderLimit: 1 })
     const held = new HeldRenderer()
-    const asks = countRenderAsks()
     const finished: string[] = []
     try {
       // 가: 그리는 중(그리기 칸을 쥐고 CPU 칸은 내놓았다).
       const 가 = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: held.render }).then(() => finished.push('가'))
       await vi.waitFor(() => expect(held.started).toBe(1), { timeout: 30_000 })
-      // 나: CPU 칸을 얻어 조립하고 그려 달라 한다 — 그리기 칸이 없어 CPU 칸을 쥔 채 기다린다.
-      const 나 = pool
-        .runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, {
-          render: async (requests) => ({ results: requests.map(() => ({ ok: true as const, bytes: PNG_1X1, width: 1, height: 1 })), fontWarning: null }),
-        })
-        .then(() => finished.push('나'))
-      await vi.waitFor(() => expect(asks.count).toBe(2), { timeout: 30_000 })
-      // 다: CPU 칸을 기다린다.
+      // 나: 큰 html 이 CPU 칸을 쥔다. 다: 그 뒤에 줄을 선다.
+      const 나 = pool.runHtml(syntheticRows(8, 7000), HTML_ZIP).then(() => finished.push('나'))
+      await vi.waitFor(() => expect(pool.stats.busy).toBe(2))
       const 다 = pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP).then(() => finished.push('다'))
       await vi.waitFor(() => expect(pool.stats.queued).toBe(1))
 
-      // 가가 다 그렸다 → 그리기 칸은 나에게, 나가 내놓은 CPU 칸은 줄 맨 앞에 선 가에게.
+      // 가가 다 그렸다 → CPU 칸을 다시 기다리는데 먼저 선 다의 앞에 선다. 나가 끝나면 가 · 다 순이다.
       held.releaseOne()
       await Promise.all([가, 나, 다])
-      expect(finished).toEqual(['가', '나', '다'])
+      expect(finished).toEqual(['나', '가', '다'])
     } finally {
-      asks.restore()
       held.releaseAll()
+      await pool.close()
+    }
+  }, 60_000)
+
+  it('끊긴 pptx 의 그리기 칸은 그리기가 끝날 때 돌아온다 — 그동안 다음 pptx 는 그리지 않는다', async () => {
+    const pool = new ExportWorkerPool({ limit: 2, renderLimit: 1 })
+    const renderer = new HeldRenderer()
+    try {
+      const gone = new AbortController()
+      const first = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render, signal: gone.signal }).catch((error: unknown) => error)
+      await vi.waitFor(() => expect(renderer.started).toBe(1), { timeout: 30_000 })
+      gone.abort()
+      expect(await first).toBeInstanceOf(ExportAbortedError)
+
+      // 브라우저는 아직 그리는 중이다 — 칸이 벌써 돌아오면 브라우저가 칸 수를 넘어 뜬다.
+      const second = pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render })
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      expect(renderer.started).toBe(1)
+      expect(pool.stats.queued).toBe(1)
+
+      renderer.releaseOne()
+      await vi.waitFor(() => expect(renderer.started).toBe(2), { timeout: 30_000 })
+      expect(renderer.maxActive).toBe(1)
+      renderer.releaseAll()
+      await expect(second).resolves.toMatchObject({ kind: 'pptx' })
+    } finally {
+      renderer.releaseAll()
       await pool.close()
     }
   }, 60_000)
@@ -495,6 +542,209 @@ describe('쉬는 동안 죽은 워커', () => {
       await pool.close()
     }
   }, 60_000)
+
+  // 스레드는 죽었는데 메인이 `exit`을 아직 처리하지 않은 틈 — 일이 그 워커를 꺼내 행을 보내고 뒤늦은 죽음을 받는다.
+  for (const [how, kill] of [
+    ['끝냈다(terminate)', (worker: Worker) => void worker.terminate()],
+    // 받을 것이 없는 `screens-done`에 워커가 던진다 — 쉬는 워커의 처리되지 않은 예외다.
+    ['예외로 죽었다', (worker: Worker) => worker.postMessage({ t: 'screens-done', fontWarning: null })],
+  ] as const) {
+    it(`exit 을 처리하기 전에 꺼내도 그 일은 새 워커로 된다 — ${how}`, async () => {
+      const pool = new ExportWorkerPool({ limit: 1 })
+      try {
+        await pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP)
+        const idle = (pool as unknown as { idle: { worker: Worker }[] }).idle
+        expect(idle).toHaveLength(1)
+        kill(idle[0]!.worker)
+
+        await expect(within(pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP), 20_000)).resolves.toMatchObject({ kind: 'html' })
+        expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0 })
+      } finally {
+        await pool.close()
+      }
+    }, 60_000)
+  }
+
+  it('일을 받은 뒤의 죽음은 다시 하지 않는다 — 같은 일은 또 죽는다', async () => {
+    const pool = new ExportWorkerPool({ resourceLimits: { maxOldGenerationSizeMb: 64 } })
+    let accepted = 0
+    const emit = Worker.prototype.emit
+    const spy = vi.spyOn(Worker.prototype, 'emit').mockImplementation(function (this: Worker, event, ...args) {
+      if (event === 'message' && (args[0] as { t?: string } | undefined)?.t === 'accepted') accepted++
+      return emit.call(this, event, ...args)
+    })
+    try {
+      // 쉬던 워커에 준다 — 받은 뒤 힙 한도로 죽는다.
+      await pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP)
+      accepted = 0
+      const failure = await pool.runHtml(syntheticRows(12, 7000), HTML_ZIP).catch((error: unknown) => error)
+      expect(failure).toBeInstanceOf(ExportWorkerError)
+      expect(accepted).toBe(1)
+    } finally {
+      spy.mockRestore()
+      await pool.close()
+    }
+  }, 60_000)
+})
+
+describe('줄은 길이로 묶는다', () => {
+  // 이 케이스가 재는 것은 «그리는 일 · 그리기 칸을 기다리는 일도 떠 있는 일로 센다»다. 자리를 놓는 규칙은 «잡은 자리는
+  // 놓거나 끊기거나 일이 끝나면 돌아온다»가, 503 의 모양은 «라우트 — …»가, 칸 배정은 «칸이 둘이다»의 케이스들이 갖는다 —
+  // 그 축이 무너지면 이 케이스도 함께 죽는다.
+  it('떠 있는 일이 차면 곧바로 ExportBusyError 다 — 그리는 일과 그리기를 기다리는 일도 센다', async () => {
+    const pool = new ExportWorkerPool({ limit: 1, renderLimit: 2, jobLimit: 4 })
+    const renderer = new HeldRenderer()
+    try {
+      // 둘은 그리고, 둘은 그리기 칸을 기다리며 줄에 선다 — 떠 있는 일이 넷이다.
+      const jobs = [0, 1, 2, 3].map(() => pool.runPptx(syntheticRows(1, 1), PPTX_NO_ZIP, { render: renderer.render }))
+      await vi.waitFor(() => expect(renderer.started).toBe(2), { timeout: 30_000 })
+      expect(pool.stats).toMatchObject({ busy: 2, queued: 2 })
+
+      const busy = await pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP).catch((error: unknown) => error)
+      expect(busy).toBeInstanceOf(ExportBusyError)
+      expect((busy as ExportBusyError).retryAfterSeconds).toBe(EXPORT_RETRY_AFTER_S)
+
+      renderer.releaseOne()
+      await jobs[0]
+      pool.admit().release()
+
+      while (renderer.started < 4) {
+        renderer.releaseAll()
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+      renderer.releaseAll()
+      await expect(Promise.all(jobs)).resolves.toHaveLength(4)
+      expect(pool.stats.queued).toBe(0)
+    } finally {
+      renderer.releaseAll()
+      await pool.close()
+    }
+  }, 60_000)
+
+  it('잡은 자리는 놓거나 끊기거나 일이 끝나면 돌아온다 — 두 번 놓아도 한 번이다', async () => {
+    const pool = new ExportWorkerPool({ limit: 1, jobLimit: 2 })
+    try {
+      // 놓는다 — 라우트가 읽다가 던진 판.
+      const a = pool.admit()
+      const b = pool.admit()
+      expect(() => pool.admit()).toThrow(ExportBusyError)
+      a.release()
+      a.release()
+      // b 가 아직 쥐고 있다 — 남은 자리는 하나다.
+      const c = pool.admit()
+      expect(() => pool.admit()).toThrow(ExportBusyError)
+      c.release()
+      b.release()
+
+      const fresh = new ExportWorkerPool({ limit: 1, jobLimit: 2 })
+      try {
+        // 끊긴다 — 줄에서 빠지고 자리를 내놓는다.
+        const running = fresh.runHtml(syntheticRows(8, 7000), HTML_ZIP)
+        await vi.waitFor(() => expect(fresh.stats).toMatchObject({ busy: 1, queued: 0 }))
+        const gone = new AbortController()
+        const queued = fresh.runHtml(syntheticRows(1, 1), HTML_NO_ZIP, { signal: gone.signal }).catch((error: unknown) => error)
+        expect(fresh.stats.queued).toBe(1)
+        expect(() => fresh.admit()).toThrow(ExportBusyError)
+        gone.abort()
+        expect(await queued).toBeInstanceOf(ExportAbortedError)
+        expect(fresh.stats.queued).toBe(0)
+        fresh.admit().release()
+
+        // 끝난다 — 도는 일도 끝나면 자리를 내놓는다.
+        await running
+        const [x, y] = [fresh.admit(), fresh.admit()]
+        x.release()
+        y.release()
+      } finally {
+        await fresh.close()
+      }
+    } finally {
+      await pool.close()
+    }
+  }, 60_000)
+
+  it('라우트 — 떠 있는 일이 차면 503 + Retry-After 이고 봉투의 문장이 사람에게 간다', async () => {
+    const renderer = new HeldRenderer()
+    try {
+      await withApi(
+        async (ctx) => {
+          const fixture = await 설계서(ctx, 'worker-busy')
+          const url = `/api/projects/${fixture.projectId}/export/preview?format=pptx`
+          // 둘이 그리고, 나머지는 그리기 칸을 기다린다 — 떠 있는 일이 한도에 닿는다.
+          const filling = Array.from({ length: EXPORT_JOB_LIMIT }, () => ctx.app.inject({ method: 'GET', url, cookies: fixture.cookie }))
+          await vi.waitFor(() => expect(renderer.started).toBe(EXPORT_RENDER_LIMIT), { timeout: 30_000 })
+
+          // 채우는 요청들이 아직 가드를 지나는 중이면 이 요청이 들어가 돈다 — 한도가 찰 때까지 다시 본다.
+          let busy!: Awaited<ReturnType<typeof ctx.app.inject>>
+          await vi.waitFor(
+            async () => {
+              busy = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })
+              expect(busy.statusCode).toBe(503)
+            },
+            { timeout: 30_000 },
+          )
+          expect(busy.headers['retry-after']).toBe(String(EXPORT_RETRY_AFTER_S))
+          expect(busy.json()).toEqual({ error: { code: 'internal', message: '내보내기가 밀려 있습니다 — 잠시 뒤 다시 시도하세요' } })
+
+          const settled = Promise.all(filling)
+          let done = false
+          void settled.then(() => (done = true))
+          while (!done) {
+            renderer.releaseAll()
+            await new Promise((resolve) => setTimeout(resolve, 20))
+          }
+          expect((await settled).map((res) => res.statusCode)).toEqual(filling.map(() => 200))
+        },
+        { screenRenderer: { render: renderer.render } },
+      )
+    } finally {
+      renderer.releaseAll()
+    }
+  }, 120_000)
+
+  // 읽은 뒤에 자리를 잡아도 503 은 나온다 — 다만 거절할 요청이 행을 다 읽은 뒤에 나와 한도가 메모리를 묶지 못한다. 그
+  // 순서를 답으로 보는 길이 빈 프로젝트다: 읽기가 `EmptyProjectError`(→ 409)를 던지므로, 읽기 전에 거절하면 503 이다.
+  it('라우트 — 자리는 행을 읽기 전에 잡는다: 찼을 때 빈 프로젝트는 409 가 아니라 503 이다', async () => {
+    const renderer = new HeldRenderer()
+    try {
+      await withApi(
+        async (ctx) => {
+          const fixture = await 설계서(ctx, 'worker-busy-before-read')
+          const empty = await createProject(ctx, fixture.cookie, { name: '빈 설계서', slug: 'worker-busy-empty' })
+          // 한가할 때는 409 다 — 이 프로젝트의 읽기가 정말 던진다.
+          const idle = await ctx.app.inject({ method: 'GET', url: `/api/projects/${empty.id}/export/preview?format=pptx`, cookies: fixture.cookie })
+          expect(idle.statusCode).toBe(409)
+
+          const filling = Array.from({ length: EXPORT_JOB_LIMIT }, () =>
+            ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`, cookies: fixture.cookie }),
+          )
+          await vi.waitFor(() => expect(renderer.started).toBe(EXPORT_RENDER_LIMIT), { timeout: 30_000 })
+          // 채우는 요청들이 아직 가드를 지나는 중이면 이 요청이 들어가 읽는다 — 한도가 찰 때까지 다시 본다.
+          await vi.waitFor(
+            async () => {
+              const html = await ctx.app.inject({ method: 'GET', url: `/api/projects/${empty.id}/export/preview`, cookies: fixture.cookie })
+              expect(html.statusCode).toBe(503)
+            },
+            { timeout: 30_000 },
+          )
+          const pptx = await ctx.app.inject({ method: 'GET', url: `/api/projects/${empty.id}/export?format=pptx`, cookies: fixture.cookie })
+          expect(pptx.statusCode).toBe(503)
+
+          const settled = Promise.all(filling)
+          let done = false
+          void settled.then(() => (done = true))
+          while (!done) {
+            renderer.releaseAll()
+            await new Promise((resolve) => setTimeout(resolve, 20))
+          }
+          expect((await settled).map((res) => res.statusCode)).toEqual(filling.map(() => 200))
+        },
+        { screenRenderer: { render: renderer.render } },
+      )
+    } finally {
+      renderer.releaseAll()
+    }
+  }, 120_000)
 })
 
 describe('workerExecArgv', () => {
