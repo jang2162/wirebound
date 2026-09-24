@@ -125,6 +125,12 @@ const ACTOR_SITES: ActorSite[] = [
   },
   {
     file: 'routes/comments.ts',
+    label: 'rebroadcastPostRevision — 재생이 다시 보내는 앞 게시의 번호 프레임',
+    origin: 'literal',
+    why: '**revision 에 적힌 actor 를 옮긴다** — 이 프레임은 앞 게시가 만든 revision 을 다시 나르는 것이라, 재생한 요청이 아니라 그 revision 을 낸 쪽(사람 · MCP · CLI)이 «누가 했나»의 답이다. 요청으로 만들면 같은 revision 을 두 요청이 다른 actor 로 보낼 수 있다',
+  },
+  {
+    file: 'routes/comments.ts',
     label: 'POST .../comments — 번호를 붙이는 갈래',
     origin: 'request',
     why: 'MCP `add_comment`가 만드는 revision이다',
