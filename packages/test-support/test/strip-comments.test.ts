@@ -64,11 +64,12 @@ describe('`.tsx`', () => {
     expect(calls(code)).toBe(false)
   })
 
-  it('이름이 없으면 `.ts` 가 먼저다 — `<T>x` 단언이 JSX 로 읽혀 던지지 않는다', () => {
+  it('이름이 없으면 `.tsx` 가 먼저다 — 두 문법이 다 받는 글자에서 JSX 식을 주석으로 지우지 않는다', () => {
+    // `.ts` 로는 단언 + 줄 주석, `.tsx` 로는 JSX 텍스트 + 식이다 — `.ts` 쪽으로 걷으면 `{…}` 가 코드째 사라진다.
+    expect(calls(stripComments('export const Z = () => <p>a // {process.exit(1)}</p>'))).toBe(true)
+    // `<T>x` 단언이 든 `.ts` 는 `.tsx` 로 못 읽혀 `.ts` 로 넘어간다 — 던지지 않는다.
     expect(calls(stripComments(ASSERTION))).toBe(true)
-    // 두 문법이 다 받고 뜻이 갈리는 글자 — `.ts` 로는 줄 주석, `.tsx` 로는 JSX 텍스트다.
-    expect(stripComments('const a = <T>b // </T>')).not.toContain('</T>')
-    expect(stripComments('const a = <T>b // </T>', 'a.tsx')).toContain('</T>')
+    expect(stripComments('const a = <T>b // </T>', 'a.ts')).not.toContain('</T>')
   })
 
   it('이름을 주면 그 확장자로만 읽는다 — 틀린 이름은 던진다', () => {

@@ -16,10 +16,11 @@
  * **JSX 텍스트는 주석이 아니다** — `<p>// 이것은 글자다</p>` 의 `//` 는 남는다. 그 토큰 앞은 트리비아가 아니라서
  * 구간을 그 자리에서 찾지 않는다.
  *
- * **`.tsx` 는 이름이 없어도 읽는다** — 두 번째 인자를 안 주면 `.ts` 로 먼저 읽고, 구문 오류면 `.tsx` 로 한 번 더
- * 읽는다. 둘 다 오류여야 던진다. 이름을 주면 그 확장자 하나로만 읽는다. **두 문법이 다 받는데 뜻이 갈리는 글자가
- * 있다** — `const a = <T>b // </T>` 는 `.ts` 로는 단언 + 줄 주석, `.tsx` 로는 JSX 요소다. 이름 없이 주면 `.ts` 쪽
- * 뜻(주석)으로 걷는다. JSX 텍스트를 주석으로 지우는 방향이라 코드가 사라지지는 않는다 — 확실히 하려면 이름을 준다.
+ * **`.tsx` 는 이름이 없어도 읽는다** — 두 번째 인자를 안 주면 `.tsx` 로 먼저 읽고, 구문 오류면 `.ts` 로 한 번 더
+ * 읽는다(`<T>x` 단언이 든 `.ts` 는 `.tsx` 로 못 읽혀 여기로 온다). 둘 다 오류여야 던진다. 이름을 주면 그 확장자 하나로만
+ * 읽는다. **두 문법이 다 받는데 뜻이 갈리는 글자가 있다** — `<p>a // {process.exit(1)}</p>` 는 `.tsx` 로는 JSX 텍스트 +
+ * 식, `.ts` 로는 단언 + 줄 주석이다. `.ts` 쪽으로 걷으면 `{…}` 식이 **코드째** 지워진다(거짓 초록). `.tsx` 쪽으로 걷으면
+ * `.ts` 파일의 줄 주석이 JSX 텍스트로 남을 뿐이다(거짓 빨강) — 그래서 `.tsx` 가 먼저다. 확실히 하려면 이름을 준다.
  *
  * **구문 오류가 든 소스는 읽지 않고 던진다.** 파서는 오류를 건너뛰며 트리를 복구하는데, 그 복구가 **코드를
  * 지운다** — `@@@ process.exit(1)`은 빈 글자로, `const x = ) process.exit(1)`은 `process, exit`로 찍혀 술어가
@@ -29,7 +30,7 @@
 import ts from 'typescript'
 
 export function stripComments(source: string, fileName?: string): string {
-  const kinds = fileName === undefined ? [false, true] : [/\.tsx$/i.test(fileName)]
+  const kinds = fileName === undefined ? [true, false] : [/\.tsx$/i.test(fileName)]
   let broken: ts.Diagnostic | undefined
   for (const jsx of kinds) {
     broken = syntaxError(source, jsx)

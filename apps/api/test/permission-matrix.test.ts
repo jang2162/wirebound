@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { roleAtLeast } from '../src/auth/roles'
+import type { preHandlerHookHandler } from 'fastify'
+import { projectGuard, roleAtLeast } from '../src/auth/roles'
 import type { ProjectRole } from '../src/db/types'
 import { insertApiToken } from '../src/repos/api-tokens'
 import { insertPreset } from '../src/repos/presets'
@@ -7,7 +8,7 @@ import { insertSnapshot } from '../src/repos/snapshots'
 import { insertTheme } from '../src/repos/themes'
 import { captureSnapshot } from '../src/services/snapshot-capture'
 import { SNAPSHOT_PAYLOAD_VERSION } from '@wirebound/themes'
-import { type GuardedRoute, routeCensus } from './guarded-routes'
+import { type GuardedRoute, guardMinOf, routeCensus } from './guarded-routes'
 import { addMember, createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 type Actor = ProjectRole | 'outsider' | 'anonymous'
@@ -655,6 +656,15 @@ describe('표의 완전성', () => {
 
   it('`:projectId` 라우트는 전부 가드를 지난다 — 가드를 못 알아보면 분모에서 빠지는 대신 여기서 죽는다', async () => {
     expect((await routeCensus()).unguardedProjectRoutes).toEqual([])
+  })
+
+  it('감싼 가드는 가드로 읽지 않는다 — 탐침이 지나는 한 갈래의 역할은 최소 역할이 아니다', async () => {
+    // 토큰이면 viewer 로 푸는 가드다. 탐침은 세션 갈래(`editor`)만 지나므로 읽으면 표와 맞아 지나간다(`guarded-routes.ts` 머리말).
+    const wrapped: preHandlerHookHandler = async function (request, reply) {
+      return projectGuard(request.tokenProjectId ? 'viewer' : 'editor').call(this, request, reply, () => {})
+    }
+    expect(await guardMinOf([wrapped])).toBeUndefined()
+    expect(await guardMinOf([projectGuard('owner')])).toBe('owner')
   })
 
   it('projectGuard가 걸린 라우트가 전부 표에 있다', async () => {
