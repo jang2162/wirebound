@@ -319,10 +319,18 @@ describe('다시 붙으면 다시 읽는다', () => {
    * 리베이스는 갭을 고치지 못하고(바탕이 서버 문서와 같아야 한다), 재조회는 오히려
    * 재연결마다 돈다. 그래서 문장을 낸다.
    */
-  it('되돌리기 이력이 있었으면 초기화됐다고 말한다', async () => {
+  /**
+   * 되돌리기 이력을 채운 채 연결을 한 번 끊었다 다시 붙인다. 재조회가 돌려주는 `headSeq`는 `resyncSeq`다 — 처음 여는
+   * 조회는 `HEAD_SEQ`다.
+   */
+  async function reconnectWithUndo(resyncSeq: number): Promise<ReturnType<typeof vi.fn>> {
     const sockets: FakeSocket[] = []
     const scheduled: (() => void)[] = []
-    const getPage = vi.fn(async (_projectId: string, pageId: string) => pageDetail(pageId, doc('n-first')))
+    let calls = 0
+    const getPage = vi.fn(async (_projectId: string, pageId: string) => {
+      calls += 1
+      return { ...pageDetail(pageId, doc('n-first')), headSeq: calls === 1 ? HEAD_SEQ : resyncSeq }
+    })
     const setup: RealtimeSetup = {
       holder: createConnectionIdHolder(),
       channel: createEditChannel(),
@@ -377,10 +385,30 @@ describe('다시 붙으면 다시 읽는다', () => {
     act(() => {
       sockets[1]?.onopen?.()
     })
+    await waitFor(() => expect(getPage).toHaveBeenCalledTimes(2))
+    return getPage
+  }
+
+  it('되돌리기 이력이 있었으면 초기화됐다고 말한다 — 끊긴 동안 서버 판이 움직였다', async () => {
+    await reconnectWithUndo(HEAD_SEQ + 1)
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('되돌리기 이력이 초기화됐습니다')
     expect(alert.textContent).toContain('연결이 다시 붙어')
+  })
+
+  /**
+   * **서버 판이 그대로면 되돌리기 이력을 지킨다.** 같은 `headSeq`에 보내지 않은 편집이 없으면 내 문서가 곧 서버 문서라
+   * 스택의 `inverse`가 남의 편집을 덮을 길이 없다. 다시 붙기만 한 판이 흔하다 — 같은 사람이 다른 탭에서 다시 로그인하면
+   * 여기 온다(Chrome: 싣던 판은 «되돌리기 이력이 초기화됐습니다» · 되돌리기 꺼짐).
+   */
+  it('서버 판이 그대로면 되돌리기 이력을 지키고 아무 말도 안 한다', async () => {
+    await reconnectWithUndo(HEAD_SEQ)
+
+    // 재조회가 끝난 뒤의 판이다(`reconnectWithUndo`가 둘째 조회를 기다렸다) — 응답을 싣는 마이크로태스크까지 흘린다.
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: '되돌리기' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
 
