@@ -257,7 +257,7 @@ const NOT_ENVELOPE_MESSAGE =
 const BAD_SHAPE_MESSAGE = '페이지 JSON의 모양이 규격과 다릅니다'
 /** `marker` 거부 — 이 한 갈래만 문장을 따로 짓는다. 그 값이 **갈 자리가 있기** 때문이다(위 «번호는 노드가 든다» 절). */
 const COMMENT_MARKER_MESSAGE =
-  'comments[]에는 marker를 싣지 않습니다 — 번호는 schema 안의 노드가 듭니다(설계 §4.3).'
+  'comments[]에는 marker를 싣지 않습니다 — 번호는 schema 안의 노드가 듭니다.'
 
 /**
  * 글자 한 벌에서 봉투를 읽는다. **던지지 않는다.**

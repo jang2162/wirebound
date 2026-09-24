@@ -172,7 +172,7 @@ export function defineComponent(def: ComponentDef): ComponentDef {
   if (unreachableStates.length > 0) {
     throw new Error(
       `${type}: states가 editor에 없어 속성 패널에서 켤 수 없습니다: ${unreachableStates.join(', ')} ` +
-        '(§5.1 — 패널은 editor에서 자동 생성됩니다)',
+        '(속성 패널은 editor에서 자동 생성됩니다)',
     )
   }
 

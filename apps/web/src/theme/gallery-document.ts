@@ -118,7 +118,7 @@ interface Sample {
  */
 const EXCLUDED: ReadonlyMap<string, string> = new Map([
   ['Page', '갤러리 문서 자체의 루트다 — 항목으로 또 넣으면 문서가 문서를 품는다'],
-  ['Slot', '레이아웃 전용이다(§4.4) — 페이지 문서에 넣으면 validatePage가 slot-count로 막는다'],
+  ['Slot', '레이아웃이 페이지를 끼우는 자리다 — 페이지 문서에 넣으면 validatePage가 slot-count로 막는다'],
 ])
 
 /**

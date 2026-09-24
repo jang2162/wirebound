@@ -114,7 +114,7 @@ export const LINT_RULES = [
     spec: null,
     beyondSpec:
       '`validatePage`가 내는 나머지 이슈(`unknown-type`·`invalid-props`·`duplicate-id`…). ' +
-      '§12.4에 줄이 없지만 §12.5가 lint를 *"설계서 자체의 결함을 보고한다"*로 적었고, ' +
+      '설계서 「lint 규칙」에 줄이 없지만 「스킬」이 `validate`(lint)를 *"설계서 자체의 결함을 보고한다"*로 적었고, ' +
       '그것들은 결함의 정의 그 자체다. 삼키면 lint가 통과시킨 문서를 저장이 거부한다.',
     group: 'document',
     owner: 'schema',
@@ -168,7 +168,7 @@ export const LINT_RULES = [
     id: 'theme-other',
     spec: null,
     beyondSpec:
-      '`resolveTheme`이 내는 나머지 §6 판정(`bad-spec`·`duplicate-variable`·`node-handle-overwrite`…). ' +
+      '`resolveTheme`이 내는 나머지 테마 판정(`bad-spec`·`duplicate-variable`·`node-handle-overwrite`…). ' +
       '위 여섯 줄이 그 함수의 코드 전부를 덮지 않는데, 덮지 못한 것을 버리면 ' +
       '**테마가 서지 않는 이유를 lint가 말하지 못한다.**',
     group: 'theme',

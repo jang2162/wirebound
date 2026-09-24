@@ -520,7 +520,7 @@ function resolveReferences(
           'bad-style-value',
           path,
           `여기서는 primitives를 가리킬 수 없습니다: ${reference} ` +
-            '(primitives 값은 토큰이나 리터럴을 씁니다 — §6.4)',
+            '(primitives 값은 토큰이나 리터럴을 씁니다)',
         )
       }
       if (!primitives.has(reference)) {
@@ -537,7 +537,7 @@ function resolveReferences(
         'bad-style-value',
         path,
         `스타일 값은 ${namespaceOf(reference)}를 직접 가리킬 수 없습니다: ${reference} ` +
-          '(semantic 토큰을 쓰세요 — 의미 계층만 갈아끼워 다크 테마·브랜드 교체가 되게 하는 것이 §6.3의 3단 분리입니다)',
+          '(semantic 토큰을 쓰세요 — semantic만 갈아끼우면 다크 테마·브랜드 교체가 됩니다)',
       )
     }
     if (!tokens.has(reference)) {
