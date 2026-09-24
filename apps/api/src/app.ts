@@ -132,6 +132,35 @@ export function buildLoggerOptions(config: ApiConfig): ApiLoggerOptions {
 }
 
 /**
+ * **닫는 중에 나가는 답은 그 연결도 닫는다**(`Connection: close`) — 도는 요청은 끝까지 답한다.
+ *
+ * `app.close()`가 닫는 것은 **그때 쉬고 있는** keep-alive 연결뿐이다(Node 의 `server.close()`). 닫기 **전에** 들어와
+ * 닫는 중에 답한 요청의 연결은 답한 뒤 keep-alive 로 남아, Fastify 의 `keepAliveTimeout`(72s)이 끝낼 때까지 `close()`가
+ * 안 끝난다. 잰 값(api 테스트 하네스 · 진짜 포트 · keep-alive 에이전트 · 내보내기 하나를 보내고 5ms 뒤 `close()`): 요청은
+ * 0.2s 에 200 · `close()` **73.2s**. 이것이 있으면 같은 절차의 `close()`가 요청이 끝나는 대로 끝난다
+ * (`test/close-while-inflight.test.ts`).
+ *
+ * **`forceCloseConnections: true`를 고르지 않은 이유:** 그것은 도는 요청의 연결까지 끊는다 — 36MB 내보내기를 받던
+ * 사람이 반쯤 받은 파일을 얻는다. Fastify 가 닫는 중에 **새로** 들어온 요청에 붙이는 것도 같은 머리다(그 뒤에 503).
+ *
+ * 누가 이 값을 먹나 — **api 에 keep-alive 로 바로 붙어 답을 받은 뒤 그 연결로 더 보내지 않는 클라이언트**(같은 연결로 또
+ * 보내면 Fastify 가 닫는 중이라 503 + `Connection: close`로 끊는다). `main.ts`의 SIGTERM · SIGINT 는 `app.close()`를 기다린 뒤
+ * 끝나고, `pnpm dev`(tsx watch)는 다시 띄울 때 앞 프로세스를 5s 기다린 뒤 SIGKILL 한다. 잰 값(tsx watch · 그런 클라이언트가
+ * pptx 미리보기를 받는 중에 소스를 건드림): 새 서버가 답하기까지 5.7s · «Process didn't exit in 5s. Force killing...»(DB 풀을
+ * 닫지 못하고 죽는다) → 이것이 있으면 1.0s. 웹 → api 는 이 값을 안 먹는다 — Vite 프록시(http-proxy 의 `agent: false`)가
+ * 요청마다 `Connection: close`를 싣는다.
+ */
+function closeConnectionsAfterReplyWhileClosing(app: FastifyInstance): void {
+  let closing = false
+  app.addHook('preClose', async () => {
+    closing = true
+  })
+  app.addHook('onSend', async (request, reply) => {
+    if (closing && request.raw.httpVersionMajor < 2) reply.header('connection', 'close')
+  })
+}
+
+/**
  * Fastify 인스턴스를 조립해 반환한다.
  *
  * `listen`은 절대 호출하지 않는다 — 포트를 여는 것은 `main.ts`만의 책임이고,
@@ -181,6 +210,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   }
 
   app.decorate('db', db)
+  closeConnectionsAfterReplyWhileClosing(app)
   registerErrorHandler(app)
   await registerAuthPlugin(app, config)
   registerProjectRoleDecorator(app)
