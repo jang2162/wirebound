@@ -24,6 +24,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { seedAfterMigration } from '../src/db/migrate'
 import { callSitesByFile, SRC_ROOT, sourceFiles, stripComments } from './source-census'
@@ -163,72 +164,153 @@ describe('픽스처가 프로덕션 경로를 지난다', () => {
  * *"`helpers.ts` 에서 `signup` 을 import 하는 파일 수"*를 한 줄 grep 으로 세면 **틀린다** —
  * `import { … } from './helpers'` 가 **여러 줄에 걸친** 파일을 놓친다.
  *
- * 그래서 **수를 적는 대신 성질을 든다** — *"`signup` 을 든 테스트 파일은 전부 그것을
- * 픽스처에서 가져온다"*. 수를 박지 않으므로 파일이 늘어도 안 낡고, 누가 픽스처를 안
- * 지나는 두 번째 길을 만들면 죽는다.
+ * 그래서 **수를 적는 대신 성질을 든다** — *"테스트가 쓰는 `signup` 은 전부 픽스처의 것이다"*. 수를 박지 않으므로
+ * 파일이 늘어도 안 낡고, 누가 픽스처를 안 지나는 두 번째 길을 만들면 죽는다.
  *
- * **«든다» · «가져온다» 둘 다 주석을 걷은 소스로 잰다**(`stripComments`) — 원문으로 재면 주석 속
- * `import { signup } from './helpers'` 가 픽스처로 읽혀 지역 `signup` 을 쓰는 파일이 초록이다.
+ * **글자가 아니라 바인딩으로 잰다.** 쓰이는 `signup` 이름 하나하나를 TypeScript 검사기로 선언에 묶고
+ * (`getSymbolAtLocation`), 그 선언이 `./helpers` 의 `signup` 을 가져오는 자리인지 본다 — 정적 import 의 지정자이거나
+ * `const { signup } = await import('./helpers')`(모듈 목을 먹이려고 `vi.resetModules()` 뒤에 다시 적재하는 파일)의
+ * 구조 분해다. 글자로 재면 «파일이 그 import 글자를 가졌나»만 보여서, 지역 `signup` 을 쓰면서 초록인 꼴이 셋 있었다 —
+ * 안 불리는 함수 안의 동적 import(죽은 스코프) · `import { signup as fixture }`(별칭) · 문자열 속의 import 글자.
+ * 셋 다 쓰이는 이름이 지역 선언에 묶이므로 여기서 죽는다(아래 «술어가 실제로 가른다»). 주석 · 문자열은 구문 트리에
+ * 이름으로 안 나오므로 걷을 것도 없다.
  *
- * **못 보는 것 — 글자로 재는 자의 한계다.** 이 자는 «파일이 그 import 글자를 가졌나»만 보고, 쓰는 `signup` 이
- * 그 import 의 것인지는 안 본다. 그래서 셋이 지역 `signup` 을 쓰면서 초록이다: ① 안 불리는 함수 안의
- * `const { signup } = await import('./helpers')`(죽은 스코프) ② `import { signup as fixture } from './helpers'`(별칭 —
- * 가져온 이름은 `fixture` 인데 `signup` 글자가 든다) ③ 문자열 속의 import 글자. 주석은 파서가 걷지만(`stripComments` —
- * `@wirebound/test-support`) 이 셋은 그대로다 — 걷는 것은 주석뿐이라 스코프 · 별칭 · 문자열을 안 본다(① · ③을 심어
- * 쟀다: 둘 다 초록). 닫으려면 import 선언을 구문 트리로 읽고 쓰이는 `signup` 을 그 바인딩에 묶어야 한다 — 이 자를 한 판
- * 더 짓지 않는다.
+ * **못 보는 것:** 네임스페이스로 가져와 속성으로 부르는 `h.signup(…)` 은 이름이 아니라 속성이라 세지 않는다(픽스처로도
+ * 위반으로도). `eval` · 조립한 이름처럼 구문 트리에 이름이 안 나오는 호출도 못 본다. 다른 모듈이 `./helpers` 를 다시
+ * 내보내고 거기서 가져오면 선언이 `./helpers` 가 아니라 죽는다(거짓 빨강 쪽).
  */
-describe('`signup` 을 든 테스트는 전부 픽스처를 지난다', () => {
+describe('테스트가 쓰는 `signup` 은 전부 픽스처의 것이다', () => {
   const TEST_ROOT = fileURLToPath(new URL('.', import.meta.url))
+  const testFiles = sourceFiles(TEST_ROOT).filter((name) => name.endsWith('.test.ts'))
 
-  /**
-   * **자기 자신은 뺀다.** 이 파일은 `signup` 이라는 낱말을 케이스 제목과 설명으로 들면서
-   * 픽스처를 안 쓴다 — 재는 자가 분모에 들어가면 자기 때문에 죽는다
-   * (`write-path-invariant.test.ts` 가 정의 파일을 빼는 것과 같은 자리다).
-   * **빼는 것은 이 하나뿐이고, 그렇다는 것도 아래에서 단언한다.**
-   */
-  const SELF = 'user-creation-census.test.ts'
-
-  const testFiles = sourceFiles(TEST_ROOT).filter((name) => name.endsWith('.test.ts') && name !== SELF)
-
-  /**
-   * `import … from './helpers'` 문장 전문. **여러 줄에 걸친 것을 이어서** 잡는다. 동적 적재의 구조 분해
-   * (`const { … } = await import('./helpers')` — 모듈 목을 먹이려고 `vi.resetModules()` 뒤에 다시 적재하는 파일)도 같은 픽스처다.
-   * 그 꼴은 중괄호 안에 중괄호가 없는 것만 잡는다(`[^}]*` — 게으른 `[\s\S]*?`면 앞의 다른 `const {`부터 삼킨다).
-   */
-  const HELPERS_IMPORT =
-    /import\s+(?:type\s+)?\{[\s\S]*?\}\s*from\s+'\.\/helpers'|const\s+\{[^}]*\}\s*=\s*await\s+import\(\s*'\.\/helpers'\s*\)/g
-
-  /** **주석을 걷은** 소스를 받는다(위 머리말). */
-  function importsSignupFixture(stripped: string): boolean {
-    return [...stripped.matchAll(HELPERS_IMPORT)].some((match) => /\bsignup\b/.test(match[0]))
+  /** 파일 이름 → 원문을 한 프로그램으로 읽는다. 모듈은 풀지 않는다 — 가져온 이름은 지정자 선언에서 멈춘다. */
+  function programOf(sources: Map<string, string>): ts.Program {
+    const options: ts.CompilerOptions = { noResolve: true, noLib: true, types: [], target: ts.ScriptTarget.Latest }
+    const host = ts.createCompilerHost(options)
+    host.getSourceFile = (name, target) => {
+      const text = sources.get(name)
+      return text === undefined ? undefined : ts.createSourceFile(name, text, target, true, ts.ScriptKind.TS)
+    }
+    host.fileExists = (name) => sources.has(name)
+    host.readFile = (name) => sources.get(name)
+    return ts.createProgram({ rootNames: [...sources.keys()], options, host })
   }
 
-  it('분모가 헛돌지 않는다 — 파일도 여러 줄 import 도 실제로 있다', () => {
-    expect(testFiles.length).toBeGreaterThan(50)
-    const multiline = testFiles.filter((name) => {
-      const source = readFileSync(join(TEST_ROOT, name), 'utf8')
-      return [...source.matchAll(HELPERS_IMPORT)].some((match) => match[0].includes('\n'))
-    })
-    // 한 줄 grep 이 놓치는 바로 그 부류가 실재한다는 것을 먼저 세운다.
-    expect(multiline.length).toBeGreaterThan(10)
-  })
-
-  it('`signup` 을 든 파일 집합 == 픽스처에서 가져오는 파일 집합', () => {
-    const mentions: string[] = []
-    const imports: string[] = []
-    for (const name of testFiles) {
-      const stripped = stripComments(readFileSync(join(TEST_ROOT, name), 'utf8'))
-      if (/\bsignup\b/.test(stripped)) mentions.push(name)
-      if (importsSignupFixture(stripped)) imports.push(name)
+  /** 그 선언이 `./helpers` 의 `signup` 을 가져오는 자리인가 — 정적 지정자 · 동적 import 의 구조 분해. */
+  function isFixture(declaration: ts.Declaration): boolean {
+    if (ts.isImportSpecifier(declaration)) {
+      const module = declaration.parent.parent.parent.moduleSpecifier
+      return (
+        (declaration.propertyName ?? declaration.name).text === 'signup' &&
+        ts.isStringLiteral(module) &&
+        module.text === './helpers'
+      )
     }
-    expect(mentions.length).toBeGreaterThan(40)
-    // 집합으로 단언한다 — 어느 파일이 어긋났는지 실패 메시지가 그대로 말한다.
-    expect(mentions).toEqual(imports)
+    if (ts.isBindingElement(declaration)) {
+      const imported = declaration.propertyName ?? declaration.name
+      const variable = declaration.parent.parent
+      if (!ts.isIdentifier(imported) || imported.text !== 'signup' || !ts.isVariableDeclaration(variable)) return false
+      const awaited = variable.initializer
+      const call = awaited !== undefined && ts.isAwaitExpression(awaited) ? awaited.expression : undefined
+      const [specifier] = call !== undefined && ts.isCallExpression(call) ? call.arguments : []
+      return (
+        call !== undefined &&
+        ts.isCallExpression(call) &&
+        call.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        specifier !== undefined &&
+        ts.isStringLiteral(specifier) &&
+        specifier.text === './helpers'
+      )
+    }
+    return false
+  }
+
+  /** 그 `signup` 이 **쓰이는** 자리인가 — 선언의 이름 · 속성 이름 · 가져오는 지정자의 이름은 뺀다. */
+  function isUse(name: ts.Identifier): boolean {
+    const parent = name.parent
+    if (ts.isImportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) return false
+    if (ts.isBindingElement(parent)) return false
+    if (ts.isShorthandPropertyAssignment(parent)) return true
+    return !(
+      (ts.isPropertyAccessExpression(parent) ||
+        ts.isPropertyAssignment(parent) ||
+        ts.isPropertySignature(parent) ||
+        ts.isPropertyDeclaration(parent) ||
+        ts.isMethodDeclaration(parent) ||
+        ts.isMethodSignature(parent) ||
+        ts.isFunctionDeclaration(parent) ||
+        ts.isFunctionExpression(parent) ||
+        ts.isVariableDeclaration(parent) ||
+        ts.isParameter(parent) ||
+        ts.isClassDeclaration(parent)) &&
+      parent.name === name
+    )
+  }
+
+  /** 파일마다 쓰이는 `signup` 의 자리 — `fixture` 는 그 이름이 `./helpers` 의 것에 묶였는가. */
+  function signupUses(sources: Map<string, string>): Map<string, { line: number; fixture: boolean }[]> {
+    const program = programOf(sources)
+    const checker = program.getTypeChecker()
+    const found = new Map<string, { line: number; fixture: boolean }[]>()
+    for (const name of sources.keys()) {
+      const file = program.getSourceFile(name)!
+      const uses: { line: number; fixture: boolean }[] = []
+      const visit = (node: ts.Node): void => {
+        if (ts.isIdentifier(node) && node.text === 'signup' && isUse(node)) {
+          const symbol = ts.isShorthandPropertyAssignment(node.parent)
+            ? checker.getShorthandAssignmentValueSymbol(node.parent)
+            : checker.getSymbolAtLocation(node)
+          const declarations = symbol?.declarations ?? []
+          uses.push({
+            line: file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1,
+            fixture: declarations.length > 0 && declarations.every(isFixture),
+          })
+        }
+        ts.forEachChild(node, visit)
+      }
+      visit(file)
+      found.set(name, uses)
+    }
+    return found
+  }
+
+  /** 픽스처가 아닌 `signup` 을 쓰는 자리 — `파일:줄`. */
+  function strayUses(sources: Map<string, string>): string[] {
+    return [...signupUses(sources)].flatMap(([name, uses]) =>
+      uses.filter((use) => !use.fixture).map((use) => `${name}:${use.line}`),
+    )
+  }
+
+  const REAL = new Map(testFiles.map((name) => [name, readFileSync(join(TEST_ROOT, name), 'utf8')]))
+
+  it('분모가 헛돌지 않는다 — 파일도 픽스처를 쓰는 자리도 실제로 있다', () => {
+    expect(testFiles.length).toBeGreaterThan(50)
+    const usingFixture = [...signupUses(REAL)].filter(([, uses]) => uses.some((use) => use.fixture))
+    expect(usingFixture.length).toBeGreaterThan(40)
   })
 
-  it('분모에서 뺀 것은 이 파일 하나다 — 예외를 늘려 자를 재우는 길을 막는다', () => {
-    const all = sourceFiles(TEST_ROOT).filter((name) => name.endsWith('.test.ts'))
-    expect(all.filter((name) => !testFiles.includes(name))).toEqual([SELF])
+  it('쓰이는 `signup` 이 전부 `./helpers` 의 것에 묶인다', () => {
+    // 목록으로 단언한다 — 어느 파일 어느 줄이 어긋났는지 실패 메시지가 그대로 말한다.
+    expect(strayUses(REAL)).toEqual([])
+  })
+
+  it('술어가 실제로 가른다 — 반대편', () => {
+    const LOCAL = 'async function signup() { return 1 }\n'
+    const verdict = (text: string): string[] => strayUses(new Map([['case.test.ts', text]]))
+
+    // 픽스처 — 한 줄 · 여러 줄 · 동적 적재 · 줄여 쓴 속성.
+    expect(verdict("import { signup } from './helpers'\nawait signup()")).toEqual([])
+    expect(verdict("import {\n  withApi,\n  signup,\n} from './helpers'\nconst f = { signup }")).toEqual([])
+    expect(verdict("const { signup } = await import('./helpers')\nawait signup()")).toEqual([])
+    expect(verdict("import { signup as fixture } from './helpers'\nawait fixture()")).toEqual([])
+
+    // 지역 `signup` 을 쓰는 꼴 — 글자로 재면 셋 다 초록이었다.
+    expect(verdict(`${LOCAL}async function dead() { const { signup } = await import('./helpers') }\nawait signup()`)).toEqual([
+      'case.test.ts:3',
+    ])
+    expect(verdict(`import { signup as fixture } from './helpers'\n${LOCAL}await signup()`)).toEqual(['case.test.ts:3'])
+    expect(verdict(`const note = "import { signup } from './helpers'"\n${LOCAL}await signup()`)).toEqual(['case.test.ts:3'])
+    // 가져오기가 아예 없는 꼴.
+    expect(verdict(`${LOCAL}await signup()`)).toEqual(['case.test.ts:2'])
   })
 })
