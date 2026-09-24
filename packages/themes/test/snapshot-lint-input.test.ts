@@ -1,9 +1,8 @@
 /**
- * **payload → lint 입력 변환의 판정들**(P9-3 T3 · D3).
+ * **payload → lint 입력 변환의 판정들.**
  *
- * P9-1 이월 §1이 *"payload와 lint 입력은 이름도 nullable도 다르다"*며 표를 남겼고, 그 표를
- * 소비자가 각자 맞추면 `wireb lint`와 MCP `validate`가 갈린다. 여기서 재는 것은 **그 표를
- * 지키는 함수 하나**다.
+ * payload와 lint 입력은 이름도 nullable도 다르다. 그 대응 표를 소비자가 각자 맞추면
+ * `wireb lint`와 MCP `validate`가 갈린다. 여기서 재는 것은 **그 표를 지키는 함수 하나**다.
  *
  * **하나짜리로 재지 않는다** — 페이지 하나·테마 하나로 재면 짝짓기가 통째로 뒤바뀌어도
  * 통과한다. 아래 픽스처는 메뉴 둘·깊이 둘·페이지 셋이다.
@@ -63,7 +62,7 @@ function payload(over: Partial<SnapshotPayload> = {}): SnapshotPayload {
   }
 }
 
-describe('절 이름을 옮긴다 (P9-1 이월 §1의 표)', () => {
+describe('절 이름을 옮긴다', () => {
   it('payload의 `schema`가 lint의 `document`가 된다', () => {
     const { input } = snapshotToLintInput(payload())
     // 이름이 안 바뀌면 여기가 `undefined`다.
@@ -160,7 +159,7 @@ describe('ⓒ schemaVersion — 마이그레이션을 지난다', () => {
 
 describe('ⓓ 두 절의 페이지를 짝 맞춘다', () => {
   /**
-   * **P9-1 이월 §4가 값과 함께 쟀다:** 봉투가 깨진 문서를 `themes[].pages`에만 넣으면
+   * 봉투가 깨진 문서를 `themes[].pages`에만 넣으면
    * `lintProject`가 `[]`를 낸다 — 아무도 말하지 않는다. 걸러 넣는 최적화를 하는 순간
    * 걸러 낸 페이지의 문서 결함이 조용해진다.
    */
@@ -189,8 +188,8 @@ describe('⑪이 도는 조건 — 레이아웃 개수', () => {
   })
 
   /**
-   * **조용히 0건이 되지 않는다.** *"프로젝트에 레이아웃이 하나뿐"*은 P6-1 재라 #2가 실측으로
-   * 거짓임을 확인한 가정이다 — `layouts`에 `project_id` 유니크가 없고 두 번째가 실제로 들어간다.
+   * **조용히 0건이 되지 않는다.** *"프로젝트에 레이아웃이 하나뿐"*은 거짓인 가정이다 —
+   * `layouts`에 `project_id` 유니크가 없어 두 번째가 실제로 들어간다.
    */
   it('레이아웃이 둘이면 안 매달고 **말한다**', () => {
     const { input, notes } = snapshotToLintInput(
@@ -210,8 +209,8 @@ describe('⑪이 도는 조건 — 레이아웃 개수', () => {
 
 describe('메뉴를 잃은 페이지', () => {
   /**
-   * FK가 이 상태를 막지 않는다 — `pages_menu_node_id_fkey`가 프로젝트를 안 본다(P8-4 리뷰가
-   * 재서 보였다). **버리면 그 페이지의 타겟이 사라지고 남의 멀쩡한 링크가 끊긴 것으로
+   * FK가 이 상태를 막지 않는다 — `pages_menu_node_id_fkey`가 프로젝트를 안 본다.
+   * **버리면 그 페이지의 타겟이 사라지고 남의 멀쩡한 링크가 끊긴 것으로
    * 보고된다.**
    */
   it('조상 없는 타겟을 붙이고 그렇다고 말한다', () => {
@@ -226,7 +225,7 @@ describe('메뉴를 잃은 페이지', () => {
   })
 })
 
-describe('config는 그대로 지난다 (D8)', () => {
+describe('config는 그대로 지난다', () => {
   it('준 것이 그대로 실린다', () => {
     const config = { naming: { page: '^[가-힣 ]+$' } }
     expect(snapshotToLintInput(payload(), config).input.config).toBe(config)

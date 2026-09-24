@@ -8,14 +8,13 @@ import { ThemeSchema, type Theme } from '../spec/theme'
 /**
  * 파생 테마 문서. **`Theme`이 아니다.**
  *
- * 재라 #5의 답은 *"규격이 `null`을 받지 않는다"*다 — `tokens.semantic.danger`·`tokens`·
- * `assets.fonts`·`components.List` 어디에 넣어도 `ThemeSchema`가 거부하는 것을 쟀다.
- * 그런데 §6.9는 *"`null`을 명시하면 상속된 키를 삭제한다"*이므로 파생 문서는 `Theme`이
+ * **규격이 `null`을 받지 않는다** — `tokens.semantic.danger`·`tokens`·`assets.fonts`·
+ * `components.List` 어디에 넣어도 `ThemeSchema`가 거부하는 것을 쟀다. 그런데 설계서
+ * 「상속과 병합」은 *"`null`을 명시하면 상속된 키를 삭제한다"*이므로 파생 문서는 `Theme`이
  * 될 수 없다. **그래서 규격을 따로 둔다.**
  *
  * 다만 `Theme`을 통째로 베껴 `null`을 허용하는 평행 규격은 만들지 않는다. 그 형태는
- * 두 규격이 손으로 맞춰야 하고 어긋나도 아무것도 알려 주지 않는다 — 이 저장소가
- * 반복해서 겪은 부류다. 대신 **`null`을 병합 지시로 보고 절 안쪽 검사를 병합 뒤로 미룬다**:
+ * 두 규격이 손으로 맞춰야 하고 어긋나도 아무것도 알려 주지 않는다. 대신 **`null`을 병합 지시로 보고 절 안쪽 검사를 병합 뒤로 미룬다**:
  * 여기서는 최상위 절 이름과 `meta`만 보고, 나머지는 `unknown`으로 통과시킨 뒤
  * **병합 결과를 `ThemeSchema`가 검사한다.** 그러면 `null`은 결과에 남지 않으므로
  * 규격을 손댈 이유가 없고, 파생 문서의 오타도 결과 검사에서 잡힌다.
@@ -43,31 +42,31 @@ export const ThemePatchSchema: z.ZodType<ThemePatch> = z.strictObject({
 })
 
 /**
- * §6.9의 상속을 적용한다. **던지지 않는다** — 이슈를 모아서 낸다.
+ * 「상속과 병합」의 상속을 적용한다. **던지지 않는다** — 이슈를 모아서 낸다.
  *
- * 규칙 넷은 §6.9 그대로다. 객체는 깊은 병합, 배열은 교체, `null`은 삭제, 깊이는 1단계.
+ * 규칙 넷은 「상속과 병합」 그대로다. 객체는 깊은 병합, 배열은 교체, `null`은 삭제, 깊이는 1단계.
  *
- * **`meta`는 병합하지 않고 파생의 것을 쓰되 `extends`는 뺀다.** §6.2·6.9를 대조해 정했다.
+ * **`meta`는 병합하지 않고 파생의 것을 쓰되 `extends`는 뺀다.** 설계서 「meta」와 「상속과
+ * 병합」을 대조해 정했다.
  * (1) `MetaSchema`가 `id`·`name`·`version`을 필수로 두므로 파생 문서에 늘 있고 병합할 빈자리가
  * 없다. (2) `preview`는 *"갤러리용 썸네일(생성물)"*이라 물려받으면 **다른 테마의 그림을 자기
  * 것이라 말하게 된다.**
  *
- * **`extends`를 빼는 이유는 §4.5다.** 그 절이 스냅샷에 테마를 함께 얼리는 이유를
+ * **`extends`를 빼는 이유는 설계서 「스냅샷」이다.** 그 절이 스냅샷에 테마를 함께 얼리는 이유를
  * *"참조만 저장하면 테마가 나중에 바뀌었을 때 스냅샷이 다른 모습으로 복원된다"*로 적었는데,
  * `extends`를 지닌 채 저장하면 **그것은 여전히 참조다** — 복원이 그때의 base를 다시
- * 요구하므로 §4.5가 막으려던 일이 그대로 일어난다. 병합이 끝난 문서가 *"나는 아직 X와
+ * 요구하므로 「스냅샷」이 막으려던 일이 그대로 일어난다. 병합이 끝난 문서가 *"나는 아직 X와
  * 병합되어야 한다"*고 말하는 것은 병합 후에 거짓이기도 하다.
  *
- * 처음에는 `extends`까지 그대로 두었고, 그 상태에서 병합 결과를 base 없이 해석하면
- * `bad-extends`가 나는 것을 쟀다. 빼고 나니 해석이 이슈 0이고 **base+patch 경로와 바이트
- * 동일한 CSS**가 나온다 — 유래를 뺐는데 결과가 같다는 것이 이 결정의 정당성이다.
+ * `extends`를 남긴 채 병합 결과를 base 없이 해석하면 `bad-extends`가 난다. 빼면 해석이
+ * 이슈 0이고 **base+patch 경로와 바이트 동일한 CSS**가 나온다 — 유래를 뺐는데 결과가 같다는 것이 이 결정의 정당성이다.
  *
  * **유래를 잃는 것은 병합 결과뿐이다.** 사람이 편집하고 저장하는 **파생 테마 자체는
  * `extends`를 그대로 지닌다.** 산출물이 둘이고 서로 다른 일을 한다 — 파생 테마는 편집용,
- * 병합 결과는 §4.5가 얼려 두는 것이다.
+ * 병합 결과는 「스냅샷」이 얼려 두는 것이다.
  *
  * **결과가 `base`·`patch`와 구조를 공유하지 않아야 하는 이유**는 시스템 테마가 읽기
- * 전용(§6.10)이고 P4b가 그것을 모듈 상수로 둘 것이기 때문이다. 결과의 하위 객체가 base의
+ * 전용(설계서 「테마 관리」)이고 모듈 상수이기 때문이다. 결과의 하위 객체가 base의
  * 것이면 한 번의 실수가 그 상수를 오염시킨다.
  *
  * **무엇이 그것을 막는지 재서 갈랐다.** 대부분은 `ThemeSchema.safeParse`가 막는다 —
@@ -76,9 +75,8 @@ export const ThemePatchSchema: z.ZodType<ThemePatch> = z.strictObject({
  * 지나간다** — 패턴 노드의 `props` 값이 그 자리이고, 거기서만 공유가 남는다.
  * 그 한 자리를 아래 `copy`가 막는다(케이스가 base·patch 양쪽으로 그것을 잰다).
  *
- * `structuredClone`을 부르지 않는 이유는 병합이 지나는 마디를 그 자리에서 복사해 한 번 더 훑는 것이
- * 잉여이고, `themes`의 tsconfig가 `lib: ["ES2022"]`·`types: []`이라 그 전역이 타입에 없어
- * `schema`처럼 `globals.d.ts`를 또 만들어야 하기 때문이다.
+ * `structuredClone`을 부르지 않는 이유는 병합이 지나는 마디를 그 자리에서 복사하므로 한 번 더
+ * 훑는 것이 잉여이기 때문이다.
  */
 export function mergeTheme(
   base: Theme,
@@ -93,7 +91,7 @@ export function mergeTheme(
     const next = mergeValue(own(base as unknown as Record<string, unknown>, section), own(patch as unknown as Record<string, unknown>, section))
     if (next !== DELETED) merged[section] = next
   }
-  // `extends`는 결과에 싣지 않는다 — 위 주석의 §4.5 논거다.
+  // `extends`는 결과에 싣지 않는다 — 위 주석의 「스냅샷」 논거다.
   const { extends: _inheritedFrom, ...standaloneMeta } = patch.meta
   merged['meta'] = copy(standaloneMeta)
 
@@ -162,7 +160,7 @@ function mergeValue(baseValue: unknown, patchValue: unknown): unknown {
 }
 
 /**
- * 배열은 §6.9에 따라 **교체**한다 — 여기서 원소를 병합하지 않는 것이 그 규칙이다.
+ * 배열은 「상속과 병합」에 따라 **교체**한다 — 여기서 원소를 병합하지 않는 것이 그 규칙이다.
  * 다만 담긴 객체까지 복사해 원본과 구조를 공유하지 않게 한다.
  */
 function copy(value: unknown): unknown {
@@ -175,7 +173,7 @@ function copy(value: unknown): unknown {
 
 /**
  * 깊은 병합의 대상이 되는 것. 배열·`null`·클래스 인스턴스를 뺀다 —
- * §6.9가 병합한다고 말한 것은 객체이고 배열은 따로 적었다.
+ * 「상속과 병합」이 병합한다고 말한 것은 객체이고 배열은 따로 적었다.
  */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false

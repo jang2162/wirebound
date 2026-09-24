@@ -6,8 +6,8 @@ import * as api from '../src/index'
 
 /**
  * `src/`의 모든 파일. **이 파일이 `test/`에 사는 것이 중요하다** — 소스를 훑는 검사를
- * `src/`에 두면 그 검사가 자기 자신을 훑는다. 이 저장소에서 같은 사고가 두 번 났고
- * 배치로 닫혔다(`apps/web/test/api-consumers.test.ts`가 선례다).
+ * `src/`에 두면 그 검사가 자기 자신을 훑는다(`apps/web/test/api-consumers.test.ts`도
+ * 같은 이유로 `test/`에 산다).
  */
 const sources = import.meta.glob('../src/**/*.ts', { query: '?raw', eager: true, import: 'default' })
 
@@ -19,9 +19,9 @@ describe('경계 — themes가 무엇을 보지 않는가', () => {
     expect(sources['../src/index.ts']).toContain('PACKAGE_NAME')
   })
 
-  it('renderer도 react도 import하지 않는다 (D1)', () => {
+  it('renderer도 react도 import하지 않는다', () => {
     // 카탈로그의 선언은 `schema`에 있다 — 렌더러의 레지스트리는 그것을 구현할 뿐이다.
-    // 렌더러를 보면 §3.3의 의존 방향이 깨지고 exporter·apps/web이 둘 다 가져오는 구조가 된다.
+    // 렌더러를 보면 설계서 「각 패키지의 책임과 의존」의 의존 방향이 깨지고 exporter·apps/web이 둘 다 가져오는 구조가 된다.
     for (const [path, source] of Object.entries(sources)) {
       expect(source, path).not.toMatch(/from '(@wirebound\/renderer|react)/)
     }
@@ -33,8 +33,8 @@ describe('경계 — themes가 무엇을 보지 않는가', () => {
   })
 
   it('tsconfig가 DOM을 들이지 않는다', () => {
-    // 이 설정이 실제로 막는 것은 웨이브 1에서 양방향으로 쟀다 — `document`를 심으면 TS2584이고
-    // `lib`에 DOM을 되넣으면 같은 줄이 통과했다. 여기서는 그 설정이 그대로인지만 본다.
+    // 이 설정이 실제로 막는 것은 양방향으로 잰다 — `src`에 `document`를 심으면 `pnpm typecheck`가
+    // TS2584이고 `lib`에 DOM을 되넣으면 같은 줄이 통과한다. 여기서는 그 설정이 그대로인지만 본다.
     for (const [name, raw] of [['tsconfig.json', tsconfigJson], ['tsconfig.test.json', tsconfigTestJson]] as const) {
       const parsed = JSON.parse(raw) as { compilerOptions: { lib: string[]; types: string[] } }
       expect(parsed.compilerOptions.lib, name).toEqual(['ES2022'])
@@ -57,8 +57,8 @@ describe('공개 표면이 계약이다', () => {
     // 상수
     'ICON_SETS', 'PLACEHOLDER_STYLES', 'PATTERN_CATEGORIES', 'SLOT_TYPES',
     'SPACE_MAX', 'TOKEN_NAMESPACES', 'STYLE_PROPERTIES',
-    // §6.8 밖의 어휘 목록. **`apps/web`이 쓴다** — `treeIndent`가 내는 CSS 이름과
-    // `renderer`의 `TREE_INDENT_VAR`를 대조하는 자리가 거기뿐이다(§3.3).
+    // 「스타일 프로퍼티 화이트리스트」 밖의 어휘 목록. **`apps/web`이 쓴다** — `treeIndent`가 내는 CSS 이름과
+    // `renderer`의 `TREE_INDENT_VAR`를 대조하는 자리가 거기뿐이다(「각 패키지의 책임과 의존」).
     'STYLE_PROPERTIES_BEYOND_SPEC',
     'THEME_ID_PATTERN', 'EXTENDS_PATTERN',
     // 해석과 방출
@@ -66,31 +66,32 @@ describe('공개 표면이 계약이다', () => {
     'resolveTokens', 'checkPrimitives', 'checkThemeComponents', 'checkPatterns',
     // 값 헬퍼 — 규격을 쓰는 쪽이 같은 규칙으로 값을 다뤄야 해서 낸다
     'styleDeclarations', 'resolveStyleValue', 'isTokenReference', 'cssVarName',
-    // 내장 시스템 테마 (P4a-2 Task 7). `ADMIN_THEME`을 따로 내는 것은 파생 테마의 base가
-    // 될 값이 이름으로 필요하기 때문이다 — P4a-3의 병합이 그것을 쓴다.
+    // 내장 시스템 테마. `ADMIN_THEME`을 따로 내는 것은 파생 테마의 base가
+    // 될 값이 이름으로 필요하기 때문이다 — 병합이 그것을 쓴다.
     'SYSTEM_THEME_IDS', 'systemTheme', 'ADMIN_THEME',
-    // 이슈 severity 표와 팩토리 (P4a-3 Task 1). 저장 경계가 "막을 이슈"와 "알릴 이슈"를
+    // 이슈 severity 표와 팩토리. 저장 경계가 "막을 이슈"와 "알릴 이슈"를
     // 갈라야 하고, 이 패키지 밖에서 테마 이슈를 만드는 자리도 표를 지나야 한다.
     'THEME_ISSUE_SEVERITY', 'themeIssue',
-    // P4c-1 T1 — 스타일이 `primitives`를 가리키는 문법. 이름공간 목록을 내는 것은
-    // 저작 UI(P4c-2)의 값 편집기가 드롭다운으로 낼 목록이 이것이기 때문이다.
+    // 스타일이 `primitives`를 가리키는 문법. 이름공간 목록을 내는 것은 저작 UI 쪽이
+    // 같은 목록으로 대조하기 때문이다(`apps/web`의 `token-editor.test.tsx`).
     'STYLE_PRIMITIVE_NAMESPACES', 'isPrimitiveReference',
-    // P4c-1 T4 — 노드 손잡이 표. **`apps/web`이 렌더러의 구조 기본 CSS와 대조한다**
-    // (§3.3 — `themes`는 `renderer`를 볼 수 없다). `STYLE_PROPERTIES_BEYOND_SPEC`과 같은 부류다.
+    // 노드 손잡이 표. **`apps/web`이 렌더러의 구조 기본 CSS와 대조한다**
+    // (「각 패키지의 책임과 의존」 — `themes`는 `renderer`를 볼 수 없다). `STYLE_PROPERTIES_BEYOND_SPEC`과 같은 부류다.
     'NODE_HANDLES', 'coveredProperties', 'overwrittenHandles',
-    // P7-1 T1 — 패턴 전개(§6.6). `apps/web`의 삽입 경로가 부르고, P8·P9도 같은 이름을 쓴다.
+    // 패턴 전개(설계서 「patterns — 테마가 소유한 구성 레시피」). `apps/web`의 삽입 경로가 부르고,
+    // `exporter`도 같은 이름을 쓴다.
     'expandPattern',
-    // P8-1 — 테마가 고른 구조를 렌더러의 옵션 꼴로 내는 투영. **`apps/web`에서 옮겨 왔다** —
-    // 화면·정적 번들·P8-3의 api 라우트가 같은 표를 써야 §11.3의 *"결과가 어긋날 수 없다"*가
-    // 참이 된다(P7-3 이월 §8.2 규칙 1).
+    // 테마가 고른 구조를 렌더러의 옵션 꼴로 내는 투영. **이 패키지에 둔다** —
+    // 화면(`apps/web`)·정적 번들(`exporter`)이 같은 표를 써야 설계서 「HTML 정적 번들」의
+    // *"결과가 어긋날 수 없다"*가 참이 된다.
     'themeStructures',
-    // P9-1 — §12.4의 lint. **`lintProject`가 합치는 자리다**(D2·T5): 설계서 규칙은
+    // 설계서 「lint 규칙」의 lint. **`lintProject`가 합치는 자리다**: 설계서 규칙은
     // `schema`가 구현하고 테마 규칙은 여기가 구현하는데, `themes → schema`가 의존 방향이라
     // **순수 스택에서 둘 다 볼 수 있는 자리가 여기뿐**이다. 웹·CLI·MCP 셋이 이 이름을 부른다.
     'lintProject', 'lintThemes',
-    // P9-3 T3 — 스냅샷 payload 규격과 lint 입력 변환. **`apps/api`에서 올라왔다**(D2).
+    // 스냅샷 payload 규격과 lint 입력 변환. **`apps/api`가 아니라 여기 둔다** —
     // payload가 `PageDocument`와 `Theme`을 동시에 나르므로 순수 스택에서 둘 다 볼 수 있는
-    // 자리가 여기다. `wireb lint`와 P9-4의 MCP `validate`가 같은 변환을 부른다.
+    // 자리가 여기다. `wireb lint`와 MCP `validate`가 같은 변환을 부른다.
     'SNAPSHOT_PAYLOAD_VERSION', 'SNAPSHOT_RESOURCES', 'SnapshotPayloadSchema', 'snapshotToLintInput',
   ].sort()
 

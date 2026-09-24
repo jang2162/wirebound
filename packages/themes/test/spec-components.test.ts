@@ -33,8 +33,8 @@ describe('전제', () => {
     expect(listComponents().length).toBe(before)
   })
 
-  it('base·parts는 §6.8의 스타일 프로퍼티 이름이 아니다', () => {
-    // 층 안에서 스타일 프로퍼티를 바로 쓰는 축약(§6.5의 `states.disabled`)이
+  it('base·parts는 설계서 「스타일 프로퍼티 화이트리스트」의 이름이 아니다', () => {
+    // 층 안에서 스타일 프로퍼티를 바로 쓰는 축약(설계서 「components — 구조 + 스킨」의 `states.disabled`)이
     // 모호하지 않은 근거다. 두 집합이 겹치면 그 축약을 쓸 수 없다.
     expect(Object.keys(STYLE_PROPERTIES)).not.toContain('base')
     expect(Object.keys(STYLE_PROPERTIES)).not.toContain('parts')
@@ -42,7 +42,7 @@ describe('전제', () => {
 })
 
 describe('ComponentsSchema', () => {
-  it('설계 §6.5의 예시가 그대로 통과한다', () => {
+  it('「components — 구조 + 스킨」의 예시가 그대로 통과한다', () => {
     const parsed = ComponentsSchema.safeParse({
       List: {
         structure: 'cardGrid',
@@ -71,15 +71,15 @@ describe('ComponentsSchema', () => {
   })
 
   it('상태·변형은 base·parts 밖에 스타일 프로퍼티를 바로 쓸 수 있다', () => {
-    // §6.5의 `states.disabled`가 `{ "opacity": 0.5 }`다 — base로 감싸지 않았다.
-    // `base`·`parts`는 §6.8의 프로퍼티 이름과 겹치지 않으므로(아래 케이스가 그것을 잰다)
+    // 「components — 구조 + 스킨」의 `states.disabled`가 `{ "opacity": 0.5 }`다 — base로 감싸지 않았다.
+    // `base`·`parts`는 「스타일 프로퍼티 화이트리스트」의 프로퍼티 이름과 겹치지 않으므로(아래 케이스가 그것을 잰다)
     // 이 축약에 모호함이 없다.
     expect(ComponentsSchema.safeParse({ List: { states: { disabled: { opacity: 0.5 } } } }).success)
       .toBe(true)
   })
 })
 
-describe('checkThemeComponents — 카탈로그 대조 (D1)', () => {
+describe('checkThemeComponents — 카탈로그 대조', () => {
   const check = (components: unknown, breakpoints: string[] = ['md']) =>
     checkThemeComponents(components as never, TOKENS, breakpoints)
 
@@ -164,22 +164,22 @@ describe('checkThemeComponents — 카탈로그 대조 (D1)', () => {
 })
 
 /**
- * **사람이 읽을 축이 테마 어휘를 넓히지 않는다** (P10-3).
+ * **사람이 읽을 축이 테마 어휘를 넓히지 않는다.**
  *
- * `ComponentDef`에 `label`·`description`·`group`이 들어왔다. 그것이 §6.11의 여섯을
- * 건드리는지가 그 슬라이스의 판단 지점이었고, 답은 *"아니다 — 여섯은 렌더러가 내보내는
- * **DOM 속성**이고 새 필드는 그중 하나도 만들지 않는다"*였다.
+ * `ComponentDef`에는 `label`·`description`·`group`이 있다. 그것은 「컴파일」의 여섯을
+ * 건드리지 않는다 — 여섯은 렌더러가 내보내는 **DOM 속성**이고 이 필드는 그중 하나도
+ * 만들지 않는다.
  *
- * **여기서는 그 판단의 나머지 절반을 잰다:** 테마 검증기가 어휘를 **필드 이름으로 골라**
+ * **여기서는 나머지 절반을 잰다:** 테마 검증기가 어휘를 **필드 이름으로 골라**
  * 읽지 `Object.keys(def)`로 모으지 않는다는 것. 후자였다면 필드를 더하는 것만으로
  * `components.List.variants.label`이 조용히 통과하게 된다 — 테마가 아무도 켤 수 없는
  * 스킨을 정의하고 검증기가 그것을 안 잡는 상태다.
  *
- * **`label`을 고른 것은 우연이 아니다.** 카탈로그에 `parts: ['label']`이 넷 있어(§Tree·
+ * **`label`을 고른 것은 우연이 아니다.** 카탈로그에 `parts: ['label']`이 넷 있어(Tree·
  * EntryForm·Field·Button) **조각으로는 정당한 이름**이다. 그래서 이 케이스는 *"그 낱말을
  * 금지한다"*가 아니라 *"어느 축에서 쓰였느냐로 갈린다"*를 잰다.
  */
-describe('사람이 읽을 축은 테마 어휘가 아니다 (P10-3)', () => {
+describe('사람이 읽을 축은 테마 어휘가 아니다', () => {
   it('label·description·group을 변형·상태 이름으로 쓰면 여전히 모르는 이름이다', () => {
     const issues = checkThemeComponents(
       {
@@ -250,8 +250,8 @@ describe('카탈로그 전체가 테마 규격을 지난다', () => {
   })
 })
 
-describe('PrimitivesSchema — §6.4', () => {
-  it('설계 §6.4의 예시가 그대로 통과한다', () => {
+describe('PrimitivesSchema — 「primitives — 사이트 골격」', () => {
+  it('「primitives — 사이트 골격」의 예시가 그대로 통과한다', () => {
     const parsed = PrimitivesSchema.safeParse({
       container: { maxWidth: '1200px', gutter: 'space.6' },
       grid: { columns: 12, gap: 'space.6' },
@@ -307,7 +307,7 @@ describe('checkPrimitives', () => {
   })
 
   it('breakpoints는 수로 따로 실리고 :root 값에는 들어가지 않는다', () => {
-    // §6.11의 `:root` 예시에 브레이크포인트가 없고, 같은 절이 그 값을 `@media` 조건에
+    // 「컴파일」의 `:root` 예시에 브레이크포인트가 없고, 같은 절이 그 값을 `@media` 조건에
     // 직접 쓴다 — 변수가 아니라 수로 필요한 자리다.
     const { values, breakpoints } = checkPrimitives({ breakpoints: { md: 768, sm: 640 } }, TOKENS)
     expect([...values.keys()].filter((key) => key.startsWith('breakpoints'))).toEqual([])
@@ -347,7 +347,7 @@ describe('프로토타입 키 — 층 축약이 조용히 사라지지 않는다
   })
 })
 
-describe('primitives도 palette를 직접 가리키지 못한다 (D3)', () => {
+describe('primitives도 palette를 직접 가리키지 못한다', () => {
   const PALETTE = new Map([['palette.blue.500', '#3b82f6'], ['space.6', '24px']])
 
   it('토큰 참조가 palette면 이슈다', () => {

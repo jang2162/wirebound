@@ -13,7 +13,7 @@ beforeAll(() => {
   installCatalog()
 })
 
-/** §6.6의 예시를 옮긴 것. `Grid.props.gap`만 뺐다 — 그 자리는 아래 주석에 적었다. */
+/** 설계서 「patterns — 테마가 소유한 구성 레시피」의 예시를 옮긴 것. `Grid.props.gap`만 뺐다 — 그 자리는 아래 주석에 적었다. */
 const HERO_SPLIT = {
   name: '히어로 — 좌우 분할',
   slots: { title: 'text', body: 'text', cta: 'action', image: 'media' },
@@ -41,7 +41,7 @@ const HERO_SPLIT = {
   },
 }
 
-describe('재라 #4 — validatePage를 재사용할 수 없다', () => {
+describe('validatePage를 재사용할 수 없다', () => {
   it('slot 필드가 붙은 노드는 봉투 검사에서 막힌다', () => {
     // `WbNodeSchema`가 `z.strictObject`라 `slot`이 인식되지 않는 키다. 그리고 봉투 이슈가
     // 나오면 `validatePage`가 **즉시 반환**하므로 트리 검증까지 가지도 않는다.
@@ -59,7 +59,7 @@ describe('재라 #4 — validatePage를 재사용할 수 없다', () => {
 })
 
 describe('PatternsSchema', () => {
-  it('설계 §6.6의 예시가 통과한다', () => {
+  it('「patterns — 테마가 소유한 구성 레시피」의 예시가 통과한다', () => {
     const parsed = PatternsSchema.safeParse({ 'hero.split': HERO_SPLIT })
     expect(parsed.error?.issues ?? []).toEqual([])
   })
@@ -89,7 +89,7 @@ describe('PatternsSchema', () => {
     ).toBe(false)
   })
 
-  it('노드에 id를 쓸 수 없다 — 전개 시점에 발급된다(§6.6)', () => {
+  it('노드에 id를 쓸 수 없다 — 전개 시점에 발급된다(「patterns — 테마가 소유한 구성 레시피」)', () => {
     expect(
       PatternsSchema.safeParse({
         'hero.x': { name: '가', schema: { type: 'Section', id: 'n_a' } },
@@ -109,7 +109,7 @@ describe('PatternsSchema', () => {
   })
 })
 
-describe('checkPatterns — 이름 (§6.6)', () => {
+describe('checkPatterns — 이름 (「patterns — 테마가 소유한 구성 레시피」)', () => {
   const check = (patterns: unknown) => checkPatterns(patterns as never)
 
   it('이름이 <범주>.<변형>이어야 한다', () => {
@@ -122,7 +122,7 @@ describe('checkPatterns — 이름 (§6.6)', () => {
     }
   })
 
-  it('범주가 §6.6의 고정 목록 안이어야 한다', () => {
+  it('범주가 「patterns — 테마가 소유한 구성 레시피」의 고정 목록 안이어야 한다', () => {
     for (const category of PATTERN_CATEGORIES) {
       const issues = check({
         [`${category}.x`]: { name: '가', schema: { type: 'Section' } },
@@ -180,7 +180,7 @@ describe('checkPatterns — schema 조각과 카탈로그 대조', () => {
   })
 
   it('props를 카탈로그의 zod로 검증한다', () => {
-    // 판정: 카탈로그가 단일 진실이다(§3.2). 여기서 안 보면 잘못된 패턴이 전개 시점까지 간다.
+    // 판정: 카탈로그가 단일 진실이다(설계서 「핵심 원칙」). 여기서 안 보면 잘못된 패턴이 전개 시점까지 간다.
     expect(check(wrap({ type: 'Grid', props: { columns: 2 } })).issues).toEqual([])
     expect(codes(check(wrap({ type: 'Grid', props: { columns: 0 } })).issues)).toEqual([
       'bad-pattern-node',
@@ -223,7 +223,7 @@ describe('checkPatterns — schema 조각과 카탈로그 대조', () => {
   })
 })
 
-describe('패턴의 variant도 무시되면 알린다 (P4a-2 수정 웨이브)', () => {
+describe('패턴의 variant도 무시되면 알린다', () => {
   const pattern = (variant: string) => ({
     'hero.x': {
       name: '히어로',

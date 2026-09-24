@@ -26,7 +26,7 @@ function ruleBody(css: string, selector: string): string | undefined {
 
 const theme = (extra: Record<string, unknown>) => ({ ...MINIMAL_THEME, ...extra })
 
-describe('compileTheme — :root (§6.11)', () => {
+describe('compileTheme — :root (설계서 「컴파일」)', () => {
   it('토큰이 --wb-<경로>로 나오고 경로의 점이 하이픈이 된다', () => {
     const css = compile(MINIMAL_THEME)
     expect(css).toContain('--wb-semantic-primary: #2563eb;')
@@ -38,8 +38,8 @@ describe('compileTheme — :root (§6.11)', () => {
 
   it('primitives도 :root에 나온다', () => {
     const css = compile(MINIMAL_THEME)
-    // §6.11의 예시는 `--wb-container-max`인데 규격 경로는 `container.maxWidth`다.
-    // D6의 규칙(경로의 `.`이 `-`가 된다)을 그대로 쓴다 — 근거는 소스 주석에 있다.
+    // 설계서 「컴파일」의 예시는 `--wb-container-max`인데 규격 경로는 `container.maxWidth`다.
+    // 이름 규칙(경로의 `.`이 `-`가 된다)을 그대로 쓴다 — 근거는 소스 주석에 있다.
     expect(css).toContain('--wb-container-maxWidth: 1200px;')
     expect(css).toContain('--wb-container-gutter: var(--wb-space-6);')
   })
@@ -49,7 +49,7 @@ describe('compileTheme — :root (§6.11)', () => {
   })
 })
 
-describe('compileTheme — 셀렉터 (§6.11)', () => {
+describe('compileTheme — 셀렉터 (「컴파일」)', () => {
   it('base는 구조를 함께 건다', () => {
     const css = compile(MINIMAL_THEME)
     expect(ruleBody(css, '[data-wb-component="List"][data-wb-structure="cardGrid"]'))
@@ -87,7 +87,7 @@ describe('compileTheme — 셀렉터 (§6.11)', () => {
   })
 })
 
-describe('P4a-1 재라 #3 — 브레이크포인트 방향과 경계값', () => {
+describe('브레이크포인트 방향과 경계값', () => {
   const twoBreakpoints = theme({
     primitives: { breakpoints: { sm: 640, md: 768 } },
     components: {
@@ -136,10 +136,11 @@ describe('P4a-1 재라 #3 — 브레이크포인트 방향과 경계값', () => 
 })
 
 /**
- * **이 계약은 메모리 안에서만 성립한다** — §4.2의 `jsonb`가 키 순서를 정규화한다.
- * 근거와 실측은 `src/emit/index.ts`의 `compileTheme` 주석에 있고, P4a-3이 재서 정한다.
+ * **이 계약은 저장을 거쳐도 성립해야 한다** — `jsonb`는 키 순서를 정규화하므로 `themes`
+ * 테이블은 절을 `json` 컬럼에 담는다(설계서 「테이블 정의」). 근거와 실측은
+ * `src/emit/index.ts`의 `compileTheme` 주석에 있다.
  */
-describe('P4a-1 재라 #6 — states가 여럿일 때 순서', () => {
+describe('states가 여럿일 때 순서', () => {
   const twoStates = theme({
     components: {
       List: {
@@ -200,7 +201,7 @@ describe('P4a-1 재라 #6 — states가 여럿일 때 순서', () => {
   })
 })
 
-describe('P4a-1 재라 #7 — variants와 states가 같은 조각을 건드릴 때', () => {
+describe('variants와 states가 같은 조각을 건드릴 때', () => {
   const both = theme({
     components: {
       List: {
@@ -236,7 +237,7 @@ describe('P4a-1 재라 #7 — variants와 states가 같은 조각을 건드릴 �
   })
 })
 
-describe('compileTheme — 결정적이다 (§6.11)', () => {
+describe('compileTheme — 결정적이다 (「컴파일」)', () => {
   it('같은 입력이 같은 출력을 낸다', () => {
     expect(compile(MINIMAL_THEME)).toBe(compile(MINIMAL_THEME))
   })
@@ -278,8 +279,9 @@ describe('compileTheme — 얕은 성질만 본다', () => {
     expect(open).toBeNull()
   })
 
-  it('!important를 쓰지 않는다 (D9)', () => {
-    // P0 이월의 inline style 결함을 코드에 새기지 않는다 — P4a-2가 그것을 걷어낸다.
+  it('!important를 쓰지 않는다', () => {
+    // 테마는 구조 기본 CSS를 **순서로** 이긴다 — `!important`로 덮으면 이기는지를 잴 수
+    // 없게 된다(`src/emit/index.ts`의 `compileTheme` 주석).
     expect(compile(MINIMAL_THEME)).not.toContain('!important')
   })
 
@@ -290,26 +292,18 @@ describe('compileTheme — 얕은 성질만 본다', () => {
 })
 
 /**
- * **재라 #1 — `@font-face`를 내지 않는다. 근거를 갈아 끼웠다.**
+ * **`assets.fonts`가 `@font-face`로 나간다 — 그 대가로 값이 검증을 지난다.**
  *
- * P4a-1이 *"P8이 URL을 다시 쓰므로 지금 만들면 되돌려야 한다"*로 안 냈고, P4a-2가
- * *"§6.8에 `fontFamily`가 없어 내도 걸 방법이 없다"*를 더했다. **P4b-1이 뒤쪽 근거를
- * 없앴다**(`fontFamily`가 어휘가 됐다). 남은 하나를 재보니 **그것도 서지 않는다** —
- * `compileTheme`은 순수 함수라 P8은 `Theme` **문서**의 `src`를 고쳐 다시 컴파일하면 되고,
- * CSS 문자열을 후처리할 이유가 없다(`같은 입력이 같은 출력을 낸다`가 그 성질이다).
- * **그 근거는 폐기한다.**
+ * 정적 번들이 폰트 URL을 다시 써야 해도 CSS를 후처리할 이유가 없다 — `compileTheme`은
+ * 순수 함수라 `Theme` **문서**의 `src`를 고쳐 다시 컴파일하면 된다(`같은 입력이 같은
+ * 출력을 낸다`가 그 성질이다).
  *
- * **대신 이번에 잰 근거로 바꾼다: `assets.fonts`의 값이 아무 검증도 지나지 않는다.**
- * 아래 케이스가 그것을 실측으로 고정한다. CSS로 내는 순간 그 값 규칙을 만들어야 하는데
- * §6.7은 `family`·`src`의 모양을 한 글자도 규정하지 않고 §6.8의 값 규칙은 **스타일
+ * CSS로 내는 순간 `family`·`src`의 값 규칙이 있어야 한다. 설계서 「assets」는 그 모양을
+ * 한 글자도 규정하지 않고 「스타일 프로퍼티 화이트리스트」의 값 규칙은 **스타일
  * 프로퍼티**의 것이라 이 자리에 닿지 않는다. **어휘를 여는 것과 값 규칙을 새로 만드는 것은
- * 다른 일이다**(P4b-1의 전역 제약).
- *
- * **그래서 오늘 걸 수 있는 폰트는 시스템에 이미 있는 것뿐이다.** 웹폰트가 필요해지는 시점은
- * P4b-3(시스템 테마 5종)이고, 그때 이 판정을 다시 열려면 **먼저 `src`·`family`의 값 규칙을
- * 세워야 한다** — 아래 둘째 케이스가 그 부재를 재는 자리다.
+ * 다른 일이다** — 그래서 `checkAssets`가 따로 막고, 아래 넷째 케이스가 그 자리를 잰다.
  */
-describe('P4b-1 재라 #1 — assets.fonts가 CSS로 나간다 (P4b-3 D5가 뒤집었다)', () => {
+describe('assets.fonts가 CSS로 나간다', () => {
   it('컴파일 결과에 @font-face가 있다', () => {
     // 픽스처가 `assets.fonts`를 실제로 갖고 있다 — 비어 있으면 이 케이스가 아무것도 안 지킨다.
     expect(MINIMAL_THEME.assets?.fonts?.length).toBeGreaterThan(0)
@@ -320,8 +314,7 @@ describe('P4b-1 재라 #1 — assets.fonts가 CSS로 나간다 (P4b-3 D5가 뒤�
     // **픽스처의 `Pretendard`로는 잴 수 없다** — 그 글자는 `assets`가 아니라
     // **토큰** `scale.typography.family.sans`에서도 나온다(`:root`의
     // `--wb-typography-family-sans`). 두 출처가 겹치면 무엇이 실렸는지 구별되지 않으므로
-    // 토큰에 없는 이름을 쓴다. (앞서 *"새어 나가지 않는다"*를 잴 때와 같은 이유이고,
-    // 방향만 뒤집혔다.)
+    // 토큰에 없는 이름을 쓴다.
     const css = compile({
       ...MINIMAL_THEME,
       assets: { fonts: [{ family: 'FontFaceProbe', src: 'local("probe-only")' }] },
@@ -337,14 +330,10 @@ describe('P4b-1 재라 #1 — assets.fonts가 CSS로 나간다 (P4b-3 D5가 뒤�
     expect(compile(MINIMAL_THEME)).toContain('--wb-typography-family-sans: Pretendard, sans-serif;')
   })
 
-  it('그 대가 — assets.fonts의 값이 이제 검증을 지난다', () => {
-    // **앞서 이 자리가 반대를 쟀다:** CSS를 통째로 깨는 문자열이 `family`·`src` 둘 다에서
-    // **이슈 0건으로** 통과하고 `ResolvedTheme.assets`에 원문 그대로 실렸다. 그때는
-    // 방출이 그것을 안 읽었으므로 무해했고, 그 케이스가 *"읽는 순간 임의 CSS 주입이
-    // 된다"*는 경고를 함께 적어 두었다.
-    //
-    // **P4b-3이 읽게 만들었으므로 그 경고가 청구됐다.** `checkAssets`가 `bgImage`와
-    // **같은 규칙**(`rejectFunctions`)으로 막는다 — 재라 #3의 답이다.
+  it('그 대가 — assets.fonts의 값이 검증을 지난다', () => {
+    // **방출이 이 값을 읽으므로 검증하지 않으면 임의 CSS 주입이 된다** — CSS를 통째로
+    // 깨는 문자열이 `family`·`src`에 실리면 선언과 블록을 끝내고 나간다. `checkAssets`가
+    // `bgImage`와 **같은 규칙**(`rejectFunctions`)으로 막는다.
     const evil = 'a.woff2) } body { display: none } @font-face { src: url(b'
     const { theme, issues } = resolveTheme({
       ...MINIMAL_THEME,
@@ -352,19 +341,17 @@ describe('P4b-1 재라 #1 — assets.fonts가 CSS로 나간다 (P4b-3 D5가 뒤�
     })
 
     expect(issues.map((issue) => issue.path)).toEqual(['assets.fonts.0.family', 'assets.fonts.0.src'])
-    // **`error`가 있으면** 테마가 통째로 못 쓰인다(P4a-1의 D2 → P4c-1이 기준을 `error`로
-    // 좁혔다) — 반쯤 해석된 것이 방출로 가지 않는다. 여기 둘은 `checkAssets`가 내는
-    // `error`라 그대로 `null`이다.
-    // (2026-08-11 F6: 이 줄이 *"이슈가 있으면"*이었고 거짓이 됐다.)
+    // **`error`가 있으면** 테마가 통째로 못 쓰인다 — 반쯤 해석된 것이 방출로 가지 않는다.
+    // 여기 둘은 `checkAssets`가 내는 `error`라 그대로 `null`이다.
     expect(theme).toBeNull()
   })
 })
 
 /**
- * **재라 #7 — §6.11 예시의 `--wb-container-max`.**
+ * **「컴파일」 예시의 `--wb-container-max`.**
  *
  * 그 절의 컴파일 예시에 `--wb-container-max`가 있는데 **규격 경로에서 어느 규칙으로도
- * 나오지 않는다** — §6.4가 그 값을 `container.maxWidth`라 부르고 D6의 이름 규칙
+ * 나오지 않는다** — 설계서 「primitives — 사이트 골격」이 그 값을 `container.maxWidth`라 부르고 이름 규칙
  * (`--wb-` + 경로의 `.`을 `-`로)이 `--wb-container-maxWidth`를 만든다.
  *
  * **판정: 예시가 줄여 쓴 것이다. 이름 규칙에 예외를 두지 않는다.**
@@ -375,22 +362,22 @@ describe('P4b-1 재라 #1 — assets.fonts가 CSS로 나간다 (P4b-3 D5가 뒤�
  * 예외를 두지 않는 이유 둘:
  *
  * 1. `cssVarName`은 **경로 → 이름의 순수 규칙**이다. 예외를 하나 두면 그것이 표가 되고,
- *    표는 §6.4의 `primitives`가 늘 때 낡는다. P4a-1이 *"절대값을 계약에 적지 않는다"*로
- *    같은 부류를 피했다.
+ *    표는 「primitives — 사이트 골격」의 `primitives`가 늘 때 낡는다. *"절대값을 계약에
+ *    적지 않는다"*와 같은 부류다.
  * 2. 예외를 두면 **테마 작성자가 `container.max`를 쓸 수 있다고 읽는다** — 규격은
  *    `maxWidth`이므로 그 문서는 `unknown-token`이 된다.
  *
- * **설계 문서는 고치지 않는다**(P4a-1의 원칙: 규격이 이기고 예시가 틀린 것으로 본다).
+ * **설계서의 예시는 고치지 않는다** — 규격과 예시가 갈리면 규격이 이기고 예시가 틀린 것으로 본다.
  */
-describe('P4b-1 재라 #7 — --wb-container-max', () => {
-  /** §6.11의 `:root` 블록에서 변수 이름을 뽑는다. 손으로 인용하지 않는다. */
+describe('「컴파일」 예시의 --wb-container-max', () => {
+  /** 「컴파일」의 `:root` 블록에서 변수 이름을 뽑는다. 손으로 인용하지 않는다. */
   function rootVarsInSpec(): string[] {
     const section = designDoc.split('### 6.11 컴파일')[1] ?? ''
     const block = section.split(':root {')[1]?.split('}')[0] ?? ''
     return [...block.matchAll(/--wb-[A-Za-z0-9-]+/g)].map((m) => m[0])
   }
 
-  it('§6.11의 :root 예시를 실제로 읽는다 — 카나리아', () => {
+  it('「컴파일」의 :root 예시를 실제로 읽는다 — 카나리아', () => {
     const names = rootVarsInSpec()
     expect(names).toContain('--wb-container-max')
     expect(names.length).toBeGreaterThan(3)

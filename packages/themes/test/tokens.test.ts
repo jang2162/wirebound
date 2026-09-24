@@ -6,7 +6,7 @@ import { SPACE_MAX, resolveTokens } from '../src/resolve/tokens'
 const codes = (issues: { code: string }[]) => issues.map((i) => i.code).sort()
 
 describe('TokensSchema', () => {
-  it('설계 §6.3의 예시가 그대로 통과한다', () => {
+  it('설계서 「tokens — 3단 분리」의 예시가 그대로 통과한다', () => {
     const parsed = TokensSchema.safeParse({
       palette: {
         'blue.500': '#3b82f6',
@@ -88,9 +88,9 @@ describe('resolveTokens — 층별 규칙', () => {
   })
 
   it('semantic이 semantic을 가리키는 사슬이 풀린다', () => {
-    // D3의 표는 semantic이 palette만 본다고 적었지만, 같은 D3의 산문이
-    // "semantic 안에서만 순환이 가능하다"고 적어 semantic→semantic을 전제한다.
-    // 산문 쪽을 택했다 — 표대로면 아래 순환 케이스가 성립할 수 없다.
+    // semantic은 palette만이 아니라 semantic도 가리킨다 — "semantic 안에서만 순환이
+    // 가능하다"가 semantic→semantic을 전제한다. semantic이 palette만 보게 막으면 아래
+    // 순환 케이스가 성립할 수 없다.
     const { table, issues } = resolveTokens({
       palette: { 'blue.600': '#2563eb' },
       semantic: { primary: 'palette.blue.600', accent: 'semantic.primary' },
@@ -151,7 +151,7 @@ describe('resolveTokens — 층별 규칙', () => {
   })
 })
 
-describe('resolveTokens — space 파생 (§6.3)', () => {
+describe('resolveTokens — space 파생 (「tokens — 3단 분리」)', () => {
   it('unit 하나에서 배수가 파생된다', () => {
     const { table, issues } = resolveTokens({ scale: { space: { unit: '4px' } } })
     expect(issues).toEqual([])
@@ -160,13 +160,13 @@ describe('resolveTokens — space 파생 (§6.3)', () => {
   })
 
   it('경계 둘 — space.24가 있고 space.25가 없다', () => {
-    // 24는 §6.3이 준 규격 상수이지 코드를 세어 얻은 수가 아니다. 그래서 여기 그대로 적는다.
+    // 24는 「tokens — 3단 분리」가 준 규격 상수이지 코드를 세어 얻은 수가 아니다. 그래서 여기 그대로 적는다.
     // SPACE_MAX를 그대로 쓰면 상한을 바꾸는 변이에 이 케이스가 눈을 감는다(재서 확인했다).
     expect(SPACE_MAX).toBe(24)
     const { table } = resolveTokens({ scale: { space: { unit: '4px' } } })
     expect(table.has('space.24')).toBe(true)
     expect(table.has('space.25')).toBe(false)
-    // 0은 파생하지 않는다 — §6.3이 space.1부터 적었다.
+    // 0은 파생하지 않는다 — 「tokens — 3단 분리」가 space.1부터 적었다.
     expect(table.has('space.0')).toBe(false)
   })
 
@@ -262,7 +262,7 @@ describe('resolveTokens — scale 나머지', () => {
 
 describe('resolveTokens — 이슈를 모아 낸다', () => {
   it('첫 이슈에서 멈추지 않는다', () => {
-    // P4c의 저작 UI가 여러 오류를 한 번에 보여야 한다.
+    // 저작 UI가 여러 오류를 한 번에 보여야 한다.
     const { issues } = resolveTokens({
       palette: { a: 'semantic.x' },
       semantic: { p: 'palette.없음', q: 'palette.없음2' },
@@ -317,8 +317,8 @@ describe('프로토타입 키 — 물려받은 멤버가 표에 실리지 않는
   })
 })
 
-describe('토큰 층의 함수 (§6.8의 금지가 우회되지 않는다)', () => {
-  it('§6.3이 쓰는 표기 함수는 통과한다', () => {
+describe('토큰 층의 함수 (「스타일 프로퍼티 화이트리스트」의 금지가 우회되지 않는다)', () => {
+  it('「tokens — 3단 분리」가 쓰는 표기 함수는 통과한다', () => {
     const { table, issues } = resolveTokens({
       scale: {
         shadow: { sm: '0 1px 2px rgba(0,0,0,.05)' },
@@ -371,7 +371,7 @@ describe('토큰 층의 함수 (§6.8의 금지가 우회되지 않는다)', () 
   })
 })
 
-describe('사슬이 실패하면 그 사슬에 기댄 키도 보인다 (F11)', () => {
+describe('사슬이 실패하면 그 사슬에 기댄 키도 보인다', () => {
   const at = (issues: { code: string; path: string }[]) =>
     issues.map((i) => `${i.code}@${i.path.replace('tokens.semantic.', '')}`).sort()
 
@@ -456,7 +456,7 @@ describe('값이 CSS 블록을 깨고 나가지 못한다', () => {
 describe('두 선언이 같은 토큰 표 키로 접히면 이슈다', () => {
   it('typography는 두 마디를 점으로 잇는다 — 거기서 접힌다', () => {
     // `typography.${항목}.${키}`라 (`h4`,`a.b`)와 (`h4.a`,`b`)가 같은 키가 된다.
-    // 앞의 선언이 뒤의 것에 덮여 **이슈 없이 사라지던** 자리다(순서를 뒤집으면 남는 값이 바뀐다).
+    // 거절하지 않으면 앞의 선언이 뒤의 것에 덮여 **이슈 없이 사라진다**(순서를 뒤집으면 남는 값이 바뀐다).
     const cases: Record<string, Record<string, string | number>>[] = [
       { h4: { 'a.b': '1px' }, 'h4.a': { b: '2px' } },
       { 'h4.a': { b: '2px' }, h4: { 'a.b': '1px' } },

@@ -7,7 +7,7 @@ import { MetaSchema } from '../src/spec/meta'
 
 beforeAll(() => {
   // 카탈로그를 설치하지 않으면 `checkThemeComponents`가 모든 컴포넌트를
-  // `unknown-component`로 본다(P4a-1이 잰 갈래).
+  // `unknown-component`로 본다.
   installCatalog()
 })
 
@@ -17,11 +17,10 @@ describe('내장 시스템 테마', () => {
   })
 
   /**
-   * **2026-08-11(P4c-1 T4): *"이슈 없이"*가 *"오류 없이"*가 됐다. 지우지 않고 남긴다.**
+   * **"이슈 없이"가 아니라 *"오류 없이"*다.**
    *
-   * `themes`에 첫 `warning`이 생겼고(`node-handle-overwrite`), `portal`·`docs`가 실제로
-   * 그것을 하나씩 낸다 — 둘이 `Tree.parts.node.paddingX`로 손잡이와 셀렉터가 정확히 같다
-   * (P4b-3의 ③이 쟀고 P4c-1이 코드로 잡았다). **경고가 나는 것이 정상이고 그 수가
+   * `portal`·`docs`가 `node-handle-overwrite` 경고를 하나씩 낸다 — 둘이
+   * `Tree.parts.node.paddingX`로 손잡이와 셀렉터가 정확히 같다. **경고가 나는 것이 정상이고 그 수가
    * 정확히 무엇인지는 `warning-channel.test.ts`가 못박는다.** 여기서 지키는 것은
    * *"다섯 다 실제로 선다"* — `error`가 0이고 `theme`이 나온다.
    */
@@ -43,8 +42,8 @@ describe('내장 시스템 테마', () => {
   })
 
   /**
-   * **`meta.id`에 `system:` 접두어가 없다.** 계획서가 `id: 'system:admin'`이라고 적었는데
-   * `THEME_ID_PATTERN`이 콜론을 받지 않는다 — `system:`은 **가리키는 쪽의 문법**이다
+   * **`meta.id`에 `system:` 접두어가 없다.** `id: 'system:admin'`으로는 적을 수 없다 —
+   * `THEME_ID_PATTERN`이 콜론을 받지 않는다. `system:`은 **가리키는 쪽의 문법**이다
    * (`EXTENDS_PATTERN`). 이 케이스가 그 사실을 고정한다.
    */
   it('id에 접두어가 없고 조회는 두 꼴을 다 받는다', () => {
@@ -63,7 +62,7 @@ describe('내장 시스템 테마', () => {
   })
 
   it('시스템 테마는 extends를 갖지 않는다', () => {
-    // §6.9의 깊이 1단계 — 시스템 테마가 출발점이다.
+    // 설계서 「상속과 병합」의 깊이 1단계 — 시스템 테마가 출발점이다.
     for (const id of SYSTEM_THEME_IDS) {
       expect(systemTheme(id)!.meta.extends, id).toBeUndefined()
     }
@@ -75,16 +74,16 @@ describe('내장 시스템 테마', () => {
       const css = compileTheme(theme!)
       expect(css, id).toContain(':root {')
       expect(css, id).toContain('--wb-semantic-primary')
-      // 파생된 간격 스케일이 실려 있다(§6.3의 `space.unit` 파생).
+      // 파생된 간격 스케일이 실려 있다(「tokens — 3단 분리」의 `space.unit` 파생).
       expect(css, id).toContain('--wb-space-4')
       expect(css, id).toContain('[data-wb-component="List"]')
-      // D8 — `!important`가 없다.
+      // `!important`가 없다.
       expect(css, id).not.toContain('!important')
     }
   })
 
   /**
-   * **D4가 실제로 쓰이는 자리.** `Text`의 변형이 타이포 스케일을 건다 — `variantFrom`이
+   * **`variantFrom`이 실제로 쓰이는 자리.** `Text`의 변형이 타이포 스케일을 건다 — `variantFrom`이
    * 없었다면 아홉 역할이 전부 같은 스킨을 받거나 계약 밖 속성이 필요했다.
    */
   it('Text 변형이 타이포 스케일을 건다', () => {
@@ -95,7 +94,7 @@ describe('내장 시스템 테마', () => {
   })
 
   it('내장 테마는 매번 같은 CSS를 낸다', () => {
-    // P4a-1의 결정성. 주입이 재컴파일을 건너뛸 수 있는 근거다(Task 8).
+    // 결정성. 주입이 재컴파일을 건너뛸 수 있는 근거다.
     const compile = () => compileTheme(resolveTheme(systemTheme('admin')!).theme!)
     expect(compile()).toBe(compile())
   })

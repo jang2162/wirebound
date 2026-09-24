@@ -1,15 +1,14 @@
 /**
- * **`assets.fonts` → `@font-face`**(P4b-3 계획서 D5·P3).
+ * **`assets.fonts` → `@font-face`.**
  *
- * P4b-1이 `fontFamily` 어휘를 열었지만 **폰트를 싣는 경로가 없었다** — `emit/index.ts`에
- * `assets`라는 글자가 0건이었다(P4b-3 ①이 다시 셌다: `grep -c assets emit/index.ts` = 0).
- * 서체는 시스템 테마 다섯의 인상 차이에서 가장 큰 몫이므로 ②가 시작되기 전에 있어야 한다.
+ * `fontFamily` 어휘가 가리킬 폰트를 싣는 경로가 이것이다 — 이 경로가 없으면 어휘는 있어도
+ * 폰트는 폴백으로 그려진다. 서체는 시스템 테마 다섯의 인상 차이에서 가장 큰 몫이다.
  *
  * **여기서 재지 못하는 것이 있다.** `@font-face`가 실제로 시트에 걸리는지, `font-family`를
  * 건 요소의 계산된 값이 선언한 이름을 갖는지는 **jsdom이 못 본다** — jsdom 25의 캐스케이드는
- * 문서 순서 하나이고 특이도도 `!important`도 안 본다(P4b-2 ③·수정 웨이브가 대조 8건으로
- * 실측했다. **그 값은 그쪽이 쟀고 여기서 다시 재지 않았다**). 이 파일이 재는 것은
- * **방출된 문자열**이고, 브라우저 쪽은 P4b-3 ①이 Chrome 151로 한 번 쟀다 —
+ * 문서 순서 하나이고 특이도도 `!important`도 안 본다(`emit-parse.test.ts`의 *"순서를 뒤집으면
+ * 이기는 쪽도 뒤집힌다"*가 그것을 못박는다). 이 파일이 재는 것은
+ * **방출된 문자열**이고, 브라우저 쪽은 Chrome 151로 쟀다 —
  * 잰 값과 프로브를 커밋하지 않은 이유는 `src/emit/index.ts`의 `pushFontFaces` 머리말에 있다.
  */
 import { describe, expect, it } from 'vitest'
@@ -80,7 +79,7 @@ describe('assets.fonts가 @font-face로 나간다', () => {
 
   /**
    * **@font-face가 어느 규칙보다 앞에 온다.** 이 저장소의 캐스케이드 계약이 순서이므로
-   * (P4b-2 이월 §0) 새 층의 자리를 문자열로 못박는다 — jsdom이 못 보는 것을 셀렉터
+   * 새 층의 자리를 문자열로 못박는다 — jsdom이 못 보는 것을 셀렉터
    * 문자열로 지키는 `structure-css.test.ts`의 특이도 못과 같은 형식이다.
    */
   it('@font-face가 :root보다 앞에 온다', () => {
@@ -90,21 +89,21 @@ describe('assets.fonts가 @font-face로 나간다', () => {
   })
 
   it('fonts가 없는 assets는 아무것도 안 낸다', () => {
-    // `icons`·`placeholder`만 있는 테마 — `placeholder.style`은 이 슬라이스가 컴파일하지
-    // 않는다(D5: 오늘 테마→렌더러 채널은 `structures` 하나뿐이다).
+    // `icons`·`placeholder`만 있는 테마 — `placeholder.style`은 컴파일하지
+    // 않는다(테마→렌더러 채널은 `structures` 하나뿐이다).
     const css = compile(themeWith({ icons: 'lucide', placeholder: { style: 'blueprint' } }))
     expect(css).not.toContain('@font-face')
   })
 })
 
 /**
- * **D7의 절반 — `admin`의 CSS가 한 글자도 바뀌면 안 된다.**
+ * **`@font-face` 층이 `admin`의 CSS를 한 글자도 바꾸면 안 된다.**
  *
- * `admin`에는 `assets`가 없으므로 `@font-face`가 **빈 문자열**이어야 한다. ③이 `main`의
- * 컴파일러를 꺼내 나란히 돌려 전수로 다시 잴 것이므로(P4b-2 D5와 같은 형식) 여기서는
- * *"새 층이 `admin`에 아무것도 더하지 않는다"*만 닫는다.
+ * `admin`에는 `assets`가 없으므로 `@font-face`가 **빈 문자열**이어야 한다. 여기서는
+ * *"새 층이 `admin`에 아무것도 더하지 않는다"*만 닫는다 — `admin`의 CSS 전체가 그대로인지는
+ * 이 파일이 재지 않는다.
  */
-describe('D7 절반 — admin은 @font-face를 하나도 안 낸다', () => {
+describe('admin은 @font-face를 하나도 안 낸다', () => {
   it('admin에 assets가 없다', () => {
     // 이 전제가 깨지면 아래 두 케이스의 뜻이 달라진다.
     expect(ADMIN_THEME.assets).toBeUndefined()
@@ -124,14 +123,14 @@ describe('D7 절반 — admin은 @font-face를 하나도 안 낸다', () => {
 })
 
 /**
- * **재라 #3 — `src`·`family`가 CSS 문법을 끊고 나가지 못한다.**
+ * **`src`·`family`가 CSS 문법을 끊고 나가지 못한다.**
  *
- * `spec/assets.ts`가 *"선언을 검증할 뿐 리소스를 가져오지 않는다"*고 적어 둔 것은 그대로다.
- * 바뀐 것은 **이 값이 CSS로 나간다**는 사실이고, 그 순간 `bgImage`와 같은 부류가 된다 —
+ * `spec/assets.ts`는 *"선언을 검증할 뿐 리소스를 가져오지 않는다"*. 그래도
+ * **이 값은 CSS로 나가므로** `bgImage`와 같은 부류다 —
  * 방출이 값을 그대로 문자열에 붙이므로(이 패키지는 CSS 파서를 안 들인다) 검증하지 않으면
  * 선언과 블록을 끝내고 나갈 수 있다.
  */
-describe('재라 #3 — src·family의 주입 경계', () => {
+describe('src·family의 주입 경계', () => {
   function issuesOf(assets: Theme['assets']): string[] {
     return resolveTheme(themeWith(assets)).issues.map((issue) => issue.path)
   }
@@ -174,7 +173,7 @@ describe('재라 #3 — src·family의 주입 경계', () => {
   /**
    * **data URI가 통과한다** — `;`는 `url()` 안쪽에서만 예외이고
    * (`resolve/functions.ts`가 그 이유를 적어 두었다) `data:font/woff2;base64,…`가 그것을 쓴다.
-   * D8의 프로브가 `local()`을 고른 것은 이것이 안 되어서가 아니다 — **둘 다 브라우저에서
+   * 브라우저 프로브가 `local()`을 고른 것은 이것이 안 되어서가 아니다 — **둘 다 브라우저에서
    * 재서 둘 다 통과했다**(`src/emit/index.ts`의 `pushFontFaces` 머리말의 표).
    */
   it('data URI는 통과한다', () => {
@@ -184,21 +183,15 @@ describe('재라 #3 — src·family의 주입 경계', () => {
   })
 
   /**
-   * **2026-08-11(P4c-1 수정 웨이브 F6): 이름과 주석이 *"이슈가 (하나라도) 있으면"*이었고
-   * 거짓이 됐다.** `themes`에 첫 `warning`이 생기면서 기준이 *"**`error`가** 있으면 `null`"*로
-   * 바뀌었는데(`resolve/index.ts`), **이 케이스가 쓰는 값(`src: 'a{b}'`)이 `error`라 단언은
-   * 계속 통과했다** — 그래서 테스트로는 안 잡히고 문장만 조용히 거짓이 됐다.
-   * `resolve.test.ts`·`emit.test.ts`와 **같은 부류 셋 중 하나**다.
-   *
-   * **거짓이 옛 규칙을 `P4a-1의 D2`에 귀속시켜 단정하고 있었던 것이 이 자리의 무게다** —
-   * 읽는 사람은 근거가 붙은 문장을 더 믿는다.
+   * **이 케이스의 값(`src: 'a{b}'`)은 `error`라, `null`의 기준이 *"이슈가 있으면"*이든
+   * *"`error`가 있으면"*이든 단언은 통과한다** — 기준(`resolve/index.ts`)이 바뀌어도 테스트로는
+   * 안 잡히고 이름과 주석만 조용히 거짓이 된다. 기준을 바꾸면 이 이름과 주석을 손으로 맞춘다.
    */
   it('error가 있으면 테마 전체가 못 쓰인다', () => {
-    // `resolveTheme`은 **`error`가** 하나라도 있으면 `theme: null`이다(P4a-1의 D2 →
-    // P4c-1이 기준을 `error`로 좁혔다) — 즉 나쁜 `src` 하나가 그 테마를 통째로 막는다.
-    // 저장 경계(`assertResolvable`)가 422를 낸다. 이 값이 내는 것은 `bad-style-value`
-    // (`error`) 한 건이고(내가 쟀다) `checkAssets`는 오늘 `warning`을 낼 길이 없어
-    // 이 갈래의 결과는 그대로다 — **바뀐 것은 규칙이지 이 케이스의 값이 아니다.**
+    // `resolveTheme`은 **`error`가** 하나라도 있으면 `theme: null`이다 — 즉 나쁜 `src`
+    // 하나가 그 테마를 통째로 막는다. 저장 경계(`assertResolvable`)가 422를 낸다.
+    // 이 값이 내는 것은 `bad-style-value`(`error`) 한 건이고 `checkAssets`는 `warning`을
+    // 낼 길이 없다.
     expect(resolveTheme(themeWith({ fonts: [{ family: 'P', src: 'a{b}' }] })).theme).toBeNull()
   })
 })

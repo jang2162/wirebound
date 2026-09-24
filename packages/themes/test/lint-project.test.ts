@@ -17,7 +17,7 @@ const doc = (children: WbNode[]): PageDocument => ({
 
 const meta = (id: string) => ({ id, name: id, version: '1.0.0' })
 
-describe('합치는 자리 (D2 · T5)', () => {
+describe('합치는 자리', () => {
   it('설계서 규칙과 테마 규칙이 한 목록으로 나온다', () => {
     const issues = lintProject({
       project: {
@@ -63,7 +63,7 @@ describe('합치는 자리 (D2 · T5)', () => {
     expect(lastPage).toBeLessThan(firstTheme)
   })
 
-  it('설정은 여기로 지나간다 (D5)', () => {
+  it('설정은 여기로 지나간다', () => {
     const project = {
       menu: [{ id: 'm1', parentId: null, title: '관리자' }],
       pages: [
@@ -117,7 +117,7 @@ describe('합치는 자리 (D2 · T5)', () => {
   })
 })
 
-describe('표 전체가 이 한 자리에서 돈다 (D6)', () => {
+describe('표 전체가 이 한 자리에서 돈다', () => {
   it('LINT_RULES의 모든 규칙이 lintProject 하나로 난다', () => {
     const dup = nid()
     const entry: WbNode = { id: nid(), type: 'EntryForm', children: [] }

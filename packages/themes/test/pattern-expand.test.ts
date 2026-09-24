@@ -1,10 +1,9 @@
 /**
- * 패턴 전개(P7-1 T1·T2). `spec/patterns.ts`가 *"전개는 만들지 않는다(D7)"*로 미뤄 둔 자리를
- * 여기서 잰다.
+ * 패턴 전개(`pattern/expand.ts`)를 잰다. 규격(`spec/patterns.ts`)은 전개를 하지 않는다.
  *
- * **세는 단위를 케이스가 만든다.** 계획서가 산문에 적은 수(*"다섯 중 둘"*)를 여기서 다시
- * 세되, 세는 단위는 **`patterns` 객체의 키 하나**다 — `grep -c patterns`는 주석의 언급과
- * 절 이름을 함께 세므로 다른 수를 낸다(재라 #2).
+ * **세는 단위를 케이스가 만든다.** 패턴을 가진 시스템 테마의 수(*"다섯 중 둘"*)를 산문에
+ * 적지 않고 여기서 세되, 세는 단위는 **`patterns` 객체의 키 하나**다 — `grep -c patterns`는
+ * 주석의 언급과 절 이름을 함께 세므로 다른 수를 낸다.
  */
 import {
   WbNodeSchema,
@@ -30,7 +29,7 @@ function counter(): () => string {
   return () => `n_t${next++}`
 }
 
-/** §6.6의 예시를 줄인 것 — 슬롯 둘이 서로 다른 깊이에 있다. */
+/** 설계서 「patterns — 테마가 소유한 구성 레시피」의 예시를 줄인 것 — 슬롯 둘이 서로 다른 깊이에 있다. */
 const NOTICE: ThemePattern = {
   name: '공지 목록',
   slots: { title: 'text', keyword: 'text' },
@@ -60,7 +59,7 @@ function flatten(nodes: readonly WbNode[]): WbNode[] {
   return out
 }
 
-describe('expandPattern — D2: slot이 결과에 남지 않는다', () => {
+describe('expandPattern — slot이 결과에 남지 않는다', () => {
   it('전개된 노드에 slot 키가 하나도 없다', () => {
     const { expanded, issues } = expandPattern(NOTICE, counter())
     expect(issues).toEqual([])
@@ -72,8 +71,8 @@ describe('expandPattern — D2: slot이 결과에 남지 않는다', () => {
     expect(withSlot).toEqual([])
   })
 
-  it('재라 #1 — slot이 남으면 봉투가 실제로 죽는다', () => {
-    // 계획서가 *"안 읽고 가정했다"*고 적은 문장을 실행으로 바꾼다. `WbNodeSchema`가
+  it('slot이 남으면 봉투가 실제로 죽는다', () => {
+    // 가정을 실행으로 잰다. `WbNodeSchema`가
     // `z.strictObject`이므로 선언 안 된 키 하나가 파싱을 실패시킨다.
     const clean = WbNodeSchema.safeParse({ id: 'n_a', type: 'Text' })
     const dirty = WbNodeSchema.safeParse({ id: 'n_a', type: 'Text', slot: 'title' })
@@ -90,14 +89,13 @@ describe('expandPattern — D2: slot이 결과에 남지 않는다', () => {
   })
 })
 
-describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다 (리뷰 D1)', () => {
+describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다', () => {
   /**
-   * **리뷰가 실증한 결함이다.** 전개가 `props`를 참조로 넘기면 전개된 노드의 props를
-   * 고치는 순간 **`systemTheme('portal')`이 영구히 오염된다** — 시스템 테마는 모듈
-   * 상수라 그 프로세스가 사는 동안 같은 객체를 계속 돌려준다.
+   * **전개가 `props`를 참조로 넘기면** 전개된 노드의 props를 고치는 순간
+   * **`systemTheme('portal')`이 영구히 오염된다** — 시스템 테마는 모듈 상수라 그
+   * 프로세스가 사는 동안 같은 객체를 계속 돌려준다.
    *
-   * 오늘 `apps/web`에 제자리 변형 경로가 없어 잠재이지만, **P7-2(프리셋)·P7-3(JSON
-   * 가져오기)이 이 전개 경로를 재사용하고 그쪽은 값을 만질 이유가 훨씬 많다.**
+   * **프리셋·JSON 가져오기가 이 전개 경로를 재사용하고 그쪽은 값을 만질 이유가 훨씬 많다.**
    */
   const NESTED = {
     name: '중첩 props',
@@ -114,11 +112,9 @@ describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다
    * 기본값이 객체이거나 배열인 prop"*이다 — 그 값이 곧 `{ ...props }`가 참조를 그대로
    * 남기는 자리다.
    *
-   * **앞 판은 이것을 `grep -n 'z.array'`로 세고 컴포넌트 이름을 줄 번호에서 추측해
-   * 셋을 적었다(`Table.columns`·`List.items`·`Tabs.tabs`). 셋 다 문제가 있었다:**
-   * `Table`은 카탈로그에 아예 없고, `List.items`는 `z.number()`이며(같은 파일의 다른
-   * 컴포넌트가 `items: z.array`를 갖는다), 수도 셋이 아니라 넷이다. **grep은 어느
-   * 컴포넌트의 prop인지 말해 주지 않는다** — 그 침묵을 추측으로 메운 것이 원인이다.
+   * **`grep -n 'z.array'`로 세면 안 된다.** **grep은 어느 컴포넌트의 prop인지 말해 주지
+   * 않아** 컴포넌트 이름을 줄 번호에서 추측하게 되고, 그 추측은 카탈로그에 없는 컴포넌트나
+   * 같은 파일의 다른 컴포넌트가 가진 같은 이름의 prop을 집는다.
    *
    * 검산: `pnpm vitest run packages/themes/test/pattern-expand.test.ts -t '얕은 복사가'`
    */
@@ -143,7 +139,7 @@ describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다
    * **`expandPattern`의 *"던지지 않는다"* 계약에 예외가 하나 있다 — 여기서 고정한다.**
    *
    * `structuredClone`은 구조적 복제가 불가능한 값(함수·심볼 등)에서 `DOMException`을
-   * 던진다. 머리말이 그 사실과 *"오늘 그 입력이 오는 경로가 0건"*을 함께 적는데, 뒤엣것을
+   * 던진다. 머리말이 그 사실과 *"그 입력이 오는 경로는 0건이다"*를 함께 적는데, 뒤엣것을
    * 케이스가 잰다.
    *
    * **세는 단위: `<컴포넌트>.<prop>` 하나에 함수를 넣고 `def.props.safeParse`를 돌린
@@ -169,8 +165,8 @@ describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다
       }
     }
 
-    // **분모를 먼저 본다.** 시도가 0이면 아래 단언이 조용히 통과한다 — 앞 슬라이스에서
-    // 계수 스크립트가 0을 내고도 초록이던 부류다.
+    // **분모를 먼저 본다.** 시도가 0이면 아래 단언이 조용히 통과한다 — 계수가 0을 내고도
+    // 초록인 부류다.
     expect(probes).toBeGreaterThan(0)
     expect(accepted).toEqual([])
   })
@@ -241,8 +237,7 @@ describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다
   })
 
   it('전개된 노드의 props를 고쳐도 시스템 테마가 오염되지 않는다', () => {
-    // **실제 테마로 잰다.** 위 케이스들은 참조를 보지만 이것은 **결과**를 본다 —
-    // 리뷰가 지목한 것이 이 형태다.
+    // **실제 테마로 잰다.** 위 케이스들은 참조를 보지만 이것은 **결과**를 본다.
     const pattern = systemTheme('portal')!.patterns!['content.noticeBoard']!
     const before = JSON.stringify(pattern)
 
@@ -300,7 +295,7 @@ describe('expandPattern — id 발급', () => {
   })
 })
 
-describe('expandPattern — D3: 슬롯은 채우지 않고 어느 노드인지만 돌려준다', () => {
+describe('expandPattern — 슬롯은 채우지 않고 어느 노드인지만 돌려준다', () => {
   it('slots 매핑이 실제 전개된 노드를 가리킨다', () => {
     const { expanded } = expandPattern(NOTICE, counter())
     const ids = new Set(flatten(expanded!.nodes).map((node) => node.id))
@@ -371,7 +366,7 @@ describe('expandPattern — D3: 슬롯은 채우지 않고 어느 노드인지�
   })
 
   /**
-   * **리뷰가 지목한 사각 ㉠을 닫는다.** `slots` 맵의 순서는 **트리 순서**여야 한다 —
+   * **`slots` 맵의 순서는 트리 순서여야 한다** —
    * `patternInsert`의 `selectId`가 *"첫 슬롯"*으로 그 맵의 첫 값을 쓰므로, 순서가
    * 선언 순서로 바뀌면 **사용자가 다른 노드를 골라 놓은 채 시작한다.**
    *
@@ -422,9 +417,10 @@ describe('expandPattern — D3: 슬롯은 채우지 않고 어느 노드인지�
   })
 
   it('한 슬롯 이름을 노드 둘이 쓰면 처음 만난 노드가 실린다', () => {
-    // `checkPatterns`가 이 경우를 막지 않는다(그쪽 주석: *"§6.6이 그 경우를 말하지 않았다"*).
+    // `checkPatterns`가 이 경우를 막지 않는다(규격이 그 경우를 말하지 않는다 — 그쪽 주석).
     // 전개는 **전위 순회로 처음 만난 노드**를 고른다 — 어느 쪽도 규격에 없으므로 위에서
-    // 아래로 채우는 감각에 맞췄다. 이것이 슬롯 **타입 체계**(§16)를 닫지는 않는다.
+    // 아래로 채우는 감각에 맞췄다. 이것이 슬롯 **타입 체계**(설계서 「열린 질문 (구현 중
+    // 결정)」)를 닫지는 않는다.
     const twice: ThemePattern = {
       name: '슬롯 둘',
       slots: { title: 'text' },
@@ -439,7 +435,7 @@ describe('expandPattern — D3: 슬롯은 채우지 않고 어느 노드인지�
   })
 })
 
-describe('expandPattern — D6: marker가 따라오지 않는다', () => {
+describe('expandPattern — marker가 따라오지 않는다', () => {
   it('전개 결과에 marker가 없다', () => {
     const { expanded } = expandPattern(NOTICE, counter())
     const withMarker = flatten(expanded!.nodes).filter((node) => Object.hasOwn(node, 'marker'))
@@ -447,7 +443,7 @@ describe('expandPattern — D6: marker가 따라오지 않는다', () => {
   })
 
   it('템플릿이 marker를 들고 있어도 결과로 새지 않는다', () => {
-    // `PatternNode`는 `marker`를 받지 않지만(사실 5), 그것은 **타입**이 막는 것이다.
+    // `PatternNode`는 `marker`를 받지 않지만(`spec/patterns.ts`), 그것은 **타입**이 막는 것이다.
     // 런타임 값이 그 자리에 오는 경로가 생겨도 전개가 옮기지 않는 것을 여기서 고정한다.
     const smuggled = {
       name: 'marker 밀반입',
@@ -459,7 +455,7 @@ describe('expandPattern — D6: marker가 따라오지 않는다', () => {
     expect(withMarker).toEqual([])
   })
 
-  it('템플릿의 interactions도 결과로 새지 않는다 — 재라 #5', () => {
+  it('템플릿의 interactions도 결과로 새지 않는다', () => {
     // `PatternNode`에 `interactions`가 없으므로 전개가 리매핑할 `target`이 없다.
     // 그래서 `remapNodeIds`를 쓸 자리가 없다. 밀반입되어도 옮기지 않는다.
     const smuggled = {
@@ -506,20 +502,20 @@ describe('expandPattern — 옮기는 필드', () => {
     expect(expanded!.nodes).toEqual([{ id: 'n_t0', type: 'Section' }])
   })
 
-  it('nodes는 오늘 항상 하나다 — ThemePattern.schema가 노드 하나이기 때문이다', () => {
-    // 배열로 내는 것은 계획서 D3의 계약이고, 삽입 쪽(D5)이 *"여럿이면 순서대로"*를 이미
-    // 다룰 수 있게 한다. 그 수가 오늘 무엇인지는 여기서 못박는다.
+  it('nodes는 항상 하나다 — ThemePattern.schema가 노드 하나이기 때문이다', () => {
+    // 배열로 내는 것이 계약이고, 삽입 쪽이 *"여럿이면 순서대로"*를 다룰 수 있게 한다.
+    // 그 수가 무엇인지는 여기서 못박는다.
     expect(expandPattern(NOTICE, counter()).expanded!.nodes.length).toBe(1)
   })
 })
 
-describe('T2 — 시스템 테마의 실제 패턴이 문서에 들어간다', () => {
-  /** 테마 id → `patterns` 객체의 **키 개수**. 세는 단위는 키 하나다(재라 #2). */
+describe('시스템 테마의 실제 패턴이 문서에 들어간다', () => {
+  /** 테마 id → `patterns` 객체의 **키 개수**. 세는 단위는 키 하나다. */
   function patternKeyCount(themeId: string): number {
     return Object.keys(systemTheme(themeId)?.patterns ?? {}).length
   }
 
-  it('재라 #2 — 패턴을 가진 시스템 테마와 그 개수를 센다', () => {
+  it('패턴을 가진 시스템 테마와 그 개수를 센다', () => {
     const counts = Object.fromEntries(SYSTEM_THEME_IDS.map((id) => [id, patternKeyCount(id)]))
     expect(counts).toEqual({
       admin: 0,
@@ -528,7 +524,7 @@ describe('T2 — 시스템 테마의 실제 패턴이 문서에 들어간다', (
       commerce: 1,
       docs: 0,
     })
-    // 계획서가 산문에 적은 *"다섯 중 둘"*을 케이스가 다시 만든다.
+    // *"다섯 중 둘"*을 산문이 아니라 케이스가 만든다.
     expect(SYSTEM_THEME_IDS.length).toBe(5)
     expect(SYSTEM_THEME_IDS.filter((id) => patternKeyCount(id) > 0)).toEqual(['portal', 'commerce'])
   })

@@ -19,30 +19,16 @@ import type { Theme } from '../spec/theme'
  *
  * ---
  *
- * ## 읽기 폭을 어디에 적었는가 — **이제 한 곳이다** (2026-08-11, P4c-1 T1)
+ * ## 읽기 폭을 어디에 적었는가 — **한 곳이다**
  *
  * `primitives.container.maxWidth: '720px'` 하나가 그 값의 유일한 자리이고,
- * `Section.parts.inner.maxWidth`가 `'container.maxWidth'`로 그것을 가리킨다.
+ * `Section.parts.inner.maxWidth`가 `'container.maxWidth'`로 그것을 가리킨다. 스타일 전용
+ * 이름공간 셋(`container`·`grid`·`section` — `STYLE_PRIMITIVE_NAMESPACES`)이 그 문법을 열고,
+ * 컴파일 결과는 `max-width: var(--wb-container-maxWidth)`다(`:root`가 그 변수에 `720px`을 낸다).
  *
- * **P4b-3까지는 그렇지 않았다. 지우지 않고 무엇이 왜 바뀌었는지 남긴다:**
- *
- * > *"`primitives.container.maxWidth: '720px'`는 §6.4가 시키는 자리다. 그런데 **그 값을
- * > 스타일이 가리킬 문법이 없다.** 토큰 참조의 이름공간은 일곱뿐이고 `container`는 없다.
- * > 그리고 `resolveTheme`이 `checkThemeComponents`에 `tokens.table`만 넘긴다. …
- * > **그래서 `Section.parts.inner.maxWidth`에 `'720px'`을 리터럴로 적었다.** 같은 수가 두
- * > 곳에 있고 **어긋나도 아무것도 안 죽는다.**"*
- *
- * **P4b-3 이월이 바로 이 중복을 병의 증거로 지목했다** — *"`docs`가 읽기 폭 720px을 두 곳에
- * 손으로 적은 것이 그 증거다. 문법이 있었으면 한 곳이다."* P4c-1 T1이 스타일 전용
- * 이름공간 셋(`container`·`grid`·`section`)을 열어 그 문법을 만들었고, 여기가 그것을 쓰는
- * 자리다. 컴파일 결과는 `max-width: 720px` → `max-width: var(--wb-container-maxWidth)`이고
- * **계산값은 같다**(`:root`가 그 변수에 `720px`을 낸다).
- *
- * > **그리고 이 파일이 그 함정의 교과서였다.** 위 문단이 *"`admin`이 `container.maxWidth`를
- * > 적었는데 풀리지 않는다"*고 규탄해 놓고, 같은 파일 200줄 아래에서 `admin`의
- * > `gap: 'grid.gap'`을 **그대로 복사했다**(P4b-3의 ③이 찾아 `'space.5'`로 고쳤다).
- * > *산문 경고는 복사를 막지 못한다* — 그것을 잡은 것은
- * > `packages/themes/test/system-unresolved-literals.test.ts`의 **수 케이스**였다.
+ * > **산문 경고는 복사를 막지 못한다.** 참조로 안 풀리는 값은 리터럴로 CSS에 실려 무효
+ * > 선언이 되는데, 그런 줄은 다른 테마에서 옮겨 오기 쉽다. 그것을 잡는 것은
+ * > `packages/themes/test/system-unresolved-literals.test.ts`의 **수 케이스**다.
  *
  * **읽기 폭은 사실 세 층이다.** 컨테이너(720px)가 칼럼을 자르고, `Text`의 `body` 변형이
  * `maxWidth: '68ch'`로 **글자 수 기준의 행 길이**를 다시 자른다. 세리프 17px에서 68ch가
@@ -51,9 +37,9 @@ import type { Theme } from '../spec/theme'
  *
  * ---
  *
- * ## `Code` 컴포넌트가 없다 — **`Placeholder`로 대신했다** (계획서 재라 #7)
+ * ## `Code` 컴포넌트가 없다 — **`Placeholder`로 대신했다**
  *
- * 카탈로그 19개 중 코드 블록에 해당하는 것이 없다. 후보를 셋 놓고 골랐다:
+ * 카탈로그에 코드 블록에 해당하는 것이 없다. 후보를 셋 놓고 골랐다:
  *
  * | 후보 | 왜 아닌가 / 왜 골랐나 |
  * |---|---|
@@ -61,14 +47,14 @@ import type { Theme } from '../spec/theme'
  * | `Media:chart`·`illustration` | 틀(`frame`)이 비율을 갖는 상자다. 코드는 줄 수만큼 길어지므로 비율이 뜻을 갖지 않는다 |
  * | **`Placeholder`** (고른 것) | 자유 문자열(`label`)과 높이(`height`)를 노드가 갖는 **유일한** 컴포넌트다. 와이어프레임에서 코드 블록은 *"모노 글자가 든 상자"*이고 그것이 정확히 이 컴포넌트의 모양이다 |
  *
- * **대가가 있고 그것이 §16의 입력이다:** `Placeholder`는 `structures`가 하나(`default`)이고
+ * **대가가 있고 그것이 설계서 「열린 질문」의 입력이다:** `Placeholder`는 `structures`가 하나(`default`)이고
  * **`variants`가 비어 있다.** 즉 이 테마에서 `Placeholder`를 코드 블록으로 스킨하는 순간
  * *"미정 영역"*이라는 원래 쓰임을 **표현할 채널이 하나도 남지 않는다.** 구조 선택이 타입
- * 단위라는 벽(P4b-2 이월 1번)보다 한 칸 더 나쁜 자리다 — 그쪽은 적어도 변형 채널이 남는다.
+ * 단위라는 벽보다 한 칸 더 나쁜 자리다 — 그쪽은 적어도 변형 채널이 남는다.
  *
  * **높이는 건드리지 않았다.** `Placeholder:default`의 기본 CSS가
  * `height: var(--wb-node-placeholder-height, 120px)`인데 여기서 `height`를 쓰면 노드가 정한
- * 줄 수가 **말없이 사라진다**(P4b-2 이월 5번의 손잡이 표). 코드 블록의 길이는 테마가 아니라
+ * 줄 수가 **사라진다**(노드 손잡이 — `NODE_HANDLES`, `node-handle-overwrite` 경고). 코드 블록의 길이는 테마가 아니라
  * 그 코드가 정한다.
  *
  * ---
@@ -80,7 +66,7 @@ import type { Theme } from '../spec/theme'
  * 감싸는 상자를 만드는 선언이 없다). `media`를 작은 정사각형으로 줄여 표시 자리로 쓴다.
  *
  * **종류가 둘뿐이다.** `Card.variants`가 `default`·`featured` 둘이므로 *"정보"*와 *"경고"*는
- * 표현되지만 *"위험"*·*"팁"*은 표현할 채널이 없다. §16의 입력이다.
+ * 표현되지만 *"위험"*·*"팁"*은 표현할 채널이 없다. 「열린 질문」의 입력이다.
  */
 export const DOCS_THEME: Theme = {
   meta: {
@@ -124,7 +110,7 @@ export const DOCS_THEME: Theme = {
       notice: 'palette.amber.600',
       noticeSoft: 'palette.amber.50',
       // 코드 블록 — `Placeholder`가 쓴다. `canvas`와 값이 같지만 **이름이 다른 것이 요점이다**
-      // (§6.3의 의미 계층 — 파생 테마가 코드 배경만 어둡게 바꿀 수 있어야 한다).
+      // (설계서 「tokens — 3단 분리」의 의미 계층 — 파생 테마가 코드 배경만 어둡게 바꿀 수 있어야 한다).
       code: 'palette.paper.100',
       codeText: 'palette.ink.700',
     },
@@ -140,9 +126,8 @@ export const DOCS_THEME: Theme = {
       /**
        * **이 테마의 절반이 여기 있다.**
        *
-       * `admin`이 예고한 자리다 — *"시스템 테마 다섯을 만들 때 여기에 `family`와
-       * `fontFamily`가 함께 온다."* `family`는 **토큰**이고 컴포넌트에 거는 것은
-       * `fontFamily` **어휘**다. 둘 다 있어야 화면에 보인다(P4b-3 ①이 그 두 층을 갈랐다).
+       * `family`는 **토큰**이고 컴포넌트에 거는 것은 `fontFamily` **어휘**다. 둘 다 있어야
+       * 화면에 보인다(`admin`에는 둘 다 없다).
        *
        * **셋으로 나눈 이유:** 문서 사이트의 서체는 한 벌이 아니다. 본문은 오래 읽으므로
        * 세리프, 내비·버튼·필드 같은 UI는 짧게 읽으므로 산세리프, 코드는 열을 맞춰야 하므로
@@ -178,18 +163,18 @@ export const DOCS_THEME: Theme = {
   },
 
   /**
-   * §6.4: *"실제 사이트처럼 보이는 인상의 절반은 여기서 나온다."*
+   * 「primitives — 사이트 골격」: *"실제 사이트처럼 보이는 인상의 절반은 여기서 나온다."*
    *
    * **`admin`의 1440px과 정반대다.** 그리고 섹션 여백은 반대로 넓다 — 관리자 화면은 한
    * 화면에 많이 담아야 하고, 문서는 한 화면에 한 생각만 담는다.
    *
    * **브레이크포인트를 둘만 둔다.** 문서 사이트가 실제로 갈리는 지점은 *"좌측 내비가 접히는
-   * 폭"* 하나이고, 그 위아래로 하나씩이면 충분하다. §6.4의 예시가 넷인 것은 예시일 뿐이다
+   * 폭"* 하나이고, 그 위아래로 하나씩이면 충분하다. 그 절의 예시가 넷인 것은 예시일 뿐이다
    * (`spec/primitives.ts`가 고정 목록이 아니라고 적어 두었다).
    */
   primitives: {
-    // **읽기 폭 720px을 적는 자리는 이제 여기 하나다**(P4c-1 T1). `Section.parts.inner`가
-    // `'container.maxWidth'`로 이것을 가리킨다 — 아래 "읽기 폭을 어디에 적었는가"를 보라.
+    // **읽기 폭 720px을 적는 자리는 여기 하나다.** `Section.parts.inner`가
+    // `'container.maxWidth'`로 이것을 가리킨다 — 머리말의 "읽기 폭을 어디에 적었는가"를 보라.
     container: { maxWidth: '720px', gutter: 'space.6' },
     grid: { columns: 12, gap: 'space.6' },
     section: { paddingY: 'space.10', paddingYCompact: 'space.5' },
@@ -202,7 +187,7 @@ export const DOCS_THEME: Theme = {
    *
    * 그래서 **자식을 담는 것(`Card`·`Tabs`·`SearchForm`·`EntryForm`)을 앞에, 그 안에 들어가는
    * 것(`List`·`Tree`·`KeyValue`·`Field`·`Button`)을 뒤에** 두었다. `parts` 규칙이 자손
-   * 결합자라 바깥의 조각 스킨이 안쪽의 같은 이름 조각까지 잡기 때문이다(P4b-2 이월 4-1).
+   * 결합자라 바깥의 조각 스킨이 안쪽의 같은 이름 조각까지 잡기 때문이다.
    * 이 순서가 그것을 **막는 것이 아니라 덮는다** — 자세한 것은 아래 각 자리의 주석에 있다.
    */
   components: {
@@ -241,20 +226,10 @@ export const DOCS_THEME: Theme = {
 
     Flex: { structure: 'default', base: { gap: 'space.4' } },
     /**
-     * **`gap`이 `'grid.gap'`이 아니라 `'space.5'`다** (P4b-3 ③이 고쳤다).
+     * **`gap`이 `'space.5'`다** — 본문 흐름(`Flex`의 `space.4`)보다 한 칸 넓힌다.
      *
-     * 이 자리에 `'grid.gap'`이라고 적혀 있었다 — `admin`에서 옮겨 온 줄이다. **머리말이
-     * 바로 그 함정을 규탄하면서 같은 줄을 복사했다.** `primitives`는 참조 이름공간에 없으므로
-     * (`TOKEN_NAMESPACES` 일곱) 그것은 참조로 안 풀리고 **리터럴로 통과해 `gap: grid.gap;`이
-     * CSS에 실린다.** Chromium 151이 그 선언을 버리는 것까지 확인했다 — 이 규칙이 통째로
-     * **빈 규칙(`{ }`)**이 되어 문서 격자에 간격이 하나도 없었다.
-     *
-     * `admin`의 같은 줄은 **고치지 않았다**(D7이 `admin`의 CSS 불변을 요구한다). `docs`는
-     * 이 슬라이스가 처음 만드는 테마라 지킬 이전 화면이 없으므로 여기서 고친다.
-     *
-     * 값이 `space.5`인 것은 본문 흐름(`Flex`의 `space.4`)보다 한 칸 넓히려는 것이고,
-     * **`primitives.grid.gap`을 가리키고 싶었던 원래 뜻은 규격에 문법이 없어 표현할 수 없다** —
-     * 이월 §A가 후보와 비용을 적었고 P4c의 첫 태스크다.
+     * **`'grid.gap'`과 값이 다르다.** 이 테마의 `primitives.grid.gap`은 `space.6`이라,
+     * 여기를 `'grid.gap'`으로 바꾸면 격자 간격이 한 칸 넓어진다.
      */
     Grid: { structure: 'default', base: { gap: 'space.5' } },
 
@@ -264,7 +239,7 @@ export const DOCS_THEME: Theme = {
      * `media`에 `aspectRatio: '1 / 1'`을 준다 — 구조 기본 CSS의 `Card [media]`가
      * `aspect-ratio: 16 / 9`를 내는데, 표시 자리는 정사각이어야 한다. **이것은 노드 손잡이를
      * 덮는 것이 아니다**(`--wb-node-media-ratio`는 `Media [frame]`에 있다). 구조가 정한
-     * 기본값을 테마가 덮는 것이고 §6.5가 그러라고 만든 자리다.
+     * 기본값을 테마가 덮는 것이고 「components — 구조 + 스킨」이 그러라고 만든 자리다.
      */
     Card: {
       structure: 'horizontal',
@@ -306,12 +281,11 @@ export const DOCS_THEME: Theme = {
      * **코드 예제의 언어 전환 탭.** `enclosed`를 고른 이유는 탭이 **패널에 붙어 있어야**
      * 하기 때문이다 — `npm`/`pnpm`/`yarn` 탭은 그 아래 코드 상자의 뚜껑이다.
      *
-     * **`vertical`을 안 골랐다.** 계획서의 참고 표가 그것을 적었지만(지시가 아니다),
-     * 세로 탭은 좌측 레일이고 이 테마에는 이미 `Tree:accordion`이 그 자리에 있다. 하나의
-     * 화면에 세로 목록 둘이 나란히 서는 것은 문서 사이트의 모양이 아니다. **D3이 요구한
-     * 정직함이 이쪽이라고 판단했다** — 안 고른 구조가 남는 것은 §16의 입력이지 결함이 아니다.
+     * **`vertical`을 안 골랐다.** 세로 탭은 좌측 레일이고 이 테마에는 이미 `Tree:accordion`이 그 자리에 있다. 하나의
+     * 화면에 세로 목록 둘이 나란히 서는 것은 문서 사이트의 모양이 아니다. **구조는 용도로
+     * 고른다** — 안 고른 구조가 남는 것은 설계서 「열린 질문」의 입력이지 결함이 아니다.
      *
-     * `underline`·`pill`과 **DOM이 글자까지 같다**(P4b-2 ③이 쟀다). 그러므로 뚜껑처럼
+     * `underline`·`pill`과 **DOM이 글자까지 같다.** 그러므로 뚜껑처럼
      * 보이게 하는 것은 전부 아래 `parts`다.
      */
     Tabs: {
@@ -364,7 +338,7 @@ export const DOCS_THEME: Theme = {
     /**
      * **`labelTop`을 골랐다. 그런데 라벨을 위로 올리는 것은 이 구조가 아니다.**
      *
-     * `labelLeft`와 DOM이 글자까지 같고(P4b-2 ③이 쟀다), 라벨과 컨트롤의 짝은 이 폼이 아니라
+     * `labelLeft`와 DOM이 글자까지 같고, 라벨과 컨트롤의 짝은 이 폼이 아니라
      * 자식 `Field` 안에 있다. 실제로 위로 올린 것은 아래 `Field.base.direction: 'column'`이다.
      * 렌더러의 `EntryFormRows` 주석이 그것을 미리 적어 두었고(*"결국 `Field` 루트의
      * `flex-direction` 하나"*), 이 테마가 그 문장이 참임을 실제로 확인한 첫 자리다.
@@ -373,8 +347,7 @@ export const DOCS_THEME: Theme = {
      * 테마가 *"이 폼은 라벨이 위인 폼"*을 셀렉터로 잡을 수 있고, 무엇보다 **테마가 고른
      * 것이 무엇인지를 문서가 말해야** 한다.
      *
-     * `parts.label`은 **폼 제목**이다(필드의 라벨이 아니다 — 이름이 겹치는 것을 P0 이월이
-     * 이미 지적했다). 아래 `Field`가 뒤에 오므로 중첩된 필드 라벨은 `Field` 쪽이 이긴다.
+     * `parts.label`은 **폼 제목**이다(필드의 라벨이 아니다 — 이름이 겹친다). 아래 `Field`가 뒤에 오므로 중첩된 필드 라벨은 `Field` 쪽이 이긴다.
      */
     EntryForm: {
       structure: 'labelTop',
@@ -401,15 +374,15 @@ export const DOCS_THEME: Theme = {
     /**
      * **문서 목록·색인.** `admin`의 표와 정반대 쓰임이다.
      *
-     * **`item`에 `display: 'block'`을 준다 — 불릿을 끄는 유일한 길이다.** §6.8에
+     * **`item`에 `display: 'block'`을 준다 — 불릿을 끄는 유일한 길이다.** 「스타일 프로퍼티 화이트리스트」에
      * `listStyle`이 없어 `list-style-type: none`을 낼 어휘가 없는데, 마커는 요소가
      * `display: list-item`일 때만 생기므로 `block`으로 바꾸면 사라진다. **우회이고 대가가
-     * 있다** — `<li>`의 뜻은 남지만 그것이 목록 항목으로 그려지지 않는다. §16의 입력이다.
+     * 있다** — `<li>`의 뜻은 남지만 그것이 목록 항목으로 그려지지 않는다. 「열린 질문」의 입력이다.
      *
      * **`title`을 여기서 다시 선언하는 것이 중요하다.** 위 `Card.parts.title`이 자손
-     * 결합자라 **카드 안에 넣은 목록의 제목까지 잡는다**(P4b-2 이월 4-1). 이 선언이 뒤에
+     * 결합자라 **카드 안에 넣은 목록의 제목까지 잡는다.** 이 선언이 뒤에
      * 오므로 중첩된 목록은 이쪽을 받는다 — **막는 것이 아니라 덮는 것이고, 지우면 조용히
-     * 샌다.** 아래 보고서에 그 실측이 있다.
+     * 샌다.**
      */
     List: {
       structure: 'stackedList',
@@ -450,8 +423,9 @@ export const DOCS_THEME: Theme = {
      *
      * **`node`에 `paddingX`를 준다. 이것이 손잡이를 덮지 않는 이유는 하나뿐이다** —
      * 구조 기본 CSS의 `Tree [node]` 규칙이 `:where([data-wb-structure="indent"])`로 좁혀져
-     * 있어(P4b-2 ③) 아코디언의 마디에는 **아예 안 맞는다.** 좁혀지기 전이었다면 이 한 줄이
-     * `--wb-node-tree-level` 들여쓰기를 말없이 지웠을 자리다.
+     * 있어 아코디언의 마디에는 **아예 안 맞는다.** 구조를 `indent`로 바꾸면 이 한 줄이
+     * `--wb-node-tree-level` 들여쓰기를 지운다 — `node-handle-overwrite` 경고가 이 자리에 나는
+     * 까닭이다.
      *
      * **`treeIndent` 어휘를 안 쓴다.** 아코디언은 깊이를 DOM 중첩으로 내므로 단계 변수를
      * 싣지 않는다 — 값을 넣어도 읽는 규칙이 없다. 대신 `panel`의 왼쪽 선이 깊이를 보인다.
@@ -516,10 +490,10 @@ export const DOCS_THEME: Theme = {
     // ── 입력 ────────────────────────────────────────────────────────────────
 
     /**
-     * **밑줄만 있는 필드.** `outlined`·`filled`와 DOM이 글자까지 같으므로(P4b-2 ③이 쟀다)
+     * **밑줄만 있는 필드.** `outlined`·`filled`와 DOM이 글자까지 같으므로
      * 갈리는 것은 아래 `control` 스킨 하나다.
      *
-     * **`borderWidth: '0 0 1px'`이 그 전부다.** §6.8에 한 변만 겨냥하는 어휘가 없어
+     * **`borderWidth: '0 0 1px'`이 그 전부다.** 「스타일 프로퍼티 화이트리스트」에 한 변만 겨냥하는 어휘가 없어
      * (`borderBottomWidth` 같은 이름이 없다) 처음에는 표현 불가로 보였는데, `border-width`가
      * CSS 단축이라 **다중값 리터럴이 그대로 통과한다**(값 규칙은 함수와 탈출 문자만 본다).
      * 이 테마가 선을 다루는 주된 방법이 이것이고, 여덟 자리에서 쓴다.
@@ -581,7 +555,7 @@ export const DOCS_THEME: Theme = {
      * **문서 사이트의 버튼은 링크에 가깝다.** 그래서 구조가 `text`다.
      *
      * **그리고 그것이 `variants`를 비워 두지 않는 이유다.** 구조는 테마가 컴포넌트 전체에
-     * 고르고 변형은 노드가 자기 하나에 고르므로(§6.5), *"이 사이트의 버튼은 전부 텍스트인데
+     * 고르고 변형은 노드가 자기 하나에 고르므로(「components — 구조 + 스킨」), *"이 사이트의 버튼은 전부 텍스트인데
      * 이 하나만 채운 CTA"*가 표현된다. `primary`가 그 하나다 — `admin`은 `base`가 이미
      * 채운 버튼이라 이 변형을 선언할 이유가 없었다.
      */
@@ -685,8 +659,8 @@ export const DOCS_THEME: Theme = {
     /**
      * 문서의 그림은 대개 스크린샷이라 `image`다(`admin`과 같다 — 우연이 아니라 같은 답이다).
      *
-     * **`frame`에 `aspectRatio`를 주지 않는다.** 주면 노드의 `ratio` prop이 **말없이**
-     * 사라진다(P4b-2 이월 5번의 손잡이 표 — `--wb-node-media-ratio`). 스크린샷의 비율은
+     * **`frame`에 `aspectRatio`를 주지 않는다.** 주면 노드의 `ratio` prop이
+     * 사라진다(노드 손잡이 — `--wb-node-media-ratio`). 스크린샷의 비율은
      * 그 스크린샷이 정한다.
      */
     Media: {
@@ -725,7 +699,7 @@ export const DOCS_THEME: Theme = {
     },
 
     /**
-     * **코드 블록.** 머리말의 재라 #7 판정 그대로다.
+     * **코드 블록.** 머리말의 판정(`Code` 컴포넌트가 없다) 그대로다.
      *
      * `borderWidth: '0 0 0 3px'`의 왼쪽 막대가 *"여기는 본문이 아니다"*를 말한다 —
      * 위 `Card`(주의 상자)와 같은 어휘를 쓰되 색이 다르다. 문서에서 본문 흐름을 끊는 상자는
@@ -754,20 +728,20 @@ export const DOCS_THEME: Theme = {
   },
 
   /**
-   * §6.7. **`@font-face`로 나간다**(P4b-3 D5가 그 경로를 만들었다).
+   * 「assets」. **`@font-face`로 나간다.**
    *
-   * **`src`가 `local()`뿐이다 — 네트워크를 쓰지 않는다.** ①이 그 선택의 한계까지 쟀다:
+   * **`src`가 `local()`뿐이다 — 네트워크를 쓰지 않는다.** 그 선택의 한계:
    * 그 이름의 로컬 폰트가 없으면 face의 `status`가 `error`가 되고 **등록은 되고 로드만
    * 실패한다.** 그래서 토큰의 `family` 값이 face 이름 **뒤에 일반 폰트 이름들을 더 늘어놓는다**
    * — 두 층이 서로를 받친다.
    *
-   * **`weights`가 값마다 블록 하나를 낸다**(①이 정했다 — 범위로 접으면 문서에 없는 굵기가
+   * **`weights`가 값마다 블록 하나를 낸다**(범위로 접으면 문서에 없는 굵기가
    * 생긴다). 셋을 합쳐 여덟 블록이 나간다.
    *
    * **`placeholder`를 선언하지 않았다.** `photo`가 필요했다 — 이 테마의 `Media`는
-   * 스크린샷 자리이고 회색 상자보다 더미 이미지가 문서에 가깝다. 그런데 D5가
-   * `placeholder.style`을 컴파일하지 않기로 했으므로, 선언하면 **아무 일도 하지 않는 설정이
-   * 테마에 남는다.** 필요했다는 사실만 보고로 넘긴다.
+   * 스크린샷 자리이고 회색 상자보다 더미 이미지가 문서에 가깝다. 그런데
+   * `placeholder.style`은 컴파일되지 않으므로, 선언하면 **아무 일도 하지 않는 설정이
+   * 테마에 남는다.**
    */
   assets: {
     fonts: [

@@ -1,13 +1,13 @@
 /**
- * **서체는 두 층이고, 오늘 그 둘이 어긋나도 죽는 케이스가 없다.**
+ * **서체는 두 층이고, 그 둘이 어긋나면 죽는 자리가 이 파일이다.**
  *
- * P4b-3 ①이 `assets.fonts` → `@font-face` 경로를 만들었고(`test/font-face.test.ts`가 그
- * 경로 자체를 잰다), P4b-1이 `fontFamily` 어휘를 열었다(`test/style.test.ts`). **둘을 잇는
+ * 한 층은 `assets.fonts` → `@font-face` 경로이고(`test/font-face.test.ts`가 그
+ * 경로 자체를 잰다), 다른 층은 `fontFamily` 어휘다(`test/style.test.ts`). **둘을 잇는
  * 것은 이름 문자열 하나뿐이다** — `@font-face`가 선언한 `family`와 토큰이 담은 폰트 스택의
  * 첫 항목이 같은 글자여야 한다. 한쪽만 고치면 폰트는 조용히 폴백으로 그려진다.
  *
- * `portal`이 그 둘을 **처음으로 함께 쓰는 테마**라 여기에 못을 박는다. `admin`은 `assets`가
- * 없고(D7이 그것을 요구한다) `fontFamily`도 안 쓴다.
+ * `portal`이 그 둘을 **함께 쓰는 테마**라 여기에 못을 박는다. `admin`은 `assets`가
+ * 없고(`font-face.test.ts`가 그것을 못박는다) `fontFamily`도 안 쓴다.
  *
  * **`<button>`을 따로 보는 이유:** `font-family`는 상속되므로 문서 뿌리(`Page`)에 한 번
  * 걸면 아래가 다 받는데, **폼 컨트롤은 예외다** — UA 스타일시트가 `<button>`에 자기 폰트를
@@ -15,8 +15,8 @@
  * 다른 서체로 그려진다.
  *
  * **재지 못한 것:** 이 파일이 보는 것은 **방출된 문자열**이다. `@font-face`가 실제 시트에
- * 걸리는지와 계산된 `font-family`가 그 이름을 갖는지는 jsdom이 못 본다 — ①이 Chromium
- * 151로 한 번 쟀고(그쪽이 쟀다) 그 값은 `emit/index.ts`의 `pushFontFaces` 머리말에 있다.
+ * 걸리는지와 계산된 `font-family`가 그 이름을 갖는지는 jsdom이 못 본다 — Chromium
+ * 151로 잰 값이 `emit/index.ts`의 `pushFontFaces` 머리말에 있다.
  */
 import { installCatalog } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -30,7 +30,7 @@ beforeAll(() => {
 
 function portalCss(): string {
   const { theme, issues } = resolveTheme(PORTAL_THEME)
-  // **오류만 본다**(P4c-1 T4). `portal`은 `Tree.parts.node.paddingX`로 노드 손잡이를 덮어
+  // **오류만 본다.** `portal`은 `Tree.parts.node.paddingX`로 노드 손잡이를 덮어
   // **경고 1건**을 낸다 — 그것이 정상이고 수와 자리는 `warning-channel.test.ts`가 못박는다.
   const errors = issues.filter((issue) => issue.severity === 'error')
   expect(errors.map((issue) => `${issue.path}: ${issue.message}`)).toEqual([])
