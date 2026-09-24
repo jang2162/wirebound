@@ -320,16 +320,18 @@ describe('다시 붙으면 다시 읽는다', () => {
    * 재연결마다 돈다. 그래서 문장을 낸다.
    */
   /**
-   * 되돌리기 이력을 채운 채 연결을 한 번 끊었다 다시 붙인다. 재조회가 돌려주는 `headSeq`는 `resyncSeq`다 — 처음 여는
-   * 조회는 `HEAD_SEQ`다.
+   * 되돌리기 이력을 채운 채 연결을 한 번 끊었다 다시 붙인다. 재조회가 돌려주는 판은 `resyncSeq` · `resyncDoc`이다 — 처음
+   * 여는 조회는 `HEAD_SEQ` · `n-first`다.
    */
-  async function reconnectWithUndo(resyncSeq: number): Promise<ReturnType<typeof vi.fn>> {
+  async function reconnectWithUndo(resyncSeq: number, resyncDoc = doc('n-first')): Promise<ReturnType<typeof vi.fn>> {
     const sockets: FakeSocket[] = []
     const scheduled: (() => void)[] = []
     let calls = 0
     const getPage = vi.fn(async (_projectId: string, pageId: string) => {
       calls += 1
-      return { ...pageDetail(pageId, doc('n-first')), headSeq: calls === 1 ? HEAD_SEQ : resyncSeq }
+      return calls === 1
+        ? { ...pageDetail(pageId, doc('n-first')), headSeq: HEAD_SEQ }
+        : { ...pageDetail(pageId, resyncDoc), headSeq: resyncSeq }
     })
     const setup: RealtimeSetup = {
       holder: createConnectionIdHolder(),
@@ -409,6 +411,20 @@ describe('다시 붙으면 다시 읽는다', () => {
     await act(async () => {})
     expect(screen.getByRole('button', { name: '되돌리기' }).hasAttribute('disabled')).toBe(false)
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  /**
+   * **번호가 같아도 문서가 다르면 싣는다.** 끊긴 사이 페이지가 지워졌다가 스냅샷 복원으로 같은 id 로 되살아나면 `head_seq`가
+   * 0 부터 다시 세고, 남이 편집해 번호가 내 것과 같아질 수 있다 — 복원 방송은 끊긴 동안 와서 못 받았다. 번호만 보고 안
+   * 싣으면 옛 문서가 남고, 자리(index) 기반인 다음 편집이 남의 노드를 덮는다(Chrome — `store/editor-store.ts`의
+   * `holdsServerPage` 머리말). 위 케이스와 **번호가 같고 문서만 다르다.**
+   */
+  it('번호가 같아도 문서가 다르면 싣는다 — 끊긴 사이 지워졌다 되살아난 페이지', async () => {
+    await reconnectWithUndo(HEAD_SEQ, doc('n-revived'))
+
+    await waitForNode('n-revived')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('되돌리기 이력이 초기화됐습니다')
   })
 })
 

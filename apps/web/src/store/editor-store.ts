@@ -341,6 +341,44 @@ function unchanged(result: RemoteChangeResult): RemoteChange {
   return { result, dropped: NO_DROPPED }
 }
 
+/**
+ * JSON 값 둘이 같은가(`holdsServerPage`). **객체의 키 순서를 보지 않는다** — 서버는 문서를 JSONB 로 두어 키 순서를 제
+ * 규칙으로 바꿔 돌려주고, 내 바탕은 `applyOps`가 키를 붙인 순서다. `JSON.stringify`로 견주면 같은 문서가 «다르다»가 되어
+ * 재조회가 늘 싣는다(되돌리기 이력을 이유 없이 잃는다). **값이 `undefined`인 키는 없는 키로 본다** — 직렬화하면 사라지는
+ * 키라 서버 판에는 없다. 배열은 순서째 견준다(자식 순서가 곧 문서다).
+ *
+ * **재귀하지 않는다** — 깊은 문서에서 호출 스택을 쓰지 않게 훑을 쌍을 배열에 쌓는다.
+ *
+ * **비용은 같은 본문의 `JSON.parse`와 같은 급이다** — 같은 판이면 끝까지 훑는다(다르면 처음 어긋난 자리에서 멈춘다).
+ * Node(V8) · Text 노드 N 개를 한 Section 에 둔 문서를 JSON 왕복하며 키 순서를 뒤집어 `holdsServerPage`로 견준 중앙값
+ * (25 회): 1000 개(102KB) 0.23ms · 5000 개(512KB) 1.2ms · 20000 개(2MB) 5.5ms — 같은 본문의 `JSON.parse`는 0.21 · 1.0 ·
+ * 4.2ms.
+ */
+function sameJson(left: unknown, right: unknown): boolean {
+  const pairs: [unknown, unknown][] = [[left, right]]
+  for (let pair = pairs.pop(); pair !== undefined; pair = pairs.pop()) {
+    const [a, b] = pair
+    if (a === b) continue
+    if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+    if (Array.isArray(a) !== Array.isArray(b)) return false
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) return false
+      for (let i = 0; i < a.length; i += 1) pairs.push([a[i], b[i]])
+      continue
+    }
+    const aRecord = a as Record<string, unknown>
+    const bRecord = b as Record<string, unknown>
+    const aKeys = Object.keys(aRecord).filter((key) => aRecord[key] !== undefined)
+    const bKeys = Object.keys(bRecord).filter((key) => bRecord[key] !== undefined)
+    if (aKeys.length !== bKeys.length) return false
+    for (const key of aKeys) {
+      if (!Object.hasOwn(bRecord, key)) return false
+      pairs.push([aRecord[key], bRecord[key]])
+    }
+  }
+  return true
+}
+
 /** `startUndo`·`startRedo`의 결과. 건너뛴 수는 「개인 undo/redo」의 안내에 쓴다. */
 export interface UndoAttempt {
   /** 큐에 들어간 편집의 id. 적용할 수 있는 항목이 없었으면 `null`이다. */
@@ -466,6 +504,27 @@ export class EditorStore {
       documentLoads: this.#state.documentLoads + 1,
     })
     return pending
+  }
+
+  /**
+   * **내 바탕이 곧 이 서버 판인가** — 같은 페이지 · 같은 `headSeq` · **같은 문서**일 때만 참이다. 재연결 재조회가 다시
+   * 읽은 판을 싣지 않고 넘어가도 되는지를 이것 하나로 묻는다(`routes/editor.tsx`의 재연결 이펙트).
+   *
+   * **`headSeq`만으로는 모자란다 — 한 페이지 id 안에서도 단조가 아니다.** 지워진 페이지를 스냅샷 복원이 되살리면 같은
+   * id 로 `head_seq` 0 부터 다시 센다. 끊긴 사이 그렇게 되살아나 남이 편집하면 번호가 우연히 내 것과 같아지고, 번호만
+   * 보는 판은 옛 문서를 둔다 — 편집 경로가 자리(index) 기반이라 다음 편집이 **남의 노드를 덮는다**(Chrome: 되살아난
+   * 페이지 앞에 남이 글을 넣어 head 1 == 내 head 1 → 안 싣고 통지 0, 내가 «원문»을 고치자 서버에서는 남의 글이 바뀌었다).
+   * 복원 방송(`restored`)은 끊긴 동안 온 것이라 받지 못했다.
+   *
+   * **견주는 것은 `baseDocument`다 — `document`가 아니다.** 바탕이 서버가 기록한 문서이고(내 낙관적 편집이 안 섞였다),
+   * `document`는 보내지 않은 편집만큼 앞서 있다.
+   *
+   * **비용**: 문서를 한 번 훑는다(`sameJson`) — 같은 본문의 `JSON.parse`와 같은 급이다(잰 값은 `sameJson`의 머리말).
+   * 재조회는 연결이 다시 붙을 때만 돌고, 그 조회가 이미 같은 문서를 내려받아 파싱했다 — 비용이 그만큼 한 번 더 든다.
+   */
+  readonly holdsServerPage = (pageId: string, headSeq: number, document: PageDocument): boolean => {
+    const { openPageId, baseDocument } = this.#state
+    return openPageId === pageId && this.#state.headSeq === headSeq && sameJson(baseDocument, document)
   }
 
   /**

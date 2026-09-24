@@ -603,3 +603,61 @@ describe('markRestored', () => {
     expect(notified).toBe(afterFirst)
   })
 })
+
+/**
+ * **내 바탕이 곧 이 서버 판인가**(`holdsServerPage`). 재연결 재조회가 이것으로 «다시 싣지 않아도 되나»를 묻는다 —
+ * 판을 번호째 · 문서째 보는 까닭은 그 머리말, 번호가 같고 문서가 다른 판은 `test/edit/reconnect-resync.test.tsx`의
+ * «번호가 같아도 문서가 다르면 싣는다»가 잰다. 여기 셋은 **같은 판을 «다르다»고 읽지 않는가**다 — 그러면 재조회가 늘
+ * 싣어 되돌리기 이력을 이유 없이 잃는다.
+ */
+describe('holdsServerPage', () => {
+  /** 서버가 돌려주는 모양 — JSONB 는 키 순서를 제 규칙으로 바꾼다. 값은 `doc()`과 같다. */
+  function reordered(children: { id: string }[] = []): PageDocument {
+    return JSON.parse(
+      JSON.stringify({
+        root: { children: children.map((c) => ({ type: 'Container', id: c.id })), type: 'Container', id: 'n_root' },
+        version: CURRENT_DOCUMENT_VERSION,
+      }),
+    ) as PageDocument
+  }
+
+  it('키 순서만 다른 같은 문서는 같은 판이다', () => {
+    const store = opened()
+
+    expect(store.holdsServerPage('page_1', 4, reordered())).toBe(true)
+  })
+
+  /** 값이 `undefined`인 키는 직렬화하면 사라진다 — 서버 판에는 없는 키다. */
+  it('값이 undefined 인 키는 없는 키로 본다', () => {
+    const store = new EditorStore()
+    const mine = doc([{ id: 'n_a' }])
+    ;(mine.root.children![0] as unknown as Record<string, unknown>)['props'] = undefined
+    store.loadPage('page_1', mine, 4)
+
+    // 서버 판은 키 순서가 내 것과 같게 둔다 — 이 케이스는 `undefined` 키 하나만 잰다(키 순서는 위 케이스).
+    const server = JSON.parse(JSON.stringify(doc([{ id: 'n_a' }]))) as PageDocument
+
+    expect(store.holdsServerPage('page_1', 4, server)).toBe(true)
+  })
+
+  /** 견주는 것은 바탕이다 — 보내지 않은 내 편집만큼 앞선 `document`가 아니다. */
+  it('보내지 않은 편집이 있어도 바탕이 서버 판이면 같은 판이다', () => {
+    const store = opened()
+    store.applyEdit(append('n_mine'))
+
+    // 키 순서는 내 것과 같게 둔다 — 이 케이스는 바탕인가 낙관 문서인가만 잰다.
+    expect(store.holdsServerPage('page_1', 4, doc())).toBe(true)
+  })
+
+  /**
+   * 음성 대조 — 위 셋이 «늘 참»으로 통과하지 않는다. **문서가 다른 판은 여기서 재지 않는다** — 그 축은 재조회째 여는
+   * `test/edit/reconnect-resync.test.tsx`의 «번호가 같아도 문서가 다르면 싣는다»가 갖는다(여기서도 재면 대조를 뗀 변조에
+   * 둘이 함께 죽는다).
+   */
+  it('번호나 페이지가 다르면 다른 판이다 — 음성 대조', () => {
+    const store = opened()
+
+    expect(store.holdsServerPage('page_1', 5, reordered())).toBe(false)
+    expect(store.holdsServerPage('page_2', 4, reordered())).toBe(false)
+  })
+})
