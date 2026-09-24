@@ -17,6 +17,7 @@
 import {
   Component,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ErrorInfo,
@@ -34,6 +35,7 @@ import {
 import { describePageTarget, type PageDocument } from '@wirebound/schema'
 import { themeStructures } from '@wirebound/themes'
 import { walkSafely } from '../edit/safe-walk'
+import { usePublishCanvasStructures } from './canvas-structures'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useProjectTheme } from '../theme/use-project-theme'
 import { useThemeCss } from '../theme/use-theme-css'
@@ -157,6 +159,10 @@ export function Canvas(props: {
    * 고르게 된다. 측정과 그 결과는 `packages/renderer/test/compose-identity.test.tsx`에 있다.
    */
   const theme = useThemeCss(useProjectTheme(props.projectId, props.themeReloadToken))
+  // **이 표가 구조의 유일한 판정 입력이다** — 문서를 그리는 데 넘기고, 속성 패널이 `visibleWhen`을
+  // 가를 때도 같은 것을 읽는다(`./canvas-structures.tsx`). `theme`이 안정 참조라 표도 테마가 바뀔 때만 새로 난다.
+  const structures = useMemo(() => themeStructures(theme), [theme])
+  usePublishCanvasStructures(structures)
 
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다. 상태 객체 전체(`(s) => s`)를 고르면 어느 필드가 바뀌든
@@ -392,7 +398,7 @@ export function Canvas(props: {
       )}
 
       <CanvasBoundary resetKey={doc}>
-        <CanvasDocument doc={doc} structures={themeStructures(theme)} interaction={interaction} />
+        <CanvasDocument doc={doc} structures={structures} interaction={interaction} />
       </CanvasBoundary>
 
       {/* 아웃라인은 문서 **옆에** 그린다. 노드에 클래스나 스타일을 얹으면 셸이 테마의

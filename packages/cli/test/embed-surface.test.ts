@@ -22,15 +22,22 @@
  *
  * 1. **런타임 면** — `import * as`로 실제 export 목록을 받아 금지된 이름이 없는지 본다.
  * 2. **소스** — `embed.ts`가 `./run`에서 재수출하지 않는지 본다. 이름을 바꿔 내주는 길
- *    (`export { run as start }`)을 축 1이 못 보기 때문이다.
+ *    (`export { run as start }`)을 축 1이 못 보기 때문이다. 주석은 파서가 걷고 본다
+ *    (`./strip-comments.ts`) — 머리말이 `from './run'`을 인용해도 재수출이 아니다.
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import * as embed from '../src/embed'
 import * as index from '../src/index'
+import { stripComments } from './strip-comments'
 
 const EMBED_SOURCE = readFileSync(fileURLToPath(new URL('../src/embed.ts', import.meta.url)), 'utf8')
+
+/** 소스 글자 하나가 `./run`에서 가져오는가. 주석은 걷고 본다. */
+function fromRun(source: string): boolean {
+  return /from\s+['"]\.\/run['"]/.test(stripComments(source))
+}
 
 /**
  * **`wireb`의 것이고 `embed`으로 나가면 안 되는 이름들.**
@@ -56,9 +63,18 @@ describe('`./embed`이 `bin`을 안 내준다', () => {
 
   it('`embed.ts`가 `./run`에서 아무것도 재수출하지 않는다 — 이름을 바꿔 내주는 길도 막는다', () => {
     // 축 1은 `export { run as start }`를 못 본다. 소스가 그것을 본다.
-    expect(EMBED_SOURCE).not.toMatch(/from\s+['"]\.\/run['"]/)
+    expect(fromRun(EMBED_SOURCE)).toBe(false)
     // 술어가 실제로 가르는지 — 이 파일이 다른 자리에서는 재수출을 하고 있다.
-    expect(EMBED_SOURCE).toMatch(/from\s+['"]\.\/project['"]/)
+    expect(stripComments(EMBED_SOURCE)).toMatch(/from\s+['"]\.\/project['"]/)
+  })
+
+  /**
+   * **주석은 재수출이 아니다 — 두 쪽 다.** 주석에 `from './run'`을 적었다고 빨강이 되면 거짓 빨강이고,
+   * 줄 주석 속 `/*`가 뒤의 JSDoc 까지 코드를 삼키면 진짜 재수출이 사라져 거짓 초록이다.
+   */
+  it('주석에 흔들리지 않는다 — 주석의 인용은 안 잡고, 주석 속 `/*`가 재수출을 삼키지 않는다', () => {
+    expect(fromRun(`${EMBED_SOURCE}\n// \`run\`을 from './run' 으로 다시 내주지 않는다\n`)).toBe(false)
+    expect(fromRun("// 글롭 예: src/*\nexport { run as start } from './run'\n/** 문서 */\nconst after = 2")).toBe(true)
   })
 
   it('붙는 자리는 실제로 나간다 — 반대편', () => {

@@ -220,7 +220,8 @@ export const COMMERCE_THEME: Theme = {
     Section: {
       structure: 'contained',
       base: { bg: 'semantic.canvas', paddingY: 'space.14' },
-      parts: { inner: { maxWidth: 'container.maxWidth', paddingX: 'space.6' } },
+      // `marginX: 'auto'`의 근거는 `admin.ts`의 `Section` 주석(가운데 정렬된 콘텐츠)에 있다.
+      parts: { inner: { maxWidth: 'container.maxWidth', marginX: 'auto', paddingX: 'space.6' } },
       variants: {
         hero: { bg: 'semantic.primarySoft', paddingY: 'space.20' },
         muted: { bg: 'semantic.surface' },

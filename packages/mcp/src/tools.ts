@@ -49,8 +49,8 @@
  *
  * `string` 밖의 둘은 `patch_page`의 `baseSeq`(수)와 `ops`(배열)다. **넓히는 것 자체가
  * 판정이다**: 여기 갈래를 더하면 도구가 받을 수 있는 모양이 늘어나고, `server.ts`의 검사도
- * 함께 늘어야 한다(그러지 않으면 검사를 안 지나는 모양이 생긴다). **그것을 막는 자는 없다** —
- * `server.ts`의 `assertShape` 머리말.
+ * 함께 늘어야 한다(그러지 않으면 검사를 안 지나는 모양이 생긴다). 검사 줄을 빠뜨리면 컴파일이
+ * 멈춘다 — `server.ts`의 `assertShape` 머리말.
  */
 export type ToolArgSchema =
   | { type: 'string'; description: string }

@@ -12,6 +12,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from './strip-comments'
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
 
@@ -79,10 +80,6 @@ const EFFECTFUL = [
   /\bconsole\./,
 ]
 
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
-
 function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   const found: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -93,9 +90,14 @@ function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   return found
 }
 
+/** 소스 글자 하나가 바깥 세계를 만지는가. 주석은 파서가 걷는다(`./strip-comments.ts`). */
+function sourceTouchesWorld(source: string): boolean {
+  const code = stripComments(source)
+  return EFFECTFUL.some((pattern) => pattern.test(code))
+}
+
 function touchesWorld(relative: string): boolean {
-  const source = stripComments(readFileSync(join(SRC, relative), 'utf8'))
-  return EFFECTFUL.some((pattern) => pattern.test(source))
+  return sourceTouchesWorld(readFileSync(join(SRC, relative), 'utf8'))
 }
 
 describe('바깥 세계를 만지는 자리', () => {
@@ -120,6 +122,24 @@ describe('바깥 세계를 만지는 자리', () => {
     // 술어가 늘 `false`면 위 케이스가 *"아무것도 안 세고 통과"*한다. 반대편을 확인한다.
     expect(touchesWorld('commands/login.ts')).toBe(false)
     expect(touchesWorld('node-io.ts')).toBe(true)
+  })
+
+  /**
+   * **주석은 세지 않는다 — 두 쪽 다.** 줄 끝 주석의 언급을 세면 거짓 빨강이고, 줄 주석 속 `/*`가 뒤의
+   * JSDoc 까지 코드를 삼키면 진짜 `process.` 호출이 사라져 거짓 초록이다.
+   */
+  it('주석에 흔들리지 않는다 — 줄 끝 주석은 안 세고, 주석 속 `/*`가 호출을 삼키지 않는다', () => {
+    expect(sourceTouchesWorld('const note = 0 // process.exit 을 부르지 않는다')).toBe(false)
+    expect(sourceTouchesWorld('// 글롭 예: src/*\nprocess.exit(1)\n/** 문서 */\nconst after = 2')).toBe(true)
+  })
+
+  /**
+   * **구문 오류가 든 소스는 조용히 지나가지 않는다.** 파서의 복구가 코드를 지워 `process.`가 사라진다
+   * (`./strip-comments.ts` 머리말) — 걷는 자리가 던져야 빨강이 된다. 헬퍼 하나를 네 자가 함께 쓰므로 여기 한 자리에서 잰다.
+   */
+  it('구문 오류가 든 소스는 읽지 않고 던진다 — 복구가 지운 호출을 초록으로 넘기지 않는다', () => {
+    expect(() => sourceTouchesWorld('@@@ process.exit(1)')).toThrow(/구문 오류/)
+    expect(() => sourceTouchesWorld('const x = ) process.exit(1)')).toThrow(/구문 오류/)
   })
 
   /**
