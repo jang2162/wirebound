@@ -56,6 +56,8 @@ export interface ExportedPage {
   /**
    * 이 페이지가 기대는 CSS 한 장. **파일로 쓰지 않는다** — 설계서 「HTML 정적 번들」의
    * `assets/theme.css`를 만드는 것은 호출자이고, 링크로 걸지 인라인할지도 그쪽이 정한다.
+   *
+   * **맨 앞에 문서 여백 초기화가 선다**(`STANDALONE_RESET`) — 그 뒤가 `pageCss(theme)`다. 까닭은 그 상수의 머리말.
    */
   css: string
   /**
@@ -98,8 +100,26 @@ export function exportPage(options: ExportPageOptions): ExportedPage {
     head: null,
     body: tree,
   })
-  return { html, css: pageCss(theme), errors }
+  return { html, css: `${STANDALONE_RESET}${pageCss(theme)}`, errors }
 }
+
+/**
+ * **문서 한 장이 혼자 뜰 때 `<html>` · `<body>`의 여백을 0 으로 둔다** — `exportPage`의 `css` 맨 앞.
+ *
+ * 이 한 장은 셸 없이 혼자 뜬다(pptx 화면 이미지가 이것을 뷰포트에 그대로 띄운다 — `apps/api`의
+ * `services/screen-render-chromium.ts`). 초기화가 없으면 브라우저 기본 여백(8px)이 붙어 문서가 뷰포트보다 16px 좁게
+ * 그려지고 왼쪽에 8px 흰 띠가 선다. 캔버스는 문서를 흰 프레임에 여백 없이 프리셋 폭 그대로 담는다 — 같게 보이려면 0 이다.
+ *
+ * 잰 값(실브라우저 — 헤드리스 Chrome · 뷰포트 720 · 첫 노드가 글 하나인 페이지 · 테마를 얹은 시트): 초기화 없이 문서 폭
+ * 704px · 첫 글자 (8, 14) / 초기화하면 720px · (0, 14) / 캔버스는 흰 프레임 기준 (0, 0). 위쪽 14px 는 첫 문단의 여백이다 —
+ * 캔버스에서는 그 여백이 프레임 **밖**(회색 바탕)으로 겹쳐 나가고, 혼자 뜬 한 장에는 그 밖이 없어 그림 안에 남는다. 문서의
+ * 여백이라 여기서 지우지 않는다.
+ *
+ * **`<head>`에 싣지 않는다** — `exportPage`의 `<head>`는 비어 있고 CSS 는 값으로만 낸다(`test/page.test.ts`). **`pageCss`에
+ * 넣지 않는다** — 그것은 번들의 `assets/theme.css`이고 테마 어휘(`data-wb-*`)로만 적힌다. 번들은 셸이 같은 초기화를 건다
+ * (`bundle/shell-css.ts`).
+ */
+const STANDALONE_RESET = 'html,\nbody {\n  margin: 0;\n}\n'
 
 /**
  * 문서 하나를 그린다. **`exportPage`와 번들이 같은 이 함수를 쓴다.**

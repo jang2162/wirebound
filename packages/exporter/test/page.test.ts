@@ -168,15 +168,27 @@ describe('exportPage — 테마', () => {
     }
   })
 
-  /** 테마 없는 프로젝트(`layouts.theme_id`가 NULL)에서 CSS가 무엇인가. */
+  /** 테마 없는 프로젝트(`layouts.theme_id`가 NULL)에서 CSS가 무엇인가 — 여백 초기화 뒤가 구조 기본 CSS 그대로다. */
   it('테마가 없으면 CSS가 구조 기본 CSS 그대로다', () => {
     const { css } = exportPage({ document: DOC, title: '회원 목록' })
-    expect(css).toBe(structureBaseCss())
+    expect(withoutReset(css)).toBe(structureBaseCss())
     expect(css.length).toBeGreaterThan(0)
   })
 
   it('null을 명시해도 같다', () => {
-    expect(exportPage({ document: DOC, title: 'ㄱ', theme: null }).css).toBe(structureBaseCss())
+    expect(withoutReset(exportPage({ document: DOC, title: 'ㄱ', theme: null }).css)).toBe(structureBaseCss())
+  })
+
+  /**
+   * **혼자 뜨는 한 장의 여백을 0 으로 둔다**(`page.tsx`의 `STANDALONE_RESET`) — 없으면 브라우저 기본 8px 이 붙어 pptx 화면
+   * 이미지의 문서가 뷰포트보다 16px 좁게 그려진다. 시트의 **맨 앞**이다 — 뒤의 구조 기본 CSS · 테마는 문서 노드만 겨냥하므로
+   * 이 규칙과 겨루지 않는다. 테마가 있든 없든 같다.
+   */
+  it('맨 앞에서 html · body 의 여백을 0 으로 둔다 — 테마가 있든 없든', () => {
+    for (const theme of [null, resolvedSystemTheme('admin')]) {
+      const { css } = exportPage({ document: DOC, title: 'ㄱ', theme })
+      expect(css.slice(0, css.indexOf(structureBaseCss()))).toMatch(/^html,\s*body\s*\{\s*margin:\s*0;?\s*\}\s*$/)
+    }
   })
 
   /**
@@ -190,8 +202,13 @@ describe('exportPage — 테마', () => {
     const base = structureBaseCss()
     const compiled = compileTheme(theme)
 
-    expect(css.indexOf(base)).toBe(0)
-    expect(css.indexOf(compiled)).toBeGreaterThan(base.length - 1)
-    expect(css).toBe(`${base}\n${compiled}`)
+    expect(withoutReset(css).indexOf(base)).toBe(0)
+    expect(withoutReset(css).indexOf(compiled)).toBeGreaterThan(base.length - 1)
+    expect(withoutReset(css)).toBe(`${base}\n${compiled}`)
   })
 })
+
+/** 여백 초기화(맨 앞)를 걷은 나머지 — `pageCss(theme)`의 값이다. 초기화 자체는 «맨 앞에서 html · body 의 여백을 0 으로 둔다»가 잰다. */
+function withoutReset(css: string): string {
+  return css.slice(css.indexOf(structureBaseCss()))
+}
