@@ -490,6 +490,22 @@ const ENDPOINTS: Array<{
     body: pptxPreview,
     call: (c) => c.getExportPreview('p1', 'pptx'),
   },
+  // **파일 그 자체.** 이 표는 주소와 메서드만 잰다 — 이 표의 응답은 JSON 이라 `downloadExport`가 «형식이 아니다»로 거절하고,
+  // 그것은 아래 `downloadExport` 케이스들이 잰다.
+  {
+    client: 'downloadExport',
+    url: '/api/projects/p1/export?format=html',
+    method: 'GET',
+    body: {},
+    call: (c) => c.downloadExport('p1', 'html').catch(() => null),
+  },
+  {
+    client: 'downloadExport',
+    url: '/api/projects/p1/export?format=pptx',
+    method: 'GET',
+    body: {},
+    call: (c) => c.downloadExport('p1', 'pptx').catch(() => null),
+  },
 ]
 
 /**
@@ -666,11 +682,10 @@ const SHAPE_CASES: Array<{
 const SHAPES_WITHOUT_BROKEN_CASE = ['noBody']
 
 /**
- * 요청을 보내지 않는 `ApiClient` 메서드. **주소를 만들 뿐이다** — 위 경로·메서드 표는
- * *"부르면 이 URL로 간다"*를 재므로 이런 것이 들 자리가 없다. 대신
- * `요청을 보내지 않는 메서드도 주소가 못박혀 있다`가 그 주소를 잰다.
+ * 요청을 보내지 않는 `ApiClient` 메서드 — 위 경로·메서드 표는 *"부르면 이 URL로 간다"*를 재므로 이런 것이 들 자리가
+ * 없다. 지금은 없다. 생기면 그 메서드가 내는 값을 따로 못박는 케이스와 함께 여기 적는다.
  */
-const METHODS_WITHOUT_REQUEST = ['exportUrl']
+const METHODS_WITHOUT_REQUEST: string[] = []
 
 /** `src/api`의 소스. 표의 분모를 소스에서 만든다(`test/api-consumers.test.ts`와 같은 배치). */
 const API_SOURCES = import.meta.glob('../../src/api/*.ts', {
@@ -711,22 +726,6 @@ describe('표의 완전성', () => {
     expect(ENDPOINTS.map((endpoint) => endpoint.client).filter((name) => !declared.has(name))).toEqual([])
   })
 
-  /**
-   * **빠진 것들이 그냥 안 세어지지 않게, 그 자리에서 잰다.** 위 표는 *"부르면 이 URL로
-   * 간다"*를 재는데 `exportUrl`은 아무 데도 가지 않으므로 그 표에 들 수 없다. 대신 그것이
-   * 내는 주소를 여기서 못박는다 — 예외로 빼기만 하면 그 메서드는 아무것도 안 지킨다.
-   */
-  it('요청을 보내지 않는 메서드도 주소가 못박혀 있다', () => {
-    const stub = stubFetch(jsonResponse(200, exportPreview))
-    const client = createHttpClient(stub.fetchImpl)
-
-    expect(client.exportUrl('p1', 'html')).toBe('/api/projects/p1/export?format=html')
-    // **형식이 주소에 실린다.** 이것이 빠지면 화면은 pptx를 보이면서 zip을 받는다.
-    expect(client.exportUrl('p1', 'pptx')).toBe('/api/projects/p1/export?format=pptx')
-    // **요청이 아니다** — 부르는 것만으로 서버에 가면 이 함수의 존재 이유가 사라진다.
-    expect(stub.calls).toHaveLength(0)
-  })
-
   it('SHAPES의 모든 키가 응답 모양 케이스에 있다', () => {
     const registered = new Set([...SHAPE_CASES.map((c) => c.shape), ...SHAPES_WITHOUT_BROKEN_CASE])
 
@@ -765,6 +764,64 @@ function declaredShapes(): string[] {
   const declaration = body.slice(start, body.indexOf('\n} satisfies', start))
   return [...declaration.matchAll(/^ {2}(\w+):/gm)].map((m) => m[1] ?? '')
 }
+
+/**
+ * **`downloadExport` — 파일을 받아 온다**(`shell/export-panel.tsx`의 «내려받기는 받아 온 뒤 저장한다»). 실패가 다른 요청처럼
+ * `ApiError`로 와야 화면이 말할 수 있다 — 앵커로 받던 때는 그 실패가 브라우저의 내려받기 목록에만 남았다.
+ */
+describe('downloadExport', () => {
+  const ZIP = 'application/zip'
+  const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+
+  it('받은 바이트를 그대로 Blob 으로 돌려준다 — 쿠키를 싣고 시간 제한을 안 건다', async () => {
+    const bytes = Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0xff])
+    const stub = stubFetch(new Response(bytes, { status: 200, headers: { 'content-type': ZIP } }))
+    const blob = await createHttpClient(stub.fetchImpl).downloadExport('p1', 'html')
+
+    // jsdom 의 `Blob`에는 `arrayBuffer()`가 없다 — `FileReader`로 읽는다.
+    const read = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as ArrayBuffer)
+      reader.onerror = () => reject(reader.error)
+      reader.readAsArrayBuffer(blob)
+    })
+    expect(new Uint8Array(read)).toEqual(bytes)
+    expect(stub.calls[0]?.init?.credentials).toBe('same-origin')
+    // 시간 제한이 걸리면 `fetchInTime`이 제 신호를 싣는다 — 받은 끊을 신호가 없으면 신호도 없어야 한다.
+    expect(stub.calls[0]?.init?.signal).toBeUndefined()
+  })
+
+  it('pptx 형식도 받는다', async () => {
+    const stub = stubFetch(new Response(new Uint8Array([1, 2]), { status: 200, headers: { 'content-type': PPTX } }))
+    await expect(createHttpClient(stub.fetchImpl).downloadExport('p1', 'pptx')).resolves.toBeInstanceOf(Blob)
+  })
+
+  it('서버가 거절하면 그 봉투를 ApiError 로 던진다 — 503 · 409 의 문장이 화면에 간다', async () => {
+    for (const [status, code, message] of [
+      [503, 'internal', '내 내보내기가 이미 돌고 있습니다 — 앞의 것이 끝난 뒤 다시 시도하세요'],
+      [409, 'conflict', '내보낼 페이지가 없습니다'],
+    ] as const) {
+      const stub = stubFetch(jsonResponse(status, { error: { code, message } }))
+      const error = asApiError(await createHttpClient(stub.fetchImpl).downloadExport('p1', 'html').catch((e: unknown) => e))
+      expect([error.status, error.code, error.message]).toEqual([status, code, message])
+    }
+  })
+
+  it('200 이어도 파일 형식이 아니면 끊는다 — 프록시가 빠진 개발 서버의 index.html 을 파일로 저장하지 않는다', async () => {
+    const stub = stubFetch(htmlResponse(200))
+    const error = asApiError(await createHttpClient(stub.fetchImpl).downloadExport('p1', 'html').catch((e: unknown) => e))
+    expect(error.message).toBe('서버 응답을 이해할 수 없습니다')
+  })
+
+  it('끊을 신호를 fetch 에 싣는다 — 끊기면 «떠난 화면»으로 거절한다', async () => {
+    const cancel = new AbortController()
+    const fetchImpl: typeof fetch = (_input, init) =>
+      new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))
+    const pending = createHttpClient(fetchImpl).downloadExport('p1', 'html', { cancel: cancel.signal }).catch((e: unknown) => e)
+    cancel.abort()
+    expect(asApiError(await pending).message).toBe('떠난 화면의 조회를 끊었습니다')
+  })
+})
 
 describe('createHttpClient', () => {
   it('login은 이메일과 비밀번호를 POST하고 사용자를 돌려준다', async () => {

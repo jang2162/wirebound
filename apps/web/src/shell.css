@@ -2917,11 +2917,19 @@
 .wb-shell-export-download {
   display: inline-block;
   padding: 8px 12px;
+  border: 0;
   border-radius: 6px;
   background: var(--wb-shell-accent);
   color: #fff;
+  font: inherit;
   font-weight: 600;
-  text-decoration: none;
+  cursor: pointer;
+}
+
+/* 받는 동안 — 두 번 누르면 서버의 일이 둘이 된다(`shell/export-panel.tsx`의 «내려받기는 받아 온 뒤 저장한다»). */
+.wb-shell-export-download:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 
 /* ── 스냅샷 팝오버 ────────────────────────────────────────────────────

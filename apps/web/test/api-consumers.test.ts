@@ -48,7 +48,7 @@ const METHODS = [
   'listComments', 'createComment', 'updateComment', 'deleteComment', 'renumberComments',
   'listSnapshots', 'createSnapshot', 'restoreSnapshot',
   'listPresets', 'createPreset',
-  'getExportPreview', 'exportUrl',
+  'getExportPreview', 'downloadExport',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -196,7 +196,7 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 내보내기. 둘 다 같은 한 화면이 부른다 — 미리보기가 무엇이 실릴지 말하고
   // 그 다음에 앵커가 zip을 받는다.
   getExportPreview: ['../src/shell/export-panel.tsx'],
-  exportUrl: ['../src/shell/export-panel.tsx'],
+  downloadExport: ['../src/shell/export-panel.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {

@@ -545,23 +545,20 @@ export interface ApiClient {
     options?: Pick<ReadOptions, 'cancel'>,
   ): Promise<ExportPreview>
   /**
-   * 파일을 받는 **주소**(zip 또는 pptx). 요청을 보내지 않는다 — 반환한 것을
-   * `<a download href>`에 그대로 건다.
+   * 파일(zip 또는 pptx)을 **받아 온다** — 화면이 저장은 따로 한다(`shell/export-panel.tsx`의 `DownloadButton`).
    *
-   * **`fetch`로 받아 blob으로 넘기지 않는 이유 둘.** 번들 크기가 페이지 수의 제곱으로 커져
-   * 다 받아 메모리에 드는 것이 그대로 비용이 되고, `URL.createObjectURL`은
-   * 이 저장소의 테스트 환경(jsdom)에 없어서 그 경로는 케이스가 닿지 못한다. 앵커는 브라우저가
-   * 곧장 디스크로 흘려보내고 세션 쿠키도 그대로 실린다.
-   *
-   * **그래도 이 함수가 `ApiClient`에 있는 이유:** 주소를 아는 자리가 하나여야 한다.
-   * 화면이 `/api/…`를 직접 적기 시작하면 경로가 두 곳이 된다.
+   * **앵커(`<a download href>`)로 받지 않는 이유:** 앵커의 실패는 브라우저의 내려받기 목록에서만 `canceled`로 끝나고 화면은
+   * 그 사실을 모른다 — 503(밀려 있다) · 409(페이지가 없다) · 401 을 사람이 못 듣는다. 받아 온 뒤 저장하면 실패가 다른
+   * 요청처럼 `ApiError`로 온다. **대가:** 파일이 저장되기 전에 한 벌 통째로 브라우저에 든다(값은 그 파일의 머리말).
    *
    * **`format`에 기본값을 두지 않는다.** 서버는 기본이 `html`이지만(형식 없이 부르는 URL이
    * 계속 zip을 받아야 한다) **이쪽에서 생략을 허용하면** 형식을 고를 줄 아는
    * 화면이 그 인자를 빠뜨렸을 때 *"pptx를 보고 zip을 받는"* 상태가 조용히 선다. 필수로
    * 두면 타입 검사가 모든 호출부에서 그것을 묻는다.
+   *
+   * **시간 제한은 없고 `cancel`은 듣는다** — `getExportPreview`와 같다.
    */
-  exportUrl(projectId: string, format: ExportFormat): string
+  downloadExport(projectId: string, format: ExportFormat, options?: Pick<ReadOptions, 'cancel'>): Promise<Blob>
 }
 
 /** 서버 에러 봉투의 `code`(README "에러 형식"). */
