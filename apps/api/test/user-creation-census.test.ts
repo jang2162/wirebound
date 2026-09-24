@@ -22,7 +22,7 @@
  * **SQL → repo → 시딩 → CLI 사슬 전체**를 층마다 잠근다.
  */
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
@@ -165,19 +165,30 @@ describe('픽스처가 프로덕션 경로를 지난다', () => {
  * `import { … } from './helpers'` 가 **여러 줄에 걸친** 파일을 놓친다.
  *
  * 그래서 **수를 적는 대신 성질을 든다** — *"테스트가 쓰는 `signup` 은 전부 픽스처의 것이다"*. 수를 박지 않으므로
- * 파일이 늘어도 안 낡고, 누가 픽스처를 안 지나는 두 번째 길을 만들면 죽는다.
+ * 파일이 늘어도 안 낡고, 누가 `signup` 이라는 이름으로 픽스처를 안 지나는 두 번째 길을 만들면 죽는다(다른 이름의 길은
+ * 아래 «못 보는 것»).
  *
  * **글자가 아니라 바인딩으로 잰다.** 쓰이는 `signup` 이름 하나하나를 TypeScript 검사기로 선언에 묶고
  * (`getSymbolAtLocation`), 그 선언이 `./helpers` 의 `signup` 을 가져오는 자리인지 본다 — 정적 import 의 지정자이거나
  * `const { signup } = await import('./helpers')`(모듈 목을 먹이려고 `vi.resetModules()` 뒤에 다시 적재하는 파일)의
- * 구조 분해다. 글자로 재면 «파일이 그 import 글자를 가졌나»만 보여서, 지역 `signup` 을 쓰면서 초록인 꼴이 셋 있었다 —
+ * 구조 분해다. 지정자는 **그 파일 자리에서 풀어** `test/helpers` 인지 보고, 구조 분해는 **`const` 만** 받는다 — 검사기는
+ * 값이 아니라 선언을 주므로 `let` · `var` 로 받은 뒤 지역 함수를 넣는 꼴이 선언만 보고 지나간다. 글자로 재면 «파일이 그 import 글자를 가졌나»만 보여서, 지역 `signup` 을 쓰면서 초록인 꼴이 셋 있었다 —
  * 안 불리는 함수 안의 동적 import(죽은 스코프) · `import { signup as fixture }`(별칭) · 문자열 속의 import 글자.
  * 셋 다 쓰이는 이름이 지역 선언에 묶이므로 여기서 죽는다(아래 «술어가 실제로 가른다»). 주석 · 문자열은 구문 트리에
  * 이름으로 안 나오므로 걷을 것도 없다.
  *
- * **못 보는 것:** 네임스페이스로 가져와 속성으로 부르는 `h.signup(…)` 은 이름이 아니라 속성이라 세지 않는다(픽스처로도
- * 위반으로도). `eval` · 조립한 이름처럼 구문 트리에 이름이 안 나오는 호출도 못 본다. 다른 모듈이 `./helpers` 를 다시
- * 내보내고 거기서 가져오면 선언이 `./helpers` 가 아니라 죽는다(거짓 빨강 쪽).
+ * **못 보는 것 — 넷은 거짓 초록 쪽이다:**
+ * - **속성으로 부르는 `signup`** — `h.signup(…)`(네임스페이스) · `api.signup(…)`(지역 객체)은 이름이 아니라 속성이라
+ *   세지 않는다(픽스처로도 위반으로도).
+ * - **다른 이름의 길** — `register()` 가 `users` 에 직접 넣어도 이 자는 `signup` 이라는 이름만 본다.
+ * - **모듈 목** — `vi.doMock('./helpers', …)` 뒤 `const { signup } = await import('./helpers')` 는 구문상 픽스처에 묶이지만
+ *   값은 목이다.
+ * - **`helpers.ts` 안의 다시 내보내기** — 모듈을 풀지 않으므로 `helpers.ts` 가 `export { signup } from '…'` 로 다른 모듈의
+ *   함수를 내보내도 픽스처로 읽힌다. `helpers.ts` 자신이 `seedUser` 를 지나는지는 «픽스처가 프로덕션 경로를 지난다»가
+ *   그 파일의 글자로만 본다.
+ *
+ * `eval` · 조립한 이름처럼 구문 트리에 이름이 안 나오는 호출도 못 본다. 다른 모듈이 `./helpers` 를 다시 내보내고 거기서
+ * 가져오면 선언이 `test/helpers` 가 아니라 죽는다(거짓 빨강 쪽).
  */
 describe('테스트가 쓰는 `signup` 은 전부 픽스처의 것이다', () => {
   const TEST_ROOT = fileURLToPath(new URL('.', import.meta.url))
@@ -196,20 +207,28 @@ describe('테스트가 쓰는 `signup` 은 전부 픽스처의 것이다', () =>
     return ts.createProgram({ rootNames: [...sources.keys()], options, host })
   }
 
-  /** 그 선언이 `./helpers` 의 `signup` 을 가져오는 자리인가 — 정적 지정자 · 동적 import 의 구조 분해. */
+  /**
+   * 그 지정자가 **그 파일에서 풀었을 때** `test/helpers` 인가. 글자 `'./helpers'` 만 보면 하위 디렉터리의 테스트가 자기 옆의
+   * 다른 `helpers.ts` 를 가져와도 픽스처로 읽힌다(분모가 하위 디렉터리까지 훑는다).
+   */
+  function isHelpersModule(specifier: ts.Expression, fileName: string): boolean {
+    return ts.isStringLiteral(specifier) && posix.join(posix.dirname(fileName), specifier.text) === 'helpers'
+  }
+
+  /** 그 선언이 `./helpers` 의 `signup` 을 가져오는 자리인가 — 정적 지정자 · 동적 import 의 `const` 구조 분해. */
   function isFixture(declaration: ts.Declaration): boolean {
+    const fileName = declaration.getSourceFile().fileName
     if (ts.isImportSpecifier(declaration)) {
       const module = declaration.parent.parent.parent.moduleSpecifier
-      return (
-        (declaration.propertyName ?? declaration.name).text === 'signup' &&
-        ts.isStringLiteral(module) &&
-        module.text === './helpers'
-      )
+      return (declaration.propertyName ?? declaration.name).text === 'signup' && isHelpersModule(module, fileName)
     }
     if (ts.isBindingElement(declaration)) {
       const imported = declaration.propertyName ?? declaration.name
       const variable = declaration.parent.parent
       if (!ts.isIdentifier(imported) || imported.text !== 'signup' || !ts.isVariableDeclaration(variable)) return false
+      // **`const` 만 픽스처다.** `let` · `var` 는 선언이 픽스처여도 뒤에 지역 값을 넣을 수 있고, 검사기는 값이 아니라
+      // 선언을 준다 — `let { signup } = await import('./helpers')` 뒤 `signup = rawSignup` 이 초록으로 지난다.
+      if ((variable.parent.flags & ts.NodeFlags.Const) === 0) return false
       const awaited = variable.initializer
       const call = awaited !== undefined && ts.isAwaitExpression(awaited) ? awaited.expression : undefined
       const [specifier] = call !== undefined && ts.isCallExpression(call) ? call.arguments : []
@@ -218,8 +237,7 @@ describe('테스트가 쓰는 `signup` 은 전부 픽스처의 것이다', () =>
         ts.isCallExpression(call) &&
         call.expression.kind === ts.SyntaxKind.ImportKeyword &&
         specifier !== undefined &&
-        ts.isStringLiteral(specifier) &&
-        specifier.text === './helpers'
+        isHelpersModule(specifier, fileName)
       )
     }
     return false
@@ -312,5 +330,16 @@ describe('테스트가 쓰는 `signup` 은 전부 픽스처의 것이다', () =>
     expect(verdict(`const note = "import { signup } from './helpers'"\n${LOCAL}await signup()`)).toEqual(['case.test.ts:3'])
     // 가져오기가 아예 없는 꼴.
     expect(verdict(`${LOCAL}await signup()`)).toEqual(['case.test.ts:2'])
+    // `let` 으로 받아 지역 함수를 넣는 꼴 — 선언은 픽스처다.
+    expect(verdict("const raw = async () => 1\nlet { signup } = await import('./helpers')\nsignup = raw\nawait signup()")).toEqual([
+      'case.test.ts:3',
+      'case.test.ts:4',
+    ])
+
+    // 지정자는 그 파일 자리에서 푼다 — 하위 디렉터리의 `./helpers` 는 다른 모듈이고 `../helpers` 가 픽스처다.
+    const inSub = (text: string): string[] => strayUses(new Map([['sub/case.test.ts', text]]))
+    expect(inSub("import { signup } from './helpers'\nawait signup()")).toEqual(['sub/case.test.ts:2'])
+    expect(inSub("import { signup } from '../helpers'\nawait signup()")).toEqual([])
+    expect(inSub("const { signup } = await import('./helpers')\nawait signup()")).toEqual(['sub/case.test.ts:2'])
   })
 })
