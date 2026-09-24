@@ -51,8 +51,17 @@ export const DB_UNREACHABLE_READ_MESSAGE = '데이터베이스와의 연결이 �
  */
 const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
 
-function dbUnreachableMessage(method: string): string {
-  return READ_METHODS.has(method) ? DB_UNREACHABLE_READ_MESSAGE : DB_UNREACHABLE_WRITE_MESSAGE
+/**
+ * **DB 가 답하지 않은 실패의 답 한 벌** — REST(아래 핸들러)와 WS `patch`(`ws/routes.ts`의 프레임 `catch`)가 같은 값을 낸다. 두
+ * 진입점이 같은 `applyEdit`을 지나므로 같은 COMMIT 유실에 같은 답이어야 한다 — 한쪽이 500 이면 웹은 그 판을 «서버 오류»로 말하고
+ * 그쪽 README 계약(500 은 커밋 전)이 거짓이 된다.
+ */
+export function dbUnreachableFailure(reads: boolean): { status: number; code: 'internal'; message: string } {
+  return {
+    status: ERROR_STATUS_DB_UNREACHABLE,
+    code: 'internal',
+    message: reads ? DB_UNREACHABLE_READ_MESSAGE : DB_UNREACHABLE_WRITE_MESSAGE,
+  }
 }
 
 /**
@@ -113,10 +122,8 @@ export function registerErrorHandler(app: FastifyInstance): void {
     // **DB 가 답하지 않았다 — 결과를 모른다**(위 상수). 아래 500 보다 먼저다.
     if (error instanceof DbConnectionLostError) {
       request.log.error(error, 'DB 연결을 잃었다 — 요청의 결과를 모른다')
-      send(reply, ERROR_STATUS_DB_UNREACHABLE, {
-        code: 'internal',
-        message: dbUnreachableMessage(request.method),
-      })
+      const { status, ...body } = dbUnreachableFailure(READ_METHODS.has(request.method))
+      send(reply, status, body)
       return
     }
 

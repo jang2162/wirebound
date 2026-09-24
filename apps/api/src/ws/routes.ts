@@ -37,8 +37,10 @@ import type { FastifyInstance, FastifyPluginAsync, preHandlerHookHandler } from 
 import { projectGuard } from '../auth/roles'
 import { hashSessionToken } from '../auth/session'
 import type { ApiConfig } from '../config'
+import { DbConnectionLostError } from '../db/connection-loss'
 import type { ProjectRole } from '../db/types'
 import { forbidden, internal, unauthenticated } from '../errors'
+import { dbUnreachableFailure } from '../http/error-handler'
 import { parseParams } from '../http/parse'
 import { z } from 'zod'
 import { nextConnectionId } from './connection-id'
@@ -220,7 +222,8 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
           // **낸 사람에게 답한다.** 예상 밖 예외에 아무것도 안 내면 그 편집의 응답이 영영 안
           // 오고, 클라이언트의 in-flight가 매달려 **다음 편집도 안 나간다**(펌프의 가드가 계속
           // 서 있다 — `apps/web`의 `edit-channel.ts` 머리말이 그 부류를 적었다). REST 경로는
-          // 같은 예외에 500 봉투가 나가 복구가 돈다 — **두 진입점의 결말을 맞춘다.**
+          // 같은 예외에 500 봉투가 나가 복구가 돈다 — **두 진입점의 결말을 맞춘다.** DB 가 답하지 않았으면(COMMIT 답을 잃었을 수
+          // 있다) REST 와 같은 503 «모름»이다(`http/error-handler.ts`의 `dbUnreachableFailure`) — 500 은 «커밋 전»이라는 약속이다.
           //
           // **`lock`도 답한다** — 서버는 아무것도 안 쥐었는데 답이 없으면 화면은 쥔 줄 안다. 거절과 같은 답을 낸다(`ws/lock.ts`의
           // 표 «DB 오류로 끝내지 못했다»). **이 프레임이 아직 마지막일 때만** — 뒤 프레임이 있으면 그것이 자기 답을 한다.
@@ -234,7 +237,9 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
           }
           if (frame.type !== 'patch' && frame.type !== 'lock') return
           try {
-            if (frame.type === 'patch') push(patchErrorFrame(projectId, frame, internal()))
+            if (frame.type === 'patch') {
+              push(patchErrorFrame(projectId, frame, error instanceof DbConnectionLostError ? dbUnreachableFailure(false) : internal()))
+            }
             else if (current()) denyLock(app, connection, frame)
           } catch (pushError: unknown) {
             // 소켓이 이미 죽었으면 보낼 수 없다. 여기서 던지면 unhandled가 된다.

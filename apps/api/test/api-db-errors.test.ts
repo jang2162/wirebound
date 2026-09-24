@@ -20,6 +20,7 @@
  * | 토큰 조회의 예외를 삼킨다 | *"토큰 조회가 …"* **혼자** |
  * | 쿠키 조회의 예외 중 **연결을 잃은 것만** 던지고 나머지는 삼킨다 | `session.test.ts`의 *"resolveSession 조회 자체가 실패하면 …"* **혼자** |
  * | `DbConnectionLostError`를 503 으로 안 옮긴다(500 봉투) | 여기 다섯 — 축의 주인은 *"게시의 COMMIT 응답이 …"*. *"게시의 COMMIT 이 클라이언트 쪽 시간 제한으로 …"*는 **혼자 죽는 변조가 없다** — 이것과 COMMIT 줄(그쪽 주인 *"COMMIT 이 서버의 답 없이 …"*)에서 늘 함께 죽는다. 남긴 것은 COMMIT 을 서버 안에서 걸리게 하는 절차를 HTTP·재생·행 수까지 한 판으로 재기 때문이다 |
+ * | WS 프레임의 `catch`(`ws/routes.ts`)가 `DbConnectionLostError`도 `internal()`로 싣는다 | *"patch 의 COMMIT 응답이 유실되면 …"* **혼자** |
  * | 쿠키 조회의 예외를 삼킨다 | *"세션 조회가 연결을 잃으면 …"* · *"쿠키 조회가 실패하면 …"* · `session.test.ts`의 *"resolveSession 조회 자체가 실패하면 …"* — 셋 다 401. 축의 주인은 *"세션 조회가 연결을 잃으면 …"* |
  */
 import { afterEach, describe, expect, it } from 'vitest'
@@ -41,6 +42,7 @@ import {
   type TestContext,
 } from './helpers'
 import { startFaultProxy, type FaultProxy } from './pg-fault-proxy'
+import { joinRoom } from './ws-client'
 
 /** 이 케이스 동안 난 `uncaughtException` — 연결을 잃은 판에서 api 를 죽이는 것이 이것이다(`db-connection-loss.test.ts`). */
 const uncaught: unknown[] = []
@@ -108,7 +110,7 @@ describe('결과를 모르는 실패는 503 이다 — 봉투 있는 500 이 아
       expect(ctx.proxy.fired).toBe(true)
       expect(first.statusCode, first.body).toBe(503)
       expect(envelope(first.body)?.code).toBe('internal')
-      // 쓰는 요청이다 — 반영됐는지 모른다는 문장이다(`http/error-handler.ts`의 `dbUnreachableMessage`).
+      // 쓰는 요청이다 — 반영됐는지 모른다는 문장이다(`http/error-handler.ts`의 `dbUnreachableFailure`).
       expect(envelope(first.body)?.message).toBe(DB_UNREACHABLE_WRITE_MESSAGE)
       expect(uncaught).toEqual([])
       const { rows } = await sql<{ body: string }>`select body from comments where page_id = ${fx.pageId}`.execute(ctx.db)
@@ -119,6 +121,39 @@ describe('결과를 모르는 실패는 503 이다 — 봉투 있는 500 이 아
       expect(again.statusCode, again.body).toBe(200)
       const { rows: after } = await sql<{ n: string }>`select count(*) as n from comments where page_id = ${fx.pageId}`.execute(ctx.db)
       expect(after).toEqual([{ n: '1' }])
+    })
+  })
+})
+
+describe('WS patch 도 결과를 모르는 실패는 503 이다 — REST 와 같은 판정', () => {
+  it('patch 의 COMMIT 응답이 유실되면 patch-error 503 · 쓰기 문장이다 — 커밋은 됐다(head 0 → 1)', async () => {
+    await withProxiedApi(async (ctx) => {
+      const fx = await pageWithRoot(ctx)
+      await ctx.app.listen({ port: 0, host: '127.0.0.1' })
+      const address = ctx.app.server.address()
+      if (address === null || typeof address === 'string') throw new Error('포트를 열지 못했습니다')
+      const socket = await joinRoom(address.port, fx.projectId, fx.owner.cookie.wb_session)
+      try {
+        await socket.waitFor('joined')
+        ctx.proxy.dropCommitReplyAfter('insert into "revisions"')
+        socket.send(
+          JSON.stringify({
+            type: 'patch',
+            pageId: fx.pageId,
+            clientOpId: 'op_commit_lost',
+            baseSeq: 0,
+            ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_lost', type: 'Text', props: {} } }],
+          }),
+        )
+        const answer = await socket.waitFor('patch-error')
+        expect(ctx.proxy.fired).toBe(true)
+        expect(answer).toMatchObject({ clientOpId: 'op_commit_lost', status: 503, code: 'internal', message: DB_UNREACHABLE_WRITE_MESSAGE })
+        expect(uncaught).toEqual([])
+        const { rows } = await sql<{ h: number }>`select head_seq::int as h from pages where id = ${fx.pageId}`.execute(getTestDb())
+        expect(rows).toEqual([{ h: 1 }])
+      } finally {
+        socket.close()
+      }
     })
   })
 })
