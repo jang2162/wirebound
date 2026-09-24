@@ -14,8 +14,10 @@
  * **다른 노드 줄이 무거운 이유는 상태 코드가 아니다** — *"실패했다고 말하는데 조작은 일어났다"*가
  * 성립하기 때문이고, 그것은 조용히 되풀이되는 부류다.
  */
+import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { migrateDocument, type PageDocument } from '@wirebound/schema'
+import { withTransaction } from '../src/db/tx'
 import {
   createMenuNode,
   createPage,
@@ -115,6 +117,64 @@ function sorted(codes: number[]): number[] {
   return codes.slice().sort((a, b) => a - b)
 }
 
+/** 잠금을 못 받고 기다리는 백엔드 수 — 질의의 까닭은 `revisions-concurrency.test.ts`의 `waitForLockWaiter` 머리말. */
+async function lockWaiters(): Promise<number> {
+  const result = await sql<{ n: number }>`
+    select count(distinct l.pid)::int as n
+      from pg_locks l
+      join pg_stat_activity a on a.pid = l.pid
+     where not l.granted
+       and a.datname = current_database()
+  `.execute(db)
+  return result.rows[0]?.n ?? 0
+}
+
+/**
+ * 페이지 행을 테스트 트랜잭션으로 쥔 채 `run`을 시작하고, **요청 `waiters`개가 그 행에서 줄을 선 것을 본 뒤에** 놓는다.
+ *
+ * 코멘트 쓰기는 `baseSeq`를 잠그기 **전에** 읽는다(`routes/comments.ts` 머리말의 «대가 2»). 요청 둘을 `Promise.all`로
+ * 던지기만 하면 앞 요청이 커밋을 마친 뒤에 뒤 요청이 `head_seq`를 읽는 판이 생기고, 그 판에서는 둘 다 200 인 것이
+ * **옳은 동작**이다 — 경합을 재는 케이스가 경합 없이 빨개진다(DB 컨테이너에 CPU 부하를 걸고 B5 를 되풀이하면 드물게 난다).
+ * 둘 다 행에서 기다리는 것을 봤으면 둘 다 그 전에 `baseSeq`를 읽었다 — 겹침이 성립한다.
+ *
+ * **줄이 안 서면 던진다** — 겹치지 않은 판을 초록 · 빨강 어느 쪽으로도 세지 않는다. 그때도 요청은 끝까지 기다린다.
+ */
+async function withPageRowHeld<T>(pageId: string, waiters: number, run: () => Promise<T>): Promise<T> {
+  let release!: () => void
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let markHeld!: () => void
+  const held = new Promise<void>((resolve) => {
+    markHeld = resolve
+  })
+  const holder = withTransaction(db, async (trx) => {
+    await trx.selectFrom('pages').select('id').where('id', '=', pageId).forUpdate().execute()
+    markHeld()
+    await released
+  })
+  await Promise.race([held, holder])
+
+  const running = run()
+  let lined: unknown
+  try {
+    const deadline = Date.now() + 5_000
+    while ((await lockWaiters()) < waiters) {
+      if (Date.now() > deadline) {
+        throw new Error(`페이지 행에서 요청 ${waiters}개가 줄을 서지 않았습니다 — 두 요청이 겹치지 않았습니다`)
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  } catch (error) {
+    lined = error
+  }
+  release()
+  await holder
+  const result = await running
+  if (lined !== undefined) throw lined
+  return result
+}
+
 describe('같은 멱등 키의 게시가 동시에 온다', () => {
   it('둘 다 성공하고(201·200) 행은 하나 · 번호는 1 이다', async () => {
     // **잠금 안에서 키를 한 번 더 보는 것이 이 케이스의 전부다**(`routes/comments.ts`). 둘 다
@@ -152,7 +212,10 @@ describe('코멘트 삭제의 동시성', () => {
       const b = await postComment(ctx, fx, 'n_b', '나에 붙은 말')
       expect(await commentCount(fx.pageId)).toBe(2)
 
-      const [resA, resB] = await Promise.all([deleteComment(ctx, fx, a), deleteComment(ctx, fx, b)])
+      // **둘이 겹친 판만 잰다**(`withPageRowHeld`) — 겹치지 않으면 둘 다 200 이 옳다.
+      const [resA, resB] = await withPageRowHeld(fx.pageId, 2, () =>
+        Promise.all([deleteComment(ctx, fx, a), deleteComment(ctx, fx, b)]),
+      )
 
       // 하나는 이기고 하나는 409다 — 어느 쪽이 이기는지는 정해져 있지 않다.
       expect(sorted([resA.statusCode, resB.statusCode])).toEqual([200, 409])
