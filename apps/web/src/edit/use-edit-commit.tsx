@@ -17,7 +17,7 @@ import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, toFailure } from '../api/failure'
 import { useEditChannel, useLockChannel } from '../realtime/context'
-import { EditNotSentError, UnansweredEditError, type UnansweredCause } from '../realtime/edit-channel'
+import { EditNotSentError, UnansweredEditError, type EditChannel, type UnansweredCause } from '../realtime/edit-channel'
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import type { EditStatus, UndoAttempt } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
@@ -48,6 +48,14 @@ const UNRECOVERED_NOTICE =
   '화면에 남아 있는 편집은 저장되지 않았습니다. 새로고침해 서버 상태를 확인하세요.'
 
 /**
+ * **실시간 연결이 열려 있는가** — 편집을 WS 로 낼지(`pump`), 결과를 모르는 편집이 뒤늦게 커밋되면 화면에 저절로 서는지
+ * (`unknownNotice`)를 이것 하나로 가른다. 둘은 같은 사실이다: 열려 있으면 편집이 그리로 나가고, 서버의 방송도 그리로 온다.
+ */
+function realtimeOpen(channel: EditChannel | null): channel is EditChannel {
+  return channel !== null && channel.ready()
+}
+
+/**
  * **보낸 편집의 결과를 모를 때의 문장** — 실패가 «그 요청은 커밋 전»을 확정하지 않는다(`api/failure.tsx`의
  * `refusedBeforeCommit` — 쓰기 장부의 «모름»과 같은 판정이다). 연결이 끊겼거나(오프라인 · 소켓 리셋), 이 탭이 연결을
  * 버렸거나(`UnansweredEditError`), 서버 앞단이 답 대신 5xx · 빈 본문을 줬다.
@@ -55,8 +63,9 @@ const UNRECOVERED_NOTICE =
  * **«취소됐다»도 «저장하지 못했다»도 거짓이다.** 편집은 서버에 닿았을 수 있다. 끊김의 문장(«편집을 저장하지 못했습니다 —
  * … 편집 1개가 취소됐습니다»)을 내면 서버는 그것을 커밋하고 화면에도 선다(Chrome — 행 잠금으로 편집을 서버에 붙잡은 채
  * 소켓을 RST 로 끊었다: WS 는 다시 붙은 연결의 다시 읽기로, REST 는 방송으로 화면에 고친 값). 사용자가 믿고 다시 하면
- * **두 번 선다.** 그래서 모른다고 말하고, 반영됐다면 화면이 저절로 맞춰진다는 것을 말한다(까닭은 `realtime/use-realtime.ts`의
- * «쿠키가 바뀌면» — 끊김도 같은 길로 다시 읽는다). 되돌리기 이력이 비는 것은 그대로다 — 답(`inverse`)을 못 받았다.
+ * **두 번 선다.** 그래서 모른다고 말하고, 반영됐다면 화면이 저절로 맞춰지는지를 말한다 — 문장을 낼 때 실시간이 열려
+ * 있으면 맞춰진다(방송 · 다시 붙은 연결의 다시 읽기 — `realtime/use-realtime.ts`의 «쿠키가 바뀌면»), 닫혀 있으면 새로고침을
+ * 권한다(아래 `settle`). 되돌리기 이력이 비는 것은 그대로다 — 답(`inverse`)을 못 받았다.
  *
  * **«취소됐다»는 서버에 안 닿은 것에만 쓴다** — 답을 못 받은 편집은 하나다(in-flight는 한 번에 하나). **아직 안 보낸
  * 편집은 이 탭이 버렸다** — 그것은 따로 세어 취소됐다고 말한다.
@@ -64,7 +73,10 @@ const UNRECOVERED_NOTICE =
  * @param why 답을 못 받은 까닭 — 앞머리가 갈린다. `null`이면 REST 의 연결 실패 · 5xx 다(까닭을 단정하지 않는다).
  * @param outcome 다시 불러왔으면 `cancelled`(그러며 버린 **안 보낸** 편집 수), 다시 불러오지도 못했으면 `reason`(그 까닭).
  */
-function unknownNotice(why: UnansweredCause | null, outcome: { cancelled: number } | { reason: string }): string {
+function unknownNotice(
+  why: UnansweredCause | null,
+  outcome: { cancelled: number; live: boolean } | { reason: string },
+): string {
   const lead =
     why === 'renewed'
       ? '다른 탭에서 다시 로그인해 실시간 연결을 새로 붙이느라 '
@@ -74,7 +86,14 @@ function unknownNotice(why: UnansweredCause | null, outcome: { cancelled: number
   const head = `${lead}보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다.`
   if ('reason' in outcome) return `${head} ${outcome.reason} — 새로고침해 서버 상태를 확인하세요.`
   const tail = outcome.cancelled > 0 ? ` 아직 보내지 않은 편집 ${outcome.cancelled}개는 취소됐습니다.` : ''
-  return `${head} 페이지를 서버 상태로 다시 불러왔고, 반영됐다면 곧 화면에 나타납니다.${tail}`
+  // **«곧 화면에 나타납니다»는 실시간이 열려 있을 때만 참이다.** 다시 읽기가 커밋 전의 판을 읽었으면(서버가 그 편집을 쥔
+  // 채 끊겼다) 뒤늦은 커밋을 화면에 세우는 길은 방송 · 재연결 재조회 둘뿐인데 둘 다 WS 가 있어야 한다(Chrome: WS 를 막은
+  // 탭에서 서버가 쥔 편집을 RST — 5s 뒤에도 화면 «원문» · DB «고친 글»). 사람이 «안 나타났으니 안 됐다»로 읽고 다시 하면
+  // 두 번 선다.
+  const settle = outcome.live
+    ? '페이지를 서버 상태로 다시 불러왔고, 반영됐다면 곧 화면에 나타납니다.'
+    : '페이지를 서버 상태로 다시 불러왔지만 실시간 연결이 열려 있지 않아, 그 뒤에 반영되면 화면에 나타나지 않을 수 있습니다. 새로고침해 서버 상태를 확인하세요.'
+  return `${head} ${settle}${tail}`
 }
 
 /** 결과를 모르는 판에서 다시 불러오지도 못했을 때, 서버가 이유를 주지 않으면 쓸 문장(`unknownNotice`의 `reason`). */
@@ -231,7 +250,10 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         const lost = dropped.length + alsoDropped.length
         if (unknown) {
           // 버린 것 중 하나(큐의 머리)가 답을 못 받은 그 편집이다 — 나머지는 안 보냈다.
-          store.setEditFailure({ kind: 'message', message: unknownNotice(why, { cancelled: lost - 1 }) })
+          store.setEditFailure({
+            kind: 'message',
+            message: unknownNotice(why, { cancelled: lost - 1, live: realtimeOpen(channel) }),
+          })
           return
         }
         store.setEditFailure({
@@ -291,7 +313,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         store.setEditStatus('idle')
       }
     },
-    [api, projectId, pageId, store],
+    [api, channel, projectId, pageId, store],
   )
 
   const pump = useCallback(async (): Promise<void> => {
@@ -327,7 +349,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // 같은 모양의 실패를 내며(`patch-error`가 REST 봉투를 그대로 싣는다), 여기 아래의
           // `ackEdit`·`recover`도 같은 것을 받는다.
           const result =
-            channel !== null && channel.ready()
+            realtimeOpen(channel)
               ? await channel.send({ pageId, ...request })
               : await api.patchOps(projectId, pageId, request)
           // **응답의 `warnings`가 여기로 함께 들어간다.** 서버는 응답에 그것을 싣는다 —

@@ -507,6 +507,7 @@ describe('다른 탭이 같은 사람으로 다시 들어오면', () => {
  * | 취소한 수가 0 이어도 취소 문장을 붙인다 | 첫째 **혼자** |
  * | 아직 안 보낸 편집의 취소를 말하지 않는다 | 둘째 **혼자** |
  * | 다시 불러오지도 못한 판이 «저장되지 않았습니다» 로 끝난다 | 셋째 **혼자** |
+ * | 실시간이 다시 열려 있어도 «새로고침해 확인하세요»(`unknownNotice`의 `live`를 늘 거짓으로) | 첫째 **혼자** |
  */
 describe('스스로 버린 소켓으로 답을 기다리던 편집', () => {
   /** «아래로»·«위로»가 설 형제 둘. 트리의 줄 이름이 타입이라 둘의 타입이 달라야 한다. */
@@ -554,12 +555,27 @@ describe('스스로 버린 소켓으로 답을 기다리던 편집', () => {
 
   const sameUser = { kind: 'signed-in' as const, user: { id: 'u-1', email: 'me@example.com', name: '테스터' } }
 
+  /**
+   * 새 소켓이 **다시 불러오기가 끝나기 전에** 열린다 — 그러면 뒤늦은 커밋은 방송으로 화면에 서므로 «곧 화면에 나타납니다»가
+   * 참이다. 실시간이 닫힌 채 내는 문장은 `test/edit/ws-transport.test.tsx`의 «결과를 모르는 실패» 표가 잰다.
+   */
   it('답을 기다리던 편집은 반영됐는지 모른다고 말한다 — 취소됐다고 하지 않는다', async () => {
-    const { wired, hub } = await inFlight(async () => pageDetail(PAGE_ID, pair()))
+    let release = (): void => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { wired, hub } = await inFlight(async () => {
+      await held
+      return pageDetail(PAGE_ID, pair())
+    })
 
     await hub.fromOtherTab(sameUser)
-
     expect(wired.sockets[0]?.closed).toBe(true)
+    wired.open(1)
+    await act(async () => {
+      release()
+    })
+
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe(
       '다른 탭에서 다시 로그인해 실시간 연결을 새로 붙이느라 보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 ' +
