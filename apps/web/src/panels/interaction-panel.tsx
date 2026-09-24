@@ -577,7 +577,9 @@ function ValueField(props: {
           const parsed = Number(text)
           // 수가 아니면 문자열 그대로 보낸다 — 검증이 `invalid-interaction-prop`으로
           // 말하는 편이, 조용히 0으로 바꿔 **사용자가 안 적은 값을 저장하는** 것보다 낫다.
-          props.onChange(text.trim() === '' ? '' : Number.isNaN(parsed) ? text : parsed)
+          // **`Infinity`도 수가 아니다**(`isNaN`이 아니라 `isFinite`로 가르는 까닭) — «Infinity» · «1e999»가 그 값이 되고,
+          // JSON 에 없는 값이라 서버는 `null`을 저장하는데 로컬 문서만 `Infinity`를 든 채 갈린다.
+          props.onChange(text.trim() === '' ? '' : Number.isFinite(parsed) ? parsed : text)
         }}
       />
     )

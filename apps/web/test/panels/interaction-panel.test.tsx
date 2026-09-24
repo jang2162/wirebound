@@ -297,6 +297,51 @@ describe('상호작용 탭 — 편집 파이프라인', () => {
 })
 
 /**
+ * **`setProp`의 숫자 «값» 칸이 무엇을 싣나**(`panels/interaction-panel.tsx`의 `ValueField`). 수가 아니면 친 글을 문자열 그대로
+ * 보낸다 — 검증이 `invalid-interaction-prop`으로 말한다. **`Infinity`도 수가 아니다:** `Number('Infinity')`·`Number('1e999')`는
+ * `NaN`이 아니라 `Infinity`라, 그대로 실으면 서버는 JSON 으로 `null`을 저장하고 로컬 문서만 `Infinity`를 든 채 조용히 갈린다
+ * (재연결 재조회의 `sameJson`이 그제야 «다르다»로 다시 싣는다).
+ */
+describe('상호작용 탭 — 숫자 값 칸', () => {
+  const DOC_NUMBER_RULE = pageDoc({
+    id: 'n-root',
+    type: 'Page',
+    children: [
+      {
+        id: 'n-btn',
+        type: 'Button',
+        props: { label: '검색' },
+        marker: 1,
+        interactions: [{ on: 'click', actions: [{ type: 'setProp', target: 'n-list', prop: 'items', value: 3 }] }],
+      },
+      { id: 'n-list', type: 'List', marker: 2 },
+    ],
+  })
+
+  it.each([
+    { typed: '7', sent: 7 },
+    { typed: 'abc', sent: 'abc' },
+    { typed: 'Infinity', sent: 'Infinity' },
+    { typed: '1e999', sent: '1e999' },
+    { typed: '-Infinity', sent: '-Infinity' },
+  ])('«$typed» 를 치면 $sent 를 싣는다', async ({ typed, sent }) => {
+    const { calls, api } = editable()
+    await openPage(DOC_NUMBER_RULE, { apiOverrides: api })
+    await openInteractionTab()
+    selectNode('Button')
+
+    const field = within(screen.getByRole('group', { name: '액션 1' })).getByLabelText('값')
+    expect((field as HTMLInputElement).value).toBe('3')
+    fireEvent.change(field, { target: { value: typed } })
+    fireEvent.blur(field)
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    const value = (calls[0]!.ops[0] as { value: { actions: { value: unknown }[] }[] }).value
+    expect(value[0]!.actions[0]!.value).toBe(sent)
+  })
+})
+
+/**
  * **여기서 이 물음을 던진다** —*"실패했다고 말하는데 조작은 일어났다."*
  * 상호작용 저작에서 그 부류의 거울상은 **저장에 실패했는데 화면에는 내 규칙이 남아 있는
  * 것**이다.

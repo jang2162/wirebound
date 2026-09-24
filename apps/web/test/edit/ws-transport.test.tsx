@@ -588,15 +588,18 @@ describe('WS가 없으면 REST로 나간다', () => {
  * | 안 보낸 편집이 1 이면 꼬리를 안 붙인다 | 둘째 끊김 **혼자** |
  * | 끊김을 «답을 못 받았다»가 아닌 실패로 끝낸다(`edit-channel.ts`의 `failAll`) | 끊김 둘 · `test/realtime/edit-channel.test.ts`의 둘 |
  * | 실시간이 닫혀 있어도 «곧 화면에 나타납니다»(`unknownNotice`의 `live`를 늘 참으로) | 끊김 둘 · REST 표의 «모름» 넷 |
+ * | `live`를 «연결이 열려 있나»만으로(`lateCommitArrives`가 `why`를 안 봄) | 열린 연결의 5xx 프레임 **혼자** |
+ * | `live`를 «편집을 실은 연결이 사라졌나»만으로(`lateCommitArrives`가 `ready()`를 안 봄) | 끊김 둘 |
  */
 describe('결과를 모르는 실패는 «취소됐다»고 하지 않는다', () => {
   /**
-   * 이 표의 판은 전부 **실시간이 열려 있지 않은 채** 문장을 낸다 — 끊김은 소켓이 닫힌 채고, REST 는 Provider 가 없다. 그때
-   * 뒤늦은 커밋은 화면에 저절로 서지 않으므로 «곧 화면에 나타납니다»가 거짓이다(`unknownNotice`의 `live`). 열려 있는 판의
-   * 문장은 `test/edit/reconnect-resync.test.tsx`의 «답을 기다리던 편집은 반영됐는지 모른다고 말한다»가 잰다.
+   * 이 표의 판은 전부 **뒤늦은 커밋이 이 탭에 안 오는 채** 문장을 낸다 — 끊김은 소켓이 닫힌 채고, REST 는 Provider 가 없고,
+   * 5xx 프레임은 편집을 실은 연결이 그대로 열려 있다. 그때 «곧 화면에 나타납니다»가 거짓이다(`unknownNotice`의 `live` —
+   * `lateCommitArrives`). 오는 판(편집을 실은 연결이 사라지고 새 연결이 열림)의 문장은 `test/edit/reconnect-resync.test.tsx`의
+   * «답을 기다리던 편집은 반영됐는지 모른다고 말한다»가 잰다.
    */
   const RELOADED =
-    '페이지를 서버 상태로 다시 불러왔지만 실시간 연결이 열려 있지 않아, 그 뒤에 반영되면 화면에 나타나지 않을 수 있습니다. ' +
+    '페이지를 서버 상태로 다시 불러왔지만, 그 뒤에 반영되면 화면에 나타나지 않을 수 있습니다. ' +
     '새로고침해 서버 상태를 확인하세요.'
 
   it('답을 기다리던 편집의 연결이 끊기면 «반영됐는지 모른다» — 안 보낸 것이 없으면 «취소»가 없다', async () => {
@@ -631,6 +634,35 @@ describe('결과를 모르는 실패는 «취소됐다»고 하지 않는다', (
       message:
         `실시간 연결이 끊겨 보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다. ${RELOADED}` +
         ' 아직 보내지 않은 편집 1개는 취소됐습니다.',
+    })
+  })
+
+  /**
+   * **실시간이 열린 채 받은 «모름»도 새로고침을 권한다.** 편집을 실은 연결이 그대로 열려 있으면 뒤늦은 커밋은 이 탭에 안 온다 —
+   * 서버는 방송에서 보낸 연결을 빼고, 끊기지 않았으니 재연결 재조회도 없다(Chrome — COMMIT 도중 api↔DB 연결을 RST: 12s 뒤
+   * DB «고친 글» · 화면 «원문» · 소켓 열린 채). 프레임은 서버가 DB 유실에 내는 503 이다(`apps/api`의 `dbUnreachableFailure`).
+   */
+  it('열린 연결로 5xx 프레임을 받으면 «모름»이고 새로고침을 권한다 — 뒤늦은 커밋은 이 탭에 안 온다', async () => {
+    const board = mount()
+    board.commit('새 내용')
+
+    board.push({
+      type: 'patch-error',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      clientOpId: 'op_1',
+      status: 503,
+      code: 'internal',
+      message: '데이터베이스와의 연결이 끊겨 요청이 반영됐는지 알 수 없습니다',
+      issues: [],
+    })
+    await act(async () => {})
+
+    // 소켓은 열린 채다 — 닫힌 판(위 끊김 둘)과 갈리는 것이 이것이다.
+    expect(board.sockets).toHaveLength(1)
+    expect(board.store.getState().editFailure).toEqual({
+      kind: 'message',
+      message: `보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다. ${RELOADED}`,
     })
   })
 
