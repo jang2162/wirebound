@@ -98,7 +98,9 @@ describe('시스템 테마의 미해석 리터럴', () => {
 
     expect(css).toContain('max-width: var(--wb-container-maxWidth);')
     expect(css).toContain('gap: var(--wb-grid-gap);')
-    expect(css).toContain('--wb-container-maxWidth: 1440px;')
+    // 변수가 값을 싣고 나가는지만 본다. 그 값이 `none`(fluid)인 것은 `system-section-centered.test.ts`의
+    // `admin의 컨테이너` 케이스가 잠근다.
+    expect(css).toMatch(/--wb-container-maxWidth: [^;\s]+;/)
     expect(css).toContain('--wb-grid-gap: var(--wb-space-5);')
   })
 

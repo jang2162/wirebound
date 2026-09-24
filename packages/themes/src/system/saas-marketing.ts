@@ -140,7 +140,7 @@ export const SAAS_MARKETING_THEME: Theme = {
   /**
    * 설계서 「primitives — 사이트 골격」이 이 테마를 이름으로 들어 적었다 — *"관리자 화면은 `maxWidth: fluid`에 좁은 섹션
    * 여백을, 마케팅 사이트는 `1200px`에 넉넉한 여백을 쓴다."* 그대로 옮겼다.
-   * `admin`은 1440px · `space.8`(32px)이다.
+   * `admin`은 `none`(폭을 가두지 않는다) · `space.8`(32px)이다.
    */
   primitives: {
     container: { maxWidth: '1200px', gutter: 'space.6' },
