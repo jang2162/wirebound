@@ -176,8 +176,7 @@ export const PORTAL_THEME: Theme = {
     Section: {
       structure: 'contained',
       base: { bg: 'semantic.canvas', paddingY: 'space.10' },
-      // **`marginX: 'auto'`가 `admin`에 없다.** 폭을 가둬도 가운데로 안 오면 가둔 것이
-      // 보이지 않는다.
+      // `marginX: 'auto'`의 근거는 `admin.ts`의 `Section` 주석(가운데 정렬된 콘텐츠)에 있다.
       parts: { inner: { maxWidth: 'container.maxWidth', marginX: 'auto', paddingX: 'space.5' } },
       variants: {
         // 포털 첫 화면의 상단 띠. 진한 남색 바탕에 흰 글씨가 기관 사이트의 표지다.

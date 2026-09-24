@@ -211,8 +211,7 @@ export const DOCS_THEME: Theme = {
       structure: 'contained',
       base: { bg: 'semantic.surface', paddingY: 'space.10' },
       parts: {
-        // `marginX: 'auto'`가 없으면 좁힌 칼럼이 왼쪽에 붙는다. `admin`에는 이 줄이 없다 —
-        // 1440px 컨테이너는 대개 화면을 다 쓰므로 가운데 정렬이 눈에 안 띈다.
+        // `marginX: 'auto'`의 근거는 `admin.ts`의 `Section` 주석(가운데 정렬된 콘텐츠)에 있다.
         inner: { maxWidth: 'container.maxWidth', marginX: 'auto', paddingX: 'space.6' },
       },
       variants: {

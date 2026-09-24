@@ -101,7 +101,12 @@ export const ADMIN_THEME: Theme = {
     Section: {
       structure: 'contained',
       base: { bg: 'semantic.canvas', paddingY: 'space.8' },
-      parts: { inner: { maxWidth: 'container.maxWidth', paddingX: 'space.6' } },
+      // **`marginX: 'auto'`가 가둔 칼럼을 가운데로 둔다.** 설계서 「컴포넌트 카탈로그」가 `Section`을
+      // *"화면 전체 폭 배경 + 가운데 정렬된 콘텐츠"*로 정한다. 빠뜨려도 아무것도 실패하지 않고, 뷰포트가
+      // `maxWidth`보다 넓을 때 칼럼이 왼쪽에 붙어 오른쪽에만 빈 띠가 선다(`maxWidth`를 거는 시스템 테마
+      // 다섯이 이 줄을 같이 갖는다). 재는 법: `exportPage`로 `Section` 하나를 뽑아 실브라우저 1920 폭에서
+      // `inner`와 섹션의 좌우 간격을 잰다 — 가운데면 둘이 같다. jsdom 은 레이아웃을 안 해 못 잰다.
+      parts: { inner: { maxWidth: 'container.maxWidth', marginX: 'auto', paddingX: 'space.6' } },
       variants: {
         hero: { bg: 'semantic.primarySoft', paddingY: 'space.16' },
         muted: { bg: 'semantic.canvas' },
