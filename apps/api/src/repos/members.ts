@@ -83,7 +83,7 @@ function isMemberPkViolation(error: unknown): boolean {
  * 두 요청을 −2…+4ms 간격으로 280 라운드(역할 변경 · 제거 넷을 돌려 가며): 교착 32 · 500 32(재는 자: `test/guard-in-lock.test.ts`의
  * «E12»). 같은 함수 · 같은 순서로 잡으면 owner 행에서 먼저 잡은 쪽이 이기고, 진 쪽은 아무것도 안 쥔 채 선다. **멤버 쓰기의 첫 잠금을
  * 프로젝트 행(`lockProjectShared`)으로 두어 닫지 않는 까닭** — 그러면 멤버 수정 · 삭제가 복원 · 삭제가 쥔 프로젝트 행 뒤에 서서, 복원이
- * 도는 동안 회수가 서지 않는다(`apps/api/README.md` 「복원은 자기가 쓰는 동안 남이 못 고치게 한다」의 «막히지 않는 것»).
+ * 도는 동안 회수가 서지 않는다(`test/restore-lock-census.test.ts`의 «막히지 않는 줄의 목록이 고정돼 있다»).
  */
 export async function lockOwnerIds(trx: DbHandle, projectId: string): Promise<Set<string>> {
   const rows = await trx
