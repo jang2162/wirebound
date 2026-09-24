@@ -200,6 +200,11 @@ export function Canvas(props: {
    * 겹layer가 덮는 값과 겹치지 않는다. **남의 편집은 실시간으로 온다**(WS 편집 채널 — `main.tsx`의
    * `createEditChannel`) — 그 편집이 문서를 고쳐도 겹layer는 남는다. 편집 하나로 시연을 버리면 남이 글자 하나 고칠
    * 때마다 보던 시연이 사라진다.
+   *
+   * **실시간으로 온 남의 편집은 축이 아니다 · 끊긴 사이를 따라잡는 재조회는 축이다.** 재조회는 판을 통째로 싣는다
+   * (`loadPage`) — 끊긴 사이 무엇이 바뀌었는지(편집 몇 개인지, 복원으로 판이 갈렸는지) 모른 채 서버 판으로 갈아 끼우므로
+   * 시연도 새로 시작한다. 그래서 같은 남의 편집이 실시간으로 오면 시연이 남고 끊긴 사이 오면 사라진다 — 받아들인 대가다.
+   * 서버 판이 그대로면 재조회가 싣지 않아 시연도 남는다(`routes/editor.tsx`의 재연결 이펙트 — `holdsServerPage`).
    */
   const runtimeKey = `${mode}:${props.pageId ?? ''}:${documentLoads}`
   const [runtime, setRuntime] = useState<RuntimeState>(() => emptyRuntime(runtimeKey))

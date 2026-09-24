@@ -109,11 +109,13 @@ export const ADMIN_THEME: Theme = {
       structure: 'contained',
       base: { bg: 'semantic.canvas', paddingY: 'space.8' },
       // **`marginX: 'auto'`가 가둔 칼럼을 가운데로 둔다.** 설계서 「컴포넌트 카탈로그」가 `Section`을
-      // *"화면 전체 폭 배경 + 가운데 정렬된 콘텐츠"*로 정한다. 빠뜨려도 아무것도 실패하지 않고, 뷰포트가
-      // `maxWidth`보다 넓을 때 칼럼이 왼쪽에 붙어 오른쪽에만 빈 띠가 선다(`maxWidth`를 거는 시스템 테마
-      // 다섯이 이 줄을 같이 갖는다). 재는 법: `exportPage`로 `Section` 하나를 뽑아 실브라우저에서 뷰포트를
+      // *"화면 전체 폭 배경 + 가운데 정렬된 콘텐츠"*로 정한다. 구조 기본 CSS 가 `contained`의 `inner`를 이미 가운데
+      // 둔다(`packages/renderer`의 `Section:contained` 규칙) — 이 줄은 그 위에 같은 값을 테마 층에서 한 번 더 말한다.
+      // 테마가 다른 `marginX`를 적으면 테마가 이긴다. **구조가 `contained`가 아니면 가운데를 두는 것은 이 줄뿐이다**
+      // (`saas-marketing`의 `splitBg` — 1920 폭에서 이 줄을 빼면 좌우 간격 0 / 672). `maxWidth`를 거는 시스템 테마
+      // 다섯이 이 줄을 같이 갖는다. 재는 법: `exportPage`로 `Page > Section > Text`를 뽑아 실브라우저에서 뷰포트를
       // 칼럼 폭보다 넓게 두고 `inner`와 섹션의 좌우 간격을 잰다 — 가운데면 둘이 같다(1920 폭에서 `portal`
-      // 292 / 292). jsdom 은 레이아웃을 안 해 못 잰다.
+      // 300 / 300). jsdom 은 레이아웃을 안 해 못 잰다.
       //
       // **이 테마에서는 칼럼이 가둬지지 않는다** — `container.maxWidth`가 `none`이라(위 `primitives`) `auto`가
       // 0 으로 계산되어 1920 폭에서도 좌우 간격이 0 / 0 이다. 그래도 이 줄을 둔다: `container.maxWidth`를 유한한
