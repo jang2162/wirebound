@@ -67,7 +67,7 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 > 값이 비어 있고, `apps/api/test/env-example-census.test.ts` 가 그것을 잰다.
 >
 > **다시 돌려도 안전하다.** 그 이메일이 이미 있으면 그대로 두고 **비밀번호를 덮어쓰지
-> 않는다.** **값을 바꿔 다시 돌리면 계정이 하나 는다** — 두 번째 사람을 만드는 길이
+> 않는다** — 비밀번호를 잊었으면 「비밀번호를 잊었다」 절이다. **값을 바꿔 다시 돌리면 계정이 하나 는다** — 두 번째 사람을 만드는 길이
 > 이것이다(멤버 초대는 이미 계정이 있는 사람만 대상이다). 이름을 정하려면
 > `SEED_USER_NAME` 을 함께 준다(비우면 이메일의 로컬 파트를 쓴다).
 >
@@ -664,6 +664,47 @@ A 의 사용자를 돌려줬고 **B 의 API 는 그 로그인을 0 번 봤다.**
 이라 그렇다 — 스키마는 올렸고(그래서 서버가 떴다) 행이 없다. **정상이다.** 옛 설계서는
 사라진 것이 아니라 **다른 이름의 볼륨**에 있다(「컨테이너를 못 찾는다」 절의 ⓒ). **`이 서버가 보는 DB:` 줄의
 `마이그레이션 N건` 이 0 이 아니면 이 갈래다** — 0 이면 서버가 아예 안 떴을 것이다.
+
+### 6.7 비밀번호를 잊었다
+
+**화면에도 API 에도 비밀번호를 바꾸거나 재설정하는 길이 없다.** 서버에 손이 닿는 사람이 DB 에서
+그 계정의 해시를 바꾼다.
+
+**`migrate` 를 새 비밀번호로 다시 돌려도 안 바뀐다** — 시딩은 이미 있는 이메일을 건너뛰고
+*"이미 있어 그대로 둡니다 … (비밀번호를 덮어쓰지 않습니다)"* 를 찍는다(「세우기」 절 5번). 이 기계에서 쟀다:
+그 뒤 새 비밀번호는 401, 옛 비밀번호는 200 이다.
+
+**`users` 행을 지우고 다시 시딩하지 마라.** 그 사람이 코멘트 · 스냅샷 · 프리셋을 남겼으면 FK 가
+막아 삭제가 실패하고(`violates foreign key constraint "comments_author_id_fkey"`), 남긴 것이 없어
+지워지면 **멤버십이 함께 지워진다** — 그 사람이 owner 였던 프로젝트는 멤버가 0 이 되고, 다시 시딩한
+계정의 목록은 빈다(이 기계에서 쟀다: 멤버 0 · `GET /api/projects` → `[]`).
+
+**그 계정의 해시만 서버와 같은 함수로 바꾼다** — 저장소(또는 워크트리) 루트에서:
+
+```bash
+# 1. 새 비밀번호를 셸 변수로 받는다 — 명령 글자와 셸 기록에 남지 않게
+read -rs NEW_PASSWORD && export NEW_PASSWORD
+
+# 2. 서버가 쓰는 hashPassword 로 해시를 만든다
+HASH=$(cd apps/api && pnpm exec tsx -e "import('./src/auth/password.ts').then(async (m) => console.log(await m.hashPassword(process.env.NEW_PASSWORD)))")
+
+# 3. 그 계정의 해시를 바꾸고 열려 있던 세션을 닫는다
+#    -d 는 apps/api/.env 의 DATABASE_URL 끝의 DB 이름이다(워크트리면 wb_<이름>)
+docker compose --env-file apps/api/.env exec -T postgres \
+  psql -U wirebound -d wirebound -v email=me@example.com -v hash="$HASH" <<'SQL'
+update users set password_hash = :'hash' where email = :'email';
+delete from sessions where user_id = (select id from users where email = :'email');
+SQL
+unset NEW_PASSWORD HASH
+```
+
+**`UPDATE 1` 이 나와야 한다.** `UPDATE 0` 이면 그 이메일의 계정이 그 DB 에 없다 — 「에디터가 뜨는데
+로그인이 안 된다」 절의 ⓞ · ⓑ 를 본다. 서버는 내리지 않아도 된다. 이 기계에서 쟀다: 명령 그대로 돌린 뒤 새
+비밀번호 200 · 옛 비밀번호 401 · 그 전에 로그인해 둔 세션 401, 프로젝트와 멤버십은 그대로다.
+
+**세션 삭제 줄을 빼면 옛 세션이 산다** — 해시를 바꾼 뒤에도 그 전에 로그인한 브라우저의
+`/api/auth/me` 가 200 이었다. 옛 비밀번호가 새어 바꾸는 것이면 그 줄을 빼지 마라.
+**`wireb login` 으로 받은 토큰은 이 두 줄이 건드리지 않는다**(`api_tokens` 는 다른 표다).
 
 ---
 
