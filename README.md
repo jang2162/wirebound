@@ -100,7 +100,9 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 
 > **`--env-file apps/api/.env` 를 빼면 포트가 기본값(5433)으로 되돌아간다.** 그러면
 > 컨테이너가 그 포트로 **다시 만들어지고**, `apps/api/.env` 의 접속 문자열은 다른 수를
-> 가리킨 채 남는다. `up` 에서는 그 플래그를 생략하지 않는다 — `ps`·`logs`·`exec`·`down` 은
+> 가리킨 채 남는다. 기본 포트를 다른 체크아웃의 컨테이너가 쥐고 있으면 그 `up` 은 종료 1
+> (`port is already allocated`)이고 컨테이너는 `created` 로 남는다 — **그대로 한 번 더 치면 종료 0 으로 포트 없이 뜬다**
+> (워크트리 컨테이너로 쟀다 · 「컨테이너를 못 찾는다」). `up` 에서는 그 플래그를 생략하지 않는다 — `ps`·`logs`·`exec`·`down` 은
 > 프로젝트 이름으로 찾으므로 플래그가 없어도 된다(이 기계에서 쟀다).
 >
 > **어긋나면 서버도 테스트도 뜨지 않고 어디가 어긋났는지 말한다**(「워크트리를 여럿 띄울 때」 절의 «포트를 어긋나게 적으면 무엇이 보이나»). 그 검사는
@@ -874,7 +876,7 @@ node apps/api/node_modules/playwright-core/cli.js install chromium
 |---|---|
 | `install chromium --only-shell` | 내려받기 **94.7 MiB** + FFmpeg 1 MiB · **6.4초** · 디스크 **196MB** + 2.5MB |
 | `install chromium` | 위 대신 **전체 Chromium**(디스크 ~356MB). **헤드리스로만 쓰므로 `--only-shell`로 충분하다** — 서버가 부르는 것이 headless shell 이다(오류 문장의 경로가 `chromium_headless_shell-<리비전>`이다) |
-| `--with-deps` | 시스템 라이브러리를 함께 넣는다. **리눅스에서 필요하다**(이 기계에서는 안 썼다) |
+| `--with-deps` | 시스템 라이브러리와 **글꼴 몇 벌**(한글이 든 `fonts-wqy-zenhei` · `fonts-unifont` 포함)을 함께 넣는다. **리눅스에서 필요하다**(리눅스 컨테이너에서 쟀다 — 「배포하려면」 절) |
 | 어디에 들어가나 | macOS 는 `~/Library/Caches/ms-playwright/`. `PLAYWRIGHT_BROWSERS_PATH`로 옮길 수 있다 |
 
 **이미 있으면 아무것도 안 낸다** — 출력 없이 종료 코드 0 이다(이 기계에서 쟀다). *"실패했나"*가
@@ -916,7 +918,7 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 
 ### 8.4 알아 둘 것
 
-- **한글 글꼴이 없으면 한 장도 안 그린다.** 두부를 내보내지 않는 판정이고, 미리보기의 `fontWarning`이 그 사실을 낸다. 리눅스 컨테이너에는 보통 없다 — `fonts-noto-cjk` 부류를 넣어야 한다(**이 기계에서는 재지 못했다** — 「못 잰 것」 절).
+- **한글 글꼴이 없으면 한 장도 안 그린다.** 두부를 내보내지 않는 판정이고, 미리보기의 `fontWarning`이 그 사실을 낸다. 리눅스 컨테이너에는 보통 없다 — `fonts-noto-cjk` 를 넣는다(리눅스 컨테이너에서 쟀다 — 「배포하려면」 절).
 - **바깥으로 나가는 요청을 끊는다.** 테마의 `@font-face`·`url()`은 사용자가 적은 문자열이라 서버가 그것을 가져가면 안 된다. **대가:** 원격 웹폰트를 든 테마는 에디터 캔버스와 다르게 그려진다.
 - **긴 페이지는 조용히 실오라기가 된다.** 화면 전체를 찍으므로 높이가 내용을 따라가고, 슬라이드 위에서 폭이 줄어든다. 상한은 **페이지 장 수**이지 바이트가 아니다.
 - 자세한 값(화소·동시성·타임아웃·상한·요청끼리의 상한)은 [`apps/api/README.md`의 *"화면 이미지를 그리는 조건"*](apps/api/README.md#화면-이미지를-그리는-조건)에 있다.
@@ -953,27 +955,148 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 
 ---
 
-## 10. 못 잰 것 — **이 문서가 확인하지 않은 것들**
+## 10. 배포하려면 — **잰 요구 사항과 앞단이 지킬 조건**
+
+**배포 대상은 아직 정하지 않았다.** 이 절은 무엇이 필요한지를 **재서** 적은 것이지 배포 절차가 아니다. 값은 로컬
+Docker 의 리눅스 컨테이너(linux/arm64 · `node:22-slim` = Debian 12 · Node 22.23.1 · 저장소의 `git archive HEAD`)에서
+실제로 띄워 본 것이다. **운영에서 돌려 본 적은 없다**(아래 「이 절이 안 잰 것 · 알려진 한계」).
+
+### 10.1 api 가 필요로 하는 것
+
+| 무엇 | 필요 | 안 하면 무엇이 보이나 (쟀다) |
+|---|---|---|
+| **Node ≥ 22.9** | 스크립트가 `--env-file-if-exists` 를 쓴다 | 22.8 은 `node: bad option: --env-file-if-exists=…` 로 **모든 스크립트가 죽는다**. 22.9 는 된다(`node:22.8.0-alpine` · `node:22.9.0-alpine`) |
+| **devDependencies 까지 설치** | `start` · `migrate` · `reset-password` 가 `tsx`(devDependency)로 돈다 | `pnpm install --prod` 뒤 `pnpm --filter @wirebound/api start` → `sh: 1: tsx: not found` |
+| **`pnpm build`** | 「테스트는 통과하는데 서버만 안 뜬다」 절과 같은 까닭 | — |
+| **`HOST=0.0.0.0`** | 기본값이 `127.0.0.1` 이다 | 컨테이너 포트를 열어도 **밖에서 안 닿는다**(호스트 `curl` 000 · 컨테이너 안 200) |
+| **마이그레이션을 먼저** | api 는 뜰 때 마이그레이션을 올리지 않는다 | **하나 뒤처진 DB 에도 뜬다** — `이 서버가 보는 DB: … · 마이그레이션 14건` 만 찍고 코드가 아는 수와 견주지 않는다. 그 뒤 코멘트 게시가 500(`column "revision_seq" of relation "comments" does not exist`). 빈 DB 면 안 뜬다(「띄우기」 절). **순서: `migrate` → 새 api** |
+| **`NODE_ENV=production` 이면 TLS** | 세션 쿠키에 `Secure` 가 붙는다(`apps/api/src/auth/plugin.ts`) | http 로 연 화면에서 **로그인 200 인데 바로 다음 `/api/auth/me` 가 401** — 브라우저가 쿠키를 안 받는다(쿠키 0). `http://127.0.0.1` 은 Chrome 이 안전한 출처로 봐 된다 — **그래서 로컬에서는 안 보인다.** 헤드리스 Chrome 에 `--host-resolver-rules=MAP wb.test 127.0.0.1` 로 `http://wb.test` 를 열어 쟀다. `development` 면 둘 다 200 |
+| **PID 1 은 node 로** | `pnpm` 을 거치면 `SIGTERM` 이 서버의 정상 종료에 안 닿는다 | `docker stop` 에 종료 코드 1(`--init` 이면 143) · «종료합니다» 줄 0 · **도는 요청이 소켓째 끊긴다**(`UND_ERR_SOCKET`). `apps/api` 에서 `node --import tsx src/main.ts`(또는 `tsx src/main.ts`)를 PID 1 로 두면 종료 0 · 도는 요청 200 |
+| **init 을 둔다**(`docker run --init` · tini) | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). `--init` 이면 0 |
+
+**환경 값의 목록과 뜻은 `apps/api/.env.example` 이 소유한다.** 배포에서 달라지는 것은 위 표의 `HOST` · `NODE_ENV` 와,
+**`POSTGRES_PORT` 를 두지 않는 것**이다 — 그 값은 compose 가 여는 포트이고, 있으면 접속 문자열과 포트가 맞는지 검사한다
+(「세우기」 절의 끝).
+
+### 10.2 pptx 의 화면 이미지 — 브라우저와 **한글 글꼴**
+
+| 이미지 | 브라우저 | 한글 글리프를 가진 글꼴 | 미리보기 · pptx |
+|---|---|---|---|
+| `install --with-deps --only-shell chromium` | playwright 캐시의 headless shell | **`--with-deps` 가 함께 깐다** — `fonts-wqy-zenhei` · `fonts-unifont`(그리고 한글이 없는 `fonts-ipafont-gothic`) | 그린다(WenQuanYi 로) |
+| 위에서 그 셋을 걷음 | 〃 | 없다 | `fontWarning: 이 서버에 한글 글꼴이 없어 화면 이미지를 그리지 않았습니다` · pptx **200** · `ppt/media` **0** · `x-wb-screen-failures: 1`. 가드 없이 찍으면 한글이 **□** 다 |
+| 걷은 뒤 `fonts-noto-cjk` | 〃 | Noto Sans CJK KR | 그린다 |
+| `apt-get install chromium` + `SCREEN_CHROMIUM_PATH=/usr/bin/chromium` | 배포판 chromium | 없다 | 위 «없다» 줄과 같다 |
+| 위 + `fonts-noto-cjk` | 〃 | Noto Sans CJK KR | 그린다 |
+
+- **한글 글꼴은 명시해서 넣는다**(`fonts-noto-cjk`). `--with-deps` 가 주는 한글은 playwright 의 의존 목록에 딸려 온
+  것이라 그 목록이 바뀌면 조용히 사라진다.
+- **글꼴이 없어도 서버 로그에는 아무것도 안 남는다**(그 판의 로그는 기동 세 줄뿐이었다). 알아채는 자리는 미리보기의
+  `fontWarning` · 응답 머리 `x-wb-screen-failures` · `wireb export` 의 표준에러 경고다(「PPTX 의 화면 이미지」 절).
+- 크기: 위 첫 줄 이미지가 **1.66GB**(playwright 캐시 344MB · `node_modules` 216MB), `fonts-noto-cjk` 가 **+170MB** 다
+  (`docker images` 로 잰다).
+
+**재는 법 — 배포할 이미지 안에서 스모크를 돌린다.** 서버와 같은 `SCREEN_CHROMIUM_PATH` 를 준다.
+
+```bash
+pnpm vitest run --project build apps/api/build-test/screen-chromium.test.ts
+```
+
+위 다섯 줄에서 돌린 값 — 한글 글꼴이 없는 두 이미지는 **10 실패**(playwright 캐시) · **9 실패**(배포판 chromium), 있는 세
+이미지는 **15 통과**다. 브라우저를 못 띄우면 건너뛰고 그렇다고 말한다 — **건너뜀은 통과가 아니다.**
+
+### 10.3 에디터 — 정적 파일
+
+`pnpm --filter @wirebound/web build` 가 `apps/web/dist`(`index.html` + `assets/`)를 낸다. api 는 이것을 서빙하지 않는다 —
+앞단이 서빙하고 `/api` 를 api 로 넘긴다. 깊은 링크(`/projects/…`)는 `index.html` 로 돌린다(아래 설정의 `try_files` 로
+200 을 쟀다).
+
+### 10.4 앞단(리버스 프록시)이 지킬 조건
+
+| 조건 | 왜 | 쟀다 (nginx 1.27 · 아래 설정) |
+|---|---|---|
+| **에디터와 `/api` 가 같은 출처** | 세션 쿠키가 same-origin 으로 실리고 api 에 CORS 설정이 없다(「띄우기」 절) | — |
+| **TLS 를 앞단이 끝낸다** | `NODE_ENV=production` 의 `Secure` 쿠키(「api 가 필요로 하는 것」) | — |
+| **WS 업그레이드를 넘긴다** — `/api/projects/:id/ws` | 실시간 · 잠금 · 방송이 이 연결이다 | `proxy_http_version 1.1` 과 `Upgrade` · `Connection` 머리가 없으면 **404**(5ms) — 에디터는 재연결을 되풀이한다(`apps/web/src/realtime/connection.ts` 의 재연결 사다리 — 코드 읽기). 있으면 **101** + 프레임 셋(`joined` · `presence` · `locks`) |
+| **WS 유휴 제한이 25초보다 길다** | 에디터가 25초마다 `ping` 한다(`connection.ts` 의 `DEFAULT_HEARTBEAT_MS`) | `proxy_read_timeout 5s` 로 두자 **5.0초**에 끊겼다. nginx 기본 60s 는 넘는다. HTTP 쪽 읽기 제한은 가장 긴 내보내기보다 길어야 한다 — 장 수에 비례한다(`apps/api/README.md` 「화면 이미지를 그리는 조건」) |
+| **클라이언트의 끊음을 상류로 전한다** | 사용자가 창을 닫거나 형식을 바꾸면 api 가 그리기를 멈춰야 칸이 돌아온다 | nginx 기본(`proxy_ignore_client_abort off`)은 전한다 — 40장 미리보기(1.46s)를 400ms 에 끊자 chromium 이 직접 붙은 판 **0.67s** · nginx 경유 **0.80s** 뒤 사라졌다(안 끊었으면 1.06s 더 돈다 · 100ms 간격 표본). 개발 서버의 프록시는 훅 없이 안 전한다 — `apps/web/vite.config.ts` 의 `proxyReq` 훅이 그 자리다 |
+| **상류 keep-alive 유휴가 72초보다 짧다** | Fastify 의 `keepAliveTimeout` 기본값이 72s 다(`apps/api/src/app.ts` 의 닫기 주석) | **안 쟀다** — 앞단이 상류 연결을 72초보다 오래 두고 다시 쓰면 api 가 막 닫은 연결에 요청을 실을 수 있다는 판정이다. nginx 는 `upstream { keepalive … }` 를 안 두면 상류 연결을 남기지 않는다 |
+| 본문 크기 | — | nginx 기본 `client_max_body_size 1m` 과 Fastify 기본 `bodyLimit` 1MiB 가 같다 — 조건이 아니다. 앞단을 더 작게 두면 그 수에서 413 이다 |
+
+재 본 nginx 설정 — **잰 것이지 권하는 운영 설정이 아니다**(TLS 가 없다):
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+server {
+  listen 80;
+  root /srv/web;                                   # apps/web/dist
+  location / { try_files $uri /index.html; }
+  location /api/ {
+    proxy_pass http://api:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $host;
+  }
+}
+```
+
+### 10.5 `Dockerfile` 을 두지 않는다 — 재 본 조합만 적는다
+
+**저장소에 `Dockerfile` 을 두지 않는다.** 까닭 셋:
+
+- **이미지의 경계가 배포 대상에 달려 있다** — 에디터 정적 파일을 같은 이미지에 둘지, 앞단이 무엇인지, 브라우저를
+  playwright 캐시로 둘지 배포판으로 둘지. 위 표들이 그 갈래마다 무엇이 드는지를 든다.
+- **그 파일을 빌드 · 기동하는 게이트가 없다.** 이미지 하나가 빌드 1분 안팎 · 1.6GB 넘게 들어 게이트 넷에 못 넣는다 — 두면 재는
+  자 없이 낡고, 저장소 안에 있다는 것만으로 «정답»으로 읽힌다.
+- **재는 자는 이미 있다** — 어떤 이미지든 그 안에서 「pptx 의 화면 이미지 — 브라우저와 한글 글꼴」의 스모크를 돌리면 브라우저와 글꼴이 든 것을 잰다.
+
+위 값을 낸 조합(한 이미지에 api 와 에디터 빌드를 함께 든 판):
+
+```bash
+# 이미지 안 — 저장소 뿌리에서
+corepack enable
+pnpm install --frozen-lockfile                   # devDependencies 까지(tsx)
+pnpm build
+pnpm --filter @wirebound/web build               # apps/web/dist — 앞단이 서빙한다
+node apps/api/node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
+apt-get install -y --no-install-recommends fonts-noto-cjk
+
+# 기동 순서 — 같은 DATABASE_URL 로
+pnpm --filter @wirebound/api migrate             # 먼저
+docker run --init -e HOST=0.0.0.0 -e NODE_ENV=production -e DATABASE_URL … -w /app/apps/api <이미지> \
+  node --import tsx src/main.ts                  # pnpm 을 거치지 않는다
+```
+
+### 10.6 이 절이 안 잰 것 · 알려진 한계
+
+- **x86_64** — 전부 linux/arm64 에서 쟀다.
+- **실제 TLS 앞단 · 다중 인스턴스 · 운영 DB** — `Secure` 쿠키는 브라우저가 http 에서 거절하는 쪽만 쟀다.
+- **상류 keep-alive 경주** — 「앞단(리버스 프록시)이 지킬 조건」 표의 판정 줄.
+- **정상 종료 중 그리던 pptx 는 그림이 빠진다(알려진 한계).** `docker stop` 이 그리는 중에 오면 그 응답은 200 이지만 그림이
+  전부 실패다(이유 `… Target page, context or browser has been closed`). playwright 가 `SIGTERM` 에 자기가 띄운 브라우저를
+  먼저 닫는다 — 컨테이너 안에서만 `chromium.launch` 에 `handleSIGTERM: false` 를 주자 같은 판이 그림을 다 실었다(실패 0).
+  서버 코드는 고치지 않았다.
+
+---
+
+## 11. 못 잰 것 — **이 문서가 확인하지 않은 것들**
 
 **지어내지 않았다.** 아래는 *"안 해 봤다"*이지 *"안 된다"*가 아니다.
 
 | 무엇 | 사정 |
 |---|---|
-| **리눅스·Windows** | 이 문서의 값은 전부 **macOS · Apple Silicon** 에서 쟀다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
-| **컨테이너의 한글 글꼴** | 「알아 둘 것」 절의 *"없으면 한 장도 안 그린다"*를 **글꼴이 없는 기계에서 재 보지 못했다.** 이 기계에는 있다 |
-| **`Dockerfile`·배포** | **없다.** 배포 절차를 지어내지 않았다. 이미지를 만드는 사람은 **브라우저 바이너리와 한글 글꼴 둘 다** 넣어야 하고, 그 둘이 들었는지 재는 자를 함께 만들어야 한다 |
+| **리눅스·Windows** | 이 문서의 값은 **macOS · Apple Silicon** 에서 쟀다 — 「배포하려면」 절만 리눅스 컨테이너(arm64)다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
+| **배포** | 「배포하려면」 절의 「이 절이 안 잰 것 · 알려진 한계」 |
 | **npm 배포** | 패키지가 전부 `private`이다. `npm i -g wirebound` 같은 길은 **없다** — 「부르는 길이 둘이고」 절이 그래서 두 길을 든다 |
 | **Claude Code 밖의 MCP 호스트** | 「다른 호스트」 절 |
-| **`--with-deps`** | 리눅스에서만 의미가 있어 이 기계에서 안 썼다 |
 | **첫 설치의 내려받기 시간** | 「세우기」 절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
 | **워크트리 셋 이상** | 「워크트리를 여럿 띄울 때」 절의 값은 전부 **워크트리 둘**로 쟀다 |
 | **옛 볼륨을 새 이름으로 옮기기** | **사용자 볼륨으로는 안 돌렸다** — 「옛 볼륨을 새 이름으로 복사한다」 절의 명령은 임시 compose 프로젝트 둘로만 돌려 봤다(복사이지 이동이 아니다) |
-| **`--env-file` 을 뺀 `up -d` 가 무엇을 하는가** | **안 쟀다.** 기본값이 5433 이라 재려면 사용자의 컨테이너가 쓰는 포트를 건드려야 한다. **잰 것은 `docker compose config` 가 그때 5433 을 낸다는 것까지다** |
 | **`SCREEN_CHROMIUM_PATH`의 성공 방향이 게이트에 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. *"옳은 경로를 주면 그 실행 파일로 그린다"*는 **그 스모크를 그 값을 준 기계에서 돌릴 때만** 잰다(배포판 chromium 컨테이너에서 15 통과 — 「배포하려면」 절). 이 기계의 게이트는 그 값을 안 주고 돈다 |
 
 ---
 
-## 11. 더 읽을 것
+## 12. 더 읽을 것
 
 | 하려는 일 | 어디 |
 |---|---|
