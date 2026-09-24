@@ -71,8 +71,8 @@ export function sourceFiles(dir: string = SRC_ROOT, prefix = ''): string[] {
  * `return 이름(…)`으로 부르는 새 호출자를 **조용히 놓친다.**
  */
 export function callSitesByFile(name: string): Map<string, number> {
-  const declaration = new RegExp(`function\\s+${name}\\(`, 'g')
-  const call = new RegExp(`\\b${name}\\(`, 'g')
+  const declaration = new RegExp(`function\\s+${name}\\s*\\(`, 'g')
+  const call = new RegExp(`\\b${name}\\s*\\(`, 'g')
   const found = new Map<string, number>()
   for (const relative of sourceFiles()) {
     const source = stripComments(readFileSync(join(SRC_ROOT, relative), 'utf8')).replace(declaration, '')

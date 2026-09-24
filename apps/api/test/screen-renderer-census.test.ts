@@ -57,7 +57,7 @@ describe('운영이 그리는 자를 실제로 받는가', () => {
   it('`main.ts` 가 그것을 만들어 `buildApp` 에 넘긴다', () => {
     const main = sourceOf('main.ts')
     expect(main).toContain(`screenRenderer: ${FACTORY}(`)
-    expect(main).toMatch(/buildApp\(\{[^}]*screenRenderer/)
+    expect(main).toMatch(/buildApp\s*\(\s*\{[^}]*screenRenderer/)
   })
 
   /**
@@ -138,6 +138,6 @@ describe('순수한 쪽이 오염되지 않았는가', () => {
   it('`exportPptx` 를 부르는 자리는 이미지를 **값으로** 넘긴다 — 그리는 자를 넘기지 않는다', () => {
     const service = sourceOf('services/export-pptx.ts')
     expect(service).toContain('exportPptx(')
-    expect(service).not.toMatch(/exportPptx\(\{[^)]*renderer/)
+    expect(service).not.toMatch(/exportPptx\s*\(\s*\{[^)]*renderer/)
   })
 })

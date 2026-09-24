@@ -74,10 +74,10 @@ const EFFECTFUL_SPECIFIER = new RegExp(
 
 const EFFECTFUL = [
   EFFECTFUL_SPECIFIER,
-  /\bprocess\./,
-  /(?<!io\.)\bfetch\(/,
+  /\bprocess\s*\./,
+  /(?<!\bio\s*\.\s*)\bfetch\s*\(/,
   // 위 머리말의 `console.` 절 — `io`를 안 거치고 표준출력을 만지는 가장 흔한 한 줄이다.
-  /\bconsole\./,
+  /\bconsole\s*\./,
 ]
 
 function sourceFiles(dir: string = SRC, prefix = ''): string[] {

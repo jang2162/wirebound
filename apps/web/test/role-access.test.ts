@@ -31,7 +31,7 @@ function roleReads(): { path: string; line: string }[] {
   const found: { path: string; line: string }[] = []
   for (const [path, source] of Object.entries(SOURCES)) {
     for (const line of stripComments(source).split('\n')) {
-      if (/\.role\b/.test(line)) found.push({ path, line: line.trim() })
+      if (/\.\s*role\b/.test(line)) found.push({ path, line: line.trim() })
     }
   }
   return found
@@ -88,14 +88,14 @@ describe('역할을 읽는 자리', () => {
       'const ok = 1 // project.role 이라고 적어도 코드가 아니다',
     ].join('\n')
 
-    expect(/\.role\b/.test(planted)).toBe(true)
-    expect(/\.role\b/.test(stripComments(planted))).toBe(false)
+    expect(/\.\s*role\b/.test(planted)).toBe(true)
+    expect(/\.\s*role\b/.test(stripComments(planted))).toBe(false)
   })
 
   it('코드에 심은 읽기는 잡는다 — 음성 대조', () => {
     // 반대편. 주석을 걷는 것이 **코드까지** 지우지는 않는지 본다.
     const planted = 'const r = project.role\n// `.role` 을 설명하는 주석'
 
-    expect(/\.role\b/.test(stripComments(planted))).toBe(true)
+    expect(/\.\s*role\b/.test(stripComments(planted))).toBe(true)
   })
 })

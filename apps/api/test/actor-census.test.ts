@@ -223,8 +223,10 @@ const ACTOR_SITES: ActorSite[] = [
 
 /** `actor:` 뒤에 오는 첫 조각 하나를 갈래로. **표와 케이스가 같은 술어를 쓴다.** */
 function classify(head: string): ActorOrigin {
-  if (head === 'requestEventActor(') return 'request-event'
-  if (head === 'requestActor(') return 'request'
+  // 이름과 `(` 사이의 공백을 걷고 비교한다 — 걷은 주석 자리가 공백으로 남는다(`stripComments`).
+  const call = head.replace(/\s+/g, '')
+  if (call === 'requestEventActor(') return 'request-event'
+  if (call === 'requestActor(') return 'request'
   if (head === '{') return 'literal'
   // 대문자로 시작하면 타입 이름이다(`RevisionActor`·`EventActor`). 값이 아니다.
   return /^[A-Z]/.test(head) ? 'type' : 'passthrough'
@@ -235,7 +237,7 @@ function actorSitesByFile(): Map<string, Map<ActorOrigin, number>> {
   const found = new Map<string, Map<ActorOrigin, number>>()
   for (const relative of sourceFiles()) {
     const source = stripComments(readFileSync(`${SRC_ROOT}/${relative}`, 'utf8'))
-    for (const match of source.matchAll(/\bactor:\s*(requestEventActor\(|requestActor\(|\{|[A-Za-z_$][\w$.]*)/g)) {
+    for (const match of source.matchAll(/\bactor:\s*(requestEventActor\s*\(|requestActor\s*\(|\{|[A-Za-z_$][\w$.]*)/g)) {
       const head = match[1]!
       const origin: ActorOrigin = classify(head)
       const byOrigin = found.get(relative) ?? new Map<ActorOrigin, number>()
@@ -285,7 +287,7 @@ describe('actor 를 만드는 자리를 소스에서 센다', () => {
   })
 
   it('술어가 실제로 가른다 — 반대편', () => {
-    const shapes = /\bactor:\s*(requestEventActor\(|requestActor\(|\{|[A-Za-z_$][\w$.]*)/g
+    const shapes = /\bactor:\s*(requestEventActor\s*\(|requestActor\s*\(|\{|[A-Za-z_$][\w$.]*)/g
     const read = (line: string): string | undefined => [...line.matchAll(shapes)][0]?.[1]
     expect(read("actor: { type: 'user', id, label }")).toBe('{')
     expect(read('actor: requestActor(request),')).toBe('requestActor(')

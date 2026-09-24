@@ -365,7 +365,7 @@ describe('삭제 없는 태그', () => {
   })
 
   it('이 파일에 삭제 라우트가 없다', () => {
-    expect(stripComments(SOURCE)).not.toMatch(/app\.delete\s*\(/)
+    expect(stripComments(SOURCE)).not.toMatch(/app\s*\.\s*delete\s*\(/)
   })
 
   /**
@@ -374,7 +374,7 @@ describe('삭제 없는 태그', () => {
    */
   it('owner 가드는 복원 하나에만 걸려 있다', () => {
     const code = stripComments(SOURCE)
-    const guarded = [...code.matchAll(/app\.(get|post|patch|put|delete)\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\('(\w+)'\)/g)]
+    const guarded = [...code.matchAll(/app\s*\.\s*(get|post|patch|put|delete)\s*\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\s*\(\s*'(\w+)'\s*\)/g)]
 
     expect(guarded.filter((match) => match[3] === 'owner').map((match) => match[2])).toEqual([
       '/:projectId/snapshots/:snapshotId/restore',
@@ -389,7 +389,7 @@ describe('삭제 없는 태그', () => {
    */
   it('복원은 POST 하나이고 라우트가 다섯이다', () => {
     const code = stripComments(SOURCE)
-    const routes = [...code.matchAll(/app\.(get|post|patch|put|delete)\(\s*'([^']+)'/g)].map(
+    const routes = [...code.matchAll(/app\s*\.\s*(get|post|patch|put|delete)\s*\(\s*'([^']+)'/g)].map(
       (match) => `${match[1]!.toUpperCase()} ${match[2]}`,
     )
 
@@ -404,7 +404,7 @@ describe('삭제 없는 태그', () => {
 
   it('심으면 잡는다 — 구분력', () => {
     const planted = `${SOURCE}\napp.delete('/:projectId/snapshots/:snapshotId', {}, async () => {})\n`
-    expect(stripComments(planted)).toMatch(/app\.delete\s*\(/)
+    expect(stripComments(planted)).toMatch(/app\s*\.\s*delete\s*\(/)
   })
 
   it('주석 안의 인용은 세지 않는다 — 구분력의 반대편', () => {

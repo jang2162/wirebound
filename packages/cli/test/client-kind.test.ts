@@ -42,7 +42,7 @@ function sourceFiles(dir: string = SRC, prefix = ''): string[] {
 
 /** 소스 글자 하나가 `io.fetch(`를 부르는가. 주석은 파서가 걷는다(`@wirebound/test-support` 의 `stripComments`). */
 function callsFetch(source: string): boolean {
-  return /\bio\.fetch\s*\(/.test(stripComments(source))
+  return /\bio\s*\.\s*fetch\s*\(/.test(stripComments(source))
 }
 
 describe('요청을 내는 자리가 하나다 — 그래서 헤더를 빠뜨릴 수 없다', () => {
@@ -62,8 +62,8 @@ describe('요청을 내는 자리가 하나다 — 그래서 헤더를 빠뜨릴
 
   it('술어가 실제로 가른다 — 반대편', () => {
     // 분모가 0이면 위가 공허하다.
-    expect(/\bio\.fetch\s*\(/.test('return await io.fetch(url, init)')).toBe(true)
-    expect(/\bio\.fetch\s*\(/.test("import type { HttpFetch } from './io'")).toBe(false)
+    expect(/\bio\s*\.\s*fetch\s*\(/.test('return await io.fetch(url, init)')).toBe(true)
+    expect(/\bio\s*\.\s*fetch\s*\(/.test("import type { HttpFetch } from './io'")).toBe(false)
   })
 })
 

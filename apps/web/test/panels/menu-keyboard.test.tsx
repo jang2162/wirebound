@@ -463,7 +463,7 @@ describe('뷰 모드에서는 단축키가 듣지 않는다', () => {
      * 조용히 지나가지 않는 쪽이다. 주석 안의 인용은 `stripComments`가 걷는다.
      */
     const source = stripComments(MENU_TREE_SOURCE)
-    const declared = (source.match(/event\.key === '/g) ?? []).length
+    const declared = (source.match(/event\s*\.\s*key\s*===\s*'/g) ?? []).length
 
     expect(declared, `SHORTCUTS의 조합 수가 바뀌었다: 표 ${declared} vs 케이스 ${SHORTCUT_KEYS.length}`).toBe(
       SHORTCUT_KEYS.length,

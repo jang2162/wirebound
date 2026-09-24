@@ -44,9 +44,9 @@ function filesMatching(root: string, pattern: RegExp): string[] {
 }
 
 /** 판정을 부르는 자리. 선언은 세지 않는다. */
-const CALLS_VERDICT = /\bfindLockConflict\(/
+const CALLS_VERDICT = /\bfindLockConflict\s*\(/
 /** 판정을 **선언**하는 자리. */
-const DECLARES_VERDICT = /export function findLockConflict\(/
+const DECLARES_VERDICT = /export\s+function\s+findLockConflict\s*\(/
 /** 잠금 소유자를 비교하는 자리 — 이것이 흩어지면 *"잠금 소유자는 사람이다"*가 자리 수만큼 다시 판정된다. */
 const COMPARES_OWNER = /\buserId\s*[!=]==/
 /**
@@ -57,11 +57,11 @@ const COMPARES_OWNER = /\buserId\s*[!=]==/
  * 심으면 두 정규식은 **아무것도 죽이지 않는다**(그 변이는 판정만 늘리는 것이 아니라 **동작도
  * 바꾼다**). 이 명제가 그 구멍을 덮는다.
  */
-const READS_LOCK_LIST = /\bliveIn\(/
+const READS_LOCK_LIST = /\bliveIn\s*\(/
 /** 목록을 *"내게 뜻이 있는 것"*으로 좁히는 자리. 이것이 복제되면 소유자 판정이 두 벌이 된다. */
-const NARROWS_BY_OWNER = /\blocksAgainst\(/
+const NARROWS_BY_OWNER = /\blocksAgainst\s*\(/
 /** 화면이 스토어의 잠금 목록을 손에 쥐는 자리. `#state`가 private이라 selector 말고 길이 없다. */
-const SELECTS_LOCK_LIST = /useEditorStore\([^,]+,\s*\(\s*\w+\s*\)\s*=>\s*\w+\.locks\s*\)/
+const SELECTS_LOCK_LIST = /useEditorStore\s*\([^,]+,\s*\(\s*\w+\s*\)\s*=>\s*\w+\s*\.\s*locks\s*\)/
 
 describe('판정은 한 벌이다', () => {
   it('훑을 소스를 실제로 읽는다', () => {
@@ -159,14 +159,14 @@ describe('판정은 한 벌이다', () => {
     const source = stripComments(readFileSync(join(WEB_SRC, 'store/use-locked-by.ts'), 'utf8'))
 
     expect(source).toContain('store.lockedBy')
-    expect(source).not.toMatch(/\bfindNodePath\(|\blocksAgainst\(|\.filter\(/)
+    expect(source).not.toMatch(/\bfindNodePath\s*\(|\blocksAgainst\s*\(|\.\s*filter\s*\(/)
   })
 
   it('검사가 진짜로 무언가를 본다 — 음성 대조', () => {
     // 위 넷이 전부 `[]`를 기대하는 형태이므로, 정규식이 아무것도 안 맞아도 통과할 수 있다.
     // 실제로 맞는 것이 있다는 것을 여기서 본다.
     expect(filesMatching(SCHEMA_SRC, CALLS_VERDICT).length).toBeGreaterThan(0)
-    expect(filesMatching(WEB_SRC, /\bfindNodePath\(/).length).toBeGreaterThan(0)
+    expect(filesMatching(WEB_SRC, /\bfindNodePath\s*\(/).length).toBeGreaterThan(0)
   })
 
   /**
