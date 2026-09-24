@@ -27,6 +27,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from './strip-comments'
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
 
@@ -53,10 +54,6 @@ const ASSEMBLY = [
 /** **부르는 자리만 본다.** 이름을 언급하는 주석은 아래에서 먼저 걷힌다. */
 const CALLS = new RegExp(`(?:^|[^\\w$.])(?:${ASSEMBLY.join('|')})\\s*\\(`)
 
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
-
 function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   const found: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -67,8 +64,13 @@ function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   return found
 }
 
+/** 소스 글자 하나가 조립을 부르는가. 주석은 파서가 걷는다(`./strip-comments.ts`). */
+function callsAssembly(source: string): boolean {
+  return CALLS.test(stripComments(source))
+}
+
 function assembles(relative: string): boolean {
-  return CALLS.test(stripComments(readFileSync(join(SRC, relative), 'utf8')))
+  return callsAssembly(readFileSync(join(SRC, relative), 'utf8'))
 }
 
 describe('조립을 부르는 자리', () => {
@@ -103,6 +105,15 @@ describe('조립을 부르는 자리', () => {
       'ordered.map((page) => pageTargetPath(page.target))',
     ]
     for (const line of caught) expect(line, line).toMatch(CALLS)
+  })
+
+  /**
+   * **주석은 세지 않는다 — 두 쪽 다.** 줄 끝 주석에 이름을 적었다고 부르는 자리가 되면 거짓 빨강이고,
+   * 줄 주석 속 `/*`가 뒤의 JSDoc 까지 코드를 삼키면 진짜 호출이 사라져 거짓 초록이다.
+   */
+  it('주석에 흔들리지 않는다 — 줄 끝 주석은 안 세고, 주석 속 `/*`가 호출을 삼키지 않는다', () => {
+    expect(callsAssembly('const note = 1 // pageView( 는 read/ 가 부른다')).toBe(false)
+    expect(callsAssembly('// 글롭 예: src/*\nconst view = pageView(input)\n/** 문서 */\nconst after = 2')).toBe(true)
   })
 
   it('언급과 남의 메서드는 안 잡는다 — 반대편', () => {

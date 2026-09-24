@@ -24,14 +24,11 @@ import { CLIENT_KIND_HEADER, callApi, callApiBytes } from '../src/client'
 import { CliError } from '../src/exit'
 import { run } from '../src/run'
 import { createFakeIo, stub, type FakeIo } from './fake-io'
+import { stripComments } from './strip-comments'
 
 const SERVER = 'https://wb.example.com'
 const PROJECT = 'prj_a1b2'
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
 
 function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   const found: string[] = []
@@ -43,12 +40,24 @@ function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   return found
 }
 
+/** 소스 글자 하나가 `io.fetch(`를 부르는가. 주석은 파서가 걷는다(`./strip-comments.ts`). */
+function callsFetch(source: string): boolean {
+  return /\bio\.fetch\s*\(/.test(stripComments(source))
+}
+
 describe('요청을 내는 자리가 하나다 — 그래서 헤더를 빠뜨릴 수 없다', () => {
   it('`io.fetch(` 를 부르는 파일이 `client.ts` 하나다', () => {
-    const callers = sourceFiles().filter((file) =>
-      /\bio\.fetch\s*\(/.test(stripComments(readFileSync(join(SRC, file), 'utf8'))),
-    )
+    const callers = sourceFiles().filter((file) => callsFetch(readFileSync(join(SRC, file), 'utf8')))
     expect(callers).toEqual(['client.ts'])
+  })
+
+  /**
+   * **주석은 세지 않는다 — 두 쪽 다.** 줄 끝 주석의 언급을 세면 거짓 빨강이고, 줄 주석 속 `/*`가 뒤의
+   * JSDoc 까지 코드를 삼키면 `client.ts` 밖의 진짜 호출이 사라져 거짓 초록이다.
+   */
+  it('주석에 흔들리지 않는다 — 줄 끝 주석은 안 세고, 주석 속 `/*`가 호출을 삼키지 않는다', () => {
+    expect(callsFetch('const note = 0 // 요청은 io.fetch( 가 아니라 callApi 로 낸다')).toBe(false)
+    expect(callsFetch("// 글롭 예: src/*\nconst res = io.fetch('x')\n/** 문서 */\nconst after = 2")).toBe(true)
   })
 
   it('술어가 실제로 가른다 — 반대편', () => {
