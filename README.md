@@ -872,10 +872,11 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 - **`pnpm test:build`는 시작할 때 패키지를 다시 빌드한다**(`vitest.config.ts`가 *"tsdown 재빌드를 `beforeAll`에서 돈다"*고 적는다). 그래서 넷 중 이것만 다른 셋과 결이 다르다 — 이미 빌드된 자리에서도 **10초 남짓** 든다(`time pnpm test:build` 로 잰다).
 - 파일 하나만 돌리려면 `pnpm vitest run <경로>`, api 만 돌리려면 `pnpm vitest run --project api`.
 
-> **브라우저가 없을 때 `test:build`가 찍는 줄은 `npx playwright install chromium`을 권한다.**
-> **그 명령을 쓰지 마라** — 이 저장소는 `playwright` 패키지를 일부러 안 들인다(그것이 브라우저를
-> 내려받는 postinstall 을 달고 온다). 브라우저를 넣는 자리는 **「넣는 법」** 절 하나다. 그 안내 문구
-> (`apps/api/build-test/screen-chromium.test.ts`)가 이 길과 어긋나 있다 — 문구를 믿지 말고 「넣는 법」 절을 따른다.
+> **브라우저가 없을 때 `test:build`가 찍는 줄은 「넣는 법」 절의 명령을 권한다.** 그 스모크
+> (`apps/api/build-test/screen-chromium.test.ts`)는 **브라우저를 실제로 띄워 보고** 안 뜨면 건너뛴다 — `--only-shell` 만
+> 넣은 기계에서도 돈다. **`SCREEN_CHROMIUM_PATH`는 안 본다** — playwright-core 캐시의 브라우저로만 돈다(그 값은 서버만
+> 쓴다 — 「기계에 이미 있는 브라우저를 쓰기」 절). `npx playwright install` 은 쓰지 마라 — 이 저장소는 `playwright`
+> 패키지를 일부러 안 들인다(그것이 브라우저를 내려받는 postinstall 을 달고 온다).
 
 ---
 
