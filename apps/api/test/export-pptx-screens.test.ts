@@ -10,9 +10,11 @@
  *
  * **여기서 브라우저를 안 띄운다**. 이음매에 가짜를 넣어 재고, 진짜는 게이트 밖에서 돈다.
  */
+import { readFileSync } from 'node:fs'
 import { unzipSync } from 'fflate'
 import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
+import { SCREEN_FAILURES_HEADER, SCREENLESS_HEADER } from '../src/routes/export'
 import { SCREEN_PATH_FAILED } from '../src/services/export-pptx'
 import { NO_KOREAN_FONT, type ScreenBatch, type ScreenRenderer, type ScreenRequest, type ScreenResult } from '../src/services/screen-render'
 import { createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
@@ -152,6 +154,70 @@ function mediaPaths(entries: Record<string, Uint8Array>): string[] {
 function slideText(entries: Record<string, Uint8Array>, index: number): string {
   return new TextDecoder().decode(entries[`ppt/slides/slide${index}.xml`]!)
 }
+
+async function downloadHeaders(ctx: TestContext, fixture: Fixture, format = 'pptx'): Promise<Record<string, unknown>> {
+  const res = await ctx.app.inject({
+    method: 'GET',
+    url: `/api/projects/${fixture.projectId}/export?format=${format}`,
+    cookies: fixture.cookie,
+  })
+  if (res.statusCode !== 200) throw new Error(`내려받기 실패 (${res.statusCode}): ${res.body}`)
+  return res.headers
+}
+
+/**
+ * **파일 응답의 머리가 화면 이미지의 수를 말한다**(`routes/export.ts`의 `SCREEN_FAILURES_HEADER`) — 미리보기를 안 부르는
+ * `wireb export`가 그림이 빠진 pptx 를 조용히 받지 않게 하는 자리다. 이유는 미리보기가 갖는다(위 케이스들).
+ */
+describe('내려받기 응답 머리 — 화면 이미지의 수', () => {
+  it('일부 실패면 실패 수 · 전부 성공이면 0 · 그리는 자가 없으면 screenless 수 · html 에는 없다', async () => {
+    const partial = new FakeRenderer((requests) => ({
+      results: requests.map((request, index) => (index === 1 ? fail('페이지가 응답하지 않습니다') : ok())),
+      fontWarning: null,
+    }))
+    await withApi(
+      async (ctx) => {
+        const fixture = await 설계서(ctx, 'screens-header-partial')
+        const headers = await downloadHeaders(ctx, fixture)
+        expect([headers[SCREEN_FAILURES_HEADER], headers[SCREENLESS_HEADER]]).toEqual(['1', '0'])
+        // html 에는 화면이 없다 — 머리를 안 싣는다.
+        const html = await downloadHeaders(ctx, fixture, 'html')
+        expect([html[SCREEN_FAILURES_HEADER], html[SCREENLESS_HEADER]]).toEqual([undefined, undefined])
+      },
+      { screenRenderer: partial },
+    )
+    await withApi(
+      async (ctx) => {
+        const headers = await downloadHeaders(ctx, await 설계서(ctx, 'screens-header-ok'))
+        expect([headers[SCREEN_FAILURES_HEADER], headers[SCREENLESS_HEADER]]).toEqual(['0', '0'])
+      },
+      { screenRenderer: allOk() },
+    )
+    await withApi(async (ctx) => {
+      const headers = await downloadHeaders(ctx, await 설계서(ctx, 'screens-header-absent'))
+      expect([headers[SCREEN_FAILURES_HEADER], headers[SCREENLESS_HEADER]]).toEqual(['0', '3'])
+    })
+  })
+
+  /**
+   * **`packages/cli`가 읽는 이름과 같은 글자다.** 앱과 패키지는 서로를 import 하지 않으므로(`CLAUDE.md`) 두 소스의 선언 줄을
+   * 읽어 맞댄다 — `actor-census.test.ts`의 «헤더 이름이 `packages/cli` 와 같은 글자다»와 같은 자세다. **줄 머리에 선
+   * `export const 이름 = '…'`만 선언으로 본다** — 블록 주석의 줄은 `*`로 시작하고 줄 주석은 `//`로 시작해 걸리지 않는다. 한
+   * 파일에 같은 이름의 선언이 둘이 아니면(0 이거나 여럿) 죽는다. 다른 꼴(템플릿 · 이어 붙이기)로 선언하면 여기서 죽는다 —
+   * 이 자가 못 보는 것은 값이 **어디서 쓰이는지**다(쓰는 자리는 두 쪽의 값 케이스가 잰다).
+   */
+  it('머리 이름이 packages/cli 와 같은 글자다', () => {
+    const declared = (path: URL, name: string): string[] =>
+      [...readFileSync(path, 'utf8').matchAll(new RegExp(`^export const ${name} = '([^']+)'$`, 'gm'))].map((match) => match[1]!)
+    const cli = new URL('../../../packages/cli/src/commands/export.ts', import.meta.url)
+    const api = new URL('../src/routes/export.ts', import.meta.url)
+    for (const name of ['SCREEN_FAILURES_HEADER', 'SCREENLESS_HEADER']) {
+      const mine = declared(api, name)
+      expect(mine, `apps/api/src/routes/export.ts 의 ${name}`).toHaveLength(1)
+      expect(declared(cli, name), `packages/cli/src/commands/export.ts 의 ${name}`).toEqual(mine)
+    }
+  })
+})
 
 describe('화면 이미지 — 전부 성공', () => {
   it('페이지마다 매체 파트가 하나씩 실리고 바이트가 그대로다', async () => {

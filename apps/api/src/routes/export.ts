@@ -124,6 +124,18 @@ const EXPORT_FORMATS = ['html', 'pptx'] as const
 
 type ExportFormat = (typeof EXPORT_FORMATS)[number]
 
+/**
+ * **pptx 파일 응답이 화면 이미지의 수를 머리에 싣는다** — 그리려다 실패한 장(`screenFailures`)과 아무도 안 그린 장
+ * (`screenless`)의 수. 이유는 미리보기가 말하고 여기는 **수만** 싣는다(머리는 ByteString 이라 한국어 이유를 못 싣는다).
+ *
+ * 파일만 받는 쪽(`wireb export`)은 미리보기를 안 부르므로 그림이 빠진 pptx 를 **조용히 성공으로** 받는다. 그것을 말하게 하는
+ * 길이 둘인데 — 클라이언트가 미리보기를 함께 부르면 브라우저를 두 번 띄우고(미리보기도 같은 판정으로 그린다), 본문에 이유를
+ * 실으면 파일 형식이 바뀐다 — 머리는 **본문을 안 건드린다.** 늘 싣는다(0 도) — 받는 쪽이 «0 장»과 «이 머리를 모르는 서버»를
+ * 가른다. `packages/cli/src/commands/export.ts`에 같은 글자가 있고 `test/export-pptx-screens.test.ts`가 두 소스를 맞댄다.
+ */
+export const SCREEN_FAILURES_HEADER = 'x-wb-screen-failures'
+export const SCREENLESS_HEADER = 'x-wb-screenless'
+
 /** **기본은 `html`이다** — 형식 인자 없이 부르는 URL은 zip을 받는 것이 계약이다. */
 const FormatQuery = z.object({ format: z.enum(EXPORT_FORMATS).default('html') })
 
@@ -156,12 +168,13 @@ async function orFail<T>(build: () => Promise<T>): Promise<T> {
 function buildHtmlOrFail(
   app: FastifyInstance,
   workers: ExportWorkerPool,
+  request: FastifyRequest,
   projectId: string,
   zipRoot: string | null,
   signal: AbortSignal,
 ): Promise<HtmlJobResult> {
   return orFail(() =>
-    admitted(workers, async (admission) => {
+    admitted(workers, request, async (admission) => {
       const rows = await readExportRows(app.db, projectId)
       const { themeId, theme } = await currentProjectTheme(app.db, projectId)
       return workers.runHtml(rows, { kind: 'html', theme: { themeId, theme }, zipRoot }, { signal, admission })
@@ -176,13 +189,14 @@ function buildHtmlOrFail(
 function buildPptxOrFail(
   app: FastifyInstance,
   workers: ExportWorkerPool,
+  request: FastifyRequest,
   projectId: string,
   renderer: ScreenRenderer | undefined,
   zip: boolean,
   signal: AbortSignal,
 ): Promise<PptxJobResult> {
   return orFail(() =>
-    admitted(workers, async (admission) => {
+    admitted(workers, request, async (admission) => {
       const rows = await readExportRows(app.db, projectId)
       const screenTheme = renderer === undefined ? null : await readScreenTheme(app.db, projectId)
       return workers.runPptx(
@@ -197,9 +211,19 @@ function buildPptxOrFail(
 /**
  * **읽기 전에 자리를 잡는다** — 떠 있는 일이 차면 `ExportBusyError`(→ 503)로 곧바로 거절해 36MB 를 읽지 않는다
  * (`services/export-worker.ts`의 «줄은 길이로 묶는다»). 일을 넘기기 전에 던지면 여기서 자리를 내놓는다.
+ *
+ * **자리의 임자는 요청한 사람이다**(같은 파일의 «한 사람이 줄을 다 쥐지 않는다») — 세션이면 그 사용자, 토큰이면 그 토큰의
+ * 사용자다(`auth/plugin.ts`가 `currentUser`를 채운다). 토큰마다 세지 않는 것은 사람이 토큰을 더 만들어 한도를 넘지 않게다.
  */
-async function admitted<T>(workers: ExportWorkerPool, build: (admission: ExportAdmission) => Promise<T>): Promise<T> {
-  const admission = workers.admit()
+async function admitted<T>(
+  workers: ExportWorkerPool,
+  request: FastifyRequest,
+  build: (admission: ExportAdmission) => Promise<T>,
+): Promise<T> {
+  // `projectGuard`를 지난 요청이라 늘 있다 — 없으면 가드를 안 건 라우트가 부른 것이다(프로그래밍 오류).
+  const person = request.currentUser?.id
+  if (person === undefined) throw new Error('내보내기의 자리는 projectGuard 를 지난 요청에서만 잡는다')
+  const admission = workers.admit(person)
   try {
     return await build(admission)
   } finally {
@@ -292,7 +316,7 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
       const signal = abortOnClientGone(request, reply)
 
       if (format === 'pptx') {
-        const pptx = await buildPptxOrFail(app, workers, projectId, screenRenderer, false, signal)
+        const pptx = await buildPptxOrFail(app, workers, request, projectId, screenRenderer, false, signal)
         return {
           format,
           pages: pptx.pages,
@@ -310,7 +334,7 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
         }
       }
 
-      const bundle = await buildHtmlOrFail(app, workers, projectId, null, signal)
+      const bundle = await buildHtmlOrFail(app, workers, request, projectId, null, signal)
 
       return {
         format,
@@ -346,11 +370,13 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
       if (format === 'pptx') {
         // **뿌리 폴더가 없다** — 워커가 `zipParts`로 묶는다(`services/export-job.ts`). `[Content_Types].xml`이 패키지
         // 뿌리에 있어야 하고, 폴더 하나를 씌우면 받는 쪽이 그것을 못 찾아 **파일이 통째로 안 열린다.**
-        const pptx = await buildPptxOrFail(app, workers, projectId, screenRenderer, true, signal)
+        const pptx = await buildPptxOrFail(app, workers, request, projectId, screenRenderer, true, signal)
+        reply.header(SCREEN_FAILURES_HEADER, String(pptx.screenFailures.length))
+        reply.header(SCREENLESS_HEADER, String(pptx.screenless.length))
         return sendFile(reply, pptx.zip!, PPTX_CONTENT_TYPE, pptxFileName(slug))
       }
 
-      const bundle = await buildHtmlOrFail(app, workers, projectId, bundleRootDirectory(slug), signal)
+      const bundle = await buildHtmlOrFail(app, workers, request, projectId, bundleRootDirectory(slug), signal)
       return sendFile(reply, bundle.zip!, 'application/zip', bundleFileName(slug))
     }))
   }
