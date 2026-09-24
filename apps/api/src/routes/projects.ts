@@ -9,6 +9,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { withTransaction } from '../db/tx'
+import { lockOwnerIds } from '../repos/members'
 import { lockProjectPages } from '../repos/pages'
 import { conflict, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
@@ -160,8 +161,13 @@ export function projectRoutes() {
         // 다른 순서도 이 대가를 못 피한다 — 프로젝트 행을 먼저 지우고 CASCADE 에서 페이지를 기다리면
         // **같은 것이 같은 답으로 서고** 메뉴 수정까지 선다(CASCADE 가 메뉴 행을 페이지보다 먼저 지운다). 페이지만
         // 먼저 잡으면 안 서지만 — 대신 201 로 만든 것이 곧 CASCADE 로 사라진다.
+        //
+        // **owner 행은 페이지 뒤 · 재확인 앞이다**(`repos/members.ts`의 `lockOwnerIds` — 멤버 쓰기와 같은 함수 · 같은 순서). 재확인이 쥐는
+        // 삭제자 행과 CASCADE 가 지우는 멤버 행이 멤버 쓰기와 고리를 만들지 않게 한다(재는 자: `test/guard-in-lock.test.ts`의 «E12»).
+        // 페이지 **뒤**인 까닭은 위 «페이지를 CASCADE 보다 먼저» 그대로다 — 페이지를 기다리는 동안 쥐면 역할 변경이 이 삭제를 기다린다.
         await lockProjectRow(trx, projectId)
         await lockProjectPages(trx, projectId)
+        await lockOwnerIds(trx, projectId)
         await recheckProjectRole(trx, request)
         await deleteProject(trx, projectId)
       })

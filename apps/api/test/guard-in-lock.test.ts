@@ -30,7 +30,7 @@
  * # 잠금 순서 — 재확인이 연 교착
  *
  * 프로젝트 삭제는 재확인을 위해 기다릴 것을 먼저 잡으므로 잠금 순서가 있다. 아래 `잠금 순서` 절이 그 순서가
- * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
+ * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 삭제가 owner 행을 멤버 쓰기와 같은 순서로 재확인 앞에서 잡는지를 한 판(E12)으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
  * 삭제의 CASCADE 와 고리를 안 만드는지(프로젝트 행 → 자기 행 → 멤버 행)를 아홉 판(E3–E11)으로, 코멘트 수정이 코멘트 행을
  * 지우는 두 쓰기 · 역할 변경과 3자 고리를 안 만드는지(프로젝트 행 → 페이지 행 → 멤버 행 → 코멘트 행)를 두 판(F3 · F3′)으로 잰다.
  */
@@ -838,7 +838,8 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
     })
     let updated = false
     const holder = withTransaction(db, async (trx) => {
-      const member = await updateMemberRole(trx, fx.projectId, fx.bob.user.id, 'viewer')
+      // 요청한 사람이 없는 픽스처라 권한은 다시 보지 않는다 — 이 판이 재는 것은 강등이 커밋 전인 동안의 남의 쓰기다.
+      const member = await updateMemberRole(trx, fx.projectId, fx.bob.user.id, 'viewer', async () => {})
       if (member?.role !== 'viewer') throw new Error('역할 변경 픽스처 실패')
       updated = true
       if (!(await decision)) throw new RollbackRoleChange()
@@ -1030,6 +1031,56 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
       expect(changed.status, changed.body).toBe(200)
       expect(removed.status, removed.body).toBe(204)
       expect(await deadlockCount()).toBe(deadlocksBefore)
+    })
+  }, 60_000)
+
+  /**
+   * **E12 — 나중에 들어온 owner 가 지우고 먼저 들어온 owner 가 멤버를 쓴다.** 삭제는 재확인에서 삭제자(밥)의 멤버 행을 `FOR SHARE`로
+   * 쥐고 CASCADE 에서 멤버 행 전부를 지운다. 역할 변경이 owner 행을 넣은 순서로(앨리스 → 밥) 잡으면 앨리스 행을 쥔 채 밥 행에 서고,
+   * CASCADE 는 그 앨리스 행에 서서 고리다. 판을 세우는 문: 밥의 멤버 행을 테스트 트랜잭션이 `FOR UPDATE`로 쥔 채 삭제를 먼저, 역할
+   * 변경을 다음에 그 행에 줄 세우고 푼다(줄의 머리가 삭제다). 삭제가 owner 행을 멤버 쓰기와 같은 순서로 재확인 **앞에서** 잡으면
+   * 둘 중 하나가 아무것도 안 쥔 채 선다(`repos/members.ts`의 `lockOwnerIds`). 문은 SQL 로 직접 잡는다 — 줄을 세우는 문일 뿐 재는 대상이
+   * 아니다(`FOR SHARE`로는 재확인과 호환이라 삭제가 문 앞에 안 선다). 혼자 죽는 변조: 삭제가 `lockOwnerIds`를 안 부른다
+   * (`routes/projects.ts`) — 교착 +1 · 한쪽 500.
+   */
+  it('E12 — 나중 owner 의 삭제와 먼저 owner 의 역할 변경을 겹치면: 삭제 204 · 역할 변경 404 · 교착 0', async () => {
+    await withRealApi(async (ctx) => {
+      const alice = await signup(ctx)
+      const bob = await signup(ctx)
+      const carol = await signup(ctx)
+      const project = await createProject(ctx, alice.cookie)
+      await addMember(ctx, project.id, bob.user.id, 'owner')
+      await addMember(ctx, project.id, carol.user.id, 'editor')
+      const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
+      await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
+
+      const deadlocksBefore = await deadlockCount()
+      const door = queueLock(async (trx) => {
+        await sql`select 1 from project_members where project_id = ${project.id} and user_id = ${bob.user.id} for update`.execute(trx)
+      })
+      await door.acquired
+      let removal: Fired | undefined
+      let roleChange: Fired | undefined
+      try {
+        removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${project.id}`, cookies: bob.cookie }))
+        await waitForLockWaiter(1)
+        roleChange = track(
+          ctx.app.inject({
+            method: 'PATCH',
+            url: `/api/projects/${project.id}/members/${carol.user.id}`,
+            cookies: alice.cookie,
+            payload: { role: 'viewer' },
+          }),
+        )
+        await waitForLockWaiter(2)
+      } finally {
+        await door.release()
+      }
+      const [removed, changed] = await Promise.all([removal.promise, roleChange.promise])
+
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect(removed.status, removed.body).toBe(204)
+      expect(changed.status, changed.body).toBe(404)
     })
   }, 60_000)
 

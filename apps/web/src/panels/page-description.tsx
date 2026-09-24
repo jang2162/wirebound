@@ -275,7 +275,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import { judgeMeta, metaConflict } from '../api/page-meta'
 import { MetaConflict, metaConflictSentence } from './meta-conflict'
 import { lockSlot, slotsOf, usePanelLock, usePanelSlot, type PanelLock } from './panel-drafts'
-import { PendingNotice } from './pending-notice'
+import { MissedNotice, PendingNotice } from './pending-notice'
 import type { WriteConclusion } from './write-ledger'
 
 /** 이 모듈의 칸을 선언한다 — 같은 모듈이 다시 불리면(HMR) 같은 칸을 돌려준다(`panel-drafts.tsx`의 `slotsOf`). */
@@ -725,11 +725,13 @@ export function PageDescriptionPanel(props: {
     return <p className="wb-shell-panel-notice" role="alert">{state.failure.message}</p>
   }
 
-  // **viewer 는 읽는다**(머리말 «viewer 에게는 읽기 전용이다»). 상자·단추가 없으므로 초안·통지도 그리지 않는다.
+  // **viewer 는 읽는다**(머리말 «viewer 에게는 읽기 전용이다»). 상자·단추가 없으므로 초안·통지도 그리지 않는다 — **장부가 남긴 결말만은
+  // 말한다**(`MissedNotice` — 저장이 나가 있는 동안 제자리에서 강등되면 그 결말을 볼 자리가 여기뿐이다).
   if (!canEdit) {
     return (
       <>
         <h2 className="wb-shell-panel-title">{state.title}</h2>
+        <MissedNotice lock={saving} />
         {state.description === null || state.description === '' ? (
           <p className="wb-shell-panel-notice">{NO_DESCRIPTION}</p>
         ) : (

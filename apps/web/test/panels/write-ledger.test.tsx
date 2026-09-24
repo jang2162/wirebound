@@ -2357,7 +2357,7 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
    * 같은 페이지의 **다른 탭**에 가 있는 동안 설명 저장이 실패하면 — provider 는 그 페이지를 보고 있지만 설명 본문은 내려가 있다. 돌아온
    * 본문은 마운트에서 지난 통지를 지우므로, 장부가 남기지 않으면 통지 0 이다. 머리는 «이 탭을 떠나 있는 동안»이다.
    *
-   * 혼자 죽는 변조: `PendingNotice`가 `stayed`를 안 보고 늘 «이 페이지를 떠나 있는 동안»을 쓴다. (`panel-drafts.tsx`의 `draws`를 늘 참으로
+   * 혼자 죽는 변조: `MissedNotice`가 `'tab'`을 안 가르고 «이 페이지를 떠나 있는 동안»을 쓴다. (`panel-drafts.tsx`의 `draws`를 늘 참으로
    * 하면 이것과 아래 충돌 케이스가 **함께** 죽는다 — 그 축의 주인은 이것이다.)
    */
   it('설명 — 같은 페이지의 다른 탭에 가 있는 동안 저장이 실패하면 돌아온 설명 탭이 «이 탭을 떠나 있는 동안 …»으로 말한다', async () => {
@@ -2413,7 +2413,7 @@ describe('판정으로 끝난 쓰기도 전한다 — 받는 자리가 그 결�
  * 값은 [jsdom]이다 — 실브라우저에서 잰 값이 아니다.
  */
 describe('그리는 갈래가 없는 동안 끝난 결말 — 강등된 viewer 갈래', () => {
-  const STAYED = '이 탭을 떠나 있는 동안 저장하지 못했습니다'
+  const HERE = '저장하지 못했습니다'
   const SERVER_ERROR = '서버 오류가 발생했습니다'
   const MEMBERSHIP = { type: 'membership-changed', projectId: PROJECT_ID }
 
@@ -2466,35 +2466,58 @@ describe('그리는 갈래가 없는 동안 끝난 결말 — 강등된 viewer �
   }
 
   /**
+   * 설명 — **제자리에서** viewer 로 강등된 동안 저장이 실패한다. 떠난 적이 없으니 머리는 «떠나 있는 동안»이 아니고, viewer 인 채로도 그
+   * 자리에서 말한다(승격을 기다리면 끝내 아무도 못 본다). 혼자 죽는 변조 둘: 설명의 viewer 갈래가 `MissedNotice`를 안 둔다 · 장부가
+   * `hosts`를 안 보고 «본문째 내려갔다»(`'tab'`)로 남긴다.
+   */
+  it('설명 — 제자리에서 viewer 로 강등된 동안 끝난 저장 실패는 viewer 갈래가 곧바로 말한다 — «떠나 있는 동안»이 아니다', async () => {
+    const { server } = await descriptionDemoted()
+    await server.fail(0, new ApiError(500, 'internal', SERVER_ERROR))
+    await waitFor(() => expect(screen.getAllByRole('alert').map((el) => el.textContent)).toEqual([`${HERE} — ${SERVER_ERROR}`]))
+  })
+
+  /** 코멘트 — 같은 판. 혼자 죽는 변조: 코멘트의 폼 밖(`!canEdit`)이 `MissedNotice`를 안 둔다(`hosts` 변조는 위 설명 케이스와 함께 죽는다). */
+  it('코멘트 — 제자리에서 viewer 로 강등된 동안 끝난 게시 실패는 폼 없는 갈래가 곧바로 말한다 — «떠나 있는 동안»이 아니다', async () => {
+    const { fail } = await commentDemoted()
+    await fail()
+    await waitFor(() => expect(screen.getAllByRole('alert').map((el) => el.textContent)).toEqual([`${HERE} — ${SERVER_ERROR}`]))
+  })
+
+  /**
    * 설명 — viewer 동안 저장이 실패하고, viewer 인 채 탭을 한 번 오간 뒤 승격 → 돌아온 폼이 말한다. 장부가 안 남기면 통지 0 이다(Chrome 에서도 같다).
+   * 머리는 위 «제자리에서» 케이스가 소유한다(끝난 순간 제자리였다 — 그 뒤 탭을 오갔어도 같다).
    *
-   * 혼자 죽는 변조: 설명의 viewer 갈래도 `PendingNotice`를 그린다(= 그 갈래를 «그린다»로 센다).
+   * **혼자 죽는 변조는 없다** — 이 판은 두 축이 겹친 자리다. viewer 갈래의 `MissedNotice`가 내려가며 남긴 결말을 지우면(«보였으니 다
+   * 말했다») 아래 «제자리에서 다시 editor 가 되면 한 번만 말한다»와 함께 죽고(승격도 그 갈래를 내린다), 설명의 viewer 갈래도
+   * `PendingNotice`를 그리면(= 그 갈래를 «그린다»로 세면) 위 «제자리에서» 케이스와 함께 죽는다.
    */
   it('설명 — viewer 로 강등된 동안 끝난 저장 실패는 탭을 오가도 남아, 다시 editor 가 되면 말한다', async () => {
     const { server, setRole } = await descriptionDemoted()
     await server.fail(0, new ApiError(500, 'internal', SERVER_ERROR))
-    expect(screen.queryByRole('alert')).toBeNull()
     // viewer 인 채 탭을 한 번 오간다 — 돌아온 본문의 마운트가 칸의 지난 통지를 지운다.
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
     fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
 
     setRole('editor')
     await waitFor(() => expect(box().disabled).toBe(false))
-    expect(screen.getAllByRole('alert').map((el) => el.textContent)).toEqual([`${STAYED} — ${SERVER_ERROR}`])
+    expect(screen.getAllByRole('alert').map((el) => el.textContent)).toEqual([`${HERE} — ${SERVER_ERROR}`])
   })
 
-  /** 코멘트 — 같은 판(장부가 안 남기면 통지 0 — Chrome 에서도 같다). 혼자 죽는 변조: 코멘트의 폼이 없는 갈래(viewer)도 `PendingNotice`를 그린다. */
+  /**
+   * 코멘트 — 같은 판(장부가 안 남기면 통지 0 — Chrome 에서도 같다). 혼자 죽는 변조는 없다 — 위 설명 케이스와 같은 두 축이 겹친다(폼
+   * 밖의 `MissedNotice`가 내려가며 지우면 코멘트의 «한 번만 말한다»와, 폼이 없는 갈래도 `PendingNotice`를 그리면 «제자리에서» 코멘트
+   * 케이스와 함께 죽는다).
+   */
   it('코멘트 — viewer 로 강등된 동안 끝난 게시 실패는 탭을 오가도 남아, 다시 editor 가 되면 말한다', async () => {
     const { fail, setRole } = await commentDemoted()
     await fail()
-    expect(screen.queryByRole('alert')).toBeNull()
     // viewer 인 채 탭을 한 번 오간다(편집 모드 — 옆 탭은 «상호작용»).
     fireEvent.click(screen.getByRole('tab', { name: '상호작용' }))
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
 
     setRole('editor')
     await waitFor(() => expect(commentBox().disabled).toBe(false))
-    expect(screen.getAllByRole('alert').map((el) => el.textContent)).toEqual([`${STAYED} — ${SERVER_ERROR}`])
+    expect(screen.getAllByRole('alert').map((el) => el.textContent)).toEqual([`${HERE} — ${SERVER_ERROR}`])
   })
 
   /**

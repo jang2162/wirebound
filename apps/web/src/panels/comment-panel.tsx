@@ -153,7 +153,7 @@ import { useRealtimeSetup } from '../realtime/context'
 import { useSessionUser } from '../session/session-context'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { lockSlot, slotsOf, usePanelLock, usePanelSlot } from './panel-drafts'
-import { PendingNotice } from './pending-notice'
+import { MissedNotice, PendingNotice } from './pending-notice'
 
 /** 이 모듈의 칸을 선언한다 — 같은 모듈이 다시 불리면(HMR) 같은 칸을 돌려준다(`panel-drafts.tsx`의 `slotsOf`). */
 const slot = slotsOf(import.meta.url)
@@ -994,7 +994,9 @@ export function CommentPanel(props: {
     <div className="wb-shell-comments">
       {/* **폼째 뺀다**(`canEdit`). 폼 안의 통지(실패 · 확인 중 · 어긋남)도 함께 가는데, 그것들은 전부 **내가 낸 쓰기**의
           뒷말이다. viewer 가 쓰기를 못 내는 것은 폼만의 일이 아니다 — 줄마다의 수정 상자도 `editing`(위)이 막아야 참이다.
-          막지 않으면 저장소에서 되살아난 수정 상자가 폼 **밖**에서 쓰기를 내고, 그 실패가 설 자리는 뺀 폼 안이다. */}
+          막지 않으면 저장소에서 되살아난 수정 상자가 폼 **밖**에서 쓰기를 내고, 그 실패가 설 자리는 뺀 폼 안이다.
+          **장부가 남긴 결말만은 폼 밖에서도 말한다**(`MissedNotice` — 게시가 나가 있는 동안 제자리에서 강등되면 볼 자리가 여기뿐이다). */}
+      {!props.canEdit && <MissedNotice lock={busyLock} />}
       {props.canEdit && (
         <form
           className="wb-shell-comment-form"

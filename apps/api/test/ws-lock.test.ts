@@ -508,6 +508,9 @@ describe('획득 거절', () => {
   /**
    * **판정과 잡기는 같은 틱이다**(`ws/lock.ts`). 셋째 사람의 잠금을 같은 페이지에 두어 두 요청이 모두 문서를 읽게 하고, 둘을 문
    * 앞에 세웠다가 함께 연다. 혼자 죽는 변조: 문서를 읽고 판정한 뒤 잡기 전에 await 가 하나 더 있다.
+   *
+   * **«문서는 행을 다시 잡지 않고 읽는다»도 이 케이스가 소유한다** — 둘이 페이지 행을 `KEY SHARE`로 함께 쥐는 판이라, `readSelectionRoot`가
+   * 행을 `FOR UPDATE`로 다시 잡으면(`lockPageForEdit`) 서로 올리려다 교착(40P01)이고 진 쪽은 서지도 거절받지도 않는다.
    */
   it('두 사람이 같은 자리를 함께 요청해도 하나만 선다 — 다른 쪽은 거절된다', async () => {
     await withRealApi(async (ctx) => {
@@ -594,10 +597,43 @@ describe('잠금 목록은 보내는 순간 짓는다', () => {
   }, 30_000)
 })
 
+/** 조건이 설 때까지 — 안 서면 던진다(시나리오가 성립하지 않았다). */
+async function until(label: string, ready: () => Promise<boolean> | boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await ready()) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`${label} — 시나리오가 성립하지 않았습니다`)
+}
+
+/** 트랜잭션 하나를 열어 잠금을 쥐고, `release`까지 쥔 채 둔다. */
+function holdInTransaction(take: (trx: DbHandle) => Promise<unknown>): { acquired: Promise<void>; release: () => Promise<void> } {
+  let acquire = (): void => {}
+  let free = (): void => {}
+  const acquired = new Promise<void>((resolve) => (acquire = resolve))
+  const freed = new Promise<void>((resolve) => (free = resolve))
+  const done = getTestDb()
+    .transaction()
+    .execute(async (trx) => {
+      await take(trx)
+      acquire()
+      await freed
+    })
+  return {
+    acquired,
+    release: async () => {
+      free()
+      await done
+    },
+  }
+}
+
 /**
  * **편집 커밋과 잠금 획득은 페이지 행 하나에 줄 선다**(`lock/check.ts`의 «판정은 페이지 행 안에서»). 보라가 쥔 `n_c`를 `n_b` 안으로
  * 옮기는 편집(들여쓰기)과 다혜의 `lock n_b`가 겹치는 판. 다혜의 `lock`은 같은 페이지에 보라의 잠금이 있어 **문서 조회 경로**다. 둘을
  * 함께 세우는 점이 없으면 편집이 판정을 지난 뒤 커밋 전에 다혜가 커밋 **전** 문서로 판정되어 서고, 커밋이 `n_c`를 그 안에 넣는다.
+ * 문서가 필요 없는 획득(그 페이지에 남의 잠금이 없다)도 같은 행에 선다 — 셋째 케이스가 잰다.
  * 순서를 **DB 잠금으로** 세운다(고정 `sleep`이 아니다 — 줄에 선 것을 `pg_locks`로 본다).
  */
 describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => {
@@ -613,36 +649,6 @@ describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => 
          and a.datname = current_database()
     `.execute(db)
     return result.rows[0]?.n ?? 0
-  }
-
-  /** 조건이 설 때까지 — 안 서면 던진다(시나리오가 성립하지 않았다). */
-  async function until(label: string, ready: () => Promise<boolean> | boolean, timeoutMs = 5_000): Promise<void> {
-    const deadline = Date.now() + timeoutMs
-    while (Date.now() < deadline) {
-      if (await ready()) return
-      await new Promise((resolve) => setTimeout(resolve, 10))
-    }
-    throw new Error(`${label} — 시나리오가 성립하지 않았습니다`)
-  }
-
-  /** 트랜잭션 하나를 열어 잠금을 쥐고, `release`까지 쥔 채 둔다. */
-  function holdInTransaction(take: (trx: DbHandle) => Promise<unknown>): { acquired: Promise<void>; release: () => Promise<void> } {
-    let acquire = (): void => {}
-    let free = (): void => {}
-    const acquired = new Promise<void>((resolve) => (acquire = resolve))
-    const freed = new Promise<void>((resolve) => (free = resolve))
-    const done = db.transaction().execute(async (trx) => {
-      await take(trx)
-      acquire()
-      await freed
-    })
-    return {
-      acquired,
-      release: async () => {
-        free()
-        await done
-      },
-    }
   }
 
   const MOVE_C_INTO_B = [{ op: 'move', from: '/root/children/2', path: '/root/children/1/children/-' }]
@@ -681,8 +687,8 @@ describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => 
 
   /**
    * **선택 쪽 절반** — 문서 조회 경로의 `lock`은 편집이 쥔 페이지 행을 기다렸다가 **커밋된 머리 문서**로 판정한다. 편집을 판정 ·
-   * 적용 뒤 커밋 직전(멤버 행 재확인)에 세워 두고 다혜가 `n_b`를 요청한다. 혼자 죽는 변조: `readSelectionRoot`가 행을 안 잡고
-   * 읽는다(`lockPageForEdit` → 잠금 없는 조회 — 커밋 전 문서를 읽고 선다).
+   * 적용 뒤 커밋 직전(멤버 행 재확인)에 세워 두고 다혜가 `n_b`를 요청한다. 혼자 죽는 변조: `handleLockFrame`이 문서를 행을 잡기
+   * **전에** 읽는다(`readSelectionRoot` → `lockPageShared` — 커밋 전 문서를 읽어 두고, 행을 얻은 뒤 그 문서로 판정해 선다).
    *
    * 멤버 행은 이 케이스가 **SQL 로 직접** 잡는다 — 편집을 커밋 직전에 세우는 문일 뿐 재는 대상이 아니다(재는 것은 페이지 행이다).
    */
@@ -710,7 +716,7 @@ describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => 
   /**
    * **편집 쪽 절반** — 편집의 2차 방어는 페이지 행을 **잡은 뒤** 판정한다. 페이지 행을 이 케이스가 쥐고, 다혜의 `lock`이 먼저 줄에
    * 서고 보라의 편집이 뒤에 선다. 행이 풀리면 다혜가 먼저 서고, 보라의 편집은 그것을 보고 423 이다. 혼자 죽는 변조: 편집이 행을
-   * 잡기 **전에** 판정한다(`lockConflictError`가 `lockPageMeta` 앞에서 판정 — 다혜가 서기 전에 판정을 지나 겹친 채 커밋한다).
+   * 잡기 **전에** 판정한다(`lockConflictError`가 `lockPageRow` 앞에서 판정 — 다혜가 서기 전에 판정을 지나 겹친 채 커밋한다).
    *
    * **`lock`이 행을 안 기다리는 코드에서는 이 줄 세우기가 안 선다** — 다혜가 곧장 서고 편집은 그것을 본다(그때 이 케이스는
    * «줄에 선다»를 기다리다 죽는다 — 겹침 단언이 아니라 시나리오가 성립하지 않아서다). 겹침을 재는 것은 선택 쪽이 행을 기다리고
@@ -736,6 +742,261 @@ describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => 
       await until('다혜가 선다', () => dahyeSettled())
       expect(held()).toEqual([`${fx.bora.user.name}:n_c`, `${fx.dahye.user.name}:n_b`].sort())
       expect(await childrenOfB(fx.page.id)).toEqual(['n_b1', 'n_b2'])
+    })
+  }, 30_000)
+
+  /**
+   * **남의 잠금이 없는 페이지에서도** 획득은 행에 선다 — 문서를 안 읽어도 되는 판이다. 보라는 이 페이지에 잠금이 없고, 보라의 편집을
+   * 판정 · 적용 뒤 커밋 직전(멤버 행 재확인)에 세워 둔 채 다혜가 그 편집이 고치는 노드를 요청한다. 행 없이 잡으면 다혜의 배지가 선 뒤
+   * 보라의 편집이 그 노드를 바꾸며 커밋된다. 혼자 죽는 변조: `handleLockFrame`이 먼저 행 없이 묻고 `free`면 그대로 잡는다(문서가
+   * 필요할 때만 트랜잭션을 연다).
+   */
+  it('남의 잠금이 없는 페이지에서도 판정을 지난 편집이 커밋되기 전에는 잠금이 서지 않는다 — 배지 뒤에 남의 편집이 커밋되지 않는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+      const dahyeHeld = (): boolean =>
+        ctx.app.realtime.locks.liveIn(fx.project.id).some((lock) => lock.userId === fx.dahye.user.id)
+      const door = holdInTransaction((trx) =>
+        sql`select 1 from project_members where project_id = ${fx.project.id} and user_id = ${fx.bora.user.id} for update`.execute(trx),
+      )
+      await door.acquired
+
+      const editB1 = [{ op: 'replace', path: '/root/children/1/children/0/props', value: {} }]
+      boraTab.send(JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: await headSeq(fx.page.id), ops: editB1, clientOpId: 'op-b1' }))
+      await until('편집이 커밋 직전에 선다', async () => (await lockWaiters()) >= 1)
+      dahyeTab.send(lockFrame(fx.page.id, 'n_b1'))
+      await until('다혜의 lock 이 줄에 서거나 선다', async () => dahyeHeld() || (await lockWaiters()) >= 2)
+      // 값을 잡고 문을 먼저 연다 — 단언이 먼저 죽으면 문이 멤버 행을 쥔 채 남아 뒤 케이스가 선다.
+      const heldBeforeCommit = dahyeHeld()
+      await door.release()
+      expect(heldBeforeCommit).toBe(false)
+
+      const ack = await boraTab.waitFor('patch-ack')
+      await until('다혜가 선다', () => dahyeHeld())
+      expect(await headSeq(fx.page.id)).toBe(ack.seq)
+      expect(held()).toEqual([`${fx.dahye.user.name}:n_b1`])
+
+      function held(): string[] {
+        return ctx.app.realtime.locks.liveIn(fx.project.id).map((lock) => `${lock.userName}:${lock.nodeId}`)
+      }
+    })
+  }, 30_000)
+})
+
+/**
+ * **한 연결의 `lock` 트랜잭션은 한 번에 하나다**(`ws/lock.ts`의 «연결 하나가 쥐는 풀 칸은 하나다») · **끝내지 못한 `lock`에도 답한다**(같은
+ * 파일 표의 «DB 오류로 끝내지 못했다» 줄). 페이지 행을 테스트 트랜잭션이 `FOR UPDATE`로 쥐어 복원 · 고아 트랜잭션을 흉내 낸다. 행을
+ * 기다리는 것은 **그 트랜잭션에 막힌 백엔드**만 센다(`pg_blocking_pids`) — 다른 대기를 섞지 않는다.
+ */
+describe('`lock`의 줄과 실패의 답', () => {
+  const db = getTestDb()
+
+  async function rowHolder(pageId: string): Promise<{ pid: number; release: () => Promise<void> }> {
+    let pid = 0
+    const row = holdInTransaction(async (trx) => {
+      pid = (await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx)).rows[0]?.pid ?? 0
+      await sql`select 1 from pages where id = ${pageId} for update`.execute(trx)
+    })
+    await row.acquired
+    return { pid, release: row.release }
+  }
+
+  async function blockedBy(pid: number): Promise<number> {
+    const result = await sql<{ n: number }>`
+      select count(*)::int as n from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))
+    `.execute(db)
+    return result.rows[0]?.n ?? 0
+  }
+
+  /** 창 동안 훑어 가장 큰 값 — «곧바로 늘지 않는가»를 본다. */
+  async function peak(read: () => Promise<number>, windowMs: number): Promise<number> {
+    let most = 0
+    const deadline = Date.now() + windowMs
+    while (Date.now() < deadline) {
+      most = Math.max(most, await read())
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    return most
+  }
+
+  const lockWithId = (pageId: string, nodeId: string, lockId: number): string => JSON.stringify({ type: 'lock', pageId, nodeId, lockId })
+  const denials = (probe: WsProbe): ServerFrame[] => probe.received.filter((frame) => frame.type === 'lock-denied')
+  const nodesOf = (ctx: RealApiContext, projectId: string): string[] =>
+    ctx.app.realtime.locks.liveIn(projectId).map((lock) => lock.nodeId)
+
+  /**
+   * 행이 쥐인 동안 한 연결이 다섯 번 고른다. 기다리는 트랜잭션은 하나고, 풀리면 **마지막** 선택만 선다. 혼자 죽는 변조: 줄이 도는 중에도
+   * 새 프레임을 곧바로 돌린다(`LockLane.run`이 `busy`를 안 본다) — 다섯이 저마다 칸을 쥐고 행에 선다(5).
+   */
+  it('연결 하나의 `lock`은 풀 칸 하나로 줄 선다 — 행이 쥐인 동안 여러 번 골라도 기다리는 트랜잭션은 하나고, 풀리면 마지막 선택이 선다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      const { broadcast } = ctx.app.realtime
+      const real = broadcast.stillAllowed
+      let checked = 0
+      broadcast.stillAllowed = async (connection, minRole) => {
+        const allowed = await real(connection, minRole)
+        if (connection.userId === fx.dahye.user.id && minRole === 'editor') checked += 1
+        return allowed
+      }
+      const row = await rowHolder(fx.page.id)
+
+      // **하나씩 자격 확인을 지난 뒤 다음을 보낸다**(사람의 클릭 · 16ms 훑기가 그렇다). 한꺼번에 보내면 앞 넷은 줄에 들어올 때 이미 뒤
+      // 프레임이 있어 트랜잭션을 안 연다 — 줄이 없어도 대기가 하나라 이 케이스가 아무것도 못 잰다.
+      const picks = ['n_a', 'n_b', 'n_c', 'n_a1', 'n_b1']
+      for (const [index, nodeId] of picks.entries()) {
+        dahyeTab.send(lockFrame(fx.page.id, nodeId))
+        await until(`${nodeId} 가 자격 확인을 지난다`, () => checked === index + 1)
+      }
+      await until('첫 `lock`이 행에 줄 선다', async () => (await blockedBy(row.pid)) >= 1)
+      // 줄이 없으면 나머지 넷도 곧바로 칸을 쥐고 행에 선다 — 그만큼 지켜본다. 값을 잡고 행을 먼저 놓는다(단언이 먼저 죽으면 행이 남는다).
+      const most = await peak(() => blockedBy(row.pid), 300)
+      await row.release()
+      expect(most).toBe(1)
+
+      await locksWith(watcher, 'n_b1')
+      expect(nodesOf(ctx, fx.project.id)).toEqual(['n_b1'])
+    })
+  }, 30_000)
+
+  /**
+   * DB 오류로 판정까지 못 간 `lock`도 `lock-denied`(그 `lockId`)를 받고, 이 연결이 앞서 쥔 것은 놓인다 — 화면은 그 답으로 «잡지 않은
+   * 선택»에 선다(`apps/web`의 `lock-channel.ts` 「잡지 않은 선택」). 던지는 자리 둘: 자격 확인(`stillAllowed`) · 트랜잭션 안(판정이 목록을
+   * 읽는 `liveIn`). 혼자 죽는 변조: `ws/routes.ts`의 `catch`가 `lock`에 답하지 않는다(둘 다) · 줄이 실패를 삼킨다(`LockLane`이
+   * `reject` 대신 `resolve` — 둘째만) · 실패의 답이 앞서 쥔 것을 안 놓는다.
+   */
+  it('끝내지 못한 `lock`에도 답한다 — 그 `lockId`로 `lock-denied`가 오고 앞서 쥔 것도 놓인다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      const { broadcast, locks } = ctx.app.realtime
+      const settled = async (nodeId: string): Promise<void> => {
+        // 두 연결 다 받은 뒤에 문을 건다 — 목록은 받는 연결마다 지어지므로(`announceLocks`) 알림이 남아 있으면 그쪽이 던진다.
+        await locksWith(watcher, nodeId)
+        await locksWith(dahyeTab, nodeId)
+      }
+
+      dahyeTab.send(lockWithId(fx.page.id, 'n_a', 1))
+      await settled('n_a')
+      const realAllowed = broadcast.stillAllowed
+      let failCheck = true
+      broadcast.stillAllowed = async (connection, minRole) => {
+        if (failCheck && connection.userId === fx.dahye.user.id && minRole === 'editor') {
+          failCheck = false
+          throw new Error('자격 확인이 풀 칸을 못 얻었다(흉내)')
+        }
+        return realAllowed(connection, minRole)
+      }
+      dahyeTab.send(lockWithId(fx.page.id, 'n_b', 2))
+      await until('자격 확인에서 끝내지 못한 `lock`에 답이 온다', () => denials(dahyeTab).length === 1)
+      expect(denials(dahyeTab)).toEqual([{ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_b', lockId: 2 }])
+      expect(await locksEmpty(watcher)).toEqual([])
+
+      dahyeTab.send(lockWithId(fx.page.id, 'n_c', 3))
+      await settled('n_c')
+      const realLiveIn = locks.liveIn.bind(locks)
+      let failVerdict = true
+      locks.liveIn = (projectId) => {
+        if (failVerdict) {
+          failVerdict = false
+          throw new Error('판정이 목록을 못 읽었다(흉내)')
+        }
+        return realLiveIn(projectId)
+      }
+      dahyeTab.send(lockWithId(fx.page.id, 'n_b1', 4))
+      await until('트랜잭션 안에서 끝내지 못한 `lock`에 답이 온다', () => denials(dahyeTab).length === 2)
+      expect(denials(dahyeTab)[1]).toEqual({ type: 'lock-denied', projectId: fx.project.id, pageId: fx.page.id, nodeId: 'n_b1', lockId: 4 })
+      expect(failVerdict).toBe(false)
+      await until('앞서 쥔 `n_c`가 놓인다', () => nodesOf(ctx, fx.project.id).length === 0)
+    })
+  }, 30_000)
+
+  /**
+   * 끝내지 못한 앞 `lock`의 답은 **뒤 프레임이 없을 때만** 간다 — 뒤 것이 이미 섰으면 그 실패의 답(놓기)이 그것을 걷어 버린다(화면은
+   * 옛 차례의 거절이라 버리고 쥔 줄 안다). 앞 프레임의 자격 확인을 문 앞에 세워 두고 뒤 프레임을 먼저 세운 뒤, 문을 열며 던진다.
+   * 혼자 죽는 변조: `catch`가 `current()`를 안 보고 답한다.
+   */
+  it('뒤 프레임이 있으면 끝내지 못한 앞 `lock`은 답하지 않는다 — 뒤 것이 선 자리를 놓지 않는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      const { broadcast } = ctx.app.realtime
+      const real = broadcast.stillAllowed
+      let calls = 0
+      let entered = (): void => {}
+      let open = (): void => {}
+      const atDoor = new Promise<void>((resolve) => (entered = resolve))
+      const opened = new Promise<void>((resolve) => (open = resolve))
+      broadcast.stillAllowed = async (connection, minRole) => {
+        if (connection.userId === fx.dahye.user.id && minRole === 'editor' && ++calls === 1) {
+          entered()
+          await opened
+          throw new Error('자격 확인이 풀 칸을 못 얻었다(흉내)')
+        }
+        return real(connection, minRole)
+      }
+
+      dahyeTab.send(lockWithId(fx.page.id, 'n_a', 1))
+      await atDoor
+      dahyeTab.send(lockWithId(fx.page.id, 'n_b', 2))
+      await locksWith(watcher, 'n_b')
+      open()
+
+      await dahyeTab.quiet()
+      expect(denials(dahyeTab)).toEqual([])
+      expect(nodesOf(ctx, fx.project.id)).toEqual(['n_b'])
+    })
+  }, 30_000)
+
+  /**
+   * 자격 확인이 **늦게 끝난 앞 프레임**이 줄에서 기다리던 뒤 프레임을 밀어내지 못한다. 행을 쥔 채 첫 프레임을 행에 세우고(줄이 돈다),
+   * 둘째의 자격 확인을 문 앞에 세운 채 셋째를 줄에 넣은 뒤 문을 연다. 혼자 죽는 변조: `LockLane.run`이 받을 때 차례를 안 본다 — 둘째가
+   * 셋째를 밀어내고, 둘째도 돌 차례에 뜻이 없어 아무것도 안 선다.
+   */
+  it('자격 확인이 늦게 끝난 앞 `lock`은 줄에 기다리던 뒤 `lock`을 밀어내지 못한다 — 행이 풀리면 마지막 선택이 선다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      const { broadcast } = ctx.app.realtime
+      const real = broadcast.stillAllowed
+      let calls = 0
+      let checked = 0
+      let entered = (): void => {}
+      let open = (): void => {}
+      const atDoor = new Promise<void>((resolve) => (entered = resolve))
+      const opened = new Promise<void>((resolve) => (open = resolve))
+      broadcast.stillAllowed = async (connection, minRole) => {
+        const allowed = await real(connection, minRole)
+        if (connection.userId === fx.dahye.user.id && minRole === 'editor') {
+          if (++calls === 2) {
+            entered()
+            await opened
+          }
+          checked += 1
+        }
+        return allowed
+      }
+      const row = await rowHolder(fx.page.id)
+
+      dahyeTab.send(lockFrame(fx.page.id, 'n_a'))
+      await until('첫 `lock`이 행에 줄 선다', async () => (await blockedBy(row.pid)) >= 1)
+      dahyeTab.send(lockFrame(fx.page.id, 'n_b'))
+      await atDoor
+      dahyeTab.send(lockFrame(fx.page.id, 'n_c'))
+      await until('셋째가 자격 확인을 지나 줄에 선다', () => checked === 2)
+      open()
+      await until('둘째도 자격 확인을 지난다', () => checked === 3)
+      await row.release()
+
+      await locksWith(watcher, 'n_c')
+      expect(nodesOf(ctx, fx.project.id)).toEqual(['n_c'])
     })
   }, 30_000)
 })

@@ -317,6 +317,8 @@ interface Box {
   receiver: Receiver
   /** 이 잠금 칸의 결말을 그리는 갈래가 떠 있는 동안 선다 — 돌려주는 함수가 물러난다(`Receiver.draws` · `PanelLock.draw`). */
   draw: (slot: string) => () => void
+  /** 이 잠금 칸의 본문이 떠 있는 동안 선다 — 돌려주는 함수가 물러난다(`Receiver.hosts` · `usePanelLock`). */
+  host: (slot: string) => () => void
 }
 
 const PanelDraftsContext = createContext<Box | null>(null)
@@ -435,26 +437,38 @@ export function PanelDraftsProvider(props: {
    */
   const drawnRef = useRef(new Map<string, number>())
   const draws = useCallback((slot: string): boolean => (drawnRef.current.get(slot) ?? 0) > 0, [])
-  const draw = useCallback((slot: string) => {
-    const drawn = drawnRef.current
-    drawn.set(slot, (drawn.get(slot) ?? 0) + 1)
-    return () => {
-      const left = (drawn.get(slot) ?? 1) - 1
-      if (left === 0) drawn.delete(slot)
-      else drawn.set(slot, left)
-    }
-  }, [])
+  const draw = useCallback((slot: string) => stand(drawnRef.current, slot), [])
+  /**
+   * **떠 있는 본문의 잠금 칸**(`Receiver.hosts`) — 세는 까닭은 위와 같다. 서는 자리는 `usePanelLock`이다(본문이 그 훅을 부른다). 통지
+   * 갈래가 없을 때 «본문째 내려갔다»와 «갈래만 없다»를 가른다 — 머리의 문장이 갈린다(`write-ledger.tsx`의 `MissedAt`).
+   */
+  const hostedRef = useRef(new Map<string, number>())
+  const hosts = useCallback((slot: string): boolean => (hostedRef.current.get(slot) ?? 0) > 0, [])
+  const host = useCallback((slot: string) => stand(hostedRef.current, slot), [])
 
   const [token] = useState(() => Symbol('panel-drafts'))
-  const receiver = useMemo<Receiver>(() => ({ token, realm: 'page', accept, sees, draws }), [token, accept, sees, draws])
+  const receiver = useMemo<Receiver>(
+    () => ({ token, realm: 'page', accept, sees, draws, hosts }),
+    [token, accept, sees, draws, hosts],
+  )
   const { receive } = ledger
   // **지금 떠 있는 provider 로 선다**(머리말 3) — 내려간 provider 로 시작한 쓰기의 응답이 여기
   // 닿는다. **레이아웃 이펙트인 것이 요점이다** — 자식의 이펙트(조회 걸기)가 먼저 돌면 그 쓰기가
   // 서기 전의 자리를 찾는다.
   useLayoutEffect(() => receive(receiver), [receive, receiver])
 
-  const box = useMemo<Box>(() => ({ held, receiver, draw }), [held, receiver, draw])
+  const box = useMemo<Box>(() => ({ held, receiver, draw, host }), [held, receiver, draw, host])
   return <PanelDraftsContext.Provider value={box}>{props.children}</PanelDraftsContext.Provider>
+}
+
+/** 칸 이름 하나를 센다 — 돌려주는 함수가 물러난다. */
+function stand(counts: Map<string, number>, slot: string): () => void {
+  counts.set(slot, (counts.get(slot) ?? 0) + 1)
+  return () => {
+    const left = (counts.get(slot) ?? 1) - 1
+    if (left === 0) counts.delete(slot)
+    else counts.set(slot, left)
+  }
 }
 
 function useBox(name: string): Box {
@@ -521,9 +535,11 @@ export interface PanelLock {
 }
 
 export function usePanelLock(key: LockSlot): PanelLock {
-  const { held, receiver, draw: drawSlot } = useBox(key.name)
-  // **여기서 서지 않는다** — 서는 것은 그리는 갈래의 `PendingNotice`다(`PanelLock.draw`).
+  const { held, receiver, draw: drawSlot, host } = useBox(key.name)
+  // **통지 갈래는 여기서 서지 않는다** — 서는 것은 그리는 갈래의 `PendingNotice`다(`PanelLock.draw`). 여기 서는 것은 **본문**이다
+  // (`Receiver.hosts`) — 이 훅을 부르는 것이 그 칸의 본문이다. 레이아웃 이펙트인 까닭은 `PendingNotice`의 것과 같다.
   const draw = useCallback(() => drawSlot(key.name), [drawSlot, key.name])
+  useLayoutEffect(() => host(key.name), [host, key.name])
   const ledger = useWriteLedger()
   const { projectId, pageId } = held
   const target = useMemo<WriteTarget>(() => ({ projectId, pageId, slot: key.name, realm: 'page' }), [projectId, pageId, key.name])

@@ -92,7 +92,8 @@ export function memberRoutes() {
 
       let member
       try {
-        member = await updateMemberRole(app.db, projectId, userId, body.role)
+        // **권한은 owner 행을 잡은 뒤 · 쓰기 전에 다시 본다**(`repos/members.ts`의 `OwnerRecheck` — 쓰기 뒤면 자기 강등이 막힌다).
+        member = await updateMemberRole(app.db, projectId, userId, body.role, (trx) => recheckProjectRole(trx, request))
       } catch (error) {
         if (error instanceof LastOwnerError) {
           throw conflict(error.message)
@@ -113,7 +114,7 @@ export function memberRoutes() {
 
       let result
       try {
-        result = await removeMember(app.db, projectId, userId)
+        result = await removeMember(app.db, projectId, userId, (trx) => recheckProjectRole(trx, request))
       } catch (error) {
         if (error instanceof LastOwnerError) {
           throw conflict(error.message)
