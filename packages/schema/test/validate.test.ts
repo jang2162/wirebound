@@ -163,20 +163,15 @@ describe('validateLayout', () => {
 
 describe('assertValidPage', () => {
   /**
-   * **2026-08-11(P4c-1 수정 웨이브 R2): 이름이 *"이슈가 있으면"*이었고 거짓이다.**
+   * **이름이 *"`error`가 있으면"*이다 — *"이슈가 있으면"*이 아니다.**
    * `throwOnFirstIssue`는 **`error`만 본다**(`partitionIssues(issues).errors[0]`) —
    * 경고만 있는 문서는 저장되므로 assert도 통과시켜야 하기 때문이고, 그 근거가 그 함수의
-   * 머리말에 있다. 케이스가 쓰는 값(`bad-root`)이 `error`라 **단언은 계속 통과했다.**
+   * 머리말에 있다.
    *
-   * **이것은 P4c-1이 만든 것이 아니다.** 이름은 `0fae394`에서 **참일 때** 쓰였고
-   * (그때는 이슈에 severity가 없어 전부 던졌다), `9ddf73e`(*"이슈에 severity를 두어
-   * 경고와 거부를 가른다"*)가 `throwOnFirstIssue`를 `errors[0]`으로 바꾸면서 거짓이 됐다.
-   * **내가 이력으로 확인했다.** 원인을 P4c-1에서 찾지 마라.
-   *
-   * `themes`의 `resolve.test.ts`·`font-face.test.ts`·`emit.test.ts` 셋과 **같은 부류**다 —
-   * *"이슈가 있으면"* → *"`error`가 있으면"*으로 규칙이 좁아졌는데 **케이스가 쓰는 값이
-   * `error`라 초록인 채 이름만 낡는다.** 넷 중 이것만 `schema` 쪽이고 **한 사이클 먼저
-   * 났다** — 즉 `themes`가 오늘 겪은 일을 `schema`는 이미 겪었고 아무도 못 봤다.
+   * **이름이 틀려도 이 케이스는 초록이다.** 케이스가 쓰는 값(`bad-root`)이 `error`라,
+   * 규칙이 *"이슈가 있으면"* → *"`error`가 있으면"*으로 좁아져도 단언은 그대로 지나가고
+   * **이름만 낡는다.** 그러니 규칙을 바꿀 때는 이름을 직접 다시 읽어야 한다.
+   * `themes`의 `resolve.test.ts`·`font-face.test.ts`·`emit.test.ts` 셋이 **같은 부류**다.
    */
   it('error가 있으면 첫 오류 메시지로 던진다', () => {
     const doc = page({ id: 'n_000000000001', type: 'Flex' })
@@ -207,7 +202,7 @@ describe('assertValidLayout', () => {
   })
 })
 
-describe('variantFrom이 있는 컴포넌트의 node.variant (P4a-2 수정 웨이브)', () => {
+describe('variantFrom이 있는 컴포넌트의 node.variant', () => {
   const doc = (variant: string, props: Record<string, unknown>): PageDocument => ({
     version: 1,
     root: {
@@ -218,12 +213,12 @@ describe('variantFrom이 있는 컴포넌트의 node.variant (P4a-2 수정 웨�
   })
 
   /**
-   * 리뷰가 만든 갈리는 입력 둘이다. 고치기 전에는 **하나는 거짓 양성, 하나는 침묵**이었다:
+   * 갈리는 입력 둘이다. 판정이 어긋나면 **하나는 거짓 양성, 하나는 침묵**이 된다:
    *
-   * | 입력 | 고치기 전 | 지금 |
+   * | 입력 | 이슈 | 어긋나면 |
    * |---|---|---|
-   * | `variant:'없는변형'` + `role:'h1'` | `unknown-variant` (원인을 잘못 가리킨다) | `ignored-variant` |
-   * | `variant:'caption'` + `role:'h2'` | **이슈 0건** (조용히 사라진다) | `ignored-variant` |
+   * | `variant:'없는변형'` + `role:'h1'` | `ignored-variant` | `unknown-variant` — 원인을 잘못 가리킨다 |
+   * | `variant:'caption'` + `role:'h2'` | `ignored-variant` | **이슈 0건** — 적은 값이 조용히 사라진다 |
    *
    * 둘 다 같은 일이 일어나므로(적은 값이 버려진다) 같은 이슈를 받는 것이 맞다.
    */
@@ -273,17 +268,16 @@ describe('variantFrom이 있는 컴포넌트의 node.variant (P4a-2 수정 웨�
 })
 
 /**
- * **severity — 경고와 거부를 가른다(P4a-3 Task 1).**
+ * **severity — 경고와 거부를 가른다.**
  *
- * P4a-2가 대가를 실측했다: severity가 없어 **모든** 이슈가 §7.1의 게이트에서 편집을 막았고,
- * `ignored-variant`가 한 번 들어간 문서는 **그 노드와 무관한 편집까지 422**로 거부됐다
+ * severity가 없으면 **모든** 이슈가 설계서 「정방향 흐름」의 게이트에서 편집을 막는다 —
+ * `ignored-variant`가 한 번 들어간 문서는 **그 노드와 무관한 편집까지 422**로 거부된다
  * (`edit-pipeline`이 `validatePage(after)`로 문서 전체를 검증하기 때문이다).
  */
 describe('ValidationIssue.severity', () => {
   /**
-   * **경고가 넷이다.** P4a-2까지는 `ignored-variant` 하나였고 **P5-2가 상호작용 셋을
-   * 더했다** — *"경고인 코드는 ignored-variant 하나뿐이다"*는 그때 거짓이 됐다.
-   * 나머지는 §7.1이 "편집을 막아야 한다"고 정한 것이고, 이 필드는 그 목록을 줄이는 것이
+   * **경고가 넷이다** — `ignored-variant`와 상호작용 셋.
+   * 나머지는 「정방향 흐름」이 "편집을 막아야 한다"고 정한 것이고, 이 필드는 그 목록을 줄이는 것이
    * 아니라 표현할 수 있게 만드는 것이다.
    *
    * **목록을 손으로 적지 않는다** — `ISSUE_SEVERITY`를 훑어 센다. `ValidationCode`에 코드가

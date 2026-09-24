@@ -1,9 +1,8 @@
 /**
- * 내장 페이지 프리셋(P7-2 T1 — D1·D4). **§11.1이 이름으로 지목한 것을 하나씩 대조한다.**
+ * 내장 페이지 프리셋. **설계서 「페이지 프리셋」이 이름으로 지목한 것을 하나씩 대조한다.**
  *
  * **수를 산문에 적지 않는다.** 프리셋이 셋인 것도, 각 프리셋이 무엇을 쓰는지도 아래
- * 케이스가 목록에서 만든다 — 계획서의 전역 제약이 요구한 것이고, P7-1에서 사망 수가
- * 한 세션 안에 세 번 낡은 것이 그 이유다.
+ * 케이스가 목록에서 만든다 — 산문에 적은 수는 목록이 바뀔 때 함께 안 바뀌어 조용히 낡는다.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
@@ -18,7 +17,7 @@ beforeAll(() => {
 })
 
 /**
- * 프리셋을 페이지 문서로 만든다. **root는 프리셋의 것이 아니다**(D3) — 적용도 root를
+ * 프리셋을 페이지 문서로 만든다. **root는 프리셋의 것이 아니다** — 적용도 root를
  * 바꾸지 않으므로, 여기서도 아무 페이지의 root를 빌려 `children`만 꽂는다.
  */
 function documentOf(nodes: readonly WbNode[]): PageDocument {
@@ -35,8 +34,8 @@ function typesOf(nodes: readonly WbNode[]): string[] {
 }
 
 /**
- * 키로 하나 고른다. **케이스 안의 헬퍼다** — 앞 판은 이것을 `getBuiltinPreset`으로 내보냈는데
- * 부르는 자리가 케이스뿐이었다(리뷰 (7)). 공개 표면에 두면 그것이 무엇을 지키는지 아무도
+ * 키로 하나 고른다. **케이스 안의 헬퍼다** — 부르는 자리가 케이스뿐인 것을 공개 표면
+ * (`getBuiltinPreset` 같은 export)에 두면 그것이 무엇을 지키는지 아무도
  * 확인하지 않은 채 남는다.
  */
 function builtin(key: string) {
@@ -45,14 +44,14 @@ function builtin(key: string) {
   return found
 }
 
-/** 이 트리에 `marker`가 하나라도 있는가. 같은 이유로 케이스 안에 둔다(앞 판은 `hasMarker`였다). */
+/** 이 트리에 `marker`가 하나라도 있는가. 같은 이유로 케이스 안에 둔다. */
 function hasMarker(nodes: readonly WbNode[]): boolean {
   return allNodes(nodes).some((node) => node.marker !== undefined)
 }
 
 describe('내장 프리셋', () => {
-  it('§11.1이 든 셋이 키로 있다', () => {
-    // 계획서가 §11.1에서 옮긴 이름 셋. **수를 적지 않고 키를 적는다** —
+  it('설계서 페이지 프리셋 절이 든 셋이 키로 있다', () => {
+    // 「페이지 프리셋」이 든 이름 셋. **수를 적지 않고 키를 적는다** —
     // 하나가 사라지거나 이름이 바뀌면 이 배열이 그것을 말한다.
     expect(BUILTIN_PRESETS.map((preset) => preset.key)).toEqual([
       'search-list',
@@ -81,7 +80,7 @@ describe('내장 프리셋', () => {
         expect(validatePage(documentOf(preset.nodes))).toEqual([])
       })
 
-      it('marker를 담지 않는다(D4)', () => {
+      it('marker를 담지 않는다', () => {
         expect(hasMarker(preset.nodes)).toBe(false)
       })
 
@@ -102,8 +101,8 @@ describe('내장 프리셋', () => {
   }
 
   /**
-   * **§11.1의 문장을 그대로 대조한다**(재라 #3). 계획서는 타입 이름이 카탈로그에 있는지만
-   * `grep`으로 봤고 **props가 그 모양을 낼 수 있는지는 안 봤다** — *"페이지네이션"*은
+   * **「페이지 프리셋」의 문장을 그대로 대조한다.** 타입 이름이 카탈로그에 있는지만 보면
+   * **props가 그 모양을 낼 수 있는지는 모른다** — *"페이지네이션"*은
    * 컴포넌트가 아니라 `List.props.pagination`이고, *"액션 버튼 그룹"*은 `Flex` 안의
    * `Button` 여럿이다. 그 둘이 여기서 값으로 확인된다.
    */
@@ -152,7 +151,7 @@ describe('stripMarkers', () => {
     expect(hasMarker(nodes)).toBe(true)
   })
 
-  it('marker 말고는 그대로 두고 상호작용도 남긴다(D4)', () => {
+  it('marker 말고는 그대로 두고 상호작용도 남긴다', () => {
     const nodes: WbNode[] = [
       {
         id: 'a',
@@ -183,7 +182,7 @@ describe('stripMarkers', () => {
     expect(stripped[0]!.props!['columns']).toEqual(['하나'])
   })
 
-  it('상호작용 액션의 value도 공유하지 않는다(리뷰 (2))', () => {
+  it('상호작용 액션의 value도 공유하지 않는다', () => {
     const nodes: WbNode[] = [
       {
         id: 'a',
@@ -206,7 +205,7 @@ describe('stripMarkers', () => {
   })
 
   /**
-   * **`structuredClone`을 쓰지 않은 이유를 값으로 고정한다**(P7-1 이월 §1 ㉡). 함수를 담은
+   * **`structuredClone`을 쓰지 않은 이유를 값으로 고정한다.** 함수를 담은
    * props에서 `structuredClone`은 `DOMException`을 던진다 — 저장 경계 **앞**에서 던지면
    * 사용자는 왜 저장이 안 되는지 듣지 못한다. 여기서는 그 자리가 조용히 비고, 무엇이
    * 잘못됐는지는 저장 경계의 카탈로그 검증이 말한다.

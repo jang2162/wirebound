@@ -1,32 +1,30 @@
 /**
- * **`defineComponent`의 도달성 검사 — 부류를 닫는 자리** (P0 이월 #9, 계획 D2).
+ * **`defineComponent`의 도달성 검사 — 부류를 닫는 자리.**
  *
- * §5.1이 *"속성 패널이 `editor`에서 자동 생성된다"*고 하므로 **`editor`에 없는 prop은
- * UI에서 도달 불가**다. 카탈로그에 그런 자리가 다섯 있었고(P4b-1이 닫았다), 케이스를
+ * 설계서 「컴포넌트 정의 구조」가 *"속성 패널이 `editor`에서 자동 생성된다"*고 하므로
+ * **`editor`에 없는 prop은 UI에서 도달 불가**다. 카탈로그 항목마다 케이스를
  * 하나씩 더하는 것으로는 **카탈로그가 커질 때 같은 구멍이 다시 난다.**
  *
  * **그래서 카탈로그 데이터가 아니라 `defineComponent`가 검사한다.** 컴포넌트를 정의하는
- * 순간 던지므로 P4b-2·P4b-3이 컴포넌트를 늘릴 때 **그 자리에서** 걸린다.
+ * 순간 던지므로 컴포넌트를 늘릴 때 **그 자리에서** 걸린다.
  *
  * ---
  *
- * **무엇을 검사하고 무엇을 검사하지 않는가 — 계획 D2의 후반은 성립하지 않는다.**
+ * **무엇을 검사하고 무엇을 검사하지 않는가.**
  *
  * | 대상 | 검사하나 | 왜 |
  * |---|---|---|
  * | `states` | **한다** | 같은 이름의 prop이 `editor`에 없으면 그 상태를 켤 길이 없다 |
- * | `variantFrom`이 가리키는 prop | **한다** | 그 컴포넌트에는 패널이 변형 컨트롤을 내지 않으므로(재라 #4) **그 prop이 유일한 길**이다 |
+ * | `variantFrom`이 가리키는 prop | **한다** | 그 컴포넌트에는 패널이 변형 컨트롤을 내지 않으므로 **그 prop이 유일한 길**이다 |
  * | `variants` — `variantFrom`이 **있을** 때 | **한다** | enum 밖의 이름은 **두 길이 다 막혀** 고를 방법이 없다(`variants ⊆ enum 값`) |
  * | `variants` — `variantFrom`이 **없을** 때 | **안 한다** | 패널이 `variants.length > 0`를 보고 **자동으로** 연다 — 어긋날 자리가 없다 |
  *
- * **D2 후반의 반증은 절반만 참이다 — 리뷰가 반례로 잡았다.**
- * `variantFrom === undefined` 가지에서는 반증이 성립한다(패널이 자동으로 여니 늘 참인
- * 단언이 된다). **`variantFrom`이 있는 가지에서는 아니다** — 그쪽은 패널이 컨트롤을 내지
- * 않고 `node.variant`도 무시되므로, `variants`에 enum 밖의 이름이 있으면 **선언돼 있는데
- * 도달 불가**다. 앞 판은 그 가지를 보지 않고 *"어긋날 자리가 없어졌다"*로 뭉뚱그렸다.
+ * **`variants`를 검사하지 않는 것은 `variantFrom`이 없는 가지뿐이다.** 그 가지는 패널이
+ * 자동으로 여니 검사가 늘 참인 단언이 된다. **`variantFrom`이 있는 가지는 다르다** — 그쪽은
+ * 패널이 컨트롤을 내지 않고 `node.variant`도 무시되므로, `variants`에 enum 밖의 이름이 있으면
+ * **선언돼 있는데 도달 불가**다. 두 가지를 *"어긋날 자리가 없다"*로 뭉뚱그리면 이 가지를 놓친다.
  *
- * **예외 쪽이 실제 구멍이었다** — D2가 *"예외가 구멍이 되지 않는가"*를 의심하라고 한 자리가
- * 정확히 여기이고, 구멍이 **둘**이었다(그 prop의 `editor` 부재 · `variants`의 enum 밖 이름).
+ * **구멍은 예외(`variantFrom`) 쪽에 둘이다** — 그 prop의 `editor` 부재 · `variants`의 enum 밖 이름.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -130,7 +128,7 @@ describe('defineComponent — variantFrom의 도달성', () => {
   })
 
   it('variantFrom이 가리키는 prop이 editor에 없으면 던진다', () => {
-    // **패널은 이 컴포넌트에 변형 컨트롤을 내지 않는다**(재라 #4 — 내면 `ignored-variant`를
+    // **패널은 이 컴포넌트에 변형 컨트롤을 내지 않는다**(내면 `ignored-variant`를
     // UI가 유도하는 셈이다). 그러면 그 prop이 유일한 길인데 그것마저 없으면
     // **변형이 통째로 도달 불가**다.
     expect(() =>
@@ -157,10 +155,10 @@ describe('defineComponent — variantFrom의 도달성', () => {
   })
 
   /**
-   * **리뷰가 만든 반례 — 반대 방향이 열려 있었다.**
+   * **반대 방향 — `variants ⊆ enum 값`.**
    *
-   * 기존 검사는 **`enum 값 ⊆ variants`**만 본다(*"선언되지 않은 값이 `data-wb-variant`로
-   * 나가면 테마 검증기가 대조할 선언이 없다"*). **반대 방향은 아무도 안 봤다** —
+   * **`enum 값 ⊆ variants`** 쪽 검사(*"선언되지 않은 값이 `data-wb-variant`로
+   * 나가면 테마 검증기가 대조할 선언이 없다"*)만 두면 **반대 방향이 열린다** —
    * `variants`에 enum에 없는 이름이 있으면:
    *
    * - `defineComponent`가 **통과시키고**
@@ -170,8 +168,8 @@ describe('defineComponent — variantFrom의 도달성', () => {
    * 테마가 그 이름에 스킨을 정의하면 **아무도 켤 수 없는 스킨**이 되어 `Media.kind`와 같은
    * *"죽어 있다"* 부류가 하나 생긴다.
    *
-   * **오늘 셋(Text·Divider·Field)은 `variants === enum`이라 실제 구멍은 아니었다 —
-   * 강제하는 것이 없었을 뿐이다.**
+   * **카탈로그의 셋(Text·Divider·Field)은 `variants === enum`이다 — 이 검사가 그것을
+   * 강제한다.**
    */
   it('variants에 enum 값이 아닌 이름이 있으면 던진다 — 도달 불가한 변형', () => {
     expect(() =>
@@ -199,7 +197,7 @@ describe('defineComponent — variantFrom의 도달성', () => {
   })
 
   it('variants === enum이면 던지지 않는다 — 음성 대조', () => {
-    // 오늘 카탈로그 셋이 이 모양이다. 좁히다 정상 카탈로그를 막으면 여기가 죽는다.
+    // 카탈로그의 셋이 이 모양이다. 좁히다 정상 카탈로그를 막으면 여기가 죽는다.
     expect(() =>
       defineComponent({
         ...base,
@@ -212,8 +210,8 @@ describe('defineComponent — variantFrom의 도달성', () => {
   })
 
   it('variantFrom이 없으면 variants만으로는 던지지 않는다 — 패널이 자동으로 연다', () => {
-    // **D2의 후반이 성립하지 않는 자리다.** `variants`가 있고 `editor`가 비어도 변형은
-    // 도달 가능하다 — 패널이 카탈로그를 보고 컨트롤을 만든다(재라 #4의 A안).
+    // **`variants`를 검사하지 않는 가지다.** `variants`가 있고 `editor`가 비어도 변형은
+    // 도달 가능하다 — 패널이 카탈로그를 보고 컨트롤을 만든다.
     expect(() =>
       defineComponent({
         ...base,

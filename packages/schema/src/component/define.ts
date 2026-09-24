@@ -26,7 +26,7 @@ const LABEL_MAX = 12
 
 /**
  * 설명의 상한. 240px 좌측 패널에서 12px 글자로 **두 줄**쯤이다. 상한이 없으면 한 컴포넌트가
- * 고르개를 세로로 밀어낸다 — 3차의 프리셋 고르개가 가로로 겪은 것과 같은 부류다.
+ * 고르개를 세로로 밀어낸다 — 긴 이름이 프리셋 고르개를 가로로 밀어내는 것과 같은 부류다.
  */
 const DESCRIPTION_MAX = 60
 
@@ -37,12 +37,12 @@ const DESCRIPTION_MAX = 60
  *
  * | 축 | 필드 | 누가 읽는가 |
  * |---|---|---|
- * | **테마 어휘** | `props`·`editor`·`structures`·`parts`·`variants`·`variantFrom`·`states`·`children` | 테마 검증기(§12.4)·`checkThemeComponents`·렌더러 |
+ * | **테마 어휘** | `props`·`editor`·`structures`·`parts`·`variants`·`variantFrom`·`states`·`children` | 테마 검증기(설계서 「lint 규칙」)·`checkThemeComponents`·렌더러 |
  * | **사람이 읽을 것** | `label`·`description`·`group` | 저작 UI(타입 고르개·문장화) |
  *
- * 아래 축은 **DOM에 나가지 않는다.** §6.11이 못박은 여섯(`data-wb-id`·`data-wb-component`·
+ * 아래 축은 **DOM에 나가지 않는다.** 설계서 「컴파일」(테마)이 못박은 여섯(`data-wb-id`·`data-wb-component`·
  * `data-wb-structure`·`data-wb-variant`·`data-wb-part`·`data-wb-state`)은 전부 위 축에서
- * 나오고, 사람이 읽을 필드는 그중 하나도 만들지 않는다 — 그래서 §6.11 계약을 넓히지
+ * 나오고, 사람이 읽을 필드는 그중 하나도 만들지 않는다 — 그래서 「컴파일」의 계약을 넓히지
  * 않는다(`variantFrom`의 주석이 말하는 *"일곱 번째 속성"*은 **DOM 속성**이다).
  * `checkThemeComponents`가 어휘를 필드 이름으로 골라 읽는 것이 그 분리를 실제로 지킨다
  * (`test/component/human-axis.test.ts`가 새 필드를 변형·상태·조각 이름으로 써 봐 확인한다).
@@ -56,8 +56,8 @@ export interface ComponentDef {
    * 자리다** — 고르개도 상호작용 문장도 이것을 쓴다(`interaction/describe.ts`의
    * `COMPONENT_NOUNS`가 여기서 유도된다).
    *
-   * **필수다.** 선택으로 두면 새 컴포넌트가 조용히 영문 이름으로 떨어지는데, 그것이 지금
-   * 고치는 고장 그 자체다.
+   * **필수다.** 선택으로 두면 새 컴포넌트가 조용히 영문 이름으로 떨어지는데, 그것이 이
+   * 필드가 막는 고장 그 자체다.
    */
   label: string
   /**
@@ -83,19 +83,19 @@ export interface ComponentDef {
    * 이 enum prop의 값이 `data-wb-variant`가 된다. **그 값들이 `variants`에 전부 선언돼
    * 있어야 한다** — `defineComponent`가 검사한다.
    *
-   * **왜 새 선언 채널을 만들지 않았는가** (P0 이월 #8): `data-wb-role`(Text)·
-   * `data-control`(Field)·`data-direction`(Divider)은 한 부류다 — 셋 다 *"노드의 enum
-   * prop에서 파생되는 표현 변형"*인데 계약에 채널이 없어 각자 속성을 만들었다.
-   * §5.1은 이미 같은 모양의 채널을 하나 갖고 있다(같은 이름의 boolean prop이 true면
+   * **왜 새 선언 채널을 만들지 않는가:** `data-wb-role`(Text)·`data-control`(Field)·
+   * `data-direction`(Divider) 같은 속성은 한 부류다 — 셋 다 *"노드의 enum
+   * prop에서 파생되는 표현 변형"*이고, 계약에 채널이 없으면 컴포넌트마다 각자 속성을 만든다.
+   * 설계서 「컴포넌트 정의 구조」는 이미 같은 모양의 채널을 하나 갖고 있다(같은 이름의 boolean prop이 true면
    * `data-wb-state`). 빠진 것은 **enum prop → `data-wb-variant`**뿐이므로 그것을 채운다.
-   * 일곱 번째 속성을 만들면 §6.11이 *"이 여섯이 전체 계약"*이라고 못박은 것이 깨지고,
-   * 테마 검증기(§12.4)와 `checkThemeComponents`가 볼 어휘가 함께 넓어진다.
+   * 일곱 번째 속성을 만들면 설계서 「컴파일」(테마)이 *"이 여섯이 전체 계약"*이라고 못박은 것이 깨지고,
+   * 테마 검증기(설계서 「lint 규칙」)와 `checkThemeComponents`가 볼 어휘가 함께 넓어진다.
    *
    * **여기서 «속성»은 렌더러가 내보내는 `data-wb-*` DOM 속성이다** — `ComponentDef`의
-   * 필드 수가 아니다(§6.11의 표가 세는 것이 그 여섯이다). 그래서 `label`·`description`·
+   * 필드 수가 아니다(「컴파일」의 표가 세는 것이 그 여섯이다). 그래서 `label`·`description`·
    * `group`처럼 **DOM에 나가지 않는** 필드는 이 못을 건드리지 않는다. 위
-   * `ComponentDef` 주석의 두 축 표가 그 구분을 소유한다. 이 문장이 없어서 P10-3이
-   * *"사람이 읽을 이름을 계약에 두면 §6.11이 깨지는가"*를 처음부터 다시 물었다.
+   * `ComponentDef` 주석의 두 축 표가 그 구분을 소유한다. 이 구분이 없으면
+   * *"사람이 읽을 이름을 계약에 두면 「컴파일」의 계약이 깨지는가"*를 매번 처음부터 다시 묻게 된다.
    */
   variantFrom?: string
   /** 같은 이름의 prop이 true면 활성화되는 상태 */
@@ -157,11 +157,11 @@ export function defineComponent(def: ComponentDef): ComponentDef {
   }
 
   /**
-   * **도달성 — §5.1이 *"속성 패널이 `editor`에서 자동 생성된다"*고 한 것의 결과**(P0 이월 #9).
+   * **도달성 — 설계서 「컴포넌트 정의 구조」가 *"속성 패널이 `editor`에서 자동 생성된다"*고 한 것의 결과.**
    *
-   * `editor`에 없는 prop은 **UI에서 도달 불가**다. 상태가 그렇게 되면 §6.5가 상태의 쓸모로
+   * `editor`에 없는 prop은 **UI에서 도달 불가**다. 상태가 그렇게 되면 설계서 「components — 구조 + 스킨」이 상태의 쓸모로
    * 든 *"'선택된 행 강조' 같은 서술을 목업에서 실제로 보여주려면"*이 성립하지 않는다 —
-   * 켤 방법이 없기 때문이다. 카탈로그에 그런 자리가 **다섯** 있었다(P4b-1이 닫았다).
+   * 켤 방법이 없기 때문이다. 이 검사가 없으면 그런 자리가 카탈로그에 소리 없이 생긴다.
    *
    * **케이스를 하나씩 더하는 대신 여기서 던진다.** 카탈로그가 커질 때 같은 구멍이 다시
    * 나지 않게 하려는 것이고, 걸리면 컴포넌트를 정의하는 **그 자리에서** 걸린다.
@@ -195,21 +195,18 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     }
 
     /**
-     * **반대 방향 — `variants ⊆ enum 값`.** 위 검사만으로는 한쪽이 열려 있었다.
+     * **반대 방향 — `variants ⊆ enum 값`.** 위 검사만으로는 한쪽이 열려 있다.
      *
      * `variants`에 enum에 없는 이름이 있으면 **그 이름은 선언돼 있는데 고를 길이 없다** —
-     * `variantFrom`이 있으므로 속성 패널이 변형 컨트롤을 내지 않고(재라 #4의 A안),
-     * `node.variant`를 적어도 `variantFrom`이 이겨 무시된다(P4a-2의 결정 — 그때
-     * `ignored-variant`가 생겼다). **두 길이 다 막혀 있다.**
+     * `variantFrom`이 있으므로 속성 패널이 변형 컨트롤을 내지 않고(아래 `editor` 검사의 머리말),
+     * `node.variant`를 적어도 `variantFrom`이 이겨 무시된다(`ignored-variant`). **두 길이 다 막혀 있다.**
      *
      * 테마가 그 이름에 스킨을 정의하면 **아무도 켤 수 없는 스킨**이 되어 `Media.kind`와
      * 같은 *"선언은 있는데 화면에 닿지 않는다"* 부류가 하나 생긴다.
      *
-     * **앞서 `test/component/variant-from.test.ts`가 정반대를 단언하고 있었다** —
-     * *"variants가 enum보다 넓은 것은 막지 않는다"*이고 근거는 *"노드가 `variant`로 직접
-     * 고르는 값이 따로 있을 수 있다"*였다. **그 근거가 거짓이다:** `variantFrom`을 가진
-     * 컴포넌트에서 `node.variant`는 선언된 값이든 아니든 똑같이 버려진다. 리뷰가 반례를
-     * 만들어 잡았고, 그 케이스는 근거와 함께 뒤집었다.
+     * *"노드가 `variant`로 직접 고르는 값이 따로 있을 수 있으니 variants가 enum보다 넓어도
+     * 된다"*는 **거짓 근거다:** `variantFrom`을 가진 컴포넌트에서 `node.variant`는 선언된
+     * 값이든 아니든 똑같이 버려진다(`test/component/variant-from.test.ts`가 이 방향을 단언한다).
      */
     const unreachableVariants = def.variants.filter((value) => !values.includes(value))
     if (unreachableVariants.length > 0) {
@@ -221,14 +218,13 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     }
 
     /**
-     * **`variantFrom`의 예외가 구멍이 되는 자리 — 계획 D2가 의심하라고 한 것이 여기다.**
+     * **`variantFrom`의 예외가 구멍이 되는 자리.**
      *
-     * 속성 패널은 `variantFrom`을 가진 컴포넌트에 **변형 컨트롤을 내지 않는다**(재라 #4의
-     * A안 — 내면 `node.variant`가 버려지는 것을 알면서 값을 넣게 되어 `ignored-variant`를
+     * 속성 패널은 `variantFrom`을 가진 컴포넌트에 **변형 컨트롤을 내지 않는다**(내면
+     * `node.variant`가 버려지는 것을 알면서 값을 넣게 되어 `ignored-variant`를
      * UI가 유도하는 셈이다). 그러면 그 변형에 닿는 길은 **이 prop의 컨트롤 하나뿐**이고,
-     * 그것마저 `editor`에 없으면 **변형이 통째로 도달 불가**가 된다.
-     *
-     * 오늘 셋(Text·Divider·Field)은 전부 갖고 있었다 — **강제하는 것이 없었을 뿐이다.**
+     * 그것마저 `editor`에 없으면 **변형이 통째로 도달 불가**가 된다. 여기서 던지지 않으면
+     * 그 상태를 막는 것이 없다.
      */
     if (!editable.has(prop)) {
       throw new Error(
@@ -269,7 +265,7 @@ function assertUnique(type: string, field: string, values: string[]): void {
 /**
  * prop **하나**의 스키마. 그 컴포넌트에 없는 prop이면 `undefined`다.
  *
- * **`setProp` 상호작용의 값 검사가 이것을 쓴다**(§8.1의 *"prop 유효성"*). 노드 전체를
+ * **`setProp` 상호작용의 값 검사가 이것을 쓴다**(설계서 「모델」(상호작용)의 *"prop 유효성"*). 노드 전체를
  * `def.props.safeParse`로 보는 것과 다른 이유: 상호작용이 바꾸는 것은 **prop 하나**이고,
  * 통째로 파싱하면 그 노드에 없는 **다른** 필수 prop 때문에 실패가 난다.
  *

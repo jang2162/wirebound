@@ -1,8 +1,8 @@
 /**
- * 가져오기의 순수 부분(§11.2 — P7-3 T3: D5·D8). **id를 재발급하고 참조 셋을 함께 옮긴다.**
+ * 가져오기의 순수 부분(설계서 「페이지 JSON」). **id를 재발급하고 참조 셋을 함께 옮긴다.**
  *
- * P7-2 이월 §6이 *"`remapNodeIds`가 내는 `mapping`을 받는 쪽이 코멘트에 적용해야 하고,
- * **P7-3이 그 맵을 처음 쓰는 자리**"*라고 지목한 그 자리를 잰다.
+ * `remapNodeIds`가 내는 `mapping`은 **받는 쪽이 코멘트에 적용해야 한다** — 트리만 옮기고
+ * 코멘트를 안 옮기면 코멘트가 파일의 옛 id를 가리킨 채 들어간다. 그 자리를 잰다.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
@@ -74,7 +74,7 @@ describe('가져오기 계획', () => {
     expect(idsOf(plan.document).some((id) => idsOf(DOCUMENT).includes(id))).toBe(false)
   })
 
-  it('코멘트의 nodeId를 같은 맵으로 옮긴다 — P7-2 이월 §6이 지목한 자리', () => {
+  it('코멘트의 nodeId를 같은 맵으로 옮긴다', () => {
     const plan = planPageImport(DOCUMENT, COMMENTS, counter())
     const ids = new Set(idsOf(plan.document))
 
@@ -98,13 +98,13 @@ describe('가져오기 계획', () => {
     ])
   })
 
-  it('번호는 문서에 그대로 살아 돌아온다 (D6)', () => {
+  it('번호는 문서에 그대로 살아 돌아온다', () => {
     const plan = planPageImport(DOCUMENT, COMMENTS, counter())
 
     expect(markersOf(plan.document)).toEqual(markersOf(DOCUMENT))
   })
 
-  it('버전은 손대지 않는다 — 올리는 것은 부르는 쪽이다 (D2)', () => {
+  it('버전은 손대지 않는다 — 올리는 것은 부르는 쪽이다', () => {
     const plan = planPageImport({ ...DOCUMENT, version: 1 }, [], counter())
 
     expect(plan.document.version).toBe(1)
@@ -123,7 +123,7 @@ describe('가져오기 계획', () => {
     expect(plan.comments[0]?.nodeId).toBe(plan.comments[1]?.nodeId)
   })
 
-  it('D5 — 파일의 트리에 없는 노드를 가리킨 코멘트는 버리지 않고 넣으며, 갈라 세운다', () => {
+  it('파일의 트리에 없는 노드를 가리킨 코멘트는 버리지 않고 넣으며, 갈라 세운다', () => {
     const plan = planPageImport(
       DOCUMENT,
       [...COMMENTS, { nodeId: 'file_gone', body: '지워진 노드에 붙어 있던 말' }],
@@ -151,13 +151,13 @@ describe('가져오기 계획', () => {
     const form = plan.document.root.children?.[0]
 
     // 결과를 고쳐도 파일의 문서는 그대로다. 입력이 오래 사는 객체(초안 스토어, 모듈 상수)일
-    // 때 이 공유가 프로세스 수명 내내 남는다(P7-2 이월 §6).
+    // 때 이 공유가 프로세스 수명 내내 남는다.
     if (form?.props !== undefined) form.props.collapsed = true
     expect(DOCUMENT.root.children?.[0]?.props?.collapsed).toBe(false)
   })
 
   it('파일의 중복 id는 결과에도 중복으로 남아 검증이 그것을 말한다', () => {
-    // P7-1 이월 §2가 지목한 축이다 — 프로브는 못 보지만 결과 문서 전체는 본다.
+    // 프로브는 못 보지만 결과 문서 전체는 본다.
     const duplicated: PageDocument = {
       version: 1,
       root: {
@@ -198,11 +198,11 @@ describe('가져오기 계획', () => {
   })
 })
 
-describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른다 (리뷰 ③)', () => {
+describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른다', () => {
   /**
-   * **이 함수가 하나여야 하는 이유는 실측된 사고다.** 앞 판은 서버만 이 둘을 돌렸고
-   * 미리보기는 봉투에서 멈췄다 — 리뷰가 셋을 실측했다(미리보기 `ready` / 서버 400·422).
-   * 아래 셋이 그 셋이고, **같은 파일로 세 층의 케이스가 선다:** 여기(게이트) ·
+   * **이 함수가 하나여야 한다.** 서버만 이 검사를 돌리고 미리보기가 봉투에서 멈추면, 같은
+   * 파일을 미리보기는 `ready`로 보이고 서버는 400·422로 거절한다. 아래 셋이 그렇게 갈리는
+   * 입력이고, **같은 파일로 세 층의 케이스가 선다:** 여기(게이트) ·
    * `apps/api/test/page-import.test.ts`(서버 상태) · `apps/web/…/page-json.test.tsx`(미리보기).
    */
   function envelopeOf(schema: PageDocument) {
@@ -222,7 +222,7 @@ describe('가져오기 게이트 — 서버와 화면이 같은 함수를 부른
     expect(gate.message).toContain('999')
   })
 
-  it('카탈로그에 없는 타입을 막고 **파일의 노드 id**를 가리킨다 (D8)', () => {
+  it('카탈로그에 없는 타입을 막고 **파일의 노드 id**를 가리킨다', () => {
     const gate = gatePageImport(
       envelopeOf({
         version: 1,

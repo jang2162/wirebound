@@ -1,5 +1,5 @@
 /**
- * **페이지 JSON 봉투**(설계 §11.2 — P7-3 D1·D2·D6). 페이지 하나를 파일 한 벌로 내보내고
+ * **페이지 JSON 봉투**(설계서 「페이지 JSON」). 페이지 하나를 파일 한 벌로 내보내고
  * 그 파일로 페이지를 만드는 형식이 여기 있다.
  *
  * **순수하다.** React도 DOM도 `fetch`도 SQL도 모른다 — 파일을 내려받고 읽는 것은
@@ -7,76 +7,67 @@
  *
  * ---
  *
- * # 왜 `packages/schema`인가 (D1)
+ * # 왜 `packages/schema`인가
  *
  * 봉투가 참조하는 것은 `PageDocument`와 코멘트뿐이고 **테마를 모른다.** 스냅샷 payload가
- * `apps/api`로 간 것은 `Theme`를 참조했기 때문이지(P6-1 D2) 서버 것이라서가 아니다.
- * 그리고 §12의 `wireb pull`(P9)이 이 봉투를 쓴다 — 소비자가 서버·웹 말고 하나 더 보인다.
+ * `apps/api`에 사는 것은 `Theme`를 참조하기 때문이지 서버 것이라서가 아니다.
+ * 그리고 `wireb pull`(설계서 「LLM 연계」)이 이 봉투를 쓴다 — 소비자가 서버·웹 말고 하나 더 있다.
  *
  * ---
  *
- * # 버전 축이 셋이고 섞이지 않는다 (D2)
+ * # 버전 축이 셋이고 섞이지 않는다
  *
  * | 축 | 어디 | 무엇 |
  * |---|---|---|
- * | `wireboundVersion` | 이 봉투 | **파일 형식** (§11.2 — 문자열 `"1"`) |
- * | `PageDocument.version` | `schema` 안 | 컴포넌트 props 규격 (§13.1) |
- * | `payloadVersion` | 스냅샷 | 스냅샷 payload 형식 (P6-1 D3) |
+ * | `wireboundVersion` | 이 봉투 | **파일 형식** (「페이지 JSON」 — 문자열 `"1"`) |
+ * | `PageDocument.version` | `schema` 안 | 컴포넌트 props 규격 (「스키마 마이그레이션」) |
+ * | `payloadVersion` | 스냅샷 | 스냅샷 payload 형식 |
  *
  * **모르는 `wireboundVersion`은 거부하고 그 값을 말한다**(아래 `readPageJson`).
  * 문서 쪽은 `migrateDocument`가 올린다 — 그 호출은 **부르는 쪽**이 한다(이 파일은 던지지
  * 않는 층이고 `migrateDocument`는 던진다).
  *
- * ## §11.2의 예시와 갈리는 자리 둘 — 설계서를 고치지 않고 여기 적는다
+ * ## `schema`는 root 노드가 아니라 문서 봉투(`{ version, root }`)다
  *
- * **㉠ `schema`가 노드가 아니라 문서 봉투(`{ version, root }`)다.**
- *
- * §11.2의 예시는 `"schema": { "id": "n_root", "type": "Page", … }`로 **root 노드**를 싣는다.
- * 그 모양에는 **문서 버전을 적을 자리가 없다.** 그런데 §13.1이 *"가져오기와 스냅샷 복원도
+ * 설계서 「페이지 JSON」의 예시와 규칙이 이것이다. **root 노드를 그대로 싣는 모양에는 문서
+ * 버전을 적을 자리가 없다.** 설계서 「스키마 마이그레이션」이 *"가져오기와 스냅샷 복원도
  * 같은 경로를 탄다"*고 못박았고 그 경로(`migrateDocument`)는 문서의 `version`을 읽는다.
  * 버전 없는 파일을 받으면 가져오기가 버전을 **지어내야** 하고, 지어낸 값은 반드시
  * *"지금 버전"*이 된다 — 즉 옛 버전으로 내보낸 파일이 마이그레이션 없이 최신 문서로
- * 취급된다. **§13.1이 존재하는 이유가 정확히 그 사고**이므로 그 모양을 쓸 수 없다.
+ * 취급된다. 그래서 root 노드만 든 `schema`는 받지 않는다.
  *
- * 봉투에 `documentVersion`을 따로 두는 판(예시의 `schema`는 그대로 두고 키를 하나 더)도
- * 놓고 봤는데, **D2의 표가 그 축의 집을 *"문서"*라고 적었다** — 봉투로 올리면 축이 섞인다.
+ * 봉투에 `documentVersion`을 따로 두는 판(`schema`는 root 노드로 두고 키를 하나 더)도
+ * 놓고 봤는데, **위 표가 그 축의 집을 *"문서"*라고 적었다** — 봉투로 올리면 축이 섞인다.
  * 그리고 `PUT .../schema`의 본문이 이미 `{ schema: DocumentEnvelopeSchema }`라
  * 이 저장소에서 *"`schema` 키 = 문서 봉투"*가 이미 한 번 쓰인 뜻이다.
  *
- * **㉡ `comments[]`가 `marker`를 싣지 않는다** — 아래 D6 절.
- *
  * ---
  *
- * # D6 — 번호는 노드가 든다. 봉투의 `comments[].marker`는 받지 않는다
+ * # 번호는 노드가 든다 — 봉투의 `comments[].marker`는 받지 않는다
  *
- * §11.2의 예시는 `{ "marker": 1, "nodeId": …, "body": … }`인데 **P5-1 D1이 번호를 노드로
- * 옮겼다**(`repos/comments.ts` 머리말: *"번호(`marker`)는 여기 없다"*). 그래서 봉투가 그것을
+ * 설계서 「페이지 JSON」의 규칙이다. 번호(`marker`)는 코멘트 표가 아니라 페이지 문서의
+ * 노드가 든다(`repos/comments.ts` 머리말: *"번호(`marker`)는 여기 없다"*). 봉투가 그것을
  * 다시 실으면 **같은 값의 출처가 둘**이 되고, 파일의 둘이 어긋날 때 무엇을 믿을지 정하는
- * 규칙을 새로 지어야 한다 — 이 저장소 어디에도 없는 규칙이다.
+ * 규칙이 없다 — 이 저장소 어디에도 없는 규칙이다.
  *
  * **`schema` 안의 노드가 이미 그 번호를 나른다**(`WbNodeSchema.marker`). 내보내기는 문서를
  * 그대로 싣고, 가져오기는 그 문서를 그대로 쓴다. 즉 번호는 **빠지지 않는다** — 자리가
- * 하나로 줄었을 뿐이다.
- *
- * **§11.2와 모순되지도 않는다.** `routes/comments.ts`의 D1이 이미 그 화해를 적어 뒀다:
- * *"§11.2의 `comments: [{ marker, nodeId, body }]`와 함께 참이려면 같은 노드의 코멘트가
- * 같은 번호를 공유해야 한다"* — 즉 예시의 `marker`는 **노드에서 파생된 값**이지 코멘트가
- * 스스로 든 값이 아니다. 파생 값을 파일에 겹쳐 적으면 그것이 낡는다.
+ * 하나다. 노드에서 파생된 값을 파일에 겹쳐 적으면 그것이 낡는다.
  *
  * **조용히 버리지 않고 거부한다.** `strictObject`가 그 키를 400으로 끊고, 아래
  * `readPageJson`이 *"번호는 `schema`의 노드에 있다"*까지 말한다. 버리면 사용자가 적은 것이
- * 소리 없이 없어진다(P7-2 이월 §6이 `remapNodeIds`에서 같은 선을 그었다).
+ * 소리 없이 없어진다(`remapNodeIds`가 같은 선을 긋는다).
  *
  * ---
  *
- * # D4 — `layoutRef`는 받되 쓰지 않는다
+ * # `layoutRef`는 받되 쓰지 않는다
  *
- * §11.2의 필드인데 **오늘 페이지가 레이아웃을 고르는 경로가 없다.** 재서 확인한 것 셋:
+ * 설계서 「페이지 JSON」의 필드인데 **지금 페이지가 레이아웃을 고르는 경로가 없다.** 확인할 자리 셋:
  * `pages` 테이블에 레이아웃 컬럼이 없고(`db/types.ts`의 `PagesTable`), 레이아웃은
- * 프로젝트당 기본 하나를 `projects.default_layout_id`로 가리키며(§4.2), `repos/layouts.ts`의
- * 유일한 갱신 함수는 `updateLayoutTheme`(테마 참조)이다.
+ * 프로젝트당 기본 하나를 `projects.default_layout_id`로 가리키며(설계서 「테이블 정의」),
+ * `repos/layouts.ts`의 유일한 갱신 함수는 `updateLayoutTheme`(테마 참조)이다.
  *
- * 그래서 **봉투는 이 필드를 받는다**(§11.2대로 쓴 파일이 거부당하지 않는다). **가져오기는
+ * 그래서 **봉투는 이 필드를 받는다**(설계서대로 쓴 파일이 거부당하지 않는다). **가져오기는
  * 쓰지 않고, 쓰지 않는다고 말한다** — 조용히 버리지 않는 것이 판정이다. **내보내기는 이
  * 필드를 만들지 않는다**(적을 값이 없다). 그러므로 왕복에서 이 필드는 살아남지 않는다.
  */
@@ -84,7 +75,7 @@ import { z } from 'zod'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN } from '../envelope'
 import type { PageDocument } from '../node'
 
-/** 봉투의 버전. §11.2가 문자열 `"1"`로 적었다. */
+/** 봉투의 버전. 설계서 「페이지 JSON」이 문자열 `"1"`로 적었다. */
 export const WIREBOUND_PAGE_VERSION = '1'
 
 /**
@@ -105,21 +96,19 @@ const FALLBACK_FILE_STEM = 'page'
  * 값이 한 자리다.
  *
  * 상한을 봉투에도 거는 근거: 걸지 않으면 **가져오기가 `POST .../comments`로는 만들 수 없는
- * 행을 만든다.** 그 상한의 이유(요청 하나가 임의 크기의 텍스트를 싣지 못하게 하고, §4.5의
- * 스냅샷이 그 비용을 payload로 그대로 옮긴다 — P5-1 재라 #4)는 어느 경로로 들어오든 같다.
+ * 행을 만든다.** 그 상한의 이유(요청 하나가 임의 크기의 텍스트를 싣지 못하게 하고, 설계서
+ * 「스냅샷」의 스냅샷이 그 비용을 payload로 그대로 옮긴다)는 어느 경로로 들어오든 같다.
  * 하한이 1인 것도 같다 — 빈 코멘트는 코멘트가 아니다.
  *
- * > **이 문장은 처음 적었을 때 거짓이었다 — 리뷰가 잡았다.** 그때는 라우트가 `2000`을
- * > 그대로 박고 있어 값이 **두 자리**였고, 그래서 이 상수를 3000으로 바꿔도
- * > `comments.test.ts`가 전부 통과했다(리뷰가 재현했고 나도 다시 쟀다). **주석을 참으로
- * > 만드는 쪽으로 고쳤다** — 라우트가 실제로 import한다. 그리고 그 이음을 케이스가
- * > 지킨다: 경계 케이스가 숫자를 박지 않고 **이 상수에서 만든다**(`comments.test.ts`의
- * > *"빈 본문과 상한+1을 막고 상한은 받는다"*).
+ * > **라우트가 값을 따로 박으면 이 문장이 조용히 거짓이 된다** — 값이 두 자리가 되어 이
+ * > 상수를 바꿔도 `comments.test.ts`가 전부 통과한다. 그래서 라우트가 이 상수를 import하고,
+ * > 그 이음을 케이스가 지킨다: 경계 케이스가 숫자를 박지 않고 **이 상수에서 만든다**
+ * > (`comments.test.ts`의 *"빈 본문과 상한+1을 막고 상한은 받는다"*).
  * >
- * > **다만 죽는 변이는 그 변이가 아니다 — 방향이 반대다(델타 리뷰 (2)).** 이은 뒤
- * > *"이 상수를 3000으로"*는 **결함이 아니라 정상 설정 변경**이라 라우트와 케이스가 함께
- * > 움직여 통과하는 것이 맞는다. 죽는 것은 **둘을 갈라 놓는 변이**다: 라우트의 경계를
- * > 이 상수에서 한 칸 떼거나, 앞 판처럼 라우트에 값을 박고 이 상수만 옮기면 죽는다.
+ * > **그 케이스가 잡는 변이는 방향이 정해져 있다.** *"이 상수를 3000으로"*는 **결함이 아니라
+ * > 정상 설정 변경**이라 라우트와 케이스가 함께 움직여 통과하는 것이 맞는다. 죽는 것은
+ * > **둘을 갈라 놓는 변이**다: 라우트의 경계를 이 상수에서 한 칸 떼거나, 라우트에 값을 박고
+ * > 이 상수만 옮기면 죽는다.
  */
 export const COMMENT_BODY_MIN_LENGTH = 1
 export const COMMENT_BODY_MAX_LENGTH = 2000
@@ -131,18 +120,15 @@ export const COMMENT_BODY_MAX_LENGTH = 2000
  * **`COMMENT_BODY_MAX_LENGTH`와 같은 근거로 여기 산다.** 봉투에도 걸지 않으면 가져오기가
  * `POST .../pages`·`PATCH .../pages/:id`로는 만들 수 없는 행을 만든다.
  *
- * **앞 판은 이 수가 두 자리였다** — 이 파일이 `2000`을 적고 `routes/pages.ts`도 `2000`을
- * 적었으며, 이 파일의 `PageSectionSchema` 주석은 *"길이는 `routes/pages.ts`의 것과 같다"*고
- * **라우트를 소유자로 가리키고 있었다.** 그 상태에서 한쪽만 고치면 갈렸고 아무 케이스도
- * 죽지 않았다(`COMMENT_BODY_MAX_LENGTH` 머리말이 코멘트에 대해 겪은 그 사고다). 이제
- * 소유자는 이 상수이고 주석의 화살표도 뒤집혔다.
+ * **소유자는 이 상수다** — 라우트가 값을 따로 적으면 수가 두 자리가 되고, 한쪽만 고쳐도
+ * 아무 케이스도 죽지 않은 채 갈린다(`COMMENT_BODY_MAX_LENGTH` 머리말과 같은 고장이다).
  *
  * **`nullable`이 규격의 일부다.** `null`은 *"설명 없음"*이라는 값이고 빈 문자열(`''`)과
- * **다르다** — 서버는 `''`를 `''`로 저장한다(실측: `PATCH {description:''}` → 200,
+ * **다르다** — 서버는 `''`를 `''`로 저장한다(다시 재려면: `PATCH {description:''}` → 200,
  * 되읽으면 `""`). 그 둘을 여기서 합치지 않는 이유는 `projects.description`과 같다.
  *
  * **글자 수는 코드포인트가 아니라 UTF-16 코드 단위다**(zod가 `.length`를 본다). 한글은
- * 한 자가 한 단위라 한글 2001자도 400이다(실측). BMP 밖(이모지 등)은 한 자가 둘로 세이는데,
+ * 한 자가 한 단위라 한글 2001자도 400이다. BMP 밖(이모지 등)은 한 자가 둘로 세이는데,
  * 그것이 이 상한의 뜻을 바꿀 만큼 흔한 입력이 아니라 그대로 둔다.
  */
 export const PAGE_DESCRIPTION_MAX_LENGTH = 2000
@@ -158,7 +144,7 @@ export const PageDescriptionSchema = z
  *
  * **저장은 둘을 가른다**(위 머리말 — `''`는 `''`로 저장된다). 이것은 **견줄 때만의 같음**이다: 화면에서 둘은
  * 똑같이 «설명 없음»으로 보이는데, 견주기가 둘을 가르면 «다른 사람이 바꿨습니다 / (설명 없음)»이라는, 사용자가 볼
- * 수 없는 차이로 선 충돌이 난다(리뷰 F3 — 나는 상자를 비웠고(`null`) 남은 `''`를 저장했다). 저장을 합치지(`''`→
+ * 수 없는 차이로 선 충돌이 난다(예: 한쪽은 상자를 비운 `null`, 저장된 값은 `''`). 저장을 합치지(`''`→
  * `null`) 않은 까닭: 쓰는 자리(만들기 · 고치기 · 가져오기 · 스냅샷 복원)와 이미 있는 행 · 스냅샷 안의 `''`까지
  * 손대야 한다(마이그레이션). 이 함수는 견주는 두 자리가 **같은 것을 부른다** — 서버의 견주기(`apps/api`의
  * `staleMetaFields`)와 화면의 판정(`apps/web`의 `judgeMeta`). 한 자리만 합치면 서버가 409 를 낸 값을 화면이
@@ -171,16 +157,16 @@ export function samePageMeta(a: string | null, b: string | null): boolean {
   return (a === '' ? null : a) === (b === '' ? null : b)
 }
 
-/** 봉투의 `comments[]` 한 줄. **`marker`가 없다** — 위 D6 절. */
+/** 봉투의 `comments[]` 한 줄. **`marker`가 없다** — 위 «번호는 노드가 든다» 절. */
 export interface PageJsonComment {
   nodeId: string
   body: string
 }
 
-/** 봉투의 `page` 절. §11.2의 세 필드. */
+/** 봉투의 `page` 절. 설계서 「페이지 JSON」의 세 필드. */
 export interface PageJsonPage {
   title: string
-  /** §11.2의 필드. **읽기만 하고 쓰지 않는다** — 위 D4 절. */
+  /** 「페이지 JSON」의 필드. **읽기만 하고 쓰지 않는다** — 위 «`layoutRef`는 받되 쓰지 않는다» 절. */
   layoutRef?: string
   description?: string | null
 }
@@ -189,7 +175,7 @@ export interface PageJsonPage {
 export interface PageJson {
   wireboundVersion: string
   page: PageJsonPage
-  /** **문서 봉투다 — root 노드가 아니다**(위 ㉠). */
+  /** **문서 봉투다 — root 노드가 아니다**(위 «`schema`는 root 노드가 아니라» 절). */
   schema: PageDocument
   comments: PageJsonComment[]
 }
@@ -199,12 +185,12 @@ export interface PageJson {
  * `POST .../pages`로는 만들 수 없는 행을 만든다 — 코멘트 본문 상한과 같은 근거다.
  *
  * **설명은 소유자가 위의 `PageDescriptionSchema`다** — `routes/pages.ts`가 그것을 가져다
- * 쓰고 여기도 같은 것을 쓴다. **제목은 아직 두 자리다**(여기와 `routes/pages.ts`의 `Title`) —
- * 이 슬라이스가 만진 것은 설명뿐이라 그대로 두고 이월한다.
+ * 쓰고 여기도 같은 것을 쓴다. **제목은 두 자리다**(여기와 `routes/pages.ts`의 `Title`) —
+ * 한쪽만 고치면 가져오기와 라우트의 상한이 조용히 갈린다. 고칠 때는 둘을 함께 고친다.
  */
 const PageSectionSchema = z.strictObject({
   title: z.string().min(1, '제목을 입력하세요').max(200, '제목은 200자 이하여야 합니다'),
-  // **길이만 본다.** 이 값이 무엇을 가리키는지는 이 봉투가 답할 수 없다(D4).
+  // **길이만 본다.** 이 값이 무엇을 가리키는지는 이 봉투가 답할 수 없다(위 «`layoutRef`는 받되 쓰지 않는다» 절).
   layoutRef: z.string().min(1).max(200).optional(),
   description: PageDescriptionSchema.optional(),
 })
@@ -226,9 +212,9 @@ const CommentSchema = z.strictObject({
 /**
  * 봉투 전체. **`z.strictObject`라 선언되지 않은 키는 그 자체로 거부다**(이 저장소의 관례).
  * 가져오기는 남이 만든 파일을 받으므로 **그 거부가 살아 있어야 한다** — 조용히 버리면
- * 사용자가 적은 것이 소리 없이 없어진다(P7-2 이월 §6).
+ * 사용자가 적은 것이 소리 없이 없어진다.
  *
- * **`comments`가 필수다.** §11.2가 네 키를 봉투의 규격으로 적었고 내보내기가 늘 넷을 쓴다 —
+ * **`comments`가 필수다.** 설계서 「페이지 JSON」이 네 키를 봉투의 규격으로 적었고 내보내기가 늘 넷을 쓴다 —
  * 없는 키를 `[]`로 대신 읽어 주면 *"이것이 페이지 JSON인가"*에 답하는 힘이 그만큼 준다.
  */
 export const PageJsonSchema = z.strictObject({
@@ -245,7 +231,7 @@ export const PageJsonSchema = z.strictObject({
  * - `unreadable` — JSON이 아니다. 할 일: 파일을 확인한다.
  * - `not-envelope` — JSON은 맞는데 wirebound 봉투가 아니다. 할 일: **다른 파일을 고른다.**
  * - `unknown-version` — 봉투는 맞는데 이 wirebound가 모르는 버전이다. 할 일: **wirebound를
- *   올린다.** §13.1이 예고한 진입점이고 오늘 마이그레이션 함수는 없다.
+ *   올린다.** 설계서 「스키마 마이그레이션」의 진입점이고 봉투 버전의 마이그레이션 함수는 지금 없다.
  * - `bad-shape` — 봉투이고 아는 버전인데 내용이 규격이 아니다. 할 일: **파일의 그 자리를
  *   고친다** — 그래서 이 갈래만 `issues`가 비어 있지 않다.
  */
@@ -253,7 +239,7 @@ export type PageJsonFailure = 'unreadable' | 'not-envelope' | 'unknown-version' 
 
 /**
  * 파일의 **어느 자리**가 문제인가. `validatePage`의 `ValidationIssue`와 같은 축(`path`)을
- * 갖는 것이 D8이다 — 가져오기가 실패할 때 사용자에게 남는 것은 파일뿐이므로, 두 단계
+ * 갖는다 — 가져오기가 실패할 때 사용자에게 남는 것은 파일뿐이므로, 두 단계
  * (봉투·카탈로그)가 **둘 다** 자리를 말해야 한다.
  */
 export interface PageJsonIssue {
@@ -269,7 +255,7 @@ const EMPTY_MESSAGE = '내용이 비어 있습니다.'
 const NOT_ENVELOPE_MESSAGE =
   'wirebound가 내보낸 페이지 파일이 아닙니다 — 파일 이름이 .wirebound-page.json인지 확인하세요.'
 const BAD_SHAPE_MESSAGE = '페이지 JSON의 모양이 규격과 다릅니다'
-/** D6 — 이 한 갈래만 문장을 따로 짓는다. 그 값이 **갈 자리가 있기** 때문이다. */
+/** `marker` 거부 — 이 한 갈래만 문장을 따로 짓는다. 그 값이 **갈 자리가 있기** 때문이다(위 «번호는 노드가 든다» 절). */
 const COMMENT_MARKER_MESSAGE =
   'comments[]에는 marker를 싣지 않습니다 — 번호는 schema 안의 노드가 듭니다(설계 §4.3).'
 
@@ -348,7 +334,7 @@ export function parsePageJson(parsed: unknown): PageJsonResult {
  * 봉투를 만든다. **문서와 코멘트를 복사하지도 정규화하지도 않는다** — `toExport`(테마)와
  * 같은 판단이다: 다시 조립하면 그 자리에서 값이 갈릴 수 있다.
  *
- * **`layoutRef`를 만들지 않는다**(D4). **`description`은 받은 그대로 싣는다** — `null`은
+ * **`layoutRef`를 만들지 않는다**(위 «`layoutRef`는 받되 쓰지 않는다» 절). **`description`은 받은 그대로 싣는다** — `null`은
  * *"설명 없음"*이라는 값이고 키가 없는 것과 다르다(`updateMenu`의 `parentId: null`과 같은 자리).
  */
 export function toPageJson(input: {
@@ -405,10 +391,10 @@ export function pageJsonFileName(title: string): string {
 /**
  * zod 이슈 하나를 **자리를 든 줄**로 옮긴다.
  *
- * **`unrecognized_keys`만 갈라 다룬다 — 재서 알았다.** 그 이슈의 `path`는 **빈 배열**이고
+ * **`unrecognized_keys`만 갈라 다룬다.** 그 이슈의 `path`는 **빈 배열**이고
  * (거부당한 키가 아니라 그 키를 **든 객체**를 가리킨다) 키 이름은 `issue.keys`에 따로 실린다.
- * 그대로 옮기면 `path`가 `''`가 되어 *"파일의 어디를 고치나"*에 아무것도 답하지 못한다 —
- * 처음 그렇게 짰고 케이스가 그것을 잡았다. 그래서 **키마다 한 줄**로 편다.
+ * 그대로 옮기면 `path`가 `''`가 되어 *"파일의 어디를 고치나"*에 아무것도 답하지 못한다.
+ * 그래서 **키마다 한 줄**로 편다.
  */
 function toIssues(issue: z.core.$ZodIssue): PageJsonIssue[] {
   const base = issue.path.map(String)
@@ -419,11 +405,11 @@ function toIssues(issue: z.core.$ZodIssue): PageJsonIssue[] {
 }
 
 /**
- * 파일의 `comments[]` 중 하나라도 `marker`를 들었는가(D6의 문장을 고르는 자리).
+ * 파일의 `comments[]` 중 하나라도 `marker`를 들었는가(`COMMENT_MARKER_MESSAGE`를 고르는 자리).
  *
  * **`safeParse`가 실패한 뒤에 날것을 다시 보는 것이 요점이다.** zod의 `unrecognized_keys`
  * 이슈에서 키 이름을 꺼낼 수도 있지만 그 이슈의 모양은 zod의 계약이고, 여기서 물어야 하는
- * 것은 *"사용자가 §11.2의 예시대로 적었는가"* 하나뿐이라 날것을 보는 편이 좁다.
+ * 것은 *"사용자가 코멘트에 `marker`를 적었는가"* 하나뿐이라 날것을 보는 편이 좁다.
  */
 function hasCommentMarker(parsed: Record<string, unknown>): boolean {
   const comments = parsed.comments

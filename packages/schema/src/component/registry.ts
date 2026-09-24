@@ -12,7 +12,7 @@ export function registerComponent(def: ComponentDef): void {
    *
    * **고르개에서 구별되지 않는 항목 둘이 되는 것**이 이 검사가 막는 것이다. 타입이 달라
    * 동작은 갈리는데 화면의 글자가 같으면 사용자가 어느 쪽을 골랐는지 알 수 없다 —
-   * 영문 타입명을 내던 판에는 없던 고장이라 이름을 들이면서 함께 막는다.
+   * 타입명은 겹칠 수 없어도 사람이 읽는 이름(`label`)은 겹칠 수 있어서 생기는 고장이다.
    */
   const clash = [...registry.values()].find((other) => other.label === def.label)
   if (clash) {
