@@ -73,7 +73,7 @@ pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바�
 비우면 기본값, **0 은 싣지 않는다 — 서버·DB 설정을 따른다**(범위 밖이면 api 가 뜨지 않는다 — `config.ts`의 `dbTimeLimitEnv`).
 **풀러(pgbouncer 부류) 뒤라면** 첫째 값은 기동 인자라 풀러가 거절하거나 버린다 — api·`migrate`가 기동 때 재서 거절이면
 무엇을 하라고 말하고 멈추고, 버렸으면 경고하고 뜬다(`src/db/client.ts`의 `verifyDbTimeLimits`). DB 에 닿지 못해 재지 못했으면
-(분할이면 `DB_POOL_WAIT_MS`만큼 쓴다) «기동 점검을 건너뜁니다»를 경고하고 뜬다 — 이 점검은 기동 때 한 번뿐이다. `lock_timeout`·`statement_timeout`은 **걸지 않는다** — 이 앱은 페이지 행 잠금에 일부러 줄을 서므로 정당한
+(분할이면 `DB_POOL_WAIT_TIMEOUT_MS`만큼 쓴다) «기동 점검을 건너뜁니다»를 경고하고 뜬다 — 이 점검은 기동 때 한 번뿐이다. `lock_timeout`·`statement_timeout`은 **걸지 않는다** — 이 앱은 페이지 행 잠금에 일부러 줄을 서므로 정당한
 기다림이 봉투 500 으로 끊긴다. 값의 근거(잰 값)와 판정은 `src/db/client.ts`의 `createPool` 머리말 «네트워크 분할»이 갖는다.
 
 **그 플래그가 안 붙는 자리가 둘이고, 둘 다 이 파일을 따로 읽는다.**
