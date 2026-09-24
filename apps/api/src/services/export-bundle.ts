@@ -1,5 +1,5 @@
 /**
- * **프로젝트 하나를 §11.3의 정적 번들로 만든다**(P8-4 T2 · D1·D5).
+ * **프로젝트 하나를 설계서 「HTML 정적 번들」의 정적 번들로 만든다.**
  *
  * `services/`는 SQL을 직접 쓰지 않고 HTTP도 모른다 — `repos/`의 함수를 조율할 뿐이다
  * (`snapshot-capture.ts`와 같은 자리). zod도 Fastify도 상태 코드도 이 파일에 없고,
@@ -9,28 +9,27 @@
  *
  * # 아래 순서 자체가 규격이다
  *
- * 1. `readExportRows` → `assembleExportSource` — 메뉴·페이지·문서·코멘트·설명. **PPTX와 공유한다**(P10-1 D4).
+ * 1. `readExportRows` → `assembleExportSource` — 메뉴·페이지·문서·코멘트·설명. **PPTX와 공유한다.**
  *    `export-source.ts`의 머리말이 수집 순서와 근거를 든다.
  * 2. `currentProjectTheme` → `asResolvedTheme` — 캔버스가 보는 것과 **같은 사슬**이다.
- *    **PPTX도 같은 둘을 지난다**(P10-2). 앞 판에는 *"여기서만 읽는다"*고 적혀 있었는데
- *    그것은 PPTX가 §6의 테마를 **OOXML 색으로** 안 옮긴다는 뜻이었고, 이제 PPTX는 그
- *    테마로 **래스터를 그린다** — 슬라이드의 화면이 곧 그 테마다.
+ *    **PPTX도 같은 둘을 지난다.** PPTX는 설계서 「테마 시스템」의 테마를 **OOXML 색으로**
+ *    옮기지 않고 그 테마로 **래스터를 그린다** — 슬라이드의 화면이 곧 그 테마다.
  * 3. `exportBundle` — 파일과 `errors`.
  * 4. 못 이은 링크를 센다.
  *
- * # D1 — 출처는 라이브 프로젝트다
+ * # 출처는 라이브 프로젝트다
  *
  * 페이지·문서는 `pages` 표의 **지금** 값이고, 코멘트는 `comments` 표의 **살아 있는**
- * 값이며, 테마는 프로젝트가 **지금** 쓰는 것이다. §15의 MVP가 *"설계서를 배포한다"*이고
+ * 값이며, 테마는 프로젝트가 **지금** 쓰는 것이다. 설계서 「로드맵」의 MVP가 *"설계서를 배포한다"*이고
  * 그것은 **지금 설계서**다. 스냅샷 번들은 이 함수의 입력을 payload에서 읽어 오는 것으로
  * 바뀔 뿐이라(입력이 이미 값이다) 그 위에 얹힌다.
  *
  * # 지문(fingerprint)은 두지 않는다
  *
  * 캡처는 *"그때 그 화면"*을 약속하므로 그 검사가
- * 필요하지만(§4.5), 번들은 *"지금 설계서"*를 약속한다 — 수집 중에 누가 페이지를 고쳤다면
+ * 필요하지만(설계서 「스냅샷」), 번들은 *"지금 설계서"*를 약속한다 — 수집 중에 누가 페이지를 고쳤다면
  * 그 편집이 실린 번들도 *"지금"*의 정직한 답이다. 필요해지면 캡처를 지나 스냅샷 번들을
- * 만드는 쪽이 옳고, 그것은 D1이 이월로 넘긴 자리다.
+ * 만드는 쪽이 옳다(위 「출처는 라이브 프로젝트다」 — 입력을 payload에서 읽는다).
  */
 import {
   exportBundle,
@@ -50,7 +49,7 @@ import { assembleExportSource, readExportRows, type ExportRows } from './export-
 import { asResolvedTheme, currentProjectTheme, type CurrentProjectTheme } from './project-theme'
 
 /**
- * **도메인 에러 둘을 `export-source`가 소유한다**(P10-1). 두 내보내기가 같은 수집을
+ * **도메인 에러 둘을 `export-source`가 소유한다.** 두 내보내기가 같은 수집을
  * 지나므로 같은 상태에서 같은 예외가 나야 하고, 라우트는 그것을 한 자리에서 상태 코드로
  * 옮긴다. **여기서 다시 내는 것은 부르는 쪽이 그대로 쓰던 이름을 잃지 않게 하려는 것이다.**
  */
@@ -63,15 +62,15 @@ export interface ExportedPageSummary {
    * **번들이 이 페이지를 부르는 이름**(`TargetedPage.bundleTitle` — 조상 메뉴가 붙어 있다).
    *
    * 맨 제목이 아니다. 맨 제목이면 서로 다른 메뉴의 같은 제목이 화면에서 `목록`·`목록`으로
-   * 보이는데, **그것이 이 슬라이스가 번들의 좌측 트리에서 고친 바로 그 결함이다**
-   * (보고서 §4.4). 같은 결함을 화면에 남겨 두면 *"이 응답을 읽는 사람"*이 겪는다.
+   * 보이는데, **번들의 좌측 트리가 조상 메뉴를 붙이는 것이 바로 그 결함 때문이다.**
+   * 같은 결함을 화면에 남겨 두면 *"이 응답을 읽는 사람"*이 겪는다.
    *
    * **그리고 이 응답 안에서 한 페이지는 한 이름으로 불린다.** `errors[].title`은
-   * `exportBundle`이 낸 것이라 늘 이 이름이었다 — 여기가 맨 제목이면 같은 패널의 위아래가
+   * `exportBundle`이 낸 것이라 늘 이 이름이다 — 여기가 맨 제목이면 같은 패널의 위아래가
    * 같은 페이지를 다르게 부른다.
    */
   title: string
-  /** 이 페이지를 가리키는 §8.1의 타겟. 저작 화면이 손으로 적는 문자열이다. */
+  /** 이 페이지를 가리키는 설계서 「상호작용」의 타겟. 저작 화면이 손으로 적는 문자열이다. */
   target: string
 }
 
@@ -119,10 +118,10 @@ export function buildProjectBundle(rows: ExportRows, { themeId, theme }: BundleT
 
   const bundlePages: BundlePage[] = ordered.map((page) => ({
     /**
-     * **조상 메뉴가 붙은 이름을 넘긴다**(P8-2 이월 §2의 판정 ②). `BundlePage.title`은
+     * **조상 메뉴가 붙은 이름을 넘긴다.** `BundlePage.title`은
      * `<title>`·좌측 트리의 이름·파일 이름 셋의 재료이고, 조상을 안 붙이면 서로 다른
-     * 메뉴의 같은 제목이 좌측 트리에서 **똑같은 두 줄**이 된다(D8 스모크에서 실측했다).
-     * 붙이면 §11.3의 예시 파일 이름(`관리자-회원-목록.html`)과도 같아진다.
+     * 메뉴의 같은 제목이 좌측 트리에서 **똑같은 두 줄**이 된다.
+     * 붙이면 「HTML 정적 번들」의 예시 파일 이름(`관리자-회원-목록.html`)과도 같아진다.
      */
     title: page.bundleTitle,
     document: documentById.get(page.id)!,
@@ -137,7 +136,7 @@ export function buildProjectBundle(rows: ExportRows, { themeId, theme }: BundleT
     files,
     errors,
     // **`bundleTitle`이다.** 맨 제목을 내면 화면의 페이지 목록이 `목록`·`목록`으로 보인다 —
-    // 번들의 좌측 트리에서 고친 것과 같은 결함이고, 여기는 `errors[].title`(늘 번들 이름)과
+    // 번들의 좌측 트리가 조상을 붙여 피하는 것과 같은 결함이고, 여기는 `errors[].title`(늘 번들 이름)과
     // 같은 응답이라 두 벌이 되기까지 한다.
     pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
     duplicateTargets: duplicateTargets(ordered),
@@ -147,7 +146,7 @@ export function buildProjectBundle(rows: ExportRows, { themeId, theme }: BundleT
 }
 
 /**
- * **어느 페이지도 가리키지 못한 링크를 센다**(D3.4).
+ * **어느 페이지도 가리키지 못한 링크를 센다.**
  *
  * 값은 이미 번들 안에 있다 — 계획의 요청마다 `href`가 `null`인지 보면 된다. 그런데
  * `exportBundle`은 그 계획을 값으로 내지 않고 HTML 안에 심어 내보내므로, 화면이 **미리**
@@ -155,7 +154,7 @@ export function buildProjectBundle(rows: ExportRows, { themeId, theme }: BundleT
  * 그 타겟을 든 페이지가 **정확히 하나**여야 링크가 생긴다.
  *
  * **파일 경로를 말하지 않고 페이지의 번들 이름으로 말한다.** `errors[].path`가 파일 이름이고
- * `index.html`이 담는 첫 페이지의 오류에도 `pages/….html`이 붙는데(P8-3 이월 §1),
+ * `index.html`이 담는 첫 페이지의 오류에도 `pages/….html`이 붙는데,
  * 아직 압축을 풀지도 않은 사람에게 파일 이름은 아무것도 짚어 주지 못한다.
  *
  * **빈 타겟은 세지 않는다.** 그것은 *"아직 안 골랐다"*이고 `schema`의 `checkPageAction`이
@@ -193,7 +192,7 @@ function brokenLinks(
  *
  * `walkNodes`를 그대로 쓴다 — 저장을 지난 문서는 `DocumentEnvelopeSchema`를 통과했으므로
  * 노드가 아닌 자식이 없다(편집 파이프라인 6단계와 `PUT .../schema` 1단계). **견디는
- * 순회를 하나 더 만들지 않는다** — 이 저장소에 이미 넷이 있다(P8-3 이월 §12).
+ * 순회를 하나 더 만들지 않는다** — 이 저장소에 이미 여럿 있다.
  */
 function referencedTargets(document: PageDocument): string[] {
   const targets: string[] = []

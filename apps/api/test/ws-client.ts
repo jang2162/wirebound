@@ -1,7 +1,8 @@
 /**
  * 테스트가 진짜 WebSocket 연결을 여는 자리. **새 의존을 쓰지 않는다** — Node 22의 전역
  * `WebSocket`(undici)이 `{ headers }` 옵션을 받아 핸드셰이크에 쿠키를 실어 준다(실측:
- * `ws-auth.test.ts`의 `쿠키가 핸드셰이크에 실린다`가 그것을 서버 쪽에서 확인한다).
+ * `ws-auth.test.ts`의 `WS 핸드셰이크는 REST와 같은 쿠키·같은 가드다` 묶음이 그것을 서버 쪽에서
+ * 확인한다 — 쿠키를 실은 연결은 붙고 안 실은 연결은 못 붙는다).
  *
  * # 왜 프레임을 큐에 쌓는가
  *
@@ -152,12 +153,12 @@ export class WsProbe {
 export type LockList = Extract<ServerFrame, { type: 'locks' }>['locks']
 
 /**
- * 잠금 목록이 그렇게 될 때까지 기다린다(§7.2).
+ * 잠금 목록이 그렇게 될 때까지 기다린다(설계서 「소프트 잠금」).
  *
  * **`waitForCount`로 *"프레임 하나 더"*를 세면 안 된다.** 누가 룸에 들어올 때마다 참가
  * 알림이 `locks`를 한 번 더 흘리므로(`ws/routes.ts`), 다음 프레임이 **내가 기다리던 것이
- * 아닐 수 있다.** 창을 두고 기다리는 것도 아니다 — 그런 케이스가 어떻게 되는지는 P3-2가
- * 겪었다. **마지막 목록이 조건을 만족할 때까지** 기다리는 것이 그 둘을 다 피한다.
+ * 아닐 수 있다.** 창을 두고 기다리는 것도 아니다 — 그러면 결말이 창의 길이와 도착 시각에
+ * 달린다. **마지막 목록이 조건을 만족할 때까지** 기다리는 것이 그 둘을 다 피한다.
  */
 export async function locksUntil(probe: WsProbe, want: (locks: LockList) => boolean, label: string): Promise<LockList> {
   const seen = (): LockList[] => probe.received.filter((frame) => frame.type === 'locks').map((frame) => frame.locks)

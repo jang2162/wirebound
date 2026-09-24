@@ -92,8 +92,8 @@ export class ParentNotFoundError extends Error {
 }
 
 /**
- * 자식 메뉴나 페이지가 있는 노드를 지우려 할 때 `deleteMenuNode`가 던진다(처음엔
- * 자식 메뉴만 셌으나, `pages.menu_node_id`도 같은 `ON DELETE RESTRICT`라
+ * 자식 메뉴나 페이지가 있는 노드를 지우려 할 때 `deleteMenuNode`가 던진다(자식 메뉴만이
+ * 아니다 — `pages.menu_node_id`도 같은 `ON DELETE RESTRICT`라
  * 페이지를 가진 메뉴도 같은 이유로 막아야 한다).
  */
 export class HasChildrenError extends Error {
@@ -215,7 +215,7 @@ async function reorderWithinSiblings(
  *   (`projectGuard`의 404/403 원칙과 같은 이유).
  * - `parentId`가 `excludeNodeId`의 자손 → `DescendantParentError`(400). 재귀
  *   CTE(`WITH RECURSIVE`) 한 번으로 확인한다 — 애플리케이션에서 트리를 올려 받아
- *   순회하면 왕복이 늘고 동시 이동과 경합한다(브리프 "금지 규칙" 절 참고).
+ *   순회하면 왕복이 늘고 동시 이동과 경합한다.
  */
 async function assertParentValid(
   trx: DbHandle,
@@ -267,7 +267,7 @@ export async function listMenuRows(db: DbHandle, projectId: string): Promise<Men
 }
 
 /**
- * 프로젝트의 메뉴 노드 전부를 **평평하게** 낸다(P6-1 스냅샷 캡처가 부른다).
+ * 프로젝트의 메뉴 노드 전부를 **평평하게** 낸다(스냅샷 캡처가 부른다).
  *
  * `listMenuRows`·`listMenuTree`와 셋이 비슷해 보이지만 내는 것이 다르다:
  *
@@ -280,15 +280,15 @@ export async function listMenuRows(db: DbHandle, projectId: string): Promise<Men
  * 캡처가 트리를 받지 않는 이유는 payload가 트리를 접지 않기 때문이다 —
  * `parentId`가 구조를 나른다(`@wirebound/themes`의 `snapshot/payload.ts`). 캡처가 `listMenuRows`를
  * 대신 쓰지 않는 이유는 그쪽이 snake_case를 그대로 흘려 **키 변환이 repo 밖으로 새기**
- * 때문이다(README "계층 규칙").
+ * 때문이다(`apps/api/README.md` 「계층 규칙」 절).
  *
  * **정렬이 결정적이어야 한다** — 같은 상태를 두 번 캡처하면 payload가 같아야 하고,
  * 그래야 `payloadBytes`나 payload 비교가 뜻을 갖는다.
  *
- * **`sort_order`만으로는 결정적이지 않다 — 재서 알았다.** 그 값은 **형제 그룹 안에서만**
+ * **`sort_order`만으로는 결정적이지 않다.** 그 값은 **형제 그룹 안에서만**
  * 뜻이 있어서(`db/types.ts`의 `MenuNodesTable`) 루트 노드와 그 자식이 **둘 다 0**을 갖는다.
- * 처음에 `ORDER BY sort_order, id`로 짰더니 `['설정', '사용자 관리']`(부모, 자식)를 넣은
- * 프로젝트에서 `['사용자 관리', '설정']`이 나왔다 — 동률이 uuid 순으로 갈린 것이다.
+ * `ORDER BY sort_order, id`면 `['설정', '사용자 관리']`(부모, 자식)를 넣은
+ * 프로젝트에서 `['사용자 관리', '설정']`이 나올 수 있다 — 동률이 uuid 순으로 갈린다.
  *
  * 그래서 `parent_id NULLS FIRST`를 앞에 둔다: **루트가 먼저, 그다음 부모별로 묶여** 각
  * 그룹 안에서 `sort_order` 순이다. **트리 순회(깊이 우선)는 아니다** — 부모끼리의 순서는
@@ -377,7 +377,7 @@ export async function insertMenuNode(
 }
 
 /**
- * 메뉴 제목을 **행 잠금을 잡고** 읽는다 — 메뉴 제목의 충돌 모델(이월 5차 ② — `routes/menu.ts`의 `PATCH` 머리말)이
+ * 메뉴 제목을 **행 잠금을 잡고** 읽는다 — 메뉴 제목의 충돌 모델(`routes/menu.ts`의 `PATCH` 머리말)이
  * «지금 값»과 «고치기 전 값»(`base`)을 견주는 자리다. `repos/pages.ts`의 `lockPageMeta`와 같은 이유로 **견주기와 쓰기가
  * 한 잠금 안**이어야 한다(잠금 없이 견주면 같은 바탕의 둘이 다 통과해 나중이 조용히 이긴다). 대상이 그 프로젝트
  * 소속이 아니면 `null`이다.
@@ -477,8 +477,8 @@ export async function updateMenuNode(
  * 존재하지 않으면) `'not-found'`를 돌려준다.
  *
  * 자식 메뉴나 페이지가 있으면 `HasChildrenError`를 던진다(호출자가 409로 매핑) —
- * DELETE 문장을 시도하기 전에 둘 다 미리 확인한다(원래 자식 메뉴만
- * 셌으나, 페이지도 `menu_node_id`로 이 노드를 참조하므로 함께 센다). `parent_id`·
+ * DELETE 문장을 시도하기 전에 둘 다 미리 확인한다(페이지도
+ * `menu_node_id`로 이 노드를 참조하므로 자식 메뉴와 함께 센다). `parent_id`·
  * `pages.menu_node_id` 양쪽의 `ON DELETE RESTRICT`(`0003-menu-nodes`·`0004-pages`
  * 마이그레이션)가 두 번째 방어선이라, 이 사전 확인과 실제 DELETE 사이에 자식이나
  * 페이지가 생기는 경합이 나더라도 DELETE 문장이 FK 위반으로 실패하고 그 예외를
@@ -522,7 +522,7 @@ export async function deleteMenuNode(db: DbHandle, projectId: string, nodeId: st
 }
 
 /**
- * 프로젝트의 메뉴 행 전부를 `FOR UPDATE`로 잠근다(P6-2 D8). **복원 전용이다.**
+ * 프로젝트의 메뉴 행 전부를 `FOR UPDATE`로 잠근다. **복원 전용이다.**
  *
  * 잠금이 실제로 무엇을 막는지는 `repos/snapshots.ts`의 `lockProjectForRestore` 머리말에
  * 실측표로 있다 — 이 함수 하나만으로는 **새 루트 메뉴 삽입을 못 막는다**(잠금은 이미
@@ -539,7 +539,7 @@ export async function lockProjectMenuNodes(trx: DbHandle, projectId: string): Pr
 }
 
 /**
- * **id를 받아** 메뉴 노드를 만든다(P6-2 D3 — *"복원이지 복제가 아니다"*).
+ * **id를 받아** 메뉴 노드를 만든다(*"복원이지 복제가 아니다"*).
  *
  * `insertMenuNode`와 갈리는 지점이 둘이다: (ㄱ) id를 발급하지 않고 **payload의 것을 그대로
  * 쓴다**, (ㄴ) `sort_order`를 형제 수로 계산하지 않고 **주어진 값을 그대로 쓴다.** 둘 다
@@ -549,9 +549,8 @@ export async function lockProjectMenuNodes(trx: DbHandle, projectId: string): Pr
  * 이미 판정했고(`dangling-reference`), 순서도 그쪽이 정한다(부모가 자식보다 먼저).
  * 마지막 방벽은 `menu_nodes_parent_id_fkey`다.
  *
- * **기존 `insertMenuNode`를 고치지 않았다** — 그쪽이 id를 만들어 내고 맨 끝에 붙이는
- * 성질은 `POST .../menu`의 계약이다(계획서 D3: *"기존 호출자가 id를 만들어 내는 성질은
- * 그대로 둔다"*).
+ * **`insertMenuNode`에 id 인자를 더하지 않는다** — 그쪽이 id를 만들어 내고 맨 끝에 붙이는
+ * 성질은 `POST .../menu`의 계약이다.
  */
 export async function insertMenuNodeWithId(
   trx: DbHandle,
@@ -601,7 +600,7 @@ export async function writeMenuNodePlacement(
  * **자식·페이지 확인도 하지 않는다.** 순서는 계획이 정한다(자식이 부모보다 먼저, 살아남는
  * 자식은 먼저 옮긴다). 그래도 `menu_nodes_parent_id_fkey`·`pages_menu_node_id_fkey`가
  * 남아 있어, 계획이 틀렸다면 **조용히 통과하지 않고 FK 위반으로 크게 죽는다** — 그리고
- * 복원 전체가 한 트랜잭션이라(D1) 아무것도 남지 않는다.
+ * 복원 전체가 한 트랜잭션이라 아무것도 남지 않는다.
  */
 export async function deleteMenuNodeRow(trx: DbHandle, projectId: string, nodeId: string): Promise<void> {
   await trx.deleteFrom('menu_nodes').where('id', '=', nodeId).where('project_id', '=', projectId).execute()

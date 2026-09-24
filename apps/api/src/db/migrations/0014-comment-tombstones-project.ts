@@ -2,14 +2,14 @@ import type { Kysely, Migration } from 'kysely'
 import { sql } from 'kysely'
 
 /**
- * **묘비의 수명을 페이지에서 프로젝트로 옮긴다**(2026-09-23, 이월 AC′ 리뷰 P4 · P5).
+ * **묘비의 수명을 페이지에서 프로젝트로 옮긴다.**
  *
- * `0013`은 묘비를 페이지에 매달았다(`page_id → pages ON DELETE CASCADE`) — «페이지가 없으면 재전송은 묘비 없이도
+ * `0013`은 묘비를 페이지에 매단다(`page_id → pages ON DELETE CASCADE`) — «페이지가 없으면 재전송은 묘비 없이도
  * 404 다». 그런데 **페이지는 되살아난다.** 복원이 지운 페이지를 같은 id 로 다시 세우면 그 페이지의 코멘트도 같은 id
  * 로 서는데, 묘비가 이미 CASCADE 로 갔으므로 되살린 행은 키 없이 서고(키는 묘비에서만 돌아온다) 스냅샷에 없던 코멘트는
- * 가릴 것이 없다. 같은 키 재전송이 **201 · 같은 글 두 행** · **201 · 되살림**이었다(리뷰가 잰 값 — 페이지 `DELETE`
- * 뒤 복원 P4, 복원의 `delete-page` 뒤 복원 P5. P5 는 복원 1단계가 `deleteComment`로 세운 묘비를 같은 트랜잭션의
- * `delete-page`가 곧바로 지운 것이다).
+ * 가릴 것이 없다. 페이지에 매달면 같은 키 재전송이 **201 · 같은 글 두 행** 또는 **201 · 되살림**이 된다 — 페이지
+ * `DELETE` 뒤 복원, 그리고 복원의 `delete-page` 뒤 복원(복원 1단계가 `deleteComment`로 세운 묘비를 같은 트랜잭션의
+ * `delete-page`가 곧바로 지운다).
  *
  * **그래서 한 칸 더 위 — 프로젝트에 매단다.** 복원이 되살릴 수 있는 것의 바깥 경계가 프로젝트다(스냅샷은 프로젝트의
  * 것이다). 프로젝트가 지워지면 되살릴 길이 없으니 묘비도 갈 때다.
@@ -29,11 +29,11 @@ import { sql } from 'kysely'
  * `FOR KEY SHARE`를 건다. 묻는 길(코멘트 `DELETE` · 페이지 삭제)은 페이지 행을 쥔 뒤에 묻으므로, 프로젝트 행을
  * `FOR UPDATE`로 먼저 잡고 페이지 행을 기다리는 복원 · 프로젝트 삭제와 고리가 된다. 그래서 두 길은 페이지를 잡기
  * **전에** 프로젝트 행을 먼저 잡는다 — 코멘트 `DELETE`는 `lockProjectForBurial`(`FOR KEY SHARE` — `repos/comments.ts`),
- * 페이지 삭제는 트리 쓰기의 첫 잠금 `lockProjectTree`(`FOR NO KEY UPDATE` — 이월 5차 A가 이미 둔 것). 복원은 프로젝트 행을
+ * 페이지 삭제는 트리 쓰기의 첫 잠금 `lockProjectTree`(`FOR NO KEY UPDATE`). 복원은 프로젝트 행을
  * 이미 쥐고 묻는다.
  *
- * **이미 돈 dev DB 가 있으므로 `0013`을 고치지 않고 여기 둔다.** 옛 묘비는 전부 살아 있는 페이지를 가리킨다(`0013`의
- * CASCADE) — 그 페이지의 프로젝트로 채운다.
+ * **`0013`을 고치지 않고 여기 둔다** — 이미 `0013`을 돈 DB 는 고친 `0013`을 다시 돌지 않는다. `0013`이 남긴 묘비는
+ * 전부 살아 있는 페이지를 가리킨다(`0013`의 CASCADE) — 그 페이지의 프로젝트로 채운다.
  */
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {

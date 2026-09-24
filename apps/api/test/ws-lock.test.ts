@@ -3,9 +3,9 @@
  *
  * ---
  *
- * # 잠금 프레임 무리 (§7.2 · P3-3 T2 · D4)
+ * # 잠금 프레임 무리 (설계서 「소프트 잠금」)
  *
- * §7.2가 정한 수명을 실행으로 잰다 — *"노드를 선택하면 그 서브트리에 잠금을 건다 · TTL 30초,
+ * 설계서가 정한 수명을 실행으로 잰다 — *"노드를 선택하면 그 서브트리에 잠금을 건다 · TTL 30초,
  * 편집 중 하트비트로 갱신 · **WS 연결 종료 시 즉시 해제**"*. TTL 자체는 시계를 밀어
  * `lock-store.test.ts`가 재고, 여기서는 **프레임이 오가는 것**과 **연결 종료**를 잰다.
  *
@@ -15,7 +15,7 @@
  * |---|---|
  * | 연결 둘 | 룸에 흘리는 대신 **낸 사람에게만** 답해도 안 죽는다 |
  * | 사용자 둘 | 소유자를 안 실어도 안 죽는다 |
- * | **같은 사용자의 탭 둘** | 잠금을 사람 단위로 저장해도 안 죽는다(수명은 연결이다 — D3) |
+ * | **같은 사용자의 탭 둘** | 잠금을 사람 단위로 저장해도 안 죽는다(수명은 연결이다) |
  * | 노드 여럿 | 어느 노드를 잠갔는지 안 실어도 안 죽는다 |
  */
 import { sql } from 'kysely'
@@ -125,7 +125,7 @@ function lockFrame(pageId: string, nodeId: string): string {
 
 const UNLOCK_FRAME = JSON.stringify({ type: 'unlock' })
 
-describe('잠금은 룸 전체가 본다 — 배지가 그 위에 선다 (§7.2)', () => {
+describe('잠금은 룸 전체가 본다 — 배지가 그 위에 선다 (설계서 「소프트 잠금」)', () => {
   it('잠그면 룸의 다른 연결이 그 목록을 받는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
@@ -166,7 +166,7 @@ describe('잠금은 룸 전체가 본다 — 배지가 그 위에 선다 (§7.2)
     })
   }, 30_000)
 
-  it('연결이 끊기면 즉시 해제된다 — §7.2가 수명을 연결에 맸다', async () => {
+  it('연결이 끊기면 즉시 해제된다 — 설계서 「소프트 잠금」이 수명을 연결에 맸다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
@@ -196,7 +196,7 @@ describe('잠금은 룸 전체가 본다 — 배지가 그 위에 선다 (§7.2)
   }, 30_000)
 })
 
-describe('연결 둘 · 사용자 둘 · 같은 사용자의 탭 둘 (D3)', () => {
+describe('연결 둘 · 사용자 둘 · 같은 사용자의 탭 둘', () => {
   it('같은 사용자의 탭 둘이 각각 자기 잠금을 든다 — 수명은 연결이다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
@@ -250,7 +250,7 @@ describe('연결 둘 · 사용자 둘 · 같은 사용자의 탭 둘 (D3)', () =
 })
 
 describe('자격과 규격', () => {
-  it('viewer는 잠글 수 없다 — §10이 조회 전용으로 못박았다', async () => {
+  it('viewer는 잠글 수 없다 — 설계서 「권한 모델」이 조회 전용으로 못박았다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const viewerTab = track(await joinRoom(ctx.port, fx.project.id, fx.onlooker.cookie.wb_session))
@@ -319,10 +319,10 @@ describe('하트비트는 목록을 흔들지 않는다', () => {
 
 
 /**
- * **서버가 획득을 거절한다**(이월 5차 2회 LK — `ws/lock.ts`의 표). 판정은 §7.2의 «선택 = 서브트리 claim» 그대로이고 화면의 1차
+ * **서버가 획득을 거절한다**(`ws/lock.ts`의 표). 판정은 설계서 「소프트 잠금」의 «선택 = 서브트리 claim» 그대로이고 화면의 1차
  * 방어와 같은 함수다(`lock/check.ts`의 `selectionVerdict`).
  */
-describe('획득 거절 (이월 5차 2회 LK)', () => {
+describe('획득 거절', () => {
   const denials = (probe: WsProbe): ServerFrame[] => probe.received.filter((frame) => frame.type === 'lock-denied')
   const held = (ctx: RealApiContext, projectId: string): string[] =>
     ctx.app.realtime.locks
@@ -331,7 +331,7 @@ describe('획득 거절 (이월 5차 2회 LK)', () => {
       .sort()
 
   /**
-   * 혼자 죽는 변조: 거절을 룸 전체에 보낸다(«누구에게»). 획득 판정이 늘 `free`(앞 판 — 거절하지 않는다)인 변조에는 이 파일의 거절
+   * 혼자 죽는 변조: 거절을 룸 전체에 보낸다(«누구에게»). 획득 판정이 늘 `free`(거절하지 않는다)인 변조에는 이 파일의 거절
    * 케이스가 함께 죽는다.
    */
   it('남이 쥔 자리의 `lock`은 받지 않는다 — 낸 연결에만 `lock-denied`, 목록은 쥔 사람 것 그대로', async () => {
@@ -387,7 +387,7 @@ describe('획득 거절 (이월 5차 2회 LK)', () => {
    * 혼자 죽는 변조: 획득 판정이 같은 사람의 **다른 자리**도 막는다(소유자를 연결처럼 본다 — 자기가 쥔 같은 자리만 뺀다). 같은 사람을
    * 통째로 막는 변조는 하트비트 케이스(«같은 노드를 다시 잡는 것은…»)와 함께 죽는다 — 같은 연결의 다시 보냄은 그 케이스가 소유한다.
    */
-  it('같은 사람의 다른 탭은 막지 않는다 (D3) — 겹치는 자리를 둘 다 쥔다', async () => {
+  it('같은 사람의 다른 탭은 막지 않는다 — 겹치는 자리를 둘 다 쥔다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const tabOne = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
@@ -552,9 +552,9 @@ describe('획득 거절 (이월 5차 2회 LK)', () => {
 })
 
 /**
- * **잠금 목록은 보내는 순간 짓는다**(`ws/broadcast.ts`의 `announceLocks` — C 리뷰 2 N4). 알림을 부른 뒤 첫 연결의 자격을 보는
- * 사이에 잠금이 바뀌면, 그 연결이 받는 목록은 바뀐 것이어야 한다 — 앞 판은 부른 순간의 목록을 실어 보냈고, 그것이 뒤 알림을
- * 추월하면 낡은 목록이 마지막 프레임으로 남았다. 혼자 죽는 변조: 목록을 부를 때 한 번 짓는다(앞 판).
+ * **잠금 목록은 보내는 순간 짓는다**(`ws/broadcast.ts`의 `announceLocks`). 알림을 부른 뒤 첫 연결의 자격을 보는
+ * 사이에 잠금이 바뀌면, 그 연결이 받는 목록은 바뀐 것이어야 한다 — 부른 순간의 목록을 실어 보내면, 그것이 뒤 알림을
+ * 추월할 때 낡은 목록이 마지막 프레임으로 남는다. 혼자 죽는 변조: 목록을 부를 때 한 번 짓는다.
  */
 describe('잠금 목록은 보내는 순간 짓는다', () => {
   it('알림이 자격을 보는 사이 선 잠금이 그 알림에 실린다', async () => {

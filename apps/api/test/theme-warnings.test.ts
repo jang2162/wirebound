@@ -1,15 +1,14 @@
 /**
- * **경고가 저장을 통과하고 응답에 실린다** (P4c-1 T2 · 재라 #4).
+ * **경고가 저장을 통과하고 응답에 실린다.**
  *
- * `themes`에 첫 `warning`이 생겼다(`suspicious-literal`·`node-handle-overwrite`).
- * 그 채널이 성립하려면 **두 곳을 함께** 고쳐야 한다 — `resolveTheme`의 *"이슈가 있으면
- * `theme`은 `null`"*과 이 파일이 겨냥하는 `assertResolvable`의 *"이슈가 있으면 422"*.
- * `routes/themes.ts`의 `assertResolvable` 주석이 하나만 고쳤을 때 각각 무엇이 죽는지를
- * 표로 적어 두었고, **양방향 구분력 실증은 P4c-1 보고에 있다.**
+ * `themes`의 `warning`(`suspicious-literal`·`node-handle-overwrite`)이 흐르려면 **두 곳이
+ * 함께** 맞아야 한다 — `resolveTheme`의 *"이슈가 있으면 `theme`은 `null`"*과 이 파일이
+ * 겨냥하는 `assertResolvable`의 *"이슈가 있으면 422"*. `routes/themes.ts`의
+ * `assertResolvable` 주석이 하나만 고쳤을 때 각각 무엇이 죽는지를 표로 적어 둔다.
  *
  * **경고를 어느 라우트가 싣는가**는 아래 `전수` 절이 소스를 훑어 센다 — 손으로 센 수는
- * 틀린다(P4a-3이 *"형제 가드를 지나지 않은 자리"*를 여섯 번 찾았고 다섯을 닫은 뒤
- * 여섯째가 나왔다).
+ * 틀린다(*"형제 가드를 지나지 않은 자리"*를 손으로 찾으면 다 닫은 줄 안 뒤에 하나가 더
+ * 나온다).
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -19,7 +18,7 @@ import { createProject, signup, withApi, type TestContext } from './helpers'
 
 /**
  * `Tree.parts.node.paddingX`가 노드 손잡이(`padding-left`)를 덮는다 — `portal`·`docs`가
- * 실제로 쓰는 바로 그 선언이다(P4b-3의 ③이 쟀다). `gap: 'spce.4'`는 이름공간 오타다.
+ * 실제로 쓰는 바로 그 선언이다. `gap: 'spce.4'`는 이름공간 오타다.
  */
 function warningTheme(): Theme {
   return {
@@ -111,7 +110,7 @@ describe('테마 경고가 저장을 통과한다', () => {
 
   /**
    * **오류가 섞이면 여전히 422다.** 그리고 그 응답의 `issues`에는 **경고도 함께** 실린다 —
-   * 저작 UI가 한 번에 고칠 수 있어야 한다는 D2의 이유가 그대로다.
+   * 저작 UI가 한 번에 고칠 수 있어야 한다.
    */
   it('오류가 하나라도 있으면 422이고 issues에 경고도 함께 실린다', () =>
     withApi(async (ctx) => {
@@ -131,8 +130,9 @@ describe('테마 경고가 저장을 통과한다', () => {
 /**
  * **전수 — 테마 문서를 해석하는 라우트가 정확히 둘이고 둘 다 경고를 싣는다.**
  *
- * 소스를 훑는 이유는 계획서가 넷으로 셌고 내가 다시 세어 둘이 됐기 때문이다(재라 #4의
- * 판정과 근거는 `routes/themes.ts`의 머리말에 있다). **다음 사람이 라우트를 하나 더
+ * 소스를 훑는 이유는 손으로 센 수가 갈리기 때문이다(같은 자리를 넷으로도 둘로도 센다).
+ * 판정과 근거는 `routes/themes.ts`의 머리말 「어느 라우트가 경고를 싣는가 — 전수로
+ * 센다」에 있다. **다음 사람이 라우트를 하나 더
  * 만들고 `assertResolvable`을 부르면서 `withWarnings`를 빠뜨리면 여기가 죽는다.**
  */
 describe('전수 — 경고를 싣는 라우트', () => {
@@ -171,7 +171,8 @@ describe('전수 — 경고를 싣는 라우트', () => {
   /**
    * **`resolveTheme`을 부르는 다른 자리가 있으면 여기가 죽는다.** `currentTheme`은
    * `mergeTheme`만 부르고 해석하지 않는다 — 그 판정이 뒤집히면 경고를 실을 라우트가
-   * 하나 느는 것이고, 재라 #4를 다시 판정해야 한다.
+   * 하나 느는 것이고, `routes/themes.ts`의 머리말 「어느 라우트가 경고를 싣는가」를 다시
+   * 판정해야 한다.
    */
   it('resolveTheme 호출은 assertResolvable 안의 하나뿐이다', () => {
     expect(code.match(/\bresolveTheme\(/g)).toHaveLength(1)

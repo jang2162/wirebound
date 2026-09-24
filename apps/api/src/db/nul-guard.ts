@@ -10,7 +10,7 @@
 /**
  * NUL(U+0000) 문자를 담은 상수. 이스케이프 시퀀스를 소스에 직접 타이핑하면 도구
  * 체인(에디터·JSON 파이프라인)에 따라 실제 제어 문자로 오인돼 조용히 치환되는
- * 사고가 나기 쉽다 — 이 파일에서 실제로 한 번 겪었다. `String.fromCharCode(0)`은
+ * 사고가 나기 쉽다. `String.fromCharCode(0)`은
  * 소스 텍스트 어디에도 그 문자를 직접 적지 않고 런타임에 만들어 그 위험을 피한다.
  */
 const NUL_CHAR = String.fromCharCode(0)
@@ -46,27 +46,27 @@ export function containsNulByte(value: unknown): boolean {
  * **사용자가 보낸 글자에 NUL 이 있어 쓰기 전에 거절한다** — `http/error-handler.ts`가 400 `bad-request`로
  * 낸다(그 자리가 이 클래스의 유일한 번역자다 — 라우트가 따로 잡지 않는다).
  *
- * # 왜 생겼나 (2026-09-22 이월 O)
+ * # 무엇을 막나
  *
- * 페이지 가져오기는 제목·설명의 NUL 을 400 으로 막는데 **같은 칸을 쓰는 `PATCH .../pages/:pageId`는 500**
- * 이었다 — 판정이 가져오기 한 자리(`services/page-import.ts`)에만 있었다. 같은 부류(검증 없이 DB 에 닿는
- * 텍스트 입력)를 라우트마다 훑은 값(각 칸에 NUL 을 실은 요청의 상태 코드, 고치기 전):
+ * 판정이 한 라우트에만 있으면 같은 칸을 쓰는 다른 라우트가 NUL 을 DB 까지 흘려 **500** 을 낸다 — 가져오기만
+ * 제목·설명을 보면 같은 칸을 쓰는 `PATCH .../pages/:pageId`가 500 이다. 같은 부류(검증 없이 DB 에 닿는
+ * 텍스트 입력)로 이 클래스가 지키는 칸:
  *
- * | 라우트 | 칸 | 고치기 전 |
- * |---|---|---|
- * | `POST /api/projects` · `PATCH /api/projects/:id` | `name` · `description` | **500** |
- * | `POST …/menu` · `PATCH …/menu/:nodeId` | `title` | **500** |
- * | `POST …/pages` · `PATCH …/pages/:pageId` | `title` · `description` | **500** |
- * | `POST …/pages/import` | `title`(본문 · 파일) · `description`(파일) | 400 |
+ * | 라우트 | 칸 |
+ * |---|---|
+ * | `POST /api/projects` · `PATCH /api/projects/:id` | `name` · `description` |
+ * | `POST …/menu` · `PATCH …/menu/:nodeId` | `title` |
+ * | `POST …/pages` · `PATCH …/pages/:pageId` | `title` · `description` |
+ * | `POST …/pages/import` | `title`(본문 · 파일) · `description`(파일) |
  *
- * 이미 막혀 있던 것(자기 자리가 있다): 코멘트 본문(`repos/comments.ts`) · 토큰 이름(`routes/tokens.ts`) ·
+ * 자기 자리에서 막는 것: 코멘트 본문(`repos/comments.ts`) · 토큰 이름(`routes/tokens.ts`) ·
  * 프리셋(`repos/presets.ts`) · 스냅샷 태그·설명(`repos/snapshots.ts`) · 테마(`repos/themes.ts`) · 문서
  * (`PUT .../schema` · 편집 파이프라인 8단계). **닿지 않는 것**: 로그인·초대의 이메일(zod 의 이메일 형식이 400) ·
  * 로그인 비밀번호(해시와 비교할 뿐 저장하지 않는다 — 401) · 슬러그(정규식) · 멱등 키(정규식) · 쿠키·토큰
  * (해시만 질의에 실린다) · 경로의 id(uuid).
  *
  * **막는 자리는 저장소의 쓰기 함수다** — 라우트가 아니라. 가져오기 · 생성 · 수정이 **같은 `insertPage`·
- * `updatePage`를 지나므로** 판정이 한 벌이 된다(가져오기가 앞에서 따로 보던 것은 지웠다). 코멘트·프리셋·스냅샷의
+ * `updatePage`를 지나므로** 판정이 한 벌이 된다(가져오기가 앞에서 따로 보지 않는다). 코멘트·프리셋·스냅샷의
  * «마지막 방벽»과 같은 층이다.
  */
 export class NulByteError extends Error {

@@ -3,10 +3,10 @@
  *
  * ---
  *
- * # 왜 이 파일이 생겼나 — D2가 만든 빚을 갚는 자리
+ * # 왜 이 파일이 있나 — 2차 방어를 호출자가 부르는 대가
  *
- * §7.2의 2차 방어는 `applyEdit` **안**에 넣을 수 없다(`lock/check.ts`의 머리말 · P3-1 D3이
- * 지킨 경계). 그러면 **호출자가 부르고, 호출자가 빠뜨릴 수 있다.** 그것이 이 결정의 대가다.
+ * 설계서 「소프트 잠금」의 2차 방어는 `applyEdit` **안**에 넣을 수 없다(`lock/check.ts`의
+ * 머리말). 그러면 **호출자가 부르고, 호출자가 빠뜨릴 수 있다.** 그것이 이 결정의 대가다.
  *
  * `broadcast-census.test.ts`가 알림에 대해 같은 것을 하고, **같은 분모를 쓴다**
  * (`./source-census.ts`가 `src/` 전체를 재귀로 훑어 `applyEdit` 호출 자리를 센다). 분모가
@@ -65,11 +65,11 @@ function track(probe: WsProbe): WsProbe {
   return probe
 }
 
-/** 소프트 잠금 충돌의 상태 코드(§7.2의 2차 방어 · D1이 409에서 갈랐다). */
+/** 소프트 잠금 충돌의 상태 코드(「소프트 잠금」의 2차 방어 — 409가 아닌 이유는 `src/errors.ts`의 `ERROR_STATUS`의 `locked`). */
 const LOCKED = 423
 
 interface Fixture {
-  /** 편집을 내는 사람. 프로젝트 owner다 — 복원이 owner를 요구한다(§10). */
+  /** 편집을 내는 사람. 프로젝트 owner다 — 복원이 owner를 요구한다(설계서 「권한 모델」). */
   actor: SignedUpUser
   /** **`n_b`를 잠그고 있는 사람.** 편집을 내지 않는다. */
   holder: SignedUpUser
@@ -298,7 +298,7 @@ describe('표의 각 줄을 **남이 잠근 판에서** 지나가 본다', () =>
   }
 })
 
-describe('막는 것은 **남의** 잠금이다 (D3)', () => {
+describe('막는 것은 **남의** 잠금이다', () => {
   it('자기 잠금에는 안 막힌다 — 같은 사람의 다른 탭이 여기 온다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -404,7 +404,7 @@ describe('막는 것은 **남의** 잠금이다 (D3)', () => {
       holderTab.send(JSON.stringify({ type: 'lock', pageId: fx.pageId, nodeId: 'n_b' }))
       await locksWith(holderTab, 'n_b')
 
-      // **새 배포가 쓴 문서를 옛 서버가 읽는 판이다**(설계 §13.1). 잠금 확인은 파이프라인과
+      // **새 배포가 쓴 문서를 옛 서버가 읽는 판이다**(설계서 「스키마 마이그레이션」). 잠금 확인은 파이프라인과
       // **같은 기준**으로 문서를 올리므로(`migrateDocument`) 여기서 읽지 못하고 판정을
       // 건너뛴다 — 그러면 파이프라인이 자기 이름(`unsupported-version` → 400)으로 답한다.
       // 올리지 않고 저장된 문서를 그대로 보면 잠금이 먼저 걸려 **400이 423으로 바뀐다.**
@@ -454,7 +454,7 @@ describe('막는 것은 **남의** 잠금이다 (D3)', () => {
     })
   }, 30_000)
 
-  it('연결이 끊기면 다시 편집할 수 있다 — §7.2의 *"연결 종료 시 즉시 해제"*', async () => {
+  it('연결이 끊기면 다시 편집할 수 있다 — 설계서 「소프트 잠금」의 *"연결 종료 시 즉시 해제"*', async () => {
     await withRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       const watcher = track(await joinRoom(ctx.port, fx.projectId, fx.actor.cookie.wb_session))

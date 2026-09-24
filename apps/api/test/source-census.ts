@@ -3,9 +3,9 @@
  *
  * `broadcast-census.test.ts`가 *"`applyEdit`을 부르는 자리는 알리는가"*를 세고,
  * `lock-census.test.ts`가 같은 분모로 *"그 자리는 잠금을 보는가"*를 센다. **훑는 방식이
- * 두 벌이면 한쪽만 넓어진다** — 앞 판이 `routes`·`services`만 비재귀로 훑어 `src/ws/`의
- * 호출자를 못 봤고, 리뷰가 그것을 실증하며 범위를 `src/` 전체로 넓혔다. 그 고침이 파일
- * 하나에만 있으면 다음 census가 좁은 채로 태어난다.
+ * 두 벌이면 한쪽만 넓어진다** — `routes`·`services`만 비재귀로 훑으면 `src/ws/`의
+ * 호출자를 조용히 못 본다. 범위를 넓히는 고침이 파일 하나에만 있으면 다음 census가 좁은
+ * 채로 태어난다.
  */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -27,8 +27,7 @@ export function stripComments(source: string): string {
  * YAML 의 주석(`#`)을 걷는다. **`docker-compose.yml` 을 재는 자가 쓴다.**
  *
  * 왜 필요한가: 인구조사가 주석을 안 걷으면 **옳은 줄을 주석에 남기고 아래에서 뒤집는
- * 우회**가 통째로 지나간다 — 이 저장소가 이미 한 번 당했다(귀속: 리뷰 델타 W4·R4e·B4).
- * compose 파일은 주석이 길어서 그 함정이 더 크다.
+ * 우회**가 통째로 지나간다. compose 파일은 주석이 길어서 그 함정이 더 크다.
  *
  * **작은따옴표 안의 `#` 은 안 걷는다.** compose 의 포트 줄이 따옴표로 싸여 있고
  * (`- '${POSTGRES_PORT:-5433}:5432'`) 값 안에 `#` 이 들어올 수 있다.

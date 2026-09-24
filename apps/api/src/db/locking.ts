@@ -3,9 +3,9 @@ import type { DbHandle } from './tx'
 /**
  * `FOR UPDATE`를 거는 함수가 **트랜잭션 핸들로 불렸는지** 확인한다.
  *
- * `repos/pages.ts`의 `lockPageForEdit`이 자기 자리에서 하던 검사를 P6-2가 여기로 뽑았다 —
- * 복원이 다섯 테이블에 같은 검사를 걸게 되면서 소비자가 넷 더 생겼기 때문이다
- * (`http/edit-outcome.ts`·`http/warnings.ts`가 두 번째 소비자에서 옮겨 간 것과 같은 자리).
+ * 한 자리에 두는 이유는 소비자가 여럿이기 때문이다 — `repos/pages.ts`의 `lockPageForEdit`과
+ * 복원이 잠그는 다섯 테이블이 같은 검사를 건다. 같은 검사를 두 벌로 두면 한쪽만 고쳐진다
+ * (`http/edit-outcome.ts`·`http/warnings.ts`가 한 자리에 선 것과 같은 이유).
  *
  * **왜 크게 실패해야 하는가.** `db.selectFrom(...).forUpdate()`를 트랜잭션이 아닌 핸들로
  * 실행하면 Postgres가 그 문장 하나만을 위한 암묵적 트랜잭션을 열고 문장이 끝나자마자

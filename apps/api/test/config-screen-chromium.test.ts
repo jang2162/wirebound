@@ -1,15 +1,15 @@
 /**
- * **`SCREEN_CHROMIUM_PATH` — 기계에 있는 브라우저를 가리키는 유일한 길**(설치 매뉴얼 D4).
+ * **`SCREEN_CHROMIUM_PATH` — 기계에 있는 브라우저를 가리키는 유일한 길.**
  *
- * `chromiumScreenRenderer`는 `executablePath` 옵션을 처음부터 들고 있었는데 그것을 채우는
- * 자가 없어 **바깥에서 닿을 수 없었다.** `playwright-core`(1.62.1)는 실행 파일을 가리키는
+ * `chromiumScreenRenderer`의 `executablePath` 옵션을 바깥에서 채우는 길이 이 env 하나다 —
+ * 이것이 없으면 그 옵션은 **바깥에서 닿을 수 없다.** `playwright-core`(1.62.1)는 실행 파일을 가리키는
  * 환경변수를 **안 낸다** — 쟀다: `lib/` 전체에서 `PLAYWRIGHT_*` 이름을 훑으면
  * `*_EXECUTABLE_PATH`는 `PLAYWRIGHT_MCP_EXECUTABLE_PATH` 하나이고 그것은 Playwright MCP
  * 서버의 것이지 `chromium.launch()`의 것이 아니다. `PLAYWRIGHT_BROWSERS_PATH`는 *캐시
  * 디렉터리*라 그 안이 playwright의 `chromium_headless_shell-<리비전>/…` 배치여야 한다 —
  * 배포판 chromium을 그 자리에 넣는 것은 절차가 아니라 손질이다.
  *
- * **그리는 자를 실제로 만드는 것은 `main.ts` 하나이고**(D3) 그 줄이 남아 있는지는
+ * **그리는 자를 실제로 만드는 것은 `main.ts` 하나이고** 그 줄이 남아 있는지는
  * `screen-renderer-census.test.ts`가 센다. 여기서 재는 것은 **그 앞 단계** — env에서 값이
  * 어떤 모양으로 `ApiConfig`에 앉는가다.
  */

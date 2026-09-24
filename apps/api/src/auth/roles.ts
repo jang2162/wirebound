@@ -1,17 +1,16 @@
 /**
- * 프로젝트 권한 가드. 설계 §10의 권한 모델을 구현하는 단일 지점이다.
+ * 프로젝트 권한 가드. 설계서 「권한 모델」을 구현하는 단일 지점이다.
  *
  * `requireProjectRole`은 Fastify를 전혀 모른다 — `db` 핸들과 `projectId`·`userId`·
  * 최소 역할 네 값만 받고 `ApiError`를 던진다. `projectGuard`는 그 위에 얹은 얇은
  * Fastify preHandler 껍데기일 뿐이다.
  *
- * **P3의 WebSocket은 껍데기를 새로 만들지 않았다 — 이 문단이 그렇게 예상했지만 거짓이었다
- * (P3-1이 재서 고쳐 적는다).** `@fastify/websocket`은 업그레이드 요청을 평범한 라우트로
+ * **WebSocket은 껍데기를 따로 두지 않는다.** `@fastify/websocket`은 업그레이드 요청을 평범한 라우트로
  * 태우고 훅을 전부 돌린 뒤에야 소켓을 넘기므로, `ws/routes.ts`가 **`projectGuard('viewer')`를
- * 그대로 preHandler로 쓴다.** 설계 §10의 *"REST와 WebSocket이 동일한 가드 함수를 쓴다"*가
+ * 그대로 preHandler로 쓴다.** 「권한 모델」의 *"REST와 WebSocket이 동일한 가드 함수를 쓴다"*가
  * 글자 그대로 지켜진다.
  *
- * **연결 도중의 재확인은 다른 자리다.** §10의 *"각 patch 수신 시 한 번"*은 preHandler가
+ * **연결 도중의 재확인은 다른 자리다.** 「권한 모델」의 *"각 patch 수신 시 한 번"*은 preHandler가
  * 닿지 않는 곳이므로 `ws/broadcast.ts`의 `stillAllowed`가 `findMembership`·`roleAtLeast`를
  * 직접 조합한다 — 그쪽도 이 파일의 함수를 쓰지 자기 판정을 만들지 않는다.
  *
@@ -42,7 +41,7 @@ declare module 'fastify' {
   }
 }
 
-/** 역할 순위. 숫자가 클수록 강한 권한이다(설계 §10: viewer < editor < owner). */
+/** 역할 순위. 숫자가 클수록 강한 권한이다(설계서 「권한 모델」: viewer < editor < owner). */
 export const ROLE_RANK: Record<ProjectRole, number> = {
   viewer: 0,
   editor: 1,
@@ -82,7 +81,7 @@ export async function findMembership(
 }
 
 /**
- * **자격이 다른 프로젝트에 묶여 있는가**(API 토큰 — P9-2 D4). 세션은 묶이지 않으므로(`null`) 늘 거짓이다.
+ * **자격이 다른 프로젝트에 묶여 있는가**(API 토큰). 세션은 묶이지 않으므로(`null`) 늘 거짓이다.
  *
  * `requireProjectRole`이 이것으로 스코프 밖을 404 로 만든다. **밖에 내놓는 것은 부르는 자리가 둘이라서다** —
  * 코멘트 게시의 재생이 가드 **앞**에서 돌며 같은 판정을 먼저 봐야 한다(`routes/comments.ts`의
@@ -93,7 +92,7 @@ export function outOfTokenScope(scopeProjectId: string | null, projectId: string
 }
 
 /**
- * 프로젝트에 대한 최소 역할을 요구한다. 설계 §10의 404/403 규칙을 구현하는 단일 함수다.
+ * 프로젝트에 대한 최소 역할을 요구한다. 설계서 「권한 모델」의 404/403 규칙을 구현하는 단일 함수다.
  *
  * | 상황 | 응답 |
  * |---|---|
@@ -107,7 +106,8 @@ export function outOfTokenScope(scopeProjectId: string | null, projectId: string
  * 응답을 내야 프로젝트 id의 존재 여부가 비멤버에게 새어 나가지 않는다.
  *
  * Fastify를 전혀 모른다: `db`·`projectId`·`userId`·`min`과 스코프만 받고 `ApiError`를
- * 던진다. `projectGuard`(REST)와 P3의 WebSocket 껍데기가 이 함수를 함께 재사용한다.
+ * 던진다. `projectGuard`(REST · WebSocket 방 입장)와 커밋 순간의 재확인(`recheckProjectRole`)이
+ * 이 함수를 함께 쓴다.
  */
 export async function requireProjectRole(
   db: DbHandle,
@@ -115,11 +115,11 @@ export async function requireProjectRole(
   userId: string,
   min: ProjectRole,
   /**
-   * **이 요청의 자격이 묶인 프로젝트**(P9-2 D4). 세션 쿠키는 묶이지 않으므로 `null`이고,
-   * API 토큰은 §10대로 프로젝트 하나에 묶인다.
+   * **이 요청의 자격이 묶인 프로젝트**. 세션 쿠키는 묶이지 않으므로 `null`이고,
+   * API 토큰은 「권한 모델」대로 프로젝트 하나에 묶인다.
    *
    * **스코프 밖은 *"멤버가 아니다"*와 같게 다룬다 — 그래서 404다**(403이 아니다).
-   * 남의 프로젝트 id를 토큰으로 찔러 존재를 알아낼 수 없어야 하고(§10), 그 성질을 이미
+   * 남의 프로젝트 id를 토큰으로 찔러 존재를 알아낼 수 없어야 하고(「권한 모델」), 그 성질을 이미
    * 갖고 있는 것이 위 표의 둘째 줄이다. **판정을 여기 두는 것이 요점이다** — 훅이나
    * 라우트에 두면 *"역할을 비교하는 코드는 한 자리"*가 두 자리가 된다.
    */
@@ -139,7 +139,7 @@ export async function requireProjectRole(
 
 /**
  * `projectGuard`가 경로 파라미터에서 읽는 스키마. `z.object`(비엄격)를 쓴다 —
- * 이후 태스크가 `/projects/:projectId/pages/:pageId`처럼 `projectId` 외의
+ * `/projects/:projectId/pages/:pageId`처럼 `projectId` 외의
  * 파라미터를 함께 갖는 라우트에도 이 가드를 그대로 붙일 수 있어야 한다.
  */
 const ProjectParams = z.object({ projectId: z.uuid() })
@@ -155,31 +155,28 @@ const ProjectParams = z.object({ projectId: z.uuid() })
  * 이 함수 자체는 얇은 껍데기일 뿐 판정 로직을 갖지 않는다 — 전부 `requireProjectRole`이
  * 한다.
  *
- * **WebSocket의 방 입장이 이 함수를 그대로 쓴다**(P3-1 — 이 자리에 *"자신만의 껍데기를
- * 만든다"*고 적혀 있던 예상은 거짓이었고, 리뷰가 이 사본이 남은 것을 찾았다).
- * `ws/routes.ts`가 `{ websocket: true, preHandler: projectGuard('viewer') }`로 단다 —
+ * **WebSocket의 방 입장이 이 함수를 그대로 쓴다.** `ws/routes.ts`가 `{ websocket: true, preHandler: projectGuard('viewer') }`로 단다 —
  * `@fastify/websocket`이 업그레이드 요청을 평범한 라우트로 태우고 훅을 전부 돌린 뒤에야
  * 소켓을 넘기기 때문이다.
  *
- * **연결 도중의 재확인만 다른 자리다.** §10의 *"각 patch 수신 시 한 번"*은 preHandler가
+ * **연결 도중의 재확인만 다른 자리다.** 「권한 모델」의 *"각 patch 수신 시 한 번"*은 preHandler가
  * 닿지 않으므로 `ws/broadcast.ts`의 `stillAllowed`가 `findMembership`·`roleAtLeast`를 직접
  * 조합한다. **그 함수의 최소 역할은 `viewer`이고 그것이 옳다 — 받는 기준이기 때문이다.**
- * **보내는 것(patch)에 그것을 그대로 쓰면 안 된다:** §10이 viewer를 *"조회 전용 — 편집·
- * 코멘트 모두 불가"*로 못박았으므로, WS로 편집을 받는 경로(P3-2)는 `editor` 이상을 따로
+ * **보내는 것(patch)에 그것을 그대로 쓰면 안 된다:** 「권한 모델」이 viewer를 *"조회 전용 — 편집·
+ * 코멘트 모두 불가"*로 못박았으므로, WS로 편집을 받는 경로는 `editor` 이상을 따로
  * 요구해야 한다.
  */
 export function projectGuard(min: ProjectRole): preHandlerHookHandler {
   return async (request: FastifyRequest, _reply: FastifyReply) => {
     const { projectId } = parseParams(ProjectParams, request.params)
 
-    // **입력 검증이 조작보다 먼저 선다** (P9-5 리뷰 지적 1). `x-wb-client`가 모르는 값이면
+    // **입력 검증이 조작보다 먼저 선다**. `x-wb-client`가 모르는 값이면
     // 여기서 400이고, **핸들러 본문은 아예 안 돈다.**
     //
-    // 앞 판은 이 검사가 `requestActor` 안에만 있었다 — 곧 *"핸들러가 actor를 만들 때"*가
-    // 검사 시점이었다. 대부분의 쓰기는 `applyEdit` 앞에서 actor를 만들어 무해했는데
-    // **복원 하나만** 반대였다: `restoreSnapshot`이 자기 트랜잭션을 커밋한 **뒤**
-    // `notifyRestored`가 처음 헤더를 봐서, 400을 받은 클라이언트 몰래 프로젝트가 통째로
-    // 되돌아가고 룸에는 아무것도 안 갔다(리뷰어가 진짜 Postgres로 실증했다).
+    // 이 검사가 `requestActor` 안에만 있으면 *"핸들러가 actor를 만들 때"*가 검사 시점이
+    // 된다. 대부분의 쓰기는 `applyEdit` 앞에서 actor를 만들지만 **복원은** 반대다:
+    // `restoreSnapshot`이 자기 트랜잭션을 커밋한 **뒤** `notifyRestored`가 처음 헤더를 봐서,
+    // 400을 받은 클라이언트 몰래 프로젝트가 통째로 되돌아가고 룸에는 아무것도 안 간다.
     //
     // **핸들러 두 줄을 위로 올리는 것으로는 다음 라우트를 못 막는다** — 순서를 지키는 자가
     // 산문뿐이기 때문이다. preHandler로 올리면 *"본문보다 먼저"*가 **구조**가 되고,
@@ -199,15 +196,15 @@ export function projectGuard(min: ProjectRole): preHandlerHookHandler {
       projectId,
       request.currentUser.id,
       min,
-      // **API 토큰이 실린 요청이면 그 토큰의 프로젝트다**(P9-2 D4). 세션이면 `null`이라
-      // 위 함수의 스코프 검사가 그대로 지나간다 — 기존 호출자의 행동이 바뀌지 않는다.
+      // **API 토큰이 실린 요청이면 그 토큰의 프로젝트다**. 세션이면 `null`이라
+      // 위 함수의 스코프 검사가 그대로 지나간다 — 세션 요청의 판정은 스코프와 무관하다.
       request.tokenProjectId,
     )
   }
 }
 
 /**
- * **커밋 순간의 권한으로 판정한다**(이월 AA · 2026-09-22). 쓰기 트랜잭션 **안에서**, 그 쓰기가 기다릴 수 있는
+ * **커밋 순간의 권한으로 판정한다**. 쓰기 트랜잭션 **안에서**, 그 쓰기가 기다릴 수 있는
  * 잠금을 **잡은 뒤에** 부른다 — 페이지 잠금 · 프로젝트 잠금(트리 쓰기의 첫 잠금 · `repos/projects.ts`의
  * `lockProjectShared`) 뒤, 또는 기다림이 쓰는 문장(FK 삽입 · `UPDATE projects` · 테마 행 · RI 검사)에서 나면 그
  * 쓰기 뒤. 재확인 **뒤**에 기다림이 남는 자리(코멘트 수정의 코멘트 행)는 멤버 행을 `FOR SHARE`로 쥔 채 기다리므로
@@ -215,8 +212,8 @@ export function projectGuard(min: ProjectRole): preHandlerHookHandler {
  * 한 번 본 것을 그 자리에서 다시 본다.
  *
  * **왜 필요한가.** 가드는 잠금 **밖**에서 한 번 돈다. 쓰기가 페이지 잠금에 쥐인 동안 그 사람이 강등되거나
- * 멤버에서 빠져도, 잠금이 풀리면 **그 사람 이름으로 커밋됐다**(좁은 반증 4차 a-4 — Chrome · psql 이 페이지
- * 행을 22s 쥔 판: 22s 에 커밋된 행의 작성자는 그 순간 이미 viewer·비멤버였다). 잠금 대기가 길수록 가드의
+ * 멤버에서 빠져도, 잠금이 풀리면 **그 사람 이름으로 커밋된다**(psql 로 페이지 행을 쥔 동안 강등하면, 풀린 뒤
+ * 커밋된 행의 작성자는 그 순간 이미 viewer·비멤버다). 잠금 대기가 길수록 가드의
  * 판정은 낡는다 — 여기서 다시 보면 판정이 **커밋과 같은 트랜잭션**의 것이 된다.
  *
  * **술어는 가드와 같다 — `requireProjectRole` 하나다.** 입력도 가드와 같은 자리에서 읽는다: 프로젝트는 경로
@@ -229,7 +226,7 @@ export function projectGuard(min: ProjectRole): preHandlerHookHandler {
  * (`repos/members.ts`의 UPDATE·DELETE)이 이 쓰기의 커밋을 기다리고, 먼저 바뀌고 있던 행이면 이 쪽이
  * 그 커밋을 기다렸다가 **바뀐 값**으로 판정한다. 뒤의 방향은 `test/guard-in-lock.test.ts`의 동시 역할 변경
  * 절이 잰다. 앞의 방향은 재확인 뒤로 커밋밖에 없어 결정적으로 세울 판이 없다 — 재확인 뒤에 800ms 를 끼워
- * 넣어 한 번 쟀다(2026-09-22, 코멘트 게시 · 250ms 에 강등): 잡지 않으면 **강등 200 @292ms → 쓰기 201 @856ms**
+ * 넣어 잰다(코멘트 게시 · 250ms 에 강등): 잡지 않으면 **강등 200 @292ms → 쓰기 201 @856ms**
  * (viewer 이름의 행), 잡으면 **쓰기 201 @837ms → 강등 200 @840ms**.
  *
  * **재생은 이것을 부르지 않는다.** 같은 키로 이미 커밋된 자기 행은 권한을 잃어도 돌려준다 — 가드 앞 재생

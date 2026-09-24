@@ -4,14 +4,14 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 /**
- * D1("`pages.schema`를 바꾸는 모든 경로는 revision을 남긴다")을 규율이 아니라 구조로
+ * *"`pages.schema`를 바꾸는 모든 경로는 revision을 남긴다"*를 규율이 아니라 구조로
  * 만드는 테스트다.
  *
  * `writePageSchemaAtSeq`는 `repos/pages.ts`가 export하는 평범한 공개 함수다. 그것을
  * `insertRevision` 없이 부르면 revision을 남기지 않고 문서만 갈아 끼울 수 있고, 그게
- * 정확히 D1이 금지하는 일이다. 지금 그 금지가 기대고 있는 것은 함수의 독스트링뿐이라
- * **두 번째 호출자가 생기는 순간을 잡아 주는 것이 아무것도 없다** — P3의 WebSocket
- * 핸들러가 그 유혹이 가장 큰 자리다(P2a 최종 리뷰 권고 1).
+ * 정확히 그 규칙이 금지하는 일이다. 이 테스트가 없으면 그 금지가 기대는 것은 함수의
+ * 독스트링뿐이라 **두 번째 호출자가 생기는 순간을 잡아 주는 것이 아무것도 없다** —
+ * WebSocket 핸들러가 그 유혹이 가장 큰 자리다.
  *
  * eslint 설정이 이 저장소에 없으므로 `no-restricted-imports` 대신 소스를 읽어 단언한다.
  *
@@ -27,7 +27,7 @@ const SRC_DIR = fileURLToPath(new URL('../src/', import.meta.url))
 /** 정의가 있는 파일. 자기 자신을 import할 수는 없으므로 검사 대상에서 뺀다. */
 const DEFINITION = 'repos/pages.ts'
 
-/** D1이 허용하는 단 하나의 호출자. */
+/** 그 규칙이 허용하는 단 하나의 호출자. */
 const ONLY_CALLER = 'services/edit-pipeline.ts'
 
 function tsFilesUnder(dir: string, prefix = ''): string[] {
@@ -48,7 +48,7 @@ function referencesWriteFunction(source: string): boolean {
   return /\.\s*writePageSchemaAtSeq\b/.test(source)
 }
 
-describe('D1: pages.schema 쓰기 경로', () => {
+describe('pages.schema 쓰기 경로', () => {
   it('writePageSchemaAtSeq를 import하는 소스 파일은 편집 파이프라인 하나뿐이다', () => {
     const files = tsFilesUnder(SRC_DIR).filter((file) => file !== DEFINITION)
 

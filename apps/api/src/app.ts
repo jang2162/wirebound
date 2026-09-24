@@ -37,12 +37,11 @@ export interface BuildAppOptions {
    * 테스트 전용: pino가 쓸 목적지 스트림을 주입한다. 운영 코드(`main.ts`)는 절대
    * 채우지 않는다 — 생략하면 pino가 원래 목적지(표준출력)를 그대로 쓴다.
    *
-   * 이 필드가 존재하는 유일한 이유는 `test/logging.test.ts`다. 전에는
-   * 그 테스트가 `buildApp`을 거치지 않고 로거 옵션·에러 핸들러·health 라우트를
-   * 직접 조립해 로그를 캡처했다 — 그때는 실제 앱과의 차이가 문제되지 않았다(아무것도
-   * 쿠키를 만지지 않았으므로). 이제 `buildApp`이 `@fastify/cookie`와 세션 인증 훅을
-   * 등록해 매 요청 쿠키를 읽으므로, 로그 리다크션이 실제로 지켜야 할 파이프라인은
-   * "직접 조립한 미니 앱"이 아니라 이 `buildApp`이다. `loggerStream`은 그 실제
+   * 이 필드가 존재하는 유일한 이유는 `test/logging.test.ts`다. `buildApp`이
+   * `@fastify/cookie`와 세션 인증 훅을 등록해 매 요청 쿠키를 읽으므로, 로그 리다크션이
+   * 실제로 지켜야 할 파이프라인은 로거 옵션·에러 핸들러·라우트를 "직접 조립한 미니 앱"이
+   * 아니라 이 `buildApp`이다 — 미니 앱으로 재면 쿠키를 만지는 층이 빠져 실제 앱과의
+   * 차이를 못 본다. `loggerStream`은 그 실제
    * 파이프라인을 그대로 쓰면서 로그만 메모리로 가로챌 수 있게 해 준다.
    */
   loggerStream?: Writable
@@ -50,10 +49,11 @@ export interface BuildAppOptions {
    * 테스트 전용: 등록되는 라우트를 하나도 빠짐없이 흘려보낸다. 운영 코드(`main.ts`)는
    * 절대 채우지 않는다 — `loggerStream`과 같은 부류의 이음매다.
    *
-   * **왜 이것이 없으면 잴 수 없는가(P9-2 D4의 인구조사).** D4는 *"`:projectId`가 없는
-   * 라우트 중 인증이 필요한 것 **전부**가 토큰만 든 요청에 401을 낸다"*를 주장한다. 그
-   * 명제의 **분모**는 등록된 라우트 전부이고, 그것을 손으로 적으면 앞으로 생길 프로젝트
-   * 밖 라우트가 **조용히 빠진다** — 이 저장소가 권한 매트릭스에서 이미 겪은 사고다.
+   * **왜 이것이 없으면 잴 수 없는가.** 인구조사(`test/token-route-census.test.ts` 등)는
+   * *"`:projectId`가 없는 라우트 중 인증이 필요한 것 **전부**가 토큰만 든 요청에 401을
+   * 낸다"*를 주장한다. 그 명제의 **분모**는 등록된 라우트 전부이고, 그것을 손으로 적으면
+   * 앞으로 생길 프로젝트 밖 라우트가 **조용히 빠진다** — 손으로 적은 권한 매트릭스가
+   * 새 라우트를 놓치는 것과 같은 꼴이다.
    *
    * **Fastify가 아는 목록을 쓴다.** `printRoutes()`는 라딕스 트리를 사람이 읽는 글자로
    * 그리는 것이라(`/theme` 아래에 `s`가 자식으로 붙는 식으로 마디가 쪼개진다) 그것을
@@ -65,14 +65,14 @@ export interface BuildAppOptions {
    */
   onRoute?: (route: RegisteredRoute) => void
   /**
-   * PPTX에 실을 화면 이미지를 그리는 자(P10-2 D2·D3).
+   * PPTX에 실을 화면 이미지를 그리는 자.
    *
    * **위의 둘과 방향이 반대다.** `loggerStream`·`onRoute`는 생략이 운영이고 채우는 것이
    * 테스트인데, 이것은 **채우는 것이 운영**이다 — 생략하면 pptx가 이미지 없이 나가고
-   * `screenless`가 그 사실을 말한다(P10-1이 만든 상태 그대로다).
+   * `screenless`가 그 사실을 말한다.
    *
    * **`buildApp`이 스스로 만들지 않는다.** 만들면 `pnpm test`의 케이스 전부가 진짜
-   * 브라우저를 띄우게 된다(D3). 운영에서 이것을 채우는 자리는 `main.ts` 하나이고
+   * 브라우저를 띄우게 된다(`services/screen-render.ts`의 머리말). 운영에서 이것을 채우는 자리는 `main.ts` 하나이고
    * `test/screen-renderer-census.test.ts`가 그것을 소스에서 센다.
    */
   screenRenderer?: ScreenRenderer
@@ -108,7 +108,7 @@ interface ApiLoggerOptions {
  * (`test/logging.test.ts`)가 이 함수 하나를 함께 쓴다 — 테스트가 실제 앱과
  * 다른 레시피를 검증하는 일이 없도록 하기 위해서다.
  *
- * **오늘 시점에 비밀이 로그에 남지 않는 실제 이유는 이 `redact`가 아니다.** Fastify의
+ * **지금 비밀이 로그에 남지 않는 실제 이유는 이 `redact`가 아니다.** Fastify의
  * 기본 `req` 시리얼라이저(`fastify/lib/logger-pino.js`)는 method·url·version·host·
  * remoteAddress·remotePort만 골라 담고 `headers`는 애초에 로그 객체에 넣지 않는다.
  * pino는 시리얼라이저를 먼저 돌리고 그 결과에 redact를 적용하므로, `req.headers.cookie`
@@ -151,14 +151,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 수백 번 부르므로 필수다(schema-setup.ts 참고).
   ensureCatalog()
 
-  // 시스템 테마를 코드에서 DB로 동기화한다(계획서 D4 — 코드가 진실, DB는 사본).
+  // 시스템 테마를 코드에서 DB로 동기화한다(코드가 진실, DB는 사본).
   //
   // **`main.ts`가 아니라 여기인 이유:** 이 뒤의 경로들이 그 행의 존재에 기댄다 —
   // 프로젝트를 만들면 기본 레이아웃이 생기고 그 `theme_id`가 시스템 `admin`을
   // 가리켜야 한다(`repos/projects.ts`). `main.ts`에만 두면 `buildApp`으로 앱을
   // 세우는 모든 경로(테스트 전부)에서 그 행이 없어 프로젝트 생성이 깨진다.
   //
-  // 매 `buildApp`마다 도는 비용은 시스템 테마 수만큼의 upsert 한 문장씩이다(오늘 하나).
+  // 매 `buildApp`마다 도는 비용은 시스템 테마 수만큼의 upsert 한 문장씩이다.
   // `ensureCatalog`가 멱등한 것과 같은 이유로 이것도 멱등해야 하고, `ON CONFLICT`가
   // 그것을 보장한다(`repos/themes.ts`의 `upsertSystemTheme`).
   await syncSystemThemes(db)
@@ -184,10 +184,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   registerErrorHandler(app)
   await registerAuthPlugin(app, config)
   registerProjectRoleDecorator(app)
-  // 실시간 층(P3-1). **인증·역할 데코레이터 뒤여야 한다** — WS 라우트가
+  // 실시간 층. **인증·역할 데코레이터 뒤여야 한다** — WS 라우트가
   // `projectGuard`를 preHandler로 달고, 그 가드가 `request.currentUser`·
   // `request.projectRole`을 쓴다. 라우트보다 **앞**인 것은 `app.realtime`을
-  // 데코레이트해야 라우트 핸들러가 그것으로 알릴 수 있기 때문이다(D3).
+  // 데코레이트해야 라우트 핸들러가 그것으로 알릴 수 있기 때문이다.
   await registerRealtime(app, config)
   await app.register(authRoutes(config), { prefix: '/api/auth' })
   await app.register(projectRoutes(), { prefix: '/api/projects' })
@@ -197,21 +197,21 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(treeRoutes(), { prefix: '/api/projects' })
   await app.register(revisionRoutes(), { prefix: '/api/projects' })
   // 코멘트도 페이지 아래에 산다(`/:projectId/pages/:pageId/comments`) — 파일은 분리하되
-  // URL 네임스페이스는 `pageRoutes`와 공유한다(P5-1).
+  // URL 네임스페이스는 `pageRoutes`와 공유한다.
   await app.register(commentRoutes(), { prefix: '/api/projects' })
   await app.register(themeRoutes(), { prefix: '/api/projects' })
   // 스냅샷도 프로젝트 아래에 산다(`/:projectId/snapshots`). **인자 없이 부른다** — 그
   // 팩토리의 `captureHooks`는 테스트 전용 이음매다(`routes/snapshots.ts`의 머리말).
   await app.register(snapshotRoutes(), { prefix: '/api/projects' })
   // 프리셋도 프로젝트 아래에 산다(`/:projectId/presets`) — 프리셋은 프로젝트가 소유한다
-  // (§11.1). 내장 3종은 `@wirebound/schema`에 있고 목록이 그것을 함께 낸다(P7-2 D2).
+  // (설계서 「페이지 프리셋」). 내장 프리셋은 `@wirebound/schema`에 있고 목록이 그것을 함께 낸다.
   await app.register(presetRoutes(), { prefix: '/api/projects' })
   // 내보내기도 프로젝트 아래에 산다(`/:projectId/export`). **URL에 파일 이름이 없다** —
-  // 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면 번호가 밀린다(P8-4 D7).
+  // 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면 번호가 밀린다.
   await app.register(exportRoutes({ screenRenderer }), { prefix: '/api/projects' })
-  // API 토큰도 프로젝트 아래에 산다(`/:projectId/tokens`) — §10이 *"토큰 스코프는 프로젝트
-  // 단위"*라고 적었으므로 그 밖에 둘 자리가 없다(P9-2 T2). 발급은 viewer 이상 누구나이고
-  // (D2), 이 셋은 **세션으로만** 부를 수 있다 — 근거는 `routes/tokens.ts`의 머리말에 있다.
+  // API 토큰도 프로젝트 아래에 산다(`/:projectId/tokens`) — 설계서 「권한 모델」이 *"토큰 스코프는
+  // 프로젝트 단위"*라고 적었으므로 그 밖에 둘 자리가 없다. 발급은 viewer 이상 누구나이고,
+  // 이 셋은 **세션으로만** 부를 수 있다 — 근거는 `routes/tokens.ts`의 머리말에 있다.
   await app.register(tokenRoutes(), { prefix: '/api/projects' })
   await app.register(healthRoutes)
 

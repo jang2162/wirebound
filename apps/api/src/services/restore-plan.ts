@@ -1,6 +1,5 @@
 /**
- * 복원 계획 — payload와 현재 상태를 견주어 **조작 목록**을 만든다(설계 §4.5의 되돌리는 쪽,
- * 계획서 T1).
+ * 복원 계획 — payload와 현재 상태를 견주어 **조작 목록**을 만든다(설계서 「스냅샷」의 되돌리는 쪽).
  *
  * **이 파일은 DB를 모른다.** SQL도 트랜잭션도 HTTP도 없다 — 값을 받아 값을 낸다. 실제 쓰기는
  * `services/restore.ts`가 이 목록을 순서대로 실행하며 한다. 나눈 이유는 하나다: **판정을
@@ -39,14 +38,14 @@
  *
  * # 만들어진 페이지는 `applyEdit`을 타지 않는다 — 판정이다
  *
- * `create-page`는 payload의 문서를 **그대로 담아** 행을 만들고 `head_seq`는 0이다
- * (재라 #4를 재서 확인했다: `insertPage`가 오늘 그렇게 한다). revision을 남기지 않는 것이
- * D1(*"모든 스키마 변경이 revision을 남긴다"*)과 어긋나지 않는 이유:
+ * `create-page`는 payload의 문서를 **그대로 담아** 행을 만들고 `head_seq`는 0이다.
+ * revision을 남기지 않는 것이 설계서 「핵심 원칙」의 *"모든 편집은 같은 파이프라인을
+ * 통과한다"*(모든 스키마 변경이 revision을 남긴다)와 어긋나지 않는 이유:
  *
  * - **`POST .../pages`가 이미 그렇게 한다.** 페이지 생성은 *"스키마 변경"*이 아니라 문서를
  *   들고 태어나는 일이고, 그 경로도 revision을 만들지 않는다.
  * - **되살릴 이력이 애초에 없다.** 그 페이지가 지워질 때 `revisions.page_id`의 CASCADE가
- *   이력을 함께 데려갔다(재라 #3을 재서 확인했다: 삭제 전 1 → 삭제 후 0). `head_seq`만
+ *   이력을 함께 데려갔다. `head_seq`만
  *   payload의 값(예: 7)으로 심으면 **행이 없는 seq를 가리키는 페이지**가 되어 그 페이지의
  *   undo가 빈 이력 위에서 돈다.
  *
@@ -57,15 +56,15 @@
  *
  * ---
  *
- * # 막는 갈래 넷 — 전부 **쓰기 전에** 판정한다 (D1)
+ * # 막는 갈래 넷 — 전부 **쓰기 전에** 판정한다
  *
- * D1이 *"부분 성공을 만들지 않는다"*이므로 거절은 첫 쓰기보다 앞서야 한다. 넷 다 값만 보고
+ * 복원은 *"부분 성공을 만들지 않는다"*(`services/restore.ts`의 머리말)이므로 거절은 첫 쓰기보다 앞서야 한다. 넷 다 값만 보고
  * 판정할 수 있어 여기 있다(작성자 존재 확인만은 DB 질문이라 `restore.ts`가 한다).
  *
  * | 갈래 | 뜻 |
  * |---|---|
- * | `layout-mismatch` | 레이아웃 id 집합이 다르다 (D7) |
- * | `unsupported-version` | 살아남는 페이지의 문서 버전이 이 프로세스보다 크다 (D5) |
+ * | `layout-mismatch` | 레이아웃 id 집합이 다르다 |
+ * | `unsupported-version` | 살아남는 페이지의 문서 버전이 이 프로세스보다 크다 |
  * | `invalid-document` | 만들 페이지의 문서가 카탈로그 검증에 걸린다 |
  * | `dangling-reference` | payload 안에서 참조가 끊겨 있다 — 그대로 쓰면 FK 위반으로 500이 된다 |
  */
@@ -115,8 +114,8 @@ export type RestoreStep =
   | { kind: 'set-layout-theme'; layoutId: string; themeId: string | null }
 
 /**
- * 무엇이 얼마나 바뀌는가. **응답이 이것을 그대로 싣는다**(D4 — *"바뀐 수와 그대로인 수를
- * 따로 센다"*, D11 — 화면이 말할 것 넷 중 둘).
+ * 무엇이 얼마나 바뀌는가. **응답이 이것을 그대로 싣는다**(*"바뀐 수와 그대로인 수를
+ * 따로 센다"* — 화면이 말할 것 넷 중 둘).
  */
 export interface RestoreSummary {
   menu: { created: number; updated: number; deleted: number }
@@ -130,7 +129,7 @@ export interface RestorePlan {
   summary: RestoreSummary
 }
 
-/** 미지원 버전에 걸린 페이지 하나. **`source`가 어느 쪽 문서인지 가른다**(D5의 두 방향). */
+/** 미지원 버전에 걸린 페이지 하나. **`source`가 어느 쪽 문서인지 가른다**(저장된 쪽 · 스냅샷 쪽의 두 방향). */
 export interface UnsupportedVersionPage {
   id: string
   title: string
@@ -146,11 +145,11 @@ export type RestorePlanOutcome =
   | { kind: 'dangling-reference'; references: string[] }
 
 /**
- * 문서 두 개가 **내용으로** 같은가. `headSeq`가 아니라 이것으로 비교하는 이유는 D4에 있다 —
+ * 문서 두 개가 **내용으로** 같은가. `headSeq`가 아니라 이것으로 비교하는 이유 —
  * 편집했다가 되돌리면 `headSeq`는 달라져 있는데 문서는 같다.
  *
- * **`JSON.stringify`가 아니라 `canonicalJson`이다 — 처음엔 전자로 짰고 틀렸다.** 같은 상태를
- * 재는데 매번 *"다르다"*가 나왔다: payload 쪽은 `jsonb`가 정렬한 키 순서(`root`→`version`)를
+ * **`JSON.stringify`가 아니라 `canonicalJson`이다.** `JSON.stringify`로 견주면 같은 상태를
+ * 매번 *"다르다"*로 판정한다: payload 쪽은 `jsonb`가 정렬한 키 순서(`root`→`version`)를
  * 들고 있고, 지금 쪽은 `SnapshotPayloadSchema.parse`가 만든 zod 선언 순서(`version`→`root`)를
  * 들고 있다. 실측과 두 경계의 표는 `src/canonical-json.ts`에 있다.
  *
@@ -221,14 +220,14 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
   }
   if (dangling.length > 0) return { kind: 'dangling-reference', references: dangling }
 
-  // ── 레이아웃 id 집합이 다르면 복원하지 않는다(D7). 개수를 조용히 맞추려 들지 않는다.
+  // ── 레이아웃 id 집합이 다르면 복원하지 않는다. 개수를 조용히 맞추려 들지 않는다.
   const snapshotLayoutIds = [...payload.layouts.map((layout) => layout.id)].sort()
   const currentLayoutIds = [...current.layouts.map((layout) => layout.id)].sort()
   if (snapshotLayoutIds.join(',') !== currentLayoutIds.join(',')) {
     return { kind: 'layout-mismatch', snapshot: snapshotLayoutIds, current: currentLayoutIds }
   }
 
-  // ── 페이지의 문서를 **쓸 것인가**부터 정한다. 아래 버전 검사(D5)와 7·8단계가 이 판정
+  // ── 페이지의 문서를 **쓸 것인가**부터 정한다. 아래 버전 검사와 7·8단계가 이 판정
   //    하나를 공유한다 — 두 번 판정하면 *"막는 기준"*과 *"쓰는 기준"*이 갈린다.
   const currentPageById = new Map(current.pages.map((page) => [page.id, page]))
   type PageWrite = 'create' | 'rewrite' | 'skip'
@@ -238,23 +237,23 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
     if (!stored) {
       writeByPage.set(page.id, 'create')
     } else {
-      // **내용으로 비교한다 — `headSeq`가 아니다**(D4).
+      // **내용으로 비교한다 — `headSeq`가 아니다**(`sameDocument`).
       writeByPage.set(page.id, sameDocument(stored.schema, page.schema) ? 'skip' : 'rewrite')
     }
   }
 
-  // ── 문서 버전(D5). **문서를 실제로 쓰는 페이지만 본다.**
+  // ── 문서 버전. **문서를 실제로 쓰는 페이지만 본다.**
   //
   // 좁힘이 두 칸이다. 첫째, **지워질 페이지는 안 본다** — 지우는 데 마이그레이션이 필요 없다.
-  // 둘째(리뷰가 잡았다), **양쪽 문서가 같아 쓸 것이 없는 페이지도 안 본다.**
+  // 둘째, **양쪽 문서가 같아 쓸 것이 없는 페이지도 안 본다.**
   //
-  // 둘째를 빠뜨렸을 때 무엇이 나빴나: 미지원 버전 페이지가 하나 생긴 프로젝트는 그 페이지가
-  // 스냅샷과 **똑같아서 아무도 그것을 건드리지 않는데도** 모든 복원이 400으로 막혔다. 즉
-  // **그 프로젝트는 어떤 스냅샷으로도 되돌아갈 수 없게** 된다 — §13.1이 걱정하는 것은
+  // 둘째를 빠뜨리면: 미지원 버전 페이지가 하나 생긴 프로젝트는 그 페이지가
+  // 스냅샷과 **똑같아서 아무도 그것을 건드리지 않는데도** 모든 복원이 400으로 막힌다. 즉
+  // **그 프로젝트는 어떤 스냅샷으로도 되돌아갈 수 없게** 된다 — 설계서 「스키마 마이그레이션」이 걱정하는 것은
   // *"그 페이지를 복구하려는 순간"*이지 *"그 페이지와 무관한 복원"*이 아니다.
   //
-  // 그리고 D4가 이미 *"내용이 같으면 아무것도 쓰지 않는다"*이므로, **쓰지 않는 페이지를
-  // 버전 때문에 막는 것은 그 결정과 일관되지 않는다.**
+  // 그리고 위 판정이 이미 *"내용이 같으면 아무것도 쓰지 않는다"*(`skip`)이므로, **쓰지 않는 페이지를
+  // 버전 때문에 막는 것은 그 판정과 일관되지 않는다.**
   //
   // **여기서 막는 것이 무엇을 대신하는지는 그대로다** — 이 검사가 없어도 파이프라인이
   // 두 방향 모두 거부한다(`unsupported-version` / 7단계 `invalid`). 이 검사는 그 거절을
@@ -372,7 +371,7 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
     }
   }
 
-  // 11. 레이아웃의 테마 **참조만** 되돌린다(D6 — 테마 문서는 건드리지 않는다).
+  // 11. 레이아웃의 테마 **참조만** 되돌린다(테마 문서는 건드리지 않는다).
   const currentLayoutById = new Map(current.layouts.map((layout) => [layout.id, layout]))
   for (const layout of payload.layouts) {
     const stored = currentLayoutById.get(layout.id)

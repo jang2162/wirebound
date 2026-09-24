@@ -1,8 +1,8 @@
 /**
- * `presets` 테이블의 SQL(P7-2 D2). HTTP도 zod도 여기 없다 — 그것은 `routes/presets.ts`다.
+ * `presets` 테이블의 SQL. HTTP도 zod도 여기 없다 — 그것은 `routes/presets.ts`다.
  *
- * **담기는 것은 `WbNode[]`이지 문서 봉투가 아니다**(D2·D3). 이 파일은 그 값의 뜻을 모르고
- * 컬럼으로만 다룬다 — `marker`를 버리는 것도(D4) 여기가 아니라 라우트다.
+ * **담기는 것은 `WbNode[]`이지 문서 봉투가 아니다.** 이 파일은 그 값의 뜻을 모르고
+ * 컬럼으로만 다룬다 — `marker`를 버리는 것도 여기가 아니라 라우트다.
  *
  * **`created_by`를 이름과 함께 낸다.** `repos/snapshots.ts`·`repos/comments.ts`가 같은
  * 조인을 하는 이유와 같다: 목록이 *"누가 남긴 것인가"*를 그리려면 uuid만으로는 안 된다.
@@ -25,7 +25,7 @@ export class PresetNulByteError extends Error {
  * 프로젝트 프리셋 한 줄.
  *
  * **`nodes`가 목록에도 실린다 — `snapshots`와 갈리는 자리다.** 그쪽은 payload가 프로젝트
- * 전체라 목록에서 뺐지만(P6-1 D9), 프리셋은 **페이지 하나의 트리**라 페이지 목록이 이미
+ * 전체라 목록에서 뺐지만, 프리셋은 **페이지 하나의 트리**라 페이지 목록이 이미
  * 나르는 것과 같은 크기다. 그리고 적용하는 화면이 그것을 **반드시** 쓰므로, 빼면 고른
  * 직후 상세 조회가 한 번 더 필요해지고 그 왕복의 실패 갈래가 하나 더 생긴다.
  */
@@ -84,7 +84,7 @@ function toRecord(row: PresetRow): PresetRecord {
  * 프리셋 하나를 만든다.
  *
  * **NUL 검사가 여기에도 있다 — 마지막 방벽이다.** 라우트가 먼저 보지만(`routes/presets.ts`),
- * 이 함수를 지나는 다른 경로(P9의 MCP·CLI)가 생겼을 때 조용히 500이 되지 않게 한다.
+ * 이 함수를 지나는 다른 경로(MCP·CLI)가 생겼을 때 조용히 500이 되지 않게 한다.
  * 검사를 지우면 `schema::jsonb` 캐스팅이 `22P05`로 죽고 그것은 500이다 — 라우트 쪽 주석에
  * 그 실측이 있다.
  */
@@ -127,7 +127,7 @@ export async function insertPreset(
 
 /**
  * 그 프로젝트의 프리셋 전부. **오래된 것이 먼저다** — 목록에 내장 프리셋이 앞에 붙고
- * (D2) 그 뒤로 사용자가 만든 순서대로 쌓이는 것이, *"내가 어제 만든 것"*을 찾을 때
+ * 그 뒤로 사용자가 만든 순서대로 쌓이는 것이, *"내가 어제 만든 것"*을 찾을 때
  * 자리가 움직이지 않는다. 스냅샷이 최신 순인 것과 갈리는 이유는 그쪽이 *"방금 얼린 것"*을
  * 먼저 보여야 하기 때문이다.
  */
@@ -164,8 +164,8 @@ export async function findPresetById(
 /**
  * 프리셋 하나를 지운다. 지운 것이 없으면 `false`(라우트가 404로 옮긴다).
  *
- * **`snapshots`와 갈리는 자리다** — 그쪽은 삭제 경로 자체를 만들지 않는 것이 §4.5의
- * 규칙이었다. 프리셋은 지울 수 있고(D2), 그래서 이름에 유일 제약이 없다.
+ * **`snapshots`와 갈리는 자리다** — 그쪽은 삭제 경로 자체를 만들지 않는 것이 설계서 「스냅샷」의
+ * 규칙이다. 프리셋은 지울 수 있고, 그래서 이름에 유일 제약이 없다.
  */
 export async function deletePreset(db: DbHandle, projectId: string, presetId: string): Promise<boolean> {
   const result = await db

@@ -1,10 +1,10 @@
 /**
- * **뜰 때 어느 DB를 보는지 말하는가**(2026-08-19 D4).
+ * **뜰 때 어느 DB를 보는지 말하는가.**
  *
- * 조용한 갈래를 시끄럽게 만드는 자리다. 실측(같은 날 보고 §2.3): 워크트리 B가
- * `pnpm --filter @wirebound/api migrate:down`을 한 번 돌리자 **A의 살아 있는 서버가**
- * `relation "api_tokens" does not exist`로 500을 내기 시작했다. A는 아무것도 안 했고
- * A의 로그에는 자기가 어느 DB를 보는지가 **한 줄도 없었다.**
+ * 조용한 갈래를 시끄럽게 만드는 자리다. 두 워크트리가 한 DB 를 보면, 워크트리 B가
+ * `pnpm --filter @wirebound/api migrate:down`을 한 번 돌리는 순간 **A의 살아 있는 서버가**
+ * `relation "api_tokens" does not exist`로 500을 내기 시작한다. A는 아무것도 안 했으므로
+ * A의 로그에 자기가 어느 DB를 보는지가 없으면 **원인을 가를 길이 없다.**
  *
  * 그래서 둘을 잰다: 값이 자격 문자열을 흘리지 않는가, 그리고 **`main.ts`가 실제로 그것을
  * 찍는가**(소스에서 센다 — `screen-renderer-census.test.ts`와 같은 결이다).
@@ -61,11 +61,10 @@ describe('describeDatabaseTarget — 사람이 가를 만큼만 낸다', () => {
 })
 
 /**
- * **빈 DB 로 뜬 것이 조용하면 안 된다**(2026-08-19 D3).
+ * **빈 DB 로 뜬 것이 조용하면 안 된다.**
  *
- * 오늘까지 빈 볼륨이 마운트되는 것을 막던 것은 `container_name` 고정 하나였다(README 6.3).
- * **이 슬라이스가 그 방어를 걷어냈다** — 워크트리마다 컨테이너를 띄우면 **빈 볼륨으로 뜨는
- * 것이 정상 경로**가 되고, 사람은 그것을 *"설계서가 사라졌다"* 로 읽는다. 데이터는 사라진
+ * 컨테이너 이름을 고정하지 않으므로(`README.md` 「컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다 / 빈 DB 가 떴다」 절)
+ * 워크트리마다 컨테이너를 띄우면 **빈 볼륨으로 뜨는 것이 정상 경로**이고, 사람은 그것을 *"설계서가 사라졌다"* 로 읽는다. 데이터는 사라진
  * 것이 아니라 **다른 이름의 볼륨**에 있다.
  */
 describe('describeSchemaState — 빈 DB 를 말한다', () => {
@@ -91,7 +90,7 @@ describe('describeSchemaState — 빈 DB 를 말한다', () => {
 
 /**
  * **못 떴을 때 나오는 문장.** 빈 DB 에서는 `buildApp` 이 `themes` 에 쓰다 죽으므로
- * (이 판이 쟀다 — `relation "themes" does not exist`) *뜬 뒤에 찍는 줄*은 0 건을 못 본다.
+ * (실측 — `relation "themes" does not exist`) *뜬 뒤에 찍는 줄*은 0 건을 못 본다.
  * 사람이 실제로 읽는 것은 이 문장이다.
  */
 describe('emptySchemaHint — 빈 DB 로 못 떴을 때만 말한다', () => {
@@ -112,7 +111,7 @@ describe('emptySchemaHint — 빈 DB 로 못 떴을 때만 말한다', () => {
     expect(emptySchemaHint(undefined, 주소)).toBeUndefined()
   })
 
-  it('**자격 문자열은 안 싣는다** — 이 문장은 터미널에 남고 붙여넣어진다 (D4)', () => {
+  it('**자격 문자열은 안 싣는다** — 이 문장은 터미널에 남고 붙여넣어진다', () => {
     const hint = emptySchemaHint(0, 주소)
     expect(hint).toContain('127.0.0.1:5443/wb_a')
     expect(hint).not.toContain('s3cr3t-pw')
@@ -166,8 +165,8 @@ describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', ()
   it('`config.databaseUrl` 을 받는 자가 둘뿐이다 — 붙는 자와 가려서 찍는 자', () => {
     // **목록을 손으로 적지 않고 소스에서 센다.** `app.log.info(config.databaseUrl)`가
     // 들어오면 여기 `info`가 하나 더 붙어 이 케이스가 죽는다. **뒤에 인자가 더 붙어도 센다** —
-    // `createPool`이 시간 제한을 둘째·셋째로 받는다(2026-09-23 이월 W′). 앞 판의 `\)`는 그 호출을 못 봐 빨강이었고,
-    // 거꾸로 `app.log.info(config.databaseUrl, …)`도 못 봤다.
+    // `createPool`이 시간 제한을 둘째·셋째로 받는다. 끝을 `\)`로 못박으면 그 호출을 못 봐 빨강이 되고,
+    // 거꾸로 `app.log.info(config.databaseUrl, …)`도 못 본다.
     const receivers = [...main.matchAll(/(\w+)\(config\.databaseUrl[,)]/g)].map((match) => match[1]).sort()
     expect(receivers).toEqual(['createPool', 'describeDatabaseTarget'])
   })
@@ -176,10 +175,9 @@ describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', ()
     expect(main).not.toMatch(/\$\{\s*config\.databaseUrl\s*\}/)
   })
 
-  it('**스키마 상태를 같은 줄에 붙인다**(D3) — 뜬 뒤에 세는 자를 실제로 지난다', () => {
+  it('**스키마 상태를 같은 줄에 붙인다** — 뜬 뒤에 세는 자를 실제로 지난다', () => {
     // 규칙(`describeSchemaState`)에는 자가 촘촘한데 **꽂는 한 줄에 자가 없으면** 회귀가
-    // 게이트 넷을 초록으로 지나간다 — 앞 슬라이스가 그 자리에서 변이 넷을 살렸다
-    // (귀속: 리뷰 §9). 여기는 서버를 띄워야만 도는 길이라 행동으로 못 재고 글자로 잰다.
+    // 게이트 넷을 초록으로 지나간다. 여기는 서버를 띄워야만 도는 길이라 행동으로 못 재고 글자로 잰다.
     expect(main).toContain('describeSchemaState(')
     expect(main).toContain('await countExecutedMigrations(db)')
     expect(main).toMatch(/이 서버가 보는 DB:[^\n]*describeDatabaseTarget/)
@@ -188,8 +186,8 @@ describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', ()
     expect(찍는줄.slice(0, 240)).toContain('describeSchemaState(')
   })
 
-  it('**못 떴을 때의 문장도 배선한다**(D3) — 이 줄이 빠지면 원문만 남는다', () => {
-    // 이 판이 심어 확인했다: 이 세 줄을 빼도 위의 케이스들이 전부 초록이었다(변이 M12).
+  it('**못 떴을 때의 문장도 배선한다** — 이 줄이 빠지면 원문만 남는다', () => {
+    // 이 케이스가 없으면 이 세 줄을 빼도 위의 케이스들이 전부 초록이다.
     // 빈 DB 는 워크트리마다 컨테이너를 띄우면 **정상 경로**라 여기가 조용하면 안 된다.
     expect(main).toContain('emptySchemaHint(await countExecutedMigrations(db), config.databaseUrl)')
     // 다른 실패는 원문 그대로 올라가야 한다 — 이 자가 모든 실패를 삼키면 안 된다.

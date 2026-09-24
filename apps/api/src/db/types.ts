@@ -16,7 +16,7 @@ export interface UsersTable {
 }
 
 export interface SessionsTable {
-  /** 쿠키 토큰의 sha256 hex. 토큰 원문은 저장하지 않는다 (설계 §4.2). */
+  /** 쿠키 토큰의 sha256 hex. 토큰 원문은 저장하지 않는다 (설계서 「테이블 정의」). */
   id: string
   user_id: string
   expires_at: ColumnType<Date, Date, Date>
@@ -36,7 +36,8 @@ export interface ProjectsTable {
    * 이 프로젝트의 기본 레이아웃(`0007-layouts`). **nullable인 것이 요점이다** —
    * `projects`와 `layouts`가 서로를 가리키는 순환이라 어느 쪽도 먼저 만들 수 없으므로,
    * `insertProject`가 프로젝트를 먼저 넣고(참조 없음) 레이아웃을 만든 뒤 이 컬럼을
-   * 채운다(같은 트랜잭션). 0007 이전에 만들어진 프로젝트는 `null`로 남는다(재라 #8).
+   * 채운다(같은 트랜잭션). 0007 이전에 만들어진 프로젝트는 `null`로 남는다(`0007-layouts.ts` 머리말
+   * «이미 있는 프로젝트에 기본 레이아웃을 만들어 주지 않는다»).
    */
   default_layout_id: ColumnType<string | null, string | null | undefined, string | null>
   created_at: Generated<Date>
@@ -88,13 +89,13 @@ export interface PagesTable {
   updated_at: Generated<Date>
   /**
    * 이 페이지의 최신 revision seq. 클라이언트가 patch를 보낼 때 `baseSeq`로 쓴다
-   * (설계 §4.2). `0`은 "아직 편집 이력이 없다"는 뜻이다. `seq`와 같은 이유로
+   * (설계서 「테이블 정의」). `0`은 "아직 편집 이력이 없다"는 뜻이다. `seq`와 같은 이유로
    * select 타입이 `string`이고, insert는 생략 가능하다(DEFAULT 0).
    */
   head_seq: ColumnType<string, number | undefined, number>
 }
 
-/** revision을 만든 주체의 종류. 설계 §4.2. `'mcp'`·`'cli'`는 P9가 쓴다. */
+/** revision을 만든 주체의 종류. 설계서 「테이블 정의」. `'mcp'`·`'cli'`는 API 토큰으로 들어온 편집이다(`auth/actor.ts`). */
 export type RevisionActorType = 'user' | 'mcp' | 'cli'
 
 /**
@@ -124,7 +125,7 @@ export interface RevisionsTable {
 }
 
 /**
- * 테마(`0006-themes`). 테마 문서(§6.1의 여섯 절)를 **절마다 컬럼 하나**로 쪼갠 것이다.
+ * 테마(`0006-themes`). 테마 문서(설계서 「테마 규격」의 여섯 절)를 **절마다 컬럼 하나**로 쪼갠 것이다.
  * `meta`는 컬럼으로 흩어진다 — `meta.id`는 `slug`, `meta.extends`는 `extends_ref`,
  * 나머지는 각 컬럼이다. 다시 `Theme` 모양으로 조립하는 것은 `repos/themes.ts`다.
  *
@@ -140,7 +141,7 @@ export interface RevisionsTable {
  */
 export interface ThemesTable {
   id: Generated<string>
-  /** `null`이면 시스템 테마다(§4.2·§6.10 — 읽기 전용, 코드가 진실이다). */
+  /** `null`이면 시스템 테마다(설계서 「테이블 정의」·「테마 관리」 — 읽기 전용, 코드가 진실이다). */
   project_id: string | null
   /** `meta.id`. `(project_id, slug)`가 유일하다(NULLS NOT DISTINCT). */
   slug: string
@@ -149,7 +150,7 @@ export interface ThemesTable {
   /** `meta.extends`. `system:<id>` 문자열이고 FK가 아니다(0006의 주석 참고). */
   extends_ref: string | null
   version: string
-  /** `meta.preview`. §4.2의 컬럼 목록에는 없다(0006의 주석 참고). */
+  /** `meta.preview`. 없으면 저장이 그 필드를 지운다(`0006-themes.ts`의 주석 참고). */
   preview: string | null
   tokens: JSONColumnType<ThemeTokens> | null
   primitives: JSONColumnType<ThemePrimitives> | null
@@ -161,20 +162,20 @@ export interface ThemesTable {
 }
 
 /**
- * 레이아웃(`0007-layouts`). **참조를 나르고 `Slot`을 담는 최소본이다**(계획서 D7) —
- * 편집 화면이 없으므로 이 슬라이스에서 쓰기는 생성 하나뿐이다.
+ * 레이아웃(`0007-layouts`). **참조를 나르고 `Slot`을 담는 최소본이다** —
+ * 편집 화면이 없으므로 쓰기는 생성과 테마 교체(`repos/layouts.ts`의 `updateLayoutTheme`)뿐이다.
  *
  * `schema`는 `jsonb`다. **`themes`의 절이 `json`인 것과 갈리는데 근거가 있다** —
  * 순서 계약이 걸리는 것은 테마의 절뿐이고, 노드 트리의 순서는 `children` 배열이
  * 나르므로 `jsonb`도 보존한다(0007의 주석 참고). `pages.schema`와 같은 선택이다.
  *
- * `schema_version` 컬럼이 없다 — §4.2의 `layouts` 목록에 없고 버전은 봉투 안에 있다.
+ * `schema_version` 컬럼이 없다 — 설계서 「테이블 정의」의 `layouts` 목록에 없고 버전은 봉투 안에 있다.
  */
 export interface LayoutsTable {
   id: Generated<string>
   project_id: string
   name: string
-  /** `null`이면 테마를 고르지 않았다(재라 #7). `themes.id`를 `ON DELETE RESTRICT`로 참조한다. */
+  /** `null`이면 테마를 고르지 않았다(`0007-layouts.ts` 머리말). `themes.id`를 `ON DELETE RESTRICT`로 참조한다. */
   theme_id: string | null
   schema: JSONColumnType<LayoutDocument>
   created_at: Generated<Date>
@@ -182,10 +183,10 @@ export interface LayoutsTable {
 }
 
 /**
- * 코멘트(`0008-comments`). 설계 §9의 우측 코멘트 탭이 담는 말이다.
+ * 코멘트(`0008-comments`). 설계서 「설계서 화면 구조」의 우측 코멘트 탭이 담는 말이다.
  *
- * **`marker` 컬럼이 없는 것이 요점이다**(P5-1 계획서 D1) — 번호는 페이지 문서의 노드가
- * 든다(`WbNode.marker`). 근거는 0008의 주석에 있다(요지: §4.3의 *"없으면 코멘트 없음"*
+ * **`marker` 컬럼이 없는 것이 요점이다** — 번호는 페이지 문서의 노드가
+ * 든다(`WbNode.marker`). 근거는 0008의 주석에 있다(요지: 설계서 「페이지 스키마 노드」의 *"없으면 코멘트 없음"*
  * 때문에 문서만 봐도 마커를 그릴 수 있어야 한다).
  *
  * `node_id`는 `pages.schema` 안의 노드 id다 — **테이블이 아니라 jsonb 문서 안의 값이라
@@ -193,8 +194,8 @@ export interface LayoutsTable {
  * 것을 막는 자리는 라우트다(`routes/comments.ts`).
  *
  * `created_at`·`updated_at`의 기본값이 `now()`가 아니라 `clock_timestamp()`다 —
- * **이 테이블만 갈린다.** 스레드 순서를 정하는 것이 시각뿐이라 한 트랜잭션 안에서
- * 만든 행이 같은 값을 가지면 안 되기 때문이다(0008의 주석에 실측 조건이 있다).
+ * 스레드 순서를 정하는 것이 시각뿐이라 한 트랜잭션 안에서
+ * 만든 행이 같은 값을 가지면 안 되기 때문이다(0008의 주석에 고장 조건이 있다).
  */
 export interface CommentsTable {
   id: Generated<string>
@@ -213,7 +214,7 @@ export interface CommentsTable {
 }
 
 /**
- * 지운 게시의 키(`0013-comment-tombstones` — 이월 AC′). `comments`에서 키가 있는 행을 지울 때
+ * 지운 게시의 키(`0013-comment-tombstones`). `comments`에서 키가 있는 행을 지울 때
  * `repos/comments.ts`의 `deleteComment`가 한 줄을 남기고, 복원이 같은 id 로 되살리면
  * `insertCommentWithId`가 그 줄을 지우며 키를 되붙인다. 읽는 자리는 게시의 키 판정뿐이다. 페이지를 지우면
  * CASCADE 전에 그 페이지의 키 있는 행도 같은 문장으로 묻는다(`deletePageComments` — `0014`).
@@ -234,13 +235,13 @@ export interface CommentTombstonesTable {
 }
 
 /**
- * 스냅샷(`0009-snapshots`). 설계 §4.5의 **삭제 없는 태그**다.
+ * 스냅샷(`0009-snapshots`). 설계서 「스냅샷」의 **삭제 없는 태그**다.
  *
  * `payload`는 `JSONColumnType<SnapshotPayload>` — `PagesTable.schema`와 **같은 비대칭**이다:
  * 삽입 시엔 `JSON.stringify`한 문자열, 조회 시엔 파싱된 객체. 그 규격을 소유하는 것은
- * `@wirebound/themes`의 `snapshot/payload.ts`이고(P6-1 D2 · P9-3 D2), 이 파일은 컬럼 타입만 안다.
+ * `@wirebound/themes`의 `snapshot/payload.ts`이고, 이 파일은 컬럼 타입만 안다.
  *
- * `tag`는 `(project_id, tag)`가 유일하다(D7). `description`은 `NULL`이면 적지 않은 것이다.
+ * `tag`는 `(project_id, tag)`가 유일하다. `description`은 `NULL`이면 적지 않은 것이다.
  * `created_by`는 `ON DELETE RESTRICT`이고 이유는 0009의 주석에 있다.
  */
 export interface SnapshotsTable {
@@ -254,15 +255,15 @@ export interface SnapshotsTable {
 }
 
 /**
- * 페이지 프리셋(`0010-presets`). 설계 §11.1의 *"프로젝트가 소유한 페이지 통째 템플릿"*이다.
+ * 페이지 프리셋(`0010-presets`). 설계서 「페이지 프리셋」의 *"프로젝트가 소유한 페이지 통째 템플릿"*이다.
  *
  * `schema`는 `JSONColumnType<WbNode[]>` — `PagesTable.schema`와 **같은 비대칭**이다:
  * 삽입 시엔 `JSON.stringify`한 문자열, 조회 시엔 파싱된 배열.
  *
- * **담기는 것이 `PageDocument`가 아니라 `WbNode[]`인 것이 이 테이블의 규격이다**(P7-2 D2) —
- * 적용이 root의 `children`만 바꾸므로(D3) 봉투는 프리셋의 것이 아니다.
+ * **담기는 것이 `PageDocument`가 아니라 `WbNode[]`인 것이 이 테이블의 규격이다** —
+ * 적용이 root의 `children`만 바꾸므로 봉투는 프리셋의 것이 아니다.
  *
- * **`name`에 유일 제약이 없다**(D2) — `snapshots.tag`와 갈리는 자리이고 근거는 0010의
+ * **`name`에 유일 제약이 없다** — `snapshots.tag`와 갈리는 자리이고 근거는 0010의
  * 주석에 있다. `description`은 `NULL`이면 적지 않은 것이다.
  */
 export interface PresetsTable {
@@ -273,18 +274,18 @@ export interface PresetsTable {
   schema: JSONColumnType<WbNode[]>
   created_by: string
   created_at: Generated<Date>
-  /** 오늘 이 값을 바꾸는 경로가 없다(수정 라우트가 없다). 근거는 0010의 주석에 있다. */
+  /** 이 값을 바꾸는 경로가 없다(수정 라우트가 없다). 근거는 0010의 주석에 있다. */
   updated_at: Generated<Date>
 }
 
 /**
- * API 토큰(`0011-api-tokens`). 설계 §10의 *"발급자의 권한을 상속 … 스코프는 프로젝트 단위"*.
+ * API 토큰(`0011-api-tokens`). 설계서 「권한 모델」의 *"발급자의 권한을 상속 … 스코프는 프로젝트 단위"*.
  *
  * **`token_hash`가 원문의 sha256 hex다 — 원문은 어디에도 저장되지 않는다**(`sessions.id`와
  * 같은 규칙, 만드는 함수도 하나다: `auth/token-hash.ts`). `id`는 그것과 별개인 uuid이고,
  * 목록·폐기가 지목하는 것이 그쪽이다(0011의 머리말).
  *
- * **역할 컬럼이 없다(P9-2 D3).** 토큰은 *"누가"*와 *"어느 프로젝트"*만 들고, 역할은 요청
+ * **역할 컬럼이 없다.** 토큰은 *"누가"*와 *"어느 프로젝트"*만 들고, 역할은 요청
  * 시점의 `project_members` 행이 정한다 — 얼리면 판정이 두 벌이 된다.
  */
 export interface ApiTokensTable {

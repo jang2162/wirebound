@@ -1,16 +1,15 @@
 /**
- * **시스템 테마 다섯이 저장·조회를 왕복해도 같은 CSS를 내는가** (P4b-3 계획서 *"재지 않은 것 2"*).
+ * **시스템 테마 다섯이 저장·조회를 왕복해도 같은 CSS를 내는가.**
  *
- * P4a-3이 `json` 컬럼으로 문서 키 순서를 지켰고 `theme-order.test.ts`가 그것을 **손으로 만든
- * 테마 하나**로 못박았다. 그 판정이 실제 시스템 테마로 확인된 것은 **`admin` 하나뿐이었고**,
- * `admin`은 다섯 중 `variants`·`states`·`responsive`·`assets`를 가장 적게 쓰는 테마다 —
- * 즉 **순서가 실제로 승자를 정하는 절들이 admin에서는 거의 안 나온다.**
+ * `json` 컬럼이 문서 키 순서를 지키고 `theme-order.test.ts`가 그것을 **손으로 만든 테마
+ * 하나**로 못박는다. 실제 시스템 테마를 **`admin` 하나로만** 재면 모자라다 — `admin`은
+ * 다섯 중 `variants`·`states`·`responsive`·`assets`를 가장 적게 쓰는 테마라, **순서가
+ * 실제로 승자를 정하는 절들이 admin에서는 거의 안 나온다.**
  *
- * ③이 다섯으로 넓힌 이유 셋:
+ * 다섯을 다 재는 이유 셋:
  *
- * 1. **`assets`가 이 슬라이스에서 처음으로 CSS가 됐다**(D5의 `@font-face`). 그 전까지
- *    `assets`는 저장돼도 아무 데도 안 쓰였으므로 왕복이 깨져도 화면이 같았다. 이제는
- *    다르다 — 넷 중 셋이 `assets.fonts`를 싣고 그것이 시트 맨 앞의 블록이 된다.
+ * 1. **`assets`가 CSS가 된다**(`@font-face`). 그러니 왕복이 `assets`를 깨뜨리면 화면이
+ *    달라진다 — 넷 중 셋이 `assets.fonts`를 싣고 그것이 시트 맨 앞의 블록이 된다.
  * 2. **`responsive`가 폭으로 재정렬된다**(`pushResponsive`). 그 절이 왕복에서 살아 있는지는
  *    브레이크포인트를 여럿 선언한 테마라야 보이고, `admin`은 그 자리가 얇다.
  * 3. **깨지면 조용하다.** 컬럼 하나를 빠뜨리거나 `json`이 `jsonb`로 바뀌면 이슈도 예외도
@@ -28,7 +27,7 @@ import { createProject, signup, withApi, type TestContext } from './helpers'
 function css(theme: Parameters<typeof resolveTheme>[0]): string {
   ensureCatalog()
   const { theme: resolved, issues } = resolveTheme(theme)
-  // 오류만 본다 — `portal`·`docs`는 손잡이 경고를 1건씩 낸다(P4c-1 T4). 경고는 CSS를
+  // 오류만 본다 — `portal`·`docs`는 손잡이 경고를 1건씩 낸다. 경고는 CSS를
   // 바꾸지 않으므로 아래 글자 대조는 그대로 유효하다.
   const errors = issues.filter((entry) => entry.severity === 'error')
   expect(errors.map((entry) => `${entry.path}: ${entry.message}`)).toEqual([])
@@ -88,7 +87,7 @@ describe('시스템 테마 다섯 — 저장·조회 왕복', () => {
       // 한 테마 안에서 층이 둘 이상이라야 "뒤엣것이 이긴다"가 뜻을 갖는다.
       expect(row.variants + row.states + row.responsive).toBeGreaterThan(0)
     }
-    // `assets.fonts`가 CSS가 되는 것은 이 슬라이스에서 생겼다. 넷 중 하나도 안 실으면
+    // `assets.fonts`는 CSS가 된다. 넷 중 하나도 그것을 안 실으면
     // 위 다섯 케이스는 `@font-face` 왕복을 하나도 안 지킨다.
     expect(rows.filter((row) => row.fonts > 0).length).toBeGreaterThan(0)
   })
@@ -96,7 +95,7 @@ describe('시스템 테마 다섯 — 저장·조회 왕복', () => {
   /**
    * **`@font-face`가 왕복을 지나는지 따로 본다.** 위 글자 대조에 이미 들어 있지만,
    * 그 케이스가 죽을 때 *"폰트가 사라졌다"*를 이름으로 말하는 자리가 있어야 한다 —
-   * `assets` 컬럼은 P4a-3이 만들었고 그때는 아무도 안 읽는 절이었다.
+   * 글자 대조의 실패는 어느 절이 사라졌는지 말하지 않는다.
    */
   it('assets.fonts를 실은 테마는 왕복 뒤에도 @font-face를 낸다', async () => {
     await withApi(async (ctx) => {

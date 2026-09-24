@@ -1,5 +1,5 @@
 /**
- * 페이지 라우트: 조회·생성·수정·삭제, 그리고 이 태스크의 핵심인 스키마 검증 게이트
+ * 페이지 라우트: 조회·생성·수정·삭제, 그리고 스키마 검증 게이트
  * (`PUT .../schema`). `menuRoutes`(`routes/menu.ts`)와 같은 `/api/projects` prefix로
  * 등록한다(`app.ts`) — 파일은 분리하되 URL 네임스페이스는 공유한다. 이 파일의
  * 라우트는 전부 `/:projectId/pages`(그 아래 `/:pageId`, `/:pageId/schema`) 아래에 있다.
@@ -8,32 +8,32 @@
  * 권한 판정은 `auth/roles.ts`의 `projectGuard` 하나가 전담한다 — 이 파일은 역할을
  * 비교하지 않는다.
  *
- * **`PUT .../schema`가 설계 §7.1의 서버 게이트다.** 순서가 규격이다:
+ * **`PUT .../schema`가 설계서 「정방향 흐름」의 서버 게이트다.** 순서가 규격이다:
  * 1. 본문을 `z.strictObject({ schema: DocumentEnvelopeSchema })`로 파싱한다.
  *    실패(봉투가 깨짐) → 400 `bad-request`.
  * 2. `migrateDocument`로 최신 버전까지 올린다. 던지면(지원하지 않는 버전) → 400.
  * 3. `validatePage`를 부른다. **`error` 이슈가 있으면**(봉투는 멀쩡한데 카탈로그 규칙 위반)
  *    → 422 `validation-failed`, `issues`에 `ValidationIssue[]`를 그대로 싣는다(경고까지 함께).
- *    **경고만 있으면 저장된다** — 응답의 `warnings`에 실린다(P4a-3 Task 1).
+ *    **경고만 있으면 저장된다** — 응답의 `warnings`에 실린다.
  *    선을 긋는 것은 `partitionIssues` 하나이고 파이프라인 6단계도 그것을 쓴다.
  * 4. 통과한 문서만 `applyEdit`(편집 파이프라인)에 태워 저장한다 — `PATCH .../ops`와
  *    **같은 쓰기 경로**다.
  * 1·3단계가 갈리는 이유: "요청이 잘못됨"(400)과 "내용이 처리 불가함"(422)은 다른
- * 성질이다(설계 §13). 1~3 중 어디서든 실패하면 저장(4단계)에 도달하지 못하므로
+ * 성질이다(설계서 「에러 처리」). 1~3 중 어디서든 실패하면 저장(4단계)에 도달하지 못하므로
  * 기존 `schema`는 그대로 남는다 — 이 게이트가 존재하는 이유 자체다.
  *
- * **`pages.schema`를 바꾸는 경로는 파이프라인 하나뿐이다(설계 결정 D1).** 그래서
+ * **`pages.schema`를 바꾸는 경로는 파이프라인 하나뿐이다.** 그래서
  * 통째 교체인 `PUT`도 revision을 남긴다. 예외를 두면 이렇게 깨진다: PUT이 문서만
  * 갈아 끼우고 `head_seq`를 그대로 두면, 그 뒤 클라이언트가 보내는 undo(저장된
  * `inverse`의 재적용)가 **교체된 문서** 위에서 돈다. 경로가 어긋나면 409로 튕기지만
  * 우연히 살아 있으면 조용히 엉뚱한 값이 들어간다. `repos/pages.ts`에 revision 없이
- * `schema`를 쓰는 함수를 남겨 두지 않는 것도(이 태스크가 그런 함수 하나를 지웠다)
+ * `schema`를 쓰는 함수를 두지 않는 것도
  * 같은 이유다 — 두 번째 쓰기 경로가 있으면 그것을 부르는 순간 같은 구멍이 다시 난다.
  *
- * **`POST .../pages/import`가 §11.2의 페이지 JSON 가져오기다(P7-3 D7).** P7-1 D4는
- * *"새 엔드포인트를 만들지 않는다"*였는데 **그것은 문서 편집 하나였고 여기는 다르다** —
- * 가져오기는 **페이지 생성 · 문서 쓰기 · 코멘트 넣기** 세 자원을 만진다. 두 요청으로 나누면
- * 중간 실패에서 **빈 페이지가 남는다**(P6-2 이월 §8). 조율은 `services/page-import.ts`가
+ * **`POST .../pages/import`가 설계서 「페이지 JSON」의 가져오기다.** 문서 편집 하나라면
+ * 새 엔드포인트가 필요 없지만 **가져오기는 다르다** —
+ * **페이지 생성 · 문서 쓰기 · 코멘트 넣기** 세 자원을 만진다. 두 요청으로 나누면
+ * 중간 실패에서 **빈 페이지가 남는다.** 조율은 `services/page-import.ts`가
  * 한 트랜잭션 안에서 하고, 이 파일은 봉투를 읽어 넘기고 결과를 HTTP로 옮기기만 한다
  * (`routes/snapshots.ts`가 `services/restore.ts`에 대해 하는 것과 같은 배치).
  *
@@ -43,11 +43,11 @@
  *
  * **`PATCH .../ops`는 같은 게이트를 부분 편집에 대해 수행한다.** 다만 검증·적용·
  * 이력 기록을 이 파일이 직접 하지 않고 `services/edit-pipeline.ts`의 `applyEdit`
- * 하나에 맡긴다 — P3의 WebSocket 핸들러가 같은 함수를 부르므로, 규칙이 이 파일에
+ * 하나에 맡긴다 — WebSocket 핸들러가 같은 함수를 부르므로, 규칙이 이 파일에
  * 있으면 두 진입점이 갈라진다. **같은 이유로 그 본문의 zod 경계(모양·경로 제약·ops
- * 상한)도 이 파일에 두지 않는다** — `http/patch-ops.ts`에 있고 P3가 그것을 그대로
- * import한다. **실패 사유를 상태 코드로 옮기는 표도 이 파일에 없다** — P5-1이
- * `http/edit-outcome.ts`로 옮겼고, `routes/comments.ts`가 그 두 번째 소비자다.
+ * 상한)도 이 파일에 두지 않는다** — `http/patch-ops.ts`에 있고 `ws/protocol.ts`가 그것을 그대로
+ * import한다. **실패 사유를 상태 코드로 옮기는 표도 이 파일에 없다** —
+ * `http/edit-outcome.ts`에 있고, `routes/comments.ts`도 그 표를 쓴다.
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
@@ -67,12 +67,12 @@ import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
 import { badRequest, conflict, notFound, unauthenticated, validationFailed, type ApiError } from '../errors'
-// **P5-1이 `http/edit-outcome.ts`로 옮겼다** — `routes/comments.ts`가 두 번째 소비자가
-// 됐다(코멘트가 번호를 부여하려고 같은 파이프라인을 부른다). `withWarnings`가 P4c-1에서
-// 같은 이유로 옮겨 간 것과 같은 자리다.
+// **실패 사유 → 상태 코드 표는 `http/edit-outcome.ts`에 둔다** — `routes/comments.ts`도 같은 표를
+// 쓴다(코멘트가 번호를 부여하려고 같은 파이프라인을 부른다). `withWarnings`가
+// `http/warnings.ts`에 있는 것과 같은 이유다.
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
-// **P4c-1이 `http/warnings.ts`로 옮겼다** — `routes/themes.ts`가 두 번째 소비자가 됐다.
+// **`http/warnings.ts`에 둔다** — `routes/themes.ts`도 같은 것을 쓴다.
 import { withWarnings } from '../http/warnings'
 import { OpsBody } from '../http/patch-ops'
 import { lockConflictError } from '../lock/check'
@@ -97,8 +97,8 @@ const Title = z.string().min(1, '제목을 입력하세요').max(200, '제목은
 /**
  * **수를 여기 적지 않는다** — 상한도 `null` 허용도 `@wirebound/schema`의
  * `PageDescriptionSchema` 하나가 갖는다(`routes/comments.ts`의 `Body`가
- * `COMMENT_BODY_MAX_LENGTH`에 대해 하는 것과 같은 자세). 앞 판은 그 수가 여기와 봉투에
- * 두 벌이라 한쪽만 고쳐도 아무것도 안 죽었다.
+ * `COMMENT_BODY_MAX_LENGTH`에 대해 하는 것과 같은 자세). 그 수를 여기와 봉투에
+ * 두 벌 두면 한쪽만 고쳐도 아무것도 안 죽는다.
  */
 const Description = PageDescriptionSchema
 
@@ -113,7 +113,7 @@ const CreatePageBody = z.strictObject({
 })
 
 /**
- * **고치기 전 값**(이월 P — 아래 `PATCH` 핸들러의 머리말). 칸마다 선택이고, 준 칸만 견준다.
+ * **고치기 전 값**(아래 `PATCH` 핸들러의 머리말). 칸마다 선택이고, 준 칸만 견준다.
  *
  * **바꿀 값의 규칙(`Title`·`Description`)으로 재지 않는다** — 이것은 저장할 값이 아니라 **견줄 값**이다. 규칙이
  * 바뀐 날(상한이 줄면) 옛 규칙으로 저장된 값을 바탕으로 보낸 요청이 400 이 되면, 그 값을 고칠 길이 막힌다.
@@ -132,13 +132,13 @@ const MetaBase = z.strictObject({
  * 1. **바꾸지 않는 칸의 바탕은 400** — `{ description, base: { title } }`. 받아 주면 «제목이 그대로면 설명을 쓴다»는
  *    **조건부 쓰기**가 되는데, 그것은 이 모델이 약속한 것(«내가 고친 칸이 고치는 동안 안 바뀌었다»)이 아니다.
  *    `base`만 오는 것도 바꿀 값이 없는 것이라 같은 400 이다.
- * 2. **바꾸는 메타 칸마다 바탕이 있어야 한다 — 없으면 400**(리뷰 F5). `{ description, base: {} }`는 «바탕 있음»의
- *    길을 타고 **아무것도 견주지 않고** 썼다(`every`가 빈 집합에 참이다). 오늘 해는 없지만(바탕 없는 것과 같다),
- *    클라이언트가 바탕 칸을 `undefined`로 떨구는 날(`JSON.stringify`가 키를 지운다) 그 결함이 400 이 아니라
- *    **조용한 덮임**으로 나타난다. `{ title, description, base: { title } }`도 같다 — 설명은 견주지 않고 쓴다.
- * 3. **순서 · 소속 메뉴(`sortOrder`·`menuNodeId`)는 바탕과 한 본문에 못 싣는다 — 400**(리뷰 F4). 바탕이 있으면
+ * 2. **바꾸는 메타 칸마다 바탕이 있어야 한다 — 없으면 400.** `{ description, base: {} }`를 받아 주면 «바탕 있음»의
+ *    길을 타고 **아무것도 견주지 않고** 쓴다(`every`가 빈 집합에 참이다). 그 자체는 해가 없지만(바탕 없는 것과 같다),
+ *    클라이언트가 바탕 칸을 `undefined`로 떨구면(`JSON.stringify`가 키를 지운다) 그 결함이 400 이 아니라
+ *    **조용한 덮임**으로 나타난다. `{ title, description, base: { title } }`도 같다 — 받아 주면 설명은 견주지 않고 쓴다.
+ * 3. **순서 · 소속 메뉴(`sortOrder`·`menuNodeId`)는 바탕과 한 본문에 못 싣는다 — 400.** 바탕이 있으면
  *    핸들러가 **이 행을 먼저** 잡고(`lockPageMeta`) 그 뒤 `updatePage`가 **형제 행**을 잡는다 — 바탕 없는 자리
- *    옮기기(형제 → 이 행)와 잠금 순서가 거꾸로라, 동시에 오면 교착이 는다(리뷰 D1: 60 회에 31 · 바탕 없는 대조 8).
+ *    옮기기(형제 → 이 행)와 잠금 순서가 거꾸로라, 동시에 오면 교착이 는다.
  *    웹은 이 조합을 안 보낸다(이름 변경 · 설명 · 순서 · 이동이 각각 따로 간다). 막는 것이 잠금 순서를 고치는 것보다
  *    싸다 — 그 둘은 이 모델 밖이다(아래 핸들러 머리말).
  *
@@ -170,7 +170,7 @@ const UpdatePageBody = z
   })
 
 /**
- * **페이지 메타 충돌의 이슈 코드**(이월 P). 이 라우트가 내는 409 는 이것뿐이지만 **코드로 가른다** — 문장으로
+ * **페이지 메타 충돌의 이슈 코드.** 이 라우트가 내는 409 는 이것뿐이지만 **코드로 가른다** — 문장으로
  * 가르면 문장을 고치는 날 화면이 조용히 갈래를 잃는다(`routes/comments.ts`의 `REUSED_KEY`와 같은 자세).
  * 웹은 이 코드를 `apps/web/src/api/page-meta.ts`의 `PAGE_META_CHANGED`로 같은 글자로 든다.
  */
@@ -186,13 +186,13 @@ const PAGE_META_CHANGED_MESSAGE = '다른 사람이 이 페이지를 먼저 바�
 const PutSchemaBody = z.strictObject({ schema: DocumentEnvelopeSchema })
 
 /**
- * `POST .../pages/import`의 본문(P7-3 D7).
+ * `POST .../pages/import`의 본문.
  *
  * **`file`을 `z.unknown()`으로 받는 것이 의도다.** 봉투를 zod로 여기서 다시 선언하면
  * *"모르는 `wireboundVersion`은 그 값을 말한다"*·*"`comments[].marker`는 `schema`의 노드로
- * 가라"*(D6) 같은 문장이 사라지고 일반 zod 오류가 나간다. 그 판정은 `@wirebound/schema`의
+ * 가라"* 같은 문장이 사라지고 일반 zod 오류가 나간다. 그 판정은 `@wirebound/schema`의
  * `parsePageJson` 하나가 갖고 **웹의 미리보기가 같은 함수를 쓴다** — 그래야 화면이 통과시킨
- * 파일을 서버가 다른 이유로 거절하는 일이 없다(P7-1 이월 §2가 지목한 부류의 반대편).
+ * 파일을 서버가 다른 이유로 거절하는 일이 없다.
  *
  * **`title`은 파일의 제목을 덮는다.** 없으면 파일의 것을 쓴다 — `services/page-import.ts`의
  * `PageImportInput.title`에 근거가 있다.
@@ -219,7 +219,7 @@ function pageImportOutcomeToApiError(outcome: Exclude<PageImportOutcome, { kind:
     case 'unsupported-version':
       return badRequest(outcome.message)
     case 'invalid-document':
-      // 이슈의 `nodeId`가 **파일의 id**다(D8) — 사용자에게 남는 것이 파일뿐이므로.
+      // 이슈의 `nodeId`가 **파일의 id**다 — 사용자에게 남는 것이 파일뿐이므로.
       return validationFailed('가져올 문서의 스키마 검증에 실패했습니다', outcome.issues)
     case 'menu-not-found':
       return notFound('메뉴를 찾을 수 없습니다')
@@ -253,7 +253,7 @@ export function pageRoutes() {
       if (!page) {
         throw notFound()
       }
-      // 설계 §13.1: 읽을 때 최신 버전으로 올려 내보낸다. 이 응답을 만드는 데만
+      // 설계서 「스키마 마이그레이션」: 읽을 때 최신 버전으로 올려 내보낸다. 이 응답을 만드는 데만
       // 쓰고, 올라간 결과를 다시 저장하지는 않는다 — 다음 저장(PUT .../schema) 때
       // 갱신된다.
       //
@@ -265,22 +265,20 @@ export function pageRoutes() {
       // `PUT .../schema`가 저장 시 `migrated.version`으로 두 값을 동시에 맞추는 것과
       // 같은 이유로, 읽기도 똑같이 해야 한다.
       //
-      // `PUT .../schema`(아래)와 마찬가지로 try/catch로 감싼다. 오늘은 PUT이 저장
+      // `PUT .../schema`(아래)와 마찬가지로 try/catch로 감싼다. PUT이 저장
       // 시점에 지원하지 않는 버전을 이미 400으로 막아 이 조회 경로가 그런 문서를
       // 볼 일이 없지만, 그 보장은 이 프로세스가 아는 `CURRENT_DOCUMENT_VERSION` 안에서만
       // 유효하다 — 더 새 배포가 저장한 문서를 이 프로세스가 되읽으면(예: 배포 롤백,
       // 여러 버전이 같은 DB를 공유하는 롤링 배포) `migrateDocument`가 똑같이 던진다.
       // 여기서 잡지 않으면 그 페이지의 모든 후속 GET이 처리되지 않은 예외로 500이 된다.
       //
-      // **그리고 그런 문서는 API로 되살릴 수 없다 — 인지된 결과다.** 전에는 `PUT
-      // .../schema`가 탈출구였다: 그 경로는 **들어온** 문서만 마이그레이션하고 저장된
-      // 문서를 통째로 덮어썼기 때문이다. 지금은 PUT도 편집 파이프라인을 타고, 그
-      // 2단계가 **저장된** 문서를 `migrateDocument`에 태워 `unsupported-version` →
+      // **그리고 그런 문서는 API로 되살릴 수 없다 — 인지된 결과다.** PUT도 편집 파이프라인을
+      // 타고, 그 2단계가 **저장된** 문서를 `migrateDocument`에 태워 `unsupported-version` →
       // 400으로 끝난다. 즉 GET·`PATCH .../ops`·`PUT .../schema` 세 경로가 전부 같은
-      // 이유로 400이다. 그래도 파이프라인을 우회하는 쓰기 경로를 되살리지는 않는다 —
-      // 그것은 D1(모든 스키마 변경이 revision을 남긴다)을 다시 뚫는 일이고, 복구
-      // 경로를 어떻게 줄지는 별도 설계 결정이다(P6 스냅샷 복원이 유력한 자리다).
-      // 여기서 500을 400으로 바꾸는 것은 그 사이에 최소한 원인을 말해 주기 위해서다.
+      // 이유로 400이다. **들어온** 문서만 마이그레이션하고 저장된 문서를 통째로 덮어쓰는
+      // 쓰기 경로를 두면 탈출구가 되지만 두지 않는다 — 그것은 «모든 스키마 변경이 revision을
+      // 남긴다»(머리말)를 뚫는 일이다. 스냅샷 복원도 이 탈출구를 떠맡지 않는다(`apps/api/README.md`
+      // 「§13.1의 미지원 버전 탈출구」 절). 여기서 500을 400으로 바꾸는 것은 최소한 원인을 말해 주기 위해서다.
       let migrated
       try {
         migrated = migrateDocument(page.schema)
@@ -304,7 +302,7 @@ export function pageRoutes() {
             schema: { version: CURRENT_DOCUMENT_VERSION, root: { id: createNodeId(), type: 'Page', children: [] } },
             schemaVersion: CURRENT_DOCUMENT_VERSION,
           })
-          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
+          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 트리 쓰기의 첫 잠금(프로젝트 행)이
           // 복원 · 프로젝트 삭제 · 다른 트리 쓰기 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
           await recheckProjectRole(trx, request)
           return inserted
@@ -321,13 +319,13 @@ export function pageRoutes() {
     })
 
     /**
-     * **파일 한 벌로 페이지를 만든다**(§11.2 — P7-3 D7·D8·D9).
+     * **파일 한 벌로 페이지를 만든다**(설계서 「페이지 JSON」).
      *
-     * **`editor`다**(D9). §10이 editor에게 *"메뉴·페이지·컴포넌트·코멘트·상호작용 편집"*을
+     * **`editor`다.** 설계서 「권한 모델」이 editor에게 *"메뉴·페이지·컴포넌트·코멘트·상호작용 편집"*을
      * 열었고 가져오기는 **페이지를 만드는 것**이므로 `POST .../pages`와 같은 등급이다.
      * 테마·레이아웃처럼 프로젝트 전체를 한 번에 바꾸지 않는다.
      *
-     * **덮지 않는다**(D4) — 언제나 **새 페이지**다. P6-2 이월 §1이 그은 선이다:
+     * **덮지 않는다** — 언제나 **새 페이지**다:
      * *"`planRestore`는 payload 상태로 수렴시키고 가져오기는 삽입이다."*
      *
      * 응답이 나르는 것 셋:
@@ -335,14 +333,14 @@ export function pageRoutes() {
      * | 키 | 무엇 | 왜 |
      * |---|---|---|
      * | `page` | 만들어진 페이지(문서까지) | 화면이 곧바로 그 주소로 옮긴다 |
-     * | `comments` | `{ inserted, dangling }` | **고아를 만들면서 들어간다**(D5) — 몇 개인지 말하지 않으면 사용자가 모른다 |
-     * | `ignoredLayoutRef` | 파일이 든 `layoutRef` | **쓰지 않았다고 말한다**(D4). 없으면 **키 자체가 없다** — 없는 것을 `null`로 흉내 내지 않는다 |
+     * | `comments` | `{ inserted, dangling }` | **고아를 만들면서 들어간다** — 몇 개인지 말하지 않으면 사용자가 모른다 |
+     * | `ignoredLayoutRef` | 파일이 든 `layoutRef` | **쓰지 않았다고 말한다.** 없으면 **키 자체가 없다** — 없는 것을 `null`로 흉내 내지 않는다 |
      */
     app.post('/:projectId/pages/import', { preHandler: projectGuard('editor') }, async (request, reply) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
       const body = parseBody(ImportPageBody, request.body)
 
-      // 1단계: 봉투. 실패 문장과 **파일의 자리**(`issues[].path`)는 봉투가 만든다(D8).
+      // 1단계: 봉투. 실패 문장과 **파일의 자리**(`issues[].path`)는 봉투가 만든다.
       const read = parsePageJson(body.file)
       if (read.status === 'failed') {
         throw badRequest(read.message, read.issues.length > 0 ? read.issues : undefined)
@@ -362,12 +360,12 @@ export function pageRoutes() {
           menuNodeId: body.menuNodeId,
           file: read.file,
           ...(body.title !== undefined ? { title: body.title } : {}),
-          // **actor는 요청이 정한다**(P9-5 D1 — `auth/actor.ts`). `authorId`는 다르다:
+          // **actor는 요청이 정한다**(`auth/actor.ts`). `authorId`는 다르다:
           // 코멘트의 작성자는 **사람**이고 `comments.author_id`가 `users(id)`에 FK를 건다.
           actor: requestActor(request),
           authorId: currentUser.id,
         })
-        // **커밋 순간의 권한**(이월 AA′). 생성과 같은 자리다 — `insertPage`의 트리 쓰기 첫 잠금 뒤. 실패한 가져오기는
+        // **커밋 순간의 권한.** 생성과 같은 자리다 — `insertPage`의 트리 쓰기 첫 잠금 뒤. 실패한 가져오기는
         // 제 세이브포인트를 이미 되돌렸다(`importPage`) — 쓴 것이 없으니 재확인하지 않는다.
         if (imported.kind === 'imported') await recheckProjectRole(trx, request)
         return imported
@@ -388,16 +386,16 @@ export function pageRoutes() {
     })
 
     /**
-     * **페이지 메타(제목 · 설명)의 충돌 모델 — 이 앱의 첫 충돌 모델이다**(이월 P = AB · 2026-09-23).
+     * **페이지 메타(제목 · 설명)의 충돌 모델.**
      *
-     * 앞 판은 나중에 저장한 쪽이 이겼다 — 창 둘이 같은 설명을 고치면 뒤의 것이 앞의 것을 **조용히** 덮었다.
-     * 이제 요청이 **고치기 전 값**(`base` — 그 사람이 고치기 시작한 바탕)을 함께 보내면:
+     * 나중에 저장한 쪽이 이기기만 하면 창 둘이 같은 설명을 고칠 때 뒤의 것이 앞의 것을 **조용히** 덮는다.
+     * 그래서 요청이 **고치기 전 값**(`base` — 그 사람이 고치기 시작한 바탕)을 함께 보내면:
      *
      * | 지금 값 | 답 |
      * |---|---|
      * | `base`와 같다(빈 값은 `''`든 `null`이든 같다 — `@wirebound/schema`의 `samePageMeta`) | 쓴다 — 200 |
      * | `base`와 다르다 | **409** · 이슈 코드 `page-meta-changed` · 칸마다 이슈 하나(`path` = 칸 이름 · `current` = **지금 값**) — 쓰지 않는다 |
-     * | `base`를 안 보냈다 | 쓴다 — 나중이 이긴다(오늘의 CLI · MCP · 가져오기 · 트리의 순서 · 메뉴 이동과 호환) |
+     * | `base`를 안 보냈다 | 쓴다 — 나중이 이긴다(바탕을 안 보내는 CLI · MCP · 가져오기 · 트리의 순서 · 메뉴 이동과 호환) |
      *
      * **견주기와 쓰기는 한 잠금 안이다** — `lockPageMeta`가 행을 잡고 읽고, 같은 트랜잭션이 쓴다. 둘이 같은 바탕으로
      * 동시에 오면 뒤의 것은 앞의 것이 커밋한 값을 읽고 409 다(`test/pages.test.ts`의 «같은 바탕으로 동시에»).
@@ -407,13 +405,13 @@ export function pageRoutes() {
      * 실패하는 갈래(값을 못 보인 충돌)가 화면에 하나 더 생긴다. 드러나는 것은 없다 — 이 요청을 낸 사람은 그 페이지를
      * 읽을 수 있는 사람이고(아래 재확인이 비교보다 먼저다), 실리는 것은 그 사람이 GET 으로 볼 수 있는 칸뿐이다.
      *
-     * **재확인(이월 AA)이 비교보다 먼저다** — 잠금을 기다리는 동안 멤버에서 빠진 사람에게 지금 값을 409 로 흘리지
+     * **재확인(`recheckProjectRole`)이 비교보다 먼저다** — 잠금을 기다리는 동안 멤버에서 빠진 사람에게 지금 값을 409 로 흘리지
      * 않는다. 순서는 «행 잠금 → 재확인 → 견줌 → 씀»이다.
      *
      * **순서 · 소속 메뉴(`sortOrder`·`menuNodeId`)는 이 모델 밖이다** — 바탕을 받지 않고(`MetaBase`에 칸이 없다)
-     * 오늘처럼 나중이 이긴다. **바탕이 없으면 잠금을 먼저 잡지 않는다** — 자리 옮기기의 잠금 순서(형제 행 → 이
-     * 행)를 이 판이 바꾸지 않는다. **바탕이 있으면 자리 옮기기가 같은 본문에 못 온다**(`UpdatePageBody`의 셋째
-     * 규칙 — 400) — 한 본문에 실으면 이 행을 먼저 잡고 형제를 잡아 순서가 거꾸로 선다(리뷰 F4).
+     * 나중이 이긴다. **바탕이 없으면 잠금을 먼저 잡지 않는다** — 자리 옮기기의 잠금 순서(형제 행 → 이
+     * 행)를 이 모델이 바꾸지 않는다. **바탕이 있으면 자리 옮기기가 같은 본문에 못 온다**(`UpdatePageBody`의 셋째
+     * 규칙 — 400) — 한 본문에 실으면 이 행을 먼저 잡고 형제를 잡아 순서가 거꾸로 선다.
      *
      * **다른 창에 실시간으로 알리지 않는다** — 이 라우트는 방송하지 않는다(`notifyPageChanged`를 부르지 않는다 —
      * 그 방송은 문서의 `seq`를 나른다). 남이 바꾼 것은 저장할 때 409 로 안다.
@@ -428,7 +426,7 @@ export function pageRoutes() {
           if (base !== undefined) {
             const current = await lockPageMeta(trx, projectId, pageId)
             if (!current) return null
-            // **커밋 순간의 권한**(이월 AA) — 비교보다 먼저다(위 머리말).
+            // **커밋 순간의 권한** — 비교보다 먼저다(위 머리말).
             await recheckProjectRole(trx, request)
             const stale = staleMetaFields(base, current)
             if (stale.length > 0) {
@@ -445,7 +443,7 @@ export function pageRoutes() {
             return updatePage(trx, projectId, pageId, patch)
           }
           const updated = await updatePage(trx, projectId, pageId, patch)
-          // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). 위 UPDATE 가 페이지 행
+          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 위 UPDATE 가 페이지 행
           // 잠금에 선다 — 그 대기 뒤의 역할로 판정한다.
           if (updated) await recheckProjectRole(trx, request)
           return updated
@@ -481,7 +479,7 @@ export function pageRoutes() {
 
       // 3단계: 카탈로그 검증. 봉투는 멀쩡하지만 내용이 **처리 불가**하면 422다.
       //
-      // **`error`만 422다(P4a-3 Task 1).** 경고(오늘은 `ignored-variant`뿐)는 문서를
+      // **`error`만 422다.** 경고(예: `ignored-variant`)는 문서를
       // 무효로 만들지 않으므로 저장을 막지 않고 응답에 실려 나간다. 여기서 `filter`를
       // 다시 쓰지 않고 `partitionIssues`를 부르는 이유는 파이프라인 6단계와 같은 선을
       // 써야 하기 때문이다 — 한쪽만 고쳐지면 이 게이트가 막은 것을 파이프라인이 통과시키거나
@@ -517,16 +515,16 @@ export function pageRoutes() {
       }
 
       // 4단계: 통과한 문서를 파이프라인에 태운다. 이 엔드포인트가 `PATCH .../ops`와
-      // **같은 쓰기 경로**를 쓰는 것이 D1(모든 스키마 변경이 revision을 남긴다)이다.
+      // **같은 쓰기 경로**를 쓰는 것이 «모든 스키마 변경이 revision을 남긴다»(머리말)이다.
       //
       // `PUT`은 "통째 교체"이므로 baseSeq를 본문으로 받지 않고 라우트가 현재 head_seq를
-      // 읽어 넘긴다 — 이 엔드포인트의 실제 사용자는 JSON 가져오기(P7)와 스냅샷
-      // 복원(P6)이고, 그 둘은 마지막 쓰기가 이기는 것이 옳다. 에디터(P2b)는 이
-      // 엔드포인트를 쓰지 않는다.
+      // 읽어 넘긴다 — 문서 한 벌을 통째로 올리는 호출자에게는 마지막 쓰기가 이기는 것이
+      // 옳다. 에디터는 이 엔드포인트를 쓰지 않는다(`PATCH .../ops`를 쓴다). 가져오기·복원도
+      // 이 라우트로 오지 않는다(아래 잠금 확인의 주석).
       //
       // **읽기와 파이프라인 호출 사이에는 경합 창이 있다.** 그 사이 다른 편집이
-      // 커밋되면 파이프라인이 `stale`을 돌려주고, 그건 그대로 409가 된다(위
-      // `toApiError`). 재시도 루프를 넣지 않는다: 창이 매우 좁고, 409를 받은
+      // 커밋되면 파이프라인이 `stale`을 돌려주고, 그건 그대로 409가 된다(아래
+      // `editOutcomeToApiError`). 재시도 루프를 넣지 않는다: 창이 매우 좁고, 409를 받은
       // 호출자(가져오기 도구)가 다시 시도하면 된다. `stale`을 조용히 삼켜 덮어쓰면
       // "덮어썼는데 무엇을 덮어썼는지 모르는" 상황이 된다.
       const before = await findPageById(app.db, projectId, pageId)
@@ -555,13 +553,12 @@ export function pageRoutes() {
         { op: 'replace', path: '/version', value: migrated.version },
       ]
 
-      // **잠금 확인은 적용 직전이다**(§7.1 · D2). `PUT`은 `/root`를 통째로 갈아 끼우므로
+      // **잠금 확인은 적용 직전이다**(설계서 「정방향 흐름」). `PUT`은 `/root`를 통째로 갈아 끼우므로
       // **잠긴 서브트리가 무엇이든 그 안에 있다** — 다른 사람이 무엇이든 잡고 있으면 막힌다.
       //
-      // **가져오기(P7)·복원(P6)을 근거로 적지 마라.** 그 둘은 이 라우트로 오지 않고
+      // **가져오기·복원을 근거로 적지 마라.** 그 둘은 이 라우트로 오지 않고
       // `applyEdit`을 직접 부른다 — `test/lock-census.test.ts`가 그 둘을 별도 줄로 세면서
-      // *"잠금을 안 본다"*고 판정한다. 앞 판의 주석이 그렇게 적었다가 같은 슬라이스의
-      // 인구조사와 어긋났다.
+      // *"잠금을 안 본다"*고 판정한다. 여기 근거로 적으면 그 인구조사와 어긋난다.
       const outcome = await withTransaction(app.db, async (trx) => {
         // **판정은 이 트랜잭션 안에서 페이지 행을 잡고 한다**(`lock/check.ts`의 «판정은 페이지 행 안에서»). 막히면
         // 던진다 — 아직 아무것도 안 썼다.
@@ -580,7 +577,7 @@ export function pageRoutes() {
           ops: putOps,
           actor: requestActor(request),
         })
-        // **커밋 순간의 권한**(이월 AA — `auth/roles.ts`의 `recheckProjectRole`). `applyEdit`이 페이지를
+        // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). `applyEdit`이 페이지를
         // 잠갔다 — 그 대기 뒤의 역할로 판정한다. 던지면 이 트랜잭션째 되돌아간다.
         if (edited.ok) await recheckProjectRole(trx, request)
         return edited
@@ -590,7 +587,7 @@ export function pageRoutes() {
         throw editOutcomeToApiError(outcome, before.headSeq)
       }
 
-      // **커밋 뒤에 알린다**(P3-1 D3·D4). 위 `withTransaction(app.db, …)`는 풀 핸들 위에서 자기
+      // **커밋 뒤에 알린다.** 위 `withTransaction(app.db, …)`는 풀 핸들 위에서 자기
       // 트랜잭션을 열고 닫으므로 이 줄에 도달한 시점에 이미 커밋돼 있다.
       notifyPageChanged(app, {
         projectId,
@@ -641,11 +638,11 @@ export function pageRoutes() {
       }
 
       // 검증·적용·역패치·기록은 전부 파이프라인이 한 트랜잭션 안에서 한다. 이
-      // 핸들러는 그 결과를 HTTP로 옮기기만 한다 — P3의 WebSocket이 같은 `applyEdit`을
+      // 핸들러는 그 결과를 HTTP로 옮기기만 한다 — WebSocket이 같은 `applyEdit`을
       // 부르므로, 규칙을 여기 두면 두 진입점이 갈라진다.
-      // **§7.1의 순서다** — `projectGuard('editor')`가 권한을 봤고, 적용 전에 잠금을 본다(D2).
-      // **§7.4의 MCP가 이 길로 들어온다:** 에이전트는 잠금을 걸지 않지만(§7.4) 남의 잠금에는
-      // 막힌다 — 안 막으면 §7.2의 2차 방어가 접속 방식에 따라 갈린다.
+      // **설계서 「정방향 흐름」의 순서다** — `projectGuard('editor')`가 권한을 봤고, 적용 전에 잠금을 본다.
+      // **설계서 「LLM 편집 경로」의 MCP가 이 길로 들어온다:** 에이전트는 잠금을 걸지 않지만 남의 잠금에는
+      // 막힌다 — 안 막으면 설계서 「소프트 잠금」의 2차 방어가 접속 방식에 따라 갈린다.
       const outcome = await withTransaction(app.db, async (trx) => {
         // 판정은 이 트랜잭션 안 — `PUT .../schema`와 같은 자리 · 같은 까닭이다.
         const blocked = await lockConflictError(app, trx, {
@@ -663,7 +660,7 @@ export function pageRoutes() {
           ops: body.ops,
           actor: requestActor(request),
         })
-        // **커밋 순간의 권한**(이월 AA). `PUT .../schema`와 같은 자리 · 같은 까닭이다.
+        // **커밋 순간의 권한.** `PUT .../schema`와 같은 자리 · 같은 까닭이다.
         if (edited.ok) await recheckProjectRole(trx, request)
         return edited
       })
@@ -680,7 +677,7 @@ export function pageRoutes() {
         warnings: outcome.warnings,
         actor: requestEventActor(request),
         origin: broadcastOrigin(request),
-        // **헤더가 없을 때의 두 번째 방벽이다**(P3-2). 소켓이 아직 안 열려 발신자 제외가
+        // **헤더가 없을 때의 두 번째 방벽이다.** 소켓이 아직 안 열려 발신자 제외가
         // 성립하지 않으면 낸 사람이 자기 편집을 되받는데, 받는 쪽의 리베이스가 그것을 두 번
         // 얹는다 — 이 값이 있으면 그 자리에서 건너뛴다(`ws/protocol.ts`의 그 필드).
         ...(body.clientOpId !== undefined ? { clientOpId: body.clientOpId } : {}),
@@ -709,7 +706,7 @@ export function pageRoutes() {
 
       const result = await withTransaction(app.db, async (trx) => {
         const deleted = await deletePage(trx, projectId, pageId)
-        // **커밋 순간의 권한**(이월 AA). 위 DELETE 가 페이지 행 잠금에 선다.
+        // **커밋 순간의 권한.** 위 DELETE 가 페이지 행 잠금에 선다.
         if (deleted === 'deleted') await recheckProjectRole(trx, request)
         return deleted
       })

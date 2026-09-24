@@ -1,7 +1,7 @@
 /**
- * API 토큰 — 설계 §10, P9-2 D1·D2·D3·D4.
+ * API 토큰 — 설계서 「권한 모델」.
  *
- * **D2·D3의 케이스는 하나짜리로 재면 안 된다.** *"editor의 토큰으로 복원이 403"*만 있으면
+ * **권한 상속·역할을 얼리지 않음의 케이스는 하나짜리로 재면 안 된다.** *"editor의 토큰으로 복원이 403"*만 있으면
  * **토큰이 통째로 안 먹는 상태와 구분되지 않는다** — 같은 토큰으로 editor가 할 수 있는
  * 일(스냅샷 생성)이 **성공**하는 짝이 있어야 그 403이 역할 때문임을 말한다.
  */
@@ -37,8 +37,8 @@ async function issueToken(
   return { id: body.id, value: body.value, header: { authorization: `Bearer ${body.value}` } }
 }
 
-describe('토큰 발급 (D2 — 발급은 멤버 누구나)', () => {
-  it('viewer도 발급받는다 — §10의 표가 아니라 그 절의 불릿을 따른다', async () => {
+describe('토큰 발급 — 발급은 멤버 누구나', () => {
+  it('viewer도 발급받는다 — 설계서 「권한 모델」의 viewer 행', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
       const project = await createProject(ctx, owner.cookie)
@@ -110,7 +110,8 @@ describe('토큰 발급 (D2 — 발급은 멤버 누구나)', () => {
   })
 
   /**
-   * **N3이 닫히는 자리.** 그 UPDATE를 통째로 빼도 1230건 중 0건이 죽었다(리뷰어 실측).
+   * **`last_used_at`을 채우는 UPDATE를 잠그는 자리** — 이 케이스가 없으면 그 UPDATE를 통째로
+   * 빼도 api 전량에서 아무것도 안 죽는다.
    * **목록 응답이 내는 필드라 사용자에게 보이는 값이다** — *"한 번도 안 쓴 토큰"*과
    * *"쓴 지 오래된 토큰"*을 가르는 것이 그 열의 쓸모다(0011의 머리말).
    *
@@ -286,7 +287,7 @@ describe('토큰 관리는 세션으로만 — 폐기가 자격을 실제로 거
   })
 })
 
-describe('토큰은 발급자의 권한을 상속한다 (D2 — 둘이 짝이다)', () => {
+describe('토큰은 발급자의 권한을 상속한다 — 둘이 짝이다', () => {
   it('editor의 토큰은 복원(owner)에 403, 스냅샷 생성(editor)에는 성공한다', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
@@ -347,7 +348,7 @@ describe('토큰은 발급자의 권한을 상속한다 (D2 — 둘이 짝이다
   })
 })
 
-describe('토큰은 역할을 얼리지 않는다 (D3)', () => {
+describe('토큰은 역할을 얼리지 않는다', () => {
   it('발급 뒤 owner→editor로 강등하면 그 토큰의 복원이 403이 된다', async () => {
     await withApi(async (ctx) => {
       const first = await signup(ctx)
@@ -420,13 +421,13 @@ describe('토큰은 역할을 얼리지 않는다 (D3)', () => {
         url: `/api/projects/${project.id}`,
         headers: token.header,
       })
-      // §10의 *"비멤버에게 프로젝트 존재를 숨긴다"*. 토큰 행은 아직 살아 있다.
+      // 설계서 「권한 모델」의 *"비멤버에게 프로젝트 존재를 숨긴다"*. 토큰 행은 아직 살아 있다.
       expect(after.statusCode).toBe(404)
     })
   })
 })
 
-describe('토큰의 범위는 프로젝트다 (D4)', () => {
+describe('토큰의 범위는 프로젝트다', () => {
   it('다른 프로젝트에 쓰면 404다 — 403이 아니다', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
@@ -491,8 +492,8 @@ describe('토큰의 범위는 프로젝트다 (D4)', () => {
   })
 
   /**
-   * **N6이 닫히는 자리.** `bearerValue`의 정규식에서 `i` 플래그를 빼도 1230건 중 0건이
-   * 죽었다(리뷰어 실측).
+   * **`bearerValue`의 정규식의 `i` 플래그를 잠그는 자리** — 이 케이스가 없으면 그 플래그를
+   * 빼도 api 전량에서 아무것도 안 죽는다.
    *
    * RFC 7235가 인증 스킴을 **대소문자 무시**로 정하므로 `i`가 있는 지금이 옳다. 지우면
    * `authorization: bearer <값>`을 보내는 클라이언트가 **조용히 401을 받는다** — 자기

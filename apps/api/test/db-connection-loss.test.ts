@@ -1,16 +1,15 @@
 /**
- * **DB 연결을 잃었을 때 — api 가 살고, 결과를 모르는 실패는 «모름»으로 나간다**(2026-09-22 이월 W (ii)).
+ * **DB 연결을 잃었을 때 — api 가 살고, 결과를 모르는 실패는 «모름»으로 나간다**.
  *
  * 기전과 경계는 `src/db/connection-loss.ts`(무엇이 «잃었다»인가)와 `src/db/client.ts`(듣는 자 둘 · 버리는 연결)가 소유한다.
  * 여기는 진짜 Postgres 에서 연결을 끊어 잰다 — 백엔드를 `pg_terminate_backend`로 죽이거나, api 와 Postgres 사이의
  * TCP 프록시(`pg-fault-proxy.ts`)가 원하는 순간에 소켓을 끊는다.
  *
- * **«프로세스가 산다»를 값으로 잰다** — 앞 판의 사망은 소켓 이벤트 안에서 던진 `'error'`였고, 그것은
+ * **«프로세스가 산다»를 값으로 잰다** — api 를 죽이는 것은 소켓 이벤트 안에서 던진 `'error'`이고, 그것은
  * `uncaughtException`으로 온다. 케이스마다 그 이벤트를 받아 적고 비었는지 본다. (vitest 는 이것을 저절로 실패로
- * 세지 않았다 — 고치기 전 탐침에서 `uncaughtException` 둘이 났는데 파일은 초록이었다.)
+ * 세지 않는다 — `uncaughtException`이 나도 파일은 초록일 수 있다.)
  *
- * **잰 변조**(api 프로젝트 전량 80 파일 · 1517 케이스 · 파일을 백업하고 한 자리를 바꾼 뒤 백업으로 되돌려 바이트 비교했다 ·
- * 2026-09-22 리뷰 (e) 후속 — 앞 판의 줄도 **이 판에서 다시 쟀다**. 연결을 버리게 된 뒤 값이 바뀐 줄이 있다):
+ * **변조와 죽는 것**(api 프로젝트 전량으로 잰다 · 파일을 백업하고 한 자리를 바꾼 뒤 백업으로 되돌려 바이트 비교한다):
  *
  * | 변조 | 죽는 것 |
  * |---|---|
@@ -21,14 +20,14 @@
  * | 트랜잭션 중간도 «잃었다»로 넓힌다(`settlesCommit: true`) | *"트랜잭션 중간 문장이 …"* **혼자**(그 선택을 잰다) |
  * | `release`가 버리기를 무시한다 | *"서버가 FATAL 로 «답한» …"* · *"트랜잭션 중간 문장이 …"* — 위 두 줄이 각각 혼자 가른다 |
  * | `query_timeout` 거절을 뗀다(`createPool`) | *"접속 설정에 클라이언트 쪽 시간 제한 …"* **혼자** |
- * | `08`을 연결 부류에서 뺀다(`['57P']` — 리뷰의 M-08) | *"서버가 `FATAL 08P01` …"* **혼자** |
+ * | `08`을 연결 부류에서 뺀다(`['57P']`) | *"서버가 `FATAL 08P01` …"* **혼자** |
  * | `57P`를 연결 부류에서 뺀다 | *"쿼리 도중 …"* · *"서버가 FATAL 로 «답한» …"*(`57P01`로 잰다 — `08` 판과 축을 가르려고). 축의 주인은 *"쿼리 도중 …"* |
  * | 연결을 얻지 못한 실패를 그대로 둔다 | *"접속이 거절되면 …"* **혼자** |
- * | 클라이언트마다의 듣는 자를 뗀다(`createPool`의 `'connect'`) | *"놀던 연결이 …"* · *"COMMIT 응답이 …"* · `api-db-errors.test.ts` 넷. 축의 주인은 *"COMMIT 응답이 …"*(소켓 끝이 COMMIT 을 매단 채 와 `'error'`가 던져진다). **앞 판의 주인 *"쿼리 도중 …"*은 이제 안 죽는다** — 그 연결은 서버의 `57P01` 답에서 버려져 소켓 끝 전에 닫히고, pg 는 스스로 닫는 연결에 `'error'`를 내지 않는다 |
- * | 풀의 듣는 자를 뗀다(`pool.on('error')`) | *"놀던 연결이 …"* **혼자**(앞 판은 *"쿼리 도중 …"*도 죽었다 — 그 연결이 풀로 돌아가 놀다가 소켓 끝을 받았다. 이제 돌아가지 않는다) |
+ * | 클라이언트마다의 듣는 자를 뗀다(`createPool`의 `'connect'`) | *"놀던 연결이 …"* · *"COMMIT 응답이 …"* · `api-db-errors.test.ts` 넷. 축의 주인은 *"COMMIT 응답이 …"*(소켓 끝이 COMMIT 을 매단 채 와 `'error'`가 던져진다). *"쿼리 도중 …"*은 **안 죽는다** — 그 연결은 서버의 `57P01` 답에서 버려져 소켓 끝 전에 닫히고, pg 는 스스로 닫는 연결에 `'error'`를 내지 않는다 |
+ * | 풀의 듣는 자를 뗀다(`pool.on('error')`) | *"놀던 연결이 …"* **혼자**(*"쿼리 도중 …"*의 연결은 풀로 돌아가지 않으므로 소켓 끝을 풀에서 받지 않는다) |
  * | «그 연결이 죽었다» 표지를 안 본다(`connectionLost: false`) | *"COMMIT 응답이 …"* · *"그 COMMIT 뒤 … ROLLBACK 도 …"* · `api-db-errors.test.ts` 넷. 축의 주인은 *"COMMIT 응답이 …"* |
  * | 가르는 층을 뗀다(`createDb`가 풀을 그대로 넘긴다) | 여기 여덟 · `api-db-errors.test.ts` 다섯. 축의 주인은 *"COMMIT 응답이 …"* |
- * | 서버가 답한 오류까지 «잃었다»로 감싼다 | *"서버가 답한 오류는 …"* · *"트랜잭션 중간 문장이 …"* · 기존 열둘(유일 위반 → 409 · `withTransaction` 세이브포인트 · `session.test.ts`의 500 …) — 서버의 답을 값으로 읽는 자리가 저장소에 널려 있다. 축의 주인은 *"서버가 답한 오류는 …"* |
+ * | 서버가 답한 오류까지 «잃었다»로 감싼다 | *"서버가 답한 오류는 …"* · *"트랜잭션 중간 문장이 …"* · 다른 케이스 열둘(유일 위반 → 409 · `withTransaction` 세이브포인트 · `session.test.ts`의 500 …) — 서버의 답을 값으로 읽는 자리가 저장소에 널려 있다. 축의 주인은 *"서버가 답한 오류는 …"* |
  *
  * **재는 자가 없는 것**: `answeredByServer`의 SQLSTATE 확인(코드 없는 `DatabaseError`는 서버의 답이 아니다)을 떼도 **아무것도
  * 안 죽는다.** 그 판(pg 가 알 수 없는 메시지를 받음)에서는 그 연결에 `ReadyForQuery`가 다시 안 와 뒤따른 ROLLBACK 이 소켓 끝까지
@@ -42,7 +41,7 @@ import { DbConnectionLostError } from '../src/db/connection-loss'
 import { TEST_DATABASE_URL, getTestDb } from './helpers'
 import { startFaultProxy } from './pg-fault-proxy'
 
-/** 이 케이스 동안 난 `uncaughtException` — 앞 판에서 api 를 죽인 것이 이것이다. */
+/** 이 케이스 동안 난 `uncaughtException` — 연결을 잃은 판에서 api 를 죽이는 것이 이것이다. */
 let uncaught: unknown[] = []
 const record = (error: unknown): void => {
   uncaught.push(error)
@@ -71,7 +70,7 @@ async function until(condition: () => boolean, timeoutMs = 3000): Promise<void> 
 }
 
 /**
- * **COMMIT 이 서버 안에서 `seconds` 걸리는 표**를 만든다 — 행마다 지연 제약 트리거가 COMMIT 때 잔다(리뷰 (e)의 절차).
+ * **COMMIT 이 서버 안에서 `seconds` 걸리는 표**를 만든다 — 행마다 지연 제약 트리거가 COMMIT 때 잔다.
  * 커밋됐는지는 `committedRows`로 따로 본다(다른 연결).
  */
 async function createSlowCommitTable(seconds: number): Promise<void> {
@@ -136,8 +135,8 @@ describe('DB 연결을 잃으면 — api 는 살고, 그 질의는 «연결을 �
       expect(((caught as Error).cause as DatabaseError).code).toBe('57P01')
       expect(uncaught).toEqual([])
       // `logged`는 비어 있을 수 있다 — 그 연결은 **소켓 끝이 오기 전에 버려진다**(서버가 답한 `57P01`로 가른 순간 ·
-      // `db/client.ts`의 `release(true)`). pg 는 스스로 닫는 연결의 끝에 `'error'`를 내지 않는다. 앞 판은 여기서 그 오류를
-      // 적는 것을 쟀다 — 이제 적는 자는 요청의 오류 처리기다(503 갈래의 `request.log.error`).
+      // `db/client.ts`의 `release(true)`). pg 는 스스로 닫는 연결의 끝에 `'error'`를 내지 않는다. 그 오류를
+      // 적는 자는 요청의 오류 처리기다(503 갈래의 `request.log.error`).
       const { rows } = await sql<{ one: number }>`select 1 as one`.execute(db)
       expect(rows).toEqual([{ one: 1 }])
     } finally {
@@ -235,7 +234,7 @@ describe('DB 연결을 잃으면 — api 는 살고, 그 질의는 «연결을 �
 
   it('서버가 FATAL 로 «답한» 연결은 풀에 돌려주지 않는다 — 소켓 끝이 늦게 와도 다음 질의는 새 연결이다(곁)', async () => {
     const proxy = await startFaultProxy(TEST_DATABASE_URL)
-    // 서버의 답(`57P01`)과 소켓 끝 사이의 틈을 넓힌다 — 앞 판은 그 틈에 연결을 풀로 돌려줬고 다음 질의가 집었다.
+    // 서버의 답(`57P01`)과 소켓 끝 사이의 틈을 넓힌다 — 그 틈에 연결을 풀로 돌려주면 다음 질의가 집는다.
     // `57P01`로 재는 것은 위 `08` 판과 축을 가르려는 것이다(그쪽 변조에서 이것이 함께 죽지 않게).
     proxy.holdClientAfterServerClose(500)
     const db = createDb(createPool(proxy.url, () => undefined))
@@ -259,7 +258,7 @@ describe('DB 연결을 잃으면 — api 는 살고, 그 질의는 «연결을 �
       expect(caught).toBeInstanceOf(DbConnectionLostError)
       expect(((caught as Error).cause as DatabaseError).code).toBe('57P01')
 
-      // 곧바로 — 소켓 끝(500ms 뒤)을 기다리지 않는다. 앞 판은 이것이 그 연결을 집어 500ms 뒤 «잃었다»로 실패했다.
+      // 곧바로 — 소켓 끝(500ms 뒤)을 기다리지 않는다. 그 연결이 풀에 돌아가 있으면 이것이 그것을 집어 500ms 뒤 «잃었다»로 실패한다.
       const next = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(db).then(
         ({ rows }) => rows[0]!.pid,
         (error: unknown) => error,
@@ -290,7 +289,7 @@ describe('DB 연결을 잃으면 — api 는 살고, 그 질의는 «연결을 �
 })
 
 /**
- * **서버의 답이 아닌 거절 — 클라이언트 쪽 시간 제한으로 잰다**(리뷰 (e)). `createPool`은 `query_timeout`을 거절하므로
+ * **서버의 답이 아닌 거절 — 클라이언트 쪽 시간 제한으로 잰다**. `createPool`은 `query_timeout`을 거절하므로
  * (아래 첫 케이스) **만든 뒤 `pool.options`에 넣는다** — pg-pool 은 새 연결마다 그 설정으로 `Client`를 만든다. 이것으로
  * `connection-loss.ts`의 COMMIT 줄과 «서버의 답이 아닌 거절을 낸 연결은 버린다»를 **거절과 따로** 잰다.
  */
@@ -324,7 +323,7 @@ describe('서버의 답이 아닌 거절 — COMMIT 이면 «모름», 트랜잭
 
       expect(caught).toBeInstanceOf(DbConnectionLostError)
       expect(((caught as Error).cause as Error).message).toBe('Query read timeout')
-      // 연결은 `'error'`를 내지 않았다 — 표지로 간 것이 아니다(앞 판은 여기서 맨 `Error`를 그대로 내보냈다).
+      // 연결은 `'error'`를 내지 않았다 — 표지로 간 것이 아니다(표지로만 가르면 여기서 맨 `Error`가 그대로 나간다).
       expect(logged).toEqual([])
       expect(uncaught).toEqual([])
       expect(await committedRows('zz_slow_commit')).toEqual(['커밋된 줄'])

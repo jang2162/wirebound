@@ -1,8 +1,8 @@
 /**
  * 저장을 막지 않은 이슈를 응답에 얹는 **하나뿐인 자리**.
  *
- * **P4a-3이 `routes/pages.ts` 안에 만들었고 P4c-1이 여기로 옮겼다** — `routes/themes.ts`가
- * 두 번째 소비자가 됐기 때문이다(테마에 첫 `warning`이 생겼다). 두 라우트가 각자
+ * **한 자리에 두는 이유는 소비자가 둘이기 때문이다** — `routes/pages.ts`와
+ * `routes/themes.ts`(테마도 `warning`을 낸다). 두 라우트가 각자
  * 짜면 *"비어 있으면 키 자체를 만들지 않는다"*가 한쪽에서만 지켜지는 순간 갈린다.
  * `partitionIssues`가 severity의 선을 한 곳에서 긋는 것과 같은 이유다.
  *
@@ -15,7 +15,7 @@
  * 저장은 됐는데 *"적은 값이 버려졌다"*를 아무도 모른다.
  *
  * **이슈 타입을 고정하지 않는다.** 페이지는 `ValidationIssue`(`schema`), 테마는
- * `ThemeIssue`(`themes`)를 싣는데 **코드 유니온이 일부러 갈라져 있다**(P4a-2의 결정).
+ * `ThemeIssue`(`themes`)를 싣는데 **코드 유니온이 일부러 갈라져 있다**.
  * 봉투의 모양(`{ path, message, code, severity }`)은 같으므로 여기서 좁힐 이유가 없다.
  */
 export function withWarnings<T extends object, I>(

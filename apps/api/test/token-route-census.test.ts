@@ -1,5 +1,5 @@
 /**
- * **D4의 인구조사.** *"토큰이 인증한 요청은 그 라우트가 `:projectId`를 가질 때만
+ * **토큰 스코프의 인구조사.** *"토큰이 인증한 요청은 그 라우트가 `:projectId`를 가질 때만
  * `currentUser`를 채운다"*가 실제로 **등록된 라우트 전부**에 대해 참인가.
  *
  * ---
@@ -25,29 +25,29 @@
  * |---|---|
  * | `:projectId`가 **있다** | 채운다. **그 토큰의 프로젝트가 아니면 404**(`/ws`만 401 — 쿠키 전용이라 가드 앞에서 끊긴다) |
  * | `:projectId`가 없고 **인증이 필요하다** | 안 채운다 → **401** |
- * | `:projectId`가 없고 **공개다** | 안 채운다 → 토큰이 없을 때와 답이 같다 — 재라 #6 |
+ * | `:projectId`가 없고 **공개다** | 안 채운다 → 토큰이 없을 때와 답이 같다 |
  *
- * ## 앞 판은 첫 줄을 `api-tokens.test.ts`에 위임했고, 그 위임이 사각을 만들었다
+ * ## 첫 줄을 `api-tokens.test.ts`에 위임하지 않는다 — 위임하면 사각이 생긴다
  *
- * **리뷰가 실증했다**(P9-2 리뷰 §3.1). `:projectId`를 갖지만 `projectGuard`를 **안 단**
- * 라우트를 하나 심었더니 **api 스위트 1230건이 전부 초록인 채** 프로젝트 A의 토큰이
- * 프로젝트 B의 메뉴 제목을 **200**으로 읽었다(리뷰어 실측).
+ * 첫 줄을 그쪽의 한 케이스에 맡기면, `:projectId`를 갖지만 `projectGuard`를 **안 단**
+ * 라우트가 하나 생겨도 **api 스위트가 전부 초록인 채** 프로젝트 A의 토큰이 프로젝트 B의
+ * 메뉴 제목을 **200**으로 읽는다(그런 라우트를 심어 보면 재현된다).
  *
- * 원인은 census 둘이 서로의 사각을 만든 것이다:
+ * 원인은 census 둘이 서로의 사각을 만드는 것이다:
  *
  * | census | 분모 | 그 라우트가 드는가 |
  * |---|---|---|
- * | 이 파일(앞 판) | 등록된 라우트를 `:projectId` **유무**로 가르되 전수 주장은 *"**없는**"* 쪽에만 뒀다 | **안 든다** |
+ * | 이 파일이 *"없는"* 쪽만 전수로 재면 | 등록된 라우트를 `:projectId` **유무**로 가르되 전수 주장은 *"**없는**"* 쪽에만 둔다 | **안 든다** |
  * | `permission-matrix.test.ts` | 소스에서 **`projectGuard`가 걸린** 라우트를 정규식으로 뽑는다 | **안 든다** — 가드가 없어 정규식에 안 걸린다 |
  *
- * 그래서 **위임을 거뒀다.** `:projectId`가 있는 쪽도 여기서 전수로 잰다 —
+ * 그래서 `:projectId`가 있는 쪽도 여기서 전수로 잰다 —
  * `api-tokens.test.ts`의 하나짜리 케이스(`GET /api/projects/:projectId`)는 **남겨 둔다**:
  * 그쪽은 *"토큰이라는 자격의 성질"*을 읽는 사람이 보는 자리이고, 여기는 분모를 지키는
  * 자리다. 갈리면 이 파일이 먼저 죽는다.
  *
- * **이 저장소의 세 번째 자리다.** `permission-matrix.test.ts`의 *"표의 완전성"*이 적은
- * 사고(`GET /:projectId/theme`가 표에 빠져 가드를 없애도 0건이 죽었다)와
- * `restore-lock-census.test.ts`가 적은 사고(손으로 고른 아홉)가 같은 부류다.
+ * **같은 부류의 자리가 셋이다.** `permission-matrix.test.ts`의 *"표의 완전성"*이 적은
+ * 사고(표에 빠진 라우트는 가드를 없애도 아무것도 안 죽는다)와 `restore-lock-census.test.ts`가
+ * 적은 사고(손으로 고른 목록)가 이것과 같은 부류다.
  */
 import { describe, expect, it } from 'vitest'
 import type { RegisteredRoute } from '../src/app'
@@ -131,10 +131,10 @@ async function withCensus(
   )
 }
 
-describe('D4 인구조사 — 토큰이 닿지 않는 라우트', () => {
+describe('인구조사 — 토큰이 닿지 않는 라우트', () => {
   it('분모를 실제로 만든다 — 라우트 목록이 비어 있지 않고 양쪽이 다 있다', async () => {
     await withCensus(async ({ routes, requiresAuth }) => {
-      // 이음매가 어긋나면 **빈 집합에서 아래가 조용히 통과한다**(이 저장소가 겪은 부류).
+      // 이음매가 어긋나면 **빈 집합에서 아래가 조용히 통과한다.**
       expect(routes.length).toBeGreaterThan(30)
       expect(routes.filter((route) => route.url.includes(PROJECT_ID_PARAM)).length).toBeGreaterThan(20)
 
@@ -147,12 +147,12 @@ describe('D4 인구조사 — 토큰이 닿지 않는 라우트', () => {
   })
 
   /**
-   * **N1이 닫히는 자리.** *"토큰은 자기 프로젝트에만 닿는다"*를 **라우트 하나가 아니라
+   * *"토큰은 자기 프로젝트에만 닿는다"*를 **라우트 하나가 아니라
    * 전수**로 잰다. `:projectId`를 갖는데 `projectGuard`가 없는 라우트가 생기면 그 줄이
    * 200(또는 그 밖의 무엇)으로 나와 **여기가 먼저 죽는다.**
    *
    * **`/ws`만 401이다.** 그 라우트는 `requireSessionAuth`가 가드보다 **앞에서** 끊으므로
-   * (§10의 *"REST와 WS의 인증 경로가 하나다"*) 404까지 가지 않는다. **그 예외를 목록에
+   * (설계서 「권한 모델」의 *"REST와 WS의 인증 경로가 하나다"*) 404까지 가지 않는다. **그 예외를 목록에
    * 박아 두는 것이 요점이다** — 예외가 하나 늘면 사람이 *"이것이 정말 404가 아니어도
    * 되나"*를 다시 판정한다.
    */
@@ -215,7 +215,7 @@ describe('D4 인구조사 — 토큰이 닿지 않는 라우트', () => {
     })
   })
 
-  it('`:projectId`가 없고 공개인 라우트는 토큰이 실려도 답이 달라지지 않는다 — 재라 #6', async () => {
+  it('`:projectId`가 없고 공개인 라우트는 토큰이 실려도 답이 달라지지 않는다', async () => {
     await withCensus(async ({ ctx, routes, header, requiresAuth }) => {
       const targets = routes
         .filter((route) => !route.url.includes(PROJECT_ID_PARAM) && !requiresAuth(route))

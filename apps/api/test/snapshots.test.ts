@@ -1,9 +1,9 @@
 /**
- * `routes/snapshots.ts` — 세 엔드포인트와 오류 표(P6-1 T3).
+ * `routes/snapshots.ts` — 세 엔드포인트와 오류 표.
  *
  * 권한 세 등급은 `permission-matrix.test.ts`가 전수로 친다(그 파일의 완전성 검사가
  * `src/routes/`를 훑어 새 라우트를 강제로 표에 올린다). 여기서는 **내용**을 잰다:
- * 응답 모양, 오류 네 갈래, 그리고 §4.5의 *"삭제 없는"*이 실제로 지켜지는지.
+ * 응답 모양, 오류 네 갈래, 그리고 설계서 「스냅샷」의 *"삭제 없는"*이 실제로 지켜지는지.
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -34,7 +34,7 @@ async function fixture(ctx: TestContext) {
  * 그러면 호출부의 `.statusCode`·`.json()`이 전부 컴파일 오류가 된다.
  *
  * **vitest는 타입을 보지 않으므로 그 상태로 테스트가 전부 초록이고 `pnpm typecheck`만
- * exit 2였다** — 계획서가 *"종료 코드를 파이프 없이 따로 찍어라"*라고 적은 바로 그 형태다.
+ * 실패한다** — 종료 코드를 파이프 없이 따로 찍어야 보이는 형태다.
  * `async`로 감싸 `await`해도 낫지 않는다(교집합의 `Awaited`가 그대로 교집합이다). 고치는
  * 자리는 **인자 타입**이다.
  */
@@ -93,7 +93,7 @@ describe('POST /:projectId/snapshots', () => {
   })
 
   /**
-   * **두 409의 문장이 달라야 한다**(계획서 T4) — 사용자가 할 일이 다르다: 태그 중복은
+   * **두 409의 문장이 달라야 한다** — 사용자가 할 일이 다르다: 태그 중복은
    * *"이름을 바꾼다"*이고 지문 불일치는 *"다시 시도한다"*이다. 화면이 코드(`conflict`)로는
    * 가를 수 없으므로 문장이 갈라야 한다.
    *
@@ -175,7 +175,7 @@ describe('POST /:projectId/snapshots', () => {
   /**
    * **NUL은 400이다 — 막지 않으면 500이다.** `snapshots.tag`가 `text`라 `pg`가 던지는 raw
    * 예외를 `http/error-handler.ts`가 500으로 낸다. 사용자가 보내온 글자 때문에 나는 실패는
-   * 서버가 잘못한 것이 아니다(`routes/comments.ts`가 같은 자리에서 같은 판단을 했다).
+   * 서버가 잘못한 것이 아니다(`routes/comments.ts`가 같은 자리에서 같은 판단을 한다).
    */
   it('태그의 NUL을 400으로 막는다', async () => {
     await withApi(async (ctx) => {
@@ -190,11 +190,10 @@ describe('POST /:projectId/snapshots', () => {
   })
 
   /**
-   * # payload의 NUL 가드는 **죽은 코드가 아니다** (G-2)
+   * # payload의 NUL 가드는 **죽은 코드가 아니다**
    *
-   * 앞 판의 머리말은 이 가드를 *"DB가 삽입 시점에 막으니 도달 경로 0"*이라는 **거짓 근거**로
-   * 적어 두었다. 다음 사람이 지울 자리다. **리뷰어가 도달 경로를 냈고 내가 재현했다:**
-   * `themes`의 절 다섯은 `jsonb`가 아니라 **`json`** 컬럼이라(0006) DB가 NUL을 **받는다.**
+   * *"DB가 삽입 시점에 막으니 도달 경로 0"*으로 읽기 쉽지만 **거짓 근거**이고, 그렇게 믿으면
+   * 다음 사람이 이 가드를 지운다. **도달 경로가 있다:** `themes`의 절 다섯은 `jsonb`가 아니라 **`json`** 컬럼이라(0006) DB가 NUL을 **받는다.**
    *
    * 실측(같은 값으로 두 캐스팅을 나란히 쳤다):
    *
@@ -203,7 +202,7 @@ describe('POST /:projectId/snapshots', () => {
    * | `'{"semantic":{"primary":"#fff\u0000"}}'::json` | **들어간다** |
    * | 같은 값 `::jsonb` | **`22P05 unsupported Unicode escape sequence`** |
    *
-   * 즉 그 절을 막는 것은 DB가 아니라 `repos/themes.ts`의 `assertNoNulByte` **한 줄뿐**이고,
+   * 즉 그 절을 막는 것은 DB가 아니라 `repos/themes.ts`의 `containsNulByte` 가드(`ThemeNulByteError`를 던진다) **한 줄뿐**이고,
    * 그 줄을 끄면 `POST /themes`가 **201**을 내고 → 되읽은 테마에 NUL이 있고 → 캡처가
    * `'captured'`로 **NUL이 든 payload**를 만들고 → `POST /snapshots`가 **400**을 낸다
    * (그 400을 내는 것이 바로 이 가드다. 행은 0개 남는다).
@@ -217,8 +216,8 @@ describe('POST /:projectId/snapshots', () => {
 
       // **`JSON.stringify`를 지나야 한다 — 재서 알았다.** 템플릿 리터럴로 NUL을 그대로
       // 심으면 파라미터에 **날 NUL 바이트**가 실려 Postgres가 프로토콜 층에서
-      // `22021 invalid byte sequence for encoding "UTF8": 0x00`으로 끊는다(그 형태로
-      // 먼저 짰다가 이 케이스가 죽었다). `JSON.stringify`는 그것을 여섯 글자 이스케이프
+      // `22021 invalid byte sequence for encoding "UTF8": 0x00`으로 끊는다.
+      // `JSON.stringify`는 그것을 여섯 글자 이스케이프
       // `\u0000`으로 바꾸므로 날 바이트가 없고, **그것이 `repos/themes.ts`의 `section()`이
       // 실제로 하는 일이다** — 즉 이 문장이 그 경로를 그대로 재현한다.
       const tokens = JSON.stringify({ semantic: { primary: `#fff${NUL}` } })
@@ -350,13 +349,13 @@ describe('GET /:projectId/snapshots/:snapshotId', () => {
 })
 
 /**
- * **§4.5의 *"삭제 없는 태그"*를 실행으로 지킨다.**
+ * **설계서 「스냅샷」의 *"삭제 없는 태그"*를 실행으로 지킨다.**
  *
  * 테이블에는 그것을 막는 장치가 없다(평범한 표다). 지키는 것은 **라우트가 없다는 사실**
  * 하나뿐이고, 그런 규칙은 사람이 기억하면 낡는다 — `permission-matrix.test.ts`가
  * *"새 라우트를 표에 등록한다"*를 실행으로 옮긴 것과 같은 판단이다.
  */
-describe('삭제 없는 태그 (§4.5)', () => {
+describe('삭제 없는 태그', () => {
   const SOURCE = readFileSync(fileURLToPath(new URL('../src/routes/snapshots.ts', import.meta.url)), 'utf8')
 
   it('검사가 진짜 라우트 파일을 읽는다', () => {
@@ -369,13 +368,10 @@ describe('삭제 없는 태그 (§4.5)', () => {
   })
 
   /**
-   * **P6-1의 `복원 라우트도 없다`를 갱신한 자리다.** 그 케이스는 명제 둘을 지키고 있었다:
-   * *"복원이 아직 없다"*와 *"쓰이지 않는 `owner` 가드를 미리 만들어 두지 않는다"*.
-   * P6-2가 복원을 만들면서 앞의 것은 참이 아니게 됐지만 **뒤의 것은 그대로 살아 있다** —
-   * 형태가 *"0건이다"*에서 *"쓰이는 그 한 자리에만 있다"*로 바뀌었을 뿐이다. 지우지 않고
-   * 이어받는다.
+   * **쓰이지 않는 `owner` 가드를 미리 만들어 두지 않는다** — 그래서 그 가드는 *"쓰이는 그
+   * 한 자리에만 있다"*. 지금 그 자리는 복원 하나다.
    */
-  it('owner 가드는 복원 하나에만 걸려 있다 (P6-2 D9)', () => {
+  it('owner 가드는 복원 하나에만 걸려 있다', () => {
     const code = stripComments(SOURCE)
     const guarded = [...code.matchAll(/app\.(get|post|patch|put|delete)\(\s*'([^']+)'\s*,\s*\{\s*preHandler:\s*projectGuard\('(\w+)'\)/g)]
 
@@ -385,8 +381,8 @@ describe('삭제 없는 태그 (§4.5)', () => {
   })
 
   /**
-   * **P9-2가 다섯째를 더했다: `GET /:projectId/snapshot`(단수).** 읽기 전용 프로젝트
-   * 덤프이고 행을 쓰지 않는다(D8) — `wireb pull`이 부르는 것이 그쪽이다.
+   * **다섯째는 `GET /:projectId/snapshot`(단수)이다.** 읽기 전용 프로젝트 덤프이고 행을
+   * 쓰지 않는다 — `wireb pull`이 부르는 것이 그쪽이다.
    * **단수와 복수가 이름 하나 차이라 목록을 통째로 단언하는 이 케이스가 그 갈림을
    * 사람에게 보인다.**
    */
@@ -412,7 +408,7 @@ describe('삭제 없는 태그 (§4.5)', () => {
 
   it('주석 안의 인용은 세지 않는다 — 구분력의 반대편', () => {
     // 이 파일의 머리말이 실제로 `app.delete`를 인용한다. 주석을 걷지 않으면 위 케이스가
-    // 늘 죽는다(`apps/web/test/api-consumers.test.ts`가 겪은 함정과 같다).
+    // 늘 죽는다(`apps/web/test/api-consumers.test.ts`의 것과 같은 함정이다).
     expect(SOURCE).toContain('app.delete')
     expect(stripComments(SOURCE)).not.toContain('app.delete')
   })

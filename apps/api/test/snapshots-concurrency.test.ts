@@ -6,7 +6,7 @@
  *
  * ---
  *
- * # 여기서만 잴 수 있는 것 — D6이 막으려는 그 경합
+ * # 여기서만 잴 수 있는 것 — 지문 확인이 막으려는 그 경합
  *
  * `snapshot-capture.test.ts`는 `withApi` 안에서 훅으로 편집을 끼워 넣는다. 그것으로
  * *"수집 도중 무언가 바뀌면 지문이 다르다"*는 잡히지만, **그 편집은 같은 커넥션·같은
@@ -28,7 +28,7 @@
  * | `pages[X].headSeq` = 0, 문서에 `marker` 없음 | 코멘트가 **달리기 전** |
  * | `comments` = 그 코멘트 한 줄 | 코멘트가 **달린 뒤** |
  *
- * §4.3이 *"없으면 코멘트 없음"*이라고 적었으므로 **그 조합은 성립한 적이 없다** —
+ * 설계서 「페이지 스키마 노드」가 *"없으면 코멘트 없음"*이라고 적었으므로 **그 조합은 성립한 적이 없다** —
  * 코멘트가 존재한 순간 그 노드에는 이미 번호가 있었고 `head_seq`는 1이었다. 지문 확인을
  * 지우면 그 payload가 **실제로 저장된다**(아래 케이스가 그 값을 확인한다).
  */
@@ -53,7 +53,7 @@ import {
 /** 이 파일은 하네스가 아니라 풀 핸들을 직접 쓴다. 파일이 끝나면 `setup.ts`의 `afterAll`이 닫는다. */
 const db = getTestDb()
 
-// 청소도 하네스도 `helpers.ts`에 있다(P3-1 D1). `projects` 삭제가 `snapshots`(CASCADE)·
+// 청소도 하네스도 `helpers.ts`에 있다. `projects` 삭제가 `snapshots`(CASCADE)·
 // `menu_nodes`·`pages`·`comments`까지 데려간다.
 beforeEach(resetRealData)
 afterEach(resetRealData)
@@ -77,8 +77,8 @@ async function setup(ctx: TestContext): Promise<Fixture> {
 /**
  * **수집 한가운데에서 끼어들 훅을 문 라우트**를 다른 prefix로 함께 등록한 실커밋 앱.
  *
- * 앱을 세우고 닫는 부분은 `helpers.ts`의 `withRealApi`가 한다(P3-1 D1) — 이 파일이 갖고
- * 있던 것은 **프로브 라우트를 얹는 이음매**뿐이고, 그것은 하네스가 아니라 이 파일의 것이다.
+ * 앱을 세우고 닫는 부분은 `helpers.ts`의 `withRealApi`가 한다 — 이 파일이 갖는 것은
+ * **프로브 라우트를 얹는 이음매**뿐이고, 그것은 하네스가 아니라 이 파일의 것이다.
  *
  * **훅을 참조로 늦게 채운다.** Fastify 5는 부팅 뒤의 라우트 등록을 거부하므로
  * (`Root plugin has already booted`) 등록이 픽스처보다 먼저여야 하는데, 훅이 필요로 하는
@@ -124,7 +124,7 @@ async function snapshotCount(projectId: string): Promise<number> {
   return Number(row.count)
 }
 
-describe('수집 도중 다른 커넥션이 커밋한다 (D6)', () => {
+describe('수집 도중 다른 커넥션이 커밋한다', () => {
   it('아무도 끼어들지 않으면 201이다 — 음성 대조', async () => {
     await withProbeApi(async (ctx) => {
       const fx = await setup(ctx)
@@ -155,7 +155,7 @@ describe('수집 도중 다른 커넥션이 커밋한다 (D6)', () => {
 
       expect(res.statusCode).toBe(409)
       expect((res.json() as { error: { message: string } }).error.message).toContain('다시 시도')
-      // **되돌릴 것이 없다** — 캡처는 읽기뿐이고 삽입은 그 뒤다(사실 5).
+      // **되돌릴 것이 없다** — 캡처는 읽기뿐이고 삽입은 그 뒤다.
       expect(await snapshotCount(fx.project.id)).toBe(0)
     })
   })
@@ -218,7 +218,7 @@ describe('수집 도중 다른 커넥션이 커밋한다 (D6)', () => {
       expect((before.schema as { root: { marker?: number } }).root.marker).toBeUndefined()
       expect(comments).toHaveLength(1)
 
-      // **그 조합은 성립한 적이 없다** — 코멘트가 존재한 순간 번호는 이미 붙어 있었다(§4.3).
+      // **그 조합은 성립한 적이 없다** — 코멘트가 존재한 순간 번호는 이미 붙어 있었다(설계서 「페이지 스키마 노드」).
       const after = await db
         .selectFrom('pages')
         .select(['head_seq', 'schema'])

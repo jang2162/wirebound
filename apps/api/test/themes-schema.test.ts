@@ -35,14 +35,14 @@ describe('themes 스키마 (0006)', () => {
       const row = await insertTheme(ctx, minimalRow())
       expect(row.project_id).toBeNull()
       expect(row.extends_ref).toBeNull()
-      // 절은 전부 선택이다. **없는 것과 빈 것을 가르기 위해** NULL을 허용한다(Task 4).
+      // 절은 전부 선택이다. **없는 것과 빈 것을 가르기 위해** NULL을 허용한다.
       expect(row.tokens).toBeNull()
       expect(row.components).toBeNull()
     })
   })
 
   /**
-   * **재라 #4 — Postgres에서 NULL은 서로 같지 않다.**
+   * **Postgres에서 NULL은 서로 같지 않다.**
    *
    * 관찰: 평범한 `UNIQUE (project_id, slug)`를 건 임시 테이블에 `(NULL, 'admin')`을
    * 두 번 넣으니 **둘 다 남았다**(컨테이너에서 직접 쟀다, PostgreSQL 16.14).
@@ -51,7 +51,7 @@ describe('themes 스키마 (0006)', () => {
    *
    * 결정: `UNIQUE NULLS NOT DISTINCT (project_id, slug)`(PG15+). 부분 인덱스를 따로 두는
    * 대신 제약 하나로 두는 이유 둘 — (1) 뜻이 하나다("slug는 소유자 안에서 유일하고,
-   * 시스템 테마의 소유자는 '없음'이다"), (2) Task 5의 기동 동기화가
+   * 시스템 테마의 소유자는 '없음'이다"), (2) 기동 동기화가
    * `ON CONFLICT (project_id, slug)` 하나로 시스템·프로젝트 테마를 함께 다룰 수 있다
    * (부분 인덱스면 `ON CONFLICT (slug) WHERE project_id IS NULL`로 갈라 적어야 한다).
    */
@@ -111,7 +111,7 @@ describe('themes 스키마 (0006)', () => {
   })
 
   /**
-   * **재라 #1 — 절 컬럼이 `jsonb`가 아니라 `json`이다.**
+   * **절 컬럼이 `jsonb`가 아니라 `json`이다.**
    *
    * `compileTheme`의 계약은 **문서 키 순서가 곧 우선순위**인데 `jsonb`는 키를
    * (길이, 바이트)로 정규화한다(컨테이너에서 직접 쟀다). `json`은 원문을 그대로 보관한다.
@@ -140,13 +140,13 @@ describe('themes 스키마 (0006)', () => {
   })
 
   /**
-   * **재라 #10 — `json`은 NUL을 입구에서 막아 주지 않는다.**
+   * **`json`은 NUL을 입구에서 막아 주지 않는다.**
    *
    * `jsonb`는 `\u0000`이 든 값을 **삽입 시점에** 거부한다(`22P05 unsupported Unicode
    * escape sequence`). `json`은 원문을 그대로 보관하므로 **삽입이 성공하고**, 나중에
    * `->>`로 텍스트를 뽑을 때에야 같은 에러가 난다(둘 다 컨테이너에서 직접 쟀다).
    *
-   * 즉 `json`으로 바꾸면서 **DB가 대신 잡아 주던 방벽 하나가 사라졌다.** 그래서
+   * 즉 `json`을 고른 대가로 **DB가 대신 잡아 주던 방벽 하나가 없다.** 그래서
    * `repos/themes.ts`가 `containsNulByte`로 직접 막는다(그 파일의 주석 참고).
    * 이 케이스는 "DB는 안 막는다"는 관찰 자체를 고정한다 — 이것이 참이므로 레포의 가드가
    * 필요하다는 논리가 선다.

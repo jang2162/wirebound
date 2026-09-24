@@ -1,11 +1,11 @@
 /**
  * ⚠️ 이 파일은 테스트 DB에 **실제로 커밋한다.** `restore-lock-census.test.ts`와 같은 부류다.
  *
- * # 무엇을 재나 — 커밋 순간의 권한 (이월 AA)
+ * # 무엇을 재나 — 커밋 순간의 권한
  *
  * 권한 가드(`projectGuard`)는 핸들러 **앞에서 한 번** 돈다. 쓰기가 페이지 잠금에 쥐인 동안 그 사람이
- * 강등되거나 멤버에서 빠져도, 잠금이 풀리면 **그 사람 이름으로 커밋됐다**(좁은 반증 4차 a-4 — Chrome,
- * psql 이 페이지 행을 22s 쥔 판: 22s 에 커밋된 행의 작성자는 그 순간 이미 viewer·비멤버였다).
+ * 강등되거나 멤버에서 빠져도, 가드만 있으면 잠금이 풀린 뒤 **그 사람 이름으로 커밋된다** — 커밋된 행의
+ * 작성자는 그 순간 이미 viewer·비멤버다.
  *
  * 그래서 페이지 잠금에 서는 쓰기는 **잠금을 잡은 뒤 같은 트랜잭션 안에서** 권한을 다시 본다
  * (`auth/roles.ts`의 `recheckProjectRole` — 가드와 같은 술어). 이 파일이 라우트마다 잰다:
@@ -17,19 +17,19 @@
  *
  * # 분모 — 페이지 잠금에 서는 쓰기
  *
- * 쓰기 라우트 전부를 페이지 행 잠금(`lockPageForEdit`) 아래에서 쏘아 **서는 것만** 골랐다(2026-09-22 · 창 700ms).
+ * 쓰기 라우트 전부를 페이지 행 잠금(`lockPageForEdit`) 아래에서 쏘아(700ms 창) **서는 것만** 고른다.
  * 아래 `분모` 절이 **등록된** 쓰기 라우트(Fastify 의 `onRoute` 값)와 WS 프레임 종류를 «잠금에 선다»(이 표와 아래
  * `PROJECT_PROBES`)와 «어느 잠금에도 안 선다»(`NOT_LOCKED`)로 **빠짐없이** 가르게 한다 — 새 쓰기가 생기면 이 파일이 먼저
  * 죽고, 사람이 «이것이 잠금에 서는가»를 판정한다.
  *
- * # 프로젝트 잠금 뒤에 서는 쓰기 (이월 AA′)
+ * # 프로젝트 잠금 뒤에 서는 쓰기
  *
  * 페이지 행을 안 잡는 쓰기도 복원(`lockProjectForRestore`) · 트리 쓰기(`lockProjectTree`) 뒤에 선다 — 같은 판이다. 아래
  * `프로젝트 잠금에 쥐인 쓰기` 절이 그 두 잠금을 진짜 함수로 쥔 채 라우트마다 잰다(`PROJECT_PROBES`).
  *
  * # 잠금 순서 — 재확인이 연 교착
  *
- * 프로젝트 삭제가 재확인을 위해 기다릴 것을 먼저 잡게 되면서 잠금 순서가 생겼다. 아래 `잠금 순서` 절이 그 순서가
+ * 프로젝트 삭제는 재확인을 위해 기다릴 것을 먼저 잡으므로 잠금 순서가 있다. 아래 `잠금 순서` 절이 그 순서가
  * 복원과 같은지(프로젝트 행 → 페이지)를 교착 두 판으로, 프로젝트 행을 `KEY SHARE`로 먼저 잡는 쓰기(`lockProjectShared`)가
  * 삭제의 CASCADE 와 고리를 안 만드는지(프로젝트 행 → 자기 행 → 멤버 행)를 아홉 판(E3–E11)으로, 코멘트 수정이 코멘트 행을
  * 지우는 두 쓰기 · 역할 변경과 3자 고리를 안 만드는지(프로젝트 행 → 페이지 행 → 멤버 행 → 코멘트 행)를 두 판(F3 · F3′)으로 잰다.
@@ -337,8 +337,8 @@ const PROBES: Probe[] = [
     okStatus: 200,
   },
   {
-    // 코멘트 수정은 문서를 안 바꾸지만 페이지 행을 `KEY SHARE`로 잡는다(`repos/pages.ts`의 `lockPageShared` — 이월 AA′ 리뷰
-    // F3). 그 값으로 같은 페이지의 쓰기 뒤에 선다 — 이 판이 «선다 · 그 뒤의 역할로 판정한다»를 잰다.
+    // 코멘트 수정은 문서를 안 바꾸지만 페이지 행을 `KEY SHARE`로 잡는다(`repos/pages.ts`의
+    // `lockPageShared`). 그 값으로 같은 페이지의 쓰기 뒤에 선다 — 이 판이 «선다 · 그 뒤의 역할로 판정한다»를 잰다.
     route: 'PATCH /api/projects/:projectId/pages/:pageId/comments/:commentId',
     label: '코멘트 수정 (작성자 — 페이지 행 KEY SHARE 로 선다)',
     bobRole: 'editor',
@@ -564,7 +564,7 @@ async function runHeld(ctx: RealApiContext, probe: Probe, kind: Demotion | null)
 /** 가드가 같은 판에서 내는 것 — 역할이 모자라면 403, 멤버가 아니면 404(`requireProjectRole`의 표). */
 const REFUSED: Record<Demotion, number> = { role: 403, member: 404 }
 
-describe('페이지 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로 판정한다 (이월 AA)', () => {
+describe('페이지 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로 판정한다', () => {
   for (const probe of PROBES) {
     describe(`${probe.route} — ${probe.label}`, () => {
       it('대조 — 강등이 없으면 잠금이 풀린 뒤 커밋되고 상태가 바뀐다', async () => {
@@ -601,14 +601,14 @@ function probeLabeled(label: string): Probe {
  * 위 표의 403 판은 전부 그대로 지나고 **이 절만** 죽는다.
  *
  * **REST 와 WS 가 한 판씩이다 — 재확인이 두 자리에 따로 있기 때문이다**(`auth/roles.ts`의 `recheckProjectRole` ·
- * `ws/patch.ts`의 `requireProjectRole`). 한쪽만 두 벌 술어로 바꾸면 그쪽 판만 죽는다. 앞 판은 REST 한 판뿐이라
- * WS 쪽을 두 벌로 바꾸는 변조에 api 전량이 통과했다(2026-09-22 리뷰 W1). WS 는 거절이 `patch-error` 프레임의 상태다 —
+ * `ws/patch.ts`의 `requireProjectRole`). 한쪽만 두 벌 술어로 바꾸면 그쪽 판만 죽는다. REST 한 판뿐이면
+ * WS 쪽을 두 벌로 바꾸는 변조에 api 전량이 통과한다. WS 는 거절이 `patch-error` 프레임의 상태다 —
  * 가드 경로의 WS(프레임 수신 확인)는 비멤버면 소켓을 끊지만(4403), 잠금 안의 재확인은 끊지 않고 404 를 답한다.
  *
  * 재확인 자리를 지우는 변조에는 표의 같은 라우트 판(`코멘트 게시 (번호를 붙인다 …)` · `WS patch 프레임`)과 **함께**
  * 죽는다 — 그 축(재확인이 서는가)은 그 판들이 소유한다. 이 절이 혼자 소유하는 것은 상태 코드(404)다.
  */
-describe('멤버에서 빠지면 404 — 가드와 같은 상태 코드 (Chrome a-4 gap-member 의 api 판)', () => {
+describe('멤버에서 빠지면 404 — 가드와 같은 상태 코드', () => {
   for (const label of [BARE_COMMENT, WS_PATCH]) {
     it(`${label}: 잠금에 쥐인 채 멤버에서 빠지면 풀린 뒤 404 — 아무것도 안 바뀐다`, async () => {
       await withRealApi(async (ctx) => {
@@ -680,12 +680,12 @@ describe('토큰 요청도 커밋 순간의 권한으로 판정한다', () => {
 })
 
 /**
- * # 커밋 중 틈 — 같은 키로 다시 보낸 게시 (좁은 반증 4차 a-4 의 api 판)
+ * # 커밋 중 틈 — 같은 키로 다시 보낸 게시
  *
  * 웹은 응답을 10s 안에 못 받은 게시를 **같은 멱등 키로 다시 보내** 판정한다. 첫 게시가 페이지 잠금에 쥐인 채
  * 강등되면: 다시 보낸 것은 행이 아직 없어 가드 앞 재생을 지나쳐 가드에서 403 을 받고, 웹은 그것을 «안 달림»
- * 확정으로 읽는다. **앞 판은 그 뒤 첫 게시가 커밋됐다** — «안 달림»이 거짓이 되고 고쳐 달면 두 행이었다(Chrome).
- * 이제 첫 게시도 잠금 뒤 재확인에서 같은 403 으로 되돌아간다.
+ * 확정으로 읽는다. **첫 게시가 그 뒤 커밋되면** «안 달림»이 거짓이 되고 고쳐 달면 두 행이다.
+ * 그래서 첫 게시도 잠금 뒤 재확인에서 같은 403 으로 되돌아간다.
  *
  * **이 판의 축(재확인이 서는가)은 표의 `코멘트 게시 (번호를 붙인다 …)` 판이 소유한다** — 같은 변조에 함께 죽는다.
  * 이 판이 더 재는 것은 **다시 보낸 것의 답과 첫 게시의 결말이 같은가**다. 대조는 권한이 그대로인 판 — 다시 보낸
@@ -697,10 +697,10 @@ describe('토큰 요청도 커밋 순간의 권한으로 판정한다', () => {
  *
  * 이 판은 **같은 페이지의 남의 쓰기가 줄에 끼면** 선다 — 페이지 행의 잠금 대기열은 도착 순이다. 첫 게시 → 남의 쓰기
  * → 다시 보낸 것 순으로 줄을 세우면, 첫 게시가 커밋한 뒤 남의 쓰기가 잠금을 쥔 동안 다시 보낸 것은 아직 잠금 밖이다
- * — 그 사이에 강등을 넣는다. (앞 판은 «앞 게시의 커밋과 이 요청의 잠금 획득 사이에 기다리는 문장이 없어 세울 판이
- * 없다»고 적었다 — 줄에 끼는 제삼자를 안 봤다. 2026-09-22 리뷰 M17.)
+ * — 그 사이에 강등을 넣는다. («앞 게시의 커밋과 이 요청의 잠금 획득 사이에 기다리는 문장이 없어 세울 판이 없다»로
+ * 보면 줄에 끼는 제삼자를 놓친다.)
  */
-describe('커밋 중 틈 — 같은 키로 다시 보낸 게시 (좁은 반증 4차 a-4 의 api 판)', () => {
+describe('커밋 중 틈 — 같은 키로 다시 보낸 게시', () => {
   const KEY = 'k-bob-resend'
 
   async function keyedRows(pageId: string, authorId: string): Promise<number> {
@@ -901,11 +901,11 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
 /**
  * # 잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 잠근다 (프로젝트 행 → 페이지)
  *
- * 프로젝트 삭제는 재확인 앞에서 기다릴 것을 먼저 다 잡는다(`routes/projects.ts`). 앞 판은 **페이지만** 먼저 잡았고,
- * 그 순서가 두 교착을 열었다(2026-09-22 리뷰 E1 · E2). 지금은 복원(`lockProjectForRestore`)과 같이 **프로젝트 행 →
- * 페이지**다(`repos/projects.ts`의 `lockProjectRow`).
+ * 프로젝트 삭제는 재확인 앞에서 기다릴 것을 먼저 다 잡는다(`routes/projects.ts`). 순서는 복원(`lockProjectForRestore`)과
+ * 같이 **프로젝트 행 → 페이지**다(`repos/projects.ts`의 `lockProjectRow`). **페이지만** 먼저 잡으면 그 순서가 아래
+ * 두 교착(E1 · E2)을 연다.
  *
- * | 판 | 앞 판에서 무엇이 서로를 기다렸나 | 이 절이 보는 것 |
+ * | 판 | 페이지만 먼저 잡으면 무엇이 서로를 기다리나 | 이 절이 보는 것 |
  * |---|---|---|
  * | E1 — 남의 페이지 쓰기가 진행 중일 때 owner 둘이 삭제 · 복원 | 복원: 프로젝트 행을 쥐고 페이지를 · 삭제: 페이지를 쥐고 프로젝트 행을 | 복원이 삭제를 기다렸다가 404 · 삭제 204 · 교착 0 |
  * | E2 — FK 삽입이 진행 중일 때 삭제와 다른 owner 의 역할 변경 | 삭제: 제 멤버 행을 `FOR SHARE`로 쥐고 프로젝트 행을(FK 삽입 뒤) · 역할 변경(`lockOwnerIds`): 다른 owner 행을 쥐고 삭제의 멤버 행을 · 그다음 CASCADE 가 그 다른 owner 행을 | 역할 변경이 삭제를 **안 기다린다**(200) · 교착 0 |
@@ -913,9 +913,8 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
  * **교착은 `pg_stat_database.deadlocks`로 본다** — 희생자는 500 을 받으므로 상태 코드가 먼저 죽지만, 카운터는 «그
  * 500 이 교착이었다»를 따로 말한다.
  *
- * **E2 는 멤버 행의 물리 순서에 기댄다** — `lockOwnerIds`는 `ORDER BY` 없이 잠가 계획(오늘 heap 순서)의 순서로
- * 잡는다. 삭제하는 사람의 행이 **먼저**면 역할 변경은 교착 대신 그 행에서 **삭제가 끝날 때까지 기다린다**(리뷰 E2 의
- * 둘째 줄). 이 판은 둘 다 잡는다 — «역할 변경이 FK 삽입을 쥔 동안 끝났는가»를 본다. 앨리스를 나중에 owner 로 올리는
+ * **E2 는 멤버 행의 물리 순서에 기댄다** — `lockOwnerIds`는 `ORDER BY` 없이 잠가 계획(heap 순서)의 순서로
+ * 잡는다. 삭제하는 사람의 행이 **먼저**면 역할 변경은 교착 대신 그 행에서 **삭제가 끝날 때까지 기다린다.** 이 판은 둘 다 잡는다 — «역할 변경이 FK 삽입을 쥔 동안 끝났는가»를 본다. 앨리스를 나중에 owner 로 올리는
  * 것은 교착 쪽이 서기 쉽게 하려는 것이지 판의 전제가 아니다.
  *
  * **FK 삽입은 진짜 `insertMenuNode`다**(메뉴를 만드는 중인 트랜잭션) — 초대 · 페이지 · 스냅샷 · 토큰 생성이 프로젝트
@@ -923,7 +922,7 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
  *
  * | 변조(`routes/projects.ts`) | 죽는 것 |
  * |---|---|
- * | 삭제의 `lockProjectRow`를 뺀다(앞 판의 순서) | E1 · E2 |
+ * | 삭제의 `lockProjectRow`를 뺀다(페이지만 먼저) | E1 · E2 |
  * | `lockProjectRow`를 `lockProjectPages` **뒤로** | **E1 혼자** — 프로젝트 행 대기가 재확인 앞이라 E2 는 선다 |
  * | 삭제의 프로젝트 행 잠금을 `FOR NO KEY UPDATE`로 | **E2 혼자** — FK 삽입과 충돌하지 않아 그 대기가 재확인 뒤(`DELETE`)로 밀린다. 복원과는 여전히 충돌해 E1 은 선다 |
  */
@@ -974,7 +973,7 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
         removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie }))
         await waitForLockWaiter(1)
         restore = fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/snapshots/${fx.snapshotId}/restore`)
-        // 둘 다 서야 판이 선다 — 삭제는 페이지에서, 복원은 (지금 순서면) 프로젝트 행에서.
+        // 둘 다 서야 판이 선다 — 삭제는 페이지에서, 복원은 (프로젝트 행 → 페이지 순서면) 프로젝트 행에서.
         await waitForLockWaiter(2)
       } finally {
         await pageWrite.release()
@@ -1101,7 +1100,7 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
 
   /**
    * E5–E9 — FK 삽입 다섯(스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성). 권한이 아니라 **봉투**의 판이다: 삽입의 FK 가 프로젝트
-   * 행에 거는 `KEY SHARE`만으로는 삭제의 `FOR UPDATE` 뒤에 섰다가 깨어나 23503 — 봉투 없는 500 이었다(이월 AA′ 남는 틈 2).
+   * 행에 거는 `KEY SHARE`만으로는 삭제의 `FOR UPDATE` 뒤에 섰다가 깨어나 23503 — 봉투 없는 500 이 된다.
    * 트랜잭션 맨 앞의 `lockProjectShared`가 0 행을 보고 404 로 옮긴다. 판은 E3 · E4 와 같다.
    */
   for (const probe of [
@@ -1165,19 +1164,19 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
   }
 
   /**
-   * F3 · F3′ — 코멘트 수정의 3자 고리(이월 AA′ 리뷰 F3). 코멘트 행 `c`를 지우는 두 쓰기가 `c`와 멤버 행을 **반대 순서로**
+   * F3 · F3′ — 코멘트 수정의 3자 고리. 코멘트 행 `c`를 지우는 두 쓰기가 `c`와 멤버 행을 **반대 순서로**
    * 잡는다 — 코멘트 삭제는 «재확인 → `c`», 페이지 삭제는 «`c` → 끝의 재확인». 코멘트 수정이 둘 사이 어느 순서를 골라도 하나와
    * 엇갈리고, 다른 owner 의 역할 변경(`lockOwnerIds` — owner 행을 힙 순서로 `FOR UPDATE`)이 셋째로 끼면 고리가 선다. 페이지 행을
    * 먼저 잡으면(`repos/pages.ts`의 `lockPageShared`) 두 삭제 뒤에 줄을 서 고리가 안 선다.
    *
-   * 판을 세우는 법(리뷰어의 스테이징): K 가 한 owner 의 멤버 행을 `FOR SHARE`로 쥔다(«그 사람의 다른 쓰기가 재확인을 지난
+   * 판을 세우는 법: K 가 한 owner 의 멤버 행을 `FOR SHARE`로 쥔다(«그 사람의 다른 쓰기가 재확인을 지난
    * 채») → 앨리스의 역할 변경이 K 앞에 선다 → 나머지 둘을 차례로 세운다 → K 를 푼다. 셋 다 선 것을 센 뒤에 푼다.
    *
    * | 코멘트 수정의 순서 | F3 | F3′ |
    * |---|---|---|
-   * | 프로젝트 행 → `UPDATE c` → 재확인(앞 판) | 교착 · 수정 500 | 0 |
-   * | 프로젝트 행 → 재확인 → `UPDATE c`(리뷰어의 뒤 처방) | 0 | 교착 · 페이지 삭제 500 |
-   * | 프로젝트 행 → 페이지 행 → 재확인 → `UPDATE c`(지금) | 0 | 0 |
+   * | 프로젝트 행 → `UPDATE c` → 재확인 | 교착 · 수정 500 | 0 |
+   * | 프로젝트 행 → 재확인 → `UPDATE c` | 0 | 교착 · 페이지 삭제 500 |
+   * | 프로젝트 행 → 페이지 행 → 재확인 → `UPDATE c`(이 순서를 쓴다) | 0 | 0 |
    */
   async function threeOwners(ctx: RealApiContext, heapOrder: 'bob-carol' | 'carol-bob') {
     const alice = await signup(ctx)
@@ -1267,32 +1266,31 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
 })
 
 /**
- * # 프로젝트 잠금 뒤에 서는 쓰기 — 커밋 순간의 권한 (이월 AA′)
+ * # 프로젝트 잠금 뒤에 서는 쓰기 — 커밋 순간의 권한
  *
  * 위 표는 **페이지 행**에 서는 쓰기다. 페이지 행을 안 잡는 쓰기도 프로젝트를 통째로 쥐는 트랜잭션 뒤에 선다 — 복원
  * (`lockProjectForRestore` — 프로젝트 행 `FOR UPDATE` + 메뉴 · 페이지 · 레이아웃 · 코멘트 행)과 트리 쓰기의 첫 잠금
  * (`lockProjectTree` — 프로젝트 행 `FOR NO KEY UPDATE`)이다. 이 절이 그 둘을 **진짜 잠금 함수로** 쥔 채 같은 판을 잰다.
  *
- * **어디에 서나 — 잰 값**(2026-09-24 · 잠금을 쥔 채 쏘아 700ms 창 · 아래 `NOT_LOCKED`의 판정과 같은 판):
+ * **어디에 서나 — 잰 값**(잠금을 쥔 채 쏘아 700ms 창 · 아래 `NOT_LOCKED`의 판정과 같은 판):
  *
  * | 쓰기 | 복원 잠금 뒤에 서는 자리 | 트리 잠금 뒤에 |
  * |---|---|---|
  * | 메뉴 생성 · 자리 옮기기 · 삭제 · 페이지 생성 · 자리 옮기기 · 삭제 · 가져오기 | 자기의 `lockProjectTree`(프로젝트 행) | 선다 |
  * | 프로젝트 수정 | `UPDATE projects`(프로젝트 행) | 선다 |
  * | 복원 · 프로젝트 삭제 | 자기의 `lockProjectRow`(프로젝트 행 `FOR UPDATE`) | 선다 |
- * | 스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성 | 자기의 `lockProjectShared`(앞 판은 `INSERT`의 FK 가 부모 행에 거는 `KEY SHARE` — 모드는 같고, 삭제 뒤에 깨면 500 이던 것이 404 가 됐다) | 안 선다(`KEY SHARE`는 `NO KEY UPDATE`와 안 부딪힌다) |
- * | 테마 고르기 · 코멘트 수정 | 자기의 `lockProjectShared`(프로젝트 행 `KEY SHARE` — 앞 판은 자기 행: 레이아웃 · 코멘트) | 안 선다 |
- * | 테마 수정 · 삭제 | 자기의 `lockProjectShared`. **앞 판은 «안 선다»로 적었고 틀렸다** — 복원이 쓰는 판(`restore-write`)에서 삭제는 RI 검사가 레이아웃 행에, slug 를 바꾸는 수정은 테마 행 `KEY SHARE`에 섰다(리뷰 F1 · F2) | 안 선다 |
+ * | 스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성 | 자기의 `lockProjectShared`(`INSERT`의 FK 가 부모 행에 거는 `KEY SHARE`와 모드는 같다 — 먼저 잡아 두면 삭제 뒤에 깰 때 500 이 아니라 404 다) | 안 선다(`KEY SHARE`는 `NO KEY UPDATE`와 안 부딪힌다) |
+ * | 테마 고르기 · 코멘트 수정 | 자기의 `lockProjectShared`(프로젝트 행 `KEY SHARE` — 자기 행(레이아웃 · 코멘트)보다 먼저) | 안 선다 |
+ * | 테마 수정 · 삭제 | 자기의 `lockProjectShared`. **잠금 함수만 쥐고 재면 «안 선다»로 잘못 나온다** — 복원이 쓰는 판(`restore-write`)에서 삭제는 RI 검사가 레이아웃 행에, slug 를 바꾸는 수정은 테마 행 `KEY SHARE`에 선다 | 안 선다 |
  * | 코멘트 삭제 | 자기의 `lockProjectForBurial`(프로젝트 행 `KEY SHARE`) | 안 선다 |
  *
  * 프로젝트 삭제의 앞 잠금(`lockProjectRow` + `lockProjectPages`)은 복원 잠금의 부분이라 따로 세지 않는다 — 그 뒤에 서는
  * 쓰기는 전부 위 «복원» 열에 있다.
  *
- * **고치기 전 값 — 56 판 중 17 이 빨강**(대조 28 은 전부 초록): 재확인이 없던 열둘(메뉴 생성 · 삭제 · 페이지 생성 · 가져오기 ·
- * 프로젝트 수정 — 두 잠금 모두 · 테마 고르기 · 스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성 · 코멘트 수정)이 강등 **뒤에** 옛 권한으로
- * 커밋했다(201 · 200 · 204 — 토큰은 멤버에서 빠진 뒤 원문까지 내줬다). 재확인이 있던 여섯(메뉴 · 페이지 자리 옮기기 · 페이지 ·
- * 코멘트 삭제 · 복원 · 프로젝트 삭제)은 두 잠금 뒤에서도 이미 초록이었다 — 그 축은 위 `PROBES` 와 `menu-title-conflict.test.ts`
- * 가 소유하고, 이 표는 «프로젝트 잠금 뒤에서도 선다»를 센다.
+ * **재확인이 없으면** 메뉴 생성 · 삭제 · 페이지 생성 · 가져오기 · 프로젝트 수정(두 잠금 모두) · 테마 고르기 · 스냅샷 · 초대 ·
+ * 테마 · 프리셋 · 토큰 생성 · 코멘트 수정이 강등 **뒤에** 옛 권한으로 커밋한다(201 · 200 · 204 — 토큰은 멤버에서 빠진 뒤
+ * 원문까지 내준다). 메뉴 · 페이지 자리 옮기기 · 페이지 · 코멘트 삭제 · 복원 · 프로젝트 삭제의 재확인 축은 위 `PROBES` 와
+ * `menu-title-conflict.test.ts`가 소유하고, 이 표는 «프로젝트 잠금 뒤에서도 선다»를 센다.
  *
  * **재확인 자리는 쓰기 뒤 · 같은 트랜잭션 안이다** — 기다림은 쓰는 문장에서 난다(트리 첫 잠금 · `UPDATE projects`). 프로젝트
  * 행을 `KEY SHARE`로 먼저 잡는 자리(`repos/projects.ts`의 `lockProjectShared` — 테마 고르기 · 수정 · 삭제 · 코멘트 수정 · FK
@@ -1306,10 +1304,10 @@ type ProjectHolder = 'restore' | 'tree' | 'restore-write'
 /**
  * 쥐는 자 — 잠금 SQL 을 베끼지 않고 프로덕션 함수를 부른다.
  *
- * **`restore-write`는 잠금만이 아니라 복원의 쓰기까지 쥔다**(이월 AA′ 리뷰 F1 · F2). 잠금 함수만 쥐면 쥔 자의 **쓰기**가 거는
+ * **`restore-write`는 잠금만이 아니라 복원의 쓰기까지 쥔다.** 잠금 함수만 쥐면 쥔 자의 **쓰기**가 거는
  * 잠금이 빠진다 — 복원의 마지막 단계 `set-layout-theme`(`services/restore-plan.ts`)는 레이아웃 행을 고치며 FK 로 새 테마
- * 행에 `KEY SHARE`를 걸고, 옛 테마는 그 커밋 뒤에야 «안 쓰인다». 앞 판의 «테마 수정 · 삭제는 안 선다»는 잠금만 쥐고 · 쓰이지
- * 않는 테마로 잰 값이었고 둘 다 틀렸다: 쓰이는 테마의 삭제는 `ON DELETE RESTRICT` 검사(`layouts`를 `FOR KEY SHARE`로 훑는다)가
+ * 행에 `KEY SHARE`를 걸고, 옛 테마는 그 커밋 뒤에야 «안 쓰인다». 잠금만 쥐고 · 쓰이지 않는 테마로 재면 «테마 수정 ·
+ * 삭제는 안 선다»로 잘못 나온다: 쓰이는 테마의 삭제는 `ON DELETE RESTRICT` 검사(`layouts`를 `FOR KEY SHARE`로 훑는다)가
  * 복원이 쥔 레이아웃 행에 서고, slug 를 바꾸는 수정은 UNIQUE 키 갱신(`FOR UPDATE`)이라 그 `KEY SHARE`에 선다.
  */
 type ProjectState = Awaited<ReturnType<typeof projectState>>
@@ -1475,7 +1473,7 @@ const PROJECT_PROBES: ProjectProbe[] = [
     okStatus: 200,
   },
   {
-    // slug(`meta.id`)를 바꾸는 판이다 — 같은 slug 면 `NO KEY UPDATE`라 테마 행의 `KEY SHARE`와 안 부딪힌다(리뷰 F2 의 대조).
+    // slug(`meta.id`)를 바꾸는 판이다 — 같은 slug 면 `NO KEY UPDATE`라 테마 행의 `KEY SHARE`와 안 부딪힌다.
     route: 'PUT /api/projects/:projectId/themes/:themeId',
     label: '테마 수정 (slug 를 바꾼다)',
     bobRole: 'owner',
@@ -1623,7 +1621,7 @@ async function runProjectHeld(ctx: RealApiContext, probe: ProjectProbe, holder: 
   return { ...outcome, before: own(before), after: own(after), deadlocks: (await deadlockCount()) - deadlocksBefore }
 }
 
-describe('프로젝트 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로 판정한다 (이월 AA′)', () => {
+describe('프로젝트 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로 판정한다', () => {
   for (const probe of PROJECT_PROBES) {
     for (const holder of probe.holders) {
       const held = PROJECT_HOLDERS[holder].label
@@ -1655,9 +1653,9 @@ describe('프로젝트 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로
  * # 분모 — 등록된 쓰기를 빠짐없이 가른다
  *
  * **세는 것은 Fastify 가 등록한 라우트의 값이다** — `buildApp`의 `onRoute` 이음매(`pre-guard-hook-census.test.ts`가
- * 쓰는 것과 같다). 앞 판은 소스 글자를 정규식(`app.post('…', { preHandler: projectGuard(`)으로 셌고,
- * `preHandler: [projectGuard('editor')]`(배열)로 적은 새 쓰기 라우트를 못 봤다 — api 전량이 통과하는 채로 그 라우트가
- * 강등 뒤에 뷰어 이름으로 커밋했다(2026-09-22 리뷰 F1). 값으로 세면 옵션을 어떤 글꼴로 적든(배열 · `app.route({…})` ·
+ * 쓰는 것과 같다). 소스 글자를 정규식(`app.post('…', { preHandler: projectGuard(`)으로 세면
+ * `preHandler: [projectGuard('editor')]`(배열)로 적은 새 쓰기 라우트를 조용히 못 본다 — api 전량이 통과하는 채로 그
+ * 라우트가 강등 뒤에 뷰어 이름으로 커밋한다. 값으로 세면 옵션을 어떤 글꼴로 적든(배열 · `app.route({…})` ·
  * 옵션 순서 · 하위 디렉터리) 등록되는 한 분모에 든다.
  *
  * **단위는 `GET`·`HEAD`가 아닌 라우트 전부다** — 가드가 걸렸는지로 거르지 않는다(`projectGuard(…)`는 부를 때마다
@@ -1670,22 +1668,22 @@ describe('프로젝트 잠금에 쥐인 쓰기 — 커밋 순간의 권한으로
  * 그 전부가 위 두 표 — `PROBES`(페이지 잠금에 선다) · `PROJECT_PROBES`(프로젝트 잠금에 선다) — 중 하나 이상, 또는 아래 목록
  * (어느 잠금에도 안 선다) 중 **정확히 한쪽**에 있어야 한다. 새 쓰기는 이 절을 먼저 죽이고, 사람이 어느 쪽인지 판정한다.
  *
- * **아래 목록의 판정은 잰 값이다** — 쓰기 라우트 전부를 페이지 행(`lockPageForEdit` · 2026-09-22)과 복원 잠금
+ * **아래 목록의 판정은 잰 값이다** — 쓰기 라우트 전부를 페이지 행(`lockPageForEdit`)과 복원 잠금
  * (`lockProjectForRestore`) · 트리 잠금(`lockProjectTree`) · 프로젝트 삭제의 앞 잠금(`lockProjectRow` + `lockProjectPages`)
- * 아래에서 쏘아 700ms 창(2026-09-24). WS 셋은 코드로 판정했다 — 핸들러가 동기라 DB 잠금을 기다릴 자리가 없다. **이 파일은
+ * 아래에서 쏘아 700ms 창. WS 셋은 코드로 판정한다 — 핸들러가 동기라 DB 잠금을 기다릴 자리가 없다. **이 파일은
  * 목록을 다시 재지 않는다** — 목록에 넣는 사람이 잰다.
  *
- * **잴 때는 쥔 자의 쓰기까지 쥔다 — 잠금 함수만으로는 모자랐다**(리뷰 F1 · F2: 앞 판의 테마 수정 · 삭제 두 줄이 그렇게 틀렸다).
- * 다시 잰 판(2026-09-24 · 700ms 창): 진짜 복원(`restoreSnapshot` — 메뉴 · 제목 · 코멘트 · 레이아웃 테마 T→S 를 실제로 쓴다) ·
- * 진짜 트리 쓰기(`deletePage` — 코멘트 달린 페이지 + `insertMenuNode`) · 진짜 프로젝트 삭제(`deleteProject`까지 — CASCADE)를
- * 커밋 전에 쥐었다. 복원 · 트리 뒤에서 아래 목록은 **전부 안 섰다.** 프로젝트 삭제 뒤에서는 멤버 수정 · 삭제 · 프리셋 · 토큰
- * 삭제가 **섰다**(CASCADE 가 그 행을 쥔다) — 풀리면 행이 없어 **404 · 아무것도 커밋 안 됨**이라 권한 판정의 자리가 아니다(그
+ * **잴 때는 쥔 자의 쓰기까지 쥔다 — 잠금 함수만으로는 모자란다**(테마 수정 · 삭제가 «안 선다»로 잘못 나온다 —
+ * 「프로젝트 잠금 뒤에 서는 쓰기」 절의 표). 재는 판(700ms 창): 진짜 복원(`restoreSnapshot` — 메뉴 · 제목 · 코멘트 ·
+ * 레이아웃 테마 T→S 를 실제로 쓴다) · 진짜 트리 쓰기(`deletePage` — 코멘트 달린 페이지 + `insertMenuNode`) · 진짜 프로젝트
+ * 삭제(`deleteProject`까지 — CASCADE)를 커밋 전에 쥔다. 복원 · 트리 뒤에서 아래 목록은 **전부 안 선다.** 프로젝트 삭제
+ * 뒤에서는 멤버 수정 · 삭제 · 프리셋 · 토큰 삭제가 **선다**(CASCADE 가 그 행을 쥔다) — 풀리면 행이 없어 **404 · 아무것도 커밋 안 됨**이라 권한 판정의 자리가 아니다(그
  * 사이의 강등도 같은 멤버 행에서 선다). «쓰이는 대상»의 판은 없다 — 멤버 · 프리셋 · 토큰 행은 어느 FK 도 가리키지 않는다.
  *
- * **못 재는 것**: 플러그인의 `addHook`으로 단 훅이 잠금에 서는 쓰기 — 라우트가 아니라 분모에 안 든다(오늘 없다 ·
+ * **못 재는 것**: 플러그인의 `addHook`으로 단 훅이 잠금에 서는 쓰기 — 라우트가 아니라 분모에 안 든다(지금은 없다 ·
  * `pre-guard-hook-census.test.ts`의 «못 재는 것»과 같은 부류). 라우트 **밖**의 쓰기 경로(예: 서버가 스스로 도는 작업)도
  * 같다. 그리고 **이 두 부류가 아닌 줄** — 아래 목록의 멤버 수정 · 삭제는 프로젝트 잠금에는 안 서지만 다른 owner 의 역할
- * 변경(`repos/members.ts`의 `lockOwnerIds` — owner 행 `FOR UPDATE`)에는 선다. 그 판은 이 파일이 안 잰다(장부 이월).
+ * 변경(`repos/members.ts`의 `lockOwnerIds` — owner 행 `FOR UPDATE`)에는 선다. 그 판은 이 파일이 안 잰다.
  */
 const NOT_LOCKED: Record<string, string> = {
   'POST /api/auth/login': '프로젝트 밖 — 세션 행만 쓴다',

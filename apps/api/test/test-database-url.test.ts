@@ -1,18 +1,16 @@
 /**
- * **테스트 DB 를 워크트리마다 가를 수 있는가**(2026-08-19 D3).
+ * **테스트 DB 를 워크트리마다 가를 수 있는가.**
  *
  * 이 자를 세운 근거는 실측이다. 워크트리 둘이 **같은** 테스트 DB를 보며 동시에
  * `vitest run --project api`를 돌리면 **둘 다 종료 코드 1**이고, 가르면 **둘 다 종료 0**에
- * 전 파일·전 케이스 통과다. 구현자와 리뷰어가 각각 쟀고 **결론이 같다.**
+ * 전 파일·전 케이스 통과다.
  *
- * **깨지는 개수는 적지 않는다 — 판마다 다르다.** 경쟁 상태라 그렇다: 구현자 판은
- * 16파일/92케이스와 10파일/53케이스였고 리뷰어 판은 13파일/57케이스와 18파일/82케이스였다
- * (귀속: 리뷰 §5). 꼴도 갈린다 — 구현자 판에는 `relation "themes" does not exist`가 29건
- * 났는데 리뷰어 판에는 **한 번도 안 났다**. **안 낡는 값은 종료 코드뿐이다.**
+ * **깨지는 개수는 적지 않는다 — 판마다 다르다.** 경쟁 상태라 그렇다: 깨지는 파일·케이스
+ * 수도, 오류의 꼴(`relation "themes" does not exist` 가 나는 판과 안 나는 판)도 판마다
+ * 갈린다. **안 낡는 값은 종료 코드뿐이다.**
  *
- * 비용도 재라: 리뷰어 판에서 **단독 실행 94.02초** vs **동시 두 판이 각각 90.9초**다
- * (귀속: 리뷰 §5). 공유한 판이 더 빨라 보이는 것은 **실패하는 판이라 일이 덜 들어서**이므로
- * 비교 기준이 못 된다.
+ * **걸린 시간도 비교 기준이 못 된다** — 공유한 판이 단독 실행보다 빨라 보이는 것은
+ * **실패하는 판이라 일이 덜 들어서**다.
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -31,7 +29,7 @@ const A = 'postgres://wirebound:wirebound@127.0.0.1:5433/wb_feat_a'
 const B = 'postgres://wirebound:wirebound@127.0.0.1:5433/wb_feat_b'
 
 describe('TEST_DATABASE_URL 은 셸 → apps/api/.env → 기본값 순서로 온다', () => {
-  it('아무 값도 없으면 오늘과 같다 — wirebound_test (D6)', () => {
+  it('아무 값도 없으면 기본값이다 — wirebound_test', () => {
     expect(resolveTestDatabaseUrl({})).toBe(DEFAULT_TEST_DATABASE_URL)
     expect(resolveTestDatabaseUrl()).toContain('/wirebound_test')
   })
@@ -73,9 +71,9 @@ describe('TEST_DATABASE_URL 은 셸 → apps/api/.env → 기본값 순서로 �
  * **여기서부터가 배선이다.** 위의 케이스들은 *"주면 순서대로 고른다"*를 재고, 아래는
  * *"진짜 파일에서 읽어다 그 순서에 넣는다"*를 잰다.
  *
- * 앞 판에는 이 자가 없었다. 리뷰가 `helpers.ts`의 조립 한 줄에서 `fileEnv` 인자를 빼자
- * **게이트 넷이 전부 초록인 채로** 스위트가 조용히 기본 DB 를 먹었다(귀속: 리뷰 §9 R4).
- * 순수 규칙 쪽에 같은 변이를 심으면 죽는다 — **덮인 쪽에만 자가 있었다.**
+ * **이 자가 없으면** `helpers.ts`의 조립 한 줄에서 `fileEnv` 인자를 빼도 **게이트 넷이
+ * 전부 초록인 채로** 스위트가 조용히 기본 DB 를 먹는다. 순수 규칙 쪽에 같은 변이를 심으면
+ * 죽는다 — **덮인 쪽에만 자가 있으면 배선은 아무도 안 잰다.**
  */
 describe('배선 — 진짜 파일을 읽어 그 순서에 넣는가', () => {
   let dir: string
@@ -99,7 +97,7 @@ describe('배선 — 진짜 파일을 읽어 그 순서에 넣는가', () => {
     expect(resolveTestDatabaseUrlFrom({ TEST_DATABASE_URL: B }, envFile)).toBe(B)
   })
 
-  it('파일이 없으면 기본값이다 — .env 를 안 만든 사람이 깨지면 안 된다 (D6)', () => {
+  it('파일이 없으면 기본값이다 — .env 를 안 만든 사람이 깨지면 안 된다', () => {
     expect(resolveTestDatabaseUrlFrom({}, join(dir, '없는파일.env'))).toBe(DEFAULT_TEST_DATABASE_URL)
   })
 
@@ -125,7 +123,7 @@ describe('배선 — 진짜 파일을 읽어 그 순서에 넣는가', () => {
 
 describe('helpers.ts 가 그 배선을 지나는가 — 소스에서 센다', () => {
   // **주석을 걷고 센다.** 안 걷으면 옳은 줄을 주석에 남기고 아래에서 경로를 바꾸는 우회가
-  // 지나간다(귀속: 리뷰 델타 R4e — 15/15 통과했다).
+  // 지나간다.
   const source = stripComments(readFileSync(new URL('./helpers.ts', import.meta.url), 'utf8'))
 
   it('TEST_DATABASE_URL 을 `resolveTestDatabaseUrlFrom(process.env)` 로 정한다', () => {
@@ -145,15 +143,15 @@ describe('helpers.ts 가 그 배선을 지나는가 — 소스에서 센다', ()
 /**
  * **배선이 가리키는 자리 자체를 잰다.**
  *
- * 리뷰어가 이 자리를 열어 뒀다(귀속: 리뷰 델타 R4c·R4d): `API_ENV_URL`을 없는 파일이나
- * 엉뚱한 진짜 파일로 바꿔도 **api 프로젝트가 전부 통과하고 종료 0**이며, 행동으로는
- * `.env`가 무시되어 **스위트가 조용히 공용 `wirebound_test`를 먹는다.**
+ * **이 자가 없으면** `API_ENV_URL`을 없는 파일이나 엉뚱한 진짜 파일로 바꿔도 **api
+ * 프로젝트가 전부 통과하고 종료 0**이며, 행동으로는 `.env`가 무시되어 **스위트가 조용히
+ * 공용 `wirebound_test`를 먹는다.**
  *
- * **그것이 이 슬라이스의 부류다** — 없애려던 것이 *"공유 자원으로 조용히 떨어지는 것"*이고
- * 이건 그 정의에 그대로 맞는다. 다만 **런타임에서 시끄럽게 할 수는 없다**: 파일이 없는 것은
- * D6이 지키기로 한 정상 상태다(`.env`를 안 만든 사람은 기본값으로 돌아야 한다).
+ * **그것이 이 모듈이 막으려는 부류다** — *"공유 자원으로 조용히 떨어지는 것"*의 정의에
+ * 그대로 맞는다. 다만 **런타임에서 시끄럽게 할 수는 없다**: 파일이 없는 것은 정상
+ * 상태다(`.env`를 안 만든 사람은 기본값으로 돌아야 한다).
  *
- * **그래서 가르는 축을 바꿨다.** *"파일이 있나"*가 아니라 ***"가리키는 디렉터리가
+ * **그래서 가르는 축은** *"파일이 있나"*가 아니라 ***"가리키는 디렉터리가
  * `apps/api` 인가"*** 다. 파일은 없어도 되고 디렉터리는 틀리면 안 된다 — 자연히 깨지는 길이
  * 그 파일을 옮기는 리팩터이므로, 옮긴 사람이 여기서 걸린다.
  */
@@ -163,7 +161,7 @@ describe('배선이 가리키는 자리', () => {
   })
 
   it('그 디렉터리가 **실재하는 api 패키지**다 — 문자열만 맞는 것이 아니다', () => {
-    // `.env` 자체는 gitignore 라 없을 수 있다(D6). 옆의 `.env.example` 은 추적되므로 늘 있다.
+    // `.env` 자체는 gitignore 라 없을 수 있다. 옆의 `.env.example` 은 추적되므로 늘 있다.
     expect(existsSync(new URL('.env.example', API_ENV_URL))).toBe(true)
     expect(existsSync(new URL('package.json', API_ENV_URL))).toBe(true)
   })

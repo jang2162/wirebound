@@ -164,7 +164,7 @@ describe('조회', () => {
     })
   })
 
-  it('노드별로 센다 — D3의 "마지막"을 판정하는 값이다', async () => {
+  it('노드별로 센다 — "마지막 코멘트"를 판정하는 값이다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
       await insertComment(ctx.db, { pageId: fx.pageId, nodeId: 'n_a', body: '가', authorId: fx.userId })
@@ -193,10 +193,11 @@ describe('조회', () => {
   })
 })
 
-describe('번호와 행이 한 트랜잭션이다(D2)', () => {
+describe('번호와 행이 한 트랜잭션이다', () => {
   it('삽입이 실패하면 방금 붙인 번호도 되돌아간다', async () => {
     // **라우트의 `withTransaction` 하나가 이것을 지킨다.** 나누면 *"번호는 붙었는데
-    // 코멘트가 없다"*(재라 #6의 상태)가 실패 경로에서 실제로 만들어진다.
+    // 코멘트가 없다"*(`routes/comments.ts` 머리말의 「번호는 있는데 코멘트 행이 없는 노드」)가
+    // 실패 경로에서 실제로 만들어진다.
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
 

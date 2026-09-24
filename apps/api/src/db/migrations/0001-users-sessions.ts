@@ -5,7 +5,7 @@ import { sql } from 'kysely'
  * `users`·`sessions` 테이블을 만든다.
  *
  * `gen_random_uuid()`는 Postgres 13+ 내장 함수라 확장(`pgcrypto` 등)을 켤 필요가 없다.
- * `sessions.id`는 uuid가 아니라 text다 — 쿠키 토큰의 sha256 hex를 저장한다(설계 §4.2).
+ * `sessions.id`는 uuid가 아니라 text다 — 쿠키 토큰의 sha256 hex를 저장한다(설계서 「테이블 정의」).
  */
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {

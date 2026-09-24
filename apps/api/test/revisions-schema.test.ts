@@ -104,7 +104,7 @@ describe('revisions 스키마', () => {
       // 그 "허용되는 쪽"을 고정한다. 이게 없으면 누군가 이 제약을 (실수로) `actor_id is not
       // null` 하나로 좁혀도(즉 actor_type과 무관하게 항상 actor_id를 요구하도록 회귀해도)
       // 위 거부 테스트만으로는 잡지 못한다 — 그 테스트는 'user'/null 조합만 보기 때문이다.
-      // P9(MCP 액터)가 실제로 이 조합(actor_type: 'mcp', actor_id: null)을 쓴다.
+      // MCP 액터가 실제로 이 조합(actor_type: 'mcp', actor_id: null)을 쓴다.
       await expect(
         withTransaction(ctx.db, (trx) =>
           trx

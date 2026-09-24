@@ -1,20 +1,20 @@
 /**
- * **재라 #1 — 저장이 문서 키 순서를 지우는가. 이 슬라이스에서 가장 큰 자리다.**
+ * **저장이 문서 키 순서를 지우는가.**
  *
  * `compileTheme`의 계약은 **문서 키 순서가 곧 우선순위**다. 같은 CSS 프로퍼티를 건드리는
- * 선언이 둘이면 **나중에 방출된 쪽이 이긴다**(§6.11의 캐스케이드). 그 "나중"을 정하는 것이
+ * 선언이 둘이면 **나중에 방출된 쪽이 이긴다**(설계서 「컴파일」의 캐스케이드). 그 "나중"을 정하는 것이
  * 문서에 적힌 키 순서이므로, **저장이 순서를 바꾸면 이기는 쪽이 바뀐다.**
  *
  * 이 파일이 하는 일 셋:
  *
  * 1. **재는 것** — `jsonb`와 `json`이 순서에 무엇을 하는지 실제 DB에 물어본다. 산문으로
- *    적으면 아무도 다시 재지 않는다(이 저장소가 반복해 겪은 부류다).
+ *    적으면 아무도 다시 재지 않는다.
  * 2. **판정** — 저장 → 조회 → 컴파일이 **저장 전 컴파일과 같은 CSS**를 내는가.
  * 3. **구분력** — 문서에서 순서만 바꾸면 CSS가 실제로 갈리는가. 이것이 없으면 위 판정이
  *    "무엇을 해도 같다"로도 설명된다.
  *
  * **여기서 다루는 것은 컬럼 타입의 성질이지 레포의 조립이 아니다** — 그래서 raw Kysely로
- * 넣고 뺀다. `Theme` 객체의 왕복(절이 컬럼으로 흩어졌다 조립되는 것)은 Task 4의
+ * 넣고 뺀다. `Theme` 객체의 왕복(절이 컬럼으로 흩어졌다 조립되는 것)은
  * `repos-themes.test.ts`가 잰다.
  */
 import { sql } from 'kysely'
@@ -30,7 +30,7 @@ import { withApi, type TestContext } from './helpers'
  * - `states`: `selected`와 `disabled`가 **같은 프로퍼티**(`opacity`)를 건드린다. 문서에
  *   적힌 순서대로 방출되므로 뒤에 온 `disabled`가 이긴다.
  * - `base`: `bgGradient`와 `bgImage`가 **같은 CSS 프로퍼티**(`background-image`)로 간다
- *   (P4a-2가 그렇게 정했다 — 이슈로 내지 않고 문서 키 순서가 이긴다).
+ *   (이슈로 내지 않고 문서 키 순서가 이긴다).
  *
  * 두 이름 쌍 모두 **jsonb가 뒤집는 쌍**이다: `selected`/`disabled`는 길이가 같아 바이트
  * 순으로 `disabled`가 앞서고, `bgImage`(7)는 `bgGradient`(10)보다 짧아 앞선다.
@@ -107,7 +107,7 @@ async function roundTrip(ctx: TestContext, theme: Theme): Promise<Theme> {
   }
 }
 
-describe('재라 #1 — 저장과 키 순서', () => {
+describe('저장과 키 순서', () => {
   describe('무엇이 실제로 노출되는지 잰다', () => {
     /**
      * **jsonb는 키를 (길이, 바이트)로 정규화한다.** 순서를 어떻게 적어 넣든 같은 결과가
@@ -134,7 +134,7 @@ describe('재라 #1 — 저장과 키 순서', () => {
           select '{"base":{"bgGradient":"g","bgImage":"i"}}'::jsonb as v
         `.execute(ctx.db)
         // bgImage(7자)가 bgGradient(10자)보다 짧아 앞으로 온다 — 작성자가 무엇을 적었든
-        // bgGradient가 뒤에 남아 늘 이긴다(P4a-2가 이월에 적은 그 결과다).
+        // bgGradient가 뒤에 남아 늘 이긴다.
         expect(Object.keys(res.rows[0]!.v.base)).toEqual(['bgImage', 'bgGradient'])
       })
     })

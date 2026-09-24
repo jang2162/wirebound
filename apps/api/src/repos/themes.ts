@@ -7,9 +7,9 @@
  *
  * ---
  *
- * **이 파일의 일은 `Theme` ↔ 행 변환 하나다(계획서 D3).**
+ * **이 파일의 일은 `Theme` ↔ 행 변환 하나다.**
  *
- * 테마 문서는 §6.1의 여섯 절인데 저장은 **절마다 컬럼 하나**이고 `meta`는 컬럼으로
+ * 테마 문서는 설계서 「테마 규격」의 여섯 절인데 저장은 **절마다 컬럼 하나**이고 `meta`는 컬럼으로
  * 흩어진다(`meta.id`→`slug`, `meta.extends`→`extends_ref`, 나머지는 각 컬럼).
  * 그래서 조립을 두 함수(`toColumns`·`toTheme`)에 가둔다 — 조립이 흩어지면 컬럼 하나가
  * 새로 생겼을 때 **읽는 쪽만 고쳐지고 쓰는 쪽이 남아** 그 필드가 말없이 사라진다.
@@ -22,7 +22,7 @@
  *
  * ---
  *
- * **NUL(U+0000)을 여기서 막는다 — 재라 #10의 답이다.**
+ * **NUL(U+0000)을 여기서 막는다.**
  *
  * 절 컬럼이 `jsonb`가 아니라 `json`이기 때문이다(0006의 주석). `jsonb`는 NUL이 든 값을
  * **삽입 시점에** 거부하지만(`22P05`) `json`은 원문을 그대로 받아 두었다가 나중에
@@ -42,7 +42,7 @@ import { withTransaction, type DbHandle } from '../db/tx'
 
 export interface ThemeRecord {
   id: string
-  /** `null`이면 시스템 테마다(§4.2). */
+  /** `null`이면 시스템 테마다(설계서 「테이블 정의」). */
   projectId: string | null
   /** 컬럼들을 다시 조립한 테마 문서. */
   theme: Theme
@@ -126,7 +126,7 @@ function toColumns(theme: Theme) {
  *
  * **`null` 컬럼은 키 자체를 만들지 않는다.** `{ description: undefined }`로 두면
  * `toEqual`은 통과하지만 `JSON.stringify`가 그 키를 지워, 응답과 되읽은 값이
- * 미묘하게 갈린다(이 저장소가 `PatchValue`에서 이미 겪은 부류다).
+ * 미묘하게 갈린다(`PatchValue`에도 같은 함정이 있다).
  */
 function toTheme(row: ThemeRow): ThemeRecord {
   const meta: Theme['meta'] = {
@@ -164,7 +164,7 @@ function assertNoNulByte(theme: Theme): void {
  * 프로젝트에서 **고를 수 있는** 테마 전부 — 그 프로젝트의 것과 시스템 테마다.
  *
  * 시스템 테마를 함께 내는 이유: 이 목록의 쓸모가 *"여기서 고를 수 있는 테마"*인데
- * 시스템 테마는 어느 프로젝트에서나 고를 수 있다(§6.10). 빼면 부르는 쪽이 매번 두 번
+ * 시스템 테마는 어느 프로젝트에서나 고를 수 있다(설계서 「테마 관리」). 빼면 부르는 쪽이 매번 두 번
  * 조회해 합쳐야 하고 그 합치는 규칙이 호출자마다 갈린다.
  *
  * 정렬은 시스템 테마가 먼저, 그 안에서는 `slug` 순이다 — 목록 UI가 상속의 출발점을

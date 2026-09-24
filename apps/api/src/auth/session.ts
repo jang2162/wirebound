@@ -1,8 +1,8 @@
 /**
  * 세션 저장소. HTTP도 쿠키도 모르는 순수 DB 계층이다 — 쿠키를 읽고 쓰는 일은
- * `auth/plugin.ts`(인증 훅)와 다음 태스크의 라우트가 담당한다.
+ * `auth/plugin.ts`(인증 훅)와 `routes/auth.ts`가 담당한다.
  *
- * **토큰 원문을 저장하지 않는다(설계 §4.2).** 쿠키에 실리는 값은
+ * **토큰 원문을 저장하지 않는다(설계서 「테이블 정의」).** 쿠키에 실리는 값은
  * `randomBytes(32).toString('base64url')`이고, `sessions.id`에는 그 sha256 hex만
  * 들어간다. DB가 유출돼도 그 자체로는 세션을 탈취할 수 없다 — 공격자가 원문 토큰을
  * 별도로 얻지 못하는 한 해시만으로는 로그인 상태를 재현할 수 없다.
@@ -26,9 +26,9 @@ export interface CreatedSession {
  * 토큰 원문의 sha256 hex. `sessions.id`(PK)로 쓰는 값과 같은 함수로 만든다 — 쓰기·읽기가
  * 다른 해시를 쓰면 영영 못 찾는다.
  *
- * **몸통은 `auth/token-hash.ts`에 있다(P9-2 T2).** API 토큰이 같은 성질(*"원문은 저장하지
- * 않는다"*)을 갖게 되면서 그 성질을 만드는 코드가 두 벌이 될 자리였다. **수명 정책은
- * 함께 옮기지 않았다** — 그것은 아래 `resolveSession`의 SQL 조건이고 토큰에는 그 조건이
+ * **몸통은 `auth/token-hash.ts`에 있다.** API 토큰이 같은 성질(*"원문은 저장하지
+ * 않는다"*)을 가지므로 따로 두면 그 성질을 만드는 코드가 두 벌이 된다. **수명 정책은
+ * 거기 없다** — 그것은 아래 `resolveSession`의 SQL 조건이고 토큰에는 그 조건이
  * 없다(그쪽 파일의 표에 근거가 있다).
  */
 export function hashSessionToken(token: string): string {
@@ -92,7 +92,7 @@ export async function resolveSession(db: DbHandle, token: string): Promise<Sessi
 /**
  * 세션 행이 아직 살아 있는지만 본다. **토큰 원문이 아니라 그 해시(=`sessions.id`)를 받는다.**
  *
- * 열려 있는 WebSocket 연결이 §10의 *"세션 행을 지우면 권한도 즉시 회수된다"*를 지키려면
+ * 열려 있는 WebSocket 연결이 설계서 「권한 모델」의 *"세션 행을 지우면 권한도 즉시 회수된다"*를 지키려면
  * 그 연결이 자기 세션을 다시 확인할 수 있어야 하는데, **원문 토큰을 프로세스 메모리에
  * 연결 수명만큼 들고 있지 않으려고** 해시만 들고 이 함수를 부른다(`ws/routes.ts`).
  *

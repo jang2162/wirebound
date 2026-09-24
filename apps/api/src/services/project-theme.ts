@@ -1,20 +1,20 @@
 /**
- * **이 프로젝트의 화면이 지금 써야 할 테마.** 설계 §4.2의 사슬
+ * **이 프로젝트의 화면이 지금 써야 할 테마.** 설계서 「테이블 정의」의 사슬
  * `projects.default_layout_id → layouts.theme_id → themes`를 한 번에 따라간다.
  *
  * `services/`는 SQL을 직접 쓰지 않고 HTTP도 모른다 — `repos/`의 함수를 조율할 뿐이다.
  *
  * ---
  *
- * # 왜 `routes/themes.ts`에서 나왔나 (P8-4 T2)
+ * # 왜 라우트 파일이 아니라 여기인가
  *
- * **소비자가 셋이 되었다.** `GET /:projectId/theme`(캔버스가 부른다) · `PUT /:projectId/theme`
+ * **소비자가 셋이다.** `GET /:projectId/theme`(캔버스가 부른다) · `PUT /:projectId/theme`
  * (고르개) · **내보내기**(`services/export-bundle.ts`). 라우트 파일 안의 비공개 함수로
  * 두면 셋째가 그 사슬을 **다시 짜야** 하고, 그러면 캔버스가 보는 테마와 번들이 싣는
- * 테마가 조용히 갈린다 — §11.3의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*가
+ * 테마가 조용히 갈린다 — 설계서 「HTML 정적 번들」의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*가
  * 렌더러가 아니라 **입력**에서 거짓이 되는 자리다.
  *
- * 옮긴 것은 자리뿐이고 규칙은 그대로다. 라우트는 `app.db`를 넘겨 부른다.
+ * 라우트는 `app.db`를 넘겨 부른다.
  */
 import {
   mergeTheme,
@@ -31,16 +31,16 @@ import { findThemeById } from '../repos/themes'
 import type { DbHandle } from '../db/tx'
 
 /**
- * 상속 대상을 **코드에서** 찾는다(P4a-2 계획서 D4 — 코드가 진실이고 DB는 사본이다).
+ * 상속 대상을 **코드에서** 찾는다(코드가 진실이고 DB는 사본이다).
  *
  * DB의 `themes` 행을 보지 않는 이유: 그 행은 동기화가 만든 사본이고, 둘이 갈리면
  * 코드가 이긴다. 사본을 base로 쓰면 해석 결과가 **동기화가 언제 돌았는지에 따라**
  * 달라진다.
  *
  * **`themeIssue`를 쓴다 — 객체 리터럴로 짓지 않는다.** 리터럴은 `severity`를 손으로
- * 박게 되고, 그러면 `routes/themes.ts`의 `assertResolvable`이 딛고 선 문장(*"오늘 테마의
- * 이슈는 전부 `error`다"*)이 이 함수가 만드는 이슈에 대해서만 거짓이 된다. 실제로 그렇게
- * 짰다가 리뷰가 잡았고, `'warning'`으로 바꿔도 api 케이스가 전부 통과했다(구분력 0).
+ * 박게 되고, 그러면 `bad-extends`의 severity가 표(`THEME_ISSUE_SEVERITY` — `themeIssue`가
+ * 읽는다)와 이 함수가 만드는 이슈에서만 갈린다. 그 갈림은 조용하다 — 손으로 박은 값을
+ * `'warning'`으로 틀려도 api 케이스가 그것을 가른다는 보장이 없다.
  */
 export function resolveThemeBase(theme: Theme): { base: Theme | undefined; missing: ThemeIssue | null } {
   const ref = theme.meta.extends
@@ -69,7 +69,7 @@ export interface CurrentProjectTheme {
 
 /**
  * `theme`이 `null`인 경우가 셋이고 전부 정상이다: 기본 레이아웃이 없다(0007 이전
- * 프로젝트 — P4a-3 재라 #8), 레이아웃이 테마를 안 고름, 테마 행이 사라짐. 화면은 구조
+ * 프로젝트), 레이아웃이 테마를 안 고름, 테마 행이 사라짐. 화면은 구조
  * 기본 CSS만으로 그려진다 — 이미 있는 경로다(`apps/web`의 `theme-source.ts`).
  *
  * 파생 테마면 여기서 `mergeTheme`으로 합쳐 낸다 — 받는 쪽(캔버스·번들)은 유래가
@@ -104,7 +104,7 @@ export async function currentProjectTheme(
 /**
  * `currentProjectTheme`이 낸 `Theme`을 그리는 쪽이 받는 `ResolvedTheme`으로 바꾼다.
  *
- * **소비자가 둘이 되어 여기로 왔다**(P10-2). `exportBundle`은 §11.3의 번들을 위해,
+ * **소비자가 둘이라 여기 둔다.** `exportBundle`은 설계서 「HTML 정적 번들」의 번들을 위해,
  * `exportPage`는 **PPTX에 실릴 래스터**를 위해 같은 값을 받는다 — 두 자리에서 각자
  * `resolveTheme`을 부르면 *"캔버스가 보는 테마와 산출물이 싣는 테마가 갈린다"*는
  * 이 파일의 존재 이유가 파일 안에서부터 거짓이 된다.

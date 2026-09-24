@@ -4,17 +4,17 @@
  *
  * ---
  *
- * # 하네스가 스스로를 재는 자리 (P3-1 T1 · D1)
+ * # 하네스가 스스로를 재는 자리
  *
- * `helpers.ts`의 `withRealApi`·`resetRealData`는 **다섯 파일이 각자 들고 있던 사본을 합친
- * 것**이다. 사본이 하나가 되면 *"이 청소가 정말로 다 지우는가"*를 한 곳에서 물을 수 있다 —
- * 앞서는 파일마다 각자 믿고 있었다.
+ * `helpers.ts`의 `withRealApi`·`resetRealData`는 실커밋 파일들이 **함께 쓰는 한 벌**이다.
+ * 한 벌이어야 *"이 청소가 정말로 다 지우는가"*를 한 곳에서 물을 수 있다 — 파일마다 사본을
+ * 들면 각자 믿고 아무도 안 잰다.
  *
- * **청소 방식을 판정한다(D1).** 후보는 셋이었다.
+ * **청소 방식의 판정.** 후보는 셋이다.
  *
  * | 후보 | 왜 아닌가 / 왜인가 |
  * |---|---|
- * | 관련 테이블 TRUNCATE | `themes`에 프로젝트에 매이지 않은 **시스템 테마** 행이 산다(§6.10). 그것까지 지우면 다음 `buildApp`의 `syncSystemThemes`가 다시 넣기 전까지 프로젝트 생성이 깨진다. 게다가 ACCESS EXCLUSIVE 잠금이라 같은 DB를 보는 커넥션을 이유 없이 세운다 |
+ * | 관련 테이블 TRUNCATE | `themes`에 프로젝트에 매이지 않은 **시스템 테마** 행이 산다(설계서 「테마 관리」). 그것까지 지우면 다음 `buildApp`의 `syncSystemThemes`가 다시 넣기 전까지 프로젝트 생성이 깨진다. 게다가 ACCESS EXCLUSIVE 잠금이라 같은 DB를 보는 커넥션을 이유 없이 세운다 |
  * | 만든 프로젝트만 지운다 | 케이스가 만든 id를 **호출자가 기억해야** 한다. 중간에 죽으면 그 목록이 사라져 다음 케이스가 오염된 판에서 돈다 — 지금 `beforeEach`·`afterEach` 양쪽에 거는 이유가 정확히 그것이다 |
  * | **`projects`·`users` 두 줄의 DELETE** ✅ | 나머지는 전부 그 둘에 FK로 매여 CASCADE로 따라간다. 시스템 테마는 프로젝트에 안 매여 있어 **남는다** — 남아야 맞는다 |
  *
@@ -79,7 +79,7 @@ async function fillEveryTable(ctx: TestContext): Promise<void> {
     if (res.statusCode !== 201) throw new Error(`픽스처 실패 ${url} (${res.statusCode}): ${res.body}`)
   }
 
-  // 코멘트가 `revisions`도 함께 채운다 — 번호를 붙이는 편집이 revision을 남긴다(P5-1).
+  // 코멘트가 `revisions`도 함께 채운다 — 번호를 붙이는 편집이 revision을 남긴다.
   await post(`/api/projects/${project.id}/pages/${page.id}/comments`, { nodeId, body: '청소 대상' })
   await post(`/api/projects/${project.id}/snapshots`, { tag: 'v1' })
   await post(`/api/projects/${project.id}/presets`, { name: '청소 대상 프리셋', schema: [] })
@@ -88,7 +88,7 @@ async function fillEveryTable(ctx: TestContext): Promise<void> {
   })
 }
 
-describe('실커밋 하네스의 청소 (P3-1 D1)', () => {
+describe('실커밋 하네스의 청소', () => {
   it('청소가 비워야 할 테이블을 케이스가 실제로 채운다 — 분모', async () => {
     await withRealApi(async (ctx) => {
       await fillEveryTable(ctx)
@@ -143,9 +143,8 @@ describe('실커밋 하네스의 청소 (P3-1 D1)', () => {
 /**
  * **누가 이 청소를 쓰나 — 목록을 손으로 안 적고 센다.**
  *
- * 이 인구조사가 있는 이유: 문서가 *"api 테스트 파일은 모두 예순여덟"*처럼 **수를 산문에
- * 적었다가 같은 판에서 낡았다**(테스트 파일 둘을 더한 것이 이 판 자신이다 — 귀속: 리뷰 §7.1).
- * 수는 파일을 더할 때마다 낡지만 **아래 불변식은 안 낡는다.**
+ * 이 인구조사가 있는 이유: 쓰는 파일의 **수를 산문에 적으면**(*"api 테스트 파일은 모두 N"*)
+ * 파일을 더할 때마다 조용히 낡는다. **아래 불변식은 안 낡는다.**
  *
  * 지키는 것: **실커밋 하네스를 쓰는 파일은 전부 청소를 건다.** 하나라도 안 걸면 그 파일이
  * 커밋한 행이 다음 파일의 판에 남는다 — `singleFork`가 파일을 직렬화할 뿐 판을 비우지는
@@ -155,8 +154,7 @@ describe('실커밋 하네스를 쓰는 파일은 전부 청소를 건다', () =
   const testDir = new URL('.', import.meta.url)
   const sources = readdirSync(testDir)
     .filter((name) => name.endsWith('.test.ts'))
-    // **주석을 걷는다.** 안 걷으면 청소를 주석 안에만 둔 파일이 "건다"로 세어진다
-    // (귀속: 리뷰 델타 B4 — D2 가 이미 든 함정과 같은 부류다).
+    // **주석을 걷는다.** 안 걷으면 청소를 주석 안에만 둔 파일이 "건다"로 세어진다.
     .map((name) => ({ name, source: stripComments(readFileSync(new URL(name, testDir), 'utf8')) }))
 
   it('센 것이 비어 있지 않다 — 디렉터리를 못 읽으면 아래가 통째로 헛돈다', () => {

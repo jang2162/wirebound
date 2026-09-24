@@ -34,7 +34,7 @@ const FORMAT_PREFIX = 'scrypt'
  * 클 수 있어(예: N이 상한이고 r도 상한이면 곱은 두 상한의 곱만큼 커진다),
  * 상한을 두는 목적(메모리 소진 방지) 자체를 놓친다.
  *
- * 512 MiB로 잡은 근거: 오늘의 기본값(N=2^15, r=8)이 요구하는 메모리는 정확히
+ * 512 MiB로 잡은 근거: 기본값(N=2^15, r=8)이 요구하는 메모리는 정확히
  * 32 MiB다. `N`을 (r을 그대로 두고) 3번 두 배로 올리면 32 × 2^3 = 256 MiB가
  * 필요해지므로, 그보다 한 번 더 두 배의 여유(512 MiB = 32 × 2^4)를 둬 "비용을
  * 몇 차례 올릴 여지"가 실제로 남도록 했다. 그러면서도 깨진 행 하나가 이 값을
@@ -210,7 +210,7 @@ function parseEncoded(encoded: string): {
  *
  * 비교는 `timingSafeEqual`로 한다. 길이가 다르면 그 함수가 예외를 던지므로,
  * 먼저 길이를 확인해 다르면 (타이밍에 좌우되지 않는) `false`를 돌려준다 — 위와
- * 같이 이제는 도달할 일이 없지만, 방어적으로 남겨 둔다.
+ * 같이 도달할 일이 없지만, 방어적으로 남겨 둔다.
  */
 export async function verifyPassword(password: string, encoded: string): Promise<boolean> {
   const { params, salt, hash } = parseEncoded(encoded)

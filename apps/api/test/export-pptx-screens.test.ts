@@ -1,5 +1,5 @@
 /**
- * **화면 이미지가 슬라이드에 실린다**(P10-2 T3·T4·T5 · D2·D4·D5·D6·D8).
+ * **화면 이미지가 슬라이드에 실린다**.
  *
  * | 무엇 | 어디 |
  * |---|---|
@@ -8,7 +8,7 @@
  * | `fitInto`가 못 읽은 화소에서 무엇을 하는가 | `packages/exporter/test/pptx.test.ts` |
  * | **진짜 브라우저**가 그 계약을 채우는가 | `apps/api/build-test/screen-chromium.test.ts` (`pnpm test:build`) |
  *
- * **여기서 브라우저를 안 띄운다**(D3). 이음매에 가짜를 넣어 재고, 진짜는 게이트 밖에서 돈다.
+ * **여기서 브라우저를 안 띄운다**. 이음매에 가짜를 넣어 재고, 진짜는 게이트 밖에서 돈다.
  */
 import { unzipSync } from 'fflate'
 import type { PageDocument } from '@wirebound/schema'
@@ -28,7 +28,7 @@ const PNG_1X1 = Uint8Array.from([
 
 /**
  * **케이스가 쓰는 가짜 그리는 자.** 받은 요청을 그대로 들고 있어서 *"무엇을 넘겼나"*를
- * 잴 수 있다 — D2(*"`exportPage`가 낸 HTML을 그대로 띄운다"*)를 지키는 자가 그것이다.
+ * 잴 수 있다 — *"`exportPage`가 낸 HTML을 그대로 띄운다"*를 지키는 자가 그것이다.
  */
 class FakeRenderer implements ScreenRenderer {
   readonly seen: ScreenRequest[][] = []
@@ -153,7 +153,7 @@ function slideText(entries: Record<string, Uint8Array>, index: number): string {
   return new TextDecoder().decode(entries[`ppt/slides/slide${index}.xml`]!)
 }
 
-describe('화면 이미지 — 전부 성공 (D5)', () => {
+describe('화면 이미지 — 전부 성공', () => {
   it('페이지마다 매체 파트가 하나씩 실리고 바이트가 그대로다', async () => {
     const renderer = allOk()
     await withApi(
@@ -199,7 +199,7 @@ describe('화면 이미지 — 전부 성공 (D5)', () => {
   })
 })
 
-describe('화면 이미지 — 일부 실패 (D5)', () => {
+describe('화면 이미지 — 일부 실패', () => {
   it('실패한 장만 빠지고 pptx 는 나온다', async () => {
     const renderer = new FakeRenderer((requests) => ({
       results: requests.map((request, index) => (index === 1 ? fail('페이지가 응답하지 않습니다') : ok())),
@@ -233,7 +233,7 @@ describe('화면 이미지 — 일부 실패 (D5)', () => {
         expect(body.screenFailures).toEqual([
           { title: fixture.titles[1], reason: '페이지가 응답하지 않습니다' },
         ])
-        /** **접히지 않는다** — 실패한 것은 *"아직 아무도 안 만들었다"*가 아니다(P10-1 이월 §2.3). */
+        /** **접히지 않는다** — 실패한 것은 *"아직 아무도 안 만들었다"*가 아니다. */
         expect(body.screenless).toEqual([])
       },
       { screenRenderer: renderer },
@@ -241,7 +241,7 @@ describe('화면 이미지 — 일부 실패 (D5)', () => {
   })
 })
 
-describe('화면 이미지 — 전부 실패 (D5)', () => {
+describe('화면 이미지 — 전부 실패', () => {
   it('한 장도 못 그려도 pptx 는 나오고 이유가 셋 다 실린다', async () => {
     const renderer = new FakeRenderer((requests) => ({
       results: requests.map(() => fail('브라우저를 띄우지 못했습니다: 실행 파일이 없습니다')),
@@ -265,7 +265,7 @@ describe('화면 이미지 — 전부 실패 (D5)', () => {
   })
 })
 
-describe('그리는 자가 없다 — P10-1 이 만든 상태 그대로다', () => {
+describe('그리는 자가 없다 — 화면 없이 낸다', () => {
   it('screenless 가 전부이고 실패는 비어 있다', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, 'screens-absent')
@@ -281,7 +281,7 @@ describe('그리는 자가 없다 — P10-1 이 만든 상태 그대로다', () 
   })
 })
 
-describe('한글 글꼴이 없다 (D4)', () => {
+describe('한글 글꼴이 없다', () => {
   it('두부를 그려 내보내지 않고 미리보기가 그 사실을 말한다', async () => {
     const renderer = new FakeRenderer((requests) => ({
       results: requests.map(() => fail(NO_KOREAN_FONT)),
@@ -307,7 +307,7 @@ describe('한글 글꼴이 없다 (D4)', () => {
   })
 })
 
-describe('못 읽은 화소를 계약에 넣지 않는다 (D8)', () => {
+describe('못 읽은 화소를 계약에 넣지 않는다', () => {
   it.each([
     ['0', 0, 0],
     ['NaN', Number.NaN, Number.NaN],
@@ -338,7 +338,7 @@ describe('못 읽은 화소를 계약에 넣지 않는다 (D8)', () => {
   })
 })
 
-describe('무엇을 그리라고 넘기나 (D2)', () => {
+describe('무엇을 그리라고 넘기나', () => {
   it('`exportPage` 가 낸 한 장을 그대로 넘긴다 — 새 HTML 을 만들지 않는다', async () => {
     const renderer = allOk()
     await withApi(
@@ -357,10 +357,9 @@ describe('무엇을 그리라고 넘기나 (D2)', () => {
           expect(request.html).not.toContain('<style')
           expect(request.css.length).toBeGreaterThan(0)
           /**
-           * **`<script>`가 없다는 것이 값이어야 한다.** 리뷰가 이것을 재서
-           * *"오늘 팝업으로 나갈 길이 없다"*를 세웠는데(귀속: 리뷰 §4.2) 그 근거가
-           * **산문이면 `exportPage`가 바뀌는 날 조용히 열린다.** 차단은 컨텍스트로
-           * 올렸고(`screen-render-chromium.ts`), 이 줄은 그 위의 두 번째 방벽이다.
+           * **`<script>`가 없다는 것이 값이어야 한다.** *"팝업으로 나갈 길이 없다"*의 근거가
+           * **산문이면 `exportPage`가 바뀌는 날 조용히 열린다.** 차단은 컨텍스트에
+           * 있고(`screen-render-chromium.ts`), 이 줄은 그 위의 두 번째 방벽이다.
            */
           expect(request.html).not.toContain('<script')
         }
@@ -371,7 +370,7 @@ describe('무엇을 그리라고 넘기나 (D2)', () => {
     )
   })
 
-  it('미리보기와 내려받기가 **같은 판정**을 쓴다 (D6) — 둘 다 그리는 자를 지난다', async () => {
+  it('미리보기와 내려받기가 **같은 판정**을 쓴다 — 둘 다 그리는 자를 지난다', async () => {
     const renderer = allOk()
     await withApi(
       async (ctx) => {
@@ -397,8 +396,8 @@ describe('무엇을 그리라고 넘기나 (D2)', () => {
         // 프로젝트를 만들면 기본 레이아웃이 시스템 `admin`을 가리킨다(`repos/projects.ts`).
         // 그 테마가 컴파일된 시트가 여기 있어야 슬라이드의 화면이 캔버스와 같은 색이 된다.
         //
-        // **`--wb-`로는 안 갈린다** — 구조 기본 CSS 도 그 접두를 쓴다(변이로 확인했다:
-        // `theme: null`을 심어도 0 사망이었다). 테마만 내는 것은 팔레트 선언이다.
+        // **`--wb-`로는 안 갈린다** — 구조 기본 CSS 도 그 접두를 쓴다(`theme: null`을 심어도
+        // 그 단언은 안 죽는다). 테마만 내는 것은 팔레트 선언이다.
         expect(renderer.last[0]!.css).toContain('--wb-palette-')
         // 구조 기본 CSS 도 함께 있어야 한다 — 순서가 곧 *"테마가 이긴다"*이다(`pageCss`).
         expect(renderer.last[0]!.css).toContain('--wb-')
@@ -408,15 +407,14 @@ describe('무엇을 그리라고 넘기나 (D2)', () => {
   })
 })
 
-describe('그리는 자가 던진다 (D5 · 리뷰 §2 — 라우트 둘이 500 이었다)', () => {
+describe('그리는 자가 던진다 — 라우트 둘이 500 을 내지 않는다', () => {
   /**
-   * **이음매의 계약이 문서뿐이었다.** `ScreenRenderer.render`는 *"던지지 않는다"*로 적혀
-   * 있지만 **타입이 그것을 강제하지 못한다.** 리뷰가 던지는 구현을 넣어 라우트 둘이
-   * **500**을 내는 것을 값으로 봤다(귀속: 리뷰 §2.1).
+   * **이음매의 계약이 문서뿐이다.** `ScreenRenderer.render`는 *"던지지 않는다"*로 적혀
+   * 있지만 **타입이 그것을 강제하지 못한다** — 던지는 구현이 들어오면 부르는 쪽이 막지
+   * 않는 한 라우트 둘이 **500**을 낸다.
    *
-   * **이 슬라이스가 이 부류에 두 번 물렸다** — 앞의 한 번은 글꼴 물음의 예외였고 스모크가
-   * 잡았다. 그 고침은 `screen-render-chromium.ts` **안쪽**이라 그 한 갈래만 닫았다.
-   * 여기서 닫는 것은 **부르는 쪽**이므로 어떤 구현이 던져도 같다.
+   * 구현 **안쪽**(`screen-render-chromium.ts`)에서 막으면 그 한 갈래(글꼴 물음의 예외 같은
+   * 것)만 닫힌다. 여기서 닫는 것은 **부르는 쪽**이므로 어떤 구현이 던져도 같다.
    */
   class 던지는렌더러 implements ScreenRenderer {
     async render(): Promise<ScreenBatch> {

@@ -63,7 +63,7 @@ describe('로그 리다크션', () => {
   })
 
   it('실제 buildApp 파이프라인(쿠키 파싱·인증 훅 포함)에서도 세션 토큰이 로그에 나타나지 않는다', async () => {
-    // `buildApp`이 `@fastify/cookie`와 세션 인증 훅을 등록하므로, 이제 /health를
+    // `buildApp`이 `@fastify/cookie`와 세션 인증 훅을 등록하므로, /health를
     // 포함한 모든 요청에서 쿠키를 읽는다. 위 테스트는 그 파이프라인을 거치지 않으므로,
     // "언젠가 누가 request.cookies나 resolveSession의 결과를 디버그 로그로 찍는다"는
     // 회귀를 잡지 못한다. 여기서는 실제 `buildApp`을 통째로 돌리고, 실제로 DB에
@@ -98,7 +98,7 @@ describe('로그 리다크션', () => {
     // 기본 req 시리얼라이저가 애초에 method·url·hostname 등만 담고 body를 아예 로그
     // 객체에 넣지 않기 때문이다 — 그 사실을 "그럴 것이다"로 남겨두지 않고 실측한다.
     //
-    // **가입 인젝트가 빠졌다**(2026-08-20 D1 — 그 라우트가 없다). 계정을 만드는 경로가
+    // **가입 인젝트는 없다** — 가입 라우트가 없다. 계정을 만드는 경로가
     // 비밀번호를 안 찍는지는 `seed-user.test.ts`가 시딩 출력 전문을 읽어 잰다 — 그쪽은
     // HTTP가 아니라 콘솔이라 이 파일의 자(pino 스트림)로는 닿지 않는 자리다.
     const marker = 'MARKER-plaintext-password-f7d2b9'

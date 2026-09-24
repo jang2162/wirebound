@@ -1,7 +1,7 @@
 /**
  * 편집 파이프라인. 편집 요청 하나(`ApplyEditInput`)가 페이지의 `schema`를 바꾸고
  * `revisions`에 이력을 남기기까지 거치는 전 과정이 `applyEdit` 함수 하나에 있다.
- * P3의 WebSocket 핸들러도 같은 함수를 그대로 부른다.
+ * WebSocket 핸들러(`ws/patch.ts`)도 같은 함수를 그대로 부른다.
  *
  * `services/`는 SQL을 직접 쓰지 않고 HTTP도 모른다 — `repos/pages.ts`·`repos/revisions.ts`의
  * 함수를 조율할 뿐이다. zod도 Fastify도 상태 코드도 이 파일에 없다.
@@ -18,7 +18,7 @@
  * 4. `invertOps(before, ops)` → `PatchError`면 `patch-failed`.
  * 5. `applyOps(before, ops)` → `PatchError`면 `patch-failed`.
  * 6. `validatePage(after)` → **`error` 이슈가 있으면** `invalid`. 경고만 있으면 통과하고
- *    성공 결과의 `warnings`에 실린다(P4a-3 Task 1).
+ *    성공 결과의 `warnings`에 실린다.
  * 7. `after.version !== before.version`이면 `invalid` — `ops`가 `/version`을 직접
  *    건드린 경우다(아래 "`version`은 편집 대상이 아니다" 참고).
  * 8. `containsNulByte(ops) || containsNulByte(inverse) || containsNulByte(after)` → `nul-byte`.
@@ -33,7 +33,7 @@
  * UNIQUE 위반)는 잡지 않고 그대로 위로 던져 500이 되게 둔다. 행 잠금이 제대로
  * 걸렸다면 그런 위반은 애초에 일어날 수 없으므로, 일어났다는 것 자체가 버그다.
  *
- * **`version`은 편집 대상이 아니다(7단계, 코드 리뷰로 추가됨).** `ops`가
+ * **`version`은 편집 대상이 아니다(7단계).** `ops`가
  * `{op:'replace', path:'/version', value: N}`처럼 문서 버전 자체를 바꿀 수 있다 —
  * `invertOps`·`applyOps`·`validatePage` 어느 것도 이걸 막지 않는다(`version`은
  * `DocumentEnvelopeSchema`에서 그냥 양의 정수이고, `validatePage`는 버전 값 자체의
@@ -47,7 +47,7 @@
  * 재현 조건과 함께 적어 뒀다). 그래서 이 7단계가 사후 복구가 아니라 **사전 차단**이다.
  * `before`는 2단계에서 이미 최신 버전으로 올라와 있으므로, `ops`가 `/version`을
  * 건드리지 않았다면 `after.version`은 `before.version`과 항상 같아야 한다 — 이
- * 불변식을 REST·WebSocket(P3) 두 호출자가 각자 다시 지키게 하는 대신 여기(공유
+ * 불변식을 REST·WebSocket 두 호출자가 각자 다시 지키게 하는 대신 여기(공유
  * 진입점)에서 한 번 지킨다.
  *
  * **4를 5보다 먼저 한다.** `invertOps`는 `before`(적용 전 문서)를 필요로 하고, 두
@@ -63,9 +63,9 @@
  * 컬럼을 흘려보내면 마이그레이션이 버전을 올린 순간 두 값이 어긋난다
  * (`routes/pages.ts`의 GET이 같은 이유로 그렇게 한다).
  *
- * **성공 결과가 `warnings`를 나른다(P4a-3 Task 1).** 6단계가 `error`만 거부하므로 경고는
+ * **성공 결과가 `warnings`를 나른다.** 6단계가 `error`만 거부하므로 경고는
  * 저장을 통과하는데, 여기서 버리면 **아무도 그것을 볼 수 없다** — severity를 만든 이유가
- * 사라진다. `EditOutcome`의 성공 갈래가 바뀌었으므로 **P3의 WebSocket 핸들러도 이 필드를
+ * 사라진다. 그래서 **WebSocket 핸들러도 이 필드를
  * 클라이언트에 실어야 한다**: 같은 `applyEdit`을 부르는 두 진입점이 한쪽만 경고를 나르면
  * 사용자가 보는 것이 접속 방식에 따라 갈린다.
  */
@@ -173,9 +173,9 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
     // 6단계: 적용 후 문서를 검증한다 — 적용 전 문서를 검증하면 항상 통과해 버려
     // 아무것도 증명하지 못한다.
     //
-    // **`error`만 거부한다(P4a-3 Task 1).** 전에는 이슈가 하나라도 있으면 막았는데,
-    // 이 검증이 문서 **전체**를 보므로 경고 하나(오늘은 `ignored-variant`뿐이다)가
-    // 문서 어딘가에 있으면 **그 노드와 무관한 편집까지** 422로 거부됐다(P4a-2가 실측).
+    // **`error`만 거부한다.** 이 검증이 문서 **전체**를 보므로, 이슈가 하나라도 있을 때
+    // 막으면 경고 하나가 문서 어딘가에 있는 것만으로 **그 노드와 무관한 편집까지** 422로
+    // 거부된다.
     // 선을 긋는 것은 `partitionIssues` 하나다 — 여기서 `filter`를 다시 쓰면
     // `routes/pages.ts`의 PUT 게이트와 갈린다.
     //
@@ -187,8 +187,8 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
       return { ok: false, reason: 'invalid', issues }
     }
 
-    // 7단계: version은 마이그레이션이 소유하는 필드이지 편집 대상이 아니다(코드
-    // 리뷰로 추가됨, 파일 헤더의 "version은 편집 대상이 아니다" 참고). before는
+    // 7단계: version은 마이그레이션이 소유하는 필드이지 편집 대상이 아니다(파일
+    // 헤더의 "version은 편집 대상이 아니다" 참고). before는
     // 2단계에서 이미 최신 버전으로 올라와 있으므로, ops가 /version을 건드리지
     // 않았다면 after.version은 before.version과 같아야 한다. 다르다면 ops가 그
     // 필드를 직접 바꿨다는 뜻이고, 그대로 저장하면 다음 읽기부터 migrateDocument가
@@ -228,7 +228,7 @@ export async function applyEdit(db: DbHandle, input: ApplyEditInput): Promise<Ed
     // `inverseOfAdd`는 배열에 끼워 넣은 add와 객체에 **없던** 키를 만든 add 양쪽에
     // 값 없는 `remove`를 돌려준다. 위 관찰은 그것들이 "도입"이라 after를 다시 깨끗하게
     // 만드는 데 쓰이지 않는다는 데 기대고 있을 뿐이다. 그러니 이 줄을 지워도 되는
-    // 신호로 읽지 마라 — jsonb 컬럼에 저장되는 건 어디까지나 `ops` 그 자체이고(D8),
+    // 신호로 읽지 마라 — jsonb 컬럼에 저장되는 건 어디까지나 `ops` 그 자체이고,
     // 이 엔진에 op 종류가 늘어나면(예: 값을 안 남기는 삭제류 연산) 그 기댈 곳이 사라진다.
     if (containsNulByte(input.ops) || containsNulByte(inverse) || containsNulByte(after)) {
       return { ok: false, reason: 'nul-byte' }

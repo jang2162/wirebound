@@ -1,17 +1,17 @@
 /**
  * **가드 앞 훅 인구조사.** 등록된 라우트 **전부**에서, 권한 가드보다 먼저 도는 훅이 **허용 목록의 것뿐인가**를
- * 라우트 옵션의 **값**으로 잰다(좁은 반증 4차 #4 · 2026-09-22).
+ * 라우트 옵션의 **값**으로 잰다.
  *
  * # 왜 — 가드 앞 훅은 권한을 안 본 채 답할 수 있다
  *
  * 코멘트 게시의 `replayBeforeGuard`(`preValidation`)는 같은 키의 자기 행이 있으면 **가드 앞에서 200 을 답한다**
- * (`apps/api/README.md`의 «멱등 키»). 그런 훅이 다른 라우트에 달리면 권한을 안 본 답이 나간다. 앞 판에는 그것을
- * 재는 자가 없었다 — 라우트를 세는 넷이 이 훅을 보지 않았다(리뷰 (a-6) · 변조 · api 네 파일 297 케이스):
+ * (`apps/api/README.md`의 «멱등 키»). 그런 훅이 다른 라우트에 달리면 권한을 안 본 답이 나간다. 이 자 말고는 그것을
+ * 재는 자가 없다 — 라우트를 세는 다른 넷이 이 훅을 보지 않는다(변조해 네 파일을 돌려 본다):
  *
- * | 변조 | 앞 판의 네 자 |
+ * | 변조 | 다른 네 자 |
  * |---|---|
- * | 새 라우트 + 가드 앞 훅(`x-probe`가 있으면 200)을 **자연 순서**(`{ preValidation, preHandler }`)로 | **297 전부 통과** — 원문 자 둘(`permission-matrix` · `restore-lock-census`)은 `{ preHandler: projectGuard(` 글꼴로 세서 라우트를 못 보고, `onRoute` 자 둘(`token-route-census` · `actor-census`)은 라우트는 보지만 픽스처가 `x-probe`를 안 실어 훅이 안 답한다 |
- * | 같은 새 라우트를 훅 없이 기존 글꼴로 | 둘이 죽는다 — 가른 것은 **옵션을 적는 순서** 하나였다 |
+ * | 새 라우트 + 가드 앞 훅(`x-probe`가 있으면 200)을 **자연 순서**(`{ preValidation, preHandler }`)로 | **네 파일 전부 통과** — 원문 자 둘(`permission-matrix` · `restore-lock-census`)은 `{ preHandler: projectGuard(` 글꼴로 세서 라우트를 못 보고, `onRoute` 자 둘(`token-route-census` · `actor-census`)은 라우트는 보지만 픽스처가 `x-probe`를 안 실어 훅이 안 답한다 |
+ * | 같은 새 라우트를 훅 없이 기존 글꼴로 | 둘이 죽는다 — 가르는 것은 **옵션을 적는 순서** 하나다 |
  *
  * 행동으로 재는 자(매트릭스)도 이것을 못 잡는다 — 가드 앞 훅은 «조건이 맞을 때만 답한다»는 모양이라 픽스처가 그
  * 조건을 안 만들면 안 답한다. 그래서 **어디에 달렸는가**를 구조로 잰다.
@@ -47,13 +47,13 @@
  * | 새는 훅의 이름을 `replayBeforeGuard`로 짓는다(다른 함수) | 같은 케이스 **혼자** — 이름이 아니라 참조로 견준다 |
  * | 무해한 `onRequest`를 코멘트 목록 `GET`에 단다 | 같은 케이스 **혼자** — 거짓 빨강의 방향이다 |
  * | 게시 라우트에서 `replayBeforeGuard`를 뗀다 | 같은 케이스(반대편) · `comments.test.ts`의 *"역할이 내려가거나 멤버에서 빠진 뒤에도 …"*·*"첫 게시 뒤 그 노드가 지워졌어도 …"* — 행동의 주인은 뒤의 둘 |
- * | 게시 라우트의 옵션 순서만 뒤집는다(리뷰 M1) | **0** — 값이 같다. `restore-lock-census.test.ts`의 *"… 반대편"*만 죽는다 |
+ * | 게시 라우트의 옵션 순서만 뒤집는다 | **0** — 값이 같다. `restore-lock-census.test.ts`의 *"… 반대편"*만 죽는다 |
  * | 코멘트 플러그인에 `addHook('preValidation', 새는 훅)` | **0** — api 전량이 통과한다(아래 «못 재는 것»의 첫 줄) |
  *
  * # 못 재는 것
  *
  * - **플러그인의 `addHook`** — Fastify 는 그것을 `onRoute`가 불린 **뒤**(`preReady`)에 라우트 옵션과 합치므로
- *   이 이음매에 안 보인다(`fastify/lib/route.js`). 오늘 전역 가드 앞 훅은 인증(`auth/plugin.ts`의 `onRequest`)
+ *   이 이음매에 안 보인다(`fastify/lib/route.js`). 지금 전역 가드 앞 훅은 인증(`auth/plugin.ts`의 `onRequest`)
  *   하나다. 코멘트 플러그인에 `addHook('preValidation', …)`으로 새는 훅을 달면 **이 자도 api 스위트의 무엇도 안
  *   죽는다**(위 표의 끝 줄) — 이 부류의 거짓 초록 길이다. 합쳐진 훅을 **값으로** 주는 공개 API 는 없다 —
  *   `findRoute`는 일부러 핸들러·파라미터만 주고(`fastify/lib/route.js`의 «reduce the expose surface»),
@@ -61,8 +61,8 @@
  * - **허용된 훅이 무엇을 하는가** — 이 자는 어디에 달렸는지만 본다. `replayBeforeGuard`의 행동(남의 행 · 스코프 밖 ·
  *   키 없음이면 가드로 넘긴다)은 `comments.test.ts`의 «멱등 키» 절이 잰다.
  * - **가드 뒤에 돌지만 가드의 답을 바꾸는 훅**(`onSend` · `preSerialization`) — 가드 앞이 아니라 이 물음 밖이다.
- * - **옵션 순서가 뒤집힌 라우트를 `permission-matrix.test.ts`가 분모에서 조용히 잃는 것**(리뷰 (a-6) M1) —
- *   값이 같아 이 자는 안 죽는다. 그쪽의 원문 글꼴 문제다(이월).
+ * - **옵션 순서가 뒤집힌 라우트를 `permission-matrix.test.ts`가 분모에서 조용히 잃는 것** —
+ *   값이 같아 이 자는 안 죽는다. 그쪽의 원문 글꼴 문제다.
  */
 import { describe, expect, it } from 'vitest'
 import type { RegisteredRoute } from '../src/app'

@@ -1,9 +1,9 @@
 /**
- * `POST /:projectId/pages/import` — 페이지 JSON 가져오기(§11.2 — P7-3 T4: D7·D8·D9).
+ * `POST /:projectId/pages/import` — 페이지 JSON 가져오기(설계서 「페이지 JSON」).
  *
  * **이 파일이 지키는 핵심은 하나다: *"실패했다고 말하는데 페이지는 남았다"*가 성립하지
- * 않는다.** P6-2 이월 §8이 이 슬라이스를 겨냥해 적어 둔 함정이고(*"가져오기는 복원보다 앞
- * 단계 쓰기가 많다"*), 아래 `아무것도 남지 않는다` 무리가 그것을 실행으로 잰다.
+ * 않는다.** 가져오기는 복원보다 앞 단계 쓰기가 많아 그 함정이 더 크다 — 아래
+ * `실패하면 아무것도 남지 않는다` 무리가 그것을 실행으로 잰다.
  *
  * **수를 산문에 적지 않는다** — 세야 하는 것은 케이스가 질의로 만든다.
  */
@@ -91,7 +91,7 @@ describe('페이지 JSON 가져오기', () => {
       expect(body.page.description).toBe('남의 프로젝트에서 온 페이지')
       expect(body.page.schema.root.children.map((node) => node.type)).toEqual(['SearchForm', 'List'])
       expect(body.page.schema.root.children.map((node) => node.marker)).toEqual([2, 1])
-      // **id는 전부 새것이다** — 파일의 id가 하나도 남지 않는다(§11.2).
+      // **id는 전부 새것이다** — 파일의 id가 하나도 남지 않는다(설계서 「페이지 JSON」).
       expect(JSON.stringify(body.page.schema)).not.toContain('file_')
     })
   })
@@ -114,7 +114,7 @@ describe('페이지 JSON 가져오기', () => {
     })
   })
 
-  it('D7 — 문서 쓰기가 편집 파이프라인을 지나 revision을 남긴다', async () => {
+  it('문서 쓰기가 편집 파이프라인을 지나 revision을 남긴다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const res = await importPage(ctx, fx, { menuNodeId: fx.menuNodeId, file: file() })
@@ -133,7 +133,7 @@ describe('페이지 JSON 가져오기', () => {
     })
   })
 
-  it('D4 — 대상 메뉴의 형제 끝에 붙고 sort_order가 연속이다', async () => {
+  it('대상 메뉴의 형제 끝에 붙고 sort_order가 연속이다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       await createPage(ctx, fx.cookie, fx.projectId, fx.menuNodeId, { title: '먼저 있던 페이지' })
@@ -145,8 +145,8 @@ describe('페이지 JSON 가져오기', () => {
       const rows = await pageRows(ctx, fx.projectId)
       expect(rows.map((row) => row.sort_order)).toEqual([0, 1, 2])
       expect(rows.map((row) => row.title)).toEqual(['먼저 있던 페이지', '가져온 회원 목록', '가져온 회원 목록'])
-      // **같은 파일을 두 번 가져와도 충돌하지 않는다** — P6-2 이월 §1이 경고한
-      // `insertPageWithId`를 쓰지 않았다는 뜻이다.
+      // **같은 파일을 두 번 가져와도 충돌하지 않는다** — id를 그대로 넣는
+      // `insertPageWithId`를 쓰면 두 번째 가져오기가 id 충돌로 죽는다.
       expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length)
     })
   })
@@ -165,7 +165,7 @@ describe('페이지 JSON 가져오기', () => {
     })
   })
 
-  it('D5 — 파일의 트리에 없는 노드를 가리킨 코멘트는 들어가고, 응답이 그것을 갈라 센다', async () => {
+  it('파일의 트리에 없는 노드를 가리킨 코멘트는 들어가고, 응답이 그것을 갈라 센다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const res = await importPage(ctx, fx, {
@@ -187,9 +187,9 @@ describe('페이지 JSON 가져오기', () => {
     })
   })
 
-  it('재라 #3 — 번호 없는 노드를 가리킨 코멘트는 번호 없이 들어간다', async () => {
+  it('번호 없는 노드를 가리킨 코멘트는 번호 없이 들어간다', async () => {
     // **번호를 새로 매기지 않는다.** 매기면 *"번호를 부여하는 자리"*가 `routes/comments.ts`
-    // 말고 하나 더 생긴다(P5-1 D1·D2가 그 자리를 하나로 묶어 뒀다). 그 상태는 화면이 이미
+    // 말고 하나 더 생긴다 — 그 자리는 하나여야 한다. 그 상태는 화면이 이미
     // 갈라 보이는 정상 상태다 — 코멘트 탭의 무리 셋 중 *"번호가 없는 노드"*.
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
@@ -215,7 +215,7 @@ describe('페이지 JSON 가져오기', () => {
     })
   })
 
-  it('D4 — layoutRef를 쓰지 않고, 쓰지 않았다고 말한다', async () => {
+  it('layoutRef를 쓰지 않고, 쓰지 않았다고 말한다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const res = await importPage(ctx, fx, {
@@ -254,7 +254,7 @@ describe('가져오기가 거절하는 것', () => {
     })
   })
 
-  it('봉투가 규격이 아니면 400이고 **파일의 자리**를 싣는다 (D8)', async () => {
+  it('봉투가 규격이 아니면 400이고 **파일의 자리**를 싣는다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const res = await importPage(ctx, fx, {
@@ -269,7 +269,7 @@ describe('가져오기가 거절하는 것', () => {
     })
   })
 
-  it('지원하지 않는 문서 버전은 400이다 (D2)', async () => {
+  it('지원하지 않는 문서 버전은 400이다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const res = await importPage(ctx, fx, {
@@ -282,7 +282,7 @@ describe('가져오기가 거절하는 것', () => {
     })
   })
 
-  it('카탈로그 검증에 걸리면 422이고 이슈가 **파일의 노드 id**를 가리킨다 (D8)', async () => {
+  it('카탈로그 검증에 걸리면 422이고 이슈가 **파일의 노드 id**를 가리킨다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const res = await importPage(ctx, fx, {
@@ -304,7 +304,7 @@ describe('가져오기가 거절하는 것', () => {
     })
   })
 
-  it('duplicate-id도 422다 — 미리보기가 막는 셋 중 하나 (리뷰 ③)', async () => {
+  it('duplicate-id도 422다 — 미리보기가 막는 셋 중 하나', async () => {
     // **세 층이 같은 파일을 본다:** 게이트(`packages/schema`) · 여기(서버 상태) ·
     // 미리보기(`apps/web`). 셋이 같은 함수를 부르므로 갈릴 자리가 없다.
     await withApi(async (ctx) => {
@@ -358,14 +358,12 @@ describe('가져오기가 거절하는 것', () => {
 
 describe('파일 크기 — 상한은 이미 하나 있다', () => {
   /**
-   * **P7-2 이월 §8이 지목한 축이다** — *"가져오기는 그 축이 더 세다(파일 크기를 사용자가
-   * 정한다)"*. **재고 나서 판정했다**: 우리 상한을 새로 두지 않는다. Fastify의 기본 본문
+   * **가져오기는 파일 크기를 사용자가 정한다.** 그래도 우리 상한을 새로 두지 않는다. Fastify의 기본 본문
    * 상한(1MiB)이 이미 있고 **우리 코드에 닿기 전에** 끊는다 — 두 벌이 되면 어느 쪽이
    * 끊었는지가 응답에서 갈리지 않는다.
    *
-   * **실측한 경계**(임시 프로브로 쟀고 지웠다): 노드 1000개(657KB)는 201, 5000개(3.3MB)는
-   * 413. 대신 **문장을 고쳤다** — 그전에는 413에도 *"요청 형식이 올바르지 않습니다"*가
-   * 나갔는데, 형식은 멀쩡하고 크기가 넘은 것이라 그 문장이 거짓이다.
+   * 경계의 양쪽은 아래 두 케이스가 잰다. **413은 크기 때문이라고 말한다** — *"요청 형식이
+   * 올바르지 않습니다"*를 내면 형식은 멀쩡하고 크기가 넘은 것이라 그 문장이 거짓이다.
    */
   it('1MiB를 넘는 본문은 413이고 **크기 때문이라고 말한다**', async () => {
     await withApi(async (ctx) => {
@@ -421,7 +419,7 @@ describe('파일 크기 — 상한은 이미 하나 있다', () => {
   })
 })
 
-describe('실패하면 아무것도 남지 않는다 — P6-2 이월 §8', () => {
+describe('실패하면 아무것도 남지 않는다', () => {
   /**
    * **문서의 NUL은 파이프라인이 잡는다.** `PUT .../schema`처럼 라우트에서 미리 끊지 않는
    * 것이 판정이다 — 그쪽은 실패 시점에 되돌릴 것이 없지만 여기는 **페이지가 이미 들어가
@@ -469,10 +467,10 @@ describe('실패하면 아무것도 남지 않는다 — P6-2 이월 §8', () =>
   })
 
   /**
-   * **제목·설명만 이 슬라이스가 직접 막는다.** 문서는 파이프라인의 8단계가, 코멘트는
-   * `repos/comments.ts`가 이미 막고 있어 그 자리를 쓰면 되지만 `pages.title`에는 그런 자리가
-   * 없다 — 막지 않으면 `pg`의 raw 예외가 **500**으로 나간다(사용자가 보낸 글자 때문에 나는
-   * 실패는 500이 아니라 400이다 — `repos/comments.ts` 머리말과 같은 판단).
+   * **제목·설명은 `insertPage`가 막는다**(`src/db/nul-guard.ts`의 `NulByteError` 머리말). 문서는
+   * 파이프라인의 8단계가, 코멘트는 `repos/comments.ts`가 막는다 — 막지 않으면 `pg`의 raw 예외가
+   * **500**으로 나간다(사용자가 보낸 글자 때문에 나는 실패는 500이 아니라 400이다 —
+   * `repos/comments.ts` 머리말과 같은 판단).
    */
   it('제목에 NUL이 있으면 400이고(500이 아니다) 페이지가 남지 않는다', async () => {
     await withApi(async (ctx) => {

@@ -1,5 +1,5 @@
 /**
- * 테마 저장소의 왕복. **`meta`가 컬럼으로 흩어졌다 다시 조립되므로**(계획서 D3) 이
+ * 테마 저장소의 왕복. **`meta`가 컬럼으로 흩어졌다 다시 조립되므로** 이
  * 왕복이 그 조립을 지킨다 — 컬럼 하나를 빠뜨리면 그 필드가 말없이 사라진다.
  */
 import { SYSTEM_THEME_IDS, type Theme } from '@wirebound/themes'
@@ -34,7 +34,7 @@ function fullTheme(): Theme {
   }
 }
 
-/** `meta`만 있는 최소 테마. `ThemeSchema`가 나머지 다섯을 선택으로 두었다(§6.9의 파생 테마). */
+/** `meta`만 있는 최소 테마. `ThemeSchema`가 나머지 다섯을 선택으로 두었다(설계서 「상속과 병합」의 파생 테마). */
 function minimalTheme(): Theme {
   return { meta: { id: 'min', name: '최소', version: '1.0.0' } }
 }
@@ -71,7 +71,7 @@ describe('repos/themes — Theme ↔ 행', () => {
   })
 
   /**
-   * **재라(Task 4 Step 1) — 빈 절과 없는 절을 가르는가.**
+   * **빈 절과 없는 절을 가르는가.**
    *
    * 답: **가른다.** NULL 컬럼이 "그 절이 없다", `'{}'`가 "있는데 비었다"다.
    *
@@ -98,7 +98,7 @@ describe('repos/themes — Theme ↔ 행', () => {
     })
   })
 
-  it('파생 테마는 extends를 지닌 채 왕복한다 (D2)', async () => {
+  it('파생 테마는 extends를 지닌 채 왕복한다', async () => {
     await withApi(async (ctx) => {
       const { project } = await ownedProject(ctx)
       const derived: Theme = {
@@ -156,7 +156,7 @@ describe('repos/themes — Theme ↔ 행', () => {
      * **`listThemes`는 그 프로젝트의 테마와 시스템 테마를 함께 낸다.**
      *
      * 이유: 목록의 쓸모가 "이 프로젝트에서 고를 수 있는 테마"인데, 시스템 테마는 어느
-     * 프로젝트에서나 고를 수 있다(§6.10). 시스템 테마를 빼면 부르는 쪽이 매번 두 번
+     * 프로젝트에서나 고를 수 있다(설계서 「테마 관리」). 시스템 테마를 빼면 부르는 쪽이 매번 두 번
      * 조회해 합쳐야 하고, 그 합치는 규칙이 호출자마다 갈린다.
      */
     it('listThemes는 시스템 테마와 그 프로젝트 테마를 함께 낸다', async () => {
@@ -170,10 +170,9 @@ describe('repos/themes — Theme ↔ 행', () => {
 
         const list = await listThemes(ctx.db, project.id)
         // **기대값을 `SYSTEM_THEME_IDS`에서 파생한다 — 손으로 적지 않는다.**
-        // 앞서 `['admin', 'mine']`을 리터럴로 적어 두었는데, 시스템 테마가 하나 늘면
-        // 이 케이스가 **그 테마와 아무 상관 없는 이유로** 죽는다(P4b-3 ①이 스텁 넷을
-        // 밟아서 실측했다 — 눈으로 센 둘에는 이 자리가 없었다). 그러면 시스템 테마를
-        // 만드는 워커마다 남의 테스트 파일을 고치게 되고 병합에서 다시 부딪힌다.
+        // `['admin', 'mine']`처럼 리터럴로 적으면 시스템 테마가 하나 늘 때 이 케이스가
+        // **그 테마와 아무 상관 없는 이유로** 죽는다. 그러면 시스템 테마를 만드는 사람마다
+        // 남의 테스트 파일을 고치게 되고 병합에서 다시 부딪힌다.
         expect(list.map((entry) => entry.theme.meta.id).sort()).toEqual(
           [...SYSTEM_THEME_IDS, 'mine'].sort(),
         )
@@ -223,9 +222,9 @@ describe('repos/themes — Theme ↔ 행', () => {
   })
 
   /**
-   * **재라 #10 — 테마 문자열 값의 NUL 바이트.**
+   * **테마 문자열 값의 NUL 바이트.**
    *
-   * 답: **레포가 막아야 한다.** 근거는 컬럼 타입을 `json`으로 바꾼 대가다 —
+   * 답: **레포가 막아야 한다.** 근거는 컬럼 타입이 `json`인 대가다 —
    * `jsonb`는 ` `을 **삽입 시점에** 거부하지만(`22P05`) `json`은 받아 두었다가
    * 텍스트로 뽑을 때에야 죽는다(`themes-schema.test.ts`가 그 관찰을 고정한다).
    * 즉 막지 않으면 **저장은 성공하고 나중에 알 수 없는 자리에서 터진다.**

@@ -1,5 +1,5 @@
 /**
- * 레이아웃과 기본 레이아웃. 설계 §4.2의 사슬
+ * 레이아웃과 기본 레이아웃. 설계서 「테이블 정의」의 사슬
  * `projects.default_layout_id → layouts.theme_id → themes`가 실제로 이어지는지 본다.
  */
 import { sql } from 'kysely'
@@ -35,8 +35,8 @@ describe('기본 레이아웃 (0007)', () => {
   })
 
   /**
-   * **`Page` 하나와 `Slot` 하나**다(계획서 D5). 그래야 `renderComposed(layout, page)`의
-   * 결과가 `renderDocument(page)`와 같고, 이 슬라이스가 화면의 외형을 건드리지 않는다.
+   * **`Page` 하나와 `Slot` 하나**다. 그래야 `renderComposed(layout, page)`의
+   * 결과가 `renderDocument(page)`와 같고, 기본 레이아웃이 화면의 외형을 건드리지 않는다.
    */
   it('기본 레이아웃의 schema가 Page 하나와 Slot 하나이고 validateLayout을 통과한다', async () => {
     await withApi(async (ctx) => {
@@ -105,7 +105,7 @@ describe('기본 레이아웃 (0007)', () => {
     })
   })
 
-  it('기본 레이아웃이 없는 프로젝트는 findDefaultLayout이 null이다 (재라 #8)', async () => {
+  it('기본 레이아웃이 없는 프로젝트는 findDefaultLayout이 null이다', async () => {
     await withApi(async (ctx) => {
       const { project } = await ownedProject(ctx)
       // 0007 이전에 만들어진 프로젝트를 흉내 낸다 — 그 상태를 재현할 다른 방법이 없다.
@@ -118,8 +118,7 @@ describe('기본 레이아웃 (0007)', () => {
   /**
    * **`layouts.theme_id`가 `ON DELETE RESTRICT`다.**
    *
-   * *"계획이 재지 않은 것 #6"*(테마를 지울 때 그것을 가리키는 레이아웃이 어떻게 되는가)의
-   * 답이다. `SET NULL`로 두면 **화면이 말없이 달라진다**(테마가 사라져 구조 기본 CSS로
+   * *"테마를 지울 때 그것을 가리키는 레이아웃이 어떻게 되는가"*의 답이다. `SET NULL`로 두면 **화면이 말없이 달라진다**(테마가 사라져 구조 기본 CSS로
    * 떨어진다). 실패하는 편이 낫고, 라우트가 그것을 409로 옮긴다.
    */
   it('쓰이고 있는 테마는 지워지지 않는다 (RESTRICT)', async () => {
@@ -148,8 +147,7 @@ describe('기본 레이아웃 (0007)', () => {
 })
 
 /**
- * `GET /api/projects/:projectId/theme` — 계획서 아키텍처 그림의 그 화살표다.
- * 캔버스가 쓰는 형태(홀로 서는 테마 하나)를 낸다.
+ * `GET /api/projects/:projectId/theme` — 캔버스가 쓰는 형태(홀로 서는 테마 하나)를 낸다.
  */
 describe('프로젝트의 현재 테마', () => {
   function get(ctx: TestContext, projectId: string, cookie: { wb_session: string }) {
@@ -201,7 +199,7 @@ describe('프로젝트의 현재 테마', () => {
       // 합쳐졌다: 파생이 덮은 값과 base의 절이 **함께** 있다.
       expect(res.json().theme.tokens.semantic.primary).toBe('#ff0000')
       expect(res.json().theme.components).toBeDefined()
-      // 홀로 선다: `extends`가 빠졌다(`mergeTheme`이 §4.5의 이유로 뺀다).
+      // 홀로 선다: `extends`가 빠졌다(`mergeTheme`이 설계서 「스냅샷」의 이유로 뺀다).
       expect(res.json().theme.meta.extends).toBeUndefined()
     })
   })
@@ -217,7 +215,7 @@ describe('프로젝트의 현재 테마', () => {
     })
   })
 
-  it('레이아웃이 테마를 안 고르면 theme이 null이다 (재라 #7)', async () => {
+  it('레이아웃이 테마를 안 고르면 theme이 null이다', async () => {
     await withApi(async (ctx) => {
       const { owner, project } = await ownedProject(ctx)
       const layout = (await findDefaultLayout(ctx.db, project.id))!

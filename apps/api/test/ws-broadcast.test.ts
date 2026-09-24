@@ -3,7 +3,7 @@
  *
  * ---
  *
- * # 하나짜리로 재지 않는다 (P3-1 T3)
+ * # 하나짜리로 재지 않는다
  *
  * **브로드캐스트는 받는 사람이 둘 이상일 때만 뜻이 있다.** 연결 하나로 재면 *"자리 0"*이
  * 되어 룸을 섞어도 안 죽는다 — 보낼 상대가 자기밖에 없으니 어느 룸에 넣든 같은 결과다.
@@ -15,7 +15,7 @@
  * | 프로젝트 둘 | 룸 키를 무시하고 **모두에게** 보내도 안 죽는다 |
  * | 페이지 여럿 | 프레임에서 `pageId`를 빼도 안 죽는다 |
  *
- * # 무엇을 알리는가 (D4)
+ * # 무엇을 알리는가
  *
  * 셋이다 — **페이지 문서 변경**(`applyEdit` 성공) · **복원 성공** · **연결·참가·이탈**.
  * 어느 `applyEdit` 호출자가 알리고 어느 쪽이 안 알리는지는 `broadcast-census.test.ts`가
@@ -64,7 +64,7 @@ interface Board {
   project: CreatedProject
   /** **다른** 프로젝트. 룸 경계를 재는 데 쓴다 — owner가 여기도 owner다. */
   other: CreatedProject
-  /** 이 프로젝트의 페이지 둘. 하나를 고치면 다른 하나를 연 사람도 룸에서 받는다(D2). */
+  /** 이 프로젝트의 페이지 둘. 하나를 고치면 다른 하나를 연 사람도 룸에서 받는다. */
   page: CreatedPage
   spare: CreatedPage
   /** `other` 프로젝트의 페이지. */
@@ -163,7 +163,7 @@ async function headSeqOf(pageId: string): Promise<number> {
   return Number(row.head_seq)
 }
 
-describe('룸 하나가 프로젝트 하나다 (D2)', () => {
+describe('룸 하나가 프로젝트 하나다', () => {
   it('편집을 안 낸 다른 연결이 그 변경을 받는다 — 이 슬라이스의 본줄기', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
@@ -225,7 +225,7 @@ describe('룸 하나가 프로젝트 하나다 (D2)', () => {
   })
 })
 
-describe('자기 편집은 자기에게 돌아오지 않는다 (§7.1)', () => {
+describe('자기 편집은 자기에게 돌아오지 않는다 (설계서 「정방향 흐름」)', () => {
   it('헤더로 가리킨 연결만 빠지고 나머지는 받는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
@@ -258,8 +258,8 @@ describe('자기 편집은 자기에게 돌아오지 않는다 (§7.1)', () => {
   })
 
   /**
-   * **빠지는 것은 그 요청의 세션이 든 연결뿐이다**(`broadcast.ts`의 `sentBy` — 좁은 반증 3차). 앞 판은
-   * id 만 견줘서, 재기동 뒤 앨리스의 옛 id 를 받은 캐럴이 앨리스의 게시 방송에서 빠졌다(Chrome). 여기서는
+   * **빠지는 것은 그 요청의 세션이 든 연결뿐이다**(`broadcast.ts`의 `sentBy`). id 만 견주면
+   * 재기동 뒤 앨리스의 옛 id 를 받은 캐럴이 앨리스의 게시 방송에서 빠진다. 여기서는
    * 재기동 대신 **남의 id 를 그대로 싣는다** — 서버가 보는 것은 같다(id 가 같고 세션이 다르다).
    *
    * 두 판을 한 케이스에 둔다: **남**(다른 사용자)과 **같은 사람의 다른 세션**(다시 로그인한 쿠키). 뒤의 것이
@@ -312,7 +312,7 @@ describe('자기 편집은 자기에게 돌아오지 않는다 (§7.1)', () => {
   })
 })
 
-describe('무엇을 알리는가 (D4)', () => {
+describe('무엇을 알리는가', () => {
   it('편집이 실패하면 아무것도 안 간다 — 성공 결과만 알린다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
@@ -325,13 +325,13 @@ describe('무엇을 알리는가 (D4)', () => {
     })
   })
 
-  it('경고를 실어 나른다 — 접속 방식에 따라 보는 것이 갈리지 않는다 (사실 2)', async () => {
+  it('경고를 실어 나른다 — 접속 방식에 따라 보는 것이 갈리지 않는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
 
       // `variant`를 받지 않는 컴포넌트에 `variant`를 얹으면 `ignored-variant`(warning)가
-      // 나온다 — 저장은 통과한다(P4a-3).
+      // 나온다 — 저장은 통과한다.
       const put = await ctx.app.inject({
         method: 'PUT',
         url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/schema`,
@@ -354,7 +354,7 @@ describe('무엇을 알리는가 (D4)', () => {
     })
   })
 
-  it('코멘트가 붙인 번호도 문서 변경으로 나간다 (사실 4 — P5-1 이월)', async () => {
+  it('코멘트가 붙인 번호도 문서 변경으로 나간다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
@@ -374,7 +374,7 @@ describe('무엇을 알리는가 (D4)', () => {
     })
   })
 
-  it('복원은 한 프레임으로 나간다 — 페이지마다가 아니다 (P6-2 이월 §9)', async () => {
+  it('복원은 한 프레임으로 나간다 — 페이지마다가 아니다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
       const snapshot = await ctx.app.inject({
@@ -403,7 +403,7 @@ describe('무엇을 알리는가 (D4)', () => {
   })
 })
 
-describe('연결·참가·이탈 (D4의 셋째)', () => {
+describe('연결·참가·이탈', () => {
   it('둘째가 붙으면 첫째가 참가자 둘을 받는다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
@@ -450,7 +450,7 @@ describe('연결·참가·이탈 (D4의 셋째)', () => {
   })
 })
 
-describe('보내기 직전에 권한을 다시 본다 (D5의 확인 지점 2)', () => {
+describe('보내기 직전에 권한을 다시 본다 (확인 지점 2)', () => {
   /**
    * **`ws-auth.test.ts`가 재는 것과 다른 자리다.** 그쪽은 *"프레임을 보내면"* 회수된다를
    * 재고, 여기는 **아무것도 안 보내는 연결**이 회수되는지를 잰다. 화면은 대개 아무것도 안

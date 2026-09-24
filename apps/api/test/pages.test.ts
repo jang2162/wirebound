@@ -112,7 +112,7 @@ describe('ensureCatalog', () => {
     resetRegistry()
     const marker = defineComponent({
       type: '__matrix_marker__',
-      // 사람이 읽을 축은 필수다(P10-3) — 이 표식은 화면에 서지 않지만 계약은 지나야 한다.
+      // 사람이 읽을 축은 필수다 — 이 표식은 화면에 서지 않지만 계약은 지나야 한다.
       label: '표식',
       description: '레지스트리 표식.',
       group: 'document',
@@ -383,7 +383,7 @@ describe('GET /api/projects/:projectId/pages/:pageId', () => {
       const owner = await signup(ctx)
       const { project, page } = await createProjectWithPage(ctx, owner)
 
-      // 오늘은 @wirebound/schema의 MIGRATIONS가 비어 있어 실제 마이그레이션으로
+      // @wirebound/schema의 MIGRATIONS가 비어 있어 실제 마이그레이션으로
       // schema.version을 끌어올릴 방법이 없다 — 라우트도 migrateDocument를 기본
       // 인자(내장 MIGRATIONS·CURRENT_DOCUMENT_VERSION)로만 부르므로 이 테스트에서
       // 다른 마이그레이션 체인을 주입할 수도 없다. 대신 "저장된 schema_version
@@ -412,7 +412,7 @@ describe('GET /api/projects/:projectId/pages/:pageId', () => {
       const { project, page } = await createProjectWithPage(ctx, owner)
 
       // PUT은 저장 시점에 지원하지 않는 버전(migrateDocument가 던지는 경우)을 이미
-      // 400으로 막으므로, 오늘은 이런 문서가 정상 쓰기 경로로 생기지 않는다 —
+      // 400으로 막으므로, 이런 문서는 정상 쓰기 경로로 생기지 않는다 —
       // 재현되는 상황은 배포 롤백이나, 여러 버전이 같은 DB를 공유하는 롤링 배포처럼
       // "이 프로세스보다 새 버전이 저장한 문서를 되읽는" 경우다. 그 상황을 DB에
       // 직접 만든다(위 테스트가 schema_version 컬럼만 어긋낸 것과 달리, 여기서는
@@ -432,9 +432,9 @@ describe('GET /api/projects/:projectId/pages/:pageId', () => {
         url: `/api/projects/${project.id}/pages/${page.id}`,
         cookies: owner.cookie,
       })
-      // 고치기 전에는 GET이 migrateDocument를 try/catch 없이 불러 이 경로가 처리
-      // 되지 않은 예외로 500이었다 — PUT의 동일 조건(위 '지원하지 않는 버전(현재보다
-      // 큼)이면 400')과 다르게 취급됐다는 것 자체가 이 태스크가 고치는 불일치다.
+      // GET이 migrateDocument를 try/catch 없이 부르면 이 경로가 처리되지 않은 예외로
+      // 500이 된다 — PUT의 동일 조건(위 '지원하지 않는 버전(현재보다 큼)이면 400')과
+      // 다르게 취급되는 불일치다.
       expect(res.statusCode).toBe(400)
       expect(res.json().error.code).toBe('bad-request')
 
@@ -471,33 +471,24 @@ describe('PATCH /api/projects/:projectId/pages/:pageId', () => {
   })
 
   /**
-   * ## 설명 갱신 (P10 — 점검 #10)
+   * ## 설명 갱신
    *
-   * **이 다섯이 서기 전까지 `description` 갱신을 재는 케이스가 하나도 없었다.** 라우트의
-   * `UpdatePageBody`는 처음부터 그 키를 받았고 `repos/pages.ts`도 그것을 썼는데, 그 이음이
-   * 자유로웠다 — `UpdatePageBody`에서 `description` 줄을 지워도, `repos/pages.ts`의
-   * `patch.description !== undefined` 갈래를 지워도 아무것도 죽지 않았다(실측).
+   * **`description` 갱신을 재는 것은 이 다섯이다.** 라우트의 `UpdatePageBody`가 그 키를 받고
+   * `repos/pages.ts`가 그것을 쓰는데, 이 다섯이 없으면 그 이음이 자유롭다 —
+   * `UpdatePageBody`에서 `description` 줄을 지워도, `repos/pages.ts`의
+   * `patch.description !== undefined` 갈래를 지워도 아무것도 죽지 않는다.
    *
    * **역할 축은 여기 없다.** `permission-matrix.test.ts`의 *"페이지 수정"* 행이 소유한다
    * (`allowed: ['owner','editor']`) — 여기 한 벌 더 두면 그것이 두 벌이다.
    *
-   * ### 경계 하나가 케이스로 안 서 있다 — **NUL은 500이다**(선재 결함, 이월)
+   * ### NUL 경계는 여기 없다 — `nul-text-inputs.test.ts`가 소유한다
    *
    * 아래 *"상한은 받고 상한+1은 400이다"*가 **길이** 경계를 소유한다. **NUL(`U+0000`)은
-   * 그 옆의 다른 경계이고 답이 다르다:** `description`도 `title`도 **500**이다(실측 —
-   * `POST .../pages`도 같다). Postgres의 `invalid byte sequence for encoding "UTF8": 0x00`
-   * 이 그대로 올라온다. `containsNulByte`는 `PUT .../schema` 한 자리에서만 불리고
-   * (`routes/pages.ts`) 이 라우트는 그것을 안 지난다.
-   *
-   * **같은 값이 `POST .../pages/import`로 오면 400이고 문장까지 있다**(실측 —
-   * `"페이지 제목·설명에 NUL 문자(U+0000)를 포함할 수 없습니다"`). **한 값에 두 답이다.**
-   *
-   * **케이스를 안 세운다.** 이것은 이 슬라이스가 만든 것이 아니고
-   * (`docs/superpowers/plans/2026-08-12-p6-1-carryforward.md`가 *"NUL이 500을 내는 여섯
-   * 경로"*로 이미 장부에 적었다) 고치는 것은 `apps/api`의 다른 슬라이스다. **지금 500을
-   * 케이스로 못박으면 고치는 날 그 케이스가 «고쳤다»를 실패로 보고한다** — 재는 것이
-   * 계약이 아니라 결함이 되기 때문이다. 그래서 **여기에 사실만 적어 둔다** — 이 표를
-   * 읽는 사람이 «길이만 재면 되는구나»로 읽지 않게.
+   * 그 옆의 다른 경계다:** `description`도 `title`도 400 이고 아무것도 안 바뀐다 — 막는
+   * 자리는 저장소의 쓰기 함수다(`src/db/nul-guard.ts`의 `NulByteError` 머리말). 그 케이스는
+   * `nul-text-inputs.test.ts`의 *"PATCH …/pages/:pageId title"* · *"PATCH …/pages/:pageId
+   * description"*이 갖는다 — 여기 한 벌 더 두면 그것이 두 벌이다. 이 표를 읽는 사람이
+   * «길이만 재면 되는구나»로 읽지 않게 적어 둔다.
    */
   it('설명을 바꾸고 되읽는다', async () => {
     await withApi(async (ctx) => {
@@ -619,7 +610,7 @@ describe('PATCH /api/projects/:projectId/pages/:pageId', () => {
         cookies: owner.cookie,
         payload: { description: '남이 잠근 동안' },
       })
-      // **§7.2의 `findLockConflict`는 문서 안 포인터를 본다.** `pages.description`은 문서
+      // **소프트 잠금(설계서 「소프트 잠금」)의 `findLockConflict`는 문서 안 포인터를 본다.** `pages.description`은 문서
       // 밖 컬럼이라 이 라우트는 `lockConflictError`를 아예 지나지 않는다. **화면의 판정이
       // 이 값에 달려 있다** — 423이 나기 시작하면 화면이 말할 것이 생긴 것이고 이 케이스가
       // 먼저 죽는다.
@@ -1009,7 +1000,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       // 봄)과 카탈로그 검증(3단계, `props 타입 오류면 422` 테스트와 달리 타입은
       // 맞으므로 통과)을 둘 다 통과한다 — 그래서 실제 API 사용자가 흔히 만들
       // 수 있는 입력이다. 그런데도 `schema::jsonb` 캐스팅이 Postgres에서
-      // 22P05로 죽는다 — 고치기 전에는 이 요청이 500이었다.
+      // 22P05로 죽는다 — 막지 않으면 이 요청이 500이다.
       const nul = String.fromCharCode(0)
       const res = await ctx.app.inject({
         method: 'PUT',
@@ -1034,7 +1025,9 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       // 세이브포인트가 아니다. 여기서는 실패하는 SQL 자체가 없으므로
       // `withTransaction`이 있든 없든 이 단언은 통과한다. 저장 함수를 감싼
       // 세이브포인트가 실제로 바깥 트랜잭션을 지키는지는 라우트를 건너뛰고 저장소
-      // 함수를 직접 부르는 `repos-revisions.test.ts:291`만이 증명한다.
+      // 함수를 직접 부르는 `repos-revisions.test.ts`의 *"writePageSchemaAtSeq가 NUL 문자로
+      // 인한 22P05로 실패해도, withTransaction의 세이브포인트가 바깥 트랜잭션을 지킨다"*만이
+      // 증명한다.
       //
       // "라우트가 DB에 닿기 전에 막는다"도 아니다. 라우트 3.5단계와 파이프라인
       // 8단계가 같은 문안의 `badRequest`를 던지므로(`routes/pages.ts`의 3.5단계와
@@ -1059,8 +1052,8 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       // validateTree(packages/schema/src/validate.ts)는 액션의 value 내용을 전혀
       // 들여다보지 않는다 — 그래서 value가 아니라 그 안 객체의 "키"에 NUL을 심으면
       // 봉투 검증도 카탈로그 검증도 둘 다 통과한다. containsNulByte가 Object.values만
-      // 훑었다면(고치기 전) 이 키는 보이지 않아 저장까지 도달해 22P05로 500이 났을
-      // 것이다 — 위 props 값 테스트와 서로 다른 코드 경로(값 vs 키)를 확인한다.
+      // 훑으면 이 키는 보이지 않아 저장까지 도달해 22P05로 500이 난다 — 위 props 값
+      // 테스트와 서로 다른 코드 경로(값 vs 키)를 확인한다.
       const nul = String.fromCharCode(0)
       const res = await ctx.app.inject({
         method: 'PUT',
@@ -1103,7 +1096,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
   })
 
   /**
-   * D1: **`pages.schema`를 바꾸는 모든 경로가 revision을 남긴다. 예외 없다.**
+   * **`pages.schema`를 바꾸는 모든 경로가 revision을 남긴다. 예외 없다.**
    *
    * 이 절이 그 불변식을 `PUT .../schema`에 대해 고정한다. 예외를 두지 않는 이유:
    * PUT이 revision 없이 문서를 갈아 끼우면 `head_seq`는 그대로인데 문서만 달라져,
@@ -1111,7 +1104,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
    * 돈다. 경로가 어긋나면 409로 튕기지만 우연히 살아 있으면 조용히 엉뚱한 값이
    * 들어간다 — 실패가 눈에 보이지 않는 종류라 코드가 아니라 이 테스트들이 막는다.
    */
-  describe('revision을 남긴다 (D1)', () => {
+  describe('revision을 남긴다', () => {
     it('PUT .../schema도 revision을 남긴다', async () => {
       await withApi(async (ctx) => {
         const owner = await signup(ctx)
@@ -1302,7 +1295,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         const res = await putSchema(ctx, project.id, page.id, owner.cookie, docWithText())
         expect(res.statusCode, res.body).toBe(200)
 
-        // 응답 형태는 이 태스크에서 **바뀌지 않는다**. 파이프라인 결과(`seq`·
+        // 응답 형태는 파이프라인을 타도 **바뀌지 않는다**. 파이프라인 결과(`seq`·
         // `revisionId`·`inverse`)를 그대로 스프레드하면 여기서 걸린다.
         expect(Object.keys(res.json()).sort()).toEqual([
           'description',
@@ -1331,10 +1324,9 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
    *    `/version`이 항상 존재하는 경로라 발생 불가, `stale`은 `withApi`의 단일
    *    트랜잭션에서 만들 수 없다). `unsupported-version`만이 실제로 `toApiError`
    *    호출부까지 도달하므로, 이 절이 없으면 그 줄을 아무 에러로 바꿔도 스위트가 초록이다.
-   * 2. **이 브랜치가 바꾼 동작.** 전에는 `PUT .../schema`가 **들어온** 문서만
-   *    마이그레이션하고 저장된 문서를 통째로 덮어썼으므로 이 상황의 유일한 탈출구였다.
-   *    이제 PUT도 파이프라인을 타고 그 2단계가 **저장된** 문서를 마이그레이션하므로
-   *    GET·`PATCH .../ops`·`PUT .../schema` 셋이 전부 400이다. 인지된 결과이고,
+   * 2. **탈출구가 없다.** PUT도 파이프라인을 타고 그 2단계가 **저장된** 문서를
+   *    마이그레이션하므로 GET·`PATCH .../ops`·`PUT .../schema` 셋이 전부 400이다 —
+   *    **들어온** 문서만 마이그레이션해 저장된 문서를 통째로 덮어쓰는 길은 없다. 인지된 결과이고,
    *    복구 경로를 어떻게 줄지는 별도 설계 결정이다(`routes/pages.ts`의 GET 주석 참고).
    */
   describe('저장된 문서가 미지원 버전이면', () => {

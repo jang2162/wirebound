@@ -74,7 +74,7 @@ describe('테마 라우트', () => {
 
         const body: { id: string; system: boolean; theme: Theme }[] = res.json()
         // **기대값을 `SYSTEM_THEME_IDS`에서 파생한다** — 이유는 `repos-themes.test.ts`의
-        // 같은 자리에 적었다. 정렬 계약이 *"시스템 테마가 먼저, 각 무리 안에서는 slug 순"*
+        // *"listThemes는 시스템 테마와 그 프로젝트 테마를 함께 낸다"*에 있다. 정렬 계약이 *"시스템 테마가 먼저, 각 무리 안에서는 slug 순"*
         // 이므로(`repos/themes.ts`의 `listThemes`) 파생한 목록도 정렬한다.
         expect(body.map((entry) => entry.theme.meta.id)).toEqual([
           ...[...SYSTEM_THEME_IDS].sort(),
@@ -155,7 +155,7 @@ describe('테마 라우트', () => {
   })
 
   /**
-   * **§7.1 게이트와 같은 갈래다** — 봉투(400)와 의미(422)가 다른 성질이다(설계 §13).
+   * **§7.1 게이트와 같은 갈래다** — 봉투(400)와 의미(422)가 다른 성질이다(설계서 「에러 처리」).
    */
   describe('본문 검증 — 400과 422가 갈린다', () => {
     it('봉투가 깨지면 400이다', async () => {
@@ -203,7 +203,7 @@ describe('테마 라우트', () => {
         expect(res.json().error.code).toBe('validation-failed')
         const issues: { code: string; severity: string; path: string }[] = res.json().error.issues
         expect(issues.length).toBeGreaterThan(0)
-        // severity가 실려 나간다(Task 1). 오늘 테마 이슈는 전부 error다(재라 #3).
+        // severity가 실려 나간다. 지금 테마 이슈는 전부 error다.
         expect(issues.every((issue) => issue.severity === 'error')).toBe(true)
       })
     })
@@ -235,16 +235,15 @@ describe('테마 라우트', () => {
   })
 
   /**
-   * **P7-1 재라 #7 — *"저장된 프로젝트 테마의 패턴도 검증을 통과한 것이다"*를 잰다.**
+   * ***"저장된 프로젝트 테마의 패턴도 검증을 통과한 것이다"*를 잰다.**
    *
-   * 계획서는 시스템 테마만 보고 그 문장을 썼다. 저장 경계가 실제로 무엇을 막는지는
-   * 여기서 재고, 그 결과가 P7-1 D9(*"패턴이 카탈로그에 없는 타입을 담고 있으면 그 순간
-   * 사용자는 아무것도 못 꽂는다"*)의 전제다.
+   * 시스템 테마만 보면 참으로 보이는 문장이라, 저장 경계가 실제로 무엇을 막는지는
+   * 여기서 잰다. 막지 못하면 *"패턴이 카탈로그에 없는 타입을 담고 있으면 그 순간
+   * 사용자는 아무것도 못 꽂는다"*가 된다.
    *
-   * **경로: `assertResolvable` → `resolveTheme` → `checkPatterns`.** 계획서가
-   * `checkThemePatterns`라고 적은 이름은 존재하지 않는다 — 실제 이름은 `checkPatterns`다.
+   * **경로: `assertResolvable` → `resolveTheme` → `checkPatterns`.**
    */
-  describe('재라 #7 — 패턴도 저장 게이트를 지난다', () => {
+  describe('패턴도 저장 게이트를 지난다', () => {
     /** `patterns` 한 벌을 얹은 테마. 나머지는 최소 문서 그대로다. */
     function withPatterns(patterns: unknown): unknown {
       return { ...brandTheme(), patterns }
@@ -303,19 +302,19 @@ describe('테마 라우트', () => {
     })
 
     /**
-     * **처음 이 케이스를 `400`으로 적었고 거짓이었다 — 재서 고쳤다.**
+     * **`400`이 아니라 422다.**
      *
      * `PatternNodeSchema`가 `z.strictObject`라 규격에서 걸리는 것은 맞지만, **그 규격을
      * 보는 자리가 라우트의 본문 검증이 아니다.** 라우트는 `ThemePatchSchema`로 본문을
-     * 보는데 그것은 절 안쪽을 `unknown`으로 두므로(§6.9의 삭제 지시 `null`을 받기 위해)
+     * 보는데 그것은 절 안쪽을 `unknown`으로 두므로(설계서 「상속과 병합」의 삭제 지시 `null`을 받기 위해)
      * `patterns` 내부가 그대로 통과하고, `resolveTheme`의 `prepare`가 `ThemeSchema`로
      * 다시 파싱할 때야 걸린다. 그 결과는 **이슈**이므로 422다.
      *
-     * 실측한 응답: `422` · `bad-spec` · path `patterns.content.x.schema` ·
+     * 응답: `422` · `bad-spec` · path `patterns.content.x.schema` ·
      * `테마 규격을 지키지 않습니다: Unrecognized key: "id"` (셋 다 같은 모양).
      *
-     * **이것이 P7-1 재라 #5의 두 번째 근거다** — 저장 경계가 `interactions`를 막으므로
-     * 전개가 리매핑할 `target`이 실재하지 않는다.
+     * **그래서 패턴 전개가 리매핑할 `target`이 실재하지 않는다** — 저장 경계가
+     * `interactions`를 막는다.
      */
     it('PatternNode에 없는 키(id·marker·interactions)는 422 bad-spec이다', async () => {
       await withApi(async (ctx) => {
@@ -412,7 +411,7 @@ describe('테마 라우트', () => {
     })
 
     /**
-     * **시스템 테마는 owner도 못 고친다(§6.10).** 403이지 404가 아닌 이유는
+     * **시스템 테마는 owner도 못 고친다(설계서 「테마 관리」).** 403이지 404가 아닌 이유는
      * `routes/themes.ts`의 주석에 있다 — 목록·조회가 이미 그 존재를 보여 주므로
      * 숨길 것이 없고, 말해야 하는 것은 *"읽기 전용이다"*다.
      */
@@ -502,10 +501,10 @@ describe('테마 라우트', () => {
 })
 
 /**
- * **Task 7 — 파생 테마(`extends_ref`).**
+ * **파생 테마(`extends_ref`).**
  *
- * 저장되는 것은 **파생 그대로**다(계획서 D2) — `mergeTheme`이 내는 홀로 서는 결과는
- * 저장하지 않는다. 그 결과가 저장될 자리는 §4.5의 스냅샷 하나뿐이고 이 슬라이스 밖이다.
+ * 저장되는 것은 **파생 그대로**다 — `mergeTheme`이 내는 홀로 서는 결과는 테마 행에
+ * 저장하지 않는다. 그 결과가 저장될 자리는 설계서 「스냅샷」의 payload 하나뿐이다.
  */
 describe('파생 테마', () => {
   function derived(overrides: Partial<Theme['meta']> = {}): Theme {
@@ -515,7 +514,7 @@ describe('파생 테마', () => {
     }
   }
 
-  it('만들면 extends를 지닌 채 왕복한다 (D2)', async () => {
+  it('만들면 extends를 지닌 채 왕복한다', async () => {
     await withApi(async (ctx) => {
       const { owner, project } = await ownedProject(ctx)
 
@@ -544,7 +543,7 @@ describe('파생 테마', () => {
   })
 
   /**
-   * **없는 상속 대상은 422다** — 재서 정했다(`routes/themes.ts`의 주석에 근거).
+   * **없는 상속 대상은 422다** — 근거는 `routes/themes.ts`의 주석에 있다.
    * 형식 위반은 400이 따로 잡으므로 여기 남는 것은 *"꼴은 맞는데 그런 테마가 없다"*이고,
    * 그것은 페이지의 `unknown-type`과 같은 부류다.
    */
@@ -565,8 +564,8 @@ describe('파생 테마', () => {
    * **이 이슈는 `themes` 패키지 밖에서 만들어진다** — 저장 경계가 *"상속 대상이 코드에
    * 없다"*를 낸다. 그래서 `severity`가 표를 지나는지 **여기서** 지켜야 한다.
    *
-   * 처음에 객체 리터럴로 짓고 `severity: 'error'`를 손으로 박았는데, 리뷰가 그 자리를
-   * `'warning'`으로 바꿔도 **api 599케이스가 전부 통과했다**(구분력 0). 아래 단언이
+   * 이슈를 객체 리터럴로 짓고 `severity: 'error'`를 손으로 박으면, 그 자리를
+   * `'warning'`으로 바꿔도 **api 스위트가 전부 통과한다**(구분력 0). 아래 단언이
    * 그 변이를 죽인다 — 표와 실제 값을 맞대므로 어느 한쪽만 바뀌어도 갈린다.
    */
   it('없는 상속 대상 이슈가 severity 표를 지난다', async () => {
@@ -593,7 +592,7 @@ describe('파생 테마', () => {
   })
 
   /**
-   * **깊이 2를 막는다(§6.9).** 파생 테마를 상속하려 해도 `extends`가 가리키는 것은
+   * **깊이 2를 막는다(설계서 「상속과 병합」).** 파생 테마를 상속하려 해도 `extends`가 가리키는 것은
    * 언제나 **코드의 시스템 테마**이므로 그런 이름이 없어 422가 된다.
    */
   it('파생 테마를 다시 상속하면 422다 (깊이 1단계)', async () => {
@@ -622,7 +621,7 @@ describe('파생 테마', () => {
   })
 
   /**
-   * **재라 #6 — 파생 테마 조회가 base를 함께 주는가.**
+   * **파생 테마 조회가 base를 함께 주는가.**
    *
    * 답: **준다(상세 조회에만).**
    *
@@ -634,7 +633,7 @@ describe('파생 테마', () => {
    * **목록에는 싣지 않는다** — 목록의 모든 파생 항목마다 시스템 테마 전문이 붙어 응답이
    * 항목 수만큼 부푼다. 목록의 쓸모는 고르기이지 그리기가 아니다.
    */
-  it('상세 조회가 base를 함께 준다 (재라 #6)', async () => {
+  it('상세 조회가 base를 함께 준다', async () => {
     await withApi(async (ctx) => {
       const { owner, project } = await ownedProject(ctx)
       const created = (await post(ctx, project.id, owner.cookie, derived())).json()
@@ -681,12 +680,11 @@ describe('파생 테마', () => {
 })
 
 /**
- * **고르개 — `PUT /:projectId/theme`**(P4b-3 계획서 D2).
+ * **고르개 — `PUT /:projectId/theme`.**
  *
- * 오늘 프로젝트의 테마를 바꾸는 경로가 **없었다**. 사슬
- * `projects.default_layout_id → layouts.theme_id → themes` 중 가운데를 바꾸는 수단이
- * 없어 DB를 직접 고쳐야 테마가 캔버스에 실렸다(P4a-3 이월의 *"테마를 화면에 거는 경로가
- * 없다"*). 레이아웃 CRUD를 만들지 않고 **그 한 필드**만 여는 라우트다.
+ * 사슬 `projects.default_layout_id → layouts.theme_id → themes` 중 가운데를 바꾸는
+ * **유일한 수단**이다 — 이것이 없으면 DB를 직접 고쳐야 테마가 캔버스에 실린다.
+ * 레이아웃 CRUD를 만들지 않고 **그 한 필드**만 여는 라우트다.
  */
 describe('테마 고르기 (PUT /:projectId/theme)', () => {
   function choose(
@@ -775,7 +773,7 @@ describe('테마 고르기 (PUT /:projectId/theme)', () => {
   })
 
   /**
-   * **`null`은 정상 상태다**(D2). `layouts.theme_id`가 `NULL`을 받고
+   * **`null`은 정상 상태다.** `layouts.theme_id`가 `NULL`을 받고
    * (`0007-layouts.ts`), 그때 화면은 구조 기본 CSS만으로 그려진다. 고르개에
    * *"없음"*이 있어야 그 상태를 눈으로 확인할 수 있다.
    */
@@ -793,10 +791,10 @@ describe('테마 고르기 (PUT /:projectId/theme)', () => {
   })
 
   /**
-   * **목록 밖의 `themeId`는 거절한다**(D2). `GET /:projectId/themes`가 이미
+   * **목록 밖의 `themeId`는 거절한다.** `GET /:projectId/themes`가 이미
    * *"이 프로젝트에서 고를 수 있는 것"*을 뜻한다(`repos/themes.ts`의 `listThemes` 주석).
    *
-   * **404인 것이 요점이다** — 남의 프로젝트 테마는 존재를 숨긴다(설계 §10,
+   * **404인 것이 요점이다** — 남의 프로젝트 테마는 존재를 숨긴다(설계서 「권한 모델」,
    * `requireWritableTheme`이 같은 판정을 한다). 403이면 *"그런 테마가 있다"*를 말한다.
    */
   it('남의 프로젝트 테마는 고를 수 없다', async () => {
@@ -822,12 +820,12 @@ describe('테마 고르기 (PUT /:projectId/theme)', () => {
   })
 
   /**
-   * **기본 레이아웃이 없는 프로젝트는 409다 — 재라 #1의 답.**
+   * **기본 레이아웃이 없는 프로젝트는 409다.**
    *
-   * 0007 이전에 만들어진 프로젝트가 그 상태이고 P4a-3 재라 #8이 *"만들어 주지 않는다"*로
-   * 닫았다. 그래서 이 라우트가 그 상태를 **소리 내야** 한다(D2).
+   * 0007 이전에 만들어진 프로젝트가 그 상태이고 마이그레이션은 기본 레이아웃을
+   * *"만들어 주지 않는다"*. 그래서 이 라우트가 그 상태를 **소리 내야** 한다.
    *
-   * **404가 아닌 이유:** `projectGuard`가 outsider에게 이미 404를 낸다(§10 — 프로젝트
+   * **404가 아닌 이유:** `projectGuard`가 outsider에게 이미 404를 낸다(설계서 「권한 모델」 — 프로젝트
    * 존재를 숨긴다). 같은 코드를 쓰면 owner가 받은 404가 *"내 프로젝트가 사라졌다"*로
    * 읽힌다. **409인 이유:** 이 저장소에서 409는 *"요청은 옳은데 지금 상태가 그것을
    * 허락하지 않는다"*이다(자식 있는 메뉴 삭제·쓰이고 있는 테마 삭제 — README 에러 표).
@@ -865,7 +863,7 @@ describe('테마 고르기 (PUT /:projectId/theme)', () => {
   })
 
   /**
-   * **editor는 고를 수 없다** — 테마 편집과 같은 등급이다(§10·§6.10). 역할 × 엔드포인트의
+   * **editor는 고를 수 없다** — 테마 편집과 같은 등급이다(설계서 「권한 모델」·「테마 관리」). 역할 × 엔드포인트의
    * 전수 판정은 `permission-matrix.test.ts`가 하고, 여기서는 *"거절이 상태를 안 바꾼다"*를
    * 함께 본다.
    */

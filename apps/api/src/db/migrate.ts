@@ -41,14 +41,14 @@ export async function migrateToLatest(db: DbHandle): Promise<void> {
 
 /**
  * **이 DB 에 올라가 있는 마이그레이션이 몇 건인가.** 서버가 뜰 때 *"빈 DB 입니다"* 를
- * 말하는 근거다(2026-08-19 D3 — `db/describe-schema-state.ts`).
+ * 말하는 근거다(`db/describe-schema-state.ts`).
  *
  * **아무것도 안 바꾼다.** kysely 의 `getMigrations()` 는 마이그레이션 표가 없으면
  * 만들지 않고 `executedAt: undefined` 로 낸다(0.28.17 의 소스에서 확인했다) — 서버가
  * 뜨는 길에 스키마를 건드리지 않는다는 뜻이다.
  *
  * **못 읽으면 던지지 않고 `undefined` 다.** DB 가 없거나 안 떠 있어도 서버는 떠야 한다 —
- * 오늘도 그렇고(풀은 게으르다), 이 한 줄 때문에 그것이 바뀌면 안 된다.
+ * 풀은 게으르므로 그렇게 뜨고, 이 한 줄 때문에 그것이 바뀌면 안 된다.
  */
 export async function countExecutedMigrations(db: DbHandle): Promise<number | undefined> {
   try {
@@ -77,16 +77,16 @@ export async function migrateToNone(db: DbHandle): Promise<void> {
 }
 
 /**
- * **마이그레이션 뒤의 계정 시딩 — `latest` 에서만 돈다**(2026-08-20 D3).
+ * **마이그레이션 뒤의 계정 시딩 — `latest` 에서만 돈다**.
  *
- * 사용자가 *"db 마이그레이션 할 때"*라고 정했고, 스키마가 **다 올라간 뒤**여야 `users` 에
+ * 계정은 `migrate` 가 만들고(설계서 「권한 모델」), 스키마가 **다 올라간 뒤**여야 `users` 에
  * 쓸 수 있다. **`down` 에서는 안 돈다** — 내리는 길에 계정을 만들 이유가 없고, 계정을
  * 마이그레이션 안에 두지 않기로 한 판정(`db/seed-user.ts` 머리말)의 짝이 이 조건이다.
  *
  * **`main()` 안의 `if` 한 줄이 아니라 함수로 빼 둔 것은 자를 세우기 위해서다.** 그 조건이
- * 호출부에 인라인으로 있는 동안에는 **그 조건을 지우고도 스위트 전체가 초록이었다**
- * (귀속: 리뷰 §7.2 의 변이 R5 — 리뷰어가 런타임에서 `down` 이 계정을 만드는 것까지 봤다).
- * 이제 `test/user-creation-census.test.ts` 가 이 함수를 **양쪽 방향으로 실제로 불러** 잰다.
+ * 호출부에 인라인으로 있으면 **그 조건을 지우고도 스위트 전체가 초록이다** — `down` 이
+ * 계정을 만들어도 아무 케이스도 안 죽는다. `test/user-creation-census.test.ts` 가 이 함수를
+ * **양쪽 방향으로 실제로 불러** 잰다.
  *
  * 성공이면 `true`. `false` 면 호출자가 종료 코드 1을 낸다.
  */
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
       return
     }
 
-    // **계정 시딩은 여기다**(2026-08-20 D3). `latest` 냐 `down` 이냐를 가르는 것은
+    // **계정 시딩은 여기다**. `latest` 냐 `down` 이냐를 가르는 것은
     // `seedAfterMigration` 이고 그쪽에 근거와 자가 있다 — **여기서 다시 가르지 않는다.**
     //
     // **`direction` 을 그대로 넘긴다.** 이 자리에 `'latest'` 를 박으면 `migrate:down` 이

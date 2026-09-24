@@ -8,10 +8,10 @@
  *
  * ---
  *
- * **검증 게이트가 `routes/pages.ts`의 §7.1 게이트와 같은 모양이다.** 순서가 규격이다:
+ * **검증 게이트가 `routes/pages.ts`의 게이트(설계서 「정방향 흐름」)와 같은 모양이다.** 순서가 규격이다:
  *
  * 1. **봉투** — `z.strictObject({ theme: ThemePatchSchema })`. 실패면 **400**.
- *    `ThemeSchema`가 아니라 `ThemePatchSchema`인 것이 요점이다: 파생 테마는 §6.9의
+ *    `ThemeSchema`가 아니라 `ThemePatchSchema`인 것이 요점이다: 파생 테마는 설계서 「상속과 병합」의
  *    삭제 지시(`null`)를 담을 수 있어 `ThemeSchema`가 거부한다. `ThemePatchSchema`는
  *    **절 이름과 `meta`만** 보고 절 안쪽을 `unknown`으로 통과시키므로 파생과 평범한
  *    테마를 **둘 다** 받는다 — `resolveTheme`의 `prepare`가 쓰는 것과 같은 규격이다.
@@ -20,31 +20,28 @@
  * 3. **의미** — `resolveTheme(theme, base)`가 **`error`를 내면 422**, `issues`에
  *    `ThemeIssue[]`를 **경고까지 함께** 싣는다. **경고만 있으면 저장되고** 성공 응답의
  *    `warnings`에 실린다(아래 `assertResolvable`).
- *    **2026-08-11(P4c-1 수정 웨이브 F6): 이 줄이 *"이슈를 내면 422"*였고 거짓이 됐다** —
- *    같은 파일 아래에서는 기준을 고쳐 놓고 이 머리말만 낡아 있었다.
  *
  * 1과 3이 갈리는 이유는 페이지와 같다 — *"요청이 잘못됨"*(400)과 *"내용이 처리 불가함"*(422)은
- * 다른 성질이다(설계 §13). 1~3 중 어디서든 실패하면 저장에 도달하지 못한다.
+ * 다른 성질이다(설계서 「에러 처리」). 1~3 중 어디서든 실패하면 저장에 도달하지 못한다.
  *
- * **없는 상속 대상은 400이 아니라 422다(Task 7에서 재서 정했다).** 형식은 이미 400이
+ * **없는 상속 대상은 400이 아니라 422다.** 형식은 이미 400이
  * 잡는다 — `MetaSchema`의 `EXTENDS_PATTERN`이 `system:<id>` 꼴이 아닌 값을 봉투에서
  * 거부한다. 여기 남는 것은 *"꼴은 맞는데 그런 테마가 없다"*이고, 그것은 `unknown-type`이
  * 페이지에서 422인 것과 같은 부류다(문법은 유효, 의미가 성립하지 않음).
  *
- * **깊이 2는 이 규칙에서 저절로 닫힌다(§6.9).** `EXTENDS_PATTERN`이 `system:` 접두어를
+ * **깊이 2는 이 규칙에서 저절로 닫힌다(「상속과 병합」).** `EXTENDS_PATTERN`이 `system:` 접두어를
  * 요구하고 상속 대상을 **코드의 시스템 테마에서만** 찾으므로, 파생 테마를 가리키는
  * `extends`는 그런 시스템 테마가 없어 422가 된다. 규격 층(패턴)과 조회 층(코드)이
  * 각각 절반씩 막는 구조이고, `mergeTheme`의 `checkExtends`가 세 번째 방벽이다.
  *
  * ---
  *
- * **어느 라우트가 경고를 싣는가 — 전수로 세고 판정했다** (P4c-1 재라 #4).
+ * **어느 라우트가 경고를 싣는가 — 전수로 센다.**
  *
  * 이 파일의 라우트는 일곱이고 **테마 문서를 해석(`resolveTheme`)하는 것은 둘뿐이다** —
  * `POST /:projectId/themes`와 `PUT /:projectId/themes/:themeId`. 그 둘이 `warnings`를
- * 싣는다. `test/theme-warnings.test.ts`가 이 파일의 소스를 훑어 그 수를 센다
- * (P4a-3이 *"형제 가드를 지나지 않은 자리"*를 여섯 번 찾고 **다섯을 닫은 뒤 여섯째가
- * 나왔다** — 손으로 센 수는 그렇게 틀린다).
+ * 싣는다. `test/theme-warnings.test.ts`의 「전수 — 경고를 싣는 라우트」가 이 파일의 소스를
+ * 훑어 그 수를 센다 — 손으로 세면 가드를 지나지 않은 자리를 조용히 빠뜨린다.
  *
  * **나머지 다섯에 왜 안 싣는가.**
  *
@@ -52,18 +49,18 @@
  * |---|---|
  * | `GET /:projectId/themes` · `DELETE …/:themeId` | 테마 문서를 해석하지 않는다. 실을 것이 없다 |
  * | `GET …/themes/:themeId` (상세) | **소비자가 스스로 잴 수 있다.** 응답이 파생 문서와 `base`를 **둘 다** 싣는다(`toDetailResponse`) — 저작 UI가 `resolveTheme(theme, base)`를 그대로 부를 수 있다. 서버가 한 번 더 해석해 실으면 두 결과가 갈릴 자리가 생긴다 |
- * | `GET /:projectId/theme` · `PUT /:projectId/theme` | 같은 이유이고 근거가 더 세다 — **소비자(캔버스)가 이미 자기가 해석한다**(`apps/web`의 `use-theme-css.ts`). 그 파일 주석이 *"두 번 해석하면 비용만이 아니라 두 결과가 갈릴 수 있는 자리가 생긴다"*고 적어 두었다. 대신 그쪽이 **경고를 삼키지 않도록** 고쳤다(P4c-1) — 앞서는 `theme === null`일 때만 콘솔에 남겼다 |
+ * | `GET /:projectId/theme` · `PUT /:projectId/theme` | 같은 이유이고 근거가 더 세다 — **소비자(캔버스)가 이미 자기가 해석한다**(`apps/web`의 `use-theme-css.ts`). 그 파일 주석이 *"두 번 해석하면 비용만이 아니라 두 결과가 갈릴 수 있는 자리가 생긴다"*고 적어 두었다. 대신 그쪽은 **경고를 삼키지 않는다** — `theme`이 서도 경고를 콘솔에 남긴다 |
  *
- * **그래서 재라 #7의 답은 *"응답에 실려 오는 것까지"*다.** 화면 표시는 P4c-2의 몫이다.
+ * **그래서 서버가 경고를 나르는 범위는 *"응답에 실려 오는 것까지"*다.** 화면 표시는 저작 UI의 몫이다.
  *
  * ---
  *
- * **시스템 테마는 owner도 못 고친다(§6.10 — 읽기 전용).**
+ * **시스템 테마는 owner도 못 고친다(설계서 「테마 관리」 — 읽기 전용).**
  *
  * 수정·삭제 대상이 `project_id IS NULL`이면 **403**이다. 404가 아닌 이유: 목록과 조회가
  * 그 테마를 이미 보여 주므로(어느 프로젝트에서나 고를 수 있다) 존재를 숨기는 것이
  * 성립하지 않는다. 반대로 **다른 프로젝트의 테마**는 404다 — 그쪽은 존재 자체를 숨기는
- * 설계 §10의 자리다.
+ * 설계서 「권한 모델」의 자리다.
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
@@ -85,8 +82,8 @@ import { parseBody, parseParams } from '../http/parse'
 import { withWarnings } from '../http/warnings'
 import { findDefaultLayout, updateLayoutTheme } from '../repos/layouts'
 import { lockProjectShared } from '../repos/projects'
-// **테마 사슬은 `services/project-theme.ts` 하나다**(P8-4 T2). 소비자가 셋이 되어
-// (캔버스·고르개·내보내기) 라우트 안의 비공개 함수로 둘 수 없게 됐다 — 두 벌이면
+// **테마 사슬은 `services/project-theme.ts` 하나다.** 소비자가 셋이라
+// (캔버스·고르개·내보내기) 라우트 안의 비공개 함수로 두지 않는다 — 두 벌이면
 // 캔버스가 보는 테마와 번들이 싣는 테마가 조용히 갈린다.
 import { currentProjectTheme, resolveThemeBase } from '../services/project-theme'
 import {
@@ -144,19 +141,19 @@ function toResponse(record: ThemeRecord) {
 }
 
 /**
- * 상세 조회의 응답. **파생 테마면 `base`를 함께 싣는다 — 재라 #6의 답이다.**
+ * 상세 조회의 응답. **파생 테마면 `base`를 함께 싣는다.**
  *
  * `resolveTheme(document, base)`는 base 없이 파생 문서를 **해석 자체를 거부한다**
  * (`bad-extends`: *"상속을 선언한 문서를 해석하려면 상속 대상 테마가 필요합니다"*).
  * 즉 base를 빼고 내면 클라이언트가 **쓸 수 없는 것**을 받고 두 번째 요청을 강요당한다.
  * 서버는 이미 둘 다 갖고 있으므로 라운드트립 하나로 끝낸다.
  *
- * **base는 코드에서 온다**(D4). DB의 사본을 실으면 해석 결과가 동기화 시점에 따라 갈린다.
+ * **base는 코드에서 온다.** DB의 사본을 실으면 해석 결과가 동기화 시점에 따라 갈린다.
  *
  * **목록에는 싣지 않는다.** 파생 항목마다 시스템 테마 전문이 붙어 응답이 항목 수만큼
  * 부푼다 — 목록의 쓸모는 고르기이지 그리기가 아니다.
  *
- * 상속 대상이 코드에 없으면(동기화가 남긴 낡은 파생, 재라 #5) `base` 키가 없다.
+ * 상속 대상이 코드에 없으면(동기화가 남긴 낡은 파생) `base` 키가 없다.
  * 그 상태는 조회로 드러나야 하지 **조회를 실패시킬 일은 아니다** — 사용자가 고치려면
  * 먼저 볼 수 있어야 한다.
  */
@@ -173,26 +170,20 @@ function themeValidationFailed(issues: ThemeIssue[]): never {
 /**
  * 게이트 2·3단계. **`error`가 있으면 422로 던지고, 경고는 통과시켜 돌려준다.**
  *
- * **저장하는 것은 해석 결과가 아니라 들어온 파생 테마 그대로다(계획서 D2).**
+ * **저장하는 것은 해석 결과가 아니라 들어온 파생 테마 그대로다.**
  * `resolveTheme`은 여기서 *"이 문서가 실제로 서는가"*를 묻는 데만 쓴다 — 병합 결과는
- * §4.5의 스냅샷이 저장할 것이고 이 슬라이스 밖이다.
+ * 스냅샷이 저장한다(설계서 「스냅샷」 — `services/snapshot-capture.ts`의 `freezeTheme`).
  *
  * ---
  *
- * **2026-08-11(P4c-1 T2): 이 함수가 예고된 대로 고쳐졌다. 지우지 않고 남긴다.**
+ * **이 분기와 `resolveTheme`의 `theme: null`은 같은 선(`error`만)을 그어야 한다.** 경고만
+ * 있는 테마는 저장되고 응답이 그 경고를 싣는다(페이지 쪽 `withWarnings`와 같은 형식).
+ * 한쪽만 *"이슈가 하나라도"*로 그으면 경고가 조용히 저장이나 그리기를 깨뜨린다:
  *
- * P4b-3까지 여기 적혀 있던 것: *"`resolveTheme`은 **이슈가 하나라도** 있으면 `theme`을
- * `null`로 낸다(P4a-1의 D2). 그 규칙을 그대로 쓰는 근거는 재라 #3의 답이다 — 오늘
- * `themes`의 이슈는 전부 `error`다. **`themes`에 첫 `warning`이 생기는 날, 저 규칙과 이
- * 분기를 함께 고쳐야 한다:** 그때는 경고만 있는 테마가 저장돼야 하고 응답이 그 경고를
- * 실어야 한다(페이지 쪽 `withWarnings`가 그 형식이다)."*
- *
- * **오늘이 그 날이고, 둘을 함께 고쳤다.** 하나만 고치면 경고가 저장을 못 지난다:
- *
- * | 무엇만 고치면 | 무슨 일이 나는가 |
+ * | 어느 쪽이 *"이슈가 하나라도"*면 | 무슨 일이 나는가 |
  * |---|---|
- * | `resolveTheme`만 | 여기서 `issues.length > 0`이 그대로라 **경고 하나가 422다.** `theme`이 `null`이 아닌데도 저장에 도달하지 못한다 |
- * | 여기만 | `resolveTheme`이 `theme: null`을 내지만 이 함수는 `issues`만 본다 — 저장은 지나가지만 **캔버스가 그 테마를 못 그린다**(`use-theme-css`가 `theme === null`에서 CSS를 비운다) |
+ * | 여기(`issues.length > 0`) | **경고 하나가 422다.** `theme`이 `null`이 아닌데도 저장에 도달하지 못한다 |
+ * | `resolveTheme` | `theme: null`을 내지만 이 함수는 `error`만 본다 — 저장은 지나가지만 **캔버스가 그 테마를 못 그린다**(`use-theme-css`가 `theme === null`에서 CSS를 비운다) |
  *
  * **선을 긋는 것은 `partitionIssues` 하나다** — `resolveTheme`이 쓰는 것과 같은 함수이고,
  * 그 머리말이 *"이 선을 긋는 코드는 이 함수 하나뿐이어야 한다"*고 못박아 두었다.
@@ -217,11 +208,11 @@ async function requireWritableTheme(
   if (!record) throw notFound('테마를 찾을 수 없습니다')
 
   // 시스템 테마는 목록·조회로 이미 보이므로 존재를 숨길 것이 없다 — 읽기 전용이라는
-  // 사실 자체를 말한다(§6.10).
+  // 사실 자체를 말한다(설계서 「테마 관리」).
   if (record.projectId === null) {
     throw forbidden('시스템 테마는 수정할 수 없습니다')
   }
-  // 다른 프로젝트의 테마는 존재를 숨긴다(설계 §10).
+  // 다른 프로젝트의 테마는 존재를 숨긴다(설계서 「권한 모델」).
   if (record.projectId !== projectId) throw notFound('테마를 찾을 수 없습니다')
 
   return record
@@ -231,33 +222,34 @@ async function requireWritableTheme(
 export function themeRoutes() {
   return async function plugin(app: FastifyInstance): Promise<void> {
     /**
-     * **이 프로젝트의 화면이 지금 써야 할 테마.** 설계 §4.2의 사슬
+     * **이 프로젝트의 화면이 지금 써야 할 테마.** 설계서 「테이블 정의」의 사슬
      * `projects.default_layout_id → layouts.theme_id → themes`를 한 번에 따라간다.
      *
      * **`GET .../themes/:themeId`와 다른 것을 낸다 — 소비자가 다르기 때문이다.**
      *
      * | 엔드포인트 | 소비자 | 내는 것 |
      * |---|---|---|
-     * | `.../themes/:themeId` | 저작 UI(P4c) | **파생 문서 그대로 + `base`** — 편집 대상은 사람이 적은 것이다 |
+     * | `.../themes/:themeId` | 저작 UI | **파생 문서 그대로 + `base`** — 편집 대상은 사람이 적은 것이다 |
      * | `.../theme` (여기) | 캔버스·내보내기 | **홀로 서는 테마 하나** — 그리는 쪽은 유래가 필요 없다 |
      *
      * 그래서 파생 테마면 여기서 `mergeTheme`으로 합쳐 낸다. `resolveTheme(document, base)`가
      * base를 요구하므로, 합치지 않고 내면 받는 쪽이 base를 따로 얻어 두 인자를 맞춰야 한다 —
      * `ThemeSource`가 `() => Theme | null`인 이유가 사라진다.
      *
-     * **합친 결과를 저장하지는 않는다(계획서 D2).** 읽을 때 계산할 뿐이고, 저장되는 것은
-     * 파생 그대로다. 병합 결과가 저장될 자리는 §4.5의 스냅샷 하나뿐이고 아직 없다.
-     * P4a-1이 `base+patch` 경로와 `merge 후 해석` 경로가 **같은 CSS**를 내는 것을 쟀으므로
+     * **합친 결과를 저장하지는 않는다.** 읽을 때 계산할 뿐이고, 저장되는 것은
+     * 파생 그대로다. 병합 결과를 저장하는 자리는 스냅샷 하나뿐이다(설계서 「스냅샷」).
+     * `base+patch` 경로와 `merge 후 해석` 경로가 **같은 CSS**를 내므로(`packages/themes/test/merge.test.ts`의
+     * 「병합-단독 경로와 base+patch 경로가 같은 CSS를 낸다 — 유래를 뺐는데 결과가 같다」)
      * 여기서 합쳐 내도 캔버스가 보는 결과는 같다.
      *
      * **`theme`이 `null`인 경우가 셋이고 전부 정상이다:** 기본 레이아웃이 없다(0007 이전
-     * 프로젝트 — 재라 #8), 레이아웃이 테마를 안 고름(재라 #7), 테마 행이 사라짐. 화면은
+     * 프로젝트), 레이아웃이 테마를 안 고름, 테마 행이 사라짐. 화면은
      * 구조 기본 CSS만으로 그려진다 — 이미 있는 경로다(`apps/web`의 `theme-source.ts`).
      *
      * **해석 이슈를 여기서 422로 만들지 않는다.** 저장 경계가 이미 막았으므로 여기 오는
      * 것은 통과한 테마뿐이고, 그래도 이슈가 난다면(코드의 시스템 테마가 바뀌어 파생이
-     * 끊긴 경우 — 재라 #5) **그리기를 막는 것보다 테마 없이 그리는 편이 낫다.**
-     * `issues`를 함께 실어 클라이언트가 콘솔에 남길 수 있게 한다(P4a-2의 재라 #12 결정).
+     * 끊긴 경우) **그리기를 막는 것보다 테마 없이 그리는 편이 낫다.**
+     * `issues`를 함께 실어 클라이언트가 콘솔에 남길 수 있게 한다.
      */
     app.get('/:projectId/theme', { preHandler: projectGuard('viewer') }, async (request) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
@@ -265,19 +257,18 @@ export function themeRoutes() {
     })
 
     /**
-     * **이 프로젝트가 쓸 테마를 고른다**(P4b-3 계획서 D2). 기본 레이아웃의 `theme_id`
+     * **이 프로젝트가 쓸 테마를 고른다.** 기본 레이아웃의 `theme_id`
      * 하나를 바꾼다.
      *
      * **왜 이것이 필요한가.** 사슬 `projects.default_layout_id → layouts.theme_id →
-     * themes` 중 **가운데를 바꾸는 수단이 없었다** — 파생 테마를 만들 수는 있는데 그것을
-     * 화면에 거는 경로가 없어 DB를 직접 고쳐야 했다(P4a-3 이월의 *"테마를 화면에 거는
-     * 경로가 없다"*). 시스템 테마가 하나뿐일 때는 고를 것이 없어 드러나지 않았다.
+     * themes` 중 **가운데를 바꾸는 수단이 이것뿐이다** — 이것이 없으면 파생 테마를 만들 수는
+     * 있어도 그것을 화면에 거는 경로가 없어 DB를 직접 고쳐야 한다.
      *
-     * **레이아웃 CRUD를 만들지 않는다.** P4a-3이 의도적으로 안 만든 자리이고(D7),
-     * 고르개에 필요한 것은 그 테이블의 **한 필드**뿐이다. 레이아웃 자체의 관리는 §4.4의
+     * **레이아웃 CRUD를 만들지 않는다.** 의도적으로 비워 둔 자리이고,
+     * 고르개에 필요한 것은 그 테이블의 **한 필드**뿐이다. 레이아웃 자체의 관리는 설계서 「레이아웃」의
      * 레이아웃 에디터가 할 일인데 그쪽은 UI가 아니라 **선택 모델부터** 정해야 한다.
      *
-     * **owner 전용이다**(§10 — 테마 편집과 같은 등급). 페이지·메뉴가 editor까지 허용하는
+     * **owner 전용이다**(설계서 「권한 모델」 — 테마 편집과 같은 등급). 페이지·메뉴가 editor까지 허용하는
      * 것과 다르다: 테마를 바꾸는 것은 그 프로젝트의 **모든 화면**을 한 번에 바꾼다.
      *
      * ---
@@ -292,17 +283,17 @@ export function themeRoutes() {
      * **목록 밖의 `themeId`는 404다.** `GET /:projectId/themes`가 이미 *"이 프로젝트에서
      * 고를 수 있는 것"*을 뜻하므로(`repos/themes.ts`의 `listThemes` 주석) 그 밖은 고를 수
      * 없다. 403이 아니라 404인 것은 남의 프로젝트 테마의 **존재를 숨기기** 위해서다
-     * (설계 §10 — `requireWritableTheme`이 같은 판정을 한다).
+     * (「권한 모델」 — `requireWritableTheme`이 같은 판정을 한다).
      *
-     * **기본 레이아웃이 없는 프로젝트는 409다(재라 #1).** 0007 이전에 만들어진 것이고
-     * P4a-3 재라 #8이 *"만들어 주지 않는다"*로 닫았다. 그러면 이 라우트가 그 상태를
+     * **기본 레이아웃이 없는 프로젝트는 409다.** 0007 이전에 만들어진 것이고
+     * 서버는 그 레이아웃을 만들어 주지 않는다(아래 표). 그러면 이 라우트가 그 상태를
      * 소리 내야 한다.
      *
      * | 후보 | 왜 아닌가 |
      * |---|---|
-     * | 404 | `projectGuard`가 outsider에게 이미 404를 낸다(§10). 같은 코드를 쓰면 owner가 받은 404가 *"내 프로젝트가 사라졌다"*로 읽힌다 |
+     * | 404 | `projectGuard`가 outsider에게 이미 404를 낸다(「권한 모델」). 같은 코드를 쓰면 owner가 받은 404가 *"내 프로젝트가 사라졌다"*로 읽힌다 |
      * | 422 | 본문은 흠이 없다. 422는 *"내용이 처리 불가"*이고 여기서 처리 불가한 것은 **서버 쪽 상태**다 |
-     * | 레이아웃을 만들어 준다 | P4a-3 재라 #8을 뒤집는 판단이고, 그 근거(마이그레이션 시점에 만들 수 있는 것은 테마 없는 레이아웃뿐이라 관찰 결과가 같다)를 이 슬라이스가 반증하지 않았다 |
+     * | 레이아웃을 만들어 준다 | 마이그레이션 시점에 만들 수 있는 것은 테마 없는 레이아웃뿐이라 관찰 결과가 같다 — 만들어 줄 근거가 없다 |
      *
      * **409인 이유:** 이 저장소에서 409는 *"요청은 옳은데 지금 상태가 그것을 허락하지
      * 않는다"*이다(자식이 있는 메뉴 삭제·쓰이고 있는 테마 삭제 — README의 에러 표).
@@ -335,7 +326,7 @@ export function themeRoutes() {
           // 행부터 잡으면 프로젝트 삭제의 CASCADE 와 고리가 된다(그 함수의 머리말에 잰 값).
           await lockProjectShared(trx, projectId)
           const chosen = await updateLayoutTheme(trx, layout.id, themeId)
-          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
+          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
           // 있다 — 그 대기 뒤의 역할로 판정한다.
           if (chosen) await recheckProjectRole(trx, request)
           return chosen
@@ -379,10 +370,10 @@ export function themeRoutes() {
       try {
         record = await withTransaction(app.db, async (trx) => {
           // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared`). 삽입의 FK 도 같은 `KEY SHARE`를 걸지만
-          // 그것은 프로젝트 삭제 뒤에 섰다가 깨면 23503 — 봉투 없는 500 이다(이월 AA′ 남는 틈 2). 먼저 잡으면 0 행 → 404.
+          // 그것은 프로젝트 삭제 뒤에 섰다가 깨면 23503 — 봉투 없는 500 이다. 먼저 잡으면 0 행 → 404.
           await lockProjectShared(trx, projectId)
           const inserted = await insertTheme(trx, projectId, theme)
-          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는
+          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 삽입의 FK 가 프로젝트 행에 거는
           // `KEY SHARE`가 복원 · 프로젝트 삭제의 `FOR UPDATE` 뒤에 섰을 수 있다 — 그 대기 뒤의 역할로 판정한다.
           await recheckProjectRole(trx, request)
           return inserted
@@ -413,10 +404,10 @@ export function themeRoutes() {
         record = await withTransaction(app.db, async (trx) => {
           // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared` — 테마 고르기와 같은 꼴). 이것이 없으면
           // slug 를 바꾸는 UPDATE(`themes (project_id, slug)` UNIQUE — 키 갱신이라 `FOR UPDATE`)가 복원의 `set-layout-theme`
-          // · 테마 고르기의 FK 가 테마 행에 건 `KEY SHARE` 뒤에 서고, 그 대기가 재확인보다 늦게 끝난다(이월 AA′ 리뷰 F2).
+          // · 테마 고르기의 FK 가 테마 행에 건 `KEY SHARE` 뒤에 서고, 그 대기가 재확인보다 늦게 끝난다.
           await lockProjectShared(trx, projectId)
           const updated = await updateTheme(trx, themeId, theme)
-          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
+          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원 · 프로젝트 삭제 뒤에 섰을 수
           // 있다 — 그 대기 뒤의 역할로 판정한다.
           if (updated) await recheckProjectRole(trx, request)
           return updated
@@ -441,11 +432,11 @@ export function themeRoutes() {
         const deleted = await withTransaction(app.db, async (trx) => {
           // **프로젝트 행이 먼저다**(`repos/projects.ts`의 `lockProjectShared` — 테마 고르기와 같은 꼴). 이것이 없으면
           // 삭제의 `ON DELETE RESTRICT` 검사(`layouts`를 `FOR KEY SHARE`로 훑는다)가 복원이 `FOR UPDATE`로 쥔 레이아웃
-          // 행 뒤에 서고, 복원이 레이아웃을 이 테마에서 떼면 그 대기 **뒤에** 통과해 강등된 사람의 삭제가 커밋됐다
-          // (이월 AA′ 리뷰 F1 — 강등 200 뒤에 204).
+          // 행 뒤에 서고, 복원이 레이아웃을 이 테마에서 떼면 그 대기 **뒤에** 통과해 강등된 사람의 삭제가 커밋된다
+          // (강등 200 뒤에 204).
           await lockProjectShared(trx, projectId)
           const removed = await deleteTheme(trx, themeId)
-          // **커밋 순간의 권한**(이월 AA′ — `auth/roles.ts`의 `recheckProjectRole`). 그 대기 뒤의 역할로 판정한다.
+          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 그 대기 뒤의 역할로 판정한다.
           if (removed) await recheckProjectRole(trx, request)
           return removed
         })

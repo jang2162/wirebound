@@ -5,11 +5,11 @@ import { signup, withApi } from './helpers'
 const 계정 = { email: 'Signup@Example.com', name: '가입자', password: 'password1234' } as const
 
 /**
- * **가입 라우트의 부재를 자가 든다**(2026-08-20 D1).
+ * **가입 라우트의 부재를 자가 든다.**
  *
- * 그냥 지우기만 하면 다음 사람이 조용히 되살린다 — 지운 것을 지운 채로 두는 힘은
- * 코드가 아니라 케이스에 있다(P9-2가 `--password` 플래그의 부재를 케이스로 든 것과
- * 같은 자리다). 계정을 만드는 길은 `db/seed-user.ts`의 시딩 하나이고,
+ * 없는 것을 케이스로 들지 않으면 다음 사람이 조용히 되살린다 — 없는 것을 없는 채로 두는 힘은
+ * 코드가 아니라 케이스에 있다(`wireb`의 `--password` 플래그의 부재를 케이스로 드는 것과
+ * 같은 자세다). 계정을 만드는 길은 `db/seed-user.ts`의 시딩 하나이고,
  * `test/seed-user.test.ts`가 그쪽을 잰다.
  */
 describe('POST /api/auth/signup — 없다', () => {
@@ -63,8 +63,7 @@ describe('POST /api/auth/login', () => {
   })
 
   /**
-   * **가입 라우트가 들고 있던 케이스가 여기로 옮겨 왔다**(2026-08-20). 쿠키를 내는 자리가
-   * 로그인 하나가 됐으므로 쿠키의 성질을 재는 자리도 여기다.
+   * 쿠키를 내는 자리가 로그인 하나이므로 쿠키의 성질을 재는 자리도 여기다.
    */
   it('쿠키가 HttpOnly이고 SameSite=Lax다', async () => {
     await withApi(async (ctx) => {
@@ -199,10 +198,10 @@ describe('POST /api/auth/logout', () => {
 })
 
 /**
- * **이 변경은 만드는 길만 없앤다**(2026-08-20 D7). 이미 DB에 있는 계정은 그대로
+ * **없는 것은 계정을 만드는 길뿐이다.** 이미 DB에 있는 계정은 그대로
  * 로그인되고, 로그인 뒤에 할 수 있던 것도 그대로다.
  */
-describe('이미 있는 계정은 그대로 쓴다 (D7)', () => {
+describe('이미 있는 계정은 그대로 쓴다', () => {
   it('로그인 → me → logout 이 그대로 이어진다', async () => {
     await withApi(async (ctx) => {
       const { user } = await signup(ctx, 계정)
