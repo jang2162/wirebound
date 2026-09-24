@@ -216,25 +216,18 @@ export interface ApiClient {
    * | `{description:''}` | 200, `""` — **빈 문자열은 `null`로 접히지 않는다** |
    * | `{description:'a'×2000}` | 200 |
    * | `{description:'a'×2001}` · `{description:'가'×2001}` | 400 `"설명은 2000자 이하여야 합니다"` |
-   * | **`{description:'a\x00b'}`(NUL)** | **500** `"서버 오류가 발생했습니다"` — 아래 |
+   * | `{description:'a\x00b'}`(NUL) | 400 `"페이지 제목·설명에 NUL 문자(U+0000)를 포함할 수 없습니다"` — 아래 |
    * | viewer가 보냄 | 403 |
    * | **남이 그 페이지의 노드를 잠근 동안** | **200** |
    *
-   * ### NUL은 500이다 — **`importPage`와 갈린다**(`apps/api` 쪽 결함)
+   * ### NUL은 400이다 — 서버가 판정하고 문장을 준다
    *
-   * `description`도 `title`도 NUL(`U+0000`)이 들어가면 **400이 아니라 500**이다(실측 —
-   * `POST .../pages`도 같다). Postgres가 `invalid byte sequence for encoding "UTF8": 0x00`
-   * 으로 거절하는 것이 그대로 올라온다. **`routes/pages.ts`의 `containsNulByte`는
-   * `PUT .../schema` 한 자리에서만 불리고 이 라우트는 그것을 안 지난다.**
+   * `description`도 `title`도 NUL(`U+0000`)이 들어가면 400이고 봉투의 문장이 이유다(`POST .../pages`·`importPage`도
+   * 같은 문장이다). 어느 텍스트 칸이 그 판정을 지나는지는 `apps/api` 의 `src/db/nul-guard.ts` `NulByteError` 머리말이
+   * 소유하고, 칸마다 HTTP 로 재는 것은 `apps/api/test/nul-text-inputs.test.ts` 다.
    *
-   * **같은 값이 `importPage`로 오면 400이고 문장까지 있다** — `"페이지 제목·설명에 NUL
-   * 문자(U+0000)를 포함할 수 없습니다"`(실측. 아래 `importPage`의 실패 표에도 그 갈래가
-   * 있다). **한 값에 두 답이 있다.** 여기 적는 이유는 이 표를 읽는 사람이 그 갈래를 모르기
-   * 때문이다 — 고치는 것은 `apps/api` 쪽 일이다.
-   *
-   * **화면은 이 갈래를 다시 판정하지 않는다.** 500이면 서버가 문장을 안 주므로
-   * `toFailure`가 `SAVE_FAILED`(*"설명을 저장하지 못했습니다"*)를 쓴다 — 화면이 NUL을
-   * 미리 막으면 서버와 규칙이 두 벌이 된다.
+   * **화면은 이 갈래를 다시 판정하지 않는다.** `toFailure`가 봉투의 문장을 그대로 보인다(`issues`가 없는 400 —
+   * `api/failure.tsx`의 `reason`) — 화면이 NUL을 미리 막으면 서버와 규칙이 두 벌이 된다.
    *
    * **잠금이 이 경로를 안 본다**(실측). 소프트 잠금(설계서 「소프트 잠금」)의 `findLockConflict`는 **문서 안 포인터**를
    * 보는데 `pages.description`은 문서 밖 컬럼이라, 이 라우트는 `lockConflictError`를 아예

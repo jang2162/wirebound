@@ -52,7 +52,7 @@ function frameTypes(path: string): string[] {
 function clientFrameTypes(): { api: string[]; web: string[] } {
   const api = stripComments(readFileSync(API_PROTOCOL, 'utf8'))
   return {
-    api: [...new Set([...api.matchAll(/z\.literal\('([a-z-]+)'\)/g)].map((match) => match[1]!))].sort(),
+    api: [...new Set([...api.matchAll(/z\s*\.\s*literal\s*\(\s*'([a-z-]+)'\s*\)/g)].map((match) => match[1]!))].sort(),
     web: typesIn(WEB_PROTOCOL, 'export type ClientFrame ='),
   }
 }

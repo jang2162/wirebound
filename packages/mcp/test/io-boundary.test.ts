@@ -71,7 +71,7 @@ const EFFECTFUL_SPECIFIER = new RegExp(
   `(?:^|[^\\w$])(?:from|import|require)\\s*\\(?\\s*['"](?:node:)?(?:${EFFECTFUL_MODULES.join('|')})['"]`,
 )
 
-const EFFECTFUL = [EFFECTFUL_SPECIFIER, /\bprocess\./, /(?<!io\.)\bfetch\(/, /\bconsole\./]
+const EFFECTFUL = [EFFECTFUL_SPECIFIER, /\bprocess\s*\./, /(?<!\bio\s*\.\s*)\bfetch\s*\(/, /\bconsole\s*\./]
 
 function sourceFiles(dir: string = SRC, prefix = ''): string[] {
   const found: string[] = []

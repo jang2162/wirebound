@@ -167,12 +167,12 @@ describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', ()
     // 들어오면 여기 `info`가 하나 더 붙어 이 케이스가 죽는다. **뒤에 인자가 더 붙어도 센다** —
     // `createPool`이 시간 제한을 둘째·셋째로 받는다. 끝을 `\)`로 못박으면 그 호출을 못 봐 빨강이 되고,
     // 거꾸로 `app.log.info(config.databaseUrl, …)`도 못 본다.
-    const receivers = [...main.matchAll(/(\w+)\(config\.databaseUrl[,)]/g)].map((match) => match[1]).sort()
+    const receivers = [...main.matchAll(/(\w+)\s*\(\s*config\s*\.\s*databaseUrl\s*[,)]/g)].map((match) => match[1]).sort()
     expect(receivers).toEqual(['createPool', 'describeDatabaseTarget'])
   })
 
   it('템플릿 문자열에 그대로 끼워 넣지도 않는다', () => {
-    expect(main).not.toMatch(/\$\{\s*config\.databaseUrl\s*\}/)
+    expect(main).not.toMatch(/\$\{\s*config\s*\.\s*databaseUrl\s*\}/)
   })
 
   it('**스키마 상태를 같은 줄에 붙인다** — 뜬 뒤에 세는 자를 실제로 지난다', () => {
@@ -217,8 +217,8 @@ describe('migrate 가 시작할 때 대상 DB 를 말한다', () => {
   })
 
   it('`config.databaseUrl` 을 받는 자가 둘뿐이다 — 붙는 자와 가려서 찍는 자', () => {
-    const receivers = [...migrate.matchAll(/(\w+)\((?:direction, )?config\.databaseUrl[,)]/g)].map((match) => match[1]).sort()
+    const receivers = [...migrate.matchAll(/(\w+)\s*\(\s*(?:direction\s*,\s*)?config\s*\.\s*databaseUrl\s*[,)]/g)].map((match) => match[1]).sort()
     expect(receivers).toEqual(['createPool', 'migrationTargetLine'])
-    expect(migrate).not.toMatch(/\$\{\s*config\.databaseUrl\s*\}/)
+    expect(migrate).not.toMatch(/\$\{\s*config\s*\.\s*databaseUrl\s*\}/)
   })
 })

@@ -75,7 +75,7 @@ export default defineConfig({
           // 두고 `revisions-concurrency.test.ts`가 든 api 전량을 돌리면 매 실행마다 서로 다른
           // 파일 몇 개가 깨지고, CLI로 `--no-file-parallelism`을 주면 전부 통과한다).
           // `poolOptions.forks.singleFork`는 프로젝트 단위로 먹히고 같은 결과를 낸다 —
-          // 이 프로젝트의 파일 전부가 포크 하나에서 차례로 돈다.
+          // 이 프로젝트의 파일이 하나씩 차례로 돈다(포크 프로세스가 몇 개 떠 있든 파일은 겹치지 않는다 — 아래 build 주석).
           //
           // 이 설정이 사라지면 `revisions-concurrency.test.ts`가 실제로 커밋한 행이
           // 동시에 도는 다른 파일의 `withApi` 트랜잭션에 보이고, 그 파일의 정리
@@ -135,7 +135,8 @@ export default defineConfig({
           // 느려진다. 이 프로젝트만 `pnpm test:build`로 따로 돌린다.
           testTimeout: 300_000,
           hookTimeout: 300_000,
-          // **파일을 한 포크에서 차례로 돌린다.** 파일마다 `beforeAll`에서 `packages/*`를 재빌드하고 tsdown 이 `dist`를
+          // **파일을 차례로 돌린다** — 포크 프로세스는 워커 수만큼 떠도 파일은 하나씩 돈다(다시 재는 법: `pnpm test:build
+          // --reporter=json` 의 파일별 시작 · 끝 시각이 겹치지 않는다). 파일마다 `beforeAll`에서 `packages/*`를 재빌드하고 tsdown 이 `dist`를
           // 비운 뒤 채우므로, 둘이 나란히 돌면 한쪽이 읽는 `dist`를 다른 쪽이 지운다(`Cannot find module …/dist/index.js`
           // — `--maxWorkers=25%`로 돌리면 mcp `dist-smoke`가 죽는다). 워커 수를 CLI 로 얼마를 주든 이 줄이 막는다.
           // `fileParallelism`은 여기 쓰면 조용히 무시된다(위 api 프로젝트 주석) — 같은 이유로 `singleFork`다.

@@ -65,7 +65,7 @@ function consumers(): Map<string, string[]> {
     for (const method of METHODS) {
       // `api.createProject(` 처럼 **무언가에 붙여** 부르는 형태만 센다 — 이름만 스치는
       // import·타입 참조는 호출이 아니다.
-      if (new RegExp(`\\.${method}\\s*\\(`).test(code)) {
+      if (new RegExp(`\\.\\s*${method}\\s*\\(`).test(code)) {
         map.get(method)?.push(path)
       }
     }
@@ -237,15 +237,15 @@ describe('ApiClient의 소비자', () => {
       '/** 표: `const page = await api.createPage(…)` 뒤 그 id를 주소로 쓴다 */',
     ].join('\n')
 
-    expect(/\.createProject\s*\(/.test(planted)).toBe(true)
-    expect(/\.createProject\s*\(/.test(stripComments(planted))).toBe(false)
-    expect(/\.createPage\s*\(/.test(stripComments(planted))).toBe(false)
+    expect(/\.\s*createProject\s*\(/.test(planted)).toBe(true)
+    expect(/\.\s*createProject\s*\(/.test(stripComments(planted))).toBe(false)
+    expect(/\.\s*createPage\s*\(/.test(stripComments(planted))).toBe(false)
   })
 
   it('코드에 심은 호출은 잡는다 — 음성 대조', () => {
     // 반대편. 주석을 걷는 것이 **코드까지** 지우지는 않는지 본다.
     const planted = 'await api.deleteProject(id)\n// `api.deleteProject(…)` 를 설명하는 주석'
 
-    expect(/\.deleteProject\s*\(/.test(stripComments(planted))).toBe(true)
+    expect(/\.\s*deleteProject\s*\(/.test(stripComments(planted))).toBe(true)
   })
 })

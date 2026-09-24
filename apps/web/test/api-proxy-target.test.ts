@@ -167,7 +167,7 @@ describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
 
   /** `resolveApiProxyTarget({ ... })`의 인자 객체를 키 → 값으로 읽는다. */
   function wiring(): Record<string, string> {
-    const match = source.match(/resolveApiProxyTarget\(\{([^}]*)\}\)/)
+    const match = source.match(/resolveApiProxyTarget\s*\(\s*\{([^}]*)\}\s*\)/)
     if (match?.[1] === undefined) {
       return {}
     }
@@ -189,11 +189,11 @@ describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
     expect(viteConfigSource.length).toBeGreaterThan(200)
     expect(source).toContain('export default defineConfig(')
     // 호출이 **하나뿐**이어야 한다 — 둘이면 첫 번째만 보고 두 번째가 조용히 이긴다.
-    expect(source.match(/resolveApiProxyTarget\(/g)).toHaveLength(1)
+    expect(source.match(/resolveApiProxyTarget\s*\(/g)).toHaveLength(1)
     // 그 값이 이름을 갖는다 — 아래 배너 케이스가 그 이름을 다시 쓴다.
     // **네임스페이스 접두사를 허용한다**(`apiProxyRules.resolveApiProxyTarget(`) — 행동이
     // 같은 옳은 설정을 죽이지 않으려는 것이다.
-    expect(source).toMatch(/const apiProxyTarget = [\w$.]*\bresolveApiProxyTarget\(/)
+    expect(source).toMatch(/const\s+apiProxyTarget\s*=\s*[\w$.\s]*\bresolveApiProxyTarget\s*\(/)
     expect(Object.keys(wiring()).sort()).toEqual(['fileEnv', 'shellEnv'])
   })
 
@@ -303,9 +303,9 @@ describe('배선이 가리키는 자리', () => {
   })
 
   it('그 파일을 읽는 자가 하나뿐이다 — 두 자리에서 읽으면 한쪽만 고쳐진다', () => {
-    expect(source.match(/new URL\('\.\.\/api\/\.env'/g)).toHaveLength(1)
+    expect(source.match(/new\s+URL\s*\(\s*'\.\.\/api\/\.env'/g)).toHaveLength(1)
     // 선언(`function readApiEnvFile()`)은 빼고 **부르는 자리**만 센다.
-    expect(source.match(/(?<!function )readApiEnvFile\(\)/g)).toHaveLength(1)
+    expect(source.match(/(?<!function\s+)readApiEnvFile\s*\(\s*\)/g)).toHaveLength(1)
   })
 
   it('**규칙을 그 모듈에서 가져온다** — 같은 이름의 지역 함수로 갈음하지 않는다', () => {

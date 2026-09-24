@@ -74,10 +74,10 @@ const EFFECTFUL_SPECIFIER = new RegExp(
 
 const EFFECTFUL = [
   EFFECTFUL_SPECIFIER,
-  /\bprocess\./,
-  /(?<!io\.)\bfetch\(/,
+  /\bprocess\s*\./,
+  /(?<!\bio\s*\.\s*)\bfetch\s*\(/,
   // 위 머리말의 `console.` 절 — `io`를 안 거치고 표준출력을 만지는 가장 흔한 한 줄이다.
-  /\bconsole\./,
+  /\bconsole\s*\./,
 ]
 
 function sourceFiles(dir: string = SRC, prefix = ''): string[] {
@@ -134,10 +134,11 @@ describe('바깥 세계를 만지는 자리', () => {
   })
 
   /**
-   * **구문 오류가 든 소스는 조용히 지나가지 않는다.** 파서의 복구가 코드를 지워 `process.`가 사라진다
-   * (`@wirebound/test-support` 의 `stripComments` 머리말) — 걷는 자리가 던져야 빨강이 된다. 헬퍼의 성질은 그 패키지의 케이스가 재고, 여기서는 이 자가 그 헬퍼를 지나 던지는지를 잰다.
+   * **구문 오류가 든 소스는 조용히 지나가지 않는다.** 닫히지 않은 블록 주석은 뒤따르는 `process.` 호출까지 공백으로
+   * 지운다(`@wirebound/test-support` 의 `stripComments` 머리말) — 걷는 자리가 던져야 빨강이 된다. 헬퍼의 성질은 그 패키지의 케이스가 재고, 여기서는 이 자가 그 헬퍼를 지나 던지는지를 잰다.
    */
-  it('구문 오류가 든 소스는 읽지 않고 던진다 — 복구가 지운 호출을 초록으로 넘기지 않는다', () => {
+  it('구문 오류가 든 소스는 읽지 않고 던진다 — 닫히지 않은 주석이 지운 호출을 초록으로 넘기지 않는다', () => {
+    expect(() => sourceTouchesWorld('const a = 1 /* 닫히지 않은 주석\nprocess.exit(1)')).toThrow(/구문 오류/)
     expect(() => sourceTouchesWorld('@@@ process.exit(1)')).toThrow(/구문 오류/)
     expect(() => sourceTouchesWorld('const x = ) process.exit(1)')).toThrow(/구문 오류/)
   })

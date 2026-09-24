@@ -24,7 +24,9 @@ import { withApi } from './helpers'
  * `unguardedProjectRoutes` 에 든다(부르는 쪽이 `[]` 를 단언한다). 감싼 가드 · 훅(`onRequest` · `addHook`)으로 단
  * 가드가 그렇다. **`:projectId` 가 없는 경로는 이 검사를 안 지난다** — `projectGuard` 는 그 경로에서 늘 400 이다.
  *
- * `HEAD` 는 Fastify 가 `GET` 마다 저절로 더하는 짝이라 뺀다(preHandler 가 같다).
+ * **`HEAD` 는 Fastify 가 `GET` 마다 저절로 더한 짝만 뺀다** — 그 짝은 `GET` 의 옵션을 복사해 등록되므로 같은 URL 의
+ * `GET` 과 preHandler 가 **참조까지** 같다(`autoHead`). `app.head(…)` 로 명시한 라우트는 가드가 새 클로저라 남는다.
+ * 명시한 `HEAD` 가 `GET` 과 같은 가드 값(변수 하나)을 나눠 쓰면 짝으로 읽혀 빠진다 — 최소 역할이 `GET` 과 같다.
  */
 export interface GuardedRoute {
   method: string
@@ -75,12 +77,24 @@ export async function guardMinOf(preHandlers: unknown[]): Promise<ProjectRole | 
   return undefined
 }
 
+/** Fastify 가 `route` 의 `GET` 짝으로 저절로 더한 `HEAD` 인가(머리말의 `HEAD` 문단). */
+function autoHead(route: RegisteredRoute, routes: RegisteredRoute[]): boolean {
+  return routes.some(
+    (other) =>
+      other !== route &&
+      other.url === route.url &&
+      other.method.split(',').includes('GET') &&
+      other.preHandlers.length === route.preHandlers.length &&
+      other.preHandlers.every((handler, index) => handler === route.preHandlers[index]),
+  )
+}
+
 export async function routeCensus(): Promise<RouteCensus> {
   const routes: RegisteredRoute[] = []
   await withApi(async () => {}, { onRoute: (route) => routes.push(route) })
   const census: RouteCensus = { guarded: [], unguardedProjectRoutes: [] }
   for (const route of routes) {
-    const methods = route.method.split(',').filter((method) => method !== 'HEAD')
+    const methods = route.method.split(',').filter((method) => method !== 'HEAD' || !autoHead(route, routes))
     const min = await guardMinOf(route.preHandlers)
     for (const method of methods) {
       if (min !== undefined) census.guarded.push({ method, url: route.url, min })

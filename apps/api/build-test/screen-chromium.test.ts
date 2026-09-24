@@ -23,7 +23,6 @@
  * | 받는 쪽(PowerPoint)이 그림을 그리는가 | **사람이 손으로** — `packages/exporter/build-test/dist-pptx.test.ts` 「진짜 자는 PowerPoint다」의 절차 |
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { exportPptx, exportPage, type PptxScreen } from '@wirebound/exporter'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
@@ -40,22 +39,34 @@ import {
 
 installCatalog()
 
-/** 이 기계에 브라우저가 있나. **없으면 건너뛰고 그렇다고 말한다.** */
-function browserPath(): string | null {
+/**
+ * 이 기계에서 렌더러가 띄우는 브라우저가 뜨나. **안 뜨면 건너뛰고 그렇다고 말한다.**
+ *
+ * **경로가 아니라 실제로 띄워서 본다.** 렌더러는 `chromium.launch()`로 헤드리스 셸(`chromium_headless_shell-<리비전>`)을
+ * 띄우는데 `chromium.executablePath()`는 **전체 Chromium** 의 경로다 — 최상위 README 「넣는 법」 절대로 `--only-shell` 만
+ * 넣은 기계에서는 그 경로가 없어 브라우저가 뜨는데도 전부 건너뛴다(다시 재는 법: 셸 디렉터리만 든
+ * `PLAYWRIGHT_BROWSERS_PATH` 로 이 파일을 돌린다).
+ *
+ * **`SCREEN_CHROMIUM_PATH`는 안 본다** — 서버(`main.ts`)만 그 값을 렌더러에 넘긴다. 이 스모크는 playwright-core 캐시의
+ * 브라우저로만 돈다.
+ */
+async function browserLaunches(): Promise<boolean> {
   try {
-    const path = chromium.executablePath()
-    return existsSync(path) ? path : null
+    const browser = await chromium.launch()
+    await browser.close()
+    return true
   } catch {
-    return null
+    return false
   }
 }
 
-const EXECUTABLE = browserPath()
-const 있다 = EXECUTABLE !== null
+const 있다 = await browserLaunches()
 
 if (!있다) {
   // eslint-disable-next-line no-console
-  console.log('[screen-chromium 스모크] 이 기계에 Chromium 이 없어 건너뛴다 — `npx playwright install chromium`')
+  console.log(
+    '[screen-chromium 스모크] Chromium 을 띄우지 못해 건너뛴다 — 넣는 법: `node apps/api/node_modules/playwright-core/cli.js install chromium --only-shell`(최상위 README 「넣는 법」 절)',
+  )
 }
 
 const theme = resolveTheme(systemTheme('admin')!).theme
