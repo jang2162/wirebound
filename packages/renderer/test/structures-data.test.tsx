@@ -522,7 +522,8 @@ describe('KeyValue:cardGrid', () => {
    *
    * `STYLE_PROPERTIES`에 **컴포넌트 범위 개념이 없어** `gridColumns`가 `List:cardGrid`·
    * `Grid`·`KeyValue` 어디에나 열린다. 아래가 그 결과다: 노드는 `3`을 실었는데 **화면에는
-   * 7열이 그려진다.** 테마가 이기는 것은 설계서 「components — 구조 + 스킨」대로 옳고,
+   * 7열이 그려진다.** 테마가 이기는 것은 옳다고 읽고(스킨이 구조를 입힌다 — 설계서 「components — 구조 + 스킨」, 해석은
+   * `packages/themes/src/spec/handles.ts` 머리말),
    * **조용하지는 않다** — 테마 검증이 `node-handle-overwrite`(warning)로 알린다. 그 표는
    * `packages/themes/src/spec/handles.ts`의 `NODE_HANDLES`가 갖는다(`KeyValue`의
    * `grid-template-columns`가 들어 있다). 이 케이스는 렌더러 쪽 사실만 잰다.
