@@ -13,12 +13,12 @@ import { act, render } from '@testing-library/react'
 import { CURRENT_DOCUMENT_VERSION, type PageDocument, type PatchOp } from '@wirebound/schema'
 import type { ReactElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import type { ApiClient } from '../../src/api/client'
+import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
 import { useEditCommit } from '../../src/edit/use-edit-commit'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { RealtimeProvider, createConnectionIdHolder } from '../../src/realtime/context'
-import { createEditChannel } from '../../src/realtime/edit-channel'
+import { createEditChannel, EditNotSentError } from '../../src/realtime/edit-channel'
 import { useRealtime } from '../../src/realtime/use-realtime'
 import { EditorStore } from '../../src/store/editor-store'
 import { EditorStoreProvider } from '../../src/store/use-editor-store'
@@ -571,5 +571,106 @@ describe('WS가 없으면 REST로 나간다', () => {
 
     expect(board.patchOps).toHaveBeenCalledTimes(1)
     expect(board.patchFrames()).toEqual([])
+  })
+})
+
+/**
+ * **결과를 모르는 실패는 «취소됐다»고 하지 않는다**(`edit/use-edit-commit.tsx`의 `unknownNotice`). 판정은 쓰기 장부의
+ * «모름»과 같은 함수 하나다(`api/failure.tsx`의 `refusedBeforeCommit`). Chrome 에서 잰 고장 방식: 행 잠금으로 편집을
+ * 서버에 붙잡은 채 소켓만 RST 로 끊으면 서버는 그것을 커밋하는데 화면은 «편집 1개가 취소됐습니다» 였다.
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 판정을 지운다(늘 «취소») | 끊김 둘 · REST 표의 «모름» 넷 |
+ * | 판정을 뒤집는다(늘 «모름») | REST 표의 «안 됨» 둘 · 나가지 못한 편집 · 409 를 재는 앞 케이스 셋 |
+ * | `EditNotSentError`를 «모름»으로 | 나가지 못한 편집 **혼자** |
+ * | 안 보낸 편집이 0 이어도 꼬리를 붙인다 | 첫 끊김 · REST 표의 «모름» 넷 |
+ * | 안 보낸 편집이 1 이면 꼬리를 안 붙인다 | 둘째 끊김 **혼자** |
+ * | 끊김을 «답을 못 받았다»가 아닌 실패로 끝낸다(`edit-channel.ts`의 `failAll`) | 끊김 둘 · `test/realtime/edit-channel.test.ts`의 둘 |
+ */
+describe('결과를 모르는 실패는 «취소됐다»고 하지 않는다', () => {
+  const RELOADED = '페이지를 서버 상태로 다시 불러왔고, 반영됐다면 곧 화면에 나타납니다.'
+
+  it('답을 기다리던 편집의 연결이 끊기면 «반영됐는지 모른다» — 안 보낸 것이 없으면 «취소»가 없다', async () => {
+    const board = mount()
+    board.commit('새 내용')
+
+    act(() => {
+      board.sockets[0]?.onclose?.()
+    })
+    await act(async () => {})
+
+    expect(board.store.getState().editFailure).toEqual({
+      kind: 'message',
+      message: `실시간 연결이 끊겨 보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다. ${RELOADED}`,
+    })
+  })
+
+  it('안 보낸 편집은 따로 세어 «취소됐다»고 말한다 — 그것만 이 탭이 버렸다', async () => {
+    const board = mount()
+    board.commit('새 내용')
+    // 둘째는 첫째의 답을 기다리며 큐에 선다(in-flight 는 하나) — 서버에 안 닿았다.
+    board.commitOther('둘째 값')
+    expect(board.patchFrames()).toHaveLength(1)
+
+    act(() => {
+      board.sockets[0]?.onclose?.()
+    })
+    await act(async () => {})
+
+    expect(board.store.getState().editFailure).toEqual({
+      kind: 'message',
+      message:
+        `실시간 연결이 끊겨 보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다. ${RELOADED}` +
+        ' 아직 보내지 않은 편집 1개는 취소됐습니다.',
+    })
+  })
+
+  /**
+   * REST 의 실패를 판정의 줄마다 — «안 됨»(4xx · api 가 낸 500)과 «모름»(연결 실패 · 봉투 없는 500 · 502 · 503)이 갈린다.
+   * 줄의 까닭은 `panels/comment-panel.tsx`의 `knownRejection` 표(첫 보내기 칸)가 소유한다.
+   */
+  it.each([
+    { label: '연결 실패', error: new ApiError(0, 'internal', '서버에 연결하지 못했습니다'), unknown: true },
+    { label: '봉투 없는 500(개발 프록시)', error: new ApiError(500, 'internal', '서버 오류'), unknown: true },
+    { label: '502', error: new ApiError(502, 'internal', '서버 오류'), unknown: true },
+    {
+      label: '봉투 503(DB 유실)',
+      error: new ApiError(503, 'internal', '데이터베이스와의 연결이 끊겨 요청이 반영됐는지 알 수 없습니다', [], true),
+      unknown: true,
+    },
+    { label: '봉투 500', error: new ApiError(500, 'internal', '서버 오류가 발생했습니다', [], true), unknown: false },
+    { label: '409', error: new ApiError(409, 'conflict', '페이지가 이미 변경되었습니다', [], true), unknown: false },
+  ])('REST $label — «모름» $unknown', async ({ error, unknown }) => {
+    const board = mount({ realtime: false })
+    board.patchOps.mockRejectedValueOnce(error)
+
+    board.commit('새 내용')
+    await act(async () => {})
+
+    const failure = board.store.getState().editFailure
+    const message = failure?.kind === 'message' ? failure.message : ''
+    if (unknown) {
+      expect(message).toBe(`보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다. ${RELOADED}`)
+    } else {
+      expect(message).toBe(`${error.message} — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다.`)
+    }
+  })
+
+  /**
+   * **나가지 못한 편집은 «안 됐다»다** — 프레임이 서버로 안 갔다(`EditNotSentError`). 전송이 이것을 내는 것은 `ready()`를 본
+   * 뒤 소켓이 닫힌 좁은 창이라, 여기서는 그 값을 전송이 곧바로 내게 해 판정만 잰다.
+   */
+  it('나가지 못한 편집은 «취소됐다»가 참이다', async () => {
+    const board = mount({ realtime: false })
+    board.patchOps.mockRejectedValueOnce(new EditNotSentError())
+
+    board.commit('새 내용')
+    await act(async () => {})
+
+    expect(board.store.getState().editFailure).toEqual({
+      kind: 'message',
+      message: '편집을 저장하지 못했습니다 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다.',
+    })
   })
 })

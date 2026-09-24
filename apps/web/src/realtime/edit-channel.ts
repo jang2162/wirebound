@@ -20,9 +20,10 @@
  * `ApiError`로 되세워 reject하면 **실패 → 화면 규칙이 하나로 남는다**(`api/failure.tsx`의
  * `toFailure`). 접속 방식에 따라 사용자가 보는 문장이 갈리지 않는다.
  *
- * **연결이 끊겨 실패한 것은 `ApiError`가 아니다.** 그쪽은 서버가 아무 판정도 하지 않은
- * 실패라 되세울 봉투가 없다 — `toFailure`가 그 값을 *"편집을 저장하지 못했습니다"*로
- * 떨어뜨리고, 그것은 **REST에서 네트워크가 끊겼을 때와 같은 문장**이다.
+ * **연결이 끊겨 실패한 것은 `ApiError`가 아니다.** 서버가 아무 판정도 하지 않은 실패라 되세울 봉투가 없다. 둘로 갈린다 —
+ * 프레임이 **나가지 못했으면** `EditNotSentError`(서버에 안 닿았다), 나간 뒤 답을 기다리다 연결을 잃었으면
+ * `UnansweredEditError`(닿았을 수 있다 — 결과를 모른다). REST 의 연결 실패도 «모른다»이므로(`api/failure.tsx`의
+ * `refusedBeforeCommit`) 두 경로가 같은 말을 한다(`edit/use-edit-commit.tsx`의 `unknownNotice`).
  */
 import type { PatchOp, ValidationIssue } from '@wirebound/schema'
 import { ApiError, type ApiErrorCode } from '../api/client'
@@ -72,30 +73,58 @@ export interface EditChannel {
    * 연결이 끊겼다 — **기다리던 편집을 지금 실패시킨다.** 안 하면 그 프로미스는 영영 안
    * 끝나고, 펌프 루프가 거기 매달려 **다음 편집도 안 나간다**(in-flight 하나를 지키는 `#pumping`이 계속 서
    * 있다). 화면에 증상 없이 조용히 멈추는 부류다.
+   *
+   * **«답을 못 받았다»로 끝낸다**(`UnansweredEditError`의 `'lost'`) — 기다리던 편집은 열린 연결로 나갔으므로 서버에
+   * 닿았을 수 있다. 소켓 리셋이면 서버는 그것을 커밋하고, 다시 붙은 연결이 그 결과를 화면에 세운다(Chrome — 행 잠금으로
+   * 편집을 서버에 붙잡은 채 WS 소켓만 RST 로 끊었다: 끊김으로 끝내던 판은 «편집 1개가 취소됐습니다» 인데 DB · 화면 둘 다
+   * 고친 값).
    */
   failInFlight(): void
   /**
-   * **이 탭이 스스로 연결을 버린다 — 기다리던 편집을 «답을 못 받았다»로 끝낸다**(`UnansweredEditError`).
-   * `failInFlight`와 갈린다: 끊긴 연결은 편집이 닿았는지부터 모르지만, 스스로 버린 연결은 **열려 있었으므로**
-   * 기다리던 편집이 **이미 서버에 닿았다** — 결과만 모른다. 그것을 끊김과 같게 끝내면 화면이 «취소됐다» 고
-   * 말하는데 서버는 커밋한다(Chrome). 부르는 곳은 쿠키가 바뀌어 다시 붙는 자리 하나다
+   * **이 탭이 스스로 연결을 버린다 — 기다리던 편집을 «답을 못 받았다»로 끝낸다**(`UnansweredEditError`의 `'renewed'`).
+   * 스스로 버린 연결은 **열려 있었으므로** 기다리던 편집이 서버에 닿았다 — 결과만 모른다. 끊김(`failInFlight`)과 까닭만
+   * 다르고 판정은 같다 — 화면이 말하는 까닭이 갈린다. 부르는 곳은 쿠키가 바뀌어 다시 붙는 자리 하나다
    * (`use-realtime.ts`의 «쿠키가 바뀌면»).
    */
   abandonInFlight(): void
 }
 
-/** 연결이 사라져 끝난 편집. **`ApiError`가 아니다**(머리말). */
-const DISCONNECTED = '실시간 연결이 끊겨 편집을 보내지 못했습니다'
+/**
+ * 프레임이 **나가지 못해** 끝난 편집 — 연결이 없거나 이미 닫혀 있었다. 서버에 안 닿았으므로 결과를 안다: 안 됐다.
+ * **`ApiError`가 아니다**(머리말).
+ */
+export class EditNotSentError extends Error {
+  constructor() {
+    super('실시간 연결이 끊겨 편집을 보내지 못했습니다')
+    this.name = 'EditNotSentError'
+  }
+}
 
 /**
- * 이 탭이 스스로 버린 연결로 답을 기다리던 편집(`abandonInFlight`). **`ApiError`가 아니고 끊김도 아니다** — 서버에
- * 닿았는데 결과를 모른다. 편집 경로가 이것을 보고 «취소됐다» 대신 «반영됐는지 모른다»를 말한다
- * (`edit/use-edit-commit.tsx`의 `unansweredNotice`).
+ * 답을 못 받은 편집이 왜 답을 못 받았나 — 화면이 말하는 까닭이다.
+ *
+ * | 값 | 언제 |
+ * |---|---|
+ * | `'lost'` | 연결이 끊겼다(오프라인 · 소켓 리셋 · 서버 재기동) · 새 연결로 갈아 끼웠다 · 채널을 뗐다 |
+ * | `'renewed'` | 쿠키가 바뀌어 이 탭이 스스로 연결을 버리고 다시 붙었다(`abandonInFlight`) |
+ */
+export type UnansweredCause = 'lost' | 'renewed'
+
+/**
+ * 나간 뒤 답을 기다리던 편집이 연결과 함께 끝났다. **`ApiError`가 아니고 «안 됐다»도 아니다** — 서버에 닿았을 수 있는데
+ * 결과를 모른다. 편집 경로가 이것을 보고 «취소됐다» 대신 «반영됐는지 모른다»를 말한다(`edit/use-edit-commit.tsx`의
+ * `unknownNotice`).
  */
 export class UnansweredEditError extends Error {
-  constructor() {
-    super('연결을 다시 붙이느라 보낸 편집의 답을 받지 못했습니다')
+  readonly why: UnansweredCause
+  constructor(why: UnansweredCause) {
+    super(
+      why === 'renewed'
+        ? '연결을 다시 붙이느라 보낸 편집의 답을 받지 못했습니다'
+        : '실시간 연결이 끊겨 보낸 편집의 답을 받지 못했습니다',
+    )
     this.name = 'UnansweredEditError'
+    this.why = why
   }
 }
 
@@ -113,12 +142,12 @@ export function createEditChannel(): EditChannel {
    */
   const waiting = new Map<string, Waiting>()
 
-  const failAll = (reason: () => Error = () => new Error(DISCONNECTED)): void => {
+  const failAll = (why: UnansweredCause): void => {
     // **사본을 순회하고 먼저 비운다.** reject가 부르는 쪽의 `catch`를 태우고, 그쪽이 다시
     // 이 채널을 건드릴 수 있다.
     const pending = [...waiting.values()]
     waiting.clear()
-    for (const one of pending) one.reject(reason())
+    for (const one of pending) one.reject(new UnansweredEditError(why))
   }
 
   return {
@@ -128,7 +157,7 @@ export function createEditChannel(): EditChannel {
       new Promise<EditAck>((resolve, reject) => {
         const live = link
         if (live === null || !live.send(patchFrame(request))) {
-          reject(new Error(DISCONNECTED))
+          reject(new EditNotSentError())
           return
         }
         waiting.set(request.clientOpId, { resolve, reject })
@@ -159,17 +188,17 @@ export function createEditChannel(): EditChannel {
     },
 
     attach: (next) => {
-      failAll()
+      failAll('lost')
       link = next
     },
 
     detach: () => {
-      failAll()
+      failAll('lost')
       link = null
     },
 
-    failInFlight: () => failAll(),
+    failInFlight: () => failAll('lost'),
 
-    abandonInFlight: () => failAll(() => new UnansweredEditError()),
+    abandonInFlight: () => failAll('renewed'),
   }
 }
