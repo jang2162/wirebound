@@ -26,7 +26,7 @@
  * 추정하면(`observe`) 목록이 거꾸로 닿는 창에서 거짓 잃음이 난다. 뿌리는 하나다 — **판정하는 자리가 서버에 있어야 한다.**
  *
  * **비용은 작다** — *"막으려면 선택 하나마다 문서를 읽어야 한다"*가 아니다. 문서를 읽는 것은 **같은 페이지에 남의 잠금이 있을 때뿐이다** — 혼자 고르는 흔한
- * 판은 조회가 없다(`lockConflictError`와 같은 자세).
+ * 판은 페이지 행을 `KEY SHARE`로 잡는 조회 하나다(아래 «판정과 잡기는 같은 틱이다»).
  *
  * # 무엇을 답하나 — 판마다
  *
@@ -51,14 +51,17 @@
  * 그래서 받는 순간 차례를 매기고(`ws/routes.ts`), 끝나는 순간 **더 뒤에 받은 것이 있으면 아무것도 안 한다**(`LockTurn`).
  * 끝난 것만 이긴다 — 뒤의 것이 끝나며 자기 판정을 한다.
  *
- * # 판정과 잡기는 같은 틱이다 — 문서 조회 경로는 페이지 행 안이다
+ * # 판정과 잡기는 같은 틱이다 — 그리고 페이지 행 안이다
  *
  * 문서를 읽는 await 뒤에 **목록을 다시 읽어** 판정하고 그 자리에서 잡는다(`selectionVerdict`는 동기다). 두 연결이 같은
  * 자리를 두고 함께 읽었어도 먼저 돌아온 쪽이 잡고, 뒤에 돌아온 쪽은 그것을 보고 거절된다.
  *
- * **문서는 페이지 행을 잡고 읽고, 판정과 `hold`는 그 행을 쥔 채 한다**(`lock/check.ts`의 «판정은 페이지 행 안에서»).
- * 편집도 그 행 안에서 판정하고 커밋하므로 둘이 한 점에 줄 선다: 판정을 지난 편집의 커밋 **전** 문서로 잠금을 판정하는 일
- * (들여쓰기 · 새 노드 판의 겹침)이 없다. 빠른 경로(남의 잠금 없음)는 행을 안 잡는다 — 그 까닭도 그 머리말이 적었다.
+ * **모든 `lock`은 페이지 행을 `KEY SHARE`로 잡고, 판정과 `hold`는 그 행을 쥔 채 한다**(`lock/check.ts`의 «판정은 페이지 행 안에서»
+ * — 표와 까닭이 거기 있다). 편집도 그 행을 `FOR UPDATE`로 잡고 판정하고 커밋하므로 둘이 한 점에 줄 선다. 행 없이 잡는 길을 두면
+ * 둘이 새어 나간다 — 판정을 지난 편집의 커밋 **전** 문서로 잠금을 판정하는 겹침(들여쓰기 · 새 노드), 그리고 남의 잠금이 없는
+ * 페이지에서 **판정을 지난 편집이 새 잠금 아래로 커밋**되는 것(배지가 선 뒤 몇 ms 에 남의 편집이 그 노드를 바꾼다 — [api] 획득과
+ * 같은 노드 편집을 어긋난 간격으로 경주시킨 200회에 67회). 트랜잭션이 쥐는 행은 이 하나뿐이라 쥔 채 기다리는 것이 없다 — 고리가
+ * 설 수 없다.
  *
  * 남는 것:
  *
@@ -66,14 +69,15 @@
  *   냈으면 그 `patch`는 2차 방어(`lockConflictError`)가 423 으로 막는다.
  * - **이기는 것은 도착 순서가 아니라 판정이 끝난 순서다.** 문서를 읽어야 하는 요청(같은 페이지에 남의 잠금이 있다)은 읽지 않아도
  *   되는 요청에 뒤질 수 있다 — 어느 쪽이든 하나만 선다(코드로 판단한 것이다 — 따로 재지 않는다).
- * - **빠른 경로의 잠금 아래로 이미 판정을 지난 편집이 커밋될 수 있다** — 겹침이 아니라 «배지가 선 뒤 수 ms 에
- *   커밋»이다. 닫으려면 빠른 경로도 행을 잡거나(선택마다 트랜잭션) 진행 중인 편집을 세야 한다 — 짓지 않는다.
- * - **문서 조회 경로가 행을 기다린다.** 같은 페이지의 편집(과 다른 선택)이 쥔 동안 줄 선다 — 큰 문서면 그 편집의 문서 조회만큼이다.
+ * - **`lock`이 행을 기다린다.** 같은 페이지의 편집 · 코멘트 게시 · 복원처럼 그 행을 `FOR UPDATE`로 쥔 쓰기가 끝날 때까지 줄
+ *   선다 — 큰 문서면 그 편집의 문서 조회만큼이다. 반대로 문서 조회 경로의 `lock`이 행을 쥔 동안(문서를 읽는 동안) 그 페이지의
+ *   편집이 줄 선다.
  */
 import type { WbNode } from '@wirebound/schema'
 import type { FastifyInstance } from 'fastify'
 import { withTransaction } from '../db/tx'
 import { readSelectionRoot, selectionVerdict } from '../lock/check'
+import { lockPageShared } from '../repos/pages'
 import type { ClientFrame, ServerFrame } from './protocol'
 import type { RoomConnection } from './rooms'
 
@@ -156,8 +160,9 @@ function settle(
 /**
  * `lock` 하나. **같은 노드를 다시 보내는 것이 하트비트다** — 그때는 목록이 안 바뀌어 조용하다.
  *
- * 먼저 문서 없이 묻는다(빠른 경로). 문서가 필요하면(같은 페이지에 남의 잠금이 있다) **페이지 행을 잡고 머리 문서를 읽은 뒤 그 행을
- * 쥔 채 처음부터 다시 묻는다**(위 «판정과 잡기는 같은 틱이다»). 읽은 뒤의 판정은 `needs-document`를 내지 않는다.
+ * **페이지 행을 `KEY SHARE`로 잡고** 문서 없이 묻는다. 문서가 필요하면(같은 페이지에 남의 잠금이 있다) 그 행을 쥔 채 머리 문서를
+ * 읽고 처음부터 다시 묻는다(위 «판정과 잡기는 같은 틱이다»). 읽은 뒤의 판정은 `needs-document`를 내지 않는다. 그 프로젝트에 없는
+ * 페이지면 문서가 없는 것으로 판정한다(«막지 않는다» — `lock/check.ts`의 `selectionVerdict`).
  */
 export async function handleLockFrame(
   app: FastifyInstance,
@@ -165,10 +170,10 @@ export async function handleLockFrame(
   frame: LockFrame,
   turn: LockTurn,
 ): Promise<void> {
-  if (settle(app, connection, frame, turn, undefined) === 'settled') return
   await withTransaction(app.db, async (trx) => {
-    const root = await readSelectionRoot(trx, connection.projectId, frame.pageId)
-    settle(app, connection, frame, turn, root)
+    const page = await lockPageShared(trx, connection.projectId, frame.pageId)
+    if (settle(app, connection, frame, turn, page ? undefined : null) === 'settled') return
+    settle(app, connection, frame, turn, await readSelectionRoot(trx, connection.projectId, frame.pageId))
   })
 }
 

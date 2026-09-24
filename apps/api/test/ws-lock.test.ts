@@ -508,6 +508,9 @@ describe('획득 거절', () => {
   /**
    * **판정과 잡기는 같은 틱이다**(`ws/lock.ts`). 셋째 사람의 잠금을 같은 페이지에 두어 두 요청이 모두 문서를 읽게 하고, 둘을 문
    * 앞에 세웠다가 함께 연다. 혼자 죽는 변조: 문서를 읽고 판정한 뒤 잡기 전에 await 가 하나 더 있다.
+   *
+   * **«문서는 행을 다시 잡지 않고 읽는다»도 이 케이스가 소유한다** — 둘이 페이지 행을 `KEY SHARE`로 함께 쥐는 판이라, `readSelectionRoot`가
+   * 행을 `FOR UPDATE`로 다시 잡으면(`lockPageForEdit`) 서로 올리려다 교착(40P01)이고 진 쪽은 서지도 거절받지도 않는다.
    */
   it('두 사람이 같은 자리를 함께 요청해도 하나만 선다 — 다른 쪽은 거절된다', async () => {
     await withRealApi(async (ctx) => {
@@ -598,6 +601,7 @@ describe('잠금 목록은 보내는 순간 짓는다', () => {
  * **편집 커밋과 잠금 획득은 페이지 행 하나에 줄 선다**(`lock/check.ts`의 «판정은 페이지 행 안에서»). 보라가 쥔 `n_c`를 `n_b` 안으로
  * 옮기는 편집(들여쓰기)과 다혜의 `lock n_b`가 겹치는 판. 다혜의 `lock`은 같은 페이지에 보라의 잠금이 있어 **문서 조회 경로**다. 둘을
  * 함께 세우는 점이 없으면 편집이 판정을 지난 뒤 커밋 전에 다혜가 커밋 **전** 문서로 판정되어 서고, 커밋이 `n_c`를 그 안에 넣는다.
+ * 문서가 필요 없는 획득(그 페이지에 남의 잠금이 없다)도 같은 행에 선다 — 셋째 케이스가 잰다.
  * 순서를 **DB 잠금으로** 세운다(고정 `sleep`이 아니다 — 줄에 선 것을 `pg_locks`로 본다).
  */
 describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => {
@@ -681,8 +685,8 @@ describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => 
 
   /**
    * **선택 쪽 절반** — 문서 조회 경로의 `lock`은 편집이 쥔 페이지 행을 기다렸다가 **커밋된 머리 문서**로 판정한다. 편집을 판정 ·
-   * 적용 뒤 커밋 직전(멤버 행 재확인)에 세워 두고 다혜가 `n_b`를 요청한다. 혼자 죽는 변조: `readSelectionRoot`가 행을 안 잡고
-   * 읽는다(`lockPageForEdit` → 잠금 없는 조회 — 커밋 전 문서를 읽고 선다).
+   * 적용 뒤 커밋 직전(멤버 행 재확인)에 세워 두고 다혜가 `n_b`를 요청한다. 혼자 죽는 변조: `handleLockFrame`이 문서를 행을 잡기
+   * **전에** 읽는다(`readSelectionRoot` → `lockPageShared` — 커밋 전 문서를 읽어 두고, 행을 얻은 뒤 그 문서로 판정해 선다).
    *
    * 멤버 행은 이 케이스가 **SQL 로 직접** 잡는다 — 편집을 커밋 직전에 세우는 문일 뿐 재는 대상이 아니다(재는 것은 페이지 행이다).
    */
@@ -710,7 +714,7 @@ describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => 
   /**
    * **편집 쪽 절반** — 편집의 2차 방어는 페이지 행을 **잡은 뒤** 판정한다. 페이지 행을 이 케이스가 쥐고, 다혜의 `lock`이 먼저 줄에
    * 서고 보라의 편집이 뒤에 선다. 행이 풀리면 다혜가 먼저 서고, 보라의 편집은 그것을 보고 423 이다. 혼자 죽는 변조: 편집이 행을
-   * 잡기 **전에** 판정한다(`lockConflictError`가 `lockPageMeta` 앞에서 판정 — 다혜가 서기 전에 판정을 지나 겹친 채 커밋한다).
+   * 잡기 **전에** 판정한다(`lockConflictError`가 `lockPageRow` 앞에서 판정 — 다혜가 서기 전에 판정을 지나 겹친 채 커밋한다).
    *
    * **`lock`이 행을 안 기다리는 코드에서는 이 줄 세우기가 안 선다** — 다혜가 곧장 서고 편집은 그것을 본다(그때 이 케이스는
    * «줄에 선다»를 기다리다 죽는다 — 겹침 단언이 아니라 시나리오가 성립하지 않아서다). 겹침을 재는 것은 선택 쪽이 행을 기다리고
@@ -736,6 +740,45 @@ describe('편집 커밋과 잠금 획득은 페이지 행에 줄 선다', () => 
       await until('다혜가 선다', () => dahyeSettled())
       expect(held()).toEqual([`${fx.bora.user.name}:n_c`, `${fx.dahye.user.name}:n_b`].sort())
       expect(await childrenOfB(fx.page.id)).toEqual(['n_b1', 'n_b2'])
+    })
+  }, 30_000)
+
+  /**
+   * **남의 잠금이 없는 페이지에서도** 획득은 행에 선다 — 문서를 안 읽어도 되는 판이다. 보라는 이 페이지에 잠금이 없고, 보라의 편집을
+   * 판정 · 적용 뒤 커밋 직전(멤버 행 재확인)에 세워 둔 채 다혜가 그 편집이 고치는 노드를 요청한다. 행 없이 잡으면 다혜의 배지가 선 뒤
+   * 보라의 편집이 그 노드를 바꾸며 커밋된다. 혼자 죽는 변조: `handleLockFrame`이 먼저 행 없이 묻고 `free`면 그대로 잡는다(문서가
+   * 필요할 때만 트랜잭션을 연다).
+   */
+  it('남의 잠금이 없는 페이지에서도 판정을 지난 편집이 커밋되기 전에는 잠금이 서지 않는다 — 배지 뒤에 남의 편집이 커밋되지 않는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const boraTab = track(await joinRoom(ctx.port, fx.project.id, fx.bora.cookie.wb_session))
+      const dahyeTab = track(await joinRoom(ctx.port, fx.project.id, fx.dahye.cookie.wb_session))
+      const dahyeHeld = (): boolean =>
+        ctx.app.realtime.locks.liveIn(fx.project.id).some((lock) => lock.userId === fx.dahye.user.id)
+      const door = holdInTransaction((trx) =>
+        sql`select 1 from project_members where project_id = ${fx.project.id} and user_id = ${fx.bora.user.id} for update`.execute(trx),
+      )
+      await door.acquired
+
+      const editB1 = [{ op: 'replace', path: '/root/children/1/children/0/props', value: {} }]
+      boraTab.send(JSON.stringify({ type: 'patch', pageId: fx.page.id, baseSeq: await headSeq(fx.page.id), ops: editB1, clientOpId: 'op-b1' }))
+      await until('편집이 커밋 직전에 선다', async () => (await lockWaiters()) >= 1)
+      dahyeTab.send(lockFrame(fx.page.id, 'n_b1'))
+      await until('다혜의 lock 이 줄에 서거나 선다', async () => dahyeHeld() || (await lockWaiters()) >= 2)
+      // 값을 잡고 문을 먼저 연다 — 단언이 먼저 죽으면 문이 멤버 행을 쥔 채 남아 뒤 케이스가 선다.
+      const heldBeforeCommit = dahyeHeld()
+      await door.release()
+      expect(heldBeforeCommit).toBe(false)
+
+      const ack = await boraTab.waitFor('patch-ack')
+      await until('다혜가 선다', () => dahyeHeld())
+      expect(await headSeq(fx.page.id)).toBe(ack.seq)
+      expect(held()).toEqual([`${fx.dahye.user.name}:n_b1`])
+
+      function held(): string[] {
+        return ctx.app.realtime.locks.liveIn(fx.project.id).map((lock) => `${lock.userName}:${lock.nodeId}`)
+      }
     })
   }, 30_000)
 })

@@ -23,18 +23,20 @@
  *
  * | 쪽 | 행을 잡는 자리 | 행 안에서 하는 것 |
  * |---|---|---|
- * | 편집(`lockConflictError` — WS `patch` · REST `PATCH …/ops` · `PUT …/schema`) | 이 함수의 첫 줄(`lockPageMeta` — `FOR UPDATE`, 문서 안 읽음) | 판정 → (부르는 쪽) `applyEdit` → 커밋 |
- * | 선택(`ws/lock.ts` — 문서 조회 경로) | `readSelectionRoot`(`lockPageForEdit` — `FOR UPDATE` + 머리 문서) | 판정 → `hold` → 커밋 |
+ * | 편집(`lockConflictError` — WS `patch` · REST `PATCH …/ops` · `PUT …/schema`) | 이 함수의 첫 줄(`lockPageRow` — `FOR UPDATE`, 문서 안 읽음) | 판정 → (부르는 쪽) `applyEdit` → 커밋 |
+ * | 선택(`ws/lock.ts` — **모든** `lock` 프레임) | 그 트랜잭션의 첫 줄(`lockPageShared` — `FOR KEY SHARE`) | (남의 잠금이 있으면 `readSelectionRoot`로 머리 문서) → 판정 → `hold` → 커밋 |
  *
- * 그러면 «문서 조회 경로의 잠금»은 언제나 **커밋된 머리 문서**로 판정되고, 편집의 판정은 그 행을 쥔 동안 선 잠금을 전부 본다.
- * 한 행을 둘이 동시에 못 쥐므로 «판정은 지났는데 커밋 전에 겹치는 잠금이 선다»가 없다.
+ * `KEY SHARE`는 편집의 `FOR UPDATE`와 부딪히므로 둘이 한 행에 줄 선다. 그러면 잠금은 언제나 **커밋된 머리 문서** 위에 서고,
+ * 편집의 판정은 그 행을 쥔 동안 선 잠금을 전부 본다 — «판정은 지났는데 커밋 전에 잠금이 선다»가 없다. 겹침만이 아니다: 남의 잠금이
+ * 없는 페이지에서 행 없이 잡으면 **이미 판정을 지난 편집이 새 잠금 아래로 커밋된다**(«배지가 선 뒤 몇 ms 에 커밋» — 남의 편집이
+ * 내 잠금 안의 노드를 바꾼다). 재는 자리: `test/ws-lock.test.ts` 「편집 커밋과 잠금 획득은 페이지 행에 줄 선다」.
  *
- * **빠른 경로(그 페이지에 남의 잠금이 없다)의 `lock`은 행을 안 잡는다.** 그 순간 겹칠 남의 잠금이 없으므로 그 자리에 겹침이 설
- * 수 없고, 뒤이어 서려는 남의 잠금은 이 잠금을 보고 문서 조회 경로(행)로 간다. 이 잠금 아래로 **이미 판정을 지난 편집**이
- * 커밋될 수는 있다 — 겹침이 아니라 «배지가 선 뒤 몇 ms 에 커밋»이다(남는 틈 — `ws/lock.ts`의 «남는 것»).
+ * **선택끼리는 줄 서지 않는다** — `KEY SHARE`끼리는 부딪히지 않는다. 판정과 `hold`는 동기라(`selectionVerdict`) 같은 틱에 붙어,
+ * 둘이 함께 행을 쥐어도 먼저 판정한 쪽이 잡고 뒤는 그것을 본다. **`FOR UPDATE`로 올리지 않는다** — 둘이 `KEY SHARE`를 쥔 채
+ * 서로 올리려 하면 교착이다. 그래서 문서도 행을 쥔 채 잠금 없이 읽는다(`readSelectionRoot`).
  *
  * **잠금 순서.** 편집: 페이지 행(`FOR UPDATE` — 여기) → (`applyEdit`이 같은 행을 다시 — 이미 쥐었다) → 멤버 행(`FOR SHARE` —
- * 커밋 순간 재확인). 선택: 페이지 행 **하나뿐이다**(`FOR UPDATE`) — 쥔 채 기다리는 것이 없다. 메모리의 잠금 목록(`lock/store.ts`)은
+ * 커밋 순간 재확인). 선택: 페이지 행 **하나뿐이다**(`FOR KEY SHARE`) — 쥔 채 기다리는 것이 없다. 메모리의 잠금 목록(`lock/store.ts`)은
  * 기다리는 자원이 아니다(동기 읽기 · 쓰기) — **DB 행 ↔ 메모리 사이에 고리가 설 수 없다.** `repos/projects.ts`가 정한 잠금 순서(프로젝트 행 →
  * 페이지 행 → 멤버 행)와 맞는다 — 둘 다 프로젝트 행을 안 잡는다.
  *
@@ -66,7 +68,7 @@ import {
 import type { FastifyInstance } from 'fastify'
 import type { DbHandle } from '../db/tx'
 import { locked, type ApiError } from '../errors'
-import { findPageById, lockPageForEdit, lockPageMeta } from '../repos/pages'
+import { findPageById, lockPageRow } from '../repos/pages'
 
 export interface LockCheckInput {
   projectId: string
@@ -87,7 +89,7 @@ function onPageOf(app: FastifyInstance, input: { projectId: string; pageId: stri
  * 남의 잠금과 부딪치면 그 실패를 낸다. 아니면 `null`이다.
  *
  * **`trx`는 부르는 쪽의 편집 트랜잭션이다** — 이 함수가 그 안에서 페이지 행을 잡고, 부르는 쪽은 같은 트랜잭션에서 `applyEdit`을
- * 불러 커밋한다(위 «판정은 페이지 행 안에서»). 트랜잭션 밖 핸들이면 `lockPageMeta`가 던진다.
+ * 불러 커밋한다(위 «판정은 페이지 행 안에서»). 트랜잭션 밖 핸들이면 `lockPageRow`가 던진다.
  *
  * **던지지 않고 값을 낸다** — `editOutcomeToApiError`가 파이프라인의 실패에 대해 하는 것과
  * 같은 모양이라, 두 진입점이 그것을 각자의 방식으로(REST는 `throw`, WS는 프레임) 옮긴다.
@@ -95,7 +97,7 @@ function onPageOf(app: FastifyInstance, input: { projectId: string; pageId: stri
 export async function lockConflictError(app: FastifyInstance, trx: DbHandle, input: LockCheckInput): Promise<ApiError | null> {
   // **페이지 행을 먼저 잡는다**(위 «판정은 페이지 행 안에서»). 문서는 안 읽는다 — 남의 잠금이 없으면 필요 없다. 없는 페이지는
   // 판정하지 않는다(파이프라인이 `not-found`로 답한다).
-  if ((await lockPageMeta(trx, input.projectId, input.pageId)) === null) return null
+  if (!(await lockPageRow(trx, input.projectId, input.pageId))) return null
   if (locksAgainst(onPageOf(app, input), input.userId).length === 0) return null
 
   // 행을 쥐었으므로 이 조회는 머리 문서다.
@@ -114,7 +116,7 @@ export async function lockConflictError(app: FastifyInstance, trx: DbHandle, inp
     return null
   }
 
-  // **목록은 문서를 읽은 뒤 다시 읽는다** — 그 await 사이 선 잠금(빠른 경로)까지 본다. 판정 뒤는 동기로 `applyEdit`에 이어진다.
+  // **목록은 문서를 읽은 뒤 다시 읽는다** — 행을 쥔 뒤라 그 사이 설 잠금은 없지만, 판정은 늘 지금 목록으로 한다. 판정 뒤는 동기로 `applyEdit`에 이어진다.
   const conflict = findLockConflict({
     root,
     locks: onPageOf(app, input),
@@ -175,15 +177,17 @@ export function selectionVerdict(
 }
 
 /**
- * `selectionVerdict`가 부탁한 문서 — **페이지 행을 잡고 읽는다**(`lockPageForEdit` — 편집 파이프라인이 쥐는 그 행 · 위 «판정은
- * 페이지 행 안에서»). 부르는 쪽(`ws/lock.ts`)은 그 트랜잭션 안에서 판정하고 `hold`한다 — 그래서 이 문서는 **커밋된 머리**이고,
- * 판정 뒤 커밋 전에 편집이 끼지 못한다.
+ * `selectionVerdict`가 부탁한 문서 — **부르는 쪽이 이미 쥔 페이지 행 아래서 잠금 없이 읽는다**. 부르는 쪽(`ws/lock.ts`)은 이 함수
+ * 앞에 그 행을 `KEY SHARE`로 잡고(`lockPageShared`) 같은 트랜잭션에서 판정하고 `hold`한다 — 편집은 그 행을 `FOR UPDATE`로 잡아야
+ * 쓰므로 이 문서는 **커밋된 머리**이고, 판정 뒤 커밋 전에 편집이 끼지 못한다(위 «판정은 페이지 행 안에서»). **여기서 행을 다시
+ * 잡지 않는다** — `FOR UPDATE`로 올리면 같은 행을 `KEY SHARE`로 쥔 두 선택이 서로를 기다린다(`test/ws-lock.test.ts`의
+ * «두 사람이 같은 자리를 함께 요청해도 하나만 선다»가 그 교착으로 죽는다).
  *
  * **없거나 읽을 수 없으면 `null`** — 그때 판정은 «막지 않는다»다(위). 올리는 기준은 `lockConflictError`와 같다(`migrateDocument`)
  * — 경로가 화면이 보는 문서의 것이어야 한다.
  */
 export async function readSelectionRoot(trx: DbHandle, projectId: string, pageId: string): Promise<WbNode | null> {
-  const page = await lockPageForEdit(trx, projectId, pageId)
+  const page = await findPageById(trx, projectId, pageId)
   if (page === null) return null
   try {
     return migrateDocument(page.schema).root

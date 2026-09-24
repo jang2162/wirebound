@@ -93,6 +93,23 @@ export async function lockPageMeta(trx: DbHandle, projectId: string, pageId: str
 }
 
 /**
+ * 페이지 행 하나를 **읽지 않고 잡는다** — `SELECT id … FOR UPDATE`. 부르는 자리는 편집의 2차 방어(`lock/check.ts`의
+ * `lockConflictError`)다 — 판정과 커밋을 이 행 안에 두려고 잡을 뿐 메타도 문서도 안 쓴다(메타를 견주는 자리는 `lockPageMeta`).
+ * 대상이 `projectId` 소속이 아니면 `false`다.
+ */
+export async function lockPageRow(trx: DbHandle, projectId: string, pageId: string): Promise<boolean> {
+  assertLocking(trx, 'lockPageRow')
+  const row = await trx
+    .selectFrom('pages')
+    .select('id')
+    .where('id', '=', pageId)
+    .where('project_id', '=', projectId)
+    .forUpdate()
+    .executeTakeFirst()
+  return row !== undefined
+}
+
+/**
  * `base`가 지금 값과 **다른 칸**. 빈 배열이면 통과다. **글자 그대로 견준다** — 서버가 제목 · 설명을 정규화하지
  * 않는다. **하나만 뺀다 — 빈 값은 `''`든 `null`이든 같다**(`@wirebound/schema`의 `samePageMeta` — 화면의 판정과
  * 같은 함수다. 저장은 둘을 가른다 — `apps/web/src/api/client.ts`의 `updatePage` 표).
@@ -535,8 +552,10 @@ export async function deletePage(db: DbHandle, projectId: string, pageId: string
 }
 
 /**
- * **코멘트 수정의 둘째 잠금** — 페이지 행 하나를 `FOR KEY SHARE`로 잡는다. 부르는 자리는
- * 하나다: 코멘트 수정(`routes/comments.ts` — 프로젝트 행(`repos/projects.ts`의 `lockProjectShared`) 뒤 · 재확인 앞).
+ * 페이지 행 하나를 `FOR KEY SHARE`로 잡는다. 부르는 자리는 둘이다 — 코멘트 수정(아래)과 잠금 획득(`ws/lock.ts`의
+ * `handleLockFrame` — 그 트랜잭션이 잡는 유일한 행이다. 까닭은 그 파일의 «판정과 잡기는 같은 틱이다»).
+ *
+ * **코멘트 수정의 둘째 잠금**(`routes/comments.ts` — 프로젝트 행(`repos/projects.ts`의 `lockProjectShared`) 뒤 · 재확인 앞).
  *
  * **왜 페이지 행을 먼저 — 코멘트 행을 지우는 두 쓰기가 둘 다 페이지 행 `FOR UPDATE`를 먼저 잡는다.** 코멘트 삭제는
  * «페이지 행(`lockPageForEdit`) → 재확인(멤버 행 `FOR SHARE`) → 코멘트 행», 페이지 삭제(`deletePage`)는 «페이지 행 →
