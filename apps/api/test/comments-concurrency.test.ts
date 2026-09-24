@@ -130,6 +130,26 @@ async function lockWaiters(): Promise<number> {
 }
 
 /**
+ * **쥔 백엔드(`holder`) 뒤에 사슬로 선 백엔드 수.** 첫 대기자는 쥔 쪽을 직접 기다리고, 같은 행의 둘째부터는 앞 대기자가 쥔
+ * 튜플 잠금을 기다린다 — 그래서 `pg_blocking_pids` 를 쥔 쪽에서부터 따라간다. 쥔 쪽은 그 행 하나만 잡고 기다리므로 이 사슬이
+ * 곧 그 행의 줄이다(사슬을 떼고 직접 막힌 것만 세면 B5 의 둘째 요청이 안 세어져 던진다). DB 전체의 «못 받은 잠금»
+ * (`lockWaiters`)으로 세면 다른 행 · 다른 잠금에서 기다리는 백엔드까지 줄로 읽는다.
+ *
+ * **못 가르는 것:** 대기자가 그 행과 무관한 잠금을 먼저 쥐고 섰고 다른 요청이 **그 잠금**을 기다리면, 그 요청도 사슬에 든다.
+ */
+async function waitersBehind(holder: number): Promise<number> {
+  const result = await sql<{ n: number }>`
+    with recursive chain(pid) as (
+      select a.pid from pg_stat_activity a where ${holder}::int = any(pg_blocking_pids(a.pid))
+      union
+      select a.pid from pg_stat_activity a join chain c on c.pid = any(pg_blocking_pids(a.pid))
+    )
+    select count(*)::int as n from chain
+  `.execute(db)
+  return result.rows[0]?.n ?? 0
+}
+
+/**
  * 페이지 행을 테스트 트랜잭션으로 쥔 채 `run`을 시작하고, **요청 `waiters`개가 그 행에서 줄을 선 것을 본 뒤에** 놓는다.
  *
  * 코멘트 쓰기는 `baseSeq`를 잠그기 **전에** 읽는다(`routes/comments.ts` 머리말의 «대가 2»). 요청 둘을 `Promise.all`로
@@ -139,7 +159,7 @@ async function lockWaiters(): Promise<number> {
  *
  * **줄이 안 서면 던진다** — 겹치지 않은 판을 초록 · 빨강 어느 쪽으로도 세지 않는다. 그때도 요청은 끝까지 기다린다.
  */
-async function withPageRowHeld<T>(pageId: string, waiters: number, run: () => Promise<T>): Promise<T> {
+async function withPageRowHeld<T>(pageId: string, waiters: number, run: () => Promise<T>, timeoutMs = 5_000): Promise<T> {
   let release!: () => void
   const released = new Promise<void>((resolve) => {
     release = resolve
@@ -148,8 +168,10 @@ async function withPageRowHeld<T>(pageId: string, waiters: number, run: () => Pr
   const held = new Promise<void>((resolve) => {
     markHeld = resolve
   })
+  let holderPid = 0
   const holder = withTransaction(db, async (trx) => {
     await trx.selectFrom('pages').select('id').where('id', '=', pageId).forUpdate().execute()
+    holderPid = (await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(trx)).rows[0]!.pid
     markHeld()
     await released
   })
@@ -158,8 +180,8 @@ async function withPageRowHeld<T>(pageId: string, waiters: number, run: () => Pr
   const running = run()
   let lined: unknown
   try {
-    const deadline = Date.now() + 5_000
-    while ((await lockWaiters()) < waiters) {
+    const deadline = Date.now() + timeoutMs
+    while ((await waitersBehind(holderPid)) < waiters) {
       if (Date.now() > deadline) {
         throw new Error(`페이지 행에서 요청 ${waiters}개가 줄을 서지 않았습니다 — 두 요청이 겹치지 않았습니다`)
       }
@@ -313,6 +335,45 @@ describe('코멘트 삭제의 동시성', () => {
       )
       // 성공한 쪽 하나만 번호를 갖는다. **둘 다 1번을 받는 일이 없다.**
       expect(markers).toEqual([1])
+    })
+  })
+})
+
+describe('줄 세기는 그 행에 묶인다 — `withPageRowHeld` 의 술어', () => {
+  it('다른 행에서 기다리는 백엔드는 세지 않는다 — 겹치지 않은 판은 던진다', async () => {
+    // 옆에서 사용자 행 하나를 쥐고 백엔드 둘을 그 행에 줄 세운다 — 페이지 행과 무관한 대기자 둘이다. 그 사이 `run` 은 요청을
+    // 하나도 안 낸다(겹침 0). 술어가 DB 전체의 대기를 세면 이 둘을 «페이지 행에 선 요청»으로 읽어 겹치지 않은 판을 센다.
+    await withRealApi(async (ctx) => {
+      const fx = await setup(ctx)
+      let release!: () => void
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let markHeld!: () => void
+      const held = new Promise<void>((resolve) => {
+        markHeld = resolve
+      })
+      const lockUser = (trx: typeof db) =>
+        trx.selectFrom('users').select('id').where('id', '=', fx.owner.user.id).forUpdate().execute()
+      const other = withTransaction(db, async (trx) => {
+        await lockUser(trx)
+        markHeld()
+        await released
+      })
+      await held
+      const bystanders = [withTransaction(db, lockUser), withTransaction(db, lockUser)]
+      try {
+        const deadline = Date.now() + 5_000
+        while ((await lockWaiters()) < 2) {
+          if (Date.now() > deadline) throw new Error('옆 대기자 둘이 줄을 서지 않았다 — 이 케이스의 전제가 안 섰다')
+          await new Promise((resolve) => setTimeout(resolve, 10))
+        }
+        await expect(withPageRowHeld(fx.pageId, 2, async () => '겹침 없음', 300)).rejects.toThrow(/줄을 서지 않았습니다/)
+      } finally {
+        release()
+        await other
+        await Promise.all(bystanders)
+      }
     })
   })
 })
