@@ -3,6 +3,13 @@
  * 빌드에 끌어들이지 않으면서도 OWASP가 인정하는 비용 파라미터를 만족한다.
  *
  * DB도 HTTP도 모르는 순수 함수 두 개(`hashPassword`, `verifyPassword`)만 담는다.
+ *
+ * **NFC.** 같은 글자가 입력기 · 붙여넣기에 따라 완성형(NFC — `한`)이나 조합형(NFD — `ㅎ ㅏ ㄴ`)으로 온다 — 바이트가 다르다.
+ * 받은 글자를 그대로 해시하면 정할 때와 칠 때의 꼴이 갈린 사람은 맞는 비밀번호로 로그인하지 못한다. 그래서 **NFC 판을
+ * 해시한다.** 견줄 때는 NFC 판 · 받은 글자 · NFD 판을 차례로 견준다 — 뒤의 둘은 **정규화 전에 받은 글자 그대로 해시한 옛
+ * 해시**를 위해서다(정할 때 NFD 였으면 NFD 판이, 친 그대로면 받은 글자가 맞는다). 판이 같으면 한 번만 견준다 — ASCII 는 늘
+ * 한 번이다. 견주는 수는 받은 글자로만 정해지므로 없는 계정의 더미 검증(`routes/auth.ts`)과 시간이 갈리지 않는다. 옛 해시를
+ * 다시 해시하지 않는다 — 로그인이 사용자 행을 쓰게 된다. 잰 값은 `test/password-nfc.test.ts`.
  */
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto'
 
@@ -128,7 +135,7 @@ function scrypt(password: string | Buffer, salt: Buffer, keylen: number, params:
 export async function hashPassword(password: string, params: ScryptParams = DEFAULT_SCRYPT_PARAMS): Promise<string> {
   validateScryptParams(params)
   const salt = randomBytes(SALT_LENGTH)
-  const derivedKey = await scrypt(password, salt, KEY_LENGTH, params)
+  const derivedKey = await scrypt(password.normalize('NFC'), salt, KEY_LENGTH, params)
   return [
     FORMAT_PREFIX,
     params.N,
@@ -214,9 +221,11 @@ function parseEncoded(encoded: string): {
  */
 export async function verifyPassword(password: string, encoded: string): Promise<boolean> {
   const { params, salt, hash } = parseEncoded(encoded)
-  const candidate = await scrypt(password, salt, KEY_LENGTH, params)
-  if (candidate.length !== hash.length) {
-    return false
+  // 머리말 «NFC» — NFC 판이 먼저다(이 파일이 만든 해시). 나머지는 옛 해시의 꼴이다.
+  const forms = new Set([password.normalize('NFC'), password, password.normalize('NFD')])
+  for (const form of forms) {
+    const candidate = await scrypt(form, salt, KEY_LENGTH, params)
+    if (candidate.length === hash.length && timingSafeEqual(candidate, hash)) return true
   }
-  return timingSafeEqual(candidate, hash)
+  return false
 }

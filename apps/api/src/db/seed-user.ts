@@ -17,7 +17,7 @@
 import { z } from 'zod'
 import { getKoreanErrorMap } from '@wirebound/schema'
 import { hashPassword, DEFAULT_SCRYPT_PARAMS } from '../auth/password'
-import { DisplayName, NormalizedEmail, RawPassword } from '../auth/credentials'
+import { DisplayName, NewPassword, NormalizedEmail } from '../auth/credentials'
 import { DuplicateEmailError, findUserByEmail, insertUser } from '../repos/users'
 import type { DbHandle } from './tx'
 
@@ -34,7 +34,7 @@ import type { DbHandle } from './tx'
 const SeedEnvSchema = z.object({
   SEED_USER_EMAIL: NormalizedEmail,
   SEED_USER_NAME: DisplayName.optional(),
-  SEED_USER_PASSWORD: RawPassword,
+  SEED_USER_PASSWORD: NewPassword,
 })
 
 /** 시딩을 켜는 값 둘. **이름은 없어도 된다**(이메일에서 만든다). */
@@ -164,7 +164,7 @@ export async function seedUser(db: DbHandle, input: SeedUserInput, scryptN: numb
 /** 환경변수를 안 지나는 호출자(테스트 픽스처)도 같은 게이트를 지나게 한다. */
 function validateInput(input: SeedUserInput): SeedUserInput {
   const parsed = z
-    .object({ email: NormalizedEmail, name: DisplayName, password: RawPassword })
+    .object({ email: NormalizedEmail, name: DisplayName, password: NewPassword })
     .safeParse(input, { error: getKoreanErrorMap() })
   if (!parsed.success) {
     throw new SeedUserError(`계정 값이 올바르지 않습니다 — ${issueLines(parsed.error)}`)

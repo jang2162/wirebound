@@ -24,7 +24,7 @@
  */
 import { pathToFileURL } from 'node:url'
 import { getKoreanErrorMap } from '@wirebound/schema'
-import { NormalizedEmail, RawPassword } from '../auth/credentials'
+import { NewPassword, NormalizedEmail } from '../auth/credentials'
 import { DEFAULT_SCRYPT_PARAMS, hashPassword } from '../auth/password'
 import { destroyUserSessions } from '../auth/session'
 import { loadConfig } from '../config'
@@ -87,14 +87,14 @@ export function normalizeEmail(raw: string): string {
 }
 
 /**
- * 비밀번호가 서버의 규칙(`RawPassword`)을 지나는지. 어긋나면 던진다 — 규칙 밖의 비밀번호를 넣으면 로그인 본문
+ * 비밀번호가 서버의 규칙(`NewPassword`)을 지나는지 — 지나면 NFC 판을 낸다. 어긋나면 던진다 — 규칙 밖의 비밀번호를 넣으면 로그인 본문
  * 검증이 400 을 내 **아무도 못 쓰는 계정**이 된다(`auth/credentials.ts` 머리말).
  */
 export function checkPassword(password: string): string {
-  const parsed = RawPassword.safeParse(password, { error: getKoreanErrorMap() })
+  const parsed = NewPassword.safeParse(password, { error: getKoreanErrorMap() })
   if (!parsed.success) {
-    // `RawPassword` 가 세는 단위(UTF-16 — 이모지 하나가 2자)로 센다. 코드 포인트로 세면 규칙이 받는 값에 «8자 미만»이라 말한다.
-    throw new ResetPasswordError(`비밀번호는 8–200자여야 합니다(친 값은 ${password.length}자)`)
+    // `NewPassword` 가 세는 단위(NFC 판의 UTF-16 — 이모지 하나가 2자)로 센다. 코드 포인트로 세면 규칙이 받는 값에 «8자 미만»이라 말한다.
+    throw new ResetPasswordError(`비밀번호는 8–200자여야 합니다(친 값은 ${password.normalize('NFC').length}자)`)
   }
   return parsed.data
 }
