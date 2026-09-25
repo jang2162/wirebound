@@ -9,7 +9,8 @@
  * |---|---|---|
  * | 코드가 아는 것을 전부 들었다 | 뜬다 | — |
  * | 하나도 없다 | **안 뜬다** — 빈 DB 라고 말한다(`describe-schema-state.ts`의 `emptySchemaHint`) | 새 볼륨이면 정상이지만 데이터가 다른 볼륨에 있을 수도 있다 |
- * | 코드가 아는 것 중 빠진 것이 있다(뒤처졌다) | **안 뜬다** — `migrate`를 권한다 | 뜨면 그 칸을 쓰는 요청마다 500 이다 |
+ * | 코드가 아는 것 중 빠진 것이 있고, 전부 마지막으로 올라간 이름 뒤다(뒤처졌다) | **안 뜬다** — `migrate`를 권한다 | 뜨면 그 칸을 쓰는 요청마다 500 이다 |
+ * | 빠진 것 중 마지막으로 올라간 이름보다 **앞** 이름이 있다(순서가 어긋났다 — 두 갈래가 이름을 엇갈려 올렸다) | **안 뜬다** — `migrate`를 권하지 않는다 | kysely `Migrator`는 올라간 것이 코드 목록(`sort()` — 코드 단위 순)의 앞머리일 때만 돈다(`allowUnorderedMigrations` 없이 — `db/migrate.ts`). 이 코드로는 `migrate`도 `migrate:down`도 `corrupted migrations`로 죽는다(잰 값: 이 워크트리 DB 의 `kysely_migration`에서 가운데 행 하나를 지우고 `pnpm migrate` · `pnpm migrate:down`). 그래서 이름을 뒤로 바꾸거나 그것이 없던 코드로 내리라고 말한다 |
  * | 코드가 모르는 것도 들었다(앞섰다 — 새 브랜치가 올린 DB 에 옛 코드) | **뜬다** — 경고 한 줄 | 뒤에 붙는 마이그레이션은 대개 칸 · 표를 더할 뿐이라 옛 코드가 그대로 돈다. 멈추고 `migrate:down`을 권하면 그 칸의 데이터를 버리게 시킨다(`README.md` «`migrate:down` 은 … 데이터를 버린다»). 새 칸이 `NOT NULL`이면 옛 코드의 쓰기가 거절된다 — 그래서 말은 한다 |
  * | 둘 다(빠진 것도 모르는 것도 있다) | **안 뜬다** | 다른 갈래가 올린 DB 다 — `migrate`도 «이미 올라간 것이 코드에 없다»로 죽는다 |
  *
@@ -41,6 +42,8 @@ export type SchemaVerdict =
   | { kind: 'current' }
   | { kind: 'empty' }
   | { kind: 'behind'; pending: string[] }
+  /** `stranded` — 빠진 것 중 마지막으로 올라간 이름보다 앞의 것. `later` — 그중 가장 앞의 것보다 뒤 이름으로 이미 올라간 것. */
+  | { kind: 'unordered'; stranded: string[]; later: string[] }
   | { kind: 'ahead'; unknown: string[] }
   | { kind: 'diverged'; pending: string[]; unknown: string[] }
 
@@ -52,7 +55,14 @@ export function schemaVerdict(executed: readonly string[], known: readonly strin
   const pending = known.filter((name) => !ran.has(name))
   const unknown = executed.filter((name) => !knows.has(name))
   if (pending.length > 0 && unknown.length > 0) return { kind: 'diverged', pending, unknown }
-  if (pending.length > 0) return { kind: 'behind', pending }
+  if (pending.length > 0) {
+    // 이름은 kysely 가 코드 목록을 세우는 순서(`sort()` — 코드 단위)로 견준다. 로캘 비교나 DB 의 `order by`(정렬 규칙)는 대소문자
+    // · 기호에서 갈린다.
+    const last = executed.reduce((a, b) => (b > a ? b : a))
+    const stranded = pending.filter((name) => name < last).sort()
+    if (stranded.length > 0) return { kind: 'unordered', stranded, later: executed.filter((name) => name > stranded[0]!).sort() }
+    return { kind: 'behind', pending }
+  }
   if (unknown.length > 0) return { kind: 'ahead', unknown }
   return { kind: 'current' }
 }
@@ -71,6 +81,10 @@ export function describeSchemaVerdict(verdict: SchemaVerdict, databaseUrl: strin
     case 'behind':
       return {
         stop: `이 DB 는 마이그레이션이 뒤처졌습니다(${target} · 안 올라간 것: ${verdict.pending.join(', ')}) — 올린 뒤에 띄우십시오: pnpm --filter @wirebound/api migrate`,
+      }
+    case 'unordered':
+      return {
+        stop: `이 DB 는 마이그레이션 순서가 어긋났습니다(${target} · 안 올라간 것: ${verdict.stranded.join(', ')} · 그보다 뒤 이름으로 이미 올라간 것: ${verdict.later.join(', ')}) — migrate 로는 안 올라갑니다(이 코드로는 migrate:down 도 같은 까닭으로 죽습니다). 뒤 이름들을 어느 갈래가 올렸는지 확인하고, 안 올라간 것의 이름을 ${verdict.later.at(-1)} 뒤로 바꾸거나 그것이 없던 코드로 migrate:down 해 뒤 이름들을 내린 뒤(그 데이터를 잃습니다) 이 코드로 migrate 하십시오`,
       }
     case 'ahead':
       return {
