@@ -241,6 +241,13 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         store.setEditFailure(failure)
         return
       }
+      // **그 편집이 나간 큐가 지금 큐가 아니면 아무것도 쓰지 않는다**(`EditorStore.sentFromOpenQueue`) — 이 아래의 첫 쓰기
+      // (`failEdits`)가 **지금 큐**를 비운다. 판을 싣거나 비운 뒤의 큐는 다른 판 위의 것이라 이 실패와 무관하고, 판째 버린 편집은
+      // 전송 루프가 이미 거른다(`wasAbandoned`). 여기 닿는 것은 리베이스가 먼저 버려 큐에 없던 편집이다 — 그 409 가 페이지를 옮긴
+      // 뒤 오면 새 페이지의 큐를 말없이 비웠다(Chrome: 1쪽 편집이 행 잠금에 선 사이 밥의 삭제로 리베이스에서 버려지고, 2쪽에서 친
+      // 글은 화면에만 남아 한 번도 안 나갔다). 통지 · 상태 · 세대도 쓰지 않는다 — 그 실패의 판은 이 화면에 없다. 전송 루프는 이어
+      // 지금 큐를 보낸다.
+      if (!store.sentFromOpenQueue()) return
 
       // **결과를 모르는가** — 서버가 커밋 전에 거절했거나(`refusedBeforeCommit`) 프레임이 나가지 못했으면(`EditNotSentError`)
       // 안다: 안 됐다. 그 밖은 서버에 닿았을 수 있다. 수습은 같고(다시 불러와 서버 상태로) 말만 다르다(`unknownNotice`).
@@ -271,7 +278,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         //
         // **더 나중에 시작한 조회가 판을 이미 정했으면 싣지 않는다** — 그 판이 이 답보다 새것이고, 그 사이 들어온 편집도 그
         // 판이 버리며 말했다. 이 실패의 통지는 그대로 한다(버린 것은 `failEdits`가 센 것뿐이다).
-        const alsoDropped = store.settlePageLoad(ticket) ? store.loadPage(pageId, page.schema, page.headSeq) : []
+        const alsoDropped = store.settlePageLoad(ticket) ? store.loadPage(pageId, page.schema, page.headSeq, ticket) : []
         // 버린 수는 **센 값이다** — 전송에 실패한 것, 큐에 남아 있던 것, 재조회를 기다리는
         // 동안 들어온 것을 합친 것이고, 셋 다 문서가 서버 것으로 되돌아가며 사라졌다.
         const lost = dropped.length + alsoDropped.length
@@ -454,10 +461,11 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           ) {
             continue
           }
-          // `recover`가 큐를 비우므로 남은 편집이 다시 나가지 않고, 재조회가 문서를 서버 것으로 맞춘다.
+          // `recover`가 큐를 비우므로 남은 편집이 다시 나가지 않고, 재조회가 문서를 서버 것으로 맞춘다(그 편집이 지금 큐에서 나갔을 때).
           await recover(caught, target)
           // **수습 뒤에도 큐가 남으면 잇는다** — 더 나중에 시작한 조회가 판을 먼저 정해 수습이 싣지 않았고 그 판 위에서 편집을 더
-          // 냈거나(`recover`의 세대 갈래), 수습 중에 페이지를 옮겨 새 페이지에서 편집했다. 그 편집은 이 루프만 보낸다 — 여기서 끝내면
+          // 냈거나(`recover`의 세대 갈래), 수습 중에 페이지를 옮겨 새 페이지에서 편집했거나, 그 실패가 지금 큐의 일이 아니라 수습이
+          // 큐를 건드리지 않았다(`recover`의 첫 가드). 그 편집은 이 루프만 보낸다 — 여기서 끝내면
           // 다음 편집이 펌프를 깨울 때까지 큐에 선다. 보내는 곳은 위의 «큐의 주인»이다.
         }
       }

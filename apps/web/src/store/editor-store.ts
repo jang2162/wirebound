@@ -480,11 +480,31 @@ export class EditorStore {
    */
   #abandonedOpId: string | null = null
 
+  /**
+   * **큐를 통째로 갈아 낀 수** — 판을 싣거나(`loadPage`) 비울(`clearPage` · `reset`) 때마다 오른다. 그 뒤의 큐는 다른 판 위의 것이다.
+   * 나간 편집이 어느 큐에서 나갔는지(`#sentQueue`)와 견줘, 그 실패가 지금 큐의 일인지 가른다(`sentFromOpenQueue`).
+   */
+  #queueEpoch = 0
+
+  /** 마지막으로 나간 편집이 나갈 때의 `#queueEpoch`. */
+  #sentQueue = -1
+
   /** 판 다시 싣기의 세대 — 시작한 수(`beginPageLoad`). */
   #pageLoadsBegun = 0
 
   /** 판을 정한 가장 나중 세대(`settlePageLoad`). 이 수 이하의 답은 싣지 않는다. */
   #pageLoadSettled = 0
+
+  /**
+   * **다시 읽는 창 안에서 온 내 ack** — 그 ack 가 올 때까지 시작한 조회 수(`begun`)와 번호. 세대 `t`의 조회가 시작된 뒤에 온 ack 는
+   * `begun >= t`다 — 그 조회는 그 커밋 앞을 읽었을 수 있다(`loadPage`의 `ticket`). 조회가 시작되기 **전**에 온 ack 는 들지 않는다 —
+   * 서버는 커밋한 뒤 ack 를 내므로 그 뒤에 시작한 조회는 그 커밋을 읽는다.
+   *
+   * **판본이 갈리면 버린다** — 번호는 판본 안에서만 견줄 수 있다(복원이 되살린 페이지는 `head_seq`를 0 부터 다시 센다). 다른 판을
+   * 싣거나 비우면(`loadPage`의 다른 페이지 · `clearPage` · `reset`) · 복원이 알려지면(`markRestored`) 비우고, 판을 정한 세대보다 앞에
+   * 시작한 조회의 몫은 정할 때 버린다(`settlePageLoad`).
+   */
+  #windowAcks: { begun: number; seq: number }[] = []
 
   constructor(options: EditorStoreOptions = {}) {
     // `crypto.randomUUID`를 여기서 한 번만 참조한다. 이 줄이 이 파일의 유일한 전역
@@ -520,6 +540,9 @@ export class EditorStore {
    * 페이지의 문서이고 어느 revision인가"가 스토어 안에서 어긋날 수 없다 — 읽는 쪽은
    * `openPageId`를 주소와 대조하기만 하면 된다(`use-editor-store.tsx`의 `useOpenDocument`).
    *
+   * **`ticket`은 이 판을 읽은 조회의 세대다**(`beginPageLoad`) — 그 조회가 도는 동안 ack 된 내 편집을 이 판과 견준다(`#windowAcks`).
+   * 판을 싣는 입구는 넘긴다. 빠뜨리면 그 입구의 옛 답이 창 안의 ack 를 조용히 지운다.
+   *
    * **왜 큐까지 여기서 비우나.** 문서·`headSeq`·`openPageId`·선택 넷만 갈아 끼우고
    * `pending`을 남기면, 실패 복구의 재조회가 그 틈에서 편집을 고아로 만든다. 실측한
    * 경로: 편집A가 409를 받아 `recover()`가 `failEdits()`로 큐를 비우고 `getPage`를 기다리는
@@ -532,9 +555,10 @@ export class EditorStore {
    * `clearPage`가 넷을 **함께 비우는** 것과 대칭이다. 재설정이 한 곳에 있으면 다음 사람이
    * 재조회 경로를 새로 만들어도 같은 틈이 안 생긴다.
    */
-  readonly loadPage = (pageId: string, document: PageDocument, headSeq: number): PendingEdit[] => {
+  readonly loadPage = (pageId: string, document: PageDocument, headSeq: number, ticket?: number): PendingEdit[] => {
     const { pending, undoStack, redoStack } = this.#state
     this.#noteAbandoned(pending)
+    this.#queueEpoch += 1
     // **선택은 지우지 않고 다시 정한다** — 무엇으로 정하는지는 `#selectionFor`가 갖는다.
     // 여는 경로는 루트로 시작하고(죽은 화면을 없앤다), 같은 페이지를 다시 싣는 재조회는
     // 보고 있던 자리를 그대로 둔다.
@@ -542,6 +566,9 @@ export class EditorStore {
     // 기다리던 번호 응답은 **이 페이지의 것일 때만** 남는다 — 아래 `#settleWaitingMarkers`.
     const samePage = this.#state.openPageId === pageId
     if (!samePage) this.#dropWaitingMarkers()
+    // 창 안의 ack 는 같은 페이지의 같은 판본일 때만 견준다(`#windowAcks`).
+    const missed = samePage && ticket !== undefined ? this.#ackedSince(ticket) : null
+    if (!samePage) this.#windowAcks = []
     this.#apply({
       openPageId: pageId,
       document,
@@ -573,7 +600,24 @@ export class EditorStore {
     // 게시의 커밋 **앞**에 읽혔으면 번호는 이 판 바로 뒤의 revision 이고, 낸 탭은 그 방송을 안 받는다(연결 id 로 빠진다) —
     // 버리면 번호가 캔버스에 안 뜬 채 `headSeq`가 하나 뒤처진다. 커밋 뒤에 읽혔으면 판에 이미 있어 버린다.
     if (samePage) this.#settleWaitingMarkers()
+    // **이 조회가 시작된 뒤 ack 된 내 편집이 실린 판보다 뒤 번호면 낡음이다.** 조회가 그 커밋 앞을 읽었다 — 서버에는 있는데 이 판에는
+    // 없고, 그 편집은 큐에서 이미 빠져 다시 오지 않는다(방송은 낸 연결을 뺀다). 안 세우면 `headSeq`가 거꾸로 간 채 화면이 최신처럼
+    // 보이고 다음 편집이 409 로 취소된다(Chrome: 배너 단추의 조회 답을 2.5s 붙잡은 사이 친 글이 ack 된 뒤 옛 답이 실려 캔버스 «원문» ·
+    // 서버 그 글 · 낡음 없음). 얹지는 않는다 — 창에 온 것을 들고 있다가 얹는 것은 프레임까지 함께 풀어야 하는 일이다.
+    if (missed !== null && missed > this.#state.headSeq) this.#markStale('gap')
     return pending
+  }
+
+  /** 세대 `ticket`의 조회가 시작된 뒤 ack 된 내 편집의 가장 큰 번호(`#windowAcks`). 없으면 `null`. */
+  #ackedSince(ticket: number): number | null {
+    let max: number | null = null
+    for (const ack of this.#windowAcks) if (ack.begun >= ticket && (max === null || ack.seq > max)) max = ack.seq
+    return max
+  }
+
+  /** 다시 읽는 조회가 도는 동안 온 내 ack 를 적는다(`#windowAcks`). 도는 조회가 없으면 적지 않는다 — 다음 조회는 그 커밋을 읽는다. */
+  #noteAck(seq: number): void {
+    if (this.#pageLoadsBegun > this.#pageLoadSettled) this.#windowAcks.push({ begun: this.#pageLoadsBegun, seq })
   }
 
   /**
@@ -618,6 +662,8 @@ export class EditorStore {
   readonly settlePageLoad = (ticket: number): boolean => {
     if (ticket <= this.#pageLoadSettled) return false
     this.#pageLoadSettled = ticket
+    // 이 세대보다 앞에 시작한 조회는 더는 판을 못 정한다 — 그 조회들만 견줄 ack 는 버린다(`#windowAcks`).
+    this.#windowAcks = this.#windowAcks.filter((ack) => ack.begun >= ticket)
     return true
   }
 
@@ -631,7 +677,17 @@ export class EditorStore {
   readonly markSent = (clientOpId: string): void => {
     this.#sentOpId = clientOpId
     this.#sentPageId = this.#state.openPageId
+    this.#sentQueue = this.#queueEpoch
   }
+
+  /**
+   * **마지막으로 나간 편집이 지금 큐에서 나갔는가** — 그 뒤로 판을 싣거나 비우지 않았는가(`#queueEpoch`). 거짓이면 그 편집의 실패는
+   * 지금 큐의 일이 아니다 — 지금 큐는 다른 판 위에 쌓였다(편집 실패 수습 `recover`가 큐를 비우기 전에 본다).
+   *
+   * **페이지 id 로 가르지 않는다.** 1쪽 → 2쪽 → 1쪽으로 돌아오면 id 는 같은데 큐는 다시 연 판 위의 것이다. 판째 버린 편집
+   * (`wasAbandoned`)은 이 판정의 한 꼴이다 — 이것은 큐에 없던 편집(리베이스가 먼저 버린 것)까지 본다.
+   */
+  readonly sentFromOpenQueue = (): boolean => this.#sentQueue === this.#queueEpoch
 
   /**
    * **버린 편집이 이미 나간 것인가.** 판을 다시 싣는 자리(`loadPage`의 반환)가 «취소»와 «모름»을 가른다. 나간 편집은 커밋 뒤에
@@ -664,15 +720,38 @@ export class EditorStore {
    * 페이지 앞에 남이 글을 넣어 head 1 == 내 head 1 → 안 싣고 통지 0, 내가 «원문»을 고치자 서버에서는 남의 글이 바뀌었다).
    * 복원 방송(`restored`)은 끊긴 동안 온 것이라 받지 못했다.
    *
-   * **견주는 것은 `baseDocument`다 — `document`가 아니다.** 바탕이 서버가 기록한 문서이고(내 낙관적 편집이 안 섞였다),
-   * `document`는 보내지 않은 편집만큼 앞서 있다.
+   * **바탕을 서버 판과 견주고, 화면(`document`)을 «바탕 + 큐»와 견준다.** 바탕이 서버가 기록한 문서이고(내 낙관적 편집이 안
+   * 섞였다), `document`는 보내지 않은 편집만큼 앞서 있다 — 그 편집은 넘어간 뒤 그 바탕 위에 그대로 나간다.
    *
-   * **비용**: 문서를 한 번 훑는다(`sameJson`) — 같은 본문의 `JSON.parse`와 같은 급이다(잰 값은 `sameJson`의 머리말).
-   * 재조회는 연결이 다시 붙을 때만 돌고, 그 조회가 이미 같은 문서를 내려받아 파싱했다 — 비용이 그만큼 한 번 더 든다.
+   * **바탕만 보면 «바탕 + 큐 = 화면»을 전제한다 — 편집 실패 수습 중에는 깨져 있다.** 수습은 큐만 비우고(`failEdits`) 화면은 그
+   * 조회의 `loadPage`가 되돌린다. 그 조회가 붙잡힌 사이 이 판정이 «같다»로 판을 정하면 되돌릴 유일한 답이 세대에 밀려, 거절된
+   * 편집이 화면에 남는다(Chrome: 수습의 조회 답을 7s 붙잡은 사이 WS 가 다시 붙어 3/3 — 캔버스 «앨리스가 친 글» · 서버 «원문»).
+   * 수습의 재조회까지 실패한 판(화면에 저장 안 된 편집이 남는다)도 같다 — 다음 재연결이 판을 싣는다.
+   *
+   * **화면을 서버 판과 곧바로 견주지 않는다.** 큐에 편집이 있으면 화면은 늘 서버 판과 다르다 — 그러면 다시 붙을 때 읽는 동안 친
+   * 편집(한도를 넘겨 답을 못 받은 것 포함)을 버리고 «취소»라 말하며 되돌리기 이력을 비운다. 전제가 선 판에서 동작이 그대로인 쪽을
+   * 골랐다(`test/store/remote-change.test.ts`의 «보내지 않은 편집이 있어도 바탕이 서버 판이면 같은 판이다»가 지킨다). 큐가 바탕에 안
+   * 얹히면(불변식이 깨졌다) 같지 않은 것으로 본다.
+   *
+   * **비용**: 바탕 · 화면을 한 번씩 훑는다(`sameJson`) — 같은 본문의 `JSON.parse`와 같은 급이다(잰 값은 `sameJson`의 머리말).
+   * 막 실은 판은 둘이 같은 참조라 화면 쪽이 공짜고, 큐가 있으면 그 ops 를 바탕에 얹는 값이 더 든다. vitest(jsdom) · 한 Section 에
+   * Text 20000 개(1.7MB) · 키 순서를 뒤집은 서버 판 · 25 회 중앙값: 막 실은 판 3.3ms · ack 뒤(바탕과 화면이 다른 객체) 6.7ms(바탕만
+   * 견주면 3.3ms) · 보내지 않은 편집 하나 16ms(12ms) — 같은 본문의 `JSON.parse` 3.4ms. 재조회는 연결이 다시 붙을 때만 돌고, 그
+   * 조회가 이미 같은 문서를 내려받아 파싱했다.
    */
   readonly holdsServerPage = (pageId: string, headSeq: number, document: PageDocument): boolean => {
-    const { openPageId, baseDocument } = this.#state
-    return openPageId === pageId && this.#state.headSeq === headSeq && sameJson(baseDocument, document)
+    const { openPageId, baseDocument, document: current, pending } = this.#state
+    if (openPageId !== pageId || this.#state.headSeq !== headSeq || baseDocument === null || current === null) return false
+    if (!sameJson(baseDocument, document)) return false
+    let expected = baseDocument
+    for (const edit of pending) {
+      try {
+        expected = applyOps(expected, edit.ops)
+      } catch {
+        return false
+      }
+    }
+    return sameJson(current, expected)
   }
 
   /**
@@ -1123,6 +1202,8 @@ export class EditorStore {
     // 기다리던 번호도 버린다 — 옛 판의 경로라 얹을 문서가 없다. 「만들어진 페이지」 복원은 같은 id 로 `headSeq`를 0 부터 다시
     // 세므로, 남기면 되살아난 판에서 그 차례가 올 때 남의 노드에 붙고 · 안 오면 막 다시 실은 판에 한도가 `'gap'`을 세운다.
     this.#dropWaitingMarkers()
+    // 창 안의 ack 번호도 옛 판본의 것이다(`#windowAcks`) — 되살린 판과 견주면 거짓 `'gap'`이 선다.
+    this.#windowAcks = []
     this.#markStale('restored')
   }
 
@@ -1150,6 +1231,8 @@ export class EditorStore {
   readonly clearPage = (): void => {
     const { pending, undoStack, redoStack } = this.#state
     this.#noteAbandoned(pending)
+    this.#queueEpoch += 1
+    this.#windowAcks = []
     this.#dropWaitingMarkers()
     this.#apply({
       openPageId: null,
@@ -1444,6 +1527,7 @@ export class EditorStore {
     })
     // 내 편집이 기다리던 번호의 사이 revision 이었을 수 있다 — 그 프레임은 내게 안 온다(`applyMarkerChange`의 «그래서 기다렸다가 …»).
     this.#settleWaitingMarkers()
+    this.#noteAck(result.seq)
   }
 
   /**
@@ -1640,6 +1724,8 @@ export class EditorStore {
    * 페이지 하나를 닫는 것은 `clearPage`다 — 그쪽은 보기 설정을 남긴다.
    */
   readonly reset = (): void => {
+    this.#queueEpoch += 1
+    this.#windowAcks = []
     this.#dropWaitingMarkers()
     this.#apply(initialState())
   }

@@ -1135,10 +1135,10 @@ function CanvasFrame(props: {
     [store],
   )
   const applyServerPage = useCallback(
-    (openPageId: string, page: PageDetail, lead: string): void => {
+    (openPageId: string, page: PageDetail, lead: string, ticket: number): void => {
       // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
       const hadUndo = store.getState().undoStack.length > 0
-      tellLost(lead, store.loadPage(openPageId, page.schema, page.headSeq), hadUndo)
+      tellLost(lead, store.loadPage(openPageId, page.schema, page.headSeq, ticket), hadUndo)
     },
     [store, tellLost],
   )
@@ -1214,7 +1214,7 @@ function CanvasFrame(props: {
         // **문서는 스토어로 간다.** `headSeq`가 편집 요청의 `baseSeq`다 — 문서와 함께
         // 실어야 편집 요청이 어느 revision 위에서 만들어졌는지가 어긋나지 않는다.
         // 연 페이지의 id도 같은 호출로 넘긴다: 읽는 쪽이 그것을 주소와 대조한다.
-        store.loadPage(openPageId, page.schema, page.headSeq)
+        store.loadPage(openPageId, page.schema, page.headSeq, ticket)
         setState({ status: 'ready' })
         // **undo 스택 복원은 `loadPage` 뒤다**. 순서가 뒤바뀌면 방금 채운 스택을
         // `loadPage`가 지운다 — 그것이 페이지 상태를 서버 것으로 놓는 자리이기 때문이다
@@ -1325,12 +1325,13 @@ function CanvasFrame(props: {
         // 문서 위의 것이라 남의 편집을 덮을 길이 없다(위 머리말의 전제가 안 선다). 보내지 않은 편집도 그 바탕 위에 그대로
         // 나간다 — 싣으면 오히려 그것을 버리고, 그사이 REST 로 나가던 편집의 답은 모르는 편집의 답이 된다. 다시 붙기만 하고
         // 아무도 안 고친 판이 흔하다 — 같은 사람이 다른 탭에서 다시 로그인하면 소켓을 갈아 끼우며 여기 온다(Chrome: 싣던
-        // 판은 «되돌리기 이력이 초기화됐습니다» · 되돌리기 꺼짐). **«그대로»는 번호와 문서가 둘 다 같은 것이다** — 번호만
-        // 보면 끊긴 사이 지워졌다 복원으로 되살아난 페이지를 옛 문서로 둔다(`holdsServerPage`의 머리말). **이 자리에만
+        // 판은 «되돌리기 이력이 초기화됐습니다» · 되돌리기 꺼짐). **«그대로»는 번호와 문서가 둘 다 같고 화면이 그 바탕 위에
+        // 선 것이다** — 번호만 보면 끊긴 사이 지워졌다 복원으로 되살아난 페이지를 옛 문서로 두고, 바탕만 보면 편집 실패 수습이 아직
+        // 되돌리지 못한 거절된 편집을 화면에 둔다(`holdsServerPage`의 머리말). **이 자리에만
         // 둔다** — 복원 경로는 판이 통째로 갈렸다는 신호라 늘 싣는다. 열린 페이지를 함께 보는 것은 «내 바탕»이 이 페이지의
         // 것일 때만 견주려는 것이다 — 그 대조만 떼도 지키는 케이스가 없다(여는 조회가 도는 중이면 그 조회가 싣는다).
         if (store.holdsServerPage(pageId, page.headSeq, page.schema)) return
-        applyServerPage(pageId, page, RESYNC_LEAD)
+        applyServerPage(pageId, page, RESYNC_LEAD, ticket)
         // **여는 조회가 실패해 있었으면 캔버스를 되살린다** — 복원 재조회의 같은 줄과 같다. 판은 방금 스토어에 실려 구조
         // 트리 · 속성 패널이 그리는데 캔버스만 실패 문장이면 세 자리가 다른 사실을 말한다. 위에서 넘어간 갈래는 스토어가
         // 이미 이 페이지를 들고 있다는 뜻이고, 그 판을 실은 쪽이 `ready`를 놓았다(여는 조회는 실패하면 스토어를 비운 채다).
@@ -1409,7 +1410,7 @@ function CanvasFrame(props: {
         if (!alive) return
         // 뒤에 시작한 다시 싣기가 판을 먼저 정했으면 이 답은 그보다 옛것이다(재연결 이펙트의 같은 줄).
         if (!store.settlePageLoad(ticket)) return
-        applyServerPage(pageId, page, restoredLead)
+        applyServerPage(pageId, page, restoredLead, ticket)
         // 앞서 이 페이지의 조회가 실패해 있었을 수도 있다. 복원으로 다시 생긴 페이지를
         // 오류 문장 아래 감춰 두지 않는다.
         setState({ status: 'ready' })
