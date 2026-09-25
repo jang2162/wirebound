@@ -185,8 +185,8 @@ describe('바뀌는 순간의 잠금과 연결', () => {
   /**
    * **제거 뒤 그 연결이 `ping`을 보내면** 프레임 수신 쪽 회수(확인 지점 1)가 닫는데, 그 닫기는 도는 프레임을 기다린다
    * (`ws/routes.ts`의 «권한이 회수되었습니다»). 페이지 행에 줄 선 편집이 있으면 그 답(재확인의 404) 뒤에 닫힌다 — 곧바로
-   * 닫으면 확정된 거절이 «모름»이 된다. 잠금을 쥐지 않은 판이다: 쥐었으면 놓는 `locks` 방송이 먼저 닫는다(위 케이스 —
-   * 그 닫기는 기다리지 않는다, `ws/notify.ts`의 `notifyMembershipChanged` «남는 틈»).
+   * 닫으면 확정된 거절이 «모름»이 된다. 잠금을 쥐지 않은 판이다: 쥐었으면 놓는 `locks` 방송이 회수한다(아래 «잠금을 쥔 채
+   * 제거돼도»).
    */
   it('제거 뒤 그 연결이 ping 을 보내도 줄 선 편집은 404 를 받은 뒤 닫힌다', async () => {
     await withRealApi(async (ctx) => {
@@ -235,6 +235,65 @@ describe('바뀌는 순간의 잠금과 연결', () => {
       expect(await targetTab.waitFor('patch-error')).toMatchObject({ clientOpId: 'op_gone', status: 404 })
       expect(await targetTab.waitClosed(1_000)).toEqual({ code: WS_CLOSE.revoked, reason: '권한이 회수되었습니다' })
       expect(targetTab.received.some((frame) => frame.type === 'pong')).toBe(false)
+    })
+  }, 30_000)
+
+  /**
+   * **잠금을 쥔 채 제거돼도 같다** — 놓는 `locks` 방송이 그 연결의 자격을 보고 회수하는데(확인 지점 2 · `ws/broadcast.ts`의
+   * `deliver`), 그 닫기도 도는 프레임을 기다린다. 곧바로 닫으면 페이지 행에 줄 선 편집의 404 가 길을 잃는다.
+   */
+  it('잠금을 쥔 채 제거돼도 줄 선 편집은 404 를 받은 뒤 닫힌다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const targetTab = track(await joinRoom(ctx.port, fx.project.id, fx.target.cookie.wb_session))
+      const ownerTab = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const put = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/schema`,
+        cookies: fx.owner.cookie,
+        payload: { schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [] } } },
+      })
+      expect(put.statusCode, put.body).toBe(200)
+      targetTab.send(lockFrame(fx.page.id, 'n_card'))
+      await locksWith(ownerTab, 'n_card')
+
+      const db = getTestDb()
+      let release!: () => void
+      const released = new Promise<void>((resolve) => (release = resolve))
+      let held!: () => void
+      const holding = new Promise<void>((resolve) => (held = resolve))
+      const holder = withTransaction(db, async (trx) => {
+        await trx.selectFrom('pages').select('id').where('id', '=', fx.page.id).forUpdate().execute()
+        held()
+        await released
+      })
+      try {
+        await holding
+        targetTab.send(
+          JSON.stringify({ type: 'patch', pageId: fx.page.id, clientOpId: 'op_locked_gone', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_y', type: 'Text', props: {} } }] }),
+        )
+        await vi.waitFor(async () => {
+          const { rows } = await sql<{ n: number }>`
+            select count(*)::int as n from pg_stat_activity
+             where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
+          `.execute(db)
+          expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+        }, { timeout: 5_000 })
+
+        expect(await remove(ctx, fx, fx.target.user.id)).toBe(204)
+        await targetTab.waitFor('membership-changed')
+        // 놓는 방송이 지나갔다 — 그 방송이 이 연결을 회수했다.
+        expect(await locksEmpty(ownerTab)).toEqual([])
+        await targetTab.quiet()
+        // 편집은 아직 행에 서 있다 — 소켓은 열려 있어야 하고, 룸에서는 빠져 방송은 안 받는다.
+        expect(targetTab.closeInfo).toBeNull()
+        expect(ctx.app.realtime.rooms.membersOf(fx.project.id).map((connection) => connection.userId)).toEqual([fx.owner.user.id])
+      } finally {
+        release()
+        await holder
+      }
+      expect(await targetTab.waitFor('patch-error')).toMatchObject({ clientOpId: 'op_locked_gone', status: 404 })
+      expect(await targetTab.waitClosed(1_000)).toEqual({ code: WS_CLOSE.revoked, reason: '권한이 회수되었습니다' })
     })
   }, 30_000)
 })

@@ -206,6 +206,74 @@ describe('세션 행을 지우면 권한이 회수된다', () => {
   })
 
   /**
+   * **방송이 회수해도 같다**(확인 지점 2 · `ws/broadcast.ts`의 `deliver`) — 그 연결이 아무것도 안 보내도 남이 일으킨 방송이
+   * 지나가며 회수한다. 소켓은 줄 선 편집의 답 뒤에 닫고, 잠금 · 참가자 목록은 곧바로 거둔다 — 닫힘 이벤트를 기다리면 그 편집이
+   * 끝날 때까지 남의 화면에 «편집 중»과 그 사람이 남는다.
+   */
+  it('세션을 지운 뒤 편집이 행에 선 채 남의 방송이 지나가면 잠금 · 참가자는 곧바로 거두고, 소켓은 그 편집의 답 뒤에 닫는다', async () => {
+    await withRealApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const peer = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      await addMember(ctx, project.id, peer.user.id, 'editor')
+      const menu = await createMenuNode(ctx, owner.cookie, project.id)
+      const page = await createPage(ctx, owner.cookie, project.id, menu.id)
+      const put = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${project.id}/pages/${page.id}/schema`,
+        cookies: owner.cookie,
+        payload: { schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }] } } },
+      })
+      expect(put.statusCode, put.body).toBe(200)
+      const probe = track(await joinRoom(ctx.port, project.id, owner.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, project.id, peer.cookie.wb_session))
+      probe.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeId: 'n_a' }))
+      await locksWith(watcher, 'n_a')
+
+      let release!: () => void
+      const released = new Promise<void>((resolve) => (release = resolve))
+      let held!: () => void
+      const holding = new Promise<void>((resolve) => (held = resolve))
+      const holder = withTransaction(db, async (trx) => {
+        await trx.selectFrom('pages').select('id').where('id', '=', page.id).forUpdate().execute()
+        held()
+        await released
+      })
+      try {
+        await holding
+        probe.send(
+          JSON.stringify({ type: 'patch', pageId: page.id, clientOpId: 'op_held_b', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }] }),
+        )
+        await vi.waitFor(async () => {
+          const { rows } = await sql<{ n: number }>`
+            select count(*)::int as n from pg_stat_activity
+             where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
+          `.execute(db)
+          expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+        }, { timeout: 5_000 })
+
+        await deleteSessions(ctx, owner.user.id)
+        // 남(peer)이 탭을 하나 더 열어 방송(presence)을 일으킨다 — 그 방송이 세션 없는 연결을 회수한다. 회수된 쪽은 아무것도
+        // 안 보낸다.
+        const started = Date.now()
+        track(await joinRoom(ctx.port, project.id, peer.cookie.wb_session))
+        await locksUntil(watcher, (list) => list.length === 0, 'n_a 풀림')
+        await vi.waitFor(() => {
+          const last = watcher.received.filter((frame) => frame.type === 'presence').at(-1)
+          expect(last?.type === 'presence' && last.participants.map((participant) => participant.userId)).toEqual([peer.user.id, peer.user.id])
+        }, { timeout: 1_000 })
+        expect(Date.now() - started).toBeLessThan(1_000)
+        expect(probe.closeInfo).toBeNull()
+      } finally {
+        release()
+        await holder
+      }
+      expect(await probe.waitFor('patch-error')).toMatchObject({ clientOpId: 'op_held_b', status: 401 })
+      expect(await probe.waitClosed(1_000)).toEqual({ code: 4403, reason: '권한이 회수되었습니다' })
+    })
+  })
+
+  /**
    * **음성 대조.** 이것이 없으면 위 케이스의 *"닫힌다"*가 *"`ping`을 보내면 원래 닫힌다"*와
    * 구분되지 않는다.
    */
