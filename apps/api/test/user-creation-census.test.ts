@@ -131,7 +131,7 @@ describe('`migrate:down` 은 계정을 안 건드린다', () => {
   it('**CLI 가 자기 `direction` 을 그대로 넘긴다** — 그 자리에 `latest` 를 박으면 위 자가 잠든다', () => {
     // 위 두 케이스는 함수를 직접 부르므로 **호출부가 무엇을 넘기는지는 못 본다.**
     // 그 한 줄만 소스에서 센다(`screen-renderer-census.test.ts` 와 같은 결이다).
-    expect(sourceOf('db/migrate.ts')).toContain('seedAfterMigration(direction,')
+    expect(sourceOf('db/migrate.ts')).toMatch(/\bseedAfterMigration\s*\(\s*direction\s*,/)
   })
 })
 
@@ -147,7 +147,7 @@ describe('픽스처가 프로덕션 경로를 지난다', () => {
    * 픽스처가 그것을 그대로 부른다"*를 **근거로** 적는다. 그 문장을 지키는 것이 이 케이스다.
    */
   it('`helpers.ts` 가 `seedUser` 를 부른다', () => {
-    expect(HELPERS).toContain('seedUser(')
+    expect(HELPERS).toMatch(/\bseedUser\s*\(/)
     expect(HELPERS).toMatch(/import \{[^}]*seedUser[^}]*\} from '\.\.\/src\/db\/seed-user'/)
   })
 

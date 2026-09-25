@@ -187,7 +187,7 @@ describe('배선 — 규칙을 무엇으로 불러 어디에 꽂는가', () => {
     // `?raw` 가 빈 문자열이면 심기 케이스가 전부 초록이 된다(`store-access.test.ts` 머리말이
     // 같은 고장을 적는다). 그래서 이 카나리아가 먼저 온다.
     expect(viteConfigSource.length).toBeGreaterThan(200)
-    expect(source).toContain('export default defineConfig(')
+    expect(source).toMatch(/\bexport\s+default\s+defineConfig\s*\(/)
     // 호출이 **하나뿐**이어야 한다 — 둘이면 첫 번째만 보고 두 번째가 조용히 이긴다.
     expect(source.match(/resolveApiProxyTarget\s*\(/g)).toHaveLength(1)
     // 그 값이 이름을 갖는다 — 아래 배너 케이스가 그 이름을 다시 쓴다.
@@ -292,7 +292,7 @@ describe('배선이 가리키는 자리', () => {
   }, 30_000)
 
   it('`apps/api/.env` 를 상대 경로로 탄다 — 그 한 줄이 바뀌면 여기서 걸린다', () => {
-    expect(source).toContain("new URL('../api/.env', import.meta.url)")
+    expect(source).toMatch(/\bnew\s+URL\s*\(\s*'\.\.\/api\/\.env'\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*\)/)
   })
 
   it('그 상대 홉이 **실재하는 api 패키지**로 간다 — 문자열만 맞는 것이 아니다', () => {

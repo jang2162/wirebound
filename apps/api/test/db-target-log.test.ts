@@ -159,7 +159,7 @@ describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', ()
   const main = stripComments(readFileSync(join(SRC_ROOT, 'main.ts'), 'utf8'))
 
   it('`describeDatabaseTarget` 을 부르는 자리가 `main.ts` 에 있다', () => {
-    expect(main).toContain('describeDatabaseTarget(config.databaseUrl)')
+    expect(main).toMatch(/\bdescribeDatabaseTarget\s*\(\s*config\s*\.\s*databaseUrl\s*\)/)
   })
 
   it('`config.databaseUrl` 을 받는 자가 둘뿐이다 — 붙는 자와 가려서 찍는 자', () => {
@@ -178,21 +178,21 @@ describe('main.ts 가 그것을 실제로 찍는가 — 소스에서 센다', ()
   it('**스키마 상태를 같은 줄에 붙인다** — 뜬 뒤에 세는 자를 실제로 지난다', () => {
     // 규칙(`describeSchemaState`)에는 자가 촘촘한데 **꽂는 한 줄에 자가 없으면** 회귀가
     // 게이트 넷을 초록으로 지나간다. 여기는 서버를 띄워야만 도는 길이라 행동으로 못 재고 글자로 잰다.
-    expect(main).toContain('describeSchemaState(')
-    expect(main).toContain('await countExecutedMigrations(db)')
+    expect(main).toMatch(/\bdescribeSchemaState\s*\(/)
+    expect(main).toMatch(/\bawait\s+countExecutedMigrations\s*\(\s*db\s*\)/)
     expect(main).toMatch(/이 서버가 보는 DB:[^\n]*describeDatabaseTarget/)
     // 세어 놓고 안 쓰면 소용이 없다 — 두 조각이 **한 줄**에 있어야 사람이 함께 읽는다.
     const 찍는줄 = main.slice(main.indexOf('이 서버가 보는 DB:'))
-    expect(찍는줄.slice(0, 240)).toContain('describeSchemaState(')
+    expect(찍는줄.slice(0, 240)).toMatch(/\bdescribeSchemaState\s*\(/)
   })
 
   it('**못 떴을 때의 문장도 배선한다** — 이 줄이 빠지면 원문만 남는다', () => {
     // 이 케이스가 없으면 이 세 줄을 빼도 위의 케이스들이 전부 초록이다.
     // 빈 DB 는 워크트리마다 컨테이너를 띄우면 **정상 경로**라 여기가 조용하면 안 된다.
-    expect(main).toContain('emptySchemaHint(await countExecutedMigrations(db), config.databaseUrl)')
+    expect(main).toMatch(/\bemptySchemaHint\s*\(\s*await\s+countExecutedMigrations\s*\(\s*db\s*\)\s*,\s*config\s*\.\s*databaseUrl\s*\)/)
     // 다른 실패는 원문 그대로 올라가야 한다 — 이 자가 모든 실패를 삼키면 안 된다.
     expect(main).toMatch(/if \(hint === undefined\) \{\s*throw error/)
-    expect(main).toContain('new Error(hint, { cause: error })')
+    expect(main).toMatch(/\bnew\s+Error\s*\(\s*hint\s*,\s*\{\s*cause\s*:\s*error\s*\}\s*\)/)
   })
 })
 

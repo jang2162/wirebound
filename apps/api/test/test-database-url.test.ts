@@ -207,7 +207,7 @@ describe('helpers.ts 가 그 배선을 지나는가 — 소스에서 센다', ()
   const source = stripComments(readFileSync(new URL('./helpers.ts', import.meta.url), 'utf8'))
 
   it('TEST_DATABASE_URL 을 `resolveTestDatabaseUrlFrom(process.env)` 로 정한다', () => {
-    expect(source).toContain('export const TEST_DATABASE_URL = resolveTestDatabaseUrlFrom(process.env)')
+    expect(source).toMatch(/\bexport\s+const\s+TEST_DATABASE_URL\s*=\s*resolveTestDatabaseUrlFrom\s*\(\s*process\s*\.\s*env\s*\)/)
   })
 
   it('그 자리에서 순서를 다시 조립하지 않는다 — 조립이 둘이면 한쪽만 고쳐진다', () => {

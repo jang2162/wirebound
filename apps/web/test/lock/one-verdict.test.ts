@@ -158,7 +158,7 @@ describe('판정은 한 벌이다', () => {
     // 소유자 판정·페이지 필터의 **행동** 케이스들과 같은 파일의 `COMPARES_OWNER`다.
     const source = stripComments(readFileSync(join(WEB_SRC, 'store/use-locked-by.ts'), 'utf8'))
 
-    expect(source).toContain('store.lockedBy')
+    expect(source).toMatch(/\bstore\s*\.\s*lockedBy\b/)
     expect(source).not.toMatch(/\bfindNodePath\s*\(|\blocksAgainst\s*\(|\.\s*filter\s*\(/)
   })
 
