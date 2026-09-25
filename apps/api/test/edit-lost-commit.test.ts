@@ -118,6 +118,33 @@ describe('COMMIT 답을 잃은 편집', () => {
     })
   })
 
+  /**
+   * **«안 보인다»면 한 번 더 본다**(`services/lost-commit.ts`의 `probeCommit`). COMMIT 을 서버에 넘기자마자 api 쪽 연결만
+   * 끊기면(`halfCutOnQuery`) 확인이 그 COMMIT 보다 먼저 닿을 수 있다 — 끊긴 연결의 COMMIT 이 아직 돈다. COMMIT 을 20ms 늦춘다
+   * (그 페이지의 revision 에만 거는 `DEFERRABLE INITIALLY DEFERRED` 제약 트리거의 `pg_sleep`). 한 번만 보면 503 «모름»이다.
+   */
+  it('끊긴 연결의 COMMIT 이 아직 돌면 한 번 더 본다 — 커밋되면 200 이고 룸이 받는다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const db = getTestDb()
+      await sql.raw(`create or replace function zz_slow_commit() returns trigger language plpgsql as $$ begin perform pg_sleep(0.02); return null; end $$`).execute(db)
+      await sql.raw(
+        `create constraint trigger zz_slow_commit after insert on revisions deferrable initially deferred for each row when (new.page_id = '${fx.pageId}') execute function zz_slow_commit()`,
+      ).execute(db)
+      try {
+        ctx.proxy.halfCutOnQuery('commit')
+        const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_late') } })
+        expect(ctx.proxy.fired).toBe(true)
+        expect(res.statusCode, res.body).toBe(200)
+        expect(res.json()).toMatchObject({ seq: 1 })
+        expect(await fx.watcher.waitFor('page-changed')).toMatchObject({ seq: 1 })
+      } finally {
+        await sql`drop trigger if exists zz_slow_commit on revisions`.execute(db)
+        await sql`drop function if exists zz_slow_commit()`.execute(db)
+      }
+    })
+  })
+
   it('확인이 1초 안에 안 끝나면 503 «모름»이다 — 확인이 답을 붙잡지 않는다', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)

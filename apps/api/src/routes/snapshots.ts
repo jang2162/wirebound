@@ -91,7 +91,7 @@ import {
 } from '../repos/snapshots'
 import { lockProjectShared } from '../repos/projects'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
-import { LOST_COMMIT_PROBE_MS, runConfirmedTransaction } from '../services/lost-commit'
+import { probeCommit, runConfirmedTransaction } from '../services/lost-commit'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
 import { broadcastOrigin, notifyRestored } from '../ws/notify'
 
@@ -325,8 +325,11 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           },
           async (restored) => {
             if (restored.kind !== 'restored') return null
-            const seen = await findSnapshotCommitWithin(app.db, projectId, restored.result.safety.id, LOST_COMMIT_PROBE_MS)
-            return seen === true ? true : null
+            const seen = await probeCommit(async (ms) => {
+              const committed = await findSnapshotCommitWithin(app.db, projectId, restored.result.safety.id, ms)
+              return committed === null ? null : { committed }
+            })
+            return seen?.committed === true ? true : null
           },
         )
         if (outcome.kind !== 'restored') {

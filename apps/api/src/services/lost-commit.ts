@@ -17,6 +17,13 @@
  * **«안 보인다»는 «커밋 안 됨»이 아니다** — 끊긴 연결의 COMMIT 이 서버에서 아직 도는 중일 수 있다. 그래서 거기서는
  * 성공도 확정 실패도 말하지 않고 원래의 «모름»을 낸다. 확인은 «보인다»일 때만 답을 바꾼다.
  *
+ * **한 번 더 본다.** «안 보인다»면 `LOST_COMMIT_RECHECK_MS` 뒤에 한 번 더 보고 그래도 안 보이면 «모름»이다(`probeCommit`). 잰 값
+ * (api 하네스 · COMMIT 을 서버에 넘기자마자 api 쪽 연결만 끊음(`halfCutOnQuery`) · 그 COMMIT 을 제약 트리거의 `pg_sleep`으로
+ * 늦춤 · 판마다 30번 · 전부 실제로 커밋됨): 한 번만 보면 지연 0 은 30/30 확인, 5ms 는 13/30, 20ms · 100ms 는 0/30 — 확인이
+ * 그 COMMIT 보다 먼저 닿는다. 한 번 더 보면 0 · 5 · 20 · 40ms 가 30/30, 100ms 는 0/30. 대가는 커밋 안 된 판의 503 이 그만큼(과
+ * 질의 하나) 늦는 것이다. 더 기다리지 않는 것은 확인이 답을 바꿀 기회일 뿐이라서다 — COMMIT 이 그보다 오래 걸리는 판은 «모름»으로
+ * 둔다.
+ *
  * **확인의 시간 한도.** 진짜 분할이면 새 연결도 닿지 않아 풀의 대기(`poolWaitMs`)만큼 503 이 늦어진다 — 확인은 답을
  * 바꿀 기회일 뿐이라 그만큼 붙잡지 않는다. 한도를 넘긴 확인은 **그 연결째 버리고**(`db/client.ts`의 `readWithin`) 원래 오류를
  * 낸다 — 기다리기만 멈추면 그 연결이 응답 뒤에도 풀 칸을 쥐고, 되풀이되면 풀이 차서 모든 요청이 503 이다.
@@ -34,6 +41,23 @@ import type { EditOutcome } from './edit-pipeline'
 
 /** 확인을 기다리는 한도 — 머리말 «확인의 시간 한도». */
 export const LOST_COMMIT_PROBE_MS = 1_000
+
+/** «안 보인다»면 이만큼 뒤에 한 번 더 본다 — 머리말 «한 번 더 본다». */
+export const LOST_COMMIT_RECHECK_MS = 50
+
+/**
+ * 커밋을 본다 — 한도(`LOST_COMMIT_PROBE_MS`) 안에서, «안 보인다»면 `LOST_COMMIT_RECHECK_MS` 뒤에 한 번 더(머리말 «한 번 더 본다»).
+ * `look(ms)`는 그 한도 안에 못 끝나면 `null`이다. 둘째가 못 보면(`null`) 첫째의 «안 보인다»를 낸다.
+ */
+export async function probeCommit<T extends { committed: boolean }>(look: (ms: number) => Promise<T | null>): Promise<T | null> {
+  const deadline = Date.now() + LOST_COMMIT_PROBE_MS
+  const first = await look(LOST_COMMIT_PROBE_MS)
+  if (first === null || first.committed) return first
+  const left = deadline - Date.now() - LOST_COMMIT_RECHECK_MS
+  if (left <= 0) return first
+  await new Promise((resolve) => setTimeout(resolve, LOST_COMMIT_RECHECK_MS))
+  return (await look(left)) ?? first
+}
 
 export interface SettledEdit {
   outcome: EditOutcome
@@ -98,7 +122,7 @@ export async function runRevisionTransaction<T>(
   return runConfirmedTransaction(db, fn, async (result) => {
     const revision = revisionOf(result)
     if (revision === null) return null
-    const seen = await findRevisionCommitWithin(db, pageId, revision.revisionId, LOST_COMMIT_PROBE_MS)
+    const seen = await probeCommit((ms) => findRevisionCommitWithin(db, pageId, revision.revisionId, ms))
     if (seen === null || !seen.committed) return null
     return seen.headSeq === revision.seq
   })
