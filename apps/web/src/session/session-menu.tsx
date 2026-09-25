@@ -53,7 +53,13 @@ const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
  */
 export const SWITCHED_NOTICE = '다른 사람으로 로그인됐습니다 — 이 탭은 이제 머리의 사람의 화면입니다'
 
-export function SessionMenu(): ReactElement {
+export function SessionMenu(props: {
+  /**
+   * **로그아웃 요청을 내기 전에 기다릴 것** — 에디터 셸이 보낸 편집의 답을 기다리게 넘긴다(`routes/editor.tsx`의 `editsAnswered`). 한도가
+   * 있어야 한다 — 로그아웃은 권한을 줄이는 쓰기라 막히면 안 된다. 셸 밖(프로젝트 목록 · 토큰)은 넘기지 않는다.
+   */
+  settle?: () => Promise<void>
+}): ReactElement {
   const api = useApi()
   const user = useSessionUser()
   const switched = useSessionSwitched()
@@ -67,6 +73,7 @@ export function SessionMenu(): ReactElement {
   async function run(): Promise<void> {
     setBusy(true)
     setFailure(null)
+    await props.settle?.()
     try {
       await api.logout()
     } catch (caught) {
