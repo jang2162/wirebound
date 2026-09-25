@@ -104,6 +104,21 @@ pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바�
 `tsx`는 런타임에 필요하다 — 내보내기 워커도 `tsx/esm`을 싣는다(`services/export-worker.ts`의 `workerExecArgv`). api 의 빌드
 산출물을 `node`로 띄우는 길은 없다.
 
+### 끄기 — 도는 요청을 끝까지 답하고 끝낸다
+
+`SIGTERM` · `SIGINT` · `SIGHUP` 셋 다 «닫아라»다. 서버는 새 요청을 안 받고, **도는 요청(그리던 pptx 포함)을 끝까지 답한 뒤**
+DB 풀을 닫고 종료 0 으로 끝낸다. 30s 안에 안 끝나면 도는 요청을 버리고 종료 1 이다. 같은 신호가 두 번 와도(`pnpm start` 아래의
+Ctrl-C 한 번이 그렇다) 기다림을 끊지 않는다. 판정과 잰 값은 `src/shutdown.ts`의 머리말이, 브라우저가 신호를 안 받는 까닭은
+`src/services/screen-render-chromium.ts`의 `LEAVE_SIGNALS_TO_SERVER`가 갖는다.
+
+- **끄는 쪽의 한도가 먼저 오면 그 뒤는 SIGKILL 이다** — `pnpm dev`(`tsx watch`)는 다시 띄울 때 5s, `docker stop` 은 기본 10s.
+  그때 도는 응답은 끊기지만 브라우저는 안 남는다(잰 값: 빈 페이지 200장 pptx 를 그리는 중에 `tsx watch` 가 다시 띄움 — 응답 끊김 ·
+  새 서버 5.8s · 남은 브라우저 0. 40장이면 그림을 다 싣고 1.9s 에 새 서버).
+- **띄운 터미널 창을 닫으면 그리던 서버가 안 끝난다** — 닫힌 터미널에 로그를 쓰려다 멈추고, 포트와 브라우저를 쥔 채 남는다(잰
+  값: pty 에서 `pnpm start` · `tsx src/main.ts` 로 띄워 pptx 를 그리는 중에 pty 를 닫음 — 120s 뒤에도 응답 없음 · 서버와
+  브라우저 셋이 남음. 쉬는 서버는 `tsx` 면 끝나고 `pnpm start` 면 남는다). 신호가 아니라 로그를 쓰는 자리가 막히는 것이라
+  닫는 길은 로그 목적지의 쓰기 오류를 받는 것이다. 그때까지는 창을 닫기 전에 Ctrl-C 로 끈다.
+
 ## 테스트
 
 api 프로젝트의 vitest 테스트는 실제 Postgres에 붙는다. 컨테이너가 healthy인

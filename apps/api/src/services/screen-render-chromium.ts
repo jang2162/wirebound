@@ -87,6 +87,23 @@ const DEVICE_SCALE_FACTOR = 2
  */
 const FULL_PAGE = true
 
+/**
+ * **신호는 서버가 받는다 — 브라우저를 띄우는 자가 받지 않는다.**
+ *
+ * playwright 는 기본으로 브라우저가 떠 있는 동안 신호 처리기를 건다. 그러면 서버가 도는 요청을 끝까지 답하려고 닫는
+ * 사이에(`shutdown.ts`) 브라우저가 먼저 닫혀 그리던 pptx 가 200 인데 그림이 전부 빠진다. 셋 다 그렇다:
+ * - `SIGTERM` · `SIGHUP` — 브라우저만 닫는다. `SIGHUP`은 처리기가 걸린 동안 node 의 기본 동작(죽기)도 막으므로, 서버가 그 신호를
+ *   안 받으면 그리던 서버가 **포트를 쥔 채 고아로 남는다**(`tsx` 부모만 죽는다).
+ * - `SIGINT` — 브라우저를 닫고 `process.exit(130)` 한다. 서버의 닫기가 끝나기 전에 프로세스가 끝난다.
+ *
+ * 잰 값(macOS 로컬 api · 빈 페이지 40장 pptx 를 보내고 300ms 뒤 `tsx` 의 전경 그룹에 신호): 이것이 없으면 셋 다 200 · 그림 실패
+ * 36/40 · SIGHUP 은 고아 서버. 있으면 셋 다 실패 0.
+ *
+ * **떼어도 브라우저가 남지 않는다** — 서버가 `process.exit`로 끝나면 playwright 의 `exit` 처리기가 죽이고, 서버가 신호로 죽으면
+ * (SIGKILL) 파이프가 닫혀 브라우저가 스스로 끝난다.
+ */
+export const LEAVE_SIGNALS_TO_SERVER = { handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false } as const
+
 /** 기본값들. `chromiumScreenRenderer`의 인자로 덮을 수 있다. */
 export const SCREEN_DEFAULTS = {
   /** 동시에 여는 페이지 수. 늘려도 얻는 것이 빠르게 줄고 최고 메모리는 그대로 는다. */
@@ -181,9 +198,10 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
 
       let browser: Browser
       try {
-        browser = await chromium.launch(
-          options?.executablePath === undefined ? {} : { executablePath: options.executablePath },
-        )
+        browser = await chromium.launch({
+          ...LEAVE_SIGNALS_TO_SERVER,
+          ...(options?.executablePath === undefined ? {} : { executablePath: options.executablePath }),
+        })
       } catch (error) {
         return {
           results: requests.map(() => failure(`브라우저를 띄우지 못했습니다: ${errorLine(error)}`)),

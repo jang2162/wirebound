@@ -1020,6 +1020,7 @@ Docker 의 리눅스 컨테이너(linux/arm64 · `node:22-slim` = Debian 12 · N
 | **`NODE_ENV=production` 이면 TLS** | 세션 쿠키에 `Secure` 가 붙는다(`apps/api/src/auth/plugin.ts`) | http 로 연 화면에서 **로그인 200 인데 바로 다음 `/api/auth/me` 가 401** — 브라우저가 쿠키를 안 받는다(쿠키 0). `http://127.0.0.1` 은 Chrome 이 안전한 출처로 봐 된다 — **그래서 로컬에서는 안 보인다.** 헤드리스 Chrome 에 `--host-resolver-rules=MAP wb.test 127.0.0.1` 로 `http://wb.test` 를 열어 쟀다. `development` 면 둘 다 200 |
 | **PID 1 은 node 로** | `pnpm` 을 거치면 `SIGTERM` 이 서버의 정상 종료에 안 닿는다 | `docker stop` 에 종료 코드 1(`--init` 이면 143) · «종료합니다» 줄 0 · **도는 요청이 소켓째 끊긴다**(`UND_ERR_SOCKET`). `apps/api` 에서 `node --import tsx src/main.ts`(또는 `tsx src/main.ts`)를 PID 1 로 두면 종료 0 · 도는 요청 200 |
 | **init 을 둔다**(`docker run --init` · tini) | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). `--init` 이면 0 |
+| **끄는 쪽의 한도** | `SIGTERM` 을 받은 api 는 도는 요청(그리던 pptx 포함)을 끝까지 답하고 끝낸다 — 한도 30s(`apps/api/README.md` 「끄기」 절) | 끄는 쪽의 한도가 먼저 오면 그 뒤는 SIGKILL 이라 도는 응답이 끊긴다 — `docker stop` 은 기본 10s(`-t` · `--stop-timeout` 으로 늘린다). 브라우저는 안 남는다. 잰 값은 macOS 로컬 api 다(빈 페이지 200장 pptx 가 SIGTERM 뒤 6.4s 에 200 · 그림 실패 0) — **컨테이너로는 안 쟀다** |
 
 Node 판을 재는 법 — 저장소 뿌리에서 `git archive HEAD | docker run -i --rm node:<판>-slim sh -c 'mkdir /app && cd /app && tar xf - &&
 corepack enable && pnpm install --frozen-lockfile && pnpm build'`. tsdown 의 `engines`(`^22.18.0 || >=24.11.0`)는 24.0–24.10 을
@@ -1123,10 +1124,6 @@ docker run --init -e HOST=0.0.0.0 -e NODE_ENV=production -e DATABASE_URL … -w 
 - **x86_64** — 전부 linux/arm64 에서 쟀다.
 - **실제 TLS 앞단 · 다중 인스턴스 · 운영 DB** — `Secure` 쿠키는 브라우저가 http 에서 거절하는 쪽만 쟀다.
 - **상류 keep-alive 경주** — 「앞단(리버스 프록시)이 지킬 조건」 표의 판정 줄.
-- **정상 종료 중 그리던 pptx 는 그림이 빠진다(알려진 한계).** `docker stop` 이 그리는 중에 오면 그 응답은 200 이지만 그림이
-  전부 실패다(이유 `… Target page, context or browser has been closed`). playwright 가 `SIGTERM` 에 자기가 띄운 브라우저를
-  먼저 닫는다 — 컨테이너 안에서만 `chromium.launch` 에 `handleSIGTERM: false` 를 주자 같은 판이 그림을 다 실었다(실패 0).
-  서버 코드는 고치지 않았다.
 
 ---
 

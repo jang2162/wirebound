@@ -5,6 +5,7 @@ import { describeDatabaseTarget } from './db/describe-target'
 import { describeSchemaState, emptySchemaHint } from './db/describe-schema-state'
 import { countExecutedMigrations } from './db/migrate'
 import { chromiumScreenRenderer } from './services/screen-render-chromium'
+import { closeOnSignals } from './shutdown'
 
 /**
  * 실제 프로세스 진입점. `listen`을 부르는 것은 이 파일뿐이다 —
@@ -56,15 +57,8 @@ async function listen(config: ReturnType<typeof loadConfig>, db: ReturnType<type
     ),
   })
 
-  async function shutdown(signal: NodeJS.Signals): Promise<void> {
-    app.log.info(`${signal} 수신 — 서버를 종료합니다`)
-    await app.close()
-    await db.destroy()
-    process.exit(0)
-  }
-
-  process.on('SIGTERM', () => void shutdown('SIGTERM'))
-  process.on('SIGINT', () => void shutdown('SIGINT'))
+  // 신호 셋을 받아 도는 요청을 끝까지 답한 뒤 닫는다 — 한도와 그 까닭은 `shutdown.ts`의 머리말.
+  closeOnSignals(app, db)
 
   await app.listen({ host: config.host, port: config.port })
   // **어느 DB를 보는지 말한다**. 바로 위에서 fastify가 찍는 줄은 포트만

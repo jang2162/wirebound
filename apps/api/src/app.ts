@@ -144,8 +144,8 @@ export function buildLoggerOptions(config: ApiConfig): ApiLoggerOptions {
  * 사람이 반쯤 받은 파일을 얻는다. Fastify 가 닫는 중에 **새로** 들어온 요청에 붙이는 것도 같은 머리다(그 뒤에 503).
  *
  * 누가 이 값을 먹나 — **api 에 keep-alive 로 바로 붙어 답을 받은 뒤 그 연결로 더 보내지 않는 클라이언트**(같은 연결로 또
- * 보내면 Fastify 가 닫는 중이라 503 + `Connection: close`로 끊는다). `main.ts`의 SIGTERM · SIGINT 는 `app.close()`를 기다린 뒤
- * 끝나고, `pnpm dev`(tsx watch)는 다시 띄울 때 앞 프로세스를 5s 기다린 뒤 SIGKILL 한다. 잰 값(tsx watch · 그런 클라이언트가
+ * 보내면 Fastify 가 닫는 중이라 503 + `Connection: close`로 끊는다). 신호를 받은 서버는 `app.close()`를 기다린 뒤
+ * 끝나고(`shutdown.ts`), `pnpm dev`(tsx watch)는 다시 띄울 때 앞 프로세스를 5s 기다린 뒤 SIGKILL 한다. 잰 값(tsx watch · 그런 클라이언트가
  * pptx 미리보기를 받는 중에 소스를 건드림): 새 서버가 답하기까지 5.7s · «Process didn't exit in 5s. Force killing...»(DB 풀을
  * 닫지 못하고 죽는다) → 이것이 있으면 1.0s. 웹 → api 는 이 값을 안 먹는다 — Vite 프록시(http-proxy 의 `agent: false`)가
  * 요청마다 `Connection: close`를 싣는다.
