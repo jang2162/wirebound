@@ -239,6 +239,11 @@ export function projectGuard(min: ProjectRole): preHandlerHookHandler {
  */
 export async function recheckProjectRole(trx: DbHandle, request: FastifyRequest): Promise<ProjectRole> {
   assertLocking(trx, 'recheckProjectRole')
+  return recheckAtCommit(trx, recheckInput(request))
+}
+
+/** `recheckProjectRole`의 입력 — 가드와 같은 자리에서 읽는다(그 머리말). */
+function recheckInput(request: FastifyRequest): RecheckInput {
   const min = request.projectGuardMin
   const currentUser = request.currentUser
   if (min === null || !currentUser) {
@@ -246,13 +251,31 @@ export async function recheckProjectRole(trx: DbHandle, request: FastifyRequest)
     throw new Error('recheckProjectRole은 projectGuard를 지난 요청에서만 부른다')
   }
   const { projectId } = parseParams(ProjectParams, request.params)
-  return recheckAtCommit(trx, {
-    projectId,
-    userId: currentUser.id,
-    min,
-    scopeProjectId: request.tokenProjectId,
-    credential: requestCredential(request),
-  })
+  return { projectId, userId: currentUser.id, min, scopeProjectId: request.tokenProjectId, credential: requestCredential(request) }
+}
+
+/**
+ * **멤버 쓰기(역할 변경 · 제거)의 재확인 — 자격과 역할을 나눠 낸다.** 술어 · 입력은 `recheckProjectRole`과 같고, 부르는 자리만
+ * 둘로 갈린다: 자격은 **첫 잠금**(owner 행보다 먼저), 역할은 owner 행을 잡은 뒤다. 순서의 까닭은 `repos/members.ts`의
+ * `OwnerRecheck`가 든다.
+ *
+ * `tokenId`는 토큰으로 들어온 요청의 토큰 행 id 다(세션이면 `null`) — 멤버 제거가 그 행을 빠지는 사람의 토큰과 한 문장으로
+ * 잡는다(`repos/api-tokens.ts`의 `lockMemberTokens`).
+ */
+export function memberWriteRecheck(request: FastifyRequest): {
+  tokenId: string | null
+  credential: (trx: DbHandle) => Promise<void>
+  role: (trx: DbHandle) => Promise<ProjectRole>
+} {
+  const input = recheckInput(request)
+  return {
+    tokenId: input.credential.kind === 'token' ? input.credential.id : null,
+    credential: (trx) => recheckCredential(trx, input.credential),
+    role: (trx) => {
+      assertLocking(trx, 'memberWriteRecheck')
+      return requireProjectRole(trx, input.projectId, input.userId, input.min, input.scopeProjectId, 'share')
+    },
+  }
 }
 
 /**
@@ -282,17 +305,26 @@ export type Credential = { kind: 'session' | 'token'; id: string }
  * 이다. 잠금을 기다리는 동안에는 이 쓰기가 그 행을 안 쥐었으므로 로그아웃은 안 기다린다. `KEY SHARE`는 요청마다 도는
  * `last_seen_at` · `last_used_at` 갱신(`FOR NO KEY UPDATE`)과 안 부딪힌다.
  */
-export async function recheckAtCommit(
-  trx: DbHandle,
-  input: { projectId: string; userId: string; min: ProjectRole; scopeProjectId: string | null; credential: Credential },
-): Promise<ProjectRole> {
+export async function recheckAtCommit(trx: DbHandle, input: RecheckInput): Promise<ProjectRole> {
   assertLocking(trx, 'recheckAtCommit')
-  const live =
-    input.credential.kind === 'session'
-      ? await sessionIsLive(trx, input.credential.id, 'key-share')
-      : await tokenIsLive(trx, input.credential.id)
-  if (!live) throw unauthenticated()
+  await recheckCredential(trx, input.credential)
   return requireProjectRole(trx, input.projectId, input.userId, input.min, input.scopeProjectId, 'share')
+}
+
+/** `recheckAtCommit`의 입력. */
+export interface RecheckInput {
+  projectId: string
+  userId: string
+  min: ProjectRole
+  scopeProjectId: string | null
+  credential: Credential
+}
+
+/** 자격 행을 잡고 산 것을 본다 — `recheckAtCommit`의 앞 절(그 머리말 «자격이 먼저다»). 죽었으면 401. */
+async function recheckCredential(trx: DbHandle, credential: Credential): Promise<void> {
+  assertLocking(trx, 'recheckCredential')
+  const live = credential.kind === 'session' ? await sessionIsLive(trx, credential.id, 'key-share') : await tokenIsLive(trx, credential.id)
+  if (!live) throw unauthenticated()
 }
 
 /**

@@ -56,6 +56,7 @@ import {
   signup,
   withApi,
   withProxiedRealApi,
+  type ProxiedRealApi,
   withRealApi,
   type RealApiContext,
   type SignedUpUser,
@@ -1026,7 +1027,7 @@ describe('동시 역할 변경 — 재확인이 멤버 행을 FOR SHARE 로 잡�
     let updated = false
     const holder = withTransaction(db, async (trx) => {
       // 요청한 사람이 없는 픽스처라 권한은 다시 보지 않는다 — 이 판이 재는 것은 강등이 커밋 전인 동안의 남의 쓰기다.
-      const member = await updateMemberRole(trx, fx.projectId, fx.bob.user.id, 'viewer', async () => {})
+      const member = await updateMemberRole(trx, fx.projectId, fx.bob.user.id, 'viewer', { tokenId: null, credential: async () => {}, role: async () => {} })
       if (member?.role !== 'viewer') throw new Error('역할 변경 픽스처 실패')
       updated = true
       if (!(await decision)) throw new RollbackRoleChange()
@@ -1677,43 +1678,89 @@ describe('잠금 순서 — 프로젝트 삭제는 복원과 같은 순서로 �
 })
 
 /**
+ * 토큰 절의 판 — 앨리스(owner)의 프로젝트에 밥을 `bobRole`로, 캐럴을 editor 로 넣고 밥의 이 프로젝트 토큰 둘을 발급한다(여러 행을
+ * 잡는 순서까지 잰다).
+ */
+async function tokenFixture(ctx: RealApiContext, bobRole: 'editor' | 'owner') {
+  const alice = await signup(ctx)
+  const bob = await signup(ctx)
+  const carol = await signup(ctx)
+  const project = await createProject(ctx, alice.cookie)
+  await addMember(ctx, project.id, bob.user.id, bobRole)
+  await addMember(ctx, project.id, carol.user.id, 'editor')
+  const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
+  const page = await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
+  const tokens: string[] = []
+  for (const name of ['첫 토큰', '둘째 토큰']) {
+    const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${project.id}/tokens`, cookies: bob.cookie, payload: { name } })
+    expect(issued.statusCode, issued.body).toBe(201)
+    tokens.push((issued.json() as { value: string }).value)
+  }
+  return { alice, bob, carol, projectId: project.id, pageId: page.id, bobToken: `Bearer ${tokens[0]}` }
+}
+
+/** 토큰 행의 id 를 정한다 — 여러 행을 id 순으로 잡는 자리(`lockProjectTokens` · `lockMemberTokens`)의 순서를 세우려고. */
+async function setTokenId(projectId: string, userId: string, name: string, id: string): Promise<void> {
+  const result = await db
+    .updateTable('api_tokens')
+    .set({ id })
+    .where('project_id', '=', projectId)
+    .where('user_id', '=', userId)
+    .where('name', '=', name)
+    .executeTakeFirst()
+  if (result.numUpdatedRows !== 1n) throw new Error(`토큰 ${name}의 id 를 못 바꿨습니다`)
+}
+
+async function roleOf(projectId: string, userId: string): Promise<string | null> {
+  const row = await db.selectFrom('project_members').select('role').where('project_id', '=', projectId).where('user_id', '=', userId).executeTakeFirst()
+  return row?.role ?? null
+}
+
+/** 요청이 끝나거나 · 누군가 잠금 줄에 설 때까지 기다린다(5s 안에 둘 다 없으면 던진다 — 판이 안 섰다). */
+async function settledOrQueued(fired: Fired): Promise<void> {
+  const deadline = Date.now() + 5_000
+  while (Date.now() < deadline) {
+    if (fired.done()) return
+    const result = await sql<{ n: number }>`
+      select count(*)::int as n from pg_locks l join pg_stat_activity a on a.pid = l.pid
+       where not l.granted and a.datname = current_database()`.execute(db)
+    if ((result.rows[0]?.n ?? 0) >= 1) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error('요청이 끝나지도 줄에 서지도 않았습니다 — 시나리오가 성립하지 않았습니다')
+}
+
+/** 요청을 세울 질의 글자(프록시의 `holdQuery`) — 세션 · 토큰의 재확인(`auth/roles.ts`의 `recheckAtCommit`), owner 행(`lockOwnerIds`), 멤버 행 재확인. */
+const SESSION_RECHECK = 'statement_timestamp() for key share'
+const TOKEN_RECHECK = '"api_tokens" where "id" = $1 for key share'
+const OWNER_LOCK = '"role" = $2 for update'
+const MEMBER_SHARE = '"user_id" = $2 for share'
+
+/**
  * **멤버 제거가 빠지는 사람의 그 프로젝트 토큰을 지운다**(`repos/members.ts`의 `removeMember` → `repos/api-tokens.ts`의
- * `deleteMemberTokens`). 그 쓰기가 토큰 행을 잡으므로 토큰 행을 잡는 두 자리와 고리를 안 만드는지 잰다.
+ * `lockMemberTokens` · `deleteMemberTokens`). 그 쓰기가 토큰 행을 잡으므로 토큰 행을 잡는 자리와 고리를 안 만드는지 잰다.
+ * 멤버 쓰기의 잠금 순서는 «토큰 행 → owner 행 → 멤버 행»이다(`repos/members.ts`의 `OwnerRecheck` «잠금 순서»).
  *
  * - **토큰으로 쓰는 owner 를 뺀다.** 토큰 쓰기의 재확인은 «토큰 행(`KEY SHARE`) → 제 멤버 행(`SHARE`)»이다. 제거가 owner 행
- *   (`lockOwnerIds` — 빠지는 owner 의 행도 든다) 뒤에 토큰을 지우면 고리가 선다. 판: 제거를 재확인 질의(앨리스 세션의
- *   `KEY SHARE`)에서 붙잡아(프록시의 `holdQuery` — owner 행은 쥔 채) 그 사이 밥의 토큰 쓰기를 세운다.
+ *   (`lockOwnerIds` — 빠지는 owner 의 행도 든다) 뒤에 토큰을 잡으면 고리가 선다. 판: 제거를 재확인 질의(앨리스 세션의
+ *   `KEY SHARE`)에서 붙잡아(프록시의 `holdQuery` — 토큰 행은 쥔 채) 그 사이 밥의 토큰 쓰기를 세운다.
  * - **프로젝트 삭제와 겹친다.** 삭제가 토큰 행을 CASCADE 에서 처음 만나면 그때 owner 행을 쥐고 있다 — 토큰 행을 쥔 채 owner
  *   행에 선 제거와 고리다. 판: owner 행을 테스트가 쥐고 둘을 차례로 줄 세운 뒤 푼다. 두 방향을 다 세운다(어느 쪽이 먼저
  *   owner 행 줄에 서나).
+ * - **제거가 도는 사이 발급된 토큰.** 지우는 것은 멤버 행을 지운 뒤라 그 사이 커밋된 발급까지 지운다. 발급하자마자 그 토큰으로
+ *   쓰는 요청과 겹치면 그 행은 건너뛴다(`SKIP LOCKED` — 기다리면 고리다).
  *
- * | 변조 | 죽는 것(전부 교착 +1 · 한쪽 500) |
+ * | 변조 | 죽는 것(교착이면 +1 · 한쪽 500) |
  * |---|---|
- * | `deleteMemberTokens`를 `lockOwnerIds` · 재확인 **뒤로** | «토큰으로 쓰는 owner» · «제거가 먼저» — 뒤의 것은 삭제가 토큰 행을 owner 행 앞에서 잡아 순서가 엇갈린다 |
- * | 프로젝트 삭제가 `lockProjectTokens`를 안 부른다 | «삭제가 먼저» 혼자 |
- * | 위 둘을 함께 | «토큰으로 쓰는 owner» 혼자 |
+ * | `lockMemberTokens`를 `lockOwnerIds` · 재확인 **뒤로** | «토큰으로 쓰는 owner» · «제거가 먼저» · «발급하자마자 쓰는 요청» · 아래 절의 «토큰으로 남을 빼는 중에 프로젝트를 지우면» — 삭제가 토큰 행을 owner 행 앞에서 잡아 순서가 엇갈린다 |
+ * | 프로젝트 삭제가 `lockProjectTokens`를 안 부른다 | «삭제가 먼저» · 아래 절의 «토큰으로 남을 빼는 중에 …» |
+ * | `deleteMemberTokens`를 멤버 행 삭제 **앞으로**(owner 행 앞) | «제거가 도는 사이 발급된 토큰» 혼자 — 발급 토큰이 남아 다시 멤버가 되면 200 |
+ * | `deleteMemberTokens`의 `SKIP LOCKED`를 뗀다 | «발급하자마자 쓰는 요청» 혼자 — 교착 +1 |
  *
  * «제거가 먼저»는 혼자 죽는 변조가 없다 — 제거의 토큰 자리 축은 «토큰으로 쓰는 owner»가 소유하고, 이 판은 뒤집은 방향을 세우려고
- * 둔다. 토큰을 안 지우던 판에서는 셋 다 교착 0 이다(제거가 토큰 행을 안 잡는다) — 고리는 토큰을 지우는 자리가 여는 것이다.
+ * 둔다. 토큰을 안 지우던 판에서는 앞의 셋이 교착 0 이다(제거가 토큰 행을 안 잡는다) — 고리는 토큰을 지우는 자리가 여는 것이다.
  */
 describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리와 고리를 안 만든다', () => {
-  /** 앨리스(owner)의 프로젝트에 밥을 `bobRole`로 넣고 밥의 이 프로젝트 토큰 둘을 발급한다(여러 행을 잡는 순서까지 잰다). */
-  async function tokenFixture(ctx: RealApiContext, bobRole: 'editor' | 'owner') {
-    const alice = await signup(ctx)
-    const bob = await signup(ctx)
-    const project = await createProject(ctx, alice.cookie)
-    await addMember(ctx, project.id, bob.user.id, bobRole)
-    const menu = await createMenuNode(ctx, alice.cookie, project.id, { title: '메뉴' })
-    const page = await createPage(ctx, alice.cookie, project.id, menu.id, { title: '페이지' })
-    const tokens: string[] = []
-    for (const name of ['첫 토큰', '둘째 토큰']) {
-      const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${project.id}/tokens`, cookies: bob.cookie, payload: { name } })
-      expect(issued.statusCode, issued.body).toBe(201)
-      tokens.push((issued.json() as { value: string }).value)
-    }
-    return { alice, bob, projectId: project.id, pageId: page.id, bobToken: `Bearer ${tokens[0]}` }
-  }
-
   async function bobTokenRows(projectId: string, bobId: string): Promise<number> {
     const rows = await db.selectFrom('api_tokens').select('id').where('project_id', '=', projectId).where('user_id', '=', bobId).execute()
     return rows.length
@@ -1723,7 +1770,7 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
     await withProxiedRealApi(async (ctx) => {
       const fx = await tokenFixture(ctx, 'owner')
       const deadlocksBefore = await deadlockCount()
-      const recheck = ctx.proxy.holdQuery('statement_timestamp() for key share')
+      const recheck = ctx.proxy.holdQuery(SESSION_RECHECK)
       let removal: Fired | undefined
       let write: Fired | undefined
       try {
@@ -1788,8 +1835,196 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
       })
     }, 60_000)
   }
+
+  it('제거가 도는 사이 발급된 토큰도 지운다 — 다시 멤버가 돼도 401', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'editor')
+      // 제거를 owner 행 질의 앞에 세운다 — 토큰 행은 이미 쥐었다. 그 사이 밥이 세션으로 새 토큰을 발급한다.
+      const ownerLock = ctx.proxy.holdQuery(OWNER_LOCK)
+      let removal: Fired | undefined
+      let issued: Awaited<ReturnType<typeof ctx.app.inject>> | undefined
+      try {
+        removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+        await ownerLock.held
+        issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.bob.cookie, payload: { name: '늦은 토큰' } })
+      } finally {
+        ownerLock.release()
+      }
+      const removed = await removal.promise
+
+      expect(issued.statusCode, issued.body).toBe(201)
+      expect(removed.status, removed.body).toBe(204)
+      expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(0)
+      await addMember(ctx, fx.projectId, fx.bob.user.id, 'editor')
+      const reused = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`,
+        headers: { authorization: `Bearer ${(issued.json() as { value: string }).value}` },
+      })
+      expect(reused.statusCode, reused.body).toBe(401)
+    })
+  }, 60_000)
+
+  it('발급하자마자 그 토큰으로 쓰는 요청과 겹쳐도 교착 0 — 그 토큰은 남는다(`deleteMemberTokens`의 «SKIP LOCKED»)', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'editor')
+      const deadlocksBefore = await deadlockCount()
+      const ownerLock = ctx.proxy.holdQuery(OWNER_LOCK)
+      const removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+      await ownerLock.held
+      const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.bob.cookie, payload: { name: '늦은 토큰' } })
+      expect(issued.statusCode, issued.body).toBe(201)
+      // 새 토큰의 쓰기를 재확인 한가운데 — 토큰 행 `KEY SHARE`를 쥐고 제 멤버 행 `SHARE` 앞 — 에 세운다.
+      const memberShare = ctx.proxy.holdQuery(MEMBER_SHARE)
+      const write = track(
+        ctx.app.inject({
+          method: 'PATCH',
+          url: `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`,
+          headers: { authorization: `Bearer ${(issued.json() as { value: string }).value}` },
+          payload: { baseSeq: 0, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_late', type: 'Text', props: {} } }] },
+        }),
+      )
+      await memberShare.held
+      ownerLock.release()
+      // 제거가 멤버 행을 지우고 토큰을 지우는 문장까지 가서 끝난다 — 그 토큰 행에 서지 않는다.
+      const removed = await removal.promise
+      memberShare.release()
+      const written = await write.promise
+
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect(removed.status, removed.body).toBe(204)
+      expect(written.status, written.body).toBe(404)
+      expect(await headSeqOf(fx.pageId)).toBe(0)
+      expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(1)
+    })
+  }, 60_000)
 })
 
+/**
+ * **토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼저다**(`repos/members.ts`의 `OwnerRecheck` «잠금 순서»).
+ *
+ * 멤버 쓰기(역할 변경 · 제거)는 owner 행을 쥔다. 토큰 요청의 자격 재확인(토큰 행 `KEY SHARE`)을 그 **뒤에** 하면, 토큰 행을 owner
+ * 행 앞에서 잡는 두 쓰기와 반대 순서가 된다 — 그 토큰의 주인을 빼는 멤버 제거(`lockMemberTokens`)와 프로젝트 삭제
+ * (`lockProjectTokens`). 대조는 같은 쓰기를 세션으로 낸 판이다(세션 행은 두 쓰기가 안 잡는다 — 교착 0).
+ *
+ * | 변조 | 죽는 것 |
+ * |---|---|
+ * | 역할 변경의 자격 확인을 `lockOwnerIds` 뒤로 | «토큰으로 역할을 바꾸는 owner 를 그때 빼면» · «토큰으로 역할을 바꾸는 중에 프로젝트를 지우면» — 둘 다 교착 +1 |
+ * | 제거가 요청의 토큰을 `lockMemberTokens`에 안 싣는다(자격은 따로 `KEY SHARE`) — 거기에 제거의 자격 확인을 `lockOwnerIds` 뒤로 옮겨도 같다 | «토큰으로 남을 빼는 중에 …» 혼자 — 교착 +1 |
+ * | 제거가 토큰을 지운 **뒤에** 자격을 본다 | «토큰으로 자기를 빼면» 혼자 — 제 토큰이 지워져 401 |
+ *
+ * 역할 변경의 두 판은 늘 함께 죽는다 — 역할 변경의 자격 자리 축은 앞의 것이 소유하고, 뒤의 것은
+ * 삭제의 토큰 선잠금과 엇갈리는 판을 세우려고 둔다.
+ */
+describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼저다', () => {
+  /**
+   * 역할 변경을 **자기 토큰의 재확인 질의 앞에** 세운다 — 인증은 지났다(먼저 쏘면 인증의 `last_used_at` 갱신이 상대가 쥔 토큰
+   * 행에 서서 재확인까지 못 간다 — 가드의 404 가 난다). 그 사이 상대(`rival`)를 쏘고, 상대가 끝나거나 줄에 서면 푼다. 자격이
+   * 첫 잠금이면 역할 변경은 아무것도 안 쥔 채 서 있으므로 상대가 먼저 끝난다. owner 행 뒤라면 상대가 그 owner 행에 서고, 풀린
+   * 역할 변경이 상대가 쥔 토큰 행에 서서 고리다.
+   */
+  async function roleChangeAgainst(ctx: ProxiedRealApi, fx: Awaited<ReturnType<typeof tokenFixture>>, rival: () => Fired) {
+    const recheck = ctx.proxy.holdQuery(TOKEN_RECHECK)
+    let change: Fired | undefined
+    let other: Fired | undefined
+    try {
+      change = track(
+        ctx.app.inject({
+          method: 'PATCH',
+          url: `/api/projects/${fx.projectId}/members/${fx.carol.user.id}`,
+          headers: { authorization: fx.bobToken },
+          payload: { role: 'viewer' },
+        }),
+      )
+      await recheck.held
+      other = rival()
+      await settledOrQueued(other)
+    } finally {
+      recheck.release()
+    }
+    const [changed, rivalled] = await Promise.all([change.promise, other.promise])
+    return { changed, rivalled }
+  }
+
+  it('토큰으로 역할을 바꾸는 owner 를 그때 빼면: 교착 0 · 제거 204 · 역할 변경 401', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'owner')
+      const deadlocksBefore = await deadlockCount()
+      const { changed, rivalled: removed } = await roleChangeAgainst(ctx, fx, () =>
+        track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie })),
+      )
+
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect(removed.status, removed.body).toBe(204)
+      // 밥의 토큰은 제거와 함께 지워졌다 — 자격이 죽었다.
+      expect(changed.status, changed.body).toBe(401)
+      expect(await roleOf(fx.projectId, fx.carol.user.id)).toBe('editor')
+    })
+  }, 60_000)
+
+  it('토큰으로 역할을 바꾸는 중에 프로젝트를 지우면: 교착 0 · 삭제 204 · 역할 변경 401', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'owner')
+      const deadlocksBefore = await deadlockCount()
+      const { changed, rivalled: deleted } = await roleChangeAgainst(ctx, fx, () =>
+        track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie })),
+      )
+
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect(deleted.status, deleted.body).toBe(204)
+      // 토큰은 삭제의 CASCADE 로 사라졌다 — 자격이 죽었다.
+      expect(changed.status, changed.body).toBe(401)
+    })
+  }, 60_000)
+
+  it('토큰으로 남을 빼는 중에 프로젝트를 지우면(요청의 토큰 id 가 더 작은 판): 교착 0', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'owner')
+      const carolToken = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.carol.cookie, payload: { name: '캐럴 토큰' } })
+      expect(carolToken.statusCode, carolToken.body).toBe(201)
+      // 삭제는 토큰 행을 id 순으로 잡는다. 밥(요청)의 토큰이 캐럴(빠지는 사람)의 것보다 앞이어야 삭제가 밥의 것을 쥔 채 캐럴의
+      // 것에 선다 — 반대 순서면 삭제가 첫 행에서 아무것도 안 쥐고 서서 어느 판이든 고리가 없다.
+      await setTokenId(fx.projectId, fx.bob.user.id, '첫 토큰', '00000000-0000-4000-8000-000000000001')
+      await setTokenId(fx.projectId, fx.carol.user.id, '캐럴 토큰', 'ffffffff-ffff-4fff-bfff-fffffffffff1')
+      const deadlocksBefore = await deadlockCount()
+      // 제거를 자기 토큰의 재확인 앞에 세운다.
+      const recheck = ctx.proxy.holdQuery(TOKEN_RECHECK)
+      let removal: Fired | undefined
+      let deletion: Fired | undefined
+      try {
+        removal = track(
+          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.carol.user.id}`, headers: { authorization: fx.bobToken } }),
+        )
+        await recheck.held
+        deletion = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}`, cookies: fx.alice.cookie }))
+        await waitForLockWaiter(1)
+      } finally {
+        recheck.release()
+      }
+      const [removed, deleted] = await Promise.all([removal.promise, deletion.promise])
+
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect(removed.status, removed.body).toBe(204)
+      expect(deleted.status, deleted.body).toBe(204)
+    })
+  }, 60_000)
+
+  it('토큰으로 자기를 빼면 204 — 그 토큰까지 지워진다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'owner')
+      const left = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`,
+        headers: { authorization: fx.bobToken },
+      })
+
+      expect(left.statusCode, left.body).toBe(204)
+      expect(await roleOf(fx.projectId, fx.bob.user.id)).toBeNull()
+      const rows = await db.selectFrom('api_tokens').select('id').where('project_id', '=', fx.projectId).where('user_id', '=', fx.bob.user.id).execute()
+      expect(rows).toHaveLength(0)
+    })
+  }, 60_000)
+})
 
 /**
  * # 프로젝트 잠금 뒤에 서는 쓰기 — 커밋 순간의 권한
