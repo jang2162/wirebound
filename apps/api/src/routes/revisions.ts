@@ -20,7 +20,7 @@ import { projectGuard } from '../auth/roles'
 import { notFound, unauthenticated } from '../errors'
 import { parseParams, parseQuery } from '../http/parse'
 import { findPageById } from '../repos/pages'
-import { listRevisions, type RevisionRecord } from '../repos/revisions'
+import { listRevisions, listRevisionsInverse, type RevisionInverseRecord, type RevisionRecord } from '../repos/revisions'
 
 const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
 
@@ -35,14 +35,20 @@ const RevisionQuery = z.strictObject({
   mine: z.enum(['true', 'false']).optional(),
   /**
    * 상한 200. 설계서 「개인 undo/redo」가 요구하는 것은 50이고, 그 몇 배까지 열어 둔다.
-   * jsonb 두 컬럼(`ops`·`inverse`)을 함께 싣기 때문에 응답이 항목 수에 비례해 무거워진다.
+   * jsonb 두 컬럼(`ops`·`inverse` — `fields=inverse`면 하나)을 싣기 때문에 응답이 항목 수에 비례해 무거워진다.
    */
   limit: z.coerce.number().int().min(1).max(200).default(50),
   /**
    * 주면 `seq`가 이 값보다 **작은** 것만 고른다 — 최신순 그대로 `limit`개. 이력을 뒤로 넘겨 읽는 커서다. 웹이 새로고침으로 채운 되돌리기를
-   * 지금 판에서 거꾸로 되짚을 때, 내 revision 사이에 낀 남의 revision 을 받는다(`apps/web/src/routes/editor.tsx`의 `restoreUndo`).
+   * 지금 판에서 거꾸로 되짚을 때, 내 revision 사이에 낀 남의 revision 을 받는다(`apps/web/src/edit/use-edit-commit.tsx`의 `loadUndoHistory`).
    */
   beforeSeq: z.coerce.number().int().min(1).optional(),
+  /**
+   * `'inverse'`면 jsonb 두 열 가운데 `inverse`만 싣는다 — 항목에 `ops` 키가 없다. 웹의 되돌리기(새로고침 뒤 스택 복원 · 되짚기)는 `inverse`만
+   * 쓰는데, 문서 통째 교체 revision 은 두 열이 각각 문서 한 벌이라 이것을 주면 응답이 반이다. 생략하면 여덟 키 그대로다 — 이력을 보는 쪽의 계약은
+   * 안 바뀐다.
+   */
+  fields: z.enum(['inverse']).optional(),
 })
 
 /**
@@ -61,6 +67,19 @@ function toResponse(revision: RevisionRecord) {
     actorId: revision.actorId,
     actorLabel: revision.actorLabel,
     ops: revision.ops,
+    inverse: revision.inverse,
+    createdAt: revision.createdAt,
+  }
+}
+
+/** `fields=inverse`의 항목 — `toResponse`에서 `ops`만 뺀 일곱 키다. */
+function toInverseResponse(revision: RevisionInverseRecord) {
+  return {
+    id: revision.id,
+    seq: revision.seq,
+    actorType: revision.actorType,
+    actorId: revision.actorId,
+    actorLabel: revision.actorLabel,
     inverse: revision.inverse,
     createdAt: revision.createdAt,
   }
@@ -98,7 +117,7 @@ export function revisionRoutes() {
       // 존재를 흘리면 안 된다).
       //
       // `findPageById`는 `schema` 컬럼까지 함께 읽어 온다 — 존재 확인에는 과하지만,
-      // 이 응답은 revision마다 `ops`·`inverse` 두 jsonb를 싣기 때문에 문서 한 벌이
+      // 이 응답은 revision마다 jsonb(`ops`·`inverse`, `fields=inverse`면 `inverse`만)를 싣기 때문에 문서 한 벌이
       // 지배적인 비용이 아니다. 가벼운 존재 확인 전용 조회를 새로 만드는 것보다
       // 페이지 조회 경로가 하나인 편이 낫다.
       const page = await findPageById(app.db, projectId, pageId)
@@ -106,15 +125,16 @@ export function revisionRoutes() {
         throw notFound()
       }
 
-      const revisions = await listRevisions(app.db, pageId, {
+      const options = {
         ...(query.mine === 'true' ? { actorId: currentUser.id } : {}),
         ...(query.beforeSeq === undefined ? {} : { beforeSeq: query.beforeSeq }),
         limit: query.limit,
-      })
+      }
 
       // 배열을 그대로 낸다 — `/projects`·`/members`·`/menu`가 전부 그렇다.
       // `{ revisions: [...] }` 같은 두 번째 관용구를 늘리지 않는다.
-      return revisions.map(toResponse)
+      if (query.fields === 'inverse') return (await listRevisionsInverse(app.db, pageId, options)).map(toInverseResponse)
+      return (await listRevisions(app.db, pageId, options)).map(toResponse)
     })
   }
 }

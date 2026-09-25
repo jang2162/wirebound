@@ -366,15 +366,16 @@ const ENDPOINTS: Array<{
   // `?mine=true`가 빠지거나 다른 키가 붙는 것은 경로 오타와 같은 부류의 사고다.
   {
     client: 'listMyRevisions',
-    url: '/api/projects/p1/pages/pg1/revisions?mine=true',
+    url: '/api/projects/p1/pages/pg1/revisions?mine=true&fields=inverse',
     method: 'GET',
     body: [revision],
     call: (c) => c.listMyRevisions('p1', 'pg1'),
   },
-  // 되짚기 조회 — `mine`을 붙이지 않는다(남의 revision 이 필요하다).
+  // 되짚기 조회 — `mine`을 붙이지 않는다(남의 revision 이 필요하다). 되돌리기의 두 조회는 모두 `fields=inverse`로 `ops`를 안 받는다
+  // (`RevisionInverse`).
   {
     client: 'listRevisionsBefore',
-    url: '/api/projects/p1/pages/pg1/revisions?beforeSeq=9&limit=3',
+    url: '/api/projects/p1/pages/pg1/revisions?beforeSeq=9&limit=3&fields=inverse',
     method: 'GET',
     body: [revision],
     call: (c) => c.listRevisionsBefore('p1', 'pg1', { beforeSeq: 9, limit: 3 }),
@@ -1593,7 +1594,7 @@ describe('patchOps', () => {
 })
 
 describe('listMyRevisions', () => {
-  it('mine=true만 붙여 GET한다', async () => {
+  it('mine=true와 fields=inverse만 붙여 GET한다', async () => {
     // **`limit`을 붙이지 않는다.** 기본값 50이 설계서 「개인 undo/redo」의 "최근 50개"와 같고,
     // **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — 캐시 버스터도 거부된다.
     const stub = stubFetch(jsonResponse(200, [revision]))
@@ -1601,7 +1602,7 @@ describe('listMyRevisions', () => {
 
     await client.listMyRevisions('p-1', 'pg-1')
 
-    expect(stub.calls[0]?.url).toBe('/api/projects/p-1/pages/pg-1/revisions?mine=true')
+    expect(stub.calls[0]?.url).toBe('/api/projects/p-1/pages/pg-1/revisions?mine=true&fields=inverse')
     expect(stub.calls[0]?.init?.method).toBe('GET')
   })
 
@@ -1623,7 +1624,7 @@ describe('listMyRevisions', () => {
 
     await client.listMyRevisions('p 1/x', '../pg1')
 
-    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1/revisions?mine=true')
+    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2Fx/pages/..%2Fpg1/revisions?mine=true&fields=inverse')
   })
 })
 

@@ -16,7 +16,7 @@ import type { Interaction, PatchOp } from '@wirebound/schema'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, toFailure } from '../api/failure'
-import type { RevisionSummary } from '../api/types'
+import type { RevisionInverse } from '../api/types'
 import { useEditChannel, useLockChannel } from '../realtime/context'
 import { EditNotSentError, UnansweredEditError, type EditChannel, type UnansweredCause } from '../realtime/edit-channel'
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
@@ -226,10 +226,10 @@ const UNDO_HISTORY_FAILURE = '되돌리기 이력을 불러오지 못했습니�
 const UNDO_HISTORY_NOTICE = '되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.'
 
 /**
- * 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 — 스토어가 `RevisionSummary`를 알면 `apps/web`의 HTTP
+ * 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 — 스토어가 `RevisionInverse`를 알면 `apps/web`의 HTTP
  * 경계가 스토어까지 새어 든다. 목록(`routes/editor.tsx`의 `restoreUndo`)과 되짚기 조회(`undo`)가 함께 쓴다.
  */
-export function restoredRevisions(revisions: readonly RevisionSummary[]): RestoredRevision[] {
+export function restoredRevisions(revisions: readonly RevisionInverse[]): RestoredRevision[] {
   return revisions.map((revision) => ({ revisionId: revision.id, seq: revision.seq, inverse: revision.inverse }))
 }
 
@@ -289,9 +289,11 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const store = useEditorStoreInstance()
   const open = useOpenPage(pageId)
   const status = useEditorStore(store, (s) => s.editStatus)
-  // 되짚기 이력을 받는 동안은 꺼진다(`undo`의 `loadUndoHistory`) — 누른 것은 받은 뒤 한 번 되돌린다.
+  // 되짚기 이력을 받는 동안은 둘 다 꺼진다(`undo`의 `loadUndoHistory`) — 누른 것은 받은 뒤 한 번 되돌린다. **다시 실행도 끄는 까닭**: 받는
+  // 동안 다시 실행이 맨 위에 세션 편집을 올리면 받은 뒤 그 되돌리기를 말없이 버린다(맨 위 비교). 받는 창은 조회 한 번이고 다시 실행 스택은
+  // 그대로라, 받은 뒤 누르면 된다 — 막히는 것은 그 창 안의 누름뿐이다.
   const canUndo = useEditorStore(store, (s) => s.undoStack.length > 0 && !s.undoHistoryLoading)
-  const canRedo = useEditorStore(store, (s) => s.redoStack.length > 0)
+  const canRedo = useEditorStore(store, (s) => s.redoStack.length > 0 && !s.undoHistoryLoading)
 
   /**
    * 실패 하나를 수습한다. **실패 종류로 갈리지 않는다** — 409든 422든 네트워크든
@@ -650,8 +652,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * (`routes/editor.tsx`의 `restoreUndo`). 받는 동안 단추가 꺼지고(`undoHistoryLoading`), 그 사이 누른 것은 버린다.
    *
    * - **판이 갈리면(떠남 · 다시 실림) 조회를 끊고 아무것도 안 한다** — 첫 쓰기(`supplyUndoHistory`) 앞에서 판으로 가른다. 스택은 그 판이 이미 비웠다.
-   * - **받는 동안 맨 위가 바뀌면 되돌리지 않는다** — 세션 편집의 ack 나 다시 실행이 위에 올랐으면 누른 때 되돌리려던 것이 아니다. 받은 이력은
-   *   남으므로 다시 누르면 바로 되돌린다.
+   * - **받는 동안 맨 위가 바뀌면 되돌리지 않는다** — 세션 편집의 ack 가 위에 올랐으면 누른 때 되돌리려던 것이 아니다. 받은 이력은 남으므로 다시
+   *   누르면 바로 되돌린다. 다시 실행은 받는 동안 꺼져 맨 위를 바꾸지 않는다(`canRedo`).
    * - **조회가 실패하면 되돌리지 않고 그렇다고 말한다** — 항목은 그대로 두고 다시 누르면 다시 받는다. 받은 데까지로 되짚으면 못 지은 항목이
    *   건너뛰어져 스택에서 사라진다 — 한 번의 끊김으로 이력을 잃는다. 세션이 끊겼으면 그 통지(`<SignedOut />`)로 간다.
    */
@@ -716,6 +718,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   }, [open, store, settle, loadUndoHistory])
 
   const redo = useCallback(() => {
+    // 받는 동안은 버린다 — 단추가 먼저 막는다(`canRedo`). `undo`의 같은 가드와 짝이다.
+    if (store.getState().undoHistoryLoading) return
     step(store.startRedo)
   }, [step, store])
 

@@ -101,6 +101,13 @@ export interface UndoRestorePoint {
   readonly seq: number
 }
 
+/**
+ * `restoreUndoStack`의 결과. `'reloaded'`는 **목록을 받는 동안 같은 페이지가 다시 실려**(재연결 · 복원 · 수습) 실을 내 revision 을 싣지 않았다는
+ * 뜻이다 — 다시 싣기는 스택이 비어 있었으면 말하지 않으므로(`routes/editor.tsx`의 `tellLost`) 부르는 쪽이 한 줄 말한다. `'none'`은 실을 것이 없거나 ·
+ * 떠났거나 · 이미 실었거나 · 바탕이 서버와 갈라졌다.
+ */
+export type UndoRestoreOutcome = 'restored' | 'reloaded' | 'none'
+
 /** 끊긴 자리를 받는 조회 한 번의 크기(`undoHistoryNeed`) — 서버 상한과 같다(`apps/api/src/routes/revisions.ts`의 `limit`). */
 export const UNDO_HISTORY_PAGE = 200
 
@@ -1320,7 +1327,8 @@ export class EditorStore {
    * 모두 판을 실은 번호보다 크므로 이것이 서버 번호 순이다. redo 스택은 건드리지 않는다 — 세션 안에서 되돌린 것이다.
    *
    * **판이 갈렸으면 버린다** — 목록을 받는 동안 판이 다시 실리거나(재연결 · 복원 · 수습) 비었으면(떠남) 세대(`point.epoch`)가 다르다. 다시 싣는
-   * 입구는 스택을 채우지 않는다(`routes/editor.tsx`의 `applyServerPage`). 한 판에 한 번만 싣는다.
+   * 입구는 스택을 채우지 않는다(`routes/editor.tsx`의 `applyServerPage`). 한 판에 한 번만 싣는다. **같은 페이지가 다시 실려 실을 것을 버렸으면
+   * `'reloaded'`를 돌려준다** — 스택이 비어 있던 다시 싣기는 이력을 잃었다고 말하지 않으므로(`tellLost`의 `hadUndo`) 부르는 쪽이 말한다.
    *
    * ## 그 revision 을 기록한 문서에서 노드 id 로 붙잡는다 — 되돌릴 때
    *
@@ -1343,11 +1351,16 @@ export class EditorStore {
   readonly restoreUndoStack = (
     mine: readonly RestoredRevision[],
     options: { others?: readonly RestoredRevision[]; point?: UndoRestorePoint } = {},
-  ): void => {
+  ): UndoRestoreOutcome => {
     const point = options.point ?? this.undoRestorePoint()
-    if (point === null || this.#undoRestoredEpoch === point.epoch) return
+    if (point === null || this.#undoRestoredEpoch === point.epoch) return 'none'
     const walk = this.#undoHistory(point, { mine, others: options.others })
-    if (walk === null || walk.restorable.length === 0) return
+    if (walk === null) {
+      const { openPageId, document } = this.#state
+      const reloaded = openPageId === point.pageId && document !== null && this.#queueEpoch !== point.epoch
+      return reloaded && mine.some((revision) => revision.seq <= point.seq) ? 'reloaded' : 'none'
+    }
+    if (walk.restorable.length === 0) return 'none'
     this.#undoRestoredEpoch = point.epoch
     const history: RestoredHistory = { epoch: point.epoch, headSeq: walk.headSeq, lowest: walk.lowest, inverses: walk.inverses, walked: false }
     this.#restoredHistory = history
@@ -1365,6 +1378,7 @@ export class EditorStore {
       }),
     )
     this.#apply({ undoStack: [...restored.reverse(), ...this.#state.undoStack] })
+    return 'restored'
   }
 
   /** 마지막으로 되돌리기를 채운 판의 세대(`restoreUndoStack` — 한 판에 한 번). */
@@ -1387,8 +1401,12 @@ export class EditorStore {
     lowest: number
     inverses: Map<number, PatchOp[]>
   } | null {
-    const { openPageId, baseDocument, headSeq } = this.#state
+    const { openPageId, baseDocument, headSeq, remoteStale } = this.#state
     if (openPageId !== point.pageId || this.#queueEpoch !== point.epoch || baseDocument === null) return null
+    // **바탕이 서버와 갈라졌으면 되짚지 않는다** — 서버 프레임이 바탕에 안 얹혔다는 것은 바탕이 그 번호의 서버 문서가 아니라는 뜻이고, 그 바탕에서
+    // 되짚어 붙잡은 노드 id 는 서버의 노드가 아닐 수 있다. 세션 항목도 갈라진 바탕에서는 붙잡지 않는다(`ackEdit`의 `recorded`). 낡음 배너가
+    // 새로고침을 권하고, 새로고침하면 서버 판에서 다시 싣는다. 갭 · 복원 낡음은 바탕이 그 번호의 서버 문서라 되짚어도 된다.
+    if (remoteStale?.reason === 'diverged') return null
     const ids = new Set<string>()
     const restorable = history.mine
       .filter((revision) => revision.seq <= point.seq && !ids.has(revision.revisionId) && ids.add(revision.revisionId))

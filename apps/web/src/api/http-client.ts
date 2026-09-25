@@ -28,7 +28,7 @@ import type {
   ProjectDetail,
   ProjectTheme,
   RestoreResult,
-  RevisionSummary,
+  RevisionInverse,
   SessionUser,
   SnapshotSummary,
   ThemeDetail,
@@ -1524,19 +1524,19 @@ export function createHttpClient(
       }
     },
     listMyRevisions: (projectId, pageId, options) =>
-      request<RevisionSummary[]>(
+      request<RevisionInverse[]>(
         'GET',
-        // `mine=true` 하나뿐이다. 선언하지 않은 쿼리 키는 400이므로(README) 캐시 버스터도
+        // `mine=true`와 `fields=inverse`(`ops`를 안 싣는다 — `RevisionInverse`)뿐이다. 선언하지 않은 쿼리 키는 400이므로(README) 캐시 버스터도
         // 붙일 수 없고, `limit`은 기본값 50이 설계서 「개인 undo/redo」의 "최근 50개"와 같아 생략한다.
-        `${pagePath(projectId, pageId)}/revisions?mine=true`,
+        `${pagePath(projectId, pageId)}/revisions?mine=true&fields=inverse`,
         SHAPES.revisionList,
         undefined,
         options,
       ),
     listRevisionsBefore: (projectId, pageId, range, options) =>
-      request<RevisionSummary[]>(
+      request<RevisionInverse[]>(
         'GET',
-        `${pagePath(projectId, pageId)}/revisions?beforeSeq=${range.beforeSeq}&limit=${range.limit}`,
+        `${pagePath(projectId, pageId)}/revisions?beforeSeq=${range.beforeSeq}&limit=${range.limit}&fields=inverse`,
         SHAPES.revisionList,
         undefined,
         options,

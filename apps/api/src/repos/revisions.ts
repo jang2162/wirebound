@@ -112,6 +112,11 @@ export interface ListRevisionsOptions {
   limit: number
 }
 
+/** `listRevisionsInverse`의 항목 — `ops`가 없다. */
+export type RevisionInverseRecord = Omit<RevisionRecord, 'ops'>
+
+const REVISION_INVERSE_COLUMNS = ['id', 'seq', 'actor_type', 'actor_id', 'actor_label', 'inverse', 'created_at'] as const
+
 /**
  * 페이지의 revision을 최신순(`seq` 내림차순)으로 최대 `limit`개 조회한다.
  *
@@ -125,7 +130,13 @@ export async function listRevisions(
   pageId: string,
   options: ListRevisionsOptions,
 ): Promise<RevisionRecord[]> {
-  let query = db.selectFrom('revisions').select(REVISION_COLUMNS).where('page_id', '=', pageId)
+  const rows = await filtered(db, pageId, options).select(REVISION_COLUMNS).execute()
+  return rows.map(toRecord)
+}
+
+/** `listRevisions` · `listRevisionsInverse`가 함께 쓰는 조건 · 순서 · 개수 — 고르는 열만 다르다. */
+function filtered(db: DbHandle, pageId: string, options: ListRevisionsOptions) {
+  let query = db.selectFrom('revisions').where('page_id', '=', pageId)
 
   if (options.actorId !== undefined) {
     query = query.where('actor_type', '=', 'user').where('actor_id', '=', options.actorId)
@@ -135,8 +146,28 @@ export async function listRevisions(
     query = query.where('seq', '<', String(options.beforeSeq))
   }
 
-  const rows = await query.orderBy('seq', 'desc').limit(options.limit).execute()
-  return rows.map(toRecord)
+  return query.orderBy('seq', 'desc').limit(options.limit)
+}
+
+/**
+ * `listRevisions`와 같은 행을 고르되 **`ops` 열을 읽지 않는다** — 되돌리기(새로고침 뒤 스택 복원 · 되짚기)는 `inverse`만 쓴다. 문서 통째 교체
+ * revision 은 두 열이 각각 문서 한 벌이라 `ops`를 빼면 응답이 반이 되고, DB 도 그 열을 풀어 읽지 않는다.
+ */
+export async function listRevisionsInverse(
+  db: DbHandle,
+  pageId: string,
+  options: ListRevisionsOptions,
+): Promise<RevisionInverseRecord[]> {
+  const rows = await filtered(db, pageId, options).select(REVISION_INVERSE_COLUMNS).execute()
+  return rows.map((row) => ({
+    id: row.id,
+    seq: Number(row.seq),
+    actorType: row.actor_type,
+    actorId: row.actor_id,
+    actorLabel: row.actor_label,
+    inverse: row.inverse,
+    createdAt: row.created_at,
+  }))
 }
 
 /** `findRevisionCommitWithin`의 답. */

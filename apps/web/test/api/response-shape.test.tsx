@@ -222,13 +222,13 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
 
   it('revision 목록이 비어 있어도 지나간다', async () => {
     // 편집한 적이 없는 페이지다. 검사가 "비어 있으면 잘못됐다"로 새면 여기서 죽는다.
-    const api = client({ '/revisions?mine=true': [] })
+    const api = client({ '/revisions?mine=true&fields=inverse': [] })
 
     await expect(api.listMyRevisions('p-1', 'pg-1')).resolves.toEqual([])
   })
 
   it('계약을 지킨 revision 목록은 그대로 지나간다', async () => {
-    const api = client({ '/revisions?mine=true': [REVISION] })
+    const api = client({ '/revisions?mine=true&fields=inverse': [REVISION] })
 
     await expect(api.listMyRevisions('p-1', 'pg-1')).resolves.toEqual([REVISION])
   })

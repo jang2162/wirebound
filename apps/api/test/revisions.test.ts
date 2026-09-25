@@ -889,6 +889,45 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
   })
 
   /**
+   * **`fields=inverse`는 `ops`만 뺀다** — 웹의 되돌리기(스택 복원 · 되짚기)가 싣는 투영이다. 나머지 일곱 키와 값, 고르는 행(`mine` · `beforeSeq` ·
+   * `limit`)은 투영 없는 조회와 같아야 한다. 투영 없는 조회가 여덟 키 그대로인 것은 위 `각 항목은 계약된 키만 담는다`가 잠근다(이력을 보는
+   * 쪽의 계약).
+   */
+  it('fields=inverse면 ops 만 빼고 같은 행 · 같은 값을 준다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const editor = await signup(ctx)
+      await addMember(ctx, fx.project.id, editor.user.id, 'editor')
+      const first = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp('n_mine000006')] }, fx.owner.cookie)
+      expect(first.statusCode, first.body).toBe(200)
+      const other = await patchOps(ctx, fx, { baseSeq: 1, ops: [textOp('n_other00006')] }, editor.cookie)
+      expect(other.statusCode, other.body).toBe(200)
+      await patchOps(ctx, fx, { baseSeq: 2, ops: [textOp('n_mine000007')] }, fx.owner.cookie)
+
+      for (const query of ['?beforeSeq=3&limit=5', '?mine=true']) {
+        const full = await getRevisions(ctx, revisionsUrl(fx, query), fx.owner.cookie)
+        const projected = await getRevisions(ctx, revisionsUrl(fx, `${query}&fields=inverse`), fx.owner.cookie)
+
+        expect(projected.statusCode, projected.body).toBe(200)
+        const expected = (full.json() as RevisionResponse[]).map(({ ops: _ops, ...rest }) => rest)
+        expect(projected.json(), query).toEqual(expected)
+        expect(expected.length, query).toBeGreaterThan(0)
+      }
+    })
+  })
+
+  it('fields가 inverse 밖이면 400이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      const ops = await getRevisions(ctx, revisionsUrl(fx, '?fields=ops'), fx.owner.cookie)
+      const empty = await getRevisions(ctx, revisionsUrl(fx, '?fields='), fx.owner.cookie)
+
+      expect([ops.statusCode, empty.statusCode]).toEqual([400, 400])
+    })
+  })
+
+  /**
    * **`beforeSeq`를 실은 조회도 같은 문을 지난다** — viewer 는 읽고(남의 편집까지), 비멤버 · 다른 프로젝트의 페이지는 404, 미인증은 401. 아래
    * `viewer도 읽을 수 있다` · `비멤버는 404다` · `다른 프로젝트의 페이지는 404다` · `미인증은 401이다`와 같은 판을 이 쿼리로 한 번 더 선다 — 되짚기
    * 조회가 따로 문을 갖지 않는다는 것을 잠근다.

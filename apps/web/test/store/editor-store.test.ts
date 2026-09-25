@@ -1683,6 +1683,47 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
     }
   }
 
+  /**
+   * **다시 실려 버린 답은 `'reloaded'`다** — 부르는 쪽이 그것을 보고 한 줄 말한다(`routes/editor.tsx`의 `restoreUndo`). 실을 것이 없던 목록(판을 실은
+   * 번호 뒤의 것뿐)은 잃은 것이 없어 `'none'`이다.
+   */
+  it('목록을 받는 동안 같은 페이지가 다시 실리면 restoreUndoStack은 reloaded 를, 실을 것이 없었으면 none 을 돌려준다', () => {
+    const reloaded = opened()
+    const dropped = opened()
+    const fresh = opened()
+    for (const { store } of [reloaded, dropped]) store.loadPage('pg-1', page(text('n_ga', '가'), text('n_na', '나')), 7)
+
+    expect({
+      restored: fresh.store.restoreUndoStack(MINE, { point: fresh.point }),
+      reloaded: reloaded.store.restoreUndoStack(MINE, { point: reloaded.point }),
+      nothingToLoad: dropped.store.restoreUndoStack([{ ...MINE[0]!, seq: 8 }], { point: dropped.point }),
+    }).toEqual({ restored: 'restored', reloaded: 'reloaded', nothingToLoad: 'none' })
+  })
+
+  /**
+   * **바탕이 서버와 갈라졌으면 싣지 않는다**(`#undoHistory`의 `diverged`) — 서버 프레임이 바탕에 안 얹혔으면 바탕은 그 번호의 서버 문서가 아니고,
+   * 거기서 되짚어 붙잡은 노드 id 는 서버의 노드가 아닐 수 있다. 세션 항목도 갈라진 바탕에서는 붙잡지 않는다(`ackEdit`). 갭은 번호를 건너뛴 프레임을
+   * 버렸을 뿐 바탕이 그 번호의 서버 문서라 싣는다(대조). 갈라진 바탕을 공개 API 로 만드는 길은 얹히지 않는 프레임 하나다 — 서버가 그런 프레임을
+   * 내는 실제 판은 재현하지 못했다(방벽이다).
+   */
+  it('바탕이 서버와 갈라졌으면 목록 답을 싣지 않는다 — 갭이면 싣는다', () => {
+    const diverged = opened()
+    const gap = opened()
+    expect(diverged.store.applyRemoteChange('pg-1', { seq: 8, ops: [{ op: 'remove', path: '/root/children/5' }], warnings: [] }).result).toBe('diverged')
+    expect(gap.store.applyRemoteChange('pg-1', { ...BOB.frame, seq: 9 }).result).toBe('gap')
+
+    const outcome = {
+      diverged: diverged.store.restoreUndoStack(MINE, { point: diverged.point }),
+      gap: gap.store.restoreUndoStack(MINE, { point: gap.point }),
+    }
+
+    expect({ outcome, stacks: [diverged.store.getState().undoStack.length, gap.store.getState().undoStack.length], undo: diverged.store.startUndo().clientOpId }).toEqual({
+      outcome: { diverged: 'none', gap: 'restored' },
+      stacks: [0, 1],
+      undo: null,
+    })
+  })
+
   it('한 판에 한 번만 싣는다 — 같은 점으로 두 번 불러도 항목이 겹치지 않는다', () => {
     const { store, point } = opened()
 
