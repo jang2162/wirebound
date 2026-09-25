@@ -227,6 +227,9 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/auth/login` | POST | (없음, 공개) | `{ email, password }` | 200 `{ id, email, name }`, 세션 쿠키 설정 |
 | `/api/auth/logout` | POST | 로그인만 | — | 204 |
 | `/api/auth/me` | GET | 로그인만 | — | 200 `{ id, email, name }` |
+| `/api/auth/tokens` | GET | 로그인만(세션) | — | 200 `{ id, name, createdAt, lastUsedAt, projectId, projectName, member }[]` — **로그인한 사람의 토큰 전부**(프로젝트를 가리지 않는다), 오래된 것 먼저. 멤버가 아닌 프로젝트의 줄은 `projectName: null` · `member: false`. 아래 "API 토큰". 토큰으로 부르면 401 |
+| `/api/auth/tokens/:tokenId` | DELETE | 로그인만(세션) | — | 204 — 어느 프로젝트의 것이든. 남의 토큰·없는 id는 404. 토큰으로 부르면 401 |
+| `/api/auth/tokens` | DELETE | 로그인만(세션) | — | 200 `{ revoked }` — 그 순간의 내 토큰 전부를 폐기한 수. 토큰으로 부르면 401 |
 | `/api/projects` | POST | 로그인만 | `{ name, slug, description? }` | 201 `{ ...프로젝트, role }` — 호출자가 owner가 되므로 `role`은 항상 `"owner"`다 |
 | `/api/projects` | GET | 로그인만 | — | 200 `{ ...프로젝트, role }[]`(호출자가 속한 것만, `created_at` 오름차순). 각 항목의 `role`은 **그 호출자의** 역할이다 |
 | `/api/projects/:projectId` | GET | viewer | — | 200 `{ ...프로젝트, role }` |
@@ -454,6 +457,13 @@ Authorization: Bearer <발급 응답의 value>
 토큰 행을 CASCADE 전에 잡는다 — 까닭(교착)은 `src/repos/members.ts`의 `removeMember`와 `src/routes/projects.ts`의 삭제 주석.
 지우는 것은 멤버 행을 지운 뒤라 **제거가 도는 사이 발급된 토큰도 지운다**. 예외는 발급하자마자 그 토큰으로 쓰는 요청이
 그 순간 재확인 중인 판이다 — 그 행은 건너뛰어 남는다(기다리면 교착 — `src/repos/api-tokens.ts`의 `deleteMemberTokens`).
+
+**계정 아래의 «내 토큰»(`/api/auth/tokens`)은 프로젝트를 가로지른다.** 멤버가 아닌 프로젝트에도 토큰이 남을 수 있다(위
+경합 · 제거가 토큰을 안 지우는 판으로 빠진 멤버의 행) — 그 토큰은 다시 멤버가 되면 산다. 그 프로젝트 아래의 목록은 404 라
+안 보이므로, 옛 비밀번호가 새었을 때 거두는 길이 여기다(웹의 «API 토큰» 화면이 부른다). **멤버가 아닌 프로젝트의 이름은 안
+싣는다** — 빠진 뒤 바뀐 이름이 새지 않게. 판정과 숨기지 못하는 것(그 프로젝트가 아직 있다는 사실)은 `src/routes/tokens.ts`의
+«내 토큰은 프로젝트를 가로지른다». 전부 폐기는 토큰 행을 id 순으로 잡는다 — 제거 · 프로젝트 삭제와 같은 순서(까닭은
+`src/repos/api-tokens.ts`의 `deleteAllUserTokens`). 폐기는 재확인하지 않는다(권한을 줄이는 쓰기다).
 
 **로그에 남지 않는다.** `buildLoggerOptions`의 `redact`가 `req.headers.authorization`을
 이미 덮고 있다(그 함수의 머리말에 이유가 있다).

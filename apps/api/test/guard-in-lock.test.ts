@@ -2510,6 +2510,10 @@ const NOT_LOCKED: Record<string, string> = {
     '프리셋 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제가 CASCADE 전에 쥔 프리셋 행에는 서지만 404 — «E15»). 가드와 커밋 사이는 재확인한다 — 위 «프리셋 삭제 — 가드와 커밋 사이»',
   'DELETE /api/projects/:projectId/tokens/:tokenId':
     '토큰 행 — 자식 행 삭제는 부모 행을 안 잡고, 그 행을 가리키는 FK 가 없다(프로젝트 삭제가 CASCADE 전에 쥔 토큰 행에는 서지만 404 — `lockProjectTokens`). 재확인하지 않는다 — 지우는 것은 자기 토큰뿐(`deleteApiToken`의 `user_id`)이고 권한을 줄이는 쓰기다. 걸면 강등 · 로그아웃 직후의 폐기가 롤백돼 거두려던 자격이 남는다',
+  'DELETE /api/auth/tokens/:tokenId':
+    '토큰 행 하나 — 위 줄과 같다(프로젝트를 안 보고 `user_id`로만 거른다 — `deleteUserToken`). 재확인하지 않는다(같은 까닭)',
+  'DELETE /api/auth/tokens':
+    '내 토큰 행 전부를 id 순으로 — 토큰 행 밖을 안 잡는다(`deleteAllUserTokens`). 프로젝트 삭제 · 멤버 제거가 쥔 토큰 행에는 서고(`my-tokens-lock.test.ts`), 재확인하지 않는다(같은 까닭)',
   'WS ping': '아무것도 안 쓴다',
   'WS lock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
   'WS unlock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
