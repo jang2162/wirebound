@@ -165,19 +165,20 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 > **뒤에 붙는 `마이그레이션 N건` 은 이 DB 의 스키마 상태다**(다 올렸으면
 > `ls apps/api/src/db/migrations/0*.ts | wc -l` 과 같다). 워크트리마다 컨테이너를
 > 띄우면 **빈 볼륨으로 뜨는 것이 정상 경로**가 되므로 그 갈림이 화면에 있어야 한다.
-> **0 건이면 서버가 아예 안 뜬다** — 부팅 중에 `themes` 에 쓰기 때문이다. 그때 나오는
-> 문장은 원문(`relation "themes" does not exist`)이 아니라 이것이다(이 기계에서 쟀다,
-> 종료 코드 1):
+> **0 건이면 서버가 아예 안 뜬다** — 뜨기 전에 코드가 아는 마이그레이션과 견주고 멈춘다
+> (`apps/api/src/db/schema-version.ts`). 그때 나오는 문장은 이것이다(빈 DB 에 `tsx src/main.ts`, 종료 코드 1):
 >
 > ```
-> Error: 이 DB 는 비어 있습니다(마이그레이션 0건): 127.0.0.1:5433/wirebound
+> 이 DB 는 비어 있습니다(마이그레이션 0건): 127.0.0.1:5433/wirebound
 > 새 볼륨이면 정상입니다 — 마이그레이션을 올리십시오:
 >   pnpm --filter @wirebound/api migrate
 > 데이터가 있어야 하는데 비었다면 지우지 말고 다른 이름의 볼륨을 찾으십시오: docker volume ls
 > ```
 >
-> **원문은 `Caused by:` 로 그대로 붙어 있다.** 그리고 *마이그레이션은 올렸는데 데이터만
-> 없는* 볼륨은 이 줄로 안 갈린다 — 그쪽은 「에디터가 뜨는데 로그인이 안 된다」 절이 든다.
+> **뒤처졌으면(하나라도 안 올렸으면) 역시 안 뜨고** 안 올라간 것의 이름과 같은 `migrate` 를 한 줄로 말한다. 안 올라간 것이
+> 이미 올라간 것보다 **앞 이름**이면(두 갈래가 이름을 엇갈려 올린 DB) `migrate` 로는 안 올라가므로 «순서가 어긋났습니다»와 할 일을
+> 한 줄로 말한다(`apps/api/src/db/schema-version.ts`의 표). 그리고
+> *마이그레이션은 올렸는데 데이터만 없는* 볼륨은 이 줄로 안 갈린다 — 그쪽은 「에디터가 뜨는데 로그인이 안 된다」 절이 든다.
 
 띄운 뒤 서버만 따로 확인하려면:
 
@@ -1016,10 +1017,11 @@ Docker 의 리눅스 컨테이너(linux/arm64 · `node:22-slim` = Debian 12 · N
 | **devDependencies 까지 설치** | `start` · `migrate` · `reset-password` 가 `tsx`(devDependency)로 돈다 | `pnpm install --prod` 뒤 `pnpm --filter @wirebound/api start` → `sh: 1: tsx: not found` |
 | **`pnpm build`** | 「테스트는 통과하는데 서버만 안 뜬다」 절과 같은 까닭 | — |
 | **`HOST=0.0.0.0`** | 기본값이 `127.0.0.1` 이다 | 컨테이너 포트를 열어도 **밖에서 안 닿는다**(호스트 `curl` 000 · 컨테이너 안 200) |
-| **마이그레이션을 먼저** | api 는 뜰 때 마이그레이션을 올리지 않는다 | **하나 뒤처진 DB 에도 뜬다** — `이 서버가 보는 DB: … · 마이그레이션 14건` 만 찍고 코드가 아는 수와 견주지 않는다. 그 뒤 코멘트 게시가 500(`column "revision_seq" of relation "comments" does not exist`). 빈 DB 면 안 뜬다(「띄우기」 절). **순서: `migrate` → 새 api** |
+| **마이그레이션을 먼저** | api 는 뜰 때 마이그레이션을 올리지 않는다 — 코드가 아는 것과 견주기만 한다(`apps/api/src/db/schema-version.ts`) | **뒤처진 DB 면 안 뜬다** — 종료 1 · 한 줄(`이 DB 는 마이그레이션이 뒤처졌습니다(… · 안 올라간 것: 0015-…) — 올린 뒤에 띄우십시오: pnpm --filter @wirebound/api migrate`). 빈 DB 도 안 뜬다(「띄우기」 절). 코드가 모르는 것이 올라간 DB(더 새 코드가 올렸다)면 경고 한 줄을 찍고 뜬다. **순서: `migrate` → 새 api** |
 | **`NODE_ENV=production` 이면 TLS** | 세션 쿠키에 `Secure` 가 붙는다(`apps/api/src/auth/plugin.ts`) | http 로 연 화면에서 **로그인 200 인데 바로 다음 `/api/auth/me` 가 401** — 브라우저가 쿠키를 안 받는다(쿠키 0). `http://127.0.0.1` 은 Chrome 이 안전한 출처로 봐 된다 — **그래서 로컬에서는 안 보인다.** 헤드리스 Chrome 에 `--host-resolver-rules=MAP wb.test 127.0.0.1` 로 `http://wb.test` 를 열어 쟀다. `development` 면 둘 다 200 |
 | **PID 1 은 node 로** | `pnpm` 을 거치면 `SIGTERM` 이 서버의 정상 종료에 안 닿는다 | `docker stop` 에 종료 코드 1(`--init` 이면 143) · «종료합니다» 줄 0 · **도는 요청이 소켓째 끊긴다**(`UND_ERR_SOCKET`). `apps/api` 에서 `node --import tsx src/main.ts`(또는 `tsx src/main.ts`)를 PID 1 로 두면 종료 0 · 도는 요청 200 |
 | **init 을 둔다**(`docker run --init` · tini) | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). `--init` 이면 0 |
+| **끄는 쪽의 한도** | `SIGTERM` 을 받은 api 는 도는 요청(그리던 pptx 포함)을 끝까지 답하고 끝낸다 — 한도 30s(`apps/api/README.md` 「끄기」 절) | 끄는 쪽의 한도가 먼저 오면 그 뒤는 SIGKILL 이라 도는 응답이 끊긴다 — `docker stop` 은 기본 10s(`-t` · `--stop-timeout` 으로 늘린다). 브라우저는 안 남는다. 잰 값은 macOS 로컬 api 다(빈 페이지 200장 pptx 가 SIGTERM 뒤 6.4s 에 200 · 그림 실패 0) — **컨테이너로는 안 쟀다** |
 
 Node 판을 재는 법 — 저장소 뿌리에서 `git archive HEAD | docker run -i --rm node:<판>-slim sh -c 'mkdir /app && cd /app && tar xf - &&
 corepack enable && pnpm install --frozen-lockfile && pnpm build'`. tsdown 의 `engines`(`^22.18.0 || >=24.11.0`)는 24.0–24.10 을
@@ -1123,10 +1125,6 @@ docker run --init -e HOST=0.0.0.0 -e NODE_ENV=production -e DATABASE_URL … -w 
 - **x86_64** — 전부 linux/arm64 에서 쟀다.
 - **실제 TLS 앞단 · 다중 인스턴스 · 운영 DB** — `Secure` 쿠키는 브라우저가 http 에서 거절하는 쪽만 쟀다.
 - **상류 keep-alive 경주** — 「앞단(리버스 프록시)이 지킬 조건」 표의 판정 줄.
-- **정상 종료 중 그리던 pptx 는 그림이 빠진다(알려진 한계).** `docker stop` 이 그리는 중에 오면 그 응답은 200 이지만 그림이
-  전부 실패다(이유 `… Target page, context or browser has been closed`). playwright 가 `SIGTERM` 에 자기가 띄운 브라우저를
-  먼저 닫는다 — 컨테이너 안에서만 `chromium.launch` 에 `handleSIGTERM: false` 를 주자 같은 판이 그림을 다 실었다(실패 0).
-  서버 코드는 고치지 않았다.
 
 ---
 

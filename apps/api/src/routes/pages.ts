@@ -560,7 +560,8 @@ export function pageRoutes() {
       // **가져오기·복원을 근거로 적지 마라.** 그 둘은 이 라우트로 오지 않고
       // `applyEdit`을 직접 부른다 — `test/lock-census.test.ts`가 그 둘을 별도 줄로 세면서
       // *"잠금을 안 본다"*고 판정한다. 여기 근거로 적으면 그 인구조사와 어긋난다.
-      const outcome = await withTransaction(app.db, async (trx) => {
+      // **COMMIT 답을 잃으면 그 자리에서 확인한다** — `PATCH .../ops`와 같다(`services/lost-commit.ts`).
+      const settled = await runEditTransaction(app.db, pageId, async (trx) => {
         // **판정은 이 트랜잭션 안에서 페이지 행을 잡고 한다**(`lock/check.ts`의 «판정은 페이지 행 안에서»). 막히면
         // 던진다 — 아직 아무것도 안 썼다.
         const blocked = await lockConflictError(app, trx, {
@@ -583,14 +584,18 @@ export function pageRoutes() {
         if (edited.ok) await recheckProjectRole(trx, request)
         return edited
       })
+      const outcome = settled.outcome
 
       if (!outcome.ok) {
         throw editOutcomeToApiError(outcome, before.headSeq)
       }
+      if (settled.confirmedAfterLoss) {
+        request.log.warn({ pageId, seq: outcome.seq, broadcast: settled.broadcast }, 'COMMIT 답을 잃었지만 새 연결로 커밋을 확인했다')
+      }
 
-      // **커밋 뒤에 알린다.** 위 `withTransaction(app.db, …)`는 풀 핸들 위에서 자기
-      // 트랜잭션을 열고 닫으므로 이 줄에 도달한 시점에 이미 커밋돼 있다.
-      notifyPageChanged(app, {
+      // **커밋 뒤에 알린다.** 위 트랜잭션은 풀 핸들 위에서 자기 트랜잭션을 열고 닫으므로 이 줄에 도달한 시점에 이미
+      // 커밋돼 있다. COMMIT 답을 잃고 확인한 판이면 그 revision 이 머리일 때만이다.
+      if (settled.broadcast) notifyPageChanged(app, {
         projectId,
         pageId,
         seq: outcome.seq,

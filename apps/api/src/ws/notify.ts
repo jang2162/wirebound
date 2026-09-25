@@ -26,7 +26,7 @@ import { roleAtLeast } from '../auth/roles'
 import type { ProjectRole } from '../db/types'
 import type { BroadcastOrigin } from './broadcast'
 import { releaseLocksOf } from './lock'
-import { MIN_ROLE_FOR_FRAME, type EventActor, type ServerFrame } from './protocol'
+import { MIN_ROLE_FOR_FRAME, WS_CLOSE, type EventActor, type ServerFrame } from './protocol'
 
 /**
  * 편집을 낸 클라이언트가 자기 WebSocket 연결을 가리키는 헤더.
@@ -145,10 +145,11 @@ export interface MembershipChangedInput {
  * 까닭은 **나가 있던 편집의 답**이다: 잠금에 줄 선 WS `patch`는 커밋 순간의 재확인이 404 를 `patch-error`로
  * 답하는데(`test/guard-in-lock.test.ts`의 «멤버에서 빠지면 404»), 여기서 닫으면 그 답이 갈 길이 없어 낸 쪽은 «답을 못
  * 받았다»(웹의 «모름»)로 끝난다 — 이미 확정된 거절을 모름으로 바꾸는 것이다. 닫는 일은 평소의 회수가 한다 — 그
- * 연결이 무엇을 보내거나(`ws/routes.ts` · 하트비트 25초) 방송이 지나갈 때(`ws/broadcast.ts`의 `stillAllowed`) 4403 이고,
+ * 연결이 무엇을 보내거나(`ws/routes.ts` · 하트비트 25초) 방송이 지나갈 때(`ws/broadcast.ts`의 `stillAllowed`) 4403 이고
+ * (보낼 때의 회수는 도는 프레임의 답 뒤에 닫는다 — `RoomConnection.closeWhenIdle`),
  * **그 사이 그 연결로 프로젝트의 무엇도 나가지 않는다**(방송이 보내기 전에 자격을 본다). 잠금은 여기서 놓는다 — 닫힘을
  * 기다리면 그동안 남의 선택을 막는다. **그 사람이 잠금을 쥐고 있었으면 놓는 `locks` 방송이 곧 그 회수다** — 방송이
- * 그 연결의 자격을 보고 닫는다. 그 판에서는 줄 선 `patch`의 404 답이 여전히 길을 잃는다(남는 틈 — 웹은 다시 읽기의
+ * 그 연결의 자격을 보고 곧바로 닫는다(방송 쪽 회수는 도는 프레임을 기다리지 않는다). 그 판에서는 줄 선 `patch`의 404 답이 여전히 길을 잃는다(남는 틈 — 웹은 다시 읽기의
  * 404 로 셸째 내려가므로 그 편집의 «모름»은 화면에 안 남는다).
  *
  * **잠금을 쥘 수 없게 됐으면 연결의 멤버십 세대도 여기서 올린다**(`RoomConnection.membershipEpoch`). 그 연결이 보낸 `lock`
@@ -190,5 +191,46 @@ export function notifyMembershipChanged(app: FastifyInstance, input: MembershipC
     } catch (error) {
       app.log.error({ err: error, projectId: input.projectId, connectionId: connection.id }, 'membership-changed 알림 실패')
     }
+  }
+}
+
+/**
+ * **그 세션으로 붙은 연결을 닫고 그 연결의 잠금을 놓는다** — 로그아웃이 세션 행을 지운 **뒤에** 부른다(`routes/auth.ts`).
+ *
+ * 세션 행을 지우는 것만으로는 이미 열린 연결이 안 닫힌다 — 평소의 회수(그 연결이 보내는 프레임 · 방송이 지나갈 때
+ * `stillAllowed`)가 닿을 때까지 열려 있고, 그 연결이 쥔 잠금은 남의 화면에 «편집 중»으로 남는다. 잰 값(api 하네스 · 잠근 채
+ * 로그아웃 · 그 뒤 아무도 아무것도 안 보냄): **30.96s** 뒤 만료가 걷을 때에야 풀렸고 연결도 그 만료 알림에서 4403 으로 닫혔다.
+ *
+ * **그 세션만이다** — `sessionId`는 로그아웃 요청의 쿠키에서 나온 해시라, 같은 사람의 다른 로그인(다른 브라우저) · 남의 연결은
+ * 안 건드린다. 같은 브라우저의 다른 탭은 같은 세션이라 함께 닫힌다 — 그 탭들도 이미 로그아웃됐다(다음 요청이 401).
+ *
+ * **회수의 닫기와 같은 순서다**(`ws/routes.ts`의 «권한이 회수되었습니다») — 룸에서 빼고, 닫고, 놓고, 알린다. 닫힘 이벤트가
+ * 뒤따라 같은 일을 다시 해도 조용히 지난다.
+ *
+ * **소켓은 도는 프레임이 끝난 뒤에 닫는다**(`RoomConnection.closeWhenIdle`) — 룸에서 빼고 잠금을 놓는 것은 곧바로다. 곧바로
+ * 닫으면 잠금에 줄 선 WS `patch`의 답(커밋 순간의 재확인이 낸 401)이 갈 길을 잃어, 낸 쪽은 확정된 거절을 «모름»으로 받는다
+ * (`notifyMembershipChanged`가 닫지 않는 까닭과 같다 · `test/guard-in-lock.test.ts`의 «WS patch 프레임: 잠금에 쥐인 채
+ * 로그아웃하면»). 룸에서 뺐으므로 그동안 그 연결로 방송은 안 나간다. 그 사이 온 새 프레임(웹의 `ping` · 잠금 하트비트의 `lock`)은
+ * 자격 확인에서 회수 갈래로 가는데, 그 갈래도 같은 기다리는 닫기라 닫힘을 앞당기지 않고 사유도 먼저 정한 «로그아웃했습니다»가
+ * 남는다(`ws/routes.ts`의 «권한이 회수되었습니다»).
+ * **그래서 잠금은 여기서 놓는다** — 닫힘을 기다리면 줄 선 프레임이 끝날 때까지 남의 화면에 남는다(도는 프레임이 없으면 닫힘
+ * 이벤트가 곧바로 같은 일을 한다 — 그 판은 이 줄 없이도 초록이고, 이 줄은 `test/logout-realtime.test.ts`의 «편집이 잠금에 선
+ * 채»가 소유한다).
+ *
+ * 던지지 않는다 — 세션 행은 이미 지워졌다.
+ */
+export function closeSessionConnections(app: FastifyInstance, sessionId: string): void {
+  const { rooms, broadcast } = app.realtime
+  for (const connection of rooms.ofSession(sessionId)) {
+    rooms.leave(connection.projectId, connection.id)
+    try {
+      connection.closeWhenIdle(WS_CLOSE.revoked, '로그아웃했습니다')
+    } catch (error) {
+      app.log.error({ err: error, projectId: connection.projectId, connectionId: connection.id }, '로그아웃한 연결을 닫지 못함')
+    }
+    releaseLocksOf(app, connection)
+    void broadcast.announcePresence(connection.projectId).catch((error: unknown) => {
+      app.log.error({ err: error, projectId: connection.projectId }, 'presence 알림 실패(로그아웃)')
+    })
   }
 }

@@ -4,15 +4,16 @@
  * `withApi`는 테스트 하나를 커넥션 하나·트랜잭션 하나에서 돌리므로 `Promise.all`로
  * 요청을 겹쳐도 전부 직렬화된다 — **행 잠금이 있든 없든 똑같이 통과하는 테스트**가 된다.
  *
- * 여기 있는 것은 **동시 삭제에서 조용히 나는 결함 둘**을 잠그는 케이스다.
+ * 여기 있는 것은 **동시 쓰기에서 조용히 나는 결함**을 잠그는 케이스다.
  *
  * | 경합 | 무엇 | 이 파일의 케이스 |
  * |---|---|---|
- * | **다른 노드** | 서로 다른 노드의 마지막 코멘트를 동시에 지우면 **진 쪽이 409를 받는데 행 삭제는 커밋된다** | `409를 받은 삭제는 행을 남기지 않는다` |
+ * | **다른 노드** | 서로 다른 노드의 마지막 코멘트를 동시에 지우면 잠그기 전에 읽은 문서로 셀 때 **한쪽이 까닭 없이 409** 다 | `서로 다른 노드의 마지막 코멘트를 동시에 지우면 …` |
+ * | **실패한 삭제** | 파이프라인이 거절한 삭제가 `return`하면 **실패를 들었는데 행 삭제는 커밋된다** | `파이프라인이 거절한 삭제는 행을 남긴다` |
  * | **같은 노드** | 같은 노드의 마지막 둘을 동시에 지우면 둘 다 *"마지막이 아니다"*로 판정해 **고아 번호**가 남는다 | `같은 노드의 마지막 둘을 동시에 지우면 번호가 사라진다` |
  * | **첫 코멘트** | 게시가 잠그기 전의 문서로 번호를 매기면 서로 다른 노드의 첫 코멘트가 둘 다 1번이거나(낡음으로 막으면 한쪽 409), 앞의 삭제가 없앤 번호를 못 봐 **번호 없는 코멘트**가 선다 | `서로 다른 노드의 첫 코멘트를 동시에 달면 …` · `마지막 코멘트의 삭제가 먼저 줄 선 뒤 …` |
  *
- * **다른 노드 줄이 무거운 이유는 상태 코드가 아니다** — *"실패했다고 말하는데 조작은 일어났다"*가
+ * **실패한 삭제 줄이 무거운 이유는 상태 코드가 아니다** — *"실패했다고 말하는데 조작은 일어났다"*가
  * 성립하기 때문이고, 그것은 조용히 되풀이되는 부류다.
  */
 import { sql } from 'kysely'
@@ -154,10 +155,10 @@ async function waitersBehind(holder: number): Promise<number> {
 /**
  * 페이지 행을 테스트 트랜잭션으로 쥔 채 `run`을 시작하고, **요청 `waiters`개가 그 행에서 줄을 선 것을 본 뒤에** 놓는다.
  *
- * 코멘트 삭제는 `baseSeq`를 잠그기 **전에** 읽는다(`routes/comments.ts` 머리말의 «대가 2»). 요청 둘을 `Promise.all`로
- * 던지기만 하면 앞 요청이 커밋을 마친 뒤에 뒤 요청이 `head_seq`를 읽는 판이 생기고, 그 판에서는 둘 다 200 인 것이
- * **옳은 동작**이다 — 경합을 재는 케이스가 경합 없이 빨개진다(DB 컨테이너에 CPU 부하를 걸고 B5 를 되풀이하면 드물게 난다).
- * 둘 다 행에서 기다리는 것을 봤으면 둘 다 그 전에 `baseSeq`를 읽었다 — 겹침이 성립한다.
+ * 코멘트 쓰기는 문서에 낼 변화를 잠근 뒤의 문서로 센다(`routes/comments.ts` 머리말 「번호는 잠근 뒤의 문서로 센다」). 잠그기
+ * 전에 읽은 문서로 세는 판(그 규칙을 어긴 변조)은 **두 요청이 겹칠 때만** 틀린다 — `Promise.all`로 던지기만 하면 앞 요청이
+ * 커밋을 마친 뒤에 뒤 요청이 읽는 판이 생기고, 그 판에서는 변조도 옳게 답해 케이스가 아무것도 안 잰다. 둘 다 행에서
+ * 기다리는 것을 봤으면 둘 다 그 전에 문서를 읽었다 — 겹침이 성립한다.
  *
  * **줄이 안 서면 던진다** — 겹치지 않은 판을 초록 · 빨강 어느 쪽으로도 세지 않는다. 그때도 요청은 끝까지 기다린다.
  */
@@ -266,31 +267,47 @@ describe('같은 멱등 키의 게시가 동시에 온다', () => {
 })
 
 describe('코멘트 삭제의 동시성', () => {
-  it('409를 받은 삭제는 행을 남기지 않는다 (리뷰 B5)', async () => {
-    // **이 케이스가 다른 노드 경합의 전부다.** 서로 다른 노드의 마지막 코멘트를 동시에 지우면 둘 다
-    // 번호를 지우려 하고, 진 쪽은 `stale`로 409를 받는다. **그때 그쪽의 행 삭제가
-    // 커밋되어 있으면 안 된다** — 사용자는 실패를 들었는데 코멘트는 사라진 상태다.
+  it('서로 다른 노드의 마지막 코멘트를 동시에 지우면 둘 다 지워지고 번호도 둘 다 사라진다 (리뷰 B5)', async () => {
+    // 지울 번호의 경로를 **잠근 문서에서** 센다 — 잠그기 전에 읽은 문서로 세면 둘 다 같은 `head_seq`를 바탕으로 삼아
+    // 뒤의 요청이 `stale` 409 를 받는다. **둘이 겹친 판만 잰다**(`withPageRowHeld`) — 겹치지 않으면 그 판도 둘 다 200 이다.
     await withRealApi(async (ctx) => {
       const fx = await setup(ctx)
       const a = await postComment(ctx, fx, 'n_a', '가에 붙은 말')
       const b = await postComment(ctx, fx, 'n_b', '나에 붙은 말')
-      expect(await commentCount(fx.pageId)).toBe(2)
+      const before = Number((await db.selectFrom('pages').select('head_seq').where('id', '=', fx.pageId).executeTakeFirstOrThrow()).head_seq)
 
-      // **둘이 겹친 판만 잰다**(`withPageRowHeld`) — 겹치지 않으면 둘 다 200 이 옳다.
       const [resA, resB] = await withPageRowHeld(fx.pageId, 2, () =>
         Promise.all([deleteComment(ctx, fx, a), deleteComment(ctx, fx, b)]),
       )
 
-      // 하나는 이기고 하나는 409다 — 어느 쪽이 이기는지는 정해져 있지 않다.
-      expect(sorted([resA.statusCode, resB.statusCode])).toEqual([200, 409])
-
-      // **핵심 단언:** 진 쪽의 행이 살아 있어야 한다. 되돌리지 않으면 여기가 0이 된다.
-      expect(await commentCount(fx.pageId)).toBe(1)
-
-      // 그리고 문서도 일관된다 — 이긴 쪽의 번호만 사라지고 진 쪽의 번호는 남는다.
+      expect([resA.statusCode, resB.statusCode]).toEqual([200, 200])
+      expect(await commentCount(fx.pageId)).toBe(0)
       const document = await schemaOf(fx.pageId)
-      const markers = [markerOf(document, 'n_a'), markerOf(document, 'n_b')]
-      expect(markers.filter((marker) => marker !== undefined)).toHaveLength(1)
+      expect([markerOf(document, 'n_a'), markerOf(document, 'n_b')]).toEqual([undefined, undefined])
+      // 문서 · 응답 · revision 번호가 한 줄로 맞는다 — 각 응답은 제 노드의 자리를 지운다.
+      expect(sorted([resA.json().seq, resB.json().seq])).toEqual([before + 1, before + 2])
+      expect(resA.json().markerOps).toEqual([{ op: 'remove', path: '/root/children/0/marker' }])
+      expect(resB.json().markerOps).toEqual([{ op: 'remove', path: '/root/children/1/marker' }])
+    })
+  })
+
+  it('파이프라인이 거절한 삭제는 행을 남긴다 — 실패를 들었는데 지워져 있지 않다', async () => {
+    // `routes/comments.ts` 머리말의 «규칙 1». 삭제는 행을 먼저 지우고 번호를 지우는 편집을 낸다 — 그 편집이 거절됐을 때
+    // `return`하면 트랜잭션이 행 삭제를 커밋한 채 실패를 답한다. 거절을 세우려고 저장된 문서에 카탈로그에 없는 노드를 직접
+    // 넣는다(라우트로는 못 넣는다 — `PUT .../schema`가 422 로 막는다). 번호를 지운 문서도 그 오류를 들어 파이프라인이 거절한다.
+    await withRealApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const a = await postComment(ctx, fx, 'n_a', '가에 붙은 말')
+      await sql`
+        update pages
+           set schema = jsonb_insert(schema, '{root,children,-1}', '{"id":"n_bad","type":"NoSuchComponent","props":{}}'::jsonb, true)
+         where id = ${fx.pageId}
+      `.execute(db)
+
+      const res = await deleteComment(ctx, fx, a)
+      expect(res.statusCode, res.body).toBe(422)
+      expect(await commentCount(fx.pageId)).toBe(1)
+      expect(markerOf(await schemaOf(fx.pageId), 'n_a')).toBe(1)
     })
   })
 
@@ -405,6 +422,42 @@ describe('코멘트 삭제의 동시성', () => {
       const marker = markerOf(await schemaOf(fx.pageId), 'n_a')
       expect(typeof marker).toBe('number')
       expect(post!.json().markerOps).toEqual([{ op: 'add', path: '/root/children/0/marker', value: marker }])
+    })
+  })
+})
+
+describe('재번호의 동시성', () => {
+  it('재번호가 잠금을 기다리는 동안 남의 편집이 커밋되면 409 가 아니라 잠근 문서를 다시 매긴다', async () => {
+    // 재번호도 잠근 뒤의 문서로 센다(`routes/comments.ts` 머리말 「번호는 잠근 뒤의 문서로 센다」). 잠그기 전에 읽은 문서로
+    // 세면 그 사이 커밋된 편집 때문에 `stale` 409 다 — 재번호가 문서에 낼 변화는 서버가 지금 문서에서 계산하므로 밀어붙일
+    // 남의 편집이 없다. 편집이 먼저 줄 서고 재번호가 뒤에 선다(`withPageRowQueued`).
+    await withRealApi(async (ctx) => {
+      const fx = await setup(ctx)
+      // 뒤 노드에 먼저 달아 문서 순서와 번호가 어긋나게 한다(n_a = 2 · n_b = 1).
+      await postComment(ctx, fx, 'n_b')
+      await postComment(ctx, fx, 'n_a')
+      const before = Number((await db.selectFrom('pages').select('head_seq').where('id', '=', fx.pageId).executeTakeFirstOrThrow()).head_seq)
+
+      const [edit, renumber] = await withPageRowQueued(fx.pageId, [
+        () =>
+          ctx.app.inject({
+            method: 'PATCH',
+            url: `/api/projects/${fx.project.id}/pages/${fx.pageId}/ops`,
+            cookies: fx.owner.cookie,
+            payload: { baseSeq: before, ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_new', type: 'Text', props: {} } }] },
+          }),
+        () => ctx.app.inject({ method: 'POST', url: `${commentsUrl(fx)}/renumber`, cookies: fx.owner.cookie }),
+      ])
+
+      expect([edit!.statusCode, renumber!.statusCode]).toEqual([200, 200])
+      expect(renumber!.json().seq).toBe(before + 2)
+      // 경로는 편집 뒤의 문서 것이다 — 새 노드가 맨 앞에 들어와 둘이 한 칸씩 밀렸다.
+      expect(renumber!.json().markerOps).toEqual([
+        { op: 'replace', path: '/root/children/1/marker', value: 1 },
+        { op: 'replace', path: '/root/children/2/marker', value: 2 },
+      ])
+      const document = await schemaOf(fx.pageId)
+      expect([markerOf(document, 'n_a'), markerOf(document, 'n_b')]).toEqual([1, 2])
     })
   })
 })

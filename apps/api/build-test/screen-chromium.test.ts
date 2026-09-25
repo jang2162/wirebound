@@ -22,9 +22,10 @@
  * | 한글 글꼴이 **없는** 기계 | **여기서 죽는다** — 「한글이 두부가 아니다」와 그린 것을 보는 케이스들(리눅스 컨테이너에서 한글 글리프를 든 글꼴을 걷고 쟀다). 그래서 배포할 이미지 안에서 돌린다(최상위 README 「배포하려면」) |
  * | 받는 쪽(PowerPoint)이 그림을 그리는가 | **사람이 손으로** — `packages/exporter/build-test/dist-pptx.test.ts` 「진짜 자는 PowerPoint다」의 절차 |
  */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
+import { fileURLToPath } from 'node:url'
 import { exportPptx, exportPage, type PptxScreen } from '@wirebound/exporter'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
 import { resolveTheme, systemTheme } from '@wirebound/themes'
@@ -372,6 +373,25 @@ describe.skipIf(!있다)('브라우저·페이지 수명', () => {
     // 여유를 둔다 — 재는 것은 *"장 수를 따라가지 않는다"*이지 정확한 수가 아니다.
     expect(많이.peak).toBeLessThanOrEqual(적게.peak + 2)
   })
+})
+
+/**
+ * **서버가 닫는 동안 브라우저가 먼저 닫히지 않는다**(`LEAVE_SIGNALS_TO_SERVER`).
+ *
+ * 신호를 보내려면 프로세스가 따로 있어야 한다 — vitest 워커에 보내면 워커가 죽는다. 그래서 `render-through-signal.ts`를
+ * 자식으로 띄우고 그 안에서 브라우저가 뜬 뒤 자기에게 보낸다. 셋 다 따로 잰다 — 그 옵션의 한 칸을 떼면 그 신호의 케이스만 죽는다
+ * (SIGTERM · SIGHUP 은 실패 40 · SIGINT 는 playwright 가 `process.exit(130)` 해 한 줄도 못 낸다).
+ */
+describe.skipIf(!있다)('그리는 중에 신호를 받아도', () => {
+  it.each(['SIGTERM', 'SIGINT', 'SIGHUP'])('%s — 도는 그리기가 끝까지 그린다', (signal) => {
+    const child = spawnSync(
+      fileURLToPath(new URL('../node_modules/.bin/tsx', import.meta.url)),
+      [fileURLToPath(new URL('./render-through-signal.ts', import.meta.url)), signal, EXECUTABLE_PATH ?? '-'],
+      { encoding: 'utf8', timeout: 60_000 },
+    )
+    expect({ status: child.status, signal: child.signal, stderr: child.stderr }).toEqual({ status: 0, signal: null, stderr: '' })
+    expect(JSON.parse(child.stdout)).toEqual({ failures: 0, total: 40 })
+  }, 90_000)
 })
 
 describe.skipIf(!있다)('두부 판정자', () => {

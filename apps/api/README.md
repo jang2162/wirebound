@@ -90,7 +90,8 @@ pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바�
 
 **서버는 뜰 때 자기가 보는 DB와 스키마 상태를 말한다** —
 `이 서버가 보는 DB: 127.0.0.1:5433/wirebound · 마이그레이션 N건`(다 올렸으면 N 은 `ls src/db/migrations/0*.ts | wc -l` 과 같다).
-**빈 DB(0건)면 서버가 안 뜨고 그렇다고 말한다** — 절차는 최상위 README 「띄우기」 절이 소유한다.
+**빈 DB(0건) · 뒤처진 DB · 순서가 어긋난 DB 면 서버가 안 뜨고 그렇다고 말한다** — 뜨기 전에 코드가 아는 마이그레이션과 견준다(판정의 표는
+`src/db/schema-version.ts`의 머리말 — 코드가 모르는 것이 올라간 DB 는 경고 한 줄 뒤에 뜬다). 절차는 최상위 README 「띄우기」 절이 소유한다.
 `호스트:포트/이름`뿐이고 **자격 문자열은 안 찍는다**(`src/db/describe-target.ts`). 워크트리를
 여럿 띄운 사람이 터미널을 나란히 놓고 가르는 값이 이것이다.
 
@@ -103,6 +104,21 @@ pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바�
 **api 자신은 빌드하지 않는다** — 운영(`start`)도 `tsx src/main.ts`로 소스를 돌리고 `packages/*`만 `dist`를 싣는다. 그래서
 `tsx`는 런타임에 필요하다 — 내보내기 워커도 `tsx/esm`을 싣는다(`services/export-worker.ts`의 `workerExecArgv`). api 의 빌드
 산출물을 `node`로 띄우는 길은 없다.
+
+### 끄기 — 도는 요청을 끝까지 답하고 끝낸다
+
+`SIGTERM` · `SIGINT` · `SIGHUP` 셋 다 «닫아라»다. 서버는 새 요청을 안 받고, **도는 요청(그리던 pptx 포함)을 끝까지 답한 뒤**
+DB 풀을 닫고 종료 0 으로 끝낸다. 30s 안에 안 끝나면 도는 요청을 버리고 종료 1 이다. 같은 신호가 두 번 와도(`pnpm start` 아래의
+Ctrl-C 한 번이 그렇다) 기다림을 끊지 않는다. 판정과 잰 값은 `src/shutdown.ts`의 머리말이, 브라우저가 신호를 안 받는 까닭은
+`src/services/screen-render-chromium.ts`의 `LEAVE_SIGNALS_TO_SERVER`가 갖는다.
+
+- **끄는 쪽의 한도가 먼저 오면 그 뒤는 SIGKILL 이다** — `pnpm dev`(`tsx watch`)는 다시 띄울 때 5s, `docker stop` 은 기본 10s.
+  그때 도는 응답은 끊기지만 브라우저는 안 남는다(잰 값: 빈 페이지 200장 pptx 를 그리는 중에 `tsx watch` 가 다시 띄움 — 응답 끊김 ·
+  새 서버 5.8s · 남은 브라우저 0. 40장이면 그림을 다 싣고 1.9s 에 새 서버).
+- **띄운 터미널 창을 닫으면 그리던 서버가 안 끝난다** — 닫힌 터미널에 로그를 쓰려다 멈추고, 포트와 브라우저를 쥔 채 남는다(잰
+  값: pty 에서 `pnpm start` · `tsx src/main.ts` 로 띄워 pptx 를 그리는 중에 pty 를 닫음 — 120s 뒤에도 응답 없음 · 서버와
+  브라우저 셋이 남음. 쉬는 서버는 `tsx` 면 끝나고 `pnpm start` 면 남는다). 신호가 아니라 로그를 쓰는 자리가 막히는 것이라
+  닫는 길은 로그 목적지의 쓰기 오류를 받는 것이다. 그때까지는 창을 닫기 전에 Ctrl-C 로 끈다.
 
 ## 테스트
 
@@ -225,7 +241,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | 경로 | 메서드 | 최소 역할 | 요청 | 응답 |
 |---|---|---|---|---|
 | `/api/auth/login` | POST | (없음, 공개) | `{ email, password }` | 200 `{ id, email, name }`, 세션 쿠키 설정 |
-| `/api/auth/logout` | POST | 로그인만 | — | 204 |
+| `/api/auth/logout` | POST | 로그인만 | — | 204. **그 세션의 WS 연결을 곧바로 닫고(4403) 그 연결의 잠금을 놓는다** — 같은 사람의 다른 로그인 · 남의 연결은 그대로다 |
 | `/api/auth/me` | GET | 로그인만 | — | 200 `{ id, email, name }` |
 | `/api/auth/tokens` | GET | 로그인만(세션) | — | 200 `{ id, name, createdAt, lastUsedAt, projectId, projectName, member }[]` — **로그인한 사람의 토큰 전부**(프로젝트를 가리지 않는다), 오래된 것 먼저. 멤버가 아닌 프로젝트의 줄은 `projectName: null` · `member: false`. 아래 "API 토큰". 토큰으로 부르면 401 |
 | `/api/auth/tokens/:tokenId` | DELETE | 로그인만(세션) | — | 204 — 어느 프로젝트의 것이든. 남의 토큰·없는 id는 404. 토큰으로 부르면 401 |
@@ -254,8 +270,8 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId/comments` | GET | viewer | — | 200 코멘트 배열(`created_at` 오름차순). 항목은 `{ id, nodeId, body, authorId, authorName, createdAt, updatedAt }` |
 | `/api/projects/:projectId/pages/:pageId/comments` | POST | editor | `{ nodeId, body, idempotencyKey? }` | 201 `{ comment, marker, seq, markerOps }` — **번호가 없는 노드면 문서에 `marker`를 붙이고 revision을 남긴다**(아래 "코멘트와 번호"). 문서에 없는 노드는 404, 본문 1~2000자 밖·NUL은 400. 그 사이 남이 고쳤어도 409 가 아니다 — 번호는 잠근 뒤의 문서로 매긴다(아래 "코멘트와 번호"). **`idempotencyKey`**(영숫자·`-`·`_` 1~64자, 밖은 400): 같은 (페이지, 작성자, 키)로 **이미 달렸으면 200 으로 그 행을 그대로 돌려준다** — 새 행·새 번호·revision 이 없고 `markerOps: []`, `seq`는 지금의 `head_seq`, `marker`는 그 노드의 **지금** 번호(노드나 번호가 사라졌으면 `null`). **같은 키에 다른 `nodeId`·`body`면 409** — 이 409 에만 `issues: [{ path: "idempotencyKey", code: "idempotency-key-reused", … }]`가 실린다(게시의 다른 409 — 아래 묘비의 것 — 와 `code`가 같아 이것으로 가른다. 아래 "멱등 키"). **그 키의 행이 달렸다가 지워졌으면 409** + `code: "idempotency-key-deleted"`(같은 꼴 — 새 행을 세우지 않는다. 아래 "멱등 키"의 «묘비»). **키 판정은 인증 뒤 · 권한 가드 앞이다** — 첫 게시 뒤 역할이 내려가거나 멤버에서 빠져도 같은 키면 200 재생(아래 "멱등 키") |
 | `/api/projects/:projectId/pages/:pageId/comments/:commentId` | PATCH | editor | `{ body }` | 200 코멘트. **작성자만 고칠 수 있다 — 남의 것은 403.** 문서를 안 바꾸므로 `seq`가 없다 |
-| `/api/projects/:projectId/pages/:pageId/comments/:commentId` | DELETE | editor | — | 200 `{ seq, markerOps }`(**204가 아니다** — 문서 변화를 실어야 한다). **그 노드의 마지막이면 `marker`도 지운다.** 남의 코멘트도 지울 수 있다 |
-| `/api/projects/:projectId/pages/:pageId/comments/renumber` | POST | editor | — | 200 `{ seq, markerOps }` — 문서 순서대로 1부터 재번호(설계서 「설계서 화면 구조」). **한 revision이다.** 바꿀 것이 없으면 `markerOps: []`이고 revision도 안 쌓인다 |
+| `/api/projects/:projectId/pages/:pageId/comments/:commentId` | DELETE | editor | — | 200 `{ seq, markerOps }`(**204가 아니다** — 문서 변화를 실어야 한다). **그 노드의 마지막이면 `marker`도 지운다.** 남의 코멘트도 지울 수 있다. 그 사이 남이 고쳤어도 409 가 아니다 — 지울 번호는 잠근 뒤의 문서로 센다(아래 "코멘트와 번호") |
+| `/api/projects/:projectId/pages/:pageId/comments/renumber` | POST | editor | — | 200 `{ seq, markerOps }` — 문서 순서대로 1부터 재번호(설계서 「설계서 화면 구조」). **한 revision이다.** 바꿀 것이 없으면 `markerOps: []`이고 revision도 안 쌓인다. 그 사이 남이 고쳤어도 409 가 아니다 — 잠근 뒤의 문서를 매긴다 |
 | `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
 | `/api/projects/:projectId/theme` | GET | viewer | — | 200 `{ themeId, theme, issues }` — **이 프로젝트의 화면이 지금 써야 할 테마 하나**(아래 "프로젝트의 현재 테마"). 없으면 `theme: null` |
 | `/api/projects/:projectId/theme` | PUT | **owner** | `{ themeId: string \| null }` | 200 `{ themeId, theme, issues }` — **GET과 같은 꼴**(같은 함수가 만든다). 기본 레이아웃의 `theme_id`를 바꾼다. `null`은 *"테마를 벗긴다"*. **목록 밖 `themeId`는 404**(남의 프로젝트 테마의 존재를 숨긴다), **기본 레이아웃이 없는 프로젝트는 409**, 봉투 위반 400 |
@@ -673,16 +689,18 @@ ops를 적용하고 `headSeq`를 `seq`로 맞춘다 — **문서를 통째로 �
 있는 노드에 코멘트를 더 다는 것, 마지막이 아닌 코멘트를 지우는 것, 바꿀 것 없는 재번호)에는
 `markerOps: []`이고 `seq`는 현재 `head_seq` 그대로다.
 
-**`baseSeq`는 서버가 읽는다.** 게시는 **페이지 행을 잠근 뒤의 문서**로 번호를 매긴다 — 번호(최댓값 + 1)도
-*"노드에 번호가 이미 있는가"*도 거기서 센다. 그래서 서로 다른 두 노드에 동시에 달린 첫 코멘트는 둘 다
-201 이고 번호가 겹치지 않으며(1 · 2), 그 사이 남이 마지막 코멘트를 지워 번호를 없앴으면 새 번호를 받는다.
-게시는 낡음(409)을 내지 않는다 — 게시가 문서에 내는 변화는 서버가 지금 문서에서 계산하므로 밀어붙일 남의
-편집이 없다. **삭제 · 재번호는 요청이 도착한 시점에 `head_seq`를 읽는다**(잠그기 전) — 그 사이 다른 편집이
-커밋되면 409 다. 잰 값은 `test/comments-concurrency.test.ts`(두 요청이 페이지 행에 줄 선 판만 센다).
+**`baseSeq`는 서버가 읽는다.** 게시 · 삭제 · 재번호 셋 다 **페이지 행을 잠근 뒤의 문서**로 센다 — 붙일 번호(최댓값 + 1)도
+*"노드에 번호가 이미 있는가"*도, 지울 번호 · 다시 매길 번호와 그 노드의 경로도 거기서 센다. 그래서 서로 다른 두 노드에 동시에
+달린 첫 코멘트는 둘 다 201 이고 번호가 겹치지 않으며(1 · 2), 그 사이 남이 마지막 코멘트를 지워 번호를 없앴으면 새 번호를 받고,
+서로 다른 노드의 마지막 코멘트를 동시에 지우면 둘 다 200 이며, 재번호가 기다리는 동안 남의 편집이 커밋되면 그 편집 뒤의 문서를
+다시 매긴다. 셋 다 낡음(409)을 내지 않는다 — 문서에 내는 변화는 서버가 지금 문서에서 계산하므로 밀어붙일 남의 편집이 없다.
+잰 값은 `test/comments-concurrency.test.ts`(두 요청이 페이지 행에 줄 선 판만 센다).
 
-**응답의 `markerOps`·`seq`는 보낸 화면이 아직 못 받은 revision 뒤의 것일 수 있다** — 겹친 게시의 뒤 요청이
-그렇다. 받는 쪽은 사이의 revision 프레임을 먼저 얹은 뒤에 이 응답을 얹어야 한다. 앞 게시의 프레임은 그 커밋
-직후에 나가고 뒤 게시의 응답은 제 트랜잭션을 마친 뒤에 나가므로 대개 프레임이 먼저 닿는다.
+**응답의 `markerOps`·`seq`는 보낸 화면이 아직 못 받은 revision 뒤의 것일 수 있다** — 겹친 쓰기의 뒤 요청이
+그렇다. 받는 쪽은 사이의 revision 프레임을 먼저 얹은 뒤에 이 응답을 얹어야 한다(웹은 `seq`가 제 다음 번호가 아니면 그
+프레임을 기다린다 — `apps/web/src/store/editor-store.ts`의 `applyMarkerChange`). 앞 쓰기의 프레임은 그 커밋 직후에 나가고
+뒤 쓰기의 응답은 제 트랜잭션을 마친 뒤에 나가므로 대개 프레임이 먼저 닿는다. 문서가 안 바뀐 응답의 `seq`는 그 요청이 본
+`head_seq`다.
 
 **성립하는 어긋난 상태 둘.** 서버는 이것을 고쳐 주지 않는다.
 
@@ -817,7 +835,7 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 **잠금 순서 — 프로젝트 행 → 페이지 행 → 코멘트 행.** 묘비의 FK 가 프로젝트를 가리키므로
 묘비 삽입은 프로젝트 행에 `FOR KEY SHARE`를 건다 — 그래서 **묻는 길은 그것을 페이지 행보다 먼저 잡는다**
 (코멘트 삭제는 `repos/comments.ts`의 `lockProjectForBurial` · 페이지 삭제는 트리 쓰기의 첫 잠금 `lockProjectTree`). 코멘트
-삭제(라우트)는 프로젝트 행(`KEY SHARE`) → 페이지 행(`lockAndCheck` — `FOR UPDATE`) → 코멘트 행 삭제 + 묘비 삽입(한 문장).
+삭제(라우트)는 프로젝트 행(`KEY SHARE`) → 페이지 행(`lockPageForEdit` — `FOR UPDATE`) → 코멘트 행 삭제 + 묘비 삽입(한 문장).
 페이지 삭제는 프로젝트 행(`NO KEY UPDATE` — 제 FK `KEY SHARE`와 안 부딪힌다) → 페이지 행(`FOR UPDATE`) → 그
 페이지의 코멘트 삭제 + 묘비 삽입 → 페이지 행 삭제. 복원은 프로젝트 행(`FOR UPDATE`) → 페이지 행들 → 코멘트 행들
 (`lockProjectForRestore`) → 같은 문장. 게시는 페이지 행 → 키의 행 → 묘비(묘비를 넣지 않으므로 프로젝트 행을 안 잡는다).
@@ -1288,9 +1306,15 @@ revision 이 보이는지 **1초 안에** 본다. 보이면 커밋된 것이라 
 revision 이 아직 페이지의 머리(`head_seq`)면 **방송한다** — 머리가 더 나아갔으면 방송하지 않는다(룸은 뒤의 `seq`에서 이것을
 놓친 줄 이미 안다. 늦게 온 옛 번호를 받는 쪽이 «다음 번호»로 얹으면 뒤 revision 이 빠진 화면이 최신이 된다). 안 보이거나
 확인하지 못했거나 1초를 넘기면 503 «모름» 그대로다 — «안 보인다»는 «커밋 안 됨»이 아니다(끊긴 연결의 COMMIT 이 아직 돌 수
-있다). 1초를 넘긴 확인은 그 연결째 버린다 — 기다리기만 멈추면 그 연결이 응답 뒤에도 풀 칸을 쥐어, 되풀이되면 풀이 찬다
+있다). 그래서 «안 보인다»면 50ms 뒤에 한 번 더 본다 — 그 COMMIT 이 그 안에 끝나면 확인된다. 1초를 넘긴 확인은 그 연결째 버린다 — 기다리기만 멈추면 그 연결이 응답 뒤에도 풀 칸을 쥐어, 되풀이되면 풀이 찬다
 (`src/db/client.ts`의 `readWithin`). 다시 보낸 것을 알아보는 재생 키를 두지 않은 것은 편집을 내는 쪽이 다시 보내지 않기 때문이다 — 웹은 «모름»이면 페이지를
 다시 읽고, MCP 는 재시도하지 않는다. 근거는 `src/services/lost-commit.ts`, 잰 값은 `test/edit-lost-commit.test.ts`.
+
+**편집 밖의 쓰기 넷도 같다** — `PUT .../schema` · 코멘트 삭제 · 재번호는 그 쓰기가 남긴 revision 을, 복원은 안전망 스냅샷을 같은
+한도로 확인한다(잰 값은 `test/lost-commit-writes.test.ts`). 보이면 원래 성공 응답이고, 방송은 앞의 셋이 그 revision 이 머리일
+때만 · 복원의 `restored`는 늘 보낸다(`seq`를 싣지 않고 받는 쪽이 다시 읽게 하는 프레임이다). 문서를 안 바꾼 삭제 · 재번호는
+확인할 행이 없어 503 «모름» 그대로다. **게시는 확인하지 않는다** — 웹이 같은 멱등 키로 다시 보내면 재생이 번호 프레임을 다시
+보낸다(위 "멱등 키").
 
 **요청은 직렬화한다.** in-flight 요청은 항상 하나여야 한다 — 앞 요청의 `seq`를
 받아야 다음 `baseSeq`가 정해지기 때문이다. 어기면 두 번째 요청이 409를 받는다.
@@ -1379,7 +1403,10 @@ id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청
 남을 뺄 수 있다 — 그래서 **무작위 id 와 세션 대조 둘 다**다.
 
 **연결 도중 권한이 사라지면 그 연결이 닫힌다**(코드 `4403`). 확인 지점은 둘이다: 클라이언트가
-프레임을 보낼 때, 그리고 서버가 브로드캐스트를 흘릴 때. 읽을 수 없는 프레임은 `4400`이다.
+프레임을 보낼 때, 그리고 서버가 브로드캐스트를 흘릴 때. **로그아웃은 확인을 기다리지 않는다** — 그 세션의 연결을
+그 자리에서 닫고 잠금을 놓는다(`src/ws/notify.ts`의 `closeSessionConnections`). **로그아웃 · 프레임을
+받을 때의 회수는 그 연결에 도는 편집이 있으면 소켓을 그 답(`patch-error` 401 · 404) 뒤에 닫는다** — 잠금은 곧바로 놓고 룸에서도
+곧바로 빼 방송이 안 간다(`src/ws/rooms.ts`의 `closeWhenIdle`). 읽을 수 없는 프레임은 `4400`이다.
 
 **하트비트는 앱 수준이다.** 브라우저 `WebSocket`은 프로토콜 ping을 보낼 수 없으므로, 연결이
 살아 있는지 재려면 `{"type":"ping"}`을 보내고 `pong`을 기다린다. **재연결도 클라이언트
