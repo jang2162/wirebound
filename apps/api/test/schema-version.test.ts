@@ -1,0 +1,134 @@
+/**
+ * **api 가 뜰 때 이 코드가 아는 마이그레이션과 DB 의 것을 견준다**(`src/db/schema-version.ts`의 표).
+ *
+ * 판정은 값으로(`schemaVerdict`), 읽기는 진짜 테스트 DB 로 잰다 — 뒤처진 · 앞선 DB 는 트랜잭션 안에서 마이그레이션 표의 행을
+ * 지우거나 더하고 되돌린다(테스트 DB 는 늘 최신이다 — `global-setup.ts`). `main.ts`가 그것을 `buildApp` 앞에서 부르는지는
+ * 소스에서 센다 — 그 파일은 부팅해야 돈다. 진짜 프로세스 판(`tsx src/main.ts` · 종료 코드 · 찍는 줄)은 `schema-version.ts`의
+ * 머리말이 든다.
+ */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { sql } from 'kysely'
+import { describe, expect, it } from 'vitest'
+import { emptySchemaHint } from '../src/db/describe-schema-state'
+import { MIGRATIONS } from '../src/db/migrations/index'
+import {
+  SchemaVersionError,
+  assertSchemaVersion,
+  describeSchemaVerdict,
+  readExecutedMigrations,
+  schemaVerdict,
+} from '../src/db/schema-version'
+import type { DbHandle } from '../src/db/tx'
+import { getTestDb } from './helpers'
+import { SRC_ROOT, stripComments } from './source-census'
+
+const KNOWN = ['0001-a', '0002-b', '0003-c']
+const URL = 'postgres://wirebound:secret-pass@127.0.0.1:5435/wirebound'
+const LATEST = Object.keys(MIGRATIONS).at(-1)!
+
+class Rollback extends Error {}
+
+/** 트랜잭션 안에서 `change`를 한 뒤 `run`을 돌리고 되돌린다. */
+async function withChangedTable<T>(change: (trx: DbHandle) => Promise<unknown>, run: (trx: DbHandle) => Promise<T>): Promise<T> {
+  let result!: T
+  await getTestDb()
+    .transaction()
+    .execute(async (trx) => {
+      await change(trx)
+      result = await run(trx)
+      throw new Rollback()
+    })
+    .catch((error: unknown) => {
+      if (!(error instanceof Rollback)) throw error
+    })
+  return result
+}
+
+describe('판정 — 머리말의 표', () => {
+  it('전부 들었으면 뜬다', () => {
+    expect(schemaVerdict(KNOWN, KNOWN)).toEqual({ kind: 'current' })
+  })
+  it('하나도 없으면 빈 DB 다', () => {
+    expect(schemaVerdict([], KNOWN)).toEqual({ kind: 'empty' })
+  })
+  it('빠진 것이 있으면 뒤처졌다 — 빠진 것을 이름으로', () => {
+    expect(schemaVerdict(['0001-a', '0002-b'], KNOWN)).toEqual({ kind: 'behind', pending: ['0003-c'] })
+  })
+  it('모르는 것을 들었으면 앞섰다', () => {
+    expect(schemaVerdict([...KNOWN, '0004-d'], KNOWN)).toEqual({ kind: 'ahead', unknown: ['0004-d'] })
+  })
+  it('둘 다면 갈라졌다', () => {
+    expect(schemaVerdict(['0001-a', '0002-b', '0009-z'], KNOWN)).toEqual({ kind: 'diverged', pending: ['0003-c'], unknown: ['0009-z'] })
+  })
+})
+
+describe('말 — 멈출지 · 경고할지', () => {
+  it('뒤처졌으면 멈추고 migrate 를 권한다 · 자격 문자열은 안 싣는다', () => {
+    const said = describeSchemaVerdict({ kind: 'behind', pending: ['0003-c'] }, URL)
+    expect(said).toEqual({ stop: expect.stringContaining('pnpm --filter @wirebound/api migrate') })
+    expect(JSON.stringify(said)).toContain('0003-c')
+    expect(JSON.stringify(said)).not.toContain('secret-pass')
+  })
+  it('앞섰으면 멈추지 않고 경고한다 · 내리기를 권하지 않는다', () => {
+    const said = describeSchemaVerdict({ kind: 'ahead', unknown: ['0004-d'] }, URL)
+    expect(said).toEqual({ warn: expect.stringContaining('0004-d') })
+    expect(JSON.stringify(said)).not.toMatch(/migrate:down/)
+  })
+  it('갈라졌으면 멈춘다', () => {
+    expect(describeSchemaVerdict({ kind: 'diverged', pending: ['0003-c'], unknown: ['0009-z'] }, URL)).toEqual({ stop: expect.stringContaining('0009-z') })
+  })
+  it('빈 DB 는 빈 DB 의 말 그대로 멈춘다', () => {
+    expect(describeSchemaVerdict({ kind: 'empty' }, URL)).toEqual({ stop: emptySchemaHint(0, URL) })
+  })
+  it('최신이면 아무 말도 없다', () => {
+    expect(describeSchemaVerdict({ kind: 'current' }, URL)).toBeNull()
+  })
+})
+
+describe('진짜 DB 에서 읽는다', () => {
+  it('테스트 DB 는 이 코드가 아는 것을 전부 들었다', async () => {
+    const executed = await readExecutedMigrations(getTestDb())
+    expect(executed).toEqual(Object.keys(MIGRATIONS))
+    expect(schemaVerdict(executed!)).toEqual({ kind: 'current' })
+  })
+
+  it('마지막 것이 빠지면 뒤처졌다 — 기동이 멈춘다', async () => {
+    const outcome = await withChangedTable(
+      (trx) => sql`delete from kysely_migration where name = ${LATEST}`.execute(trx),
+      async (trx) => {
+        const warned: string[] = []
+        const thrown = await assertSchemaVersion(trx, URL, (message) => warned.push(message)).catch((error: unknown) => error)
+        return { thrown, warned }
+      },
+    )
+    expect(outcome.thrown).toBeInstanceOf(SchemaVersionError)
+    expect((outcome.thrown as Error).message).toContain(LATEST)
+    expect(outcome.warned).toEqual([])
+  })
+
+  it('모르는 것이 하나 더 있으면 앞섰다 — 뜨되 한 줄 경고한다', async () => {
+    const outcome = await withChangedTable(
+      (trx) => sql`insert into kysely_migration (name, timestamp) values ('9999-from-a-newer-branch', now()::text)`.execute(trx),
+      async (trx) => {
+        const warned: string[] = []
+        const thrown = await assertSchemaVersion(trx, URL, (message) => warned.push(message)).catch((error: unknown) => error)
+        return { thrown, warned }
+      },
+    )
+    expect(outcome.thrown).toBeUndefined()
+    expect(outcome.warned).toHaveLength(1)
+    expect(outcome.warned[0]).toContain('9999-from-a-newer-branch')
+  })
+})
+
+describe('main.ts 가 그것을 buildApp 앞에서 부른다 — 소스에서 센다', () => {
+  const main = stripComments(readFileSync(join(SRC_ROOT, 'main.ts'), 'utf8'))
+
+  it('`assertSchemaVersion(db, config.databaseUrl, …)` 가 `listen(` 보다 앞이다', () => {
+    const check = main.search(/assertSchemaVersion\s*\(\s*db\s*,\s*config\s*\.\s*databaseUrl\s*,/)
+    const boot = main.search(/await\s+listen\s*\(/)
+    expect(check).toBeGreaterThan(-1)
+    expect(boot).toBeGreaterThan(check)
+  })
+})

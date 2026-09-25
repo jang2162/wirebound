@@ -4,6 +4,7 @@ import { createDb, createPool, verifyDbTimeLimits } from './db/client'
 import { describeDatabaseTarget } from './db/describe-target'
 import { describeSchemaState, emptySchemaHint } from './db/describe-schema-state'
 import { countExecutedMigrations } from './db/migrate'
+import { assertSchemaVersion, SchemaVersionError } from './db/schema-version'
 import { chromiumScreenRenderer } from './services/screen-render-chromium'
 import { closeOnSignals } from './shutdown'
 
@@ -29,6 +30,8 @@ async function main(): Promise<void> {
   // 실은 시간 제한이 걸리는지 한 번 잰다 — 앞단이 거절하면 여기서 멈춘다(`db/client.ts`의 `verifyDbTimeLimits`).
   await verifyDbTimeLimits(pool, config.dbTimeLimits, (message) => console.warn(message))
   const db = createDb(pool)
+  // **이 코드가 아는 마이그레이션과 견준다** — 뒤처졌으면 여기서 멈추고 한 줄로 말한다(`db/schema-version.ts`의 표).
+  await assertSchemaVersion(db, config.databaseUrl, (message) => console.warn(message))
   try {
     await listen(config, db)
   } catch (error) {
@@ -37,6 +40,7 @@ async function main(): Promise<void> {
     // 라 사람이 *"설계서가 사라졌다"* 로 읽는다. 데이터는 다른 이름의 볼륨에 있다.
     // 문구를 만드는 자는 `describe-schema-state.ts` 이고 그쪽에 자가 있다 — 이 길은
     // 부팅이 실패해야만 지나므로 케이스가 여기 못 닿는다(같은 판정: `missing-database-hint.ts`).
+    // 빈 DB 는 대개 위 `assertSchemaVersion`이 먼저 멈춘다 — 여기는 그때 마이그레이션 표를 못 읽은 판이다.
     const hint = emptySchemaHint(await countExecutedMigrations(db), config.databaseUrl)
     if (hint === undefined) {
       throw error
@@ -76,6 +80,7 @@ async function listen(config: ReturnType<typeof loadConfig>, db: ReturnType<type
 }
 
 main().catch((error) => {
-  console.error(error)
+  // 스키마 판정은 사람이 할 일을 한 줄로 말한다 — 스택은 그 줄을 묻는다.
+  console.error(error instanceof SchemaVersionError ? error.message : error)
   process.exit(1)
 })
