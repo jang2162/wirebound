@@ -27,7 +27,7 @@ import { Link, useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
-import type { PageDetail, ProjectDetail, RevisionSummary } from '../api/types'
+import type { PageDetail, ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CanvasStructuresProvider } from '../canvas/canvas-structures'
 import { CommentPanel } from '../panels/comment-panel'
@@ -37,7 +37,7 @@ import { PageDescriptionPanel } from '../panels/page-description'
 import { PanelDraftsProvider } from '../panels/panel-drafts'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
-import { leftUnsentNotice, useEditCommit } from '../edit/use-edit-commit'
+import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
@@ -54,7 +54,6 @@ import {
   EditorStore,
   VIEWPORT_PRESETS,
   type EditorMode,
-  type RestoredRevision,
   type ViewportWidth,
 } from '../store/editor-store'
 import type { PendingEdit } from '../store/edit-queue'
@@ -243,20 +242,6 @@ const RESYNC_LEAD = '연결이 다시 붙어 페이지를 서버 상태로 다�
 const RESTORED_LEAD = '스냅샷을 복원해 페이지를 다시 불러왔습니다.'
 /** 남이 복원한 판을 배너의 단추로 다시 읽었을 때의 앞머리. 위 문장을 쓰면 남의 복원을 내가 한 일로 말한다. */
 const REMOTE_RESTORED_LEAD = '다른 사람이 복원한 상태로 페이지를 다시 불러왔습니다.'
-
-/**
- * 새로고침으로 채울 되돌리기가 끊긴 구간을 더 받는 횟수(`CanvasFrame`의 `restoreUndo`). 첫 번은 내 revision 사이에 낀 남의 것을, 그 뒤는
- * 받는 동안 올라간 판의 것을 받는다 — 판이 계속 오르면 거기서 멈추고 받은 데까지로 싣는다.
- */
-const UNDO_HISTORY_ROUNDS = 3
-
-/**
- * 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 — 스토어가 `RevisionSummary`를 알면 `apps/web`의 HTTP
- * 경계가 스토어까지 새어 든다.
- */
-function restoredRevisions(revisions: readonly RevisionSummary[]): RestoredRevision[] {
-  return revisions.map((revision) => ({ revisionId: revision.id, seq: revision.seq, inverse: revision.inverse }))
-}
 
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
@@ -1217,10 +1202,9 @@ function CanvasFrame(props: {
      * **판을 실은 바로 뒤의 점(`undoRestorePoint`)을 들고 간다** — 목록을 받는 동안 판이 다시 실리거나(재연결 · 복원 · 수습) 비면 스토어가
      * 그 답을 버린다(세대). 판을 실은 번호 뒤의 내 편집은 세션 항목이 이미 든다 — 스토어가 그 아래에 끼운다(`restoreUndoStack`).
      *
-     * **되짚는 길에 빠진 번호가 있으면 그 구간을 더 받는다**(`undoHistoryNeed` · `listRevisionsBefore`) — 내 마지막 편집 뒤에 남이 한 번만
-     * 고쳤거나(코멘트 번호 포함) 목록 답 전에 프레임 · 내 ack 가 왔으면 목록만으로는 그 revision 의 문서를 못 짓는다. 받는 동안 판이 더
-     * 올라갔으면 그 위를 또 받는다(`UNDO_HISTORY_ROUNDS`까지). 그 조회가 실패하거나 한도에 걸리면 받은 데까지로 싣는다 — 못 지은 항목은
-     * 누를 때 건너뛰고 그 수를 말한다.
+     * **되짚는 길에 빠진 번호(내 revision 사이에 낀 남의 것 · 목록 답 전에 온 프레임 · 내 ack)는 여기서 받지 않는다** — 되돌리기를 처음
+     * 누를 때 받는다(`edit/use-edit-commit.tsx`의 `undo` · `EditorStore.undoHistoryNeed`). 열 때 받으면 누르지 않아도 문서 통째 교체
+     * revision 이 낀 페이지마다 수백 MB 를 내려받는다.
      *
      * **재조회(복구) 경로에서는 이것을 부르지 않는다.** 재조회는 서버가 내 것과 갈라졌다는
      * 뜻이고, 그때 옛 `inverse`를 되살리면 **남의 편집을 조용히 덮는다** — 실측: 내가 `A→B`로
@@ -1236,22 +1220,7 @@ function CanvasFrame(props: {
         const mine = restoredRevisions(await api.listMyRevisions(projectId, openPageId, { cancel: leave.signal }))
         // 늦게 온 응답이 새 페이지의 스택을 덮지 않게 한다(문서 조회와 같은 가드).
         if (!alive) return
-        let others: RestoredRevision[] = []
-        for (let round = 0; round < UNDO_HISTORY_ROUNDS; round += 1) {
-          const need = store.undoHistoryNeed(point, { mine, others })
-          if (need === null) break
-          let more: RestoredRevision[]
-          try {
-            more = restoredRevisions(await api.listRevisionsBefore(projectId, openPageId, need, { cancel: leave.signal }))
-          } catch {
-            break
-          }
-          if (!alive) return
-          others = [...others, ...more]
-          // 물은 가장 높은 번호가 없으면(서버에 없다) 다시 물어도 같다.
-          if (!more.some((revision) => revision.seq === need.beforeSeq - 1)) break
-        }
-        store.restoreUndoStack(mine, { others, point })
+        store.restoreUndoStack(mine, { point })
       } catch {
         // 여기서 알리지 않는다. 사용자가 할 수 있는 일이 없고, 편집 실패 통지 자리를
         // 부가 기능의 실패로 채우면 진짜 편집 실패가 묻힌다.

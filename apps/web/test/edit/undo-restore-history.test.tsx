@@ -190,13 +190,11 @@ describe('새로고침 되돌리기가 끊긴 자리를 받아 되짚는다', ()
     expect(contents()).toEqual(['밥', '가', '옛 나'])
   })
 
-  it('되짚기 조회를 받는 동안 판이 또 오르면 그 위를 한 번 더 받는다', async () => {
+  it('되짚기 조회를 받는 동안 판이 또 올라도 그 조회 하나로 되짚는다 — 목록 답을 실은 판에서 되짚는다', async () => {
     const { setup, sockets } = wiring()
     const list = deferred<RevisionSummary[]>()
-    const firstBefore = deferred<RevisionSummary[]>()
-    const before = vi.fn((_projectId: string, _pageId: string, range: { beforeSeq: number; limit: number }) =>
-      range.beforeSeq === HEAD_SEQ + 2 ? firstBefore.promise : Promise.resolve([bobInsert(HEAD_SEQ + 2)]),
-    )
+    const answer = deferred<RevisionSummary[]>()
+    const before = vi.fn((_projectId: string, _pageId: string, _range: { beforeSeq: number; limit: number }) => answer.promise)
     await openPage(doc(text('n-ga', '가'), text('n-na', '나')), {
       realtime: setup,
       apiOverrides: { listMyRevisions: () => list.promise, listRevisionsBefore: before },
@@ -222,32 +220,214 @@ describe('새로고침 되돌리기가 끊긴 자리를 받아 되짚는다', ()
     await act(async () => {
       list.resolve([myEdit(HEAD_SEQ, 1)])
     })
-    await waitFor(() => expect(before).toHaveBeenCalledTimes(1))
-    // 첫 되짚기 조회가 도는 동안 밥이 한 번 더 넣는다 — 받은 구간 위에 번호가 하나 더 선다.
-    bob(HEAD_SEQ + 2, 'n-bob2', '밥2')
-    await act(async () => {
-      firstBefore.resolve([bobInsert(HEAD_SEQ + 1)])
-    })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
     fireEvent.click(undoButton())
+    await waitFor(() => expect(before).toHaveBeenCalledTimes(1))
+    // 되짚기 조회가 도는 동안 밥이 한 번 더 넣는다 — 목록 답을 실은 판(8) 위의 번호라 되짚을 구간 밖이다.
+    bob(HEAD_SEQ + 2, 'n-bob2', '밥2')
+    await act(async () => {
+      answer.resolve([bobInsert(HEAD_SEQ + 1)])
+    })
 
     const patches = () => (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch') as { ops: PatchOp[] }[]
     await waitFor(() => expect(patches()).toHaveLength(1))
-    expect(before.mock.calls.map((call) => call[2])).toEqual([
-      { beforeSeq: HEAD_SEQ + 2, limit: 1 },
-      { beforeSeq: HEAD_SEQ + 3, limit: 1 },
-    ])
+    expect(before.mock.calls.map((call) => call[2])).toEqual([{ beforeSeq: HEAD_SEQ + 2, limit: 1 }])
     expect(patches()[0]?.ops).toEqual([{ op: 'replace', path: '/root/children/3/props/content', value: '옛 나' }])
     expect(contents()).toEqual(['밥2', '밥', '가', '옛 나'])
   })
 
-  it('되짚기 조회가 실패하면 그 항목은 누를 때 건너뛰고 그 수를 말한다 — 경로 그대로 보내지 않는다', async () => {
+  /**
+   * **한 조회의 상한(200)보다 긴 구간은 받은 것을 넘기고 다시 묻는다**(`edit/use-edit-commit.tsx`의 `UNDO_HISTORY_ROUNDS`). 내 편집(1) 뒤에
+   * 밥이 205 번 고쳤다 — 첫 조회가 206 ~ 7 을, 둘째가 6 ~ 2 를 받는다.
+   */
+  it('되짚을 구간이 한 조회보다 길면 한 번 더 받아 되짚는다', async () => {
     const patch = recordingPatch()
-    await openPage(doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')), {
+    const HEAD = 206
+    const history = [
+      ...Array.from({ length: HEAD - 1 }, (_, index) =>
+        summary(HEAD - index, [{ op: 'replace', path: '/root/children/1/props/content', value: `나${HEAD - index - 1}` }], 'u-bob'),
+      ),
+      summary(1, [{ op: 'replace', path: '/root/children/0/props/content', value: '옛 가' }]),
+    ]
+    const before = vi.fn(async (_projectId: string, _pageId: string, range: { beforeSeq: number; limit: number }) =>
+      history.filter((entry) => entry.seq < range.beforeSeq).slice(0, range.limit),
+    )
+    const opened = doc(text('n-ga', '가'), text('n-na', `나${HEAD}`))
+    await openPage(opened, {
       apiOverrides: {
-        listMyRevisions: async () => [myEdit(HEAD_SEQ - 1, 1)],
+        getPage: async (_projectId, pageId) => ({ ...pageDetail(pageId, opened), headSeq: HEAD }),
+        listMyRevisions: async () => history.filter((entry) => entry.actorId === 'u-1'),
+        listRevisionsBefore: before,
+        patchOps: patch.patchOps,
+      },
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+
+    fireEvent.click(undoButton())
+
+    // 보냈거나 건너뛰었다 — 한 번만 받으면 6 ~ 2 가 빠져 내 1 을 못 짓고 건너뛴다.
+    await waitFor(() => expect(patch.calls.length > 0 || screen.queryByText('건너뛰었습니다', { exact: false }) !== null).toBe(true))
+    expect({ fetches: before.mock.calls.map((call) => call[2]), sent: patch.calls }).toEqual({
+      fetches: [
+        { beforeSeq: HEAD + 1, limit: 200 },
+        { beforeSeq: HEAD - 199, limit: HEAD - 201 },
+      ],
+      sent: [[{ op: 'replace', path: '/root/children/0/props/content', value: '옛 가' }]],
+    })
+  })
+})
+
+/**
+ * **되짚기 이력은 처음 누를 때 받는다**(`edit/use-edit-commit.tsx`의 `loadUndoHistory`) — 누른 뒤 답을 기다리는 동안의 판. 판: 연 판 7 · 내 5 · 6
+ * 은 «나»를 고쳤고 밥의 7 이 맨 앞에 «밥»을 넣었다 — 되짚으려면 7 을 받아야 한다.
+ */
+describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
+  const MINE = [
+    summary(HEAD_SEQ - 1, [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }]),
+    summary(HEAD_SEQ - 2, [{ op: 'replace', path: '/root/children/1/props/content', value: '옛옛 나' }]),
+  ]
+  const OPENED = doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나'))
+
+  it('열 때는 되짚기 조회를 내지 않는다 — 처음 누를 때 한 번 받는다', async () => {
+    const patch = recordingPatch()
+    const before = vi.fn(async () => [bobInsert(HEAD_SEQ)])
+    await openPage(OPENED, { apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: before, patchOps: patch.patchOps } })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    await act(async () => {})
+    const atOpen = before.mock.calls.length
+
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(patch.calls).toHaveLength(1))
+    await act(async () => {})
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(patch.calls).toHaveLength(2))
+
+    expect({ atOpen, fetches: before.mock.calls.length, contents: contents() }).toEqual({ atOpen: 0, fetches: 1, contents: ['밥', '가', '옛옛 나'] })
+  })
+
+  /**
+   * **받는 동안 단추가 꺼진다**(`canUndo`의 `undoHistoryLoading` — React 는 꺼진 단추의 클릭을 안 부른다). `undo`도 받는 중이면 버리지만 그 겹은
+   * 이 케이스가 못 잰다 — 단추가 먼저 막는다. 되돌리기에는 단축키가 없어(`store/editor-store.ts`의 `startUndo` 머리말) 그 겹은 입구가 늘 때를
+   * 위한 것이다.
+   */
+  it('받는 동안 단추가 꺼지고 그 사이 누른 것은 버린다 — 받은 뒤 한 번만 되돌린다', async () => {
+    const patch = recordingPatch()
+    const answer = deferred<RevisionSummary[]>()
+    const before = vi.fn(() => answer.promise)
+    await openPage(OPENED, { apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: before, patchOps: patch.patchOps } })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(undoButton().disabled).toBe(true))
+    fireEvent.click(undoButton())
+    fireEvent.click(undoButton())
+    await act(async () => {
+      answer.resolve([bobInsert(HEAD_SEQ)])
+    })
+    await waitFor(() => expect(patch.calls).toHaveLength(1))
+    await act(async () => {})
+
+    expect({ fetches: before.mock.calls.length, sent: patch.calls, enabled: !undoButton().disabled }).toEqual({
+      fetches: 1,
+      sent: [[{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }]],
+      enabled: true,
+    })
+  })
+
+  it('받는 동안 떠나면 조회를 끊고 되돌리지 않는다', async () => {
+    const patch = recordingPatch()
+    const answer = deferred<RevisionSummary[]>()
+    const signals: (AbortSignal | undefined)[] = []
+    const before = vi.fn((_projectId: string, _pageId: string, _range: unknown, options?: { cancel?: AbortSignal }) => {
+      signals.push(options?.cancel)
+      return answer.promise
+    })
+    await openPage(OPENED, {
+      apiOverrides: { listMyRevisions: async (_projectId, pageId) => (pageId === PAGE_ID ? MINE : []), listRevisionsBefore: before, patchOps: patch.patchOps },
+      docs: { 'pg-2': doc(text('n-other', '다른 페이지')) },
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(before).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(within(screen.getByRole('region', { name: '메뉴·페이지 트리' })).getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitForNode('n-other')
+    await act(async () => {
+      answer.resolve([bobInsert(HEAD_SEQ)])
+    })
+    await act(async () => {})
+
+    expect({ aborted: signals[0]?.aborted, sent: patch.calls, contents: contents() }).toEqual({ aborted: true, sent: [], contents: ['다른 페이지'] })
+  })
+
+  it('받는 동안 이 탭의 편집이 맨 위에 오르면 그 누름은 되돌리지 않는다 — 누른 때 되돌리려던 것이 아니다', async () => {
+    const patch = recordingPatch()
+    const answer = deferred<RevisionSummary[]>()
+    await openPage(OPENED, {
+      apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: () => answer.promise, patchOps: patch.patchOps },
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(undoButton().disabled).toBe(true))
+
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[1]!)
+    const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
+    fireEvent.change(box, { target: { value: '가 고침' } })
+    fireEvent.blur(box)
+    await waitFor(() => expect(patch.calls).toHaveLength(1))
+    await act(async () => {
+      answer.resolve([bobInsert(HEAD_SEQ)])
+    })
+    await act(async () => {})
+
+    expect({ sent: patch.calls.length, contents: contents(), enabled: !undoButton().disabled }).toEqual({
+      sent: 1,
+      contents: ['밥', '가 고침', '나'],
+      enabled: true,
+    })
+  })
+
+  /**
+   * **조회가 실패하면 되돌리지 않고 그렇다고 말한다 — 항목은 남고 다시 누르면 다시 받는다.** 받은 데까지로 되짚으면 못 지은 항목이 건너뛰어져
+   * 스택에서 사라진다. 세션이 끊겼으면 로그인으로 간다(아래 케이스). 판마다 서버가 답하는 실패다.
+   */
+  const FAILURES: readonly { name: string; error: () => unknown; says: string }[] = [
+    { name: '403', error: () => new ApiError(403, 'forbidden', '권한이 없습니다 [UR]'), says: '권한이 없습니다 [UR]' },
+    { name: '404', error: () => new ApiError(404, 'not-found', '페이지가 없습니다 [UR]'), says: '페이지가 없습니다 [UR]' },
+    { name: '500', error: () => new ApiError(500, 'internal', '되짚기 조회 실패 [UR]'), says: '되짚기 조회 실패 [UR]' },
+    { name: '연결 실패', error: () => new TypeError('Failed to fetch'), says: '되돌리기 이력을 불러오지 못했습니다' },
+  ]
+  for (const failure of FAILURES) {
+    it(`되짚기 조회가 실패하면(${failure.name}) 되돌리지 않고 말하며, 다시 누르면 다시 받아 제 노드를 되돌린다`, async () => {
+      const patch = recordingPatch()
+      let calls = 0
+      const before = vi.fn(async () => {
+        calls += 1
+        if (calls === 1) throw failure.error()
+        return [bobInsert(HEAD_SEQ)]
+      })
+      await openPage(OPENED, { apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: before, patchOps: patch.patchOps } })
+      await waitFor(() => expect(undoButton().disabled).toBe(false))
+
+      fireEvent.click(undoButton())
+      const notice = await screen.findByText('되돌리지 않았습니다', { exact: false })
+      await act(async () => {})
+      const first = { notice: notice.textContent, sent: patch.calls.length, contents: contents(), enabled: !undoButton().disabled }
+      fireEvent.click(undoButton())
+      await waitFor(() => expect(patch.calls).toHaveLength(1))
+
+      expect(first).toEqual({ notice: `${failure.says} — 되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.`, sent: 0, contents: ['밥', '가', '나'], enabled: true })
+      expect(patch.calls[0]).toEqual([{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }])
+    })
+  }
+
+  it('되짚기 조회가 401 이면 되돌리지 않고 로그인으로 간다', async () => {
+    const patch = recordingPatch()
+    await openPage(OPENED, {
+      apiOverrides: {
+        listMyRevisions: async () => MINE,
         listRevisionsBefore: async () => {
-          throw new ApiError(500, 'internal', '되짚기 조회 실패 [UR]')
+          throw new ApiError(401, 'unauthenticated', '로그인이 필요합니다')
         },
         patchOps: patch.patchOps,
       },
@@ -256,10 +436,56 @@ describe('새로고침 되돌리기가 끊긴 자리를 받아 되짚는다', ()
 
     fireEvent.click(undoButton())
 
-    expect(await screen.findByText('되돌릴 수 없는 편집 1개를 건너뛰었습니다.', { exact: false })).toBeTruthy()
-    await act(async () => {})
+    await screen.findByLabelText('이메일')
     expect(patch.calls).toEqual([])
-    expect(contents()).toEqual(['밥', '가', '나'])
+  })
+})
+
+/**
+ * **둘이 번갈아 고친 페이지** — 밥이 «가» · «나»를 넣은 뒤(1) 나는 «가»를(짝수), 밥은 «나»를(홀수) 10 번씩 번갈아 고쳤다(판 21). 내 revision
+ * 사이마다 남의 것이 하나씩 끼어 구멍이 열이다. 되짚기 조회가 구멍마다 하나씩 들면 회수 한도(`UNDO_HISTORY_ROUNDS`)가 먼저 차 그 아래 항목을 못
+ * 짓는다 — 빠진 구간의 아래 끝은 이미 가진 번호가 아니라 «그 아래가 모두 찬 데»까지다(`EditorStore.undoHistoryNeed`).
+ */
+describe('번갈아 고친 페이지', () => {
+  const EDITS = 10
+  const HEAD = 2 * EDITS + 1
+  const revision = (seq: number): RevisionSummary => {
+    const k = seq / 2
+    return seq % 2 === 0
+      ? summary(seq, [{ op: 'replace', path: '/root/children/0/props/content', value: `가${k - 1}` }])
+      : summary(seq, [{ op: 'replace', path: '/root/children/1/props/content', value: `나${(seq - 1) / 2 - 1}` }], 'u-bob')
+  }
+  const history = Array.from({ length: HEAD - 1 }, (_, index) => revision(HEAD - index))
+
+  it('되짚기 조회 한 번으로 내 편집 열을 전부 되돌리고 밥의 «나»는 그대로다', async () => {
+    const patch = recordingPatch()
+    const before = vi.fn(async (_projectId: string, _pageId: string, range: { beforeSeq: number; limit: number }) =>
+      history.filter((entry) => entry.seq < range.beforeSeq).slice(0, range.limit),
+    )
+    const opened = doc(text('n-ga', `가${EDITS}`), text('n-na', `나${EDITS}`))
+    await openPage(opened, {
+      apiOverrides: {
+        getPage: async (_projectId, pageId) => ({ ...pageDetail(pageId, opened), headSeq: HEAD }),
+        listMyRevisions: async () => history.filter((entry) => entry.actorId === 'u-1'),
+        listRevisionsBefore: before,
+        patchOps: patch.patchOps,
+      },
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+
+    for (let press = 0; press < EDITS && !undoButton().disabled; press += 1) {
+      const sent = patch.calls.length
+      fireEvent.click(undoButton())
+      await waitFor(() => expect(patch.calls.length > sent || screen.queryByText('건너뛰었습니다', { exact: false }) !== null).toBe(true))
+      await act(async () => {})
+    }
+
+    expect({
+      fetches: before.mock.calls.map((call) => call[2]),
+      sent: patch.calls.length,
+      skipped: screen.queryByText('건너뛰었습니다', { exact: false })?.textContent ?? null,
+      contents: contents(),
+    }).toEqual({ fetches: [{ beforeSeq: HEAD + 1, limit: HEAD - 2 }], sent: EDITS, skipped: null, contents: ['가0', `나${EDITS}`] })
   })
 })
 

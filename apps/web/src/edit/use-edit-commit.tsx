@@ -16,10 +16,11 @@ import type { Interaction, PatchOp } from '@wirebound/schema'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, toFailure } from '../api/failure'
+import type { RevisionSummary } from '../api/types'
 import { useEditChannel, useLockChannel } from '../realtime/context'
 import { EditNotSentError, UnansweredEditError, type EditChannel, type UnansweredCause } from '../realtime/edit-channel'
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
-import type { EditStatus, UndoAttempt } from '../store/editor-store'
+import type { EditStatus, RestoredRevision, UndoAttempt, UndoHistoryNeed } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
 
 /** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
@@ -188,6 +189,25 @@ function lockedNotice(userName: string, skipped: number): string {
   return `${head}${userName}님이 편집 중이라 되돌릴 수 없습니다. 잠금이 풀리면 그대로 되돌릴 수 있습니다.`
 }
 
+/**
+ * 새로고침으로 채운 되돌리기의 되짚기 이력을 누를 때 받는 횟수(`undo`). 한 조회는 `UNDO_HISTORY_PAGE`(200)개까지라 그보다 긴 구간은 받은
+ * 것을 넘기고 다시 묻는다 — 그래도 남으면 받은 데까지로 되짚고 못 지은 항목은 누를 때 건너뛰고 그 수를 말한다.
+ */
+const UNDO_HISTORY_ROUNDS = 3
+
+/** 되짚기 이력 조회가 이유 없이 실패했을 때(네트워크 등). */
+const UNDO_HISTORY_FAILURE = '되돌리기 이력을 불러오지 못했습니다'
+/** 되짚기 이력을 못 받았을 때 덧붙인다 — 되돌리지 않았고 항목은 그대로 남아 다시 누르면 다시 받는다. */
+const UNDO_HISTORY_NOTICE = '되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.'
+
+/**
+ * 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 — 스토어가 `RevisionSummary`를 알면 `apps/web`의 HTTP
+ * 경계가 스토어까지 새어 든다. 목록(`routes/editor.tsx`의 `restoreUndo`)과 되짚기 조회(`undo`)가 함께 쓴다.
+ */
+export function restoredRevisions(revisions: readonly RevisionSummary[]): RestoredRevision[] {
+  return revisions.map((revision) => ({ revisionId: revision.id, seq: revision.seq, inverse: revision.inverse }))
+}
+
 export interface EditCommit {
   /** 노드의 prop 하나를 바꾼다. 적용할 수 없으면 아무 일도 일어나지 않는다. */
   commitProp: (nodeId: string, prop: string, value: unknown) => void
@@ -244,7 +264,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const store = useEditorStoreInstance()
   const open = useOpenPage(pageId)
   const status = useEditorStore(store, (s) => s.editStatus)
-  const canUndo = useEditorStore(store, (s) => s.undoStack.length > 0)
+  // 되짚기 이력을 받는 동안은 꺼진다(`undo`의 `loadUndoHistory`) — 누른 것은 받은 뒤 한 번 되돌린다.
+  const canUndo = useEditorStore(store, (s) => s.undoStack.length > 0 && !s.undoHistoryLoading)
   const canRedo = useEditorStore(store, (s) => s.redoStack.length > 0)
 
   /**
@@ -561,9 +582,70 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
     [open, store, pump],
   )
 
+  /**
+   * **새로고침으로 채운 항목의 되짚기 이력을 받고 되돌린다**(`EditorStore.undoHistoryNeed`) — 페이지를 열 때 받지 않고 처음 누를 때 받는다
+   * (`routes/editor.tsx`의 `restoreUndo`). 받는 동안 단추가 꺼지고(`undoHistoryLoading`), 그 사이 누른 것은 버린다.
+   *
+   * - **판이 갈리면(떠남 · 다시 실림) 조회를 끊고 아무것도 안 한다** — 첫 쓰기(`supplyUndoHistory`) 앞에서 판으로 가른다. 스택은 그 판이 이미 비웠다.
+   * - **받는 동안 맨 위가 바뀌면 되돌리지 않는다** — 세션 편집의 ack 나 다시 실행이 위에 올랐으면 누른 때 되돌리려던 것이 아니다. 받은 이력은
+   *   남으므로 다시 누르면 바로 되돌린다.
+   * - **조회가 실패하면 되돌리지 않고 그렇다고 말한다** — 항목은 그대로 두고 다시 누르면 다시 받는다. 받은 데까지로 되짚으면 못 지은 항목이
+   *   건너뛰어져 스택에서 사라진다 — 한 번의 끊김으로 이력을 잃는다. 세션이 끊겼으면 그 통지(`<SignedOut />`)로 간다.
+   */
+  const loadUndoHistory = useCallback(
+    async (first: UndoHistoryNeed): Promise<void> => {
+      const target = store.queuePageId()
+      const project = store.queueProjectId() ?? projectId
+      if (target === null) return
+      const { undoStack } = store.getState()
+      const top = undoStack[undoStack.length - 1]
+      const leave = new AbortController()
+      const stop = store.subscribe(() => {
+        if (!store.undoHistoryLive(first)) leave.abort()
+      })
+      store.beginUndoHistoryLoad(first)
+      try {
+        let need: UndoHistoryNeed | null = first
+        for (let round = 0; need !== null && round < UNDO_HISTORY_ROUNDS; round += 1) {
+          const asked: UndoHistoryNeed = need
+          let more: RestoredRevision[]
+          try {
+            more = restoredRevisions(
+              await api.listRevisionsBefore(project, target, { beforeSeq: asked.beforeSeq, limit: asked.limit }, { cancel: leave.signal }),
+            )
+          } catch (caught) {
+            if (!store.undoHistoryLive(first)) return
+            const failure = toFailure(caught, UNDO_HISTORY_FAILURE)
+            store.setEditFailure(failure.kind === 'signed-out' ? failure : { kind: 'message', message: `${failure.message} — ${UNDO_HISTORY_NOTICE}` })
+            return
+          }
+          if (!store.supplyUndoHistory(asked, more)) return
+          // 물은 가장 높은 번호가 없으면(서버에 없다) 다시 물어도 같다.
+          if (!more.some((revision) => revision.seq === asked.beforeSeq - 1)) break
+          need = store.undoHistoryNeed()
+        }
+        const now = store.getState().undoStack
+        if (!store.undoHistoryLive(first) || now[now.length - 1] !== top) return
+        store.endUndoHistoryLoad(first)
+        step(store.startUndo)
+      } finally {
+        stop()
+        store.endUndoHistoryLoad(first)
+      }
+    },
+    [api, projectId, store, step],
+  )
+
   const undo = useCallback(() => {
-    step(store.startUndo)
-  }, [step, store])
+    if (store.getState().undoHistoryLoading) return
+    const need = store.undoHistoryNeed()
+    if (need === null) {
+      step(store.startUndo)
+      return
+    }
+    if (open === null) return
+    void loadUndoHistory(need)
+  }, [open, step, store, loadUndoHistory])
 
   const redo = useCallback(() => {
     step(store.startRedo)

@@ -1539,11 +1539,13 @@ describe('서버 이력으로 채운 되돌리기', () => {
     const point = store.undoRestorePoint()
     if (point === null) throw new Error('판이 없다')
 
+    store.restoreUndoStack(mine, { point })
     // 빠진 것은 7 하나 — 7 까지를 받는 조회다.
-    expect(store.undoHistoryNeed(point, { mine })).toEqual({ beforeSeq: 8, limit: 1 })
-    const others = [{ revisionId: 'rev-7', seq: 7, inverse: [{ op: 'remove', path: '/root/children/0' }] as PatchOp[] }]
-    expect(store.undoHistoryNeed(point, { mine, others })).toBeNull()
-    store.restoreUndoStack(mine, { others, point })
+    const need = store.undoHistoryNeed()
+    expect(need).toEqual({ beforeSeq: 8, limit: 1, epoch: point.epoch })
+    if (need === null) throw new Error('조회가 없다')
+    expect(store.supplyUndoHistory(need, [{ revisionId: 'rev-7', seq: 7, inverse: [{ op: 'remove', path: '/root/children/0' }] }])).toBe(true)
+    expect(store.undoHistoryNeed()).toBeNull()
 
     expect(store.startUndo().skipped).toBe(0)
     expect(contents(store)).toEqual(['밥', '가', '옛 나'])
@@ -1583,29 +1585,27 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
     return { store, point }
   }
 
-  /** 부르는 쪽(`restoreUndo`)이 하는 대로 빠진 구간을 받아 싣는다 — `server`가 그 구간을 답한다. */
-  function restoreLikeRoute(
-    store: EditorStore,
-    point: NonNullable<ReturnType<EditorStore['undoRestorePoint']>>,
-    server: readonly { revisionId: string; seq: number; inverse: PatchOp[] }[],
-  ): { beforeSeq: number; limit: number }[] {
+  /**
+   * 부르는 쪽이 하는 대로 누른다 — 여는 조회(`routes/editor.tsx`의 `restoreUndo`)는 목록만 싣고, 되돌리기(`edit/use-edit-commit.tsx`의
+   * `loadUndoHistory`)가 누를 때 빠진 구간을 받아 넘긴 뒤 되돌린다. `server`가 그 구간을 답한다. 물은 구간을 돌려준다.
+   */
+  function undoLikeHook(store: EditorStore, server: readonly { revisionId: string; seq: number; inverse: PatchOp[] }[]): { beforeSeq: number; limit: number }[] {
     const asked: { beforeSeq: number; limit: number }[] = []
-    let others: { revisionId: string; seq: number; inverse: PatchOp[] }[] = []
     for (let round = 0; round < 3; round += 1) {
-      const need = store.undoHistoryNeed(point, { mine: MINE, others })
+      const need = store.undoHistoryNeed()
       if (need === null) break
-      asked.push(need)
-      others = [...others, ...server.filter((revision) => revision.seq < need.beforeSeq).slice(0, need.limit)]
+      asked.push({ beforeSeq: need.beforeSeq, limit: need.limit })
+      store.supplyUndoHistory(need, server.filter((revision) => revision.seq < need.beforeSeq).slice(0, need.limit))
     }
-    store.restoreUndoStack(MINE, { others, point })
+    store.startUndo()
     return asked
   }
 
   it('여는 조회 × 목록 답만 — 사이 조회 없이 제 노드를 되돌린다', () => {
     const { store, point } = opened()
+    store.restoreUndoStack(MINE, { point })
 
-    expect(restoreLikeRoute(store, point, [])).toEqual([])
-    store.startUndo()
+    expect(undoLikeHook(store, [])).toEqual([])
 
     expect(contents(store)).toEqual(['가', '옛 나'])
   })
@@ -1614,10 +1614,11 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
     const { store, point } = opened()
     expect(store.applyRemoteChange('pg-1', BOB.frame).result).toBe('applied')
 
-    expect(restoreLikeRoute(store, point, [BOB.revision])).toEqual([{ beforeSeq: 9, limit: 1 }])
-    expect(store.startUndo().skipped).toBe(0)
+    store.restoreUndoStack(MINE, { point })
 
-    expect(contents(store)).toEqual(['밥', '가', '옛 나'])
+    expect(undoLikeHook(store, [BOB.revision])).toEqual([{ beforeSeq: 9, limit: 1 }])
+
+    expect({ contents: contents(store), stack: store.getState().undoStack.length }).toEqual({ contents: ['밥', '가', '옛 나'], stack: 0 })
   })
 
   it('여는 조회 × 목록을 읽은 뒤 온 내 ack — 세션 항목이 위에 남고, 그 다음에 복원 항목이 제 노드를 되돌린다', () => {
@@ -1626,14 +1627,14 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
     store.applyEdit([{ op: 'add', path: '/root/children/0', value: text('n_da', '다') }])
     store.ackEdit('op-1', { seq: 8, revisionId: 'rev-8', inverse: [{ op: 'remove', path: '/root/children/0' }] })
 
-    expect(restoreLikeRoute(store, point, [{ revisionId: 'rev-8', seq: 8, inverse: [{ op: 'remove', path: '/root/children/0' }] }])).toEqual([
-      { beforeSeq: 9, limit: 1 },
-    ])
+    store.restoreUndoStack(MINE, { point })
+    const server = [{ revisionId: 'rev-8', seq: 8, inverse: [{ op: 'remove', path: '/root/children/0' }] as PatchOp[] }]
 
     expect(store.getState().undoStack.map((ref) => ref.revisionId)).toEqual(['rev-7', 'rev-8'])
-    store.startUndo()
+    // 맨 위가 세션 항목이면 이력 없이 되돌린다 — 그다음 누름이 복원 항목이라 그때 받는다.
+    expect(undoLikeHook(store, server)).toEqual([])
     expect(contents(store)).toEqual(['가', '나'])
-    store.startUndo()
+    expect(undoLikeHook(store, server)).toEqual([{ beforeSeq: 9, limit: 1 }])
     expect(contents(store)).toEqual(['가', '옛 나'])
   })
 
@@ -1668,8 +1669,8 @@ describe('새로고침 되돌리기의 입구 × 출처', () => {
         reload.run(store)
         const before = store.getState().undoStack
 
-        expect(store.undoHistoryNeed(point, { mine: MINE, others: [BOB.revision] })).toBeNull()
         store.restoreUndoStack(MINE, { others: [BOB.revision], point })
+        expect(store.undoHistoryNeed()).toBeNull()
 
         expect(store.getState().undoStack).toBe(before)
         expect(store.startUndo().clientOpId).toBeNull()

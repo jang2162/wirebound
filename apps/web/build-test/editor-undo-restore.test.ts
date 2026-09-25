@@ -14,7 +14,7 @@
  *
  * 단언은 성질이다 — 되돌리기가 앨리스의 편집을 되돌리고(서버 값) · 남의 노드는 그대로이고 · 화면이 서버와 같다.
  *
- * **2 는 혼자 죽는 변조가 없다** — 사이 구간을 받아 되짚는 길(`EditorStore.undoHistoryNeed` · `restoreUndo`의 되짚기 조회)을 떼면 1 · 3 과 함께
+ * **2 는 혼자 죽는 변조가 없다** — 사이 구간을 받아 되짚는 길(`EditorStore.undoHistoryNeed` · 되돌리기의 `loadUndoHistory`)을 떼면 1 · 3 과 함께
  * 죽는다. 2 가 드는 것은 번호 revision(남의 코멘트)도 남의 revision 으로 받아 되짚는다는 것이다 — 되짚기의 축은 1 이 소유한다. 세션 항목을 덮는
  * 변조에는 4 만 죽는다.
  */
@@ -147,6 +147,87 @@ describe.skipIf(!전제.ok)('새로고침으로 채운 되돌리기', () => {
       expect(second.content).toEqual(['가', '나'])
       expect(after.canvas).toBe('가 나')
     } finally {
+      await context.close()
+    }
+  })
+})
+
+/**
+ * **되짚기 이력은 열 때가 아니라 처음 누를 때 받는다**(`edit/use-edit-commit.tsx`의 `loadUndoHistory`) — 문서 통째 교체 revision 은 문서 두 벌이라
+ * 그것이 낀 페이지를 열 때 미리 받으면 되돌리기를 안 눌러도 수 MB ~ 수백 MB 를 내려받는다. 판: 앨리스의 1 · 2 뒤에 밥이 문서를 통째로 10 번
+ * 갈았다(맨 앞에 긴 글 노드 2000 개). 받는 동안 단추는 꺼지고, 그 사이의 더블클릭은 되돌리기 하나다.
+ */
+describe.skipIf(!전제.ok)('문서 교체가 낀 페이지의 되돌리기', () => {
+  let stack: EditorStack
+
+  beforeAll(async () => {
+    if (!전제.ok) return
+    stack = await startEditorStack(전제)
+  })
+
+  afterAll(async () => {
+    if (stack === undefined) return
+    const { after } = await stack.close()
+    expect(after).toEqual({ processes: 0, listeningPorts: [], databases: 0 })
+  })
+
+  it('열 때 되짚기 이력을 받지 않고, 누른 뒤 받는 동안 더블클릭해도 한 번만 되돌린다', async () => {
+    const fx = await fixture(stack, 'replaced')
+    const REPLACES = 10
+    for (let round = 0; round < REPLACES; round += 1) {
+      const current = (await stack.request(fx.bob, 'GET', fx.P)).body
+      const fillers = Array.from({ length: 2000 }, (_, index) => text(`n_f${round}_${index}`, `${round}:${index} ${'글'.repeat(60)}`))
+      const kept = (current.schema.root.children as { id: string }[]).filter((child) => !child.id.startsWith('n_f'))
+      const replaced = await stack.request(fx.bob, 'PUT', `${fx.P}/schema`, { schema: { ...current.schema, root: { ...current.schema.root, children: [...fillers, ...kept] } } })
+      expect(replaced.status).toBe(200)
+    }
+    const head = 2 + REPLACES
+
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const fetched: { at: 'open' | 'press'; bytes: number }[] = []
+    let pressed = false
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await page.route(/\/revisions\?beforeSeq=/, async (route: Route) => {
+      const response = await route.fetch()
+      fetched.push({ at: pressed ? 'press' : 'open', bytes: (await response.body()).length })
+      // 누른 뒤의 조회만 붙잡는다 — 받는 동안의 단추를 잰다.
+      if (pressed) await gate
+      await route.fulfill({ response })
+    })
+    try {
+      await page.goto(fx.P)
+      await page.locator('.wb-shell-canvas-frame', { hasText: '나 고침' }).waitFor()
+      const undo = page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
+      await poll('되돌리기가 켜진다', async () => undo.isEnabled(), (enabled) => enabled)
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const atOpen = [...fetched]
+      // eslint-disable-next-line no-console
+      console.log(`[문서 교체 뒤 열기] 되짚기 조회 ${JSON.stringify(atOpen)}`)
+      expect(atOpen).toEqual([])
+
+      pressed = true
+      const box = await undo.boundingBox()
+      if (box === null) throw new Error('되돌리기 단추가 안 보인다')
+      await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2)
+      await poll('되짚기 이력을 받는다', async () => fetched.length, (count) => count > atOpen.length)
+      const whileLoading = { disabled: await undo.isDisabled(), head: (await server(stack, fx.alice, fx.P)).head }
+      release()
+      const landed = await landedOrSkipped(stack, fx, page, head + 1)
+      const after = await stable(page)
+      const settled = await server(stack, fx.alice, fx.P)
+      // eslint-disable-next-line no-console
+      console.log(`[문서 교체 뒤 되돌리기] 열 때 ${JSON.stringify(atOpen)} · 누를 때 ${JSON.stringify(fetched.slice(atOpen.length))} · 받는 동안 ${JSON.stringify(whileLoading)} · 서버 head ${settled.head} · 통지 ${JSON.stringify(after.notices)}`)
+      expect({ pressFetches: fetched.length - atOpen.length, whileLoading, head: settled.head, last: landed.content.slice(-2) }).toEqual({
+        pressFetches: 1,
+        whileLoading: { disabled: true, head },
+        head: head + 1,
+        last: ['가', '나'],
+      })
+    } finally {
+      release()
       await context.close()
     }
   })

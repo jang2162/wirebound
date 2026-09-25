@@ -1288,7 +1288,9 @@ DB의 행과 코드가 갈리면 **코드가 이긴다** — 다음 기동이 �
 5. 새로고침 후에는 `GET .../revisions?mine=true`로 자기 revision을 받아
    undo 스택을 복원한다. 그 사이에 남의 revision 이 끼어 있으면 `?beforeSeq=`로 그 구간을
    받아 거꾸로 되짚는다 — 받은 `inverse`의 경로는 그 revision 을 기록한 문서의 것이라,
-   클라이언트가 그 문서를 지어 노드 id 로 붙잡아야 남의 노드를 안 고친다.
+   클라이언트가 그 문서를 지어 노드 id 로 붙잡아야 남의 노드를 안 고친다. 웹 에디터는 이
+   구간을 페이지를 열 때가 아니라 처음 되돌릴 때 받는다 — 응답이 `ops`와 `inverse`를 함께
+   싣고, `PUT .../schema`의 revision 은 둘 다 문서 통째라 한 조회가 수백 MB 일 수 있다.
 
 **`PUT .../schema`가 만든 revision도 같은 방식으로 되돌린다 — 예외가 아니다.** 그
 revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `/version`이

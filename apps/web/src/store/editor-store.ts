@@ -104,6 +104,23 @@ export interface UndoRestorePoint {
 /** 끊긴 자리를 받는 조회 한 번의 크기(`undoHistoryNeed`) — 서버 상한과 같다(`apps/api/src/routes/revisions.ts`의 `limit`). */
 export const UNDO_HISTORY_PAGE = 200
 
+/** 되짚기 조회 하나(`undoHistoryNeed`). 답은 같은 값과 함께 `supplyUndoHistory`로 넘긴다 — `epoch`가 그 이력을 실은 판이다. */
+export interface UndoHistoryNeed {
+  readonly beforeSeq: number
+  readonly limit: number
+  readonly epoch: number
+}
+
+/** 새로고침으로 채운 항목의 되짚기 재료 — 목록 답을 실은 판(`headSeq`)에서 내 가장 옛 항목(`lowest`)까지의 `inverse`. */
+interface RestoredHistory {
+  readonly epoch: number
+  readonly headSeq: number
+  readonly lowest: number
+  readonly inverses: Map<number, PatchOp[]>
+  /** 첫 항목을 붙잡기 시작했다 — 되짚은 문서를 이어 쓰므로 그 뒤로는 받은 것을 더하지 않는다. */
+  walked: boolean
+}
+
 /**
  * 새 `clientOpId`를 만드는 함수. **생성자 인자로 받는 것이 계약이다** — 이 스토어는
  * 순수 TS이고 전역 의존을 갖지 않는다(이 파일 머리말: React·DOM·`fetch`를 import하지
@@ -180,6 +197,11 @@ export interface EditorState {
    * 새로고침 복원도 이것을 채우지 않는다: redo는 세션 안에서 undo를 눌러야 생긴다.
    */
   redoStack: RevisionRef[]
+  /**
+   * **새로고침으로 채운 되돌리기의 이력을 받는 중인가**(`beginUndoHistoryLoad`) — 되돌리기 단추가 이것을 보고 꺼진다. 누른 뒤 답을 기다리는
+   * 동안 다시 누르면 그 누름은 버린다(`edit/use-edit-commit.tsx`의 `undo`). 판을 싣거나 비우면 함께 풀린다.
+   */
+  undoHistoryLoading: boolean
   editStatus: EditStatus
   /** 마지막 편집 실패. 새 편집을 내면 지워진다 — 남아 있으면 방금 낸 편집도 실패한 것으로 읽힌다. */
   editFailure: EditFailure | null
@@ -269,6 +291,7 @@ function initialState(): EditorState {
     pending: [],
     undoStack: [],
     redoStack: [],
+    undoHistoryLoading: false,
     editStatus: 'idle',
     editFailure: null,
     editWarnings: NO_WARNINGS,
@@ -698,6 +721,8 @@ export class EditorStore {
     const { pending, undoStack, redoStack } = this.#state
     this.#noteAbandoned(pending, this.#state.openPageId !== pageId)
     this.#queueEpoch += 1
+    // 새로고침으로 채운 항목의 되짚기 재료도 그 판의 것이다 — 스택과 함께 버린다(받은 `inverse`를 쥐고 있다).
+    this.#restoredHistory = null
     // **선택은 지우지 않고 다시 정한다** — 무엇으로 정하는지는 `#selectionFor`가 갖는다.
     // 여는 경로는 루트로 시작하고(죽은 화면을 없앤다), 같은 페이지를 다시 싣는 재조회는
     // 보고 있던 자리를 그대로 둔다.
@@ -733,6 +758,7 @@ export class EditorStore {
       // 방금 채운 스택을 이것이 지운다(`routes/editor.tsx`에 그 순서가 있다).
       undoStack: undoStack.length === 0 ? undoStack : [],
       redoStack: redoStack.length === 0 ? redoStack : [],
+      undoHistoryLoading: false,
       // **경고도 함께 버린다.** 문서가 서버 것으로 되돌아갔으므로 앞 편집의 경고는 지금
       // 문서의 것이 아니다. `getPage`는 경고를 싣지 않으므로 **다음 편집까지 모른다** —
       // 모르는 것을 "없다"로 두는 쪽을 골랐다: 남겨 두면 이미 사라진 문제를 말하게 된다.
@@ -1070,23 +1096,64 @@ export class EditorStore {
   }
 
   /**
-   * **되짚으려면 더 받아야 할 이력** — 지금 판에서 내 가장 옛 항목까지 거꾸로 되짚는 길에 빠진 번호가 있으면, 그 가장 높은 번호부터 아래로
-   * 이어 빠진 구간을 받는 조회(`seq < beforeSeq` · 최신순 `limit`개)를 낸다. 빠진 것이 없거나 판이 갈렸으면 `null`.
+   * **되짚으려면 더 받아야 할 이력** — 되돌리기의 맨 위가 새로고침으로 채운 항목인데, 그 이력을 실은 판에서 내 가장 옛 항목까지 거꾸로
+   * 되짚는 길에 빠진 번호가 있으면 그 가장 높은 번호부터 아래로 빠진 구간을 받는 조회(`seq < beforeSeq` · 최신순 `limit`개)를 낸다. 받은
+   * 답은 같은 값과 함께 `supplyUndoHistory`로 넘긴다. 빠진 것이 없거나 · 맨 위가 세션 항목이거나 · 이미 되짚기 시작했거나 · 판이 갈렸으면
+   * `null`.
    *
-   * 빠진 번호는 남의 revision(코멘트 번호 포함 · 토큰으로 낸 내 것)이거나, 목록을 읽은 뒤에 온 프레임 · 내 ack 의 revision 이다 — 목록은
-   * 내 것만이고, 그 뒤의 것은 서버가 목록을 읽은 판에 없었다. 그래서 부르는 쪽은 받은 것을 합쳐 다시 묻는다 — 도는 동안 판이 더 올라갔으면
-   * 그 위를 또 낸다.
+   * **누를 때 묻는다**(`edit/use-edit-commit.tsx`의 `undo`) — 페이지를 열 때 받지 않는다. 문서 통째 교체 revision 은 문서 두 벌이라 그것이
+   * 낀 페이지를 열 때 미리 받으면 되돌리기를 안 눌러도 응답이 수백 MB 다(api: 노드 2000 문서 교체 200 개 → 한 조회 185MB). 세션 항목은
+   * 이력 없이 되돌리므로 그 위에서는 묻지 않는다.
+   *
+   * 빠진 번호는 남의 revision(코멘트 번호 포함 · 토큰으로 낸 내 것)이거나, 목록을 읽은 뒤 · 목록 답 전에 온 프레임 · 내 ack 의
+   * revision 이다 — 목록은 내 것만이고 그 뒤의 것은 서버가 목록을 읽은 판에 없었다. **되짚는 판은 목록 답을 실은 판이다**
+   * (`restoreUndoStack`) — 그 뒤에 판이 올라도 구간은 늘지 않는다. 한 조회의 상한(`UNDO_HISTORY_PAGE`)을 넘으면 받은 것을 넘기고 다시 묻는다.
    */
-  readonly undoHistoryNeed = (
-    point: UndoRestorePoint,
-    history: { mine: readonly RestoredRevision[]; others?: readonly RestoredRevision[] },
-  ): { beforeSeq: number; limit: number } | null => {
-    const walk = this.#undoHistory(point, history)
-    if (walk === null || walk.missing === null) return null
-    // 빠진 구간의 아래 끝 — 이미 받은 번호에서 멈춘다(앞 조회가 받은 것을 다시 받지 않는다).
-    let bottom = walk.missing - 1
-    while (bottom > walk.lowest && !walk.inverses.has(bottom)) bottom -= 1
-    return { beforeSeq: walk.missing + 1, limit: Math.min(UNDO_HISTORY_PAGE, walk.missing - bottom) }
+  readonly undoHistoryNeed = (): UndoHistoryNeed | null => {
+    const history = this.#restoredHistory
+    if (history === null || history.epoch !== this.#queueEpoch || history.walked) return null
+    const { undoStack } = this.#state
+    if (undoStack[undoStack.length - 1]?.anchorOnUse === undefined) return null
+    let missing: number | null = null
+    for (let seq = history.headSeq; seq > history.lowest; seq -= 1) {
+      if (!history.inverses.has(seq)) {
+        missing = seq
+        break
+      }
+    }
+    if (missing === null) return null
+    // 빠진 구간의 아래 끝 — «그 아래가 모두 찬 데»까지만 끊는다. 이미 가진 번호에서 끊으면 구멍마다 조회가 하나씩 들어, 둘이 번갈아 고친
+    // 페이지에서 회수 한도가 먼저 찬다(jsdom: 번갈아 10 번 → 조회 3 회 limit 1 · 되돌리기 3 · 건너뜀 7). 구간 안의 가진 번호는 다시 받는다.
+    let bottom = history.lowest
+    while (bottom + 1 < missing && history.inverses.has(bottom + 1)) bottom += 1
+    return { beforeSeq: missing + 1, limit: Math.min(UNDO_HISTORY_PAGE, missing - bottom), epoch: history.epoch }
+  }
+
+  /**
+   * 되짚기 조회의 답을 싣는다(`undoHistoryNeed`). 그 이력을 실은 판이 아니거나(다시 실림 · 떠남) 이미 되짚기 시작했으면 싣지 않고 `false`.
+   * 누가 냈든 받는다 — 되짚기에는 `inverse`만 쓴다.
+   */
+  readonly supplyUndoHistory = (need: UndoHistoryNeed, revisions: readonly RestoredRevision[]): boolean => {
+    const history = this.#restoredHistory
+    if (history === null || !this.undoHistoryLive(need) || history.walked) return false
+    for (const revision of revisions) {
+      if (revision.seq > history.lowest && revision.seq <= history.headSeq) history.inverses.set(revision.seq, revision.inverse)
+    }
+    return true
+  }
+
+  /** 그 조회를 낸 판이 아직 열려 있는가 — 판을 다시 싣거나 비우면 `false`다. */
+  readonly undoHistoryLive = (need: UndoHistoryNeed): boolean =>
+    this.#restoredHistory?.epoch === need.epoch && this.#queueEpoch === need.epoch
+
+  /** 되짚기 이력을 받기 시작한다 — 되돌리기 단추가 꺼진다(`undoHistoryLoading`). 그 판이 아니면 아무것도 안 한다. */
+  readonly beginUndoHistoryLoad = (need: UndoHistoryNeed): void => {
+    if (this.undoHistoryLive(need)) this.#apply({ undoHistoryLoading: true })
+  }
+
+  /** 받기를 끝낸다. 그 사이 판이 갈렸으면 그 판이 이미 풀었다 — 새 판의 받기를 건드리지 않는다. */
+  readonly endUndoHistoryLoad = (need: UndoHistoryNeed): void => {
+    if (this.undoHistoryLive(need)) this.#apply({ undoHistoryLoading: false })
   }
 
   /**
@@ -1112,9 +1179,10 @@ export class EditorStore {
    *
    * 서버의 `inverse`는 그 revision 을 막 기록한 문서의 자리 경로다. 그 뒤 남이 같은 배열 앞자리에 넣었으면 옛 자리가 **남의 노드**를
    * 가리키고 서버는 받은 경로를 그대로 적용한다(설계서 「정방향 흐름」 — Chrome: 경로 그대로 보내는 판은 밥이 맨 앞에 넣은 판에서 «나»의 되돌리기가
-   * «가»를 고쳤다). 그래서 세션 안 항목(`ackEdit`)처럼 **그 revision 을 막 기록한 문서에서 노드 id 로 붙잡는다**. 그 문서는 지금 바탕에서
-   * 그 뒤 revision 의 `inverse`를 차례로 얹어 되짚는다 — 내 것이든 남의 것이든 받은 것으로(`history.others` — `undoHistoryNeed`가 그 구간을
-   * 낸다).
+   * «가»를 고쳤다). 그래서 세션 안 항목(`ackEdit`)처럼 **그 revision 을 막 기록한 문서에서 노드 id 로 붙잡는다**. 그 문서는 이것을 부른 판의
+   * 바탕에서 그 뒤 revision 의 `inverse`를 차례로 얹어 되짚는다 — 내 것이든 남의 것이든 받은 것으로. 목록에 없는 번호(남의 것 · 목록 답 전에 온
+   * 프레임 · 내 ack)는 처음 누를 때 받는다(`undoHistoryNeed` · `supplyUndoHistory`) — 되짚는 판이 여기서 정해지므로 그 뒤에 판이 올라도 받을
+   * 구간은 늘지 않는다. `others`는 이미 받은 것을 함께 넘기는 자리다.
    *
    * **되짚기와 붙잡기는 되돌릴 때 한다**(`RevisionRef.anchorOnUse`) — 한 항목에 `anchorOps`(op 마다 문서 복제)와 `applyOps` 한 번씩이라, 페이지를
    * 열 때 50 항목을 다 하면 메인 스레드가 문서 크기 × op 수만큼 멈춘다(노드 6000 · 50 항목 × 20 op: 열 때 다 하면 2.7s · 되돌릴 때 하면 열 때 0ms ·
@@ -1122,7 +1190,7 @@ export class EditorStore {
    * 위 항목 하나와 그 사이 번호만큼이다. 되짚는 문서는 항목끼리 나눠 쓴다 — 스택은 번호가 내려가는 순서로 소비된다.
    *
    * **못 짓거나 못 붙잡는 항목도 싣는다 — 누르면 건너뛰고 그 수를 말한다**(`#startFrom`의 `skipped` → «되돌릴 수 없는 편집 N개를
-   * 건너뛰었습니다»). 되짚는 길에 받지 못한 번호가 남았거나(조회 실패 · 한도 밖) 얹히지 않는 `inverse`에서 그 아래 항목이 그렇다. 싣지 않으면
+   * 건너뛰었습니다»). 되짚는 길에 받지 못한 번호가 남았거나(한 누름에 받는 구간의 한도 밖) 얹히지 않는 `inverse`에서 그 아래 항목이 그렇다. 싣지 않으면
    * 아무도 그 사실을 말하지 않는다.
    */
   readonly restoreUndoStack = (
@@ -1134,12 +1202,16 @@ export class EditorStore {
     const walk = this.#undoHistory(point, { mine, others: options.others })
     if (walk === null || walk.restorable.length === 0) return
     this.#undoRestoredEpoch = point.epoch
+    const history: RestoredHistory = { epoch: point.epoch, headSeq: walk.headSeq, lowest: walk.lowest, inverses: walk.inverses, walked: false }
+    this.#restoredHistory = history
     const recordedAt = historyDocuments(walk.head, walk.headSeq, walk.inverses)
     const restored = walk.restorable.map(
       (revision): RevisionRef => ({
         revisionId: revision.revisionId,
         inverse: revision.inverse,
         anchorOnUse: once(() => {
+          // 되짚기 시작 — 그 뒤로는 더 받지 않는다(`undoHistoryNeed`). 받지 못한 번호 아래의 항목은 못 짓고 누를 때 건너뛴다.
+          history.walked = true
           const recorded = recordedAt(revision.seq)
           return recorded === null ? null : anchorOps(recorded, revision.inverse)
         }),
@@ -1151,9 +1223,12 @@ export class EditorStore {
   /** 마지막으로 되돌리기를 채운 판의 세대(`restoreUndoStack` — 한 판에 한 번). */
   #undoRestoredEpoch = -1
 
+  /** 새로고침으로 채운 항목을 되짚을 재료(`restoreUndoStack`) — 누를 때 빠진 구간을 받아 채운다(`supplyUndoHistory`). 판을 싣거나 비우면 버린다. */
+  #restoredHistory: RestoredHistory | null = null
+
   /**
    * 되짚기의 재료 — 판이 `point`의 것일 때만 낸다. 실을 내 revision(판을 실은 번호 이하 · 최신순), 그 가장 옛 번호, 되짚을 `inverse`(그 번호
-   * 위 · 지금 번호 이하), 지금 번호에서 내려가며 처음 빠진 번호.
+   * 위 · 지금 번호 이하).
    */
   #undoHistory(
     point: UndoRestorePoint,
@@ -1164,7 +1239,6 @@ export class EditorStore {
     restorable: RestoredRevision[]
     lowest: number
     inverses: Map<number, PatchOp[]>
-    missing: number | null
   } | null {
     const { openPageId, baseDocument, headSeq } = this.#state
     if (openPageId !== point.pageId || this.#queueEpoch !== point.epoch || baseDocument === null) return null
@@ -1177,14 +1251,7 @@ export class EditorStore {
     for (const revision of [...history.mine, ...(history.others ?? [])]) {
       if (revision.seq > lowest && revision.seq <= headSeq) inverses.set(revision.seq, revision.inverse)
     }
-    let missing: number | null = null
-    for (let seq = headSeq; seq > lowest; seq -= 1) {
-      if (!inverses.has(seq)) {
-        missing = seq
-        break
-      }
-    }
-    return { head: baseDocument, headSeq, restorable, lowest, inverses, missing }
+    return { head: baseDocument, headSeq, restorable, lowest, inverses }
   }
 
   /**
@@ -1621,6 +1688,7 @@ export class EditorStore {
     this.#leftPageId = this.#state.openPageId
     this.#noteAbandoned(pending, true)
     this.#queueEpoch += 1
+    this.#restoredHistory = null
     this.#windowChanges = []
     this.#openingPageId = null
     this.#dropWaitingMarkers()
@@ -1641,6 +1709,7 @@ export class EditorStore {
       pending: pending.length === 0 ? pending : [],
       undoStack: undoStack.length === 0 ? undoStack : [],
       redoStack: redoStack.length === 0 ? redoStack : [],
+      undoHistoryLoading: false,
       editStatus: 'idle',
       // 떠나며 버린 편집을 말하는 통지만 남긴다(`#leaveNotice`).
       editFailure: this.#keptLeaveNotice(),
@@ -2203,6 +2272,7 @@ export class EditorStore {
     this.#projectId = projectId
     this.#noteAbandoned(this.#state.pending, true)
     this.#queueEpoch += 1
+    this.#restoredHistory = null
     this.#windowChanges = []
     this.#openingPageId = null
     this.#dropWaitingMarkers()
