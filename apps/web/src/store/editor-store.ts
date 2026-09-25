@@ -664,8 +664,8 @@ export class EditorStore {
    *
    * ## 문서와 `headSeq`는 함께 움직이거나 둘 다 안 움직인다
    *
-   * `applyOps`가 던질 수 있다 — 보내지 않은 구조 편집이 그 노드를 이미 지웠으면 경로가
-   * 없다. **그때 `headSeq`만 올리지 않는다.** 올리면 *"화면에는 번호가 없는데 다음 편집은
+   * `applyOps`가 던질 수 있다 — 서버가 센 경로가 내 **바탕**에 없으면(바탕이 서버와 갈라졌다). 보내지 않은 편집은 까닭이
+   * 아니다 — 번호는 바탕에 얹고 그 편집을 위에 다시 얹는다(`#applyMarkerOps`). **그때 `headSeq`만 올리지 않는다.** 올리면 *"화면에는 번호가 없는데 다음 편집은
    * 번호가 있는 revision 위에서 만들어지는"* 상태가 되고, 그 어긋남은 아무도 모르는 채
    * 남는다.
    *
@@ -748,27 +748,35 @@ export class EditorStore {
   }
 
   /**
-   * 번호 ops 를 문서와 바탕에 얹고 `headSeq`를 `seq`로 옮긴다. **`seq === headSeq + 1`일 때만 부른다**(`applyMarkerChange`의
-   * «내 다음 번호가 아니면 사이 프레임을 기다린다»). 던지면 아무것도 안 움직이고 거짓이다.
+   * 번호 ops 를 바탕에 얹고 보내지 않은 편집을 그 위에 다시 얹은 뒤 `headSeq`를 `seq`로 옮긴다. **`seq === headSeq + 1`일 때만
+   * 부른다**(`applyMarkerChange`의 «내 다음 번호가 아니면 사이 프레임을 기다린다»). 못 얹으면 아무것도 안 움직이고 거짓이다.
+   *
+   * **`document`에 곧바로 얹지 않는다 — 리베이스다**(`#rebaseOnto`와 같은 길). 경로는 서버가 `seq - 1` 문서에서 센 것이고 그
+   * 문서는 바탕이다 — 보내지 않은 편집이 얹힌 `document`가 아니다. 보내지 않은 구조 편집이 앞에 노드를 넣었으면 같은 경로가
+   * **그 편집이 만든 노드**를 가리킨다(jsdom: head 7 `[n_a, n_b]` · E1 글 고침 · E2 맨 앞에 `n_new` · `n_b`에 단 게시(9)의 응답이
+   * E1 ack 보다 먼저 → ack 뒤 화면 `n_new, n_a#1, n_b` · 서버 `n_new, n_a, n_b#1` · 낡음 없음). 보내지 않은 삭제가 그 노드를
+   * 지웠어도 같다 — 바탕에는 노드가 있어 얹히고, 삭제는 그 위에 다시 얹힌다.
    */
   #applyMarkerOps(change: { seq: number; markerOps: PatchOp[] }): boolean {
-    const { document, baseDocument } = this.#state
-    if (document === null || baseDocument === null) return false
-    let next: PageDocument
+    const { baseDocument, pending } = this.#state
+    if (baseDocument === null) return false
     let nextBase: PageDocument
+    let document: PageDocument
     try {
-      next = applyOps(document, change.markerOps)
-      // **바탕에도 같이 얹는다**. 이 변경은 서버가 이미 기록한 것이므로 바탕이
-      // 그것을 모르면 다음 리베이스가 **번호 없는 문서** 위에서 만들어진다. 둘 중 하나만
-      // 던지면 아무것도 안 움직인다 — 셋(문서·바탕·`headSeq`)이 함께 가는 자리다.
+      // **바탕에 얹는다** — 이 변경은 서버가 이미 기록한 것이므로 바탕이 그것을 모르면 다음 리베이스가 **번호 없는 문서** 위에서
+      // 만들어진다. 여기서 던지면 서버가 센 경로가 내 바탕에 없다 — 바탕이 서버와 갈라졌다.
       nextBase = applyOps(baseDocument, change.markerOps)
+      document = nextBase
+      // **보내지 않은 편집은 버리지 않는다** — 하나라도 다시 못 얹으면 아무것도 안 움직인다. `#rebaseOnto`처럼 버리면 부르는
+      // 쪽(코멘트 응답)이 버린 편집을 말할 자리가 없다. 번호 ops 는 `marker` 칸만 바꾸므로 편집이 그것에 걸려 못 얹히는 판은
+      // 코드로 못 찾았다 — 그래도 조용히 잃지 않게 «못 얹음»으로 모은다(부르는 쪽이 말한다).
+      for (const edit of pending) document = applyOps(document, edit.ops)
     } catch {
-      // 보내지 않은 구조 편집이 그 노드를 이미 지웠다. **`headSeq`도 안 올린다** —
-      // 올리면 문서와 revision 번호가 조용히 갈라진다.
+      // **`headSeq`도 안 올린다** — 올리면 문서와 revision 번호가 조용히 갈라진다. 셋(문서·바탕·`headSeq`)이 함께 간다.
       return false
     }
 
-    this.#apply({ document: next, baseDocument: nextBase, headSeq: change.seq })
+    this.#apply({ document, baseDocument: nextBase, headSeq: change.seq })
     return true
   }
 

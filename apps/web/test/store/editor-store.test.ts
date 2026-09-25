@@ -909,18 +909,37 @@ describe('EditorStore의 마커 반영', () => {
     expect(store.getState().document?.root.children?.[0]?.marker).toBeUndefined()
   })
 
-  it('ops를 적용할 수 없으면 headSeq도 안 올린다', () => {
-    // **이 케이스가 이 메서드의 중심이다.** 보내지 않은 구조 편집이 그 노드를 이미
-    // 지웠으면 경로가 없다. 그때 `headSeq`만 올리면 문서와 revision 번호가 조용히
-    // 갈라진다 — 둘 다 안 움직이면 다음 편집이 409를 받고 복구가 페이지를 다시 받는다.
+  it('ops를 바탕에 얹을 수 없으면 headSeq도 안 올린다', () => {
+    // **이 케이스가 이 메서드의 중심이다.** 서버가 센 경로가 내 바탕에 없다 — 바탕이 서버와 갈라졌다. 그때 `headSeq`만
+    // 올리면 문서와 revision 번호가 조용히 갈라진다 — 둘 다 안 움직이면 다음 편집이 409를 받고 복구가 페이지를 다시 받는다.
+    const store = new EditorStore()
+    store.loadPage('pg-1', withChild(), 7)
+    const before = store.getState().document
+
+    // **`'diverged'`다 — 화면이 이것을 말해야 한다.** 서버에는 번호가 있는데
+    // 내 문서에는 없는 상태이고, 조용히 넘기면 아무도 그 어긋남을 모른다.
+    expect(
+      store.applyMarkerChange('pg-1', { seq: 8, markerOps: [{ op: 'add', path: '/root/children/9/marker', value: 1 }] }),
+    ).toBe('diverged')
+    expect(store.getState().headSeq).toBe(7)
+    expect(store.getState().document).toBe(before)
+  })
+
+  /**
+   * **보내지 않은 편집은 못 얹는 까닭이 아니다** — 번호는 바탕에 얹고 그 편집을 위에 다시 얹는다(`#applyMarkerOps`). 보내지 않은
+   * 삭제가 그 노드를 지웠어도 바탕에는 노드가 있다. 그 삭제는 서버의 `seq` 위에서 그대로 나간다 — `diverged`로 두면 `headSeq`가
+   * 뒤처진 채 그 삭제가 409 를 받고 다시 읽기가 그것을 버린다.
+   */
+  it('보내지 않은 삭제가 그 노드를 지웠어도 얹는다 — 삭제는 남고 다음 번호 위에서 나간다', () => {
     const store = new EditorStore()
     store.loadPage('pg-1', withChild(), 7)
     store.applyEdit([{ op: 'remove', path: '/root/children/0' }])
 
-    // **`'diverged'`다 — 화면이 이것을 말해야 한다.** 서버에는 번호가 있는데
-    // 내 문서에는 없는 상태이고, 조용히 넘기면 아무도 그 어긋남을 모른다.
-    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('diverged')
-    expect(store.getState().headSeq).toBe(7)
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })).toBe('applied')
+    expect(store.getState().headSeq).toBe(8)
+    expect(store.getState().document?.root.children).toEqual([])
+    expect(store.getState().pending).toHaveLength(1)
+    expect(store.nextRequest()?.baseSeq).toBe(8)
   })
 
   it('문서가 안 바뀐 요청은 headSeq도 안 건드린다', () => {
@@ -1010,6 +1029,35 @@ describe('EditorStore의 마커 반영', () => {
         ['n_b', 'B'],
         ['n_a', 'A2'],
       ])
+    })
+
+    /**
+     * **보내지 않은 편집 위에 번호를 곧바로 얹지 않는다 — 바탕에 얹고 다시 얹는다.** 서버 순서: head 7 → 내 E1(글 고침 · 8) → 내
+     * 게시가 `n_b`에 번호(9 — 경로는 8 의 문서에서 센 `/root/children/1`). E2(맨 앞에 `n_new`)는 E1 의 답을 기다리며 큐에 있다. 응답이
+     * E1 ack 보다 먼저 닿아 기다리다 ack 에서 풀린다 — 그때 문서에는 E2 가 얹혀 있어 같은 경로가 `n_a`를 가리킨다.
+     */
+    it('편집 둘을 연달아 낸 뒤 게시해도 번호가 제 노드에 붙는다 — 뒤 편집이 앞에 넣은 노드가 아니다', () => {
+      const store = new EditorStore()
+      store.loadPage('pg-1', twoChildren(), 7)
+      const e1: PatchOp[] = [{ op: 'replace', path: '/root/children/0/props/content', value: 'A2' }]
+      const e2: PatchOp[] = [{ op: 'add', path: '/root/children/0', value: { id: 'n_new', type: 'Text', props: { content: 'N' } } }]
+      const markB: PatchOp[] = [{ op: 'add', path: '/root/children/1/marker', value: 1 }]
+      store.applyEdit(e1)
+      store.applyEdit(e2)
+      const first = store.nextRequest()!
+
+      expect(store.applyMarkerChange('pg-1', { seq: 9, markerOps: markB })).toBe('waiting')
+      store.ackEdit(first.clientOpId, { seq: 8, revisionId: 'r8', inverse: [] })
+
+      const server = applyOps(applyOps(applyOps(twoChildren(), e1), markB), e2)
+      expect(store.getState().headSeq).toBe(9)
+      expect(store.getState().document).toEqual(server)
+      // 뒤 편집은 그 번호 위에서 나간다 — 서버에서도 같은 문서가 된다.
+      const second = store.nextRequest()!
+      expect(second.baseSeq).toBe(9)
+      store.ackEdit(second.clientOpId, { seq: 10, revisionId: 'r10', inverse: [] })
+      expect(store.getState().document).toEqual(server)
+      expect(store.getState().remoteStale).toBeNull()
     })
 
     it('기다리는 것이 둘이면 사이 프레임 뒤에 차례로 얹는다', () => {
