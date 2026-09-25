@@ -6,13 +6,13 @@
  * |---|---|---|
  * | 단추는 보낸 편집의 답을 받은 뒤 읽는다 | `editsAnswered` | «보낸 편집의 답을 받은 뒤에 읽는다» · «답이 한도 안에 안 오면 …» |
  * | 판째 버린 나간 편집은 «모름»이다 | `resyncNotice`의 `sent` · `wasSent` | «읽는 동안 낸 편집은 …» |
- * | 그 편집의 늦은 답 | `#orphanAck` · 전송 루프의 `wasAbandoned` | «늦은 ack …» · «늦은 거절 …» |
+ * | 그 편집의 늦은 답 | `#orphanAck` · 전송 루프의 `wasAbandoned` | «늦은 ack …» 둘 · «늦은 거절 …» |
  * | 편집은 큐의 주인 페이지로 나간다 | 전송 루프의 `queuePageId` | «페이지를 옮기면 …» |
  * | 늦게 온 옛 판이 새 판을 덮지 않는다 | 세대(`beginPageLoad` · `settlePageLoad`) | «겹친 두 조회» 묶음 |
  * | 다시 읽기가 실패해 판을 비우며 버린 편집 | 복원 재조회의 실패 갈래 `tellLost` | «다시 읽기가 실패하면 …» |
  * | 수습이 되돌리기 전의 화면은 «판이 같다»가 아니다 | `holdsServerPage`의 «바탕 + 큐 = 화면» | «편집 실패 수습이 판을 되돌리기 전에 …» 묶음 |
  * | 수습은 그 편집이 나간 큐만 비운다 | `recover`의 첫 가드 · `sentFromOpenQueue` | «편집 실패 수습은 그 편집이 나간 큐만 …» 묶음 |
- * | 창 안에서 ack 된 내 편집을 옛 답이 조용히 지우지 않는다 | `loadPage`의 `ticket` · `#windowAcks` | «다시 읽는 창 안에서 ack 된 …» 묶음 |
+ * | 창 안에 온 revision(내 ack · 남의 프레임)을 옛 답이 지우지 않는다 — 실린 판 뒤에 얹는다 | `loadPage`의 `ticket` · `#windowChanges` · `#replayWindow` | «다시 읽는 창 안에 온 revision» 묶음 |
  *
  * jsdom 의 `fireEvent.click`은 포커스를 안 옮겨 blur 커밋이 안 난다 — 실브라우저에서 단추의 클릭이 blur 로 내는 편집은 여기서 **먼저
  * 낸 편집**으로 세운다. 겨룸의 앞섬(ms)과 뒤집힘은 실브라우저로만 잰다.
@@ -73,6 +73,29 @@ const swapped = (): PageDocument =>
   })
 
 const RESTORED = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1', actor: { type: 'user', label: '밥' } } as const
+
+/** 밥이 끝에 `Heading`을 넣은 revision 의 프레임. */
+const BOB_ADDS = (seq: number) =>
+  ({
+    type: 'page-changed',
+    projectId: PROJECT_ID,
+    pageId: PAGE_ID,
+    seq,
+    ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n-bob', type: 'Heading', props: {} } }],
+    warnings: [],
+    actor: { type: 'user', label: '밥' },
+  }) as const
+/** 서버가 밥의 `Heading`을 커밋한 판. */
+const withHeading = (): PageDocument =>
+  pageDoc({
+    id: 'n-root',
+    type: 'Page',
+    children: [
+      { id: 'n-a', type: 'Text', props: {} },
+      { id: 'n-b', type: 'Divider', props: {} },
+      { id: 'n-bob', type: 'Heading', props: {} },
+    ],
+  })
 
 const CONFLICT = { status: 409, code: 'conflict', message: '페이지가 이미 변경되었습니다' }
 /** 서버 판이 그대로인 거절 — 수습이 판을 다시 읽어도 바탕은 서버 것 그대로다. */
@@ -246,15 +269,31 @@ describe('판째 버린 나간 편집', () => {
     )
   })
 
-  it('늦은 ack 가 그 판 뒤의 번호면 화면이 최신이 아니라고 말한다', async () => {
+  /** 서버가 그 번호로 기록한 것은 보낸 ops 그대로이고, 그 번호 바로 앞의 판이 지금 판이다 — «반영됐다면 곧 나타납니다»가 참이 된다. */
+  it('늦은 ack 가 그 판 바로 뒤의 번호면 그 편집을 얹는다', async () => {
     const { view, sent } = await abandoned()
-    expect(statusText()).not.toContain('받지 못한 변경')
 
     view.ack(sent, HEAD_SEQ + 1)
     await act(async () => {})
 
+    expect(structureTypes()).toEqual(['Page', 'Divider', 'Text'])
+    expect(statusText()).not.toContain('받지 못한 변경')
+    // 다음 편집(Text 를 위로)은 그 번호 위에서 나간다.
+    const tree = screen.getByRole('region', { name: '구조 트리' })
+    fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '위로' }))
+    await act(async () => {})
+    expect(view.patches()).toHaveLength(2)
+    expect(view.patches()[1]?.baseSeq).toBe(HEAD_SEQ + 1)
+  })
+
+  it('늦은 ack 가 번호를 건너뛰면 얹지 않고 화면이 최신이 아니라고 말한다', async () => {
+    const { view, sent } = await abandoned()
+
+    view.ack(sent, HEAD_SEQ + 2)
+    await act(async () => {})
+
     expect(statusText()).toContain('받지 못한 변경이 있어 화면이 최신이 아닙니다')
-    // 얹지는 않는다 — 그 편집은 이 판이 아닌 판 위에서 만들어졌다.
     expect(structureTypes()).toEqual(['Page', 'Text', 'Divider'])
   })
 
@@ -294,6 +333,24 @@ describe('편집은 큐의 주인 페이지로 나간다', () => {
     view.ack(first, HEAD_SEQ + 1)
     await act(async () => {})
 
+    expect(view.patches().map((patch) => patch.pageId)).toEqual([PAGE_ID, OTHER_PAGE_ID])
+  })
+
+  /** 떠나기 전 화면에는 그 편집이 서 있었다 — 그 거절을 말없이 넘기면 사용자는 저장된 줄 안다(Chrome: 서버 1쪽에 지운 글이 남음). */
+  it('떠난 페이지에서 보낸 편집이 거절되면 말한다 — 수습은 하지 않고 새 페이지의 편집은 나간다', async () => {
+    const view = await mount({ immediate: (pageId) => (pageId === OTHER_PAGE_ID ? pageDetail(pageId, pair()) : undefined) })
+    const first = await view.moveDown()
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Text', 'Divider']))
+    await view.moveDown()
+
+    view.refuse(first)
+    await act(async () => {})
+
+    expect(alertText()).toBe(
+      '페이지가 이미 변경되었습니다 — 떠난 페이지에서 보낸 편집 1개가 저장되지 않았습니다. 그 페이지를 다시 열어 확인하세요.',
+    )
+    expect(view.getPage).toHaveBeenCalledTimes(2)
     expect(view.patches().map((patch) => patch.pageId)).toEqual([PAGE_ID, OTHER_PAGE_ID])
   })
 })
@@ -607,8 +664,8 @@ describe('편집 실패 수습은 그 편집이 나간 큐만 비운다', () => 
   })
 })
 
-describe('다시 읽는 창 안에서 ack 된 내 편집', () => {
-  it('실린 판이 그 편집의 커밋 앞을 읽었으면 화면이 최신이 아니라고 말한다', async () => {
+describe('다시 읽는 창 안에 온 revision', () => {
+  it('실린 판이 내 편집의 커밋 앞을 읽었으면 그 편집을 판 뒤에 얹는다', async () => {
     const view = await mount()
     const sent = await view.moveDown()
     view.push(RESTORED)
@@ -623,7 +680,6 @@ describe('다시 읽는 창 안에서 ack 된 내 편집', () => {
     await act(async () => {})
     view.ack(view.patches()[1]!, HEAD_SEQ + 2)
     await act(async () => {})
-    expect(statusText()).not.toContain('받지 못한 변경')
 
     // 조회는 둘째 편집의 커밋 앞을 읽었다.
     await act(async () => {
@@ -631,11 +687,15 @@ describe('다시 읽는 창 안에서 ack 된 내 편집', () => {
     })
     await act(async () => {})
 
-    expect(statusText()).toContain('받지 못한 변경이 있어 화면이 최신이 아닙니다')
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider'])
+    expect(statusText()).not.toContain('받지 못한 변경')
+    await view.moveDown()
+    expect(view.patches()).toHaveLength(3)
+    expect(view.patches()[2]?.baseSeq).toBe(HEAD_SEQ + 2)
   })
 
   /** 재연결 재조회는 사람이 누르지 않고 돈다 — 치는 중에 이 창이 열린다. */
-  it('재연결 재조회의 판도 그 창 안의 ack 와 견준다', async () => {
+  it('재연결 재조회의 판에도 창 안에서 ack 된 편집을 얹는다', async () => {
     const view = await mount()
     view.reconnect()
     await waitFor(() => expect(view.held).toHaveLength(1))
@@ -648,7 +708,69 @@ describe('다시 읽는 창 안에서 ack 된 내 편집', () => {
     })
     await act(async () => {})
 
+    expect(structureTypes()).toEqual(['Page', 'Divider', 'Text'])
+    expect(statusText()).not.toContain('받지 못한 변경')
+  })
+
+  it('창 안에 얹힌 남의 프레임이 옛 답에 지워지지 않는다', async () => {
+    const view = await mount()
+    view.reconnect()
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(BOB_ADDS(HEAD_SEQ + 1))
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider', 'Heading'])
+
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider', 'Heading'])
+    expect(statusText()).not.toContain('받지 못한 변경')
+  })
+
+  /** 판 뒤의 번호가 이어지지 않으면(사이 revision 을 못 받았다) 얹지 않고 말한다. */
+  it('창 안의 번호가 실린 판에 이어지지 않으면 화면이 최신이 아니라고 말한다', async () => {
+    const view = await mount()
+    // 단추의 다시 읽기는 늘 싣는다(재연결은 «판이 같다»로 넘어갈 수 있다).
+    view.push(RESTORED)
+    fireEvent.click(reloadButton())
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(BOB_ADDS(HEAD_SEQ + 2))
+
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider'])
     expect(statusText()).toContain('받지 못한 변경이 있어 화면이 최신이 아닙니다')
+  })
+
+  /**
+   * 뒤에 시작한 조회가 먼저 읽힌 판(두 연결의 순서가 뒤집혔다) — 뒤 조회의 답이 판을 정해 앞 조회의 새 답은 세대에 밀린다. 그 사이의
+   * 커밋은 뒤 조회가 시작된 뒤 프레임으로 왔으므로 뒤 조회의 판 뒤에 얹힌다.
+   */
+  it('뒤에 시작한 조회가 먼저 읽혀도 그 뒤의 커밋이 판에 남는다', async () => {
+    const view = await mount()
+    view.reconnect()
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(RESTORED)
+    fireEvent.click(reloadButton())
+    await waitFor(() => expect(view.held).toHaveLength(2))
+    view.push(BOB_ADDS(HEAD_SEQ + 1))
+
+    // 뒤 조회(단추)는 그 커밋 앞을 읽었다.
+    await act(async () => {
+      view.held[1]!.resolve(pageDetail(PAGE_ID, pair()))
+    })
+    // 앞 조회(재연결)는 그 뒤를 읽었지만 세대에 밀린다.
+    await act(async () => {
+      view.held[0]!.resolve({ ...pageDetail(PAGE_ID, withHeading()), headSeq: HEAD_SEQ + 1 })
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider', 'Heading'])
+    expect(statusText()).not.toContain('받지 못한 변경')
   })
 
   /** 복원은 되살린 페이지의 번호를 0 부터 다시 센다 — 복원 앞의 번호를 되살린 판과 견주지 않는다. */

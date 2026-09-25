@@ -116,6 +116,19 @@ function unknownNotice(
   return `${head} ${settle}${tail}`
 }
 
+/**
+ * **떠난 페이지에서 보낸 편집이 거절됐을 때의 문장**(전송 루프의 `abandonedOnLeave`). 서버가 커밋 전에 거절했으면(`refusedBeforeCommit`)
+ * 저장되지 않은 것이고, 그 밖은 반영됐는지 모른다(`unknownNotice`와 같은 판정). 둘 다 그 페이지를 다시 열어 보라고 한다 — 이 화면은 그
+ * 페이지를 안 들고 있다.
+ */
+function leftBehindNotice(caught: unknown): string {
+  const failure = toFailure(caught, EDIT_UNKNOWN_FAILURE)
+  if (refusedBeforeCommit(caught) && failure.kind === 'message') {
+    return `${failure.message} — 떠난 페이지에서 보낸 편집 1개가 저장되지 않았습니다. 그 페이지를 다시 열어 확인하세요.`
+  }
+  return '떠난 페이지에서 보낸 편집 1개는 답을 받지 못해 서버에 반영됐는지 알 수 없습니다 — 그 페이지를 다시 열어 확인하세요.'
+}
+
 /** 결과를 모르는 판에서 다시 불러오지도 못했을 때, 서버가 이유를 주지 않으면 쓸 문장(`unknownNotice`의 `reason`). */
 const UNANSWERED_RECOVER_FAILURE = '페이지를 다시 불러오지도 못했습니다'
 
@@ -230,9 +243,10 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * 서버 상태로) 그 편집을 «취소됐다»고 말하지 않는다 — 서버에 닿았을 수 있다.
    *
    * @param pageId 실패한 편집이 나간 페이지 — 이 훅의 `pageId`가 아니다(`pump`의 «큐의 주인»).
+   * @param projectId 그 페이지의 프로젝트 — 같은 까닭으로 이 훅의 `projectId`가 아니다.
    */
   const recover = useCallback(
-    async (caught: unknown, pageId: string): Promise<void> => {
+    async (caught: unknown, pageId: string, projectId: string): Promise<void> => {
       const failure = toFailure(caught, EDIT_UNKNOWN_FAILURE)
       if (failure.kind === 'signed-out') {
         // 큐는 비운다 — 로그인하고 돌아와도 그 편집들은 이미 낡은 `baseSeq` 위에 있다.
@@ -358,7 +372,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         store.setEditStatus('idle')
       }
     },
-    [api, channel, projectId, store],
+    [api, channel, store],
   )
 
   const pump = useCallback(async (): Promise<void> => {
@@ -380,6 +394,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
          * 옮겨 친 글이 1쪽에 저장 · 2쪽 그대로 · 화면은 2쪽에 그 글 · 통지 0).
          */
         const target = store.queuePageId()
+        // 프로젝트도 큐의 주인 것이다(`EditorStore.queueProjectId`) — 셸 없이 스토어를 쓰는 자리는 이 훅의 값이다.
+        const project = store.queueProjectId() ?? projectId
         if (request === null || target === null) {
           if (store.getState().editStatus === 'sending') store.setEditStatus('idle')
           return
@@ -406,7 +422,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           const result =
             realtimeOpen(channel)
               ? await channel.send({ pageId: target, ...request })
-              : await api.patchOps(projectId, target, request)
+              : await api.patchOps(project, target, request)
           // **응답의 `warnings`가 여기로 함께 들어간다.** 서버는 응답에 그것을 싣는다 —
           // 여기서 넘기지 않으면 **읽는 코드가 0건**이 되어 경고가 아무 데도 안 남는다.
           // 스토어가 ack와 **함께** 싣는 것이 요점이다 — 늦게 도착한
@@ -419,7 +435,12 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // 편집을 버리고(`failEdits`) 판을 한 번 더 읽고, 통지가 «편집 0개가 취소됐습니다»로 앞 문장을 덮는다(jsdom) — 페이지를
           // 옮겼으면 새 페이지의 편집을 버린다. **세션이 끊긴 것만 수습으로 보낸다** — 그 통지(`<SignedOut />`)는 어느 편집의
           // 실패든 같다.
-          if (store.wasAbandoned(request.clientOpId) && toFailure(caught, EDIT_UNKNOWN_FAILURE).kind !== 'signed-out') continue
+          if (store.wasAbandoned(request.clientOpId) && toFailure(caught, EDIT_UNKNOWN_FAILURE).kind !== 'signed-out') {
+            // **페이지를 떠나며 버렸으면 그 거절은 말한다**(`EditorStore.abandonedOnLeave`) — 떠나기 전 화면에는 그 편집이 서 있었고, 떠날
+            // 때는 아무 말도 안 했다. 수습(다시 읽기 · 큐 비우기)은 여전히 안 한다 — 그 판은 이 화면에 없다.
+            if (store.abandonedOnLeave(request.clientOpId)) store.setEditFailure({ kind: 'message', message: leftBehindNotice(caught) })
+            continue
+          }
           // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다.**
           //
           // **이것이 없으면 리베이스가 서버에 닿지 않는다(실측).** 서버는 `baseSeq`가
@@ -462,7 +483,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
             continue
           }
           // `recover`가 큐를 비우므로 남은 편집이 다시 나가지 않고, 재조회가 문서를 서버 것으로 맞춘다(그 편집이 지금 큐에서 나갔을 때).
-          await recover(caught, target)
+          await recover(caught, target, project)
           // **수습 뒤에도 큐가 남으면 잇는다** — 더 나중에 시작한 조회가 판을 먼저 정해 수습이 싣지 않았고 그 판 위에서 편집을 더
           // 냈거나(`recover`의 세대 갈래), 수습 중에 페이지를 옮겨 새 페이지에서 편집했거나, 그 실패가 지금 큐의 일이 아니라 수습이
           // 큐를 건드리지 않았다(`recover`의 첫 가드). 그 편집은 이 루프만 보낸다 — 여기서 끝내면

@@ -389,7 +389,8 @@ export function EditorShellRoute(): ReactElement {
 
     // 프로젝트가 바뀌면 앞 프로젝트의 문서·선택·줌이 남지 않게 지운다. 노드 id는 문서
     // 안에서만 뜻이 있으므로, 남으면 선택 표시가 존재하지 않는 노드를 가리킨다.
-    store.reset()
+    // 옮겨 가는 프로젝트를 함께 넘긴다 — 앞 편집의 답을 기다리던 전송 루프가 이어 보낼 곳이다(`EditorStore.queueProjectId`).
+    store.reset(projectId)
     // 앞 프로젝트의 이름이 새 주소에서 잠깐 보이는 것도 막는다. 라우터는 두 프로젝트
     // 주소 사이에서 같은 컴포넌트를 다시 쓰므로 상태가 그대로 남는다.
     setState({ status: 'loading' })
@@ -1103,6 +1104,12 @@ function CanvasFrame(props: {
   const zoom = useEditorStore(store, (s) => s.zoom)
   const [state, setState] = useState<PageLoadState>({ status: 'empty' })
   /**
+   * **실패한 캔버스의 «다시 시도»가 올리는 수** — 페이지를 여는 이펙트가 이 값에 매여 다시 돈다(여는 길 그대로: 비우고 · 읽고 · 되돌리기
+   * 이력을 채운다). 실패 문장만 두면 다시 여는 길이 다른 페이지로 갔다 오거나 새로고침뿐이다 — 판을 비운 복원 재조회의 실패가 앞 조회의
+   * 성공을 세대로 이긴 판(`EditorStore.settlePageLoad`)도 여기서 풀린다.
+   */
+  const [openAttempt, setOpenAttempt] = useState(0)
+  /**
    * 마지막으로 처리한 재조회 신호. **상태가 아니라 ref다** — 이 값이 바뀌었다고 다시 그릴
    * 이유가 없고, 상태로 두면 그 갱신이 아래 이펙트를 한 번 더 태운다.
    */
@@ -1249,7 +1256,8 @@ function CanvasFrame(props: {
       alive = false
       leave.abort()
     }
-  }, [api, projectId, pageId, store])
+    // `openAttempt`는 이 이펙트를 다시 태우는 신호다(위 선언).
+  }, [api, projectId, pageId, store, openAttempt])
 
   /**
    * **연결이 다시 붙었으므로 페이지를 다시 읽는다**.
@@ -1451,7 +1459,12 @@ function CanvasFrame(props: {
         (state.failure.kind === 'signed-out' ? (
           <SignedOut />
         ) : (
-          <p role="alert">{state.failure.message}</p>
+          <>
+            <p role="alert">{state.failure.message}</p>
+            <button type="button" onClick={() => setOpenAttempt((attempt) => attempt + 1)}>
+              다시 시도
+            </button>
+          </>
         ))}
       {state.status === 'ready' && (
         <Canvas projectId={projectId} pageId={pageId} themeReloadToken={props.themeReloadToken} />

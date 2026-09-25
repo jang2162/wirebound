@@ -301,6 +301,88 @@ describe('리베이스는 내 편집을 제 노드로 옮긴다', () => {
   })
 })
 
+/**
+ * **판을 다시 싣는 창 안에 온 revision 은 실린 판 뒤에 제 차례로 얹힌다**(`EditorStore`의 `#windowChanges` · `#replayWindow`). 판은 늘 «조회를
+ * 시작 → 그 사이 revision 이 옴 → 조회의 답이 그 revision 앞의 판»이다. 셸째 재는 케이스는 `test/edit/reload-sent-edits.test.tsx`의 «다시
+ * 읽는 창 안에 온 revision» 묶음이 갖는다 — 여기는 셸로 세우기 어려운 입구(번호 응답 · 판째 버린 편집의 늦은 ack · 선택)다.
+ */
+describe('다시 읽는 창 안에 온 revision', () => {
+  it('번호 응답도 실린 판 뒤에 얹는다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 5, ops: append('n_a'), warnings: NO_WARNINGS })
+    const ticket = store.beginPageLoad()
+    const marker: PatchOp[] = [{ op: 'add', path: '/root/children/0/marker', value: 1 }]
+    expect(store.applyMarkerChange('page_1', { seq: 6, markerOps: marker })).toBe('applied')
+
+    expect(store.settlePageLoad(ticket)).toBe(true)
+    store.loadPage('page_1', doc([{ id: 'n_a' }]), 5, ticket)
+
+    expect(store.getState().headSeq).toBe(6)
+    expect(store.getState().document?.root.children?.[0]?.marker).toBe(1)
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  it('판째 버린 편집의 늦은 ack 가 다른 조회의 창 안에 오면 그 조회의 판 뒤에도 얹는다', () => {
+    const store = opened()
+    const opId = store.applyEdit(append('n_mine'))!
+    store.markSent(opId)
+    const first = store.beginPageLoad()
+    store.settlePageLoad(first)
+    store.loadPage('page_1', doc(), 4, first)
+    const second = store.beginPageLoad()
+
+    store.ackEdit(opId, { seq: 5, revisionId: 'rev_5', inverse: [] })
+    expect(ids(store)).toEqual(['n_mine'])
+    store.settlePageLoad(second)
+    store.loadPage('page_1', doc(), 4, second)
+
+    expect(ids(store)).toEqual(['n_mine'])
+    expect(store.getState().headSeq).toBe(5)
+  })
+
+  it('얹은 revision 이 고른 노드를 지웠으면 선택을 놓는다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 5, ops: append('n_a'), warnings: NO_WARNINGS })
+    store.selectNode('n_a')
+    const ticket = store.beginPageLoad()
+    store.applyRemoteChange('page_1', { seq: 6, ops: [{ op: 'remove', path: '/root/children/0' }], warnings: NO_WARNINGS })
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc([{ id: 'n_a' }]), 5, ticket)
+
+    expect(ids(store)).toEqual([])
+    expect(store.getState().selectedNodeId).toBeNull()
+  })
+})
+
+/**
+ * **번호 응답이 보낼 편집을 다시 못 얹으면 아무것도 안 움직인다**(`EditorStore`의 `#applyMarkerOps` — «하나라도 다시 못 얹으면»). 번호 ops 는
+ * `marker` 칸만 바꾸므로 판은 좁다 — 되돌리기 스택에 번호를 지우는 `inverse`가 있고(서버 이력으로 채운 스택) 그것을 되돌리는 편집이 큐에 선
+ * 사이, 같은 번호를 지우는 응답(코멘트 삭제)이 온다.
+ */
+describe('번호 응답이 보낼 편집을 다시 못 얹는 판', () => {
+  it('갈라졌다고 말하고 문서 · 바탕 · headSeq · 큐를 안 움직인다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', {
+      seq: 5,
+      ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_a', type: 'Container', marker: 1 } }],
+      warnings: NO_WARNINGS,
+    })
+    const removeMarker: PatchOp[] = [{ op: 'remove', path: '/root/children/0/marker' }]
+    store.restoreUndoStack([{ revisionId: 'rev_marker', inverse: removeMarker }])
+    expect(store.startUndo().clientOpId).not.toBeNull()
+    const before = store.getState()
+
+    const result = store.applyMarkerChange('page_1', { seq: 6, markerOps: removeMarker })
+
+    expect(result).toBe('diverged')
+    expect(store.getState().headSeq).toBe(5)
+    expect(store.getState().baseDocument).toBe(before.baseDocument)
+    expect(store.getState().document).toBe(before.document)
+    expect(store.getState().pending).toBe(before.pending)
+  })
+})
+
 describe('applyRemoteChange — 안 얹는 갈래', () => {
   it('다른 페이지의 변경은 건너뛴다 — headSeq도 안 건드린다', () => {
     const store = opened()
