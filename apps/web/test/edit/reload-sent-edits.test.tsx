@@ -540,7 +540,10 @@ describe('편집 실패 수습이 판을 되돌리기 전에 재연결 재조회
 })
 
 describe('편집 실패 수습은 그 편집이 나간 큐만 비운다', () => {
-  /** 1쪽의 나간 편집(«아래로»)을 남의 변경이 리베이스에서 버린다 — 그 편집은 큐에 없고 답(409)은 아직 안 왔다. */
+  /**
+   * 1쪽의 나간 편집(«아래로»)을 남의 변경이 리베이스에서 버린다 — 그 편집은 큐에 없고 답(409)은 아직 안 왔다. 남은 **옮기는 노드(Text)를**
+   * 지운다 — 리베이스는 노드 id 로 경로를 다시 지으므로(`store/anchored-ops.ts`) 옮길 노드가 사라져야 버린다.
+   */
   async function rebaseDropped(immediate: (pageId: string) => PageDetail | undefined) {
     const view = await mount({ immediate })
     const first = await view.moveDown()
@@ -549,7 +552,7 @@ describe('편집 실패 수습은 그 편집이 나간 큐만 비운다', () => 
       projectId: PROJECT_ID,
       pageId: PAGE_ID,
       seq: HEAD_SEQ + 1,
-      ops: [{ op: 'remove', path: '/root/children/1' }],
+      ops: [{ op: 'remove', path: '/root/children/0' }],
       warnings: [],
       actor: { type: 'user', label: '밥' },
     })

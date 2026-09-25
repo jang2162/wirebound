@@ -25,6 +25,7 @@ import {
   type ValidationIssue,
 } from '@wirebound/schema'
 import type { NodeLockView } from '../realtime/protocol'
+import { anchorOps, rebaseAnchored, sameOps, type AnchoredOp } from './anchored-ops'
 import {
   ackPending,
   clearPending,
@@ -67,6 +68,12 @@ export type EditFailure = { kind: 'signed-out' } | { kind: 'message'; message: s
 export interface RevisionRef {
   revisionId: string
   inverse: PatchOp[]
+  /**
+   * `inverse`를 노드 id 로 붙잡은 것(`anchored-ops.ts`) — 그 revision 을 막 기록한 문서(ack 가 바탕에 접은 판)에서 적는다(`ackEdit`). 되돌리기가
+   * 이것으로 지금 문서에서 경로를 다시 짓는다 — 그 사이 남이 같은 배열 앞자리에 넣었으면 `inverse`의 옛 자리는 **남의 노드**다. **없으면
+   * (`undefined` · `null`) `inverse`를 경로 그대로 쓴다** — 서버 이력으로 채운 스택(`restoreUndoStack`)은 그 revision 의 문서를 모른다.
+   */
+  anchored?: AnchoredOp[] | null
 }
 
 /**
@@ -1162,7 +1169,7 @@ export class EditorStore {
    * 문서와 revision 번호가 어긋난 상태가 화면에 보인다 — `applyMarkerChange`가 *"둘 다
    * 움직이거나 둘 다 안 움직인다"*로 못박은 것과 같은 자리다.
    *
-   * **버린 것이 없으면 `pending` 배열의 참조를 그대로 둔다** — 새 배열을 만들면 `#apply`가
+   * **버린 것도 경로를 다시 지은 것도 없으면 `pending` 배열의 참조를 그대로 둔다** — 새 배열을 만들면 `#apply`가
    * 변경으로 보고 큐를 구독하는 쪽이 프레임마다 헛일을 한다(`NO_WARNINGS`와 같은 이유).
    */
   #rebaseOnto(nextBase: PageDocument, seq: number, extra: Partial<EditorState>): PendingEdit[] {
@@ -1171,7 +1178,26 @@ export class EditorStore {
     const dropped: PendingEdit[] = []
     let document = nextBase
 
+    let moved = false
+
     for (const edit of pending) {
+      // **붙잡은 편집은 노드 id 로 경로를 다시 짓는다**(`anchored-ops.ts`) — 경로 그대로 얹으면 남이 같은 배열 앞자리에 넣거나 뺀 판에서 **다른
+      // 노드**에 얹히고, 409 뒤 다시 내기가 그 경로를 서버에 보낸다. 다시 지은 ops 가 곧 그 편집의 ops 다 — 나갈 요청(`nextRequest`)도 그것을 낸다.
+      if (edit.anchored) {
+        const rebased = rebaseAnchored(document, edit.anchored)
+        if (rebased === null) {
+          dropped.push(edit)
+          continue
+        }
+        document = rebased.document
+        if (sameOps(rebased.ops, edit.ops)) {
+          kept.push(edit)
+        } else {
+          kept.push({ ...edit, ops: rebased.ops })
+          moved = true
+        }
+        continue
+      }
       let next: PageDocument
       try {
         next = applyOps(document, edit.ops)
@@ -1188,7 +1214,7 @@ export class EditorStore {
       baseDocument: nextBase,
       document,
       headSeq: seq,
-      pending: dropped.length === 0 ? pending : kept,
+      pending: dropped.length === 0 && !moved ? pending : kept,
     })
     return dropped
   }
@@ -1299,12 +1325,16 @@ export class EditorStore {
     extra: Partial<EditorState>,
   ): string {
     const clientOpId = this.#nextOpId()
+    // **만든 문서에서 노드 id 로 붙잡는다** — 리베이스가 그 id 의 자리로 경로를 다시 짓는다(`anchored-ops.ts`). 만든 문서는 지금 `document`다
+    // (낙관 적용 전) — 이 편집의 ops 는 그 위에서 지어졌다.
+    const source = this.#state.document
+    const anchored = source === null ? null : anchorOps(source, ops)
     // `pending`을 **새 배열로** 만드는 것이 계약이다 — `#apply`가 참조 비교를 하므로
     // 제자리에서 `push`하면 알림이 안 간다.
     this.#apply({
       ...extra,
       document,
-      pending: [...this.#state.pending, { clientOpId, ops, baseSeq: this.#state.headSeq, kind }],
+      pending: [...this.#state.pending, { clientOpId, ops, baseSeq: this.#state.headSeq, kind, anchored }],
     })
     return clientOpId
   }
@@ -1382,15 +1412,15 @@ export class EditorStore {
       const rest = stack.slice(0, -1)
       if (ref === undefined) break
 
-      let next: PageDocument
-      try {
-        // 건너뛴 항목이 문서를 바꾸지 않으므로 후보마다 **같은 문서**에 시험한다.
-        next = applyOps(document, ref.inverse)
-      } catch {
+      // 건너뛴 항목이 문서를 바꾸지 않으므로 후보마다 **같은 문서**에 시험한다. **붙잡은 항목은 노드 id 로 경로를 다시 짓는다**
+      // (`RevisionRef.anchored`) — 그 사이 남이 앞자리에 넣었으면 `inverse`의 옛 자리가 남의 노드를 가리킨다. 경로의 노드가 사라졌으면 못 얹는다.
+      const attempt = this.#tryInverse(document, ref)
+      if (attempt === null) {
         stack = rest
         skipped += 1
         continue
       }
+      const { ops, document: next } = attempt
 
       // **낙관적 적용보다 먼저 묻는다 — 순서가 계약이다.** 뒤로 옮기면 «깜빡임»이 아니라
       // **항목이 사라진다.** 변조로 쟀다(이 판정을 아래 `#enqueue` **뒤로** 옮긴다):
@@ -1400,7 +1430,7 @@ export class EditorStore {
       // **문서는 되돌아간 채 남고 요청은 나가지 않으며 잠금이 풀린 뒤 다시 눌러도 그 항목은
       // 이미 없다.** 되돌아갔다가 재조회로 복귀하는 깜빡임은 그보다 나은 판이다.
       const blocked =
-        openPageId === null ? null : this.#lockConflict(openPageId, document, lockPointers(ref.inverse))
+        openPageId === null ? null : this.#lockConflict(openPageId, document, lockPointers(ops))
       if (blocked !== null) {
         // **건너뛴 것만 버리고 막힌 것은 남긴다.** `stack`은 이미 건너뛴 만큼 좁혀져 있고
         // 그 맨 위가 막힌 항목이다 — 잠금이 풀리면 다음 누름이 바로 그것을 집는다.
@@ -1410,9 +1440,9 @@ export class EditorStore {
 
       const clientOpId = this.#enqueue(
         next,
-        // **서버가 준 `inverse`를 그대로 보낸다**(「정방향 흐름」). 클라이언트가 `invertOps`로
-        // 계산하지 않는다 — 클라이언트 상태가 낙관적으로 앞서 있을 수 있기 때문이다.
-        ref.inverse,
+        // **서버가 준 `inverse`를 보낸다**(「정방향 흐름」). 클라이언트가 `invertOps`로 계산하지 않는다 — 클라이언트 상태가 낙관적으로 앞서
+        // 있을 수 있기 때문이다. 다시 짓는 것은 경로뿐이다(`#tryInverse`).
+        ops,
         kind,
         kind === 'undo' ? { undoStack: rest } : { redoStack: rest },
       )
@@ -1423,6 +1453,16 @@ export class EditorStore {
       this.#apply(kind === 'undo' ? { undoStack: [] } : { redoStack: [] })
     }
     return { clientOpId: null, skipped, blocked: null }
+  }
+
+  /** 되돌리기 항목을 `document`에 얹어 본다 — 붙잡았으면 경로를 다시 짓고, 아니면 `inverse` 그대로. 못 얹으면 `null`. */
+  #tryInverse(document: PageDocument, ref: RevisionRef): { ops: PatchOp[]; document: PageDocument } | null {
+    if (ref.anchored) return rebaseAnchored(document, ref.anchored)
+    try {
+      return { ops: ref.inverse, document: applyOps(document, ref.inverse) }
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -1502,8 +1542,14 @@ export class EditorStore {
       }
     }
 
-    // 서버가 준 `inverse`를 **그대로** 싣는다(「정방향 흐름」).
-    const ref: RevisionRef = { revisionId: result.revisionId, inverse: result.inverse }
+    // 서버가 준 `inverse`를 **그대로** 싣는다(「정방향 흐름」). 붙잡는 문서는 그 revision 을 기록한 판(방금 접은 바탕)이다 — 바탕을 못 접었으면
+    // (갈라졌다) 붙잡지 않는다.
+    const recorded = nextBase !== null && this.#state.remoteStale?.reason !== 'diverged' ? nextBase : null
+    const ref: RevisionRef = {
+      revisionId: result.revisionId,
+      inverse: result.inverse,
+      anchored: recorded === null ? null : anchorOps(recorded, result.inverse),
+    }
     // **undo가 만든 revision은 redo 스택으로 간다.** 그 revision의 `inverse`는 원래 편집을
     // 다시 적용하는 것이므로 undo 스택에 쌓으면 같은 편집을 무한히 되돌리게 된다.
     // redo가 만든 것은 반대로 다시 undo 스택으로 간다.

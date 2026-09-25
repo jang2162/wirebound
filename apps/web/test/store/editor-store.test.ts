@@ -476,7 +476,8 @@ describe('EditorStore의 편집 상태', () => {
     // 낙관적 적용 — 서버에 묻기 전에 문서가 이미 바뀌어 있다.
     expect(store.getState().document?.root.props).toEqual({ title: '새 제목' })
     // `kind`는 ack가 어느 스택에 쌓을지를 가르는 표시다.
-    expect(store.getState().pending).toEqual([
+    // 붙잡은 경로(`anchored`)는 모양을 여기서 안 잰다 — `anchored-ops.test.ts`가 잰다.
+    expect(store.getState().pending).toMatchObject([
       { clientOpId: 'op-1', ops: TITLE_OPS, baseSeq: 7, kind: 'edit' },
     ])
     // `headSeq`는 ack 전까지 그대로다 — 그것을 여기서 올리면 다음 편집이 아직 없는
@@ -522,7 +523,7 @@ describe('EditorStore의 편집 상태', () => {
     expect(store.getState().headSeq).toBe(8)
     expect(store.getState().pending).toEqual([])
     // **`inverse`는 서버가 준 그대로 쌓인다**(설계서 「정방향 흐름」). 클라이언트가 계산하지 않는다.
-    expect(store.getState().undoStack).toEqual([
+    expect(store.getState().undoStack).toMatchObject([
       { revisionId: 'rev-8', inverse: [{ op: 'remove', path: '/root/props' }] },
     ])
   })

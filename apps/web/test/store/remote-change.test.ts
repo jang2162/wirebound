@@ -229,6 +229,78 @@ describe('applyRemoteChange — 리베이스', () => {
   })
 })
 
+/**
+ * **리베이스 · 되돌리기는 노드 id 로 경로를 다시 짓는다**(`src/store/anchored-ops.ts`). 판은 `[n_a, n_b, n_c]`에서 내 편집이 `n_b`(자리 1)를
+ * 겨누는 사이 남이 맨 앞에 넣는 것이다 — 경로 그대로 얹으면 던지지 않고 `n_a`에 얹히고, 409 뒤 다시 내기가 그 경로를 서버에 보낸다(Chrome · api:
+ * 서버에서 «가»가 지워졌다).
+ */
+describe('리베이스는 내 편집을 제 노드로 옮긴다', () => {
+  function three(): EditorStore {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 5, ops: [...append('n_a'), ...append('n_b'), ...append('n_c')], warnings: NO_WARNINGS })
+    return store
+  }
+  const FRONT: PatchOp[] = [{ op: 'add', path: '/root/children/0', value: { id: 'n_x', type: 'Container' } }]
+
+  it('나간 삭제는 남이 앞에 넣은 판에서 그 노드를 지우는 경로로 다시 나간다', () => {
+    const store = three()
+    store.applyEdit([{ op: 'remove', path: '/root/children/1' }])
+
+    const change = store.applyRemoteChange('page_1', { seq: 6, ops: FRONT, warnings: NO_WARNINGS })
+
+    expect(change.dropped).toEqual([])
+    expect(ids(store)).toEqual(['n_x', 'n_a', 'n_c'])
+    expect(store.nextRequest()).toMatchObject({ baseSeq: 6, ops: [{ op: 'remove', path: '/root/children/2' }] })
+  })
+
+  it('남이 그 노드를 지웠으면 버리고 돌려준다 — 옆 노드에 얹지 않는다', () => {
+    const store = three()
+    store.applyEdit([{ op: 'replace', path: '/root/children/1/type', value: 'Text' }])
+
+    const change = store.applyRemoteChange('page_1', { seq: 6, ops: [{ op: 'remove', path: '/root/children/1' }], warnings: NO_WARNINGS })
+
+    expect(change.dropped.map((edit) => edit.clientOpId)).toEqual(['op_1'])
+    expect(store.getState().document?.root.children?.map((node) => node.type)).toEqual(['Container', 'Container'])
+  })
+
+  it('되돌리기는 ack 뒤 남이 앞에 넣은 판에서 그 노드를 되돌린다', () => {
+    const store = three()
+    const opId = store.applyEdit([{ op: 'replace', path: '/root/children/1/type', value: 'Text' }])
+    store.ackEdit(opId!, { seq: 6, revisionId: 'rev_6', inverse: [{ op: 'replace', path: '/root/children/1/type', value: 'Container' }] })
+    store.applyRemoteChange('page_1', { seq: 7, ops: FRONT, warnings: NO_WARNINGS })
+
+    const attempt = store.startUndo()
+
+    expect(attempt).toMatchObject({ skipped: 0, blocked: null })
+    expect(store.nextRequest()?.ops).toEqual([{ op: 'replace', path: '/root/children/2/type', value: 'Container' }])
+    expect(store.getState().document?.root.children?.map((node) => node.type)).toEqual(['Container', 'Container', 'Container', 'Container'])
+  })
+
+  it('되돌리기의 잠금 판정도 다시 지은 경로로 묻는다 — 남이 잡은 제 노드면 막힌다', () => {
+    const store = three()
+    const opId = store.applyEdit([{ op: 'replace', path: '/root/children/1/type', value: 'Text' }])
+    store.ackEdit(opId!, { seq: 6, revisionId: 'rev_6', inverse: [{ op: 'replace', path: '/root/children/1/type', value: 'Container' }] })
+    store.applyRemoteChange('page_1', { seq: 7, ops: FRONT, warnings: NO_WARNINGS })
+    store.setViewer('me')
+    store.setLocks([{ pageId: 'page_1', nodeId: 'n_b', userId: 'bob', userName: '밥' }])
+
+    expect(store.startUndo()).toMatchObject({ clientOpId: null, blocked: { userName: '밥' } })
+    expect(store.getState().undoStack).toHaveLength(1)
+  })
+
+  it('되돌릴 노드를 남이 지웠으면 건너뛴다 — 옆 노드를 되돌리지 않는다', () => {
+    const store = three()
+    const opId = store.applyEdit([{ op: 'replace', path: '/root/children/1/type', value: 'Text' }])
+    store.ackEdit(opId!, { seq: 6, revisionId: 'rev_6', inverse: [{ op: 'replace', path: '/root/children/1/type', value: 'Container' }] })
+    store.applyRemoteChange('page_1', { seq: 7, ops: [{ op: 'remove', path: '/root/children/1' }], warnings: NO_WARNINGS })
+
+    const attempt = store.startUndo()
+
+    expect(attempt).toEqual({ clientOpId: null, skipped: 1, blocked: null })
+    expect(store.getState().pending).toEqual([])
+  })
+})
+
 describe('applyRemoteChange — 안 얹는 갈래', () => {
   it('다른 페이지의 변경은 건너뛴다 — headSeq도 안 건드린다', () => {
     const store = opened()
