@@ -82,7 +82,6 @@
  * `text`·`jsonb` 컬럼이라 값이 저장되지 못하므로 payload로는 못 온다.
  */
 import { sql } from 'kysely'
-import { readWithin } from '../db/client'
 import { assertLocking } from '../db/locking'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
@@ -265,29 +264,6 @@ export async function insertSnapshot(
 export async function listSnapshots(db: DbHandle, projectId: string): Promise<SnapshotSummary[]> {
   const rows = await selectSnapshots(db).where('snapshots.project_id', '=', projectId).execute()
   return rows.map((row) => toSummary(row as SummaryRow))
-}
-
-/**
- * **그 스냅샷 행이 커밋됐는가** — COMMIT 답을 잃은 복원이 새 연결로 안전망 스냅샷을 찾는 자리다(`services/lost-commit.ts`).
- * 그 id 는 복원 트랜잭션 안에서 `insertSnapshot`이 이미 돌려줬으므로 보이면 그 트랜잭션은 커밋됐다.
- *
- * **`ms` 안에 못 끝나거나 실패하면 `null`이고 그 연결은 버린다**(`db/client.ts`의 `readWithin` — `findRevisionCommitWithin`과 같다).
- */
-export async function findSnapshotCommitWithin(
-  db: DbHandle,
-  projectId: string,
-  snapshotId: string,
-  ms: number,
-): Promise<boolean | null> {
-  const query = db
-    .selectNoFrom((eb) => [
-      eb
-        .exists(eb.selectFrom('snapshots').select('id').where('id', '=', snapshotId).where('project_id', '=', projectId))
-        .as('committed'),
-    ])
-    .compile()
-  const row = (await readWithin(db, query, ms))?.[0]
-  return row === undefined ? null : Boolean(row.committed)
 }
 
 /**

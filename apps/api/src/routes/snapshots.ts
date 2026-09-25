@@ -83,7 +83,6 @@ import { parseBody, parseParams } from '../http/parse'
 import {
   SnapshotNulByteError,
   findSnapshotById,
-  findSnapshotCommitWithin,
   insertSnapshot,
   listSnapshots,
   type SnapshotDetail,
@@ -91,7 +90,7 @@ import {
 } from '../repos/snapshots'
 import { lockProjectShared } from '../repos/projects'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
-import { probeCommit, runConfirmedTransaction } from '../services/lost-commit'
+import { runConfirmedTransaction } from '../services/lost-commit'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
 import { broadcastOrigin, notifyRestored } from '../ws/notify'
 
@@ -311,7 +310,7 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           throw unauthenticated()
         }
 
-        // **COMMIT 답을 잃으면 안전망 스냅샷이 보이는지 새 연결로 확인한다**(`services/lost-commit.ts`) — 보이면 복원은 커밋됐다.
+        // **COMMIT 답을 잃으면 그 트랜잭션이 커밋됐는지 새 연결로 확인한다**(`services/lost-commit.ts`) — 커밋됐으면 성공이다.
         // `restored`는 페이지의 `seq`를 싣지 않고 받는 쪽이 다시 읽게 하는 프레임이라 머리를 보지 않고 보낸다.
         const { result: outcome } = await runConfirmedTransaction(
           app.db,
@@ -323,14 +322,7 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
             if (restored.kind === 'restored') await recheckProjectRole(trx, request)
             return restored
           },
-          async (restored) => {
-            if (restored.kind !== 'restored') return null
-            const seen = await probeCommit(async (ms) => {
-              const committed = await findSnapshotCommitWithin(app.db, projectId, restored.result.safety.id, ms)
-              return committed === null ? null : { committed }
-            })
-            return seen?.committed === true ? true : null
-          },
+          async (restored) => (restored.kind === 'restored' ? true : null),
         )
         if (outcome.kind !== 'restored') {
           throw restoreOutcomeToApiError(outcome)
