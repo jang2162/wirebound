@@ -38,6 +38,11 @@ const RevisionQuery = z.strictObject({
    * jsonb 두 컬럼(`ops`·`inverse`)을 함께 싣기 때문에 응답이 항목 수에 비례해 무거워진다.
    */
   limit: z.coerce.number().int().min(1).max(200).default(50),
+  /**
+   * 주면 `seq`가 이 값보다 **작은** 것만 고른다 — 최신순 그대로 `limit`개. 이력을 뒤로 넘겨 읽는 커서다. 웹이 새로고침으로 채운 되돌리기를
+   * 지금 판에서 거꾸로 되짚을 때, 내 revision 사이에 낀 남의 revision 을 받는다(`apps/web/src/routes/editor.tsx`의 `restoreUndo`).
+   */
+  beforeSeq: z.coerce.number().int().min(1).optional(),
 })
 
 /**
@@ -103,6 +108,7 @@ export function revisionRoutes() {
 
       const revisions = await listRevisions(app.db, pageId, {
         ...(query.mine === 'true' ? { actorId: currentUser.id } : {}),
+        ...(query.beforeSeq === undefined ? {} : { beforeSeq: query.beforeSeq }),
         limit: query.limit,
       })
 

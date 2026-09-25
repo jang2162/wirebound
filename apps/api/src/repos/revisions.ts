@@ -107,6 +107,8 @@ export async function insertRevision(trx: DbHandle, input: InsertRevisionInput):
 export interface ListRevisionsOptions {
   /** 주면 `actor_type = 'user' AND actor_id = <이 값>`으로 좁힌다. */
   actorId?: string
+  /** 주면 `seq < beforeSeq`로 좁힌다 — 그 번호 앞의 이력을 최신순으로 읽는 커서다. */
+  beforeSeq?: number
   limit: number
 }
 
@@ -127,6 +129,10 @@ export async function listRevisions(
 
   if (options.actorId !== undefined) {
     query = query.where('actor_type', '=', 'user').where('actor_id', '=', options.actorId)
+  }
+  if (options.beforeSeq !== undefined) {
+    // 비교 값의 타입은 select 타입(`string` — int8)이다. 값이 정수라 문자열로 넘겨도 pg 가 bigint 로 견준다.
+    query = query.where('seq', '<', String(options.beforeSeq))
   }
 
   const rows = await query.orderBy('seq', 'desc').limit(options.limit).execute()

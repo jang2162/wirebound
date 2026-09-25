@@ -35,7 +35,7 @@ const OTHER_DOC = pageDoc({
   children: [{ id: TEXT_ID, type: 'Text', props: { content: '다른 페이지', role: 'body' } }],
 })
 
-/** 서버가 준 revision 하나. `inverse`가 undo가 되보낼 ops다. `seq`는 연 판(`HEAD_SEQ` 7)에서 이어져야 실린다(`restoreUndoStack`). */
+/** 서버가 준 revision 하나. `inverse`가 undo가 되보낼 ops다. `seq`가 연 판(`HEAD_SEQ` 7)에서 이어지면 되짚기 조회 없이 붙잡힌다(`restoreUndoStack`). */
 function revision(seq: number, restoreTo: string): RevisionSummary {
   return {
     id: `rev-${seq}`,

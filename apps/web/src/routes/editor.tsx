@@ -37,7 +37,7 @@ import { PageDescriptionPanel } from '../panels/page-description'
 import { PanelDraftsProvider } from '../panels/panel-drafts'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
-import { leftUnsentNotice, useEditCommit } from '../edit/use-edit-commit'
+import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
@@ -1199,6 +1199,13 @@ function CanvasFrame(props: {
      * 내 revision을 받아 undo 스택을 채운다. **실패는 삼킨다** — 조회가 실패하면
      * undo만 없고 페이지는 그대로 열려 있다.
      *
+     * **판을 실은 바로 뒤의 점(`undoRestorePoint`)을 들고 간다** — 목록을 받는 동안 판이 다시 실리거나(재연결 · 복원 · 수습) 비면 스토어가
+     * 그 답을 버린다(세대). 판을 실은 번호 뒤의 내 편집은 세션 항목이 이미 든다 — 스토어가 그 아래에 끼운다(`restoreUndoStack`).
+     *
+     * **되짚는 길에 빠진 번호(내 revision 사이에 낀 남의 것 · 목록 답 전에 온 프레임 · 내 ack)는 여기서 받지 않는다** — 되돌리기를 처음
+     * 누를 때 받는다(`edit/use-edit-commit.tsx`의 `undo` · `EditorStore.undoHistoryNeed`). 열 때 받으면 누르지 않아도 문서 통째 교체
+     * revision 이 낀 페이지마다 수백 MB 를 내려받는다.
+     *
      * **재조회(복구) 경로에서는 이것을 부르지 않는다.** 재조회는 서버가 내 것과 갈라졌다는
      * 뜻이고, 그때 옛 `inverse`를 되살리면 **남의 편집을 조용히 덮는다** — 실측: 내가 `A→B`로
      * 바꾼 뒤 남이 `C`로 바꾼 문서에 내 `inverse`(`replace … ← "A"`)를 적용하면 던지지 않고
@@ -1207,15 +1214,13 @@ function CanvasFrame(props: {
      * 충돌 뒤에는 스택을 비운 채 두고 사용자가 새로고침으로 되찾게 한다.
      */
     async function restoreUndo(openPageId: string): Promise<void> {
+      const point = store.undoRestorePoint()
+      if (point === null || point.pageId !== openPageId) return
       try {
-        const revisions = await api.listMyRevisions(projectId, openPageId, { cancel: leave.signal })
+        const mine = restoredRevisions(await api.listMyRevisions(projectId, openPageId, { cancel: leave.signal }))
         // 늦게 온 응답이 새 페이지의 스택을 덮지 않게 한다(문서 조회와 같은 가드).
         if (!alive) return
-        // 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 —
-        // 스토어가 `RevisionSummary`를 알면 `apps/web`의 HTTP 경계가 스토어까지 새어 든다.
-        store.restoreUndoStack(
-          revisions.map((revision) => ({ revisionId: revision.id, seq: revision.seq, inverse: revision.inverse })),
-        )
+        store.restoreUndoStack(mine, { point })
       } catch {
         // 여기서 알리지 않는다. 사용자가 할 수 있는 일이 없고, 편집 실패 통지 자리를
         // 부가 기능의 실패로 채우면 진짜 편집 실패가 묻힌다.

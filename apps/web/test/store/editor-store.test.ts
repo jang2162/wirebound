@@ -812,18 +812,36 @@ describe('EditorStore의 편집 상태', () => {
     ])
   })
 
-  it('restoreUndoStack은 redo 스택을 비운다', () => {
-    // 복원한 항목은 redo를 갖지 않는다. redo 스택은 세션 안에서 undo를 눌러야 생긴다.
+  /**
+   * **목록 답이 오기 전에 세션에서 되돌린 것(redo)을 지우지 않는다** — 복원한 항목은 세션 앞의 것이라 그 redo 와 무관하다. 목록 답은 판을 실은
+   * 뒤에 오므로 그 사이 세션 항목 · redo 가 이미 서 있을 수 있다(Chrome: `apps/web/build-test/editor-undo-restore.test.ts`의 «세션 먼저»).
+   */
+  it('restoreUndoStack은 세션의 redo 스택을 두고 세션 항목 아래에 싣는다', () => {
     const store = loaded()
+    const point = store.undoRestorePoint()
+    if (point === null) throw new Error('판이 없다')
     store.applyEdit(TITLE_OPS)
     store.ackEdit('op-1', ack(8))
+    store.applyEdit([{ op: 'replace', path: '/root/props/title', value: '둘째 제목' }])
+    store.ackEdit('op-2', ack(9, [{ op: 'replace', path: '/root/props/title', value: '새 제목' }]))
     store.startUndo()
-    store.ackEdit('op-2', ack(9, REDO_INVERSE))
+    store.ackEdit('op-3', ack(10, [{ op: 'replace', path: '/root/props/title', value: '둘째 제목' }]))
     expect(store.getState().redoStack).toHaveLength(1)
+    const session = store.getState().undoStack
 
-    store.restoreUndoStack([{ revisionId: 'r', seq: 9, inverse: [] }])
+    // 판을 실은 7 까지의 내 것 하나 — 8 · 9 · 10 은 세션이 든다(목록이 그 뒤에 읽혔으면 함께 온다).
+    store.restoreUndoStack(
+      [
+        { revisionId: 'rev-10', seq: 10, inverse: [{ op: 'replace', path: '/root/props/title', value: '둘째 제목' }] },
+        { revisionId: 'rev-9', seq: 9, inverse: [{ op: 'replace', path: '/root/props/title', value: '새 제목' }] },
+        { revisionId: 'rev-8', seq: 8, inverse: [{ op: 'remove', path: '/root/props' }] },
+        { revisionId: 'rev-7', seq: 7, inverse: [] },
+      ],
+      { point },
+    )
 
-    expect(store.getState().redoStack).toEqual([])
+    expect(store.getState().redoStack).toHaveLength(1)
+    expect(store.getState().undoStack.map((ref) => ref.revisionId)).toEqual(['rev-7', ...session.map((ref) => ref.revisionId)])
   })
 
   it('loadPage는 redo 스택도 비운다', () => {
@@ -1496,7 +1514,12 @@ describe('서버 이력으로 채운 되돌리기', () => {
     expect(contents(store)).toEqual(['밥', '옛 나'])
   })
 
-  it('연 판에 남의 revision 이 끼어 있으면 그 아래 항목은 싣지 않는다 — 그 revision 의 문서를 모른다', () => {
+  /**
+   * **사이 번호가 빠졌으면 누름이 그 항목 앞에서 멈추고 받을 조회를 낸다**(`UndoAttempt.history`) — 붙잡지 않으므로 항목은 남는다. **받을 만큼 받고도
+   * 못 받았으면 그 항목은 건너뛰고 그 수를 말한다** — 경로 그대로 보내지 않는다. 6 의 경로(`children/1`)는 밥의 7 앞 판의 자리라 지금 판에서는
+   * «가»다. 싣지 않으면 아무도 그 항목이 사라진 것을 말하지 않는다.
+   */
+  it('연 판에 받지 못한 남의 revision 이 끼어 있으면 누름이 멈춰 받을 조회를 내고, 받지 못한 채 다시 누르면 건너뛴다 — 남의 노드를 안 고친다', () => {
     const store = new EditorStore({ nextOpId: idSequence() })
     // 6 은 내 것(«나»를 고쳤다), 7 은 밥이 맨 앞에 넣은 것 — 연 판은 7 이다.
     store.loadPage('pg-1', page(text('n_bob', '밥'), text('n_ga', '가'), text('n_na', '나')), 7)
@@ -1504,8 +1527,192 @@ describe('서버 이력으로 채운 되돌리기', () => {
       { revisionId: 'rev-6', seq: 6, inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }] },
     ])
 
-    expect(store.getState().undoStack).toEqual([])
-    expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 0, blocked: null })
+    expect(store.getState().undoStack).toHaveLength(1)
+    expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 0, blocked: null, history: { beforeSeq: 8, limit: 1, epoch: expect.any(Number) } })
+    expect(store.getState().undoStack).toHaveLength(1)
+    expect(store.startUndo({ historyLoaded: true })).toEqual({ clientOpId: null, skipped: 1, blocked: null })
     expect(contents(store)).toEqual(['밥', '가', '나'])
+    expect(store.getState().pending).toEqual([])
+  })
+
+  it('사이에 낀 남의 revision 을 받으면 그것으로 되짚어 제 노드를 되돌린다', () => {
+    const store = new EditorStore({ nextOpId: idSequence() })
+    store.loadPage('pg-1', page(text('n_bob', '밥'), text('n_ga', '가'), text('n_na', '나')), 7)
+    const mine = [{ revisionId: 'rev-6', seq: 6, inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }] as PatchOp[] }]
+    const point = store.undoRestorePoint()
+    if (point === null) throw new Error('판이 없다')
+
+    store.restoreUndoStack(mine, { point })
+    // 빠진 것은 7 하나 — 7 까지를 받는 조회다.
+    const need = store.undoHistoryNeed()
+    expect(need).toEqual({ beforeSeq: 8, limit: 1, epoch: point.epoch })
+    if (need === null) throw new Error('조회가 없다')
+    expect(store.supplyUndoHistory(need, [{ revisionId: 'rev-7', seq: 7, inverse: [{ op: 'remove', path: '/root/children/0' }] }])).toBe(true)
+    expect(store.undoHistoryNeed()).toBeNull()
+
+    expect(store.startUndo().skipped).toBe(0)
+    expect(contents(store)).toEqual(['밥', '가', '옛 나'])
+    expect(store.getState().pending[0]?.ops).toEqual([{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }])
+  })
+})
+
+/**
+ * **새로고침으로 채우는 되돌리기의 입구 × 값의 출처**(`restoreUndoStack` · `undoRestorePoint` · `undoHistoryNeed`).
+ *
+ * 목록을 부르는 입구는 페이지를 여는 조회 하나다(`routes/editor.tsx`의 `restoreUndo`). 판을 다시 싣는 입구(재연결 · 복원 · 수습 — 모두
+ * `loadPage`)와 떠남(`clearPage`)은 목록을 부르지 않고, 목록을 받는 동안 그 입구가 돌면 그 답을 버린다(세대). 값의 출처는 셋이다 — 목록 답에
+ * 든 것 · 목록을 읽은 뒤 온 남의 프레임 · 목록을 읽은 뒤 온 내 ack. 판마다 되돌리기가 제 노드를 고치는지(열기) · 스택이 그대로인지(다시 싣기 ·
+ * 떠남)를 본다.
+ *
+ * 판: `[가, 나]`(7) — 내 7 은 «나»를 «옛 나»에서 «나»로 고쳤다. 목록은 7 에서 읽혔다.
+ */
+describe('새로고침 되돌리기의 입구 × 출처', () => {
+  const text = (id: string, content: string) => ({ id, type: 'Text', props: { content } })
+  const page = (...children: ReturnType<typeof text>[]): PageDocument => ({
+    version: CURRENT_DOCUMENT_VERSION,
+    root: { id: 'n_root', type: 'Container', children },
+  })
+  const contents = (store: EditorStore) => store.getState().document?.root.children?.map((child) => child.props?.content)
+  const MINE = [{ revisionId: 'rev-7', seq: 7, inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }] as PatchOp[] }]
+  /** 밥이 맨 앞에 넣은 프레임(8)과 그 `inverse` — 되짚기 조회가 받는 것. */
+  const BOB = {
+    frame: { seq: 8, ops: [{ op: 'add', path: '/root/children/0', value: text('n_bob', '밥') }] as PatchOp[], warnings: [] },
+    revision: { revisionId: 'rev-8', seq: 8, inverse: [{ op: 'remove', path: '/root/children/0' }] as PatchOp[] },
+  }
+
+  function opened(): { store: EditorStore; point: NonNullable<ReturnType<EditorStore['undoRestorePoint']>> } {
+    const store = new EditorStore({ nextOpId: idSequence() })
+    store.loadPage('pg-1', page(text('n_ga', '가'), text('n_na', '나')), 7)
+    const point = store.undoRestorePoint()
+    if (point === null) throw new Error('판이 없다')
+    return { store, point }
+  }
+
+  /**
+   * 부르는 쪽이 하는 대로 누른다 — 여는 조회(`routes/editor.tsx`의 `restoreUndo`)는 목록만 싣고, 되돌리기(`edit/use-edit-commit.tsx`의
+   * `loadUndoHistory`)가 누를 때 빠진 구간을 받아 넘긴 뒤 되돌린다. `server`가 그 구간을 답한다. 물은 구간을 돌려준다.
+   */
+  function undoLikeHook(store: EditorStore, server: readonly { revisionId: string; seq: number; inverse: PatchOp[] }[]): { beforeSeq: number; limit: number }[] {
+    const asked: { beforeSeq: number; limit: number }[] = []
+    for (let round = 0; round < 3; round += 1) {
+      const need = store.undoHistoryNeed()
+      if (need === null) break
+      asked.push({ beforeSeq: need.beforeSeq, limit: need.limit })
+      store.supplyUndoHistory(need, server.filter((revision) => revision.seq < need.beforeSeq).slice(0, need.limit))
+    }
+    store.startUndo()
+    return asked
+  }
+
+  it('여는 조회 × 목록 답만 — 사이 조회 없이 제 노드를 되돌린다', () => {
+    const { store, point } = opened()
+    store.restoreUndoStack(MINE, { point })
+
+    expect(undoLikeHook(store, [])).toEqual([])
+
+    expect(contents(store)).toEqual(['가', '옛 나'])
+  })
+
+  it('여는 조회 × 목록을 읽은 뒤 온 남의 프레임 — 그 번호를 받아 되짚고 남의 노드는 그대로다', () => {
+    const { store, point } = opened()
+    expect(store.applyRemoteChange('pg-1', BOB.frame).result).toBe('applied')
+
+    store.restoreUndoStack(MINE, { point })
+
+    expect(undoLikeHook(store, [BOB.revision])).toEqual([{ beforeSeq: 9, limit: 1 }])
+
+    expect({ contents: contents(store), stack: store.getState().undoStack.length }).toEqual({ contents: ['밥', '가', '옛 나'], stack: 0 })
+  })
+
+  it('여는 조회 × 목록을 읽은 뒤 온 내 ack — 세션 항목이 위에 남고, 그 다음에 복원 항목이 제 노드를 되돌린다', () => {
+    const { store, point } = opened()
+    // 세션에서 맨 앞에 «다»를 넣었다(8) — 목록은 그 앞(7)에서 읽혔다.
+    store.applyEdit([{ op: 'add', path: '/root/children/0', value: text('n_da', '다') }])
+    store.ackEdit('op-1', { seq: 8, revisionId: 'rev-8', inverse: [{ op: 'remove', path: '/root/children/0' }] })
+
+    store.restoreUndoStack(MINE, { point })
+    const server = [{ revisionId: 'rev-8', seq: 8, inverse: [{ op: 'remove', path: '/root/children/0' }] as PatchOp[] }]
+
+    expect(store.getState().undoStack.map((ref) => ref.revisionId)).toEqual(['rev-7', 'rev-8'])
+    // 맨 위가 세션 항목이면 이력 없이 되돌린다 — 그다음 누름이 복원 항목이라 그때 받는다.
+    expect(undoLikeHook(store, server)).toEqual([])
+    expect(contents(store)).toEqual(['가', '나'])
+    expect(undoLikeHook(store, server)).toEqual([{ beforeSeq: 9, limit: 1 }])
+    expect(contents(store)).toEqual(['가', '옛 나'])
+  })
+
+  /** 다시 싣는 입구는 모두 `loadPage`다 — 재연결 재조회 · 복원 재조회 · 편집 실패 수습. 떠남은 `clearPage` 뒤 다시 여는 `loadPage`다. */
+  const RELOADS: readonly { name: string; run: (store: EditorStore) => void }[] = [
+    { name: '다시 싣기(재연결 · 복원 · 수습 — 같은 판)', run: (store) => void store.loadPage('pg-1', page(text('n_ga', '가'), text('n_na', '나')), 7) },
+    { name: '다시 싣기(판이 움직였다)', run: (store) => void store.loadPage('pg-1', page(text('n_bob', '밥'), text('n_ga', '가'), text('n_na', '나')), 8) },
+    {
+      name: '떠났다 돌아옴',
+      run: (store) => {
+        store.clearPage()
+        store.loadPage('pg-1', page(text('n_ga', '가'), text('n_na', '나')), 7)
+      },
+    },
+  ]
+  const SOURCES: readonly { name: string; run: (store: EditorStore) => void }[] = [
+    { name: '목록 답만', run: () => {} },
+    { name: '남의 프레임', run: (store) => void store.applyRemoteChange('pg-1', BOB.frame) },
+    {
+      name: '내 ack',
+      run: (store) => {
+        store.applyEdit([{ op: 'add', path: '/root/children/0', value: text('n_da', '다') }])
+        store.ackEdit('op-1', { seq: 8, revisionId: 'rev-8', inverse: [{ op: 'remove', path: '/root/children/0' }] })
+      },
+    },
+  ]
+  for (const reload of RELOADS) {
+    for (const source of SOURCES) {
+      it(`${reload.name} × ${source.name} — 목록을 받는 동안 판이 다시 실리면 그 답을 싣지 않는다`, () => {
+        const { store, point } = opened()
+        source.run(store)
+        reload.run(store)
+        const before = store.getState().undoStack
+
+        store.restoreUndoStack(MINE, { others: [BOB.revision], point })
+        expect(store.undoHistoryNeed()).toBeNull()
+
+        expect(store.getState().undoStack).toBe(before)
+        expect(store.startUndo().clientOpId).toBeNull()
+      })
+    }
+  }
+
+  it('한 판에 한 번만 싣는다 — 같은 점으로 두 번 불러도 항목이 겹치지 않는다', () => {
+    const { store, point } = opened()
+
+    store.restoreUndoStack(MINE, { point })
+    store.restoreUndoStack(MINE, { point })
+
+    expect(store.getState().undoStack).toHaveLength(1)
+  })
+
+  /**
+   * **페이지를 열 때 되짚지도 붙잡지도 않는다 — 누를 때 한다**(`RevisionRef.anchorOnUse`). 붙잡기는 op 마다 문서를 복제하므로 50 항목을 열 때
+   * 다 하면 메인 스레드가 문서 크기 × op 수만큼 멈춘다. `inverse`의 원소를 읽는 수로 잰다 — 붙잡기 · 되짚기가 원소를 읽는다.
+   */
+  it('restoreUndoStack은 inverse 를 읽지 않는다 — 누를 때 맨 위 항목만 읽는다', () => {
+    const { store, point } = opened()
+    const reads = { count: 0 }
+    const counted = (ops: PatchOp[]): PatchOp[] =>
+      new Proxy(ops, {
+        get(target, key, receiver) {
+          if (typeof key === 'string' && /^\d+$/.test(key)) reads.count += 1
+          return Reflect.get(target, key, receiver)
+        },
+      })
+    const mine = [
+      { revisionId: 'rev-7', seq: 7, inverse: counted([{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }]) },
+      { revisionId: 'rev-6', seq: 6, inverse: counted([{ op: 'replace', path: '/root/children/0/props/content', value: '옛 가' }]) },
+    ]
+
+    store.restoreUndoStack(mine, { point })
+    const atOpen = reads.count
+    store.startUndo()
+
+    expect({ atOpen, stack: store.getState().undoStack.length, top: contents(store) }).toEqual({ atOpen: 0, stack: 1, top: ['가', '옛 나'] })
   })
 })

@@ -16,10 +16,11 @@ import type { Interaction, PatchOp } from '@wirebound/schema'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, toFailure } from '../api/failure'
+import type { RevisionSummary } from '../api/types'
 import { useEditChannel, useLockChannel } from '../realtime/context'
 import { EditNotSentError, UnansweredEditError, type EditChannel, type UnansweredCause } from '../realtime/edit-channel'
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
-import type { EditStatus, UndoAttempt } from '../store/editor-store'
+import type { EditStatus, RestoredRevision, UndoAttempt, UndoHistoryNeed } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
 
 /** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
@@ -159,8 +160,13 @@ const UNANSWERED_RECOVER_FAILURE = '페이지를 다시 불러오지도 못했�
  * 점이 같고, 자리를 나누면 그 하나뿐인 통지 규칙이 흩어진다.
  */
 function skippedNotice(skipped: number, applied: boolean): string {
-  const head = `되돌릴 수 없는 편집 ${skipped}개를 건너뛰었습니다.`
+  const head = skippedHead(skipped)
   return applied ? `${head} 그 앞의 편집을 되돌렸습니다.` : `${head} 되돌릴 것이 더 없습니다.`
+}
+
+/** 건너뛴 것만 말하는 앞 문장 — 되짚기 이력을 받는 동안과 받지 못했을 때도 쓴다(`undo` · `loadUndoHistory`). */
+function skippedHead(skipped: number): string {
+  return `되돌릴 수 없는 편집 ${skipped}개를 건너뛰었습니다.`
 }
 
 /**
@@ -186,6 +192,25 @@ function skippedNotice(skipped: number, applied: boolean): string {
 function lockedNotice(userName: string, skipped: number): string {
   const head = skipped > 0 ? `되돌릴 수 없는 편집 ${skipped}개를 건너뛰었습니다. 그 앞의 편집은 ` : ''
   return `${head}${userName}님이 편집 중이라 되돌릴 수 없습니다. 잠금이 풀리면 그대로 되돌릴 수 있습니다.`
+}
+
+/**
+ * 새로고침으로 채운 되돌리기의 되짚기 이력을 누를 때 받는 횟수(`undo`). 한 조회는 `UNDO_HISTORY_PAGE`(200)개까지라 그보다 긴 구간은 받은
+ * 것을 넘기고 다시 묻는다 — 그래도 남으면 받은 데까지로 되짚고 못 지은 항목은 누를 때 건너뛰고 그 수를 말한다.
+ */
+const UNDO_HISTORY_ROUNDS = 3
+
+/** 되짚기 이력 조회가 이유 없이 실패했을 때(네트워크 등). */
+const UNDO_HISTORY_FAILURE = '되돌리기 이력을 불러오지 못했습니다'
+/** 되짚기 이력을 못 받았을 때 덧붙인다 — 되돌리지 않았고 항목은 그대로 남아 다시 누르면 다시 받는다. */
+const UNDO_HISTORY_NOTICE = '되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.'
+
+/**
+ * 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 — 스토어가 `RevisionSummary`를 알면 `apps/web`의 HTTP
+ * 경계가 스토어까지 새어 든다. 목록(`routes/editor.tsx`의 `restoreUndo`)과 되짚기 조회(`undo`)가 함께 쓴다.
+ */
+export function restoredRevisions(revisions: readonly RevisionSummary[]): RestoredRevision[] {
+  return revisions.map((revision) => ({ revisionId: revision.id, seq: revision.seq, inverse: revision.inverse }))
 }
 
 export interface EditCommit {
@@ -244,7 +269,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
   const store = useEditorStoreInstance()
   const open = useOpenPage(pageId)
   const status = useEditorStore(store, (s) => s.editStatus)
-  const canUndo = useEditorStore(store, (s) => s.undoStack.length > 0)
+  // 되짚기 이력을 받는 동안은 꺼진다(`undo`의 `loadUndoHistory`) — 누른 것은 받은 뒤 한 번 되돌린다.
+  const canUndo = useEditorStore(store, (s) => s.undoStack.length > 0 && !s.undoHistoryLoading)
   const canRedo = useEditorStore(store, (s) => s.redoStack.length > 0)
 
   /**
@@ -528,27 +554,25 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * 대신 **누르면 이 자리가 이유를 말한다** — undo가 이미 쓰는 통로이고(위 `skippedNotice`),
    * 「개인 undo/redo」가 *"적용 불가는 에러가 아니라 정상 흐름"*으로 정한 자리와 같다.
    */
-  const step = useCallback(
-    (start: () => UndoAttempt): void => {
-      // 지금 열린 페이지가 아니면 아무것도 하지 않는다(`commitProp`과 같은 대조).
-      if (open === null) return
-
-      const attempt = start()
+  const settle = useCallback(
+    (attempt: UndoAttempt, carried: number): void => {
+      // 앞서 같은 누름이 건너뛴 것(`carried` — 되짚기 이력을 받기 전에 버린 세션 항목)도 함께 센다.
+      const skipped = carried + attempt.skipped
       // **잠금이 먼저다.** 건너뛴 것이 함께 있어도 사용자가 지금 답을 기다리는 물음은
       // *"왜 안 되돌아갔나"*이고, 그 답은 잠금이다. 건너뛴 수는 문장 안에 함께 실린다.
       if (attempt.blocked !== null) {
         store.setEditFailure({
           kind: 'message',
-          message: lockedNotice(attempt.blocked.userName, attempt.skipped),
+          message: lockedNotice(attempt.blocked.userName, skipped),
         })
         // **큐에 들어간 것이 없으므로 펌프도 밟지 않는다** — 스토어가 낙관적 적용조차
         // 안 했다(`#startFrom`이 그 앞에서 멈춘다).
         return
       }
-      if (attempt.skipped > 0) {
+      if (skipped > 0) {
         store.setEditFailure({
           kind: 'message',
-          message: skippedNotice(attempt.skipped, attempt.clientOpId !== null),
+          message: skippedNotice(skipped, attempt.clientOpId !== null),
         })
       } else {
         // 앞 통지를 치운다 — 남겨 두면 방금 누른 undo도 실패한 것으로 읽힌다.
@@ -558,12 +582,87 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       if (attempt.clientOpId === null) return
       void pump()
     },
-    [open, store, pump],
+    [store, pump],
   )
 
+  const step = useCallback(
+    (start: () => UndoAttempt): void => {
+      // 지금 열린 페이지가 아니면 아무것도 하지 않는다(`commitProp`과 같은 대조).
+      if (open === null) return
+      settle(start(), 0)
+    },
+    [open, settle],
+  )
+
+  /**
+   * **새로고침으로 채운 항목의 되짚기 이력을 받고 되돌린다**(`EditorStore.undoHistoryNeed`) — 페이지를 열 때 받지 않고 처음 누를 때 받는다
+   * (`routes/editor.tsx`의 `restoreUndo`). 받는 동안 단추가 꺼지고(`undoHistoryLoading`), 그 사이 누른 것은 버린다.
+   *
+   * - **판이 갈리면(떠남 · 다시 실림) 조회를 끊고 아무것도 안 한다** — 첫 쓰기(`supplyUndoHistory`) 앞에서 판으로 가른다. 스택은 그 판이 이미 비웠다.
+   * - **받는 동안 맨 위가 바뀌면 되돌리지 않는다** — 세션 편집의 ack 나 다시 실행이 위에 올랐으면 누른 때 되돌리려던 것이 아니다. 받은 이력은
+   *   남으므로 다시 누르면 바로 되돌린다.
+   * - **조회가 실패하면 되돌리지 않고 그렇다고 말한다** — 항목은 그대로 두고 다시 누르면 다시 받는다. 받은 데까지로 되짚으면 못 지은 항목이
+   *   건너뛰어져 스택에서 사라진다 — 한 번의 끊김으로 이력을 잃는다. 세션이 끊겼으면 그 통지(`<SignedOut />`)로 간다.
+   */
+  const loadUndoHistory = useCallback(
+    async (first: UndoHistoryNeed, skipped: number): Promise<void> => {
+      const target = store.queuePageId()
+      const project = store.queueProjectId() ?? projectId
+      if (target === null) return
+      const { undoStack } = store.getState()
+      const top = undoStack[undoStack.length - 1]
+      const leave = new AbortController()
+      const stop = store.subscribe(() => {
+        if (!store.undoHistoryLive(first)) leave.abort()
+      })
+      store.beginUndoHistoryLoad(first)
+      try {
+        let need: UndoHistoryNeed | null = first
+        for (let round = 0; need !== null && round < UNDO_HISTORY_ROUNDS; round += 1) {
+          const asked: UndoHistoryNeed = need
+          let more: RestoredRevision[]
+          try {
+            more = restoredRevisions(
+              await api.listRevisionsBefore(project, target, { beforeSeq: asked.beforeSeq, limit: asked.limit }, { cancel: leave.signal }),
+            )
+          } catch (caught) {
+            if (!store.undoHistoryLive(first)) return
+            const failure = toFailure(caught, UNDO_HISTORY_FAILURE)
+            const head = skipped > 0 ? `${skippedHead(skipped)} ` : ''
+            store.setEditFailure(failure.kind === 'signed-out' ? failure : { kind: 'message', message: `${head}${failure.message} — ${UNDO_HISTORY_NOTICE}` })
+            return
+          }
+          if (!store.supplyUndoHistory(asked, more)) return
+          // 물은 가장 높은 번호가 없으면(서버에 없다) 다시 물어도 같다.
+          if (!more.some((revision) => revision.seq === asked.beforeSeq - 1)) break
+          need = store.undoHistoryNeed()
+        }
+        const now = store.getState().undoStack
+        if (!store.undoHistoryLive(first) || now[now.length - 1] !== top) return
+        store.endUndoHistoryLoad(first)
+        settle(store.startUndo({ historyLoaded: true }), skipped)
+      } finally {
+        stop()
+        store.endUndoHistoryLoad(first)
+      }
+    },
+    [api, projectId, store, settle],
+  )
+
+  /**
+   * 되돌리기 한 단계. 새로고침으로 채운 항목에 닿았는데 되짚기 이력이 모자라면 스토어가 멈추고 조회를 낸다(`UndoAttempt.history`) — 맨 위가 그
+   * 항목이든, 맨 위 세션 항목을 건너뛰고 닿았든. 받은 뒤 되돌리고, 건너뛴 세션 항목은 그 결과와 함께 센다. 받는 동안은 건너뛴 것만 말한다.
+   */
   const undo = useCallback(() => {
-    step(store.startUndo)
-  }, [step, store])
+    if (open === null || store.getState().undoHistoryLoading) return
+    const attempt = store.startUndo()
+    if (attempt.history === undefined) {
+      settle(attempt, 0)
+      return
+    }
+    if (attempt.skipped > 0) store.setEditFailure({ kind: 'message', message: skippedHead(attempt.skipped) })
+    void loadUndoHistory(attempt.history, attempt.skipped)
+  }, [open, store, settle, loadUndoHistory])
 
   const redo = useCallback(() => {
     step(store.startRedo)

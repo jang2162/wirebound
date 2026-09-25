@@ -91,6 +91,7 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
       issues: [],
     }),
     listMyRevisions: notStubbed('listMyRevisions'),
+    listRevisionsBefore: notStubbed('listRevisionsBefore'),
     /**
      * **`getProjectTheme`과 같은 이유로 `notStubbed`가 아니다.** 에디터 셸의 테마 고르개가
      * **테스트가 요청하지 않아도** 부른다(`routes/editor.tsx`). 여기서 던지면 셸을 지나가는
