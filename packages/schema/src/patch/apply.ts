@@ -20,8 +20,11 @@ export function applyOp<T>(doc: T, op: PatchOp): T {
  *   저장하고 방송하며, 웹은 보낼 편집으로 들고 있다. 그래서 결과는 `ops`의 값을 참조하지 않는다.
  * - **빈 목록이면 입력을 그대로(같은 참조) 돌려준다.** 복제하지 않는다.
  *
- * 결과가 연산마다 복제하는 단순 구현과 같다는 것 — 문서 · 역연산 · 오류 — 은
- * `packages/schema/test/patch/equivalence.property.test.ts`가 무작위 ops 로 잰다.
+ * **JSON 문서(한 객체가 두 자리에 꽂힌 공유 참조가 없는 문서)에서** 결과가 연산마다 복제하는 단순 구현과 같다 — 문서 ·
+ * 역연산 · 오류. `packages/schema/test/patch/equivalence.property.test.ts`가 무작위 JSON 문서와 ops 로 잰다. **공유 참조가
+ * 있으면 갈린다** — `structuredClone`은 문서 안의 공유를 보존하고 `move`는 뺀 값을 복제 없이 옮기므로, 옮긴 값 안을 뒤 연산이
+ * 바꾸면 다른 자리의 같은 객체도 바뀐다(단순 구현은 `move`마다 복제해 공유를 끊는다). 서버 문서는 jsonb 에서 오고 웹 문서는
+ * `JSON` · 이 함수의 결과뿐이라 공유가 생기지 않는다 — 문서를 다른 길로 조립하는 자리가 생기면 그 자리가 공유를 끊는다.
  */
 export function applyOps<T>(doc: T, ops: PatchOp[]): T {
   if (ops.length === 0) return doc
