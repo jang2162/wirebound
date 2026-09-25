@@ -44,8 +44,9 @@ cp apps/api/.env.example apps/api/.env
 # 2. Postgres 를 띄운다 — 저장소(또는 워크트리) 루트에서
 docker compose --env-file apps/api/.env up -d     # 이 플래그를 빼지 마라 → 「컨테이너를 못 찾는다」
 docker compose ps                                 # healthy 가 될 때까지 기다린다
-                                                  # PORTS 칸에 포트가 보여야 한다 → 「컨테이너를 못 찾는다」
                                                   # healthy 가 아니면 5번과 테스트가 전부 접속 실패로 죽는다
+docker compose port postgres 5432                 # 포트를 찍어야 한다 — `no port …` · 종료 1 이면
+                                                  # 포트 없이 뜬 것이다 → 「컨테이너를 못 찾는다」 ⓑ
 
 # 3. 워크스페이스를 설치한다
 pnpm install
@@ -231,7 +232,8 @@ cp apps/api/.env.example apps/api/.env
 
 # 4. 이 워크트리의 컨테이너를 띄운다 — 이 디렉터리에서
 docker compose --env-file apps/api/.env up -d
-docker compose ps          # healthy 이고 PORTS 칸에 <포트> 가 보여야 한다 (「컨테이너를 못 찾는다」)
+docker compose ps                   # healthy 여야 한다
+docker compose port postgres 5432   # <포트> 를 찍어야 한다 — 종료 1 이면 포트 없이 뜬 것이다(「컨테이너를 못 찾는다」 ⓑ)
 
 # 5. DB 둘을 만든다 — 방금 띄운 내 컨테이너 안에서 한 줄씩
 docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>;'
@@ -522,8 +524,15 @@ Error response from daemon: failed to set up container networking:
 > 그 포트에 붙는 것은 전부 **먼저 잡은 워크트리의 컨테이너**다 — 내 서버가 남의 DB 를
 > 읽고 쓰는데 **아무도 안 운다.**
 >
-> **그래서 `up -d` 뒤에는 `docker compose ps` 의 `PORTS` 칸을 본다.** 비어 있으면 위
-> 충돌이 났던 것이다: `docker compose down` 하고 포트를 바꿔 다시 띄운다.
+> **그래서 `up -d` 뒤에는 `docker compose port postgres 5432` 를 친다** — 포트가 열려 있으면 그 포트를 찍고 종료 0,
+> 포트 없이 떴으면 `no port 5432/tcp for container …` 로 **종료 1** 이다(`docker compose ps` 의 `PORTS` 빈 칸과 같은 판을
+> 눈 대신 종료 코드로 가른다). 종료 1 이면 위 충돌이 났던 것이다: `docker compose down` 하고 포트를 바꿔 다시 띄운다.
+> 포트를 쥔 쪽이 먼저 내려갔으면 그냥 `up -d` 한 번이 포트를 되찾는다(`Started`).
+> **compose 설정으로는 못 막는다** — 헬스체크는 컨테이너 **안**에서 돌아 호스트 포트를 못 보고(포트 없이도 `healthy`),
+> `up -d --wait` 도 그 판에서 종료 0 이다. 다시 재는 법: 일회용 컨테이너가 그 포트를 쥔 채(`docker run -d --rm -p
+> <포트>:5432 postgres:16-alpine sleep 600`) `up -d` 를 두 번 치고 위 명령의 종료 코드를 본다 — 두 번째 `up` 뒤
+> `DATABASE_URL` 은 **쥔 컨테이너의 DB** 에 닿는다. 호스트 프로세스(컨테이너가 아닌 것)가 그 포트를 쥔 판은 `up` 이
+> 막히지 않고 포트를 붙인다(Docker Desktop · 이 기계).
 > (DB 이름을 워크트리마다 가르는 것이 이 사고를 시끄럽게 만드는 두 번째 자다 — 「워크트리를 여럿 띄울 때」.)
 
 **ⓒ 컨테이너는 떴는데 DB 가 비었다.** **워크트리마다 볼륨이 따로 생기므로 그것이
