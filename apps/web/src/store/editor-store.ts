@@ -1070,8 +1070,8 @@ export class EditorStore {
   }
 
   /**
-   * **되짚으려면 더 받아야 할 이력** — 지금 판에서 내 가장 옛 항목까지 거꾸로 되짚는 길에 빠진 번호가 있으면, 그 가장 높은 번호까지를
-   * 받는 조회(`seq < beforeSeq` · 최신순 `limit`개)를 낸다. 빠진 것이 없거나 판이 갈렸으면 `null`.
+   * **되짚으려면 더 받아야 할 이력** — 지금 판에서 내 가장 옛 항목까지 거꾸로 되짚는 길에 빠진 번호가 있으면, 그 가장 높은 번호부터 아래로
+   * 이어 빠진 구간을 받는 조회(`seq < beforeSeq` · 최신순 `limit`개)를 낸다. 빠진 것이 없거나 판이 갈렸으면 `null`.
    *
    * 빠진 번호는 남의 revision(코멘트 번호 포함 · 토큰으로 낸 내 것)이거나, 목록을 읽은 뒤에 온 프레임 · 내 ack 의 revision 이다 — 목록은
    * 내 것만이고, 그 뒤의 것은 서버가 목록을 읽은 판에 없었다. 그래서 부르는 쪽은 받은 것을 합쳐 다시 묻는다 — 도는 동안 판이 더 올라갔으면
@@ -1083,7 +1083,10 @@ export class EditorStore {
   ): { beforeSeq: number; limit: number } | null => {
     const walk = this.#undoHistory(point, history)
     if (walk === null || walk.missing === null) return null
-    return { beforeSeq: walk.missing + 1, limit: Math.min(UNDO_HISTORY_PAGE, walk.missing - walk.lowest) }
+    // 빠진 구간의 아래 끝 — 이미 받은 번호에서 멈춘다(앞 조회가 받은 것을 다시 받지 않는다).
+    let bottom = walk.missing - 1
+    while (bottom > walk.lowest && !walk.inverses.has(bottom)) bottom -= 1
+    return { beforeSeq: walk.missing + 1, limit: Math.min(UNDO_HISTORY_PAGE, walk.missing - bottom) }
   }
 
   /**

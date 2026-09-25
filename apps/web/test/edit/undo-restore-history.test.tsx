@@ -190,6 +190,57 @@ describe('새로고침 되돌리기가 끊긴 자리를 받아 되짚는다', ()
     expect(contents()).toEqual(['밥', '가', '옛 나'])
   })
 
+  it('되짚기 조회를 받는 동안 판이 또 오르면 그 위를 한 번 더 받는다', async () => {
+    const { setup, sockets } = wiring()
+    const list = deferred<RevisionSummary[]>()
+    const firstBefore = deferred<RevisionSummary[]>()
+    const before = vi.fn((_projectId: string, _pageId: string, range: { beforeSeq: number; limit: number }) =>
+      range.beforeSeq === HEAD_SEQ + 2 ? firstBefore.promise : Promise.resolve([bobInsert(HEAD_SEQ + 2)]),
+    )
+    await openPage(doc(text('n-ga', '가'), text('n-na', '나')), {
+      realtime: setup,
+      apiOverrides: { listMyRevisions: () => list.promise, listRevisionsBefore: before },
+    })
+    act(() => {
+      sockets[0]?.onopen?.()
+    })
+    const bob = (seq: number, id: string, content: string) =>
+      act(() => {
+        sockets[0]?.onmessage?.({
+          data: JSON.stringify({
+            type: 'page-changed',
+            projectId: PROJECT_ID,
+            pageId: PAGE_ID,
+            seq,
+            ops: [{ op: 'add', path: '/root/children/0', value: text(id, content) }],
+            warnings: [],
+            actor: { type: 'user', label: '밥' },
+          }),
+        })
+      })
+    bob(HEAD_SEQ + 1, 'n-bob', '밥')
+    await act(async () => {
+      list.resolve([myEdit(HEAD_SEQ, 1)])
+    })
+    await waitFor(() => expect(before).toHaveBeenCalledTimes(1))
+    // 첫 되짚기 조회가 도는 동안 밥이 한 번 더 넣는다 — 받은 구간 위에 번호가 하나 더 선다.
+    bob(HEAD_SEQ + 2, 'n-bob2', '밥2')
+    await act(async () => {
+      firstBefore.resolve([bobInsert(HEAD_SEQ + 1)])
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    fireEvent.click(undoButton())
+
+    const patches = () => (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch') as { ops: PatchOp[] }[]
+    await waitFor(() => expect(patches()).toHaveLength(1))
+    expect(before.mock.calls.map((call) => call[2])).toEqual([
+      { beforeSeq: HEAD_SEQ + 2, limit: 1 },
+      { beforeSeq: HEAD_SEQ + 3, limit: 1 },
+    ])
+    expect(patches()[0]?.ops).toEqual([{ op: 'replace', path: '/root/children/3/props/content', value: '옛 나' }])
+    expect(contents()).toEqual(['밥2', '밥', '가', '옛 나'])
+  })
+
   it('되짚기 조회가 실패하면 그 항목은 누를 때 건너뛰고 그 수를 말한다 — 경로 그대로 보내지 않는다', async () => {
     const patch = recordingPatch()
     await openPage(doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')), {
