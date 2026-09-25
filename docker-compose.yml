@@ -23,6 +23,10 @@ services:
       # **`--env-file` 을 빼먹으면 이 기본값으로 되돌아간다.** 그때 컨테이너가 5433 으로
       # 다시 만들어져 기본값을 쓰는 다른 체크아웃과 포트가 부딪히므로 그 플래그는 `up` 에서
       # 생략하지 않는다. `ps`·`logs`·`exec`·`down` 은 프로젝트 이름으로 찾으므로 플래그가 없어도 된다.
+      #
+      # **이 포트를 다른 컨테이너가 쥐고 있으면 첫 `up` 은 죽고, 다시 치면 포트 없이 `healthy` 로 뜬다**(종료 0).
+      # 이 파일로는 못 막는다 — `up` 뒤에 `docker compose port postgres 5432` 가 종료 1 이면 그 판이다(README
+      # 「컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다」 ⓑ).
       - '${POSTGRES_PORT:-5433}:5432'
     volumes:
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro

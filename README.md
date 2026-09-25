@@ -44,8 +44,9 @@ cp apps/api/.env.example apps/api/.env
 # 2. Postgres 를 띄운다 — 저장소(또는 워크트리) 루트에서
 docker compose --env-file apps/api/.env up -d     # 이 플래그를 빼지 마라 → 「컨테이너를 못 찾는다」
 docker compose ps                                 # healthy 가 될 때까지 기다린다
-                                                  # PORTS 칸에 포트가 보여야 한다 → 「컨테이너를 못 찾는다」
                                                   # healthy 가 아니면 5번과 테스트가 전부 접속 실패로 죽는다
+docker compose port postgres 5432                 # 포트를 찍어야 한다 — `no port …` · 종료 1 이면
+                                                  # 포트 없이 뜬 것이다 → 「컨테이너를 못 찾는다」 ⓑ
 
 # 3. 워크스페이스를 설치한다
 pnpm install
@@ -231,7 +232,8 @@ cp apps/api/.env.example apps/api/.env
 
 # 4. 이 워크트리의 컨테이너를 띄운다 — 이 디렉터리에서
 docker compose --env-file apps/api/.env up -d
-docker compose ps          # healthy 이고 PORTS 칸에 <포트> 가 보여야 한다 (「컨테이너를 못 찾는다」)
+docker compose ps                   # healthy 여야 한다
+docker compose port postgres 5432   # <포트> 를 찍어야 한다 — 종료 1 이면 포트 없이 뜬 것이다(「컨테이너를 못 찾는다」 ⓑ)
 
 # 5. DB 둘을 만든다 — 방금 띄운 내 컨테이너 안에서 한 줄씩
 docker compose exec postgres psql -U wirebound -d postgres -c 'CREATE DATABASE wb_<이름>;'
@@ -522,8 +524,15 @@ Error response from daemon: failed to set up container networking:
 > 그 포트에 붙는 것은 전부 **먼저 잡은 워크트리의 컨테이너**다 — 내 서버가 남의 DB 를
 > 읽고 쓰는데 **아무도 안 운다.**
 >
-> **그래서 `up -d` 뒤에는 `docker compose ps` 의 `PORTS` 칸을 본다.** 비어 있으면 위
-> 충돌이 났던 것이다: `docker compose down` 하고 포트를 바꿔 다시 띄운다.
+> **그래서 `up -d` 뒤에는 `docker compose port postgres 5432` 를 친다** — 포트가 열려 있으면 그 포트를 찍고 종료 0,
+> 포트 없이 떴으면 `no port 5432/tcp for container …` 로 **종료 1** 이다(`docker compose ps` 의 `PORTS` 빈 칸과 같은 판을
+> 눈 대신 종료 코드로 가른다). 종료 1 이면 위 충돌이 났던 것이다: `docker compose down` 하고 포트를 바꿔 다시 띄운다.
+> 포트를 쥔 쪽이 먼저 내려갔으면 그냥 `up -d` 한 번이 포트를 되찾는다(`Started`).
+> **compose 설정으로는 못 막는다** — 헬스체크는 컨테이너 **안**에서 돌아 호스트 포트를 못 보고(포트 없이도 `healthy`),
+> `up -d --wait` 도 그 판에서 종료 0 이다. 다시 재는 법: 일회용 컨테이너가 그 포트를 쥔 채(`docker run -d --rm -p
+> <포트>:5432 postgres:16-alpine sleep 600`) `up -d` 를 두 번 치고 위 명령의 종료 코드를 본다 — 두 번째 `up` 뒤
+> `DATABASE_URL` 은 **쥔 컨테이너의 DB** 에 닿는다. 호스트 프로세스(컨테이너가 아닌 것)가 그 포트를 쥔 판은 `up` 이
+> 막히지 않고 포트를 붙인다(Docker Desktop · 이 기계).
 > (DB 이름을 워크트리마다 가르는 것이 이 사고를 시끄럽게 만드는 두 번째 자다 — 「워크트리를 여럿 띄울 때」.)
 
 **ⓒ 컨테이너는 떴는데 DB 가 비었다.** **워크트리마다 볼륨이 따로 생기므로 그것이
@@ -747,7 +756,7 @@ me@example.com 의 새 비밀번호(8–200자, 친 글자는 안 보인다):
 바꿨습니다 — me@example.com · 로그인해 둔 세션 1개를 지웠습니다
 API 토큰(wireb login)은 그대로입니다 — 2개:
   «설계서» (5e06dfcd-…) 2개 — «CI», «노트북»
-옛 비밀번호가 새어서 바꾼 것이면 이 토큰들도 거둔다 — README 「비밀번호를 잊었다」 절
+옛 비밀번호가 새어서 바꾼 것이면 이 토큰들도 거둔다 — 새 비밀번호로 에디터에 로그인해 «API 토큰» 화면(/tokens)에서
 ```
 
 - **비밀번호는 명령이 터미널에서 숨겨 묻는다** — 인자 · 환경변수 · 파이프로는 안 받는다(셋 다 셸 기록이나 `ps` 에 남는
@@ -762,42 +771,21 @@ API 토큰(wireb login)은 그대로입니다 — 2개:
 
 **옛 비밀번호가 새어서 바꾼 것이면 토큰도 거둔다.** 세션만 지워서는 못 쫓아낸다 — 토큰은 세션으로 만들고 발급자의 역할을
 그대로 가지므로, 옛 비밀번호를 쥔 사람이 세션 하나로 멤버인 프로젝트마다 토큰을 남겼을 수 있다(재설정 뒤에도 그 토큰의
-요청은 200 이다). 명령은 «잊었다»와 «새었다»를 가르지 못해 거두는 것은 사람이 한다. **화면에는 토큰 목록 · 폐기가 없다** —
-토큰 관리 API(`apps/api/README.md` 의 «API 토큰»)는 **세션으로만** 부를 수 있으므로, **새 비밀번호로 에디터에 로그인한 그
-탭**의 개발자 도구 콘솔에 붙여 넣는다. 둘 다 **자기가 만든 토큰만** 본다.
+요청은 200 이다). 명령은 «잊었다»와 «새었다»를 가르지 못해 거두는 것은 사람이 한다 — **새 비밀번호로 에디터에 로그인해
+머리 오른쪽의 «API 토큰» 화면(`/tokens`)에서 «전부 폐기»를 누른다.** 그 화면은 그 계정의 토큰을 **프로젝트를 가리지 않고**
+보여 준다 — 멤버에서 빠진 프로젝트의 토큰(지금은 404 지만 다시 멤버가 되면 사는 것)도 `멤버가 아닌 프로젝트 (<id>)` 로
+뜬다(그 프로젝트의 이름은 안 보인다 — 빠진 뒤의 이름이 새지 않게). 하나씩 거둘 수도 있고, 폐기는 두 번 누른다(확정). 자기
+CLI 의 토큰도 함께 거두므로 끝나면 `wireb login` 을 다시 한다.
 
-```js
-// 목록 — 멤버인 프로젝트마다 자기 토큰을 표로 찍는다
-(async () => {
-  const rows = []
-  for (const p of await (await fetch('/api/projects')).json())
-    for (const t of await (await fetch(`/api/projects/${p.id}/tokens`)).json())
-      rows.push({ project: p.name, token: t.name, lastUsedAt: t.lastUsedAt, projectId: p.id, tokenId: t.id })
-  console.table(rows)
-  return rows
-})()
-```
-
-```js
-// 전부 폐기 — 자기 CLI 의 토큰도 함께 거두므로 끝나면 `wireb login` 을 다시 한다
-(async () => {
-  const done = []
-  for (const p of await (await fetch('/api/projects')).json())
-    for (const t of await (await fetch(`/api/projects/${p.id}/tokens`)).json())
-      done.push({ project: p.name, token: t.name, status: (await fetch(`/api/projects/${p.id}/tokens/${t.id}`, { method: 'DELETE' })).status })
-  console.table(done)
-  return done
-})()
-```
-
-폐기는 `status` 가 204 다. 하나만 거두려면 목록의 `projectId` · `tokenId` 로 `DELETE /api/projects/<projectId>/tokens/<tokenId>`
-를 같은 콘솔에서 부른다. 멤버가 아닌 프로젝트의 토큰은 이 길로 안 보인다(그 프로젝트의 목록이 404) — 지금은 404 라 쓰이지
-않고, 다시 멤버로 들이기 전에 그 사람이 거둔다.
+화면 없이 거두려면 같은 일을 하는 API 가 있다 — `GET /api/auth/tokens` · `DELETE /api/auth/tokens/<id>` ·
+`DELETE /api/auth/tokens`(전부). **세션으로만 부른다**(토큰으로 부르면 401 — 토큰으로 토큰을 거두지 않는다).
+계약은 `apps/api/README.md` 의 «API 토큰».
 
 > **재는 법** — 일회용 계정으로 옛 비밀번호 세션에서 토큰 셋을 만들고 → 명령으로 바꾸고(출력에 3개) → 그 토큰의
-> `GET /api/projects/<id>` 가 200 인지 → 독립 헤드리스 Chrome 에서 에디터에 새 비밀번호로 로그인해 위 두 글을
-> `page.evaluate` 로 돌리고 → 폐기 204 × 3 · 그 토큰 401 × 3 · 목록 `[]` 를 본다. 명령 쪽 값은
-> `apps/api/test/reset-password.test.ts` 가 함께 잰다.
+> `GET /api/projects/<id>` 가 200 인지 → 독립 헤드리스 Chrome 에서 에디터에 새 비밀번호로 로그인해 «API 토큰» 링크로
+> 화면을 열고 → «전부 폐기» → «토큰 전부 폐기 확정» → `토큰 3개를 폐기했습니다` · 그 토큰 401 × 3 · 화면에
+> `만든 API 토큰이 없습니다` 를 본다. 명령 쪽 값은 `apps/api/test/reset-password.test.ts` 가, 화면 · API 의 값은
+> `apps/web/test/routes/tokens.test.tsx` · `apps/api/test/my-tokens.test.ts` 가 함께 잰다.
 
 **바꾸지 않고 끝나는 갈래가 전부 «아무것도 바꾸지 않았습니다»를 말하고 종료 코드가 0 이 아니다:**
 

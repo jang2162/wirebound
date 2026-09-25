@@ -88,7 +88,7 @@ describe('서버와 웹의 프레임 이름', () => {
   it('웹이 미리 만들어 두는 하트비트가 그 이름을 쓴다', () => {
     const web = stripComments(readFileSync(WEB_PROTOCOL, 'utf8'))
 
-    expect(web).toContain("JSON.stringify({ type: 'ping' }")
+    expect(web).toMatch(/\bJSON\s*\.\s*stringify\s*\(\s*\{\s*type\s*:\s*'ping'\s*\}/)
   })
 
   it('닫는 코드를 웹이 아는 값으로만 쓴다 — 4000번대는 애플리케이션 몫이다', () => {

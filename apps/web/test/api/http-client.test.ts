@@ -254,6 +254,9 @@ const ENDPOINTS: Array<{
   { client: 'logout', url: '/api/auth/logout', method: 'POST', body: null, call: (c) => c.logout() },
   { client: 'me', url: '/api/auth/me', method: 'GET', body: user, call: (c) => c.me() },
   { client: 'listProjects', url: '/api/projects', method: 'GET', body: [project], call: (c) => c.listProjects() },
+  { client: 'listMyTokens', url: '/api/auth/tokens', method: 'GET', body: [{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }], call: (c) => c.listMyTokens() },
+  { client: 'revokeMyToken', url: '/api/auth/tokens/t1', method: 'DELETE', body: null, call: (c) => c.revokeMyToken('t1') },
+  { client: 'revokeAllMyTokens', url: '/api/auth/tokens', method: 'DELETE', body: { revoked: 2 }, call: (c) => c.revokeAllMyTokens() },
   { client: 'getProject', url: '/api/projects/p1', method: 'GET', body: project, call: (c) => c.getProject('p1') },
   { client: 'getTree', url: '/api/projects/p1/tree', method: 'GET', body: { menu: [] }, call: (c) => c.getTree('p1') },
   { client: 'getPage', url: '/api/projects/p1/pages/pg1', method: 'GET', body: page, call: (c) => c.getPage('p1', 'pg1') },
@@ -525,6 +528,9 @@ const SHAPE_CASES: Array<{
 }> = [
   { shape: 'projectDetail', broken: { ...project, id: '' }, ok: project, call: (c) => c.getProject('p1') },
   { shape: 'projectList', broken: [{ ...project, id: '' }], ok: [project], call: (c) => c.listProjects() },
+  // 폐기 주소가 되는 `id`는 빈 문자열까지 막는다 — 그 밖의 칸은 모양만 본다.
+  { shape: 'myTokens', broken: [{ ...{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }, id: '' }], ok: [{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }], call: (c) => c.listMyTokens() },
+  { shape: 'revokedCount', broken: { revoked: '2' }, ok: { revoked: 2 }, call: (c) => c.revokeAllMyTokens() },
   { shape: 'treeEnvelope', broken: { menu: null }, ok: { menu: [treeNode] }, call: (c) => c.getTree('p1') },
   {
     shape: 'menuNode',

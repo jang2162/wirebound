@@ -100,7 +100,7 @@ export interface Violation {
  * (검산 명령에 `*` 뒤 `/`를 쓰지 마라 — 이 주석이 거기서 끝나 `esbuild`가 이 파일을 통째로
  * 못 읽는다.)
  *
- * 1. `wb-shell` — 에디터 셸의 루트(`shell.css` 머리말 4번의 사슬 첫 칸)
+ * 1. `wb-shell` — 에디터 셸의 루트(`shell.css` 머리말 «상속되는 속성은 문서를 감싸는 상자에 걸지 않는다»의 사슬 첫 칸)
  * 2. `wb-shell-canvas` — 그 사슬 둘째
  * 3. `wb-shell-canvas-frame` — 셋째
  * 4. `wb-shell-canvas-surface` — 넷째. 여기 안에 페이지 문서가 들어온다
@@ -158,7 +158,7 @@ const WRAPPER_PROPERTIES = new Set([
   'box-shadow',
 ])
 
-/** 셸의 클래스·변수 접두어. 테마가 쓰는 이름과 겹칠 수 없다는 것이 `shell.css` 머리말 1번이다. */
+/** 셸의 클래스·변수 접두어. 테마가 쓰는 이름과 겹칠 수 없다는 것이 `shell.css` 머리말의 «모든 클래스에 `wb-shell-` 접두어를 붙인다» 규칙이다. */
 const PREFIX = 'wb-shell'
 
 interface Rule {
@@ -599,7 +599,7 @@ function splitTop(text: string, separator: string): string[] {
  * 선택자 하나를 본다. 허용하는 형태는 **`wb-shell` 클래스 하나로 시작하는 복합 선택자
  * 하나**뿐이다 — 결합자도, 함수형 의사 클래스도 없다.
  *
- * 이 한 문장이 `shell.css` 머리말 2·3번을 함께 막는다. 요소 선택자(`div`)·전체 선택자(`*`)·속성 선택자
+ * 이 한 문장이 `shell.css` 머리말의 «요소 선택자를 쓰지 않는다» · «자손 선택자를 쓰지 않는다»를 함께 막는다. 요소 선택자(`div`)·전체 선택자(`*`)·속성 선택자
  * (`[data-wb-id]`)·id 선택자는 전부 "`wb-shell` 클래스로 시작하지 않는다"에 걸리고,
  * 자손·자식·형제는 "결합자가 있다"에 걸린다.
  */
@@ -651,7 +651,7 @@ function checkSelector(selector: string, violations: Violation[]): void {
 /**
  * 감싸는 상자의 선언을 본다. **허용 목록 밖은 전부 위반이다**(위 `WRAPPER_PROPERTIES`).
  *
- * 커스텀 프로퍼티는 따로 본다. `--wb-shell-*`는 두기로 한 예외이고(머리말 4번), 접두어 없는
+ * 커스텀 프로퍼티는 따로 본다. `--wb-shell-*`는 두기로 한 예외이고(`shell.css` 머리말 «상속되는 속성은 문서를 감싸는 상자에 걸지 않는다»의 «예외 — 커스텀 프로퍼티»), 접두어 없는
  * 변수는 테마의 변수 이름과 겹칠 수 있어 막는다 — 속성 이름 목록을 훑는 `rg` 정규식은
  * `--*`를 아예 보지 못한다.
  */

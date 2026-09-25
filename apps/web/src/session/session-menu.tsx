@@ -40,6 +40,7 @@
  * 판정 자체는 `api/failure.tsx`가 갖는다 — 여기서 `code`를 다시 읽지 않는다.
  */
 import { useState, type ReactElement } from 'react'
+import { Link } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
 import { useSessionSwitched, useSessionUser, useSignOut } from './session-context'
@@ -89,6 +90,8 @@ export function SessionMenu(): ReactElement {
     <>
       <div className="wb-shell-session">
         {user !== null && <span className="wb-shell-session-user">{user.name}</span>}
+        {/* 이 계정의 API 토큰 — 거두는 화면이 여기서 열린다(`routes/tokens.tsx`). */}
+        <Link className="wb-shell-session-tokens" to="/tokens">API 토큰</Link>
         {/* 요청이 도는 동안 잠근다 — 두 번 눌러 두 번 나갈 이유가 없다(로그인 폼과 같은 관례). */}
         <button
           type="button"

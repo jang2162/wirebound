@@ -71,8 +71,8 @@ describe('운영이 그리는 자를 실제로 받는가', () => {
    */
   it('`main.ts` 가 `config.screenChromiumPath` 를 그리는 자에게 넘긴다', () => {
     const main = sourceOf('main.ts')
-    expect(main).toContain('config.screenChromiumPath')
-    expect(main).toContain('executablePath: config.screenChromiumPath')
+    expect(main).toMatch(/\bconfig\s*\.\s*screenChromiumPath\b/)
+    expect(main).toMatch(/\bexecutablePath\s*:\s*config\s*\.\s*screenChromiumPath\b/)
   })
 
   it('`buildApp` 은 그것을 스스로 만들지 않는다 — 만들면 케이스 전부가 브라우저를 띄운다', () => {
@@ -137,7 +137,7 @@ describe('순수한 쪽이 오염되지 않았는가', () => {
    */
   it('`exportPptx` 를 부르는 자리는 이미지를 **값으로** 넘긴다 — 그리는 자를 넘기지 않는다', () => {
     const service = sourceOf('services/export-pptx.ts')
-    expect(service).toContain('exportPptx(')
+    expect(service).toMatch(/\bexportPptx\s*\(/)
     expect(service).not.toMatch(/exportPptx\s*\(\s*\{[^)]*renderer/)
   })
 })

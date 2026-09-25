@@ -37,6 +37,27 @@
  *
  * ---
  *
+ * # 내 토큰은 프로젝트를 가로지른다 — `/api/auth/tokens`
+ *
+ * 위 셋은 프로젝트 아래라 **그 프로젝트의 멤버만** 부른다(가드가 비멤버에게 404). 그런데 멤버가 아닌 프로젝트의 토큰도 남을 수
+ * 있다 — 멤버 제거가 지우지만(`deleteMemberTokens`) 제거와 겹쳐 발급하자마자 쓰인 토큰은 건너뛰고(그 함수의 `SKIP LOCKED`),
+ * 이 표를 훑어 지우는 마이그레이션이 없어 제거가 토큰을 안 지우는 판으로 빠진 멤버의 토큰도 남아 있을 수 있다. 그 토큰은
+ * 비멤버인 동안 404 로 잠들었다가 **다시 멤버가 되면 산다.**
+ * 옛 비밀번호가 새어 토큰을 거둘 사람에게는 그 프로젝트 목록이 안 보이므로, 계정 아래에 **로그인한 사람의 토큰 전부**를
+ * 프로젝트 · 멤버 여부와 함께 내는 목록 · 하나 폐기 · 전부 폐기를 둔다(`myTokenRoutes`). 세션으로만 부르는 규칙은 같다.
+ *
+ * **비멤버 프로젝트의 이름은 안 싣는다**(`projectName: null`) — 그 프로젝트의 id 만 낸다. 판정: *"한때 멤버였던 사람에게
+ * 이름이 새는가"* — **샌다.** 토큰은 멤버일 때만 발급되니 그 사람은 발급 때의 이름을 알았지만, 응답이 싣는 것은 **지금의**
+ * 이름이다. 빠진 뒤 owner 가 바꾼 이름은 그 사람이 모르는 것이고, 설계서 「권한 모델」은 비멤버에게 프로젝트를 404 로
+ * 숨긴다. id 는 그 사람이 토큰을 발급할 때 이미 받은 값이라 새는 것이 없다. **숨기지 못하는 것 하나 — 그 프로젝트가 아직
+ * 있다는 사실.** 토큰 행은 프로젝트 삭제의 CASCADE 로 함께 사라지므로 줄이 보이면 프로젝트가 있다. 지울 줄을 보여 주려면
+ * 피할 수 없고, 그 사람이 거둬야 할 자격이 그 프로젝트에 살아 있다는 뜻이기도 하다.
+ *
+ * **폐기에 재확인을 걸지 않는다** — 권한을 줄이는 쓰기다(설계서 「권한 모델」의 «예외는 자기 API 토큰의 폐기다»). 잠금을
+ * 기다리는 사이 로그아웃했다고 폐기를 되돌리면 거두려던 자격이 남는다.
+ *
+ * ---
+ *
  * # 오류 표
  *
  * | 상황 | 상태 |
@@ -45,6 +66,7 @@
  * | 이름에 NUL(U+0000) | **400** |
  * | 토큰으로 부름 | **403** |
  * | 없는 토큰 id · 남의 토큰 id | **404**(존재를 숨긴다) |
+ * | `/api/auth/tokens`를 토큰으로 부름 | **401**(`:projectId`가 없는 라우트라 토큰이 사람을 안 채운다 — `auth/plugin.ts`) |
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
@@ -53,11 +75,21 @@ import { containsNulByte } from '../db/nul-guard'
 import { withTransaction } from '../db/tx'
 import { badRequest, forbidden, notFound, unauthenticated } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
-import { deleteApiToken, insertApiToken, listApiTokens, type ApiTokenRecord } from '../repos/api-tokens'
+import {
+  deleteAllUserTokens,
+  deleteApiToken,
+  deleteUserToken,
+  insertApiToken,
+  listApiTokens,
+  listUserTokens,
+  type ApiTokenRecord,
+  type MyApiTokenRecord,
+} from '../repos/api-tokens'
 import { lockProjectShared } from '../repos/projects'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const TokenParams = z.object({ projectId: z.uuid(), tokenId: z.uuid() })
+const MyTokenParams = z.object({ tokenId: z.uuid() })
 
 /**
  * 이름은 **사람이 이 자격을 알아보는 꼬리표다** — `snapshots.tag`와 같은 1~60자를 쓴다.
@@ -74,6 +106,16 @@ function toResponse(record: ApiTokenRecord) {
     name: record.name,
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
+  }
+}
+
+/** «내 토큰» 목록의 형태 — 위에 프로젝트 칸 셋을 더한다. `projectName`은 멤버일 때만 있다(머리말 «내 토큰은 프로젝트를 가로지른다»). */
+function toMyResponse(record: MyApiTokenRecord) {
+  return {
+    ...toResponse(record),
+    projectId: record.projectId,
+    projectName: record.projectName,
+    member: record.member,
   }
 }
 
@@ -134,9 +176,40 @@ export function tokenRoutes() {
 }
 
 /**
+ * **로그인한 사람의 토큰 전부** — `/api/auth` 아래에 등록한다(머리말 «내 토큰은 프로젝트를 가로지른다»). 가드가
+ * `requireAuth`다 — 프로젝트가 없으니 역할을 볼 자리가 없고, 다루는 것은 자기 자격뿐이다.
+ */
+export function myTokenRoutes() {
+  return async function plugin(app: FastifyInstance): Promise<void> {
+    /** 목록. **원문이 없다.** 비멤버 프로젝트의 줄은 `projectName: null`이다. */
+    app.get('/tokens', { preHandler: app.requireAuth }, async (request) => {
+      const currentUser = requireSessionUser(request)
+      const records = await listUserTokens(app.db, currentUser.id)
+      return records.map(toMyResponse)
+    })
+
+    /** 하나 폐기 — 어느 프로젝트의 것이든. 남의 토큰 id · 없는 id 는 404 다. */
+    app.delete('/tokens/:tokenId', { preHandler: app.requireAuth }, async (request, reply) => {
+      const { tokenId } = parseParams(MyTokenParams, request.params)
+      const currentUser = requireSessionUser(request)
+      if (!(await deleteUserToken(app.db, currentUser.id, tokenId))) {
+        throw notFound('토큰을 찾을 수 없습니다')
+      }
+      return reply.status(204).send()
+    })
+
+    /** 전부 폐기. 지운 수를 낸다(0 이어도 200 — «남은 토큰이 없다»가 이루려던 상태다). */
+    app.delete('/tokens', { preHandler: app.requireAuth }, async (request) => {
+      const currentUser = requireSessionUser(request)
+      return { revoked: await deleteAllUserTokens(app.db, currentUser.id) }
+    })
+  }
+}
+
+/**
  * 이 요청이 **세션으로** 인증됐는지 확인하고 그 사용자를 낸다. 토큰이면 403이다.
  *
- * 근거는 이 파일 머리말의 *"이 셋은 세션으로만 부를 수 있다"*에 있다. 셋이 같은 문장을
+ * 근거는 이 파일 머리말의 *"이 셋은 세션으로만 부를 수 있다"*에 있다. 여섯이(«내 토큰» 셋 포함) 같은 문장을
  * 쓰도록 함수 하나로 둔다 — 갈리면 한 라우트만 열려 있는 상태가 조용히 생긴다.
  */
 function requireSessionUser(request: {

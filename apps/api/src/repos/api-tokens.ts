@@ -139,6 +139,83 @@ export async function deleteApiToken(
 }
 
 /**
+ * «내 토큰» 목록의 한 줄(`routes/tokens.ts`의 `myTokenRoutes`). **원문도 해시도 없다.**
+ *
+ * **`projectName`은 지금 그 프로젝트의 멤버일 때만 싣는다** — 멤버가 아니면 `null`이다. 그 판정의 근거는
+ * `routes/tokens.ts`의 «내 토큰은 프로젝트를 가로지른다» 절이 소유한다. 이름을 이 질의에서 거르는 것은 비멤버의 이름이 DB 밖으로
+ * 나올 자리를 두지 않으려는 것이다 — 응답을 만드는 쪽이 거르면 그 한 줄을 빠뜨린 판이 조용히 이름을 낸다.
+ */
+export interface MyApiTokenRecord extends ApiTokenRecord {
+  /** 지금 그 프로젝트의 멤버인가. 아니면 그 토큰의 요청은 404 다 — 다시 멤버로 들면 산다. */
+  member: boolean
+  projectName: string | null
+}
+
+/**
+ * 그 사용자의 토큰 전부 — **프로젝트를 가리지 않는다.** 멤버에서 빠진 프로젝트의 토큰도 든다(그 프로젝트의 목록
+ * `listApiTokens`는 가드가 404 라 못 부른다). 순서는 `listApiTokens`와 같다(만든 때 · id).
+ */
+export async function listUserTokens(db: DbHandle, userId: string): Promise<MyApiTokenRecord[]> {
+  const rows = await db
+    .selectFrom('api_tokens')
+    .leftJoin('project_members as m', (join) =>
+      join.onRef('m.project_id', '=', 'api_tokens.project_id').onRef('m.user_id', '=', 'api_tokens.user_id'),
+    )
+    // 프로젝트 행은 멤버일 때만 붙인다 — 비멤버의 줄에는 이름 칸이 처음부터 비어 있다.
+    .leftJoin('projects as p', (join) => join.onRef('p.id', '=', 'api_tokens.project_id').on('m.user_id', 'is not', null))
+    .select([
+      'api_tokens.id as id',
+      'api_tokens.project_id as project_id',
+      'api_tokens.user_id as user_id',
+      'api_tokens.name as name',
+      'api_tokens.created_at as created_at',
+      'api_tokens.last_used_at as last_used_at',
+      'm.user_id as member_user_id',
+      'p.name as project_name',
+    ])
+    .where('api_tokens.user_id', '=', userId)
+    .orderBy('api_tokens.created_at', 'asc')
+    .orderBy('api_tokens.id', 'asc')
+    .execute()
+
+  return rows.map((row) => ({
+    ...toRecord(row as ApiTokenRow),
+    member: row.member_user_id !== null,
+    projectName: row.project_name ?? null,
+  }))
+}
+
+/**
+ * 그 사용자의 토큰 하나를 폐기한다 — **프로젝트를 안 본다**(멤버가 아닌 프로젝트의 것도 지운다). 지운 것이 없으면 `false`.
+ * `userId`를 조건에 두는 까닭은 `deleteApiToken`과 같다.
+ */
+export async function deleteUserToken(db: DbHandle, userId: string, tokenId: string): Promise<boolean> {
+  const result = await db.deleteFrom('api_tokens').where('user_id', '=', userId).where('id', '=', tokenId).executeTakeFirst()
+  return (result.numDeletedRows ?? 0n) > 0n
+}
+
+/**
+ * 그 사용자의 토큰 전부를 한 문장으로 폐기하고 지운 수를 낸다.
+ *
+ * **id 순으로 잡은 뒤 지운다**(안쪽 질의의 `ORDER BY id FOR UPDATE`). 여러 토큰 행을 잡는 다른 자리 — 멤버 제거의
+ * `lockMemberTokens` · 프로젝트 삭제의 `lockProjectTokens` — 가 id 순이라, 이 문장이 행을 읽는 순서(heap)대로 잡으면 겹치는
+ * 행 둘을 서로 반대로 잡아 고리가 선다. [api] 내 토큰 셋을 heap 순서와 id 순서가 엇갈리게 두고 한 행을 옆 트랜잭션이 쥔 채
+ * 폐기와 프로젝트 삭제 · 멤버 제거를 겹치면, `WHERE user_id` 만의 `DELETE`는 교착 +1 · 삭제(제거)가 500 이다(재는 자:
+ * `test/my-tokens-lock.test.ts`의 «폐기가 먼저» 둘). 이 문장은 토큰 행 밖을 안 잡으므로 «토큰 행 → owner 행 →
+ * 멤버 행»(`repos/members.ts`)의 앞 칸에만 선다.
+ *
+ * **재확인이 없다** — 권한을 줄이는 쓰기다(설계서 「권한 모델」의 «예외는 자기 API 토큰의 폐기다»). 목록을 잡은 뒤 커밋된 새
+ * 발급은 안 지운다 — «누른 순간의 토큰 전부»다.
+ */
+export async function deleteAllUserTokens(db: DbHandle, userId: string): Promise<number> {
+  const result = await db
+    .deleteFrom('api_tokens')
+    .where('id', 'in', (eb) => eb.selectFrom('api_tokens').select('id').where('user_id', '=', userId).orderBy('id').forUpdate())
+    .executeTakeFirst()
+  return Number(result.numDeletedRows ?? 0n)
+}
+
+/**
  * **멤버 제거의 첫 잠금** — 빠지는 사람의 그 프로젝트 토큰과, 토큰으로 들어온 요청이면 **그 요청의 토큰**을 한 문장으로 id 순
  * `FOR UPDATE`. 멤버 제거(`repos/members.ts`의 `removeMember`)가 owner 행보다 먼저 부르고, 지우는 것은 멤버 행을 지운 뒤의
  * `deleteMemberTokens`다.
@@ -212,6 +289,11 @@ export async function lockProjectTokens(trx: DbHandle, projectId: string): Promi
  * 세 컬럼만 명시적으로 고른다.
  *
  * `last_used_at`을 갱신하는 것도 `resolveSession`이 `last_seen_at`을 만지는 것과 같은 자리다.
+ *
+ * **갱신이 0 행이면 주체를 내지 않는다.** 앞의 `SELECT`는 잠그지 않으므로, 폐기(`deleteUserToken` · `deleteAllUserTokens` ·
+ * 멤버 제거)가 그 행을 쥐고 있으면 행을 본 뒤 갱신이 폐기의 커밋을 기다렸다가 지워진 행에 0 행으로 끝난다. 그 결과를 안
+ * 보면 폐기된 토큰으로 인증이 선다 — 쓰기는 커밋 순간의 재확인(`tokenIsLive`)이 막지만 읽기에는 재확인이 없어 한 번 답한다.
+ * [api] `my-tokens-lock.test.ts` «폐기와 겹친 인증은 폐기된 토큰으로 서지 않는다».
  */
 export async function findApiTokenByValue(db: DbHandle, value: string): Promise<ApiTokenPrincipal | null> {
   const hash = hashTokenValue(value)
@@ -232,11 +314,13 @@ export async function findApiTokenByValue(db: DbHandle, value: string): Promise<
 
   if (!row) return null
 
-  await db
+  const touched = await db
     .updateTable('api_tokens')
     .set({ last_used_at: sql<Date>`clock_timestamp()` })
     .where('token_hash', '=', hash)
-    .execute()
+    .returning('id')
+    .executeTakeFirst()
+  if (!touched) return null
 
   return {
     tokenId: row.token_id,

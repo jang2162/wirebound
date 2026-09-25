@@ -129,7 +129,7 @@ async function issueToken(ctx: TestContext, cookie: { wb_session: string }, proj
   return (res.json() as { value: string }).value
 }
 
-const TOKEN_HINT = '옛 비밀번호가 새어서 바꾼 것이면 이 토큰들도 거둔다 — README 「비밀번호를 잊었다」 절'
+const TOKEN_HINT = '옛 비밀번호가 새어서 바꾼 것이면 이 토큰들도 거둔다 — 새 비밀번호로 에디터에 로그인해 «API 토큰» 화면(/tokens)에서'
 
 describe('숨겨 받기', () => {
   it('친 글자를 되비추지 않고 한 줄을 받는다 — 원시 모드는 켰다가 되돌린다', async () => {

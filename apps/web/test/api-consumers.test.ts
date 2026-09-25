@@ -39,6 +39,7 @@ const SOURCES = import.meta.glob('../src/**/*.{ts,tsx}', {
 const METHODS = [
   'login', 'logout', 'me',
   'listProjects', 'getProject', 'createProject', 'updateProject', 'deleteProject',
+  'listMyTokens', 'revokeMyToken', 'revokeAllMyTokens',
   'getTree',
   'createMenu', 'updateMenu', 'deleteMenu',
   'createPage', 'updatePage', 'deletePage', 'getPage', 'importPage',
@@ -91,6 +92,10 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   logout: ['../src/session/session-menu.tsx'],
   me: ['../src/session/session-context.tsx'],
   listProjects: ['../src/projects/use-project-commands.tsx'],
+  // 계정의 API 토큰 화면 하나다. 목록은 줄의 글자와 폐기 주소(`id`)를 읽는다(`SHAPES.myTokens`).
+  listMyTokens: ['../src/routes/tokens.tsx'],
+  revokeMyToken: ['../src/routes/tokens.tsx'],
+  revokeAllMyTokens: ['../src/routes/tokens.tsx'],
   // **소비자가 둘이고 읽는 것이 다르다.** 셸은 `name`·`id`를 그리려고 부르고, 테마 저작
   // 화면은 **`role`** 때문에 부른다(설계서 「권한 모델」 — 쓰기가 owner 게이트라 읽기 전용인지
   // 알아야 한다). **셋째는 스냅샷 화면이고** 역시 `role` 때문에 부른다 — 「권한 모델」이 생성을
