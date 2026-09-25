@@ -11,13 +11,13 @@
  *
  * # 다섯 가지 판단
  *
- * ## 1. 손잡이는 둘이다 — 폭 하나, 두 영역 사이 하나
+ * ## 손잡이는 둘이다 — 폭 하나, 두 영역 사이 하나
  *
  * 하나만 두면 나머지 한쪽이 고쳐지지 않는다. 위 실측의 고장이 **둘**이기 때문이다:
  * 폭이 좁은 것과 배분이 내용과 무관한 것은 서로 다른 원인이고 한쪽을 고쳐도 다른 쪽이
  * 남는다. **우측 패널(300px)은 고정이다** — 손잡이가 없다.
  *
- * ## 2. `localStorage`에 기억한다
+ * ## `localStorage`에 기억한다
  *
  * `panels/page-json-panel.tsx`가 접힘을 `useState`로 두는 근거는 *"드물게 쓰는 폼을
  * 세션마다 한 번 여는 것은 맞는 대가"*다. 그 문단이 **판단이 바뀔 신호**를 함께 적고
@@ -40,7 +40,7 @@
  * 넓은가"*이지 *"이 설계서가 어떤 설계서인가"*가 아니다. 키에 프로젝트 id를 넣으면
  * 설계서를 옮길 때마다 폭이 튄다.
  *
- * ## 3. 한계와 되돌리기 — 0px까지 줄지 않는다
+ * ## 한계와 되돌리기 — 0px까지 줄지 않는다
  *
  * **최소 200px**(`SIDE_WIDTH_MIN`). **근거는 되잡기이지 내용이 아니다.** 0px까지 열어 두면
  * 손잡이가 창 끝에 붙어 되잡기가 어렵고, 사이드바가 사라진 것과 고장 난 것을 사용자가 가릴
@@ -71,13 +71,13 @@
  * 잡기 어려운 상황이 이 기능의 가장 흔한 사고이고, 최소·최대를 둔 것 자체가 그 사고를
  * 막는 첫 겹이다.
  *
- * ## 4. 키보드로도 된다
+ * ## 키보드로도 된다
  *
  * 드래그 전용이면 키보드 사용자에게는 이 기능이 **없는 것과 같다.** `role="separator"` +
  * `aria-valuenow`/`valuemin`/`valuemax` + 화살표가 그 표준 모양이고(WAI-ARIA의 window
  * splitter), `tabindex`가 붙어 초점을 받는다. 자세한 것은 `shell/shell-resizer.tsx`.
  *
- * ## 5. 두 영역 사이는 **비율**이다 — 픽셀이 아니다
+ * ## 두 영역 사이는 **비율**이다 — 픽셀이 아니다
  *
  * 픽셀로 고정하면 창 높이가 바뀔 때 어긋난다. 창을 키우면 늘어난 세로가 전부 한쪽으로
  * 가고, 줄이면 한쪽이 먼저 0이 된다. 비율은 그 둘을 다 피한다 — `flex: 1` 둘이 내는
@@ -118,7 +118,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 export const SIDE_WIDTH_DEFAULT = 264
 
 /**
- * 사이드바 최소 폭(px). **근거는 되잡기다** — 내용이 담기는 폭이 아니다(머리말 3번).
+ * 사이드바 최소 폭(px). **근거는 되잡기다** — 내용이 담기는 폭이 아니다(머리말 「한계와 되돌리기」).
  * 넘치는 상태가 있고 그때 보이는 것은 그 상자 안의 가로 스크롤이다.
  */
 export const SIDE_WIDTH_MIN = 200
@@ -173,7 +173,7 @@ export const REGION_MIN_HEIGHT = 72
 /** 화살표 한 칸(px). 드래그와 같은 단위다. */
 export const RESIZE_STEP = 16
 
-/** 보존 키. **설계서마다가 아니라 사람마다 하나다**(머리말 2번). */
+/** 보존 키. **설계서마다가 아니라 사람마다 하나다**(머리말 「`localStorage`에 기억한다」). */
 export const STORAGE_KEY = 'wirebound.editor.sidebar'
 
 /** 보존되는 값. 둘 다 없을 수 있다 — 한쪽이 깨져도 다른 쪽은 산다. */
@@ -214,7 +214,7 @@ export function regionRatioMin(sharedHeight: number): number {
   return Math.min(0.5, REGION_MIN_HEIGHT / sharedHeight)
 }
 
-/** 화면에 실제로 쓸 배분. 창 높이가 바뀌면 한계가 따라 바뀐다(머리말 5번). */
+/** 화면에 실제로 쓸 배분. 창 높이가 바뀌면 한계가 따라 바뀐다(머리말 「두 영역 사이는 **비율**이다」). */
 export function clampRegionRatio(ratio: number, sharedHeight: number): number {
   const min = regionRatioMin(sharedHeight)
   return clamp(ratio, min, 1 - min)
@@ -282,7 +282,7 @@ function usableNumber(value: unknown): number | undefined {
 }
 
 /**
- * 저장된 값을 읽는다. **필드마다 따로 검증하고 따로 버린다**(머리말 2번) — 통째로 버리면
+ * 저장된 값을 읽는다. **필드마다 따로 검증하고 따로 버린다**(머리말 「`localStorage`에 기억한다」) — 통째로 버리면
  * 폭이 깨졌다는 이유로 배분까지 잃는다.
  *
  * 범위 검사는 여기서 하지 않는다. 한계가 창 크기에 매여 있어 읽는 시점에는 아직 모르고,
@@ -316,7 +316,7 @@ export function readLayout(storage: Storage | null): StoredLayout {
   }
 }
 
-/** 저장한다. **실패는 삼킨다**(머리말 2번) — quota·차단에서 던지고, 화면은 그대로 돈다. */
+/** 저장한다. **실패는 삼킨다**(머리말 「`localStorage`에 기억한다」) — quota·차단에서 던지고, 화면은 그대로 돈다. */
 export function writeLayout(storage: Storage | null, layout: StoredLayout): void {
   if (storage === null) return
   try {

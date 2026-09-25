@@ -78,7 +78,7 @@ export const BLOB_URL_LIFETIME_MS = 60_000
 /**
  * 고른 파일의 글자를 읽는다.
  *
- * **`FileReader`다 — `file.text()`가 아니다.** jsdom의 `Blob`에 `text()`가 없다(머리말의 4).
+ * **`FileReader`다 — `file.text()`가 아니다.** jsdom의 `Blob`에 `text()`가 없다(머리말 「jsdom에서 이 파일을 어떻게 재는가」 표의 `Blob.prototype` 줄).
  * 실브라우저에는 있지만 **두 환경에서 다른 경로를 타면 회귀가 재는 것이 배포되는 것과
  * 다르다.** `FileReader`는 양쪽에 다 있다.
  *

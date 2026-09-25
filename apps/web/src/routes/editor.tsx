@@ -535,7 +535,7 @@ function EditorShell(props: {
    * `.wb-shell-region`의 인라인 `flex-grow`다.
    *
    * **인라인인 것은 `shell.css`가 이 값을 알 수 없기 때문이다**(사람마다 다르고 저장에서
-   * 온다). 둘 다 상속되지 않는 속성이라 `shell.css` 머리말의 4번(상속 속성)을 건드리지 않는다
+   * 온다). 둘 다 상속되지 않는 속성이라 `shell.css` 머리말의 «상속되는 속성은 문서를 감싸는 상자에 걸지 않는다»를 건드리지 않는다
    * (`test/shell-css-guard.ts` 머리말의 ㉠ — *"자리·크기를 코드가 계산하는 것"*).
    */
   const layout = useSidebarLayout()

@@ -82,7 +82,7 @@ const ALLOWED: string[] = [
   '.wb-shell-selection { cursor: pointer; }',
   // 셸이 직접 그리는 조각. 상속 속성을 걸어도 문서가 그 아래 오지 않는다.
   '.wb-shell-header { font-weight: 700; }',
-  // 두기로 한 예외 — 접두어가 붙은 변수(머리말 4번).
+  // 두기로 한 예외 — 접두어가 붙은 변수(`shell.css` 머리말 «상속되는 속성은 문서를 감싸는 상자에 걸지 않는다»의 «예외 — 커스텀 프로퍼티»).
   '.wb-shell { --wb-shell-planted: 1px; }',
   // 허용 목록 안의 속성은 포맷이 어떻든 통과한다.
   '.wb-shell-canvas-frame{background:#fff}',
