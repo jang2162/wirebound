@@ -16,6 +16,23 @@
  * 되돌릴 수 없는 것의 색(`.wb-shell-project-danger`)이다 — 프로젝트 목록의 `삭제` → `삭제 확정`과 같은 무게 가르기다.
  * 이름을 쳐서 확인하게 하지 않는 것은 잃는 것이 다르기 때문이다 — 토큰은 다시 발급하면 되고 프로젝트는 되살릴 수 없다.
  *
+ * **더블클릭 한 번이 두 누름을 다 지나면 안 된다.** 첫 누름이 그린 단추가 그 좌표에 서면 둘째 누름이 그것을 누른다. 그래서
+ * 두 겹으로 막는다 — 전부 폐기와 줄 하나 폐기에 같은 규칙이다.
+ *
+ * - **확정은 연타의 둘째 누름을 버린다**(`click`의 `detail > 1` — `confirmClick`). 키보드로 누른 `click`은 `detail`이 0 이라
+ *   지난다.
+ * - **확정은 묻던 단추 자리에 서지 않는다** — 다른 줄로 내려간다(`shell.css`의 «내 API 토큰» 블록 — 전부 폐기는 세로로 쌓고,
+ *   줄 하나의 확정은 만든 때 줄 밑으로 보낸다). 그 자리에는 `취소`가 서거나, 좁은 폭에서 둘째 줄로 접혀 있던 긴 이름의
+ *   `폐기`면 `취소`가 윗줄로 올라가 만든 때 줄이 선다. `detail`이 1 인 두 누름(따로 누른 두 번 · 합성 클릭)은 이 겹만 막는다.
+ *
+ * [Chrome] 두 폭(390 · 1280)에서 첫 누름 뒤 그 단추의 왼끝 · 가운데 · 오른끝에 확정이 없고, `dblclick`과 따로 누른 두 번
+ * (80 · 250 · 500ms)이 DELETE 0 건이다. 두 겹은 각각 혼자 `dblclick`을 막는다 — 가드를 떼도 0, 배치를 확정이 먼저인 가로
+ * 줄로 되돌려도 0(그때 따로 누른 두 번은 1). 다시 재는 법: 독립 헤드리스 Chrome 으로 `/tokens`를 열어 `elementFromPoint` ·
+ * `mouse.dblclick` · `mouse.click` 두 번. jsdom 은 좌표가 없어 배치를 못 잰다 — `test/routes/tokens.test.tsx`는 `detail`만 잰다.
+ *
+ * **전부 폐기의 확정은 수를 말하지 않는다** — 받아 둔 목록의 수는 누르는 순간 서버의 «전부»와 다를 수 있다(그 사이 다른 탭 ·
+ * `wireb login`이 발급한 것). 실제로 거둔 수는 서버의 `revoked`로 알림이 말한다.
+ *
  * ## 성공 뒤에는 목록을 다시 받는다
  *
  * 지운 줄만 빼서 그리지 않는다 — 그 사이 다른 탭 · `wireb login`이 발급했거나 멤버 제거가 지운 것이 있으면 빼기만 한
@@ -24,7 +41,7 @@
  * **하나 폐기의 404 는 성공으로 친다** — 그 토큰이 이미 없다는 뜻이고(다른 탭의 폐기 · 멤버 제거 · 프로젝트 삭제), 폐기가
  * 이루려던 상태가 참이다. 로그아웃의 «세션이 이미 없다»(`session/session-menu.tsx`)와 같은 자리다.
  */
-import { useCallback, useEffect, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useState, type MouseEvent, type ReactElement } from 'react'
 import { Link } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
@@ -42,6 +59,14 @@ const WHEN = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 
 export function formatWhen(iso: string): string {
   const date = new Date(iso)
   return Number.isNaN(date.getTime()) ? iso : WHEN.format(date)
+}
+
+/** 확정 단추의 `onClick` — 연타의 둘째 누름을 버린다(머리말 «더블클릭 한 번이 두 누름을 다 지나면 안 된다»). */
+function confirmClick(action: () => void): (event: MouseEvent<HTMLButtonElement>) => void {
+  return (event) => {
+    if (event.detail > 1) return
+    action()
+  }
 }
 
 type ListState = { status: 'loading' } | { status: 'failed'; failure: Failure } | { status: 'ready'; tokens: MyApiToken[] }
@@ -122,11 +147,16 @@ export function TokensRoute(): ReactElement {
         <div className="wb-shell-tokens-bulk">
           {confirming?.kind === 'all' ? (
             <>
-              <button className="wb-shell-project-danger" type="button" disabled={busy} onClick={() => void revoke({ kind: 'all' })}>
-                {`토큰 ${tokens.length}개 전부 폐기 확정`}
-              </button>
               <button className="wb-shell-project-action" type="button" disabled={busy} onClick={() => setConfirming(null)}>
                 취소
+              </button>
+              <button
+                className="wb-shell-project-danger"
+                type="button"
+                disabled={busy}
+                onClick={confirmClick(() => void revoke({ kind: 'all' }))}
+              >
+                토큰 전부 폐기 확정
               </button>
             </>
           ) : (
@@ -204,11 +234,11 @@ function TokenRow(props: {
       </span>
       {confirming ? (
         <>
-          <button className="wb-shell-project-danger" type="button" disabled={busy} onClick={props.onConfirm}>
-            {`${token.name} 폐기 확정`}
-          </button>
           <button className="wb-shell-project-action" type="button" disabled={busy} onClick={props.onCancel}>
             취소
+          </button>
+          <button className="wb-shell-project-danger wb-shell-tokens-confirm" type="button" disabled={busy} onClick={confirmClick(props.onConfirm)}>
+            {`${token.name} 폐기 확정`}
           </button>
         </>
       ) : (

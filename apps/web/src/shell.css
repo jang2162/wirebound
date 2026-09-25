@@ -3360,10 +3360,13 @@
   color: var(--wb-shell-muted);
 }
 
-/* 전부 폐기 — 목록 위 한 줄. 확인이 열리면 확정 · 취소 둘이 선다. */
+/* 전부 폐기 — 목록 위. 확인이 열리면 **세로로 쌓는다** — `전부 폐기` 자리에 `취소`가 서고 확정은 그 밑이다. 가로로 세우면
+   왼쪽 정렬이라 먼저 그린 단추가 `전부 폐기` 자리를 덮는다(`routes/tokens.tsx` 머리말 «더블클릭 한 번이 두 누름을 다 지나면
+   안 된다»). */
 .wb-shell-tokens-bulk {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -3385,4 +3388,11 @@
   order: 1;
   font-size: 12px;
   color: var(--wb-shell-muted);
+}
+
+/* 줄 하나의 확정 — 만든 때 줄(`order: 1` · 폭 전부) **밑으로** 보내 오른쪽 끝에 세운다. 첫 줄에 두면 남는 폭에 따라 확정이
+   `폐기` 자리로 밀려 온다(`routes/tokens.tsx` 머리말 «더블클릭 한 번이 두 누름을 다 지나면 안 된다»). */
+.wb-shell-tokens-confirm {
+  order: 2;
+  margin-left: auto;
 }

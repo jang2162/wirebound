@@ -119,13 +119,55 @@ describe('API 토큰 화면', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '전부 폐기' }))
     expect(calls.revokeAll).toBe(0)
-    fireEvent.click(screen.getByRole('button', { name: '토큰 3개 전부 폐기 확정' }))
+    fireEvent.click(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }))
 
     await screen.findByText('토큰 3개를 폐기했습니다')
     await screen.findByText(EMPTY_NOTICE)
     expect(calls.revokeAll).toBe(1)
     expect(calls.list).toBe(2)
     expect(screen.queryByRole('button', { name: '전부 폐기' })).toBeNull()
+  })
+
+  it('전부 폐기의 확정은 수를 말하지 않는다 — 누른 순간의 전부를 지우고 알림이 서버가 거둔 수를 말한다', async () => {
+    // 화면은 둘을 받았고, 그 사이 다른 탭이 하나를 더 발급했다 — 서버의 «전부»는 셋이다.
+    const { client, calls } = server([token(), token({ id: 't-2', name: '노트북' })], {
+      revokeAllMyTokens: async () => {
+        calls.revokeAll += 1
+        return { revoked: 3 }
+      },
+    })
+    renderWithProviders(<App />, { client, route: '/tokens' })
+
+    fireEvent.click(await screen.findByRole('button', { name: '전부 폐기' }))
+    expect(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }).textContent).not.toMatch(/\d/)
+    fireEvent.click(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }))
+
+    await screen.findByText('토큰 3개를 폐기했습니다')
+    expect(calls.revokeAll).toBe(1)
+  })
+
+  it('확정은 연타의 둘째 누름(`detail > 1`)을 버린다 — 전부 폐기 · 줄 하나 폐기 둘 다 · 키보드(`detail` 0)는 지난다', async () => {
+    const { client, calls } = server([token(), token({ id: 't-2', name: '노트북' })])
+    renderWithProviders(<App />, { client, route: '/tokens' })
+
+    fireEvent.click(await screen.findByRole('button', { name: '전부 폐기' }), { detail: 1 })
+    fireEvent.click(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }), { detail: 2 })
+    fireEvent.click(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }), { detail: 3 })
+    expect(calls.revokeAll).toBe(0)
+    fireEvent.click(screen.getByRole('button', { name: '취소' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'CI 폐기' }), { detail: 1 })
+    fireEvent.click(screen.getByRole('button', { name: 'CI 폐기 확정' }), { detail: 2 })
+    expect(calls.revoke).toEqual([])
+
+    // 확인은 열린 채다 — 따로 누른 한 번(`detail` 1)은 지난다.
+    fireEvent.click(screen.getByRole('button', { name: 'CI 폐기 확정' }), { detail: 1 })
+    await waitFor(() => expect(calls.revoke).toEqual(['t-1']))
+    await screen.findByText('토큰을 폐기했습니다')
+
+    fireEvent.click(screen.getByRole('button', { name: '전부 폐기' }))
+    fireEvent.click(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }), { detail: 0 })
+    await waitFor(() => expect(calls.revokeAll).toBe(1))
   })
 
   it('폐기가 실패하면 서버 문장을 그리고 목록은 그대로다', async () => {
@@ -137,7 +179,7 @@ describe('API 토큰 화면', () => {
     renderWithProviders(<App />, { client, route: '/tokens' })
 
     fireEvent.click(await screen.findByRole('button', { name: '전부 폐기' }))
-    fireEvent.click(screen.getByRole('button', { name: '토큰 1개 전부 폐기 확정' }))
+    fireEvent.click(screen.getByRole('button', { name: '토큰 전부 폐기 확정' }))
 
     expect((await screen.findByRole('alert')).textContent).toBe('토큰 저장소가 응답하지 않습니다 [TK-9]')
     screen.getByText('CI')
