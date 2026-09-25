@@ -20,7 +20,7 @@ import type { RevisionInverse } from '../api/types'
 import { useEditChannel, useLockChannel } from '../realtime/context'
 import { EditNotSentError, UnansweredEditError, type EditChannel, type UnansweredCause } from '../realtime/edit-channel'
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
-import { MARKER_FRAME_WAIT_MS, type EditStatus, type RestoredRevision, type UndoAttempt, type UndoHistoryNeed } from '../store/editor-store'
+import { MARKER_FRAME_WAIT_MS, type EditFailure, type EditStatus, type RestoredRevision, type UndoAttempt, type UndoHistoryNeed } from '../store/editor-store'
 import { LOSS_RANK, type LossPart } from '../store/loss-notice'
 import { interactionsOps, propOps, variantOps } from './ops'
 
@@ -643,14 +643,36 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * 대신 **누르면 이 자리가 이유를 말한다** — undo가 이미 쓰는 통로이고(위 `skippedNotice`),
    * 「개인 undo/redo」가 *"적용 불가는 에러가 아니라 정상 흐름"*으로 정한 자리와 같다.
    */
+  /**
+   * **누른 뒤 답을 기다렸다가 세우는 통지**(되짚기 이력 — `loadUndoHistory`). 기다리는 동안 잃음 조각이 섰으면(리베이스 버림 · 수습 · 떠남의
+   * 거절 — `EditorStore.tellLoss`) 치우지도 덮지도 않는다 — 누른 때의 통지가 아니라 그 뒤에 온 잃음이다. 제 문장은 가장 약한 조각으로 그 뒤에
+   * 잇는다(jsdom: 이력을 받는 동안 선 «편집 1개를 버렸습니다»를 받은 뒤의 `setEditFailure(null)`이 지웠고, 조회 실패의 문장이 덮었다). 누른
+   * 뒤 선 것이 없으면 누른 때와 같다 — 앞 통지를 치우거나 갈아 끼운다. 세션이 끊긴 통지는 늘 세운다.
+   */
+  const sayAfterWait = useCallback(
+    (pressed: EditFailure | null, failure: EditFailure | null): void => {
+      const arrived = store.getState().editFailure !== pressed && store.showsLoss()
+      if (!arrived || failure?.kind === 'signed-out') {
+        store.setEditFailure(failure)
+        return
+      }
+      if (failure === null) return
+      const { message } = failure
+      store.tellLoss({ key: 'undo-after-wait', rank: LOSS_RANK.history, counts: [], render: () => message })
+    },
+    [store],
+  )
+
   const settle = useCallback(
-    (attempt: UndoAttempt, carried: number): void => {
+    (attempt: UndoAttempt, carried: number, pressed?: EditFailure | null): void => {
+      // 되짚기 이력을 기다린 뒤면(`pressed` — 누른 때의 통지) 그 사이 선 잃음을 지키며 말한다(`sayAfterWait`).
+      const say = (failure: EditFailure | null): void => (pressed === undefined ? store.setEditFailure(failure) : sayAfterWait(pressed, failure))
       // 앞서 같은 누름이 건너뛴 것(`carried` — 되짚기 이력을 받기 전에 버린 세션 항목)도 함께 센다.
       const skipped = carried + attempt.skipped
       // **잠금이 먼저다.** 건너뛴 것이 함께 있어도 사용자가 지금 답을 기다리는 물음은
       // *"왜 안 되돌아갔나"*이고, 그 답은 잠금이다. 건너뛴 수는 문장 안에 함께 실린다.
       if (attempt.blocked !== null) {
-        store.setEditFailure({
+        say({
           kind: 'message',
           message: lockedNotice(attempt.blocked.userName, skipped),
         })
@@ -659,19 +681,19 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         return
       }
       if (skipped > 0) {
-        store.setEditFailure({
+        say({
           kind: 'message',
           message: skippedNotice(skipped, attempt.clientOpId !== null),
         })
       } else {
         // 앞 통지를 치운다 — 남겨 두면 방금 누른 undo도 실패한 것으로 읽힌다.
-        store.setEditFailure(null)
+        say(null)
       }
 
       if (attempt.clientOpId === null) return
       void pump()
     },
-    [store, pump],
+    [store, pump, sayAfterWait],
   )
 
   const step = useCallback(
@@ -700,6 +722,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       if (target === null) return
       const { undoStack } = store.getState()
       const top = undoStack[undoStack.length - 1]
+      // 누른 때의 통지 — 받는 동안 선 잃음을 가른다(`sayAfterWait`).
+      const pressed = store.getState().editFailure
       const leave = new AbortController()
       const stop = store.subscribe(() => {
         if (!store.undoHistoryLive(first)) leave.abort()
@@ -718,7 +742,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
             if (!store.undoHistoryLive(first)) return
             const failure = toFailure(caught, UNDO_HISTORY_FAILURE)
             const head = skipped > 0 ? `${skippedHead(skipped)} ` : ''
-            store.setEditFailure(failure.kind === 'signed-out' ? failure : { kind: 'message', message: `${head}${failure.message} — ${UNDO_HISTORY_NOTICE}` })
+            sayAfterWait(pressed, failure.kind === 'signed-out' ? failure : { kind: 'message', message: `${head}${failure.message} — ${UNDO_HISTORY_NOTICE}` })
             return
           }
           if (!store.supplyUndoHistory(asked, more)) return
@@ -729,13 +753,13 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         const now = store.getState().undoStack
         if (!store.undoHistoryLive(first) || now[now.length - 1] !== top) return
         store.endUndoHistoryLoad(first)
-        settle(store.startUndo({ historyLoaded: true }), skipped)
+        settle(store.startUndo({ historyLoaded: true }), skipped, pressed)
       } finally {
         stop()
         store.endUndoHistoryLoad(first)
       }
     },
-    [api, projectId, store, settle],
+    [api, projectId, store, settle, sayAfterWait],
   )
 
   /**

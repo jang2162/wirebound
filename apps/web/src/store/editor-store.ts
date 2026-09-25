@@ -2405,6 +2405,9 @@ export class EditorStore {
    */
   readonly leftPage = (): string | null => this.#leftPageId
 
+  /** 지금 통지가 잃음의 조각인가(`#lossParts`) — 누른 뒤 기다렸다가 말하는 자리가 그 사이 선 잃음을 가른다(`edit/use-edit-commit.tsx`의 `sayAfterWait`). */
+  readonly showsLoss = (): boolean => this.#shownLoss().length > 0
+
   /** 지금 통지가 떠남의 조각을 품는가 — 통지 자리(`shell/edit-alert.tsx`)가 닫는 단추를 그릴지 가른다. */
   readonly isLeaveNotice = (failure: EditFailure | null): boolean =>
     failure !== null && failure === this.#lossNotice && this.#lossParts.some((part) => part.sticky !== undefined)
