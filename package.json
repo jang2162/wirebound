@@ -11,6 +11,7 @@
     "test": "vitest run --project '!build'",
     "test:watch": "vitest --project '!build'",
     "test:build": "vitest run --project build",
+    "test:browser": "vitest run --project build apps/web/build-test",
     "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json"
   },
   "devDependencies": {

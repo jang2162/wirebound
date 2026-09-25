@@ -129,6 +129,10 @@ export default defineConfig({
           // 못 두는 것**이지 패키지인지 앱인지가 아니다 — `apps/api/build-test`가 진짜
           // 브라우저를 띄운다. 그쪽은 `dist`가 아니라 소스를 보지만(앱에는 `dist`가
           // 없다) 재려는 것이 *"빌드된 것"*이 아니라 *"진짜 브라우저"*라 결이 같다.
+          //
+          // **`apps/web/build-test`는 에디터를 실브라우저로 모는 판이다** — 파일마다 일회용 DB · api · vite · Chrome 을 띄우고
+          // 거둔다(`editor-stack.ts`). 그 파일들만 돌리는 것이 `pnpm test:browser`다. **Postgres 가 있어야 돈다** — 없으면
+          // 건너뛰고 그렇다고 말한다. 포트는 빈 것을 받아 워크트리끼리 안 부딪힌다.
           include: ['packages/*/build-test/**/*.test.ts', 'apps/*/build-test/**/*.test.ts'],
           // tsdown 재빌드를 beforeAll에서 돈다. 기본 테스트 실행에서 분리한 이유:
           // pnpm test가 PATH의 pnpm과 전체 재빌드에 묶이면 개발 루프가 매번 수십 초씩
@@ -140,6 +144,8 @@ export default defineConfig({
           // 비운 뒤 채우므로, 둘이 나란히 돌면 한쪽이 읽는 `dist`를 다른 쪽이 지운다(`Cannot find module …/dist/index.js`
           // — `--maxWorkers=25%`로 돌리면 mcp `dist-smoke`가 죽는다). 워커 수를 CLI 로 얼마를 주든 이 줄이 막는다.
           // `fileParallelism`은 여기 쓰면 조용히 무시된다(위 api 프로젝트 주석) — 같은 이유로 `singleFork`다.
+          // 에디터 판(`apps/web/build-test`)은 이 줄에 기대지 않는다 — `dist` 를 안 읽고 포트 · DB 를 판마다 새로 받는다. 다시 재는
+          // 법: `pnpm test:browser` 둘을 한꺼번에 띄운다(같은 워크트리에서도 둘 다 전 케이스 통과였다).
           pool: 'forks',
           poolOptions: { forks: { singleFork: true } },
         },

@@ -18,13 +18,16 @@
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.0",
-    "@wirebound/exporter": "workspace:*",
-    "@wirebound/test-support": "workspace:*",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^26.1.2",
+    "@types/pg": "^8.11.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "@wirebound/exporter": "workspace:*",
+    "@wirebound/test-support": "workspace:*",
+    "pg": "^8.13.0",
+    "playwright-core": "^1.62.1",
     "vite": "^6.0.0"
   }
 }
