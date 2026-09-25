@@ -178,6 +178,96 @@ describe.skipIf(!전제.ok)('편집 둘 사이의 코멘트 게시', () => {
       await context.close()
     }
   })
+
+  /**
+   * **로그아웃이 한도에서 센 거절은 «저장되지 않았다»가 아니다**(`routes/editor.tsx`의 `settleEdits`). B 가 게시의 답을 기다리는 동안(큐에 남은 채)
+   * 로그아웃의 한도가 먼저 지나고, 로그아웃 요청이 떠 있는 사이 게시 응답이 풀리면 리베이스가 B 를 번호 뒤로 옮겨 다시 내 커밋한다. 성질: 서버에
+   * B 가 있으면 한 줄은 그것을 저장 안 됨으로 말하지 않는다 — 이 판에서는 «모름» 문장이다. 고치기 전에는 큐에 남은 거절 표시 편집을 «거절된 편집
+   * 1개는 저장되지 않았습니다»로 셌다([Chrome] 2/2 — 서버 `head 4 · ['편집 B#1']`).
+   *
+   * 창을 넓히려고 로그아웃 요청을 2s 붙잡는다(느린 망) — 붙잡지 않으면 창이 몇 ms 다.
+   */
+  it('로그아웃 한도 뒤 번호가 와 다시 낸 편집을 «저장되지 않았다»로 말하지 않는다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const fx = await fixture(stack, alice, 'between-logout')
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const lines: string[] = []
+    const started = Date.now()
+    const at = (): string => `${Date.now() - started}ms`
+    page.on('websocket', (ws) => {
+      ws.on('framesent', (frame) => {
+        const payload = String(frame.payload)
+        if (payload.includes('"patch"')) lines.push(`${at()} WS→ patch baseSeq=${/"baseSeq":(\d+)/.exec(payload)?.[1]}`)
+      })
+      ws.on('framereceived', (frame) => {
+        const payload = String(frame.payload)
+        const kind = /"type":"(patch-ack|patch-error)"/.exec(payload)?.[1]
+        if (kind !== undefined) lines.push(`${at()} WS← ${kind}`)
+      })
+    })
+    // 게시 응답을 2.5s 붙잡는다 — 409 를 받은 B 가 그 답을 기다리는 창이다(번호 기다림 한도 3s 안 · 로그아웃 한도 뒤).
+    await page.route('**/comments', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      const response = await route.fetch()
+      const body = await response.body()
+      await new Promise((resolve) => setTimeout(resolve, 2_500))
+      lines.push(`${at()} POST 코멘트 응답 풂`)
+      await route.fulfill({ response, body })
+    })
+    await page.route('**/api/auth/logout', async (route) => {
+      lines.push(`${at()} POST logout 붙잡음`)
+      await new Promise((resolve) => setTimeout(resolve, 2_000))
+      lines.push(`${at()} POST logout 보냄`)
+      await route.fallback()
+    })
+    try {
+      await page.goto(fx.P1)
+      const box = await selectFirstText(page, '원문')
+      await box.click()
+      await box.fill('편집 A')
+      const hold = await stack.holdRow('pages', fx.first)
+      try {
+        await page.getByRole('tab', { name: '코멘트' }).click()
+        await hold.waitForWaiters(1)
+        await page.locator('#wb-comment-draft').fill('사이에 낀 게시')
+        await page.getByRole('button', { name: '코멘트 달기' }).click()
+        await hold.waitForWaiters(2)
+        await page.getByRole('tab', { name: '속성' }).click()
+        const second = page.locator('.wb-shell-panel textarea').first()
+        await second.click()
+        await second.fill('편집 B')
+        await second.evaluate((element) => (element as HTMLElement).blur())
+        await page.waitForTimeout(150)
+        // 409 앞에 누른다 — 로그아웃 한도(누른 뒤 3s)가 번호 기다림 한도(409 뒤 3s)보다 먼저 끝난다.
+        lines.push(`${at()} 로그아웃 누름`)
+        await page.getByRole('button', { name: '로그아웃' }).click()
+        await page.waitForTimeout(1_000)
+      } finally {
+        await hold.release()
+      }
+      await page.waitForURL('**/login**', { timeout: 10_000 })
+      await page.getByRole('heading', { name: 'wirebound' }).waitFor()
+      await page.waitForTimeout(300)
+      const said = (await page.locator('.wb-shell-login [role="status"]').allTextContents()).join(' | ')
+      const final = await server(stack, alice, fx.P1)
+      // eslint-disable-next-line no-console
+      console.log(`[사이 게시 · 로그아웃] ${lines.join(' · ')} · 서버 ${JSON.stringify(final)} · 한 줄 ${JSON.stringify(said)}`)
+
+      // 판 카나리아 — B 의 409 · 로그아웃 요청(한도 뒤) · 게시 응답 · B 를 다시 냄 · 그 ack 가 이 순서로 났다.
+      const marks = ['WS← patch-error', '로그아웃 누름', 'POST logout 붙잡음', 'POST 코멘트 응답 풂', 'WS→ patch baseSeq=3', 'POST logout 보냄']
+      const order = marks.map((mark) => lines.findIndex((line) => line.includes(mark)))
+      expect(order.every((index) => index >= 0)).toBe(true)
+      expect(order.slice(2).every((index, i) => index > order[i + 1]!)).toBe(true)
+      expect(order[1]!).toBeLessThan(order[0]!)
+      // 성질 — 서버에 B 가 있으면 한 줄은 그것을 저장 안 됨으로 말하지 않는다(이 판: «모름»).
+      expect({ 서버: final, 한줄: said }).toEqual({
+        서버: { head: 4, content: ['편집 B#1'] },
+        한줄: '로그아웃 전에 보낸 편집 1개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다. 다시 로그인해 그 페이지를 확인하세요.',
+      })
+    } finally {
+      await context.close()
+    }
+  })
 })
 
 async function fixture(stack: EditorStack, owner: Session, slug: string) {

@@ -521,8 +521,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // 응답의 경고가 지금 문서의 것으로 실리지 않는다(`ackEdit`의 가드 뒤에 있다).
           store.ackEdit(request.clientOpId, result)
         } catch (caught) {
-          // **커밋되지 않은 것이 확정된 실패면 적는다**(`EditorStore.markRefused`) — 이 편집은 아래 기다림 · 수습 동안 큐에 남거나 버려진다.
-          // 로그아웃이 그 사이 두고 간 편집을 셀 때 «모름»이 아니라 «저장되지 않았다»로 센다(`routes/editor.tsx`의 `settleEdits`).
+          // **이 보내기가 커밋되지 않은 것이 확정된 실패면 적는다**(`EditorStore.markRefused`) — 이 편집은 아래 기다림 · 수습 동안 큐에 남거나
+          // 버려진다. 버려지면 로그아웃이 그것을 «모름»이 아니라 «저장되지 않았다»로 센다(`discardTally`). 큐에 남은 동안은 다시 나갈 수 있어 «모름»이다.
           if (!unknownOutcome(caught)) store.markRefused(request.clientOpId)
           if (passedOver(request.clientOpId, caught)) continue
           // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다.**

@@ -660,8 +660,9 @@ function EditorShell(props: {
    *
    * **버린 것도 센다**(`EditorStore.discardTally`) — 기다리는 동안 편집 실패 수습이 큐를 비우면(`failEdits`) 그 통지는 판을 다시 읽은 뒤에
    * 서고 셸째 내려가 아무도 못 본다. 큐만 세면 0 이다(jsdom: 로그아웃 뒤 409 → 수습). 누르기 전에 시작한 수습이 버린 것도 아직 말하지
-   * 않았으니 센다(`recoveringDiscards`). **거절이 확정된 편집은 «모름»이 아니다**(`wasRefused`) — 번호 쓰기를 기다리는 편집은 409 를 받고도
-   * 큐에 남는다(`use-edit-commit.tsx`의 `pump`).
+   * 않았으니 센다(`recoveringDiscards`). **«거절»은 큐에서 빠진 편집에만 선다**(누계의 `refused`) — 큐에 남은 나간 편집은 그 보내기가 거절됐어도
+   * «모름»이다: 번호 쓰기를 기다리는 편집은 409 를 받고도 큐에 남고, 한도 뒤 게시의 답이 오면 리베이스가 옮겨 다시 낸다(`use-edit-commit.tsx`의
+   * `pump`) — 로그아웃 요청이 떠 있는 동안 커밋된다(Chrome `build-test/editor-post-between.test.ts`의 «로그아웃 한도 뒤 …»).
    */
   const settleEdits = useCallback(async () => {
     const start = store.discardTally()
@@ -669,10 +670,9 @@ function EditorShell(props: {
     await editsAnswered(store)
     const end = store.discardTally()
     const { pending } = store.getState()
-    const refusedHere = pending.filter(store.wasRefused).length
-    const sentHere = pending.filter(store.wasSent).length - refusedHere
+    const sentHere = pending.filter(store.wasSent).length
     const since = (key: keyof DiscardTally): number => end[key] - start[key] + untold[key]
-    return logoutLossNotice(sentHere + since('unknown'), pending.length - sentHere - refusedHere + since('unsent'), refusedHere + since('refused'))
+    return logoutLossNotice(sentHere + since('unknown'), pending.length - sentHere + since('unsent'), since('refused'))
   }, [store])
 
   return (

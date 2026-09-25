@@ -186,17 +186,47 @@ describe('로그아웃을 기다리는 동안 버린 편집', () => {
   })
 
   /**
-   * **번호 쓰기를 기다리는 편집의 거절은 «모름»이 아니다**(`EditorStore.markRefused`). 전송 루프는 409 를 받고도 게시의 답을 기다리는 동안 그
-   * 편집을 큐에 둔다. 로그아웃의 한도가 그 사이 지나면 고치기 전에는 «보낸 편집 1개의 답을 받지 못해 …»였다(jsdom).
+   * **큐에 남은 편집의 거절은 «저장되지 않았다»가 아니다**(`routes/editor.tsx`의 `settleEdits`). 전송 루프는 409 를 받고도 게시의 답을 기다리는
+   * 동안 그 편집을 큐에 둔다 — 한도 뒤 답이 오면 리베이스가 옮겨 다시 내 커밋될 수 있다(Chrome `build-test/editor-post-between.test.ts`의
+   * «로그아웃 한도 뒤 …»가 그 커밋까지 잰다). 한도에서는 «모름»이 참이다. 고치기 전에는 «거절된 편집 1개는 저장되지 않았습니다»였다.
    */
-  it('번호 쓰기를 기다리는 동안 한도가 지나면 거절된 편집을 «저장되지 않았다»로 센다', async () => {
+  it('번호 쓰기를 기다리는 동안 한도가 지나면 큐에 남은 거절된 편집을 «모름»으로 센다', async () => {
     const view = await editRefusedLater({ recoverHangs: false, posting: true })
 
     const said = await logoutThrough(view.refuse, 500)
 
     // 판 카나리아 — 수습으로 가지 않았다(게시의 답을 기다리는 중이었다).
     expect(view.loads()).toBe(1)
-    expect(said).toBe(logoutLossNotice(0, 0, 1))
+    expect(said).toBe(logoutLossNotice(1, 0))
+  })
+
+  /**
+   * **큐에서 빠진 뒤에는 «거절»이다** — 게시의 답이 끝내 안 오면 번호 기다림 한도(`MARKER_FRAME_WAIT_MS`) 뒤 수습이 그 편집을 버린다(`failEdits`).
+   * 그 버림이 로그아웃 한도 안에 오면 누계의 `refused` 로 센다.
+   */
+  it('번호 기다림 한도 뒤 수습이 로그아웃 한도 안에 버린 거절된 편집은 «저장되지 않았다»로 센다', async () => {
+    const view = await editRefusedLater({ recoverHangs: false, posting: true })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await view.refuse()
+      await act(async () => {
+        vi.advanceTimersByTime(1_000)
+      })
+      // 판 카나리아 — 누를 때 아직 수습 전이다(번호를 기다린다).
+      expect(view.loads()).toBe(1)
+      fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+      await act(async () => {
+        vi.advanceTimersByTime(2_000)
+      })
+      await act(async () => {})
+    } finally {
+      vi.useRealTimers()
+    }
+    await screen.findByLabelText('이메일')
+
+    // 판 카나리아 — 번호 기다림 한도 뒤 수습이 판을 다시 읽었다.
+    expect(view.loads()).toBe(2)
+    expect(statusText()).toBe(logoutLossNotice(0, 0, 1))
   })
 })
 

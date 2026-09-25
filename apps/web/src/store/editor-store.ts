@@ -617,7 +617,7 @@ export class EditorStore {
   /** 리베이스가 버린 나간 편집(`wasRebaseDropped`). 없으면 `null`이다. */
   #rebaseDroppedOpId: string | null = null
 
-  /** 마지막으로 나간 편집이 커밋 전에 거절됐다(`markRefused`). 다음 편집이 나가면 지운다(`markSent`). */
+  /** 마지막으로 나간 편집의 그 보내기가 커밋 전에 거절됐다(`markRefused`). 다음 편집이 나가면 지운다(`markSent`). */
   #refusedOpId: string | null = null
 
   /** 버린 편집의 누계(`discardTally`). */
@@ -978,17 +978,24 @@ export class EditorStore {
   }
 
   /**
-   * **이 나간 편집은 커밋되지 않았다 — 확정이다**(전송 루프가 커밋 전 거절 · 못 나간 프레임을 받고 부른다). 그 편집은 번호 쓰기를 기다리는 동안
-   * 큐에 남고(`use-edit-commit.tsx`의 `pump`) 수습이 버린다 — 그동안 로그아웃이 세면 «모름»이 아니라 «저장되지 않았다»다(`discardTally` ·
-   * `wasRefused`). 다시 내면(`markSent`) 지운다.
+   * **이 편집의 그 보내기는 커밋되지 않았다 — 확정이다**(전송 루프가 커밋 전 거절 · 못 나간 프레임을 받고 부른다). 다시 내면(`markSent`) 지운다.
+   *
+   * **«그 편집은 저장되지 않는다»가 아니다.** 편집이 큐에 남아 있는 동안에는 번호 쓰기의 답을 기다린 뒤 리베이스가 옮겨 다시 낼 길이 열려
+   * 있다(`use-edit-commit.tsx`의 `pump`). 그래서 이 표시는 큐에서 **빠진** 편집을 셀 때만 읽는다(`#countDiscarded`) — 큐에 남은 편집은 로그아웃의
+   * 한도에서 «모름»이다(`routes/editor.tsx`의 `settleEdits` — 큐의 표시를 «저장되지 않았다»로 세자 그 편집이 로그아웃 요청이 떠 있는 동안 다시
+   * 나가 커밋됐다: Chrome `build-test/editor-post-between.test.ts`).
    */
   readonly markRefused = (clientOpId: string): void => {
     if (clientOpId === this.#sentOpId) this.#refusedOpId = clientOpId
   }
 
-  /** 이 나간 편집이 커밋 전에 거절됐는가(`markRefused`) — 리베이스가 버린 나간 편집도 반드시 거절되므로 참이다(`wasRebaseDropped`). */
-  readonly wasRefused = (edit: PendingEdit): boolean =>
-    edit.clientOpId === this.#refusedOpId || edit.clientOpId === this.#rebaseDroppedOpId
+  /**
+   * 버린 이 편집의 마지막 보내기가 커밋 전에 거절됐는가(`markRefused`) — 리베이스가 버린 나간 편집도 반드시 거절되므로 참이다
+   * (`wasRebaseDropped`). **큐에서 빠진 편집에만 묻는다**(`markRefused`의 머리말).
+   */
+  #refusedWhenDropped(edit: PendingEdit): boolean {
+    return edit.clientOpId === this.#refusedOpId || edit.clientOpId === this.#rebaseDroppedOpId
+  }
 
   /**
    * **버린 편집의 누계**(`DiscardTally`) — 판을 싣거나 비우며(`loadPage` · `clearPage` · `reset`) · 수습이 큐를 비우며(`failEdits`) · 리베이스가
@@ -1009,7 +1016,7 @@ export class EditorStore {
     const added = { unknown: 0, refused: 0, unsent: 0 }
     for (const edit of dropped) {
       if (!this.wasSent(edit)) added.unsent += 1
-      else if (this.wasRefused(edit)) added.refused += 1
+      else if (this.#refusedWhenDropped(edit)) added.refused += 1
       else added.unknown += 1
     }
     const total = this.#discarded
