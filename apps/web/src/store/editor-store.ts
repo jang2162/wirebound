@@ -75,14 +75,34 @@ export interface RevisionRef {
    * 문서가 없었거나 `inverse`가 그 문서에 안 얹혀 붙잡지 못한 항목이다.
    */
   anchored?: AnchoredOp[] | null
+  /**
+   * **서버 이력으로 채운 항목은 되돌릴 때 붙잡는다**(`restoreUndoStack`) — 그 revision 을 기록한 문서를 그때 되짚어 짓고 붙잡는다(한 번 지으면
+   * 든다). `null`이면 못 지었거나 못 붙잡았다 — 그 항목은 얹지 않는다(`#tryInverse`). 경로 그대로 보내지 않는다: 그 사이 남이 앞자리에
+   * 넣었으면 남의 노드를 고친다.
+   */
+  anchorOnUse?: () => AnchoredOp[] | null
 }
 
-/** 서버 이력에서 온 내 revision 하나(`restoreUndoStack`의 인자). `seq`로 지금 판에서 이어지는지 본다. */
+/** 서버 이력에서 온 revision 하나(`restoreUndoStack` · `undoHistoryNeed`의 인자). `seq`로 지금 판에서 이어지는지 본다. */
 export interface RestoredRevision {
   revisionId: string
   seq: number
   inverse: PatchOp[]
 }
+
+/**
+ * **새로고침으로 채울 되돌리기의 판**(`undoRestorePoint`) — 판을 실은 세대(`#queueEpoch`)와 그때의 번호. 판을 싣는 입구가 목록을 받는 동안
+ * 판이 다시 실리거나 비면(재연결 · 복원 · 수습 · 떠남) 세대가 달라 그 답은 싣지 않는다.
+ */
+export interface UndoRestorePoint {
+  readonly pageId: string
+  readonly epoch: number
+  /** 판을 실은 번호. 이 번호까지가 세션 앞의 이력이다 — 그 뒤의 내 revision 은 이 탭이 ack 로 이미 스택에 올렸다(`ackEdit`). */
+  readonly seq: number
+}
+
+/** 끊긴 자리를 받는 조회 한 번의 크기(`undoHistoryNeed`) — 서버 상한과 같다(`apps/api/src/routes/revisions.ts`의 `limit`). */
+export const UNDO_HISTORY_PAGE = 200
 
 /**
  * 새 `clientOpId`를 만드는 함수. **생성자 인자로 받는 것이 계약이다** — 이 스토어는
@@ -443,6 +463,46 @@ export interface UndoAttempt {
 
 /** 아무것도 시작하지 못한 결과. 부르는 쪽이 세 필드를 매번 적지 않게 여기 둔다. */
 const NO_ATTEMPT: UndoAttempt = { clientOpId: null, skipped: 0, blocked: null }
+
+/** 처음 부를 때 한 번 짓고 그 값을 든다. */
+function once<T>(make: () => T): () => T {
+  let made = false
+  let value: T
+  return () => {
+    if (!made) {
+      value = make()
+      made = true
+    }
+    return value
+  }
+}
+
+/**
+ * **`headSeq` 판(`head`)에서 거꾸로 되짚어 `seq` 판의 문서를 짓는 함수**(`restoreUndoStack`) — `seq + 1`부터 `headSeq`까지의 `inverse`를
+ * 높은 번호부터 얹는다. 빠진 번호가 있거나 얹다가 던지면 그 아래는 `null`이다. 지은 문서를 들고 있다가 더 낮은 번호를 물으면 거기서 잇는다
+ * — 되돌리기 스택은 번호가 내려가는 순서로 소비된다. 더 높은 번호를 물으면 `head`에서 다시 걷는다.
+ */
+function historyDocuments(head: PageDocument, headSeq: number, inverses: ReadonlyMap<number, PatchOp[]>): (seq: number) => PageDocument | null {
+  let document: PageDocument | null = head
+  let at = headSeq
+  return (seq) => {
+    if (seq > headSeq) return null
+    if (seq > at) {
+      document = head
+      at = headSeq
+    }
+    while (document !== null && at > seq) {
+      const inverse = inverses.get(at)
+      try {
+        document = inverse === undefined ? null : applyOps(document, inverse)
+      } catch {
+        document = null
+      }
+      at -= 1
+    }
+    return document
+  }
+}
 
 type Listener = () => void
 
@@ -1000,53 +1060,128 @@ export class EditorStore {
   }
 
   /**
-   * 서버가 준 내 revision으로 undo 스택을 채운다.
+   * **새로고침으로 채울 되돌리기의 판** — 판을 실은 바로 뒤에 부른다(`routes/editor.tsx`의 `restoreUndo`). 목록 답을 실을 때
+   * (`restoreUndoStack`) 이것과 견줘, 그 사이 판이 다시 실렸거나 비었으면 버린다. 열린 판이 없으면 `null`.
+   */
+  readonly undoRestorePoint = (): UndoRestorePoint | null => {
+    const { openPageId, document, headSeq } = this.#state
+    if (openPageId === null || document === null) return null
+    return { pageId: openPageId, epoch: this.#queueEpoch, seq: headSeq }
+  }
+
+  /**
+   * **되짚으려면 더 받아야 할 이력** — 지금 판에서 내 가장 옛 항목까지 거꾸로 되짚는 길에 빠진 번호가 있으면, 그 가장 높은 번호까지를
+   * 받는 조회(`seq < beforeSeq` · 최신순 `limit`개)를 낸다. 빠진 것이 없거나 판이 갈렸으면 `null`.
    *
-   * **인자는 `seq` 내림차순(최신이 앞)이다** — 서버 응답 순서 그대로 받는다. 이 스토어의
+   * 빠진 번호는 남의 revision(코멘트 번호 포함 · 토큰으로 낸 내 것)이거나, 목록을 읽은 뒤에 온 프레임 · 내 ack 의 revision 이다 — 목록은
+   * 내 것만이고, 그 뒤의 것은 서버가 목록을 읽은 판에 없었다. 그래서 부르는 쪽은 받은 것을 합쳐 다시 묻는다 — 도는 동안 판이 더 올라갔으면
+   * 그 위를 또 낸다.
+   */
+  readonly undoHistoryNeed = (
+    point: UndoRestorePoint,
+    history: { mine: readonly RestoredRevision[]; others?: readonly RestoredRevision[] },
+  ): { beforeSeq: number; limit: number } | null => {
+    const walk = this.#undoHistory(point, history)
+    if (walk === null || walk.missing === null) return null
+    return { beforeSeq: walk.missing + 1, limit: Math.min(UNDO_HISTORY_PAGE, walk.missing - walk.lowest) }
+  }
+
+  /**
+   * 서버가 준 내 revision으로 undo 스택을 채운다 — **세션 항목 아래에** 서버 번호 순으로 싣는다.
+   *
+   * **`mine`은 `seq` 내림차순(최신이 앞)이다** — 서버 응답 순서 그대로 받는다. 이 스토어의
    * 스택은 **끝이 top**이므로 여기서 뒤집어 싣는다. (*"뒤집지 마라"*는 스택을 "앞이 top"으로
    * 두는 표현을 전제한 말이라 여기에 안 맞는다. 재는 것은 배열 모양이 아니라
    * **어느 것이 먼저 undo되는가**이고, `restoreUndoStack은 최신이 top이 되게 싣는다`가
    * 그것을 고정한다.)
    *
-   * ## 지금 판에서 거꾸로 되짚어 붙잡는다 — 남의 revision 이 끼면 거기서 멈춘다
+   * ## 판을 실은 번호까지만 싣는다 — 그 뒤는 세션 항목이다
+   *
+   * 목록 답은 판을 실은 뒤에 온다. 그 사이 이 탭이 고친 편집은 ack 로 이미 스택에 올랐다(`ackEdit`) — 스택을 갈아 끼우면 그것이 사라진다
+   * (Chrome: 목록 답을 붙잡은 채 «가»를 고치고 놓으면, 스택을 갈아 끼우는 판은 되돌리기가 꺼지거나 첫 되돌리기가 세션 편집 대신 앞 편집을 되돌린다). 그래서
+   * 판을 실은 번호(`point.seq`) 이하의 내 revision 만 **그 아래에** 끼운다 — 그 뒤의 내 revision 은 세션 항목이 이미 든다. 세션 항목의 번호는
+   * 모두 판을 실은 번호보다 크므로 이것이 서버 번호 순이다. redo 스택은 건드리지 않는다 — 세션 안에서 되돌린 것이다.
+   *
+   * **판이 갈렸으면 버린다** — 목록을 받는 동안 판이 다시 실리거나(재연결 · 복원 · 수습) 비었으면(떠남) 세대(`point.epoch`)가 다르다. 다시 싣는
+   * 입구는 스택을 채우지 않는다(`routes/editor.tsx`의 `applyServerPage`). 한 판에 한 번만 싣는다.
+   *
+   * ## 그 revision 을 기록한 문서에서 노드 id 로 붙잡는다 — 되돌릴 때
    *
    * 서버의 `inverse`는 그 revision 을 막 기록한 문서의 자리 경로다. 그 뒤 남이 같은 배열 앞자리에 넣었으면 옛 자리가 **남의 노드**를
-   * 가리키고 서버는 받은 경로를 그대로 적용한다(설계서 「정방향 흐름」 — jsdom: 연 뒤 밥이 맨 앞에 넣자 «나»의 되돌리기가 «가»를 고쳤다).
-   * 그래서 세션 안 항목(`ackEdit`)처럼 **그 revision 을 막 기록한 문서에서 노드 id 로 붙잡는다**(`RevisionRef.anchored`). 그 문서는
-   * 지금 바탕(`headSeq`의 서버 판)에서 내 `inverse`를 차례로 얹어 되짚는다 — 번호가 `headSeq`부터 하나씩 내려가는 동안만이다.
+   * 가리키고 서버는 받은 경로를 그대로 적용한다(설계서 「정방향 흐름」 — Chrome: 경로 그대로 보내는 판은 밥이 맨 앞에 넣은 판에서 «나»의 되돌리기가
+   * «가»를 고쳤다). 그래서 세션 안 항목(`ackEdit`)처럼 **그 revision 을 막 기록한 문서에서 노드 id 로 붙잡는다**. 그 문서는 지금 바탕에서
+   * 그 뒤 revision 의 `inverse`를 차례로 얹어 되짚는다 — 내 것이든 남의 것이든 받은 것으로(`history.others` — `undoHistoryNeed`가 그 구간을
+   * 낸다).
    *
-   * **번호가 끊기면 그 아래는 싣지 않는다.** 끊긴 자리의 revision 은 남의 것(또는 토큰으로 낸 내 것)이라 그 `inverse`가 없고, 그 아래
-   * revision 의 문서를 지을 수 없다 — 붙잡지 못한 채 경로 그대로 보내면 위와 같은 판이 연 판에서 이미 선다(jsdom: 내 6 · 밥 7(맨 앞에
-   * 넣음)으로 연 판에서 6 의 되돌리기가 «가»를 고쳤다). 되짚다가 얹히지 않는 항목에서도 멈춘다. 되짚지 않고 그 revision 의 문서를 서버에서
-   * 받는 길(남의 revision 까지 받아 되짚기)은 고르지 않았다 — 되돌리기 이력 하나를 위해 이력 전체를 페이지를 열 때마다 받는다.
+   * **되짚기와 붙잡기는 되돌릴 때 한다**(`RevisionRef.anchorOnUse`) — 한 항목에 `anchorOps`(op 마다 문서 복제)와 `applyOps` 한 번씩이라, 페이지를
+   * 열 때 50 항목을 다 하면 메인 스레드가 문서 크기 × op 수만큼 멈춘다(노드 6000 · 50 항목 × 20 op: 열 때 다 하면 2.7s · 되돌릴 때 하면 열 때 0ms ·
+   * 첫 누름 0.16s — vitest node 환경에서 새 스토어에 `loadPage` → `restoreUndoStack` → `startUndo`를 `performance.now()`로 잰다). 누를 때는 맨
+   * 위 항목 하나와 그 사이 번호만큼이다. 되짚는 문서는 항목끼리 나눠 쓴다 — 스택은 번호가 내려가는 순서로 소비된다.
    *
-   * **비용**: 실을 항목마다 `anchorOps` 한 번과 `applyOps`(문서 복제) 한 번 — 최대 50 항목(서버가 주는 수) × 문서 크기. 페이지를 열 때
-   * 한 번 돈다.
-   *
-   * **redo 스택은 비운다.** 복원한 항목은 redo를 갖지 않는다 — redo는 세션 안에서 undo를
-   * 눌러야 생긴다.
+   * **못 짓거나 못 붙잡는 항목도 싣는다 — 누르면 건너뛰고 그 수를 말한다**(`#startFrom`의 `skipped` → «되돌릴 수 없는 편집 N개를
+   * 건너뛰었습니다»). 되짚는 길에 받지 못한 번호가 남았거나(조회 실패 · 한도 밖) 얹히지 않는 `inverse`에서 그 아래 항목이 그렇다. 싣지 않으면
+   * 아무도 그 사실을 말하지 않는다.
    */
-  readonly restoreUndoStack = (revisions: readonly RestoredRevision[]): void => {
-    const { redoStack, baseDocument, headSeq } = this.#state
-    const kept: RevisionRef[] = []
-    let recorded = baseDocument
-    let expected = headSeq
-    for (const revision of [...revisions].sort((a, b) => b.seq - a.seq)) {
-      if (recorded === null || revision.seq !== expected) break
-      const anchored = anchorOps(recorded, revision.inverse)
-      if (anchored === null) break
-      try {
-        recorded = applyOps(recorded, revision.inverse)
-      } catch {
+  readonly restoreUndoStack = (
+    mine: readonly RestoredRevision[],
+    options: { others?: readonly RestoredRevision[]; point?: UndoRestorePoint } = {},
+  ): void => {
+    const point = options.point ?? this.undoRestorePoint()
+    if (point === null || this.#undoRestoredEpoch === point.epoch) return
+    const walk = this.#undoHistory(point, { mine, others: options.others })
+    if (walk === null || walk.restorable.length === 0) return
+    this.#undoRestoredEpoch = point.epoch
+    const recordedAt = historyDocuments(walk.head, walk.headSeq, walk.inverses)
+    const restored = walk.restorable.map(
+      (revision): RevisionRef => ({
+        revisionId: revision.revisionId,
+        inverse: revision.inverse,
+        anchorOnUse: once(() => {
+          const recorded = recordedAt(revision.seq)
+          return recorded === null ? null : anchorOps(recorded, revision.inverse)
+        }),
+      }),
+    )
+    this.#apply({ undoStack: [...restored.reverse(), ...this.#state.undoStack] })
+  }
+
+  /** 마지막으로 되돌리기를 채운 판의 세대(`restoreUndoStack` — 한 판에 한 번). */
+  #undoRestoredEpoch = -1
+
+  /**
+   * 되짚기의 재료 — 판이 `point`의 것일 때만 낸다. 실을 내 revision(판을 실은 번호 이하 · 최신순), 그 가장 옛 번호, 되짚을 `inverse`(그 번호
+   * 위 · 지금 번호 이하), 지금 번호에서 내려가며 처음 빠진 번호.
+   */
+  #undoHistory(
+    point: UndoRestorePoint,
+    history: { mine: readonly RestoredRevision[]; others?: readonly RestoredRevision[] | undefined },
+  ): {
+    head: PageDocument
+    headSeq: number
+    restorable: RestoredRevision[]
+    lowest: number
+    inverses: Map<number, PatchOp[]>
+    missing: number | null
+  } | null {
+    const { openPageId, baseDocument, headSeq } = this.#state
+    if (openPageId !== point.pageId || this.#queueEpoch !== point.epoch || baseDocument === null) return null
+    const ids = new Set<string>()
+    const restorable = history.mine
+      .filter((revision) => revision.seq <= point.seq && !ids.has(revision.revisionId) && ids.add(revision.revisionId))
+      .sort((a, b) => b.seq - a.seq)
+    const lowest = restorable[restorable.length - 1]?.seq ?? headSeq
+    const inverses = new Map<number, PatchOp[]>()
+    for (const revision of [...history.mine, ...(history.others ?? [])]) {
+      if (revision.seq > lowest && revision.seq <= headSeq) inverses.set(revision.seq, revision.inverse)
+    }
+    let missing: number | null = null
+    for (let seq = headSeq; seq > lowest; seq -= 1) {
+      if (!inverses.has(seq)) {
+        missing = seq
         break
       }
-      kept.push({ revisionId: revision.revisionId, inverse: revision.inverse, anchored })
-      expected -= 1
     }
-    this.#apply({
-      undoStack: kept.reverse(),
-      redoStack: redoStack.length === 0 ? redoStack : [],
-    })
+    return { head: baseDocument, headSeq, restorable, lowest, inverses, missing }
   }
 
   /**
@@ -1685,6 +1820,11 @@ export class EditorStore {
 
   /** 되돌리기 항목을 `document`에 얹어 본다 — 붙잡았으면 경로를 다시 짓고, 아니면 `inverse` 그대로. 못 얹으면 `null`. */
   #tryInverse(document: PageDocument, ref: RevisionRef): { ops: PatchOp[]; document: PageDocument } | null {
+    if (ref.anchorOnUse !== undefined) {
+      // 서버 이력으로 채운 항목 — 못 붙잡았으면 얹지 않는다(경로 그대로 보내면 남의 노드를 고칠 수 있다).
+      const anchored = ref.anchorOnUse()
+      return anchored === null ? null : rebaseAnchored(document, anchored)
+    }
     if (ref.anchored) return rebaseAnchored(document, ref.anchored)
     try {
       return { ops: ref.inverse, document: applyOps(document, ref.inverse) }

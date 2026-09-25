@@ -327,10 +327,20 @@ export interface ApiClient {
    * **응답은 `seq` 내림차순이고 여기서 뒤집지 않는다** — 스택으로 옮기는 자리가 그 순서를
    * 안다(`store/editor-store.ts`의 `restoreUndoStack`).
    *
-   * **`limit`을 붙이지 않는다.** 서버 기본값 50이 설계서 「개인 undo/redo」의 "최근 50개"와 같고,
-   * **선언하지 않은 쿼리 키는 그 자체로 400이다**(README) — `mine` 외에는 아무것도 붙일 수 없다.
+   * **`limit`을 붙이지 않는다.** 서버 기본값 50이 설계서 「개인 undo/redo」의 "최근 50개"와 같다. 선언하지 않은 쿼리 키는
+   * 그 자체로 400이다(README) — 캐시 버스터도 못 붙인다.
    */
   listMyRevisions(projectId: string, pageId: string, options?: ReadOptions): Promise<RevisionSummary[]>
+  /**
+   * 이 페이지의 revision 가운데 `seq < beforeSeq`인 것 — **누가 냈든** 최신순으로 `limit`개(서버 상한 200). 새로고침으로 채운 되돌리기가
+   * 내 revision 사이에 낀 남의 revision 을 받아 거꾸로 되짚는 데 쓴다(`store/editor-store.ts`의 `undoHistoryNeed`).
+   */
+  listRevisionsBefore(
+    projectId: string,
+    pageId: string,
+    range: { beforeSeq: number; limit: number },
+    options?: ReadOptions,
+  ): Promise<RevisionSummary[]>
   /**
    * 이 프로젝트의 화면이 지금 써야 할 테마(설계서 「테이블 정의」의 사슬을 서버가 따라간다).
    *

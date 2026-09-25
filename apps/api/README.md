@@ -270,7 +270,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder?, base? }`(하나 이상, `schema`는 여기서 못 바꾼다) — **`base`는 고치기 전 값**(아래 «페이지 메타의 충돌 모델») | 200 **페이지 여덟 키**(POST·GET과 같다) · **409** `page-meta-changed`(바탕이 지금 값과 다르다) |
 | `/api/projects/:projectId/pages/:pageId/schema` | PUT | editor | `{ schema }`(문서 봉투 전체) | 200 페이지(봉투 위반 400, 카탈로그 **오류** 422, 실패 시 기존 스키마 보존). 경고가 있으면 `warnings`가 더 붙는다. 통째 교체도 revision을 남긴다 |
 | `/api/projects/:projectId/pages/:pageId/ops` | PATCH | editor | `{ baseSeq, ops[], clientOpId? }` | 200 `{ seq, revisionId, inverse, schemaVersion, clientOpId?, warnings? }`(본문·경로 제약 위반과 지원하지 않는 문서 버전·NUL 문자는 400, 페이지 없음 404, baseSeq 불일치·패치 실패 409, 카탈로그 **오류** 422) |
-| `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50` | 200 revision 배열(seq 내림차순). **`limit` 최대 200이 곧 도달 가능한 이력의 전부다** — 커서 페이지네이션이 없다 |
+| `/api/projects/:projectId/pages/:pageId/revisions` | GET | viewer | `?mine=true&limit=50&beforeSeq=N` | 200 revision 배열(seq 내림차순). `limit` 최대 200. `beforeSeq`를 주면 `seq < N`인 것만 — 이력을 뒤로 넘겨 읽는 커서다 |
 | `/api/projects/:projectId/pages/:pageId` | DELETE | editor | — | 204 |
 | `/api/projects/:projectId/pages/:pageId/comments` | GET | viewer | — | 200 코멘트 배열(`created_at` 오름차순). 항목은 `{ id, nodeId, body, authorId, authorName, createdAt, updatedAt }` |
 | `/api/projects/:projectId/pages/:pageId/comments` | POST | editor | `{ nodeId, body, idempotencyKey? }` | 201 `{ comment, marker, seq, markerOps }` — **번호가 없는 노드면 문서에 `marker`를 붙이고 revision을 남긴다**(아래 "코멘트와 번호"). 문서에 없는 노드는 404, 본문 1~2000자 밖·NUL은 400. 그 사이 남이 고쳤어도 409 가 아니다 — 번호는 잠근 뒤의 문서로 매긴다(아래 "코멘트와 번호"). **`idempotencyKey`**(영숫자·`-`·`_` 1~64자, 밖은 400): 같은 (페이지, 작성자, 키)로 **이미 달렸으면 200 으로 그 행을 그대로 돌려준다** — 새 행·새 번호·revision 이 없고 `markerOps: []`, `seq`는 지금의 `head_seq`, `marker`는 그 노드의 **지금** 번호(노드나 번호가 사라졌으면 `null`). **같은 키에 다른 `nodeId`·`body`면 409** — 이 409 에만 `issues: [{ path: "idempotencyKey", code: "idempotency-key-reused", … }]`가 실린다(게시의 다른 409 — 아래 묘비의 것 — 와 `code`가 같아 이것으로 가른다. 아래 "멱등 키"). **그 키의 행이 달렸다가 지워졌으면 409** + `code: "idempotency-key-deleted"`(같은 꼴 — 새 행을 세우지 않는다. 아래 "멱등 키"의 «묘비»). **키 판정은 인증 뒤 · 권한 가드 앞이다** — 첫 게시 뒤 역할이 내려가거나 멤버에서 빠져도 같은 키면 200 재생(아래 "멱등 키") |
@@ -1286,7 +1286,9 @@ DB의 행과 코드가 갈리면 **코드가 이긴다** — 다음 기동이 �
 4. 응답의 `seq`가 다음 요청의 `baseSeq`다. 응답의 `inverse`를 그대로 다시
    `ops`로 보내면 그 편집이 취소된다 — 이것이 undo다. 서버에 undo 개념은 없다.
 5. 새로고침 후에는 `GET .../revisions?mine=true`로 자기 revision을 받아
-   undo 스택을 복원한다.
+   undo 스택을 복원한다. 그 사이에 남의 revision 이 끼어 있으면 `?beforeSeq=`로 그 구간을
+   받아 거꾸로 되짚는다 — 받은 `inverse`의 경로는 그 revision 을 기록한 문서의 것이라,
+   클라이언트가 그 문서를 지어 노드 id 로 붙잡아야 남의 노드를 안 고친다.
 
 **`PUT .../schema`가 만든 revision도 같은 방식으로 되돌린다 — 예외가 아니다.** 그
 revision의 `ops`는 `[replace /root, replace /version]`이고 `inverse`에도 `/version`이

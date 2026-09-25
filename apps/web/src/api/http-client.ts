@@ -1533,5 +1533,13 @@ export function createHttpClient(
         undefined,
         options,
       ),
+    listRevisionsBefore: (projectId, pageId, range, options) =>
+      request<RevisionSummary[]>(
+        'GET',
+        `${pagePath(projectId, pageId)}/revisions?beforeSeq=${range.beforeSeq}&limit=${range.limit}`,
+        SHAPES.revisionList,
+        undefined,
+        options,
+      ),
   }
 }

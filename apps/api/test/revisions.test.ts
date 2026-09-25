@@ -840,6 +840,93 @@ describe('GET /api/projects/:projectId/pages/:pageId/revisions', () => {
     })
   })
 
+  it('beforeSeq는 그 번호 앞의 것만 최신순으로 limit개 준다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 5)
+
+      const res = await getRevisions(ctx, revisionsUrl(fx, '?beforeSeq=4&limit=2'), fx.owner.cookie)
+
+      expect(res.statusCode, res.body).toBe(200)
+      // `4`를 넣거나(`<=`) 오래된 쪽부터 자르면 [4, 3] · [1, 2]가 된다.
+      expect((res.json() as RevisionResponse[]).map((revision) => revision.seq)).toEqual([3, 2])
+    })
+  })
+
+  it('beforeSeq는 남의 revision 도 준다 — mine 과 따로 걸린다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const editor = await signup(ctx)
+      await addMember(ctx, fx.project.id, editor.user.id, 'editor')
+      const mine = await patchOps(ctx, fx, { baseSeq: 0, ops: [textOp('n_mine000004')] }, fx.owner.cookie)
+      expect(mine.statusCode, mine.body).toBe(200)
+      const other = await patchOps(ctx, fx, { baseSeq: 1, ops: [textOp('n_other00004')] }, editor.cookie)
+      expect(other.statusCode, other.body).toBe(200)
+      const last = await patchOps(ctx, fx, { baseSeq: 2, ops: [textOp('n_mine000005')] }, fx.owner.cookie)
+      expect(last.statusCode, last.body).toBe(200)
+
+      const all = await getRevisions(ctx, revisionsUrl(fx, '?beforeSeq=3'), fx.owner.cookie)
+      const mineOnly = await getRevisions(ctx, revisionsUrl(fx, '?mine=true&beforeSeq=3'), fx.owner.cookie)
+
+      expect(all.statusCode, all.body).toBe(200)
+      expect((all.json() as RevisionResponse[]).map((revision) => [revision.seq, revision.actorId])).toEqual([
+        [2, editor.user.id],
+        [1, fx.owner.user.id],
+      ])
+      expect((mineOnly.json() as RevisionResponse[]).map((revision) => revision.seq)).toEqual([1])
+    })
+  })
+
+  it('beforeSeq가 1보다 작거나 숫자가 아니면 400이다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+
+      const zero = await getRevisions(ctx, revisionsUrl(fx, '?beforeSeq=0'), fx.owner.cookie)
+      const text = await getRevisions(ctx, revisionsUrl(fx, '?beforeSeq=abc'), fx.owner.cookie)
+
+      expect([zero.statusCode, text.statusCode]).toEqual([400, 400])
+    })
+  })
+
+  /**
+   * **`beforeSeq`를 실은 조회도 같은 문을 지난다** — viewer 는 읽고(남의 편집까지), 비멤버 · 다른 프로젝트의 페이지는 404, 미인증은 401. 아래
+   * `viewer도 읽을 수 있다` · `비멤버는 404다` · `다른 프로젝트의 페이지는 404다` · `미인증은 401이다`와 같은 판을 이 쿼리로 한 번 더 선다 — 되짚기
+   * 조회가 따로 문을 갖지 않는다는 것을 잠근다.
+   */
+  it('beforeSeq 조회도 viewer 는 읽고 비멤버 · 다른 프로젝트 · 미인증은 막힌다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      await editTimes(ctx, fx, 2)
+      const viewer = await signup(ctx)
+      await addMember(ctx, fx.project.id, viewer.user.id, 'viewer')
+      const outsider = await signup(ctx)
+      const otherProject = await createProject(ctx, outsider.cookie)
+      const otherMenu = await createMenuNode(ctx, outsider.cookie, otherProject.id)
+      const otherPage = await createPage(ctx, outsider.cookie, otherProject.id, otherMenu.id)
+      const seeded = await patchOps(
+        ctx,
+        fx,
+        { baseSeq: 0, ops: [textOp('n_leak000002')] },
+        outsider.cookie,
+        `/api/projects/${otherProject.id}/pages/${otherPage.id}/ops`,
+      )
+      expect(seeded.statusCode, seeded.body).toBe(200)
+
+      const byViewer = await getRevisions(ctx, revisionsUrl(fx, '?beforeSeq=3'), viewer.cookie)
+      const byOutsider = await getRevisions(ctx, revisionsUrl(fx, '?beforeSeq=3'), outsider.cookie)
+      const otherProjectPage = await getRevisions(
+        ctx,
+        `/api/projects/${fx.project.id}/pages/${otherPage.id}/revisions?beforeSeq=3`,
+        fx.owner.cookie,
+      )
+      const anonymous = await getRevisions(ctx, revisionsUrl(fx, '?beforeSeq=3'), undefined)
+
+      expect(byViewer.statusCode, byViewer.body).toBe(200)
+      expect((byViewer.json() as RevisionResponse[]).map((revision) => revision.seq)).toEqual([2, 1])
+      expect([byOutsider.statusCode, otherProjectPage.statusCode, anonymous.statusCode]).toEqual([404, 404, 401])
+    })
+  })
+
   it('선언 안 된 쿼리 키가 있으면 400이다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)

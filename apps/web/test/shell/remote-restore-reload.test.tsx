@@ -146,7 +146,7 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
         listMyRevisions: async () => [
           {
             id: 'rev-1',
-            // 연 판(`HEAD_SEQ` 7)에서 이어지는 내 revision 이라야 스택에 실린다(`EditorStore.restoreUndoStack`).
+            // 연 판(`HEAD_SEQ` 7)의 내 revision — 되짚기 조회 없이 붙잡힌다(`EditorStore.restoreUndoStack`).
             seq: 7,
             actorType: 'user',
             actorId: 'u1',

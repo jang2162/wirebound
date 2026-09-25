@@ -371,6 +371,14 @@ const ENDPOINTS: Array<{
     body: [revision],
     call: (c) => c.listMyRevisions('p1', 'pg1'),
   },
+  // 되짚기 조회 — `mine`을 붙이지 않는다(남의 revision 이 필요하다).
+  {
+    client: 'listRevisionsBefore',
+    url: '/api/projects/p1/pages/pg1/revisions?beforeSeq=9&limit=3',
+    method: 'GET',
+    body: [revision],
+    call: (c) => c.listRevisionsBefore('p1', 'pg1', { beforeSeq: 9, limit: 3 }),
+  },
   // **테마 저작 셋.** `getProjectTheme`의 `/theme`과 한 글자 차이인 `/themes/:id`다 —
   // 두 줄이 나란히 있어야 그 차이가 표에서 보인다.
   {

@@ -43,7 +43,7 @@ const METHODS = [
   'getTree',
   'createMenu', 'updateMenu', 'deleteMenu',
   'createPage', 'updatePage', 'deletePage', 'getPage', 'importPage',
-  'patchOps', 'listMyRevisions',
+  'patchOps', 'listMyRevisions', 'listRevisionsBefore',
   'getProjectTheme', 'listProjectThemes', 'setProjectTheme',
   'getTheme', 'createTheme', 'updateTheme',
   'listComments', 'createComment', 'updateComment', 'deleteComment', 'renumberComments',
@@ -139,6 +139,7 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   ],
   patchOps: ['../src/edit/use-edit-commit.tsx'],
   listMyRevisions: ['../src/routes/editor.tsx'],
+  listRevisionsBefore: ['../src/routes/editor.tsx'],
   // **소비자가 둘이고 서로 다른 것을 읽는다.** 캔버스 쪽 훅은 `theme`을
   // 읽어 그리고, 고르개는 같은 응답의 `themeId`를 읽어 *"지금 무엇이 골라져 있는가"*를
   // 그린다 — 목록(`listProjectThemes`)만으로는 그것을 알 수 없다.
