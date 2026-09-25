@@ -19,17 +19,25 @@
  * 늦추는 동안에도 scrypt 는 돈다. 그래서 **비밀번호를 견주기 전에** 그 시도를 두 키에 기록하고(한 틱 안이라 동시에 온 요청도 차례로
  * 센다), 한도에 닿은 키가 있으면 DB 도 scrypt 도 안 거치고 429 로 끝낸다 — 한 키가 한 번에 돌릴 수 있는 scrypt 가 한도 수로 묶인다.
  * 기록은 창(`windowMs`) 안의 시각 목록이고, 가장 오래된 기록이 창을 벗어나면 한 번 더 받는다.
- * - **성공하면 그 계정의 기록을 지우고, 주소에서는 이 시도의 자리만 걷는다.** 주소의 앞선 실패는 남는다 — 지우면 자기 계정 하나를
- *   가진 사람이 남의 계정을 두드리는 사이사이 자기 계정으로 로그인해 주소의 실패를 씻는다. 계정의 기록을 지워도 남는 틈은, 주인이
- *   로그인할 때마다 두드리는 쪽이 한도만큼 더 대 볼 수 있다는 것이다(주인의 성공이 드문 한 작다).
+ * - **성공은 두 키에서 이 시도의 자리만 걷는다 — 앞선 실패는 계정 · 주소 어느 쪽에서도 안 지운다.**
+ *   - 주소의 실패를 지우면 자기 계정 하나를 가진 사람이 남의 계정을 두드리는 사이사이 자기 계정으로 로그인해 주소의 실패를 씻는다.
+ *   - 계정의 실패를 지우면 그 지움이 남의 다음 답에 보인다 — 한도 − 1 까지 채워 둔 쪽이 뒤 두 번의 답(`401,401` 대 `401,429`)으로
+ *     «그 사이 주인이 로그인했다 = 있는 계정»을 읽고(아래 «없는 계정도 같은 판정이다»), 주인이 로그인할 때마다 한도만큼 더 대 본다.
+ *     «같은 주소에서 온 실패만 지운다»도 고르지 않았다 — 주인과 주소를 나누는 쪽(같은 NAT · `TRUST_PROXY` 없이 앞단 뒤라 모두가 한
+ *     주소)에게는 같은 신호가 선다.
+ *   - **대가: 주인의 오타도 창 동안 남는다.** 틀린 뒤 로그인한 사람이 창 안에서 다시 틀리면 앞의 오타까지 세어 더 일찍 막힌다(한도
+ *     10 가운데 그 오타 수만큼).
+ *   - 성공의 자리도 걷으므로 성공만 거듭하는 사람은 막히지 않는다. 그 자리는 비밀번호를 견주는 동안(scrypt 한 번)만 차 있다.
  * - **요청이 비밀번호를 견주지 못하고 끝나면(DB 오류) 두 자리를 다 걷는다** — 맞혀 본 것이 아니다.
  * - **막힌 동안은 옳은 비밀번호도 429 다.** 옳으면 받아 주면 막힌 키에서도 200 · 429 가 갈려 비밀번호를 맞혀 보는 창구가 그대로 남는다.
  *   그 대가로 **남이 내 계정을 막을 수 있다** — 창마다 틀린 비밀번호를 한도만큼 보내면 그 창 동안 주인도 새로 로그인하지 못한다.
  *   이미 로그인한 세션 · API 토큰은 그대로 돈다. 계정 발급을 서버에 손이 닿는 사람이 하는 자체 호스팅 도구라(설계서 「권한 모델」) 그
  *   값을 치른다. 풀 수단은 창이 지나는 것과 서버 재기동이다(기록이 메모리에만 있다).
  * - **없는 계정도 같은 판정이다.** 키는 이메일 글자이지 계정 행이 아니다 — 막힌 판은 DB 를 읽기 전에 끝나므로 있는 계정과 없는 계정의
- *   429 가 코드 · 문장 · 시간까지 같고, 막히기 전의 401 은 원래대로 같다(`routes/auth.ts` 의 더미 해시). 성공이 계정 기록을 지우는
- *   것은 비밀번호를 아는 사람에게만 보인다.
+ *   429 가 코드 · 문장 · 시간까지 같고, 막히기 전의 401 은 원래대로 같다(`routes/auth.ts` 의 더미 해시). 주인의 성공은 남의 다음 답을
+ *   안 바꾼다 — 성공이 제 자리만 걷으므로 남은 횟수가 주인이 안 온 계정 · 없는 계정과 같다. **남는 창:** 주인의 비밀번호를 견주는
+ *   동안(scrypt 한 번) 그 자리가 차 있어, 한도 − 1 에서 그 틈에 닿은 시도는 429 를 보고 성공이 자리를 걷은 뒤에는 다시 401 을 본다.
+ *   없는 계정에서는 안 나는 차례다. 한도 − 1 에서 보낸 시도는 받아지면 한도를 채우므로, 그 틈을 한 번에 맞혀야 선다.
  * - 본문이 틀린 요청(400)은 세지 않는다 — 검증 전에 끝나 scrypt 가 안 돈다.
  *
  * **저장소는 프로세스 메모리다.** api 는 한 프로세스라 이것으로 충분하다(실시간 층 · 잠금도 한 프로세스를 전제한다 — `ws/` 의
@@ -42,11 +50,12 @@
  * 둔다 — 이메일 규격이 길이를 묶지 않아(`auth/credentials.ts` 의 `NormalizedEmail`) 긴 글자가 그대로 쌓이지 않게.
  *
  * **주소는 `request.ip` 다** — `TRUST_PROXY` 가 비면 소켓 주소, 차면 그 앞단이 적은 `X-Forwarded-For` 를 따른다(`config.ts` 의
- * `trustProxy`). 앞단 뒤에서 그것을 안 채우면 모든 요청이 앞단 하나의 주소라 **주소 키가 서버 전체의 한도가 된다** — 아무나 틀린
+ * `trustProxy`). 앞단이 적은 글자가 IP 가 아니면 소켓 주소로 센다(`requestAddressKey`). 앞단 뒤에서 그것을 안 채우면 모든 요청이 앞단 하나의 주소라 **주소 키가 서버 전체의 한도가 된다** — 아무나 틀린
  * 로그인 `perAddress` 번으로 창 동안 모두의 새 로그인을 막는다(최상위 `README.md` 「앞단(리버스 프록시)이 지킬 조건」).
  */
 import { createHash } from 'node:crypto'
-import { isIPv4, isIPv6 } from 'node:net'
+import { isIPv4 } from 'node:net'
+import { ipv6Groups, mappedIPv4 } from '../ip-address'
 
 export interface LoginLimitRule {
   /** 기록을 세는 창(ms). */
@@ -116,17 +125,13 @@ class AttemptLog {
     if (at >= 0) stamps.splice(at, 1)
     if (stamps.length === 0) this.entries.delete(key)
   }
-
-  clear(key: string): void {
-    this.entries.delete(key)
-  }
 }
 
 export type LoginAdmission =
   | { kind: 'limited'; retryAfterSeconds: number }
   | {
       kind: 'admitted'
-      /** 비밀번호가 맞았다 — 계정 기록을 지우고 주소에서 이 자리를 걷는다. */
+      /** 비밀번호가 맞았다 — 두 키에서 이 자리만 걷는다(앞선 실패는 남는다 — 머리말 «성공은 두 키에서»). */
       succeeded(): void
       /** 비밀번호를 견주지 못하고 끝났다 — 두 자리를 다 걷는다. */
       abandoned(): void
@@ -152,16 +157,14 @@ export function createLoginLimiter(rule: LoginLimitRule = LOGIN_LIMIT, now: () =
       }
       accounts.add(account, at)
       addresses.add(address, at)
+      const release = () => {
+        accounts.removeOne(account, at)
+        addresses.removeOne(address, at)
+      }
       return {
         kind: 'admitted',
-        succeeded() {
-          accounts.clear(account)
-          addresses.removeOne(address, at)
-        },
-        abandoned() {
-          accounts.removeOne(account, at)
-          addresses.removeOne(address, at)
-        },
+        succeeded: release,
+        abandoned: release,
       }
     },
   }
@@ -172,29 +175,27 @@ function accountKey(email: string): string {
 }
 
 /**
- * 주소를 키로 만든다. IPv4 에 매핑된 IPv6(`::ffff:1.2.3.4`)는 IPv4 로, IPv6 은 앞 64비트로 묶는다(머리말 «키는 둘이다»). 둘 다 아니면
- * 받은 글자 그대로다.
+ * 주소를 키로 만든다(머리말 «키는 둘이다»). IPv4 는 그대로, IPv4 매핑 IPv6 은 IPv4 로, 그 밖의 IPv6 은 앞 64비트로 묶는다. 믿는 앞단이
+ * 적은 글자(`request.ip`)는 꼴이 제각각이라 값으로 편 뒤 가르고(`ip-address.ts`), 포트(`1.2.3.4:5678` · `[2001:db8::1]:443`)는 뗀다 —
+ * 안 떼면 연결마다 새 키다. **IP 가 아니면 `undefined`** — 받은 글자로 세면 `unknown` 하나가 모두의 키가 되고, 글자를 바꿔 가며 새 키를
+ * 얻는다. 부르는 쪽이 소켓 주소로 되돌린다(`requestAddressKey`).
  */
-export function addressKey(address: string): string {
-  const bare = address.split('%')[0] as string
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(bare)
-  if (mapped !== null && isIPv4(mapped[1] as string)) return mapped[1] as string
-  if (!isIPv6(bare)) return address
-  const groups = expandIPv6(bare)
-  return `${groups.slice(0, 4).join(':')}::/64`
+export function addressKey(address: string): string | undefined {
+  const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(address)
+  const withPort = /^(\d+\.\d+\.\d+\.\d+):\d+$/.exec(address)
+  const text = bracketed?.[1] ?? withPort?.[1] ?? address
+  if (isIPv4(text)) return text
+  const groups = ipv6Groups(text)
+  if (groups === undefined) return undefined
+  const mapped = mappedIPv4(groups)
+  if (mapped !== undefined) return mapped
+  return `${groups.slice(0, 4).map((group) => group.toString(16)).join(':')}::/64`
 }
 
-/** 줄인 IPv6(`2001:db8::1`)을 여덟 묶음으로 편다. 끝에 IPv4 가 붙은 꼴(`::1.2.3.4`)은 두 묶음으로 바꾼다. */
-function expandIPv6(address: string): string[] {
-  let text = address.toLowerCase()
-  const tail = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(text)
-  if (tail !== null) {
-    const [a, b, c, d] = tail.slice(1).map(Number) as [number, number, number, number]
-    text = `${text.slice(0, tail.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`
-  }
-  const [head, rest] = text.split('::') as [string, string | undefined]
-  const left = head === '' ? [] : head.split(':')
-  const right = rest === undefined || rest === '' ? [] : rest.split(':')
-  const fill = rest === undefined ? [] : Array(8 - left.length - right.length).fill('0')
-  return [...left, ...fill, ...right].map((group) => group.replace(/^0+(?=.)/, ''))
+/**
+ * 요청의 주소 키. `request.ip` 가 IP 가 아니면(믿는 앞단이 `X-Forwarded-For` 에 `unknown` 같은 글자를 적었다) 소켓 주소 — 그 앞단의 주소
+ * — 로 센다. 소켓 주소도 없으면(끊긴 소켓) 빈 글자 한 키다.
+ */
+export function requestAddressKey(ip: string, socketAddress: string | undefined): string {
+  return addressKey(ip) ?? addressKey(socketAddress ?? '') ?? ''
 }

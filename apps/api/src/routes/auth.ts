@@ -14,7 +14,7 @@ import { z } from 'zod'
 import { LoginPassword, NormalizedEmail } from '../auth/credentials'
 import { DEFAULT_SCRYPT_PARAMS, hashPassword, verifyPassword } from '../auth/password'
 import { sessionCookieOptions } from '../auth/plugin'
-import { addressKey, createLoginLimiter } from '../auth/login-limit'
+import { createLoginLimiter, requestAddressKey } from '../auth/login-limit'
 import { createSession, destroySession, hashSessionToken } from '../auth/session'
 import type { ApiConfig } from '../config'
 import { rateLimited, unauthenticated } from '../errors'
@@ -76,7 +76,7 @@ export function authRoutes(config: ApiConfig) {
       const body = parseBody(LoginBody, request.body)
       // **본문을 읽은 뒤 · 첫 `await` 전에 자리를 잡는다** — 동시에 온 요청도 한 틱 안에서 차례로 세이고, 막힌 판은 DB 도 scrypt 도
       // 안 거친다(`auth/login-limit.ts` 머리말 «방식»).
-      const admission = limiter.begin(body.email, addressKey(request.ip))
+      const admission = limiter.begin(body.email, requestAddressKey(request.ip, request.socket.remoteAddress))
       if (admission.kind === 'limited') {
         reply.header('retry-after', String(admission.retryAfterSeconds))
         throw rateLimited(loginLimitedMessage(admission.retryAfterSeconds))

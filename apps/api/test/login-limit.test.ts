@@ -10,6 +10,7 @@
  * 비밀번호 검증 · 사용자 조회의 호출 수는 `vi.spyOn` 으로 센다 — `vi.mock` 은 `setupFiles` 가 먼저 적재한 그래프에 안 닿는다
  * (`auth-timing.test.ts` 머리말).
  */
+import Fastify from 'fastify'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import * as passwordModule from '../src/auth/password'
 import { addressKey, createLoginLimiter, LOGIN_LIMIT } from '../src/auth/login-limit'
@@ -171,15 +172,14 @@ describe('로그인 시도 제한', () => {
     })
   })
 
-  it('성공은 그 계정의 실패를 지우고, 주소에서는 제 자리만 걷는다 — 주소의 앞선 실패는 남는다', async () => {
+  // 계정의 앞선 실패가 성공 뒤에도 남는 것은 아래 «성공은 남의 다음 답을 안 바꾼다»가 잰다.
+  it('성공은 두 키에서 제 자리만 걷는다 — 성공만 거듭하면 안 막히고, 주소의 앞선 실패는 남는다', async () => {
     await withApi(async (ctx) => {
-      const { user, password } = await signup(ctx)
-
-      // 계정: 한도 − 1 번 틀리고 성공하면 다시 한도만큼 틀릴 수 있다.
-      await failTimes(ctx, perAccount - 1, () => user.email, '10.0.5.1')
-      expect((await login(ctx, user.email, password, '10.0.5.1')).statusCode).toBe(200)
-      await failTimes(ctx, perAccount, () => user.email, '10.0.5.2')
-      expect((await login(ctx, user.email, WRONG, '10.0.5.2')).statusCode).toBe(429)
+      // 성공만 거듭하면 한도에 안 닿는다 — 성공은 제 자리를 걷는다.
+      const often = await signup(ctx)
+      for (let i = 0; i < perAccount + 1; i++) {
+        expect((await login(ctx, often.user.email, often.password, '10.0.5.2')).statusCode, `${i + 1}번째 성공`).toBe(200)
+      }
 
       // 주소: 한도 − 1 번 틀린 주소에서 성공해도 실패는 남아, 한 번 더 틀리면 막힌다.
       const mine = await signup(ctx)
@@ -187,6 +187,56 @@ describe('로그인 시도 제한', () => {
       expect((await login(ctx, mine.user.email, mine.password, '10.0.6.1')).statusCode).toBe(200)
       expect((await login(ctx, 'victim-last@example.com', WRONG, '10.0.6.1')).statusCode).toBe(401)
       expect((await login(ctx, 'victim-more@example.com', WRONG, '10.0.6.1')).statusCode).toBe(429)
+    })
+  })
+
+  // 성공이 계정 기록을 지우면, 한도 − 1 까지 채워 둔 쪽이 뒤 두 번의 답으로 «그 사이 주인이 로그인했다 = 있는 계정»을 읽는다
+  // (`src/auth/login-limit.ts` 머리말 «없는 계정도 같은 판정이다»).
+  it('성공은 남의 다음 답을 안 바꾼다 — 한도 − 1 까지 채운 뒤 두 번의 답이 주인이 로그인한 계정 · 안 온 계정 · 없는 계정에서 같다', async () => {
+    await withApi(async (ctx) => {
+      const elsewhere = await signup(ctx)
+      const sameAddress = await signup(ctx)
+      const idle = await signup(ctx)
+
+      // 두드리는 쪽은 판마다 한 주소에서 11 번 — 주소 키는 한도 밑이다.
+      const probe = async (email: string, address: string, between: () => Promise<void>) => {
+        await failTimes(ctx, perAccount - 1, () => email, address)
+        await between()
+        return [(await login(ctx, email, WRONG, address)).statusCode, (await login(ctx, email, WRONG, address)).statusCode]
+      }
+      const ownerLogsIn = (owner: { user: { email: string }; password: string }, address: string) => async () => {
+        expect((await login(ctx, owner.user.email, owner.password, address)).statusCode).toBe(200)
+      }
+
+      const answers = {
+        // 주인이 다른 주소에서 로그인했다.
+        elsewhere: await probe(elsewhere.user.email, '10.0.7.1', ownerLogsIn(elsewhere, '192.0.2.77')),
+        // 주인이 두드리는 쪽과 같은 주소(같은 NAT · 앞단 뒤 `TRUST_PROXY` 없음)에서 로그인했다.
+        sameAddress: await probe(sameAddress.user.email, '10.0.7.2', ownerLogsIn(sameAddress, '10.0.7.2')),
+        idle: await probe(idle.user.email, '10.0.7.3', async () => {}),
+        ghost: await probe('nobody-probe@example.com', '10.0.7.4', async () => {}),
+      }
+      expect(answers).toEqual({ elsewhere: [401, 429], sameAddress: [401, 429], idle: [401, 429], ghost: [401, 429] })
+    })
+  })
+
+  it('주인의 성공과 함께 몰린 틀린 요청도 — 창 안에서 틀린 비밀번호를 견주는 수는 한도 그대로다', async () => {
+    await withApi(async (ctx) => {
+      const { user, password } = await signup(ctx)
+      // 시도마다 주소를 바꿔 주소 키는 한도 밑이다.
+      let n = 0
+      const address = () => `10.0.8.${++n}`
+
+      await failTimes(ctx, 5, () => user.email, address)
+      const burst = await Promise.all([
+        login(ctx, user.email, password, '192.0.2.78'),
+        ...Array.from({ length: 30 }, () => login(ctx, user.email, WRONG, address())),
+      ])
+      const after = []
+      for (let i = 0; i < perAccount; i++) after.push((await login(ctx, user.email, WRONG, address())).statusCode)
+
+      const wrongCompared = 5 + [...burst.slice(1).map((res) => res.statusCode), ...after].filter((s) => s === 401).length
+      expect(wrongCompared).toBe(perAccount)
     })
   })
 
@@ -220,15 +270,48 @@ describe('로그인 시도 제한', () => {
 })
 
 describe('주소 키', () => {
-  it('IPv4 에 매핑된 IPv6 은 IPv4 로, IPv6 은 /64 로 묶는다', () => {
-    expect(addressKey('::ffff:10.1.2.3')).toBe('10.1.2.3')
-    expect(addressKey('10.1.2.3')).toBe('10.1.2.3')
-    expect(addressKey('2001:db8:1:2:3:4:5:6')).toBe(addressKey('2001:0db8:0001:0002::9'))
-    expect(addressKey('2001:db8:1:2::9')).toBe('2001:db8:1:2::/64')
-    expect(addressKey('2001:db8:1:3::9')).not.toBe(addressKey('2001:db8:1:2::9'))
-    expect(addressKey('::1')).toBe('0:0:0:0::/64')
-    expect(addressKey('fe80::1%lo0')).toBe('fe80:0:0:0::/64')
-    expect(addressKey('::0102:0304')).toBe(addressKey('::1.2.3.4'))
+  // 소켓 주소는 정규 꼴로 오지만, 믿는 앞단의 `X-Forwarded-For` 는 앞단이 적은 글자 그대로 `request.ip` 가 된다 — 꼴이 갈려도 한
+  // 클라이언트는 한 키, 다른 클라이언트는 다른 키여야 한다.
+  it('한 클라이언트의 여러 꼴이 한 키다 — IPv4 매핑 IPv6 은 IPv4 로, IPv6 은 /64 로, 포트는 떼고 · IP 가 아니면 키가 없다', () => {
+    const groups: [key: string | undefined, forms: string[]][] = [
+      [
+        '2001:db8:1:2::/64',
+        [
+          '2001:db8:1:2::5',
+          '2001:0db8:0001:0002:0000:0000:0000:0005',
+          '2001:DB8:1:2::5',
+          '2001:db8:1:2:0:0:0:5',
+          '2001:db8:1:2::5%eth0',
+          '2001:db8:1:2::0.0.0.5',
+          '2001:db8:1:2:ffff:ffff:ffff:ffff',
+          '[2001:db8:1:2::5]',
+          '[2001:db8:1:2::5]:443',
+        ],
+      ],
+      [
+        '1.2.3.4',
+        [
+          '1.2.3.4',
+          '1.2.3.4:5678',
+          '::ffff:1.2.3.4',
+          '::FFFF:1.2.3.4',
+          '0:0:0:0:0:ffff:1.2.3.4',
+          '0000:0000:0000:0000:0000:ffff:1.2.3.4',
+          '::ffff:0102:0304',
+          '::ffff:102:304',
+          '::ffff:1.2.3.4%eth0',
+          '[::ffff:1.2.3.4]:80',
+        ],
+      ],
+      ['5.6.7.8', ['5.6.7.8', '::ffff:5.6.7.8', '0:0:0:0:0:ffff:5.6.7.8', '::ffff:506:708']],
+      ['0:0:0:0::/64', ['::1', '::', '[::1]']],
+      ['2001:db8:1:3::/64', ['2001:db8:1:3::9']],
+      ['fe80:0:0:0::/64', ['fe80::1%lo0', 'fe80::2%en1', 'fe80::1']],
+      [undefined, ['unknown', '', ' 1.2.3.4', '01.2.3.4', '::ffff:01.2.3.4', '1.2.3.4:', '[1.2.3.4]:80x', 'proxy.example.com']],
+    ]
+    const table = Object.fromEntries(groups.flatMap(([, forms]) => forms.map((form) => [form, addressKey(form)])))
+    const expected = Object.fromEntries(groups.flatMap(([key, forms]) => forms.map((form) => [form, key])))
+    expect(table).toEqual(expected)
   })
 
   it('/64 로 묶인 주소들은 한 키로 센다', async () => {
@@ -238,6 +321,41 @@ describe('주소 키', () => {
       expect(res.statusCode).toBe(429)
       expect((await login(ctx, 'v6-next@example.com', WRONG, '2001:db8:1:3::1')).statusCode).toBe(401)
     })
+  })
+
+  it('믿는 앞단이 IP 가 아닌 글자를 적으면 소켓 주소로 센다 — 글자마다 새 키가 되지 않는다', async () => {
+    await withApi(
+      async (ctx) => {
+        for (let i = 0; i < perAddress; i++) {
+          const res = await ctx.app.inject({
+            method: 'POST',
+            url: '/api/auth/login',
+            payload: { email: `garbled${i}@example.com`, password: WRONG },
+            remoteAddress: '10.9.9.9',
+            headers: { 'x-forwarded-for': `unknown-${i}` },
+          })
+          expect(res.statusCode, `${i + 1}번째 실패`).toBe(401)
+        }
+        const garbled = await ctx.app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          payload: { email: 'garbled-next@example.com', password: WRONG },
+          remoteAddress: '10.9.9.9',
+          headers: { 'x-forwarded-for': 'unknown' },
+        })
+        expect(garbled.statusCode).toBe(429)
+        // 앞단이 IP 를 적은 요청은 제 주소로 센다.
+        const clean = await ctx.app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          payload: { email: 'garbled-next@example.com', password: WRONG },
+          remoteAddress: '10.9.9.9',
+          headers: { 'x-forwarded-for': '203.0.113.9' },
+        })
+        expect(clean.statusCode).toBe(401)
+      },
+      { config: { ...testConfig(), trustProxy: ['10.9.9.9'] } },
+    )
   })
 })
 
@@ -269,6 +387,46 @@ describe('믿는 앞단(TRUST_PROXY)', () => {
     ])
     for (const bad of ['true', '1', '10.0.0.0/33', 'proxy.example.com', '10.0.0.1/8/1']) {
       expect(() => loadConfig({ ...base, TRUST_PROXY: bad }), bad).toThrow(/TRUST_PROXY/)
+    }
+  })
+
+  it('모든 IPv4 를 덮는 IPv6 대역 · 접두 0 은 기동 거절이다 — 까닭을 문장으로 말한다', () => {
+    // IPv6 대역이 `::ffff:0:0/96`(IPv4 매핑 주소)을 통째로 덮으면 IPv4 로 붙는 클라이언트를 모두 믿는다.
+    for (const bad of ['::ffff:10.0.0.0/8', '0:0:0:0:0:ffff:10.0.0.0/8', '::ffff:a00:0/8', '::ffff:0:0/96', '::/64', '::/8']) {
+      expect(() => loadConfig({ ...base, TRUST_PROXY: `10.0.0.2,${bad}` }), bad).toThrow(/모든 IPv4 주소를 믿습니다 — IPv4 대역은 IPv4 꼴/)
+    }
+    // 접두 0 은 Fastify(proxy-addr)가 기동에서 제 문장으로 던진다 — 설정에서 먼저 거절한다.
+    for (const bad of ['0.0.0.0/0', '::/0']) {
+      expect(() => loadConfig({ ...base, TRUST_PROXY: bad }), bad).toThrow(/접두 0 이라 모든 주소를 믿습니다/)
+    }
+  })
+
+  // 설정이 받아 준 값을 실물(Fastify 의 `trustProxy`)에 물려, 대역 밖의 IPv4 클라이언트가 적은 머리를 안 믿는지 본다.
+  it('받아 준 값은 Fastify 가 받고, 대역 안의 앞단만 믿는다 — 대역 밖의 IPv4 · IPv4 매핑 클라이언트는 제 주소다', async () => {
+    const accepted: [value: string, inside: string][] = [
+      ['10.0.0.0/8', '10.1.1.1'],
+      ['10.0.0.2', '10.0.0.2'],
+      ['::ffff:10.0.0.0/104', '10.1.1.1'],
+      ['::ffff:10.0.0.2', '10.0.0.2'],
+      ['::ffff:10.0.0.2/128', '::ffff:10.0.0.2'],
+      ['2001:db8::/32', '2001:db8::5'],
+      ['::/96', '::5'],
+      ['::1', '::1'],
+      ['fe80::1%eth0/64', 'fe80::5'],
+    ]
+    for (const [value, inside] of accepted) {
+      const { trustProxy } = loadConfig({ ...base, TRUST_PROXY: value })
+      const app = Fastify({ trustProxy })
+      app.get('/', async (request) => ({ ip: request.ip }))
+      try {
+        const ipFrom = async (remoteAddress: string) =>
+          (await app.inject({ url: '/', remoteAddress, headers: { 'x-forwarded-for': '6.6.6.6' } })).json().ip
+        expect(await ipFrom(inside), `${value} 안`).toBe('6.6.6.6')
+        expect(await ipFrom('203.0.113.9'), `${value} 밖`).toBe('203.0.113.9')
+        expect(await ipFrom('::ffff:203.0.113.9'), `${value} 밖(매핑)`).toBe('::ffff:203.0.113.9')
+      } finally {
+        await app.close()
+      }
     }
   })
 
