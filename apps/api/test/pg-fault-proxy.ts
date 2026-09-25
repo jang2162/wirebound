@@ -31,8 +31,12 @@ export interface FaultProxy {
   /**
    * `fragment` 를 담은 질의를 **붙잡는다** — `release()`까지 Postgres 에 안 넘긴다. `held`는 그 질의가 붙잡혔을 때 풀린다.
    * 요청 하나를 그 질의 앞에서 세워 두고(그 앞에서 잡은 잠금은 쥔 채) 다른 요청을 겹치는 자리다. `delayQuery`와 같은 칸을 쓴다.
+   *
+   * **`held`는 `heldWithinMs`(기본 `HOLD_WITHIN_MS`) 안에 안 붙잡히면 원인 문장으로 거절한다** — 질의의 글자가 바뀌었거나(조각은
+   * SQL 모양에 매인다) 요청이 그 질의 앞에서 끝나면 판이 안 서는데, 한도가 없으면 케이스는 원인 없이 케이스 한도까지 멈춘다. 그때 이
+   * 붙잡기도 거둔다 — 늦게 온 질의를 엉뚱하게 세우지 않는다. `held`를 안 기다리는 호출자에게 그 거절은 조용히 지난다.
    */
-  holdQuery(fragment: string): { held: Promise<void>; release: () => void }
+  holdQuery(fragment: string, heldWithinMs?: number): { held: Promise<void>; release: () => void }
   /**
    * `fragment` 를 담은 질의 **대신 잘못된 메시지**(형식 `z`)를 Postgres 에 보낸다 — 서버가 **진짜** `FATAL 08P01`
    * («invalid frontend message type 122»)로 답하고 연결을 닫는다 — `08` 부류를 서버에서 내게 하는 길이 이것뿐이다.
@@ -103,6 +107,9 @@ function applyStartupPolicy(chunk: Buffer, policy: StartupPolicy): { reject: Buf
   head.writeInt32BE(PROTOCOL_3, 4)
   return { forward: Buffer.concat([head, body, chunk.subarray(chunk.readInt32BE(0))]) }
 }
+
+/** `holdQuery`의 `held`가 기다리는 기본 한도 — api 케이스 한도(20s)보다 짧아 그 앞에 원인 문장이 나온다. */
+export const HOLD_WITHIN_MS = 10_000
 
 export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> {
   const upstream = new URL(databaseUrl)
@@ -233,16 +240,28 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     delayQuery: (fragment, ms) => {
       delay = { fragment: fragment.toLowerCase(), ms }
     },
-    holdQuery: (fragment) => {
+    holdQuery: (fragment, heldWithinMs = HOLD_WITHIN_MS) => {
       let release: () => void = () => {}
       const released = new Promise<void>((resolve) => {
         release = resolve
       })
       let markHeld: () => void = () => {}
-      const held = new Promise<void>((resolve) => {
+      let giveUp: (error: Error) => void = () => {}
+      const held = new Promise<void>((resolve, reject) => {
         markHeld = resolve
+        giveUp = reject
       })
-      delay = { fragment: fragment.toLowerCase(), ms: released, onHeld: markHeld }
+      held.catch(() => {})
+      const slot = { fragment: fragment.toLowerCase(), ms: released, onHeld: () => {
+        clearTimeout(limit)
+        markHeld()
+      } }
+      const limit = setTimeout(() => {
+        if (delay === slot) delay = null
+        giveUp(new Error(`프록시: '${fragment}'를 담은 질의가 ${heldWithinMs}ms 안에 안 왔습니다 — 판이 안 섰습니다(그 질의의 글자가 바뀌었거나, 요청이 그 질의 앞에서 끝났거나, 다음 붙잡기가 이 칸을 덮었다)`))
+      }, heldWithinMs)
+      limit.unref()
+      delay = slot
       return { held, release }
     },
     corruptQuery: (fragment) => {

@@ -21,7 +21,35 @@
  *
  * 한도보다 먼저 오는 것도 있다 — 감독하는 쪽의 SIGKILL(`tsx watch` 5s · `docker stop` 기본 10s). 그때 도는 응답은 끊기지만
  * 브라우저는 안 남는다(파이프가 닫히면 스스로 끝난다 — 그리는 중에 서버 node 를 SIGKILL 한 판에서 남은 브라우저 0).
+ *
+ * # 신호 없이 오는 «닫아라» 둘 — 터미널이 사라졌다 · 띄운 부모가 끝났다
+ *
+ * **터미널을 닫아도 SIGHUP 이 안 올 수 있다.** 깔린 pnpm 판이 저장소의 `packageManager`와 다르면 `pnpm start`의 바깥 pnpm 이
+ * 그 판을 자식으로 띄우는데, 그때는 터미널을 닫아도 서버 · tsx 에 신호가 안 온다(잰 값 · macOS: pty 에 `pnpm start`를 띄우고
+ * master 를 닫은 판 — 서버 · tsx 가 받은 신호 0 · 바깥 pnpm 은 산 채 남음. `packageManager`가 없는 디렉터리의 `pnpm start` ·
+ * `tsx` 직접은 SIGHUP 을 받는다). 그래서 표준출력이
+ * 터미널이면 `LIFELINE_INTERVAL_MS`마다 0 바이트를 써 본다 — 끊긴 터미널은 0 바이트 쓰기에도 **EIO** 를 낸다(`/dev/tty`를 다시
+ * 여는 것은 끊긴 뒤에도 성공해 못 쓴다). Linux 도 같다 — `node:22-slim` 컨테이너에서 `script`가 띄운 pty 아래에 서버를 두고(부모
+ * 셸은 HUP 을 무시해 산 채) 3s 에 `script`를 SIGKILL 하자 3011–3028ms 에 «터미널이 닫혔습니다»로 닫혔다. 로그 쓰기의 EIO 는 로그를
+ * 버리기만 한다(`log-destination.ts`).
+ *
+ * **띄운 부모가 끝나도 신호가 안 온다.** `tsx`(watch 아님)는 SIGINT · SIGTERM 만 서버에 되전달한다 — `tsx`의 pid 에만 SIGHUP 을
+ * 보내거나 `tsx`가 SIGKILL 로 죽으면 서버는 부모 없이 포트를 쥐고 남는다. 그래서 같은 주기에 `process.ppid`가 처음 값과
+ * 달라졌는지 본다(부모가 끝나면 launchd · init 이 새 부모가 된다).
+ *
+ * **부모를 보는 것은 tsx CLI 가 띄운 판뿐이다**(`launchedByTsxCli`). 다른 부모는 서버보다 먼저 끝나는 것이 정상일 수 있다 —
+ * `nohup node … &` 뒤 셸을 닫기 · zsh 의 `&!` · 준비될 때까지 기다린 뒤 끝나는 기동 래퍼 · 컨테이너 안에서 `sh -c "node … &"`로
+ * 띄우고 끝나는 래퍼. 부모를 가리지 않고 보면 이 판들에서 정상 서버가 부모가 끝난 지 1s 안에 스스로 닫는다(잰 값 · macOS 의
+ * pty 에 bash 를 띄워 `nohup node --env-file=.env --import tsx src/main.ts > log 2>&1 &`를 치고 `/health` 200 뒤 `exit` · 같은
+ * 것을 `node:22-slim` 컨테이너(`--init`)에서 `sh -c "node … & sleep 3; exit 0"`으로). tsx CLI 의 부모는 서버와 함께 사는 것이
+ * 계약이라(자식이 끝나야 끝난다) 부모가 먼저 끝났으면 위의 고아다.
+ *
+ * **tsx 판본에 매인다.** tsx 가 자식에 싣는 플래그가 바뀌면 판별이 «아니다»로 떨어져 부모를 안 본다 — 고아 판이 다시 남을 뿐
+ * 정상 서버를 끄지 않는 쪽이다. 그 떨어짐은 조용하므로 `test/shutdown.test.ts`의 «깔린 tsx»가 실제 tsx 로 자식을 띄워 판별을
+ * 잰다 — tsx 를 올려 플래그가 바뀌면 그 케이스가 먼저 죽는다.
  */
+import { write } from 'node:fs'
+import { isatty } from 'node:tty'
 import type { FastifyInstance } from 'fastify'
 
 export const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP'] as const
@@ -35,24 +63,55 @@ export const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP'] as const
  */
 export const SHUTDOWN_GRACE_MS = 30_000
 
+/** 터미널 · 부모를 보는 주기. 0 바이트 쓰기 하나와 `ppid` 읽기라 값싸다 — 끊긴 뒤 이만큼 안에 닫기 시작한다. */
+export const LIFELINE_INTERVAL_MS = 1_000
+
 interface ShutdownProcess {
   on(signal: (typeof SHUTDOWN_SIGNALS)[number], listener: () => void): unknown
   exit(code: number): void
+  readonly ppid: number
+  readonly execArgv: readonly string[]
+}
+
+/** tsx CLI(`tsx` · `tsx watch`)는 자식 node 에 `--require <tsx>/dist/preflight.cjs`를 싣는다 — `node --import tsx`에는 없다. */
+const TSX_PREFLIGHT = /[\\/]tsx[\\/]dist[\\/]preflight\.cjs$/
+
+/** tsx CLI 가 띄운 node 인가(머리말 «부모를 보는 것은 tsx CLI 가 띄운 판뿐이다»). */
+export function launchedByTsxCli(execArgv: readonly string[]): boolean {
+  return execArgv.some((arg) => TSX_PREFLIGHT.test(arg))
+}
+
+/** 터미널에 0 바이트를 써 본다 — 오류 코드를 낸다(없으면 `undefined`). */
+export type TerminalProbe = () => Promise<string | undefined>
+
+/** 표준출력이 터미널일 때만 잰다 — 파이프 · 파일(컨테이너 · `nohup`)에는 «터미널이 사라진다»가 없다. */
+function stdoutTerminalProbe(): TerminalProbe | undefined {
+  if (!isatty(1)) return undefined
+  return () => new Promise((resolve) => write(1, Buffer.alloc(0), (error) => resolve(error?.code)))
 }
 
 export function closeOnSignals(
   app: FastifyInstance,
   db: { destroy(): Promise<void> },
-  options: { graceMs?: number; process?: ShutdownProcess } = {},
+  options: {
+    graceMs?: number
+    process?: ShutdownProcess
+    lifelineMs?: number
+    /** `null`이면 터미널을 안 본다. 생략하면 표준출력이 터미널일 때 본다. */
+    terminal?: TerminalProbe | null
+  } = {},
 ): void {
   const proc: ShutdownProcess = options.process ?? process
   const graceMs = options.graceMs ?? SHUTDOWN_GRACE_MS
+  const terminal = options.terminal === undefined ? stdoutTerminalProbe() : (options.terminal ?? undefined)
+  const parent = launchedByTsxCli(proc.execArgv) ? proc.ppid : undefined
   let closing = false
 
-  async function shutdown(signal: (typeof SHUTDOWN_SIGNALS)[number]): Promise<void> {
+  async function shutdown(reason: string): Promise<void> {
     if (closing) return
     closing = true
-    app.log.info(`${signal} 수신 — 서버를 종료합니다`)
+    clearInterval(lifeline)
+    app.log.info(`${reason} — 서버를 종료합니다`)
     const limit = setTimeout(() => {
       app.log.warn(`종료가 ${graceMs}ms 안에 안 끝났습니다 — 도는 요청을 버리고 끝냅니다`)
       proc.exit(1)
@@ -64,5 +123,20 @@ export function closeOnSignals(
     proc.exit(0)
   }
 
-  for (const signal of SHUTDOWN_SIGNALS) proc.on(signal, () => void shutdown(signal))
+  for (const signal of SHUTDOWN_SIGNALS) proc.on(signal, () => void shutdown(`${signal} 수신`))
+
+  let probing = false
+  const lifeline = setInterval(() => {
+    if (parent !== undefined && proc.ppid !== parent) {
+      void shutdown(`부모 프로세스(${parent})가 끝났습니다`)
+      return
+    }
+    if (terminal === undefined || probing) return
+    probing = true
+    void terminal().then((code) => {
+      probing = false
+      if (code === 'EIO') void shutdown('터미널이 닫혔습니다')
+    })
+  }, options.lifelineMs ?? LIFELINE_INTERVAL_MS)
+  lifeline.unref()
 }

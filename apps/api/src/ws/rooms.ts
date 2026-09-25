@@ -56,7 +56,8 @@ export interface RoomConnection {
   close(code: number, reason: string): void
   /**
    * **도는 프레임이 다 끝난 뒤에 닫는다** — 지금 도는 것이 없으면 곧바로다. 로그아웃(`ws/notify.ts`의
-   * `closeSessionConnections`)과 프레임 수신 쪽 회수(`ws/routes.ts`의 «권한이 회수되었습니다»)가 쓴다: 잠금에 줄 선 `patch`의
+   * `closeSessionConnections`) · 프레임 수신 쪽 회수(`ws/routes.ts`의 «권한이 회수되었습니다») · 방송 쪽 회수(`ws/broadcast.ts`의
+   * `deliver`)가 쓴다: 잠금에 줄 선 `patch`의
    * 답(커밋 순간의 재확인이 낸 401 · 404)이 닫힌 소켓에서 길을 잃지 않게. 여러 번 불리면 **먼저 정한 사유**로 닫는다.
    */
   closeWhenIdle(code: number, reason: string): void

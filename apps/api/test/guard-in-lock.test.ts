@@ -1731,10 +1731,9 @@ async function settledOrQueued(fired: Fired): Promise<void> {
 }
 
 /**
- * 요청을 세울 질의 글자(프록시의 `holdQuery`) — 세션 · 토큰의 재확인(`auth/roles.ts`의 `recheckAtCommit`), owner 행(`lockOwnerIds`),
+ * 요청을 세울 질의 글자(프록시의 `holdQuery`) — 토큰의 재확인(`auth/roles.ts`의 `recheckAtCommit`), owner 행(`lockOwnerIds`),
  * 멤버 행 재확인, 멤버 제거의 첫 잠금(`lockMemberTokens`).
  */
-const SESSION_RECHECK = 'statement_timestamp() for key share'
 const TOKEN_RECHECK = '"api_tokens" where "id" = $1 for key share'
 const OWNER_LOCK = '"role" = $2 for update'
 const MEMBER_SHARE = '"user_id" = $2 for share'
@@ -1746,8 +1745,11 @@ const MEMBER_TOKENS_LOCK = 'order by "id" for update'
  * 멤버 쓰기의 잠금 순서는 «토큰 행 → owner 행 → 멤버 행»이다(`repos/members.ts`의 `OwnerRecheck` «잠금 순서»).
  *
  * - **토큰으로 쓰는 owner 를 뺀다.** 토큰 쓰기의 재확인은 «토큰 행(`KEY SHARE`) → 제 멤버 행(`SHARE`)»이다. 제거가 owner 행
- *   (`lockOwnerIds` — 빠지는 owner 의 행도 든다) 뒤에 토큰을 잡으면 고리가 선다. 판: 제거를 재확인 질의(앨리스 세션의
- *   `KEY SHARE`)에서 붙잡아(프록시의 `holdQuery` — 토큰 행은 쥔 채) 그 사이 밥의 토큰 쓰기를 세운다.
+ *   (`lockOwnerIds` — 빠지는 owner 의 행도 든다) 뒤에 토큰을 잡으면 고리가 선다. 판: 제거를 역할 재확인(앨리스 멤버 행의 `SHARE`)
+ *   에서 붙잡아(프록시의 `holdQuery`) 그 사이 밥의 토큰 쓰기를 세운다. **그 자리는 두 순서 모두에서 제거가 행을 쥔 자리다** —
+ *   옳은 순서면 토큰 · owner 행을 쥐어 밥은 인증의 `last_used_at` 갱신에서 서고, 토큰을 owner 행 · 재확인 뒤로 옮긴 판이면 owner
+ *   행을 쥐어 밥은 제 멤버 행 `SHARE`에서 선다(그다음 제거가 밥의 토큰 행에 서서 고리). 자격 재확인에서 붙잡으면 옮긴 판의 제거는
+ *   아무것도 안 쥔 채 서서 밥이 기다릴 것이 없다 — 판이 안 선다.
  * - **프로젝트 삭제와 겹친다.** 삭제가 토큰 행을 CASCADE 에서 처음 만나면 그때 owner 행을 쥐고 있다 — 토큰 행을 쥔 채 owner
  *   행에 선 제거와 고리다. 판: owner 행을 테스트가 쥐고 둘을 차례로 줄 세운 뒤 푼다. 두 방향을 다 세운다(어느 쪽이 먼저
  *   owner 행 줄에 서나).
@@ -1774,12 +1776,12 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
     await withProxiedRealApi(async (ctx) => {
       const fx = await tokenFixture(ctx, 'owner')
       const deadlocksBefore = await deadlockCount()
-      const recheck = ctx.proxy.holdQuery(SESSION_RECHECK)
+      const roleRecheck = ctx.proxy.holdQuery(MEMBER_SHARE)
       let removal: Fired | undefined
       let write: Fired | undefined
       try {
         removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
-        await recheck.held
+        await roleRecheck.held
         write = track(
           ctx.app.inject({
             method: 'PATCH',
@@ -1790,7 +1792,7 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
         )
         await waitForLockWaiter(1)
       } finally {
-        recheck.release()
+        roleRecheck.release()
       }
       const [removed, written] = await Promise.all([removal.promise, write.promise])
 

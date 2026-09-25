@@ -66,6 +66,10 @@ export async function createSession(db: DbHandle, userId: string, ttlHours: numb
  * `password_hash`는 select하지 않는다 — `users`에서 `id`·`email`·`name`만 명시적으로
  * 골라 온다. `selectAll()`로 다 가져온 뒤 필드를 지우는 방식은 나중에 `users`에
  * 컬럼이 늘어나면 실수로 민감한 값을 새어 보낼 수 있어 쓰지 않는다.
+ *
+ * **`last_seen_at` 갱신이 0 행이면 사용자를 내지 않는다.** 앞의 `SELECT`와 갱신 사이에 로그아웃 · 세션 삭제가 커밋되면 갱신은
+ * 지워진 행에 0 행으로 끝난다 — 그 결과를 안 보면 지워진 세션으로 인증이 서고, 읽기에는 커밋 순간의 재확인이 없어 그 요청이
+ * 답한다. 토큰 인증(`repos/api-tokens.ts`의 `findApiTokenByValue`)과 같은 자리다. [api] `session-logout-race.test.ts`.
  */
 export async function resolveSession(db: DbHandle, token: string): Promise<SessionUser | null> {
   const id = hashSessionToken(token)
@@ -82,10 +86,14 @@ export async function resolveSession(db: DbHandle, token: string): Promise<Sessi
     return null
   }
 
-  await db.updateTable('sessions')
+  const touched = await db.updateTable('sessions')
     .set({ last_seen_at: new Date() })
     .where('id', '=', id)
-    .execute()
+    .returning('id')
+    .executeTakeFirst()
+  if (!touched) {
+    return null
+  }
 
   return { id: row.id, email: row.email, name: row.name }
 }

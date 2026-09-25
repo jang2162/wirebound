@@ -11,6 +11,7 @@ import type { FastifyInstance } from 'fastify'
 import type { ApiConfig } from '../config'
 import { LOCK_SWEEP_MS, createLockStore, type LockStore } from '../lock/store'
 import { createBroadcaster, type Broadcaster } from './broadcast'
+import { releaseLocksOf } from './lock'
 import { wsRoutes } from './routes'
 import { InMemoryRoomRegistry, type RoomRegistry } from './rooms'
 
@@ -37,6 +38,30 @@ export { InMemoryRoomRegistry } from './rooms'
 export * from './protocol'
 
 /**
+ * **닫는 중에 닫힘 핸드셰이크에 답하지 않는 연결을 기다리는 한도.**
+ *
+ * `@fastify/websocket`의 기본 `preClose`는 연결마다 `close()`(닫힘 프레임)를 보내고, `ws`는 상대의 닫힘 프레임을 30s
+ * (`closeTimeout`) 기다린 뒤에야 소켓을 끊는다 — 그동안 `app.close()`가 안 끝난다. 잠든 노트북 · 끊긴 망의 연결 하나가 종료를
+ * 30s 붙잡고, 종료의 한도(`shutdown.ts`의 `SHUTDOWN_GRACE_MS`)와 같은 값이라 한도가 이겨 «도는 요청을 버리고» 종료 1 로 끝난다.
+ * 잰 값(서버를 띄워 SIGTERM · 핸드셰이크 뒤 아무것도 안 읽는 연결 하나): 30 053ms · 종료 1. 답하는 연결 하나: 52ms.
+ *
+ * 답하는 연결은 한도 안에 닫힘을 주고받는다 — 기본 `preClose`를 바꾸지 않고, 그 뒤에 한도가 지나도 안 닫힌 연결만
+ * `terminate()`한다. `app.close()` 앞에서 곧바로 끊지 않는 것은 답하는 연결의 닫힘 핸드셰이크를 지키려는 것이다.
+ */
+export const WS_CLOSE_GRACE_MS = 2_000
+
+function cutUnansweredClosesAfter(app: FastifyInstance, graceMs: number): void {
+  // `@fastify/websocket`이 제 `preClose`(연결마다 `close()`)를 먼저 걸었다 — 이 훅은 그 뒤에 돈다.
+  app.addHook('preClose', async () => {
+    for (const client of app.websocketServer.clients) {
+      const cut = setTimeout(() => client.terminate(), graceMs)
+      cut.unref()
+      client.once('close', () => clearTimeout(cut))
+    }
+  })
+}
+
+/**
  * `@fastify/websocket`을 붙이고 룸·브로드캐스터를 만들어 `app.realtime`에 건다.
  *
  * **`app.register()`로 감싸지 않는다** — `registerAuthPlugin`과 같은 이유다. 감싸면
@@ -48,6 +73,7 @@ export * from './protocol'
  */
 export async function registerRealtime(app: FastifyInstance, config: ApiConfig): Promise<void> {
   await app.register(websocketPlugin)
+  cutUnansweredClosesAfter(app, WS_CLOSE_GRACE_MS)
 
   const rooms = new InMemoryRoomRegistry()
   /**
@@ -71,8 +97,19 @@ export async function registerRealtime(app: FastifyInstance, config: ApiConfig):
   }
   const locks = createLockStore(undefined, undefined, onExpired)
   // 권한을 못 잰 연결은 그 프레임만 건너뛴다(`broadcast.ts`의 `createBroadcaster` 머리말) — 한 줄 남긴다.
-  const broadcast = createBroadcaster(app.db, rooms, locks, (error, connection) =>
-    app.log.warn({ err: error, projectId: connection.projectId, connectionId: connection.id }, '방송 — 권한을 재지 못해 한 연결을 건너뜀'),
+  const broadcast = createBroadcaster(
+    app.db,
+    rooms,
+    locks,
+    (error, connection) =>
+      app.log.warn({ err: error, projectId: connection.projectId, connectionId: connection.id }, '방송 — 권한을 재지 못해 한 연결을 건너뜀'),
+    // 방송이 회수한 연결 — 닫힘은 도는 프레임을 기다리므로 잠금 · 참가자는 여기서 거둔다(`broadcast.ts`의 «회수는 프레임 쪽 회수와 같은 순서다»).
+    (connection) => {
+      releaseLocksOf(app, connection)
+      void broadcast.announcePresence(connection.projectId).catch((error: unknown) => {
+        app.log.error({ err: error, projectId: connection.projectId }, 'presence 알림 실패(방송의 회수)')
+      })
+    },
   )
   app.decorate('realtime', { rooms, locks, broadcast })
 
