@@ -6,7 +6,7 @@
  * `test/api/http-client.test.ts`가 따로 지킨다 — 여기서는 **무엇을 부르는가**와 **화면이
  * 무엇을 보이는가**를 본다.
  */
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app'
 import { ApiError, type ApiClient } from '../../src/api/client'
@@ -631,8 +631,9 @@ describe('통합 — 한 화면에서 이어서', () => {
       expect(screen.queryByRole('button', { name: `${row.name} 수정` }) !== null).toBe(open)
       expect(screen.queryByRole('button', { name: `${row.name} 삭제` }) !== null).toBe(open)
     }
-    // 링크는 역할과 무관하게 셋 다 있다 — 읽기는 viewer도 된다.
-    expect(screen.getAllByRole('link')).toHaveLength(3)
+    // 링크는 역할과 무관하게 셋 다 있다 — 읽기는 viewer도 된다. 목록 안에서 센다 — 머리의 계정 묶음에도 링크가 있다
+    // («API 토큰» — `session/session-menu.tsx`).
+    expect(within(screen.getByRole('list')).getAllByRole('link')).toHaveLength(3)
   })
 
   it('조회 실패와 조작 실패가 각자 자리에 나온다', async () => {
@@ -674,12 +675,12 @@ describe('통합 — 한 화면에서 이어서', () => {
       screen.queryAllByRole('textbox').length +
       screen.queryAllByRole('link').length
 
-    // 닫힌 상태: 링크 1 + 새 프로젝트·수정·삭제 3 + **로그아웃 1** = 5.
-    // 로그아웃은 이 화면에서도 앱에서 나가는 길이다(`session/session-menu.tsx`,
+    // 닫힌 상태: 링크 1 + 새 프로젝트·수정·삭제 3 + **계정 묶음 2(«API 토큰» 링크 · 로그아웃)** = 6.
+    // 계정 묶음은 이 화면에서도 앱에서 나가는 길이다(`session/session-menu.tsx`,
     // `test/routes/shell-nav.test.tsx`). 이 케이스가 재는 것은 *"열면 늘고 닫으면
     // 되돌아온다"*이고, 바탕 수는 이 화면의 정지점을 셀 뿐이다.
     const closed = stops()
-    expect(closed).toBe(5)
+    expect(closed).toBe(6)
 
     fireEvent.click(screen.getByRole('button', { name: '새 프로젝트' }))
     // 폼: 입력 3 + 만들기·취소 2
