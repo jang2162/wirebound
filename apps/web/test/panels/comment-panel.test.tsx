@@ -18,6 +18,7 @@ import type { ApiClient } from '../../src/api/client'
 import type { Comment, CommentCreated } from '../../src/api/types'
 import {
   deselect,
+  HEAD_SEQ,
   openPage,
   OTHER_PAGE_ID,
   OTHER_PAGE_TITLE,
@@ -284,7 +285,8 @@ describe('지우기와 재번호', () => {
         listComments: async () => listed,
         deleteComment: async () => {
           listed = []
-          return { seq: 9, markerOps: [{ op: 'remove' as const, path: '/root/children/0/marker' }] }
+          // 내 다음 번호다 — 앞선 번호면 스토어가 사이 프레임을 기다린다(`applyMarkerChange`).
+          return { seq: HEAD_SEQ + 1, markerOps: [{ op: 'remove' as const, path: '/root/children/0/marker' }] }
         },
       },
     })
@@ -305,7 +307,7 @@ describe('지우기와 재번호', () => {
       apiOverrides: {
         listComments,
         renumberComments: async () => ({
-          seq: 9,
+          seq: HEAD_SEQ + 1,
           markerOps: [{ op: 'replace' as const, path: '/root/children/2/marker', value: 1 }],
         }),
       },
