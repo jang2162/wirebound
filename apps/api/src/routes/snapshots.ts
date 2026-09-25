@@ -83,6 +83,7 @@ import { parseBody, parseParams } from '../http/parse'
 import {
   SnapshotNulByteError,
   findSnapshotById,
+  findSnapshotCommitWithin,
   insertSnapshot,
   listSnapshots,
   type SnapshotDetail,
@@ -90,6 +91,7 @@ import {
 } from '../repos/snapshots'
 import { lockProjectShared } from '../repos/projects'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
+import { LOST_COMMIT_PROBE_MS, runConfirmedTransaction } from '../services/lost-commit'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
 import { broadcastOrigin, notifyRestored } from '../ws/notify'
 
@@ -309,14 +311,24 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           throw unauthenticated()
         }
 
-        const outcome = await withTransaction(app.db, async (trx) => {
-          const restored = await restoreSnapshot(trx, { projectId, snapshotId, actorId: currentUser.id })
-          // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
-          // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
-          // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
-          if (restored.kind === 'restored') await recheckProjectRole(trx, request)
-          return restored
-        })
+        // **COMMIT 답을 잃으면 안전망 스냅샷이 보이는지 새 연결로 확인한다**(`services/lost-commit.ts`) — 보이면 복원은 커밋됐다.
+        // `restored`는 페이지의 `seq`를 싣지 않고 받는 쪽이 다시 읽게 하는 프레임이라 머리를 보지 않고 보낸다.
+        const { result: outcome } = await runConfirmedTransaction(
+          app.db,
+          async (trx) => {
+            const restored = await restoreSnapshot(trx, { projectId, snapshotId, actorId: currentUser.id })
+            // **커밋 순간의 권한**(`auth/roles.ts`의 `recheckProjectRole`). 복원은 프로젝트의 페이지를
+            // 전부 잠근다(`lockProjectForRestore`) — 그 대기 뒤의 역할로 판정한다. 던지면 복원째 되돌아간다
+            // (`restoreSnapshot`의 트랜잭션은 이 안의 세이브포인트가 된다).
+            if (restored.kind === 'restored') await recheckProjectRole(trx, request)
+            return restored
+          },
+          async (restored) => {
+            if (restored.kind !== 'restored') return null
+            const seen = await findSnapshotCommitWithin(app.db, projectId, restored.result.safety.id, LOST_COMMIT_PROBE_MS)
+            return seen === true ? true : null
+          },
+        )
         if (outcome.kind !== 'restored') {
           throw restoreOutcomeToApiError(outcome)
         }

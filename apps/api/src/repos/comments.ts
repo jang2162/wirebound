@@ -443,7 +443,7 @@ export async function deletePageComments(trx: DbHandle, pageId: string): Promise
  * 행을 이미 `FOR UPDATE`로 쥐고 묻는다. `KEY SHARE`는 다른 `KEY SHARE` · `FOR SHARE` · `NO KEY UPDATE`와 부딪히지
  * 않는다 — 같은 프로젝트의 코멘트 삭제끼리는 줄을 서지 않는다.
  *
- * 대상이 없으면(그 사이 지워졌다) 아무것도 안 잡는다 — 뒤의 페이지 잠금(`lockAndCheck`)이 없음을 보고 404 가 된다.
+ * 대상이 없으면(그 사이 지워졌다) 아무것도 안 잡는다 — 뒤의 페이지 잠금(`lockPageForEdit`)이 없음을 보고 404 가 된다.
  * `lockProjectTree`처럼 `ProjectGoneError`를 던지지 않는 것은 뒤에 그 판정을 하는 자리가 이미 있어서다(답은 같은 404).
  */
 export async function lockProjectForBurial(trx: DbHandle, projectId: string): Promise<void> {

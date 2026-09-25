@@ -43,26 +43,25 @@
  * 경로도 **서버가 자기 문서에서** 계산한다. 클라이언트가 주면 코멘트와 무관한 이유
  * (내 화면이 조금 뒤처졌다)로 코멘트가 거절된다.
  *
- * **삭제 · 재번호는 잠그기 *전*에 읽는다.** 요청이 도착한 시점에 `findPageById`로 읽어 그 값을
- * `baseSeq`로 넘기므로, 그 사이 다른 편집이 커밋되면 `stale`로 **409가 나간다** — 두 요청은 잠그기
- * 전에 읽은 문서로 지울 번호 · 매길 번호의 경로를 정하기 때문이다. `PUT .../schema`가 같은 모양이고
- * (그 라우트의 주석에 경합 창이 적혀 있다), 재시도 루프를 넣지 않는 것도 같다.
+ * **그 값은 잠근 행의 `head_seq`다** — 아래 「번호는 잠근 뒤의 문서로 센다」.
  *
- * ## 게시는 잠근 뒤의 문서로 번호를 매긴다
+ * ## 번호는 잠근 뒤의 문서로 센다
  *
- * 게시는 번호(최댓값 + 1)와 *"노드에 번호가 이미 있는가"*를 **페이지 행을 잠근 뒤의 문서**에서 센다 —
- * 그 문서가 곧 파이프라인의 `before`이고 `baseSeq`는 잠근 행의 `head_seq`다. 잠그기 전에 읽은 문서로
- * 매기면 둘이 틀린다: 서로 다른 두 노드에 동시에 달린 첫 코멘트가 **둘 다 1번**을 받고, 남이 마지막
- * 코멘트를 지워 번호를 없앤 직후라면 *"번호가 이미 있다"*로 판단해 **번호 없는 코멘트**를 세운다. 그 둘을
- * 낡음(409)으로 거절하면 겹친 두 게시 중 하나가 까닭 없이 실패한다 — 게시가 문서에 내는 변화는 서버가
- * 지금 문서에서 계산하므로 밀어붙일 남의 편집이 없다. 그래서 게시는 `stale`을 내지 않는다.
+ * 게시 · 삭제 · 재번호 셋 다 문서에 낼 변화(붙일 번호 · 지울 번호 · 다시 매길 번호와 그 노드의 경로)를 **페이지 행을 잠근 뒤의
+ * 문서**에서 센다 — 그 문서가 곧 파이프라인의 `before`이고 `baseSeq`는 잠근 행의 `head_seq`다. 잠그기 전에 읽은 문서로 세면
+ * 틀린다: 서로 다른 두 노드에 동시에 달린 첫 코멘트가 **둘 다 1번**을 받고, 남이 마지막 코멘트를 지워 번호를 없앤 직후라면
+ * *"번호가 이미 있다"*로 판단해 **번호 없는 코멘트**를 세우고, 그 사이 남이 노드를 옮겼으면 지울 번호의 경로가 **다른 노드**를
+ * 가리킨다. 그것들을 낡음(409)으로 거절하면 겹친 두 쓰기 중 하나가 까닭 없이 실패한다 — 서로 다른 노드의 마지막 코멘트를 동시에
+ * 지우면 한쪽이 409 다(`test/comments-concurrency.test.ts`의 «서로 다른 노드의 마지막 코멘트를 동시에 지우면»). 세 쓰기가 문서에
+ * 내는 변화는 서버가 지금 문서에서 계산하므로 밀어붙일 남의 편집이 없다. 그래서 셋 다 `stale`을 내지 않는다.
  *
- * **대가 — 응답의 `markerOps`·`seq`는 보낸 화면이 아직 못 받은 revision 뒤의 것일 수 있다.** 웹은 그 ops 를
- * 제 문서에 얹고 `headSeq`를 `seq`로 옮긴다(`apps/web/src/store/editor-store.ts`의 `applyMarkerChange` —
- * `seq`가 제 다음 번호인지 보지 않는다). 사이의 revision 프레임이 응답보다 늦게 닿으면 그 프레임은
- * `seq ≤ headSeq`로 건너뛰어져 화면이 그 revision 을 잃는다. 앞 게시의 프레임은 그 커밋 직후에 나가고
- * 뒤 게시의 응답은 제 트랜잭션을 마친 뒤에 나가므로 대개 프레임이 먼저 닿는다 — 잠그기 전에 읽을 때도
- * 앞 게시가 커밋된 직후에 도착한 게시가 같은 순서에 놓였다. 닫는 것은 웹이 `seq`를 보는 것이다.
+ * `PUT .../schema`는 다르다 — 문서 한 벌을 통째로 올리는 호출자의 것이라 잠그기 전에 읽은 `head_seq`로 낡음을 본다(그 라우트의
+ * 주석에 경합 창이 적혀 있다).
+ *
+ * **대가 — 응답의 `markerOps`·`seq`는 보낸 화면이 아직 못 받은 revision 뒤의 것일 수 있다.** 웹은 `seq`가 제 다음 번호가
+ * 아니면 사이 프레임을 기다렸다가 제 차례에 얹는다(`apps/web/src/store/editor-store.ts`의 `applyMarkerChange` «내 다음 번호가
+ * 아니면 사이 프레임을 기다린다»). 문서를 안 바꾼 갈래(`markerOps: []`)의 `seq`는 그 요청이 본 `head_seq`이고 웹은 그것으로
+ * `headSeq`를 안 옮긴다.
  *
  * ## 남의 코멘트를 고칠 수 있는가: 수정은 못 하고 삭제는 한다
  *
@@ -102,7 +101,7 @@
  * 계약"*이 아니게 되고, 다음 사람이 순서를 뒤집어도 이 결함이 다시 나지 않는다.
  * (그래서 `POST`의 던지기를 `return`으로 바꿔도 지금은 죽는 테스트가 없다 — 그 자리의 순서가 아직 지키고 있다.)
  *
- * **규칙 2 — 쓰기는 페이지를 먼저 잠그고, 잠그기 전에 읽은 `head_seq`가 아직 유효한지 본다.**
+ * **규칙 2 — 쓰기는 페이지를 먼저 잠그고, 잠근 뒤의 문서로 센다.**
  *
  * `applyEdit`이 이미 `lockPageForEdit`을 갖고 있지만(그것이 「번호 부여가 편집 파이프라인을 지난다」가 성립하는 이유다) **문서를
  * 안 바꾸는 갈래는 그 잠금을 지나지 않는다** — 그 갈래가 *"이 노드에 코멘트가 몇 개
@@ -110,17 +109,12 @@
  * **같은 노드의 마지막 둘을 동시에 지우면 둘 다 *"마지막이 아니다"*로
  * 판정해 고아 번호가 남는다.**
  *
- * 그래서 삭제는 `lockAndCheck`가 (1) 페이지 행을 `FOR UPDATE`로 잠가 **그 페이지의 코멘트 쓰기를
- * 직렬화**하고 (2) 잠근 뒤의 `head_seq`가 요청 시작에 읽은 값과 같은지 본다. 다르면
- * `stale`이다 — **문서를 안 바꾸는 갈래에도 낙관적 잠금을 적용하는 것이 요점이다.** 게시는 같은 잠금을
- * 잡되 (2) 대신 잠근 뒤의 문서로 번호를 다시 센다(「게시는 잠근 뒤의 문서로 번호를 매긴다」).
+ * 그래서 셋 다 먼저 페이지 행을 `FOR UPDATE`로 잠가 **그 페이지의 코멘트 쓰기를 직렬화**하고(`lockPageForEdit`), 센 것은
+ * 잠근 행의 문서에서 센다(「번호는 잠근 뒤의 문서로 센다」). 예외는 **바꿀 것이 없는 재번호** 하나다 — 잠그기 전에 읽은 문서에서
+ * 이미 바꿀 것이 없으면 아무것도 안 쓰고 끝난다(잠그면 복원을 까닭 없이 기다린다).
  *
  * **비용은 쓰기 하나당 `SELECT … FOR UPDATE` 한 문장이다.** 코멘트 쓰기는 사람이 타이핑하는
  * 속도로 일어나므로 재지 않았다 — 재야 할 만큼 잦은 경로가 아니다.
- *
- * **삭제의 `baseSeq`는 잠그기 *전*에 읽는다**(위 대가 2). 잠근 뒤의 값을 쓰면 비교가 항상
- * 참이 되어 낙관적 잠금이 죽는다 — 잠금은 **직렬화**를 위한 것이고 `baseSeq`는 **충돌
- * 감지**를 위한 것이라 둘의 시점이 달라야 한다. 게시는 충돌을 감지할 것이 없다 — 번호를 잠근 뒤에 센다.
  *
  * ## 번호는 있는데 코멘트 행이 없는 노드
  *
@@ -169,6 +163,7 @@ import {
 import { findPageById, lockPageForEdit, lockPageShared } from '../repos/pages'
 import { lockProjectShared } from '../repos/projects'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
+import { runRevisionTransaction, type Settled, type WrittenRevision } from '../services/lost-commit'
 import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
 
 /**
@@ -184,11 +179,14 @@ import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
  */
 class EditRollback extends Error {
   readonly outcome: Extract<EditOutcome, { ok: false }>
+  /** 파이프라인에 넘긴 `baseSeq` — 409 문장에 싣는다(`editOutcomeToApiError`). */
+  readonly baseSeq: number
 
-  constructor(outcome: Extract<EditOutcome, { ok: false }>) {
+  constructor(outcome: Extract<EditOutcome, { ok: false }>, baseSeq: number) {
     super(`편집 파이프라인이 실패했습니다: ${outcome.reason}`)
     this.name = 'EditRollback'
     this.outcome = outcome
+    this.baseSeq = baseSeq
   }
 }
 
@@ -298,42 +296,30 @@ async function rebroadcastPostRevision(app: FastifyInstance, projectId: string, 
 }
 
 /**
- * `withTransaction`을 돌리되 `EditRollback`을 HTTP 에러로 옮긴다. **쓰기 셋이 이것만 쓴다** —
+ * 트랜잭션을 돌리되 `EditRollback`을 HTTP 에러로 옮긴다. **쓰기 셋이 이것만 쓴다** —
  * `try/catch`를 자리마다 쓰면 한 자리가 빠졌을 때 500이 나간다.
+ *
+ * **COMMIT 답을 잃으면 `revisionOf`가 낸 revision 을 새 연결로 확인한다**(`services/lost-commit.ts`) — 보이면 원래 성공처럼
+ * 답하고, 그것이 머리일 때만 `broadcast`가 참이다. 삭제 · 재번호가 준다. **게시는 안 준다** — 웹이 같은 멱등 키로 다시 보내
+ * 재생이 번호 프레임을 다시 보낸다(`rebroadcastPostRevision`). 둘이 겹치면 한 게시의 성공을 두 길이 저마다 판정한다.
  */
 async function runWrite<T>(
   db: DbHandle,
-  baseSeq: number,
+  pageId: string,
   fn: (trx: DbHandle) => Promise<T>,
-): Promise<T> {
+  revisionOf: (result: T) => WrittenRevision | null = () => null,
+): Promise<Settled<T>> {
   try {
-    return await withTransaction(db, fn)
+    return await runRevisionTransaction(db, pageId, fn, revisionOf)
   } catch (error) {
-    if (error instanceof EditRollback) throw editOutcomeToApiError(error.outcome, baseSeq)
+    if (error instanceof EditRollback) throw editOutcomeToApiError(error.outcome, error.baseSeq)
     throw error
   }
 }
 
-/**
- * 페이지를 잠그고 **잠그기 전에 읽은 `baseSeq`가 아직 유효한지** 본다(머리말의 규칙 2).
- *
- * 잠금은 그 페이지의 코멘트 쓰기를 **직렬화**한다 — 문서를 안 바꾸는 갈래(코멘트 수를
- * 세어 번호를 지울지 정하는 자리)가 그 잠금을 안 지나면 두 요청이 같은 답을 본다.
- *
- * 실패를 **던진다** — 이 함수를 부르는 자리는 전부 이미 트랜잭션 안이고, 그 구간에서
- * 쓴 것이 있으면 되돌려야 하기 때문이다(규칙 1과 같은 근거).
- */
-async function lockAndCheck(
-  trx: DbHandle,
-  projectId: string,
-  pageId: string,
-  baseSeq: number,
-): Promise<void> {
-  const locked = await lockPageForEdit(trx, projectId, pageId)
-  if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' })
-  if (locked.headSeq !== baseSeq) {
-    throw new EditRollback({ ok: false, reason: 'stale', headSeq: locked.headSeq })
-  }
+/** 문서를 바꾼 코멘트 쓰기의 revision — COMMIT 답을 잃었을 때 확인이 찾는다(`runWrite`). */
+function markerRevision(result: { seq: number; revisionId?: string } | 'not-found'): WrittenRevision | null {
+  return result === 'not-found' || result.revisionId === undefined ? null : { revisionId: result.revisionId, seq: result.seq }
 }
 
 const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
@@ -663,7 +649,7 @@ export function commentRoutes() {
         throw unauthenticated()
       }
 
-      const { document, page } = await loadDocument(app, projectId, pageId)
+      const { document } = await loadDocument(app, projectId, pageId)
       const key = body.idempotencyKey
 
       // **이미 커밋된 같은 키는 여기 오지 않는다** — `replayBeforeGuard`가 가드 앞에서 재생했다(그것이
@@ -676,18 +662,18 @@ export function commentRoutes() {
       // 트랜잭션 안이면 SAVEPOINT로 감싸므로(`db/tx.ts`), 안쪽의 `applyEdit`이 여는
       // 트랜잭션은 이 구간의 세이브포인트가 된다. 나누면 *"번호는 붙었는데 코멘트가
       // 없다"*(머리말 「번호는 있는데 코멘트 행이 없는 노드」의 상태)가 실패 경로에서 실제로 만들어진다.
-      const result = await runWrite(app.db, page.headSeq, async (trx) => {
+      const { result } = await runWrite(app.db, pageId, async (trx) => {
         // **잠근다.** 그리고 같은 키를 한 번 더 본다 — 같은 키가 동시에 왔으면 앞 요청이 방금 커밋했다.
         // 안 보면 이 요청이 같은 키로 둘째 행을 넣으려다 유일 색인에 걸려 **500** 이다(같은 게시를 두 번
         // 보낸 사람이 «모름»을 듣는다). 페이지 행을 잠갔으므로 같은 페이지의 게시는 여기서 한 줄로 선다.
         const locked = await lockPageForEdit(trx, projectId, pageId)
-        if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' })
+        if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' }, 0)
         if (key !== undefined) {
           const existing = await findCommentByIdempotencyKey(trx, pageId, currentUser.id, key)
           if (existing !== null) return { replay: replayOf(existing, body, migrateDocument(locked.schema), locked.headSeq) }
           // **달렸다가 지워졌다.** 가드 앞에서 둘 다 못 본 것은 첫 게시가 아직 커밋 중이었기 때문이다 —
           // 그 뒤 첫 게시와 삭제가 **이 요청보다 먼저** 페이지 행 잠금을 지나 커밋했으면 여기서 묘비를 본다. 삭제도
-          // 페이지 행을 먼저 잠그므로(`lockAndCheck` — 복원은 `lockProjectForRestore`) 이 조회와 겹칠 수 없다. 이
+          // 페이지 행을 먼저 잠그므로(`lockPageForEdit` — 복원은 `lockProjectForRestore`) 이 조회와 겹칠 수 없다. 이
           // 조회가 없으면 새 행을 세운다 — 되살림이다(`test/comment-tombstone.test.ts`의 동시성 판).
           if (await hasCommentTombstone(trx, pageId, currentUser.id, key)) throw deletedKey()
         }
@@ -699,7 +685,7 @@ export function commentRoutes() {
         // 잠금 획득 **사이에** 강등이 끼는 판이다 — 같은 페이지의 남의 쓰기가 둘 사이에 줄을 서면 선다(페이지 행의 잠금
         // 대기열은 도착 순이다). 이 줄을 재생 앞으로 옮기면 그 판에서 달린 게시가 403 을 받는다.
         await recheckProjectRole(trx, request)
-        // **번호는 잠근 뒤의 문서로 매긴다**(머리말 「게시는 잠근 뒤의 문서로 번호를 매긴다」). 잠그기 전에
+        // **번호는 잠근 뒤의 문서로 매긴다**(머리말 「번호는 잠근 뒤의 문서로 센다」). 잠그기 전에
         // 읽은 문서로 매기면 그 사이 남의 첫 코멘트가 같은 번호를 가져갔거나 마지막 코멘트를 지워 번호를 없앴을
         // 수 있다 — 그 판을 409 로 거절하는 대신 지금 문서에서 다시 센다. 노드도 여기서 다시 본다.
         const current = lockedDocument(locked.schema)
@@ -731,7 +717,7 @@ export function commentRoutes() {
         // `return`으로도 지금은 안전하지만(그래서 이 던지기를 되돌려도 죽는 테스트가 없다), 그 안전이
         // **삽입이 아래에 있다는 순서**에만 기대고 있다. 셋이 같은 규칙을 쓰면 순서가
         // 계약이 아니게 된다 — 그 순서가 뒤집힌 자리가 `DELETE`다.
-        if (!outcome.ok) throw new EditRollback(outcome)
+        if (!outcome.ok) throw new EditRollback(outcome, locked.headSeq)
 
         const comment = await insertComment(trx, {
           pageId,
@@ -850,63 +836,61 @@ export function commentRoutes() {
           throw unauthenticated()
         }
 
-        const { document, page } = await loadDocument(app, projectId, pageId)
+        // 트랜잭션을 열기 전에 끊는다 — 없는 페이지 404 · 못 올리는 문서 400. 지울 번호는 잠근 뒤의 문서로 센다.
+        await loadDocument(app, projectId, pageId)
 
-        const result = await runWrite(app.db, page.headSeq, async (trx) => {
-          // **지우기 전에 잠그고 본다**(규칙 2). 두 가지를 함께 닫는다:
-          //
-          // - **동시 삭제** — 같은 노드의 마지막 둘을 동시에 지우면 잠금 없이는 둘 다
-          //   *"마지막이 아니다"*로 판정해 **고아 번호**가 남는다. 잠그면 뒤의 요청이
-          //   앞의 삭제를 보고 센다.
-          // - **낡은 문서** — 앞의 요청이 번호를 지워 `head_seq`가 올랐으면 여기서 `stale`로
-          //   끊긴다. **행을 지우기 전에** 끊기므로 *"409를 받았는데 코멘트가 사라져
-          //   있다"*가 성립하지 않는다.
-          // **묻을 트랜잭션의 첫 잠금 — 페이지 행보다 먼저**(`repos/comments.ts`의 `lockProjectForBurial`). 묘비의 FK 가
-          // 프로젝트 행에 거는 `KEY SHARE`를 페이지 행을 쥔 뒤에 처음 잡으면 복원 · 프로젝트 삭제(프로젝트 → 페이지)와
-          // 고리가 된다(`test/comment-tombstone.test.ts`의 «코멘트 삭제 ∥ 복원»).
-          await lockProjectForBurial(trx, projectId)
-          await lockAndCheck(trx, projectId, pageId, page.headSeq)
-          // **커밋 순간의 권한.** 잠금 대기 뒤의 역할로 판정한다 — 게시와 같은 자리다.
-          await recheckProjectRole(trx, request)
+        const { result, broadcast } = await runWrite(
+          app.db,
+          pageId,
+          async (trx) => {
+            // **지우기 전에 잠근다**(규칙 2). **같은 노드의 마지막 둘을 동시에 지우면** 잠금 없이는 둘 다 *"마지막이
+            // 아니다"*로 판정해 **고아 번호**가 남는다 — 잠그면 뒤의 요청이 앞의 삭제를 보고 센다.
+            // **묻을 트랜잭션의 첫 잠금 — 페이지 행보다 먼저**(`repos/comments.ts`의 `lockProjectForBurial`). 묘비의 FK 가
+            // 프로젝트 행에 거는 `KEY SHARE`를 페이지 행을 쥔 뒤에 처음 잡으면 복원 · 프로젝트 삭제(프로젝트 → 페이지)와
+            // 고리가 된다(`test/comment-tombstone.test.ts`의 «코멘트 삭제 ∥ 복원»).
+            await lockProjectForBurial(trx, projectId)
+            const locked = await lockPageForEdit(trx, projectId, pageId)
+            if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' }, 0)
+            // **커밋 순간의 권한.** 잠금 대기 뒤의 역할로 판정한다 — 게시와 같은 자리다.
+            await recheckProjectRole(trx, request)
 
-          // **삭제와 세기가 같은 트랜잭션 안이다.** 나누면 그 사이에 들어온 새 코멘트를
-          // 못 보고 번호를 지워, *"코멘트는 있는데 번호가 없는 노드"*가 만들어진다.
-          const deleted = await deleteComment(trx, pageId, commentId)
-          if (deleted === 'not-found') return 'not-found' as const
+            // **삭제와 세기가 같은 트랜잭션 안이다.** 나누면 그 사이에 들어온 새 코멘트를
+            // 못 보고 번호를 지워, *"코멘트는 있는데 번호가 없는 노드"*가 만들어진다.
+            const deleted = await deleteComment(trx, pageId, commentId)
+            if (deleted === 'not-found') return 'not-found' as const
 
-          const remaining = await countNodeComments(trx, pageId, deleted.nodeId)
-          if (remaining > 0) {
-            return { seq: page.headSeq, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
-          }
+            const unchanged = { seq: locked.headSeq, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
+            const remaining = await countNodeComments(trx, pageId, deleted.nodeId)
+            if (remaining > 0) return unchanged
 
-          // 마지막이었다. 문서에서 그 노드를 찾아 번호를 지운다. **노드가 문서에 없을 수
-          // 있다** — 코멘트가 달린 노드를 지우면 행이 남기 때문이다(머리말 「번호는 있는데 코멘트 행이 없는 노드」).
-          // 그때는 지울 번호도 없으므로 문서를 안 바꾼다.
-          const nodePath = findNodePath(document.root, deleted.nodeId)
-          const node = nodePath === undefined ? undefined : nodeAt(document, deleted.nodeId)
-          const ops = nodePath !== undefined && node !== undefined ? clearMarkerOps(node, nodePath) : []
-          if (ops.length === 0) {
-            return { seq: page.headSeq, markerOps: [] as PatchOp[], warnings: NO_WARNINGS }
-          }
+            // 마지막이었다. **잠근 문서에서** 그 노드를 찾아 번호를 지운다(머리말 「번호는 잠근 뒤의 문서로 센다」). **노드가
+            // 문서에 없을 수 있다** — 코멘트가 달린 노드를 지우면 행이 남기 때문이다(머리말 「번호는 있는데 코멘트 행이 없는 노드」).
+            // 그때는 지울 번호도 없으므로 문서를 안 바꾼다.
+            const document = lockedDocument(locked.schema)
+            const nodePath = findNodePath(document.root, deleted.nodeId)
+            const node = nodePath === undefined ? undefined : nodeAt(document, deleted.nodeId)
+            const ops = nodePath !== undefined && node !== undefined ? clearMarkerOps(node, nodePath) : []
+            if (ops.length === 0) return unchanged
 
-          const outcome = await applyEdit(trx, {
-            projectId,
-            pageId,
-            baseSeq: page.headSeq,
-            ops,
-            actor: requestActor(request),
-          })
-          // **던진다 — `return`이 아니다**(규칙 1). 여기가 순서에 기댈 수 없는 자리다: 위에서 행을
-          // 이미 지웠으므로 `return`하면 `withTransaction`이 그 삭제를 **커밋한 채**
-          // 409를 낸다.
-          if (!outcome.ok) throw new EditRollback(outcome)
+            const outcome = await applyEdit(trx, {
+              projectId,
+              pageId,
+              baseSeq: locked.headSeq,
+              ops,
+              actor: requestActor(request),
+            })
+            // **던진다 — `return`이 아니다**(규칙 1). 여기가 순서에 기댈 수 없는 자리다: 위에서 행을
+            // 이미 지웠으므로 `return`하면 트랜잭션이 그 삭제를 **커밋한 채** 409를 낸다.
+            if (!outcome.ok) throw new EditRollback(outcome, locked.headSeq)
 
-          return { seq: outcome.seq, markerOps: ops, warnings: outcome.warnings }
-        })
+            return { seq: outcome.seq, markerOps: ops, warnings: outcome.warnings, revisionId: outcome.revisionId }
+          },
+          markerRevision,
+        )
 
         if (result === 'not-found') throw notFound()
 
-        notifyMarkerChange(app, request, projectId, pageId, result)
+        if (broadcast) notifyMarkerChange(app, request, projectId, pageId, result)
 
         // 응답에서 `warnings`를 뺀다 — 이 라우트의 계약은 `{ seq, markerOps }`다
         // (`apps/api/README.md` 「엔드포인트」 절의 표). 넓히려면 그 계약부터 바꾼다.
@@ -933,35 +917,43 @@ export function commentRoutes() {
           throw unauthenticated()
         }
 
+        // 트랜잭션을 열기 전에 끊는다 — 없는 페이지 404 · 못 올리는 문서 400. **바꿀 것이 없으면 여기서 끝낸다** — 아무것도
+        // 안 쓰는 요청이 페이지 행을 잠그면 복원 · 남의 쓰기를 까닭 없이 기다린다(`test/restore-lock-census.test.ts`의 «바꿀
+        // 번호가 없다»). 바꿀 것이 있으면 다시 매길 번호는 잠근 뒤의 문서로 센다.
         const { document, page } = await loadDocument(app, projectId, pageId)
-        const ops = renumberOps(document)
-        if (ops.length === 0) {
+        if (renumberOps(document).length === 0) {
           return { seq: page.headSeq, markerOps: [] as PatchOp[] }
         }
 
-        const outcome = await withTransaction(app.db, async (trx) => {
-          const edited = await applyEdit(trx, {
-            projectId,
-            pageId,
-            baseSeq: page.headSeq,
-            ops,
-            actor: requestActor(request),
-          })
-          // **커밋 순간의 권한.** `applyEdit`이 페이지를 잠갔다 — 그 대기 뒤의 역할로 판정한다.
-          if (edited.ok) await recheckProjectRole(trx, request)
-          return edited
-        })
-        if (!outcome.ok) {
-          throw editOutcomeToApiError(outcome, page.headSeq)
-        }
+        const { result, broadcast } = await runWrite(
+          app.db,
+          pageId,
+          async (trx) => {
+            const locked = await lockPageForEdit(trx, projectId, pageId)
+            if (locked === null) throw new EditRollback({ ok: false, reason: 'not-found' }, 0)
+            // **잠근 문서로 센다**(머리말 「번호는 잠근 뒤의 문서로 센다」) — 잠그기 전에 읽은 문서로 세면 그 사이 남의
+            // 편집이 커밋됐을 때 까닭 없이 409 다.
+            const ops = renumberOps(lockedDocument(locked.schema))
+            // 그 사이 남이 이미 맞춰 놓았다 — revision 을 안 쌓는다. 권한 재확인도 없다: 아무것도 안 쓴다.
+            if (ops.length === 0) return { seq: locked.headSeq, markerOps: ops, warnings: NO_WARNINGS }
+            const edited = await applyEdit(trx, {
+              projectId,
+              pageId,
+              baseSeq: locked.headSeq,
+              ops,
+              actor: requestActor(request),
+            })
+            if (!edited.ok) throw new EditRollback(edited, locked.headSeq)
+            // **커밋 순간의 권한.** 페이지를 잠갔다 — 그 대기 뒤의 역할로 판정한다.
+            await recheckProjectRole(trx, request)
+            return { seq: edited.seq, markerOps: ops, warnings: edited.warnings, revisionId: edited.revisionId }
+          },
+          markerRevision,
+        )
 
-        notifyMarkerChange(app, request, projectId, pageId, {
-          seq: outcome.seq,
-          markerOps: ops,
-          warnings: outcome.warnings,
-        })
+        if (broadcast) notifyMarkerChange(app, request, projectId, pageId, result)
 
-        return { seq: outcome.seq, markerOps: ops }
+        return { seq: result.seq, markerOps: result.markerOps }
       },
     )
   }
@@ -975,9 +967,8 @@ export function commentRoutes() {
  * `migrateDocument`에 태우므로, 여기서 안 올린 문서로 `findNodePath`를 하면 마이그레이션이
  * 트리 모양을 바꾸는 날 두 경로가 갈린다.
  *
- * **읽기와 잠금 사이에 경합 창이 있다** — 삭제 · 재번호는 그 사이 다른 편집이 커밋되면 `applyEdit`이
- * `stale`을 내고 409가 된다(머리말의 대가 2). 게시는 잠근 뒤에 다시 읽는다(머리말 「게시는 잠근 뒤의
- * 문서로 번호를 매긴다」).
+ * **여기서 읽은 문서로 번호를 세지 않는다** — 셋 다 트랜잭션을 열기 전에 끊으려고(없는 페이지 · 노드 · 못 올리는 버전)
+ * 읽고, 문서에 낼 변화는 잠근 뒤의 문서로 센다(머리말 「번호는 잠근 뒤의 문서로 센다」).
  */
 async function loadDocument(
   app: FastifyInstance,
