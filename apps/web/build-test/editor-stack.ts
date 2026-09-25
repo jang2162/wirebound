@@ -241,6 +241,12 @@ export interface EditorStack {
   queueRow(table: 'pages', id: string): Promise<QueuedRowHold>
   /** 브라우저 → 웹 방향의 WS 연결(요청 줄에 `/ws`) 바이트만 `ms` 늦추는 프록시. 그 밖의 연결은 그대로 지난다. */
   startWsDelay(ms: number): Promise<{ origin: string; close(): Promise<void> }>
+  /**
+   * **서버 → 브라우저 방향**의 바이트만 `ms` 늦추는 프록시(순서는 지킨다). 첫 요청 줄이 `match`(기본: WS 연결 `GET …/ws`)에 맞는
+   * 연결만 늦춘다 — 서로 다른 연결로 가는 두 메시지의 도착 순서(WS 프레임 대 REST 응답)를 뒤집는 자리다(`CLAUDE.md` «서로 다른 연결로
+   * 가는 두 메시지의 도착 순서»). `delayed()` 는 지금까지 늦춘 덩어리 수 — 판이 섰는지의 카나리아다.
+   */
+  startDownDelay(ms: number, match?: RegExp): Promise<{ origin: string; delayed(): number; close(): Promise<void> }>
   /** 고른 연결만 끊는 프록시(`CutProxy`). */
   startCutProxy(): Promise<CutProxy>
   close(): Promise<Teardown>
@@ -654,6 +660,12 @@ export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok:
         closers.push(proxy.close)
         return { origin: `http://127.0.0.1:${proxy.port}`, close: proxy.close }
       },
+      async startDownDelay(ms, match = WS_REQUEST_LINE) {
+        const proxy = await startDownDelayProxy(webPort, ms, match)
+        ports.push(proxy.port)
+        closers.push(proxy.close)
+        return { origin: `http://127.0.0.1:${proxy.port}`, delayed: proxy.delayed, close: proxy.close }
+      },
       async startCutProxy() {
         const proxy = await startCutProxy(webPort)
         ports.push(proxy.port)
@@ -713,6 +725,73 @@ function startWsDelayProxy(targetPort: number, ms: number): Promise<{ port: numb
       const port = typeof address === 'object' && address !== null ? address.port : 0
       resolve({
         port,
+        close: () => {
+          if (closed) return Promise.resolve()
+          closed = true
+          for (const socket of sockets) socket.destroy()
+          return new Promise((done) => server.close(() => done()))
+        },
+      })
+    })
+  })
+}
+
+/** WS 연결의 첫 요청 줄 — vite 의 HMR 소켓(`GET /?token=…`)은 안 맞는다. */
+const WS_REQUEST_LINE = /^GET [^\r\n]*\/ws[ ?]/
+
+/**
+ * `EditorStack.startDownDelay` 의 몸통 — 브라우저 → 웹 은 그대로, 웹 → 브라우저 는 첫 요청 줄이 `match` 에 맞는 연결만 `ms` 늦춘다.
+ * 덩어리마다 «앞 덩어리의 시각 이후 · 받은 때 + ms» 에 쓴다 — 순서가 안 뒤바뀐다.
+ */
+function startDownDelayProxy(
+  targetPort: number,
+  ms: number,
+  match: RegExp,
+): Promise<{ port: number; delayed(): number; close(): Promise<void> }> {
+  const sockets = new Set<net.Socket>()
+  let delayedChunks = 0
+  const server = net.createServer((client) => {
+    const upstream = net.connect(targetPort, '127.0.0.1')
+    sockets.add(client)
+    sockets.add(upstream)
+    let slow: boolean | null = null
+    let due = 0
+    client.on('data', (chunk) => {
+      if (slow === null) slow = match.test(chunk.toString('latin1'))
+      upstream.write(chunk)
+    })
+    upstream.on('data', (chunk) => {
+      if (!slow) {
+        client.write(chunk)
+        return
+      }
+      delayedChunks += 1
+      const now = performance.now()
+      due = Math.max(due, now + ms)
+      setTimeout(() => {
+        if (!client.destroyed) client.write(chunk)
+      }, due - now)
+    })
+    const end = () => {
+      client.destroy()
+      upstream.destroy()
+      sockets.delete(client)
+      sockets.delete(upstream)
+    }
+    client.on('error', end)
+    upstream.on('error', end)
+    client.on('close', end)
+    // 위쪽이 닫히면 늦춘 덩어리가 다 나간 뒤에 닫는다 — 곧바로 닫으면 뒤의 바이트를 잃는다.
+    upstream.on('close', () => setTimeout(end, Math.max(0, due - performance.now())))
+  })
+  let closed = false
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      resolve({
+        port: typeof address === 'object' && address !== null ? address.port : 0,
+        delayed: () => delayedChunks,
         close: () => {
           if (closed) return Promise.resolve()
           closed = true
