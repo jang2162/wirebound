@@ -21,7 +21,7 @@
 
 | 무엇 | 요구 | 왜 |
 |---|---|---|
-| **Node** | **≥ 22.9** (`package.json`의 `engines`) | 스크립트가 `--env-file-if-exists`를 쓴다. 그 플래그가 22.9에서 들어왔다 |
+| **Node** | **≥ 22.18** (`package.json`의 `engines`) | `pnpm build` 의 tsdown 이 설정 파일을 Node 의 타입 벗기기로 읽는데, 그것이 22.18 부터 기본으로 켜져 있다. 22.17 이하는 설치는 되고 **빌드가 죽는다**(「배포하려면」 절) |
 | **pnpm** | **10.0.0** (`packageManager`) | 워크스페이스 심링크와 `node_modules` 배치가 이 저장소의 전제다. npm·yarn으로는 안 된다 |
 | **Docker** | 아무 최신판 | Postgres 하나를 띄운다. DB를 직접 갖고 있으면 없어도 된다(「세우기」 절의 끝) |
 | **Chromium** | **PPTX의 화면 이미지를 쓸 때만** | 저장소가 브라우저 바이너리를 안 들고 있다. 「PPTX 의 화면 이미지」 절이 그 자리다 |
@@ -965,7 +965,7 @@ Docker 의 리눅스 컨테이너(linux/arm64 · `node:22-slim` = Debian 12 · N
 
 | 무엇 | 필요 | 안 하면 무엇이 보이나 (쟀다) |
 |---|---|---|
-| **Node ≥ 22.9** | 스크립트가 `--env-file-if-exists` 를 쓴다 | 22.8 은 `node: bad option: --env-file-if-exists=…` 로 **모든 스크립트가 죽는다**. 22.9 는 된다(`node:22.8.0-alpine` · `node:22.9.0-alpine`) |
+| **Node ≥ 22.18** | `pnpm build` 의 tsdown 이 `tsdown.config.ts` 를 Node 의 타입 벗기기(`process.features.typescript` — 22.18 부터 기본)로 읽는다. 그것이 없으면 `unrun` 으로 읽으려 하는데 이 저장소에 없다 | 22.17 은 설치 0 · **빌드 1**(`Failed to import module "unrun"`) — api 가 `@wirebound/schema/dist` 를 못 찾아 안 뜬다. 22.18 · 24.10 은 빌드 0. 더 낮으면 먼저 다른 데서 죽는다 — 22.13 이하는 `corepack enable` 뒤 `pnpm` 이 `Cannot find matching keyid`(22.14 는 된다), 22.9 는 빌드가 `Cannot find module '@rolldown/binding-linux-arm64-gnu'`(바인딩의 `engines` 가 안 맞아 pnpm 이 조용히 건너뛴다), 22.8 은 `node: bad option: --env-file-if-exists=…` 로 모든 스크립트가 죽는다 |
 | **devDependencies 까지 설치** | `start` · `migrate` · `reset-password` 가 `tsx`(devDependency)로 돈다 | `pnpm install --prod` 뒤 `pnpm --filter @wirebound/api start` → `sh: 1: tsx: not found` |
 | **`pnpm build`** | 「테스트는 통과하는데 서버만 안 뜬다」 절과 같은 까닭 | — |
 | **`HOST=0.0.0.0`** | 기본값이 `127.0.0.1` 이다 | 컨테이너 포트를 열어도 **밖에서 안 닿는다**(호스트 `curl` 000 · 컨테이너 안 200) |
@@ -973,6 +973,10 @@ Docker 의 리눅스 컨테이너(linux/arm64 · `node:22-slim` = Debian 12 · N
 | **`NODE_ENV=production` 이면 TLS** | 세션 쿠키에 `Secure` 가 붙는다(`apps/api/src/auth/plugin.ts`) | http 로 연 화면에서 **로그인 200 인데 바로 다음 `/api/auth/me` 가 401** — 브라우저가 쿠키를 안 받는다(쿠키 0). `http://127.0.0.1` 은 Chrome 이 안전한 출처로 봐 된다 — **그래서 로컬에서는 안 보인다.** 헤드리스 Chrome 에 `--host-resolver-rules=MAP wb.test 127.0.0.1` 로 `http://wb.test` 를 열어 쟀다. `development` 면 둘 다 200 |
 | **PID 1 은 node 로** | `pnpm` 을 거치면 `SIGTERM` 이 서버의 정상 종료에 안 닿는다 | `docker stop` 에 종료 코드 1(`--init` 이면 143) · «종료합니다» 줄 0 · **도는 요청이 소켓째 끊긴다**(`UND_ERR_SOCKET`). `apps/api` 에서 `node --import tsx src/main.ts`(또는 `tsx src/main.ts`)를 PID 1 로 두면 종료 0 · 도는 요청 200 |
 | **init 을 둔다**(`docker run --init` · tini) | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). `--init` 이면 0 |
+
+Node 판을 재는 법 — 저장소 뿌리에서 `git archive HEAD | docker run -i --rm node:<판>-slim sh -c 'mkdir /app && cd /app && tar xf - &&
+corepack enable && pnpm install --frozen-lockfile && pnpm build'`. tsdown 의 `engines`(`^22.18.0 || >=24.11.0`)는 24.0–24.10 을
+빼지만 그 판에서도 빌드가 돌아(24.10 에서 쟀다) `engines` 는 `>=22.18.0` 으로 둔다.
 
 **환경 값의 목록과 뜻은 `apps/api/.env.example` 이 소유한다.** 배포에서 달라지는 것은 위 표의 `HOST` · `NODE_ENV` 와,
 **`POSTGRES_PORT` 를 두지 않는 것**이다 — 그 값은 compose 가 여는 포트이고, 있으면 접속 문자열과 포트가 맞는지 검사한다

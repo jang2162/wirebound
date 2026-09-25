@@ -2,7 +2,7 @@
 
 Fastify 5 기반 REST + WebSocket 서버. 설계서 편집을 지원하는 백엔드다.
 
-필요한 것: Docker, Node ≥ 22.9, pnpm.
+필요한 것: Docker, Node ≥ 22.18, pnpm(까닭은 최상위 README 「필요한 것」 절).
 
 ## 기동 절차
 
@@ -46,7 +46,7 @@ pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바�
 ### 이 서버가 env 를 읽는 방식
 
 `dev`·`start`·`migrate`·`migrate:down`·`reset-password` 스크립트가 전부 `tsx`에
-`--env-file-if-exists=.env`를 붙여 실행하므로(Node 22.9+, `apps/api/package.json`),
+`--env-file-if-exists=.env`를 붙여 실행하므로(`apps/api/package.json` — 그 플래그는 Node 22.9 부터이고 이 저장소의 하한은 그보다 높다),
 `apps/api/.env`가 있으면 자동으로 읽는다 — 이 프로젝트는 `dotenv` 같은 별도 패키지를
 쓰지 않는다.
 
