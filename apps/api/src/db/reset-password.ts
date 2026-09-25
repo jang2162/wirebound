@@ -8,8 +8,8 @@
  * 화면에도 API 에도 비밀번호를 바꾸는 길이 없고, 시딩(`db/seed-user.ts`)은 이미 있는 이메일의 비밀번호를
  * 덮어쓰지 않는다. 그래서 잊은 비밀번호를 되찾는 길은 이 명령 하나다(최상위 README 「비밀번호를 잊었다」).
  *
- * **서버와 같은 함수를 부른다** — 규칙은 `auth/credentials.ts` 의 `NormalizedEmail` · `RawPassword`, 해시는
- * `auth/password.ts` 의 `hashPassword`(비용은 서버와 같은 `PASSWORD_SCRYPT_N`), 세션 삭제는 `auth/session.ts` 의
+ * **서버와 같은 함수를 부른다** — 규칙은 `auth/credentials.ts` 의 `NormalizedEmail` · `NewPassword`(NFC 판을 세고 낸다),
+ * 해시는 `auth/password.ts` 의 `hashPassword`(비용은 서버와 같은 `PASSWORD_SCRYPT_N`), 세션 삭제는 `auth/session.ts` 의
  * `destroyUserSessions`. 손으로 친 SQL · 셸 조각으로 같은 일을 하면 규칙이 두 벌이 되고, 붙여 넣기 · Ctrl-D ·
  * 짧은 비밀번호에서 조용히 «아무도 못 쓰는 계정»이 남는다.
  *

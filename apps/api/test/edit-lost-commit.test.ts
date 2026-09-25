@@ -12,7 +12,7 @@ import { sql } from 'kysely'
 import { buildApp } from '../src/app'
 import { createDb, createPool } from '../src/db/client'
 import { DB_UNREACHABLE_WRITE_MESSAGE } from '../src/http/error-handler'
-import { DB_WRITE_NOT_APPLIED_MESSAGE } from '../src/services/lost-commit'
+import { DB_WRITE_NOT_APPLIED_MESSAGE, LOST_COMMIT_PROBE_MS } from '../src/services/lost-commit'
 import type { ServerFrame } from '../src/ws/protocol'
 import {
   addMember,
@@ -41,6 +41,8 @@ const pageChanged = (frames: ServerFrame[]): PageChanged[] => frames.filter((fra
 const PROBE = 'as "committed"'
 /** 커밋을 묻는 질의의 글자(`services/lost-commit.ts`의 `settleTransaction`). */
 const XACT = 'pg_xact_status'
+/** 확인이 503 «모름»을 내기까지의 한도 — 확인의 한도(`LOST_COMMIT_PROBE_MS`)에 요청의 나머지 몫을 더한 것. */
+const PROBE_LIMIT_MS = LOST_COMMIT_PROBE_MS + 500
 
 /** 그 페이지의 revision 행이 설 때 COMMIT 을 `ms` 늦춘다 — `DEFERRABLE INITIALLY DEFERRED` 제약 트리거의 `pg_sleep`. */
 async function slowCommit<T>(pageId: string, ms: number, run: () => Promise<T>): Promise<T> {
@@ -181,8 +183,43 @@ describe('COMMIT 답을 잃은 편집', () => {
         expect(ctx.proxy.fired).toBe(true)
         expect(res.statusCode, res.body).toBe(503)
         expect(res.json().error.message).toBe(DB_UNREACHABLE_WRITE_MESSAGE)
-        expect(Date.now() - started).toBeLessThan(2_500)
+        expect(Date.now() - started).toBeLessThan(PROBE_LIMIT_MS)
         expect(pageChanged(await fx.watcher.quiet())).toEqual([])
+      })
+    })
+  })
+
+  /**
+   * **확인의 한도는 두 단계(결말 · 머리)가 한 마감을 나눠 쓴다**(`services/lost-commit.ts`의 «확인의 시간 한도»). 결말을 한도
+   * 끝 가까이에서 알면 머리를 읽을 몫은 남은 만큼뿐이다 — 단계마다 한도를 새로 주면 응답이 한도의 두 배까지 늦는다. COMMIT 을
+   * 950ms 늦춰 결말을 한도 끝에서 알게 하고, 머리를 읽는 질의를 붙잡는다.
+   */
+  it('결말을 한도 끝에서 알면 머리를 읽는 몫은 남은 만큼이다 — 503 이 한도 안에 난다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await slowCommit(fx.pageId, 950, async () => {
+        ctx.proxy.halfCutOnQuery('commit')
+        const probe = ctx.proxy.holdQuery(PROBE, 5_000)
+        let probed = false
+        void probe.held.then(
+          () => {
+            probed = true
+          },
+          () => undefined,
+        )
+        try {
+          const started = Date.now()
+          const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_edge') } })
+          const elapsed = Date.now() - started
+          expect(ctx.proxy.fired).toBe(true)
+          // 결말(`committed`)을 한도 안에 알고 머리를 읽으러 갔다 — 판이 섰다.
+          expect(probed).toBe(true)
+          expect(res.statusCode, res.body).toBe(503)
+          expect(elapsed).toBeLessThan(PROBE_LIMIT_MS)
+          expect(await revisionSeqs(fx.pageId)).toEqual([1])
+        } finally {
+          probe.release()
+        }
       })
     })
   })
@@ -199,7 +236,7 @@ describe('COMMIT 답을 잃은 편집', () => {
       const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_slow') } })
       const elapsed = Date.now() - started
       expect(res.statusCode, res.body).toBe(503)
-      expect(elapsed).toBeLessThan(2_500)
+      expect(elapsed).toBeLessThan(PROBE_LIMIT_MS)
       // 커밋은 됐다 — 그래서 «모름»이 참이다(«확정 실패»가 아니다).
       expect(await revisionSeqs(fx.pageId)).toEqual([1])
     })
