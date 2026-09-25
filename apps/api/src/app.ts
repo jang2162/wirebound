@@ -5,6 +5,7 @@ import { registerProjectRoleDecorator } from './auth/roles'
 import type { ApiConfig } from './config'
 import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
+import { logDestination } from './log-destination'
 import { authRoutes } from './routes/auth'
 import { commentRoutes } from './routes/comments'
 import { exportRoutes } from './routes/export'
@@ -35,7 +36,7 @@ export interface BuildAppOptions {
   config: ApiConfig
   /**
    * 테스트 전용: pino가 쓸 목적지 스트림을 주입한다. 운영 코드(`main.ts`)는 절대
-   * 채우지 않는다 — 생략하면 pino가 원래 목적지(표준출력)를 그대로 쓴다.
+   * 채우지 않는다 — 생략하면 표준출력으로 가는 `logDestination()`을 쓴다(`log-destination.ts`).
    *
    * 이 필드가 존재하는 유일한 이유는 `test/logging.test.ts`다. `buildApp`이
    * `@fastify/cookie`와 세션 인증 훅을 등록해 매 요청 쿠키를 읽으므로, 로그 리다크션이
@@ -172,7 +173,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   const loggerOptions = buildLoggerOptions(config)
   const app = Fastify({
-    logger: loggerStream ? { ...loggerOptions, stream: loggerStream } : loggerOptions,
+    // 쓰기 오류(닫힌 터미널의 EIO)에 멈추지 않는 목적지를 건다 — 그 까닭은 `log-destination.ts`의 머리말.
+    logger: { ...loggerOptions, stream: loggerStream ?? logDestination() },
   })
 
   // validatePage(routes/pages.ts의 PUT .../schema 게이트)가 기대하는 컴포넌트

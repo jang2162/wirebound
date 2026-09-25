@@ -10,11 +10,12 @@ import { request as httpRequest } from 'node:http'
 import { join } from 'node:path'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { closeOnSignals, SHUTDOWN_SIGNALS } from '../src/shutdown'
+import { closeOnSignals, SHUTDOWN_SIGNALS, type TerminalProbe } from '../src/shutdown'
 import { SRC_ROOT, stripComments } from './source-census'
 
 class FakeProcess extends EventEmitter {
   exits: number[] = []
+  ppid = 4242
   exit(code: number): void {
     this.exits.push(code)
   }
@@ -30,8 +31,8 @@ afterEach(async () => {
   app = undefined
 })
 
-/** 답을 붙잡는 라우트 하나를 둔 앱 · 가짜 프로세스 · 가짜 DB. */
-async function harness(graceMs = 60_000) {
+/** 답을 붙잡는 라우트 하나를 둔 앱 · 가짜 프로세스 · 가짜 DB. 터미널은 안 본다(`terminal`을 주면 그것을 본다). */
+async function harness(graceMs = 60_000, terminal: TerminalProbe | null = null) {
   app = Fastify({ logger: false })
   let entered!: () => void
   const inHandler = new Promise<void>((resolve) => (entered = resolve))
@@ -45,7 +46,7 @@ async function harness(graceMs = 60_000) {
   const { port } = app.server.address() as { port: number }
   const proc = new FakeProcess()
   const db = { destroy: vi.fn(async () => {}) }
-  closeOnSignals(app, db, { process: proc, graceMs })
+  closeOnSignals(app, db, { process: proc, graceMs, terminal, lifelineMs: 10 })
   const reply = new Promise<{ status: number; body: string }>((resolve, reject) => {
     // 답한 뒤 연결을 남기지 않는다 — keep-alive 로 남으면 `close()`가 72s 를 기다린다(`app.ts`의 `closeConnectionsAfterReplyWhileClosing`).
     const req = httpRequest({ host: '127.0.0.1', port, path: '/slow', agent: false }, (res) => {
@@ -107,6 +108,58 @@ describe('신호를 받으면', () => {
     await vi.waitFor(() => expect(proc.exits).toEqual([1]), { timeout: 5_000 })
     expect(Date.now() - started).toBeGreaterThanOrEqual(140)
     expect(db.destroy).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * **신호 없이 오는 «닫아라» 둘**(`shutdown.ts`의 «신호 없이 오는» 절) — 터미널이 끊겼거나 띄운 부모가 끝났다. 끊긴 진짜 터미널이
+ * 0 바이트 쓰기에 EIO 를 내는 것은 pty 로만 재진다(그 절의 잰 값).
+ */
+describe('신호 없이', () => {
+  it('터미널이 끊기면(0 바이트 쓰기가 EIO) 도는 요청을 끝까지 답한 뒤 0 으로 끝낸다', async () => {
+    let lost = false
+    const probed: string[] = []
+    const { proc, db, reply } = await harness(60_000, async () => {
+      const code = lost ? 'EIO' : undefined
+      probed.push(code ?? 'ok')
+      return code
+    })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    // 터미널이 살아 있는 동안은 여러 번 봐도 안 닫는다.
+    expect(probed.length).toBeGreaterThanOrEqual(2)
+    expect(app!.server.listening).toBe(true)
+
+    lost = true
+    await vi.waitFor(() => expect(app!.server.listening).toBe(false))
+    expect(proc.exits).toEqual([])
+    release()
+    expect(await reply).toEqual({ status: 200, body: '{"done":true}' })
+    await vi.waitFor(() => expect(proc.exits).toEqual([0]))
+    expect(db.destroy).toHaveBeenCalledTimes(1)
+  })
+
+  it('EIO 가 아닌 터미널 쓰기 오류로는 닫지 않는다', async () => {
+    let probes = 0
+    await harness(60_000, async () => {
+      probes++
+      return 'EAGAIN'
+    })
+    await vi.waitFor(() => expect(probes).toBeGreaterThanOrEqual(3))
+    expect(app!.server.listening).toBe(true)
+  })
+
+  it('띄운 부모가 끝나면(`ppid`가 바뀜) 도는 요청을 끝까지 답한 뒤 0 으로 끝낸다', async () => {
+    const { proc, db, reply } = await harness()
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(app!.server.listening).toBe(true)
+
+    proc.ppid = 1
+    await vi.waitFor(() => expect(app!.server.listening).toBe(false))
+    expect(proc.exits).toEqual([])
+    release()
+    expect(await reply).toEqual({ status: 200, body: '{"done":true}' })
+    await vi.waitFor(() => expect(proc.exits).toEqual([0]))
+    expect(db.destroy).toHaveBeenCalledTimes(1)
   })
 })
 
