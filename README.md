@@ -747,7 +747,7 @@ me@example.com 의 새 비밀번호(8–200자, 친 글자는 안 보인다):
 바꿨습니다 — me@example.com · 로그인해 둔 세션 1개를 지웠습니다
 API 토큰(wireb login)은 그대로입니다 — 2개:
   «설계서» (5e06dfcd-…) 2개 — «CI», «노트북»
-옛 비밀번호가 새어서 바꾼 것이면 이 토큰들도 거둔다 — README 「비밀번호를 잊었다」 절
+옛 비밀번호가 새어서 바꾼 것이면 이 토큰들도 거둔다 — 새 비밀번호로 에디터에 로그인해 «API 토큰» 화면(/tokens)에서
 ```
 
 - **비밀번호는 명령이 터미널에서 숨겨 묻는다** — 인자 · 환경변수 · 파이프로는 안 받는다(셋 다 셸 기록이나 `ps` 에 남는
@@ -762,42 +762,21 @@ API 토큰(wireb login)은 그대로입니다 — 2개:
 
 **옛 비밀번호가 새어서 바꾼 것이면 토큰도 거둔다.** 세션만 지워서는 못 쫓아낸다 — 토큰은 세션으로 만들고 발급자의 역할을
 그대로 가지므로, 옛 비밀번호를 쥔 사람이 세션 하나로 멤버인 프로젝트마다 토큰을 남겼을 수 있다(재설정 뒤에도 그 토큰의
-요청은 200 이다). 명령은 «잊었다»와 «새었다»를 가르지 못해 거두는 것은 사람이 한다. **화면에는 토큰 목록 · 폐기가 없다** —
-토큰 관리 API(`apps/api/README.md` 의 «API 토큰»)는 **세션으로만** 부를 수 있으므로, **새 비밀번호로 에디터에 로그인한 그
-탭**의 개발자 도구 콘솔에 붙여 넣는다. 둘 다 **자기가 만든 토큰만** 본다.
+요청은 200 이다). 명령은 «잊었다»와 «새었다»를 가르지 못해 거두는 것은 사람이 한다 — **새 비밀번호로 에디터에 로그인해
+머리 오른쪽의 «API 토큰» 화면(`/tokens`)에서 «전부 폐기»를 누른다.** 그 화면은 그 계정의 토큰을 **프로젝트를 가리지 않고**
+보여 준다 — 멤버에서 빠진 프로젝트의 토큰(지금은 404 지만 다시 멤버가 되면 사는 것)도 `멤버가 아닌 프로젝트 (<id>)` 로
+뜬다(그 프로젝트의 이름은 안 보인다 — 빠진 뒤의 이름이 새지 않게). 하나씩 거둘 수도 있고, 폐기는 두 번 누른다(확정). 자기
+CLI 의 토큰도 함께 거두므로 끝나면 `wireb login` 을 다시 한다.
 
-```js
-// 목록 — 멤버인 프로젝트마다 자기 토큰을 표로 찍는다
-(async () => {
-  const rows = []
-  for (const p of await (await fetch('/api/projects')).json())
-    for (const t of await (await fetch(`/api/projects/${p.id}/tokens`)).json())
-      rows.push({ project: p.name, token: t.name, lastUsedAt: t.lastUsedAt, projectId: p.id, tokenId: t.id })
-  console.table(rows)
-  return rows
-})()
-```
-
-```js
-// 전부 폐기 — 자기 CLI 의 토큰도 함께 거두므로 끝나면 `wireb login` 을 다시 한다
-(async () => {
-  const done = []
-  for (const p of await (await fetch('/api/projects')).json())
-    for (const t of await (await fetch(`/api/projects/${p.id}/tokens`)).json())
-      done.push({ project: p.name, token: t.name, status: (await fetch(`/api/projects/${p.id}/tokens/${t.id}`, { method: 'DELETE' })).status })
-  console.table(done)
-  return done
-})()
-```
-
-폐기는 `status` 가 204 다. 하나만 거두려면 목록의 `projectId` · `tokenId` 로 `DELETE /api/projects/<projectId>/tokens/<tokenId>`
-를 같은 콘솔에서 부른다. 멤버가 아닌 프로젝트의 토큰은 이 길로 안 보인다(그 프로젝트의 목록이 404) — 지금은 404 라 쓰이지
-않고, 다시 멤버로 들이기 전에 그 사람이 거둔다.
+화면 없이 거두려면 같은 일을 하는 API 가 있다 — `GET /api/auth/tokens` · `DELETE /api/auth/tokens/<id>` ·
+`DELETE /api/auth/tokens`(전부). **세션으로만 부른다**(토큰으로 부르면 401 — 토큰으로 토큰을 거두지 않는다).
+계약은 `apps/api/README.md` 의 «API 토큰».
 
 > **재는 법** — 일회용 계정으로 옛 비밀번호 세션에서 토큰 셋을 만들고 → 명령으로 바꾸고(출력에 3개) → 그 토큰의
-> `GET /api/projects/<id>` 가 200 인지 → 독립 헤드리스 Chrome 에서 에디터에 새 비밀번호로 로그인해 위 두 글을
-> `page.evaluate` 로 돌리고 → 폐기 204 × 3 · 그 토큰 401 × 3 · 목록 `[]` 를 본다. 명령 쪽 값은
-> `apps/api/test/reset-password.test.ts` 가 함께 잰다.
+> `GET /api/projects/<id>` 가 200 인지 → 독립 헤드리스 Chrome 에서 에디터에 새 비밀번호로 로그인해 «API 토큰» 링크로
+> 화면을 열고 → «전부 폐기» → «토큰 3개 전부 폐기 확정» → `토큰 3개를 폐기했습니다` · 그 토큰 401 × 3 · 화면에
+> `만든 API 토큰이 없습니다` 를 본다. 명령 쪽 값은 `apps/api/test/reset-password.test.ts` 가, 화면 · API 의 값은
+> `apps/web/test/routes/tokens.test.tsx` · `apps/api/test/my-tokens.test.ts` 가 함께 잰다.
 
 **바꾸지 않고 끝나는 갈래가 전부 «아무것도 바꾸지 않았습니다»를 말하고 종료 코드가 0 이 아니다:**
 
