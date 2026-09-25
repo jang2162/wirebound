@@ -14,16 +14,19 @@
  */
 import { EventEmitter } from 'node:events'
 import { readFileSync } from 'node:fs'
+import type { KyselyPlugin, PluginTransformQueryArgs, PluginTransformResultArgs, QueryResult, RootOperationNode, UnknownRow } from 'kysely'
 import { describe, expect, it } from 'vitest'
 import { verifyPassword } from '../src/auth/password'
+import { DbConnectionLostError } from '../src/db/connection-loss'
 import {
+  checkPassword,
   readHiddenLine,
   resetPassword,
   runResetPassword,
   type HiddenInput,
   type ResetPasswordIo,
 } from '../src/db/reset-password'
-import { createProject, getTestDb, signup, testConfig, withApi, type TestContext } from './helpers'
+import { addMember, createProject, getTestDb, signup, testConfig, withApi, type TestContext } from './helpers'
 
 const TEST_SCRYPT_N = testConfig().passwordScryptN
 const NEW_PASSWORD = '새-비밀번호-5678'
@@ -119,6 +122,15 @@ async function login(ctx: TestContext, email: string, password: string): Promise
   return res.statusCode
 }
 
+/** 세션으로 토큰을 발급받아 원문을 낸다. */
+async function issueToken(ctx: TestContext, cookie: { wb_session: string }, projectId: string, name: string): Promise<string> {
+  const res = await ctx.app.inject({ method: 'POST', url: `/api/projects/${projectId}/tokens`, cookies: cookie, payload: { name } })
+  if (res.statusCode !== 201) throw new Error(`토큰 발급 실패 (status ${res.statusCode}): ${res.body}`)
+  return (res.json() as { value: string }).value
+}
+
+const TOKEN_HINT = '옛 비밀번호가 새어서 바꾼 것이면 이 토큰들도 거둔다 — README 「비밀번호를 잊었다」 절'
+
 describe('숨겨 받기', () => {
   it('친 글자를 되비추지 않고 한 줄을 받는다 — 원시 모드는 켰다가 되돌린다', async () => {
     const input = new FakeTty()
@@ -168,6 +180,28 @@ describe('숨겨 받기', () => {
     expect(dropped).toEqual(['\n'.length + 'echo 다음 명령\n'.length])
   })
 
+  it('**천천히 오는 붙여넣기도 조용해질 때까지 버린다** — 창 뒤에 온 조각이 답으로 먹히지 않는다', async () => {
+    const input = new FakeTty()
+    const dropped: number[] = []
+    const asked: number[] = []
+    const started = Date.now()
+    const reading = readHiddenLine(input, (text) => text !== '\n' && asked.push(Date.now() - started), '? ', {
+      drainMs: 40,
+      discarded: (n) => dropped.push(n),
+    })
+    // 터미널이 붙여넣기를 조각으로 나눠 보낸다 — 조각 사이(15ms)가 `drainMs` 보다 짧고, 전체(105ms)는 그보다 길다.
+    const pasted = ['# 붙여 넣은 ', '주석 줄\necho ', 'AFTER-PASTE', '\n', '# 끝\n', '\n', '\n', '\n']
+    for (const chunk of pasted) {
+      input.type(chunk)
+      await new Promise((resolve) => setTimeout(resolve, 15))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    input.type('사람이 친 값\r')
+    expect(await reading).toEqual({ kind: 'line', value: '사람이 친 값' })
+    expect(dropped).toEqual([pasted.join('').length])
+    expect(asked[0]).toBeGreaterThanOrEqual(105)
+  })
+
   it('한 줄을 받으면 그 조각의 나머지를 다음 물음에 넘기지 않는다', async () => {
     const input = new FakeTty()
     const first = readHiddenLine(input, () => {}, '? ', { drainMs: 0 })
@@ -187,7 +221,7 @@ describe('바꾼다', () => {
       const me = await signup(ctx, { email: 'me@example.com' })
       const other = await signup(ctx)
       expect(await login(ctx, 'me@example.com', me.password)).toBe(200) // 세션 둘째
-      const project = await createProject(ctx, me.cookie)
+      const project = await createProject(ctx, me.cookie, { name: '설계서' })
       const issued = await ctx.app.inject({
         method: 'POST',
         url: `/api/projects/${project.id}/tokens`,
@@ -211,10 +245,71 @@ describe('바꾼다', () => {
 
       expect(t.out).toEqual([
         '비밀번호 재설정 대상 DB: 127.0.0.1:5999/wb_reset',
-        '바꿨습니다 — me@example.com · 로그인해 둔 세션 2개를 지웠습니다 · API 토큰(wireb login)은 그대로입니다',
+        '바꿨습니다 — me@example.com · 로그인해 둔 세션 2개를 지웠습니다',
+        'API 토큰(wireb login)은 그대로입니다 — 1개:',
+        `  «설계서» (${project.id}) 1개 — «재설정 전 토큰»`,
+        TOKEN_HINT,
       ])
       expect(t.all()).not.toContain(NEW_PASSWORD)
       expect(t.all()).not.toContain('비밀@')
+    })
+  })
+
+  it('**옛 비밀번호의 세션으로 만든 토큰은 재설정 뒤에도 산다** — 그 사람의 토큰을 프로젝트별로 센다(원문은 안 싣는다)', async () => {
+    await withApi(async (ctx) => {
+      const me = await signup(ctx, { email: 'me@example.com' })
+      const other = await signup(ctx)
+      const ga = await createProject(ctx, me.cookie, { name: '설계서 가' })
+      const na = await createProject(ctx, me.cookie, { name: '설계서 나' })
+      const da = await createProject(ctx, other.cookie, { name: '설계서 다' })
+      await addMember(ctx, ga.id, other.user.id, 'editor')
+      await addMember(ctx, da.id, me.user.id, 'editor')
+      // 옛 비밀번호를 쥔 사람이 그 세션으로 만든 토큰이다.
+      const values = [
+        await issueToken(ctx, me.cookie, ga.id, '노트북'),
+        await issueToken(ctx, me.cookie, ga.id, 'CI'),
+        await issueToken(ctx, me.cookie, na.id, '옛 세션 토큰'),
+        await issueToken(ctx, me.cookie, da.id, '떠난 곳'),
+      ]
+      await issueToken(ctx, other.cookie, ga.id, '남의 토큰')
+      const left = await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${da.id}/members/${me.user.id}`, cookies: other.cookie })
+      expect(left.statusCode, left.body).toBe(204)
+
+      const t = terminal([`${NEW_PASSWORD}\r`, `${NEW_PASSWORD}\r`])
+      expect(await runResetPassword(['me@example.com'], target(ctx), t.io)).toBe(0)
+
+      const viaToken = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${ga.id}`,
+        headers: { authorization: `Bearer ${values[0]}` },
+      })
+      expect(viaToken.statusCode, viaToken.body).toBe(200)
+      expect(t.out.slice(1)).toEqual([
+        '바꿨습니다 — me@example.com · 로그인해 둔 세션 1개를 지웠습니다',
+        'API 토큰(wireb login)은 그대로입니다 — 4개:',
+        `  «설계서 가» (${ga.id}) 2개 — «CI», «노트북»`,
+        `  «설계서 나» (${na.id}) 1개 — «옛 세션 토큰»`,
+        `  «설계서 다» (${da.id}) 1개 — «떠난 곳» — 멤버가 아니어서 지금은 404, 다시 멤버가 되면 산다`,
+        TOKEN_HINT,
+      ])
+      for (const value of values) expect(t.all()).not.toContain(value)
+
+      await signup(ctx, { email: 'none@example.com' })
+      const none = terminal([`${NEW_PASSWORD}\r`, `${NEW_PASSWORD}\r`])
+      expect(await runResetPassword(['none@example.com'], target(ctx), none.io)).toBe(0)
+      expect(none.out.at(-1)).toBe('API 토큰(wireb login)은 0개입니다')
+    })
+  })
+
+  it('토큰 이름의 제어 문자는 터미널에 그대로 안 보낸다', async () => {
+    await withApi(async (ctx) => {
+      const me = await signup(ctx, { email: 'me@example.com' })
+      const project = await createProject(ctx, me.cookie, { name: '설계서\u001b[2J' })
+      await issueToken(ctx, me.cookie, project.id, '토큰\u009b31m\u0007')
+      const t = terminal([`${NEW_PASSWORD}\r`, `${NEW_PASSWORD}\r`])
+      expect(await runResetPassword(['me@example.com'], target(ctx), t.io)).toBe(0)
+      expect(t.out).toContain(`  «설계서\\u001b[2J» (${project.id}) 1개 — «토큰\\u009b31m\\u0007»`)
+      expect(t.all()).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/)
     })
   })
 
@@ -296,6 +391,20 @@ describe('바꾸지 않는다 — 해시가 그대로이고 그렇다고 말한�
     })
   })
 
+  it('비밀번호 글자 수는 규칙과 같은 단위(UTF-16)로 센다 — 이모지 하나가 2자다', () => {
+    expect(() => checkPassword('🔑🔒🔑')).toThrow('비밀번호는 8–200자여야 합니다(친 값은 6자)')
+    expect(checkPassword('🔑🔒🔑🔒')).toBe('🔑🔒🔑🔒')
+  })
+
+  it('이메일이 둘이면 이메일 하나만 받는다고 말한다 — 비밀번호를 받았다고 하지 않는다', async () => {
+    const t = terminal([])
+    expect(await runResetPassword(['a@example.com', 'b@example.com'], { db: getTestDb(), databaseUrl: 'postgres://x', scryptN: TEST_SCRYPT_N }, t.io)).toBe(1)
+    expect(t.err).toEqual([
+      '사용법: pnpm --filter @wirebound/api reset-password <이메일>',
+      '이메일은 한 번에 하나만 받습니다(받은 이메일 2개) — 아무것도 바꾸지 않았습니다.',
+    ])
+  })
+
   it('인자로 비밀번호를 주면 거절한다 · 이메일이 아니면 거절한다 — DB 에 가기 전에', async () => {
     const db = getTestDb()
     for (const args of [['me@example.com', NEW_PASSWORD], [], ['이메일아님']]) {
@@ -306,8 +415,85 @@ describe('바꾸지 않는다 — 해시가 그대로이고 그렇다고 말한�
     }
     const extra = terminal([])
     await runResetPassword(['me@example.com', NEW_PASSWORD], { db, databaseUrl: 'postgres://x', scryptN: 1024 }, extra.io)
-    expect(extra.err.join('\n')).toMatch(/인자로 받지 않습니다/)
+    expect(extra.err.join('\n')).toMatch(/인자로 받지 않습니다 — 셸 기록에 남습니다\. 명령이 물을 때 친다\./)
     expect(extra.all()).not.toContain(NEW_PASSWORD)
+  })
+})
+
+describe('`--` 는 인자가 아니다', () => {
+  it('`reset-password -- <이메일>`(pnpm 인자 관습)도 그 이메일을 바꾼다', async () => {
+    await withApi(async (ctx) => {
+      await signup(ctx, { email: 'me@example.com' })
+      const t = terminal([`${NEW_PASSWORD}\r`, `${NEW_PASSWORD}\r`])
+      expect(await runResetPassword(['--', 'me@example.com'], target(ctx), t.io)).toBe(0)
+      expect(await verifyPassword(NEW_PASSWORD, await hashOf(ctx, 'me@example.com'))).toBe(true)
+    })
+  })
+})
+
+/** 고른 질의에서 DB 오류를 내는 플러그인. `when` 이 `'result'` 면 질의가 DB 에서 돈 **뒤에** 던진다. */
+function failing(match: (node: RootOperationNode) => boolean, when: 'query' | 'result'): KyselyPlugin {
+  const hit = new WeakSet<object>()
+  return {
+    transformQuery(args: PluginTransformQueryArgs): RootOperationNode {
+      if (match(args.node)) {
+        // 서버가 연결 끊김을 싸서 던지는 꼴 그대로 — 안쪽 원인만 말해야 한다.
+        if (when === 'query') throw new DbConnectionLostError(new Error('Connection terminated unexpectedly'))
+        hit.add(args.queryId)
+      }
+      return args.node
+    },
+    async transformResult(args: PluginTransformResultArgs): Promise<QueryResult<UnknownRow>> {
+      if (hit.has(args.queryId)) throw new Error('Connection terminated unexpectedly')
+      return args.result
+    },
+  }
+}
+
+function rawText(node: RootOperationNode): string {
+  return node.kind === 'RawNode' ? node.sqlFragments.join('') : ''
+}
+
+describe('DB 오류 — 스택 대신 무엇이 됐는지 말한다', () => {
+  it('계정을 찾다가 끊기면 묻지 않고 «아무것도 바꾸지 않았습니다»', async () => {
+    await withApi(async (ctx) => {
+      await signup(ctx, { email: 'me@example.com' })
+      const db = ctx.db.withPlugin(failing((node) => node.kind === 'SelectQueryNode', 'query'))
+      const t = terminal([`${NEW_PASSWORD}\r`, `${NEW_PASSWORD}\r`])
+      expect(await runResetPassword(['me@example.com'], { ...target(ctx), db }, t.io)).toBe(1)
+      expect(t.err).toEqual([
+        'DB 에서 계정을 찾지 못했습니다(Connection terminated unexpectedly) — 아무것도 바꾸지 않았습니다.',
+      ])
+      expect(t.questions()).toEqual([])
+    })
+  })
+
+  it('쓰는 도중에 끊기면 «아무것도 바꾸지 않았습니다» — 해시가 그대로다', async () => {
+    await withApi(async (ctx) => {
+      const me = await signup(ctx, { email: 'me@example.com' })
+      const before = await hashOf(ctx, 'me@example.com')
+      const db = ctx.db.withPlugin(failing((node) => node.kind === 'UpdateQueryNode', 'query'))
+      const t = terminal([`${NEW_PASSWORD}\r`, `${NEW_PASSWORD}\r`])
+      expect(await runResetPassword(['me@example.com'], { ...target(ctx), db }, t.io)).toBe(1)
+      expect(t.err).toEqual(['DB 에 쓰지 못했습니다(Connection terminated unexpectedly) — 아무것도 바꾸지 않았습니다.'])
+      expect(t.out).toHaveLength(1)
+      expect(await hashOf(ctx, 'me@example.com')).toBe(before)
+      expect(await sessionCount(ctx, me.user.id)).toBe(1)
+    })
+  })
+
+  it('커밋에서 끊기면 «반영됐는지 모릅니다» — 바꿨다고도 안 바꿨다고도 하지 않는다', async () => {
+    await withApi(async (ctx) => {
+      await signup(ctx, { email: 'me@example.com' })
+      // `withApi` 의 핸들은 트랜잭션이라 쓰기의 «커밋»이 `release savepoint` 다. 그것이 DB 에서 돈 뒤에 끊긴 판이다.
+      const db = ctx.db.withPlugin(failing((node) => rawText(node).startsWith('release savepoint'), 'result'))
+      const t = terminal([`${NEW_PASSWORD}\r`, `${NEW_PASSWORD}\r`])
+      expect(await runResetPassword(['me@example.com'], { ...target(ctx), db }, t.io)).toBe(1)
+      expect(t.err).toHaveLength(1)
+      expect(t.err[0]).toMatch(/^DB 가 커밋에 답하지 못했습니다\(.*\) — 반영됐는지 모릅니다\. /)
+      expect(t.all()).not.toContain('아무것도 바꾸지 않았습니다')
+      expect(t.out).toHaveLength(1)
+    })
   })
 })
 

@@ -18,7 +18,9 @@
  * 이 프로세스 안에서 만들어 매개변수로 DB 에 보낸다.
  *
  * **바꾸지 않고 끝나는 갈래가 전부 «아무것도 바꾸지 않았습니다»를 말한다** — 대상 0 · 빈 값 · Ctrl-D · Ctrl-C ·
- * 규칙 밖(8–200자) · 두 번 친 값이 다름. 쓰기는 두 값을 다 받고 규칙을 지난 뒤에 한 트랜잭션으로 한 번 한다.
+ * 규칙 밖(8–200자) · 두 번 친 값이 다름 · 인자가 어긋남 · 쓰기 전에 난 DB 오류. 쓰기는 두 값을 다 받고 규칙을 지난 뒤에
+ * 한 트랜잭션으로 한 번 한다. **커밋에서 난 DB 오류만은 «반영됐는지 모릅니다»다** — 커밋이 DB 에 닿았는지 이 프로세스가
+ * 모른다(`ResetPasswordWriteError`).
  */
 import { pathToFileURL } from 'node:url'
 import { getKoreanErrorMap } from '@wirebound/schema'
@@ -27,6 +29,7 @@ import { DEFAULT_SCRYPT_PARAMS, hashPassword } from '../auth/password'
 import { destroyUserSessions } from '../auth/session'
 import { loadConfig } from '../config'
 import { createDb, createPool } from './client'
+import { DbConnectionLostError } from './connection-loss'
 import { describeDatabaseTarget } from './describe-target'
 import { withTransaction, type DbHandle } from './tx'
 
@@ -38,8 +41,40 @@ export class ResetPasswordError extends Error {
   }
 }
 
+/**
+ * 쓰기 트랜잭션이 DB 오류로 끝났다. `outcomeUnknown` 은 **몸통을 다 돌고 커밋에서** 난 오류다 — 커밋이 DB 에 닿았는지
+ * 이 프로세스는 알 수 없다. 몸통에서 났으면 트랜잭션이 끝나지 않았으므로 아무것도 안 바뀌었다.
+ */
+export class ResetPasswordWriteError extends Error {
+  constructor(
+    readonly outcomeUnknown: boolean,
+    cause: unknown,
+  ) {
+    super(dbErrorText(cause), { cause })
+    this.name = 'ResetPasswordWriteError'
+  }
+}
+
+/**
+ * DB 오류를 한 줄로. `DbConnectionLostError` 는 안쪽 원인을 쓴다 — 그 문장(«그 질의가 반영됐는지 모릅니다»)은 트랜잭션
+ * 중간의 끊김까지 넓게 «모름»으로 적는 서버의 판정이고(`db/connection-loss.ts`), 이 명령은 커밋에 닿았는지를 스스로 가른다.
+ */
+function dbErrorText(error: unknown): string {
+  const inner = error instanceof DbConnectionLostError ? error.cause : error
+  return inner instanceof Error ? inner.message : String(inner)
+}
+
+/** 재설정 뒤에도 사는 그 사람의 API 토큰 — 프로젝트 하나 몫. 토큰 원문 · 해시는 없다. */
+export interface RemainingTokens {
+  projectId: string
+  projectName: string
+  /** 그 프로젝트의 멤버인가. 아니면 그 토큰은 지금 404 지만 다시 멤버가 되면 산다(역할을 요청 때 읽는다). */
+  member: boolean
+  tokenNames: string[]
+}
+
 export type ResetPasswordOutcome =
-  | { kind: 'updated'; email: string; sessionsDeleted: number }
+  | { kind: 'updated'; email: string; sessionsDeleted: number; tokens: RemainingTokens[] }
   | { kind: 'no-user'; email: string }
 
 /** 이메일을 서버의 규칙으로 정규화한다(소문자). 형식이 어긋나면 던진다. */
@@ -58,7 +93,8 @@ export function normalizeEmail(raw: string): string {
 export function checkPassword(password: string): string {
   const parsed = RawPassword.safeParse(password, { error: getKoreanErrorMap() })
   if (!parsed.success) {
-    throw new ResetPasswordError(`비밀번호는 8–200자여야 합니다(친 값은 ${[...password].length}자)`)
+    // `RawPassword` 가 세는 단위(UTF-16 — 이모지 하나가 2자)로 센다. 코드 포인트로 세면 규칙이 받는 값에 «8자 미만»이라 말한다.
+    throw new ResetPasswordError(`비밀번호는 8–200자여야 합니다(친 값은 ${password.length}자)`)
   }
   return parsed.data
 }
@@ -66,8 +102,13 @@ export function checkPassword(password: string): string {
 /**
  * **그 계정의 해시를 바꾸고 그 사람의 세션을 지운다 — 한 트랜잭션.** 계정이 없으면 아무것도 안 바꾸고 `no-user`.
  *
- * 세션을 지우는 것은 옛 비밀번호가 새어 바꾸는 사람을 위해서다 — 안 지우면 그 전에 로그인한 브라우저가 계속 산다.
- * **API 토큰(`wireb login`)은 건드리지 않는다**(`api_tokens` 는 다른 표이고 토큰마다 따로 폐기한다).
+ * 세션을 지우는 것은 옛 비밀번호로 로그인한 브라우저를 끊기 위해서다.
+ *
+ * **API 토큰(`wireb login`)은 지우지 않고 센다.** 잊어서 바꾸는 사람에게는 토큰이 그대로 도는 것이 맞다 — 그 사람의
+ * CLI 가 계속 돈다. 그런데 **옛 비밀번호가 새어서** 바꾸는 것이면 세션만 지워서는 못 쫓아낸다: 토큰은 세션으로 만들고
+ * (`routes/tokens.ts`) 발급자의 역할을 그대로 가지므로, 옛 비밀번호를 쥔 사람이 세션 하나로 멤버인 프로젝트마다 토큰을
+ * 남겼을 수 있다. 이 명령은 두 갈래를 가를 수 없어 **남은 토큰을 프로젝트별로 말하고** 거두는 것은 사람이 한다
+ * (최상위 README 「비밀번호를 잊었다」).
  */
 export async function resetPassword(
   db: DbHandle,
@@ -77,24 +118,80 @@ export async function resetPassword(
 ): Promise<ResetPasswordOutcome> {
   const normalized = normalizeEmail(email)
   const passwordHash = await hashPassword(checkPassword(password), { ...DEFAULT_SCRYPT_PARAMS, N: scryptN })
-  return withTransaction(db, async (trx) => {
-    const updated = await trx
-      .updateTable('users')
-      .set({ password_hash: passwordHash })
-      .where('email', '=', normalized)
-      .returning('id')
-      .executeTakeFirst()
-    if (updated === undefined) {
-      return { kind: 'no-user', email: normalized }
+  let reachedCommit = false
+  try {
+    return await withTransaction(db, async (trx) => {
+      const outcome = await writeReset(trx, normalized, passwordHash)
+      reachedCommit = true
+      return outcome
+    })
+  } catch (error) {
+    throw new ResetPasswordWriteError(reachedCommit, error)
+  }
+}
+
+async function writeReset(trx: DbHandle, normalized: string, passwordHash: string): Promise<ResetPasswordOutcome> {
+  const updated = await trx
+    .updateTable('users')
+    .set({ password_hash: passwordHash })
+    .where('email', '=', normalized)
+    .returning('id')
+    .executeTakeFirst()
+  if (updated === undefined) {
+    return { kind: 'no-user', email: normalized }
+  }
+  const sessions = await trx
+    .selectFrom('sessions')
+    .select((eb) => eb.fn.countAll<string>().as('n'))
+    .where('user_id', '=', updated.id)
+    .executeTakeFirstOrThrow()
+  await destroyUserSessions(trx, updated.id)
+  const tokens = await trx
+    .selectFrom('api_tokens')
+    .innerJoin('projects', 'projects.id', 'api_tokens.project_id')
+    .leftJoin('project_members', (join) =>
+      join
+        .onRef('project_members.project_id', '=', 'api_tokens.project_id')
+        .onRef('project_members.user_id', '=', 'api_tokens.user_id'),
+    )
+    .select([
+      'projects.id as projectId',
+      'projects.name as projectName',
+      'api_tokens.name as tokenName',
+      'project_members.user_id as memberId',
+    ])
+    .where('api_tokens.user_id', '=', updated.id)
+    .execute()
+  return { kind: 'updated', email: normalized, sessionsDeleted: Number(sessions.n), tokens: groupTokens(tokens) }
+}
+
+/** 프로젝트별로 묶는다. 순서는 DB 정렬(콜레이션)에 안 기대고 코드 포인트로 — 출력이 기계마다 같다. */
+function groupTokens(
+  rows: { projectId: string; projectName: string; tokenName: string; memberId: string | null }[],
+): RemainingTokens[] {
+  const byProject = new Map<string, RemainingTokens>()
+  for (const row of rows) {
+    const group = byProject.get(row.projectId) ?? {
+      projectId: row.projectId,
+      projectName: row.projectName,
+      member: row.memberId !== null,
+      tokenNames: [],
     }
-    const sessions = await trx
-      .selectFrom('sessions')
-      .select((eb) => eb.fn.countAll<string>().as('n'))
-      .where('user_id', '=', updated.id)
-      .executeTakeFirstOrThrow()
-    await destroyUserSessions(trx, updated.id)
-    return { kind: 'updated', email: normalized, sessionsDeleted: Number(sessions.n) }
-  })
+    group.tokenNames.push(row.tokenName)
+    byProject.set(row.projectId, group)
+  }
+  const order = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+  const groups = [...byProject.values()]
+  for (const group of groups) group.tokenNames.sort(order)
+  return groups.sort((a, b) => order(a.projectName, b.projectName) || order(a.projectId, b.projectId))
+}
+
+/**
+ * 사람이 지은 이름을 터미널에 싣는 꼴. **제어 문자(C0 · DEL · C1)는 `\uXXXX` 로 적는다** — 프로젝트 · 토큰 이름은
+ * 멤버 누구나 짓는 값이라, 그대로 찍으면 이름에 넣은 제어열이 이 명령을 치는 사람의 터미널을 조작한다.
+ */
+function shown(name: string): string {
+  return `«${name.replace(/[\u0000-\u001f\u007f-\u009f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)}»`
 }
 
 /** 숨겨 받기가 쓰는 터미널 입력. `process.stdin` 이 이 모양이다 — 케이스는 가짜를 넣는다. */
@@ -119,9 +216,11 @@ const ESC = '\u001b'
 /**
  * **한 줄을 터미널에서 숨겨 받는다** — 원시 모드로 바꾸고 친 글자를 되비추지 않는다.
  *
- * **묻기 전에 이미 와 있던 입력은 버린다**(`drainMs` 동안 온 것). 명령 줄과 그 뒤 줄들을 통째로 붙여 넣으면 뒤 줄들이
- * 터미널 입력에 쌓여 있다가 첫 물음의 답으로 먹힌다 — 버리지 않으면 붙여 넣은 다음 줄(흔히 빈 줄이나 다음 명령)이
- * 비밀번호가 된다. 버린 바이트 수를 `discarded` 로 알린다.
+ * **묻기 전에 오는 입력은 조용해질 때까지 버린다** — 마지막 조각 뒤로 `drainMs` 동안 아무것도 안 와야 묻는다. 명령 줄과
+ * 그 뒤 줄들을 통째로 붙여 넣으면 뒤 줄들이 터미널 입력에 쌓여 있다가 첫 물음의 답으로 먹힌다 — 버리지 않으면 붙여 넣은
+ * 다음 줄(흔히 빈 줄이나 다음 명령)이 비밀번호가 된다. **창을 고정하지 않는 까닭:** 터미널이 붙여넣기를 조각으로 나눠
+ * 천천히 보내면(iTerm2 «Paste Slowly» — 16바이트씩 125ms) 고정 창 뒤에 온 줄이 답으로 먹히고, 조각 경계에서 잘린 줄의
+ * 뒤쪽이 셸로 가 명령으로 돈다. 버린 글자 수(UTF-16 단위)를 `discarded` 로 알린다.
  *
  * 한 줄을 받으면 그 조각의 나머지도 버린다 — 다음 물음 앞에 온 입력이다. 원시 모드는 어느 갈래로 끝나든 되돌린다.
  */
@@ -135,12 +234,21 @@ export async function readHiddenLine(
   input.setRawMode(true)
   input.resume()
   let dropped = 0
+  let quiet: ReturnType<typeof setTimeout> | undefined
+  let settle = (): void => {}
   const drain = (chunk: string): void => {
     dropped += chunk.length
+    settle()
   }
   try {
-    input.on('data', drain)
-    await new Promise((resolve) => setTimeout(resolve, options.drainMs))
+    await new Promise<void>((resolve) => {
+      settle = () => {
+        clearTimeout(quiet)
+        quiet = setTimeout(resolve, options.drainMs)
+      }
+      settle()
+      input.on('data', drain)
+    })
     input.off('data', drain)
     if (dropped > 0) options.discarded?.(dropped)
 
@@ -184,6 +292,7 @@ export async function readHiddenLine(
       input.on('data', onData)
     })
   } finally {
+    clearTimeout(quiet)
     input.off('data', drain)
     input.setRawMode(false)
     input.pause()
@@ -199,7 +308,7 @@ export interface ResetPasswordIo {
   /** 묻는 글 — 줄바꿈 없이 그대로 쓴다. */
   prompt: (text: string) => void
   input: HiddenInput
-  /** 묻기 전에 와 있던 입력을 버리는 시간(ms). */
+  /** 묻기 전 입력을 버릴 때 «조용해졌다»고 보는 간격(ms). */
   drainMs: number
 }
 
@@ -212,14 +321,22 @@ const NOTHING_CHANGED = '아무것도 바꾸지 않았습니다.'
  * 지나면 → 쓴다. 쓰기 전에 끝나는 갈래는 DB 에 아무것도 안 보낸다.
  */
 export async function runResetPassword(
-  args: readonly string[],
+  rawArgs: readonly string[],
   target: { db: DbHandle; databaseUrl: string; scryptN: number },
   io: ResetPasswordIo,
 ): Promise<number> {
+  // `pnpm … reset-password -- <이메일>` 처럼 pnpm 인자 관습으로 붙인 `--` 는 인자가 아니다.
+  const args = rawArgs[0] === '--' ? rawArgs.slice(1) : rawArgs
   if (args.length !== 1 || args[0] === undefined || args[0].trim() === '') {
     io.error('사용법: pnpm --filter @wirebound/api reset-password <이메일>')
     if (args.length > 1) {
-      io.error('비밀번호는 인자로 받지 않습니다 — 셸 기록에 남습니다. 명령이 묻을 때 친다.')
+      // 인자를 되찍지 않는다 — 비밀번호를 인자로 준 사람이면 그 값이다.
+      const emails = args.filter((arg) => NormalizedEmail.safeParse(arg.trim()).success).length
+      io.error(
+        emails === args.length
+          ? `이메일은 한 번에 하나만 받습니다(받은 이메일 ${emails}개) — ${NOTHING_CHANGED}`
+          : `인자는 이메일 하나만 받습니다(받은 인자 ${args.length}개). 비밀번호는 인자로 받지 않습니다 — 셸 기록에 남습니다. 명령이 물을 때 친다.`,
+      )
     }
     return 1
   }
@@ -239,7 +356,13 @@ export async function runResetPassword(
     return 1
   }
 
-  const found = await target.db.selectFrom('users').select('id').where('email', '=', email).executeTakeFirst()
+  let found: { id: string } | undefined
+  try {
+    found = await target.db.selectFrom('users').select('id').where('email', '=', email).executeTakeFirst()
+  } catch (error) {
+    io.error(`DB 에서 계정을 찾지 못했습니다(${dbErrorText(error)}) — ${NOTHING_CHANGED}`)
+    return 1
+  }
   if (found === undefined) {
     io.error(`대상 0 — ${email} 계정이 이 DB 에 없습니다. ${NOTHING_CHANGED}`)
     return 1
@@ -269,16 +392,37 @@ export async function runResetPassword(
     return 1
   }
 
-  const outcome = await resetPassword(target.db, email, firstValue, target.scryptN)
+  let outcome: ResetPasswordOutcome
+  try {
+    outcome = await resetPassword(target.db, email, firstValue, target.scryptN)
+  } catch (error) {
+    if (!(error instanceof ResetPasswordWriteError)) throw error
+    io.error(
+      error.outcomeUnknown
+        ? `DB 가 커밋에 답하지 못했습니다(${error.message}) — 반영됐는지 모릅니다. 새 비밀번호로 로그인해 보고, 안 되면 다시 친다.`
+        : `DB 에 쓰지 못했습니다(${error.message}) — ${NOTHING_CHANGED}`,
+    )
+    return 1
+  }
   if (outcome.kind === 'no-user') {
     // 묻는 사이에 계정이 지워졌다.
     io.error(`대상 0 — ${email} 계정이 이 DB 에 없습니다. ${NOTHING_CHANGED}`)
     return 1
   }
-  io.log(
-    `바꿨습니다 — ${outcome.email} · 로그인해 둔 세션 ${outcome.sessionsDeleted}개를 지웠습니다` +
-      ' · API 토큰(wireb login)은 그대로입니다',
-  )
+  io.log(`바꿨습니다 — ${outcome.email} · 로그인해 둔 세션 ${outcome.sessionsDeleted}개를 지웠습니다`)
+  const tokenCount = outcome.tokens.reduce((sum, group) => sum + group.tokenNames.length, 0)
+  if (tokenCount === 0) {
+    io.log('API 토큰(wireb login)은 0개입니다')
+    return 0
+  }
+  io.log(`API 토큰(wireb login)은 그대로입니다 — ${tokenCount}개:`)
+  for (const group of outcome.tokens) {
+    io.log(
+      `  ${shown(group.projectName)} (${group.projectId}) ${group.tokenNames.length}개 — ${group.tokenNames.map(shown).join(', ')}` +
+        (group.member ? '' : ' — 멤버가 아니어서 지금은 404, 다시 멤버가 되면 산다'),
+    )
+  }
+  io.log('옛 비밀번호가 새어서 바꾼 것이면 이 토큰들도 거둔다 — README 「비밀번호를 잊었다」 절')
   return 0
 }
 
@@ -297,10 +441,19 @@ function ended(line: HiddenLine, io: ResetPasswordIo): string | undefined {
 
 async function main(): Promise<void> {
   const config = loadConfig()
-  const db = createDb(createPool(config.databaseUrl, undefined, config.dbTimeLimits))
+  // 풀의 연결 오류는 찍지 않는다 — 그 연결에 매달린 질의가 거절되고 이 명령이 무엇이 됐는지 한 줄로 말한다(기본 싱크는 스택째 찍는다).
+  const db = createDb(createPool(config.databaseUrl, () => undefined, config.dbTimeLimits))
   // 원시 모드인 채로 끝나면 셸이 글자를 안 되비춘다 — 어느 길로 끝나든 되돌린다.
-  process.on('exit', () => {
+  const restoreTty = (): void => {
     if (process.stdin.isTTY) process.stdin.setRawMode(false)
+  }
+  process.on('exit', restoreTty)
+  // `exit` 는 신호 죽음에서 안 돈다. SIGINT · SIGTERM 은 Node 가 스스로 tty 를 되돌리고 죽지만 SIGHUP 은 되돌리지 않는다 —
+  // 전경 그룹째 HUP 을 받으면 zsh 의 다음 명령이 `-isig -icrnl` 을 물려받는다. 되돌린 뒤 같은 신호로 다시 죽는다(셸이
+  // 보는 종료가 SIGTERM 판과 같은 «신호 죽음»이다).
+  process.once('SIGHUP', () => {
+    restoreTty()
+    process.kill(process.pid, 'SIGHUP')
   })
   try {
     process.exitCode = await runResetPassword(
@@ -311,7 +464,8 @@ async function main(): Promise<void> {
         error: (line) => console.error(line),
         prompt: (text) => process.stderr.write(text),
         input: process.stdin,
-        drainMs: 100,
+        // 천천히 보내는 붙여넣기의 조각 사이(iTerm2 «Paste Slowly» 125ms)보다 넉넉히 길고, 물음이 늦는 값으로는 사람이 못 느낀다.
+        drainMs: 300,
       },
     )
   } finally {
