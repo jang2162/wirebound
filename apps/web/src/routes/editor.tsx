@@ -446,8 +446,8 @@ function EditorShell(props: {
     setRoleNotice(canEdit ? ROLE_NOTICE.gained : props.roleKnown ? ROLE_NOTICE.lost : ROLE_NOTICE.unknown)
   }, [canEdit, props.roleKnown])
   /**
-   * **고르개가 테마를 바꿨다는 신호**. 값에는 뜻이 없고 오를 때마다 캔버스가
-   * 테마를 다시 조회한다.
+   * **테마 선택이 바뀌었다는 신호** — 고르개가 바꿨거나 내가 스냅샷을 복원했다(복원의 마지막 단계가 레이아웃의
+   * 테마 선택을 되돌린다 — `restoredToken`의 표). 값에는 뜻이 없고 오를 때마다 캔버스가 테마를 다시 조회한다.
    *
    * **테마 자체를 여기 두지 않는다.** 그러면 셸이 테마를 읽는 주체가 되어
    * `useThemeCss`의 안정 참조 계약을 셸이 지켜야 하고, 캔버스는 자기가 그리는 것의
@@ -483,9 +483,18 @@ function EditorShell(props: {
   const frameRef = useRef<HTMLDivElement>(null)
 
   /**
-   * **내가 스냅샷을 복원했다는 신호.** 값에는 뜻이 없고 오를 때마다 **캔버스가 문서를,
-   * 좌측이 트리를** 다시 읽는다 — 앞의 두 토큰과 같은 모양이고 같은 이유로 스토어에 두지
-   * 않는다.
+   * **내가 스냅샷을 복원했다는 신호.** 값에는 뜻이 없고 오를 때마다 **복원이 바꾸는 것을 떠 있는 자리가 전부**
+   * 다시 읽는다 — 앞의 두 토큰과 같은 모양이고 같은 이유로 스토어에 두지 않는다.
+   *
+   * | 복원이 바꾸는 것(`services/restore-plan.ts`의 단계 표) | 다시 읽는 자리 |
+   * |---|---|
+   * | 메뉴 · 페이지 목록 · 제목 | 좌측 트리(`MenuTree`의 `reloadToken`) |
+   * | 열린 페이지의 문서 | 캔버스(`CanvasFrame`의 복원 재조회) — 구조 트리 · 속성 패널은 스토어에서 읽는다 |
+   * | 코멘트 · 페이지 설명 | 우측 본문 — **탭을 다녀온 것처럼 다시 세운다**(`RightPanel`의 `key`) |
+   * | 레이아웃의 테마 선택 | 캔버스(`themeReloadToken`도 함께 올린다) · 고르개(`ThemePicker`의 `reloadToken`) |
+   *
+   * **자리를 하나 빠뜨리면 탭을 다녀오거나 새로고침해야 맞는다** — 되돌렸다는 알림 아래 옛 코멘트 목록이 조용히 남는다
+   * (Chrome: 스냅샷의 코멘트를 지운 뒤 복원하면 서버 1 · 탭 0). 복원이 바꾸는 것이 늘면 이 표에 줄을 더한다.
    *
    * **이 신호가 필요한 까닭:** 복원은 에디터 **위에** 뜨는 팝오버에서 일어나므로 셸이 다시
    * 마운트되지 않는다 — 셸 밖 라우트에서 **돌아오는 길**이 있으면 저절로 다시 읽히겠지만
@@ -596,6 +605,7 @@ function EditorShell(props: {
         <ThemePicker
           projectId={props.project.id}
           canChoose={abilities.chooseTheme}
+          reloadToken={restoredToken}
           onChanged={() => setThemeReloadToken((token) => token + 1)}
         />
         {/* **스냅샷 팝오버**(셸 밖 별도 라우트가 아니라 팝오버인 근거는
@@ -607,7 +617,10 @@ function EditorShell(props: {
             있는지"*조차 못 본다. */}
         <SnapshotsPanel
           projectId={props.project.id}
-          onRestored={() => setRestoredToken((token) => token + 1)}
+          onRestored={() => {
+            setRestoredToken((token) => token + 1)
+            setThemeReloadToken((token) => token + 1)
+          }}
         />
         {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 스냅샷 링크 옆에 두는 것은 둘 다
             *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
@@ -758,7 +771,7 @@ function EditorShell(props: {
 
       <aside className="wb-shell-panel" aria-label="우측 패널">
         {/* **본문 넷이 같은 `canEdit`을 받는다** — 속성 · 상호작용은 끄고, 코멘트 폼 · 설명 편집기는 숨긴다. */}
-        <RightPanel projectId={props.project.id} pageId={props.pageId} canEdit={canEdit} />
+        <RightPanel projectId={props.project.id} pageId={props.pageId} canEdit={canEdit} restoredToken={restoredToken} />
       </aside>
     </div>
   )
@@ -798,6 +811,8 @@ function RightPanel(props: {
   pageId: string | undefined
   /** 설계서를 고칠 수 있는가 — 셸의 `canEdit`. 본문에 그대로 내린다. */
   canEdit: boolean
+  /** 내가 스냅샷을 복원했다는 신호(셸의 `restoredToken`). 본문의 `key`다 — 아래 본문 자리의 주석. */
+  restoredToken: number
 }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
@@ -851,9 +866,15 @@ function RightPanel(props: {
           id={`wb-tabpanel-${tab}`}
           aria-labelledby={`wb-tab-${tab}`}
         >
+          {/* **복원하면 본문을 다시 세운다**(`key`). 코멘트 · 설명 본문은 마운트될 때 읽으므로 탭을 다녀오면 맞는데,
+              복원은 탭을 안 바꾼다. 다시 세우는 것은 탭을 다녀온 것과 같은 길이다 — 친 글자 · 나가 있는 쓰기는 위
+              provider 가 들고 있어 살아남고, 지난 쓰기의 통지는 마운트가 지운다(복원 앞의 일이다). 본문마다 신호를 받아
+              다시 읽게 하지 않은 것은, 그러면 복원이 바꾸는 것을 읽는 본문이 늘 때마다 그 배선을 잊는 자리가 생기기 때문이다. */}
           {(() => {
             const Body = PANEL_BODIES[tab]
-            return <Body projectId={props.projectId} pageId={props.pageId} canEdit={props.canEdit} />
+            return (
+              <Body key={props.restoredToken} projectId={props.projectId} pageId={props.pageId} canEdit={props.canEdit} />
+            )
           })()}
         </div>
       </PanelDraftsProvider>

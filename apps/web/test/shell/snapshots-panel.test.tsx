@@ -28,6 +28,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { useNavigate } from 'react-router'
 import type { WbNode } from '@wirebound/schema'
+import { systemTheme } from '@wirebound/themes'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type {
   PageDetail,
@@ -1168,6 +1169,126 @@ describe('복원 뒤 재동기화', () => {
 
     // **두 번이면 신호를 안 소비한 것이다.**
     expect(getPage.mock.calls.map((call) => String(call[1]))).toEqual([PAGE_ID])
+  })
+
+  /**
+   * **복원은 문서와 트리 말고도 코멘트 · 페이지 설명 · 레이아웃의 테마 선택을 바꾼다**(`services/restore-plan.ts`의 단계 표).
+   * 아래 넷은 그 셋을 떠 있는 채로 복원한 판이다 — 탭을 다녀와야 맞으면 안 된다.
+   */
+  it('코멘트 탭이 떠 있으면 목록을 다시 받는다 — 복원이 되살린 코멘트가 보인다', async () => {
+    const withNode: WbNode = { id: 'n-old', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: { content: '가' } }] }
+    let lists = 0
+    await openPage(pageDoc(withNode), {
+      apiOverrides: {
+        getProject: async () => project('owner'),
+        listSnapshots: async () => [snapshot()],
+        restoreSnapshot: async () => restoreResult(),
+        listComments: async () => {
+          lists += 1
+          return lists === 1
+            ? []
+            : [
+                {
+                  id: 'c1',
+                  nodeId: 'n_a',
+                  body: '되살아난 코멘트',
+                  authorId: user.id,
+                  authorName: user.name,
+                  createdAt: '2026-08-12T09:00:00.000Z',
+                  updatedAt: '2026-08-12T09:00:00.000Z',
+                },
+              ]
+        },
+      },
+    })
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    await waitFor(() => expect(lists).toBe(1))
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+
+    expect(await screen.findByText('되살아난 코멘트')).toBeTruthy()
+    expect(lists).toBe(2)
+  })
+
+  it('페이지 설명 탭이 떠 있으면 설명을 다시 받는다', async () => {
+    // 캔버스와 설명 탭이 **각자** `getPage`를 부르므로 부른 수가 아니라 복원 여부로 가른다.
+    let restored = false
+    await openPage(pageDoc(옛뿌리), {
+      apiOverrides: {
+        getProject: async () => project('owner'),
+        listSnapshots: async () => [snapshot()],
+        restoreSnapshot: async () => {
+          restored = true
+          return restoreResult()
+        },
+        getPage: async (_projectId, pageId) =>
+          restored
+            ? { ...pageDetail(pageId, pageDoc(새뿌리)), description: '스냅샷의 설명' }
+            : pageDetail(pageId, pageDoc(옛뿌리)),
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+    fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+    const box = (await screen.findByRole('textbox', { name: '페이지 설명' })) as HTMLTextAreaElement
+    expect(box.value).toBe('')
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+
+    await waitFor(() =>
+      expect((screen.getByRole('textbox', { name: '페이지 설명' }) as HTMLTextAreaElement).value).toBe('스냅샷의 설명'),
+    )
+  })
+
+  /** 고르개와 캔버스는 테마를 **각자** 읽는다(`theme/theme-picker.tsx` 머리말 «고른 값이 캔버스에 닿는 경로»). 둘 다 따로 잰다. */
+  function themeAfterRestore(): Partial<ApiClient> {
+    const admin = systemTheme('admin')
+    const portal = systemTheme('portal')
+    if (admin === undefined || portal === undefined) throw new Error('시스템 테마가 없다')
+    let restored = false
+    return {
+      listProjectThemes: async () => [
+        { id: 'th-admin', system: true, theme: admin },
+        { id: 'th-portal', system: true, theme: portal },
+      ],
+      getProjectTheme: async () =>
+        restored
+          ? { themeId: 'th-portal', theme: portal, issues: [] }
+          : { themeId: 'th-admin', theme: admin, issues: [] },
+      restoreSnapshot: async () => {
+        restored = true
+        return restoreResult()
+      },
+    }
+  }
+
+  it('테마 고르개가 복원이 되돌린 선택을 다시 읽는다', async () => {
+    const { getPage } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
+    await openConfirm({ getPage, ...themeAfterRestore() })
+    const select = screen.getByRole<HTMLSelectElement>('combobox', { name: '테마' })
+    await waitFor(() => expect(select.value).toBe('th-admin'))
+
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+
+    await waitFor(() => expect(select.value).toBe('th-portal'))
+  })
+
+  it('캔버스가 복원이 되돌린 테마로 다시 그린다', async () => {
+    const { getPage } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
+    await openConfirm({ getPage, ...themeAfterRestore() })
+    const sheet = (): string => document.head.querySelector('style[data-wb-style="theme"]')?.textContent ?? ''
+    await waitFor(() => expect(sheet()).not.toBe(''))
+    const before = sheet()
+
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+    await waitForNode('n-new')
+
+    await waitFor(() => expect(sheet()).not.toBe(before))
   })
 
   it('스냅샷을 저장하는 것만으로는 다시 읽지 않는다 — 프로젝트가 안 바뀌었다', async () => {
