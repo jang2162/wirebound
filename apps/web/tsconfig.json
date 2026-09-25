@@ -13,6 +13,7 @@
   // `vite.config.ts`는 여기 없다 — `tsconfig.node.json`이 든다. 그 파일만 `types: ["node"]`를
   // 요구하기 때문이고, **이 프로그램에서 Node 전역이 실제로 막히지는 않는다**(그쪽 주석에
   // 잰 값이 있다).
-  "include": ["src", "test", "config"],
+  // **`build-test`도 든다.** 안 들면 그 파일이 타입검사를 아예 안 받는다(`apps/api/tsconfig.json`의 같은 줄).
+  "include": ["src", "test", "config", "build-test"],
   "references": [{ "path": "../../packages/schema" }, { "path": "../../packages/renderer" }]
 }

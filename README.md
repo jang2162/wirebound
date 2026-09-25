@@ -982,6 +982,7 @@ pnpm test          # 규격·값·인구조사.  Postgres 가 필요하다 (브�
 pnpm typecheck     # 컴파일
 pnpm build         # packages/* 의 dist
 pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브라우저 (없으면 건너뛴다)
+pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만 — apps/web/build-test (Postgres · 브라우저가 없으면 건너뛴다)
 ```
 
 - **`pnpm test`는 실제 Postgres 에 붙는다.** 컨테이너가 healthy 여야 하고 테스트 DB(기본 `wirebound_test`)가 있어야 한다(「테스트가 이유를 알기 어려운 접속 에러로 죽는다」).
@@ -992,6 +993,12 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
   통과 · 종료 0** 이다.
 - **`pnpm test`는 브라우저를 안 띄운다.** 진짜 브라우저를 재는 것은 `pnpm test:build` 하나이고, 브라우저가 없으면 **건너뛰고 그렇다고 말한다**(빈 캐시로 돌리면 **종료 0** 이고 건너뛴 수를 `skipped` 로 찍는다).
 - **`pnpm test:build`는 시작할 때 패키지를 다시 빌드한다**(`vitest.config.ts`가 *"tsdown 재빌드를 `beforeAll`에서 돈다"*고 적는다). 그래서 넷 중 이것만 다른 셋과 결이 다르다 — 이미 빌드된 자리에서도 **10초 남짓** 든다(`time pnpm test:build` 로 잰다).
+- **`pnpm test:browser`는 에디터를 헤드리스 Chrome 으로 모는 판이다** — jsdom 이 못 재는 포커스 · blur · 클릭 좌표 · 두 연결의
+  도착 순서를 잰다. 파일마다 일회용 DB(`apps/api/.env` 의 `DATABASE_URL` 컨테이너에 새로 만들고 끝에 지운다) · api · vite ·
+  Chrome 을 빈 포트로 띄우고 거둔다 — 워크트리 여럿이 동시에 돌려도 안 부딪힌다. `pnpm test:build`도 이 파일들을 돈다.
+  브라우저는 시스템 Chrome 을 먼저, 없으면 playwright-core 캐시를 띄워 보고, `EDITOR_BROWSER_PATH`를 주면 그것만 띄워 본다.
+  Postgres 에 못 붙거나 브라우저가 안 뜨면 까닭을 한 줄 찍고 건너뛴다. **워크트리에서 `DATABASE_URL`이 compose 기본 포트면
+  멈춘다** — 최상위 체크아웃의 컨테이너에 DB 를 만들지 않는다.
 - 파일 하나만 돌리려면 `pnpm vitest run <경로>`, api 만 돌리려면 `pnpm vitest run --project api`.
 
 > **브라우저가 없을 때 `test:build`가 찍는 줄은 「넣는 법」 절의 명령을 권한다.** 그 스모크
