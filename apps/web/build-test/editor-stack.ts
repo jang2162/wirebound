@@ -12,7 +12,7 @@
  * | DB | `apps/api/.env`(셸이 이긴다)의 `DATABASE_URL` 이 가리키는 컨테이너에 **새 DB 하나** | 워크트리 dev DB · 테스트 DB 를 안 건드린다. 끝에 `DROP … WITH (FORCE)` |
  * | 계정 | `migrate latest` 의 시딩(`SEED_USER_*`) — 서버와 같은 길 | 비밀번호는 `randomBytes` 로 만들어 자식의 `env` 로만 넘긴다. 명령 글자에 안 싣는다 |
  * | api | `tsx --conditions=development src/main.ts` · 빈 포트 | 패키지를 `dist` 가 아니라 소스로 읽는다 — `pnpm test:build` 의 다른 파일이 `dist` 를 비웠다 채우는 것과 무관하다 |
- * | 웹 | `vite --port <빈 포트> --strictPort` · 셸 `PORT` 로 프록시 대상을 준다 | 셸이 `apps/api/.env` 를 이긴다(`config/api-proxy-target.ts`) |
+ * | 웹 | `vite --port <빈 포트> --strictPort`(운영 번들 판이면 `vite preview`) · 셸 `PORT` 로 프록시 대상을 준다 | 셸이 `apps/api/.env` 를 이긴다(`config/api-proxy-target.ts`) |
  * | 브라우저 | `playwright-core` + 아래 `chromeCandidates` 가운데 **실제로 뜨는 것** | 사람의 브라우저 · 공유 프로필을 안 쓴다 |
  *
  * **포트를 고정하지 않는다** — 워크트리 여럿이 동시에 돌려도 부딪히지 않는다. 쿠키 이름도 api 포트를 붙여 짓고 케이스는 그
@@ -24,17 +24,25 @@
  * 잰다 — `lsof` 가 없는 기계에서도 선다) · 만든 DB. 케이스 파일의 `afterAll` 이 뒤 값 0 과 앞 값(카나리아)을 단언한다. 판을 세우다
  * 던져도 그때까지 띄운 것을 거둔다. vitest 가 신호로 죽으면 `process.on('exit')` 이 그룹째 `SIGKILL` 한다.
  *
+ * **`SIGKILL` 로 죽은 실행의 DB 는 다음 판이 거둔다**(`sweepStaleBrowserDatabases`) — 죽은 프로세스는 `exit` 처리기도 못 돌린다.
+ * 산 실행(같은 워크트리에서 동시에 도는 `pnpm test:browser`)의 것은 안 지운다 — 이름에 적은 pid 가 살아 있으면 둔다. 그때 떼어
+ * 띄운 그룹(api · vite)은 스스로 끝난다 — 띄운 이 프로세스가 사라지면 그룹째 죽는 줄(`group-lifeline.mjs`)에 매달아 띄운다.
+ *
  * # 이 판이 못 재는 것
  *
- * - **운영 번들.** vite dev 로 띄운다 — 모듈이 쪼개져 오고 React 개발 판이다. 타이밍이 운영과 다를 수 있다.
- * - **망 지연.** 모두 루프백이다 — 두 연결의 지연 차가 0 이라 도착 순서가 늘 보내는 순서다. 겨룸을 재는 케이스는 `startWsDelay`
- *   로 한쪽 연결만 늦춘다.
+ * - **운영 번들은 기본으로 안 잰다.** vite dev 로 띄운다 — 모듈이 쪼개져 오고 React 개발 판이라 `StrictMode` 가 이펙트를 두 번
+ *   돌린다(페이지를 열 때 조회가 두 번 나간다 — 운영 번들은 한 번). 셸의 `EDITOR_STACK_BUNDLE=build` 면 `vite build` + `vite
+ *   preview`(같은 프록시)로 띄운다 — 이펙트 · 마운트 순서를 바꾸는 트랙은 그 판으로 한 번 더 돈다. [Chrome] 이 디렉터리의 판 전부가
+ *   두 판에서 같은 판정이었다(판 하나가 `vite build` 한 번만큼 늦다).
+ * - **망 지연 · 끊김.** 모두 루프백이다 — 두 연결의 지연 차가 0 이라 도착 순서가 늘 보내는 순서다. 겨룸을 재는 케이스는 `startWsDelay`
+ *   로 한쪽 연결만 늦추고, 끊김을 재는 케이스는 `startCutProxy` 로 고른 연결만 끊는다.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
-import { lstatSync, readFileSync } from 'node:fs'
+import { createHash, randomBytes } from 'node:crypto'
+import { lstatSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import net from 'node:net'
+import { hostname, tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
 import pg from 'pg'
@@ -43,6 +51,13 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 const API_DIR = fileURLToPath(new URL('../../api/', import.meta.url))
 const WEB_DIR = fileURLToPath(new URL('../', import.meta.url))
 const TSX = `${API_DIR}node_modules/.bin/tsx`
+const LIFELINE = fileURLToPath(new URL('./group-lifeline.mjs', import.meta.url))
+
+/**
+ * 웹을 무엇으로 띄우나 — 기본은 vite dev. 셸의 `EDITOR_STACK_BUNDLE=build` 면 `vite build` 한 번 뒤 `vite preview`(같은 프록시 설정)
+ * 로 **운영 번들**을 띄운다. 머리말 「이 판이 못 재는 것」의 «운영 번들».
+ */
+const BUNDLE: 'dev' | 'build' = process.env.EDITOR_STACK_BUNDLE === 'build' ? 'build' : 'dev'
 const VITE = `${WEB_DIR}node_modules/.bin/vite`
 
 /**
@@ -154,9 +169,36 @@ export interface Session {
 }
 
 export interface RowHold {
-  /** 이 행을 기다리는 다른 연결이 `count` 개가 될 때까지 기다린다 — 안 서면 던진다. 요청이 정말 줄 섰는지의 카나리아다. */
+  /**
+   * 이 잠금 뒤에 줄 선 연결이 `count` 개가 될 때까지 기다린다 — 안 서면 던진다. 요청이 정말 줄 섰는지의 카나리아다. **사슬째 센다** —
+   * 한 행에 둘째로 줄 선 연결은 쥔 연결이 아니라 앞의 대기자를 기다린다(`pg_blocking_pids`). DB 전체의 대기자를 세지 않는다 — 다른
+   * 행의 줄까지 읽는다(`CLAUDE.md` «경주를 재는 케이스는 두 요청이 겹친 판만 센다»).
+   */
   waitForWaiters(count?: number, timeoutMs?: number): Promise<void>
   release(): Promise<void>
+}
+
+/** 쥔 연결 뒤에 **줄을 서는** 잠금(`queueRow`). 줄에 섰는지는 앞 잠금의 `waitForWaiters` 로 센다. */
+export interface QueuedRowHold {
+  /** 앞의 잠금이 풀려 이 연결이 행을 쥐었을 때 풀린다. */
+  readonly acquired: Promise<void>
+  /** 쥔 뒤에 놓는다 — 아직 줄에 서 있으면 쥘 때까지 기다렸다가 놓는다. */
+  release(): Promise<void>
+}
+
+/**
+ * 브라우저와 웹(vite) 사이의 TCP 프록시 — **고른 연결만 끊는다.** 연결마다 마지막 요청 줄(`GET /api/…/ws` · `PATCH …`)을 적어 두고
+ * 그 줄로 고른다. 모든 소켓을 끊으면 vite 의 HMR 소켓까지 끊겨 페이지가 새로고침되고 측정이 사라진다 — 그래서 요청 줄로 고른다
+ * (`CLAUDE.md` «실브라우저로 끊김을 잴 때는 api 연결만 골라 끊는다»). 새 연결은 늘 그대로 흐른다.
+ */
+export interface CutProxy {
+  /** 이 주소로 탭을 연다(`openTab` 의 `origin`). */
+  readonly origin: string
+  /** 요청 줄이 `match` 에 맞는 **지금 열린** 연결의 브라우저 → 서버 바이트를 버린다(연결은 산다). 맞은 연결 수. */
+  blackhole(match: RegExp): number
+  /** 요청 줄이 `match` 에 맞는 지금 열린 연결을 RST 로 끊는다. 맞은 연결 수. */
+  reset(match: RegExp): number
+  close(): Promise<void>
 }
 
 export interface Census {
@@ -192,8 +234,15 @@ export interface EditorStack {
   query<Row extends Record<string, unknown> = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<Row[]>
   /** 행 하나를 `FOR UPDATE` 로 쥔다 — 그 행을 쓰는 요청이 서버에서 줄 선다. */
   holdRow(table: 'pages', id: string): Promise<RowHold>
+  /**
+   * 그 행에 `FOR UPDATE` 를 **보내기만 하고** 돌아온다 — 앞의 잠금이 쥐고 있으면 줄에 선다. 요청 둘 사이에 끼워 뒤 요청을 앞 요청이
+   * 커밋한 뒤에도 붙잡아 두는 데 쓴다.
+   */
+  queueRow(table: 'pages', id: string): Promise<QueuedRowHold>
   /** 브라우저 → 웹 방향의 WS 연결(요청 줄에 `/ws`) 바이트만 `ms` 늦추는 프록시. 그 밖의 연결은 그대로 지난다. */
   startWsDelay(ms: number): Promise<{ origin: string; close(): Promise<void> }>
+  /** 고른 연결만 끊는 프록시(`CutProxy`). */
+  startCutProxy(): Promise<CutProxy>
   close(): Promise<Teardown>
 }
 
@@ -261,9 +310,17 @@ process.on('exit', () => {
   }
 })
 
-/** 자기 프로세스 그룹으로 띄운다(`detached`) — 거둘 때 손자(tsx 의 node · vite 의 esbuild)까지 그룹째 보낸다. */
+/**
+ * 자기 프로세스 그룹으로 띄운다(`detached`) — 거둘 때 손자(tsx 의 node · vite 의 esbuild)까지 그룹째 보낸다. 그룹의 머리는
+ * `group-lifeline.mjs` 다 — 이 프로세스가 `SIGKILL` 로 사라지면 그룹째 끝낸다(머리말 «끝에 무엇을 재나»).
+ */
 function spawnGroup(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): Spawned {
-  const child = spawn(command, args, { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(process.execPath, [LIFELINE, String(process.pid), command, ...args], {
+    cwd,
+    env,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
   if (child.pid !== undefined) liveGroups.add(child.pid)
   let tail = ''
   const keep = (chunk: Buffer) => {
@@ -311,12 +368,86 @@ function cookieFrom(response: Response): string {
 }
 
 /**
+ * 이 기계의 표 — DB 이름에 싣는다. 같은 DB 컨테이너를 **다른 pid 공간**(리눅스 컨테이너 안의 vitest)이 쓰면 그 실행의 pid 는 여기서
+ * 늘 죽은 것으로 보인다 — 표가 다르면 pid 를 안 믿고 나이로 가른다.
+ */
+const HOST_TAG = createHash('sha256').update(hostname()).digest('hex').slice(0, 8)
+
+/**
+ * 표가 다른 기계의 DB 는 이만큼 지나야 지운다 — 판 하나가 도는 시간(수 분)보다 넉넉히 길다.
+ */
+export const STALE_BROWSER_DATABASE_MS = 60 * 60 * 1000
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    // EPERM 은 남의 프로세스가 그 pid 로 살아 있다는 뜻이다.
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/**
+ * 이 판이 만드는 DB 이름 — `wb_browser_<기계 표>_<pid>_<만든 때(초 · 36진)>_<무작위>`. 앞 판의 것을 거둘 때 이 셋으로 가른다
+ * (`sweepStaleBrowserDatabases`).
+ */
+export function browserDatabaseName(options: { now?: number; pid?: number; host?: string } = {}): string {
+  const made = Math.floor((options.now ?? Date.now()) / 1000).toString(36)
+  return `wb_browser_${options.host ?? HOST_TAG}_${options.pid ?? process.pid}_${made}_${randomBytes(4).toString('hex')}`
+}
+
+/**
+ * **앞 판이 남긴 `wb_browser_*` DB 를 지운다.** 이 기계의 것은 이름의 pid 가 죽었으면 곧바로, 다른 기계(표가 다르다)의 것은 만든 지
+ * `STALE_BROWSER_DATABASE_MS` 가 지났으면. 표 · 만든 때가 없는 옛 이름(`wb_browser_<pid>_<무작위>`)은 이 기계의 것으로 본다. 이름 꼴이
+ * 아닌 DB 는 안 본다.
+ */
+export async function sweepStaleBrowserDatabases(
+  admin: pg.Client,
+  options: { now?: number; alive?: (pid: number) => boolean } = {},
+): Promise<{ dropped: string[]; kept: string[] }> {
+  const now = options.now ?? Date.now()
+  const alive = options.alive ?? pidAlive
+  const names = (await admin.query<{ datname: string }>("select datname from pg_database where datname like 'wb\\_browser\\_%' order by datname")).rows
+  const dropped: string[] = []
+  const kept: string[] = []
+  for (const { datname } of names) {
+    const parts = datname.slice('wb_browser_'.length).split('_')
+    let stale: boolean
+    if (parts.length === 2 && /^\d+$/.test(parts[0]!) && /^[0-9a-f]{8}$/.test(parts[1]!)) {
+      stale = !alive(Number(parts[0]))
+    } else if (parts.length === 4 && /^[0-9a-f]{8}$/.test(parts[0]!) && /^\d+$/.test(parts[1]!) && /^[0-9a-z]+$/.test(parts[2]!)) {
+      stale = parts[0] === HOST_TAG ? !alive(Number(parts[1])) : now - parseInt(parts[2]!, 36) * 1000 >= STALE_BROWSER_DATABASE_MS
+    } else {
+      continue
+    }
+    if (!stale) {
+      kept.push(datname)
+      continue
+    }
+    await admin.query(`drop database if exists "${datname}" with (force)`)
+    dropped.push(datname)
+  }
+  return { dropped, kept }
+}
+
+/**
  * 판을 세운다. **도중에 던지면 그때까지 띄운 것을 거두고 다시 던진다.**
  */
 export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok: true }>): Promise<EditorStack> {
-  const database = `wb_browser_${process.pid}_${randomBytes(4).toString('hex')}`
+  const database = browserDatabaseName()
   const admin = new pg.Client({ connectionString: prerequisite.databaseUrl })
   await admin.connect()
+  // 거두기가 실패해도 판은 세운다 — 남은 DB 는 판을 틀리게 하지 않고 자리만 먹는다. 실패는 말한다.
+  const swept = await sweepStaleBrowserDatabases(admin).catch((error: unknown) => {
+    // eslint-disable-next-line no-console
+    console.log(`[에디터 실브라우저 판] 앞 판이 남긴 DB 를 거두지 못했다 — ${(error as Error).message}`)
+    return undefined
+  })
+  if (swept !== undefined && swept.dropped.length > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[에디터 실브라우저 판] 앞 판이 남긴 DB ${swept.dropped.length}개를 지웠다 — ${swept.dropped.join(', ')}`)
+  }
   const spawned: Spawned[] = []
   /** 띄운 프로세스 그룹 — 거둔 뒤에도 센다(`spawned` 는 거두며 빈다). */
   const groups: number[] = []
@@ -325,6 +456,8 @@ export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok:
   let db: pg.Client | undefined
   let browser: Browser | undefined
   let created = false
+  /** 운영 번들 판이면 `vite build` 가 쓴 자리. */
+  let builtWeb: string | undefined
 
   const census = async (): Promise<Census> => {
     const listeningPorts: number[] = []
@@ -341,6 +474,7 @@ export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok:
       await db?.end().catch(() => {})
       for (const one of spawned.splice(0).reverse()) await stopGroup(one)
       if (created) await admin.query(`drop database if exists "${database}" with (force)`)
+      if (builtWeb !== undefined) rmSync(builtWeb, { recursive: true, force: true })
       return { before, after: await census() }
     } finally {
       await admin.end().catch(() => {})
@@ -394,11 +528,22 @@ export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok:
     const webPort = await freePort()
     ports.push(webPort)
     const webUrl = `http://127.0.0.1:${webPort}`
+    const serve = ['--port', String(webPort), '--strictPort', '--host', '127.0.0.1']
+    if (BUNDLE === 'build') {
+      builtWeb = mkdtempSync(join(tmpdir(), 'wb-browser-web-'))
+      const built = spawnSync(VITE, ['build', '--outDir', builtWeb, '--emptyOutDir'], {
+        cwd: WEB_DIR,
+        env: childEnv({ NODE_ENV: 'production' }),
+        encoding: 'utf8',
+        timeout: 180_000,
+      })
+      if (built.status !== 0) throw new Error(`vite build 종료 ${built.status}\n${built.stdout}\n${built.stderr}`)
+    }
     const web = spawnGroup(
       VITE,
-      ['--port', String(webPort), '--strictPort', '--host', '127.0.0.1'],
+      BUNDLE === 'build' ? ['preview', '--outDir', builtWeb!, ...serve] : serve,
       WEB_DIR,
-      childEnv({ NODE_ENV: 'development', PORT: String(apiPort) }),
+      childEnv({ NODE_ENV: BUNDLE === 'build' ? 'production' : 'development', PORT: String(apiPort) }),
     )
     spawned.push(web)
     if (web.child.pid !== undefined) groups.push(web.child.pid)
@@ -481,23 +626,39 @@ export async function startEditorStack(prerequisite: Extract<Prerequisite, { ok:
         closers.push(release)
         return {
           async waitForWaiters(count = 1, timeoutMs = 10_000) {
-            // 쥔 백엔드를 기다리는 연결을 센다 — DB 전체의 대기자를 세면 다른 행의 줄까지 읽는다.
-            await waitUntil(`행 ${id} 에 줄 선 요청 ${count}`, undefined, async () => {
-              const rows = await stackDb.query(
-                'select count(*)::int as n from pg_stat_activity where pid <> pg_backend_pid() and $1 = any(pg_blocking_pids(pid))',
-                [pid],
-              )
-              return rows.rows[0].n >= count
-            }, timeoutMs)
+            await waitUntil(`행 ${id} 에 줄 선 요청 ${count}`, undefined, async () => (await chainedWaiters(stackDb, pid)) >= count, timeoutMs)
           },
           release,
         }
+      },
+      async queueRow(table, id) {
+        const holder = new pg.Client({ connectionString: databaseUrl })
+        await holder.connect()
+        await holder.query('begin')
+        // 기다리는 동안 이 연결로는 아무것도 못 보낸다 — 잠금 질의를 보내고 결과를 붙든다(pg 는 질의를 차례로 보낸다).
+        const acquired = holder.query(`select id from ${table} where id = $1 for update`, [id]).then(() => undefined)
+        let released = false
+        const release = async () => {
+          if (released) return
+          released = true
+          await acquired.catch(() => {})
+          await holder.query('commit').catch(() => {})
+          await holder.end().catch(() => {})
+        }
+        closers.push(release)
+        return { acquired, release }
       },
       async startWsDelay(ms) {
         const proxy = await startWsDelayProxy(webPort, ms)
         ports.push(proxy.port)
         closers.push(proxy.close)
         return { origin: `http://127.0.0.1:${proxy.port}`, close: proxy.close }
+      },
+      async startCutProxy() {
+        const proxy = await startCutProxy(webPort)
+        ports.push(proxy.port)
+        closers.push(proxy.close)
+        return { origin: `http://127.0.0.1:${proxy.port}`, blackhole: proxy.blackhole, reset: proxy.reset, close: proxy.close }
       },
       close: teardown,
     }
@@ -556,6 +717,97 @@ function startWsDelayProxy(targetPort: number, ms: number): Promise<{ port: numb
           if (closed) return Promise.resolve()
           closed = true
           for (const socket of sockets) socket.destroy()
+          return new Promise((done) => server.close(() => done()))
+        },
+      })
+    })
+  })
+}
+
+/**
+ * `rootPid` 가 쥔 잠금 뒤에 **사슬로** 줄 선 연결 수 — `rootPid` 를 기다리는 연결, 그 연결을 기다리는 연결 … 을 다 센다.
+ */
+async function chainedWaiters(db: pg.Client, rootPid: number): Promise<number> {
+  const rows = (
+    await db.query<{ pid: number; blockers: number[] }>(
+      "select pid, pg_blocking_pids(pid) as blockers from pg_stat_activity where pid <> pg_backend_pid() and wait_event_type = 'Lock'",
+    )
+  ).rows
+  const chain = new Set([rootPid])
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const row of rows) {
+      if (!chain.has(row.pid) && row.blockers.some((blocker) => chain.has(blocker))) {
+        chain.add(row.pid)
+        grew = true
+      }
+    }
+  }
+  return chain.size - 1
+}
+
+/** `CutProxy` 의 몸통 — 브라우저 → 웹 한 연결마다 위쪽 연결 하나. */
+function startCutProxy(targetPort: number): Promise<{
+  port: number
+  blackhole(match: RegExp): number
+  reset(match: RegExp): number
+  close(): Promise<void>
+}> {
+  interface Link {
+    readonly client: net.Socket
+    readonly upstream: net.Socket
+    line: string
+    swallow: boolean
+  }
+  const links = new Set<Link>()
+  const server = net.createServer((client) => {
+    const link: Link = { client, upstream: net.connect(targetPort, '127.0.0.1'), line: '', swallow: false }
+    links.add(link)
+    client.on('data', (chunk) => {
+      const request = /^(GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS) [^\r\n]*/.exec(chunk.toString('latin1'))
+      if (request !== null) link.line = request[0]
+      if (!link.swallow) link.upstream.write(chunk)
+    })
+    link.upstream.on('data', (chunk) => client.write(chunk))
+    const end = () => {
+      links.delete(link)
+      client.destroy()
+      link.upstream.destroy()
+    }
+    client.on('error', end)
+    link.upstream.on('error', end)
+    client.on('close', end)
+    link.upstream.on('close', end)
+  })
+  const pick = (match: RegExp) => [...links].filter((link) => match.test(link.line))
+  let closed = false
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      resolve({
+        port: typeof address === 'object' && address !== null ? address.port : 0,
+        blackhole(match) {
+          const picked = pick(match)
+          for (const link of picked) link.swallow = true
+          return picked.length
+        },
+        reset(match) {
+          const picked = pick(match)
+          for (const link of picked) {
+            links.delete(link)
+            link.client.resetAndDestroy()
+            link.upstream.destroy()
+          }
+          return picked.length
+        },
+        close() {
+          if (closed) return Promise.resolve()
+          closed = true
+          for (const link of links) {
+            link.client.destroy()
+            link.upstream.destroy()
+          }
           return new Promise((done) => server.close(() => done()))
         },
       })

@@ -292,9 +292,8 @@ async function server(stack: EditorStack, session: Session, path: string): Promi
 }
 
 /**
- * 이 판의 DB 에서 잠금을 기다리는 연결이 `count` 개가 될 때까지 기다린다. **사슬째 센다** — 한 행에 둘째로 줄 선 요청은 쥔 연결이
- * 아니라 첫째 대기자를 기다린다(`holdRow` 의 `waitForWaiters` 는 쥔 연결을 곧바로 기다리는 것만 센다). 이 DB 는 이 판의 것이라
- * 다른 대기자가 없다.
+ * 이 판의 DB 에서 잠금을 기다리는 연결이 `count` 개가 될 때까지 기다린다. **DB 전체의 대기자를 센다** — 이 DB 는 이 판의 것이라
+ * 다른 대기자가 없다(사슬로 세는 자는 `holdRow` 의 `waitForWaiters`).
  */
 async function waitLocked(stack: EditorStack, count: number): Promise<void> {
   await poll(

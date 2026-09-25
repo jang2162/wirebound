@@ -1003,7 +1003,9 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
   Chrome 을 빈 포트로 띄우고 거둔다 — 워크트리 여럿이 동시에 돌려도 안 부딪힌다. `pnpm test:build`도 이 파일들을 돈다.
   브라우저는 시스템 Chrome 을 먼저, 없으면 playwright-core 캐시를 띄워 보고, `EDITOR_BROWSER_PATH`를 주면 그것만 띄워 본다.
   Postgres 에 못 붙거나 브라우저가 안 뜨면 까닭을 한 줄 찍고 건너뛴다. **워크트리에서 `DATABASE_URL`이 compose 기본 포트면
-  멈춘다** — 최상위 체크아웃의 컨테이너에 DB 를 만들지 않는다.
+  멈춘다** — 최상위 체크아웃의 컨테이너에 DB 를 만들지 않는다. 웹은 vite dev 로 띄운다 — `EDITOR_STACK_BUNDLE=build pnpm
+  test:browser` 는 `vite build` + `vite preview`(운영 번들)로 띄운다(dev 는 `StrictMode` 로 이펙트가 두 번 돈다). 실행이
+  `SIGKILL` 로 죽어도 그 api · vite 는 스스로 끝나고, 남은 DB(`wb_browser_*`)는 다음 실행이 지운다.
 - 파일 하나만 돌리려면 `pnpm vitest run <경로>`, api 만 돌리려면 `pnpm vitest run --project api`.
 
 > **브라우저가 없을 때 `test:build`가 찍는 줄은 「넣는 법」 절의 명령을 권한다.** 그 스모크
