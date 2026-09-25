@@ -2002,6 +2002,131 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
 })
 
 /**
+ * **이미 멤버인 사람을 다시 넣으면 그 사람의 토큰 행을 잡지 않는다**(`repos/members.ts`의 `insertMember` — 멤버 행을 먼저 읽는다).
+ * 토큰을 지우는 문장(`deleteStaleMemberTokens`)이 `FOR UPDATE`로 행을 잡은 **뒤에야** 삽입의 PK 위반(409)이 났다 — 그 토큰으로 도는
+ * 요청을 기다리고, 잡은 동안은 그 토큰의 요청(인증의 `last_used_at` 갱신)을 세웠다.
+ *
+ * - **토큰 요청이 먼저** — owner 밥이 **토큰으로** 캐럴의 역할을 바꾸는 쓰기를 owner 행 줄에 세운다(토큰 행 `KEY SHARE`를 첫 잠금으로
+ *   쥔 채다 — `OwnerRecheck` «잠금 순서»). 그 사이 앨리스가 밥을 다시 넣는다.
+ * - **다시 넣기가 먼저** — 다시 넣기를 멤버 행 삽입 앞에 세우고(고치기 전에는 그 자리가 토큰 행을 쥔 뒤다) 밥의 토큰으로 읽는다.
+ *
+ * **먼저 읽는 것이 여는 판 — 없는 걸 본 뒤 넣는 사이 다른 초대가 끼는 판.** 읽기는 잠그지 않으므로 새 잠금이 없다. 끼어든 초대는
+ * 삽입의 PK 위반이 그대로 409 로 잡는다. 두 방향(앞 초대가 삽입 앞 · 삽입 뒤에 선 사이 뒤 초대)을 세운다. 대조(읽기를 뗀 판)는
+ * 두 방향 모두 같은 답 · 같은 줄이다 — 이 둘은 고치기 전에도 초록인 성질 잠금이다.
+ */
+describe('이미 멤버인 사람을 다시 넣으면 — 토큰 행을 잡지 않는다', () => {
+  const invite = (ctx: RealApiContext, fx: { projectId: string; alice: SignedUpUser }, email: string) =>
+    track(ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/members`, cookies: fx.alice.cookie, payload: { email, role: 'editor' } }))
+
+  it('토큰 요청이 먼저 — 그 요청이 토큰 행을 쥔 채 서 있어도 다시 넣기는 곧바로 409 · 그 요청은 제 차례에 200 · 교착 0', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'owner')
+      const deadlocksBefore = await deadlockCount()
+      const owners = queueLock(async (trx) => {
+        await lockOwnerIds(trx, fx.projectId)
+      })
+      let change: Fired | undefined
+      let readd: Fired | undefined
+      let settled = false
+      try {
+        await owners.acquired
+        change = track(
+          ctx.app.inject({
+            method: 'PATCH',
+            url: `/api/projects/${fx.projectId}/members/${fx.carol.user.id}`,
+            headers: { authorization: fx.bobToken },
+            payload: { role: 'viewer' },
+          }),
+        )
+        await waitForLockWaiter()
+        // 판이 섰는가 — 역할 변경이 owner 행 줄에 섰다.
+        expect(change.done()).toBe(false)
+        readd = invite(ctx, fx, fx.bob.user.email)
+        settled = await settlesWithin(readd, 1_000)
+      } finally {
+        await owners.release()
+      }
+      const [changed, readded] = await Promise.all([change.promise, readd.promise])
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect([readded.status, changed.status]).toEqual([409, 200])
+      expect(settled).toBe(true)
+      expect(await roleOf(fx.projectId, fx.carol.user.id)).toBe('viewer')
+    })
+  }, 60_000)
+
+  it('다시 넣기가 먼저 — 밥의 토큰 읽기가 다시 넣기를 안 기다린다 · 다시 넣기 409 · 교착 0', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'editor')
+      const deadlocksBefore = await deadlockCount()
+      // 고친 판의 다시 넣기는 이 질의에 안 닿는다 — 붙잡기는 짧은 한도 뒤에 조용히 거둔다.
+      const insert = ctx.proxy.holdQuery('insert into "project_members"', 1_500)
+      const readd = invite(ctx, fx, fx.bob.user.email)
+      let settled = false
+      let read: Fired | undefined
+      try {
+        await Promise.race([insert.held.catch(() => undefined), readd.promise])
+        read = track(ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`, headers: { authorization: fx.bobToken } }))
+        settled = await settlesWithin(read, 1_000)
+      } finally {
+        insert.release()
+      }
+      const [readded, got] = await Promise.all([readd.promise, read.promise])
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect([readded.status, got.status]).toEqual([409, 200])
+      expect(settled).toBe(true)
+    })
+  }, 60_000)
+
+  it('없는 사람을 둘이 함께 넣으면 — 앞 넣기가 삽입 앞에 선 사이 뒤 넣기: 뒤 201 · 앞 409 · 뒤는 줄에 안 선다 · 교착 0', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'editor')
+      const dave = await signup(ctx)
+      const deadlocksBefore = await deadlockCount()
+      const insert = ctx.proxy.holdQuery('insert into "project_members"')
+      const first = invite(ctx, fx, dave.user.email)
+      let second: Fired | undefined
+      let queued = true
+      try {
+        await insert.held
+        second = invite(ctx, fx, dave.user.email)
+        queued = !(await settlesWithin(second, 1_000))
+      } finally {
+        insert.release()
+      }
+      const [firstDone, secondDone] = await Promise.all([first.promise, second.promise])
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect(queued).toBe(false)
+      expect([firstDone.status, secondDone.status]).toEqual([409, 201])
+      expect(await roleOf(fx.projectId, dave.user.id)).toBe('editor')
+    })
+  }, 60_000)
+
+  it('없는 사람을 둘이 함께 넣으면 — 앞 넣기가 삽입 뒤(재확인 앞)에 선 사이 뒤 넣기: 앞 201 · 뒤 409 · 뒤는 앞의 멤버 행 줄에 선다 · 교착 0', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'editor')
+      const dave = await signup(ctx)
+      const deadlocksBefore = await deadlockCount()
+      const recheck = ctx.proxy.holdQuery(MEMBER_SHARE)
+      const first = invite(ctx, fx, dave.user.email)
+      let second: Fired | undefined
+      let queued = false
+      try {
+        await recheck.held
+        second = invite(ctx, fx, dave.user.email)
+        await settledOrQueued(second)
+        queued = !second.done()
+      } finally {
+        recheck.release()
+      }
+      const [firstDone, secondDone] = await Promise.all([first.promise, second.promise])
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect(queued).toBe(true)
+      expect([firstDone.status, secondDone.status]).toEqual([201, 409])
+    })
+  }, 60_000)
+})
+
+/**
  * **토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼저다**(`repos/members.ts`의 `OwnerRecheck` «잠금 순서»).
  *
  * 멤버 쓰기(역할 변경 · 제거)는 owner 행을 쥔다. 토큰 요청의 자격 재확인(토큰 행 `KEY SHARE`)을 그 **뒤에** 하면, 토큰 행을 owner

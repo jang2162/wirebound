@@ -126,10 +126,16 @@ export async function listMembers(db: DbHandle, projectId: string): Promise<Memb
  * `repos/users.ts`의 `findUserByEmail`로 먼저 사용자를 찾아 그 레코드를 넘긴다 —
  * 이 함수는 이메일을 모르고, "이미 가입한 사용자만 초대 대상"이라는 규칙도 몰라도 된다.
  *
- * 조회 후 삽입하지 않는다(`repos/users.ts`의 `insertUser`와 같은 이유) — 이미
- * 멤버인지는 삽입을 시도해 보고 복합 PK 위반으로 감지한다. `withTransaction`으로
- * 감싸 그 실패가 호출자의 트랜잭션(실제 요청이든 테스트 하네스든) 전체를
- * 오염시키지 않게 한다(`src/db/tx.ts` 참고).
+ * **이미 멤버인지 먼저 읽고, 멤버면 토큰을 건드리지 않고 409 다**(`DuplicateMemberError`). 아래 토큰 지우기는 행을 `FOR UPDATE`로
+ * 잡으므로, 읽지 않고 곧장 지우면 이미 멤버인 사람의 다시 넣기가 그 사람의 토큰으로 도는 요청을 기다린 뒤에야 PK 위반으로 409 가
+ * 되고, 잡은 동안은 그 토큰의 요청(인증의 `last_used_at` 갱신)을 세운다 — [api] 토큰으로 역할을 바꾸는 쓰기가 owner 행 줄에 선
+ * 동안 그 사람을 다시 넣으면 1s 안에 안 끝났다(고치기 전) → 곧바로 409.
+ *
+ * **읽기는 잠그지 않는다** — 새 잠금이 없으니 새 고리도 없다. 읽은 뒤 · 넣기 전에 다른 초대가 끼면 삽입의 복합 PK 위반이 여전히
+ * 409 로 잡는다(아래 `catch`). 대가: 그 사람을 빼는 제거가 도는 중이면 제거가 커밋하기 전의 판을 읽어 409 다(다시 보내면 201 —
+ * 읽지 않던 판은 토큰 행에서 제거를 기다린 뒤 201 이었다). 잰 값은 `test/guard-in-lock.test.ts`의 «이미 멤버인 사람을 다시 넣으면».
+ * `withTransaction`으로 감싸 PK 위반이 호출자의 트랜잭션(실제 요청이든 테스트 하네스든) 전체를 오염시키지 않게 한다
+ * (`src/db/tx.ts` 참고).
  *
  * **넣기 전에 그 사람의 이 프로젝트 토큰을 지운다**(`deleteStaleMemberTokens`) — 멤버가 아닌 사람은 토큰을 못 만들므로(발급이 커밋
  * 순간 멤버 행을 재확인한다 — `routes/tokens.ts`) 지금 남은 것은 **앞 멤버십의 것**이다. 제거가 지우지만 발급하자마자 쓰는 요청과
@@ -144,6 +150,13 @@ export async function insertMember(
 ): Promise<MemberRecord> {
   try {
     return await withTransaction(db, async (trx) => {
+      const existing = await trx
+        .selectFrom('project_members')
+        .select('user_id')
+        .where('project_id', '=', projectId)
+        .where('user_id', '=', user.id)
+        .executeTakeFirst()
+      if (existing !== undefined) throw new DuplicateMemberError()
       await deleteStaleMemberTokens(trx, projectId, user.id)
       const inserted = await trx
         .insertInto('project_members')
