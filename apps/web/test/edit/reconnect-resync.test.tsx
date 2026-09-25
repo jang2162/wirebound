@@ -417,12 +417,12 @@ describe('다시 붙으면 다시 읽는다', () => {
   })
 
   /**
-   * **번호가 같아도 문서가 다르면 싣는다.** 끊긴 사이 페이지가 지워졌다가 스냅샷 복원으로 같은 id 로 되살아나면 `head_seq`가
-   * 0 부터 다시 세고, 남이 편집해 번호가 내 것과 같아질 수 있다 — 복원 방송은 끊긴 동안 와서 못 받았다. 번호만 보고 안
-   * 싣으면 옛 문서가 남고, 자리(index) 기반인 다음 편집이 남의 노드를 덮는다(Chrome — `store/editor-store.ts`의
+   * **번호가 같아도 문서가 다르면 싣는다.** 서버는 한 페이지 id 에서 번호가 같으면 문서도 같게 센다(되살린 페이지도 옛 판본 뒤에서 —
+   * `apps/api/src/repos/pages.ts`의 `insertPageWithId`). 그래도 이 탭의 바탕은 프레임 · ack 를 얹어 지은 것이라 번호는 같고 문서는 다를
+   * 수 있다 — 번호만 보고 안 싣으면 그 바탕이 남고, 자리(index) 기반인 다음 편집이 남의 노드를 덮는다(`store/editor-store.ts`의
    * `holdsServerPage` 머리말). 위 케이스와 **번호가 같고 문서만 다르다.**
    */
-  it('번호가 같아도 문서가 다르면 싣는다 — 끊긴 사이 지워졌다 되살아난 페이지', async () => {
+  it('번호가 같아도 문서가 다르면 싣는다 — 이 탭의 바탕이 서버 판과 갈린 판', async () => {
     await reconnectWithUndo(HEAD_SEQ, doc('n-revived'))
 
     await waitForNode('n-revived')

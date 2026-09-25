@@ -539,7 +539,7 @@ export async function deletePage(db: DbHandle, projectId: string, pageId: string
     await lockProjectTree(trx, projectId)
     const current = await trx
       .selectFrom('pages')
-      .select(['menu_node_id', 'sort_order'])
+      .select(['menu_node_id', 'sort_order', 'head_seq'])
       .where('id', '=', pageId)
       .where('project_id', '=', projectId)
       .forUpdate()
@@ -547,6 +547,7 @@ export async function deletePage(db: DbHandle, projectId: string, pageId: string
     if (!current) return 'not-found'
 
     await deletePageComments(trx, pageId)
+    await recordPageSeqFloor(trx, projectId, pageId, Number(current.head_seq))
     await trx.deleteFrom('pages').where('id', '=', pageId).execute()
     await closeGap(trx, current.menu_node_id, current.sort_order)
 
@@ -609,11 +610,15 @@ export async function lockProjectPages(trx: DbHandle, projectId: string): Promis
  * `insertPage`와 갈리는 지점 셋: id를 발급하지 않고, `sort_order`를 계산하지 않고,
  * `menu_node_id`의 유효성을 확인하지 않는다(계획이 판정했고 FK가 마지막 방벽이다).
  *
- * **`head_seq`를 심지 않는다 — 컬럼 기본값 0이다.** payload의 `headSeq`(예: 7)를 심으면
- * **행이 없는 seq를 가리키는 페이지**가 된다: 그 페이지가 지워질 때 `revisions.page_id`의
- * CASCADE가 이력을 함께 데려갔기 때문이다(재는 법: 삭제 전후로 그 페이지의 `revisions` 행 수를 센다 — 0 이 된다).
- * 그 상태에서는 그 페이지의 undo가 빈 이력 위에서 돈다. **복원이 되살릴 수 있는 것은
- * 문서이지 이력이 아니다.**
+ * **`head_seq`는 그 id 가 쓴 마지막 번호 다음이다**(`page_seq_floors` — `recordPageSeqFloor`). 한 페이지 id 에서 번호가 같으면
+ * 문서도 같아야 한다 — 서버는 편집의 자리 경로를 `baseSeq` 판에 그대로 적용하므로, 되살린 판본이 옛 판본이 쓴 번호를 다시 쓰면
+ * 옛 판본을 든 탭(복원 방송을 못 받았다 · MCP · CLI)의 편집이 되살린 문서의 다른 노드에 적용된다. 그 id 의 줄이 없으면(한 번도
+ * 안 지웠다 · `0017` 앞에 지웠다) 0 이다.
+ *
+ * **그 번호에는 revision 행이 없다** — 그 페이지가 지워질 때 `revisions.page_id`의 CASCADE가 이력을 함께 데려갔다(재는 법: 삭제
+ * 전후로 그 페이지의 `revisions` 행 수를 센다 — 0 이 된다). 그 페이지의 undo 는 빈 이력 위에서 돈다 — 되살린 뒤의 편집만 이력에
+ * 쌓인다. **복원이 되살릴 수 있는 것은 문서이지 이력이 아니다.** payload의 `headSeq`를 심지 않는 것도 같은 까닭이다 — 그 값은
+ * 그 id 가 쓴 마지막 번호보다 작을 수 있다(스냅샷 뒤의 편집).
  *
  * **그래서 이 경로는 revision을 남기지 않는다.** *"모든 스키마 변경이 revision을
  * 남긴다"*(이 파일의 머리말)와 어긋나지 않는다 — `POST .../pages`가 이미 문서를 들고 태어나며 revision을
@@ -633,6 +638,7 @@ export async function insertPageWithId(
     schemaVersion: number
   },
 ): Promise<void> {
+  const floor = await trx.selectFrom('page_seq_floors').select('head_seq').where('page_id', '=', input.id).executeTakeFirst()
   await trx
     .insertInto('pages')
     .values({
@@ -644,7 +650,26 @@ export async function insertPageWithId(
       sort_order: input.sortOrder,
       schema: JSON.stringify(input.schema),
       schema_version: input.schemaVersion,
+      head_seq: floor === undefined ? 0 : Number(floor.head_seq) + 1,
     })
+    .execute()
+}
+
+/**
+ * **지우는 페이지 id 가 쓴 마지막 번호를 남긴다**(`0017-page-seq-floors`) — 페이지 행을 지우는 트랜잭션에서 그 행의 `head_seq`로
+ * 부른다. 부르는 자리는 페이지를 지우는 두 길이다: `deletePage`(페이지 `DELETE`) · `deletePageRow`(복원의 `delete-page`). 지우는
+ * 길이 늘면 여기를 부르게 한다 — 빠뜨리면 그 길로 지운 페이지를 되살릴 때 0 부터 센다(`insertPageWithId`).
+ *
+ * **`greatest`로 덮는다.** 되살린 페이지는 이 값보다 큰 번호에서 세므로 늘 더 큰 값이 온다 — 그 전제가 깨져도(줄을 거치지 않고 만든
+ * 행) 앞 판본이 쓴 번호를 잃지 않는다.
+ */
+export async function recordPageSeqFloor(trx: DbHandle, projectId: string, pageId: string, headSeq: number): Promise<void> {
+  await trx
+    .insertInto('page_seq_floors')
+    .values({ page_id: pageId, project_id: projectId, head_seq: headSeq })
+    .onConflict((conflict) =>
+      conflict.column('page_id').doUpdateSet({ head_seq: sql`greatest(page_seq_floors.head_seq, excluded.head_seq)` }),
+    )
     .execute()
 }
 
@@ -682,5 +707,11 @@ export async function writePagePlacement(
  * 맡기지 않고 코멘트를 먼저 지우지만(계획의 1단계), 이력은 되살릴 수 없으므로 그대로 간다.
  */
 export async function deletePageRow(trx: DbHandle, projectId: string, pageId: string): Promise<void> {
-  await trx.deleteFrom('pages').where('id', '=', pageId).where('project_id', '=', projectId).execute()
+  const deleted = await trx
+    .deleteFrom('pages')
+    .where('id', '=', pageId)
+    .where('project_id', '=', projectId)
+    .returning('head_seq')
+    .executeTakeFirst()
+  if (deleted !== undefined) await recordPageSeqFloor(trx, projectId, pageId, Number(deleted.head_seq))
 }

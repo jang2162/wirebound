@@ -1214,7 +1214,7 @@ function CanvasFrame(props: {
         // 서버의 `id`가 스택의 `revisionId`다. 두 이름을 맞추는 자리를 여기 하나로 둔다 —
         // 스토어가 `RevisionSummary`를 알면 `apps/web`의 HTTP 경계가 스토어까지 새어 든다.
         store.restoreUndoStack(
-          revisions.map((revision) => ({ revisionId: revision.id, inverse: revision.inverse })),
+          revisions.map((revision) => ({ revisionId: revision.id, seq: revision.seq, inverse: revision.inverse })),
         )
       } catch {
         // 여기서 알리지 않는다. 사용자가 할 수 있는 일이 없고, 편집 실패 통지 자리를

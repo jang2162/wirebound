@@ -70,10 +70,18 @@ export interface RevisionRef {
   inverse: PatchOp[]
   /**
    * `inverse`를 노드 id 로 붙잡은 것(`anchored-ops.ts`) — 그 revision 을 막 기록한 문서(ack 가 바탕에 접은 판)에서 적는다(`ackEdit`). 되돌리기가
-   * 이것으로 지금 문서에서 경로를 다시 짓는다 — 그 사이 남이 같은 배열 앞자리에 넣었으면 `inverse`의 옛 자리는 **남의 노드**다. **없으면
-   * (`undefined` · `null`) `inverse`를 경로 그대로 쓴다** — 서버 이력으로 채운 스택(`restoreUndoStack`)은 그 revision 의 문서를 모른다.
+   * 이것으로 지금 문서에서 경로를 다시 짓는다 — 그 사이 남이 같은 배열 앞자리에 넣었으면 `inverse`의 옛 자리는 **남의 노드**다. 서버 이력으로
+   * 채운 스택(`restoreUndoStack`)은 지금 판에서 되짚은 문서에서 적는다. **없으면(`undefined` · `null`) `inverse`를 경로 그대로 쓴다** — ack 가 적을
+   * 문서가 없었거나 `inverse`가 그 문서에 안 얹혀 붙잡지 못한 항목이다.
    */
   anchored?: AnchoredOp[] | null
+}
+
+/** 서버 이력에서 온 내 revision 하나(`restoreUndoStack`의 인자). `seq`로 지금 판에서 이어지는지 본다. */
+export interface RestoredRevision {
+  revisionId: string
+  seq: number
+  inverse: PatchOp[]
 }
 
 /**
@@ -571,9 +579,9 @@ export class EditorStore {
    *
    * **조회가 시작되기 전에 온 것은 들지 않는다** — 서버는 커밋한 뒤 방송 · ack 를 내므로 그 뒤에 시작한 조회는 그 커밋을 읽는다.
    *
-   * **판본이 갈리면 버린다** — 번호는 판본 안에서만 견줄 수 있다(복원이 되살린 페이지는 `head_seq`를 0 부터 다시 센다). 다른 페이지를 싣거나
-   * 판을 비우면(`loadPage` · `clearPage` · `reset`) · 복원이 알려지면(`markRestored`) 그 페이지 밖의 것 · 전부를 버리고, 판을 정한 세대보다
-   * 앞에 시작한 조회의 몫은 정할 때 버린다(`settlePageLoad`).
+   * **판이 갈리면 버린다** — 복원 앞일 수 있는 판에 복원 뒤 revision 을 얹지 않는다. 다른 페이지를 싣거나 판을 비우면(`loadPage` ·
+   * `clearPage` · `reset`) · 복원이 알려지면(`markRestored`) 그 페이지 밖의 것 · 전부를 버리고, 판을 정한 세대보다 앞에 시작한 조회의 몫은 정할
+   * 때 버린다(`settlePageLoad`).
    */
   #windowChanges: { pageId: string; begun: number; seq: number; ops: PatchOp[] | null }[] = []
 
@@ -641,7 +649,7 @@ export class EditorStore {
     this.#windowChanges = this.#windowChanges.filter((change) => change.pageId === pageId)
     this.#openingPageId = null
     // **복원 신호보다 앞에 시작한 조회의 판이면 복원 배너를 둔다**(`#restoredAt`) — 그 판은 복원 앞을 읽었을 수 있다. 창도 얹지 않는다 — 신호
-    // 뒤에 온 revision 은 되살린 판본의 번호라 옛 판본의 판에 얹으면 남의 노드에 얹힌다.
+    // 뒤에 온 revision 은 복원 뒤 판의 것이라 복원 앞 판 뒤의 번호가 아니다.
     const beforeRestore = ticket !== undefined && ticket <= this.#restoredAt
     // **떠남의 통지가 가리키는 페이지를 다시 열면 그 페이지는 확인한 것이다**(`#leaveNotice`의 «푸는 자리») — 가리키는 것이 다 열렸으면
     // 통지를 푼다. 다른 통지가 서 있으면 그대로 둔다.
@@ -748,8 +756,8 @@ export class EditorStore {
    * 옛 판이 실린다 — 남이 넣은 노드가 사라지고 낡음도 안 선다(Chrome: 배너 단추의 조회를 붙잡은 채 남이 노드를 넣고 WS 를
    * 끊으면, 재연결 재조회가 head 4 를 실은 뒤 붙잡은 head 3 의 답이 그 노드를 지웠다).
    *
-   * **`headSeq`로 막지 않는다 — 한 페이지 id 안에서도 단조가 아니다**(`holdsServerPage`의 머리말 — 복원이 지워진 페이지를
-   * 되살리면 0 부터 다시 센다). «번호가 내려가면 버린다»는 그 판을 막는다.
+   * **`headSeq`로 막지 않는다 — 세대로 막는다.** 판을 정하는 것은 실은 답만이 아니다 — `holdsServerPage`로 같다고 보고 넘어간 답 ·
+   * 페이지가 사라졌다고 답한 조회도 판을 정한다(`settlePageLoad`). «번호가 내려가면 버린다»에는 그 둘을 적을 자리가 없다.
    *
    * | 입구 | 자리 |
    * |---|---|
@@ -781,8 +789,8 @@ export class EditorStore {
    *
    * **세대가 닫지 않는 판은 창 얹기가 닫는다**(`#windowChanges`) — 조회 하나의 창 안에서 얹힌 남의 프레임 · 내 ack 는 다툴 다른 조회가
    * 없어 그 조회의 옛 답이 싣는다. 뒤에 시작한 조회가 먼저 읽힌 판(두 연결의 순서가 뒤집혔다)도 뒤 답이 옛 판을 싣는다. 둘 다 그 사이의
-   * 커밋이 조회가 시작된 뒤 프레임 · ack 로 왔으므로 실린 판 뒤에 제 차례로 얹힌다. 번호는 판본이 아니므로(위) 판본은 조회 세대 · 복원
-   * 신호로 가른다.
+   * 커밋이 조회가 시작된 뒤 프레임 · ack 로 왔으므로 실린 판 뒤에 제 차례로 얹힌다. 복원 앞일 수 있는 판은 복원 신호로 가른다
+   * (`#restoredAt`).
    */
   readonly settlePageLoad = (ticket: number): boolean => {
     if (ticket <= this.#pageLoadSettled) return false
@@ -886,11 +894,11 @@ export class EditorStore {
    * **내 바탕이 곧 이 서버 판인가** — 같은 페이지 · 같은 `headSeq` · **같은 문서**일 때만 참이다. 재연결 재조회가 다시
    * 읽은 판을 싣지 않고 넘어가도 되는지를 이것 하나로 묻는다(`routes/editor.tsx`의 재연결 이펙트).
    *
-   * **`headSeq`만으로는 모자란다 — 한 페이지 id 안에서도 단조가 아니다.** 지워진 페이지를 스냅샷 복원이 되살리면 같은
-   * id 로 `head_seq` 0 부터 다시 센다. 끊긴 사이 그렇게 되살아나 남이 편집하면 번호가 우연히 내 것과 같아지고, 번호만
-   * 보는 판은 옛 문서를 둔다 — 편집 경로가 자리(index) 기반이라 다음 편집이 **남의 노드를 덮는다**(Chrome: 되살아난
-   * 페이지 앞에 남이 글을 넣어 head 1 == 내 head 1 → 안 싣고 통지 0, 내가 «원문»을 고치자 서버에서는 남의 글이 바뀌었다).
-   * 복원 방송(`restored`)은 끊긴 동안 온 것이라 받지 못했다.
+   * **번호 말고 문서도 견준다 — 번호로는 서버 쪽 판본만 가른다.** 한 페이지 id 에서 번호가 같으면 서버 문서도 같다(서버가 되살린
+   * 페이지도 옛 판본이 쓴 번호 뒤에서 센다 — `apps/api/src/repos/pages.ts`의 `insertPageWithId`). 그래도 문서를 견주는 것은 이 탭의
+   * 바탕이 그 번호의 서버 문서와 같다는 것을 번호가 보증하지 않기 때문이다 — 바탕은 이 탭이 프레임 · ack 를 얹어 지은 것이라, 얹기가
+   * 서버와 갈리면(얹기 결함 · 번호를 못 알아본 빠진 프레임) 번호는 같고 문서는 다르다. 그 판을 «같다»로 넘기면 편집 경로가 자리(index)
+   * 기반이라 다음 편집이 **남의 노드를 덮는다.** 재연결마다 도는 비용(아래)으로 그 벽을 산다.
    *
    * **바탕을 서버 판과 견주고, 화면(`document`)을 «바탕 + 큐»와 견준다.** 바탕이 서버가 기록한 문서이고(내 낙관적 편집이 안
    * 섞였다), `document`는 보내지 않은 편집만큼 앞서 있다 — 그 편집은 넘어간 뒤 그 바탕 위에 그대로 나간다.
@@ -1000,13 +1008,43 @@ export class EditorStore {
    * **어느 것이 먼저 undo되는가**이고, `restoreUndoStack은 최신이 top이 되게 싣는다`가
    * 그것을 고정한다.)
    *
+   * ## 지금 판에서 거꾸로 되짚어 붙잡는다 — 남의 revision 이 끼면 거기서 멈춘다
+   *
+   * 서버의 `inverse`는 그 revision 을 막 기록한 문서의 자리 경로다. 그 뒤 남이 같은 배열 앞자리에 넣었으면 옛 자리가 **남의 노드**를
+   * 가리키고 서버는 받은 경로를 그대로 적용한다(설계서 「정방향 흐름」 — jsdom: 연 뒤 밥이 맨 앞에 넣자 «나»의 되돌리기가 «가»를 고쳤다).
+   * 그래서 세션 안 항목(`ackEdit`)처럼 **그 revision 을 막 기록한 문서에서 노드 id 로 붙잡는다**(`RevisionRef.anchored`). 그 문서는
+   * 지금 바탕(`headSeq`의 서버 판)에서 내 `inverse`를 차례로 얹어 되짚는다 — 번호가 `headSeq`부터 하나씩 내려가는 동안만이다.
+   *
+   * **번호가 끊기면 그 아래는 싣지 않는다.** 끊긴 자리의 revision 은 남의 것(또는 토큰으로 낸 내 것)이라 그 `inverse`가 없고, 그 아래
+   * revision 의 문서를 지을 수 없다 — 붙잡지 못한 채 경로 그대로 보내면 위와 같은 판이 연 판에서 이미 선다(jsdom: 내 6 · 밥 7(맨 앞에
+   * 넣음)으로 연 판에서 6 의 되돌리기가 «가»를 고쳤다). 되짚다가 얹히지 않는 항목에서도 멈춘다. 되짚지 않고 그 revision 의 문서를 서버에서
+   * 받는 길(남의 revision 까지 받아 되짚기)은 고르지 않았다 — 되돌리기 이력 하나를 위해 이력 전체를 페이지를 열 때마다 받는다.
+   *
+   * **비용**: 실을 항목마다 `anchorOps` 한 번과 `applyOps`(문서 복제) 한 번 — 최대 50 항목(서버가 주는 수) × 문서 크기. 페이지를 열 때
+   * 한 번 돈다.
+   *
    * **redo 스택은 비운다.** 복원한 항목은 redo를 갖지 않는다 — redo는 세션 안에서 undo를
    * 눌러야 생긴다.
    */
-  readonly restoreUndoStack = (revisions: readonly RevisionRef[]): void => {
-    const { redoStack } = this.#state
+  readonly restoreUndoStack = (revisions: readonly RestoredRevision[]): void => {
+    const { redoStack, baseDocument, headSeq } = this.#state
+    const kept: RevisionRef[] = []
+    let recorded = baseDocument
+    let expected = headSeq
+    for (const revision of [...revisions].sort((a, b) => b.seq - a.seq)) {
+      if (recorded === null || revision.seq !== expected) break
+      const anchored = anchorOps(recorded, revision.inverse)
+      if (anchored === null) break
+      try {
+        recorded = applyOps(recorded, revision.inverse)
+      } catch {
+        break
+      }
+      kept.push({ revisionId: revision.revisionId, inverse: revision.inverse, anchored })
+      expected -= 1
+    }
     this.#apply({
-      undoStack: [...revisions].reverse(),
+      undoStack: kept.reverse(),
       redoStack: redoStack.length === 0 ? redoStack : [],
     })
   }
@@ -1404,10 +1442,9 @@ export class EditorStore {
    * 일은 그 사실을 말하는 것뿐이다.
    */
   readonly markRestored = (): void => {
-    // 기다리던 번호도 버린다 — 옛 판의 경로라 얹을 문서가 없다. 「만들어진 페이지」 복원은 같은 id 로 `headSeq`를 0 부터 다시
-    // 세므로, 남기면 되살아난 판에서 그 차례가 올 때 남의 노드에 붙고 · 안 오면 막 다시 실은 판에 한도가 `'gap'`을 세운다.
+    // 기다리던 번호도 버린다 — 그 경로가 복원 앞 판의 것인지 이 탭은 가르지 못한다.
     this.#dropWaitingMarkers()
-    // 창 안의 revision 도 옛 판본의 것이다(`#windowChanges`) — 되살린 판에 얹으면 남의 노드에 얹힌다.
+    // 창 안의 revision 도 버린다(`#windowChanges`) — 도는 조회가 복원 앞을 읽었으면 그 판 뒤의 것이 아니다.
     this.#windowChanges = []
     // **지금 도는 조회는 복원 앞을 읽었을 수 있다** — 그 답이 실려도 이 낡음을 풀지 않는다(`loadPage`의 `beforeRestore`). 판을 정하지 못하게
     // 하지는 않는다(세대를 올려 `settlePageLoad`를 거짓으로): 여는 조회면 캔버스가 «불러오는 중»에 머물고, 수습의 조회면 거절된 편집을

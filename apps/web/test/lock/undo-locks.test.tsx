@@ -84,7 +84,7 @@
  * 뒤엣것이 *"그 갈래는 서버가 200을 낼 것까지 막는다"*의 실증이다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { findLockConflict, lockPointers, type PageDocument, type PatchOp } from '@wirebound/schema'
+import { applyOps as applyOpsNow, findLockConflict, lockPointers, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
@@ -186,6 +186,8 @@ interface Board {
   calls: { ops: PatchOp[] }[]
   /** 서버가 낸 상태 코드들. 화면의 막기를 빼면 여기 `423`이 선다. */
   status: number[]
+  /** 남이 낸 편집 — 서버 문서에 얹고 그 프레임을 방송한다. */
+  remote: (ops: PatchOp[]) => void
 }
 
 async function board(): Promise<Board> {
@@ -258,6 +260,22 @@ async function board(): Promise<Board> {
     },
     calls,
     status,
+    remote: (ops) => {
+      held = applyOpsNow(held, ops)
+      seq += 1
+      const frame: ServerFrame = {
+        type: 'page-changed',
+        projectId: PROJECT_ID,
+        pageId: PAGE_ID,
+        seq,
+        ops,
+        warnings: [],
+        actor: { type: 'user', label: '보라' },
+      }
+      act(() => {
+        sockets.at(-1)?.onmessage?.({ data: JSON.stringify(frame) })
+      })
+    },
   }
 }
 
@@ -531,14 +549,13 @@ describe('왜 안 되는지 말한다', () => {
     const view = await board()
     await editText(view, '새 내용')
 
-    // **스택 맨 위에 «적용 불가»를 하나 얹는다.** 남이 지운 노드를 되돌리는 판이고(설계서 「개인 undo/redo」),
-    // 그 아래에 잠금에 막히는 항목이 있다.
-    act(() => {
-      view.store.restoreUndoStack([
-        { revisionId: 'rev-gone', inverse: [{ op: 'replace', path: '/root/children/9/props/content', value: 'x' }] },
-        ...view.store.getState().undoStack.slice().reverse(),
-      ])
-    })
+    // **스택 맨 위에 «적용 불가»를 하나 둔다.** `n-box` 안의 단추를 지운 편집이고, 남이 그 뒤 `n-box`를 지웠다 — 되살릴 부모가 없다
+    // (설계서 「개인 undo/redo」의 적용 불가). 그 아래에 잠금에 막히는 항목(`n-a`의 글)이 있다.
+    select('Button')
+    fireEvent.click(toolButton('삭제'))
+    await waitFor(() => expect(view.calls).toHaveLength(2))
+    await waitFor(() => expect(stacks(view).undo).toBe(2))
+    view.remote([{ op: 'remove', path: '/root/children/1' }])
     view.lock([foreign('n-a')])
     fireEvent.click(undoButton())
     await settle()

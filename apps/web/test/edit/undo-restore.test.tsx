@@ -35,7 +35,7 @@ const OTHER_DOC = pageDoc({
   children: [{ id: TEXT_ID, type: 'Text', props: { content: '다른 페이지', role: 'body' } }],
 })
 
-/** 서버가 준 revision 하나. `inverse`가 undo가 되보낼 ops다. */
+/** 서버가 준 revision 하나. `inverse`가 undo가 되보낼 ops다. `seq`는 연 판(`HEAD_SEQ` 7)에서 이어져야 실린다(`restoreUndoStack`). */
 function revision(seq: number, restoreTo: string): RevisionSummary {
   return {
     id: `rev-${seq}`,
@@ -105,7 +105,7 @@ function harness(options: { revisions?: RevisionSummary[]; revisionsFail?: boole
 
 describe('새로고침 뒤 undo 스택 복원', () => {
   it('페이지를 열면 내 revision을 받아 스택을 채운다', async () => {
-    const h = harness({ revisions: [revision(8, OLD_TEXT)] })
+    const h = harness({ revisions: [revision(7, OLD_TEXT)] })
     await openPage(DOC, { apiOverrides: h.api })
 
     await waitFor(() => expect(h.revisionCalls).toHaveLength(1))
@@ -117,7 +117,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
   it('응답 순서가 곧 스택 순서다 — 최신이 먼저 되돌아간다', async () => {
     // 서버는 `seq` 내림차순으로 준다. **재는 것은 배열 모양이 아니라 어느 것이 먼저
     // undo되는가**다 — 스택 표현은 구현이 정할 일이다.
-    const h = harness({ revisions: [revision(9, '최신 되돌림'), revision(8, '옛 되돌림')] })
+    const h = harness({ revisions: [revision(7, '최신 되돌림'), revision(6, '옛 되돌림')] })
     await openPage(DOC, { apiOverrides: h.api })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
 
@@ -131,7 +131,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
 
   it('복원한 항목을 undo할 수 있다', async () => {
     // 모양만 보는 것이 아니라 실제로 되돌아가는지 본다.
-    const h = harness({ revisions: [revision(8, '복원으로 돌아간 값')] })
+    const h = harness({ revisions: [revision(7, '복원으로 돌아간 값')] })
     await openPage(DOC, { apiOverrides: h.api })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
 
@@ -143,7 +143,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
 
   it('복원 직후에는 redo가 비어 있다', async () => {
     // 복원한 항목은 redo를 갖지 않는다. redo는 세션 안에서 undo를 눌러야 생긴다.
-    const h = harness({ revisions: [revision(8, OLD_TEXT)] })
+    const h = harness({ revisions: [revision(7, OLD_TEXT)] })
     await openPage(DOC, { apiOverrides: h.api })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
 
@@ -169,7 +169,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
   })
 
   it('페이지를 옮기면 새 페이지의 스택을 받는다', async () => {
-    const h = harness({ revisions: [revision(8, OLD_TEXT)] })
+    const h = harness({ revisions: [revision(7, OLD_TEXT)] })
     await openPage(DOC, { apiOverrides: h.api, docs: { [OTHER_PAGE_ID]: OTHER_DOC } })
     await waitFor(() => expect(undoButton().disabled).toBe(false))
 
@@ -189,7 +189,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
     // **순서가 계약이다.** `loadPage`가 스택을 비우므로 복원이 그 앞에 오면 방금 채운 것을
     // 지운다. 여기서는 revision 응답을 **문서 응답보다 먼저** 흘려 주어, 구현이 순서를
     // 바꿔도(복원 먼저) 결과가 같아 보이지 않게 한다.
-    const h = harness({ revisions: [revision(8, OLD_TEXT)] })
+    const h = harness({ revisions: [revision(7, OLD_TEXT)] })
     await openPage(DOC, { apiOverrides: h.api })
 
     // 복원이 실제로 살아남았다.
@@ -211,7 +211,7 @@ describe('새로고침 뒤 undo 스택 복원', () => {
     let getPageCalls = 0
     const listMyRevisions: ApiClient['listMyRevisions'] = async (_projectId, pageId) => {
       revisionCalls.push(pageId)
-      return [revision(8, OLD_TEXT)]
+      return [revision(7, OLD_TEXT)]
     }
     const patchOps: ApiClient['patchOps'] = () =>
       Promise.reject(new ApiError(409, 'conflict', '충돌 [T11]'))

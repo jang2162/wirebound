@@ -387,27 +387,24 @@ describe('되돌아가는 것들', () => {
   })
 
   /**
-   * **되살아난 페이지의 `head_seq`는 0이다.** payload의 값을 심으면 행이 없는 seq를
-   * 가리킨다 — 그 페이지가 지워질 때 `revisions.page_id`의 CASCADE가 이력을 데려갔기
-   * 때문이다. **복원이 되살릴 수 있는 것은 문서이지 이력이 아니다.**
+   * **되살아난 페이지의 `head_seq`는 그 id 가 쓴 마지막 번호 다음이다**(`repos/pages.ts`의 `insertPageWithId`) — 스냅샷이 적은 번호가
+   * 아니라 지울 때의 번호다. 그 번호에는 revision 행이 없다 — 그 페이지가 지워질 때 `revisions.page_id`의 CASCADE가 이력을
+   * 데려갔다. **복원이 되살릴 수 있는 것은 문서이지 이력이 아니다.**
    */
-  it('되살아난 페이지는 head_seq 0에서 다시 시작한다 — 이력은 되살아나지 않는다', async () => {
+  it('되살아난 페이지는 지울 때의 번호 다음에서 센다 — 이력은 되살아나지 않는다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       await editPage(ctx, fx, 'n_sec1')
       const id = await snapshot(ctx, fx, 'v1')
-      const before = await readPage(ctx, fx.page.id)
-      expect(Number(before?.head_seq)).toBe(1)
+      // 스냅샷 뒤의 편집 — 스냅샷이 적은 번호(1)보다 지울 때의 번호(2)가 크다.
+      await editPage(ctx, fx, 'n_sec2')
+      expect(Number((await readPage(ctx, fx.page.id))?.head_seq)).toBe(2)
 
-      await ctx.app.inject({
-        method: 'DELETE',
-        url: `/api/projects/${fx.project.id}/pages/${fx.page.id}`,
-        cookies: fx.owner.cookie,
-      })
+      await deletePageRoute(ctx, fx, fx.page.id)
       await restore(ctx, fx, id)
 
       const page = await readPage(ctx, fx.page.id)
-      expect(Number(page?.head_seq)).toBe(0)
+      expect(Number(page?.head_seq)).toBe(3)
       const revisions = await ctx.db.selectFrom('revisions').select('id').where('page_id', '=', fx.page.id).execute()
       expect(revisions).toHaveLength(0)
       // 문서는 그때 그것이다.
@@ -1126,3 +1123,116 @@ describe('권한 — 설계서 「권한 모델」', () => {
     })
   })
 })
+
+/**
+ * **한 페이지 id 에서 번호가 같으면 문서도 같다** — 복원이 지운 페이지를 같은 id 로 되살려도 옛 판본이 쓴 번호를 다시 쓰지 않는다
+ * (`0017-page-seq-floors`). 서버는 편집의 자리 경로를 `baseSeq` 판에 그대로 적용하므로, 번호가 겹치면 옛 판본을 든 탭의 편집이 되살린
+ * 문서의 다른 노드에 적용된다(Chrome 판은 `apps/web/build-test/editor-page-version.test.ts`).
+ */
+describe('되살린 페이지의 번호', () => {
+  it('옛 판본의 번호로 낸 편집은 되살린 판에서 409 다 — 되살린 번호로 낸 것은 받는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await editPage(ctx, fx, 'n_sec1')
+      const id = await snapshot(ctx, fx, 'v1')
+      await editPage(ctx, fx, 'n_sec2')
+      await deletePageRoute(ctx, fx, fx.page.id)
+      await restore(ctx, fx, id)
+
+      const add = (baseSeq: number) =>
+        ctx.app.inject({
+          method: 'PATCH',
+          url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/ops`,
+          cookies: fx.owner.cookie,
+          payload: { baseSeq, ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_late', type: 'Section', props: {} } }] },
+        })
+      // 옛 판본이 쓴 번호 전부 — 0(만든 때) · 1(스냅샷 때) · 2(지울 때).
+      expect([(await add(0)).statusCode, (await add(1)).statusCode, (await add(2)).statusCode]).toEqual([409, 409, 409])
+      const accepted = await add(3)
+      expect(accepted.statusCode).toBe(200)
+      expect((accepted.json() as { seq: number }).seq).toBe(4)
+    })
+  })
+
+  it('복원이 지운 페이지도 번호를 남긴다 — 그 페이지를 되살리면 그 다음에서 센다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const id = await snapshot(ctx, fx, 'v1')
+      // 스냅샷에 없는 페이지 — 복원의 `delete-page`가 지운다.
+      const extra = await createPage(ctx, fx.owner.cookie, fx.project.id, fx.menu.id, { title: '나중 페이지' })
+      await editPageById(ctx, fx, extra.id, (extra.schema as { root: { id: string } }).root.id, 'n_x1')
+      await editPageById(ctx, fx, extra.id, (extra.schema as { root: { id: string } }).root.id, 'n_x2')
+
+      const first = (await restore(ctx, fx, id)).json() as RestoreBody
+      expect(first.summary.pages.deleted).toBe(1)
+      expect(await readPage(ctx, extra.id)).toBeUndefined()
+      const floor = await ctx.db.selectFrom('page_seq_floors').select('head_seq').where('page_id', '=', extra.id).executeTakeFirst()
+      expect(Number(floor?.head_seq)).toBe(2)
+
+      // 안전망이 그 페이지를 든다 — 되돌리면 되살아난다.
+      await restore(ctx, fx, first.safetySnapshot.id)
+      const back = await readPage(ctx, extra.id)
+      expect(Number(back?.head_seq)).toBe(3)
+      expect((back?.schema as PageDocument).root.children?.[0]?.id).toBe('n_x2')
+    })
+  })
+
+  it('지웠다 되살리기를 거듭해도 번호가 내려가지 않는다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const id = await snapshot(ctx, fx, 'v1')
+      await deletePageRoute(ctx, fx, fx.page.id)
+      await restore(ctx, fx, id)
+      // 번호를 쓴 적 없는 페이지(0)를 지웠다 되살리면 1 이다.
+      expect(Number((await readPage(ctx, fx.page.id))?.head_seq)).toBe(1)
+
+      await editPage(ctx, fx, 'n_sec1')
+      await editPage(ctx, fx, 'n_sec2')
+      await deletePageRoute(ctx, fx, fx.page.id)
+      await restore(ctx, fx, id)
+      expect(Number((await readPage(ctx, fx.page.id))?.head_seq)).toBe(4)
+    })
+  })
+
+  it('프로젝트를 지우면 남긴 번호도 간다', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await deletePageRoute(ctx, fx, fx.page.id)
+      const count = async () =>
+        Number(
+          (
+            await ctx.db
+              .selectFrom('page_seq_floors')
+              .select((eb) => eb.fn.countAll().as('n'))
+              .where('project_id', '=', fx.project.id)
+              .executeTakeFirstOrThrow()
+          ).n,
+        )
+      expect(await count()).toBe(1)
+
+      const res = await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.project.id}`, cookies: fx.owner.cookie })
+      expect(res.statusCode).toBe(204)
+      expect(await count()).toBe(0)
+    })
+  })
+})
+
+async function deletePageRoute(ctx: TestContext, fx: Fixture, pageId: string): Promise<void> {
+  const res = await ctx.app.inject({
+    method: 'DELETE',
+    url: `/api/projects/${fx.project.id}/pages/${pageId}`,
+    cookies: fx.owner.cookie,
+  })
+  if (res.statusCode !== 204) throw new Error(`페이지 삭제 픽스처 실패 (${res.statusCode}): ${res.body}`)
+}
+
+/** `editPage`와 같은 편집을 다른 페이지에. */
+async function editPageById(ctx: TestContext, fx: Fixture, pageId: string, rootId: string, sectionId: string): Promise<void> {
+  const res = await ctx.app.inject({
+    method: 'PUT',
+    url: `/api/projects/${fx.project.id}/pages/${pageId}/schema`,
+    cookies: fx.owner.cookie,
+    payload: { schema: { version: 1, root: { id: rootId, type: 'Page', children: [{ id: sectionId, type: 'Section', props: {} }] } } },
+  })
+  if (res.statusCode !== 200) throw new Error(`편집 픽스처 실패 (${res.statusCode}): ${res.body}`)
+}
