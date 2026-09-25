@@ -144,6 +144,56 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
       await context.close()
     }
   })
+  /**
+   * **남긴 한 줄은 그 로그아웃이 연 세션 세대 동안만 선다**(`session/session-context.tsx`의 `useSignOutNotice`). 한 브라우저의 두 탭 — 탭1 에서 앨리스가
+   * 한도 뒤 나가 한 줄이 서고, 탭2 에서 밥이 들어오면 탭1 은 그 소식으로 밥이 되며, 밥이 탭2 에서 나가면 탭1 도 로그인 화면이다. 그때 앨리스의
+   * 줄이 서면 밥에게 겪지 않은 잃음을 말한다. 고치기 전에는 섰다([Chrome] 3/3 — 한 줄은 이 탭의 로그인만 지웠다).
+   */
+  it('다른 탭에서 들어온 사람이 나간 뒤의 로그인 화면에는 앞 사람의 한 줄이 없다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const fx = await fixture(stack, alice, 'logout-other-tab')
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const seen: string[] = []
+    try {
+      await page.goto(fx.P1)
+      const hold = await stack.holdRow('pages', fx.first)
+      try {
+        const box = await selectFirstText(page, '1쪽 원문')
+        await box.click()
+        await box.fill('붙잡힌 글')
+        await box.evaluate((element) => (element as HTMLElement).blur())
+        await hold.waitForWaiters(1)
+        await page.getByRole('button', { name: '로그아웃' }).click()
+        await page.waitForURL('**/login**', { timeout: 8_000 })
+      } finally {
+        await hold.release()
+      }
+      const own = await farewell(page)
+      const other = await context.newPage()
+      await other.goto('/login')
+      await other.getByLabel('이메일').fill(stack.users.bob.email)
+      await other.getByLabel('비밀번호').fill(stack.users.bob.password)
+      await other.getByRole('button', { name: '로그인' }).click()
+      await other.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 8_000 })
+      await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 8_000 })
+      seen.push(`밥 로그인 뒤 탭1 ${new URL(page.url()).pathname}`)
+      await other.getByRole('button', { name: '로그아웃' }).click()
+      await other.waitForURL('**/login**', { timeout: 8_000 })
+      await page.waitForURL('**/login**', { timeout: 8_000 })
+      await page.getByRole('heading', { name: 'wirebound' }).waitFor()
+      await page.waitForTimeout(300)
+      const after = await farewell(page)
+      // eslint-disable-next-line no-console
+      console.log(`[다른 탭의 다음 사람] 앨리스 줄 ${JSON.stringify(own)} · ${seen.join(' · ')} · 밥 로그아웃 뒤 탭1 줄 ${JSON.stringify(after)}`)
+
+      // 판 카나리아 — 앨리스의 줄이 섰고 탭1 이 밥이 됐다가 로그인 화면으로 돌아왔다.
+      expect(own).toBe('로그아웃 전에 보낸 편집 1개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다. 다시 로그인해 그 페이지를 확인하세요.')
+      expect(seen).toEqual(['밥 로그인 뒤 탭1 /'])
+      expect(after).toBe('')
+    } finally {
+      await context.close()
+    }
+  })
 })
 
 /** 로그인 화면의 `status` 글 — 로그아웃하며 남긴 한 줄. 없으면 빈 글. */

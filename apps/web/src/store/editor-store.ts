@@ -339,6 +339,18 @@ export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged' | 'waiting'
  */
 export const MARKER_FRAME_WAIT_MS = 3_000
 
+/**
+ * **버린 편집의 누계** — 나갔는데 답을 못 받은 것(`unknown` — 서버에 닿았을 수 있다) · 나갔다가 커밋 전에 거절된 것(`refused` — 거절을 받았거나
+ * 리베이스가 버렸다) · 안 보낸 것(`unsent`). 로그아웃이 기다림의 앞뒤로 재어 그 사이 버린 것을 센다(`routes/editor.tsx`의 `settleEdits`).
+ */
+export interface DiscardTally {
+  unknown: number
+  refused: number
+  unsent: number
+}
+
+const NO_DISCARDS: DiscardTally = { unknown: 0, refused: 0, unsent: 0 }
+
 /** 다시 읽는 창에 들고 있는 revision 의 한도(`#noteWindow`). 창 하나에 오는 것은 대개 몇 개다 — 이 수는 끝나지 않은 창이 쌓는 것을 끊는다. */
 const WINDOW_CHANGES_LIMIT = 500
 
@@ -589,8 +601,7 @@ export class EditorStore {
 
   /**
    * **나간 뒤 답을 받기 전에 판째 버린 편집의 id** — 판을 다시 실었거나(`loadPage`) 페이지를 옮기며 비웠다(`clearPage`). 그 편집의
-   * 늦은 답은 이 화면의 일이 아니다(`wasAbandoned`). **리베이스가 버린 편집은 여기 들지 않는다** — 그 거절은 편집 실패 수습이
-   * 받는다(`test/edit/ws-transport.test.tsx`의 «리베이스가 버린 편집의 409로 …»).
+   * 늦은 답은 이 화면의 일이 아니다(`wasAbandoned`). **리베이스가 버린 편집은 여기 들지 않는다** — 그것은 `#rebaseDroppedOpId`가 든다.
    */
   #abandonedOpId: string | null = null
 
@@ -605,6 +616,15 @@ export class EditorStore {
 
   /** 리베이스가 버린 나간 편집(`wasRebaseDropped`). 없으면 `null`이다. */
   #rebaseDroppedOpId: string | null = null
+
+  /** 마지막으로 나간 편집이 커밋 전에 거절됐다(`markRefused`). 다음 편집이 나가면 지운다(`markSent`). */
+  #refusedOpId: string | null = null
+
+  /** 버린 편집의 누계(`discardTally`). */
+  #discarded: DiscardTally = NO_DISCARDS
+
+  /** 마지막 `failEdits`가 버린 것(`recoveringDiscards`). */
+  #lastFailed: DiscardTally = NO_DISCARDS
 
   /** 판째 버린 그 편집의 ops(`#abandonedOpId`) — 늦은 ack 가 오면 그 revision 을 얹는 데 쓴다(`#orphanAck`). */
   #abandonedOps: PatchOp[] | null = null
@@ -682,6 +702,13 @@ export class EditorStore {
    * 편집의 답 뒤에 읽는다)가 그 복원 앞을 읽었을 수 있다. 시작한 적이 없으면 `-1`이다.
    */
   #rereadMark = -1
+
+  /**
+   * **마지막 복원 뒤 다시 읽기가 시작될 때까지 시작한 조회 수**(`beginRestoreReread`). 그 뒤에 시작한 페이지 조회의 판은, 그 사이 신호가 없으면
+   * 복원 낡음을 푼다(`#keepsRestored`) — 다시 읽기가 메뉴 · 코멘트 · 설명 · 테마를 곧바로 다시 읽기 시작했으니(`routes/editor.tsx`의
+   * `restoredToken`) 남은 것은 페이지뿐이고, 그 조회는 복원 뒤를 읽었다.
+   */
+  #rereadBegun = Number.POSITIVE_INFINITY
 
   /**
    * **내가 한 복원의 안전망 스냅샷 id**(`beginRestoreReread`). 그 복원의 신호가 되돌아오면 알아보고 넘긴다(`markRestored`) — 복원이 연결 id
@@ -815,7 +842,7 @@ export class EditorStore {
       // 남는다 — *"고쳤는데 고쳤다고 말하지 않는"* 부류다. **복원 신호 앞에 시작한 조회의 판만 예외다**(위 `beforeRestore`) — 푸는
       // 쪽이 복원 앞 판을 최신처럼 보이게 한다(스토어: 창 안 복원 신호 → 복원 앞 답 → 낡음 `null`). **복원 낡음은 페이지 판으로 안
       // 푼다**(`#keepsRestored`) — 복원은 메뉴 · 코멘트 · 테마도 바꿨다.
-      remoteStale: beforeRestore || this.#keepsRestored(options.restoreReread === true) ? this.#restoredStale() : null,
+      remoteStale: beforeRestore || this.#keepsRestored(options.restoreReread === true, ticket) ? this.#restoredStale() : null,
       documentLoads: this.#state.documentLoads + 1,
     })
     // **다시 읽은 판에도 기다리던 번호 응답을 제 차례에 얹는다**(`applyMarkerChange`의 «내 다음 번호가 아니면 …») — 아래 창 얹기
@@ -947,6 +974,47 @@ export class EditorStore {
     this.#sentOps = head !== null && head.clientOpId === clientOpId ? head.ops : null
     this.#sentPageId = this.#state.openPageId
     this.#sentQueue = this.#queueEpoch
+    this.#refusedOpId = null
+  }
+
+  /**
+   * **이 나간 편집은 커밋되지 않았다 — 확정이다**(전송 루프가 커밋 전 거절 · 못 나간 프레임을 받고 부른다). 그 편집은 번호 쓰기를 기다리는 동안
+   * 큐에 남고(`use-edit-commit.tsx`의 `pump`) 수습이 버린다 — 그동안 로그아웃이 세면 «모름»이 아니라 «저장되지 않았다»다(`discardTally` ·
+   * `wasRefused`). 다시 내면(`markSent`) 지운다.
+   */
+  readonly markRefused = (clientOpId: string): void => {
+    if (clientOpId === this.#sentOpId) this.#refusedOpId = clientOpId
+  }
+
+  /** 이 나간 편집이 커밋 전에 거절됐는가(`markRefused`) — 리베이스가 버린 나간 편집도 반드시 거절되므로 참이다(`wasRebaseDropped`). */
+  readonly wasRefused = (edit: PendingEdit): boolean =>
+    edit.clientOpId === this.#refusedOpId || edit.clientOpId === this.#rebaseDroppedOpId
+
+  /**
+   * **버린 편집의 누계**(`DiscardTally`) — 판을 싣거나 비우며(`loadPage` · `clearPage` · `reset`) · 수습이 큐를 비우며(`failEdits`) · 리베이스가
+   * 얹지 못해(`#rebaseOnto`) 버린 것을 전부 센다. 버리는 자리마다 화면이 그 수를 말하지만, 로그아웃은 그 화면을 셸째 내린다 — 로그아웃이
+   * 기다리는 동안 버린 것은 이 누계의 차로만 남는다(`routes/editor.tsx`의 `settleEdits`).
+   */
+  readonly discardTally = (): DiscardTally => this.#discarded
+
+  /**
+   * **도는 수습이 버린 것** — 수습(`'recovering'`)은 큐를 먼저 비우고(`failEdits`) 판을 다시 읽은 **뒤에** 말한다(`use-edit-commit.tsx`의
+   * `recover`). 그 사이는 버렸는데 아직 말하지 않았다. 수습이 안 돌면 0 이다. 로그아웃이 기다리기 전에 재는 누계에서 이것을 뺀다.
+   */
+  readonly recoveringDiscards = (): DiscardTally => (this.#state.editStatus === 'recovering' ? this.#lastFailed : NO_DISCARDS)
+
+  /** 버린 편집을 누계에 더하고 더한 몫을 돌려준다(`discardTally`). */
+  #countDiscarded(dropped: readonly PendingEdit[]): DiscardTally {
+    if (dropped.length === 0) return NO_DISCARDS
+    const added = { unknown: 0, refused: 0, unsent: 0 }
+    for (const edit of dropped) {
+      if (!this.wasSent(edit)) added.unsent += 1
+      else if (this.wasRefused(edit)) added.refused += 1
+      else added.unknown += 1
+    }
+    const total = this.#discarded
+    this.#discarded = { unknown: total.unknown + added.unknown, refused: total.refused + added.refused, unsent: total.unsent + added.unsent }
+    return added
   }
 
   /**
@@ -1025,6 +1093,7 @@ export class EditorStore {
    * 편집이 버려지는 판은 답을 기다리는 판뿐이다.
    */
   #noteAbandoned(dropped: readonly PendingEdit[], leaving: boolean): void {
+    this.#countDiscarded(dropped)
     const page = this.#state.openPageId ?? this.#sentPageId
     if (!dropped.some((edit) => edit.clientOpId === this.#sentOpId)) {
       if (leaving && this.#abandonedLeaving && this.#abandonedOpId === this.#sentOpId && dropped.length > 0) {
@@ -1743,6 +1812,7 @@ export class EditorStore {
     })
     // 나가 있던 편집을 버렸으면 적는다 — 그 거절은 수습하지 않는다(`wasRebaseDropped`).
     if (dropped.some((edit) => edit.clientOpId === this.#sentOpId)) this.#rebaseDroppedOpId = this.#sentOpId
+    this.#countDiscarded(dropped)
     return dropped
   }
 
@@ -1781,15 +1851,22 @@ export class EditorStore {
   readonly beginRestoreReread = (safetySnapshotId?: string): void => {
     if (safetySnapshotId !== undefined) this.#ownRestores = [...this.#ownRestores.slice(-(OWN_RESTORES_LIMIT - 1)), safetySnapshotId]
     this.#rereadMark = this.#restoreSignals
+    this.#rereadBegun = this.#pageLoadsBegun
   }
 
   /**
-   * 판을 싣거나 비우는 자리가 **복원 낡음을 남겨야 하는가** — 서 있는데 이 자리가 복원 뒤 다시 읽기의 것이 아니거나, 그 다시 읽기가 시작된
-   * 뒤 신호가 왔으면 참이다(`beginRestoreReread`).
+   * 판을 싣거나 비우는 자리가 **복원 낡음을 남겨야 하는가** — 서 있는데, 그 다시 읽기가 시작된 뒤 신호가 왔거나(`beginRestoreReread`), 이 자리가
+   * 복원 뒤 다시 읽기의 것도 아니고 그 다시 읽기가 시작된 뒤에 시작한 페이지 조회(`ticket` — `#rereadBegun`)의 판도 아니면 참이다.
+   *
+   * **다시 읽기 뒤에 시작한 조회도 푼다** — 다시 읽기가 도는 사이 다른 페이지로 옮기면 복원 이펙트는 판을 못 싣고 물러나고, 옮긴 페이지의
+   * 여는 조회가 판을 싣는다. 그 판이 안 풀면 메뉴 · 테마는 다시 읽혔는데 배너가 남는다(Chrome: «다시 불러오기» 뒤 둘째로 옮기면 2.5s 뒤에도
+   * 배너 — `apps/web/build-test/editor-banner-reload.test.ts`). 다시 읽기 **앞에** 시작한 조회(재연결 재조회 · 여는 조회)는 그대로 둔다 —
+   * 그 판을 실어도 나머지가 다시 읽혔는지 모른다.
    */
-  #keepsRestored(restoreReread: boolean): boolean {
+  #keepsRestored(restoreReread: boolean, ticket?: number): boolean {
     if (this.#state.remoteStale?.reason !== 'restored') return false
-    return !restoreReread || this.#rereadMark !== this.#restoreSignals
+    if (this.#rereadMark !== this.#restoreSignals) return true
+    return !restoreReread && !(ticket !== undefined && ticket > this.#rereadBegun)
   }
 
   /** 둘 복원 낡음 — 서 있으면 그것(참조를 지켜 구독자가 헛일을 안 한다 — `NO_WARNINGS`와 같은 이유), 아니면 새로 세운다. */
@@ -2221,6 +2298,7 @@ export class EditorStore {
   readonly failEdits = (): PendingEdit[] => {
     const current = this.#state.pending
     const { pending, dropped } = clearPending(current)
+    this.#lastFailed = this.#countDiscarded(dropped)
     // `clearPage`와 같은 이유로 이미 빈 큐는 참조를 유지한다.
     this.#apply({ pending: current.length === 0 ? current : pending, editStatus: 'recovering' })
     return dropped

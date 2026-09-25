@@ -46,7 +46,7 @@ interface SentPatch {
 }
 
 /** 셸을 열고 소켓을 붙인다. 여는 조회 뒤의 `getPage`는 붙잡는다 — 수습이 판을 다시 읽으면 부른 수로 보인다. */
-async function mount() {
+async function mount(extra: Record<string, unknown> = {}) {
   const sockets: FakeSocket[] = []
   const setup: RealtimeSetup = {
     holder: createConnectionIdHolder(),
@@ -67,7 +67,7 @@ async function mount() {
     calls += 1
     return calls === 1 ? Promise.resolve(pageDetail(pageId, pair())) : new Promise<PageDetail>(() => {})
   })
-  await openPage(pair(), { realtime: setup, apiOverrides: { getPage } })
+  await openPage(pair(), { realtime: setup, apiOverrides: { getPage, ...extra } })
   act(() => {
     sockets[0]?.onopen?.()
   })
@@ -141,5 +141,68 @@ describe('리베이스가 버린 나간 편집의 거절', () => {
     ])
     expect(structureTypes()).toEqual(['Page'])
     expect(view.getPage).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * **번호 쓰기를 기다리는 동안 리베이스가 버려도 같다**(전송 루프의 `passedOver` — 기다림 뒤에 판정을 다시 본다). 409 가 밥의 프레임보다 먼저 와
+   * 코멘트 게시의 답을 기다리는 사이 프레임이 그 편집을 버린다. 고치기 전에는 기다림 앞의 판정(안 버림)으로 수습해 조회 2 · 삭제가 한 번도 안
+   * 나감 · «버렸습니다»를 «…편집 1개가 취소됐습니다»로 덮었다(jsdom).
+   */
+  it('번호 쓰기를 기다리는 동안 리베이스가 버려도 그 거절은 수습하지 않는다', async () => {
+    let answerPost: (created: unknown) => void = () => {}
+    const view = await mount({
+      listComments: async () => [],
+      createComment: () =>
+        new Promise((resolve) => {
+          answerPost = resolve
+        }),
+    })
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    fireEvent.click(document.body.querySelector('[data-wb-id="n-b"]') as HTMLElement)
+    fireEvent.change(await screen.findByLabelText('새 코멘트'), { target: { value: '새 말' } })
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+    await view.tool('Text', '아래로')
+    const first = view.patches()[0]!
+    await view.tool('Divider', '삭제')
+
+    // 409 가 먼저 — 게시가 떠 있어 전송 루프가 그 답을 기다린다.
+    view.refuse(first)
+    await act(async () => {})
+    expect(view.getPage).toHaveBeenCalledTimes(1)
+    // 기다리는 사이 밥의 프레임이 Text 를 지운다 — 리베이스가 나가 있던 «아래로»를 버린다.
+    view.push({
+      type: 'page-changed',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      seq: HEAD_SEQ + 1,
+      ops: [{ op: 'remove', path: '/root/children/0' }],
+      warnings: [],
+      actor: { type: 'user', label: '밥' },
+    })
+    await act(async () => {})
+    expect(alertText()).toContain('편집 1개를 버렸습니다')
+    // 게시의 답 — 번호를 밥의 번호 뒤에 얹는다. 기다림이 끝난다.
+    answerPost({
+      comment: { id: 'c1', nodeId: 'n-b', body: '새 말', authorId: 'u-1', authorName: '테스터', createdAt: '', updatedAt: '' },
+      marker: 1,
+      seq: HEAD_SEQ + 2,
+      markerOps: [{ op: 'add', path: '/root/children/0/marker', value: 1 }],
+    })
+    await act(async () => {})
+    await act(async () => {})
+
+    expect({
+      patches: view.patches().map((patch) => patch.baseSeq),
+      조회: view.getPage.mock.calls.length,
+      통지: alertText(),
+      구조: structureTypes(),
+    }).toEqual({
+      patches: [HEAD_SEQ, HEAD_SEQ + 2],
+      조회: 1,
+      통지: '다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 1개를 버렸습니다.',
+      구조: ['Page'],
+    })
   })
 })

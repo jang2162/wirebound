@@ -1010,6 +1010,50 @@ describe('창 안의 복원 신호', () => {
     expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
   })
 
+  /**
+   * **다시 읽기가 시작된 뒤에 시작한 페이지 조회의 판도 푼다**(`#rereadBegun`) — 다시 읽기는 메뉴 · 코멘트 · 테마를 곧바로 다시 읽기 시작했고,
+   * 그 조회는 복원 뒤를 읽었다. 다시 읽기가 도는 사이 다른 페이지로 옮긴 판이다(`apps/web/build-test/editor-banner-reload.test.ts`).
+   */
+  it('복원 뒤 다시 읽기가 시작된 뒤에 시작한 다른 조회의 판도 복원 낡음을 푼다', () => {
+    const store = opened()
+    store.markRestored()
+    store.beginRestoreReread()
+    store.clearPage()
+    const ticket = store.beginPageLoad('page_2')
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_2', doc(), 1, ticket)
+
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  /** 다시 읽기 **앞에** 시작한 조회(재연결 재조회 · 여는 조회)는 나머지가 다시 읽혔는지 모른다 — 신호 뒤에 시작했어도. */
+  it('복원 뒤 다시 읽기보다 앞에 시작한 조회의 판은 복원 낡음을 안 푼다', () => {
+    const store = opened()
+    store.markRestored()
+    const ticket = store.beginPageLoad('page_1')
+    store.beginRestoreReread()
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc(), 1, ticket)
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
+  })
+
+  /** 다시 읽기가 시작된 뒤 온 신호는 그 다시 읽기가 못 읽었다 — 그 신호 뒤에 시작한 조회도 페이지만 읽었다(`#rereadMark`). */
+  it('복원 뒤 다시 읽기가 시작된 뒤 신호가 또 오면 그 뒤에 시작한 다른 조회의 판도 안 푼다', () => {
+    const store = opened()
+    store.markRestored()
+    store.beginRestoreReread()
+    store.markRestored()
+    const ticket = store.beginPageLoad('page_1')
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc(), 1, ticket)
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
+  })
+
   // 서버에서는 이 판이 안 선다 — 되살린 페이지는 옛 판본이 쓴 번호 뒤에서 센다(`apps/api/test/restore.test.ts`의 «되살린 페이지의 번호»).
   // 이 케이스는 복원 앞일 수 있는 판에 신호 뒤 revision 을 얹지 않는 장치를 잠근다 — 번호가 겹치지 않아도 그 판 뒤의 번호가 아니다.
   it('신호 앞에 시작한 조회의 판에는 신호 뒤에 온 revision 을 얹지 않는다 — 되살린 판본의 번호다', () => {

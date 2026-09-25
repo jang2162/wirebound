@@ -768,12 +768,16 @@ export function CommentPanel(props: {
       if (pageId === undefined || busy) return
       const openPageId = pageId
       // **번호 쓰기의 답을 기다리는 동안 센다**(`EditorStore.beginMarkerWrite`) — 그 사이 409 를 받은 편집이 이 답을 기다린다. 끝은 답을
-      // 스토어에 얹은 뒤(장부의 `run`이 끝날 때)다.
+      // 스토어에 얹은 뒤(장부의 `run`이 끝날 때)와 **판정으로 넘어갈 때**(`verify`가 처음 불릴 때 — 장부의 `CHECKING`) 가운데 먼저 오는 때다.
+      // 판정은 «다시 확인»을 누를 때까지 끝나지 않을 수 있다 — 그동안 세면 머리가 안 움직인 409 마다 한도(3s)를 기다린다.
       const endMarkerWrite = store.beginMarkerWrite()
       void busyLock.run<T, V>({
         send: (signal) => op.send(api, openPageId, signal),
         ...(op.uncertain === undefined ? {} : { uncertain: op.uncertain }),
-        verify: (signal) => op.verify(api, openPageId, signal),
+        verify: (signal) => {
+          endMarkerWrite()
+          return op.verify(api, openPageId, signal)
+        },
         // **돌려주는 것은 칸에 그린 결말 그대로다** — 그리는 본문이 없는 동안 끝나면 장부가 이것을 남긴다(`write-ledger.tsx`의
         // «떠나 있는 동안 끝난 실패» · «판정으로 끝난 쓰기도 전한다»). «이미 달렸고 그 뒤 고쳐졌다 · 지워졌다»
         // (`keyVerdict`)는 실패가 아니라 `done`(다시 보낸 것이면 `verified`)으로 오고 `WriteNote`를 돌려준다 — 칸에는

@@ -5,9 +5,10 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
+import { ApiError } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { logoutLossNotice } from '../../src/routes/editor'
-import { openPage, pageDoc } from '../editor-harness'
+import { openPage, pageDetail, pageDoc } from '../editor-harness'
 import { unauthenticatedError } from '../helpers'
 
 const pair = (): PageDocument =>
@@ -78,9 +79,137 @@ describe('로그아웃하며 두고 간 편집', () => {
   })
 })
 
+const CONFLICT = (): ApiError => new ApiError(409, 'conflict', '페이지가 이미 변경되었습니다 (요청 baseSeq 7, 현재 8)', [], true)
+
+/**
+ * 셸을 열고 «아래로»를 낸다(REST). 편집의 답은 `refuse`를 부를 때 409 로 온다. 편집 실패 수습의 조회(두 번째 `getPage`)는 `recoverHangs`면 안 온다.
+ * `posting`이면 먼저 코멘트를 게시해 둔다 — 답이 안 와 번호 쓰기가 떠 있다(전송 루프가 409 뒤 그 답을 기다린다).
+ */
+async function editRefusedLater(options: { recoverHangs: boolean; posting?: boolean }) {
+  let refuse: () => void = () => {}
+  const patchOps = vi.fn(
+    (): Promise<PatchResult> =>
+      new Promise<never>((_resolve, reject) => {
+        refuse = () => reject(CONFLICT())
+      }),
+  )
+  let loads = 0
+  const doc = pair()
+  await openPage(doc, {
+    apiOverrides: {
+      patchOps,
+      logout: async () => {},
+      listComments: async () => [],
+      createComment: () => new Promise<never>(() => {}),
+      getPage: async (_projectId, pageId) => {
+        loads += 1
+        if (loads >= 2 && options.recoverHangs) return new Promise<never>(() => {})
+        return { ...pageDetail(pageId, doc), headSeq: loads >= 2 ? 8 : 7 }
+      },
+    },
+  })
+  if (options.posting === true) {
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    fireEvent.click(document.body.querySelector('[data-wb-id="n-b"]') as HTMLElement)
+    fireEvent.change(await screen.findByLabelText('새 코멘트'), { target: { value: '새 말' } })
+    fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('tab', { name: '속성' }))
+  }
+  const tree = screen.getByRole('region', { name: '구조 트리' })
+  fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+  fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+  await act(async () => {})
+  expect(patchOps).toHaveBeenCalledTimes(1)
+  return {
+    refuse: async () => {
+      refuse()
+      await act(async () => {})
+    },
+    loads: () => loads,
+  }
+}
+
+/** 가짜 시계로 로그아웃을 누르고 `beforeRefuse` ms 뒤 `then`을 부른 다음 한도(3s)까지 흘린다. 로그인 화면의 한 줄을 돌려준다. */
+async function logoutThrough(then: () => Promise<void>, beforeRefuse: number): Promise<string> {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  try {
+    fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+    await act(async () => {
+      vi.advanceTimersByTime(beforeRefuse)
+    })
+    await then()
+    await act(async () => {
+      vi.advanceTimersByTime(3_000 - beforeRefuse)
+    })
+    await act(async () => {})
+  } finally {
+    vi.useRealTimers()
+  }
+  await screen.findByLabelText('이메일')
+  return statusText()
+}
+
+/**
+ * **로그아웃을 기다리는 동안 버린 편집도 센다**(`routes/editor.tsx`의 `settleEdits` · `EditorStore.discardTally`). 편집 실패 수습은 큐를 먼저 비우고
+ * 판을 다시 읽은 **뒤에** 말한다 — 그 사이 셸이 내려가면 아무도 못 본다. 고치기 전에는 기다림 뒤의 큐만 세어 한 줄이 0 이었다(jsdom).
+ */
+describe('로그아웃을 기다리는 동안 버린 편집', () => {
+  it('누른 뒤 거절돼 수습이 버린 편집을 말한다', async () => {
+    const view = await editRefusedLater({ recoverHangs: false })
+
+    const said = await logoutThrough(view.refuse, 500)
+
+    // 판 카나리아 — 수습이 판을 다시 읽었다.
+    expect(view.loads()).toBe(2)
+    expect(said).toBe(logoutLossNotice(0, 0, 1))
+  })
+
+  it('누르기 전에 시작한 수습이 한도 안에 못 끝나면 그 수습이 버린 편집을 말한다', async () => {
+    const view = await editRefusedLater({ recoverHangs: true })
+    await view.refuse()
+    expect(screen.queryAllByRole('alert').map((node) => node.textContent).join('')).toBe('')
+
+    const said = await logoutThrough(async () => {}, 0)
+
+    expect(said).toBe(logoutLossNotice(0, 0, 1))
+  })
+
+  it('수습이 끝나 화면이 말한 뒤에 누르면 다시 말하지 않는다', async () => {
+    const view = await editRefusedLater({ recoverHangs: false })
+    await view.refuse()
+    expect(screen.getByRole('alert').textContent).toContain('편집 1개가 취소됐습니다')
+
+    const said = await logoutThrough(async () => {}, 0)
+
+    expect(said).toBe('')
+  })
+
+  /**
+   * **번호 쓰기를 기다리는 편집의 거절은 «모름»이 아니다**(`EditorStore.markRefused`). 전송 루프는 409 를 받고도 게시의 답을 기다리는 동안 그
+   * 편집을 큐에 둔다. 로그아웃의 한도가 그 사이 지나면 고치기 전에는 «보낸 편집 1개의 답을 받지 못해 …»였다(jsdom).
+   */
+  it('번호 쓰기를 기다리는 동안 한도가 지나면 거절된 편집을 «저장되지 않았다»로 센다', async () => {
+    const view = await editRefusedLater({ recoverHangs: false, posting: true })
+
+    const said = await logoutThrough(view.refuse, 500)
+
+    // 판 카나리아 — 수습으로 가지 않았다(게시의 답을 기다리는 중이었다).
+    expect(view.loads()).toBe(1)
+    expect(said).toBe(logoutLossNotice(0, 0, 1))
+  })
+})
+
 describe('logoutLossNotice', () => {
   it('두고 간 것이 없으면 말하지 않는다', () => {
     expect(logoutLossNotice(0, 0)).toBeNull()
+  })
+
+  it('거절된 편집은 안 보낸 편집과 함께 «저장되지 않았다»로 센다', () => {
+    expect(logoutLossNotice(0, 0, 1)).toBe('로그아웃하며 거절된 편집 1개는 저장되지 않았습니다 — 다시 로그인해 그 페이지를 확인하세요.')
+    expect(logoutLossNotice(1, 2, 1)).toBe(
+      '로그아웃 전에 보낸 편집 1개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다. 거절된 편집 1개와 보내지 않은 편집 2개는 저장되지 않았습니다. 다시 로그인해 그 페이지를 확인하세요.',
+    )
   })
 
   it('보낸 편집은 «모름», 안 보낸 편집은 «저장되지 않았다»로 센다', () => {

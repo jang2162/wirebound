@@ -8,6 +8,10 @@
  * 늦추면 3/3 B 를 잃고 «편집 1개가 취소됐습니다». 앞섬이 망의 흔들림보다 작다(`CLAUDE.md` «서로 다른 연결로 가는 두 메시지의 도착 순서»).
  *
  * 고친 뒤: 409 를 받을 때 이 탭이 답을 기다리는 번호 쓰기가 있으면 그 답까지(한도 `MARKER_FRAME_WAIT_MS`) 기다린 뒤 번호가 움직였는지 본다.
+ *
+ * **그 기다림 동안 떠나면 B 를 잃는다고 말한다**(전송 루프의 `passedOver` — 기다림 뒤에 판정을 다시 본다). 떠나면 판째 버려지므로 B 는 저장되지
+ * 않는다(고치기 전 소스도 같다 — 수습). 고치기 전에는 기다림 앞에서 끝난 버림 검사가 낡아, 기다림 뒤 수습이 «큐가 바뀌었다»로 물러나고 통지가
+ * 0 이었다([Chrome] 3/3 — 409 뒤 ~180ms 에 둘째로 옮김 · 3.5s 동안 통지 0).
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -107,6 +111,73 @@ describe.skipIf(!전제.ok)('편집 둘 사이의 코멘트 게시', () => {
       }
     })
   }
+  it('게시 응답을 기다리는 동안 다른 페이지로 옮기면 저장되지 않은 둘째 편집을 말한다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const fx = await fixture(stack, alice, 'between-leave')
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const lines: string[] = []
+    const started = Date.now()
+    const at = (): string => `${Date.now() - started}ms`
+    page.on('websocket', (ws) => {
+      ws.on('framereceived', (frame) => {
+        const payload = String(frame.payload)
+        if (payload.includes('"patch-error"')) lines.push(`${at()} WS← patch-error`)
+      })
+    })
+    // 게시 응답을 1.5s 붙잡는다 — 409 를 받은 B 가 그 답을 기다리는 창이다(한도 3s 안).
+    await page.route('**/comments', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      const response = await route.fetch()
+      const body = await response.body()
+      await new Promise((resolve) => setTimeout(resolve, 1_500))
+      lines.push(`${at()} POST 코멘트 응답 풂`)
+      await route.fulfill({ response, body })
+    })
+    try {
+      await page.goto(fx.P1)
+      const box = await selectFirstText(page, '원문')
+      await box.click()
+      await box.fill('편집 A')
+      const hold = await stack.holdRow('pages', fx.first)
+      try {
+        await page.getByRole('tab', { name: '코멘트' }).click()
+        await hold.waitForWaiters(1)
+        await page.locator('#wb-comment-draft').fill('사이에 낀 게시')
+        await page.getByRole('button', { name: '코멘트 달기' }).click()
+        await hold.waitForWaiters(2)
+        await page.getByRole('tab', { name: '속성' }).click()
+        const second = page.locator('.wb-shell-panel textarea').first()
+        await second.click()
+        await second.fill('편집 B')
+        await second.evaluate((element) => (element as HTMLElement).blur())
+        await page.waitForTimeout(150)
+      } finally {
+        await hold.release()
+      }
+      await poll('B 의 409', async () => lines.join(' · '), (value) => value.includes('patch-error'), 5_000)
+      await page.waitForTimeout(100)
+      lines.push(`${at()} 둘째로 옮김`)
+      await page.getByRole('link', { name: '둘째' }).click()
+      const alert = page.locator('[role=alert]', { hasText: '저장되지 않았습니다' })
+      const said = await alert.waitFor({ timeout: 4_000 }).then(
+        async () => (await alert.textContent()) ?? '',
+        () => '',
+      )
+      const final = await server(stack, alice, fx.P1)
+      // eslint-disable-next-line no-console
+      console.log(`[사이 게시 · 떠남] ${lines.join(' · ')} · 서버 ${JSON.stringify(final)} · 통지 ${JSON.stringify(said)}`)
+
+      // 판 카나리아 — 409 를 받은 뒤 · 게시 응답을 풀기 전에 옮겼다(기다림 안에서 떠났다).
+      const order = ['WS← patch-error', '둘째로 옮김', 'POST 코멘트 응답 풂'].map((mark) => lines.findIndex((line) => line.includes(mark)))
+      expect(order.every((index, i) => index >= 0 && (i === 0 || index > order[i - 1]!))).toBe(true)
+      expect({ 서버: final, 통지: said }).toEqual({
+        서버: { head: 3, content: ['편집 A#1'] },
+        통지: '페이지가 이미 변경되었습니다 (요청 baseSeq 2, 현재 3) — 떠난 페이지에서 보낸 편집 1개가 저장되지 않았습니다. 그 페이지를 다시 열어 확인하세요.',
+      })
+    } finally {
+      await context.close()
+    }
+  })
 })
 
 async function fixture(stack: EditorStack, owner: Session, slug: string) {
@@ -114,6 +185,8 @@ async function fixture(stack: EditorStack, owner: Session, slug: string) {
   const project = (await call('POST', '/projects', { name: '사이 게시', slug: `${slug}-${Date.now().toString(36)}` })).body
   const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' })).body
   const first = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body
+  // 떠날 곳 — 트리의 «둘째» 링크로 옮긴다.
+  await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '둘째' })
   const P1 = `/projects/${project.id}/pages/${first.id}`
   const seeded = await call('PATCH', `${P1}/ops`, { baseSeq: 0, ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_one0000001', type: 'Text', props: { content: '원문' } } }] })
   if (seeded.status >= 300) throw new Error(`seed ${seeded.status}`)

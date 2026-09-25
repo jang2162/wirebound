@@ -53,6 +53,7 @@ import { ThemePicker } from '../theme/theme-picker'
 import {
   EditorStore,
   VIEWPORT_PRESETS,
+  type DiscardTally,
   type EditorMode,
   type ViewportWidth,
 } from '../store/editor-store'
@@ -186,13 +187,14 @@ const RELOAD_FAILED_LEAD = '페이지를 다시 불러오지 못했습니다.'
 const SENT_EDIT_WAIT_MS = 3_000
 
 /**
- * **로그아웃이 한도 뒤에 두고 간 편집의 한 줄**(`settleEdits`) — 로그인 화면이 그린다(`session/session-context.tsx`의 `useSignOutNotice`).
- * 나간 편집(`sent` — in-flight 라 0 · 1)은 답을 못 받아 서버에 반영됐는지 모르고, 그 뒤에 줄 선 편집(`unsent`)은 한 번도 안 나가 저장되지
- * 않았다. 로그아웃 뒤에 나간 편집이 커밋될 수도 있다 — «모름»이다. 둘 다 0 이면 `null`.
+ * **로그아웃이 두고 간 편집의 한 줄**(`settleEdits`) — 로그인 화면이 그린다(`session/session-context.tsx`의 `useSignOutNotice`).
+ * 나간 편집 가운데 답을 못 받은 것(`sent`)은 서버에 반영됐는지 모른다 — 로그아웃 뒤에 커밋될 수도 있다. 커밋 전에 거절된 것(`refused`)과 한 번도
+ * 안 나간 것(`unsent`)은 저장되지 않았다. 셋 다 0 이면 `null`.
  */
-export function logoutLossNotice(sent: number, unsent: number): string | null {
-  if (sent === 0 && unsent === 0) return null
-  const lost = unsent > 0 ? `보내지 않은 편집 ${unsent}개는 저장되지 않았습니다` : ''
+export function logoutLossNotice(sent: number, unsent: number, refused = 0): string | null {
+  if (sent === 0 && unsent === 0 && refused === 0) return null
+  const parts = [refused > 0 ? `거절된 편집 ${refused}개` : '', unsent > 0 ? `보내지 않은 편집 ${unsent}개` : ''].filter((part) => part !== '')
+  const lost = parts.length === 0 ? '' : `${parts.join('와 ')}는 저장되지 않았습니다`
   if (sent === 0) return `로그아웃하며 ${lost} — 다시 로그인해 그 페이지를 확인하세요.`
   const tail = lost === '' ? '' : ` ${lost}.`
   return `로그아웃 전에 보낸 편집 ${sent}개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다.${tail} 다시 로그인해 그 페이지를 확인하세요.`
@@ -654,13 +656,23 @@ function EditorShell(props: {
 
   /**
    * 로그아웃 앞의 기다림 — 아래 `SessionMenu` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. 기다림 뒤에 큐에 남은
-   * 편집을 세어 로그인 화면에 남길 한 줄을 돌려준다(`logoutLossNotice`).
+   * 편집과 **기다리는 동안 버린 편집**을 세어 로그인 화면에 남길 한 줄을 돌려준다(`logoutLossNotice`).
+   *
+   * **버린 것도 센다**(`EditorStore.discardTally`) — 기다리는 동안 편집 실패 수습이 큐를 비우면(`failEdits`) 그 통지는 판을 다시 읽은 뒤에
+   * 서고 셸째 내려가 아무도 못 본다. 큐만 세면 0 이다(jsdom: 로그아웃 뒤 409 → 수습). 누르기 전에 시작한 수습이 버린 것도 아직 말하지
+   * 않았으니 센다(`recoveringDiscards`). **거절이 확정된 편집은 «모름»이 아니다**(`wasRefused`) — 번호 쓰기를 기다리는 편집은 409 를 받고도
+   * 큐에 남는다(`use-edit-commit.tsx`의 `pump`).
    */
   const settleEdits = useCallback(async () => {
+    const start = store.discardTally()
+    const untold = store.recoveringDiscards()
     await editsAnswered(store)
+    const end = store.discardTally()
     const { pending } = store.getState()
-    const sent = pending.filter(store.wasSent).length
-    return logoutLossNotice(sent, pending.length - sent)
+    const refusedHere = pending.filter(store.wasRefused).length
+    const sentHere = pending.filter(store.wasSent).length - refusedHere
+    const since = (key: keyof DiscardTally): number => end[key] - start[key] + untold[key]
+    return logoutLossNotice(sentHere + since('unknown'), pending.length - sentHere - refusedHere + since('unsent'), refusedHere + since('refused'))
   }, [store])
 
   return (

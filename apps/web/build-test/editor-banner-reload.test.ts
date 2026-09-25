@@ -8,6 +8,8 @@
  * jsdom 에서는 이 판이 안 선다 — `fireEvent.click` 이 포커스를 안 옮겨 blur 가 안 난다. 루프백은 두 연결의 지연 차가 0 이라
  * 도착 순서가 늘 보내는 순서다 — 그래서 **WS 연결만 10ms 늦춘다**(`startWsDelay`). 그 지연이 없던 측정에서 WS 가 GET 보다
  * 8–15ms 앞섰으니, 10ms 는 망의 흔들림 폭 안에서 순서를 뒤집는 값이다.
+ *
+ * 둘째 케이스는 단추의 다시 읽기가 도는 사이 다른 페이지로 옮긴 판이다(배너가 풀리는가).
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -117,6 +119,72 @@ describe.skipIf(!전제.ok)('배너 «다시 불러오기»와 blur 커밋의 �
     } finally {
       await context.close()
       await delay.close()
+    }
+  })
+  /**
+   * **«다시 불러오기»가 도는 사이 다른 페이지로 옮겨도 배너가 풀린다**(`EditorStore.#keepsRestored`의 `#rereadBegun`). 단추는 메뉴 · 테마 ·
+   * 우측 본문을 곧바로 다시 읽고 페이지는 보낸 편집의 답 뒤에 읽는다. 그 페이지 조회가 도는 사이 옮기면 복원 이펙트는 판을 못 싣고 물러나고,
+   * 옮긴 페이지의 여는 조회가 판을 싣는다 — 그 조회는 다시 읽기가 시작된 뒤에 시작했으니 복원 뒤를 읽었다. 고치기 전에는 그 판이 배너를 안
+   * 풀어 2.5s 뒤에도 «다른 사람이 스냅샷을 복원했습니다»가 남았다([Chrome] — 단추를 한 번 더 누르면 풀렸다).
+   */
+  it('다시 읽기 도중 다른 페이지로 옮기면 배너가 풀린다', async () => {
+    const bob = await stack.login(stack.users.bob)
+    const call = (method: string, path: string, body?: unknown) => stack.request(bob, method, path, body)
+    const project = created(await call('POST', '/projects', { name: '옮기는 다시 읽기', slug: `reread-leave-${Date.now().toString(36)}` }))
+    const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.alice.email, role: 'owner' })
+    if (member.status >= 300) throw new Error(`픽스처 member ${member.status} ${JSON.stringify(member.body)}`)
+    const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' }))
+    const first = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' }))
+    const second = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '둘째' }))
+    for (const [id, content, nodeId] of [
+      [first.id, '첫째 원문', 'n_one0000001'],
+      [second.id, '둘째 원문', 'n_two0000001'],
+    ] as const) {
+      const seeded = await call('PATCH', `/projects/${project.id}/pages/${id}/ops`, {
+        baseSeq: 0,
+        ops: [{ op: 'add', path: '/root/children/0', value: { id: nodeId, type: 'Text', props: { content } } }],
+      })
+      if (seeded.status >= 300) throw new Error(`픽스처 ops ${seeded.status}`)
+    }
+    const snapshot = created(await call('POST', `/projects/${project.id}/snapshots`, { tag: 'leave' }))
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const events: string[] = []
+    const t0 = Date.now()
+    const at = (): number => Date.now() - t0
+    const firstPath = `/api/projects/${project.id}/pages/${first.id}`
+    const secondPath = `/api/projects/${project.id}/pages/${second.id}`
+    try {
+      await page.goto(`/projects/${project.id}/pages/${first.id}`)
+      await page.locator('.wb-shell-canvas-frame', { hasText: '첫째 원문' }).waitFor()
+      const restored = await call('POST', `/projects/${project.id}/snapshots/${snapshot.id}/restore`)
+      if (restored.status !== 200) throw new Error(`복원 ${restored.status}`)
+      const button = page.getByRole('button', { name: '다시 불러오기' })
+      await button.waitFor()
+      // 다시 읽기의 페이지 조회를 1.5s 붙잡는다 — 그 사이 옮긴다.
+      await page.route(`**${firstPath}`, async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback()
+        events.push(`${at()} GET 첫째 붙잡음`)
+        await new Promise((resolve) => setTimeout(resolve, 1_500))
+        await route.fallback()
+      })
+      page.on('request', (request) => {
+        if (request.method() === 'GET' && request.url().endsWith(secondPath)) events.push(`${at()} GET 둘째`)
+      })
+      await button.click()
+      await poll('다시 읽기의 페이지 조회가 붙잡힌다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('GET 첫째 붙잡음')))
+      events.push(`${at()} 둘째로 옮김`)
+      await page.getByRole('link', { name: '둘째' }).click()
+      await page.locator('.wb-shell-canvas-frame', { hasText: '둘째 원문' }).waitFor()
+      await page.waitForTimeout(2_500)
+      const banners = await page.locator('.wb-shell-remote-alert').allTextContents()
+      // eslint-disable-next-line no-console
+      console.log(`[다시 읽기 도중 옮김] ${events.join(' · ')} · 배너 ${JSON.stringify(banners)}`)
+
+      // 판 카나리아 — 붙잡은 조회가 도는 사이 옮겼고 둘째를 읽었다.
+      expect(events.map((line) => line.replace(/^\d+ /, ''))).toEqual(['GET 첫째 붙잡음', '둘째로 옮김', 'GET 둘째'])
+      expect(banners).toEqual([])
+    } finally {
+      await context.close()
     }
   })
 })
