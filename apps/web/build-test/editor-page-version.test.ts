@@ -109,6 +109,72 @@ describe.skipIf(!전제.ok)('되살린 페이지의 번호', () => {
       await refusal.close()
     }
   })
+
+  /**
+   * **남긴 번호가 없는 id 를 되살리면 2^32 에서 센다**(`apps/api/src/repos/pages.ts` 의 `insertPageWithId` «그 id 의 줄이 없으면») —
+   * 그 번호로 한 판을 끝까지 돈다: 앨리스의 편집(REST · WS) → 밥의 화면에 프레임 → 앨리스의 ack → 새로고침 뒤 서버 이력으로 채운
+   * 되돌리기(`GET …/revisions?mine=true`) → 되돌린 편집이 밥에게 닿는다. 번호를 다루는 자리(수 비교 · `+ 1`)가 안전 정수 안에서
+   * 도는지를 본다. 줄 없는 판은 줄을 지워 세운다 — 번호를 남기기 전에 지운 판과 DB 가 같다.
+   */
+  it('2^32 에서 세는 되살린 페이지도 편집 · 프레임 · 새로고침 뒤 되돌리기가 돈다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const call = (method: string, path: string, body?: unknown) => stack.request(alice, method, path, body)
+    const project = created(await call('POST', '/projects', { name: '큰 번호', slug: `big-seq-${Date.now().toString(36)}` }))
+    const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
+    if (member.status >= 300) throw new Error(`픽스처 member ${member.status} ${JSON.stringify(member.body)}`)
+    const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' }))
+    const target = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '페이지' }))
+    const P = `/projects/${project.id}/pages/${target.id}`
+    const text = (id: string, content: string) => ({ id, type: 'Text', props: { content } })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: [
+        { op: 'add', path: '/root/children/0', value: text('n_ga00000001', '가') },
+        { op: 'add', path: '/root/children/1', value: text('n_na00000001', '나') },
+      ],
+    })
+    if (seeded.status >= 300) throw new Error(`픽스처 ops ${seeded.status}`)
+    const snapshot = created(await call('POST', `/projects/${project.id}/snapshots`, { tag: 'big-seq' }))
+    expect((await call('DELETE', P)).status).toBe(204)
+    await stack.query('delete from page_seq_floors where page_id = $1', [target.id])
+    expect((await call('POST', `/projects/${project.id}/snapshots/${snapshot.id}/restore`)).status).toBe(200)
+    const floor = 2 ** 32
+    expect((await server(stack, alice, P)).head).toBe(floor)
+
+    const a = await stack.openTab(stack.users.alice)
+    const b = await stack.openTab(stack.users.bob)
+    try {
+      await a.page.goto(P)
+      await b.page.goto(P)
+      await a.page.locator('.wb-shell-canvas-frame', { hasText: '나' }).waitFor()
+      await b.page.locator('.wb-shell-canvas-frame', { hasText: '나' }).waitFor()
+
+      await a.page.locator('li button', { hasText: 'Text' }).nth(1).click()
+      const box = a.page.locator('.wb-shell-panel textarea').first()
+      expect(await box.inputValue()).toBe('나')
+      await box.click()
+      await box.fill('큰 번호 고침')
+      await box.evaluate((element) => (element as HTMLElement).blur())
+      const edited = await poll('편집이 서버에 닿는다', () => server(stack, alice, P), (value) => value.head === floor + 1)
+      expect(edited.content).toEqual(['가', '큰 번호 고침'])
+      await b.page.locator('.wb-shell-canvas-frame', { hasText: '큰 번호 고침' }).waitFor()
+      // 앨리스의 ack 가 제 판을 머리로 두었다 — 낡음 · 거절 통지가 없다.
+      expect(await stable(a.page)).toEqual({ canvas: '가 큰 번호 고침', notices: [] })
+
+      await a.page.reload()
+      await a.page.locator('.wb-shell-canvas-frame', { hasText: '큰 번호 고침' }).waitFor()
+      const undo = a.page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
+      await poll('새로고침으로 채운 되돌리기가 켜진다', async () => undo.isEnabled(), (enabled) => enabled)
+      await undo.click()
+      const undone = await poll('되돌리기가 서버에 닿는다', () => server(stack, alice, P), (value) => value.head === floor + 2)
+      expect(undone.content).toEqual(['가', '나'])
+      expect(await stable(a.page)).toEqual({ canvas: '가 나', notices: [] })
+      expect((await stable(b.page)).canvas).toBe('가 나')
+    } finally {
+      await a.context.close()
+      await b.context.close()
+    }
+  })
 })
 
 describe.skipIf(!전제.ok)('서버 이력으로 채운 되돌리기', () => {

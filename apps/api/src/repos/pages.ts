@@ -612,8 +612,23 @@ export async function lockProjectPages(trx: DbHandle, projectId: string): Promis
  *
  * **`head_seq`는 그 id 가 쓴 마지막 번호 다음이다**(`page_seq_floors` — `recordPageSeqFloor`). 한 페이지 id 에서 번호가 같으면
  * 문서도 같아야 한다 — 서버는 편집의 자리 경로를 `baseSeq` 판에 그대로 적용하므로, 되살린 판본이 옛 판본이 쓴 번호를 다시 쓰면
- * 옛 판본을 든 탭(복원 방송을 못 받았다 · MCP · CLI)의 편집이 되살린 문서의 다른 노드에 적용된다. 그 id 의 줄이 없으면(한 번도
- * 안 지웠다 · `0017` 앞에 지웠다) 0 이다.
+ * 옛 판본을 든 탭(복원 방송을 못 받았다 · MCP · CLI)의 편집이 되살린 문서의 다른 노드에 적용된다.
+ *
+ * **그 id 의 줄이 없으면 `UNKNOWN_SEQ_FLOOR`(2^32)에서 센다.** 복원이 되살리는 id 는 지금 없는 페이지이고, `0017` 뒤에 페이지를
+ * 지우는 두 길은 늘 줄을 남기므로(`recordPageSeqFloor`) 줄이 없다는 것은 **`0017` 앞에 지웠다**는 뜻이다. 그 id 가 어디까지
+ * 셌는지 남은 곳이 없다 — `revisions`는 CASCADE 로 갔고 revision id 는 uuid(전역 수열이 없다), 스냅샷 payload 의 `headSeq`는
+ * **하한**이다(스냅샷 뒤의 편집이 더 셌을 수 있다). 하한에서 이으면 되살리자마자 옛 번호와 같아질 수 있다(`test/restore.test.ts`의
+ * «0017 앞에 지운 페이지»). 그래서 옛 판본이 쓸 수 없던 자리로 건너뛴다 — 한 페이지에 편집이 2^32 번 쌓이기 전에는 겹치지 않는다.
+ * 번호는 `bigint` 칸이고 수로 바꾼 값(`Number`)은 안전 정수 안이다.
+ *
+ * **남는 판 — `0017` 앞에 한 번 되살린 페이지.** 그때는 0 부터 셌으므로, 그 페이지를 `0017` 뒤에 다시 지우면 줄의 값이 되살린
+ * 뒤의 번호뿐이라 첫 판본의 번호와 겹칠 수 있다. 되살린 페이지와 처음부터 산 페이지를 가를 흔적이 없다.
+ *
+ * **호출자는 프로젝트 행을 쥐고 있어야 한다** — 줄을 읽고(이 함수) 행을 넣기 사이에 같은 id 를 되살렸다 지우는 쓰기가 커밋되면
+ * 읽은 줄이 낡아 «줄 + 1»이 그 판본의 번호와 겹친다(행은 그 사이 지워져 id 충돌도 없다). 같은 id 를 되살리는 길(복원)과 지우는
+ * 두 길이 전부 프로젝트 행을 먼저 잡으므로 서로의 뒤에 선다 — 복원 `FOR UPDATE`(`repos/snapshots.ts`의 `lockProjectForRestore`) ·
+ * 페이지 `DELETE`의 `FOR NO KEY UPDATE`(`deletePage` — `lockProjectTree`) · 복원의 `delete-page`는 그 복원 안이다. 부르는 자리는
+ * 복원(`services/restore.ts`) 하나다 — 가져오기는 새 id 를 쓴다(`services/page-import.ts`).
  *
  * **그 번호에는 revision 행이 없다** — 그 페이지가 지워질 때 `revisions.page_id`의 CASCADE가 이력을 함께 데려갔다(재는 법: 삭제
  * 전후로 그 페이지의 `revisions` 행 수를 센다 — 0 이 된다). 그 페이지의 undo 는 빈 이력 위에서 돈다 — 되살린 뒤의 편집만 이력에
@@ -650,15 +665,19 @@ export async function insertPageWithId(
       sort_order: input.sortOrder,
       schema: JSON.stringify(input.schema),
       schema_version: input.schemaVersion,
-      head_seq: floor === undefined ? 0 : Number(floor.head_seq) + 1,
+      head_seq: floor === undefined ? UNKNOWN_SEQ_FLOOR : Number(floor.head_seq) + 1,
     })
     .execute()
 }
 
+/** 줄 없이 되살린 페이지가 세기 시작하는 번호 — `insertPageWithId` 머리말의 «그 id 의 줄이 없으면». */
+export const UNKNOWN_SEQ_FLOOR = 2 ** 32
+
 /**
  * **지우는 페이지 id 가 쓴 마지막 번호를 남긴다**(`0017-page-seq-floors`) — 페이지 행을 지우는 트랜잭션에서 그 행의 `head_seq`로
  * 부른다. 부르는 자리는 페이지를 지우는 두 길이다: `deletePage`(페이지 `DELETE`) · `deletePageRow`(복원의 `delete-page`). 지우는
- * 길이 늘면 여기를 부르게 한다 — 빠뜨리면 그 길로 지운 페이지를 되살릴 때 0 부터 센다(`insertPageWithId`).
+ * 길이 늘면 여기를 부르게 한다 — 빠뜨리면 그 길로 지운 페이지를 되살릴 때 줄이 없어
+ * `0017` 앞에 지운 판으로 읽힌다(`insertPageWithId` — 번호는 안 겹치지만 2^32 로 건너뛴다).
  *
  * **`greatest`로 덮는다.** 되살린 페이지는 이 값보다 큰 번호에서 세므로 늘 더 큰 값이 온다 — 그 전제가 깨져도(줄을 거치지 않고 만든
  * 행) 앞 판본이 쓴 번호를 잃지 않는다.

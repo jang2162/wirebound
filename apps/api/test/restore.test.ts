@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
 import type { PageDocument } from '@wirebound/schema'
 import { listSnapshots } from '../src/repos/snapshots'
+import { UNKNOWN_SEQ_FLOOR } from '../src/repos/pages'
 import { SAFETY_TAG_PREFIX, restoreActorLabel, restoreSnapshot } from '../src/services/restore'
 import { ensureCatalog } from '../src/schema-setup'
 import {
@@ -1191,6 +1192,42 @@ describe('되살린 페이지의 번호', () => {
       await deletePageRoute(ctx, fx, fx.page.id)
       await restore(ctx, fx, id)
       expect(Number((await readPage(ctx, fx.page.id))?.head_seq)).toBe(4)
+    })
+  })
+
+  /**
+   * **`0017` 앞에 지운 페이지 — 남긴 번호가 없다**(`repos/pages.ts`의 `insertPageWithId` «그 id 의 줄이 없으면»). 그 판은 줄을
+   * 지운 DB 와 같다 — `0017`이 빈 표로 서고, 그 앞의 삭제는 줄을 안 남겼다. 옛 판본(head 2 에서 첫 자식 `n_b`를 지우려는
+   * 클라이언트 — 복원 방송을 못 받는 MCP · CLI)이 되살린 뒤 남의 편집이 head 를 2 로 올린 판에 온다. 스냅샷의 번호(1)는 지울 때의
+   * 번호(2)보다 작다 — 스냅샷 번호에서 이으면 되살리자마자 2 라 남의 편집도 필요 없다.
+   */
+  it('남긴 번호가 없는 페이지를 되살리면 옛 번호가 닿지 않는 자리에서 센다 — 옛 판본의 편집은 409', async () => {
+    await withApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await editPage(ctx, fx, 'n_a')
+      const id = await snapshot(ctx, fx, 'v1')
+      await editPage(ctx, fx, 'n_b')
+      await deletePageRoute(ctx, fx, fx.page.id)
+      await ctx.db.deleteFrom('page_seq_floors').where('page_id', '=', fx.page.id).execute()
+      await restore(ctx, fx, id)
+
+      const stale = () =>
+        ctx.app.inject({
+          method: 'PATCH',
+          url: `/api/projects/${fx.project.id}/pages/${fx.page.id}/ops`,
+          cookies: fx.owner.cookie,
+          payload: { baseSeq: 2, ops: [{ op: 'remove', path: '/root/children/0' }] },
+        })
+      const children = async () => ((await readPage(ctx, fx.page.id))?.schema as PageDocument).root.children?.map((child) => child.id)
+      // 되살린 직후 — 스냅샷 번호에서 이으면 여기서 이미 2 다.
+      expect((await stale()).statusCode).toBe(409)
+      expect(await children()).toEqual(['n_a'])
+      // 남의 편집 둘 — 되살린 판이 0 에서 셌다면 head 가 옛 판본의 2 에 닿는다.
+      await editPage(ctx, fx, 'n_c')
+      await editPage(ctx, fx, 'n_d')
+      expect((await stale()).statusCode).toBe(409)
+      expect(await children()).toEqual(['n_d'])
+      expect(Number((await readPage(ctx, fx.page.id))?.head_seq)).toBe(UNKNOWN_SEQ_FLOOR + 2)
     })
   })
 
