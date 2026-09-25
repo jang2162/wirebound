@@ -60,17 +60,23 @@ export interface LogDestinationOptions {
   retryMs?: number
 }
 
-/** 동기로 쓴다 — 버리는 판은 대개 종료 처리기 안이라 비동기로 두면 한 줄이 나가기 전에 프로세스가 끝난다. */
-function noticeOnStderr(line: string): void {
-  try {
-    writeSync(2, `${line}\n`)
-  } catch {
-    // 표준에러도 죽었다 — 알릴 곳이 없다.
-  }
+/**
+ * `notice` 를 생략했을 때 알리는 자리. 동기로 쓴다 — 버리는 판은 대개 종료 처리기 안이라 비동기로 두면 한 줄이 나가기 전에
+ * 프로세스가 끝난다. 객체의 속성으로 두는 것은 `buildApp` 이 옵션 없이 만든 목적지의 알림을 테스트가 가로채게 하려는 것이다 —
+ * `writeSync(2)` 는 vitest 가 못 거둬 테스트 출력에 그대로 새어 나온다(`test/log-destination.test.ts` 의 «앱의 로거»).
+ */
+export const stderrNotice = {
+  line(line: string): void {
+    try {
+      writeSync(2, `${line}\n`)
+    } catch {
+      // 표준에러도 죽었다 — 알릴 곳이 없다.
+    }
+  },
 }
 
 export function logDestination(fd = 1, options: LogDestinationOptions = {}): LogDestination {
-  const notice = options.notice ?? noticeOnStderr
+  const notice = options.notice ?? ((line: string) => stderrNotice.line(line))
   const stream = destination({ fd, sync: false })
   const write = stream.write.bind(stream)
   const flushSync = stream.flushSync.bind(stream)
