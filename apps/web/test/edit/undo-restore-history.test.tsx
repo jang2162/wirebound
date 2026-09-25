@@ -9,8 +9,9 @@
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { PageDocument, PatchOp } from '@wirebound/schema'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
+import { createHttpClient, READ_DEADLINE_MS } from '../../src/api/http-client'
 import type { PatchResult, RevisionSummary } from '../../src/api/types'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
@@ -275,6 +276,56 @@ describe('새로고침 되돌리기가 끊긴 자리를 받아 되짚는다', ()
       sent: [[{ op: 'replace', path: '/root/children/0/props/content', value: '옛 가' }]],
     })
   })
+
+  /**
+   * **한 누름에 받는 한도(`UNDO_HISTORY_ROUNDS` × 200)보다 긴 구간은 받은 데까지로 되짚고, 못 지은 항목은 건너뛰고 말한다** — 받을 만큼 받은 뒤의
+   * 누름은 멈추지 않는다(`startUndo`의 `historyLoaded`). 멈추면 아무것도 안 하고 말도 없이 단추가 켜진 채 남아, 누를 때마다 같은 세 조회를 낸다.
+   * 내 편집(1) 뒤에 밥이 609 번 고쳤다.
+   */
+  it('되짚을 구간이 한 누름에 받는 한도보다 길면 받은 데까지로 되짚고 못 지은 항목은 건너뛰고 말한다', async () => {
+    const patch = recordingPatch()
+    const HEAD = 610
+    const history = [
+      ...Array.from({ length: HEAD - 1 }, (_, index) =>
+        summary(HEAD - index, [{ op: 'replace', path: '/root/children/1/props/content', value: `나${HEAD - index - 1}` }], 'u-bob'),
+      ),
+      summary(1, [{ op: 'replace', path: '/root/children/0/props/content', value: '옛 가' }]),
+    ]
+    const before = vi.fn(async (_projectId: string, _pageId: string, range: { beforeSeq: number; limit: number }) =>
+      history.filter((entry) => entry.seq < range.beforeSeq).slice(0, range.limit),
+    )
+    const opened = doc(text('n-ga', '가'), text('n-na', `나${HEAD}`))
+    await openPage(opened, {
+      apiOverrides: {
+        getPage: async (_projectId, pageId) => ({ ...pageDetail(pageId, opened), headSeq: HEAD }),
+        listMyRevisions: async () => history.filter((entry) => entry.actorId === 'u-1'),
+        listRevisionsBefore: before,
+        patchOps: patch.patchOps,
+      },
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(before).toHaveBeenCalledTimes(3))
+    await act(async () => {})
+    await act(async () => {})
+
+    expect({
+      fetches: before.mock.calls.map((call) => call[2]),
+      sent: patch.calls,
+      notice: screen.queryByText('건너뛰었습니다', { exact: false })?.textContent ?? null,
+      enabled: !undoButton().disabled,
+    }).toEqual({
+      fetches: [
+        { beforeSeq: HEAD + 1, limit: 200 },
+        { beforeSeq: HEAD - 199, limit: 200 },
+        { beforeSeq: HEAD - 399, limit: 200 },
+      ],
+      sent: [],
+      notice: '되돌릴 수 없는 편집 1개를 건너뛰었습니다. 되돌릴 것이 더 없습니다.',
+      enabled: false,
+    })
+  })
 })
 
 /**
@@ -388,6 +439,91 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
   })
 
   /**
+   * **맨 위 세션 항목을 건너뛴 누름도 복원 항목에 닿으면 받고 되돌린다**(`EditorStore.#startFrom`의 `history`). 판: 열고 나서 «가»를 고쳐 ack(8 —
+   * 세션 항목), 밥이 «가»를 지웠다(9). 누르면 세션 항목은 못 얹어 건너뛰고 같은 누름이 내 6 에 닿는다 — 되짚으려면 7 을 받아야 한다. 받지 않고
+   * 붙잡으면 6 · 5 를 못 짓고 한 누름에 전부 건너뛰어 스택이 빈다. 누르기 직전까지 세우고 보낸 편집 프레임을 읽는 함수를 돌려준다.
+   */
+  async function sessionTopGone(before: ApiClient['listRevisionsBefore']): Promise<() => PatchOp[][]> {
+    const { setup, sockets } = wiring()
+    await openPage(OPENED, { realtime: setup, apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: before } })
+    act(() => {
+      sockets[0]?.onopen?.()
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    const patches = () => (sockets[0]?.sent ?? []).filter((frame) => (frame as { type?: string }).type === 'patch') as { ops: PatchOp[]; clientOpId: string }[]
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[1]!)
+    const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
+    fireEvent.change(box, { target: { value: '가 고침' } })
+    fireEvent.blur(box)
+    await waitFor(() => expect(patches()).toHaveLength(1))
+    const frame = (data: Record<string, unknown>) =>
+      act(() => {
+        sockets[0]?.onmessage?.({ data: JSON.stringify({ projectId: PROJECT_ID, pageId: PAGE_ID, warnings: [], ...data }) })
+      })
+    frame({
+      type: 'patch-ack',
+      clientOpId: patches()[0]?.clientOpId,
+      seq: HEAD_SEQ + 1,
+      revisionId: 'rev-session',
+      inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '가' }],
+    })
+    await act(async () => {})
+    frame({ type: 'page-changed', seq: HEAD_SEQ + 2, ops: [{ op: 'remove', path: '/root/children/1' }], actor: { type: 'user', label: '밥' } })
+    await waitFor(() => expect(contents()).toEqual(['밥', '나']))
+    return () => patches().slice(1).map((sent) => sent.ops)
+  }
+
+  it('맨 위 세션 항목을 건너뛴 누름이 복원 항목에 닿으면 받은 뒤 제 노드를 되돌리고, 건너뛴 것은 그 세션 항목 하나다', async () => {
+    const before = vi.fn(async () => [bobInsert(HEAD_SEQ)])
+    const sent = await sessionTopGone(before)
+
+    fireEvent.click(undoButton())
+    // 보냈거나 건너뛰고 멈췄다 — 받지 않고 붙잡으면 보냄 0 · «되돌릴 것이 더 없습니다»로 끝난다.
+    await waitFor(() => expect(sent().length > 0 || screen.queryByText('되돌릴 것이 더 없습니다', { exact: false }) !== null).toBe(true))
+    await act(async () => {})
+
+    expect({
+      fetches: before.mock.calls.map((call) => (call as unknown[])[2]),
+      sent: sent(),
+      notice: screen.queryByText('건너뛰었습니다', { exact: false })?.textContent ?? null,
+      enabled: !undoButton().disabled,
+      contents: contents(),
+    }).toEqual({
+      fetches: [{ beforeSeq: HEAD_SEQ + 1, limit: 1 }],
+      sent: [[{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }]],
+      notice: '되돌릴 수 없는 편집 1개를 건너뛰었습니다. 그 앞의 편집을 되돌렸습니다.',
+      enabled: true,
+      contents: ['밥', '옛 나'],
+    })
+  })
+
+  it('맨 위 세션 항목을 건너뛴 누름의 되짚기 조회가 실패하면 건너뛴 것과 실패를 함께 말하고, 다시 누르면 받아 제 노드를 되돌린다', async () => {
+    let calls = 0
+    const sent = await sessionTopGone(async () => {
+      calls += 1
+      if (calls === 1) throw new ApiError(500, 'internal', '되짚기 조회 실패 [UR]')
+      return [bobInsert(HEAD_SEQ)]
+    })
+
+    fireEvent.click(undoButton())
+    const notice = await screen.findByText('되돌리지 않았습니다', { exact: false })
+    await act(async () => {})
+    const first = { notice: notice.textContent, sent: sent().length, enabled: !undoButton().disabled }
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(sent()).toHaveLength(1))
+
+    expect(first).toEqual({
+      notice: '되돌릴 수 없는 편집 1개를 건너뛰었습니다. 되짚기 조회 실패 [UR] — 되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.',
+      sent: 0,
+      enabled: true,
+    })
+    expect({ sent: sent(), contents: contents() }).toEqual({
+      sent: [[{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }]],
+      contents: ['밥', '옛 나'],
+    })
+  })
+
+  /**
    * **조회가 실패하면 되돌리지 않고 그렇다고 말한다 — 항목은 남고 다시 누르면 다시 받는다.** 받은 데까지로 되짚으면 못 지은 항목이 건너뛰어져
    * 스택에서 사라진다. 세션이 끊겼으면 로그인으로 간다(아래 케이스). 판마다 서버가 답하는 실패다.
    */
@@ -420,6 +556,66 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
       expect(patch.calls[0]).toEqual([{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }])
     })
   }
+
+  /**
+   * **조회가 끝내 답하지 않아도 단추가 꺼진 채 남지 않는다** — 되짚기 조회는 일반 읽기라 HTTP 클라이언트의 시간 한도를 탄다(`api/http-client.ts`의
+   * `READ_DEADLINE_MS` — 머리까지 10초 · 두 번). 넘으면 실패 갈래로 가 말하고 단추가 다시 켜진다. 여기는 가짜 api 가 아니라 실물 클라이언트에 답하지
+   * 않는 `fetch`를 물린다(끊기면 `fetch`처럼 거절한다).
+   */
+  describe('되짚기 조회가 답하지 않으면', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('시간 한도에 실패로 끝나 말하고 단추가 다시 켜지며, 다시 누르면 다시 받아 제 노드를 되돌린다', async () => {
+      const patch = recordingPatch()
+      let answers = false
+      const asked: string[] = []
+      const fetchImpl: typeof fetch = (input, init) => {
+        asked.push(String(input))
+        if (answers) {
+          return Promise.resolve(new Response(JSON.stringify([bobInsert(HEAD_SEQ)]), { status: 200, headers: { 'content-type': 'application/json' } }))
+        }
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        })
+      }
+      const http = createHttpClient(fetchImpl)
+      await openPage(OPENED, {
+        apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: http.listRevisionsBefore, patchOps: patch.patchOps },
+      })
+      await waitFor(() => expect(undoButton().disabled).toBe(false))
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+      fireEvent.click(undoButton())
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2 * READ_DEADLINE_MS - 1)
+      })
+      const waiting = { asked: asked.length, disabled: undoButton().disabled, notice: screen.queryByText('되돌리지 않았습니다', { exact: false }) }
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      const timedOut = {
+        notice: screen.queryByText('되돌리지 않았습니다', { exact: false })?.textContent ?? null,
+        sent: patch.calls.length,
+        enabled: !undoButton().disabled,
+      }
+      expect({ waiting, timedOut }).toEqual({
+        waiting: { asked: 2, disabled: true, notice: null },
+        timedOut: { notice: '서버가 응답하지 않습니다 — 잠시 뒤 새로고침하세요 — 되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.', sent: 0, enabled: true },
+      })
+      vi.useRealTimers()
+      answers = true
+      fireEvent.click(undoButton())
+      await waitFor(() => expect(patch.calls).toHaveLength(1))
+
+      expect({ asked: asked.length, sent: patch.calls, contents: contents() }).toEqual({
+        asked: 3,
+        sent: [[{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }]],
+        contents: ['밥', '가', '옛 나'],
+      })
+    })
+  })
 
   it('되짚기 조회가 401 이면 되돌리지 않고 로그인으로 간다', async () => {
     const patch = recordingPatch()

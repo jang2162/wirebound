@@ -482,6 +482,12 @@ export interface UndoAttempt {
    * 한 필드에 접으면 *"영영 못 되돌린다"*와 *"지금은 못 되돌린다"*가 같은 값이 된다.
    */
   blocked: NodeLock | null
+  /**
+   * **새로고침으로 채운 항목에 닿았는데 되짚을 이력이 모자라 멈췄다**(`#startFrom`) — 받을 조회다. 앞의 건너뛴 항목(`skipped`)은 이미 버렸고 그
+   * 항목은 스택 맨 위에 남는다. 부르는 쪽이 받아 넘긴 뒤(`supplyUndoHistory`) `startUndo({ historyLoaded: true })`로 다시 누른다. 멈추지 않았으면
+   * 없다.
+   */
+  history?: UndoHistoryNeed
 }
 
 /** 아무것도 시작하지 못한 결과. 부르는 쪽이 세 필드를 매번 적지 않게 여기 둔다. */
@@ -1103,17 +1109,23 @@ export class EditorStore {
    *
    * **누를 때 묻는다**(`edit/use-edit-commit.tsx`의 `undo`) — 페이지를 열 때 받지 않는다. 문서 통째 교체 revision 은 문서 두 벌이라 그것이
    * 낀 페이지를 열 때 미리 받으면 되돌리기를 안 눌러도 응답이 수백 MB 다(api: 노드 2000 문서 교체 200 개 → 한 조회 185MB). 세션 항목은
-   * 이력 없이 되돌리므로 그 위에서는 묻지 않는다.
+   * 이력 없이 되돌리므로 그 위에서는 묻지 않는다 — 세션 항목을 건너뛴 누름이 복원 항목에 닿으면 `startUndo`가 멈추고 같은 조회를 낸다
+   * (`UndoAttempt.history`).
    *
    * 빠진 번호는 남의 revision(코멘트 번호 포함 · 토큰으로 낸 내 것)이거나, 목록을 읽은 뒤 · 목록 답 전에 온 프레임 · 내 ack 의
    * revision 이다 — 목록은 내 것만이고 그 뒤의 것은 서버가 목록을 읽은 판에 없었다. **되짚는 판은 목록 답을 실은 판이다**
    * (`restoreUndoStack`) — 그 뒤에 판이 올라도 구간은 늘지 않는다. 한 조회의 상한(`UNDO_HISTORY_PAGE`)을 넘으면 받은 것을 넘기고 다시 묻는다.
    */
   readonly undoHistoryNeed = (): UndoHistoryNeed | null => {
-    const history = this.#restoredHistory
-    if (history === null || history.epoch !== this.#queueEpoch || history.walked) return null
     const { undoStack } = this.#state
     if (undoStack[undoStack.length - 1]?.anchorOnUse === undefined) return null
+    return this.#historyNeed()
+  }
+
+  /** 되짚는 길에 빠진 구간(`undoHistoryNeed`) — 스택의 어느 항목이 닿았는지는 부르는 쪽이 본다(`#startFrom`). */
+  #historyNeed(): UndoHistoryNeed | null {
+    const history = this.#restoredHistory
+    if (history === null || history.epoch !== this.#queueEpoch || history.walked) return null
     let missing: number | null = null
     for (let seq = history.headSeq; seq > history.lowest; seq -= 1) {
       if (!history.inverses.has(seq)) {
@@ -1830,12 +1842,16 @@ export class EditorStore {
    * undo 0 · redo 0이 되고 되돌리기 버튼이 비활성이 된다. 「에러 처리」가 undo 실패에 대해
    * 적은 것(*"그 항목만 스택에서 버리고 나머지는 그대로 쓴다"*)과 어긋나는 값이다.
    */
-  readonly startUndo = (): UndoAttempt => this.#startFrom('undo')
+  readonly startUndo = (options: { historyLoaded?: boolean } = {}): UndoAttempt => this.#startFrom('undo', options.historyLoaded === true)
 
   /** redo 한 단계. `startUndo`와 같은 규칙을 redo 스택에 쓴다. */
-  readonly startRedo = (): UndoAttempt => this.#startFrom('redo')
+  readonly startRedo = (): UndoAttempt => this.#startFrom('redo', false)
 
-  #startFrom(kind: 'undo' | 'redo'): UndoAttempt {
+  /**
+   * `historyLoaded` — 부르는 쪽이 되짚기 이력을 받을 만큼 받았다. 그래도 빠진 번호가 남으면(한 누름에 받는 한도 밖 · 서버에 없음) 받은 데까지로
+   * 되짚고 못 지은 항목은 건너뛴다. 없으면 새로고침으로 채운 항목에 닿았을 때 이력이 모자라면 멈춘다(`UndoAttempt.history`).
+   */
+  #startFrom(kind: 'undo' | 'redo', historyLoaded: boolean): UndoAttempt {
     const { document, openPageId } = this.#state
     if (document === null) return NO_ATTEMPT
 
@@ -1846,6 +1862,17 @@ export class EditorStore {
       const ref = stack[stack.length - 1]
       const rest = stack.slice(0, -1)
       if (ref === undefined) break
+
+      // **새로고침으로 채운 항목에 닿았는데 이력이 모자라면 붙잡기 전에 멈춘다**(`undoHistoryNeed`). 붙잡으면 되짚기가 시작돼(`walked`) 더 못 받고,
+      // 받지 못한 번호 아래의 항목은 못 지어 이 누름에 전부 건너뛴다. 맨 위 세션 항목을 건너뛴 누름도 여기로 온다(jsdom: 세션 항목 1 을 건너뛴
+      // 누름이 복원 항목 2 를 받지 않고 붙잡아 «3개를 건너뛰었습니다» · 보냄 0 · 스택 비움). 건너뛴 것만 버린다 — 잠금의 `blocked`와 같다.
+      if (!historyLoaded && ref.anchorOnUse !== undefined) {
+        const history = this.#historyNeed()
+        if (history !== null) {
+          if (skipped > 0) this.#apply(kind === 'undo' ? { undoStack: stack } : { redoStack: stack })
+          return { clientOpId: null, skipped, blocked: null, history }
+        }
+      }
 
       // 건너뛴 항목이 문서를 바꾸지 않으므로 후보마다 **같은 문서**에 시험한다. **붙잡은 항목은 노드 id 로 경로를 다시 짓는다**
       // (`RevisionRef.anchored`) — 그 사이 남이 앞자리에 넣었으면 `inverse`의 옛 자리가 남의 노드를 가리킨다. 경로의 노드가 사라졌으면 못 얹는다.

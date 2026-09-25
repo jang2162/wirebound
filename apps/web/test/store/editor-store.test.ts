@@ -1515,10 +1515,11 @@ describe('서버 이력으로 채운 되돌리기', () => {
   })
 
   /**
-   * **사이 번호를 못 받았으면 그 항목은 누를 때 건너뛰고 그 수를 말한다** — 경로 그대로 보내지 않는다. 6 의 경로(`children/1`)는 밥의 7 앞 판의
-   * 자리라 지금 판에서는 «가»다. 싣지 않으면 아무도 그 항목이 사라진 것을 말하지 않는다.
+   * **사이 번호가 빠졌으면 누름이 그 항목 앞에서 멈추고 받을 조회를 낸다**(`UndoAttempt.history`) — 붙잡지 않으므로 항목은 남는다. **받을 만큼 받고도
+   * 못 받았으면 그 항목은 건너뛰고 그 수를 말한다** — 경로 그대로 보내지 않는다. 6 의 경로(`children/1`)는 밥의 7 앞 판의 자리라 지금 판에서는
+   * «가»다. 싣지 않으면 아무도 그 항목이 사라진 것을 말하지 않는다.
    */
-  it('연 판에 받지 못한 남의 revision 이 끼어 있으면 그 아래 항목은 누를 때 건너뛴다 — 남의 노드를 안 고친다', () => {
+  it('연 판에 받지 못한 남의 revision 이 끼어 있으면 누름이 멈춰 받을 조회를 내고, 받지 못한 채 다시 누르면 건너뛴다 — 남의 노드를 안 고친다', () => {
     const store = new EditorStore({ nextOpId: idSequence() })
     // 6 은 내 것(«나»를 고쳤다), 7 은 밥이 맨 앞에 넣은 것 — 연 판은 7 이다.
     store.loadPage('pg-1', page(text('n_bob', '밥'), text('n_ga', '가'), text('n_na', '나')), 7)
@@ -1527,7 +1528,9 @@ describe('서버 이력으로 채운 되돌리기', () => {
     ])
 
     expect(store.getState().undoStack).toHaveLength(1)
-    expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 1, blocked: null })
+    expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 0, blocked: null, history: { beforeSeq: 8, limit: 1, epoch: expect.any(Number) } })
+    expect(store.getState().undoStack).toHaveLength(1)
+    expect(store.startUndo({ historyLoaded: true })).toEqual({ clientOpId: null, skipped: 1, blocked: null })
     expect(contents(store)).toEqual(['밥', '가', '나'])
     expect(store.getState().pending).toEqual([])
   })
