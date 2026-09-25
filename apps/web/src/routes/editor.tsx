@@ -1285,9 +1285,13 @@ function CanvasFrame(props: {
         const mine = restoredRevisions(await api.listMyRevisions(projectId, openPageId, { cancel: leave.signal }))
         // 늦게 온 응답이 새 페이지의 스택을 덮지 않게 한다(문서 조회와 같은 가드).
         if (!alive) return
-        // **다시 싣기가 버린 목록은 말한다** — 그 다시 싣기가 버린 편집을 이미 말했으면(통지가 서 있다) 덮지 않는다. 덮으면 그 편집 수를 잃는다.
-        if (store.restoreUndoStack(mine, { point }) === 'reloaded' && store.getState().editFailure === null) {
-          store.setEditFailure({ kind: 'message', message: UNDO_RESTORE_DROPPED_NOTICE })
+        // **다시 싣기가 버린 목록은 말한다** — 잃음의 조각으로 잇는다(`EditorStore.tellLoss`): 그 다시 싣기가 버린 편집을 이미 말했으면 그
+        // 문장 뒤에 선다(세기가 가장 약하다 — 잃은 편집이 없다). 덮으면 그 편집 수를 잃는다. 사람이 누른 동작의 통지는 덮지 않는다(`overOther`).
+        if (store.restoreUndoStack(mine, { point }) === 'reloaded') {
+          store.tellLoss(
+            { key: 'undo-restore-dropped', rank: LOSS_RANK.history, counts: [], render: () => UNDO_RESTORE_DROPPED_NOTICE },
+            { overOther: false },
+          )
         }
       } catch {
         // 여기서 알리지 않는다. 사용자가 할 수 있는 일이 없고, 편집 실패 통지 자리를

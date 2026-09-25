@@ -76,6 +76,23 @@ describe('스토어가 조각을 드는 수명', () => {
     expect(message(store)).toBe('버림 1개.')
   })
 
+  it('«덮지 않는» 조각은 잃음이 아닌 통지 위에 서지 않고, 잃음 조각 뒤에는 잇고, 빈 자리에는 선다', () => {
+    const weak: LossPart = { key: '이력', rank: LOSS_RANK.history, counts: [], render: () => '이력.' }
+    const store = opened()
+    store.setEditFailure({ kind: 'message', message: '되돌릴 수 없는 편집 1개를 건너뛰었습니다.' })
+    store.tellLoss(weak, { overOther: false })
+    expect(message(store)).toBe('되돌릴 수 없는 편집 1개를 건너뛰었습니다.')
+
+    store.setEditFailure(null)
+    store.tellLoss(counted('버림', LOSS_RANK.cancelled, 1))
+    store.tellLoss(weak, { overOther: false })
+    expect(message(store)).toBe('버림 1개. 이력.')
+
+    store.setEditFailure(null)
+    store.tellLoss(weak, { overOther: false })
+    expect(message(store)).toBe('이력.')
+  })
+
   it('세션이 끊긴 통지는 뒤에 온 잃음이 덮지 않는다', () => {
     const store = opened()
     store.setEditFailure({ kind: 'signed-out' })

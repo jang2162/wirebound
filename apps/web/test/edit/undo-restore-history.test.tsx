@@ -44,6 +44,8 @@ class FakeSocket implements RealtimeSocket {
 }
 
 const text = (id: string, content: string) => ({ id, type: 'Text', props: { content, role: 'body' } })
+/** 다시 싣기가 버린 목록을 말하는 한 줄(`routes/editor.tsx`의 `UNDO_RESTORE_DROPPED_NOTICE`). */
+const UNDO_LINE = '페이지를 다시 불러와 되돌리기 이력을 싣지 않았습니다 — 새로고침하면 다시 불러옵니다.'
 
 function doc(...children: ReturnType<typeof text>[]): PageDocument {
   return pageDoc({ id: 'n-root', type: 'Page', children })
@@ -796,7 +798,8 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
 
   /**
    * **다시 싣기가 이미 말했으면 덮지 않는다** — 그 문장이 버린 편집을 말하고 있으면 덮는 순간 그 수를 잃는다. 판: 목록을 붙잡은 채 편집이 거절돼
-   * 수습이 판을 다시 싣고 거절을 말했다. 이력 한 줄은 그보다 약하다(잃은 편집이 없다).
+   * 수습이 판을 다시 싣고 거절을 말했다. 이력 한 줄은 그보다 약하다(잃은 편집이 없다) — 잃음의 조각으로 그 문장 **뒤에** 잇는다
+   * (`EditorStore.tellLoss` · `store/loss-notice.ts`의 세기).
    */
   it('편집 실패 수습이 판을 다시 실으며 이미 말했으면 목록 답을 버려도 그 문장을 덮지 않는다', async () => {
     const list = deferred<RevisionSummary[]>()
@@ -820,7 +823,12 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
     })
     await act(async () => {})
 
-    expect({ same: screen.getByRole('alert').textContent === said, undo: undoButton().disabled }).toEqual({ same: true, undo: true })
+    const now = screen.getByRole('alert').textContent ?? ''
+    expect({ kept: said !== null && now.startsWith(said), undoLine: now.endsWith(UNDO_LINE), undo: undoButton().disabled }).toEqual({
+      kept: true,
+      undoLine: true,
+      undo: true,
+    })
   })
 
   it('재연결 재조회가 판을 다시 실었어도 실을 것이 없던 목록이면 말하지 않는다', async () => {

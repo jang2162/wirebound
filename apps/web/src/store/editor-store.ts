@@ -2380,9 +2380,14 @@ export class EditorStore {
    * 통지의 잃음이 사라진다(jsdom: `test/edit/loss-notice-merge.test.tsx`). **새 편집 · 되돌리기는 여전히 치운다**(`setEditFailure`) — 사람이
    * 한 일이고, 남겨 두면 방금 낸 편집도 실패한 것으로 읽힌다.
    */
-  readonly tellLoss = (part: LossPart): void => {
-    if (this.#state.editFailure?.kind === 'signed-out') return
-    this.#apply({ editFailure: this.#composeLoss(mergeLoss(this.#shownLoss(), part)) })
+  readonly tellLoss = (part: LossPart, options: { overOther?: boolean } = {}): void => {
+    const { editFailure } = this.#state
+    if (editFailure?.kind === 'signed-out') return
+    const shown = this.#shownLoss()
+    // **`overOther: false`면 조각이 아닌 통지 위에는 세우지 않는다** — 사람이 방금 누른 동작의 결과(되돌리기 · 프리셋)를 비동기로 온 약한
+    // 조각(`LOSS_RANK.history`)이 덮지 않는다. 앞 조각이 있으면 잇고, 비어 있으면 세운다(`routes/editor.tsx`의 `UNDO_RESTORE_DROPPED_NOTICE`).
+    if (options.overOther === false && editFailure !== null && shown.length === 0) return
+    this.#apply({ editFailure: this.#composeLoss(mergeLoss(shown, part)) })
   }
 
   /**
