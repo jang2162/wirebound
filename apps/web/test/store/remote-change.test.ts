@@ -229,6 +229,160 @@ describe('applyRemoteChange — 리베이스', () => {
   })
 })
 
+/**
+ * **리베이스 · 되돌리기는 노드 id 로 경로를 다시 짓는다**(`src/store/anchored-ops.ts`). 판은 `[n_a, n_b, n_c]`에서 내 편집이 `n_b`(자리 1)를
+ * 겨누는 사이 남이 맨 앞에 넣는 것이다 — 경로 그대로 얹으면 던지지 않고 `n_a`에 얹히고, 409 뒤 다시 내기가 그 경로를 서버에 보낸다(Chrome · api:
+ * 서버에서 «가»가 지워졌다).
+ */
+describe('리베이스는 내 편집을 제 노드로 옮긴다', () => {
+  function three(): EditorStore {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 5, ops: [...append('n_a'), ...append('n_b'), ...append('n_c')], warnings: NO_WARNINGS })
+    return store
+  }
+  const FRONT: PatchOp[] = [{ op: 'add', path: '/root/children/0', value: { id: 'n_x', type: 'Container' } }]
+
+  it('나간 삭제는 남이 앞에 넣은 판에서 그 노드를 지우는 경로로 다시 나간다', () => {
+    const store = three()
+    store.applyEdit([{ op: 'remove', path: '/root/children/1' }])
+
+    const change = store.applyRemoteChange('page_1', { seq: 6, ops: FRONT, warnings: NO_WARNINGS })
+
+    expect(change.dropped).toEqual([])
+    expect(ids(store)).toEqual(['n_x', 'n_a', 'n_c'])
+    expect(store.nextRequest()).toMatchObject({ baseSeq: 6, ops: [{ op: 'remove', path: '/root/children/2' }] })
+  })
+
+  it('남이 그 노드를 지웠으면 버리고 돌려준다 — 옆 노드에 얹지 않는다', () => {
+    const store = three()
+    store.applyEdit([{ op: 'replace', path: '/root/children/1/type', value: 'Text' }])
+
+    const change = store.applyRemoteChange('page_1', { seq: 6, ops: [{ op: 'remove', path: '/root/children/1' }], warnings: NO_WARNINGS })
+
+    expect(change.dropped.map((edit) => edit.clientOpId)).toEqual(['op_1'])
+    expect(store.getState().document?.root.children?.map((node) => node.type)).toEqual(['Container', 'Container'])
+  })
+
+  it('되돌리기는 ack 뒤 남이 앞에 넣은 판에서 그 노드를 되돌린다', () => {
+    const store = three()
+    const opId = store.applyEdit([{ op: 'replace', path: '/root/children/1/type', value: 'Text' }])
+    store.ackEdit(opId!, { seq: 6, revisionId: 'rev_6', inverse: [{ op: 'replace', path: '/root/children/1/type', value: 'Container' }] })
+    store.applyRemoteChange('page_1', { seq: 7, ops: FRONT, warnings: NO_WARNINGS })
+
+    const attempt = store.startUndo()
+
+    expect(attempt).toMatchObject({ skipped: 0, blocked: null })
+    expect(store.nextRequest()?.ops).toEqual([{ op: 'replace', path: '/root/children/2/type', value: 'Container' }])
+    expect(store.getState().document?.root.children?.map((node) => node.type)).toEqual(['Container', 'Container', 'Container', 'Container'])
+  })
+
+  it('되돌리기의 잠금 판정도 다시 지은 경로로 묻는다 — 남이 잡은 제 노드면 막힌다', () => {
+    const store = three()
+    const opId = store.applyEdit([{ op: 'replace', path: '/root/children/1/type', value: 'Text' }])
+    store.ackEdit(opId!, { seq: 6, revisionId: 'rev_6', inverse: [{ op: 'replace', path: '/root/children/1/type', value: 'Container' }] })
+    store.applyRemoteChange('page_1', { seq: 7, ops: FRONT, warnings: NO_WARNINGS })
+    store.setViewer('me')
+    store.setLocks([{ pageId: 'page_1', nodeId: 'n_b', userId: 'bob', userName: '밥' }])
+
+    expect(store.startUndo()).toMatchObject({ clientOpId: null, blocked: { userName: '밥' } })
+    expect(store.getState().undoStack).toHaveLength(1)
+  })
+
+  it('되돌릴 노드를 남이 지웠으면 건너뛴다 — 옆 노드를 되돌리지 않는다', () => {
+    const store = three()
+    const opId = store.applyEdit([{ op: 'replace', path: '/root/children/1/type', value: 'Text' }])
+    store.ackEdit(opId!, { seq: 6, revisionId: 'rev_6', inverse: [{ op: 'replace', path: '/root/children/1/type', value: 'Container' }] })
+    store.applyRemoteChange('page_1', { seq: 7, ops: [{ op: 'remove', path: '/root/children/1' }], warnings: NO_WARNINGS })
+
+    const attempt = store.startUndo()
+
+    expect(attempt).toEqual({ clientOpId: null, skipped: 1, blocked: null })
+    expect(store.getState().pending).toEqual([])
+  })
+})
+
+/**
+ * **판을 다시 싣는 창 안에 온 revision 은 실린 판 뒤에 제 차례로 얹힌다**(`EditorStore`의 `#windowChanges` · `#replayWindow`). 판은 늘 «조회를
+ * 시작 → 그 사이 revision 이 옴 → 조회의 답이 그 revision 앞의 판»이다. 셸째 재는 케이스는 `test/edit/reload-sent-edits.test.tsx`의 «다시
+ * 읽는 창 안에 온 revision» 묶음이 갖는다 — 여기는 셸로 세우기 어려운 입구(번호 응답 · 판째 버린 편집의 늦은 ack · 선택)다.
+ */
+describe('다시 읽는 창 안에 온 revision', () => {
+  it('번호 응답도 실린 판 뒤에 얹는다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 5, ops: append('n_a'), warnings: NO_WARNINGS })
+    const ticket = store.beginPageLoad('page_1')
+    const marker: PatchOp[] = [{ op: 'add', path: '/root/children/0/marker', value: 1 }]
+    expect(store.applyMarkerChange('page_1', { seq: 6, markerOps: marker })).toBe('applied')
+
+    expect(store.settlePageLoad(ticket)).toBe(true)
+    store.loadPage('page_1', doc([{ id: 'n_a' }]), 5, ticket)
+
+    expect(store.getState().headSeq).toBe(6)
+    expect(store.getState().document?.root.children?.[0]?.marker).toBe(1)
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  it('판째 버린 편집의 늦은 ack 가 다른 조회의 창 안에 오면 그 조회의 판 뒤에도 얹는다', () => {
+    const store = opened()
+    const opId = store.applyEdit(append('n_mine'))!
+    store.markSent(opId)
+    const first = store.beginPageLoad('page_1')
+    store.settlePageLoad(first)
+    store.loadPage('page_1', doc(), 4, first)
+    const second = store.beginPageLoad('page_1')
+
+    store.ackEdit(opId, { seq: 5, revisionId: 'rev_5', inverse: [] })
+    expect(ids(store)).toEqual(['n_mine'])
+    store.settlePageLoad(second)
+    store.loadPage('page_1', doc(), 4, second)
+
+    expect(ids(store)).toEqual(['n_mine'])
+    expect(store.getState().headSeq).toBe(5)
+  })
+
+  it('얹은 revision 이 고른 노드를 지웠으면 선택을 놓는다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', { seq: 5, ops: append('n_a'), warnings: NO_WARNINGS })
+    store.selectNode('n_a')
+    const ticket = store.beginPageLoad('page_1')
+    store.applyRemoteChange('page_1', { seq: 6, ops: [{ op: 'remove', path: '/root/children/0' }], warnings: NO_WARNINGS })
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc([{ id: 'n_a' }]), 5, ticket)
+
+    expect(ids(store)).toEqual([])
+    expect(store.getState().selectedNodeId).toBeNull()
+  })
+})
+
+/**
+ * **번호 응답이 보낼 편집을 다시 못 얹으면 아무것도 안 움직인다**(`EditorStore`의 `#applyMarkerOps` — «하나라도 다시 못 얹으면»). 번호 ops 는
+ * `marker` 칸만 바꾸므로 판은 좁다 — 되돌리기 스택에 번호를 지우는 `inverse`가 있고(서버 이력으로 채운 스택) 그것을 되돌리는 편집이 큐에 선
+ * 사이, 같은 번호를 지우는 응답(코멘트 삭제)이 온다.
+ */
+describe('번호 응답이 보낼 편집을 다시 못 얹는 판', () => {
+  it('갈라졌다고 말하고 문서 · 바탕 · headSeq · 큐를 안 움직인다', () => {
+    const store = opened()
+    store.applyRemoteChange('page_1', {
+      seq: 5,
+      ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_a', type: 'Container', marker: 1 } }],
+      warnings: NO_WARNINGS,
+    })
+    const removeMarker: PatchOp[] = [{ op: 'remove', path: '/root/children/0/marker' }]
+    store.restoreUndoStack([{ revisionId: 'rev_marker', inverse: removeMarker }])
+    expect(store.startUndo().clientOpId).not.toBeNull()
+    const before = store.getState()
+
+    const result = store.applyMarkerChange('page_1', { seq: 6, markerOps: removeMarker })
+
+    expect(result).toBe('diverged')
+    expect(store.getState().headSeq).toBe(5)
+    expect(store.getState().baseDocument).toBe(before.baseDocument)
+    expect(store.getState().document).toBe(before.document)
+    expect(store.getState().pending).toBe(before.pending)
+  })
+})
+
 describe('applyRemoteChange — 안 얹는 갈래', () => {
   it('다른 페이지의 변경은 건너뛴다 — headSeq도 안 건드린다', () => {
     const store = opened()
@@ -659,5 +813,171 @@ describe('holdsServerPage', () => {
 
     expect(store.holdsServerPage('page_1', 5, reordered())).toBe(false)
     expect(store.holdsServerPage('page_2', 4, reordered())).toBe(false)
+  })
+})
+
+/**
+ * **여는 조회의 창**(`EditorStore`의 `#openingPageId`) — 열린 페이지가 아닌 페이지를 읽는 동안 온 그 페이지의 revision 도 적어, 실린 판 뒤에
+ * 얹는다. 셸째 재는 판은 `test/edit/reload-sent-edits.test.tsx`의 «입구마다» 묶음이, 실브라우저 판은 `build-test/editor-open-window.test.ts`가
+ * 갖는다 — 여기는 두 길(판을 비운 뒤 · 다른 페이지가 열린 채)과 판째 버린 편집의 늦은 ack 를 스토어로 가른다.
+ */
+describe('여는 조회의 창', () => {
+  it('판을 비우고 연 조회의 창에 온 프레임을 실린 판 뒤에 얹는다', () => {
+    const store = opened()
+    store.clearPage()
+    const ticket = store.beginPageLoad('page_1')
+    expect(store.applyRemoteChange('page_1', { seq: 5, ops: append('n_bob'), warnings: NO_WARNINGS }).result).toBe('skipped')
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc(), 4, ticket)
+
+    expect(ids(store)).toEqual(['n_bob'])
+    expect(store.getState().headSeq).toBe(5)
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  it('다른 페이지가 열린 채 읽는 조회의 창도 적는다', () => {
+    const store = opened()
+    store.loadPage('page_2', doc([{ id: 'n_q' }]), 9)
+    const ticket = store.beginPageLoad('page_1')
+    store.applyRemoteChange('page_1', { seq: 5, ops: append('n_bob'), warnings: NO_WARNINGS })
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc(), 4, ticket)
+
+    expect(ids(store)).toEqual(['n_bob'])
+    expect(store.getState().headSeq).toBe(5)
+  })
+
+  it('떠났다 다시 여는 조회의 창에 온 판째 버린 편집의 ack 를 얹는다', () => {
+    const store = opened()
+    const opId = store.applyEdit(append('n_mine'))!
+    store.markSent(opId)
+    store.clearPage()
+    store.loadPage('page_2', doc(), 9)
+    store.clearPage()
+    const ticket = store.beginPageLoad('page_1')
+    store.ackEdit(opId, { seq: 5, revisionId: 'rev_5', inverse: [] })
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc(), 4, ticket)
+
+    expect(ids(store)).toEqual(['n_mine'])
+    expect(store.getState().headSeq).toBe(5)
+  })
+
+  it('열린 페이지의 창에 적힌 것은 다른 페이지의 판에 얹지 않는다', () => {
+    const store = opened()
+    const ticket = store.beginPageLoad('page_2')
+    // 열린 페이지(page_1)의 프레임 — 그 페이지의 창에 적힌다.
+    store.applyRemoteChange('page_1', { seq: 5, ops: append('n_one'), warnings: NO_WARNINGS })
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_2', doc(), 4, ticket)
+
+    expect(ids(store)).toEqual([])
+    expect(store.getState().headSeq).toBe(4)
+  })
+
+  it('그 ack 가 다른 페이지를 여는 창에 오면 적지 않는다', () => {
+    const store = opened()
+    const opId = store.applyEdit(append('n_mine'))!
+    store.markSent(opId)
+    store.clearPage()
+    const ticket = store.beginPageLoad('page_2')
+    store.ackEdit(opId, { seq: 5, revisionId: 'rev_5', inverse: [] })
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_2', doc(), 4, ticket)
+
+    expect(ids(store)).toEqual([])
+    expect(store.getState().headSeq).toBe(4)
+  })
+})
+
+/**
+ * **복원 신호보다 앞에 시작한 조회의 답은 복원 배너를 풀지 않는다**(`EditorStore`의 `#restoredAt`). 그 조회는 복원 앞을 읽었을 수 있다 — 풀면
+ * 옛 판본이 최신처럼 서고, 남의 복원은 자동으로 다시 읽지 않으므로(배너 단추) 다음 편집까지 조용하다.
+ */
+describe('창 안의 복원 신호', () => {
+  it('신호 앞에 시작한 조회의 답을 실어도 복원 낡음을 둔다', () => {
+    const store = opened()
+    const ticket = store.beginPageLoad('page_1')
+    store.markRestored()
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc([{ id: 'n_old' }]), 4, ticket)
+
+    expect(ids(store)).toEqual(['n_old'])
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
+  })
+
+  it('신호 뒤에 시작한 조회의 답은 복원 낡음을 푼다', () => {
+    const store = opened()
+    store.markRestored()
+    const ticket = store.beginPageLoad('page_1')
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc(), 1, ticket)
+
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  it('신호 앞에 시작한 조회의 판에는 신호 뒤에 온 revision 을 얹지 않는다 — 되살린 판본의 번호다', () => {
+    const store = opened()
+    const ticket = store.beginPageLoad('page_1')
+    store.markRestored()
+    // 되살린 페이지가 번호를 0 부터 다시 세어 옛 판의 다음 번호와 우연히 같다.
+    store.applyRemoteChange('page_1', { seq: 5, ops: [{ op: 'remove', path: '/root/children/0' }], warnings: NO_WARNINGS })
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc([{ id: 'n_old' }]), 4, ticket)
+
+    expect(ids(store)).toEqual(['n_old'])
+    expect(store.getState().headSeq).toBe(4)
+  })
+})
+
+/**
+ * **떠나며 버린 편집의 수와 그 통지**(`EditorStore.clearPage`의 반환 · `abandonedUnsent` · `setLeaveNotice`). 문장은 셸이 짓는다 —
+ * `test/edit/reload-sent-edits.test.tsx`의 «떠나며 버린 편집의 수».
+ */
+describe('떠나며 버린 편집', () => {
+  it('판을 비우며 버린 편집을 돌려주고, 나간 편집과 함께 버린 안 보낸 편집의 수를 든다', () => {
+    const store = opened()
+    const sent = store.applyEdit(append('n_a'))!
+    store.markSent(sent)
+    store.applyEdit(append('n_b'))
+    store.applyEdit(append('n_c'))
+
+    const dropped = store.clearPage()
+
+    expect(dropped.map((edit) => store.wasSent(edit))).toEqual([true, false, false])
+    expect(store.abandonedOnLeave(sent)).toBe(true)
+    expect(store.abandonedUnsent()).toBe(2)
+  })
+
+  it('같은 페이지를 다시 실으며 버린 것은 떠남으로 세지 않는다', () => {
+    const store = opened()
+    const sent = store.applyEdit(append('n_a'))!
+    store.markSent(sent)
+    store.applyEdit(append('n_b'))
+
+    store.loadPage('page_1', doc(), 4)
+
+    expect(store.abandonedOnLeave(sent)).toBe(false)
+    expect(store.abandonedUnsent()).toBe(0)
+  })
+
+  it('떠남의 통지는 판을 비우거나 프로젝트를 옮겨도 남고, 다른 통지는 지워진다', () => {
+    const store = opened()
+    store.setLeaveNotice('떠남')
+    store.clearPage()
+    store.reset('prj_2')
+    expect(store.getState().editFailure).toEqual({ kind: 'message', message: '떠남' })
+
+    store.setEditFailure({ kind: 'message', message: '다른 실패' })
+    store.clearPage()
+    expect(store.getState().editFailure).toBeNull()
   })
 })

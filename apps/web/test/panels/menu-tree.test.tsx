@@ -562,6 +562,31 @@ describe('메뉴·페이지 트리', () => {
     expect(shellStore().getState().headSeq).toBe(0)
   })
 
+  /** 실패 문장만 두면 다시 여는 길이 다른 페이지로 갔다 오거나 새로고침뿐이다. */
+  it('조회가 실패한 캔버스의 «다시 시도»가 그 페이지를 다시 연다', async () => {
+    let failing = true
+    await openEditor(
+      {
+        getPage: async (projectId, pageId) => {
+          asked.push([projectId, pageId])
+          if (failing) throw new ApiError(503, 'internal', PAGE_MESSAGE, [], true)
+          const page = PAGES[pageId]
+          if (page === undefined) throw new Error(`가짜 서버가 모르는 페이지: ${pageId}`)
+          return page
+        },
+      },
+      '/projects/p-1/pages/pg-list',
+    )
+    await screen.findByText(PAGE_MESSAGE)
+
+    failing = false
+    fireEvent.click(within(canvas()).getByRole('button', { name: '다시 시도' }))
+
+    await waitFor(() => expect(shellStore().getState().document).toBe(PAGES['pg-list']?.schema))
+    expect(within(canvas()).queryByText(PAGE_MESSAGE)).toBeNull()
+    expect(asked.filter(([, pageId]) => pageId === 'pg-list')).toHaveLength(2)
+  })
+
   it('선택된 페이지가 시각적으로 구분된다', async () => {
     await openEditor()
 

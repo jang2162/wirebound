@@ -8,6 +8,7 @@
  * 그래서 배열의 `[0]`이 전송 중인 것이고, ack가 오면 그것만 빠진다.
  */
 import type { PatchOp } from '@wirebound/schema'
+import type { AnchoredOp } from './anchored-ops'
 
 /**
  * 이 편집이 어디서 나왔나. **ack 시점에 revision을 어느 스택에 쌓을지가 여기서 갈린다** —
@@ -44,6 +45,11 @@ export interface PendingEdit {
    */
   baseSeq: number
   kind: EditKind
+  /**
+   * `ops`를 노드 id 로 붙잡은 것(`anchored-ops.ts`) — 리베이스가 이것으로 경로를 다시 짓는다. 큐에 넣는 순간 그 편집을 만든 문서에서 적는다
+   * (`EditorStore`의 `#enqueue`). **없으면(`undefined` · `null`) 리베이스는 `ops`를 경로 그대로 얹는다** — 못 붙잡은 편집이다.
+   */
+  anchored?: AnchoredOp[] | null
 }
 
 /** 지금 보낼 것. 없으면 `null`이다. */

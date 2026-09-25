@@ -366,3 +366,53 @@ describe('useEditCommit', () => {
     expect(canvasText()).toBe(OLD_TEXT)
   })
 })
+
+/**
+ * **프로젝트를 옮긴 뒤 이어 보내는 편집은 옮겨 간 프로젝트로 나간다.** 셸은 프로젝트를 옮겨도 같은 스토어를 쓰고(`reset`), 앞 프로젝트의
+ * 편집이 답을 기다리는 동안 전송 루프는 그 훅의 `projectId`를 쥔 채 돈다. 그 뒤 옮겨 간 프로젝트의 편집이 REST 로 나가면 앞 프로젝트
+ * 경로(`/projects/앞/pages/새 페이지/ops`)로 간다 — 서버가 404 로 거절하고 수습이 그 편집을 버린다.
+ */
+describe('프로젝트를 옮긴 뒤의 전송', () => {
+  function ProjectDriver(props: { projectId: string; pageId: string }): ReactElement {
+    const { commitProp } = useEditCommit(props)
+    commitRef.current = commitProp
+    return <span />
+  }
+
+  it('앞 프로젝트 편집의 답 뒤에 이어 보내는 편집은 옮겨 간 프로젝트 경로로 나간다', async () => {
+    const { calls, patchOps } = deferredPatchOps()
+    const client = { patchOps, getPage: vi.fn() } as unknown as ApiClient
+    const store = new EditorStore()
+    store.reset('prj-a')
+    store.loadPage('pg-a', textDoc(), HEAD_SEQ)
+    const tree = (projectId: string, pageId: string) => (
+      <ApiProvider client={client}>
+        <EditorStoreProvider store={store}>
+          <ProjectDriver projectId={projectId} pageId={pageId} />
+        </EditorStoreProvider>
+      </ApiProvider>
+    )
+    const view = render(tree('prj-a', 'pg-a'))
+    commit(NEW_TEXT)
+    await waitFor(() => expect(calls).toHaveLength(1))
+
+    // 프로젝트를 옮긴다 — 셸이 하는 순서다(`routes/editor.tsx`의 `store.reset(projectId)`).
+    act(() => {
+      store.reset('prj-b')
+      store.loadPage('pg-b', textDoc(), 2)
+    })
+    view.rerender(tree('prj-b', 'pg-b'))
+    commit('옮겨 간 뒤 친 글')
+    expect(calls).toHaveLength(1)
+
+    await act(async () => {
+      calls[0]?.settle(patchResult(HEAD_SEQ + 1, 'op-1'))
+    })
+
+    await waitFor(() => expect(calls).toHaveLength(2))
+    expect(calls.map((call) => [call.projectId, call.pageId])).toEqual([
+      ['prj-a', 'pg-a'],
+      ['prj-b', 'pg-b'],
+    ])
+  })
+})

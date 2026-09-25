@@ -37,7 +37,7 @@ import { PageDescriptionPanel } from '../panels/page-description'
 import { PanelDraftsProvider } from '../panels/panel-drafts'
 import { PropertyPanel } from '../panels/property-panel'
 import { StructureTree } from '../panels/structure-tree'
-import { useEditCommit } from '../edit/use-edit-commit'
+import { leftUnsentNotice, useEditCommit } from '../edit/use-edit-commit'
 import { EditAlert } from '../shell/edit-alert'
 import { EditWarnings } from '../shell/edit-warnings'
 import { RemoteAlert } from '../shell/remote-alert'
@@ -389,7 +389,8 @@ export function EditorShellRoute(): ReactElement {
 
     // 프로젝트가 바뀌면 앞 프로젝트의 문서·선택·줌이 남지 않게 지운다. 노드 id는 문서
     // 안에서만 뜻이 있으므로, 남으면 선택 표시가 존재하지 않는 노드를 가리킨다.
-    store.reset()
+    // 옮겨 가는 프로젝트를 함께 넘긴다 — 앞 편집의 답을 기다리던 전송 루프가 이어 보낼 곳이다(`EditorStore.queueProjectId`).
+    store.reset(projectId)
     // 앞 프로젝트의 이름이 새 주소에서 잠깐 보이는 것도 막는다. 라우터는 두 프로젝트
     // 주소 사이에서 같은 컴포넌트를 다시 쓰므로 상태가 그대로 남는다.
     setState({ status: 'loading' })
@@ -1103,6 +1104,12 @@ function CanvasFrame(props: {
   const zoom = useEditorStore(store, (s) => s.zoom)
   const [state, setState] = useState<PageLoadState>({ status: 'empty' })
   /**
+   * **실패한 캔버스의 «다시 시도»가 올리는 수** — 페이지를 여는 이펙트가 이 값에 매여 다시 돈다(여는 길 그대로: 비우고 · 읽고 · 되돌리기
+   * 이력을 채운다). 실패 문장만 두면 다시 여는 길이 다른 페이지로 갔다 오거나 새로고침뿐이다 — 판을 비운 복원 재조회의 실패가 앞 조회의
+   * 성공을 세대로 이긴 판(`EditorStore.settlePageLoad`)도 여기서 풀린다.
+   */
+  const [openAttempt, setOpenAttempt] = useState(0)
+  /**
    * 마지막으로 처리한 재조회 신호. **상태가 아니라 ref다** — 이 값이 바뀌었다고 다시 그릴
    * 이유가 없고, 상태로 두면 그 갱신이 아래 이펙트를 한 번 더 태운다.
    */
@@ -1134,6 +1141,17 @@ function CanvasFrame(props: {
     },
     [store],
   )
+  /**
+   * **떠나며 버린 안 보낸 편집을 말한다**(`leftUnsentNotice`) — 판을 비우는 자리(`clearPage`)가 돌려준 것에서 센다. 답을 기다리던 나간 편집은
+   * 여기서 안 센다 — 그 답이 거절이면 전송 루프가 합쳐 말하고(`abandonedOnLeave`), 저장됐으면 말할 것이 없다.
+   */
+  const tellLeft = useCallback(
+    (dropped: readonly PendingEdit[]): void => {
+      const unsent = dropped.filter((edit) => !store.wasSent(edit)).length
+      if (unsent > 0) store.setLeaveNotice(leftUnsentNotice(unsent))
+    },
+    [store],
+  )
   const applyServerPage = useCallback(
     (openPageId: string, page: PageDetail, lead: string, ticket: number): void => {
       // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
@@ -1149,7 +1167,7 @@ function CanvasFrame(props: {
       // 페이지가 없는데 스토어는 있다고 말하는 상태다 — 문서를 스토어에서 읽는 쪽(캔버스·
       // 구조 트리·속성 패널)이 열려 있지 않은 페이지를 그리게 된다. 남은 `headSeq`가 편집의
       // `baseSeq`가 되면 더 나쁘다.
-      store.clearPage()
+      tellLeft(store.clearPage())
       setState({ status: 'empty' })
       return
     }
@@ -1167,8 +1185,8 @@ function CanvasFrame(props: {
     // 읽는 쪽은 열려 있지 않은 페이지를 그리고, 앞 페이지의 revision 위에서 편집 요청이
     // 만들어진다. 캔버스가
     // 잠깐 비는 쪽을 택했다 — 새 페이지의 주소 아래에 앞 페이지의 내용이 그려지는 것보다
-    // 낫다. 이미 비어 있으면 스토어가 알리지 않으므로 구독자가 헛일을 하지도 않는다.
-    store.clearPage()
+    // 낫다. 이미 비어 있으면 스토어가 알리지 않으므로 구독자가 헛일을 하지도 않는다. **비우며 버린 편집은 말한다**(`tellLeft`).
+    tellLeft(store.clearPage())
 
     /**
      * 내 revision을 받아 undo 스택을 채운다. **실패는 삼킨다** — 조회가 실패하면
@@ -1200,8 +1218,8 @@ function CanvasFrame(props: {
     // 열 페이지를 **인자로** 받는다. 이펙트 위쪽의 `undefined` 검사만으로는 이 안에서
     // `pageId`가 좁혀지지 않는다(호이스팅된 함수 선언이라 TS가 호출 시점을 모른다).
     async function load(openPageId: string): Promise<void> {
-      // 판을 싣는 입구다 — 세대를 받는다(`EditorStore.beginPageLoad`의 표).
-      const ticket = store.beginPageLoad()
+      // 판을 싣는 입구다 — 세대를 받는다(`EditorStore.beginPageLoad`의 표). 판이 빈 채 읽으므로 이 페이지의 창이 여기서 열린다.
+      const ticket = store.beginPageLoad(openPageId)
       try {
         const page = await api.getPage(projectId, openPageId, { cancel: leave.signal })
         // 이 줄이 없으면 늦게 온 앞 페이지의 응답이 아래 `loadPage`로 흘러 **새 페이지의
@@ -1249,7 +1267,8 @@ function CanvasFrame(props: {
       alive = false
       leave.abort()
     }
-  }, [api, projectId, pageId, store])
+    // `openAttempt`는 이 이펙트를 다시 태우는 신호다(위 선언).
+  }, [api, projectId, pageId, store, tellLeft, openAttempt])
 
   /**
    * **연결이 다시 붙었으므로 페이지를 다시 읽는다**.
@@ -1314,7 +1333,7 @@ function CanvasFrame(props: {
       await editsAnswered(store, leave.signal)
       if (!alive) return
       // 판을 싣는 입구다 — 세대를 받는다(`EditorStore.beginPageLoad`의 표).
-      const ticket = store.beginPageLoad()
+      const ticket = store.beginPageLoad(pageId)
       try {
         const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         if (!alive) return
@@ -1404,7 +1423,7 @@ function CanvasFrame(props: {
       await editsAnswered(store, leave.signal)
       if (!alive) return
       // 판을 싣는 입구다 — 세대를 받는다(`EditorStore.beginPageLoad`의 표).
-      const ticket = store.beginPageLoad()
+      const ticket = store.beginPageLoad(pageId)
       try {
         const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         if (!alive) return
@@ -1451,7 +1470,12 @@ function CanvasFrame(props: {
         (state.failure.kind === 'signed-out' ? (
           <SignedOut />
         ) : (
-          <p role="alert">{state.failure.message}</p>
+          <>
+            <p role="alert">{state.failure.message}</p>
+            <button type="button" onClick={() => setOpenAttempt((attempt) => attempt + 1)}>
+              다시 시도
+            </button>
+          </>
         ))}
       {state.status === 'ready' && (
         <Canvas projectId={projectId} pageId={pageId} themeReloadToken={props.themeReloadToken} />

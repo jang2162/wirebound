@@ -216,7 +216,7 @@ describe('WS가 붙어 있으면 편집이 그리로 나간다', () => {
     expect(board.store.getState().pending).toEqual([])
     expect(board.store.getState().headSeq).toBe(HEAD_SEQ + 1)
     // 서버가 준 `inverse`가 undo 스택에 그대로 실린다(설계서 「정방향 흐름」).
-    expect(board.store.getState().undoStack).toEqual([
+    expect(board.store.getState().undoStack).toMatchObject([
       { revisionId: `rev_${HEAD_SEQ + 1}`, inverse: contentOps('옛 내용') },
     ])
   })
@@ -423,6 +423,46 @@ describe('리베이스한 편집을 다시 낸다', () => {
     const children = board.store.getState().document?.root.children ?? []
     expect(children.map((node) => node.id)).toEqual(['n_text', 'n_other', 'n_theirs'])
     expect(children[0]?.props).toEqual({ content: '내 값' })
+  })
+
+  /**
+   * **다시 내는 것은 제 노드를 가리키는 경로다**(`store/anchored-ops.ts`). 남이 같은 배열 **맨 앞**에 넣었으면 내 편집의 옛 자리(0)는 남의
+   * 노드다 — 경로 그대로 다시 내면 서버가 남의 노드를 고친다(Chrome · api: `[가, 나, 다]`에서 «나»를 고친 글이 «가»에 저장됐다).
+   */
+  it('남이 맨 앞에 넣었으면 다시 낸 편집이 제 노드의 새 자리를 가리킨다', async () => {
+    const board = mount()
+    board.commit('내 값')
+    board.push({
+      type: 'page-changed',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      seq: HEAD_SEQ + 1,
+      ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_theirs', type: 'Text', props: { content: '남의 글' } } }],
+      warnings: [],
+      actor: { type: 'user', label: '남' },
+    })
+    board.push({
+      type: 'patch-error',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      clientOpId: 'op_1',
+      status: 409,
+      code: 'conflict',
+      message: '페이지가 이미 변경되었습니다 (요청 baseSeq 4, 현재 5)',
+      issues: [],
+    })
+    await act(async () => {})
+
+    expect(board.patchFrames().map((frame) => [frame.baseSeq, frame.ops])).toEqual([
+      [HEAD_SEQ, contentOps('내 값')],
+      [HEAD_SEQ + 1, [{ op: 'replace', path: '/root/children/1/props/content', value: '내 값' }]],
+    ])
+    const children = board.store.getState().document?.root.children ?? []
+    expect(children.map((node) => [node.id, node.props?.content])).toEqual([
+      ['n_theirs', '남의 글'],
+      ['n_text', '내 값'],
+      ['n_other', '둘째'],
+    ])
   })
 
   /**
