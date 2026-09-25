@@ -62,6 +62,10 @@ function undoButton(): HTMLButtonElement {
   return within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '되돌리기' })
 }
 
+function redoButton(): HTMLButtonElement {
+  return within(screen.getByRole('group', { name: '편집 이력' })).getByRole<HTMLButtonElement>('button', { name: '다시 실행' })
+}
+
 function contents(): string[] {
   return [...document.body.querySelectorAll('[data-wb-id^="n-"]')]
     .filter((node) => node.getAttribute('data-wb-id') !== 'n-root')
@@ -439,6 +443,47 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
   })
 
   /**
+   * **받는 동안 다시 실행 단추도 꺼진다**(`canRedo`의 `undoHistoryLoading`). 판: 열고 나서 «가»를 고치고(세션 편집) 되돌려 다시 실행 스택에 하나가
+   * 있다. 되돌리기를 한 번 더 누르면 맨 위가 복원 항목이라 받는다 — 그 사이 다시 실행을 누르면 세션 편집이 맨 위에 올라 받은 뒤 그 누름을 말없이
+   * 버린다(`loadUndoHistory`의 맨 위 비교). 단추를 끄면 받은 뒤 되돌리고, 다시 실행은 그 뒤에 둘(되돌린 복원 항목 · 세션 편집)로 남는다.
+   * `redo` 안의 «받는 중이면 버린다» 가드는 이 케이스가 못 잰다 — 단추가 먼저 막는다(위 되돌리기 단추의 케이스와 같다).
+   */
+  it('받는 동안 다시 실행 단추도 꺼진다 — 받은 뒤 되돌리고, 다시 실행은 그 뒤에 남는다', async () => {
+    const patch = recordingPatch()
+    const answer = deferred<RevisionSummary[]>()
+    await openPage(OPENED, {
+      apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: () => answer.promise, patchOps: patch.patchOps },
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[1]!)
+    const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
+    fireEvent.change(box, { target: { value: '가 고침' } })
+    fireEvent.blur(box)
+    await waitFor(() => expect(patch.calls).toHaveLength(1))
+    await act(async () => {})
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(patch.calls).toHaveLength(2))
+    await waitFor(() => expect(redoButton().disabled).toBe(false))
+
+    fireEvent.click(undoButton())
+    await waitFor(() => expect(undoButton().disabled).toBe(true))
+    const whileLoading = { undo: undoButton().disabled, redo: redoButton().disabled }
+    fireEvent.click(redoButton())
+    await act(async () => {
+      answer.resolve([bobInsert(HEAD_SEQ)])
+    })
+    await waitFor(() => expect(patch.calls.length).toBeGreaterThan(2))
+    await act(async () => {})
+
+    expect({ whileLoading, sent: patch.calls.slice(2), notice: screen.queryByRole('alert')?.textContent ?? null, redo: !redoButton().disabled }).toEqual({
+      whileLoading: { undo: true, redo: true },
+      sent: [[{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }]],
+      notice: null,
+      redo: true,
+    })
+  })
+
+  /**
    * **맨 위 세션 항목을 건너뛴 누름도 복원 항목에 닿으면 받고 되돌린다**(`EditorStore.#startFrom`의 `history`). 판: 열고 나서 «가»를 고쳐 ack(8 —
    * 세션 항목), 밥이 «가»를 지웠다(9). 누르면 세션 항목은 못 얹어 건너뛰고 같은 누름이 내 6 에 닿는다 — 되짚으려면 7 을 받아야 한다. 받지 않고
    * 붙잡으면 6 · 5 를 못 짓고 한 누름에 전부 건너뛰어 스택이 빈다. 누르기 직전까지 세우고 보낸 편집 프레임을 읽는 함수를 돌려준다.
@@ -687,7 +732,7 @@ describe('번갈아 고친 페이지', () => {
 
 describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답을 싣지 않는다', () => {
   /** 되돌리기 목록을 붙잡은 채 연결을 한 번 끊었다 다시 붙인다 — 재조회가 돌려주는 판은 `resync`다. */
-  async function reconnectWhileListing(resync: { headSeq: number; doc: PageDocument }): Promise<{ release(): Promise<void> }> {
+  async function reconnectWhileListing(resync: { headSeq: number; doc: PageDocument }): Promise<{ release(mine?: RevisionSummary[]): Promise<void> }> {
     const { setup, sockets, scheduled } = wiring()
     const list = deferred<RevisionSummary[]>()
     let calls = 0
@@ -714,9 +759,9 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
     await waitFor(() => expect(getPage).toHaveBeenCalledTimes(2))
     await act(async () => {})
     return {
-      async release() {
+      async release(mine = [myEdit(HEAD_SEQ, 1)]) {
         await act(async () => {
-          list.resolve([myEdit(HEAD_SEQ, 1)])
+          list.resolve(mine)
         })
         await act(async () => {})
       },
@@ -730,6 +775,61 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
     await view.release()
 
     expect(undoButton().disabled).toBe(true)
+  })
+
+  /**
+   * **버린 것을 한 줄 말한다**(`routes/editor.tsx`의 `UNDO_RESTORE_DROPPED_NOTICE`) — 다시 싣기는 그때 스택이 비어 있어 이력을 잃었다고 말하지
+   * 않았다(`tellLost`의 `hadUndo`). 실을 것이 없던 목록이면 잃은 것이 없어 말하지 않는다(대조).
+   */
+  it('재연결 재조회가 판을 다시 실어 목록 답을 버리면 그렇다고 한 줄 말한다', async () => {
+    const view = await reconnectWhileListing({ headSeq: HEAD_SEQ + 1, doc: doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')) })
+    await waitForNode('n-bob')
+    const beforeRelease = screen.queryByRole('alert')?.textContent ?? null
+
+    await view.release()
+
+    expect({ beforeRelease, after: screen.queryByRole('alert')?.textContent ?? null }).toEqual({
+      beforeRelease: null,
+      after: '페이지를 다시 불러와 되돌리기 이력을 싣지 않았습니다 — 새로고침하면 다시 불러옵니다.',
+    })
+  })
+
+  /**
+   * **다시 싣기가 이미 말했으면 덮지 않는다** — 그 문장이 버린 편집을 말하고 있으면 덮는 순간 그 수를 잃는다. 판: 목록을 붙잡은 채 편집이 거절돼
+   * 수습이 판을 다시 싣고 거절을 말했다. 이력 한 줄은 그보다 약하다(잃은 편집이 없다).
+   */
+  it('편집 실패 수습이 판을 다시 실으며 이미 말했으면 목록 답을 버려도 그 문장을 덮지 않는다', async () => {
+    const list = deferred<RevisionSummary[]>()
+    await openPage(doc(text('n-ga', '가'), text('n-na', '나')), {
+      apiOverrides: {
+        listMyRevisions: () => list.promise,
+        patchOps: async () => {
+          throw new ApiError(422, 'validation-failed', '거절된 편집 [UL]')
+        },
+      },
+    })
+    fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[0]!)
+    const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
+    fireEvent.change(box, { target: { value: '가 고침' } })
+    fireEvent.blur(box)
+    await screen.findByText('거절된 편집 [UL]', { exact: false })
+    const said = screen.getByRole('alert').textContent
+
+    await act(async () => {
+      list.resolve([myEdit(HEAD_SEQ, 1)])
+    })
+    await act(async () => {})
+
+    expect({ same: screen.getByRole('alert').textContent === said, undo: undoButton().disabled }).toEqual({ same: true, undo: true })
+  })
+
+  it('재연결 재조회가 판을 다시 실었어도 실을 것이 없던 목록이면 말하지 않는다', async () => {
+    const view = await reconnectWhileListing({ headSeq: HEAD_SEQ + 1, doc: doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나')) })
+    await waitForNode('n-bob')
+
+    await view.release([])
+
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   /** 대조 — 재조회가 판을 다시 싣지 않고 넘어가면(서버 판이 그대로) 같은 판이라 답을 싣는다. */

@@ -205,6 +205,12 @@ export interface RevisionSummary {
 }
 
 /**
+ * `?fields=inverse`로 받은 항목 — `RevisionSummary`에서 `ops`만 없다. 되돌리기(새로고침 뒤 스택 복원 · 되짚기)는 `inverse`만 쓰는데, 문서 통째 교체
+ * revision 은 `ops` · `inverse`가 각각 문서 한 벌이라 그 조회의 응답이 반이 된다(`api/http-client.ts`의 `listMyRevisions` · `listRevisionsBefore`).
+ */
+export type RevisionInverse = Omit<RevisionSummary, 'ops'>
+
+/**
  * `GET /api/projects/:projectId/theme`의 응답 — **이 프로젝트의 화면이 지금 써야 할 테마**다.
  *
  * `theme`이 `null`인 경우가 셋이고 **전부 정상이다**(서버 README): 기본 레이아웃이 없다 ·

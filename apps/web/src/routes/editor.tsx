@@ -172,6 +172,13 @@ function resyncNotice(lead: string, lost: { unsent: number; sent: number }, hadU
   return parts.join(' ')
 }
 
+/**
+ * **목록을 받는 동안 페이지가 다시 실려 새로고침 이력을 싣지 않았을 때의 한 줄**(`restoreUndo` · `EditorStore.restoreUndoStack`의 `'reloaded'`).
+ * 다시 싣기는 그때 스택이 비어 있어 이력을 잃었다고 말하지 않았다(`tellLost`의 `hadUndo`) — 말하지 않으면 새로고침한 사람은 되돌리기가 왜 꺼져
+ * 있는지 모른다. 다시 새로고침하면 서버 판에서 다시 싣는다.
+ */
+const UNDO_RESTORE_DROPPED_NOTICE = '페이지를 다시 불러와 되돌리기 이력을 싣지 않았습니다 — 새로고침하면 다시 불러옵니다.'
+
 /** 복원 뒤 다시 읽기가 실패해 판을 비우며 편집을 버렸을 때의 앞머리. 실패의 까닭은 캔버스가 말한다. */
 const RELOAD_FAILED_LEAD = '페이지를 다시 불러오지 못했습니다.'
 
@@ -1240,7 +1247,8 @@ function CanvasFrame(props: {
      * undo만 없고 페이지는 그대로 열려 있다.
      *
      * **판을 실은 바로 뒤의 점(`undoRestorePoint`)을 들고 간다** — 목록을 받는 동안 판이 다시 실리거나(재연결 · 복원 · 수습) 비면 스토어가
-     * 그 답을 버린다(세대). 판을 실은 번호 뒤의 내 편집은 세션 항목이 이미 든다 — 스토어가 그 아래에 끼운다(`restoreUndoStack`).
+     * 그 답을 버린다(세대) — 같은 페이지가 다시 실렸으면 버렸다고 한 줄 말한다(`UNDO_RESTORE_DROPPED_NOTICE`). 판을 실은 번호 뒤의 내 편집은 세션
+     * 항목이 이미 든다 — 스토어가 그 아래에 끼운다(`restoreUndoStack`).
      *
      * **되짚는 길에 빠진 번호(내 revision 사이에 낀 남의 것 · 목록 답 전에 온 프레임 · 내 ack)는 여기서 받지 않는다** — 되돌리기를 처음
      * 누를 때 받는다(`edit/use-edit-commit.tsx`의 `undo` · `EditorStore.undoHistoryNeed`). 열 때 받으면 누르지 않아도 문서 통째 교체
@@ -1260,7 +1268,10 @@ function CanvasFrame(props: {
         const mine = restoredRevisions(await api.listMyRevisions(projectId, openPageId, { cancel: leave.signal }))
         // 늦게 온 응답이 새 페이지의 스택을 덮지 않게 한다(문서 조회와 같은 가드).
         if (!alive) return
-        store.restoreUndoStack(mine, { point })
+        // **다시 싣기가 버린 목록은 말한다** — 그 다시 싣기가 버린 편집을 이미 말했으면(통지가 서 있다) 덮지 않는다. 덮으면 그 편집 수를 잃는다.
+        if (store.restoreUndoStack(mine, { point }) === 'reloaded' && store.getState().editFailure === null) {
+          store.setEditFailure({ kind: 'message', message: UNDO_RESTORE_DROPPED_NOTICE })
+        }
       } catch {
         // 여기서 알리지 않는다. 사용자가 할 수 있는 일이 없고, 편집 실패 통지 자리를
         // 부가 기능의 실패로 채우면 진짜 편집 실패가 묻힌다.

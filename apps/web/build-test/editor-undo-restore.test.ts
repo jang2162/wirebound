@@ -155,7 +155,8 @@ describe.skipIf(!전제.ok)('새로고침으로 채운 되돌리기', () => {
 /**
  * **되짚기 이력은 열 때가 아니라 처음 누를 때 받는다**(`edit/use-edit-commit.tsx`의 `loadUndoHistory`) — 문서 통째 교체 revision 은 문서 두 벌이라
  * 그것이 낀 페이지를 열 때 미리 받으면 되돌리기를 안 눌러도 수 MB ~ 수백 MB 를 내려받는다. 판: 앨리스의 1 · 2 뒤에 밥이 문서를 통째로 10 번
- * 갈았다(맨 앞에 긴 글 노드 2000 개). 받는 동안 단추는 꺼지고, 그 사이의 더블클릭은 되돌리기 하나다.
+ * 갈았다(맨 앞에 긴 글 노드 2000 개). 받는 동안 단추는 꺼지고, 그 사이의 더블클릭은 되돌리기 하나다. 누를 때 받는 답에는 `ops`가 없다
+ * (`fields=inverse` — 받는 바이트가 반이다).
  */
 describe.skipIf(!전제.ok)('문서 교체가 낀 페이지의 되돌리기', () => {
   let stack: EditorStack
@@ -184,7 +185,7 @@ describe.skipIf(!전제.ok)('문서 교체가 낀 페이지의 되돌리기', ()
     const head = 2 + REPLACES
 
     const { context, page } = await stack.openTab(stack.users.alice)
-    const fetched: { at: 'open' | 'press'; bytes: number }[] = []
+    const fetched: { at: 'open' | 'press'; bytes: number; ops: boolean }[] = []
     let pressed = false
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
@@ -192,7 +193,10 @@ describe.skipIf(!전제.ok)('문서 교체가 낀 페이지의 되돌리기', ()
     })
     await page.route(/\/revisions\?beforeSeq=/, async (route: Route) => {
       const response = await route.fetch()
-      fetched.push({ at: pressed ? 'press' : 'open', bytes: (await response.body()).length })
+      const body = await response.body()
+      // 되짚기 조회는 `inverse`만 받는다(`fields=inverse`) — 문서 교체 revision 은 `ops`도 문서 한 벌이다.
+      const ops = (JSON.parse(body.toString('utf8')) as Record<string, unknown>[]).some((item) => 'ops' in item)
+      fetched.push({ at: pressed ? 'press' : 'open', bytes: body.length, ops })
       // 누른 뒤의 조회만 붙잡는다 — 받는 동안의 단추를 잰다.
       if (pressed) await gate
       await route.fulfill({ response })
@@ -220,8 +224,15 @@ describe.skipIf(!전제.ok)('문서 교체가 낀 페이지의 되돌리기', ()
       const settled = await server(stack, fx.alice, fx.P)
       // eslint-disable-next-line no-console
       console.log(`[문서 교체 뒤 되돌리기] 열 때 ${JSON.stringify(atOpen)} · 누를 때 ${JSON.stringify(fetched.slice(atOpen.length))} · 받는 동안 ${JSON.stringify(whileLoading)} · 서버 head ${settled.head} · 통지 ${JSON.stringify(after.notices)}`)
-      expect({ pressFetches: fetched.length - atOpen.length, whileLoading, head: settled.head, last: landed.content.slice(-2) }).toEqual({
+      expect({
+        pressFetches: fetched.length - atOpen.length,
+        pressOps: fetched.some((entry) => entry.ops),
+        whileLoading,
+        head: settled.head,
+        last: landed.content.slice(-2),
+      }).toEqual({
         pressFetches: 1,
+        pressOps: false,
         whileLoading: { disabled: true, head },
         head: head + 1,
         last: ['가', '나'],
