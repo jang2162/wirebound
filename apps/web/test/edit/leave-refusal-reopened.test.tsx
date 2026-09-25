@@ -126,6 +126,37 @@ describe('떠난 페이지의 거절 — 다시 연 뒤에 왔다', () => {
     expect(alertText()).toBe('페이지가 이미 변경되었습니다 — 떠난 페이지에서 보낸 편집 1개가 저장되지 않았습니다.')
   })
 
+  it('다시 연 뒤 친 편집을 두고 또 떠나면 거절이 와도 그 페이지를 가리킨다 — 다시 연 판은 그 편집 앞이다', async () => {
+    const { view, sent } = await leaveWithSent(true)
+    // 다시 연 1쪽에서 친 편집 — 앞 편집의 답을 기다리며 줄 선다(in-flight 는 하나).
+    await view.tool('Text', '아래로')
+    expect(view.patches()).toHaveLength(1)
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await act(async () => {})
+
+    view.refuse(sent)
+    await act(async () => {})
+
+    expect(alertText()).toBe(
+      '페이지가 이미 변경되었습니다 — 떠난 페이지에서 보낸 편집 1개와 보내지 않은 편집 1개가 저장되지 않았습니다. 그 페이지를 다시 열어 확인하세요.',
+    )
+    // 가리키는 페이지를 다시 열면 풀린다.
+    fireEvent.click(screen.getByRole('link', { name: '회원 목록' }))
+    await act(async () => {})
+    expect(alertText()).toBe('')
+  })
+
+  it('다시 연 뒤 편집 없이 또 떠나면 거절이 와도 다시 열라고 하지 않는다 — 다시 연 판이 서버 상태다', async () => {
+    const { view, sent } = await leaveWithSent(true)
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await act(async () => {})
+
+    view.refuse(sent)
+    await act(async () => {})
+
+    expect(alertText()).toBe('페이지가 이미 변경되었습니다 — 떠난 페이지에서 보낸 편집 1개가 저장되지 않았습니다.')
+  })
+
   it('아직 다시 안 열었으면 다시 열라고 한다', async () => {
     const { view, sent } = await leaveWithSent(false)
 

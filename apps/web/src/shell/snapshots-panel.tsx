@@ -114,7 +114,7 @@
  */
 import { useEffect, useState, type FormEvent, type ReactElement, type RefObject } from 'react'
 import { useApi } from '../api/context'
-import { SignedOut, toFailure, type Failure } from '../api/failure'
+import { SignedOut, refusedBeforeCommit, toFailure, type Failure } from '../api/failure'
 import type { ProjectDetail, RestoreResult, SnapshotSummary } from '../api/types'
 import { projectAbilities } from '../projects/project-actions'
 import { usePopoverDismiss } from './use-popover-dismiss'
@@ -128,6 +128,8 @@ const FAILURE_TITLE = '스냅샷을 열지 못했습니다'
 const SAVE_FAILURE = '스냅샷을 저장하지 못했습니다'
 /** 복원이 이유 없이 실패했을 때. **저장과 다른 문장이다** — 무엇이 실패했는지가 다르다. */
 const RESTORE_FAILURE = '복원하지 못했습니다'
+/** 복원의 답을 잃었을 때 서버 문장 뒤에 붙인다(`runRestore`) — 복원됐을 수 있다. */
+const RESTORE_UNANSWERED = '복원됐는지 알 수 없습니다. 화면 위 «다시 불러오기»로 지금 상태를 확인하세요.'
 /**
  * **저장은 됐는데 목록만 못 받았을 때의 앞머리.** 이 문장이 없으면 화면이 *"실패"*만
  * 말하고, 사용자는 같은 태그로 다시 시도해 **409**를 받는다 — 그리고 스냅샷은 지울 수
@@ -179,6 +181,11 @@ export function SnapshotsPanel(props: {
    * 신호를 알아본다(`EditorStore.beginRestoreReread`).
    */
   onRestored: (safetySnapshotId: string) => void
+  /**
+   * **복원의 답을 잃었다** — 서버가 복원했는지 모른다(`EditorStore.markRestoreUnanswered`). 셸이 «복원됐는지 모릅니다 — 다시 불러오기»를 세운다.
+   * 커밋 전에 거절된 실패(4xx · 봉투 있는 500)는 부르지 않는다 — 복원이 안 됐다.
+   */
+  onRestoreUnanswered: () => void
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** **토글까지 감싸는 상자에 건다** — 그 배치가 훅의 계약이다(`use-popover-dismiss.ts`). */
@@ -197,7 +204,13 @@ export function SnapshotsPanel(props: {
         스냅샷
       </button>
       {open && (
-        <SnapshotsBody projectId={props.projectId} onRestored={props.onRestored} placement={placement} bodyRef={bodyRef} />
+        <SnapshotsBody
+          projectId={props.projectId}
+          onRestored={props.onRestored}
+          onRestoreUnanswered={props.onRestoreUnanswered}
+          placement={placement}
+          bodyRef={bodyRef}
+        />
       )}
     </div>
   )
@@ -207,6 +220,7 @@ export function SnapshotsPanel(props: {
 function SnapshotsBody(props: {
   projectId: string
   onRestored: (safetySnapshotId: string) => void
+  onRestoreUnanswered: () => void
   /** 붙일 자리와 잴 상자 — 토글을 감싼 쪽이 고른다(`use-popover-side.ts`). */
   placement: PopoverPlacement
   bodyRef: RefObject<HTMLDivElement | null>
@@ -301,6 +315,7 @@ function SnapshotsBody(props: {
           reloadFailure={reloadFailure}
           onSaved={() => setReloadToken((token) => token + 1)}
           onRestored={props.onRestored}
+          onRestoreUnanswered={props.onRestoreUnanswered}
         />
       )}
     </div>
@@ -347,6 +362,8 @@ function SnapshotsScreen(props: {
   onSaved: () => void
   /** 복원이 성공했다. **`onSaved`와 갈라 둔다** — 아래 `runRestore`의 주석. */
   onRestored: (safetySnapshotId: string) => void
+  /** 복원의 답을 잃었다(`SnapshotsPanel`의 같은 이름). */
+  onRestoreUnanswered: () => void
 }): ReactElement {
   const api = useApi()
   const abilities = projectAbilities(props.project.role)
@@ -385,7 +402,12 @@ function SnapshotsScreen(props: {
       const failure = toFailure(caught, RESTORE_FAILURE)
       // 저장 쪽과 같은 판단이다 — 세션이 끊긴 것은 다음 조회가 `SignedOut`으로 보낸다.
       // 그 밖에는 **서버 문장을 그대로 그린다**: 409 넷과 400 셋을 화면은 `code`로 가를 수 없다.
-      setNotice({ kind: 'error', message: failure.kind === 'signed-out' ? RESTORE_FAILURE : failure.message })
+      const message = failure.kind === 'signed-out' ? RESTORE_FAILURE : failure.message
+      // **커밋 전에 거절됐는지 모르면 복원됐을 수 있다**(`refusedBeforeCommit`) — 답만 잃었으면 서버는 복원했고 그 신호는 이 탭에 안 온다.
+      // 셸이 «복원됐는지 모릅니다 — 다시 불러오기»를 세우고, 여기서도 그렇다고 말한다.
+      const unanswered = failure.kind !== 'signed-out' && !refusedBeforeCommit(caught)
+      setNotice({ kind: 'error', message: unanswered ? `${message} — ${RESTORE_UNANSWERED}` : message })
+      if (unanswered) props.onRestoreUnanswered()
     } finally {
       setRestoring(null)
     }

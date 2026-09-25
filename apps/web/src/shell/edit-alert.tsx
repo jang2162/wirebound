@@ -11,9 +11,9 @@
  * 세션 훅을 직접 부르지 않고 이 자리로 넘기는 것은, 그 규칙이 `api/failure.tsx` 한 곳에
  * 있어야 하기 때문이다.
  *
- * **떠남의 통지에만 닫는 단추가 있다**(`EditorStore.closeLeaveNotice`). 다른 통지는 페이지를 옮기면 판을 비우며 지워지지만 떠남의
- * 통지는 그것을 비켜 가게 만들었다(`EditorStore`의 `#leaveNotice`) — 편집을 못 내는 화면(뷰 모드 · viewer)에서는 새 편집이 덮을
- * 일도 없어 셸이 사는 동안 남는다. 단추는 문장(`role="alert"`) **밖**에 둔다 — 문장의 글자가 곧 통지다.
+ * **떠남의 조각을 품은 통지에만 닫는 단추가 있다**(`EditorStore.closeLeaveNotice` — 이어 붙은 조각도 함께 닫는다). 다른 통지는 페이지를
+ * 옮기면 판을 비우며 지워지지만 떠남의 조각은 그것을 비켜 가게 만들었다(`EditorStore`의 `#lossParts`) — 편집을 못 내는 화면(뷰 모드 ·
+ * viewer)에서는 새 편집이 덮을 일도 없어 셸이 사는 동안 남는다. 단추는 문장(`role="alert"`) **밖**에 둔다 — 문장의 글자가 곧 통지다.
  */
 import type { ReactElement } from 'react'
 import { SignedOut } from '../api/failure'

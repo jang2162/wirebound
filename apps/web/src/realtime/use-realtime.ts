@@ -57,6 +57,7 @@ import { useRealtimeSetup } from './context'
 import { realtimeUrl } from './protocol'
 import { useKnownUserHolder } from '../api/known-user'
 import { useSessionRenewal } from '../session/session-context'
+import { LOSS_RANK } from '../store/loss-notice'
 import { useEditorStoreInstance } from '../store/use-editor-store'
 
 /**
@@ -141,8 +142,9 @@ export function useRealtime(
             // **리베이스가 버린 편집을 말한다**(「개인 undo/redo」의 *"적용 불가"*와 같은 성질).
             // 스토어는 무엇이 버려졌는지만 돌려주고 문안은 여기서 만든다 — `startUndo`의
             // `skipped`를 화면이 문장으로 바꾸는 것과 같은 배치다.
+            // 앞 잃음을 덮지 않고 잇는다(`EditorStore.tellLoss`) — 버림이 거듭되면 수를 더한다.
             if (change.dropped.length > 0) {
-              store.setEditFailure({ kind: 'message', message: droppedNotice(change.dropped.length) })
+              store.tellLoss({ key: 'dropped', rank: LOSS_RANK.cancelled, counts: [change.dropped.length], render: ([count]) => droppedNotice(count ?? 0) })
             }
             break
           }

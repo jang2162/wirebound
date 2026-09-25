@@ -224,6 +224,8 @@ interface SessionContextValue {
   confirm: (user: SessionUser) => void
   /** 같은 사람의 새 세션을 알았을 때 부를 것을 단다. 돌려주는 함수가 뗀다. */
   onRenewal: (listener: () => void) => () => void
+  /** 지금 세대를 부르는 순간에 읽는다(`useSessionEpochNow`). */
+  epochNow: () => number
 }
 
 /**
@@ -394,10 +396,16 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
   }, [])
 
   const { state, epoch, user, switched } = session
+  /** 커밋된 세대 — 부르는 컴포넌트가 이미 내려갔어도 읽힌다(`useSessionEpochNow`). */
+  const committedEpoch = useRef(epoch)
+  useLayoutEffect(() => {
+    committedEpoch.current = epoch
+  }, [epoch])
+  const epochNow = useCallback(() => committedEpoch.current, [])
   const farewell = session.farewell !== null && session.farewell.epoch === epoch ? session.farewell.text : null
   const value = useMemo(
-    () => ({ state, epoch, user, switched, farewell, invalidate, signOut, confirm, onRenewal }),
-    [state, epoch, user, switched, farewell, invalidate, signOut, confirm, onRenewal],
+    () => ({ state, epoch, user, switched, farewell, invalidate, signOut, confirm, onRenewal, epochNow }),
+    [state, epoch, user, switched, farewell, invalidate, signOut, confirm, onRenewal, epochNow],
   )
 
   return <SessionContext.Provider value={value}>{props.children}</SessionContext.Provider>
@@ -421,6 +429,14 @@ export function useSessionState(): SessionState {
  */
 export function useSessionEpoch(): number {
   return useSessionContext().epoch
+}
+
+/**
+ * **지금 세대를 부르는 순간에 읽는 함수**(위 머리말 «세션 세대»). 기다림 뒤에 «누를 때와 같은 세션인가»를 묻는 자리가 쓴다 — 세션이 끝나면
+ * 그 화면은 내려가므로(문지기가 로그인으로 보낸다) 렌더에서 읽은 세대는 기다림 뒤에 낡는다. 로그아웃 단추가 부른다(`session-menu.tsx`의 `run`).
+ */
+export function useSessionEpochNow(): () => number {
+  return useSessionContext().epochNow
 }
 
 /**

@@ -46,12 +46,15 @@ const NOTICE: Record<RemoteStale['reason'], string> = {
   restored: '다른 사람이 스냅샷을 복원했습니다. 다시 불러와 지금 상태를 확인하세요.',
 }
 
+/** 내 복원의 답을 잃었을 때(`RemoteStale`의 `unanswered`) — 남의 복원이라고 하면 거짓이다. 단추는 같다. */
+const UNANSWERED_RESTORE_NOTICE = '스냅샷 복원의 답을 받지 못해 복원됐는지 알 수 없습니다. 다시 불러와 지금 상태를 확인하세요.'
+
 export function RemoteAlert(props: {
   /**
    * 남이 복원한 판을 다시 읽는다 — 셸의 복원 신호를 올린다(`routes/editor.tsx`의 `restoredToken`). **반드시 받는다** — 선택 인자면
-   * 새 호출자가 빠뜨릴 때 단추가 조용히 아무 일도 안 한다.
+   * 새 호출자가 빠뜨릴 때 단추가 조용히 아무 일도 안 한다. 서 있는 낡음을 넘긴다 — 셸이 다시 읽으며 말할 앞머리를 고른다(`unanswered`).
    */
-  onReload: () => void
+  onReload: (stale: RemoteStale) => void
 }): ReactElement | null {
   const store = useEditorStoreInstance()
   const stale = useEditorStore(store, (s) => s.remoteStale)
@@ -60,11 +63,11 @@ export function RemoteAlert(props: {
 
   return (
     <p className="wb-shell-remote-alert" role="status">
-      {NOTICE[stale.reason]}
+      {stale.unanswered === true ? UNANSWERED_RESTORE_NOTICE : NOTICE[stale.reason]}
       {stale.reason === 'restored' && (
         <>
           {' '}
-          <button type="button" className="wb-shell-remote-reload" onClick={props.onReload}>
+          <button type="button" className="wb-shell-remote-reload" onClick={() => props.onReload(stale)}>
             다시 불러오기
           </button>
         </>
