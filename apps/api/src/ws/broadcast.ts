@@ -190,6 +190,11 @@ export function createBroadcaster(
         onSkip(error, connection)
         continue
       }
+      // **await 뒤에 룸에 아직 있는지 본다.** 도는 것은 부를 때 뜬 사본이라, 그사이 나간 연결 · 겹쳐 도는 다른 방송이 이미
+      // 회수한 연결이 들어 있다. 안 보면 방송마다 같은 연결을 다시 회수하고 회수마다 `onRevoked`가 presence 방송을 새로 낳아
+      // 그 방송이 또 회수한다 — 회수할 연결 K 개가 방송 하나에 presence 방송 K² 남짓을 낳는다(재는 법 · 값: `test/ws-broadcast.test.ts`의
+      // «연결마다 한 번만 회수한다»). 이 줄이 있으면 연결마다 회수 한 번 · presence 는 `onRevoked` 한 번과 닫힘 이벤트 한 번이다.
+      if (!rooms.membersOf(projectId).includes(connection)) continue
       if (!allowed) {
         rooms.leave(projectId, connection.id)
         connection.closeWhenIdle(WS_CLOSE.revoked, '권한이 회수되었습니다')
@@ -212,14 +217,18 @@ export function createBroadcaster(
   return {
     send,
     stillAllowed,
-    announcePresence: async (projectId) => {
-      const participants: Participant[] = rooms.membersOf(projectId).map((connection) => ({
-        connectionId: connection.id,
-        userId: connection.userId,
-        userName: connection.userName,
-      }))
-      return send(projectId, { type: 'presence', projectId, participants })
-    },
+    // **참가자도 연결마다 보내는 순간 짓는다** — 아래 `announceLocks`와 같은 까닭이다. 회수가 여럿 겹치면 presence 방송이 겹쳐
+    // 돌고, 부를 때 지은 목록은 뒤에 지은 목록을 추월해 이미 나간 사람을 든 채 마지막 프레임으로 남는다 — 그 사람이 다음 presence
+    // 까지 화면에 남는다(`test/ws-broadcast.test.ts`의 «보내는 순간의 룸»).
+    announcePresence: async (projectId) =>
+      deliver(projectId, () => {
+        const participants: Participant[] = rooms.membersOf(projectId).map((connection) => ({
+          connectionId: connection.id,
+          userId: connection.userId,
+          userName: connection.userName,
+        }))
+        return JSON.stringify({ type: 'presence', projectId, participants } satisfies ServerFrame)
+      }),
     // **목록은 연결마다 보내는 순간 짓는다.** 부를 때 한 번 짓고 연결마다 자격을 await 한 뒤 보내면
     // 앞서 지은(낡은) 목록이 뒤에 지은 목록을 한 연결에서 **추월해 마지막 프레임으로 남는다**(raw WS 로 잠금을 잇달아 바꾸고
     // 250ms 뒤 구경꾼의 마지막 목록을 보면 선 잠금이 빠진 판이 난다). 보내는 순간 지으면 한 연결이 받는 목록은 **지은 순서대로 닿고**, 짓기와

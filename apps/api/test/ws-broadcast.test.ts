@@ -434,6 +434,29 @@ describe('연결·참가·이탈', () => {
     })
   })
 
+  /**
+   * **presence 는 보내는 순간의 룸을 싣는다**(`broadcast.ts`의 `announcePresence`). 회수가 겹쳐 presence 방송이 겹쳐 돌면 부를 때
+   * 지은 목록이 뒤에 지은 목록을 추월해 나간 사람을 든 채 마지막 프레임으로 남는다 — 그 겹침은 흔들려서, 같은 기전을 방송 하나
+   * 안에서 잰다: 부른 뒤 첫 연결의 자격을 재는(await) 사이에 나간 연결은 그 방송에 안 실린다.
+   */
+  it('presence 는 보내는 순간의 룸을 싣는다 — 부른 뒤 보내기 전에 나간 연결은 안 싣는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
+      await watcher.waitForCount('presence', 2)
+      const { rooms, broadcast } = ctx.app.realtime
+      const gone = rooms.membersOf(fx.project.id).find((connection) => connection.userId === fx.peer.user.id)!
+
+      const announced = broadcast.announcePresence(fx.project.id)
+      rooms.leave(fx.project.id, gone.id)
+      await announced
+
+      const frames = await watcher.waitForCount('presence', 3)
+      expect(frames[2]!.participants.map((participant) => participant.userId)).toEqual([fx.owner.user.id])
+    })
+  })
+
   it('모두 나가면 룸이 남지 않는다 — 연 프로젝트만큼 자라는 누수가 아니다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await board(ctx)
@@ -470,6 +493,66 @@ describe('보내기 직전에 권한을 다시 본다 (확인 지점 2)', () => 
       const closed = await revoked.waitClosed()
       expect(closed.code).toBe(4403)
       expect(revoked.received.filter((frame) => frame.type === 'page-changed')).toEqual([])
+    })
+  })
+
+  /**
+   * **회수할 연결이 여럿이어도 연결마다 한 번만 회수한다**(`broadcast.ts`의 `deliver` — «await 뒤에 룸에 아직 있는지 본다»).
+   * 회수마다 `onRevoked`가 presence 방송을 내고 그 방송이 도는 사본에는 아직 안 빠진 회수 연결이 들어 있어, 가르지 않으면 방송
+   * 하나가 연결마다 여러 번 회수하고 presence 방송이 회수 수의 제곱 남짓으로 는다. 그 방송마다 연결마다 질의 둘이라 서버 전체가
+   * 느려진다 — 다른 요청의 지연은 붐비는 기계에서 흔들려 자로 안 쓰고, 그 원인인 수를 잰다. 가르면 presence 는 연결마다
+   * `onRevoked` 한 번과 닫힘 이벤트 한 번이다.
+   */
+  it('회수할 연결이 여럿이면 방송 하나가 연결마다 한 번만 회수하고 presence 는 회수 수의 두 배를 안 넘는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const kept = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
+      const revokedUsers: SignedUpUser[] = []
+      const revokedTabs: WsProbe[] = []
+      for (let i = 0; i < 4; i += 1) {
+        const user = await signup(ctx)
+        await addMember(ctx, fx.project.id, user.user.id, 'editor')
+        revokedUsers.push(user)
+        revokedTabs.push(track(await joinRoom(ctx.port, fx.project.id, user.cookie.wb_session)))
+      }
+      await kept.waitForCount('presence', 6)
+
+      const { rooms, broadcast } = ctx.app.realtime
+      const revokedIds = new Set(revokedUsers.map((user) => user.user.id))
+      const revocations = new Map<string, number>()
+      for (const connection of rooms.membersOf(fx.project.id)) {
+        if (!revokedIds.has(connection.userId)) continue
+        const closeWhenIdle = connection.closeWhenIdle.bind(connection)
+        connection.closeWhenIdle = (code, reason) => {
+          revocations.set(connection.id, (revocations.get(connection.id) ?? 0) + 1)
+          closeWhenIdle(code, reason)
+        }
+      }
+      let presenceCalls = 0
+      const announcePresence = broadcast.announcePresence.bind(broadcast)
+      broadcast.announcePresence = (projectId) => {
+        presenceCalls += 1
+        return announcePresence(projectId)
+      }
+
+      await db.deleteFrom('sessions').where('user_id', 'in', [...revokedIds]).execute()
+      await editPage(ctx, fx, fx.owner)
+
+      for (const tab of revokedTabs) expect((await tab.waitClosed()).code).toBe(4403)
+      // 닫힘 이벤트의 presence 까지 다 난 뒤에 센다 — 수가 200ms 동안 안 바뀌면 끝난 것으로 본다.
+      let seen = -1
+      while (seen !== presenceCalls) {
+        seen = presenceCalls
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
+      expect([...revocations.values()]).toEqual([1, 1, 1, 1])
+      expect(presenceCalls).toBeLessThanOrEqual(2 * revokedTabs.length)
+      const last = kept.received.filter((frame) => frame.type === 'presence').at(-1)
+      expect(last?.type === 'presence' && last.participants.map((participant) => participant.userId)).toEqual([
+        fx.owner.user.id,
+        fx.peer.user.id,
+      ])
     })
   })
 })
