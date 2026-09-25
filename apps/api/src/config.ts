@@ -1,3 +1,4 @@
+import { isIP } from 'node:net'
 import { z } from 'zod'
 import { getKoreanErrorMap } from '@wirebound/schema'
 import { DEFAULT_DB_TIME_LIMITS, type DbTimeLimits } from './db/client'
@@ -28,6 +29,11 @@ export interface ApiConfig {
   screenChromiumPath: string | undefined
   /** 풀과 연결의 시간 제한 — 뜻과 기본값의 근거는 `db/client.ts`의 `createPool` 머리말 «네트워크 분할». */
   dbTimeLimits: DbTimeLimits
+  /**
+   * **믿는 앞단의 주소**(IP · CIDR). 비면 아무도 안 믿는다 — 요청의 주소(`request.ip`)는 소켓 주소다. 차 있으면 그 주소에서 온 요청은
+   * `X-Forwarded-For` 가 적은 주소를 쓴다(Fastify 의 `trustProxy`). 읽는 자는 로그인 제한의 주소 키다(`auth/login-limit.ts` 머리말).
+   */
+  trustProxy: string[]
 }
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const
@@ -69,6 +75,37 @@ function dbTimeLimitEnv(fieldName: string, fallback: number, min: number, max: n
   )
 }
 
+/**
+ * `TRUST_PROXY` — 쉼표로 가른 IP 또는 CIDR. **빈 값은 «안 믿는다»다.** 받는 것을 주소 · CIDR 로 묶은 까닭: Fastify 는 `true`(모두 믿음) ·
+ * 홉 수도 받는데, 둘 다 api 에 바로 닿는 사람이 `X-Forwarded-For` 를 지어 적으면 그 주소가 된다 — 로그인 제한의 주소 키를 아무 주소로나
+ * 바꿔 비켜 간다. 앞단이 어디서 오는지를 적게 해야 그 앞단이 적은 것만 믿는다.
+ */
+const TrustProxyEnv = z.preprocess(
+  (value) => (value === undefined ? '' : value),
+  z
+    .string()
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item !== ''),
+    )
+    .refine(
+      (items) => items.every(isAddressOrCidr),
+      'TRUST_PROXY는 쉼표로 가른 IP 또는 CIDR(예: 10.0.0.2,172.16.0.0/12)이어야 합니다',
+    ),
+)
+
+function isAddressOrCidr(item: string): boolean {
+  const [address, prefix, extra] = item.split('/')
+  if (extra !== undefined || address === undefined) return false
+  const version = isIP(address)
+  if (version === 0) return false
+  if (prefix === undefined) return true
+  if (!/^\d+$/.test(prefix)) return false
+  return Number(prefix) <= (version === 4 ? 32 : 128)
+}
+
 const DATABASE_URL_MESSAGE = 'DATABASE_URL이 필요합니다'
 
 /**
@@ -93,6 +130,8 @@ const EnvSchema = z.object({
   PASSWORD_SCRYPT_N: numericEnv('PASSWORD_SCRYPT_N').default(32768),
   LOG_LEVEL: z.enum(LOG_LEVELS).optional(),
   SCREEN_CHROMIUM_PATH: z.string().optional(),
+  /** 믿는 앞단 — `ApiConfig.trustProxy` · `TrustProxyEnv`. */
+  TRUST_PROXY: TrustProxyEnv,
   /**
    * **`docker compose` 가 여는 호스트 포트.** 이 서버가 쓰는 값이 아니라 **`DATABASE_URL`
    * 안의 포트와 맞는지 재기 위해서만** 읽는다 — 그래서 `ApiConfig` 에 안 실린다.
@@ -169,5 +208,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
       poolWaitMs: data.DB_POOL_WAIT_TIMEOUT_MS,
       keepAliveIdleMs: data.DB_KEEPALIVE_IDLE_MS,
     },
+    trustProxy: data.TRUST_PROXY,
   }
 }

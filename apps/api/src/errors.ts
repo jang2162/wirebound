@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | 'conflict'
   | 'locked'
   | 'validation-failed'
+  | 'rate-limited'
   | 'internal'
 
 export const ERROR_STATUS: Record<ApiErrorCode, number> = {
@@ -38,6 +39,11 @@ export const ERROR_STATUS: Record<ApiErrorCode, number> = {
    */
   locked: 423,
   'validation-failed': 422,
+  /**
+   * 로그인 시도 제한(`auth/login-limit.ts`). `Retry-After`(초)를 함께 싣는다 — 싣는 자리는 라우트다(`routes/auth.ts`). 401 과 갈라
+   * 둔다: 401 은 «그 비밀번호가 틀렸다»이고 이것은 «견주지 않았다»다. 같은 숫자면 사람은 옳은 비밀번호를 틀린 줄 알고 바꾼다.
+   */
+  'rate-limited': 429,
   internal: 500,
 }
 
@@ -114,6 +120,10 @@ export function locked(message: string): ApiError {
 
 export function validationFailed(message: string, issues: ApiErrorIssue[]): ApiError {
   return new ApiError('validation-failed', message, issues)
+}
+
+export function rateLimited(message: string): ApiError {
+  return new ApiError('rate-limited', message)
 }
 
 export function internal(message = '서버 오류가 발생했습니다'): ApiError {
