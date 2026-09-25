@@ -411,6 +411,7 @@ describe('삭제 없는 태그', () => {
     // 이 파일의 머리말이 실제로 `app.delete`를 인용한다. 주석을 걷지 않으면 위 케이스가
     // 늘 죽는다(`apps/web/test/api-consumers.test.ts`의 것과 같은 함정이다).
     expect(SOURCE).toContain('app.delete')
-    expect(stripComments(SOURCE)).not.toContain('app.delete')
+    // 위 «심으면 잡는다»와 **같은 술어**로 잰다 — 글자로 재면 `app/* … */.delete(` 가 걷힌 뒤 공백으로 비켜 간다.
+    expect(stripComments(SOURCE)).not.toMatch(/app\s*\.\s*delete\s*\(/)
   })
 })

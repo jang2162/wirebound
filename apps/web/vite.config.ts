@@ -9,7 +9,7 @@ const API_ENV_URL = new URL('../api/.env', import.meta.url)
 
 /**
  * `apps/api/.env`를 읽는다. **새 의존을 들이지 않는다** — `node:util`의 `parseEnv`가
- * 그 일을 한다(Node 20.12+, 이 저장소의 `engines`는 ≥22.9다). `process.loadEnvFile()`도
+ * 그 일을 한다(Node 20.12+ — 하한은 루트 `package.json` 의 `engines`). `process.loadEnvFile()`도
  * 같은 순서를 내지만 그쪽은 `process.env`를 통째로 바꾸므로 쓰지 않는다 — 접속 문자열이
  * vite 프로세스의 환경에 얹힌다.
  *

@@ -91,10 +91,10 @@ describe('계정을 만드는 사슬 — 층마다 호출자가 하나다', () =
     expect(callSites('seedAfterMigration')).toEqual({ 'db/migrate.ts': 1 })
   })
 
-  it('비밀번호를 해시하는 자는 시딩과 로그인의 더미 해시 둘뿐이다', () => {
-    // `routes/auth.ts` 의 1건은 타이밍 방어용 `dummyHash` 다. 라우트가 비밀번호를 한 번
+  it('비밀번호를 해시하는 자는 시딩 · 재설정 명령 · 로그인의 더미 해시 셋뿐이다', () => {
+    // `routes/auth.ts` 의 1건은 타이밍 방어용 `dummyHash` 다. `db/reset-password.ts` 는 서버에 손이 닿는 사람의 CLI 다. 라우트가 비밀번호를 한 번
     // 더 해시하기 시작하면(=자격을 받는 새 표면) 그 수가 늘고 여기서 죽는다.
-    expect(callSites('hashPassword')).toEqual({ 'db/seed-user.ts': 1, 'routes/auth.ts': 1 })
+    expect(callSites('hashPassword')).toEqual({ 'db/reset-password.ts': 1, 'db/seed-user.ts': 1, 'routes/auth.ts': 1 })
   })
 })
 
@@ -152,9 +152,11 @@ describe('픽스처가 프로덕션 경로를 지난다', () => {
   })
 
   it('그리고 그 아래 층을 **건너뛰지 않는다** — 직접 삽입·직접 해시가 없다', () => {
-    expect(HELPERS).not.toContain("insertInto('users')")
-    expect(HELPERS).not.toContain('insertUser(')
-    expect(HELPERS).not.toContain('hashPassword(')
+    // **글자가 아니라 정규식이다** — 걷은 주석은 공백으로 남으므로(`insertUser /* 직접 */ (` → `insertUser        (`)
+    // 글자 `insertUser(` 로 재면 주석 하나 · 줄바꿈 하나로 비켜 간다.
+    expect(HELPERS).not.toMatch(/\binsertInto\s*\(\s*['"`]users['"`]\s*\)/)
+    expect(HELPERS).not.toMatch(/\binsertUser\s*\(/)
+    expect(HELPERS).not.toMatch(/\bhashPassword\s*\(/)
   })
 })
 
@@ -177,12 +179,13 @@ describe('픽스처가 프로덕션 경로를 지난다', () => {
  * 셋 다 쓰이는 이름이 지역 선언에 묶이므로 여기서 죽는다(아래 «술어가 실제로 가른다»). 주석 · 문자열은 구문 트리에
  * 이름으로 안 나오므로 걷을 것도 없다.
  *
- * **못 보는 것 — 넷은 거짓 초록 쪽이다:**
+ * **모듈 목은 목을 거는 자리를 센다** — `vi.mock` · `vi.doMock` 이 `./helpers` 를 겨누면 그 줄이 픽스처가 아닌 자리다. 그 뒤의
+ * `signup` 은 구문상 픽스처에 묶이지만 값은 목이기 때문이다.
+ *
+ * **못 보는 것 — 셋은 거짓 초록 쪽이다:**
  * - **속성으로 부르는 `signup`** — `h.signup(…)`(네임스페이스) · `api.signup(…)`(지역 객체)은 이름이 아니라 속성이라
  *   세지 않는다(픽스처로도 위반으로도).
  * - **다른 이름의 길** — `register()` 가 `users` 에 직접 넣어도 이 자는 `signup` 이라는 이름만 본다.
- * - **모듈 목** — `vi.doMock('./helpers', …)` 뒤 `const { signup } = await import('./helpers')` 는 구문상 픽스처에 묶이지만
- *   값은 목이다.
  * - **`helpers.ts` 안의 다시 내보내기** — 모듈을 풀지 않으므로 `helpers.ts` 가 `export { signup } from '…'` 로 다른 모듈의
  *   함수를 내보내도 픽스처로 읽힌다. `helpers.ts` 자신이 `seedUser` 를 지나는지는 «픽스처가 프로덕션 경로를 지난다»가
  *   그 파일의 글자로만 본다.
@@ -243,6 +246,22 @@ describe('테스트가 쓰는 `signup` 은 전부 픽스처의 것이다', () =>
     return false
   }
 
+  /**
+   * `vi.mock` · `vi.doMock` 이 `./helpers` 를 겨누는 자리인가 — 그 뒤의 `signup` 은 구문상 픽스처에 묶여도 값은 목이다.
+   * 지정자는 문자열이거나 `import('./helpers')` 다. **일부만 덮는 목도 센다**(`signup` 을 원래 것으로 둔 목 — 거짓 빨강 쪽).
+   */
+  function mocksHelpers(node: ts.Node, fileName: string): boolean {
+    if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false
+    const { expression: target, name: method } = node.expression
+    if (!ts.isIdentifier(target) || target.text !== 'vi' || (method.text !== 'mock' && method.text !== 'doMock')) return false
+    const [first] = node.arguments
+    const specifier =
+      first !== undefined && ts.isCallExpression(first) && first.expression.kind === ts.SyntaxKind.ImportKeyword
+        ? first.arguments[0]
+        : first
+    return specifier !== undefined && isHelpersModule(specifier, fileName)
+  }
+
   /** 그 `signup` 이 **쓰이는** 자리인가 — 선언의 이름 · 속성 이름 · 가져오는 지정자의 이름은 뺀다. */
   function isUse(name: ts.Identifier): boolean {
     const parent = name.parent
@@ -274,6 +293,9 @@ describe('테스트가 쓰는 `signup` 은 전부 픽스처의 것이다', () =>
       const file = program.getSourceFile(name)!
       const uses: { line: number; fixture: boolean }[] = []
       const visit = (node: ts.Node): void => {
+        if (mocksHelpers(node, name)) {
+          uses.push({ line: file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1, fixture: false })
+        }
         if (ts.isIdentifier(node) && node.text === 'signup' && isUse(node)) {
           const symbol = ts.isShorthandPropertyAssignment(node.parent)
             ? checker.getShorthandAssignmentValueSymbol(node.parent)
@@ -335,6 +357,13 @@ describe('테스트가 쓰는 `signup` 은 전부 픽스처의 것이다', () =>
       'case.test.ts:3',
       'case.test.ts:4',
     ])
+
+    // 모듈 목 — 이름은 `./helpers` 의 것에 묶이지만 값은 목이다. 목을 거는 자리를 센다(정적 · 동적 · `import()` 로 준 지정자).
+    const MOCKED = "const { signup } = await import('./helpers')\nawait signup()"
+    expect(verdict(`vi.doMock('./helpers', () => ({ signup: async () => 1 }))\n${MOCKED}`)).toEqual(['case.test.ts:1'])
+    expect(verdict(`vi.mock('./helpers')\nimport { signup } from './helpers'\nawait signup()`)).toEqual(['case.test.ts:1'])
+    expect(verdict(`vi.doMock(import('./helpers'), () => ({}))\n${MOCKED}`)).toEqual(['case.test.ts:1'])
+    expect(verdict(`vi.doMock('../src/repos/layouts', () => ({}))\n${MOCKED}`)).toEqual([])
 
     // 지정자는 그 파일 자리에서 푼다 — 하위 디렉터리의 `./helpers` 는 다른 모듈이고 `../helpers` 가 픽스처다.
     const inSub = (text: string): string[] => strayUses(new Map([['sub/case.test.ts', text]]))

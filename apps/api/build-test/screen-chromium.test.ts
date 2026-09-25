@@ -19,10 +19,11 @@
  * | 무엇 | 누가 잡나 |
  * |---|---|
  * | 브라우저가 없는 기계에서 무슨 일이 나는가 | **여기서 잰다**(아래 *"바이너리가 없으면"*) |
- * | 한글 글꼴이 **없는** 기계 | **아무도 안 잰다.** 이 자는 글꼴이 있는 기계(macOS)를 전제한다 |
+ * | 한글 글꼴이 **없는** 기계 | **여기서 죽는다** — 「한글이 두부가 아니다」와 그린 것을 보는 케이스들(리눅스 컨테이너에서 한글 글리프를 든 글꼴을 걷고 쟀다). 그래서 배포할 이미지 안에서 돌린다(최상위 README 「배포하려면」) |
  * | 받는 쪽(PowerPoint)이 그림을 그리는가 | **사람이 손으로** — `packages/exporter/build-test/dist-pptx.test.ts` 「진짜 자는 PowerPoint다」의 절차 |
  */
 import { execFileSync } from 'node:child_process'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { exportPptx, exportPage, type PptxScreen } from '@wirebound/exporter'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
@@ -36,8 +37,30 @@ import {
   type KoreanGlyphSamples,
   type ScreenRequest,
 } from '../src/services/screen-render'
+import { readApiEnvFile } from '../test/test-database-url'
 
 installCatalog()
+
+/**
+ * **서버가 띄우는 그 브라우저로 잰다** — `SCREEN_CHROMIUM_PATH` 를 서버와 같은 순서(셸 → `apps/api/.env`, `--env-file-if-exists`
+ * 와 같다)로 읽고, 비면 playwright-core 캐시다(`config.ts` 가 빈 문자열을 안 준 것으로 보는 것과 같다).
+ *
+ * 안 보면 배포판 chromium 을 쓰는 기계(`SCREEN_CHROMIUM_PATH=/usr/bin/chromium`)에서 캐시가 비었다며 **전부 건너뛰고 초록**이다 —
+ * 그 브라우저가 한글 글꼴이 없어 서버가 한 장도 못 그려도 그렇다(`node:22-slim` + `apt-get install chromium` 컨테이너에서
+ * 쟀다: 2 통과 · 13 건너뜀). 최상위 README 「배포하려면」이 이 스모크를 배포할 이미지 안에서 돌리라고 든다.
+ */
+function screenChromiumPath(): string | undefined {
+  const value = process.env.SCREEN_CHROMIUM_PATH ?? readApiEnvFile().SCREEN_CHROMIUM_PATH
+  return value === undefined || value === '' ? undefined : value
+}
+
+const EXECUTABLE_PATH = screenChromiumPath()
+const LAUNCH = EXECUTABLE_PATH === undefined ? {} : { executablePath: EXECUTABLE_PATH }
+
+/** 이 스모크가 부르는 렌더러 — 서버와 같은 실행 파일을 쓴다. `options` 가 그 경로를 덮을 수 있다(«바이너리가 없으면»). */
+function renderer(options: Parameters<typeof chromiumScreenRenderer>[0] = {}): ReturnType<typeof chromiumScreenRenderer> {
+  return chromiumScreenRenderer({ ...LAUNCH, ...options })
+}
 
 /**
  * 이 기계에서 렌더러가 띄우는 브라우저가 뜨나. **안 뜨면 건너뛰고 그렇다고 말한다.**
@@ -46,13 +69,10 @@ installCatalog()
  * 띄우는데 `chromium.executablePath()`는 **전체 Chromium** 의 경로다 — 최상위 README 「넣는 법」 절대로 `--only-shell` 만
  * 넣은 기계에서는 그 경로가 없어 브라우저가 뜨는데도 전부 건너뛴다(다시 재는 법: 셸 디렉터리만 든
  * `PLAYWRIGHT_BROWSERS_PATH` 로 이 파일을 돌린다).
- *
- * **`SCREEN_CHROMIUM_PATH`는 안 본다** — 서버(`main.ts`)만 그 값을 렌더러에 넘긴다. 이 스모크는 playwright-core 캐시의
- * 브라우저로만 돈다.
  */
 async function browserLaunches(): Promise<boolean> {
   try {
-    const browser = await chromium.launch()
+    const browser = await chromium.launch(LAUNCH)
     await browser.close()
     return true
   } catch {
@@ -65,7 +85,9 @@ const 있다 = await browserLaunches()
 if (!있다) {
   // eslint-disable-next-line no-console
   console.log(
-    '[screen-chromium 스모크] Chromium 을 띄우지 못해 건너뛴다 — 넣는 법: `node apps/api/node_modules/playwright-core/cli.js install chromium --only-shell`(최상위 README 「넣는 법」 절)',
+    EXECUTABLE_PATH === undefined
+      ? '[screen-chromium 스모크] Chromium 을 띄우지 못해 건너뛴다 — 넣는 법: `node apps/api/node_modules/playwright-core/cli.js install chromium --only-shell`(최상위 README 「넣는 법」 절)'
+      : `[screen-chromium 스모크] SCREEN_CHROMIUM_PATH(${EXECUTABLE_PATH})를 띄우지 못해 건너뛴다 — 서버도 그 경로로는 못 그린다(최상위 README 「기계에 이미 있는 브라우저를 쓰기」 절)`,
   )
 }
 
@@ -108,10 +130,10 @@ function requestFor(index: number, rows: number): ScreenRequest {
 
 describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
   it('계약이 요구하는 것을 낸다 — PNG 이고 화소를 읽을 수 있다', async () => {
-    const renderer = chromiumScreenRenderer()
+    const drawing = renderer()
     // **하나짜리로 재지 않는다.** 셋이고 길이가 서로 다르다.
     const requests = [requestFor(1, 4), requestFor(2, 40), requestFor(3, 4)]
-    const batch = await renderer.render(requests)
+    const batch = await drawing.render(requests)
 
     expect(batch.results).toHaveLength(3)
     expect(batch.fontWarning).toBeNull()
@@ -137,14 +159,14 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
   })
 
   it('한글이 두부가 아니다 — 이 기계에는 글꼴이 있다', async () => {
-    const batch = await chromiumScreenRenderer().render([requestFor(1, 4)])
+    const batch = await renderer().render([requestFor(1, 4)])
     expect(batch.fontWarning).toBeNull()
     expect(batch.results[0]!.ok).toBe(true)
   })
 
   it('그린 것이 pptx 의 매체로 그대로 실린다 — 계약이 이어진다', async () => {
     const requests = [requestFor(1, 6), requestFor(2, 6)]
-    const batch = await chromiumScreenRenderer().render(requests)
+    const batch = await renderer().render(requests)
 
     const screens: (PptxScreen | null)[] = batch.results.map((result, index) =>
       result.ok
@@ -176,7 +198,7 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
    */
   it('한 장도 못 그려도 던지지 않는다 — 타임아웃이 값이 된다', async () => {
     const requests = [requestFor(1, 4), requestFor(2, 4)]
-    const batch = await chromiumScreenRenderer({ timeoutMs: 1 }).render(requests)
+    const batch = await renderer({ timeoutMs: 1 }).render(requests)
 
     expect(batch.results).toHaveLength(requests.length)
     expect(batch.results.map((result) => result.ok)).toEqual([false, false])
@@ -210,13 +232,13 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
         '</head><body><h1>회원 목록</h1></body></html>',
       css: 'body { color: #111 }',
     }
-    const batch = await chromiumScreenRenderer({ timeoutMs: 3000 }).render([request])
+    const batch = await renderer({ timeoutMs: 3000 }).render([request])
     expect(batch.results[0]!.ok).toBe(true)
   })
 
   it('상한을 넘은 장은 조용히 빠지지 않고 분모를 말한다', async () => {
     const requests = [requestFor(1, 4), requestFor(2, 4), requestFor(3, 4)]
-    const batch = await chromiumScreenRenderer({ maxPages: 2 }).render(requests)
+    const batch = await renderer({ maxPages: 2 }).render(requests)
 
     expect(batch.results.slice(0, 2).every((result) => result.ok)).toBe(true)
     const last = batch.results[2]!
@@ -234,8 +256,8 @@ describe('바이너리가 없으면', () => {
    * 그때 내보내기가 통째로 500이 되면 pptx를 아예 못 받는다.
    */
   it('던지지 않고 전부 실패로 낸다 — pptx 는 여전히 나온다', async () => {
-    const renderer = chromiumScreenRenderer({ executablePath: '/tmp/wirebound-no-such-chromium' })
-    const batch = await renderer.render([requestFor(1, 4), requestFor(2, 4)])
+    const bad = renderer({ executablePath: '/tmp/wirebound-no-such-chromium' })
+    const batch = await bad.render([requestFor(1, 4), requestFor(2, 4)])
 
     expect(batch.results.map((result) => result.ok)).toEqual([false, false])
     for (const result of batch.results) {
@@ -248,12 +270,48 @@ describe('바이너리가 없으면', () => {
 
 /* ------------------------------------------ 소스를 지워도 아무도 안 죽던 자리들 — 그 자 */
 
-/** 이 기계에서 도는 playwright 브라우저 프로세스 수. **자를 여기 둔다 — 소스에 두지 않는다.** */
-function playwrightProcesses(): number {
-  const raw = execFileSync('/bin/sh', ['-c', "ps -eo command | grep -c '[m]s-playwright' || true"], {
-    encoding: 'utf8',
-  })
-  return Number.parseInt(raw.trim(), 10) || 0
+/**
+ * 이 워커 밑에서 도는 브라우저 프로세스 수 — **이 프로세스의 자손**을 센다. **자를 여기 둔다 — 소스에 두지 않는다.**
+ *
+ * 실행 파일 이름으로 세지 않는다 — `SCREEN_CHROMIUM_PATH` 의 배포판 chromium 은 셸 스크립트가 다른 경로의 실행 파일을 띄워
+ * 이름이 안 맞는다. **리눅스는 `/proc` 을 읽는다** — `node:22-slim` 컨테이너에는 `ps` 가 없어 `ps` 로 세면 늘 0 이고, 그때 아래
+ * 수명 케이스는 `browser.close()` 를 떼도 초록이다(그 컨테이너에서 쟀다). 좀비는 세지 않는다 — 거둘 차례만 남은 것이다.
+ */
+function browserProcesses(): number {
+  const parents = new Map<number, number>()
+  if (existsSync('/proc/self/stat')) {
+    for (const entry of readdirSync('/proc')) {
+      if (!/^\d+$/.test(entry)) continue
+      let stat: string
+      try {
+        stat = readFileSync(`/proc/${entry}/stat`, 'utf8')
+      } catch {
+        continue // 읽는 사이 끝났다
+      }
+      // `pid (이름) 상태 ppid …` — 이름에 공백 · 괄호가 들 수 있어 마지막 `)` 뒤에서 자른다.
+      const [state, ppid] = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
+      if (state !== 'Z') parents.set(Number(entry), Number(ppid))
+    }
+  } else {
+    for (const line of execFileSync('ps', ['-A', '-o', 'pid=,ppid=,stat=,comm='], { encoding: 'utf8' }).split('\n')) {
+      const [pid, ppid, state, ...command] = line.trim().split(/\s+/)
+      // 세는 `ps` 자신도 이 프로세스의 자식이다 — 뺀다.
+      if (pid === undefined || ppid === undefined || state?.startsWith('Z') || command.join(' ').split('/').pop() === 'ps') continue
+      parents.set(Number(pid), Number(ppid))
+    }
+  }
+  const mine = new Set([process.pid])
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const [pid, ppid] of parents) {
+      if (!mine.has(pid) && mine.has(ppid)) {
+        mine.add(pid)
+        grew = true
+      }
+    }
+  }
+  return mine.size - 1
 }
 
 /** `render`가 도는 동안의 **최고** 프로세스 수와 끝난 뒤의 수. */
@@ -262,20 +320,20 @@ async function processWatch(
   concurrency: number,
 ): Promise<{ peak: number; after: number }> {
   let peak = 0
-  // **100ms 다.** `ps`를 부르는 값이 작지 않아 25ms 로 재면 이 케이스 하나가 20초를 먹는다
-  // (실측). 재려는 것은 최고치의 **자릿수**이지 순간값이 아니다.
+  // **100ms 다.** 세는 값(`ps` · `/proc` 을 훑는 것)이 작지 않아 25ms 로 재면 이 케이스 하나가 20초를 먹는다
+  // (macOS `ps` 로 쟀다). 재려는 것은 최고치의 **자릿수**이지 순간값이 아니다.
   const timer = setInterval(() => {
-    const now = playwrightProcesses()
+    const now = browserProcesses()
     if (now > peak) peak = now
   }, 100)
   try {
-    await chromiumScreenRenderer({ concurrency }).render(requests)
+    await renderer({ concurrency }).render(requests)
   } finally {
     clearInterval(timer)
   }
   // 닫히는 데 잠깐 걸린다. **여기서 안 기다리면 원본도 빨갛다.**
   await new Promise((resolve) => setTimeout(resolve, 500))
-  return { peak, after: playwrightProcesses() }
+  return { peak, after: browserProcesses() }
 }
 
 describe.skipIf(!있다)('브라우저·페이지 수명', () => {
@@ -288,8 +346,10 @@ describe.skipIf(!있다)('브라우저·페이지 수명', () => {
    * 오래 도는 서버에서만 나는 증상이라 여기서 세는 수밖에 없다.
    */
   it('끝나면 프로세스가 시작값으로 돌아온다', async () => {
-    const before = playwrightProcesses()
-    const { after } = await processWatch([requestFor(1, 4), requestFor(2, 4)], 2)
+    const before = browserProcesses()
+    const { peak, after } = await processWatch([requestFor(1, 4), requestFor(2, 4)], 2)
+    // **세는 자가 눈을 떴는가** — 그리는 동안 하나도 안 보이면 아래 단언은 0 과 0 을 견주는 빈 자다.
+    expect(peak).toBeGreaterThan(before)
     expect(after).toBe(before)
   })
 
@@ -317,7 +377,7 @@ describe.skipIf(!있다)('브라우저·페이지 수명', () => {
 describe.skipIf(!있다)('두부 판정자', () => {
   /** 판정자가 브라우저에서 걷어 오는 날 값. */
   async function samples(): Promise<KoreanGlyphSamples> {
-    const browser = await chromium.launch()
+    const browser = await chromium.launch(LAUNCH)
     try {
       const page = await browser.newPage()
       await page.setContent('<!doctype html><html lang="ko"><body></body></html>')
@@ -359,7 +419,7 @@ describe.skipIf(!있다)('두부 판정자', () => {
    * 맞댄다. 자를 소스가 아니라 여기 둔다.
    */
   it('걷어 온 세 값을 따로 재도 같다 — 상수를 되돌리면 여기서 죽는다', async () => {
-    const browser = await chromium.launch()
+    const browser = await chromium.launch(LAUNCH)
     try {
       const page = await browser.newPage()
       await page.setContent('<!doctype html><html lang="ko"><body></body></html>')
@@ -403,7 +463,7 @@ describe.skipIf(!있다)('두부 판정자', () => {
    */
   it('다섯 번을 물어도 늘 「있다」다 — 조용한 거짓 경고가 없다', async () => {
     for (let 회 = 0; 회 < 5; 회 += 1) {
-      const batch = await chromiumScreenRenderer().render([requestFor(회, 3)])
+      const batch = await renderer().render([requestFor(회, 3)])
       expect(batch.fontWarning).toBeNull()
       expect(batch.results[0]!.ok).toBe(true)
     }
@@ -423,7 +483,7 @@ describe.skipIf(!있다)('시트가 그림에 반영되나', () => {
     const 그대로 = requestFor(1, 4)
     const 여백 = { ...그대로, css: `${그대로.css}\nbody { padding-top: 800px }` }
 
-    const batch = await chromiumScreenRenderer({ concurrency: 1 }).render([그대로, 여백])
+    const batch = await renderer({ concurrency: 1 }).render([그대로, 여백])
     const [a, b] = batch.results
     expect(a!.ok).toBe(true)
     expect(b!.ok).toBe(true)
@@ -489,7 +549,7 @@ describe.skipIf(!있다)('바깥으로 나가는 요청 — 일곱 길 전부', 
         '</body></html>',
       ].join('')
 
-      const batch = await chromiumScreenRenderer({ timeoutMs: 5000 }).render([
+      const batch = await renderer({ timeoutMs: 5000 }).render([
         { title: '바깥 자원 일곱 길', html, css: 'body { color: #111 }' },
       ])
       expect(batch.results[0]!.ok).toBe(true)

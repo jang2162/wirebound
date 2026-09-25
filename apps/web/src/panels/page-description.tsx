@@ -151,7 +151,7 @@
  *
  * **가 → 나 → 가.** 잠금을 페이지 리셋에 함께 버리면, 저장 중에 옆 페이지를 다녀올 때 상자가
  * 열린 채 돌아오고 거기 친 글이 앞 저장의 응답에 지워진다. 잠금만
- * **페이지에 매다는** 까닭과 고르지 않은 갈래는 `panel-drafts.tsx`의 머리말 3이 갖는다.
+ * **페이지에 매다는** 까닭과 고르지 않은 갈래는 `panel-drafts.tsx`의 「잠금만은 그 페이지에 매단다」 절이 갖는다.
  *
  * **낡은 값이 보이는 길 둘 — 둘 다 막혀 있다.** 둘째는 타이밍과 무관하다. 각 항목의 끝이 막는 규칙이다.
  *
@@ -184,7 +184,7 @@
  *    저장이 아직 나가 있는 채 다시 저장할 수 있다. 그때 **늦게 온 앞 저장이 뒤 저장을 덮고, 화면은
  *    «설명을 저장했습니다»와 함께 DB 에 없는 값을 보인다**(Chrome — 앞 저장이 나가 있는 동안
  *    프로젝트 목록을 다녀와 `"둘째 글"`을 저장하면 화면 `"둘째 글"` · «설명을 저장했습니다», 앞
- *    저장의 응답이 온 뒤 DB `"첫째 글"`). `panel-drafts.tsx` 머리말 3이 잠금의 근거로 든 «응답의
+ *    저장의 응답이 온 뒤 DB `"첫째 글"`). `panel-drafts.tsx` 「잠금만은 그 페이지에 매단다」 절이 잠금의 근거로 든 «응답의
  *    순서» 문제가 이 길로 그대로 돌아온다. 코멘트에서는 한 번호에 두 행이 된다
  *    (`comment-panel.tsx`).
  *    **막는 규칙 — 잠금은 provider 보다 오래 사는 장부(`write-ledger.tsx`)에 들고**, 응답은 **새로
@@ -372,7 +372,7 @@ function answered(at: number, next: LoadState): (prev: LoadState) => LoadState {
  * 값으로 들면 통지를 지우는 자리가 잠금까지 푼다 — 마운트의 «지난 통지를 지운다» 한 줄이
  * 풀고(N1), jsdom 에서는 `onChange`도 푼다(`fireEvent.change`는 꺼진 상자에도
  * 들어간다). 그래서 두 칸은 **드는 곳부터 다르다** — 통지는 방문의 칸, 잠금은
- * 페이지의 칸이다(`panel-drafts.tsx`의 머리말 3).
+ * 페이지의 칸이다(`panel-drafts.tsx`의 「잠금만은 그 페이지에 매단다」).
  */
 type SaveState =
   | { status: 'idle' }
@@ -424,7 +424,7 @@ interface Draft {
  * 빈 상자와 *"사용자가 지운 상자"*가 같은 값이 되어, 값이 도착할 때 지운 것을 되살린다.
  */
 const DRAFT = slot<Draft | null>('page-description/draft', null, {
-  // **저장소에 비춘다**(`panel-drafts.tsx`의 머리말 4) — 새로고침·세션 만료를 넘는다. 안 쳤으면(`null`)
+  // **저장소에 비춘다**(`panel-drafts.tsx`의 「저장소에 비춘다」) — 새로고침·세션 만료를 넘는다. 안 쳤으면(`null`)
   // 비출 것이 없다. **바탕도 함께 비춘다** — 되살린 초안이 제 바탕을 들어야 새로고침 뒤의 충돌을 잡는다.
   save: (draft) => draft ?? undefined,
   // **바탕 없는 사본(글만 든 문자열 — 앞 판 배포의 모양)은 버린다** — 바탕을 모르는 초안을 되살리면 저장이 바탕
@@ -448,7 +448,7 @@ const SAVE = slot<SaveState>('page-description/save', { status: 'idle' })
 /**
  * **저장이 나가 있다 — 상자와 버튼을 끈다.** 잠금 칸이라 페이지를 떠났다 돌아와도 그 저장이
  * 끝나기 전에는 풀리지 않는다(이것이 페이지 리셋에 버려지면, 가 → 나 → 가로 돌아와
- * 친 글이 앞 저장의 응답에 지워지고 둘째 저장이 동시에 나간다. `panel-drafts.tsx`의 머리말 3).
+ * 친 글이 앞 저장의 응답에 지워지고 둘째 저장이 동시에 나간다. `panel-drafts.tsx`의 「잠금만은 그 페이지에 매단다」).
  * **값은 장부에 든다**(`write-ledger.tsx`) — 에디터를 떠났다 와도 풀리지 않는다.
  */
 const SAVING = lockSlot('page-description/saving')
@@ -658,7 +658,7 @@ export function PageDescriptionPanel(props: {
     }
 
     // **잠금은 장부가 쥐고 푼다**(`write-ledger.tsx`) — 그 페이지의 것을, 지금 어디에 가 있든
-    // (`panel-drafts.tsx`의 머리말 3), 에디터를 떠났다 와도. 아래 `settle`이 끝나야 풀린다.
+    // (`panel-drafts.tsx`의 「잠금만은 그 페이지에 매단다」), 에디터를 떠났다 와도. 아래 `settle`이 끝나야 풀린다.
     await saving.run({
       send: (signal) => api.updatePage(projectId, openPageId, { description: next, base: { description: base } }, { signal }),
       // **시간 안에 응답이 없으면 서버에서 다시 읽는다.** 판정은 `land`가 한다 — 서버 값이 내 글이면
@@ -675,7 +675,7 @@ export function PageDescriptionPanel(props: {
         // 페이지를 옮겼으면 **어디에도 안 닿는다**(N2 — `panel-drafts.tsx`).
         // 가 → 나 → 가로 돌아와 있으면 돌아온 방문에 닿고, 에디터를 떠났다 돌아와 있으면 **새로
         // 선 provider** 의 방문에 닿는다. 두 방문 다 잠금이 남아 있어 초안을 칠 수
-        // 없었으므로 비우는 것은 **보낸 그것**뿐이다(`panel-drafts.tsx`의 머리말 3).
+        // 없었으므로 비우는 것은 **보낸 그것**뿐이다(`panel-drafts.tsx`의 「잠금만은 그 페이지에 매단다」).
         //
         // **돌려주는 것은 결말이다** — 떠나 있는 동안 끝나면 장부가 이것을 남긴다(`write-ledger.tsx`의 «떠나 있는 동안
         // 끝난 실패»). 칸에 그리는 값과 **같은 값**을 돌려준다 — 보고 있을 때와 떠나 있을 때의 말이 갈리지 않게.

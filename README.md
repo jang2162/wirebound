@@ -21,7 +21,7 @@
 
 | 무엇 | 요구 | 왜 |
 |---|---|---|
-| **Node** | **≥ 22.9** (`package.json`의 `engines`) | 스크립트가 `--env-file-if-exists`를 쓴다. 그 플래그가 22.9에서 들어왔다 |
+| **Node** | **≥ 22.18** (`package.json`의 `engines`) | `pnpm build` 의 tsdown 이 설정 파일을 Node 의 타입 벗기기로 읽는데, 그것이 22.18 부터 기본으로 켜져 있다. 22.17 이하는 설치는 되고 **빌드가 죽는다**(「배포하려면」 절) |
 | **pnpm** | **10.0.0** (`packageManager`) | 워크스페이스 심링크와 `node_modules` 배치가 이 저장소의 전제다. npm·yarn으로는 안 된다 |
 | **Docker** | 아무 최신판 | Postgres 하나를 띄운다. DB를 직접 갖고 있으면 없어도 된다(「세우기」 절의 끝) |
 | **Chromium** | **PPTX의 화면 이미지를 쓸 때만** | 저장소가 브라우저 바이너리를 안 들고 있다. 「PPTX 의 화면 이미지」 절이 그 자리다 |
@@ -100,7 +100,9 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 
 > **`--env-file apps/api/.env` 를 빼면 포트가 기본값(5433)으로 되돌아간다.** 그러면
 > 컨테이너가 그 포트로 **다시 만들어지고**, `apps/api/.env` 의 접속 문자열은 다른 수를
-> 가리킨 채 남는다. `up` 에서는 그 플래그를 생략하지 않는다 — `ps`·`logs`·`exec`·`down` 은
+> 가리킨 채 남는다. 기본 포트를 다른 체크아웃의 컨테이너가 쥐고 있으면 그 `up` 은 종료 1
+> (`port is already allocated`)이고 컨테이너는 `created` 로 남는다 — **그대로 한 번 더 치면 종료 0 으로 포트 없이 뜬다**
+> (워크트리 컨테이너로 쟀다 · 「컨테이너를 못 찾는다」). `up` 에서는 그 플래그를 생략하지 않는다 — `ps`·`logs`·`exec`·`down` 은
 > 프로젝트 이름으로 찾으므로 플래그가 없어도 된다(이 기계에서 쟀다).
 >
 > **어긋나면 서버도 테스트도 뜨지 않고 어디가 어긋났는지 말한다**(「워크트리를 여럿 띄울 때」 절의 «포트를 어긋나게 적으면 무엇이 보이나»). 그 검사는
@@ -730,57 +732,111 @@ A 의 사용자를 돌려줬고 **B 의 API 는 그 로그인을 0 번 봤다.**
 
 ### 6.7 비밀번호를 잊었다
 
-**화면에도 API 에도 비밀번호를 바꾸거나 재설정하는 길이 없다.** 서버에 손이 닿는 사람이 DB 에서
-그 계정의 해시를 바꾼다.
+**화면에도 API 에도 비밀번호를 바꾸는 길이 없다.** 서버에 손이 닿는 사람이 명령 하나로 바꾼다 — **그 서버가 읽는
+`apps/api/.env` 가 있는 루트**(그 서버를 띄운 저장소나 워크트리)에서 친다. 명령은 그 `.env` 의 `DATABASE_URL` 로 붙고,
+첫 줄에 어느 DB 인지 말한다.
+
+```bash
+pnpm --filter @wirebound/api reset-password me@example.com
+```
+
+```
+비밀번호 재설정 대상 DB: 127.0.0.1:5433/wirebound
+me@example.com 의 새 비밀번호(8–200자, 친 글자는 안 보인다):
+한 번 더:
+바꿨습니다 — me@example.com · 로그인해 둔 세션 1개를 지웠습니다
+API 토큰(wireb login)은 그대로입니다 — 2개:
+  «설계서» (5e06dfcd-…) 2개 — «CI», «노트북»
+옛 비밀번호가 새어서 바꾼 것이면 이 토큰들도 거둔다 — README 「비밀번호를 잊었다」 절
+```
+
+- **비밀번호는 명령이 터미널에서 숨겨 묻는다** — 인자 · 환경변수 · 파이프로는 안 받는다(셋 다 셸 기록이나 `ps` 에 남는
+  길이다). 표준입력이 터미널이 아니면 묻지 않고 끝난다. 해시도 명령 글자에 안 실린다.
+- **서버와 같은 규칙 · 같은 함수를 지난다** — 이메일은 서버처럼 소문자로 맞추고, 비밀번호는 로그인이 받는 규칙(8–200자)을
+  먼저 지난다. 해시 비용도 서버의 `PASSWORD_SCRYPT_N` 이다.
+- **그 사람의 세션을 함께 지운다** — 옛 비밀번호로 로그인해 둔 브라우저는 다시 로그인해야 한다. 서버는 내리지 않아도 된다.
+- **`wireb login` 으로 받은 API 토큰은 지우지 않고 센다** — 프로젝트마다 이름 · id · 수와 토큰 이름을 찍는다(토큰 원문은
+  안 찍는다). **잊어서 바꾼 것이면 그대로 두면 된다** — 그 사람의 CLI 가 계속 돈다. 멤버가 아닌 프로젝트의 토큰은
+  `— 멤버가 아니어서 지금은 404, 다시 멤버가 되면 산다` 가 붙는다.
+
+**옛 비밀번호가 새어서 바꾼 것이면 토큰도 거둔다.** 세션만 지워서는 못 쫓아낸다 — 토큰은 세션으로 만들고 발급자의 역할을
+그대로 가지므로, 옛 비밀번호를 쥔 사람이 세션 하나로 멤버인 프로젝트마다 토큰을 남겼을 수 있다(재설정 뒤에도 그 토큰의
+요청은 200 이다). 명령은 «잊었다»와 «새었다»를 가르지 못해 거두는 것은 사람이 한다. **화면에는 토큰 목록 · 폐기가 없다** —
+토큰 관리 API(`apps/api/README.md` 의 «API 토큰»)는 **세션으로만** 부를 수 있으므로, **새 비밀번호로 에디터에 로그인한 그
+탭**의 개발자 도구 콘솔에 붙여 넣는다. 둘 다 **자기가 만든 토큰만** 본다.
+
+```js
+// 목록 — 멤버인 프로젝트마다 자기 토큰을 표로 찍는다
+(async () => {
+  const rows = []
+  for (const p of await (await fetch('/api/projects')).json())
+    for (const t of await (await fetch(`/api/projects/${p.id}/tokens`)).json())
+      rows.push({ project: p.name, token: t.name, lastUsedAt: t.lastUsedAt, projectId: p.id, tokenId: t.id })
+  console.table(rows)
+  return rows
+})()
+```
+
+```js
+// 전부 폐기 — 자기 CLI 의 토큰도 함께 거두므로 끝나면 `wireb login` 을 다시 한다
+(async () => {
+  const done = []
+  for (const p of await (await fetch('/api/projects')).json())
+    for (const t of await (await fetch(`/api/projects/${p.id}/tokens`)).json())
+      done.push({ project: p.name, token: t.name, status: (await fetch(`/api/projects/${p.id}/tokens/${t.id}`, { method: 'DELETE' })).status })
+  console.table(done)
+  return done
+})()
+```
+
+폐기는 `status` 가 204 다. 하나만 거두려면 목록의 `projectId` · `tokenId` 로 `DELETE /api/projects/<projectId>/tokens/<tokenId>`
+를 같은 콘솔에서 부른다. 멤버가 아닌 프로젝트의 토큰은 이 길로 안 보인다(그 프로젝트의 목록이 404) — 지금은 404 라 쓰이지
+않고, 다시 멤버로 들이기 전에 그 사람이 거둔다.
+
+> **재는 법** — 일회용 계정으로 옛 비밀번호 세션에서 토큰 셋을 만들고 → 명령으로 바꾸고(출력에 3개) → 그 토큰의
+> `GET /api/projects/<id>` 가 200 인지 → 독립 헤드리스 Chrome 에서 에디터에 새 비밀번호로 로그인해 위 두 글을
+> `page.evaluate` 로 돌리고 → 폐기 204 × 3 · 그 토큰 401 × 3 · 목록 `[]` 를 본다. 명령 쪽 값은
+> `apps/api/test/reset-password.test.ts` 가 함께 잰다.
+
+**바꾸지 않고 끝나는 갈래가 전부 «아무것도 바꾸지 않았습니다»를 말하고 종료 코드가 0 이 아니다:**
+
+| 갈래 | 무엇이 보이나 |
+|---|---|
+| 그 이메일의 계정이 이 DB 에 없다 | `대상 0 — … 계정이 이 DB 에 없습니다` — **비밀번호를 묻지도 않는다.** 다른 체크아웃의 DB 를 보고 있는지 첫 줄로 가른다(「에디터가 뜨는데 로그인이 안 된다」 절의 ⓞ · ⓑ) |
+| 빈 값 · 빈 줄에서 Ctrl-D | `비밀번호가 비었습니다` |
+| Ctrl-C | `취소했습니다` · 종료 코드 130 |
+| 8자 미만 · 200자 초과 | `비밀번호는 8–200자여야 합니다(친 값은 N자)` — 둘째를 묻지 않는다. **글자 수는 로그인 규칙과 같은 UTF-16 단위다** — 이모지 하나가 2자다 |
+| 두 번 친 값이 다르다 | `두 번 친 값이 다릅니다` |
+| 인자가 둘 이상 | 이메일 둘이면 `이메일은 한 번에 하나만 받습니다`, 아니면 `비밀번호는 인자로 받지 않습니다 …` — 인자를 되찍지 않는다. 앞의 `--`(`reset-password -- me@example.com`)는 인자로 안 센다 |
+| DB 에 못 닿는다 · 쓰는 도중에 끊긴다 | `DB 에서 계정을 찾지 못했습니다(…)` · `DB 에 쓰지 못했습니다(…)` — 커밋 전이라 아무것도 안 바뀌었다 |
+
+**DB 가 커밋에 답하지 못하면 종료 1 이고 `반영됐는지 모릅니다` 다** — 커밋이 DB 에 닿았는지 명령이 모른다. 새 비밀번호로
+로그인해 보고, 안 되면 다시 친다.
+
+**통째로 붙여 넣어도 된다 — 물음이 뜨기 전에 다 도착하면.** 명령은 묻기 전에 **입력이 0.3초 동안 조용해질 때까지** 온 것을
+버리고 `(묻기 전에 들어온 입력 N글자를 버렸습니다)` 를 찍는다 — 명령 줄 뒤에 딸려 온 줄(빈 줄 · 주석 · 다음 명령)이 비밀번호로
+먹히지도, 명령으로 돌지도 않는다. 터미널이 붙여넣기를 조각으로 나눠 천천히 보내도(iTerm2 «Paste Slowly» — 16바이트씩
+125ms) 조각 사이가 0.3초보다 짧으면 통째로 버린다. **물음이 뜬 뒤에 도착한 것은 답이다** — 그때부터 온 줄은 비밀번호로
+읽힌다(두 번 치기 · 8자 하한이 대개 걸러 «아무것도 바꾸지 않았습니다»로 끝난다).
+
+**물음이 뜨기 전에 친 글자는 화면에 보인다.** 명령이 뜨는 동안(`tsx` 기동 — 이 기계에서 Enter 부터 첫 줄까지 약 1.8초)은
+터미널이 아직 되비춤을 켠 채다 — 되비춤을 끄는 것은 명령의 코드이고 그 코드는 그 뒤에 돈다. 그 글자는 셸 기록에는 안 남고
+버려지지만(위) 화면 · 스크롤백에 남는다. **물음을 보고 친다.**
+
+> **재는 법** — 대화형 셸을 pty 로 띄워 사람처럼 친다(zsh · bash, 한 줄씩 친 판 · 명령과 뒤 줄들을 통째로 붙여 넣은 판을
+> **한 번에 쓴 판과 16바이트씩 125ms 로 나눠 쓴 판** · 물음 전에 글자당 80ms 로 미리 친 판 · Ctrl-D · Ctrl-C · 7자 · 두 값이
+> 다름 · 물음에서 전경 그룹에 SIGHUP(뒤에 `stty -a` 가 `isig icrnl` 이고 `read` 가 Enter 로 끝나야 한다) · 둘째 물음에서
+> 그 DB 컨테이너를 `docker stop`). 각 판 뒤에 DB 의 해시를 새 · 옛 비밀번호로 `verifyPassword` 하고 그 사람의 세션 수를
+> 센다. 셸 기록 파일과 둘째 물음에서 찍은 `ps -Eww -axo pid,command` 에서 비밀번호를 찾는다(없어야 한다). 바꾸지 않는
+> 갈래의 값은 `apps/api/test/reset-password.test.ts` 가 가짜 터미널로 함께 잰다.
 
 **`migrate` 를 새 비밀번호로 다시 돌려도 안 바뀐다** — 시딩은 이미 있는 이메일을 건너뛰고
-*"이미 있어 그대로 둡니다 … (비밀번호를 덮어쓰지 않습니다)"* 를 찍는다(「세우기」 절 5번). 이 기계에서 쟀다:
-그 뒤 새 비밀번호는 401, 옛 비밀번호는 200 이다.
+*"이미 있어 그대로 둡니다 … (비밀번호를 덮어쓰지 않습니다)"* 를 찍는다(「세우기」 절 5번).
 
 **`users` 행을 지우고 다시 시딩하지 마라.** 그 사람이 코멘트 · 스냅샷 · 프리셋을 남겼으면 FK 가
 막아 삭제가 실패하고(`violates foreign key constraint "comments_author_id_fkey"`), 남긴 것이 없어
 지워지면 **멤버십이 함께 지워진다** — 그 사람이 owner 였던 프로젝트는 멤버가 0 이 되고, 다시 시딩한
 계정의 목록은 빈다(이 기계에서 쟀다: 멤버 0 · `GET /api/projects` → `[]`).
-
-**그 계정의 해시만 서버와 같은 함수로 바꾼다** — **그 서버가 읽는 `apps/api/.env` 가 있는 루트**(그 서버를
-띄운 저장소나 워크트리)에서 친다. compose 는 `--env-file` 이 아니라 **명령을 친 디렉터리로 컨테이너를 고른다** —
-다른 체크아웃에서 치면 그쪽 DB 의 같은 이메일이 바뀌고 `UPDATE 1` 이 나오는데, 띄운 서버의 비밀번호는 그대로다.
-고칠 자리는 둘이다 — 이메일, 그리고 `-d`(그 `.env` 의 `DATABASE_URL` 끝의 DB 이름. 워크트리면 `wb_<이름>`).
-
-```bash
-(
-  printf '새 비밀번호(8–200자, 친 글자는 안 보인다): ' && read -rs NEW_PASSWORD && echo && export NEW_PASSWORD &&
-  HASH=$(cd apps/api && pnpm exec tsx -e "Promise.all([import('./src/auth/credentials.ts'), import('./src/auth/password.ts')]).then(async ([c, m]) => console.log(await m.hashPassword(c.RawPassword.parse(process.env.NEW_PASSWORD))))") &&
-  docker compose --env-file apps/api/.env exec -T postgres \
-    psql -U wirebound -d wirebound -v email=me@example.com -v hash="$HASH" <<'SQL'
-update users set password_hash = :'hash' where email = :'email';
-delete from sessions where user_id = (select id from users where email = :'email');
-SQL
-)
-```
-
-- **비밀번호는 `read -rs` 로 받는다** — 명령 글자와 셸 기록에 남지 않는다. 받은 값은 해시를 만드는 동안 그
-  자식 프로세스의 환경에 있고(같은 사용자의 `ps -E` 에는 보인다), 괄호(서브셸)가 끝나면 변수도 사라진다.
-  해시는 `psql -v` 인자라 그 명령이 도는 동안 호스트와 컨테이너의 `ps` 에 보인다.
-- **통째로 붙여 넣어도 된다 — 괄호가 그것을 위해 있다.** 셸이 닫는 괄호까지 다 읽은 뒤에 실행하므로 `read` 가
-  붙여 넣은 다음 줄이 아니라 사람이 치는 것을 기다린다. 괄호 없이 줄들을 붙여 넣으면 `read` 가 **붙여 넣은 다음
-  줄(빈 줄)을 비밀번호로 먹어** 해시가 빈 비밀번호의 것이 되고(로그인 본문 검증이 8자 미만을 400 으로 막아 아무도
-  못 들어간다), 사람이 이어서 친 비밀번호는 **명령으로 실행돼 셸 기록에 남는다**. 블록 안에 `#` 주석을 두지 않는 것도
-  같은 까닭이다 — `interactivecomments` 가 꺼진 zsh 는 붙여 넣은 주석 줄의 `(` · `<` 에서 구문 오류를 낸다.
-- **서버의 규칙(`src/auth/credentials.ts` 의 `RawPassword`, 8–200자)을 먼저 지난다.** 어기면 `ZodError` 로 멈추고
-  (오류는 비밀번호를 찍지 않는다) `&&` 가 DB 줄을 막는다. 규칙 밖의 비밀번호를 넣으면 로그인 본문 검증이 400 을 내
-  **아무도 못 쓰는 계정**이 된다. `read` 에서 Ctrl-D 를 누르면 `read` 에서 멈춘다 — 줄들이 `&&` 로 이어지지 않으면
-  빈 해시가 들어가 `UPDATE 1` 인데 로그인이 500 이 된다.
-
-**`UPDATE 1` 이 나와야 한다.** `UPDATE` 줄이 안 나오고 오류가 찍혔으면 DB 는 그대로다. `UPDATE 0` 이면 그 이메일의
-계정이 그 DB 에 없다 — 이메일은 소문자로 저장되므로 대문자를 섞어 치면 `UPDATE 0` 이다. 그 밖이면 「에디터가 뜨는데
-로그인이 안 된다」 절의 ⓞ · ⓑ 를 본다. 서버는 내리지 않아도 된다. 이 기계에서 쟀다: 명령 그대로 돌린 뒤 새
-비밀번호 200 · 옛 비밀번호 401 · 그 전에 로그인해 둔 세션 401, 프로젝트와 멤버십은 그대로다 — zsh · bash 에 한 줄씩
-친 판과 통째로 붙여 넣은 판 모두.
-
-**세션 삭제 줄을 빼면 옛 세션이 산다** — 해시를 바꾼 뒤에도 그 전에 로그인한 브라우저의
-`/api/auth/me` 가 200 이었다. 옛 비밀번호가 새어 바꾸는 것이면 그 줄을 빼지 마라.
-**`wireb login` 으로 받은 토큰은 이 두 줄이 건드리지 않는다**(`api_tokens` 는 다른 표다).
 
 ---
 
@@ -878,7 +934,7 @@ node apps/api/node_modules/playwright-core/cli.js install chromium
 |---|---|
 | `install chromium --only-shell` | 내려받기 **94.7 MiB** + FFmpeg 1 MiB · **6.4초** · 디스크 **196MB** + 2.5MB |
 | `install chromium` | 위 대신 **전체 Chromium**(디스크 ~356MB). **헤드리스로만 쓰므로 `--only-shell`로 충분하다** — 서버가 부르는 것이 headless shell 이다(오류 문장의 경로가 `chromium_headless_shell-<리비전>`이다) |
-| `--with-deps` | 시스템 라이브러리를 함께 넣는다. **리눅스에서 필요하다**(이 기계에서는 안 썼다) |
+| `--with-deps` | 시스템 라이브러리와 **글꼴 몇 벌**(한글이 든 `fonts-wqy-zenhei` · `fonts-unifont` 포함)을 함께 넣는다. **리눅스에서 필요하다**(리눅스 컨테이너에서 쟀다 — 「배포하려면」 절) |
 | 어디에 들어가나 | macOS 는 `~/Library/Caches/ms-playwright/`. `PLAYWRIGHT_BROWSERS_PATH`로 옮길 수 있다 |
 
 **이미 있으면 아무것도 안 낸다** — 출력 없이 종료 코드 0 이다(이 기계에서 쟀다). *"실패했나"*가
@@ -920,7 +976,7 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 
 ### 8.4 알아 둘 것
 
-- **한글 글꼴이 없으면 한 장도 안 그린다.** 두부를 내보내지 않는 판정이고, 미리보기의 `fontWarning`이 그 사실을 낸다. 리눅스 컨테이너에는 보통 없다 — `fonts-noto-cjk` 부류를 넣어야 한다(**이 기계에서는 재지 못했다** — 「못 잰 것」 절).
+- **한글 글꼴이 없으면 한 장도 안 그린다.** 두부를 내보내지 않는 판정이고, 미리보기의 `fontWarning`이 그 사실을 낸다. 리눅스 컨테이너에는 보통 없다 — `fonts-noto-cjk` 를 넣는다(리눅스 컨테이너에서 쟀다 — 「배포하려면」 절).
 - **바깥으로 나가는 요청을 끊는다.** 테마의 `@font-face`·`url()`은 사용자가 적은 문자열이라 서버가 그것을 가져가면 안 된다. **대가:** 원격 웹폰트를 든 테마는 에디터 캔버스와 다르게 그려진다.
 - **긴 페이지는 조용히 실오라기가 된다.** 화면 전체를 찍으므로 높이가 내용을 따라가고, 슬라이드 위에서 폭이 줄어든다. 상한은 **페이지 장 수**이지 바이트가 아니다.
 - 자세한 값(화소·동시성·타임아웃·상한·요청끼리의 상한)은 [`apps/api/README.md`의 *"화면 이미지를 그리는 조건"*](apps/api/README.md#화면-이미지를-그리는-조건)에 있다.
@@ -950,33 +1006,159 @@ pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브�
 
 > **브라우저가 없을 때 `test:build`가 찍는 줄은 「넣는 법」 절의 명령을 권한다.** 그 스모크
 > (`apps/api/build-test/screen-chromium.test.ts`)는 **브라우저를 실제로 띄워 보고** 안 뜨면 건너뛴다 — `--only-shell` 만
-> 넣은 기계에서도 돈다. **`SCREEN_CHROMIUM_PATH`는 안 본다** — playwright-core 캐시의 브라우저로만 돈다(그 값은 서버만
-> 쓴다 — 「기계에 이미 있는 브라우저를 쓰기」 절). `npx playwright install` 은 쓰지 마라 — 이 저장소는 `playwright`
-> 패키지를 일부러 안 들인다(그것이 브라우저를 내려받는 postinstall 을 달고 온다).
+> 넣은 기계에서도 돈다. **서버가 쓰는 브라우저로 돈다** — `SCREEN_CHROMIUM_PATH` 를 서버와 같은 순서(셸 → `apps/api/.env`)로
+> 읽고, 비면 playwright-core 캐시다(「기계에 이미 있는 브라우저를 쓰기」 절). 그 경로를 못 띄우면 건너뛰며 그 경로를 말한다.
+> `npx playwright install` 은 쓰지 마라 — 이 저장소는 `playwright` 패키지를 일부러 안 들인다(그것이 브라우저를 내려받는
+> postinstall 을 달고 온다).
 
 ---
 
-## 10. 못 잰 것 — **이 문서가 확인하지 않은 것들**
+## 10. 배포하려면 — **잰 요구 사항과 앞단이 지킬 조건**
+
+**배포 대상은 아직 정하지 않았다.** 이 절은 무엇이 필요한지를 **재서** 적은 것이지 배포 절차가 아니다. 값은 로컬
+Docker 의 리눅스 컨테이너(linux/arm64 · `node:22-slim` = Debian 12 · Node 22.23.1 · 저장소의 `git archive HEAD`)에서
+실제로 띄워 본 것이다. **운영에서 돌려 본 적은 없다**(아래 「이 절이 안 잰 것 · 알려진 한계」).
+
+### 10.1 api 가 필요로 하는 것
+
+| 무엇 | 필요 | 안 하면 무엇이 보이나 (쟀다) |
+|---|---|---|
+| **Node ≥ 22.18** | `pnpm build` 의 tsdown 이 `tsdown.config.ts` 를 Node 의 타입 벗기기(`process.features.typescript` — 22.18 부터 기본)로 읽는다. 그것이 없으면 `unrun` 으로 읽으려 하는데 이 저장소에 없다 | 22.17 은 설치 0 · **빌드 1**(`Failed to import module "unrun"`) — api 가 `@wirebound/schema/dist` 를 못 찾아 안 뜬다. 22.18 · 24.10 은 빌드 0. 더 낮으면 먼저 다른 데서 죽는다 — 22.13 이하는 `corepack enable` 뒤 `pnpm` 이 `Cannot find matching keyid`(22.14 는 된다), 22.9 는 빌드가 `Cannot find module '@rolldown/binding-linux-arm64-gnu'`(바인딩의 `engines` 가 안 맞아 pnpm 이 조용히 건너뛴다), 22.8 은 `node: bad option: --env-file-if-exists=…` 로 모든 스크립트가 죽는다 |
+| **devDependencies 까지 설치** | `start` · `migrate` · `reset-password` 가 `tsx`(devDependency)로 돈다 | `pnpm install --prod` 뒤 `pnpm --filter @wirebound/api start` → `sh: 1: tsx: not found` |
+| **`pnpm build`** | 「테스트는 통과하는데 서버만 안 뜬다」 절과 같은 까닭 | — |
+| **`HOST=0.0.0.0`** | 기본값이 `127.0.0.1` 이다 | 컨테이너 포트를 열어도 **밖에서 안 닿는다**(호스트 `curl` 000 · 컨테이너 안 200) |
+| **마이그레이션을 먼저** | api 는 뜰 때 마이그레이션을 올리지 않는다 | **하나 뒤처진 DB 에도 뜬다** — `이 서버가 보는 DB: … · 마이그레이션 14건` 만 찍고 코드가 아는 수와 견주지 않는다. 그 뒤 코멘트 게시가 500(`column "revision_seq" of relation "comments" does not exist`). 빈 DB 면 안 뜬다(「띄우기」 절). **순서: `migrate` → 새 api** |
+| **`NODE_ENV=production` 이면 TLS** | 세션 쿠키에 `Secure` 가 붙는다(`apps/api/src/auth/plugin.ts`) | http 로 연 화면에서 **로그인 200 인데 바로 다음 `/api/auth/me` 가 401** — 브라우저가 쿠키를 안 받는다(쿠키 0). `http://127.0.0.1` 은 Chrome 이 안전한 출처로 봐 된다 — **그래서 로컬에서는 안 보인다.** 헤드리스 Chrome 에 `--host-resolver-rules=MAP wb.test 127.0.0.1` 로 `http://wb.test` 를 열어 쟀다. `development` 면 둘 다 200 |
+| **PID 1 은 node 로** | `pnpm` 을 거치면 `SIGTERM` 이 서버의 정상 종료에 안 닿는다 | `docker stop` 에 종료 코드 1(`--init` 이면 143) · «종료합니다» 줄 0 · **도는 요청이 소켓째 끊긴다**(`UND_ERR_SOCKET`). `apps/api` 에서 `node --import tsx src/main.ts`(또는 `tsx src/main.ts`)를 PID 1 로 두면 종료 0 · 도는 요청 200 |
+| **init 을 둔다**(`docker run --init` · tini) | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). `--init` 이면 0 |
+
+Node 판을 재는 법 — 저장소 뿌리에서 `git archive HEAD | docker run -i --rm node:<판>-slim sh -c 'mkdir /app && cd /app && tar xf - &&
+corepack enable && pnpm install --frozen-lockfile && pnpm build'`. tsdown 의 `engines`(`^22.18.0 || >=24.11.0`)는 24.0–24.10 을
+빼지만 그 판에서도 빌드가 돌아(24.10 에서 쟀다) `engines` 는 `>=22.18.0` 으로 둔다.
+
+**환경 값의 목록과 뜻은 `apps/api/.env.example` 이 소유한다.** 배포에서 달라지는 것은 위 표의 `HOST` · `NODE_ENV` 와,
+**`POSTGRES_PORT` 를 두지 않는 것**이다 — 그 값은 compose 가 여는 포트이고, 있으면 접속 문자열과 포트가 맞는지 검사한다
+(「세우기」 절의 끝).
+
+### 10.2 pptx 의 화면 이미지 — 브라우저와 **한글 글꼴**
+
+| 이미지 | 브라우저 | 한글 글리프를 가진 글꼴 | 미리보기 · pptx |
+|---|---|---|---|
+| `install --with-deps --only-shell chromium` | playwright 캐시의 headless shell | **`--with-deps` 가 함께 깐다** — `fonts-wqy-zenhei` · `fonts-unifont`(그리고 한글이 없는 `fonts-ipafont-gothic`) | 그린다(WenQuanYi 로) |
+| 위에서 그 셋을 걷음 | 〃 | 없다 | `fontWarning: 이 서버에 한글 글꼴이 없어 화면 이미지를 그리지 않았습니다` · pptx **200** · `ppt/media` **0** · `x-wb-screen-failures: 1`. 가드 없이 찍으면 한글이 **□** 다 |
+| 걷은 뒤 `fonts-noto-cjk` | 〃 | Noto Sans CJK KR | 그린다 |
+| `apt-get install chromium` + `SCREEN_CHROMIUM_PATH=/usr/bin/chromium` | 배포판 chromium | 없다 | 위 «없다» 줄과 같다 |
+| 위 + `fonts-noto-cjk` | 〃 | Noto Sans CJK KR | 그린다 |
+
+- **한글 글꼴은 명시해서 넣는다**(`fonts-noto-cjk`). `--with-deps` 가 주는 한글은 playwright 의 의존 목록에 딸려 온
+  것이라 그 목록이 바뀌면 조용히 사라진다.
+- **글꼴이 없어도 서버 로그에는 아무것도 안 남는다**(그 판의 로그는 기동 세 줄뿐이었다). 알아채는 자리는 미리보기의
+  `fontWarning` · 응답 머리 `x-wb-screen-failures` · `wireb export` 의 표준에러 경고다(「PPTX 의 화면 이미지」 절).
+- 크기: 위 첫 줄 이미지가 **1.66GB**(playwright 캐시 344MB · `node_modules` 216MB), `fonts-noto-cjk` 가 **+170MB** 다
+  (`docker images` 로 잰다).
+
+**재는 법 — 배포할 이미지 안에서 스모크를 돌린다.** 서버와 같은 `SCREEN_CHROMIUM_PATH` 를 준다.
+
+```bash
+pnpm vitest run --project build apps/api/build-test/screen-chromium.test.ts
+```
+
+위 다섯 줄에서 돌린 값 — 한글 글꼴이 없는 두 이미지는 **10 실패**(playwright 캐시) · **9 실패**(배포판 chromium), 있는 세
+이미지는 **15 통과**다. 브라우저를 못 띄우면 건너뛰고 그렇다고 말한다 — **건너뜀은 통과가 아니다.**
+
+### 10.3 에디터 — 정적 파일
+
+`pnpm --filter @wirebound/web build` 가 `apps/web/dist`(`index.html` + `assets/`)를 낸다. api 는 이것을 서빙하지 않는다 —
+앞단이 서빙하고 `/api` 를 api 로 넘긴다. 깊은 링크(`/projects/…`)는 `index.html` 로 돌린다(아래 설정의 `try_files` 로
+200 을 쟀다).
+
+### 10.4 앞단(리버스 프록시)이 지킬 조건
+
+| 조건 | 왜 | 쟀다 (nginx 1.27 · 아래 설정) |
+|---|---|---|
+| **에디터와 `/api` 가 같은 출처** | 세션 쿠키가 same-origin 으로 실리고 api 에 CORS 설정이 없다(「띄우기」 절) | — |
+| **TLS 를 앞단이 끝낸다** | `NODE_ENV=production` 의 `Secure` 쿠키(「api 가 필요로 하는 것」) | — |
+| **WS 업그레이드를 넘긴다** — `/api/projects/:id/ws` | 실시간 · 잠금 · 방송이 이 연결이다 | `proxy_http_version 1.1` 과 `Upgrade` · `Connection` 머리가 없으면 **404**(5ms) — 에디터는 재연결을 되풀이한다(`apps/web/src/realtime/connection.ts` 의 재연결 사다리 — 코드 읽기). 있으면 **101** + 프레임 셋(`joined` · `presence` · `locks`) |
+| **WS 유휴 제한이 25초보다 길다** | 에디터가 25초마다 `ping` 한다(`connection.ts` 의 `DEFAULT_HEARTBEAT_MS`) | `proxy_read_timeout 5s` 로 두자 **5.0초**에 끊겼다. nginx 기본 60s 는 넘는다. HTTP 쪽 읽기 제한은 가장 긴 내보내기보다 길어야 한다 — 장 수에 비례한다(`apps/api/README.md` 「화면 이미지를 그리는 조건」) |
+| **클라이언트의 끊음을 상류로 전한다** | 사용자가 창을 닫거나 형식을 바꾸면 api 가 그리기를 멈춰야 칸이 돌아온다 | nginx 기본(`proxy_ignore_client_abort off`)은 전한다 — 40장 미리보기(1.46s)를 400ms 에 끊자 chromium 이 직접 붙은 판 **0.67s** · nginx 경유 **0.80s** 뒤 사라졌다(안 끊었으면 1.06s 더 돈다 · 100ms 간격 표본). 개발 서버의 프록시는 훅 없이 안 전한다 — `apps/web/vite.config.ts` 의 `proxyReq` 훅이 그 자리다 |
+| **상류 keep-alive 유휴가 72초보다 짧다** | Fastify 의 `keepAliveTimeout` 기본값이 72s 다(`apps/api/src/app.ts` 의 닫기 주석) | **안 쟀다** — 앞단이 상류 연결을 72초보다 오래 두고 다시 쓰면 api 가 막 닫은 연결에 요청을 실을 수 있다는 판정이다. nginx 는 `upstream { keepalive … }` 를 안 두면 상류 연결을 남기지 않는다 |
+| 본문 크기 | — | nginx 기본 `client_max_body_size 1m` 과 Fastify 기본 `bodyLimit` 1MiB 가 같다 — 조건이 아니다. 앞단을 더 작게 두면 그 수에서 413 이다 |
+
+재 본 nginx 설정 — **잰 것이지 권하는 운영 설정이 아니다**(TLS 가 없다):
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+server {
+  listen 80;
+  root /srv/web;                                   # apps/web/dist
+  location / { try_files $uri /index.html; }
+  location /api/ {
+    proxy_pass http://api:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $host;
+  }
+}
+```
+
+### 10.5 `Dockerfile` 을 두지 않는다 — 재 본 조합만 적는다
+
+**저장소에 `Dockerfile` 을 두지 않는다.** 까닭 셋:
+
+- **이미지의 경계가 배포 대상에 달려 있다** — 에디터 정적 파일을 같은 이미지에 둘지, 앞단이 무엇인지, 브라우저를
+  playwright 캐시로 둘지 배포판으로 둘지. 위 표들이 그 갈래마다 무엇이 드는지를 든다.
+- **그 파일을 빌드 · 기동하는 게이트가 없다.** 이미지 하나가 빌드 1분 안팎 · 1.6GB 넘게 들어 게이트 넷에 못 넣는다 — 두면 재는
+  자 없이 낡고, 저장소 안에 있다는 것만으로 «정답»으로 읽힌다.
+- **재는 자는 이미 있다** — 어떤 이미지든 그 안에서 「pptx 의 화면 이미지 — 브라우저와 한글 글꼴」의 스모크를 돌리면 브라우저와 글꼴이 든 것을 잰다.
+
+위 값을 낸 조합(한 이미지에 api 와 에디터 빌드를 함께 든 판):
+
+```bash
+# 이미지 안 — 저장소 뿌리에서
+corepack enable
+pnpm install --frozen-lockfile                   # devDependencies 까지(tsx)
+pnpm build
+pnpm --filter @wirebound/web build               # apps/web/dist — 앞단이 서빙한다
+node apps/api/node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
+apt-get install -y --no-install-recommends fonts-noto-cjk
+
+# 기동 순서 — 같은 DATABASE_URL 로
+pnpm --filter @wirebound/api migrate             # 먼저
+docker run --init -e HOST=0.0.0.0 -e NODE_ENV=production -e DATABASE_URL … -w /app/apps/api <이미지> \
+  node --import tsx src/main.ts                  # pnpm 을 거치지 않는다
+```
+
+### 10.6 이 절이 안 잰 것 · 알려진 한계
+
+- **x86_64** — 전부 linux/arm64 에서 쟀다.
+- **실제 TLS 앞단 · 다중 인스턴스 · 운영 DB** — `Secure` 쿠키는 브라우저가 http 에서 거절하는 쪽만 쟀다.
+- **상류 keep-alive 경주** — 「앞단(리버스 프록시)이 지킬 조건」 표의 판정 줄.
+- **정상 종료 중 그리던 pptx 는 그림이 빠진다(알려진 한계).** `docker stop` 이 그리는 중에 오면 그 응답은 200 이지만 그림이
+  전부 실패다(이유 `… Target page, context or browser has been closed`). playwright 가 `SIGTERM` 에 자기가 띄운 브라우저를
+  먼저 닫는다 — 컨테이너 안에서만 `chromium.launch` 에 `handleSIGTERM: false` 를 주자 같은 판이 그림을 다 실었다(실패 0).
+  서버 코드는 고치지 않았다.
+
+---
+
+## 11. 못 잰 것 — **이 문서가 확인하지 않은 것들**
 
 **지어내지 않았다.** 아래는 *"안 해 봤다"*이지 *"안 된다"*가 아니다.
 
 | 무엇 | 사정 |
 |---|---|
-| **리눅스·Windows** | 이 문서의 값은 전부 **macOS · Apple Silicon** 에서 쟀다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
-| **컨테이너의 한글 글꼴** | 「알아 둘 것」 절의 *"없으면 한 장도 안 그린다"*를 **글꼴이 없는 기계에서 재 보지 못했다.** 이 기계에는 있다 |
-| **`Dockerfile`·배포** | **없다.** 배포 절차를 지어내지 않았다. 이미지를 만드는 사람은 **브라우저 바이너리와 한글 글꼴 둘 다** 넣어야 하고, 그 둘이 들었는지 재는 자를 함께 만들어야 한다 |
+| **리눅스·Windows** | 이 문서의 값은 **macOS · Apple Silicon** 에서 쟀다 — 「배포하려면」 절만 리눅스 컨테이너(arm64)다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
+| **배포** | 「배포하려면」 절의 「이 절이 안 잰 것 · 알려진 한계」 |
 | **npm 배포** | 패키지가 전부 `private`이다. `npm i -g wirebound` 같은 길은 **없다** — 「부르는 길이 둘이고」 절이 그래서 두 길을 든다 |
 | **Claude Code 밖의 MCP 호스트** | 「다른 호스트」 절 |
-| **`--with-deps`** | 리눅스에서만 의미가 있어 이 기계에서 안 썼다 |
 | **첫 설치의 내려받기 시간** | 「세우기」 절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
 | **워크트리 셋 이상** | 「워크트리를 여럿 띄울 때」 절의 값은 전부 **워크트리 둘**로 쟀다 |
 | **옛 볼륨을 새 이름으로 옮기기** | **사용자 볼륨으로는 안 돌렸다** — 「옛 볼륨을 새 이름으로 복사한다」 절의 명령은 임시 compose 프로젝트 둘로만 돌려 봤다(복사이지 이동이 아니다) |
-| **`--env-file` 을 뺀 `up -d` 가 무엇을 하는가** | **안 쟀다.** 기본값이 5433 이라 재려면 사용자의 컨테이너가 쓰는 포트를 건드려야 한다. **잰 것은 `docker compose config` 가 그때 5433 을 낸다는 것까지다** |
-| **`SCREEN_CHROMIUM_PATH`의 성공 방향에 자동 케이스가 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. ***"옳은 경로를 주면 그 실행 파일로 뜬다"*는 손으로만 쟀다** — 브라우저 둘이 있어야 세울 수 있는 자리다 |
+| **`SCREEN_CHROMIUM_PATH`의 성공 방향이 게이트에 없다** | *"틀린 경로면 실패한다"*는 `apps/api/build-test/screen-chromium.test.ts`가 잰다. *"옳은 경로를 주면 그 실행 파일로 그린다"*는 **그 스모크를 그 값을 준 기계에서 돌릴 때만** 잰다(배포판 chromium 컨테이너에서 15 통과 — 「배포하려면」 절). 이 기계의 게이트는 그 값을 안 주고 돈다 |
 
 ---
 
-## 11. 더 읽을 것
+## 12. 더 읽을 것
 
 | 하려는 일 | 어디 |
 |---|---|
