@@ -220,6 +220,14 @@ export function createBroadcaster(
     // **참가자도 연결마다 보내는 순간 짓는다** — 아래 `announceLocks`와 같은 까닭이다. 회수가 여럿 겹치면 presence 방송이 겹쳐
     // 돌고, 부를 때 지은 목록은 뒤에 지은 목록을 추월해 이미 나간 사람을 든 채 마지막 프레임으로 남는다 — 그 사람이 다음 presence
     // 까지 화면에 남는다(`test/ws-broadcast.test.ts`의 «보내는 순간의 룸»).
+    //
+    // **전체 명단을 싣는다 — 차분 프레임(들어옴 · 나감)으로 바꾸지 않는다.** 들고 남 한 번에 K 명분을 K 연결에 보낸다. 잰 값(실포트 ·
+    // 멤버 K 명이 든 룸에 한 명이 들고 날 때 모든 연결이 새 명단을 받기까지): K=10 16.6KB · 17ms, K=50 342KB · 58ms, K=200
+    // 5.3MB · 233ms. 명단을 비운 판(차분 프레임 크기의 상한 격)도 K=50 44ms · K=200 142ms 라 시간의 대부분은 바이트가 아니라
+    // 위 `deliver`의 연결마다 재확인(조회 둘)이다 — 차분은 그 몫을 못 줄이고, 순서 · 유실(재연결 · 늦게 닿은 프레임)을 막는 판 번호와
+    // 다시 받기 장치를 새로 세워야 한다. 그리고 명단을 읽는 소비자가 없다 — 웹은 `presence`를 받고 버리고
+    // (`apps/web`의 `realtime/use-realtime.ts` 표), MCP · `wireb`는 WS 를 안 쓴다. 명단을 화면에 그리게 되거나 큰 룸이 실제가
+    // 되면 그때 다시 잰다.
     announcePresence: async (projectId) =>
       deliver(projectId, () => {
         const participants: Participant[] = rooms.membersOf(projectId).map((connection) => ({

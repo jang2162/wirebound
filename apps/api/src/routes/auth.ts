@@ -14,9 +14,10 @@ import { z } from 'zod'
 import { LoginPassword, NormalizedEmail } from '../auth/credentials'
 import { DEFAULT_SCRYPT_PARAMS, hashPassword, verifyPassword } from '../auth/password'
 import { sessionCookieOptions } from '../auth/plugin'
+import { createLoginLimiter, requestAddressKey } from '../auth/login-limit'
 import { createSession, destroySession, hashSessionToken } from '../auth/session'
 import type { ApiConfig } from '../config'
-import { unauthenticated } from '../errors'
+import { rateLimited, unauthenticated } from '../errors'
 import { parseBody } from '../http/parse'
 import { findUserByEmail } from '../repos/users'
 import { closeSessionConnections } from '../ws/notify'
@@ -27,6 +28,11 @@ import { closeSessionConnections } from '../ws/notify'
  * 두 경로가 몰래 갈라지는 사고를 막는다.
  */
 const LOGIN_FAILURE_MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다'
+
+/** 로그인 시도 제한의 문장. 막힌 키가 계정인지 주소인지 말하지 않는다 — 사람이 할 일(기다림)이 같다. */
+function loginLimitedMessage(retryAfterSeconds: number): string {
+  return `로그인 시도가 너무 많습니다 — ${Math.ceil(retryAfterSeconds / 60)}분 뒤 다시 시도하세요`
+}
 
 /**
  * 로그인 본문. `z.strictObject`라 선언되지 않은 키가 오면 그 자체로 400이다.
@@ -63,9 +69,27 @@ export function authRoutes(config: ApiConfig) {
      */
     const dummyHash = await hashPassword('타이밍-방어-전용-더미-비밀번호', scryptParams(config))
 
+    /** 이 앱의 로그인 시도 기록 — 앱마다 하나다(`auth/login-limit.ts` 머리말 «저장소는 프로세스 메모리다»). */
+    const limiter = createLoginLimiter()
+
     app.post('/login', async (request, reply) => {
       const body = parseBody(LoginBody, request.body)
-      const found = await findUserByEmail(app.db, body.email)
+      // **본문을 읽은 뒤 · 첫 `await` 전에 자리를 잡는다** — 동시에 온 요청도 한 틱 안에서 차례로 세이고, 막힌 판은 DB 도 scrypt 도
+      // 안 거친다(`auth/login-limit.ts` 머리말 «방식»).
+      const admission = limiter.begin(body.email, requestAddressKey(request.ip, request.socket.remoteAddress))
+      if (admission.kind === 'limited') {
+        reply.header('retry-after', String(admission.retryAfterSeconds))
+        throw rateLimited(loginLimitedMessage(admission.retryAfterSeconds))
+      }
+
+      // 견준 뒤의 401 은 실패로 남긴다. 견주기 전에 끝났으면(DB 오류) 맞혀 본 것이 아니라 자리를 걷는다.
+      let found: Awaited<ReturnType<typeof findUserByEmail>>
+      try {
+        found = await findUserByEmail(app.db, body.email)
+      } catch (error) {
+        admission.abandoned()
+        throw error
+      }
 
       if (!found) {
         // 존재하지 않는 이메일이어도 검증을 한 번 돈다 — 위 dummyHash 설명 참고.
@@ -78,6 +102,7 @@ export function authRoutes(config: ApiConfig) {
       if (!ok) {
         throw unauthenticated(LOGIN_FAILURE_MESSAGE)
       }
+      admission.succeeded()
 
       // 로그인은 새 세션을 만들 뿐, 그 계정의 다른 세션에는 손대지 않는다 — 한
       // 계정이 동시에 여러 기기·탭에서 로그인해 있을 수 있다(설계서 「권한 모델」,

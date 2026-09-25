@@ -589,6 +589,8 @@ export type ApiErrorCode =
    */
   | 'locked'
   | 'validation-failed'
+  /** 로그인 시도 제한(429). 화면은 서버 문장을 그대로 그린다(`routes/login.tsx`). */
+  | 'rate-limited'
   | 'internal'
 
 /** 실패 응답에 실려 오는 개별 이슈. `code`·`nodeId`는 카탈로그 검증 실패에만 채워진다. */

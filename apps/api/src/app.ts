@@ -175,6 +175,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const app = Fastify({
     // 쓰기 오류(닫힌 터미널의 EIO)에 멈추지 않는 목적지를 건다 — 그 까닭은 `log-destination.ts`의 머리말.
     logger: { ...loggerOptions, stream: loggerStream ?? logDestination() },
+    // 믿는 앞단이 없으면 `request.ip`는 소켓 주소다 — 로그인 제한의 주소 키(`auth/login-limit.ts`)가 읽는다.
+    trustProxy: config.trustProxy.length > 0 ? config.trustProxy : false,
   })
 
   // validatePage(routes/pages.ts의 PUT .../schema 게이트)가 기대하는 컴포넌트

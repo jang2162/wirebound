@@ -173,6 +173,7 @@ const API_ERROR_CODES: Record<ApiErrorCode, true> = {
   conflict: true,
   locked: true,
   'validation-failed': true,
+  'rate-limited': true,
   internal: true,
 }
 

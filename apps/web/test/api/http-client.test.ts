@@ -1413,6 +1413,7 @@ describe('createHttpClient', () => {
       conflict: true,
       locked: true,
       'validation-failed': true,
+      'rate-limited': true,
       internal: true,
     } satisfies Record<ApiErrorCode, true>) as ApiErrorCode[]
 
