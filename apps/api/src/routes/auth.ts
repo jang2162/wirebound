@@ -14,11 +14,12 @@ import { z } from 'zod'
 import { NormalizedEmail, RawPassword } from '../auth/credentials'
 import { DEFAULT_SCRYPT_PARAMS, hashPassword, verifyPassword } from '../auth/password'
 import { sessionCookieOptions } from '../auth/plugin'
-import { createSession, destroySession } from '../auth/session'
+import { createSession, destroySession, hashSessionToken } from '../auth/session'
 import type { ApiConfig } from '../config'
 import { unauthenticated } from '../errors'
 import { parseBody } from '../http/parse'
 import { findUserByEmail } from '../repos/users'
+import { closeSessionConnections } from '../ws/notify'
 
 /**
  * 로그인 실패 메시지. "없는 이메일"과 "틀린 비밀번호"가 정확히 같은 문자열을 써야
@@ -93,6 +94,9 @@ export function authRoutes(config: ApiConfig) {
       const token = request.cookies[config.sessionCookieName]
       if (token) {
         await destroySession(app.db, token)
+        // **그 세션의 WS 연결을 닫고 잠금을 놓는다** — 안 하면 다음 확인까지 열려 잠금이 남의 화면에 남는다(`ws/notify.ts`의
+        // `closeSessionConnections`).
+        closeSessionConnections(app, hashSessionToken(token))
       }
       reply.clearCookie(config.sessionCookieName, { path: '/' })
       reply.code(204).send()

@@ -102,6 +102,10 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         return
       }
 
+      /** 도는 프레임 수와, 그것이 0 이 되면 닫을 사유(`RoomConnection.closeWhenIdle`). */
+      let inflight = 0
+      let closeWhenIdle: { code: number; reason: string } | null = null
+
       const connection: RoomConnection = {
         // **무작위다** — 재기동을 넘어 겹치지 않는다(`connection-id.ts`).
         id: nextConnectionId(),
@@ -112,6 +116,10 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         membershipEpoch: 0,
         send: (payload) => socket.send(payload),
         close: (code, reason) => socket.close(code, reason),
+        closeWhenIdle: (code, reason) => {
+          closeWhenIdle = { code, reason }
+          if (inflight === 0) socket.close(code, reason)
+        },
       }
 
       const { rooms, broadcast } = app.realtime
@@ -161,6 +169,7 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         const turn = frame.type === 'lock' || frame.type === 'unlock' ? ++lockTurns : 0
         const current = (): boolean => turn === lockTurns
 
+        inflight += 1
         void (async () => {
           // **자격을 보기 전의 멤버십 세대**(`RoomConnection.membershipEpoch`). 아래 `lock` 갈래가 본다.
           const epoch = connection.membershipEpoch
@@ -251,6 +260,10 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
             // 판을 아무도 안 만들기 때문이지 겹칠 수 없어서가 아니다.
             app.log.error({ err: pushError, projectId }, 'WS 실패 통지 실패')
           }
+        }).finally(() => {
+          inflight -= 1
+          // 닫기로 한 연결의 마지막 답이 나갔다(`RoomConnection.closeWhenIdle`).
+          if (closeWhenIdle !== null && inflight === 0) socket.close(closeWhenIdle.code, closeWhenIdle.reason)
         })
       })
 

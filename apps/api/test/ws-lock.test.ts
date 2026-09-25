@@ -579,6 +579,7 @@ describe('잠금 목록은 보내는 순간 짓는다', () => {
           if (frame.type === 'locks') received.push(frame.locks.map((lock) => lock.nodeId))
         },
         close: () => {},
+        closeWhenIdle: () => {},
       })
       const broadcaster = createBroadcaster(ctx.db, rooms, store)
 

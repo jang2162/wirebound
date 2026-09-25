@@ -476,6 +476,7 @@ describe('방송 — 한 연결의 권한을 못 재면 그 연결만 건너뛴�
             if (i === 1) for (let k = 0; k < (pool.options.max ?? 10); k++) held.push(pool.connect())
           },
           close: () => closed.push(`c${i}`),
+          closeWhenIdle: () => closed.push(`c${i}`),
         })
       }
       const broadcaster = createBroadcaster(db, rooms, createLockStore(), (error, connection) => {

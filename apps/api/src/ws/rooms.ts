@@ -54,6 +54,11 @@ export interface RoomConnection {
   membershipEpoch: number
   send(payload: string): void
   close(code: number, reason: string): void
+  /**
+   * **도는 프레임이 다 끝난 뒤에 닫는다** — 지금 도는 것이 없으면 곧바로다. 로그아웃이 쓴다(`ws/notify.ts`의
+   * `closeSessionConnections`): 잠금에 줄 선 `patch`의 답(커밋 순간의 재확인이 낸 401)이 닫힌 소켓에서 길을 잃지 않게.
+   */
+  closeWhenIdle(code: number, reason: string): void
 }
 
 export interface RoomRegistry {
@@ -64,6 +69,8 @@ export interface RoomRegistry {
   membersOf(projectId: string): RoomConnection[]
   /** 참가자가 하나라도 있는 룸의 수. 빈 룸은 세지 않는다 — 지워지기 때문이다. */
   roomCount(): number
+  /** 그 세션(`RoomConnection.sessionId`)으로 붙은 연결 — 모든 룸에서. 로그아웃이 닫는다(`ws/notify.ts`의 `closeSessionConnections`). */
+  ofSession(sessionId: string): RoomConnection[]
 }
 
 /**
@@ -101,5 +108,13 @@ export class InMemoryRoomRegistry implements RoomRegistry {
 
   roomCount(): number {
     return this.#rooms.size
+  }
+
+  ofSession(sessionId: string): RoomConnection[] {
+    const found: RoomConnection[] = []
+    for (const room of this.#rooms.values()) {
+      for (const connection of room.values()) if (connection.sessionId === sessionId) found.push(connection)
+    }
+    return found
   }
 }
