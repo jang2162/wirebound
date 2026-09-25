@@ -461,6 +461,31 @@ export class EditorStore {
   /** `#waitingMarkers`가 비지 않은 동안만 선다 — `MARKER_FRAME_WAIT_MS` 뒤 `'gap'` 낡음. */
   #markerWaitTimer: ReturnType<typeof setTimeout> | null = null
 
+  /**
+   * **마지막으로 서버에 낸 편집의 id**(`markSent`). 관측 상태가 아니라 `#pumping`처럼 제어 값이다. 답이 오면 그 편집은 큐에서
+   * 빠지므로 지우지 않는다 — 묻는 쪽은 «이 편집이 그것인가»만 묻는다(`wasSent`).
+   *
+   * **`pending[0]`이 곧 나간 것이 아니다.** 리베이스가 나간 머리를 버리면(남의 변경과 부딪쳤다) 그 뒤의 안 보낸 편집이 머리가
+   * 된다 — 머리로 가르면 안 보낸 것을 «반영됐는지 모름»으로 말한다.
+   */
+  #sentOpId: string | null = null
+
+  /** 그 편집이 나갈 때 열려 있던 페이지 — 늦은 답이 지금 판의 것인지 가른다(`#orphanAck`). */
+  #sentPageId: string | null = null
+
+  /**
+   * **나간 뒤 답을 받기 전에 판째 버린 편집의 id** — 판을 다시 실었거나(`loadPage`) 페이지를 옮기며 비웠다(`clearPage`). 그 편집의
+   * 늦은 답은 이 화면의 일이 아니다(`wasAbandoned`). **리베이스가 버린 편집은 여기 들지 않는다** — 그 거절은 편집 실패 수습이
+   * 받는다(`test/edit/ws-transport.test.tsx`의 «리베이스가 버린 편집의 409로 …»).
+   */
+  #abandonedOpId: string | null = null
+
+  /** 판 다시 싣기의 세대 — 시작한 수(`beginPageLoad`). */
+  #pageLoadsBegun = 0
+
+  /** 판을 정한 가장 나중 세대(`settlePageLoad`). 이 수 이하의 답은 싣지 않는다. */
+  #pageLoadSettled = 0
+
   constructor(options: EditorStoreOptions = {}) {
     // `crypto.randomUUID`를 여기서 한 번만 참조한다. 이 줄이 이 파일의 유일한 전역
     // 의존이고, 주입하면 그것마저 없어진다. **jsdom·Node에 그 함수가 있는지는 재지
@@ -509,6 +534,7 @@ export class EditorStore {
    */
   readonly loadPage = (pageId: string, document: PageDocument, headSeq: number): PendingEdit[] => {
     const { pending, undoStack, redoStack } = this.#state
+    this.#noteAbandoned(pending)
     // **선택은 지우지 않고 다시 정한다** — 무엇으로 정하는지는 `#selectionFor`가 갖는다.
     // 여는 경로는 루트로 시작하고(죽은 화면을 없앤다), 같은 페이지를 다시 싣는 재조회는
     // 보고 있던 자리를 그대로 둔다.
@@ -548,6 +574,84 @@ export class EditorStore {
     // 버리면 번호가 캔버스에 안 뜬 채 `headSeq`가 하나 뒤처진다. 커밋 뒤에 읽혔으면 판에 이미 있어 버린다.
     if (samePage) this.#settleWaitingMarkers()
     return pending
+  }
+
+  /**
+   * **판을 서버에서 다시 읽기 시작한다 — 세대 번호를 받는다.** 조회를 내는 순간에 부른다. 답이 오면 `settlePageLoad`로 실어도
+   * 되는지 묻는다.
+   *
+   * ## 왜 세대인가 — 두 조회가 겹치면 늦게 온 옛 판이 새 판을 덮는다
+   *
+   * 판을 싣는 입구가 여럿이고(아래 표) 서로 모른 채 조회를 낸다. 앞 조회의 답이 붙잡혀 늦게 오면, 뒤 조회가 실은 새 판 위에
+   * 옛 판이 실린다 — 남이 넣은 노드가 사라지고 낡음도 안 선다(Chrome: 배너 단추의 조회를 붙잡은 채 남이 노드를 넣고 WS 를
+   * 끊으면, 재연결 재조회가 head 4 를 실은 뒤 붙잡은 head 3 의 답이 그 노드를 지웠다).
+   *
+   * **`headSeq`로 막지 않는다 — 한 페이지 id 안에서도 단조가 아니다**(`holdsServerPage`의 머리말 — 복원이 지워진 페이지를
+   * 되살리면 0 부터 다시 센다). «번호가 내려가면 버린다»는 그 판을 막는다.
+   *
+   * | 입구 | 자리 |
+   * |---|---|
+   * | 페이지 열기 | `routes/editor.tsx`의 `CanvasFrame` 여는 이펙트 |
+   * | 재연결 재조회 | 같은 파일의 재연결 이펙트 |
+   * | 복원 재조회 — 내 복원 · 남의 복원 배너의 단추 | 같은 파일의 복원 이펙트(`restoredToken`) |
+   * | 편집 실패 수습 | `edit/use-edit-commit.tsx`의 `recover` |
+   *
+   * **판을 싣는 입구가 늘면 이 표에 줄을 더하고 세대를 받게 한다** — 안 받는 입구의 답은 세대를 모른 채 새 판을 덮는다.
+   */
+  readonly beginPageLoad = (): number => {
+    this.#pageLoadsBegun += 1
+    return this.#pageLoadsBegun
+  }
+
+  /**
+   * **이 세대의 답으로 판을 정해도 되는가** — 참이면 정한 것으로 적는다. 부르는 쪽은 참일 때만 싣는다(`loadPage`) · 그대로 둔다
+   * (`holdsServerPage`로 같다고 본 판) · 비운다(조회가 페이지가 사라졌다고 답한 판). 셋 다 «이 세대가 판을 정했다»다.
+   *
+   * **«더 나중에 시작한 조회가 이미 판을 정했으면» 거짓이다 — «더 나중에 시작한 조회가 있으면»이 아니다.** 뒤 조회가 아직 답을
+   * 안 했을 때 앞 답을 버리면, 뒤 조회가 실패하거나(재연결 재조회는 실패를 조용히 둔다) 싣지 않고 넘어가는 판에서 **아무 답도
+   * 안 실린다** — 편집 실패 수습이면 문서에 거절된 편집이 남은 채 큐만 빈다(수습은 문서를 되돌리지 않는다 — `failEdits`), 페이지
+   * 열기면 캔버스가 «불러오는 중»에 머문다. 앞 답을 먼저 실어도 뒤 답이 오면 그 위에 실린다.
+   *
+   * **닫지 못하는 판** — 조회 하나의 창 안에서 얹힌 남의 프레임은 그 조회의 옛 답에 지워진다(다툴 다른 조회가 없다). 뒤에 시작한
+   * 조회가 먼저 읽힌 판(두 연결의 순서가 뒤집혔다)도 뒤 답이 옛 판을 싣는다. 둘 다 판의 판본을 견줘야 닫히는데 번호는 판본이 아니다(위).
+   */
+  readonly settlePageLoad = (ticket: number): boolean => {
+    if (ticket <= this.#pageLoadSettled) return false
+    this.#pageLoadSettled = ticket
+    return true
+  }
+
+  /** 더 나중에 시작한 조회가 이미 판을 정했는가 — 정하지 않고 묻기만 한다(판을 정하지 않는 실패 갈래가 쓴다). */
+  readonly pageLoadSuperseded = (ticket: number): boolean => ticket <= this.#pageLoadSettled
+
+  /**
+   * **이 편집을 서버로 낸다**(전송 루프가 요청을 내기 직전에 부른다). 판을 다시 실으며 이 편집을 버리면 «취소됐다»가 아니라
+   * «반영됐는지 모른다»다 — 서버에 닿아 커밋됐을 수 있다(`wasSent`).
+   */
+  readonly markSent = (clientOpId: string): void => {
+    this.#sentOpId = clientOpId
+    this.#sentPageId = this.#state.openPageId
+  }
+
+  /**
+   * **버린 편집이 이미 나간 것인가.** 판을 다시 싣는 자리(`loadPage`의 반환)가 «취소»와 «모름»을 가른다. 나간 편집은 커밋 뒤에
+   * 버려져도 이 탭에 돌아오지 않는다 — 답(ack)은 큐에 없어 버려지고(`ackEdit`), 방송은 낸 연결을 뺀다.
+   */
+  readonly wasSent = (edit: PendingEdit): boolean => edit.clientOpId === this.#sentOpId
+
+  /** 이 편집을 나간 뒤 판째 버렸는가(`#abandonedOpId`). 전송 루프가 그 늦은 거절을 수습하지 않는 데 쓴다. */
+  readonly wasAbandoned = (clientOpId: string): boolean => clientOpId === this.#abandonedOpId
+
+  /**
+   * **큐의 주인 페이지** — 큐의 편집은 늘 이 페이지의 것이다(큐는 페이지를 옮길 때 비워진다 — `clearPage` · 다른 페이지의 `loadPage`).
+   * 전송 루프가 편집을 보낼 경로다(`edit/use-edit-commit.tsx`의 `pump`). 화면이 문서를 읽는 관문(`useOpenPage`)이 아니다 — 주소와
+   * 대조하지 않는다. 큐와 같은 순간의 값이라야 하기 때문이다.
+   */
+  readonly queuePageId = (): string | null => this.#state.openPageId
+
+  /** 나간 편집을 판째 버리면 적는다(`#abandonedOpId`). */
+  #noteAbandoned(dropped: readonly PendingEdit[]): void {
+    if (dropped.some((edit) => edit.clientOpId === this.#sentOpId)) this.#abandonedOpId = this.#sentOpId
   }
 
   /**
@@ -1045,6 +1149,7 @@ export class EditorStore {
    */
   readonly clearPage = (): void => {
     const { pending, undoStack, redoStack } = this.#state
+    this.#noteAbandoned(pending)
     this.#dropWaitingMarkers()
     this.#apply({
       openPageId: null,
@@ -1288,7 +1393,10 @@ export class EditorStore {
     const nextPendingQueue = ackPending(pending, clientOpId)
     // 같은 참조면 맞는 ack가 아니었다는 뜻이다. 그때 `headSeq`나 스택을 건드리면
     // 모르는 응답이 상태를 바꾸게 된다.
-    if (nextPendingQueue === pending) return
+    if (nextPendingQueue === pending) {
+      this.#orphanAck(clientOpId, result.seq)
+      return
+    }
 
     // **ack된 편집은 이제 서버의 것이다 — 바탕에 접어 넣는다**. 안 접으면 바탕이
     // `headSeq`보다 뒤처지고, 다음 리베이스가 낡은 문서 위에서 만들어진다.
@@ -1336,6 +1444,20 @@ export class EditorStore {
     })
     // 내 편집이 기다리던 번호의 사이 revision 이었을 수 있다 — 그 프레임은 내게 안 온다(`applyMarkerChange`의 «그래서 기다렸다가 …»).
     this.#settleWaitingMarkers()
+  }
+
+  /**
+   * **큐에 없는 편집의 ack** — 판을 다시 실으며 나간 편집을 버렸는데(`wasSent`) 그 편집이 서버에 커밋됐다. 다시 읽은 판이 그 커밋
+   * **앞**을 읽었으면(`seq > headSeq`) 서버에는 있는데 이 판에는 없는 revision 이다 — 방송은 낸 연결을 빼므로 이 탭에 다시 오지
+   * 않는다. **낡음(`'gap'`)을 세운다** — 안 세우면 다음 남의 프레임이 갭을 세울 때까지 화면이 최신처럼 보인다(jsdom: 옛 판 7 이
+   * 실린 뒤 ack 8 → 낡음 `null` · 남의 9 에서야 `'gap'`). 얹지는 않는다 — 그 편집의 ops 는 이 판이 아닌 판 위에서 만들어졌다.
+   *
+   * **나갈 때 열려 있던 페이지가 지금 열린 페이지일 때만이다** — 페이지를 옮긴 뒤의 답은 이 판과 무관하다.
+   */
+  #orphanAck(clientOpId: string, seq: number): void {
+    const { openPageId, document, headSeq } = this.#state
+    if (clientOpId !== this.#abandonedOpId || openPageId === null || openPageId !== this.#sentPageId || document === null) return
+    if (seq > headSeq) this.#markStale('gap')
   }
 
   /**

@@ -56,6 +56,7 @@ import {
   type EditorMode,
   type ViewportWidth,
 } from '../store/editor-store'
+import type { PendingEdit } from '../store/edit-queue'
 import {
   EditorStoreProvider,
   useEditorStore,
@@ -150,15 +151,75 @@ function fitZoom(canvas: HTMLElement, frame: HTMLElement, viewportWidth: number)
  * `edit/edit-recovery.test.tsx`의 여러 케이스가 글자로 재고 있고, 이것은 **다른 사건**이다 —
  * 사용자가 낸 편집이 실패한 것이 아니라 연결이 끊겼다 붙은 것이다.
  *
- * **앞머리만 인자다.** 잃은 것을 세는 두 조각은 재연결과 복원이 **똑같이** 잃는데,
+ * **앞머리만 인자다.** 잃은 것을 세는 조각들은 재연결과 복원이 **똑같이** 잃는데,
  * *"왜 다시 읽었는가"*는 사용자에게 다른 사실이다 — 하나는 연결이 끊겼다 붙은 것이고
- * 하나는 자기가 방금 되돌린 것이다. 문장을 통째로 두 벌 두면 두 조각의 문안이 갈린다.
+ * 하나는 자기가 방금 되돌린 것이다. 문장을 통째로 두 벌 두면 조각의 문안이 갈린다.
+ *
+ * **버린 편집은 둘로 센다 — 이미 나간 것과 안 나간 것**(`EditorStore.wasSent`). 나간 편집은 서버에 닿아 커밋됐을 수 있다 — 다시
+ * 읽은 판이 그 커밋 **앞**을 읽었으면 그 편집은 서버에 있는데 화면에 없고, 뒤늦은 답은 큐에 없어 버려지며 방송은 낸 연결을
+ * 뺀다. 그것을 «취소됐다»고 말하면 사용자가 믿고 다시 해 **두 번 선다**(Chrome: 배너 단추의 클릭이 blur 로 낸 편집이 조회보다
+ * 8ms 먼저 나가, WS 를 10ms 늦춘 판에서 3/3 «취소됐다» · 서버에는 그 글). 그래서 모른다고 말하고 새로고침을 권한다 — 편집
+ * 실패 수습의 «모름»(`edit/use-edit-commit.tsx`의 `unknownNotice`)과 같은 판정이다.
  */
-function resyncNotice(lead: string, dropped: number, hadUndo: boolean): string {
+function resyncNotice(lead: string, lost: { unsent: number; sent: number }, hadUndo: boolean): string {
   const parts = [lead]
-  if (dropped > 0) parts.push(`아직 저장되지 않은 편집 ${dropped}개가 취소됐습니다.`)
+  if (lost.sent > 0) {
+    parts.push(`보낸 편집 ${lost.sent}개는 답을 받기 전이라 서버에 반영됐는지 알 수 없습니다 — 새로고침해 서버 상태를 확인하세요.`)
+  }
+  if (lost.unsent > 0) parts.push(`아직 저장되지 않은 편집 ${lost.unsent}개가 취소됐습니다.`)
   if (hadUndo) parts.push('되돌리기 이력이 초기화됐습니다.')
   return parts.join(' ')
+}
+
+/** 복원 뒤 다시 읽기가 실패해 판을 비우며 편집을 버렸을 때의 앞머리. 실패의 까닭은 캔버스가 말한다. */
+const RELOAD_FAILED_LEAD = '페이지를 다시 불러오지 못했습니다.'
+
+/**
+ * 판을 다시 읽기 전에 **보낸 편집의 답을 기다리는** 한도(`editsAnswered`).
+ *
+ * 답은 보통 수 ms 뒤에 온다. 늦어지는 판은 서버가 그 편집을 행 잠금에 줄 세웠거나(남의 쓰기가 페이지 행을 쥐었다) 패킷을
+ * 다시 보내는 판이다 — 3 초는 몇 번 다시 보내는 것(RTO 200ms 부터 두 배씩)까지 덮는다. 그보다 늦으면 «늦다»가 아니라 «안
+ * 온다»로 본다(끊겼는데 아직 모른다 · 서버가 멈췄다) — 기다림을 끝내고 읽는다. 그때 나간 편집은 `resyncNotice`가 «반영됐는지
+ * 모름»으로 말한다(Chrome: 행을 4.5s 쥔 판 — 3s 뒤 읽어 옛 판 · 그 문장 · 서버에는 그 글). 사람이 누른 단추의 답을 몇 초 넘게
+ * 붙들지 않는다.
+ */
+const SENT_EDIT_WAIT_MS = 3_000
+
+/**
+ * **보낸 편집의 답(ack · 거절)을 기다린다** — 전송이 쉬면(`editStatus === 'idle'`) 풀린다. 한도(`SENT_EDIT_WAIT_MS`)나 `signal`로도
+ * 풀린다.
+ *
+ * ## 왜 기다리나 — 판을 다시 싣는 단추는 그 클릭이 낸 편집과 겨룬다
+ *
+ * 속성 칸은 blur 에 커밋한다. 칸에 친 채 단추를 누르면 실클릭이 먼저 포커스를 옮겨 편집이 WS 로 나가고, 곧바로 단추가 조회를
+ * 낸다 — 두 요청이 **다른 연결**로 겨룬다. 조회가 그 커밋 앞을 읽으면 `loadPage`가 나간 편집을 버리고 옛 판을 그린다. 답을
+ * 받은 뒤에 읽으면 판이 그 편집을 품는다(Chrome: 행을 쥐어 편집을 줄 세운 판 · WS 를 10ms 늦춘 판 모두 화면 = 서버).
+ *
+ * **기다리는 값은 `editStatus` 하나고 그 값을 바꾸는 것은 전부 스토어를 지난다** — 구독이 모든 자리를 받는다. `'sending'`이면
+ * 전송 루프가 편집을 내고 답을 기다리는 중이고, `'recovering'`이면 편집 실패 수습이 판을 다시 읽는 중이다(그 판을 먼저 싣게
+ * 둔다). 전송 루프는 큐가 빌 때까지 이어서 내므로 그동안 낸 편집의 답까지 기다린다.
+ *
+ * jsdom 의 `fireEvent.click`은 포커스를 안 옮겨 blur 커밋이 안 난다 — 이 겨룸은 편집을 먼저 내고 누르는 케이스로 잰다.
+ */
+function editsAnswered(store: EditorStore, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const answered = (): boolean => store.getState().editStatus === 'idle'
+    if (answered()) {
+      resolve()
+      return
+    }
+    const done = (): void => {
+      stop()
+      clearTimeout(timer)
+      signal.removeEventListener('abort', done)
+      resolve()
+    }
+    const stop = store.subscribe(() => {
+      if (answered()) done()
+    })
+    const timer = setTimeout(done, SENT_EDIT_WAIT_MS)
+    signal.addEventListener('abort', done)
+  })
 }
 
 /**
@@ -1062,15 +1123,24 @@ function CanvasFrame(props: {
    * **말할 것이 없으면 말하지 않는다.** 버린 편집도 없고 스택도 비어 있었으면 이 재조회는
    * 무해하고, 그때 뜨는 통지는 사용자가 잃지 않은 것에 대한 경고가 된다.
    */
+  const tellLost = useCallback(
+    (lead: string, dropped: readonly PendingEdit[], hadUndo: boolean): void => {
+      if (dropped.length === 0 && !hadUndo) return
+      const sent = dropped.filter(store.wasSent).length
+      store.setEditFailure({
+        kind: 'message',
+        message: resyncNotice(lead, { unsent: dropped.length - sent, sent }, hadUndo),
+      })
+    },
+    [store],
+  )
   const applyServerPage = useCallback(
     (openPageId: string, page: PageDetail, lead: string): void => {
       // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
       const hadUndo = store.getState().undoStack.length > 0
-      const dropped = store.loadPage(openPageId, page.schema, page.headSeq)
-      if (dropped.length === 0 && !hadUndo) return
-      store.setEditFailure({ kind: 'message', message: resyncNotice(lead, dropped.length, hadUndo) })
+      tellLost(lead, store.loadPage(openPageId, page.schema, page.headSeq), hadUndo)
     },
-    [store],
+    [store, tellLost],
   )
 
   useEffect(() => {
@@ -1130,12 +1200,17 @@ function CanvasFrame(props: {
     // 열 페이지를 **인자로** 받는다. 이펙트 위쪽의 `undefined` 검사만으로는 이 안에서
     // `pageId`가 좁혀지지 않는다(호이스팅된 함수 선언이라 TS가 호출 시점을 모른다).
     async function load(openPageId: string): Promise<void> {
+      // 판을 싣는 입구다 — 세대를 받는다(`EditorStore.beginPageLoad`의 표).
+      const ticket = store.beginPageLoad()
       try {
         const page = await api.getPage(projectId, openPageId, { cancel: leave.signal })
         // 이 줄이 없으면 늦게 온 앞 페이지의 응답이 아래 `loadPage`로 흘러 **새 페이지의
         // 문서를 덮어쓴다.** 실측: 지우면 `앞 페이지의 응답이 늦게 와도 새 페이지의 문서를
         // 덮어쓰지 않는다` 하나가 죽는다.
         if (!alive) return
+        // **뒤에 시작한 다시 싣기(재연결 · 복원)가 이 페이지를 먼저 실었으면 그 판이 새것이다** — 그 입구가 캔버스도 `ready`로
+        // 놓았다. 되돌리기 이력은 채우지 않는다(그 판이 이미 비웠고, 비운 까닭이 이 페이지에도 선다 — 위 `restoreUndo`).
+        if (!store.settlePageLoad(ticket)) return
         // **문서는 스토어로 간다.** `headSeq`가 편집 요청의 `baseSeq`다 — 문서와 함께
         // 실어야 편집 요청이 어느 revision 위에서 만들어졌는지가 어긋나지 않는다.
         // 연 페이지의 id도 같은 호출로 넘긴다: 읽는 쪽이 그것을 주소와 대조한다.
@@ -1152,6 +1227,8 @@ function CanvasFrame(props: {
         void restoreUndo(openPageId)
       } catch (caught) {
         if (!alive) return
+        // 뒤에 시작한 다시 싣기가 이미 판을 실었으면 그 판을 실패 문장 아래 감추지 않는다(위 성공 갈래의 세대 줄).
+        if (store.pageLoadSuperseded(ticket)) return
         // 여기서 다시 `clearPage()`를 부르지 않는다. 조회 시작 시점에 이미 비웠고, 그
         // 사이에 문서를 싣는 길은 이 이펙트의 성공 분기뿐인데 그쪽은 도달하지 못했다
         // (앞 조회가 늦게 와도 `alive`가 false다 — **그 전제는 위 성공 분기의 가드가
@@ -1233,9 +1310,17 @@ function CanvasFrame(props: {
     // 떠나면 끊는다 — 위 이펙트와 같다.
     const leave = new AbortController()
     void (async () => {
+      // 보낸 편집의 답을 받은 뒤에 읽는다 — 그 편집이 판에 실린다(`editsAnswered`).
+      await editsAnswered(store, leave.signal)
+      if (!alive) return
+      // 판을 싣는 입구다 — 세대를 받는다(`EditorStore.beginPageLoad`의 표).
+      const ticket = store.beginPageLoad()
       try {
         const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         if (!alive) return
+        // 뒤에 시작한 다시 싣기가 판을 먼저 정했으면 이 답은 그보다 옛것이다. **판이 같다고 보고 넘어가는 것도 정한 것이다** —
+        // 안 적으면 그 뒤에 온 앞 조회의 옛 답이 판을 덮는다(창 안에 얹힌 남의 프레임이 지워진다).
+        if (!store.settlePageLoad(ticket)) return
         // **서버 판이 그대로면 다시 싣지 않는다** — 되돌리기 이력을 지킨다. 내 바탕이 곧 서버 문서면 스택의 `inverse`는 그
         // 문서 위의 것이라 남의 편집을 덮을 길이 없다(위 머리말의 전제가 안 선다). 보내지 않은 편집도 그 바탕 위에 그대로
         // 나간다 — 싣으면 오히려 그것을 버리고, 그사이 REST 로 나가던 편집의 답은 모르는 편집의 답이 된다. 다시 붙기만 하고
@@ -1266,7 +1351,7 @@ function CanvasFrame(props: {
       alive = false
       leave.abort()
     }
-  }, [api, projectId, pageId, applyServerPage, resyncToken])
+  }, [api, projectId, pageId, store, applyServerPage, resyncToken])
 
   /**
    * **내가 스냅샷을 복원했으므로 페이지를 다시 읽는다.**
@@ -1313,17 +1398,30 @@ function CanvasFrame(props: {
     // 떠나면 끊는다 — 위 이펙트와 같다.
     const leave = new AbortController()
     void (async () => {
+      // **보낸 편집의 답을 받은 뒤에 읽는다**(`editsAnswered`) — 배너의 단추는 누르는 클릭이 blur 로 편집을 내고 곧바로 이 조회를
+      // 낸다. 먼저 읽으면 반영된 편집을 버리고 옛 판을 그린다.
+      await editsAnswered(store, leave.signal)
+      if (!alive) return
+      // 판을 싣는 입구다 — 세대를 받는다(`EditorStore.beginPageLoad`의 표).
+      const ticket = store.beginPageLoad()
       try {
         const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         if (!alive) return
+        // 뒤에 시작한 다시 싣기가 판을 먼저 정했으면 이 답은 그보다 옛것이다(재연결 이펙트의 같은 줄).
+        if (!store.settlePageLoad(ticket)) return
         applyServerPage(pageId, page, restoredLead)
         // 앞서 이 페이지의 조회가 실패해 있었을 수도 있다. 복원으로 다시 생긴 페이지를
         // 오류 문장 아래 감춰 두지 않는다.
         setState({ status: 'ready' })
       } catch (caught) {
         if (!alive) return
-        // 위 머리말의 둘째 절. 문서를 스토어에서 읽는 셋이 같은 사실을 말하게 한다.
+        // **비우는 것도 판을 정하는 것이다** — 뒤에 시작한 다시 싣기가 이미 실었으면 그 판을 지우지 않는다.
+        if (!store.settlePageLoad(ticket)) return
+        // 위 머리말의 둘째 절. 문서를 스토어에서 읽는 셋이 같은 사실을 말하게 한다. **비우며 버린 편집은 말한다** — 판을
+        // 실을 때(`applyServerPage`)와 같은 문장 길이다. 되돌리기 이력은 말하지 않는다 — 그 페이지를 더 못 연다.
+        const { pending } = store.getState()
         store.clearPage()
+        tellLost(RELOAD_FAILED_LEAD, pending, false)
         setState({ status: 'failed', failure: toFailure(caught, PAGE_UNKNOWN_FAILURE) })
       }
     })()
@@ -1333,7 +1431,7 @@ function CanvasFrame(props: {
       leave.abort()
     }
     // `restoredLead`는 신호와 함께만 바뀐다 — 그 값으로 다시 돌아도 위 `handledRestore`가 막는다.
-  }, [api, projectId, pageId, store, applyServerPage, restoredToken, restoredLead])
+  }, [api, projectId, pageId, store, applyServerPage, tellLost, restoredToken, restoredLead])
 
   return (
     <div
