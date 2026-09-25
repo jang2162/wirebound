@@ -1,5 +1,5 @@
-import { Kysely, PostgresDialect, type PostgresPool, type PostgresPoolClient } from 'kysely'
-import { Client, Pool, type PoolClient } from 'pg'
+import { Kysely, PostgresDialect, type CompiledQuery, type PostgresPool, type PostgresPoolClient } from 'kysely'
+import { Client, Pool, type PoolClient, type QueryResultRow } from 'pg'
 import { DbConnectionLostError, answeredByServer, classifyConnectFailure, classifyQueryFailure } from './connection-loss'
 import type { Database } from './types'
 import type { DbHandle } from './tx'
@@ -335,7 +335,74 @@ function classifyingPool(pool: Pool): PostgresPool {
  * `DbConnectionLostError`, 서버가 답한 것은 pg 의 `DatabaseError` 그대로다.
  */
 export function createDb(pool: Pool): DbHandle {
-  return new Kysely<Database>({
+  const db = new Kysely<Database>({
     dialect: new PostgresDialect({ pool: classifyingPool(pool) }),
+  })
+  poolsOf.set(db, pool)
+  return db
+}
+
+/** `createDb`가 만든 핸들의 풀 — `readWithin`이 연결을 버리려고 든다. 트랜잭션 핸들은 여기 없다. */
+const poolsOf = new WeakMap<DbHandle, Pool>()
+
+/**
+ * **풀에서 연결 하나를 빌려 읽기 하나를 `ms` 안에 돌린다 — 한도를 넘기면 그 연결을 버린다**(`release(true)`). 한도 안에 못
+ * 끝났거나 실패했으면 `null`이다. 부르는 자리는 COMMIT 답을 잃은 편집의 확인이다(`services/lost-commit.ts`).
+ *
+ * **기다리기만 멈추면 칸은 쥔 채다.** Kysely 로 질의하고 그 약속을 `Promise.race`로 버리면, 풀에서 빌린 연결은 그 질의가 끝날
+ * 때까지 돌아오지 않는다. 확인이 받은 연결이 조용히 죽어 있으면(분할) 질의가 보낸 바이트를 못 받은 채 TCP 재전송이 포기할
+ * 때까지 산다 — 편집 하나마다 칸 하나가 응답 뒤에도 남고, 쌓이면 모든 요청이 풀 대기 한도(`poolWaitMs`)에서 503 이다([api]
+ * 프록시가 COMMIT 답을 끊고 확인 질의를 붙잡은 채 편집 12번: 칸이 하나씩 쌓여 10 에서 차고, 그 뒤 보통 `GET`이 503). 버리면
+ * 칸이 곧바로 돈다. 그 질의가 서버에 닿아 있었으면 서버는 끝까지 돌 수 있지만 읽기 하나라 해가 없다.
+ *
+ * **연결을 기다리는 동안 한도가 지나면** 받는 즉시 풀에 돌려준다 — 새로 맺은 연결이라 멀쩡하다. 그 기다림 자체는 풀 대기
+ * 한도가 끊는다.
+ *
+ * **`createDb`로 만든 핸들이 아니면(트랜잭션 핸들 등) 돌리지 않고 `null`이다** — 버릴 연결을 고를 수 없다. 편집 트랜잭션이
+ * COMMIT 답을 잃는 판은 풀 핸들에서만 난다.
+ */
+export async function readWithin<R>(db: DbHandle, query: CompiledQuery<R>, ms: number): Promise<R[] | null> {
+  const pool = poolsOf.get(db)
+  if (pool === undefined) return null
+  return new Promise<R[] | null>((resolve) => {
+    let settled = false
+    let held: PoolClient | null = null
+    const settle = (rows: R[] | null) => {
+      settled = true
+      clearTimeout(timer)
+      resolve(rows)
+    }
+    const timer = setTimeout(() => {
+      // 질의 중이면 그 연결을 버린다 — 걸린 질의는 연결이 닫히며 거절된다(아래 `catch`가 삼킨다).
+      if (held !== null) held.release(true)
+      held = null
+      settle(null)
+    }, ms)
+    timer.unref()
+    pool.connect().then(
+      async (client) => {
+        if (settled) {
+          client.release()
+          return
+        }
+        held = client
+        try {
+          const result = await client.query<R & QueryResultRow>(query.sql, [...query.parameters])
+          if (settled) return
+          held = null
+          client.release()
+          settle(result.rows)
+        } catch {
+          if (settled) return
+          // 서버가 답한 거절인지 가르지 않는다 — 읽기 하나라 버려도 잃는 것이 없다.
+          held = null
+          client.release(true)
+          settle(null)
+        }
+      },
+      () => {
+        if (!settled) settle(null)
+      },
+    )
   })
 }

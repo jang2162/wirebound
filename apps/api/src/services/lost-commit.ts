@@ -18,13 +18,14 @@
  * 성공도 확정 실패도 말하지 않고 원래의 «모름»을 낸다. 확인은 «보인다»일 때만 답을 바꾼다.
  *
  * **확인의 시간 한도.** 진짜 분할이면 새 연결도 닿지 않아 풀의 대기(`poolWaitMs`)만큼 503 이 늦어진다 — 확인은 답을
- * 바꿀 기회일 뿐이라 그만큼 붙잡지 않는다. 한도를 넘긴 확인 질의는 버려 두고(읽기뿐이다) 원래 오류를 낸다.
+ * 바꿀 기회일 뿐이라 그만큼 붙잡지 않는다. 한도를 넘긴 확인은 **그 연결째 버리고**(`db/client.ts`의 `readWithin`) 원래 오류를
+ * 낸다 — 기다리기만 멈추면 그 연결이 응답 뒤에도 풀 칸을 쥐고, 되풀이되면 풀이 차서 모든 요청이 503 이다.
  *
  * 잰 값은 `test/edit-lost-commit.test.ts`(TCP 프록시가 COMMIT 답을 끊는다).
  */
 import { DbConnectionLostError } from '../db/connection-loss'
 import { withTransaction, type DbHandle } from '../db/tx'
-import { findRevisionCommit, type RevisionCommit } from '../repos/revisions'
+import { findRevisionCommitWithin } from '../repos/revisions'
 import type { EditOutcome } from './edit-pipeline'
 
 /** 확인을 기다리는 한도 — 머리말 «확인의 시간 한도». */
@@ -59,22 +60,8 @@ export async function runEditTransaction(
   } catch (error) {
     const outcome = finished.outcome
     if (!(error instanceof DbConnectionLostError) || outcome === undefined || !outcome.ok) throw error
-    const seen = await probeWithin(db, pageId, outcome.revisionId)
+    const seen = await findRevisionCommitWithin(db, pageId, outcome.revisionId, LOST_COMMIT_PROBE_MS)
     if (seen === null || !seen.committed) throw error
     return { outcome, broadcast: seen.headSeq === outcome.seq, confirmedAfterLoss: true }
-  }
-}
-
-/** 확인 하나를 `LOST_COMMIT_PROBE_MS` 안에서 한다. 실패하거나 한도를 넘기면 `null`이다. */
-async function probeWithin(db: DbHandle, pageId: string, revisionId: string): Promise<RevisionCommit | null> {
-  let timer: NodeJS.Timeout | undefined
-  const late = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), LOST_COMMIT_PROBE_MS)
-    timer.unref()
-  })
-  try {
-    return await Promise.race([findRevisionCommit(db, pageId, revisionId).catch(() => null), late])
-  } finally {
-    clearTimeout(timer)
   }
 }

@@ -12,6 +12,7 @@
  * 전담한다 — `repos/pages.ts`와 같은 관례다.
  */
 import type { PatchOp } from '@wirebound/schema'
+import { readWithin } from '../db/client'
 import { withTransaction, type DbHandle } from '../db/tx'
 import type { RevisionActorType } from '../db/types'
 
@@ -132,7 +133,7 @@ export async function listRevisions(
   return rows.map(toRecord)
 }
 
-/** `findRevisionCommit`의 답. */
+/** `findRevisionCommitWithin`의 답. */
 export interface RevisionCommit {
   /** 그 revision 행이 보인다 — 그것을 넣은 트랜잭션이 커밋됐다. */
   committed: boolean
@@ -144,13 +145,23 @@ export interface RevisionCommit {
  * **그 revision 이 커밋됐는가, 그 페이지의 머리는 어디인가** — 한 문장이라 두 값이 한 스냅숏이다. COMMIT 답을 잃은
  * 편집을 새 연결로 확인하는 자리가 부른다(`services/lost-commit.ts`). revision 의 id 는 넣은 트랜잭션 안에서
  * `insertRevision`이 이미 돌려줬으므로 그 행이 보이면 그 트랜잭션은 커밋된 것이다.
+ *
+ * **`ms` 안에 못 끝나거나 실패하면 `null`이고, 그 질의를 돌린 연결은 버린다**(`db/client.ts`의 `readWithin`) — 기다리기만
+ * 멈추면 그 연결이 풀 칸을 쥔 채 남는다.
  */
-export async function findRevisionCommit(db: DbHandle, pageId: string, revisionId: string): Promise<RevisionCommit> {
-  const row = await db
+export async function findRevisionCommitWithin(
+  db: DbHandle,
+  pageId: string,
+  revisionId: string,
+  ms: number,
+): Promise<RevisionCommit | null> {
+  const query = db
     .selectNoFrom((eb) => [
       eb.exists(eb.selectFrom('revisions').select('id').where('id', '=', revisionId).where('page_id', '=', pageId)).as('committed'),
       eb.selectFrom('pages').select('head_seq').where('id', '=', pageId).as('head_seq'),
     ])
-    .executeTakeFirstOrThrow()
+    .compile()
+  const row = (await readWithin(db, query, ms))?.[0]
+  if (row === undefined) return null
   return { committed: Boolean(row.committed), headSeq: row.head_seq === null ? null : Number(row.head_seq) }
 }

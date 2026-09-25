@@ -9,6 +9,8 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
+import { buildApp } from '../src/app'
+import { createDb, createPool } from '../src/db/client'
 import { DB_UNREACHABLE_WRITE_MESSAGE } from '../src/http/error-handler'
 import type { ServerFrame } from '../src/ws/protocol'
 import {
@@ -19,9 +21,12 @@ import {
   getTestDb,
   resetRealData,
   signup,
+  testConfig,
+  TEST_DATABASE_URL,
   withProxiedRealApi,
   type ProxiedRealApi,
 } from './helpers'
+import { startFaultProxy } from './pg-fault-proxy'
 import { joinRoom } from './ws-client'
 
 afterEach(async () => {
@@ -31,7 +36,7 @@ afterEach(async () => {
 type PageChanged = Extract<ServerFrame, { type: 'page-changed' }>
 const pageChanged = (frames: ServerFrame[]): PageChanged[] => frames.filter((frame): frame is PageChanged => frame.type === 'page-changed')
 
-/** 확인 질의가 싣는 글자 — 프록시가 그 질의만 늦추거나 끊는다(`repos/revisions.ts`의 `findRevisionCommit`). */
+/** 확인 질의가 싣는 글자 — 프록시가 그 질의만 늦추거나 끊는다(`repos/revisions.ts`의 `findRevisionCommitWithin`). */
 const PROBE = 'as "committed"'
 
 async function fixture(ctx: ProxiedRealApi) {
@@ -126,6 +131,41 @@ describe('COMMIT 답을 잃은 편집', () => {
       // 커밋은 됐다 — 그래서 «모름»이 참이다(«확정 실패»가 아니다).
       expect(await revisionSeqs(fx.pageId)).toEqual([1])
     })
+  })
+
+  /**
+   * **확인이 한도를 넘기면 그 연결째 버린다**(`db/client.ts`의 `readWithin`). 기다리기만 멈추면 그 연결이 응답 뒤에도 풀 칸을
+   * 쥐고, 되풀이되면 풀이 차서 모든 요청이 503 이다. 확인 질의를 프록시가 **붙잡는다**(분할의 흉내 — 죽은 연결에 보낸 질의는 답이
+   * 없다). 칸은 앱의 풀을 직접 읽는다 — `withProxiedRealApi`는 풀을 내놓지 않아 여기서 앱을 세운다.
+   */
+  it('확인이 한도를 넘기면 그 연결을 버린다 — 응답 뒤에 풀 칸을 쥐지 않는다', async () => {
+    const proxy = await startFaultProxy(TEST_DATABASE_URL)
+    const pool = createPool(proxy.url, () => undefined)
+    const db = createDb(pool)
+    const app = await buildApp({ db, config: testConfig() })
+    const held: { release: () => void }[] = []
+    try {
+      const ctx = { app, db }
+      const owner = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      const menu = await createMenuNode(ctx, owner.cookie, project.id)
+      const page = await createPage(ctx, owner.cookie, project.id, menu.id)
+      const opsUrl = `/api/projects/${project.id}/pages/${page.id}/ops`
+      for (let seq = 0; seq < 3; seq += 1) {
+        proxy.dropCommitReplyAfter('insert into "revisions"')
+        held.push(proxy.holdQuery(PROBE))
+        const res = await app.inject({ method: 'PATCH', url: opsUrl, cookies: owner.cookie, payload: { baseSeq: seq, ops: addText(`n_${seq}`) } })
+        expect(res.statusCode, res.body).toBe(503)
+        // 응답이 나간 뒤 쥔 칸이 없다 — 붙잡힌 확인 질의의 연결은 풀을 떠났다.
+        expect(pool.totalCount - pool.idleCount).toBe(0)
+      }
+      expect(await revisionSeqs(page.id)).toEqual([1, 2, 3])
+    } finally {
+      for (const hold of held) hold.release()
+      await app.close()
+      await db.destroy()
+      await proxy.close()
+    }
   })
 
   /**
