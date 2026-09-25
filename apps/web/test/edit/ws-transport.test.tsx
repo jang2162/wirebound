@@ -667,6 +667,33 @@ describe('결과를 모르는 실패는 «취소됐다»고 하지 않는다', (
   })
 
   /**
+   * **WS 의 500 프레임은 «안 됨»이다 — REST 의 봉투 500 과 같다.** 프레임은 늘 api 가 만든다(앞단이 끼어들 자리가 없다). api 는
+   * 편집 핸들러가 던진 예외 가운데 DB 가 답하지 않은 것만 503 으로, 나머지를 500 으로 낸다(`apps/api`의 `ws/routes.ts` 프레임
+   * `catch` — REST 의 `http/error-handler.ts`와 같은 가름). 위 503 케이스와 이 케이스가 그 두 줄이다.
+   */
+  it('열린 연결로 500 프레임을 받으면 «취소됐다» — api 가 커밋 전에 던진 것이다', async () => {
+    const board = mount()
+    board.commit('새 내용')
+
+    board.push({
+      type: 'patch-error',
+      projectId: PROJECT_ID,
+      pageId: PAGE_ID,
+      clientOpId: 'op_1',
+      status: 500,
+      code: 'internal',
+      message: '서버 오류가 발생했습니다',
+      issues: [],
+    })
+    await act(async () => {})
+
+    expect(board.store.getState().editFailure).toEqual({
+      kind: 'message',
+      message: '서버 오류가 발생했습니다 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다.',
+    })
+  })
+
+  /**
    * REST 의 실패를 판정의 줄마다 — «안 됨»(4xx · api 가 낸 500)과 «모름»(연결 실패 · 봉투 없는 500 · 502 · 503)이 갈린다.
    * 줄의 까닭은 `panels/comment-panel.tsx`의 `knownRejection` 표(첫 보내기 칸)가 소유한다.
    */
