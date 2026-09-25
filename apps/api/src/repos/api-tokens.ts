@@ -281,6 +281,16 @@ export async function deleteMemberTokens(trx: DbHandle, projectId: string, userI
  */
 export async function deleteStaleMemberTokens(trx: DbHandle, projectId: string, userId: string): Promise<void> {
   assertLocking(trx, 'deleteStaleMemberTokens')
+  // id 순으로 먼저 잡는다 — 여러 행을 잡는 다른 자리(`lockMemberTokens` · `lockProjectTokens` · 전부 폐기)와 같은 순서라야 행이 둘 이상일
+  // 때 서로 엇갈려 잡지 않는다.
+  await trx
+    .selectFrom('api_tokens')
+    .select('id')
+    .where('project_id', '=', projectId)
+    .where('user_id', '=', userId)
+    .orderBy('id')
+    .forUpdate()
+    .execute()
   await trx.deleteFrom('api_tokens').where('project_id', '=', projectId).where('user_id', '=', userId).execute()
 }
 
