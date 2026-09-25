@@ -20,6 +20,7 @@ import type {
   ExportPreview,
   MarkerChange,
   MenuNode,
+  MyApiToken,
   PageDetail,
   PageImported,
   PatchResult,
@@ -330,6 +331,20 @@ function isPageDetail(value: unknown): boolean {
   )
 }
 
+function isMyApiToken(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    value['id'] !== '' &&
+    typeof value['name'] === 'string' &&
+    typeof value['createdAt'] === 'string' &&
+    (typeof value['lastUsedAt'] === 'string' || value['lastUsedAt'] === null) &&
+    typeof value['projectId'] === 'string' &&
+    (typeof value['projectName'] === 'string' || value['projectName'] === null) &&
+    typeof value['member'] === 'boolean'
+  )
+}
+
 function isProjectDetail(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -382,6 +397,12 @@ function isExportPreview(value: unknown): boolean {
 const SHAPES = {
   /** 본문을 읽지 않는 요청. 204에서는 아래 조기 반환에 걸려 이 검사에 닿지 않는다. */
   noBody: () => true,
+  /**
+   * «내 토큰» 목록(`routes/tokens.tsx`). **`id`는 폐기 주소가 되므로 빈 문자열까지 막는다**(아래 `pageDetail`의 «주소가 되는
+   * 값»과 같은 판단). 나머지는 줄의 글자로 그려지는 값이라 모양만 본다 — 객체가 React 자식으로 닿으면 목록이 통째로 빈다.
+   */
+  myTokens: (value) => isArrayOf(value, isMyApiToken),
+  revokedCount: (value) => isRecord(value) && typeof value['revoked'] === 'number',
   sessionUser: (value) => isRecord(value) && typeof value['id'] === 'string',
   projectDetail: isProjectDetail,
   projectList: (value) => isArrayOf(value, isProjectDetail),
@@ -1231,6 +1252,9 @@ export function createHttpClient(
     logout: () => request<void>('POST', '/auth/logout', SHAPES.noBody),
     me: (options) => request<SessionUser>('GET', '/auth/me', SHAPES.sessionUser, undefined, options),
     listProjects: () => request<ProjectDetail[]>('GET', '/projects', SHAPES.projectList),
+    listMyTokens: () => request<MyApiToken[]>('GET', '/auth/tokens', SHAPES.myTokens),
+    revokeMyToken: (tokenId) => request<void>('DELETE', `/auth/tokens/${encodeURIComponent(tokenId)}`, SHAPES.noBody),
+    revokeAllMyTokens: () => request<{ revoked: number }>('DELETE', '/auth/tokens', SHAPES.revokedCount),
     getProject: (projectId, options) =>
       request<ProjectDetail>('GET', projectPath(projectId), SHAPES.projectDetail, undefined, options),
     // 아래 셋이 프로젝트 CRUD다. **생성 응답은 `ProjectDetail`이다** — `role`까지

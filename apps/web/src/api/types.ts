@@ -23,6 +23,21 @@ export interface SessionUser {
 }
 
 /**
+ * `GET /api/auth/tokens`의 한 줄 — **로그인한 사람의 토큰 전부**(프로젝트를 가로지른다). 원문은 없다.
+ * `projectName`은 지금 그 프로젝트의 멤버일 때만 있다 — 멤버가 아니면 `null`이고 `member`가 `false`다(서버
+ * `routes/tokens.ts`의 «내 토큰은 프로젝트를 가로지른다»). `lastUsedAt`은 한 번도 안 쓴 토큰이면 `null`이다.
+ */
+export interface MyApiToken {
+  id: string
+  name: string
+  createdAt: string
+  lastUsedAt: string | null
+  projectId: string
+  projectName: string | null
+  member: boolean
+}
+
+/**
  * 프로젝트의 공통 필드. **이것만 오는 응답은 없다** — 아래 `ProjectDetail`의 실측 표가
  * 프로젝트를 내는 네 자리가 전부 `role`까지 싣는다는 것을 보인다. 여기 따로 두는 것은
  * `ProjectDetail`이 "공통 필드 + 역할"임을 타입으로 남기기 위해서다.

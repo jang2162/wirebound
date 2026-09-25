@@ -14,6 +14,7 @@ import type {
   CommentCreated,
   MarkerChange,
   MenuNode,
+  MyApiToken,
   PageDetail,
   PageImported,
   PatchResult,
@@ -69,6 +70,15 @@ export interface ApiClient {
   me(options?: ReadOptions): Promise<SessionUser>
   /** 호출자가 속한 프로젝트 목록. 각 항목에 호출자의 `role`이 실려 온다. */
   listProjects(): Promise<ProjectDetail[]>
+  /**
+   * **로그인한 사람의 API 토큰 전부** — 멤버가 아닌 프로젝트의 것도 든다(`routes/tokens.tsx`). 세션으로만 부른다(서버가
+   * 토큰 요청에 401).
+   */
+  listMyTokens(): Promise<MyApiToken[]>
+  /** 토큰 하나를 폐기한다 — 어느 프로젝트의 것이든. 없거나 남의 것이면 404 다. */
+  revokeMyToken(tokenId: string): Promise<void>
+  /** 내 토큰 전부를 폐기하고 지운 수를 낸다. */
+  revokeAllMyTokens(): Promise<{ revoked: number }>
   /** `cancel`은 셸을 떠나면 끊는다(`routes/editor.tsx`의 첫 조회 · `reread`). */
   getProject(projectId: string, options?: ReadOptions): Promise<ProjectDetail>
   /**

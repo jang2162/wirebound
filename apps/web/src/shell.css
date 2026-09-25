@@ -3327,3 +3327,62 @@
   padding-left: 16px;
   font-size: 11px;
 }
+
+/* ── 내 API 토큰(`routes/tokens.tsx`) ──────────────────────────────────────────────────────
+   화면 루트는 `.wb-shell-project-list`를 함께 달아 팔레트 · 폭 · 글꼴을 받고, 목록 · 단추는 프로젝트 목록의 것을 그대로
+   쓴다(`-project-items` · `-project-item` · `-project-action` · `-project-danger`) — 같은 계정 묶음에서 가는 두 화면이 한
+   어휘다. 여기 있는 것은 이 화면에만 있는 칸이다. */
+
+/* 계정 묶음의 링크. **로그아웃 단추와 나란히 서므로 같은 높이 · 모서리다** — 링크라 밑줄을 지우고 강조색 글자로 가른다.
+   좁은 폭에서 어떻게 접히는지는 셸 머리의 접는 규칙이 정한다. */
+.wb-shell-session-tokens {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  color: var(--wb-shell-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.wb-shell-tokens-lead {
+  margin: 0 0 8px;
+}
+
+.wb-shell-tokens-back {
+  color: var(--wb-shell-accent);
+  text-decoration: none;
+}
+
+.wb-shell-tokens-note {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--wb-shell-muted);
+}
+
+/* 전부 폐기 — 목록 위 한 줄. 확인이 열리면 확정 · 취소 둘이 선다. */
+.wb-shell-tokens-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wb-shell-tokens-name {
+  flex: 0 1 auto;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+/* 프로젝트 칸이 줄의 남는 폭을 먹어 단추를 오른쪽 끝에 민다. */
+.wb-shell-tokens-project {
+  flex: 1 1 auto;
+  color: var(--wb-shell-ink);
+  word-break: break-word;
+}
+
+.wb-shell-tokens-meta {
+  flex: 1 1 100%;
+  order: 1;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
