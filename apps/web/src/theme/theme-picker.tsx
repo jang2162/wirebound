@@ -62,6 +62,11 @@ export function ThemePicker(props: {
    * 여기서 역할을 다시 읽으면 판정이 두 곳이 된다.
    */
   canChoose: boolean
+  /**
+   * 오르면 목록과 지금 선택을 다시 읽는다 — 셸의 `restoredToken`(복원이 레이아웃의 테마 선택을 되돌린다). 고르개가
+   * 스스로 바꾼 것은 이미 들고 있으므로 이 값에 닿지 않는다(`onChanged`는 캔버스만 다시 조회시킨다).
+   */
+  reloadToken: number
   /** 서버의 테마가 실제로 바뀐 뒤에만 불린다. 셸이 이것으로 캔버스를 다시 조회시킨다. */
   onChanged: () => void
 }): ReactElement | null {
@@ -97,7 +102,8 @@ export function ThemePicker(props: {
     return () => {
       alive = false
     }
-  }, [api, props.projectId])
+    // 다시 읽는 동안 앞 목록을 그대로 그린다 — `null`로 비우면 머리에서 고르개가 잠깐 사라져 줄이 흔들린다.
+  }, [api, props.projectId, props.reloadToken])
 
   if (options === null) return null
 

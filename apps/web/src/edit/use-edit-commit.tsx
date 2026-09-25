@@ -228,9 +228,11 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    *
    * **문장만 갈리는 실패가 하나 있다 — 결과를 모르는 편집**(`unknownNotice`). 수습은 같고(다시 불러와
    * 서버 상태로) 그 편집을 «취소됐다»고 말하지 않는다 — 서버에 닿았을 수 있다.
+   *
+   * @param pageId 실패한 편집이 나간 페이지 — 이 훅의 `pageId`가 아니다(`pump`의 «큐의 주인»).
    */
   const recover = useCallback(
-    async (caught: unknown): Promise<void> => {
+    async (caught: unknown, pageId: string): Promise<void> => {
       const failure = toFailure(caught, EDIT_UNKNOWN_FAILURE)
       if (failure.kind === 'signed-out') {
         // 큐는 비운다 — 로그인하고 돌아와도 그 편집들은 이미 낡은 `baseSeq` 위에 있다.
@@ -239,6 +241,13 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         store.setEditFailure(failure)
         return
       }
+      // **그 편집이 나간 큐가 지금 큐가 아니면 아무것도 쓰지 않는다**(`EditorStore.sentFromOpenQueue`) — 이 아래의 첫 쓰기
+      // (`failEdits`)가 **지금 큐**를 비운다. 판을 싣거나 비운 뒤의 큐는 다른 판 위의 것이라 이 실패와 무관하고, 판째 버린 편집은
+      // 전송 루프가 이미 거른다(`wasAbandoned`). 여기 닿는 것은 리베이스가 먼저 버려 큐에 없던 편집이다 — 그 409 가 페이지를 옮긴
+      // 뒤 오면 새 페이지의 큐를 말없이 비웠다(Chrome: 1쪽 편집이 행 잠금에 선 사이 밥의 삭제로 리베이스에서 버려지고, 2쪽에서 친
+      // 글은 화면에만 남아 한 번도 안 나갔다). 통지 · 상태 · 세대도 쓰지 않는다 — 그 실패의 판은 이 화면에 없다. 전송 루프는 이어
+      // 지금 큐를 보낸다.
+      if (!store.sentFromOpenQueue()) return
 
       // **결과를 모르는가** — 서버가 커밋 전에 거절했거나(`refusedBeforeCommit`) 프레임이 나가지 못했으면(`EditNotSentError`)
       // 안다: 안 됐다. 그 밖은 서버에 닿았을 수 있다. 수습은 같고(다시 불러와 서버 상태로) 말만 다르다(`unknownNotice`).
@@ -257,6 +266,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       const stop = store.subscribe(() => {
         if (!stillOpen()) leave.abort()
       })
+      // 판을 싣는 입구다 — 세대를 받는다(`EditorStore.beginPageLoad`의 표).
+      const ticket = store.beginPageLoad()
       try {
         const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         // **떠났으면 싣지 않는다** — 끊기 전에 답이 와 있었을 수 있다. 버린 편집의 통지도 이제 이 화면의 말이 아니다.
@@ -264,7 +275,10 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         // **`loadPage`가 그 사이 들어온 편집까지 버리고 그것을 돌려준다.** 재조회는 왕복
         // 하나라 그 동안 새 편집이 큐에 쌓일 수 있고, 비우지 않으면 "취소됐다"고 알린 편집이
         // 나중에 새 `baseSeq` 위에서 서버로 나간다(`store/editor-store.ts`에 실측이 있다).
-        const alsoDropped = store.loadPage(pageId, page.schema, page.headSeq)
+        //
+        // **더 나중에 시작한 조회가 판을 이미 정했으면 싣지 않는다** — 그 판이 이 답보다 새것이고, 그 사이 들어온 편집도 그
+        // 판이 버리며 말했다. 이 실패의 통지는 그대로 한다(버린 것은 `failEdits`가 센 것뿐이다).
+        const alsoDropped = store.settlePageLoad(ticket) ? store.loadPage(pageId, page.schema, page.headSeq, ticket) : []
         // 버린 수는 **센 값이다** — 전송에 실패한 것, 큐에 남아 있던 것, 재조회를 기다리는
         // 동안 들어온 것을 합친 것이고, 셋 다 문서가 서버 것으로 되돌아가며 사라졌다.
         const lost = dropped.length + alsoDropped.length
@@ -305,6 +319,17 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         // **떠났으면 말하지도 비우지도 않는다** — 끊긴 조회의 거절이거나 떠난 뒤의 실패다. 아래 `failEdits`는 **지금 열린 페이지의**
         // 큐를 비운다 — 떠난 페이지의 수습이 옆 페이지의 편집을 버리면 안 된다.
         if (!stillOpen()) return
+        // **더 나중에 시작한 조회가 판을 이미 정했으면 그 판이 서버 것이다** — 문서는 되돌아갔고 그 뒤에 낸 편집은 그 판 위의
+        // 것이라 버리지 않는다. 실패의 통지만 한다(판은 다시 실렸다).
+        if (store.pageLoadSuperseded(ticket)) {
+          store.setEditFailure({
+            kind: 'message',
+            message: unknown
+              ? unknownNotice(why, { cancelled: dropped.length - 1, live: lateCommitArrives(why, channel) })
+              : `${failure.message} — 페이지를 서버 상태로 다시 불러왔고, 편집 ${dropped.length}개가 취소됐습니다.`,
+          })
+          return
+        }
         // **재조회를 기다리는 동안 들어온 편집은 여기서도 버린다.** 서버 상태를 모르는 채
         // 그것을 보내면 낡은 `baseSeq` 위에서 기록된다(실측: 이 줄이 없으면 그 편집이
         // `baseSeq 7`로 나간다 — 재조회가 성공한 판의 42와 달리 서버가 다시 409를 낼 값이다).
@@ -333,7 +358,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         store.setEditStatus('idle')
       }
     },
-    [api, channel, projectId, pageId, store],
+    [api, channel, projectId, store],
   )
 
   const pump = useCallback(async (): Promise<void> => {
@@ -347,12 +372,22 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         // ack되며 이미 낡아 있다 — ack의 `setState`는 이 루프가 도는 microtask 뒤에야
         // 커밋되기 때문이다.
         const request = store.nextRequest()
-        if (request === null) {
+        /**
+         * **큐의 주인은 스토어가 연 페이지다 — 이 훅의 `pageId`가 아니다.** 큐는 페이지를 옮길 때 비워지므로(`clearPage` · 다른
+         * 페이지의 `loadPage`) 그 안의 편집은 늘 `openPageId`의 것이다. 이 루프는 앞 편집의 답을 기다리는 동안 페이지가 바뀌어도
+         * 이어서 돈다 — 답이 온 편집은 큐에 없어 버려지고(`ackEdit`) 다음 머리는 **새 페이지의 편집**이다. 훅의 `pageId`로 보내면
+         * 그것이 앞 페이지 경로로 나가, 번호가 맞으면 서버가 **앞 페이지에 받는다**(Chrome: 1쪽 편집을 행 잠금에 줄 세운 채 2쪽으로
+         * 옮겨 친 글이 1쪽에 저장 · 2쪽 그대로 · 화면은 2쪽에 그 글 · 통지 0).
+         */
+        const target = store.queuePageId()
+        if (request === null || target === null) {
           if (store.getState().editStatus === 'sending') store.setEditStatus('idle')
           return
         }
 
         store.setEditStatus('sending')
+        // 이 편집은 이제 서버에 닿을 수 있다 — 판을 다시 실으며 버리면 «모름»이다(`EditorStore.wasSent`).
+        store.markSent(request.clientOpId)
         // **설계서 「소프트 잠금」의 *"편집 중 하트비트로 갱신"*.** 타이머를 두지 않고 **편집이 나가는 순간**에
         // 매다는 것이 판정이다: 그 절이 갱신의 조건으로 적은 것이 *"편집 중"*이고, 타이머를
         // 두면 케이스가 시간을 기다리게 된다. 잡은 것이 없으면 아무것도 안 나간다.
@@ -370,14 +405,21 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // `ackEdit`·`recover`도 같은 것을 받는다.
           const result =
             realtimeOpen(channel)
-              ? await channel.send({ pageId, ...request })
-              : await api.patchOps(projectId, pageId, request)
+              ? await channel.send({ pageId: target, ...request })
+              : await api.patchOps(projectId, target, request)
           // **응답의 `warnings`가 여기로 함께 들어간다.** 서버는 응답에 그것을 싣는다 —
           // 여기서 넘기지 않으면 **읽는 코드가 0건**이 되어 경고가 아무 데도 안 남는다.
           // 스토어가 ack와 **함께** 싣는 것이 요점이다 — 늦게 도착한
           // 응답의 경고가 지금 문서의 것으로 실리지 않는다(`ackEdit`의 가드 뒤에 있다).
           store.ackEdit(request.clientOpId, result)
         } catch (caught) {
+          // **판째 버린 편집의 거절은 수습하지 않고 다음 편집으로 간다**(`EditorStore.wasAbandoned`). 판을 다시 실으며 버렸으면 그
+          // 편집을 «반영됐는지 모름»으로 이미 말했고(`routes/editor.tsx`의 `resyncNotice`) 실린 판에 그 편집이 없다 — 거절은 그
+          // 판이 맞다는 뜻이라 되돌릴 것이 없다. 페이지를 옮기며 버렸으면 이 실패는 지금 페이지의 일이 아니다. 수습하면 그 뒤에 낸
+          // 편집을 버리고(`failEdits`) 판을 한 번 더 읽고, 통지가 «편집 0개가 취소됐습니다»로 앞 문장을 덮는다(jsdom) — 페이지를
+          // 옮겼으면 새 페이지의 편집을 버린다. **세션이 끊긴 것만 수습으로 보낸다** — 그 통지(`<SignedOut />`)는 어느 편집의
+          // 실패든 같다.
+          if (store.wasAbandoned(request.clientOpId) && toFailure(caught, EDIT_UNKNOWN_FAILURE).kind !== 'signed-out') continue
           // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다.**
           //
           // **이것이 없으면 리베이스가 서버에 닿지 않는다(실측).** 서버는 `baseSeq`가
@@ -419,16 +461,18 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           ) {
             continue
           }
-          // 루프를 여기서 끝낸다. `recover`가 큐를 비우므로 남은 편집이 다시 나가지 않고,
-          // 재조회가 문서를 서버 것으로 맞춘다.
-          await recover(caught)
-          return
+          // `recover`가 큐를 비우므로 남은 편집이 다시 나가지 않고, 재조회가 문서를 서버 것으로 맞춘다(그 편집이 지금 큐에서 나갔을 때).
+          await recover(caught, target)
+          // **수습 뒤에도 큐가 남으면 잇는다** — 더 나중에 시작한 조회가 판을 먼저 정해 수습이 싣지 않았고 그 판 위에서 편집을 더
+          // 냈거나(`recover`의 세대 갈래), 수습 중에 페이지를 옮겨 새 페이지에서 편집했거나, 그 실패가 지금 큐의 일이 아니라 수습이
+          // 큐를 건드리지 않았다(`recover`의 첫 가드). 그 편집은 이 루프만 보낸다 — 여기서 끝내면
+          // 다음 편집이 펌프를 깨울 때까지 큐에 선다. 보내는 곳은 위의 «큐의 주인»이다.
         }
       }
     } finally {
       store.endPump()
     }
-  }, [api, channel, lockChannel, projectId, pageId, store, recover])
+  }, [api, channel, lockChannel, projectId, store, recover])
 
   /**
    * 스택에서 한 단계 꺼내 보낸다. undo와 redo가 같은 규칙을 쓰므로 한 곳에 둔다 —

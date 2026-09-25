@@ -372,7 +372,8 @@ const BUSY = lockSlot('comments/busy')
 const WRITE_ERROR = slot<Failure | null>('comments/write-error', null)
 /**
  * **서버는 번호를 바꿨는데 내 문서에 얹지 못했다**(`applyMarkerChange`가
- * `'diverged'`를 냈다). 보내지 않은 구조 편집이 그 노드를 이미 지운 경우다.
+ * `'diverged'`를 냈다). 서버가 센 경로가 내 바탕에 없는 경우다 — 보내지 않은 편집은 까닭이 아니다(스토어가 번호를 바탕에 얹고
+ * 그 편집을 위에 다시 얹는다 — `#applyMarkerOps`).
  *
  * **버리지 않고 말한다.** 버리면 *"코멘트는 달렸는데 캔버스에 번호가 없고 아무도 그것을
  * 말하지 않는"* 상태가 된다 — «못 했다»를 «할 것 없다»로 접는 부류(머리말 «무리가 셋이고»)의 형태다.

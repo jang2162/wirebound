@@ -609,7 +609,8 @@ export class ApiError extends Error {
    * 앞단(프록시)이 낸 것이다 — Vite 개발 프록시는 api 가 요청을 쥔 채 죽으면 `500 text/plain` 빈 본문을
    * 준다(잰 값 — `panels/comment-panel.tsx`의 `knownRejection`). 같은 500 이라도 **누가 냈는지**가 **그
    * 요청의** 결과를 아는지를 가른다(무엇에 대해 아는지 — 다시 보낸 게시의 500 은 봉투가 있어도 앞 게시를 모른다 —
-   * 는 그 함수의 표가 소유한다). 응답을 못 받은 실패(`status` 0)는 `false`다.
+   * 는 그 함수의 표가 소유한다). 응답을 못 받은 실패(`status` 0)는 `false`다. WS `patch-error` 프레임은 늘 `true`다 — 프레임은
+   * api 만 짓는다(`realtime/edit-channel.ts`의 `deliver`).
    */
   readonly enveloped: boolean
 

@@ -182,7 +182,10 @@ export function createEditChannel(): EditChannel {
         // `code`는 서버가 보낸 문자열이다. `ApiErrorCode` 밖의 값이 오면 화면은 `message`로
         // 떨어지므로(그 유니온을 코드로 가르는 것은 `unauthenticated` 하나다 —
         // `api/failure.tsx`) 여기서 다시 검사하지 않는다.
-        one.reject(new ApiError(frame.status, frame.code as ApiErrorCode, frame.message, frame.issues))
+        //
+        // **프레임은 늘 api 의 봉투다**(`enveloped`) — 앞단이 WS 프레임을 지어낼 자리가 없다. 그래서 500 은 REST 의 봉투 500 처럼
+        // «커밋 전»이고, DB 가 답하지 않은 판은 api 가 503 으로 따로 낸다(`refusedBeforeCommit`이 그 둘을 숫자로 가른다).
+        one.reject(new ApiError(frame.status, frame.code as ApiErrorCode, frame.message, frame.issues, true))
       }
       return true
     },

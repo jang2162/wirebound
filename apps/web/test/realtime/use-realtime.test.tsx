@@ -60,7 +60,7 @@ function mount(options?: { projectId?: string; withProvider?: boolean }): Board 
 
   function Screen(): ReactElement {
     useRealtime(options?.projectId ?? 'project_1')
-    return <RemoteAlert />
+    return <RemoteAlert onReload={() => {}} />
   }
 
   const tree = (
@@ -314,7 +314,7 @@ describe('RemoteAlert', () => {
     const store = new EditorStore()
     render(
       <EditorStoreProvider store={store}>
-        <RemoteAlert />
+        <RemoteAlert onReload={() => {}} />
       </EditorStoreProvider>,
     )
 
@@ -326,7 +326,7 @@ describe('RemoteAlert', () => {
     store.loadPage('page_1', doc(), 4)
     render(
       <EditorStoreProvider store={store}>
-        <RemoteAlert />
+        <RemoteAlert onReload={() => {}} />
       </EditorStoreProvider>,
     )
 
