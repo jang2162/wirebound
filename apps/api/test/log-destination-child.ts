@@ -4,15 +4,17 @@
  *
  * - `at-once`: 쓰자마자 `flushSync` · `process.exit` — 비동기 쓰기의 오류가 알려지기 전이다.
  * - `late`: 쓰기 오류가 알려질 만큼 기다린 뒤 더 쓰고 끝낸다.
+ * - `full`: `/dev/full`(늘 ENOSPC — Linux)에 쓰고, 떨굼이 알려진 뒤 더 쓰고 `flushSync` 로 끝낸다.
  */
 import { openSync } from 'node:fs'
 import { logDestination } from '../src/log-destination'
 
+const mode = process.argv[2]
 // 읽기 전용으로 연 fd 에 쓰면 EBADF — 끊긴 터미널의 EIO 와 같은 «EAGAIN 이 아닌 쓰기 오류»다.
-const stream = logDestination(openSync('/dev/null', 'r'))
+const stream = logDestination(mode === 'full' ? openSync('/dev/full', 'w') : openSync('/dev/null', 'r'))
 stream.write('첫 줄\n')
 stream.write('둘째 줄\n')
-if (process.argv[2] === 'late') {
+if (mode === 'late' || mode === 'full') {
   await new Promise((resolve) => setTimeout(resolve, 200))
   stream.write('셋째 줄\n')
 }

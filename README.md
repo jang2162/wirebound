@@ -177,7 +177,9 @@ SEED_USER_EMAIL=me@example.com SEED_USER_PASSWORD='고른-비밀번호' \
 >
 > **뒤처졌으면(하나라도 안 올렸으면) 역시 안 뜨고** 안 올라간 것의 이름과 같은 `migrate` 를 한 줄로 말한다. 안 올라간 것이
 > 이미 올라간 것보다 **앞 이름**이면(두 갈래가 이름을 엇갈려 올린 DB) `migrate` 로는 안 올라가므로 «순서가 어긋났습니다»와 할 일을
-> 한 줄로 말한다(`apps/api/src/db/schema-version.ts`의 표). 그리고
+> 한 줄로 말한다(`apps/api/src/db/schema-version.ts`의 표). 이름은 다 맞는데 **올린 시각 순서가 이름 순서와 어긋난** DB(시계가
+> 뒤처진 호스트가 올렸다)는 뜨되 경고 한 줄을 찍는다 — 다음 `migrate` · `migrate:down` 이 `corrupted migrations` 로 죽는다는
+> 말이다(같은 파일 「올린 시각의 순서」). 그리고
 > *마이그레이션은 올렸는데 데이터만 없는* 볼륨은 이 줄로 안 갈린다 — 그쪽은 「에디터가 뜨는데 로그인이 안 된다」 절이 든다.
 
 띄운 뒤 서버만 따로 확인하려면:
@@ -532,8 +534,11 @@ Error response from daemon: failed to set up container networking:
 > **compose 설정으로는 못 막는다** — 헬스체크는 컨테이너 **안**에서 돌아 호스트 포트를 못 보고(포트 없이도 `healthy`),
 > `up -d --wait` 도 그 판에서 종료 0 이다. 다시 재는 법: 일회용 컨테이너가 그 포트를 쥔 채(`docker run -d --rm -p
 > <포트>:5432 postgres:16-alpine sleep 600`) `up -d` 를 두 번 치고 위 명령의 종료 코드를 본다 — 두 번째 `up` 뒤
-> `DATABASE_URL` 은 **쥔 컨테이너의 DB** 에 닿는다. 호스트 프로세스(컨테이너가 아닌 것)가 그 포트를 쥔 판은 `up` 이
-> 막히지 않고 포트를 붙인다(Docker Desktop · 이 기계).
+> `DATABASE_URL` 은 **쥔 컨테이너의 DB** 에 닿는다. **호스트 프로세스(컨테이너가 아닌 것 — 기계에 깔린 Postgres 등)가 그
+> 포트를 쥔 판은 `up` 도 `docker compose port` 도 종료 0 인데 `127.0.0.1:<포트>` 는 그 호스트 프로세스가 받는다** — 그
+> 프로세스가 `127.0.0.1` · `0.0.0.0` · `::` 에 묶였으면 그렇고, `::1` 에만 묶였으면 `127.0.0.1` 은 컨테이너 · `localhost` 는
+> 그 프로세스다(Colima · 이 기계에서 쟀다). 가르는 것은 `lsof -nP -iTCP:<포트> -sTCP:LISTEN` 이다 — 런타임의 포워더(Colima 면
+> `ssh`) 말고 다른 프로세스가 보이면 이 판이니 `POSTGRES_PORT` 를 바꾼다.
 > (DB 이름을 워크트리마다 가르는 것이 이 사고를 시끄럽게 만드는 두 번째 자다 — 「워크트리를 여럿 띄울 때」.)
 
 **ⓒ 컨테이너는 떴는데 DB 가 비었다.** **워크트리마다 볼륨이 따로 생기므로 그것이
@@ -998,7 +1003,9 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
   Chrome 을 빈 포트로 띄우고 거둔다 — 워크트리 여럿이 동시에 돌려도 안 부딪힌다. `pnpm test:build`도 이 파일들을 돈다.
   브라우저는 시스템 Chrome 을 먼저, 없으면 playwright-core 캐시를 띄워 보고, `EDITOR_BROWSER_PATH`를 주면 그것만 띄워 본다.
   Postgres 에 못 붙거나 브라우저가 안 뜨면 까닭을 한 줄 찍고 건너뛴다. **워크트리에서 `DATABASE_URL`이 compose 기본 포트면
-  멈춘다** — 최상위 체크아웃의 컨테이너에 DB 를 만들지 않는다.
+  멈춘다** — 최상위 체크아웃의 컨테이너에 DB 를 만들지 않는다. 웹은 vite dev 로 띄운다 — `EDITOR_STACK_BUNDLE=build pnpm
+  test:browser` 는 `vite build` + `vite preview`(운영 번들)로 띄운다(dev 는 `StrictMode` 로 이펙트가 두 번 돈다). 실행이
+  `SIGKILL` 로 죽어도 그 api · vite 는 스스로 끝나고, 남은 DB(`wb_browser_*`)는 다음 실행이 지운다.
 - 파일 하나만 돌리려면 `pnpm vitest run <경로>`, api 만 돌리려면 `pnpm vitest run --project api`.
 
 > **브라우저가 없을 때 `test:build`가 찍는 줄은 「넣는 법」 절의 명령을 권한다.** 그 스모크

@@ -5,17 +5,35 @@
  * 워커가 함께 선다. 끊긴 터미널(EIO) 판은 pty 로만 재진다(그 파일의 머리말).
  */
 import { spawnSync } from 'node:child_process'
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs'
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { symbols } from 'pino'
 import { describe, expect, it, vi } from 'vitest'
-import { logDestination } from '../src/log-destination'
+import { logDestination, stderrNotice } from '../src/log-destination'
 import { withApi } from './helpers'
 
+/**
+ * 이 기계에 늘 ENOSPC 를 내는 `/dev/full` 이 있나 — 경로가 아니라 **실제로 1 바이트를 써 본다**(macOS 에는 없다 · Linux 에는 있다).
+ */
+function devFullRefuses(): boolean {
+  try {
+    const fd = openSync('/dev/full', 'w')
+    try {
+      writeSync(fd, Buffer.from('x'))
+      return false
+    } finally {
+      closeSync(fd)
+    }
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOSPC'
+  }
+}
+const DEV_FULL = devFullRefuses()
+
 describe('로그 목적지의 쓰기가 실패하면', () => {
-  function runChild(mode: 'at-once' | 'late') {
+  function runChild(mode: 'at-once' | 'late' | 'full') {
     const child = spawnSync(
       fileURLToPath(new URL('../node_modules/.bin/tsx', import.meta.url)),
       [fileURLToPath(new URL('./log-destination-child.ts', import.meta.url)), mode],
@@ -75,6 +93,25 @@ describe('로그 목적지의 쓰기가 실패하면', () => {
     }
   })
 
+  /**
+   * **떨구는 중의 `flushSync` 는 아무것도 안 한다** — 진짜 ENOSPC 가 있어야 갈린다(흘려 넣은 오류로는 sonic-boom 의 버퍼가 안
+   * 찬다). `/dev/full` 이 없는 기계(macOS)는 건너뛴다 — 이 케이스는 Linux 에서만 돈다.
+   *
+   * **이 케이스가 보는 것은 «밀어내지 않는다»까지다.** `/dev/full` 은 0 바이트 쓰기도 ENOSPC 로 거절해, 떨구는 중에 밀어내면
+   * `flushSync` 의 0 바이트 확인이 걸려 로그를 버리고 알림이 한 줄 더 선다 — 그 줄로 죽는다. 밀어냈을 때의 진짜 증상(sonic-boom 의
+   * `flushSync` 가 ENOSPC 에 100ms 쉬고 영영 되풀이)은 **0 바이트는 되고 1 바이트는 ENOSPC 인** 가득 찬 파일시스템에서만 선다 —
+   * 케이스가 만들 수 없다. 다시 재는 법: `docker run --tmpfs /full:size=64k node:22-slim` 에서 `/full` 을 채우고 그 위 파일을 목적지로
+   * 준 뒤 `flushSync` — 이 코드는 0ms 로 돌아오고, 밀어내게 바꾸면 8s 한도에 걸린다(`timeout` 종료 124).
+   */
+  it.skipIf(!DEV_FULL)('공간이 찬 채로 끝내도 `flushSync` 에서 멈추지 않는다(Linux `/dev/full`)', () => {
+    expect(runChild('full')).toEqual({
+      status: 0,
+      signal: null,
+      stdout: '끝까지 왔다\n',
+      stderr: expect.stringMatching(/^로그 목적지\(fd \d+\)에 쓰지 못해\(ENOSPC\) 쓸 수 있을 때까지 로그 줄을 버립니다\n$/),
+    })
+  })
+
   it('끝난 목적지의 오류(EIO)는 그 뒤를 버리고 한 번만 알린다', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wb-log-'))
     const path = join(dir, 'out.log')
@@ -99,15 +136,22 @@ describe('로그 목적지의 쓰기가 실패하면', () => {
    * **`buildApp`의 로거가 그 목적지를 쓴다** — 앱의 로거가 실제로 쓰는 스트림(pino 의 `streamSym`)에 쓰기 오류를 내 본다. pino 의
    * 기본 목적지면 그 오류가 다시 던져진다(`log-destination.ts`의 머리말).
    */
-  it('앱의 로거에 쓰기 오류가 나도 던지지 않고, 그 뒤 로그는 버려진다', async () => {
-    await withApi(async ({ app }) => {
-      const stream = (app.log as unknown as Record<symbol, unknown>)[symbols.streamSym] as NodeJS.EventEmitter & {
-        write(line: string): boolean
-        flushSync(): void
-      }
-      expect(() => stream.emit('error', Object.assign(new Error('write EIO'), { code: 'EIO' }))).not.toThrow()
-      expect(() => stream.write('버려질 줄\n')).not.toThrow()
-      expect(() => stream.flushSync()).not.toThrow()
-    })
+  it('앱의 로거에 쓰기 오류가 나도 던지지 않고, 그 뒤 로그는 버려진다고 한 번 알린다', async () => {
+    // 알림은 표준에러로 가는 기본 자리 — 가로채지 않으면 테스트 출력에 한 줄이 샌다.
+    const noticed = vi.spyOn(stderrNotice, 'line').mockImplementation(() => {})
+    try {
+      await withApi(async ({ app }) => {
+        const stream = (app.log as unknown as Record<symbol, unknown>)[symbols.streamSym] as NodeJS.EventEmitter & {
+          write(line: string): boolean
+          flushSync(): void
+        }
+        expect(() => stream.emit('error', Object.assign(new Error('write EIO'), { code: 'EIO' }))).not.toThrow()
+        expect(() => stream.write('버려질 줄\n')).not.toThrow()
+        expect(() => stream.flushSync()).not.toThrow()
+      })
+      expect(noticed.mock.calls).toEqual([['로그 목적지(fd 1)에 쓰지 못해(EIO) 이 뒤의 로그를 버립니다 — 서버는 계속 돕니다']])
+    } finally {
+      noticed.mockRestore()
+    }
   })
 })

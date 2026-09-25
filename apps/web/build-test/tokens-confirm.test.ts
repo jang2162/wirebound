@@ -90,6 +90,34 @@ describe.skipIf(!전제.ok)('토큰 폐기 확인', () => {
   /** 판이 끝난 뒤 — 늦게 나가는 DELETE 를 기다린다. 확정이 섰다면 이 안에 나간다(카나리아가 잰다). */
   const settle = (page: Page) => page.waitForTimeout(400)
 
+  /**
+   * **확정은 묻던 자리에서 단추 한 높이 이상 떨어진다**(`shell.css` 의 «내 API 토큰» 블록). 겹치지만 않는 거리면 위의 판은 초록이어도
+   * 두 누름 사이 손이 조금만 내려가면 확정에 닿는다 — 좁은 폭의 긴 이름 줄은 줄 간격이 `baseline` 정렬로 글꼴 따라 6px 까지 좁았다.
+   */
+  it.each([360, 390, 1280])('폭 %i — 확정이 묻던 자리에서 단추 한 높이 이상 떨어져 선다(거리)', async (width) => {
+    const rows: string[] = []
+    const { page, load, close } = await tab(width)
+    try {
+      for (const target of TARGETS) {
+        await load()
+        const ask = page.getByRole('button', { name: target.ask, exact: true })
+        const asked = await ask.boundingBox()
+        if (asked === null) throw new Error(`${target.ask} 단추가 안 보인다`)
+        await ask.click()
+        const confirm = await page.locator('.wb-shell-project-danger').boundingBox()
+        if (confirm === null) throw new Error(`${target.key} 확정이 안 보인다`)
+        const dx = Math.max(0, confirm.x - (asked.x + asked.width), asked.x - (confirm.x + confirm.width))
+        const dy = Math.max(0, confirm.y - (asked.y + asked.height), asked.y - (confirm.y + confirm.height))
+        rows.push(`${width} ${target.key}: 거리 ${Math.round(Math.hypot(dx, dy))} · 단추 높이 ${Math.round(asked.height)}`)
+        expect({ 대상: target.key, 멀다: Math.hypot(dx, dy) >= asked.height - 0.5 }).toEqual({ 대상: target.key, 멀다: true })
+      }
+    } finally {
+      await close()
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[토큰 확인 · 거리]\n${rows.join('\n')}`)
+  })
+
   it.each([390, 1280])('폭 %i — 연타 · 따로 두 번이 어느 점에서도 안 지운다', async (width) => {
     const rows: string[] = []
     const { page, load, close } = await tab(width)

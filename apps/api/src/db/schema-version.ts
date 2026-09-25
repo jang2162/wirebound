@@ -16,6 +16,18 @@
  *
  * **못 읽으면 견주지 않는다**(`undefined`) — DB 가 아직 안 떠 있어도 서버는 뜬다(풀은 게으르다). 뜬 뒤의 `이 서버가 보는 DB:` 줄이
  * «읽지 못했습니다»를 말한다(`describeSchemaState`).
+ *
+ * # 올린 시각의 순서
+ *
+ * 위 표는 이름만 본다. kysely 는 올라간 것을 **이름이 아니라 `timestamp` 순**(같으면 이름)으로 읽어 코드 목록의 앞머리와 견준다
+ * (`Migrator`의 `#getExecutedMigrations` · `#ensureMigrationsInOrder`). `timestamp` 는 올린 프로세스의 시계다 — 시계가 뒤처진
+ * 호스트가 다음 것을 올리면 이름은 맞는데 시각 순이 어긋난다. 그 DB 는 스키마가 다 올라가 있어 **서버는 뜨고**(멈추면 멀쩡한 DB 를
+ * 기동 장애로 만든다) **다음 `migrate` · `migrate:down` 이 `corrupted migrations` 로 죽는다** — 그 문장은 시계를 말하지 않는다.
+ * 그래서 기동이 **경고 한 줄**로 미리 말한다(`timestampOrderSlip`). 판정이 멈추는 판이어도 먼저 말한다 — 멈춤 문장이 권하는
+ * `migrate` 가 같은 까닭으로 죽는다.
+ *
+ * 잰 값: 이 워크트리 DB 에서 `0016` 의 `timestamp` 를 `2000-01-01T00:00:00.000Z` 로 당기면 `tsx src/main.ts` 가 경고 없이 뜨고
+ * (health 200) `migrate` 가 `expected previously executed migration 0016-api-tokens-user-idx to be at index 0` 로 죽는다.
  */
 import { sql } from 'kysely'
 import { describeDatabaseTarget } from './describe-target'
@@ -28,14 +40,43 @@ const MIGRATION_TABLE = 'kysely_migration'
 
 /** DB 에 올라간 마이그레이션 이름들(오름차순). 표가 없으면 빈 배열이다. 못 읽으면 `undefined`. */
 export async function readExecutedMigrations(db: DbHandle): Promise<string[] | undefined> {
+  return (await readExecutedMigrationTimes(db))?.map((row) => row.name)
+}
+
+export interface ExecutedMigration {
+  readonly name: string
+  readonly timestamp: string
+}
+
+/** 올라간 마이그레이션의 이름과 `timestamp`(이름 오름차순). 표가 없으면 빈 배열이다. 못 읽으면 `undefined`. */
+export async function readExecutedMigrationTimes(db: DbHandle): Promise<ExecutedMigration[] | undefined> {
   try {
     const exists = await sql<{ present: boolean }>`select to_regclass(${MIGRATION_TABLE}) is not null as present`.execute(db)
     if (!exists.rows[0]?.present) return []
-    const { rows } = await sql<{ name: string }>`select name from ${sql.table(MIGRATION_TABLE)} order by name`.execute(db)
-    return rows.map((row) => row.name)
+    const { rows } = await sql<ExecutedMigration>`select name, timestamp from ${sql.table(MIGRATION_TABLE)} order by name`.execute(db)
+    return rows.map((row) => ({ name: row.name, timestamp: row.timestamp }))
   } catch {
     return undefined
   }
+}
+
+/**
+ * **kysely 가 읽는 순서(올린 시각 순)와 이름 순이 처음 갈리는 자리** — 안 갈리면 `null`. 순서는 kysely 의 비교를 그대로 옮겼다:
+ * `timestamp` 글자가 같으면 이름을 `localeCompare`, 다르면 `Date` 로 읽은 시각의 차. 이름 순은 kysely 가 코드 목록을 세우는
+ * `sort()`(코드 단위)다. 머리말 「올린 시각의 순서」.
+ */
+export function timestampOrderSlip(rows: readonly ExecutedMigration[]): { index: number; byTime: string; byName: string } | null {
+  const byTime = [...rows]
+    .sort((a, b) => (a.timestamp === b.timestamp ? a.name.localeCompare(b.name) : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()))
+    .map((row) => row.name)
+  const byName = rows.map((row) => row.name).sort()
+  const index = byTime.findIndex((name, i) => name !== byName[i])
+  return index === -1 ? null : { index, byTime: byTime[index]!, byName: byName[index]! }
+}
+
+/** `timestampOrderSlip` 을 사람이 읽을 한 줄로. 자격 문자열은 안 싣는다. */
+export function describeTimestampOrderSlip(slip: { index: number; byTime: string; byName: string }, databaseUrl: string): string {
+  return `이 DB 의 마이그레이션 기록은 올린 시각 순서가 이름 순서와 다릅니다(${describeDatabaseTarget(databaseUrl)} · 시각 순으로 ${slip.index + 1}번째가 ${slip.byTime} — 이름 순이면 ${slip.byName}) — 다음 migrate · migrate:down 이 corrupted migrations 로 죽습니다. 시계가 뒤처진 호스트가 올린 기록입니다. kysely_migration 의 timestamp 를 이름 순으로 고치십시오`
 }
 
 export type SchemaVerdict =
@@ -105,11 +146,16 @@ export class SchemaVersionError extends Error {
   }
 }
 
-/** 읽고 견주고, 안 뜨는 판이면 `SchemaVersionError`로 던진다. 뜨되 말할 것은 `warn`으로. 못 읽으면 조용히 지난다(머리말). */
+/**
+ * 읽고 견주고, 안 뜨는 판이면 `SchemaVersionError`로 던진다. 뜨되 말할 것은 `warn`으로. 못 읽으면 조용히 지난다(머리말). 올린 시각의
+ * 순서가 어긋났으면 판정보다 먼저 `warn` 한 줄이다(머리말 「올린 시각의 순서」).
+ */
 export async function assertSchemaVersion(db: DbHandle, databaseUrl: string, warn: (message: string) => void): Promise<void> {
-  const executed = await readExecutedMigrations(db)
-  if (executed === undefined) return
-  const said = describeSchemaVerdict(schemaVerdict(executed), databaseUrl)
+  const rows = await readExecutedMigrationTimes(db)
+  if (rows === undefined) return
+  const slip = timestampOrderSlip(rows)
+  if (slip !== null) warn(describeTimestampOrderSlip(slip, databaseUrl))
+  const said = describeSchemaVerdict(schemaVerdict(rows.map((row) => row.name)), databaseUrl)
   if (said === null) return
   if ('stop' in said) throw new SchemaVersionError(said.stop)
   warn(said.warn)

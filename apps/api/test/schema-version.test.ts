@@ -16,8 +16,10 @@ import {
   SchemaVersionError,
   assertSchemaVersion,
   describeSchemaVerdict,
+  describeTimestampOrderSlip,
   readExecutedMigrations,
   schemaVerdict,
+  timestampOrderSlip,
 } from '../src/db/schema-version'
 import type { DbHandle } from '../src/db/tx'
 import { getTestDb } from './helpers'
@@ -105,6 +107,31 @@ describe('말 — 멈출지 · 경고할지', () => {
   })
 })
 
+describe('올린 시각의 순서 — kysely 가 읽는 순서', () => {
+  const at = (name: string, timestamp: string) => ({ name, timestamp })
+
+  it('시각 순이 이름 순과 같으면 말할 것이 없다', () => {
+    expect(timestampOrderSlip([at('0001-a', '2026-01-01T00:00:00.000Z'), at('0002-b', '2026-01-01T00:00:00.001Z')])).toBeNull()
+  })
+  it('뒤 이름이 앞 시각이면 처음 갈리는 자리를 든다', () => {
+    const rows = [at('0001-a', '2026-01-01T00:00:00.000Z'), at('0002-b', '2026-01-01T00:00:00.001Z'), at('0003-c', '2000-01-01T00:00:00.000Z')]
+    expect(timestampOrderSlip(rows)).toEqual({ index: 0, byTime: '0003-c', byName: '0001-a' })
+  })
+  it('시각 글자가 같으면 kysely 처럼 이름을 localeCompare 로 가른다 — 코드 단위 순과 갈리는 이름이면 어긋남이다', () => {
+    const same = '2026-01-01T00:00:00.000Z'
+    expect(timestampOrderSlip([at('0001-a', same), at('0002-b', same)])).toBeNull()
+    // localeCompare 는 'a' 를 'B' 앞에, sort() 는 'B' 를 'a' 앞에 둔다.
+    expect(timestampOrderSlip([at('0002-a', same), at('0002-B', same)])).toEqual({ index: 0, byTime: '0002-a', byName: '0002-B' })
+  })
+  it('말은 다음 migrate 가 죽는다는 것과 두 이름을 싣고 자격 문자열은 안 싣는다', () => {
+    const text = describeTimestampOrderSlip({ index: 0, byTime: '0003-c', byName: '0001-a' }, URL)
+    expect(text).toContain('corrupted migrations')
+    expect(text).toContain('0003-c')
+    expect(text).toContain('0001-a')
+    expect(text).not.toContain('secret-pass')
+  })
+})
+
 describe('진짜 DB 에서 읽는다', () => {
   it('테스트 DB 는 이 코드가 아는 것을 전부 들었다', async () => {
     const executed = await readExecutedMigrations(getTestDb())
@@ -142,6 +169,22 @@ describe('진짜 DB 에서 읽는다', () => {
     expect((outcome.thrown as Error).message).toContain(middle)
     expect((outcome.thrown as Error).message).toContain(LATEST)
     expect(outcome.warned).toEqual([])
+  })
+
+  /** 시계가 뒤처진 호스트가 마지막 것을 올린 판 — kysely 의 `migrate`는 이 DB 에서 `corrupted migrations`로 죽는다(머리말). */
+  it('마지막 것의 올린 시각이 앞서면 뜨되 한 줄 경고한다 — 다음 migrate 가 죽는다고', async () => {
+    const outcome = await withChangedTable(
+      (trx) => sql`update kysely_migration set timestamp = '2000-01-01T00:00:00.000Z' where name = ${LATEST}`.execute(trx),
+      async (trx) => {
+        const warned: string[] = []
+        const thrown = await assertSchemaVersion(trx, URL, (message) => warned.push(message)).catch((error: unknown) => error)
+        return { thrown, warned }
+      },
+    )
+    expect(outcome.thrown).toBeUndefined()
+    expect(outcome.warned).toHaveLength(1)
+    expect(outcome.warned[0]).toContain('corrupted migrations')
+    expect(outcome.warned[0]).toContain(LATEST)
   })
 
   it('모르는 것이 하나 더 있으면 앞섰다 — 뜨되 한 줄 경고한다', async () => {
