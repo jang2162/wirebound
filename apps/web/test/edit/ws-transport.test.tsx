@@ -539,16 +539,18 @@ describe('리베이스한 편집을 다시 낸다', () => {
   })
 
   /**
-   * **버려진 편집의 실패가 뒤에 선 편집으로 넘어가지 않는다.**
+   * **버려진 편집의 실패는 뒤에 선 편집을 앞 편집의 번호로 다시 내지 않는다 — 그리고 수습하지도 않는다.**
    *
-   * 재전송 조건에 *"큐의 머리가 여전히 이 편집"*이 있는 이유다. 리베이스가 머리를 버리면
-   * 그 자리에 **다른 편집**이 올라오는데, 그때 앞 편집의 409로 재전송하면 **버려진 편집의
-   * 실패가 조용히 삼켜지고 엉뚱한 편집이 대신 나간다.**
+   * 재전송 조건에 *"큐의 머리가 여전히 이 편집"*이 있는 이유다. 리베이스가 머리를 버리면 그 자리에 **다른 편집**이 올라오는데, 그때 앞
+   * 편집의 409로 «다시 내기» 갈래를 타면 버려진 편집의 실패가 뒤 편집의 재전송으로 읽힌다. 뒤 편집은 이미 남의 번호 위로 리베이스돼
+   * 있으니 **다음 차례에 제 번호로 나간다** — 전송 루프가 그 409 를 수습하지 않고(`EditorStore.wasRebaseDropped`) 다음 편집으로 간다.
+   * 버린 것은 리베이스가 그 자리에서 말했다. 수습으로 보내면 판을 한 번 더 읽고 멀쩡한 뒤 편집(op_2)을 버린다(고치기 전 값 — 이 케이스가
+   * 그것을 기대했다. 뒤집은 까닭은 `test/edit/rebase-dropped-refusal.test.tsx` 머리말).
    *
    * 판을 만들려면 pending이 둘이고 **남이 그중 하나의 자리만 지워야** 한다 — 하나뿐이면
    * 큐가 통째로 비어 그 조건이 관측되지 않는다.
    */
-  it('리베이스가 버린 편집의 409로 뒤에 선 편집을 내지 않는다', async () => {
+  it('리베이스가 버린 편집의 409는 수습하지 않고 뒤에 선 편집을 남의 번호 위로 낸다', async () => {
     const board = mount()
     // op_1은 둘째 노드를, op_2는 첫째 노드를 고친다.
     board.commitOther('버려질 값')
@@ -580,11 +582,13 @@ describe('리베이스한 편집을 다시 낸다', () => {
     })
 
     await act(async () => {})
-    // op_2가 그 실패를 타고 나가지 않았다 — 프레임은 처음 하나뿐이다.
-    expect(board.patchFrames()).toHaveLength(1)
-    // 실패는 삼켜지지 않고 복구 경로로 갔다.
-    // 수습의 다시 받기는 떠나면 끊을 신호를 싣는다(`use-edit-commit.tsx`의 `recover`).
-    expect(board.getPage).toHaveBeenCalledWith(PROJECT_ID, PAGE_ID, { cancel: expect.any(AbortSignal) })
+    // op_2는 제 차례에 남의 번호 위로 나갔다 — 앞 편집의 번호로 다시 낸 것이 아니다.
+    expect(board.patchFrames().map((frame) => [frame.clientOpId, frame.baseSeq])).toEqual([
+      ['op_1', HEAD_SEQ],
+      ['op_2', HEAD_SEQ + 1],
+    ])
+    // 수습(다시 받기)은 안 돌았다.
+    expect(board.getPage).not.toHaveBeenCalled()
   })
 })
 

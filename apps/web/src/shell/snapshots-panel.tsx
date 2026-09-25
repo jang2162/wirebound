@@ -174,8 +174,11 @@ type Notice =
  */
 export function SnapshotsPanel(props: {
   projectId: string
-  /** 복원이 성공했다. 셸이 이것을 받아 문서와 트리를 다시 읽는다(위 머리말). */
-  onRestored: () => void
+  /**
+   * 복원이 성공했다. 셸이 이것을 받아 문서와 트리를 다시 읽는다(위 머리말). 그 복원의 안전망 스냅샷 id 를 넘긴다 — 셸이 되돌아오는 내 복원의
+   * 신호를 알아본다(`EditorStore.beginRestoreReread`).
+   */
+  onRestored: (safetySnapshotId: string) => void
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** **토글까지 감싸는 상자에 건다** — 그 배치가 훅의 계약이다(`use-popover-dismiss.ts`). */
@@ -203,7 +206,7 @@ export function SnapshotsPanel(props: {
 /** 조회와 그 실패를 든다. 열려 있는 동안만 산다 — 마운트가 곧 조회다(위 머리말). */
 function SnapshotsBody(props: {
   projectId: string
-  onRestored: () => void
+  onRestored: (safetySnapshotId: string) => void
   /** 붙일 자리와 잴 상자 — 토글을 감싼 쪽이 고른다(`use-popover-side.ts`). */
   placement: PopoverPlacement
   bodyRef: RefObject<HTMLDivElement | null>
@@ -343,7 +346,7 @@ function SnapshotsScreen(props: {
   reloadFailure: string | null
   onSaved: () => void
   /** 복원이 성공했다. **`onSaved`와 갈라 둔다** — 아래 `runRestore`의 주석. */
-  onRestored: () => void
+  onRestored: (safetySnapshotId: string) => void
 }): ReactElement {
   const api = useApi()
   const abilities = projectAbilities(props.project.role)
@@ -377,7 +380,7 @@ function SnapshotsScreen(props: {
        * **`onSaved`에 얹지 않는다.** 저장은 이 목록만 바꾸고 복원은 **프로젝트 전체**를
        * 바꾼다 — 한 신호로 접으면 스냅샷을 하나 만들 때마다 셸이 문서와 트리를 다시 읽는다.
        */
-      props.onRestored()
+      props.onRestored(result.safetySnapshot.id)
     } catch (caught) {
       const failure = toFailure(caught, RESTORE_FAILURE)
       // 저장 쪽과 같은 판단이다 — 세션이 끊긴 것은 다음 조회가 `SignedOut`으로 보낸다.

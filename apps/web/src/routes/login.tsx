@@ -4,7 +4,7 @@
 import { useState, type FormEvent, type ReactElement } from 'react'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
-import { useConfirmSession } from '../session/session-context'
+import { useConfirmSession, useSignOutNotice } from '../session/session-context'
 
 /** 서버까지 가 보지 않아도 실패가 확실한 경우에만 쓰는 문장. */
 const EMPTY_EMAIL = '이메일을 입력하세요'
@@ -15,6 +15,8 @@ const UNKNOWN_FAILURE = '로그인하지 못했습니다'
 export function LoginRoute(): ReactElement {
   const api = useApi()
   const confirmSession = useConfirmSession()
+  // 이 탭이 로그아웃하며 남긴 한 줄 — 에디터의 로그아웃이 한도 뒤에 두고 간 편집을 말한다(`useSignOutNotice`).
+  const farewell = useSignOutNotice()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -76,6 +78,11 @@ export function LoginRoute(): ReactElement {
     // 지킨다 — 프로젝트 목록·스냅샷·테마 화면이 같은 자리에서 같은 규칙을 따른다.
     <main className="wb-shell-login">
       <h1 className="wb-shell-login-title">wirebound</h1>
+      {farewell !== null && (
+        <p className="wb-shell-login-notice" role="status">
+          {farewell}
+        </p>
+      )}
       <form
         className="wb-shell-login-form"
         onSubmit={(event) => {

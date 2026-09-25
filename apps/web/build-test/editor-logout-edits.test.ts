@@ -57,6 +57,9 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
       console.log(`[친 채 로그아웃] ${log.lines.join(' · ')}`)
       expect(await server(stack, alice, fx.P1)).toEqual({ head: 2, content: ['친 채 나간 글'] })
       expect(order(log)).toEqual(['WS→ patch', 'WS← patch-ack', 'POST logout'])
+      // 답을 받고 나갔다 — 로그인 화면은 잃은 것을 말하지 않는다.
+      await page.getByRole('heading', { name: 'wirebound' }).waitFor()
+      expect(await farewell(page)).toBe('')
     } finally {
       await context.close()
     }
@@ -108,6 +111,11 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
         await box.fill('붙잡힌 글')
         await box.evaluate((element) => (element as HTMLElement).blur())
         await hold.waitForWaiters(1)
+        // 답을 기다리는 편집 뒤에 하나를 더 쌓는다 — 한도 뒤에는 한 번도 안 나간다.
+        await box.click()
+        await box.fill('쌓인 글')
+        await box.evaluate((element) => (element as HTMLElement).blur())
+        await page.locator('.wb-shell-canvas-frame', { hasText: '쌓인 글' }).waitFor()
 
         const clicked = Date.now()
         await page.getByRole('button', { name: '로그아웃' }).click()
@@ -125,6 +133,10 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
         })
         // 세션이 실제로 지워졌다 — 그 탭의 쿠키로 다시 물으면 401 이다.
         expect(await page.evaluate(async () => (await fetch('/api/auth/me')).status)).toBe(401)
+        // **두고 간 편집을 로그인 화면이 말한다**(`routes/editor.tsx`의 `logoutLossNotice`) — 셸은 내려갔다. 고치기 전에는 아무 말도 없었다.
+        expect(await farewell(page)).toBe(
+          '로그아웃 전에 보낸 편집 1개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다. 보내지 않은 편집 1개는 저장되지 않았습니다. 다시 로그인해 그 페이지를 확인하세요.',
+        )
       } finally {
         await hold.release()
       }
@@ -133,6 +145,12 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
     }
   })
 })
+
+/** 로그인 화면의 `status` 글 — 로그아웃하며 남긴 한 줄. 없으면 빈 글. */
+async function farewell(page: Page): Promise<string> {
+  const notices = await page.locator('.wb-shell-login [role="status"]').allTextContents()
+  return notices.join(' | ')
+}
 
 interface Fixture {
   first: string

@@ -20,7 +20,7 @@ import type { RevisionSummary } from '../api/types'
 import { useEditChannel, useLockChannel } from '../realtime/context'
 import { EditNotSentError, UnansweredEditError, type EditChannel, type UnansweredCause } from '../realtime/edit-channel'
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
-import type { EditStatus, RestoredRevision, UndoAttempt, UndoHistoryNeed } from '../store/editor-store'
+import { MARKER_FRAME_WAIT_MS, type EditStatus, type RestoredRevision, type UndoAttempt, type UndoHistoryNeed } from '../store/editor-store'
 import { interactionsOps, propOps, variantOps } from './ops'
 
 /** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
@@ -126,13 +126,14 @@ function unknownNotice(
  * 그 말을 덮는다. 보낸 편집은 늘 하나다(in-flight 는 하나). 그 답을 기다리는 동안 또 떠났으면 버린 것이 여러 페이지에 있다(`pages` —
  * `EditorStore.abandonedPages`) — 페이지 수를 싣는다. «그 페이지»라고 하면 사용자는 하나만 다시 연다.
  */
-function leftBehindNotice(caught: unknown, unsent: number, pages: number): string {
+function leftBehindNotice(caught: unknown, unsent: number, pages: number, reopened: boolean): string {
   const failure = toFailure(caught, EDIT_UNKNOWN_FAILURE)
   const where = pages > 1 ? `떠난 페이지 ${pages}곳에서` : '떠난 페이지에서'
   const reopen = pages > 1 ? '그 페이지들을 다시 열어 확인하세요.' : '그 페이지를 다시 열어 확인하세요.'
   if (refusedBeforeCommit(caught) && failure.kind === 'message') {
     const lost = unsent > 0 ? `보낸 편집 1개와 보내지 않은 편집 ${unsent}개가` : '보낸 편집 1개가'
-    return `${failure.message} — ${where} ${lost} 저장되지 않았습니다. ${reopen}`
+    // **이미 다시 열었으면 다시 열라고 하지 않는다**(`EditorStore.abandonedPagesReopened`) — 커밋 전에 거절됐으니 다시 연 판이 서버 상태다.
+    return `${failure.message} — ${where} ${lost} 저장되지 않았습니다.${reopened ? '' : ` ${reopen}`}`
   }
   const also = unsent > 0 ? `없고, 보내지 않은 편집 ${unsent}개는 저장되지 않았습니다` : '없습니다'
   return `${where} 보낸 편집 1개는 답을 받지 못해 서버에 반영됐는지 알 수 ${also} — ${reopen}`
@@ -146,6 +147,17 @@ function leftBehindNotice(caught: unknown, unsent: number, pages: number): strin
  */
 export function leftUnsentNotice(unsent: number): string {
   return `떠난 페이지에서 아직 보내지 않은 편집 ${unsent}개는 저장되지 않았습니다 — 그 페이지를 다시 열어 확인하세요.`
+}
+
+/** `promise`가 풀리거나 `ms`가 지나면 풀린다 — 먼저 오는 쪽. 타이머는 남기지 않는다. */
+function settledWithin(promise: Promise<void>, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    void promise.then(() => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
 }
 
 /** 결과를 모르는 판에서 다시 불러오지도 못했을 때, 서버가 이유를 주지 않으면 쓸 문장(`unknownNotice`의 `reason`). */
@@ -485,10 +497,16 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
             // 판을 비우는 자리가 지우지 않는 통지로 세운다(`EditorStore.setLeaveNotice`) — 그 뒤에 또 옮겨도 남는다.
             if (store.abandonedOnLeave(request.clientOpId)) {
               const pages = store.abandonedPages()
-              store.setLeaveNotice(leftBehindNotice(caught, store.abandonedUnsent(), pages.length), pages)
+              // 다시 연 뒤의 커밋 전 거절이면 가리킬 페이지가 없다 — 통지는 닫는 단추 · 새 편집으로 풀린다.
+              const settled = store.abandonedPagesReopened() && refusedBeforeCommit(caught)
+              store.setLeaveNotice(leftBehindNotice(caught, store.abandonedUnsent(), pages.length, settled), settled ? [] : pages)
             }
             continue
           }
+          // **리베이스가 이 나간 편집을 버렸으면 그 거절은 수습하지 않는다**(`EditorStore.wasRebaseDropped`) — 버린 것은 이미 말했고
+          // 바탕 · 큐는 남의 판 위에 맞다. 수습하면 그 뒤에 낸 편집을 버리고 앞 문장을 «편집 0개가 취소됐습니다»로 덮는다. 세션이 끊긴 것만
+          // 수습으로 보낸다(위 갈래와 같다).
+          if (store.wasRebaseDropped(request.clientOpId) && toFailure(caught, EDIT_UNKNOWN_FAILURE).kind !== 'signed-out') continue
           // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다.**
           //
           // **이것이 없으면 리베이스가 서버에 닿지 않는다(실측).** 서버는 `baseSeq`가
@@ -520,7 +538,21 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           // **409로 좁히는 것은 판정이다.** *"문서가 내 밑에서 움직였다"*는 부류가 그것뿐이고
           // (`http/edit-outcome.ts`의 표), 401·422까지 다시 내면 고쳐지지 않는 실패에 왕복을
           // 하나 더 쓴다.
-          const head = store.nextRequest()
+          let head = store.nextRequest()
+          // **번호 쓰기의 답을 기다리는 중이면 그 답까지 기다린 뒤 다시 본다**(`EditorStore.beginMarkerWrite`) — 번호 revision 에 밀린
+          // 409 인데 번호가 아직 안 왔다(번호는 REST 응답으로만 온다 · 이 409 와 다른 연결이다). 답이 번호를 얹으면 리베이스가 이 편집을
+          // 그 뒤로 옮겨 아래 갈래가 다시 낸다. 한도(`MARKER_FRAME_WAIT_MS`)가 지나면 그대로 본다.
+          if (
+            caught instanceof ApiError &&
+            caught.status === 409 &&
+            head !== null &&
+            head.clientOpId === request.clientOpId &&
+            head.baseSeq === request.baseSeq &&
+            store.markerWritePending()
+          ) {
+            await settledWithin(store.markerWritesSettled(), MARKER_FRAME_WAIT_MS)
+            head = store.nextRequest()
+          }
           if (
             caught instanceof ApiError &&
             caught.status === 409 &&

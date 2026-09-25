@@ -696,12 +696,33 @@ describe('낡음 이유에는 세기가 있다', () => {
 describe('낡음은 풀린다', () => {
   it('페이지를 다시 받으면 풀린다 — 새로고침한 뒤에도 남지 않는다', () => {
     const store = opened()
-    store.markRestored()
-    expect(store.getState().remoteStale).not.toBeNull()
+    store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
+    expect(store.getState().remoteStale).toEqual({ reason: 'gap' })
 
     store.loadPage('page_1', doc(), 9)
 
     expect(store.getState().remoteStale).toBeNull()
+  })
+
+  it('복원 낡음은 복원 뒤 다시 읽기의 판이 푼다', () => {
+    const store = opened()
+    store.markRestored()
+    expect(store.getState().remoteStale).not.toBeNull()
+
+    store.beginRestoreReread()
+    store.loadPage('page_1', doc(), 9, undefined, { restoreReread: true })
+
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  /** 복원은 메뉴 · 코멘트 · 테마도 바꿨다 — 페이지만 다시 받은 판은 그것들을 안 읽었다(`EditorStore.beginRestoreReread`). */
+  it('복원 낡음은 페이지만 다시 받은 판으로 안 풀린다', () => {
+    const store = opened()
+    store.markRestored()
+
+    store.loadPage('page_1', doc(), 9)
+
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
   })
 
   /**
@@ -725,10 +746,22 @@ describe('낡음은 풀린다', () => {
 
   it('페이지를 닫으면 풀린다', () => {
     const store = opened()
-    store.markRestored()
+    store.applyRemoteChange('page_1', { seq: 9, ops: ADD_ONE, warnings: NO_WARNINGS })
 
     store.clearPage()
 
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  it('복원 낡음은 페이지를 닫아도 남고, 복원 뒤 다시 읽기가 비운 판이면 풀린다', () => {
+    const store = opened()
+    store.markRestored()
+
+    store.clearPage()
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
+
+    store.beginRestoreReread()
+    store.clearPage({ restoreReread: true })
     expect(store.getState().remoteStale).toBeNull()
   })
 })
@@ -940,15 +973,41 @@ describe('창 안의 복원 신호', () => {
     expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
   })
 
-  it('신호 뒤에 시작한 조회의 답은 복원 낡음을 푼다', () => {
+  it('신호 뒤에 시작한 복원 뒤 다시 읽기의 답은 복원 낡음을 푼다', () => {
     const store = opened()
+    store.markRestored()
+    store.beginRestoreReread()
+    const ticket = store.beginPageLoad('page_1')
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc(), 1, ticket, { restoreReread: true })
+
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  /** 다시 읽기의 다른 조회(메뉴 · 코멘트 · 테마)는 페이지 조회보다 앞에 시작해 그 복원 앞을 읽었을 수 있다(`#rereadMark`). */
+  it('복원 뒤 다시 읽기가 시작된 뒤 온 신호는 그 다시 읽기의 답이 안 푼다 — 페이지 조회가 신호 뒤에 시작했어도', () => {
+    const store = opened()
+    store.markRestored()
+    store.beginRestoreReread()
     store.markRestored()
     const ticket = store.beginPageLoad('page_1')
 
     store.settlePageLoad(ticket)
-    store.loadPage('page_1', doc(), 1, ticket)
+    store.loadPage('page_1', doc(), 1, ticket, { restoreReread: true })
 
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
+  })
+
+  it('내 복원의 안전망 스냅샷 id 를 실은 신호는 낡음을 안 세운다 — 다른 id 면 세운다', () => {
+    const store = opened()
+    store.beginRestoreReread('s-mine')
+
+    store.markRestored('s-mine')
     expect(store.getState().remoteStale).toBeNull()
+
+    store.markRestored('s-other')
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
   })
 
   // 서버에서는 이 판이 안 선다 — 되살린 페이지는 옛 판본이 쓴 번호 뒤에서 센다(`apps/api/test/restore.test.ts`의 «되살린 페이지의 번호»).

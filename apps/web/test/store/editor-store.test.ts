@@ -1294,7 +1294,9 @@ describe('EditorStore의 마커 반영', () => {
         store.applyMarkerChange('pg-1', { seq: 7, markerOps: MARK_FIRST })
 
         store.markRestored()
-        store.loadPage('pg-1', restoredPage(), 0)
+        // 복원 뒤 다시 읽기의 판이다 — 복원 낡음을 푸는 판이라야 한도가 세울 `gap`이 보인다(`beginRestoreReread`).
+        store.beginRestoreReread()
+        store.loadPage('pg-1', restoredPage(), 0, undefined, { restoreReread: true })
         vi.advanceTimersByTime(MARKER_FRAME_WAIT_MS)
 
         expect(store.getState().remoteStale).toBeNull()

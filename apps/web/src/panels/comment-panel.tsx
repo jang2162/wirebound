@@ -151,7 +151,7 @@ import { walkSafely } from '../edit/safe-walk'
 import { nodeTypeLabel } from './node-shape'
 import { useRealtimeSetup } from '../realtime/context'
 import { useSessionUser } from '../session/session-context'
-import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
 import { lockSlot, slotsOf, usePanelLock, usePanelSlot } from './panel-drafts'
 import { MissedNotice, PendingNotice } from './pending-notice'
 
@@ -380,7 +380,30 @@ const WRITE_ERROR = slot<Failure | null>('comments/write-error', null)
  * **`'skipped'`는 말하지 않는다** — 그때는 화면이 이미 다른 페이지를 보고 있다. **`'waiting'`도 말하지 않는다** — 사이
  * 프레임이 오면 스토어가 얹고, 끝내 안 오면 스토어가 낡음으로 말한다(`shell/remote-alert.tsx`).
  */
-const MARKERS_DIVERGED = slot<boolean>('comments/diverged', false)
+const MARKERS_DIVERGED = slot<Diverged | null>('comments/diverged', null)
+
+/**
+ * 번호 어긋남의 값 — **어느 revision 의 번호를 못 얹었나**(`seq`). 판을 다시 실어 `headSeq`가 그 번호에 닿으면 그 판이 그 revision 을
+ * 품었다 — 화면은 서버 것이라 통지를 거둔다(`divergedShown`). 못 얹은 것이 응답을 못 받은 쓰기거나(판정 갈래) 얹었는데 번호가 없는
+ * 재생이면 번호를 모른다(`null`) — 그때는 판으로 거두지 않는다(다음 쓰기 · 탭을 다녀옴이 지운다).
+ */
+interface Diverged {
+  seq: number | null
+}
+
+/** 어긋났다 — 번호를 알면 그것과 함께. */
+function divergedAt(seq: number | null): Diverged {
+  return { seq }
+}
+
+/**
+ * **지금 통지를 세울까** — 어긋남이 있고, 그 번호를 모르거나 지금 판이 아직 그 번호 앞이면 참이다. [Chrome] 코멘트 삭제(번호 지움)가 커밋된
+ * 사이 되돌리기가 줄 서면 그 삭제의 번호가 어긋나고, 이어 409 수습이 그 뒤 판(head 3 · 번호 없음)을 실었는데 통지는 2.5s 뒤까지 남았다
+ * (2/2) — 화면 = 서버인데 «새로고침하면 맞춰집니다»다. 앞을 읽은 판이면 번호가 여전히 빠졌으니 남긴다.
+ */
+function divergedShown(diverged: Diverged | null, headSeq: number): boolean {
+  return diverged !== null && (diverged.seq === null || headSeq < diverged.seq)
+}
 /** 게시가 **이미 달렸고 그 뒤 고쳐졌다 · 지워졌다**(`keyVerdict`) — 통지다. 다음 게시가 달리면 지운다. */
 const LANDED_SINCE_NOTICE = slot<KeyVerdict | null>('comments/landed-since', null)
 /**
@@ -587,8 +610,10 @@ export function CommentPanel(props: {
   // **남의 코멘트는 고칠 수 없다**(서버가 막는다). `null`이면 아직 누구인지 모르는
   // 것이므로 수정 단추를 하나도 안 낸다 — 서버가 어차피 403으로 막는다.
   const currentUser = useSessionUser()
-  // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 쓴다.
-  const document = useOpenDocument(props.pageId)
+  // 문서는 `useOpenPage`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 쓴다. 번호(`headSeq`)도 함께 받아 어긋남을 거두는 데
+  // 쓴다(다시 실은 판이 그 번호에 닿았나 — `divergedShown`).
+  const open = useOpenPage(props.pageId)
+  const document = open?.document ?? null
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
 
   // **일곱 다 칸이다**(위 `LIST` 선언의 주석). 아래 쓰기 함수들은 **이 렌더의 페이지를 단다** —
@@ -651,7 +676,7 @@ export function CommentPanel(props: {
   // 일곱을 함께) — 여기서 `pageId`에도 돌면 같은 일을 두 자리가 하게 된다.
   useEffect(() => {
     setWriteError(null)
-    setDiverged(false)
+    setDiverged(null)
     setLandedSince(null)
     // 다시 받기의 실패도 지난 통지다. **도는 중인 것은 남긴다** — 아직 끝나지 않았다.
     setRefreshing((prev) => (prev?.failure == null ? prev : null))
@@ -742,6 +767,9 @@ export function CommentPanel(props: {
     }): void => {
       if (pageId === undefined || busy) return
       const openPageId = pageId
+      // **번호 쓰기의 답을 기다리는 동안 센다**(`EditorStore.beginMarkerWrite`) — 그 사이 409 를 받은 편집이 이 답을 기다린다. 끝은 답을
+      // 스토어에 얹은 뒤(장부의 `run`이 끝날 때)다.
+      const endMarkerWrite = store.beginMarkerWrite()
       void busyLock.run<T, V>({
         send: (signal) => op.send(api, openPageId, signal),
         ...(op.uncertain === undefined ? {} : { uncertain: op.uncertain }),
@@ -770,9 +798,10 @@ export function CommentPanel(props: {
             return failure
           }
         },
-      })
+        // 뒷일(`settle` — 답을 스토어에 얹는다)이 끝난 뒤다. 장부가 던져도 센 것을 남기지 않는다.
+      }).finally(endMarkerWrite)
     },
-    [api, busy, busyLock, pageId, setWriteError],
+    [api, busy, busyLock, pageId, setWriteError, store],
   )
 
   /** 지금 문서에서 그 노드에 번호가 있는가. 문서를 못 읽었으면 «없다»로 본다 — 어긋남을 말하는 쪽이다. */
@@ -836,9 +865,11 @@ export function CommentPanel(props: {
         // 조건을 빼면 번호가 보이는데 «반영하지 못했습니다»가 선다. **jsdom 에는 방송이 없어 이 조건을
         // 재는 케이스가 없다** — Chrome 으로 잰 조건이다.
         const missed = created.markerOps.length === 0 && created.marker !== null && !hadMarker
-        setDiverged(applied === 'diverged' || (applied === 'applied' && missed && ownerLive))
+        setDiverged(
+          applied === 'diverged' ? divergedAt(created.seq) : applied === 'applied' && missed && ownerLive ? divergedAt(null) : null,
+        )
       } else {
-        setDiverged(false)
+        setDiverged(null)
       }
       setLandedSince(posted.kind === 'created' ? null : posted.kind)
       setPostKeys((prev) => {
@@ -903,7 +934,7 @@ export function CommentPanel(props: {
         return { at, comments, gone: !comments.some((comment) => comment.id === commentId) }
       },
       done: (change, openPageId) => {
-        setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
+        setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged' ? divergedAt(change.seq) : null)
         refresh(openPageId)
       },
       // **실패하면 목록을 다시 받는다.** «지워지지 않았습니다» 판정 뒤 서버가 앞 삭제를 늦게
@@ -914,7 +945,7 @@ export function CommentPanel(props: {
         setState(answered(at, { status: 'ready', at, comments }))
         if (!gone) return { kind: 'message', message: NOT_DELETED }
         // 그 노드의 마지막이었으면 서버가 번호를 지웠다 — 응답을 못 받았으니 내 문서에는 남아 있다.
-        setDiverged(ownerLive && hadMarker && !comments.some((comment) => comment.nodeId === target?.nodeId))
+        setDiverged(ownerLive && hadMarker && !comments.some((comment) => comment.nodeId === target?.nodeId) ? divergedAt(null) : null)
         return null
       },
     })
@@ -955,12 +986,12 @@ export function CommentPanel(props: {
       // 응답을 못 받았으니 번호가 바뀌었어도 내 문서에 없다 — 그렇다고만 말한다.
       verify: async () => null,
       done: (change, openPageId) => {
-        setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged')
+        setDiverged(store.applyMarkerChange(openPageId, change) === 'diverged' ? divergedAt(change.seq) : null)
         // 목록은 다시 받지 않아도 된다 — 재번호는 **표를 안 건드린다**. 번호만 바뀌고
         // 그 번호는 문서에서 읽는다.
       },
       verified: (_verdict, ownerLive) => {
-        setDiverged(ownerLive)
+        setDiverged(ownerLive ? divergedAt(null) : null)
         return null
       },
     })
@@ -1074,7 +1105,7 @@ export function CommentPanel(props: {
             ))}
           {/* **실패가 아니라 어긋남이다** — 코멘트는 저장됐고 번호만 화면에 못 얹었다.
               그래서 `alert`가 아니라 `status`이고 문안도 *"실패했다"*가 아니다. */}
-          {diverged && (
+          {divergedShown(diverged, open?.headSeq ?? 0) && (
             <p className="wb-shell-panel-notice" role="status">
               {DIVERGED}
             </p>

@@ -211,9 +211,11 @@ interface SessionContextValue {
   user: SessionUser | null
   /** 이 탭이 로그인하지 않았는데 다른 사람이 됐다(`Session.switched`). */
   switched: boolean
+  /** 로그아웃하며 이 탭이 남긴 한 줄(`useSignOutNotice`). */
+  farewell: string | null
   invalidate: () => void
-  /** 이 탭에서 로그아웃했다 — 끊고 다른 탭에 알린다(«탭 사이»). */
-  signOut: () => void
+  /** 이 탭에서 로그아웃했다 — 끊고 다른 탭에 알린다(«탭 사이»). 잃은 것을 말하는 한 줄을 받는다. */
+  signOut: (farewell?: string) => void
   confirm: (user: SessionUser) => void
   /** 같은 사람의 새 세션을 알았을 때 부를 것을 단다. 돌려주는 함수가 뗀다. */
   onRenewal: (listener: () => void) => () => void
@@ -231,6 +233,8 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
   const channel = useTabChannel()
   const drafts = useDraftStore()
   const [session, setSession] = useState<Session>({ state: PENDING, user: null, epoch: 0, renewal: 0, switched: false })
+  /** 로그아웃하며 이 탭이 남긴 한 줄(`useSignOutNotice`). 로그인하면 지운다. */
+  const [farewell, setFarewell] = useState<string | null>(null)
   const knownUser = useKnownUserHolder()
   /** 다른 탭의 소식이 왔다 — 그보다 먼저 나간 마운트의 `me()` 답은 낡았을 수 있다(«탭 사이»). */
   const superseded = useRef(false)
@@ -294,11 +298,12 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
   /** **다른 탭에 알리는 자리는 여기 하나다**(위 머리말 «탭 사이»). 통로가 없으면 아무것도 안 한다. */
   const announce = useCallback((news: SessionNews) => channel?.post(news), [channel])
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback((notice?: string) => {
     // **명시적 로그아웃이면 이 탭의 초안 사본을 지운다**(아래 «초안의 사본») — 세션을 끝내기 **전에**: 지운 뒤에
     // 그 사람의 화면이 한 번 더 커밋돼도 저장소가 그것을 받지 않는다(`panels/draft-store.tsx`의 `generation`).
     // **올린 세대를 소식에 싣는다** — 듣는 탭은 그 번호로 `max`만 한다(`panels/draft-store.tsx`의 «표지는 세대 번호다»).
     const era = drafts?.forget()
+    setFarewell(notice ?? null)
     setSession(ended)
     announce(era === undefined ? { kind: 'signed-out' } : { kind: 'signed-out', era })
   }, [announce, drafts])
@@ -308,6 +313,7 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
       // **세대는 안 올린다** — 앞 세션은 `invalidate`가 이미 끝냈고, 세션이 없는 동안에는 쓰기가 없다
       // (위 머리말 «세션 세대»). **이 탭의 사람을 알았다** — 그 사람이 아닌 칸을 지운다(위 머리말 «초안의 사본»).
       drafts?.admit(sessionUser.id)
+      setFarewell(null)
       setSession((current) =>
         current.state.status === 'authenticated'
           ? { ...current, user: sessionUser, switched: false }
@@ -384,8 +390,8 @@ export function SessionProvider(props: { children: ReactNode }): ReactElement {
 
   const { state, epoch, user, switched } = session
   const value = useMemo(
-    () => ({ state, epoch, user, switched, invalidate, signOut, confirm, onRenewal }),
-    [state, epoch, user, switched, invalidate, signOut, confirm, onRenewal],
+    () => ({ state, epoch, user, switched, farewell, invalidate, signOut, confirm, onRenewal }),
+    [state, epoch, user, switched, farewell, invalidate, signOut, confirm, onRenewal],
   )
 
   return <SessionContext.Provider value={value}>{props.children}</SessionContext.Provider>
@@ -419,9 +425,21 @@ export function useInvalidateSession(): () => void {
   return useSessionContext().invalidate
 }
 
-/** 이 탭에서 로그아웃이 성공했을 때 부른다 — 끊고 **다른 탭에 알린다**(위 머리말 «탭 사이»). */
-export function useSignOut(): () => void {
+/**
+ * 이 탭에서 로그아웃이 성공했을 때 부른다 — 끊고 **다른 탭에 알린다**(위 머리말 «탭 사이»). 로그아웃이 잃은 것이 있으면 그 한 줄을 넘긴다 —
+ * 로그인 화면이 그린다(`useSignOutNotice`).
+ */
+export function useSignOut(): (farewell?: string) => void {
   return useSessionContext().signOut
+}
+
+/**
+ * **로그아웃하며 이 탭이 남긴 한 줄** — 에디터의 로그아웃은 보낸 편집의 답을 한도까지만 기다리고 나간다(`session/session-menu.tsx`의
+ * `settle`). 한도 뒤에 답을 못 받은 편집 · 못 보낸 편집은 말할 화면이 셸째 내려가므로, 그 수를 로그인 화면이 말한다(`routes/login.tsx`).
+ * 이 탭의 메모리에만 산다 — 다른 탭의 로그아웃 소식 · 401 무효화는 남기지 않고, 다시 로그인하면 지운다. 없으면 `null`이다.
+ */
+export function useSignOutNotice(): string | null {
+  return useSessionContext().farewell
 }
 
 /**
