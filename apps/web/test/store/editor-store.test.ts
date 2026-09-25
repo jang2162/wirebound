@@ -1089,9 +1089,12 @@ describe('EditorStore의 마커 반영', () => {
         vi.advanceTimersByTime(1)
         expect(store.getState().remoteStale).toEqual({ reason: 'gap' })
         expect(store.getState().headSeq).toBe(7)
-        // 늦게라도 오면 그 프레임은 얹힌다 — 기다리던 번호는 버렸으므로 안 얹힌다(낡음이 말한다).
+        // 늦게라도 오면 그 프레임은 얹힌다 — 기다리던 번호는 버렸으므로 안 얹힌다(낡음이 말한다). **낡음은 그대로다** — 버린
+        // 번호는 다시 오지 않는다(`MARKER_FRAME_WAIT_MS`의 판정). 프레임이 낡음을 안 푸는 축은 `remote-change.test.ts`의 «놓쳤던 번호가 뒤늦게 오면 얹되 낡음은 남는다»가 소유한다.
         store.applyRemoteChange('pg-1', { seq: 8, ops: MOVE_B_FIRST, warnings: [] })
         expect(store.getState().headSeq).toBe(8)
+        expect(store.getState().remoteStale).toEqual({ reason: 'gap' })
+        expect(store.getState().document?.root.children?.map((node) => node.marker)).toEqual([undefined, undefined])
       } finally {
         vi.useRealTimers()
       }
