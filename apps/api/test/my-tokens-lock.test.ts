@@ -25,6 +25,7 @@
  * |---|---|
  * | `deleteAllUserTokens`를 `DELETE … WHERE user_id = $1` 한 문장으로(id 순 선잠금을 뗌) | «폐기가 먼저» 둘 — 교착 +1 · 희생자는 삭제 · 제거(500), 폐기는 200 |
  * | 하나 폐기(`deleteUserToken`)에 세션 재확인을 건다 | «재확인하지 않는다» 혼자 — 401 · 토큰이 남는다 |
+ * | `findApiTokenByValue`가 `last_used_at` 갱신의 행 수를 안 본다 | «폐기와 겹친 인증» — 읽기 200(폐기된 토큰으로 답한다). `guard-in-lock.test.ts`의 «토큰으로 쓰는 owner 를 빼면»도 함께 죽는다(쓰기 404) |
  *
  * **«삭제가 먼저»와 대조군은 혼자 죽는 변조가 없다** — 옛 판(위 첫 줄)에서도 교착 0 이라는 것이 값이다. 고리가 폐기가 행을 잡는
  * 순서 탓이고 원래 있던 것이 아님을 이 둘이 가른다(`CLAUDE.md` «교착을 잴 때는 누가 먼저 잡느냐를 뒤집은 판과 옛 판을 함께
@@ -55,6 +56,8 @@ interface Fx {
   p: string
   /** 밥의 프로젝트 — 토큰 D. */
   q: string
+  /** 토큰 원문 — `Bearer`로 실어 인증을 세운다. */
+  values: Record<keyof typeof ID, string>
 }
 
 async function fixture(ctx: RealApiContext): Promise<Fx> {
@@ -63,14 +66,15 @@ async function fixture(ctx: RealApiContext): Promise<Fx> {
   const p = (await createProject(ctx, alice.cookie)).id
   const q = (await createProject(ctx, bob.cookie)).id
   await addMember(ctx, p, bob.user.id, 'editor')
+  const values = { A: randomTokenValue(), D: randomTokenValue(), B: randomTokenValue() }
   // 넣는 순서가 heap 순서다(머리말 «판 세우기»).
   for (const [key, projectId] of [['B', p], ['D', q], ['A', p]] as const) {
     await db
       .insertInto('api_tokens')
-      .values({ id: ID[key], project_id: projectId, user_id: bob.user.id, token_hash: hashTokenValue(randomTokenValue()), name: key })
+      .values({ id: ID[key], project_id: projectId, user_id: bob.user.id, token_hash: hashTokenValue(values[key]), name: key })
       .execute()
   }
-  return { alice, bob, p, q }
+  return { alice, bob, p, q, values }
 }
 
 async function deadlockCount(): Promise<number> {
@@ -119,6 +123,12 @@ type Reply = { status: number; body: string }
 
 function fire(ctx: RealApiContext, method: 'DELETE' | 'POST', url: string, cookie: { wb_session: string }): Promise<Reply> {
   return ctx.app.inject({ method, url, cookies: cookie }).then((res) => ({ status: res.statusCode, body: res.body }))
+}
+
+function fireWithToken(ctx: RealApiContext, url: string, value: string): Promise<Reply> {
+  return ctx.app
+    .inject({ method: 'GET', url, headers: { authorization: `Bearer ${value}` } })
+    .then((res) => ({ status: res.statusCode, body: res.body }))
 }
 
 async function bobTokens(userId: string): Promise<string[]> {
@@ -244,6 +254,31 @@ describe('폐기는 재확인하지 않는다 — 권한을 줄이는 쓰기다'
 
       expect(revoked.status, revoked.body).toBe(204)
       expect(await bobTokens(fx.bob.user.id)).toEqual([ID.D, ID.A].sort())
+    })
+  }, 60_000)
+})
+
+describe('폐기와 겹친 인증은 폐기된 토큰으로 서지 않는다', () => {
+  it('전부 폐기가 D 를 쥔 채 서 있을 때 토큰 D 로 읽으면: 인증이 D 에 줄 서고, 폐기가 커밋하면 401', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      // 폐기는 A · D 를 쥐고 B 에 선다(id 순). 읽기는 인증의 `last_used_at` 갱신에서 D 에 선다.
+      const hold = await holdToken(ID.B)
+      let revoke: Promise<Reply> | undefined
+      let read: Promise<Reply> | undefined
+      try {
+        revoke = fire(ctx, 'DELETE', '/api/auth/tokens', fx.bob.cookie)
+        await waitForLockWaiters(1)
+        read = fireWithToken(ctx, `/api/projects/${fx.q}`, fx.values.D)
+        await waitForLockWaiters(2)
+      } finally {
+        await hold.release()
+      }
+      const [revoked, answered] = await Promise.all([revoke, read])
+
+      expect(revoked.status, revoked.body).toBe(200)
+      expect(JSON.parse(revoked.body)).toEqual({ revoked: 3 })
+      expect(answered.status, answered.body).toBe(401)
     })
   }, 60_000)
 })

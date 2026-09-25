@@ -289,6 +289,11 @@ export async function lockProjectTokens(trx: DbHandle, projectId: string): Promi
  * 세 컬럼만 명시적으로 고른다.
  *
  * `last_used_at`을 갱신하는 것도 `resolveSession`이 `last_seen_at`을 만지는 것과 같은 자리다.
+ *
+ * **갱신이 0 행이면 주체를 내지 않는다.** 앞의 `SELECT`는 잠그지 않으므로, 폐기(`deleteUserToken` · `deleteAllUserTokens` ·
+ * 멤버 제거)가 그 행을 쥐고 있으면 행을 본 뒤 갱신이 폐기의 커밋을 기다렸다가 지워진 행에 0 행으로 끝난다. 그 결과를 안
+ * 보면 폐기된 토큰으로 인증이 선다 — 쓰기는 커밋 순간의 재확인(`tokenIsLive`)이 막지만 읽기에는 재확인이 없어 한 번 답한다.
+ * [api] `my-tokens-lock.test.ts` «폐기와 겹친 인증은 폐기된 토큰으로 서지 않는다».
  */
 export async function findApiTokenByValue(db: DbHandle, value: string): Promise<ApiTokenPrincipal | null> {
   const hash = hashTokenValue(value)
@@ -309,11 +314,13 @@ export async function findApiTokenByValue(db: DbHandle, value: string): Promise<
 
   if (!row) return null
 
-  await db
+  const touched = await db
     .updateTable('api_tokens')
     .set({ last_used_at: sql<Date>`clock_timestamp()` })
     .where('token_hash', '=', hash)
-    .execute()
+    .returning('id')
+    .executeTakeFirst()
+  if (!touched) return null
 
   return {
     tokenId: row.token_id,

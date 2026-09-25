@@ -1770,7 +1770,7 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
     return rows.length
   }
 
-  it('토큰으로 쓰는 owner 를 빼면: 제거 204 · 쓰기 404 · 토큰 0 · 교착 0', async () => {
+  it('토큰으로 쓰는 owner 를 빼면: 제거 204 · 쓰기 401 · 토큰 0 · 교착 0', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await tokenFixture(ctx, 'owner')
       const deadlocksBefore = await deadlockCount()
@@ -1796,7 +1796,9 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
 
       expect(await deadlockCount()).toBe(deadlocksBefore)
       expect(removed.status, removed.body).toBe(204)
-      expect(written.status, written.body).toBe(404)
+      // 쓰기는 인증의 `last_used_at` 갱신에서 제거가 쥔 토큰 행에 섰다가, 제거가 그 토큰을 지우면 인증이 안 선다
+      // (`repos/api-tokens.ts`의 `findApiTokenByValue` «갱신이 0 행이면 주체를 내지 않는다»).
+      expect(written.status, written.body).toBe(401)
       expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(0)
       expect(await headSeqOf(fx.pageId)).toBe(0)
     })
