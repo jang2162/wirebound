@@ -117,7 +117,8 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
         send: (payload) => socket.send(payload),
         close: (code, reason) => socket.close(code, reason),
         closeWhenIdle: (code, reason) => {
-          closeWhenIdle = { code, reason }
+          // 먼저 정한 사유가 남는다 — 로그아웃한 연결의 `ping`이 회수 갈래로 와도 «로그아웃했습니다»로 닫는다.
+          closeWhenIdle ??= { code, reason }
           if (inflight === 0) socket.close(code, reason)
         },
       }
@@ -191,15 +192,14 @@ export function wsRoutes(config: ApiConfig): FastifyPluginAsync {
               return
             }
             rooms.leave(projectId, connection.id)
-            socket.close(WS_CLOSE.revoked, '권한이 회수되었습니다')
-            // **회수도 연결 종료다** — 「소프트 잠금」의 *"연결 종료 시 즉시 해제"*가 여기도 선다.
-            // `close` 이벤트가 뒤따르지만 그 자리에서 다시 놓아도 조용히 지난다.
-            //
-            // **그래서 이 줄을 지워도 죽는 케이스가 없다.** 바로 위 `socket.close()`가 부르는
-            // `close` 핸들러가 같은 일을 하므로 지워도 아무것도 안 죽는다. **지워도 되는
-            // 신호로 읽지 마라:** 이것은 둘째 방어이고, `close` 이벤트가 안 오는 구현으로
-            // 갈아 끼우는 날 유일한 해제가 된다(`ws/patch.ts`의 `clientOpId`·`connection.ts`의
-            // `stopped`와 같은 부류다).
+            // **소켓은 도는 프레임이 끝난 뒤에 닫는다**(`RoomConnection.closeWhenIdle`) — 이 프레임 앞에 잠금에 줄 선
+            // `patch`가 있으면 곧바로 닫을 때 그 답(커밋 순간의 재확인이 낸 401 · 404)이 길을 잃어, 낸 쪽은 확정된 거절을
+            // «모름»으로 받는다. 웹의 `ping`(25초) · 잠금 하트비트의 `lock`이 로그아웃 · 제거 뒤 이 갈래로 온다
+            // (`test/logout-realtime.test.ts`의 «그 연결이 ping 를 보내도»). 룸에서 뺐으므로 그동안 방송은 안 나간다.
+            connection.closeWhenIdle(WS_CLOSE.revoked, '권한이 회수되었습니다')
+            // **회수도 연결 종료다** — 「소프트 잠금」의 *"연결 종료 시 즉시 해제"*가 여기도 선다. 닫힘은 도는 프레임을
+            // 기다리므로 그 사이 남의 화면에 잠금이 남지 않게 여기서 놓는다. 도는 것이 없으면 곧바로 닫혀 `close` 이벤트가
+            // 같은 일을 하고, 그 자리에서 다시 놓아도 조용히 지난다.
             releaseLocksOf(app, connection)
             announce()
             return

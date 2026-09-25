@@ -21,9 +21,13 @@
  * **역할이 프레임마다 갈리는 것은 `ws-patch.test.ts`가 잰다** — 이 파일이 재는 것은
  * *"자격이 사라지면 닫힌다"*이고 그쪽이 재는 것은 *"뷰어는 편집을 못 낸다"*다.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { sql } from 'kysely'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { withTransaction } from '../src/db/tx'
 import {
   addMember,
+  createMenuNode,
+  createPage,
   createProject,
   getTestDb,
   resetRealData,
@@ -31,7 +35,7 @@ import {
   withRealApi,
   type TestContext,
 } from './helpers'
-import { WsProbe, joinRoom } from './ws-client'
+import { WsProbe, joinRoom, locksUntil, locksWith } from './ws-client'
 
 const db = getTestDb()
 
@@ -135,6 +139,69 @@ describe('세션 행을 지우면 권한이 회수된다', () => {
 
       const closed = await probe.waitClosed()
       expect(closed.code).toBe(4403)
+    })
+  })
+
+  /**
+   * **닫기가 도는 프레임을 기다리는 동안에도 잠금은 곧바로 놓는다**(`ws/routes.ts`의 «권한이 회수되었습니다» 갈래의
+   * `releaseLocksOf`). 페이지 행에 줄 선 편집이 있으면 소켓은 그 답 뒤에야 닫히므로 닫힘 이벤트의 해제를 기다리면 그만큼 남의
+   * 화면에 «편집 중»이 남는다. 로그아웃 · 제거는 알림 자리에서 먼저 놓으므로 이 줄은 **세션 행만 지운 판**이 소유한다.
+   */
+  it('세션을 지운 뒤 편집이 행에 선 채 프레임을 보내면 잠금은 곧바로 놓고, 소켓은 그 편집의 답 뒤에 닫는다', async () => {
+    await withRealApi(async (ctx) => {
+      const owner = await signup(ctx)
+      const peer = await signup(ctx)
+      const project = await createProject(ctx, owner.cookie)
+      await addMember(ctx, project.id, peer.user.id, 'editor')
+      const menu = await createMenuNode(ctx, owner.cookie, project.id)
+      const page = await createPage(ctx, owner.cookie, project.id, menu.id)
+      const put = await ctx.app.inject({
+        method: 'PUT',
+        url: `/api/projects/${project.id}/pages/${page.id}/schema`,
+        cookies: owner.cookie,
+        payload: { schema: { version: 1, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: {} }] } } },
+      })
+      expect(put.statusCode, put.body).toBe(200)
+      const probe = track(await joinRoom(ctx.port, project.id, owner.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, project.id, peer.cookie.wb_session))
+      probe.send(JSON.stringify({ type: 'lock', pageId: page.id, nodeId: 'n_a' }))
+      await locksWith(watcher, 'n_a')
+
+      let release!: () => void
+      const released = new Promise<void>((resolve) => (release = resolve))
+      let held!: () => void
+      const holding = new Promise<void>((resolve) => (held = resolve))
+      const holder = withTransaction(db, async (trx) => {
+        await trx.selectFrom('pages').select('id').where('id', '=', page.id).forUpdate().execute()
+        held()
+        await released
+      })
+      try {
+        await holding
+        probe.send(
+          JSON.stringify({ type: 'patch', pageId: page.id, clientOpId: 'op_held', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }] }),
+        )
+        await vi.waitFor(async () => {
+          const { rows } = await sql<{ n: number }>`
+            select count(*)::int as n from pg_stat_activity
+             where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
+          `.execute(db)
+          expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+        }, { timeout: 5_000 })
+
+        await deleteSessions(ctx, owner.user.id)
+        probe.send(JSON.stringify({ type: 'ping' }))
+        // 편집이 행에 서 있는 동안 — 잠금은 1초 안에 빠지고, 소켓은 아직 열려 있다.
+        const started = Date.now()
+        await locksUntil(watcher, (list) => list.length === 0, 'n_a 풀림')
+        expect(Date.now() - started).toBeLessThan(1_000)
+        expect(probe.closeInfo).toBeNull()
+      } finally {
+        release()
+        await holder
+      }
+      expect(await probe.waitFor('patch-error')).toMatchObject({ clientOpId: 'op_held', status: 401 })
+      expect((await probe.waitClosed(1_000)).code).toBe(4403)
     })
   })
 

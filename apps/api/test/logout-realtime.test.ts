@@ -167,6 +167,57 @@ describe('로그아웃', () => {
     })
   })
 
+  /**
+   * **그 사이 그 연결이 새 프레임을 보내도** 소켓은 줄 선 편집의 답 뒤에 닫는다 — 새 프레임은 자격 확인에서 세션 없음을 보고
+   * 회수로 가는데, 그 갈래도 `closeWhenIdle`로 닫는다(`ws/routes.ts`의 «권한이 회수되었습니다»). 웹은 25초마다 `ping`을, 잠금
+   * 하트비트로 `lock`을 다시 보내므로 편집이 페이지 행에 오래 서는 판에서 닿는다. 닫힘 사유는 먼저 정한 것(로그아웃)이 남는다.
+   */
+  for (const [kind, frameOf] of [
+    ['ping', () => ({ type: 'ping' })],
+    ['lock', (pageId: string) => ({ type: 'lock', pageId, nodeId: 'n_a' })],
+  ] as const) {
+    it(`편집이 잠금에 선 채 로그아웃한 뒤 그 연결이 ${kind} 를 보내도, 소켓은 그 편집의 답 뒤에 닫는다`, async () => {
+      await withRealApi(async (ctx) => {
+        const fx = await scene(ctx)
+        const db = getTestDb()
+        let release!: () => void
+        const released = new Promise<void>((resolve) => (release = resolve))
+        let held!: () => void
+        const holding = new Promise<void>((resolve) => (held = resolve))
+        const holder = withTransaction(db, async (trx) => {
+          await trx.selectFrom('pages').select('id').where('id', '=', fx.page.id).forUpdate().execute()
+          held()
+          await released
+        })
+        try {
+          await holding
+          fx.leaving.send(
+            JSON.stringify({ type: 'patch', pageId: fx.page.id, clientOpId: 'op_out', baseSeq: 1, ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n_x', type: 'Text', props: {} } }] }),
+          )
+          await vi.waitFor(async () => {
+            const { rows } = await sql<{ n: number }>`
+              select count(*)::int as n from pg_stat_activity
+               where pid <> pg_backend_pid() and datname = current_database() and wait_event_type = 'Lock'
+            `.execute(db)
+            expect(rows[0]!.n).toBeGreaterThanOrEqual(1)
+          }, { timeout: 5_000 })
+
+          const res = await ctx.app.inject({ method: 'POST', url: '/api/auth/logout', cookies: fx.owner.cookie })
+          expect(res.statusCode, res.body).toBe(204)
+          fx.leaving.send(JSON.stringify(frameOf(fx.page.id)))
+          // 새 프레임의 자격 확인이 끝날 창. 편집은 아직 행에 서 있다 — 소켓은 열려 있어야 한다.
+          await fx.leaving.quiet()
+          expect(fx.leaving.closeInfo).toBeNull()
+        } finally {
+          release()
+          await holder
+        }
+        expect(await fx.leaving.waitFor('patch-error')).toMatchObject({ clientOpId: 'op_out', status: 401, code: 'unauthenticated' })
+        expect(await fx.leaving.waitClosed(1_000)).toEqual({ code: WS_CLOSE.revoked, reason: '로그아웃했습니다' })
+      })
+    })
+  }
+
   it('남의 세션이 로그아웃해도 내 연결 · 잠금은 그대로다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await scene(ctx)
