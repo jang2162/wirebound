@@ -931,6 +931,7 @@ describe('`:projectId` 라우트 전부가 나쁜 헤더를 핸들러 앞에서 
     'layouts',
     'comments',
     'comment_tombstones',
+    'page_seq_floors',
     'snapshots',
     'presets',
     'api_tokens',

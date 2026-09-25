@@ -460,6 +460,17 @@ describe('EditorStore의 편집 상태', () => {
     return store
   }
 
+  /** 루트 밑에 `props.x`를 든 `n_a` 하나 — 서버 이력의 되돌리기가 겨눌 노드가 있다. */
+  function withPropsChild(): EditorStore {
+    const store = new EditorStore({ nextOpId: idSequence() })
+    store.loadPage(
+      'pg-1',
+      { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Container', children: [{ id: 'n_a', type: 'Text', props: { x: 0 } }] } },
+      7,
+    )
+    return store
+  }
+
   it('초기 편집 상태는 비어 있다', () => {
     const state = new EditorStore().getState()
     expect(state.pending).toEqual([])
@@ -748,12 +759,14 @@ describe('EditorStore의 편집 상태', () => {
   it('적용할 수 없는 inverse는 스택에서 빼고 다음으로 넘어간다', () => {
     // **설계서 「개인 undo/redo」의 계약이다 — 에러가 아니라 정상 흐름이다.** 그 경로가 없으면 다른
     // 사람이 지운 노드를 undo할 때 스택 맨 위에 갇힌다.
-    const store = loaded()
-    // **인자는 최신이 앞이다**(서버 응답 순서). 그러므로 `rev-bad`가 스택 top이다.
+    const store = withPropsChild()
+    // **인자는 최신이 앞이다**(서버 응답 순서). 그러므로 `rev-7`이 스택 top이다 — 7 은 `n_a`의 `x`를, 6 은 루트 `props`를 만들었다.
     store.restoreUndoStack([
-      { revisionId: 'rev-bad', inverse: [{ op: 'replace', path: '/root/children/9/props/x', value: 1 }] },
-      { revisionId: 'rev-old', inverse: [{ op: 'add', path: '/root/props', value: { title: '옛' } }] },
+      { revisionId: 'rev-7', seq: 7, inverse: [{ op: 'replace', path: '/root/children/0/props/x', value: 1 }] },
+      { revisionId: 'rev-6', seq: 6, inverse: [{ op: 'add', path: '/root/props', value: { title: '옛' } }] },
     ])
+    // 남이 `n_a`를 지웠다 — `rev-7`이 되돌릴 노드가 없다.
+    store.applyRemoteChange('pg-1', { seq: 8, ops: [{ op: 'remove', path: '/root/children/0' }], warnings: [] })
 
     const attempt = store.startUndo()
 
@@ -765,11 +778,12 @@ describe('EditorStore의 편집 상태', () => {
   })
 
   it('스택이 전부 적용 불가면 비우고 건너뛴 수를 알린다', () => {
-    const store = loaded()
+    const store = withPropsChild()
     store.restoreUndoStack([
-      { revisionId: 'r1', inverse: [{ op: 'replace', path: '/root/children/8/props/x', value: 1 }] },
-      { revisionId: 'r2', inverse: [{ op: 'replace', path: '/root/children/9/props/x', value: 1 }] },
+      { revisionId: 'r7', seq: 7, inverse: [{ op: 'replace', path: '/root/children/0/props/x', value: 1 }] },
+      { revisionId: 'r6', seq: 6, inverse: [{ op: 'replace', path: '/root/children/0/props/x', value: 2 }] },
     ])
+    store.applyRemoteChange('pg-1', { seq: 8, ops: [{ op: 'remove', path: '/root/children/0' }], warnings: [] })
 
     const attempt = store.startUndo()
 
@@ -785,8 +799,8 @@ describe('EditorStore의 편집 상태', () => {
     // 것은 배열 모양이 아니라 **어느 것이 먼저 undo되는가**다.
     const store = loaded()
     store.restoreUndoStack([
-      { revisionId: 'rev-최신', inverse: [{ op: 'add', path: '/root/props', value: { title: '최신' } }] },
-      { revisionId: 'rev-옛것', inverse: [{ op: 'add', path: '/root/props', value: { title: '옛것' } }] },
+      { revisionId: 'rev-최신', seq: 7, inverse: [{ op: 'add', path: '/root/props', value: { title: '최신' } }] },
+      { revisionId: 'rev-옛것', seq: 6, inverse: [{ op: 'add', path: '/root/props', value: { title: '옛것' } }] },
     ])
 
     store.startUndo()
@@ -807,7 +821,7 @@ describe('EditorStore의 편집 상태', () => {
     store.ackEdit('op-2', ack(9, REDO_INVERSE))
     expect(store.getState().redoStack).toHaveLength(1)
 
-    store.restoreUndoStack([{ revisionId: 'r', inverse: [] }])
+    store.restoreUndoStack([{ revisionId: 'r', seq: 9, inverse: [] }])
 
     expect(store.getState().redoStack).toEqual([])
   })
@@ -890,7 +904,7 @@ describe('EditorStore의 마커 반영', () => {
   it('undo 스택을 비우지 않는다 — 코멘트를 달 때마다 되돌리기가 사라지면 안 된다', () => {
     const store = new EditorStore()
     store.loadPage('pg-1', withChild(), 7)
-    store.restoreUndoStack([{ revisionId: 'rev-1', inverse: [] }])
+    store.restoreUndoStack([{ revisionId: 'rev-1', seq: 7, inverse: [] }])
 
     store.applyMarkerChange('pg-1', { seq: 8, markerOps: ADD_MARKER })
 
@@ -1219,8 +1233,9 @@ describe('EditorStore의 마커 반영', () => {
       }
     })
 
-    // 복원은 판이 통째로 갈렸다는 신호다 — 옛 문서의 번호 경로를 얹을 문서가 없다. 「만들어진 페이지」 복원은 같은 id 로 head 를
-    // 0 부터 다시 세므로, 남으면 되살아난 문서에서 그 차례가 올 때 **남의 노드**에 붙는다.
+    // 복원은 판이 통째로 갈렸다는 신호다 — 옛 문서의 번호 경로를 얹을 문서가 없다. 아래 판은 되살린 판이 0 부터 세어 그 차례가 오는
+    // 판이다 — 서버는 되살린 페이지를 옛 판본이 쓴 번호 뒤에서 세므로(`apps/api/src/repos/pages.ts`의 `insertPageWithId`) 서버에서는
+    // 안 서지만, 버리는 장치는 번호와 무관하게 선다. 남으면 그 차례가 올 때 **남의 노드**에 붙는다.
     const restoredPage = (): PageDocument => ({
       version: CURRENT_DOCUMENT_VERSION,
       root: {
@@ -1426,5 +1441,71 @@ describe('내가 누구인지 모를 때', () => {
     store.selectNode('n_a')
     // 위와 같은 이유로 루트가 남는다 — 재는 것은 `n_a`로 **옮겨가지 않았다**는 사실이다.
     expect(store.getState().selectedNodeId).toBe('n_root')
+  })
+})
+
+/**
+ * **서버 이력으로 채운 되돌리기 항목도 제 노드를 되돌린다**(`restoreUndoStack`).
+ *
+ * 서버의 `inverse`는 그 revision 을 막 기록한 문서의 자리 경로다. 그 뒤 남이 같은 배열 앞자리에 넣었으면 옛 자리는 **남의 노드**를
+ * 가리키고, 그대로 보내면 서버가 그 노드를 고친다(경로를 다시 짓지 않는다 — 설계서 「정방향 흐름」). 페이지를 연 뒤의 남의 편집이면
+ * 세션 안 항목처럼 노드 id 로 붙잡아 다시 지어야 하고, 연 판에 이미 남의 revision 이 끼어 있으면 그 아래 항목은 그 revision 의 문서를
+ * 알 길이 없다.
+ */
+describe('서버 이력으로 채운 되돌리기', () => {
+  const text = (id: string, content: string) => ({ id, type: 'Text', props: { content } })
+  function page(...children: ReturnType<typeof text>[]): PageDocument {
+    return { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Container', children } }
+  }
+  const contents = (store: EditorStore) => store.getState().document?.root.children?.map((child) => child.props?.content)
+  const bobFrame = (seq: number) => ({
+    seq,
+    ops: [{ op: 'add', path: '/root/children/0', value: text('n_bob', '밥') }] as PatchOp[],
+    warnings: [],
+  })
+
+  // 가장 작은 판이다 — «되짚기»는 아래 «이어진 내 revision 여럿은 …»이, «끊김»은 «연 판에 남의 revision 이 끼어 있으면 …»이 혼자 든다.
+  it('페이지를 연 뒤 남이 앞자리에 넣어도 되돌리기가 제 노드를 고친다', () => {
+    const store = new EditorStore({ nextOpId: idSequence() })
+    store.loadPage('pg-1', page(text('n_ga', '가'), text('n_na', '나')), 7)
+    // 내 revision 7 — «나»를 «옛 나»에서 «나»로 고쳤다.
+    store.restoreUndoStack([
+      { revisionId: 'rev-7', seq: 7, inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }] },
+    ])
+    expect(store.applyRemoteChange('pg-1', bobFrame(8)).result).toBe('applied')
+
+    store.startUndo()
+
+    expect(contents(store)).toEqual(['밥', '가', '옛 나'])
+    expect(store.getState().pending[0]?.ops).toEqual([{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }])
+  })
+
+  it('이어진 내 revision 여럿은 거꾸로 되짚은 제 판에서 붙잡는다 — 남이 앞에 넣은 뒤 둘 다 제 노드를 되돌린다', () => {
+    const store = new EditorStore({ nextOpId: idSequence() })
+    store.loadPage('pg-1', page(text('n_ga', '가'), text('n_na', '나')), 7)
+    store.restoreUndoStack([
+      // 7: «가»를 맨 앞에 넣었다 · 6: «나»를 고쳤다 — 6 의 경로는 «가»가 없던 판(6)의 자리다.
+      { revisionId: 'rev-7', seq: 7, inverse: [{ op: 'remove', path: '/root/children/0' }] },
+      { revisionId: 'rev-6', seq: 6, inverse: [{ op: 'replace', path: '/root/children/0/props/content', value: '옛 나' }] },
+    ])
+    store.applyRemoteChange('pg-1', bobFrame(8))
+
+    expect(store.startUndo().skipped).toBe(0)
+    expect(store.startUndo().skipped).toBe(0)
+
+    expect(contents(store)).toEqual(['밥', '옛 나'])
+  })
+
+  it('연 판에 남의 revision 이 끼어 있으면 그 아래 항목은 싣지 않는다 — 그 revision 의 문서를 모른다', () => {
+    const store = new EditorStore({ nextOpId: idSequence() })
+    // 6 은 내 것(«나»를 고쳤다), 7 은 밥이 맨 앞에 넣은 것 — 연 판은 7 이다.
+    store.loadPage('pg-1', page(text('n_bob', '밥'), text('n_ga', '가'), text('n_na', '나')), 7)
+    store.restoreUndoStack([
+      { revisionId: 'rev-6', seq: 6, inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: '옛 나' }] },
+    ])
+
+    expect(store.getState().undoStack).toEqual([])
+    expect(store.startUndo()).toEqual({ clientOpId: null, skipped: 0, blocked: null })
+    expect(contents(store)).toEqual(['밥', '가', '나'])
   })
 })

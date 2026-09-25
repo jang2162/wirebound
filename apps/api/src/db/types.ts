@@ -240,6 +240,19 @@ export interface CommentTombstonesTable {
 }
 
 /**
+ * 지운 페이지 id 가 쓴 마지막 번호(`0017-page-seq-floors`). 페이지를 지우는 두 길(`repos/pages.ts`의 `deletePage` ·
+ * `deletePageRow`)이 `recordPageSeqFloor`로 남기고, 복원이 같은 id 로 되살릴 때 `insertPageWithId`가 그 다음부터 센다.
+ */
+export interface PageSeqFloorsTable {
+  /** 지운 페이지의 id. FK 가 아니다 — 가리키는 행이 지금 없다. */
+  page_id: string
+  /** 수명(`ON DELETE CASCADE`). */
+  project_id: string
+  /** 그 id 가 쓴 가장 큰 번호. `head_seq`와 같은 이유로 select 타입이 `string`이다. */
+  head_seq: ColumnType<string, number, number>
+}
+
+/**
  * 스냅샷(`0009-snapshots`). 설계서 「스냅샷」의 **삭제 없는 태그**다.
  *
  * `payload`는 `JSONColumnType<SnapshotPayload>` — `PagesTable.schema`와 **같은 비대칭**이다:
@@ -316,6 +329,7 @@ export interface Database {
   layouts: LayoutsTable
   comments: CommentsTable
   comment_tombstones: CommentTombstonesTable
+  page_seq_floors: PageSeqFloorsTable
   snapshots: SnapshotsTable
   presets: PresetsTable
   api_tokens: ApiTokensTable

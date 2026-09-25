@@ -369,7 +369,7 @@ describe('번호 응답이 보낼 편집을 다시 못 얹는 판', () => {
       warnings: NO_WARNINGS,
     })
     const removeMarker: PatchOp[] = [{ op: 'remove', path: '/root/children/0/marker' }]
-    store.restoreUndoStack([{ revisionId: 'rev_marker', inverse: removeMarker }])
+    store.restoreUndoStack([{ revisionId: 'rev_marker', seq: 5, inverse: removeMarker }])
     expect(store.startUndo().clientOpId).not.toBeNull()
     const before = store.getState()
 
@@ -951,11 +951,12 @@ describe('창 안의 복원 신호', () => {
     expect(store.getState().remoteStale).toBeNull()
   })
 
+  // 서버에서는 이 판이 안 선다 — 되살린 페이지는 옛 판본이 쓴 번호 뒤에서 센다(`apps/api/test/restore.test.ts`의 «되살린 페이지의 번호»).
+  // 이 케이스는 복원 앞일 수 있는 판에 신호 뒤 revision 을 얹지 않는 장치를 잠근다 — 번호가 겹치지 않아도 그 판 뒤의 번호가 아니다.
   it('신호 앞에 시작한 조회의 판에는 신호 뒤에 온 revision 을 얹지 않는다 — 되살린 판본의 번호다', () => {
     const store = opened()
     const ticket = store.beginPageLoad('page_1')
     store.markRestored()
-    // 되살린 페이지가 번호를 0 부터 다시 세어 옛 판의 다음 번호와 우연히 같다.
     store.applyRemoteChange('page_1', { seq: 5, ops: [{ op: 'remove', path: '/root/children/0' }], warnings: NO_WARNINGS })
 
     store.settlePageLoad(ticket)
