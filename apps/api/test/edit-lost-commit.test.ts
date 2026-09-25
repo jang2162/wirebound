@@ -2,8 +2,8 @@
  * **COMMIT 답을 잃은 편집을 서버가 그 자리에서 확인한다**(`services/lost-commit.ts`의 `runEditTransaction`).
  *
  * 편집(`PATCH .../ops` · WS `patch`)의 COMMIT 이 Postgres 에서 커밋됐는데 그 답만 잃으면 핸들러는 결과를 모른다. 그때 새 연결로
- * 그 편집의 revision(트랜잭션 안에서 이미 id 를 안다)이 보이는지 본다 — 보이면 커밋됐으므로 **성공으로 답하고**, 그 revision 이
- * 아직 페이지의 머리면 **방송한다.** 안 보이거나 확인하지 못하면 원래대로 503 «모름»이다.
+ * 그 트랜잭션의 결말(`pg_xact_status`)을 묻는다 — 커밋됐으면 **성공으로 답하고**, 그 revision 이 아직 페이지의 머리면 **방송한다.**
+ * 커밋 안 됐으면 봉투 있는 500(«반영되지 않았다»), 한도 안에 결말을 모르면 원래대로 503 «모름»이다.
  *
  * 진짜 Postgres 앞의 TCP 프록시(`pg-fault-proxy.ts`)가 COMMIT 답을 끊는다 — 커밋은 된다.
  */
@@ -12,6 +12,7 @@ import { sql } from 'kysely'
 import { buildApp } from '../src/app'
 import { createDb, createPool } from '../src/db/client'
 import { DB_UNREACHABLE_WRITE_MESSAGE } from '../src/http/error-handler'
+import { DB_WRITE_NOT_APPLIED_MESSAGE, LOST_COMMIT_PROBE_MS } from '../src/services/lost-commit'
 import type { ServerFrame } from '../src/ws/protocol'
 import {
   addMember,
@@ -38,6 +39,25 @@ const pageChanged = (frames: ServerFrame[]): PageChanged[] => frames.filter((fra
 
 /** 확인 질의가 싣는 글자 — 프록시가 그 질의만 늦추거나 끊는다(`repos/revisions.ts`의 `findRevisionCommitWithin`). */
 const PROBE = 'as "committed"'
+/** 커밋을 묻는 질의의 글자(`services/lost-commit.ts`의 `settleTransaction`). */
+const XACT = 'pg_xact_status'
+/** 확인이 503 «모름»을 내기까지의 한도 — 확인의 한도(`LOST_COMMIT_PROBE_MS`)에 요청의 나머지 몫을 더한 것. */
+const PROBE_LIMIT_MS = LOST_COMMIT_PROBE_MS + 500
+
+/** 그 페이지의 revision 행이 설 때 COMMIT 을 `ms` 늦춘다 — `DEFERRABLE INITIALLY DEFERRED` 제약 트리거의 `pg_sleep`. */
+async function slowCommit<T>(pageId: string, ms: number, run: () => Promise<T>): Promise<T> {
+  const db = getTestDb()
+  await sql.raw(`create or replace function zz_slow_commit() returns trigger language plpgsql as $$ begin perform pg_sleep(${ms / 1000}); return null; end $$`).execute(db)
+  await sql.raw(
+    `create constraint trigger zz_slow_commit after insert on revisions deferrable initially deferred for each row when (new.page_id = '${pageId}') execute function zz_slow_commit()`,
+  ).execute(db)
+  try {
+    return await run()
+  } finally {
+    await sql`drop trigger if exists zz_slow_commit on revisions`.execute(db)
+    await sql`drop function if exists zz_slow_commit()`.execute(db)
+  }
+}
 
 async function fixture(ctx: ProxiedRealApi) {
   const owner = await signup(ctx)
@@ -105,56 +125,118 @@ describe('COMMIT 답을 잃은 편집', () => {
     })
   })
 
-  it('COMMIT 이 서버에 안 닿았으면 revision 이 없다 — 503 «모름» 그대로 · 방송 없음', async () => {
+  /**
+   * **COMMIT 이 서버에 안 닿았으면 «안 됐다»를 안다** — 프록시가 COMMIT 을 넘기지 않고 두 쪽을 끊으면 백엔드가 끊김을 보고 트랜잭션을
+   * 되돌린다. 확인이 `aborted`를 받아 봉투 있는 500 으로 답한다 — 웹은 그것을 «커밋 전»으로 읽는다(`apps/web`의 `refusedBeforeCommit`).
+   */
+  it('COMMIT 이 서버에 안 닿았으면 revision 이 없다 — 봉투 있는 500 «반영되지 않았다» · 방송 없음', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       ctx.proxy.dropOnQuery('commit')
       const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_gone') } })
       expect(ctx.proxy.fired).toBe(true)
-      expect(res.statusCode, res.body).toBe(503)
-      expect(res.json().error.message).toBe(DB_UNREACHABLE_WRITE_MESSAGE)
+      expect(res.statusCode, res.body).toBe(500)
+      expect(res.json()).toEqual({ error: { code: 'internal', message: DB_WRITE_NOT_APPLIED_MESSAGE } })
       expect(await revisionSeqs(fx.pageId)).toEqual([])
       expect(pageChanged(await fx.watcher.quiet())).toEqual([])
     })
   })
 
-  /**
-   * **«안 보인다»면 한 번 더 본다**(`services/lost-commit.ts`의 `probeCommit`). COMMIT 을 서버에 넘기자마자 api 쪽 연결만
-   * 끊기면(`halfCutOnQuery`) 확인이 그 COMMIT 보다 먼저 닿을 수 있다 — 끊긴 연결의 COMMIT 이 아직 돈다. COMMIT 을 20ms 늦춘다
-   * (그 페이지의 revision 에만 거는 `DEFERRABLE INITIALLY DEFERRED` 제약 트리거의 `pg_sleep`). 한 번만 보면 503 «모름»이다.
-   */
-  it('끊긴 연결의 COMMIT 이 아직 돌면 한 번 더 본다 — 커밋되면 200 이고 룸이 받는다', async () => {
+  it('WS — COMMIT 이 서버에 안 닿았으면 500 patch-error «반영되지 않았다»', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
-      const db = getTestDb()
-      await sql.raw(`create or replace function zz_slow_commit() returns trigger language plpgsql as $$ begin perform pg_sleep(0.02); return null; end $$`).execute(db)
-      await sql.raw(
-        `create constraint trigger zz_slow_commit after insert on revisions deferrable initially deferred for each row when (new.page_id = '${fx.pageId}') execute function zz_slow_commit()`,
-      ).execute(db)
-      try {
+      ctx.proxy.dropOnQuery('commit')
+      fx.author.send(JSON.stringify({ type: 'patch', pageId: fx.pageId, clientOpId: 'op_ws_gone', baseSeq: 0, ops: addText('n_ws_gone') }))
+      const answer = await fx.author.waitFor('patch-error')
+      expect(ctx.proxy.fired).toBe(true)
+      expect(answer).toMatchObject({ clientOpId: 'op_ws_gone', status: 500, code: 'internal', message: DB_WRITE_NOT_APPLIED_MESSAGE })
+      expect(await revisionSeqs(fx.pageId)).toEqual([])
+    })
+  })
+
+  /**
+   * **끊긴 연결의 COMMIT 이 아직 돌면 끝날 때까지 본다**(`services/lost-commit.ts`의 «커밋이 끝날 때까지 본다»). COMMIT 을 서버에
+   * 넘기자마자 api 쪽 연결만 끊기면(`halfCutOnQuery`) 확인이 그 COMMIT 보다 먼저 닿는다 — 끊긴 연결의 COMMIT 이 아직 돈다. COMMIT 을
+   * 500ms 늦춘다. revision 행이 보이는지로만 가르면 503 «모름»이다.
+   */
+  it('끊긴 연결의 COMMIT 이 한도 안에 끝나면 기다린다 — 커밋되면 200 이고 룸이 받는다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await slowCommit(fx.pageId, 500, async () => {
         ctx.proxy.halfCutOnQuery('commit')
         const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_late') } })
         expect(ctx.proxy.fired).toBe(true)
         expect(res.statusCode, res.body).toBe(200)
         expect(res.json()).toMatchObject({ seq: 1 })
         expect(await fx.watcher.waitFor('page-changed')).toMatchObject({ seq: 1 })
-      } finally {
-        await sql`drop trigger if exists zz_slow_commit on revisions`.execute(db)
-        await sql`drop function if exists zz_slow_commit()`.execute(db)
-      }
+      })
     })
   })
 
-  it('확인이 1초 안에 안 끝나면 503 «모름»이다 — 확인이 답을 붙잡지 않는다', async () => {
+  it('끊긴 연결의 COMMIT 이 한도를 넘겨 돌면 503 «모름»이다 — 한도에서 멈춘다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await slowCommit(fx.pageId, 3_000, async () => {
+        ctx.proxy.halfCutOnQuery('commit')
+        const started = Date.now()
+        const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_long') } })
+        expect(ctx.proxy.fired).toBe(true)
+        expect(res.statusCode, res.body).toBe(503)
+        expect(res.json().error.message).toBe(DB_UNREACHABLE_WRITE_MESSAGE)
+        expect(Date.now() - started).toBeLessThan(PROBE_LIMIT_MS)
+        expect(pageChanged(await fx.watcher.quiet())).toEqual([])
+      })
+    })
+  })
+
+  /**
+   * **확인의 한도는 두 단계(결말 · 머리)가 한 마감을 나눠 쓴다**(`services/lost-commit.ts`의 «확인의 시간 한도»). 결말을 한도
+   * 끝 가까이에서 알면 머리를 읽을 몫은 남은 만큼뿐이다 — 단계마다 한도를 새로 주면 응답이 한도의 두 배까지 늦는다. COMMIT 을
+   * 950ms 늦춰 결말을 한도 끝에서 알게 하고, 머리를 읽는 질의를 붙잡는다.
+   */
+  it('결말을 한도 끝에서 알면 머리를 읽는 몫은 남은 만큼이다 — 503 이 한도 안에 난다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await slowCommit(fx.pageId, 950, async () => {
+        ctx.proxy.halfCutOnQuery('commit')
+        const probe = ctx.proxy.holdQuery(PROBE, 5_000)
+        let probed = false
+        void probe.held.then(
+          () => {
+            probed = true
+          },
+          () => undefined,
+        )
+        try {
+          const started = Date.now()
+          const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_edge') } })
+          const elapsed = Date.now() - started
+          expect(ctx.proxy.fired).toBe(true)
+          // 결말(`committed`)을 한도 안에 알고 머리를 읽으러 갔다 — 판이 섰다.
+          expect(probed).toBe(true)
+          expect(res.statusCode, res.body).toBe(503)
+          expect(elapsed).toBeLessThan(PROBE_LIMIT_MS)
+          expect(await revisionSeqs(fx.pageId)).toEqual([1])
+        } finally {
+          probe.release()
+        }
+      })
+    })
+  })
+
+  it.each([
+    ['커밋을 묻는 질의', XACT],
+    ['머리를 읽는 질의', PROBE],
+  ])('확인이 1초 안에 안 끝나면 503 «모름»이다 — %s', async (_, fragment) => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       ctx.proxy.dropCommitReplyAfter('insert into "revisions"')
-      ctx.proxy.delayQuery(PROBE, 3_000)
+      ctx.proxy.delayQuery(fragment, 3_000)
       const started = Date.now()
       const res = await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_slow') } })
       const elapsed = Date.now() - started
       expect(res.statusCode, res.body).toBe(503)
-      expect(elapsed).toBeLessThan(2_500)
+      expect(elapsed).toBeLessThan(PROBE_LIMIT_MS)
       // 커밋은 됐다 — 그래서 «모름»이 참이다(«확정 실패»가 아니다).
       expect(await revisionSeqs(fx.pageId)).toEqual([1])
     })
@@ -178,15 +260,16 @@ describe('COMMIT 답을 잃은 편집', () => {
       const menu = await createMenuNode(ctx, owner.cookie, project.id)
       const page = await createPage(ctx, owner.cookie, project.id, menu.id)
       const opsUrl = `/api/projects/${project.id}/pages/${page.id}/ops`
-      for (let seq = 0; seq < 3; seq += 1) {
+      // 두 확인 질의를 번갈아 붙잡는다 — 커밋을 묻는 질의 · 머리를 읽는 질의.
+      for (let seq = 0; seq < 4; seq += 1) {
         proxy.dropCommitReplyAfter('insert into "revisions"')
-        held.push(proxy.holdQuery(PROBE))
+        held.push(proxy.holdQuery(seq % 2 === 0 ? XACT : PROBE))
         const res = await app.inject({ method: 'PATCH', url: opsUrl, cookies: owner.cookie, payload: { baseSeq: seq, ops: addText(`n_${seq}`) } })
         expect(res.statusCode, res.body).toBe(503)
         // 응답이 나간 뒤 쥔 칸이 없다 — 붙잡힌 확인 질의의 연결은 풀을 떠났다.
         expect(pool.totalCount - pool.idleCount).toBe(0)
       }
-      expect(await revisionSeqs(page.id)).toEqual([1, 2, 3])
+      expect(await revisionSeqs(page.id)).toEqual([1, 2, 3, 4])
     } finally {
       for (const hold of held) hold.release()
       await app.close()

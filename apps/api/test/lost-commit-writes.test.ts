@@ -2,8 +2,8 @@
  * **COMMIT 답을 잃은 쓰기 — 편집 밖의 넷도 그 자리에서 확인한다**(`services/lost-commit.ts`).
  *
  * `PATCH .../ops` · WS `patch`는 `test/edit-lost-commit.test.ts`가 잰다. 여기는 revision(또는 복원의 안전망 스냅샷)을 남기는
- * 나머지 쓰기 넷이다 — `PUT .../schema` · 코멘트 삭제 · 재번호 · 복원. 커밋됐는데 답만 잃으면 새 연결로 그 행이 보이는지 보고,
- * 보이면 원래 성공처럼 답하고 방송한다(편집 경로와 같은 표 — 페이지 방송은 그 revision 이 머리일 때만).
+ * 나머지 쓰기 넷이다 — `PUT .../schema` · 코멘트 삭제 · 재번호 · 복원. 커밋됐는데 답만 잃으면 새 연결로 그 트랜잭션의 결말을 묻고,
+ * 커밋됐으면 원래 성공처럼 답하고 방송한다(편집 경로와 같은 표 — 페이지 방송은 그 revision 이 머리일 때만).
  *
  * 게시는 여기 없다 — 웹이 같은 멱등 키로 다시 보내 재생이 번호 프레임을 다시 보낸다(`test/comment-replay-broadcast.test.ts`).
  *
@@ -11,7 +11,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sql } from 'kysely'
-import { DB_UNREACHABLE_WRITE_MESSAGE } from '../src/http/error-handler'
+import { DB_WRITE_NOT_APPLIED_MESSAGE } from '../src/services/lost-commit'
 import type { ServerFrame } from '../src/ws/protocol'
 import {
   addMember,
@@ -143,7 +143,7 @@ describe('COMMIT 답을 잃은 쓰기', () => {
     })
   })
 
-  it('복원 — 안전망 스냅샷이 보이면 200 이고 룸이 `restored` 를 받는다', async () => {
+  it('복원 — 커밋을 확인하면 200 이고 룸이 `restored` 를 받는다', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       const snap = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/snapshots`, cookies: fx.owner.cookie, payload: { tag: 'v1' } })
@@ -231,7 +231,7 @@ describe('COMMIT 답을 잃은 쓰기', () => {
     })
   })
 
-  it('COMMIT 이 서버에 안 닿았으면 503 «모름» 그대로 · 방송 없음 — 코멘트 삭제', async () => {
+  it('COMMIT 이 서버에 안 닿았으면 봉투 있는 500 «반영되지 않았다» · 방송 없음 — 코멘트 삭제', async () => {
     await withProxiedRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       const id = await post(ctx, fx, 'n_a')
@@ -240,8 +240,8 @@ describe('COMMIT 답을 잃은 쓰기', () => {
       ctx.proxy.dropOnQuery('commit')
       const res = await ctx.app.inject({ method: 'DELETE', url: `${fx.pageUrl}/comments/${id}`, cookies: fx.owner.cookie })
       expect(ctx.proxy.fired).toBe(true)
-      expect(res.statusCode, res.body).toBe(503)
-      expect(res.json().error.message).toBe(DB_UNREACHABLE_WRITE_MESSAGE)
+      expect(res.statusCode, res.body).toBe(500)
+      expect(res.json()).toEqual({ error: { code: 'internal', message: DB_WRITE_NOT_APPLIED_MESSAGE } })
       expect(await headSeq(fx.pageId)).toBe(before)
       expect(pageChanged(await fx.watcher.quiet())).toEqual([])
     })

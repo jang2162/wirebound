@@ -25,7 +25,8 @@ import type { Kysely, Migration } from 'kysely'
  * 쓰기의 첫 잠금(`lockProjectTree` — `FOR NO KEY UPDATE`)으로, 복원은 `FOR UPDATE`로 그 행을 페이지보다 먼저 쥔다 — 제 트랜잭션의
  * 잠금이라 부딪히지 않는다(`0014`의 «묘비를 넣는 트랜잭션은 프로젝트 행을 먼저 잡는다»와 같은 길).
  *
- * **이 마이그레이션 앞에 지운 페이지는 줄이 없다** — 그 id 가 어디까지 셌는지 남은 곳이 없다. 줄이 없는 id 를 되살리면 0 부터 센다.
+ * **이 마이그레이션 앞에 지운 페이지는 줄이 없다** — 그 id 가 어디까지 셌는지 남은 곳이 없다. 줄이 없는 id 를 되살리면 옛 번호가
+ * 닿을 수 없는 자리에서 센다(`repos/pages.ts`의 `insertPageWithId` — «그 id 의 줄이 없으면»).
  */
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
@@ -39,8 +40,8 @@ export const migration: Migration = {
     await db.schema.createIndex('page_seq_floors_project_idx').on('page_seq_floors').column('project_id').execute()
   },
 
-  // **`down`은 남긴 번호를 버린다** — 그 뒤 되살린 페이지는 다시 0 부터 센다. `test/global-setup.ts`가 매 실행 latest → none →
-  // latest 를 왕복하므로 이 `down`이 실제로 돈다.
+  // **`down`은 남긴 번호를 버린다** — 다시 올린 뒤 되살린 페이지는 줄 없는 판으로 센다(`insertPageWithId`).
+  // `test/global-setup.ts`가 매 실행 latest → none → latest 를 왕복하므로 이 `down`이 실제로 돈다.
   async down(db: Kysely<unknown>): Promise<void> {
     await db.schema.dropTable('page_seq_floors').execute()
   },

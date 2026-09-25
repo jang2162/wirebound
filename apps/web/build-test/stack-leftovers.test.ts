@@ -30,6 +30,7 @@ function deadPid(): number {
 }
 
 const LIFELINE = fileURLToPath(new URL('./group-lifeline.mjs', import.meta.url))
+const EDITOR_STACK = new URL('./editor-stack.ts', import.meta.url).href
 
 /** 프로세스 그룹 `pgid` 에 산(좀비가 아닌) 프로세스 수. */
 function groupSize(pgid: number): number {
@@ -55,6 +56,47 @@ describe('띄운 프로세스가 사라지면 줄에 매단 그룹이 끝난다'
     try {
       // 카나리아 — 부모가 사는 동안 그룹에 줄 · 명령 둘이 산다(세는 자가 0 과 0 을 견주지 않게).
       await poll('그룹이 선다', async () => groupSize(pgid), (n) => n >= 2)
+      parent.kill('SIGKILL')
+      const left = await poll('부모가 죽은 뒤 그룹이 끝난다', async () => groupSize(pgid), (n) => n === 0, 2_000)
+      expect(left).toBe(0)
+    } finally {
+      parent.kill('SIGKILL')
+      try {
+        process.kill(-pgid, 'SIGKILL')
+      } catch {
+        // 이미 없다
+      }
+    }
+  })
+})
+
+/**
+ * **판이 실제로 쓰는 자리 — `editor-stack.ts` 의 `spawnGroup`.** 위 케이스는 줄을 손으로 띄우므로 `spawnGroup` 이 줄을 빼거나 엉뚱한
+ * pid 를 지켜보게 넘겨도 초록이다. 여기서는 부모가 `spawnGroup` 을 불러 그룹을 띄우고 `SIGKILL` 로 죽는다(부모는 `.ts` 를 그대로
+ * 적재한다 — Node 의 타입 걷기).
+ *
+ * | 변조(`spawnGroup`) | 죽는 것 |
+ * |---|---|
+ * | 줄 없이 명령을 곧바로 떼어 띄운다 | 이 케이스 혼자 — 그룹이 남는다 |
+ * | 줄에 `process.pid` 대신 `process.ppid` 를 넘긴다 | 이 케이스 혼자 — 줄이 산 조부모(이 테스트)를 지켜본다 |
+ */
+describe('판이 띄운 그룹(`spawnGroup`)도 띄운 프로세스가 사라지면 끝난다', () => {
+  it('부모가 spawnGroup 으로 띄우고 SIGKILL 로 죽으면 그룹이 2s 안에 0 이다', async () => {
+    const parentScript = `
+      import(${JSON.stringify(EDITOR_STACK)}).then(({ spawnGroup }) => {
+        const group = spawnGroup(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], process.cwd(), process.env)
+        process.stdout.write(String(group.child.pid) + '\\n')
+        setInterval(() => {}, 1000)
+      })
+    `
+    const parent = spawn(process.execPath, ['--input-type=module', '-e', parentScript], { stdio: ['ignore', 'pipe', 'inherit'] })
+    const pgid = await new Promise<number>((resolve, reject) => {
+      parent.stdout!.once('data', (chunk: Buffer) => resolve(Number(String(chunk).trim())))
+      parent.once('exit', (code) => reject(new Error(`부모가 그룹을 띄우기 전에 끝났다(종료 ${code})`)))
+    })
+    try {
+      // 카나리아 — 부모가 사는 동안 그룹이 산다(줄 · 명령 둘. 줄이 빠진 판이면 명령 하나라 하한을 1 로 둔다).
+      await poll('그룹이 선다', async () => groupSize(pgid), (n) => n >= 1)
       parent.kill('SIGKILL')
       const left = await poll('부모가 죽은 뒤 그룹이 끝난다', async () => groupSize(pgid), (n) => n === 0, 2_000)
       expect(left).toBe(0)

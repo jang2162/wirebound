@@ -15,7 +15,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DisplayName, RawPassword } from '../src/auth/credentials'
+import { DisplayName, LoginPassword, NewPassword } from '../src/auth/credentials'
 import { migrateToLatest } from '../src/db/migrate'
 import {
   describeSeedOutcome,
@@ -323,11 +323,11 @@ describe('시딩한 계정은 로그인된다', () => {
     ['200자', 'a'.repeat(200), true],
     ['201자', 'a'.repeat(201), false],
   ])('비밀번호 %s 를 시딩과 로그인이 같게 판정한다', (_label, password, ok) => {
-    expect(RawPassword.safeParse(password).success).toBe(ok)
+    expect([NewPassword.safeParse(password).success, LoginPassword.safeParse(password).success]).toEqual([ok, ok])
   })
 
   /**
-   * **위의 규격 비교보다 강한 자다.** 저것은 `RawPassword` 라는 **한 객체**를 두 번 물어
+   * **위의 규격 비교보다 강한 자다.** 저것은 규격 객체(`NewPassword` · `LoginPassword`)를 직접 물어
    * 보므로, 누군가 `seed-user.ts` 에 **자기 규격을 새로 적으면**(공유를 끊으면) 통과한
    * 채로 갈린다 — 시딩이 5자를 받고 로그인이 400 을 내는 계정이 그렇게 생긴다.
    *

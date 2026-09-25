@@ -11,7 +11,7 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { NormalizedEmail, RawPassword } from '../auth/credentials'
+import { LoginPassword, NormalizedEmail } from '../auth/credentials'
 import { DEFAULT_SCRYPT_PARAMS, hashPassword, verifyPassword } from '../auth/password'
 import { sessionCookieOptions } from '../auth/plugin'
 import { createSession, destroySession, hashSessionToken } from '../auth/session'
@@ -37,7 +37,7 @@ const LOGIN_FAILURE_MESSAGE = '이메일 또는 비밀번호가 올바르지 않
  */
 const LoginBody = z.strictObject({
   email: NormalizedEmail,
-  password: RawPassword,
+  password: LoginPassword,
 })
 
 /** 이 서버가 쓰는 scrypt 비용 파라미터. `config.passwordScryptN`만 환경별로 달라지고(운영 32768, 테스트 1024), r·p는 고정값을 쓴다. */

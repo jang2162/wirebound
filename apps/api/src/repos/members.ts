@@ -6,7 +6,7 @@
  */
 import { DatabaseError } from 'pg'
 import { withTransaction, type DbHandle } from '../db/tx'
-import { deleteMemberTokens, lockMemberTokens } from './api-tokens'
+import { deleteMemberTokens, deleteStaleMemberTokens, lockMemberTokens } from './api-tokens'
 import type { ProjectRole } from '../db/types'
 
 export interface MemberRecord {
@@ -130,6 +130,11 @@ export async function listMembers(db: DbHandle, projectId: string): Promise<Memb
  * 멤버인지는 삽입을 시도해 보고 복합 PK 위반으로 감지한다. `withTransaction`으로
  * 감싸 그 실패가 호출자의 트랜잭션(실제 요청이든 테스트 하네스든) 전체를
  * 오염시키지 않게 한다(`src/db/tx.ts` 참고).
+ *
+ * **넣기 전에 그 사람의 이 프로젝트 토큰을 지운다**(`deleteStaleMemberTokens`) — 멤버가 아닌 사람은 토큰을 못 만들므로(발급이 커밋
+ * 순간 멤버 행을 재확인한다 — `routes/tokens.ts`) 지금 남은 것은 **앞 멤버십의 것**이다. 제거가 지우지만 발급하자마자 쓰는 요청과
+ * 겹친 토큰은 건너뛴다(`api-tokens.ts`의 `deleteMemberTokens` «`SKIP LOCKED`») — 남겨 두면 다시 넣는 순간 되살아난다. [api] 그
+ * 판을 세운 뒤 다시 넣으면 남은 토큰의 읽기 · 쓰기가 200(고치기 전) → 인증 401.
  */
 export async function insertMember(
   db: DbHandle,
@@ -139,6 +144,7 @@ export async function insertMember(
 ): Promise<MemberRecord> {
   try {
     return await withTransaction(db, async (trx) => {
+      await deleteStaleMemberTokens(trx, projectId, user.id)
       const inserted = await trx
         .insertInto('project_members')
         .values({ project_id: projectId, user_id: user.id, role })

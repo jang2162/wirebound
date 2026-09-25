@@ -100,8 +100,7 @@ describe('로그 목적지의 쓰기가 실패하면', () => {
    * **이 케이스가 보는 것은 «밀어내지 않는다»까지다.** `/dev/full` 은 0 바이트 쓰기도 ENOSPC 로 거절해, 떨구는 중에 밀어내면
    * `flushSync` 의 0 바이트 확인이 걸려 로그를 버리고 알림이 한 줄 더 선다 — 그 줄로 죽는다. 밀어냈을 때의 진짜 증상(sonic-boom 의
    * `flushSync` 가 ENOSPC 에 100ms 쉬고 영영 되풀이)은 **0 바이트는 되고 1 바이트는 ENOSPC 인** 가득 찬 파일시스템에서만 선다 —
-   * 케이스가 만들 수 없다. 다시 재는 법: `docker run --tmpfs /full:size=64k node:22-slim` 에서 `/full` 을 채우고 그 위 파일을 목적지로
-   * 준 뒤 `flushSync` — 이 코드는 0ms 로 돌아오고, 밀어내게 바꾸면 8s 한도에 걸린다(`timeout` 종료 124).
+   * 그 판은 `build-test/log-destination-full-disk.test.ts` 가 잰다(tmpfs 를 채운 리눅스 컨테이너 · `pnpm test:build`).
    */
   it.skipIf(!DEV_FULL)('공간이 찬 채로 끝내도 `flushSync` 에서 멈추지 않는다(Linux `/dev/full`)', () => {
     expect(runChild('full')).toEqual({

@@ -8,8 +8,8 @@
  * 화면에도 API 에도 비밀번호를 바꾸는 길이 없고, 시딩(`db/seed-user.ts`)은 이미 있는 이메일의 비밀번호를
  * 덮어쓰지 않는다. 그래서 잊은 비밀번호를 되찾는 길은 이 명령 하나다(최상위 README 「비밀번호를 잊었다」).
  *
- * **서버와 같은 함수를 부른다** — 규칙은 `auth/credentials.ts` 의 `NormalizedEmail` · `RawPassword`, 해시는
- * `auth/password.ts` 의 `hashPassword`(비용은 서버와 같은 `PASSWORD_SCRYPT_N`), 세션 삭제는 `auth/session.ts` 의
+ * **서버와 같은 함수를 부른다** — 규칙은 `auth/credentials.ts` 의 `NormalizedEmail` · `NewPassword`(NFC 판을 세고 낸다),
+ * 해시는 `auth/password.ts` 의 `hashPassword`(비용은 서버와 같은 `PASSWORD_SCRYPT_N`), 세션 삭제는 `auth/session.ts` 의
  * `destroyUserSessions`. 손으로 친 SQL · 셸 조각으로 같은 일을 하면 규칙이 두 벌이 되고, 붙여 넣기 · Ctrl-D ·
  * 짧은 비밀번호에서 조용히 «아무도 못 쓰는 계정»이 남는다.
  *
@@ -24,7 +24,7 @@
  */
 import { pathToFileURL } from 'node:url'
 import { getKoreanErrorMap } from '@wirebound/schema'
-import { NormalizedEmail, RawPassword } from '../auth/credentials'
+import { NewPassword, NormalizedEmail } from '../auth/credentials'
 import { DEFAULT_SCRYPT_PARAMS, hashPassword } from '../auth/password'
 import { destroyUserSessions } from '../auth/session'
 import { loadConfig } from '../config'
@@ -87,14 +87,14 @@ export function normalizeEmail(raw: string): string {
 }
 
 /**
- * 비밀번호가 서버의 규칙(`RawPassword`)을 지나는지. 어긋나면 던진다 — 규칙 밖의 비밀번호를 넣으면 로그인 본문
+ * 비밀번호가 서버의 규칙(`NewPassword`)을 지나는지 — 지나면 NFC 판을 낸다. 어긋나면 던진다 — 규칙 밖의 비밀번호를 넣으면 로그인 본문
  * 검증이 400 을 내 **아무도 못 쓰는 계정**이 된다(`auth/credentials.ts` 머리말).
  */
 export function checkPassword(password: string): string {
-  const parsed = RawPassword.safeParse(password, { error: getKoreanErrorMap() })
+  const parsed = NewPassword.safeParse(password, { error: getKoreanErrorMap() })
   if (!parsed.success) {
-    // `RawPassword` 가 세는 단위(UTF-16 — 이모지 하나가 2자)로 센다. 코드 포인트로 세면 규칙이 받는 값에 «8자 미만»이라 말한다.
-    throw new ResetPasswordError(`비밀번호는 8–200자여야 합니다(친 값은 ${password.length}자)`)
+    // `NewPassword` 가 세는 단위(NFC 판의 UTF-16 — 이모지 하나가 2자)로 센다. 코드 포인트로 세면 규칙이 받는 값에 «8자 미만»이라 말한다.
+    throw new ResetPasswordError(`비밀번호는 8–200자여야 합니다(친 값은 ${password.normalize('NFC').length}자)`)
   }
   return parsed.data
 }
