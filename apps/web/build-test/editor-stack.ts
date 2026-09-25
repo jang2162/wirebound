@@ -293,7 +293,7 @@ function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   return { ...env, ...extra }
 }
 
-interface Spawned {
+export interface Spawned {
   readonly child: ChildProcess
   /** 최근 출력 — 기동 실패를 말할 때 붙인다. */
   readonly output: () => string
@@ -314,7 +314,7 @@ process.on('exit', () => {
  * 자기 프로세스 그룹으로 띄운다(`detached`) — 거둘 때 손자(tsx 의 node · vite 의 esbuild)까지 그룹째 보낸다. 그룹의 머리는
  * `group-lifeline.mjs` 다 — 이 프로세스가 `SIGKILL` 로 사라지면 그룹째 끝낸다(머리말 «끝에 무엇을 재나»).
  */
-function spawnGroup(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): Spawned {
+export function spawnGroup(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): Spawned {
   const child = spawn(process.execPath, [LIFELINE, String(process.pid), command, ...args], {
     cwd,
     env,
