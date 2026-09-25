@@ -16,13 +16,14 @@
  * 맨 윗줄을 지워도 환경이 그대로라, 아래 첫 테스트가 그 사고를 잡지 못한다.
  */
 import {
+  applyOps,
   CURRENT_DOCUMENT_VERSION,
   type PageDocument,
   type PatchOp,
   type ValidationIssue,
 } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
-import { EditorStore, VIEWPORT_PRESETS, type ViewportWidth } from '../../src/store/editor-store'
+import { EditorStore, MARKER_FRAME_WAIT_MS, VIEWPORT_PRESETS, type ViewportWidth } from '../../src/store/editor-store'
 
 /** 페이지 문서 최소형. 스토어는 내용을 해석하지 않으므로 루트 id만 구분되면 된다. */
 function doc(rootId: string): PageDocument {
@@ -963,6 +964,146 @@ describe('EditorStore의 마커 반영', () => {
 
     expect(store.getState().document?.root.children?.[0]?.marker).toBe(1)
     expect(store.getState().document?.root.children?.map((node) => node.id)).toEqual(['n_a', 'n_theirs'])
+  })
+
+  /**
+   * **응답의 `seq`가 내 다음 번호가 아니면 사이 프레임을 기다린다**(`applyMarkerChange`의 «내 다음 번호가 아니면 …»).
+   *
+   * 서버 순서: head 7 `[n_a, n_b]` → 남이 `n_b`를 맨 앞으로 옮김(8) → 내 게시가 `n_b`에 번호(9 — 경로는 8 의 문서에서 센
+   * `/root/children/0`). 게시는 잠근 뒤의 문서로 번호를 매기므로 응답이 8 의 프레임보다 먼저 닿을 수 있다.
+   */
+  describe('사이 프레임보다 먼저 닿은 번호 응답', () => {
+    const twoChildren = (): PageDocument => ({
+      version: CURRENT_DOCUMENT_VERSION,
+      root: {
+        id: 'n_root',
+        type: 'Container',
+        children: [
+          { id: 'n_a', type: 'Text', props: { content: 'A' } },
+          { id: 'n_b', type: 'Text', props: { content: 'B' } },
+        ],
+      },
+    })
+    const MOVE_B_FIRST: PatchOp[] = [{ op: 'move', from: '/root/children/1', path: '/root/children/0' }]
+    const MARK_FIRST: PatchOp[] = [{ op: 'add', path: '/root/children/0/marker', value: 1 }]
+    const serverAt9 = () => applyOps(applyOps(twoChildren(), MOVE_B_FIRST), MARK_FIRST)
+
+    it('응답 → 프레임 순이어도 화면이 서버와 같다 — 번호는 옮겨진 그 노드에, 뒤 편집은 제 노드를 고친다', () => {
+      const store = new EditorStore()
+      store.loadPage('pg-1', twoChildren(), 7)
+
+      // 기다린다 — 얹지도 `headSeq`를 옮기지도 않는다. 얹으면 번호가 `n_a`에 붙고, 8 의 프레임은 «이미 아는 번호»로 버려진다.
+      expect(store.applyMarkerChange('pg-1', { seq: 9, markerOps: MARK_FIRST })).toBe('waiting')
+      expect(store.getState().headSeq).toBe(7)
+      expect(store.getState().document).toEqual(twoChildren())
+
+      expect(store.applyRemoteChange('pg-1', { seq: 8, ops: MOVE_B_FIRST, warnings: [] }).result).toBe('applied')
+
+      expect(store.getState().document).toEqual(serverAt9())
+      expect(store.getState().headSeq).toBe(9)
+      expect(store.getState().remoteStale).toBeNull()
+      // 화면에서 `n_a`를 고친 편집의 경로가 서버에서도 `n_a`다.
+      store.applyEdit([{ op: 'replace', path: '/root/children/1/props/content', value: 'A2' }])
+      const sent = store.getState().pending.at(-1)!
+      expect(sent.baseSeq).toBe(9)
+      expect(applyOps(serverAt9(), sent.ops).root.children?.map((node) => [node.id, node.props?.content])).toEqual([
+        ['n_b', 'B'],
+        ['n_a', 'A2'],
+      ])
+    })
+
+    it('기다리는 것이 둘이면 사이 프레임 뒤에 차례로 얹는다', () => {
+      // 기다렸다 얹는 축은 «응답 → 프레임 순이어도 …»가 소유한다 — 이 케이스는 둘째를 잇는 것만 잰다.
+      const store = new EditorStore()
+      store.loadPage('pg-1', twoChildren(), 7)
+      const markSecond: PatchOp[] = [{ op: 'add', path: '/root/children/1/marker', value: 2 }]
+
+      expect(store.applyMarkerChange('pg-1', { seq: 10, markerOps: markSecond })).toBe('waiting')
+      expect(store.applyMarkerChange('pg-1', { seq: 9, markerOps: MARK_FIRST })).toBe('waiting')
+      store.applyRemoteChange('pg-1', { seq: 8, ops: MOVE_B_FIRST, warnings: [] })
+
+      expect(store.getState().headSeq).toBe(10)
+      expect(store.getState().document?.root.children?.map((node) => [node.id, node.marker])).toEqual([
+        ['n_b', 1],
+        ['n_a', 2],
+      ])
+    })
+
+    it('사이 프레임이 한도 안에 안 오면 `gap` 낡음을 세운다 — 조용히 빠지지 않는다', () => {
+      vi.useFakeTimers()
+      try {
+        const store = new EditorStore()
+        store.loadPage('pg-1', twoChildren(), 7)
+        store.applyMarkerChange('pg-1', { seq: 9, markerOps: MARK_FIRST })
+
+        vi.advanceTimersByTime(MARKER_FRAME_WAIT_MS - 1)
+        expect(store.getState().remoteStale).toBeNull()
+        vi.advanceTimersByTime(1)
+        expect(store.getState().remoteStale).toEqual({ reason: 'gap' })
+        expect(store.getState().headSeq).toBe(7)
+        // 늦게라도 오면 그 프레임은 얹힌다 — 기다리던 번호는 버렸으므로 안 얹힌다(낡음이 말한다).
+        store.applyRemoteChange('pg-1', { seq: 8, ops: MOVE_B_FIRST, warnings: [] })
+        expect(store.getState().headSeq).toBe(8)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('같은 페이지를 다시 실으면 그 판 위에 제 차례로 얹는다', () => {
+      // 다시 읽은 조회가 게시의 커밋 앞에 읽혔다 — 낸 탭은 그 방송을 안 받으므로(연결 id 로 빠진다) 버리면 번호가 안 뜬다.
+      const store = new EditorStore()
+      store.loadPage('pg-1', twoChildren(), 7)
+      store.applyMarkerChange('pg-1', { seq: 9, markerOps: MARK_FIRST })
+
+      store.loadPage('pg-1', applyOps(twoChildren(), MOVE_B_FIRST), 8)
+
+      expect(store.getState().document).toEqual(serverAt9())
+      expect(store.getState().headSeq).toBe(9)
+    })
+
+    it('다시 실은 판이 이미 그 revision 을 담았으면 다시 얹지 않는다', () => {
+      // 조회가 게시의 커밋 뒤에 읽혔다. 번호를 지우는 `remove`를 한 번 더 얹으면 던져 «반영하지 못했다»가 선다.
+      const store = new EditorStore()
+      const marked = applyOps(twoChildren(), MARK_FIRST)
+      store.loadPage('pg-1', marked, 7)
+      const unmark: PatchOp[] = [{ op: 'remove', path: '/root/children/0/marker' }]
+      store.applyMarkerChange('pg-1', { seq: 9, markerOps: unmark })
+
+      store.loadPage('pg-1', applyOps(marked, unmark), 9)
+
+      expect(store.getState().remoteStale).toBeNull()
+      expect(store.getState().headSeq).toBe(9)
+    })
+
+    it('다른 페이지를 실으면 버린다 — 한도가 지나도 새 페이지에 낡음이 안 선다', () => {
+      vi.useFakeTimers()
+      try {
+        const store = new EditorStore()
+        store.loadPage('pg-1', twoChildren(), 7)
+        store.applyMarkerChange('pg-1', { seq: 9, markerOps: MARK_FIRST })
+
+        store.loadPage('pg-2', twoChildren(), 3)
+        vi.advanceTimersByTime(MARKER_FRAME_WAIT_MS)
+
+        expect(store.getState().remoteStale).toBeNull()
+        expect(store.getState().headSeq).toBe(3)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  it('그 revision 의 프레임이 응답보다 먼저 왔으면 다시 얹지 않는다 — 번호를 지운 응답이 «반영하지 못했다»가 되지 않는다', () => {
+    // 코멘트 삭제는 연결 id 를 안 실어 낸 탭에도 방송이 온다. 번호를 지우는 `remove`를 두 번 얹으면 두 번째가 던진다.
+    const store = new EditorStore()
+    store.loadPage('pg-1', applyOps(withChild(), ADD_MARKER), 7)
+    const REMOVE_MARKER: PatchOp[] = [{ op: 'remove', path: '/root/children/0/marker' }]
+
+    store.applyRemoteChange('pg-1', { seq: 8, ops: REMOVE_MARKER, warnings: [] })
+
+    expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: REMOVE_MARKER })).toBe('applied')
+    expect(store.getState().headSeq).toBe(8)
+    expect(store.getState().document?.root.children?.[0]?.marker).toBeUndefined()
   })
 })
 

@@ -240,8 +240,8 @@ type Reposted = { posted: true; result: Posted } | { posted: false; caught: unkn
  * **이 이슈 코드가 실린 409 는 «그 키의 게시는 이미 달렸고 그 뒤 고쳐졌다»다.** 서버는
  * 같은 키에 다른 글이 오면 409 를 내는데(`apps/api/README.md`의 «멱등 키»), 이 화면은 글을 고치면 새 키를 짓는다
  * (`POST_KEYS`) — 같은 키 · 다른 글이 되는 길은 **앞 게시가 달린 뒤 그 행이 고쳐진** 판뿐이다(같은 사람이 다른
- * 탭에서 고쳤다). 게시의 다른 409(낡음 · 적용 불가)도 `code`가 `conflict`라 **이슈 코드로만** 가른다 — 문장으로
- * 가르지 않는다.
+ * 탭에서 고쳤다). 게시가 내는 409 는 이슈 코드가 있는 둘(`idempotency-key-reused` · `idempotency-key-deleted`)뿐이지만
+ * 둘 다 `code`가 `conflict`라 **이슈 코드로만** 가른다 — 문장으로 가르지 않는다.
  *
  * **가르는 자리는 여기 하나이고, 받는 자리도 하나다**(`submit`의 `post`) — 첫 보내기와 다시 보낸 것(판정)이 같은
  * 함수를 지난다. 그래서 이 409 는 `knownRejection`의 표에 오지 않는다(그 표는 «안 달림»·«모름»을 가른다).
@@ -376,7 +376,8 @@ const WRITE_ERROR = slot<Failure | null>('comments/write-error', null)
  *
  * **버리지 않고 말한다.** 버리면 *"코멘트는 달렸는데 캔버스에 번호가 없고 아무도 그것을
  * 말하지 않는"* 상태가 된다 — «못 했다»를 «할 것 없다»로 접는 부류(머리말 «무리가 셋이고»)의 형태다.
- * **`'skipped'`는 말하지 않는다** — 그때는 화면이 이미 다른 페이지를 보고 있다.
+ * **`'skipped'`는 말하지 않는다** — 그때는 화면이 이미 다른 페이지를 보고 있다. **`'waiting'`도 말하지 않는다** — 사이
+ * 프레임이 오면 스토어가 얹고, 끝내 안 오면 스토어가 낡음으로 말한다(`shell/remote-alert.tsx`).
  */
 const MARKERS_DIVERGED = slot<boolean>('comments/diverged', false)
 /** 게시가 **이미 달렸고 그 뒤 고쳐졌다 · 지워졌다**(`keyVerdict`) — 통지다. 다음 게시가 달리면 지운다. */
