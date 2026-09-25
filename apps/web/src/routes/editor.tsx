@@ -179,6 +179,8 @@ const ROLE_NOTICE = {
 const RESYNC_LEAD = '연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다.'
 /** 내가 스냅샷을 복원해 다시 읽었을 때의 앞머리. **재연결과 다른 사건이다.** */
 const RESTORED_LEAD = '스냅샷을 복원해 페이지를 다시 불러왔습니다.'
+/** 남이 복원한 판을 배너의 단추로 다시 읽었을 때의 앞머리. 위 문장을 쓰면 남의 복원을 내가 한 일로 말한다. */
+const REMOTE_RESTORED_LEAD = '다른 사람이 복원한 상태로 페이지를 다시 불러왔습니다.'
 
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
@@ -511,6 +513,17 @@ function EditorShell(props: {
    * 한 토큰으로 접으면 저 셋을 갈 자리가 없어지고, 재연결마다 트리까지 다시 받게 된다.
    */
   const [restoredToken, setRestoredToken] = useState(0)
+  /** 그 신호를 누가 올렸나 — 다시 읽으며 잃은 것을 말할 때의 앞머리다(`CanvasFrame`의 `applyServerPage`). 신호와 함께 바뀐다. */
+  const [restoredLead, setRestoredLead] = useState(RESTORED_LEAD)
+  /**
+   * **복원 뒤 다시 읽기의 입구 하나** — 내가 복원했을 때(스냅샷 팝오버)와 남의 복원을 배너의 단추로 다시 읽을 때가 함께 탄다. 두
+   * 신호를 한 자리에서 올려야 한쪽 입구가 테마를 빠뜨리지 않는다(`restoredToken` 표의 테마 줄).
+   */
+  const reloadAfterRestore = useCallback((lead: string) => {
+    setRestoredLead(lead)
+    setRestoredToken((token) => token + 1)
+    setThemeReloadToken((token) => token + 1)
+  }, [])
 
   /**
    * **룸에 붙어 있는다**(룸은 프로젝트 단위 하나다). 페이지를 옮겨도 연결은
@@ -617,10 +630,7 @@ function EditorShell(props: {
             있는지"*조차 못 본다. */}
         <SnapshotsPanel
           projectId={props.project.id}
-          onRestored={() => {
-            setRestoredToken((token) => token + 1)
-            setThemeReloadToken((token) => token + 1)
-          }}
+          onRestored={() => reloadAfterRestore(RESTORED_LEAD)}
         />
         {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 스냅샷 링크 옆에 두는 것은 둘 다
             *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
@@ -648,7 +658,7 @@ function EditorShell(props: {
         {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
             `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
             근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
-        <RemoteAlert />
+        <RemoteAlert onReload={() => reloadAfterRestore(REMOTE_RESTORED_LEAD)} />
         {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
         {roleNotice !== null && (
           <p className="wb-shell-remote-alert" role="status">
@@ -765,6 +775,7 @@ function EditorShell(props: {
           themeReloadToken={themeReloadToken}
           resyncToken={resyncToken}
           restoredToken={restoredToken}
+          restoredLead={restoredLead}
           frameRef={frameRef}
         />
       </main>
@@ -1018,8 +1029,10 @@ function CanvasFrame(props: {
   themeReloadToken: number
   /** 연결이 다시 붙었다는 신호. 오를 때마다 아래 재조회 이펙트가 돈다. */
   resyncToken: number
-  /** 내가 스냅샷을 복원했다는 신호. 오를 때마다 아래 복원 재조회 이펙트가 돈다. */
+  /** 스냅샷이 복원됐다는 신호(내 복원 · 남의 복원을 배너의 단추로). 오를 때마다 아래 복원 재조회 이펙트가 돈다. */
   restoredToken: number
+  /** 그 재조회가 잃은 것을 말할 때의 앞머리(셸의 `restoredLead`). */
+  restoredLead: string
   /** 셸이 `화면 맞춤`에서 이 프레임의 여백을 읽는다(`fitZoom`). 그리는 데는 쓰지 않는다. */
   frameRef: RefObject<HTMLDivElement | null>
 }): ReactElement {
@@ -1035,7 +1048,7 @@ function CanvasFrame(props: {
   const handledResync = useRef(0)
   /** 복원 신호 쪽의 같은 장치. 두 이펙트가 각자 든다 — 신호가 서로 다르다. */
   const handledRestore = useRef(0)
-  const { projectId, pageId, resyncToken, restoredToken } = props
+  const { projectId, pageId, resyncToken, restoredToken, restoredLead } = props
 
   /**
    * **서버가 준 페이지를 스토어에 놓고, 그러면서 잃은 것이 있으면 말한다.**
@@ -1289,8 +1302,12 @@ function CanvasFrame(props: {
     if (handledRestore.current === restoredToken) return
     handledRestore.current = restoredToken
     // 페이지가 없어도 신호를 소비한다 — 근거는 위 재연결 이펙트의 같은 자리에 있다.
-    // **두 이펙트가 같은 모양이라 고장도 같다.**
-    if (pageId === undefined) return
+    // **두 이펙트가 같은 모양이라 고장도 같다.** 그때도 **판을 비운 것으로 놓는다**(`clearPage`) — 남의 복원 배너는 페이지를 안
+    // 연 화면에도 서고, 그것을 푸는 것은 다시 실은 판뿐이다. 열린 페이지가 없는 화면은 비운 판이 곧 서버 것이다.
+    if (pageId === undefined) {
+      store.clearPage()
+      return
+    }
 
     let alive = true
     // 떠나면 끊는다 — 위 이펙트와 같다.
@@ -1299,7 +1316,7 @@ function CanvasFrame(props: {
       try {
         const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         if (!alive) return
-        applyServerPage(pageId, page, RESTORED_LEAD)
+        applyServerPage(pageId, page, restoredLead)
         // 앞서 이 페이지의 조회가 실패해 있었을 수도 있다. 복원으로 다시 생긴 페이지를
         // 오류 문장 아래 감춰 두지 않는다.
         setState({ status: 'ready' })
@@ -1315,7 +1332,8 @@ function CanvasFrame(props: {
       alive = false
       leave.abort()
     }
-  }, [api, projectId, pageId, store, applyServerPage, restoredToken])
+    // `restoredLead`는 신호와 함께만 바뀐다 — 그 값으로 다시 돌아도 위 `handledRestore`가 막는다.
+  }, [api, projectId, pageId, store, applyServerPage, restoredToken, restoredLead])
 
   return (
     <div

@@ -2846,6 +2846,18 @@
   color: #2a4a7a;
 }
 
+/* 남의 복원을 다시 읽는 단추. 문장 끝에 붙어 서므로 테두리 버튼이 아니라 글자다 —
+   `.wb-shell-export-toggle`과 같은 꼴이다. */
+.wb-shell-remote-reload {
+  font: inherit;
+  color: var(--wb-shell-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
 /* 내보내기(설계서 「HTML 정적 번들」). 셸 머리의 토글과 그 아래 떠서 보이는 요약이다.
    **떠 있는 상자로 두는 것이 요점이다** — 머리에 그대로 펼치면 목록이 길어질수록
    셸의 세 칸이 아래로 밀린다. */
