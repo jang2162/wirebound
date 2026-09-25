@@ -3420,6 +3420,12 @@
   gap: 8px;
 }
 
+/* 확정은 묻던 자리에서 **단추 한 높이(24px) 이상** 떨어진다 — 겹치지만 않는 거리(`gap` 8px)면 두 번 누르는 사이 손이 조금만
+   내려가도 확정에 닿는다. 줄 하나의 확정(아래 `-tokens-confirm`)과 같은 하한이다(재는 자: `build-test/tokens-confirm.test.ts` 의 «거리»). */
+.wb-shell-tokens-bulk > .wb-shell-project-danger {
+  margin-top: 16px;
+}
+
 .wb-shell-tokens-name {
   flex: 0 1 auto;
   font-weight: 600;
@@ -3441,8 +3447,12 @@
 }
 
 /* 줄 하나의 확정 — 만든 때 줄(`order: 1` · 폭 전부) **밑으로** 보내 오른쪽 끝에 세운다. 첫 줄에 두면 남는 폭에 따라 확정이
-   `폐기` 자리로 밀려 온다(`routes/tokens.tsx` 머리말 «더블클릭 한 번이 두 누름을 다 지나면 안 된다»). */
+   `폐기` 자리로 밀려 온다(`routes/tokens.tsx` 머리말 «더블클릭 한 번이 두 누름을 다 지나면 안 된다»).
+   **위 여백이 묻던 자리와의 거리를 정한다.** 좁은 폭에서 긴 이름의 `폐기`는 둘째 줄로 접혀 있다가, 누르면 그 줄에 만든 때 줄이
+   서고 확정은 바로 밑이다 — 여백 없이는 둘 사이가 줄 간격뿐이고 `align-items: baseline` 이라 글꼴 따라 그보다 좁다([Chrome] 폭
+   360–414 에서 6px). 위의 전부 폐기와 같은 하한(단추 한 높이 이상)을 준다. 재는 자: `build-test/tokens-confirm.test.ts` 의 «거리». */
 .wb-shell-tokens-confirm {
   order: 2;
   margin-left: auto;
+  margin-top: 18px;
 }
