@@ -1091,6 +1091,132 @@ describe('EditorStore의 마커 반영', () => {
         vi.useRealTimers()
       }
     })
+
+    // 사이 revision 이 **내 것**이면 프레임이 안 온다(발신 제외) — 그 revision 은 내 편집의 ack · 내 다른 번호 응답으로 들어온다.
+    // 그 자리에서 안 풀면 한도 뒤 받지 않은 것이 없는데 `gap`이 서고 번호가 끝내 안 뜬다.
+    it('사이 revision 이 내 편집이면 그 ack 뒤에 얹는다', () => {
+      vi.useFakeTimers()
+      try {
+        const store = new EditorStore({ nextOpId: () => 'op-1' })
+        store.loadPage('pg-1', twoChildren(), 7)
+        const EDIT_B: PatchOp[] = [{ op: 'replace', path: '/root/children/1/props/content', value: 'B2' }]
+        store.applyEdit(EDIT_B)
+        expect(store.nextRequest()?.baseSeq).toBe(7)
+
+        // 편집이 잠금 줄에서 게시 앞에 섰고, 게시 응답(HTTP)이 편집 ack(WS)보다 먼저 닿았다.
+        expect(store.applyMarkerChange('pg-1', { seq: 9, markerOps: MARK_FIRST })).toBe('waiting')
+        store.ackEdit('op-1', {
+          seq: 8,
+          revisionId: 'rv-8',
+          inverse: [{ op: 'replace', path: '/root/children/1/props/content', value: 'B' }],
+        })
+
+        expect(store.getState().headSeq).toBe(9)
+        expect(store.getState().document).toEqual(applyOps(applyOps(twoChildren(), EDIT_B), MARK_FIRST))
+        vi.advanceTimersByTime(MARKER_FRAME_WAIT_MS)
+        expect(store.getState().remoteStale).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('사이 revision 이 내 다른 번호 응답이면 그것을 얹은 뒤 이어서 얹는다', () => {
+      vi.useFakeTimers()
+      try {
+        const store = new EditorStore()
+        store.loadPage('pg-1', twoChildren(), 7)
+        const markSecond: PatchOp[] = [{ op: 'add', path: '/root/children/1/marker', value: 2 }]
+
+        expect(store.applyMarkerChange('pg-1', { seq: 9, markerOps: markSecond })).toBe('waiting')
+        expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: MARK_FIRST })).toBe('applied')
+
+        expect(store.getState().headSeq).toBe(9)
+        expect(store.getState().document?.root.children?.map((node) => [node.id, node.marker])).toEqual([
+          ['n_a', 1],
+          ['n_b', 2],
+        ])
+        vi.advanceTimersByTime(MARKER_FRAME_WAIT_MS)
+        expect(store.getState().remoteStale).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('사이 revision 이 방송도 오는 내 코멘트 삭제여도 응답에서 풀린다 — 뒤에 온 그 프레임은 이미 아는 번호다', () => {
+      // 곧바로 얹는 갈래 뒤에 푸는 축은 «… 내 다른 번호 응답이면 …»이 소유한다 — 이 케이스는 삭제 판의 뒤 프레임까지 잰다.
+      vi.useFakeTimers()
+      try {
+        const store = new EditorStore()
+        store.loadPage('pg-1', applyOps(twoChildren(), MARK_FIRST), 7)
+        const unmarkFirst: PatchOp[] = [{ op: 'remove', path: '/root/children/0/marker' }]
+        const markSecondAsOne: PatchOp[] = [{ op: 'add', path: '/root/children/1/marker', value: 1 }]
+
+        expect(store.applyMarkerChange('pg-1', { seq: 9, markerOps: markSecondAsOne })).toBe('waiting')
+        expect(store.applyMarkerChange('pg-1', { seq: 8, markerOps: unmarkFirst })).toBe('applied')
+        expect(store.applyRemoteChange('pg-1', { seq: 8, ops: unmarkFirst, warnings: [] }).result).toBe('skipped')
+
+        expect(store.getState().headSeq).toBe(9)
+        expect(store.getState().document?.root.children?.map((node) => [node.id, node.marker])).toEqual([
+          ['n_a', undefined],
+          ['n_b', 1],
+        ])
+        vi.advanceTimersByTime(MARKER_FRAME_WAIT_MS)
+        expect(store.getState().remoteStale).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // 복원은 판이 통째로 갈렸다는 신호다 — 옛 문서의 번호 경로를 얹을 문서가 없다. 「만들어진 페이지」 복원은 같은 id 로 head 를
+    // 0 부터 다시 세므로, 남으면 되살아난 문서에서 그 차례가 올 때 **남의 노드**에 붙는다.
+    const restoredPage = (): PageDocument => ({
+      version: CURRENT_DOCUMENT_VERSION,
+      root: {
+        id: 'n_root',
+        type: 'Container',
+        children: [
+          { id: 'n_x', type: 'Text', props: { content: 'X' } },
+          { id: 'n_y', type: 'Text', props: { content: 'Y' } },
+        ],
+      },
+    })
+
+    it('복원이 오면 버린다 — 되살아난 판에서 그 차례가 와도 옛 번호를 얹지 않는다', () => {
+      const store = new EditorStore()
+      store.loadPage('pg-1', twoChildren(), 5)
+      expect(store.applyMarkerChange('pg-1', { seq: 7, markerOps: MARK_FIRST })).toBe('waiting')
+
+      store.markRestored()
+      store.loadPage('pg-1', restoredPage(), 0)
+      for (let seq = 1; seq <= 6; seq += 1) {
+        store.applyRemoteChange('pg-1', {
+          seq,
+          ops: [{ op: 'replace', path: '/root/children/1/props/content', value: `Y${seq}` }],
+          warnings: [],
+        })
+      }
+
+      expect(store.getState().headSeq).toBe(6)
+      expect(store.getState().document?.root.children?.map((node) => node.marker)).toEqual([undefined, undefined])
+    })
+
+    it('복원이 오면 버린다 — 다시 실은 판에 한도가 `gap`을 세우지 않는다', () => {
+      // 버리는 축은 «복원이 오면 버린다 — 되살아난 판에서 …»가 소유한다 — 이 케이스는 한도 쪽 증상을 잰다.
+      vi.useFakeTimers()
+      try {
+        const store = new EditorStore()
+        store.loadPage('pg-1', twoChildren(), 5)
+        store.applyMarkerChange('pg-1', { seq: 7, markerOps: MARK_FIRST })
+
+        store.markRestored()
+        store.loadPage('pg-1', restoredPage(), 0)
+        vi.advanceTimersByTime(MARKER_FRAME_WAIT_MS)
+
+        expect(store.getState().remoteStale).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 
   it('그 revision 의 프레임이 응답보다 먼저 왔으면 다시 얹지 않는다 — 번호를 지운 응답이 «반영하지 못했다»가 되지 않는다', () => {

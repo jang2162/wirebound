@@ -444,7 +444,8 @@ export class EditorStore {
    * 관측 상태가 아니라 `#pumping`처럼 제어 값이라 `#state` 밖에 있다. 화면에 뜻하는 바는 «아직 안 얹었다»뿐이고, 끝내 못
    * 얹으면 `remoteStale`로 말한다.
    *
-   * **비우는 자리는 다른 페이지를 싣는 `loadPage` · `clearPage` · `reset`, 그리고 기다림이 끝나는 자리다**(`#settleWaitingMarkers`).
+   * **비우는 자리는 다른 페이지를 싣는 `loadPage` · `clearPage` · `reset` · 복원(`markRestored`), 그리고 기다림이 끝나는 자리다**
+   * (`#settleWaitingMarkers`).
    * 같은 페이지를 다시 실으면 남은 것을 그 판에 제 차례로 얹는다(`loadPage`의 끝).
    */
   #waitingMarkers: { seq: number; markerOps: PatchOp[] }[] = []
@@ -697,7 +698,9 @@ export class EditorStore {
    * 고친다**(jsdom: head 7 `[n_a, n_b]` → 남이 `n_b`를 맨 앞으로(8) → 게시(9)의 응답이 먼저 닿으면 화면 `n_a#1 n_b` · 서버
    * `n_b#1 n_a` · 낡음 없음).
    *
-   * **그래서 기다렸다가 제 차례에 얹는다** — 사이 프레임이 오면 `applyRemoteChange`가 그것을 얹은 뒤 이어서 얹는다. 곧바로
+   * **그래서 기다렸다가 제 차례에 얹는다** — 사이 revision 을 얹어 `headSeq`를 올리는 자리마다 이어서 얹는다. 남의 것이면
+   * 프레임(`applyRemoteChange`)이고, **내 것이면 프레임이 안 온다**(발신 제외) — 내 편집의 ack(`ackEdit`) · 내 다른 번호 응답(아래
+   * 곧바로 얹는 갈래)으로 온다. 한 자리라도 빠지면 받지 않은 것이 없는데 한도 뒤 `'gap'`이 서고 번호가 끝내 안 뜬다. 곧바로
    * 낡음(`'gap'`)을 세우고 다시 읽게 하는 길은 고르지 않았다: 그 프레임은 응답보다 **먼저 나갔고**(`MARKER_FRAME_WAIT_MS`)
    * 몇 ms 늦을 뿐이라, 그 길은 흔한 판마다 받지 못한 것이 없는데 «받지 못한 변경이 있다»를 세운다 — 낡음은 프레임이 풀지
    * 않으므로 새로고침까지 남는다. 서버가 게시에 `baseSeq`를 받아 그 문서의 경로를 내는 길도 안 닫는다 — 경로가 맞아도 사이
@@ -738,7 +741,10 @@ export class EditorStore {
       return 'waiting'
     }
 
-    return this.#applyMarkerOps(change) ? 'applied' : 'diverged'
+    if (!this.#applyMarkerOps(change)) return 'diverged'
+    // 이 번호가 기다리던 번호의 사이 revision 이었을 수 있다(위 «그래서 기다렸다가 …»).
+    this.#settleWaitingMarkers()
+    return 'applied'
   }
 
   /**
@@ -779,8 +785,9 @@ export class EditorStore {
   }
 
   /**
-   * 기다리던 번호 응답을 **제 차례가 온 만큼** 얹는다 — 프레임을 얹은 뒤(`applyRemoteChange`) · 같은 페이지를 다시 실은 뒤
-   * (`loadPage`) 부른다. `giveUp`을 주면 남은 것을 버리고 그 낡음을 세운다(한도를 넘겼다). 얹다가 던지면 `'diverged'`다.
+   * 기다리던 번호 응답을 **제 차례가 온 만큼** 얹는다 — `headSeq`를 올린 뒤마다 부른다: 프레임(`applyRemoteChange`) · 내 편집의
+   * ack(`ackEdit`) · 곧바로 얹은 번호 응답(`applyMarkerChange`) · 같은 페이지를 다시 실은 판(`loadPage`). `giveUp`을 주면 남은
+   * 것을 버리고 그 낡음을 세운다(한도를 넘겼다). 얹다가 던지면 `'diverged'`다.
    *
    * **갭 · 갈라짐 프레임에서는 부르지 않는다** — 그때 이미 선 낡음이 기다리던 번호의 몫까지 말하고(한도가 세우는 `'gap'`은 그보다
    * 약하거나 같다), 사이 revision 이 안 얹혔으니 기다리던 것도 제 차례가 안 온다.
@@ -993,6 +1000,9 @@ export class EditorStore {
    * 일은 그 사실을 말하는 것뿐이다.
    */
   readonly markRestored = (): void => {
+    // 기다리던 번호도 버린다 — 옛 판의 경로라 얹을 문서가 없다. 「만들어진 페이지」 복원은 같은 id 로 `headSeq`를 0 부터 다시
+    // 세므로, 남기면 되살아난 판에서 그 차례가 올 때 남의 노드에 붙고 · 안 오면 막 다시 실은 판에 한도가 `'gap'`을 세운다.
+    this.#dropWaitingMarkers()
     this.#markStale('restored')
   }
 
@@ -1308,6 +1318,8 @@ export class EditorStore {
           ? this.#state.editWarnings
           : warnings,
     })
+    // 내 편집이 기다리던 번호의 사이 revision 이었을 수 있다 — 그 프레임은 내게 안 온다(`applyMarkerChange`의 «그래서 기다렸다가 …»).
+    this.#settleWaitingMarkers()
   }
 
   /**
