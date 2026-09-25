@@ -257,7 +257,8 @@ export async function lockMemberTokens(trx: DbHandle, projectId: string, userId:
  * **남이 잡고 있는 행은 건너뛴다(`SKIP LOCKED`).** 제거가 먼저 잡은 행은 제 것이라 건너뛰지 않는다. 남이 잡고 있는 행은 그
  * 사이 발급된 토큰을 **쓰는 중인** 요청의 재확인(`KEY SHARE`)뿐이다 — 그 요청은 토큰 행을 쥔 채 이 제거가 지운 멤버 행을
  * 기다리므로, 기다리면 고리다. 건너뛴 토큰은 남는다(그 요청은 멤버 행이 없어 404) — «발급하자마자 쓰는 요청이 이 문장과
- * 겹친» 판뿐이다.
+ * 겹친» 판뿐이다. 남은 토큰이 멤버가 아닌 동안 하는 것: 그 프로젝트의 읽기 · 쓰기 404 · 세션 전용 자리 401 · 주인의 «API 토큰»
+ * 목록에 보인다(거둘 수 있다). **다시 멤버가 되면 되살아나지 않는다** — 넣는 자리가 먼저 지운다(`deleteStaleMemberTokens`).
  */
 export async function deleteMemberTokens(trx: DbHandle, projectId: string, userId: string): Promise<void> {
   assertLocking(trx, 'deleteMemberTokens')
@@ -267,6 +268,20 @@ export async function deleteMemberTokens(trx: DbHandle, projectId: string, userI
       eb.selectFrom('api_tokens').select('id').where('project_id', '=', projectId).where('user_id', '=', userId).forUpdate().skipLocked(),
     )
     .execute()
+}
+
+/**
+ * **멤버가 아닌 사람의 그 프로젝트 토큰을 지운다** — 멤버 추가(`repos/members.ts`의 `insertMember`)가 멤버 행을 넣기 전에 부른다.
+ * 그때 남은 토큰은 앞 멤버십의 것이다(`deleteMemberTokens`가 건너뛴 행).
+ *
+ * **기다리지 않는 고리가 없다.** 그 토큰으로 도는 요청은 인증의 `last_used_at` 갱신(행 잠금)이나 재확인의 `KEY SHARE`를 쥔다 —
+ * 이 문장은 그 요청이 끝나기를 기다린다. 그 요청은 이 추가가 쥔 것(프로젝트 행 `KEY SHARE` · 아직 안 넣은 멤버 행)을 기다리지
+ * 않는다: 멤버 행이 없어 재확인이 곧바로 404 다. 이 문장이 먼저 지우면 그 요청의 인증 갱신이 지운 행을 기다렸다가 못 찾아 401 이다.
+ * 잰 값은 `test/guard-in-lock.test.ts`의 «남은 토큰의 주인을 다시 넣으면».
+ */
+export async function deleteStaleMemberTokens(trx: DbHandle, projectId: string, userId: string): Promise<void> {
+  assertLocking(trx, 'deleteStaleMemberTokens')
+  await trx.deleteFrom('api_tokens').where('project_id', '=', projectId).where('user_id', '=', userId).execute()
 }
 
 /**

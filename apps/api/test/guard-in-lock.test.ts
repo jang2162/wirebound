@@ -1738,6 +1738,8 @@ const TOKEN_RECHECK = '"api_tokens" where "id" = $1 for key share'
 const OWNER_LOCK = '"role" = $2 for update'
 const MEMBER_SHARE = '"user_id" = $2 for share'
 const MEMBER_TOKENS_LOCK = 'order by "id" for update'
+/** 가드의 멤버 조회(`auth/roles.ts`의 `findMembership` — 잠그지 않는 판). 재확인의 `for share` 판도 이 글자를 담으므로 먼저 오는 것을 붙잡는다. */
+const GUARD_MEMBERSHIP = 'from "project_members" where "project_id" = $1 and "user_id" = $2'
 
 /**
  * **멤버 제거가 빠지는 사람의 그 프로젝트 토큰을 지운다**(`repos/members.ts`의 `removeMember` → `repos/api-tokens.ts`의
@@ -1762,6 +1764,8 @@ const MEMBER_TOKENS_LOCK = 'order by "id" for update'
  * | 프로젝트 삭제가 `lockProjectTokens`를 안 부른다 | «삭제가 먼저» · 아래 절의 «토큰으로 남을 빼는 중에 …» |
  * | `deleteMemberTokens`를 멤버 행 삭제 **앞으로**(owner 행 앞) | «제거가 도는 사이 발급된 토큰» 혼자 — 발급 토큰이 남아 다시 멤버가 되면 200 |
  * | `deleteMemberTokens`의 `SKIP LOCKED`를 뗀다 | «발급하자마자 쓰는 요청» 혼자 — 교착 +1 |
+ * | 멤버 추가가 `deleteStaleMemberTokens`를 안 부른다 | «남은 토큰의 주인을 다시 넣으면» 셋 — 되살림 `[200, 200]` · «요청이 먼저»의 쓰기 200 · «넣기가 먼저»의 쓰기가 줄에 안 선다. 교착은 0 그대로 |
+ * | 그 호출을 멤버 행 삽입 **뒤로** | «넣기가 먼저»의 카나리아(쓰기가 줄에 안 선다 — 판이 안 선 것이지 구분력이 아니다). 되살림은 여전히 막힌다 |
  *
  * «제거가 먼저»는 혼자 죽는 변조가 없다 — 제거의 토큰 자리 축은 «토큰으로 쓰는 owner»가 소유하고, 이 판은 뒤집은 방향을 세우려고
  * 둔다. 토큰을 안 지우던 판에서는 앞의 셋이 교착 0 이다(제거가 토큰 행을 안 잡는다) — 고리는 토큰을 지우는 자리가 여는 것이다.
@@ -1906,6 +1910,95 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
       expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(1)
     })
   }, 60_000)
+
+  /**
+   * **남은 토큰의 주인을 다시 넣으면 그 토큰은 되살아나지 않는다**(`repos/members.ts`의 `insertMember` — 넣기 전에 지운다). 위 판으로
+   * 토큰 하나를 남긴 뒤 다시 넣는다. 고치기 전에는 다시 넣자마자 그 토큰의 읽기 · 쓰기가 200 이었다.
+   *
+   * 두 방향의 겹침도 잰다 — 지우는 문장이 그 토큰으로 도는 요청과 고리를 만들지 않는다:
+   * - **요청이 먼저** — 남은 토큰의 쓰기가 인증을 지나 가드의 멤버 조회 앞에 선 사이 다시 넣고 푼다. 가드는 다시 넣은 멤버를 보고
+   *   지나가지만 커밋 순간의 재확인이 지운 토큰 행을 못 찾아 401 이다. (비멤버인 동안 그 토큰의 요청은 가드에서 404 라 재확인까지 못
+   *   간다 — 토큰 행을 쥔 채 이 추가를 기다리는 요청은 없다.)
+   * - **넣기가 먼저** — 다시 넣기를 멤버 행 삽입 앞(토큰을 지운 뒤)에 세우고 남은 토큰으로 쓴다. 그 쓰기가 인증의 `last_used_at` 갱신에서
+   *   지운 행 줄에 선 것을 본 뒤 푼다 — 쓰기 401.
+   *
+   * 대조(지우는 문장을 뗀 판): 두 겹침 다 교착 0 · 넣기 201 이고 토큰이 남는다(행 1 · «요청이 먼저»의 쓰기 200).
+   */
+  describe('남은 토큰의 주인을 다시 넣으면', () => {
+    async function leaveLateToken(ctx: ProxiedRealApi, fx: Awaited<ReturnType<typeof tokenFixture>>): Promise<string> {
+      const ownerLock = ctx.proxy.holdQuery(OWNER_LOCK)
+      const removal = track(ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, cookies: fx.alice.cookie }))
+      await ownerLock.held
+      const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.bob.cookie, payload: { name: '늦은 토큰' } })
+      expect(issued.statusCode, issued.body).toBe(201)
+      const late = `Bearer ${(issued.json() as { value: string }).value}`
+      const memberShare = ctx.proxy.holdQuery(MEMBER_SHARE)
+      const write = track(ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_late') }))
+      await memberShare.held
+      ownerLock.release()
+      expect((await removal.promise).status).toBe(204)
+      memberShare.release()
+      expect((await write.promise).status).toBe(404)
+      // 판이 섰는가 — 제거가 그 토큰을 건너뛰었다.
+      expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(1)
+      return late
+    }
+    const opsUrl = (fx: { projectId: string; pageId: string }) => `/api/projects/${fx.projectId}/pages/${fx.pageId}/ops`
+    const addOps = (_pageId: string, id: string) => ({ baseSeq: 0, ops: [{ op: 'add', path: '/root/children/-', value: { id, type: 'Text', props: {} } }] })
+    const readd = (ctx: ProxiedRealApi, fx: Awaited<ReturnType<typeof tokenFixture>>) =>
+      track(ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/members`, cookies: fx.alice.cookie, payload: { email: fx.bob.user.email, role: 'editor' } }))
+
+    it('그 토큰은 401 · 행 0 — 되살아나지 않는다', async () => {
+      await withProxiedRealApi(async (ctx) => {
+        const fx = await tokenFixture(ctx, 'editor')
+        const late = await leaveLateToken(ctx, fx)
+        expect((await readd(ctx, fx).promise).status).toBe(201)
+        const read = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fx.projectId}/pages/${fx.pageId}`, headers: { authorization: late } })
+        const write = await ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_back') })
+        expect([read.statusCode, write.statusCode]).toEqual([401, 401])
+        expect(await headSeqOf(fx.pageId)).toBe(0)
+        expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(0)
+      })
+    }, 60_000)
+
+    it('요청이 먼저 — 인증을 지난 남은 토큰의 쓰기가 가드 앞에 선 사이 다시 넣어도 교착 0 · 넣기 201 · 쓰기 401 · 행 0', async () => {
+      await withProxiedRealApi(async (ctx) => {
+        const fx = await tokenFixture(ctx, 'editor')
+        const late = await leaveLateToken(ctx, fx)
+        const deadlocksBefore = await deadlockCount()
+        const guard = ctx.proxy.holdQuery(GUARD_MEMBERSHIP)
+        const write = track(ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_mid') }))
+        await guard.held
+        const inserted = await readd(ctx, fx).promise
+        guard.release()
+        const written = await write.promise
+        expect(await deadlockCount()).toBe(deadlocksBefore)
+        expect([inserted.status, written.status]).toEqual([201, 401])
+        expect(await headSeqOf(fx.pageId)).toBe(0)
+        expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(0)
+      })
+    }, 60_000)
+
+    it('넣기가 먼저 — 토큰을 지운 넣기가 선 사이 남은 토큰으로 써도 교착 0 · 쓰기 401 · 넣기 201 · 행 0', async () => {
+      await withProxiedRealApi(async (ctx) => {
+        const fx = await tokenFixture(ctx, 'editor')
+        const late = await leaveLateToken(ctx, fx)
+        const deadlocksBefore = await deadlockCount()
+        const insert = ctx.proxy.holdQuery('insert into "project_members"')
+        const added = readd(ctx, fx)
+        await insert.held
+        const write = track(ctx.app.inject({ method: 'PATCH', url: opsUrl(fx), headers: { authorization: late }, payload: addOps(fx.pageId, 'n_after') }))
+        await settledOrQueued(write)
+        // 판이 섰는가 — 쓰기가 끝나지 않고 지운 토큰 행 줄에 섰다.
+        expect(write.done()).toBe(false)
+        insert.release()
+        const [written, inserted] = await Promise.all([write.promise, added.promise])
+        expect(await deadlockCount()).toBe(deadlocksBefore)
+        expect([written.status, inserted.status]).toEqual([401, 201])
+        expect(await bobTokenRows(fx.projectId, fx.bob.user.id)).toBe(0)
+      })
+    }, 60_000)
+  })
 })
 
 /**
