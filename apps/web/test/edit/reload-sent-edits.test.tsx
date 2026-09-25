@@ -20,8 +20,8 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { PageDocument } from '@wirebound/schema'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../../src/api/client'
-import type { PageDetail } from '../../src/api/types'
+import { ApiError, type ApiClient } from '../../src/api/client'
+import type { PageDetail, RestoreResult, SnapshotSummary } from '../../src/api/types'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
@@ -75,11 +75,11 @@ const swapped = (): PageDocument =>
 const RESTORED = { type: 'restored', projectId: PROJECT_ID, snapshotId: 's1', actor: { type: 'user', label: '밥' } } as const
 
 /** 밥이 끝에 `Heading`을 넣은 revision 의 프레임. */
-const BOB_ADDS = (seq: number) =>
+const BOB_ADDS = (seq: number, pageId: string = PAGE_ID) =>
   ({
     type: 'page-changed',
     projectId: PROJECT_ID,
-    pageId: PAGE_ID,
+    pageId,
     seq,
     ops: [{ op: 'add', path: '/root/children/-', value: { id: 'n-bob', type: 'Heading', props: {} } }],
     warnings: [],
@@ -114,7 +114,7 @@ interface Held {
   reject: (error: unknown) => void
 }
 
-async function mount(options: { immediate?: (pageId: string) => PageDetail | undefined } = {}) {
+async function mount(options: { immediate?: (pageId: string) => PageDetail | undefined; api?: Partial<ApiClient> } = {}) {
   const sockets: FakeSocket[] = []
   const scheduled: (() => void)[] = []
   const setup: RealtimeSetup = {
@@ -143,7 +143,7 @@ async function mount(options: { immediate?: (pageId: string) => PageDetail | und
     if (now !== undefined) return Promise.resolve(now)
     return new Promise<PageDetail>((resolve, reject) => held.push({ pageId, resolve, reject }))
   })
-  await openPage(pair(), { realtime: setup, apiOverrides: { getPage } })
+  await openPage(pair(), { realtime: setup, apiOverrides: { ...options.api, getPage } })
   act(() => {
     sockets[0]?.onopen?.()
   })
@@ -352,6 +352,86 @@ describe('편집은 큐의 주인 페이지로 나간다', () => {
     )
     expect(view.getPage).toHaveBeenCalledTimes(2)
     expect(view.patches().map((patch) => patch.pageId)).toEqual([PAGE_ID, OTHER_PAGE_ID])
+  })
+})
+
+/**
+ * **떠나며 버린 편집은 전부 센다**(`EditorStore.clearPage`의 반환 · `abandonedUnsent`). 답을 기다리는 편집 뒤에 쌓인 편집은 서버에 한 번도
+ * 안 갔다 — 떠나는 순간 말하고(`leftUnsentNotice`), 기다리던 편집이 거절되거나 답을 못 받으면 둘을 합쳐 말한다(`leftBehindNotice`).
+ */
+describe('떠나며 버린 편집의 수', () => {
+  const LEFT_UNSENT = '떠난 페이지에서 아직 보내지 않은 편집 1개는 저장되지 않았습니다 — 그 페이지를 다시 열어 확인하세요.'
+
+  /** «아래로»를 보내 답을 기다리는 채 «위로»를 큐에 세우고 다른 페이지로 옮긴다. */
+  async function leaveWithQueue() {
+    const view = await mount({ immediate: (pageId) => (pageId === OTHER_PAGE_ID ? pageDetail(pageId, pair()) : undefined) })
+    const sent = await view.moveDown()
+    const tree = screen.getByRole('region', { name: '구조 트리' })
+    fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '위로' }))
+    await act(async () => {})
+    expect(view.patches()).toHaveLength(1)
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Text', 'Divider']))
+    return { view, sent }
+  }
+
+  it('안 보낸 편집은 떠나는 순간 말한다 — 답을 기다리던 편집이 저장돼도 그대로다', async () => {
+    const { view, sent } = await leaveWithQueue()
+    expect(alertText()).toBe(LEFT_UNSENT)
+
+    view.ack(sent, HEAD_SEQ + 1)
+    await act(async () => {})
+
+    expect(alertText()).toBe(LEFT_UNSENT)
+    expect(view.patches()).toHaveLength(1)
+  })
+
+  it('답을 기다리던 편집이 거절되면 보낸 것과 안 보낸 것을 합쳐 말한다', async () => {
+    const { view, sent } = await leaveWithQueue()
+
+    view.refuse(sent)
+    await act(async () => {})
+
+    expect(alertText()).toBe(
+      '페이지가 이미 변경되었습니다 — 떠난 페이지에서 보낸 편집 1개와 보내지 않은 편집 1개가 저장되지 않았습니다. 그 페이지를 다시 열어 확인하세요.',
+    )
+  })
+
+  it('답을 기다리던 편집의 답을 못 받으면 모른다고 말하고 안 보낸 것을 함께 센다', async () => {
+    const { view } = await leaveWithQueue()
+
+    // 연결이 끊기면 채널이 답을 기다리던 편집을 실패시킨다 — 서버에 닿았는지 모른다.
+    view.reconnect()
+    await act(async () => {})
+
+    expect(alertText()).toBe(
+      '떠난 페이지에서 보낸 편집 1개는 답을 받지 못해 서버에 반영됐는지 알 수 없고, 보내지 않은 편집 1개는 저장되지 않았습니다 — ' +
+        '그 페이지를 다시 열어 확인하세요.',
+    )
+  })
+
+  it('떠남의 통지는 또 옮겨도 남는다 — 판을 비우는 자리가 지우지 않는다', async () => {
+    const { view } = await leaveWithQueue()
+    expect(alertText()).toBe(LEFT_UNSENT)
+
+    fireEvent.click(screen.getByRole('link', { name: '회원 목록' }))
+    await waitFor(() => expect(view.held).toHaveLength(1))
+
+    expect(alertText()).toBe(LEFT_UNSENT)
+  })
+
+  it('떠난 뒤 온 거절의 통지도 또 옮겨도 남는다', async () => {
+    const { view, sent } = await leaveWithQueue()
+    view.refuse(sent)
+    await act(async () => {})
+    const refused = alertText()
+    expect(refused).toContain('보낸 편집 1개와 보내지 않은 편집 1개가 저장되지 않았습니다')
+
+    fireEvent.click(screen.getByRole('link', { name: '회원 목록' }))
+    await waitFor(() => expect(view.held).toHaveLength(1))
+
+    expect(alertText()).toBe(refused)
   })
 })
 
@@ -790,5 +870,205 @@ describe('다시 읽는 창 안에 온 revision', () => {
     await act(async () => {})
 
     expect(statusText()).not.toContain('받지 못한 변경')
+  })
+})
+
+/** 내 복원이 부르는 스냅샷 하나와 그 결과 — 팝오버가 그리는 데 쓰는 값만 맞춘다(`test/shell/snapshots-panel.test.tsx`). */
+const SNAPSHOT: SnapshotSummary = {
+  id: 's1',
+  tag: 'v1',
+  description: null,
+  createdBy: 'u1',
+  createdByName: '홍길동',
+  createdAt: '2026-08-12T09:00:00.000Z',
+  payloadBytes: 10,
+}
+const RESTORE_RESULT: RestoreResult = {
+  summary: {
+    menu: { created: 0, updated: 0, deleted: 0 },
+    pages: { created: 0, metaUpdated: 0, schemaChanged: 1, schemaUnchanged: 0, deleted: 0 },
+    comments: { created: 0, updated: 0, deleted: 0 },
+    layouts: { themeRefChanged: 0 },
+  },
+  safetySnapshot: { id: 's9', tag: '복원 전' },
+  themes: [],
+}
+
+/**
+ * **판을 싣는 입구마다 창 안의 남의 프레임 · 내 ack 가 옛 답 뒤에 남는다**(`EditorStore.beginPageLoad`의 표). 판은 늘 «입구가 조회를 시작
+ * → 그 사이 revision 이 옴 → 조회의 답이 그 revision 앞의 판»이다.
+ *
+ * | 입구 | 남의 프레임 | 내 ack |
+ * |---|---|---|
+ * | 페이지 열기 | «열기 — …남의 프레임» | «열기 — 떠났다 돌아오는 …» |
+ * | 재연결 재조회 | «창 안에 얹힌 남의 프레임이 옛 답에 지워지지 않는다»(위 묶음) | «재연결 재조회의 판에도 …»(위 묶음) |
+ * | 배너 «다시 불러오기» | «배너 — …» | «실린 판이 내 편집의 커밋 앞을 읽었으면 …»(위 묶음) |
+ * | 편집 실패 수습 | «수습 — …» | **서지 않는다** — 전송 루프가 수습을 기다리는 동안(`await recover`) 편집을 안 낸다 |
+ * | 내 복원 | «내 복원 — …» 둘 | |
+ *
+ * 열기가 따로 걸리는 입구다 — 여는 길은 조회 전에 판을 비우므로 그 페이지의 revision 이 «열린 페이지 아님»으로 빠지기 쉽다
+ * (`EditorStore`의 `#openingPageId`가 그 창을 적는다). 나머지는 같은 페이지를 다시 싣는 입구다.
+ *
+ * 복원 신호가 조회 도중에 오는 판도 입구마다 다르게 아프다 — 여는 조회의 답을 버리면 캔버스가 «불러오는 중»에 머물고, 수습의 답을 버리면
+ * 거절된 편집이 화면에 남는다. 그래서 답은 싣고 복원 배너만 둔다(«…복원이 알려지면 …» 둘).
+ */
+describe('입구마다 — 창 안의 revision 이 옛 답 뒤에 남는다', () => {
+  it('열기 — 여는 조회가 읽은 뒤 온 그 페이지의 남의 프레임이 실린 판에 남는다', async () => {
+    const view = await mount()
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(BOB_ADDS(HEAD_SEQ + 1, OTHER_PAGE_ID))
+
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(OTHER_PAGE_ID, pair()))
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider', 'Heading'])
+    expect(statusText()).not.toContain('받지 못한 변경')
+    // 다음 편집은 그 번호 위에서 나간다 — 옛 번호로 나가 409 로 취소되지 않는다.
+    const next = await view.moveDown()
+    expect(next).toMatchObject({ pageId: OTHER_PAGE_ID, baseSeq: HEAD_SEQ + 1 })
+  })
+
+  it('열기 — 다른 페이지의 프레임은 여는 페이지의 판에 얹지 않는다', async () => {
+    const view = await mount()
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(BOB_ADDS(HEAD_SEQ + 1, PAGE_ID))
+
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(OTHER_PAGE_ID, pair()))
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider'])
+  })
+
+  it('열기 — 떠났다 돌아오는 여는 조회의 창에 온 내 편집의 ack 가 실린 판에 남는다', async () => {
+    const view = await mount({ immediate: (pageId) => (pageId === OTHER_PAGE_ID ? pageDetail(pageId, pair()) : undefined) })
+    const sent = await view.moveDown()
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Text', 'Divider']))
+    fireEvent.click(screen.getByRole('link', { name: '회원 목록' }))
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.ack(sent, HEAD_SEQ + 1)
+    await act(async () => {})
+
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Divider', 'Text'])
+    expect(statusText()).not.toContain('받지 못한 변경')
+  })
+
+  it('배너 — 단추의 조회가 읽은 뒤 온 남의 프레임이 실린 판에 남는다', async () => {
+    const view = await mount()
+    view.push(RESTORED)
+    fireEvent.click(reloadButton())
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(BOB_ADDS(HEAD_SEQ + 1))
+
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider', 'Heading'])
+    expect(statusText()).not.toContain('받지 못한 변경')
+  })
+
+  it('수습 — 수습의 조회가 읽은 뒤 온 남의 프레임이 실린 판에 남는다', async () => {
+    const view = await mount()
+    const sent = await view.moveDown()
+    view.refuse(sent, LOCKED)
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(BOB_ADDS(HEAD_SEQ + 1))
+
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider', 'Heading'])
+    expect(statusText()).not.toContain('받지 못한 변경')
+  })
+
+  /**
+   * 복원 신호보다 앞에 시작한 조회의 답은 복원 앞을 읽었을 수 있다 — 싣되(여는 조회면 캔버스가 서야 하고, 수습이면 거절된 편집을 걷는 유일한
+   * 답이다) 복원 배너를 걷지 않는다(`EditorStore`의 `#restoredAt`).
+   */
+  it('열기 — 여는 조회가 도는 중에 복원이 알려지면 판을 싣고 복원 배너를 둔다', async () => {
+    const view = await mount()
+    fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(RESTORED)
+
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(OTHER_PAGE_ID, pair()))
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider'])
+    expect(reloadButton()).toBeTruthy()
+  })
+
+  it('수습 — 수습의 조회가 도는 중에 복원이 알려지면 거절된 편집을 걷고 복원 배너를 둔다', async () => {
+    const view = await mount()
+    const sent = await view.moveDown()
+    view.refuse(sent, LOCKED)
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    view.push(RESTORED)
+
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+    })
+    await act(async () => {})
+
+    expect(structureTypes()).toEqual(['Page', 'Text', 'Divider'])
+    expect(reloadButton()).toBeTruthy()
+  })
+
+  describe('내 복원', () => {
+    /** 스냅샷 팝오버에서 되돌린다 — 복원 재조회(`restoredToken`)가 붙잡힌 채 선다. */
+    async function restoring() {
+      const view = await mount({ api: { listSnapshots: async () => [SNAPSHOT], restoreSnapshot: async () => RESTORE_RESULT } })
+      fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+      await screen.findByText('v1')
+      fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+      fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+      await waitFor(() => expect(view.held).toHaveLength(1))
+      return view
+    }
+
+    it('복원 재조회가 읽은 뒤 온 남의 프레임이 실린 판에 남는다', async () => {
+      const view = await restoring()
+      view.push(BOB_ADDS(HEAD_SEQ + 1))
+
+      await act(async () => {
+        view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+      })
+      await act(async () => {})
+
+      expect(structureTypes()).toEqual(['Page', 'Text', 'Divider', 'Heading'])
+      expect(statusText()).not.toContain('받지 못한 변경')
+    })
+
+    it('복원 재조회가 읽은 뒤 ack 된 내 편집이 실린 판에 남는다', async () => {
+      const view = await restoring()
+      const sent = await view.moveDown()
+      view.ack(sent, HEAD_SEQ + 1)
+      await act(async () => {})
+
+      await act(async () => {
+        view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+      })
+      await act(async () => {})
+
+      expect(structureTypes()).toEqual(['Page', 'Divider', 'Text'])
+      expect(statusText()).not.toContain('받지 못한 변경')
+    })
   })
 })

@@ -120,13 +120,28 @@ function unknownNotice(
  * **떠난 페이지에서 보낸 편집이 거절됐을 때의 문장**(전송 루프의 `abandonedOnLeave`). 서버가 커밋 전에 거절했으면(`refusedBeforeCommit`)
  * 저장되지 않은 것이고, 그 밖은 반영됐는지 모른다(`unknownNotice`와 같은 판정). 둘 다 그 페이지를 다시 열어 보라고 한다 — 이 화면은 그
  * 페이지를 안 들고 있다.
+ *
+ * **그 편집과 함께 버린 안 보낸 편집(`unsent`)을 합쳐 센다** — 떠나는 순간 그 수를 말했지만(`leftUnsentNotice`) 통지 자리가 하나라 이 문장이
+ * 그 말을 덮는다. 보낸 편집은 늘 하나다(in-flight 는 하나).
  */
-function leftBehindNotice(caught: unknown): string {
+function leftBehindNotice(caught: unknown, unsent: number): string {
   const failure = toFailure(caught, EDIT_UNKNOWN_FAILURE)
   if (refusedBeforeCommit(caught) && failure.kind === 'message') {
-    return `${failure.message} — 떠난 페이지에서 보낸 편집 1개가 저장되지 않았습니다. 그 페이지를 다시 열어 확인하세요.`
+    const lost = unsent > 0 ? `보낸 편집 1개와 보내지 않은 편집 ${unsent}개가` : '보낸 편집 1개가'
+    return `${failure.message} — 떠난 페이지에서 ${lost} 저장되지 않았습니다. 그 페이지를 다시 열어 확인하세요.`
   }
-  return '떠난 페이지에서 보낸 편집 1개는 답을 받지 못해 서버에 반영됐는지 알 수 없습니다 — 그 페이지를 다시 열어 확인하세요.'
+  const also = unsent > 0 ? `없고, 보내지 않은 편집 ${unsent}개는 저장되지 않았습니다` : '없습니다'
+  return `떠난 페이지에서 보낸 편집 1개는 답을 받지 못해 서버에 반영됐는지 알 수 ${also} — 그 페이지를 다시 열어 확인하세요.`
+}
+
+/**
+ * **떠나며 버린 안 보낸 편집의 문장** — 페이지를 옮기는 순간 말한다(`routes/editor.tsx`의 `tellLeft`). 앞 편집의 답을 기다리는 동안 쌓인
+ * 편집은 서버에 한 번도 안 갔다. **보내고 떠나지 않는다** — 그 편집은 답을 기다리는 앞 편집의 결과 위에서 지어졌고(앞 편집이 거절되면 낼 수
+ * 없다), 떠난 페이지는 이 탭이 프레임을 얹지 않아 남의 편집 위로 옮길 바탕이 없다. 떠난 뒤 그 페이지로 돌아오면 늦은 답과 다시 연 판을
+ * 맞춰야 한다 — 열려 있지 않은 페이지에 편집을 내는 새 갈래다.
+ */
+export function leftUnsentNotice(unsent: number): string {
+  return `떠난 페이지에서 아직 보내지 않은 편집 ${unsent}개는 저장되지 않았습니다 — 그 페이지를 다시 열어 확인하세요.`
 }
 
 /** 결과를 모르는 판에서 다시 불러오지도 못했을 때, 서버가 이유를 주지 않으면 쓸 문장(`unknownNotice`의 `reason`). */
@@ -281,7 +296,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         if (!stillOpen()) leave.abort()
       })
       // 판을 싣는 입구다 — 세대를 받는다(`EditorStore.beginPageLoad`의 표).
-      const ticket = store.beginPageLoad()
+      const ticket = store.beginPageLoad(pageId)
       try {
         const page = await api.getPage(projectId, pageId, { cancel: leave.signal })
         // **떠났으면 싣지 않는다** — 끊기 전에 답이 와 있었을 수 있다. 버린 편집의 통지도 이제 이 화면의 말이 아니다.
@@ -438,7 +453,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           if (store.wasAbandoned(request.clientOpId) && toFailure(caught, EDIT_UNKNOWN_FAILURE).kind !== 'signed-out') {
             // **페이지를 떠나며 버렸으면 그 거절은 말한다**(`EditorStore.abandonedOnLeave`) — 떠나기 전 화면에는 그 편집이 서 있었고, 떠날
             // 때는 아무 말도 안 했다. 수습(다시 읽기 · 큐 비우기)은 여전히 안 한다 — 그 판은 이 화면에 없다.
-            if (store.abandonedOnLeave(request.clientOpId)) store.setEditFailure({ kind: 'message', message: leftBehindNotice(caught) })
+            // 판을 비우는 자리가 지우지 않는 통지로 세운다(`EditorStore.setLeaveNotice`) — 그 뒤에 또 옮겨도 남는다.
+            if (store.abandonedOnLeave(request.clientOpId)) store.setLeaveNotice(leftBehindNotice(caught, store.abandonedUnsent()))
             continue
           }
           // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다.**

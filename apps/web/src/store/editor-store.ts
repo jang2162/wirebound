@@ -367,6 +367,9 @@ export interface RemoteChange {
   dropped: PendingEdit[]
 }
 
+/** 복원 신호 앞에 시작한 조회의 판에 두는 낡음(`loadPage`). */
+const RESTORED_STALE: RemoteStale = { reason: 'restored' }
+
 /** 아무것도 안 버린 결과. **참조를 고정한다** — `NO_WARNINGS`와 같은 이유다. */
 const NO_DROPPED: PendingEdit[] = []
 
@@ -499,6 +502,17 @@ export class EditorStore {
   /** 그 편집을 **페이지를 떠나며** 버렸는가(`clearPage` · `reset` · 다른 페이지의 `loadPage`) — 같은 페이지를 다시 실으며 버린 것과 가른다. */
   #abandonedLeaving = false
 
+  /** 떠나며 그 편집과 함께 버린 **안 보낸** 편집의 수 — 그 편집의 거절을 말할 때 합쳐 센다(`abandonedUnsent`). */
+  #abandonedUnsent = 0
+
+  /**
+   * **떠나며 버린 편집을 말하는 통지**(`setLeaveNotice`) — 판을 비우는 자리(`clearPage` · `reset`)가 이것은 지우지 않는다. 그 통지는 떠난
+   * 뒤의 화면에 서는 것이 요점이다 — 옮겨 간 페이지 · 프로젝트를 여는 비우기가 곧바로 지우면 한 번도 안 보인다. 프로젝트를 옮기면 캔버스의
+   * 여는 이펙트(`routes/editor.tsx`의 `CanvasFrame`)가 판을 비우며 통지를 세우고, 셸의 `reset`은 같은 커밋에서 그 **뒤에** 돈다(React 는 자식의
+   * 이펙트를 먼저 돌린다).
+   */
+  #leaveNotice: EditFailure | null = null
+
   /**
    * **큐를 통째로 갈아 낀 수** — 판을 싣거나(`loadPage`) 비울(`clearPage` · `reset`) 때마다 오른다. 그 뒤의 큐는 다른 판 위의 것이다.
    * 나간 편집이 어느 큐에서 나갔는지(`#sentQueue`)와 견줘, 그 실패가 지금 큐의 일인지 가른다(`sentFromOpenQueue`).
@@ -518,17 +532,34 @@ export class EditorStore {
   #pageLoadSettled = 0
 
   /**
-   * **다시 읽는 창 안에서 온 revision** — 남의 프레임 · 내 ack · 번호 응답. 그것이 올 때까지 시작한 조회 수(`begun`) · 번호 · 그 revision 의
-   * ops(모르면 `null`)를 든다. 세대 `t`의 조회가 시작된 뒤에 온 것은 `begun >= t`다 — 그 조회는 그 커밋 앞을 읽었을 수 있다. 판을 실으면
-   * 그 판 뒤의 것을 제 차례에 얹는다(`#replayWindow`).
+   * **여는 조회가 도는 페이지** — 열린 페이지가 아닌 페이지를 읽기 시작했다(`beginPageLoad` — 여는 입구는 조회 전에 판을 비운다). 그 조회가
+   * 도는 동안 온 그 페이지의 revision 을 창에 적는다(`#windowChanges`) — 룸이 프로젝트라 여는 동안에도 그 페이지의 프레임 · 늦은 ack 가
+   * 온다. 판을 싣거나 비우면 지운다.
+   */
+  #openingPageId: string | null = null
+
+  /**
+   * **마지막 복원 신호가 왔을 때까지 시작한 조회 수**(`markRestored`). 이 수 이하의 세대가 읽은 판은 복원 앞의 판본일 수 있다 — 그 답을
+   * 실어도 낡음(`'restored'`)을 그대로 둔다(`loadPage`).
+   */
+  #restoredAt = 0
+
+  /**
+   * **다시 읽는 창 안에서 온 revision** — 남의 프레임 · 내 ack · 번호 응답. 그것이 올 때까지 시작한 조회 수(`begun`) · 페이지 · 번호 · 그
+   * revision 의 ops(모르면 `null`)를 든다. 세대 `t`의 조회가 시작된 뒤에 온 것은 `begun >= t`다 — 그 조회는 그 커밋 앞을 읽었을 수 있다.
+   * 판을 실으면 그 페이지 · 그 판 뒤의 것을 제 차례에 얹는다(`#replayWindow`).
+   *
+   * **적는 페이지는 열린 페이지와 여는 페이지다**(`#openingPageId`) — 여는 길은 조회 전에 판을 비우므로(`clearPage`) 열린
+   * 페이지만 적으면 여는 조회의 창이 빈다(Chrome: 2쪽에서 1쪽을 여는 조회가 읽힌 뒤 밥이 1쪽에 넣은 글이 옛 답에 조용히 빠지고, 다음
+   * 편집이 409 로 취소됐다).
    *
    * **조회가 시작되기 전에 온 것은 들지 않는다** — 서버는 커밋한 뒤 방송 · ack 를 내므로 그 뒤에 시작한 조회는 그 커밋을 읽는다.
    *
-   * **판본이 갈리면 버린다** — 번호는 판본 안에서만 견줄 수 있다(복원이 되살린 페이지는 `head_seq`를 0 부터 다시 센다). 다른 판을 싣거나
-   * 비우면(`loadPage`의 다른 페이지 · `clearPage` · `reset`) · 복원이 알려지면(`markRestored`) 비우고, 판을 정한 세대보다 앞에 시작한
-   * 조회의 몫은 정할 때 버린다(`settlePageLoad`).
+   * **판본이 갈리면 버린다** — 번호는 판본 안에서만 견줄 수 있다(복원이 되살린 페이지는 `head_seq`를 0 부터 다시 센다). 다른 페이지를 싣거나
+   * 판을 비우면(`loadPage` · `clearPage` · `reset`) · 복원이 알려지면(`markRestored`) 그 페이지 밖의 것 · 전부를 버리고, 판을 정한 세대보다
+   * 앞에 시작한 조회의 몫은 정할 때 버린다(`settlePageLoad`).
    */
-  #windowChanges: { begun: number; seq: number; ops: PatchOp[] | null }[] = []
+  #windowChanges: { pageId: string; begun: number; seq: number; ops: PatchOp[] | null }[] = []
 
   constructor(options: EditorStoreOptions = {}) {
     // `crypto.randomUUID`를 여기서 한 번만 참조한다. 이 줄이 이 파일의 유일한 전역
@@ -590,8 +621,12 @@ export class EditorStore {
     // 기다리던 번호 응답은 **이 페이지의 것일 때만** 남는다 — 아래 `#settleWaitingMarkers`.
     const samePage = this.#state.openPageId === pageId
     if (!samePage) this.#dropWaitingMarkers()
-    // 창 안에 온 revision 은 같은 페이지의 같은 판본일 때만 얹는다(`#windowChanges`).
-    if (!samePage) this.#windowChanges = []
+    // 창 안에 온 revision 은 이 페이지의 것만 얹는다(`#windowChanges`) — 여는 페이지의 창(`#openingPageId`)도 여기서 얹힌다.
+    this.#windowChanges = this.#windowChanges.filter((change) => change.pageId === pageId)
+    this.#openingPageId = null
+    // **복원 신호보다 앞에 시작한 조회의 판이면 복원 배너를 둔다**(`#restoredAt`) — 그 판은 복원 앞을 읽었을 수 있다. 창도 얹지 않는다 — 신호
+    // 뒤에 온 revision 은 되살린 판본의 번호라 옛 판본의 판에 얹으면 남의 노드에 얹힌다.
+    const beforeRestore = ticket !== undefined && ticket <= this.#restoredAt
     this.#apply({
       openPageId: pageId,
       document,
@@ -615,8 +650,9 @@ export class EditorStore {
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
       // **낡음도 함께 푼다.** 이 자리가 페이지 상태를 서버 것으로 **놓는** 곳이므로, 여기를
       // 지나온 문서는 정의상 낡지 않았다. 안 풀면 *"새로고침하세요"*가 새로고침한 뒤에도
-      // 남는다 — *"고쳤는데 고쳤다고 말하지 않는"* 부류다.
-      remoteStale: null,
+      // 남는다 — *"고쳤는데 고쳤다고 말하지 않는"* 부류다. **복원 신호 앞에 시작한 조회의 판만 예외다**(위 `beforeRestore`) — 푸는
+      // 쪽이 복원 앞 판을 최신처럼 보이게 한다(스토어: 창 안 복원 신호 → 복원 앞 답 → 낡음 `null`).
+      remoteStale: beforeRestore ? RESTORED_STALE : null,
       documentLoads: this.#state.documentLoads + 1,
     })
     // **다시 읽은 판에도 기다리던 번호 응답을 제 차례에 얹는다**(`applyMarkerChange`의 «내 다음 번호가 아니면 …») — 아래 창 얹기
@@ -626,7 +662,7 @@ export class EditorStore {
     // 없다 — 남의 프레임은 다시 오지 않고, 내 편집은 큐에서 이미 빠졌다(방송은 낸 연결을 뺀다). 안 얹으면 `headSeq`가 거꾸로 간 채
     // 옛 판이 서고 다음 편집이 409 로 취소된다(Chrome: 배너 단추의 조회 답을 2.5s 붙잡은 사이 친 글이 ack 된 뒤 옛 답이 실려 캔버스
     // «원문» · 서버 그 글). 번호 응답은 그 뒤에 제 차례를 찾는다 — 얹은 만큼 `headSeq`가 올랐다.
-    if (samePage && ticket !== undefined) this.#replayWindow(ticket)
+    if (ticket !== undefined && !beforeRestore) this.#replayWindow(pageId, ticket)
     if (samePage) this.#settleWaitingMarkers()
     return pending
   }
@@ -638,10 +674,12 @@ export class EditorStore {
    * 얹는 ops 는 서버가 그 번호로 기록한 것 그대로라 경로를 다시 짓지 않는다 — 그 번호 바로 앞의 판(이 판) 위에서 서버가 적용한 것이다.
    * 큐는 비어 있다(`loadPage`가 방금 비웠다) — 바탕과 화면이 함께 간다.
    */
-  #replayWindow(ticket: number): void {
+  #replayWindow(pageId: string, ticket: number): void {
     const { baseDocument, headSeq, selectedNodeId } = this.#state
     if (baseDocument === null) return
-    const changes = this.#windowChanges.filter((change) => change.begun >= ticket).sort((a, b) => a.seq - b.seq)
+    const changes = this.#windowChanges
+      .filter((change) => change.pageId === pageId && change.begun >= ticket)
+      .sort((a, b) => a.seq - b.seq)
     let document = baseDocument
     let seq = headSeq
     let stale: RemoteStale['reason'] | null = null
@@ -673,9 +711,9 @@ export class EditorStore {
    * **한도(`WINDOW_CHANGES_LIMIT`)를 넘으면 앞의 것부터 버린다** — 실패로 끝나 판을 안 정한 조회가 있으면 «도는 조회»가 다음 판까지
    * 남는다. 버린 번호가 필요한 판은 얹다가 이어지지 않아 `'gap'`을 세운다(조용히 틀리지 않는다).
    */
-  #noteWindow(seq: number, ops: PatchOp[] | null): void {
-    if (this.#pageLoadsBegun <= this.#pageLoadSettled) return
-    this.#windowChanges.push({ begun: this.#pageLoadsBegun, seq, ops })
+  #noteWindow(pageId: string | null, seq: number, ops: PatchOp[] | null): void {
+    if (pageId === null || this.#pageLoadsBegun <= this.#pageLoadSettled) return
+    this.#windowChanges.push({ pageId, begun: this.#pageLoadsBegun, seq, ops })
     if (this.#windowChanges.length > WINDOW_CHANGES_LIMIT) this.#windowChanges = this.#windowChanges.slice(-WINDOW_CHANGES_LIMIT)
   }
 
@@ -700,9 +738,14 @@ export class EditorStore {
    * | 편집 실패 수습 | `edit/use-edit-commit.tsx`의 `recover` |
    *
    * **판을 싣는 입구가 늘면 이 표에 줄을 더하고 세대를 받게 한다** — 안 받는 입구의 답은 세대를 모른 채 새 판을 덮는다.
+   *
+   * **읽는 페이지를 받는다** — 열린 페이지가 아니면(여는 입구는 조회 전에 판을 비운다) 그 페이지가 여는 페이지다(`#openingPageId`). 그 창에
+   * 온 revision 도 적어야 실린 판 뒤에 얹힌다 — 입구마다 창 안의 남의 프레임 · 내 ack 가 옛 답 뒤에 남는지를 재는 판은
+   * `test/edit/reload-sent-edits.test.tsx`의 «입구마다» 묶음이다.
    */
-  readonly beginPageLoad = (): number => {
+  readonly beginPageLoad = (pageId: string): number => {
     this.#pageLoadsBegun += 1
+    if (this.#state.openPageId !== pageId) this.#openingPageId = pageId
     return this.#pageLoadsBegun
   }
 
@@ -783,12 +826,19 @@ export class EditorStore {
    */
   readonly abandonedOnLeave = (clientOpId: string): boolean => clientOpId === this.#abandonedOpId && this.#abandonedLeaving
 
-  /** 나간 편집을 판째 버리면 적는다(`#abandonedOpId`). */
+  /**
+   * **떠나며 판째 버린 나간 편집과 함께 버린 안 보낸 편집의 수**(`#abandonedUnsent`). 그 편집의 거절을 말하는 문장이 합쳐 센다 — 안 보낸
+   * 것은 떠나는 순간 이미 말했지만, 통지 자리가 하나라 거절의 문장이 그 말을 덮는다.
+   */
+  readonly abandonedUnsent = (): number => this.#abandonedUnsent
+
+  /** 나간 편집을 판째 버리면 적는다(`#abandonedOpId`). 떠나며 버렸으면 함께 버린 안 보낸 편집의 수도 적는다. */
   #noteAbandoned(dropped: readonly PendingEdit[], leaving: boolean): void {
     if (!dropped.some((edit) => edit.clientOpId === this.#sentOpId)) return
     this.#abandonedOpId = this.#sentOpId
     this.#abandonedOps = this.#sentOps
     this.#abandonedLeaving = leaving
+    this.#abandonedUnsent = leaving ? dropped.length - 1 : 0
   }
 
   /**
@@ -1049,7 +1099,7 @@ export class EditorStore {
     }
 
     this.#apply({ document, baseDocument: nextBase, headSeq: change.seq })
-    this.#noteWindow(change.seq, change.markerOps)
+    this.#noteWindow(this.#state.openPageId, change.seq, change.markerOps)
     return true
   }
 
@@ -1185,7 +1235,11 @@ export class EditorStore {
     change: { seq: number; ops: PatchOp[]; warnings: ValidationIssue[]; clientOpId?: string },
   ): RemoteChange => {
     const { openPageId, document, baseDocument, headSeq, pending } = this.#state
-    if (openPageId !== pageId || document === null || baseDocument === null) return unchanged('skipped')
+    if (openPageId !== pageId || document === null || baseDocument === null) {
+      // **여는 조회가 도는 페이지면 창에 적는다**(`#openingPageId`) — 그 조회가 이 커밋 앞을 읽었으면 실린 판 뒤에 얹는다.
+      if (pageId === this.#openingPageId) this.#noteWindow(pageId, change.seq, change.ops)
+      return unchanged('skipped')
+    }
     // 이미 아는 revision이다(ack이 이미 지나간 내 편집을 포함한다).
     if (change.seq <= headSeq) return unchanged('skipped')
     // **아직 ack되지 않은 내 편집이 되돌아온 것이다**(위 머리말의 되받기 창). 얹으면 같은
@@ -1199,7 +1253,7 @@ export class EditorStore {
       return unchanged('skipped')
     }
     // **다시 읽는 창 안이면 얹든 못 얹든 적는다**(`#windowChanges`) — 여기서 갭이던 번호도 실릴 판에서는 제 차례일 수 있다.
-    this.#noteWindow(change.seq, change.ops)
+    this.#noteWindow(pageId, change.seq, change.ops)
 
     // 놓친 revision이 있다. **얹지도 `headSeq`를 올리지도 않는다**(위 머리말).
     if (change.seq !== headSeq + 1) {
@@ -1307,6 +1361,10 @@ export class EditorStore {
     this.#dropWaitingMarkers()
     // 창 안의 revision 도 옛 판본의 것이다(`#windowChanges`) — 되살린 판에 얹으면 남의 노드에 얹힌다.
     this.#windowChanges = []
+    // **지금 도는 조회는 복원 앞을 읽었을 수 있다** — 그 답이 실려도 이 낡음을 풀지 않는다(`loadPage`의 `beforeRestore`). 판을 정하지 못하게
+    // 하지는 않는다(세대를 올려 `settlePageLoad`를 거짓으로): 여는 조회면 캔버스가 «불러오는 중»에 머물고, 수습의 조회면 거절된 편집을
+    // 되돌리는 유일한 답이 버려진다.
+    this.#restoredAt = this.#pageLoadsBegun
     this.#markStale('restored')
   }
 
@@ -1330,12 +1388,17 @@ export class EditorStore {
    * 모드·뷰포트 폭·줌은 **건드리지 않는다.** 그 셋은 페이지가 아니라 보는 사람에게 매인
    * 값이라, 페이지를 닫았다고 되돌리면 사용자가 맞춰 둔 화면이 이유 없이 초기화된다.
    * 프로젝트를 떠날 때 그것까지 지우는 것은 `reset`의 몫이다.
+   *
+   * **버린 편집을 돌려준다**(`loadPage`와 같다) — 떠나는 화면이 그 수를 말한다(`routes/editor.tsx`의 `tellLeft`). 답을 기다리던 편집 뒤에
+   * 쌓인 편집은 서버에 한 번도 안 갔다 — 말없이 버리면 사용자는 저장된 줄 안다(Chrome: 앞 편집이 행 잠금에 선 사이 같은 칸을 다시 고치고
+   * 옮기자, 서버에는 앞 편집만 · 통지 0).
    */
-  readonly clearPage = (): void => {
+  readonly clearPage = (): PendingEdit[] => {
     const { pending, undoStack, redoStack } = this.#state
     this.#noteAbandoned(pending, true)
     this.#queueEpoch += 1
     this.#windowChanges = []
+    this.#openingPageId = null
     this.#dropWaitingMarkers()
     this.#apply({
       openPageId: null,
@@ -1355,10 +1418,12 @@ export class EditorStore {
       undoStack: undoStack.length === 0 ? undoStack : [],
       redoStack: redoStack.length === 0 ? redoStack : [],
       editStatus: 'idle',
-      editFailure: null,
+      // 떠나며 버린 편집을 말하는 통지만 남긴다(`#leaveNotice`).
+      editFailure: this.#keptLeaveNotice(),
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
       remoteStale: null,
     })
+    return pending
   }
 
   /**
@@ -1651,7 +1716,7 @@ export class EditorStore {
     // 내 편집이 기다리던 번호의 사이 revision 이었을 수 있다 — 그 프레임은 내게 안 온다(`applyMarkerChange`의 «그래서 기다렸다가 …»).
     this.#settleWaitingMarkers()
     // 서버가 이 번호로 기록한 ops 는 보낸 그것이다(`markSent`).
-    this.#noteWindow(result.seq, clientOpId === this.#sentOpId ? this.#sentOps : head?.ops ?? null)
+    this.#noteWindow(this.#state.openPageId, result.seq, clientOpId === this.#sentOpId ? this.#sentOps : head?.ops ?? null)
   }
 
   /**
@@ -1663,13 +1728,19 @@ export class EditorStore {
    * 세운다** — 사이 번호가 없거나, 그 판 위에 보낼 편집이 쌓였다(얹으면 그 편집을 리베이스해야 하는데 버린 것을 말할 자리가 없다). 다시
    * 읽는 창 안이면 그 조회의 판에 얹을 몫으로도 적는다(`#windowChanges`).
    *
-   * **나갈 때 열려 있던 페이지가 지금 열린 페이지일 때만이다** — 페이지를 옮긴 뒤의 답은 이 판과 무관하다.
+   * **나갈 때 열려 있던 페이지가 지금 열린 페이지일 때만이다** — 페이지를 옮긴 뒤의 답은 이 판과 무관하다. 그 페이지를 다시 여는
+   * 중이면(떠났다 돌아오는 길) 여는 조회의 창에 적는다(`#openingPageId`) — 그 조회가 이 커밋 앞을 읽었으면 실린 판 뒤에 얹힌다.
    */
   #orphanAck(clientOpId: string, seq: number): void {
     const { openPageId, document, baseDocument, headSeq, pending } = this.#state
-    if (clientOpId !== this.#abandonedOpId || openPageId === null || openPageId !== this.#sentPageId || document === null) return
+    if (clientOpId !== this.#abandonedOpId) return
+    if (this.#sentPageId !== null && this.#sentPageId === this.#openingPageId && openPageId !== this.#sentPageId) {
+      this.#noteWindow(this.#openingPageId, seq, this.#abandonedOps)
+      return
+    }
+    if (openPageId === null || openPageId !== this.#sentPageId || document === null) return
     const ops = this.#abandonedOps
-    this.#noteWindow(seq, ops)
+    this.#noteWindow(openPageId, seq, ops)
     if (seq <= headSeq) return
     if (seq === headSeq + 1 && ops !== null && pending.length === 0 && baseDocument !== null) {
       let next: PageDocument
@@ -1708,6 +1779,19 @@ export class EditorStore {
   /** 실패 통지를 세우거나(`Failure`) 치운다(`null`). 그리는 것은 `shell/edit-alert.tsx`다. */
   readonly setEditFailure = (editFailure: EditFailure | null): void => {
     this.#apply({ editFailure })
+  }
+
+  /** **떠나며 버린 편집을 말한다** — 판을 비우는 자리가 지우지 않는 통지다(`#leaveNotice`). 새 편집 · 다른 통지는 그대로 덮는다. */
+  readonly setLeaveNotice = (message: string): void => {
+    const notice: EditFailure = { kind: 'message', message }
+    this.#leaveNotice = notice
+    this.#apply({ editFailure: notice })
+  }
+
+  /** 지금 통지가 떠남의 통지면 그것, 아니면 `null` — 판을 비우는 자리가 둘 통지다. */
+  #keptLeaveNotice(): EditFailure | null {
+    const { editFailure } = this.#state
+    return editFailure !== null && editFailure === this.#leaveNotice ? editFailure : null
   }
 
   /**
@@ -1870,8 +1954,10 @@ export class EditorStore {
     this.#noteAbandoned(this.#state.pending, true)
     this.#queueEpoch += 1
     this.#windowChanges = []
+    this.#openingPageId = null
     this.#dropWaitingMarkers()
-    this.#apply(initialState())
+    // 떠나며 버린 편집을 말하는 통지는 남긴다(`#leaveNotice`) — 캔버스의 여는 이펙트가 프로젝트를 옮기며 먼저 판을 비우고 그 통지를 세운다.
+    this.#apply({ ...initialState(), editFailure: this.#keptLeaveNotice() })
   }
 
   /**

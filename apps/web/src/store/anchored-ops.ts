@@ -19,11 +19,13 @@
  * | 무엇을 가리키나 | 적는 것 | 다시 짓기 |
  * |---|---|---|
  * | 노드(와 그 안의 필드) — `remove` · `replace` · 필드 `add` · `move`의 `from` | 노드 id + 그 아래 토큰 | 그 id 의 지금 경로 + 토큰. 없으면 못 얹음 |
- * | `children` 배열의 **넣을 자리** — `add …/children/<i>` · `move`의 `path` | 부모 id · 앞 형제 id · 뒤 형제 id · 옛 index | 앞 형제 뒤 → (앞이 없으면) 뒤 형제 앞 → 옛 index(길이로 자름). 부모가 없으면 못 얹음 |
+ * | `children` 배열의 **넣을 자리** — `add …/children/<i>` · `move`의 `path` | 부모 id · 앞 형제 id 줄 · 뒤 형제 id 줄(가까운 것부터) · 옛 index | 살아 있는 가장 가까운 앞 형제 뒤 → (앞이 다 없으면) 가장 가까운 뒤 형제 앞 → 옛 index(길이로 자름). 부모가 없으면 못 얹음 |
  * | 노드 밖(`/version`) | 경로 그대로 | 그대로 |
  *
  * **넣을 자리는 앞 형제로 먼저 잡는다.** 뒤 형제로 먼저 잡으면 «끝에 넣기»(뒤 형제 없음)와 «뒤 형제가 사라짐»이 같은 값이 된다. 맨 앞(`index 0`)
- * 은 늘 맨 앞이다 — 남이 그 앞에 넣었어도 내가 고른 것은 «맨 앞»이다.
+ * 은 늘 맨 앞이다 — 남이 그 앞에 넣었어도 내가 고른 것은 «맨 앞»이다. **바로 옆 형제만 적지 않는다** — 양옆이 함께 사라지면 옛 index 로 떨어져
+ * 남이 넣은 노드들 사이에 선다(`[a, b, c, d]`의 b · c 사이에 넣는 동안 남이 b · c 를 지우고 맨 앞에 x · y 를 넣자 `[y, x, 내 것, a, d]`).
+ * 형제 줄은 그 배열의 길이만큼 든다.
  *
  * ## 전제가 바뀐 op 은 얹지 않는다
  *
@@ -40,7 +42,27 @@
  * ## 비용
  *
  * op 이 하나인 편집은 적어 둘 때 · 다시 지을 때 문서를 걷기만 한다(노드 id 찾기 — 노드 수에 선형). op 이 여럿이면(이동의 `add`+`move` · 패턴
- * 넣기) 뒤 op 의 자리는 앞 op 을 얹은 문서에서 재야 하므로 op 마다 `applyOps`(문서 복제 한 번)가 든다.
+ * 넣기) 뒤 op 의 자리는 앞 op 을 얹은 문서에서 재야 하므로 op 마다 `applyOps`(문서 복제 한 번)가 든다 — **op 수 × 문서 크기**다.
+ *
+ * 잰 값(ms · 5 회 중앙값 · 스토어는 3 회 · vitest node 환경). 문서는 루트 아래 Container 30 · 60 개에 Text 100 개씩(노드 3000 · 6000), 편집은
+ * 마지막 Container 의 `children/10`부터 잇따라 넣는 `add` op N 개(패턴 넣기의 모양), 남의 프레임은 루트 맨 앞에 넣기 하나다. «옛 방식»은 경로
+ * 그대로 `applyOps` 한 번이다.
+ *
+ * | 노드 | op | `anchorOps` | `rebaseAnchored` | 옛 방식 | 스토어 `applyEdit` + 프레임 하나 |
+ * |---|---|---|---|---|---|
+ * | 3000 | 1 | 0 | 2.0 | 1.4 | 4.5 |
+ * | 3000 | 50 | 64 | 74 | 1.4 | 147 |
+ * | 3000 | 200 | 264 | 303 | 1.5 | 565 |
+ * | 6000 | 1 | 0 | 2.9 | 2.5 | 7.8 |
+ * | 6000 | 50 | 127 | 149 | 2.7 | 287 |
+ * | 6000 | 200 | 520 | 596 | 2.8 | 1117 |
+ *
+ * 보내지 않은 op 하나짜리 편집 50 개 위에 프레임 하나(노드 3000): 70ms — 옛 방식도 편집마다 `applyOps`를 한 번씩 해서 같은 급이다.
+ *
+ * **오늘 값은 낮다** — 웹에서 op 이 여럿인 편집은 패턴 넣기(패턴의 최상위 노드 수 — 만들 때 이미 그만큼 복제한다)와 «안으로»(2)뿐이다. op
+ * 수백짜리 편집이 생기면(가져오기 등) 적을 때 · 프레임마다 메인 스레드를 수백 ms 막는다 — 그때는 op 마다 복제하지 않고 한 문서 위에서 자리를
+ * 옮겨 가며 재는 쪽으로 바꾼다. 다시 재는 법: 위 문서 · 편집 · 프레임으로 `anchorOps(문서, ops)` · `rebaseAnchored(프레임을 얹은 문서, 붙잡은
+ * 것)` · `applyOps(프레임을 얹은 문서, ops)`와 새 `EditorStore`의 `loadPage` → `applyEdit(ops)` → `applyRemoteChange`를 `performance.now()`로 잰다.
  */
 import { applyOps, formatPointer, getByPointer, parsePointer, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { findNodePathSafely, isNodeLike } from '../edit/safe-walk'
@@ -49,7 +71,7 @@ import { findNodePathSafely, isNodeLike } from '../edit/safe-walk'
 type Anchor =
   | { kind: 'raw'; path: string }
   | { kind: 'node'; id: string; rest: string[] }
-  | { kind: 'slot'; parentId: string; after: string | null; before: string | null; index: number | '-' }
+  | { kind: 'slot'; parentId: string; after: string[]; before: string[]; index: number | '-' }
 
 /**
  * op 을 만든 문서에서 선 전제(머리말의 «전제가 바뀐 op»). `had`는 객체 키 `add`가 가리킨 키가 있었는가, `kids`는 통째로 바꾸는 `children`의 자식
@@ -164,10 +186,10 @@ function anchorPath(document: PageDocument, path: string, slot: boolean): Anchor
     const token = tokens[i + 1]!
     const kids = node.children
     if (slot && i + 2 === tokens.length && Array.isArray(kids)) {
-      if (token === '-') return { kind: 'slot', parentId: node.id, after: null, before: null, index: '-' }
+      if (token === '-') return { kind: 'slot', parentId: node.id, after: [], before: [], index: '-' }
       if (!/^\d+$/.test(token)) break
       const index = Number(token)
-      return { kind: 'slot', parentId: node.id, after: idAt(kids, index - 1), before: idAt(kids, index), index }
+      return { kind: 'slot', parentId: node.id, after: idsOf(kids.slice(0, index)).reverse(), before: idsOf(kids.slice(index)), index }
     }
     if (!Array.isArray(kids) || !/^\d+$/.test(token)) break
     const child: unknown = kids[Number(token)]
@@ -178,9 +200,9 @@ function anchorPath(document: PageDocument, path: string, slot: boolean): Anchor
   return { kind: 'node', id: node.id, rest: tokens.slice(i) }
 }
 
-function idAt(kids: readonly unknown[], index: number): string | null {
-  const node = index >= 0 ? kids[index] : undefined
-  return isNodeLike(node) && typeof node.id === 'string' ? node.id : null
+/** 형제들의 id 줄 — id 가 없는 원소는 뺀다(찾을 수 없다). */
+function idsOf(kids: readonly unknown[]): string[] {
+  return kids.flatMap((kid) => (isNodeLike(kid) && typeof kid.id === 'string' ? [kid.id] : []))
 }
 
 /** 적어 둔 자리를 `document`에서 경로로 짓는다. 못 지으면 `null`. */
@@ -201,13 +223,18 @@ function resolveAnchor(document: PageDocument, anchor: Anchor): string | null {
 }
 
 /** 넣을 자리의 index — 머리말의 «넣을 자리는 앞 형제로 먼저 잡는다». */
-function slotIndex(kids: readonly unknown[], anchor: { after: string | null; before: string | null; index: number }): number {
-  if (anchor.after === null) return 0
-  const after = kids.findIndex((kid) => isNodeLike(kid) && kid.id === anchor.after)
-  if (after >= 0) return after + 1
-  if (anchor.before === null) return kids.length
-  const before = kids.findIndex((kid) => isNodeLike(kid) && kid.id === anchor.before)
-  if (before >= 0) return before
+function slotIndex(kids: readonly unknown[], anchor: { after: string[]; before: string[]; index: number }): number {
+  if (anchor.index === 0) return 0
+  const at = new Map(kids.flatMap((kid, i) => (isNodeLike(kid) && typeof kid.id === 'string' ? [[kid.id, i] as const] : [])))
+  for (const id of anchor.after) {
+    const after = at.get(id)
+    if (after !== undefined) return after + 1
+  }
+  if (anchor.before.length === 0) return kids.length
+  for (const id of anchor.before) {
+    const before = at.get(id)
+    if (before !== undefined) return before
+  }
   return Math.min(anchor.index, kids.length)
 }
 

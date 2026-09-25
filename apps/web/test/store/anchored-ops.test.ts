@@ -108,6 +108,33 @@ describe('넣을 자리는 앞 형제 뒤다', () => {
     expect(contents(result!.document)).toEqual(['ga', 'na', 'mine'])
   })
 
+  it('양옆 형제가 함께 사라졌으면 살아 있는 더 앞의 형제 뒤다 — 옛 index 로 떨어지지 않는다', () => {
+    const four = doc([text('a'), text('b'), text('c'), text('d')])
+    // b · c 가 지워지고 맨 앞에 x · y 가, a · d 사이에 z 가 들어왔다 — 옛 index 2 는 남이 넣은 x 뒤고, 뒤 형제 d 앞은 z 뒤다.
+    const bobs = applyOps(four, [
+      { op: 'remove', path: '/root/children/2' },
+      { op: 'remove', path: '/root/children/1' },
+      { op: 'add', path: '/root/children/0', value: text('x') },
+      { op: 'add', path: '/root/children/0', value: text('y') },
+      { op: 'add', path: '/root/children/3', value: text('z') },
+    ])
+    const result = rebase([{ op: 'add', path: '/root/children/2', value: text('mine') }], bobs, four)
+    expect(contents(result!.document)).toEqual(['y', 'x', 'a', 'mine', 'z', 'd'])
+  })
+
+  it('앞 형제가 다 사라졌으면 살아 있는 더 뒤의 형제 앞이다', () => {
+    const four = doc([text('a'), text('b'), text('c'), text('d')])
+    const bobs = applyOps(four, [
+      { op: 'remove', path: '/root/children/2' },
+      { op: 'remove', path: '/root/children/1' },
+      { op: 'remove', path: '/root/children/0' },
+      { op: 'add', path: '/root/children/0', value: text('x') },
+    ])
+    // 앞 형제 a · b 와 바로 뒤 형제 c 가 없다 — 남은 뒤 형제 d 앞이다. 옛 index 2 면 d 뒤(끝)다.
+    const result = rebase([{ op: 'add', path: '/root/children/2', value: text('mine') }], bobs, four)
+    expect(contents(result!.document)).toEqual(['x', 'mine', 'd'])
+  })
+
   it('«아래로»는 옮기는 노드와 목적지를 둘 다 다시 짓는다', () => {
     const result = rebase([{ op: 'move', from: '/root/children/1', path: '/root/children/2' }], FRONT_ADDED)
     expect(result?.ops).toEqual([{ op: 'move', from: '/root/children/2', path: '/root/children/3' }])
