@@ -136,6 +136,7 @@ async function lockWaiters(): Promise<number> {
  * (`lockWaiters`)으로 세면 다른 행 · 다른 잠금에서 기다리는 백엔드까지 줄로 읽는다.
  *
  * **못 가르는 것:** 대기자가 그 행과 무관한 잠금을 먼저 쥐고 섰고 다른 요청이 **그 잠금**을 기다리면, 그 요청도 사슬에 든다.
+ * 쥔 쪽 뒤에 **표 잠금**(DDL · `LOCK TABLE`)이 서면 그 뒤의 모든 대기가 — 다른 행 · 다른 문장이어도 — 사슬에 든다.
  */
 async function waitersBehind(holder: number): Promise<number> {
   const result = await sql<{ n: number }>`
