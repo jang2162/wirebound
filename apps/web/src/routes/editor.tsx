@@ -187,7 +187,7 @@ const SENT_EDIT_WAIT_MS = 3_000
 
 /**
  * **보낸 편집의 답(ack · 거절)을 기다린다** — 전송이 쉬면(`editStatus === 'idle'`) 풀린다. 한도(`SENT_EDIT_WAIT_MS`)나 `signal`로도
- * 풀린다.
+ * 풀린다. 판을 다시 싣는 두 이펙트와 로그아웃(`SessionMenu`의 `settle`)이 부른다.
  *
  * ## 왜 기다리나 — 판을 다시 싣는 단추는 그 클릭이 낸 편집과 겨룬다
  *
@@ -201,7 +201,7 @@ const SENT_EDIT_WAIT_MS = 3_000
  *
  * jsdom 의 `fireEvent.click`은 포커스를 안 옮겨 blur 커밋이 안 난다 — 이 겨룸은 편집을 먼저 내고 누르는 케이스로 잰다.
  */
-function editsAnswered(store: EditorStore, signal: AbortSignal): Promise<void> {
+function editsAnswered(store: EditorStore, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const answered = (): boolean => store.getState().editStatus === 'idle'
     if (answered()) {
@@ -211,14 +211,14 @@ function editsAnswered(store: EditorStore, signal: AbortSignal): Promise<void> {
     const done = (): void => {
       stop()
       clearTimeout(timer)
-      signal.removeEventListener('abort', done)
+      signal?.removeEventListener('abort', done)
       resolve()
     }
     const stop = store.subscribe(() => {
       if (answered()) done()
     })
     const timer = setTimeout(done, SENT_EDIT_WAIT_MS)
-    signal.addEventListener('abort', done)
+    signal?.addEventListener('abort', done)
   })
 }
 
@@ -632,6 +632,9 @@ function EditorShell(props: {
    */
   const split = mode === 'edit'
 
+  /** 로그아웃 앞의 기다림 — 아래 `SessionMenu` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. */
+  const settleEdits = useCallback(() => editsAnswered(store), [store])
+
   return (
     <div className="wb-shell">
       <header className="wb-shell-header">
@@ -708,7 +711,12 @@ function EditorShell(props: {
 
             **`projectId`를 받지 않는다.** 세션은 프로젝트에 매이지 않으므로 이 컴포넌트를
             셸 밖(프로젝트 목록 등)에 그대로 옮겨 놓을 수 있다. */}
-        <SessionMenu />
+        {/* **보낸 편집의 답을 받은 뒤에 로그아웃한다**(`editsAnswered`) — 칸에 친 채 누르면 그 클릭이 blur 로 낸 편집과 로그아웃이 다른
+            연결로 겨룬다. 로그아웃이 먼저 세션을 지우면 편집은 커밋 순간의 재확인에서 거절되고 셸째 내려가 말할 자리도 없다(Chrome:
+            친 채 누른 3판 가운데 1판이 401 · 행 잠금에 줄 선 편집과 그 뒤에 쌓인 편집은 둘 다 잃음). **막지는 않는다** — 한도가 지나면
+            그대로 나간다. 로그아웃은 권한을 줄이는 쓰기라, 막으면 누르고 떠난 사람의 세션이 남는다. 한도 뒤에 잃는 편집은 말할 화면이
+            없다(남는 틈). */}
+        <SessionMenu settle={settleEdits} />
         {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,
             어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
             받고 보내지 못한 편집을 잃는다. 셸 상단에 두면 어느 패널을 보고 있어도
@@ -1142,16 +1150,15 @@ function CanvasFrame(props: {
     [store],
   )
   /**
-   * **떠나며 버린 안 보낸 편집을 말한다**(`leftUnsentNotice`) — 판을 비우는 자리(`clearPage`)가 돌려준 것에서 센다. 답을 기다리던 나간 편집은
-   * 여기서 안 센다 — 그 답이 거절이면 전송 루프가 합쳐 말하고(`abandonedOnLeave`), 저장됐으면 말할 것이 없다.
+   * **판을 비우고, 떠나며 버린 안 보낸 편집을 말한다**(`leftUnsentNotice`) — 판을 비우는 자리(`clearPage`)가 돌려준 것에서 센다. 답을 기다리던
+   * 나간 편집은 여기서 안 센다 — 그 답이 거절이면 전송 루프가 합쳐 말하고(`abandonedOnLeave`), 저장됐으면 말할 것이 없다. 통지는 떠난
+   * 페이지를 다시 열면 풀린다(`EditorStore.setLeaveNotice`의 `pages` · `leftPage`).
    */
-  const tellLeft = useCallback(
-    (dropped: readonly PendingEdit[]): void => {
-      const unsent = dropped.filter((edit) => !store.wasSent(edit)).length
-      if (unsent > 0) store.setLeaveNotice(leftUnsentNotice(unsent))
-    },
-    [store],
-  )
+  const leavePage = useCallback((): void => {
+    const unsent = store.clearPage().filter((edit) => !store.wasSent(edit)).length
+    const left = store.leftPage()
+    if (unsent > 0) store.setLeaveNotice(leftUnsentNotice(unsent), left === null ? [] : [left])
+  }, [store])
   const applyServerPage = useCallback(
     (openPageId: string, page: PageDetail, lead: string, ticket: number): void => {
       // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
@@ -1167,7 +1174,7 @@ function CanvasFrame(props: {
       // 페이지가 없는데 스토어는 있다고 말하는 상태다 — 문서를 스토어에서 읽는 쪽(캔버스·
       // 구조 트리·속성 패널)이 열려 있지 않은 페이지를 그리게 된다. 남은 `headSeq`가 편집의
       // `baseSeq`가 되면 더 나쁘다.
-      tellLeft(store.clearPage())
+      leavePage()
       setState({ status: 'empty' })
       return
     }
@@ -1185,8 +1192,8 @@ function CanvasFrame(props: {
     // 읽는 쪽은 열려 있지 않은 페이지를 그리고, 앞 페이지의 revision 위에서 편집 요청이
     // 만들어진다. 캔버스가
     // 잠깐 비는 쪽을 택했다 — 새 페이지의 주소 아래에 앞 페이지의 내용이 그려지는 것보다
-    // 낫다. 이미 비어 있으면 스토어가 알리지 않으므로 구독자가 헛일을 하지도 않는다. **비우며 버린 편집은 말한다**(`tellLeft`).
-    tellLeft(store.clearPage())
+    // 낫다. 이미 비어 있으면 스토어가 알리지 않으므로 구독자가 헛일을 하지도 않는다. **비우며 버린 편집은 말한다**(`leavePage`).
+    leavePage()
 
     /**
      * 내 revision을 받아 undo 스택을 채운다. **실패는 삼킨다** — 조회가 실패하면
@@ -1268,7 +1275,7 @@ function CanvasFrame(props: {
       leave.abort()
     }
     // `openAttempt`는 이 이펙트를 다시 태우는 신호다(위 선언).
-  }, [api, projectId, pageId, store, tellLeft, openAttempt])
+  }, [api, projectId, pageId, store, leavePage, openAttempt])
 
   /**
    * **연결이 다시 붙었으므로 페이지를 다시 읽는다**.

@@ -421,6 +421,57 @@ describe('떠나며 버린 편집의 수', () => {
     expect(alertText()).toBe(LEFT_UNSENT)
   })
 
+  /** 답을 기다리는 동안 옮겨 간 페이지에서 친 편집도 그 답 뒤에 줄 서 한 번도 안 나간다 — 거절의 문장이 두 떠남을 합쳐 센다. */
+  it('답을 기다리는 동안 두 번 떠나면 거절의 문장이 두 페이지의 것을 합쳐 센다', async () => {
+    const { view, sent } = await leaveWithQueue()
+    await view.moveDown()
+    expect(view.patches()).toHaveLength(1)
+    fireEvent.click(screen.getByRole('link', { name: '회원 목록' }))
+    await waitFor(() => expect(view.held).toHaveLength(1))
+
+    view.refuse(sent)
+    await act(async () => {})
+
+    expect(alertText()).toBe(
+      '페이지가 이미 변경되었습니다 — 떠난 페이지 2곳에서 보낸 편집 1개와 보내지 않은 편집 2개가 저장되지 않았습니다. ' +
+        '그 페이지들을 다시 열어 확인하세요.',
+    )
+  })
+
+  it('떠난 페이지를 다시 열면 떠남의 통지가 풀린다', async () => {
+    const { view } = await leaveWithQueue()
+    expect(alertText()).toBe(LEFT_UNSENT)
+
+    fireEvent.click(screen.getByRole('link', { name: '회원 목록' }))
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+    })
+    await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Text', 'Divider']))
+
+    expect(alertText()).toBe('')
+  })
+
+  it('떠남의 통지는 닫는 단추로 닫는다', async () => {
+    await leaveWithQueue()
+    expect(alertText()).toBe(LEFT_UNSENT)
+
+    fireEvent.click(screen.getByRole('button', { name: '통지 닫기' }))
+
+    expect(alertText()).toBe('')
+    expect(screen.queryByRole('button', { name: '통지 닫기' })).toBeNull()
+  })
+
+  /** 닫는 단추는 떠남의 통지에만 있다 — 다른 통지는 페이지를 옮기면 판을 비우며 지워진다. */
+  it('다른 통지에는 닫는 단추가 없다', async () => {
+    const view = await mount({ immediate: () => pageDetail(PAGE_ID, pair()) })
+    const sent = await view.moveDown()
+    view.refuse(sent)
+    await waitFor(() => expect(alertText()).toContain('편집 1개가 취소됐습니다'))
+
+    expect(screen.queryByRole('button', { name: '통지 닫기' })).toBeNull()
+  })
+
   it('떠난 뒤 온 거절의 통지도 또 옮겨도 남는다', async () => {
     const { view, sent } = await leaveWithQueue()
     view.refuse(sent)

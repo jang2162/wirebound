@@ -122,20 +122,23 @@ function unknownNotice(
  * 페이지를 안 들고 있다.
  *
  * **그 편집과 함께 버린 안 보낸 편집(`unsent`)을 합쳐 센다** — 떠나는 순간 그 수를 말했지만(`leftUnsentNotice`) 통지 자리가 하나라 이 문장이
- * 그 말을 덮는다. 보낸 편집은 늘 하나다(in-flight 는 하나).
+ * 그 말을 덮는다. 보낸 편집은 늘 하나다(in-flight 는 하나). 그 답을 기다리는 동안 또 떠났으면 버린 것이 여러 페이지에 있다(`pages` —
+ * `EditorStore.abandonedPages`) — 페이지 수를 싣는다. «그 페이지»라고 하면 사용자는 하나만 다시 연다.
  */
-function leftBehindNotice(caught: unknown, unsent: number): string {
+function leftBehindNotice(caught: unknown, unsent: number, pages: number): string {
   const failure = toFailure(caught, EDIT_UNKNOWN_FAILURE)
+  const where = pages > 1 ? `떠난 페이지 ${pages}곳에서` : '떠난 페이지에서'
+  const reopen = pages > 1 ? '그 페이지들을 다시 열어 확인하세요.' : '그 페이지를 다시 열어 확인하세요.'
   if (refusedBeforeCommit(caught) && failure.kind === 'message') {
     const lost = unsent > 0 ? `보낸 편집 1개와 보내지 않은 편집 ${unsent}개가` : '보낸 편집 1개가'
-    return `${failure.message} — 떠난 페이지에서 ${lost} 저장되지 않았습니다. 그 페이지를 다시 열어 확인하세요.`
+    return `${failure.message} — ${where} ${lost} 저장되지 않았습니다. ${reopen}`
   }
   const also = unsent > 0 ? `없고, 보내지 않은 편집 ${unsent}개는 저장되지 않았습니다` : '없습니다'
-  return `떠난 페이지에서 보낸 편집 1개는 답을 받지 못해 서버에 반영됐는지 알 수 ${also} — 그 페이지를 다시 열어 확인하세요.`
+  return `${where} 보낸 편집 1개는 답을 받지 못해 서버에 반영됐는지 알 수 ${also} — ${reopen}`
 }
 
 /**
- * **떠나며 버린 안 보낸 편집의 문장** — 페이지를 옮기는 순간 말한다(`routes/editor.tsx`의 `tellLeft`). 앞 편집의 답을 기다리는 동안 쌓인
+ * **떠나며 버린 안 보낸 편집의 문장** — 페이지를 옮기는 순간 말한다(`routes/editor.tsx`의 `leavePage`). 앞 편집의 답을 기다리는 동안 쌓인
  * 편집은 서버에 한 번도 안 갔다. **보내고 떠나지 않는다** — 그 편집은 답을 기다리는 앞 편집의 결과 위에서 지어졌고(앞 편집이 거절되면 낼 수
  * 없다), 떠난 페이지는 이 탭이 프레임을 얹지 않아 남의 편집 위로 옮길 바탕이 없다. 떠난 뒤 그 페이지로 돌아오면 늦은 답과 다시 연 판을
  * 맞춰야 한다 — 열려 있지 않은 페이지에 편집을 내는 새 갈래다.
@@ -454,7 +457,10 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
             // **페이지를 떠나며 버렸으면 그 거절은 말한다**(`EditorStore.abandonedOnLeave`) — 떠나기 전 화면에는 그 편집이 서 있었고, 떠날
             // 때는 아무 말도 안 했다. 수습(다시 읽기 · 큐 비우기)은 여전히 안 한다 — 그 판은 이 화면에 없다.
             // 판을 비우는 자리가 지우지 않는 통지로 세운다(`EditorStore.setLeaveNotice`) — 그 뒤에 또 옮겨도 남는다.
-            if (store.abandonedOnLeave(request.clientOpId)) store.setLeaveNotice(leftBehindNotice(caught, store.abandonedUnsent()))
+            if (store.abandonedOnLeave(request.clientOpId)) {
+              const pages = store.abandonedPages()
+              store.setLeaveNotice(leftBehindNotice(caught, store.abandonedUnsent(), pages.length), pages)
+            }
             continue
           }
           // **리베이스가 그 사이에 이 편집을 옮겨 놓았으면 다시 낸다.**

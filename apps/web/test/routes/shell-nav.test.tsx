@@ -19,15 +19,25 @@
  * **주소가 실제로 옮겨졌는지까지 본다.** 링크가 있다는 것과 그것이 목록으로 데려다준다는
  * 것은 다른 사실이고, `to`를 잘못 적은 판이 앞쪽만으로는 통과한다.
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { CURRENT_DOCUMENT_VERSION } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../src/api/client'
-import type { SessionUser } from '../../src/api/types'
+import type { PatchResult, SessionUser } from '../../src/api/types'
 import { App } from '../../src/app'
 import { currentPath, fakeApi, renderWithProviders, unauthenticatedError } from '../helpers'
-import { PAGE_ROUTE, PROJECT_NAME, openPage, pageDoc } from '../editor-harness'
+import { HEAD_SEQ, PAGE_ROUTE, PROJECT_NAME, openPage, pageDoc } from '../editor-harness'
 
 const DOC = pageDoc({ id: 'n-root', type: 'Page', children: [] })
+/** «아래로»를 낼 수 있는 문서 — 로그아웃 앞의 기다림을 재는 케이스가 편집 하나를 띄운다. */
+const TWO = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    { id: 'n-a', type: 'Text', props: {} },
+    { id: 'n-b', type: 'Divider', props: {} },
+  ],
+})
 
 /**
  * **하네스의 기본 사용자(`테스터`)를 쓰지 않는다.** 화면이 하드코딩할 리 없는 이름이어야
@@ -151,6 +161,41 @@ describe('머리에서 로그아웃한다', () => {
     fireEvent.click(button)
 
     await waitFor(() => expect(calls).toBe(2))
+  })
+
+  /**
+   * 칸에 친 채 누르면 그 클릭이 blur 로 낸 편집과 로그아웃이 겨룬다 — 로그아웃이 먼저 세션을 지우면 편집은 거절되고 셸째 내려가 말할 자리도
+   * 없다. 답을 받은 뒤에 나간다(Chrome 판은 `build-test/editor-logout-edits.test.ts` — 한도 뒤에 막히지 않는 판도 그쪽이 잰다).
+   */
+  it('보낸 편집의 답을 받은 뒤에 로그아웃을 낸다', async () => {
+    const order: string[] = []
+    let answer!: (result: PatchResult) => void
+    await openPage(TWO, {
+      apiOverrides: {
+        me: async () => USER,
+        logout: async () => {
+          order.push('logout')
+        },
+        patchOps: () => {
+          order.push('patch')
+          return new Promise<PatchResult>((resolve) => (answer = resolve))
+        },
+      },
+    })
+    const tree = screen.getByRole('region', { name: '구조 트리' })
+    fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+    await act(async () => {})
+
+    fireEvent.click(within(header()).getByRole('button', { name: '로그아웃' }))
+    await act(async () => {})
+    expect(order).toEqual(['patch'])
+
+    await act(async () => {
+      answer({ seq: HEAD_SEQ + 1, revisionId: 'rev-8', inverse: [], schemaVersion: CURRENT_DOCUMENT_VERSION })
+    })
+    await waitFor(() => expect(currentPath()).toBe('/login'))
+    expect(order).toEqual(['patch', 'logout'])
   })
 
   it('서버가 세션이 없다고 답하면 성공으로 친다', async () => {

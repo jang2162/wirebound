@@ -19,13 +19,15 @@
  * | 무엇을 가리키나 | 적는 것 | 다시 짓기 |
  * |---|---|---|
  * | 노드(와 그 안의 필드) — `remove` · `replace` · 필드 `add` · `move`의 `from` | 노드 id + 그 아래 토큰 | 그 id 의 지금 경로 + 토큰. 없으면 못 얹음 |
- * | `children` 배열의 **넣을 자리** — `add …/children/<i>` · `move`의 `path` | 부모 id · 앞 형제 id 줄 · 뒤 형제 id 줄(가까운 것부터) · 옛 index | 살아 있는 가장 가까운 앞 형제 뒤 → (앞이 다 없으면) 가장 가까운 뒤 형제 앞 → 옛 index(길이로 자름). 부모가 없으면 못 얹음 |
+ * | `children` 배열의 **넣을 자리** — `add …/children/<i>` · `move`의 `path` | 부모 id · 앞 형제 id 줄 · 뒤 형제 id 줄(가까운 것부터) · 옛 index | 살아 있는 가장 가까운 형제 곁 — 앞 형제면 그 뒤 · 뒤 형제면 그 앞(같은 거리면 앞) → 다 없으면 옛 index(길이로 자름). 부모가 없으면 못 얹음 |
  * | 노드 밖(`/version`) | 경로 그대로 | 그대로 |
  *
- * **넣을 자리는 앞 형제로 먼저 잡는다.** 뒤 형제로 먼저 잡으면 «끝에 넣기»(뒤 형제 없음)와 «뒤 형제가 사라짐»이 같은 값이 된다. 맨 앞(`index 0`)
- * 은 늘 맨 앞이다 — 남이 그 앞에 넣었어도 내가 고른 것은 «맨 앞»이다. **바로 옆 형제만 적지 않는다** — 양옆이 함께 사라지면 옛 index 로 떨어져
- * 남이 넣은 노드들 사이에 선다(`[a, b, c, d]`의 b · c 사이에 넣는 동안 남이 b · c 를 지우고 맨 앞에 x · y 를 넣자 `[y, x, 내 것, a, d]`).
- * 형제 줄은 그 배열의 길이만큼 든다.
+ * **넣을 자리는 원래 거리 순으로 앞 · 뒤 형제를 번갈아 본다 — 같은 거리면 앞 형제가 먼저다.** 뒤 형제로 먼저 잡으면 «끝에 넣기»(뒤 형제
+ * 없음)와 «뒤 형제가 사라짐»이 같은 값이 된다. 앞 형제 줄을 끝까지 먼저 보면 바로 앞 형제가 사라지고 바로 뒤 형제가 산 판에서 원래 틈(뒤
+ * 형제 바로 앞)을 떠나 남이 그 사이에 넣은 노드들 앞에 선다(`[a, b, c, d]`의 b · c 사이에 넣는 동안 남이 b 를 지우고 a 뒤에 x · y · z 를
+ * 넣자 `[a, 내 것, x, y, z, c, d]`). 맨 앞(`index 0`)은 늘 맨 앞이다 — 남이 그 앞에 넣었어도 내가 고른 것은 «맨 앞»이다. **바로 옆 형제만
+ * 적지 않는다** — 양옆이 함께 사라지면 옛 index 로 떨어져 남이 넣은 노드들 사이에 선다(`[a, b, c, d]`의 b · c 사이에 넣는 동안 남이 b · c 를
+ * 지우고 맨 앞에 x · y 를 넣자 `[y, x, 내 것, a, d]`). 형제 줄은 그 배열의 길이만큼 든다.
  *
  * ## 전제가 바뀐 op 은 얹지 않는다
  *
@@ -222,19 +224,19 @@ function resolveAnchor(document: PageDocument, anchor: Anchor): string | null {
   return `${parentPath}/children/${slotIndex(kids, { after, before, index })}`
 }
 
-/** 넣을 자리의 index — 머리말의 «넣을 자리는 앞 형제로 먼저 잡는다». */
+/** 넣을 자리의 index — 머리말의 «넣을 자리는 원래 거리 순으로 앞 · 뒤 형제를 번갈아 본다». */
 function slotIndex(kids: readonly unknown[], anchor: { after: string[]; before: string[]; index: number }): number {
   if (anchor.index === 0) return 0
   const at = new Map(kids.flatMap((kid, i) => (isNodeLike(kid) && typeof kid.id === 'string' ? [[kid.id, i] as const] : [])))
-  for (const id of anchor.after) {
-    const after = at.get(id)
+  for (let distance = 0; distance < Math.max(anchor.after.length, anchor.before.length); distance += 1) {
+    const afterId = anchor.after[distance]
+    const after = afterId === undefined ? undefined : at.get(afterId)
     if (after !== undefined) return after + 1
-  }
-  if (anchor.before.length === 0) return kids.length
-  for (const id of anchor.before) {
-    const before = at.get(id)
+    const beforeId = anchor.before[distance]
+    const before = beforeId === undefined ? undefined : at.get(beforeId)
     if (before !== undefined) return before
   }
+  if (anchor.before.length === 0) return kids.length
   return Math.min(anchor.index, kids.length)
 }
 

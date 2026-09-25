@@ -122,6 +122,57 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
       await context.close()
     }
   })
+
+  /**
+   * 코멘트 게시는 번호를 매긴 revision 을 남기고 그 방송은 낸 연결을 뺀다 — 이 탭이 그 revision 을 받는 길은 게시의 응답 하나다
+   * (`panels/comment-panel.tsx` 의 `landed` → `EditorStore.applyMarkerChange`). 응답이 여는 창 안에 오면 그 창에 적어야 실린 판 뒤에 얹힌다.
+   */
+  it('떠났다 돌아오는 여는 조회의 창에 온 코멘트 번호가 실린 판에 남는다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const fx = await fixture(stack, alice, 'open-marker')
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const log = watch(page, fx)
+    try {
+      await page.goto(fx.P1)
+      await selectFirstText(page, '1쪽 원문')
+      await page.getByRole('tab', { name: '코멘트' }).click()
+      await page.locator('#wb-comment-draft').fill('번호가 붙을 코멘트')
+
+      const hold = await stack.holdRow('pages', fx.first)
+      const posted = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/comments'))
+      await page.getByRole('button', { name: '코멘트 달기' }).click()
+      await hold.waitForWaiters(1)
+      await page.getByRole('link', { name: '둘째' }).click()
+      await page.locator('.wb-shell-canvas-frame', { hasText: '2쪽 원문' }).waitFor()
+
+      // 1쪽을 다시 연다 — 조회는 게시의 커밋 앞을 읽는다(행 잠금은 읽기를 막지 않는다).
+      const held = holdNextRead(page, fx.P1, log)
+      await page.getByRole('link', { name: '첫째' }).click()
+      await held.read
+      await hold.release()
+      // 판이 섰는가 — 게시의 응답이 붙잡은 답보다 먼저 닿았다.
+      const response = await posted
+      log.lines.push(`POST 코멘트 ${response.status()} seq ${(await response.json()).seq}`)
+      held.release()
+
+      const opened = await stable(page)
+      expect({ 번호: await page.locator('.wb-shell-marker').allTextContents(), 통지: opened.notices }).toEqual({ 번호: ['1'], 통지: [] })
+      expect(await server(stack, alice, fx.P1)).toEqual({ head: 2, content: ['1쪽 원문'] })
+
+      await page.getByRole('tab', { name: '속성' }).click()
+      await editFirstText(page, '1쪽 원문', '돌아와 낸 글')
+      const landed = await poll('다음 편집이 서버에 닿는다', () => server(stack, alice, fx.P1), (value) => value.head === 3, 5_000).catch(
+        async () => server(stack, alice, fx.P1),
+      )
+      const settled = await stable(page)
+      // eslint-disable-next-line no-console
+      console.log(`[여는 창 · 번호 응답] ${log.lines.join(' · ')} · 서버 ${JSON.stringify(landed)} · 통지 ${JSON.stringify(settled.notices)}`)
+      expect({ 서버: landed, 통지: settled.notices }).toEqual({ 서버: { head: 3, content: ['돌아와 낸 글'] }, 통지: [] })
+      expect(log.lines.filter((line) => line.includes('WS→ patch'))).toEqual(['WS→ patch 1쪽 baseSeq=2'])
+    } finally {
+      await context.close()
+    }
+  })
 })
 
 interface Fixture {

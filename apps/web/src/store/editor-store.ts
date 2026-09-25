@@ -502,16 +502,32 @@ export class EditorStore {
   /** 그 편집을 **페이지를 떠나며** 버렸는가(`clearPage` · `reset` · 다른 페이지의 `loadPage`) — 같은 페이지를 다시 실으며 버린 것과 가른다. */
   #abandonedLeaving = false
 
-  /** 떠나며 그 편집과 함께 버린 **안 보낸** 편집의 수 — 그 편집의 거절을 말할 때 합쳐 센다(`abandonedUnsent`). */
+  /**
+   * 떠나며 그 편집과 함께 버린 **안 보낸** 편집의 수 — 그 편집의 거절을 말할 때 합쳐 센다(`abandonedUnsent`). 그 답을 기다리는 동안 또 떠나며
+   * 버린 것도 더한다(`#noteAbandoned`).
+   */
   #abandonedUnsent = 0
+
+  /** 그 편집과 함께 버린 것들이 있던 페이지 — 떠난 차례대로, 겹치지 않게(`abandonedPages`). */
+  #abandonedPages: string[] = []
 
   /**
    * **떠나며 버린 편집을 말하는 통지**(`setLeaveNotice`) — 판을 비우는 자리(`clearPage` · `reset`)가 이것은 지우지 않는다. 그 통지는 떠난
    * 뒤의 화면에 서는 것이 요점이다 — 옮겨 간 페이지 · 프로젝트를 여는 비우기가 곧바로 지우면 한 번도 안 보인다. 프로젝트를 옮기면 캔버스의
    * 여는 이펙트(`routes/editor.tsx`의 `CanvasFrame`)가 판을 비우며 통지를 세우고, 셸의 `reset`은 같은 커밋에서 그 **뒤에** 돈다(React 는 자식의
    * 이펙트를 먼저 돌린다).
+   *
+   * **푸는 자리는 넷이다** — 새 편집 · 되돌리기(다른 통지로 덮거나 치운다) · 통지가 가리키는 페이지를 다시 연 판(`loadPage` —
+   * `#leaveNoticePages`가 빈다) · 닫는 단추(`closeLeaveNotice`). 뒤의 둘이 없으면 편집을 못 내는 화면(뷰 모드 · viewer)에서 셸이 사는
+   * 동안 남고, 그 페이지로 돌아와 화면이 서버 판을 보여도 «다시 열어 확인하세요»가 선다(Chrome).
    */
   #leaveNotice: EditFailure | null = null
+
+  /** 떠남의 통지가 가리키는 페이지 가운데 아직 다시 안 연 것(`setLeaveNotice`의 `pages`). */
+  #leaveNoticePages = new Set<string>()
+
+  /** 마지막 `clearPage`가 비운 판의 페이지(`leftPage`). 비울 판이 없었으면 `null`이다. */
+  #leftPageId: string | null = null
 
   /**
    * **큐를 통째로 갈아 낀 수** — 판을 싣거나(`loadPage`) 비울(`clearPage` · `reset`) 때마다 오른다. 그 뒤의 큐는 다른 판 위의 것이다.
@@ -627,7 +643,12 @@ export class EditorStore {
     // **복원 신호보다 앞에 시작한 조회의 판이면 복원 배너를 둔다**(`#restoredAt`) — 그 판은 복원 앞을 읽었을 수 있다. 창도 얹지 않는다 — 신호
     // 뒤에 온 revision 은 되살린 판본의 번호라 옛 판본의 판에 얹으면 남의 노드에 얹힌다.
     const beforeRestore = ticket !== undefined && ticket <= this.#restoredAt
+    // **떠남의 통지가 가리키는 페이지를 다시 열면 그 페이지는 확인한 것이다**(`#leaveNotice`의 «푸는 자리») — 가리키는 것이 다 열렸으면
+    // 통지를 푼다. 다른 통지가 서 있으면 그대로 둔다.
+    const leaveSettled = this.#leaveNoticePages.delete(pageId) && this.#leaveNoticePages.size === 0 && this.#keptLeaveNotice() !== null
+    if (leaveSettled) this.#leaveNotice = null
     this.#apply({
+      ...(leaveSettled ? { editFailure: null } : {}),
       openPageId: pageId,
       document,
       // **바탕도 서버 문서다.** 여기를 지나온 순간 낙관적 편집은 하나도 안 얹혀 있다 —
@@ -832,13 +853,33 @@ export class EditorStore {
    */
   readonly abandonedUnsent = (): number => this.#abandonedUnsent
 
-  /** 나간 편집을 판째 버리면 적는다(`#abandonedOpId`). 떠나며 버렸으면 함께 버린 안 보낸 편집의 수도 적는다. */
+  /** **그 편집과 함께 버린 것들이 있던 페이지**(`#abandonedPages`) — 거절의 문장이 페이지 수를 싣고, 통지는 이 페이지들을 다시 열면 풀린다. */
+  readonly abandonedPages = (): readonly string[] => this.#abandonedPages
+
+  /**
+   * 나간 편집을 판째 버리면 적는다(`#abandonedOpId`). 떠나며 버렸으면 함께 버린 안 보낸 편집의 수와 떠난 페이지도 적는다.
+   *
+   * **떠나며 버린 나간 편집의 답을 기다리는 동안 또 떠나면 그 수에 더한다.** 그 동안 옮겨 간 페이지에서 친 편집은 그 답 뒤에 줄 서 한
+   * 번도 안 나간다(in-flight 는 하나다). 떠나는 순간 그 수를 말하지만(`routes/editor.tsx`의 `leavePage`) 통지 자리가 하나라 거절의 문장이
+   * 그 말을 덮는다 — 첫 떠남만 세면 둘째 떠남의 것이 합친 문장에서 빠진다(Chrome: 1쪽 편집이 줄 선 채 2쪽에서 치고 3쪽으로 옮긴 뒤 거절
+   * — 잃은 것 둘 · «보낸 편집 1개가»). **답을 기다리는지는 «마지막으로 나간 것이 그 편집인가»로 가른다** — 답이 오면 전송 루프는 쌓인
+   * 편집을 곧바로 내고(`markSent`), 쌓인 것이 없으면 멈췄다가 다음 편집을 곧바로 낸다. 그래서 그 편집이 마지막으로 나간 채 안 보낸
+   * 편집이 버려지는 판은 답을 기다리는 판뿐이다.
+   */
   #noteAbandoned(dropped: readonly PendingEdit[], leaving: boolean): void {
-    if (!dropped.some((edit) => edit.clientOpId === this.#sentOpId)) return
+    const page = this.#state.openPageId ?? this.#sentPageId
+    if (!dropped.some((edit) => edit.clientOpId === this.#sentOpId)) {
+      if (leaving && this.#abandonedLeaving && this.#abandonedOpId === this.#sentOpId && dropped.length > 0) {
+        this.#abandonedUnsent += dropped.length
+        if (page !== null && !this.#abandonedPages.includes(page)) this.#abandonedPages = [...this.#abandonedPages, page]
+      }
+      return
+    }
     this.#abandonedOpId = this.#sentOpId
     this.#abandonedOps = this.#sentOps
     this.#abandonedLeaving = leaving
     this.#abandonedUnsent = leaving ? dropped.length - 1 : 0
+    this.#abandonedPages = leaving && page !== null ? [page] : []
   }
 
   /**
@@ -1003,7 +1044,7 @@ export class EditorStore {
    * | 결과 | 언제 | 화면이 할 일 |
    * |---|---|---|
    * | `'applied'` | 반영했다 — 또는 **그 revision 이 이미 내 문서에 있다**(`seq <= headSeq` — 그 프레임이 응답보다 먼저 왔다) | 없다 |
-   * | `'skipped'` | **다른 페이지가 열려 있거나 문서가 없다** | 없다 — 그 화면은 이미 딴 것을 보고 있다 |
+   * | `'skipped'` | **다른 페이지가 열려 있거나 문서가 없다** — 그 페이지를 여는 중이면 창에 적는다(`#windowChanges`) | 없다 — 그 화면은 이미 딴 것을 보고 있다 |
    * | `'diverged'` | **`applyOps`가 던졌다** | **말해야 한다** — 서버에는 번호가 있는데 내 화면에는 없다 |
    * | `'waiting'` | **`seq`가 내 다음 번호보다 앞이다** — 사이 프레임을 기다린다(아래 절) | 없다 — 끝내 못 얹으면 스토어가 `remoteStale`로 말한다 |
    *
@@ -1047,7 +1088,14 @@ export class EditorStore {
     const { openPageId, document, baseDocument, headSeq } = this.#state
     // 다른 페이지로 옮긴 뒤 도착한 응답이다. 여기서 `headSeq`를 건드리면 새 페이지의
     // 편집이 남의 revision 번호 위에서 만들어진다(`ackEdit`의 늦은 ack 가드와 같은 자리).
-    if (openPageId !== pageId || document === null || baseDocument === null) return 'skipped'
+    if (openPageId !== pageId || document === null || baseDocument === null) {
+      // **여는 조회가 도는 페이지면 창에 적는다**(`applyRemoteChange`의 같은 줄) — 게시의 방송은 낸 연결을 빼므로 이 응답이 그 revision 이
+      // 이 탭에 오는 유일한 길이다. 그 조회가 이 커밋 앞을 읽었으면 실린 판 뒤에 얹는다(Chrome: 게시를 행 잠금에 줄 세운 채 떠났다
+      // 돌아오고, 다시 여는 조회가 그 커밋 앞을 읽자 번호가 캔버스에 없고 다음 편집이 409 로 취소됐다). 문서가 안 바뀐 응답은 revision 이
+      // 아니다(아래 «`markerOps`가 비면 …»).
+      if (pageId === this.#openingPageId && change.markerOps.length > 0) this.#noteWindow(pageId, change.seq, change.markerOps)
+      return 'skipped'
+    }
 
     // 문서가 안 바뀐 요청이다(이미 번호가 있는 노드에 코멘트를 더 달았거나, 마지막이 아닌
     // 코멘트를 지웠거나, 바꿀 것 없는 재번호). **아무것도 안 건드린다**(위 머리말).
@@ -1389,12 +1437,13 @@ export class EditorStore {
    * 값이라, 페이지를 닫았다고 되돌리면 사용자가 맞춰 둔 화면이 이유 없이 초기화된다.
    * 프로젝트를 떠날 때 그것까지 지우는 것은 `reset`의 몫이다.
    *
-   * **버린 편집을 돌려준다**(`loadPage`와 같다) — 떠나는 화면이 그 수를 말한다(`routes/editor.tsx`의 `tellLeft`). 답을 기다리던 편집 뒤에
+   * **버린 편집을 돌려준다**(`loadPage`와 같다) — 떠나는 화면이 그 수를 말한다(`routes/editor.tsx`의 `leavePage`). 답을 기다리던 편집 뒤에
    * 쌓인 편집은 서버에 한 번도 안 갔다 — 말없이 버리면 사용자는 저장된 줄 안다(Chrome: 앞 편집이 행 잠금에 선 사이 같은 칸을 다시 고치고
    * 옮기자, 서버에는 앞 편집만 · 통지 0).
    */
   readonly clearPage = (): PendingEdit[] => {
     const { pending, undoStack, redoStack } = this.#state
+    this.#leftPageId = this.#state.openPageId
     this.#noteAbandoned(pending, true)
     this.#queueEpoch += 1
     this.#windowChanges = []
@@ -1781,11 +1830,32 @@ export class EditorStore {
     this.#apply({ editFailure })
   }
 
-  /** **떠나며 버린 편집을 말한다** — 판을 비우는 자리가 지우지 않는 통지다(`#leaveNotice`). 새 편집 · 다른 통지는 그대로 덮는다. */
-  readonly setLeaveNotice = (message: string): void => {
+  /**
+   * **떠나며 버린 편집을 말한다** — 판을 비우는 자리가 지우지 않는 통지다(`#leaveNotice`). 새 편집 · 다른 통지는 그대로 덮는다. `pages`는 그
+   * 통지가 «다시 열어 확인하세요»라고 가리키는 페이지다 — 그 페이지를 전부 다시 열면 풀린다(`loadPage`).
+   */
+  readonly setLeaveNotice = (message: string, pages: readonly string[]): void => {
     const notice: EditFailure = { kind: 'message', message }
     this.#leaveNotice = notice
+    this.#leaveNoticePages = new Set(pages)
     this.#apply({ editFailure: notice })
+  }
+
+  /**
+   * **마지막 `clearPage`가 비운 판의 페이지** — 떠나는 화면이 버린 편집을 말할 때 통지가 가리킬 페이지다(`routes/editor.tsx`의 `leavePage`). 화면이
+   * 스토어의 `openPageId`를 곧장 읽지 않게 여기서 준다(`test/store-access.test.ts`).
+   */
+  readonly leftPage = (): string | null => this.#leftPageId
+
+  /** 지금 통지가 떠남의 통지인가 — 통지 자리(`shell/edit-alert.tsx`)가 닫는 단추를 그릴지 가른다. */
+  readonly isLeaveNotice = (failure: EditFailure | null): boolean => failure !== null && failure === this.#leaveNotice
+
+  /** **떠남의 통지를 닫는다**(통지 자리의 단추). 다른 통지가 서 있으면 건드리지 않는다. */
+  readonly closeLeaveNotice = (): void => {
+    const shown = this.#keptLeaveNotice() !== null
+    this.#leaveNotice = null
+    this.#leaveNoticePages = new Set()
+    if (shown) this.#apply({ editFailure: null })
   }
 
   /** 지금 통지가 떠남의 통지면 그것, 아니면 `null` — 판을 비우는 자리가 둘 통지다. */

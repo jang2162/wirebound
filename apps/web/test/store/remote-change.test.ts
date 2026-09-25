@@ -879,6 +879,34 @@ describe('여는 조회의 창', () => {
     expect(store.getState().headSeq).toBe(4)
   })
 
+  /** 게시의 방송은 낸 연결을 뺀다 — 번호 응답이 그 revision 이 이 탭에 오는 유일한 길이다(Chrome 판은 `build-test/editor-open-window.test.ts`). */
+  it('떠났다 다시 여는 조회의 창에 온 번호 응답을 실린 판 뒤에 얹는다', () => {
+    const store = opened()
+    store.clearPage()
+    const ticket = store.beginPageLoad('page_1')
+    expect(store.applyMarkerChange('page_1', { seq: 5, markerOps: [{ op: 'add', path: '/root/marker', value: 1 }] })).toBe('skipped')
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc(), 4, ticket)
+
+    expect(store.getState().document?.root.marker).toBe(1)
+    expect(store.getState().headSeq).toBe(5)
+    expect(store.getState().remoteStale).toBeNull()
+  })
+
+  /** 문서가 안 바뀐 번호 응답의 `seq`는 서버가 요청을 받은 때의 번호다 — 그 revision 의 ops 가 아니다(`applyMarkerChange`의 «`markerOps`가 비면»). */
+  it('문서가 안 바뀐 번호 응답은 여는 창에 적지 않는다', () => {
+    const store = opened()
+    store.clearPage()
+    const ticket = store.beginPageLoad('page_1')
+    store.applyMarkerChange('page_1', { seq: 5, markerOps: [] })
+
+    store.settlePageLoad(ticket)
+    store.loadPage('page_1', doc(), 4, ticket)
+
+    expect(store.getState().headSeq).toBe(4)
+  })
+
   it('그 ack 가 다른 페이지를 여는 창에 오면 적지 않는다', () => {
     const store = opened()
     const opId = store.applyEdit(append('n_mine'))!
@@ -969,9 +997,81 @@ describe('떠나며 버린 편집', () => {
     expect(store.abandonedUnsent()).toBe(0)
   })
 
+  /** 둘째 떠남에서 버린 것은 그 답 뒤에 줄 서 한 번도 안 나갔다(Chrome 판은 `build-test/editor-leave-unsent.test.ts`). */
+  it('나간 편집의 답을 기다리는 동안 또 떠나며 버린 안 보낸 편집도 세고, 그 페이지를 더한다', () => {
+    const store = opened()
+    const sent = store.applyEdit(append('n_a'))!
+    store.markSent(sent)
+    store.applyEdit(append('n_b'))
+    store.clearPage()
+    store.loadPage('page_2', doc(), 9)
+    store.applyEdit(append('n_c'))
+
+    const dropped = store.clearPage()
+
+    expect(dropped.map((edit) => store.wasSent(edit))).toEqual([false])
+    expect(store.abandonedOnLeave(sent)).toBe(true)
+    expect(store.abandonedUnsent()).toBe(2)
+    expect(store.abandonedPages()).toEqual(['page_1', 'page_2'])
+  })
+
+  /** 그 편집이 아닌 편집이 답을 기다리는 판 — 실패 수습이 다시 읽는 동안 쌓인 편집이다. 떠난 편집의 수는 이미 말해졌다. */
+  it('마지막으로 나간 것이 떠나며 버린 편집이 아니면 그 수에 더하지 않는다', () => {
+    const store = opened()
+    const sent = store.applyEdit(append('n_a'))!
+    store.markSent(sent)
+    store.clearPage()
+    store.loadPage('page_2', doc(), 9)
+    const next = store.applyEdit(append('n_b'))!
+    store.markSent(next)
+    store.failEdits()
+    store.applyEdit(append('n_c'))
+
+    store.clearPage()
+
+    expect(store.abandonedUnsent()).toBe(0)
+    expect(store.abandonedPages()).toEqual(['page_1'])
+  })
+
+  it('떠남의 통지는 가리키는 페이지를 다 다시 열면 풀린다', () => {
+    const store = opened()
+    store.setLeaveNotice('떠남', ['page_1', 'page_2'])
+    store.clearPage()
+
+    store.loadPage('page_1', doc(), 4)
+    expect(store.getState().editFailure).toEqual({ kind: 'message', message: '떠남' })
+
+    store.clearPage()
+    store.loadPage('page_2', doc(), 9)
+    expect(store.getState().editFailure).toBeNull()
+  })
+
+  it('다른 통지가 서 있으면 그 페이지를 다시 열어도 그 통지는 그대로다', () => {
+    const store = opened()
+    store.setLeaveNotice('떠남', ['page_1'])
+    store.setEditFailure({ kind: 'message', message: '다른 실패' })
+
+    store.loadPage('page_1', doc(), 4)
+
+    expect(store.getState().editFailure).toEqual({ kind: 'message', message: '다른 실패' })
+  })
+
+  it('떠남의 통지는 닫을 수 있고, 다른 통지는 닫지 않는다', () => {
+    const store = opened()
+    store.setLeaveNotice('떠남', ['page_1'])
+    expect(store.isLeaveNotice(store.getState().editFailure)).toBe(true)
+    store.closeLeaveNotice()
+    expect(store.getState().editFailure).toBeNull()
+
+    store.setEditFailure({ kind: 'message', message: '다른 실패' })
+    expect(store.isLeaveNotice(store.getState().editFailure)).toBe(false)
+    store.closeLeaveNotice()
+    expect(store.getState().editFailure).toEqual({ kind: 'message', message: '다른 실패' })
+  })
+
   it('떠남의 통지는 판을 비우거나 프로젝트를 옮겨도 남고, 다른 통지는 지워진다', () => {
     const store = opened()
-    store.setLeaveNotice('떠남')
+    store.setLeaveNotice('떠남', [])
     store.clearPage()
     store.reset('prj_2')
     expect(store.getState().editFailure).toEqual({ kind: 'message', message: '떠남' })

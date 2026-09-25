@@ -122,6 +122,19 @@ describe('넣을 자리는 앞 형제 뒤다', () => {
     expect(contents(result!.document)).toEqual(['y', 'x', 'a', 'mine', 'z', 'd'])
   })
 
+  /** 형제는 원래 거리 순으로 본다 — 앞 형제 줄을 끝까지 먼저 보면 원래 틈을 떠나 남이 그 사이에 넣은 노드들 앞에 선다. */
+  it('바로 앞 형제가 사라지고 바로 뒤 형제가 살았으면 뒤 형제 바로 앞이다 — 더 먼 앞 형제 뒤로 가지 않는다', () => {
+    const four = doc([text('a'), text('b'), text('c'), text('d')])
+    const bobs = applyOps(four, [
+      { op: 'remove', path: '/root/children/1' },
+      { op: 'add', path: '/root/children/1', value: text('x') },
+      { op: 'add', path: '/root/children/2', value: text('y') },
+      { op: 'add', path: '/root/children/3', value: text('z') },
+    ])
+    const result = rebase([{ op: 'add', path: '/root/children/2', value: text('mine') }], bobs, four)
+    expect(contents(result!.document)).toEqual(['a', 'x', 'y', 'z', 'mine', 'c', 'd'])
+  })
+
   it('앞 형제가 다 사라졌으면 살아 있는 더 뒤의 형제 앞이다', () => {
     const four = doc([text('a'), text('b'), text('c'), text('d')])
     const bobs = applyOps(four, [
