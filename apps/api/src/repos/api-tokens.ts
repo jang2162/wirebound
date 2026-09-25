@@ -148,8 +148,12 @@ export async function deleteApiToken(
  * 그 행을 `KEY SHARE`로 잡는데(`auth/roles.ts`의 `recheckAtCommit`), 빠지는 사람의 토큰과 요청의 토큰을 두 문장으로 잡으면
  * 앞 문장의 행을 쥔 채 뒤 문장의 행을 기다리고, 삭제는 id 순으로 잡다가 그 반대 쪽을 쥔 채 선다 — [api] 밥이 **토큰으로**
  * 캐럴을 빼는 제거를 owner 행 앞에 세워 둔 채 프로젝트를 지우면, 두 토큰의 id 순서 한쪽에서 교착 +1 · 삭제 500(재는 자:
- * `test/guard-in-lock.test.ts`의 «토큰으로 낸 멤버 쓰기»). 요청의 토큰이 이 문장에서 `FOR UPDATE`로 잡히므로 그 토큰의 다른
- * 요청은 이 제거가 끝날 때까지 인증(`last_used_at` 갱신)에서 기다린다 — 그 사람이 토큰으로 멤버를 빼는 동안뿐이다.
+ * `test/guard-in-lock.test.ts`의 «토큰으로 낸 멤버 쓰기»). **owner 둘이 토큰으로 서로를 빼는 판도 이 한 문장에
+ * 매인다** — 두 문장이면 둘이 각자 상대의 토큰을 쥔 채 제 토큰의 자격 확인(`KEY SHARE`)에서 서로를 기다린다. 두 토큰의 id
+ * 순서와 무관하게 교착 +1 · 한쪽 500(재는 자: 같은 절의 «owner 둘이 토큰으로 서로를 빼면»).
+ *
+ * 요청의 토큰이 이 문장에서 `FOR UPDATE`로 잡히므로 그 토큰의 다른 요청은 이 제거가 끝날 때까지 인증(`last_used_at` 갱신)에서
+ * 기다린다 — 그 사람이 토큰으로 멤버를 빼는 동안뿐이다.
  */
 export async function lockMemberTokens(trx: DbHandle, projectId: string, userId: string, requestTokenId: string | null): Promise<void> {
   assertLocking(trx, 'lockMemberTokens')

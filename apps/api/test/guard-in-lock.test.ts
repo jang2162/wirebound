@@ -1730,11 +1730,15 @@ async function settledOrQueued(fired: Fired): Promise<void> {
   throw new Error('요청이 끝나지도 줄에 서지도 않았습니다 — 시나리오가 성립하지 않았습니다')
 }
 
-/** 요청을 세울 질의 글자(프록시의 `holdQuery`) — 세션 · 토큰의 재확인(`auth/roles.ts`의 `recheckAtCommit`), owner 행(`lockOwnerIds`), 멤버 행 재확인. */
+/**
+ * 요청을 세울 질의 글자(프록시의 `holdQuery`) — 세션 · 토큰의 재확인(`auth/roles.ts`의 `recheckAtCommit`), owner 행(`lockOwnerIds`),
+ * 멤버 행 재확인, 멤버 제거의 첫 잠금(`lockMemberTokens`).
+ */
 const SESSION_RECHECK = 'statement_timestamp() for key share'
 const TOKEN_RECHECK = '"api_tokens" where "id" = $1 for key share'
 const OWNER_LOCK = '"role" = $2 for update'
 const MEMBER_SHARE = '"user_id" = $2 for share'
+const MEMBER_TOKENS_LOCK = 'order by "id" for update'
 
 /**
  * **멤버 제거가 빠지는 사람의 그 프로젝트 토큰을 지운다**(`repos/members.ts`의 `removeMember` → `repos/api-tokens.ts`의
@@ -1910,11 +1914,16 @@ describe('멤버 제거가 토큰을 지운다 — 토큰 행을 잡는 자리�
  * | 변조 | 죽는 것 |
  * |---|---|
  * | 역할 변경의 자격 확인을 `lockOwnerIds` 뒤로 | «토큰으로 역할을 바꾸는 owner 를 그때 빼면» · «토큰으로 역할을 바꾸는 중에 프로젝트를 지우면» — 둘 다 교착 +1 |
- * | 제거가 요청의 토큰을 `lockMemberTokens`에 안 싣는다(자격은 따로 `KEY SHARE`) — 거기에 제거의 자격 확인을 `lockOwnerIds` 뒤로 옮겨도 같다 | «토큰으로 남을 빼는 중에 …» 혼자 — 교착 +1 |
+ * | 제거가 요청의 토큰을 `lockMemberTokens`에 안 싣는다(자격은 따로 `KEY SHARE`) — 거기에 제거의 자격 확인을 `lockOwnerIds` 뒤로 옮겨도 같다 | «토큰으로 남을 빼는 중에 …» · «owner 둘이 토큰으로 서로를 빼면» — 둘 다 교착 +1 |
  * | 제거가 토큰을 지운 **뒤에** 자격을 본다 | «토큰으로 자기를 빼면» 혼자 — 제 토큰이 지워져 401 |
  *
  * 역할 변경의 두 판은 늘 함께 죽는다 — 역할 변경의 자격 자리 축은 앞의 것이 소유하고, 뒤의 것은
  * 삭제의 토큰 선잠금과 엇갈리는 판을 세우려고 둔다.
+ *
+ * 요청의 토큰을 첫 잠금에 싣는 축은 «owner 둘이 토큰으로 서로를 빼면»이 소유한다 — 프로젝트 삭제 없이 서고, 두 토큰의 id 를
+ * 바꿔 세워도 그 변조에 교착 +1 이다. «토큰으로 남을 빼는 중에 …»는 삭제의 토큰 선잠금과 엇갈리는 판을 세우려고 두고, 삭제가
+ * `lockProjectTokens`를 안 부르는 변조에도 죽는다(위 절의 표). 두 판을 가르는 변조는 없다. 첫 잠금의 `ORDER BY`를 떼면 새
+ * 케이스가 60 초 멈춰 죽는데 교착이 아니다 — 질의 글자가 `MEMBER_TOKENS_LOCK`과 안 맞아 밥을 못 세운다.
  */
 describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼저다', () => {
   /**
@@ -2006,6 +2015,49 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
       expect(await deadlockCount()).toBe(deadlocksBefore)
       expect(removed.status, removed.body).toBe(204)
       expect(deleted.status, deleted.body).toBe(204)
+    })
+  }, 60_000)
+
+  it('owner 둘이 토큰으로 서로를 빼면: 교착 0 · 먼저 잡은 쪽 204 · 다른 쪽 401', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await tokenFixture(ctx, 'owner')
+      const issued = await ctx.app.inject({ method: 'POST', url: `/api/projects/${fx.projectId}/tokens`, cookies: fx.alice.cookie, payload: { name: '앨리스 토큰' } })
+      expect(issued.statusCode, issued.body).toBe(201)
+      const aliceToken = `Bearer ${(issued.json() as { value: string }).value}`
+      await setTokenId(fx.projectId, fx.alice.user.id, '앨리스 토큰', '00000000-0000-4000-8000-000000000001')
+      await setTokenId(fx.projectId, fx.bob.user.id, '첫 토큰', 'ffffffff-ffff-4fff-bfff-fffffffffff1')
+      const deadlocksBefore = await deadlockCount()
+      // 밥의 제거를 첫 잠금(`lockMemberTokens`) 앞에 세운다 — 인증은 지났고 아무것도 안 쥐었다. 그 사이 앨리스의 제거가 첫 잠금을
+      // 지나 자기 토큰의 재확인 앞에 선다. 밥을 풀면 밥은 앨리스가 쥔 토큰 행에 선다. 요청의 토큰이 첫 잠금에 없으면 밥은 앨리스
+      // 토큰을 먼저 쥐고 제 토큰의 `KEY SHARE`에서 서고, 풀린 앨리스는 제 토큰의 `KEY SHARE`에서 밥에게 서서 고리다.
+      const bobLock = ctx.proxy.holdQuery(MEMBER_TOKENS_LOCK)
+      let bobRemoval: Fired | undefined
+      let aliceRemoval: Fired | undefined
+      let aliceRecheck: { held: Promise<void>; release: () => void } | undefined
+      try {
+        bobRemoval = track(
+          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.alice.user.id}`, headers: { authorization: fx.bobToken } }),
+        )
+        await bobLock.held
+        aliceRecheck = ctx.proxy.holdQuery(TOKEN_RECHECK)
+        aliceRemoval = track(
+          ctx.app.inject({ method: 'DELETE', url: `/api/projects/${fx.projectId}/members/${fx.bob.user.id}`, headers: { authorization: aliceToken } }),
+        )
+        await aliceRecheck.held
+        bobLock.release()
+        await waitForLockWaiter(1)
+      } finally {
+        bobLock.release()
+        aliceRecheck?.release()
+      }
+      const [aliceRemoved, bobRemoved] = await Promise.all([aliceRemoval.promise, bobRemoval.promise])
+
+      expect(await deadlockCount()).toBe(deadlocksBefore)
+      expect(aliceRemoved.status, aliceRemoved.body).toBe(204)
+      // 밥의 토큰은 앨리스의 제거와 함께 지워졌다 — 자격이 죽었다.
+      expect(bobRemoved.status, bobRemoved.body).toBe(401)
+      expect(await roleOf(fx.projectId, fx.alice.user.id)).toBe('owner')
+      expect(await roleOf(fx.projectId, fx.bob.user.id)).toBeNull()
     })
   }, 60_000)
 
