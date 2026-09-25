@@ -28,7 +28,11 @@ async function scene(ctx: RealApiContext) {
 }
 
 /** 핸드셰이크만 하고 더 안 읽는 연결. `drained()`는 그제야 읽기 시작해 서버가 끊을 때(EOF) 풀린다. */
-function unansweringClient(port: number, projectId: string, token: string): Promise<{ drained: () => Promise<void> }> {
+function unansweringClient(
+  port: number,
+  projectId: string,
+  token: string,
+): Promise<{ drained: () => Promise<void>; destroy: () => void }> {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1')
     sockets.push(socket)
@@ -53,6 +57,7 @@ function unansweringClient(port: number, projectId: string, token: string): Prom
             socket.resume()
             return closed
           },
+          destroy: () => socket.destroy(),
         })
     }
     socket.on('data', onData)
@@ -77,6 +82,8 @@ describe('닫는 중의 WS 연결', () => {
       const client = await unansweringClient(ctx.port, projectId, token)
 
       const { outcome, elapsedMs } = await closeWithin(ctx, WS_CLOSE_GRACE_MS + 3_000)
+      // 안 닫혔으면 이쪽에서 끊는다 — 그래야 하네스의 `app.close()`가 30s 를 안 기다리고 값으로 죽는다.
+      if (outcome !== 'closed') client.destroy()
       expect(outcome).toBe('closed')
       // 한도까지는 기다린다 — 곧바로 끊지 않는다.
       expect(elapsedMs).toBeGreaterThanOrEqual(WS_CLOSE_GRACE_MS - 50)
