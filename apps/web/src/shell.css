@@ -149,6 +149,17 @@
   flex-wrap: wrap;
   gap: 24px;
   padding: 10px 16px;
+  /* **머리는 창보다 넓어지지 않는다.** 머리는 그리드의 네 칸에 걸치는데, 좁은 창에서는 그리드가 좌측 · 우측의 고정 폭만큼
+     창보다 넓다 — 머리가 그 폭까지 펼쳐지면 줄을 바꿀 자리를 창 밖에서 찾아 오른쪽 도구들이 잘린다. `.wb-shell`이
+     `position: fixed`라 문서가 넓어지지 않아 가로 스크롤로도 못 본다(Chrome 390: 되돌리기 · 확대 · 화면 맞춤 · 내보내기가
+     493 까지 · 단추 글자가 «편집 모/드» · «축/소»로 접힘). 상한을 창 폭에 두면 `flex-wrap`이 창 안에서 줄을 바꾼다. 안에서
+     줄을 바꿔야 하는 묶음은 둘이다 — 도구(`.wb-shell-tools` — 모드 · 뷰포트 · 줌이 한 줄이면 390 에서 477px)와 세션
+     (`.wb-shell-session` — 이름이 길면 넘친다: 한글 30자 이름에서 떼면 넘침 셋). 묶음이 줄을 바꾸면 단추는 줄어들지 않아
+     글자가 안 접힌다 — 단추마다 `nowrap`을 걸어 봤고 390 · 480 에서 아무것도 안 바뀌었다. 테마 고르개 묶음 · 이력은 자식이
+     다 줄어들거나 짧아 걸 것이 없다(`test/shell-css-picker.test.ts`의 `ONE_LINE`).
+     몸통(좌측 · 캔버스 · 우측)이 좁은 창에서 넘치는 것은 이 줄의 일이 아니다. */
+  max-width: 100vw;
+  box-sizing: border-box;
   background: var(--wb-shell-chrome);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--wb-shell-ink);
@@ -228,8 +239,10 @@
 
 .wb-shell-tools {
   display: flex;
+  /* 좁은 창에서는 모드 · 뷰포트 · 줌 묶음이 줄을 바꾼다. 근거는 `.wb-shell-header`의 `max-width`. */
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 8px 16px;
   font-size: 13px;
 }
 
@@ -371,6 +384,9 @@
    두는가"*이고 그것은 별도의 일이다 — **이 규칙만 만지작거리지 마라.** */
 .wb-shell-session {
   display: inline-flex;
+  /* 이름 · 링크 · 로그아웃이 좁은 창에서 줄을 바꾼다 — 이 묶음에 새 조각이 들어와도 같다. 근거는 `.wb-shell-header`의
+     `max-width`. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 13px;
