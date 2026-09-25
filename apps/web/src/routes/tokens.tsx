@@ -152,7 +152,7 @@ export function TokensRoute(): ReactElement {
                 취소
               </button>
               <button
-                className="wb-shell-project-danger"
+                className="wb-shell-project-danger wb-shell-tokens-bulk-confirm"
                 type="button"
                 disabled={busy}
                 onClick={confirmClick(() => void revoke({ kind: 'all' }))}

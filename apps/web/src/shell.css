@@ -3422,7 +3422,7 @@
 
 /* 확정은 묻던 자리에서 **단추 한 높이(24px) 이상** 떨어진다 — 겹치지만 않는 거리(`gap` 8px)면 두 번 누르는 사이 손이 조금만
    내려가도 확정에 닿는다. 줄 하나의 확정(아래 `-tokens-confirm`)과 같은 하한이다(재는 자: `build-test/tokens-confirm.test.ts` 의 «거리»). */
-.wb-shell-tokens-bulk > .wb-shell-project-danger {
+.wb-shell-tokens-bulk-confirm {
   margin-top: 16px;
 }
 
