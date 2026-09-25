@@ -84,7 +84,17 @@ export type ServerFrame =
        */
       clientOpId?: string
     }
-  | { type: 'restored'; projectId: string; snapshotId: string; actor: EventActor }
+  | {
+      type: 'restored'
+      projectId: string
+      snapshotId: string
+      actor: EventActor
+      /**
+       * 그 복원이 만든 안전망 스냅샷의 id. **있을 때만 온다.** 내가 한 복원의 것이면 그 신호는 내 복원이 되돌아온 것이다 — 복원이 연결 id
+       * 없이 나가면 서버가 낸 연결을 못 뺀다(`page-changed`의 `clientOpId`와 같은 창). 스토어가 알아보고 넘긴다(`EditorStore.markRestored`).
+       */
+      safetySnapshotId?: string
+    }
   /**
    * **내 멤버십이 바뀌었다 — 프로젝트를 다시 읽어라.** 역할 값은 안 온다 — 역할은 `getProject`의 응답 하나에서
    * 읽는다(위 `joined`의 머리말과 같은 까닭 · 서버 `ws/protocol.ts`의 그 갈래).
@@ -255,6 +265,8 @@ export function parseServerFrame(raw: string): ServerFrame | null {
             projectId: value.projectId,
             snapshotId: value.snapshotId,
             actor: value.actor as unknown as EventActor,
+            // 없으면 키를 안 만든다 — `page-changed`의 `clientOpId`와 같다.
+            ...(str(value.safetySnapshotId) ? { safetySnapshotId: value.safetySnapshotId } : {}),
           }
         : null
     case 'membership-changed':

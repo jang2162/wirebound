@@ -53,6 +53,7 @@ import { ThemePicker } from '../theme/theme-picker'
 import {
   EditorStore,
   VIEWPORT_PRESETS,
+  type DiscardTally,
   type EditorMode,
   type ViewportWidth,
 } from '../store/editor-store'
@@ -184,6 +185,20 @@ const RELOAD_FAILED_LEAD = '페이지를 다시 불러오지 못했습니다.'
  * 붙들지 않는다.
  */
 const SENT_EDIT_WAIT_MS = 3_000
+
+/**
+ * **로그아웃이 두고 간 편집의 한 줄**(`settleEdits`) — 로그인 화면이 그린다(`session/session-context.tsx`의 `useSignOutNotice`).
+ * 나간 편집 가운데 답을 못 받은 것(`sent`)은 서버에 반영됐는지 모른다 — 로그아웃 뒤에 커밋될 수도 있다. 커밋 전에 거절된 것(`refused`)과 한 번도
+ * 안 나간 것(`unsent`)은 저장되지 않았다. 셋 다 0 이면 `null`.
+ */
+export function logoutLossNotice(sent: number, unsent: number, refused = 0): string | null {
+  if (sent === 0 && unsent === 0 && refused === 0) return null
+  const parts = [refused > 0 ? `거절된 편집 ${refused}개` : '', unsent > 0 ? `보내지 않은 편집 ${unsent}개` : ''].filter((part) => part !== '')
+  const lost = parts.length === 0 ? '' : `${parts.join('와 ')}는 저장되지 않았습니다`
+  if (sent === 0) return `로그아웃하며 ${lost} — 다시 로그인해 그 페이지를 확인하세요.`
+  const tail = lost === '' ? '' : ` ${lost}.`
+  return `로그아웃 전에 보낸 편집 ${sent}개의 답을 받지 못해 서버에 반영됐는지 알 수 없습니다.${tail} 다시 로그인해 그 페이지를 확인하세요.`
+}
 
 /**
  * **보낸 편집의 답(ack · 거절)을 기다린다** — 전송이 쉬면(`editStatus === 'idle'`) 풀린다. 한도(`SENT_EDIT_WAIT_MS`)나 `signal`로도
@@ -580,12 +595,19 @@ function EditorShell(props: {
   /**
    * **복원 뒤 다시 읽기의 입구 하나** — 내가 복원했을 때(스냅샷 팝오버)와 남의 복원을 배너의 단추로 다시 읽을 때가 함께 탄다. 두
    * 신호를 한 자리에서 올려야 한쪽 입구가 테마를 빠뜨리지 않는다(`restoredToken` 표의 테마 줄).
+   *
+   * **다시 읽기가 시작된 것을 스토어에 먼저 적는다**(`EditorStore.beginRestoreReread`) — 복원 배너는 이 다시 읽기의 판만 풀고, 그 사이 온 복원
+   * 신호가 있으면 안 푼다. 내 복원이면 그 안전망 스냅샷 id 를 넘겨 되돌아오는 신호를 알아보게 한다.
    */
-  const reloadAfterRestore = useCallback((lead: string) => {
-    setRestoredLead(lead)
-    setRestoredToken((token) => token + 1)
-    setThemeReloadToken((token) => token + 1)
-  }, [])
+  const reloadAfterRestore = useCallback(
+    (lead: string, ownSafetySnapshotId?: string) => {
+      store.beginRestoreReread(ownSafetySnapshotId)
+      setRestoredLead(lead)
+      setRestoredToken((token) => token + 1)
+      setThemeReloadToken((token) => token + 1)
+    },
+    [store],
+  )
 
   /**
    * **룸에 붙어 있는다**(룸은 프로젝트 단위 하나다). 페이지를 옮겨도 연결은
@@ -632,8 +654,26 @@ function EditorShell(props: {
    */
   const split = mode === 'edit'
 
-  /** 로그아웃 앞의 기다림 — 아래 `SessionMenu` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. */
-  const settleEdits = useCallback(() => editsAnswered(store), [store])
+  /**
+   * 로그아웃 앞의 기다림 — 아래 `SessionMenu` 자리의 주석. 끊는 신호는 없다: 누른 뒤 화면을 옮겨도 로그아웃은 나간다. 기다림 뒤에 큐에 남은
+   * 편집과 **기다리는 동안 버린 편집**을 세어 로그인 화면에 남길 한 줄을 돌려준다(`logoutLossNotice`).
+   *
+   * **버린 것도 센다**(`EditorStore.discardTally`) — 기다리는 동안 편집 실패 수습이 큐를 비우면(`failEdits`) 그 통지는 판을 다시 읽은 뒤에
+   * 서고 셸째 내려가 아무도 못 본다. 큐만 세면 0 이다(jsdom: 로그아웃 뒤 409 → 수습). 누르기 전에 시작한 수습이 버린 것도 아직 말하지
+   * 않았으니 센다(`recoveringDiscards`). **«거절»은 큐에서 빠진 편집에만 선다**(누계의 `refused`) — 큐에 남은 나간 편집은 그 보내기가 거절됐어도
+   * «모름»이다: 번호 쓰기를 기다리는 편집은 409 를 받고도 큐에 남고, 한도 뒤 게시의 답이 오면 리베이스가 옮겨 다시 낸다(`use-edit-commit.tsx`의
+   * `pump`) — 로그아웃 요청이 떠 있는 동안 커밋된다(Chrome `build-test/editor-post-between.test.ts`의 «로그아웃 한도 뒤 …»).
+   */
+  const settleEdits = useCallback(async () => {
+    const start = store.discardTally()
+    const untold = store.recoveringDiscards()
+    await editsAnswered(store)
+    const end = store.discardTally()
+    const { pending } = store.getState()
+    const sentHere = pending.filter(store.wasSent).length
+    const since = (key: keyof DiscardTally): number => end[key] - start[key] + untold[key]
+    return logoutLossNotice(sentHere + since('unknown'), pending.length - sentHere + since('unsent'), since('refused'))
+  }, [store])
 
   return (
     <div className="wb-shell">
@@ -695,7 +735,7 @@ function EditorShell(props: {
             있는지"*조차 못 본다. */}
         <SnapshotsPanel
           projectId={props.project.id}
-          onRestored={() => reloadAfterRestore(RESTORED_LEAD)}
+          onRestored={(safetySnapshotId) => reloadAfterRestore(RESTORED_LEAD, safetySnapshotId)}
         />
         {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 스냅샷 링크 옆에 두는 것은 둘 다
             *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
@@ -714,8 +754,8 @@ function EditorShell(props: {
         {/* **보낸 편집의 답을 받은 뒤에 로그아웃한다**(`editsAnswered`) — 칸에 친 채 누르면 그 클릭이 blur 로 낸 편집과 로그아웃이 다른
             연결로 겨룬다. 로그아웃이 먼저 세션을 지우면 편집은 커밋 순간의 재확인에서 거절되고 셸째 내려가 말할 자리도 없다(Chrome:
             친 채 누른 3판 가운데 1판이 401 · 행 잠금에 줄 선 편집과 그 뒤에 쌓인 편집은 둘 다 잃음). **막지는 않는다** — 한도가 지나면
-            그대로 나간다. 로그아웃은 권한을 줄이는 쓰기라, 막으면 누르고 떠난 사람의 세션이 남는다. 한도 뒤에 잃는 편집은 말할 화면이
-            없다(남는 틈). */}
+            그대로 나간다. 로그아웃은 권한을 줄이는 쓰기라, 막으면 누르고 떠난 사람의 세션이 남는다. 한도 뒤에 잃는 편집은 셸째
+            내려가므로 로그인 화면이 말한다(`logoutLossNotice` · `useSignOutNotice`). */}
         <SessionMenu settle={settleEdits} />
         {/* 편집 실패 통지는 **한 자리**다. 조회 실패처럼 화면마다 나누지 않는 것은,
             어느 화면에서 시작된 편집이든 실패의 결과가 같기 때문이다 — 페이지를 다시
@@ -1160,10 +1200,10 @@ function CanvasFrame(props: {
     if (unsent > 0) store.setLeaveNotice(leftUnsentNotice(unsent), left === null ? [] : [left])
   }, [store])
   const applyServerPage = useCallback(
-    (openPageId: string, page: PageDetail, lead: string, ticket: number): void => {
+    (openPageId: string, page: PageDetail, lead: string, ticket: number, restoreReread = false): void => {
       // **비우기 전에 센다.** `loadPage`가 두 스택을 비우므로 그 뒤에는 알 수 없다.
       const hadUndo = store.getState().undoStack.length > 0
-      tellLost(lead, store.loadPage(openPageId, page.schema, page.headSeq, ticket), hadUndo)
+      tellLost(lead, store.loadPage(openPageId, page.schema, page.headSeq, ticket, { restoreReread }), hadUndo)
     },
     [store, tellLost],
   )
@@ -1422,7 +1462,7 @@ function CanvasFrame(props: {
     // **두 이펙트가 같은 모양이라 고장도 같다.** 그때도 **판을 비운 것으로 놓는다**(`clearPage`) — 남의 복원 배너는 페이지를 안
     // 연 화면에도 서고, 그것을 푸는 것은 다시 실은 판뿐이다. 열린 페이지가 없는 화면은 비운 판이 곧 서버 것이다.
     if (pageId === undefined) {
-      store.clearPage()
+      store.clearPage({ restoreReread: true })
       return
     }
 
@@ -1441,7 +1481,8 @@ function CanvasFrame(props: {
         if (!alive) return
         // 뒤에 시작한 다시 싣기가 판을 먼저 정했으면 이 답은 그보다 옛것이다(재연결 이펙트의 같은 줄).
         if (!store.settlePageLoad(ticket)) return
-        applyServerPage(pageId, page, restoredLead, ticket)
+        // 복원 뒤 다시 읽기의 판이다 — 이 판만 복원 배너를 푼다(`EditorStore.beginRestoreReread`).
+        applyServerPage(pageId, page, restoredLead, ticket, true)
         // 앞서 이 페이지의 조회가 실패해 있었을 수도 있다. 복원으로 다시 생긴 페이지를
         // 오류 문장 아래 감춰 두지 않는다.
         setState({ status: 'ready' })
@@ -1452,7 +1493,7 @@ function CanvasFrame(props: {
         // 위 머리말의 둘째 절. 문서를 스토어에서 읽는 셋이 같은 사실을 말하게 한다. **비우며 버린 편집은 말한다** — 판을
         // 실을 때(`applyServerPage`)와 같은 문장 길이다. 되돌리기 이력은 말하지 않는다 — 그 페이지를 더 못 연다.
         const { pending } = store.getState()
-        store.clearPage()
+        store.clearPage({ restoreReread: true })
         tellLost(RELOAD_FAILED_LEAD, pending, false)
         setState({ status: 'failed', failure: toFailure(caught, PAGE_UNKNOWN_FAILURE) })
       }

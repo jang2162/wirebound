@@ -2035,6 +2035,14 @@
   color: #b42318;
 }
 
+/* 로그아웃하며 두고 간 편집의 한 줄(`useSignOutNotice`). 실패가 아니라 앞 세션의 사정이라 `status`이고 붉지 않다. */
+.wb-shell-login-notice {
+  margin: 0;
+  width: 100%;
+  font-size: 13px;
+  color: var(--wb-shell-ink);
+}
+
 /* ── 테마 저작 화면. **셸 밖의 별도 라우트다** ────────────────────────────
    클래스 접두어를 `wb-shell-`로 맞추는 것은 프로젝트 목록과 같은 이유다 — 화면이 셸
    안이든 밖이든 `test/shell-css.test.ts`가 그 접두어를 기계로 지킨다.

@@ -56,9 +56,10 @@ export const SWITCHED_NOTICE = '다른 사람으로 로그인됐습니다 — �
 export function SessionMenu(props: {
   /**
    * **로그아웃 요청을 내기 전에 기다릴 것** — 에디터 셸이 보낸 편집의 답을 기다리게 넘긴다(`routes/editor.tsx`의 `editsAnswered`). 한도가
-   * 있어야 한다 — 로그아웃은 권한을 줄이는 쓰기라 막히면 안 된다. 셸 밖(프로젝트 목록 · 토큰)은 넘기지 않는다.
+   * 있어야 한다 — 로그아웃은 권한을 줄이는 쓰기라 막히면 안 된다. 셸 밖(프로젝트 목록 · 토큰)은 넘기지 않는다. **기다림 뒤에도 잃는 것이
+   * 있으면 그 한 줄을 돌려준다** — 로그아웃이 성공하면 로그인 화면이 그린다(`useSignOutNotice`). 없으면 `null`이다.
    */
-  settle?: () => Promise<void>
+  settle?: () => Promise<string | null>
 }): ReactElement {
   const api = useApi()
   const user = useSessionUser()
@@ -73,7 +74,7 @@ export function SessionMenu(props: {
   async function run(): Promise<void> {
     setBusy(true)
     setFailure(null)
-    await props.settle?.()
+    const farewell = (await props.settle?.()) ?? null
     try {
       await api.logout()
     } catch (caught) {
@@ -87,7 +88,7 @@ export function SessionMenu(props: {
     }
     // **여기 뒤로 상태를 놓지 않는다.** 끊는 순간 문지기가 로그인으로 보내 이 컴포넌트가
     // 사라지므로, `setBusy(false)`는 사라진 것에 거는 일이 된다.
-    signOut()
+    signOut(farewell ?? undefined)
   }
 
   return (

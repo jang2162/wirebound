@@ -139,7 +139,18 @@ export type ServerFrame =
        */
       clientOpId?: string
     }
-  | { type: 'restored'; projectId: string; snapshotId: string; actor: EventActor }
+  | {
+      type: 'restored'
+      projectId: string
+      snapshotId: string
+      actor: EventActor
+      /**
+       * 그 복원이 만든 안전망 스냅샷의 id — 복원 응답의 `safetySnapshot.id`와 같다. **낸 사람이 자기 복원을 알아보는 수단이다**(위
+       * `page-changed`의 `clientOpId`와 같은 창: 복원이 연결 id 없이 나가는 동안 소켓이 다시 붙어 룸에 들면 낸 사람이 되받는다). 복원마다
+       * 새로 나므로 겹치지 않는다.
+       */
+      safetySnapshotId: string
+    }
   /**
    * **이 연결의 주인의 멤버십이 바뀌었다 — 다시 읽어라.** 역할 변경 · 제거 · owner 넘기기(역할 변경의 한 판이다)가
    * 전부 이것이다.

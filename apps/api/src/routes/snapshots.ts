@@ -335,6 +335,7 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
         notifyRestored(app, {
           projectId,
           snapshotId,
+          safetySnapshotId: outcome.result.safety.id,
           actor: requestEventActor(request),
           origin: broadcastOrigin(request),
         })

@@ -90,6 +90,8 @@ export function notifyPageChanged(app: FastifyInstance, input: PageChangedInput)
 export interface RestoredInput {
   projectId: string
   snapshotId: string
+  /** 그 복원이 만든 안전망 스냅샷(`protocol.ts`의 그 필드). */
+  safetySnapshotId: string
   actor: EventActor
   /** 방송에서 뺄 발신 연결(`broadcastOrigin`). 없으면 아무도 안 뺀다. */
   origin?: BroadcastOrigin

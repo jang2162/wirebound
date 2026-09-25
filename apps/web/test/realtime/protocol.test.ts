@@ -62,6 +62,13 @@ describe('읽는 것', () => {
     ])
   })
 
+  it('restored 의 안전망 스냅샷 id 를 옮긴다 — 글자가 아니면 키를 안 만든다', () => {
+    const base = { type: 'restored', projectId: 'p', snapshotId: 's', actor: { type: 'user', label: '홍길동' } }
+
+    expect(parseServerFrame(JSON.stringify({ ...base, safetySnapshotId: 's9' }))).toEqual({ ...base, safetySnapshotId: 's9' })
+    expect(parseServerFrame(JSON.stringify({ ...base, safetySnapshotId: 9 }))).toEqual(base)
+  })
+
   it('patch-ack의 값을 그대로 옮긴다 — undo 스택이 이것을 든다', () => {
     expect(parseServerFrame(JSON.stringify(PATCH_ACK))).toEqual(PATCH_ACK)
   })

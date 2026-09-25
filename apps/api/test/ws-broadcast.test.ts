@@ -401,6 +401,36 @@ describe('무엇을 알리는가', () => {
       expect(watcher.received.filter((received) => received.type === 'page-changed')).toEqual([])
     })
   })
+
+  /**
+   * **프레임이 그 복원의 안전망 스냅샷 id 를 싣는다 — 응답의 것과 같은 값이다.** 복원이 연결 id 없이 나가 낸 사람이 되받으면 웹이 그 값으로
+   * 내 복원을 알아본다(`apps/web`의 `EditorStore.markRestored`). 헤더 없이 낸 owner 의 소켓도 받는다 — 그 창이다.
+   */
+  it('복원 프레임이 응답과 같은 안전망 스냅샷 id 를 싣는다 — 연결 id 없이 낸 사람도 받는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const snapshot = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.project.id}/snapshots`,
+        cookies: fx.owner.cookie,
+        payload: { tag: 'v1' },
+      })
+      expect(snapshot.statusCode).toBe(201)
+      const snapshotId = (snapshot.json() as { id: string }).id
+      const mine = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+
+      const restore = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.project.id}/snapshots/${snapshotId}/restore`,
+        cookies: fx.owner.cookie,
+      })
+      expect(restore.statusCode).toBe(200)
+      const safety = (restore.json() as { safetySnapshot: { id: string } }).safetySnapshot.id
+
+      const frame = await mine.waitFor('restored')
+      expect(frame.safetySnapshotId).toBe(safety)
+    })
+  })
 })
 
 describe('연결·참가·이탈', () => {
