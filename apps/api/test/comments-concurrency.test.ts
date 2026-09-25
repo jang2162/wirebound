@@ -10,6 +10,7 @@
  * |---|---|---|
  * | **다른 노드** | 서로 다른 노드의 마지막 코멘트를 동시에 지우면 **진 쪽이 409를 받는데 행 삭제는 커밋된다** | `409를 받은 삭제는 행을 남기지 않는다` |
  * | **같은 노드** | 같은 노드의 마지막 둘을 동시에 지우면 둘 다 *"마지막이 아니다"*로 판정해 **고아 번호**가 남는다 | `같은 노드의 마지막 둘을 동시에 지우면 번호가 사라진다` |
+ * | **첫 코멘트** | 게시가 잠그기 전의 문서로 번호를 매기면 서로 다른 노드의 첫 코멘트가 둘 다 1번이거나(낡음으로 막으면 한쪽 409), 앞의 삭제가 없앤 번호를 못 봐 **번호 없는 코멘트**가 선다 | `서로 다른 노드의 첫 코멘트를 동시에 달면 …` · `마지막 코멘트의 삭제가 먼저 줄 선 뒤 …` |
  *
  * **다른 노드 줄이 무거운 이유는 상태 코드가 아니다** — *"실패했다고 말하는데 조작은 일어났다"*가
  * 성립하기 때문이고, 그것은 조용히 되풀이되는 부류다.
@@ -153,7 +154,7 @@ async function waitersBehind(holder: number): Promise<number> {
 /**
  * 페이지 행을 테스트 트랜잭션으로 쥔 채 `run`을 시작하고, **요청 `waiters`개가 그 행에서 줄을 선 것을 본 뒤에** 놓는다.
  *
- * 코멘트 쓰기는 `baseSeq`를 잠그기 **전에** 읽는다(`routes/comments.ts` 머리말의 «대가 2»). 요청 둘을 `Promise.all`로
+ * 코멘트 삭제는 `baseSeq`를 잠그기 **전에** 읽는다(`routes/comments.ts` 머리말의 «대가 2»). 요청 둘을 `Promise.all`로
  * 던지기만 하면 앞 요청이 커밋을 마친 뒤에 뒤 요청이 `head_seq`를 읽는 판이 생기고, 그 판에서는 둘 다 200 인 것이
  * **옳은 동작**이다 — 경합을 재는 케이스가 경합 없이 빨개진다(DB 컨테이너에 CPU 부하를 걸고 B5 를 되풀이하면 드물게 난다).
  * 둘 다 행에서 기다리는 것을 봤으면 둘 다 그 전에 `baseSeq`를 읽었다 — 겹침이 성립한다.
@@ -161,6 +162,47 @@ async function waitersBehind(holder: number): Promise<number> {
  * **줄이 안 서면 던진다** — 겹치지 않은 판을 초록 · 빨강 어느 쪽으로도 세지 않는다. 그때도 요청은 끝까지 기다린다.
  */
 async function withPageRowHeld<T>(pageId: string, waiters: number, run: () => Promise<T>, timeoutMs = 5_000): Promise<T> {
+  const holder = await holdPageRow(pageId)
+  const running = run()
+  let lined: unknown
+  try {
+    await waitForWaiters(holder.pid, waiters, timeoutMs)
+  } catch (error) {
+    lined = error
+  }
+  await holder.release()
+  const result = await running
+  if (lined !== undefined) throw lined
+  return result
+}
+
+/**
+ * `withPageRowHeld`와 같되 **줄 서는 순서를 정한다** — `runs[i]`는 앞의 `i`개가 행에서 줄을 선 것을 본 뒤에 시작한다.
+ * 페이지 행의 잠금 대기열은 도착 순이므로 놓은 뒤 잠금을 받는 순서도 이 순서다. 결과는 `runs`의 순서로 돌려준다.
+ */
+async function withPageRowQueued<T>(pageId: string, runs: Array<() => Promise<T>>): Promise<T[]> {
+  const holder = await holdPageRow(pageId)
+  const running: Promise<T>[] = []
+  let lined: unknown
+  try {
+    for (const [index, run] of runs.entries()) {
+      running.push(run())
+      await waitForWaiters(holder.pid, index + 1)
+    }
+  } catch (error) {
+    lined = error
+  }
+  await holder.release()
+  const results = await Promise.all(running)
+  if (lined !== undefined) throw lined
+  return results
+}
+
+/**
+ * 페이지 행을 테스트 트랜잭션으로 쥔다. `pid`는 쥔 백엔드다(`waitersBehind`가 그 뒤의 줄을 센다). `release`가 놓고 그
+ * 트랜잭션이 끝나기를 기다린다.
+ */
+async function holdPageRow(pageId: string): Promise<{ pid: number; release: () => Promise<void> }> {
   let release!: () => void
   const released = new Promise<void>((resolve) => {
     release = resolve
@@ -177,33 +219,32 @@ async function withPageRowHeld<T>(pageId: string, waiters: number, run: () => Pr
     await released
   })
   await Promise.race([held, holder])
-
-  const running = run()
-  let lined: unknown
-  try {
-    const deadline = Date.now() + timeoutMs
-    while ((await waitersBehind(holderPid)) < waiters) {
-      if (Date.now() > deadline) {
-        throw new Error(`페이지 행에서 요청 ${waiters}개가 줄을 서지 않았습니다 — 두 요청이 겹치지 않았습니다`)
-      }
-      await new Promise((resolve) => setTimeout(resolve, 10))
-    }
-  } catch (error) {
-    lined = error
+  return {
+    pid: holderPid,
+    release: async () => {
+      release()
+      await holder
+    },
   }
-  release()
-  await holder
-  const result = await running
-  if (lined !== undefined) throw lined
-  return result
+}
+
+/** 쥔 백엔드(`holder`) 뒤에 `waiters`개가 줄을 설 때까지 기다린다(`waitersBehind`). `timeoutMs` 안에 안 되면 던진다. */
+async function waitForWaiters(holder: number, waiters: number, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while ((await waitersBehind(holder)) < waiters) {
+    if (Date.now() > deadline) {
+      throw new Error(`페이지 행에서 요청 ${waiters}개가 줄을 서지 않았습니다 — 요청이 겹치지 않았습니다`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
 }
 
 describe('같은 멱등 키의 게시가 동시에 온다', () => {
   it('둘 다 성공하고(201·200) 행은 하나 · 번호는 1 이다', async () => {
     // **잠금 안에서 키를 한 번 더 보는 것이 이 케이스의 전부다**(`routes/comments.ts`). 둘 다
     // 잠그기 전의 확인을 지나(아직 아무것도 커밋되지 않았다) 페이지 행에서 줄을 선다. 뒤의 요청이
-    // 잠근 뒤 키를 안 보면 앞 요청이 번호를 붙여 올린 `head_seq`에 걸려 **409(stale)** 를 받는다 —
-    // 같은 게시를 두 번 보낸 사람이 «실패»를 듣는다. 키를 봐도 **낡음보다 뒤에** 보면 같다.
+    // 잠근 뒤 키를 안 보면 같은 키로 둘째 행을 넣으려다 유일 색인에 걸려 **500** 이다 —
+    // 같은 게시를 두 번 보낸 사람이 «모름»을 듣는다.
     await withRealApi(async (ctx) => {
       const fx = await setup(ctx)
       const post = () =>
@@ -312,11 +353,13 @@ describe('코멘트 삭제의 동시성', () => {
     })
   })
 
-  it('서로 다른 노드의 첫 코멘트를 동시에 달면 번호가 겹치지 않는다', async () => {
-    // `baseSeq`를 잠그기 **전에** 읽어야 낙관적 잠금이 선다는 것을 실측으로 고정한다 —
-    // 잠근 뒤에 읽으면 둘 다 1번을 받는다.
+  it('서로 다른 노드의 첫 코멘트를 동시에 달면 둘 다 달리고 번호가 겹치지 않는다', async () => {
+    // **번호는 잠근 뒤의 문서로 매긴다**(`routes/comments.ts` 머리말 「게시는 잠근 뒤의 문서로 번호를 매긴다」).
+    // 잠그기 전에 읽은 문서로 매기면 뒤의 요청이 앞 요청의 번호를 못 봐 둘 다 1번이 되고, 그것을 낡음으로
+    // 거절하면 한쪽이 409 다. **둘이 겹친 판만 잰다**(`withPageRowHeld`) — 겹치지 않으면 어느 쪽이든 둘 다 201 이다.
     await withRealApi(async (ctx) => {
       const fx = await setup(ctx)
+      const before = await db.selectFrom('pages').select('head_seq').where('id', '=', fx.pageId).executeTakeFirstOrThrow()
 
       const post = (nodeId: string) =>
         ctx.app.inject({
@@ -326,16 +369,42 @@ describe('코멘트 삭제의 동시성', () => {
           payload: { nodeId, body: `${nodeId}의 말` },
         })
 
-      const [a, b] = await Promise.all([post('n_a'), post('n_b')])
+      const [a, b] = await withPageRowHeld(fx.pageId, 2, () => Promise.all([post('n_a'), post('n_b')]))
 
-      expect(sorted([a.statusCode, b.statusCode])).toEqual([201, 409])
-
+      expect(sorted([a.statusCode, b.statusCode])).toEqual([201, 201])
       const document = await schemaOf(fx.pageId)
-      const markers = [markerOf(document, 'n_a'), markerOf(document, 'n_b')].filter(
-        (marker): marker is number => typeof marker === 'number',
-      )
-      // 성공한 쪽 하나만 번호를 갖는다. **둘 다 1번을 받는 일이 없다.**
-      expect(markers).toEqual([1])
+      // **둘 다 1번을 받는 일이 없다.** 문서 · 응답 · revision 번호가 한 줄로 맞는다.
+      expect([markerOf(document, 'n_a'), markerOf(document, 'n_b')].sort()).toEqual([1, 2])
+      expect([a.json().marker, b.json().marker].sort()).toEqual([1, 2])
+      expect(sorted([a.json().seq, b.json().seq])).toEqual([Number(before.head_seq) + 1, Number(before.head_seq) + 2])
+      expect(await commentCount(fx.pageId)).toBe(2)
+    })
+  })
+
+  it('마지막 코멘트의 삭제가 먼저 줄 선 뒤 같은 노드에 게시하면 번호를 새로 받는다', async () => {
+    // 게시는 잠근 뒤의 문서로 번호를 본다. 잠그기 전에 읽은 문서로 보면 *"이미 번호가 있다"*로 판단해
+    // 앞의 삭제가 번호를 지운 뒤에 **번호 없는 코멘트**를 세운다. 순서를 정해 줄을 세운다(`withPageRowQueued`).
+    await withRealApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const only = await postComment(ctx, fx, 'n_a', '지울 말')
+
+      const [del, post] = await withPageRowQueued(fx.pageId, [
+        () => deleteComment(ctx, fx, only),
+        () =>
+          ctx.app.inject({
+            method: 'POST',
+            url: commentsUrl(fx),
+            cookies: fx.owner.cookie,
+            payload: { nodeId: 'n_a', body: '새 말' },
+          }),
+      ])
+
+      expect([del!.statusCode, post!.statusCode]).toEqual([200, 201])
+      expect(await commentCount(fx.pageId)).toBe(1)
+      // 번호가 **있다**는 것만 본다 — 그 값(최댓값 + 1)은 위 «첫 코멘트를 동시에» 케이스의 축이다.
+      const marker = markerOf(await schemaOf(fx.pageId), 'n_a')
+      expect(typeof marker).toBe('number')
+      expect(post!.json().markerOps).toEqual([{ op: 'add', path: '/root/children/0/marker', value: marker }])
     })
   })
 })

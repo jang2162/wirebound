@@ -256,9 +256,21 @@ const NO_WARNINGS: ValidationIssue[] = []
 
 /**
  * `applyMarkerChange`의 결과. **`boolean`이 아닌 것이 요점이다** — 그 함수의 머리말에
- * 셋이 갈리는 근거가 있다.
+ * 넷이 갈리는 근거가 있다.
  */
-export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged'
+export type MarkerChangeResult = 'applied' | 'skipped' | 'diverged' | 'waiting'
+
+/**
+ * 번호 응답이 **사이 프레임을 기다리는** 한도(`applyMarkerChange`의 «내 다음 번호가 아니면 사이 프레임을 기다린다»). 넘기면
+ * `'gap'` 낡음을 세운다.
+ *
+ * 그 프레임은 응답보다 **먼저 나갔다** — 사이 revision 은 번호를 매긴 쓰기가 페이지 행 잠금을 받기 전에 커밋됐고 서버는
+ * 커밋 직후에 방송한다. 기다리는 것은 두 연결(WS · HTTP)의 지연 차뿐이다. 잰 값 [api]: 페이지 행을 쥔 채 «남의 구조
+ * 편집 → 내 게시» 순으로 줄 세우고 풀면, localhost 에서는 프레임이 응답보다 4–8ms 앞서고, 서버→브라우저 WS 바이트만
+ * 10ms 늦추는 TCP 프록시를 끼우면 6판 모두 응답이 먼저 닿는다. 패킷 하나를 다시 보내면(RTO 200ms 부터 두 배씩) 수백 ms
+ * 가 붙는다 — 3초는 그 몇 번을 덮는다. 그보다 늦으면 «늦었다»가 아니라 «안 온다»로 본다(끊긴 연결 · 빠진 방송).
+ */
+export const MARKER_FRAME_WAIT_MS = 3_000
 
 /**
  * 화면이 낡은 이유. **셋을 가른다 — 사용자가 할 일이 다르고, 무엇이 일어났는지도 다르다.**
@@ -314,7 +326,10 @@ const STALE_RANK: Record<RemoteStale['reason'], number> = {
   restored: 3,
 }
 
-/** `applyRemoteChange`의 결과. `MarkerChangeResult`에 `'rebased'`·`'gap'`이 더 있다. */
+/**
+ * `applyRemoteChange`의 결과. `MarkerChangeResult`에 없는 `'rebased'`·`'gap'`이 있고, 그쪽의 `'waiting'`은 없다 — 프레임은
+ * 기다리지 않는다(«받은 프레임을 쌓아 두지 않는다»).
+ */
 export type RemoteChangeResult = 'applied' | 'skipped' | 'rebased' | 'gap' | 'diverged'
 
 /**
@@ -424,6 +439,20 @@ export class EditorStore {
    */
   #pumping = false
 
+  /**
+   * **사이 프레임을 기다리는 번호 응답**(`applyMarkerChange`의 «내 다음 번호가 아니면 사이 프레임을 기다린다») — `seq` 오름차순.
+   * 관측 상태가 아니라 `#pumping`처럼 제어 값이라 `#state` 밖에 있다. 화면에 뜻하는 바는 «아직 안 얹었다»뿐이고, 끝내 못
+   * 얹으면 `remoteStale`로 말한다.
+   *
+   * **비우는 자리는 다른 페이지를 싣는 `loadPage` · `clearPage` · `reset` · 복원(`markRestored`), 그리고 기다림이 끝나는 자리다**
+   * (`#settleWaitingMarkers`).
+   * 같은 페이지를 다시 실으면 남은 것을 그 판에 제 차례로 얹는다(`loadPage`의 끝).
+   */
+  #waitingMarkers: { seq: number; markerOps: PatchOp[] }[] = []
+
+  /** `#waitingMarkers`가 비지 않은 동안만 선다 — `MARKER_FRAME_WAIT_MS` 뒤 `'gap'` 낡음. */
+  #markerWaitTimer: ReturnType<typeof setTimeout> | null = null
+
   constructor(options: EditorStoreOptions = {}) {
     // `crypto.randomUUID`를 여기서 한 번만 참조한다. 이 줄이 이 파일의 유일한 전역
     // 의존이고, 주입하면 그것마저 없어진다. **jsdom·Node에 그 함수가 있는지는 재지
@@ -476,6 +505,9 @@ export class EditorStore {
     // 여는 경로는 루트로 시작하고(죽은 화면을 없앤다), 같은 페이지를 다시 싣는 재조회는
     // 보고 있던 자리를 그대로 둔다.
     const selectedNodeId = this.#selectionFor(pageId, document)
+    // 기다리던 번호 응답은 **이 페이지의 것일 때만** 남는다 — 아래 `#settleWaitingMarkers`.
+    const samePage = this.#state.openPageId === pageId
+    if (!samePage) this.#dropWaitingMarkers()
     this.#apply({
       openPageId: pageId,
       document,
@@ -503,6 +535,10 @@ export class EditorStore {
       remoteStale: null,
       documentLoads: this.#state.documentLoads + 1,
     })
+    // **다시 읽은 판에도 기다리던 번호 응답을 제 차례에 얹는다**(`applyMarkerChange`의 «내 다음 번호가 아니면 …»). 그 조회가
+    // 게시의 커밋 **앞**에 읽혔으면 번호는 이 판 바로 뒤의 revision 이고, 낸 탭은 그 방송을 안 받는다(연결 id 로 빠진다) —
+    // 버리면 번호가 캔버스에 안 뜬 채 `headSeq`가 하나 뒤처진다. 커밋 뒤에 읽혔으면 판에 이미 있어 버린다.
+    if (samePage) this.#settleWaitingMarkers()
     return pending
   }
 
@@ -644,12 +680,35 @@ export class EditorStore {
    *
    * | 결과 | 언제 | 화면이 할 일 |
    * |---|---|---|
-   * | `'applied'` | 반영했다 | 없다 |
+   * | `'applied'` | 반영했다 — 또는 **그 revision 이 이미 내 문서에 있다**(`seq <= headSeq` — 그 프레임이 응답보다 먼저 왔다) | 없다 |
    * | `'skipped'` | **다른 페이지가 열려 있거나 문서가 없다** | 없다 — 그 화면은 이미 딴 것을 보고 있다 |
    * | `'diverged'` | **`applyOps`가 던졌다** | **말해야 한다** — 서버에는 번호가 있는데 내 화면에는 없다 |
+   * | `'waiting'` | **`seq`가 내 다음 번호보다 앞이다** — 사이 프레임을 기다린다(아래 절) | 없다 — 끝내 못 얹으면 스토어가 `remoteStale`로 말한다 |
    *
    * `'diverged'`를 조용히 넘기면 *"코멘트는 달렸는데 캔버스에 번호가 없고 아무도 그것을
    * 말하지 않는"* 상태가 된다.
+   *
+   * ## 내 다음 번호가 아니면 사이 프레임을 기다린다
+   *
+   * `markerOps`의 경로는 **서버가 `seq - 1` 문서에서 센 것이다.** 그 문서가 내 문서일 때만(`seq === headSeq + 1`) 내 문서에
+   * 얹어 맞는다. 게시는 번호를 페이지 행을 잠근 **뒤**의 문서로 매기므로(`apps/api/README.md` 「코멘트와 번호」), 게시가 잠금을
+   * 기다리는 동안 남의 편집이 커밋되면 응답의 `seq`는 내가 아직 못 받은 revision **뒤**의 것이다. 그 프레임이 응답보다 늦게
+   * 닿는 판에서 번호를 그냥 얹으면 **조용히 틀린다** — 남이 노드를 옮겼으면 번호가 **다른 노드**에 붙고, `headSeq`가 `seq`로
+   * 뛰어 늦게 온 그 프레임은 «이미 아는 번호»로 버려지고(갭도 안 선다), 그 뒤 경로로 낸 편집이 서버에서 **남의 노드를
+   * 고친다**(jsdom: head 7 `[n_a, n_b]` → 남이 `n_b`를 맨 앞으로(8) → 게시(9)의 응답이 먼저 닿으면 화면 `n_a#1 n_b` · 서버
+   * `n_b#1 n_a` · 낡음 없음).
+   *
+   * **그래서 기다렸다가 제 차례에 얹는다** — 사이 revision 을 얹어 `headSeq`를 올리는 자리마다 이어서 얹는다. 남의 것이면
+   * 프레임(`applyRemoteChange`)이고, **내 것이면 프레임이 안 온다**(발신 제외) — 내 편집의 ack(`ackEdit`) · 내 다른 번호 응답(아래
+   * 곧바로 얹는 갈래)으로 온다. 한 자리라도 빠지면 받지 않은 것이 없는데 한도 뒤 `'gap'`이 서고 번호가 끝내 안 뜬다. 곧바로
+   * 낡음(`'gap'`)을 세우고 다시 읽게 하는 길은 고르지 않았다: 그 프레임은 응답보다 **먼저 나갔고**(`MARKER_FRAME_WAIT_MS`)
+   * 몇 ms 늦을 뿐이라, 그 길은 흔한 판마다 받지 못한 것이 없는데 «받지 못한 변경이 있다»를 세운다 — 낡음은 프레임이 풀지
+   * 않으므로 새로고침까지 남는다. 서버가 게시에 `baseSeq`를 받아 그 문서의 경로를 내는 길도 안 닫는다 — 경로가 맞아도 사이
+   * revision 은 여전히 빠진 채 `headSeq`만 뛴다.
+   *
+   * **끝내 안 오면 말한다** — `MARKER_FRAME_WAIT_MS` 안에 제 차례가 안 오면 기다리던 것을 버리고 `'gap'` 낡음을 세운다
+   * (`#settleWaitingMarkers`). 기다리는 동안 문서 · `headSeq`는 안 움직인다 — 그 사이 낸 편집은 옛 `baseSeq`로 나가 409 를 받고
+   * 다시 읽는다(위 «둘 다 안 움직이면»과 같은 수렴).
    *
    * ## `markerOps`가 비면 `headSeq`도 안 건드린다
    *
@@ -663,7 +722,7 @@ export class EditorStore {
     pageId: string,
     change: { seq: number; markerOps: PatchOp[] },
   ): MarkerChangeResult => {
-    const { openPageId, document, baseDocument } = this.#state
+    const { openPageId, document, baseDocument, headSeq } = this.#state
     // 다른 페이지로 옮긴 뒤 도착한 응답이다. 여기서 `headSeq`를 건드리면 새 페이지의
     // 편집이 남의 revision 번호 위에서 만들어진다(`ackEdit`의 늦은 ack 가드와 같은 자리).
     if (openPageId !== pageId || document === null || baseDocument === null) return 'skipped'
@@ -672,6 +731,29 @@ export class EditorStore {
     // 코멘트를 지웠거나, 바꿀 것 없는 재번호). **아무것도 안 건드린다**(위 머리말).
     if (change.markerOps.length === 0) return 'applied'
 
+    // **그 revision 의 프레임이 먼저 왔다** — 서버는 연결 id 를 안 실은 요청(코멘트 삭제 · 재번호)의 방송을 낸 탭에도
+    // 보낸다. 한 번 더 얹으면 같은 변경이 두 번 들어간다: 번호를 지우는 `remove`는 두 번째에 던져 **번호가 이미 지워진
+    // 화면에 «반영하지 못했습니다»**가 서고(jsdom), 그 뒤 revision 까지 받았으면 옛 문서의 경로를 새 문서에 얹는다.
+    if (change.seq <= headSeq) return 'applied'
+
+    if (change.seq !== headSeq + 1) {
+      this.#waitForFrames(change)
+      return 'waiting'
+    }
+
+    if (!this.#applyMarkerOps(change)) return 'diverged'
+    // 이 번호가 기다리던 번호의 사이 revision 이었을 수 있다(위 «그래서 기다렸다가 …»).
+    this.#settleWaitingMarkers()
+    return 'applied'
+  }
+
+  /**
+   * 번호 ops 를 문서와 바탕에 얹고 `headSeq`를 `seq`로 옮긴다. **`seq === headSeq + 1`일 때만 부른다**(`applyMarkerChange`의
+   * «내 다음 번호가 아니면 사이 프레임을 기다린다»). 던지면 아무것도 안 움직이고 거짓이다.
+   */
+  #applyMarkerOps(change: { seq: number; markerOps: PatchOp[] }): boolean {
+    const { document, baseDocument } = this.#state
+    if (document === null || baseDocument === null) return false
     let next: PageDocument
     let nextBase: PageDocument
     try {
@@ -683,11 +765,58 @@ export class EditorStore {
     } catch {
       // 보내지 않은 구조 편집이 그 노드를 이미 지웠다. **`headSeq`도 안 올린다** —
       // 올리면 문서와 revision 번호가 조용히 갈라진다.
-      return 'diverged'
+      return false
     }
 
     this.#apply({ document: next, baseDocument: nextBase, headSeq: change.seq })
-    return 'applied'
+    return true
+  }
+
+  /** 번호 응답을 사이 프레임이 올 때까지 든다. 처음 들 때 한도를 건다(`MARKER_FRAME_WAIT_MS`). */
+  #waitForFrames(change: { seq: number; markerOps: PatchOp[] }): void {
+    const waiting = this.#waitingMarkers.filter((held) => held.seq !== change.seq)
+    waiting.push({ seq: change.seq, markerOps: change.markerOps })
+    waiting.sort((a, b) => a.seq - b.seq)
+    this.#waitingMarkers = waiting
+    this.#markerWaitTimer ??= setTimeout(() => {
+      this.#markerWaitTimer = null
+      this.#settleWaitingMarkers('gap')
+    }, MARKER_FRAME_WAIT_MS)
+  }
+
+  /**
+   * 기다리던 번호 응답을 **제 차례가 온 만큼** 얹는다 — `headSeq`를 올린 뒤마다 부른다: 프레임(`applyRemoteChange`) · 내 편집의
+   * ack(`ackEdit`) · 곧바로 얹은 번호 응답(`applyMarkerChange`) · 같은 페이지를 다시 실은 판(`loadPage`). `giveUp`을 주면 남은
+   * 것을 버리고 그 낡음을 세운다(한도를 넘겼다). 얹다가 던지면 `'diverged'`다.
+   *
+   * **갭 · 갈라짐 프레임에서는 부르지 않는다** — 그때 이미 선 낡음이 기다리던 번호의 몫까지 말하고(한도가 세우는 `'gap'`은 그보다
+   * 약하거나 같다), 사이 revision 이 안 얹혔으니 기다리던 것도 제 차례가 안 온다.
+   */
+  #settleWaitingMarkers(giveUp?: RemoteStale['reason']): void {
+    if (this.#waitingMarkers.length === 0) return
+    if (giveUp === undefined) {
+      while (this.#waitingMarkers.length > 0) {
+        const next = this.#waitingMarkers[0]!
+        // 아직 사이 프레임이 남았다 — 한도를 그대로 두고 계속 기다린다.
+        if (next.seq > this.#state.headSeq + 1) return
+        this.#waitingMarkers = this.#waitingMarkers.slice(1)
+        // 그 revision 의 프레임이 왔다(연결 id 를 안 실은 요청이면 낸 탭에도 방송이 온다) — 이미 문서에 있다.
+        if (next.seq <= this.#state.headSeq) continue
+        if (!this.#applyMarkerOps(next)) {
+          giveUp = 'diverged'
+          break
+        }
+      }
+    }
+    if (giveUp !== undefined) this.#markStale(giveUp)
+    this.#dropWaitingMarkers()
+  }
+
+  /** 기다리던 번호 응답과 한도를 버린다 — `#waitingMarkers`의 «비우는 자리». */
+  #dropWaitingMarkers(): void {
+    if (this.#markerWaitTimer !== null) clearTimeout(this.#markerWaitTimer)
+    this.#markerWaitTimer = null
+    this.#waitingMarkers = []
   }
 
   /**
@@ -821,6 +950,8 @@ export class EditorStore {
     const dropped = this.#rebaseOnto(nextBase, change.seq, {
       editWarnings: change.warnings.length === 0 ? NO_WARNINGS : change.warnings,
     })
+    // **이 프레임을 기다리던 번호 응답이 있으면 이어서 얹는다**(`applyMarkerChange`의 «내 다음 번호가 아니면 …»).
+    this.#settleWaitingMarkers()
     return { result: pending.length === 0 ? 'applied' : 'rebased', dropped }
   }
 
@@ -869,6 +1000,9 @@ export class EditorStore {
    * 일은 그 사실을 말하는 것뿐이다.
    */
   readonly markRestored = (): void => {
+    // 기다리던 번호도 버린다 — 옛 판의 경로라 얹을 문서가 없다. 「만들어진 페이지」 복원은 같은 id 로 `headSeq`를 0 부터 다시
+    // 세므로, 남기면 되살아난 판에서 그 차례가 올 때 남의 노드에 붙고 · 안 오면 막 다시 실은 판에 한도가 `'gap'`을 세운다.
+    this.#dropWaitingMarkers()
     this.#markStale('restored')
   }
 
@@ -895,6 +1029,7 @@ export class EditorStore {
    */
   readonly clearPage = (): void => {
     const { pending, undoStack, redoStack } = this.#state
+    this.#dropWaitingMarkers()
     this.#apply({
       openPageId: null,
       document: null,
@@ -1183,6 +1318,8 @@ export class EditorStore {
           ? this.#state.editWarnings
           : warnings,
     })
+    // 내 편집이 기다리던 번호의 사이 revision 이었을 수 있다 — 그 프레임은 내게 안 온다(`applyMarkerChange`의 «그래서 기다렸다가 …»).
+    this.#settleWaitingMarkers()
   }
 
   /**
@@ -1365,6 +1502,7 @@ export class EditorStore {
    * 페이지 하나를 닫는 것은 `clearPage`다 — 그쪽은 보기 설정을 남긴다.
    */
   readonly reset = (): void => {
+    this.#dropWaitingMarkers()
     this.#apply(initialState())
   }
 

@@ -14,7 +14,7 @@
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { projectGuard, recheckProjectRole } from '../auth/roles'
+import { memberWriteRecheck, projectGuard, recheckProjectRole } from '../auth/roles'
 import { withTransaction } from '../db/tx'
 import { conflict, notFound } from '../errors'
 import { parseBody, parseParams } from '../http/parse'
@@ -92,8 +92,9 @@ export function memberRoutes() {
 
       let member
       try {
-        // **권한은 owner 행을 잡은 뒤 · 쓰기 전에 다시 본다**(`repos/members.ts`의 `OwnerRecheck` — 쓰기 뒤면 자기 강등이 막힌다).
-        member = await updateMemberRole(app.db, projectId, userId, body.role, (trx) => recheckProjectRole(trx, request))
+        // **자격은 owner 행 앞 · 역할은 owner 행 뒤 · 쓰기 전에 다시 본다**(`repos/members.ts`의 `OwnerRecheck` — 쓰기 뒤면 자기
+        // 강등이 막히고, 자격을 owner 행 뒤에 보면 토큰으로 낸 쓰기가 멤버 제거와 고리를 만든다).
+        member = await updateMemberRole(app.db, projectId, userId, body.role, memberWriteRecheck(request))
       } catch (error) {
         if (error instanceof LastOwnerError) {
           throw conflict(error.message)
@@ -114,7 +115,7 @@ export function memberRoutes() {
 
       let result
       try {
-        result = await removeMember(app.db, projectId, userId, (trx) => recheckProjectRole(trx, request))
+        result = await removeMember(app.db, projectId, userId, memberWriteRecheck(request))
       } catch (error) {
         if (error instanceof LastOwnerError) {
           throw conflict(error.message)

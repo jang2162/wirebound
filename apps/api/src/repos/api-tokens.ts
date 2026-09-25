@@ -139,10 +139,74 @@ export async function deleteApiToken(
 }
 
 /**
+ * **멤버 제거의 첫 잠금** — 빠지는 사람의 그 프로젝트 토큰과, 토큰으로 들어온 요청이면 **그 요청의 토큰**을 한 문장으로 id 순
+ * `FOR UPDATE`. 멤버 제거(`repos/members.ts`의 `removeMember`)가 owner 행보다 먼저 부르고, 지우는 것은 멤버 행을 지운 뒤의
+ * `deleteMemberTokens`다.
+ *
+ * **여러 행을 잡는 두 트랜잭션은 같은 순서로 잡아야 서로를 기다리는 고리가 안 선다.** 같은 행들을 잡는 다른 자리는 프로젝트
+ * 삭제의 `lockProjectTokens`(그 프로젝트 토큰 전부 · id 순)다. **요청의 토큰을 따로 잡으면 이 순서가 깨진다** — 자격 재확인은
+ * 그 행을 `KEY SHARE`로 잡는데(`auth/roles.ts`의 `recheckAtCommit`), 빠지는 사람의 토큰과 요청의 토큰을 두 문장으로 잡으면
+ * 앞 문장의 행을 쥔 채 뒤 문장의 행을 기다리고, 삭제는 id 순으로 잡다가 그 반대 쪽을 쥔 채 선다 — [api] 밥이 **토큰으로**
+ * 캐럴을 빼는 제거를 owner 행 앞에 세워 둔 채 프로젝트를 지우면, 두 토큰의 id 순서 한쪽에서 교착 +1 · 삭제 500(재는 자:
+ * `test/guard-in-lock.test.ts`의 «토큰으로 낸 멤버 쓰기»). **owner 둘이 토큰으로 서로를 빼는 판도 이 한 문장에
+ * 매인다** — 두 문장이면 둘이 각자 상대의 토큰을 쥔 채 제 토큰의 자격 확인(`KEY SHARE`)에서 서로를 기다린다. 두 토큰의 id
+ * 순서와 무관하게 교착 +1 · 한쪽 500(재는 자: 같은 절의 «owner 둘이 토큰으로 서로를 빼면»).
+ *
+ * 요청의 토큰이 이 문장에서 `FOR UPDATE`로 잡히므로 그 토큰의 다른 요청은 이 제거가 끝날 때까지 인증(`last_used_at` 갱신)에서
+ * 기다린다 — 그 사람이 토큰으로 멤버를 빼는 동안뿐이다.
+ */
+export async function lockMemberTokens(trx: DbHandle, projectId: string, userId: string, requestTokenId: string | null): Promise<void> {
+  assertLocking(trx, 'lockMemberTokens')
+  await trx
+    .selectFrom('api_tokens')
+    .select('id')
+    .where('project_id', '=', projectId)
+    .where((eb) => (requestTokenId === null ? eb('user_id', '=', userId) : eb.or([eb('user_id', '=', userId), eb('id', '=', requestTokenId)])))
+    .orderBy('id')
+    .forUpdate()
+    .execute()
+}
+
+/**
+ * **멤버에서 빠지는 사람의 그 프로젝트 토큰을 지운다** — 멤버 제거(`repos/members.ts`의 `removeMember`)가 같은 트랜잭션에서
+ * **멤버 행을 지운 뒤** 부른다. 남겨 두면 비멤버인 동안은 404 로 잠들었다가 **다시 멤버가 되는 순간 되살아난다** — 거둔 줄 안
+ * 자격이 돌아온다. 그 사람의 다른 프로젝트 토큰은 안 건드린다(스코프가 프로젝트다).
+ *
+ * **멤버 행을 지운 뒤인 까닭 — 제거가 도는 사이 발급된 토큰.** 제거가 토큰을 잡은(`lockMemberTokens`) 뒤 owner 행을 기다리는
+ * 동안 그 사람이 새 토큰을 발급하면, 발급은 멤버 행을 `SHARE`로 재확인할 뿐이라 막히지 않고 커밋된다 — 첫 잠금의 목록에 없던
+ * 행이다. 멤버 행을 지운 뒤면 그 뒤의 발급은 재확인에서 기다렸다가 404 로 되돌아가고, 그 전에 커밋된 발급은 이 문장이 본다.
+ * [api] 제거를 owner 행 질의 앞에 세운 채 세션으로 발급(201): 이 문장이 없으면 그 토큰이 남아 다시 멤버가 되면 200.
+ *
+ * **남이 잡고 있는 행은 건너뛴다(`SKIP LOCKED`).** 제거가 먼저 잡은 행은 제 것이라 건너뛰지 않는다. 남이 잡고 있는 행은 그
+ * 사이 발급된 토큰을 **쓰는 중인** 요청의 재확인(`KEY SHARE`)뿐이다 — 그 요청은 토큰 행을 쥔 채 이 제거가 지운 멤버 행을
+ * 기다리므로, 기다리면 고리다. 건너뛴 토큰은 남는다(그 요청은 멤버 행이 없어 404) — «발급하자마자 쓰는 요청이 이 문장과
+ * 겹친» 판뿐이다.
+ */
+export async function deleteMemberTokens(trx: DbHandle, projectId: string, userId: string): Promise<void> {
+  assertLocking(trx, 'deleteMemberTokens')
+  await trx
+    .deleteFrom('api_tokens')
+    .where('id', 'in', (eb) =>
+      eb.selectFrom('api_tokens').select('id').where('project_id', '=', projectId).where('user_id', '=', userId).forUpdate().skipLocked(),
+    )
+    .execute()
+}
+
+/**
+ * 프로젝트의 토큰 행 전부를 id 순으로 `FOR UPDATE`로 잠근다. **부르는 자리는 프로젝트 삭제 하나다**(`routes/projects.ts` —
+ * 멤버 제거의 `lockMemberTokens`와 고리를 만들지 않으려고 CASCADE 보다 먼저 잡는다). `lockProjectPresets`와 같은 모양이다.
+ */
+export async function lockProjectTokens(trx: DbHandle, projectId: string): Promise<void> {
+  assertLocking(trx, 'lockProjectTokens')
+  await trx.selectFrom('api_tokens').select('id').where('project_id', '=', projectId).orderBy('id').forUpdate().execute()
+}
+
+/**
  * 원문으로 토큰을 찾아 그 주체를 낸다. 없으면 `null`이다.
  *
  * **만료 조건이 없다 — `resolveSession`과 갈리는 자리이고 의도한 것이다**(0011의 머리말).
- * 이 표에는 `expires_at`이 없고, 자격을 거두는 수단은 폐기(DELETE)와 멤버십 제거 둘이다.
+ * 이 표에는 `expires_at`이 없고, 자격을 거두는 수단은 폐기(DELETE)와 멤버십 제거(그 프로젝트 토큰을 함께 지운다 —
+ * `deleteMemberTokens`) 둘이다.
  *
  * **`password_hash`를 select하지 않는다** — `resolveSession`과 같은 이유로 `users`에서
  * 세 컬럼만 명시적으로 고른다.

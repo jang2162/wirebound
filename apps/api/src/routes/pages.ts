@@ -77,6 +77,7 @@ import { withWarnings } from '../http/warnings'
 import { OpsBody } from '../http/patch-ops'
 import { lockConflictError } from '../lock/check'
 import { applyEdit } from '../services/edit-pipeline'
+import { runEditTransaction } from '../services/lost-commit'
 import { broadcastOrigin, notifyPageChanged } from '../ws/notify'
 import { importPage, type PageImportOutcome } from '../services/page-import'
 import {
@@ -643,7 +644,9 @@ export function pageRoutes() {
       // **설계서 「정방향 흐름」의 순서다** — `projectGuard('editor')`가 권한을 봤고, 적용 전에 잠금을 본다.
       // **설계서 「LLM 편집 경로」의 MCP가 이 길로 들어온다:** 에이전트는 잠금을 걸지 않지만 남의 잠금에는
       // 막힌다 — 안 막으면 설계서 「소프트 잠금」의 2차 방어가 접속 방식에 따라 갈린다.
-      const outcome = await withTransaction(app.db, async (trx) => {
+      // **COMMIT 답을 잃으면 그 자리에서 확인한다**(`services/lost-commit.ts`) — 커밋됐으면 성공으로 답하고, 그 revision 이
+      // 아직 머리일 때만 방송한다.
+      const settled = await runEditTransaction(app.db, pageId, async (trx) => {
         // 판정은 이 트랜잭션 안 — `PUT .../schema`와 같은 자리 · 같은 까닭이다.
         const blocked = await lockConflictError(app, trx, {
           projectId,
@@ -664,12 +667,16 @@ export function pageRoutes() {
         if (edited.ok) await recheckProjectRole(trx, request)
         return edited
       })
+      const outcome = settled.outcome
 
       if (!outcome.ok) {
         throw editOutcomeToApiError(outcome, body.baseSeq)
       }
+      if (settled.confirmedAfterLoss) {
+        request.log.warn({ pageId, seq: outcome.seq, broadcast: settled.broadcast }, 'COMMIT 답을 잃었지만 새 연결로 커밋을 확인했다')
+      }
 
-      notifyPageChanged(app, {
+      if (settled.broadcast) notifyPageChanged(app, {
         projectId,
         pageId,
         seq: outcome.seq,

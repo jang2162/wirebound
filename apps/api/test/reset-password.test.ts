@@ -272,8 +272,9 @@ describe('바꾼다', () => {
         await issueToken(ctx, me.cookie, da.id, '떠난 곳'),
       ]
       await issueToken(ctx, other.cookie, ga.id, '남의 토큰')
-      const left = await ctx.app.inject({ method: 'DELETE', url: `/api/projects/${da.id}/members/${me.user.id}`, cookies: other.cookie })
-      expect(left.statusCode, left.body).toBe(204)
+      // 멤버 행만 지운다 — 제거 라우트는 그 프로젝트 토큰까지 지우므로, 비멤버 토큰은 그 전에 빠진 사람의 옛 행 ·
+      // 제거와 겹쳐 남은 행(`deleteMemberTokens` 의 `SKIP LOCKED`)으로만 생긴다. 이것은 그 흉내다.
+      await ctx.db.deleteFrom('project_members').where('project_id', '=', da.id).where('user_id', '=', me.user.id).execute()
 
       const t = terminal([`${NEW_PASSWORD}\r`, `${NEW_PASSWORD}\r`])
       expect(await runResetPassword(['me@example.com'], target(ctx), t.io)).toBe(0)

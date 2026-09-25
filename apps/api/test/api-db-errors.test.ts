@@ -126,7 +126,9 @@ describe('결과를 모르는 실패는 503 이다 — 봉투 있는 500 이 아
 })
 
 describe('WS patch 도 결과를 모르는 실패는 503 이다 — REST 와 같은 판정', () => {
-  it('patch 의 COMMIT 응답이 유실되면 patch-error 503 · 쓰기 문장이다 — 커밋은 됐다(head 0 → 1)', async () => {
+  it('patch 의 COMMIT 응답이 유실되고 확인도 못 하면 patch-error 503 · 쓰기 문장이다 — 커밋은 됐다(head 0 → 1)', async () => {
+    // 확인(`services/lost-commit.ts`)이 커밋을 보면 ack 다(`edit-lost-commit.test.ts`). 여기서는 확인 질의를 한도 넘게
+    // 늦춰 «모름»이 남는 판을 잰다 — 진짜 분할에서 새 연결도 닿지 않는 판이다.
     await withProxiedApi(async (ctx) => {
       const fx = await pageWithRoot(ctx)
       await ctx.app.listen({ port: 0, host: '127.0.0.1' })
@@ -136,6 +138,7 @@ describe('WS patch 도 결과를 모르는 실패는 503 이다 — REST 와 같
       try {
         await socket.waitFor('joined')
         ctx.proxy.dropCommitReplyAfter('insert into "revisions"')
+        ctx.proxy.delayQuery('as "committed"', 3_000)
         socket.send(
           JSON.stringify({
             type: 'patch',

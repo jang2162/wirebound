@@ -9,6 +9,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import { withTransaction } from '../db/tx'
+import { lockProjectTokens } from '../repos/api-tokens'
 import { lockOwnerIds } from '../repos/members'
 import { lockProjectMenuNodes } from '../repos/menu'
 import { lockProjectPages } from '../repos/pages'
@@ -180,10 +181,16 @@ export function projectRoutes() {
         // 멤버 행을 프리셋보다 **먼저** 지우는 데에 기대는데, CASCADE 는 FK 트리거 **이름**(`RI_ConstraintTrigger_a_<oid>`의 글자 순)
         // 순으로 돈다. oid 가 자릿수를 넘거나 멤버 FK 를 다시 만들면 프리셋이 먼저 지워지고, 그때 «재확인을 지나 `DELETE` 앞»에
         // 선 프리셋 삭제와 고리를 만든다. 여기서 먼저 잡으면 CASCADE 순서와 무관하다. 재는 자는 `test/guard-in-lock.test.ts`의 «E15».
+        //
+        // **토큰 행도 owner 행 앞이다**(`repos/api-tokens.ts`의 `lockProjectTokens` — id 순). 멤버 쓰기는 «토큰 행 → owner 행»이다
+        // (`repos/members.ts`의 `OwnerRecheck` «잠금 순서» — 제거는 빠지는 사람 · 요청의 토큰을 id 순으로, 역할 변경은 요청의 토큰을
+        // `KEY SHARE`로). 삭제가 토큰 행을 CASCADE 에서 처음 만나면 그때 이미 owner 행을 쥐고 있어, 토큰 행을 쥔 채 owner 행에 선
+        // 멤버 쓰기와 서로를 기다린다. 재는 자는 `test/guard-in-lock.test.ts`의 «멤버 제거가 토큰을 지운다» · «토큰으로 낸 멤버 쓰기».
         await lockProjectRow(trx, projectId)
         await lockProjectPages(trx, projectId)
         await lockProjectMenuNodes(trx, projectId)
         await lockProjectPresets(trx, projectId)
+        await lockProjectTokens(trx, projectId)
         await lockOwnerIds(trx, projectId)
         await recheckProjectRole(trx, request)
         await deleteProject(trx, projectId)

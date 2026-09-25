@@ -1,4 +1,4 @@
-import { applyOp } from './apply'
+import { addAt, applyOpInPlace, removeAt } from './apply'
 import { formatPointer, getByPointer, parsePointer } from './pointer'
 import { PatchError, type PatchOp } from './types'
 
@@ -13,71 +13,87 @@ import { PatchError, type PatchOp } from './types'
  *
  * 덮어쓰기 `move`의 역패치는 옮긴 서브트리를 통째로 품으므로 해당 로그 항목이 원본보다
  * 커진다.
+ *
+ * 문서는 `applyOps`처럼 **한 번 복제한 사본**을 연산마다 제자리로 진행시킨다(까닭은 그 함수의
+ * 독스트링). 입력 문서는 변경하지 않는다.
  */
 export function invertOps<T>(doc: T, ops: PatchOp[]): PatchOp[] {
+  if (ops.length === 0) return []
+
   // 연산 하나의 역이 여러 개일 수 있으므로 묶음으로 모은다.
   // 묶음 순서만 뒤집고 묶음 **안**의 순서는 그대로 둬야 역이 제대로 적용된다.
   const inverses: PatchOp[][] = []
-  let current: T = doc
+  const current = structuredClone(doc)
 
   for (const op of ops) {
-    inverses.push(inverseOf(current, op))
-    current = applyOp(current, op)
+    if (op.op === 'move') {
+      inverses.push(invertMoveInPlace(current, op))
+      continue
+    }
+    inverses.push([inverseOf(current, op)])
+    applyOpInPlace(current, op)
   }
 
   return inverses.reverse().flat()
 }
 
-function inverseOf(doc: unknown, op: PatchOp): PatchOp[] {
+/** `add`·`remove`·`replace`의 역. 문서를 읽기만 한다. */
+function inverseOf(doc: unknown, op: Exclude<PatchOp, { op: 'move' }>): PatchOp {
   switch (op.op) {
     case 'add':
-      return [inverseOfAdd(doc, op)]
+      return inverseOfAdd(doc, op)
     case 'remove': {
       const old = getByPointer(doc, op.path)
       if (old === undefined) {
         throw new PatchError(`지울 값을 찾을 수 없습니다: ${op.path}`, op.path)
       }
-      return [{ op: 'add', path: op.path, value: structuredClone(old) }]
+      return { op: 'add', path: op.path, value: structuredClone(old) }
     }
     case 'replace': {
       const old = getByPointer(doc, op.path)
       if (old === undefined) {
         throw new PatchError(`바꿀 값을 찾을 수 없습니다: ${op.path}`, op.path)
       }
-      return [{ op: 'replace', path: op.path, value: structuredClone(old) }]
+      return { op: 'replace', path: op.path, value: structuredClone(old) }
     }
-    case 'move':
-      return inverseOfMove(doc, op)
   }
 }
 
 /**
- * move의 역.
+ * move의 역을 만들고 그 move를 `doc`에 **제자리로** 적용한다.
  *
  * 목적지가 비어 있으면 반대 방향 move 하나로 끝난다.
- * 하지만 목적지가 **값이 들어 있는 객체 키**면 applyOp의 add 단계(addAt)가 그 값을 덮어쓴다.
+ * 하지만 목적지가 **값이 들어 있는 객체 키**면 add 단계(addAt)가 그 값을 덮어쓴다.
  * move 하나는 값 하나만 옮기므로 "노드를 제자리로"와 "덮인 값을 복원"을 함께 담을 수 없다.
  *
  * 그래서 이 경우만 두 연산으로 나눈다. 순서는 replace 먼저다 —
  * 옮긴 노드를 원래 자리(배열)에 먼저 넣으면 뒤 원소가 밀려 목적지 경로가 다른 노드를 가리킨다.
+ *
+ * **역을 만드는 일과 적용을 한 함수에 둔 까닭:** move는 remove 후 add이고 목적지 판단은 모두
+ * **값을 뺀 뒤** 문서를 기준으로 한다. 뺀 문서를 따로 만들면 문서 전체를 한 번 더 복제해야
+ * 하므로, 사본에서 실제로 빼고 판단한 뒤 그대로 넣는다. 던지는 순서(출발지 → 목적지 포인터 →
+ * 옮길 값 → 목적지 경로)와 문장은 역을 먼저 만들고 `applyOp`을 부르던 순서와 같다.
  */
-function inverseOfMove(doc: unknown, op: { op: 'move'; from: string; path: string }): PatchOp[] {
-  // move는 remove 후 add다. 목적지 판단은 모두 **값을 뺀 뒤** 문서를 기준으로 한다.
-  const afterRemove = applyOp(doc, { op: 'remove', path: op.from })
-  const target = resolveMoveTarget(afterRemove, op)
-  const overwritten = overwrittenAt(afterRemove, target)
+function invertMoveInPlace(doc: unknown, op: { op: 'move'; from: string; path: string }): PatchOp[] {
+  const moved = removeAt(doc, op.from)
+  const target = resolveMoveTarget(doc, op)
+  const overwritten = overwrittenAt(doc, target)
 
-  if (overwritten === null) return [{ op: 'move', from: target, path: op.from }]
-
-  const moved = getByPointer(doc, op.from)
   if (moved === undefined) {
     throw new PatchError(`옮길 값을 찾을 수 없습니다: ${op.from}`, op.from)
   }
 
-  return [
-    { op: 'replace', path: target, value: structuredClone(overwritten.value) },
-    { op: 'add', path: op.from, value: structuredClone(moved) },
-  ]
+  const inverse: PatchOp[] =
+    overwritten === null
+      ? [{ op: 'move', from: target, path: op.from }]
+      : [
+          { op: 'replace', path: target, value: structuredClone(overwritten.value) },
+          // 옮긴 값은 사본에 다시 들어가 뒤 연산이 제자리로 바꿀 수 있으므로 복제해 둔다.
+          { op: 'add', path: op.from, value: structuredClone(moved) },
+        ]
+
+  addAt(doc, op.path, moved)
+  return inverse
 }
 
 /**
