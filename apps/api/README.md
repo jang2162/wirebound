@@ -16,6 +16,7 @@ pnpm --filter @wirebound/api dev            # tsx watch 로 띄운다
 pnpm --filter @wirebound/api migrate        # 마이그레이션 최신화 + 계정 시딩 (아래)
 pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린다 (반복하면 0까지)
 pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바꾼다 — 터미널에서 숨겨 묻는다 (최상위 README 「비밀번호를 잊었다」)
+pnpm --filter @wirebound/api unlock-login <이메일>     # 로그인 막힘을 푼다 — 떠 있는 api 에 보낸다 (최상위 README 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ)
 ```
 
 ### `migrate` 가 계정도 만든다 — **가입 라우트가 없기 때문이다**
@@ -45,7 +46,7 @@ pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바�
 
 ### 이 서버가 env 를 읽는 방식
 
-`dev`·`start`·`migrate`·`migrate:down`·`reset-password` 스크립트가 전부 `tsx`에
+`dev`·`start`·`migrate`·`migrate:down`·`reset-password`·`unlock-login` 스크립트가 전부 `tsx`에
 `--env-file-if-exists=.env`를 붙여 실행하므로(`apps/api/package.json` — 그 플래그는 Node 22.9 부터이고 이 저장소의 하한은 그보다 높다),
 `apps/api/.env`가 있으면 자동으로 읽는다 — 이 프로젝트는 `dotenv` 같은 별도 패키지를
 쓰지 않는다.
@@ -199,7 +200,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 | `not-found` | 404 | 대상이 없음, **또는 프로젝트 멤버가 아님**(설계서 「권한 모델」 — 비멤버에게 프로젝트 존재 여부를 숨긴다) |
 | `conflict` | 409 | 유니크 제약 위반, 마지막 owner 제거 시도, 자식이 있는 메뉴 삭제 시도, **스냅샷 태그 중복**, **스냅샷 수집 중 프로젝트 변경**, **복원의 네 갈래**(지문 불일치·안전망 태그 중복·레이아웃 불일치·코멘트 작성자 없음) 등 |
 | `locked` | **423** | **다른 사용자가 편집 중인 노드**(설계서 「소프트 잠금」)를 건드렸다. `message`가 누가 잡고 있는지 말한다. **`conflict`(409)와 갈라 둔 것이 계약이다** — 아래 *"소프트 잠금"* 참고 |
-| `rate-limited` | **429** + `Retry-After` | **로그인 시도가 너무 많다**(`POST /api/auth/login`만). 비밀번호를 견주지 않았다 — 옳은 비밀번호도 이 답이다. `Retry-After`(초) 뒤에 풀린다. 규칙은 아래 «로그인 시도 제한» |
+| `rate-limited` | **429** + `Retry-After` | **로그인 시도가 너무 많다**(`POST /api/auth/login`만). 비밀번호를 견주지 않았다 — 옳은 비밀번호도 이 답이다. `Retry-After`(초) 뒤에 풀린다 — 서버에 손이 닿는 사람이 명령으로 먼저 풀 수 있다. 규칙은 아래 «로그인 시도 제한» |
 | `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]` |
 | `internal` | 500 | 예상하지 못한 서버 오류. **그 요청은 커밋 전이다**(웹의 코멘트 게시가 그렇게 읽는다). COMMIT 답을 잃은 쓰기가 **커밋 안 된 것을 확인한** 판도 이 줄이다 — «…요청이 반영되지 않았습니다 — 다시 시도하세요»(아래 «COMMIT 답을 잃은 편집») |
 | `internal` | **503** | **DB 가 답하지 않았다** — 연결이 끊겼거나 닿지 못했거나, **COMMIT 에 서버의 답이 아닌 거절이 왔다**. **그 요청이 반영됐는지 모른다**(COMMIT 의 답만 잃었을 수 있다). 500 과 갈라 둔 것이 계약이다 — 경계는 `src/db/connection-loss.ts`, 번역은 `src/http/error-handler.ts`. **문장은 메서드로 갈린다** — 쓰는 요청은 «…요청이 반영됐는지 알 수 없습니다», GET · HEAD · OPTIONS 는 «…불러오지 못했습니다 — 잠시 뒤 다시 시도하세요»(읽기는 «반영»을 말하지 않는다). WS `patch`의 `patch-error`도 같은 판에 같은 `status` · 쓰기 문장이다(`http/error-handler.ts`의 `dbUnreachableFailure`). 가르는 값은 숫자다 — 문장은 사람에게만 간다. **편집(`PATCH .../ops` · WS `patch`)은 COMMIT 답을 잃으면 먼저 확인한다** — 아래 "편집 파이프라인"의 «COMMIT 답을 잃은 편집» |
@@ -467,8 +468,20 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
   Fastify 가 그 값을 읽는 그대로 목록째 잰다)은 기동에서 거절한다.
 - **기록은 이 프로세스의 메모리다** — 재기동하면 비고, 프로세스가 여럿이면 따로 센다. 키는 종류마다 1만 개까지 두고, 넘으면
   창 안의 기록이 가장 적은 키부터 버린다 — 새 키로 채워 막힌 계정의 기록을 씻지 못한다(까닭은 머리말 «키 수에 상한이 있다»).
-- 잠긴 사람을 먼저 풀어 주는 명령은 없다 — 창이 지나거나 api 를 다시 띄운다. `wireb login`도 이 라우트로 오므로 같은 429 를
-  `서버가 거절했습니다 (429): …`로 말한다.
+- **막힌 키는 서버에 손이 닿는 사람이 명령으로 먼저 푼다** — `pnpm --filter @wirebound/api unlock-login <이메일>` · `--address <주소>`.
+  준 키의 기록만 걷는다(재기동은 모두의 것을 비운다). 치는 절차와 출력은 최상위 README 「에디터가 뜨는데 로그인이 안 된다」 절의
+  ⓓ, 대가(푼 것이 두드리는 쪽에 보인다 · 두드리는 쪽도 다시 댄다)는 `src/auth/login-limit.ts` 머리말 «막힘을 푸는 명령»이 소유한다.
+- **명령은 api 가 연 유닉스 소켓으로 보낸다** — `<바탕>/wirebound-<uid>/api-<HOST>-<PORT>.sock`(디렉터리 0700 · 소켓 0600). 바탕은
+  `XDG_RUNTIME_DIR` 가 있으면 그것, 없으면 `os.tmpdir()`(`TMPDIR` · 없으면 `/tmp` — compose 컨테이너는 대개 이쪽)이고, api 와 명령이
+  같은 함수(`unlockSocketPlace`)로 짓는다. api 의 TCP 포트에는 이 입구가 없다(`POST /login-unlock` 은 404). 인가는 파일 권한이다 —
+  api 를 띄운 사용자만 들어간다. api 는 TCP 포트를 연 뒤 그 자리를 열고(남은 소켓은 붙어 보고 거절이면 지운다 — 받으면 산 api 의 것이라
+  안 연다) 기동 로그에 `로그인 막힘을 푸는 입구: <경로>` 를 찍는다. 디렉터리가 남의 것 · 남에게 열림 · 심볼릭 링크이거나 · 같은
+  `HOST` · `PORT` 의 다른 api 가 그 자리에서 듣거나 · 경로가 소켓 경로 한도를 넘거나 · 여는 중에 파일 시스템 오류가 나면
+  `로그인 막힘을 푸는 입구를 안 엽니다 — …` 를 찍고 입구 없이 뜬다. **명령도 붙기 전에 같은 조건으로 자리를 본다**(소켓 파일도 소켓 ·
+  주인이 나인지) — 공유 `/tmp` 에서 남이 먼저 만든 자리에 이메일을 보내지 않는다. 답은 보낸 키의 결과가 제 꼴로 있을 때만 믿고, 답의
+  글자는 제어 문자를 걷고 찍는다. 입구의 요청은 `UNLOCK_REQUEST_TIMEOUT_MS` 안에 다 와야 한다. 계약(본문 `{ email?, address? }` · 답)과 까닭은
+  `src/auth/unlock-socket.ts` 머리말.
+- `wireb login`도 이 라우트로 오므로 같은 429 를 `서버가 거절했습니다 (429): …`로 말한다.
 
 ### API 토큰
 
@@ -1590,6 +1603,7 @@ pnpm --filter @wirebound/api start                 # 개발 서버 없이 한 �
 pnpm --filter @wirebound/api migrate               # 마이그레이션 최신화
 pnpm --filter @wirebound/api migrate:down          # 마이그레이션 하나 내리기(반복 시 0까지)
 pnpm --filter @wirebound/api reset-password <이메일>  # 비밀번호 바꾸기(터미널에서 숨겨 묻는다)
+pnpm --filter @wirebound/api unlock-login <이메일>    # 로그인 막힘 풀기(떠 있는 api 에 보낸다 · --address <주소>)
 pnpm vitest run --project api                      # api 테스트만 실행 (컨테이너 필요)
 ```
 
