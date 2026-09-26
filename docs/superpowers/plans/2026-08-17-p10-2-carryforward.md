@@ -2040,6 +2040,40 @@ N-A 를 막을 때 리뷰어가 제시한 두 안을 **둘 다 안 골랐다** �
 
 ---
 
+### 3.42 **단일 서버 compose 로 배포하고 · 로그인 막힘을 풀 수 있다(2026-09-26)** — 이월 7차 12회
+
+> 3.41 의 판정으로 두 트랙을 나란히 돌렸다 — DP `fix/deploy-compose`(배포 · 3.4 상한) · UK `fix/login-unlock`(막힘을 푸는 명령).
+> 병합 순서는 UK `4ea6057` → DP `27b0b45` 다(DP 가 UK 위로 rebase 해 게이트를 쟀다).
+> - **UK** 는 좁은 리뷰(높음 하나 — 명령이 소켓 자리의 주인을 안 봐 공유 `/tmp` 에서 남의 소켓에 붙음 · 중간 하나 — 같은 PORT 다른 HOST)를 거쳐, 대응을 다음 리뷰 없이 병합했다.
+> - **DP** 는 좁은 리뷰(첫 리뷰어 세션이 모델 safeguard 물음으로 멈춰 새 리뷰어로 다시 돌림)에서 높음 하나(넓이 상한의 측정-캡처 경주 — 전이로 자라는 페이지가 상한의 4.9배로 찍힘)가 나왔고, 대응을 다음 리뷰 없이 병합했다.
+> 마이그레이션 없음. 새 환경변수 `EXPORT_RENDER_LIMIT`. 새 명령 `unlock-login`. 새 디렉터리 `deploy/` · `Dockerfile`.
+
+#### 닫은 것
+
+| 이월 | 오늘 값(고치기 전) | 막은 방법 · 값 |
+|---|---|---|
+| **배포 대상**(3.41 판정: 단일 서버 · compose) | 배포 형태 없음 | `Dockerfile`(build · web · api — 배포판 chromium · fonts-noto-cjk · tini · 비루트) · `deploy/docker-compose.yml`(Caddy 앞단만 바깥 포트 · migrate 한 번 · api · Postgres) · `TRUST_PROXY` = 앞단 고정 주소(`ip_range` 로 동적 할당과 가름) · 종료 한도 api 30s < Caddy 35s < compose 40s. [컨테이너] 로그인 · 두 탭 편집 33ms · pptx(한글) · stop 중 내보내기 끝까지 · 재기동 · 백업 복원 · 로그인 제한이 실제 클라이언트 주소에 걸림 |
+| **3.4 상한** | [컨테이너] 4000행 한 장 5.75GB → OOM kill | 한 장 넓이 상한 720×8192 CSS px — 넘으면 안 그리고 까닭을 말함. 측정-캡처 경주는 움직임을 `@layer` 로 끄고 · 글꼴을 기다린 뒤 재고 · 잰 크기로 묶어 찍고 · 찍은 뒤 다시 재서 막음([컨테이너] 20/20 거절 · 최고 457MB). 요청 사이 그리기 칸은 이미 있던 줄(2)을 `EXPORT_RENDER_LIMIT` 로 · 바이트 상한 · `mem_limit` 은 두지 않음(판정) |
+| 시스템 테마 그림이 전이 중간에 찍힘(이 차수에 찾음) | [Chrome] admin 그림이 전이 걷은 판과 6/6 다름 | 끝 상태로 찍힘 |
+| **로그인 제한의 대가 — 풀 명령 없음**(3.41 판정) | 창 · 재기동만 | `pnpm --filter @wirebound/api unlock-login <이메일> [--address <주소>]`(컨테이너는 `docker compose -f deploy/docker-compose.yml exec api node --import tsx src/auth/unlock-login.ts …`) — api 의 유닉스 소켓(`<바탕>/wirebound-<uid>/api-<HOST>-<PORT>.sock` · 0700/0600)으로 보냄. 명령도 자리의 주인 · 권한을 보고, 답의 제어 문자를 걷고, 산 소켓은 안 지움. [pty · Linux 비루트 둘 · 컨테이너] |
+
+#### 게이트
+
+`main` `27b0b45` — **`pnpm test` 379파일 6914케이스(통과 6913 · 건너뜀 1 — macOS 의 `/dev/full` 판) · `pnpm test:build` 24파일 138케이스 · 실패 0**(DP 가 `4ea6057` 위로 rebase 해 쟀다 — 첫 판에 `export-worker.test.ts` «쉬는 워커» 한 케이스가 부하에서 한 번 빨강, 아래 이월). 이미지 안 스모크 23 통과. 등식: `3bd86bd` 377 · 6886 + UK 1 · 23 + DP 1 · 5 · `test:build` 23 · 128 + DP 1 · 10. typecheck 0 · build 0.
+
+#### 이월
+
+| # | 무엇 | 사정 |
+|---|---|---|
+| — | 화면 그리기: `exportPage` 가 인라인 `style` 로 내는 `!important` 는 `@layer` 끄기를 이김(출처를 안 셈 — 그때도 묶어 찍기 · 다시 재기가 메모리는 막음) · `document.fonts.ready` 대기에 한도 없음 · 찍은 뒤 다시 재기의 거짓 빨강(끄기가 안 닿는 움직임이 있으면) | 낮음 |
+| — | `apps/api/test/export-worker.test.ts` «쉬는 워커 › 쉬는 시간이 지나면 끝내고…» 가 전량 부하에서 한 번 빨강(`threads` 1 — 쉬는 시간 100ms 를 넘긴 판으로 보임) | 낮음 · 흔들리는 케이스 |
+| — | 막힘 풀기: `listen` ~ `open` 사이 신호 창(≈1ms) · 같은 ms 의 옛 in-flight 가 풀기 뒤 새 기록을 걷음 · api 와 명령의 `XDG_RUNTIME_DIR` 가 갈리면 자리가 갈림(문장이 까닭을 말함) · 입구 로그에 이메일 안 남김 | 낮음 |
+| 확인 | **실제 리눅스 서버에서** 바깥 클라이언트 주소가 api 에 어떻게 보이는지(IPv6 · docker IPv6 끔이면 게이트웨이 하나로 보여 로그인 주소 한도가 서버 전체에 걸림) — README 「배포하려면」 «이 절이 안 잰 것»의 확인법(`logs api | grep remoteAddress`) | 배포할 때 사용자 |
+
+3.6 의 전역 pnpm · MCP 다른 호스트 · x86_64 · Windows 글꼴은 안 쟀다(이미지는 linux/arm64 에서만 지었다).
+
+---
+
 ## 4. **설계서가 안 정한 채로 남은 것**
 
 §16이 *"열린 질문"*으로 스스로 다섯을 든다. 그 아래는 **구현이 판정했고 설계서에는 줄이
@@ -2100,7 +2134,7 @@ N-A 를 막을 때 리뷰어가 제시한 두 안을 **둘 다 안 골랐다** �
 | **셸 CSS 의 flex 레이아웃을 손본다 / 무언가가 좁은 자리에서 넘친다** | `apps/web/test/shell-css-picker.test.ts` 머리말 — **`flex-basis: 100%` 는 감싸는 상자에서만 자기 줄을 뜻한다**(`nowrap` 상자에서는 줄을 터뜨린다). **jsdom 으로는 못 잰다**(좌표가 전부 0). 브라우저로 재는 방법과 그때 갈리기 쉬운 것 둘 — *렌더 폭의 합*은 여유의 척도가 아니고, *부모가 감싼다*는 그 안이 안 넘친다는 뜻이 아니다 — 는 그 파일의 `ONE_LINE` 과 이 문서 **§3.12**. 미결은 §3.12 의 A·B·D |
 | **설계 문서를 손본다** | 이 문서 §4 · P10-1 이월 §3.3 |
 | **미결을 하나 고른다** | **이 문서의 가장 뒤 §3.x 의 «이월» 표가 지금 판이다**(차수마다 앞 표를 이어 적는다). 그보다 오래된 것은 P9-5 이월 §3 → P10-1 이월 §4 → 이 문서 §3 앞쪽 |
-| **에디터의 실시간 · 리베이스 · 판 다시 싣기를 손본다** | 설계서 「실시간」 · `apps/web/src/store/anchored-ops.ts` 머리말 · `apps/web/src/store/editor-store.ts` 의 창 · 세대 머리말 · 이 문서 §3.33–3.40. **실브라우저로 찾은 판은 `apps/web/build-test/` 에 잠그고 `pnpm test:browser` 로 돈다** |
+| **에디터의 실시간 · 리베이스 · 판 다시 싣기를 손본다** | 설계서 「실시간」 · `apps/web/src/store/anchored-ops.ts` 머리말 · `apps/web/src/store/editor-store.ts` 의 창 · 세대 머리말 · 이 문서 §3.33–3.42. **실브라우저로 찾은 판은 `apps/web/build-test/` 에 잠그고 `pnpm test:browser` 로 돈다** |
 | **화면 이미지에 자를 세운다** | 이 문서 §3.4의 *"PNG 바이트가 결정적이지 않다"* — **바이트로 재지 마라.** 화소나 자리로 재라 |
 
 ---
