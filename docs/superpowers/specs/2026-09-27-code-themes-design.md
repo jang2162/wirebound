@@ -1,0 +1,407 @@
+# 코드 테마 — 설계
+
+테마를 «JSON 규격(토큰 + 렌더러 구조 선택 + 스타일 화이트리스트)»에서 **«headless SDK 위에 tsx · CSS 로 짜서 빌드한 패키지»** 로 바꾼다. 업로드한 패키지는 불변이고, 사이트에서는 테마가 선언한 토큰 값만 고친다.
+
+이 문서는 발행된 시점 기록(spec)이다. 정본 설계서(`docs/superpowers/specs/2026-08-03-wirebound-design.md`)의 「명시적으로 제외한 것」 · 「컴포넌트 정의 구조」 · 「테마 시스템」 · 「설계서 화면 구조」 · 「HTML 정적 번들」 절은 이 설계의 구현이 병합될 때(아래 「진행 단계」의 A6) 이 문서에 맞춰 고친다.
+
+---
+
+## 목적과 범위
+
+**목적 두 가지**
+
+1. **표현력.** 렌더러가 가진 구조 구현체와 스타일 화이트리스트 밖의 마크업 · CSS · 인터랙션을 테마가 쓸 수 있어야 한다.
+2. **작성 방식.** 테마를 JSON 이 아니라 익숙한 코드(tsx · CSS)와 도구(빌드 · 로컬 미리보기 · 버전 관리)로 만든다.
+
+**확정한 결정**
+
+| 축 | 결정 |
+|---|---|
+| 신뢰 경계 | 업로드는 **인스턴스 관리자만** 한다. 올라온 코드는 신뢰 코드로 같은 origin 에서 돈다 |
+| 기존 JSON 테마 | **전부 대체한다.** 시스템 테마 5종은 새 SDK 로 다시 써서 기본 설치한다. 운영 데이터가 없어 이전 경로를 두지 않는다 |
+| 스키마 계약 | **카탈로그 · props 는 `schema` 가 고정한다.** 테마는 뷰만 만들고, 컴포넌트마다 `variant` 를 선언한다 |
+| 작성 도구 | SDK + 스타터 템플릿 + 로컬 갤러리(dev) + build + 에이전트용 스킬. 배포는 관리자 화면의 템플릿 zip(npm 공개 뒤에는 npm) |
+| 토큰 | 테마가 manifest 에 **자유롭게 선언**한다. 사이트의 편집 GUI 는 선언에서 자동 생성한다 |
+| 버전 | 프로젝트는 `테마 id@버전` 에 **고정**하고 owner 가 올린다 |
+| 적재 방식 | 호스트가 React · SDK 를 공유 런타임으로 주고, 렌더러가 «테마 뷰 → SDK 기본 뷰» 를 고른다 |
+| 캔버스 | **same-origin iframe** 안에서 그린다(보안 격리가 아니라 문서 분리) |
+| 테마 단위 | **프로젝트당 하나.** 레이아웃은 테마를 고르지 않는다 |
+
+**이 설계가 다루지 않는 것**
+
+- 테마 코드의 보안 격리(샌드박스). 신뢰 경계를 «관리자만 업로드»로 세웠다.
+- 테마가 props · 컴포넌트 종류를 더하는 것. 카탈로그를 닫아 둬야 검증 · LLM 편집 · lint · 테마 교체가 성립한다.
+- 사이트 안의 코드 에디터 · 서버 쪽 빌드.
+- CLI 로 테마 업로드(`wb-theme publish`). 지금 API 토큰은 프로젝트 범위라 인스턴스 동작에 맞지 않는다 — 관리자 토큰과 함께 따로 설계한다.
+- 한 프로젝트 안에 토큰 값 여러 벌(브랜드 A/B).
+
+---
+
+## 패키지와 번들 계약
+
+### 패키지
+
+| 패키지 | 책임 | 의존 |
+|---|---|---|
+| `schema` | 카탈로그 정의에서 `structures` · `parts` · `variants` 를 걷는다. `props` · `states` · `editor` · `children` 만 남는다. `editor` 의 `visibleWhen: { structure }` 는 걷고, variant 에 따른 감춤은 manifest 의 `hideProps` 가 맡는다 | zod |
+| `theme-sdk` (신규) | `defineTheme` · `view` · 컴포넌트별 뷰 props 타입(`ViewProps<'List'>`) · `<Root>` · `<Focus>` · `useToken` · SDK 기본 뷰 세트 | `schema`, react(peer) |
+| `renderer` | 트리 순회, `Slot` 주입, 상호작용 런타임, 뷰 선택(테마 뷰 → 기본 뷰), 포커스 · 마커 좌표 계산 | `schema`, `theme-sdk` |
+| `themes` | manifest zod 규격, 토큰 선언 · 값 검증(타입 · 참조 순환), 토큰 → CSS 변수 컴파일, `.wbtheme` 읽기 · 검증 | `schema` |
+| `theme-kit` (신규) | 작성자 도구. `wb-theme dev`(로컬 갤러리) · `wb-theme build` · 스타터 템플릿 | `theme-sdk`, `themes`, `renderer` |
+| `system-themes/*` (신규) | 시스템 테마 5종의 소스. 저장소 빌드가 `.wbtheme` 로 만든다 | `theme-kit` |
+
+`theme-sdk` · `renderer` 는 브라우저에서만 테마 코드를 싣는다. **api 의 Node 프로세스는 테마 코드를 싣지 않는다**(「내보내기와 PPTX」).
+
+### 뷰 계약
+
+테마는 컴포넌트마다 뷰 하나를 낸다. 뷰가 받는 것:
+
+| 필드 | 뜻 |
+|---|---|
+| `props` | 기본값이 채워진, 카탈로그 타입이 붙은 props |
+| `states` | props 에서 파생된 상태 집합(카탈로그의 `states` 선언) |
+| `variant` | 노드의 variant. 테마에 없는 값이면 그 컴포넌트의 `defaultVariant` |
+| `children` | 이미 렌더된 자식 |
+| `slot` | `Slot` 이 받는 주입 내용 |
+| `on` | 상호작용 런타임 핸들러(규칙이 있을 때만) |
+
+뷰는 `<Root>` 로 감싸야 한다. `<Root>` 가 `data-wb-id` · `data-wb-component` · `data-wb-variant` · `data-wb-state` 와 상호작용 핸들러를 루트 요소에 붙인다 — 테마가 빠뜨릴 수 없게 SDK 가 강제한다. `<Root>` 없이 반환하면 개발 모드에서 던지고, 운영 모드에서는 렌더러가 그 노드를 기본 뷰로 대신 그리고 콘솔에 경고한다.
+
+```tsx
+import { view, Root, Focus, useToken } from '@wirebound/theme-sdk'
+
+export const List = view<'List'>(({ props, variant, children }) => {
+  const density = useToken('density')
+  return (
+    <Root marker={{ placement: 'top-end', offset: [4, -8] }}>
+      <header>…</header>
+      <Focus>
+        {variant === 'cards' ? <div className="cards">…</div> : <table>…</table>}
+      </Focus>
+    </Root>
+  )
+})
+
+export default defineTheme({ views: { List, /* … */ } })
+```
+
+- **`<Focus>`** — 선택 외곽선이 감쌀 요소. 없으면 `<Root>` 전체다. 한 뷰에 `<Focus>` 가 둘 이상이면 개발 모드에서 던진다.
+- **`<Root marker>`** — 코멘트 번호 마커의 자리. `placement` 는 `top-start | top-end | bottom-start | bottom-end | start | end`, 기본 `top-start`. `offset` 은 `[x, y]` CSS px, 기본 `[0, 0]`. 기준 상자는 `<Focus>` 가 있으면 그것, 없으면 루트다. variant 마다 다르게 주려면 코드에서 가른다.
+- 포커스 · 마커 좌표는 `renderer` 의 함수 하나가 DOM 에서 계산한다. 에디터 오버레이 · HTML 뷰어 · PPTX 가 모두 그 함수를 쓴다.
+
+### `.wbtheme` 파일
+
+zip 하나.
+
+```
+manifest.json      서버가 코드를 실행하지 않고 읽는 선언(「manifest」)
+theme.js           일반 스크립트(IIFE). __wirebound_runtime__.register(defineTheme(…)) 를 부른다
+theme.css          선택
+assets/**          글꼴 · 이미지(허용 확장자만)
+```
+
+**`theme.js` 는 ES 모듈이 아니라 일반 스크립트다.** 내보낸 HTML 번들은 `file://` 로 열리는데 Chrome 은 `file://` 의 ES 모듈을 CORS 로 막는다. 캔버스 iframe · 내보낸 HTML · PPTX 워커가 모두 `<script>` 로 싣는다.
+
+**공유 런타임.** 테마는 `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않는다. `wb-theme build` 가 이 import 를 `globalThis.__wirebound_runtime__` 에서 읽게 바꿔 쓴다. 호스트는 `theme.js` 보다 먼저 이 전역을 채운다. SDK 의 major 판은 manifest 의 `sdk` 범위로 맞추고, 업로드 때 호스트의 SDK 판과 대조한다.
+
+`assets/**` 는 `theme.css` 에서 상대 경로로 가리킨다. 호스트는 패키지 파일을 한 디렉터리처럼 내주므로(api 의 파일 경로 · 번들의 `assets/theme/`) 상대 경로가 세 곳에서 같게 풀린다.
+
+### 캔버스 iframe
+
+에디터 가운데의 캔버스(목업 영역)만 same-origin iframe 으로 감싼다. 헤더 · 트리 · 우측 패널은 에디터 문서에 그대로 있다.
+
+- **문서 분리가 목적이다.** 테마 CSS(`button { … }` · `*` · `:root`)가 에디터 UI 를 칠하지 않는다. iframe 폭을 뷰포트 프리셋 값으로 두면 테마의 `@media` · `vw` · `matchMedia` 가 프리셋 폭으로 판정된다 — 내보낸 HTML · PPTX 와 같은 결과다.
+- **보안 격리가 아니다.** same-origin 이라 에디터가 iframe 의 DOM 을 직접 읽고 이벤트를 받는다. 캔버스 클릭 선택 · 외곽선 · 번호 마커 · 드래그 드롭이 DOM 으로 돈다.
+- 줌은 iframe 을 CSS `transform: scale()` 로 줄인다. iframe 의 레이아웃 폭은 프리셋 값 그대로다.
+- 토큰 CSS 변수는 iframe 문서의 `:root` 에 주입한다.
+
+Shadow DOM 은 CSS 는 가르지만 `@media` 가 창 폭으로 판정되는 문제를 못 푼다. 셀렉터 접두어 · `@container` 변환은 작성자가 쓴 CSS 를 도구가 고쳐 쓰는 것이라 `:root` · `html` · `vh` · `matchMedia` 에서 샌다. 그래서 iframe 이다.
+
+---
+
+## manifest
+
+작성자는 템플릿의 `theme.config.ts` 에 선언하고, `wb-theme build` 가 `manifest.json` 으로 뽑는다.
+
+```jsonc
+{
+  "id": "acme-portal",
+  "name": "ACME 포털",
+  "description": "…",
+  "version": "1.3.0",
+  "sdk": "^1.0.0",
+  "preview": "assets/preview.png",
+
+  "tokens": {
+    "groups": [{ "id": "color", "label": "색" }, { "id": "type", "label": "글꼴" }],
+    "items": {
+      "color.primary":      { "type": "color",  "label": "주색", "group": "color", "default": "#2563eb" },
+      "color.primaryHover": { "type": "color",  "label": "주색(호버)", "group": "color", "default": "{color.primary}" },
+      "font.body":          { "type": "font",   "label": "본문 글꼴", "group": "type", "default": "Pretendard, sans-serif" },
+      "radius.card":        { "type": "length", "label": "카드 모서리", "default": "12px" },
+      "density":            { "type": "select", "label": "밀도", "options": ["compact", "comfortable"], "default": "comfortable" }
+    }
+  },
+
+  "components": {
+    "List": {
+      "variants": [
+        { "id": "table", "label": "테이블" },
+        { "id": "cards", "label": "카드 그리드", "hideProps": ["columns"] }
+      ],
+      "defaultVariant": "table"
+    }
+  },
+
+  "patterns": {
+    "hero.split": { "name": "히어로 — 좌우 분할", "slots": { "…": "…" }, "schema": { "…": "…" } }
+  }
+}
+```
+
+| 필드 | 규칙 |
+|---|---|
+| `id` | `[a-z0-9-]+`. 인스턴스 안에서 유일하고 버전 계보의 키다. 시스템 테마는 `system-` 으로 시작하고, 관리자 업로드는 이 접두어를 쓸 수 없다 |
+| `version` | semver. 같은 `id@version` 재업로드는 거부한다 |
+| `sdk` | semver 범위. 호스트 SDK 판이 범위 밖이면 거부한다 |
+| `preview` | 선택. 패키지 안의 이미지 경로 |
+| `tokens.items` | 키는 `[a-zA-Z0-9.-]+`. 타입은 `color` · `length` · `number` · `font` · `shadow` · `select` 여섯. 기본값은 그 타입의 리터럴이거나 같은 타입 토큰의 참조(`{키}`). 참조 순환 · 없는 키 · 타입이 다른 참조는 거부한다 |
+| `components` | 키는 카탈로그의 컴포넌트 이름. `variants` 는 하나 이상, `defaultVariant` 는 그 안의 id. `hideProps` 는 그 컴포넌트의 props 이름 |
+| `patterns` | 이름은 `<범주>.<변형>`, 범주는 고정 목록(`header` · `nav` · `hero` · `features` · `content` · `cta` · `pricing` · `testimonial` · `footer` · `auth` · `empty` · `error`). `schema` 는 `schema` 패키지 검증을 통과해야 한다. 전개 규칙(삽입 때 id 새로 발급, `slot` 은 템플릿에만)은 지금과 같다 |
+
+**토큰이 화면에 닿는 길**
+
+- 모든 토큰은 CSS 변수 `--wb-<키의 . 을 - 로>` 로 iframe `:root` 에 주입된다(`color.primary` → `--wb-color-primary`). 참조는 `var(--wb-…)` 로 컴파일한다.
+- 마크업을 바꾸는 토큰(대개 `select` · `number`)은 코드에서 `useToken('density')` 로 읽는다. 토큰이 바뀌면 그 토큰을 읽은 뷰가 다시 그려진다.
+
+**variant 가 테마에 없을 때** — 노드의 `variant` 는 스키마에서 자유 문자열이다. 지금 테마에 없는 값이면 렌더러는 `defaultVariant` 로 그리고, lint 가 «현재 테마에 없는 variant» 로 경고한다. 페이지 데이터는 바꾸지 않는다. 테마를 되돌리면 원래 모습으로 돌아온다.
+
+---
+
+## 업로드 · 버전 · 인스턴스 관리자
+
+### 인스턴스 관리자
+
+- `users.is_instance_admin boolean not null default false`.
+- 주는 길은 서버에 손이 닿는 사람뿐이다 — `migrate` 시딩의 `SEED_USER_ADMIN=1`, 그리고 새 명령 `pnpm --filter @wirebound/api admin grant <email>` · `admin revoke <email>`. **API 에는 관리자를 만들거나 바꾸는 라우트가 없다.**
+- 관리자가 하는 일은 테마 업로드 · 버전 숨김과 되살림 · 템플릿 내려받기다. 프로젝트 역할(owner/editor/viewer)과 별개이며 프로젝트 권한을 넓히지 않는다.
+
+### 저장
+
+```sql
+theme_packages(theme_id text, version text, name text, description text,
+               sdk_range text, manifest json, files bytea, size int, sha256 text,
+               uploaded_by uuid NULL, uploaded_at timestamptz, hidden_at timestamptz NULL)
+  PK (theme_id, version)
+  uploaded_by NULL = 시스템 테마
+```
+
+- 행은 한 번 쓰면 `hidden_at` 말고는 바뀌지 않는다. **지우는 라우트는 없다** — 스냅샷이 `id@버전` 을 참조하므로 지우면 «그때 그 화면» 이 깨진다.
+- 파일은 zip 원본 그대로 `bytea` 에 둔다. 단일 서버 배포라 `pg_dump` 하나에 설계서와 테마가 함께 담기게 한다. 패키지 상한 10 MB(압축), 풀었을 때 상한 50 MB, 항목 수 상한 500.
+- `themes` 테이블 · `layouts.theme_id` 는 걷는다.
+
+### 업로드 검증
+
+`POST /api/admin/theme-packages`(multipart, 관리자 세션만). 코드는 실행하지 않는다. 실패는 항목별 사유 목록과 함께 422 로 답한다.
+
+1. zip 크기 · 풀린 크기 · 항목 수 상한.
+2. 항목 경로 — 절대 경로 · `..` · 심볼릭 링크 거부. 허용 목록: `manifest.json` · `theme.js` · `theme.css` · `assets/**`(`png` · `jpg` · `jpeg` · `gif` · `webp` · `svg` · `woff` · `woff2` · `ttf` · `otf`).
+3. `manifest.json` 이 manifest zod 규격을 통과한다(「manifest」의 표).
+4. 호스트 SDK 판이 `sdk` 범위 안이다.
+5. `id` 가 `system-` 으로 시작하지 않는다.
+6. 같은 `id@version` 이 있으면 409.
+
+### 버전과 숨김
+
+- 한 `theme_id` 의 «최신» 은 숨기지 않은 버전 가운데 semver 가 가장 큰 것이다.
+- 숨긴 버전은 새로 고를 수 없다. 이미 고정한 프로젝트 · 스냅샷은 그대로 쓴다.
+- `PATCH /api/admin/theme-packages/:id/:version` `{ hidden: boolean }`.
+
+### 읽기 경로
+
+| 경로 | 누가 | 답 |
+|---|---|---|
+| `GET /api/theme-packages` | 로그인한 사용자 | 테마별 버전 목록(숨긴 것은 관리자에게만) · manifest 요약 |
+| `GET /api/theme-packages/:id/:version/manifest` | 로그인한 사용자 | manifest 전문 |
+| `GET /api/theme-packages/:id/:version/files/*` | 로그인한 사용자 | 패키지 안의 파일. `Cache-Control: private, max-age=31536000, immutable` |
+| `GET /api/admin/theme-template.zip` | 관리자 | 스타터 템플릿 + SDK · theme-kit tarball 동봉 |
+
+숨긴 버전도 `manifest` · `files` 는 내준다 — 고정한 프로젝트가 그려져야 한다.
+
+### 시스템 테마
+
+저장소 빌드가 `system-themes/*` 를 `.wbtheme` 로 만든다. api 가 기동할 때 그 파일들 가운데 **DB 에 없는 `id@version` 만** 넣는다(`uploaded_by NULL`). 있는 버전은 건드리지 않는다. 같은 `id@version` 인데 `sha256` 이 다르면 기동을 멈추고 그 사실을 말한다 — 올린 버전의 내용이 바뀐 것이다.
+
+### 관리자 화면
+
+`/admin/themes`. 테마 · 버전 목록, 업로드(검증 사유를 항목별로), 숨김 · 되살림, 템플릿 내려받기. 프로젝트 목록 화면 머리에 관리자에게만 링크가 보인다.
+
+---
+
+## 프로젝트 쪽: 선택 · 토큰 · 스냅샷
+
+### 데이터
+
+```sql
+projects
+  + theme_id text not null
+  + theme_version text not null
+  + theme_tokens json not null default '{}'   -- 기본값과 다른 값만
+  + theme_rev int not null default 0
+  FK (theme_id, theme_version) → theme_packages
+```
+
+새 프로젝트는 `system-admin` 의 최신 버전으로 시작한다.
+
+### 권한
+
+테마 바꾸기 · 버전 올리기 · 토큰 고치기는 **owner** 다. editor · viewer 는 읽기만 한다.
+
+### 테마 바꾸기와 버전 올리기
+
+`PUT /api/projects/:projectId/theme` `{ themeId, version, tokens, rev }`. 저장된 `theme_rev` 와 `rev` 가 다르면 409 와 현재 값을 돌려준다.
+
+화면(프로젝트 설정 페이지의 «테마» 절)은 보내기 전에 확인 창으로 둘을 알린다.
+
+- **토큰 이전** — 키가 같고 타입이 같으면 값을 잇는다. 새 테마에 없는 키는 버린다. 새 키는 기본값이다. 이어지는 · 버려지는 · 기본값으로 서는 수를 보인다.
+- **없는 variant** — 새 테마의 `components` 에 없는 variant 를 쓰는 노드 수를 페이지별로 보인다. 계산은 `GET /api/projects/:projectId/theme/impact?themeId=&version=` 이 한다(서버가 페이지 스키마와 manifest 를 견준다).
+
+### 토큰 편집
+
+- manifest 선언에서 자동 생성한 폼. 그룹별로 나누고 타입마다 컨트롤을 쓴다(`color` 컬러 피커 · `length` 값 + 단위 · `font` 글꼴 목록 + 자유 입력 · `select` 선택 · `number` 숫자 · `shadow` 문자열).
+- 옆에 **테마 갤러리 iframe** — 모든 컴포넌트 · variant 를 SDK 가 주는 샘플 노드로 늘어놓은 화면. 폼을 고치면 CSS 변수와 `useToken` 값만 바꿔 즉시 반영한다. 저장 전에는 서버 · 다른 사람에게 가지 않는다.
+- «저장» 은 `PUT …/theme` 을 같은 `themeId@version` 으로 보낸다. 409 면 내 값과 서버 값을 나란히 보이고 고르게 한다.
+- 항목별 · 전체 «기본값으로».
+
+### 실시간
+
+테마 · 토큰이 저장되면 프로젝트 룸에 `theme-changed { themeId, version, tokens, rev }` 를 방송한다. 열린 캔버스는 번들이 바뀌었으면 iframe 을 다시 싣고, 토큰만 바뀌었으면 CSS 변수 · `useToken` 값만 바꾼다. 방송을 놓친 탭은 페이지를 다시 읽을 때 프로젝트의 `theme_rev` 로 따라잡는다. 번들을 못 읽으면 캔버스는 SDK 기본 뷰로 그리고 셸 머리에 한 줄로 알리며 다시 읽을 단추를 둔다.
+
+### 스냅샷
+
+payload 에 테마 내용 대신 `{ themeId, version, tokens }` 를 얼린다. 패키지는 지우지 않으므로 참조로 충분하다. 복원은 이 셋도 되돌린다(숨긴 버전이어도 된다). 복원도 `theme_rev` 를 올리고 `theme-changed` 를 방송한다.
+
+### 레이아웃
+
+스키마 트리라는 성질은 그대로이고 `themeRef` 만 걷는다.
+
+### CLI · MCP
+
+`wireb pull` · `wireb lint` 는 프로젝트의 `themeId@version` 과 manifest 를 읽는다. lint 규칙 «현재 테마에 없는 variant» 를 더한다. 테마 JSON 을 읽던 자리는 걷는다.
+
+---
+
+## 내보내기와 PPTX
+
+**테마 코드는 브라우저에서만 돈다** — 캔버스 iframe · 내보낸 HTML · PPTX 용 Chromium. api 의 Node 프로세스는 테마 코드를 싣지 않는다. `window` · `document` 를 만지는 테마 하나가 서버 렌더를 깨거나 전역 부작용을 서버 프로세스에 남기지 않게 하려는 것이다.
+
+### HTML 번들 — 브라우저 렌더
+
+```
+wirebound-export/
+  index.html              트리 네비 + 뷰어 셸
+  pages/<이름>.html        페이지 스키마 JSON + 스크립트 태그
+  assets/
+    runtime.js            react · react-dom · theme-sdk · renderer · 상호작용 런타임 (일반 스크립트)
+    theme/theme.js        업로드된 패키지의 파일 그대로
+    theme/theme.css
+    theme/assets/**
+    tokens.css            프로젝트 토큰 값 → CSS 변수
+```
+
+- 페이지는 `runtime.js` → `theme.js` 차례로 싣고 스키마를 그린다. 트리 네비 · 코멘트 · 상호작용은 지금과 같다.
+- JS 가 꺼진 브라우저에서는 목업이 보이지 않는다. 설계서 뷰어라 받아들인다.
+- `file://` 로 열어도 돈다(모든 스크립트가 일반 스크립트).
+
+### PPTX
+
+Chromium 워커가 HTML 번들의 페이지와 같은 문서를 연다. SDK 는 첫 렌더와 `document.fonts.ready` 가 끝나면 `<html data-wb-ready>` 를 세운다. 워커는 그것을 기다린 뒤 지금의 한도(동시 브라우저 수 · 한 장의 넓이 · 글꼴 대기 · 장 수)로 잰다. 테마 코드가 던졌거나 한도 안에 준비되지 않은 장은 그리지 않고 이유를 적는다. 번호 마커 좌표는 `renderer` 의 좌표 함수로 얻는다.
+
+---
+
+## 작성자 도구
+
+### 템플릿 zip
+
+```
+wirebound-theme-starter/
+  package.json            @wirebound/theme-sdk · @wirebound/theme-kit 을 동봉 tarball 경로(file:)로 참조
+  vendor/*.tgz            SDK · kit tarball
+  theme.config.ts         manifest 선언(id · name · version · tokens · components · patterns)
+  src/index.tsx           defineTheme({ views })
+  src/views/*.tsx         컴포넌트별 뷰 (기본 뷰를 복사한 출발점)
+  src/theme.css
+  assets/
+  SKILL.md                코딩 에이전트용 작성 지침
+```
+
+npm 공개 뒤에는 `package.json` 의 두 의존을 버전 범위로 바꾸는 것만으로 옮겨 간다.
+
+### `wb-theme dev`
+
+로컬 갤러리. 카탈로그의 모든 컴포넌트 × variant 를 샘플 노드로 늘어놓고, 토큰 패널(manifest 에서 자동 생성) · 뷰포트 프리셋 · 포커스 · 마커 오버레이 표시를 갖춘다. 뷰와 CSS 는 HMR 로 반영한다. 갤러리 화면은 사이트의 토큰 편집 옆 갤러리와 같은 컴포넌트(`theme-kit` 이 내보낸다)다.
+
+### `wb-theme build`
+
+1. `theme.config.ts` → `manifest.json`, `themes` 의 manifest 검증을 로컬에서 먼저 돌린다(업로드 검증과 같은 함수).
+2. `src/index.tsx` → `theme.js`(IIFE, 공유 런타임 import 를 전역 읽기로 바꿔 씀).
+3. CSS · assets 복사.
+4. `dist/<id>-<version>.wbtheme`.
+
+### 스킬
+
+`SKILL.md` — 뷰 계약(`<Root>` 필수 · `<Focus>` · marker), 토큰 선언 규칙, variant 선언, 금지 사항(공유 런타임 모듈을 번들에 넣지 않는다 · `theme.js` 에서 네트워크로 다른 스크립트를 싣지 않는다 — 내보낸 번들이 오프라인에서 깨진다), dev · build 절차.
+
+---
+
+## 걷어 낼 것
+
+- `themes` 테이블, `layouts.theme_id`, 테마 CRUD · JSON 라우트
+- 렌더러의 구조 구현체 레지스트리와 structure-css (구조 구현체의 마크업은 SDK 기본 뷰와 시스템 테마 뷰의 출발점으로 옮긴다)
+- 카탈로그의 `structures` · `parts` · `variants`, `editor` 의 `visibleWhen: { structure }`
+- 테마 JSON 에디터 · 토큰 화면 · 기존 테마 갤러리 · 테마 JSON 가져오기/내보내기 (`apps/web/src/routes/theme-editor.tsx` · `apps/web/src/routes/tokens.tsx` 와 딸린 것)
+- 캔버스 상단의 테마 드롭다운
+- 정본 설계서의 스타일 프로퍼티 화이트리스트와 `data-wb-part` 계약
+
+운영 데이터가 없으므로 마이그레이션은 파괴적이다. `down` 은 테이블 모양만 되살리고 데이터는 되살리지 않는다.
+
+---
+
+## 시스템 테마 이전
+
+- `system-admin` · `system-saas-marketing` · `system-portal` · `system-commerce` · `system-docs` 다섯을 `theme-kit` 으로 쓴다.
+- 지금의 구조 구현체와 각 테마 JSON 의 스킨이 출발점이다. 지금 테마가 고르던 structure 는 그 테마의 variant 가 된다.
+- 지금의 토큰 3단(palette → semantic → scale)은 각 테마가 선언하는 토큰으로 옮긴다. 기획자가 만질 손잡이만 드러낸다.
+- SDK 기본 뷰는 테마와 무관한 중립 와이어프레임이다. 테마가 뷰를 빠뜨려도 화면이 비지 않게 하는 안전망이다.
+
+---
+
+## 테스트
+
+| 층 | 재는 것 |
+|---|---|
+| `themes` | manifest 규격(표의 규칙 하나마다 거부 케이스), 토큰 참조 순환 · 없는 키 · 타입 다른 참조, zip 안전성(`..` · 절대 경로 · 링크 · 크기 · 항목 수 · 허용 목록) |
+| `theme-sdk` · `renderer` | `<Root>` 누락(개발 모드는 던짐 · 운영 모드는 기본 뷰), `<Focus>` 둘, 카탈로그의 모든 컴포넌트에 기본 뷰가 있음, 모르는 variant → `defaultVariant`, 포커스 · 마커 좌표(placement 여섯 × offset) |
+| api | 비관리자 업로드 403 · 비로그인 401, `system-` 접두어 거부, `id@version` 중복 409, 숨김(목록에서 빠짐 · 파일은 내줌), 관리자 권한을 바꾸는 라우트가 없음, 테마 변경 owner 만 · `theme_rev` 409, impact 계산, 스냅샷 동결 · 복원(숨긴 버전 포함), `theme-changed` 방송, 시스템 테마 시딩의 멱등 · `sha256` 불일치 거부 |
+| build-test | 스타터 템플릿을 `wb-theme build` 한 파일이 업로드 검증을 통과(끝에서 끝까지), 시스템 테마 5종 빌드 · 시딩 |
+| 실브라우저(`apps/web/build-test`) | iframe 캔버스 렌더, 프리셋 375 에서 테마의 `@media` 가 걸림, `button { … }` 을 가진 테마가 에디터 버튼의 계산 스타일을 안 바꿈, 마커 위치, 캔버스 클릭 선택, 토큰 즉시 미리보기, `theme-changed` 수신 뒤 다시 그림 |
+| 내보내기 | `file://` 로 연 번들이 Chromium 에서 `data-wb-ready` 까지 감, 코드 테마로 찍은 PPTX, 던지는 테마의 장은 이유와 함께 빠짐 |
+
+---
+
+## 진행 단계
+
+차수마다 동작 가능한 상태로 끝낸다. plan 은 차수별로 쓴다.
+
+| 차수 | 내용 | 끝나면 |
+|---|---|---|
+| **A1** | `theme-sdk`(뷰 계약 · `<Root>` · `<Focus>` · `useToken` · 기본 뷰), `renderer` 재배선, 캔버스 iframe. 카탈로그의 `structures` · `parts` · `variants` 와 렌더러의 구조 레지스트리 · structure-css, 웹의 테마 JSON 에디터 · 토큰 화면 · 테마 드롭다운을 함께 걷는다. 캔버스는 저장소 안의 테마 하나(`system-admin` 의 첫 판)를 직접 싣는다 | 캔버스가 iframe 안에서 코드 테마로 그려진다 |
+| **A2** | `.wbtheme` 형식 · `themes` 검증, `theme-kit`(dev · build), 스타터 템플릿 · 스킬 | 로컬에서 테마를 짜고 빌드한다 |
+| **A3** | api — `theme_packages` · 관리자 · 업로드 · 파일 경로 · 프로젝트 바인딩 · impact · 스냅샷 · 방송 · 시스템 테마 시딩. `themes` 테이블 · `layouts.theme_id` · 테마 JSON 라우트를 걷는다 | 올린 테마를 프로젝트가 고른다(REST) |
+| **A4** | web — 관리자 화면, 프로젝트 설정 페이지의 테마 절 · 토큰 편집기. 캔버스가 저장소 테마 대신 프로젝트의 `id@버전` 을 싣는다 | 사이트에서 테마를 고르고 토큰을 고친다 |
+| **A5** | HTML 번들 · PPTX | 내보내기가 코드 테마로 돈다 |
+| **A6** | 시스템 테마 5종 완성, 정본 설계서 갱신 | 시스템 테마 다섯이 기본 설치된다 |
+
+**A1 부터 A4 가 끝날 때까지는 테마를 고를 수 없다** — 모든 프로젝트가 저장소 테마 하나로 그려지고, 옛 JSON 테마로 짠 외형은 사라진다. 운영 데이터가 없어 받아들인다. A1 이 옛 테마 엔진을 한꺼번에 걷는 까닭은, 카탈로그에서 structure 를 걷는 순간 옛 엔진이 설 자리가 없어 두 체계를 함께 돌릴 수 없기 때문이다. A1 ~ A4 동안 내보내기(HTML · PPTX)는 옛 경로가 걷혀 서지 않을 수 있다 — A5 가 되살린다. 그 사이 내보내기 라우트는 «테마 이전 중» 사유로 거절한다.
+
+A4 의 설정 페이지는 별도 과제 «프로젝트 설정 페이지(이름 · 슬러그 변경)» 가 뼈대를 먼저 세운다.
