@@ -97,6 +97,29 @@ describe('테마 경로', () => {
     expect(err.mock.calls.some((c) => String(c[0]).includes('Root'))).toBe(true)
   })
 
+  // spec 「뷰 계약」: «`<Root>` 없이 **반환하면** … 기본 뷰로 대신 그린다» — 판정은 반환마다다. 한 번 빠뜨린 노드가 편집으로 Root 를
+  // 그리게 되어도 기본 뷰에 갇히면 테마 모습이 그 노드에서 영영 사라진다(`ViewHost` 의 `missing` 이 되돌아오지 않는다). 뷰가 던진
+  // 판은 «뷰가 던진 뒤 문서가 바뀌면 다시 그려 본다» 가 잰다 — 이 케이스는 Root 누락 쪽의 짝이다.
+  it('Root 를 빠뜨렸던 뷰가 편집으로 Root 를 그리게 되면 테마 뷰로 돌아온다', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const Button = view(({ props }) =>
+      props.label === '빠짐' ? <button>Root 없음</button> : <Root as="button" className="mine">{String(props.label)}</Root>,
+    )
+    const theme = { manifest: base, views: { Button } }
+    const doc = (label: string) => page([{ id: 'b', type: 'Button', props: { label } }])
+    const { container, rerender } = render(<>{renderDocument(doc('빠짐'), { theme })}</>)
+    const read = () => {
+      const el = container.querySelector('[data-wb-id="b"]')!
+      return { className: el.className, structure: el.getAttribute('data-wb-structure'), text: el.textContent }
+    }
+    const missing = read()
+    rerender(<>{renderDocument(doc('고침'), { theme })}</>)
+    expect({ missing, fixed: read() }).toEqual({
+      missing: { className: '', structure: 'solid', text: '빠짐' },
+      fixed: { className: 'mine', structure: null, text: '고침' },
+    })
+  })
+
   it('props 검증 실패는 지금처럼 동기로 onNodeError 에 모인다', () => {
     const errors: NodeRenderError[] = []
     draw(page([{ id: 'b', type: 'Button', props: { label: 3 } }]), { manifest: base, views: {} }, errors)
