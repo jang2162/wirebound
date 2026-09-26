@@ -145,7 +145,7 @@ export function useProjectThemeState(
         if (!alive) return
         // 조회 실패에서도 **그리기는 계속된다** — 화면은 구조 기본 CSS로 그려진다.
         // 여기서 던지면 캔버스가 통째로 사라진다. 이 상태를 문장으로 옮길지는 읽는
-        // 쪽이 정한다(캔버스는 말하지 않고, 패턴 고르개는 말한다).
+        // 쪽이 정한다(캔버스는 셸 머리에 한 줄을 싣고 — `canvas/canvas-theme-notice.tsx` —, 패턴 고르개는 제 자리에 말한다).
         console.error('테마를 읽지 못해 기본 스타일로 그립니다', error)
         setState({ status: 'failed' })
       }
@@ -168,7 +168,14 @@ export function useProjectThemeState(
 }
 
 export function useProjectTheme(projectId: string | undefined, reloadToken = 0): ThemeSource {
-  const state = useProjectThemeState(projectId, reloadToken)
+  return useThemeSourceOf(useProjectThemeState(projectId, reloadToken))
+}
+
+/**
+ * 상태를 `ThemeSource`로 좁힌다 — 상태도 함께 읽는 쪽(캔버스: 실패를 셸에 싣는다)이 조회를 두 번 돌리지 않게 따로 둔다. 안정 참조 계약은
+ * 아래 `useMemo` 하나가 진다.
+ */
+export function useThemeSourceOf(state: ProjectThemeState): ThemeSource {
   // **넷을 `null` 하나로 좁힌다.** 그리는 쪽은 *"무엇을 그리나"*만 물으므로 이유가
   // 필요 없다 — 이유가 필요한 쪽(패턴 고르개)이 위 훅을 직접 쓴다.
   const theme = state.status === 'ready' ? state.theme : null

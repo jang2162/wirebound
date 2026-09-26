@@ -43,7 +43,7 @@ import { useState, type ReactElement } from 'react'
 import { Link } from 'react-router'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
-import { useSessionSwitched, useSessionUser, useSignOut } from './session-context'
+import { useSessionEpochNow, useSessionSwitched, useSessionUser, useSignOut } from './session-context'
 
 /** 서버가 이유를 주지 않은 실패(네트워크 단절 등)에 쓸 문장. */
 const UNKNOWN_FAILURE = '로그아웃하지 못했습니다'
@@ -66,6 +66,7 @@ export function SessionMenu(props: {
   const switched = useSessionSwitched()
   // **끊고 다른 탭에 알린다**(`session-context.tsx`의 «탭 사이») — 401 의 무효화와 갈린다.
   const signOut = useSignOut()
+  const epochNow = useSessionEpochNow()
   /** 실패 문장. **`Failure`를 통째로 들지 않는다** — `signed-out`은 아래에서 성공으로
    * 접히므로 이 자리에 올 수 있는 것은 문장 하나뿐이다. */
   const [failure, setFailure] = useState<string | null>(null)
@@ -74,7 +75,19 @@ export function SessionMenu(props: {
   async function run(): Promise<void> {
     setBusy(true)
     setFailure(null)
+    const pressed = epochNow()
     const farewell = (await props.settle?.()) ?? null
+    /**
+     * **기다리는 동안 세션이 끝났으면 로그아웃하지 않는다** — 로그아웃 요청은 쿠키의 세션을 지운다. 기다림(`settle` — 한도 3s) 사이에 다른
+     * 탭이 로그아웃하고 다른 사람으로 들어오면 쿠키는 그 사람의 것이라, 여기서 내면 그 사람의 세션을 끊고 끊었다고 다른 탭에 알린다
+     * (jsdom: `test/session/logout-farewell.test.tsx`의 «로그아웃을 기다리는 동안 다른 탭에서 …»). 누를 때 끝내려던 세션은 이미 끝났다 —
+     * 세대가 올랐다(세션이 끝나는 길은 전부 세대를 올린다 · 다른 사람으로 바뀌어도 오른다). 두고 간 편집의 한 줄은 이때 잃는다 — 그 한 줄은
+     * 끝낸 세션의 세대에 매달리는데(`useSignOutNotice`) 그 세션을 끝낸 것은 이 탭이 아니다.
+     */
+    if (epochNow() !== pressed) {
+      setBusy(false)
+      return
+    }
     try {
       await api.logout()
     } catch (caught) {

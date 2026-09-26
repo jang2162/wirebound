@@ -37,7 +37,8 @@ import { themeStructures } from '@wirebound/themes'
 import { walkSafely } from '../edit/safe-walk'
 import { usePublishCanvasStructures } from './canvas-structures'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { useProjectTheme } from '../theme/use-project-theme'
+import { useProjectThemeState, useThemeSourceOf } from '../theme/use-project-theme'
+import { usePublishThemeFailed } from './canvas-theme-notice'
 import { useThemeCss } from '../theme/use-theme-css'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
 // 끝난다 — 그 모듈의 주석 참고.
@@ -158,7 +159,10 @@ export function Canvas(props: {
    * **두 노드를 더 그리고**, 그 id는 페이지 문서에 없어 아래 `nodeIdAt`이 유령 노드를
    * 고르게 된다. 측정과 그 결과는 `packages/renderer/test/compose-identity.test.tsx`에 있다.
    */
-  const theme = useThemeCss(useProjectTheme(props.projectId, props.themeReloadToken))
+  const themeState = useProjectThemeState(props.projectId, props.themeReloadToken)
+  const theme = useThemeCss(useThemeSourceOf(themeState))
+  // **못 읽었으면 셸 머리가 말한다**(`canvas-theme-notice.tsx`) — 기본 스타일을 설계서의 모습으로 읽지 않게.
+  usePublishThemeFailed(themeState.status === 'failed')
   // **이 표가 구조의 유일한 판정 입력이다** — 문서를 그리는 데 넘기고, 속성 패널이 `visibleWhen`을
   // 가를 때도 같은 것을 읽는다(`./canvas-structures.tsx`). `theme`이 안정 참조라 표도 테마가 바뀔 때만 새로 난다.
   const structures = useMemo(() => themeStructures(theme), [theme])

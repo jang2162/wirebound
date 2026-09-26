@@ -44,6 +44,8 @@ class FakeSocket implements RealtimeSocket {
 }
 
 const text = (id: string, content: string) => ({ id, type: 'Text', props: { content, role: 'body' } })
+/** 다시 싣기가 버린 목록을 말하는 한 줄(`routes/editor.tsx`의 `UNDO_RESTORE_DROPPED_NOTICE`). */
+const UNDO_LINE = '페이지를 다시 불러와 되돌리기 이력을 싣지 않았습니다 — 새로고침하면 다시 불러옵니다.'
 
 function doc(...children: ReturnType<typeof text>[]): PageDocument {
   return pageDoc({ id: 'n-root', type: 'Page', children })
@@ -687,6 +689,98 @@ describe('누른 뒤 되짚기 이력을 기다리는 동안', () => {
  * 사이마다 남의 것이 하나씩 끼어 구멍이 열이다. 되짚기 조회가 구멍마다 하나씩 들면 회수 한도(`UNDO_HISTORY_ROUNDS`)가 먼저 차 그 아래 항목을 못
  * 짓는다 — 빠진 구간의 아래 끝은 이미 가진 번호가 아니라 «그 아래가 모두 찬 데»까지다(`EditorStore.undoHistoryNeed`).
  */
+/**
+ * **되짚기 이력을 받는 동안 선 잃음 통지는 받은 뒤의 통지가 치우지도 덮지도 않는다**(`edit/use-edit-commit.tsx`의 `sayAfterWait`). 판: 누른 뒤
+ * 이력 조회를 붙잡은 채 «가»를 고쳐(나감 · 답 없음) «밥»을 고친다(줄 섬). 밥이 «밥»을 지워 리베이스가 줄 선 편집을 버리고 말한다. 그 뒤 이력의
+ * 답이 온다. 누르기 **전에** 서 있던 통지는 예전처럼 치운다(대조).
+ */
+describe('되짚기 이력을 받는 동안 선 잃음 통지', () => {
+  const MINE = [summary(HEAD_SEQ - 1, [{ op: 'replace', path: '/root/children/2/props/content', value: '옛 나' }])]
+  const OPENED = doc(text('n-bob', '밥'), text('n-ga', '가'), text('n-na', '나'))
+  const DROPPED = '다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 1개를 버렸습니다.'
+  const alertText = (): string =>
+    screen
+      .queryAllByRole('alert')
+      .filter((node) => node.classList.contains('wb-shell-edit-alert'))
+      .map((node) => node.textContent)
+      .join(' | ')
+
+  /** `pressFirst`면 누른 뒤 버림이 서고(받는 동안), 아니면 버림이 선 뒤 누른다(누르기 전의 통지). */
+  async function dropped(before: ApiClient['listRevisionsBefore'], pressFirst: boolean): Promise<void> {
+    const { setup, sockets } = wiring()
+    await openPage(OPENED, { realtime: setup, apiOverrides: { listMyRevisions: async () => MINE, listRevisionsBefore: before } })
+    act(() => {
+      sockets[0]?.onopen?.()
+    })
+    await waitFor(() => expect(undoButton().disabled).toBe(false))
+    const press = async (): Promise<void> => {
+      fireEvent.click(undoButton())
+      await waitFor(() => expect(undoButton().disabled).toBe(true))
+    }
+    if (pressFirst) await press()
+    for (const [index, value] of [[1, '가 고침'], [0, '밥 고침']] as const) {
+      fireEvent.click(within(screen.getByRole('region', { name: '구조 트리' })).getAllByRole('button', { name: 'Text' })[index]!)
+      const box = within(screen.getByRole('complementary', { name: '우측 패널' })).getByLabelText<HTMLTextAreaElement>('내용')
+      fireEvent.change(box, { target: { value } })
+      fireEvent.blur(box)
+      await act(async () => {})
+    }
+    act(() => {
+      sockets[0]?.onmessage?.({
+        data: JSON.stringify({
+          type: 'page-changed',
+          projectId: PROJECT_ID,
+          pageId: PAGE_ID,
+          seq: HEAD_SEQ + 1,
+          ops: [{ op: 'remove', path: '/root/children/0' }],
+          warnings: [],
+          actor: { type: 'user', label: '밥' },
+        }),
+      })
+    })
+    await act(async () => {})
+    // 판 카나리아 — 리베이스가 줄 선 편집을 버리고 말했다.
+    expect({ alert: alertText(), contents: contents() }).toEqual({ alert: DROPPED, contents: ['가 고침', '나'] })
+    if (!pressFirst) await press()
+  }
+
+  it('이력을 받은 뒤의 되돌리기가 그 사이 선 버림 통지를 치우지 않는다', async () => {
+    const answer = deferred<RevisionSummary[]>()
+    await dropped(() => answer.promise, true)
+
+    await act(async () => {
+      answer.resolve([summary(HEAD_SEQ, [{ op: 'replace', path: '/root/children/0/props/content', value: 'x' }], 'u-bob')])
+    })
+    await act(async () => {})
+
+    expect(alertText()).toBe(DROPPED)
+  })
+
+  it('이력 조회가 실패하면 그 사이 선 버림 통지 뒤에 실패를 잇는다', async () => {
+    let reject!: (error: unknown) => void
+    await dropped(() => new Promise<RevisionSummary[]>((_resolve, fail) => (reject = fail)), true)
+
+    await act(async () => {
+      reject(new ApiError(500, 'internal', '되짚기 조회 실패 [NT]'))
+    })
+    await act(async () => {})
+
+    expect(alertText()).toBe(`${DROPPED} 되짚기 조회 실패 [NT] — 되돌리지 않았습니다. 다시 누르면 다시 불러옵니다.`)
+  })
+
+  it('누르기 전에 서 있던 통지는 받은 뒤의 되돌리기가 치운다 — 누른 때의 통지다', async () => {
+    const answer = deferred<RevisionSummary[]>()
+    await dropped(() => answer.promise, false)
+
+    await act(async () => {
+      answer.resolve([summary(HEAD_SEQ, [{ op: 'replace', path: '/root/children/0/props/content', value: 'x' }], 'u-bob')])
+    })
+    await act(async () => {})
+
+    expect(alertText()).toBe('')
+  })
+})
+
 describe('번갈아 고친 페이지', () => {
   const EDITS = 10
   const HEAD = 2 * EDITS + 1
@@ -796,7 +890,8 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
 
   /**
    * **다시 싣기가 이미 말했으면 덮지 않는다** — 그 문장이 버린 편집을 말하고 있으면 덮는 순간 그 수를 잃는다. 판: 목록을 붙잡은 채 편집이 거절돼
-   * 수습이 판을 다시 싣고 거절을 말했다. 이력 한 줄은 그보다 약하다(잃은 편집이 없다).
+   * 수습이 판을 다시 싣고 거절을 말했다. 이력 한 줄은 그보다 약하다(잃은 편집이 없다) — 잃음의 조각으로 그 문장 **뒤에** 잇는다
+   * (`EditorStore.tellLoss` · `store/loss-notice.ts`의 세기).
    */
   it('편집 실패 수습이 판을 다시 실으며 이미 말했으면 목록 답을 버려도 그 문장을 덮지 않는다', async () => {
     const list = deferred<RevisionSummary[]>()
@@ -820,7 +915,12 @@ describe('목록을 받는 동안 판이 다시 실리거나 떠나면 그 답�
     })
     await act(async () => {})
 
-    expect({ same: screen.getByRole('alert').textContent === said, undo: undoButton().disabled }).toEqual({ same: true, undo: true })
+    const now = screen.getByRole('alert').textContent ?? ''
+    expect({ kept: said !== null && now.startsWith(said), undoLine: now.endsWith(UNDO_LINE), undo: undoButton().disabled }).toEqual({
+      kept: true,
+      undoLine: true,
+      undo: true,
+    })
   })
 
   it('재연결 재조회가 판을 다시 실었어도 실을 것이 없던 목록이면 말하지 않는다', async () => {

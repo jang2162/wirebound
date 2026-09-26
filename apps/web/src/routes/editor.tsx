@@ -30,6 +30,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { PageDetail, ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CanvasStructuresProvider } from '../canvas/canvas-structures'
+import { CanvasThemeNoticeProvider, ThemeAlert } from '../canvas/canvas-theme-notice'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { InteractionPanel } from '../panels/interaction-panel'
@@ -58,6 +59,7 @@ import {
   type ViewportWidth,
 } from '../store/editor-store'
 import type { PendingEdit } from '../store/edit-queue'
+import { LOSS_RANK } from '../store/loss-notice'
 import {
   EditorStoreProvider,
   useEditorStore,
@@ -264,6 +266,8 @@ const RESYNC_LEAD = '연결이 다시 붙어 페이지를 서버 상태로 다�
 const RESTORED_LEAD = '스냅샷을 복원해 페이지를 다시 불러왔습니다.'
 /** 남이 복원한 판을 배너의 단추로 다시 읽었을 때의 앞머리. 위 문장을 쓰면 남의 복원을 내가 한 일로 말한다. */
 const REMOTE_RESTORED_LEAD = '다른 사람이 복원한 상태로 페이지를 다시 불러왔습니다.'
+/** 답을 잃은 내 복원 뒤 배너의 단추로 다시 읽었을 때의 앞머리(`EditorStore.markRestoreUnanswered`) — 복원됐는지 모른다. */
+const UNANSWERED_RESTORE_LEAD = '복원됐는지 확인하려고 페이지를 서버 상태로 다시 불러왔습니다.'
 
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
@@ -474,12 +478,15 @@ export function EditorShellRoute(): ReactElement {
     <EditorStoreProvider store={store}>
       {/* 캔버스가 그리는 구조 표를 속성 패널이 읽는 통로 — 둘의 공통 조상이 셸이라 여기서 감싼다. */}
       <CanvasStructuresProvider>
-        <EditorShell
-          project={state.project}
-          roleKnown={roleKnown}
-          pageId={params.pageId}
-          onMembership={onMembership}
-        />
+        {/* 캔버스가 테마를 못 읽었다는 것을 머리가 말하는 통로 — 같은 까닭으로 셸째 감싼다. */}
+        <CanvasThemeNoticeProvider>
+          <EditorShell
+            project={state.project}
+            roleKnown={roleKnown}
+            pageId={params.pageId}
+            onMembership={onMembership}
+          />
+        </CanvasThemeNoticeProvider>
       </CanvasStructuresProvider>
     </EditorStoreProvider>
   )
@@ -743,6 +750,7 @@ function EditorShell(props: {
         <SnapshotsPanel
           projectId={props.project.id}
           onRestored={(safetySnapshotId) => reloadAfterRestore(RESTORED_LEAD, safetySnapshotId)}
+          onRestoreUnanswered={store.markRestoreUnanswered}
         />
         {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 스냅샷 링크 옆에 두는 것은 둘 다
             *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.
@@ -775,7 +783,9 @@ function EditorShell(props: {
         {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
             `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
             근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
-        <RemoteAlert onReload={() => reloadAfterRestore(REMOTE_RESTORED_LEAD)} />
+        <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.unanswered === true ? UNANSWERED_RESTORE_LEAD : REMOTE_RESTORED_LEAD)} />
+        {/* **캔버스가 테마를 못 읽어 기본 스타일로 그린다**(`canvas/canvas-theme-notice.tsx`). 단추는 고르개와 같은 신호로 다시 읽는다. */}
+        <ThemeAlert onReload={() => setThemeReloadToken((token) => token + 1)} />
         {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
         {roleNotice !== null && (
           <p className="wb-shell-remote-alert" role="status">
@@ -1184,14 +1194,21 @@ function CanvasFrame(props: {
    *
    * **말할 것이 없으면 말하지 않는다.** 버린 편집도 없고 스택도 비어 있었으면 이 재조회는
    * 무해하고, 그때 뜨는 통지는 사용자가 잃지 않은 것에 대한 경고가 된다.
+   *
+   * **앞 잃음을 덮지 않고 잇는다**(`EditorStore.tellLoss`) — 떠나며 버린 편집의 통지가 서 있는 채 다시 붙으면 «이력 초기화»가 그것을 덮어
+   * 떠난 페이지의 잃음이 사라졌다(jsdom). 같은 앞머리의 조각은 수를 더한다.
    */
   const tellLost = useCallback(
     (lead: string, dropped: readonly PendingEdit[], hadUndo: boolean): void => {
       if (dropped.length === 0 && !hadUndo) return
       const sent = dropped.filter(store.wasSent).length
-      store.setEditFailure({
-        kind: 'message',
-        message: resyncNotice(lead, { unsent: dropped.length - sent, sent }, hadUndo),
+      const unsent = dropped.length - sent
+      store.tellLoss({
+        key: `resync:${lead}`,
+        rank: sent > 0 ? LOSS_RANK.unknown : unsent > 0 ? LOSS_RANK.cancelled : LOSS_RANK.history,
+        counts: [sent, unsent, hadUndo ? 1 : 0],
+        render: ([sentCount, unsentCount, undoCount]) =>
+          resyncNotice(lead, { sent: sentCount ?? 0, unsent: unsentCount ?? 0 }, (undoCount ?? 0) > 0),
       })
     },
     [store],
@@ -1204,7 +1221,7 @@ function CanvasFrame(props: {
   const leavePage = useCallback((): void => {
     const unsent = store.clearPage().filter((edit) => !store.wasSent(edit)).length
     const left = store.leftPage()
-    if (unsent > 0) store.setLeaveNotice(leftUnsentNotice(unsent), left === null ? [] : [left])
+    if (unsent > 0) store.setLeaveNotice(leftUnsentNotice(unsent), left === null ? [] : [left], LOSS_RANK.cancelled)
   }, [store])
   const applyServerPage = useCallback(
     (openPageId: string, page: PageDetail, lead: string, ticket: number, restoreReread = false): void => {
@@ -1268,9 +1285,13 @@ function CanvasFrame(props: {
         const mine = restoredRevisions(await api.listMyRevisions(projectId, openPageId, { cancel: leave.signal }))
         // 늦게 온 응답이 새 페이지의 스택을 덮지 않게 한다(문서 조회와 같은 가드).
         if (!alive) return
-        // **다시 싣기가 버린 목록은 말한다** — 그 다시 싣기가 버린 편집을 이미 말했으면(통지가 서 있다) 덮지 않는다. 덮으면 그 편집 수를 잃는다.
-        if (store.restoreUndoStack(mine, { point }) === 'reloaded' && store.getState().editFailure === null) {
-          store.setEditFailure({ kind: 'message', message: UNDO_RESTORE_DROPPED_NOTICE })
+        // **다시 싣기가 버린 목록은 말한다** — 잃음의 조각으로 잇는다(`EditorStore.tellLoss`): 그 다시 싣기가 버린 편집을 이미 말했으면 그
+        // 문장 뒤에 선다(세기가 가장 약하다 — 잃은 편집이 없다). 덮으면 그 편집 수를 잃는다. 사람이 누른 동작의 통지는 덮지 않는다(`overOther`).
+        if (store.restoreUndoStack(mine, { point }) === 'reloaded') {
+          store.tellLoss(
+            { key: 'undo-restore-dropped', rank: LOSS_RANK.history, counts: [], render: () => UNDO_RESTORE_DROPPED_NOTICE },
+            { overOther: false },
+          )
         }
       } catch {
         // 여기서 알리지 않는다. 사용자가 할 수 있는 일이 없고, 편집 실패 통지 자리를

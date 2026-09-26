@@ -15,7 +15,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
-import type { ApiClient } from '../../src/api/client'
+import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, RestoreResult, TreeMenuNode } from '../../src/api/types'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
@@ -279,5 +279,87 @@ describe('내 복원 — 연결 id 없이 나가 내 신호가 되돌아온 판'
     await waitForNode('n-after')
 
     expect(banner()).toMatch(OTHER_RESTORE)
+  })
+})
+
+/**
+ * **내 복원의 답을 잃은 판**(`EditorStore.markRestoreUnanswered`). 복원 요청은 연결 id 를 실어 그 신호가 이 탭에 안 온다 — 답을 잃으면 서버가
+ * 복원했는지 이 탭은 모른다. 커밋 전에 거절된 실패(4xx · 봉투 있는 500)는 복원이 안 된 것이라 배너를 세우지 않는다. 실브라우저 판은
+ * `apps/web/build-test/editor-restore-unanswered.test.ts`가 든다.
+ */
+describe('내 복원 — 답을 잃은 판', () => {
+  const UNANSWERED = /스냅샷 복원의 답을 받지 못해 복원됐는지 알 수 없습니다/
+
+  function snapshotApi(restoreSnapshot: ApiClient['restoreSnapshot']): Partial<ApiClient> {
+    return {
+      listSnapshots: async () => [
+        {
+          id: 's1',
+          tag: 'v1',
+          description: null,
+          createdBy: 'u1',
+          createdByName: '홍길동',
+          createdAt: '2026-08-12T09:00:00.000Z',
+          payloadBytes: 10,
+        },
+      ],
+      restoreSnapshot,
+    }
+  }
+
+  async function pressRestore(): Promise<void> {
+    fireEvent.click(screen.getByRole('button', { name: '스냅샷' }))
+    await screen.findByText('v1')
+    fireEvent.click(screen.getByRole('button', { name: '이 상태로 되돌리기' }))
+    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
+    await act(async () => {})
+  }
+
+  it('연결이 끊겨 답을 잃으면 «복원됐는지 모릅니다»와 다시 불러오기 단추를 세운다', async () => {
+    const view = await mount({ api: snapshotApi(async () => Promise.reject(new TypeError('Failed to fetch'))) })
+
+    await pressRestore()
+
+    expect(banner()).toMatch(UNANSWERED)
+    expect(banner()).not.toMatch(OTHER_RESTORE)
+    // 팝오버도 그렇다고 말한다.
+    expect(screen.getAllByRole('alert').map((node) => node.textContent).join(' | ')).toMatch(/복원됐는지 알 수 없습니다/)
+    // 스스로 다시 읽지 않는다 — 여는 조회 하나뿐이다.
+    expect(view.getPage).toHaveBeenCalledTimes(1)
+  })
+
+  it('봉투 없는 5xx 도 모른다', async () => {
+    await mount({ api: snapshotApi(async () => Promise.reject(new ApiError(502, 'internal', 'Bad Gateway', [], false))) })
+
+    await pressRestore()
+
+    expect(banner()).toMatch(UNANSWERED)
+  })
+
+  it('커밋 전에 거절됐으면 배너를 세우지 않는다 — 복원이 안 됐다', async () => {
+    await mount({ api: snapshotApi(async () => Promise.reject(new ApiError(409, 'conflict', '복원할 수 없습니다', [], true))) })
+
+    await pressRestore()
+
+    // 판 카나리아 — 실패는 팝오버가 말했다.
+    expect(await screen.findByText(/복원할 수 없습니다/)).toBeTruthy()
+    expect(banner()).not.toMatch(UNANSWERED)
+  })
+
+  it('그 단추는 복원 뒤 다시 읽기를 타고, 그 판이 배너를 푼다', async () => {
+    const view = await mount({ api: snapshotApi(async () => Promise.reject(new TypeError('Failed to fetch'))) })
+    await pressRestore()
+    expect(banner()).toMatch(UNANSWERED)
+
+    fireEvent.click(screen.getByRole('button', { name: '다시 불러오기' }))
+    await waitFor(() => expect(view.held).toHaveLength(1))
+    // 메뉴도 다시 읽는다 — 복원이 바꾸는 것을 전부 다시 읽는 길이다.
+    await waitFor(() => expect(view.getTree).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      view.held[0]!.resolve(pageDetail(PAGE_ID, pair('n-after')))
+    })
+    await waitForNode('n-after')
+
+    expect(banner()).not.toMatch(UNANSWERED)
   })
 })

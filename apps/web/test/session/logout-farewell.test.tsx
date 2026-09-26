@@ -9,7 +9,7 @@ import { ApiError } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { logoutLossNotice } from '../../src/routes/editor'
 import { openPage, pageDetail, pageDoc } from '../editor-harness'
-import { unauthenticatedError } from '../helpers'
+import { tabHub, unauthenticatedError, type TabHub } from '../helpers'
 
 const pair = (): PageDocument =>
   pageDoc({
@@ -227,6 +227,62 @@ describe('로그아웃을 기다리는 동안 버린 편집', () => {
     // 판 카나리아 — 번호 기다림 한도 뒤 수습이 판을 다시 읽었다.
     expect(view.loads()).toBe(2)
     expect(statusText()).toBe(logoutLossNotice(0, 0, 1))
+  })
+})
+
+/**
+ * **기다리는 동안 다른 탭에서 사람이 바뀌면 로그아웃하지 않는다**(`SessionMenu`의 `run`) — 로그아웃 요청은 쿠키의 세션을 지운다. 기다림(한도
+ * 3s) 사이에 다른 탭이 로그아웃하고 다른 사람으로 들어오면 쿠키는 그 사람의 것이라, 뒤따르는 로그아웃이 그 사람의 세션을 끊는다. 누를 때의
+ * 세션 세대와 기다림 뒤의 세대가 같을 때만 낸다.
+ */
+describe('로그아웃을 기다리는 동안 다른 탭에서 사람이 바뀌면', () => {
+  const BOB = { id: 'u-2', email: 'bob@example.com', name: '밥' }
+
+  async function pressLogoutWhileWaiting(otherTab: (hub: TabHub) => Promise<void>) {
+    const hub = tabHub()
+    const logout = vi.fn(async () => {})
+    await openPage(pair(), {
+      tabChannel: hub.channel,
+      apiOverrides: { patchOps: () => new Promise<never>(() => {}), logout, listProjects: async () => [] },
+    })
+    const tree = screen.getByRole('region', { name: '구조 트리' })
+    fireEvent.click(within(tree).getByRole('button', { name: 'Text' }))
+    fireEvent.click(within(within(tree).getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '아래로' }))
+    await act(async () => {})
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+      await act(async () => {
+        vi.advanceTimersByTime(1_000)
+      })
+      await otherTab(hub)
+      await act(async () => {
+        vi.advanceTimersByTime(2_000)
+      })
+      await act(async () => {})
+    } finally {
+      vi.useRealTimers()
+    }
+    await act(async () => {})
+    return { logout, hub }
+  }
+
+  it('뒤따르는 로그아웃이 바뀐 사람의 세션을 끊지 않는다', async () => {
+    const { logout, hub } = await pressLogoutWhileWaiting(async (other) => {
+      await other.fromOtherTab({ kind: 'signed-out' })
+      await other.fromOtherTab({ kind: 'signed-in', user: BOB })
+    })
+
+    expect(logout).not.toHaveBeenCalled()
+    // 이 탭은 끝난 세션을 다시 알리지 않는다 — 알리면 밥의 탭이 제 세션을 끝낸 줄 안다.
+    expect(hub.posted).toEqual([])
+  })
+
+  it('아무 일도 없었으면 한도 뒤에 그대로 로그아웃한다', async () => {
+    const { logout, hub } = await pressLogoutWhileWaiting(async () => {})
+
+    expect(logout).toHaveBeenCalledTimes(1)
+    expect(hub.posted.map((news) => news.kind)).toEqual(['signed-out'])
   })
 })
 

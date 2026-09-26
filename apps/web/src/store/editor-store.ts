@@ -26,6 +26,7 @@ import {
 } from '@wirebound/schema'
 import type { NodeLockView } from '../realtime/protocol'
 import { anchorOps, rebaseAnchored, sameOps, type AnchoredOp } from './anchored-ops'
+import { LOSS_RANK, lossMessage, mergeLoss, type LossPart } from './loss-notice'
 import {
   ackPending,
   clearPending,
@@ -399,6 +400,11 @@ const WINDOW_CHANGES_LIMIT = 500
  */
 export interface RemoteStale {
   reason: 'gap' | 'diverged' | 'restored'
+  /**
+   * **`'restored'`에만 — 내 복원의 답을 못 받아 복원됐는지 모른다**(`markRestoreUnanswered`). 세기 · 푸는 자리는 `'restored'` 그대로고 문장과
+   * 단추의 앞머리만 갈린다 — 남의 복원이라고 말하면 거짓이다.
+   */
+  unanswered?: true
 }
 
 /**
@@ -440,6 +446,9 @@ export interface RemoteChange {
 
 /** 복원 신호 앞에 시작한 조회의 판 · 복원 뒤 다시 읽기가 아닌 판에 두는 낡음(`loadPage` · `clearPage`). */
 const RESTORED_STALE: RemoteStale = { reason: 'restored' }
+
+/** 내 복원의 답을 잃은 낡음(`markRestoreUnanswered`). */
+const RESTORE_UNANSWERED_STALE: RemoteStale = { reason: 'restored', unanswered: true }
 
 /** 알아볼 내 복원의 수(`#ownRestores`). 한 탭이 답을 기다리는 복원은 하나라 몇이면 넉넉하다. */
 const OWN_RESTORES_LIMIT = 8
@@ -652,19 +661,21 @@ export class EditorStore {
   #abandonedReopened = new Set<string>()
 
   /**
-   * **떠나며 버린 편집을 말하는 통지**(`setLeaveNotice`) — 판을 비우는 자리(`clearPage` · `reset`)가 이것은 지우지 않는다. 그 통지는 떠난
-   * 뒤의 화면에 서는 것이 요점이다 — 옮겨 간 페이지 · 프로젝트를 여는 비우기가 곧바로 지우면 한 번도 안 보인다. 프로젝트를 옮기면 캔버스의
-   * 여는 이펙트(`routes/editor.tsx`의 `CanvasFrame`)가 판을 비우며 통지를 세우고, 셸의 `reset`은 같은 커밋에서 그 **뒤에** 돈다(React 는 자식의
-   * 이펙트를 먼저 돌린다).
+   * **지금 통지가 말하는 잃음의 조각**(`tellLoss` · `store/loss-notice.ts`) — 통지 자리가 이 조각들을 이어 그린 것(`#lossNotice`)일 때만 뜻이
+   * 있다. 다른 통지(`setEditFailure`)가 서면 버린다.
    *
-   * **푸는 자리는 넷이다** — 새 편집 · 되돌리기(다른 통지로 덮거나 치운다) · 통지가 가리키는 페이지를 다시 연 판(`loadPage` —
-   * `#leaveNoticePages`가 빈다) · 닫는 단추(`closeLeaveNotice`). 뒤의 둘이 없으면 편집을 못 내는 화면(뷰 모드 · viewer)에서 셸이 사는
-   * 동안 남고, 그 페이지로 돌아와 화면이 서버 판을 보여도 «다시 열어 확인하세요»가 선다(Chrome).
+   * **떠남의 조각(`sticky`)은 판을 비우는 자리(`clearPage` · `reset`)가 지우지 않는다.** 그 조각은 떠난 뒤의 화면에 서는 것이 요점이다 —
+   * 옮겨 간 페이지 · 프로젝트를 여는 비우기가 곧바로 지우면 한 번도 안 보인다. 프로젝트를 옮기면 캔버스의 여는 이펙트(`routes/editor.tsx`의
+   * `CanvasFrame`)가 판을 비우며 그 조각을 세우고, 셸의 `reset`은 같은 커밋에서 그 **뒤에** 돈다(React 는 자식의 이펙트를 먼저 돌린다).
+   *
+   * **떠남의 조각을 푸는 자리는 넷이다** — 새 편집 · 되돌리기(다른 통지로 덮거나 치운다) · 조각이 가리키는 페이지를 다시 연 판(`loadPage` —
+   * `pages`가 빈다) · 닫는 단추(`closeLeaveNotice`). 뒤의 둘이 없으면 편집을 못 내는 화면(뷰 모드 · viewer)에서 셸이 사는 동안 남고, 그
+   * 페이지로 돌아와 화면이 서버 판을 보여도 «다시 열어 확인하세요»가 선다(Chrome).
    */
-  #leaveNotice: EditFailure | null = null
+  #lossParts: LossPart[] = []
 
-  /** 떠남의 통지가 가리키는 페이지 가운데 아직 다시 안 연 것(`setLeaveNotice`의 `pages`). */
-  #leaveNoticePages = new Set<string>()
+  /** 그 조각들을 이어 그린 통지 — 통지 자리가 이 값일 때만 조각이 산다(`#shownLoss`). */
+  #lossNotice: EditFailure | null = null
 
   /** 마지막 `clearPage`가 비운 판의 페이지(`leftPage`). 비울 판이 없었으면 `null`이다. */
   #leftPageId: string | null = null
@@ -815,14 +826,12 @@ export class EditorStore {
     // **복원 신호보다 앞에 시작한 조회의 판이면 복원 배너를 둔다**(`#restoredAt`) — 그 판은 복원 앞을 읽었을 수 있다. 창도 얹지 않는다 — 신호
     // 뒤에 온 revision 은 복원 뒤 판의 것이라 복원 앞 판 뒤의 번호가 아니다.
     const beforeRestore = ticket !== undefined && ticket <= this.#restoredAt
-    // **떠남의 통지가 가리키는 페이지를 다시 열면 그 페이지는 확인한 것이다**(`#leaveNotice`의 «푸는 자리») — 가리키는 것이 다 열렸으면
-    // 통지를 푼다. 다른 통지가 서 있으면 그대로 둔다.
-    const leaveSettled = this.#leaveNoticePages.delete(pageId) && this.#leaveNoticePages.size === 0 && this.#keptLeaveNotice() !== null
+    // **판을 실으면 풀리는 잃음의 조각을 걷는다**(`#lossAfterLoad`) — 떠남의 조각이 가리키는 페이지를 다시 열면 그 페이지는 확인한 것이다.
+    const loss = this.#lossAfterLoad(pageId)
     // 판째 버린 나간 편집의 페이지를 다시 싣는다 — 그 편집의 거절이 오면 «다시 열라»를 빼는 데 쓴다(`abandonedPagesReopened`).
     if (this.#abandonedPages.includes(pageId)) this.#abandonedReopened.add(pageId)
-    if (leaveSettled) this.#leaveNotice = null
     this.#apply({
-      ...(leaveSettled ? { editFailure: null } : {}),
+      ...(loss === undefined ? {} : { editFailure: loss }),
       openPageId: pageId,
       document,
       // **바탕도 서버 문서다.** 여기를 지나온 순간 낙관적 편집은 하나도 안 얹혀 있다 —
@@ -1054,7 +1063,7 @@ export class EditorStore {
    * 거절된다: 남의 revision 이 그 편집의 `baseSeq` 바로 뒤 번호로 커밋됐으니 그 번호에서 낸 편집은 낡았다(내 편집이 먼저 커밋됐으면 그 번호의
    * 프레임은 내 것이라 버리지 않는다 — `clientOpId`로 알아본다). 버린 것은 그 자리에서 말했고(`use-realtime.ts`의 `droppedNotice`) 바탕 ·
    * 큐는 이미 남의 판 위에 맞다 — 전송 루프는 그 거절을 수습하지 않고 다음 편집으로 간다. 수습하면 판을 한 번 더 읽고, 큐를 비워 그 뒤에 낸
-   * 멀쩡한 편집을 버리고, «편집 0개가 취소됐습니다»로 앞 문장을 덮는다(`test/edit/rebase-dropped-refusal.test.tsx`).
+   * 멀쩡한 편집을 버리고, 통지에 «편집 0개가 취소됐습니다»를 더한다(`test/edit/rebase-dropped-refusal.test.tsx`).
    */
   readonly wasRebaseDropped = (clientOpId: string): boolean => clientOpId === this.#rebaseDroppedOpId
 
@@ -1082,7 +1091,7 @@ export class EditorStore {
 
   /**
    * **떠나며 판째 버린 나간 편집과 함께 버린 안 보낸 편집의 수**(`#abandonedUnsent`). 그 편집의 거절을 말하는 문장이 합쳐 센다 — 안 보낸
-   * 것은 떠나는 순간 이미 말했지만, 통지 자리가 하나라 거절의 문장이 그 말을 덮는다.
+   * 것은 떠나는 순간 이미 말했지만, 떠남의 조각은 하나라(`setLeaveNotice`) 거절의 문장이 그 말을 대신한다.
    */
   readonly abandonedUnsent = (): number => this.#abandonedUnsent
 
@@ -1100,8 +1109,8 @@ export class EditorStore {
    * 나간 편집을 판째 버리면 적는다(`#abandonedOpId`). 떠나며 버렸으면 함께 버린 안 보낸 편집의 수와 떠난 페이지도 적는다.
    *
    * **떠나며 버린 나간 편집의 답을 기다리는 동안 또 떠나면 그 수에 더한다.** 그 동안 옮겨 간 페이지에서 친 편집은 그 답 뒤에 줄 서 한
-   * 번도 안 나간다(in-flight 는 하나다). 떠나는 순간 그 수를 말하지만(`routes/editor.tsx`의 `leavePage`) 통지 자리가 하나라 거절의 문장이
-   * 그 말을 덮는다 — 첫 떠남만 세면 둘째 떠남의 것이 합친 문장에서 빠진다(Chrome: 1쪽 편집이 줄 선 채 2쪽에서 치고 3쪽으로 옮긴 뒤 거절
+   * 번도 안 나간다(in-flight 는 하나다). 떠나는 순간 그 수를 말하지만(`routes/editor.tsx`의 `leavePage`) 떠남의 조각은 하나라 거절의 문장이
+   * 그 말을 대신한다 — 첫 떠남만 세면 둘째 떠남의 것이 합친 문장에서 빠진다(Chrome: 1쪽 편집이 줄 선 채 2쪽에서 치고 3쪽으로 옮긴 뒤 거절
    * — 잃은 것 둘 · «보낸 편집 1개가»). **답을 기다리는지는 «마지막으로 나간 것이 그 편집인가»로 가른다** — 답이 오면 전송 루프는 쌓인
    * 편집을 곧바로 내고(`markSent`), 쌓인 것이 없으면 멈췄다가 다음 편집을 곧바로 낸다. 그래서 그 편집이 마지막으로 나간 채 안 보낸
    * 편집이 버려지는 판은 답을 기다리는 판뿐이다.
@@ -1113,6 +1122,10 @@ export class EditorStore {
       if (leaving && this.#abandonedLeaving && this.#abandonedOpId === this.#sentOpId && dropped.length > 0) {
         this.#abandonedUnsent += dropped.length
         if (page !== null && !this.#abandonedPages.includes(page)) this.#abandonedPages = [...this.#abandonedPages, page]
+        // **그 페이지를 앞서 다시 열었어도 이제는 확인한 것이 아니다**(`abandonedPagesReopened`) — 다시 연 판은 지금 버린 편집 앞의 것이다.
+        // 지우지 않으면 거절의 문장이 «다시 열라»와 가리킬 페이지를 함께 잃는다(jsdom: 다시 연 뒤 친 편집을 두고 또 떠나면 통지가 그
+        // 페이지를 안 가리켜, 다시 열어도 풀리지 않았다).
+        if (page !== null) this.#abandonedReopened.delete(page)
       }
       return
     }
@@ -1850,6 +1863,27 @@ export class EditorStore {
     // **내 복원의 신호면 넘긴다**(`#ownRestores`) — 그 복원 뒤에 시작한 내 다시 읽기가 복원이 바꾼 것을 전부 읽는다. 여기 오는 것은 복원의
     // 답을 받은 뒤다(답보다 먼저 온 신호는 아직 모르는 복원이라 센다 — 그 뒤에 시작하는 다시 읽기가 푼다).
     if (safetySnapshotId !== undefined && this.#ownRestores.includes(safetySnapshotId)) return
+    this.#restoreHappened()
+    this.#markStale('restored')
+  }
+
+  /**
+   * **내 복원의 답을 잃었다** — 그 요청이 커밋 전에 거절됐는지 모른다(연결 실패 · 봉투 없는 5xx · 모양이 틀린 답 — `api/failure.tsx`의
+   * `refusedBeforeCommit`이 거짓이다). 서버는 복원했을 수 있는데 그 신호는 이 탭에 안 온다 — 복원 요청이 연결 id 를 실어 방송이 이 연결을
+   * 뺀다. 조용히 두면 서버는 복원됐는데 화면은 옛 판이고 배너도 없다(Chrome: `apps/web/build-test/editor-restore-unanswered.test.ts`).
+   *
+   * **남의 복원과 같은 낡음을 세운다** — 같은 단추가 복원 뒤 다시 읽기를 타고(`routes/editor.tsx`의 `reloadAfterRestore`), 그 판이 푼다. 문장만
+   * «복원됐는지 모릅니다»다(`unanswered`). 스스로 다시 읽지 않는다 — 다시 읽기가 실패하면 판을 비우는데(복원이 페이지를 지웠을 수 있다),
+   * 복원이 서버에 안 닿은 판이면 멀쩡한 화면을 지운다. 이미 복원 낡음이 서 있으면 그 단추가 같은 일을 한다 — 건드리지 않는다.
+   */
+  readonly markRestoreUnanswered = (): void => {
+    this.#restoreHappened()
+    if (this.#state.remoteStale?.reason === 'restored') return
+    this.#apply({ remoteStale: RESTORE_UNANSWERED_STALE })
+  }
+
+  /** 복원이 일어났다(신호 · 답을 잃은 내 복원) — 그 앞 판에 기댄 것을 버리고 세대를 적는다. 낡음을 세우는 것은 부르는 쪽이다. */
+  #restoreHappened(): void {
     this.#restoreSignals += 1
     // 기다리던 번호도 버린다 — 그 경로가 복원 앞 판의 것인지 이 탭은 가르지 못한다.
     this.#dropWaitingMarkers()
@@ -1859,7 +1893,6 @@ export class EditorStore {
     // 하지는 않는다(세대를 올려 `settlePageLoad`를 거짓으로): 여는 조회면 캔버스가 «불러오는 중»에 머물고, 수습의 조회면 거절된 편집을
     // 되돌리는 유일한 답이 버려진다.
     this.#restoredAt = this.#pageLoadsBegun
-    this.#markStale('restored')
   }
 
   /**
@@ -1953,8 +1986,8 @@ export class EditorStore {
       redoStack: redoStack.length === 0 ? redoStack : [],
       undoHistoryLoading: false,
       editStatus: 'idle',
-      // 떠나며 버린 편집을 말하는 통지만 남긴다(`#leaveNotice`).
-      editFailure: this.#keptLeaveNotice(),
+      // 떠나며 버린 편집을 말하는 조각만 남긴다(`#lossParts`의 `sticky`).
+      editFailure: this.#keptLoss(),
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
       // 복원 낡음은 복원 뒤 다시 읽기만 푼다(`beginRestoreReread`) — 페이지를 옮기며 비우는 판은 메뉴 · 코멘트 · 테마를 다시 안 읽었다.
       remoteStale: this.#keepsRestored(options.restoreReread === true) ? this.#restoredStale() : null,
@@ -2339,14 +2372,31 @@ export class EditorStore {
   }
 
   /**
-   * **떠나며 버린 편집을 말한다** — 판을 비우는 자리가 지우지 않는 통지다(`#leaveNotice`). 새 편집 · 다른 통지는 그대로 덮는다. `pages`는 그
-   * 통지가 «다시 열어 확인하세요»라고 가리키는 페이지다 — 그 페이지를 전부 다시 열면 풀린다(`loadPage`).
+   * **잃음을 말한다 — 앞 잃음을 덮지 않고 잇는다**(`store/loss-notice.ts`). 지금 통지가 잃음의 조각이 아니면(되돌리기 · 프리셋 · 없음) 새로
+   * 시작한다. **세션이 끊긴 통지는 덮지 않는다** — 그 통지는 셸을 로그인으로 보내는 중이고, 뒤에 온 잃음이 덮으면 끊긴 세션 위에 편집 화면이
+   * 남는다.
+   *
+   * **잇는 까닭** — 잃음을 말하는 쪽은 제 때에 온다(리베이스 버림은 프레임에 · 수습은 조회의 답에 · 떠남의 거절은 앞 페이지의 답에). 덮어쓰면 앞
+   * 통지의 잃음이 사라진다(jsdom: `test/edit/loss-notice-merge.test.tsx`). **새 편집 · 되돌리기는 여전히 치운다**(`setEditFailure`) — 사람이
+   * 한 일이고, 남겨 두면 방금 낸 편집도 실패한 것으로 읽힌다.
    */
-  readonly setLeaveNotice = (message: string, pages: readonly string[]): void => {
-    const notice: EditFailure = { kind: 'message', message }
-    this.#leaveNotice = notice
-    this.#leaveNoticePages = new Set(pages)
-    this.#apply({ editFailure: notice })
+  readonly tellLoss = (part: LossPart, options: { overOther?: boolean } = {}): void => {
+    const { editFailure } = this.#state
+    if (editFailure?.kind === 'signed-out') return
+    const shown = this.#shownLoss()
+    // **`overOther: false`면 조각이 아닌 통지 위에는 세우지 않는다** — 사람이 방금 누른 동작의 결과(되돌리기 · 프리셋)를 비동기로 온 약한
+    // 조각(`LOSS_RANK.history`)이 덮지 않는다. 앞 조각이 있으면 잇고, 비어 있으면 세운다(`routes/editor.tsx`의 `UNDO_RESTORE_DROPPED_NOTICE`).
+    if (options.overOther === false && editFailure !== null && shown.length === 0) return
+    this.#apply({ editFailure: this.#composeLoss(mergeLoss(shown, part)) })
+  }
+
+  /**
+   * **떠나며 버린 편집을 말한다** — 판을 비우는 자리가 지우지 않는 조각이다(`#lossParts`의 `sticky`). 앞의 떠남 조각은 이 문장이 대신한다 —
+   * 수가 없는 조각이고(`LossPart.render`), 거절의 문장이 떠날 때 버린 것까지 합쳐 센다(`abandonedUnsent`). `pages`는 그 조각이 «다시 열어
+   * 확인하세요»라고 가리키는 페이지다 — 그 페이지를 전부 다시 열면 풀린다(`loadPage`).
+   */
+  readonly setLeaveNotice = (message: string, pages: readonly string[], rank: number = LOSS_RANK.cancelled): void => {
+    this.tellLoss({ key: 'leave', rank, counts: [], render: () => message, sticky: { pages } })
   }
 
   /**
@@ -2355,21 +2405,60 @@ export class EditorStore {
    */
   readonly leftPage = (): string | null => this.#leftPageId
 
-  /** 지금 통지가 떠남의 통지인가 — 통지 자리(`shell/edit-alert.tsx`)가 닫는 단추를 그릴지 가른다. */
-  readonly isLeaveNotice = (failure: EditFailure | null): boolean => failure !== null && failure === this.#leaveNotice
+  /** 지금 통지가 잃음의 조각인가(`#lossParts`) — 누른 뒤 기다렸다가 말하는 자리가 그 사이 선 잃음을 가른다(`edit/use-edit-commit.tsx`의 `sayAfterWait`). */
+  readonly showsLoss = (): boolean => this.#shownLoss().length > 0
 
-  /** **떠남의 통지를 닫는다**(통지 자리의 단추). 다른 통지가 서 있으면 건드리지 않는다. */
+  /** 지금 통지가 떠남의 조각을 품는가 — 통지 자리(`shell/edit-alert.tsx`)가 닫는 단추를 그릴지 가른다. */
+  readonly isLeaveNotice = (failure: EditFailure | null): boolean =>
+    failure !== null && failure === this.#lossNotice && this.#lossParts.some((part) => part.sticky !== undefined)
+
+  /**
+   * **떠남의 조각을 품은 통지를 닫는다**(통지 자리의 단추). 이어 붙은 다른 조각도 함께 닫는다 — 한 줄로 그려져 사람이 읽고 닫은 것은 그 줄
+   * 전부다. 다른 통지가 서 있으면 건드리지 않는다.
+   */
   readonly closeLeaveNotice = (): void => {
-    const shown = this.#keptLeaveNotice() !== null
-    this.#leaveNotice = null
-    this.#leaveNoticePages = new Set()
-    if (shown) this.#apply({ editFailure: null })
+    if (this.isLeaveNotice(this.#state.editFailure)) this.#apply({ editFailure: this.#composeLoss([]) })
   }
 
-  /** 지금 통지가 떠남의 통지면 그것, 아니면 `null` — 판을 비우는 자리가 둘 통지다. */
-  #keptLeaveNotice(): EditFailure | null {
+  /** 통지 자리가 잃음의 조각이면 그 조각들, 아니면 빈 목록(`#lossParts`). */
+  #shownLoss(): readonly LossPart[] {
     const { editFailure } = this.#state
-    return editFailure !== null && editFailure === this.#leaveNotice ? editFailure : null
+    return editFailure !== null && editFailure === this.#lossNotice ? this.#lossParts : []
+  }
+
+  /** 조각들을 한 통지로 짓고 적는다 — 세우는 것(`#apply`)은 부르는 쪽이다. 빈 목록이면 `null`. */
+  #composeLoss(parts: LossPart[]): EditFailure | null {
+    this.#lossParts = parts
+    this.#lossNotice = parts.length === 0 ? null : { kind: 'message', message: lossMessage(parts) }
+    return this.#lossNotice
+  }
+
+  /** 판을 비우는 자리가 둘 통지 — 떠남의 조각만 남긴다(`#lossParts`). 다 남으면 같은 참조다. 조각이 아닌 통지는 치운다. */
+  #keptLoss(): EditFailure | null {
+    const parts = this.#shownLoss()
+    const kept = parts.filter((part) => part.sticky !== undefined)
+    if (kept.length === parts.length && kept.length > 0) return this.#state.editFailure
+    return this.#composeLoss(kept)
+  }
+
+  /**
+   * **판을 실으면 풀리는 조각을 걷는다** — 떠남의 조각이 가리키는 페이지를 다시 열면 그 페이지는 확인한 것이고(가리키는 것이 다 열렸으면 그
+   * 조각을 걷는다), «화면에 남아 있는 편집»(`untilLoad`)은 이 판이 치웠다. 걷을 것이 없으면 `undefined` — 통지를 건드리지 않는다.
+   */
+  #lossAfterLoad(pageId: string): EditFailure | null | undefined {
+    const parts = this.#shownLoss()
+    const next: LossPart[] = []
+    for (const part of parts) {
+      if (part.untilLoad === true) continue
+      if (part.sticky === undefined || !part.sticky.pages.includes(pageId)) {
+        next.push(part)
+        continue
+      }
+      const pages = part.sticky.pages.filter((page) => page !== pageId)
+      if (pages.length > 0) next.push({ ...part, sticky: { pages } })
+    }
+    const changed = next.length !== parts.length || next.some((part, index) => part !== parts[index])
+    return changed ? this.#composeLoss(next) : undefined
   }
 
   /**
@@ -2535,8 +2624,8 @@ export class EditorStore {
     this.#windowChanges = []
     this.#openingPageId = null
     this.#dropWaitingMarkers()
-    // 떠나며 버린 편집을 말하는 통지는 남긴다(`#leaveNotice`) — 캔버스의 여는 이펙트가 프로젝트를 옮기며 먼저 판을 비우고 그 통지를 세운다.
-    this.#apply({ ...initialState(), editFailure: this.#keptLeaveNotice() })
+    // 떠나며 버린 편집을 말하는 조각은 남긴다(`#lossParts`의 `sticky`) — 캔버스의 여는 이펙트가 프로젝트를 옮기며 먼저 판을 비우고 그 조각을 세운다.
+    this.#apply({ ...initialState(), editFailure: this.#keptLoss() })
   }
 
   /**

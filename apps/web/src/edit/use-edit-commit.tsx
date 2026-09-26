@@ -20,7 +20,8 @@ import type { RevisionInverse } from '../api/types'
 import { useEditChannel, useLockChannel } from '../realtime/context'
 import { EditNotSentError, UnansweredEditError, type EditChannel, type UnansweredCause } from '../realtime/edit-channel'
 import { isPageOpen, useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
-import { MARKER_FRAME_WAIT_MS, type EditStatus, type RestoredRevision, type UndoAttempt, type UndoHistoryNeed } from '../store/editor-store'
+import { MARKER_FRAME_WAIT_MS, type EditFailure, type EditStatus, type RestoredRevision, type UndoAttempt, type UndoHistoryNeed } from '../store/editor-store'
+import { LOSS_RANK, type LossPart } from '../store/loss-notice'
 import { interactionsOps, propOps, variantOps } from './ops'
 
 /** 서버가 이유를 주지 않은 편집 실패에 쓸 문장(네트워크 단절 등). */
@@ -87,10 +88,12 @@ function lateCommitArrives(why: UnansweredCause | null, channel: EditChannel | n
  *
  * @param why 답을 못 받은 까닭 — 앞머리가 갈린다. `null`이면 REST 의 연결 실패 · 5xx 다(까닭을 단정하지 않는다).
  * @param outcome 다시 불러왔으면 `cancelled`(그러며 버린 **안 보낸** 편집 수), 다시 불러오지도 못했으면 `reason`(그 까닭).
+ * @param sent 답을 못 받은 편집 수 — 한 수습에 하나지만 합친 통지는 여럿을 센다(`store/loss-notice.ts`).
  */
 function unknownNotice(
   why: UnansweredCause | null,
   outcome: { cancelled: number; live: boolean } | { reason: string },
+  sent = 1,
 ): string {
   const lead =
     why === 'renewed'
@@ -98,7 +101,7 @@ function unknownNotice(
       : why === 'lost'
         ? '실시간 연결이 끊겨 '
         : ''
-  const head = `${lead}보낸 편집의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다.`
+  const head = `${lead}보낸 편집${sent > 1 ? ` ${sent}개` : ''}의 답을 받지 못했습니다 — 서버에 반영됐는지 알 수 없습니다.`
   if ('reason' in outcome) return `${head} ${outcome.reason} — 새로고침해 서버 상태를 확인하세요.`
   const tail = outcome.cancelled > 0 ? ` 아직 보내지 않은 편집 ${outcome.cancelled}개는 취소됐습니다.` : ''
   // **«곧 화면에 나타납니다»는 뒤늦은 커밋이 이 탭에 올 때만 참이다**(`lateCommitArrives`). 다시 읽기가 커밋 전의 판을
@@ -122,8 +125,8 @@ function unknownNotice(
  * 저장되지 않은 것이고, 그 밖은 반영됐는지 모른다(`unknownNotice`와 같은 판정). 둘 다 그 페이지를 다시 열어 보라고 한다 — 이 화면은 그
  * 페이지를 안 들고 있다.
  *
- * **그 편집과 함께 버린 안 보낸 편집(`unsent`)을 합쳐 센다** — 떠나는 순간 그 수를 말했지만(`leftUnsentNotice`) 통지 자리가 하나라 이 문장이
- * 그 말을 덮는다. 보낸 편집은 늘 하나다(in-flight 는 하나). 그 답을 기다리는 동안 또 떠났으면 버린 것이 여러 페이지에 있다(`pages` —
+ * **그 편집과 함께 버린 안 보낸 편집(`unsent`)을 합쳐 센다** — 떠나는 순간 그 수를 말했지만(`leftUnsentNotice`) 떠남의 조각은 하나라
+ * (`EditorStore.setLeaveNotice`) 이 문장이 그 말을 대신한다. 보낸 편집은 늘 하나다(in-flight 는 하나). 그 답을 기다리는 동안 또 떠났으면 버린 것이 여러 페이지에 있다(`pages` —
  * `EditorStore.abandonedPages`) — 페이지 수를 싣는다. «그 페이지»라고 하면 사용자는 하나만 다시 연다.
  */
 function leftBehindNotice(caught: unknown, unsent: number, pages: number, reopened: boolean): string {
@@ -170,6 +173,55 @@ function unknownOutcome(caught: unknown): boolean {
 
 /** 결과를 모르는 판에서 다시 불러오지도 못했을 때, 서버가 이유를 주지 않으면 쓸 문장(`unknownNotice`의 `reason`). */
 const UNANSWERED_RECOVER_FAILURE = '페이지를 다시 불러오지도 못했습니다'
+
+/**
+ * **수습이 말하는 잃음의 조각**(`EditorStore.tellLoss`) — 서버가 거절한 편집. 합치면 버린 수를 더하고 서버 문장은 뒤에 온 것이다(열쇠에 넣지
+ * 않는다 — 409 의 번호가 거절마다 달라 조각이 는다).
+ *
+ * **뒤에 시작한 조회가 판을 먼저 정한 판에서도 «다시 불러왔고»를 말한다** — 이 수습은 싣지 않았지만 화면은 그 조회가 읽은 서버 판이다(그
+ * 조회가 싣거나 · 같은 판이라 넘어갔다 — `EditorStore.settlePageLoad`). 그 조회는 잃은 것이 없으면 말하지 않으므로(재연결 재조회) 빼면 화면이
+ * 되돌아간 까닭이 사라진다. 두 조회가 저마다 잃은 것은 조각을 이어 함께 말한다.
+ *
+ * **서버 문장과 우리 문장 사이에 구분자를 둔다.** 공백 하나로 붙이면 두 문장이 한
+ * 문장처럼 읽힌다 — 카탈로그 위반의 이유가 **타입 이름으로 끝나기** 때문에
+ * `알 수 없는 컴포넌트 타입: 없는타입 페이지를 …`가 되어 **"없는타입 페이지를"이
+ * 하나의 명사구**가 된다.
+ *
+ * **`unknown-type` 하나의 문제가 아니다.** 이 경로가 실제로 받는 문장을 api 하네스로
+ * 재 보니 **끝에 마침표를 두는 것이 하나도 없다:**
+ *
+ *   409 `페이지가 이미 변경되었습니다 (요청 baseSeq 99, 현재 0)`        ← 괄호로 끝난다
+ *   409 `편집을 적용할 수 없습니다: 바꿀 값을 찾을 수 없습니다: /root/…`  ← **경로로 끝난다**
+ *   422 `알 수 없는 컴포넌트 타입: 없는타입`                          ← 타입 이름으로 끝난다
+ *   400 `잘못된 입력: 예상 타입은 array, 받은 타입은 undefined입니다`
+ *
+ * **위 넷은 서버에 실재하는 문장이다** — 지어낸 예로 논지를 세우지 않는다. 둘째 줄은
+ * **경로로 끝나서** 우리 문장과 붙으면 더 읽기 어렵다. 즉 어떤 문장이 와도 붙는다 —
+ * **이어 붙이는 형태 자체가 이 부류를 만든다.**
+ *
+ * **서버 문장에 마침표를 덧붙이지 않는 이유:** 그것은 서버가 쓴 문장을 고치는 것이고,
+ * `api/failure.tsx`가 *"화면이 문안을 다시 쓰면 서버가 이유를 바꿔도 사용자는 옛
+ * 이유를 듣는다"*로 세운 경계를 넘는다. 구분자는 **우리 쪽 문장에 붙이는 것**이라
+ * 그 경계 안이다.
+ */
+function refusedLoss(message: string, lost: number): LossPart {
+  return {
+    key: 'recover',
+    rank: LOSS_RANK.cancelled,
+    counts: [lost],
+    render: ([count]) => `${message} — 페이지를 서버 상태로 다시 불러왔고, 편집 ${count ?? 0}개가 취소됐습니다.`,
+  }
+}
+
+/** **결과를 모르는 편집의 조각**(`unknownNotice`) — 답을 못 받은 편집 수와 함께 버린 안 보낸 편집 수를 센다. 열쇠는 문장의 갈래다. */
+function unknownLoss(why: UnansweredCause | null, cancelled: number, live: boolean): LossPart {
+  return {
+    key: `recover-unknown:${why ?? 'rest'}:${String(live)}`,
+    rank: LOSS_RANK.unknown,
+    counts: [1, cancelled],
+    render: ([sent, count]) => unknownNotice(why, { cancelled: count ?? 0, live }, sent ?? 1),
+  }
+}
 
 /**
  * 되돌릴 수 없는 항목을 건너뛰었을 때의 안내(설계서 「개인 undo/redo」).
@@ -361,39 +413,14 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         // 버린 수는 **센 값이다** — 전송에 실패한 것, 큐에 남아 있던 것, 재조회를 기다리는
         // 동안 들어온 것을 합친 것이고, 셋 다 문서가 서버 것으로 되돌아가며 사라졌다.
         const lost = dropped.length + alsoDropped.length
+        // **앞 잃음을 덮지 않고 잇는다**(`EditorStore.tellLoss`) — 이 답을 기다리는 동안 다른 쪽이 말한 잃음(판을 먼저 실은 조회 · 리베이스
+        // 버림)이 서 있을 수 있다.
         if (unknown) {
           // 버린 것 중 하나(큐의 머리)가 답을 못 받은 그 편집이다 — 나머지는 안 보냈다.
-          store.setEditFailure({
-            kind: 'message',
-            message: unknownNotice(why, { cancelled: lost - 1, live: lateCommitArrives(why, channel) }),
-          })
+          store.tellLoss(unknownLoss(why, lost - 1, lateCommitArrives(why, channel)))
           return
         }
-        store.setEditFailure({
-          kind: 'message',
-          // **서버 문장과 우리 문장 사이에 구분자를 둔다.** 공백 하나로 붙이면 두 문장이 한
-          // 문장처럼 읽힌다 — 카탈로그 위반의 이유가 **타입 이름으로 끝나기** 때문에
-          // `알 수 없는 컴포넌트 타입: 없는타입 페이지를 …`가 되어 **"없는타입 페이지를"이
-          // 하나의 명사구**가 된다.
-          //
-          // **`unknown-type` 하나의 문제가 아니다.** 이 경로가 실제로 받는 문장을 api 하네스로
-          // 재 보니 **끝에 마침표를 두는 것이 하나도 없다:**
-          //
-          //   409 `페이지가 이미 변경되었습니다 (요청 baseSeq 99, 현재 0)`        ← 괄호로 끝난다
-          //   409 `편집을 적용할 수 없습니다: 바꿀 값을 찾을 수 없습니다: /root/…`  ← **경로로 끝난다**
-          //   422 `알 수 없는 컴포넌트 타입: 없는타입`                          ← 타입 이름으로 끝난다
-          //   400 `잘못된 입력: 예상 타입은 array, 받은 타입은 undefined입니다`
-          //
-          // **위 넷은 서버에 실재하는 문장이다** — 지어낸 예로 논지를 세우지 않는다. 둘째 줄은
-          // **경로로 끝나서** 우리 문장과 붙으면 더 읽기 어렵다. 즉 어떤 문장이 와도 붙는다 —
-          // **이어 붙이는 형태 자체가 이 부류를 만든다.**
-          //
-          // **서버 문장에 마침표를 덧붙이지 않는 이유:** 그것은 서버가 쓴 문장을 고치는 것이고,
-          // `api/failure.tsx`가 *"화면이 문안을 다시 쓰면 서버가 이유를 바꿔도 사용자는 옛
-          // 이유를 듣는다"*로 세운 경계를 넘는다. 구분자는 **우리 쪽 문장에 붙이는 것**이라
-          // 그 경계 안이다.
-          message: `${failure.message} — 페이지를 서버 상태로 다시 불러왔고, 편집 ${lost}개가 취소됐습니다.`,
-        })
+        store.tellLoss(refusedLoss(failure.message, lost))
       } catch (recoverCaught) {
         // **떠났으면 말하지도 비우지도 않는다** — 끊긴 조회의 거절이거나 떠난 뒤의 실패다. 아래 `failEdits`는 **지금 열린 페이지의**
         // 큐를 비운다 — 떠난 페이지의 수습이 옆 페이지의 편집을 버리면 안 된다.
@@ -401,12 +428,11 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         // **더 나중에 시작한 조회가 판을 이미 정했으면 그 판이 서버 것이다** — 문서는 되돌아갔고 그 뒤에 낸 편집은 그 판 위의
         // 것이라 버리지 않는다. 실패의 통지만 한다(판은 다시 실렸다).
         if (store.pageLoadSuperseded(ticket)) {
-          store.setEditFailure({
-            kind: 'message',
-            message: unknown
-              ? unknownNotice(why, { cancelled: dropped.length - 1, live: lateCommitArrives(why, channel) })
-              : `${failure.message} — 페이지를 서버 상태로 다시 불러왔고, 편집 ${dropped.length}개가 취소됐습니다.`,
-          })
+          store.tellLoss(
+            unknown
+              ? unknownLoss(why, dropped.length - 1, lateCommitArrives(why, channel))
+              : refusedLoss(failure.message, dropped.length),
+          )
           return
         }
         // **재조회를 기다리는 동안 들어온 편집은 여기서도 버린다.** 서버 상태를 모르는 채
@@ -419,19 +445,25 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           recoverCaught,
           unknown ? UNANSWERED_RECOVER_FAILURE : RECOVER_UNKNOWN_FAILURE,
         )
-        store.setEditFailure(
-          recoverFailure.kind === 'signed-out'
-            ? // 세션이 끊긴 것은 여기서 말하지 않는다 — `EditAlert`이 `<SignedOut />`으로
-              // 화면을 갈아 끼우므로 남아 있는 화면 자체가 없다.
-              recoverFailure
-            : unknown
-              ? // **«저장되지 않았습니다»가 여기서도 거짓이다** — 결과를 모르는 편집은 서버에 닿았을 수 있다.
-                { kind: 'message', message: unknownNotice(why, { reason: recoverFailure.message }) }
-              : // **성공 갈래와 같은 형식으로 우리 문장을 덧붙인다**(구분자 `—`도 같다).
-                // 서버 문장은 끝에 마침표를 두지 않으므로 그대로 이어 붙이면 두 문장이 한
-                // 문장처럼 읽힌다(성공 갈래 주석의 실측).
-                { kind: 'message', message: `${recoverFailure.message} — ${UNRECOVERED_NOTICE}` },
-        )
+        if (recoverFailure.kind === 'signed-out') {
+          // 세션이 끊긴 것은 여기서 말하지 않는다 — `EditAlert`이 `<SignedOut />`으로
+          // 화면을 갈아 끼우므로 남아 있는 화면 자체가 없다.
+          store.setEditFailure(recoverFailure)
+        } else if (unknown) {
+          // **«저장되지 않았습니다»가 여기서도 거짓이다** — 결과를 모르는 편집은 서버에 닿았을 수 있다.
+          const reason = recoverFailure.message
+          store.tellLoss({
+            key: `recover-unknown-failed:${why ?? 'rest'}`,
+            rank: LOSS_RANK.unknown,
+            counts: [1],
+            render: ([sent]) => unknownNotice(why, { reason }, sent ?? 1),
+          })
+        } else {
+          // **성공 갈래와 같은 형식으로 우리 문장을 덧붙인다**(구분자 `—`도 같다 — `refusedLoss`의 실측).
+          // **판을 다시 실으면 이 문장은 거짓이다**(`untilLoad`) — «화면에 남아 있는 편집»을 그 판이 치운다.
+          const message = `${recoverFailure.message} — ${UNRECOVERED_NOTICE}`
+          store.tellLoss({ key: 'recover-failed', rank: LOSS_RANK.cancelled, counts: [], render: () => message, untilLoad: true })
+        }
       } finally {
         stop()
         store.setEditStatus('idle')
@@ -456,7 +488,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       // **판째 버린 편집의 거절은 수습하지 않고 다음 편집으로 간다**(`EditorStore.wasAbandoned`). 판을 다시 실으며 버렸으면 그
       // 편집을 «반영됐는지 모름»으로 이미 말했고(`routes/editor.tsx`의 `resyncNotice`) 실린 판에 그 편집이 없다 — 거절은 그
       // 판이 맞다는 뜻이라 되돌릴 것이 없다. 페이지를 옮기며 버렸으면 이 실패는 지금 페이지의 일이 아니다. 수습하면 그 뒤에 낸
-      // 편집을 버리고(`failEdits`) 판을 한 번 더 읽고, 통지가 «편집 0개가 취소됐습니다»로 앞 문장을 덮는다(jsdom) — 페이지를
+      // 편집을 버리고(`failEdits`) 판을 한 번 더 읽고, 통지에 «편집 0개가 취소됐습니다»를 더한다(jsdom) — 페이지를
       // 옮겼으면 새 페이지의 편집을 버린다.
       if (store.wasAbandoned(clientOpId)) {
         // **페이지를 떠나며 버렸으면 그 거절은 말한다**(`EditorStore.abandonedOnLeave`) — 떠나기 전 화면에는 그 편집이 서 있었고, 떠날
@@ -466,12 +498,16 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           const pages = store.abandonedPages()
           // 다시 연 뒤의 커밋 전 거절이면 가리킬 페이지가 없다 — 통지는 닫는 단추 · 새 편집으로 풀린다.
           const settled = store.abandonedPagesReopened() && refusedBeforeCommit(caught)
-          store.setLeaveNotice(leftBehindNotice(caught, store.abandonedUnsent(), pages.length, settled), settled ? [] : pages)
+          store.setLeaveNotice(
+            leftBehindNotice(caught, store.abandonedUnsent(), pages.length, settled),
+            settled ? [] : pages,
+            refusedBeforeCommit(caught) ? LOSS_RANK.cancelled : LOSS_RANK.unknown,
+          )
         }
         return true
       }
       // **리베이스가 이 나간 편집을 버렸으면 그 거절은 수습하지 않는다**(`EditorStore.wasRebaseDropped`) — 버린 것은 이미 말했고
-      // 바탕 · 큐는 남의 판 위에 맞다. 수습하면 그 뒤에 낸 편집을 버리고 앞 문장을 «편집 0개가 취소됐습니다»로 덮는다.
+      // 바탕 · 큐는 남의 판 위에 맞다. 수습하면 그 뒤에 낸 편집을 버리고 통지에 «편집 0개가 취소됐습니다»를 더한다.
       return store.wasRebaseDropped(clientOpId)
     }
     try {
@@ -607,14 +643,36 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
    * 대신 **누르면 이 자리가 이유를 말한다** — undo가 이미 쓰는 통로이고(위 `skippedNotice`),
    * 「개인 undo/redo」가 *"적용 불가는 에러가 아니라 정상 흐름"*으로 정한 자리와 같다.
    */
+  /**
+   * **누른 뒤 답을 기다렸다가 세우는 통지**(되짚기 이력 — `loadUndoHistory`). 기다리는 동안 잃음 조각이 섰으면(리베이스 버림 · 수습 · 떠남의
+   * 거절 — `EditorStore.tellLoss`) 치우지도 덮지도 않는다 — 누른 때의 통지가 아니라 그 뒤에 온 잃음이다. 제 문장은 가장 약한 조각으로 그 뒤에
+   * 잇는다(jsdom: 이력을 받는 동안 선 «편집 1개를 버렸습니다»를 받은 뒤의 `setEditFailure(null)`이 지웠고, 조회 실패의 문장이 덮었다). 누른
+   * 뒤 선 것이 없으면 누른 때와 같다 — 앞 통지를 치우거나 갈아 끼운다. 세션이 끊긴 통지는 늘 세운다.
+   */
+  const sayAfterWait = useCallback(
+    (pressed: EditFailure | null, failure: EditFailure | null): void => {
+      const arrived = store.getState().editFailure !== pressed && store.showsLoss()
+      if (!arrived || failure?.kind === 'signed-out') {
+        store.setEditFailure(failure)
+        return
+      }
+      if (failure === null) return
+      const { message } = failure
+      store.tellLoss({ key: 'undo-after-wait', rank: LOSS_RANK.history, counts: [], render: () => message })
+    },
+    [store],
+  )
+
   const settle = useCallback(
-    (attempt: UndoAttempt, carried: number): void => {
+    (attempt: UndoAttempt, carried: number, pressed?: EditFailure | null): void => {
+      // 되짚기 이력을 기다린 뒤면(`pressed` — 누른 때의 통지) 그 사이 선 잃음을 지키며 말한다(`sayAfterWait`).
+      const say = (failure: EditFailure | null): void => (pressed === undefined ? store.setEditFailure(failure) : sayAfterWait(pressed, failure))
       // 앞서 같은 누름이 건너뛴 것(`carried` — 되짚기 이력을 받기 전에 버린 세션 항목)도 함께 센다.
       const skipped = carried + attempt.skipped
       // **잠금이 먼저다.** 건너뛴 것이 함께 있어도 사용자가 지금 답을 기다리는 물음은
       // *"왜 안 되돌아갔나"*이고, 그 답은 잠금이다. 건너뛴 수는 문장 안에 함께 실린다.
       if (attempt.blocked !== null) {
-        store.setEditFailure({
+        say({
           kind: 'message',
           message: lockedNotice(attempt.blocked.userName, skipped),
         })
@@ -623,19 +681,19 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         return
       }
       if (skipped > 0) {
-        store.setEditFailure({
+        say({
           kind: 'message',
           message: skippedNotice(skipped, attempt.clientOpId !== null),
         })
       } else {
         // 앞 통지를 치운다 — 남겨 두면 방금 누른 undo도 실패한 것으로 읽힌다.
-        store.setEditFailure(null)
+        say(null)
       }
 
       if (attempt.clientOpId === null) return
       void pump()
     },
-    [store, pump],
+    [store, pump, sayAfterWait],
   )
 
   const step = useCallback(
@@ -664,6 +722,8 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       if (target === null) return
       const { undoStack } = store.getState()
       const top = undoStack[undoStack.length - 1]
+      // 누른 때의 통지 — 받는 동안 선 잃음을 가른다(`sayAfterWait`).
+      const pressed = store.getState().editFailure
       const leave = new AbortController()
       const stop = store.subscribe(() => {
         if (!store.undoHistoryLive(first)) leave.abort()
@@ -682,7 +742,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
             if (!store.undoHistoryLive(first)) return
             const failure = toFailure(caught, UNDO_HISTORY_FAILURE)
             const head = skipped > 0 ? `${skippedHead(skipped)} ` : ''
-            store.setEditFailure(failure.kind === 'signed-out' ? failure : { kind: 'message', message: `${head}${failure.message} — ${UNDO_HISTORY_NOTICE}` })
+            sayAfterWait(pressed, failure.kind === 'signed-out' ? failure : { kind: 'message', message: `${head}${failure.message} — ${UNDO_HISTORY_NOTICE}` })
             return
           }
           if (!store.supplyUndoHistory(asked, more)) return
@@ -693,13 +753,13 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
         const now = store.getState().undoStack
         if (!store.undoHistoryLive(first) || now[now.length - 1] !== top) return
         store.endUndoHistoryLoad(first)
-        settle(store.startUndo({ historyLoaded: true }), skipped)
+        settle(store.startUndo({ historyLoaded: true }), skipped, pressed)
       } finally {
         stop()
         store.endUndoHistoryLoad(first)
       }
     },
-    [api, projectId, store, settle],
+    [api, projectId, store, settle, sayAfterWait],
   )
 
   /**
