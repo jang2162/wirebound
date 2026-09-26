@@ -50,7 +50,7 @@
  * 그것을 어떻게 나눠 쓰는지가 새 물음이 된다. 동시에 뜨는 브라우저 수는 `export-worker.ts`의
  * 그리기 칸이 묶는다.
  */
-import { chromium, type Browser, type BrowserContext } from 'playwright-core'
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core'
 import {
   decideKoreanGlyphs,
   errorLine,
@@ -307,7 +307,9 @@ async function renderOne(
     await page.addStyleTag({ content: FREEZE_MOTION })
     await page.addStyleTag({ content: request.css })
     // **찍기 전에 잰다** — 비트맵을 만드는 것이 비싼 몫이다(`SCREEN_DEFAULTS.maxArea`).
-    const [width, height] = await page.evaluate<[number, number]>(PAGE_SIZE)
+    const measured = await measure(page, timeoutMs)
+    if (measured === null) return failure(`${SCREEN_FONTS_LATE} — ${timeoutMs}ms`)
+    const [width, height] = measured
     if (width * height > maxArea) return failure(tooLarge(width, height, maxArea))
     /**
      * **잰 크기로 묶어 찍는다.** playwright 는 찍으면서 크기를 다시 재고 그 크기로 비트맵을 만든다 — 잰 뒤에 자라는
@@ -315,7 +317,9 @@ async function renderOne(
      */
     const bytes = await page.screenshot({ type: 'png', fullPage: FULL_PAGE, clip: { x: 0, y: 0, width, height } })
     // **잘린 그림을 내지 않는다** — 묶어 찍은 뒤 자랐으면 그림은 위쪽만이다(`FULL_PAGE`의 판정).
-    const [afterWidth, afterHeight] = await page.evaluate<[number, number]>(PAGE_SIZE)
+    const after = await measure(page, timeoutMs)
+    if (after === null) return failure(`${SCREEN_FONTS_LATE} — ${timeoutMs}ms`)
+    const [afterWidth, afterHeight] = after
     if (afterWidth > width || afterHeight > height) return failure(grew(width, height, afterWidth, afterHeight))
     const size = readPngSize(bytes)
     // **못 읽은 크기를 계약에 넣지 않는다** — 넣으면 슬라이드가 조용히 찌그러진다.
@@ -404,6 +408,31 @@ const PAGE_SIZE = `(async () => {
   ]
 })()`
 
+/**
+ * 화면 전체의 크기를 잰다 — **한 단계의 한도(`timeoutMs`) 안에서.** 넘으면 `null`.
+ *
+ * `page.evaluate` 는 컨텍스트의 기본 한도(`setDefaultTimeout`)를 안 받아, `PAGE_SIZE` 가 기다리는 `document.fonts.ready` 가 한도 없이
+ * 기다렸다 — 그리기의 다른 단계에는 한도가 있다(`shutdown.ts` 「한도가 있는 까닭」). 받기가 끝나지 않는 글꼴은 페이지 내용만으로
+ * 못 만들었지만(원격 요청은 끊기고 `data:` · `local()` · 낯선 스킴은 곧 끝난다) 막힌 원본을 가족마다 줄줄이 단 파생 테마는 받기가
+ * 가족을 차례로 지나 원본 수만큼 길어진다(1MiB 안에서 한 장 15s). 다시 재는 법: `build-test/screen-chromium.test.ts` 「글꼴을
+ * 기다리는 것도 한 장의 한도 안이다」.
+ *
+ * 한도를 넘긴 재기는 브라우저 안에서 계속 돈다 — 부른 쪽이 컨텍스트를 닫을 때 끊긴다(그때 던지는 것을 여기서 받는다).
+ */
+async function measure(page: Page, timeoutMs: number): Promise<[number, number] | null> {
+  const measured = page.evaluate<[number, number]>(PAGE_SIZE)
+  measured.catch(() => {})
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs)
+  })
+  try {
+    return await Promise.race([measured, late])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** 넓이 상한을 넘은 장의 이유. 크기와 상한을 함께 말한다 — 무엇을 줄이면 되는지 사람이 알아야 한다. */
 export function tooLarge(width: number, height: number, maxArea: number): string {
   return `${SCREEN_TOO_LARGE} — ${width}×${height}px(상한 ${VIEWPORT.width}×${Math.floor(maxArea / VIEWPORT.width)}px 넓이)`
@@ -416,6 +445,9 @@ export const SCREEN_TOO_LARGE = '페이지가 너무 커 화면을 그리지 않
 export function grew(width: number, height: number, afterWidth: number, afterHeight: number): string {
   return `${SCREEN_GREW} — ${width}×${height}px 에서 ${afterWidth}×${afterHeight}px`
 }
+
+/** 글꼴을 기다리다 한도를 넘은 장의 이유 머리. 뒤에 한도를 붙인다(`measure`). */
+export const SCREEN_FONTS_LATE = '글꼴을 기다리다 한 장의 한도를 넘어 화면을 그리지 않았습니다'
 
 /** 잰 뒤에 자란 장의 이유 머리. */
 export const SCREEN_GREW = '페이지가 그리는 동안 커져 화면을 그리지 않았습니다'

@@ -34,7 +34,9 @@
  * 자리에 다른 프로세스가 새로 만든 소켓이어도 — 잰 값: 연 소켓을 다른 이름으로 옮기고 그 자리에 파일을 둔 뒤 닫으면 그 파일이
  * 지워진다). `onClose` 는 도는 요청이 다 끝난 뒤(최대 `SHUTDOWN_GRACE_MS`)라, 그 사이 TCP 포트를 놓아 새 api 가 떠서 만든 소켓을
  * 지운다. `preClose` 는 TCP 포트를 놓기 전이라 새 api 가 아직 못 뜬다. 살아 있는 동안에는 뒤에 뜬 api 가 붙어 보고 비켜 가므로(위
- * «여는 것은») 이름으로 지우는 파일이 늘 제 것이다.
+ * «여는 것은») 이름으로 지우는 파일이 늘 제 것이다. **여는 중에 닫기가 오면**(TCP 포트를 연 뒤 입구를 열기 전의 신호) `preClose` 는
+ * 아직 안 연 입구를 지나치므로, 표지를 세우고 여는 일이 await 마다 그것을 봐 그만둔다 — 이미 열었으면 도로 닫는다. 안 보면 닫힌
+ * api 가 연 입구를 남기고, 프로세스가 끝나면 파일만 남는다.
  *
  * **입구의 요청은 `UNLOCK_REQUEST_TIMEOUT_MS` 안에 다 와야 한다** — 명령은 본문 하나를 한 번에 보낸다. 끝없이 조금씩 보내는 연결이
  * Node 기본(300s) 동안 자리를 쥐지 않게.
@@ -283,7 +285,10 @@ export function prepareUnlockSocket(
     })
   })
 
+  // 닫기가 시작됐다 — 여는 일이 await 마다 본다(머리말 «닫는 것은»).
+  let closing = false
   app.addHook('preClose', async () => {
+    closing = true
     if (!server.listening) return
     const closed = new Promise<void>((resolve) => server.close(() => resolve()))
     // 명령은 답을 받으면 끊지만(`connection: close`) 멈춘 연결이 종료를 붙잡지 않게.
@@ -291,9 +296,15 @@ export function prepareUnlockSocket(
     await closed
   })
 
+  function refuseIfClosing(socketPath: string): void {
+    if (closing) throw new UnlockSocketRefused(`${socketPath} 에 입구를 안 엽니다 — api 가 닫히는 중입니다`)
+  }
+
   async function openAt(socketPath: string, dir: string): Promise<void> {
     await ensurePrivateDir(dir)
+    refuseIfClosing(socketPath)
     await clearPlace(socketPath)
+    refuseIfClosing(socketPath)
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject)
       server.listen(socketPath, () => {
@@ -304,8 +315,9 @@ export function prepareUnlockSocket(
     try {
       // 디렉터리가 이미 막지만 파일도 좁힌다 — 소켓은 umask 대로(대개 755) 만들어진다.
       await chmod(socketPath, 0o600)
+      refuseIfClosing(socketPath)
     } catch (error) {
-      // 못 좁혔으면 연 입구를 도로 닫는다 — «안 엽니다»라 말하고 열어 둔 채 두지 않게.
+      // 못 좁혔거나 그 사이 닫기가 왔으면 연 입구를 도로 닫는다 — «안 엽니다»라 말하고 열어 둔 채 두지 않게.
       await new Promise<void>((resolve) => server.close(() => resolve()))
       throw error
     }

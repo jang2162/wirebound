@@ -35,6 +35,7 @@ import {
   chromiumScreenRenderer,
   KOREAN_GLYPH_PROBE,
   SCREEN_DEFAULTS,
+  SCREEN_FONTS_LATE,
   SCREEN_GREW,
   SCREEN_TOO_LARGE,
 } from '../src/services/screen-render-chromium'
@@ -317,6 +318,32 @@ describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
     ])
     const [result] = batch.results
     expect(result!.ok ? `그림 ${result!.width}×${result!.height}` : result!.reason).toMatch(new RegExp(`^${SCREEN_TOO_LARGE} — 720×\\d+px\\(`))
+  })
+
+  /**
+   * **글꼴을 기다리는 것도 한 장의 한도 안이다.** `page.evaluate` 는 컨텍스트의 기본 한도를 안 받아, 재기가 기다리는
+   * `document.fonts.ready` 는 한도 없이 기다렸다. 받기를 끝나지 않게 만드는 페이지는 못 찾았지만(원격 요청은 끊기고 `data:` ·
+   * `local()` · 낯선 스킴은 곧 끝난다) 막힌 원본을 가족마다 줄줄이 달면 받기가 가족을 차례로 지나 원본 수만큼 길어진다 — 1MiB 안의
+   * 파생 테마(가족 23 × 원본 2000)가 한 장에 15s 를 기다리고 `ok` 로 끝났다(한 장 한도 10s). 여기서는 가족 40 × 원본 800 을
+   * 한도 3s 로 잰다 — 한도가 없으면 기다린 뒤 그림이 나와 여기서 죽는다.
+   */
+  it('글꼴을 기다리는 것도 한 장의 한도 안이다 — 넘으면 그 장이 실패하고 까닭을 말한다', async () => {
+    const families = Array.from({ length: 40 }, (_unused, family) => family)
+    const faces = families
+      .map((family) => {
+        const blocked = Array.from({ length: 800 }, (_unused, index) => `url(http://font.invalid/${family}/${index}.ttf)`).join(', ')
+        return `@font-face { font-family: Slow${family}; src: ${blocked} }`
+      })
+      .join('\n')
+    const chain = families.map((family) => `Slow${family}`).join(', ')
+    const batch = await renderer({ timeoutMs: 3000 }).render([
+      {
+        title: '느린 글꼴',
+        html: '<!doctype html><html lang="ko"><body><p>회원 목록</p></body></html>',
+        css: `${faces}\nbody { font-family: ${chain}, sans-serif }`,
+      },
+    ])
+    expect(batch.results).toEqual([{ ok: false, reason: `${SCREEN_FONTS_LATE} — 3000ms` }])
   })
 
   it('찍는 사이에 자라도 비트맵은 잰 크기를 안 넘고, 위쪽만 잘린 그림을 내지 않는다', async () => {

@@ -40,7 +40,8 @@
  *     주인이 청한 계정만 풀므로 «있는 계정»의 신호가 된다. 사람이 친 명령 한 번에 한 번 서고 두드리는 쪽이 제 뜻으로 세우지 못한다 —
  *     아래 «없는 계정도 같은 판정이다»가 닫은 신호(주인이 로그인할 때마다 선다)와 다르다. 명령이 없으면 주인이 창을 기다리거나 서버를
  *     다시 띄워야 하고, 재기동은 같은 신호를 내면서 두드리는 쪽의 기록까지 모두 비운다 — 명령은 그보다 좁아 이 값을 치른다.
- *   - **두드리는 쪽도 한도만큼 다시 댄다** — 계정 키를 걷으므로, 아직 보내고 있으면 곧 다시 막힌다.
+ *   - **두드리는 쪽도 한도만큼 다시 댄다** — 계정 키를 걷으므로, 아직 보내고 있으면 곧 다시 막힌다. 풀기 앞에 들어와 풀기 뒤에
+ *     끝난 시도는 풀기 뒤의 기록을 안 걷는다 — 시도가 넣은 키의 세대에서만 제 자리를 걷는다(`AttemptLog.removeOne`).
  *   - **계정을 풀어도 주소 키는 그대로다**(그 반대도) — 429 문장이 두 키를 가르지 않으므로(`routes/auth.ts` 의 `loginLimitedMessage`)
  *     명령이 그렇다고 말한다.
  *   - 로그인 판정에는 닿지 않는다 — 막힌 판은 그대로 DB 도 scrypt 도 안 거치고, 푼 뒤의 판정도 기록이 없는 키의 것과 같다.
@@ -137,14 +138,20 @@ class AttemptLog {
     return (stamps[stamps.length - this.limit] as number) + this.windowMs
   }
 
-  add(key: string, stamp: number): void {
+  /**
+   * 기록을 하나 더한다. 준 배열이 그 키의 **세대**다 — 키를 걷으면(풀기 · 창 만료 · 상한에서 버림) 다시 설 때 새 배열이 선다.
+   * `removeOne` 이 이것으로 제 세대의 기록만 걷는다.
+   */
+  add(key: string, stamp: number): readonly number[] {
     const stamps = this.live(key, stamp)
     if (stamps !== undefined) {
       stamps.push(stamp)
-      return
+      return stamps
     }
     while (this.entries.size >= this.maxKeys && this.evictOne(stamp)) {}
-    this.entries.set(key, [stamp])
+    const fresh = [stamp]
+    this.entries.set(key, fresh)
+    return fresh
   }
 
   /**
@@ -180,10 +187,13 @@ class AttemptLog {
     return { cleared, blockedForMs: until === undefined ? undefined : until - now }
   }
 
-  /** 이 시도의 자리 하나를 걷는다. 같은 시각의 다른 시도가 있어도 하나만 걷는다. */
-  removeOne(key: string, stamp: number): void {
+  /**
+   * 이 시도의 자리 하나를 걷는다. 같은 시각의 다른 시도가 있어도 하나만 걷는다. **넣은 세대(`add` 가 준 배열)가 아니면 안 걷는다** —
+   * 자리를 시각 값으로 찾으므로, 키가 걷힌 뒤 같은 ms 에 선 새 기록을 옛 시도가 걷게 된다(풀기 앞에 들어온 시도가 풀기 뒤에 끝난 판).
+   */
+  removeOne(key: string, stamp: number, generation: readonly number[]): void {
     const stamps = this.entries.get(key)
-    if (stamps === undefined) return
+    if (stamps === undefined || stamps !== generation) return
     const at = stamps.indexOf(stamp)
     if (at >= 0) stamps.splice(at, 1)
     if (stamps.length === 0) this.entries.delete(key)
@@ -231,11 +241,11 @@ export function createLoginLimiter(rule: LoginLimitRule = LOGIN_LIMIT, now: () =
       if (until > 0) {
         return { kind: 'limited', retryAfterSeconds: Math.max(1, Math.ceil((until - at) / 1000)) }
       }
-      accounts.add(account, at)
-      addresses.add(address, at)
+      const accountGeneration = accounts.add(account, at)
+      const addressGeneration = addresses.add(address, at)
       const release = () => {
-        accounts.removeOne(account, at)
-        addresses.removeOne(address, at)
+        accounts.removeOne(account, at, accountGeneration)
+        addresses.removeOne(address, at, addressGeneration)
       }
       return {
         kind: 'admitted',
