@@ -376,7 +376,10 @@ async function probeKoreanGlyphs(browser: Browser, timeoutMs: number): Promise<K
 /**
  * **움직임을 끈다 — 잰 크기와 찍는 크기가 같은 상태를 보게.** 테마 시트는 HTML 을 띄운 **뒤에** 얹으므로 테마의
  * `transition` 은 기본값에서 테마 값으로 옮겨 가는 전이를 시작한다. 그 사이에 재면 작게 재고 크게 찍는다(여백 20000px 을
- * 전이로 건 파생 테마가 상한의 4.9배 비트맵을 냈다) — 시스템 테마도 단추에 `transition` 을 걸어 그림이 옮겨 가는 중간에 찍혔다.
+ * 전이로 건 파생 테마가 상한의 4.9배 비트맵을 냈다 — 운영 compose 의 api 컨테이너에서 한 장에 cgroup 최고 2GB 안팎) — 시스템 테마도
+ * 단추에 `transition` 을 걸어 그림이 옮겨 가는 중간에 찍혔다. 다시 재는 법: `build-test/screen-chromium.test.ts` 「잰 크기와 찍는
+ * 크기」(끄기 · 층 · 글꼴 기다림 · 묶어 찍기 · 찍은 뒤 다시 재기를 하나씩 떼면 거기 케이스가 죽는다) · 최상위 README
+ * 「화면 그리기 상한」의 잰 값.
  *
  * **층(`@layer`)에 둔다** — 층 안의 `!important` 는 층 밖의 `!important` 를 특이도와 상관없이 이긴다. 테마 값은 `!important` 를
  * 실을 수 있고(컴파일이 받는다) 그 셀렉터가 `*` 보다 구체적이라, 층 없이 두면 테마가 이 끄기를 이긴다.

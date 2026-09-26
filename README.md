@@ -1115,7 +1115,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 | 두 탭이 같은 페이지를 연다 | `wss://…/api/projects/<id>/ws` 가 붙고 `joined` · `presence` · `locks` |
 | 한 탭의 속성 패널에서 글을 고친다 | 다른 탭이 `page-changed` 를 받고 **33ms** 에 화면에 선다 · 서버 판이 같다 |
 | pptx 미리보기 · 내려받기(한 장) | 200 · `screenFailures: []` · `fontWarning: null` · 0.67s / 0.35s · 슬라이드 그림의 한글이 Noto Sans CJK 로 그려졌다 |
-| 이미지 안의 스모크(`screen-chromium.test.ts`) | **18 통과 · 건너뜀 0**(배포판 chromium 154 · `fonts-noto-cjk`) |
+| 이미지 안의 스모크(`screen-chromium.test.ts`) | **23 통과 · 건너뜀 0**(배포판 chromium 154 · `fonts-noto-cjk`) |
 | 40장 pptx 를 내려받는 중 · 에디터 WS 가 붙은 채 `docker compose stop` | 내려받기 **200 · 7.4MB · 그림 실패 0** — 앞단이 그 응답을 넘긴 뒤 WS 를 닫고 끝난다 · 모두 종료 0 · **5.6s** |
 | 같은 판에서 `docker compose stop api` 만(올리기 때 api 를 다시 만드는 판) | api 가 WS 를 곧바로 닫고(에디터는 재연결을 되풀이하며 그동안 502) 도는 pptx 를 끝까지 답한다 — **200 · 그림 실패 0** · 종료 0 · 5.8s |
 | 다시 `up` · `down` 뒤 `up` | 사용자 · 프로젝트 · 페이지 · 리비전 수가 같다 · 로그인해 둔 세션이 산다(`/api/auth/me` 200) |
@@ -1147,6 +1147,7 @@ A 가 틀린 비밀번호로 31번 → 30번 401 · 31번째 **429**. 그 뒤 B 
 | **init 을 둔다** — 이미지의 PID 1 은 `tini` | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). tini 면 0(위 「올린 판에서 잰 값」) |
 | **터미널 밖에서 띄운다**(compose · 서비스 관리자) — `nohup` 으로는 창 닫기에서 못 지킨다 | api 는 `SIGHUP` 을 «닫아라»로 받는다(`apps/api/README.md` 「끄기」 절) — `nohup` 이 건 무시를 그 처리기가 덮는다 | macOS pty 의 bash 에서 `nohup node --import tsx src/main.ts > log 2>&1 &`(`nohup pnpm start` 도) 뒤 창(pty master)을 닫으면 «SIGHUP 수신 — 서버를 종료합니다»로 끝난다 |
 | **끄는 쪽의 한도가 api 의 한도보다 길다** | `SIGTERM` 을 받은 api 는 도는 요청(그리던 pptx 포함)을 끝까지 답하고 끝낸다 — 한도 30s(`apps/api/README.md` 「끄기」 절). compose 는 api · web 의 `stop_grace_period` 를 40s 로 둔다(기본 10s) | 끄는 쪽의 한도가 먼저 오면 그 뒤는 SIGKILL 이라 도는 응답이 끊긴다. 브라우저는 안 남는다 |
+| **로그인 막힘을 푸는 명령은 api 가 든 그 컨테이너 · 그 사용자로** | 명령은 api 의 유닉스 소켓(`<바탕>/wirebound-<uid>/api-<HOST>-<PORT>.sock` — 바탕은 `XDG_RUNTIME_DIR`, 없으면 `TMPDIR` · `/tmp`)으로 보낸다(`apps/api/src/auth/unlock-socket.ts` 머리말). 이미지에서는 `/tmp/wirebound-1000/api-0.0.0.0-3001.sock` 이다 — `/tmp` 는 `node` 가 쓸 수 있고, `HOST` · `PORT` 는 이미지의 `ENV` 라 `docker compose exec` 셸도 같은 값을 본다. api 기동 로그의 `로그인 막힘을 푸는 입구: <경로>` 줄이 그 자리다 | 다른 사용자(`exec -u root`) · 다른 컨테이너(`run --rm api …`) · 다른 `HOST`(`exec -e HOST=127.0.0.1`)로 치면 `api 의 입구가 없습니다 — …` · 종료 1 · 아무것도 안 바뀐다 |
 | **로그는 표준출력** | api 는 표준출력에 pino JSON 을 쓴다. compose 는 json-file 드라이버에 20MB × 5 로 돌린다 — 안 돌리면 서버 디스크를 다 먹는다. api 는 로그를 못 써도 멈추지 않는다(`apps/api/src/log-destination.ts`) | — |
 
 Node 판을 재는 법 — 저장소 뿌리에서 `git archive HEAD | docker run -i --rm node:<판>-slim sh -c 'mkdir /app && cd /app && tar xf - &&
@@ -1228,7 +1229,7 @@ pptx 의 화면은 요청마다 브라우저를 띄워 그린다 — **서버 �
 | 무엇 | 값 | 넘으면 |
 |---|---|---|
 | 동시에 뜨는 브라우저 수 | env **`EXPORT_RENDER_LIMIT`**(비우면 **2**) | **줄을 서서 기다린다** — 사람에게 되돌려 보내지 않는다. 줄의 길이는 떠 있는 내보내기 8 · 사람마다 2 가 묶고 그것을 넘은 요청만 503 + `Retry-After` 다(`apps/api/src/services/export-worker.ts` 머리말 «줄은 길이로 묶는다» · «한 사람이 줄을 다 쥐지 않는다»). 되돌려 보내지 않는 까닭: 기다림이 «앞 일 수 × 일 하나»로 묶이고, 거절하면 그 사람이 같은 줄에 다시 서야 한다. 사람이 떠나면 웹이 요청을 끊고 끊긴 일은 줄에서 빠진다 |
-| 한 장의 넓이 | 뷰포트 폭 × **8192 CSS px**(`SCREEN_DEFAULTS.maxArea` — 200행 남짓) | 그 장을 **안 그린다** — 슬라이드에 «화면 이미지가 실리지 않았습니다», 미리보기의 이유에 `페이지가 너무 커 화면을 그리지 않았습니다 — 720×145577px(상한 720×8192px 넓이)`. **자르지 않는다** — 잘린 목업은 멀쩡한 한 장으로 읽힌다 |
+| 한 장의 넓이 | 뷰포트 폭 × **8192 CSS px**(`SCREEN_DEFAULTS.maxArea` — 200행 남짓) | 그 장을 **안 그린다** — 슬라이드에 «화면 이미지가 실리지 않았습니다», 미리보기의 이유에 `페이지가 너무 커 화면을 그리지 않았습니다 — 720×145577px(상한 720×8192px 넓이)`. **자르지 않는다** — 잘린 목업은 멀쩡한 한 장으로 읽힌다. **재는 상태와 찍는 상태가 같다** — 테마의 전이 · 애니메이션을 끄고 글꼴을 기다린 뒤 재고, 잰 크기로 묶어 찍는다. 그래도 찍는 사이에 커진 장은 안 그린다(`페이지가 그리는 동안 커져 화면을 그리지 않았습니다 — …`) |
 | 장 수 | **200**(`SCREEN_DEFAULTS.maxPages`) | 넘은 장이 실패가 되고 이유가 분모를 말한다 |
 
 **바이트 상한은 두지 않는다** — 파일 크기는 위 셋의 곱으로 묶인다(상한 바로 밑의 페이지 한 장이 pptx 로 0.85MB · 여덟 장 7.1MB). 바이트로
@@ -1246,6 +1247,8 @@ pptx 의 화면은 요청마다 브라우저를 띄워 그린다 — **서버 �
 | 한 장 × 200 · 500 · 1000 · 2000행(넓이 상한 없이) | 2 | 부하 전 + 0.38 · 0.77 · 1.24 · 2.05GB | 0.7–2.5s |
 | 한 장 × 4000행(넓이 상한 없이) | 2 | **5.7GB**, 다음 번은 컨테이너 안에서 OOM kill — `Unable to capture screenshot` | 5.3s |
 | 한 장 × 4000행(넓이 상한) | 2 | 0.46GB · 그 장은 안 그림 | 0.76s |
+| 한 장 × 여백 20000px 를 전이(지연 2–10ms)로 거는 파생 테마(재고 나서 자람 · 끄기 · 묶어 찍기 없이) | — | 20번 중 7번 상한의 **4.9배**(1440×80320) 비트맵 · **1.95–2.24GB** · 나머지 13번은 전이 앞 그림 0.48–0.54GB | — |
+| 같은 것(끄기 · 묶어 찍기) | — | 20번 다 안 그림(720×40160) · 0.42–0.46GB | — |
 | **상한 바로 밑 8장 × 200행 pptx 넷(최악)** | 2 | **3.13GB** | 4.1–8.0s |
 | 같은 것 | 1 | **1.93GB** | 3.1–10.8s |
 
@@ -1265,10 +1268,14 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 # 비밀번호 재설정 — 터미널에서 숨겨 묻는다(「비밀번호를 잊었다」 절)
 docker compose -f deploy/docker-compose.yml exec api node --import tsx src/db/reset-password.ts me@example.com
+
+# 로그인 막힘 풀기 — 떠 있는 api 에 보낸다(「에디터가 뜨는데 로그인이 안 된다」의 ⓓ · 주소는 --address <주소>)
+docker compose -f deploy/docker-compose.yml exec api node --import tsx src/auth/unlock-login.ts me@example.com
 ```
 
 - **쟀다:** 덤프(250KB)를 새 DB 에 `pg_restore` → 종료 0 · 수가 같다. 재설정은 pty 에 한 줄씩 쳐서 바꿨고 새 비밀번호로 로그인 200 이다
-  — 통째로 붙여 넣는 판은 이 길로는 안 쟀다(명령 쪽은 「비밀번호를 잊었다」 절의 재는 법).
+  — 통째로 붙여 넣는 판은 이 길로는 안 쟀다(명령 쪽은 「비밀번호를 잊었다」 절의 재는 법). 막힘 풀기는 앞단 너머 틀린 비밀번호 10번 →
+  11번째부터 429(맞는 비밀번호도) → 이 명령(`창 안의 시도 10건을 지웠습니다`) → 200 이다. 그 컨테이너 · 그 사용자로 친다(「api 가 필요로 하는 것」).
 - **사람을 더 만들려면** `docker compose -f deploy/docker-compose.yml run --rm -e SEED_USER_EMAIL=… -e SEED_USER_PASSWORD=… migrate` — 시딩은 이미 있는 이메일을
   그대로 두므로 값을 바꿔 다시 돌리면 계정이 하나 는다(쟀다). 비밀번호가 셸 기록에 남는다 — 곧 위 재설정으로 바꾼다.
 - 올리는 동안 WS 는 끊겼다 다시 붙는다(에디터가 스스로) — api 가 바뀌는 몇 초 동안 앞단은 502 를 낸다. 코드가 모르는 마이그레이션이
