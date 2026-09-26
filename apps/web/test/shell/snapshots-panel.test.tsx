@@ -1246,7 +1246,7 @@ describe('복원 뒤 재동기화', () => {
     )
   })
 
-  /** 고르개와 캔버스는 테마를 **각자** 읽는다(`theme/theme-picker.tsx` 머리말 «고른 값이 캔버스에 닿는 경로»). 둘 다 따로 잰다. */
+  /** 복원이 레이아웃의 테마 선택을 `portal` 로 되돌리는 서버. 캔버스는 서버의 테마를 읽지 않으므로 고르개만 잰다. */
   function themeAfterRestore(): Partial<ApiClient> {
     const admin = systemTheme('admin')
     const portal = systemTheme('portal')
@@ -1277,19 +1277,6 @@ describe('복원 뒤 재동기화', () => {
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
 
     await waitFor(() => expect(select.value).toBe('th-portal'))
-  })
-
-  it('캔버스가 복원이 되돌린 테마로 다시 그린다', async () => {
-    const { getPage } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
-    await openConfirm({ getPage, ...themeAfterRestore() })
-    const sheet = (): string => document.head.querySelector('style[data-wb-style="theme"]')?.textContent ?? ''
-    await waitFor(() => expect(sheet()).not.toBe(''))
-    const before = sheet()
-
-    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
-    await waitForNode('n-new')
-
-    await waitFor(() => expect(sheet()).not.toBe(before))
   })
 
   it('스냅샷을 저장하는 것만으로는 다시 읽지 않는다 — 프로젝트가 안 바뀌었다', async () => {

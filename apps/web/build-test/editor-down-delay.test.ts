@@ -20,7 +20,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session, canvasFrame } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -72,7 +72,7 @@ describe.skipIf(!전제.ok)('서버 → 브라우저 지연으로 뒤집은 도�
     const log = watch(page)
     try {
       await page.goto(P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '나' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '나' }).waitFor()
       // 판이 섰는가 — 앨리스의 WS 가 지연 프록시를 지나 붙었다.
       await poll('앨리스의 WS 가 늦춰진 채 붙는다', async () => delay.delayed(), (n) => n >= 1)
       // 룸에 든 뒤에 게시한다 — 연결 id(`joined`)를 받기 전의 게시는 제 연결을 안 싣고 나가 방송이 제 탭에도 온다(다른 판이다).

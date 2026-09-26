@@ -13,7 +13,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, canvasFrame, canvasText } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -155,7 +155,7 @@ describe.skipIf(!전제.ok)('배너 «다시 불러오기»와 blur 커밋의 �
     const secondPath = `/api/projects/${project.id}/pages/${second.id}`
     try {
       await page.goto(`/projects/${project.id}/pages/${first.id}`)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '첫째 원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '첫째 원문' }).waitFor()
       const restored = await call('POST', `/projects/${project.id}/snapshots/${snapshot.id}/restore`)
       if (restored.status !== 200) throw new Error(`복원 ${restored.status}`)
       const button = page.getByRole('button', { name: '다시 불러오기' })
@@ -174,7 +174,7 @@ describe.skipIf(!전제.ok)('배너 «다시 불러오기»와 blur 커밋의 �
       await poll('다시 읽기의 페이지 조회가 붙잡힌다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('GET 첫째 붙잡음')))
       events.push(`${at()} 둘째로 옮김`)
       await page.getByRole('link', { name: '둘째' }).click()
-      await page.locator('.wb-shell-canvas-frame', { hasText: '둘째 원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '둘째 원문' }).waitFor()
       await page.waitForTimeout(2_500)
       const banners = await page.locator('.wb-shell-remote-alert').allTextContents()
       // eslint-disable-next-line no-console
@@ -195,7 +195,7 @@ function created(response: { status: number; body: any }): { id: string } {
 }
 
 async function selectText(page: Page, content: string): Promise<void> {
-  await page.locator('.wb-shell-canvas-frame', { hasText: content }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: content }).waitFor()
   await page.locator('li button', { hasText: 'Text' }).first().click()
   await page.locator('.wb-shell-panel textarea').first().waitFor()
 }
@@ -203,7 +203,7 @@ async function selectText(page: Page, content: string): Promise<void> {
 /** 캔버스 글 · 머리 통지가 500ms 동안 안 바뀌면 그 값. */
 async function stable(page: Page): Promise<{ canvas: string; notices: string[] }> {
   const read = async () => ({
-    canvas: (await page.locator('.wb-shell-canvas-frame').innerText()).replace(/\s+/g, ' '),
+    canvas: (await canvasText(page)).replace(/\s+/g, ' '),
     notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
   })
   let last = await read()

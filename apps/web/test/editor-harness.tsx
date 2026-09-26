@@ -81,6 +81,37 @@ export function pageDoc(root: WbNode): PageDocument {
   return { version: CURRENT_DOCUMENT_VERSION, root }
 }
 
+/** `Page > Text` 문서 하나. 캔버스 케이스가 노드 하나만 필요할 때 쓴다. */
+export function docWithText(id: string, content: string): PageDocument {
+  return pageDoc({ id: 'root', type: 'Page', children: [{ id, type: 'Text', props: { content } }] })
+}
+
+/**
+ * **캔버스 문서에 가짜 레이아웃을 건다** — jsdom 은 레이아웃이 없어 모든 상자가 0 이다. `doc` 창의
+ * `getBoundingClientRect` 를 가로채, `[data-wb-id]` 요소는 문서 순서의 번호 i 에 대해 `{ left: 0, top: i * 20, width: 100,
+ * height: 20 }` 을, `[data-wb-focus]` 요소는 제 노드 상자에서 `{ left: 10, top: +5, width: 50, height: 10 }` 을, 그 밖의 요소는
+ * 가장 가까운 `[data-wb-id]` 조상의 상자를 돌려준다. 되돌리는 함수를 돌려준다.
+ *
+ * 이 흉내는 iframe 의 자리(호스트 쪽 상자)를 0 으로 둔다 — 그 둘을 더하는 계산은 실브라우저 판
+ * (`build-test/canvas-iframe.test.ts`)이 잰다.
+ */
+export function stackLayout(doc: Document): () => void {
+  const view = doc.defaultView as (Window & typeof globalThis) | null
+  if (view === null) throw new Error('캔버스 문서에 창이 없습니다')
+  const proto = view.Element.prototype
+  const original = proto.getBoundingClientRect
+  proto.getBoundingClientRect = function (this: Element): DOMRect {
+    const node = this.closest('[data-wb-id]')
+    if (node === null) return original.call(this)
+    const index = Array.from(doc.querySelectorAll('[data-wb-id]')).indexOf(node)
+    const [left, top, width, height] = this.hasAttribute('data-wb-focus') ? [10, index * 20 + 5, 50, 10] : [0, index * 20, 100, 20]
+    return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {} } as DOMRect
+  }
+  return () => {
+    proto.getBoundingClientRect = original
+  }
+}
+
 /** 서버가 낼 페이지 응답. 재조회를 세는 테스트가 자기 `getPage`를 만들 때도 쓴다. */
 export function pageDetail(pageId: string, schema: PageDocument): PageDetail {
   return {
@@ -166,9 +197,47 @@ export async function openPage(doc: PageDocument, options: EditorOptions = {}): 
   await waitForNode(doc.root.id)
 }
 
-/** 캔버스에 그려진 노드의 엘리먼트. 폴백도 `data-wb-id`를 그대로 달고 있어 같이 잡힌다. */
+/**
+ * 캔버스 문서가 그려지는 iframe 의 문서(`canvas/canvas-iframe.tsx`). 문서 노드는 호스트 문서에 없고 여기 있다 —
+ * 선택 외곽선 · 마커 · 배너처럼 셸이 그리는 것은 호스트 문서 그대로다. iframe 이 아직 없으면 던진다.
+ */
+export function canvasDocument(): Document {
+  const iframe = document.body.querySelector<HTMLIFrameElement>('iframe.wb-shell-canvas-iframe')
+  const doc = iframe?.contentDocument ?? null
+  if (doc === null) throw new Error('캔버스 iframe 을 찾지 못했습니다')
+  return doc
+}
+
+/** iframe 이 없으면 `null` 인 판. 문서가 없는 화면을 재는 자리가 쓴다. */
+function canvasDocumentOrNull(): Document | null {
+  return document.body.querySelector<HTMLIFrameElement>('iframe.wb-shell-canvas-iframe')?.contentDocument ?? null
+}
+
+/**
+ * 캔버스 문서 안에서 고른다. iframe 이 없으면(캔버스가 안 섰다) `null` 이다 — `document.body.querySelector` 를 그대로
+ * 옮겨 쓰는 자리다. 노드 id 로 찾을 때는 셀렉터를 조립하지 않는 `nodeElement` 를 쓴다.
+ */
+export function canvasQuery<E extends Element = HTMLElement>(selector: string): E | null {
+  return canvasDocumentOrNull()?.querySelector<E>(selector) ?? null
+}
+
+/** `canvasQuery` 의 전부 판. iframe 이 없으면 빈 배열이다. */
+export function canvasQueryAll<E extends Element = HTMLElement>(selector: string): E[] {
+  return Array.from(canvasDocumentOrNull()?.querySelectorAll<E>(selector) ?? [])
+}
+
+/**
+ * 캔버스에 그려진 노드의 엘리먼트. 폴백도 `data-wb-id`를 그대로 달고 있어 같이 잡힌다.
+ *
+ * 셀렉터를 조립하지 않고 속성을 견준다 — 노드 id 는 문서에서 온 임의의 문자열이라 따옴표가 섞이면 셀렉터가 깨진다.
+ */
 export function nodeElement(nodeId: string): HTMLElement | null {
-  return document.body.querySelector<HTMLElement>(`[data-wb-id="${nodeId}"]`)
+  const doc = canvasDocumentOrNull()
+  if (doc === null) return null
+  for (const element of Array.from(doc.querySelectorAll<HTMLElement>('[data-wb-id]'))) {
+    if (element.getAttribute('data-wb-id') === nodeId) return element
+  }
+  return null
 }
 
 /** 있어야 하는 노드. 없으면 그 자리에서 요란하게 깨진다. */
@@ -217,7 +286,8 @@ export function canvasSurface(): HTMLElement {
  * (편집 모드에서만 먹는다. 뷰 모드는 선택을 바꾸지 않는다 — `canvas.tsx`의 `onClick`.)
  */
 export function deselect(): void {
-  fireEvent.click(canvasSurface())
+  // 빈 자리는 iframe 문서의 body 다 — 문서 노드 밖이다.
+  fireEvent.click(canvasDocument().body)
 }
 
 /** 선택 아웃라인. 어느 노드에 붙었는지는 `data-wb-selected-id`가 말한다. */
@@ -232,8 +302,7 @@ export function selectionOutline(): HTMLElement | null {
  * 이 속성을 달지 않으므로 배너가 떠 있어도 값이 흔들리지 않는다.
  */
 export function canvasRootId(): string | null {
-  const surface = document.body.querySelector('.wb-shell-canvas-surface')
-  return surface?.querySelector('[data-wb-id]')?.getAttribute('data-wb-id') ?? null
+  return canvasDocumentOrNull()?.body.querySelector('[data-wb-id]')?.getAttribute('data-wb-id') ?? null
 }
 
 /** 구조 트리가 지금 그리고 있는 노드 타입들. 트리가 없거나 비어 있으면 빈 배열이다. */

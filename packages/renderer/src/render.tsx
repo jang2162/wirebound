@@ -8,8 +8,9 @@ import {
   type InteractionTrigger,
   type WbNode,
 } from '@wirebound/schema'
+import { DEFAULT_VIEWS, type NodeBinding, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { Fragment, type ReactElement, type ReactNode } from 'react'
-import { nodeAttrs, partAttrs, type WbHandlers } from './attrs'
+import { activeStates, nodeAttrs, partAttrs, type WbHandlers } from './attrs'
 import { FallbackNode } from './fallback'
 import {
   hiddenByOverlay,
@@ -19,6 +20,8 @@ import {
   type InteractionResult,
 } from './interaction/runtime'
 import { getStructure } from './structures/registry'
+import { resolveVariant } from './variant'
+import { ViewHost } from './view-host'
 
 export interface RenderOptions {
   /** 컴포넌트 타입 → 구조 이름. 테마가 제공한다. 없으면 카탈로그의 첫 구조를 쓴다. */
@@ -65,6 +68,11 @@ export interface RenderOptions {
    * 정적 번들이 다른 런타임을 갖는다.
    */
   interaction?: InteractionOptions
+  /**
+   * **테마 경로를 켠다.** 주면 노드마다 «테마 뷰 → SDK 기본 뷰» 를 React 컴포넌트로 그리고 `structures` 는 보지 않는다.
+   * 주지 않으면 구조 경로 그대로다 — 내보내기가 그 경로를 쓴다.
+   */
+  theme?: ThemeDefinition
 }
 
 /**
@@ -187,6 +195,9 @@ function childKey(child: unknown, index: number): string {
  * 그 안의 진짜 버그가 "폴백이 떴네"로 위장된다. 이 경로가 남아 있으므로 **캔버스는 이
  * 호출 위에 React Error Boundary를 두어야 한다.** "renderNode는 안 던진다"에만 기대면
  * 구조 구현체 하나의 버그가 캔버스 전체를 흰 화면으로 만든다.
+ *
+ * **테마 경로(`options.theme`)에서는 뷰 본문의 예외를 노드마다 둔 경계가 받아 그 자리에 폴백을 그린다**
+ * (`view-host.tsx`) — 그 폴백은 React 가 뷰를 그릴 때 서므로 동기 `onNodeError` 에는 실리지 않는다.
  */
 export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElement {
   // 상호작용 타겟을 풀려면 **트리 전체**가 필요한데(다른 노드를 가리킨다) 이 진입점이 받는
@@ -272,6 +283,30 @@ function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): React
       `${node.type}의 props가 올바르지 않습니다: ${parsed.error.issues
         .map((issue) => `${issue.path.join('.')} ${issue.message}`)
         .join(', ')}`,
+    )
+  }
+
+  if (options.theme !== undefined) {
+    const fallbackView = DEFAULT_VIEWS[node.type]
+    if (fallbackView === undefined) return fallback(`기본 뷰가 없는 컴포넌트: ${node.type}`)
+    const props = parsed.data as Record<string, unknown>
+    const variant = resolveVariant(def, node, props, options.theme.manifest)
+    const states = activeStates(def, props)
+    const attrs: Record<string, string> = { 'data-wb-id': node.id, 'data-wb-component': node.type }
+    if (variant !== undefined) attrs['data-wb-variant'] = variant
+    if (states.length > 0) attrs['data-wb-state'] = states.join(' ')
+    const binding: Omit<NodeBinding, 'markRootRendered'> = {
+      attrs: options.interaction === undefined ? attrs : { ...attrs, ...handlersFor(root, node, options) },
+    }
+    return (
+      <ViewHost
+        key={node.id}
+        nodeId={node.id}
+        view={options.theme.views[node.type] ?? fallbackView}
+        fallbackView={fallbackView}
+        binding={binding}
+        viewProps={{ nodeId: node.id, type: node.type, props, states, variant, children, slot: options.slot ?? null }}
+      />
     )
   }
 

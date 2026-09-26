@@ -20,7 +20,7 @@
  */
 import type { Page, Route } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session, canvasFrame, canvasText } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -55,7 +55,7 @@ describe.skipIf(!전제.ok)('새로고침으로 채운 되돌리기', () => {
     const { context, page } = await stack.openTab(stack.users.alice)
     try {
       await page.goto(fx.P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '밥' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '밥' }).waitFor()
       await undoOnce(page)
       const landed = await landedOrSkipped(stack, fx, page, 4)
       const after = await stable(page)
@@ -78,7 +78,7 @@ describe.skipIf(!전제.ok)('새로고침으로 채운 되돌리기', () => {
     const { context, page } = await stack.openTab(stack.users.alice)
     try {
       await page.goto(fx.P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '나 고침' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '나 고침' }).waitFor()
       await undoOnce(page)
       const landed = await landedOrSkipped(stack, fx, page, 4)
       // eslint-disable-next-line no-console
@@ -97,12 +97,12 @@ describe.skipIf(!전제.ok)('새로고침으로 채운 되돌리기', () => {
     const held = holdMyRevisions(page)
     try {
       await page.goto(fx.P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '나 고침' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '나 고침' }).waitFor()
       // 서버가 목록을 읽었다(head 2) — 그 답을 붙잡아 둔 채 밥의 편집이 프레임으로 닿게 한다.
       await held.read
       const bobs = await stack.request(fx.bob, 'PATCH', `${fx.P}/ops`, { baseSeq: 2, ops: [{ op: 'add', path: '/root/children/0', value: text('n_bob0000001', '밥') }] })
       expect(bobs.status).toBe(200)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '밥' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '밥' }).waitFor()
       held.release()
       await held.delivered
 
@@ -124,7 +124,7 @@ describe.skipIf(!전제.ok)('새로고침으로 채운 되돌리기', () => {
     const held = holdMyRevisions(page)
     try {
       await page.goto(fx.P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '나 고침' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '나 고침' }).waitFor()
       await held.read
       await page.locator('li button', { hasText: 'Text' }).first().click()
       const box = page.locator('.wb-shell-panel textarea').first()
@@ -203,7 +203,7 @@ describe.skipIf(!전제.ok)('문서 교체가 낀 페이지의 되돌리기', ()
     })
     try {
       await page.goto(fx.P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '나 고침' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '나 고침' }).waitFor()
       const undo = page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
       await poll('되돌리기가 켜진다', async () => undo.isEnabled(), (enabled) => enabled)
       await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -339,7 +339,7 @@ async function server(stack: EditorStack, session: Session, path: string): Promi
 /** 캔버스 글 · 머리 통지가 500ms 동안 안 바뀌면 그 값. */
 async function stable(page: Page): Promise<{ canvas: string; notices: string[] }> {
   const read = async () => ({
-    canvas: (await page.locator('.wb-shell-canvas-frame').innerText()).replace(/\s+/g, ' ').trim(),
+    canvas: (await canvasText(page)).replace(/\s+/g, ' ').trim(),
     notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
   })
   let last = await read()

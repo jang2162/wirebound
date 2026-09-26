@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
 import type { PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
-import { openPage, pageDetail, pageDoc } from '../editor-harness'
+import { openPage, pageDetail, pageDoc, canvasQuery } from '../editor-harness'
 import '../../src/catalog-setup'
 
 const TEXT_ID = 'n-text'
@@ -105,7 +105,7 @@ function redoButton(): HTMLButtonElement {
 }
 
 function canvasTextOf(nodeId: string): string {
-  const node = document.body.querySelector(`[data-wb-id="${nodeId}"]`)
+  const node = canvasQuery(`[data-wb-id="${nodeId}"]`)
   if (node === null) throw new Error(`캔버스에 노드가 없다: ${nodeId}`)
   return node.textContent ?? ''
 }

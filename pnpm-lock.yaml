@@ -106,6 +106,12 @@ importers:
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../../packages/schema
+      '@wirebound/system-theme-admin':
+        specifier: workspace:*
+        version: link:../../system-themes/admin
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../../packages/theme-sdk
       '@wirebound/themes':
         specifier: workspace:*
         version: link:../../packages/themes
@@ -236,10 +242,19 @@ importers:
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../schema
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../theme-sdk
       react:
         specifier: ^19.0.0
         version: 19.2.8
     devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.18
@@ -278,6 +293,34 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/theme-sdk:
+    dependencies:
+      '@wirebound/schema':
+        specifier: workspace:*
+        version: link:../schema
+    devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.4(@types/react@19.2.18)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(tsx@4.23.5)(typescript@5.9.3)
+
   packages/themes:
     dependencies:
       '@wirebound/schema':
@@ -290,6 +333,16 @@ importers:
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(tsx@4.23.5)(typescript@5.9.3)
+
+  system-themes/admin:
+    dependencies:
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../../packages/theme-sdk
+    devDependencies:
+      '@wirebound/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
 
 packages:
 

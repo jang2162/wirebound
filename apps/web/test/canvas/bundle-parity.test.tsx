@@ -19,21 +19,16 @@
  *
  * # 무엇을 견주나
  *
- * 캔버스가 그린 DOM에서 **문서 뿌리 아래**만 떼어 낸다. 셸이 문서 **옆에** 그리는 것
+ * 캔버스가 iframe 안에 그린 DOM에서 **문서 뿌리 아래**만 떼어 낸다. 셸이 문서 **옆에** 그리는 것
  * (선택 아웃라인 · 번호 마커 · 오류 배너)은 번들에 없고 있어서도 안 된다. 그 셸이 문서
  * **안으로** 들어오면(노드를 감싸거나 속성을 얹으면) 여기서 죽는다.
  *
  * # 테마
  *
- * 캔버스는 서버에서 테마를 읽는다(`useProjectTheme`). 그래서 **가짜 api가 주는 테마를
- * 이 파일이 정하고, 같은 것을 `exportPage`에 넘긴다** — 두 경로가 같은 테마를 보게 하는
- * 유일한 방법이다.
- *
- * **`portal`을 고른 것은 판정이다.** 가짜 api의 기본값은 `admin`인데 그 테마는 카탈로그의
- * 첫 구조와 다른 것을 **하나도 안 고른다**(`resolveTheme(systemTheme('admin'))`의 `components`를
- * 카탈로그의 첫 구조와 대조하면 다시 잰다). 그래서 구조 배선이
- * 끊겨도 `admin`으로는 안 죽는다. `portal`은 일곱 자리에서 다른 구조를 고르고,
- * `EntryForm:sectioned`를 고르는 유일한 시스템 테마이기도 하다 — 갈림 ㉡이 난 자리다.
+ * 캔버스는 저장소 테마 `system-admin` 을 SDK 기본 뷰로 그린다(`src/canvas/canvas-theme.ts`). 번들은 아직 구조 경로이고
+ * 옛 JSON 테마를 받는다 — 그래서 번들 쪽에 옛 `admin` 을 넘긴다. **옛 `admin` 은 모든 컴포넌트에 카탈로그의 기본 구조를
+ * 고르므로**(아래 «견주기의 전제» 케이스) 두 경로가 같은 DOM 을 내야 한다 — 기본 뷰가 기본 구조의 바이트 사본이라는
+ * 것을 진짜 캔버스에서 끝에서 끝까지 재는 자리다.
  */
 import { describeTree } from '@wirebound/exporter/test-support'
 import { broadFixture, variantFixture } from '@wirebound/exporter/test-support'
@@ -46,10 +41,11 @@ import {
   type ResolvedTheme,
   type Theme,
 } from '@wirebound/themes'
+import { defaultStructure, listComponents } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
-import { canvasSurface, openPage } from '../editor-harness'
+import { canvasDocument, openPage } from '../editor-harness'
 
-const THEME_ID = 'portal'
+const THEME_ID = 'admin'
 
 function themeDocument(): Theme {
   const theme = systemTheme(THEME_ID)
@@ -65,17 +61,12 @@ function resolved(): ResolvedTheme {
   return theme!
 }
 
-/** 가짜 api가 캔버스에 줄 테마. `useProjectTheme`이 이 꼴을 받는다. */
-function themeOverride(): { themeId: string; theme: Theme; issues: [] } {
-  return { themeId: `system:${THEME_ID}`, theme: themeDocument(), issues: [] }
-}
-
 /**
- * 캔버스가 그린 **문서 뿌리**. 셸의 상자들은 `data-wb-id`를 달지 않으므로 표면 안에서 첫
- * `[data-wb-id]`가 곧 문서의 뿌리다(`editor-harness`의 `canvasRootId`가 같은 근거를 쓴다).
+ * 캔버스가 그린 **문서 뿌리**. iframe 문서 안의 첫 `[data-wb-id]`가 곧 문서의 뿌리다(`editor-harness`의
+ * `canvasRootId`가 같은 근거를 쓴다).
  */
 function canvasDocumentRoot(): Element {
-  const root = canvasSurface().querySelector('[data-wb-id]')
+  const root = canvasDocument().body.querySelector('[data-wb-id]')
   if (root === null) throw new Error('캔버스에 문서가 없습니다')
   return root
 }
@@ -97,9 +88,7 @@ const FIXTURES: [label: string, make: () => PageDocument][] = [
 describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
   it.each(FIXTURES)('%s', async (_label, make) => {
     const document_ = make()
-    await openPage(document_, {
-      apiOverrides: { getProjectTheme: async () => themeOverride() },
-    })
+    await openPage(document_)
 
     expect(describeTree(bundleDocumentRoot(document_, resolved()))).toEqual(
       describeTree(canvasDocumentRoot()),
@@ -107,68 +96,48 @@ describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
   })
 
   /**
-   * **테마가 실제로 캔버스에 닿았는지부터 본다.** 안 닿으면 위 견주기는 두 경로가 나란히
-   * *"테마 없음"*을 그리는 것을 재게 되고, 구조 배선이 끊겨도 통과한다.
-   *
-   * `portal`이 `List`를 `stackedList`로 고르는 것이 그 증거다 — 카탈로그의 첫 구조는
-   * `table`이다.
+   * **견주기의 전제 — 옛 `admin` 은 모든 컴포넌트에 카탈로그의 기본 구조를 고른다.** 이것이 거짓이면 번들은 다른 구조를,
+   * 캔버스는 기본 뷰(= 기본 구조)를 그려 위 견주기가 테마 차이를 재게 된다.
    */
-  it('캔버스가 서버가 준 테마의 구조를 그린다 — 카탈로그 기본이 아니다', async () => {
-    await openPage(broadFixture(), {
-      apiOverrides: { getProjectTheme: async () => themeOverride() },
-    })
-
-    const list = canvasSurface().querySelector('[data-wb-component="List"]')
-    expect(list?.getAttribute('data-wb-structure')).toBe('stackedList')
-    expect(resolved().components.get('List')?.structure).toBe('stackedList')
+  it('견주기의 전제 — 옛 admin 은 모든 컴포넌트에 기본 구조를 고른다', () => {
+    const theme = resolved()
+    for (const def of listComponents()) {
+      expect(theme.components.get(def.type)?.structure ?? defaultStructure(def), def.type).toBe(defaultStructure(def))
+    }
   })
 
   /**
-   * **갈렸던 자리 ㉢ — 캔버스에만 남는 빈 `style` 속성.**
-   *
-   * **이 파일만 보는 갈림이다.** `packages/exporter`의 견주기는 한 번만
-   * 그리므로 이 상태를 만들지 못한다.
-   *
-   * 캔버스는 테마를 **서버에서 늦게** 받는다(`useProjectTheme`의 첫 상태가 `loading`이고
-   * 그때 테마는 `null`이다). 그래서 `Tree`가 먼저 `indent`로 그려지고 — 그 구조는
-   * 단계 변수를 `style`에 싣는다 — 테마가 온 뒤 `accordion`으로 바뀐다. React는 같은
-   * `<li>`를 재사용하며 선언만 지우고 **속성은 남긴다.**
-   *
-   * **선언이 0개이므로 스타일이 다른 것이 아니다.** 원인의 재현은
-   * `packages/exporter/test/parity.test.tsx`의 *"갈렸던 자리 ㉢"*이 구조 전환 하나로 든다.
+   * **`Tree` 노드의 `style` 이 번들과 같다.** 캔버스가 서버 테마를 늦게 받던 때는 첫 그림(기본 구조)과 테마가 온 뒤의
+   * 구조가 달라 React 가 같은 `<li>` 에 빈 `style` 속성을 남겼다. 캔버스가 테마를 처음부터 쥐고 그리므로 그 갈림이 없다.
    */
-  it('캔버스의 Tree 노드에 선언 없는 style이 남는다 — 번들에는 없다', async () => {
-    await openPage(broadFixture(), {
-      apiOverrides: { getProjectTheme: async () => themeOverride() },
-    })
+  it('캔버스의 Tree 노드 style 이 번들과 같다', async () => {
+    await openPage(broadFixture())
 
-    const canvasNode = canvasSurface().querySelector(
+    const canvasNode = canvasDocument().querySelector<HTMLElement>('[data-wb-component="Tree"] > [data-wb-part="node"]')
+    const bundleNode = bundleDocumentRoot(broadFixture(), resolved()).querySelector<HTMLElement>(
       '[data-wb-component="Tree"] > [data-wb-part="node"]',
     )
-    expect(canvasNode?.getAttribute('style')).toBe('')
-
-    const bundleNode = bundleDocumentRoot(broadFixture(), resolved()).querySelector(
-      '[data-wb-component="Tree"] > [data-wb-part="node"]',
-    )
-    expect(bundleNode?.getAttribute('style')).toBeNull()
+    // 글자로 견주지 않는다 — 번들은 SSR 문자열(`--x:0`), 캔버스는 DOM 이 다시 쓴 꼴(`--x: 0;`)이라 같은 선언이 다르게 적힌다.
+    const declarations = (node: HTMLElement | null | undefined) =>
+      node === null || node === undefined ? null : Array.from(node.style, (name) => `${name}=${node.style.getPropertyValue(name).trim()}`)
+    expect(declarations(canvasNode)).toEqual(['--wb-node-tree-level=0'])
+    expect(declarations(canvasNode)).toEqual(declarations(bundleNode))
   })
 
   /**
-   * **문서 뿌리가 캔버스 표면의 **직계 자식**이다 — 아무것도 그것을 감싸지 않는다.**
+   * **문서 뿌리가 iframe 문서 `body` 의 **직계 자식**이다 — 아무것도 그것을 감싸지 않는다.**
    *
    * **이 케이스가 없으면 위 견주기가 감싸개를 못 본다.** 견주기는 뿌리 **아래**만 재므로
    * 캔버스가 문서를 한 겹 감싸도 두 목록이 같다 — 변이 *"캔버스가 트리를 한 겹 감싼다"*를
    * 심으면 견주기는 아무것도 안 죽고, 여기가 그 축을 든다.
    *
-   * 표면 안의 다른 상자들(런타임 알림 · 선택 아웃라인 · 번호 마커)은 문서 **옆**이므로
-   * 형제로 있어도 된다. 지키는 것은 *"문서 위에 한 겹이 끼지 않는다"*이다.
+   * 셸의 장치들(런타임 알림 · 선택 아웃라인 · 번호 마커)은 호스트 문서에 있어 iframe 안에 없다. 지키는 것은
+   * *"문서 위에 한 겹이 끼지 않는다"*이다 — 테마 CSS 의 `body > …` 가 문서 뿌리를 겨냥할 수 있어야 한다.
    */
   it('문서 뿌리를 아무것도 감싸지 않는다', async () => {
-    await openPage(broadFixture(), {
-      apiOverrides: { getProjectTheme: async () => themeOverride() },
-    })
+    await openPage(broadFixture())
 
-    expect(canvasDocumentRoot().parentElement).toBe(canvasSurface())
+    expect(canvasDocumentRoot().parentElement).toBe(canvasDocument().body)
   })
 
   /**
@@ -177,9 +146,7 @@ describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
    * 무엇이 들어왔는지 이름으로 말한다.
    */
   it('문서 뿌리 아래에 셸의 어휘가 없다', async () => {
-    await openPage(broadFixture(), {
-      apiOverrides: { getProjectTheme: async () => themeOverride() },
-    })
+    await openPage(broadFixture())
 
     const root = canvasDocumentRoot()
     const shellAttributes = [...root.querySelectorAll('*')]

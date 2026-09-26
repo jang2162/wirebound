@@ -11,7 +11,7 @@ import type { PageDetail } from '../../src/api/types'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
-import { HEAD_SEQ, PAGE_ID, PROJECT_ID, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
+import { HEAD_SEQ, PAGE_ID, PROJECT_ID, openPage, pageDetail, pageDoc, structureTypes, canvasQuery } from '../editor-harness'
 
 class FakeSocket implements RealtimeSocket {
   onopen: (() => void) | null = null
@@ -158,7 +158,7 @@ describe('리베이스가 버린 나간 편집의 거절', () => {
         }),
     })
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
-    fireEvent.click(document.body.querySelector('[data-wb-id="n-b"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n-b"]') as HTMLElement)
     fireEvent.change(await screen.findByLabelText('새 코멘트'), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await act(async () => {})

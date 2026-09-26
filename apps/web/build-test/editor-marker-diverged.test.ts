@@ -11,7 +11,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session, canvasFrame } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -136,7 +136,7 @@ async function server(stack: EditorStack, s: Session, path: string) {
   return { head: page.headSeq as number, content: (page.schema.root.children ?? []).map((c: any) => `${c.props?.content}${c.marker ? '#' + c.marker : ''}`) }
 }
 async function selectFirstText(page: Page, content: string) {
-  await page.locator('.wb-shell-canvas-frame', { hasText: content }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: content }).waitFor()
   await page.locator('li button', { hasText: 'Text' }).first().click()
   await page.locator('.wb-shell-panel').first().waitFor()
 }

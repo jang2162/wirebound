@@ -1,8 +1,9 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../../src/app'
 import type { SessionUser } from '../../src/api/types'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
+import { canvasQuery } from '../editor-harness'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -89,7 +90,8 @@ describe('라우트 표', () => {
     // 하는 것은 그래서다. 이 문자열은 가짜가 문서에 심어 둔 `Text` 노드의 내용이라,
     // 화면에 나왔다는 것은 `pageId`가 조회까지 갔고 그 응답이 렌더러를 지나 그려졌다는
     // 뜻이다.
-    await screen.findByText('페이지 pg-2')
+    // 문서는 캔버스 iframe 안에 그려져 `screen`(호스트 문서)의 조회에 안 잡힌다.
+    await waitFor(() => expect(canvasQuery('[data-wb-id]')?.ownerDocument.body.textContent).toContain('페이지 pg-2'))
     expect(currentPath()).toBe('/projects/p-1/pages/pg-2')
   })
 })

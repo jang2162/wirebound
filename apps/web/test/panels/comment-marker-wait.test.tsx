@@ -10,7 +10,7 @@ import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
-import { openPage, pageDetail, pageDoc } from '../editor-harness'
+import { openPage, pageDetail, pageDoc, canvasQuery } from '../editor-harness'
 
 const pair = (): PageDocument =>
   pageDoc({
@@ -40,7 +40,7 @@ describe('판정에 머문 번호 쓰기', () => {
       },
     })
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
-    fireEvent.click(document.body.querySelector('[data-wb-id="n-b"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n-b"]') as HTMLElement)
     fireEvent.change(await screen.findByLabelText('새 코멘트'), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     // 보내기도 판정(같은 키로 다시 보내기)도 연결 실패 — «다시 확인»에 머문다.

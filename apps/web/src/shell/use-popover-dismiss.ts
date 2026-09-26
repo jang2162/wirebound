@@ -51,6 +51,15 @@
  * 그래서 `isComposing` 하나만 본다. **막히는 날의 신호는 "조합 중에 Escape가 먹는다"이고,
  * 그때 이 문단을 읽고 229를 더하면 된다.**
  *
+ * ## 캔버스 iframe 의 문서에도 건다
+ *
+ * 캔버스는 iframe 이라 그 안을 누른 `mousedown` · 그 안에 초점이 있을 때의 `keydown` 이 호스트 `document` 로 올라오지 않는다 —
+ * 호스트에만 걸면 팝오버를 연 채 캔버스를 눌러도, 초점이 캔버스에 있는 채 Escape 를 눌러도 안 닫힌다
+ * (`build-test/canvas-iframe-host-events.test.ts`). 그 문서는 `canvas/canvas-document.tsx` 의 통로로 받고, 페이지를 옮겨 iframe 이
+ * 갈리면 의존이 바뀌어 옛 문서의 리스너를 걷고 새 문서에 건다.
+ *
+ * iframe 문서의 이벤트 대상은 **그 창의** `Node` 라 호스트의 `instanceof Node` 가 거짓이다 — 노드인지는 `nodeType` 으로 본다.
+ *
  * ## 열려 있지 않으면 아무것도 걸지 않는다
  *
  * 셸 머리에 팝오버가 둘이라, 닫힌 채로도 거는 구현은 설계서를 여는 것만으로 전역
@@ -58,12 +67,14 @@
  * `test/shell/popover-dismiss.test.tsx`가 등록·해제를 수로 센다.
  */
 import { useEffect, useRef, type RefObject } from 'react'
+import { useCanvasDocument } from '../canvas/canvas-document'
 
 export function usePopoverDismiss<T extends HTMLElement = HTMLDivElement>(
   open: boolean,
   close: () => void,
 ): RefObject<T | null> {
   const ref = useRef<T>(null)
+  const canvasDocument = useCanvasDocument()
 
   /**
    * **마지막 `close`를 ref로 든다.** 부르는 쪽이 인라인 화살표를 넘기면 그것이 렌더마다
@@ -87,8 +98,9 @@ export function usePopoverDismiss<T extends HTMLElement = HTMLDivElement>(
       const box = ref.current
       // `Node`가 아닌 target(창 밖으로 나간 포인터 등)은 `contains`가 판정할 수 없다.
       // 그때 닫지 않는 쪽을 고른다 — 바깥이라고 단정할 근거가 없다.
-      if (box === null || !(event.target instanceof Node)) return
-      if (box.contains(event.target)) return
+      const target = event.target as Node | null
+      if (box === null || target === null || typeof target.nodeType !== 'number') return
+      if (box.contains(target)) return
       latest.current()
     }
 
@@ -105,13 +117,18 @@ export function usePopoverDismiss<T extends HTMLElement = HTMLDivElement>(
       latest.current()
     }
 
-    document.addEventListener('mousedown', onMouseDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown)
-      document.removeEventListener('keydown', onKeyDown)
+    const targets = canvasDocument === null ? [document] : [document, canvasDocument]
+    for (const target of targets) {
+      target.addEventListener('mousedown', onMouseDown)
+      target.addEventListener('keydown', onKeyDown)
     }
-  }, [open])
+    return () => {
+      for (const target of targets) {
+        target.removeEventListener('mousedown', onMouseDown)
+        target.removeEventListener('keydown', onKeyDown)
+      }
+    }
+  }, [open, canvasDocument])
 
   return ref
 }

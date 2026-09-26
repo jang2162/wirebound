@@ -854,6 +854,13 @@
   min-height: inherit;
 }
 
+/* 캔버스 문서를 담는 iframe(`canvas/canvas-iframe.tsx`). 상속 속성은 iframe 경계를 넘지 않으므로 문서에 닿는 것은 없다 —
+   폭 · 높이는 자바스크립트가 인라인으로 준다(뷰포트 프리셋 · 문서 높이). */
+.wb-shell-canvas-iframe {
+  display: block;
+  border: 0;
+}
+
 /* 선택 아웃라인. 문서 노드 위에 겹쳐 그리되 **노드를 건드리지 않는다**(머리말의 «문서 옆에 그리는 셸의 장치는 여기 규칙을 그대로 따른다»).
    자리는 자바스크립트가 인라인 style로 넣는다 — 노드마다 달라지는 값이라 CSS로 쓸 수 없다. */
 .wb-shell-selection {

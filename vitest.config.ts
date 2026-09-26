@@ -12,7 +12,9 @@ const shared = {
   resolve: {
     alias: {
       '@wirebound/schema': src('./packages/schema/src/index.ts'),
+      '@wirebound/theme-sdk': src('./packages/theme-sdk/src/index.ts'),
       '@wirebound/renderer': src('./packages/renderer/src/index.ts'),
+      '@wirebound/system-theme-admin': src('./system-themes/admin/src/index.ts'),
       '@wirebound/themes': src('./packages/themes/src/index.ts'),
       // **더 좁은 것을 먼저 둔다.** rollup의 alias는 `id === find || id.startsWith(find + '/')`로
       // 맞추고 **앞의 것이 이기므로**, 순서를 뒤집으면 `@wirebound/exporter/test-support`가
@@ -59,7 +61,15 @@ export default defineConfig({
         ...shared,
         test: {
           name: 'unit',
-          include: ['packages/*/test/**/*.test.{ts,tsx}', 'apps/playground/test/**/*.test.{ts,tsx}'],
+          include: [
+            'packages/*/test/**/*.test.{ts,tsx}',
+            'apps/playground/test/**/*.test.{ts,tsx}',
+            'system-themes/*/test/**/*.test.{ts,tsx}',
+          ],
+          // 시스템 테마의 `theme.css?raw` 를 실제로 읽는다. 기본값이면 vitest 가 CSS 임포트를 **빈 문자열**로 바꿔
+          // `ADMIN_V0_CSS` 가 비고, CSS 를 재는 케이스가 빈 문자열을 잰다(web 프로젝트의 `css: true` 와 같은 함정).
+          // 이 저장소의 다른 CSS 는 건드리지 않게 그 파일만 고른다.
+          css: { include: [/\/system-themes\/[^/]+\/src\/theme\.css/] },
         },
       },
       {

@@ -12,7 +12,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
-import { openPage, pageDoc } from '../editor-harness'
+import { openPage, pageDoc, canvasQuery } from '../editor-harness'
 import '../../src/catalog-setup'
 
 const DOC = pageDoc({
@@ -265,7 +265,7 @@ describe('속성 패널 — 목록 컨트롤', () => {
     fireEvent.blur(input)
 
     await waitFor(() => expect(calls).toHaveLength(1))
-    const node = document.body.querySelector('[data-wb-id="n-list"]')
+    const node = canvasQuery('[data-wb-id="n-list"]')
     if (node === null) throw new Error('캔버스에 노드가 없다')
     expect(node.textContent).toContain('성명')
   })

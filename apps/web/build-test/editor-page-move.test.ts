@@ -13,7 +13,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Page } from 'playwright-core'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, canvasFrame } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -135,7 +135,7 @@ async function patch(call: Call, path: string, baseSeq: number, ops: unknown[]):
 
 /** 구조 트리에서 글 노드를 골라 속성 칸을 연다 — 캔버스가 그 페이지의 글을 그린 뒤에. */
 async function selectText(page: Page, content: string): Promise<void> {
-  await page.locator('.wb-shell-canvas-frame', { hasText: content }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: content }).waitFor()
   await page.locator('li button', { hasText: 'Text' }).first().click()
   await page.locator('.wb-shell-panel textarea').first().waitFor()
 }

@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import { ApiError } from '../../src/api/client'
 import type { ProjectDetail, ProjectRole } from '../../src/api/types'
-import { OTHER_PAGE_ID, PAGE_ID, PROJECT_ID, PROJECT_NAME, openPage, pageDoc, waitForNode } from '../editor-harness'
+import { OTHER_PAGE_ID, PAGE_ID, PROJECT_ID, PROJECT_NAME, openPage, pageDoc, waitForNode, canvasQuery } from '../editor-harness'
 import { fakeRealtime, type FakeRealtime } from '../fake-realtime'
 import '../../src/catalog-setup'
 
@@ -82,7 +82,7 @@ async function mount(server: Server, docs: Record<string, PageDocument> = {}): P
 }
 
 function pick(nodeId: string): void {
-  const el = document.body.querySelector(`.wb-shell-canvas [data-wb-id="${nodeId}"]`)
+  const el = canvasQuery(`[data-wb-id="${nodeId}"]`)
   if (el === null) throw new Error(`캔버스에 ${nodeId} 가 없다`)
   fireEvent.click(el)
 }

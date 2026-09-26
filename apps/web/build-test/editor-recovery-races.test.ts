@@ -16,7 +16,7 @@
  */
 import type { Page, Route } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session, canvasFrame, canvasText } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -125,7 +125,7 @@ describe.skipIf(!전제.ok)('수습 · 재연결 · 다시 읽기의 겹침', ()
       await box.click()
       await box.fill('2쪽에 친 글')
       await box.evaluate((element) => (element as HTMLElement).blur())
-      await page.locator('.wb-shell-canvas-frame', { hasText: '2쪽에 친 글' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '2쪽에 친 글' }).waitFor()
       // 판이 섰는가 — 1쪽 편집은 아직 행에 서 있고 2쪽 편집은 안 나갔다.
       expect(log.lines.filter((line) => line.startsWith('WS→'))).toEqual(['WS→ patch 1쪽 baseSeq=1'])
       await second.release()
@@ -160,7 +160,7 @@ describe.skipIf(!전제.ok)('수습 · 재연결 · 다시 읽기의 겹침', ()
     try {
       const reads = holdReads(page, fx.P1, log)
       await page.goto(fx.P1)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
       const restored = await stack.request(bob, 'POST', `/projects/${fx.projectId}/snapshots/${snapshot.body.id}/restore`)
       expect(restored.status).toBe(200)
       const reload = page.getByRole('button', { name: '다시 불러오기' })
@@ -310,7 +310,7 @@ function holdReads(page: Page, path: string, log: { lines: string[] }): { arm():
 
 /** 구조 트리에서 첫 글 노드를 골라 속성 칸을 연다 — 캔버스가 그 글을 그린 뒤에. */
 async function selectFirstText(page: Page, content: string) {
-  await page.locator('.wb-shell-canvas-frame', { hasText: content }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: content }).waitFor()
   await page.locator('li button', { hasText: 'Text' }).first().click()
   const box = page.locator('.wb-shell-panel textarea').first()
   await box.waitFor()
@@ -320,7 +320,7 @@ async function selectFirstText(page: Page, content: string) {
 /** 캔버스 글 · 머리 통지가 500ms 동안 안 바뀌면 그 값. */
 async function stable(page: Page): Promise<{ canvas: string; notices: string[] }> {
   const read = async () => ({
-    canvas: (await page.locator('.wb-shell-canvas-frame').innerText()).replace(/\s+/g, ' '),
+    canvas: (await canvasText(page)).replace(/\s+/g, ' '),
     notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
   })
   let last = await read()

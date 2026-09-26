@@ -11,7 +11,7 @@
  */
 import type { Page, Route } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session, canvasFrame, canvasText } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -44,7 +44,7 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
     const log = watch(page, fx)
     try {
       await page.goto(fx.P2)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '2쪽 원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '2쪽 원문' }).waitFor()
       const held = holdNextRead(page, fx.P1, log)
 
       await page.getByRole('link', { name: '첫째' }).click()
@@ -94,7 +94,7 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
       // 실클릭 — blur 가 1쪽 편집을 낸다. 행에 줄 서야 판이 선다.
       await page.getByRole('link', { name: '둘째' }).click()
       await hold.waitForWaiters(1)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '2쪽 원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '2쪽 원문' }).waitFor()
 
       // 1쪽을 다시 연다 — 조회는 곧바로 읽힌다(행 잠금은 읽기를 막지 않는다 · 그 편집의 커밋 앞).
       const held = holdNextRead(page, fx.P1, log)
@@ -143,7 +143,7 @@ describe.skipIf(!전제.ok)('페이지를 여는 조회의 창', () => {
       await page.getByRole('button', { name: '코멘트 달기' }).click()
       await hold.waitForWaiters(1)
       await page.getByRole('link', { name: '둘째' }).click()
-      await page.locator('.wb-shell-canvas-frame', { hasText: '2쪽 원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '2쪽 원문' }).waitFor()
 
       // 1쪽을 다시 연다 — 조회는 게시의 커밋 앞을 읽는다(행 잠금은 읽기를 막지 않는다).
       const held = holdNextRead(page, fx.P1, log)
@@ -258,7 +258,7 @@ function holdNextRead(page: Page, path: string, log: { lines: string[] }): { rea
 
 /** 구조 트리에서 첫 글 노드를 골라 속성 칸을 연다 — 캔버스가 그 글을 그린 뒤에. */
 async function selectFirstText(page: Page, content: string) {
-  await page.locator('.wb-shell-canvas-frame', { hasText: content }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: content }).waitFor()
   await page.locator('li button', { hasText: 'Text' }).first().click()
   const box = page.locator('.wb-shell-panel textarea').first()
   await box.waitFor()
@@ -276,7 +276,7 @@ async function editFirstText(page: Page, current: string, next: string): Promise
 /** 캔버스 글 · 머리 통지가 500ms 동안 안 바뀌면 그 값. */
 async function stable(page: Page): Promise<{ canvas: string; notices: string[] }> {
   const read = async () => ({
-    canvas: (await page.locator('.wb-shell-canvas-frame').innerText()).replace(/\s+/g, ' '),
+    canvas: (await canvasText(page)).replace(/\s+/g, ' '),
     notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
   })
   let last = await read()

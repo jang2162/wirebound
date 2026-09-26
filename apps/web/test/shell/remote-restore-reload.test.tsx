@@ -100,7 +100,7 @@ function reloadButton(): HTMLElement {
 }
 
 describe('남의 복원 배너의 «다시 불러오기»', () => {
-  it('누르면 복원된 판을 다시 읽고 배너가 풀린다 — 테마 선택도 다시 읽는다', async () => {
+  it('누르면 복원된 판을 다시 읽고 배너가 풀린다 — 고르개의 테마 선택도 다시 읽는다', async () => {
     const admin = systemTheme('admin')
     const portal = systemTheme('portal')
     if (admin === undefined || portal === undefined) throw new Error('시스템 테마가 없다')
@@ -118,10 +118,6 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
     })
     const select = screen.getByRole<HTMLSelectElement>('combobox', { name: '테마' })
     await waitFor(() => expect(select.value).toBe('th-admin'))
-    // 고르개는 문서 신호로도 다시 읽는다 — 캔버스의 테마는 테마 신호로만 다시 읽으므로 그쪽을 따로 본다.
-    const sheet = (): string => document.head.querySelector('style[data-wb-style="theme"]')?.textContent ?? ''
-    await waitFor(() => expect(sheet()).not.toBe(''))
-    const before = sheet()
 
     restored = true
     view.push(RESTORED_FRAME)
@@ -134,7 +130,6 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
     await waitForNode('n-after')
     expect(nodeElement('n-before')).toBeNull()
     await waitFor(() => expect(select.value).toBe('th-portal'))
-    await waitFor(() => expect(sheet()).not.toBe(before))
     expect(screen.queryByRole('button', { name: '다시 불러오기' })).toBeNull()
     expect(screen.queryByText(/스냅샷이 복원됐습니다/)).toBeNull()
   })

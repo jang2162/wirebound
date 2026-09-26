@@ -6,12 +6,11 @@
  * 머리말에 있다. 요지는 조회가 실패한 화면 위에서 조용히 통과하는 단언을 만들지 않는
  * 것이다.
  */
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getStructure, registerStructure } from '@wirebound/renderer'
-import { ListDef, defineComponent, registerComponent } from '@wirebound/schema'
+import { Focus, Root, view } from '@wirebound/theme-sdk'
 import type { EditorStore } from '../../src/store/editor-store'
 import {
   CommitProbe,
@@ -19,12 +18,15 @@ import {
   OTHER_PAGE_ROUTE,
   OTHER_PAGE_TITLE,
   PAGE_ID,
-  PROJECT_ID,
   PROJECT_NAME,
   PROJECT_ROUTE,
+  canvasDocument,
   canvasFrame,
   canvasRootId,
   canvasSurface,
+  deselect,
+  docWithText,
+  HEAD_SEQ,
   nodeElement,
   openPage,
   pageDoc,
@@ -32,9 +34,11 @@ import {
   renderEditor,
   requireNode,
   selectionOutline,
+  stackLayout,
   structureTypes,
   waitForNode,
   type CommitObservation,
+  canvasQuery,
 } from '../editor-harness'
 
 /**
@@ -66,113 +70,37 @@ beforeEach(() => {
 })
 
 /**
- * **캔버스가 서버가 준 테마를 싣는가.**
+ * **테마 뷰를 갈아 끼운 판.** 캔버스가 그리는 테마(`src/canvas/canvas-theme.ts`)의 `List` 를 노드 id 로 가른다 —
+ * `n-boom` 은 던지고, `n-focus` 는 `Focus` · `marker` 를 쓰는 뷰로 그린다. 나머지 `List` 는 기본 뷰 그대로라 이 파일의
+ * 다른 케이스는 영향이 없다.
  *
- * 이 절이 없으면 캔버스의 `useThemeCss(useProjectTheme(…))`를 `useThemeCss()`로
- * 바꿔도 **웹 테스트가 전부 통과한다** — 그 배선을 지키는 것이 이 두 케이스다.
- *
- * 서버가 준 테마에만 있는 값을 심어 `<style>`에서 찾는다 — 내장 폴백(`defaultThemeSource`,
- * 시스템 `admin`)에는 없는 값이라 배선이 끊기면 사라진다.
+ * `apps/web` 테스트는 `setupFiles` 가 앱 모듈을 먼저 싣지 않으므로 이 파일 머리의 `vi.mock` 이 닿는다. 닿았는지는
+ * `boom.calls` 로 본다(0 이면 모의가 안 닿은 것이다).
  */
-describe('캔버스와 프로젝트 테마', () => {
-  const MARKER = '#123456'
+const { boom } = vi.hoisted(() => ({ boom: { calls: 0, message: '테마 뷰가 터졌습니다 [A1A-BOOM]' } }))
 
-  const SERVER_THEME = {
-    meta: { id: 'server', name: '서버가 준 것', version: '1.0.0' },
-    components: { Card: { structure: 'plain', base: { bg: MARKER } } },
-  }
-
-  /**
-   * `List`의 **둘째 구현체.** 카탈로그는 `['table','cardGrid','stackedList','mediaList']`를
-   * 선언하고 렌더러가 넷을 다 싣는다 — 테마가 고른 것이 실제로 쓰이는지 보려면 카탈로그의
-   * 첫 구조(`table`)가 아닌 것을 골라야 한다.
-   */
-  const ALT_STRUCTURE = 'cardGrid'
-
-  function listPage() {
-    return pageDoc({
-      id: 'n_root00000001',
-      type: 'Page',
-      children: [{ id: 'n_list00000001', type: 'List', props: { items: 2 } }],
-    })
-  }
-
-  function cardPage() {
-    return pageDoc({
-      id: 'n_root00000001',
-      type: 'Page',
-      children: [{ id: 'n_card00000001', type: 'Card', props: { title: '카드' } }],
-    })
-  }
-
-  function themeCss(): string {
-    return document.head.querySelector('style[data-wb-style="theme"]')?.textContent ?? ''
-  }
-
-  it('서버가 준 테마를 <style>에 싣는다', async () => {
-    await openPage(cardPage(), {
-      apiOverrides: { getProjectTheme: async () => ({ themeId: null, theme: SERVER_THEME, issues: [] }) },
-    })
-
-    await waitFor(() => expect(themeCss()).toContain(MARKER))
-  })
-
-  it('서버가 테마를 주지 않으면 테마 CSS가 비고 문서는 그대로 그려진다', async () => {
-    await openPage(cardPage(), {
-      apiOverrides: { getProjectTheme: async () => ({ themeId: null, theme: null, issues: [] }) },
-    })
-
-    await waitFor(() => expect(themeCss()).toBe(''))
-    expect(requireNode('n_card00000001')).toBeTruthy()
-  })
-
-  /**
-   * **셸이 조회해 온 프로젝트의 id로 요청한다** — `routes/editor.tsx`가 트리·패널에
-   * 넘기는 것과 같은 값이다.
-   *
-   * **이 단언을 `expect.any(String)`으로 넓히지 마라** — 문자열이면 무엇이든 통과하므로
-   * 셸이 엉뚱한 id를 넘겨도 웹 전량이 통과한다. 실제 id로 좁힌다.
-   */
-  it('셸이 조회해 온 프로젝트의 id로 테마를 요청한다', async () => {
-    const getProjectTheme = vi.fn(async () => ({ themeId: null, theme: SERVER_THEME, issues: [] }))
-    await openPage(cardPage(), { apiOverrides: { getProjectTheme } })
-
-    await waitFor(() => expect(getProjectTheme).toHaveBeenCalled())
-    expect(getProjectTheme).toHaveBeenCalledWith(PROJECT_ID)
-  })
-
-  /**
-   * **캔버스가 테마가 고른 구조를 렌더러에 넘기는가.**
-   *
-   * `theme-structures.test.tsx`는 **함수**(`themeStructures`)를 재고, 캔버스가 그 결과를
-   * **쓴다**는 것은 여기서만 잰다 — 이 케이스가 없으면 `structures={themeStructures(theme)}`를
-   * `{}`로 바꿔도 웹 전량이 통과한다.
-   *
-   * 테마가 카탈로그의 첫 구조가 아닌 **둘째 구현체**를 고르게 한다. 배선이 끊기면 렌더러가
-   * 카탈로그의 첫 구조(`table`)로 떨어져 `data-wb-structure`가 갈린다.
-   */
-  it('테마가 고른 구조를 렌더러에 넘긴다', async () => {
-    const themed = {
-      meta: { id: 'structured', name: '구조를 고르는 테마', version: '1.0.0' },
-      components: { List: { structure: ALT_STRUCTURE } },
+vi.mock('../../src/canvas/canvas-theme', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/canvas/canvas-theme')>()
+  const List = actual.CANVAS_THEME.views.List
+  if (List === undefined) throw new Error('캔버스 테마에 List 뷰가 없다')
+  const BoomList = view((props) => {
+    if (props.nodeId === 'n-boom') {
+      boom.calls += 1
+      throw new Error(boom.message)
     }
-    await openPage(listPage(), {
-      apiOverrides: { getProjectTheme: async () => ({ themeId: null, theme: themed, issues: [] }) },
-    })
-
-    await waitFor(() =>
-      expect(requireNode('n_list00000001').getAttribute('data-wb-structure')).toBe(ALT_STRUCTURE),
-    )
+    if (props.nodeId === 'n-focus') {
+      return (
+        <Root marker={{ placement: 'bottom-end', offset: [2, -3] }}>
+          <span>머리</span>
+          <Focus>
+            <div>몸</div>
+          </Focus>
+        </Root>
+      )
+    }
+    return <List {...props} />
   })
-
-  it('테마가 구조를 고르지 않으면 카탈로그의 기본 구조로 그린다', async () => {
-    await openPage(listPage(), {
-      apiOverrides: { getProjectTheme: async () => ({ themeId: null, theme: SERVER_THEME, issues: [] }) },
-    })
-
-    // 위 케이스와 **같은 문서**인데 결과가 갈린다 — 그것이 테마가 실제로 고른다는 증거다.
-    await waitFor(() => expect(requireNode('n_list00000001').getAttribute('data-wb-structure')).toBe('table'))
-  })
+  return { ...actual, CANVAS_THEME: { ...actual.CANVAS_THEME, views: { ...actual.CANVAS_THEME.views, List: BoomList } } }
 })
 
 function shellStore(): EditorStore {
@@ -204,41 +132,6 @@ const DOC = pageDoc({
     },
   ],
 })
-
-/**
- * 본문에서 던지는 구조 구현체. **렌더러가 유일하게 흡수하지 않는 실패 경로**다
- * (`packages/renderer/src/render.tsx` — 감싸면 구현체의 진짜 버그가 "폴백이 떴네"로
- * 위장되므로 일부러 남겼고, 잡는 일은 캔버스 몫이라고 그 주석이 못박고 있다).
- *
- * 카탈로그 정의는 `ListDef`를 그대로 빌려 타입 이름만 바꾼다 — props 스키마를 새로 쓰려면
- * zod가 필요한데 `apps/web`은 zod에 의존하지 않는다.
- */
-const BOOM_TYPE = '터지는구조'
-const BOOM_MESSAGE = '구조 구현체가 터졌습니다 [T9-BOOM]'
-
-// **이름도 갈아야 한다** — `registerComponent`가 겹치는 `label`을 던진다(고르개에서
-// 구별되지 않는 항목 둘이 되는 것을 막는다). 타입 이름을 그대로 쓴다.
-registerComponent(defineComponent({ ...ListDef, type: BOOM_TYPE, label: BOOM_TYPE }))
-registerStructure(BOOM_TYPE, 'table', () => {
-  throw new Error(BOOM_MESSAGE)
-})
-
-/**
- * `List`의 둘째 구현체 — 렌더러가 그것을 싣지 않는 판을 위한 보험이다. 렌더러는
- * `installStructures()`로 `List`의 네 구조를 다 싣고(`packages/renderer/src/structures/data.tsx`),
- * `src/canvas/canvas.tsx`가 `catalog-setup`을 import하므로 그것이 이 파일의 본문보다 먼저
- * 돈다 — 그래서 지금 이 등록은 건너뛴다. `data-wb-structure`는 렌더러가 붙이므로 본문은
- * 최소로 둔다.
- *
- * **이미 있으면 등록하지 않는다.** `registerStructure`는 중복 등록에 **던지고**, 이 줄은
- * 모듈 평가 시점에 돈다 — 가드를 빼면 `installStructures()`가 이미 실은 `List:cardGrid`와
- * 겹쳐 이 파일이 통째로 죽는다(케이스 하나가 아니라 파일 전체다). **본문이 렌더러의 것이어도
- * 위 케이스는 성립한다** — 재는 것이 `data-wb-structure` 속성 하나이고 그 속성은 렌더러가
- * 붙인다.
- */
-if (!getStructure('List', 'cardGrid')) {
-  registerStructure('List', 'cardGrid', ({ attrs }) => <div {...attrs} />)
-}
 
 /** 오류 경계가 도는 동안의 콘솔 출력을 막는다. React와 경계가 각각 한 번씩 찍는다. */
 function silenceConsoleError(): ReturnType<typeof vi.spyOn> {
@@ -387,7 +280,7 @@ describe('캔버스', () => {
     await screen.findByRole('heading', { name: PROJECT_NAME })
 
     screen.getByText('왼쪽 트리에서 페이지를 고르세요')
-    expect(document.body.querySelector('[data-wb-component]')).toBeNull()
+    expect(canvasQuery('[data-wb-component]')).toBeNull()
 
     // 양성 대조: 페이지를 열면 같은 자리에 문서가 그려진다. 이것이 없으면 캔버스가
     // 아무것도 그리지 못하는 구현도 위 단언을 통과한다.
@@ -408,6 +301,101 @@ describe('캔버스', () => {
     expect(selectionOutline()).toBeNull()
   })
 
+  it('문서는 iframe 안에, 외곽선은 호스트에 그린다', async () => {
+    await openPage(docWithText('t1', '안'))
+    fireEvent.click(requireNode('t1'))
+    expect(canvasDocument().querySelector('[data-wb-id="t1"]')).not.toBeNull()
+    expect(document.querySelector('[data-wb-id="t1"]')).toBeNull()
+    await waitFor(() => expect(selectionOutline()?.getAttribute('data-wb-selected-id')).toBe('t1'))
+    expect(canvasDocument().querySelector('[data-wb-selected-id]')).toBeNull()
+  })
+
+  it('iframe 의 head 에 base · theme 스타일이 차례로 있다 — 호스트 head 에는 테마가 없다', async () => {
+    await openPage(docWithText('t1', '안'))
+    const styles = [...canvasDocument().head.querySelectorAll('style[data-wb-style]')]
+    expect(styles.map((style) => style.getAttribute('data-wb-style'))).toEqual(['base', 'theme'])
+    // 저장소 테마의 CSS 가 실렸다 — 빈 시트로는 이 이름이 없다.
+    expect(styles[1]?.textContent).toContain('--wb-semantic-primary')
+    expect(document.head.querySelector('style[data-wb-style="theme"]')).toBeNull()
+  })
+
+  it('iframe 의 빈 자리 클릭은 선택을 푼다', async () => {
+    await openPage(docWithText('t1', '안'))
+    fireEvent.click(requireNode('t1'))
+    await waitFor(() => expect(selectionOutline()).not.toBeNull())
+
+    deselect()
+
+    await waitFor(() => expect(selectionOutline()).toBeNull())
+    expect(shellStore().getState().selectedNodeId).toBeNull()
+  })
+
+  it('따옴표 · 공백이 든 id 도 고른다', async () => {
+    await openPage(docWithText('t"1 x', '안'))
+    fireEvent.click(requireNode('t"1 x'))
+    await waitFor(() => expect(selectionOutline()?.getAttribute('data-wb-selected-id')).toBe('t"1 x'))
+  })
+
+  it('편집 뒤 외곽선이 새 자리에 선다 — 선택은 그대로다', async () => {
+    const doc = pageDoc({
+      id: 'root',
+      type: 'Page',
+      children: [
+        { id: 't0', type: 'Text', props: { content: '앞' } },
+        { id: 't1', type: 'Text', props: { content: '뒤' } },
+      ],
+    })
+    let seq = HEAD_SEQ
+    await openPage(doc, {
+      apiOverrides: {
+        patchOps: async (_projectId, _pageId, body) => {
+          seq += 1
+          return { seq, revisionId: `rev-${seq}`, inverse: [], schemaVersion: 1, ...(body.clientOpId === undefined ? {} : { clientOpId: body.clientOpId }) }
+        },
+      },
+    })
+    const restore = stackLayout(canvasDocument())
+    try {
+      fireEvent.click(requireNode('t1'))
+      // 문서 순서: root 0 · t0 1 · t1 2 — 한 칸이 20px 이다.
+      await waitFor(() => expect(selectionOutline()?.style.top).toBe('40px'))
+
+      fireEvent.click(within(screen.getByRole('group', { name: '구조 편집' })).getByRole('button', { name: '위로' }))
+
+      await waitFor(() => expect(selectionOutline()?.style.top).toBe('20px'))
+      expect(selectionOutline()?.getAttribute('data-wb-selected-id')).toBe('t1')
+    } finally {
+      restore()
+    }
+  })
+
+  it('외곽선은 뷰의 Focus 를 감싸고, 마커는 뷰가 정한 자리에 선다', async () => {
+    const doc = pageDoc({
+      id: 'root',
+      type: 'Page',
+      children: [{ id: 'n-focus', type: 'List', props: {}, marker: 1 }],
+    })
+    await openPage(doc)
+    const restore = stackLayout(canvasDocument())
+    try {
+      // 레이아웃이 바뀐 것을 iframe 이 다시 재게 한다 — 실브라우저에서는 `ResizeObserver` 가 부르는 자리다. 마커 이펙트는
+      // 선택을 안 보므로 이 신호(`measureTick`)가 없으면 옛 자리에 남는다.
+      await act(async () => {
+        canvasDocument().defaultView!.dispatchEvent(new Event('wb-canvas-measure'))
+      })
+      fireEvent.click(requireNode('n-focus'))
+      // n-focus 는 문서 순서 1 번(상자 top 20). Focus 상자는 `stackLayout` 이 left 10 · top +5 · 50 × 10 으로 준다.
+      await waitFor(() => expect(selectionOutline()?.style.top).toBe('25px'))
+      const outline = selectionOutline()!
+      expect([outline.style.left, outline.style.width, outline.style.height]).toEqual(['10px', '50px', '10px'])
+      // bottom-end + [2, -3]: x = 10 + 50 + 2, y = 25 + 10 - 3.
+      const marker = document.querySelector<HTMLElement>('.wb-shell-marker[data-wb-marker-for="n-focus"]')
+      expect([marker?.style.left, marker?.style.top]).toEqual(['62px', '32px'])
+    } finally {
+      restore()
+    }
+  })
+
   it('id를 잃은 폴백을 눌러도 빈 id가 선택되지 않는다', async () => {
     // id가 없는 값. 렌더러의 모양 가드가 흡수해 `data-wb-id=""`인 폴백이 된다.
     const broken = pageDoc({
@@ -417,7 +405,7 @@ describe('캔버스', () => {
     })
     await openPage(broken)
 
-    const orphan = document.body.querySelector('[data-wb-id=""]')
+    const orphan = canvasQuery('[data-wb-id=""]')
     if (orphan === null) throw new Error('id 없는 폴백을 찾지 못했습니다')
     fireEvent.click(orphan)
 
@@ -497,46 +485,36 @@ describe('캔버스', () => {
 })
 
 /**
- * 렌더러가 **캔버스에 요구하는** 두 케이스다 —
- * 경계가 없으면 구조 구현체 하나의 예외가 앱 트리를 통째로 흰 화면으로 만든다.
+ * **테마 뷰 하나가 던져도 캔버스가 산다.** 뷰 본문의 예외는 렌더러가 노드마다 둔 경계가 그 자리에 가둔다
+ * (`packages/renderer/src/view-host.tsx`) — 그 노드만 폴백이고 형제 · 선택 · 셸은 산다.
  */
 describe('캔버스의 오류 경계', () => {
   const BOOM_DOC = pageDoc({
     id: 'n-root',
     type: 'Page',
-    children: [{ id: 'n-boom', type: BOOM_TYPE }],
+    children: [
+      { id: 'n-boom', type: 'List', props: { items: 1 } },
+      { id: 'n-alive', type: 'Text', props: { content: '산다' } },
+    ],
   })
 
-  it('구조 구현체가 던져도 셸은 살아 있다', async () => {
+  it('테마 뷰가 던져도 캔버스가 산다 — 그 노드만 폴백이다', async () => {
     const logged = silenceConsoleError()
     try {
-      renderEditor({ docs: { [PAGE_ID]: BOOM_DOC } })
-      await screen.findByRole('heading', { name: PROJECT_NAME })
+      boom.calls = 0
+      await openPage(BOOM_DOC)
+      await waitForNode('n-alive')
 
-      // 던진 문장을 그대로 보여 준다. 원인을 감추면 무엇이 터졌는지 알 길이 없다.
-      const alert = await screen.findByRole('alert')
-      expect(alert.textContent).toContain(BOOM_MESSAGE)
-      // 셸의 나머지가 살아 있다. 경계가 없으면 여기까지 함께 사라진다.
+      expect(boom.calls).toBeGreaterThan(0)
+      // 던진 문장을 그 노드 자리에 보여 준다. 원인을 감추면 무엇이 터졌는지 알 길이 없다.
+      expect(requireNode('n-boom').getAttribute('data-wb-error')).toContain(boom.message)
+      expect(requireNode('n-alive').textContent).toBe('산다')
+      // 폴백도 `data-wb-id` 를 달아 고를 수 있다.
+      fireEvent.click(requireNode('n-boom'))
+      expect(shellStore().getState().selectedNodeId).toBe('n-boom')
+      // 셸의 나머지가 살아 있다.
       screen.getByRole('navigation', { name: '메뉴와 구조' })
       screen.getByRole('complementary', { name: '우측 패널' })
-      expect(logged.mock.calls.length).toBeGreaterThan(0)
-    } finally {
-      logged.mockRestore()
-    }
-  })
-
-  it('다른 페이지를 열면 다시 그려 본다', async () => {
-    const logged = silenceConsoleError()
-    try {
-      const other = pageDoc({ id: 'n-other', type: 'Page' })
-      renderEditor({ docs: { [PAGE_ID]: BOOM_DOC, [OTHER_PAGE_ID]: other } })
-      await screen.findByText('이 페이지를 그리지 못했습니다')
-
-      fireEvent.click(screen.getByRole('link', { name: OTHER_PAGE_TITLE }))
-
-      // 경계가 자기 상태를 되돌리지 않으면 멀쩡한 페이지도 오류 문장 아래 갇힌다.
-      await waitForNode('n-other')
-      expect(screen.queryByText('이 페이지를 그리지 못했습니다')).toBeNull()
     } finally {
       logged.mockRestore()
     }

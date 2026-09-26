@@ -25,6 +25,7 @@ import {
   pageDetail,
   pageDoc,
   waitForNode,
+  canvasQueryAll,
 } from '../editor-harness'
 import '../../src/catalog-setup'
 
@@ -69,7 +70,7 @@ function redoButton(): HTMLButtonElement {
 }
 
 function contents(): string[] {
-  return [...document.body.querySelectorAll('[data-wb-id^="n-"]')]
+  return canvasQueryAll('[data-wb-id^="n-"]')
     .filter((node) => node.getAttribute('data-wb-id') !== 'n-root')
     .map((node) => node.textContent ?? '')
 }

@@ -27,12 +27,18 @@
  * - **`Enter`** — 기본값. **두 번 누르기의 키보드 짝이다.** 표준이 정한 키는 아니지만,
  *   이것이 없으면 키보드 사용자만 기본값으로 돌아갈 길이 없다. `title`이 그 셋을 말한다.
  *
- * # 드래그를 `window`에서 듣는다
+ * # 드래그를 `window`에서 듣고, 포인터를 손잡이에 붙잡는다
  *
- * `setPointerCapture`가 아니라 `window` 리스너인 것은 두 가지 때문이다. 포인터가 캔버스
- * 위로 나가도 계속 따라와야 하고(캡처도 그 일을 한다), **jsdom에 `setPointerCapture`가
- * 없다**(캡처만 쓰면 테스트에서 드래그 경로가 통째로 죽는다). `window` 리스너는 양쪽에서
- * 같은 코드가 돈다.
+ * **캔버스는 iframe 이다** — 포인터가 캔버스 위로 나가면 `pointermove` · `pointerup` 이 iframe 문서로 가서 호스트 `window` 에
+ * 안 닿는다(폭이 그 자리에서 멈추고, 캔버스 위에서 놓으면 드래그가 붙은 채 남는다 — `build-test/canvas-iframe-host-events.test.ts`).
+ * 그래서 누르는 순간 `setPointerCapture` 로 포인터를 손잡이에 붙잡는다 — 그 뒤의 포인터 이벤트는 iframe 위에서도 손잡이로 와서
+ * `window` 까지 올라간다.
+ *
+ * **드래그 동안 iframe 에 `pointer-events: none` 을 거는 길을 고르지 않았다** — 손잡이가 캔버스 iframe 을 찾아야 해(클래스
+ * 이름이 배선이 된다) 셸의 다른 조각을 알게 되고, 캔버스 말고 다른 iframe 이 생기면 그것도 세야 한다. 캡처는 손잡이 하나로 끝난다.
+ *
+ * **듣는 자리는 그대로 `window` 다.** jsdom 에 `setPointerCapture` 가 없어(부르지 않고 넘어간다) 캡처에만 기대면 테스트의 드래그
+ * 경로가 통째로 죽는다. 캡처된 이벤트도 손잡이에서 `window` 로 버블링하므로 두 판에서 같은 리스너가 돈다.
  *
  * `preventDefault()`는 드래그가 **글자 선택으로 새는 것**을 막는다. 대신
  * `user-select: none`을 얹지 않는 것은 그것이 상속 속성이라 셸의 감싸는 상자에 걸 수 없기
@@ -77,6 +83,9 @@ export function ShellResizer(props: ShellResizerProps): ReactElement {
       // 주 버튼만. 오른쪽·가운데 버튼으로 시작한 드래그는 사람이 뜻한 것이 아니다.
       if (event.button !== 0) return
       event.preventDefault()
+      // 캔버스 iframe 위로 나가도 포인터 이벤트가 이 손잡이로 오게 한다(머리말). 놓으면 브라우저가 스스로 푼다.
+      const handle = event.currentTarget
+      if (typeof handle.setPointerCapture === 'function') handle.setPointerCapture(event.pointerId)
 
       const start = axisOf(orientation, event)
       const from = onGrab()

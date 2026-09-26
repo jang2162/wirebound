@@ -18,7 +18,7 @@ import type { PageDocument } from '@wirebound/schema'
 import type { Comment, ProjectDetail } from '../../src/api/types'
 import { VIEWER_NOTICE } from '../../src/panels/property-panel'
 import { openDraftStore } from '../../src/panels/draft-store'
-import { openPage, pageDoc, PROJECT_ID, PROJECT_NAME, type EditorOptions } from '../editor-harness'
+import { openPage, pageDoc, PROJECT_ID, PROJECT_NAME, type EditorOptions, canvasQuery } from '../editor-harness'
 import { fakeRealtime, type FakeRealtime } from '../fake-realtime'
 import '../../src/catalog-setup'
 
@@ -106,7 +106,7 @@ async function openAsViewer(how: How = '새로 연 viewer', options: EditorOptio
 }
 
 function pick(nodeId: string): void {
-  const el = document.body.querySelector(`.wb-shell-canvas [data-wb-id="${nodeId}"]`)
+  const el = canvasQuery(`[data-wb-id="${nodeId}"]`)
   if (el === null) throw new Error(`캔버스에 ${nodeId} 가 없다`)
   fireEvent.click(el)
 }

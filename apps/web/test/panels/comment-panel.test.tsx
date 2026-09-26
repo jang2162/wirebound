@@ -29,6 +29,7 @@ import {
   PROJECT_NAME,
   renderEditor,
   waitForNode,
+  canvasQuery,
 } from '../editor-harness'
 
 /** 하네스가 세션으로 내는 사용자. 내 코멘트와 남의 코멘트를 가른다. */
@@ -195,7 +196,7 @@ describe('코멘트 탭 — 번호는 문서에서 온다', () => {
     await waitFor(() => expect(groupTitles()).toHaveLength(2))
 
     // 캔버스에서 `n_c`를 고른다.
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_c"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_c"]') as HTMLElement)
 
     await waitFor(() => {
       const current = document.body.querySelector('.wb-shell-comment-group[aria-current="true"]')
@@ -229,7 +230,7 @@ describe('코멘트 달기 — 문서가 함께 움직인다', () => {
     await openCommentTab()
     expect(canvasMarkers()).toEqual({})
 
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
 
@@ -265,7 +266,7 @@ describe('코멘트 달기 — 문서가 함께 움직인다', () => {
     })
     await openCommentTab()
 
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '잃으면 안 되는 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
 
@@ -430,7 +431,7 @@ describe('문서에 얹지 못했을 때 — 버리지 않고 말한다', () => 
     })
     await openCommentTab()
 
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
 
@@ -458,7 +459,7 @@ describe('문서에 얹지 못했을 때 — 버리지 않고 말한다', () => 
     })
     await openCommentTab()
 
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     fireEvent.change(screen.getByLabelText('새 코멘트'), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
 
@@ -656,7 +657,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
   it('새 코멘트 초안이 탭을 오가도 남는다', async () => {
     await openPage(pageDoc(three({})), { apiOverrides: { listComments: async () => [] } })
     await openCommentTab()
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     typeInto(await findNewBox(), '쓰던 코멘트')
 
     toPropsTab()
@@ -692,7 +693,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
     const api = heldComments()
     await openPage(pageDoc(three({})), { apiOverrides: api.overrides })
     await openCommentTab()
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     typeInto(await findNewBox(), '한 번만 달 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
@@ -718,7 +719,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
     const api = heldComments()
     await openPage(pageDoc(three({})), { apiOverrides: api.overrides })
     await openCommentTab()
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     typeInto(await findNewBox(), '방금 단 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
@@ -743,7 +744,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
       apiOverrides: api.overrides,
     })
     await openCommentTab()
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     typeInto(await findNewBox(), '앞 페이지에 단 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
@@ -770,7 +771,7 @@ describe('탭·페이지를 오가도 쓰던 말이 제자리에 있다', () => 
       apiOverrides: api.overrides,
     })
     await openCommentTab()
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     typeInto(await findNewBox(), '앞에 단 말')
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await waitFor(() => expect(api.created).toHaveLength(1))
@@ -894,7 +895,7 @@ describe('새 코멘트는 쓴 노드에만 달린다', () => {
       },
     })
     const pick = (key: 'a' | 'b' | 'c'): void => {
-      fireEvent.click(document.body.querySelector(`[data-wb-id="n_${key}"]`) as HTMLElement)
+      fireEvent.click(canvasQuery(`[data-wb-id="n_${key}"]`) as HTMLElement)
     }
     await openCommentTab()
     pick('a')
@@ -948,7 +949,7 @@ describe('달 곳 — 폼이 어느 노드에 다는지 말한다', () => {
     await openPage(pageDoc(three({ b: 2 })), { apiOverrides: { listComments: async () => [] } })
     await openCommentTab()
     const pick = (key: 'a' | 'b'): void => {
-      fireEvent.click(document.body.querySelector(`[data-wb-id="n_${key}"]`) as HTMLElement)
+      fireEvent.click(canvasQuery(`[data-wb-id="n_${key}"]`) as HTMLElement)
     }
     pick('a')
     typeInto(await findNewBox(), '가에 대해')

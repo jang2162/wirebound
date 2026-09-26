@@ -15,6 +15,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState, type ReactElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { CanvasDocumentProvider, usePublishCanvasDocument } from '../../src/canvas/canvas-document'
 import { usePopoverDismiss } from '../../src/shell/use-popover-dismiss'
 
 /**
@@ -180,6 +181,55 @@ describe('팝오버 닫기', () => {
 
     add.mockRestore()
     remove.mockRestore()
+  })
+})
+
+/** 캔버스가 iframe 문서를 싣는 자리의 흉내 — 셸에서는 `canvas/canvas.tsx` 가 싣는다. */
+function Publisher(props: { doc: Document | null }): null {
+  usePublishCanvasDocument(props.doc)
+  return null
+}
+
+/**
+ * **캔버스 iframe 문서도 바깥이다.** iframe 안의 `mousedown` · `keydown` 은 호스트 `document` 로 올라오지 않으므로 그 문서에도
+ * 따로 건다. 실브라우저 판은 `build-test/canvas-iframe-host-events.test.ts` 가 잰다 — 여기서는 문서가 **갈릴 때** 옛 문서의 것을
+ * 걷고 새 문서에 거는지를 본다(페이지를 옮기면 iframe 이 새로 선다).
+ */
+describe('팝오버 닫기 — 캔버스 iframe 문서', () => {
+  it('캔버스 문서 안의 누름 · Escape 가 닫고, 문서가 갈리면 새 문서에서 닫는다', () => {
+    // 창이 있는 문서여야 한다 — `fireEvent` 가 그 창의 이벤트 생성자를 쓴다.
+    const frames = [0, 1].map(() => document.body.appendChild(document.createElement('iframe')))
+    const [first, second] = frames.map((frame) => frame.contentDocument!) as [Document, Document]
+    const firstAdd = vi.spyOn(first, 'addEventListener')
+    const firstRemove = vi.spyOn(first, 'removeEventListener')
+    const view = (doc: Document) => (
+      <CanvasDocumentProvider>
+        <Publisher doc={doc} />
+        <Host />
+      </CanvasDocumentProvider>
+    )
+    const { rerender } = render(view(first))
+    const open = () => fireEvent.click(screen.getByRole('button', { name: '토글' }))
+
+    open()
+    fireEvent.mouseDown(first.body)
+    expect(isOpen()).toBe(false)
+
+    open()
+    fireEvent.keyDown(first.body, { key: 'Escape' })
+    expect(isOpen()).toBe(false)
+
+    // 연 채로 iframe 이 갈린다.
+    open()
+    rerender(view(second))
+    fireEvent.mouseDown(first.body)
+    expect(isOpen()).toBe(true)
+    fireEvent.mouseDown(second.body)
+    expect(isOpen()).toBe(false)
+    // 옛 문서에 건 것은 다 걷혔다.
+    expect(kinds(firstRemove)).toEqual(kinds(firstAdd))
+    cleanup()
+    for (const frame of frames) frame.remove()
   })
 })
 

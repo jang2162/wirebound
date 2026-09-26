@@ -15,7 +15,7 @@
 import net from 'node:net'
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session, canvasFrame, canvasText } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -67,7 +67,7 @@ describe.skipIf(!전제.ok)('되살린 페이지의 번호', () => {
     const log = watch(page)
     try {
       await page.goto(P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '다' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '다' }).waitFor()
       // 판이 섰는가 — 앨리스가 WS 로 붙어 있었고, 끊은 것이 그 연결이다.
       await poll('앨리스의 WS 가 붙는다', async () => refusal.live(), (live) => live >= 1)
       expect(refusal.refuse()).toBeGreaterThanOrEqual(1)
@@ -146,8 +146,8 @@ describe.skipIf(!전제.ok)('되살린 페이지의 번호', () => {
     try {
       await a.page.goto(P)
       await b.page.goto(P)
-      await a.page.locator('.wb-shell-canvas-frame', { hasText: '나' }).waitFor()
-      await b.page.locator('.wb-shell-canvas-frame', { hasText: '나' }).waitFor()
+      await canvasFrame(a.page).locator('body', { hasText: '나' }).waitFor()
+      await canvasFrame(b.page).locator('body', { hasText: '나' }).waitFor()
 
       await a.page.locator('li button', { hasText: 'Text' }).nth(1).click()
       const box = a.page.locator('.wb-shell-panel textarea').first()
@@ -157,12 +157,12 @@ describe.skipIf(!전제.ok)('되살린 페이지의 번호', () => {
       await box.evaluate((element) => (element as HTMLElement).blur())
       const edited = await poll('편집이 서버에 닿는다', () => server(stack, alice, P), (value) => value.head === floor + 1)
       expect(edited.content).toEqual(['가', '큰 번호 고침'])
-      await b.page.locator('.wb-shell-canvas-frame', { hasText: '큰 번호 고침' }).waitFor()
+      await canvasFrame(b.page).locator('body', { hasText: '큰 번호 고침' }).waitFor()
       // 앨리스의 ack 가 제 판을 머리로 두었다 — 낡음 · 거절 통지가 없다.
       expect(await stable(a.page)).toEqual({ canvas: '가 큰 번호 고침', notices: [] })
 
       await a.page.reload()
-      await a.page.locator('.wb-shell-canvas-frame', { hasText: '큰 번호 고침' }).waitFor()
+      await canvasFrame(a.page).locator('body', { hasText: '큰 번호 고침' }).waitFor()
       const undo = a.page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
       await poll('새로고침으로 채운 되돌리기가 켜진다', async () => undo.isEnabled(), (enabled) => enabled)
       await undo.click()
@@ -216,7 +216,7 @@ describe.skipIf(!전제.ok)('서버 이력으로 채운 되돌리기', () => {
     const { context, page } = await stack.openTab(stack.users.alice)
     try {
       await page.goto(P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '나 고침' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '나 고침' }).waitFor()
       const undo = page.getByRole('group', { name: '편집 이력' }).getByRole('button', { name: '되돌리기' })
       // 새로고침으로 채운 스택이 섰다(세션 안에서 아무것도 안 고쳤다).
       await poll('되돌리기가 켜진다', async () => undo.isEnabled(), (enabled) => enabled)
@@ -226,7 +226,7 @@ describe.skipIf(!전제.ok)('서버 이력으로 채운 되돌리기', () => {
         ops: [{ op: 'add', path: '/root/children/0', value: text('n_bob0000001', '밥') }],
       })
       expect(bobs.status).toBe(200)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '밥' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '밥' }).waitFor()
 
       await undo.click()
       const landed = await poll('되돌리기가 서버에 닿는다', () => server(stack, alice, P), (value) => value.head === 4)
@@ -331,7 +331,7 @@ function startWsRefusal(targetPort: string): Promise<{ origin: string; live(): n
 /** 캔버스 글 · 머리 통지가 500ms 동안 안 바뀌면 그 값. */
 async function stable(page: Page): Promise<{ canvas: string; notices: string[] }> {
   const read = async () => ({
-    canvas: (await page.locator('.wb-shell-canvas-frame').innerText()).replace(/\s+/g, ' ').trim(),
+    canvas: (await canvasText(page)).replace(/\s+/g, ' ').trim(),
     notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
   })
   let last = await read()

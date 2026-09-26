@@ -10,7 +10,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session, canvasFrame } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -81,7 +81,7 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
       await box.click()
       await box.fill('E2 쌓인 글')
       await box.evaluate((element) => (element as HTMLElement).blur())
-      await page.locator('.wb-shell-canvas-frame', { hasText: 'E2 쌓인 글' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: 'E2 쌓인 글' }).waitFor()
 
       await page.getByRole('button', { name: '로그아웃' }).click()
       await new Promise((resolve) => setTimeout(resolve, 300))
@@ -115,7 +115,7 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
         await box.click()
         await box.fill('쌓인 글')
         await box.evaluate((element) => (element as HTMLElement).blur())
-        await page.locator('.wb-shell-canvas-frame', { hasText: '쌓인 글' }).waitFor()
+        await canvasFrame(page).locator('body', { hasText: '쌓인 글' }).waitFor()
 
         const clicked = Date.now()
         await page.getByRole('button', { name: '로그아웃' }).click()
@@ -232,7 +232,7 @@ async function server(stack: EditorStack, session: Session, path: string): Promi
 }
 
 async function selectFirstText(page: Page, content: string) {
-  await page.locator('.wb-shell-canvas-frame', { hasText: content }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: content }).waitFor()
   await page.locator('li button', { hasText: 'Text' }).first().click()
   const box = page.locator('.wb-shell-panel textarea').first()
   await box.waitFor()
