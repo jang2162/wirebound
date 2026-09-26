@@ -351,7 +351,8 @@ describe('복원', () => {
     await openConfirm(client)
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
 
-    await waitFor(() => expect(restore).toHaveBeenCalledWith(PROJECT_ID, 's7'))
+    // 셋째 인자는 이 탭이 지은 복원 id 다(`RestoreOptions` — 신호를 알아보는 값).
+    await waitFor(() => expect(restore).toHaveBeenCalledWith(PROJECT_ID, 's7', { clientRestoreId: expect.any(String) }))
   })
 
   /**

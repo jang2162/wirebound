@@ -87,14 +87,29 @@ export function notifyPageChanged(app: FastifyInstance, input: PageChangedInput)
     })
 }
 
+/**
+ * 복원을 낸 탭이 그 요청에 붙인 id(`protocol.ts`의 `restored` 프레임의 `clientRestoreId`). 탭이 지은 무작위 값이고 서버는 저장하지 않고
+ * 프레임에 되돌려 줄 뿐이다 — `page-changed`의 `clientOpId`와 같은 부류다(복원은 본문이 없어 머리로 싣는다).
+ */
+export const RESTORE_ID_HEADER = 'x-wb-restore-id'
+
+/** 룸의 모두에게 되비치는 값이라 글자와 길이를 묶는다 — 벗어나면 안 실은 것으로 본다(`broadcastOrigin`이 틀린 연결 id 를 버리는 것과 같다). */
+const RESTORE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+
+/** 요청이 실은 복원 id. 없거나 꼴이 틀리면 `undefined`다 — 프레임에 안 실린다. */
+export function clientRestoreId(request: FastifyRequest): string | undefined {
+  const raw = request.headers[RESTORE_ID_HEADER]
+  return typeof raw === 'string' && RESTORE_ID_PATTERN.test(raw) ? raw : undefined
+}
+
 export interface RestoredInput {
   projectId: string
   snapshotId: string
   /** 그 복원이 만든 안전망 스냅샷(`protocol.ts`의 그 필드). */
   safetySnapshotId: string
   actor: EventActor
-  /** 방송에서 뺄 발신 연결(`broadcastOrigin`). 없으면 아무도 안 뺀다. */
-  origin?: BroadcastOrigin
+  /** 낸 탭이 붙인 복원 id(`clientRestoreId`). **있을 때만 프레임에 실린다.** */
+  clientRestoreId?: string
 }
 
 /**
@@ -107,11 +122,16 @@ export interface RestoredInput {
  * 있어 그 자리에서 알리면 커밋 전이고, 페이지마다 프레임을 내면 받는 쪽이 그것을 평범한
  * 편집으로 읽어 하나씩 적용하려 든다 — 복원은 페이지가 사라지고 생기기도 하는 사건이라
  * ops로 표현되지 않는다. **한 프레임으로 *"판이 갈렸다"*를 말하고 받는 쪽이 다시 읽는다.**
+ *
+ * **낸 사람의 연결도 빼지 않는다** — 편집의 방송(`notifyPageChanged`)과 다른 점이다. 복원의 답을 잃으면 낸 탭은 서버가 복원했는지 모르고,
+ * 커밋이 그 탭의 다시 읽기보다 늦으면 이 신호만이 화면이 낡았다는 것을 안다(`apps/web/build-test/editor-restore-late-commit.test.ts` — 연결을
+ * 빼던 판에서는 서버 `원문` · 캔버스 옛 글 · 배너 없음). 낸 탭은 답을 받은 복원을 안전망 스냅샷 id 로 알아보고 넘긴다(`apps/web`의
+ * `EditorStore.markRestored`). 대가는 낸 연결마다 프레임 하나다.
  */
 export function notifyRestored(app: FastifyInstance, input: RestoredInput): void {
-  const { origin, ...frame } = input
+  const { clientRestoreId: restoreId, ...frame } = input
   void app.realtime.broadcast
-    .send(input.projectId, { type: 'restored', ...frame }, origin === undefined ? undefined : { except: origin })
+    .send(input.projectId, { type: 'restored', ...frame, ...(restoreId === undefined ? {} : { clientRestoreId: restoreId }) })
     .catch((error: unknown) => {
       app.log.error({ err: error, projectId: input.projectId }, 'restored 알림 실패')
     })

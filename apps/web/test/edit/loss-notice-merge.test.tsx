@@ -176,6 +176,52 @@ async function mount(
 }
 
 const reloadButton = (): HTMLElement => screen.getByRole('button', { name: '다시 불러오기' })
+
+/**
+ * **거절 둘이 한 통지에 잇닿는 판** — 첫 편집이 409(`conflict`)를 받고 그 수습 조회를 붙잡는다 → 남의 복원 · «다시 불러오기»가 새 판을
+ * 싣는다 → 그 판에서 둘째 편집을 낸다(수습이 끝나면 나간다) → 수습의 옛 답(판을 못 정함 · 첫 거절의 조각) → 둘째 편집이 `second`로 거절되고
+ * 그 수습이 둘째 조각을 잇는다. 끝의 편집 통지 글을 낸다.
+ */
+async function twoRefusals(second: { status: number; code: string; message: string }): Promise<string> {
+  let calls = 0
+  const view = await mount({
+    immediate: () => {
+      calls += 1
+      // 첫째(첫 수습)는 붙잡고, 그 뒤(복원 다시 읽기 · 둘째 수습)는 새 판으로 곧바로 답한다.
+      return calls === 1 ? undefined : { ...pageDetail(PAGE_ID, swapped()), headSeq: HEAD_SEQ + 2 }
+    },
+  })
+  const first = await view.moveDown()
+  view.refuse(first)
+  await waitFor(() => expect(view.held).toHaveLength(1))
+  view.push(RESTORED)
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  fireEvent.click(reloadButton())
+  await act(async () => {
+    vi.advanceTimersByTime(3_000)
+  })
+  await act(async () => {})
+  vi.useRealTimers()
+  await waitFor(() => expect(view.getPage).toHaveBeenCalledTimes(3))
+  await act(async () => {})
+  // 새 판에서 낸 둘째 편집 — 첫 수습이 끝나야 나간다.
+  await view.tool('Divider', '아래로')
+  expect(view.patches()).toHaveLength(1)
+  await act(async () => {
+    view.held[0]!.resolve(pageDetail(PAGE_ID, pair()))
+  })
+  await act(async () => {})
+  // 판 카나리아 — 첫 거절의 조각이 섰고 둘째 편집이 나갔다.
+  expect(alertText()).toBe('페이지가 이미 변경되었습니다 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다.')
+  const sent = view.patches()
+  expect(sent).toHaveLength(2)
+  const next = sent[1]!
+  view.push({ type: 'patch-error', projectId: PROJECT_ID, pageId: next.pageId, clientOpId: next.clientOpId, ...second, issues: [] })
+  await waitFor(() => expect(view.getPage).toHaveBeenCalledTimes(4))
+  await act(async () => {})
+  await act(async () => {})
+  return alertText()
+}
 /** 편집 통지 자리(`shell/edit-alert.tsx`)의 글 — 캔버스의 렌더 오류 같은 다른 `alert`은 섞지 않는다. */
 const alertText = (): string =>
   screen
@@ -339,6 +385,27 @@ describe('합친 통지 — 같은 틀은 수를 더하고, 참이 아니게 되
     // 판 카나리아 — 둘째 버림도 났다(Divider 가 사라지고 Button 만 남았다).
     expect(structureTypes()).toEqual(['Page', 'Button'])
     expect(alertText()).toBe('다른 사람의 변경과 겹쳐 아직 저장되지 않은 편집 2개를 버렸습니다.')
+  })
+
+  /**
+   * **수습 조각의 열쇠는 거절의 `code`다**(`edit/use-edit-commit.tsx`의 `refusedLoss`) — 열쇠가 하나면 서로 다른 두 거절이 합쳐져 뒤 까닭으로
+   * 읽힌다(«밥님이 편집 중인 노드입니다 — … 편집 2개» — 앞 편집은 잠금이 아니라 판이 바뀌어 취소됐다). 판: 첫 거절의 수습을 붙잡은 사이 복원
+   * 다시 읽기가 새 판을 싣고, 그 판에서 낸 편집이 수습 뒤에 나가 다른 까닭으로 거절된다(`twoRefusals`).
+   */
+  it('서로 다른 까닭의 두 거절은 까닭마다 말한다 — 뒤 까닭으로 합치지 않는다', async () => {
+    const text = await twoRefusals({ status: 409, code: 'locked', message: '밥님이 편집 중인 노드입니다' })
+
+    expect(text).toBe(
+      '페이지가 이미 변경되었습니다 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다. ' +
+        '밥님이 편집 중인 노드입니다 — 페이지를 서버 상태로 다시 불러왔고, 편집 1개가 취소됐습니다.',
+    )
+  })
+
+  /** **같은 까닭은 서버 문장이 달라도 한 조각이다** — 409 의 번호는 문장에만 있어, 문장을 열쇠에 넣으면 거절마다 조각이 는다. 문장은 뒤의 것이다. */
+  it('같은 까닭의 두 거절은 문장이 달라도 한 문장으로 수를 더한다 — 늘어놓지 않는다', async () => {
+    const text = await twoRefusals({ status: 409, code: 'conflict', message: '페이지가 이미 변경되었습니다 (요청 baseSeq 9, 현재 10)' })
+
+    expect(text).toBe('페이지가 이미 변경되었습니다 (요청 baseSeq 9, 현재 10) — 페이지를 서버 상태로 다시 불러왔고, 편집 2개가 취소됐습니다.')
   })
 
   it('새 편집을 내면 합친 통지 전부를 치운다 — 남겨 두면 방금 낸 편집도 실패한 것으로 읽힌다', async () => {

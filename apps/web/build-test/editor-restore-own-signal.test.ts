@@ -1,10 +1,10 @@
 /**
- * **연결 id 없이 나간 내 복원의 신호가 «다른 사람이 복원했습니다»를 세우지 않는다**(`EditorStore.markRestored`의 안전망 스냅샷 id).
+ * **연결 id 없이 나간 내 복원의 신호가 «다른 사람이 복원했습니다»를 세우지 않는다**(`EditorStore.markRestored`의 안전망 스냅샷 id · 복원 id).
  *
- * 복원 요청은 지금 WS 연결의 id 를 싣고, 서버는 그 연결을 방송에서 뺀다. 소켓이 다시 붙는 중이면 id 가 없어 아무도 안 빠지고, 그 사이
- * 다시 붙은 소켓이 내 복원의 신호를 받는다. 방송은 연결마다 권한을 물은 뒤 보내 REST 응답보다 늦을 수 있다 — 내 다시 읽기가 시작된 뒤
- * 온 신호는 그 다시 읽기의 판이 풀지 않는다. 판: WS 를 RST 로 끊고 곧바로 «되돌린다»(헤더 없음), 페이지 행을 쥐어 복원을 세운 채 소켓이
- * 다시 붙기를 기다렸다가 놓는다.
+ * 복원의 방송은 낸 연결도 빼지 않으므로(서버 `ws/notify.ts`의 `notifyRestored`) 내 복원의 신호는 늘 이 탭에 온다 — 이 판은 그 신호가
+ * **다시 붙은 소켓**에 오는 칸이다(차례 넷은 `editor-restore-signal-order.test.ts`). 방송은 연결마다 권한을 물은 뒤 보내 REST 응답보다 늦을 수
+ * 있다 — 내 다시 읽기가 시작된 뒤 온 신호는 그 다시 읽기의 판이 풀지 않는다. 판: WS 를 RST 로 끊고 곧바로 «되돌린다»(연결 id 없음), 페이지
+ * 행을 쥐어 복원을 세운 채 소켓이 다시 붙기를 기다렸다가 놓는다.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'

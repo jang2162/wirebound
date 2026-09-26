@@ -1070,7 +1070,7 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 ### 복원
 
 `POST /api/projects/:projectId/snapshots/:snapshotId/restore` · **owner 전용**(설계서 「권한 모델」 — editor는
-생성만 한다) · **본문이 없다.**
+생성만 한다) · **본문이 없다.** 머리 `x-wb-restore-id`(선택)는 방송의 `clientRestoreId`로 되돌아온다(아래 «실시간 (WebSocket)»의 «복원은 이 헤더를 안 본다»).
 
 **이력을 지우지 않는다.** 페이지 문서는 편집 파이프라인(`applyEdit`)을 타므로 되돌림 자체가
 **새 revision으로 append**된다(설계서 「스냅샷」). 그 revision의 `actorLabel`은 `복원: <원본 태그>`라
@@ -1399,7 +1399,7 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 | `joined` | 붙은 직후, **그 연결에게만** | `projectId` · `connectionId` · `userId` · `role` |
 | `presence` | 누가 들어오거나 나갈 때, 룸 전체에 | `projectId` · `participants[{ connectionId, userId, userName }]` |
 | `page-changed` | `applyEdit`이 성공했을 때 | `projectId` · `pageId` · `seq` · `ops` · `warnings` · `actor` |
-| `restored` | 스냅샷 복원이 성공했을 때 | `projectId` · `snapshotId` · `actor` |
+| `restored` | 스냅샷 복원이 성공했을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `snapshotId` · `safetySnapshotId` · `actor` · (요청이 실어 왔으면) `clientRestoreId` |
 | `patch-ack` | `patch` 프레임이 성공했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `seq` · `revisionId` · `inverse` · `warnings` |
 | `patch-error` | `patch` 프레임이 실패했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `status` · `code` · `message` · `issues` — **REST 에러 봉투와 같은 값이다** |
 | `locks` | 잠금이 바뀌었을 때와 **누가 들어올 때**, 룸 전체에 | `projectId` · `locks[{ pageId, nodeId, userId, userName }]` |
@@ -1430,6 +1430,12 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 `x-wb-connection-id: <joined의 connectionId>`를 실으면 그 연결만 브로드캐스트에서 빠진다.
 안 실어도 동작한다 — 그때는 자기 편집이 한 번 더 오고, 그 프레임이 HTTP 응답보다 먼저
 도착할 수 있다.
+
+**복원은 이 헤더를 안 본다 — 낸 사람도 `restored`를 받는다**(`src/ws/notify.ts`의 `notifyRestored`). 복원의 답을 잃은
+탭에게는 그 신호만이 서버가 복원했다는 것을 알린다(커밋이 그 탭의 다시 읽기보다 늦을 수 있다). 낸 탭은 답의
+`safetySnapshot.id`와 같은 `safetySnapshotId`로 자기 복원을 알아본다. 답을 기다리는 동안 온 신호를 알아보려면 복원 요청에
+`x-wb-restore-id: <탭이 지은 id>`(`[A-Za-z0-9_-]{1,64}` — 벗어나면 안 실은 것으로 본다)를 싣는다 — 그 값이 프레임의
+`clientRestoreId`로 되돌아온다. 룸의 모두에게 보이는 값이라 넘기는 판정에는 `safetySnapshotId`만 쓴다.
 
 **빠지는 것은 그 요청과 같은 세션의 연결뿐이다**(`src/ws/broadcast.ts`의 `sentBy`). 남의 연결
 id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청도 아무도 안 뺀다 — WS 는 쿠키로만 열리므로 그

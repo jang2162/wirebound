@@ -999,14 +999,16 @@ describe('창 안의 복원 신호', () => {
     expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
   })
 
-  it('내 복원의 안전망 스냅샷 id 를 실은 신호는 낡음을 안 세운다 — 다른 id 면 세운다', () => {
+  it('답을 받은 내 복원의 안전망 스냅샷 id 를 실은 신호는 낡음을 안 세운다 — 다른 id 면 세운다', () => {
     const store = opened()
-    store.beginRestoreReread('s-mine')
+    store.beginOwnRestore('r-mine')
+    store.ownRestoreAnswered('r-mine', 's-mine')
+    store.beginRestoreReread()
 
-    store.markRestored('s-mine')
+    store.markRestored({ safetySnapshotId: 's-mine', clientRestoreId: 'r-mine' })
     expect(store.getState().remoteStale).toBeNull()
 
-    store.markRestored('s-other')
+    store.markRestored({ safetySnapshotId: 's-other' })
     expect(store.getState().remoteStale).toEqual({ reason: 'restored' })
   })
 

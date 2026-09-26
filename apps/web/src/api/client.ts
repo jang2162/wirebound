@@ -49,6 +49,14 @@ export interface WriteOptions {
 }
 
 /**
+ * 복원 하나에 얹는 선택. **`clientRestoreId`** — 이 탭이 지은 그 복원의 id(`x-wb-restore-id`). 서버가 그 복원의 `restored` 신호에 되돌려 주어,
+ * 답이 오기 전 · 답을 잃은 뒤에 온 신호를 이 탭이 알아본다(`store/editor-store.ts`의 `markRestored`).
+ */
+export interface RestoreOptions {
+  readonly clientRestoreId?: string
+}
+
+/**
  * 읽기 하나에 얹는 선택. **신호가 둘이고 뜻이 다르다** — 누가 시간을 재는가가 갈린다.
  *
  * - **`signal`** — **판정용 다시 읽기**(`panels/write-ledger.tsx`의 `race`)가 싣는다. 부른 쪽이 제 시간 제한으로
@@ -542,7 +550,7 @@ export interface ApiClient {
    *
    * **어느 갈래에서 끊기든 아무것도 바뀌지 않는다** — 서버가 한 트랜잭션으로 묶는다.
    */
-  restoreSnapshot(projectId: string, snapshotId: string): Promise<RestoreResult>
+  restoreSnapshot(projectId: string, snapshotId: string, options?: RestoreOptions): Promise<RestoreResult>
   /**
    * **내려받기 전에 화면이 말할 것**(설계서 「HTML 정적 번들」). 번들을 실제로 만들어 보고 그 결과를
    * 값으로 낸다 — 그래서 **싸지 않다.** 화면을 열 때가 아니라 사람이 내보내기를 누를 때

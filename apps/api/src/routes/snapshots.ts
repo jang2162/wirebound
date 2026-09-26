@@ -92,7 +92,7 @@ import { lockProjectShared } from '../repos/projects'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
 import { runConfirmedTransaction } from '../services/lost-commit'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
-import { broadcastOrigin, notifyRestored } from '../ws/notify'
+import { clientRestoreId, notifyRestored } from '../ws/notify'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const SnapshotParams = z.object({ projectId: z.uuid(), snapshotId: z.uuid() })
@@ -337,7 +337,7 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           snapshotId,
           safetySnapshotId: outcome.result.safety.id,
           actor: requestEventActor(request),
-          origin: broadcastOrigin(request),
+          clientRestoreId: clientRestoreId(request),
         })
 
         return toRestoreResponse(outcome.result)

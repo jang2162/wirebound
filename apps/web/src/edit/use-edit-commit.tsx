@@ -204,9 +204,11 @@ const UNANSWERED_RECOVER_FAILURE = '페이지를 다시 불러오지도 못했�
  * 이유를 듣는다"*로 세운 경계를 넘는다. 구분자는 **우리 쪽 문장에 붙이는 것**이라
  * 그 경계 안이다.
  */
-function refusedLoss(message: string, lost: number): LossPart {
+function refusedLoss(caught: unknown, message: string, lost: number): LossPart {
   return {
-    key: 'recover',
+    // **열쇠는 거절의 `code`다** — 까닭마다 한 조각이다. 열쇠가 하나면 서로 다른 두 거절이 합쳐져 뒤 까닭으로 읽힌다(jsdom: 409 `conflict` 뒤
+    // `locked` → «밥님이 편집 중인 노드입니다 — … 편집 2개»). 서버 문장은 넣지 않는다 — `409`의 번호가 문장에만 있어 거절마다 조각이 는다.
+    key: `recover:${caught instanceof ApiError ? caught.code : 'other'}`,
     rank: LOSS_RANK.cancelled,
     counts: [lost],
     render: ([count]) => `${message} — 페이지를 서버 상태로 다시 불러왔고, 편집 ${count ?? 0}개가 취소됐습니다.`,
@@ -420,7 +422,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           store.tellLoss(unknownLoss(why, lost - 1, lateCommitArrives(why, channel)))
           return
         }
-        store.tellLoss(refusedLoss(failure.message, lost))
+        store.tellLoss(refusedLoss(caught, failure.message, lost))
       } catch (recoverCaught) {
         // **떠났으면 말하지도 비우지도 않는다** — 끊긴 조회의 거절이거나 떠난 뒤의 실패다. 아래 `failEdits`는 **지금 열린 페이지의**
         // 큐를 비운다 — 떠난 페이지의 수습이 옆 페이지의 편집을 버리면 안 된다.
@@ -431,7 +433,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
           store.tellLoss(
             unknown
               ? unknownLoss(why, dropped.length - 1, lateCommitArrives(why, channel))
-              : refusedLoss(failure.message, dropped.length),
+              : refusedLoss(caught, failure.message, dropped.length),
           )
           return
         }

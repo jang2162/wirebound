@@ -1080,6 +1080,9 @@ const BODY_KEYS = {
  */
 const CONNECTION_ID_HEADER = 'x-wb-connection-id'
 
+/** 복원 요청이 싣는 그 복원의 id(`RestoreOptions`). 이름은 `apps/api/src/ws/notify.ts`의 `RESTORE_ID_HEADER`와 같아야 한다. */
+const RESTORE_ID_HEADER = 'x-wb-restore-id'
+
 /**
  * `ApiClient`의 HTTP 구현을 만든다.
  *
@@ -1138,6 +1141,8 @@ export function createHttpClient(
       readonly cache?: RequestCache
       /** `false`면 일반 읽기여도 시간 제한을 안 건다(`READ_DEADLINE_MS`의 «안 거는 읽기»). */
       readonly deadline?: false
+      /** 복원의 id(`RESTORE_ID_HEADER`) — 받는 것은 `restoreSnapshot` 하나다. */
+      readonly restoreId?: string
     },
   ): Promise<Response> {
     // **없으면 키를 만들지 않는다.** `undefined`를 실은 헤더가 통과하는 것은 우연이고,
@@ -1151,6 +1156,7 @@ export function createHttpClient(
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       ...(connection === undefined ? {} : { [CONNECTION_ID_HEADER]: connection }),
       ...(known === undefined ? {} : { [KNOWN_USER_HEADER]: known }),
+      ...(options?.restoreId === undefined ? {} : { [RESTORE_ID_HEADER]: options.restoreId }),
     }
 
     const init: RequestInit = {
@@ -1484,11 +1490,13 @@ export function createHttpClient(
       ),
     // **본문이 없다** — 되돌릴 대상은 주소가 다 말하고 안전망 태그는 서버가 짓는다.
     // 그래서 `declaredOnly`도 `BODY_KEYS`도 없다(`deleteProject` 같은 부류다).
-    restoreSnapshot: (projectId, snapshotId) =>
+    restoreSnapshot: (projectId, snapshotId, options) =>
       request<RestoreResult>(
         'POST',
         `${projectPath(projectId)}/snapshots/${snapshotId}/restore`,
         SHAPES.restoreResult,
+        undefined,
+        options?.clientRestoreId === undefined ? undefined : { restoreId: options.clientRestoreId },
       ),
     // **시간 제한을 안 건다** — PPTX 는 서버가 페이지를 한 장씩 그린다(`READ_DEADLINE_MS`의 «안 거는 읽기»).
     getExportPreview: (projectId, format, options) =>

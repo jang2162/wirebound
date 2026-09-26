@@ -37,7 +37,7 @@ import {
   type RealApiContext,
   type SignedUpUser,
 } from './helpers'
-import { CONNECTION_ID_HEADER } from '../src/ws/notify'
+import { CONNECTION_ID_HEADER, RESTORE_ID_HEADER } from '../src/ws/notify'
 import { WsProbe, joinRoom } from './ws-client'
 
 const db = getTestDb()
@@ -429,6 +429,70 @@ describe('무엇을 알리는가', () => {
 
       const frame = await mine.waitFor('restored')
       expect(frame.safetySnapshotId).toBe(safety)
+    })
+  })
+
+  /**
+   * **복원은 낸 연결도 빼지 않는다**(`ws/notify.ts`의 `notifyRestored`) — 답을 잃은 탭에게는 그 신호만이 서버가 복원했다는 것을 알린다
+   * (`apps/web/build-test/editor-restore-late-commit.test.ts`). 요청이 실은 복원 id 가 프레임으로 되돌아온다. 편집의 방송은 그대로 뺀다
+   * (위 «자기 편집은 자기에게 돌아오지 않는다»).
+   */
+  it('연결 id 를 실은 복원도 그 연결에 신호를 보내고, 요청의 복원 id 를 싣는다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const snapshot = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.project.id}/snapshots`,
+        cookies: fx.owner.cookie,
+        payload: { tag: 'v1' },
+      })
+      expect(snapshot.statusCode).toBe(201)
+      const snapshotId = (snapshot.json() as { id: string }).id
+      const mine = track(await joinRoom(ctx.port, fx.project.id, fx.owner.cookie.wb_session))
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
+      const joined = await mine.waitFor('joined')
+
+      const restore = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fx.project.id}/snapshots/${snapshotId}/restore`,
+        cookies: fx.owner.cookie,
+        headers: { [CONNECTION_ID_HEADER]: joined.connectionId, [RESTORE_ID_HEADER]: 'rst-0f3a_B' },
+      })
+      expect(restore.statusCode).toBe(200)
+
+      // 방송이 나간 것을 남의 연결로 본 뒤 낸 연결을 센다 — 안 오면 타임아웃이 아니라 값(`null`)으로 죽는다.
+      await watcher.waitFor('restored')
+      const frame = await mine.waitFor('restored', 1_000).catch(() => null)
+      expect({ safety: frame?.safetySnapshotId, restoreId: frame?.clientRestoreId }).toEqual({
+        safety: (restore.json() as { safetySnapshot: { id: string } }).safetySnapshot.id,
+        restoreId: 'rst-0f3a_B',
+      })
+    })
+  })
+
+  /** 복원 id 는 룸의 모두에게 되비친다 — 꼴을 벗어난 값(길이 · 글자)은 안 실은 것으로 본다. */
+  it('꼴이 틀린 복원 id 는 프레임에 안 실린다', async () => {
+    await withRealApi(async (ctx) => {
+      const fx = await board(ctx)
+      const watcher = track(await joinRoom(ctx.port, fx.project.id, fx.peer.cookie.wb_session))
+      for (const bad of ['<b>x</b>', 'a'.repeat(65)]) {
+        const snapshot = await ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${fx.project.id}/snapshots`,
+          cookies: fx.owner.cookie,
+          payload: { tag: `v-${bad.length}` },
+        })
+        expect(snapshot.statusCode).toBe(201)
+        const restore = await ctx.app.inject({
+          method: 'POST',
+          url: `/api/projects/${fx.project.id}/snapshots/${(snapshot.json() as { id: string }).id}/restore`,
+          cookies: fx.owner.cookie,
+          headers: { [RESTORE_ID_HEADER]: bad },
+        })
+        expect(restore.statusCode).toBe(200)
+      }
+      const frames = await watcher.waitForCount('restored', 2)
+      expect(frames.map((frame) => 'clientRestoreId' in frame)).toEqual([false, false])
     })
   })
 })

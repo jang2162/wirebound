@@ -90,10 +90,15 @@ export type ServerFrame =
       snapshotId: string
       actor: EventActor
       /**
-       * 그 복원이 만든 안전망 스냅샷의 id. **있을 때만 온다.** 내가 한 복원의 것이면 그 신호는 내 복원이 되돌아온 것이다 — 복원이 연결 id
-       * 없이 나가면 서버가 낸 연결을 못 뺀다(`page-changed`의 `clientOpId`와 같은 창). 스토어가 알아보고 넘긴다(`EditorStore.markRestored`).
+       * 그 복원이 만든 안전망 스냅샷의 id. **있을 때만 온다.** 답을 받은 내 복원의 것이면 그 신호는 내 복원이 되돌아온 것이다 — 복원의 방송은
+       * 낸 연결도 빼지 않는다(서버 `ws/notify.ts`의 `notifyRestored`). 스토어가 알아보고 넘긴다(`EditorStore.markRestored`).
        */
       safetySnapshotId?: string
+      /**
+       * 낸 탭이 그 요청에 실은 복원 id(`api/client.ts`의 `RestoreOptions`). **있을 때만 온다.** 답을 기다리는 · 잃은 내 복원의 신호를 알아본다 —
+       * 넘기는 판정에는 안 쓴다(흉내 낼 수 있다 — `EditorStore`의 `RestoreSignal`).
+       */
+      clientRestoreId?: string
     }
   /**
    * **내 멤버십이 바뀌었다 — 프로젝트를 다시 읽어라.** 역할 값은 안 온다 — 역할은 `getProject`의 응답 하나에서
@@ -267,6 +272,7 @@ export function parseServerFrame(raw: string): ServerFrame | null {
             actor: value.actor as unknown as EventActor,
             // 없으면 키를 안 만든다 — `page-changed`의 `clientOpId`와 같다.
             ...(str(value.safetySnapshotId) ? { safetySnapshotId: value.safetySnapshotId } : {}),
+            ...(str(value.clientRestoreId) ? { clientRestoreId: value.clientRestoreId } : {}),
           }
         : null
     case 'membership-changed':

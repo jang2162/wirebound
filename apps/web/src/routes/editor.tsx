@@ -56,6 +56,7 @@ import {
   VIEWPORT_PRESETS,
   type DiscardTally,
   type EditorMode,
+  type RemoteStale,
   type ViewportWidth,
 } from '../store/editor-store'
 import type { PendingEdit } from '../store/edit-queue'
@@ -266,8 +267,14 @@ const RESYNC_LEAD = '연결이 다시 붙어 페이지를 서버 상태로 다�
 const RESTORED_LEAD = '스냅샷을 복원해 페이지를 다시 불러왔습니다.'
 /** 남이 복원한 판을 배너의 단추로 다시 읽었을 때의 앞머리. 위 문장을 쓰면 남의 복원을 내가 한 일로 말한다. */
 const REMOTE_RESTORED_LEAD = '다른 사람이 복원한 상태로 페이지를 다시 불러왔습니다.'
-/** 답을 잃은 내 복원 뒤 배너의 단추로 다시 읽었을 때의 앞머리(`EditorStore.markRestoreUnanswered`) — 복원됐는지 모른다. */
-const UNANSWERED_RESTORE_LEAD = '복원됐는지 확인하려고 페이지를 서버 상태로 다시 불러왔습니다.'
+/**
+ * 답을 잃은 내 복원 뒤 배너의 단추로 다시 읽었을 때의 앞머리(`RemoteStale`의 `own`) — 복원됐는지 모르거나(`EditorStore.markRestoreUnanswered`),
+ * 그 신호가 와 반영된 것을 안다(`EditorStore.markRestored`).
+ */
+const OWN_RESTORE_LEAD: Record<NonNullable<RemoteStale['own']>, string> = {
+  unanswered: '복원됐는지 확인하려고 페이지를 서버 상태로 다시 불러왔습니다.',
+  landed: RESTORED_LEAD,
+}
 
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
 type PanelTab = 'props' | 'page' | 'comments' | 'interactions'
@@ -611,11 +618,11 @@ function EditorShell(props: {
    * 신호를 한 자리에서 올려야 한쪽 입구가 테마를 빠뜨리지 않는다(`restoredToken` 표의 테마 줄).
    *
    * **다시 읽기가 시작된 것을 스토어에 먼저 적는다**(`EditorStore.beginRestoreReread`) — 복원 배너는 이 다시 읽기의 판만 풀고, 그 사이 온 복원
-   * 신호가 있으면 안 푼다. 내 복원이면 그 안전망 스냅샷 id 를 넘겨 되돌아오는 신호를 알아보게 한다.
+   * 신호가 있으면 안 푼다.
    */
   const reloadAfterRestore = useCallback(
-    (lead: string, ownSafetySnapshotId?: string) => {
-      store.beginRestoreReread(ownSafetySnapshotId)
+    (lead: string) => {
+      store.beginRestoreReread()
       setRestoredLead(lead)
       setRestoredToken((token) => token + 1)
       setThemeReloadToken((token) => token + 1)
@@ -749,7 +756,13 @@ function EditorShell(props: {
             있는지"*조차 못 본다. */}
         <SnapshotsPanel
           projectId={props.project.id}
-          onRestored={(safetySnapshotId) => reloadAfterRestore(RESTORED_LEAD, safetySnapshotId)}
+          onRestoreSent={store.beginOwnRestore}
+          onRestored={(clientRestoreId, safetySnapshotId) => {
+            // 답의 안전망 스냅샷 id 를 먼저 적는다 — 되돌아오는 내 복원의 신호를 알아보고, 미뤄 둔 신호를 가른다(`EditorStore.ownRestoreAnswered`).
+            store.ownRestoreAnswered(clientRestoreId, safetySnapshotId)
+            reloadAfterRestore(RESTORED_LEAD)
+          }}
+          onRestoreRefused={store.ownRestoreRefused}
           onRestoreUnanswered={store.markRestoreUnanswered}
         />
         {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 스냅샷 링크 옆에 두는 것은 둘 다
@@ -783,7 +796,7 @@ function EditorShell(props: {
         {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
             `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
             근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
-        <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.unanswered === true ? UNANSWERED_RESTORE_LEAD : REMOTE_RESTORED_LEAD)} />
+        <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? REMOTE_RESTORED_LEAD : OWN_RESTORE_LEAD[stale.own])} />
         {/* **캔버스가 테마를 못 읽어 기본 스타일로 그린다**(`canvas/canvas-theme-notice.tsx`). 단추는 고르개와 같은 신호로 다시 읽는다. */}
         <ThemeAlert onReload={() => setThemeReloadToken((token) => token + 1)} />
         {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}

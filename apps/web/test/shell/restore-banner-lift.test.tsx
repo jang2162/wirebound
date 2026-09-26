@@ -283,9 +283,9 @@ describe('내 복원 — 연결 id 없이 나가 내 신호가 되돌아온 판'
 })
 
 /**
- * **내 복원의 답을 잃은 판**(`EditorStore.markRestoreUnanswered`). 복원 요청은 연결 id 를 실어 그 신호가 이 탭에 안 온다 — 답을 잃으면 서버가
- * 복원했는지 이 탭은 모른다. 커밋 전에 거절된 실패(4xx · 봉투 있는 500)는 복원이 안 된 것이라 배너를 세우지 않는다. 실브라우저 판은
- * `apps/web/build-test/editor-restore-unanswered.test.ts`가 든다.
+ * **내 복원의 답을 잃은 판**(`EditorStore.markRestoreUnanswered`). 신호가 안 온 판이다 — 답을 잃으면 서버가 복원했는지 이 탭은 모른다(신호가
+ * 온 칸은 `test/store/restore-own-signal.test.ts`). 커밋 전에 거절된 실패(4xx · 봉투 있는 500)는 복원이 안 된 것이라 배너를 세우지 않는다.
+ * 실브라우저 판은 `apps/web/build-test/editor-restore-unanswered.test.ts` · `editor-restore-signal-order.test.ts`가 든다.
  */
 describe('내 복원 — 답을 잃은 판', () => {
   const UNANSWERED = /스냅샷 복원의 답을 받지 못해 복원됐는지 알 수 없습니다/
