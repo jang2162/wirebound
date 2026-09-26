@@ -28,10 +28,16 @@ import { createServer, type Server } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { exportPptx, exportPage, type PptxScreen } from '@wirebound/exporter'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
-import { resolveTheme, systemTheme } from '@wirebound/themes'
-import { chromium } from 'playwright-core'
+import { resolveTheme, systemTheme, type Theme } from '@wirebound/themes'
+import { chromium, type Page } from 'playwright-core'
 import { describe, expect, it } from 'vitest'
-import { chromiumScreenRenderer, KOREAN_GLYPH_PROBE } from '../src/services/screen-render-chromium'
+import {
+  chromiumScreenRenderer,
+  KOREAN_GLYPH_PROBE,
+  SCREEN_DEFAULTS,
+  SCREEN_GREW,
+  SCREEN_TOO_LARGE,
+} from '../src/services/screen-render-chromium'
 import {
   decideKoreanGlyphs,
   readPngSize,
@@ -123,9 +129,9 @@ function doc(index: number, rows: number): PageDocument {
   } as unknown as PageDocument
 }
 
-function requestFor(index: number, rows: number): ScreenRequest {
+function requestFor(index: number, rows: number, withTheme = theme): ScreenRequest {
   const title = `관리자 회원 목록${index}`
-  const rendered = exportPage({ document: doc(index, rows), title, theme })
+  const rendered = exportPage({ document: doc(index, rows), title, theme: withTheme })
   return { title, html: rendered.html, css: rendered.css }
 }
 
@@ -248,6 +254,121 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
       expect(last.reason).toContain('2장')
       expect(last.reason).toContain('3장 중 3번째')
     }
+  })
+
+  /**
+   * **넓이 상한을 넘은 장은 찍지 않고 크기와 상한을 말한다**(`SCREEN_DEFAULTS.maxArea`) — 긴 페이지 한 장의 비트맵이 서버의
+   * 메모리를 다 먹는다. 상한 바로 밑은 그린다 — 상한이 멀쩡한 페이지를 막지 않는다. 폭이 뷰포트를 넘는 페이지도 넓이로 잰다.
+   */
+  it('넓이 상한을 넘은 장은 그리지 않고 크기와 상한을 말한다 — 바로 밑은 그린다', async () => {
+    const block = (width: number, height: number): ScreenRequest => ({
+      title: `${width}×${height}`,
+      html: `<!doctype html><html lang="ko"><body style="margin:0"><div style="width:${width}px;height:${height}px">긴 페이지</div></body></html>`,
+      css: 'body { color: #111 }',
+    })
+    const maxHeight = SCREEN_DEFAULTS.maxArea / 720
+    const batch = await renderer().render([block(720, maxHeight), block(720, maxHeight + 1), block(1440, maxHeight / 2 + 1)])
+    const [under, tall, wide] = batch.results
+    expect(under!.ok ? [under!.width, under!.height] : under).toEqual([1440, maxHeight * 2])
+    expect(tall).toEqual({ ok: false, reason: `${SCREEN_TOO_LARGE} — 720×${maxHeight + 1}px(상한 720×${maxHeight}px 넓이)` })
+    expect(wide).toEqual({ ok: false, reason: `${SCREEN_TOO_LARGE} — 1440×${maxHeight / 2 + 1}px(상한 720×${maxHeight}px 넓이)` })
+  })
+})
+
+/**
+ * **잰 크기와 찍는 크기가 같은 상태를 본다**(`screen-render-chromium.ts` 의 `FREEZE_MOTION` · `PAGE_SIZE` · 잰 크기로 묶어 찍기).
+ * 넓이 상한은 찍기 전에 재고 playwright 는 찍으면서 크기를 다시 잰다 — 그 사이에 자라는 페이지가 상한을 지난 비트맵이 됐다.
+ *
+ * **판을 타이밍에 맡기지 않는다.** 전이는 지연을 5초로 둬 찍기가 끝나기 전에 안 끝나고(끄기가 없으면 늘 작게 재고 작게 찍는다),
+ * 글꼴은 막힌 원본 열 개를 거쳐 온다(원본마다 서버까지 왕복해 끊겨, 기다림이 없으면 늘 오기 전에 잰다). 찍는 사이에 자라는 판은
+ * `screenshot` 을 감싸 잰 직후에 키운다. 지연을 몇 ms 로 둔 경주 판은 같은 소스에서 거절과 통과가 섞여 자로 못 쓴다.
+ */
+describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
+  /** 여백 20000px 를 전이로 거는 파생 테마의 페이지 — 에디터가 저장할 수 있는 값이다(`transition` 은 화이트리스트 안이고 `!important` 도 컴파일이 받는다). */
+  function growingPage(transition: string): ScreenRequest {
+    const derived: Theme = {
+      ...systemTheme('admin')!,
+      components: { ...systemTheme('admin')!.components, Page: { structure: 'default', base: { paddingY: '20000px', transition } } },
+    }
+    const resolved = resolveTheme(derived)
+    expect(resolved.issues).toEqual([])
+    return requestFor(1, 4, resolved.theme!)
+  }
+
+  it('전이로 자라는 페이지는 끝 크기로 재서 거절한다 — 값에 `!important` 를 실어도', async () => {
+    const batch = await renderer().render([growingPage('padding 1ms linear 5s'), growingPage('padding 1ms linear 5s !important')])
+    const seen = batch.results.map((result) => (result.ok ? `그림 ${result.width}×${result.height}` : result.reason))
+    // 끝 크기는 여백 둘(40000px) 너머 — 전이 앞에 재면 뷰포트(552px)다.
+    const final = expect.stringMatching(new RegExp(`^${SCREEN_TOO_LARGE} — 720×4\\d{4}px\\(`))
+    expect(seen).toEqual([final, final])
+  })
+
+  it('늦게 오는 글꼴은 기다린 뒤 잰다', async () => {
+    const lines = Array.from({ length: 40 }, (_unused, index) => `<p style="margin:0">line ${index}</p>`).join('')
+    const blocked = Array.from({ length: 10 }, (_unused, index) => `url(http://font.invalid/${index}.ttf)`).join(', ')
+    // 막힌 원본 뒤에 이 기계에 있는 글꼴을 두고 세로 지표를 15배로 — 오면 40줄이 상한(8192px)을 넘는다. 어느 것도 없으면 대체 글꼴로 작게 그려져 여기서 죽는다.
+    const local = ['Arial', 'DejaVu Sans', 'Noto Sans CJK KR', 'NotoSansCJKkr-Regular'].map((name) => `local("${name}")`).join(', ')
+    const batch = await renderer().render([
+      {
+        title: '늦은 글꼴',
+        html: `<!doctype html><html lang="ko"><body style="margin:0">${lines}</body></html>`,
+        css: `@font-face { font-family: Tall; src: ${blocked}, ${local}; ascent-override: 1500% } body { font-family: Tall; font-size: 16px }`,
+      },
+    ])
+    const [result] = batch.results
+    expect(result!.ok ? `그림 ${result!.width}×${result!.height}` : result!.reason).toMatch(new RegExp(`^${SCREEN_TOO_LARGE} — 720×\\d+px\\(`))
+  })
+
+  it('찍는 사이에 자라도 비트맵은 잰 크기를 안 넘고, 위쪽만 잘린 그림을 내지 않는다', async () => {
+    // **렌더러가 쓰는 그 `Page` 클래스를 감싼다** — 같은 `playwright-core` 모듈이다. 잰 직후(찍기 바로 앞)에 페이지를 40000px 키운다.
+    const probe = await chromium.launch(LAUNCH)
+    const proto = Object.getPrototypeOf(await probe.newPage()) as { screenshot: Page['screenshot'] }
+    await probe.close()
+    const original = proto.screenshot
+    const captured: unknown[] = []
+    proto.screenshot = async function (this: Page, options) {
+      await this.evaluate(`document.body.style.paddingBottom = '40000px'`)
+      const bytes = await original.call(this, options)
+      captured.push(readPngSize(bytes))
+      return bytes
+    }
+    let batch
+    try {
+      batch = await renderer().render([
+        { title: '자라는 장', html: '<!doctype html><html lang="ko"><body style="margin:0"><div style="height:100px">자란다</div></body></html>', css: 'body { color: #111 }' },
+      ])
+    } finally {
+      proto.screenshot = original
+    }
+    // 잰 크기(뷰포트 720×552)의 두 배다 — 자란 40000px 를 찍지 않았다.
+    expect(captured).toEqual([{ width: 1440, height: 1104 }])
+    expect(batch.results).toEqual([{ ok: false, reason: `${SCREEN_GREW} — 720×552px 에서 720×40100px` }])
+  })
+
+  /**
+   * **시스템 테마의 전이는 끝 상태로 찍힌다.** 테마 시트는 HTML 을 띄운 뒤에 얹으므로 테마의 `transition` 은 기본값에서 테마 값으로
+   * 옮겨 가는 전이를 시작한다 — admin 은 단추에 `transition: 150ms` 를 걸어, 끄기 전에는 그림이 옮겨 가는 중간에 찍혔다(전이를 걷은
+   * 테마와 그림이 다르고 높이도 흔들렸다). 끄기 없이 찍은 뒤에 다시 재면 이 전이가 «그리는 동안 커짐»으로 멀쩡한 장을 거절한다.
+   */
+  it('시스템 테마의 전이는 끝 상태로 찍힌다 — 전이를 걷은 테마와 같은 그림이고 멀쩡한 장이 거절되지 않는다', async () => {
+    let stripped = 0
+    const strip = (value: unknown): void => {
+      if (value === null || typeof value !== 'object') return
+      const record = value as Record<string, unknown>
+      for (const key of Object.keys(record)) {
+        if (key === 'transition') {
+          delete record[key]
+          stripped++
+        } else strip(record[key])
+      }
+    }
+    const still = structuredClone(systemTheme('admin')!)
+    strip(still.components)
+    // 카나리아 — admin 이 전이를 안 걸면 이 케이스는 아무것도 안 잰다.
+    expect(stripped).toBeGreaterThan(0)
+    const batch = await renderer().render([requestFor(1, 40), requestFor(1, 40, resolveTheme(still).theme!)])
+    const [moving, calm] = batch.results
+    expect(moving!.ok && calm!.ok ? Buffer.compare(moving!.bytes, calm!.bytes) : batch.results).toBe(0)
   })
 })
 

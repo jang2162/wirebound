@@ -1,0 +1,30 @@
+# 앞단 — 에디터 정적 번들을 서빙하고 `/api` 를 api 로 넘긴다. 이 설정이 README 「앞단(리버스 프록시)이 지킬 조건」을
+# 지키는지 잰 값은 그 절이 갖는다.
+{
+	# 끄는 동안 도는 요청(그리던 pptx 내려받기)을 기다리는 한도. api 의 한도(`apps/api/src/shutdown.ts` 의 `SHUTDOWN_GRACE_MS` 30s)보다
+	# 길고 compose 의 `stop_grace_period`(40s)보다 짧게 둔다 — 앞단이 먼저 끊으면 api 가 끝까지 답해도 사람에게 안 닿는다.
+	grace_period 35s
+}
+
+# 도메인이면 Caddy 가 인증서를 스스로 받는다(80 · 443 이 바깥에서 닿아야 한다). `localhost` · `*.localhost` 는 Caddy 의
+# 내부 CA 로 서명한다(잴 때 쓴다).
+{$SITE_ADDRESS} {
+	handle /api/* {
+		# X-Forwarded-For: Caddy 는 믿지 않는 클라이언트가 보낸 머리를 버리고 소켓 주소(포트 없음)로 새로 적는다 — 기본값이다.
+		# `trusted_proxies` 를 두지 않는다 — 두면 그 대역의 클라이언트가 적은 값을 이어받는다.
+		# WS 업그레이드 · 클라이언트 끊김의 전달도 기본값이다.
+		reverse_proxy api:3001 {
+			transport http {
+				# 상류 keep-alive 를 api 의 `keepAliveTimeout`(72s)보다 짧게 쥔다 — 길면 api 가 막 닫은 연결에 요청을 싣는다.
+				keepalive 60s
+			}
+		}
+	}
+
+	handle {
+		root * /srv
+		# 깊은 링크(`/projects/…`)는 에디터의 `index.html` 로 돌린다.
+		try_files {path} /index.html
+		file_server
+	}
+}

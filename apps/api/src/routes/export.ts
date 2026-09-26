@@ -293,12 +293,12 @@ async function projectSlug(app: FastifyInstance, projectId: string): Promise<str
  * **`screenRenderer`를 안 주면 pptx가 이미지 없이 나간다** — `buildApp`의
  * 같은 이름 필드를 그대로 받는다. 근거는 그쪽 머리말에 있다.
  */
-export function exportRoutes(options?: { screenRenderer?: ScreenRenderer }) {
+export function exportRoutes(options?: { screenRenderer?: ScreenRenderer; renderLimit?: number }) {
   const screenRenderer = options?.screenRenderer
 
   return async function plugin(app: FastifyInstance): Promise<void> {
     // **앱 하나에 풀 하나** — 앱이 닫히면 워커도 끝낸다. 워커는 처음 내보낼 때 뜬다(`services/export-worker.ts`).
-    const workers = new ExportWorkerPool()
+    const workers = new ExportWorkerPool({ renderLimit: options?.renderLimit })
     app.addHook('onClose', () => workers.close())
 
     /**

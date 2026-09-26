@@ -249,7 +249,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(presetRoutes(), { prefix: '/api/projects' })
   // 내보내기도 프로젝트 아래에 산다(`/:projectId/export`). **URL에 파일 이름이 없다** —
   // 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면 번호가 밀린다.
-  await app.register(exportRoutes({ screenRenderer }), { prefix: '/api/projects' })
+  await app.register(exportRoutes({ screenRenderer, renderLimit: config.exportRenderLimit }), { prefix: '/api/projects' })
   // API 토큰도 프로젝트 아래에 산다(`/:projectId/tokens`) — 설계서 「권한 모델」이 *"토큰 스코프는
   // 프로젝트 단위"*라고 적었으므로 그 밖에 둘 자리가 없다. 발급은 viewer 이상 누구나이고,
   // 이 셋은 **세션으로만** 부를 수 있다 — 근거는 `routes/tokens.ts`의 머리말에 있다.

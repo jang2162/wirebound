@@ -36,7 +36,7 @@
  * | 무엇 | 값 | 왜 |
  * |---|---|---|
  * | CPU 칸 | `EXPORT_WORKER_LIMIT`(2 · 코어가 둘 이하면 1) | 내보내기는 드물고 하나가 크다 — 위 «대가»의 메모리가 일마다 붙는다. 칸을 못 얻은 일은 **줄을 선다** |
- * | 그리기 칸 | `EXPORT_RENDER_LIMIT`(2) — **동시에 뜨는 브라우저 수**다 | 아래 «칸이 둘이다» |
+ * | 그리기 칸 | `EXPORT_RENDER_LIMIT`(2 · 같은 이름의 env 로 덮는다 — `ApiConfig.exportRenderLimit`) — **동시에 뜨는 브라우저 수**다 | 아래 «칸이 둘이다» |
  * | 워커 스레드 수 | CPU 칸 + 그리기 칸까지 | 아래 «칸이 둘이다» |
  * | 떠 있는 일 | `EXPORT_JOB_LIMIT`(8)까지(읽는 중 · 줄 선 · 도는) — 넘으면 `ExportBusyError`(→ 503 · `Retry-After: EXPORT_RETRY_AFTER_S`) | 아래 «줄은 길이로 묶는다» |
  * | 사람마다 떠 있는 일 | `EXPORT_PERSON_JOB_LIMIT`(2)까지 — 넘으면 같은 503 이되 문장이 «내 내보내기»다 | 아래 «한 사람이 줄을 다 쥐지 않는다» |
@@ -194,7 +194,7 @@ import { errorLine, type ScreenBatch, type ScreenRequest } from './screen-render
 /** CPU 칸 수 — 머리말의 표. 코어가 하나뿐인 기계에서는 하나다. */
 export const EXPORT_WORKER_LIMIT = Math.max(1, Math.min(2, availableParallelism() - 1))
 
-/** 그리기 칸 수 — 동시에 뜨는 브라우저 수다(머리말 «칸이 둘이다»). */
+/** 그리기 칸 수의 기본값 — 동시에 뜨는 브라우저 수다(머리말 «칸이 둘이다»). env `EXPORT_RENDER_LIMIT` 가 덮는다(`config.ts`). */
 export const EXPORT_RENDER_LIMIT = 2
 
 /** 쉬는 워커를 끝내기까지(ms) — 머리말의 표. */
