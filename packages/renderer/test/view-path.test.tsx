@@ -120,6 +120,38 @@ describe('테마 경로', () => {
     })
   })
 
+  it('누락 판정이 선 노드의 형제만 고치면 경고가 되풀이되지 않는다 — 판정도 그대로다', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const Button = view(() => <button>Root 없음</button>)
+    const theme = { manifest: base, views: { Button } }
+    const doc = (sibling: string) =>
+      page([{ id: 'b', type: 'Button', props: { label: '기본' } }, { id: 't', type: 'Text', props: { content: sibling } }])
+    const warnings = () => err.mock.calls.filter((c) => String(c[0]).includes('Root')).length
+    const { container, rerender } = render(<>{renderDocument(doc('하나'), { theme })}</>)
+    const first = warnings()
+    rerender(<>{renderDocument(doc('둘'), { theme })}</>)
+    rerender(<>{renderDocument(doc('셋'), { theme })}</>)
+    expect({
+      first,
+      afterSiblingEdits: warnings(),
+      structure: container.querySelector('[data-wb-id="b"]')!.getAttribute('data-wb-structure'),
+      sibling: container.querySelector('[data-wb-id="t"]')!.textContent,
+    }).toEqual({ first: 1, afterSiblingEdits: 1, structure: 'solid', sibling: '셋' })
+  })
+
+  it('누락 판정이 선 노드를 고쳤는데도 Root 가 없으면 다시 말한다', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const Button = view(() => <button>Root 없음</button>)
+    const theme = { manifest: base, views: { Button } }
+    const doc = (label: string) => page([{ id: 'b', type: 'Button', props: { label } }])
+    const { container, rerender } = render(<>{renderDocument(doc('하나'), { theme })}</>)
+    rerender(<>{renderDocument(doc('둘'), { theme })}</>)
+    expect({
+      warnings: err.mock.calls.filter((c) => String(c[0]).includes('Root')).length,
+      text: container.querySelector('[data-wb-id="b"]')!.textContent,
+    }).toEqual({ warnings: 2, text: '둘' })
+  })
+
   it('props 검증 실패는 지금처럼 동기로 onNodeError 에 모인다', () => {
     const errors: NodeRenderError[] = []
     draw(page([{ id: 'b', type: 'Button', props: { label: 3 } }]), { manifest: base, views: {} }, errors)
