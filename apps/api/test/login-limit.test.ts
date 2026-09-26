@@ -610,3 +610,19 @@ describe('믿는 앞단(TRUST_PROXY)', () => {
     )
   })
 })
+
+describe('막힘을 푼 뒤', () => {
+  // 시도의 자리를 시각 값으로 찾으면, 풀기가 키를 걷은 뒤 같은 ms 에 선 새 기록을 풀기 앞에 들어온 시도가 끝나며 걷는다 — 막힌 쪽이
+  // 한 번 더 댄다. 시계를 한 ms 에 세워 판을 세운다.
+  it('풀기 앞에 들어온 시도가 풀기 뒤에 끝나도 풀기 뒤의 기록을 안 걷는다 — 같은 ms 의 기록이어도', () => {
+    const limiter = createLoginLimiter(LOGIN_LIMIT, () => 5)
+    const early = limiter.begin('victim@x', '10.9.0.1')
+    if (early.kind !== 'admitted') throw new Error('앞선 시도가 막혔다 — 판이 안 섰다')
+    limiter.unlock({ email: 'victim@x' })
+    for (let i = 0; i < perAccount; i++) limiter.begin('victim@x', `10.0.0.${i}`)
+    expect(limiter.begin('victim@x', '10.0.1.1').kind).toBe('limited')
+
+    early.succeeded()
+    expect(limiter.begin('victim@x', '10.0.1.2').kind).toBe('limited')
+  })
+})

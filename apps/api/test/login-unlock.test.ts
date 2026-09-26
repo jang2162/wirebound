@@ -411,6 +411,35 @@ describe('입구', () => {
     }
   })
 
+  /**
+   * **여는 중에 닫기가 오면 입구를 안 연다.** `main.ts` 는 TCP 포트를 연 뒤에 입구를 연다 — 그 사이에 신호가 오면 닫기(`preClose`)는
+   * 아직 안 연 입구를 지나치고, 여는 일은 그 뒤에도 이어 소켓을 연다. 닫힌 api 가 연 채 남기는 소켓이다(프로세스가 끝나면 파일만
+   * 남고, 그 사이 같은 자리에 선 새 api 의 소켓을 지울 수 있다). 여기서는 여는 일이 첫 await 에 선 사이에 앱을 닫는다.
+   */
+  it('여는 중에 닫기가 오면 입구를 안 연다 — 닫힌 뒤 늦게 끝난 여는 일이 소켓을 남기지 않는다', async () => {
+    const app = Fastify({ logger: false })
+    app.decorate('loginLimiter', createLoginLimiter())
+    const opening = prepareUnlockSocket(app)
+      .open(socketPath, dir)
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+    await app.close()
+    const refused = await opening
+    const listening = await new Promise<boolean>((resolve) => {
+      const socket = connect(socketPath)
+      socket.once('connect', () => {
+        socket.destroy()
+        resolve(true)
+      })
+      socket.once('error', () => resolve(false))
+    })
+    expect({ listening, file: existsSync(socketPath) }).toEqual({ listening: false, file: false })
+    expect(refused).toBeInstanceOf(UnlockSocketRefused)
+    expect((refused as Error).message).toBe(`${socketPath} 에 입구를 안 엽니다 — api 가 닫히는 중입니다`)
+  })
+
   it('닫기는 도는 요청을 기다리기 전에 입구부터 닫는다 — 그 사이 같은 자리에 선 새 api 의 소켓을 안 지운다', async () => {
     await withApi(async (ctx) => {
       let release = (): void => {}
