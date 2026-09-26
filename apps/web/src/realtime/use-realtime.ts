@@ -31,7 +31,7 @@
  *
  * 다른 탭이 **같은 사람으로 다시 들어오면**(옛 세션은 산다) 이 탭의 HTTP 는 새 세션, WS 는 옛 세션이다. 서버의 방송은
  * 요청과 같은 세션의 연결만 빼므로(`apps/api/src/ws/broadcast.ts`의 `sentBy`) **자기 방송을 되받는다** — 복원이면
- * 본인에게 «다른 사람이 스냅샷을 복원했습니다»(Chrome). 세션이 그것을 알리면(`useSessionRenewal` —
+ * 본인의 복원에 복원 배너가 선다(Chrome). 세션이 그것을 알리면(`useSessionRenewal` —
  * `session/session-context.tsx`의 «탭 사이») 옛 소켓을 버리고 곧바로 다시 붙는다(`connection.ts`의 `reconnect`). 끊긴
  * 것과 같은 길이라 **두 번째 `'open'`이 다시 읽는다** — 버린 소켓과 새 소켓 사이의 프레임은 사라진다. **대가도
  * 끊긴 것과 같다** — 다시 읽기가 되돌리기 이력을 비우면 그렇다고 말한다(`routes/editor.tsx`의 `resyncNotice`).

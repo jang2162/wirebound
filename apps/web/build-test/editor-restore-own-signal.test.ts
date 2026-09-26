@@ -1,5 +1,5 @@
 /**
- * **연결 id 없이 나간 내 복원의 신호가 «다른 사람이 복원했습니다»를 세우지 않는다**(`EditorStore.markRestored`의 안전망 스냅샷 id · 복원 id).
+ * **연결 id 없이 나간 내 복원의 신호가 복원 배너를 세우지 않는다**(`EditorStore.markRestored`의 안전망 스냅샷 id · 복원 id).
  *
  * 복원의 방송은 낸 연결도 빼지 않으므로(서버 `ws/notify.ts`의 `notifyRestored`) 내 복원의 신호는 늘 이 탭에 온다 — 이 판은 그 신호가
  * **다시 붙은 소켓**에 오는 칸이다(차례 넷은 `editor-restore-signal-order.test.ts`). 방송은 연결마다 권한을 물은 뒤 보내 REST 응답보다 늦을 수
@@ -91,7 +91,7 @@ describe.skipIf(!전제.ok)('연결 id 없이 나간 내 복원', () => {
 
       // 판이 섰는가: 복원이 연결 id 없이 나갔고 그 신호가 이 탭에 왔다.
       expect(events.some((line) => line.includes('POST restore 연결id=없음'))).toBe(true)
-      expect(notices.some((text) => text.includes('다른 사람이 스냅샷을 복원했습니다'))).toBe(false)
+      expect(notices.some((text) => text.includes('스냅샷이 복원됐습니다'))).toBe(false)
     } finally {
       await context.close()
       await cut.close()

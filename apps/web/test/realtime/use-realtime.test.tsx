@@ -178,7 +178,7 @@ describe('프레임이 스토어에 닿는다', () => {
     })
 
     expect(board.store.getState().headSeq).toBe(4)
-    expect(screen.getByRole('status').textContent).toContain('스냅샷을 복원')
+    expect(screen.getByRole('status').textContent).toContain('스냅샷이 복원됐습니다')
   })
 
   /**
@@ -296,7 +296,7 @@ describe('프레임이 스토어에 닿는다', () => {
     board.push({ ...PAGE_CHANGED, seq: 9 })
 
     const notice = screen.getByRole('status').textContent
-    expect(notice).toContain('스냅샷을 복원')
+    expect(notice).toContain('스냅샷이 복원됐습니다')
     expect(notice).not.toContain('끊긴')
   })
 
