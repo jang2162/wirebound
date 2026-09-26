@@ -29,7 +29,7 @@ export const EntryFormView = view(({ props, children }) => (
 export const FieldView = view(({ props }) => (
   <Root as="div" data-wb-structure="outlined">
     <label data-wb-part="label">{String(props.label)}</label>
-    <div data-wb-part="control">{String(props.placeholder) || ' '}</div>
+    <div data-wb-part="control">{String(props.placeholder) || ' '}</div>
   </Root>
 ))
 

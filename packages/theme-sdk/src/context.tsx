@@ -1,8 +1,8 @@
 import { createContext, useContext, type ReactElement, type ReactNode, type SyntheticEvent } from 'react'
 
 export interface NodeBinding {
-  attrs: Record<string, string | undefined> &
-    Partial<Record<'onClick' | 'onChange' | 'onSubmit', (event: SyntheticEvent) => void>>
+  /** 루트에 펼 것 — `data-wb-*` 속성(문자열)과, 상호작용 런타임이 켜졌으면 `onClick`·`onChange`·`onSubmit`. */
+  attrs: Readonly<Record<string, string | ((event: SyntheticEvent) => void) | undefined>>
   /** 렌더러의 `ViewHost` 가 «Root 가 그려졌나» 를 보는 통로. */
   markRootRendered: () => void
 }

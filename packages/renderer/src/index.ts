@@ -45,3 +45,5 @@ export { renderDocument, renderNode, resolveStructure, resolveStructureOf } from
 export { installStructures } from './structures/index'
 
 export { renderComposed } from './compose'
+
+export { resolveVariant } from './variant'
