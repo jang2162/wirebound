@@ -21,7 +21,8 @@
  * | 한도(`LOST_COMMIT_PROBE_MS`) 안에 결말이 안 났다 · 확인이 실패했다 · 커밋됐는데 머리를 못 읽었다 | 원래 오류(503 «모름») | 안 한다 |
  *
  * **커밋이 끝날 때까지 본다.** 끊긴 연결의 COMMIT 이 서버에서 아직 돌면 `in progress`다 — 간격을 `LOST_COMMIT_POLL_MS`에서
- * `LOST_COMMIT_POLL_MAX_MS`까지 늘려 가며 다시 묻고 한도에서 멈춘다(잃은 COMMIT 여럿이 한꺼번에 돌 때 묻는 질의가 풀을 덜 채운다).
+ * `LOST_COMMIT_POLL_MAX_MS`까지 늘려 가며 다시 묻고 한도에서 멈춘다(잃은 COMMIT 여럿이 한꺼번에 돌 때 묻는 질의가 풀을 덜 채운다 —
+ * 한도를 넘겨 도는 COMMIT 하나에 25–26 번, 10ms 고정이면 82–86 번 · `test/edit-lost-commit.test.ts` «결말을 묻는 간격은 늘어난다»).
  * 연결이 끊겨 COMMIT 이 서버에 못 닿았으면 백엔드가 그 끊김을 보고 트랜잭션을 되돌려 `aborted`가 된다. 끊김이 한쪽만이라 백엔드가
  * 상대가 떠난 줄 모르면(트랜잭션 안에서 쉰다) 한도까지 `in progress`라 «모름»이다 — 참이다. 잰 값(`test/edit-lost-commit.test.ts` ·
  * COMMIT 을 서버에 넘기자마자 api 쪽 연결만 끊음(`halfCutOnQuery`) · 그 COMMIT 을 제약 트리거의 `pg_sleep`으로 늦춤 · 전부 실제로 커밋됨):

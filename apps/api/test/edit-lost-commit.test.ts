@@ -12,7 +12,12 @@ import { sql } from 'kysely'
 import { buildApp } from '../src/app'
 import { createDb, createPool } from '../src/db/client'
 import { DB_UNREACHABLE_WRITE_MESSAGE } from '../src/http/error-handler'
-import { DB_WRITE_NOT_APPLIED_MESSAGE, LOST_COMMIT_PROBE_MS } from '../src/services/lost-commit'
+import {
+  DB_WRITE_NOT_APPLIED_MESSAGE,
+  LOST_COMMIT_POLL_MAX_MS,
+  LOST_COMMIT_POLL_MS,
+  LOST_COMMIT_PROBE_MS,
+} from '../src/services/lost-commit'
 import type { ServerFrame } from '../src/ws/protocol'
 import {
   addMember,
@@ -41,6 +46,20 @@ const pageChanged = (frames: ServerFrame[]): PageChanged[] => frames.filter((fra
 const PROBE = 'as "committed"'
 /** 커밋을 묻는 질의의 글자(`services/lost-commit.ts`의 `settleTransaction`). */
 const XACT = 'pg_xact_status'
+/**
+ * 한도(`LOST_COMMIT_PROBE_MS`) 동안 결말을 묻는 수의 상한 — 첫 물음에 더해, 간격(`LOST_COMMIT_POLL_MS`에서 두 배씩
+ * `LOST_COMMIT_POLL_MAX_MS`까지)을 쌓은 시각이 한도 안인 만큼. 질의의 왕복을 0 으로 셈한다 — 실제는 이보다 적다.
+ */
+function maxPolls(): number {
+  let polls = 1
+  let at = 0
+  for (let pause = LOST_COMMIT_POLL_MS; at + pause < LOST_COMMIT_PROBE_MS; pause = Math.min(pause * 2, LOST_COMMIT_POLL_MAX_MS)) {
+    at += pause
+    polls += 1
+  }
+  return polls
+}
+
 /** 확인이 503 «모름»을 내기까지의 한도 — 확인의 한도(`LOST_COMMIT_PROBE_MS`)에 요청의 나머지 몫을 더한 것. */
 const PROBE_LIMIT_MS = LOST_COMMIT_PROBE_MS + 500
 
@@ -185,6 +204,26 @@ describe('COMMIT 답을 잃은 편집', () => {
         expect(res.json().error.message).toBe(DB_UNREACHABLE_WRITE_MESSAGE)
         expect(Date.now() - started).toBeLessThan(PROBE_LIMIT_MS)
         expect(pageChanged(await fx.watcher.quiet())).toEqual([])
+      })
+    })
+  })
+
+  /**
+   * **결말을 묻는 간격은 늘어난다**(`services/lost-commit.ts`의 «커밋이 끝날 때까지 본다») — 잃은 COMMIT 여럿이 한꺼번에 돌 때 묻는
+   * 질의가 풀을 덜 채우게. 한도를 넘겨 도는 COMMIT 하나에서 결말을 묻는 질의를 센다. 간격이 `LOST_COMMIT_POLL_MS`에서 두 배씩
+   * `LOST_COMMIT_POLL_MAX_MS`까지 늘면 한도 동안 묻는 수는 `maxPolls()`(왕복을 0 으로 셈) 이하다 — 간격이 늘지 않으면(10ms 고정)
+   * 한 건에 80 번 넘게 묻는다. 네 번 밑이면 간격이 상한에 닿기 전에 묻기를 멈췄거나 세는 자가 질의를 못 본 것이다.
+   */
+  it('결말을 묻는 간격은 늘어난다 — 한도를 넘겨 도는 COMMIT 하나에 묻는 수가 늘어나는 간격의 몫 이하다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      await slowCommit(fx.pageId, 3_000, async () => {
+        ctx.proxy.halfCutOnQuery('commit')
+        const polls = ctx.proxy.countQueries(XACT)
+        await ctx.app.inject({ method: 'PATCH', url: fx.opsUrl, cookies: fx.owner.cookie, payload: { baseSeq: 0, ops: addText('n_poll') } })
+        expect(ctx.proxy.fired).toBe(true)
+        expect(polls.count).toBeGreaterThanOrEqual(4)
+        expect(polls.count).toBeLessThanOrEqual(maxPolls())
       })
     })
   })

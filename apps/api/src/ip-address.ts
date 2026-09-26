@@ -1,12 +1,12 @@
 /**
- * IP 주소 글자를 값으로 읽는 도구. 설정의 `TRUST_PROXY` 검사(`config.ts`)와 로그인 제한의 주소 키(`auth/login-limit.ts`)가 쓴다 —
- * 둘 다 **한 주소의 여러 꼴**(줄임 · 앞 0 · 대소문자 · 끝의 IPv4 · 영역)을 같은 값으로 봐야 한다. 글자로 견주면 `0:0:0:0:0:ffff:1.2.3.4`
- * 와 `::ffff:1.2.3.4` 가 갈린다.
+ * IP 주소 글자를 값으로 읽는 도구. 로그인 제한의 주소 키(`auth/login-limit.ts` 의 `addressKey`)가 쓴다 — **한 주소의 여러 꼴**(줄임 ·
+ * 앞 0 · 대소문자 · 끝의 IPv4 · 영역)을 같은 값으로 봐야 한다. 글자로 견주면 `0:0:0:0:0:ffff:1.2.3.4` 와 `::ffff:1.2.3.4` 가 갈린다.
+ *
+ * 설정의 `TRUST_PROXY` 검사(`config.ts`)는 이것을 안 쓴다 — 믿을지를 정하는 것은 Fastify 의 판독기(`@fastify/proxy-addr` · ipaddr.js)라
+ * 그 판독기로 잰다. 둘은 같은 글자를 다르게 읽는다: ipaddr.js 는 글자 `::a.b.c.d` 를 IPv4 매핑(`::ffff:a.b.c.d`)으로 읽고, 값이 같은
+ * `0:0:0:0:0:0:a.b.c.d` 는 IPv6 으로 읽는다. 여기의 손 판독기로 믿음을 재면 그 틈으로 `::0.0.0.0/96`(= IPv4 전부)이 샌다.
  */
 import { isIPv6 } from 'node:net'
-
-/** IPv4 매핑 IPv6 의 앞 96비트(`::ffff:0:0/96`) — 여덟 묶음 가운데 앞 여섯. */
-const MAPPED_PREFIX = [0, 0, 0, 0, 0, 0xffff] as const
 
 /**
  * IPv6 주소를 여덟 묶음(16비트 수)으로 편다. 영역(`%eth0`)은 떼고 본다. IPv6 이 아니면 `undefined` — 펴기는 `isIPv6` 가 받은 글자에만
@@ -29,25 +29,26 @@ export function ipv6Groups(address: string): number[] | undefined {
   return [...left, ...fill, ...right].map((group) => Number.parseInt(group, 16))
 }
 
-/** 편 IPv6 이 IPv4 매핑 주소(`::ffff:a.b.c.d`)면 그 IPv4 를 `a.b.c.d` 로 준다. */
-export function mappedIPv4(groups: readonly number[]): string | undefined {
-  if (!MAPPED_PREFIX.every((group, i) => groups[i] === group)) return undefined
+/**
+ * 끝 32비트에 IPv4 를 담는 IPv6 대역의 앞 96비트(여덟 묶음 가운데 앞 여섯) — 이 대역의 주소는 한 IPv4 클라이언트다.
+ * - IPv4 매핑(`::ffff:0:0/96`) — 듀얼스택 소켓이 IPv4 연결을 내는 꼴.
+ * - IPv4 변환(`::ffff:0:0:0/96` — RFC 6145) · NAT64 잘 알려진 접두(`64:ff9b::/96` — RFC 6052) — 변환기 뒤의 IPv4 클라이언트.
+ * - IPv4 호환(`::/96` — RFC 4291 이 폐기한 꼴). 첫 바이트가 0 인 것(`::` · `::1` — `0.0.0.0/8` 은 클라이언트 주소가 아니다)은 뺀다.
+ * 운영자가 고른 NAT64 접두(`2001:db8:64::/96` 따위)는 모른다 — 그 뒤의 IPv4 클라이언트는 /64 하나로 뭉친다.
+ */
+const IPV4_CARRIERS: readonly (readonly number[])[] = [
+  [0, 0, 0, 0, 0, 0xffff],
+  [0, 0, 0, 0, 0xffff, 0],
+  [0x64, 0xff9b, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0],
+]
+
+/** 편 IPv6 이 IPv4 를 담는 꼴(`IPV4_CARRIERS`)이면 그 IPv4 를 `a.b.c.d` 로 준다. */
+export function embeddedIPv4(groups: readonly number[]): string | undefined {
+  const carrier = IPV4_CARRIERS.find((prefix) => prefix.every((group, i) => groups[i] === group))
+  if (carrier === undefined) return undefined
   const high = groups[6] as number
   const low = groups[7] as number
+  if (carrier === IPV4_CARRIERS[3] && high >> 8 === 0) return undefined
   return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`
-}
-
-/**
- * IPv6 대역(`groups`/`prefix`)이 IPv4 매핑 주소 전부(`::ffff:0:0/96`)를 덮는가. 덮으면 IPv4 로 붙는 클라이언트를 모두 그 대역 안으로 본다
- * — Fastify 의 `trustProxy`(proxy-addr)는 IPv4 클라이언트를 매핑 꼴로 바꿔 IPv6 대역과 견준다. `::ffff:10.0.0.0/8` 은 10/8 이 아니라
- * `::/8` 이고, `::/64` 도 그렇다.
- */
-export function coversAllIPv4(groups: readonly number[], prefix: number): boolean {
-  if (prefix > 96) return false
-  for (let bit = 0; bit < prefix; bit++) {
-    const shift = 15 - (bit % 16)
-    const index = Math.floor(bit / 16)
-    if ((((groups[index] as number) >> shift) & 1) !== (((MAPPED_PREFIX[index] as number) >> shift) & 1)) return false
-  }
-  return true
 }

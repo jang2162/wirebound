@@ -62,6 +62,11 @@ export interface FaultProxy {
   rejectStartupParameter(name: string): void
   /** **풀러 흉내 — 기동 메시지에서 `name`을 조용히 뺀다**(pgbouncer 의 `ignore_startup_parameters`). 계속 선다. */
   dropStartupParameter(name: string): void
+  /**
+   * `fragment` 를 담은 덩어리를 **센다** — 무장 · 붙잡기와 따로 서고 풀리지 않는다(모든 연결 · 끝까지). 한 질의를 몇 번 보냈는지 재는
+   * 자리다(잃은 COMMIT 의 결말을 묻는 폴링). 머리말대로 매개변수 값도 글자에 든다.
+   */
+  countQueries(fragment: string): { readonly count: number }
   /** 무장이 쏴졌는가. */
   readonly fired: boolean
   close(): Promise<void>
@@ -120,6 +125,7 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
   let holdMs = 0
   let delay: { fragment: string; ms: number | Promise<void>; onHeld?: () => void } | null = null
   const startup: StartupPolicy = { reject: new Set(), drop: new Set() }
+  const counters: { fragment: string; count: number }[] = []
   const sockets = new Set<net.Socket>()
 
   const server = net.createServer((client) => {
@@ -161,6 +167,7 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
         return
       }
       const text = chunk.toString('latin1').toLowerCase()
+      for (const counter of counters) if (text.includes(counter.fragment)) counter.count += 1
       if (arm?.kind === 'query' && text.includes(arm.fragment)) {
         arm = null
         fired = true
@@ -272,6 +279,15 @@ export async function startFaultProxy(databaseUrl: string): Promise<FaultProxy> 
     },
     halfCutOnQuery: (fragment) => {
       arm = { kind: 'half-cut', fragment: fragment.toLowerCase() }
+    },
+    countQueries: (fragment) => {
+      const counter = { fragment: fragment.toLowerCase(), count: 0 }
+      counters.push(counter)
+      return {
+        get count() {
+          return counter.count
+        },
+      }
     },
     rejectStartupParameter: (name) => {
       startup.reject.add(name)

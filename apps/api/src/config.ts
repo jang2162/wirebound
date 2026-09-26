@@ -1,8 +1,8 @@
+import { createRequire } from 'node:module'
 import { isIP } from 'node:net'
 import { z } from 'zod'
 import { getKoreanErrorMap } from '@wirebound/schema'
 import { DEFAULT_DB_TIME_LIMITS, type DbTimeLimits } from './db/client'
-import { coversAllIPv4, ipv6Groups } from './ip-address'
 import { portAgreementError } from './db/port-agreement'
 
 /**
@@ -81,8 +81,11 @@ function dbTimeLimitEnv(fieldName: string, fallback: number, min: number, max: n
  * 홉 수도 받는데, 둘 다 api 에 바로 닿는 사람이 `X-Forwarded-For` 를 지어 적으면 그 주소가 된다 — 로그인 제한의 주소 키를 아무 주소로나
  * 바꿔 비켜 간다. 앞단이 어디서 오는지를 적게 해야 그 앞단이 적은 것만 믿는다.
  *
- * 같은 까닭으로 **모두를 믿는 대역도 거절한다**(`trustProxyItemError`) — 접두 0, 그리고 IPv4 매핑 주소(`::ffff:0:0/96`)를 통째로 덮는
- * IPv6 대역(`::ffff:10.0.0.0/8` 은 10/8 이 아니라 `::/8` 로 읽혀 IPv4 클라이언트 전부를 믿는다 — `ip-address.ts` 의 `coversAllIPv4`).
+ * 같은 까닭으로 **모두를 믿는 대역도 거절한다**(`trustProxyItemError`) — 접두 0, 그리고 IPv4 클라이언트 전부를 믿는 IPv6 대역.
+ * Fastify 는 IPv4 클라이언트를 매핑 꼴(`::ffff:a.b.c.d`)로 바꿔 IPv6 대역과 견주므로 그 매핑 대역(`::ffff:0:0/96`)을 덮는 IPv6 대역은
+ * IPv4 전부를 믿는다 — `::ffff:10.0.0.0/8` 은 10/8 이 아니라 `::/8` 이고, 글자 `::0.0.0.0/96` 은 Fastify 가 매핑 꼴로 읽어 IPv4 전부다
+ * (값이 같은 `0:0:0:0:0:0:0.0.0.0/96` 은 IPv6 대역이다). 글자마다 읽는 법이 갈려 **그 판독기로 잰다**(`fastifyTrust`) — IPv4 의 양 끝
+ * `0.0.0.0` · `255.255.255.255` 를 둘 다 믿으면 대역이 이어져 있으므로 그 사이 전부를 믿는다.
  * 명시한 IPv4 대역 둘로 모두를 덮는 값(`0.0.0.0/1,128.0.0.0/1`)은 못 막는다 — `.env.example` 의 `TRUST_PROXY` 줄이 «클라이언트가
  * 닿는 대역을 적지 않는다»로 사람에게 맡긴다.
  */
@@ -116,12 +119,25 @@ function trustProxyItemError(item: string): string | undefined {
   const prefix = Number(prefixText)
   if (prefix > (version === 4 ? 32 : 128)) return invalid
   if (prefix === 0) return `"${item}"은 접두 0 이라 모든 주소를 믿습니다 — 앞단의 주소만 적어야 합니다`
-  const groups = version === 6 ? ipv6Groups(address) : undefined
-  if (groups !== undefined && coversAllIPv4(groups, prefix)) {
+  let trusts: (address: string, hop: number) => boolean
+  try {
+    trusts = fastifyTrust([item])
+  } catch {
+    return invalid
+  }
+  if (trusts('0.0.0.0', 0) && trusts('255.255.255.255', 0)) {
     return `"${item}"은 모든 IPv4 주소를 믿습니다 — IPv4 대역은 IPv4 꼴(예: 10.0.0.0/8)로, IPv4 매핑 IPv6 은 접두 97 이상으로 적어야 합니다`
   }
   return undefined
 }
+
+/**
+ * Fastify 가 `trustProxy` 배열로 믿을 주소를 가르는 함수를 짓는다 — Fastify 가 부르는 바로 그 모듈(`@fastify/proxy-addr` 의
+ * `compile`)이다. 이 저장소의 의존이 아니라 Fastify 의 의존이라 Fastify 의 자리에서 찾는다(판이 갈리지 않게).
+ */
+const fastifyTrust = createRequire(createRequire(import.meta.url).resolve('fastify'))('@fastify/proxy-addr').compile as (
+  value: string[],
+) => (address: string, hop: number) => boolean
 
 const DATABASE_URL_MESSAGE = 'DATABASE_URL이 필요합니다'
 

@@ -301,10 +301,22 @@ describe('주소 키', () => {
           '::ffff:102:304',
           '::ffff:1.2.3.4%eth0',
           '[::ffff:1.2.3.4]:80',
+          // IPv4 변환(RFC 6145) · IPv4 호환(폐기된 꼴) · NAT64 잘 알려진 접두(RFC 6052) — `::1` 과 한 /64 로 뭉치지 않는다.
+          '::ffff:0:1.2.3.4',
+          '0:0:0:0:ffff:0:1.2.3.4',
+          '::ffff:0:102:304',
+          '::1.2.3.4',
+          '0:0:0:0:0:0:1.2.3.4',
+          '::102:304',
+          '64:ff9b::1.2.3.4',
+          '64:FF9B::102:304',
         ],
       ],
-      ['5.6.7.8', ['5.6.7.8', '::ffff:5.6.7.8', '0:0:0:0:0:ffff:5.6.7.8', '::ffff:506:708']],
-      ['0:0:0:0::/64', ['::1', '::', '[::1]']],
+      ['5.6.7.8', ['5.6.7.8', '::ffff:5.6.7.8', '0:0:0:0:0:ffff:5.6.7.8', '::ffff:506:708', '::ffff:0:5.6.7.8', '::5.6.7.8', '64:ff9b::5.6.7.8']],
+      // 첫 바이트가 0 인 IPv4 호환 꼴은 IPv4 클라이언트가 아니다(`0.0.0.0/8`) — IPv6 으로 남는다.
+      ['0:0:0:0::/64', ['::1', '::', '[::1]', '::0.0.0.1', '::0.1.2.3']],
+      // 운영자가 고른 NAT64 접두는 모른다 — 그 뒤의 IPv4 클라이언트는 /64 하나로 뭉친다(`src/ip-address.ts` 의 `embeddedIPv4`).
+      ['64:ff9b:1:0::/64', ['64:ff9b:1::1.2.3.4', '64:ff9b:1::5.6.7.8']],
       ['2001:db8:1:3::/64', ['2001:db8:1:3::9']],
       ['fe80:0:0:0::/64', ['fe80::1%lo0', 'fe80::2%en1', 'fe80::1']],
       [undefined, ['unknown', '', ' 1.2.3.4', '01.2.3.4', '::ffff:01.2.3.4', '1.2.3.4:', '[1.2.3.4]:80x', 'proxy.example.com']],
@@ -321,6 +333,31 @@ describe('주소 키', () => {
       expect(res.statusCode).toBe(429)
       expect((await login(ctx, 'v6-next@example.com', WRONG, '2001:db8:1:3::1')).statusCode).toBe(401)
     })
+  })
+
+  // 푸는 규칙은 위 «한 클라이언트의 여러 꼴이 한 키다»가 소유한다 — 이 케이스는 Fastify 가 그 꼴의 머리를 `request.ip` 로 그대로 내는지를
+  // 실물로 잰다(Fastify 의 판독기는 글자 `::a.b.c.d` 를 매핑 꼴로 읽는다).
+  it('믿는 앞단이 IPv4 를 담은 IPv6 꼴을 적으면 그 IPv4 로 센다 — 꼴이 갈려도 한 키 · `::1` 과는 따로', async () => {
+    const forms = ['::ffff:0:198.51.100.7', '::198.51.100.7', '64:ff9b::198.51.100.7', '::ffff:198.51.100.7']
+    await withApi(
+      async (ctx) => {
+        const viaProxy = (email: string, xff: string) =>
+          ctx.app.inject({
+            method: 'POST',
+            url: '/api/auth/login',
+            payload: { email, password: WRONG },
+            remoteAddress: '10.9.9.9',
+            headers: { 'x-forwarded-for': xff },
+          })
+        for (let i = 0; i < perAddress; i++) {
+          const res = await viaProxy(`embedded${i}@example.com`, forms[i % forms.length] as string)
+          expect(res.statusCode, `${i + 1}번째 실패`).toBe(401)
+        }
+        expect((await viaProxy('embedded-next@example.com', '198.51.100.7')).statusCode).toBe(429)
+        expect((await viaProxy('embedded-next@example.com', '::1')).statusCode).toBe(401)
+      },
+      { config: { ...testConfig(), trustProxy: ['10.9.9.9'] } },
+    )
   })
 
   it('믿는 앞단이 IP 가 아닌 글자를 적으면 소켓 주소로 센다 — 글자마다 새 키가 되지 않는다', async () => {
@@ -360,13 +397,52 @@ describe('주소 키', () => {
 })
 
 describe('키 수의 상한', () => {
-  it('상한에 닿으면 가장 오래 기록한 키를 버린다', () => {
-    const limiter = createLoginLimiter({ windowMs: 1000, perAccount: 1, perAddress: 100, maxKeys: 2 }, () => 0)
+  /** 시각이 부를 때마다 1ms 씩 가는 제한기 — 마지막 기록의 차례가 서게. */
+  function tickingLimiter(rule: { perAccount: number; maxKeys: number }) {
+    let t = 0
+    return createLoginLimiter({ windowMs: 1_000_000, perAddress: 1_000_000, ...rule }, () => t++)
+  }
+
+  // 새 키로 상한을 채워 앞선 기록을 씻지 못한다 — 막힌 키만 건너뛰면 한도 − 1 까지 찬 키가 밀려 한도만큼 더 대 본다.
+  it('상한에서 버리는 것은 기록이 가장 적은 키다 — 새 키로 채워도 막힌 키 · 한도 − 1 까지 찬 키가 안 밀린다', () => {
+    const maxKeys = 50
+    const limiter = tickingLimiter({ perAccount: 3, maxKeys })
+
+    for (let i = 0; i < 3; i++) limiter.begin('blocked@x', 'ip')
+    for (let i = 0; i < 2; i++) limiter.begin('nearly@x', 'ip')
+    for (let i = 0; i < maxKeys * 2; i++) limiter.begin(`fill${i}@x`, 'ip')
+
+    expect(limiter.begin('blocked@x', 'ip').kind).toBe('limited')
+    expect([limiter.begin('nearly@x', 'ip').kind, limiter.begin('nearly@x', 'ip').kind]).toEqual(['admitted', 'limited'])
+  })
+
+  // 넣은 차례로 버리면 주인의 성공이 그 키를 맨 뒤로 옮겨 — 기록은 안 남겨도 — 밀리는 키가 갈린다. 남이 한 번 틀려 둔 이메일이
+  // 채우기 뒤에 남아 있으면 «그 사이 주인이 로그인했다 = 있는 계정»이다.
+  it('주인의 성공은 버리는 차례를 안 바꾼다 — 채우기 뒤의 답이 주인이 로그인한 계정 · 안 온 계정에서 같다', () => {
+    const answers = (ownerLogsIn: boolean) => {
+      const maxKeys = 20
+      const limiter = tickingLimiter({ perAccount: 2, maxKeys })
+      limiter.begin('victim@x', 'ip')
+      for (let i = 0; i < maxKeys / 2; i++) limiter.begin(`fill${i}@x`, 'ip')
+      if (ownerLogsIn) {
+        const owner = limiter.begin('victim@x', 'owner-ip')
+        if (owner.kind !== 'admitted') throw new Error('주인이 막혔다 — 판이 안 섰다')
+        owner.succeeded()
+      }
+      for (let i = maxKeys / 2; i < maxKeys; i++) limiter.begin(`fill${i}@x`, 'ip')
+      return [limiter.begin('victim@x', 'ip').kind, limiter.begin('victim@x', 'ip').kind]
+    }
+    expect(answers(true)).toEqual(answers(false))
+  })
+
+  // 모든 키가 막혔으면 메모리 상한을 지키려 막힌 키도 버린다(`src/auth/login-limit.ts` 머리말 «키 수에 상한이 있다»).
+  it('모든 키가 막혔으면 마지막 기록이 가장 오래된 키를 버린다', () => {
+    const limiter = tickingLimiter({ perAccount: 1, maxKeys: 2 })
 
     limiter.begin('a@x', 'ip')
     limiter.begin('b@x', 'ip')
     expect(limiter.begin('a@x', 'ip').kind).toBe('limited')
-    // 셋째 키가 들어오면 가장 오래 기록한 a 가 밀린다 — b · c 는 남는다.
+    // 셋째 키가 들어오면 마지막 기록이 가장 오래된 a 가 밀린다 — b · c 는 남는다.
     limiter.begin('c@x', 'ip')
     expect(limiter.begin('b@x', 'ip').kind).toBe('limited')
     expect(limiter.begin('c@x', 'ip').kind).toBe('limited')
@@ -392,7 +468,8 @@ describe('믿는 앞단(TRUST_PROXY)', () => {
 
   it('모든 IPv4 를 덮는 IPv6 대역 · 접두 0 은 기동 거절이다 — 까닭을 문장으로 말한다', () => {
     // IPv6 대역이 `::ffff:0:0/96`(IPv4 매핑 주소)을 통째로 덮으면 IPv4 로 붙는 클라이언트를 모두 믿는다.
-    for (const bad of ['::ffff:10.0.0.0/8', '0:0:0:0:0:ffff:10.0.0.0/8', '::ffff:a00:0/8', '::ffff:0:0/96', '::/64', '::/8']) {
+    // 글자 `::a.b.c.d` 는 Fastify 가 매핑 꼴로 읽는다 — `::0.0.0.0/96` 은 `::ffff:0.0.0.0/96` 이다.
+    for (const bad of ['::ffff:10.0.0.0/8', '0:0:0:0:0:ffff:10.0.0.0/8', '::ffff:a00:0/8', '::ffff:0:0/96', '::/64', '::/8', '::0.0.0.0/96', '::1.2.3.4/96', '::0.0.0.0/80']) {
       expect(() => loadConfig({ ...base, TRUST_PROXY: `10.0.0.2,${bad}` }), bad).toThrow(/모든 IPv4 주소를 믿습니다 — IPv4 대역은 IPv4 꼴/)
     }
     // 접두 0 은 Fastify(proxy-addr)가 기동에서 제 문장으로 던진다 — 설정에서 먼저 거절한다.
@@ -413,6 +490,14 @@ describe('믿는 앞단(TRUST_PROXY)', () => {
       ['::/96', '::5'],
       ['::1', '::1'],
       ['fe80::1%eth0/64', 'fe80::5'],
+      // 글자 `::a.b.c.d` 는 매핑 꼴 — 10/8 이다. 값이 같은 긴 꼴은 IPv6 대역이다.
+      ['::10.0.0.0/104', '10.1.1.1'],
+      ['0:0:0:0:0:0:10.0.0.0/104', '0:0:0:0:0:0:10.1.1.1'],
+      // IPv4 변환 · NAT64 대역은 그 꼴로 오는 주소만 믿는다 — IPv4 로 붙는 클라이언트는 아니다.
+      ['::ffff:0:0:0/96', '::ffff:0:1.2.3.4'],
+      ['64:ff9b::/96', '64:ff9b::1.2.3.4'],
+      // IPv4 의 절반(0.0.0.0/1)은 받는다 — 양 끝을 둘 다 믿어야 «IPv4 전부»다(`src/config.ts` 의 `trustProxyItemError`).
+      ['::ffff:0.0.0.0/97', '10.1.1.1'],
     ]
     for (const [value, inside] of accepted) {
       const { trustProxy } = loadConfig({ ...base, TRUST_PROXY: value })
