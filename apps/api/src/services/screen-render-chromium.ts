@@ -303,11 +303,20 @@ async function renderOne(
     context = await newRenderContext(browser, timeoutMs)
     const page = await context.newPage()
     await page.setContent(request.html, { waitUntil: 'load' })
+    // 테마 시트보다 먼저 얹어 전이가 시작도 안 하게 한다(`FREEZE_MOTION`). 뒤에 얹어도 시작한 전이가 끊겨 끝 값으로 간다 — 잰 값이 같았다.
+    await page.addStyleTag({ content: FREEZE_MOTION })
     await page.addStyleTag({ content: request.css })
     // **찍기 전에 잰다** — 비트맵을 만드는 것이 비싼 몫이다(`SCREEN_DEFAULTS.maxArea`).
     const [width, height] = await page.evaluate<[number, number]>(PAGE_SIZE)
     if (width * height > maxArea) return failure(tooLarge(width, height, maxArea))
-    const bytes = await page.screenshot({ type: 'png', fullPage: FULL_PAGE })
+    /**
+     * **잰 크기로 묶어 찍는다.** playwright 는 찍으면서 크기를 다시 재고 그 크기로 비트맵을 만든다 — 잰 뒤에 자라는
+     * 페이지(위 두 겹이 못 닫는 수단)가 상한을 지난 비트맵이 된다. `clip` 이 있으면 그 재기를 `clip` 안으로 자른다.
+     */
+    const bytes = await page.screenshot({ type: 'png', fullPage: FULL_PAGE, clip: { x: 0, y: 0, width, height } })
+    // **잘린 그림을 내지 않는다** — 묶어 찍은 뒤 자랐으면 그림은 위쪽만이다(`FULL_PAGE`의 판정).
+    const [afterWidth, afterHeight] = await page.evaluate<[number, number]>(PAGE_SIZE)
+    if (afterWidth > width || afterHeight > height) return failure(grew(width, height, afterWidth, afterHeight))
     const size = readPngSize(bytes)
     // **못 읽은 크기를 계약에 넣지 않는다** — 넣으면 슬라이드가 조용히 찌그러진다.
     if (size === null) return failure('그린 이미지의 화소를 읽지 못했습니다')
@@ -365,14 +374,30 @@ async function probeKoreanGlyphs(browser: Browser, timeoutMs: number): Promise<K
 }
 
 /**
- * 화면 전체의 크기(CSS px) — `fullPage` 가 찍는 크기와 같은 값을 읽는다. 글자로 넘기는 까닭은 `KOREAN_GLYPH_PROBE`와 같다.
+ * **움직임을 끈다 — 잰 크기와 찍는 크기가 같은 상태를 보게.** 테마 시트는 HTML 을 띄운 **뒤에** 얹으므로 테마의
+ * `transition` 은 기본값에서 테마 값으로 옮겨 가는 전이를 시작한다. 그 사이에 재면 작게 재고 크게 찍는다(여백 20000px 을
+ * 전이로 건 파생 테마가 상한의 4.9배 비트맵을 냈다) — 시스템 테마도 단추에 `transition` 을 걸어 그림이 옮겨 가는 중간에 찍혔다.
+ *
+ * **층(`@layer`)에 둔다** — 층 안의 `!important` 는 층 밖의 `!important` 를 특이도와 상관없이 이긴다. 테마 값은 `!important` 를
+ * 실을 수 있고(컴파일이 받는다) 그 셀렉터가 `*` 보다 구체적이라, 층 없이 두면 테마가 이 끄기를 이긴다.
  */
-const PAGE_SIZE = `(() => {
+export const FREEZE_MOTION =
+  '@layer wb-freeze-motion { *, *::before, *::after { transition: none !important; animation: none !important } }'
+
+/**
+ * 화면 전체의 크기(CSS px) — playwright 가 `fullPage` 로 찍을 때 재는 식(`body`·`documentElement` 의 scroll · offset · client
+ * 최대)과 같다. **글꼴을 기다린 뒤 잰다** — 테마의 `@font-face` 는 시트를 얹은 뒤에야 받기 시작하고 playwright 도 찍기 전에
+ * `document.fonts.ready` 를 기다린다(세로 지표가 큰 글꼴이 오기 전에 재면 작게 잰다). 먼저 레이아웃을 세워야 쓰이는 글꼴의 받기가
+ * 시작된다. 글자로 넘기는 까닭은 `KOREAN_GLYPH_PROBE`와 같다.
+ */
+const PAGE_SIZE = `(async () => {
+  void document.documentElement.offsetHeight
+  await document.fonts.ready
   const d = document.documentElement
   const b = document.body
   return [
-    Math.max(d.scrollWidth, d.clientWidth, b ? b.scrollWidth : 0),
-    Math.max(d.scrollHeight, d.clientHeight, b ? b.scrollHeight : 0),
+    Math.max(d.scrollWidth, d.offsetWidth, d.clientWidth, b ? Math.max(b.scrollWidth, b.offsetWidth, b.clientWidth) : 0),
+    Math.max(d.scrollHeight, d.offsetHeight, d.clientHeight, b ? Math.max(b.scrollHeight, b.offsetHeight, b.clientHeight) : 0),
   ]
 })()`
 
@@ -383,6 +408,14 @@ export function tooLarge(width: number, height: number, maxArea: number): string
 
 /** 넓이 상한을 넘은 장의 이유 머리. */
 export const SCREEN_TOO_LARGE = '페이지가 너무 커 화면을 그리지 않았습니다'
+
+/** 잰 뒤에 자란 장의 이유. 두 크기를 함께 말한다. */
+export function grew(width: number, height: number, afterWidth: number, afterHeight: number): string {
+  return `${SCREEN_GREW} — ${width}×${height}px 에서 ${afterWidth}×${afterHeight}px`
+}
+
+/** 잰 뒤에 자란 장의 이유 머리. */
+export const SCREEN_GREW = '페이지가 그리는 동안 커져 화면을 그리지 않았습니다'
 
 function failure(reason: string): ScreenResult {
   return { ok: false, reason }
