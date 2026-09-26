@@ -149,7 +149,7 @@ export function useRealtime(
             break
           }
           case 'restored':
-            store.markRestored(frame.safetySnapshotId)
+            store.markRestored(frame)
             break
           case 'membership-changed':
             onMembership?.('changed')

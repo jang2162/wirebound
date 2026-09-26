@@ -177,15 +177,22 @@ type Notice =
 export function SnapshotsPanel(props: {
   projectId: string
   /**
-   * 복원이 성공했다. 셸이 이것을 받아 문서와 트리를 다시 읽는다(위 머리말). 그 복원의 안전망 스냅샷 id 를 넘긴다 — 셸이 되돌아오는 내 복원의
-   * 신호를 알아본다(`EditorStore.beginRestoreReread`).
+   * **복원을 보낸다** — 그 요청에 실은 복원 id(`x-wb-restore-id`)를 넘긴다(`EditorStore.beginOwnRestore`). 셸이 답이 오기 전에 온 그 id 의
+   * 신호를 답까지 미룬다. 보낸 뒤에는 아래 셋 가운데 하나를 반드시 부른다 — 같은 복원 id 로.
    */
-  onRestored: (safetySnapshotId: string) => void
+  onRestoreSent: (clientRestoreId: string) => void
+  /**
+   * 복원이 성공했다. 셸이 이것을 받아 문서와 트리를 다시 읽는다(위 머리말). 그 복원의 안전망 스냅샷 id 를 넘긴다 — 셸이 되돌아오는 내 복원의
+   * 신호를 알아본다(`EditorStore.ownRestoreAnswered`).
+   */
+  onRestored: (clientRestoreId: string, safetySnapshotId: string) => void
+  /** **커밋 전에 거절됐다**(4xx · 봉투 있는 500) — 복원이 안 됐다(`EditorStore.ownRestoreRefused`). */
+  onRestoreRefused: (clientRestoreId: string) => void
   /**
    * **복원의 답을 잃었다** — 서버가 복원했는지 모른다(`EditorStore.markRestoreUnanswered`). 셸이 «복원됐는지 모릅니다 — 다시 불러오기»를 세운다.
-   * 커밋 전에 거절된 실패(4xx · 봉투 있는 500)는 부르지 않는다 — 복원이 안 됐다.
+   * 커밋 전에 거절된 실패는 여기가 아니라 위 `onRestoreRefused`다 — 복원이 안 됐다.
    */
-  onRestoreUnanswered: () => void
+  onRestoreUnanswered: (clientRestoreId: string) => void
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** **토글까지 감싸는 상자에 건다** — 그 배치가 훅의 계약이다(`use-popover-dismiss.ts`). */
@@ -206,7 +213,9 @@ export function SnapshotsPanel(props: {
       {open && (
         <SnapshotsBody
           projectId={props.projectId}
+          onRestoreSent={props.onRestoreSent}
           onRestored={props.onRestored}
+          onRestoreRefused={props.onRestoreRefused}
           onRestoreUnanswered={props.onRestoreUnanswered}
           placement={placement}
           bodyRef={bodyRef}
@@ -219,8 +228,10 @@ export function SnapshotsPanel(props: {
 /** 조회와 그 실패를 든다. 열려 있는 동안만 산다 — 마운트가 곧 조회다(위 머리말). */
 function SnapshotsBody(props: {
   projectId: string
-  onRestored: (safetySnapshotId: string) => void
-  onRestoreUnanswered: () => void
+  onRestoreSent: (clientRestoreId: string) => void
+  onRestored: (clientRestoreId: string, safetySnapshotId: string) => void
+  onRestoreRefused: (clientRestoreId: string) => void
+  onRestoreUnanswered: (clientRestoreId: string) => void
   /** 붙일 자리와 잴 상자 — 토글을 감싼 쪽이 고른다(`use-popover-side.ts`). */
   placement: PopoverPlacement
   bodyRef: RefObject<HTMLDivElement | null>
@@ -314,7 +325,9 @@ function SnapshotsBody(props: {
           snapshots={state.snapshots}
           reloadFailure={reloadFailure}
           onSaved={() => setReloadToken((token) => token + 1)}
+          onRestoreSent={props.onRestoreSent}
           onRestored={props.onRestored}
+          onRestoreRefused={props.onRestoreRefused}
           onRestoreUnanswered={props.onRestoreUnanswered}
         />
       )}
@@ -360,10 +373,14 @@ function SnapshotsScreen(props: {
   /** 저장은 됐는데 목록만 못 받았을 때의 서버 문장. 없으면 `null`. */
   reloadFailure: string | null
   onSaved: () => void
+  /** 복원을 보낸다(`SnapshotsPanel`의 같은 이름). */
+  onRestoreSent: (clientRestoreId: string) => void
   /** 복원이 성공했다. **`onSaved`와 갈라 둔다** — 아래 `runRestore`의 주석. */
-  onRestored: (safetySnapshotId: string) => void
+  onRestored: (clientRestoreId: string, safetySnapshotId: string) => void
+  /** 커밋 전에 거절됐다(`SnapshotsPanel`의 같은 이름). */
+  onRestoreRefused: (clientRestoreId: string) => void
   /** 복원의 답을 잃었다(`SnapshotsPanel`의 같은 이름). */
-  onRestoreUnanswered: () => void
+  onRestoreUnanswered: (clientRestoreId: string) => void
 }): ReactElement {
   const api = useApi()
   const abilities = projectAbilities(props.project.role)
@@ -384,8 +401,11 @@ function SnapshotsScreen(props: {
     setNotice(null)
     setConfirming(null)
     setRestoring(snapshot.id)
+    // **이 복원의 id** — 서버가 그 신호에 되돌려 준다(`x-wb-restore-id`). 답이 오기 전 · 답을 잃은 뒤의 신호를 셸이 알아본다.
+    const clientRestoreId = crypto.randomUUID()
+    props.onRestoreSent(clientRestoreId)
     try {
-      const result = await api.restoreSnapshot(props.project.id, snapshot.id)
+      const result = await api.restoreSnapshot(props.project.id, snapshot.id, { clientRestoreId })
       setNotice({ kind: 'restored', tag: snapshot.tag, result })
       // **성공했을 때만** 목록을 다시 받는다. 프로젝트가 바뀌었고 안전망 스냅샷이 하나 생겼다.
       props.onSaved()
@@ -397,17 +417,18 @@ function SnapshotsScreen(props: {
        * **`onSaved`에 얹지 않는다.** 저장은 이 목록만 바꾸고 복원은 **프로젝트 전체**를
        * 바꾼다 — 한 신호로 접으면 스냅샷을 하나 만들 때마다 셸이 문서와 트리를 다시 읽는다.
        */
-      props.onRestored(result.safetySnapshot.id)
+      props.onRestored(clientRestoreId, result.safetySnapshot.id)
     } catch (caught) {
       const failure = toFailure(caught, RESTORE_FAILURE)
       // 저장 쪽과 같은 판단이다 — 세션이 끊긴 것은 다음 조회가 `SignedOut`으로 보낸다.
       // 그 밖에는 **서버 문장을 그대로 그린다**: 409 넷과 400 셋을 화면은 `code`로 가를 수 없다.
       const message = failure.kind === 'signed-out' ? RESTORE_FAILURE : failure.message
-      // **커밋 전에 거절됐는지 모르면 복원됐을 수 있다**(`refusedBeforeCommit`) — 답만 잃었으면 서버는 복원했고 그 신호는 이 탭에 안 온다.
-      // 셸이 «복원됐는지 모릅니다 — 다시 불러오기»를 세우고, 여기서도 그렇다고 말한다.
+      // **커밋 전에 거절됐는지 모르면 복원됐을 수 있다**(`refusedBeforeCommit`) — 답만 잃었으면 서버는 복원했거나 아직 하는 중이다.
+      // 셸이 «복원됐는지 모릅니다 — 다시 불러오기»를 세우고(그 신호가 뒤에 오면 다시 세운다), 여기서도 그렇다고 말한다.
       const unanswered = failure.kind !== 'signed-out' && !refusedBeforeCommit(caught)
       setNotice({ kind: 'error', message: unanswered ? `${message} — ${RESTORE_UNANSWERED}` : message })
-      if (unanswered) props.onRestoreUnanswered()
+      if (unanswered) props.onRestoreUnanswered(clientRestoreId)
+      else props.onRestoreRefused(clientRestoreId)
     } finally {
       setRestoring(null)
     }

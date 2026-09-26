@@ -1,8 +1,9 @@
 /**
- * **내 복원의 답을 잃으면 «복원됐는지 모릅니다 — 다시 불러오기»를 세운다**(`EditorStore.markRestoreUnanswered`).
+ * **내 복원의 답을 잃으면 배너를 세운다**(`EditorStore.markRestoreUnanswered`) — 답을 기다리는 동안 그 복원의 신호가 왔으면 «반영됐습니다»다.
  *
- * 복원 요청은 지금 WS 연결의 id 를 실어 서버가 그 연결을 방송에서 뺀다 — 답을 잃으면 이 탭에는 신호도 답도 없다. 판: 서버가 복원을 커밋한 뒤
- * 브라우저가 그 답만 버린다(`route.fetch` → `abort`). 성질: 화면이 서버와 다르면 배너가 그렇다고 말하고, 그 단추가 화면을 서버 판으로 맞춘다.
+ * 판: 서버가 복원을 커밋하고 그 신호가 이 탭에 닿은 뒤 브라우저가 답만 버린다(`route.fetch` → 신호 → `abort`). 복원의 방송은 낸 연결도 빼지
+ * 않는다 — 연결을 빼던 판에서는 이 탭에 신호도 답도 없었다. 성질: 화면이 서버와 다르면 배너가 그렇다고 말하고, 그 단추가 화면을 서버 판으로
+ * 맞춘다. 신호가 다시 읽기보다 늦게 오는 판은 `editor-restore-signal-order.test.ts`의 «늦게 커밋»이 든다.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
@@ -59,9 +60,10 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
         if (kind !== undefined) events.push(`${at()} WS← ${kind}`)
       })
     })
-    // **서버는 복원을 끝내고 브라우저는 그 답만 잃는다.**
+    // **서버는 복원을 끝내고 브라우저는 그 답만 잃는다** — 그 신호가 닿은 뒤에 끊는다(신호가 답보다 먼저인 칸).
     await page.route('**/restore', async (route) => {
       const answer = await route.fetch()
+      await poll('신호가 먼저 닿는다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 10_000)
       events.push(`${at()} 복원 서버 답 ${answer.status()} · 브라우저에는 끊김`)
       await route.abort('connectionreset')
     })
@@ -86,12 +88,13 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
       // eslint-disable-next-line no-console
       console.log(`[답 잃은 복원] ${events.join(' · ')} · ${JSON.stringify(after)} · 상태줄 ${JSON.stringify(statuses)}`)
 
-      // 판 카나리아 — 서버는 복원했고(원문) 이 탭은 그 신호도 답도 못 받아 옛 판이다.
+      // 판 카나리아 — 서버는 복원했고(원문) 이 탭은 답을 못 받아 옛 판이다. 신호는 답보다 먼저 닿았다.
       expect(after.서버).toBe('원문')
       expect(after.캔버스).toContain('바뀐 글')
-      expect(events.some((line) => line.endsWith('WS← restored'))).toBe(false)
-      // 성질 — 화면이 서버와 다르면 그렇다고 말한다(단추가 있다).
+      expect(events.findIndex((line) => line.endsWith('WS← restored'))).toBeLessThan(events.findIndex((line) => line.includes('복원 서버 답')))
+      // 성질 — 화면이 서버와 다르면 그렇다고 말한다(단추가 있다). 신호가 왔으니 «반영됐습니다»다 — 남의 복원이라고 하지 않는다.
       expect(after.배너).toBe(true)
+      expect(statuses.some((text) => text.includes('서버에 반영됐습니다'))).toBe(true)
 
       await page.locator('.wb-shell-remote-alert').getByRole('button', { name: '다시 불러오기' }).click()
       await page.locator('.wb-shell-canvas-frame', { hasText: '원문' }).waitFor({ timeout: 10_000 })

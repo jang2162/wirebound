@@ -14,7 +14,7 @@ describe('답을 잃은 내 복원', () => {
   it('남의 복원 배너가 서 있으면 그 문장을 두고, 도는 다시 읽기의 판은 배너를 풀지 않는다', () => {
     const store = new EditorStore()
     store.loadPage('page_1', doc(), 4)
-    store.markRestored('s-bob')
+    store.markRestored({ safetySnapshotId: 's-bob' })
     // 배너의 단추로 다시 읽기를 시작한다 — 그 판이 오기 전에 내 복원의 답을 잃는다.
     store.beginRestoreReread()
     const ticket = store.beginPageLoad('page_1')
@@ -32,7 +32,7 @@ describe('답을 잃은 내 복원', () => {
     const store = new EditorStore()
     store.loadPage('page_1', doc(), 4)
     store.markRestoreUnanswered()
-    expect(store.getState().remoteStale).toEqual({ reason: 'restored', unanswered: true })
+    expect(store.getState().remoteStale).toEqual({ reason: 'restored', own: 'unanswered' })
 
     store.beginRestoreReread()
     const ticket = store.beginPageLoad('page_1')

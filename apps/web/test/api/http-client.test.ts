@@ -1337,6 +1337,23 @@ describe('createHttpClient', () => {
     ])
   })
 
+  /**
+   * **복원의 id 는 복원에만 실린다**(`RestoreOptions`) — 서버가 그 복원의 신호에 되돌려 주어, 답이 오기 전 · 답을 잃은 뒤의 신호를 이 탭이
+   * 알아본다(`store/editor-store.ts`의 `markRestored`). 안 주면 키를 안 만든다.
+   */
+  it('복원에 복원 id 를 주면 머리로 나간다 — 안 주면 키가 없다', async () => {
+    const stub = stubFetch(jsonResponse(200, restoreResult), jsonResponse(200, restoreResult))
+    const client = createHttpClient(stub.fetchImpl, () => 'wsc_7')
+
+    await client.restoreSnapshot('p1', 's1', { clientRestoreId: 'r-1' })
+    await client.restoreSnapshot('p1', 's1')
+
+    expect(stub.calls.map((call) => call.init?.headers)).toEqual([
+      { 'x-wb-connection-id': 'wsc_7', 'x-wb-restore-id': 'r-1' },
+      { 'x-wb-connection-id': 'wsc_7' },
+    ])
+  })
+
   it('연결이 없으면 헤더를 아예 안 만든다 — 빈 문자열을 보내지 않는다', async () => {
     const stub = stubFetch(jsonResponse(200, user))
     const client = createHttpClient(stub.fetchImpl, () => undefined)

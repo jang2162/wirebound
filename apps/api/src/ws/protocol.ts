@@ -145,11 +145,18 @@ export type ServerFrame =
       snapshotId: string
       actor: EventActor
       /**
-       * 그 복원이 만든 안전망 스냅샷의 id — 복원 응답의 `safetySnapshot.id`와 같다. **낸 사람이 자기 복원을 알아보는 수단이다**(위
-       * `page-changed`의 `clientOpId`와 같은 창: 복원이 연결 id 없이 나가는 동안 소켓이 다시 붙어 룸에 들면 낸 사람이 되받는다). 복원마다
-       * 새로 나므로 겹치지 않는다.
+       * 그 복원이 만든 안전망 스냅샷의 id — 복원 응답의 `safetySnapshot.id`와 같다. **낸 사람이 답을 받은 자기 복원을 알아보는 수단이다** —
+       * 복원의 방송은 낸 연결도 빼지 않으므로(`notify.ts`의 `notifyRestored`) 낸 탭이 늘 되받는다. 서버가 지어 복원마다 새로 나므로 겹치지
+       * 않고, 남이 흉내 낼 수 없다.
        */
       safetySnapshotId: string
+      /**
+       * **낸 탭이 그 요청에 붙인 id. 있을 때만 실린다**(`notify.ts`의 `RESTORE_ID_HEADER`). 답을 **아직 못 받았거나 잃은** 복원의 신호를
+       * 낸 탭이 알아보는 수단이다 — 답이 오기 전의 신호는 답을 볼 때까지 미루고, 답을 잃은 복원의 신호는 «복원이 서버에 반영됐다»로 읽는다.
+       * 넘기는(배너를 안 세우는) 판정에는 쓰지 않는다 — 룸의 모두에게 보이는 값이라 흉내 낼 수 있다(`apps/web`의 `EditorStore.markRestored`).
+       * 탭이 지은 무작위 값이라 무엇도 드러내지 않는다. **멱등 키가 아니다** — 서버는 저장하지 않는다.
+       */
+      clientRestoreId?: string
     }
   /**
    * **이 연결의 주인의 멤버십이 바뀌었다 — 다시 읽어라.** 역할 변경 · 제거 · owner 넘기기(역할 변경의 한 판이다)가
