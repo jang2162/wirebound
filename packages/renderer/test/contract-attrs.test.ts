@@ -37,14 +37,19 @@ const CONTRACT_ATTRS = [
 ]
 
 /**
- * 계약 밖인데 원문에 있어도 되는 것. **이름 있는 예외 하나뿐이다.**
+ * 계약 밖인데 원문에 있어도 되는 것. **이름 있는 예외 셋이다.**
  *
  * `data-wb-error`는 폴백이 단다(`src/fallback.tsx`). 폴백은 **문서 노드가 아니라 오류
  * 표시**이고 테마의 어휘 밖이라(설계서 「컴포넌트 정의 구조」 — 테마는 카탈로그가 선언한 컴포넌트와 parts만
  * 스타일한다) 테마 검증기가 대조할 일이 없다. 같은 판정을 `structures.test.tsx`의
  * *"폴백만 일반 선언을 낸다"*가 스타일 쪽에서 함께 고정한다.
+ *
+ * `data-wb-marker` · `data-wb-marker-offset`은 **테마 뷰가 호스트에게 마커 자리를 알리는 속성**이다 — SDK 의 `<Root marker>` 가
+ * 달고(`packages/theme-sdk/src/root.tsx`), 렌더러는 **읽기만** 한다(`src/marker.ts` 의 `markerPoint`). 셀렉터 어휘가 아니고 SDK
+ * 기본 뷰는 달지 않는다(코드 테마 spec 「뷰 계약」). 같은 부류의 `data-wb-focus` 는 `src/` 에 셀렉터 글자(`[data-wb-focus]`)로만
+ * 있어 아래 `dataAttrs` 의 정규식이 세지 않는다 — 그래서 목록에 없다(있으면 «실제로 쓰인다» 가 죽는다).
  */
-const ALLOWED_OUTSIDE_CONTRACT = ['data-wb-error']
+const ALLOWED_OUTSIDE_CONTRACT = ['data-wb-error', 'data-wb-marker', 'data-wb-marker-offset']
 
 /**
  * 원문에서 `data-…` 리터럴을 모은다. JSX 속성과 문자열 키를 함께 잡는다.
