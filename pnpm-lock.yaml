@@ -328,6 +328,16 @@ importers:
         specifier: ^0.22.14
         version: 0.22.14(tsx@4.23.5)(typescript@5.9.3)
 
+  system-themes/admin:
+    dependencies:
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../../packages/theme-sdk
+    devDependencies:
+      '@wirebound/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+
 packages:
 
   '@asamuzakjp/css-color@3.2.0':

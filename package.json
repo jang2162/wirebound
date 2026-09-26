@@ -7,12 +7,12 @@
   "scripts": {
     "dev:api": "pnpm --filter @wirebound/api dev",
     "dev:web": "pnpm --filter @wirebound/web dev",
-    "build": "pnpm --filter './packages/*' -r build",
+    "build": "pnpm --filter './packages/*' --filter './system-themes/*' -r build",
     "test": "vitest run --project '!build'",
     "test:watch": "vitest --project '!build'",
     "test:build": "vitest run --project build",
     "test:browser": "vitest run --project build apps/web/build-test",
-    "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json"
+    "typecheck": "tsc --build --force packages/*/tsconfig*.json apps/*/tsconfig*.json system-themes/*/tsconfig*.json"
   },
   "devDependencies": {
     "jsdom": "^25.0.0",

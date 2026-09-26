@@ -1,0 +1,443 @@
+/*
+ * system-admin 테마의 CSS. 옛 JSON 테마 `admin`(packages/themes 의 ADMIN_THEME)을 컴파일한 결과를 옮긴 첫 판이고,
+ * 이제 이 파일이 소스다 — 생성기는 없다. 고칠 때는 이 파일을 고친다.
+ *
+ * `:root` 의 `--wb-semantic-*` · `--wb-radius-*` 는 manifest(`src/manifest.ts`)의 토큰이 덮는 자리다 — 토큰 키의 `.` 을 `-` 로
+ * 바꾼 이름이다(`semantic.primary` → `--wb-semantic-primary`). 이름을 바꾸면 토큰 편집이 조용히 안 닿는다.
+ */
+:root {
+  --wb-palette-gray-50: #f8fafc;
+  --wb-palette-gray-100: #f1f5f9;
+  --wb-palette-gray-200: #e2e8f0;
+  --wb-palette-gray-400: #94a3b8;
+  --wb-palette-gray-600: #475569;
+  --wb-palette-gray-900: #0f172a;
+  --wb-palette-blue-50: #eff6ff;
+  --wb-palette-blue-500: #3b82f6;
+  --wb-palette-blue-600: #2563eb;
+  --wb-palette-red-500: #ef4444;
+  --wb-radius-sm: 4px;
+  --wb-radius-md: 6px;
+  --wb-radius-lg: 10px;
+  --wb-shadow-sm: 0 1px 2px rgba(15,23,42,.06);
+  --wb-shadow-md: 0 4px 12px rgba(15,23,42,.10);
+  --wb-motion-base: 150ms;
+  --wb-typography-display-fontSize: 32px;
+  --wb-typography-display-lineHeight: 1.2;
+  --wb-typography-display-fontWeight: 700;
+  --wb-typography-h1-fontSize: 24px;
+  --wb-typography-h1-lineHeight: 1.3;
+  --wb-typography-h1-fontWeight: 700;
+  --wb-typography-h2-fontSize: 20px;
+  --wb-typography-h2-lineHeight: 1.35;
+  --wb-typography-h2-fontWeight: 700;
+  --wb-typography-h3-fontSize: 17px;
+  --wb-typography-h3-lineHeight: 1.4;
+  --wb-typography-h3-fontWeight: 600;
+  --wb-typography-h4-fontSize: 15px;
+  --wb-typography-h4-lineHeight: 1.45;
+  --wb-typography-h4-fontWeight: 600;
+  --wb-typography-h5-fontSize: 14px;
+  --wb-typography-h5-lineHeight: 1.5;
+  --wb-typography-h5-fontWeight: 600;
+  --wb-typography-h6-fontSize: 13px;
+  --wb-typography-h6-lineHeight: 1.5;
+  --wb-typography-h6-fontWeight: 600;
+  --wb-typography-body-fontSize: 14px;
+  --wb-typography-body-lineHeight: 1.6;
+  --wb-typography-body-fontWeight: 400;
+  --wb-typography-caption-fontSize: 12px;
+  --wb-typography-caption-lineHeight: 1.5;
+  --wb-typography-caption-fontWeight: 400;
+  --wb-space-1: 4px;
+  --wb-space-2: 8px;
+  --wb-space-3: 12px;
+  --wb-space-4: 16px;
+  --wb-space-5: 20px;
+  --wb-space-6: 24px;
+  --wb-space-7: 28px;
+  --wb-space-8: 32px;
+  --wb-space-9: 36px;
+  --wb-space-10: 40px;
+  --wb-space-11: 44px;
+  --wb-space-12: 48px;
+  --wb-space-13: 52px;
+  --wb-space-14: 56px;
+  --wb-space-15: 60px;
+  --wb-space-16: 64px;
+  --wb-space-17: 68px;
+  --wb-space-18: 72px;
+  --wb-space-19: 76px;
+  --wb-space-20: 80px;
+  --wb-space-21: 84px;
+  --wb-space-22: 88px;
+  --wb-space-23: 92px;
+  --wb-space-24: 96px;
+  --wb-semantic-primary: #2563eb;
+  --wb-semantic-primarySoft: #eff6ff;
+  --wb-semantic-surface: #ffffff;
+  --wb-semantic-canvas: #f8fafc;
+  --wb-semantic-border: #e2e8f0;
+  --wb-semantic-borderStrong: #94a3b8;
+  --wb-semantic-text: #0f172a;
+  --wb-semantic-textMuted: #475569;
+  --wb-semantic-danger: #ef4444;
+  --wb-container-maxWidth: none;
+  --wb-container-gutter: var(--wb-space-6);
+  --wb-grid-columns: 12;
+  --wb-grid-gap: var(--wb-space-5);
+  --wb-section-paddingY: var(--wb-space-8);
+  --wb-section-paddingYCompact: var(--wb-space-4);
+}
+[data-wb-component="Section"][data-wb-structure="contained"] {
+  background: var(--wb-semantic-canvas);
+  padding-top: var(--wb-space-8);
+  padding-bottom: var(--wb-space-8);
+}
+[data-wb-component="Section"] [data-wb-part="inner"] {
+  max-width: var(--wb-container-maxWidth);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--wb-space-6);
+  padding-right: var(--wb-space-6);
+}
+[data-wb-component="Section"][data-wb-variant="hero"] {
+  background: var(--wb-semantic-primarySoft);
+  padding-top: var(--wb-space-16);
+  padding-bottom: var(--wb-space-16);
+}
+[data-wb-component="Section"][data-wb-variant="muted"] {
+  background: var(--wb-semantic-canvas);
+}
+[data-wb-component="Flex"][data-wb-structure="default"] {
+  gap: var(--wb-space-4);
+}
+[data-wb-component="Grid"][data-wb-structure="default"] {
+  gap: var(--wb-grid-gap);
+}
+[data-wb-component="Card"][data-wb-structure="plain"] {
+  background: var(--wb-semantic-surface);
+  border-radius: var(--wb-radius-lg);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--wb-semantic-border);
+  padding: var(--wb-space-5);
+}
+[data-wb-component="Card"] [data-wb-part="title"] {
+  font-size: var(--wb-typography-h3-fontSize);
+  line-height: var(--wb-typography-h3-lineHeight);
+  font-weight: var(--wb-typography-h3-fontWeight);
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="Card"] [data-wb-part="subtitle"] {
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+  font-weight: var(--wb-typography-caption-fontWeight);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Card"] [data-wb-part="body"] {
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="Card"][data-wb-variant="featured"] {
+  box-shadow: var(--wb-shadow-md);
+  border-color: var(--wb-semantic-primary);
+}
+[data-wb-component="Tabs"] [data-wb-part="list"] {
+  gap: var(--wb-space-4);
+  border-color: var(--wb-semantic-border);
+}
+[data-wb-component="Tabs"] [data-wb-part="tab"] {
+  padding-top: var(--wb-space-2);
+  padding-bottom: var(--wb-space-2);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-h5-fontSize);
+  line-height: var(--wb-typography-h5-lineHeight);
+  font-weight: var(--wb-typography-h5-fontWeight);
+}
+[data-wb-component="Tabs"] [data-wb-part="panel"] {
+  padding-top: var(--wb-space-4);
+  padding-bottom: var(--wb-space-4);
+}
+[data-wb-component="List"][data-wb-structure="table"] {
+  width: 100%;
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+  font-weight: var(--wb-typography-body-fontWeight);
+}
+[data-wb-component="List"] [data-wb-part="header"] {
+  background: var(--wb-semantic-canvas);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+}
+[data-wb-component="List"] [data-wb-part="cell"] {
+  padding-left: var(--wb-space-3);
+  padding-right: var(--wb-space-3);
+  padding-top: var(--wb-space-2);
+  padding-bottom: var(--wb-space-2);
+  border-color: var(--wb-semantic-border);
+}
+[data-wb-component="List"] [data-wb-part="rowAlt"] {
+  background: var(--wb-semantic-canvas);
+}
+[data-wb-component="List"] [data-wb-part="pagination"] {
+  padding-top: var(--wb-space-3);
+  padding-bottom: var(--wb-space-3);
+  text-align: center;
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="List"][data-wb-variant="compact"] [data-wb-part="cell"] {
+  padding-top: var(--wb-space-1);
+  padding-bottom: var(--wb-space-1);
+}
+[data-wb-component="List"][data-wb-state~="selected"] [data-wb-part="row"] {
+  background: var(--wb-semantic-primarySoft);
+}
+[data-wb-component="List"][data-wb-state~="disabled"] {
+  opacity: 0.5;
+}
+[data-wb-component="Tree"][data-wb-structure="indent"] {
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+  font-weight: var(--wb-typography-body-fontWeight);
+}
+[data-wb-component="Tree"] [data-wb-part="node"] {
+  padding-top: var(--wb-space-1);
+  padding-bottom: var(--wb-space-1);
+}
+[data-wb-component="Tree"] [data-wb-part="toggle"] {
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Tree"][data-wb-state~="selected"] [data-wb-part="node"] {
+  background: var(--wb-semantic-primarySoft);
+}
+[data-wb-component="KeyValue"][data-wb-structure="table"] {
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+  font-weight: var(--wb-typography-body-fontWeight);
+  color: var(--wb-semantic-text);
+}
+[data-wb-component="KeyValue"] [data-wb-part="key"] {
+  color: var(--wb-semantic-textMuted);
+  padding-top: var(--wb-space-2);
+  padding-bottom: var(--wb-space-2);
+  text-align: left;
+}
+[data-wb-component="KeyValue"] [data-wb-part="value"] {
+  padding-top: var(--wb-space-2);
+  padding-bottom: var(--wb-space-2);
+}
+[data-wb-component="SearchForm"][data-wb-structure="inline"] {
+  background: var(--wb-semantic-surface);
+  padding: var(--wb-space-4);
+  border-radius: var(--wb-radius-md);
+}
+[data-wb-component="SearchForm"] [data-wb-part="fields"] {
+  gap: var(--wb-space-4);
+}
+[data-wb-component="SearchForm"] [data-wb-part="actions"] {
+  gap: var(--wb-space-2);
+}
+[data-wb-component="EntryForm"][data-wb-structure="labelLeft"] {
+  background: var(--wb-semantic-surface);
+  padding: var(--wb-space-5);
+  border-radius: var(--wb-radius-md);
+}
+[data-wb-component="EntryForm"] [data-wb-part="label"] {
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-h5-fontSize);
+  line-height: var(--wb-typography-h5-lineHeight);
+  font-weight: var(--wb-typography-h5-fontWeight);
+}
+[data-wb-component="EntryForm"] [data-wb-part="actions"] {
+  gap: var(--wb-space-2);
+}
+[data-wb-component="Field"][data-wb-structure="outlined"] {
+  gap: var(--wb-space-1);
+}
+[data-wb-component="Field"] [data-wb-part="label"] {
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Field"] [data-wb-part="control"] {
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--wb-semantic-border);
+  border-radius: var(--wb-radius-sm);
+  padding-left: var(--wb-space-3);
+  padding-right: var(--wb-space-3);
+  padding-top: var(--wb-space-2);
+  padding-bottom: var(--wb-space-2);
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Field"] [data-wb-part="help"] {
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+  font-weight: var(--wb-typography-caption-fontWeight);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Field"][data-wb-variant="textarea"] [data-wb-part="control"] {
+  min-height: 72px;
+}
+[data-wb-component="Field"][data-wb-variant="checkbox"] [data-wb-part="control"] {
+  width: 16px;
+  min-height: 16px;
+  padding-left: 0;
+  padding-right: 0;
+}
+[data-wb-component="Field"][data-wb-state~="invalid"] [data-wb-part="control"] {
+  border-color: var(--wb-semantic-danger);
+}
+[data-wb-component="Field"][data-wb-state~="disabled"] {
+  opacity: 0.5;
+}
+[data-wb-component="Button"][data-wb-structure="solid"] {
+  background: var(--wb-semantic-primary);
+  color: var(--wb-semantic-surface);
+  border-radius: var(--wb-radius-sm);
+  padding-left: var(--wb-space-4);
+  padding-right: var(--wb-space-4);
+  padding-top: var(--wb-space-2);
+  padding-bottom: var(--wb-space-2);
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--wb-semantic-primary);
+  transition: var(--wb-motion-base);
+}
+[data-wb-component="Button"][data-wb-variant="secondary"] {
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-text);
+  border-color: var(--wb-semantic-border);
+}
+[data-wb-component="Button"][data-wb-variant="danger"] {
+  background: var(--wb-semantic-danger);
+  border-color: var(--wb-semantic-danger);
+}
+[data-wb-component="Button"][data-wb-variant="ghost"] {
+  background: var(--wb-semantic-surface);
+  color: var(--wb-semantic-primary);
+  border-color: var(--wb-semantic-surface);
+}
+[data-wb-component="Button"][data-wb-state~="disabled"] {
+  opacity: 0.5;
+}
+[data-wb-component="Button"][data-wb-state~="loading"] {
+  opacity: 0.7;
+}
+[data-wb-component="Link"][data-wb-structure="default"] {
+  color: var(--wb-semantic-primary);
+  text-decoration: underline;
+}
+[data-wb-component="Link"][data-wb-variant="muted"] {
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Link"][data-wb-state~="disabled"] {
+  opacity: 0.5;
+  text-decoration: none;
+}
+[data-wb-component="Text"][data-wb-structure="default"] {
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+  font-weight: var(--wb-typography-body-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="display"] {
+  font-size: var(--wb-typography-display-fontSize);
+  line-height: var(--wb-typography-display-lineHeight);
+  font-weight: var(--wb-typography-display-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="h1"] {
+  font-size: var(--wb-typography-h1-fontSize);
+  line-height: var(--wb-typography-h1-lineHeight);
+  font-weight: var(--wb-typography-h1-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="h2"] {
+  font-size: var(--wb-typography-h2-fontSize);
+  line-height: var(--wb-typography-h2-lineHeight);
+  font-weight: var(--wb-typography-h2-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="h3"] {
+  font-size: var(--wb-typography-h3-fontSize);
+  line-height: var(--wb-typography-h3-lineHeight);
+  font-weight: var(--wb-typography-h3-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="h4"] {
+  font-size: var(--wb-typography-h4-fontSize);
+  line-height: var(--wb-typography-h4-lineHeight);
+  font-weight: var(--wb-typography-h4-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="h5"] {
+  font-size: var(--wb-typography-h5-fontSize);
+  line-height: var(--wb-typography-h5-lineHeight);
+  font-weight: var(--wb-typography-h5-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="h6"] {
+  font-size: var(--wb-typography-h6-fontSize);
+  line-height: var(--wb-typography-h6-lineHeight);
+  font-weight: var(--wb-typography-h6-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="body"] {
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+  font-weight: var(--wb-typography-body-fontWeight);
+}
+[data-wb-component="Text"][data-wb-variant="caption"] {
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+  font-weight: var(--wb-typography-caption-fontWeight);
+  color: var(--wb-semantic-textMuted);
+}
+[data-wb-component="Media"] [data-wb-part="frame"] {
+  background: var(--wb-semantic-canvas);
+  border-radius: var(--wb-radius-md);
+  object-fit: cover;
+}
+[data-wb-component="Media"] [data-wb-part="caption"] {
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+  font-weight: var(--wb-typography-caption-fontWeight);
+  color: var(--wb-semantic-textMuted);
+  margin-top: var(--wb-space-2);
+  margin-bottom: var(--wb-space-2);
+}
+[data-wb-component="Divider"][data-wb-structure="default"] {
+  border-width: 0;
+  border-color: var(--wb-semantic-border);
+  background: var(--wb-semantic-border);
+}
+[data-wb-component="Divider"][data-wb-variant="horizontal"] {
+  height: 1px;
+  width: 100%;
+}
+[data-wb-component="Divider"][data-wb-variant="vertical"] {
+  width: 1px;
+  min-height: 100%;
+}
+[data-wb-component="Placeholder"][data-wb-structure="default"] {
+  background: var(--wb-semantic-canvas);
+  border-width: 1px;
+  border-style: dashed;
+  border-color: var(--wb-semantic-borderStrong);
+  border-radius: var(--wb-radius-md);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-typography-caption-fontSize);
+  line-height: var(--wb-typography-caption-lineHeight);
+  font-weight: var(--wb-typography-caption-fontWeight);
+  display: grid;
+}
+@media (max-width: 640px) {
+  [data-wb-component="Section"][data-wb-structure="contained"] {
+    padding-top: var(--wb-space-4);
+    padding-bottom: var(--wb-space-4);
+  }
+}

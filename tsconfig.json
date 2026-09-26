@@ -15,6 +15,7 @@
     { "path": "./packages/exporter/tsconfig.test.json" },
     { "path": "./apps/playground" },
     { "path": "./apps/api" },
-    { "path": "./apps/web" }
+    { "path": "./apps/web" },
+    { "path": "./system-themes/admin" }
   ]
 }
