@@ -14,7 +14,7 @@ import { z } from 'zod'
 import { LoginPassword, NormalizedEmail } from '../auth/credentials'
 import { DEFAULT_SCRYPT_PARAMS, hashPassword, verifyPassword } from '../auth/password'
 import { sessionCookieOptions } from '../auth/plugin'
-import { createLoginLimiter, requestAddressKey } from '../auth/login-limit'
+import { requestAddressKey, type LoginLimiter } from '../auth/login-limit'
 import { createSession, destroySession, hashSessionToken } from '../auth/session'
 import type { ApiConfig } from '../config'
 import { rateLimited, unauthenticated } from '../errors'
@@ -53,9 +53,11 @@ function scryptParams(config: ApiConfig) {
 
 /**
  * `config`를 받아 Fastify 플러그인을 만드는 팩토리. `app.ts`가
- * `app.register(authRoutes(config), { prefix: '/api/auth' })`로 등록한다.
+ * `app.register(authRoutes(config, app.loginLimiter), { prefix: '/api/auth' })`로 등록한다. `limiter` 는 이 앱의 로그인 시도
+ * 기록이다 — 앱마다 하나이고(`auth/login-limit.ts` 머리말 «저장소는 프로세스 메모리다»), 막힘을 푸는 입구(`auth/unlock-socket.ts`)가
+ * 같은 것을 푼다.
  */
-export function authRoutes(config: ApiConfig) {
+export function authRoutes(config: ApiConfig, limiter: LoginLimiter) {
   return async function plugin(app: FastifyInstance): Promise<void> {
     /**
      * 타이밍 공격 방어용 더미 해시. 존재하지 않는 이메일로 로그인해도 이 해시로
@@ -68,9 +70,6 @@ export function authRoutes(config: ApiConfig) {
      * 매 요청 같은 값과 비교해도 안전에 영향이 없다).
      */
     const dummyHash = await hashPassword('타이밍-방어-전용-더미-비밀번호', scryptParams(config))
-
-    /** 이 앱의 로그인 시도 기록 — 앱마다 하나다(`auth/login-limit.ts` 머리말 «저장소는 프로세스 메모리다»). */
-    const limiter = createLoginLimiter()
 
     app.post('/login', async (request, reply) => {
       const body = parseBody(LoginBody, request.body)

@@ -1,5 +1,6 @@
 import type { Writable } from 'node:stream'
 import Fastify, { type FastifyInstance } from 'fastify'
+import { createLoginLimiter, type LoginLimiter } from './auth/login-limit'
 import { registerAuthPlugin } from './auth/plugin'
 import { registerProjectRoleDecorator } from './auth/roles'
 import type { ApiConfig } from './config'
@@ -28,6 +29,11 @@ import { registerRealtime } from './ws'
 declare module 'fastify' {
   interface FastifyInstance {
     db: DbHandle
+    /**
+     * 이 앱의 로그인 시도 기록 — 앱마다 하나다(`auth/login-limit.ts` 머리말 «저장소는 프로세스 메모리다»). 로그인 라우트가 쓰고,
+     * 막힘을 푸는 입구(`auth/unlock-socket.ts` — `main.ts` 가 연다)가 푼다.
+     */
+    loginLimiter: LoginLimiter
   }
 }
 
@@ -214,6 +220,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   }
 
   app.decorate('db', db)
+  app.decorate('loginLimiter', createLoginLimiter())
   closeConnectionsAfterReplyWhileClosing(app)
   registerErrorHandler(app)
   await registerAuthPlugin(app, config)
@@ -223,7 +230,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // `request.projectRole`을 쓴다. 라우트보다 **앞**인 것은 `app.realtime`을
   // 데코레이트해야 라우트 핸들러가 그것으로 알릴 수 있기 때문이다.
   await registerRealtime(app, config)
-  await app.register(authRoutes(config), { prefix: '/api/auth' })
+  await app.register(authRoutes(config, app.loginLimiter), { prefix: '/api/auth' })
   await app.register(projectRoutes(), { prefix: '/api/projects' })
   await app.register(memberRoutes(), { prefix: '/api/projects' })
   await app.register(menuRoutes(), { prefix: '/api/projects' })

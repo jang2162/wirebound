@@ -8,7 +8,8 @@
     "start": "tsx --env-file-if-exists=.env src/main.ts",
     "migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts latest",
     "migrate:down": "tsx --env-file-if-exists=.env src/db/migrate.ts down",
-    "reset-password": "tsx --env-file-if-exists=.env src/db/reset-password.ts"
+    "reset-password": "tsx --env-file-if-exists=.env src/db/reset-password.ts",
+    "unlock-login": "tsx --env-file-if-exists=.env src/auth/unlock-login.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",

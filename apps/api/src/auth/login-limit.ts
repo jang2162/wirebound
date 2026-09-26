@@ -33,7 +33,17 @@
  * - **막힌 동안은 옳은 비밀번호도 429 다.** 옳으면 받아 주면 막힌 키에서도 200 · 429 가 갈려 비밀번호를 맞혀 보는 창구가 그대로 남는다.
  *   그 대가로 **남이 내 계정을 막을 수 있다** — 창마다 틀린 비밀번호를 한도만큼 보내면 그 창 동안 주인도 새로 로그인하지 못한다.
  *   이미 로그인한 세션 · API 토큰은 그대로 돈다. 계정 발급을 서버에 손이 닿는 사람이 하는 자체 호스팅 도구라(설계서 「권한 모델」) 그
- *   값을 치른다. 풀 수단은 창이 지나는 것과 서버 재기동이다(기록이 메모리에만 있다).
+ *   값을 치른다. 풀 수단은 창이 지나는 것 · 아래 «막힘을 푸는 명령» · 서버 재기동(모두의 기록을 비운다)이다.
+ * - **막힘을 푸는 명령** — 서버에 손이 닿는 사람이 `unlock-login` 으로 키 하나(계정 또는 주소)의 기록을 다 걷는다(`unlock`). 명령이
+ *   메모리에 닿는 입구와 그 인가는 `auth/unlock-socket.ts` 머리말이 소유한다. 대가:
+ *   - **푼 것이 두드리는 쪽의 다음 답에 보인다** — 한도에서 429 를 받던 쪽이 401 을 받으면 «누가 이 이메일을 풀었다»를 읽고, 사람은
+ *     주인이 청한 계정만 풀므로 «있는 계정»의 신호가 된다. 사람이 친 명령 한 번에 한 번 서고 두드리는 쪽이 제 뜻으로 세우지 못한다 —
+ *     아래 «없는 계정도 같은 판정이다»가 닫은 신호(주인이 로그인할 때마다 선다)와 다르다. 명령이 없으면 주인이 창을 기다리거나 서버를
+ *     다시 띄워야 하고, 재기동은 같은 신호를 내면서 두드리는 쪽의 기록까지 모두 비운다 — 명령은 그보다 좁아 이 값을 치른다.
+ *   - **두드리는 쪽도 한도만큼 다시 댄다** — 계정 키를 걷으므로, 아직 보내고 있으면 곧 다시 막힌다.
+ *   - **계정을 풀어도 주소 키는 그대로다**(그 반대도) — 429 문장이 두 키를 가르지 않으므로(`routes/auth.ts` 의 `loginLimitedMessage`)
+ *     명령이 그렇다고 말한다.
+ *   - 로그인 판정에는 닿지 않는다 — 막힌 판은 그대로 DB 도 scrypt 도 안 거치고, 푼 뒤의 판정도 기록이 없는 키의 것과 같다.
  * - **없는 계정도 같은 판정이다.** 키는 이메일 글자이지 계정 행이 아니다 — 막힌 판은 DB 를 읽기 전에 끝나므로 있는 계정과 없는 계정의
  *   429 가 코드 · 문장 · 시간까지 같고, 막히기 전의 401 은 원래대로 같다(`routes/auth.ts` 의 더미 해시). 주인의 성공은 남의 다음 답을
  *   안 바꾼다 — 성공이 제 자리만 걷으므로 남은 횟수가 주인이 안 온 계정 · 없는 계정과 같다. **남는 창:** 주인의 비밀번호를 견주는
@@ -162,6 +172,14 @@ class AttemptLog {
     return true
   }
 
+  /** 키의 기록을 다 걷는다 — 걷기 전 창 안의 기록 수와, 막혀 있었으면 풀리기까지 남았던 시간을 준다(머리말 «막힘을 푸는 명령»). */
+  clear(key: string, now: number): KeyClearance {
+    const until = this.blockedUntil(key, now)
+    const cleared = this.live(key, now)?.length ?? 0
+    this.entries.delete(key)
+    return { cleared, blockedForMs: until === undefined ? undefined : until - now }
+  }
+
   /** 이 시도의 자리 하나를 걷는다. 같은 시각의 다른 시도가 있어도 하나만 걷는다. */
   removeOne(key: string, stamp: number): void {
     const stamps = this.entries.get(key)
@@ -182,9 +200,22 @@ export type LoginAdmission =
       abandoned(): void
     }
 
+/** 한 키를 푼 결과. */
+export interface KeyClearance {
+  /** 걷은 창 안의 기록 수. */
+  cleared: number
+  /** 막혀 있었으면 그대로 두었을 때 풀리기까지 남았던 시간(ms) — 제한기의 시계로 잰다. 아니면 `undefined`. */
+  blockedForMs: number | undefined
+}
+
 export interface LoginLimiter {
   /** 비밀번호를 견주기 **전에** 부른다. 받아 주면 그 시도를 두 키에 기록해 둔다 — 틀리면 그대로 실패로 남는다. */
   begin(email: string, address: string): LoginAdmission
+  /**
+   * 관리자가 막힘을 푼다 — 준 키의 기록을 다 걷는다(머리말 «막힘을 푸는 명령»). `email` 은 로그인 본문과 같은 정규화를 지난 값,
+   * `address` 는 `addressKey` 가 낸 키다. 준 쪽만 걷고 결과를 준다.
+   */
+  unlock(target: { email?: string; address?: string }): { account?: KeyClearance; address?: KeyClearance }
 }
 
 /** `now` 의 기본값은 부를 때마다 `Date` 를 찾는다 — 가짜 시계(`vi.useFakeTimers`)가 앱을 세운 뒤에 바꾼 `Date` 도 읽게. */
@@ -210,6 +241,13 @@ export function createLoginLimiter(rule: LoginLimitRule = LOGIN_LIMIT, now: () =
         kind: 'admitted',
         succeeded: release,
         abandoned: release,
+      }
+    },
+    unlock(target) {
+      const at = now()
+      return {
+        ...(target.email === undefined ? {} : { account: accounts.clear(accountKey(target.email), at) }),
+        ...(target.address === undefined ? {} : { address: addresses.clear(target.address, at) }),
       }
     },
   }
