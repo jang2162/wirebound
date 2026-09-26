@@ -1030,7 +1030,7 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 
 - **한글 글꼴이 없으면 한 장도 안 그린다.** 두부를 내보내지 않는 판정이고, 미리보기의 `fontWarning`이 그 사실을 낸다. 리눅스 컨테이너에는 보통 없다 — `fonts-noto-cjk` 를 넣는다(리눅스 컨테이너에서 쟀다 — 「배포하려면」 절).
 - **바깥으로 나가는 요청을 끊는다.** 테마의 `@font-face`·`url()`은 사용자가 적은 문자열이라 서버가 그것을 가져가면 안 된다. **대가:** 원격 웹폰트를 든 테마는 에디터 캔버스와 다르게 그려진다.
-- **긴 페이지는 조용히 실오라기가 된다.** 화면 전체를 찍으므로 높이가 내용을 따라가고, 슬라이드 위에서 폭이 줄어든다. 상한은 **페이지 장 수**이지 바이트가 아니다.
+- **긴 페이지는 실오라기가 된다.** 화면 전체를 찍으므로 높이가 내용을 따라가고, 슬라이드 위에서 폭이 줄어든다. 한 장의 넓이가 상한(뷰포트 폭 × 8192 CSS px)을 넘으면 그 장은 안 그리고 이유를 말한다 — 긴 페이지 한 장이 서버 메모리를 수 GB 먹어서다(「배포하려면」의 「화면 그리기 상한」).
 - 자세한 값(화소·동시성·타임아웃·상한·요청끼리의 상한)은 [`apps/api/README.md`의 *"화면 이미지를 그리는 조건"*](apps/api/README.md#화면-이미지를-그리는-조건)에 있다.
 
 ---
@@ -1043,7 +1043,7 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 pnpm test          # 규격·값·인구조사.  Postgres 가 필요하다 (브라우저는 안 띄운다)
 pnpm typecheck     # 컴파일
 pnpm build         # packages/* 의 dist
-pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브라우저 (없으면 건너뛴다)
+pnpm test:build    # 받는 쪽이 받는 것 — 빌드된 dist · 진짜 브라우저 · 운영 compose 의 값 (없으면 건너뛴다)
 pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만 — apps/web/build-test (Postgres · 브라우저가 없으면 건너뛴다)
 ```
 
@@ -1074,36 +1074,95 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 
 ---
 
-## 10. 배포하려면 — **잰 요구 사항과 앞단이 지킬 조건**
+## 10. 배포하려면 — **단일 리눅스 서버 · docker compose**
 
-**배포 대상은 아직 정하지 않았다.** 이 절은 무엇이 필요한지를 **재서** 적은 것이지 배포 절차가 아니다. 값은 로컬
-Docker 의 리눅스 컨테이너(linux/arm64 · `node:22-slim` = Debian 12 · Node 22.23.1 · 저장소의 `git archive HEAD`)에서
-실제로 띄워 본 것이다. **운영에서 돌려 본 적은 없다**(아래 「이 절이 안 잰 것 · 알려진 한계」).
+**배포 대상은 리눅스 서버 한 대 · docker compose 다** — api 프로세스 하나 · Postgres · 앞단(Caddy). 이미지는 저장소 뿌리의
+`Dockerfile`, 운영 compose 는 `deploy/` 다. 이 절의 값은 그 compose 를 **실제로 올려** 잰 것이다 — Colima 의 리눅스 VM(linux/arm64 ·
+4 CPU · 8GB · Docker 29.2.1 · Compose 5.1.4)이고 **운영 서버에서 돌려 본 적은 없다**(아래 「이 절이 안 잰 것 · 알려진 한계」).
 
-### 10.1 api 가 필요로 하는 것
+### 10.1 올리기 — `deploy/`
+
+```bash
+# 저장소 뿌리에서
+cp deploy/.env.example deploy/.env      # SITE_ADDRESS · POSTGRES_PASSWORD · SEED_USER_* 를 채운다
+docker compose -f deploy/docker-compose.yml up -d --build
+```
+
+**운영 compose 의 명령은 전부 `-f deploy/docker-compose.yml` 을 붙인다** — compose 가 `deploy/.env` 를 그 파일 옆에서 스스로 읽는다
+(개발용 compose 의 `--env-file apps/api/.env` 는 안 붙인다). 아래 표들의 `docker compose stop` 부류는 그 플래그를 줄여 적은 것이다.
+
+| 서비스 | 무엇 | 바깥 포트 |
+|---|---|---|
+| `postgres` | `postgres:16-alpine` · 데이터는 볼륨 `wirebound-prod_pgdata` | 없음 |
+| `migrate` | api 이미지로 `src/db/migrate.ts latest` 를 한 번 돌고 끝난다 — 마이그레이션을 올리고 `SEED_USER_*` 로 최초 계정을 만든다(이미 있으면 그대로 둔다). **`up` 마다 다시 돈다** — 다 올라간 DB 에는 아무것도 안 한다 | 없음 |
+| `api` | `migrate` 가 종료 0 으로 끝나야 뜬다. 뜰 때 올리지 않고 견주기만 하므로(`apps/api/src/db/schema-version.ts`) 뒤처진 DB 로는 안 뜬다 — `migrate` 가 죽으면 api 도 안 뜨고 `docker compose logs migrate` 에 까닭이 있다 | 없음 |
+| `web` | Caddy — 에디터 정적 번들을 서빙하고 `/api` 를 api 로 넘긴다. TLS 를 끝낸다(도메인이면 인증서를 스스로 받는다) | 80 · 443 |
+
+- **개발용 `docker-compose.yml`(저장소 뿌리)과 다른 프로젝트다** — 운영 compose 는 프로젝트 이름을 `wirebound-prod` 로 고정한다.
+  디렉터리 이름에 맡기면 볼륨이 `deploy_…` 로 지어져 디렉터리를 옮기는 순간 빈 DB 로 뜬다(「워크트리를 여럿 띄울 때」).
+- **비밀은 이미지에 없다** — `.dockerignore` 가 `.env` 를 빌드 문맥에서 뺀다. 값은 `deploy/.env` 에서 기동 때 온다. `SEED_USER_*` 는
+  `migrate` 만 받는다 — api 컨테이너는 그 셋을 빈 값으로 받는다.
+- `SITE_ADDRESS` 가 도메인이면 그 도메인이 이 서버를 가리키고 80 · 443 이 바깥에서 닿아야 한다. `localhost` · `*.localhost` 는 Caddy 의
+  내부 CA 로 서명한다 — 아래 값은 `SITE_ADDRESS=wb.localhost` · `HTTPS_PORT=8443` 으로 쟀다.
+
+### 10.2 올린 판에서 잰 값
+
+| 단계 | 결과 |
+|---|---|
+| 빌드 | 캐시 없이(`build --no-cache --pull`) **151s**. 이미지 api **1.81GB** · web **86MB** |
+| `up -d --build`(이미지 캐시) | postgres healthy → migrate 종료 0(마이그레이션 17건 · 계정 시딩) → api healthy → web. 42s |
+| 에디터 로그인 화면으로 로그인 | 200 · 쿠키 `Secure` · `HttpOnly` |
+| 두 탭이 같은 페이지를 연다 | `wss://…/api/projects/<id>/ws` 가 붙고 `joined` · `presence` · `locks` |
+| 한 탭의 속성 패널에서 글을 고친다 | 다른 탭이 `page-changed` 를 받고 **33ms** 에 화면에 선다 · 서버 판이 같다 |
+| pptx 미리보기 · 내려받기(한 장) | 200 · `screenFailures: []` · `fontWarning: null` · 0.67s / 0.35s · 슬라이드 그림의 한글이 Noto Sans CJK 로 그려졌다 |
+| 이미지 안의 스모크(`screen-chromium.test.ts`) | **18 통과 · 건너뜀 0**(배포판 chromium 154 · `fonts-noto-cjk`) |
+| 40장 pptx 를 내려받는 중 · 에디터 WS 가 붙은 채 `docker compose stop` | 내려받기 **200 · 7.4MB · 그림 실패 0** — 앞단이 그 응답을 넘긴 뒤 WS 를 닫고 끝난다 · 모두 종료 0 · **5.6s** |
+| 같은 판에서 `docker compose stop api` 만(올리기 때 api 를 다시 만드는 판) | api 가 WS 를 곧바로 닫고(에디터는 재연결을 되풀이하며 그동안 502) 도는 pptx 를 끝까지 답한다 — **200 · 그림 실패 0** · 종료 0 · 5.8s |
+| 다시 `up` · `down` 뒤 `up` | 사용자 · 프로젝트 · 페이지 · 리비전 수가 같다 · 로그인해 둔 세션이 산다(`/api/auth/me` 200) |
+| 좀비 | 그림 뒤 chromium 좀비 0(tini 가 거둔다). node 의 자식 esbuild 좀비 하나가 남는다 — 내보내기 셋을 쉬는 시간(10s)을 넘겨 띄워 보낸 뒤에도 하나다(tsx 가 워커 스레드에서 띄운 것 · 늘지 않았다) |
+
+주소 키와 로그인 제한(`TRUST_PROXY` 는 앞단의 고정 주소 — 아래 「앞단(리버스 프록시)이 지킬 조건」):
+
+| 클라이언트 | api 가 본 주소(`remoteAddress`) |
+|---|---|
+| compose 네트워크의 컨테이너 둘(A · B)이 앞단으로 · `X-Forwarded-For: 6.6.6.6` 을 실어도 | 각자의 주소 — 앞단이 받은 머리를 버리고 소켓 주소로 새로 적는다 |
+| 같은 네트워크에서 api 에 곧바로 `X-Forwarded-For` 를 지어 적음 | 소켓 주소 — 믿는 앞단이 아니다 |
+| 호스트(macOS)에서 게시 포트로 | 셋 다 backend 네트워크의 게이트웨이(`10.231.47.128`) 하나 — Colima 가 포트를 넘기는 길이라 모든 요청이 한 주소다(아래 「이 절이 안 잰 것」) |
+
+A 가 틀린 비밀번호로 31번 → 30번 401 · 31번째 **429**. 그 뒤 B 는 **401**(B 가 A 의 주소를 `X-Forwarded-For` 에 적어도 401 — B 로 센다).
+
+### 10.3 api 가 필요로 하는 것
+
+`Dockerfile` 이 아래를 다 한다 — 이 표는 그 까닭이다. 이미지 없이 띄우는 사람도 이 표를 지킨다.
 
 | 무엇 | 필요 | 안 하면 무엇이 보이나 (쟀다) |
 |---|---|---|
 | **Node ≥ 22.18** | `pnpm build` 의 tsdown 이 `tsdown.config.ts` 를 Node 의 타입 벗기기(`process.features.typescript` — 22.18 부터 기본)로 읽는다. 그것이 없으면 `unrun` 으로 읽으려 하는데 이 저장소에 없다 | 22.17 은 설치 0 · **빌드 1**(`Failed to import module "unrun"`) — api 가 `@wirebound/schema/dist` 를 못 찾아 안 뜬다. 22.18 · 24.10 은 빌드 0. 더 낮으면 먼저 다른 데서 죽는다 — 22.13 이하는 `corepack enable` 뒤 `pnpm` 이 `Cannot find matching keyid`(22.14 는 된다), 22.9 는 빌드가 `Cannot find module '@rolldown/binding-linux-arm64-gnu'`(바인딩의 `engines` 가 안 맞아 pnpm 이 조용히 건너뛴다), 22.8 은 `node: bad option: --env-file-if-exists=…` 로 모든 스크립트가 죽는다 |
-| **devDependencies 까지 설치** | `start` · `migrate` · `reset-password` · `unlock-login` 이 `tsx`(devDependency)로 돈다 | `pnpm install --prod` 뒤 `pnpm --filter @wirebound/api start` → `sh: 1: tsx: not found` |
+| **devDependencies 까지 설치** | `start` · `migrate` · `reset-password` · `unlock-login` 이 `tsx`(devDependency)로 돈다 — 내보내기 워커 스레드도 tsx 로더로 `.ts` 를 싣는다(`apps/api/src/services/export-worker.ts` 의 `tsxEsmLoader`) | `pnpm install --prod` 뒤 `pnpm --filter @wirebound/api start` → `sh: 1: tsx: not found` |
 | **`pnpm build`** | 「테스트는 통과하는데 서버만 안 뜬다」 절과 같은 까닭 | — |
 | **`HOST=0.0.0.0`** | 기본값이 `127.0.0.1` 이다 | 컨테이너 포트를 열어도 **밖에서 안 닿는다**(호스트 `curl` 000 · 컨테이너 안 200) |
-| **마이그레이션을 먼저** | api 는 뜰 때 마이그레이션을 올리지 않는다 — 코드가 아는 것과 견주기만 한다(`apps/api/src/db/schema-version.ts`) | **뒤처진 DB 면 안 뜬다** — 종료 1 · 한 줄(`이 DB 는 마이그레이션이 뒤처졌습니다(… · 안 올라간 것: 0015-…) — 올린 뒤에 띄우십시오: pnpm --filter @wirebound/api migrate`). 빈 DB 도 안 뜬다(「띄우기」 절). 코드가 모르는 것이 올라간 DB(더 새 코드가 올렸다)면 경고 한 줄을 찍고 뜬다. **순서: `migrate` → 새 api** |
+| **마이그레이션을 먼저** | api 는 뜰 때 마이그레이션을 올리지 않는다 — 코드가 아는 것과 견주기만 한다(`apps/api/src/db/schema-version.ts`) | **뒤처진 DB 면 안 뜬다** — 종료 1 · 한 줄(`이 DB 는 마이그레이션이 뒤처졌습니다(… · 안 올라간 것: 0015-…) — 올린 뒤에 띄우십시오: pnpm --filter @wirebound/api migrate`). 빈 DB 도 안 뜬다(「띄우기」 절). 코드가 모르는 것이 올라간 DB(더 새 코드가 올렸다)면 경고 한 줄을 찍고 뜬다. **순서: `migrate` → 새 api** — compose 의 `migrate` 서비스가 그 순서다 |
 | **`NODE_ENV=production` 이면 TLS** | 세션 쿠키에 `Secure` 가 붙는다(`apps/api/src/auth/plugin.ts`) | http 로 연 화면에서 **로그인 200 인데 바로 다음 `/api/auth/me` 가 401** — 브라우저가 쿠키를 안 받는다(쿠키 0). `http://127.0.0.1` 은 Chrome 이 안전한 출처로 봐 된다 — **그래서 로컬에서는 안 보인다.** 헤드리스 Chrome 에 `--host-resolver-rules=MAP wb.test 127.0.0.1` 로 `http://wb.test` 를 열어 쟀다. `development` 면 둘 다 200 |
-| **PID 1 은 node 로** | `pnpm` 을 거치면 `SIGTERM` 이 서버의 정상 종료에 안 닿는다 | `docker stop` 에 종료 코드 1(`--init` 이면 143) · «종료합니다» 줄 0 · **도는 요청이 소켓째 끊긴다**(`UND_ERR_SOCKET`). `apps/api` 에서 `node --import tsx src/main.ts`(또는 `tsx src/main.ts`)를 PID 1 로 두면 종료 0 · 도는 요청 200 |
-| **init 을 둔다**(`docker run --init` · tini) | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). `--init` 이면 0 |
-| **터미널 밖에서 띄운다**(`docker run --init` · 서비스 관리자) — `nohup` 으로는 창 닫기에서 못 지킨다 | api 는 `SIGHUP` 을 «닫아라»로 받는다(`apps/api/README.md` 「끄기」 절) — `nohup` 이 건 무시를 그 처리기가 덮는다 | macOS pty 의 bash 에서 `nohup node --import tsx src/main.ts > log 2>&1 &`(`nohup pnpm start` 도) 뒤 창(pty master)을 닫으면 «SIGHUP 수신 — 서버를 종료합니다»로 끝난다 |
-| **끄는 쪽의 한도** | `SIGTERM` 을 받은 api 는 도는 요청(그리던 pptx 포함)을 끝까지 답하고 끝낸다 — 한도 30s(`apps/api/README.md` 「끄기」 절) | 끄는 쪽의 한도가 먼저 오면 그 뒤는 SIGKILL 이라 도는 응답이 끊긴다 — `docker stop` 은 기본 10s(`-t` · `--stop-timeout` 으로 늘린다). 브라우저는 안 남는다. 잰 값은 macOS 로컬 api 다(빈 페이지 200장 pptx 가 SIGTERM 뒤 6.4s 에 200 · 그림 실패 0) — **컨테이너로는 안 쟀다** |
+| **PID 1 아래의 node 가 신호를 받는다** — pnpm 을 거치지 않는다 | `pnpm` 을 거치면 `SIGTERM` 이 서버의 정상 종료에 안 닿는다. 이미지는 `node --import tsx src/main.ts` 다 — tsx CLI 가 아니라서 부모 감시(`apps/api/src/shutdown.ts` 의 `launchedByTsxCli`)는 안 돈다 | `docker stop` 에 종료 코드 1(`--init` 이면 143) · «종료합니다» 줄 0 · **도는 요청이 소켓째 끊긴다**(`UND_ERR_SOCKET`) |
+| **init 을 둔다** — 이미지의 PID 1 은 `tini` | chromium 이 남긴 자식을 node 가 안 거둔다 | node 가 PID 1 이면 pptx 그림 한 번마다 `headless_shell` **좀비가 둘씩 쌓인다**(5번 → 10). tini 면 0(위 「올린 판에서 잰 값」) |
+| **터미널 밖에서 띄운다**(compose · 서비스 관리자) — `nohup` 으로는 창 닫기에서 못 지킨다 | api 는 `SIGHUP` 을 «닫아라»로 받는다(`apps/api/README.md` 「끄기」 절) — `nohup` 이 건 무시를 그 처리기가 덮는다 | macOS pty 의 bash 에서 `nohup node --import tsx src/main.ts > log 2>&1 &`(`nohup pnpm start` 도) 뒤 창(pty master)을 닫으면 «SIGHUP 수신 — 서버를 종료합니다»로 끝난다 |
+| **끄는 쪽의 한도가 api 의 한도보다 길다** | `SIGTERM` 을 받은 api 는 도는 요청(그리던 pptx 포함)을 끝까지 답하고 끝낸다 — 한도 30s(`apps/api/README.md` 「끄기」 절). compose 는 api · web 의 `stop_grace_period` 를 40s 로 둔다(기본 10s) | 끄는 쪽의 한도가 먼저 오면 그 뒤는 SIGKILL 이라 도는 응답이 끊긴다. 브라우저는 안 남는다 |
+| **로그는 표준출력** | api 는 표준출력에 pino JSON 을 쓴다. compose 는 json-file 드라이버에 20MB × 5 로 돌린다 — 안 돌리면 서버 디스크를 다 먹는다. api 는 로그를 못 써도 멈추지 않는다(`apps/api/src/log-destination.ts`) | — |
 
 Node 판을 재는 법 — 저장소 뿌리에서 `git archive HEAD | docker run -i --rm node:<판>-slim sh -c 'mkdir /app && cd /app && tar xf - &&
 corepack enable && pnpm install --frozen-lockfile && pnpm build'`. tsdown 의 `engines`(`^22.18.0 || >=24.11.0`)는 24.0–24.10 을
 빼지만 그 판에서도 빌드가 돌아(24.10 에서 쟀다) `engines` 는 `>=22.18.0` 으로 둔다.
 
-**환경 값의 목록과 뜻은 `apps/api/.env.example` 이 소유한다.** 배포에서 달라지는 것은 위 표의 `HOST` · `NODE_ENV` 와,
-**`POSTGRES_PORT` 를 두지 않는 것**이다 — 그 값은 compose 가 여는 포트이고, 있으면 접속 문자열과 포트가 맞는지 검사한다
-(「세우기」 절의 끝).
+**환경 값의 목록과 뜻은 `apps/api/.env.example` 이 소유한다.** 운영 compose 에서 사람이 적는 것은 `deploy/.env.example` 이 든다 —
+`HOST` · `PORT` · `NODE_ENV` 는 이미지가, `DATABASE_URL` · `TRUST_PROXY` 는 compose 가 정하고, **`POSTGRES_PORT` 는 두지 않는다**(개발용
+compose 가 여는 포트 — 있으면 접속 문자열과 포트가 맞는지 검사한다).
 
-### 10.2 pptx 의 화면 이미지 — 브라우저와 **한글 글꼴**
+### 10.4 pptx 의 화면 이미지 — 브라우저와 **한글 글꼴**
+
+**이미지는 배포판 `chromium` + `fonts-noto-cjk` 를 넣고 `SCREEN_CHROMIUM_PATH=/usr/bin/chromium` 을 둔다**(아래 표의 다섯째 줄). playwright
+캐시(`cli.js install --with-deps --only-shell`)를 고르지 않은 까닭: 보안 갱신이 apt 로 오고 의존 라이브러리를 패키지 관리자가 맞춘다.
+대가는 판이 `playwright-core` 가 맞춰 지은 리비전이 아니라는 것이다 — 그래서 **이미지를 새로 지으면 그 안에서 스모크를 돌린다**(아래 「다시 재는
+법」).
 
 | 이미지 | 브라우저 | 한글 글리프를 가진 글꼴 | 미리보기 · pptx |
 |---|---|---|---|
@@ -1111,44 +1170,40 @@ corepack enable && pnpm install --frozen-lockfile && pnpm build'`. tsdown 의 `e
 | 위에서 그 셋을 걷음 | 〃 | 없다 | `fontWarning: 이 서버에 한글 글꼴이 없어 화면 이미지를 그리지 않았습니다` · pptx **200** · `ppt/media` **0** · `x-wb-screen-failures: 1`. 가드 없이 찍으면 한글이 **□** 다 |
 | 걷은 뒤 `fonts-noto-cjk` | 〃 | Noto Sans CJK KR | 그린다 |
 | `apt-get install chromium` + `SCREEN_CHROMIUM_PATH=/usr/bin/chromium` | 배포판 chromium | 없다 | 위 «없다» 줄과 같다 |
-| 위 + `fonts-noto-cjk` | 〃 | Noto Sans CJK KR | 그린다 |
+| 위 + `fonts-noto-cjk` — **`Dockerfile` 의 판** | 〃 | Noto Sans CJK KR | 그린다 |
 
 - **한글 글꼴은 명시해서 넣는다**(`fonts-noto-cjk`). `--with-deps` 가 주는 한글은 playwright 의 의존 목록에 딸려 온
   것이라 그 목록이 바뀌면 조용히 사라진다.
 - **글꼴이 없어도 서버 로그에는 아무것도 안 남는다**(그 판의 로그는 기동 세 줄뿐이었다). 알아채는 자리는 미리보기의
   `fontWarning` · 응답 머리 `x-wb-screen-failures` · `wireb export` 의 표준에러 경고다(「PPTX 의 화면 이미지」 절).
-- 크기: 위 첫 줄 이미지가 **1.66GB**(playwright 캐시 344MB · `node_modules` 216MB), `fonts-noto-cjk` 가 **+170MB** 다
-  (`docker images` 로 잰다).
+- 표의 첫 다섯 줄은 `node:22-slim`(Debian 12) 위에서 쟀다 — 스모크가 한글 글꼴이 없는 두 이미지에서 **10 실패**(playwright 캐시) ·
+  **9 실패**(배포판 chromium), 있는 세 이미지에서 **15 통과**였다.
 
-**재는 법 — 배포할 이미지 안에서 스모크를 돌린다.** 서버와 같은 `SCREEN_CHROMIUM_PATH` 를 준다.
+### 10.5 에디터 — 정적 파일
 
-```bash
-pnpm vitest run --project build apps/api/build-test/screen-chromium.test.ts
-```
+`pnpm --filter @wirebound/web build` 가 `apps/web/dist`(`index.html` + `assets/`)를 낸다. api 는 이것을 서빙하지 않는다 — **앞단이
+서빙한다**: `web` 이미지가 그 번들을 `/srv` 에 들고, `deploy/Caddyfile` 이 `/api/*` 만 api 로 넘기고 나머지는 파일로 답한다. 깊은
+링크(`/projects/…`)는 `index.html` 로 돌린다(`try_files` — 200 을 쟀다).
 
-위 다섯 줄에서 돌린 값 — 한글 글꼴이 없는 두 이미지는 **10 실패**(playwright 캐시) · **9 실패**(배포판 chromium), 있는 세
-이미지는 **15 통과**다. 브라우저를 못 띄우면 건너뛰고 그렇다고 말한다 — **건너뜀은 통과가 아니다.**
+### 10.6 앞단(리버스 프록시)이 지킬 조건
 
-### 10.3 에디터 — 정적 파일
-
-`pnpm --filter @wirebound/web build` 가 `apps/web/dist`(`index.html` + `assets/`)를 낸다. api 는 이것을 서빙하지 않는다 —
-앞단이 서빙하고 `/api` 를 api 로 넘긴다. 깊은 링크(`/projects/…`)는 `index.html` 로 돌린다(아래 설정의 `try_files` 로
-200 을 쟀다).
-
-### 10.4 앞단(리버스 프록시)이 지킬 조건
-
-| 조건 | 왜 | 쟀다 (nginx 1.27 · 아래 설정) |
+| 조건 | 왜 | 쟀다 (Caddy 2.11.4 · `deploy/Caddyfile`) |
 |---|---|---|
-| **에디터와 `/api` 가 같은 출처** | 세션 쿠키가 same-origin 으로 실리고 api 에 CORS 설정이 없다(「띄우기」 절) | — |
-| **TLS 를 앞단이 끝낸다** | `NODE_ENV=production` 의 `Secure` 쿠키(「api 가 필요로 하는 것」) | — |
-| **WS 업그레이드를 넘긴다** — `/api/projects/:id/ws` | 실시간 · 잠금 · 방송이 이 연결이다 | `proxy_http_version 1.1` 과 `Upgrade` · `Connection` 머리가 없으면 **404**(5ms) — 에디터는 재연결을 되풀이한다(`apps/web/src/realtime/connection.ts` 의 재연결 사다리 — 코드 읽기). 있으면 **101** + 프레임 셋(`joined` · `presence` · `locks`) |
-| **WS 유휴 제한이 25초보다 길다** | 에디터가 25초마다 `ping` 한다(`connection.ts` 의 `DEFAULT_HEARTBEAT_MS`) | `proxy_read_timeout 5s` 로 두자 **5.0초**에 끊겼다. nginx 기본 60s 는 넘는다. HTTP 쪽 읽기 제한은 가장 긴 내보내기보다 길어야 한다 — 장 수에 비례한다(`apps/api/README.md` 「화면 이미지를 그리는 조건」) |
-| **클라이언트의 끊음을 상류로 전한다** | 사용자가 창을 닫거나 형식을 바꾸면 api 가 그리기를 멈춰야 칸이 돌아온다 | nginx 기본(`proxy_ignore_client_abort off`)은 전한다 — 40장 미리보기(1.46s)를 400ms 에 끊자 chromium 이 직접 붙은 판 **0.67s** · nginx 경유 **0.80s** 뒤 사라졌다(안 끊었으면 1.06s 더 돈다 · 100ms 간격 표본). 개발 서버의 프록시는 훅 없이 안 전한다 — `apps/web/vite.config.ts` 의 `proxyReq` 훅이 그 자리다 |
-| **상류 keep-alive 유휴가 72초보다 짧다** | Fastify 의 `keepAliveTimeout` 기본값이 72s 다(`apps/api/src/app.ts` 의 닫기 주석) | **안 쟀다** — 앞단이 상류 연결을 72초보다 오래 두고 다시 쓰면 api 가 막 닫은 연결에 요청을 실을 수 있다는 판정이다. nginx 는 `upstream { keepalive … }` 를 안 두면 상류 연결을 남기지 않는다 |
-| **`TRUST_PROXY` 에 앞단의 주소를 적는다**(`apps/api/.env.example`) — **클라이언트가 닿는 대역은 적지 않는다** · 앞단은 `X-Forwarded-For` **끝에 포트 없는 클라이언트 주소를 덧붙인다**(받은 값을 그대로 넘기지 않는다) | 로그인 시도 제한이 요청의 주소로 센다(`apps/api/README.md` 「로그인 시도 제한」 절) — 안 적으면 api 가 보는 주소가 모두 앞단 하나다. 클라이언트가 닿는 대역을 믿으면 그 클라이언트가 머리를 지어 적어 주소를 바꾼다. api 는 머리를 **오른쪽 끝부터** 읽어 믿는 앞단이 아닌 첫 항목을 주소로 삼으므로, 앞단이 덧붙이지 않으면 클라이언트가 적은 값이 주소가 된다. 포트가 붙으면 떼고 IP 가 아니면 앞단의 주소로 센다(`apps/api/src/auth/login-limit.ts` 의 `addressKey`) | **앞단으로는 안 쟀다.** api 테스트가 소켓 주소를 가른 판(`apps/api/test/login-limit.test.ts` 의 «믿는 앞단») — 안 믿으면 `X-Forwarded-For` 가 달라도 한 주소로 세어 30 번 뒤에는 모두 429, 믿으면 머리의 주소마다 따로 센다 |
-| 본문 크기 | — | nginx 기본 `client_max_body_size 1m` 과 Fastify 기본 `bodyLimit` 1MiB 가 같다 — 조건이 아니다. 앞단을 더 작게 두면 그 수에서 413 이다 |
+| **에디터와 `/api` 가 같은 출처** | 세션 쿠키가 same-origin 으로 실리고 api 에 CORS 설정이 없다(「띄우기」 절) | 한 사이트 블록이 둘을 낸다 |
+| **TLS 를 앞단이 끝낸다** | `NODE_ENV=production` 의 `Secure` 쿠키(「api 가 필요로 하는 것」) | https 로 로그인 200 · 다음 `/api/auth/me` 200 |
+| **WS 업그레이드를 넘긴다** — `/api/projects/:id/ws` | 실시간 · 잠금 · 방송이 이 연결이다 | `reverse_proxy` 의 기본값이 넘긴다 — 붙고 프레임 셋(`joined` · `presence` · `locks`) |
+| **WS 유휴 제한이 25초보다 길다** | 에디터가 25초마다 `ping` 한다(`apps/web/src/realtime/connection.ts` 의 `DEFAULT_HEARTBEAT_MS`) | 핑 없이 150s 둔 연결이 산 채였다(재는 쪽이 닫음). 상류 응답을 기다리는 제한은 Caddy 문서상 기본값이 없다 — 잰 가장 긴 응답은 7.4s 였다. 두게 되면 가장 긴 내보내기보다 길게 둔다(장 수에 비례한다 — `apps/api/README.md` 「화면 이미지를 그리는 조건」) |
+| **클라이언트의 끊음을 상류로 전한다** | 사용자가 창을 닫거나 형식을 바꾸면 api 가 그 일을 버려야 칸이 돌아온다 | 기본값이 전한다 — 40장 × 40행 미리보기를 4.0s 에 끊자 api 가 곧바로 붙은 판과 **같은 때**(4.00s)에 «요청이 끊겨 내보내기를 멈췄다»를 적었다. **이미 브라우저에 넘긴 그리기는 끝까지 돌고 버려진다**(`apps/api/src/services/export-worker.ts` 머리말 «칸이 둘이다») — chromium 은 두 판 다 안 끊은 판이 끝나는 때(6s 안팎)에 사라졌다 |
+| **상류 keep-alive 유휴가 72초보다 짧다** | Fastify 의 `keepAliveTimeout` 기본값이 72s 다(`apps/api/src/app.ts` 의 닫기 주석) — 앞단이 상류 연결을 그보다 오래 두고 다시 쓰면 api 가 막 닫은 연결에 요청을 실을 수 있다 | Caddyfile 이 `keepalive 60s` 로 둔다(Caddy 문서의 기본값은 2분). **경주 자체는 안 쟀다** |
+| **`TRUST_PROXY` 에 앞단의 주소를 적는다** — **클라이언트가 닿는 대역은 적지 않는다** · 앞단은 `X-Forwarded-For` **끝에 포트 없는 클라이언트 주소를 둔다**(받은 값을 그대로 넘기지 않는다) | 로그인 시도 제한이 요청의 주소로 센다(`apps/api/README.md` 「로그인 시도 제한」 절) — 안 적으면 api 가 보는 주소가 모두 앞단 하나다. api 는 머리를 **오른쪽 끝부터** 읽어 믿는 앞단이 아닌 첫 항목을 주소로 삼는다. 포트가 붙으면 떼고 IP 가 아니면 앞단의 주소로 센다(`apps/api/src/auth/login-limit.ts` 의 `addressKey`) | compose 가 앞단을 고정 주소(`EDGE_IP`)에 두고 그 주소를 `TRUST_PROXY` 로 준다. Caddy 는 `trusted_proxies` 가 없으면 받은 머리를 **버리고** 소켓 주소를 적는다 — 위 「올린 판에서 잰 값」의 주소 표 · 로그인 제한 |
+| **앞단이 클라이언트의 진짜 주소를 본다** | 앞단이 보는 주소가 하나면 위 줄을 지켜도 모두가 한 주소다 | 이 기계(Colima)의 게시 포트로는 **못 지켰다** — 아래 「이 절이 안 잰 것」 |
+| 본문 크기 | — | Caddy 문서상 기본 상한이 없다 — api 의 `bodyLimit`(1MiB)이 413 을 낸다(앞단을 거친 413 은 안 쟀다) |
+| 끄는 동안 도는 응답 | compose 는 web 을 api 보다 먼저 끈다 | `grace_period 35s` — api 의 30s 보다 길고 web 의 `stop_grace_period` 40s 보다 짧다. 위 「올린 판에서 잰 값」의 `docker compose stop` 줄 |
 
-재 본 nginx 설정 — **잰 것이지 권하는 운영 설정이 아니다**(TLS 가 없다):
+**nginx 로 둘 때** — 재 본 설정(TLS 가 없다 · 잰 것이지 권하는 운영 설정이 아니다). `proxy_http_version 1.1` 과 `Upgrade` · `Connection`
+머리가 없으면 WS 가 **404**(5ms)이고 에디터는 재연결을 되풀이한다. `proxy_read_timeout 5s` 로 두자 WS 가 **5.0초**에 끊겼다(기본 60s 는
+넘는다). `upstream { keepalive … }` 를 안 두면 상류 연결을 남기지 않는다. 기본 `client_max_body_size 1m` 은 api 의 상한과 같다.
+**nginx 뒤의 `X-Forwarded-For` 는 안 쟀다** — 아래 설정은 그 머리를 안 싣는다. 싣는다면 위 표의 `TRUST_PROXY` 줄을 지키는지 따로 잰다.
 
 ```nginx
 map $http_upgrade $connection_upgrade { default upgrade; '' close; }
@@ -1166,40 +1221,103 @@ server {
 }
 ```
 
-### 10.5 `Dockerfile` 을 두지 않는다 — 재 본 조합만 적는다
+### 10.7 화면 그리기 상한
 
-**저장소에 `Dockerfile` 을 두지 않는다.** 까닭 셋:
+pptx 의 화면은 요청마다 브라우저를 띄워 그린다 — **서버 하나의 메모리를 셋이 묶는다**:
 
-- **이미지의 경계가 배포 대상에 달려 있다** — 에디터 정적 파일을 같은 이미지에 둘지, 앞단이 무엇인지, 브라우저를
-  playwright 캐시로 둘지 배포판으로 둘지. 위 표들이 그 갈래마다 무엇이 드는지를 든다.
-- **그 파일을 빌드 · 기동하는 게이트가 없다.** 이미지 하나가 빌드 1분 안팎 · 1.6GB 넘게 들어 게이트 넷에 못 넣는다 — 두면 재는
-  자 없이 낡고, 저장소 안에 있다는 것만으로 «정답»으로 읽힌다.
-- **재는 자는 이미 있다** — 어떤 이미지든 그 안에서 「pptx 의 화면 이미지 — 브라우저와 한글 글꼴」의 스모크를 돌리면 브라우저와 글꼴이 든 것을 잰다.
+| 무엇 | 값 | 넘으면 |
+|---|---|---|
+| 동시에 뜨는 브라우저 수 | env **`EXPORT_RENDER_LIMIT`**(비우면 **2**) | **줄을 서서 기다린다** — 사람에게 되돌려 보내지 않는다. 줄의 길이는 떠 있는 내보내기 8 · 사람마다 2 가 묶고 그것을 넘은 요청만 503 + `Retry-After` 다(`apps/api/src/services/export-worker.ts` 머리말 «줄은 길이로 묶는다» · «한 사람이 줄을 다 쥐지 않는다»). 되돌려 보내지 않는 까닭: 기다림이 «앞 일 수 × 일 하나»로 묶이고, 거절하면 그 사람이 같은 줄에 다시 서야 한다. 사람이 떠나면 웹이 요청을 끊고 끊긴 일은 줄에서 빠진다 |
+| 한 장의 넓이 | 뷰포트 폭 × **8192 CSS px**(`SCREEN_DEFAULTS.maxArea` — 200행 남짓) | 그 장을 **안 그린다** — 슬라이드에 «화면 이미지가 실리지 않았습니다», 미리보기의 이유에 `페이지가 너무 커 화면을 그리지 않았습니다 — 720×145577px(상한 720×8192px 넓이)`. **자르지 않는다** — 잘린 목업은 멀쩡한 한 장으로 읽힌다 |
+| 장 수 | **200**(`SCREEN_DEFAULTS.maxPages`) | 넘은 장이 실패가 되고 이유가 분모를 말한다 |
 
-위 값을 낸 조합(한 이미지에 api 와 에디터 빌드를 함께 든 판):
+**바이트 상한은 두지 않는다** — 파일 크기는 위 셋의 곱으로 묶인다(상한 바로 밑의 페이지 한 장이 pptx 로 0.85MB · 여덟 장 7.1MB). 바이트로
+재려면 다 그린 뒤에야 알고, 그때는 메모리를 이미 먹었다.
+
+잰 값 — api 컨테이너의 cgroup `memory.current` 최고(부하 전 0.2GB 안팎 · 100ms 표본 · 내보내기를 동시에 · 사람 몫에 안 걸리게 두 사람):
+
+| 판 | 그리기 칸 | 최고 | 답 |
+|---|---|---|---|
+| 8장 × 40행 미리보기 하나 | 2 | 0.75GB | 1.8s |
+| 같은 것 둘 | 2 | 1.04GB | 2.4 · 2.6s |
+| 같은 것 넷 | 2 | 1.14GB | 2.7 · 2.9 · 5.4 · 5.6s(둘은 줄) |
+| 같은 것 넷 | 4 | 1.99GB | 4.8–5.9s — 칸을 늘려도 끝나는 때는 같다(CPU 4) |
+| 같은 것 둘 | 1 | 0.87GB | 1.6 · 3.1s |
+| 한 장 × 200 · 500 · 1000 · 2000행(넓이 상한 없이) | 2 | 부하 전 + 0.38 · 0.77 · 1.24 · 2.05GB | 0.7–2.5s |
+| 한 장 × 4000행(넓이 상한 없이) | 2 | **5.7GB**, 다음 번은 컨테이너 안에서 OOM kill — `Unable to capture screenshot` | 5.3s |
+| 한 장 × 4000행(넓이 상한) | 2 | 0.46GB · 그 장은 안 그림 | 0.76s |
+| **상한 바로 밑 8장 × 200행 pptx 넷(최악)** | 2 | **3.13GB** | 4.1–8.0s |
+| 같은 것 | 1 | **1.93GB** | 3.1–10.8s |
+
+**그래서 `EXPORT_RENDER_LIMIT` 는 서버 메모리로 고른다** — 최악(상한 바로 밑 페이지로만 된 pptx 가 칸마다 도는 판)이 칸 2 에서 api
+3.1GB · 칸 1 에서 1.9GB 다. **메모리 4GB 미만이면 1 로 둔다.** 칸을 늘려도 CPU 수를 넘으면 빨라지지 않는다(위 표의 넷째 줄).
+`mem_limit` 로 api 컨테이너를 묶지 않은 까닭: 넘으면 커널이 api 의 node 를 죽여 모든 사람의 편집 연결이 함께 끊긴다 — 입력(칸 ·
+넓이 · 장 수)을 묶는 쪽을 골랐다.
+
+### 10.8 백업 · 올리기(업그레이드) · 비밀번호
 
 ```bash
-# 이미지 안 — 저장소 뿌리에서
-corepack enable
-pnpm install --frozen-lockfile                   # devDependencies 까지(tsx)
-pnpm build
-pnpm --filter @wirebound/web build               # apps/web/dist — 앞단이 서빙한다
-node apps/api/node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
-apt-get install -y --no-install-recommends fonts-noto-cjk
+# 백업 — 저장소 뿌리에서. 복원은 새 DB 에 pg_restore(아래 «쟀다»)
+docker compose -f deploy/docker-compose.yml exec -T postgres pg_dump -U wirebound -Fc wirebound > wirebound-$(date +%F).dump
 
-# 기동 순서 — 같은 DATABASE_URL 로
-pnpm --filter @wirebound/api migrate             # 먼저
-docker run --init -e HOST=0.0.0.0 -e NODE_ENV=production -e DATABASE_URL … -w /app/apps/api <이미지> \
-  node --import tsx src/main.ts                  # pnpm 을 거치지 않는다
+# 올리기 — 새 코드를 받은 뒤. migrate 가 먼저 돌고, api 는 도는 요청을 끝까지 답한 뒤 새 것으로 바뀐다
+docker compose -f deploy/docker-compose.yml up -d --build
+
+# 비밀번호 재설정 — 터미널에서 숨겨 묻는다(「비밀번호를 잊었다」 절)
+docker compose -f deploy/docker-compose.yml exec api node --import tsx src/db/reset-password.ts me@example.com
 ```
 
-### 10.6 이 절이 안 잰 것 · 알려진 한계
+- **쟀다:** 덤프(250KB)를 새 DB 에 `pg_restore` → 종료 0 · 수가 같다. 재설정은 pty 에 한 줄씩 쳐서 바꿨고 새 비밀번호로 로그인 200 이다
+  — 통째로 붙여 넣는 판은 이 길로는 안 쟀다(명령 쪽은 「비밀번호를 잊었다」 절의 재는 법).
+- **사람을 더 만들려면** `docker compose -f deploy/docker-compose.yml run --rm -e SEED_USER_EMAIL=… -e SEED_USER_PASSWORD=… migrate` — 시딩은 이미 있는 이메일을
+  그대로 두므로 값을 바꿔 다시 돌리면 계정이 하나 는다(쟀다). 비밀번호가 셸 기록에 남는다 — 곧 위 재설정으로 바꾼다.
+- 올리는 동안 WS 는 끊겼다 다시 붙는다(에디터가 스스로) — api 가 바뀌는 몇 초 동안 앞단은 502 를 낸다. 코드가 모르는 마이그레이션이
+  올라간 DB 로 옛 이미지를 띄우면(되돌리기) 경고 한 줄을 찍고 뜬다(「api 가 필요로 하는 것」).
+
+### 10.9 다시 재는 법 — 이미지를 게이트에 넣지 않는다
+
+이미지 빌드 · 기동은 게이트 넷에 없다 — 캐시 없는 빌드가 2분 반 · api 이미지 1.8GB 다. 대신 둘이 있다:
+
+- **값이 맞물리는지** — `pnpm test:build` 의 `apps/api/build-test/deploy-compose.test.ts` 가 `docker compose config` 로 푼 운영 compose 를
+  읽어 잰다(끄는 한도 대 api 의 한도 · 앞단의 grace · `TRUST_PROXY` = 앞단 주소 · 그 주소가 대역 안 · `ip_range` 밖 · 바깥 포트는 앞단만).
+  docker 가 없으면 건너뛴다.
+- **이미지를 새로 지었으면 그 안에서 스모크** — 브라우저 판과 글꼴이 든 것을 잰다(건너뜀 0 이어야 한다 — 건너뜀은 통과가 아니다):
+
+  ```bash
+  docker run --rm -u root -w /app --entrypoint "" wirebound-api:local \
+    node_modules/.bin/vitest run --project build apps/api/build-test/screen-chromium.test.ts
+  ```
+
+  `-u root` 는 build 프로젝트가 시작할 때 `packages/*` 를 다시 빌드해서다(이미지의 파일은 root 것이다).
+
+손으로 재는 한 판(위 「올린 판에서 잰 값」을 낸 순서) — `deploy/.env` 를 채우고 운영과 안 겹치게 프로젝트 이름을 바꿔 올린다:
+
+```bash
+docker compose -f deploy/docker-compose.yml -p wb-measure up -d --build
+# 앞단 주소로 에디터에 로그인 → 두 탭에서 편집 → pptx 미리보기 · 내려받기 → 40장 pptx 를 받는 중에 stop
+docker compose -f deploy/docker-compose.yml -p wb-measure stop
+docker compose -f deploy/docker-compose.yml -p wb-measure up -d   # 수를 견준다
+docker compose -f deploy/docker-compose.yml -p wb-measure down -v
+```
+
+주소 키는 `docker compose logs api` 의 `remoteAddress` 로 본다.
+
+### 10.10 이 절이 안 잰 것 · 알려진 한계
 
 - **x86_64** — 전부 linux/arm64 에서 쟀다.
-- **실제 TLS 앞단 · 다중 인스턴스 · 운영 DB** — `Secure` 쿠키는 브라우저가 http 에서 거절하는 쪽만 쟀다.
-- **상류 keep-alive 경주** — 「앞단(리버스 프록시)이 지킬 조건」 표의 판정 줄.
+- **실제 도메인의 인증서 발급(ACME)** — `*.localhost` 로 내부 CA 만 쟀다.
+- **바깥 클라이언트의 진짜 주소** — 이 기계(Colima)에서는 호스트에서 게시 포트로 온 요청이 전부 backend 네트워크의 게이트웨이 하나로
+  보였다(위 주소 표) — 그 판이면 **로그인 주소 한도가 서버 전체에 한 벌로 걸린다.** 리눅스 서버에서 바깥 IPv4 는 도커가 iptables 로 넘겨
+  주소가 남는다고 알려져 있고, 도커의 IPv6 를 안 켠 채 IPv6 로 온 요청은 도커의 사용자 공간 프록시를 지나 게이트웨이 주소가 된다고
+  알려져 있다 — **둘 다 안 쟀다.** 올린 뒤 바깥에서 한 번 부르고 `docker compose logs api | grep remoteAddress` 가 게이트웨이(기본
+  `10.231.47.128`)면 그 판이다.
+- **다중 인스턴스 · 운영 DB** — 실시간 층이 프로세스 하나를 전제한다.
+- **상류 keep-alive 경주** — 「앞단(리버스 프록시)이 지킬 조건」 표의 그 줄.
+- **api 의 종료 한도(30s)를 넘는 일** — 한도 뒤 종료 1 은 `apps/api/test/shutdown.test.ts` 가 재고, 컨테이너에서는 30s 를 넘는 일을 안
+  돌려 봤다.
 
 ---
+
 
 ## 11. 못 잰 것 — **이 문서가 확인하지 않은 것들**
 
@@ -1207,7 +1325,7 @@ docker run --init -e HOST=0.0.0.0 -e NODE_ENV=production -e DATABASE_URL … -w 
 
 | 무엇 | 사정 |
 |---|---|
-| **리눅스·Windows** | 이 문서의 값은 **macOS · Apple Silicon** 에서 쟀다 — 「배포하려면」 절만 리눅스 컨테이너(arm64)다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
+| **리눅스·Windows** | 이 문서의 값은 **macOS · Apple Silicon** 에서 쟀다 — 「배포하려면」 절만 리눅스 VM 의 컨테이너(arm64)다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
 | **배포** | 「배포하려면」 절의 「이 절이 안 잰 것 · 알려진 한계」 |
 | **npm 배포** | 패키지가 전부 `private`이다. `npm i -g wirebound` 같은 길은 **없다** — 「부르는 길이 둘이고」 절이 그래서 두 길을 든다 |
 | **Claude Code 밖의 MCP 호스트** | 「다른 호스트」 절 |
@@ -1239,6 +1357,8 @@ packages/cli        wireb
 packages/mcp        MCP 서버 · 스킬
 apps/web            설계서 에디터
 apps/api            REST + WebSocket
+Dockerfile          운영 이미지 둘(api · web)
+deploy/             운영 compose · Caddyfile — 「배포하려면」
 ```
 
 의존 방향은 한 방향이다: `schema` ← `renderer` ← 나머지.

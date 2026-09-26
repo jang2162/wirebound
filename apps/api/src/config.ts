@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { getKoreanErrorMap } from '@wirebound/schema'
 import { DEFAULT_DB_TIME_LIMITS, type DbTimeLimits } from './db/client'
 import { portAgreementError } from './db/port-agreement'
+import { EXPORT_RENDER_LIMIT } from './services/export-worker'
 
 /**
  * API 서버 설정. env에서 읽어 검증한 값만 이 형태로 존재한다 —
@@ -35,6 +36,11 @@ export interface ApiConfig {
    * `X-Forwarded-For` 가 적은 주소를 쓴다(Fastify 의 `trustProxy`). 읽는 자는 로그인 제한의 주소 키다(`auth/login-limit.ts` 머리말).
    */
   trustProxy: string[]
+  /**
+   * **동시에 뜨는 화면 그리기 브라우저 수** — 내보내기 풀의 그리기 칸(`services/export-worker.ts` 의 «칸이 둘이다»). 브라우저 하나가
+   * 수백 MB 를 먹어 이 수가 곧 그리기의 메모리 상한이다 — 값을 고르는 법은 최상위 README 「배포하려면」의 「화면 그리기 상한」.
+   */
+  exportRenderLimit: number
 }
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const
@@ -235,6 +241,13 @@ const EnvSchema = z.object({
   SCREEN_CHROMIUM_PATH: z.string().optional(),
   /** 믿는 앞단 — `ApiConfig.trustProxy` · `TrustProxyEnv`. */
   TRUST_PROXY: TrustProxyEnv,
+  /** 그리기 칸 수 — `ApiConfig.exportRenderLimit`. 비면 기본값이다(`dbTimeLimitEnv`와 같은 까닭). 0 은 거절한다 — 그리기를 끄는 값이 아니고, 받으면 풀이 1 로 올려 읽어(`ExportWorkerPool`) 적은 값과 다른 수로 돈다. */
+  EXPORT_RENDER_LIMIT: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    numericEnv('EXPORT_RENDER_LIMIT')
+      .refine((limit) => limit >= 1, 'EXPORT_RENDER_LIMIT은 1 이상이어야 합니다')
+      .default(EXPORT_RENDER_LIMIT),
+  ),
   /**
    * **`docker compose` 가 여는 호스트 포트.** 이 서버가 쓰는 값이 아니라 **`DATABASE_URL`
    * 안의 포트와 맞는지 재기 위해서만** 읽는다 — 그래서 `ApiConfig` 에 안 실린다.
@@ -312,5 +325,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
       keepAliveIdleMs: data.DB_KEEPALIVE_IDLE_MS,
     },
     trustProxy: data.TRUST_PROXY,
+    exportRenderLimit: data.EXPORT_RENDER_LIMIT,
   }
 }

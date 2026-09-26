@@ -1,0 +1,122 @@
+# **운영 compose — 단일 리눅스 서버.** 절차 · 잰 값은 최상위 README 「배포하려면」 절이 갖는다. 저장소 뿌리에서 친다:
+#
+#   cp deploy/.env.example deploy/.env     # 값을 채운다 — compose 가 이 파일 옆의 .env 를 스스로 읽는다
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#
+# **개발용 `../docker-compose.yml` 과 다른 프로젝트다** — 프로젝트 이름을 아래 `name` 으로 고정한다. 개발용은 디렉터리
+# 이름이 프로젝트 이름이라(README 「워크트리를 여럿 띄울 때」) 저장소 뿌리의 개발 볼륨이 `wirebound_wirebound-pgdata` 다.
+# 이름을 디렉터리에 맡기면 이 파일의 볼륨이 `deploy_…` 로 지어져 저장소를 옮기거나 디렉터리 이름을 바꾸는 순간 빈 DB 로 뜬다.
+name: wirebound-prod
+
+x-api-image: &api-image
+  image: wirebound-api:${WIREBOUND_TAG:-local}
+  build:
+    context: ..
+    target: api
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wirebound
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?deploy/.env 에 POSTGRES_PASSWORD 를 적는다}
+      POSTGRES_DB: wirebound
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # 바깥 포트를 열지 않는다 — api 만 compose 네트워크로 붙는다.
+    networks: [backend]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wirebound -d wirebound']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  # **마이그레이션 · 최초 계정 — 기동 전에 한 번 돌고 끝난다.** api 는 이것이 종료 0 으로 끝나야 뜬다. api 는 뜰 때 올리지
+  # 않고 견주기만 한다 — 뒤처진 DB 면 안 뜬다(`apps/api/src/db/schema-version.ts`). `up` 마다 다시 돌고, 다 올라간 DB 에는
+  # 아무것도 안 한다.
+  migrate:
+    <<: *api-image
+    command: ['node', '--import', 'tsx', 'src/db/migrate.ts', 'latest']
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://wirebound:${POSTGRES_PASSWORD}@postgres:5432/wirebound
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    <<: *api-image
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://wirebound:${POSTGRES_PASSWORD}@postgres:5432/wirebound
+      # 믿는 앞단은 `web` 하나다 — 아래 `web` 의 고정 주소. 클라이언트가 닿는 대역을 적지 않는다(README 「앞단이 지킬 조건」).
+      TRUST_PROXY: ${EDGE_IP:-10.231.47.2}
+      # 시딩 값은 `migrate` 만 읽는다 — api 의 환경에 비밀번호를 남기지 않는다.
+      SEED_USER_EMAIL: ''
+      SEED_USER_NAME: ''
+      SEED_USER_PASSWORD: ''
+    networks: [backend]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3001/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      # 요청마다 로그 두 줄이 남는다 — 뜨는 동안만 촘촘히 묻고 그 뒤는 30s 마다.
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
+      start_interval: 1s
+    # api 는 SIGTERM 에 도는 요청을 30s 까지 끝까지 답한다(`apps/api/src/shutdown.ts`) — 그보다 길게 둔다. 기본 10s 면 그 뒤가 SIGKILL 이다.
+    stop_grace_period: 40s
+    restart: unless-stopped
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '5'
+
+  web:
+    image: wirebound-web:${WIREBOUND_TAG:-local}
+    build:
+      context: ..
+      target: web
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?deploy/.env 에 SITE_ADDRESS 를 적는다}
+    ports:
+      - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
+      - '${HTTPS_PORT:-443}:443/udp'
+    volumes:
+      # 받은 인증서 · 키 — 지우면 다시 받는다(발급 한도에 걸릴 수 있다).
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      backend:
+        ipv4_address: ${EDGE_IP:-10.231.47.2}
+    depends_on:
+      api:
+        condition: service_healthy
+    # 앞단의 `grace_period`(Caddyfile 35s)보다 길게 — 앞단이 먼저 끊으면 api 가 끝까지 답한 pptx 가 사람에게 안 닿는다.
+    stop_grace_period: 40s
+    restart: unless-stopped
+    logging: *logging
+
+networks:
+  backend:
+    ipam:
+      config:
+        # `EDGE_IP` 를 고정하려고 대역을 정한다. 서버의 다른 네트워크와 겹치면 `up` 이 죽는다 — 그때 셋을 함께 바꾼다.
+        # 기본값은 도커가 스스로 나눠 주는 대역(172.17–31.0.0/16 · 192.168.0.0/16) 밖이다.
+        - subnet: ${BACKEND_SUBNET:-10.231.47.0/24}
+          # **다른 컨테이너는 이 범위에서만 주소를 받는다** — 없으면 먼저 뜬 postgres 가 `EDGE_IP` 를 가져가 `web` 이
+          # «Address already in use» 로 안 뜬다(쟀다). `EDGE_IP` 는 이 범위 밖에 둔다.
+          ip_range: ${BACKEND_IP_RANGE:-10.231.47.128/25}
+
+volumes:
+  pgdata:
+  caddy-data:
+  caddy-config:

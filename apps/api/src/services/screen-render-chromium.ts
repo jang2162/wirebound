@@ -117,12 +117,26 @@ export const SCREEN_DEFAULTS = {
    * pptx 하나가 통째로 메모리에 올라가므로 장 수가 그대로 최고 사용량이다.
    */
   maxPages: 200,
+  /**
+   * **한 장의 넓이 상한(CSS px²)** — 뷰포트 폭 × 8192. 넘은 장은 그리지 않고 실패한다(이유가 크기와 상한을 말한다).
+   *
+   * 화면 전체를 찍으므로(`FULL_PAGE`) 긴 페이지의 비트맵이 높이만큼 자란다. 잰 값(운영 compose 의 api 컨테이너 · 배포판
+   * chromium · `Text` 행만 든 페이지 한 장의 pptx 내려받기 · cgroup `memory.current` 최고 − 부하 전): 200행 +0.38GB · 500행
+   * +0.77GB · 1000행 +1.24GB · 2000행 +2.05GB · 4000행 5.7GB 까지 오르고 다음 번은 컨테이너 안에서 OOM kill 로 «Unable to
+   * capture screenshot». 페이지 여덟 장 × 40행 짜리 일 하나가 +0.54GB 다 — 긴 페이지 한 장이 서버 하나를 쓰러뜨린다.
+   * 8192 는 200행 남짓이고 장치 화소로 16384(배율 2)다. 그보다 긴 그림은 슬라이드(7.5 × 5.75in)에 1pt 안팎의 글자로 앉는다.
+   *
+   * **자르지 않는다** — 잘린 목업은 «눈으로는 그럴듯한 한 장»이다(`FULL_PAGE`의 판정과 같다). 넓이로 재는 것은 폭이 뷰포트를
+   * 넘는 페이지도 전체를 찍기 때문이다. 다시 재는 법: 최상위 README 「배포하려면」의 「화면 그리기 상한」.
+   */
+  maxArea: 720 * 8192,
 } as const
 
 export interface ChromiumScreenRendererOptions {
   concurrency?: number
   timeoutMs?: number
   maxPages?: number
+  maxArea?: number
   /**
    * 브라우저 실행 파일. **주지 않으면 `playwright-core`가 기계에서 찾는다.**
    * 스모크가 자기 기계의 것을 가리킬 때 쓴다.
@@ -191,6 +205,7 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
   const concurrency = options?.concurrency ?? SCREEN_DEFAULTS.concurrency
   const timeoutMs = options?.timeoutMs ?? SCREEN_DEFAULTS.timeoutMs
   const maxPages = options?.maxPages ?? SCREEN_DEFAULTS.maxPages
+  const maxArea = options?.maxArea ?? SCREEN_DEFAULTS.maxArea
 
   return {
     async render(requests: readonly ScreenRequest[]): Promise<ScreenBatch> {
@@ -229,7 +244,7 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
            */
           return { results: requests.map(() => failure(korean.reason)), fontWarning: null }
         }
-        return { results: await renderAll(browser, requests, { concurrency, timeoutMs, maxPages }), fontWarning: null }
+        return { results: await renderAll(browser, requests, { concurrency, timeoutMs, maxPages, maxArea }), fontWarning: null }
       } finally {
         /**
          * **닫는 데 실패해도 다 그린 배치를 잃지 않는다.** 여기서 던지면 그 예외가 `render`
@@ -250,7 +265,7 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
 async function renderAll(
   browser: Browser,
   requests: readonly ScreenRequest[],
-  limits: { concurrency: number; timeoutMs: number; maxPages: number },
+  limits: { concurrency: number; timeoutMs: number; maxPages: number; maxArea: number },
 ): Promise<ScreenResult[]> {
   const results: ScreenResult[] = new Array(requests.length)
   let next = 0
@@ -266,7 +281,7 @@ async function renderAll(
         )
         continue
       }
-      results[index] = await renderOne(browser, requests[index]!, limits.timeoutMs)
+      results[index] = await renderOne(browser, requests[index]!, limits.timeoutMs, limits.maxArea)
     }
   }
 
@@ -281,6 +296,7 @@ async function renderOne(
   browser: Browser,
   request: ScreenRequest,
   timeoutMs: number,
+  maxArea: number,
 ): Promise<ScreenResult> {
   let context: BrowserContext | undefined
   try {
@@ -288,6 +304,9 @@ async function renderOne(
     const page = await context.newPage()
     await page.setContent(request.html, { waitUntil: 'load' })
     await page.addStyleTag({ content: request.css })
+    // **찍기 전에 잰다** — 비트맵을 만드는 것이 비싼 몫이다(`SCREEN_DEFAULTS.maxArea`).
+    const [width, height] = await page.evaluate<[number, number]>(PAGE_SIZE)
+    if (width * height > maxArea) return failure(tooLarge(width, height, maxArea))
     const bytes = await page.screenshot({ type: 'png', fullPage: FULL_PAGE })
     const size = readPngSize(bytes)
     // **못 읽은 크기를 계약에 넣지 않는다** — 넣으면 슬라이드가 조용히 찌그러진다.
@@ -344,6 +363,26 @@ async function probeKoreanGlyphs(browser: Browser, timeoutMs: number): Promise<K
     await context?.close().catch(() => {})
   }
 }
+
+/**
+ * 화면 전체의 크기(CSS px) — `fullPage` 가 찍는 크기와 같은 값을 읽는다. 글자로 넘기는 까닭은 `KOREAN_GLYPH_PROBE`와 같다.
+ */
+const PAGE_SIZE = `(() => {
+  const d = document.documentElement
+  const b = document.body
+  return [
+    Math.max(d.scrollWidth, d.clientWidth, b ? b.scrollWidth : 0),
+    Math.max(d.scrollHeight, d.clientHeight, b ? b.scrollHeight : 0),
+  ]
+})()`
+
+/** 넓이 상한을 넘은 장의 이유. 크기와 상한을 함께 말한다 — 무엇을 줄이면 되는지 사람이 알아야 한다. */
+export function tooLarge(width: number, height: number, maxArea: number): string {
+  return `${SCREEN_TOO_LARGE} — ${width}×${height}px(상한 ${VIEWPORT.width}×${Math.floor(maxArea / VIEWPORT.width)}px 넓이)`
+}
+
+/** 넓이 상한을 넘은 장의 이유 머리. */
+export const SCREEN_TOO_LARGE = '페이지가 너무 커 화면을 그리지 않았습니다'
 
 function failure(reason: string): ScreenResult {
   return { ok: false, reason }

@@ -31,7 +31,7 @@ import { installCatalog, type PageDocument } from '@wirebound/schema'
 import { resolveTheme, systemTheme } from '@wirebound/themes'
 import { chromium } from 'playwright-core'
 import { describe, expect, it } from 'vitest'
-import { chromiumScreenRenderer, KOREAN_GLYPH_PROBE } from '../src/services/screen-render-chromium'
+import { chromiumScreenRenderer, KOREAN_GLYPH_PROBE, SCREEN_DEFAULTS, SCREEN_TOO_LARGE } from '../src/services/screen-render-chromium'
 import {
   decideKoreanGlyphs,
   readPngSize,
@@ -248,6 +248,24 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
       expect(last.reason).toContain('2장')
       expect(last.reason).toContain('3장 중 3번째')
     }
+  })
+
+  /**
+   * **넓이 상한을 넘은 장은 찍지 않고 크기와 상한을 말한다**(`SCREEN_DEFAULTS.maxArea`) — 긴 페이지 한 장의 비트맵이 서버의
+   * 메모리를 다 먹는다. 상한 바로 밑은 그린다 — 상한이 멀쩡한 페이지를 막지 않는다. 폭이 뷰포트를 넘는 페이지도 넓이로 잰다.
+   */
+  it('넓이 상한을 넘은 장은 그리지 않고 크기와 상한을 말한다 — 바로 밑은 그린다', async () => {
+    const block = (width: number, height: number): ScreenRequest => ({
+      title: `${width}×${height}`,
+      html: `<!doctype html><html lang="ko"><body style="margin:0"><div style="width:${width}px;height:${height}px">긴 페이지</div></body></html>`,
+      css: 'body { color: #111 }',
+    })
+    const maxHeight = SCREEN_DEFAULTS.maxArea / 720
+    const batch = await renderer().render([block(720, maxHeight), block(720, maxHeight + 1), block(1440, maxHeight / 2 + 1)])
+    const [under, tall, wide] = batch.results
+    expect(under!.ok ? [under!.width, under!.height] : under).toEqual([1440, maxHeight * 2])
+    expect(tall).toEqual({ ok: false, reason: `${SCREEN_TOO_LARGE} — 720×${maxHeight + 1}px(상한 720×${maxHeight}px 넓이)` })
+    expect(wide).toEqual({ ok: false, reason: `${SCREEN_TOO_LARGE} — 1440×${maxHeight / 2 + 1}px(상한 720×${maxHeight}px 넓이)` })
   })
 })
 

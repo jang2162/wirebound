@@ -320,7 +320,10 @@ describe('기본값 — docker-compose.yml 과 .env.example 이 같은 수를 �
       ['CLAUDE.md', CLAUDE],
     ] as const) {
       // `docker compose … up -d` 처럼 줄임표가 낀 **산문**은 뺀다 — 그것은 칠 명령이 아니다.
-      const 칠명령 = 원문.split('\n').filter((line) => /docker compose[^…\n]*\bup -d/.test(line))
+      // 운영 compose(`-f deploy/docker-compose.yml`)도 뺀다 — Postgres 포트를 바깥에 안 열고 `deploy/.env` 를 스스로 읽는다.
+      const 칠명령 = 원문
+        .split('\n')
+        .filter((line) => /docker compose[^…\n]*\bup -d/.test(line) && !line.includes('-f deploy/docker-compose.yml'))
       expect(칠명령.length, `${이름} 에 칠 수 있는 up 명령이 있어야 한다`).toBeGreaterThan(0)
       for (const line of 칠명령) {
         expect(line, `${이름}: 이 플래그를 잃으면 컨테이너가 기본 포트로 다시 만들어진다`).toContain(
