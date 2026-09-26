@@ -357,15 +357,32 @@ describe('워커가 죽는다', () => {
 })
 
 describe('쉬는 워커', () => {
+  /**
+   * **쉬는 시계를 가짜로 둔다** — 쉬는 시계는 일이 끝날 때마다 따로 선다. 진짜 시계면 두 일이 끝난 시각이 쉬는 시간보다 벌어진
+   * 판(붐빌 때)에서 앞 워커가 뒤 일이 끝나기 전에 쉬는 시간을 다 채워 «둘이 떠 있다»가 1 로 나왔다 — 다시 재는 법: 이 케이스를
+   * 진짜 시계로 되돌리고 CPU 를 묶는다(`node -e 'for(;;){}'` 를 코어 수의 네 배). `setImmediate` 는 안 바꾼다 — 행을 보내는 사이의
+   * 양보가 그것이다(`yieldToLoop`).
+   */
   it('쉬는 시간이 지나면 끝내고, 마지막 하나는 새 워커로 갈아 둔다', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    // 목록에서 빼는 것만이 아니라 스레드를 끝내는지 — `stats` 는 목록만 센다.
+    const terminate = vi.spyOn(Worker.prototype, 'terminate')
     const pool = new ExportWorkerPool({ limit: 2, idleMs: 100 })
     try {
       await Promise.all([pool.runHtml(syntheticRows(2, 2000), HTML_ZIP), pool.runHtml(syntheticRows(2, 2000), HTML_ZIP)])
       expect(pool.stats.threads).toBe(2)
-      await new Promise((resolve) => setTimeout(resolve, 600))
+      await vi.advanceTimersByTimeAsync(99)
+      expect([pool.stats.threads, terminate.mock.calls.length]).toEqual([2, 0])
+      await vi.advanceTimersByTimeAsync(1)
       expect(pool.stats).toEqual({ threads: 1, busy: 0, queued: 0, drawSlots: 0 })
+      expect(terminate).toHaveBeenCalledTimes(2)
     } finally {
-      await pool.close()
+      terminate.mockRestore()
+      try {
+        await pool.close()
+      } finally {
+        vi.useRealTimers()
+      }
     }
   }, 60_000)
 })
