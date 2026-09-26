@@ -1,5 +1,5 @@
 import { buildApp } from './app'
-import { prepareUnlockSocket, unlockSocketDir, unlockSocketPath, UnlockSocketRefused } from './auth/unlock-socket'
+import { prepareUnlockSocket, unlockSocketPlace, UnlockSocketRefused } from './auth/unlock-socket'
 import { loadConfig } from './config'
 import { createDb, createPool, verifyDbTimeLimits } from './db/client'
 import { describeDatabaseTarget } from './db/describe-target'
@@ -67,13 +67,12 @@ async function listen(config: ReturnType<typeof loadConfig>, db: ReturnType<type
   const unlockSocket = prepareUnlockSocket(app)
 
   await app.listen({ host: config.host, port: config.port })
-  // **로그인 막힘을 푸는 입구를 연다** — TCP 포트를 쥔 뒤라야 자리에 남은 소켓이 죽은 api 의 것이다(`auth/unlock-socket.ts`
-  // 머리말 «여는 것은»). 못 열어도 api 는 그대로 뜬다 — 풀기만 못 한다.
-  const socketDir = unlockSocketDir()
-  const socketPath = unlockSocketPath(config.port, socketDir)
+  // **로그인 막힘을 푸는 입구를 연다** — TCP 포트를 쥔 뒤에 연다. 같은 HOST · PORT 의 api 는 TCP 에서 먼저 막히고, 자리에 남은
+  // 소켓은 붙어 보고 가른다(`auth/unlock-socket.ts` 머리말 «여는 것은»). 못 열어도 api 는 그대로 뜬다 — 풀기만 못 한다.
+  const place = unlockSocketPlace(config)
   try {
-    await unlockSocket.open(socketPath, socketDir)
-    app.log.info(`로그인 막힘을 푸는 입구: ${socketPath}`)
+    await unlockSocket.open(place.path, place.dir)
+    app.log.info(`로그인 막힘을 푸는 입구: ${place.path}`)
   } catch (error) {
     if (!(error instanceof UnlockSocketRefused)) throw error
     app.log.warn(`로그인 막힘을 푸는 입구를 안 엽니다 — ${error.message}. 막힌 로그인은 창이 지나거나 api 를 다시 띄워야 풀린다`)
