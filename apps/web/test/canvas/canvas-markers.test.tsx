@@ -15,7 +15,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { WbNode } from '@wirebound/schema'
-import { openPage, pageDoc, waitForNode } from '../editor-harness'
+import { openPage, pageDoc, waitForNode, canvasQuery } from '../editor-harness'
 
 /** 지금 캔버스에 그려진 마커. `노드 id → 번호`다. */
 function markers(): Record<string, string> {
@@ -72,7 +72,7 @@ describe('캔버스 번호 마커', () => {
     await waitFor(() => expect(markers()).toEqual({ n_a: '1' }))
 
     // 노드를 골라 아웃라인을 세운 뒤 모드를 바꾼다 — 아웃라인이 사라지는 것이 대조군이다.
-    fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
     await waitFor(() => expect(document.body.querySelector('[data-wb-selected-id]')).not.toBeNull())
 
     fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))

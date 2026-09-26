@@ -37,6 +37,7 @@ import {
   PROJECT_NAME,
   PROJECT_ROUTE,
   renderEditor,
+  canvasQuery,
 } from '../editor-harness'
 // 카탈로그가 설치돼 있어야 `listComponents()`가 빈 배열이 아니다.
 import { clickAsBrowser } from '../click-as-browser'
@@ -595,7 +596,7 @@ const EDIT_DOC = pageDoc({
 
 /** 캔버스에 그려진 노드의 글자. 낙관적 적용이 화면까지 닿았는지 본다. */
 function canvasTextOf(nodeId: string): string {
-  const node = document.body.querySelector(`[data-wb-id="${nodeId}"]`)
+  const node = canvasQuery(`[data-wb-id="${nodeId}"]`)
   if (node === null) throw new Error(`캔버스에 노드가 없다: ${nodeId}`)
   return node.textContent ?? ''
 }
@@ -778,7 +779,7 @@ describe('속성 패널 — 텍스트·수 입력 (blur/Enter 커밋)', () => {
     selectAt('Text', 0)
     fireEvent.change(requireWidget('내용'), { target: { value: '버려질 타이핑' } })
 
-    const other = document.body.querySelector('[data-wb-id="n-text2"]')
+    const other = canvasQuery('[data-wb-id="n-text2"]')
     if (other === null) throw new Error('캔버스에 둘째 노드가 없다')
     fireEvent.click(other)
 
@@ -908,7 +909,7 @@ describe('속성 패널 — 실브라우저의 클릭은 선택이 바뀌기 전
   it('캔버스로 다른 노드를 누르면 원래 노드로 커밋된다', async () => {
     const { calls } = await typing()
 
-    const other = document.body.querySelector('[data-wb-id="n-text2"]')
+    const other = canvasQuery('[data-wb-id="n-text2"]')
     if (other === null) throw new Error('캔버스에 둘째 노드가 없다')
     clickAsBrowser(other)
     await waitFor(() => expect(calls).toHaveLength(1))

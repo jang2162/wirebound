@@ -31,11 +31,16 @@ export function CanvasIframe(props: {
   onFrame?: (frame: CanvasFrame | null) => void
   /** iframe 문서의 높이를 다시 잰 뒤 불린다 — 노드 상자가 바뀌었을 수 있다. */
   onResize?: () => void
+  /**
+   * 문서 밖(iframe 의 `body` · `html` 자체)을 눌렀다. **React 의 `onClick` 으로는 안 온다** — portal 의 컨테이너(body)는
+   * React 가 그린 요소가 아니라서, 그것을 누른 클릭은 React 트리의 어느 핸들러에도 닿지 않는다(jsdom · 실브라우저 같다).
+   */
+  onBackgroundClick?: () => void
 }): ReactElement {
   const [iframe, setIframe] = useState<HTMLIFrameElement | null>(null)
   const [frame, setFrame] = useState<CanvasFrame | null>(null)
   const [height, setHeight] = useState(MIN_HEIGHT)
-  const { onFrame, onResize } = props
+  const { onFrame, onResize, onBackgroundClick } = props
 
   useLayoutEffect(() => {
     const doc = iframe?.contentDocument
@@ -69,6 +74,16 @@ export function CanvasIframe(props: {
       if (tag.textContent !== css) tag.textContent = css
     }
   }, [frame, props.styles])
+
+  useLayoutEffect(() => {
+    if (frame === null || onBackgroundClick === undefined) return
+    const doc = frame.document
+    const listener = (event: Event) => {
+      if (event.target === doc.body || event.target === doc.documentElement) onBackgroundClick()
+    }
+    doc.addEventListener('click', listener)
+    return () => doc.removeEventListener('click', listener)
+  }, [frame, onBackgroundClick])
 
   useLayoutEffect(() => {
     if (frame === null) return

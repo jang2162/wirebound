@@ -145,7 +145,7 @@ export function useProjectThemeState(
         if (!alive) return
         // 조회 실패에서도 **그리기는 계속된다** — 화면은 구조 기본 CSS로 그려진다.
         // 여기서 던지면 캔버스가 통째로 사라진다. 이 상태를 문장으로 옮길지는 읽는
-        // 쪽이 정한다(캔버스는 셸 머리에 한 줄을 싣고 — `canvas/canvas-theme-notice.tsx` —, 패턴 고르개는 제 자리에 말한다).
+        // 쪽이 정한다(패턴 고르개는 제 자리에 말한다).
         console.error('테마를 읽지 못해 기본 스타일로 그립니다', error)
         setState({ status: 'failed' })
       }

@@ -30,7 +30,6 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { PageDetail, ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CanvasStructuresProvider } from '../canvas/canvas-structures'
-import { CanvasThemeNoticeProvider, ThemeAlert } from '../canvas/canvas-theme-notice'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { InteractionPanel } from '../panels/interaction-panel'
@@ -488,15 +487,12 @@ export function EditorShellRoute(): ReactElement {
     <EditorStoreProvider store={store}>
       {/* 캔버스가 그리는 구조 표를 속성 패널이 읽는 통로 — 둘의 공통 조상이 셸이라 여기서 감싼다. */}
       <CanvasStructuresProvider>
-        {/* 캔버스가 테마를 못 읽었다는 것을 머리가 말하는 통로 — 같은 까닭으로 셸째 감싼다. */}
-        <CanvasThemeNoticeProvider>
-          <EditorShell
-            project={state.project}
-            roleKnown={roleKnown}
-            pageId={params.pageId}
-            onMembership={onMembership}
-          />
-        </CanvasThemeNoticeProvider>
+        <EditorShell
+          project={state.project}
+          roleKnown={roleKnown}
+          pageId={params.pageId}
+          onMembership={onMembership}
+        />
       </CanvasStructuresProvider>
     </EditorStoreProvider>
   )
@@ -549,21 +545,12 @@ function EditorShell(props: {
     setRoleNotice(canEdit ? ROLE_NOTICE.gained : props.roleKnown ? ROLE_NOTICE.lost : ROLE_NOTICE.unknown)
   }, [canEdit, props.roleKnown])
   /**
-   * **테마 선택이 바뀌었다는 신호** — 고르개가 바꿨거나 내가 스냅샷을 복원했다(복원의 마지막 단계가 레이아웃의
-   * 테마 선택을 되돌린다 — `restoredToken`의 표). 값에는 뜻이 없고 오를 때마다 캔버스가 테마를 다시 조회한다.
-   *
-   * **테마 자체를 여기 두지 않는다.** 그러면 셸이 테마를 읽는 주체가 되어
-   * `useThemeCss`의 안정 참조 계약을 셸이 지켜야 하고, 캔버스는 자기가 그리는 것의
-   * 출처를 잃는다. 신호 하나만 내려보내면 그 계약이 `useProjectTheme` 안에 그대로 남는다.
+   * **연결이 다시 붙었다는 신호**. 값에는 뜻이 없고 오를 때마다 캔버스가 페이지를
+   * 다시 읽는다.
    *
    * **스토어에 두지 않는 이유:** `EditorState`가 드는 것은 **페이지 편집** 상태다
-   * (문서·`headSeq`·undo 스택·전송 큐). 테마 선택은 그 축이 아니고, 거기 얹으면
+   * (문서·`headSeq`·undo 스택·전송 큐). 재조회 신호는 그 축이 아니고, 거기 얹으면
    * 편집과 무관한 이유로 스토어 구독자가 다시 그린다.
-   */
-  const [themeReloadToken, setThemeReloadToken] = useState(0)
-  /**
-   * **연결이 다시 붙었다는 신호**. 값에는 뜻이 없고 오를 때마다 캔버스가 페이지를
-   * 다시 읽는다 — `themeReloadToken`과 같은 모양이고 같은 이유로 스토어에 두지 않는다.
    */
   const [resyncToken, setResyncToken] = useState(0)
 
@@ -594,7 +581,7 @@ function EditorShell(props: {
    * | 메뉴 · 페이지 목록 · 제목 | 좌측 트리(`MenuTree`의 `reloadToken`) |
    * | 열린 페이지의 문서 | 캔버스(`CanvasFrame`의 복원 재조회) — 구조 트리 · 속성 패널은 스토어에서 읽는다 |
    * | 코멘트 · 페이지 설명 | 우측 본문 — **탭을 다녀온 것처럼 다시 세운다**(`RightPanel`의 `key`) |
-   * | 레이아웃의 테마 선택 | 캔버스(`themeReloadToken`도 함께 올린다) · 고르개(`ThemePicker`의 `reloadToken`) |
+   * | 레이아웃의 테마 선택 | 고르개(`ThemePicker`의 `reloadToken`) — 캔버스는 서버의 테마를 읽지 않는다(`canvas/canvas-theme.ts`) |
    *
    * **자리를 하나 빠뜨리면 탭을 다녀오거나 새로고침해야 맞는다** — 되돌렸다는 알림 아래 옛 코멘트 목록이 조용히 남는다
    * (Chrome: 스냅샷의 코멘트를 지운 뒤 복원하면 서버 1 · 탭 0). 복원이 바꾸는 것이 늘면 이 표에 줄을 더한다.
@@ -628,8 +615,8 @@ function EditorShell(props: {
   /** 그 신호를 누가 올렸나 — 다시 읽으며 잃은 것을 말할 때의 앞머리다(`CanvasFrame`의 `applyServerPage`). 신호와 함께 바뀐다. */
   const [restoredLead, setRestoredLead] = useState(RESTORED_LEAD)
   /**
-   * **복원 뒤 다시 읽기의 입구 하나** — 내가 복원했을 때(스냅샷 팝오버)와 남의 복원을 배너의 단추로 다시 읽을 때가 함께 탄다. 두
-   * 신호를 한 자리에서 올려야 한쪽 입구가 테마를 빠뜨리지 않는다(`restoredToken` 표의 테마 줄).
+   * **복원 뒤 다시 읽기의 입구 하나** — 내가 복원했을 때(스냅샷 팝오버)와 남의 복원을 배너의 단추로 다시 읽을 때가 함께 탄다. 한
+   * 자리에서 올려야 한쪽 입구가 다시 읽을 자리를 빠뜨리지 않는다(`restoredToken` 표).
    *
    * **다시 읽기가 시작된 것을 스토어에 먼저 적는다**(`EditorStore.beginRestoreReread`) — 복원 배너는 이 다시 읽기의 판만 풀고, 그 사이 온 복원
    * 신호가 있으면 안 푼다.
@@ -640,7 +627,6 @@ function EditorShell(props: {
       store.beginRestoreReread()
       setRestoredLead(lead)
       setRestoredToken((token) => token + 1)
-      setThemeReloadToken((token) => token + 1)
     },
     [store, shellLive],
   )
@@ -760,7 +746,8 @@ function EditorShell(props: {
           projectId={props.project.id}
           canChoose={abilities.chooseTheme}
           reloadToken={restoredToken}
-          onChanged={() => setThemeReloadToken((token) => token + 1)}
+          // 캔버스는 저장소 테마 하나를 그린다(`canvas/canvas-theme.ts`) — 골라도 캔버스는 안 바뀐다. 고르개는 A1b 가 걷는다.
+          onChanged={() => {}}
         />
         {/* **스냅샷 팝오버**(셸 밖 별도 라우트가 아니라 팝오버인 근거는
             `shell/snapshots-panel.tsx` 머리말의 표에 있다). 내보내기 옆에 두는 것은 둘 다
@@ -817,8 +804,6 @@ function EditorShell(props: {
             `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
             근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
         <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])} />
-        {/* **캔버스가 테마를 못 읽어 기본 스타일로 그린다**(`canvas/canvas-theme-notice.tsx`). 단추는 고르개와 같은 신호로 다시 읽는다. */}
-        <ThemeAlert onReload={() => setThemeReloadToken((token) => token + 1)} />
         {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}
         {roleNotice !== null && (
           <p className="wb-shell-remote-alert" role="status">
@@ -932,7 +917,6 @@ function EditorShell(props: {
         <CanvasFrame
           projectId={props.project.id}
           pageId={props.pageId}
-          themeReloadToken={themeReloadToken}
           resyncToken={resyncToken}
           restoredToken={restoredToken}
           restoredLead={restoredLead}
@@ -970,7 +954,7 @@ function EditorShell(props: {
  *
  * **탭 상태를 스토어에 두지 않는다.** `EditorState`가 드는 것은 **페이지 편집** 상태다
  * (문서·`headSeq`·undo 스택·전송 큐). 어느 탭을 보고 있는가는 그 축이 아니고, 거기 얹으면
- * 편집과 무관한 이유로 스토어 구독자가 다시 그린다 — `themeReloadToken`을 셸의 `useState`로
+ * 편집과 무관한 이유로 스토어 구독자가 다시 그린다 — `resyncToken`을 셸의 `useState`로
  * 둔 것과 같은 근거다.
  *
  * **`role="tab"`·`aria-selected`·`role="tabpanel"`을 다는 것이 계약이다.** 보조 기술이
@@ -1185,8 +1169,6 @@ type PageLoadState =
 function CanvasFrame(props: {
   projectId: string
   pageId: string | undefined
-  /** 고르개가 테마를 바꿨다는 신호. `Canvas`가 그대로 `useProjectTheme`에 넘긴다. */
-  themeReloadToken: number
   /** 연결이 다시 붙었다는 신호. 오를 때마다 아래 재조회 이펙트가 돈다. */
   resyncToken: number
   /** 스냅샷이 복원됐다는 신호(내 복원 · 남의 복원을 배너의 단추로). 오를 때마다 아래 복원 재조회 이펙트가 돈다. */
@@ -1596,7 +1578,7 @@ function CanvasFrame(props: {
           </>
         ))}
       {state.status === 'ready' && (
-        <Canvas projectId={projectId} pageId={pageId} themeReloadToken={props.themeReloadToken} />
+        <Canvas projectId={projectId} pageId={pageId} />
       )}
     </div>
   )

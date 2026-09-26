@@ -38,6 +38,7 @@ import {
   pageDetail,
   renderEditor,
   waitForNode,
+  canvasQuery,
 } from '../editor-harness'
 
 class FakeSocket implements RealtimeSocket {
@@ -457,7 +458,7 @@ describe('여는 조회가 실패한 캔버스', () => {
     // 다시 읽기가 돌았다 — 아래가 «재조회가 안 돌았다»로 빨강이 되지 않게 먼저 본다.
     await waitFor(() => expect(getPage).toHaveBeenCalledTimes(2))
 
-    await waitFor(() => expect(canvasFrame().querySelector('[data-wb-id="n-back"]')).not.toBeNull())
+    await waitFor(() => expect(canvasQuery('[data-wb-id="n-back"]')).not.toBeNull())
   })
 })
 

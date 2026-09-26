@@ -8,14 +8,17 @@
  * **지금 주소의 것인지**는 `useOpenDocument`가 대조한다(`store/use-editor-store.tsx`) —
  * 여기서 다시 확인하지 않는 것은 그 대조가 한 곳에 있기 때문이지, 어긋날 수 없어서가 아니다.
  *
- * **이 파일이 그리는 것 중 문서 안쪽에 스타일을 주는 것은 없다.** 설계서 내용의
- * 외형은 테마 CSS가 전담한다. 그래서 셸의 클래스가 붙는 것은 문서를 **감싸는**
- * 상자(`wb-shell-canvas-surface`)와 문서 **옆에** 그려지는 셸의 장치 둘
- * (`wb-shell-selection`·`wb-shell-canvas-error`)뿐이고, 셋 다 문서 노드를 겨냥하지
- * 않는다. 자세한 근거는 `shell.css` 머리말(셸 규칙이 캔버스 안쪽에 닿지 않게 지키는 조항들)에 있다.
+ * **문서는 iframe 안에 그린다**(`./canvas-iframe.tsx`). 테마 CSS 는 그 iframe 문서에만 실려 에디터를 칠하지 않고,
+ * 테마의 `@media` 는 뷰포트 프리셋 폭으로 판정된다. 테마는 저장소 테마 하나다(`./canvas-theme.ts`).
+ *
+ * **이 파일이 그리는 것 중 문서 안쪽에 스타일을 주는 것은 없다.** 셸의 클래스가 붙는 것은 호스트 문서의 상자
+ * (`wb-shell-canvas-surface` · `wb-shell-canvas-iframe`)와 문서 **옆에** 그려지는 셸의 장치
+ * (`wb-shell-selection` · `wb-shell-marker` · `wb-shell-canvas-error` · `wb-shell-canvas-runtime`)뿐이고, 전부 호스트
+ * 문서에 있다 — 셸 CSS 는 iframe 안에 실리지 않는다. 자세한 근거는 `shell.css` 머리말에 있다.
  */
 import {
   Component,
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -27,24 +30,25 @@ import {
 } from 'react'
 import {
   EMPTY_OVERLAY,
+  focusElement,
+  markerPoint,
   renderDocument,
   type InteractionEvent,
   type InteractionOverlay,
   type NodeRenderError,
 } from '@wirebound/renderer'
 import { describePageTarget, type PageDocument } from '@wirebound/schema'
-import { themeStructures } from '@wirebound/themes'
+import { ThemeProvider } from '@wirebound/theme-sdk'
+import { createPortal } from 'react-dom'
 import { walkSafely } from '../edit/safe-walk'
-import { usePublishCanvasStructures } from './canvas-structures'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
-import { useProjectThemeState, useThemeSourceOf } from '../theme/use-project-theme'
-import { usePublishThemeFailed } from './canvas-theme-notice'
-import { useThemeCss } from '../theme/use-theme-css'
+import { CanvasIframe, type CanvasFrame } from './canvas-iframe'
+import { CANVAS_STYLES, CANVAS_THEME, canvasTokens } from './canvas-theme'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
 // 끝난다 — 그 모듈의 주석 참고.
 import '../catalog-setup'
 
-/** 선택 아웃라인이 덮을 자리. 프레임의 배율을 걷어 낸 **문서 좌표계**의 값이다. */
+/** 선택 아웃라인이 덮을 자리. 표면 안의 좌표이고 프레임의 배율을 걷어 낸 값이다. */
 interface Box {
   left: number
   top: number
@@ -53,15 +57,17 @@ interface Box {
 }
 
 /**
- * 번호 마커 하나가 앉을 자리(설계서 「설계서 화면 구조」의 번호 마커).
+ * 번호 마커 하나가 앉을 자리(설계서 「설계서 화면 구조」의 번호 마커). `left`·`top` 은 마커의 **중심**이다 —
+ * 렌더러의 `markerPoint` 가 뷰의 `data-wb-marker` 로 정한 점이고, `.wb-shell-marker` 가 `translate(-50%, -50%)` 로 가운데 맞춘다.
  *
- * **아웃라인과 같은 장치를 쓴다** — `findNodeElement`로 상자를 잡아 배율을
- * 걷어 낸 문서 좌표로 옮긴다. 다른 것은 **한 번에 여럿**이라는 점뿐이고, 그 차이가
- * 비용이다(아웃라인은 늘 하나다).
+ * **아웃라인과 같은 장치를 쓴다** — `findNodeElement`로 노드를 잡아 표면 좌표로 옮긴다. 다른 것은
+ * **한 번에 여럿**이라는 점뿐이고, 그 차이가 비용이다(아웃라인은 늘 하나다).
  */
-interface MarkerBox extends Box {
+interface MarkerBox {
   nodeId: string
   marker: number
+  left: number
+  top: number
 }
 
 /**
@@ -131,42 +137,14 @@ function noticesOf(event: InteractionEvent): string[] {
 export function Canvas(props: {
   projectId: string
   pageId: string | undefined
-  /**
-   * **고르개가 테마를 바꾸면 셸이 이 값을 올린다**. 값 자체에는 뜻이 없고
-   * *"다시 조회하라"*는 신호다 — 캔버스는 그것을 `useProjectTheme`에 그대로 넘긴다.
-   *
-   * **테마를 여기로 내려보내지 않는 것이 요점이다.** 그러면 캔버스가 테마를 **읽는**
-   * 주체가 아니게 되고, `useThemeCss`가 기대는 안정 참조를 셸이 대신 지켜야 한다.
-   * 신호 하나만 내려보내면 그 계약이 훅 안에 그대로 남는다.
-   */
-  themeReloadToken?: number
 }): ReactElement | null {
   /**
-   * 테마 CSS를 싣는다. **문서가 없어도 부른다** — 아래에서 `doc === null`이면 일찍
-   * 돌아가지만 훅은 그보다 위에 있어야 하고(훅 규칙), 그 덕에 페이지를 고르지 않은
-   * 상태에서도 시트가 자리를 지킨다.
-   *
-   * **주입은 캔버스가 한다.** 셸(`App`)이 아니라 여기인 이유는 이 시트가 겨냥하는 것이
-   * 문서 노드뿐이기 때문이다 — 셸과 문서의 스타일을 가르는 그 선이고(`shell.css` 머리말),
-   * `shell.css`가 문서를 겨냥하지 않는 것과 대칭이다.
-   *
-   * **테마는 서버에서 온다.** `useProjectTheme`이 설계서 「테이블 정의」의 사슬을 따라간 결과를
-   * 안정 참조로 준다 — 그 안정성이 계약인 이유는 `useThemeCss`가 `useMemo(…, [source])`로
-   * 컴파일을 아끼기 때문이고, 그 훅의 주석에 근거가 있다.
-   *
    * **`renderComposed`를 쓰지 않는다.** *"기본 레이아웃이 `Page > Slot`이라 결과가
    * 같다"*는 **성립하지 않는다** — 합성은 레이아웃 루트와 `Slot`
    * **두 노드를 더 그리고**, 그 id는 페이지 문서에 없어 아래 `nodeIdAt`이 유령 노드를
    * 고르게 된다. 측정과 그 결과는 `packages/renderer/test/compose-identity.test.tsx`에 있다.
    */
-  const themeState = useProjectThemeState(props.projectId, props.themeReloadToken)
-  const theme = useThemeCss(useThemeSourceOf(themeState))
-  // **못 읽었으면 셸 머리가 말한다**(`canvas-theme-notice.tsx`) — 기본 스타일을 설계서의 모습으로 읽지 않게.
-  usePublishThemeFailed(themeState.status === 'failed')
-  // **이 표가 구조의 유일한 판정 입력이다** — 문서를 그리는 데 넘기고, 속성 패널이 `visibleWhen`을
-  // 가를 때도 같은 것을 읽는다(`./canvas-structures.tsx`). `theme`이 안정 참조라 표도 테마가 바뀔 때만 새로 난다.
-  const structures = useMemo(() => themeStructures(theme), [theme])
-  usePublishCanvasStructures(structures)
+  const tokens = useMemo(() => canvasTokens(CANVAS_THEME), [])
 
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다. 상태 객체 전체(`(s) => s`)를 고르면 어느 필드가 바뀌든
@@ -181,6 +159,19 @@ export function Canvas(props: {
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const [box, setBox] = useState<Box | null>(null)
   const [markers, setMarkers] = useState<MarkerBox[]>(NO_MARKERS)
+  /** 문서를 그리는 iframe. 그 문서가 서기 전에는 잴 것이 없다. */
+  const [frame, setFrame] = useState<CanvasFrame | null>(null)
+  /**
+   * 노드 렌더 실패 배너가 앉을 호스트 요소. 배너는 문서를 그리는 자리(iframe 안)에서 오류를 모으지만 셸 CSS 가 없는
+   * iframe 에 두면 모양을 잃으므로 portal 로 호스트에 되돌린다.
+   */
+  const [bannerHost, setBannerHost] = useState<HTMLDivElement | null>(null)
+  /**
+   * **iframe 이 다시 잰 횟수.** 이미지 · 글꼴 · 테마 CSS 처럼 문서 밖의 것이 노드 상자를 바꾸면 아래 두 측정 이펙트의
+   * 다른 의존이 안 바뀐다 — iframe 의 높이를 다시 잴 때마다 올려 외곽선 · 마커가 새 자리를 따라가게 한다.
+   */
+  const [measureTick, setMeasureTick] = useState(0)
+  const bumpMeasure = useCallback(() => setMeasureTick((tick) => tick + 1), [])
 
   /**
    * **상호작용 런타임의 상태**(설계서 「상호작용」의 「실행」 절). 문서가 아니라 **문서 옆**이다 —
@@ -303,14 +294,14 @@ export function Canvas(props: {
   useLayoutEffect(() => {
     const surface = surfaceRef.current
     const target =
-      surface !== null && outlinedNodeId !== null ? findNodeElement(surface, outlinedNodeId) : null
+      frame !== null && outlinedNodeId !== null ? findNodeElement(frame.document, outlinedNodeId) : null
 
-    if (surface === null || target === null) {
+    if (surface === null || frame === null || target === null) {
       setBox(null)
       return
     }
 
-    const next = measure(target, surface, zoom)
+    const next = measure(target, frameOffset(frame, surface, zoom))
     setBox((prev) => (sameBox(prev, next) ? prev : next))
     // `doc`·`viewportWidth`가 의존성에 있는 것은 둘이 바뀌면 노드의 자리가 바뀌기
     // 때문이다. `zoom`은 자리를 바꾸지는 않지만 아래 계산이 그 값을 쓴다.
@@ -319,7 +310,9 @@ export function Canvas(props: {
     // **`live.notices`도 자리를 바꾼다.** 알림 줄이 문서 **위에** 그려져 문서를 아래로
     // 밀기 때문이다 — 겹layer가 안 바뀐 조작(`applied === 0`, 즉 깨진 규칙만 만난 클릭)에서는
     // `live.overlay`의 참조가 그대로라 이 이펙트가 안 돌고, **아웃라인이 옛 자리에 남는다**.
-  }, [outlinedNodeId, doc, zoom, viewportWidth, live.overlay, live.notices])
+    // **`frame`·`measureTick`도 자리를 바꾼다** — iframe 문서가 서야 잴 수 있고, 문서 밖의 것이 상자를 바꾸면
+    // iframe 이 다시 잰다(위 `measureTick`).
+  }, [outlinedNodeId, doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **번호 마커의 자리를 잰다**(「설계서 화면 구조」). 위 아웃라인 이펙트와 같은 장치이고
@@ -341,11 +334,12 @@ export function Canvas(props: {
    */
   useLayoutEffect(() => {
     const surface = surfaceRef.current
-    if (surface === null || doc === null) {
+    if (surface === null || frame === null || doc === null) {
       setMarkers((prev) => (prev.length === 0 ? prev : NO_MARKERS))
       return
     }
 
+    const offset = frameOffset(frame, surface, zoom)
     const next: MarkerBox[] = []
     for (const visit of walkSafely(doc.root)) {
       const marker = visit.node.marker
@@ -353,19 +347,21 @@ export function Canvas(props: {
       // 검증 **전** 문서에 대해서는 그 보장이 없다.
       if (typeof marker !== 'number' || !Number.isInteger(marker)) continue
 
-      const target = findNodeElement(surface, visit.node.id)
+      const target = findNodeElement(frame.document, visit.node.id)
       // **그려지지 않은 노드는 건너뛴다.** 렌더러가 흡수한 폴백은 id가 빈 문자열이라
-      // 찾을 수 없고(`fallback.tsx`), 구조 구현체가 자식을 안 그리는 경우도 있다.
+      // 찾을 수 없고(`fallback.tsx`), 뷰가 자식을 안 그리는 경우도 있다.
       if (target === null) continue
 
-      next.push({ nodeId: visit.node.id, marker, ...measure(target, surface, zoom) })
+      // 자리는 뷰가 정한다(`data-wb-marker` — 없으면 기준 상자의 왼쪽 위). 계산은 렌더러의 `markerPoint` 한 곳이다.
+      const point = markerPoint(target)
+      next.push({ nodeId: visit.node.id, marker, left: offset.left + point.x, top: offset.top + point.y })
     }
 
     setMarkers((prev) => (sameMarkers(prev, next) ? prev : next))
     // 아웃라인 쪽과 같은 이유로 `live.overlay`가 있다 — 숨겨진 노드의 마커는 사라져야 한다
     // (`findNodeElement`가 `null`을 내므로 아래 루프가 건너뛴다). `live.notices`도 같은
     // 이유다: 알림 줄이 문서를 아래로 민다. **빠뜨리면 마커가 옛 자리에 남는다.**
-  }, [doc, zoom, viewportWidth, live.overlay, live.notices])
+  }, [doc, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   if (doc === null) return null
 
@@ -382,9 +378,11 @@ export function Canvas(props: {
       // 우선순위는 상호작용이다. 그런데 선택은 뷰 모드에서 **아무것도 그리지 않으므로**
       // (아웃라인이 없다) 바뀌어도 화면에 안 보인다 — 즉 편집 모드로 돌아왔을 때 떠날 때와
       // 다른 노드가 골라져 있게 된다. **조용히 바뀌는 화면 상태**다. 선택을 남기는 판정(아래 `outlinedNodeId` 주석)과도 이쪽이 맞다.
+      //
+      // iframe 안의 클릭도 여기 닿는다 — 문서는 portal 로 그려져 React 이벤트가 이 트리로 버블링한다.
       onClick={(event: MouseEvent<HTMLDivElement>) => {
         if (mode !== 'edit') return
-        store.selectNode(nodeIdAt(event.target, event.currentTarget))
+        store.selectNode(frame === null ? null : nodeIdAt(event.target, frame.document.body))
       }}
       // **조작이 시작되는 자리**(위 `beginGesture`). 셋을 다는 것은 트리거 4종이 도는 DOM
       // 이벤트가 셋이기 때문이다(`render.tsx`의 `DOM_EVENT`) — 하나라도 빠뜨리면 그
@@ -409,8 +407,29 @@ export function Canvas(props: {
         </div>
       )}
 
+      {/* 노드 렌더 실패 배너가 portal 로 들어오는 자리(위 `bannerHost`). */}
+      <div ref={setBannerHost} />
+
+      {/* 경계를 iframe **밖**에 둔다 — portal 안에서 던진 것도 React 트리를 따라 여기 닿고, 대신 그린 문장이
+          셸 CSS 가 있는 호스트 문서에 선다. 경계가 문서를 대신 그리는 동안 iframe 은 내려간다. */}
       <CanvasBoundary resetKey={doc}>
-        <CanvasDocument doc={doc} structures={structures} interaction={interaction} />
+        <CanvasIframe
+          styles={CANVAS_STYLES}
+          width={viewportWidth}
+          onFrame={setFrame}
+          onResize={bumpMeasure}
+          // 문서 밖(iframe 의 빈 자리)을 누른 것 — 표면의 `onClick` · `onClickCapture` 가 받는 클릭과 같게 다룬다.
+          onBackgroundClick={() => {
+            if (mode === 'view') beginGesture()
+            else store.selectNode(null)
+          }}
+        >
+          {(f) => (
+            <ThemeProvider value={{ tokens, window: f.window }}>
+              <CanvasDocument doc={doc} interaction={interaction} bannerHost={bannerHost} />
+            </ThemeProvider>
+          )}
+        </CanvasIframe>
       </CanvasBoundary>
 
       {/* 아웃라인은 문서 **옆에** 그린다. 노드에 클래스나 스타일을 얹으면 셸이 테마의
@@ -454,9 +473,9 @@ export function Canvas(props: {
 /**
  * 문서를 실제로 그리는 자리. `Canvas`에서 갈라 둔 이유는 **오류 경계 때문**이다.
  *
- * `renderDocument`는 구조 구현체를 그 자리에서 부른다(엘리먼트를 만드는 함수이지
- * 컴포넌트가 아니다). 그래서 그 호출이 `Canvas`의 렌더 본문에 있으면 경계보다 **위에서**
- * 던지는 셈이 되어 경계가 잡지 못한다. 호출을 경계 **안쪽 컴포넌트**로 내려야 잡힌다.
+ * `renderDocument`는 엘리먼트를 만드는 함수이지 컴포넌트가 아니다. 그 호출이 `Canvas`의 렌더 본문에 있으면 경계보다
+ * **위에서** 던지는 셈이 되어 경계가 잡지 못한다. 호출을 경계 **안쪽 컴포넌트**로 내려야 잡힌다. 테마 뷰 본문의 예외는
+ * 렌더러가 노드마다 둔 경계가 먼저 받는다(`packages/renderer/src/view-host.tsx`) — 여기 경계는 그 밖에서 던진 것을 받는다.
  */
 function CanvasDocument(props: {
   doc: PageDocument
@@ -465,12 +484,8 @@ function CanvasDocument(props: {
    * 켜고 끄는 판단은 `Canvas`가 하고 여기는 그대로 넘긴다.
    */
   interaction?: { overlay: InteractionOverlay; onEvent: (event: InteractionEvent) => void }
-  /**
-   * 테마가 고른 구조. **없는 구조를 고르면 렌더러가 폴백을 그리고 무엇이 없는지 말한다** —
-   * 조용히 기본 구조로 바꿔 그리지 않는 이유는 `apps/web/test/theme/theme-structures.test.tsx`의
-   * 판정에 적었다(요지: 그러면 테마 작성자가 자기 설정이 먹혔다고 믿는다).
-   */
-  structures: Record<string, string>
+  /** 오류 배너를 그릴 호스트 요소. 아직 없으면 배너를 그리지 않는다 — 곧 서고 다시 그려진다. */
+  bannerHost: HTMLElement | null
 }): ReactElement {
   /**
    * 렌더 중에 모은다. `onNodeError` 안에서 `setState`를 부르면 안 되고(렌더러 주석),
@@ -479,7 +494,7 @@ function CanvasDocument(props: {
    */
   const errors: NodeRenderError[] = []
   const tree = renderDocument(props.doc, {
-    structures: props.structures,
+    theme: CANVAS_THEME,
     onNodeError: (error) => errors.push(error),
     // **키를 조건부로 넣는다.** `interaction: undefined`를 그냥 실어도 렌더러는 같게
     // 다루지만(`options.interaction === undefined` 검사), 켜지지 않았다는 것이 호출부에서
@@ -489,7 +504,9 @@ function CanvasDocument(props: {
 
   return (
     <>
-      {errors.length > 0 && (
+      {errors.length > 0 &&
+        props.bannerHost !== null &&
+        createPortal(
         <div className="wb-shell-canvas-error" role="alert">
           <p className="wb-shell-canvas-error-title">
             노드 {errors.length}개를 그리지 못했습니다
@@ -504,8 +521,9 @@ function CanvasDocument(props: {
               </li>
             ))}
           </ul>
-        </div>
-      )}
+        </div>,
+          props.bannerHost,
+        )}
       {tree}
     </>
   )
@@ -520,10 +538,8 @@ interface BoundaryState {
  * 문서를 그리다 던진 예외를 잡는다.
  *
  * **렌더러는 노드가 잘못된 정도로는 던지지 않는다** — 폴백으로 흡수하고 `onNodeError`로
- * 알린다. 남아 있는 던지는 경로는 하나, **구조 구현체 본문의 예외**다. 렌더러가 그것을
- * 일부러 감싸지 않으므로(감싸면 진짜 버그가 "폴백이 떴네"로 위장된다) 잡는 일이 캔버스
- * 몫이라고 `packages/renderer/src/render.tsx`의 주석이 못박고 있다. 경계가 없으면 구조
- * 구현체 하나의 버그가 앱 트리 전체를 흰 화면으로 만든다.
+ * 알린다. 테마 뷰 본문의 예외도 렌더러의 노드 경계가 그 자리에 가둔다. 여기 남는 것은 그 밖에서 던진 것(렌더러 ·
+ * 캔버스 자신의 버그)이고, 경계가 없으면 그 하나가 앱 트리 전체를 흰 화면으로 만든다.
  *
  * `resetKey`가 바뀌면 다시 그려 본다. 그러지 않으면 한 번 던진 뒤로는 다른 페이지를 열어도
  * 오류 문장이 남는다. 문서 객체의 동일성을 키로 쓰는 것은 스토어가 문서를 갈아 끼울 때만
@@ -564,16 +580,17 @@ class CanvasBoundary extends Component<
 
 /**
  * 누른 자리에서 가장 가까운 노드의 id. 노드 위가 아니면 `null`이다 — 빈 자리를 누르면
- * 선택이 풀린다.
+ * 선택이 풀린다. iframe 문서의 `body` 까지만 올라간다 — iframe 밖(표면의 알림 · 배너)을 누르면 노드가 없다.
  *
  * **빈 `data-wb-id`는 건너뛴다.** 렌더러의 모양 가드가 흡수한 폴백은 id를 문자열로 읽지
  * 못한 노드라 빈 문자열을 단다(`packages/renderer/src/fallback.tsx`). 그것을 그대로
  * 넣으면 스토어에는 선택이 있는데 가리키는 노드는 없는 상태가 된다.
  */
-function nodeIdAt(target: EventTarget | null, surface: HTMLElement): string | null {
-  let element = target instanceof Element ? target : null
+function nodeIdAt(target: EventTarget | null, body: HTMLElement): string | null {
+  // `instanceof Element` 를 쓰지 않는다 — iframe 안의 요소는 iframe 창의 `Element` 로 만들어져 호스트 창의 것과 다르다.
+  let element = isElement(target) ? target : null
 
-  while (element !== null && surface.contains(element)) {
+  while (element !== null && body.contains(element)) {
     const id = element.getAttribute('data-wb-id')
     if (id !== null && id !== '') return id
     element = element.parentElement
@@ -582,36 +599,47 @@ function nodeIdAt(target: EventTarget | null, surface: HTMLElement): string | nu
   return null
 }
 
+function isElement(target: EventTarget | null): target is Element {
+  return target !== null && (target as Node).nodeType === 1
+}
+
 /**
- * 캔버스 안에서 그 id를 가진 노드의 엘리먼트.
+ * iframe 문서 안에서 그 id를 가진 노드의 엘리먼트.
  *
  * `querySelector('[data-wb-id="…"]')`를 쓰지 않는 것은 id가 문서에서 온 임의의
  * 문자열이기 때문이다 — 따옴표나 역슬래시가 섞이면 셀렉터 문법이 깨진다.
  */
-function findNodeElement(surface: HTMLElement, nodeId: string): HTMLElement | null {
-  for (const element of surface.querySelectorAll<HTMLElement>('[data-wb-id]')) {
+function findNodeElement(doc: Document, nodeId: string): Element | null {
+  for (const element of Array.from(doc.querySelectorAll('[data-wb-id]'))) {
     if (element.getAttribute('data-wb-id') === nodeId) return element
   }
   return null
 }
 
 /**
- * 노드가 덮는 자리를 상자 좌표로 옮긴다.
+ * iframe 의 왼쪽 위가 표면의 어디에 서는가. 표면 좌표이고 배율을 걷어 낸 값이다.
  *
- * 두 사각형 모두 화면 좌표라 프레임의 `scale(zoom)`이 이미 곱해져 있다. 그래서 차를
- * `zoom`으로 나눠 **문서 좌표계**로 되돌린다 — 아웃라인은 프레임 안에 있어 같은 배율을
- * 한 번 더 받기 때문이다. 스크롤은 두 사각형에 똑같이 실리므로 차를 쓰면 상쇄된다.
+ * 두 사각형 모두 호스트 화면 좌표라 프레임의 `scale(zoom)`이 곱해져 있어 차를 `zoom`으로 나눈다. iframe 이 표면의
+ * 맨 위에 서지 않는 판(알림 줄 · 오류 배너가 위에 있다)이 있어 0 으로 두지 않는다.
  */
-function measure(target: HTMLElement, surface: HTMLElement, zoom: number): Box {
-  const node = target.getBoundingClientRect()
+function frameOffset(frame: CanvasFrame, surface: HTMLElement, zoom: number): { left: number; top: number } {
+  const element = frame.window.frameElement
+  if (element === null) return { left: 0, top: 0 }
+  const outer = element.getBoundingClientRect()
   const base = surface.getBoundingClientRect()
+  return { left: (outer.left - base.left) / zoom, top: (outer.top - base.top) / zoom }
+}
 
-  return {
-    left: (node.left - base.left) / zoom,
-    top: (node.top - base.top) / zoom,
-    width: node.width / zoom,
-    height: node.height / zoom,
-  }
+/**
+ * 노드가 덮는 자리를 표면 좌표로 옮긴다. **감쌀 요소는 뷰가 정한다**(`data-wb-focus` — 없으면 노드 루트).
+ *
+ * iframe 안의 사각형은 iframe 문서의 CSS px 이다 — 바깥 프레임의 `scale(zoom)` 은 iframe 요소에 걸리고 그 안의
+ * 레이아웃에는 안 곱해진다. 그래서 줌으로 나누지 않고 iframe 의 자리만 더한다. iframe 은 문서 높이를 따라 자라
+ * 안쪽 세로 스크롤이 없다(`canvas-iframe.tsx`).
+ */
+function measure(target: Element, offset: { left: number; top: number }): Box {
+  const node = focusElement(target).getBoundingClientRect()
+  return { left: offset.left + node.left, top: offset.top + node.top, width: node.width, height: node.height }
 }
 
 /**
@@ -625,7 +653,13 @@ function sameMarkers(a: readonly MarkerBox[], b: readonly MarkerBox[]): boolean 
   if (a.length !== b.length) return false
   return a.every((item, index) => {
     const other = b[index]
-    return other !== undefined && item.nodeId === other.nodeId && item.marker === other.marker && sameBox(item, other)
+    return (
+      other !== undefined &&
+      item.nodeId === other.nodeId &&
+      item.marker === other.marker &&
+      item.left === other.left &&
+      item.top === other.top
+    )
   })
 }
 

@@ -27,6 +27,7 @@ import {
   openPage,
   pageDetail,
   pageDoc,
+  canvasQuery,
 } from '../editor-harness'
 import { currentPath } from '../helpers'
 
@@ -109,7 +110,7 @@ function commit(value: string, nodeId = TEXT_ID): void {
 }
 
 function canvasText(): string {
-  const node = document.body.querySelector(`[data-wb-id="${TEXT_ID}"]`)
+  const node = canvasQuery(`[data-wb-id="${TEXT_ID}"]`)
   if (node === null) throw new Error('캔버스에 텍스트 노드가 없습니다')
   return node.textContent ?? ''
 }

@@ -69,10 +69,6 @@ function picker(): HTMLSelectElement {
   return screen.getByRole<HTMLSelectElement>('combobox', { name: '테마' })
 }
 
-function themeCss(): string {
-  return document.head.querySelector(`style[data-wb-style="${THEME_STYLE_ID}"]`)?.textContent ?? ''
-}
-
 beforeEach(() => {
   // `<style>`은 `document.head`의 전역 공유 자원이고 훅이 정리에서 지우지 않는다
   // (`use-theme-css.ts`의 근거). 케이스끼리 새지 않도록 여기서 치운다.
@@ -104,44 +100,21 @@ describe('테마 고르개', () => {
   })
 
   /**
-   * **이 케이스가 이 파일의 완료 조건이다.** 고르개 → 서버 → 캔버스의 사슬 전체를 지난다.
-   */
-  it('고른 테마가 캔버스의 시트에 실린다', async () => {
-    const server = fakeThemeServer(ADMIN_ID)
-    await openPage(pageDoc({ id: 'n1', type: 'Text', props: { content: '가' } }), {
-      apiOverrides: server.overrides,
-    })
-
-    // **양성 대조**: 고르기 전에는 그 값이 없다. 이것이 없으면 시트가 처음부터
-    // 브랜드 색을 담고 있어도 아래가 통과한다.
-    await waitFor(() => expect(themeCss()).toContain('--wb-'))
-    expect(themeCss()).not.toContain(BRAND_PRIMARY)
-
-    fireEvent.change(picker(), { target: { value: BRAND_ID } })
-
-    // 서버가 바뀌고,
-    await waitFor(() => expect(server.chosen()).toBe(BRAND_ID))
-    // **캔버스가 다시 조회해 다시 컴파일한다.**
-    await waitFor(() => expect(themeCss()).toContain(BRAND_PRIMARY))
-  })
-
-  /**
    * **`없음`이 자리표시가 아니라 선택지다.** *"테마를 고르지 않았다"*는 정상 상태이고
    * 화면은 그때 구조 기본 CSS만으로 그려진다 — 고르개에 이 항목이 있어야 그 상태를
    * 눈으로 확인할 수 있다.
    */
-  it('없음을 고르면 테마 시트가 비고 서버에 null이 간다', async () => {
+  it('없음을 고르면 서버에 null이 간다', async () => {
     const server = fakeThemeServer(BRAND_ID)
     await openPage(pageDoc({ id: 'n1', type: 'Text', props: { content: '가' } }), {
       apiOverrides: server.overrides,
     })
-    await waitFor(() => expect(themeCss()).toContain(BRAND_PRIMARY))
+    await waitFor(() => expect(picker().value).toBe(BRAND_ID))
 
     fireEvent.change(picker(), { target: { value: '' } })
 
     await waitFor(() => expect(server.chosen()).toBeNull())
     expect(server.setProjectTheme).toHaveBeenCalledWith(expect.any(String), null)
-    await waitFor(() => expect(themeCss()).toBe(''))
   })
 
   it('owner가 아니면 읽기 전용이다', async () => {

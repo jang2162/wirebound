@@ -68,6 +68,7 @@ import { DRAFT_KEY_PREFIX, openDraftStore, type DraftStore } from '../../src/pan
 import { clickAsBrowser } from '../click-as-browser'
 import { renderWithProviders, SYSTEM_ADMIN_THEME_ID } from '../helpers'
 import { systemTheme } from '@wirebound/themes'
+import { canvasQuery } from '../editor-harness'
 
 const ME: SessionUser = { id: 'u-1', email: 'carol@example.com', name: '캐럴' }
 const PROJECT_ID = 'p-1'
@@ -540,7 +541,7 @@ const SELECTIONS: { name: string; pick: () => void }[] = [
 ]
 
 function clickNode(nodeId: string): void {
-  const el = document.body.querySelector(`.wb-shell-canvas [data-wb-id="${nodeId}"]`)
+  const el = canvasQuery(`[data-wb-id="${nodeId}"]`)
   if (el !== null) fireEvent.click(el)
 }
 
@@ -553,7 +554,7 @@ async function toMode(mode: '편집 모드' | '뷰 모드'): Promise<void> {
 /** 두 모드 × 다섯 선택 — 판마다 다시 열어 앞 판이 연 것이 뒤 판을 가리지 않게 한다. */
 async function opened(wire: Wire): Promise<void> {
   await screen.findByRole('heading', { name: PROJECT_NAME })
-  await waitFor(() => expect(document.body.querySelector('.wb-shell-canvas [data-wb-id="n-root"]')).not.toBeNull())
+  await waitFor(() => expect(canvasQuery('[data-wb-id="n-root"]')).not.toBeNull())
   ;(wire as unknown as { open: () => void }).open()
   await settle()
 }

@@ -29,6 +29,7 @@ import {
   openPage,
   pageDoc,
   waitForNode,
+  canvasQuery,
 } from '../editor-harness'
 
 /** 셸이 만든 스토어를 붙잡는 자리. 아래 `vi.mock`이 채운다. */
@@ -145,7 +146,7 @@ function mountDriver(client: ApiClient, pageId: string = PAGE_ID): void {
 
 /** 캔버스에 그려진 텍스트 노드의 내용. */
 function canvasText(): string {
-  const node = document.body.querySelector(`[data-wb-id="${TEXT_ID}"]`)
+  const node = canvasQuery(`[data-wb-id="${TEXT_ID}"]`)
   if (node === null) throw new Error('캔버스에 텍스트 노드가 없습니다')
   return node.textContent ?? ''
 }

@@ -8,7 +8,7 @@ import type { PageDocument } from '@wirebound/schema'
 import { ApiError } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import { logoutLossNotice } from '../../src/routes/editor'
-import { openPage, pageDetail, pageDoc } from '../editor-harness'
+import { openPage, pageDetail, pageDoc, canvasQuery } from '../editor-harness'
 import { tabHub, unauthenticatedError, type TabHub } from '../helpers'
 
 const pair = (): PageDocument =>
@@ -110,7 +110,7 @@ async function editRefusedLater(options: { recoverHangs: boolean; posting?: bool
   })
   if (options.posting === true) {
     fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
-    fireEvent.click(document.body.querySelector('[data-wb-id="n-b"]') as HTMLElement)
+    fireEvent.click(canvasQuery('[data-wb-id="n-b"]') as HTMLElement)
     fireEvent.change(await screen.findByLabelText('새 코멘트'), { target: { value: '새 말' } })
     fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
     await act(async () => {})

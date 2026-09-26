@@ -53,6 +53,24 @@ describe('CanvasIframe', () => {
     expect(onClick).toHaveBeenCalledWith('안')
   })
 
+  it('iframe 의 빈 자리(body · html) 클릭은 onBackgroundClick 으로 — React 의 onClick 에는 안 닿는다', async () => {
+    const onBackground = vi.fn()
+    const onClick = vi.fn()
+    const { container } = render(
+      <div onClick={onClick}>
+        <CanvasIframe styles={[]} width={1280} onBackgroundClick={onBackground}>{() => <button>누름</button>}</CanvasIframe>
+      </div>,
+    )
+    await waitFor(() => expect(frameDoc(container).querySelector('button')).not.toBeNull())
+    fireEvent.click(frameDoc(container).body)
+    fireEvent.click(frameDoc(container).documentElement)
+    expect(onBackground).toHaveBeenCalledTimes(2)
+    expect(onClick).not.toHaveBeenCalled()
+    fireEvent.click(frameDoc(container).querySelector('button')!)
+    expect(onBackground).toHaveBeenCalledTimes(2)
+    expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
   it('폭은 width px 그대로', () => {
     const { container } = render(<CanvasIframe styles={[]} width={375}>{() => null}</CanvasIframe>)
     expect(container.querySelector('iframe')!.style.width).toBe('375px')

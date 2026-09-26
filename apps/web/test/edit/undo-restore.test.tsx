@@ -17,6 +17,7 @@ import {
   PROJECT_NAME,
   openPage,
   pageDoc,
+  canvasQuery,
 } from '../editor-harness'
 import '../../src/catalog-setup'
 
@@ -62,7 +63,7 @@ function redoButton(): HTMLButtonElement {
 }
 
 function canvasText(): string {
-  const node = document.body.querySelector(`[data-wb-id="${TEXT_ID}"]`)
+  const node = canvasQuery(`[data-wb-id="${TEXT_ID}"]`)
   if (node === null) throw new Error('캔버스에 노드가 없다')
   return node.textContent ?? ''
 }

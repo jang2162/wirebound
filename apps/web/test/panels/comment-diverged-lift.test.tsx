@@ -9,7 +9,7 @@ import type { WbNode } from '@wirebound/schema'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../src/api/client'
 import type { PageDetail } from '../../src/api/types'
-import { HEAD_SEQ, PAGE_ID, openPage, pageDetail, pageDoc } from '../editor-harness'
+import { HEAD_SEQ, PAGE_ID, openPage, pageDetail, pageDoc, canvasQuery } from '../editor-harness'
 
 const DIVERGED = /번호를 화면에 반영하지 못했습니다/
 
@@ -49,7 +49,7 @@ async function divergeThenReload(reloaded: PageDetail): Promise<void> {
     },
   })
   fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
-  fireEvent.click(document.body.querySelector('[data-wb-id="n_a"]') as HTMLElement)
+  fireEvent.click(canvasQuery('[data-wb-id="n_a"]') as HTMLElement)
   fireEvent.change(await screen.findByLabelText('새 코멘트'), { target: { value: '새 말' } })
   fireEvent.click(screen.getByRole('button', { name: '코멘트 달기' }))
   await waitFor(() => expect(screen.getByText(DIVERGED)).toBeTruthy())

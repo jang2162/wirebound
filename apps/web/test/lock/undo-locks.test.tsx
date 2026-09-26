@@ -103,6 +103,7 @@ import {
   openPage,
   pageDetail,
   pageDoc,
+  canvasQuery,
 } from '../editor-harness'
 import '../../src/catalog-setup'
 
@@ -327,7 +328,7 @@ function alertText(): string | null {
 }
 
 function canvasTextOf(nodeId: string): string {
-  const node = document.body.querySelector(`[data-wb-id="${nodeId}"]`)
+  const node = canvasQuery(`[data-wb-id="${nodeId}"]`)
   if (node === null) throw new Error(`캔버스에 노드가 없다: ${nodeId}`)
   return node.textContent ?? ''
 }
