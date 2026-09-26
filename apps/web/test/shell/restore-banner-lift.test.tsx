@@ -77,7 +77,7 @@ const restoredFrame = (safety?: string) => ({
   ...(safety === undefined ? {} : { safetySnapshotId: safety }),
 })
 
-const OTHER_RESTORE = /다른 사람이 스냅샷을 복원했습니다/
+const RESTORED_BANNER = /스냅샷이 복원됐습니다/
 
 function restoreResult(safety: string): RestoreResult {
   return {
@@ -175,13 +175,13 @@ describe('남의 복원 배너 — 페이지만 읽는 조회는 풀지 않는�
     expect(view.getTree).toHaveBeenCalledTimes(1)
 
     view.push(restoredFrame('s-bob'))
-    expect(banner()).toMatch(OTHER_RESTORE)
+    expect(banner()).toMatch(RESTORED_BANNER)
 
     view.reconnect()
     await waitForNode('n-after')
 
     expect(view.getTree).toHaveBeenCalledTimes(1)
-    expect(banner()).toMatch(OTHER_RESTORE)
+    expect(banner()).toMatch(RESTORED_BANNER)
   })
 
   it('신호 뒤 다른 페이지를 열어도 배너가 남는다', async () => {
@@ -192,7 +192,7 @@ describe('남의 복원 배너 — 페이지만 읽는 조회는 풀지 않는�
     await waitForNode('n-other')
 
     expect(view.getTree).toHaveBeenCalledTimes(1)
-    expect(banner()).toMatch(OTHER_RESTORE)
+    expect(banner()).toMatch(RESTORED_BANNER)
   })
 })
 
@@ -213,7 +213,7 @@ describe('남의 복원 배너 — 다시 읽기를 시작한 뒤 온 신호', (
     view.push({ type: 'patch-ack', projectId: PROJECT_ID, pageId: edit.pageId, clientOpId: edit.clientOpId, seq: 8, revisionId: 'rev-8', inverse: [], warnings: [] })
     await waitForNode('n-after')
 
-    expect(banner()).toMatch(OTHER_RESTORE)
+    expect(banner()).toMatch(RESTORED_BANNER)
   })
 })
 
@@ -252,7 +252,7 @@ describe('내 복원 — 연결 id 없이 나가 내 신호가 되돌아온 판'
     })
     await waitForNode('n-after')
 
-    expect(banner()).not.toMatch(OTHER_RESTORE)
+    expect(banner()).not.toMatch(RESTORED_BANNER)
   })
 
   it('다른 복원의 신호면 배너가 선다', async () => {
@@ -265,7 +265,7 @@ describe('내 복원 — 연결 id 없이 나가 내 신호가 되돌아온 판'
     })
     await waitForNode('n-after')
 
-    expect(banner()).toMatch(OTHER_RESTORE)
+    expect(banner()).toMatch(RESTORED_BANNER)
   })
 
   it('안전망 스냅샷 id 를 안 싣는 신호면 배너가 선다 — 내 복원인지 모른다', async () => {
@@ -278,7 +278,7 @@ describe('내 복원 — 연결 id 없이 나가 내 신호가 되돌아온 판'
     })
     await waitForNode('n-after')
 
-    expect(banner()).toMatch(OTHER_RESTORE)
+    expect(banner()).toMatch(RESTORED_BANNER)
   })
 })
 
@@ -321,7 +321,7 @@ describe('내 복원 — 답을 잃은 판', () => {
     await pressRestore()
 
     expect(banner()).toMatch(UNANSWERED)
-    expect(banner()).not.toMatch(OTHER_RESTORE)
+    expect(banner()).not.toMatch(RESTORED_BANNER)
     // 팝오버도 그렇다고 말한다.
     expect(screen.getAllByRole('alert').map((node) => node.textContent).join(' | ')).toMatch(/복원됐는지 알 수 없습니다/)
     // 스스로 다시 읽지 않는다 — 여는 조회 하나뿐이다.
@@ -344,6 +344,52 @@ describe('내 복원 — 답을 잃은 판', () => {
     // 판 카나리아 — 실패는 팝오버가 말했다.
     expect(await screen.findByText(/복원할 수 없습니다/)).toBeTruthy()
     expect(banner()).not.toMatch(UNANSWERED)
+  })
+
+  /**
+   * **그 복원 id 의 신호가 온 뒤 단추의 앞머리도 누가 복원했는지 말하지 않는다**(`routes/editor.tsx`의 `OWN_RESTORE_LEAD`) — 그 신호는 흉내 낸
+   * 남의 복원일 수 있다(배너 문장은 `restore-banner-words.test.tsx`). 앞머리는 다시 읽기가 잃은 것을 말할 때 선다 — 되돌리기 이력 하나를 준다.
+   */
+  it('답을 잃은 뒤 그 복원 id 의 신호가 오면 단추의 앞머리는 «복원된 상태로»다 — «스냅샷을 복원해»도 «다른 사람이»도 아니다', async () => {
+    let restoreId: string | undefined
+    const view = await mount({
+      immediate: () => pageDetail(PAGE_ID, pair('n-after')),
+      api: {
+        ...snapshotApi(async (_projectId, _snapshotId, options) => {
+          restoreId = options?.clientRestoreId
+          return Promise.reject(new TypeError('Failed to fetch'))
+        }),
+        listMyRevisions: async () => [
+          {
+            id: 'rev-1',
+            // 연 판(`HEAD_SEQ` 7)의 내 revision — 되짚기 조회 없이 붙잡힌다(`EditorStore.restoreUndoStack`).
+            seq: 7,
+            actorType: 'user',
+            actorId: 'u1',
+            actorLabel: '홍길동',
+            ops: [],
+            createdAt: '2026-08-12T09:00:00.000Z',
+            inverse: [{ op: 'replace', path: '/root/children/0/props', value: {} }],
+          },
+        ],
+      },
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: '되돌리기' })).toHaveProperty('disabled', false))
+    await pressRestore()
+    expect(banner()).toMatch(UNANSWERED)
+
+    view.push({ ...restoredFrame('s-late'), clientRestoreId: restoreId })
+    // 판 카나리아 — 그 복원 id 의 신호로 «모름»이 «복원됐다»로 바뀌었다.
+    expect(restoreId).toEqual(expect.any(String))
+    expect(banner()).toMatch(RESTORED_BANNER)
+    expect(banner()).not.toMatch(UNANSWERED)
+
+    fireEvent.click(screen.getByRole('button', { name: '다시 불러오기' }))
+    await waitForNode('n-after')
+    const lead = await screen.findByText(/되돌리기 이력이 초기화됐습니다/)
+
+    expect(lead.textContent).toMatch(/^복원된 상태로 페이지를 다시 불러왔습니다/)
+    expect(lead.textContent).not.toMatch(/스냅샷을 복원해|다른 사람/)
   })
 
   it('그 단추는 복원 뒤 다시 읽기를 타고, 그 판이 배너를 푼다', async () => {

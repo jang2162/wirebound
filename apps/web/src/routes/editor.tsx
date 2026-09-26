@@ -265,15 +265,18 @@ const ROLE_NOTICE = {
 const RESYNC_LEAD = '연결이 다시 붙어 페이지를 서버 상태로 다시 불러왔습니다.'
 /** 내가 스냅샷을 복원해 다시 읽었을 때의 앞머리. **재연결과 다른 사건이다.** */
 const RESTORED_LEAD = '스냅샷을 복원해 페이지를 다시 불러왔습니다.'
-/** 남이 복원한 판을 배너의 단추로 다시 읽었을 때의 앞머리. 위 문장을 쓰면 남의 복원을 내가 한 일로 말한다. */
-const REMOTE_RESTORED_LEAD = '다른 사람이 복원한 상태로 페이지를 다시 불러왔습니다.'
+/**
+ * 복원 신호로 선 배너의 단추로 다시 읽었을 때의 앞머리. **누가 복원했는지 말하지 않는다** — 배너의 문장과 같은 까닭이다(`shell/remote-alert.tsx`의
+ * `NOTICE`). 위 문장을 쓰면 남의 복원을 내가 한 일로, «다른 사람이 …»를 쓰면 알아보지 못한 내 복원을 남의 일로 말한다.
+ */
+const SIGNALLED_RESTORE_LEAD = '복원된 상태로 페이지를 다시 불러왔습니다.'
 /**
  * 답을 잃은 내 복원 뒤 배너의 단추로 다시 읽었을 때의 앞머리(`RemoteStale`의 `own`) — 복원됐는지 모르거나(`EditorStore.markRestoreUnanswered`),
- * 그 신호가 와 반영된 것을 안다(`EditorStore.markRestored`).
+ * 그 복원 id 의 신호가 왔다(`EditorStore.markRestored` — 흉내 낸 남의 복원일 수 있어 내 복원이라고 하지 않는다).
  */
 const OWN_RESTORE_LEAD: Record<NonNullable<RemoteStale['own']>, string> = {
   unanswered: '복원됐는지 확인하려고 페이지를 서버 상태로 다시 불러왔습니다.',
-  landed: RESTORED_LEAD,
+  landed: SIGNALLED_RESTORE_LEAD,
 }
 
 /** 우측 패널의 탭. **넷이 선언되고 모드마다 셋이 보인다** — 표는 아래 `PANEL_TABS`다. */
@@ -813,7 +816,7 @@ function EditorShell(props: {
         {/* **남의 변경 때문에 화면이 낡았다는 통지**. `EditAlert`와 자리는 같고
             `role`이 다르다 — 이쪽은 사용자가 방금 누른 것의 실패가 아니라 **남이 한 일**이다.
             근거는 `shell/remote-alert.tsx`의 머리말에 있다. */}
-        <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? REMOTE_RESTORED_LEAD : OWN_RESTORE_LEAD[stale.own])} />
+        <RemoteAlert onReload={(stale) => reloadAfterRestore(stale.own === undefined ? SIGNALLED_RESTORE_LEAD : OWN_RESTORE_LEAD[stale.own])} />
         {/* **캔버스가 테마를 못 읽어 기본 스타일로 그린다**(`canvas/canvas-theme-notice.tsx`). 단추는 고르개와 같은 신호로 다시 읽는다. */}
         <ThemeAlert onReload={() => setThemeReloadToken((token) => token + 1)} />
         {/* **편집 권한이 바뀌었다**(`ROLE_NOTICE`). 남이 한 일이라 `RemoteAlert`와 같은 꼴이다. */}

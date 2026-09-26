@@ -175,8 +175,8 @@ function unknownOutcome(caught: unknown): boolean {
 const UNANSWERED_RECOVER_FAILURE = '페이지를 다시 불러오지도 못했습니다'
 
 /**
- * **수습이 말하는 잃음의 조각**(`EditorStore.tellLoss`) — 서버가 거절한 편집. 합치면 버린 수를 더하고 서버 문장은 뒤에 온 것이다(열쇠에 넣지
- * 않는다 — 409 의 번호가 거절마다 달라 조각이 는다).
+ * **수습이 말하는 잃음의 조각**(`EditorStore.tellLoss`) — 서버가 거절한 편집. 합치면 버린 수를 더하고 서버 문장은 뒤에 온 것이다(문장 전체는
+ * 열쇠에 넣지 않는다 — 409 의 번호가 거절마다 달라 조각이 는다. 머리만 넣는다 — `refusalHead`).
  *
  * **뒤에 시작한 조회가 판을 먼저 정한 판에서도 «다시 불러왔고»를 말한다** — 이 수습은 싣지 않았지만 화면은 그 조회가 읽은 서버 판이다(그
  * 조회가 싣거나 · 같은 판이라 넘어갔다 — `EditorStore.settlePageLoad`). 그 조회는 잃은 것이 없으면 말하지 않으므로(재연결 재조회) 빼면 화면이
@@ -206,13 +206,25 @@ const UNANSWERED_RECOVER_FAILURE = '페이지를 다시 불러오지도 못했�
  */
 function refusedLoss(caught: unknown, message: string, lost: number): LossPart {
   return {
-    // **열쇠는 거절의 `code`다** — 까닭마다 한 조각이다. 열쇠가 하나면 서로 다른 두 거절이 합쳐져 뒤 까닭으로 읽힌다(jsdom: 409 `conflict` 뒤
-    // `locked` → «밥님이 편집 중인 노드입니다 — … 편집 2개»). 서버 문장은 넣지 않는다 — `409`의 번호가 문장에만 있어 거절마다 조각이 는다.
-    key: `recover:${caught instanceof ApiError ? caught.code : 'other'}`,
+    // **열쇠는 거절의 `code`와 문장의 머리다** — 까닭마다 한 조각이다. 열쇠가 하나면 서로 다른 두 거절이 합쳐져 뒤 까닭으로 읽힌다(jsdom: 409
+    // `conflict` 뒤 `locked` → «밥님이 편집 중인 노드입니다 — … 편집 2개»). `code`만으로도 모자란다 — 서버가 `stale` · `patch-failed`를 둘 다
+    // `conflict`로 낸다(`http/edit-outcome.ts` — 클라이언트의 대응이 같아서다). 문장 전체는 넣지 않는다 — `409`의 번호가 문장에만 있어 거절마다
+    // 조각이 는다.
+    key: `recover:${caught instanceof ApiError ? caught.code : 'other'}:${refusalHead(message)}`,
     rank: LOSS_RANK.cancelled,
     counts: [lost],
     render: ([count]) => `${message} — 페이지를 서버 상태로 다시 불러왔고, 편집 ${count ?? 0}개가 취소됐습니다.`,
   }
+}
+
+/**
+ * **거절 문장의 머리** — 첫 `(` · `:` 앞. 서버 문장은 까닭을 앞에, 번호 · 경로 · 속 까닭을 그 뒤에 둔다(`http/edit-outcome.ts` ·
+ * `@wirebound/schema`의 `migrateDocument`): `페이지가 이미 변경되었습니다 (요청 baseSeq 9, 현재 10)` · `편집을 적용할 수 없습니다: 바꿀 값을 찾을
+ * 수 없습니다: /root/…` · `지원하지 않는 문서 버전: 3` · `문서에 NUL 문자(U+0000)를 …`. 머리에 번호가 드는 문장이 생기면 거절마다 조각이 는다 —
+ * `test/edit/refusal-head.test.ts`가 서버 문장으로 잰다.
+ */
+export function refusalHead(message: string): string {
+  return message.split(/[(:]/, 1)[0]!.trim()
 }
 
 /** **결과를 모르는 편집의 조각**(`unknownNotice`) — 답을 못 받은 편집 수와 함께 버린 안 보낸 편집 수를 센다. 열쇠는 문장의 갈래다. */

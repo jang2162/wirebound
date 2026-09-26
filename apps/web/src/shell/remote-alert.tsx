@@ -40,16 +40,28 @@ import type { ReactElement } from 'react'
 import type { RemoteStale } from '../store/editor-store'
 import { useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
 
+/**
+ * **`'restored'`의 문장은 누가 복원했는지 말하지 않는다.** 이 탭이 받는 신호로는 남의 복원인지 내 복원인지 가를 수 없는 판이 있다 — 알아보는
+ * 목록(`EditorStore`의 `#restoresInFlight` · `#lostRestores`)을 벗어난 내 복원(셸이 내려갔다 다시 섬 · 미룬 신호의 한도가 지남 · 같은 사람의
+ * 다른 탭)은 남의 복원과 같은 신호고, 복원 id 는 룸의 모두에게 보여 흉내 낼 수 있다(`RestoreSignal`). 프레임의 `actor`는 이름뿐이라 사람을
+ * 가르지 못한다. «다른 사람이 …»라고 하면 그 판들에서 거짓이다(`test/shell/restore-banner-words.test.tsx`).
+ */
 const NOTICE: Record<RemoteStale['reason'], string> = {
   gap: '받지 못한 변경이 있어 화면이 최신이 아닙니다. 새로고침하면 맞춰집니다.',
   diverged: '다른 사람의 변경을 화면에 반영하지 못했습니다. 새로고침하면 맞춰집니다.',
-  restored: '다른 사람이 스냅샷을 복원했습니다. 다시 불러와 지금 상태를 확인하세요.',
+  restored: '스냅샷이 복원됐습니다. 다시 불러와 지금 상태를 확인하세요.',
 }
 
-/** 내 복원일 때(`RemoteStale`의 `own`) — 남의 복원이라고 하면 거짓이다. 단추는 같다. */
+/**
+ * 답을 잃은 내 복원일 때(`RemoteStale`의 `own`). 단추는 같다.
+ *
+ * - `unanswered` — 신호가 오기 전이라 «모른다»가 참이다.
+ * - `landed` — 그 복원 id 의 신호가 왔다. **«내 복원이 반영됐다»고 하지 않는다** — 흉내 낸 남의 복원일 수 있고, 남의 복원 신호가 뒤에 겹쳐도 이
+ *   문장이 남는다(`EditorStore.#markStale`은 같은 세기를 덮지 않는다). 남의 복원 문장과 같다(위 `NOTICE`).
+ */
 const OWN_RESTORE_NOTICE: Record<NonNullable<RemoteStale['own']>, string> = {
   unanswered: '스냅샷 복원의 답을 받지 못해 복원됐는지 알 수 없습니다. 다시 불러와 지금 상태를 확인하세요.',
-  landed: '답을 받지 못한 스냅샷 복원이 서버에 반영됐습니다. 다시 불러와 복원된 상태를 확인하세요.',
+  landed: NOTICE.restored,
 }
 
 export function RemoteAlert(props: {

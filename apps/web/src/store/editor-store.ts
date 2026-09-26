@@ -401,13 +401,13 @@ const WINDOW_CHANGES_LIMIT = 500
 export interface RemoteStale {
   reason: 'gap' | 'diverged' | 'restored'
   /**
-   * **`'restored'`에만 — 내 복원이다**(없으면 남의 복원). 세기 · 푸는 자리는 `'restored'` 그대로고 문장과 단추의 앞머리만 갈린다 — 남의
-   * 복원이라고 말하면 거짓이다.
+   * **`'restored'`에만 — 답을 잃은 내 복원이 세운 낡음이다**(없으면 알아보지 못한 복원 신호 — 남의 것이거나 알아보는 목록을 벗어난 내 것).
+   * 세기 · 푸는 자리는 `'restored'` 그대로고 문장과 단추의 앞머리만 갈린다(`shell/remote-alert.tsx`의 `OWN_RESTORE_NOTICE`).
    *
    * | 값 | 언제 |
    * |---|---|
    * | `'unanswered'` | 답을 못 받아 복원됐는지 모른다(`markRestoreUnanswered`) |
-   * | `'landed'` | 답을 못 받은 복원의 신호가 왔다 — 서버에 반영됐다(`markRestored`) |
+   * | `'landed'` | 답을 못 받은 복원의 id 를 실은 신호가 왔다 — 그 id 의 복원이 커밋됐다(흉내 낸 남의 복원일 수 있다 — `RestoreSignal`)(`markRestored`) |
    */
   own?: 'unanswered' | 'landed'
 }
@@ -467,7 +467,7 @@ const RESTORED_STALE: RemoteStale = { reason: 'restored' }
 /** 내 복원의 답을 잃은 낡음(`markRestoreUnanswered`). */
 const RESTORE_UNANSWERED_STALE: RemoteStale = { reason: 'restored', own: 'unanswered' }
 
-/** 답을 잃은 내 복원의 신호가 온 낡음(`markRestored`) — 서버에 반영됐다. */
+/** 답을 잃은 내 복원의 id 를 실은 신호가 온 낡음(`markRestored`) — 그 id 의 복원이 커밋됐다. */
 const RESTORE_LANDED_STALE: RemoteStale = { reason: 'restored', own: 'landed' }
 
 /** 알아볼 내 복원의 수(`#ownRestores` · `#lostRestores`). 한 탭이 답을 기다리는 복원은 하나라 몇이면 넉넉하다. */
@@ -1968,8 +1968,8 @@ export class EditorStore {
   }
 
   /**
-   * **답을 잃은 내 복원이 서버에 반영됐다** — 그 신호가 왔다. 남의 복원 배너가 서 있으면 그 문장을 둔다(단추가 같다). «모른다»보다는 이것이
-   * 참이다. 다른 낡음(갭 · 어긋남)보다 세다(`STALE_RANK`).
+   * **답을 잃은 내 복원의 id 를 실은 신호가 왔다** — 그 id 의 복원이 커밋됐다. 다른 복원 배너가 서 있으면 그대로 둔다(문장 · 단추가 같다 —
+   * `shell/remote-alert.tsx`의 `NOTICE`). «모른다»보다는 이것이 참이다. 다른 낡음(갭 · 어긋남)보다 세다(`STALE_RANK`).
    */
   #ownRestoreLanded(): void {
     this.#restoreHappened()
@@ -1985,7 +1985,7 @@ export class EditorStore {
    * 사람의 다시 읽기보다 늦게 커밋하면 그 신호가 뒤에 와 배너를 다시 세운다(`markRestored`).
    *
    * **남의 복원과 같은 낡음을 세운다** — 같은 단추가 복원 뒤 다시 읽기를 타고(`routes/editor.tsx`의 `reloadAfterRestore`), 그 판이 푼다. 문장만
-   * «복원됐는지 모릅니다»(`own: 'unanswered'`) · «반영됐습니다»(`'landed'`)다. 스스로 다시 읽지 않는다 — 다시 읽기가 실패하면 판을 비우는데(복원이 페이지를 지웠을 수 있다),
+   * «복원됐는지 모릅니다»(`own: 'unanswered'`) · «복원됐습니다»(`'landed'`)다. 스스로 다시 읽지 않는다 — 다시 읽기가 실패하면 판을 비우는데(복원이 페이지를 지웠을 수 있다),
    * 복원이 서버에 안 닿은 판이면 멀쩡한 화면을 지운다. 이미 복원 낡음이 서 있으면 그 단추가 같은 일을 한다 — 건드리지 않는다.
    */
   readonly markRestoreUnanswered = (clientRestoreId?: string): void => {

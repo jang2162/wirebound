@@ -125,7 +125,7 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
 
     restored = true
     view.push(RESTORED_FRAME)
-    expect(screen.getByRole('status').textContent).toContain('다른 사람이 스냅샷을 복원했습니다')
+    expect(screen.getByRole('status').textContent).toContain('스냅샷이 복원됐습니다')
     // 누르기 전에는 다시 읽지 않는다 — 배너가 서는 것만으로 판을 갈지 않는다(보내지 않은 편집이 있을 수 있다).
     expect(view.getPage).toHaveBeenCalledTimes(1)
 
@@ -136,10 +136,10 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
     await waitFor(() => expect(select.value).toBe('th-portal'))
     await waitFor(() => expect(sheet()).not.toBe(before))
     expect(screen.queryByRole('button', { name: '다시 불러오기' })).toBeNull()
-    expect(screen.queryByText(/다른 사람이 스냅샷을 복원했습니다/)).toBeNull()
+    expect(screen.queryByText(/스냅샷이 복원됐습니다/)).toBeNull()
   })
 
-  it('다시 읽으며 되돌리기 이력을 잃으면 남의 복원이라고 말한다 — «스냅샷을 복원해»가 아니다', async () => {
+  it('다시 읽으며 되돌리기 이력을 잃으면 복원된 판을 읽었다고 말한다 — 누가 복원했는지(«스냅샷을 복원해» · «다른 사람이»)는 말하지 않는다', async () => {
     const view = await mount({
       after: async () => pageDetail(PAGE_ID, doc('n-after')),
       api: {
@@ -164,7 +164,7 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
     fireEvent.click(reloadButton())
 
     await waitForNode('n-after')
-    expect(await screen.findByText('다른 사람이 복원한 상태로 페이지를 다시 불러왔습니다. 되돌리기 이력이 초기화됐습니다.')).toBeTruthy()
+    expect(await screen.findByText('복원된 상태로 페이지를 다시 불러왔습니다. 되돌리기 이력이 초기화됐습니다.')).toBeTruthy()
     expect(screen.getByRole('button', { name: '되돌리기' })).toHaveProperty('disabled', true)
   })
 
@@ -184,7 +184,7 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
 
     expect(await screen.findByText('페이지를 찾을 수 없습니다')).toBeTruthy()
     expect(canvasRootId()).toBeNull()
-    expect(screen.queryByText(/다른 사람이 스냅샷을 복원했습니다/)).toBeNull()
+    expect(screen.queryByText(/스냅샷이 복원됐습니다/)).toBeNull()
   })
 
   /** 배너는 페이지를 안 연 화면에도 선다 — 다시 실을 판이 없어도 풀려야 한다(`CanvasFrame`의 복원 재조회가 판을 비운 것으로 놓는다). */
@@ -200,7 +200,7 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
     pushTo(sockets)(RESTORED_FRAME)
     fireEvent.click(reloadButton())
 
-    await waitFor(() => expect(screen.queryByText(/다른 사람이 스냅샷을 복원했습니다/)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/스냅샷이 복원됐습니다/)).toBeNull())
     expect(getPage).not.toHaveBeenCalled()
   })
 
@@ -229,7 +229,7 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
       warnings: [],
       actor: { type: 'user', label: '밥' },
     })
-    expect(screen.getByRole('status').textContent).toContain('다른 사람이 스냅샷을 복원했습니다')
+    expect(screen.getByRole('status').textContent).toContain('스냅샷이 복원됐습니다')
 
     await act(async () => {
       answer({ ...pageDetail(PAGE_ID, doc('n-after')), headSeq: 40 })

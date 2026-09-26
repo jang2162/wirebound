@@ -214,9 +214,9 @@ describe('배너의 «다시 불러오기»와 나가 있는 편집', () => {
     view.ack(sent, HEAD_SEQ + 1)
 
     await waitFor(() => expect(view.getPage).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(screen.queryByText(/다른 사람이 스냅샷을 복원했습니다/)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/스냅샷이 복원됐습니다/)).toBeNull())
     expect(structureTypes()).toEqual(['Page', 'Divider', 'Text'])
-    expect(alertText()).toBe('다른 사람이 복원한 상태로 페이지를 다시 불러왔습니다. 되돌리기 이력이 초기화됐습니다.')
+    expect(alertText()).toBe('복원된 상태로 페이지를 다시 불러왔습니다. 되돌리기 이력이 초기화됐습니다.')
   })
 
   it('답이 한도 안에 안 오면 읽고, 그 편집은 반영됐는지 모른다고 말한다', async () => {
@@ -239,7 +239,7 @@ describe('배너의 «다시 불러오기»와 나가 있는 편집', () => {
 
     expect(view.getPage).toHaveBeenCalledTimes(2)
     expect(alertText()).toBe(
-      '다른 사람이 복원한 상태로 페이지를 다시 불러왔습니다. 보낸 편집 1개는 답을 받기 전이라 서버에 반영됐는지 알 수 없습니다 — ' +
+      '복원된 상태로 페이지를 다시 불러왔습니다. 보낸 편집 1개는 답을 받기 전이라 서버에 반영됐는지 알 수 없습니다 — ' +
         '새로고침해 서버 상태를 확인하세요.',
     )
   })
@@ -264,7 +264,7 @@ describe('판째 버린 나간 편집', () => {
 
     expect(structureTypes()).toEqual(['Page', 'Text', 'Divider'])
     expect(alertText()).toBe(
-      '다른 사람이 복원한 상태로 페이지를 다시 불러왔습니다. 보낸 편집 1개는 답을 받기 전이라 서버에 반영됐는지 알 수 없습니다 — ' +
+      '복원된 상태로 페이지를 다시 불러왔습니다. 보낸 편집 1개는 답을 받기 전이라 서버에 반영됐는지 알 수 없습니다 — ' +
         '새로고침해 서버 상태를 확인하세요.',
     )
   })
@@ -574,7 +574,7 @@ describe('겹친 두 조회 — 늦게 온 옛 판이 새 판을 덮지 않는�
     })
 
     await waitFor(() => expect(structureTypes()).toEqual(['Page', 'Divider', 'Text']))
-    expect(screen.queryByText(/다른 사람이 스냅샷을 복원했습니다/)).toBeNull()
+    expect(screen.queryByText(/스냅샷이 복원됐습니다/)).toBeNull()
   })
 })
 

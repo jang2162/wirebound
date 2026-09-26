@@ -8,7 +8,7 @@
  * | | 신호가 답보다 먼저 | 신호가 답(다시 읽기)보다 늦게 |
  * |---|---|---|
  * | 답을 받음 | 아래 «답보다 먼저» — 거짓 배너 0 | 아래 «다시 읽기보다 늦게» — 거짓 배너 0 |
- * | 답을 잃음 | `editor-restore-unanswered.test.ts` — «반영됐습니다» | 아래 «늦게 커밋» — 배너가 다시 선다 |
+ * | 답을 잃음 | `editor-restore-unanswered.test.ts` — «복원됐습니다» | 아래 «늦게 커밋» — 배너가 다시 선다 |
  *
  * 차례는 붙잡아 세운다: 답을 신호 뒤로 미루려면 `route.fetch` 뒤 신호를 기다렸다 `fulfill`, 신호를 뒤로 미루려면 서버 → 브라우저 WS 만 늦춘다
  * (`startDownDelay`), 커밋을 다시 읽기 뒤로 미루려면 페이지 행을 쥐어 복원을 서버에 세운다(`holdRow`). 거짓 배너는 끝 화면이 아니라 DOM 에 선
@@ -164,9 +164,10 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       // 판 카나리아 — 다시 읽기는 복원 앞을 읽었고, 복원은 그 뒤에 커밋됐다.
       expect(reread).toEqual({ 서버: '바뀐 글', 캔버스: expect.stringContaining('바뀐 글') as unknown as string, 배너: false })
       expect(after.서버).toBe('원문')
-      // 성질 — 화면이 서버와 다르면 그렇다고 말한다(단추가 있다). 남의 복원이라고 하지 않는다.
+      // 성질 — 화면이 서버와 다르면 그렇다고 말한다(단추가 있다). 누가 복원했는지는 말하지 않는다(`shell/remote-alert.tsx`의 `NOTICE`).
       expect({ 맞음: after.캔버스.includes(after.서버), 배너: after.배너 }).toEqual({ 맞음: false, 배너: true })
-      expect(statuses.some((text) => text.includes('다른 사람이 스냅샷을 복원했습니다'))).toBe(false)
+      expect(statuses.some((text) => text.includes('스냅샷이 복원됐습니다'))).toBe(true)
+      expect(statuses.filter((text) => /다른 사람|알 수 없/.test(text))).toEqual([])
 
       await page.locator('.wb-shell-remote-alert').getByRole('button', { name: '다시 불러오기' }).click()
       await page.locator('.wb-shell-canvas-frame', { hasText: '원문' }).waitFor({ timeout: 10_000 })

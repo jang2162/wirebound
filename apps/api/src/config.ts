@@ -84,10 +84,10 @@ function dbTimeLimitEnv(fieldName: string, fallback: number, min: number, max: n
  * 같은 까닭으로 **모두를 믿는 대역도 거절한다**(`trustProxyItemError`) — 접두 0, 그리고 IPv4 클라이언트 전부를 믿는 IPv6 대역.
  * Fastify 는 IPv4 클라이언트를 매핑 꼴(`::ffff:a.b.c.d`)로 바꿔 IPv6 대역과 견주므로 그 매핑 대역(`::ffff:0:0/96`)을 덮는 IPv6 대역은
  * IPv4 전부를 믿는다 — `::ffff:10.0.0.0/8` 은 10/8 이 아니라 `::/8` 이고, 글자 `::0.0.0.0/96` 은 Fastify 가 매핑 꼴로 읽어 IPv4 전부다
- * (값이 같은 `0:0:0:0:0:0:0.0.0.0/96` 은 IPv6 대역이다). 글자마다 읽는 법이 갈려 **그 판독기로 잰다**(`fastifyTrust`) — IPv4 의 양 끝
- * `0.0.0.0` · `255.255.255.255` 를 둘 다 믿으면 대역이 이어져 있으므로 그 사이 전부를 믿는다.
- * 명시한 IPv4 대역 둘로 모두를 덮는 값(`0.0.0.0/1,128.0.0.0/1`)은 못 막는다 — `.env.example` 의 `TRUST_PROXY` 줄이 «클라이언트가
- * 닿는 대역을 적지 않는다»로 사람에게 맡긴다.
+ * (값이 같은 `0:0:0:0:0:0:0.0.0.0/96` 은 IPv6 대역이다). 글자마다 읽는 법이 갈려 **그 판독기로 잰다**(`fastifyTrust` · `trustsAllIPv4`).
+ * **항목 하나하나는 좁아도 합이 IPv4 전부인 목록**(`0.0.0.0/1,128.0.0.0/1`)도 거절한다 — 목록째 그 판독기에 물려 잰다.
+ * «거의 전부»(빈 칸이 주소 하나)는 받는다 — 문턱을 둘 근거가 없다. `.env.example` 의 `TRUST_PROXY` 줄이 «클라이언트가 닿는 대역을 적지 않는다»로
+ * 사람에게 맡긴다.
  */
 const TrustProxyEnv = z.preprocess(
   (value) => (value === undefined ? '' : value),
@@ -100,9 +100,19 @@ const TrustProxyEnv = z.preprocess(
         .filter((item) => item !== ''),
     )
     .superRefine((items, ctx) => {
+      let refused = 0
       for (const item of items) {
         const message = trustProxyItemError(item)
-        if (message !== undefined) ctx.addIssue({ code: 'custom', message })
+        if (message === undefined) continue
+        refused += 1
+        ctx.addIssue({ code: 'custom', message })
+      }
+      // 합은 항목이 다 받는 값일 때만 잰다 — 못 읽는 항목이 있으면 판독기가 목록째 던진다.
+      if (refused === 0 && items.length > 1 && trustsAllIPv4(items)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `"${items.join(',')}"은 항목을 합치면 모든 IPv4 주소를 믿습니다 — 앞단의 주소만 적어야 합니다`,
+        })
       }
     }),
 )
@@ -114,30 +124,90 @@ function trustProxyItemError(item: string): string | undefined {
   if (extra !== undefined || address === undefined) return invalid
   const version = isIP(address)
   if (version === 0) return invalid
-  if (prefixText === undefined) return undefined
-  if (!/^\d+$/.test(prefixText)) return invalid
-  const prefix = Number(prefixText)
-  if (prefix > (version === 4 ? 32 : 128)) return invalid
+  if (prefixText !== undefined && !/^\d+$/.test(prefixText)) return invalid
+  const prefix = prefixText === undefined ? undefined : Number(prefixText)
+  if (prefix !== undefined && prefix > (version === 4 ? 32 : 128)) return invalid
   if (prefix === 0) return `"${item}"은 접두 0 이라 모든 주소를 믿습니다 — 앞단의 주소만 적어야 합니다`
-  let trusts: (address: string, hop: number) => boolean
+  // 판독기가 못 읽는 항목은 여기서 거절한다 — 받은 항목은 목록째 물려도(`trustsAllIPv4`) 판독기가 던지지 않는다.
   try {
-    trusts = fastifyTrust([item])
+    fastifyTrust([item])
   } catch {
     return invalid
   }
-  if (trusts('0.0.0.0', 0) && trusts('255.255.255.255', 0)) {
+  if (prefix !== undefined && trustsAllIPv4([item])) {
     return `"${item}"은 모든 IPv4 주소를 믿습니다 — IPv4 대역은 IPv4 꼴(예: 10.0.0.0/8)로, IPv4 매핑 IPv6 은 접두 97 이상으로 적어야 합니다`
   }
   return undefined
 }
 
 /**
- * Fastify 가 `trustProxy` 배열로 믿을 주소를 가르는 함수를 짓는다 — Fastify 가 부르는 바로 그 모듈(`@fastify/proxy-addr` 의
- * `compile`)이다. 이 저장소의 의존이 아니라 Fastify 의 의존이라 Fastify 의 자리에서 찾는다(판이 갈리지 않게).
+ * 받은 목록이 **IPv4 전부**를 믿는가 — 목록째 Fastify 의 판독기(`fastifyTrust`)에 물려 잰다. 판독기가 믿는 IPv4 는 항목마다 이어진 구간의
+ * 합이라, 합에 빈 칸이 있으면 가장 작은 빈 칸은 `0` 이거나 어느 구간의 끝 + 1 이다 — 그 점들만 물어도 빈 칸을 놓치지 않는다. 구간의 끝은
+ * 판독기가 쓰는 ipaddr.js 로 읽는다(`ipv4Span`).
+ *
+ * **실패 방향이 한쪽이다.** 판정은 판독기의 답이라, 모든 점을 믿는 목록만 거절한다 — IPv4 전부를 믿는 목록은 끝을 잘못 읽어도 모든 점을
+ * 믿으므로 늘 거절된다(거짓 초록이 없다). 끝을 잘못 읽으면 빈 칸이 있는 목록을 거절할 수 있다(거짓 빨강 — 기동이 문장으로 멈춘다).
+ * IPv4 클라이언트는 두 꼴로 오지만(`a.b.c.d` · 이중 스택 소켓의 `::ffff:a.b.c.d`) 판독기가 둘을 같은 IPv4 로 바꿔 견주므로 한 꼴만 묻는다 —
+ * 받은 목록의 빈 칸이 두 꼴 모두 제 주소인지는 `test/login-limit.test.ts` «항목의 합에 빈 칸이 있으면 …»이 실물 Fastify 로 잰다.
  */
-const fastifyTrust = createRequire(createRequire(import.meta.url).resolve('fastify'))('@fastify/proxy-addr').compile as (
-  value: string[],
-) => (address: string, hop: number) => boolean
+function trustsAllIPv4(items: string[]): boolean {
+  const trusts = fastifyTrust(items)
+  const probes = [0]
+  for (const item of items) {
+    const end = ipv4Span(item)?.[1]
+    if (end !== undefined && end < IPV4_LAST) probes.push(end + 1)
+  }
+  const dotted = probes.map((n) => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.'))
+  return dotted.every((address) => trusts(address, 0))
+}
+
+const IPV4_LAST = 0xffffffff
+
+/**
+ * 항목 하나가 판독기에서 덮는 IPv4 구간(`[처음, 끝]` — 32비트 수) — 없으면 `undefined`. 판독기(`@fastify/proxy-addr` 의 `parseipNotation`)와
+ * 같게 읽는다: 접두 없는 IPv4 매핑 IPv6 은 IPv4 주소 하나고, 그 밖의 IPv6 대역은 IPv4 매핑 대역(`::ffff:0:0/96`)과 겹치는 만큼 IPv4 를 덮는다
+ * (IPv4 클라이언트를 매핑 꼴로 바꿔 견준다). 이 읽기가 틀려도 거짓 빨강 쪽으로만 틀린다(`trustsAllIPv4`).
+ */
+function ipv4Span(item: string): [number, number] | undefined {
+  const slash = item.lastIndexOf('/')
+  let ip = ipaddr.parse(slash === -1 ? item : item.slice(0, slash))
+  if (slash === -1 && ip.kind() === 'ipv6' && ip.isIPv4MappedAddress()) ip = ip.toIPv4Address()
+  const bits = slash === -1 ? (ip.kind() === 'ipv4' ? 32 : 128) : Number(item.slice(slash + 1))
+  if (ip.kind() === 'ipv4') {
+    const [a = 0, b = 0, c = 0, d = 0] = ip.toByteArray()
+    return ipv4Block(((a << 24) | (b << 16) | (c << 8) | d) >>> 0, bits)
+  }
+  if (bits <= 96) return IPV4_MAPPED.match(ip, bits) ? [0, IPV4_LAST] : undefined
+  if (!ip.match(IPV4_MAPPED, 96)) return undefined
+  const [, , , , , , high = 0, low = 0] = ip.parts
+  return ipv4Block(((high << 16) | low) >>> 0, bits - 96)
+}
+
+function ipv4Block(address: number, bits: number): [number, number] {
+  const mask = bits === 0 ? 0 : (IPV4_LAST << (32 - bits)) >>> 0
+  const start = (address & mask) >>> 0
+  return [start, (start | (~mask >>> 0)) >>> 0]
+}
+
+/**
+ * Fastify 가 `trustProxy` 배열로 믿을 주소를 가르는 함수를 짓는다 — Fastify 가 부르는 바로 그 모듈(`@fastify/proxy-addr` 의
+ * `compile`)이다. 이 저장소의 의존이 아니라 Fastify 의 의존이라 Fastify 의 자리에서 찾는다(판이 갈리지 않게). 그 모듈이 주소를 읽는
+ * ipaddr.js 도 그 모듈의 자리에서 찾는다 — 설치 배치에 따라 다른 판(1.x)이 이 저장소 쪽에 올라와 있을 수 있다.
+ */
+const fastifyRequire = createRequire(createRequire(import.meta.url).resolve('fastify'))
+const fastifyTrust = fastifyRequire('@fastify/proxy-addr').compile as (value: string[]) => (address: string, hop: number) => boolean
+
+/** 판독기가 쓰는 ipaddr.js 에서 여기서 부르는 것만. */
+interface IpAddress {
+  kind(): 'ipv4' | 'ipv6'
+  match(range: IpAddress, bits: number): boolean
+  isIPv4MappedAddress(): boolean
+  toIPv4Address(): IpAddress
+  toByteArray(): number[]
+  parts: number[]
+}
+const ipaddr = createRequire(fastifyRequire.resolve('@fastify/proxy-addr'))('ipaddr.js') as { parse(text: string): IpAddress }
+const IPV4_MAPPED = ipaddr.parse('::ffff:0:0')
 
 const DATABASE_URL_MESSAGE = 'DATABASE_URL이 필요합니다'
 
