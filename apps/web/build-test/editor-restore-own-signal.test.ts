@@ -7,7 +7,7 @@
  * 행을 쥐어 복원을 세운 채 소켓이 다시 붙기를 기다렸다가 놓는다.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, canvasFrame } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -68,7 +68,7 @@ describe.skipIf(!전제.ok)('연결 id 없이 나간 내 복원', () => {
     })
     try {
       await page.goto(P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor()
       await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')))
       await page.getByRole('button', { name: '스냅샷' }).click()
       await page.getByRole('button', { name: '이 상태로 되돌리기' }).click()

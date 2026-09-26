@@ -46,7 +46,7 @@ import { hostname, tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
 import pg from 'pg'
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core'
+import { chromium, type Browser, type BrowserContext, type FrameLocator, type Page } from 'playwright-core'
 
 const API_DIR = fileURLToPath(new URL('../../api/', import.meta.url))
 const WEB_DIR = fileURLToPath(new URL('../', import.meta.url))
@@ -906,4 +906,21 @@ export async function poll<T>(what: string, read: () => Promise<T>, done: (value
     await sleep(100)
   }
   throw new Error(`${what}: ${timeoutMs}ms 안에 안 섰다 — 마지막 값 ${JSON.stringify(last)}`)
+}
+
+/**
+ * **캔버스 문서가 그려지는 iframe**(`src/canvas/canvas-iframe.tsx`). 문서의 글자 · 노드는 여기 안에 있다 — 호스트의
+ * `.wb-shell-canvas-frame` 의 `innerText` · `hasText` 는 iframe 안의 글자를 담지 않는다. 선택 외곽선 · 번호 마커 · 배너는
+ * 호스트 문서 그대로다.
+ */
+export function canvasFrame(page: Page): FrameLocator {
+  return page.frameLocator('iframe.wb-shell-canvas-iframe')
+}
+
+/** 캔버스 문서의 글자(`body.innerText`). iframe 이 없으면(페이지 없음 · 불러오는 중 · 실패) 빈 문자열이다. */
+export async function canvasText(page: Page): Promise<string> {
+  const handle = await page.$('iframe.wb-shell-canvas-iframe')
+  const frame = await handle?.contentFrame()
+  if (frame === null || frame === undefined) return ''
+  return frame.evaluate(() => document.body.innerText)
 }

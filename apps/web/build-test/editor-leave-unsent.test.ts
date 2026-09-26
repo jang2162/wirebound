@@ -10,7 +10,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session, canvasFrame, canvasText } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -45,7 +45,7 @@ describe.skipIf(!전제.ok)('떠나며 버린 편집의 수', () => {
       const hold = await stack.holdRow('pages', fx.first)
       await sendThenQueue(page, stack, 1)
       await page.getByRole('link', { name: '둘째' }).click()
-      await page.locator('.wb-shell-canvas-frame', { hasText: '2쪽 원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '2쪽 원문' }).waitFor()
       await hold.release()
 
       await poll('보낸 편집이 서버에 닿는다', () => server(stack, alice, fx.P1), (value) => value.head === 2)
@@ -77,7 +77,7 @@ describe.skipIf(!전제.ok)('떠나며 버린 편집의 수', () => {
       await waitLocked(stack, 1)
       await sendThenQueue(page, stack, 2)
       await page.getByRole('link', { name: '둘째' }).click()
-      await page.locator('.wb-shell-canvas-frame', { hasText: '2쪽 원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '2쪽 원문' }).waitFor()
       await hold.release()
       expect((await bobs).status).toBe(200)
 
@@ -117,9 +117,9 @@ describe.skipIf(!전제.ok)('떠나며 버린 편집의 수', () => {
       await waitLocked(stack, 2)
       await page.getByRole('link', { name: '둘째' }).click()
       await editFirstText(page, '2쪽 원문', 'E3 2쪽 글')
-      await page.locator('.wb-shell-canvas-frame', { hasText: 'E3 2쪽 글' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: 'E3 2쪽 글' }).waitFor()
       await page.getByRole('link', { name: '셋째' }).click()
-      await page.locator('.wb-shell-canvas-frame', { hasText: '3쪽 원문' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '3쪽 원문' }).waitFor()
       await hold.release()
       expect((await bobs).status).toBe(200)
 
@@ -154,7 +154,7 @@ describe.skipIf(!전제.ok)('떠나며 버린 편집의 수', () => {
       expect((await stable(page)).notices).toEqual([LEFT_UNSENT])
 
       await page.getByRole('link', { name: '첫째' }).click()
-      await page.locator('.wb-shell-canvas-frame', { hasText: 'E1 보낸 글' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: 'E1 보낸 글' }).waitFor()
       expect((await stable(page)).notices).toEqual([])
     } finally {
       await context.close()
@@ -184,7 +184,7 @@ describe.skipIf(!전제.ok)('떠나며 버린 편집의 수', () => {
           history.pushState({}, '', to)
           dispatchEvent(new PopStateEvent('popstate'))
         }, other.P1)
-        await page.locator('.wb-shell-canvas-frame', { hasText: '1쪽 원문' }).waitFor()
+        await canvasFrame(page).locator('body', { hasText: '1쪽 원문' }).waitFor()
         const settled = await stable(page)
         // eslint-disable-next-line no-console
         console.log(`[프로젝트 전환] 통지 ${JSON.stringify(settled.notices)}`)
@@ -232,14 +232,14 @@ async function leaveSaved(page: Page, stack: EditorStack, alice: Session, fx: Fi
   const hold = await stack.holdRow('pages', fx.first)
   await sendThenQueue(page, stack, 1)
   await page.getByRole('link', { name: '둘째' }).click()
-  await page.locator('.wb-shell-canvas-frame', { hasText: '2쪽 원문' }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: '2쪽 원문' }).waitFor()
   await hold.release()
   await poll('보낸 편집이 서버에 닿는다', () => server(stack, alice, fx.P1), (value) => value.head === 2)
 }
 
 /** 첫 글을 고치고 blur 로 커밋한다. */
 async function editFirstText(page: Page, current: string, next: string): Promise<void> {
-  await page.locator('.wb-shell-canvas-frame', { hasText: current }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: current }).waitFor()
   await page.locator('li button', { hasText: 'Text' }).first().click()
   const box = page.locator('.wb-shell-panel textarea').first()
   await box.waitFor()
@@ -310,7 +310,7 @@ async function waitLocked(stack: EditorStack, count: number): Promise<void> {
 
 /** 첫 글을 고쳐 보내고(행에 줄 선다) 같은 칸을 다시 고쳐 큐에만 세운다. */
 async function sendThenQueue(page: Page, stack: EditorStack, waiters: number): Promise<void> {
-  await page.locator('.wb-shell-canvas-frame', { hasText: '1쪽 원문' }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: '1쪽 원문' }).waitFor()
   await page.locator('li button', { hasText: 'Text' }).first().click()
   const box = page.locator('.wb-shell-panel textarea').first()
   await box.waitFor()
@@ -321,7 +321,7 @@ async function sendThenQueue(page: Page, stack: EditorStack, waiters: number): P
   await box.click()
   await box.fill('E2 안 보낸 글')
   await box.evaluate((element) => (element as HTMLElement).blur())
-  await page.locator('.wb-shell-canvas-frame', { hasText: 'E2 안 보낸 글' }).waitFor()
+  await canvasFrame(page).locator('body', { hasText: 'E2 안 보낸 글' }).waitFor()
 }
 
 function watch(page: Page, fx: Fixture): { lines: string[] } {
@@ -345,7 +345,7 @@ function watch(page: Page, fx: Fixture): { lines: string[] } {
 /** 캔버스 글 · 머리 통지가 500ms 동안 안 바뀌면 그 값. */
 async function stable(page: Page): Promise<{ canvas: string; notices: string[] }> {
   const read = async () => ({
-    canvas: (await page.locator('.wb-shell-canvas-frame').innerText()).replace(/\s+/g, ' '),
+    canvas: (await canvasText(page)).replace(/\s+/g, ' '),
     notices: await page.locator('.wb-shell-header [role=status], .wb-shell-header [role=alert]').allTextContents(),
   })
   let last = await read()

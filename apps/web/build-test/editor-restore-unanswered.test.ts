@@ -6,7 +6,7 @@
  * 맞춘다. 신호가 다시 읽기보다 늦게 오는 판은 `editor-restore-signal-order.test.ts`의 «늦게 커밋»이 든다.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, canvasFrame, canvasText } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -71,11 +71,11 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
       const detail = await call('GET', `${P}`)
       return String(detail.body?.schema?.root?.children?.[0]?.props?.content)
     }
-    const canvas = async (): Promise<string> => (await page.locator('.wb-shell-canvas-frame').textContent()) ?? ''
+    const canvas = async (): Promise<string> => await canvasText(page)
     const banner = async (): Promise<boolean> => (await page.locator('.wb-shell-remote-alert', { hasText: '다시 불러오기' }).count()) > 0
     try {
       await page.goto(P)
-      await page.locator('.wb-shell-canvas-frame', { hasText: '바뀐 글' }).waitFor()
+      await canvasFrame(page).locator('body', { hasText: '바뀐 글' }).waitFor()
       await poll('소켓이 룸에 든다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← joined')))
       await page.getByRole('button', { name: '스냅샷' }).click()
       await page.getByRole('button', { name: '이 상태로 되돌리기' }).click()
@@ -99,7 +99,7 @@ describe.skipIf(!전제.ok)('답을 잃은 내 복원', () => {
       expect(statuses.filter((text) => /다른 사람|알 수 없/.test(text))).toEqual([])
 
       await page.locator('.wb-shell-remote-alert').getByRole('button', { name: '다시 불러오기' }).click()
-      await page.locator('.wb-shell-canvas-frame', { hasText: '원문' }).waitFor({ timeout: 10_000 })
+      await canvasFrame(page).locator('body', { hasText: '원문' }).waitFor({ timeout: 10_000 })
       expect({ 캔버스: await canvas(), 배너: await banner() }).toEqual({ 캔버스: expect.stringContaining('원문') as unknown as string, 배너: false })
     } finally {
       await context.close()
