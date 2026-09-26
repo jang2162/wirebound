@@ -13,7 +13,8 @@
  * - 계정만이면 한 주소가 계정을 바꿔 가며 흔한 비밀번호 하나씩을 대 보는 것(비밀번호 뿌리기)과 없는 이메일로 scrypt 만 돌리는 것을
  *   못 막는다.
  * - 주소만이면 주소 여럿에서 한 계정을 두드리는 것을 못 막는다.
- * - 주소는 IPv6 면 /64 로 묶는다(`addressKey`) — 한 회선이 흔히 /64 하나를 통째로 받아, 주소를 바꿔 가며 한도를 비켜 간다.
+ * - 주소는 IPv6 면 /64 로 묶는다(`addressKey`) — 한 회선이 흔히 /64 하나를 통째로 받아, 주소를 바꿔 가며 한도를 비켜 간다. IPv4 를
+ *   담는 IPv6(`::ffff:1.2.3.4` 따위)은 그 IPv4 로 센다.
  *
  * **방식 — 검증 전에 자리를 잡고, 한도에 닿으면 429 + `Retry-After`.** 지연(실패 수만큼 늦게 답함)은 동시에 몰린 요청을 못 막는다 —
  * 늦추는 동안에도 scrypt 는 돈다. 그래서 **비밀번호를 견주기 전에** 그 시도를 두 키에 기록하고(한 틱 안이라 동시에 온 요청도 차례로
@@ -44,10 +45,23 @@
  * 룸과 `lock/store.ts`). **프로세스가 여럿이 되면 깨지는 것:** 기록이 프로세스마다 따로라 한도가 프로세스 수만큼 곱해지고, 앞단이 요청을 돌려
  * 나누면 한 키의 기록이 흩어진다. 그때는 기록을 DB(또는 공유 저장소)로 옮긴다. 재기동은 기록을 비운다.
  *
- * **키 수에 상한이 있다(`maxKeys`).** 없는 이메일마다 기록이 하나 생기므로 상한이 없으면 메모리가 는다. 상한에 닿으면 가장 오래
- * 기록한 키를 버린다 — 창이 모두 같으므로 먼저 창을 벗어나는 키가 그것이다(창을 벗어난 키는 따로 걷지 않고 이렇게 밀려난다). **주소를 상한 ÷ 주소 한도(약 330)개 넘게 가진 쪽은 새 키로 밀어내
- * 남의 계정 기록을 씻을 수 있다.** 그런 쪽은 주소 키를 이미 비켜 가므로 이 모듈이 막는 범위 밖이다. 계정 키는 이메일의 sha256 으로
- * 둔다 — 이메일 규격이 길이를 묶지 않아(`auth/credentials.ts` 의 `NormalizedEmail`) 긴 글자가 그대로 쌓이지 않게.
+ * **키 수에 상한이 있다(`maxKeys`).** 없는 이메일마다 기록이 하나 생기므로 상한이 없으면 메모리가 는다. 새 키가 상한에 닿으면 **창 안의
+ * 기록이 가장 적은 키**를 버린다(같으면 마지막 기록이 가장 오래된 키 · 그것도 같으면 키 글자가 앞선 키). 창을 벗어난 키는 따로 걷지 않고
+ * 이렇게 밀려난다(기록이 0 이다).
+ * - **기록이 적은 키부터 버리는 까닭** — 새 키(없는 이메일 하나씩 · 주소 약 330 개)로 상한을 채워 앞선 기록을 씻지 못하게. 넣은 차례로
+ *   버리면 막힌 계정의 기록이 새 키 1만 개에 씻겨 한도만큼 더 대 보고, 막힌 키만 건너뛰어도 한도 − 1 까지 채운 키가 같은 값에 씻긴다(창
+ *   하나에 9 번 더). 기록이 c 인 키를 밀어내려면 다른 키 모두가 c 이상이어야 한다 — 키 하나를 씻는 값이 한 창 안에 견준 비밀번호 약
+ *   c × 1만 번이다(막힌 계정 키면 약 10만 번 · 주소 약 3300 개).
+ * - **넣은 차례로 가르지 않는 까닭** — 주인의 성공은 기록을 안 남기지만(«성공은 두 키에서») 그 키를 다시 넣은 차례로 옮긴다. 넣은 차례로
+ *   버리면 남이 한 번 틀려 둔 이메일이 채우기 뒤에 남는지로 «그 사이 주인이 로그인했다 = 있는 계정»을 읽는다. 마지막 기록의 시각은 성공이
+ *   자리를 걷은 뒤 그 앞과 같다.
+ * - **모든 키가 막혔어도 버린다** — 메모리 상한이 먼저다. 새 키를 안 받는(그 요청을 막는) 길은 고르지 않았다 — 표가 막힌 키로 차 있는
+ *   동안 기록이 없는 모든 사람(처음 로그인하는 주인 · 새 주소)의 로그인이 막혀, 남의 계정 하나가 아니라 서버 전체가 막힌다.
+ * - 버릴 키를 찾으려고 표를 한 번 훑는다 — 막힌 키 1만 개로 찬 표에 새 키 하나를 넣는 데 p50 0.34 · p99 0.77ms(이 기계). 훑는 것은
+ *   상한에 닿은 뒤 받아 준 새 키뿐이다 — 막힌 요청(429)과 이미 있는 키는 안 훑는다.
+ *
+ * 계정 키는 이메일의 sha256 으로 둔다 — 이메일 규격이 길이를 묶지 않아(`auth/credentials.ts` 의 `NormalizedEmail`) 긴 글자가 그대로
+ * 쌓이지 않게.
  *
  * **주소는 `request.ip` 다** — `TRUST_PROXY` 가 비면 소켓 주소, 차면 그 앞단이 적은 `X-Forwarded-For` 를 따른다(`config.ts` 의
  * `trustProxy`). 앞단이 적은 글자가 IP 가 아니면 소켓 주소로 센다(`requestAddressKey`). 앞단 뒤에서 그것을 안 채우면 모든 요청이 앞단 하나의 주소라 **주소 키가 서버 전체의 한도가 된다** — 아무나 틀린
@@ -55,7 +69,7 @@
  */
 import { createHash } from 'node:crypto'
 import { isIPv4 } from 'node:net'
-import { ipv6Groups, mappedIPv4 } from '../ip-address'
+import { embeddedIPv4, ipv6Groups } from '../ip-address'
 
 export interface LoginLimitRule {
   /** 기록을 세는 창(ms). */
@@ -105,16 +119,38 @@ class AttemptLog {
   }
 
   add(key: string, stamp: number): void {
-    const stamps = this.live(key, stamp) ?? []
-    // 맨 뒤로 옮겨 «가장 오래 기록한 키»가 맨 앞에 오게 한다(`Map` 은 넣은 차례를 지킨다).
-    this.entries.delete(key)
-    while (this.entries.size >= this.maxKeys) {
-      const oldest = this.entries.keys().next().value
-      if (oldest === undefined) break
-      this.entries.delete(oldest)
+    const stamps = this.live(key, stamp)
+    if (stamps !== undefined) {
+      stamps.push(stamp)
+      return
     }
-    stamps.push(stamp)
-    this.entries.set(key, stamps)
+    while (this.entries.size >= this.maxKeys && this.evictOne(stamp)) {}
+    this.entries.set(key, [stamp])
+  }
+
+  /**
+   * 상한에서 키 하나를 버린다 — 기록이 가장 적은 키, 같으면 마지막 기록이 가장 오래된 키, 그것도 같으면 키 글자가 앞선 키(머리말 «키
+   * 수에 상한이 있다»). 차례를 `Map` 의 넣은 차례로 가르지 않는다 — 주인의 성공이 기록을 남기지 않아도 넣은 차례는 바꾼다. 버렸으면 참.
+   */
+  private evictOne(now: number): boolean {
+    let pick: { key: string; count: number; last: number } | undefined
+    for (const key of this.entries.keys()) {
+      const stamps = this.live(key, now)
+      // 창을 벗어나 빈 키는 `live` 가 스스로 걷었다 — 한 자리가 비었다.
+      if (stamps === undefined) return true
+      const count = stamps.length
+      const last = stamps[count - 1] as number
+      if (
+        pick === undefined ||
+        count < pick.count ||
+        (count === pick.count && (last < pick.last || (last === pick.last && key < pick.key)))
+      ) {
+        pick = { key, count, last }
+      }
+    }
+    if (pick === undefined) return false
+    this.entries.delete(pick.key)
+    return true
   }
 
   /** 이 시도의 자리 하나를 걷는다. 같은 시각의 다른 시도가 있어도 하나만 걷는다. */
@@ -175,7 +211,9 @@ function accountKey(email: string): string {
 }
 
 /**
- * 주소를 키로 만든다(머리말 «키는 둘이다»). IPv4 는 그대로, IPv4 매핑 IPv6 은 IPv4 로, 그 밖의 IPv6 은 앞 64비트로 묶는다. 믿는 앞단이
+ * 주소를 키로 만든다(머리말 «키는 둘이다»). IPv4 는 그대로, IPv4 를 담는 IPv6(매핑 · 변환 · NAT64 · 호환 — `ip-address.ts` 의
+ * `embeddedIPv4`)은 그 IPv4 로, 그 밖의 IPv6 은 앞 64비트로 묶는다 — 담긴 IPv4 를 안 풀면 그 꼴로 오는 IPv4 클라이언트 전부가 /64
+ * 하나(`::1` 과 같은 `0:0:0:0::/64` · `64:ff9b:0:0::/64`)의 한도를 나눠 쓴다. 믿는 앞단이
  * 적은 글자(`request.ip`)는 꼴이 제각각이라 값으로 편 뒤 가르고(`ip-address.ts`), 포트(`1.2.3.4:5678` · `[2001:db8::1]:443`)는 뗀다 —
  * 안 떼면 연결마다 새 키다. **IP 가 아니면 `undefined`** — 받은 글자로 세면 `unknown` 하나가 모두의 키가 되고, 글자를 바꿔 가며 새 키를
  * 얻는다. 부르는 쪽이 소켓 주소로 되돌린다(`requestAddressKey`).
@@ -187,8 +225,8 @@ export function addressKey(address: string): string | undefined {
   if (isIPv4(text)) return text
   const groups = ipv6Groups(text)
   if (groups === undefined) return undefined
-  const mapped = mappedIPv4(groups)
-  if (mapped !== undefined) return mapped
+  const embedded = embeddedIPv4(groups)
+  if (embedded !== undefined) return embedded
   return `${groups.slice(0, 4).map((group) => group.toString(16)).join(':')}::/64`
 }
 
