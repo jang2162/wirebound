@@ -29,6 +29,7 @@ import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { PageDetail, ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
+import { CanvasDocumentProvider } from '../canvas/canvas-document'
 import { CanvasStructuresProvider } from '../canvas/canvas-structures'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
@@ -487,12 +488,15 @@ export function EditorShellRoute(): ReactElement {
     <EditorStoreProvider store={store}>
       {/* 캔버스가 그리는 구조 표를 속성 패널이 읽는 통로 — 둘의 공통 조상이 셸이라 여기서 감싼다. */}
       <CanvasStructuresProvider>
-        <EditorShell
-          project={state.project}
-          roleKnown={roleKnown}
-          pageId={params.pageId}
-          onMembership={onMembership}
-        />
+        {/* 캔버스 iframe 의 문서를 머리의 팝오버가 아는 통로 — 같은 까닭으로 셸째 감싼다. */}
+        <CanvasDocumentProvider>
+          <EditorShell
+            project={state.project}
+            roleKnown={roleKnown}
+            pageId={params.pageId}
+            onMembership={onMembership}
+          />
+        </CanvasDocumentProvider>
       </CanvasStructuresProvider>
     </EditorStoreProvider>
   )

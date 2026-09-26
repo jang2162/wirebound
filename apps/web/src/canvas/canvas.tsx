@@ -42,6 +42,7 @@ import { ThemeProvider } from '@wirebound/theme-sdk'
 import { createPortal } from 'react-dom'
 import { walkSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasIframe, type CanvasFrame } from './canvas-iframe'
 import { CANVAS_STYLES, CANVAS_THEME, canvasTokens } from './canvas-theme'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
@@ -172,6 +173,8 @@ export function Canvas(props: {
    */
   const [measureTick, setMeasureTick] = useState(0)
   const bumpMeasure = useCallback(() => setMeasureTick((tick) => tick + 1), [])
+  // 셸의 호스트 리스너(팝오버 닫기)가 캔버스 위의 조작을 받게 이 iframe 의 문서를 싣는다(`./canvas-document.tsx`).
+  usePublishCanvasDocument(frame?.document ?? null)
 
   /**
    * **상호작용 런타임의 상태**(설계서 「상호작용」의 「실행」 절). 문서가 아니라 **문서 옆**이다 —

@@ -79,6 +79,38 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
     })
   }
 
+  /**
+   * **iframe 이 갈려도 새 문서에서 닫힌다.** 페이지를 옮기면 캔버스가 내려갔다 올라와 iframe 이 새로 선다. 팝오버를 연 채 옮기면
+   * 옛 iframe 문서에 건 리스너는 쓸모가 없고 새 문서에 걸려야 한다 — 문서를 한 번만 읽어 두는 구현은 여기서 죽는다.
+   * 판 카나리아: 연 뒤 iframe 에 표시를 달고, 옮긴 뒤 그 표시가 없는(새로 선) iframe 인지 본다.
+   */
+  it('팝오버를 연 채 페이지를 옮겨 iframe 이 새로 서도, 캔버스를 누르면 닫힌다', async () => {
+    const { P1, secondTitle } = await twoPages(stack, alice, 'pop-swap')
+    await withTab(stack, async (page) => {
+      await page.goto(P1)
+      await page.getByRole('link', { name: secondTitle }).click()
+      await (await docNode(page, 'n_second00001')).waitFor()
+      await page.click('.wb-shell-export-toggle')
+      const opened = await page.locator('.wb-shell-export-body').count()
+      await page.locator(IFRAME).evaluate((el) => el.setAttribute('data-probe-old', ''))
+      await page.goBack()
+      await (await docNode(page, 'n_text0000002')).waitFor()
+      const swapped = await settle(
+        async () => ({ iframes: await page.locator(IFRAME).count(), old: await page.locator(`${IFRAME}[data-probe-old]`).count() }),
+        (value) => value.iframes === 1 && value.old === 0,
+      )
+      const stillOpen = await page.locator('.wb-shell-export-body').count()
+      await (await docNode(page, 'n_text0000002')).click()
+      const closed = await settle(() => page.locator('.wb-shell-export-body').count(), (count) => count === 0)
+      expect({ opened, swapped, stillOpen, afterCanvasClick: closed }).toEqual({
+        opened: 1,
+        swapped: { iframes: 1, old: 0 },
+        stillOpen: 1,
+        afterCanvasClick: 0,
+      })
+    })
+  })
+
   it('사이드바 폭 손잡이를 캔버스 위로 끌어도 폭이 따라오고, 캔버스 위에서 놓으면 드래그가 끝난다', async () => {
     const P = await fixture(stack, alice, 'resize')
     await withTab(stack, async (page) => {
@@ -185,4 +217,19 @@ async function fixture(stack: EditorStack, owner: Session, slug: string, buttonR
   const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops })
   if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
   return P
+}
+
+/** 페이지 둘 — 첫째는 `fixture` 와 같은 모양(Button · Text 둘), 둘째는 Text 하나(`n_second00001`). */
+async function twoPages(stack: EditorStack, owner: Session, slug: string): Promise<{ P1: string; secondTitle: string }> {
+  const call = (m: string, p: string, b?: unknown) => stack.request(owner, m, p, b)
+  const P1 = await fixture(stack, owner, slug)
+  const projectId = P1.split('/')[2]!
+  const menu = (await call('GET', `/projects/${projectId}/tree`)).body.menu[0]
+  const second = (await call('POST', `/projects/${projectId}/pages`, { menuNodeId: menu.id, title: '둘째' })).body
+  const seeded = await call('PATCH', `/projects/${projectId}/pages/${second.id}/ops`, {
+    baseSeq: 0,
+    ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_second00001', type: 'Text', props: { content: '둘째 글' } } }],
+  })
+  if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
+  return { P1, secondTitle: '둘째' }
 }
