@@ -75,6 +75,22 @@ export function CanvasIframe(props: {
     }
   }, [frame, props.styles])
 
+  /**
+   * **iframe 안의 폼 제출은 문서를 떠나지 않는다.** 폼 안에 진짜 제출 단추가 있으면(기본 `type` 이 `submit` 인 `<button>`) 브라우저가
+   * iframe 을 `about:blank?` 로 옮겨 캔버스가 빈다 — 호스트 주소는 그대로라 무엇이 일어났는지 안 보인다. 렌더러의 `submit` 핸들러는
+   * 규칙이 있을 때만 막으므로(`packages/renderer/src/render.tsx` 의 `handlersFor`) 편집 모드 · 규칙 없는 폼은 여기서 막는다.
+   *
+   * **캡처 단계에서 기본 동작만 막고 전파는 둔다** — React 의 `submit` 핸들러(규칙)는 그대로 불린다
+   * (`build-test/canvas-iframe-submit.test.ts`).
+   */
+  useLayoutEffect(() => {
+    if (frame === null) return
+    const doc = frame.document
+    const stay = (event: Event) => event.preventDefault()
+    doc.addEventListener('submit', stay, true)
+    return () => doc.removeEventListener('submit', stay, true)
+  }, [frame])
+
   useLayoutEffect(() => {
     if (frame === null || onBackgroundClick === undefined) return
     const doc = frame.document
