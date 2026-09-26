@@ -473,6 +473,16 @@ const RESTORE_LANDED_STALE: RemoteStale = { reason: 'restored', own: 'landed' }
 /** 알아볼 내 복원의 수(`#ownRestores` · `#lostRestores`). 한 탭이 답을 기다리는 복원은 하나라 몇이면 넉넉하다. */
 const OWN_RESTORES_LIMIT = 8
 
+/**
+ * **미뤄 둔 복원 신호가 답을 기다리는 한도**(ms — `markRestored`). 넘기면 그 신호를 남의 복원으로 세운다. 값은 읽기 한도(`api/http-client.ts`의
+ * `READ_DEADLINE_MS`)와 같다 — 복원은 쓰기라 그 한도가 안 걸려 답이 끝없이 매달릴 수 있고, 그동안 흉내 낸 복원 id 의 신호(`RestoreSignal`)는
+ * 서버가 복원했는데 배너를 안 세운다(Chrome: `apps/web/build-test/editor-restore-signal-order.test.ts` «흉내 낸 신호 · 내 답이 매달림»).
+ *
+ * **대가:** 내 답이 이보다 늦으면 내 복원의 신호가 «다른 사람이 복원했습니다»로 한 번 서고, 그 답의 다시 읽기(`beginRestoreReread`)가
+ * 걷는다(같은 파일 «답이 한도보다 늦음»). 짧게 잡으면 그 거짓 배너가 흔해지고, 길게 잡으면 흉내가 배너를 그만큼 늦춘다.
+ */
+export const RESTORE_SIGNAL_WAIT_MS = 10_000
+
 /** 아무것도 안 버린 결과. **참조를 고정한다** — `NO_WARNINGS`와 같은 이유다. */
 const NO_DROPPED: PendingEdit[] = []
 
@@ -756,17 +766,26 @@ export class EditorStore {
   #ownRestores: string[] = []
 
   /**
-   * **답을 기다리는 내 복원** — 복원 id(`beginOwnRestore`) → 그 사이 온 그 id 의 신호. 신호가 답보다 먼저 오면 내 복원인지 아직 모른다(답의
-   * 안전망 스냅샷 id 와 견줘야 한다 — `RestoreSignal`). 답이 오면 그 판정으로 넘기거나 세우고(`ownRestoreAnswered` · `ownRestoreRefused`),
-   * 답을 잃으면 «반영됐다»로 세운다(`markRestoreUnanswered`).
+   * **답을 기다리는 내 복원** — 복원 id(`beginOwnRestore`) → 그 사이 온 그 id 의 신호와 그 한도. 신호가 답보다 먼저 오면 내 복원인지 아직
+   * 모른다(답의 안전망 스냅샷 id 와 견줘야 한다 — `RestoreSignal`). 답이 오면 그 판정으로 넘기거나 세우고(`ownRestoreAnswered` ·
+   * `ownRestoreRefused`), 답을 잃으면 «반영됐다»로 세우고(`markRestoreUnanswered`), 첫 신호에서 `RESTORE_SIGNAL_WAIT_MS`가 지나도 답이
+   * 없으면 남의 복원으로 세운다.
+   *
+   * **이 목록 · `#ownRestores` · `#lostRestores`는 `reset`이 비운다** — 셸이 내려갔다 다시 서면(셸 안의 프로젝트 전환 · 뒤로 · 앞으로) 앞 셸이
+   * 낸 복원의 답은 그 셸의 콜백으로 가고 그 콜백은 스토어에 안 쓴다(`routes/editor.tsx`의 `shellGeneration`). 남은 id 가 돌아온 셸의 신호를
+   * 미뤄 두면 그 신호는 넘겨지거나 한도까지 조용하다.
    */
-  #restoresInFlight = new Map<string, RestoreSignal[]>()
+  #restoresInFlight = new Map<string, { signals: RestoreSignal[]; timer: ReturnType<typeof setTimeout> | null }>()
 
   /**
    * **답을 잃은 내 복원의 복원 id**(`markRestoreUnanswered`). 그 복원이 사람의 다시 읽기보다 늦게 커밋되면 이 id 를 실은 신호가 뒤에 온다 —
-   * 그 신호만이 화면이 낡았다는 것을 안다(Chrome: `apps/web/build-test/editor-restore-late-commit.test.ts`). 끝의 몇 개만 든다.
+   * 그 신호만이 화면이 낡았다는 것을 안다(Chrome: `apps/web/build-test/editor-restore-signal-order.test.ts` «답을 잃음 · 다시 읽기보다 늦게
+   * 커밋»). 끝의 몇 개만 든다.
    */
   #lostRestores: string[] = []
+
+  /** **`reset`을 부른 수** — 셸이 제가 선 세대를 쥐고 내려간 뒤의 콜백을 거른다(`resetGeneration`). */
+  #resets = 0
 
   /**
    * **다시 읽는 창 안에서 온 revision** — 남의 프레임 · 내 ack · 번호 응답. 그것이 올 때까지 시작한 조회 수(`begun`) · 페이지 · 번호 · 그
@@ -1900,7 +1919,11 @@ export class EditorStore {
       // **답을 기다리는 내 복원의 id 면 답까지 미룬다** — 답의 안전망 스냅샷 id 로 가른다(`ownRestoreAnswered`).
       const waiting = this.#restoresInFlight.get(restoreId)
       if (waiting !== undefined) {
-        waiting.push(signal)
+        waiting.signals.push(signal)
+        // 한도 안에 답이 안 오면 남의 복원으로 세운다(`RESTORE_SIGNAL_WAIT_MS`) — 목록에서 내리므로 다시 부르면 미루지 않는다.
+        waiting.timer ??= setTimeout(() => {
+          for (const late of this.#takeInFlight(restoreId)) this.markRestored(late)
+        }, RESTORE_SIGNAL_WAIT_MS)
         return
       }
       // **답을 잃은 내 복원의 신호면 서버에 반영된 것이다** — 그 사이 다시 읽어 배너가 걷혔어도 다시 세운다.
@@ -1918,7 +1941,7 @@ export class EditorStore {
    * (`markRestored`). 보낸 뒤에는 셋 가운데 하나를 반드시 부른다: `ownRestoreAnswered` · `ownRestoreRefused` · `markRestoreUnanswered`.
    */
   readonly beginOwnRestore = (clientRestoreId: string): void => {
-    this.#restoresInFlight.set(clientRestoreId, [])
+    this.#restoresInFlight.set(clientRestoreId, { signals: [], timer: null })
   }
 
   /**
@@ -1935,11 +1958,13 @@ export class EditorStore {
     for (const signal of this.#takeInFlight(clientRestoreId)) this.markRestored(signal)
   }
 
-  /** 답을 기다리던 복원을 내리고 그 사이 온 신호를 낸다. 모르는 id 면 빈 목록이다. */
+  /** 답을 기다리던 복원을 내리고(한도도 걷는다) 그 사이 온 신호를 낸다. 모르는 id 면 빈 목록이다. */
   #takeInFlight(clientRestoreId: string): RestoreSignal[] {
-    const waiting = this.#restoresInFlight.get(clientRestoreId) ?? []
+    const waiting = this.#restoresInFlight.get(clientRestoreId)
+    if (waiting === undefined) return []
+    if (waiting.timer !== null) clearTimeout(waiting.timer)
     this.#restoresInFlight.delete(clientRestoreId)
-    return waiting
+    return waiting.signals
   }
 
   /**
@@ -2708,6 +2733,13 @@ export class EditorStore {
   }
 
   /**
+   * **지금 `reset` 세대** — 셸이 설 때 쥐고, 뒤에 온 콜백이 스토어에 쓰기 전에 견준다(`routes/editor.tsx`의 `shellGeneration`). 셸 안의 프로젝트
+   * 전환은 스토어를 그대로 두고 셸만 내렸다 다시 세우므로, 내려간 셸이 쥔 콜백(복원 팝오버의 답)이 산 스토어에 닿는다. id 로 가르지 않는
+   * 까닭은 같은 프로젝트로 돌아온 판에서도 셸이 새것이기 때문이다.
+   */
+  readonly resetGeneration = (): number => this.#resets
+
+  /**
    * 프로젝트를 떠날 때. 문서만 지우면 이전 프로젝트의 선택·줌이 다음 프로젝트에 남는다.
    * 페이지 하나를 닫는 것은 `clearPage`다 — 그쪽은 보기 설정을 남긴다. 옮겨 가는 프로젝트를 받는다(`queueProjectId`).
    */
@@ -2715,6 +2747,11 @@ export class EditorStore {
     this.#projectId = projectId
     this.#noteAbandoned(this.#state.pending, true)
     this.#queueEpoch += 1
+    this.#resets += 1
+    // 앞 셸이 낸 복원은 이제 알아볼 수 없다(`#restoresInFlight`의 머리말) — 그 신호가 돌아온 셸에 오면 남의 복원으로 선다.
+    for (const id of [...this.#restoresInFlight.keys()]) this.#takeInFlight(id)
+    this.#ownRestores = []
+    this.#lostRestores = []
     this.#restoredHistory = null
     this.#windowChanges = []
     this.#openingPageId = null

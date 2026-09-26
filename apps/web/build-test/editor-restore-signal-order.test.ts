@@ -13,10 +13,17 @@
  * 차례는 붙잡아 세운다: 답을 신호 뒤로 미루려면 `route.fetch` 뒤 신호를 기다렸다 `fulfill`, 신호를 뒤로 미루려면 서버 → 브라우저 WS 만 늦춘다
  * (`startDownDelay`), 커밋을 다시 읽기 뒤로 미루려면 페이지 행을 쥐어 복원을 서버에 세운다(`holdRow`). 거짓 배너는 끝 화면이 아니라 DOM 에 선
  * 횟수로 센다 — 섰다가 다시 읽기가 걷은 판도 센다.
+ *
+ * 네 칸 밖의 판 둘도 여기 둔다.
+ *
+ * - **답을 기다리는 사이 셸이 내려갔다 다시 선 판**(셸 안의 프로젝트 전환 · 뒤로 · 앞으로) — 내려간 셸의 복원 콜백은 스토어에 안 쓰고
+ *   (`routes/editor.tsx`의 `shellGeneration`) `reset`은 앞 셸의 복원을 잊는다. 아래 «다른 프로젝트로 …» 넷.
+ * - **미뤄 둔 신호의 한도**(`EditorStore`의 `RESTORE_SIGNAL_WAIT_MS`) — 흉내 낸 복원 id 와 매달린 답, 그리고 그 대가. 아래 «흉내 낸 신호 …» ·
+ *   «답이 한도보다 늦음».
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session, type StackUser } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -26,6 +33,9 @@ if (!전제.ok) {
 
 /** 서버 → 브라우저 WS 지연 — 복원 답 · 다시 읽기(수백 ms)보다 넉넉히 길다. */
 const DELAY_MS = 1_500
+
+/** 미뤄 둔 신호의 한도(`EditorStore`의 `RESTORE_SIGNAL_WAIT_MS` — 10s)를 넘겨 기다리는 폭. */
+const BEYOND_WAIT_MS = 12_000
 
 describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
   let stack: EditorStack
@@ -168,10 +178,341 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await context.close()
     }
   })
+
+  /**
+   * **셸이 내려갔다 다시 서도 내 복원이 조용히 넘겨지지 않는다**(`EditorStore.reset` · `routes/editor.tsx`의 `shellGeneration`). 셸 안에서
+   * 다른 프로젝트로 가면 라우트는 스토어를 그대로 두고 셸만 내렸다 다시 세운다 — 복원 팝오버는 내려간 셸의 콜백을 쥔 채 답을 받는다.
+   * 그 콜백이 산 스토어에 «내 것»을 적으면, 돌아온 셸에 온 그 복원의 신호가 넘겨지는데 다시 읽기는 내려간 셸에서 돌아(아무것도 안 함)
+   * 서버 `원문` · 캔버스 «바뀐 글» · 배너 없음이었다. 두 차례 다 그랬다 — 신호가 먼저면 미뤄 둔 신호를 죽은 셸의 답이 넘겼고, 답이 먼저면
+   * 죽은 셸의 답이 적은 안전망 id 가 뒤의 신호를 넘겼다. 이제 돌아온 셸에는 그 복원이 남의 복원으로 선다(문장은 반만 맞고 단추는 맞다).
+   *
+   * 다른 프로젝트로 가는 링크는 셸 안에 없다 — 이력을 건너뛰는 뒤로 · 앞으로가 이 길이다. `pushState` + `popstate`로 그 길을 탄다.
+   */
+  for (const order of ['신호가 먼저', '답이 먼저'] as const) {
+    it(`복원이 도는 사이 다른 프로젝트로 갔다 돌아옴 · ${order} — 커밋 뒤 화면이 서버와 같거나 배너가 선다`, async () => {
+      const alice = await stack.login(stack.users.alice)
+      const fx = await fixture(stack, alice, `restore-away-${order === '신호가 먼저' ? 'signal' : 'answer'}`)
+      const other = await fixture(stack, alice, 'restore-away-other')
+      // 답이 먼저인 차례 — 서버 → 브라우저 WS 만 늦춘다.
+      const delay = order === '답이 먼저' ? await stack.startDownDelay(DELAY_MS) : undefined
+      const { context, page } = await stack.openTab(stack.users.alice, delay === undefined ? {} : { origin: delay.origin })
+      const { lines: events, at } = watch(page)
+      const hold = await stack.holdRow('pages', fx.pageId)
+      let released = false
+      if (order === '신호가 먼저') {
+        await page.route('**/restore', async (route) => {
+          const answer = await route.fetch({ timeout: 60_000 })
+          await poll('신호가 먼저 닿는다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 15_000)
+          events.push(`${at()} 복원 답 ${answer.status()} 건넴`)
+          await route.fulfill({ response: answer })
+        })
+      }
+      try {
+        await page.goto(fx.P)
+        await page.locator('.wb-shell-canvas-frame', { hasText: '바뀐 글' }).waitFor()
+        await joinedAtLeast(events, 1)
+        await restore(page)
+        await hold.waitForWaiters(1)
+        await travel(page, other.P)
+        await page.locator('.wb-shell-canvas-frame', { hasText: '바뀐 글' }).waitFor()
+        await joinedAtLeast(events, 2)
+        await page.evaluate(() => history.back())
+        await page.waitForURL((url) => url.pathname === fx.P)
+        await page.locator('.wb-shell-canvas-frame', { hasText: '바뀐 글' }).waitFor()
+        await joinedAtLeast(events, 3)
+        events.push(`${at()} 돌아옴`)
+        const back = { 서버: await server(stack, alice, fx.P), 배너: await banner(page) }
+
+        await hold.release()
+        released = true
+        await poll('신호', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 15_000)
+        await poll('답', async () => events.slice(), (lines) => lines.some((line) => line.includes('복원 답 200')), 15_000)
+        await page.waitForTimeout(2_500)
+        const after = { 서버: await server(stack, alice, fx.P), 캔버스: await canvas(page), 배너: await banner(page) }
+        const statuses = await page.locator('[role=status]').allTextContents()
+        // eslint-disable-next-line no-console
+        console.log(`[다른 프로젝트 · ${order}] ${events.join(' · ')} · 돌아온 뒤 ${JSON.stringify(back)} · 커밋 뒤 ${JSON.stringify(after)} · 상태줄 ${JSON.stringify(statuses)}`)
+
+        // 판 카나리아 — 돌아온 뒤에도 복원은 서버에 서 있었고, 행을 놓자 커밋됐다. 그 차례로 닿았다.
+        expect(back).toEqual({ 서버: '바뀐 글', 배너: false })
+        expect(after.서버).toBe('원문')
+        const signalAt = first(events, 'WS← restored')
+        const answerAt = events.findIndex((line) => line.includes('복원 답 200'))
+        expect(order === '신호가 먼저' ? signalAt < answerAt : answerAt < signalAt).toBe(true)
+        // 성질 — 화면이 서버와 다르면 그렇다고 말한다.
+        expect({ 맞음: after.캔버스.includes(after.서버), 배너: after.배너 }).toEqual({ 맞음: false, 배너: true })
+      } finally {
+        if (!released) await hold.release()
+        await context.close()
+        await delay?.close()
+      }
+    })
+  }
+
+  /**
+   * **내려간 셸의 복원 답은 다음 프로젝트의 배너를 풀지 않는다**(`routes/editor.tsx`의 `reloadAfterRestore`). 그 답이 부르는 다시 읽기의 시작
+   * 표시(`EditorStore.beginRestoreReread`)가 산 스토어에 적히면, 그 뒤에 시작한 아무 페이지 조회가 복원 배너를 푼다 — 메뉴 · 테마는 다시
+   * 읽지 않았는데(다시 읽는 자리들은 내려간 셸에 있었다). B 에서 남의 복원이 지운 페이지 «셋째»가 트리에 남은 채 배너가 사라진다.
+   */
+  it('복원이 도는 사이 다른 프로젝트로 감 · 그 답이 거기 옴 — 남의 복원 배너가 트리를 다시 읽기 전에 안 풀린다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const bob = await stack.login(stack.users.bob)
+    const fx = await fixture(stack, alice, 'restore-dead-answer')
+    const b = await otherProject(stack, bob, stack.users.alice, 'restore-dead-answer-b')
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const { lines: events, at } = watch(page)
+    const hold = await stack.holdRow('pages', fx.pageId)
+    let released = false
+    try {
+      await page.goto(fx.P)
+      await page.locator('.wb-shell-canvas-frame', { hasText: '바뀐 글' }).waitFor()
+      await joinedAtLeast(events, 1)
+      await restore(page)
+      await hold.waitForWaiters(1)
+      await travel(page, b.first)
+      await page.locator('.wb-shell-canvas-frame', { hasText: '첫째 원문' }).waitFor()
+      await joinedAtLeast(events, 2)
+      await page.getByRole('link', { name: '셋째' }).waitFor()
+
+      // 밥이 B 를 «셋째»가 없던 판으로 복원한다 — 앨리스에게는 남의 복원 배너.
+      const restored = await stack.request(bob, 'POST', `/projects/${b.projectId}/snapshots/${b.snapshotId}/restore`)
+      if (restored.status !== 200) throw new Error(`밥의 복원 ${restored.status}`)
+      await poll('남의 복원 배너', async () => banner(page), (shown) => shown, 10_000)
+
+      // A 의 복원을 놓는다 — 그 답이 B 에 선 탭에 온다(내려간 셸의 콜백).
+      await hold.release()
+      released = true
+      await poll('A 의 답', async () => events.slice(), (lines) => lines.some((line) => line.includes('복원 답 200')), 15_000)
+      await page.waitForTimeout(500)
+      events.push(`${at()} 둘째로 옮김`)
+      await page.getByRole('link', { name: '둘째' }).click()
+      await page.locator('.wb-shell-canvas-frame', { hasText: '둘째 원문' }).waitFor()
+      await page.waitForTimeout(1_500)
+      const after = {
+        트리에_셋째: (await page.getByRole('link', { name: '셋째' }).count()) > 0,
+        서버에_셋째: (await stack.request(alice, 'GET', `/projects/${b.projectId}/pages/${b.third}`)).status === 200,
+        배너: await banner(page),
+      }
+      const statuses = await page.locator('[role=status]').allTextContents()
+      // eslint-disable-next-line no-console
+      console.log(`[죽은 셸의 답] ${events.join(' · ')} · 둘째로 옮긴 뒤 ${JSON.stringify(after)} · 상태줄 ${JSON.stringify(statuses)}`)
+
+      // 판 카나리아 — 트리는 아직 복원 앞 판이다(«셋째»가 있다), 서버에는 없다.
+      expect({ 트리에_셋째: after.트리에_셋째, 서버에_셋째: after.서버에_셋째 }).toEqual({ 트리에_셋째: true, 서버에_셋째: false })
+      // 성질 — 트리가 서버와 다르면 배너가 그렇다고 말한다.
+      expect(after.배너).toBe(true)
+    } finally {
+      if (!released) await hold.release()
+      await context.close()
+    }
+  })
+
+  /**
+   * **내려간 셸의 «답 잃음»은 다음 프로젝트에 배너를 세우지 않는다**(`routes/editor.tsx`의 `shellGeneration`). 그 콜백이 산 스토어에 쓰면 B 에
+   * «복원됐는지 모릅니다»가 선다 — B 는 그 복원과 무관하다.
+   */
+  it('복원이 도는 사이 다른 프로젝트로 감 · 그 답을 거기서 잃음 — 거기에 배너가 서지 않는다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const fx = await fixture(stack, alice, 'restore-dead-lost')
+    const other = await fixture(stack, alice, 'restore-dead-lost-other')
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const { lines: events, at } = watch(page)
+    let cut: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => (cut = resolve))
+    // 서버로 보내지 않고 붙잡았다가 끊는다 — 탭에는 답을 잃은 복원이다.
+    await page.route('**/restore', async (route) => {
+      events.push(`${at()} 복원 붙잡음`)
+      await gate
+      events.push(`${at()} 복원 끊음`)
+      await route.abort('connectionreset')
+    })
+    try {
+      await page.goto(fx.P)
+      await page.locator('.wb-shell-canvas-frame', { hasText: '바뀐 글' }).waitFor()
+      await joinedAtLeast(events, 1)
+      await restore(page)
+      await poll('복원이 붙잡힌다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('복원 붙잡음')))
+      await travel(page, other.P)
+      await page.locator('.wb-shell-canvas-frame', { hasText: '바뀐 글' }).waitFor()
+      await joinedAtLeast(events, 2)
+      await countBanners(page)
+      cut?.()
+      await poll('끊었다', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('복원 끊음')))
+      await page.waitForTimeout(1_500)
+      const seen = await bannersSeen(page)
+      const statuses = await page.locator('[role=status]').allTextContents()
+      // eslint-disable-next-line no-console
+      console.log(`[죽은 셸의 답 잃음] ${events.join(' · ')} · 배너 선 수 ${seen} · 상태줄 ${JSON.stringify(statuses)}`)
+
+      expect({ 배너: seen, 복원_문장: statuses.some((text) => text.includes('복원')) }).toEqual({ 배너: 0, 복원_문장: false })
+    } finally {
+      cut?.()
+      await context.close()
+    }
+  })
+
+  /**
+   * **미뤄 둔 신호는 한도(`RESTORE_SIGNAL_WAIT_MS` — 10s) 안에 답을 못 만나면 남의 복원으로 선다**(`EditorStore.markRestored`). 탭이 지은 복원
+   * id 는 룸의 모두에게 보여, owner 가 남의 id 를 실어 복원하면 그 신호는 그 탭의 답까지 미뤄진다 — 답이 매달리면(쓰기에는 시간 한도가 없다)
+   * 화면이 서버와 다른데 배너가 끝까지 없었다. 한도 뒤에는 배너가 서고, 매달린 답이 오면 그 다시 읽기가 화면을 서버 판으로 맞춘다.
+   */
+  it('흉내 낸 신호 · 내 답이 매달림 — 한도 뒤 배너가 서고, 답의 다시 읽기가 화면을 서버와 맞춘다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const bob = await stack.login(stack.users.bob)
+    const fx = await fixture(stack, alice, 'restore-mimic', true)
+    const member = await stack.request(alice, 'POST', `/projects/${fx.projectId}/members`, { email: stack.users.bob.email, role: 'owner' })
+    if (member.status >= 300) throw new Error(`픽스처 member ${member.status}`)
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const { lines: events, at } = watch(page)
+    let restoreId: string | undefined
+    let answer: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => (answer = resolve))
+    // 앨리스의 복원은 서버에서 끝나고, 답만 붙잡는다.
+    await page.route('**/restore', async (route) => {
+      restoreId = route.request().headers()['x-wb-restore-id']
+      const response = await route.fetch({ timeout: 60_000 })
+      events.push(`${at()} 앨리스 복원 서버 ${response.status()} · 답 붙잡음`)
+      await gate
+      await route.fulfill({ response })
+    })
+    try {
+      await page.goto(fx.P)
+      await page.locator('.wb-shell-canvas-frame', { hasText: '셋째 글' }).waitFor()
+      await joinedAtLeast(events, 1)
+      await countBanners(page)
+      await page.getByRole('button', { name: '스냅샷' }).click()
+      await page.locator('li.wb-shell-snapshots-row', { hasText: 'v1' }).getByRole('button', { name: '이 상태로 되돌리기' }).click()
+      await page.getByRole('button', { name: '되돌린다' }).click()
+      await poll('앨리스 복원이 서버에서 끝남', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('답 붙잡음')), 15_000)
+      await poll('앨리스 신호', async () => events.filter((line) => line.endsWith('WS← restored')).length, (n) => n >= 1)
+
+      // 밥이 앨리스의 복원 id 를 실어 v2(«바뀐 글»)로 복원한다.
+      const snapshots = await stack.request(bob, 'GET', `/projects/${fx.projectId}/snapshots`)
+      const v2 = (snapshots.body.snapshots ?? snapshots.body).find((snapshot: { tag: string }) => snapshot.tag === 'v2')
+      const mimic = await fetch(`${stack.apiUrl}/api/projects/${fx.projectId}/snapshots/${v2.id}/restore`, {
+        method: 'POST',
+        headers: { cookie: bob.cookie, 'x-wb-restore-id': restoreId ?? '' },
+      })
+      events.push(`${at()} 밥 복원 ${mimic.status}`)
+      await poll('밥 신호', async () => events.filter((line) => line.endsWith('WS← restored')).length, (n) => n >= 2)
+      const bobSignal = Date.now()
+      await page.waitForTimeout(2_000)
+      const early = { 배너: await banner(page), 선_수: await bannersSeen(page) }
+      // 한도가 지나도록 기다린다 — 폴로 기다리면 배너가 끝내 안 서는 판이 값이 아니라 시간 초과로 죽는다.
+      await page.waitForTimeout(BEYOND_WAIT_MS - (Date.now() - bobSignal))
+      const hung = { 서버: await server(stack, alice, fx.P), 캔버스: await canvas(page), 배너: await banner(page) }
+
+      answer?.()
+      await page.locator('.wb-shell-canvas-frame', { hasText: hung.서버 }).waitFor({ timeout: 10_000 })
+      await page.waitForTimeout(1_000)
+      const after = { 서버: await server(stack, alice, fx.P), 캔버스: await canvas(page), 배너: await banner(page) }
+      // eslint-disable-next-line no-console
+      console.log(`[흉내 · 매달린 답] ${events.join(' · ')} · 2s ${JSON.stringify(early)} · ${BEYOND_WAIT_MS}ms ${JSON.stringify(hung)} · 답 뒤 ${JSON.stringify(after)}`)
+
+      // 판 카나리아 — 밥의 신호는 앨리스의 답까지 미뤄졌다(2s 에 배너 없음), 서버는 밥의 판이고 캔버스는 아직 옛 글이다.
+      expect(early).toEqual({ 배너: false, 선_수: 0 })
+      expect({ 서버: hung.서버, 캔버스에_서버: hung.캔버스.includes(hung.서버) }).toEqual({ 서버: '바뀐 글', 캔버스에_서버: false })
+      // 성질 — 한도 뒤에는 말한다. 답의 다시 읽기가 화면을 맞추고 배너를 걷는다.
+      expect(hung.배너).toBe(true)
+      expect({ 맞음: after.캔버스.includes(after.서버), 배너: after.배너 }).toEqual({ 맞음: true, 배너: false })
+    } finally {
+      answer?.()
+      await context.close()
+    }
+  })
+
+  /**
+   * **R2 의 대가 — 내 답이 한도보다 늦으면 거짓 배너가 한 번 서고, 그 답의 다시 읽기가 걷는다.** 신호는 답보다 먼저 닿아 미뤄지고, 한도가
+   * 지나면 남의 복원으로 선다. 답이 오면 셸이 복원 뒤 다시 읽기를 시작하고(`reloadAfterRestore`) 그 판이 배너를 푼다.
+   */
+  it('답을 받음 · 답이 한도보다 늦음 — 거짓 배너가 한 번 서고 답의 다시 읽기가 걷는다', async () => {
+    const alice = await stack.login(stack.users.alice)
+    const fx = await fixture(stack, alice, 'restore-late-answer')
+    const { context, page } = await stack.openTab(stack.users.alice)
+    const { lines: events, at } = watch(page)
+    let answer: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => (answer = resolve))
+    await page.route('**/restore', async (route) => {
+      const response = await route.fetch({ timeout: 60_000 })
+      events.push(`${at()} 복원 서버 ${response.status()} · 답 붙잡음`)
+      await gate
+      events.push(`${at()} 복원 답 ${response.status()} 건넴`)
+      await route.fulfill({ response })
+    })
+    try {
+      await page.goto(fx.P)
+      await page.locator('.wb-shell-canvas-frame', { hasText: '바뀐 글' }).waitFor()
+      await joinedAtLeast(events, 1)
+      await countBanners(page)
+      await restore(page)
+      await poll('신호', async () => events.slice(), (lines) => lines.some((line) => line.endsWith('WS← restored')), 10_000)
+      await page.waitForTimeout(BEYOND_WAIT_MS)
+      const hung = { 배너: await banner(page) }
+      answer?.()
+      await page.locator('.wb-shell-canvas-frame', { hasText: '원문' }).waitFor({ timeout: 10_000 })
+      await poll('배너가 걷힌다', async () => banner(page), (shown) => !shown, 10_000)
+      await page.waitForTimeout(500)
+      const after = { 서버: await server(stack, alice, fx.P), 캔버스: await canvas(page), 배너: await banner(page), 선_수: await bannersSeen(page) }
+      // eslint-disable-next-line no-console
+      console.log(`[한도보다 늦은 답] ${events.join(' · ')} · ${BEYOND_WAIT_MS}ms ${JSON.stringify(hung)} · 답 뒤 ${JSON.stringify(after)}`)
+
+      expect(first(events, 'WS← restored')).toBeLessThan(first(events, '건넴'))
+      expect(hung).toEqual({ 배너: true })
+      expect(after).toEqual({ 서버: '원문', 캔버스: expect.stringContaining('원문') as unknown as string, 배너: false, 선_수: 1 })
+    } finally {
+      answer?.()
+      await context.close()
+    }
+  })
 })
 
-/** `원문`을 스냅샷 v1 에 얼리고 `바뀐 글`로 고친 페이지. */
-async function fixture(stack: EditorStack, owner: Session, slug: string): Promise<{ P: string; pageId: string }> {
+/** 셸 안에서 다른 주소로 간다 — 이력을 건너뛰는 뒤로 · 앞으로와 같은 길(`popstate`)이다. */
+async function travel(page: Page, to: string): Promise<void> {
+  await page.evaluate((path) => {
+    history.pushState({}, '', path)
+    dispatchEvent(new PopStateEvent('popstate'))
+  }, to)
+}
+
+/** 소켓이 룸에 든 수가 `count` 이상이 될 때까지 — 프로젝트를 옮길 때마다 새 룸에 든다. */
+async function joinedAtLeast(lines: string[], count: number): Promise<void> {
+  await poll(`룸에 ${count}번 든다`, async () => lines.filter((line) => line.endsWith('WS← joined')).length, (n) => n >= count, 10_000)
+}
+
+/**
+ * 밥의 프로젝트 — 앨리스는 owner 다. 페이지 «첫째» · «둘째»를 스냅샷에 얼린 뒤 «셋째»를 더한다(그 스냅샷으로 복원하면 «셋째»가 지워진다).
+ */
+async function otherProject(
+  stack: EditorStack,
+  owner: Session,
+  member: StackUser,
+  slug: string,
+): Promise<{ projectId: string; snapshotId: string; first: string; third: string }> {
+  const call = (method: string, path: string, body?: unknown) => stack.request(owner, method, path, body)
+  const project = created(await call('POST', '/projects', { name: '다른 프로젝트', slug: `${slug}-${Date.now().toString(36)}` }))
+  const invited = await call('POST', `/projects/${project.id}/members`, { email: member.email, role: 'owner' })
+  if (invited.status >= 300) throw new Error(`픽스처 member ${invited.status} ${JSON.stringify(invited.body)}`)
+  const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' }))
+  const pages: string[] = []
+  for (const [title, content, nodeId] of [
+    ['첫째', '첫째 원문', 'n_one0000001'],
+    ['둘째', '둘째 원문', 'n_two0000001'],
+  ] as const) {
+    const made = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title }))
+    const seeded = await call('PATCH', `/projects/${project.id}/pages/${made.id}/ops`, {
+      baseSeq: 0,
+      ops: [{ op: 'add', path: '/root/children/0', value: { id: nodeId, type: 'Text', props: { content } } }],
+    })
+    if (seeded.status >= 300) throw new Error(`픽스처 ops ${seeded.status}`)
+    pages.push(made.id)
+  }
+  const snapshot = created(await call('POST', `/projects/${project.id}/snapshots`, { tag: 'b1' }))
+  const third = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '셋째' }))
+  return { projectId: project.id, snapshotId: snapshot.id, first: `/projects/${project.id}/pages/${pages[0]}`, third: third.id }
+}
+
+/** `원문`을 스냅샷 v1 에 얼리고 `바뀐 글`로 고친 페이지. `third`면 그 판을 v2 에 얼리고 `셋째 글`로 한 번 더 고친다. */
+async function fixture(stack: EditorStack, owner: Session, slug: string, third = false): Promise<{ P: string; pageId: string; projectId: string }> {
   const call = (method: string, path: string, body?: unknown) => stack.request(owner, method, path, body)
   const project = created(await call('POST', '/projects', { name: '복원 차례', slug: `${slug}-${Date.now().toString(36)}` }))
   const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' }))
@@ -188,7 +529,15 @@ async function fixture(stack: EditorStack, owner: Session, slug: string): Promis
     ops: [{ op: 'replace', path: '/root/children/0/props/content', value: '바뀐 글' }],
   })
   if (changed.status >= 300) throw new Error(`픽스처 ops ${changed.status}`)
-  return { P, pageId: target.id }
+  if (third) {
+    created(await call('POST', `/projects/${project.id}/snapshots`, { tag: 'v2' }))
+    const again = await call('PATCH', `${P}/ops`, {
+      baseSeq: 2,
+      ops: [{ op: 'replace', path: '/root/children/0/props/content', value: '셋째 글' }],
+    })
+    if (again.status >= 300) throw new Error(`픽스처 ops ${again.status}`)
+  }
+  return { P, pageId: target.id, projectId: project.id }
 }
 
 /** 이 탭이 받은 것의 차례 — `joined` · `restored` 프레임, 복원 답, 페이지 조회. 줄 머리는 시작부터 ms 다. */

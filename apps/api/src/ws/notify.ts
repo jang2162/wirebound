@@ -124,9 +124,9 @@ export interface RestoredInput {
  * ops로 표현되지 않는다. **한 프레임으로 *"판이 갈렸다"*를 말하고 받는 쪽이 다시 읽는다.**
  *
  * **낸 사람의 연결도 빼지 않는다** — 편집의 방송(`notifyPageChanged`)과 다른 점이다. 복원의 답을 잃으면 낸 탭은 서버가 복원했는지 모르고,
- * 커밋이 그 탭의 다시 읽기보다 늦으면 이 신호만이 화면이 낡았다는 것을 안다(`apps/web/build-test/editor-restore-late-commit.test.ts` — 연결을
- * 빼던 판에서는 서버 `원문` · 캔버스 옛 글 · 배너 없음). 낸 탭은 답을 받은 복원을 안전망 스냅샷 id 로 알아보고 넘긴다(`apps/web`의
- * `EditorStore.markRestored`). 대가는 낸 연결마다 프레임 하나다.
+ * 커밋이 그 탭의 다시 읽기보다 늦으면 이 신호만이 화면이 낡았다는 것을 안다(`apps/web/build-test/editor-restore-signal-order.test.ts`
+ * «답을 잃음 · 다시 읽기보다 늦게 커밋» — 연결을 빼던 판에서는 서버 `원문` · 캔버스 옛 글 · 배너 없음). 낸 탭은 답을 받은 복원을 안전망
+ * 스냅샷 id 로 알아보고 넘긴다(`apps/web`의 `EditorStore.markRestored`). 대가는 낸 연결마다 프레임 하나다.
  */
 export function notifyRestored(app: FastifyInstance, input: RestoredInput): void {
   const { clientRestoreId: restoreId, ...frame } = input

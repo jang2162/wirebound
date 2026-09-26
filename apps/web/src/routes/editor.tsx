@@ -611,6 +611,17 @@ function EditorShell(props: {
    * 한 토큰으로 접으면 저 셋을 갈 자리가 없어지고, 재연결마다 트리까지 다시 받게 된다.
    */
   const [restoredToken, setRestoredToken] = useState(0)
+  /**
+   * **이 셸이 선 `reset` 세대**(`EditorStore.resetGeneration`). 셸 안에서 다른 프로젝트로 가면(뒤로 · 앞으로) 라우트는 스토어를 그대로 두고 이
+   * 셸을 내린 뒤 새 셸을 세운다 — 복원 팝오버는 내려간 셸의 콜백을 쥔 채 답을 받는다. 그 콜백이 스토어에 쓰면 산 셸의 판을 바꾼다: 답이
+   * 돌아온 셸의 복원 신호를 넘기고(다시 읽기는 내려간 셸에서 돌아 아무것도 안 한다), 다시 읽기 시작 표시가 다음 프로젝트의 복원 배너를 메뉴 ·
+   * 테마를 다시 읽기 전에 풀게 하고, 답 잃음이 무관한 프로젝트에 «복원됐는지 모릅니다»를 세운다(Chrome:
+   * `apps/web/build-test/editor-restore-signal-order.test.ts` «다른 프로젝트로 갔다 돌아옴» · «그 답이 거기 옴» · «그 답을 거기서 잃음»).
+   * 그래서 복원 콜백과 `reloadAfterRestore`는 세대가 같을 때만 스토어에 쓴다. 거절 콜백은 `reset`이 미뤄 둔 목록을 비운 뒤라 거르지 않아도
+   * 지금은 아무것도 안 바꾼다 — 같은 규칙으로 건다. 보냄(`onRestoreSent`)은 산 셸에서만 나므로 거르지 않는다.
+   */
+  const [shellGeneration] = useState(() => store.resetGeneration())
+  const shellLive = useCallback(() => store.resetGeneration() === shellGeneration, [store, shellGeneration])
   /** 그 신호를 누가 올렸나 — 다시 읽으며 잃은 것을 말할 때의 앞머리다(`CanvasFrame`의 `applyServerPage`). 신호와 함께 바뀐다. */
   const [restoredLead, setRestoredLead] = useState(RESTORED_LEAD)
   /**
@@ -622,12 +633,13 @@ function EditorShell(props: {
    */
   const reloadAfterRestore = useCallback(
     (lead: string) => {
+      if (!shellLive()) return
       store.beginRestoreReread()
       setRestoredLead(lead)
       setRestoredToken((token) => token + 1)
       setThemeReloadToken((token) => token + 1)
     },
-    [store],
+    [store, shellLive],
   )
 
   /**
@@ -759,11 +771,16 @@ function EditorShell(props: {
           onRestoreSent={store.beginOwnRestore}
           onRestored={(clientRestoreId, safetySnapshotId) => {
             // 답의 안전망 스냅샷 id 를 먼저 적는다 — 되돌아오는 내 복원의 신호를 알아보고, 미뤄 둔 신호를 가른다(`EditorStore.ownRestoreAnswered`).
-            store.ownRestoreAnswered(clientRestoreId, safetySnapshotId)
+            // 내려간 셸의 답이면 둘 다 스토어에 안 쓴다(`shellGeneration`).
+            if (shellLive()) store.ownRestoreAnswered(clientRestoreId, safetySnapshotId)
             reloadAfterRestore(RESTORED_LEAD)
           }}
-          onRestoreRefused={store.ownRestoreRefused}
-          onRestoreUnanswered={store.markRestoreUnanswered}
+          onRestoreRefused={(clientRestoreId) => {
+            if (shellLive()) store.ownRestoreRefused(clientRestoreId)
+          }}
+          onRestoreUnanswered={(clientRestoreId) => {
+            if (shellLive()) store.markRestoreUnanswered(clientRestoreId)
+          }}
         />
         {/* **설계서를 내려받는 자리**(설계서 「HTML 정적 번들」). 스냅샷 링크 옆에 두는 것은 둘 다
             *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.

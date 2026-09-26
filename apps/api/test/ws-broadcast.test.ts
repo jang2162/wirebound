@@ -434,7 +434,7 @@ describe('무엇을 알리는가', () => {
 
   /**
    * **복원은 낸 연결도 빼지 않는다**(`ws/notify.ts`의 `notifyRestored`) — 답을 잃은 탭에게는 그 신호만이 서버가 복원했다는 것을 알린다
-   * (`apps/web/build-test/editor-restore-late-commit.test.ts`). 요청이 실은 복원 id 가 프레임으로 되돌아온다. 편집의 방송은 그대로 뺀다
+   * (`apps/web/build-test/editor-restore-signal-order.test.ts` «답을 잃음 · 다시 읽기보다 늦게 커밋»). 요청이 실은 복원 id 가 프레임으로 되돌아온다. 편집의 방송은 그대로 뺀다
    * (위 «자기 편집은 자기에게 돌아오지 않는다»).
    */
   it('연결 id 를 실은 복원도 그 연결에 신호를 보내고, 요청의 복원 id 를 싣는다', async () => {
