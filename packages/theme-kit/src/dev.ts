@@ -23,8 +23,9 @@ function clientDir(): string {
 
 /**
  * 로컬 이름으로 온 요청인가 — `localhost` · `127.0.0.1` · `[::1]`(포트가 붙어도). 셸 미들웨어는 vite 의 Host 검사보다 먼저 걸리므로
- * 스스로 본다. 안 보면 DNS 재바인딩으로 남의 페이지가 같은 출처가 되어 `/__wb/project`(manifest · 설정 이슈)와 SSE 를 읽는다 —
- * vite 가 지키는 `/frame.html` · `/@fs/…` 와 같은 판정이어야 한다.
+ * 스스로 본다. 안 보면 DNS 재바인딩으로 남의 페이지가 같은 출처가 되어 `/__wb/project`(manifest · 설정 이슈)와 SSE 를 읽는다.
+ * 이 판정은 vite 가 `/frame.html` · `/@fs/…` 에 내리는 판정보다 좁다 — `*.localhost` · IP 꼴(`127.0.0.2` · `[0:0::1]`)은 셸만 403
+ * 이고, 대문자(`LOCALHOST`)는 셸만 받는다(브라우저는 Host 를 소문자로 보낸다).
  */
 function isLocalHost(header: string | undefined): boolean {
   if (header === undefined) return false

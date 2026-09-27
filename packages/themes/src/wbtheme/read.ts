@@ -47,12 +47,13 @@ interface CentralEntry {
  * **판정은 fflate 가 실제로 읽는 항목 목록에 맡긴다.** `unzipSync` 의 `filter` 가 늘 거짓을 돌려주면 fflate 는 아무것도 풀지
  * 않고 제가 풀 항목(이름 · 압축 크기 · 원래 크기 · 압축 방식)을 차례로 넘긴다 — 검사하는 목록과 푸는 목록이 같은 코드에서
  * 나온다. 손으로 읽는 중앙 디렉터리는 fflate 가 안 주는 외부 속성(링크 판정)만 얻고, 그 목록이 fflate 의 목록과 이름 ·
- * 차례 · 수까지 같아야 쓴다. 손 판독기가 fflate 와 다른 칸을 읽으면(끝 레코드의 두 항목 수 · zip64 로케이터) 검사한 항목과
+ * 차례 · 수까지 같아야 쓴다. 목록 대조는 외부 속성을 못 견주므로, 두 디렉터리가 이름까지 같은 zip64 판은 로케이터 거절이 혼자
+ * 막는다. 손 판독기가 fflate 와 다른 칸을 읽으면(끝 레코드의 두 항목 수 · zip64 로케이터) 검사한 항목과
  * 푸는 항목이 갈려 검사를 비켜 간 것이 실린다. 그래서 두 칸이 갈리는 zip(두 항목 수가 다름 · 로케이터가 있음)은 받지 않고,
  * 남은 갈림은 목록 대조가 `bad-zip` 으로 막는다.
  *
  * **풀린 크기는 항목마다 `max(압축 크기, 원래 크기)` 로 센다** — fflate 는 stored 항목을 압축 크기로 잘라 싣고(원래 크기는 안
- * 본다) deflate 항목은 원래 크기만큼 버퍼를 잡는다. 한쪽만 세면 다른 쪽을 속인 zip 이 상한을 비켜 간다.
+ * 본다) deflate 항목은 원래 크기만큼 버퍼를 잡는다(`inflateBounded` 도 같다). 한쪽만 세면 다른 쪽을 속인 zip 이 상한을 비켜 간다.
  */
 export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; issues: WbthemeIssue[] } {
   if (bytes.length > WBTHEME_LIMITS.zipBytes) {
