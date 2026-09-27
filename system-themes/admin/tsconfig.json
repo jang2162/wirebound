@@ -2,13 +2,18 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
-    // 빌드 산출물이 없다 — 이 차수의 소비자는 소스를 읽는 vite · vitest 뿐이다(`.wbtheme` 빌드는 A2).
+    // 타입검사만 한다 — `.wbtheme` 는 `wb-theme build` 가 짓고(`package.json` 의 `build`), 웹 · vitest 는 소스를 읽는다.
     "noEmit": true,
     "composite": true,
     "outDir": ".tsbuild",
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src", "test"],
-  "references": [{ "path": "../../packages/theme-sdk" }]
+  "include": ["src", "test", "build-test", "theme.config.ts"],
+  "references": [
+    { "path": "../../packages/theme-sdk" },
+    { "path": "../../packages/schema" },
+    { "path": "../../packages/themes" },
+    { "path": "../../packages/renderer" }
+  ]
 }

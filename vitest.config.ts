@@ -12,8 +12,12 @@ const shared = {
   resolve: {
     alias: {
       '@wirebound/schema': src('./packages/schema/src/index.ts'),
+      // 좁은 것이 먼저다 — 아래 exporter 주석의 규칙.
+      '@wirebound/theme-sdk/runtime': src('./packages/theme-sdk/src/runtime.ts'),
       '@wirebound/theme-sdk': src('./packages/theme-sdk/src/index.ts'),
       '@wirebound/renderer': src('./packages/renderer/src/index.ts'),
+      '@wirebound/theme-gallery': src('./packages/theme-gallery/src/index.ts'),
+      '@wirebound/theme-kit': src('./packages/theme-kit/src/index.ts'),
       '@wirebound/system-theme-admin': src('./system-themes/admin/src/index.ts'),
       '@wirebound/themes': src('./packages/themes/src/index.ts'),
       // **더 좁은 것을 먼저 둔다.** rollup의 alias는 `id === find || id.startsWith(find + '/')`로
@@ -143,7 +147,9 @@ export default defineConfig({
           // **`apps/web/build-test`는 에디터를 실브라우저로 모는 판이다** — 파일마다 일회용 DB · api · vite · Chrome 을 띄우고
           // 거둔다(`editor-stack.ts`). 그 파일들만 돌리는 것이 `pnpm test:browser`다. **Postgres 가 있어야 돈다** — 없으면
           // 건너뛰고 그렇다고 말한다. 포트는 빈 것을 받아 워크트리끼리 안 부딪힌다.
-          include: ['packages/*/build-test/**/*.test.ts', 'apps/*/build-test/**/*.test.ts'],
+          //
+          // `system-themes/*/build-test` 는 시스템 테마를 저장소 빌드(`wb-theme build`)로 `.wbtheme` 로 내고 실어 본다.
+          include: ['packages/*/build-test/**/*.test.ts', 'apps/*/build-test/**/*.test.ts', 'system-themes/*/build-test/**/*.test.{ts,tsx}'],
           // tsdown 재빌드를 beforeAll에서 돈다. 기본 테스트 실행에서 분리한 이유:
           // pnpm test가 PATH의 pnpm과 전체 재빌드에 묶이면 개발 루프가 매번 수십 초씩
           // 느려진다. 이 프로젝트만 `pnpm test:build`로 따로 돌린다.

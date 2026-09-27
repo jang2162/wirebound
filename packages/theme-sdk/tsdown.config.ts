@@ -1,7 +1,8 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // 본 진입과 공유 런타임(`./runtime`). 둘이 한 청크를 나눠 쓰므로 `runtime` 의 `sdk` 가 본 진입의 모듈 그 자체다.
+  entry: ['src/index.ts', 'src/runtime.ts'],
   format: ['esm'],
   dts: true,
   outDir: 'dist',

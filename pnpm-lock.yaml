@@ -299,11 +299,96 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  packages/theme-sdk:
+  packages/theme-gallery:
     dependencies:
+      '@wirebound/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../schema
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../theme-sdk
+    devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.4(@types/react@19.2.18)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(tsx@4.23.5)(typescript@5.9.3)
+
+  packages/theme-kit:
+    dependencies:
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.3(@types/node@26.1.2)(tsx@4.23.5))
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@26.1.2)(tsx@4.23.5)
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.4(@types/react@19.2.18)
+      '@wirebound/renderer':
+        specifier: workspace:*
+        version: link:../renderer
+      '@wirebound/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@wirebound/theme-gallery':
+        specifier: workspace:*
+        version: link:../theme-gallery
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../theme-sdk
+      '@wirebound/themes':
+        specifier: workspace:*
+        version: link:../themes
+      playwright-core:
+        specifier: ^1.62.1
+        version: 1.62.1
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(tsx@4.23.5)(typescript@5.9.3)
+
+  packages/theme-sdk:
     devDependencies:
       '@testing-library/dom':
         specifier: ^10.4.0
@@ -332,6 +417,12 @@ importers:
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../schema
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../theme-sdk
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       zod:
         specifier: ^4.0.0
         version: 4.4.3
@@ -346,9 +437,36 @@ importers:
         specifier: workspace:*
         version: link:../../packages/theme-sdk
     devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.4(@types/react@19.2.18)
+      '@wirebound/renderer':
+        specifier: workspace:*
+        version: link:../../packages/renderer
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../../packages/schema
+      '@wirebound/theme-kit':
+        specifier: workspace:*
+        version: link:../../packages/theme-kit
+      '@wirebound/themes':
+        specifier: workspace:*
+        version: link:../../packages/themes
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
 
 packages:
 

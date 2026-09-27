@@ -9,6 +9,8 @@
     { "path": "./packages/schema/tsconfig.test.json" },
     { "path": "./packages/theme-sdk" },
     { "path": "./packages/renderer" },
+    { "path": "./packages/theme-gallery" },
+    { "path": "./packages/theme-kit" },
     { "path": "./packages/themes" },
     { "path": "./packages/themes/tsconfig.test.json" },
     { "path": "./packages/exporter" },

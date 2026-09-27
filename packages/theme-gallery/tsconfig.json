@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".tsbuild",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "composite": true
+  },
+  "include": ["src", "test"],
+  "references": [{ "path": "../schema" }, { "path": "../theme-sdk" }, { "path": "../renderer" }]
+}

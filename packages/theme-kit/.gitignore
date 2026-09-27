@@ -1,0 +1,2 @@
+# 빌드 케이스가 픽스처를 복사해 두는 자리(`test/build.test.ts` 의 `copyFixture`). 워크스페이스의 `node_modules` 가 보이는 곳이어야 한다.
+.tmp/
