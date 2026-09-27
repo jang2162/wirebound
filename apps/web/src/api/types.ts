@@ -297,8 +297,8 @@ export interface SnapshotSummary {
 }
 
 /**
- * 복원 결과. **화면이 말할 것 넷이 전부 여기 있다** — 바뀐 페이지 수·그대로인 페이지
- * 수·안전망 스냅샷의 태그·테마가 다른지.
+ * 복원 결과. **화면이 말할 것 셋이 전부 여기 있다** — 바뀐 페이지 수·그대로인 페이지
+ * 수·안전망 스냅샷의 태그.
  *
  * **`summary`가 자원마다 갈려 있는 것이 요점이다.** 하나로 접으면 *"12개가 바뀌었습니다"*가
  * 되는데, 사용자가 알고 싶은 것은 *"내 페이지가 몇 개 되돌아갔나"*이지 총합이 아니다.
@@ -316,19 +316,12 @@ export interface RestoreResult {
       deleted: number
     }
     comments: { created: number; updated: number; deleted: number }
-    layouts: { themeRefChanged: number }
   }
   /**
    * 복원 **직전** 상태를 담은 스냅샷. 서버가 자동으로 만든다 — 화면은 *"되돌리려면 이것"*을
    * 가리킬 수 있어야 한다.
    */
   safetySnapshot: { id: string; tag: string }
-  /**
-   * 레이아웃별 테마 보고. **복원은 테마 문서를 되돌리지 않는다**(payload의 테마는
-   * 병합 결과라 그것을 쓰면 파생 테마의 상속이 영구히 사라진다). 참조만 되돌리고, 지금 그
-   * 참조가 내는 모습이 그때와 다르면 `differs`가 `true`다.
-   */
-  themes: Array<{ layoutId: string; themeId: string | null; differs: boolean }>
 }
 
 /**

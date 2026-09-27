@@ -8,7 +8,7 @@
  *
  * # 아래 순서 자체가 규격이다
  *
- * 0. `withTransaction` — **1~9 전부가 그 안에서 돈다**(부분 성공을 만들지 않는다).
+ * 0. `withTransaction` — **1~8 전부가 그 안에서 돈다**(부분 성공을 만들지 않는다).
  * 1. `lockProjectForRestore` — 프로젝트와 네 표를 잠근다. **가장 먼저다.**
  * 2. `findSnapshotById(projectId, snapshotId)` — 없으면 `not-found`(존재를 숨긴다).
  * 3. `payloadVersion > SNAPSHOT_PAYLOAD_VERSION`이면 `payload-version`.
@@ -18,7 +18,6 @@
  * 6. 코멘트 작성자가 아직 있는가 — DB 질문이라 계획이 못 한다.
  * 7. `insertSnapshot` — **여기가 첫 쓰기다.** 태그가 부딪히면 `safety-tag-taken`.
  * 8. 계획의 `steps`를 **순서대로** 실행한다.
- * 9. 테마 비교 보고 — 테마 문서는 되돌리지 않고 다름을 말한다.
  *
  * **1~6은 아무것도 쓰지 않는다.** 그러므로 그 갈래들의 *"이 갈래는 무엇을 되돌리는가"*
  * 에 대한 답은 캡처와 같다: **되돌릴 것이 없다.** 7 이후의 실패는 답이
@@ -36,7 +35,7 @@
  *
  * # 지금 상태를 **안전망 스냅샷의 payload로** 읽는다 — 두 번 읽지 않는다
  *
- * 4단계의 캡처가 이미 다섯 자원을 전부 읽었고 그 결과는 `SnapshotPayload`다. 계획이
+ * 4단계의 캡처가 이미 네 자원을 전부 읽었고 그 결과는 `SnapshotPayload`다. 계획이
  * 필요로 하는 *"지금 상태"*와 **모양이 같으므로** 그것을 그대로 넘긴다.
  *
  * 왕복을 아끼는 것이 이유가 아니다. **안전망이 저장한 것과 계획이 본 것이 같은 값이어야
@@ -69,63 +68,38 @@
  *
  * ---
  *
- * # `fingerprint-mismatch`는 **죽은 갈래가 아니다** — 잠금의 구멍이 그것을 살려 둔다
+ * # `fingerprint-mismatch` — 운영에서 닿는 길은 지금 없다. 그래도 둔다
  *
- * 1단계에서 잠그고 4단계에서 캡처하므로 *"수집 도중 남이 커밋한다"*가 대부분 막힌다.
- * **그런데 하나가 남는다:** 복원은 테마 **행**을 쓰지 않아 그 표를 잠그지 않는데,
- * 지문에는 **담기는 테마가 들어 있다**(`readCaptureFingerprint`의 4번 절). 그래서
- * *"복원이 도는 동안 누가 테마 문서를 고친다"*가 이 갈래를 실제로 낸다.
+ * 1단계에서 잠그고 4단계에서 캡처하므로 *"수집 도중 남이 커밋한다"*가 막힌다. 지문
+ * (`readCaptureFingerprint`)에서 잠금 밖에 남은 조각은 **코멘트 작성자의 이름**(`users.name`)
+ * 하나인데, 그 값을 고치는 라우트가 지금 없다 — 그래서 운영에서 이 갈래에 닿는 길은 0이다.
  *
- * **비율은 이 갈래의 성질이 아니라 *"테마를 얼마나 자주 고치느냐"*의
- * 성질이다** — 파라미터 없이 비율만 적으면 *"드물다"*로 오독된다. 복원 한 판이 도는 동안 테마를 얼마나 자주 커밋하느냐에 **비율이 그대로 따라간다** —
- * 복원 12판씩, 아래 세 조건대로 옆 연결에서 테마 행을 UPDATE 하며 재면:
- *
- * | 조건 | 지문 불일치 |
- * |---|---|
- * | **단발** — 복원을 쏜 뒤 `0~11ms` 사이 한 번만 커밋(판마다 지연을 1ms씩 늘린다) | **4/12** |
- * | **연속** — 복원이 끝날 때까지 UPDATE를 쉬지 않고 돌린다 | **12/12** |
- * | **무관한 테마** — 레이아웃이 **가리키지 않는** 테마를 같은 속도로 고친다 | **0/12** |
- *
- * **셋째 줄이 지문의 범위를 말한다:** 지문의 테마 절은 `layouts`를 조인하므로 **담기는
- * 테마**(= 레이아웃이 가리키는 것)만 본다. 그 밖의 테마를 아무리 고쳐도 복원은 `restored`다.
- *
- * **409는 옳은 결과다** — 이 갈래는 첫 쓰기(안전망 삽입)보다 앞이라 **아무것도 남기지
- * 않는다.** 사용자가 할 일은 다시 시도하는 것이고, 그 사이 테마가 그대로면 통과한다.
- *
- * 레이스라 케이스로 쓸 수 없어 `captureHooks`로 결정적으로 잰다
- * (`test/restore.test.ts`의 `복원 도중 테마가 바뀌면 409다 — 잠금이 막지 못하는 유일한 창`).
- *
- * **그러니 이 갈래를 지우지 마라.** *"잠갔으니 안 난다"*는 테마를 함께 잠그기 전까지 거짓이고,
- * 테마를 잠그는 것은 막힌 일이 아니라 **하지 않기로 한 일**이다(복원이 테마 행을 안 쓰므로).
+ * **그래도 지우지 않는다.** `captureSnapshot`이 이 값을 돌려주는 한 복원은 그것을 다뤄야 하고
+ * (첫 쓰기보다 앞이라 **아무것도 남기지 않는** 409다), 이름을 고치는 길이 생기는 날 이 갈래가
+ * 다시 산다. `captureHooks`로 그 이름을 수집 도중에 고쳐 결정적으로 잰다
+ * (`test/restore.test.ts`의 `복원 도중 코멘트 작성자의 이름이 바뀌면 409다 — 잠금 밖의 지문 조각`).
  *
  * ---
  *
  * # NUL(U+0000) — 검사를 두지 않는다. 이유가 있다
  *
- * *"복원도 NUL 을 400으로 옮기지 않으면 500이 된다"*는 경고는 **복원이 테마 행을 쓸 때만
- * 참이다** — 복원은 테마 문서를 되돌리지 않는다.
- *
- * 남은 질문은 *"payload의 다른 절에 NUL이 있을 수 있는가"*이고 답은 **없다**이다:
- * `snapshots.payload`가 **jsonb**라 NUL이 든 값은 **삽입 시점에 거부된다**(`22P05`).
- * NUL 이 들어갈 수 있는 구멍은 `themes`의 절이 `json`(jsonb가 아니다)이라는 데 있는데,
- * 그 값이 스냅샷으로 넘어갈 때는 다시 jsonb를 만나 `insertSnapshot`의 가드가 400으로
- * 끊는다. 즉 **저장된 payload에는 NUL이 있을 수 없다.**
+ * 질문은 *"payload에 NUL이 있을 수 있는가"*이고 답은 **없다**이다:
+ * `snapshots.payload`가 **jsonb**라 NUL이 든 값은 **삽입 시점에 거부된다**(`22P05` —
+ * `insertSnapshot`의 가드가 그 앞에서 400으로 끊는다). 즉 **저장된 payload에는 NUL이 있을 수 없다.**
  *
  * 그러므로 여기 가드를 두면 **도달 경로가 0인 줄**이 되고, 그런 줄은 근거가 없으면
  * 다음 사람이 지운다. 없는 위험에 가드를 두는 대신 **왜 없는지를 여기 적는다.**
  * 마지막 방벽도 남아 있다: 페이지 문서는 `applyEdit` 8단계가 다시 본다.
  */
-import { canonicalJson } from '../canonical-json'
 import type { DbHandle } from '../db/tx'
 import { withTransaction } from '../db/tx'
 import { deleteComment, insertCommentWithId, writeCommentBody } from '../repos/comments'
-import { updateLayoutTheme } from '../repos/layouts'
 import { deleteMenuNodeRow, insertMenuNodeWithId, writeMenuNodePlacement } from '../repos/menu'
 import { deletePageRow, insertPageWithId, writePagePlacement } from '../repos/pages'
 import { findSnapshotById, insertSnapshot, lockProjectForRestore } from '../repos/snapshots'
 import { countExistingUsers } from '../repos/users'
 import { applyEdit, type EditOutcome } from './edit-pipeline'
-import { captureSnapshot, freezeTheme, type CaptureHooks } from './snapshot-capture'
+import { captureSnapshot, type CaptureHooks } from './snapshot-capture'
 import { planRestore, type RestoreSummary } from './restore-plan'
 import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from '@wirebound/themes'
 import type { UnsupportedVersionPage } from './restore-plan'
@@ -148,19 +122,9 @@ export function restoreActorLabel(tag: string): string {
   return `복원: ${tag}`
 }
 
-/** 응답이 싣는 테마 보고 한 줄. **되돌리지 않고 다름을 말한다.** */
-export interface RestoreThemeReport {
-  layoutId: string
-  /** 복원 뒤 그 레이아웃이 가리키는 테마 id. */
-  themeId: string | null
-  /** payload의 동결본과 지금 그 참조가 내는 병합 결과가 다른가. */
-  differs: boolean
-}
-
 export interface RestoreResult {
   summary: RestoreSummary
   safety: { id: string; tag: string }
-  themes: RestoreThemeReport[]
 }
 
 export type RestoreOutcome =
@@ -218,10 +182,8 @@ export interface RestoreInput {
    * `services/snapshot-capture.ts`의 `CaptureHooks`가 같은 이유로 둔 이음매이고,
    * 여기는 그것을 **그대로 통과시킬 뿐** 새 개념을 만들지 않는다.
    *
-   * **없으면 `fingerprint-mismatch` 갈래를 결정적으로 잴 수 없다.** 복원은 잠그고 나서
-   * 캡처하므로 그 창에 끼어들 수 있는 것이 하나뿐인데(아래), 그 하나를 정확한 지점에 밀어
-   * 넣는 타이밍은 바깥에서 만들 수 없다 — 레이스로 재면 **테마를 고치는 속도에 따라 4/12에서
-   * 12/12까지 흔들린다**(위 머리말의 표).
+   * **없으면 `fingerprint-mismatch` 갈래를 잴 수 없다.** 복원은 잠그고 나서 캡처하므로
+   * 운영에서는 그 창에 끼어드는 길이 없다(위 머리말의 `fingerprint-mismatch` 절).
    */
   captureHooks?: CaptureHooks
 }
@@ -405,30 +367,8 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
           updatedAt: new Date(step.comment.updatedAt),
         })
         break
-      case 'set-layout-theme':
-        await updateLayoutTheme(trx, step.layoutId, step.themeId)
-        break
     }
   }
 
-  // 9단계. **테마는 되돌리지 않고 다름을 말한다.** 얼리는 규칙은 캡처의 것을 그대로
-  // 쓴다 — 두 벌이면 한쪽만 고쳐진다.
-  const frozenByLayout = new Map(target.payload.themes.map((entry) => [entry.layoutId, entry.theme]))
-  const themes: RestoreThemeReport[] = []
-  for (const layout of target.payload.layouts) {
-    const nowTheme = await freezeTheme(trx, layout.themeId)
-    const frozen = frozenByLayout.get(layout.id) ?? null
-    themes.push({
-      layoutId: layout.id,
-      themeId: layout.themeId,
-      // **키 순서는 보지 못한다 — 볼 수 없다.** `snapshots.payload`가 jsonb라 캡처가 무엇을
-      // 담든 저장되는 순간 키가 정렬되고, `themes`의 절은 `json`이라 원문 순서를 들고 있다.
-      // 순서를 보는 비교는 *"항상 다르다"*만 내놓는다(실측: 같은 테마의 `meta`가 한쪽은
-      // `{id,name,version,description}`, 다른 쪽은 `{id,name,description,version}`).
-      // 잃는 것과 되찾으려면 무엇이 필요한지는 `src/canonical-json.ts`에 적었다.
-      differs: canonicalJson(nowTheme ?? null) !== canonicalJson(frozen),
-    })
-  }
-
-  return { summary, safety: { id: safety.id, tag: safety.tag }, themes }
+  return { summary, safety: { id: safety.id, tag: safety.tag } }
 }

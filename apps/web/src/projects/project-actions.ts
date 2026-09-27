@@ -20,7 +20,7 @@
  *
  * **던지지 않는 것이 이 파일의 계약이다.** `tree/tree-actions.ts`와 같은 근거다 — 이 판정은
  * 목록을 그리는 중에 불리는데 **목록은 오류 경계 밖이다**(`apps/web/src`의 경계는 캔버스의
- * `CanvasBoundary`와 테마 갤러리의 `GalleryBoundary`뿐이다). 그래서 모르는 값에도 답을 낸다.
+ * `CanvasBoundary` 하나다). 그래서 모르는 값에도 답을 낸다.
  *
  * **서버가 내는 것**(다시 재는 법: api 하네스로 역할마다 세션을 만들어
  * `PATCH`·`DELETE /projects/:id`를 보낸다):

@@ -20,7 +20,7 @@
  *
  * # 무엇이 "한 시점에 존재한 적 없는 payload"인가 — 이 파일이 고르는 시나리오
  *
- * 수집 순서는 `menu → pages → [여기] → layouts → themes → comments`다. 끼어드는 편집을
+ * 수집 순서는 `menu → pages → [여기] → layouts → comments`다. 끼어드는 편집을
  * **페이지 뒤·코멘트 앞**에 두면 이렇게 갈린다:
  *
  * | payload의 값 | 언제의 것인가 |

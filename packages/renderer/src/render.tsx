@@ -60,7 +60,7 @@ export interface RenderOptions {
   onNodeError?: (error: NodeRenderError) => void
   /**
    * **상호작용 런타임을 켠다**(설계서 「상호작용」의 「실행」). **없으면 꺼진 것이고 그것이 기본이다** —
-   * 이 키를 주지 않은 호출(편집 모드의 캔버스·테마 갤러리·기존 케이스 전부)은 **한 글자도
+   * 이 키를 주지 않은 호출(편집 모드의 캔버스·기존 케이스 전부)은 **한 글자도
    * 다르지 않게** 그려진다.
    *
    * `renderer`가 이것을 소유하는 이유는 `interaction/runtime.ts`의 머리말에 있다 — 요지는

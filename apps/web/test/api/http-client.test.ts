@@ -158,10 +158,8 @@ const restoreResult = {
     menu: { created: 0, updated: 1, deleted: 0 },
     pages: { created: 0, metaUpdated: 0, schemaChanged: 2, schemaUnchanged: 3, deleted: 1 },
     comments: { created: 0, updated: 0, deleted: 0 },
-    layouts: { themeRefChanged: 0 },
   },
   safetySnapshot: { id: 's2', tag: '복원 전 2026-08-12T09:24:30.443Z' },
-  themes: [{ layoutId: 'l1', themeId: 't1', differs: false }],
 }
 
 /** `GET .../export/preview?format=html`의 응답. */
@@ -564,18 +562,17 @@ const SHAPE_CASES: Array<{
     call: (c) => c.listPresets('p1'),
   },
   // --- 복원. ---
-  // **`themes`가 배열이 아니면 막는다** — 결과 알림이 `.some(...)`으로 훑으므로 배열이
-  // 아니면 **렌더 도중 던진다.** 다른 두 값(바뀐 수·안전망 태그)은 이상한 글자가 보일 뿐이라
-  // 손해의 등급이 다르다(`pageDetail`의 `schema.root`가 같은 부류다).
+  // **`summary.pages`가 객체가 아니면 막는다** — 결과 알림이 그 안의 수를 읽으려고 풀어 헤치므로
+  // **렌더 도중 던진다**(`pageDetail`의 `schema.root`가 같은 부류다).
   {
     shape: 'restoreResult',
-    broken: { ...restoreResult, themes: null },
+    broken: { ...restoreResult, summary: { ...restoreResult.summary, pages: null } },
     ok: restoreResult,
     call: (c) => c.restoreSnapshot('p1', 's1'),
   },
   {
     // **`brokenLinks`가 배열이 아니면 화면이 전개하다 던진다** — 이 화면을 감싸는 오류
-    // 경계가 없다(`apps/web`의 경계는 캔버스와 테마 갤러리뿐이다).
+    // 경계가 없다(`apps/web`의 경계는 캔버스 하나다).
     shape: 'exportPreview',
     broken: { ...exportPreview, brokenLinks: null },
     ok: exportPreview,
@@ -823,7 +820,7 @@ describe('createHttpClient', () => {
     // **이것만 화면을 통째로 비운다.** 목록의 `<p>{project.description}</p>`가 그 값을
     // React 자식으로 그리는데, **React가 그리지 못하는 객체가 닿으면** React가
     // `Objects are not valid as a React child`를 던지고 **목록에 오류 경계가 없다**
-    // (`apps/web/src`에서 경계는 캔버스의 `CanvasBoundary`와 테마 갤러리의 `GalleryBoundary`뿐이다).
+    // (`apps/web/src`에서 경계는 캔버스의 `CanvasBoundary` 하나다).
     //
     // **실측(진짜 `<App />`, 계약 밖 값을 관문에 태워 목록까지 보냈다):**
     //

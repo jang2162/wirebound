@@ -150,7 +150,7 @@ export const TOOLS: readonly ToolSpec[] = [
   {
     name: 'validate',
     description:
-      '설계서와 테마에 lint 규칙을 돌리고 결함 목록을 돌려줍니다. 결함이 있는 것은 오류가 아닙니다. ' +
+      '설계서에 lint 규칙을 돌리고 결함 목록을 돌려줍니다. 결함이 있는 것은 오류가 아닙니다. ' +
       '경로를 주면 그 페이지의 결함만 내되 범위 밖에 남은 개수를 함께 말합니다. ' +
       '명명 규칙은 리포의 .wirebound.json 이 정합니다 — 인자로 줄 수 없습니다.',
     inputSchema: { type: 'object', properties: { path: PATH_ARG }, additionalProperties: false },

@@ -34,8 +34,8 @@
  * 않는 이유는 그것이 브라우저 모달이라 케이스가 그 문장을 읽지 못하고, 무엇을 되돌리는지
  * (어느 태그인지)를 화면에 붙여 보여 줄 수도 없기 때문이다.
  *
- * **결과가 말할 것 넷:** 바뀐 페이지 수 · **그대로인 페이지 수** · 안전망 스냅샷의 태그 ·
- * 테마가 다르면 그 사실. 둘째가 빠지면 *"0개가 바뀌었습니다"*가 **아무 일도 안 일어난 것**과
+ * **결과가 말할 것 셋:** 바뀐 페이지 수 · **그대로인 페이지 수** · 안전망 스냅샷의 태그.
+ * 둘째가 빠지면 *"0개가 바뀌었습니다"*가 **아무 일도 안 일어난 것**과
  * **전부 그대로였던 것**을 구분하지 못한다.
  *
  * ---
@@ -335,17 +335,13 @@ function SnapshotsBody(props: {
 }
 
 /**
- * 복원 결과. **머리말 «복원»의 «결과가 말할 것 넷»을 한 자리에서 말한다.**
+ * 복원 결과. **머리말 «복원»의 «결과가 말할 것 셋»을 한 자리에서 말한다.**
  *
  * `role="status"`다 — 실패가 아니므로 `alert`이 아니고, 그래도 스크린리더가 읽어야 한다
  * (프로젝트 전체가 방금 바뀌었다).
- *
- * **테마는 다를 때만 말한다.** 같을 때도 *"테마는 그대로입니다"*를 붙이면 매번 보이는 줄이
- * 되어 다를 때의 신호가 묻힌다 — 복원이 되돌리지 **않은** 것을 알리는 자리이기 때문이다.
  */
 function RestoreNotice(props: { tag: string; result: RestoreResult }): ReactElement {
   const { pages } = props.result.summary
-  const themesDiffer = props.result.themes.some((theme) => theme.differs)
 
   return (
     <div className="wb-shell-snapshots-restored" role="status">
@@ -357,11 +353,6 @@ function RestoreNotice(props: { tag: string; result: RestoreResult }): ReactElem
       <p className="wb-shell-snapshots-restored-line">
         되돌리기 전 상태는 “{props.result.safetySnapshot.tag}”에 저장했습니다.
       </p>
-      {themesDiffer ? (
-        <p className="wb-shell-snapshots-restored-line">
-          테마는 스냅샷 당시와 다릅니다. 복원은 테마 문서를 되돌리지 않습니다.
-        </p>
-      ) : null}
     </div>
   )
 }

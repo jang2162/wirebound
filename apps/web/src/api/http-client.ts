@@ -657,18 +657,16 @@ function isComment(value: unknown): boolean {
 /**
  * 복원 결과의 모양.
  *
- * **여기서 보는 것이 화면이 실제로 읽는 값이다.** 그 밖(자원별 세부 수, `themes[].layoutId`)은
+ * **여기서 보는 것이 화면이 실제로 읽는 값이다.** 그 밖(자원별 세부 수)은
  * 보지 않는다 — 이 표의 관례대로 **오늘 읽는 것의 상위집합**만 본다.
  *
  * | 읽는 값 | 그 값이 되는 것 | 어겼을 때 |
  * |---|---|---|
  * | `summary.pages.schemaChanged`·`schemaUnchanged` | 결과 알림의 **숫자** | `undefined`가 문장에 그대로 그려진다 |
  * | `safetySnapshot.tag` | 결과 알림의 *"되돌리려면 …"* 문장 | 같은 부류 |
- * | `themes` | 배열을 `.some(...)`으로 훑는다 | 배열이 아니면 **렌더 도중 던진다** |
  *
- * **셋째가 이 검사를 두는 이유다.** 앞의 둘은 이상한 글자가 보일 뿐이지만, `themes`가
- * 배열이 아니면 `.some`이 없어 결과 알림을 그리다 통째로 죽는다 — `pageDetail`의
- * `schema.root`가 같은 부류다(*"캔버스가 `root.children`을 읽다 렌더 도중 던진다"*).
+ * **`summary.pages`가 객체가 아니면 결과 알림을 그리다 통째로 죽는다** — 그 안의 수를 읽으려고
+ * 먼저 풀어 헤친다. `pageDetail`의 `schema.root`가 같은 부류다(*"캔버스가 `root.children`을 읽다 렌더 도중 던진다"*).
  *
  * **`safetySnapshot.id`는 빈 문자열까지 막지 않는다** — 이 화면은 그 값을 주소에 넣지
  * 않는다(태그만 글자로 그린다). 주소가 되는 값만 빈 문자열을 막는 것이 이 표의 규칙이다.
@@ -682,8 +680,7 @@ function isRestoreResult(value: unknown): boolean {
     return false
   }
   const safety = value['safetySnapshot']
-  if (!isRecord(safety) || typeof safety['tag'] !== 'string') return false
-  return Array.isArray(value['themes'])
+  return isRecord(safety) && typeof safety['tag'] === 'string'
 }
 
 /** 스냅샷 하나의 모양. 목록·생성이 같은 것을 쓴다 — 서버의 `toSummaryResponse` 하나가 둘을 만든다. */

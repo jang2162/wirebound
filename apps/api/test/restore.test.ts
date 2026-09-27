@@ -67,10 +67,8 @@ interface RestoreBody {
     menu: { created: number; updated: number; deleted: number }
     pages: { created: number; metaUpdated: number; schemaChanged: number; schemaUnchanged: number; deleted: number }
     comments: { created: number; updated: number; deleted: number }
-    layouts: { themeRefChanged: number }
   }
   safetySnapshot: { id: string; tag: string }
-  themes: Array<{ layoutId: string; themeId: string | null; differs: boolean }>
 }
 
 async function addComment(ctx: TestContext, fx: Fixture, body: string, pageId = fx.page.id, nodeId = fx.nodeId) {
@@ -635,72 +633,17 @@ describe('FK 순서가 DB에서도 참인가', () => {
   })
 })
 
-describe('테마', () => {
-  it('테마 행을 건드리지 않고 참조만 되돌린다', async () => {
+describe('응답', () => {
+  /** 복원은 레이아웃에 아무것도 쓰지 않는다 — 응답도 레이아웃 · 테마를 말하지 않는다. */
+  it('응답은 summary · safetySnapshot 둘뿐이고 summary 에 레이아웃 칸이 없다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       const id = await snapshot(ctx, fx, 'v1')
 
-      const layout = await ctx.db
-        .selectFrom('layouts')
-        .select(['id', 'theme_id'])
-        .where('project_id', '=', fx.project.id)
-        .executeTakeFirstOrThrow()
-      const themesBefore = await ctx.db.selectFrom('themes').select(['id', 'updated_at']).execute()
+      const body = (await restore(ctx, fx, id)).json() as Record<string, Record<string, unknown>>
 
-      // 참조를 떼어 놓는다.
-      await ctx.db.updateTable('layouts').set({ theme_id: null }).where('id', '=', layout.id).execute()
-
-      const body = (await restore(ctx, fx, id)).json() as RestoreBody
-
-      expect(body.summary.layouts.themeRefChanged).toBe(1)
-      const after = await ctx.db.selectFrom('layouts').select('theme_id').where('id', '=', layout.id).executeTakeFirst()
-      expect(after?.theme_id).toBe(layout.theme_id)
-      // 테마 **행**은 그대로다 — 복원이 문서를 되돌리지 않는다.
-      const themesAfter = await ctx.db.selectFrom('themes').select(['id', 'updated_at']).execute()
-      expect(themesAfter).toEqual(themesBefore)
-    })
-  })
-
-  it('지금 테마가 동결본과 다르면 응답이 말한다 — 되돌리지는 않는다', async () => {
-    await withApi(async (ctx) => {
-      const fx = await fixture(ctx)
-      const id = await snapshot(ctx, fx, 'v1')
-
-      const layout = await ctx.db
-        .selectFrom('layouts')
-        .select(['id', 'theme_id'])
-        .where('project_id', '=', fx.project.id)
-        .executeTakeFirstOrThrow()
-      // 그 레이아웃이 가리키는 테마 문서를 바꾼다(시스템 테마라 라우트로는 못 고친다 — 설계서 「테마 관리」).
-      await ctx.db
-        .updateTable('themes')
-        .set({ tokens: sql`'{"semantic":{"primary":"#123456"}}'::json` })
-        .where('id', '=', layout.theme_id)
-        .execute()
-
-      const body = (await restore(ctx, fx, id)).json() as RestoreBody
-
-      expect(body.themes).toHaveLength(1)
-      expect(body.themes[0]).toMatchObject({ layoutId: layout.id, themeId: layout.theme_id, differs: true })
-      // 되돌리지 않았다 — 파생 테마의 상속을 평탄화하는 것은 복원이 아니라 파괴다.
-      const theme = await ctx.db
-        .selectFrom('themes')
-        .select('tokens')
-        .where('id', '=', layout.theme_id)
-        .executeTakeFirst()
-      expect(JSON.stringify(theme?.tokens)).toContain('#123456')
-    })
-  })
-
-  it('같으면 differs가 false다 — 음성 대조', async () => {
-    await withApi(async (ctx) => {
-      const fx = await fixture(ctx)
-      const id = await snapshot(ctx, fx, 'v1')
-
-      const body = (await restore(ctx, fx, id)).json() as RestoreBody
-
-      expect(body.themes.map((entry) => entry.differs)).toEqual([false])
+      expect(Object.keys(body).sort()).toEqual(['safetySnapshot', 'summary'])
+      expect(Object.keys(body.summary!).sort()).toEqual(['comments', 'menu', 'pages'])
     })
   })
 })
@@ -759,7 +702,6 @@ describe('막는 갈래 — 오류 표', () => {
         .values({
           project_id: fx.project.id,
           name: '두 번째 레이아웃',
-          theme_id: null,
           schema: JSON.stringify({ version: 1, root: { id: 'n_l', type: 'Page', children: [] } }),
         })
         .execute()
@@ -914,26 +856,17 @@ describe('막는 갈래 — 오류 표', () => {
   /**
    * **`fingerprint-mismatch` 갈래.** 이 케이스가 없으면 이 갈래를 지우는 변이가 산다.
    *
-   * 잠금이 대부분을 막는데도 이 갈래가 살아 있는 이유는 **복원이 테마 표를 잠그지 않기**
-   * 때문이다(테마 **행**을 쓰지 않으므로). 그런데 지문에는 담기는 테마가 들어 있다.
-   * 그래서 *"복원이 도는 동안 누가 테마를 고친다"*가 실제로 이 갈래를 낸다.
-   *
-   * **레이스로 재면 성패가 테마를 고치는 속도를 따라간다**: 복원을 쏜 뒤 한 번만
-   * 커밋하면 **가끔**, 복원이 끝날 때까지 쉬지 않고 고치면 **늘** 이 갈래가 서고, 레이아웃이
-   * **가리키지 않는** 테마를 고치면 **안 선다**(지문의 테마 절이 `layouts`를 조인한다). 그래서
-   * 레이스는 케이스가 될 수 없고, `captureHooks`로 결정적으로 만든다.
+   * 복원은 잠그고 나서 캡처하므로 운영에서 이 갈래에 닿는 길은 지금 없다 — 지문에서 잠금 밖에 남은 조각은 코멘트
+   * 작성자의 이름(`users.name`) 하나이고 그것을 고치는 라우트가 없다(`services/restore.ts` 머리말). 그 이름을
+   * `captureHooks`로 수집 도중에 고쳐 결정적으로 만든다.
    *
    * **끼어드는 자리가 `afterPages`인 것이 요점이다** — 수집의 한가운데여야 두 지문이 갈린다.
    */
-  it('복원 도중 테마가 바뀌면 409다 — 잠금이 막지 못하는 유일한 창', async () => {
+  it('복원 도중 코멘트 작성자의 이름이 바뀌면 409다 — 잠금 밖의 지문 조각', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
+      await addComment(ctx, fx, '작성자 이름이 지문에 든다')
       const id = await snapshot(ctx, fx, 'v1')
-      const layout = await ctx.db
-        .selectFrom('layouts')
-        .select(['id', 'theme_id'])
-        .where('project_id', '=', fx.project.id)
-        .executeTakeFirstOrThrow()
 
       const outcome = await restoreSnapshot(ctx.db, {
         projectId: fx.project.id,
@@ -941,11 +874,7 @@ describe('막는 갈래 — 오류 표', () => {
         actorId: fx.owner.user.id,
         captureHooks: {
           afterPages: async () => {
-            await ctx.db
-              .updateTable('themes')
-              .set({ tokens: sql`'{"semantic":{"primary":"#123456"}}'::json` })
-              .where('id', '=', layout.theme_id)
-              .execute()
+            await ctx.db.updateTable('users').set({ name: '바뀐 이름' }).where('id', '=', fx.owner.user.id).execute()
           },
         },
       })
@@ -1075,7 +1004,6 @@ describe('부분 성공을 만들지 않는다', () => {
         .values({
           project_id: fx.project.id,
           name: '두 번째 레이아웃',
-          theme_id: null,
           schema: JSON.stringify({ version: 1, root: { id: 'n_l', type: 'Page', children: [] } }),
         })
         .execute()

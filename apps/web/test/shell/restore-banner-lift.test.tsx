@@ -85,10 +85,8 @@ function restoreResult(safety: string): RestoreResult {
       menu: { created: 0, updated: 0, deleted: 0 },
       pages: { created: 0, metaUpdated: 0, schemaChanged: 1, schemaUnchanged: 0, deleted: 0 },
       comments: { created: 0, updated: 0, deleted: 0 },
-      layouts: { themeRefChanged: 0 },
     },
     safetySnapshot: { id: safety, tag: '복원 전' },
-    themes: [],
   }
 }
 

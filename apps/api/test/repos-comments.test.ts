@@ -1,6 +1,6 @@
 /**
  * `repos/comments.ts` — 라우트를 지나지 않고 저장소를 직접 재는 자리
- * (`repos-layouts.test.ts`·`repos-themes.test.ts`와 같은 배치).
+ * (`repos-layouts.test.ts`와 같은 배치).
  *
  * **여기서만 잴 수 있는 것 둘:**
  *

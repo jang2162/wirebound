@@ -62,7 +62,7 @@ export interface ApiErrorIssue {
   code?: string
   /**
    * `'error'`(저장을 막았다) 또는 `'warning'`(막지 않았다). `@wirebound/schema`의
-   * `ValidationIssue`와 `@wirebound/themes`의 `ThemeIssue`가 둘 다 이 필드를 갖는다.
+   * `ValidationIssue`가 이 필드를 갖는다.
    * **422 응답에는 경고까지 함께 싣는다** — 받는 쪽이 이 필드로 가른다.
    * `http/parse.ts`가 zod 이슈에서 만드는 이슈에는 없다(그 층은 severity를 모른다).
    */

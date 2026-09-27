@@ -208,7 +208,7 @@ export function projectGuard(min: ProjectRole): preHandlerHookHandler {
 /**
  * **커밋 순간의 권한으로 판정한다**. 쓰기 트랜잭션 **안에서**, 그 쓰기가 기다릴 수 있는
  * 잠금을 **잡은 뒤에** 부른다 — 페이지 잠금 · 프로젝트 잠금(트리 쓰기의 첫 잠금 · `repos/projects.ts`의
- * `lockProjectShared`) 뒤, 또는 기다림이 쓰는 문장(FK 삽입 · `UPDATE projects` · 테마 행 · RI 검사)에서 나면 그
+ * `lockProjectShared`) 뒤, 또는 기다림이 쓰는 문장(FK 삽입 · `UPDATE projects` · RI 검사)에서 나면 그
  * 쓰기 뒤. 재확인 **뒤**에 기다림이 남는 자리(코멘트 수정의 코멘트 행)는 멤버 행을 `FOR SHARE`로 쥔 채 기다리므로
  * 그 사이의 강등이 이 커밋을 기다린다 — 판정이 커밋 순간의 것으로 남는다. 가드(`projectGuard`)가 핸들러 앞에서
  * 한 번 본 것을 그 자리에서 다시 본다.

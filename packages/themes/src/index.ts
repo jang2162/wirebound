@@ -102,7 +102,6 @@ export { lintProject } from './lint/project'
 export type {
   SnapshotComment,
   SnapshotLayout,
-  SnapshotLayoutTheme,
   SnapshotMenuNode,
   SnapshotPage,
   SnapshotPayload,

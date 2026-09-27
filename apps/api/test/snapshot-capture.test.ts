@@ -1,23 +1,21 @@
 /**
  * `services/snapshot-capture.ts` — 얼리는 쪽.
  *
- * 여기서 재는 것 넷:
+ * 여기서 재는 것 셋:
  *
- * 1. 다섯 자원이 실제로 담기고 **겹layer는 담기지 않는다**.
- * 2. 테마가 **병합된 결과**로 얼려진다 — `ThemeSchema`를 통과하고 `extends`가 남지 않는다.
- * 3. 저장된 문서를 **마이그레이션하지 않고** 그대로 담는다.
- * 4. 지문이 어긋나면 **값으로** 실패하고 **아무것도 쓰지 않는다**.
+ * 1. 네 자원이 실제로 담기고 **겹layer는 담기지 않는다**.
+ * 2. 저장된 문서를 **마이그레이션하지 않고** 그대로 담는다.
+ * 3. 지문이 어긋나면 **값으로** 실패하고 **아무것도 쓰지 않는다**.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sql } from 'kysely'
-import { ThemeSchema, systemTheme } from '@wirebound/themes'
 import { CURRENT_DOCUMENT_VERSION } from '@wirebound/schema'
 import { captureSnapshot } from '../src/services/snapshot-capture'
 import { SNAPSHOT_PAYLOAD_VERSION, SNAPSHOT_RESOURCES } from '@wirebound/themes'
 import { listSnapshots } from '../src/repos/snapshots'
 import { createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
-/** 현실적인 프로젝트 하나 — 메뉴 둘·페이지 둘·코멘트 하나·기본 레이아웃·시스템 테마. */
+/** 현실적인 프로젝트 하나 — 메뉴 둘·페이지 둘·코멘트 하나·기본 레이아웃. */
 async function realisticProject(ctx: TestContext) {
   const owner = await signup(ctx)
   const project = await createProject(ctx, owner.cookie)
@@ -44,39 +42,13 @@ async function realisticProject(ctx: TestContext) {
   return { owner, project, rootMenu, childMenu, first, second, rootNodeId }
 }
 
-/** 파생 테마를 만들어 프로젝트의 기본 레이아웃에 건다. 상속 대상은 시스템 `admin`이다. */
-async function chooseDerivedTheme(ctx: TestContext, fx: Awaited<ReturnType<typeof realisticProject>>) {
-  const created = await ctx.app.inject({
-    method: 'POST',
-    url: `/api/projects/${fx.project.id}/themes`,
-    cookies: fx.owner.cookie,
-    payload: {
-      theme: {
-        meta: { id: 'derived', name: '파생 테마', version: '1.0.0', extends: 'system:admin' },
-        tokens: { semantic: { primary: '#ff0000' } },
-      },
-    },
-  })
-  if (created.statusCode !== 201) throw new Error(`테마 픽스처 실패 (${created.statusCode}): ${created.body}`)
-  const themeId = (created.json() as { id: string }).id
-
-  const chosen = await ctx.app.inject({
-    method: 'PUT',
-    url: `/api/projects/${fx.project.id}/theme`,
-    cookies: fx.owner.cookie,
-    payload: { themeId },
-  })
-  if (chosen.statusCode !== 200) throw new Error(`테마 선택 실패 (${chosen.statusCode}): ${chosen.body}`)
-  return themeId
-}
-
 function captured(outcome: Awaited<ReturnType<typeof captureSnapshot>>) {
   if (outcome.kind !== 'captured') throw new Error(`캡처가 실패했다: ${outcome.kind}`)
   return outcome.payload
 }
 
-describe('다섯 자원을 담는다', () => {
-  it('메뉴·페이지·레이아웃·테마·코멘트가 전부 실린다', async () => {
+describe('네 자원을 담는다', () => {
+  it('메뉴·페이지·레이아웃·코멘트가 전부 실린다', async () => {
     await withApi(async (ctx) => {
       const fx = await realisticProject(ctx)
 
@@ -86,7 +58,6 @@ describe('다섯 자원을 담는다', () => {
       expect(payload.menu.map((node) => node.title)).toEqual(['설정', '사용자 관리'])
       expect(payload.pages.map((page) => page.title)).toEqual(['사용자 목록', '사용자 상세'])
       expect(payload.layouts).toHaveLength(1)
-      expect(payload.themes).toHaveLength(1)
       expect(payload.comments.map((comment) => comment.body)).toEqual(['이 목록은 페이지네이션이 필요하다'])
     })
   })
@@ -94,7 +65,7 @@ describe('다섯 자원을 담는다', () => {
   /**
    * **겹layer는 없다.** 규격이 `z.strictObject`라 선언되지 않은 절은 파싱에서
    * 죽지만, 그것은 *"실리면 죽는다"*이지 *"실릴 자리가 없다"*는 아니다. 이 케이스는
-   * **만들어진 payload의 키**를 세어 그 자리가 실제로 다섯인지 본다.
+   * **만들어진 payload의 키**를 세어 그 자리가 실제로 넷인지 본다.
    */
   it('payload의 키가 규격이 선언한 것뿐이다 — 겹layer가 없다', async () => {
     await withApi(async (ctx) => {
@@ -145,97 +116,6 @@ describe('다섯 자원을 담는다', () => {
       expect(payload.comments).toEqual([])
       // 빈 프로젝트에도 기본 레이아웃은 있다(`insertProject`가 만든다).
       expect(payload.layouts).toHaveLength(1)
-    })
-  })
-})
-
-describe('테마를 병합된 결과로 얼린다', () => {
-  it('테마를 고르지 않았으면 null이다 — 실패가 아니다', async () => {
-    await withApi(async (ctx) => {
-      const fx = await realisticProject(ctx)
-      await ctx.app.inject({
-        method: 'PUT',
-        url: `/api/projects/${fx.project.id}/theme`,
-        cookies: fx.owner.cookie,
-        payload: { themeId: null },
-      })
-
-      const payload = captured(await captureSnapshot(ctx.db, fx.project.id))
-
-      expect(payload.themes).toHaveLength(1)
-      expect(payload.themes[0]!.themeId).toBeNull()
-      expect(payload.themes[0]!.theme).toBeNull()
-    })
-  })
-
-  it('시스템 테마는 그대로 얼린다', async () => {
-    await withApi(async (ctx) => {
-      const fx = await realisticProject(ctx)
-
-      const payload = captured(await captureSnapshot(ctx.db, fx.project.id))
-
-      // 프로젝트를 만들면 기본 레이아웃이 시스템 `admin`을 가리킨다(`repos/projects.ts`).
-      expect(payload.themes[0]!.theme?.meta.id).toBe(systemTheme('admin')!.meta.id)
-    })
-  })
-
-  /** 병합 결과가 `ThemeSchema`를 통과하는가. */
-  it('파생 테마의 병합 결과가 ThemeSchema를 통과한다', async () => {
-    await withApi(async (ctx) => {
-      const fx = await realisticProject(ctx)
-      await chooseDerivedTheme(ctx, fx)
-
-      const payload = captured(await captureSnapshot(ctx.db, fx.project.id))
-
-      const frozen = payload.themes[0]!.theme
-      expect(frozen).not.toBeNull()
-      expect(ThemeSchema.safeParse(frozen).success).toBe(true)
-    })
-  })
-
-  /**
-   * **`extends`가 남아 있지 않은가.** 남아 있으면 payload가 자기완결이 아니고 *"병합된
-   * 결과로 얼린다"*가 거짓이 된다(설계서 「스냅샷」의 *"참조만 저장하면 …"*).
-   *
-   * **두 층으로 잰다.** `meta.extends`가 없는지와, 문서 전체를 직렬화했을 때 그 문자열이
-   * 어디에도 없는지. 앞쪽만 보면 절 어딘가에 남은 참조를 놓친다.
-   */
-  it('병합 결과에 extends가 남지 않는다', async () => {
-    await withApi(async (ctx) => {
-      const fx = await realisticProject(ctx)
-      await chooseDerivedTheme(ctx, fx)
-
-      const payload = captured(await captureSnapshot(ctx.db, fx.project.id))
-
-      const frozen = payload.themes[0]!.theme!
-      expect(Object.hasOwn(frozen.meta, 'extends')).toBe(false)
-      expect(JSON.stringify(frozen)).not.toContain('extends')
-    })
-  })
-
-  it('파생이 덮어쓴 값이 병합 결과에 살아 있다 — 얼린 것이 base가 아니다', async () => {
-    await withApi(async (ctx) => {
-      const fx = await realisticProject(ctx)
-      await chooseDerivedTheme(ctx, fx)
-
-      const payload = captured(await captureSnapshot(ctx.db, fx.project.id))
-
-      const frozen = payload.themes[0]!.theme!
-      expect(frozen.tokens?.semantic?.['primary']).toBe('#ff0000')
-      // base의 다른 절이 함께 내려왔다 — 병합이 실제로 일어났다는 증거다.
-      expect(frozen.primitives).toBeDefined()
-    })
-  })
-
-  it('themeId도 함께 남는다 — 복원이 그 행이 아직 있는지 물을 수 있어야 한다', async () => {
-    await withApi(async (ctx) => {
-      const fx = await realisticProject(ctx)
-      const themeId = await chooseDerivedTheme(ctx, fx)
-
-      const payload = captured(await captureSnapshot(ctx.db, fx.project.id))
-
-      expect(payload.themes[0]!.themeId).toBe(themeId)
-      expect(payload.themes[0]!.layoutId).toBe(payload.layouts[0]!.id)
     })
   })
 })
@@ -449,38 +329,6 @@ describe('지문이 어긋나면 값으로 실패한다', () => {
             payload: { title: '환경설정' },
           })
           if (res.statusCode !== 200) throw new Error(`메뉴 수정 실패 (${res.statusCode}): ${res.body}`)
-        },
-      })
-
-      expect(outcome.kind).toBe('fingerprint-mismatch')
-    })
-  })
-
-  /**
-   * **여기도 시각 기반 지문으로는 못 잡는다** — `updateTheme`이 `updated_at`을 `now()`
-   * (=트랜잭션 시작 시각)로 쓰는데 하네스가 테스트 하나를 트랜잭션 하나로 감싸므로 그 값이
-   * 얼어 있다. 운영에서는 요청마다 트랜잭션이 갈려 움직이지만, **잴 수 없는 방어는 다음
-   * 사람이 지운다.** 내용 지문은 하네스에서도 잡힌다.
-   */
-  it('수집 도중 테마가 바뀌면 지문 불일치다', async () => {
-    await withApi(async (ctx) => {
-      const fx = await realisticProject(ctx)
-      const themeId = await chooseDerivedTheme(ctx, fx)
-
-      const outcome = await captureSnapshot(ctx.db, fx.project.id, {
-        afterPages: async () => {
-          const res = await ctx.app.inject({
-            method: 'PUT',
-            url: `/api/projects/${fx.project.id}/themes/${themeId}`,
-            cookies: fx.owner.cookie,
-            payload: {
-              theme: {
-                meta: { id: 'derived', name: '파생 테마', version: '1.0.1', extends: 'system:admin' },
-                tokens: { semantic: { primary: '#0000ff' } },
-              },
-            },
-          })
-          if (res.statusCode !== 200) throw new Error(`테마 수정 실패 (${res.statusCode}): ${res.body}`)
         },
       })
 

@@ -72,7 +72,7 @@ import { badRequest, conflict, notFound, unauthenticated, validationFailed, type
 // `http/warnings.ts`에 있는 것과 같은 이유다.
 import { editOutcomeToApiError } from '../http/edit-outcome'
 import { parseBody, parseParams } from '../http/parse'
-// **`http/warnings.ts`에 둔다** — `routes/themes.ts`도 같은 것을 쓴다.
+// **`http/warnings.ts`에 둔다** — 아래 세 응답이 같은 것을 쓴다.
 import { withWarnings } from '../http/warnings'
 import { OpsBody } from '../http/patch-ops'
 import { lockConflictError } from '../lock/check'
@@ -324,7 +324,7 @@ export function pageRoutes() {
      *
      * **`editor`다.** 설계서 「권한 모델」이 editor에게 *"메뉴·페이지·컴포넌트·코멘트·상호작용 편집"*을
      * 열었고 가져오기는 **페이지를 만드는 것**이므로 `POST .../pages`와 같은 등급이다.
-     * 테마·레이아웃처럼 프로젝트 전체를 한 번에 바꾸지 않는다.
+     * 레이아웃처럼 프로젝트 전체를 한 번에 바꾸지 않는다.
      *
      * **덮지 않는다** — 언제나 **새 페이지**다:
      * *"`planRestore`는 payload 상태로 수렴시키고 가져오기는 삽입이다."*

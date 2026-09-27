@@ -19,7 +19,6 @@ const PAGE_B = '55555555-5555-4555-8555-555555555555'
 const COMMENT_A = '66666666-6666-4666-8666-666666666666'
 const COMMENT_B = '77777777-7777-4777-8777-777777777777'
 const LAYOUT_A = '88888888-8888-4888-8888-888888888888'
-const THEME_A = '99999999-9999-4999-8999-999999999999'
 const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 /**
@@ -46,7 +45,6 @@ function payload(over: Partial<SnapshotPayload> = {}): SnapshotPayload {
     menu: [],
     pages: [],
     layouts: [],
-    themes: [],
     comments: [],
     ...over,
   }
@@ -257,25 +255,16 @@ describe('메뉴·페이지·코멘트의 변경 판정', () => {
 
 describe('레이아웃', () => {
   it('레이아웃 id 집합이 다르면 계획을 내지 않는다 (409)', () => {
-    const p = payload({ layouts: [{ id: LAYOUT_A, name: 'L', themeId: null, schema: doc('x') as never }] })
+    const p = payload({ layouts: [{ id: LAYOUT_A, name: 'L', schema: doc('x') as never }] })
     const c = current({ layouts: [] })
 
     const outcome = planRestore(p, c)
     expect(outcome.kind).toBe('layout-mismatch')
   })
 
-  it('참조가 다르면 참조만 되돌린다 — 테마 행은 건드리지 않는다', () => {
-    const p = payload({ layouts: [{ id: LAYOUT_A, name: 'L', themeId: THEME_A, schema: doc('x') as never }] })
-    const c = current({ layouts: [{ id: LAYOUT_A, themeId: null }] })
-
-    const plan = planOf(p, c)
-    expect(kinds(plan.steps)).toEqual(['set-layout-theme'])
-    expect(plan.summary.layouts.themeRefChanged).toBe(1)
-  })
-
-  it('참조가 같으면 아무것도 하지 않는다', () => {
-    const p = payload({ layouts: [{ id: LAYOUT_A, name: 'L', themeId: THEME_A, schema: doc('x') as never }] })
-    const c = current({ layouts: [{ id: LAYOUT_A, themeId: THEME_A }] })
+  it('레이아웃 id 집합이 같으면 레이아웃은 아무 단계도 내지 않는다', () => {
+    const p = payload({ layouts: [{ id: LAYOUT_A, name: 'L', schema: doc('x') as never }] })
+    const c = current({ layouts: [{ id: LAYOUT_A }] })
     expect(kinds(planOf(p, c).steps)).toEqual([])
   })
 })
@@ -428,7 +417,6 @@ describe('요약이 세는 것', () => {
       menu: { created: 1, updated: 0, deleted: 1 },
       pages: { created: 1, metaUpdated: 0, schemaChanged: 1, schemaUnchanged: 0, deleted: 0 },
       comments: { created: 1, updated: 0, deleted: 1 },
-      layouts: { themeRefChanged: 0 },
     })
   })
 })

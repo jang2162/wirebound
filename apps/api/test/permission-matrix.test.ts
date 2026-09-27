@@ -5,7 +5,6 @@ import type { ProjectRole } from '../src/db/types'
 import { insertApiToken } from '../src/repos/api-tokens'
 import { insertPreset } from '../src/repos/presets'
 import { insertSnapshot } from '../src/repos/snapshots'
-import { insertTheme } from '../src/repos/themes'
 import { captureSnapshot } from '../src/services/snapshot-capture'
 import { SNAPSHOT_PAYLOAD_VERSION } from '@wirebound/themes'
 import { type GuardedRoute, guardMinOf, routeCensus } from './guarded-routes'
@@ -35,7 +34,7 @@ interface Case {
    * 주체의 것으로 만들어야 하는 케이스가 있기 때문이다 — 코멘트 수정은 **작성자만** 할 수
    * 있어서(`routes/comments.ts` 머리말의 「남의 코멘트를 고칠 수 있는가」), owner가 만든 코멘트를
    * editor가 고치려 하면 **권한과 무관한 이유로** 403이 된다. 그러면 이 매트릭스가
-   * 재려는 것(역할 판정)을 못 잰다 — `테마하나`가 시스템 테마를 피하는 것과 같은 이유다.
+   * 재려는 것(역할 판정)을 못 잰다.
    *
    * `anonymous`에게는 주체가 없으므로 owner의 id가 온다. 그 행은 어차피 인증 훅에서
    * 끝나므로(401) 누구의 것인지가 결과를 바꾸지 않는다.
@@ -153,20 +152,6 @@ const 코멘트하나 = async (
 }
 
 /**
- * ':themeId'가 필요한 케이스(테마 조회·수정·삭제)가 실행 전에 대상 테마를 만든다.
- *
- * **시스템 테마를 쓰지 않는다.** 그것은 owner도 수정할 수 없어(설계서 「테마 관리」) 수정·삭제 행이
- * 권한과 무관한 이유로 403이 되고, 그러면 이 매트릭스가 재려는 것(역할 판정)을 못 잰다.
- */
-const 테마하나 = async (
-  ctx: TestContext,
-  projectId: string,
-  _ownerCookie: { wb_session: string },
-): Promise<Record<string, string>> => ({
-  themeId: (await insertTheme(ctx.db, projectId, { meta: { id: 'target', name: '대상 테마', version: '1.0.0' } })).id,
-})
-
-/**
  * ':snapshotId'가 필요한 케이스(스냅샷 조회)가 실행 전에 대상 스냅샷을 만든다.
  *
  * **API가 아니라 repo로 넣는다** — `코멘트하나`와 같은 이유다: 픽스처가 검사 대상
@@ -190,7 +175,6 @@ const 스냅샷하나 = async (
         menu: [],
         pages: [],
         layouts: [],
-        themes: [],
         comments: [],
       },
       createdBy: actorUserId,
@@ -238,10 +222,10 @@ const 프리셋하나 = async (
 /**
  * ':snapshotId'가 필요한 **복원** 케이스가 실행 전에 대상 스냅샷을 만든다.
  *
- * **`스냅샷하나`를 재사용하지 않는다 — 그것으로는 이 행이 못 선다.** 그쪽 payload는 다섯
+ * **`스냅샷하나`를 재사용하지 않는다 — 그것으로는 이 행이 못 선다.** 그쪽 payload는 네
  * 절이 전부 빈 최소본인데, 프로젝트를 만들면 **기본 레이아웃이 하나 생긴다**(`insertProject`).
  * 그래서 복원이 레이아웃 개수 불일치로 **409**를 내고, 허용된 역할(owner)이 4xx가 아님을
- * 보는 판정이 **권한과 무관한 이유로** 무너진다(`테마하나`가 시스템 테마를 피하는 것과 같은 자리).
+ * 보는 판정이 **권한과 무관한 이유로** 무너진다.
  *
  * 그래서 **지금 상태를 실제로 캡처해** 넣는다 — 복원이 아무것도 바꾸지 않는 판이 되어
  * 이 행이 재려는 것(역할 판정)만 남는다.
@@ -319,7 +303,7 @@ const CASES: Case[] = [
   {
     // **설계서 「권한 모델」의 표에 가져오기가 없다.** 등급의 근거는 `routes/pages.ts`의
     // 그 핸들러 주석에 있다 — 가져오기는 **페이지를 만드는 것**이므로 바로 위
-    // `페이지 생성`과 같은 등급이다. 테마·레이아웃처럼 프로젝트 전체를 한 번에 바꾸지 않는다.
+    // `페이지 생성`과 같은 등급이다. 레이아웃처럼 프로젝트 전체를 한 번에 바꾸지 않는다.
     //
     // **허용된 역할이 실제로 성공해야 한다** — `menuNodeId`가 진짜여야 하고(아니면 404),
     // 파일이 봉투·카탈로그를 지나야 한다(아니면 400/422). 그래서 `setup`이 만든 메뉴 id를
@@ -430,61 +414,7 @@ const CASES: Case[] = [
   },
   { label: '트리 조회', method: 'GET', url: '/api/projects/:projectId/tree', allowed: ['owner', 'editor', 'viewer'] },
   {
-    // **캔버스가 부르는 유일한 테마 엔드포인트다**(`apps/web`의 `useProjectTheme`).
-    // 이 줄이 빠지면 권한 가드를 **아예 없애도**(과소 차단) **owner 전용으로 좁혀도**
-    // (과도 차단) api 스위트의 어떤 케이스도 죽지 않는다 — 양방향 모두 이 줄만 잰다.
-    label: '프로젝트의 현재 테마',
-    method: 'GET',
-    url: '/api/projects/:projectId/theme',
-    allowed: ['owner', 'editor', 'viewer'],
-  },
-  {
-    // **테마를 고르는 것은 owner 전용이다**(설계서 「권한 모델」 — 테마 편집과 같은 등급). 페이지·메뉴가
-    // editor까지 허용하는 것과 다른 이유: 이 한 번의 호출이 그 프로젝트의 **모든 화면**을
-    // 바꾼다.
-    //
-    // **`{ themeId: null }`을 보낸다.** 이 행이 재는 것은 역할 판정이지 고르기의 내용이
-    // 아니다 — 실제 테마 id를 실으려면 `setup`이 필요하고, 그러면 그 픽스처가 깨질 때
-    // 권한과 무관한 이유로 이 행 전체가 무너진다(페이지 ops 행과 같은 판단이다).
-    label: '프로젝트 테마 고르기',
-    method: 'PUT',
-    url: '/api/projects/:projectId/theme',
-    payload: { themeId: null },
-    allowed: ['owner'],
-  },
-  { label: '테마 목록', method: 'GET', url: '/api/projects/:projectId/themes', allowed: ['owner', 'editor', 'viewer'] },
-  {
-    label: '테마 조회',
-    method: 'GET',
-    url: '/api/projects/:projectId/themes/:themeId',
-    allowed: ['owner', 'editor', 'viewer'],
-    setup: 테마하나,
-  },
-  {
-    // **테마 편집은 owner 전용이다**(설계서 「권한 모델」·「테마 관리」) — 페이지·메뉴가 editor까지 허용하는 것과 다르다.
-    label: '테마 생성',
-    method: 'POST',
-    url: '/api/projects/:projectId/themes',
-    payload: { theme: { meta: { id: 'new-theme', name: '새 테마', version: '1.0.0' } } },
-    allowed: ['owner'],
-  },
-  {
-    label: '테마 수정',
-    method: 'PUT',
-    url: '/api/projects/:projectId/themes/:themeId',
-    payload: { theme: { meta: { id: 'target', name: '바뀐 테마', version: '2.0.0' } } },
-    allowed: ['owner'],
-    setup: 테마하나,
-  },
-  {
-    label: '테마 삭제',
-    method: 'DELETE',
-    url: '/api/projects/:projectId/themes/:themeId',
-    allowed: ['owner'],
-    setup: 테마하나,
-  },
-  {
-    // **스냅샷 생성은 editor다**(설계서 「권한 모델」 — *"editor: … 스냅샷 생성 (복원 불가)"*). 테마 고르기가
+    // **스냅샷 생성은 editor다**(설계서 「권한 모델」 — *"editor: … 스냅샷 생성 (복원 불가)"*). 복원이
     // owner인 것과 갈리는 이유: 스냅샷은 아무것도 바꾸지 않는다. 지금 상태를 적어 둘 뿐이다.
     //
     // **태그를 행마다 다르게 하지 않는다.** 각 행이 `withApi`로 새 프로젝트를 만들고
@@ -531,7 +461,7 @@ const CASES: Case[] = [
   {
     // **설계서 「권한 모델」의 표에 프리셋이 없다.** 등급의 근거는
     // `routes/presets.ts`의 머리말에 있다 — editor의 *"페이지 편집"*을 돕는 도구이지
-    // 테마·레이아웃처럼 프로젝트 전체 외형을 한 번에 바꾸는 것이 아니다.
+    // 레이아웃처럼 프로젝트 전체 외형을 한 번에 바꾸는 것이 아니다.
     label: '프리셋 목록',
     method: 'GET',
     url: '/api/projects/:projectId/presets',
@@ -635,8 +565,7 @@ function expectedRejection(actor: Actor): number {
  * **표가 라우트를 하나도 빠뜨리지 않는다.**
  *
  * 표에서 빠진 라우트는 권한 가드를 **아예 없애도**(과소 차단) **owner 전용으로 좁혀도**
- * (과도 차단) **0건도 죽지 않는다** — 캔버스가 부르는 유일한 테마 엔드포인트
- * `GET /:projectId/theme`도 예외가 아니다.
+ * (과도 차단) **0건도 죽지 않는다**.
  *
  * *"새 라우트를 만들면 이 표에 등록한다"*를 사람의 기억에 맡기면 하나가 빠져도 아무도
  * 모른다. 세는 것을 실행으로 옮기면 빠지지 않는다.

@@ -22,7 +22,6 @@ export const PAGE_DETAIL = '20000000-0000-4000-8000-000000000002'
 export const PAGE_LANDING = '20000000-0000-4000-8000-000000000003'
 
 export const LAYOUT = '30000000-0000-4000-8000-000000000001'
-export const THEME_ROW = '40000000-0000-4000-8000-000000000001'
 const COMMENT = '50000000-0000-4000-8000-000000000001'
 const AUTHOR = '60000000-0000-4000-8000-000000000001'
 
@@ -69,7 +68,7 @@ function 빈문서(): unknown {
  */
 export function snapshotPayload(over: Partial<SnapshotPayload> = {}): SnapshotPayload {
   return {
-    payloadVersion: 1,
+    payloadVersion: 2,
     capturedAt: '2026-08-16T00:00:00.000Z',
     menu: [
       { id: MENU_ADMIN, parentId: null, title: '관리자', sortOrder: 0 },
@@ -81,8 +80,7 @@ export function snapshotPayload(over: Partial<SnapshotPayload> = {}): SnapshotPa
       page(PAGE_DETAIL, MENU_MEMBER, '상세', 1, 빈문서(), null),
       page(PAGE_LANDING, MENU_MARKETING, '랜딩', 0, 빈문서(), null),
     ],
-    layouts: [{ id: LAYOUT, name: '기본', themeId: THEME_ROW, schema: 빈문서() as never }],
-    themes: [{ layoutId: LAYOUT, themeId: THEME_ROW, theme: null }],
+    layouts: [{ id: LAYOUT, name: '기본', schema: 빈문서() as never }],
     comments: [
       {
         id: COMMENT,

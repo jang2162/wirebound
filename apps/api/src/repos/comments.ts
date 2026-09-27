@@ -1,6 +1,6 @@
 /**
  * 코멘트 저장소. SQL만 안다 — HTTP도 zod도 편집 파이프라인도 이 파일 밖의 일이다
- * (`repos/layouts.ts`·`repos/themes.ts`와 같은 관례). API가 주고받는 키는 camelCase,
+ * (`repos/layouts.ts`와 같은 관례). API가 주고받는 키는 camelCase,
  * DB 컬럼은 snake_case이고 그 변환은 이 파일이 전담한다.
  *
  * **번호(`marker`)는 여기 없다.** 그것은 페이지 문서의 노드가 들고, 바꾸는
@@ -19,9 +19,7 @@
  *
  * **NUL(U+0000)을 여기서 막는다.**
  *
- * `repos/themes.ts`와 **같은 자리이지만 원인이 다르다.** 그쪽은 절 컬럼이 `json`이라
- * DB가 삽입 시점에 안 막고 나중에 텍스트를 뽑을 때 죽는다. 여기 `body`는 `text`라
- * **DB가 삽입 시점에 막는다** — 다만 그것은 `pg` 드라이버가 던지는 raw 예외라
+ * 여기 `body`는 `text`라 **DB가 삽입 시점에 막는다** — 다만 그것은 `pg` 드라이버가 던지는 raw 예외라
  * `http/error-handler.ts`가 **500**으로 낸다. 사용자가 보내온 글자 때문에 나는 실패는
  * 500(서버가 잘못했다)이 아니라 400이어야 하므로, 그 예외가 나기 전에 여기서 끊는다.
  * `routes/pages.ts`가 `PUT .../schema`에서 같은 이유로 파이프라인보다 먼저 검사하는 것과
@@ -61,8 +59,8 @@ export class CommentNulByteError extends Error {
 
 /**
  * `comments`에서 뽑는 컬럼. **`users.name`은 여기 없다** — 조인 별칭이라 아래
- * `selectComments`가 따로 붙인다. 목록을 상수로 두는 것은 `repos/layouts.ts`·
- * `repos/themes.ts`와 같은 관례다(읽는 자리가 셋이라 흩어지면 하나만 낡는다).
+ * `selectComments`가 따로 붙인다. 목록을 상수로 두는 것은 `repos/layouts.ts`와 같은 관례다(읽는 자리가 셋이라 흩어지면
+ * 하나만 낡는다).
  */
 const COMMENT_COLUMNS = [
   'comments.id',
@@ -272,8 +270,7 @@ export async function countNodeComments(db: DbHandle, pageId: string, nodeId: st
  * **삽입과 조회가 두 문장인 것은 조인 때문이다.** `RETURNING`은 삽입한 테이블의 컬럼만
  * 낼 수 있어 `users.name`을 함께 받을 수 없다. 라우트가 아는 `currentUser.name`을 그대로
  * 실어 한 문장으로 줄일 수도 있지만, 그러면 **읽기 경로와 쓰기 경로가 이름을 서로 다른
- * 곳에서 얻게 되고** 둘이 갈리는 날 아무도 모른다 — 이 파일이 조립을 독점하는 이유
- * (`repos/themes.ts`의 머리말)와 같다.
+ * 곳에서 얻게 되고** 둘이 갈리는 날 아무도 모른다 — 이 파일이 조립을 독점하는 이유다.
  */
 export async function insertComment(
   db: DbHandle,
@@ -342,7 +339,7 @@ export async function insertImportedComments(
 /**
  * 본문을 고친다. 없으면 `null`이다.
  *
- * **`updated_at`을 함께 갱신한다** — `repos/pages.ts`·`repos/themes.ts`가 같은 자리에서
+ * **`updated_at`을 함께 갱신한다** — `repos/pages.ts`가 같은 자리에서
  * `now()`를 쓰는데 여기는 `clock_timestamp()`다(0008의 주석과 같은 이유: 한 트랜잭션
  * 안에서 두 번 고치면 `now()`는 같은 값이라 "언제 고쳤나"가 사라진다).
  */

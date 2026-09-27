@@ -738,21 +738,4 @@ describe('exportProjectBundle', () => {
       expect(bundle.themeId).toBeNull()
     })
   })
-
-  it('테마를 벗긴 프로젝트도 번들이 나온다', async () => {
-    await withApi(async (ctx) => {
-      const fixture = await 설계서(ctx, '설계서 하나', 'one')
-      const res = await ctx.app.inject({
-        method: 'PUT',
-        url: `/api/projects/${fixture.projectId}/theme`,
-        cookies: fixture.cookie,
-        payload: { themeId: null },
-      })
-      expect(res.statusCode).toBe(200)
-
-      const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
-      expect(bundle.themeId).toBeNull()
-      expect(pageFiles(bundle.files)).toHaveLength(4)
-    })
-  })
 })

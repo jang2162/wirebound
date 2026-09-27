@@ -1,6 +1,5 @@
 import type { ColumnType, Generated, JSONColumnType } from 'kysely'
 import type { LayoutDocument, PageDocument, PatchOp, WbNode } from '@wirebound/schema'
-import type { ThemeAssets, ThemeComponent, ThemePattern, ThemePrimitives, ThemeTokens } from '@wirebound/themes'
 import type { SnapshotPayload } from '@wirebound/themes'
 
 /**
@@ -125,49 +124,9 @@ export interface RevisionsTable {
 }
 
 /**
- * 테마(`0006-themes`). 테마 문서(설계서 「테마 규격」의 여섯 절)를 **절마다 컬럼 하나**로 쪼갠 것이다.
- * `meta`는 컬럼으로 흩어진다 — `meta.id`는 `slug`, `meta.extends`는 `extends_ref`,
- * 나머지는 각 컬럼이다. 다시 `Theme` 모양으로 조립하는 것은 `repos/themes.ts`다.
+ * 레이아웃(`0007-layouts`). **`Slot`을 담는 최소본이다** — 편집 화면이 없으므로 쓰기는 생성뿐이다.
  *
- * **절 다섯은 `jsonb`가 아니라 `json` 컬럼이다.** 근거는 `0006-themes.ts`의 주석에 있다
- * (요지: `jsonb`가 키 순서를 정규화하는데 `compileTheme`의 계약이 문서 키 순서다).
- * TS 타입은 `JSONColumnType<…>`으로 같다 — 그 타입은 "삽입은 문자열, 조회는 파싱된
- * 객체"라는 **비대칭**을 나타낼 뿐 컬럼이 json인지 jsonb인지를 담지 않고, `pg` 드라이버가
- * 두 OID를 똑같이 `JSON.parse`한다.
- *
- * `| null`이 붙은 것은 **절이 없는 것과 빈 것을 가르기 위해서다** — `patterns`가 없는
- * 테마와 `patterns: {}`인 테마는 서로 다른 문서이고, 그 구분이 왕복에서 살아야 한다
- * (`repos-themes.test.ts`가 고정한다).
- */
-export interface ThemesTable {
-  id: Generated<string>
-  /** `null`이면 시스템 테마다(설계서 「테이블 정의」·「테마 관리」 — 읽기 전용, 코드가 진실이다). */
-  project_id: string | null
-  /** `meta.id`. `(project_id, slug)`가 유일하다(NULLS NOT DISTINCT). */
-  slug: string
-  name: string
-  description: string | null
-  /** `meta.extends`. `system:<id>` 문자열이고 FK가 아니다(0006의 주석 참고). */
-  extends_ref: string | null
-  version: string
-  /** `meta.preview`. 없으면 저장이 그 필드를 지운다(`0006-themes.ts`의 주석 참고). */
-  preview: string | null
-  tokens: JSONColumnType<ThemeTokens> | null
-  primitives: JSONColumnType<ThemePrimitives> | null
-  components: JSONColumnType<Record<string, ThemeComponent>> | null
-  patterns: JSONColumnType<Record<string, ThemePattern>> | null
-  assets: JSONColumnType<ThemeAssets> | null
-  created_at: Generated<Date>
-  updated_at: Generated<Date>
-}
-
-/**
- * 레이아웃(`0007-layouts`). **참조를 나르고 `Slot`을 담는 최소본이다** —
- * 편집 화면이 없으므로 쓰기는 생성과 테마 교체(`repos/layouts.ts`의 `updateLayoutTheme`)뿐이다.
- *
- * `schema`는 `jsonb`다. **`themes`의 절이 `json`인 것과 갈리는데 근거가 있다** —
- * 순서 계약이 걸리는 것은 테마의 절뿐이고, 노드 트리의 순서는 `children` 배열이
- * 나르므로 `jsonb`도 보존한다(0007의 주석 참고). `pages.schema`와 같은 선택이다.
+ * `schema`는 `jsonb`다 — 노드 트리의 순서는 `children` 배열이 나르므로 `jsonb`도 보존한다. `pages.schema`와 같은 선택이다.
  *
  * `schema_version` 컬럼이 없다 — 설계서 「테이블 정의」의 `layouts` 목록에 없고 버전은 봉투 안에 있다.
  */
@@ -175,8 +134,6 @@ export interface LayoutsTable {
   id: Generated<string>
   project_id: string
   name: string
-  /** `null`이면 테마를 고르지 않았다(`0007-layouts.ts` 머리말). `themes.id`를 `ON DELETE RESTRICT`로 참조한다. */
-  theme_id: string | null
   schema: JSONColumnType<LayoutDocument>
   created_at: Generated<Date>
   updated_at: Generated<Date>
@@ -325,7 +282,6 @@ export interface Database {
   menu_nodes: MenuNodesTable
   pages: PagesTable
   revisions: RevisionsTable
-  themes: ThemesTable
   layouts: LayoutsTable
   comments: CommentsTable
   comment_tombstones: CommentTombstonesTable

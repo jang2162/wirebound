@@ -183,13 +183,11 @@ export interface WithRealApiOptions {
 /**
  * 실커밋 하네스가 쓰는 청소. **`withApi`(롤백 하네스)를 쓰는 파일은 부르지 않는다.**
  *
- * `projects` 삭제가 `menu_nodes`·`pages`·`revisions`·`comments`·`snapshots`·`presets`·
- * 프로젝트 테마까지 CASCADE로 데려가고, `users` 삭제가 `sessions`를 데려간다.
- * **TRUNCATE가 아니다** — 그 명령은 테이블 전체에 ACCESS EXCLUSIVE 잠금을 잡으므로
- * 시스템 테마처럼 프로젝트에 매이지 않은 행까지 지우거나(`themes`), 같은 DB를 보는 다른
- * 커넥션을 이유 없이 세운다. 두 줄의 DELETE로 이 부류의 파일이 만드는 것이 전부 가고
- * 시스템 테마만 남는다는 것은 `real-api-harness.test.ts`가 실제로 세어 고정한다 —
- * 그 파일에 후보 셋을 가른 표도 있다.
+ * `projects` 삭제가 `menu_nodes`·`pages`·`revisions`·`comments`·`snapshots`·`presets`까지
+ * CASCADE로 데려가고, `users` 삭제가 `sessions`를 데려간다.
+ * **TRUNCATE가 아니다** — 그 명령은 테이블 전체에 ACCESS EXCLUSIVE 잠금을 잡아 같은 DB를 보는 다른
+ * 커넥션을 이유 없이 세운다. 두 줄의 DELETE로 이 부류의 파일이 만드는 것이 전부 간다는 것은
+ * `real-api-harness.test.ts`가 실제로 세어 고정한다 — 그 파일에 후보 셋을 가른 표도 있다.
  */
 export async function resetRealData(): Promise<void> {
   const db = getTestDb()

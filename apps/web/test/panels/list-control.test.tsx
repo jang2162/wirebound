@@ -5,8 +5,8 @@
  * `panels/controls/list-control.tsx`에 있다.
  *
  * **케이스 `배열이 아닌 값이면 빈 목록으로 시작한다`가 이 파일의 방어선이다.** 속성 패널은
- * 캔버스의 오류 경계 **밖**이라(`apps/web/src`의 경계는 캔버스의 `CanvasBoundary`와 테마
- * 갤러리의 `GalleryBoundary`뿐이고 속성 패널은 어느 쪽 안에도 없다) 여기서 던지면 셸 전체가 흰 화면이 된다.
+ * 캔버스의 오류 경계 **밖**이라(`apps/web/src`의 경계는 캔버스의 `CanvasBoundary` 하나이고
+ * 속성 패널은 그 안에 없다) 여기서 던지면 셸 전체가 흰 화면이 된다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'

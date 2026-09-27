@@ -152,12 +152,11 @@ function pullIo(): FakeIo {
   stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, {
     status: 200,
     body: {
-      payloadVersion: 1,
+      payloadVersion: 2,
       capturedAt: '2026-08-16T00:00:00.000Z',
       menu: [],
       pages: [],
       layouts: [],
-      themes: [],
       comments: [],
     },
   })

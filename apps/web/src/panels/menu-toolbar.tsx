@@ -7,7 +7,7 @@
  * 단축키 같은 다른 입구가 자기 조건을 따로 갖게 된다.
  *
  * **이 파일은 오류 경계 밖이다** — 메뉴 트리와 같은 자리다. `apps/web/src`의 오류
- * 경계는 캔버스의 `CanvasBoundary`와 테마 갤러리의 `GalleryBoundary`뿐이고 이 툴바는 어느 쪽 안에도
+ * 경계는 캔버스의 `CanvasBoundary` 하나이고 이 툴바는 그 안에
  * 없어(다시 세는 법: `rg -l getDerivedStateFromError apps/web/src`), 던지면 `.wb-shell`이 통째로
  * DOM에서 사라진다. 여기서 부르는 것들은 값으로 답해야 한다.
  */

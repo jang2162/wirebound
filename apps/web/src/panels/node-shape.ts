@@ -11,7 +11,7 @@
  * 안에 그려질 상자다). 여기 있는 것은 같은 판정을 글자로 옮기는 두 줄이다.
  *
  * **왜 이것이 필요한가.** 두 패널은 오류 경계 **밖**이다 — 에디터 셸 안의
- * 경계는 `canvas/canvas.tsx`의 `CanvasBoundary` 하나다(`GalleryBoundary`는 테마 갤러리 몫). 그래서 여기서 React가
+ * 경계는 `canvas/canvas.tsx`의 `CanvasBoundary` 하나다. 그래서 여기서 React가
  * 렌더 도중 던지면 캔버스만이 아니라 **`.wb-shell`이 통째로 DOM에서 사라진다**(실측:
  * `type`이 객체인 노드를 심으면 `Objects are not valid as a React child`로 셸이 사라진다.
  * 그 실측을 케이스로 옮긴 것이 `test/panels/structure-tree.test.tsx`·

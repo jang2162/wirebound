@@ -132,8 +132,8 @@
  *
  * ## 이 패널은 오류 경계 밖이다
  *
- * `apps/web/src`의 오류 경계는 캔버스의 `CanvasBoundary`와 테마 갤러리의 `GalleryBoundary`뿐이고
- * 이 패널은 어느 쪽 안에도 없다. 그래서 여기서 예외가
+ * `apps/web/src`의 오류 경계는 캔버스의 `CanvasBoundary` 하나이고
+ * 이 패널은 그 안에 없다. 그래서 여기서 예외가
  * 새면 셸 전체가 흰 화면이 된다 — `panels/property-panel.tsx`가 같은 이유로 `nodeType`
  * 가드를 들고 있다. 이 파일이 그리는 값은 전부 문자열이고(모양 가드가
  * `api/http-client.ts`의 `SHAPES.comment`에서 이미 끊는다), 문서 순회는 던지지 않는

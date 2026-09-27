@@ -37,8 +37,8 @@ async function main(): Promise<void> {
     await listen(config, db)
   } catch (error) {
     // **빈 DB 로 죽은 것이면 그렇게 말한다**. 워크트리마다 컨테이너를 띄우면
-    // **빈 볼륨으로 뜨는 것이 정상 경로**가 되는데, 원문은 `relation "themes" does not exist`
-    // 라 사람이 *"설계서가 사라졌다"* 로 읽는다. 데이터는 다른 이름의 볼륨에 있다.
+    // **빈 볼륨으로 뜨는 것이 정상 경로**가 되는데, 원문(`relation … does not exist` 따위)은
+    // 사람이 *"설계서가 사라졌다"* 로 읽는다. 데이터는 다른 이름의 볼륨에 있다.
     // 문구를 만드는 자는 `describe-schema-state.ts` 이고 그쪽에 자가 있다 — 이 길은
     // 부팅이 실패해야만 지나므로 케이스가 여기 못 닿는다(같은 판정: `missing-database-hint.ts`).
     // 빈 DB 는 대개 위 `assertSchemaVersion`이 먼저 멈춘다 — 여기는 그때 마이그레이션 표를 못 읽은 판이다.

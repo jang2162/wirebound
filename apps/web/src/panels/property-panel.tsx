@@ -457,8 +457,8 @@ function formatValue(value: unknown): string {
 /**
  * 마지막 수단의 서식. **`JSON.stringify`는 던진다** — 순환 참조와 `BigInt`가 그렇다.
  *
- * 이 패널은 오류 경계 **밖**이다(`apps/web/src`의 경계는 캔버스의 `CanvasBoundary`와
- * 테마 갤러리의 `GalleryBoundary`뿐이다). 그래서 여기서 예외가 새면 캔버스만 무너지는 것이 아니라 셸 전체가
+ * 이 패널은 오류 경계 **밖**이다(`apps/web/src`의 경계는 캔버스의 `CanvasBoundary`
+ * 하나다). 그래서 여기서 예외가 새면 캔버스만 무너지는 것이 아니라 셸 전체가
  * 흰 화면이 된다. 위쪽의 `nodeType` 가드가 같은 이유로 있다(`./node-shape.ts`).
  *
  * **지금은 던질 수 없다.** 스토어에 문서를 싣는 것은 `store.loadPage(…)` **하나이고**,

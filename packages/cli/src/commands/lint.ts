@@ -32,8 +32,8 @@
  *
  * # 검사에서 빠진 것을 **말한다**
  *
- * `snapshotToLintInput`이 낸 `notes`를 그대로 낸다. 테마를 안 고른 레이아웃 · 상속이 끊긴
- * 파생 테마 · 레이아웃이 둘이라 안 돈 ⑪ — 전부 *"결함 0건"*으로 위장하면 안 되는 것들이다.
+ * `snapshotToLintInput`이 낸 `notes`를 그대로 낸다. 못 올린 문서 버전 · 메뉴를 잃은 페이지 — 전부
+ * *"결함 0건"*으로 위장하면 안 되는 것들이다.
  */
 import type { LintIssue } from '@wirebound/schema'
 import type { SnapshotLintNote } from '@wirebound/themes'

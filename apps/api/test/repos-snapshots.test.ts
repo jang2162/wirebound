@@ -4,7 +4,7 @@
  * **payload를 손으로 짓는다.** 캡처(`services/snapshot-capture.ts`)를 지나지 않는 것이
  * 의도다 — 이 파일이 재는 것은 *"행 하나가 어떻게 들어가고 나오는가"*이고, 캡처가 무엇을
  * 담는지는 `snapshot-capture.test.ts`가 잰다. 둘을 섞으면 저장소 케이스가 캡처의 실패로
- * 함께 죽는다(`repos-themes.test.ts`가 `resolveTheme`을 지나지 않는 것과 같은 자리).
+ * 함께 죽는다.
  */
 import { describe, expect, it } from 'vitest'
 import { Kysely, PostgresDialect, sql } from 'kysely'
@@ -29,7 +29,7 @@ import { TEST_DATABASE_URL, createProject, signup, withApi, type TestContext } f
 
 const NUL = String.fromCharCode(0)
 
-/** 규격을 만족하는 최소 payload. 자원 다섯이 전부 비어 있다. */
+/** 규격을 만족하는 최소 payload. 자원 넷이 전부 비어 있다. */
 function emptyPayload(overrides?: Partial<SnapshotPayload>): SnapshotPayload {
   return {
     payloadVersion: SNAPSHOT_PAYLOAD_VERSION,
@@ -37,7 +37,6 @@ function emptyPayload(overrides?: Partial<SnapshotPayload>): SnapshotPayload {
     menu: [],
     pages: [],
     layouts: [],
-    themes: [],
     comments: [],
     ...overrides,
   }
@@ -55,11 +54,11 @@ describe('payload 규격', () => {
   })
 
   /**
-   * *"payload에 담기는 것은 다섯이고 겹layer는 없다."* **분모를 손으로 적지
+   * *"payload에 담기는 것은 넷이고 겹layer는 없다."* **분모를 손으로 적지
    * 않는다**: 규격의 shape에서 자원 이름을 뽑아 센다(`SNAPSHOT_RESOURCES`).
    */
-  it('자원은 다섯이고 겹layer가 없다', () => {
-    expect([...SNAPSHOT_RESOURCES].sort()).toEqual(['comments', 'layouts', 'menu', 'pages', 'themes'])
+  it('자원은 넷이고 겹layer가 없다', () => {
+    expect([...SNAPSHOT_RESOURCES].sort()).toEqual(['comments', 'layouts', 'menu', 'pages'])
   })
 
   it('선언되지 않은 절(겹layer 등)은 그 자체로 거부된다', () => {
@@ -126,7 +125,7 @@ describe('insertSnapshot', () => {
   /**
    * **태그는 프로젝트 안에서 유일하다.** 실패가 `withTransaction`의 세이브포인트
    * 안에서 나므로 **호출자의 트랜잭션이 살아남는다** — 그 뒤에 무언가를 더 확인할 수 있는
-   * 것이 그 증거다(`repos/themes.ts`의 `insertTheme`와 같은 자리).
+   * 것이 그 증거다.
    */
   it('같은 프로젝트에 같은 태그를 두 번 넣으면 유니크 위반이다', async () => {
     await withApi(async (ctx) => {
@@ -451,7 +450,7 @@ describe('readCaptureFingerprint', () => {
    * **지문이 덮는 테이블은 payload가 담는 자원과 하나씩 맞물린다.** 하나라도 빠지면 그
    * 자원의 변화가 수집 도중에 일어나도 지문이 침묵한다.
    */
-  it('빈 프로젝트라도 다섯 테이블을 전부 낸다', async () => {
+  it('빈 프로젝트라도 네 테이블을 전부 낸다', async () => {
     await withApi(async (ctx) => {
       const { project } = await fixture(ctx)
 
@@ -460,7 +459,7 @@ describe('readCaptureFingerprint', () => {
         unknown
       >
 
-      expect(Object.keys(parsed).sort()).toEqual(['comments', 'layouts', 'menu_nodes', 'pages', 'themes'])
+      expect(Object.keys(parsed).sort()).toEqual(['comments', 'layouts', 'menu_nodes', 'pages'])
     })
   })
 })
