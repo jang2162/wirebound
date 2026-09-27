@@ -33,18 +33,77 @@ const COLOR_NAMES = new Set(
 )
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
-const COLOR_FN = /^(?:rgb|rgba|hsl|hsla)\(\s*[-+0-9.%\s,/a-z]+\)$/i
+/** 괄호 안은 수 · `%` · `,` · 공백 · `/` 뿐 — 글자를 받으면 `var(` · `url(` 같은 다른 함수가 들어온다. */
+const COLOR_FN = /^(?:rgb|rgba|hsl|hsla)\([-+0-9.%\s,/]+\)$/i
 const LENGTH = /^(?:0|-?\d+(?:\.\d+)?(?:px|rem|em|%|vh|vw))$/
-/** CSS 선언을 끝내거나 블록을 열고 닫거나 `</style>` 을 여는 글자. 값 하나가 규칙 밖으로 새는 길이다. */
-const CSS_BREAKERS = /[;{}<]/
 
 /**
- * 토큰 값 하나가 그 타입에 맞는지. 맞으면 `null`, 아니면 이유 한 문장.
+ * 글꼴 이름 하나 — 짝이 맞는 따옴표 문자열(안에 따옴표 · `\` · 줄바꿈 · `<` 가 없다), 또는 글자 · 숫자 · `_` · `-` 로 된 낱말들.
+ * `<` 를 따옴표 안에서도 막는 것은 `</style>` 이 CSS 문자열과 무관하게 HTML 의 `<style>` 을 닫기 때문이다.
+ */
+const FONT_FAMILY = String.raw`(?:"[^"\\\r\n<]+"|'[^'\\\r\n<]+'|[\p{L}\p{N}_-]+(?:[ \t]+[\p{L}\p{N}_-]+)*)`
+const FONT_LIST = new RegExp(String.raw`^\s*${FONT_FAMILY}(?:\s*,\s*${FONT_FAMILY})*\s*$`, 'u')
+/** 그림자 한 개를 이루는 낱말 — 색 함수(괄호 안에 공백이 든다)이거나 공백 없는 낱말. */
+const SHADOW_WORD = /(?:rgba?|hsla?)\([^()]*\)|[^\s,()]+/gi
+
+function isColor(value: string): boolean {
+  return HEX.test(value) || COLOR_FN.test(value) || COLOR_NAMES.has(value.toLowerCase())
+}
+
+/** `inset`? · 길이 2 ~ 4 개(이어서) · 색 한 개까지. 차례는 CSS 와 같게 자유롭되 길이는 붙어 있어야 한다. */
+function isOneShadow(text: string): boolean {
+  const words = text.match(SHADOW_WORD) ?? []
+  // 낱말로 다시 이은 것이 원문(공백 차이 말고)과 같아야 한다 — 짝 없는 괄호 · 쉼표처럼 낱말이 못 된 글자가 없다.
+  if (words.join('').replace(/\s+/g, '') !== text.replace(/\s+/g, '')) return false
+  let inset = 0
+  let colors = 0
+  const lengthRuns: number[] = []
+  let previousWasLength = false
+  for (const word of words) {
+    if (LENGTH.test(word)) {
+      if (previousWasLength) lengthRuns[lengthRuns.length - 1]! += 1
+      else lengthRuns.push(1)
+      previousWasLength = true
+      continue
+    }
+    previousWasLength = false
+    if (word.toLowerCase() === 'inset') inset += 1
+    else if (isColor(word)) colors += 1
+    else return false
+  }
+  return inset <= 1 && colors <= 1 && lengthRuns.length === 1 && lengthRuns[0]! >= 2 && lengthRuns[0]! <= 4
+}
+
+function isShadow(value: string): boolean {
+  if (value.trim().toLowerCase() === 'none') return true
+  // 쉼표는 색 함수 안에도 있다 — 괄호 밖의 쉼표로만 가른다.
+  const parts: string[] = []
+  let depth = 0
+  let from = 0
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i]
+    if (ch === '(') depth += 1
+    else if (ch === ')') depth -= 1
+    else if (ch === ',' && depth === 0) {
+      parts.push(value.slice(from, i))
+      from = i + 1
+    }
+    if (depth < 0) return false
+  }
+  if (depth !== 0) return false
+  parts.push(value.slice(from))
+  return parts.every((part) => part.trim() !== '' && isOneShadow(part.trim()))
+}
+
+/**
+ * 토큰 값 하나가 그 타입에 맞는지. 맞으면 `null`, 아니면 이유 한 문장. manifest 의 기본값(`checkTokens`)과 받은 값
+ * (`tokensCss` · `tokenValues`)이 이 함수 하나를 쓴다.
  *
- * **값은 `:root { --wb-…: <값>; }` 에 그대로 실린다**(`tokensCss`) — 그래서 여기서 받는 것이 곧 CSS 에 들어가는
- * 것이다. `color` · `length` 를 꼴로 닫는 까닭은 편집 GUI 가 그 꼴의 컨트롤을 쓰고(spec 「토큰 편집」), 열린 글자를
- * 받으면 `;` 없이도 `red) , url(…` 같은 값이 다른 속성처럼 읽히기 때문이다. `font` · `shadow` 는 꼴이 넓어 닫지
- * 않고 규칙 밖으로 새는 글자만 막는다.
+ * **값은 `:root { --wb-…: <값>; }` 에 그대로 실린다**(`tokensCss`) — 그래서 여기서 받는 것이 곧 CSS 에 들어가는 것이다.
+ * **여섯 타입 모두 허용하는 꼴로 닫는다(거부 목록이 아니다).** 거부 목록은 «선언을 끝내는 글자» 만 보고 «뒤를 삼키는 구문»
+ * (주석 `/*` · 짝 없는 괄호 · 따옴표 · 끝의 `\`)을 놓쳐, 값 하나가 뒤 토큰 · 같은 시트의 뒤 규칙까지 무너뜨린다(실 Chrome 으로
+ * 잰 표 — `docs/superpowers/plans/2026-09-27-a2-review.md` 「2. 토큰 값 → tokensCss」). 꼴 밖의 함수(`url(` · `image-set(` ·
+ * `var(`)도 이 꼴에 없어 저절로 거절된다 — 테마가 그 변수를 이미지 속성에 쓰면 보는 사람의 브라우저가 요청을 낸다.
  */
 export function checkTokenValue(decl: Pick<TokenDecl, 'type' | 'options'>, value: unknown): string | null {
   const type: TokenType = decl.type
@@ -54,15 +113,13 @@ export function checkTokenValue(decl: Pick<TokenDecl, 'type' | 'options'>, value
   if (typeof value !== 'string') return '문자열이 아닙니다'
   switch (type) {
     case 'color':
-      return HEX.test(value) || COLOR_FN.test(value) || COLOR_NAMES.has(value.toLowerCase())
-        ? null
-        : '색(#rgb · #rrggbb · #rrggbbaa · rgb() · rgba() · hsl() · 색 이름)이 아닙니다'
+      return isColor(value) ? null : '색(#rgb · #rrggbb · #rrggbbaa · rgb() · rgba() · hsl() · 색 이름)이 아닙니다'
     case 'length':
       return LENGTH.test(value) ? null : '길이(0 또는 수 + px · rem · em · % · vh · vw)가 아닙니다'
     case 'font':
+      return FONT_LIST.test(value) ? null : '글꼴 이름 목록(쉼표로 가른 낱말 또는 따옴표 문자열)이 아닙니다'
     case 'shadow':
-      if (value.trim() === '') return '비어 있습니다'
-      return CSS_BREAKERS.test(value) ? '; { } < 를 담을 수 없습니다' : null
+      return isShadow(value) ? null : '그림자(none, 또는 inset? · 길이 2 ~ 4 개 · 색 하나를 쉼표로 가른 목록)가 아닙니다'
     case 'select':
       return decl.options?.includes(value) ? null : `선택지(${(decl.options ?? []).join(' · ')}) 밖의 값입니다`
   }
