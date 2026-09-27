@@ -8,5 +8,5 @@
     "composite": true
   },
   "include": ["src"],
-  "references": [{ "path": "../schema" }]
+  "references": [{ "path": "../schema" }, { "path": "../theme-sdk" }]
 }

@@ -35,3 +35,9 @@ export type {
 export { SNAPSHOT_PAYLOAD_VERSION, SNAPSHOT_RESOURCES, SnapshotPayloadSchema } from './snapshot/payload'
 export type { SnapshotLintNote, SnapshotLintNoteKind, SnapshotLintPlan } from './snapshot/lint-input'
 export { snapshotToLintInput } from './snapshot/lint-input'
+
+// 테마 manifest 규격과 검증(spec `2026-09-27-code-themes-design.md` 「manifest」). 빌드(`wb-theme build`) · 업로드 · 호스트가
+// 같은 함수를 부른다 — 셋이 각자 검증하면 빌드를 지난 파일이 업로드에서 거부된다.
+export type { ManifestIssue, ManifestIssueCode } from './manifest/schema'
+export { ManifestSchema, validateManifest } from './manifest/schema'
+export { compareVersions, SDK_RANGE_PATTERN, satisfiesSdk, VERSION_PATTERN } from './manifest/semver'

@@ -28,9 +28,20 @@ describe('경계 — themes가 무엇을 보지 않는가', () => {
     }
   })
 
-  it('package.json이 schema와 zod만 의존한다', () => {
+  it('package.json이 schema · theme-sdk · zod만 의존한다', () => {
     const manifest = JSON.parse(packageJson) as { dependencies: Record<string, string> }
-    expect(Object.keys(manifest.dependencies).sort()).toEqual(['@wirebound/schema', 'zod'])
+    expect(Object.keys(manifest.dependencies).sort()).toEqual(['@wirebound/schema', '@wirebound/theme-sdk', 'zod'])
+  })
+
+  it('theme-sdk 는 타입으로만 읽는다', () => {
+    // theme-sdk 의 런타임은 react 를 싣는다 — api(Node)가 부르는 manifest 검증 · `.wbtheme` 읽기가 그것을 끌어오면
+    // 테마 코드를 싣지 않는 서버 프로세스에 react 가 들어온다(spec 「내보내기와 PPTX」).
+    // 절(`import … from`)은 따옴표를 못 넘게 잡는다 — 앞 import 의 경로 글자를 지나 다음 줄의 theme-sdk 에 닿지 않게.
+    const clauses = Object.entries(sources).flatMap(([path, source]) =>
+      [...source.matchAll(/import\s+([^'"]*?)\s*from\s*'@wirebound\/theme-sdk'/g)].map((m) => [path, m[1]!] as const),
+    )
+    expect(clauses.length).toBeGreaterThan(0)
+    for (const [path, clause] of clauses) expect(clause, path).toMatch(/^type\s/)
   })
 
   it('tsconfig가 DOM을 들이지 않는다', () => {
@@ -61,6 +72,8 @@ describe('공개 표면이 계약이다', () => {
     // 스냅샷 payload 규격과 lint 입력 변환. **`apps/api`가 아니라 여기 둔다** — api·CLI(`wireb pull`·`wireb lint`)·MCP가
     // 같은 모양을 읽는다. `wireb lint`와 MCP `validate`가 같은 변환을 부른다.
     'SNAPSHOT_PAYLOAD_VERSION', 'SNAPSHOT_RESOURCES', 'SnapshotPayloadSchema', 'snapshotToLintInput',
+    // 테마 manifest 규격 · 검증 · semver 부분집합. 빌드(`wb-theme build`) · 업로드 · 호스트가 같은 함수를 부른다.
+    'ManifestSchema', 'validateManifest', 'compareVersions', 'satisfiesSdk', 'VERSION_PATTERN', 'SDK_RANGE_PATTERN',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {
