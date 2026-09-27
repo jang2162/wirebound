@@ -300,10 +300,6 @@ importers:
         version: 5.9.3
 
   packages/theme-sdk:
-    dependencies:
-      '@wirebound/schema':
-        specifier: workspace:*
-        version: link:../schema
     devDependencies:
       '@testing-library/dom':
         specifier: ^10.4.0

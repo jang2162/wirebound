@@ -12,6 +12,8 @@ const shared = {
   resolve: {
     alias: {
       '@wirebound/schema': src('./packages/schema/src/index.ts'),
+      // 좁은 것이 먼저다 — 아래 exporter 주석의 규칙.
+      '@wirebound/theme-sdk/runtime': src('./packages/theme-sdk/src/runtime.ts'),
       '@wirebound/theme-sdk': src('./packages/theme-sdk/src/index.ts'),
       '@wirebound/renderer': src('./packages/renderer/src/index.ts'),
       '@wirebound/system-theme-admin': src('./system-themes/admin/src/index.ts'),

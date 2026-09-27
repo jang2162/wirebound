@@ -1,6 +1,6 @@
 {
   "name": "@wirebound/theme-sdk",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -11,15 +11,18 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "development": "./src/runtime.ts",
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js",
+      "default": "./dist/runtime.js"
     }
   },
   "files": ["dist"],
   "scripts": {
     "build": "tsdown",
     "build:watch": "tsdown --watch"
-  },
-  "dependencies": {
-    "@wirebound/schema": "workspace:*"
   },
   "peerDependencies": {
     "react": "^19.0.0"
