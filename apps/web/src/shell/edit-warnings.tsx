@@ -46,8 +46,7 @@ export function EditWarnings(): ReactElement | null {
       <p className="wb-shell-edit-warnings-title">{heading(warnings.length)}</p>
       <ul className="wb-shell-edit-warnings-list">
         {/* **키가 `path`다** — 이슈 하나는 문서의 한 자리에 매여 있고, 같은 자리에 두 코드가
-            함께 나오는 경우가 있어(`unknown-variant`와 `ignored-variant`는 배타적이지만
-            상호작용 셋은 액션마다 하나다) `code`를 함께 넣는다. */}
+            함께 나오는 경우가 있어(상호작용 셋은 액션마다 하나다) `code`를 함께 넣는다. */}
         {warnings.map((issue) => (
           <li key={`${issue.path}:${issue.code}`} className="wb-shell-edit-warnings-item">
             {issue.message}

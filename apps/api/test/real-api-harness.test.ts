@@ -14,9 +14,9 @@
  *
  * | 후보 | 왜 아닌가 / 왜인가 |
  * |---|---|
- * | 관련 테이블 TRUNCATE | `themes`에 프로젝트에 매이지 않은 **시스템 테마** 행이 산다(설계서 「테마 관리」). 그것까지 지우면 다음 `buildApp`의 `syncSystemThemes`가 다시 넣기 전까지 프로젝트 생성이 깨진다. 게다가 ACCESS EXCLUSIVE 잠금이라 같은 DB를 보는 커넥션을 이유 없이 세운다 |
+ * | 관련 테이블 TRUNCATE | ACCESS EXCLUSIVE 잠금이라 같은 DB를 보는 커넥션을 이유 없이 세운다 |
  * | 만든 프로젝트만 지운다 | 케이스가 만든 id를 **호출자가 기억해야** 한다. 중간에 죽으면 그 목록이 사라져 다음 케이스가 오염된 판에서 돈다 — 지금 `beforeEach`·`afterEach` 양쪽에 거는 이유가 정확히 그것이다 |
- * | **`projects`·`users` 두 줄의 DELETE** ✅ | 나머지는 전부 그 둘에 FK로 매여 CASCADE로 따라간다. 시스템 테마는 프로젝트에 안 매여 있어 **남는다** — 남아야 맞는다 |
+ * | **`projects`·`users` 두 줄의 DELETE** ✅ | 나머지는 전부 그 둘에 FK로 매여 CASCADE로 따라간다 |
  *
  * **아래 케이스가 그 마지막 칸을 실제로 센다.** 표에 적어 두기만 하면 새 테이블이 생겼을 때
  * 아무도 모른다.
@@ -40,10 +40,7 @@ const db = getTestDb()
 beforeEach(resetRealData)
 afterEach(resetRealData)
 
-/**
- * 청소가 비워야 하는 테이블. **`themes`가 빠져 있는 것이 판정이다** — 시스템 테마는
- * 프로젝트에 매여 있지 않으므로 남는다(위 표).
- */
+/** 청소가 비워야 하는 테이블. */
 const CLEARED_TABLES = [
   'users',
   'sessions',
@@ -58,7 +55,7 @@ const CLEARED_TABLES = [
   'presets',
 ] as const
 
-async function countRows(table: (typeof CLEARED_TABLES)[number] | 'themes'): Promise<number> {
+async function countRows(table: (typeof CLEARED_TABLES)[number]): Promise<number> {
   const row = await db
     .selectFrom(table)
     .select((eb) => eb.fn.countAll<string>().as('count'))
@@ -83,9 +80,6 @@ async function fillEveryTable(ctx: TestContext): Promise<void> {
   await post(`/api/projects/${project.id}/pages/${page.id}/comments`, { nodeId, body: '청소 대상' })
   await post(`/api/projects/${project.id}/snapshots`, { tag: 'v1' })
   await post(`/api/projects/${project.id}/presets`, { name: '청소 대상 프리셋', schema: [] })
-  await post(`/api/projects/${project.id}/themes`, {
-    theme: { meta: { id: 'harness-target', name: '청소 대상 테마', version: '1.0.0' } },
-  })
 }
 
 describe('실커밋 하네스의 청소', () => {
@@ -113,21 +107,6 @@ describe('실커밋 하네스의 청소', () => {
       }
 
       expect(left).toEqual([])
-    })
-  })
-
-  it('시스템 테마는 남는다 — 지우면 다음 프로젝트 생성이 깨진다', async () => {
-    await withRealApi(async (ctx) => {
-      await fillEveryTable(ctx)
-      await resetRealData()
-
-      expect(await countRows('themes')).toBeGreaterThan(0)
-
-      // 남았다는 것을 **쓸 수 있다는 것으로** 확인한다. 행 수만 세면 그 행이 쓸모 있는지는
-      // 모른다 — 프로젝트 생성이 기본 레이아웃의 `theme_id`로 시스템 테마를 가리킨다.
-      const owner = await signup(ctx)
-      const project = await createProject(ctx, owner.cookie)
-      expect(project.id).toBeTruthy()
     })
   })
 

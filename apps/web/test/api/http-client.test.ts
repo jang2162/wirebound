@@ -15,9 +15,6 @@ import type {
   PageDetail,
   PageImported,
   ProjectDetail,
-  ProjectTheme,
-  ThemeDetail,
-  ThemeSummary,
   SessionUser,
   TreeMenuNode,
 } from '../../src/api/types'
@@ -70,28 +67,6 @@ function htmlResponse(status: number): Response {
 const user: SessionUser = { id: 'u1', email: 'a@b.c', name: '홍길동' }
 const project: ProjectDetail = { id: 'p1', name: '프로젝트', slug: 'proj', description: null, role: 'owner' }
 
-/** `GET /api/projects/:projectId/theme`의 응답. 서버는 파생 테마를 합쳐서 낸다. */
-const themeSummary: ThemeSummary = {
-  id: 't1',
-  system: true,
-  theme: { meta: { id: 'admin', name: '관리자', version: '1.0.0' } },
-}
-
-const projectTheme: ProjectTheme = { themeId: null, theme: { meta: { id: 'admin', name: '관리자', version: '1.0.0' } },
-  issues: [],
-}
-
-/**
- * `GET·POST·PUT .../themes[/:themeId]`의 응답. **조건부 두 키를 일부러 안 담았다** —
- * 그것이 서버의 흔한 응답이고(`base`는 파생일 때만, `warnings`는 경고가 있을 때만),
- * *"없는 것이 정상"*을 통과시키는 것이 `SHAPES.themeDetail`의 절반이다.
- */
-const themeDetail: ThemeDetail = {
-  id: 't1',
-  system: false,
-  updatedAt: '2026-08-11T09:00:00.000Z',
-  theme: { meta: { id: 'brand', name: '브랜드', version: '1.0.0' } },
-}
 const treeNode: TreeMenuNode = {
   id: 'm1',
   title: '회원관리',
@@ -183,10 +158,8 @@ const restoreResult = {
     menu: { created: 0, updated: 1, deleted: 0 },
     pages: { created: 0, metaUpdated: 0, schemaChanged: 2, schemaUnchanged: 3, deleted: 1 },
     comments: { created: 0, updated: 0, deleted: 0 },
-    layouts: { themeRefChanged: 0 },
   },
   safetySnapshot: { id: 's2', tag: '복원 전 2026-08-12T09:24:30.443Z' },
-  themes: [{ layoutId: 'l1', themeId: 't1', differs: false }],
 }
 
 /** `GET .../export/preview?format=html`의 응답. */
@@ -260,27 +233,6 @@ const ENDPOINTS: Array<{
   { client: 'getProject', url: '/api/projects/p1', method: 'GET', body: project, call: (c) => c.getProject('p1') },
   { client: 'getTree', url: '/api/projects/p1/tree', method: 'GET', body: { menu: [] }, call: (c) => c.getTree('p1') },
   { client: 'getPage', url: '/api/projects/p1/pages/pg1', method: 'GET', body: page, call: (c) => c.getPage('p1', 'pg1') },
-  // **`/theme`(단수)이지 `/themes`(복수)가 아니다.** 둘 다 실재하는 경로라
-  // 오타가 404가 아니라 **다른 리소스의 응답**을 받는다 — 목록(배열)이 오면
-  // `SHAPES.projectTheme`이 막지만, 그 방벽 하나에 기대지 않는다.
-  { client: 'getProjectTheme', url: '/api/projects/p1/theme', method: 'GET', body: projectTheme, call: (c) => c.getProjectTheme('p1') },
-  // **고르기는 `/theme`(단수)에 `PUT`이다** — 목록(`/themes`)과 한 글자 차이라 위
-  // `getProjectTheme`의 주석과 같은 부류이고, 여기서는 오타가 **테마 생성**(`POST /themes`)이
-  // 아니라 **테마 수정**(`PUT /themes/:themeId`)으로 가므로 더 나쁘다.
-  {
-    client: 'setProjectTheme',
-    url: '/api/projects/p1/theme',
-    method: 'PUT',
-    body: projectTheme,
-    call: (c) => c.setProjectTheme('p1', 't1'),
-  },
-  {
-    client: 'listProjectThemes',
-    url: '/api/projects/p1/themes',
-    method: 'GET',
-    body: [themeSummary],
-    call: (c) => c.listProjectThemes('p1'),
-  },
   // --- 아래 줄들은 **각자 자기 describe에서도 URL이 단언되지만 이 표에도 있어야 한다** —
   // 표에서 빠진 것은 `표의 완전성`이 세고, 그 절이 없으면 아무도 모른다(`표의 완전성` 머리말). ---
   {
@@ -328,8 +280,8 @@ const ENDPOINTS: Array<{
   },
   {
     // **`/pages/import`가 `/pages/:pageId`와 한 글자 차이가 아니다** — `import`는 uuid가
-    // 아니므로 서버의 `:pageId` 라우트와 겹칠 수 없고, 오타가 나면 404다(`getProjectTheme`의
-    // 주석이 말한 부류와 반대로 안전한 자리다). 그래도 표에 두는 것은 **메서드**가 틀리면
+    // 아니므로 서버의 `:pageId` 라우트와 겹칠 수 없고, 오타가 나면 404다(오타가 다른 리소스의
+    // 응답을 받는 부류와 반대로 안전한 자리다). 그래도 표에 두는 것은 **메서드**가 틀리면
     // (`PUT`으로 보내면) 페이지 생성이 아니라 아무것도 아닌 곳으로 가기 때문이다.
     client: 'importPage',
     url: '/api/projects/p1/pages/import',
@@ -379,30 +331,6 @@ const ENDPOINTS: Array<{
     method: 'GET',
     body: [revision],
     call: (c) => c.listRevisionsBefore('p1', 'pg1', { beforeSeq: 9, limit: 3 }),
-  },
-  // **테마 저작 셋.** `getProjectTheme`의 `/theme`과 한 글자 차이인 `/themes/:id`다 —
-  // 두 줄이 나란히 있어야 그 차이가 표에서 보인다.
-  {
-    client: 'getTheme',
-    url: '/api/projects/p1/themes/t1',
-    method: 'GET',
-    body: themeDetail,
-    call: (c) => c.getTheme('p1', 't1'),
-  },
-  {
-    client: 'createTheme',
-    url: '/api/projects/p1/themes',
-    method: 'POST',
-    body: themeDetail,
-    call: (c) => c.createTheme('p1', { theme: { meta: { id: 'brand', name: '브랜드', version: '1.0.0' } } }),
-  },
-  {
-    client: 'updateTheme',
-    url: '/api/projects/p1/themes/t1',
-    method: 'PUT',
-    body: themeDetail,
-    call: (c) =>
-      c.updateTheme('p1', 't1', { theme: { meta: { id: 'brand', name: '브랜드', version: '1.0.0' } } }),
   },
   // **코멘트 다섯.** 전부 `.../pages/:pageId/comments` 아래다 — 코멘트는 프로젝트가
   // 아니라 **페이지의 노드**에 붙는다. 이 다섯 줄을 빼면 `표의 완전성`의 두 케이스가
@@ -557,28 +485,6 @@ const SHAPE_CASES: Array<{
     ok: pageImported,
     call: (c) => c.importPage('p1', { menuNodeId: 'm1', file: {} }),
   },
-  {
-    shape: 'projectTheme',
-    broken: { themeId: null, theme: 42, issues: [] },
-    ok: projectTheme,
-    call: (c) => c.getProjectTheme('p1'),
-  },
-  {
-    // **`id`가 빈 문자열이면 막는다** — 그 값이 그대로 `setProjectTheme`의 본문이 되고,
-    // 서버의 `z.uuid()`가 400을 낸다. 사용자는 고르개를 눌렀는데 이유 없는 실패를 본다.
-    shape: 'themeList',
-    broken: [{ ...themeSummary, id: '' }],
-    ok: [themeSummary],
-    call: (c) => c.listProjectThemes('p1'),
-  },
-  {
-    // **`warnings`가 배열이 아니면 막는다** — 그 값을 저장 성공 경로에서 화면이 `.map`한다.
-    // `id: ''`도 같은 부류지만(생성 응답의 `id`가 주소가 된다) 한 줄에 하나만 심는다.
-    shape: 'themeDetail',
-    broken: { ...themeDetail, warnings: 'none' },
-    ok: themeDetail,
-    call: (c) => c.getTheme('p1', 't1'),
-  },
   // --- 아래 셋이 빠지면 세는 절(`표의 완전성`)이 찾아낸다. ---
   // `sessionUser.id`는 세션 문맥이 그대로 들고 다니는 값이다(`session/session-context.tsx`).
   { shape: 'sessionUser', broken: { id: 42 }, ok: user, call: (c) => c.me() },
@@ -605,7 +511,7 @@ const SHAPE_CASES: Array<{
   // 모든 코멘트가 "사라진 노드" 무리로 떨어져 번호가 하나도 안 붙는다.
   { shape: 'comment', broken: { ...comment, nodeId: 42 }, ok: comment, call: (c) => c.updateComment('p1', 'pg1', 'c1', { body: '가' }) },
   // **`id`가 빈 문자열이면 막는다** — 그 값이 수정·삭제 요청의 경로가 된다
-  // (`themeList`의 `id`와 같은 축: 주소가 되지는 않지만 **요청 경로가 되는** 값).
+  // (주소가 되지는 않지만 **요청 경로가 되는** 값).
   { shape: 'commentList', broken: [{ ...comment, id: '' }], ok: [comment], call: (c) => c.listComments('p1', 'pg1') },
   // **`markerOps`가 배열이 아니면 막는다** — 그 값이 그대로 `applyOps`에 들어간다
   // (`patchResult.inverse`와 같은 하중).
@@ -656,18 +562,17 @@ const SHAPE_CASES: Array<{
     call: (c) => c.listPresets('p1'),
   },
   // --- 복원. ---
-  // **`themes`가 배열이 아니면 막는다** — 결과 알림이 `.some(...)`으로 훑으므로 배열이
-  // 아니면 **렌더 도중 던진다.** 다른 두 값(바뀐 수·안전망 태그)은 이상한 글자가 보일 뿐이라
-  // 손해의 등급이 다르다(`pageDetail`의 `schema.root`가 같은 부류다).
+  // **`summary.pages`가 객체가 아니면 막는다** — 결과 알림이 그 안의 수를 읽으려고 풀어 헤치므로
+  // **렌더 도중 던진다**(`pageDetail`의 `schema.root`가 같은 부류다).
   {
     shape: 'restoreResult',
-    broken: { ...restoreResult, themes: null },
+    broken: { ...restoreResult, summary: { ...restoreResult.summary, pages: null } },
     ok: restoreResult,
     call: (c) => c.restoreSnapshot('p1', 's1'),
   },
   {
     // **`brokenLinks`가 배열이 아니면 화면이 전개하다 던진다** — 이 화면을 감싸는 오류
-    // 경계가 없다(`apps/web`의 경계는 캔버스와 테마 갤러리뿐이다).
+    // 경계가 없다(`apps/web`의 경계는 캔버스 하나다).
     shape: 'exportPreview',
     broken: { ...exportPreview, brokenLinks: null },
     ok: exportPreview,
@@ -915,7 +820,7 @@ describe('createHttpClient', () => {
     // **이것만 화면을 통째로 비운다.** 목록의 `<p>{project.description}</p>`가 그 값을
     // React 자식으로 그리는데, **React가 그리지 못하는 객체가 닿으면** React가
     // `Objects are not valid as a React child`를 던지고 **목록에 오류 경계가 없다**
-    // (`apps/web/src`에서 경계는 캔버스의 `CanvasBoundary`와 테마 갤러리의 `GalleryBoundary`뿐이다).
+    // (`apps/web/src`에서 경계는 캔버스의 `CanvasBoundary` 하나다).
     //
     // **실측(진짜 `<App />`, 계약 밖 값을 관문에 태워 목록까지 보냈다):**
     //
@@ -1245,46 +1150,11 @@ describe('createHttpClient', () => {
     }
   })
 
-  /**
-   * **`SHAPES.projectTheme`이 실제로 막는가.** 이 모양 검사가 `() => true`로 퇴행해도
-   * 이 shape에 계약 밖 응답을 태우는 케이스가 없으면 **웹 전량이 초록이다** — 화면 테스트는
-   * `fakeApi`로 이 층을 지나지 않는다.
-   *
-   * 무엇을 막는지는 좁다(그 shape의 주석 참고): `theme`이 객체이거나 `null`인가,
-   * `issues`가 배열인가. **테마 안쪽은 일부러 보지 않는다** — `resolveTheme`이 그것을
-   * 이슈로 말하고, 두 층이 같은 것을 검사하면 사용자가 원인을 두 번 다르게 듣는다.
-   */
-  describe('getProjectTheme의 응답 모양', () => {
-    it('theme이 객체이거나 null이면 통과한다', async () => {
-      for (const body of [projectTheme, { themeId: null, theme: null, issues: [] }]) {
-        const stub = stubFetch(jsonResponse(200, body))
-        await expect(createHttpClient(stub.fetchImpl).getProjectTheme('p1')).resolves.toEqual(body)
-      }
-    })
+  it('경로에 들어가는 id는 URL 인코딩된다', async () => {
+    const stub = stubFetch(jsonResponse(200, { menu: [] }))
+    await createHttpClient(stub.fetchImpl).getTree('p 1/../x')
 
-    it('theme이 객체도 null도 아니면 ApiError를 던진다', async () => {
-      // 배열이 오는 것이 실재하는 경로다 — 경로를 `/themes`로 잘못 적으면 목록이 온다.
-      for (const theme of ['admin', 42, [], undefined]) {
-        const stub = stubFetch(jsonResponse(200, { theme, issues: [] }))
-        await expect(
-          createHttpClient(stub.fetchImpl).getProjectTheme('p1'),
-          JSON.stringify(theme),
-        ).rejects.toBeInstanceOf(ApiError)
-      }
-    })
-
-    it('issues가 배열이 아니면 ApiError를 던진다', async () => {
-      // 화면이 `issues.length`·`issues.map`을 그냥 부른다(`use-project-theme.ts`).
-      const stub = stubFetch(jsonResponse(200, { themeId: null, theme: null, issues: null }))
-      await expect(createHttpClient(stub.fetchImpl).getProjectTheme('p1')).rejects.toBeInstanceOf(ApiError)
-    })
-
-    it('경로에 들어가는 id는 URL 인코딩된다', async () => {
-      const stub = stubFetch(jsonResponse(200, projectTheme))
-      await createHttpClient(stub.fetchImpl).getProjectTheme('p 1/../x')
-
-      expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2F..%2Fx/theme')
-    })
+    expect(stub.calls[0]?.url).toBe('/api/projects/p%201%2F..%2Fx/tree')
   })
 
   /**

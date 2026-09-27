@@ -6,7 +6,6 @@
  * 구현은 `http-client.ts`(실제 서버)와 각 화면 테스트의 가짜 두 부류다.
  */
 import type { PatchOp, WbNode } from '@wirebound/schema'
-import type { Theme } from '@wirebound/themes'
 import type {
   Comment,
   ExportFormat,
@@ -20,13 +19,10 @@ import type {
   PatchResult,
   Preset,
   ProjectDetail,
-  ProjectTheme,
   RevisionInverse,
   SessionUser,
   RestoreResult,
   SnapshotSummary,
-  ThemeDetail,
-  ThemeSummary,
   TreeMenuNode,
 } from './types'
 
@@ -350,71 +346,6 @@ export interface ApiClient {
     options?: ReadOptions,
   ): Promise<RevisionInverse[]>
   /**
-   * 이 프로젝트의 화면이 지금 써야 할 테마(설계서 「테이블 정의」의 사슬을 서버가 따라간다).
-   *
-   * **`theme`이 `null`인 것은 실패가 아니다** — 테마를 고르지 않은 상태가 정상이고 그때
-   * 화면은 구조 기본 CSS만으로 그려진다. 그래서 이 메서드는 그 경우에도 던지지 않는다.
-   *
-   * **파생 테마는 서버가 합쳐서 준다.** 받는 쪽이 base를 따로 얻어 `resolveTheme`의 두
-   * 인자를 맞출 필요가 없다 — `ThemeSource`가 `() => Theme | null`로 남는 이유다.
-   * 편집용 형태(파생 문서 + `base`)는 다른 엔드포인트가 내고 이 화면은 쓰지 않는다.
-   */
-  getProjectTheme(projectId: string, options?: ReadOptions): Promise<ProjectTheme>
-  /**
-   * **이 프로젝트에서 고를 수 있는 테마 전부.** 시스템 테마가 함께 나오고 그것이 먼저다
-   * (서버가 정렬한다 — 시스템 먼저, 각 무리 안에서 `slug` 순). 여기서 다시 정렬하지
-   * 않는다: 순서가 서버의 계약이고 두 자리에서 정렬하면 갈릴 수 있다.
-   */
-  listProjectThemes(projectId: string): Promise<ThemeSummary[]>
-  /**
-   * **이 프로젝트가 쓸 테마를 고른다.** `null`은 *"테마를 벗긴다"*이고 그것은 정상 상태다 —
-   * 화면이 구조 기본 CSS만으로 그려진다.
-   *
-   * **응답이 `getProjectTheme`과 같은 꼴이다**(서버가 같은 함수로 만든다). 그래서 고른 뒤
-   * 다시 조회할 필요가 없다 — 다만 캔버스는 자기 훅으로 읽으므로 화면을 갱신하려면
-   * 그쪽에 알려야 한다(`theme/use-project-theme.ts`의 `reloadToken`).
-   *
-   * **owner만 성공한다**(설계서 「권한 모델」 — 테마 편집과 같은 등급). 서버가 막지만 화면도 미리 막는다.
-   */
-  setProjectTheme(projectId: string, themeId: string | null): Promise<ProjectTheme>
-  /**
-   * **저작 UI가 편집할 테마 하나.** `getProjectTheme`과 **다른 것을 낸다** —
-   * 그쪽은 캔버스가 그대로 쓸 **홀로 서는 테마**이고, 이쪽은 **사람이 적은 파생 문서
-   * 그대로 + `base`**다(서버 README의 소비자 표).
-   *
-   * **viewer도 읽을 수 있다.** 편집을 막는 것은 쓰기 둘이고(「권한 모델」), 이 라우트는 `viewer`
-   * 게이트다 — 화면이 읽기 전용으로 그릴 수 있어야 하기 때문이다.
-   *
-   * **시스템 테마는 어느 프로젝트에서나 읽힌다**(`project_id IS NULL`). 남의 프로젝트
-   * 테마는 404다(「권한 모델」의 존재 숨김).
-   */
-  getTheme(projectId: string, themeId: string): Promise<ThemeDetail>
-  /**
-   * 테마를 만든다. **owner만 부를 수 있다**(「권한 모델」 — 테마 편집은 owner).
-   *
-   * *"이 테마를 바탕으로 새 테마 만들기"*가 부르는 자리다. 그때 본문은
-   * `{ theme: { meta: { id, name, extends: 'system:<slug>' } } }`뿐이고 나머지 절은 비운다 —
-   * **파생은 덮어쓸 것만 적는 것이 설계서 「상속과 병합」의 뜻**이다.
-   *
-   * **`meta.id`(slug)가 충돌하면 409다.** 유일성 단위가 `(project_id, slug)`이므로
-   * 시스템 테마와 같은 slug는 충돌하지 않는다.
-   *
-   * **응답의 `id`가 편집 화면의 주소가 된다** — `SHAPES.themeDetail`이 빈 문자열을 막는
-   * 이유가 그것이다(`pageDetail`의 "주소가 되는 값" 축과 같다).
-   */
-  createTheme(projectId: string, body: { theme: Theme }): Promise<ThemeDetail>
-  /**
-   * **통째 교체다.** 서버의 `updateTheme`이 절 다섯을 전부 쓰므로 **본문에 없는 절은
-   * 실제로 비워진다** — 부분 갱신이 아니다. **owner만 부를 수 있고 시스템 테마는 403이다.**
-   *
-   * `updateProject` 부류와 달리 `updateBody`(빈 본문 차단)를 지나지 않는다 — 키가
-   * `theme` 하나뿐이라 "바꿀 값이 없는 본문"이라는 것이 성립하지 않는다.
-   *
-   * **`error`가 있으면 422다**(`ApiError.issues`에 `ThemeIssue[]`가 실려 온다).
-   * **경고만 있으면 저장되고** 응답의 `warnings`에 실린다 — 없으면 그 키 자체가 없다.
-   */
-  updateTheme(projectId: string, themeId: string, body: { theme: Theme }): Promise<ThemeDetail>
-  /**
    * 이 페이지의 코멘트 전부. **선택한 노드의 것만이 아니다** — 「설계서 화면 구조」의 우측
    * 목록이 *"① 검색폼 - … / ② 목록 - …"*로 **전부**를 보인다.
    *
@@ -478,7 +409,7 @@ export interface ApiClient {
   renumberComments(projectId: string, pageId: string, options?: WriteOptions): Promise<MarkerChange>
   /**
    * 이 프로젝트의 스냅샷 전부. **최근 것이 먼저** 오고 동률이면 태그 순이다 —
-   * 순서가 서버의 계약이므로 여기서 다시 정렬하지 않는다(`listProjectThemes`와 같은 판단).
+   * 순서가 서버의 계약이므로 여기서 다시 정렬하지 않는다 — 두 자리에서 정렬하면 갈릴 수 있다.
    *
    * **`payload`가 실려 오지 않는다** — 목록이 payload 전부를 나르면 프로젝트가
    * 커질수록 목록만으로 무거워진다. 크기(`payloadBytes`)만 온다.
@@ -488,7 +419,7 @@ export interface ApiClient {
   /**
    * **이 프로젝트에서 고를 수 있는 프리셋 전부**(설계서 「페이지 프리셋」). 내장 3종이 먼저 오고
    * 프로젝트 프리셋이 만든 순서대로 뒤에 붙는다 — **순서가 서버의 계약이므로 여기서 다시
-   * 정렬하지 않는다**(`listProjectThemes`와 같은 판단).
+   * 정렬하지 않는다**(스냅샷 목록과 같은 판단).
    *
    * **프로젝트 프리셋이 하나도 없는 것이 기본 상태다.** 그때도 응답이 비지 않는다.
    */

@@ -15,8 +15,8 @@ import type { ReactElement } from 'react'
 const CLEAR_LABEL = '(기본)'
 
 export interface VariantControlProps {
-  /** 카탈로그의 `def.variants` 그대로. 화면이 목록을 따로 들지 않는다. */
-  options: readonly string[]
+  /** 테마 manifest 의 variant 선언 그대로(`variantFieldOf`). 라벨을 보이고 id 를 적는다. */
+  options: readonly { id: string; label: string }[]
   value: unknown
   id: string
   /** 남이 잠근 자리라 못 바꾸는가. `TextControlProps.disabled`와 같은 값이다. */
@@ -28,10 +28,9 @@ export interface VariantControlProps {
 export function VariantControl(props: VariantControlProps): ReactElement {
   const { options, value, id, disabled, onCommit } = props
 
-  // 문서의 값이 선언된 변형에 없으면 빈 칸으로 둔다. `unknown-variant`인 문서가 그 경로이고
-  // (검증 전 문서가 스토어에 실릴 수 있다), 그때 첫 선택지가 골라진 것처럼 보이면
-  // 사용자가 건드리지도 않은 값이 정답처럼 뜬다. `SelectControl`과 같은 판단이다.
-  const current = typeof value === 'string' && options.includes(value) ? value : ''
+  // 문서의 값이 선언된 변형에 없으면 빈 칸으로 둔다. 테마가 선언하지 않은 값을 든 문서가 그 경로이고, 그때 첫 선택지가
+  // 골라진 것처럼 보이면 사용자가 건드리지도 않은 값이 정답처럼 뜬다. `SelectControl`과 같은 판단이다.
+  const current = typeof value === 'string' && options.some((option) => option.id === value) ? value : ''
 
   return (
     <select
@@ -44,8 +43,8 @@ export function VariantControl(props: VariantControlProps): ReactElement {
       {/* **항상 있다.** 위 머리말의 이유이고, `SelectControl`과 갈리는 유일한 지점이다. */}
       <option value="">{CLEAR_LABEL}</option>
       {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
+        <option key={option.id} value={option.id}>
+          {option.label}
         </option>
       ))}
     </select>

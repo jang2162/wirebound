@@ -620,7 +620,7 @@ export function useStructureCommands(props: {
 
 /**
  * *"이 패턴을 못 쓴다"*의 머리말. **패턴 이름과 키를 둘 다 말한다** — 이름은 사용자가
- * 목록에서 본 것이고, 키는 테마 JSON에서 그 자리를 찾을 때 필요하다(설계서 「테마 관리」의 저작 화면).
+ * 목록에서 본 것이고, 키는 테마의 manifest 에서 그 자리를 찾을 때 필요하다.
  *
  * **구분자를 두는 것은 뒤에 붙는 이슈 문장이 마침표로 끝나지 않기 때문이다** —
  * `use-edit-commit.tsx`가 서버 문장에 대해 잰 것과 같은 부류다.
@@ -638,9 +638,8 @@ const NO_SPOT_NOTICE = '고른 자리에는 패턴을 꽂을 수 없습니다. �
 /**
  * 툴바. **판정도 조작도 갖지 않는다** — `useStructureCommands`가 준 것을 그릴 뿐이다.
  *
- * **`projectId`를 받는 것은 패턴 고르개 때문이다.** 패턴은 테마가 소유하므로
- * (설계서 「페이지 프리셋」) 목록을 만들려면 그 프로젝트의 테마를 읽어야 하고, 그 조회는 고르개가 열렸을
- * 때만 일어난다 — `PatternPicker`가 닫혀 있을 때 DOM에 없기 때문이다.
+ * **`projectId`를 받는 것은 프리셋 고르개 때문이다.** 프리셋은 프로젝트에 살고(설계서 「페이지 프리셋」), 그 조회는
+ * 고르개가 열렸을 때만 일어난다 — `PresetPicker`가 닫혀 있을 때 DOM에 없기 때문이다.
  */
 export function StructureToolbar(props: {
   commands: StructureCommands
@@ -810,7 +809,6 @@ export function StructureToolbar(props: {
       )}
       {picker === 'pattern' && (
         <PatternPicker
-          projectId={props.projectId}
           onPick={commands.pickPattern}
           onCancel={commands.cancelAdd}
         />

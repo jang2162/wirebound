@@ -8,8 +8,8 @@
  *
  * # 내려받기를 어떻게 재는가 — **절반은 대역이다**
  *
- * jsdom에 `URL.createObjectURL`이 없다(`files/file-io.ts`의 머리말에 잰 표가 있다). 아래 `withDownloadCapture`는 `theme-io-panel.test.ts`의 것과 **같은 장치**이고,
- * 재는 것도 같다 — Blob에 실린 글자·앵커의 `download` 이름·클릭 한 번. **재지 못하는
+ * jsdom에 `URL.createObjectURL`이 없다(`files/file-io.ts`의 머리말에 잰 표가 있다). 아래 `withDownloadCapture`가 재는 것은
+ * Blob에 실린 글자·앵커의 `download` 이름·클릭 한 번이다. **재지 못하는
  * 것은 브라우저가 실제로 파일을 저장하는지**다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -171,7 +171,7 @@ interface Download {
   clicks: number
 }
 
-/** `theme-io-panel.test.ts`의 것과 같은 장치(그 파일의 머리말에 근거가 있다). */
+/** 내려받기를 대역으로 잡는 장치 — 근거는 이 파일 머리말 «내려받기를 어떻게 재는가». */
 async function withDownloadCapture(run: () => void): Promise<Download> {
   const url = URL as unknown as Record<string, unknown>
   const hadCreate = 'createObjectURL' in url
@@ -541,8 +541,7 @@ describe('내보내기', () => {
 describe('파일 읽기가 실패하면 대기 글자가 남지 않는다', () => {
   /**
    * **읽을 수 없는 파일.** `readAsText`는 Blob이 아닌 것에 던지고, 그것이 `readTextFile`의
-   * Promise를 거절시킨다 — 실브라우저에서 권한·삭제로 나는 거절과 같은 갈래로 들어온다
-   * (`theme-io-panel.test.ts`의 같은 장치).
+   * Promise를 거절시킨다 — 실브라우저에서 권한·삭제로 나는 거절과 같은 갈래로 들어온다.
    */
   function pickBrokenFile(): void {
     openImport()

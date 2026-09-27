@@ -11,7 +11,6 @@ import { assertNoNulBytes } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
 import { DEFAULT_LAYOUT_NAME, defaultLayoutDocument, insertLayout } from './layouts'
-import { findThemeBySlug } from './themes'
 
 export interface ProjectRecord {
   id: string
@@ -55,21 +54,11 @@ function isSlugUniqueViolation(error: unknown): boolean {
 }
 
 /**
- * 기본 레이아웃이 가리킬 시스템 테마의 slug. `packages/themes`의 `SYSTEM_THEME_IDS`에
- * 있는 이름이다.
- *
- * `apps/web`의 `DEFAULT_THEME_ID`와 같은 값인데 **두 상수를 잇지 않는다** — 서버가
- * 고르는 것은 *"새 프로젝트의 기본값"*이고 웹의 것은 *"서버가 테마를 주지 못할 때의
- * 폴백"*이다. 둘이 우연히 같을 뿐 다른 질문에 답한다.
- */
-const DEFAULT_THEME_SLUG = 'admin'
-
-/**
  * 프로젝트를 만들고, 생성자를 owner로 넣고, **기본 레이아웃을 함께 만든다** —
  * 전부 같은 트랜잭션 안에서다.
  *
  * 셋 중 하나만 성공하는 상태가 생기면 안 된다. 주인 없는 프로젝트는 아무도 접근할 수
- * 없는 채로 영원히 남고(설계서 「권한 모델」), 레이아웃 없는 프로젝트는 테마를 가리킬 방법이 없는데
+ * 없는 채로 영원히 남고(설계서 「권한 모델」), 레이아웃 없는 프로젝트에는
  * **레이아웃을 만들어 주는 다른 경로가 없다**(레이아웃을 만드는 라우트가 없다).
  *
  * ---
@@ -90,12 +79,6 @@ const DEFAULT_THEME_SLUG = 'admin'
  * 이 함수의 일이다. (`apps/api/README.md` 「계층 규칙」 절은 여러 repo를 조율하는 로직을
  * `services/`에 두라고 하는데, 이 함수는 그 예외다. 조율을 밖으로 빼면 "프로젝트 생성"이
  * 두 자리로 갈라져 한쪽만 부르는 경로가 생길 수 있어 여기 둔다.)
- *
- * **기본 레이아웃의 `theme_id`는 시스템 `admin`을 가리킨다.** 그 행은 기동 동기화가
- * 넣는다(`services/system-themes.ts`) — `buildApp`이 라우트를 세우기 전에 돌므로 이
- * 함수가 도달할 때는 반드시 있다. 그래도 없으면 `null`로 두고 진행한다: 테마를 못 고른
- * 프로젝트는 구조 기본 CSS로 그려질 뿐이지만(정상 경로다), 프로젝트 생성 자체가
- * 실패하면 사용자가 할 수 있는 것이 없다.
  *
  * 조회 후 삽입하지 않는다(`repos/users.ts`의 `insertUser`와 같은 이유) — slug
  * 유니크 위반은 삽입을 시도해 보고 그 실패로 감지한다. 이 실패가 이 함수를 호출한
@@ -124,14 +107,11 @@ export async function insertProject(
         .values({ project_id: project.id, user_id: ownerId, role: 'owner' })
         .execute()
 
-      // 2단계: 기본 레이아웃. 문서는 `Page` 하나와 `Slot` 하나다 — 참조(`theme_id`)를
-      // 나르는 그릇의 최소본이다. **그 `schema`를 그리는 코드는 없다** —
-      // `repos/layouts.ts`의 `defaultLayoutDocument` 주석 참고.
-      const theme = await findThemeBySlug(trx, null, DEFAULT_THEME_SLUG)
+      // 2단계: 기본 레이아웃. 문서는 `Page` 하나와 `Slot` 하나다 — 그릇의 최소본이다. **그 `schema`를 그리는 코드는
+      // 없다** — `repos/layouts.ts`의 `defaultLayoutDocument` 주석 참고.
       const layout = await insertLayout(trx, {
         projectId: project.id,
         name: DEFAULT_LAYOUT_NAME,
-        themeId: theme?.id ?? null,
         schema: defaultLayoutDocument(),
       })
 
@@ -260,37 +240,29 @@ export async function lockProjectTree(trx: DbHandle, projectId: string): Promise
 }
 
 /**
- * **자기 행만 쓰는 쓰기의 첫 잠금** — 프로젝트 행을 `FOR KEY SHARE`로 잡는다. 부르는 자리: 프로젝트
- * 테마 고르기(`routes/themes.ts` — 레이아웃 행) · 코멘트 수정(`routes/comments.ts` — 코멘트 행) · 테마 수정 · 삭제
- * (`routes/themes.ts` — 테마 행) · FK 삽입 다섯(스냅샷 · 초대 · 테마 · 프리셋 · 토큰 생성).
+ * **자기 행만 쓰는 쓰기의 첫 잠금** — 프로젝트 행을 `FOR KEY SHARE`로 잡는다. 부르는 자리: 코멘트 수정(`routes/comments.ts`
+ * — 코멘트 행) · FK 삽입 넷(스냅샷 · 초대 · 프리셋 · 토큰 생성).
  *
- * **테마 수정 · 삭제도 복원 뒤에 선다 — 자기 행이 아니라 남의 쓰기가 건 잠금에서.** 삭제의
- * `ON DELETE RESTRICT` 검사는 `layouts`를 `FOR KEY SHARE`로 훑어 복원이 `FOR UPDATE`로 쥔 레이아웃 행에 서고, slug 를
- * 바꾸는 수정은 UNIQUE 키 갱신이라 `FOR UPDATE`여서 복원의 `set-layout-theme` · 테마 고르기의 FK 가 테마 행에 건
- * `KEY SHARE`에 선다. 그 대기가 재확인보다 늦게 끝나면 강등 뒤에 커밋된다 — 이것을 먼저 잡아 복원의 프로젝트 행 대기를
- * 재확인 앞으로 끌어온다.
+ * **FK 삽입 넷은 권한이 아니라 봉투 때문이다.** 삽입의 FK 도 같은 `KEY SHARE`를 걸지만 그것은 프로젝트 삭제 뒤에 섰다가
+ * 깨면 23503 — 봉투 없는 500 이다. 이것으로 먼저 잡으면 0 행 → 404(트리 쓰기와 같은 답).
  *
- * **FK 삽입 다섯은 권한이 아니라 봉투 때문이다.** 삽입의 FK 도 같은 `KEY SHARE`를 걸지만 그것은 프로젝트 삭제 뒤에 섰다가
- * 깨면 23503 — 봉투 없는 500 이다. 이것으로 먼저 잡으면 0 행 → 404(트리 쓰기 · 테마 고르기와 같은 답).
- *
- * **왜 — 커밋 순간의 재확인이 잠금 순서를 요구한다.** 두 쓰기는 프로젝트 행을 안 잡고 자기 행만 잡는다(그 행은 복원이
+ * **왜 — 커밋 순간의 재확인이 잠금 순서를 요구한다.** 코멘트 수정은 프로젝트 행을 안 잡고 자기 행만 잡는다(그 행은 복원이
  * `lockProjectForRestore`로 잠근다 — 그래서 복원 뒤에 선다). 그 뒤에 재확인(`auth/roles.ts`의 `recheckProjectRole` — 멤버 행
  * `FOR SHARE`)을 붙이면 «자기 행 → 멤버 행» 순이 되는데, 프로젝트 삭제는 «프로젝트 행 → 페이지 → CASCADE(멤버 행 → … →
  * 레이아웃 · 코멘트 행)» 순이다 — 삭제가 멤버 행을 지운 채 이 쓰기의 행을 기다리고, 이 쓰기는 그 멤버 행을 기다린다.
- * 잰 값(쓰기를 자기 행 뒤 · 재확인 앞에 세워 둔 채 삭제를 쏜다 — 5 판씩): **교착 5/5 · 삭제 500**(테마 · 코멘트 둘 다). 이것을
+ * 잰 값(쓰기를 자기 행 뒤 · 재확인 앞에 세워 둔 채 삭제를 쏜다 — 5 판씩): **교착 5/5 · 삭제 500**(코멘트). 이것을
  * 먼저 잡으면 삭제는 프로젝트 행에서 기다리고 **교착 0/5 · 삭제 204**. 순서가 «프로젝트 행 → 자기 행 → 멤버 행»이 된다 —
  * 트리 쓰기(`lockProjectTree`) · FK 삽입(부모 행 `KEY SHARE`)과 같은 방향이다.
  *
  * **`KEY SHARE`인 까닭** — 복원 · 프로젝트 삭제의 `FOR UPDATE`와 부딪힌다. 트리 쓰기의 `NO KEY UPDATE` · 다른 `KEY SHARE`와는
- * 안 부딪혀 같은 프로젝트의 테마 고르기 · 코멘트 수정이 트리 쓰기 뒤에 줄을 서지 않는다. **프로젝트 수정은
+ * 안 부딪혀 같은 프로젝트의 코멘트 수정이 트리 쓰기 뒤에 줄을 서지 않는다. **프로젝트 수정은
  * 갈린다** — 이름 · 설명만 바꾸면 `NO KEY UPDATE`라 안 부딪히고, **`slug`(UNIQUE)를 바꾸면 키 갱신이라 `FOR UPDATE`여서
- * 부딪힌다**(그 수정을 쥔 채 테마 고르기 · 스냅샷 · 토큰 발급을 보내면 섰다가 풀린 뒤 200/201). 그 대기는 이것에서 나므로
+ * 부딪힌다**(그 수정을 쥔 채 스냅샷 · 토큰 발급을 보내면 섰다가 풀린 뒤 201). 그 대기는 이것에서 나므로
  * 뒤의 재확인이 그 뒤의 역할로 판정한다 — 권한 구멍이 아니라 기다림의 폭이다.
  * 코멘트 삭제의 `lockProjectForBurial`(`repos/comments.ts`)과 같은 모드다 — 그쪽은 0 행이면 조용히 지나가는 계약이라(뒤의
  * 페이지 잠금이 404 를 낸다) 합치지 않는다.
  *
- * **대상이 없으면(그 사이 지워졌다) 던진다**(`ProjectGoneError` → 404) — 테마 고르기는 뒤에서 레이아웃이 없음을 409 «기본
- * 레이아웃이 없어»로 읽으므로, 여기서 끊지 않으면 지워진 프로젝트가 409 로 새어 나간다.
+ * **대상이 없으면(그 사이 지워졌다) 던진다**(`ProjectGoneError` → 404) — 위 «FK 삽입 넷은…»의 봉투 없는 500 을 여기서 끊는다.
  */
 export async function lockProjectShared(trx: DbHandle, projectId: string): Promise<void> {
   assertLocking(trx, 'lockProjectShared')

@@ -29,7 +29,7 @@
  *
  * `duplicateTargets`·`brokenLinks`·`errors`·`themeId`는 **HTML 번들의 성질이다.** PPTX는
  * 페이지 사이 링크를 만들지 않고(설계서 「명시적으로 제외한 것 (YAGNI)」이 도형 변환을 뺐으므로 슬라이드는
- * 글자와 이미지뿐이다) 설계서 「테마 시스템」의 테마도 안 쓴다. **그 넷을 pptx 응답에 그대로 실으면 값이 있는데 그
+ * 글자와 이미지뿐이다) 번들의 테마 칸(`themeId`)도 안 쓴다. **그 넷을 pptx 응답에 그대로 실으면 값이 있는데 그
  * 값이 아무것도 안 가리킨다.**
  *
  * 대신 pptx는 **셋**을 낸다:
@@ -61,7 +61,6 @@
  * | 페이지 문서 | 그렇다 — `GET .../pages/:id`가 viewer다 |
  * | 페이지 설명 | 그렇다 — 같은 응답에 있다 |
  * | 코멘트(본문·작성자 이름·작성 시각) | 그렇다 — `GET .../comments`가 viewer이고 같은 세 값을 낸다 |
- * | 테마 | 그렇다 — `GET .../theme`가 viewer다 |
  * | 메뉴·페이지 트리 | 그렇다 — `GET .../tree`가 viewer다 |
  * | 상호작용 문장 | 그렇다 — 문서 안의 `interactions`에서 만들어진다 |
  *
@@ -87,8 +86,7 @@
  * # 빈 프로젝트가 409인 이유
  *
  * 이 저장소에서 409는 *"요청은 옳은데 지금 상태가 그것을 허락하지 않는다"*이다(`apps/api/README.md`
- * 「에러 형식」 절의 표 — 자식이 있는 메뉴 삭제·쓰이고 있는 테마 삭제·기본 레이아웃이 없는 프로젝트의
- * 테마 고르기). 페이지를 하나 만들면 되는 **고쳐질 수 있는 상태**다. 404는 *"없다"*로
+ * 「에러 형식」 절의 표 — 자식이 있는 메뉴 삭제). 페이지를 하나 만들면 되는 **고쳐질 수 있는 상태**다. 404는 *"없다"*로
  * 끝나고 `projectGuard`가 outsider에게 이미 그것을 낸다.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
@@ -98,10 +96,8 @@ import { conflict, notFound } from '../errors'
 import { parseParams, parseQuery } from '../http/parse'
 import { findProjectById } from '../repos/projects'
 import { EmptyProjectError, UnsupportedDocumentError, readExportRows } from '../services/export-source'
-import { readScreenTheme } from '../services/export-pptx'
 import { ExportAbortedError, ExportWorkerPool, type ExportAdmission } from '../services/export-worker'
 import type { HtmlJobResult, PptxJobResult } from '../services/export-worker-protocol'
-import { currentProjectTheme } from '../services/project-theme'
 import type { ScreenRenderer } from '../services/screen-render'
 import {
   PPTX_CONTENT_TYPE,
@@ -176,15 +172,14 @@ function buildHtmlOrFail(
   return orFail(() =>
     admitted(workers, request, signal, async (admission) => {
       const rows = await readExportRows(app.db, projectId)
-      const { themeId, theme } = await currentProjectTheme(app.db, projectId)
-      return workers.runHtml(rows, { kind: 'html', theme: { themeId, theme }, zipRoot }, { signal, admission })
+      return workers.runHtml(rows, { kind: 'html', zipRoot }, { signal, admission })
     }),
   )
 }
 
 /**
- * pptx 도 같다 — 다만 **테마 읽기와 그리기는 메인에 남는다**(DB 와 브라우저를 메인이 쥔다). 워커가 그려 달라면 여기서
- * `renderer`를 부른다. 그리는 자가 없으면 테마도 안 읽는다(`services/export-pptx.ts`의 «그리는 것은 이음매 뒤다»).
+ * pptx 도 같다 — 다만 **그리기는 메인에 남는다**(브라우저를 메인이 쥔다). 워커가 그려 달라면 여기서 `renderer`를 부른다
+ * (`services/export-pptx.ts`의 «그리는 것은 이음매 뒤다»).
  */
 function buildPptxOrFail(
   app: FastifyInstance,
@@ -198,10 +193,9 @@ function buildPptxOrFail(
   return orFail(() =>
     admitted(workers, request, signal, async (admission) => {
       const rows = await readExportRows(app.db, projectId)
-      const screenTheme = renderer === undefined ? null : await readScreenTheme(app.db, projectId)
       return workers.runPptx(
         rows,
-        { kind: 'pptx', screenTheme, zip },
+        { kind: 'pptx', screens: renderer !== undefined, zip },
         { signal, admission, ...(renderer === undefined ? {} : { render: (requests) => renderer.render(requests) }) },
       )
     }),

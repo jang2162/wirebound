@@ -927,7 +927,6 @@ describe('`:projectId` 라우트 전부가 나쁜 헤더를 핸들러 앞에서 
     'menu_nodes',
     'pages',
     'revisions',
-    'themes',
     'layouts',
     'comments',
     'comment_tombstones',

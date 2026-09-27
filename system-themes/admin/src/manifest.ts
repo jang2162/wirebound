@@ -27,4 +27,51 @@ export const MANIFEST: ThemeManifest = {
       'radius.lg': { type: 'length', label: '모서리(크게)', group: 'shape', default: '10px' },
     },
   },
+  /**
+   * 카탈로그가 variant 를 두던 다섯 컴포넌트 — 그 값을 쓰던 페이지가 속성 패널에서 같은 칸을 본다. `Button` 의 `default` 는
+   * variant 없는 버튼의 자리다 — 선언에 없으면 variant 없는 버튼이 `defaultVariant`(선언 안의 값, 예컨대 `primary`)로 그려진다.
+   * `theme.css` 는 `default` 를 겨냥한 규칙이 없어 variant 없는 노드가 바탕 규칙 그대로 그려진다(`test/admin.test.ts`).
+   */
+  components: {
+    Section: {
+      variants: [
+        { id: 'default', label: '기본' },
+        { id: 'hero', label: '히어로' },
+        { id: 'muted', label: '옅게' },
+      ],
+      defaultVariant: 'default',
+    },
+    Card: {
+      variants: [
+        { id: 'default', label: '기본' },
+        { id: 'featured', label: '강조' },
+      ],
+      defaultVariant: 'default',
+    },
+    List: {
+      variants: [
+        { id: 'default', label: '기본' },
+        { id: 'featured', label: '강조' },
+        { id: 'compact', label: '촘촘' },
+      ],
+      defaultVariant: 'default',
+    },
+    Button: {
+      variants: [
+        { id: 'default', label: '기본' },
+        { id: 'primary', label: '주' },
+        { id: 'secondary', label: '보조' },
+        { id: 'danger', label: '위험' },
+        { id: 'ghost', label: '투명' },
+      ],
+      defaultVariant: 'default',
+    },
+    Link: {
+      variants: [
+        { id: 'default', label: '기본' },
+        { id: 'muted', label: '옅게' },
+      ],
+      defaultVariant: 'default',
+    },
+  },
 }

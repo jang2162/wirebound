@@ -245,6 +245,10 @@ describe('진짜 클라이언트가 붙어 도구를 부른다', () => {
       // **한국어가 프로토콜을 건너 그대로 왔는가.** 카탈로그가 실제 프로세스에서도 섰는가.
       expect(got.page.interactions[0]!.text).toContain('로딩 상태')
 
+      // **검사에서 빠진 것(`notes`)도 프로토콜을 건너오는가** — 메뉴를 잃은 페이지 하나로 노트를 세운다.
+      const 떠돌이 = snapshotPayload()
+      떠돌이.pages[2]!.menuNodeId = '00000000-0000-4000-8000-00000000dead'
+      payload = 떠돌이
       const validated = JSON.parse(text(await client.callTool({ name: 'validate', arguments: {} }))) as {
         ran: boolean
         failing: boolean

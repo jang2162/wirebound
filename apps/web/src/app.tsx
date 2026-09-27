@@ -10,7 +10,6 @@ import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
 import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
-import { ThemeEditorRoute } from './routes/theme-editor'
 import { TokensRoute } from './routes/tokens'
 import { SessionProvider } from './session/session-context'
 
@@ -62,24 +61,10 @@ export function App(): ReactElement {
                 그대로 이어진다. */}
             <Route path="/projects/:projectId" element={<EditorShellRoute />} />
             <Route path="/projects/:projectId/pages/:pageId" element={<EditorShellRoute />} />
-            {/* **테마 저작은 셸 밖의 별도 라우트다.** 셸 안에 두지 않는 이유 셋은
-                `routes/theme-editor.tsx` 머리말에 있다 — 요지는 갤러리와 캔버스가 *"화면 전체를
-                쓰는 미리보기"* 자리를 다툰다는 것이다.
-
-                **`:themeId`는 행 id다.** slug가 아니다 — 유일성 단위가
-                `(project_id, slug)`라 시스템 테마와 프로젝트 테마가 같은 slug를 가질 수 있다.
-
-                **문지기 안이다** — 위 `RequireAuth` 아래에 있으므로 로그인 없이는 못 온다.
-                owner인지는 화면이 판정한다(읽기는 viewer도 된다 — 그 파일의 권한 절). */}
-            <Route path="/projects/:projectId/themes/:themeId" element={<ThemeEditorRoute />} />
             {/* **스냅샷에는 주소가 없다** — 셸 밖 라우트가 아니라 **셸 머리의 팝오버**다
                 (`shell/snapshots-panel.tsx` 머리말의 표가 라우트로 둘 근거 둘과 그것이 서지 않는 까닭을 짝지어 적고 있다).
                 요지: 설계서 「설계서 화면 구조」는 머리에 무엇이 오는지 말하지 않고, 스냅샷 목록은 링크로 건네는
-                화면이 아니다.
-
-                **테마 저작은 라우트다** — 그쪽 근거는 스냅샷과 갈린다: 갤러리와
-                캔버스가 *"화면 전체를 쓰는 미리보기"* 자리를 다툰다(`routes/theme-editor.tsx`).
-                팝오버 안에 들어갈 크기가 아니라는 뜻이므로 스냅샷과 같은 판단을 하지 않는다. */}
+                화면이 아니다. */}
           </Route>
         </Routes>
       </WriteLedgerProvider>

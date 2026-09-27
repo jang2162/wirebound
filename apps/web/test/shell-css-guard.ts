@@ -19,28 +19,23 @@
  * - `shell.css` **밖의** 스타일. `.tsx`의 인라인 `style`, `<style>` 태그, 다른 CSS 파일은
  *   읽지 않는다. `apps/web/src`의 CSS 파일은 `shell.css` 하나이고 JSX `<style>` 태그는
  *   없다(검산: `rg --files apps/web/src -g '*.css'` — **`rg -l '\.css$'`로 쓰지 마라.**
- *   그것은 파일 이름이 아니라 **내용**에서 `.css`로 끝나는 줄을 찾아 `draft-css.ts`를 낸다).
+ *   그것은 파일 이름이 아니라 **내용**에서 `.css`로 끝나는 줄을 찾는다).
  *
- *   **인라인 `style`은 두 부류뿐이고 둘 다 상속되지 않는 속성만 건다.**
- *
- *   ㉠ **자리·크기를 코드가 계산하는 것** — 캔버스 프레임의 폭·줌(`routes/editor.tsx`),
- *      선택 아웃라인의 자리(`canvas/canvas.tsx`).
- *   ㉡ **값 자체가 스타일인 미리보기** — 토큰 GUI의 색 견본·간격 막대·타이포 표본
- *      (`theme/token-editor.tsx`). 초안의 값을 그대로 그려야 해서 정적 CSS로 쓸 수 없고,
- *      커스텀 프로퍼티로 우회하면 그 이름이 테마가 `:root`에 싣는 것과 겹친다.
+ *   **인라인 `style`은 한 부류뿐이고 상속되지 않는 속성만 건다** — **자리·크기를 코드가 계산하는 것**: 캔버스 프레임의
+ *   폭·줌(`routes/editor.tsx`), 선택 아웃라인의 자리(`canvas/canvas.tsx`), 캔버스 iframe 의 크기(`canvas/canvas-iframe.tsx`),
+ *   팝오버의 자리.
  *
  *   **수를 적지 않는 것이 의도다** — 자리 수는 파일이 하나 늘 때마다 낡고, 그렇게 낡은
  *   주석은 아무것도 실패시키지 않은 채 거짓이 된다. **부류가 늘 때만 이 주석을 고친다.**
- *   새 인라인이 ㉠·㉡ 어디에도 안 들어가면 그때는 정말로 검토가 필요한 것이다.
+ *   새 인라인이 그 부류에 안 들어가면 그때는 정말로 검토가 필요한 것이다.
  *   지금 자리를 세려면: `grep -rn 'style={' apps/web/src`.
  *
  *   어느 쪽이든 **검사가 보고 있어서 안전한 것이 아니다.**
  *
- *   **셋째 부류가 있다:** `theme/use-theme-css.ts`가 `document.head`에 `<style>`
- *   둘을 만들어 붙인다. 그 시트는 **문서 노드를 겨냥하는 것이 일**이므로 격리 규칙이 금지하는
- *   대상이 아니다 — 그 규칙이 가른 선은 *"셸이 문서를 스타일하지 않는다"*이고, 저 시트의
- *   내용은 셸이 아니라 `packages/renderer`의 구조 기본 CSS와 `packages/themes`가 컴파일한
- *   테마 CSS다. 다만 **이 검사는 그 시트를 읽지 않는다**는 사실은 위와 같다.
+ *   **다른 부류가 있다:** 캔버스 iframe(`canvas/canvas-iframe.tsx`)이 그 문서의 head 에 `<style>` 둘을 붙인다
+ *   (`canvas/canvas-theme.ts`의 `CANVAS_STYLES`). 그 시트는 **문서 노드를 겨냥하는 것이 일**이므로 격리 규칙이 금지하는
+ *   대상이 아니다 — 그 규칙이 가른 선은 *"셸이 문서를 스타일하지 않는다"*이고, 저 시트의 내용은 셸이 아니라 SDK 기본 뷰
+ *   CSS와 테마 CSS다. 다만 **이 검사는 그 시트를 읽지 않는다**는 사실은 위와 같다.
  * - `WRAPPERS`에 없는 상자. 문서를 감싸는 상자가 새로 생기면 **사람이 여기 더해야** 한다.
  *   그 목록은 `canvas/canvas.tsx`·`routes/editor.tsx`가 무엇을 감싸는지에 매여 있고,
  *   검사가 스스로 알아낼 방법이 없다.
@@ -95,8 +90,8 @@ export interface Violation {
  * 자식으로 물려 내려간다 — 선택자 검사가 못 보는 누수라 속성으로 따로 본다.
  *
  * **세는 단위는 "문서 노드가 그 안에 들어오는 클래스"다.** 한 줄에 하나씩 적는다.
- * 검산 — 문서 노드가 **바로 그 안에** 들어오는 상자 둘(캔버스·갤러리 항목)을 소스에서 찾는다:
- * `rg -n 'wb-shell-canvas-surface|wb-shell-gallery-item' apps/web/src`
+ * 검산 — 문서 노드가 **바로 그 안에** 들어오는 상자(캔버스)를 소스에서 찾는다:
+ * `rg -n 'wb-shell-canvas-surface' apps/web/src`
  * (검산 명령에 `*` 뒤 `/`를 쓰지 마라 — 이 주석이 거기서 끝나 `esbuild`가 이 파일을 통째로
  * 못 읽는다.)
  *
@@ -104,31 +99,17 @@ export interface Violation {
  * 2. `wb-shell-canvas` — 그 사슬 둘째
  * 3. `wb-shell-canvas-frame` — 셋째
  * 4. `wb-shell-canvas-surface` — 넷째. 여기 안에 페이지 문서가 들어온다
- * 5. `wb-shell-theme` — **테마 저작 화면의 루트**. 셸 밖의 별도 라우트라
- *    사슬이 따로다
- * 6. `wb-shell-theme-gallery` — 그 사슬 둘째. 라우트가 그리는 `<main>`이다
- * 7. `wb-shell-gallery-list` — 그 사슬 셋째. 항목 상자들이 여기 들어온다
- * 8. `wb-shell-gallery-item` — 그 사슬 넷째. **여기 안에 갤러리가 `renderNode`로 그린 문서
- *    노드가 들어온다.** 캡션(`wb-shell-gallery-caption`)은 그 문서 노드의 **형제**라
- *    감싸는 상자가 아니다 — 그래서 이 목록에 없고 글자 속성을 마음대로 건다
- * 9. `wb-shell-gallery-patterns` — 7번의 형제. 패턴 항목 상자(8번)들이 여기 들어온다
  *
  * > **문서를 감싸는 상자를 만드는 사람이 여기 한 줄을 더하는 것이 이 목록의 유일한 갱신
  * > 방법이다** — 목록에 없는 상자에 상속 속성을 걸면 **아무 케이스도 안 죽고**, 목록에 있으면
- * > 여러 케이스가 죽는다(6번 상자에 상속 속성을 심고 목록에서 넣었다 뺐다 하며 다시 잰다).
- * > 즉 여기 더하지 않으면 격리 위반이 조용히 지나간다. **갤러리 안에 상자를 또 만드는 사람은
- * > 여기 한 줄을 더해야 한다.**
+ * > 여러 케이스가 죽는다(4번 상자에 상속 속성을 심고 목록에서 넣었다 뺐다 하며 다시 잰다).
+ * > 즉 여기 더하지 않으면 격리 위반이 조용히 지나간다.
  */
 const WRAPPERS = new Set([
   'wb-shell',
   'wb-shell-canvas',
   'wb-shell-canvas-frame',
   'wb-shell-canvas-surface',
-  'wb-shell-theme',
-  'wb-shell-theme-gallery',
-  'wb-shell-gallery-list',
-  'wb-shell-gallery-item',
-  'wb-shell-gallery-patterns',
 ])
 
 /**
@@ -366,7 +347,7 @@ export function declaredVariables(css: string): Set<string> {
  *
  * **못 보는 것 둘:**
  *
- * - **`shell.css` 밖.** `theme/use-theme-css.ts`가 `document.head`에 붙이는 시트와
+ * - **`shell.css` 밖.** 캔버스 iframe 이 그 문서의 head 에 붙이는 시트와
  *   `.tsx`의 인라인 `style`은 읽지 않는다(머리말의 같은 항목). 그쪽은 **테마의 어휘**라
  *   `--wb-shell-*`를 쓰지도 않는다(두 이름 집합의 교집합이 비어 있다).
  * - **문자열 리터럴 안의 `var(`도 사용으로 센다.** `content: "var(--없는것)"`이 그 형태다 —

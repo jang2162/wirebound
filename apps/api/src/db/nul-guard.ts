@@ -60,7 +60,7 @@ export function containsNulByte(value: unknown): boolean {
  * | `POST …/pages/import` | `title`(본문 · 파일) · `description`(파일) |
  *
  * 자기 자리에서 막는 것: 코멘트 본문(`repos/comments.ts`) · 토큰 이름(`routes/tokens.ts`) ·
- * 프리셋(`repos/presets.ts`) · 스냅샷 태그·설명(`repos/snapshots.ts`) · 테마(`repos/themes.ts`) · 문서
+ * 프리셋(`repos/presets.ts`) · 스냅샷 태그·설명(`repos/snapshots.ts`) · 문서
  * (`PUT .../schema` · 편집 파이프라인 8단계). **닿지 않는 것**: 로그인·초대의 이메일(zod 의 이메일 형식이 400) ·
  * 로그인 비밀번호(해시와 비교할 뿐 저장하지 않는다 — 401) · 슬러그(정규식) · 멱등 키(정규식) · 쿠키·토큰
  * (해시만 질의에 실린다) · 경로의 id(uuid).

@@ -18,12 +18,10 @@ import { presetRoutes } from './routes/presets'
 import { projectRoutes } from './routes/projects'
 import { revisionRoutes } from './routes/revisions'
 import { snapshotRoutes } from './routes/snapshots'
-import { themeRoutes } from './routes/themes'
 import { myTokenRoutes, tokenRoutes } from './routes/tokens'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
 import type { ScreenRenderer } from './services/screen-render'
-import { syncSystemThemes } from './services/system-themes'
 import { registerRealtime } from './ws'
 
 declare module 'fastify' {
@@ -63,7 +61,7 @@ export interface BuildAppOptions {
    * 새 라우트를 놓치는 것과 같은 꼴이다.
    *
    * **Fastify가 아는 목록을 쓴다.** `printRoutes()`는 라딕스 트리를 사람이 읽는 글자로
-   * 그리는 것이라(`/theme` 아래에 `s`가 자식으로 붙는 식으로 마디가 쪼개진다) 그것을
+   * 그리는 것이라(`/pages` 와 `/presets` 가 공통 접두 `/p` 아래로 갈라지는 식으로 마디가 쪼개진다) 그것을
    * 되파싱하면 자가 대상보다 약해진다. `onRoute` 훅은 Fastify가 라우트를 등록할 때마다
    * 부르므로 **경로 패턴과 preHandler 목록을 그대로** 준다.
    *
@@ -190,18 +188,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 수백 번 부르므로 필수다(schema-setup.ts 참고).
   ensureCatalog()
 
-  // 시스템 테마를 코드에서 DB로 동기화한다(코드가 진실, DB는 사본).
-  //
-  // **`main.ts`가 아니라 여기인 이유:** 이 뒤의 경로들이 그 행의 존재에 기댄다 —
-  // 프로젝트를 만들면 기본 레이아웃이 생기고 그 `theme_id`가 시스템 `admin`을
-  // 가리켜야 한다(`repos/projects.ts`). `main.ts`에만 두면 `buildApp`으로 앱을
-  // 세우는 모든 경로(테스트 전부)에서 그 행이 없어 프로젝트 생성이 깨진다.
-  //
-  // 매 `buildApp`마다 도는 비용은 시스템 테마 수만큼의 upsert 한 문장씩이다.
-  // `ensureCatalog`가 멱등한 것과 같은 이유로 이것도 멱등해야 하고, `ON CONFLICT`가
-  // 그것을 보장한다(`repos/themes.ts`의 `upsertSystemTheme`).
-  await syncSystemThemes(db)
-
   // **라우트 등록보다 앞이어야 한다** — `onRoute` 훅은 자기보다 뒤에 등록된 것만 본다.
   if (onRoute) {
     const list = (hook: unknown): unknown[] => (hook === undefined ? [] : Array.isArray(hook) ? [...hook] : [hook])
@@ -240,7 +226,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 코멘트도 페이지 아래에 산다(`/:projectId/pages/:pageId/comments`) — 파일은 분리하되
   // URL 네임스페이스는 `pageRoutes`와 공유한다.
   await app.register(commentRoutes(), { prefix: '/api/projects' })
-  await app.register(themeRoutes(), { prefix: '/api/projects' })
   // 스냅샷도 프로젝트 아래에 산다(`/:projectId/snapshots`). **인자 없이 부른다** — 그
   // 팩토리의 `captureHooks`는 테스트 전용 이음매다(`routes/snapshots.ts`의 머리말).
   await app.register(snapshotRoutes(), { prefix: '/api/projects' })

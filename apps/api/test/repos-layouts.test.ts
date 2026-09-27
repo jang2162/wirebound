@@ -1,13 +1,10 @@
 /**
- * 레이아웃과 기본 레이아웃. 설계서 「테이블 정의」의 사슬
- * `projects.default_layout_id → layouts.theme_id → themes`가 실제로 이어지는지 본다.
+ * 레이아웃과 기본 레이아웃. 설계서 「테이블 정의」의 `projects.default_layout_id → layouts`가 실제로 이어지는지 본다.
  */
 import { sql } from 'kysely'
 import { validateLayout } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
-import { withTransaction } from '../src/db/tx'
 import { findDefaultLayout } from '../src/repos/layouts'
-import { findThemeBySlug, insertTheme } from '../src/repos/themes'
 import { createProject, signup, withApi, type TestContext } from './helpers'
 
 async function ownedProject(ctx: TestContext) {
@@ -61,16 +58,6 @@ describe('기본 레이아웃 (0007)', () => {
     })
   })
 
-  it('theme_id가 시스템 admin을 가리킨다', async () => {
-    await withApi(async (ctx) => {
-      const { project } = await ownedProject(ctx)
-      const layout = (await findDefaultLayout(ctx.db, project.id))!
-      const admin = await findThemeBySlug(ctx.db, null, 'admin')
-
-      expect(layout.themeId).toBe(admin!.id)
-    })
-  })
-
   it('프로젝트를 지우면 레이아웃도 지워진다 (CASCADE)', async () => {
     await withApi(async (ctx) => {
       const { owner, project } = await ownedProject(ctx)
@@ -112,126 +99,6 @@ describe('기본 레이아웃 (0007)', () => {
       await ctx.db.updateTable('projects').set({ default_layout_id: null }).where('id', '=', project.id).execute()
 
       expect(await findDefaultLayout(ctx.db, project.id)).toBeNull()
-    })
-  })
-
-  /**
-   * **`layouts.theme_id`가 `ON DELETE RESTRICT`다.**
-   *
-   * *"테마를 지울 때 그것을 가리키는 레이아웃이 어떻게 되는가"*의 답이다. `SET NULL`로 두면 **화면이 말없이 달라진다**(테마가 사라져 구조 기본 CSS로
-   * 떨어진다). 실패하는 편이 낫고, 라우트가 그것을 409로 옮긴다.
-   */
-  it('쓰이고 있는 테마는 지워지지 않는다 (RESTRICT)', async () => {
-    await withApi(async (ctx) => {
-      const { project } = await ownedProject(ctx)
-      const layout = (await findDefaultLayout(ctx.db, project.id))!
-
-      await expect(
-        withTransaction(ctx.db, (trx) => trx.deleteFrom('themes').where('id', '=', layout.themeId!).execute()),
-      ).rejects.toThrow()
-    })
-  })
-
-  it('쓰이지 않는 테마는 지워진다', async () => {
-    await withApi(async (ctx) => {
-      const { project } = await ownedProject(ctx)
-      const unused = await insertTheme(ctx.db, project.id, {
-        meta: { id: 'unused', name: '안 쓰임', version: '1.0.0' },
-      })
-
-      await withTransaction(ctx.db, (trx) => trx.deleteFrom('themes').where('id', '=', unused.id).execute())
-      const rows = await ctx.db.selectFrom('themes').select('id').where('id', '=', unused.id).execute()
-      expect(rows).toHaveLength(0)
-    })
-  })
-})
-
-/**
- * `GET /api/projects/:projectId/theme` — 캔버스가 쓰는 형태(홀로 서는 테마 하나)를 낸다.
- */
-describe('프로젝트의 현재 테마', () => {
-  function get(ctx: TestContext, projectId: string, cookie: { wb_session: string }) {
-    return ctx.app.inject({ method: 'GET', url: `/api/projects/${projectId}/theme`, cookies: cookie })
-  }
-
-  it('기본 레이아웃이 가리키는 시스템 테마를 낸다', async () => {
-    await withApi(async (ctx) => {
-      const { owner, project } = await ownedProject(ctx)
-
-      const res = await get(ctx, project.id, owner.cookie)
-      expect(res.statusCode).toBe(200)
-      expect(res.json().theme.meta.id).toBe('admin')
-      expect(res.json().issues).toEqual([])
-    })
-  })
-
-  /**
-   * **파생 테마는 합쳐서 낸다.** 그리는 쪽은 유래가 필요 없고 `resolveTheme`이 base를
-   * 요구하므로, 합치지 않고 내면 받는 쪽이 두 인자를 스스로 맞춰야 한다.
-   * (편집용 형태는 `GET .../themes/:themeId`가 `base`와 함께 낸다 — 소비자가 다르다.)
-   */
-  it('파생 테마면 합쳐서 홀로 서는 테마를 낸다', async () => {
-    await withApi(async (ctx) => {
-      const { owner, project } = await ownedProject(ctx)
-
-      const created = await ctx.app.inject({
-        method: 'POST',
-        url: `/api/projects/${project.id}/themes`,
-        cookies: owner.cookie,
-        payload: {
-          theme: {
-            meta: { id: 'derived', name: '파생', version: '1.0.0', extends: 'system:admin' },
-            tokens: { semantic: { primary: '#ff0000' } },
-          },
-        } as never,
-      })
-      expect(created.statusCode).toBe(201)
-
-      const layout = (await findDefaultLayout(ctx.db, project.id))!
-      await ctx.db
-        .updateTable('layouts')
-        .set({ theme_id: created.json().id })
-        .where('id', '=', layout.id)
-        .execute()
-
-      const res = await get(ctx, project.id, owner.cookie)
-      expect(res.statusCode).toBe(200)
-      // 합쳐졌다: 파생이 덮은 값과 base의 절이 **함께** 있다.
-      expect(res.json().theme.tokens.semantic.primary).toBe('#ff0000')
-      expect(res.json().theme.components).toBeDefined()
-      // 홀로 선다: `extends`가 빠졌다(`mergeTheme`이 설계서 「스냅샷」의 이유로 뺀다).
-      expect(res.json().theme.meta.extends).toBeUndefined()
-    })
-  })
-
-  it('기본 레이아웃이 없으면 theme이 null이다 — 실패가 아니다', async () => {
-    await withApi(async (ctx) => {
-      const { owner, project } = await ownedProject(ctx)
-      await ctx.db.updateTable('projects').set({ default_layout_id: null }).where('id', '=', project.id).execute()
-
-      const res = await get(ctx, project.id, owner.cookie)
-      expect(res.statusCode).toBe(200)
-      expect(res.json().theme).toBeNull()
-    })
-  })
-
-  it('레이아웃이 테마를 안 고르면 theme이 null이다', async () => {
-    await withApi(async (ctx) => {
-      const { owner, project } = await ownedProject(ctx)
-      const layout = (await findDefaultLayout(ctx.db, project.id))!
-      await ctx.db.updateTable('layouts').set({ theme_id: null }).where('id', '=', layout.id).execute()
-
-      const res = await get(ctx, project.id, owner.cookie)
-      expect(res.statusCode).toBe(200)
-      expect(res.json().theme).toBeNull()
-    })
-  })
-
-  it('viewer도 읽을 수 있다', async () => {
-    await withApi(async (ctx) => {
-      const { owner, project } = await ownedProject(ctx)
-      const res = await get(ctx, project.id, owner.cookie)
-      expect(res.statusCode).toBe(200)
     })
   })
 })

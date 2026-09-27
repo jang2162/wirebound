@@ -120,8 +120,7 @@ const getPage: ToolHandler = async (io, args) => {
  *
  * # `notes`를 버리지 않는다
  *
- * *"검사에서 빠진 것"*이다. 버리면 테마를 안 고른 레이아웃·상속이 끊긴 파생 테마·안 돈 ⑪·
- * 못 올린 문서 버전·메뉴를 잃은 페이지가 전부 **"결함 0건"으로 위장된다.**
+ * *"검사에서 빠진 것"*이다. 버리면 못 올린 문서 버전·메뉴를 잃은 페이지가 전부 **"결함 0건"으로 위장된다.**
  */
 const validate: ToolHandler = async (io, args) => {
   const open = await openProject(io)
@@ -151,7 +150,7 @@ const validate: ToolHandler = async (io, args) => {
     totalIssues: report.totalIssues,
     /** 경로 밖에 남은 `error`. **0이 아니면 이 응답만 보고 *"괜찮다"*로 읽으면 안 된다.** */
     outsideErrors: report.outsideErrors,
-    /** `pageId`가 `null`이라 경로 필터에서 통째로 빠진 이슈 수(테마·메뉴 이름 규칙). */
+    /** `pageId`가 `null`이라 경로 필터에서 통째로 빠진 이슈 수(메뉴 이름 규칙). */
     droppedProjectIssues: report.droppedProjectIssues,
     /** **검사에서 빠진 것.** 비어 있지 않으면 결함 0건이 *"깨끗하다"*가 아니다. */
     notes: report.notes,

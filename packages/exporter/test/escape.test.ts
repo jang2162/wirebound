@@ -29,15 +29,15 @@
  *
  * | 것 | 무엇이 관찰되나 | 안전은 어디서 오나 |
  * |---|---|---|
- * | `javascript:` URL | `href`에 그대로 실린다 | **렌더러다.** `structures/action.tsx`가 `Link.target` 앞에 `#`을 붙여 조각 참조로 만든다 — React도 exporter도 막지 않는다 |
+ * | `javascript:` URL | `href`에 그대로 실린다 | **뷰다.** SDK 기본 뷰 `Link`(`packages/theme-sdk/src/default-views/action.tsx`)가 `target` 앞에 `#`을 붙여 조각 참조로 만든다 — React도 exporter도 막지 않는다. 테마 뷰는 신뢰 코드라 그 판정을 스스로 진다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「확정한 결정」의 신뢰 경계) |
  * | 백슬래시 | 그대로다 | HTML에서 뜻이 없다 |
  * | **날 제어 문자**(U+0000 NUL · U+000B 등) | **그대로 실린다** — 텍스트에도 `<title>`에도 | **저장 경계다**(NUL만). 아래 참조 |
  * | **줄·문단 분리자**(U+2028 · U+2029) | **그대로 실린다** | **필요 없다.** ES2019가 그 둘을 문자열 리터럴에서 합법으로 만들었다 — 아래 참조 |
- * | CSS | 이스케이프 대상이 아니다 | **`themes`다.** `css`는 HTML 밖의 값이고, 그 안에 `<`가 들어가는 길은 `bad-style-value` **error**로 막혀 `resolveTheme`이 `null`을 낸다 |
+ * | CSS | 이스케이프 대상이 아니다 | **인라인하지 않는 것이다.** `css`는 HTML 밖의 값이고 번들은 `assets/theme.css` 링크로 건다. 테마 CSS 는 관리자가 올린 신뢰 코드다(같은 spec 의 신뢰 경계) |
  *
  * **CSS 줄의 물음은 인라인할 때 생긴다** — 번들은 시트를 `assets/theme.css` 링크로 걸지만,
  * CSS를 `<style>`로 인라인하는 경로를 만들면 *"`</style>`이 값에 들어갈 수 있는가"*가
- * 물음이 되고, 그 답은 아래 케이스가 든다.
+ * 물음이 된다. 그 경로를 만드는 쪽이 그 답을 세운다.
  *
  * ---
  *
@@ -72,15 +72,12 @@
  * **그래서 exporter도 저장 경계도 이 둘을 막지 않는다.** 문서에서 금지하면 사용자가 적을
  * 수 있는 글자를 우리가 줄이는 것인데, 줄여서 얻을 것이 없다.
  */
-import { installStructures } from '@wirebound/renderer'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
-import { THEME_ISSUE_SEVERITY, resolveTheme } from '@wirebound/themes'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { exportPage } from '../src/page'
 
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
 
 /** 텍스트 자리에 문자열 하나를 실은 문서. */
@@ -210,7 +207,7 @@ describe('바꾸지 않는 것 — 그래서 안전이 다른 데서 온다', ()
   })
 
   /**
-   * **`javascript:`를 React가 막지 않는다.** 막는 것은 렌더러의 구조 구현이고, 방법은
+   * **`javascript:`를 React가 막지 않는다.** 막는 것은 SDK 기본 뷰 `Link`이고, 방법은
    * 검사가 아니라 `#` 접두어다 — 값이 무엇이든 조각 참조가 된다.
    */
   it('javascript: URL이 href에 그대로 실린다 — 다만 # 뒤다', () => {
@@ -236,39 +233,6 @@ describe('바꾸지 않는 것 — 그래서 안전이 다른 데서 온다', ()
       .parseFromString(html, 'text/html')
       .querySelector('a[data-wb-component="Link"]')
     expect(anchor?.getAttribute('href')).toBe('#javascript:alert(1)')
-  })
-
-  /**
-   * **CSS는 이 함수의 이스케이프 대상이 아니다.** `css`는 HTML 밖의 값이라 여기서
-   * 바꿀 것이 없고, 대신 `<`가 값에 들어가는 길이 `themes`에서 막혀 있다. **CSS를
-   * `<style>`로 인라인하는 경로를 만들면 이 케이스가 그 근거다.**
-   */
-  it('테마 값에 `<`를 넣으면 테마가 서지 않는다 — CSS에 도달할 길이 없다', () => {
-    const { theme, issues } = resolveTheme({
-      meta: { id: 'x', name: '가', version: '1.0.0' },
-      tokens: { semantic: { primary: '#111' } },
-      primitives: { container: { maxWidth: '</style><script>alert(1)</script>' } },
-    })
-
-    expect(theme).toBeNull()
-    expect(
-      issues
-        .filter((issue) => THEME_ISSUE_SEVERITY[issue.code] === 'error')
-        .map((issue) => `${issue.code} ${issue.path}`),
-    ).toEqual(['bad-style-value primitives.container.maxWidth'])
-  })
-
-  it('폰트 src도 같은 자리에서 막힌다', () => {
-    const { theme, issues } = resolveTheme({
-      meta: { id: 'y', name: '나', version: '1.0.0' },
-      tokens: { semantic: { primary: '#111' } },
-      assets: { fonts: [{ family: 'A', src: 'https://x/a.woff2</style><script>x</script>' }] },
-    })
-
-    expect(theme).toBeNull()
-    expect(issues.map((issue) => `${issue.code} ${issue.path}`)).toEqual([
-      'bad-style-value assets.fonts.0.src',
-    ])
   })
 })
 

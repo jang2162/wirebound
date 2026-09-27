@@ -1,3 +1,4 @@
+import { installCatalog } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import packageJson from '../package.json?raw'
 import tsconfigJson from '../tsconfig.json?raw'
@@ -50,48 +51,15 @@ describe('공개 표면이 계약이다', () => {
    */
   const CONTRACT = [
     'PACKAGE_NAME',
-    // 규격
-    'ThemeSchema', 'ThemePatchSchema', 'MetaSchema', 'AssetsSchema', 'TokensSchema',
-    'PrimitivesSchema', 'ComponentSchema', 'ComponentsSchema',
+    // 패턴(설계서 「patterns — 테마가 소유한 구성 레시피」). 규격 · 검증 · 전개. `apps/web`의 패턴 고르개와 삽입 경로가 부른다 —
+    // CLI·MCP가 부르려면 패키지에 있어야 한다(설계서 「LLM 연계 (P9)」).
     'PatternSchema', 'PatternsSchema', 'PatternNodeSchema',
-    // 상수
-    'ICON_SETS', 'PLACEHOLDER_STYLES', 'PATTERN_CATEGORIES', 'SLOT_TYPES',
-    'SPACE_MAX', 'TOKEN_NAMESPACES', 'STYLE_PROPERTIES',
-    // 「스타일 프로퍼티 화이트리스트」 밖의 어휘 목록. **`apps/web`이 쓴다** — `treeIndent`가 내는 CSS 이름과
-    // `renderer`의 `TREE_INDENT_VAR`를 대조하는 자리가 거기뿐이다(「각 패키지의 책임과 의존」).
-    'STYLE_PROPERTIES_BEYOND_SPEC',
-    'THEME_ID_PATTERN', 'EXTENDS_PATTERN',
-    // 해석과 방출
-    'resolveTheme', 'compileTheme', 'mergeTheme',
-    'resolveTokens', 'checkPrimitives', 'checkThemeComponents', 'checkPatterns',
-    // 값 헬퍼 — 규격을 쓰는 쪽이 같은 규칙으로 값을 다뤄야 해서 낸다
-    'styleDeclarations', 'resolveStyleValue', 'isTokenReference', 'cssVarName',
-    // 내장 시스템 테마. `ADMIN_THEME`을 따로 내는 것은 파생 테마의 base가
-    // 될 값이 이름으로 필요하기 때문이다 — 병합이 그것을 쓴다.
-    'SYSTEM_THEME_IDS', 'systemTheme', 'ADMIN_THEME',
-    // 이슈 severity 표와 팩토리. 저장 경계가 "막을 이슈"와 "알릴 이슈"를
-    // 갈라야 하고, 이 패키지 밖에서 테마 이슈를 만드는 자리도 표를 지나야 한다.
-    'THEME_ISSUE_SEVERITY', 'themeIssue',
-    // 스타일이 `primitives`를 가리키는 문법. 이름공간 목록을 내는 것은 저작 UI 쪽이
-    // 같은 목록으로 대조하기 때문이다(`apps/web`의 `token-editor.test.tsx`).
-    'STYLE_PRIMITIVE_NAMESPACES', 'isPrimitiveReference',
-    // 노드 손잡이 표. **`apps/web`이 렌더러의 구조 기본 CSS와 대조한다**
-    // (「각 패키지의 책임과 의존」 — `themes`는 `renderer`를 볼 수 없다). `STYLE_PROPERTIES_BEYOND_SPEC`과 같은 부류다.
-    'NODE_HANDLES', 'coveredProperties', 'overwrittenHandles',
-    // 패턴 전개(설계서 「patterns — 테마가 소유한 구성 레시피」). `apps/web`의 삽입 경로가 부르고,
-    // `exporter`도 같은 이름을 쓴다.
-    'expandPattern',
-    // 테마가 고른 구조를 렌더러의 옵션 꼴로 내는 투영. **이 패키지에 둔다** —
-    // 화면(`apps/web`)·정적 번들(`exporter`)이 같은 표를 써야 설계서 「HTML 정적 번들」의
-    // *"결과가 어긋날 수 없다"*가 참이 된다.
-    'themeStructures',
-    // 설계서 「lint 규칙」의 lint. **`lintProject`가 합치는 자리다**: 설계서 규칙은
-    // `schema`가 구현하고 테마 규칙은 여기가 구현하는데, `themes → schema`가 의존 방향이라
-    // **순수 스택에서 둘 다 볼 수 있는 자리가 여기뿐**이다. 웹·CLI·MCP 셋이 이 이름을 부른다.
-    'lintProject', 'lintThemes',
-    // 스냅샷 payload 규격과 lint 입력 변환. **`apps/api`가 아니라 여기 둔다** —
-    // payload가 `PageDocument`와 `Theme`을 동시에 나르므로 순수 스택에서 둘 다 볼 수 있는
-    // 자리가 여기다. `wireb lint`와 MCP `validate`가 같은 변환을 부른다.
+    'PATTERN_CATEGORIES', 'SLOT_TYPES',
+    'checkPatterns', 'expandPattern',
+    // 설계서 「lint 규칙」의 lint. 웹·CLI·MCP 셋이 이 이름을 부른다.
+    'lintProject',
+    // 스냅샷 payload 규격과 lint 입력 변환. **`apps/api`가 아니라 여기 둔다** — api·CLI(`wireb pull`·`wireb lint`)·MCP가
+    // 같은 모양을 읽는다. `wireb lint`와 MCP `validate`가 같은 변환을 부른다.
     'SNAPSHOT_PAYLOAD_VERSION', 'SNAPSHOT_RESOURCES', 'SnapshotPayloadSchema', 'snapshotToLintInput',
   ].sort()
 
@@ -100,18 +68,22 @@ describe('공개 표면이 계약이다', () => {
   })
 
   it('내부 헬퍼가 새어 나가지 않는다', () => {
-    for (const name of ['own', 'scanFunctions', 'rejectFunctions', 'rejectDangerousCharacters', 'urlSpans']) {
+    // 이슈 팩토리와 severity 표는 패턴 검증 안의 일이다 — 바깥에서 테마 이슈를 만드는 자리가 없다.
+    for (const name of ['issue', 'themeIssue', 'THEME_ISSUE_SEVERITY']) {
       expect(Object.keys(api), name).not.toContain(name)
     }
   })
 
-  it('해석과 방출이 실제로 이어진다', () => {
-    // 공개 표면만으로 테마 하나를 CSS까지 가져갈 수 있어야 한다.
-    const { theme, issues } = api.resolveTheme({
-      meta: { id: 'a', name: '가', version: '1.0.0' },
-      tokens: { semantic: { primary: '#2563eb' } },
+  it('패턴 검증과 전개가 공개 표면만으로 이어진다', () => {
+    installCatalog()
+    const pattern = api.PatternSchema.parse({
+      name: '제목 하나',
+      slots: { title: 'text' },
+      schema: { type: 'Text', slot: 'title', props: { content: '안녕' } },
     })
+    expect(api.checkPatterns({ 'hero.basic': pattern }).issues).toEqual([])
+    const { expanded, issues } = api.expandPattern(pattern, () => 'n_000000000001')
     expect(issues).toEqual([])
-    expect(api.compileTheme(theme!)).toContain('--wb-semantic-primary: #2563eb;')
+    expect([...expanded!.slots]).toEqual([['title', 'n_000000000001']])
   })
 })

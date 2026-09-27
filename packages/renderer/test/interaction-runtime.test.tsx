@@ -2,8 +2,8 @@
  * **설계서 「실행」의 상호작용 런타임.**
  *
  * **DOM이 없다.** 이 프로젝트(`unit`)는 jsdom을 걸지 않으므로 여기서 재는 것은
- * **엘리먼트 트리와 SSR 문자열**이다 — 핸들러가 붙었는지는 `element.props.onClick`으로
- * 보고, 눌린 뒤의 화면은 그 핸들러를 부른 뒤 새 겹layer로 다시 그려 본다.
+ * **엘리먼트 트리와 SSR 문자열**이다 — 핸들러가 붙었는지는 노드마다 선 `ViewHost` 엘리먼트가 뷰에 넘길 속성
+ * (`binding.attrs.onClick`)으로 보고, 눌린 뒤의 화면은 그 핸들러를 부른 뒤 새 겹layer로 다시 그려 본다.
  * **진짜 DOM 이벤트(버블링·`submit`·`change`)는 `apps/web` 쪽 케이스가 잰다** — 그쪽이
  * jsdom이다.
  *
@@ -21,11 +21,9 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { renderDocument, type InteractionEvent } from '../src/render'
 import { EMPTY_OVERLAY, runInteraction, type InteractionOverlay } from '../src/interaction/runtime'
-import { installStructures } from '../src/structures/index'
 
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
 
 /** 설계서 「자동 문장화」의 예를 그대로 문서로 만든 것. *"① 검색 버튼 클릭 시 ② 목록이 로딩 상태로 바뀝니다"* */
@@ -77,23 +75,25 @@ function press(
   return { events, overlay: current }
 }
 
-/** 트리에서 그 노드의 루트 엘리먼트에 붙은 핸들러를 찾는다. */
+/** 트리에서 그 노드의 루트에 실릴 핸들러를 찾는다 — 노드의 `ViewHost`가 뷰에 넘기는 속성(`binding.attrs`)에 있다. */
 function handlerOf(
   tree: unknown,
   nodeId: string,
   dom: string,
 ): ((event: unknown) => void) | undefined {
-  const found = elementOf(tree, nodeId)
-  return (found?.props as Record<string, ((event: unknown) => void) | undefined> | undefined)?.[dom]
+  return attrsOf(tree, nodeId)?.[dom] as ((event: unknown) => void) | undefined
 }
 
-function elementOf(tree: unknown, nodeId: string): { props: unknown } | undefined {
+function attrsOf(tree: unknown, nodeId: string): Record<string, unknown> | undefined {
   if (typeof tree !== 'object' || tree === null) return undefined
-  const node = tree as { props?: Record<string, unknown> }
-  if (node.props?.['data-wb-id'] === nodeId) return node as { props: unknown }
-  const children = node.props?.['children']
+  const props = (tree as { props?: Record<string, unknown> }).props
+  const attrs = (props?.['binding'] as { attrs?: Record<string, unknown> } | undefined)?.attrs
+  if (attrs?.['data-wb-id'] === nodeId) return attrs
+  // `ViewHost`의 자식은 뷰에 넘길 `viewProps.children`이고, `Fragment`의 자식은 `children`이다.
+  const viewProps = props?.['viewProps'] as { children?: unknown } | undefined
+  const children = viewProps !== undefined ? viewProps.children : props?.['children']
   for (const child of Array.isArray(children) ? children : [children]) {
-    const hit = elementOf(child, nodeId)
+    const hit = attrsOf(child, nodeId)
     if (hit !== undefined) return hit
   }
   return undefined
@@ -115,7 +115,7 @@ describe('끈 렌더는 바뀌지 않는다', () => {
 
   it('런타임을 켜도 HTML이 같다 — 핸들러는 DOM 속성이 아니다', () => {
     const doc = example(CLICK_SETS_LOADING)
-    // 설계서 「컴파일」의 여섯 속성 계약을 넓히지 않는다는 것을 **렌더 결과에서** 재는 자리다.
+    // 설계서 「노드 속성」의 여섯 속성 계약을 넓히지 않는다는 것을 **렌더 결과에서** 재는 자리다.
     // (원문을 세는 쪽은 `contract-attrs.test.ts`가 이미 한다.)
     expect(markup(doc, EMPTY_OVERLAY)).toBe(markup(doc))
   })
@@ -154,7 +154,7 @@ describe('셋을 실행한다', () => {
     expect(markup(doc, EMPTY_OVERLAY)).toBe(markup(doc))
   })
 
-  it('switchTab이 Tabs의 활성 탭을 덮는다 — 구조 구현체는 그대로다', () => {
+  it('switchTab이 Tabs의 활성 탭을 덮는다 — 뷰는 그대로다', () => {
     const doc = example([
       { on: 'click', actions: [{ type: 'switchTab', target: 'n_tabs', tab: 1 }] },
     ])

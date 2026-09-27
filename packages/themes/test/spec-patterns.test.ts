@@ -190,11 +190,9 @@ describe('checkPatterns — schema 조각과 카탈로그 대조', () => {
     ])
   })
 
-  it('variant가 그 컴포넌트의 것이어야 한다', () => {
+  it('variant의 값은 보지 않는다 — 고를 수 있는 변형은 테마 manifest 가 선언한다', () => {
     expect(check(wrap({ type: 'Section', variant: 'hero' })).issues).toEqual([])
-    expect(codes(check(wrap({ type: 'Section', variant: 'jumbo' })).issues)).toEqual([
-      'bad-pattern-node',
-    ])
+    expect(check(wrap({ type: 'Section', variant: 'jumbo' })).issues).toEqual([])
   })
 
   it('자식을 담을 수 없는 컴포넌트에 자식을 두면 이슈다', () => {
@@ -217,7 +215,7 @@ describe('checkPatterns — schema 조각과 카탈로그 대조', () => {
 
   it('첫 이슈에서 멈추지 않는다', () => {
     const { issues } = check(
-      wrap({ type: 'Carousel', children: [{ type: 'Section', variant: 'jumbo' }] }),
+      wrap({ type: 'Carousel', children: [{ type: 'Slot' }] }),
     )
     expect(issues.length).toBeGreaterThanOrEqual(2)
   })

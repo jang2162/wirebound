@@ -16,15 +16,8 @@
  * |---|---|---|
  * | `states` | **한다** | 같은 이름의 prop이 `editor`에 없으면 그 상태를 켤 길이 없다 |
  * | `variantFrom`이 가리키는 prop | **한다** | 그 컴포넌트에는 패널이 변형 컨트롤을 내지 않으므로 **그 prop이 유일한 길**이다 |
- * | `variants` — `variantFrom`이 **있을** 때 | **한다** | enum 밖의 이름은 **두 길이 다 막혀** 고를 방법이 없다(`variants ⊆ enum 값`) |
- * | `variants` — `variantFrom`이 **없을** 때 | **안 한다** | 패널이 `variants.length > 0`를 보고 **자동으로** 연다 — 어긋날 자리가 없다 |
  *
- * **`variants`를 검사하지 않는 것은 `variantFrom`이 없는 가지뿐이다.** 그 가지는 패널이
- * 자동으로 여니 검사가 늘 참인 단언이 된다. **`variantFrom`이 있는 가지는 다르다** — 그쪽은
- * 패널이 컨트롤을 내지 않고 `node.variant`도 무시되므로, `variants`에 enum 밖의 이름이 있으면
- * **선언돼 있는데 도달 불가**다. 두 가지를 *"어긋날 자리가 없다"*로 뭉뚱그리면 이 가지를 놓친다.
- *
- * **구멍은 예외(`variantFrom`) 쪽에 둘이다** — 그 prop의 `editor` 부재 · `variants`의 enum 밖 이름.
+ * 변형 목록은 카탈로그에 없다 — 테마 manifest 가 선언하고, 패널은 그 manifest 로 변형 칸을 연다(`apps/web`의 `variantFieldOf`).
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -41,9 +34,6 @@ const base = {
   label: '티',
   description: '검사용 표본.',
   group: 'document' as const,
-  structures: ['default'],
-  parts: [],
-  variants: [],
   states: [],
   children: 'none' as const,
 }
@@ -105,21 +95,6 @@ describe('defineComponent — states의 도달성', () => {
       defineComponent({ ...base, props: z.strictObject({}), editor: [], states: [] }),
     ).not.toThrow()
   })
-
-  it('visibleWhen이 붙은 항목도 도달로 센다', () => {
-    // **감춰지는 것과 없는 것은 다르다.** `visibleWhen`은 구조에 따라 감출 뿐이고,
-    // 그 구조를 고른 테마에서는 보인다. 여기서 막으면 정상적인 카탈로그가 거부된다.
-    expect(() =>
-      defineComponent({
-        ...base,
-        props: z.strictObject({ disabled: z.boolean().default(false) }),
-        editor: [
-          { prop: 'disabled', control: 'switch', label: '비활성', visibleWhen: { structure: 'default' } },
-        ],
-        states: ['disabled'],
-      }),
-    ).not.toThrow()
-  })
 })
 
 describe('defineComponent — variantFrom의 도달성', () => {
@@ -136,7 +111,6 @@ describe('defineComponent — variantFrom의 도달성', () => {
         ...base,
         props: enumProps,
         editor: [],
-        variants: ['h1', 'body'],
         variantFrom: 'role',
       }),
     ).toThrow(/editor/)
@@ -148,76 +122,7 @@ describe('defineComponent — variantFrom의 도달성', () => {
         ...base,
         props: enumProps,
         editor: [{ prop: 'role', control: 'select', label: '역할', options: ['h1', 'body'] }],
-        variants: ['h1', 'body'],
         variantFrom: 'role',
-      }),
-    ).not.toThrow()
-  })
-
-  /**
-   * **반대 방향 — `variants ⊆ enum 값`.**
-   *
-   * **`enum 값 ⊆ variants`** 쪽 검사(*"선언되지 않은 값이 `data-wb-variant`로
-   * 나가면 테마 검증기가 대조할 선언이 없다"*)만 두면 **반대 방향이 열린다** —
-   * `variants`에 enum에 없는 이름이 있으면:
-   *
-   * - `defineComponent`가 **통과시키고**
-   * - 패널은 컨트롤을 **안 낸다**(`variantFrom`이 있으므로 `variantFieldOf`가 `null`)
-   * - 그래서 그 이름은 **선언돼 있는데 UI에서 도달 불가**다
-   *
-   * 테마가 그 이름에 스킨을 정의하면 **아무도 켤 수 없는 스킨**이 되어 `Media.kind`와 같은
-   * *"죽어 있다"* 부류가 하나 생긴다.
-   *
-   * **카탈로그의 셋(Text·Divider·Field)은 `variants === enum`이다 — 이 검사가 그것을
-   * 강제한다.**
-   */
-  it('variants에 enum 값이 아닌 이름이 있으면 던진다 — 도달 불가한 변형', () => {
-    expect(() =>
-      defineComponent({
-        ...base,
-        props: enumProps,
-        editor: [{ prop: 'role', control: 'select', label: '역할', options: ['h1', 'body'] }],
-        // `role` enum은 h1·body 둘인데 여기에 셋째가 있다. 그 값을 고를 길이 없다.
-        variants: ['h1', 'body', 'featured'],
-        variantFrom: 'role',
-      }),
-    ).toThrow(/featured/)
-  })
-
-  it('여럿 남으면 전부 말한다', () => {
-    expect(() =>
-      defineComponent({
-        ...base,
-        props: enumProps,
-        editor: [{ prop: 'role', control: 'select', label: '역할', options: ['h1', 'body'] }],
-        variants: ['h1', 'body', 'featured', 'compact'],
-        variantFrom: 'role',
-      }),
-    ).toThrow(/featured.*compact|compact.*featured/)
-  })
-
-  it('variants === enum이면 던지지 않는다 — 음성 대조', () => {
-    // 카탈로그의 셋이 이 모양이다. 좁히다 정상 카탈로그를 막으면 여기가 죽는다.
-    expect(() =>
-      defineComponent({
-        ...base,
-        props: enumProps,
-        editor: [{ prop: 'role', control: 'select', label: '역할', options: ['h1', 'body'] }],
-        variants: ['h1', 'body'],
-        variantFrom: 'role',
-      }),
-    ).not.toThrow()
-  })
-
-  it('variantFrom이 없으면 variants만으로는 던지지 않는다 — 패널이 자동으로 연다', () => {
-    // **`variants`를 검사하지 않는 가지다.** `variants`가 있고 `editor`가 비어도 변형은
-    // 도달 가능하다 — 패널이 카탈로그를 보고 컨트롤을 만든다.
-    expect(() =>
-      defineComponent({
-        ...base,
-        props: z.strictObject({}),
-        editor: [],
-        variants: ['featured'],
       }),
     ).not.toThrow()
   })

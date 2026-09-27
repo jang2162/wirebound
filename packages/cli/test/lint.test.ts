@@ -9,9 +9,7 @@ import { EXIT } from '../src/exit'
 import { run } from '../src/run'
 import { createFakeIo, stub, type FakeIo } from './fake-io'
 import {
-  LAYOUT,
   MENU_MEMBER,
-  THEME_ROW,
   page,
   snapshotPayload,
   경고가_있는_프로젝트,
@@ -66,11 +64,7 @@ describe('종료 코드', () => {
     expect(io.stdout.join('\n')).toContain('결함 없음')
   })
 
-  /**
-   * **근거는 실측이다**(그 수를 못박는 것은 `packages/themes/test/warning-channel.test.ts`):
-   * 시스템 테마 `portal`·`docs`가 `theme-other:warning`을 하나씩 갖는다. `warning`으로 실패를 내면
-   * 그 테마를 고른 프로젝트가 **문서를 아무리 잘 써도** CI에서 빨개진다.
-   */
+  /** 근거는 `src/exit.ts`의 `EXIT` 머리말(«무엇이 이 번호를 만드는가»)이다. */
   it('경고만 있으면 0이다', async () => {
     const io = 준비(경고가_있는_프로젝트())
     expect(await run(['lint'], io), io.stderr.join('\n')).toBe(EXIT.ok)
@@ -204,29 +198,19 @@ describe('경로 필터와 종료 코드 (판정)', () => {
 })
 
 describe('검사에서 빠진 것을 말한다 — 조용히 0건이 되지 않는다', () => {
-  it('상속이 끊긴 파생 테마를 말한다', async () => {
-    const io = 준비()
+  it('메뉴를 잃은 페이지를 말한다', async () => {
+    const 고아 = snapshotPayload()
+    고아.menu = []
+    const io = 준비(고아)
     await run(['lint'], io)
 
     const said = io.stdout.join('\n')
     expect(said).toContain('검사에서 빠진 것:')
-    expect(said).toContain(THEME_ROW)
-  })
-
-  it('레이아웃이 둘이면 ⑪을 안 돌렸다고 말한다', async () => {
-    const 둘 = snapshotPayload()
-    둘.layouts.push({ id: LAYOUT.replace(/1$/, '2'), name: '둘째', themeId: null, schema: 둘.layouts[0]!.schema })
-    둘.themes.push({ layoutId: LAYOUT.replace(/1$/, '2'), themeId: null, theme: null })
-
-    const io = 준비(둘)
-    await run(['lint'], io)
-
-    expect(io.stdout.join('\n')).toContain('노드 variant 대조를 돌리지 않았습니다')
+    expect(said).toContain('스냅샷에 없습니다')
   })
 
   it('빠진 것이 없으면 그 절을 아예 안 낸다', async () => {
-    const 깨끗 = snapshotPayload({ layouts: [], themes: [] })
-    const io = 준비(깨끗)
+    const io = 준비(snapshotPayload())
     await run(['lint'], io)
 
     expect(io.stdout.join('\n')).not.toContain('검사에서 빠진 것')

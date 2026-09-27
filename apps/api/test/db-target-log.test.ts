@@ -89,8 +89,8 @@ describe('describeSchemaState — 빈 DB 를 말한다', () => {
 })
 
 /**
- * **못 떴을 때 나오는 문장.** 빈 DB 에서는 `buildApp` 이 `themes` 에 쓰다 죽으므로
- * (실측 — `relation "themes" does not exist`) *뜬 뒤에 찍는 줄*은 0 건을 못 본다.
+ * **못 떴을 때 나오는 문장.** 빈 DB 에서는 `main.ts` 가 `listen` 앞의 `assertSchemaVersion` 에서 멈추므로
+ * *뜬 뒤에 찍는 줄*은 0 건을 못 본다.
  * 사람이 실제로 읽는 것은 이 문장이다.
  */
 describe('emptySchemaHint — 빈 DB 로 못 떴을 때만 말한다', () => {

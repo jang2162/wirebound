@@ -18,9 +18,6 @@ export const ButtonDef = defineComponent({
     { prop: 'disabled', control: 'switch', label: '비활성' },
     { prop: 'loading', control: 'switch', label: '로딩' },
   ],
-  structures: ['solid', 'outline', 'text'],
-  parts: ['label'],
-  variants: ['primary', 'secondary', 'danger', 'ghost'],
   states: ['disabled', 'loading'],
   children: 'none',
 })
@@ -41,9 +38,6 @@ export const LinkDef = defineComponent({
     // `states: ['disabled']`와 짝이다(`Button`과 같다).
     { prop: 'disabled', control: 'switch', label: '비활성' },
   ],
-  structures: ['default'],
-  parts: [],
-  variants: ['default', 'muted'],
   states: ['disabled'],
   children: 'none',
 })

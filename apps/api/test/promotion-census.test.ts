@@ -57,7 +57,7 @@ const PAGE_TARGET_LITERAL = /['"`]page:/
  * 다섯이 걸려 술어가 승격과 무관한 것을 막는다.
  */
 const PAYLOAD_DECLARATION =
-  /\b(?:interface|type|const)\s+Snapshot(?:Payload|MenuNode|Page|Layout|LayoutTheme|Comment)\w*\s*(?:[={:<]|extends\b)/
+  /\b(?:interface|type|const)\s+Snapshot(?:Payload|MenuNode|Page|Layout|Comment)\w*\s*(?:[={:<]|extends\b)/
 
 describe('승격이 두 벌로 갈리지 않는다', () => {
   it('훑을 소스를 실제로 읽는다', () => {
@@ -108,7 +108,7 @@ describe('승격이 두 벌로 갈리지 않는다', () => {
       'export type SnapshotComment = {',
       'const SnapshotPayloadSchema = z.strictObject({',
       'export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.strictObject({',
-      'interface SnapshotLayoutTheme extends 무엇 {',
+      'interface SnapshotLayout extends 무엇 {',
     ]) {
       expect(line, line).toMatch(PAYLOAD_DECLARATION)
     }
@@ -123,7 +123,7 @@ describe('승격이 두 벌로 갈리지 않는다', () => {
       "import type { SnapshotPayload } from '@wirebound/themes'",
       "import { SNAPSHOT_PAYLOAD_VERSION, type SnapshotPayload } from '@wirebound/themes'",
       // 여러 줄 import 절의 한 항목. **import 를 선언으로 오인하는 술어가 여기서 걸린다.**
-      '  type SnapshotLayoutTheme,',
+      '  type SnapshotLayout,',
       '  type SnapshotPayload,',
       "import { targetedPages, type TargetedPage } from '@wirebound/schema'",
       'const payload: SnapshotPayload = await captureSnapshot(db, projectId)',

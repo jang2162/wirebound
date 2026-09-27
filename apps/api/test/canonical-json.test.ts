@@ -40,7 +40,7 @@ describe('값이 다르면 다르다 — 음성 대조', () => {
     expect(canonicalJson({ a: 1 })).not.toBe(canonicalJson({ a: 1, b: 2 }))
   })
 
-  it('null과 빈 객체를 가르지 못하면 테마 비교가 무너진다', () => {
+  it('null과 빈 객체를 가른다', () => {
     expect(canonicalJson(null)).not.toBe(canonicalJson({}))
   })
 })

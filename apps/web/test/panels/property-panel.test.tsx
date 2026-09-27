@@ -8,7 +8,6 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { registerStructure } from '@wirebound/renderer'
 import {
   CATALOG_TYPES,
   ListDef,
@@ -23,6 +22,7 @@ import {
 import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
 import { PropertyPanel, variantFieldOf } from '../../src/panels/property-panel'
+import { CANVAS_THEME } from '../../src/canvas/canvas-theme'
 import { EditorStore } from '../../src/store/editor-store'
 import { EditorStoreProvider } from '../../src/store/use-editor-store'
 import type { PatchResult } from '../../src/api/types'
@@ -45,33 +45,6 @@ import { fakeApi } from '../helpers'
 import '../../src/catalog-setup'
 
 /**
- * `visibleWhen`이 **맞지 않는** 노드를 만들기 위한 테스트 전용 컴포넌트.
- *
- * 카탈로그에서 `visibleWhen`을 가진 것은 `List.columns`(`{ structure: 'table' }') 하나인데,
- * `List`의 기본 구조가 마침 `table`이라 **카탈로그만으로는 감춰지는 경우를 만들 수 없다**
- * (실측: `packages/schema/src/component/catalog/*.ts`의 `editor` 배열 전체에서
- * `visibleWhen`은 그 한 자리뿐이고, 거기의 구조가 `structures[0]`과 같다).
- *
- * `ListDef`를 그대로 빌리고 구조 순서만 뒤집는다 — props 스키마를 새로 쓰려면 zod가
- * 필요한데 `apps/web`은 zod에 의존하지 않는다. 기본 구조가 `cardGrid`가 되므로
- * `columns`의 `visibleWhen: { structure: 'table' }`은 더 이상 맞지 않는다.
- */
-const PROBE_TYPE = '구조프로브'
-
-registerComponent(
-  defineComponent({
-    ...ListDef,
-    type: PROBE_TYPE,
-    // 이름도 갈아야 한다 — `registerComponent`가 겹치는 `label`을 던진다.
-    label: PROBE_TYPE,
-    structures: ['cardGrid', 'table'],
-  }),
-)
-// 캔버스가 폴백 대신 이 구현으로 그리도록 기본 구조 하나를 등록해 둔다. 속성 패널의
-// 단언과는 무관하지만, 폴백이 뜨면 그 화면이 무엇을 말하는지 읽기 어려워진다.
-registerStructure(PROBE_TYPE, 'cardGrid', ({ attrs }) => <div {...attrs} />)
-
-/**
  * **`options`를 갖지 않는 `select`.** 카탈로그에는 그런 자리가 없으므로(실측: `control:
  * 'select'` 여덟 자리가 전부 `options`를 갖는다) 여기서 만든다 — `EditorField.options`가
  * 선택 필드라 컴파일러가 그 짝을 강제하지 않고, 카탈로그는 데이터라 언제든 그렇게 될 수 있다.
@@ -90,7 +63,6 @@ registerComponent(
     states: [],
   }),
 )
-registerStructure(NO_OPTIONS_TYPE, 'table', ({ attrs }) => <div {...attrs} />)
 
 const DOC = pageDoc({
   id: 'n-root',
@@ -113,7 +85,6 @@ const DOC = pageDoc({
         ],
       },
     },
-    { id: 'n-probe', type: PROBE_TYPE, props: { columns: ['숨은 컬럼'], items: 1 } },
     { id: 'n-ghost', type: '없는타입' },
   ],
 })
@@ -331,7 +302,7 @@ describe('속성 패널', () => {
     // `title`만 있고 `subtitle`은 없는 노드다. 없는 값을 그대로 찍으면 "undefined"가
     // 사용자에게 보인다.
     //
-    // **맨 앞의 `변형` 줄** — `Card`는 `variants`가 있고
+    // **맨 앞의 `변형` 줄** — 캔버스 테마의 manifest 가 `Card` 의 variant 를 선언하고
     // `variantFrom`이 없어 컨트롤이 나온다. 노드에 `variant`가 없으므로 빈 칸이다.
     expect(propRows()).toEqual([
       { label: '변형', value: '' },
@@ -341,25 +312,13 @@ describe('속성 패널', () => {
     expect(within(panel()).queryByText(/undefined/)).toBeNull()
   })
 
-  it('visibleWhen이 현재 구조와 다르면 감춘다', async () => {
-    await openPage(DOC)
-
-    select(PROBE_TYPE)
-
-    // `columns`의 `visibleWhen`은 `table`인데 이 컴포넌트의 현재 구조는 `cardGrid`다.
-    expect(labels()).not.toContain('컬럼')
-    // 양성 대조: 나머지 줄은 그대로 있다. 이것이 없으면 패널이 아무것도 못 그리는
-    // 구현도 위 단언을 통과한다.
-    expect(labels()).toContain('항목 수')
-  })
-
-  it('visibleWhen이 맞으면 보인다', async () => {
+  it('List 의 컬럼은 목록 위젯이 칸마다 그린다', async () => {
     await openPage(DOC)
 
     select('List')
 
-    // 같은 `editor` 명세인데 이쪽은 현재 구조가 `table`이라 보인다. 위 케이스와 짝이다 —
-    // 둘이 함께 통과해야 필터가 구조를 실제로 보고 있다고 할 수 있다.
+    // 캔버스 테마의 manifest 가 `List` 의 어느 variant 에도 `hideProps` 를 두지 않아 컬럼이 보인다(감춤은
+    // `visible-fields.test.ts` 가 잰다).
     expect(labels()).toContain('컬럼')
     // 값은 목록 위젯이 그린다. 한 줄로 이어 붙인 글자가 아니라 칸마다 하나다.
     const cells = [...panel().querySelectorAll<HTMLInputElement>('.wb-shell-list-cell')]
@@ -1252,14 +1211,16 @@ const VARIANT_DOC = pageDoc({
   id: 'n-root',
   type: 'Page',
   children: [
-    // `variants: ['default','featured']`, `variantFrom` 없음 → 컨트롤이 나온다.
+    // manifest 가 `default` · `featured` 를 선언하고 `variantFrom` 없음 → 컨트롤이 나온다.
     { id: 'n-card', type: 'Card', props: { title: '카드' }, variant: 'featured' },
     // 같은 부류인데 노드에 `variant`가 없다 → 빈 칸이고, 고르면 `add`가 나간다.
     { id: 'n-card2', type: 'Card', props: { title: '둘째' } },
     // `variantFrom: 'role'` → 컨트롤이 **나오면 안 된다**(`ignored-variant`를 UI가 유도하는 셈이다).
     { id: 'n-text', type: 'Text', props: { content: '문단', role: 'body' } },
-    // `variants: []` → 나올 것이 없다.
+    // manifest 가 선언하지 않았다 → 나올 것이 없다.
     { id: 'n-tree', type: 'Tree', props: { depth: 2 } },
+    // 옛 카탈로그에 `default` 가 없던 컴포넌트 — manifest 는 `default` 를 첫 선언으로 둔다.
+    { id: 'n-button', type: 'Button', props: { label: '저장' }, variant: 'danger' },
   ],
 })
 
@@ -1269,38 +1230,57 @@ const VARIANT_DOC = pageDoc({
  * `EditorField.prop`은 **props의 키**를 가리키는데 `variant`는 **노드 봉투의 필드**다
  * (설계서 「페이지 스키마 노드」). 그래서 `editor`에 적을 수 없고 — 적으면 `defineComponent`가
  * *"editor가 스키마에 없는 prop을 가리킵니다"*로 던진다 — 패널이 특수 취급하지 않으면 도달
- * 경로가 아예 없다. **`Button`·`Link`·`List`·`Section`·`Card`의 변형이 UI에서 하나도 닿지 않는다.**
+ * 경로가 아예 없다.
  *
- * **이 특수 취급의 대가는 작다.** 패널이 읽는 것은 `def.variants`·
- * `def.variantFrom`으로 **전부 카탈로그의 값**이고, 새로 갖는 지식은 *"variant는 봉투의
- * 필드다"* 하나인데 그것은 설계서 「페이지 스키마 노드」·「컴파일」이 정한 **모델의 사실**이지
- * 컴포넌트별 지식이 아니다. 「컴포넌트 정의 구조」·「설계서 화면 구조」가 말하는 *"컴포넌트
- * **정의**에서 자동 생성"*은 그대로 성립한다 — 카탈로그가 늘어도 이 패널은 안 바뀐다(아래 전수
- * 케이스가 그것을 센다).
- *
- * **`ComponentDef`에 `variantField`를 선언하는 안을 고르지 않은 것은** 그 선언이 담을 정보가
- * **라벨 하나**뿐이기 때문이다 — 나올지 말지는 `variants.length > 0 && variantFrom === undefined`로
- * 카탈로그에서 이미 유도된다. 라벨 하나를 위해 「컴포넌트 정의 구조」의 계약을 넓히지 않는다.
+ * **선택지는 캔버스 테마의 manifest 가 준다**(`components[type].variants` — 라벨을 보이고 id 를 적는다). variant 는
+ * 테마가 선언하는 것이라 카탈로그에 없다. `variantFrom` 컴포넌트는 prop 이 변형을 정하므로 칸이 없다.
  */
 describe('속성 패널 — 변형', () => {
-  it('variants가 있는 컴포넌트에 변형 컨트롤이 나온다', async () => {
+  it('변형 칸의 선택지는 캔버스 테마의 manifest 가 준다', async () => {
+    await openPage(VARIANT_DOC)
+
+    selectAt('Button', 0)
+    const options = [...requireWidget('변형').querySelectorAll('option')].map((o) => o.textContent)
+
+    expect(options).toEqual(['(기본)', '기본', '주', '보조', '위험', '투명'])
+  })
+
+  it('옛 variant 값이 그대로 선다', async () => {
+    await openPage(VARIANT_DOC)
+
+    selectAt('Button', 0)
+
+    expect((requireWidget('변형') as HTMLSelectElement).value).toBe('danger')
+    expect(canvasQuery('[data-wb-id="n-button"]')!.getAttribute('data-wb-variant')).toBe('danger')
+  })
+
+  it('manifest 가 선언하지 않은 컴포넌트에는 변형 칸이 없다', async () => {
+    await openPage(VARIANT_DOC)
+
+    selectAt('Tree', 0)
+
+    // 양성 대조: 나머지 줄은 그대로 있다 — 패널이 아무것도 못 그리는 구현도 위 단언을 통과한다.
+    expect(controlWidget('변형')).toBeNull()
+    expect(labels().length).toBeGreaterThan(0)
+  })
+
+  it('선언한 컴포넌트에는 변형 칸이 맨 앞에 선다', async () => {
     await openPage(VARIANT_DOC)
 
     selectAt('Card', 0)
 
-    // **맨 앞이다.** `variant`는 이 노드가 어떤 표현인가를 정하는 것이라 개별 prop보다
-    // 상위이고, 설계서 「components — 구조 + 스킨」도 `variants`를 `base`/`parts` 위의 층으로 둔다.
+    // **맨 앞이다.** `variant`는 이 노드가 어떤 표현인가를 정하는 것이라 개별 prop보다 상위다.
     expect(labels()).toEqual(['변형', '제목', '부제'])
     expect((requireWidget('변형') as HTMLSelectElement).value).toBe('featured')
   })
 
-  it('선택지는 카탈로그의 variants 그대로이고 비우는 자리가 있다', async () => {
+  it('선택지의 값은 manifest 의 id 이고 비우는 자리가 있다', async () => {
     await openPage(VARIANT_DOC)
 
     selectAt('Card', 0)
     const options = [...requireWidget('변형').querySelectorAll('option')].map((o) => o.value)
 
-    // 빈 값이 **항상** 있다 — 없으면 한 번 고른 변형에서 빠져나올 수 없다.
+    // 빈 값이 **항상** 있다 — 없으면 한 번 고른 변형에서 빠져나올 수 없다. 비운 노드는 `defaultVariant` 로 그려진다.
     expect(options).toEqual(['', 'default', 'featured'])
   })
 
@@ -1311,14 +1291,6 @@ describe('속성 패널 — 변형', () => {
     selectAt('Text', 0)
 
     expect(labels()).toEqual(['내용', '역할'])
-    expect(controlWidget('변형')).toBeNull()
-  })
-
-  it('variants가 빈 컴포넌트에는 나오지 않는다', async () => {
-    await openPage(VARIANT_DOC)
-
-    selectAt('Tree', 0)
-
     expect(controlWidget('변형')).toBeNull()
   })
 
@@ -1377,63 +1349,31 @@ describe('속성 패널 — 변형', () => {
   })
 
   /**
-   * **`/variant`가 편집 파이프라인의 게이트를 그대로 지나는가.**
-   *
-   * `validatePage`에는 `variant`에 걸리는 코드가 둘 있다:
-   *
-   * | 코드 | 조건 | severity |
-   * |---|---|---|
-   * | `unknown-variant` | `variants`에 없는 값 | **error** — 설계서 「정방향 흐름」의 검증 게이트가 편집을 422로 막는다 |
-   * | `ignored-variant` | `variantFrom`이 있는데 `variant`를 적음 | warning |
-   *
-   * **패널이 낼 수 있는 값으로는 둘 다 만들 수 없어야 한다.** 앞의 것은 선택지가
-   * `def.variants` 그대로이기 때문이고, 뒤의 것은 `variantFrom`이 있으면 컨트롤 자체가
-   * 안 나오기 때문이다. **그 성질을 카탈로그 전수로 실행해 확인한다** — 산문으로 두면
-   * 카탈로그가 늘 때 아무도 다시 재지 않는다.
+   * **패널이 낼 수 있는 값은 `ignored-variant` 를 만들지 않는다** — `variantFrom` 이 있으면 컨트롤 자체가 안 나오기
+   * 때문이다. 그 성질을 manifest 전수로 실행해 확인한다.
    */
-  it('패널이 낼 수 있는 값은 unknown-variant도 ignored-variant도 만들지 않는다', () => {
+  it('패널이 낼 수 있는 값은 ignored-variant 를 만들지 않는다', () => {
     let checked = 0
 
     for (const type of CATALOG_TYPES) {
       const def = getComponent(type)
       if (def === undefined) continue
 
-      const field = variantFieldOf(def)
-      if (field === null) {
-        // 컨트롤이 없으므로 이 컴포넌트에는 패널이 `variant`를 실을 길이 없다.
-        // **`variantFrom`을 가진 것이 여기 걸린다** — `ignored-variant`가 도달 불가인 이유다.
-        continue
-      }
+      const field = variantFieldOf(def, CANVAS_THEME.manifest)
+      if (field === null) continue
 
-      for (const variant of field.options) {
+      for (const option of field.options) {
         checked += 1
         const issues = validatePage({
           version: 1,
-          root: { id: 'n_000000000001', type: 'Page', children: [{ id: 'n_000000000002', type, variant }] },
+          root: { id: 'n_000000000001', type: 'Page', children: [{ id: 'n_000000000002', type, variant: option.id }] },
         })
-        expect(
-          issues.filter((issue) => issue.code === 'unknown-variant' || issue.code === 'ignored-variant'),
-          `${type} ← ${variant}`,
-        ).toEqual([])
+        expect(issues.filter((issue) => issue.code === 'ignored-variant'), `${type} ← ${option.id}`).toEqual([])
       }
     }
 
     // 카나리아 — 하나도 안 돌았으면 위 루프가 아무것도 지키지 않는다.
     expect(checked).toBeGreaterThan(10)
-  })
-
-  it('음성 대조 — 선언되지 않은 값은 실제로 unknown-variant다', () => {
-    // 위 케이스가 "`validatePage`가 아무것도 안 낸다"로 통과하지 않게 못을 박는다.
-    const issues = validatePage({
-      version: 1,
-      root: {
-        id: 'n_000000000001',
-        type: 'Page',
-        children: [{ id: 'n_000000000002', type: 'Card', variant: '패널이낼수없는값' }],
-      },
-    })
-
-    expect(issues.map((issue) => issue.code)).toEqual(['unknown-variant'])
   })
 
   it('음성 대조 — variantFrom을 가진 컴포넌트에 variant를 적으면 ignored-variant다', () => {
@@ -1451,27 +1391,23 @@ describe('속성 패널 — 변형', () => {
   })
 
   /**
-   * **부류를 닫는 자리다.** 패널이 카탈로그를 보고 **자동으로** 여닫으므로 `defineComponent`가
-   * 검사할 것이 없다 — 어긋날 자리 자체가 없다. **그 대신 이 케이스가 카탈로그를
-   * 전수로 돌아 그 성질을 확인한다.**
-   *
-   * 컴포넌트가 늘면 여기가 분모를 다시 세므로 같은 구멍이 안 난다.
+   * **부류를 닫는 자리다.** 패널이 manifest 를 보고 **자동으로** 여닫는다 — 선언한 컴포넌트마다 컨트롤이 나오고 선택지가
+   * 선언 그대로인지 전수로 센다. 선언이 늘면 여기가 분모를 다시 센다.
    */
-  it('카탈로그 전수 — variants가 비어 있지 않고 variantFrom이 없으면 반드시 컨트롤이 나온다', async () => {
-    const expectedOpen = CATALOG_TYPES.filter((type) => {
-      const def = getComponent(type)
-      return def !== undefined && def.variants.length > 0 && def.variantFrom === undefined
-    })
+  it('manifest 전수 — 선언하고 variantFrom 이 없는 컴포넌트에만 컨트롤이 나오고 선택지가 선언 그대로다', () => {
+    const declared = CANVAS_THEME.manifest.components ?? {}
     // 카나리아 — 분모가 비면 아래 루프가 조용히 통과한다.
-    expect(expectedOpen).toEqual(['Section', 'Card', 'List', 'Button', 'Link'])
+    expect(Object.keys(declared)).toEqual(['Section', 'Card', 'List', 'Button', 'Link'])
 
     for (const type of CATALOG_TYPES) {
       const def = getComponent(type)
       if (def === undefined) continue
-      const shouldOpen = def.variants.length > 0 && def.variantFrom === undefined
-      expect(variantFieldOf(def) !== null, type).toBe(shouldOpen)
-      if (shouldOpen) {
-        expect(variantFieldOf(def)?.options, type).toEqual(def.variants)
+      const decl = declared[type]
+      const shouldOpen = decl !== undefined && def.variantFrom === undefined
+      const field = variantFieldOf(def, CANVAS_THEME.manifest)
+      expect(field !== null, type).toBe(shouldOpen)
+      if (decl !== undefined && field !== null) {
+        expect(field.options, type).toEqual(decl.variants.map((v) => ({ id: v.id, label: v.label })))
       }
     }
   })

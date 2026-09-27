@@ -216,9 +216,8 @@ export function runInteraction(
           write(action.target, VISIBLE_KEY, action.value)
           break
         case 'switchTab':
-          // `Tabs`의 활성 탭은 `props.active`이고 구조 구현체가 그것을 읽는다
-          // (`structures/structure.tsx`의 `TabsUnderline`). 겹layer가 그 자리를 덮으면
-          // **구조 구현체를 한 글자도 안 고치고** 탭이 바뀐다.
+          // `Tabs`의 활성 탭은 `props.active`이고 뷰가 그것을 읽는다. 겹layer가 그 자리를 덮으면
+          // **뷰를 한 글자도 안 고치고** 탭이 바뀐다.
           write(action.target, 'active', action.tab)
           break
       }

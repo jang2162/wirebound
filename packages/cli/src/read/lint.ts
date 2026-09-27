@@ -24,14 +24,13 @@
  * | `outsideErrors` | 경로 밖에 남은 `error` 개수 |
  * | `droppedProjectIssues` | **`pageId`가 `null`이라 경로 필터에서 통째로 빠진** 이슈 개수 |
  *
- * 둘째가 경로 필터의 구멍이다 — **테마 이슈와 메뉴 이름 이슈는 페이지에 안 매달려
+ * 둘째가 경로 필터의 구멍이다 — **메뉴 이름 이슈는 페이지에 안 매달려
  * 있어** 경로를 주는 순간 사라진다. 개수를 안 말하면 *"이 페이지는 깨끗하다"*가
  * *"프로젝트가 깨끗하다"*로 읽힌다.
  *
  * # `notes`를 버리지 않는다
  *
- * `snapshotToLintInput`이 낸 것이 *"검사에서 빠진 것"*이다 — 테마를 안 고른 레이아웃 ·
- * 상속이 끊긴 파생 테마 · 레이아웃이 둘이라 안 돈 ⑪ · 못 올린 문서 버전 · 메뉴를 잃은 페이지.
+ * `snapshotToLintInput`이 낸 것이 *"검사에서 빠진 것"*이다 — 못 올린 문서 버전 · 메뉴를 잃은 페이지.
  * **버리면 그 전부가 *"결함 0건"*으로 위장된다.**
  *
  * # `LintConfig`는 리포의 파일에서만 온다
@@ -133,7 +132,7 @@ export function lintReport(
       errors,
       warnings: issues.length - errors,
       outsideErrors: countErrors(all) - errors,
-      // **`filterLintIssues`가 `pageId`로만 거른다** — 테마 이슈와 메뉴 이름 이슈는
+      // **`filterLintIssues`가 `pageId`로만 거른다** — 메뉴 이름 이슈는
       // `pageId`가 `null`이라 어느 경로를 줘도 빠진다.
       droppedProjectIssues: all.filter((issue) => issue.pageId === null).length,
       notes: plan.notes,

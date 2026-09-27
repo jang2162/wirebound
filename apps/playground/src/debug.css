@@ -1,4 +1,5 @@
-/* 렌더러 확인용 최소 스타일. 실제 테마는 `@wirebound/themes`가 CSS로 컴파일한다. */
+/* 렌더러 확인용 최소 스타일 — 윤곽선 · 여백만 얹는다. 외형은 `main.tsx` 가 싣는 SDK 기본 뷰 CSS 와 `system-admin` 테마 CSS 다.
+   `[data-wb-part=…]` 는 기본 뷰가 다는 마크업 훅이다. */
 body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: #1f2937; }
 [data-wb-component] { outline: 1px dashed #cbd5e1; outline-offset: -1px; }
 [data-wb-component="Page"] { padding: 12px; }

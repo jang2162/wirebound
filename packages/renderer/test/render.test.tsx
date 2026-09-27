@@ -1,30 +1,10 @@
 import { installCatalog, type PageDocument } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { renderDocument, renderNode, resolveStructure } from '../src/render'
-import { registerStructure, resetStructures } from '../src/structures/registry'
+import { renderDocument, renderNode } from '../src/render'
 
 beforeAll(() => {
   installCatalog()
-  resetStructures()
-
-  registerStructure('Page', 'default', ({ attrs, children }) => (
-    <div {...attrs}>{children}</div>
-  ))
-  registerStructure('Text', 'default', ({ attrs, props }) => (
-    <p {...attrs}>{String(props.content)}</p>
-  ))
-  registerStructure('List', 'table', ({ attrs, part }) => (
-    <table {...attrs}>
-      <thead {...part('header')} />
-    </table>
-  ))
-  registerStructure('List', 'cardGrid', ({ attrs, part }) => (
-    <div {...attrs}>
-      <div {...part('item')} />
-    </div>
-  ))
-  registerStructure('Slot', 'default', ({ attrs, slot }) => <div {...attrs}>{slot}</div>)
 })
 
 function markup(element: React.ReactElement): string {
@@ -32,11 +12,15 @@ function markup(element: React.ReactElement): string {
 }
 
 describe('renderNode', () => {
-  it('기본 구조로 그린다', () => {
+  it('기본 뷰로 그린다', () => {
     const html = markup(renderNode({ id: 'n_000000000001', type: 'Text', props: { content: '안녕' } }))
     expect(html).toContain('data-wb-component="Text"')
-    expect(html).toContain('data-wb-structure="default"')
     expect(html).toContain('안녕')
+  })
+
+  it('theme 을 안 주면 기본 뷰로 그린다 — 버튼은 button 태그다', () => {
+    const html = markup(renderNode({ id: 'b', type: 'Button', props: { label: 'x' } }))
+    expect(html).toMatch(/^<button [^>]*data-wb-id="b"/)
   })
 
   it('props 기본값을 채워 넘긴다', () => {
@@ -64,40 +48,11 @@ describe('renderNode', () => {
     expect(html).toContain('둘째')
   })
 
-  it('options.structures로 구조를 바꾼다', () => {
-    const node = { id: 'n_000000000001', type: 'List' }
-    expect(markup(renderNode(node))).toContain('<table')
-    expect(markup(renderNode(node, { structures: { List: 'cardGrid' } }))).toContain(
-      'data-wb-structure="cardGrid"',
-    )
-  })
-
-  it('조각에 data-wb-part를 붙인다', () => {
-    const html = markup(renderNode({ id: 'n_000000000001', type: 'List' }))
-    expect(html).toContain('data-wb-part="header"')
-  })
-
   // renderNode는 던지지 않고 폴백으로 흡수한다. 폴백 자체의 계약은 fallback.test.tsx가
   // 본다. 여기서는 renderNode가 그 경로로 빠지는지만 확인한다.
-  // `requireComponent`·`requireStructure`·`resolveStructure`가 던지는 것은 각각의 테스트가
-  // 지킨다.
   it('알 수 없는 타입이면 폴백을 그린다', () => {
     const html = markup(renderNode({ id: 'n_000000000001', type: 'Nope' }))
     expect(html).toContain('data-wb-error="알 수 없는 컴포넌트 타입: Nope"')
-  })
-
-  it('구현이 없는 구조를 지정하면 폴백을 그린다', () => {
-    const html = markup(
-      renderNode({ id: 'n_000000000001', type: 'List' }, { structures: { List: 'mediaList' } }),
-    )
-    expect(html).toContain('data-wb-error="구현되지 않은 구조: List:mediaList"')
-  })
-
-  it('카탈로그에 없는 구조를 지정하면 폴백을 그린다', () => {
-    const html = markup(
-      renderNode({ id: 'n_000000000001', type: 'List' }, { structures: { List: 'bogus' } }),
-    )
-    expect(html).toContain('data-wb-error="List에 없는 구조입니다: bogus"')
   })
 })
 
@@ -115,24 +70,26 @@ describe('renderDocument', () => {
   })
 })
 
-describe('resolveStructure', () => {
-  it('지정이 없으면 첫 번째 구조를 쓴다', () => {
-    expect(resolveStructure('List', {})).toBe('table')
-  })
-
-  it('지정이 있으면 그것을 쓴다', () => {
-    expect(resolveStructure('List', { structures: { List: 'stackedList' } })).toBe('stackedList')
-  })
-
-  // renderNode는 폴백으로 흡수하지만 이 함수 자체는 던지고, 그 보증을 지키는 곳이
-  // 여기 말고는 없다.
-  it('카탈로그에 없는 구조를 지정하면 던진다', () => {
-    expect(() => resolveStructure('List', { structures: { List: 'bogus' } })).toThrow(
-      'List에 없는 구조입니다: bogus',
-    )
-  })
-
-  it('알 수 없는 타입이면 던진다', () => {
-    expect(() => resolveStructure('Nope', {})).toThrow('알 수 없는 컴포넌트 타입: Nope')
+describe('공개 API', () => {
+  it('구조 경로의 이름이 공개 API 에 없다', async () => {
+    const api = await import('@wirebound/renderer')
+    for (const name of [
+      'registerStructure',
+      'getStructure',
+      'requireStructure',
+      'listStructureKeys',
+      'resetStructures',
+      'installStructures',
+      'structureBaseCss',
+      'resolveStructure',
+      'resolveStructureOf',
+      'partAttrs',
+      'nodeAttrs',
+      'nodeVar',
+      'TREE_INDENT_VAR',
+      'NODE_VAR_PREFIX',
+    ]) {
+      expect(name in api, name).toBe(false)
+    }
   })
 })

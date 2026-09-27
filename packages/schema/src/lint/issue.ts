@@ -13,10 +13,10 @@
  * 다른 말을 한다."* 타입도 갈라 둔다: `lintIssue`는 표가 severity를 든 규칙만 받고
  * `relayLintIssue`는 relay 규칙만 받는다.
  *
- * **자리(`pageId`·`themeId`·`nodeId`)를 평평하게 둔다.** lint의 소비자는 CLI의 `--json`과
+ * **자리(`pageId`·`nodeId`)를 평평하게 둔다.** lint의 소비자는 CLI의 `--json`과
  * MCP의 응답이라(설계서 「MCP 도구」·「CLI」) 중첩된 판별 유니온보다 평평한 필드가 다루기 쉽다. 없으면
  * `null`이고 *"모른다"*가 아니라 *"그 축이 없다"*이다 — 프로젝트 전체를 두고 나는 이슈는
- * 셋 다 `null`이다.
+ * 둘 다 `null`이다.
  */
 import type { IssueSeverity } from '../validate'
 import type { LintRuleId, OwnSeverityRuleId, RelayRuleId } from './rules'
@@ -28,14 +28,9 @@ export interface LintIssue {
   severity: IssueSeverity
   /** 이 이슈가 난 페이지. 페이지 밖이면 `null`. */
   pageId: string | null
-  /** 이 이슈가 난 테마. 테마 밖이면 `null`. */
-  themeId: string | null
   /** 이 이슈가 난 노드. 노드 단위가 아니면 `null`. */
   nodeId: string | null
-  /**
-   * 문서 안의 자리. 페이지 문서면 JSON 포인터(`/root/children/0`), 테마 문서면 점으로 이은
-   * 경로(`tokens.semantic.primary`)다 — **날라 온 이슈의 것을 그대로 쓴다.**
-   */
+  /** 문서 안의 자리 — JSON 포인터(`/root/children/0`). **날라 온 이슈의 것을 그대로 쓴다.** */
   path: string
   message: string
 }
@@ -43,7 +38,6 @@ export interface LintIssue {
 /** 이슈가 난 자리. 안 준 축은 `null`이 된다. */
 export interface LintWhere {
   pageId?: string
-  themeId?: string
   nodeId?: string
 }
 
@@ -92,10 +86,9 @@ function requireRule(id: string) {
   return rule
 }
 
-function place(where: LintWhere): Pick<LintIssue, 'pageId' | 'themeId' | 'nodeId'> {
+function place(where: LintWhere): Pick<LintIssue, 'pageId' | 'nodeId'> {
   return {
     pageId: where.pageId ?? null,
-    themeId: where.themeId ?? null,
     nodeId: where.nodeId ?? null,
   }
 }

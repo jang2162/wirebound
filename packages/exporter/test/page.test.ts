@@ -8,36 +8,17 @@
  *
  * DOM을 견주는 것은 `parity.test.tsx`가 한다. 그 파일만 jsdom을 쓴다.
  */
-import { installStructures, structureBaseCss } from '@wirebound/renderer'
+import { NO_THEME } from '@wirebound/renderer'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
-import {
-  THEME_ISSUE_SEVERITY,
-  compileTheme,
-  resolveTheme,
-  systemTheme,
-  type ResolvedTheme,
-} from '@wirebound/themes'
+import { defaultViewsCss, defineTheme, Root, view } from '@wirebound/theme-sdk'
+import { createElement } from 'react'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { exportPage } from '../src/page'
+import { EMPTY_MANIFEST, pageWith, SAMPLE_PAGE } from '../test-support/fixtures'
 
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
-
-/**
- * 시스템 테마 하나를 해석한다. **`error`만 막고 `warning`은 통과시킨다** —
- * `resolveTheme`의 기준이 그것이고, 실제로
- * `docs` 테마가 `node-handle-overwrite` 경고 하나를 든다. 경고를 막으면 이 파일이
- * 재려는 것과 무관한 이유로 죽는다.
- */
-function resolvedSystemTheme(id: string): ResolvedTheme {
-  const { theme, issues } = resolveTheme(systemTheme(id)!)
-  const errors = issues.filter((issue) => THEME_ISSUE_SEVERITY[issue.code] === 'error')
-  expect(errors.map((issue) => `${issue.path}: ${issue.message}`)).toEqual([])
-  expect(theme).not.toBeNull()
-  return theme!
-}
 
 const DOC: PageDocument = {
   version: 1,
@@ -100,7 +81,8 @@ describe('exportPage — HTML 한 장의 모양', () => {
    */
   it('셸을 미리 만들지 않는다 — body의 자식은 문서 뿌리 하나다', () => {
     const body = html.slice(html.indexOf('<body>') + '<body>'.length, html.indexOf('</body>'))
-    expect(body.startsWith('<div data-wb-id="n_000000000001"')).toBe(true)
+    // 속성 순서는 계약이 아니다(기본 뷰는 `data-wb-structure` 를 노드 속성 앞에 단다) — 첫 원소가 문서 뿌리인지만 본다.
+    expect(body).toMatch(/^<div [^>]*data-wb-id="n_000000000001"/)
     expect(body.endsWith('</div>')).toBe(true)
     for (const shell of ['<nav', '<aside', '<header', 'wb-shell', 'index.html']) {
       expect(body, shell).not.toContain(shell)
@@ -123,7 +105,7 @@ describe('exportPage — HTML 한 장의 모양', () => {
 })
 
 describe('exportPage — 문서를 렌더러로 그린다', () => {
-  it('설계서 「컴파일」의 속성이 붙은 채로 나온다', () => {
+  it('설계서 「노드 속성」의 속성이 붙은 채로 나온다', () => {
     const { html } = exportPage({ document: DOC, title: '회원 목록' })
     expect(html).toContain('data-wb-component="Page"')
     expect(html).toContain('data-wb-component="Text"')
@@ -148,67 +130,55 @@ describe('exportPage — 문서를 렌더러로 그린다', () => {
 })
 
 describe('exportPage — 테마', () => {
-  it('테마가 고른 구조를 그린다', () => {
-    const admin = resolvedSystemTheme('admin')
-    const docs = resolvedSystemTheme('docs')
-    const structureOf = (theme: ResolvedTheme): string | undefined =>
-      theme.components.get('List')?.structure
-
-    // **두 테마가 실제로 다른 것을 고르는지부터 본다.** 같은 값을 고르면 아래 반복이
-    // 같은 것을 두 번 재고, 구조 배선이 끊겨도 통과한다.
-    expect(structureOf(admin)).toBeDefined()
-    expect(structureOf(docs)).toBeDefined()
-    expect(structureOf(admin)).not.toBe(structureOf(docs))
-
-    for (const theme of [admin, docs]) {
-      const { html } = exportPage({ document: DOC, title: '회원 목록', theme })
-      expect(html, structureOf(theme)).toContain(
-        `data-wb-component="List" data-wb-structure="${structureOf(theme)}"`,
-      )
-    }
+  it('번들의 CSS 는 기본 뷰 CSS 로 시작하고, 테마 CSS 를 주면 그 뒤에 싣는다', () => {
+    const plain = exportPage({ document: SAMPLE_PAGE, title: 't' })
+    expect(plain.css).toContain(defaultViewsCss())
+    const themed = exportPage({ document: SAMPLE_PAGE, title: 't', themeCss: 'a{color:red}' })
+    expect(themed.css.indexOf(defaultViewsCss())).toBeLessThan(themed.css.indexOf('a{color:red}'))
   })
 
-  /** 테마 없는 프로젝트(`layouts.theme_id`가 NULL)에서 CSS가 무엇인가 — 여백 초기화 뒤가 구조 기본 CSS 그대로다. */
-  it('테마가 없으면 CSS가 구조 기본 CSS 그대로다', () => {
+  it('테마 뷰를 주면 그것으로 그린다', () => {
+    const Button = view(({ props }) => createElement(Root, { as: 'button', className: 'mine' }, String(props.label)))
+    const theme = defineTheme({ manifest: EMPTY_MANIFEST, views: { Button } })
+    const { html } = exportPage({ document: pageWith({ id: 'b', type: 'Button', props: { label: 'x' } }), title: 't', theme })
+    expect(html).toContain('class="mine"')
+  })
+
+  /** 테마를 안 넘기면(api 의 판) SDK 기본 뷰로 그린다 — `NO_THEME` 을 넘긴 것과 한 글자도 다르지 않다. */
+  it('테마를 안 주면 NO_THEME 을 준 것과 같다', () => {
+    expect(exportPage({ document: DOC, title: 'ㄱ' }).html).toBe(exportPage({ document: DOC, title: 'ㄱ', theme: NO_THEME }).html)
+  })
+
+  it('테마 CSS 가 없으면 CSS 가 기본 뷰 CSS 그대로다', () => {
     const { css } = exportPage({ document: DOC, title: '회원 목록' })
-    expect(withoutReset(css)).toBe(structureBaseCss())
+    expect(withoutReset(css)).toBe(defaultViewsCss())
     expect(css.length).toBeGreaterThan(0)
-  })
-
-  it('null을 명시해도 같다', () => {
-    expect(withoutReset(exportPage({ document: DOC, title: 'ㄱ', theme: null }).css)).toBe(structureBaseCss())
   })
 
   /**
    * **혼자 뜨는 한 장의 여백을 0 으로 둔다**(`page.tsx`의 `STANDALONE_RESET`) — 없으면 브라우저 기본 8px 이 붙어 pptx 화면
-   * 이미지의 문서가 뷰포트보다 16px 좁게 그려진다. 시트의 **맨 앞**이다 — 뒤의 구조 기본 CSS · 테마는 문서 노드만 겨냥하므로
-   * 이 규칙과 겨루지 않는다. 테마가 있든 없든 같다.
+   * 이미지의 문서가 뷰포트보다 16px 좁게 그려진다. 시트의 **맨 앞**이다 — 뒤의 기본 뷰 CSS · 테마는 문서 노드만 겨냥하므로
+   * 이 규칙과 겨루지 않는다. 테마 CSS 가 있든 없든 같다.
    */
-  it('맨 앞에서 html · body 의 여백을 0 으로 둔다 — 테마가 있든 없든', () => {
-    for (const theme of [null, resolvedSystemTheme('admin')]) {
-      const { css } = exportPage({ document: DOC, title: 'ㄱ', theme })
-      expect(css.slice(0, css.indexOf(structureBaseCss()))).toMatch(/^html,\s*body\s*\{\s*margin:\s*0;?\s*\}\s*$/)
+  it('맨 앞에서 html · body 의 여백을 0 으로 둔다 — 테마 CSS 가 있든 없든', () => {
+    for (const themeCss of [undefined, 'a{color:red}']) {
+      const { css } = exportPage({ document: DOC, title: 'ㄱ', ...(themeCss === undefined ? {} : { themeCss }) })
+      expect(css.slice(0, css.indexOf(defaultViewsCss()))).toMatch(/^html,\s*body\s*\{\s*margin:\s*0;?\s*\}\s*$/)
     }
   })
 
   /**
-   * **순서가 계약이다.** 구조 기본 CSS가 먼저, 테마가 나중 — 같은 특이도에서 나중에 온
-   * 규칙이 이기므로 이 순서가 곧 *"테마가 이긴다"*이다(`use-theme-css.ts`가 화면에서
-   * 같은 순서로 `<style>` 둘을 건다).
+   * **순서가 계약이다.** 기본 뷰 CSS 가 먼저, 테마가 나중 — 같은 특이도에서 나중에 온 규칙이 이기므로 이 순서가 곧
+   * *"테마가 이긴다"*이다(캔버스 iframe 이 같은 순서로 `<style>` 둘을 건다 — `apps/web/src/canvas/canvas-theme.ts` 의
+   * `CANVAS_STYLES`).
    */
-  it('테마가 있으면 구조 기본 CSS 뒤에 붙는다', () => {
-    const theme = resolvedSystemTheme('admin')
-    const { css } = exportPage({ document: DOC, title: '회원 목록', theme })
-    const base = structureBaseCss()
-    const compiled = compileTheme(theme)
-
-    expect(withoutReset(css).indexOf(base)).toBe(0)
-    expect(withoutReset(css).indexOf(compiled)).toBeGreaterThan(base.length - 1)
-    expect(withoutReset(css)).toBe(`${base}\n${compiled}`)
+  it('테마 CSS 가 있으면 기본 뷰 CSS 바로 뒤에 붙는다', () => {
+    const { css } = exportPage({ document: DOC, title: '회원 목록', themeCss: 'a{color:red}' })
+    expect(withoutReset(css)).toBe(`${defaultViewsCss()}a{color:red}`)
   })
 })
 
-/** 여백 초기화(맨 앞)를 걷은 나머지 — `pageCss(theme)`의 값이다. 초기화 자체는 «맨 앞에서 html · body 의 여백을 0 으로 둔다»가 잰다. */
+/** 여백 초기화(맨 앞)를 걷은 나머지 — `pageCss(themeCss)`의 값이다. 초기화 자체는 «맨 앞에서 html · body 의 여백을 0 으로 둔다»가 잰다. */
 function withoutReset(css: string): string {
-  return css.slice(css.indexOf(structureBaseCss()))
+  return css.slice(css.indexOf(defaultViewsCss()))
 }

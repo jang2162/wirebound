@@ -38,6 +38,7 @@
  */
 import {
   EMPTY_OVERLAY,
+  NO_THEME,
   overlayProps,
   renderNode,
   runInteraction,
@@ -46,7 +47,7 @@ import {
   type NodeRenderError,
 } from '@wirebound/renderer'
 import type { InteractionTrigger, PageDocument, WbNode } from '@wirebound/schema'
-import { themeStructures, type ResolvedTheme } from '@wirebound/themes'
+import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { eachNode } from '../nodes'
 import { installRegistries } from '../page'
@@ -98,7 +99,8 @@ const MAX_VARIANTS = 512
 
 export interface RuntimePlanInput {
   page: PageDocument
-  theme: ResolvedTheme | null
+  /** 그릴 테마. 없으면 SDK 기본 뷰다(`NO_THEME`) — 본 판(`renderPageTree`)과 같은 값을 받아야 판이 같다. */
+  theme?: ThemeDefinition
   /**
    * `navigate`·`openModal`의 타겟 → 그 페이지의 번들 안 경로.
    *
@@ -220,7 +222,7 @@ function reachableRecords(effects: readonly RuntimeRecord[], budget: number): Ru
 export function buildRuntimePlan(input: RuntimePlanInput): RuntimePlanResult {
   installRegistries()
   const root = input.page.root as WbNode
-  const structures = themeStructures(input.theme)
+  const theme = input.theme ?? NO_THEME
 
   const nodes = new Map<string, WbNode>()
   for (const node of eachNode(root)) {
@@ -298,7 +300,7 @@ export function buildRuntimePlan(input: RuntimePlanInput): RuntimePlanResult {
 
     const table: Record<string, string> = {}
     for (const record of records) {
-      table[stateKey(record)] = renderVariant(node, record, structures, seenErrors, errors)
+      table[stateKey(record)] = renderVariant(node, record, theme, seenErrors, errors)
     }
     variants[nodeId] = table
   }
@@ -317,7 +319,7 @@ export function buildRuntimePlan(input: RuntimePlanInput): RuntimePlanResult {
 function renderVariant(
   node: WbNode,
   record: RuntimeRecord,
-  structures: Record<string, string>,
+  theme: ThemeDefinition,
   seenErrors: Set<string>,
   errors: NodeRenderError[],
 ): string {
@@ -325,7 +327,7 @@ function renderVariant(
   const overlaid = { ...node, props: overlayProps(overlay, node.id, node.props) }
   const seen: NodeRenderError[] = []
   const tree = renderNode(overlaid as WbNode, {
-    structures,
+    theme,
     onNodeError: (error) => seen.push(error),
   })
   const html = renderToStaticMarkup(tree)

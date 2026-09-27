@@ -1,16 +1,13 @@
 import {
-  defaultStructure,
   getComponent,
   getKoreanErrorMap,
-  requireComponent,
   type AnyDocument,
-  type ComponentDef,
   type InteractionTrigger,
   type WbNode,
 } from '@wirebound/schema'
 import { DEFAULT_VIEWS, type NodeBinding, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { Fragment, type ReactElement, type ReactNode } from 'react'
-import { activeStates, nodeAttrs, partAttrs, type WbHandlers } from './attrs'
+import { activeStates, type WbAttrs, type WbHandlers } from './attrs'
 import { FallbackNode } from './fallback'
 import {
   hiddenByOverlay,
@@ -19,13 +16,11 @@ import {
   type InteractionOverlay,
   type InteractionResult,
 } from './interaction/runtime'
-import { getStructure } from './structures/registry'
+import { NO_THEME } from './no-theme'
 import { resolveVariant } from './variant'
 import { ViewHost } from './view-host'
 
 export interface RenderOptions {
-  /** 컴포넌트 타입 → 구조 이름. 테마가 제공한다. 없으면 카탈로그의 첫 구조를 쓴다. */
-  structures?: Record<string, string>
   /** Slot 자리에 넣을 내용. compose가 채운다. */
   slot?: ReactNode
   /**
@@ -60,7 +55,7 @@ export interface RenderOptions {
   onNodeError?: (error: NodeRenderError) => void
   /**
    * **상호작용 런타임을 켠다**(설계서 「상호작용」의 「실행」). **없으면 꺼진 것이고 그것이 기본이다** —
-   * 이 키를 주지 않은 호출(편집 모드의 캔버스·테마 갤러리·기존 케이스 전부)은 **한 글자도
+   * 이 키를 주지 않은 호출(편집 모드의 캔버스·기존 케이스 전부)은 **한 글자도
    * 다르지 않게** 그려진다.
    *
    * `renderer`가 이것을 소유하는 이유는 `interaction/runtime.ts`의 머리말에 있다 — 요지는
@@ -69,8 +64,8 @@ export interface RenderOptions {
    */
   interaction?: InteractionOptions
   /**
-   * **테마 경로를 켠다.** 주면 노드마다 «테마 뷰 → SDK 기본 뷰» 를 React 컴포넌트로 그리고 `structures` 는 보지 않는다.
-   * 주지 않으면 구조 경로 그대로다 — 내보내기가 그 경로를 쓴다.
+   * **그릴 테마.** 노드마다 «테마 뷰 → SDK 기본 뷰» 를 React 컴포넌트로 그린다. 주지 않으면 `NO_THEME` — 모든 노드가
+   * 기본 뷰다.
    */
   theme?: ThemeDefinition
 }
@@ -121,38 +116,6 @@ export interface NodeRenderError {
   message: string
 }
 
-export type StructureResolution = { ok: true; structure: string } | { ok: false; message: string }
-
-/**
- * 구조 이름 결정의 실제 본체. 던지는 대신 결과를 돌려준다.
- *
- * `resolveStructure`를 try/catch로 감싸지 않는 이유: catch는 이 함수가 의도한 실패만이
- * 아니라 그 안에서 난 모든 예외를 똑같이 폴백으로 삼켜, 진짜 버그를 "구조를 못 찾았다"로
- * 위장한다.
- *
- * **공개한다 — 편집기의 속성 패널이 캔버스와 같은 구조를 보려고 부른다**
- * (`apps/web/src/panels/property-panel.tsx`의 `currentStructure`). 패널이 구조 표를 스스로 읽으면
- * 판정이 두 벌이 되어 캔버스와 갈린다. 패널은 오류 경계 밖이라 던지는 `resolveStructure` 대신 이것을 쓴다.
- */
-export function resolveStructureOf(def: ComponentDef, options: RenderOptions): StructureResolution {
-  const requested = options.structures?.[def.type]
-  if (requested === undefined) return { ok: true, structure: defaultStructure(def) }
-  if (!def.structures.includes(requested)) {
-    return { ok: false, message: `${def.type}에 없는 구조입니다: ${requested}` }
-  }
-  return { ok: true, structure: requested }
-}
-
-/**
- * 던지는 공개 API. `renderNode`는 이것을 쓰지 않고 폴백으로 흡수하지만,
- * 구조 이름만 알고 싶은 호출자(테마 도구 등)에게는 실패가 예외인 편이 낫다.
- */
-export function resolveStructure(type: string, options: RenderOptions): string {
-  const resolved = resolveStructureOf(requireComponent(type), options)
-  if (!resolved.ok) throw new Error(resolved.message)
-  return resolved.structure
-}
-
 /** 노드에서 문자열 하나를 읽는다. 문자열이 아니면 빈 문자열이다(모양 가드가 흡수한 노드). */
 function readString(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -181,22 +144,16 @@ function childKey(child: unknown, index: number): string {
 }
 
 /**
- * 노드 하나를 그린다. **구조 구현체 본문에서 난 예외를 빼면 던지지 않는다** — 노드가
+ * 노드 하나를 그린다. **던지지 않는다** — 노드가
  * 잘못돼 있으면 그 자리에 폴백을 그린다. 던지면 React가 서브트리를 통째로
  * 버리는데, 에디터는 서버 검증 전에 낙관적 패치를 적용하므로(「정방향 흐름」) 일시적으로
  * 유효하지 않은 문서가 정상 상태다. 편집 중에 화면이 사라지면 안 된다.
  *
  * 폴백으로 흡수하는 것: 노드가 객체가 아니거나 `id`·`type`이 문자열이 아닌 경우,
  * `children`이 배열이 아니거나 그 원소가 노드가 아닌 경우, 알 수 없는 컴포넌트 타입,
- * props 검증 실패, 카탈로그에 없는 구조, 구현이 없는 구조.
+ * props 검증 실패, 기본 뷰가 없는 컴포넌트.
  *
- * **흡수하지 않는 것: `registerStructure`로 등록된 구조 구현체 본문이 던지는 예외.**
- * 일부러 그렇게 뒀다 — 구조 구현체는 렌더러 밖에서 등록되는 임의의 함수이고, 여기서 감싸면
- * 그 안의 진짜 버그가 "폴백이 떴네"로 위장된다. 이 경로가 남아 있으므로 **캔버스는 이
- * 호출 위에 React Error Boundary를 두어야 한다.** "renderNode는 안 던진다"에만 기대면
- * 구조 구현체 하나의 버그가 캔버스 전체를 흰 화면으로 만든다.
- *
- * **테마 경로(`options.theme`)에서는 뷰 본문의 예외를 노드마다 둔 경계가 받아 그 자리에 폴백을 그린다**
+ * **뷰 본문의 예외는 노드마다 둔 경계가 받아 그 자리에 폴백을 그린다**
  * (`view-host.tsx`) — 그 폴백은 React 가 뷰를 그릴 때 서므로 동기 `onNodeError` 에는 실리지 않는다.
  */
 export function renderNode(node: WbNode, options: RenderOptions = {}): ReactElement {
@@ -223,7 +180,7 @@ function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): React
   //
   // 감추지 않고 **DOM에서 빼는** 것은 `apps/web`이 뷰 모드에서 구조 트리를 빼는 것과 같은
   // 판단이다 — `display:none`으로 두면 테마가 그것을 덮어 되살릴 수 있어 *"숨겨졌다"*가
-  // 아니게 된다(`structures/input.tsx`의 `SearchFormCollapsible`이 같은 근거를 적었다).
+  // 아니게 된다.
   if (nodeId !== '' && hiddenByOverlay(options.interaction?.overlay, nodeId)) return <></>
 
   const rawChildren = raw?.children
@@ -286,65 +243,44 @@ function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): React
     )
   }
 
-  if (options.theme !== undefined) {
-    const fallbackView = DEFAULT_VIEWS[node.type]
-    if (fallbackView === undefined) return fallback(`기본 뷰가 없는 컴포넌트: ${node.type}`)
-    const props = parsed.data as Record<string, unknown>
-    const variant = resolveVariant(def, node, props, options.theme.manifest)
-    const states = activeStates(def, props)
-    const attrs: Record<string, string> = { 'data-wb-id': node.id, 'data-wb-component': node.type }
-    if (variant !== undefined) attrs['data-wb-variant'] = variant
-    if (states.length > 0) attrs['data-wb-state'] = states.join(' ')
-    const binding: Omit<NodeBinding, 'markRootRendered'> = {
-      attrs: options.interaction === undefined ? attrs : { ...attrs, ...handlersFor(root, node, options) },
-    }
-    return (
-      <ViewHost
-        key={node.id}
-        nodeId={node.id}
-        view={options.theme.views[node.type] ?? fallbackView}
-        fallbackView={fallbackView}
-        binding={binding}
-        viewProps={{ nodeId: node.id, type: node.type, props, states, variant, children, slot: options.slot ?? null }}
-      />
-    )
-  }
-
-  const resolved = resolveStructureOf(def, options)
-  if (!resolved.ok) return fallback(resolved.message)
-
-  const render = getStructure(node.type, resolved.structure)
-  if (!render) return fallback(`구현되지 않은 구조: ${node.type}:${resolved.structure}`)
-
+  const theme = options.theme ?? NO_THEME
+  const fallbackView = DEFAULT_VIEWS[node.type]
+  if (fallbackView === undefined) return fallback(`기본 뷰가 없는 컴포넌트: ${node.type}`)
   const props = parsed.data as Record<string, unknown>
-  const attrs = nodeAttrs(node, def, resolved.structure, props)
-
-  return render({
-    node,
-    props,
-    // **꺼져 있으면 `nodeAttrs`가 낸 객체 그대로 넘어간다** — 스프레드로 새 객체를 만들지도
-    // 않는다(끈 렌더는 상호작용이 없는 렌더와 한 글자도 달라서는 안 된다).
+  const variant = resolveVariant(def, node, props, theme.manifest)
+  const states = activeStates(def, props)
+  const attrs: WbAttrs = { 'data-wb-id': node.id, 'data-wb-component': node.type }
+  if (variant !== undefined) attrs['data-wb-variant'] = variant
+  if (states.length > 0) attrs['data-wb-state'] = states.join(' ')
+  const binding: Omit<NodeBinding, 'markRootRendered'> = {
+    // **꺼져 있으면 속성 객체 그대로 넘어간다** — 끈 렌더는 상호작용이 없는 렌더와 한 글자도 달라서는 안 된다.
     attrs: options.interaction === undefined ? attrs : { ...attrs, ...handlersFor(root, node, options) },
-    part: partAttrs,
-    children,
-    slot: options.slot ?? null,
-  })
+  }
+  return (
+    <ViewHost
+      key={node.id}
+      nodeId={node.id}
+      view={theme.views[node.type] ?? fallbackView}
+      fallbackView={fallbackView}
+      binding={binding}
+      viewProps={{ nodeId: node.id, type: node.type, props, states, variant, children, slot: options.slot ?? null }}
+    />
+  )
 }
 
 /**
  * 트리거 4종 → DOM 이벤트.
  *
- * **`attrs`에 얹는 것이 요점이다.** 구조 구현체는 전부 `{...attrs}`를 자기 루트 태그에
- * 편다(전수 — `structures/*.tsx`). 그래서 여기 핸들러를 넣으면 **구조 구현체를 한
- * 글자도 안 고치고** 모든 컴포넌트가 상호작용을 받는다.
+ * **`attrs`에 얹는 것이 요점이다.** 뷰는 노드 속성을 `Root`에 펴므로(`@wirebound/theme-sdk`) 여기 핸들러를 넣으면
+ * **뷰를 한 글자도 안 고치고** 모든 컴포넌트가 상호작용을 받는다.
  *
- * **설계서 「컴파일」의 여섯 속성 계약을 넓히지 않는다.** 이것들은 `data-*` 속성이 아니라 React의
+ * **설계서 「노드 속성」의 여섯 속성 계약을 넓히지 않는다.** 이것들은 `data-*` 속성이 아니라 React의
  * 이벤트 prop이라 DOM에 속성으로 나가지 않고, 테마의 셀렉터 어휘에 아무것도 더하지
  * 않는다(`test/contract-attrs.test.ts`가 세는 것도 `data-wb-*`다). **일곱째 데이터 속성이
  * 필요해지면 만들기 전에 멈추고 묻는다.**
  *
  * **`select`가 `onClick`인 것은 판정이다.** 와이어프레임 DOM에는 *"선택"*을 내는 네이티브
- * 이벤트원이 없다 — `Tabs`는 탭마다 `<span>`을 그리고(`structures/structure.tsx`) `List`도
+ * 이벤트원이 없다 — `Tabs`의 기본 뷰는 탭마다 `<span>`을 그리고 `List`도
  * 행이 `<div>`다. 「자동 문장화」의 표본(*"③ 상세정보 탭 선택 시"*)이 실제로 뜻하는 조작은 **그 노드
  * 안을 누르는 것**이고, 그것이 루트로 버블링해 여기 닿는다. React의 `onSelect`(텍스트
  * 선택)는 그 조작이 아니다.
@@ -442,8 +378,7 @@ const TRIGGERS_OF: Record<string, InteractionTrigger[]> = (() => {
 })()
 
 /**
- * 문서 하나를 그린다. 보증은 `renderNode`와 같다 — 구조 구현체 본문의 예외를 빼면 던지지
- * 않는다.
+ * 문서 하나를 그린다. 보증은 `renderNode`와 같다 — 던지지 않는다.
  *
  * `?.`를 쓰는 이유: 타입상 `doc`도 `root`도 반드시 있지만, 런타임에는 문서가 아직 없거나
  * (로딩 중) 낙관적 패치가 `/root`를 지운 중간 상태가 들어올 수 있다. 어느 쪽이든

@@ -2,19 +2,9 @@ import { installCatalog, validatePage, type PageDocument, type WbNode } from '@w
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { renderDocument, renderNode, type NodeRenderError } from '../src/render'
-import { registerStructure, resetStructures } from '../src/structures/registry'
 
 beforeAll(() => {
   installCatalog()
-  resetStructures()
-
-  registerStructure('Page', 'default', ({ attrs, children }) => <div {...attrs}>{children}</div>)
-  registerStructure('Text', 'default', ({ attrs, props }) => (
-    <p {...attrs}>{String(props.content)}</p>
-  ))
-  registerStructure('List', 'table', ({ attrs }) => <table {...attrs} />)
-  // List의 'mediaList'·'cardGrid'는 일부러 등록하지 않는다 — 카탈로그에는 있지만
-  // 구현이 없는 조합을 만들기 위해서다.
 })
 
 function markup(element: ReturnType<typeof renderNode>): string {
@@ -95,10 +85,10 @@ describe('렌더 실패 폴백', () => {
     // 폴백은 깨진 노드 하나뿐이다.
     expect(errorMessages(html)).toHaveLength(1)
     expect(html).toContain('data-wb-id="n_000000000002"')
-    // 형제는 폴백이 아니라 제 구조로 그려졌다.
+    // 형제는 폴백이 아니라 제 뷰로 그려졌다.
     expect(html).toContain(
       // `data-wb-variant="body"`는 `role`의 기본값에서 파생된다(`variantFrom`).
-      '<p data-wb-id="n_000000000003" data-wb-component="Text" data-wb-structure="default" data-wb-variant="body">살아남은 형제</p>',
+      '<p data-wb-structure="default" data-wb-id="n_000000000003" data-wb-component="Text" data-wb-variant="body">살아남은 형제</p>',
     )
   })
 
@@ -116,23 +106,6 @@ describe('렌더 실패 폴백', () => {
     // 자식이 폴백 '옆'이 아니라 '안'에 있다는 확인: 자식 엘리먼트를 닫자마자
     // 폴백이 닫히고 마크업이 끝난다. 형제로 붙였다면 </p>로 끝난다.
     expect(html).toMatch(/<\/p><\/div>$/)
-  })
-
-  it('구현되지 않은 구조도 폴백이다', () => {
-    const html = markup(
-      renderNode({ id: 'n_000000000001', type: 'List' }, { structures: { List: 'mediaList' } }),
-    )
-
-    expect(errorMessages(html)).toEqual(['구현되지 않은 구조: List:mediaList'])
-  })
-
-  it('카탈로그에 없는 구조를 지정해도 폴백이다', () => {
-    // 테마가 오타난 구조를 지정해도 화면이 남아야 한다 — 여기서 던지면 캔버스가 흰 화면이 된다.
-    const html = markup(
-      renderNode({ id: 'n_000000000001', type: 'List' }, { structures: { List: 'bogus' } }),
-    )
-
-    expect(errorMessages(html)).toEqual(['List에 없는 구조입니다: bogus'])
   })
 
   it('onNodeError가 노드마다 불린다', () => {
@@ -251,10 +224,10 @@ describe('모양이 깨진 노드', () => {
       html = markup(renderNode(node))
     }).not.toThrow()
 
-    // 노드 자신은 멀쩡하므로 폴백이 아니라 제 구조로 그려진다. 자식만 없다.
+    // 노드 자신은 멀쩡하므로 폴백이 아니라 제 뷰로 그려진다. 자식만 없다.
     expect(errorMessages(html)).toEqual([])
     expect(html).toBe(
-      '<div data-wb-id="n_000000000001" data-wb-component="Page" data-wb-structure="default"></div>',
+      '<div data-wb-structure="default" data-wb-id="n_000000000001" data-wb-component="Page"></div>',
     )
   })
 
@@ -271,10 +244,10 @@ describe('모양이 깨진 노드', () => {
     }).not.toThrow()
 
     expect(errorMessages(html)).toEqual(['노드가 객체가 아닙니다: null'])
-    // 형제는 제 구조로 그대로 그려진다 — 구멍 하나가 배열 전체를 죽이지 않는다.
+    // 형제는 제 뷰로 그대로 그려진다 — 구멍 하나가 배열 전체를 죽이지 않는다.
     expect(html).toContain(
       // `data-wb-variant="body"`는 `role`의 기본값에서 파생된다(`variantFrom`).
-      '<p data-wb-id="n_000000000003" data-wb-component="Text" data-wb-structure="default" data-wb-variant="body">살아남은 형제</p>',
+      '<p data-wb-structure="default" data-wb-id="n_000000000003" data-wb-component="Text" data-wb-variant="body">살아남은 형제</p>',
     )
   })
 

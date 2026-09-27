@@ -19,9 +19,7 @@
  *    왕복하면 그 사이에 다른 페이지의 코멘트가 바뀌어 **한 시점에 존재한 적 없는 조합**이
  *    산출물에 담긴다.
  *
- * **테마는 여기서 안 읽는다.** PPTX는 테마를 OOXML 색으로 옮기지 않고(설계서 「명시적으로 제외한 것 (YAGNI)」이
- * 도형 변환을 포기했다) 화면을 그릴 때만 읽는다(`export-pptx.ts`의 「테마를 래스터를 위해 읽는다」). 화면 없는
- * 쪽까지 질의를 하나 더 도는 것은 비용이지 계약이 아니다 — 읽는 쪽이 읽는다.
+ * **테마는 읽지 않는다** — 번들도 PPTX 화면도 테마 없이 SDK 기본 뷰로 그린다(`export-pptx.ts`의 「테마를 읽지 않는다」).
  */
 import type { BundleComment } from '@wirebound/exporter'
 import { migrateDocument, targetedPages, type PageDocument, type TargetedPage } from '@wirebound/schema'

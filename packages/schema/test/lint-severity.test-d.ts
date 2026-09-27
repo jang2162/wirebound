@@ -10,11 +10,11 @@ const source = { severity: 'error' as const, path: '/', message: '아무거나' 
 
 // 표가 severity를 든 규칙은 `lintIssue`가 받는다
 lintIssue('comment-missing', where, '/', '메시지')
-lintIssue('theme-node-variant', where, '/', '메시지')
+lintIssue('naming', where, '/', '메시지')
 
 // relay 규칙은 `relayLintIssue`가 받는다
 relayLintIssue('interaction-target', where, source)
-relayLintIssue('theme-token', where, source)
+relayLintIssue('document-invalid', where, source)
 
 // @ts-expect-error relay 규칙에 severity를 지어 넣을 수 없다
 lintIssue('interaction-target', where, '/', '메시지')

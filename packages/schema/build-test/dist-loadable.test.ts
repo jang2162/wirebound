@@ -40,7 +40,6 @@ describe('빌드 산출물', () => {
       const s = await import('@wirebound/schema')
       const r = await import('@wirebound/renderer')
       s.installCatalog()
-      r.installStructures()
       const el = r.renderDocument({ version: 1, root: { id: 'n_000000000001', type: 'Page', children: [] } })
       if (!el) throw new Error('렌더 결과가 비었다')
       console.log('OK')

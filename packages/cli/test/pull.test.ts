@@ -14,12 +14,11 @@ const SERVER = 'https://wb.example.com'
 const PROJECT = 'prj_a1b2'
 
 const PAYLOAD = {
-  payloadVersion: 1,
+  payloadVersion: 2,
   capturedAt: '2026-08-16T00:00:00.000Z',
   menu: [{ id: 'm1', parentId: null, title: '관리자', sortOrder: 0 }],
   pages: [{ id: 'p1', menuNodeId: 'm1', title: '목록', schemaVersion: 1, schema: { version: 1 }, headSeq: 0 }],
   layouts: [],
-  themes: [],
   comments: [],
 }
 

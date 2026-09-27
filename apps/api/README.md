@@ -280,13 +280,6 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/pages/:pageId/comments/:commentId` | DELETE | editor | — | 200 `{ seq, markerOps }`(**204가 아니다** — 문서 변화를 실어야 한다). **그 노드의 마지막이면 `marker`도 지운다.** 남의 코멘트도 지울 수 있다. 그 사이 남이 고쳤어도 409 가 아니다 — 지울 번호는 잠근 뒤의 문서로 센다(아래 "코멘트와 번호") |
 | `/api/projects/:projectId/pages/:pageId/comments/renumber` | POST | editor | — | 200 `{ seq, markerOps }` — 문서 순서대로 1부터 재번호(설계서 「설계서 화면 구조」). **한 revision이다.** 바꿀 것이 없으면 `markerOps: []`이고 revision도 안 쌓인다. 그 사이 남이 고쳤어도 409 가 아니다 — 잠근 뒤의 문서를 매긴다 |
 | `/api/projects/:projectId/tree` | GET | viewer | — | 200 `{ menu }` — 메뉴 트리 + 각 노드의 `pages`(스키마는 싣지 않는다) |
-| `/api/projects/:projectId/theme` | GET | viewer | — | 200 `{ themeId, theme, issues }` — **이 프로젝트의 화면이 지금 써야 할 테마 하나**(아래 "프로젝트의 현재 테마"). 없으면 `theme: null` |
-| `/api/projects/:projectId/theme` | PUT | **owner** | `{ themeId: string \| null }` | 200 `{ themeId, theme, issues }` — **GET과 같은 꼴**(같은 함수가 만든다). 기본 레이아웃의 `theme_id`를 바꾼다. `null`은 *"테마를 벗긴다"*. **목록 밖 `themeId`는 404**(남의 프로젝트 테마의 존재를 숨긴다), **기본 레이아웃이 없는 프로젝트는 409**, 봉투 위반 400 |
-| `/api/projects/:projectId/themes` | GET | viewer | — | 200 테마 배열 — **시스템 테마가 함께 나온다**(아래 "테마 응답 형태"). 시스템 테마가 먼저, 그 안에서 `slug` 순 |
-| `/api/projects/:projectId/themes` | POST | **owner** | `{ theme }` | 201 테마(봉투 위반 400, **오류** 422, 중복 id 409, NUL 400). 경고가 있으면 `warnings`가 더 붙는다 |
-| `/api/projects/:projectId/themes/:themeId` | GET | viewer | — | 200 테마 — 파생 테마면 `base`가 더 붙는다. 시스템 테마는 어느 프로젝트에서나 읽힌다 |
-| `/api/projects/:projectId/themes/:themeId` | PUT | **owner** | `{ theme }`(문서 전체) | 200 테마(통째 교체). 경고가 있으면 `warnings`가 더 붙는다. **시스템 테마는 403**, 남의 프로젝트 테마는 404 |
-| `/api/projects/:projectId/themes/:themeId` | DELETE | **owner** | — | 204. **시스템 테마는 403**, 남의 프로젝트 테마는 404 |
 | `/api/projects/:projectId/snapshot` | GET | viewer | — | 200 **프로젝트 payload 그 자체**(아래 "읽기 전용 프로젝트 덤프"). **행을 쓰지 않는다.** 수집 도중 프로젝트가 바뀌면 409 |
 | `/api/projects/:projectId/snapshots` | POST | **editor** | `{ tag, description? }` | 201 스냅샷(아래 "스냅샷 응답 형태"). **지금 상태를 태그 하나로 얼린다**(설계서 「스냅샷」). 태그 중복 409, 수집 도중 프로젝트가 바뀌면 409(**문장이 다르다**), NUL 400, 태그 1~60자·설명 0~2000자 밖은 400 |
 | `/api/projects/:projectId/snapshots` | GET | viewer | — | 200 스냅샷 배열(`created_at` 내림차순, 동률은 `tag` 오름차순). **`payload`가 없다** — 크기(`payloadBytes`)만 실린다 |
@@ -335,7 +328,7 @@ wirebound-export-<슬러그>/
   index.html            트리 네비 + 뷰어 셸 (첫 페이지를 담는다)
   pages/….html          페이지마다 셸을 통째로
   assets/shell.css      뷰어 셸의 CSS
-  assets/theme.css      구조 기본 CSS + 테마 컴파일 결과
+  assets/theme.css      SDK 기본 뷰의 CSS (테마는 아직 싣지 않는다 — 아래 `themeId`)
   assets/runtime.js     상호작용 런타임
 ```
 
@@ -351,8 +344,7 @@ wirebound-export-<슬러그>/
 `duplicateTargets`가 함께 낸다(타겟도 겹치기 때문이다).
 
 **출처는 라이브 프로젝트다.** 페이지·문서는 `pages` 표의 지금 값, 코멘트는
-`comments` 표의 살아 있는 값, 테마는 프로젝트가 지금 쓰는 것(`GET .../theme`와 **같은
-사슬**)이다. 스냅샷의 *"그때"*를 내보내는 경로는 없다.
+`comments` 표의 살아 있는 값이다. 스냅샷의 *"그때"*를 내보내는 경로는 없다.
 
 **URL에 파일 이름이 없다.** 파일 이름은 안정한 열쇠가 아니라 페이지를 하나 더하면
 뒤에서 부딪히던 이름들의 번호가 밀린다 — 그것으로 URL을 만들면 남의 북마크가 깨진다.
@@ -369,7 +361,7 @@ wirebound-export-<슬러그>/
 | `duplicateTargets` | 둘 이상의 페이지가 든 타겟. **그 타겟을 겨눈 링크는 어디에도 안 생긴다** |
 | `brokenLinks` | `{ target, from, reason }[]` — 어느 페이지도 가리키지 못한 링크. `from`은 그것을 겨눈 페이지들의 **번들 이름**이다. `reason`은 `missing`(그 타겟을 든 페이지가 없다) 또는 `ambiguous`(둘 이상이다) |
 | `errors` | `{ path, title, error }[]` — 그리지 못한 노드. **`title`이 어느 페이지인지 말한다** |
-| `themeId` | 번들이 실은 테마. `null`이면 구조 기본 CSS만으로 그려진 것이다 |
+| `themeId` | 번들이 실은 테마. 늘 `null` 이다 — 번들은 테마 없이 SDK 기본 뷰 CSS 로 그린다 |
 | `fileName` | 내려받을 때 붙을 이름. **화면이 지어내지 않는다** |
 
 **이 응답이 담지 않는 것 하나:** 한 노드를 여러 규칙이 서로 다른 prop으로 겨누면 미리 그릴
@@ -414,7 +406,7 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 | 코멘트·상호작용 문장 | **번들과 같은 함수가 만든다**(`@wirebound/exporter`의 `commentEntries`·`pageSentences`). 설계서 「자동 문장화」가 *"우측 패널, HTML 번들, PPTX 모두 이 문장을 싣는다"*고 적는다 |
 | 노트 | 슬라이드에 실린 것 **전부와 페이지 설명**. 슬라이드는 넘치면 잘리므로 **잘려도 사라지지 않게** 하는 자리다 |
 | **화면 이미지** | **서버가 헤드리스 Chromium으로 그린다.** `exportPage`가 내는 그 페이지의 HTML을 그대로 띄워 PNG 한 장을 찍고, 슬라이드의 화면 자리에 **비율을 지켜** 넣는다. 못 그린 장은 그 자리에서 *"화면 이미지가 실리지 않았습니다"*가 되고 **미리보기가 이유를 말한다** |
-| 테마 | **OOXML의 `a:clrScheme`으로 옮기지 않는다.** 설계서 「명시적으로 제외한 것」이 도형 변환을 포기했고 슬라이드에 실릴 화면은 래스터다 — 그 이미지가 이미 테마 색을 담으므로 여기서 다시 칠하면 같은 색이 두 자리에서 다르게 나온다. **다만 그 래스터를 그리는 입력으로는 읽는다**(번들과 같은 사슬: `currentProjectTheme` → `asResolvedTheme`) |
+| 테마 | **OOXML의 `a:clrScheme`으로 옮기지 않는다.** 설계서 「명시적으로 제외한 것」이 도형 변환을 포기했고 슬라이드에 실릴 화면은 래스터다 — 그 이미지가 이미 테마 색을 담으므로 여기서 다시 칠하면 같은 색이 두 자리에서 다르게 나온다. **그 래스터를 그리는 입력으로도 싣지 않는다** — api 는 테마 코드를 싣지 않아 화면은 번들과 같은 SDK 기본 뷰의 와이어프레임이다(`services/export-pptx.ts` 머리말) |
 
 ##### 화면 이미지를 그리는 조건
 
@@ -447,7 +439,7 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 미리보기가 싼 답을 따로 만들면 화면이 *"괜찮다"*고 한 뒤 파일이 그림 없이 나오는 날이 온다.
 
 **`duplicateTargets`·`brokenLinks`·`errors`·`themeId`는 안 싣는다.** 그 넷은 HTML 번들의
-성질이다 — PPTX는 페이지 사이 링크를 만들지 않고 설계서 「테마 시스템」의 테마도 안 쓴다. 그대로 실으면 값이
+성질이다 — PPTX는 페이지 사이 링크를 만들지 않고 번들의 테마 칸(`themeId`)도 안 쓴다. 그대로 실으면 값이
 있는데 그 값이 **아무것도 안 가리킨다.**
 
 ### 로그인 시도 제한
@@ -922,120 +914,23 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 페이지 본문(스키마 포함)이 필요하면 `GET /api/projects/:projectId/pages/:pageId`를
 따로 호출한다.
 
-### 테마 응답 형태
-
-테마를 내는 응답(목록의 각 항목 · `POST` · `GET` · `PUT`)의 **바탕은 네 키**다.
-
-```jsonc
-{ "id": "…", "system": false, "updatedAt": "2026-08-10T…Z",
-  "theme": { "meta": { "id": "brand", "name": "브랜드", "version": "1.0.0" }, "tokens": { … } } }
-```
-
-**여기에 조건부로 붙는 키가 둘이다** — 아래 `base`와 `warnings`. 둘 다 **없으면 키 자체가
-없다**(페이지 쪽 `warnings`·`clientOpId`와 같은 관례).
-
-- **`id`는 행의 uuid, `theme.meta.id`는 slug다.** 경로에 쓰는 것은 `id`다.
-- **`system: true`면 읽기 전용이다**(설계서 「테마 관리」). 그 테마는 `project_id IS NULL`이고,
-  수정·삭제 시도는 owner여도 **403**이다 — 목록·조회가 이미 그 존재를 보여 주므로
-  숨길 것이 없고, 말해야 하는 것은 "읽기 전용"이라는 사실이다. 반대로 **남의 프로젝트
-  테마는 404**다(설계서 「권한 모델」의 존재 숨김).
-- **상세 조회(`GET .../themes/:themeId`)만 `base`를 낼 수 있다.**
-  그 테마가 `meta.extends`를 선언했을 때만 붙고, 값은 **상속 대상 시스템 테마 전문**이다.
-  `resolveTheme(document, base)`가 base 없이는 파생 문서의 해석 자체를 거부하므로,
-  base를 빼고 내면 클라이언트가 쓸 수 없는 것을 받는다. **목록에는 붙지 않는다** —
-  파생 항목마다 시스템 테마 전문이 붙어 응답이 항목 수만큼 부푼다.
-
-- **쓰기 둘(`POST .../themes` · `PUT .../themes/:themeId`)만 `warnings`를 낼 수 있다**
-  저장된 테마에 **경고**가 있을 때만 붙고 값은 `ThemeIssue[]`다. 페이지 쪽
-  `PUT .../schema`의 `warnings`와 같은 형식이고 만드는 함수도 하나다(`http/warnings.ts`).
-  **읽기(`GET`)와 목록은 이 키를 내지 않는다** — 그 라우트들은 테마를 해석하지 않기
-  때문이다. 경고를 알아야 하는 클라이언트는 받은 `theme`(파생이면 `base`와 함께)에
-  `resolveTheme`을 직접 돌린다(`@wirebound/themes`가 브라우저에서도 돈다). 캔버스가
-  이미 그렇게 한다(`apps/web`의 `use-theme-css.ts`).
-
-**저장되는 것은 파생 테마 그대로다.** `extends`를 지닌 채 왕복하고, 병합 결과(홀로
-서는 테마)는 저장하지 않는다 — 그것이 저장되는 자리는 스냅샷(설계서 「스냅샷」) 하나뿐이다.
-
-#### 테마 본문 검증 — 400과 422가 갈린다
-
-`PUT .../pages/:pageId/schema`의 게이트(설계서 「정방향 흐름」)와 같은 모양이다.
-
-| 무엇 | 상태 |
-|---|---|
-| `{ theme }` 봉투 위반(절 이름 오타, `meta` 없음, `meta.id`가 `[A-Za-z0-9_-]{1,64}` 밖, `extends`가 `system:<id>` 꼴이 아님) | **400** |
-| 테마에 NUL 문자(U+0000) | **400** |
-| 상속 대상 시스템 테마가 **없음**(꼴은 맞지만 그런 이름이 없다) | **422** `bad-extends` |
-| 토큰 참조가 안 풀림, 카탈로그에 없는 컴포넌트/구조/조각/변형/상태, 화이트리스트 밖 스타일 프로퍼티 등(**`error`**) | **422**, `issues`에 `ThemeIssue[]`(경고까지 함께) |
-| **`warning`만 있음** | **저장된다.** 경고는 성공 응답의 `warnings`에 실린다(위) |
-| `(project_id, meta.id)` 중복 | **409** |
-
-**`ThemeIssue`도 `severity`를 갖는다**(`"error"` 또는 `"warning"`) — 페이지의
-`ValidationIssue`와 같은 값 집합이고 선을 긋는 것은 `partitionIssues` 하나다.
-**`warning`인 테마 이슈는 둘이다**(`@wirebound/themes`의
-`THEME_ISSUE_SEVERITY`가 코드마다 정한다):
-
-| 코드 | 언제 | 왜 막지 않는가 |
-|---|---|---|
-| `suspicious-literal` | 값이 참조처럼 생겼는데 이름공간이 목록 밖이다(`"spce.4"`) | 값이 **적힌 그대로** CSS에 실리고 테마는 선다. 멀쩡한 CSS 리터럴이 그 모양일 수 있어 판정이 확실하지 않다 |
-| `node-handle-overwrite` | 테마 스타일이 같은 셀렉터에서 **노드 손잡이**가 내는 CSS 프로퍼티를 낸다 | **테마가 이기는 것이 옳다고 읽는다** — 설계서 「components — 구조 + 스킨」에서 스킨이 구조를 입힌다(그 절은 노드 손잡이와의 순서를 따로 말하지 않는다 — 해석은 `packages/themes/src/spec/handles.ts` 머리말). 결함은 그것이 조용하다는 것뿐이다 |
-
-**상속 깊이는 1단계다**(설계서 「상속과 병합」). `extends`가 가리킬 수 있는 것은 **코드의 시스템 테마**뿐이라
-파생 테마를 다시 상속하려 하면 그런 시스템 테마가 없어 422가 된다.
-
-### 프로젝트의 현재 테마 (`GET /api/projects/:projectId/theme`)
-
-설계서 「테이블 정의」의 사슬 `projects.default_layout_id → layouts.theme_id → themes`를 한 번에
-따라가 **캔버스가 그대로 쓸 수 있는 테마 하나**를 낸다.
-
-```jsonc
-{ "themeId": "…", "theme": { "meta": { … }, "tokens": { … }, … }, "issues": [] }
-```
-
-**`themeId`는 고르개를 위한 것이다.** `theme`은 파생을 **합친** 문서라
-`meta.extends`가 지워져 있고, `meta.id`(=slug)로 목록과 맞대는 것은 **성립하지 않는다** —
-유일성 단위가 `(project_id, slug)`라 시스템 테마와 프로젝트 테마가 같은 slug를 가질 수 있다.
-캔버스는 이 값을 읽지 않는다.
-
-**`theme: null`인데 `themeId`가 있을 수 있다** — 상속이 끊긴 파생을 고른 상태다. 반대로
-테마 행 자체가 사라졌으면 둘 다 `null`이다.
-
-**`.../themes/:themeId`와 다른 것을 낸다 — 소비자가 다르기 때문이다.**
-
-| 엔드포인트 | 소비자 | 내는 것 |
-|---|---|---|
-| `.../themes/:themeId` | 테마 저작 UI | **파생 문서 그대로 + `base`** — 편집 대상은 사람이 적은 것이다 |
-| `.../theme` | 캔버스·내보내기 | **홀로 서는 테마 하나** — 파생이면 `mergeTheme`으로 합쳐 낸다 |
-
-합쳐 내는 이유: `resolveTheme(document, base)`가 base를 요구하므로 합치지 않고 내면
-받는 쪽이 두 인자를 스스로 맞춰야 한다. **합친 결과를 저장하지는 않는다** — 읽을 때
-계산할 뿐이고 저장되는 것은 파생 그대로다.
-
-**`theme`이 `null`인 경우가 셋이고 전부 정상이다:** 기본 레이아웃이 없다 · 레이아웃이
-테마를 고르지 않았다 · 테마 행이 사라졌다. 그때 화면은 **구조 기본 CSS만으로** 그려진다.
-해석 이슈가 나도 422가 아니라 `issues`에 실어 200으로 낸다 — 그리기를 막는 것보다
-테마 없이 그리는 편이 낫다.
-
 ### 레이아웃
 
 **프로젝트를 만들면 기본 레이아웃이 함께 생긴다**(같은 트랜잭션). 그 문서는 `Page`
-하나와 `Slot` 하나이고, `theme_id`는 시스템 `admin`을 가리킨다.
+하나와 `Slot` 하나다.
 
-- **레이아웃을 편집하는 엔드포인트는 없다.** 레이아웃은 참조를 나르고 `Slot`을
+- **레이아웃을 편집하는 엔드포인트는 없다.** 레이아웃은 `Slot`을
   담는 그릇이다(설계서 「레이아웃」의 레이아웃 에디터는 없다 — 아래 "이 서버가 만들지 않은 것").
 - **저장된 `schema`를 그리는 코드는 없다 — 캔버스는 페이지 문서만 그린다.**
-  쓰는 자리는 프로젝트 생성 하나이고, 읽는 쪽이 실제로 쓰는 것은 `theme_id`뿐이다.
+  쓰는 자리는 프로젝트 생성 하나다.
   `renderComposed`로 합치면 레이아웃의 루트 `Page`와 `Slot`이 **노드 둘을 더 그려**
   페이지 문서에 없는 `data-wb-id`가 DOM에 섞인다(`packages/renderer/test/compose-identity.test.tsx`).
   그리는 코드가 생기는 것은 레이아웃 에디터가 올 때이고, 그쪽은 **선택 모델부터** 정해야 한다.
 - `projects.default_layout_id`와 `layouts.project_id`가 **서로를 가리키는 순환**이라
   `default_layout_id`가 nullable이다. 생성은 프로젝트 → 레이아웃 → 프로젝트 UPDATE
   세 문장으로 닫는다.
-- **`layouts.theme_id`는 `ON DELETE RESTRICT`다.** 쓰이고 있는 테마를 지우려 하면
-  **409**다. `SET NULL`로 두면 화면이 말없이 달라지므로 실패하는 쪽을 골랐다.
 - 마이그레이션 0007 **이전에 만들어진 프로젝트**는 `default_layout_id`가 `NULL`로
-  남는다(마이그레이션이 만들어 주지 않는다 — 그 시점엔 `themes`가 비어 있어 테마 없는
-  레이아웃만 만들 수 있고, 그것은 레이아웃이 없는 것과 관찰 결과가 같다). 그런 프로젝트에
-  레이아웃을 주는 경로는 없다.
+  남는다(마이그레이션이 만들어 주지 않는다). 그런 프로젝트에 레이아웃을 주는 경로는 없다.
 
 ### 스냅샷 응답 형태
 
@@ -1058,7 +953,6 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 | `menu` | 메뉴 노드 평평한 목록(`parentId`가 구조를 나른다) |
 | `pages` | 페이지 + **저장된 문서 그대로** + `headSeq`(설계서 「스냅샷」의 요구) |
 | `layouts` | 레이아웃 **전부**(프로젝트당 하나라고 가정하지 않는다) |
-| `themes` | 레이아웃별 **병합이 끝난 홀로 서는 테마**. 고르지 않았으면 `null` |
 | `comments` | 코멘트 + 그 시점의 작성자 이름 |
 
 **겹layer(런타임 상태)는 담지 않는다.** payload 규격이 `z.strictObject`라 선언되지 않은
@@ -1068,8 +962,8 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 페이지가 하나 있어도 캡처는 성공한다 — 캡처는 읽기이고, 읽기가 실패하면 사용자는 얼릴
 수단 자체를 잃는다(그 페이지의 `GET`은 여전히 400이다).
 
-**테마는 병합된 결과로 얼린다.** 참조만 저장하면 테마가 나중에 바뀌었을 때 스냅샷이 다른
-모습으로 복원된다(설계서 「스냅샷」). `mergeTheme` 결과에는 `extends`가 남지 않는다.
+**테마는 담지 않는다 — 판 2.** payload 에 테마 절도 레이아웃의 테마 참조도 없다. 판 1 payload(`themes` 절 ·
+`layouts[].themeId`가 있다)는 마이그레이션 0018 이 판 2 로 옮긴다 — 규격이 `z.strictObject`라 옮기지 않으면 판 2 규격이 못 읽는다.
 
 **`payloadBytes`는 `octet_length(payload::text)`다** — DB가 들고 있는 문서의 옥텟 수이고,
 생성·목록·상세 셋이 같은 식을 쓴다. 설계서 「열린 질문」의 스냅샷 보관 정책을 닫을 관측이라 **상한은
@@ -1094,11 +988,9 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
   "summary": {
     "menu":     { "created": 0, "updated": 1, "deleted": 0 },
     "pages":    { "created": 1, "metaUpdated": 0, "schemaChanged": 2, "schemaUnchanged": 3, "deleted": 1 },
-    "comments": { "created": 0, "updated": 0, "deleted": 2 },
-    "layouts":  { "themeRefChanged": 1 }
+    "comments": { "created": 0, "updated": 0, "deleted": 2 }
   },
-  "safetySnapshot": { "id": "…", "tag": "복원 전 2026-08-12T09:24:30.443Z" },
-  "themes": [{ "layoutId": "…", "themeId": "…", "differs": false }]
+  "safetySnapshot": { "id": "…", "tag": "복원 전 2026-08-12T09:24:30.443Z" }
 }
 ```
 
@@ -1122,19 +1014,6 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
   같은 프로젝트를 두 번 복원해야 한다 — 재시도로 풀린다.
 - **되살아난 페이지는 `head_seq` 0에서 다시 시작한다.** 이력은 되살아나지 않는다(지워질 때
   CASCADE가 데려갔다). 복원이 되살릴 수 있는 것은 **문서**다.
-
-#### 테마는 되돌리지 않는다 — 다름을 말한다
-
-payload의 테마는 **병합 결과**다. 그것을 `themes` 행에 쓰면 파생 테마가 평탄화되어 상속이
-영구히 사라지고, 시스템 테마는 애초에 쓸 수 없다(설계서 「테마 관리」). 그래서 복원은 레이아웃의
-`theme_id` **참조만** 되돌리고, 그 참조가 지금 내는 병합 결과가 payload의 동결본과 다르면
-`themes[].differs`로 말한다. 테마를 되돌리는 경로는 따로 있다(고르개·가져오기).
-
-**`differs`는 키 순서 변경을 보지 못한다.** `snapshots.payload`가 `jsonb`라 캡처가 무엇을
-담든 저장되는 순간 키가 정렬되는 반면 `themes`의 절은 `json`이라 원문 순서를 들고 있어서,
-순서를 보는 비교는 *"항상 다르다"*만 낸다(실측: 같은 테마의 `meta`가 한쪽 `{id,name,version,
-description}`, 다른 쪽 `{id,name,description,version}`). 순서까지 보려면 캡처가 순서를
-**값으로** 실어야 하고 그것은 `payloadVersion` 2다.
 
 #### 레이아웃 개수가 다르면 복원하지 않는다
 
@@ -1236,12 +1115,11 @@ description}`, 다른 쪽 `{id,name,description,version}`). 순서까지 보려�
 #### 캡처는 자기가 본 것이 한 시점인지 확인한다
 
 수집 **전후로 지문을 읽어** 다르면 409다. 지문은 payload에 실릴 내용 자체이고
-(`readCaptureFingerprint`), 다섯 테이블을 덮는다. **재시도 루프는 없다** —
+(`readCaptureFingerprint`), 네 테이블을 덮는다. **재시도 루프는 없다** —
 `PUT .../schema`가 `stale`에서 한 판단과 같다.
 
-**지문이 개수 + `max(updated_at)` 꼴이 아니라 내용인 까닭 — 그 꼴로는 못 잡는 자리가 둘이다:**
-`menu_nodes`에는 `updated_at` 컬럼이 아예 없어 제목만 바뀌면 아무 값도 안 움직이고,
-`themes.updated_at`은 `now()`(트랜잭션 시작 시각)라 한 트랜잭션 안에서는 얼어 있다.
+**지문이 개수 + `max(updated_at)` 꼴이 아니라 내용인 까닭:** `menu_nodes`에는 `updated_at` 컬럼이 아예 없어
+제목만 바뀌면 아무 값도 안 움직인다.
 
 **실패해도 아무것도 쓰지 않는다** — 캡처는 읽기뿐이고 삽입은 그 결과를 받은 뒤에 한다.
 
@@ -1256,24 +1134,12 @@ description}`, 다른 쪽 `{id,name,description,version}`). 순서까지 보려�
 **복원이 *"그때"*로 읽어야 하는 값은 `payload.capturedAt`이다.** `created_at`은 그
 값의 사본이고, 목록 정렬이 쓰는 것이 그쪽이다.
 
-#### 시스템 테마는 코드가 진실이다
-
-`packages/themes/src/system/`이 시스템 테마를 갖고 있고, 서버가 **기동할 때마다**
-그것을 `themes` 테이블에 `project_id IS NULL`로 upsert한다(`services/system-themes.ts`).
-DB의 행과 코드가 갈리면 **코드가 이긴다** — 다음 기동이 되돌린다.
-
-**코드에서 사라진 시스템 테마의 행은 지우지 않는다.** `layouts.theme_id`가 그 행을
-참조하고 파생 테마의 `extends_ref`가 그 slug를 가리키므로, 코드 한 줄을 지운 결과가
-사용자 데이터에 닿아서는 안 된다. 대가로 **해석할 수 없는 낡은 행이 목록에 남을 수
-있다**(그 테마를 상속한 파생은 422가 된다).
-
 ### 프리셋 응답 형태
 
 프리셋은 **프로젝트가 소유한 페이지 통째 템플릿**이고 테마를 바꿔도 그대로다(설계서 「페이지 프리셋」).
 테마 패턴(설계서 「patterns — 테마가 소유한 구성 레시피」)과 다른 것이다 — 패턴은 테마가 소유한 **섹션 단위** 레시피다.
 
-**목록은 내장과 프로젝트 것을 함께 낸다.** `GET .../themes`가 시스템 테마를 함께 내는
-것과 같은 형태이고, 뜻도 같다 — *"이 프로젝트에서 **고를 수 있는** 것"*.
+**목록은 내장과 프로젝트 것을 함께 낸다.** 뜻은 *"이 프로젝트에서 **고를 수 있는** 것"*이다.
 
 `source`가 판별자이고 **키 집합이 갈린다:**
 
@@ -1558,9 +1424,8 @@ id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청
   `lockProjectRow` — 복원과 프로젝트 삭제). 그다음이 페이지다. 한쪽이 페이지를 먼저 잡으면 둘이
   서로를 기다린다 — `test/guard-in-lock.test.ts`의 «잠금 순서» 절이 잰다.
 - **그 밖의 프로젝트 쓰기는 프로젝트 행을 `KEY SHARE`로 먼저 잡는다**(`repos/projects.ts`의
-  `lockProjectShared` — 테마 고르기 · 수정 · 삭제 · 코멘트 수정 · FK 삽입 다섯). 순서는 «프로젝트 행 →
-  자기 행 → 멤버 행(재확인)»이다 — 자기 행부터 잡으면 재확인이 프로젝트 삭제의 CASCADE 와 고리가 되고,
-  남의 쓰기가 건 잠금(복원의 레이아웃 행 · 테마 행 `KEY SHARE`)에 선 대기가 재확인보다 늦게 끝난다.
+  `lockProjectShared` — 코멘트 수정 · FK 삽입 넷). 순서는 «프로젝트 행 →
+  자기 행 → 멤버 행(재확인)»이다 — 자기 행부터 잡으면 재확인이 프로젝트 삭제의 CASCADE 와 고리가 된다.
 - **프로젝트 행을 안 잡고 «자기 행 → 재확인»으로 가는 쓰기는 프로젝트 삭제가 그 표의 행을 CASCADE 전에 먼저 잡는다** —
   메뉴 제목 쓰기(`lockProjectMenuNodes`) · 프리셋 삭제(`lockProjectPresets`), 둘 다 owner 행 · 재확인 앞이다(`routes/projects.ts`의
   삭제 주석). 안 잡으면 삭제의 CASCADE 가 멤버 행을 쥔 채 그 행에 서서 재확인과 고리가 된다(한쪽 500). 재확인을 쓰기
@@ -1585,10 +1450,7 @@ id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청
   레이아웃(`Page` 하나 + `Slot` 하나) 하나가 자동으로 생길 뿐, 그것을 바꿀 방법이 없다.
   설계서 「테이블 정의」가 적은 `pages.layout_id`도 없다 — 페이지가 레이아웃을 고르는 경로가 없다.
 - **복원이 되돌리지 않는 것**: **레이아웃 생성·삭제**(개수가 다르면 409로 끊는다 — 설계서 「레이아웃」의
-  레이아웃 에디터가 올 때 함께 연다)와 **테마 문서 되돌리기**(복원은 참조만 되돌리고 다름을
-  보고한다 — 위 "복원").
-- **테마의 동시 편집 방어**: `pages`는 `head_seq`로 닫혀 있는데 `themes`에는 그런 것이
-  없다. 마지막 쓰기가 이긴다.
+  레이아웃 에디터가 올 때 함께 연다).
 - **API 토큰의 만료·회전**: 설계서 「권한 모델」에 그 줄이 없어 근거 없이 정하지 않았다(위 "API 토큰").
 
 ## 명령 요약

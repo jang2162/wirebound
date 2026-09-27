@@ -9,7 +9,6 @@ describe('lint 이슈를 만드는 자리', () => {
       rule: 'comment-missing',
       severity: 'warning',
       pageId: 'p1',
-      themeId: null,
       nodeId: null,
       path: '/root/children/0',
       message: '코멘트가 없습니다',
@@ -19,7 +18,6 @@ describe('lint 이슈를 만드는 자리', () => {
   it('자리를 안 준 축은 null이다', () => {
     const issue = lintIssue('page-unlinked', {}, '/', '떠 있습니다')
     expect(issue.pageId).toBeNull()
-    expect(issue.themeId).toBeNull()
     expect(issue.nodeId).toBeNull()
   })
 
@@ -32,13 +30,12 @@ describe('lint 이슈를 만드는 자리', () => {
     expect(relayed.severity).toBe('warning')
 
     const asError = relayLintIssue(
-      'theme-token',
-      { themeId: 't1' },
-      { severity: 'error', path: 'tokens.semantic.primary', message: '없는 토큰입니다' },
+      'document-invalid',
+      { pageId: 'p1' },
+      { severity: 'error', path: '/root', message: '봉투가 깨졌습니다' },
     )
     expect(asError.severity).toBe('error')
-    expect(asError.themeId).toBe('t1')
-    expect(asError.pageId).toBeNull()
+    expect(asError.nodeId).toBeNull()
   })
 
   it('표가 severity를 든 규칙에 relay를 쓰면 던진다', () => {

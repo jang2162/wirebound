@@ -1,5 +1,6 @@
 /*
- * system-admin 테마의 CSS. 옛 JSON 테마 `admin`(packages/themes 의 ADMIN_THEME)을 컴파일한 결과를 옮긴 첫 판이고,
+ * system-admin 테마의 CSS. 옛 JSON 테마 `admin`을 컴파일한 결과를 옮긴 첫 판이고(원본을 볼 때:
+ * `git show 34c6c9d0:packages/themes/src/system/admin.ts`),
  * 이제 이 파일이 소스다 — 생성기는 없다. 고칠 때는 이 파일을 고친다.
  *
  * `:root` 의 `--wb-semantic-*` · `--wb-radius-*` 는 manifest(`src/manifest.ts`)의 토큰이 덮는 자리다 — 토큰 키의 `.` 을 `-` 로

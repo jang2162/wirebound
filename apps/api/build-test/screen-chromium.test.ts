@@ -28,7 +28,6 @@ import { createServer, type Server } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { exportPptx, exportPage, type PptxScreen } from '@wirebound/exporter'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
-import { resolveTheme, systemTheme, type Theme } from '@wirebound/themes'
 import { chromium, type Page } from 'playwright-core'
 import { describe, expect, it } from 'vitest'
 import {
@@ -99,8 +98,6 @@ if (!있다) {
   )
 }
 
-const theme = resolveTheme(systemTheme('admin')!).theme
-
 /**
  * 페이지 문서 하나. **한글이 들어 있다** — 두부가 되는지 재려면 그래야 한다.
  *
@@ -130,9 +127,10 @@ function doc(index: number, rows: number): PageDocument {
   } as unknown as PageDocument
 }
 
-function requestFor(index: number, rows: number, withTheme = theme): ScreenRequest {
+/** 한 장의 요청. `themeCss` 는 기본 뷰 CSS 뒤에 얹힌다(`exportPage`) — 테마 CSS 가 화면에 닿는 판을 세울 때 준다. */
+function requestFor(index: number, rows: number, themeCss?: string): ScreenRequest {
   const title = `관리자 회원 목록${index}`
-  const rendered = exportPage({ document: doc(index, rows), title, theme: withTheme })
+  const rendered = exportPage({ document: doc(index, rows), title, ...(themeCss === undefined ? {} : { themeCss }) })
   return { title, html: rendered.html, css: rendered.css }
 }
 
@@ -221,8 +219,8 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
   /**
    * **바깥으로 나가는 요청을 끊는가.**
    *
-   * 테마의 `@font-face`·`url()`은 사용자가 적은 문자열이라(`themes/spec/assets.ts`) 서버가
-   * 그것을 가져가면 프로젝트 멤버가 적은 주소로 **서버가 요청을 보내는 자리**가 된다.
+   * 페이지의 HTML · CSS 가 가리키는 바깥 주소(`@font-face` · `url()` · `<link>`)를 서버가 가져가면 그것을 적은 사람의
+   * 주소로 **서버가 요청을 보내는 자리**가 된다.
    *
    * **재는 방법은 「기다리지 않는다」이다.** 라우팅되는 곳이 없는 주소를 걸어 두면 끊는
    * 쪽은 그대로 그리고, 안 끊는 쪽은 `load`를 기다리다 타임아웃으로 죽는다.
@@ -285,15 +283,9 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
  * `screenshot` 을 감싸 잰 직후에 키운다. 지연을 몇 ms 로 둔 경주 판은 같은 소스에서 거절과 통과가 섞여 자로 못 쓴다.
  */
 describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
-  /** 여백 20000px 를 전이로 거는 파생 테마의 페이지 — 에디터가 저장할 수 있는 값이다(`transition` 은 화이트리스트 안이고 `!important` 도 컴파일이 받는다). */
+  /** 여백 20000px 를 전이로 거는 테마 CSS 의 페이지 — 테마 CSS 는 무엇이든 적을 수 있다(`!important` 도). */
   function growingPage(transition: string): ScreenRequest {
-    const derived: Theme = {
-      ...systemTheme('admin')!,
-      components: { ...systemTheme('admin')!.components, Page: { structure: 'default', base: { paddingY: '20000px', transition } } },
-    }
-    const resolved = resolveTheme(derived)
-    expect(resolved.issues).toEqual([])
-    return requestFor(1, 4, resolved.theme!)
+    return requestFor(1, 4, `[data-wb-component="Page"] { padding-top: 20000px; padding-bottom: 20000px; transition: ${transition} }`)
   }
 
   it('전이로 자라는 페이지는 끝 크기로 재서 거절한다 — 값에 `!important` 를 실어도', async () => {
@@ -373,29 +365,16 @@ describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
   })
 
   /**
-   * **시스템 테마의 전이는 끝 상태로 찍힌다.** 테마 시트는 HTML 을 띄운 뒤에 얹으므로 테마의 `transition` 은 기본값에서 테마 값으로
-   * 옮겨 가는 전이를 시작한다 — admin 은 단추에 `transition: 150ms` 를 걸어, 끄기 전에는 그림이 옮겨 가는 중간에 찍혔다(전이를 걷은
-   * 테마와 그림이 다르고 높이도 흔들렸다). 끄기 없이 찍은 뒤에 다시 재면 이 전이가 «그리는 동안 커짐»으로 멀쩡한 장을 거절한다.
+   * **테마 CSS 의 전이는 끝 상태로 찍힌다.** 테마 시트는 HTML 을 띄운 뒤에 얹으므로 테마의 `transition` 은 기본값에서 테마 값으로
+   * 옮겨 가는 전이를 시작한다 — 끄기 전에는 그림이 옮겨 가는 중간에 찍혔다(전이를 걷은 CSS 와 그림이 다르고 높이도 흔들렸다). 끄기
+   * 없이 찍은 뒤에 다시 재면 이 전이가 «그리는 동안 커짐»으로 멀쩡한 장을 거절한다.
    */
-  it('시스템 테마의 전이는 끝 상태로 찍힌다 — 전이를 걷은 테마와 같은 그림이고 멀쩡한 장이 거절되지 않는다', async () => {
-    let stripped = 0
-    const strip = (value: unknown): void => {
-      if (value === null || typeof value !== 'object') return
-      const record = value as Record<string, unknown>
-      for (const key of Object.keys(record)) {
-        if (key === 'transition') {
-          delete record[key]
-          stripped++
-        } else strip(record[key])
-      }
-    }
-    const still = structuredClone(systemTheme('admin')!)
-    strip(still.components)
-    // 카나리아 — admin 이 전이를 안 걸면 이 케이스는 아무것도 안 잰다.
-    expect(stripped).toBeGreaterThan(0)
-    const batch = await renderer().render([requestFor(1, 40), requestFor(1, 40, resolveTheme(still).theme!)])
-    const [moving, calm] = batch.results
-    expect(moving!.ok && calm!.ok ? Buffer.compare(moving!.bytes, calm!.bytes) : batch.results).toBe(0)
+  it('테마 CSS 의 전이는 끝 상태로 찍힌다 — 전이를 걷은 CSS 와 같은 그림이고 멀쩡한 장이 거절되지 않는다', async () => {
+    const skin = '[data-wb-component="Button"] { padding: 24px 48px; background: #2563eb; color: #fff }'
+    const moving = `${skin}\n[data-wb-component="Button"] { transition: padding 150ms, background-color 150ms }`
+    const batch = await renderer().render([requestFor(1, 40, moving), requestFor(1, 40, skin)])
+    const [movingShot, calmShot] = batch.results
+    expect(movingShot!.ok && calmShot!.ok ? Buffer.compare(movingShot!.bytes, calmShot!.bytes) : batch.results).toBe(0)
   })
 })
 
@@ -673,7 +652,7 @@ describe('스모크 픽스처가 진짜 화면인가', () => {
    * **브라우저가 없어도 도는 케이스다** — 그리기 전 단계를 잰다.
    */
   it('픽스처가 폴백 없이 그려진다 — 그린 것이 진짜 화면이다', () => {
-    const rendered = exportPage({ document: doc(1, 4), title: '관리자 회원 목록1', theme })
+    const rendered = exportPage({ document: doc(1, 4), title: '관리자 회원 목록1' })
     expect(rendered.errors).toEqual([])
     expect(rendered.html).not.toContain('알 수 없는 컴포넌트')
     expect(rendered.html).not.toContain('올바르지 않습니다')

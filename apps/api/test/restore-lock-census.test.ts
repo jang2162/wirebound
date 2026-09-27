@@ -74,8 +74,7 @@ import {
 
 const db = getTestDb()
 
-// 청소도 하네스도 `helpers.ts`에 있다. 이 파일이 만드는 프로젝트 테마는
-// 프로젝트와 함께 CASCADE로 간다(0006).
+// 청소도 하네스도 `helpers.ts`에 있다.
 beforeEach(resetRealData)
 afterEach(resetRealData)
 
@@ -93,7 +92,6 @@ interface Ids {
   snapshotId: string
   nodeId: string
   commentId: string
-  themeId: string
   presetId: string
   tokenId: string
   otherUserId: string
@@ -271,17 +269,6 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
-    // **`layouts.theme_id`를 쓰는 유일한 라우트이고, 복원이 되돌리는 바로 그 컬럼이다.**
-    // *"테마 라우트"*로 묶으면 *"복원이 안 건드리는 것"* 쪽으로 새기 쉽다.
-    route: 'PUT /:projectId/theme',
-    label: '프로젝트 테마 고르기 — 복원이 되돌리는 layouts.theme_id를 쓴다',
-    method: 'PUT',
-    url: (ids) => `/api/projects/${ids.projectId}/theme`,
-    payload: (ids) => ({ themeId: ids.themeId }),
-    restoreWrites: true,
-    blocked: true,
-  },
-  {
     route: 'POST /:projectId/snapshots',
     label: '스냅샷 생성 — 복원이 안전망을 넣는 그 표다',
     method: 'POST',
@@ -347,46 +334,9 @@ const PROBES: Probe[] = [
     blocked: false,
   },
   {
-    // **막힌다.** `themes.project_id`가 `projects(id)`를
-    // 참조하므로 삽입이 그 행에 `FOR KEY SHARE`를 걸고, 그것이 `FOR UPDATE`와 충돌한다.
-    // **복원이 테마 행을 쓰지 않는데도 막힌다** — 부수 효과다(아래 `표가 스스로 세는 것`).
-    route: 'POST /:projectId/themes',
-    label: '테마 생성 — 복원은 테마 행을 쓰지 않지만 `project_id` FK 때문에 막힌다',
-    method: 'POST',
-    url: (ids) => `/api/projects/${ids.projectId}/themes`,
-    payload: () => ({ theme: { meta: { id: 'census-new', name: '끼어든 테마', version: '1.0.0' } } }),
-    restoreWrites: false,
-    blocked: true,
-  },
-  {
-    // **막힌다.** 트랜잭션의 첫 잠금이 프로젝트 행 `KEY SHARE`(`repos/projects.ts`의
-    // `lockProjectShared`)라 `FOR UPDATE`와 충돌한다 — 부수 효과다. 복원이 **테마를 안 쓰는** 판만 보면 «안 막힌다»로
-    // 보이지만, 그 첫 잠금이 없으면 복원의 `set-layout-theme`이 테마 행에 `KEY SHARE`를 걸 때 slug 를 바꾸는 수정이 그 뒤에
-    // 서고 가드의 판정이 낡은 채 커밋된다 — 첫 잠금이 기다림을 재확인 앞으로 끌어온다. **그 편집이 이기는 것은 그대로다** —
-    // 복원은 테마 행을 되돌리지 않으므로 풀린 뒤의 편집이 남는다.
-    route: 'PUT /:projectId/themes/:themeId',
-    label: '테마 수정 — 복원이 도는 동안 고치면 기다렸다가 **그 편집이 이긴다**',
-    method: 'PUT',
-    url: (ids) => `/api/projects/${ids.projectId}/themes/${ids.themeId}`,
-    payload: () => ({ theme: { meta: { id: 'census-target', name: '바뀐 테마', version: '2.0.0' } } }),
-    restoreWrites: false,
-    blocked: true,
-  },
-  {
-    // **막힌다 — 테마 수정과 같은 이유다.** 쓰이지 않는 테마만 보면 «안 막힌다»로 보이지만, 복원이 레이아웃을 그
-    // 테마에서 떼는 판이면 `ON DELETE RESTRICT` 검사가 복원이 쥔 레이아웃 행에 서고, 첫 잠금이 없으면 복원 커밋 뒤에
-    // 통과해 강등된 사람의 삭제가 커밋된다.
-    route: 'DELETE /:projectId/themes/:themeId',
-    label: '테마 삭제',
-    method: 'DELETE',
-    url: (ids) => `/api/projects/${ids.projectId}/themes/${ids.themeId}`,
-    restoreWrites: false,
-    blocked: true,
-  },
-  {
     // **프리셋 쓰기 둘** — *"프리셋 쓰기가 복원 중에 어떻게 되는가"*를 여기서 잰다.
     //
-    // **막힌다 — `POST .../themes`와 같은 이유다.** `presets.project_id`가 `projects(id)`를
+    // **막힌다.** `presets.project_id`가 `projects(id)`를
     // 참조하므로 삽입이 그 행에 `FOR KEY SHARE`를 걸고 그것이 `FOR UPDATE`와 충돌한다.
     // **복원이 프리셋 행을 쓰지 않는데도 막히는 것**이라 부수 효과다.
     route: 'POST /:projectId/presets',
@@ -398,7 +348,7 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
-    // **안 막힌다 — `DELETE .../themes`와 같은 이유다.** 자식 행을 지우는 것은 부모 행의
+    // **안 막힌다.** 자식 행을 지우는 것은 부모 행의
     // FK 검사를 부르지 않는다. **복원이 프리셋을 되돌리지 않으므로 해롭지 않다** —
     // 복원 도중 지운 프리셋은 복원 뒤에도 없는 것이 맞다.
     route: 'DELETE /:projectId/presets/:presetId',
@@ -411,7 +361,7 @@ const PROBES: Probe[] = [
   {
     // **API 토큰 쓰기 둘.**
     //
-    // **막힌다 — `POST .../presets`·`POST .../themes`와 같은 이유다.**
+    // **막힌다 — `POST .../presets`와 같은 이유다.**
     // `api_tokens.project_id`가 `projects(id)`를 참조하므로 삽입이 그 행에
     // `FOR KEY SHARE`를 걸고 그것이 `FOR UPDATE`와 충돌한다. **복원이 토큰 행을
     // 쓰지 않는데도 막히는 것**이라 부수 효과다.
@@ -484,15 +434,6 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
   })
   if (commentRes.statusCode !== 201) throw new Error(`코멘트 픽스처 실패: ${commentRes.body}`)
 
-  // 시스템 테마는 쓸 수 없으므로(설계서 「테마 관리」) 프로젝트 테마를 하나 만든다.
-  const themeRes = await app.inject({
-    method: 'POST',
-    url: `/api/projects/${project.id}/themes`,
-    cookies: owner.cookie,
-    payload: { theme: { meta: { id: 'census-target', name: '대상 테마', version: '1.0.0' } } },
-  })
-  if (themeRes.statusCode !== 201) throw new Error(`테마 픽스처 실패: ${themeRes.body}`)
-
   const presetRes = await app.inject({
     method: 'POST',
     url: `/api/projects/${project.id}/presets`,
@@ -544,7 +485,6 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
     snapshotId: (snapshotRes.json() as { id: string }).id,
     nodeId,
     commentId: (commentRes.json() as { comment: { id: string } }).comment.id,
-    themeId: (themeRes.json() as { id: string }).id,
     presetId: (presetRes.json() as { id: string }).id,
     tokenId: (tokenRes.json() as { id: string }).id,
     otherUserId: invitee.user.id,
@@ -660,7 +600,6 @@ describe('표가 스스로 세는 것', () => {
       // **프리셋 삭제**는 자식 행 삭제라 부모를 잡지 않는다 —
       // 복원이 프리셋을 되돌리지 않으므로(payload에 프리셋 절이 없다) 해롭지 않다.
       'DELETE /:projectId/presets/:presetId',
-      // 테마 삭제 · 수정은 이 목록에 없다 — 첫 잠금 때문에 막힌다(위 census 의 그 두 줄).
       // **토큰 폐기**도 자식 행 삭제라 부모를 잡지 않는다.
       // 복원이 토큰을 되돌리지 않으므로 해롭지 않고, **오히려 막히면 안 되는 쪽이다** —
       // 폐기는 자격을 거두는 조작이라 복원이 도는 동안 기다려야 할 이유가 없다.

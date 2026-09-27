@@ -11,9 +11,8 @@
  */
 import {
   EMPTY_OVERLAY,
-  installStructures,
+  NO_THEME,
   renderDocument,
-  resetStructures,
   runInteraction,
   type InteractionEvent,
   type InteractionOverlay,
@@ -31,10 +30,10 @@ import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { buildRuntimePlan, RUNTIME_JS, stateKey } from '../src/runtime/plan'
+import { markedTheme } from '../test-support/fixtures'
 
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
 
 const NO_HREFS = new Map<string, string | null>()
@@ -56,7 +55,7 @@ function page(interactions: Record<string, Interaction[]>): PageDocument {
 }
 
 function plan(document: PageDocument, hrefs: ReadonlyMap<string, string | null> = NO_HREFS) {
-  return buildRuntimePlan({ page: document, theme: null, hrefs, baseErrors: [] })
+  return buildRuntimePlan({ page: document, hrefs, baseErrors: [] })
 }
 
 /**
@@ -171,10 +170,14 @@ describe('DOM 이벤트 → 트리거 (plan.ts의 표가 렌더러와 같은가)
       if (element === null || typeof element !== 'object') return
       const props = (element as { props?: Record<string, unknown> }).props
       if (props === undefined) return
-      if (props['data-wb-id'] === nodeId && typeof props[dom] === 'function') {
-        found = props[dom] as (event: unknown) => void
+      // 핸들러는 노드의 `ViewHost`가 뷰에 넘기는 속성(`binding.attrs`)에 있다 — 뷰가 그것을 `Root`에 편다.
+      const attrs = (props['binding'] as { attrs?: Record<string, unknown> } | undefined)?.attrs
+      if (attrs?.['data-wb-id'] === nodeId && typeof attrs[dom] === 'function') {
+        found = attrs[dom] as (event: unknown) => void
       }
-      const children = props['children']
+      // `ViewHost`의 자식은 `viewProps.children`, `Fragment`의 자식은 `children`이다.
+      const viewProps = props['viewProps'] as { children?: unknown } | undefined
+      const children = viewProps !== undefined ? viewProps.children : props['children']
       if (Array.isArray(children)) for (const child of children) visit(child)
       else visit(children)
     }
@@ -387,10 +390,8 @@ describe('계획이 무엇을 담나', () => {
     })
     try {
       resetRegistry()
-      resetStructures()
       const { plan: built } = buildRuntimePlan({
         page: document,
-        theme: null,
         hrefs: NO_HREFS,
         baseErrors: [],
       })
@@ -398,7 +399,6 @@ describe('계획이 무엇을 담나', () => {
       expect(built.events[0]?.writes).toEqual([])
     } finally {
       installCatalog()
-      installStructures()
     }
   })
 })
@@ -423,7 +423,8 @@ describe('미리 그린 판이 렌더러의 답과 같다 (설계서 「HTML 정
 
   /** 문서 전체를 그 겹layer로 그린 뒤 그 노드가 시작하는 자리부터 낸다. */
   function sliceOf(document: PageDocument, overlay: InteractionOverlay, nodeId: string): string {
-    const html = renderToStaticMarkup(renderDocument(document, { interaction: { overlay } }))
+    // 번들이 그리는 길과 같은 테마(`NO_THEME`)로 그린다 — `renderPageTree` 가 테마를 안 받으면 그것을 넘긴다.
+    const html = renderToStaticMarkup(renderDocument(document, { theme: NO_THEME, interaction: { overlay } }))
     const at = html.indexOf(`data-wb-id="${nodeId}"`)
     expect(at).toBeGreaterThan(-1)
     return html.slice(html.lastIndexOf('<', at))
@@ -453,6 +454,19 @@ describe('미리 그린 판이 렌더러의 답과 같다 (설계서 「HTML 정
         '[["items",3],["loading",true]]',
       ].sort(),
     )
+  })
+
+  /**
+   * **미리 그린 판도 넘긴 테마로 그린다** — 본 판(`renderPageTree`)과 다른 테마로 그리면 누른 뒤의 화면만 기본 뷰로 바뀐다.
+   * `markedTheme` 의 `Card` 뷰는 `class="marked"` 를 단다.
+   */
+  it('미리 그린 판은 넘긴 테마로 그린다', () => {
+    const document = page({ n_btn: [{ on: 'click', actions: [{ type: 'setProp', target: 'n_card', prop: 'title', value: '바뀜' }] }] })
+    const { plan: built } = buildRuntimePlan({ page: document, theme: markedTheme(), hrefs: NO_HREFS, baseErrors: [] })
+    const drawn = Object.values(built.variants['n_card'] ?? {})
+    expect(drawn).toHaveLength(1)
+    expect(drawn[0]).toContain('class="marked"')
+    expect(drawn[0]).toContain('바뀜')
   })
 
   /** `setVisible`은 그릴 판이 없다 — DOM에서 빼는 것이라 판이 아니라 삭제다. */

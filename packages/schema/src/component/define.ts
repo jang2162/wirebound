@@ -17,8 +17,6 @@ export interface EditorField {
   label: string
   /** control이 'select'일 때 선택지 */
   options?: string[]
-  /** 특정 구조에서만 보이는 속성 (예: 컬럼은 table 구조에서만 의미가 있다) */
-  visibleWhen?: { structure: string }
 }
 
 /** 사람이 읽을 이름의 상한. 고르개의 `<option>` 한 줄에 표시(`담을 수 있음`)와 함께 든다. */
@@ -37,17 +35,15 @@ const DESCRIPTION_MAX = 60
  *
  * | 축 | 필드 | 누가 읽는가 |
  * |---|---|---|
- * | **테마 어휘** | `props`·`editor`·`structures`·`parts`·`variants`·`variantFrom`·`states`·`children` | 테마 검증기(설계서 「lint 규칙」)·`checkThemeComponents`·렌더러 |
+ * | **노드의 계약** | `props`·`editor`·`variantFrom`·`states`·`children` | 검증기·렌더러·속성 패널 |
  * | **사람이 읽을 것** | `label`·`description`·`group` | 저작 UI(타입 고르개·문장화) |
  *
- * 아래 축은 **DOM에 나가지 않는다.** 설계서 「컴파일」(테마)이 못박은 여섯(`data-wb-id`·`data-wb-component`·
- * `data-wb-structure`·`data-wb-variant`·`data-wb-part`·`data-wb-state`)은 전부 위 축에서
- * 나오고, 사람이 읽을 필드는 그중 하나도 만들지 않는다 — 그래서 「컴파일」의 계약을 넓히지
- * 않는다(`variantFrom`의 주석이 말하는 *"일곱 번째 속성"*은 **DOM 속성**이다).
- * `checkThemeComponents`가 어휘를 필드 이름으로 골라 읽는 것이 그 분리를 실제로 지킨다
- * (`test/component/human-axis.test.ts`가 새 필드를 변형·상태·조각 이름으로 써 봐 확인한다).
+ * 아래 축은 **DOM에 나가지 않는다.** 렌더러가 노드에 싣는 `data-wb-*`(`id`·`component`·`variant`·`state`)는 전부 위
+ * 축에서 나오고, 사람이 읽을 필드는 그중 하나도 만들지 않는다.
  *
- * 실제 DOM을 그리는 함수는 renderer 패키지가 (타입, 구조) 키로 등록한다.
+ * **구조 · 조각 · 변형은 여기 없다 — 테마가 선언한다.** 화면은 테마의 뷰가 그리고(`@wirebound/theme-sdk`), 고를 수 있는
+ * 변형은 테마 manifest 의 `components[type].variants` 가 든다. 그래서 스키마는 `node.variant` 의 값을 판정하지 않는다
+ * (`validate.ts`).
  */
 export interface ComponentDef {
   type: string
@@ -75,27 +71,14 @@ export interface ComponentDef {
   group: ComponentGroup
   props: z.ZodType
   editor: EditorField[]
-  /** 첫 번째가 기본 구조 */
-  structures: string[]
-  parts: string[]
-  variants: string[]
   /**
-   * 이 enum prop의 값이 `data-wb-variant`가 된다. **그 값들이 `variants`에 전부 선언돼
-   * 있어야 한다** — `defineComponent`가 검사한다.
+   * 이 enum prop의 값이 `data-wb-variant`가 된다 — `node.variant` 대신(`renderer`의 `resolveVariant`).
    *
    * **왜 새 선언 채널을 만들지 않는가:** `data-wb-role`(Text)·`data-control`(Field)·
    * `data-direction`(Divider) 같은 속성은 한 부류다 — 셋 다 *"노드의 enum
-   * prop에서 파생되는 표현 변형"*이고, 계약에 채널이 없으면 컴포넌트마다 각자 속성을 만든다.
+   * prop에서 파생되는 표현 변형"*이고, 채널이 없으면 컴포넌트마다 각자 속성을 만든다.
    * 설계서 「컴포넌트 정의 구조」는 이미 같은 모양의 채널을 하나 갖고 있다(같은 이름의 boolean prop이 true면
-   * `data-wb-state`). 빠진 것은 **enum prop → `data-wb-variant`**뿐이므로 그것을 채운다.
-   * 일곱 번째 속성을 만들면 설계서 「컴파일」(테마)이 *"이 여섯이 전체 계약"*이라고 못박은 것이 깨지고,
-   * 테마 검증기(설계서 「lint 규칙」)와 `checkThemeComponents`가 볼 어휘가 함께 넓어진다.
-   *
-   * **여기서 «속성»은 렌더러가 내보내는 `data-wb-*` DOM 속성이다** — `ComponentDef`의
-   * 필드 수가 아니다(「컴파일」의 표가 세는 것이 그 여섯이다). 그래서 `label`·`description`·
-   * `group`처럼 **DOM에 나가지 않는** 필드는 이 못을 건드리지 않는다. 위
-   * `ComponentDef` 주석의 두 축 표가 그 구분을 소유한다. 이 구분이 없으면
-   * *"사람이 읽을 이름을 계약에 두면 「컴파일」의 계약이 깨지는가"*를 매번 처음부터 다시 묻게 된다.
+   * `data-wb-state`). 빠진 것은 **enum prop → `data-wb-variant`**뿐이므로 그것을 채운다 — 테마가 겨냥할 속성이 늘지 않는다.
    */
   variantFrom?: string
   /** 같은 이름의 prop이 true면 활성화되는 상태 */
@@ -126,12 +109,6 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     )
   }
 
-  if (def.structures.length === 0) {
-    throw new Error(`${type}: structures는 최소 하나여야 합니다`)
-  }
-  assertUnique(type, 'structures', def.structures)
-  assertUnique(type, 'parts', def.parts)
-  assertUnique(type, 'variants', def.variants)
   assertUnique(type, 'states', def.states)
 
   const known = propKeys(def.props)
@@ -139,15 +116,10 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     if (!known.has(field.prop)) {
       throw new Error(`${type}: editor가 스키마에 없는 prop을 가리킵니다: ${field.prop}`)
     }
-    if (field.visibleWhen && !def.structures.includes(field.visibleWhen.structure)) {
-      throw new Error(
-        `${type}: editor의 visibleWhen이 없는 구조를 가리킵니다: ${field.visibleWhen.structure}`,
-      )
-    }
   }
 
-  // **도달 가능한 prop 집합.** `visibleWhen`이 붙은 것도 센다 — 그것은 구조에 따라 **감출**
-  // 뿐이고, 그 구조를 고른 테마에서는 보인다. 감춰지는 것과 없는 것은 다르다.
+  // **도달 가능한 prop 집합.** 테마 manifest 의 `hideProps`가 감추는 것도 센다 — 그것은 변형에 따라 **감출**
+  // 뿐이고, 다른 변형에서는 보인다. 감춰지는 것과 없는 것은 다르다.
   const editable = new Set(def.editor.map((field) => field.prop))
 
   for (const state of def.states) {
@@ -159,7 +131,7 @@ export function defineComponent(def: ComponentDef): ComponentDef {
   /**
    * **도달성 — 설계서 「컴포넌트 정의 구조」가 *"속성 패널이 `editor`에서 자동 생성된다"*고 한 것의 결과.**
    *
-   * `editor`에 없는 prop은 **UI에서 도달 불가**다. 상태가 그렇게 되면 설계서 「components — 구조 + 스킨」이 상태의 쓸모로
+   * `editor`에 없는 prop은 **UI에서 도달 불가**다. 상태가 그렇게 되면 설계서 「컴포넌트 정의 구조」이 상태의 쓸모로
    * 든 *"'선택된 행 강조' 같은 서술을 목업에서 실제로 보여주려면"*이 성립하지 않는다 —
    * 켤 방법이 없기 때문이다. 이 검사가 없으면 그런 자리가 카탈로그에 소리 없이 생긴다.
    *
@@ -185,38 +157,6 @@ export function defineComponent(def: ComponentDef): ComponentDef {
     if (values === null) {
       throw new Error(`${type}: variantFrom이 가리키는 prop이 enum이 아닙니다: ${prop}`)
     }
-    // **이것이 핵심 검사다.** 선언되지 않은 값이 `data-wb-variant`로 나가면 테마 검증기가
-    // 대조할 선언이 없다 — `checkThemeComponents`는 `def.variants`를 어휘로 쓴다.
-    const undeclared = values.filter((value) => !def.variants.includes(value))
-    if (undeclared.length > 0) {
-      throw new Error(
-        `${type}: variantFrom(${prop})의 값이 variants에 선언돼 있지 않습니다: ${undeclared.join(', ')}`,
-      )
-    }
-
-    /**
-     * **반대 방향 — `variants ⊆ enum 값`.** 위 검사만으로는 한쪽이 열려 있다.
-     *
-     * `variants`에 enum에 없는 이름이 있으면 **그 이름은 선언돼 있는데 고를 길이 없다** —
-     * `variantFrom`이 있으므로 속성 패널이 변형 컨트롤을 내지 않고(아래 `editor` 검사의 머리말),
-     * `node.variant`를 적어도 `variantFrom`이 이겨 무시된다(`ignored-variant`). **두 길이 다 막혀 있다.**
-     *
-     * 테마가 그 이름에 스킨을 정의하면 **아무도 켤 수 없는 스킨**이 되어 `Media.kind`와
-     * 같은 *"선언은 있는데 화면에 닿지 않는다"* 부류가 하나 생긴다.
-     *
-     * *"노드가 `variant`로 직접 고르는 값이 따로 있을 수 있으니 variants가 enum보다 넓어도
-     * 된다"*는 **거짓 근거다:** `variantFrom`을 가진 컴포넌트에서 `node.variant`는 선언된
-     * 값이든 아니든 똑같이 버려진다(`test/component/variant-from.test.ts`가 이 방향을 단언한다).
-     */
-    const unreachableVariants = def.variants.filter((value) => !values.includes(value))
-    if (unreachableVariants.length > 0) {
-      throw new Error(
-        `${type}: variants에 ${prop} enum에 없는 이름이 있어 고를 길이 없습니다: ` +
-          `${unreachableVariants.join(', ')} ` +
-          `(variantFrom을 가진 컴포넌트에서는 node.variant가 무시되고 패널도 변형 컨트롤을 내지 않습니다)`,
-      )
-    }
-
     /**
      * **`variantFrom`의 예외가 구멍이 되는 자리.**
      *

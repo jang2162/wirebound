@@ -21,26 +21,6 @@ describe('컴포넌트 카탈로그', () => {
     expect(listComponents()).toHaveLength(19)
   })
 
-  it('모든 컴포넌트가 구조를 최소 하나 갖는다', () => {
-    for (const def of listComponents()) {
-      expect(def.structures.length, def.type).toBeGreaterThan(0)
-    }
-  })
-
-  it('설계 문서에 적힌 구조 목록을 갖는다', () => {
-    expect(getComponent('List')!.structures).toEqual([
-      'table', 'cardGrid', 'stackedList', 'mediaList',
-    ])
-    expect(getComponent('Card')!.structures).toEqual([
-      'plain', 'bordered', 'elevated', 'mediaTop', 'horizontal',
-    ])
-    expect(getComponent('Tabs')!.structures).toEqual([
-      'underline', 'pill', 'enclosed', 'vertical',
-    ])
-    expect(getComponent('Field')!.structures).toEqual(['outlined', 'filled', 'underlined'])
-    expect(getComponent('Section')!.structures).toEqual(['contained', 'fullBleed', 'splitBg'])
-  })
-
   it('자식을 담는 컴포넌트만 children이 many다', () => {
     const containers = listComponents()
       .filter((d) => d.children === 'many')

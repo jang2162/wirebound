@@ -40,8 +40,8 @@
  *   않는다). 새 칸을 달면 `fillDraftsAsEditor`에 그 칸을 채우는 한 걸음을 더하라.
  * - **끌기 · 포인터 제스처**: 손잡이(`ShellResizer`)는 폭만 바꾸고 저장소는 브라우저다. 뷰 모드 캔버스의 시연 제스처는
  *   문서를 안 바꾼다. 둘 다 누르기만 하고 끌지는 않는다.
- * - **에디터 밖으로 나가는 길**: «프로젝트 목록으로 돌아가기» · 테마 저작 화면 링크는 따라가지 않는다
- *   (각자 제 판정이 있다 — `projectAbilities`의 `rename`·`editTheme`). 내려받기 버튼은 누른다 — `GET`이라 쓰기가 아니다. **로그아웃**(`POST /auth/logout`)은 누르지 않는다 —
+ * - **에디터 밖으로 나가는 길**: «프로젝트 목록으로 돌아가기»는 따라가지 않는다
+ *   (제 판정이 있다 — `projectAbilities`의 `rename`). 내려받기 버튼은 누른다 — `GET`이라 쓰기가 아니다. **로그아웃**(`POST /auth/logout`)은 누르지 않는다 —
  *   세션 쓰기지 설계서 쓰기가 아니고, 누르면 훑기가 끝난다.
  * - **고르는 상태는 다섯뿐**: 선택 없음 · 루트 · 자식 · 손자 · 메뉴(아래 `SELECTIONS`) × 두 모드. 그 밖의 노드 종류가
  *   여는 속성 위젯은 이 문서에 든 종류만큼이다.
@@ -66,8 +66,7 @@ import { createEditChannel } from '../../src/realtime/edit-channel'
 import { createLockChannel } from '../../src/realtime/lock-channel'
 import { DRAFT_KEY_PREFIX, openDraftStore, type DraftStore } from '../../src/panels/draft-store'
 import { clickAsBrowser } from '../click-as-browser'
-import { renderWithProviders, SYSTEM_ADMIN_THEME_ID } from '../helpers'
-import { systemTheme } from '@wirebound/themes'
+import { renderWithProviders } from '../helpers'
 import { canvasQuery } from '../editor-harness'
 
 const ME: SessionUser = { id: 'u-1', email: 'carol@example.com', name: '캐럴' }
@@ -141,7 +140,6 @@ function page(pageId: string): PageDetail {
 
 /** 조회 — `GET` 경로(쿼리 제외) → 몸통. 없는 경로는 404 로 답하고 `unrouted`에 적는다. */
 function reads(role: ProjectRole): Record<string, unknown> {
-  const admin = systemTheme('admin') ?? null
   const project = `/api/projects/${PROJECT_ID}`
   return {
     '/api/auth/me': ME,
@@ -153,8 +151,6 @@ function reads(role: ProjectRole): Record<string, unknown> {
     [`${project}/pages/${OTHER_PAGE_ID}/revisions`]: [],
     [`${project}/pages/${PAGE_ID}/comments`]: COMMENTS,
     [`${project}/pages/${OTHER_PAGE_ID}/comments`]: COMMENTS,
-    [`${project}/theme`]: { themeId: SYSTEM_ADMIN_THEME_ID, theme: admin, issues: [] },
-    [`${project}/themes`]: admin === null ? [] : [{ id: SYSTEM_ADMIN_THEME_ID, system: true, theme: admin }],
     [`${project}/presets`]: [],
     [`${project}/snapshots`]: SNAPSHOTS,
   }

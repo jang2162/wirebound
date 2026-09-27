@@ -55,7 +55,7 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
         await (await docNode(page, 'n_text0000002')).waitFor()
         await page.click(toggle)
         const opened = await page.locator(body).count()
-        await (await docNode(page, 'n_text0000002')).click()
+        await clickClearOfPopover(await docNode(page, 'n_text0000002'))
         const closed = await settle(() => page.locator(body).count(), (count) => count === 0)
         expect({ opened, afterCanvasClick: closed }).toEqual({ opened: 1, afterCanvasClick: 0 })
       })
@@ -100,7 +100,7 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 호스트 리스너가 캔버�
         (value) => value.iframes === 1 && value.old === 0,
       )
       const stillOpen = await page.locator('.wb-shell-export-body').count()
-      await (await docNode(page, 'n_text0000002')).click()
+      await clickClearOfPopover(await docNode(page, 'n_text0000002'))
       const closed = await settle(() => page.locator('.wb-shell-export-body').count(), (count) => count === 0)
       expect({ opened, swapped, stillOpen, afterCanvasClick: closed }).toEqual({
         opened: 1,
@@ -184,6 +184,18 @@ async function withTab(stack: EditorStack, run: (page: Page) => Promise<void>): 
   } finally {
     await context.close()
   }
+}
+
+/**
+ * **팝오버가 안 덮는 자리를 누른다** — 노드의 왼끝에서 20px. 팝오버 둘은 머리 오른쪽에 붙어 아래로 자라고(`.wb-shell-export-body` ·
+ * `.wb-shell-snapshots-body` 의 `right: 0`), 내보내기 상자는 미리보기가 도착하면 키가 는다(1440 폭: 아래끝 158 → 248px). 노드의
+ * 가운데(y 172)를 누르면 미리보기가 누름보다 먼저 온 판에서 누름이 상자 안 `li` 에 떨어져 «안쪽을 눌렀다»로 안 닫힌다 — 재려던
+ * 리스너와 무관하게 빨갛다(미리보기가 열고 ~160ms 에 도착해 누름과 겨뤘다).
+ */
+async function clickClearOfPopover(node: Locator): Promise<void> {
+  const box = await node.boundingBox()
+  if (box === null) throw new Error('노드 상자를 못 쟀다')
+  await node.click({ position: { x: 20, y: box.height / 2 } })
 }
 
 /** 문서 노드 — iframe 이 있으면 그 안에서, 없으면(iframe 이전 판) 호스트에서. 문서가 설 때까지 기다린 뒤 가른다. */

@@ -28,7 +28,6 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { useNavigate } from 'react-router'
 import type { WbNode } from '@wirebound/schema'
-import { systemTheme } from '@wirebound/themes'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type {
   PageDetail,
@@ -103,7 +102,7 @@ function panelApi(overrides: Partial<ApiClient>): Partial<ApiClient> {
 }
 
 /**
- * 서버가 낼 복원 결과. **두 블록이 쓴다** — 결과 넷을 재는 쪽(`복원`)과 셸이 다시 읽는지
+ * 서버가 낼 복원 결과. **두 블록이 쓴다** — 결과 셋을 재는 쪽(`복원`)과 셸이 다시 읽는지
  * 재는 쪽(`복원 뒤 재동기화`).
  */
 function restoreResult(overrides: Partial<RestoreResult> = {}): RestoreResult {
@@ -112,10 +111,8 @@ function restoreResult(overrides: Partial<RestoreResult> = {}): RestoreResult {
       menu: { created: 0, updated: 1, deleted: 0 },
       pages: { created: 0, metaUpdated: 0, schemaChanged: 2, schemaUnchanged: 3, deleted: 1 },
       comments: { created: 0, updated: 0, deleted: 0 },
-      layouts: { themeRefChanged: 0 },
     },
     safetySnapshot: { id: 's9', tag: '복원 전 2026-08-12T09:24:30.443Z' },
-    themes: [{ layoutId: 'l1', themeId: 't1', differs: false }],
     ...overrides,
   }
 }
@@ -145,7 +142,7 @@ function fingerprintError(): ApiError {
 
 /**
  * **`fireEvent`다 — `@testing-library/user-event`는 이 저장소의 의존이 아니다**(전역 제약:
- * *"`apps/web`에 새 런타임 의존을 더하지 않는다"*). `theme-editor.test.tsx`가 같은 선례다.
+ * *"`apps/web`에 새 런타임 의존을 더하지 않는다"*).
  */
 function saveWith(tag: string, description?: string): void {
   fireEvent.change(screen.getByLabelText('태그'), { target: { value: tag } })
@@ -359,26 +356,7 @@ describe('복원', () => {
    * **바뀐 수와 그대로인 수를 따로 말한다.** 둘째가 빠지면 *"0개가 바뀌었습니다"*가
    * **아무 일도 안 일어난 것**과 **전부 그대로였던 것**을 구분하지 못한다.
    */
-  it('결과가 넷을 말한다 — 바뀐 수·그대로인 수·안전망 태그·테마 차이', async () => {
-    const client = panelApi({
-      me: async () => user,
-      getProject: async () => project('owner'),
-      listSnapshots: async () => [snapshot()],
-      restoreSnapshot: async () => restoreResult({ themes: [{ layoutId: 'l1', themeId: 't1', differs: true }] }),
-    })
-
-    await openConfirm(client)
-    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
-
-    const status = await screen.findByRole('status')
-    expect(status.textContent).toContain('v1')
-    expect(status.textContent).toContain('2개가 바뀌')
-    expect(status.textContent).toContain('3개는 그대로')
-    expect(status.textContent).toContain('복원 전 2026-08-12T09:24:30.443Z')
-    expect(status.textContent).toContain('테마는 스냅샷 당시와 다릅니다')
-  })
-
-  it('테마가 같으면 테마 이야기를 하지 않는다 — 매번 보이는 줄은 신호가 아니다', async () => {
+  it('결과가 셋을 말한다 — 바뀐 수·그대로인 수·안전망 태그', async () => {
     const client = panelApi({
       me: async () => user,
       getProject: async () => project('owner'),
@@ -390,8 +368,10 @@ describe('복원', () => {
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
 
     const status = await screen.findByRole('status')
-    expect(status.textContent).toContain('되돌렸습니다')
-    expect(status.textContent).not.toContain('테마')
+    expect(status.textContent).toContain('v1')
+    expect(status.textContent).toContain('2개가 바뀌')
+    expect(status.textContent).toContain('3개는 그대로')
+    expect(status.textContent).toContain('복원 전 2026-08-12T09:24:30.443Z')
   })
 
   it('성공하면 목록을 다시 받는다 — 프로젝트가 바뀌었고 안전망이 하나 생겼다', async () => {
@@ -1173,8 +1153,8 @@ describe('복원 뒤 재동기화', () => {
   })
 
   /**
-   * **복원은 문서와 트리 말고도 코멘트 · 페이지 설명 · 레이아웃의 테마 선택을 바꾼다**(`services/restore-plan.ts`의 단계 표).
-   * 아래 넷은 그 셋을 떠 있는 채로 복원한 판이다 — 탭을 다녀와야 맞으면 안 된다.
+   * **복원은 문서와 트리 말고도 코멘트 · 페이지 설명을 바꾼다**(`services/restore-plan.ts`의 단계 표).
+   * 아래 둘은 그 둘을 떠 있는 채로 복원한 판이다 — 탭을 다녀와야 맞으면 안 된다.
    */
   it('코멘트 탭이 떠 있으면 목록을 다시 받는다 — 복원이 되살린 코멘트가 보인다', async () => {
     const withNode: WbNode = { id: 'n-old', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: { content: '가' } }] }
@@ -1244,39 +1224,6 @@ describe('복원 뒤 재동기화', () => {
     await waitFor(() =>
       expect((screen.getByRole('textbox', { name: '페이지 설명' }) as HTMLTextAreaElement).value).toBe('스냅샷의 설명'),
     )
-  })
-
-  /** 복원이 레이아웃의 테마 선택을 `portal` 로 되돌리는 서버. 캔버스는 서버의 테마를 읽지 않으므로 고르개만 잰다. */
-  function themeAfterRestore(): Partial<ApiClient> {
-    const admin = systemTheme('admin')
-    const portal = systemTheme('portal')
-    if (admin === undefined || portal === undefined) throw new Error('시스템 테마가 없다')
-    let restored = false
-    return {
-      listProjectThemes: async () => [
-        { id: 'th-admin', system: true, theme: admin },
-        { id: 'th-portal', system: true, theme: portal },
-      ],
-      getProjectTheme: async () =>
-        restored
-          ? { themeId: 'th-portal', theme: portal, issues: [] }
-          : { themeId: 'th-admin', theme: admin, issues: [] },
-      restoreSnapshot: async () => {
-        restored = true
-        return restoreResult()
-      },
-    }
-  }
-
-  it('테마 고르개가 복원이 되돌린 선택을 다시 읽는다', async () => {
-    const { getPage } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
-    await openConfirm({ getPage, ...themeAfterRestore() })
-    const select = screen.getByRole<HTMLSelectElement>('combobox', { name: '테마' })
-    await waitFor(() => expect(select.value).toBe('th-admin'))
-
-    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
-
-    await waitFor(() => expect(select.value).toBe('th-portal'))
   })
 
   it('스냅샷을 저장하는 것만으로는 다시 읽지 않는다 — 프로젝트가 안 바뀌었다', async () => {

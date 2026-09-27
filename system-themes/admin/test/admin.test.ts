@@ -27,6 +27,11 @@ describe('system-admin 첫 판', () => {
     for (const type of Object.keys(ADMIN_V0.manifest.components ?? {})) expect(catalog.has(type)).toBe(true)
   })
 
+  /** variant 없는 노드는 `defaultVariant`(`default`)로 그려진다 — 그 값을 겨냥한 규칙이 있으면 옛 모습(규칙 없음)과 갈린다. */
+  it('옛 테마 CSS 에 [data-wb-variant="default"] 규칙이 없다', () => {
+    expect(ADMIN_V0_CSS).not.toContain('data-wb-variant="default"')
+  })
+
   it('CSS 는 비어 있지 않고 :root 를 싣는다', () => {
     expect(ADMIN_V0_CSS.length).toBeGreaterThan(1000)
     expect(ADMIN_V0_CSS).toContain(':root {')

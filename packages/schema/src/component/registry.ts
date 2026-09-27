@@ -35,10 +35,6 @@ export function listComponents(): ComponentDef[] {
   return [...registry.values()]
 }
 
-export function defaultStructure(def: ComponentDef): string {
-  return def.structures[0]!
-}
-
 /** 테스트 전용. 프로덕션 코드에서 호출하지 않는다. */
 export function resetRegistry(): void {
   registry.clear()

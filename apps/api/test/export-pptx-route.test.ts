@@ -281,7 +281,7 @@ describe('GET /:projectId/export/preview?format=pptx', () => {
 
   /**
    * **HTML 번들의 성질을 pptx 응답에 싣지 않는다**. PPTX는 페이지 사이 링크를
-   * 만들지 않고 설계서 「테마 시스템」의 테마를 OOXML 색으로 옮기지도 않는다 — 값이 있는데 그 값이 아무것도
+   * 만들지 않고 번들의 테마 칸(`themeId`)도 쓰지 않는다 — 값이 있는데 그 값이 아무것도
    * 안 가리키면 화면이 거짓을 말한다.
    *
    * **pptx 만의 필드가 셋이다**(`screenless`·`screenFailures`·`fontWarning` — 그리는 자가

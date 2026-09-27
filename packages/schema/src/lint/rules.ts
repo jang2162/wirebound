@@ -14,7 +14,7 @@
  * ## severity를 표가 든다 — 다만 날라 오는 것은 그대로 둔다
  *
  * `severity: null`은 *"정하지 않았다"*가 아니라 ***"날라 온 이슈의 것을 그대로 쓴다"***이다.
- * 「lint 규칙」의 규칙 여럿은 이 저장소에 이미 있는 판정(`validatePage` · `resolveTheme`)을 **부르는
+ * 「lint 규칙」의 규칙 여럿은 이 저장소에 이미 있는 판정(`validatePage`)을 **부르는
  * 것**이고, 그 이슈의 severity를 lint가 다시 고르면 **같은 문서를 두 화면이 다르게 말한다** —
  * 저장 화면은 통과라는데 lint는 error라고 하는 식이다. 그래서 relay 규칙은 severity를 고를
  * 자리 자체가 없다: `lintIssue`가 받는 id 집합에서 타입으로 빠진다.
@@ -26,7 +26,7 @@
  * ## severity 축은 새로 만들지 않는다
  *
  * lint가 쓰는 값은 `IssueSeverity`(`error`·`warning`) 그대로이고 축도 같다 — ***"이 결함이
- * 문서·테마를 무효로 만드는가."*** relay 규칙이 그 축의 값을 그대로 나르므로 lint가 다른 축을
+ * 문서를 무효로 만드는가."*** relay 규칙이 그 축의 값을 그대로 나르므로 lint가 다른 축을
  * 쓰면 한 목록 안에서 같은 필드가 두 뜻을 갖게 된다. **severity를 스스로 고르는 규칙은 전부
  * `warning`이다** — 그중 어느 것도 문서를 무효로 만들지 않는다(코멘트가 없어도, 번호가 겹쳐도,
  * 메뉴에 안 붙어도 문서는 그대로 선다).
@@ -36,11 +36,13 @@ import type { IssueSeverity } from '../validate'
 /** 규칙 하나의 식별자. `wireb lint`의 출력과 MCP `validate`의 응답이 이 문자열을 싣는다. */
 export type LintRuleId = (typeof LINT_RULES)[number]['id']
 
-/** 「lint 규칙」의 두 소제목. */
-export type LintRuleGroup = 'document' | 'theme'
+/**
+ * 「lint 규칙」의 소제목. 설계서 규칙 하나다 — 테마 자체의 결함은 테마 빌드와 업로드 검증이 막는다(설계서 「lint 규칙」).
+ */
+export type LintRuleGroup = 'document'
 
 /** 이 규칙을 **구현**하는 패키지. */
-export type LintRuleOwner = 'schema' | 'themes'
+export type LintRuleOwner = 'schema'
 
 export interface LintRule {
   id: string
@@ -118,61 +120,6 @@ export const LINT_RULES = [
       '그것들은 결함의 정의 그 자체다. 삼키면 lint가 통과시킨 문서를 저장이 거부한다.',
     group: 'document',
     owner: 'schema',
-    severity: null,
-  },
-  // ── 테마 규칙 (「lint 규칙」) ───────────────────────────────────────────────
-  {
-    id: 'theme-vocabulary',
-    spec: '컴포넌트 정의에 없는 `structure` · `part` · `state` 참조',
-    group: 'theme',
-    owner: 'themes',
-    severity: null,
-  },
-  {
-    id: 'theme-token',
-    spec: '존재하지 않는 토큰 참조 (`semantic.brand` 오타 등)',
-    group: 'theme',
-    owner: 'themes',
-    severity: null,
-  },
-  {
-    id: 'theme-style-prop',
-    spec: '화이트리스트에 없는 스타일 프로퍼티',
-    group: 'theme',
-    owner: 'themes',
-    severity: null,
-  },
-  {
-    id: 'theme-node-variant',
-    spec: '노드가 쓰는 `variant`를 테마가 정의하지 않음',
-    group: 'theme',
-    owner: 'themes',
-    // `resolveTheme`도 `validatePage`도 이것을 보지 않는다 — lint만의 판정이다.
-    severity: 'warning',
-  },
-  {
-    id: 'theme-pattern',
-    spec: '패턴 `slots` 계약과 `schema` 불일치',
-    group: 'theme',
-    owner: 'themes',
-    severity: null,
-  },
-  {
-    id: 'theme-extends',
-    spec: '`extends` 대상이 없거나 상속 깊이 위반',
-    group: 'theme',
-    owner: 'themes',
-    severity: null,
-  },
-  {
-    id: 'theme-other',
-    spec: null,
-    beyondSpec:
-      '`resolveTheme`이 내는 나머지 테마 판정(`bad-spec`·`duplicate-variable`·`node-handle-overwrite`…). ' +
-      '위 여섯 줄이 그 함수의 코드 전부를 덮지 않는데, 덮지 못한 것을 버리면 ' +
-      '**테마가 서지 않는 이유를 lint가 말하지 못한다.**',
-    group: 'theme',
-    owner: 'themes',
     severity: null,
   },
 ] as const satisfies readonly LintRule[]

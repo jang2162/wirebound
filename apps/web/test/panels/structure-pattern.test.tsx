@@ -4,15 +4,50 @@
  * **자리 규칙 자체는 여기서 재지 않는다** — `../edit/pattern-insert.test.ts`가 문서로
  * 직접 잰다. 여기서 재는 것은 그 결과가 **기존 커밋 경로를 그대로 타는가**와
  * **실패 갈래마다 무엇이 되돌아가는가**다.
+ *
+ * **패턴의 출처는 캔버스 테마의 manifest 다** — `pattern-picker.test.tsx` 와 같은 목으로 `manifest.patterns` 를 싣는다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
-import { systemTheme, type Theme } from '@wirebound/themes'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { applyOps, invertOps, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
-import { SYSTEM_ADMIN_THEME_ID } from '../helpers'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
+
+/** 옛 시스템 테마 `portal` 이 선언하던 패턴 — 원본은 지워졌으므로 이 파일이 값을 든다(`pattern-picker.test.tsx` 와 같은 값). */
+const PORTAL_PATTERNS = {
+  'content.noticeBoard': {
+    name: '공지 목록',
+    slots: { title: 'text', keyword: 'text' },
+    schema: {
+      type: 'Section',
+      children: [
+        { type: 'Text', props: { role: 'h2', content: '공지사항' }, slot: 'title' },
+        {
+          type: 'SearchForm',
+          props: { collapsed: true },
+          children: [{ type: 'Field', props: { label: '검색어', control: 'text' }, slot: 'keyword' }],
+        },
+        { type: 'List', props: { items: 10, pagination: true } },
+      ],
+    },
+  },
+}
+
+/** 목의 `manifest.patterns` 가 읽는 자리. 케이스가 바꾼다. */
+const holder = vi.hoisted(() => ({ patterns: undefined as unknown, factoryCalls: 0 }))
+
+vi.mock('../../src/canvas/canvas-theme', async (orig) => {
+  holder.factoryCalls += 1
+  const real = await orig<typeof import('../../src/canvas/canvas-theme')>()
+  const manifest = { ...real.CANVAS_THEME.manifest }
+  Object.defineProperty(manifest, 'patterns', { get: () => holder.patterns, enumerable: true })
+  return { ...real, CANVAS_THEME: { ...real.CANVAS_THEME, manifest } }
+})
+
+beforeEach(() => {
+  holder.patterns = PORTAL_PATTERNS
+})
 
 /**
  * ```
@@ -69,12 +104,6 @@ function server(options: { failPatch?: boolean } = {}): Server {
   return { calls, api: { patchOps, getPage } }
 }
 
-function themeApi(theme: Theme | null): Partial<ApiClient> {
-  return {
-    getProjectTheme: async () => ({ themeId: SYSTEM_ADMIN_THEME_ID, theme, issues: [] }),
-  }
-}
-
 function structureRegion(): HTMLElement {
   return screen.getByRole('region', { name: '구조 트리' })
 }
@@ -108,9 +137,13 @@ async function insertPattern(): Promise<void> {
 }
 
 describe('패턴 삽입 — 기존 커밋 경로를 탄다', () => {
+  it('캔버스 테마 모듈의 목이 닿는다 — 팩토리가 한 번 불린다', () => {
+    expect(holder.factoryCalls).toBe(1)
+  })
+
   it('편집 하나로 나가고 op은 꽂은 노드 수만큼이다', async () => {
     const backend = server()
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()
@@ -128,7 +161,7 @@ describe('패턴 삽입 — 기존 커밋 경로를 탄다', () => {
 
   it('전개된 트리가 통째로 화면에 들어온다', async () => {
     const backend = server()
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()
@@ -142,7 +175,7 @@ describe('패턴 삽입 — 기존 커밋 경로를 탄다', () => {
 
   it('undo가 그대로 따라온다 — 새 계약을 만들지 않았다', async () => {
     const backend = server()
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()
@@ -162,7 +195,7 @@ describe('패턴 삽입 — 기존 커밋 경로를 탄다', () => {
 
   it('꽂은 뒤 목록이 닫힌다', async () => {
     const backend = server()
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()
@@ -173,7 +206,7 @@ describe('패턴 삽입 — 기존 커밋 경로를 탄다', () => {
 describe('패턴 삽입 — 꽂는 자리', () => {
   it('자식을 받는 노드를 골랐으면 그 안에 들어간다', async () => {
     const backend = server()
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()
@@ -185,7 +218,7 @@ describe('패턴 삽입 — 꽂는 자리', () => {
 
   it('자식을 못 받는 노드를 골랐으면 그 뒤 형제가 된다 — 거부하지 않는다', async () => {
     const backend = server()
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Text')
     await insertPattern()
@@ -197,7 +230,7 @@ describe('패턴 삽입 — 꽂는 자리', () => {
 
   it('선택이 없으면 root의 자식 끝이다', async () => {
     const backend = server()
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
+    await openPage(doc(), { apiOverrides: backend.api })
 
     // **고른 것이 없는 상태를 손으로 만든다.** 페이지를 열면 스토어가 루트를 고른 채로
     // 시작하므로(`store/editor-store.ts`의 `#selectionFor`), 그냥 열어서는 이 케이스가 재려는
@@ -215,7 +248,7 @@ describe('패턴 삽입 — 꽂는 자리', () => {
 describe('패턴 삽입 — 꽂은 뒤 선택', () => {
   it('첫 슬롯 노드로 선택이 옮겨진다 — 그것을 골라야 슬롯을 채운다', async () => {
     const backend = server()
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()
@@ -231,11 +264,8 @@ describe('패턴 삽입 — 꽂은 뒤 선택', () => {
     // 다른 페이지를 들고 있는 상태를 만들 수 없으므로, 여기서는 **꽂히지 않는 갈래**로
     // 잰다 — 잘못된 패턴이면 편집 자체가 없고 선택도 그대로다.
     const backend = server()
-    const broken: Theme = {
-      ...systemTheme('portal')!,
-      patterns: { 'content.bad': { name: '깨진 패턴', schema: { type: '없는타입' } } },
-    }
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(broken) } })
+    holder.patterns = { 'content.bad': { name: '깨진 패턴', schema: { type: '없는타입' } } }
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()
@@ -247,11 +277,8 @@ describe('패턴 삽입 — 꽂은 뒤 선택', () => {
 describe('패턴 삽입 — 실패 갈래마다 무엇이 되돌아가는가', () => {
   it('카탈로그에 없는 타입을 담은 패턴은 편집을 만들지 않고 이유를 말한다', async () => {
     const backend = server()
-    const broken: Theme = {
-      ...systemTheme('portal')!,
-      patterns: { 'content.bad': { name: '깨진 패턴', schema: { type: '없는타입' } } },
-    }
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(broken) } })
+    holder.patterns = { 'content.bad': { name: '깨진 패턴', schema: { type: '없는타입' } } }
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()
@@ -269,17 +296,14 @@ describe('패턴 삽입 — 실패 갈래마다 무엇이 되돌아가는가', (
 
   it('선언 안 된 슬롯을 쓰는 패턴도 막고 그 슬롯 이름을 말한다', async () => {
     const backend = server()
-    const broken: Theme = {
-      ...systemTheme('portal')!,
-      patterns: {
+    holder.patterns = {
         'content.bad': {
           name: '슬롯 오타',
           slots: { title: 'text' },
           schema: { type: 'Section', children: [{ type: 'Text', slot: 'titel' }] },
         },
-      },
-    }
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(broken) } })
+      }
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()
@@ -308,7 +332,7 @@ describe('패턴 삽입 — 실패 갈래마다 무엇이 되돌아가는가', (
     // 덮는다. 그러면 구조 트리에 패턴이 **정상적으로 꽂히고**(`Section`·`SearchForm`·`List`가
     // 보인다) 알림은 `null`이다.
     await openPage(brokenDoc, {
-      apiOverrides: { patchOps: backend.api.patchOps!, ...themeApi(systemTheme('portal')!) },
+      apiOverrides: { patchOps: backend.api.patchOps! },
     })
 
     await insertPattern()
@@ -324,7 +348,7 @@ describe('패턴 삽입 — 실패 갈래마다 무엇이 되돌아가는가', (
 
   it('서버가 거절하면 문서가 서버 상태로 되돌아가고 알림이 남는다', async () => {
     const backend = server({ failPatch: true })
-    await openPage(doc(), { apiOverrides: { ...backend.api, ...themeApi(systemTheme('portal')!) } })
+    await openPage(doc(), { apiOverrides: backend.api })
 
     select('Card')
     await insertPattern()

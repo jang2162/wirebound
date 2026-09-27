@@ -28,7 +28,6 @@
  * | 8 | `write-page-schema` | 페이지 행이 있어야 `applyEdit`이 잠글 수 있다 |
  * | 9 | `create-comment` | `comments.page_id` FK — 페이지가 먼저다 |
  * | 10 | `update-comment` | — |
- * | 11 | `set-layout-theme` | 다른 것과 얽히지 않는다. 마지막이다 |
  *
  * **4·5가 6보다 앞인 것이 이 표에서 가장 안 보이는 자리다.** *"지우는 것을 먼저"*라는
  * 직관대로 짜면 *"payload에 남아 있는 자식이 지울 부모 밑에 있는"* 프로젝트에서
@@ -93,7 +92,7 @@ export interface RestoreCurrentState {
     schemaVersion: number
     schema: PageDocument
   }>
-  layouts: Array<{ id: string; themeId: string | null }>
+  layouts: Array<{ id: string }>
   comments: Array<{ id: string; pageId: string; body: string }>
 }
 
@@ -110,7 +109,6 @@ export type RestoreStep =
   | { kind: 'write-page-schema'; page: SnapshotPage }
   | { kind: 'create-comment'; comment: SnapshotComment }
   | { kind: 'update-comment'; comment: SnapshotComment }
-  | { kind: 'set-layout-theme'; layoutId: string; themeId: string | null }
 
 /**
  * 무엇이 얼마나 바뀌는가. **응답이 이것을 그대로 싣는다**(*"바뀐 수와 그대로인 수를
@@ -120,7 +118,6 @@ export interface RestoreSummary {
   menu: { created: number; updated: number; deleted: number }
   pages: { created: number; metaUpdated: number; schemaChanged: number; schemaUnchanged: number; deleted: number }
   comments: { created: number; updated: number; deleted: number }
-  layouts: { themeRefChanged: number }
 }
 
 export interface RestorePlan {
@@ -275,7 +272,6 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
     menu: { created: 0, updated: 0, deleted: 0 },
     pages: { created: 0, metaUpdated: 0, schemaChanged: 0, schemaUnchanged: 0, deleted: 0 },
     comments: { created: 0, updated: 0, deleted: 0 },
-    layouts: { themeRefChanged: 0 },
   }
 
   // 1. 코멘트 삭제 — 페이지보다 먼저(CASCADE에 순서를 맡기지 않는다).
@@ -367,17 +363,6 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
     } else if (stored.body !== comment.body) {
       steps.push({ kind: 'update-comment', comment })
       summary.comments.updated += 1
-    }
-  }
-
-  // 11. 레이아웃의 테마 **참조만** 되돌린다(테마 문서는 건드리지 않는다).
-  const currentLayoutById = new Map(current.layouts.map((layout) => [layout.id, layout]))
-  for (const layout of payload.layouts) {
-    const stored = currentLayoutById.get(layout.id)
-    // 위 `layout-mismatch` 검사를 통과했으므로 `stored`는 반드시 있다.
-    if (stored && stored.themeId !== layout.themeId) {
-      steps.push({ kind: 'set-layout-theme', layoutId: layout.id, themeId: layout.themeId })
-      summary.layouts.themeRefChanged += 1
     }
   }
 

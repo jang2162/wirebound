@@ -6,7 +6,7 @@
  * 버리지 않는 것** · **정규식을 세션이 못 주는 것**.
  */
 import { describe, expect, it } from 'vitest'
-import { LAYOUT, THEME_ROW, snapshotPayload, 경고가_있는_프로젝트, 오류가_있는_프로젝트 } from '@wirebound/cli/test-support'
+import { snapshotPayload, 경고가_있는_프로젝트, 오류가_있는_프로젝트 } from '@wirebound/cli/test-support'
 import { callTool } from '../src/server'
 import { PROJECT, SERVER, callJson, harness } from './harness'
 
@@ -141,36 +141,11 @@ describe('경로는 출력 거르개다 — 빠진 것을 **값으로** 말한�
 })
 
 /**
- * **`notes`를 버리지 않는다.** 버리면 테마를 안 고른 레이아웃·상속이 끊긴 파생 테마·
- * 안 돈 ⑪·못 올린 문서 버전·메뉴를 잃은 페이지가 전부 *"결함 0건"*으로 위장된다.
+ * **`notes`를 버리지 않는다.** 버리면 못 올린 문서 버전·메뉴를 잃은 페이지가 전부 *"결함 0건"*으로 위장된다.
  *
- * **하나짜리로 재지 않는다** — 다섯 모양 중 넷을 각각 만들어 잰다.
+ * **하나짜리로 재지 않는다** — 두 모양을 각각 만들어 잰다.
  */
 describe('검사에서 빠진 것을 싣는다', () => {
-  it('상속이 끊긴 파생 테마 — 기본 픽스처가 이미 그 상태다', async () => {
-    const said = (await callJson(harness(), 'validate')) as Report
-    expect(said.issues).toEqual([])
-    // **결함 0건인데 검사에서 빠진 것이 있다.** 그 둘이 같이 나가야 한다.
-    expect(said.notes.map((n) => n.kind)).toContain('theme-unresolved')
-    expect(said.notes.map((n) => n.message).join('\n')).toContain(THEME_ROW)
-  })
-
-  it('테마를 안 고른 레이아웃', async () => {
-    const payload = snapshotPayload({ themes: [{ layoutId: LAYOUT, themeId: null, theme: null }] })
-    const said = (await callJson(harness({ payload }), 'validate')) as Report
-    expect(said.notes.map((n) => n.kind)).toContain('theme-unset')
-  })
-
-  it('레이아웃이 둘이라 ⑪을 안 돌렸다', async () => {
-    const 둘 = snapshotPayload()
-    둘.layouts.push({ id: LAYOUT.replace(/1$/, '2'), name: '둘째', themeId: null, schema: 둘.layouts[0]!.schema })
-    둘.themes.push({ layoutId: LAYOUT.replace(/1$/, '2'), themeId: null, theme: null })
-
-    const said = (await callJson(harness({ payload: 둘 }), 'validate')) as Report
-    expect(said.notes.map((n) => n.kind)).toContain('variant-rule-off')
-    expect(said.notes.map((n) => n.message).join('\n')).toContain('노드 variant 대조를 돌리지 않았습니다')
-  })
-
   it('메뉴를 잃은 페이지', async () => {
     const 고아 = snapshotPayload()
     고아.menu = []
@@ -186,8 +161,7 @@ describe('검사에서 빠진 것을 싣는다', () => {
   })
 
   it('빠진 것이 없으면 빈 배열이다 — 반대편', async () => {
-    const 깨끗 = snapshotPayload({ layouts: [], themes: [] })
-    const said = (await callJson(harness({ payload: 깨끗 }), 'validate')) as Report
+    const said = (await callJson(harness({ payload: snapshotPayload() }), 'validate')) as Report
     expect(said.notes).toEqual([])
   })
 })

@@ -370,8 +370,7 @@ const CreateCommentBody = z.strictObject({
 
 /**
  * 키가 `body` 하나라 `.refine(빈 본문 금지)`를 걸지 않는다 — 그 키가 없는 것은
- * *"바꿀 값이 없다"*가 아니라 **본문이 없는 것**이고, zod가 그것을 이미 400으로 낸다
- * (`routes/themes.ts`의 `ThemeBody`와 같은 자리).
+ * *"바꿀 값이 없다"*가 아니라 **본문이 없는 것**이고, zod가 그것을 이미 400으로 낸다.
  */
 const UpdateCommentBody = z.strictObject({ body: Body })
 
@@ -786,7 +785,7 @@ export function commentRoutes() {
         }
 
         // 저장소도 NUL을 막으므로 던질 수 있다. 위에서 이미 걸렀지만 그 검사가 빠지는
-        // 날 500이 되지 않도록 여기서 400으로 옮긴다(`routes/themes.ts`와 같은 관례).
+        // 날 500이 되지 않도록 여기서 400으로 옮긴다.
         let updated
         try {
           updated = await withTransaction(app.db, async (trx) => {

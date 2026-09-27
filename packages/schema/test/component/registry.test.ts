@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { defineComponent } from '../../src/component/define'
 import {
-  defaultStructure,
   getComponent,
   listComponents,
   registerComponent,
@@ -21,9 +20,6 @@ const Sample = defineComponent({
     { prop: 'label', control: 'text', label: '라벨' },
     { prop: 'disabled', control: 'switch', label: '비활성' },
   ],
-  structures: ['plain', 'fancy'],
-  parts: ['body'],
-  variants: ['default'],
   states: ['disabled'],
   children: 'none',
 })
@@ -58,23 +54,13 @@ describe('컴포넌트 레지스트리', () => {
     registerComponent(Other)
     expect(listComponents().map((d) => d.type)).toEqual(['Sample', 'Other'])
   })
-
-  it('첫 번째 구조가 기본 구조다', () => {
-    expect(defaultStructure(Sample)).toBe('plain')
-  })
 })
 
 describe('defineComponent', () => {
-  it('구조가 비어 있으면 던진다', () => {
+  it('상태 이름이 중복이면 던진다', () => {
     expect(() =>
-      defineComponent({ ...Sample, type: 'Empty', structures: [] }),
-    ).toThrow('Empty: structures는 최소 하나여야 합니다')
-  })
-
-  it('구조 이름이 중복이면 던진다', () => {
-    expect(() =>
-      defineComponent({ ...Sample, type: 'Dup', structures: ['a', 'a'] }),
-    ).toThrow('Dup: structures에 중복이 있습니다')
+      defineComponent({ ...Sample, type: 'Dup', states: ['disabled', 'disabled'] }),
+    ).toThrow('Dup: states에 중복이 있습니다')
   })
 
   it('editor가 가리키는 prop이 스키마에 없으면 던진다', () => {
@@ -91,17 +77,5 @@ describe('defineComponent', () => {
     expect(() =>
       defineComponent({ ...Sample, type: 'X', states: ['missing'] }),
     ).toThrow('X: states와 같은 이름의 prop이 없습니다: missing')
-  })
-
-  it('editor의 visibleWhen이 없는 구조를 가리키면 던진다', () => {
-    expect(() =>
-      defineComponent({
-        ...Sample,
-        type: 'Vis',
-        editor: [
-          { prop: 'label', control: 'text', label: '라벨', visibleWhen: { structure: 'nope' } },
-        ],
-      }),
-    ).toThrow('Vis: editor의 visibleWhen이 없는 구조를 가리킵니다: nope')
   })
 })

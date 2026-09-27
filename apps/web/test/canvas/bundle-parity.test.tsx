@@ -11,8 +11,7 @@
  * *"화면과 같다"*를 재면서 **화면이 아닌 것**과 견준다.
  *
  * 캔버스는 `apps/web`에 살고 `packages/exporter`는 그것을 볼 수 없다. **`apps/web`만
- * 셋(캔버스 · 렌더러 · exporter)을 동시에 본다.** `themes`의 어휘를 `renderer`와 대조하는
- * 케이스가 이미 같은 이유로 여기 있다(`theme/node-handles.test.ts`).
+ * 셋(캔버스 · 렌더러 · exporter)을 동시에 본다.**
  *
  * **견주는 자와 픽스처는 exporter의 것을 그대로 쓴다**(`@wirebound/exporter/test-support`).
  * 두 벌을 두면 *"같다"*의 뜻이 둘이 된다.
@@ -25,41 +24,15 @@
  *
  * # 테마
  *
- * 캔버스는 저장소 테마 `system-admin` 을 SDK 기본 뷰로 그린다(`src/canvas/canvas-theme.ts`). 번들은 아직 구조 경로이고
- * 옛 JSON 테마를 받는다 — 그래서 번들 쪽에 옛 `admin` 을 넘긴다. **옛 `admin` 은 모든 컴포넌트에 카탈로그의 기본 구조를
- * 고르므로**(아래 «견주기의 전제» 케이스) 두 경로가 같은 DOM 을 내야 한다 — 기본 뷰가 기본 구조의 바이트 사본이라는
- * 것을 진짜 캔버스에서 끝에서 끝까지 재는 자리다.
+ * 캔버스는 저장소 테마 `system-admin` 을 싣는다(`src/canvas/canvas-theme.ts`). 번들에 **같은 테마 정의**(`CANVAS_THEME`)를
+ * 넘겨 견준다 — 캔버스가 뷰 경로에 무엇을 더하거나 빼면 여기서 죽는다.
  */
-import { describeTree } from '@wirebound/exporter/test-support'
-import { broadFixture, variantFixture } from '@wirebound/exporter/test-support'
+import { broadFixture, describeTree } from '@wirebound/exporter/test-support'
 import { exportPage } from '@wirebound/exporter'
 import type { PageDocument } from '@wirebound/schema'
-import {
-  THEME_ISSUE_SEVERITY,
-  resolveTheme,
-  systemTheme,
-  type ResolvedTheme,
-  type Theme,
-} from '@wirebound/themes'
-import { defaultStructure, listComponents } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
+import { CANVAS_THEME } from '../../src/canvas/canvas-theme'
 import { canvasDocument, openPage } from '../editor-harness'
-
-const THEME_ID = 'admin'
-
-function themeDocument(): Theme {
-  const theme = systemTheme(THEME_ID)
-  if (theme === undefined) throw new Error(`시스템 테마가 없습니다: ${THEME_ID}`)
-  return theme
-}
-
-function resolved(): ResolvedTheme {
-  const { theme, issues } = resolveTheme(themeDocument())
-  const errors = issues.filter((issue) => THEME_ISSUE_SEVERITY[issue.code] === 'error')
-  expect(errors.map((issue) => `${issue.path}: ${issue.message}`)).toEqual([])
-  expect(theme).not.toBeNull()
-  return theme!
-}
 
 /**
  * 캔버스가 그린 **문서 뿌리**. iframe 문서 안의 첫 `[data-wb-id]`가 곧 문서의 뿌리다(`editor-harness`의
@@ -71,50 +44,35 @@ function canvasDocumentRoot(): Element {
   return root
 }
 
-/** 번들이 그린 문서 뿌리. */
-function bundleDocumentRoot(document_: PageDocument, theme: ResolvedTheme | null): Element {
-  const { html } = exportPage({ document: document_, title: '견주기', theme })
+/** 번들이 그린 문서 뿌리 — 캔버스와 같은 테마 정의로 그린다. */
+function bundleDocumentRoot(document_: PageDocument): Element {
+  const { html } = exportPage({ document: document_, title: '견주기', theme: CANVAS_THEME })
   const parsed = new DOMParser().parseFromString(html, 'text/html')
   const root = parsed.body.firstElementChild
   if (root === null) throw new Error('번들에 문서가 없습니다')
   return root
 }
 
-const FIXTURES: [label: string, make: () => PageDocument][] = [
-  ['넓게 덮는 문서', broadFixture],
-  ['variant를 전부 쓰는 문서', variantFixture],
-]
+const FIXTURES: [label: string, make: () => PageDocument][] = [['넓게 덮는 문서', broadFixture]]
 
 describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
   it.each(FIXTURES)('%s', async (_label, make) => {
     const document_ = make()
     await openPage(document_)
 
-    expect(describeTree(bundleDocumentRoot(document_, resolved()))).toEqual(
+    expect(describeTree(bundleDocumentRoot(document_))).toEqual(
       describeTree(canvasDocumentRoot()),
     )
   })
 
   /**
-   * **견주기의 전제 — 옛 `admin` 은 모든 컴포넌트에 카탈로그의 기본 구조를 고른다.** 이것이 거짓이면 번들은 다른 구조를,
-   * 캔버스는 기본 뷰(= 기본 구조)를 그려 위 견주기가 테마 차이를 재게 된다.
-   */
-  it('견주기의 전제 — 옛 admin 은 모든 컴포넌트에 기본 구조를 고른다', () => {
-    const theme = resolved()
-    for (const def of listComponents()) {
-      expect(theme.components.get(def.type)?.structure ?? defaultStructure(def), def.type).toBe(defaultStructure(def))
-    }
-  })
-
-  /**
-   * **`Tree` 노드의 `style` 이 번들과 같다.** 캔버스가 서버 테마를 늦게 받던 때는 첫 그림(기본 구조)과 테마가 온 뒤의
-   * 구조가 달라 React 가 같은 `<li>` 에 빈 `style` 속성을 남겼다. 캔버스가 테마를 처음부터 쥐고 그리므로 그 갈림이 없다.
+   * **`Tree` 노드의 `style` 이 번들과 같다.** 선언은 CSS 변수 하나이고, 두 쪽이 같은 선언을 낸다.
    */
   it('캔버스의 Tree 노드 style 이 번들과 같다', async () => {
     await openPage(broadFixture())
 
     const canvasNode = canvasDocument().querySelector<HTMLElement>('[data-wb-component="Tree"] > [data-wb-part="node"]')
-    const bundleNode = bundleDocumentRoot(broadFixture(), resolved()).querySelector<HTMLElement>(
+    const bundleNode = bundleDocumentRoot(broadFixture()).querySelector<HTMLElement>(
       '[data-wb-component="Tree"] > [data-wb-part="node"]',
     )
     // 글자로 견주지 않는다 — 번들은 SSR 문자열(`--x:0`), 캔버스는 DOM 이 다시 쓴 꼴(`--x: 0;`)이라 같은 선언이 다르게 적힌다.

@@ -55,7 +55,7 @@ const PNG_1X1 = Uint8Array.from([
   0x42, 0x60, 0x82,
 ])
 
-const HTML_NO_ZIP: Extract<ExportJobSpec, { kind: 'html' }> = { kind: 'html', theme: { themeId: null, theme: null }, zipRoot: null }
+const HTML_NO_ZIP: Extract<ExportJobSpec, { kind: 'html' }> = { kind: 'html', zipRoot: null }
 const HTML_ZIP: Extract<ExportJobSpec, { kind: 'html' }> = { ...HTML_NO_ZIP, zipRoot: 'root' }
 
 /** DB 없이 만든 행 — 페이지 `pages` 장 · 장마다 글 노드 `nodes` 개(7000 이면 한 장이 약 500KB). */
@@ -120,9 +120,7 @@ function button(rootId: string, buttonId: string, label: string, navigateTo: str
 }
 
 /**
- * 견줄 것이 여럿인 설계서 — 메뉴 둘(하나는 자식) · 페이지 셋(설명 · 서로를 겨누는 링크 · 못 잇는 링크) · 코멘트 셋 ·
- * 기본 레이아웃의 시스템 테마(`admin`). **테마가 들어 있어야** 워커의 카탈로그가 빈 판(`export-worker-thread.ts`의
- * `ensureCatalog`)이 `theme.css`와 화면 시트에서 갈린다.
+ * 견줄 것이 여럿인 설계서 — 메뉴 둘(하나는 자식) · 페이지 셋(설명 · 서로를 겨누는 링크 · 못 잇는 링크) · 코멘트 셋.
  */
 async function 설계서(ctx: TestContext, slug: string): Promise<{ cookie: { wb_session: string }; projectId: string; slug: string }> {
   const user = await signup(ctx)
@@ -189,9 +187,10 @@ describe('워커가 낸 것은 같은 스레드에서 낸 것과 같다', () => 
       // `RUNTIME_JS`) 글자가 **변환기가 낸 그대로**다. vitest 는 메인을 vite 로, 워커를 tsx 로 변환하므로 두 글자가 다르다.
       // 운영은 두 스레드가 같은 `dist` 파일을 싣는다(`export-worker.ts`의 «워커가 싣는 코드는 메인과 같다»). 나머지는 바이트로 같다.
       expect(differingEntries(got, want)).toEqual([`${bundleRootDirectory(fixture.slug)}/assets/runtime.js`])
-      // 카나리아 — 견준 것에 테마와 코멘트가 실제로 들어 있다(없으면 둘이 우연히 같다).
+      // 카나리아 — 견준 것에 기본 뷰 CSS · 그려진 노드 · 코멘트가 실제로 들어 있다(없으면 둘이 우연히 같다).
       const theme = got.find(([name]) => name.endsWith('assets/theme.css'))!
-      expect(strFromU8(theme[1])).toContain('--wb-palette-')
+      expect(strFromU8(theme[1])).toContain('--wb-node-grid-columns')
+      expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('data-wb-component="Button"')
       expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('목록 코멘트 둘')
 
       const preview = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })
@@ -220,9 +219,9 @@ describe('워커가 낸 것은 같은 스레드에서 낸 것과 같다', () => 
         const want = entries(zipParts(reference.parts))
         expect(got.map(([name]) => name)).toEqual(want.map(([name]) => name))
         expect(differingEntries(got, want)).toEqual([])
-        // 그리라고 넘긴 HTML · 시트가 같다 — 테마가 든 시트여야 견준 것이 뜻이 있다.
+        // 그리라고 넘긴 HTML · 시트가 같다 — 기본 뷰 CSS 가 든 시트여야 견준 것이 뜻이 있다.
         expect(viaRoute.last()).toEqual(inThread.last())
-        expect(inThread.last()[0]!.css).toContain('--wb-palette-')
+        expect(inThread.last()[0]!.css).toContain('--wb-node-grid-columns')
 
         const preview = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`, cookies: fixture.cookie })
         const body = preview.json()
@@ -387,7 +386,7 @@ describe('쉬는 워커', () => {
   }, 60_000)
 })
 
-const PPTX_NO_ZIP: Extract<ExportJobSpec, { kind: 'pptx' }> = { kind: 'pptx', screenTheme: { ok: true, theme: null }, zip: false }
+const PPTX_NO_ZIP: Extract<ExportJobSpec, { kind: 'pptx' }> = { kind: 'pptx', screens: true, zip: false }
 
 /** 풀어 줄 때까지 안 끝나는 그리는 자 — 지금 몇이 그리는 중인지 센다. */
 class HeldRenderer {

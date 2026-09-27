@@ -222,17 +222,11 @@ function checkNode(
      * 평행한 코드를 여기 만들면 유니온이 둘이 되어 따로 썩는다. **갈리지 않게 묶는 것은
      * 문장이고**, `ignoredVariantMessage`를 함께 부르는 것이 그 방법이다.
      */
+    // `variantFrom`이 없는 컴포넌트의 값은 보지 않는다 — 고를 수 있는 변형은 패턴을 든 테마의 manifest 가 선언하고
+    // (`components[type].variants`) 이 함수는 패턴만 받는다. 스키마가 페이지 노드의 값을 판정하지 않는 것과 같다.
     if (def.variantFrom !== undefined) {
       issues.push(
         issue('bad-pattern-node', `${path}.variant`, ignoredVariantMessage(def, node.variant)),
-      )
-    } else if (!def.variants.includes(node.variant)) {
-      issues.push(
-        issue(
-          'bad-pattern-node',
-          `${path}.variant`,
-          `${node.type}에 정의되지 않은 variant입니다: ${node.variant}`,
-        ),
       )
     }
   }

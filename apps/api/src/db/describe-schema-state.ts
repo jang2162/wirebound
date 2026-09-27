@@ -10,10 +10,9 @@
  * 수*다 — 스키마가 비었다는 것을 한 수로 말하는 것이 그것뿐이다.
  *
  * **말하는 자리가 둘이다.** *"서버가 뜰 때 마이그레이션이 0 건인지 말한다"* 하나로는
- * 모자라다 — **빈 DB 에서는 서버가 뜨지 못한다**: `buildApp` 이 부팅 중에 `themes` 에 쓰고
- * 그 표가 없어 `relation "themes" does not exist`(SQLSTATE `42P01`)로 죽는다(종료 코드 1 —
- * 빈 DB 에 `pnpm --filter @wirebound/api dev` 로 다시 잰다). 즉 **뜬 뒤에 찍는 줄은 0 건을
- * 영영 못 본다.** 그래서:
+ * 모자라다 — **빈 DB 에서는 서버가 뜨기 전에 멈춘다**: `main.ts` 가 `listen` 앞에서
+ * `assertSchemaVersion`(`schema-version.ts`)으로 견주고 빈 DB 면 거기서 멈춘다(`buildApp` 자체는 부팅 중에
+ * DB 를 쓰지 않아 빈 DB 에서도 조립된다). 즉 **뜬 뒤에 찍는 줄은 0 건을 영영 못 본다.** 그래서:
  *
  * 1. **뜬 뒤** — `describeSchemaState` 가 `이 서버가 보는 DB:` 줄에 수를 붙인다. 워크트리
  *    둘을 나란히 놓은 사람이 *"내 쪽이 몇 건인가"* 를 가른다.

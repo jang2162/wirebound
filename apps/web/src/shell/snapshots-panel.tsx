@@ -11,7 +11,7 @@
  *
  * | 별도 라우트의 근거 | 지금 | 왜 |
  * |---|---|---|
- * | *"설계서 「설계서 화면 구조」의 3분할에 이 화면이 들어갈 자리가 없다"* | **자리는 3분할이 아니라 머리다** | 「설계서 화면 구조」는 좌·중·우 셋을 그리고 **머리에 무엇이 오는지는 말하지 않는다.** 머리에는 셋이 산다 — 테마 고르개·내보내기·모드/줌 도구. 셋 다 *"이 프로젝트 전체를 다루는 것"*이고 스냅샷도 그 축이다 |
+ * | *"설계서 「설계서 화면 구조」의 3분할에 이 화면이 들어갈 자리가 없다"* | **자리는 3분할이 아니라 머리다** | 「설계서 화면 구조」는 좌·중·우 셋을 그리고 **머리에 무엇이 오는지는 말하지 않는다.** 머리에는 내보내기 · 모드/줌 도구가 산다 — *"이 프로젝트 전체를 다루는 것"*이고 스냅샷도 그 축이다 |
  * | *"주소가 있어야 공유·새로고침이 된다"* | **공유할 것이 없다** | 스냅샷 목록은 사람에게 링크로 건네는 화면이 아니다(설계서 한 장이 아니라 이 프로젝트의 기록이다). 그리고 그 주소는 **셸을 떠나야** 열린다 — 되돌린 뒤 설계서로 돌아오는 왕복이 조작마다 붙는다 |
  *
  * **결정한 것은 사용자다.** 두 갈래(주소를 남기고 팝오버를 더한다 / 주소를 없애고
@@ -34,8 +34,8 @@
  * 않는 이유는 그것이 브라우저 모달이라 케이스가 그 문장을 읽지 못하고, 무엇을 되돌리는지
  * (어느 태그인지)를 화면에 붙여 보여 줄 수도 없기 때문이다.
  *
- * **결과가 말할 것 넷:** 바뀐 페이지 수 · **그대로인 페이지 수** · 안전망 스냅샷의 태그 ·
- * 테마가 다르면 그 사실. 둘째가 빠지면 *"0개가 바뀌었습니다"*가 **아무 일도 안 일어난 것**과
+ * **결과가 말할 것 셋:** 바뀐 페이지 수 · **그대로인 페이지 수** · 안전망 스냅샷의 태그.
+ * 둘째가 빠지면 *"0개가 바뀌었습니다"*가 **아무 일도 안 일어난 것**과
  * **전부 그대로였던 것**을 구분하지 못한다.
  *
  * ---
@@ -44,7 +44,7 @@
  *
  * 설계서 「권한 모델」이 스냅샷 **생성**을 editor에게 열고 **복원만 owner**로 둔다. 그래서 이 화면은
  * viewer에게도 목록을 보여 주고 **폼과 복원 버튼만 닫는다** — 막으면 viewer가 *"이 프로젝트에
- * 어떤 기록이 있는지"*조차 못 본다(테마 저작 화면이 같은 자리에서 같은 판단을 한다).
+ * 어떤 기록이 있는지"*조차 못 본다.
  *
  * **셸의 토글도 역할로 감추지 않는다**(`routes/editor.tsx`) — 같은 이유다.
  *
@@ -138,8 +138,7 @@ const RESTORE_UNANSWERED = '복원됐는지 알 수 없습니다. 화면 위 «�
 const RELOAD_FAILURE_PREFIX = '저장은 됐지만 목록을 갱신하지 못했습니다'
 
 /**
- * 조회 상태. 성공·실패를 판별 유니온으로 가르는 것은 `routes/theme-editor.tsx`와 같은
- * 이유다 — `null`로 실패를 판정하면 응답 전과 실패가 같은 값이 되어 로딩 중에 오류 화면이
+ * 조회 상태. 성공·실패를 판별 유니온으로 가르는 까닭 — `null`로 실패를 판정하면 응답 전과 실패가 같은 값이 되어 로딩 중에 오류 화면이
  * 깜빡인다.
  *
  * **프로젝트와 목록을 함께 받는다.** 프로젝트는 **역할** 때문에 필요하다(그것 없이는 폼을
@@ -260,7 +259,7 @@ function SnapshotsBody(props: {
     async function load(): Promise<void> {
       try {
         // **둘을 함께 받는다.** 역할 없이는 폼을 열지 말지 못 정하고, 목록 없이는 그릴
-        // 것이 없다. `Promise.all`이라 왕복이 하나다(`theme-editor.tsx`와 같은 형식).
+        // 것이 없다. `Promise.all`이라 왕복이 하나다.
         const [project, snapshots] = await Promise.all([api.getProject(projectId), api.listSnapshots(projectId)])
         if (!alive) return
         setState({ status: 'ready', project, snapshots })
@@ -336,17 +335,13 @@ function SnapshotsBody(props: {
 }
 
 /**
- * 복원 결과. **머리말 «복원»의 «결과가 말할 것 넷»을 한 자리에서 말한다.**
+ * 복원 결과. **머리말 «복원»의 «결과가 말할 것 셋»을 한 자리에서 말한다.**
  *
  * `role="status"`다 — 실패가 아니므로 `alert`이 아니고, 그래도 스크린리더가 읽어야 한다
  * (프로젝트 전체가 방금 바뀌었다).
- *
- * **테마는 다를 때만 말한다.** 같을 때도 *"테마는 그대로입니다"*를 붙이면 매번 보이는 줄이
- * 되어 다를 때의 신호가 묻힌다 — 복원이 되돌리지 **않은** 것을 알리는 자리이기 때문이다.
  */
 function RestoreNotice(props: { tag: string; result: RestoreResult }): ReactElement {
   const { pages } = props.result.summary
-  const themesDiffer = props.result.themes.some((theme) => theme.differs)
 
   return (
     <div className="wb-shell-snapshots-restored" role="status">
@@ -358,11 +353,6 @@ function RestoreNotice(props: { tag: string; result: RestoreResult }): ReactElem
       <p className="wb-shell-snapshots-restored-line">
         되돌리기 전 상태는 “{props.result.safetySnapshot.tag}”에 저장했습니다.
       </p>
-      {themesDiffer ? (
-        <p className="wb-shell-snapshots-restored-line">
-          테마는 스냅샷 당시와 다릅니다. 복원은 테마 문서를 되돌리지 않습니다.
-        </p>
-      ) : null}
     </div>
   )
 }

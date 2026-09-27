@@ -108,8 +108,7 @@ export function PresetPicker(props: {
   const [reload, setReload] = useState(0)
 
   useEffect(() => {
-    // 앞 프로젝트의 응답이 늦게 도착해 새 프로젝트의 목록을 덮는 것을 막는다
-    // (`theme-picker.tsx`·`use-project-theme.ts`의 조회들과 같은 형식이다).
+    // 앞 프로젝트의 응답이 늦게 도착해 새 프로젝트의 목록을 덮는 것을 막는다.
     let alive = true
     // 떠나면 요청째 끊는다(`ReadOptions.cancel`).
     const leave = new AbortController()
@@ -303,7 +302,7 @@ function failureMessage(failure: Failure): string {
 /**
  * 목록 한 줄. **내장인지 프로젝트 것인지 말한다** — 이름은 사용자가 지을 수 있어
  * 내장과 같은 이름이 될 수 있고(유일 제약이 없다 — `apps/api/README.md` 「이름에 유일 제약이 없다」), 그러면 이름만으로는 갈리지
- * 않는다. `ThemePicker`가 시스템 테마에 표시를 붙이는 것과 같은 자리다.
+ * 않는다.
  */
 function optionLabel(preset: Preset): string {
   const source = preset.source === 'builtin' ? '내장' : '프로젝트'

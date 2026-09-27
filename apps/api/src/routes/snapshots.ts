@@ -1,7 +1,7 @@
 /**
  * 스냅샷 라우트 — 설계서 「스냅샷」의 **삭제 없는 태그**, 그중 **얼리는 쪽**이다.
  * `pageRoutes`와 같은 `/api/projects` prefix로 등록한다(`app.ts`) — 파일은 갈리되 URL
- * 네임스페이스는 공유한다(`routes/comments.ts`·`routes/themes.ts`와 같은 관례).
+ * 네임스페이스는 공유한다(`routes/comments.ts`와 같은 관례).
  *
  * HTTP·zod 검증만 다룬다 — SQL은 `repos/snapshots.ts`, payload를 만드는 것은
  * `services/snapshot-capture.ts`다. **권한 판정은 `auth/roles.ts`의 `projectGuard` 하나가
@@ -111,7 +111,7 @@ const SnapshotBody = z.strictObject({
   description: z.string().max(2000, '설명은 2000자 이하여야 합니다').nullable().optional(),
 })
 
-/** Postgres 유니크 위반 SQLSTATE. `routes/themes.ts`·`routes/projects.ts`와 같은 값이다. */
+/** Postgres 유니크 위반 SQLSTATE. `routes/projects.ts`와 같은 값이다. */
 const UNIQUE_VIOLATION = '23505'
 
 function isUniqueViolation(error: unknown): boolean {
@@ -208,8 +208,8 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
       } catch (error) {
         if (error instanceof SnapshotNulByteError) {
           // repo의 마지막 방벽에 걸렸다. 위에서 본문 둘은 이미 걸렀으므로 여기 오는 것은
-          // payload 안의 NUL이고, API 로 거기 닿는 길은 `repos/themes.ts`의 가드가 막는다
-          // (`repos/snapshots.ts` 머리말 「payload 검사는 죽은 코드가 아니다」).
+          // payload 안의 NUL이고, 지금 저장된 값으로는 거기 닿는 길이 없다
+          // (`repos/snapshots.ts` 머리말 「payload 검사는 지금 저장된 값으로는 도달하지 않는다 — 그래도 둔다」).
           throw badRequest(error.message)
         }
         if (isUniqueViolation(error)) {
@@ -328,7 +328,7 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           throw restoreOutcomeToApiError(outcome)
         }
 
-        // **복원을 룸에 알린다.** 복원은 다섯 자원을 한꺼번에 바꾸므로, 알리지 않으면
+        // **복원을 룸에 알린다.** 복원은 세 자원(메뉴·페이지·코멘트)을 한꺼번에 바꾸므로, 알리지 않으면
         // 다른 접속자는 낡은 문서 위에서 편집하다 `stale` 409를 받고 화면은 왜인지 말할
         // 수단이 없다. **커밋 뒤**다 — `restoreSnapshot`이 자기
         // 트랜잭션을 닫고 돌아온 뒤에 알린다.
@@ -346,18 +346,12 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
   }
 }
 
-/** 복원 응답. 화면이 보일 넷(바뀐 수·그대로인 수·안전망 태그·테마 차이)이 전부 여기 있다. */
+/** 복원 응답. 화면이 보일 셋(바뀐 수·그대로인 수·안전망 태그)이 전부 여기 있다. */
 function toRestoreResponse(result: RestoreResult) {
   return {
     summary: result.summary,
     /** *"되돌리려면 이것"*을 화면이 가리킬 수 있어야 한다. */
     safetySnapshot: result.safety,
-    /**
-     * **되돌리지 않은 것에 대한 보고다.** payload의 테마는 병합 결과라 그것을 `themes`
-     * 행에 쓰면 파생 테마가 평탄화되어 상속이 영구히 사라진다 — 그래서 참조만 되돌리고,
-     * 지금 그 참조가 내는 모습이 그때와 다르면 여기서 말한다.
-     */
-    themes: result.themes,
   }
 }
 

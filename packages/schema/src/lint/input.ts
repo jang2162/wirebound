@@ -10,9 +10,9 @@
  * ## 스냅샷 payload와의 관계
  *
  * 설계서 「스냅샷」의 스냅샷 payload가 이미 **프로젝트 전체를 값으로 나르는 모양**을 갖는다
- * (`@wirebound/themes`의 `snapshot/payload.ts` — 메뉴·페이지·레이아웃·테마·코멘트).
- * **모양은 그대로 따르고 타입은 쓰지 않는다.** 그 타입이 `PageDocument`와 `Theme`을 동시에
- * 참조하므로 `schema`가 그것을 import하면 `schema → themes` 역방향 의존이 생긴다.
+ * (`@wirebound/themes`의 `snapshot/payload.ts` — 메뉴·페이지·레이아웃·코멘트).
+ * **모양은 그대로 따르고 타입은 쓰지 않는다.** 그 타입은 `themes` 패키지에 있어 `schema`가 그것을 import하면
+ * `schema → themes` 역방향 의존이 생긴다.
  *
  * payload를 이 모양으로 옮기는 자리는 `themes` 쪽 하나다(`snapshotToLintInput`) — `schema`는
  * payload를 모른다.

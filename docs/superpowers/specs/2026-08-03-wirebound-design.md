@@ -21,7 +21,7 @@
 ### 1.1 대상 사용자
 
 - **기획자 / PM** — 화면을 설계하고 코멘트를 단다. 코드를 쓰지 않으며, 테마는 고르기만 한다.
-- **디자이너** — 레이아웃을 잡고 테마를 만든다. 토큰은 GUI로, 깊은 수정은 JSON으로 한다.
+- **디자이너** — 레이아웃을 잡고 테마를 만든다. 테마는 headless SDK 위의 코드 패키지로 짠다(§6).
 - **개발자** — 설계서를 읽고 구현한다. CLI/MCP로 접근한다.
 - **코딩 에이전트** — MCP를 통해 설계서를 읽고 구현하며 피드백을 남긴다.
 
@@ -42,9 +42,9 @@
 | 실행 형태 | 서버형 SaaS (웹 앱) | 프로젝트 단위 권한 분리와 실시간 협업이 요구사항 |
 | 저작 방식 | 선언적 스키마(JSON 트리) + GUI 트리/폼 에디터 | 좌표 기반은 LLM이 다루기 어렵고 재사용·내보내기가 불리 |
 | 기술 스택 | TypeScript 모노레포 (React + Node + PostgreSQL) | 스키마·검증·렌더러를 웹/CLI/MCP/내보내기가 공유 |
-| 스타일 | 쉘(Layout) / 테마(Theme) 분리, 레이아웃이 테마 참조 | 여러 레이아웃이 같은 디자인 언어를 공유해야 함 |
-| 테마 범위 | 디자인 시스템 정의 — 토큰 + 구조 매핑 + 패턴 (§6) | 관리자 외 다양한 형태의 웹을 같은 도구로 설계해야 함 |
-| 구조 변형 | 렌더러가 구조 구현체를 제공하고 테마가 선택 | 임의 템플릿 없이 형태를 바꿀 수 있는 유일한 방법 |
+| 스타일 | 쉘(Layout) / 테마(Theme) 분리 | 여러 레이아웃이 같은 디자인 언어를 공유해야 함 |
+| 테마 범위 | 디자인 시스템 정의 — headless SDK 위의 코드 패키지(뷰 + 토큰 + 패턴) (§6) | 관리자 외 다양한 형태의 웹을 같은 도구로 설계해야 함 |
+| 형태 | 테마의 뷰가 마크업을 정하고, 카탈로그(컴포넌트 종류 · props)는 닫혀 있다 | 형태를 바꾸는 자유를 주면서도 검증 · 내보내기 · LLM 조작이 기대는 닫힌 스키마를 지킨다 |
 | 이력 | JSON Patch 커맨드 로그, 개인 undo 스택, 태그형 스냅샷 | 동시편집 환경에서 누가 무엇을 바꿨는지 추적 가능 |
 | 동시편집 | WebSocket 실시간 반영 + 노드 단위 소프트 잠금 | CRDT 없이 설계서 작업에 충분한 협업 수준 |
 | 상호작용 | 선언적 트리거→액션 규칙 (고정 액션 목록) | 스크립트 없이 검증 가능, 자동 문장화 가능 |
@@ -68,11 +68,10 @@
 
 ### 2.1 명시적으로 제외한 것 (YAGNI)
 
-- **페이지의 반응형 편집** — 페이지 스키마에 브레이크포인트별 분기를 두지 않는다. 반응형은 **테마가 정의**하고(§6.4), 사용자는 뷰포트 프리셋을 바꿔 확인만 한다.
+- **페이지의 반응형 편집** — 페이지 스키마에 브레이크포인트별 분기를 두지 않는다. 반응형은 **테마가 정의**하고(§6), 사용자는 뷰포트 프리셋을 바꿔 확인만 한다.
 - **자유 좌표 배치** — 레이아웃 규칙 기반 배치만 지원한다.
 - **CRDT 실시간 협업** — 소프트 잠금으로 충분하다.
 - **컴포넌트 플러그인** — 서버에서 외부 코드 실행은 보안 부담이 크다.
-- **테마의 임의 마크업 템플릿** — 테마는 렌더러가 제공하는 구조 구현체 중에서만 고른다. 템플릿 엔진을 들이면 검증·내보내기·보안이 모두 무너진다.
 - **PPTX 무손실 도형 변환** — 렌더 이미지 삽입 방식으로 확정한다.
 - **조직/워크스페이스 계층** — 프로젝트 단위 초대로 시작한다.
 - **비로그인 공유 링크** — 후속 과제.
@@ -91,11 +90,15 @@ apps/
 
 packages/
   schema     노드 타입 정의 + zod 검증 + JSON Patch 유틸 + lint 규칙
-  renderer   schema → React 렌더링 (headless, DOM 구조만 생성)
-  themes     토큰/컴포넌트 스타일 → CSS 컴파일
+  renderer   schema → React 렌더링 (노드마다 테마 뷰를 그린다)
+  theme-sdk  테마 뷰 SDK — 뷰 계약 · SDK 기본 뷰와 그 CSS
+  themes     패턴 규격 · 스냅샷 payload 규격 · 설계 lint 입구
   exporter   HTML 정적 번들 · PPTX 생성
   cli        wireb
   mcp        MCP 서버
+
+system-themes/
+  admin      저장소 테마 system-admin — 캔버스가 싣는다
 ```
 
 ### 3.2 핵심 원칙
@@ -106,8 +109,8 @@ packages/
 **렌더러는 하나뿐이다.**
 `renderer`가 웹 앱의 캔버스와 내보낸 HTML 양쪽을 그린다. 두 개의 렌더 구현이 존재하지 않으므로 결과가 어긋날 수 없다.
 
-**렌더러는 스타일을 갖지 않고, 구조는 테마가 고른다.**
-`renderer`는 DOM 구조와 `data-wb-*` 속성만 생성한다. 스타일은 전부 `themes`가 컴파일한 CSS가 담당한다. 다만 렌더러는 컴포넌트마다 **여러 구조 구현체**를 갖고, 그중 무엇을 쓸지는 테마가 지정한다(§6.5). 그래서 테마 교체만으로 형태까지 바뀌면서도, 임의 마크업이 시스템에 들어오지는 않는다.
+**렌더러는 스타일을 갖지 않고, 형태는 테마의 뷰가 정한다.**
+`renderer`는 노드마다 테마의 뷰(없으면 SDK 기본 뷰)를 React 컴포넌트로 그리고 `data-wb-*` 속성을 싣는다(§6.1). 스타일은 테마의 CSS가 담당한다. 카탈로그가 닫혀 있으므로 테마 교체로 형태가 바뀌어도 문서의 계약(컴포넌트 종류 · props)은 그대로다.
 
 **모든 편집은 같은 파이프라인을 통과한다.**
 사람의 GUI 편집, MCP의 patch, CLI의 수정이 모두 `검증 → revision 기록 → 브로드캐스트`를 거친다. 우회 경로가 없으므로 이력이 항상 완전하다.
@@ -117,13 +120,14 @@ packages/
 | 패키지 | 책임 | 의존 |
 |---|---|---|
 | `schema` | 노드 타입, props 정의, zod 검증, patch/inverse 생성, 마이그레이션, lint 규칙 | 없음 |
-| `renderer` | 스키마 트리 → React 엘리먼트, 상호작용 런타임 | `schema` |
-| `themes` | 테마 규격 정의·검증, `extends` 병합, 토큰/구조/패턴 → CSS 컴파일, 시스템 테마 세트 | `schema` |
-| `exporter` | 정적 HTML 번들 생성 | `schema`, `renderer`, `themes` |
-| `cli` | 터미널 명령, API 클라이언트 | `schema` |
-| `mcp` | MCP 도구 정의, API 클라이언트 | `schema` |
-| `apps/api` | 인증, 권한, 영속성, revision, WebSocket | `schema`, `exporter` |
-| `apps/web` | 에디터 UI, 실시간 동기화, undo 스택 | `schema`, `renderer`, `themes` |
+| `renderer` | 스키마 트리 → 노드마다 테마 뷰(없으면 SDK 기본 뷰), 상호작용 런타임 | `schema`, `theme-sdk` |
+| `theme-sdk` | 뷰 계약(`view` · `Root` · `Focus`), manifest 타입, SDK 기본 뷰와 그 CSS | `schema` |
+| `themes` | 패턴 규격 · 검증 · 전개, 스냅샷 payload 규격과 lint 입력 변환, 설계 lint 입구(`lintProject`) | `schema` |
+| `exporter` | 정적 HTML 번들 · PPTX 생성 | `schema`, `renderer`, `theme-sdk` |
+| `cli` | 터미널 명령, API 클라이언트 | `schema`, `themes` |
+| `mcp` | MCP 도구 정의 | `cli` |
+| `apps/api` | 인증, 권한, 영속성, revision, WebSocket | `schema`, `themes`, `exporter` |
+| `apps/web` | 에디터 UI, 실시간 동기화, undo 스택 | `schema`, `renderer`, `theme-sdk`, `themes`, `system-themes/admin` |
 
 `schema`가 의존을 갖지 않는다는 점이 중요하다. Node와 브라우저 양쪽에서 동작해야 한다.
 
@@ -137,8 +141,7 @@ packages/
 User
 Project ──┬── ProjectMember (user, role: owner|editor|viewer)
           ├── ApiToken     (name, hash, createdBy, scope=projectId)
-          ├── Theme        (meta, tokens, primitives, components, patterns, assets)
-          ├── Layout       (name, schema, themeRef)
+          ├── Layout       (name, schema)
           ├── MenuNode     (parentId, order, title)   ← 트리
           │     └── Page   (title, order, layoutRef?, description, schema)
           │           ├── Comment  (marker, nodeId, body, author)
@@ -164,15 +167,7 @@ project_members(project_id, user_id, role, invited_at)
 
 api_tokens(id, project_id, name, token_hash, user_id, last_used_at, created_at)
 
-themes(id, project_id, slug, name, description, extends_ref, version, preview,
-       tokens json, primitives json, components json,
-       patterns json, assets json, updated_at)
-  project_id NULL = 시스템 테마 (읽기 전용)
-  절 컬럼은 json 이다 — jsonb 는 키를 정규화해 작성자가 적은 순서를 잃는다
-  extends_ref = 'system:<slug>' 형식, 상속 깊이 1단계
-  UNIQUE (project_id, slug)
-
-layouts(id, project_id, name, schema jsonb, theme_id, updated_at)
+layouts(id, project_id, name, schema jsonb, updated_at)
 
 menu_nodes(id, project_id, parent_id, title, sort_order, created_at)
   parent_id NULL = 루트
@@ -218,7 +213,7 @@ snapshots(id, project_id, tag, description, payload jsonb,
 
 **노드는 스타일을 갖지 않는다.** `variant`로 테마가 정의한 표현 중 하나를 고를 뿐이고, 실제 스타일 값은 전부 테마에 있다. 이 성질 덕분에 테마 교체만으로 전체 설계서의 외형이 바뀐다. 반대로 "이 버튼만 빨갛게" 같은 일회성 스타일은 지원하지 않는다 — 필요하면 테마에 variant를 추가하는 것이 올바른 경로다.
 
-노드가 어떤 구조(`structure`)로 렌더될지는 노드가 아니라 **테마가 결정**한다(§6.5). 같은 `List` 노드가 관리자 테마에서는 테이블로, 마케팅 테마에서는 카드 그리드로 그려진다.
+노드가 어떤 형태로 그려질지는 노드가 아니라 **테마의 뷰가 결정**한다(§6). 같은 `List` 노드가 한 테마에서는 테이블로, 다른 테마에서는 카드 그리드로 그려진다.
 
 ### 4.4 레이아웃
 
@@ -241,19 +236,19 @@ snapshots(id, project_id, tag, description, payload jsonb,
 
 렌더링 시 페이지 스키마가 `Slot` 위치에 주입된다. "헤더 있음/LNB 있음" 같은 속성은 별도 플래그가 아니라 트리에 해당 노드가 존재하느냐로 표현된다. 그 결과 레이아웃 편집기와 페이지 편집기가 같은 UI를 쓰고, 렌더러도 하나로 끝난다.
 
-레이아웃은 `themeRef`로 테마 하나를 가리킨다. 페이지는 프로젝트 기본 레이아웃을 상속하되 `layoutRef`로 개별 지정할 수 있다.
+페이지는 프로젝트 기본 레이아웃을 상속하되 `layoutRef`로 개별 지정할 수 있다.
 
 ### 4.5 스냅샷
 
 스냅샷은 **삭제 없는 태그**다.
 
-- 생성: 현재 프로젝트 전체 상태(메뉴·페이지·레이아웃·테마·코멘트)를 `payload`에 압축 저장하고, 각 페이지의 `head_seq`를 함께 기록한다.
+- 생성: 현재 프로젝트 전체 상태(메뉴·페이지·레이아웃·코멘트)를 `payload`에 압축 저장하고, 각 페이지의 `head_seq`를 함께 기록한다.
 - 복원: 이력을 지우지 않는다. 현재 상태에서 스냅샷 상태로 가는 patch를 계산해 **새 revision들로 append**한다. 따라서 복원 자체가 이력에 남고, 복원을 다시 되돌릴 수도 있다.
 - 복원이 지워진 페이지를 되살리면 **같은 id** 로 서고, `head_seq`는 **그 id 가 지워질 때까지 쓴 번호 다음**부터 센다(지워진 이력은 되살아나지 않는다). 0 부터 다시 세면 복원 방송을 못 받은 클라이언트(연결이 끊긴 탭 · MCP · CLI)의 번호와 남의 편집으로 오른 번호가 우연히 같아지고, 그 클라이언트의 편집이 되살린 문서의 다른 노드에 적용된다. 그래서 페이지를 지울 때 그 id 의 마지막 번호를 남긴다 — 수명은 프로젝트다(복원이 되살릴 수 있는 것의 바깥 경계). 남긴 번호가 없는 id(번호를 남기기 전에 지웠다)는 어디까지 셌는지 알 길이 없어(스냅샷의 번호는 하한이다) 2^32 에서 센다.
 
 payload를 통째로 저장하는 이유는 복원 속도 때문이다. revision replay는 페이지 수가 늘면 선형으로 느려지고, 스냅샷은 자주 만들지 않으므로 저장 비용이 문제되지 않는다.
 
-**테마도 payload에 포함한다.** 참조만 저장하면 테마가 나중에 바뀌었을 때 스냅샷이 다른 모습으로 복원된다. 테마 변경은 프로젝트 전체 페이지의 외형을 한 번에 바꾸므로, "그때 그 화면"을 보장하려면 당시 테마 내용을 함께 얼려야 한다. 상속 테마는 병합된 결과를 저장한다.
+**테마는 아직 payload에 싣지 않는다** — 프로젝트가 테마를 고르는 기능이 없어 얼릴 것이 없다(§6). 프로젝트가 테마를 고르게 되면 스냅샷이 그 참조를 싣는다(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「스냅샷」).
 
 ---
 
@@ -283,7 +278,7 @@ payload를 통째로 저장하는 이유는 복원 속도 때문이다. revision
 | | `Divider` | 구분선 |
 | | `Placeholder` | 미정 영역 자리표시 |
 
-`Text` · `Divider` · `Placeholder`는 설계서 작성에 필수적이라, `Section` · `Media`는 관리자 외 사이트 설계에 필수적이라 카탈로그에 든다. `Section`은 "화면 전체 폭 배경 + 가운데 정렬된 콘텐츠"라는 사이트 레이아웃의 기본 단위이며, 테마의 `primitives.container` · `primitives.section`을 소비한다.
+`Text` · `Divider` · `Placeholder`는 설계서 작성에 필수적이라, `Section` · `Media`는 관리자 외 사이트 설계에 필수적이라 카탈로그에 든다. `Section`은 "화면 전체 폭 배경 + 가운데 정렬된 콘텐츠"라는 사이트 레이아웃의 기본 단위다.
 
 ### 5.1 컴포넌트 정의 구조
 
@@ -292,29 +287,30 @@ payload를 통째로 저장하는 이유는 복원 속도 때문이다. revision
 ```ts
 defineComponent({
   type: 'List',
+  label: '목록',
+  description: '여러 건을 표·카드·목록 모양으로 늘어놓는다.',
+  group: 'data',
   props: z.object({ items: z.number(), columns: z.array(z.string()).optional(),
                     pagination: z.boolean(), selectable: z.boolean() }),
   editor: [                                    // 속성 패널 폼이 여기서 자동 생성됨
     { prop: 'items',      control: 'number',     label: '항목 수' },
-    { prop: 'columns',    control: 'stringList', label: '컬럼',
-      visibleWhen: { structure: 'table' } },   // 구조에 따라 보이는 속성이 다름
+    { prop: 'columns',    control: 'stringList', label: '컬럼' },
     { prop: 'pagination', control: 'switch',     label: '페이지네이션' },
   ],
-  structures: ['table', 'cardGrid', 'stackedList', 'mediaList'],  // 첫 번째가 기본
-  parts:      ['header', 'row', 'rowAlt', 'cell', 'item', 'media', 'title', 'meta'],
-  variants:   ['default', 'featured', 'compact'],
   states:     ['selected', 'disabled', 'loading', 'empty'],
   children:   'none',                          // none | many
 })
 ```
 
-**정의(계약)와 구현은 패키지가 다르다.** 위 선언은 `schema` 패키지에 있고 React에 의존하지 않는다. 구조별 실제 DOM을 그리는 함수는 `renderer` 패키지가 `(type, structure)` 키로 등록한다. `schema`가 의존을 갖지 않아야 한다는 §3.3의 원칙 때문이다. 카탈로그가 선언한 모든 구조에 구현이 존재하는지는 `renderer`의 테스트가 검사한다.
+**정의(계약)와 그리기는 패키지가 다르다.** 위 선언은 `schema` 패키지에 있고 React에 의존하지 않는다. 화면은 테마의 뷰가 그린다(§6). `schema`가 의존을 갖지 않아야 한다는 §3.3의 원칙 때문이다.
 
-여기 선언된 것이 곧 **테마가 쓸 수 있는 어휘**다. 테마는 `structures`에 없는 구조를 고를 수 없고, `parts`에 없는 조각을 스타일링할 수 없으며, `states`에 없는 상태를 만들 수 없다. 테마 검증이 이 선언과 대조해 이루어진다.
+**구조 · 조각 · 변형은 카탈로그에 없다 — 테마가 선언한다.** 컴포넌트가 어떤 마크업으로 그려질지는 테마의 뷰가, 고를 수 있는 변형(`variant`)과 변형마다 감출 속성은 테마 manifest 가 정한다(§6.0). 그래서 스키마는 노드의 `variant` 값을 판정하지 않는다 — 테마에 없는 값이면 렌더러가 그 테마의 기본 변형으로 그린다.
 
-상태는 props에서 파생된다. `states`에 선언된 이름과 같은 props가 `true`이면 그 상태가 활성화되고, 렌더러가 `data-wb-state`에 실어 보낸다.
+**변형을 prop 에서 파생하는 컴포넌트가 있다**(`variantFrom` — `Text`의 `role` · `Field`의 `control` · `Divider`의 `direction`). 그 enum prop 의 값이 `data-wb-variant`가 되고, 노드의 `variant`는 무시된다(검증이 `ignored-variant` 경고로 알린다).
 
-속성 패널이 정의에서 자동 생성되므로 컴포넌트를 늘려도 에디터 코드를 수정하지 않는다. `visibleWhen`은 현재 테마가 선택한 구조에 따라 관련 없는 속성을 감춘다 — 카드 그리드에는 "컬럼"이 의미 없다.
+상태는 props에서 파생된다. `states`에 선언된 이름과 같은 props가 `true`이면 그 상태가 활성화되고, 렌더러가 `data-wb-state`에 실어 보낸다. 상태는 설계서 표현에 필수다. "필수값 미입력 시 저장 버튼 비활성", "선택된 행 강조" 같은 서술을 목업에서 실제로 보여주려면 상태를 켤 수 있어야 한다. 상태 목록은 여기 고정 선언되어 있어 임의 상태를 만들 수 없다.
+
+속성 패널이 정의에서 자동 생성되므로 컴포넌트를 늘려도 에디터 코드를 수정하지 않는다.
 
 ---
 
@@ -324,154 +320,34 @@ defineComponent({
 
 wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, 포털, 커머스, 문서 사이트의 설계도 같은 도구로 해야 한다. 이 요구가 테마의 범위를 결정한다.
 
-**테마는 색 팔레트가 아니라 디자인 시스템 정의다.** 같은 페이지 스키마가 테마에 따라 데이터 테이블로도, 카드 그리드로도, 히어로가 있는 랜딩 페이지로도 렌더된다. 자율적인 웹 디자인과 컴포넌트 매핑이 모두 테마의 책임이다.
+**테마는 색 팔레트가 아니라 디자인 시스템 정의다.** 같은 페이지 스키마가 테마에 따라 데이터 테이블로도, 카드 그리드로도, 히어로가 있는 랜딩 페이지로도 렌더된다.
 
-이를 위해 렌더러의 역할을 조정한다. 렌더러는 컴포넌트마다 **여러 구조 구현체(structure)** 를 가지고, 테마가 그중 하나를 선택한다.
+**테마는 코드 패키지다.** headless SDK(`@wirebound/theme-sdk`) 위에 컴포넌트마다 React 뷰를 짜고, manifest(토큰 · 컴포넌트별 변형 · 패턴)를 선언한다. 뷰가 없는 컴포넌트는 SDK 기본 뷰로 그린다. 카탈로그는 닫혀 있다 — 테마는 컴포넌트 종류나 props 를 더하지 못하고 형태만 정한다. 이 선을 지켜야 스키마가 닫힌 채로 남고, 검증 · 내보내기 · LLM 조작이 성립한다. 목표 설계 전체(업로드 · 버전 · 프로젝트의 테마 선택 · 토큰 편집 · 스냅샷의 테마 · 내보내기의 테마)는 `docs/superpowers/specs/2026-09-27-code-themes-design.md`가 든다.
 
-```jsonc
-// 관리자 테마                       // 마케팅 테마
-"List": { "structure": "table" }     "List": { "structure": "cardGrid" }
-```
+**지금 서 있는 것:**
 
-구조 구현체는 렌더러가 가진 고정 목록이다. 테마가 임의 마크업이나 템플릿을 정의하지는 못한다. 이 선을 지켜야 스키마가 닫힌 채로 남고, 검증·내보내기·LLM 조작이 성립한다.
+- **캔버스는 same-origin iframe 안에서 SDK 뷰로 그리고, 저장소 테마 `system-admin` 하나를 싣는다**(`system-themes/admin`). 프로젝트가 테마를 고르는 기능 · 테마 업로드 · 토큰 편집은 아직 없다.
+- **변형은 manifest 가 선언한다** — `components[type].variants` · `defaultVariant` · `hideProps`. 노드의 `variant`가 선언 밖이면 렌더러가 `defaultVariant`로 그린다(페이지 데이터는 바꾸지 않는다). 속성 패널의 변형 칸과 감출 속성도 이 선언을 읽는다.
+- **내보내기(HTML 번들 · PPTX 화면)는 테마 없이 SDK 기본 뷰와 그 CSS로 그린다**(§11.3).
 
-### 6.1 테마 규격
+### 6.1 노드 속성
 
-```
-Theme
-├── meta         id, name, description, extends, version, preview
-├── tokens       디자인 토큰 (palette → semantic → scale 3단)
-├── primitives   사이트 골격 상수 (컨테이너, 그리드, 섹션 리듬, 브레이크포인트)
-├── components   컴포넌트 매핑 (structure + base/parts/variants/states)
-├── patterns     복합 구성 레시피 (헤더/히어로/기능그리드/CTA/푸터)
-└── assets       폰트, 아이콘 세트, 플레이스홀더 표현
-```
+노드의 루트에는 `data-wb-*` 속성이 실리고, 테마의 CSS는 이것을 셀렉터로 쓴다.
 
-### 6.2 meta
+| 속성 | 값 | 누가 싣나 |
+|---|---|---|
+| `data-wb-id` | 노드 id | 렌더러 — 에디터의 선택 · 잠금 · 코멘트 앵커 |
+| `data-wb-component` | 컴포넌트 타입 | 렌더러 |
+| `data-wb-variant` | 변형(`variantFrom`이면 그 prop 값) | 렌더러 |
+| `data-wb-state` | 공백 구분 상태 목록 | 렌더러 |
+| `data-wb-structure` | 기본 뷰의 형태 이름 | SDK 기본 뷰 |
+| `data-wb-part` | 기본 뷰의 내부 조각 이름 | SDK 기본 뷰 |
 
-```jsonc
-{
-  "id": "acme-portal",
-  "name": "ACME 포털",
-  "description": "사내 포털용 파생 테마",
-  "extends": "system:portal",     // 시스템 테마 상속 (선택)
-  "version": "1.2.0",
-  "preview": "…"                  // 갤러리용 썸네일 (생성물)
-}
-```
+앞의 넷은 렌더러가 짓고 뷰가 자기 루트(`Root`)에 편다 — 어느 테마의 뷰든 같다. 뒤의 둘은 SDK 기본 뷰의 마크업 훅이라, 자기 뷰를 짠 테마는 자기 마크업을 쓴다.
 
-### 6.3 tokens — 3단 분리
+### 6.2 patterns — 테마가 소유한 구성 레시피
 
-```jsonc
-{
-  "palette": {                                   // 1단: 원시값
-    "blue.500": "#3b82f6", "blue.600": "#2563eb",
-    "gray.50": "#f9fafb", "gray.500": "#6b7280", "gray.900": "#111827"
-  },
-  "semantic": {                                  // 2단: 의미 (palette 참조)
-    "primary": "palette.blue.600",
-    "primaryHover": "palette.blue.500",
-    "text": "palette.gray.900",
-    "textMuted": "palette.gray.500",
-    "surface": "#ffffff",
-    "canvas": "palette.gray.50",
-    "border": "#e5e7eb",
-    "danger": "#dc2626"
-  },
-  "scale": {                                     // 3단: 스케일
-    "space":  { "unit": "4px" },                 // space.1 … space.24 파생
-    "radius": { "sm": "4px", "md": "6px", "lg": "12px", "full": "9999px" },
-    "shadow": { "sm": "0 1px 2px rgba(0,0,0,.05)", "lg": "0 10px 24px rgba(0,0,0,.12)" },
-    "typography": {
-      "family":  { "sans": "Pretendard, sans-serif", "serif": "…", "mono": "…" },
-      "display": { "fontSize": "56px", "lineHeight": 1.1,  "fontWeight": 700, "letterSpacing": "-0.02em" },
-      "h1":      { "fontSize": "32px", "lineHeight": 1.25, "fontWeight": 700 },
-      "body":    { "fontSize": "14px", "lineHeight": 1.5,  "fontWeight": 400 },
-      "caption": { "fontSize": "12px", "lineHeight": 1.4,  "fontWeight": 400 }
-    },
-    "motion": { "fast": "120ms", "base": "200ms", "easing": "cubic-bezier(.4,0,.2,1)" }
-  }
-}
-```
-
-의미 계층을 두는 이유는 다크 테마와 브랜드 교체 때문이다. `semantic`만 갈아끼우면 전체가 바뀐다. `space.unit`만 정의하면 `space.1`~`space.24`가 배수로 파생되므로 간격 토큰을 나열할 필요가 없다.
-
-### 6.4 primitives — 사이트 골격
-
-```jsonc
-{
-  "container": { "maxWidth": "1200px", "gutter": "space.6" },
-  "grid":      { "columns": 12, "gap": "space.6" },
-  "section":   { "paddingY": "space.20", "paddingYCompact": "space.10" },
-  "breakpoints": { "sm": 640, "md": 768, "lg": 1024, "xl": 1280 }
-}
-```
-
-"실제 사이트처럼 보이는" 인상의 절반은 여기서 나온다. 컨테이너 폭과 섹션의 세로 리듬이 사이트의 성격을 결정한다 — 관리자 화면은 `maxWidth: fluid`에 좁은 섹션 여백을, 마케팅 사이트는 `1200px`에 넉넉한 여백을 쓴다.
-
-`breakpoints`는 **테마가 반응형 스타일을 정의**하기 위한 것이다. 페이지 편집 자체는 여전히 데스크톱 기준이며(§2.1), 뷰포트 프리셋을 바꾸면 테마가 정의한 브레이크포인트 스타일이 적용되어 확인만 가능하다.
-
-### 6.5 components — 구조 + 스킨
-
-```jsonc
-{
-  "List": {
-    "structure": "cardGrid",
-    "base":     { "gap": "space.6" },
-    "parts": {
-      "item":  { "bg": "semantic.surface", "radius": "radius.lg",
-                 "shadow": "shadow.sm", "padding": "space.5" },
-      "media": { "aspectRatio": "16/9", "objectFit": "cover", "radius": "radius.md" },
-      "title": { "typography": "h3" }
-    },
-    "variants": {
-      "featured": { "parts": { "item": { "shadow": "shadow.lg" } } },
-      "compact":  { "parts": { "item": { "padding": "space.3" } } }
-    },
-    "states": {
-      "selected": { "parts": { "item": { "borderColor": "semantic.primary", "borderWidth": "2px" } } },
-      "disabled": { "opacity": 0.5 }
-    },
-    "responsive": {
-      "md": { "base": { "gap": "space.4" } }
-    }
-  }
-}
-```
-
-네 개의 층이 있다.
-
-| 층 | 역할 |
-|---|---|
-| `structure` | 렌더러가 제공하는 구조 구현체 중 선택 |
-| `base` / `parts` | 컴포넌트 루트와 내부 조각의 기본 스킨 |
-| `variants` | 노드가 `variant`로 선택하는 표현 변형 |
-| `states` | 노드 props에서 파생되는 상태 스킨 |
-| `responsive` | 브레이크포인트별 오버라이드 |
-
-`parts`가 **headless 컴포넌트를 테마에 매핑하는 실제 지점**이다. 렌더러는 내부 조각에 `data-wb-part`를 붙여 내보내고, 테마가 그 조각을 스타일링한다.
-
-`states`는 설계서 표현에 필수다. "필수값 미입력 시 저장 버튼 비활성", "선택된 행 강조" 같은 서술을 목업에서 실제로 보여주려면 상태 스킨이 있어야 한다. 상태 목록은 컴포넌트 정의에 고정 선언되어 있어(§5.1) 임의 상태를 만들 수 없다.
-
-**구조 구현체 목록** (렌더러가 구현, 테마가 선택)
-
-| 컴포넌트 | structure 옵션 |
-|---|---|
-| `List` | `table` · `cardGrid` · `stackedList` · `mediaList` |
-| `Card` | `plain` · `bordered` · `elevated` · `mediaTop` · `horizontal` |
-| `Tabs` | `underline` · `pill` · `enclosed` · `vertical` |
-| `SearchForm` | `inline` · `stacked` · `collapsible` |
-| `EntryForm` | `labelLeft` · `labelTop` · `sectioned` |
-| `Field` | `outlined` · `filled` · `underlined` |
-| `Button` | `solid` · `outline` · `text` |
-| `Tree` | `indent` · `accordion` |
-| `KeyValue` | `table` · `definitionList` · `cardGrid` |
-| `Section` | `contained` · `fullBleed` · `splitBg` |
-| `Media` | `image` · `video` · `illustration` · `chart` |
-
-### 6.6 patterns — 테마가 소유한 구성 레시피
-
-패턴은 테마에 속한 **파라미터화된 스키마 조각**이다. 레이아웃이 패턴을 조합해 셸을 만들고, 페이지도 패턴을 꽂아 콘텐츠를 채운다.
+패턴은 테마 manifest 의 `patterns`에 든 **파라미터화된 스키마 조각**이다. 레이아웃이 패턴을 조합해 셸을 만들고, 페이지도 패턴을 꽂아 콘텐츠를 채운다.
 
 ```jsonc
 {
@@ -482,7 +358,7 @@ Theme
       "schema": {
         "type": "Section", "variant": "hero",
         "children": [
-          { "type": "Grid", "props": { "columns": 2, "gap": "space.10" }, "children": [
+          { "type": "Grid", "props": { "columns": 2 }, "children": [
             { "type": "Flex", "props": { "direction": "column" }, "children": [
               { "type": "Text", "slot": "title", "props": { "role": "display" } },
               { "type": "Text", "slot": "body",  "props": { "role": "body" } },
@@ -513,110 +389,6 @@ Theme
 | 범위 | 페이지 일부 (섹션 단위) | 페이지 통째 |
 | 테마 교체 시 | 다른 모양으로 재현됨 | 그대로 유지 |
 | 용도 | 디자인 언어의 구성 단위 | 반복 화면의 출발점 |
-
-### 6.7 assets
-
-```jsonc
-{
-  "fonts": [ { "family": "Pretendard", "src": "…", "weights": [400, 500, 700] } ],
-  "icons": "lucide",                              // 내장 아이콘 세트 중 선택
-  "placeholder": { "style": "skeleton" }          // skeleton | blueprint | photo | solid
-}
-```
-
-`placeholder.style`은 `Media`와 `Placeholder` 컴포넌트의 표현을 결정한다. 와이어프레임 느낌이 필요하면 `blueprint`, 실제 사이트에 가깝게 보여야 하면 `photo`(더미 이미지)를 쓴다.
-
-### 6.8 스타일 프로퍼티 화이트리스트
-
-임의 CSS는 여전히 쓸 수 없다. 다만 웹 디자인이 가능한 수준으로 어휘를 넓힌다.
-
-```
-색/배경:  bg, bgGradient, bgImage, bgSize, bgPosition, fg
-간격:     padding, paddingX, paddingY, margin, marginX, marginY, gap
-크기:     width, height, minWidth, maxWidth, minHeight, aspectRatio
-배치:     display, direction, align, justify, wrap, position, inset, zIndex
-테두리:   borderColor, borderWidth, borderStyle, radius
-타이포:   typography(스케일 참조), fontSize, fontWeight, lineHeight,
-          letterSpacing, textAlign, textTransform, textDecoration
-이미지:   objectFit, objectPosition
-효과:     shadow, opacity, overflow, transition
-```
-
-값은 **토큰 참조**(`"semantic.primary"`, `"space.6"`, `"radius.lg"`) 또는 **리터럴**(`"#ffffff"`, `"1px"`, `"16/9"`)만 허용한다. `calc()`나 임의 함수는 받지 않는다.
-
-제한을 유지하는 이유는 두 가지다. (1) 값을 검증할 수 있고 GUI 편집이 가능하다. (2) 설계서가 무제한 스타일 튜닝의 장이 되는 것을 막는다. **PPTX 무손실 변환은 목표에서 제외한다** — 배경 그라디언트와 이미지를 허용하므로 도형 변환은 성립하지 않고, PPTX는 렌더 이미지 삽입 방식으로 확정한다.
-
-### 6.9 상속과 병합
-
-```
-system:portal  (내장, 읽기 전용)
-      ↓ extends
-acme-portal    (프로젝트 소유, 일부만 오버라이드)
-```
-
-병합 규칙:
-
-- 객체는 **깊은 병합**(deep merge)한다.
-- 배열은 **교체**한다(부분 병합하지 않는다).
-- `null`을 명시하면 상속된 키를 **삭제**한다.
-- 상속 깊이는 1단계로 제한한다. 파생의 파생은 만들지 않는다.
-
-대부분의 프로젝트는 시스템 테마를 상속해 `semantic` 색 몇 개와 `typography.family`만 덮어쓴다. 테마 전체를 손으로 쓰는 일이 없어야 한다.
-
-### 6.10 테마 관리
-
-| 층위 | 소유 | 편집 | 용도 |
-|---|---|---|---|
-| **시스템 테마** | wirebound 내장 | 읽기 전용 | 출발점. `admin` · `saas-marketing` · `portal` · `commerce` · `docs` |
-| **프로젝트 테마** | 프로젝트 | owner | 처음부터 정의 |
-| **파생 테마** | 프로젝트 | owner | 시스템 테마 상속 + 부분 오버라이드 (권장) |
-
-- **저작 UI** — `tokens`는 전용 GUI(컬러 피커, 스케일 에디터, 타이포 미리보기)로 편집한다. `components`·`patterns`·`primitives`는 스키마 검증이 붙은 JSON 에디터로 편집한다. 기획자는 토큰만 만지고, 깊은 수정은 디자이너·개발자가 한다.
-- **미리보기** — 테마 편집 화면은 모든 컴포넌트를 한 페이지에 늘어놓은 **테마 갤러리**를 실시간으로 보여준다. 변경이 전 컴포넌트에 어떻게 퍼지는지 즉시 확인한다.
-- **가져오기/내보내기** — 테마는 JSON 한 벌로 내보내고 가져온다. 회사 디자인 시스템을 한 번 테마로 만들면 프로젝트마다 재사용한다.
-- **버전** — `meta.version`을 기록한다. 테마 변경은 프로젝트 전체 페이지의 외형을 바꾸므로, 스냅샷은 참조 중인 테마 내용을 함께 저장한다(§4.5).
-- **권한** — 테마 편집은 owner 전용이다(§10).
-
-### 6.11 컴파일
-
-`themes`가 테마를 CSS 한 장으로 컴파일한다.
-
-```css
-:root {
-  --wb-semantic-primary: #2563eb;
-  --wb-space-6: 24px;
-  --wb-radius-lg: 12px;
-  --wb-container-max: 1200px;
-}
-
-[data-wb-component="List"][data-wb-structure="cardGrid"] {
-  display: grid; gap: var(--wb-space-6);
-}
-[data-wb-component="List"] [data-wb-part="item"] {
-  background: var(--wb-semantic-surface);
-  border-radius: var(--wb-radius-lg);
-  box-shadow: var(--wb-shadow-sm);
-}
-[data-wb-component="List"][data-wb-state~="selected"] [data-wb-part="item"] {
-  border-color: var(--wb-semantic-primary);
-}
-@media (max-width: 768px) {
-  [data-wb-component="List"][data-wb-structure="cardGrid"] { gap: var(--wb-space-4); }
-}
-```
-
-렌더러가 내보내는 속성은 여섯 개다.
-
-| 속성 | 값 | 용도 |
-|---|---|---|
-| `data-wb-id` | 노드 id | 에디터의 선택·잠금·코멘트 앵커 |
-| `data-wb-component` | 컴포넌트 타입 | 테마 셀렉터의 기준 |
-| `data-wb-structure` | 테마가 고른 구조 | 구조별 스타일 분기 |
-| `data-wb-variant` | 노드의 variant | 표현 변형 |
-| `data-wb-part` | 내부 조각 이름 | 복합 컴포넌트 내부 스타일링 |
-| `data-wb-state` | 공백 구분 상태 목록 | 상태 스킨 |
-
-이 여섯이 렌더러와 테마 사이의 전체 계약이다. 웹 앱은 컴파일된 CSS를 `<style>`로 주입하고, 내보낸 번들은 `assets/theme.css`로 담는다. 동일한 컴파일러를 쓰므로 결과가 같다.
 
 ---
 
@@ -743,11 +515,9 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 
 **좌측 하단 — 구조 트리.** 선택된 페이지의 컴포넌트 트리다. 노드 선택·추가·삭제·이동(드래그)을 여기서 한다. 편집 모드에서만 보이며, 뷰 모드에서는 접혀 메뉴 트리가 전체를 쓴다.
 
-**중앙 — 캔버스.** 편집 모드에서 선택 아웃라인과 번호 마커 오버레이가 보인다. 캔버스에서도 노드를 클릭해 선택할 수 있지만, **구조 변경은 구조 트리에서, 속성 변경은 속성 패널에서** 한다. 캔버스 직접 드래그 편집은 지원하지 않는다.
+**중앙 — 캔버스.** 문서는 same-origin iframe 안에 그린다 — 테마의 CSS가 셸에 새지 않고, 뷰포트 폭이 iframe 의 폭이라 테마의 미디어 쿼리가 그 폭을 본다. 편집 모드에서 선택 아웃라인과 번호 마커 오버레이가 보인다. 캔버스에서도 노드를 클릭해 선택할 수 있지만, **구조 변경은 구조 트리에서, 속성 변경은 속성 패널에서** 한다. 캔버스 직접 드래그 편집은 지원하지 않는다.
 
-뷰포트 폭 프리셋(1920 / 1440 / 1280 / 1024 / 768 / 375)과 줌을 제공한다. 폭을 바꾸면 테마가 정의한 브레이크포인트 스타일(§6.4)이 적용된다. 페이지 스키마 자체에는 반응형 분기가 없으므로, 이는 **편집이 아니라 확인**이다.
-
-테마 전환 드롭다운도 캔버스 상단에 둔다. 같은 페이지를 다른 테마로 즉시 바꿔 보며 비교할 수 있다. 테마를 읽지 못하면 캔버스는 구조 기본 스타일로 그리되 셸 머리에 그렇다고 한 줄로 말하고 다시 읽을 단추를 둔다 — 말하지 않으면 기본 스타일을 설계서의 모습으로 읽는다.
+뷰포트 폭 프리셋(1920 / 1440 / 1280 / 1024 / 768 / 375)과 줌을 제공한다. 폭을 바꾸면 테마가 정의한 브레이크포인트 스타일이 적용된다. 페이지 스키마 자체에는 반응형 분기가 없으므로, 이는 **편집이 아니라 확인**이다.
 
 **우측 — 탭 패널.** 모드에 따라 탭 구성이 바뀐다.
 
@@ -766,7 +536,7 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 
 | 역할 | 가능한 일 |
 |---|---|
-| **owner** | 전부 + 멤버 초대/역할 변경, 프로젝트 삭제, 테마·레이아웃 편집, 스냅샷 복원 |
+| **owner** | 전부 + 멤버 초대/역할 변경, 프로젝트 삭제, 레이아웃 편집, 스냅샷 복원 |
 | **editor** | 메뉴·페이지·컴포넌트·코멘트·상호작용 편집, 스냅샷 생성 (복원 불가) |
 | **viewer** | 조회 전용 — 편집·코멘트 모두 불가. API 토큰 발급은 된다(토큰은 발급자의 권한을 넘지 않는다) |
 
@@ -782,7 +552,7 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 - API 토큰은 **발급자의 권한을 상속**한다. editor가 만든 토큰으로는 스냅샷 복원이 안 된다. 토큰 스코프는 프로젝트 단위다.
 - 토큰은 **세션으로만** 발급·조회·폐기한다(토큰으로 토큰을 다루지 않는다). 프로젝트 안에서는 자기가 만든 토큰만 보고 거두고, 계정 아래에서는 **자기 토큰 전부를 프로젝트를 가리지 않고** 보고 거둔다 — 멤버에서 빠진 프로젝트에 남은 토큰(다시 멤버가 되면 산다)까지다. 그 줄에는 프로젝트의 이름을 싣지 않는다(빠진 뒤의 이름을 숨긴다 — 비멤버에게 프로젝트를 숨기는 규칙과 같다). 에디터의 «API 토큰» 화면이 그 길이다.
 
-테마·레이아웃 편집을 owner로 제한한 이유는 이 둘이 프로젝트 전체 페이지의 외형을 한 번에 바꾸는 전역 자원이기 때문이다. 시스템 테마는 누구도 편집할 수 없으며, 수정이 필요하면 `extends`로 파생 테마를 만든다(§6.9).
+레이아웃 편집을 owner로 제한한 이유는 레이아웃이 프로젝트 전체 페이지의 외형을 한 번에 바꾸는 전역 자원이기 때문이다.
 
 ---
 
@@ -798,7 +568,7 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 
 "현재 페이지를 프리셋으로 저장"으로 프로젝트 프리셋을 추가할 수 있다. 프리셋 적용 시 노드 `id`를 새로 발급한다.
 
-프리셋은 **테마 패턴(§6.6)과 다른 것**이다. 프리셋은 프로젝트가 소유한 페이지 통째 템플릿이고 테마를 바꿔도 그대로다. 패턴은 테마가 소유한 섹션 단위 레시피이고 테마를 바꾸면 다른 모양으로 재현된다. 페이지를 만들 때 프리셋으로 출발하고, 그 안에 패턴을 꽂아 채우는 것이 일반적인 흐름이다.
+프리셋은 **테마 패턴(§6.2)과 다른 것**이다. 프리셋은 프로젝트가 소유한 페이지 통째 템플릿이고 테마를 바꿔도 그대로다. 패턴은 테마가 소유한 섹션 단위 레시피이고 테마를 바꾸면 다른 모양으로 재현된다. 페이지를 만들 때 프리셋으로 출발하고, 그 안에 패턴을 꽂아 채우는 것이 일반적인 흐름이다.
 
 ### 11.2 페이지 JSON
 
@@ -824,7 +594,7 @@ wirebound-export/
     관리자-회원-목록.html
     관리자-회원-상세.html
   assets/
-    theme.css           테마 컴파일 결과
+    theme.css           SDK 기본 뷰의 CSS (테마는 아직 싣지 않는다 — §6.0)
     runtime.js          상호작용 런타임
 ```
 
@@ -883,13 +653,7 @@ wireb export --format html -o dir  정적 번들 생성
 - `EntryForm` 안에 `Field`가 하나도 없는 등 구조적 공백
 - 프로젝트 명명 규칙 위반 (설정 가능)
 
-**테마 규칙** (§6 규격 대조)
-- 컴포넌트 정의에 없는 `structure` · `part` · `state` 참조
-- 존재하지 않는 토큰 참조 (`semantic.brand` 오타 등)
-- 화이트리스트에 없는 스타일 프로퍼티
-- 노드가 쓰는 `variant`를 테마가 정의하지 않음
-- 패턴 `slots` 계약과 `schema` 불일치
-- `extends` 대상이 없거나 상속 깊이 위반
+**테마** — 테마 자체의 결함(manifest · 토큰 · 뷰)은 lint 가 아니라 테마 빌드와 업로드 검증이 막는다(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「업로드 검증」). 프로젝트가 고른 테마에 없는 `variant` 는 같은 문서 「CLI · MCP」의 lint 규칙이 본다.
 
 ### 12.5 스킬
 
@@ -962,9 +726,9 @@ migrations = [
 |---|---|
 | `schema` | **patch/inverse 왕복 속성 테스트** — 임의 편집 시퀀스를 적용한 뒤 역순으로 역적용하면 원본과 정확히 일치해야 한다. 이력 시스템 전체의 안전망 |
 | `schema` | zod 검증 경계값, 마이그레이션 체인 |
-| `renderer` | 컴포넌트 × 구조 조합별 DOM 스냅샷 테스트, `data-wb-*` 속성 계약 검증 |
-| `themes` | 토큰 참조 해석(3단 체인), 화이트리스트 위반 거부, `extends` 병합 규칙(깊은 병합·배열 교체·null 삭제), 컴포넌트 정의와의 대조 검증 |
-| `themes` | **시스템 테마 전수 검증** — 내장 테마 각각이 모든 컴포넌트를 커버하는지, 미정의 조각이 없는지 |
+| `renderer` | 뷰 경로(테마 뷰 · 기본 뷰 · 뷰 예외의 노드 단위 폴백), `data-wb-*` 속성 계약 검증 |
+| `themes` | 패턴 규격 · 전개(슬롯 · id 재발급), 스냅샷 payload 규격 |
+| `theme-sdk` | 기본 뷰가 카탈로그 전부를 덮는지, 뷰 계약(`Root` · `Focus`) |
 | `api` | 동시편집 통합 테스트 — 두 클라이언트 동시 patch, 잠금 경합, 편집 중 권한 회수, WS 재연결 후 델타 복구 |
 | `api` | 권한 매트릭스 (역할 × 엔드포인트) |
 | `exporter` | 내보낸 HTML의 DOM과 웹 렌더 DOM의 동등성 검증 |
@@ -983,11 +747,9 @@ patch/inverse 왕복 테스트가 가장 중요하다. undo, 스냅샷 복원, M
 | **P2a** | 편집 파이프라인 — revision 로그, JSON Patch 엔드포인트, 개인 undo/redo의 서버 쪽 | 편집 이력이 쌓이고 되돌릴 수 있다 |
 | **P2b** | 에디터 3분할 셸 — 메뉴·구조 트리, 캔버스, 속성 패널, 낙관적 편집 | 혼자서 설계서를 작성할 수 있다 |
 | **P3** | WebSocket 실시간 동기화 + 소프트 잠금 | 여럿이 동시에 작업한다 |
-| **P4a** | 테마 엔진 — 규격 정의·검증, `extends` 병합, CSS 컴파일, 레이아웃 관리 | 테마 JSON을 넣으면 외형이 바뀐다 |
-| **P4b** | 구조 구현체 전개 (`structures` 목록 완성) + 시스템 테마 세트 5종 | 관리자 외 사이트 형태를 그릴 수 있다 |
-| **P4c** | 테마 저작 UI — 토큰 GUI, JSON 에디터, 테마 갤러리, 가져오기/내보내기 | 디자이너가 테마를 만든다 |
+| **P4** | 테마 — 코드 테마 차수 A1 ~ A6(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「진행 단계」): 뷰 SDK · iframe 캔버스(A1), `.wbtheme` · 작성자 도구(A2), 업로드 · 버전 · 프로젝트 바인딩(A3), 테마 선택 · 토큰 편집 화면(A4), 내보내기(A5), 시스템 테마 5종(A6) | 관리자 외 사이트 형태를 테마로 그리고, 테마를 코드로 짜서 올린다 |
 | **P5** | 코멘트/번호 마커 + 상호작용 규칙 + 뷰 모드 | 설계서로서 완성된다 |
-| **P6** | 스냅샷 태그/복원 (테마 동결 포함) | 버전을 관리한다 |
+| **P6** | 스냅샷 태그/복원 | 버전을 관리한다 |
 | **P7** | 페이지 프리셋 + 테마 패턴 삽입 + JSON 가져오기/내보내기 | 반복 작업이 빨라진다 |
 | **P8** | HTML 정적 번들 내보내기 | **MVP 릴리스** — 설계서를 배포한다 |
 | **P9** | `wireb` CLI + MCP + 스킬 + `.wirebound.json` + lint | 에이전트가 설계서를 읽고 구현한다 |
@@ -995,9 +757,7 @@ patch/inverse 왕복 테스트가 가장 중요하다. undo, 스냅샷 복원, M
 
 각 단계는 그 자체로 동작 가능한 상태를 만들고 끝낸다. P2b까지 가면 단독 사용이 가능하고, P8이 1차 릴리스다.
 
-P4를 셋으로 쪼갠 이유는 테마가 이 제품의 차별점이자 가장 큰 덩어리이기 때문이다. P4a는 엔진, P4b는 표현력, P4c는 저작 도구다. P4b까지만 해도 내장 테마로 다양한 사이트를 그릴 수 있고, P4c는 그다음에 붙여도 된다.
-
-P2를 둘로 쪼갠 이유는 P4와 같다. P2a는 서버(편집 파이프라인과 이력)이고 P2b는
+P2를 둘로 쪼갠 이유: P2a는 서버(편집 파이프라인과 이력)이고 P2b는
 그 위에 얹히는 에디터 UI다. 테스트 방식이 서로 다르고(vitest + Postgres vs.
 컴포넌트 테스트), P2a만으로도 REST로 편집·되돌리기가 동작하는 상태가 된다.
 
@@ -1005,8 +765,6 @@ P2를 둘로 쪼갠 이유는 P4와 같다. P2a는 서버(편집 파이프라인
 
 ## 16. 열린 질문 (구현 중 결정)
 
-- **구조 구현체 목록의 최종 범위** — §6.5의 목록은 초안이다. 시스템 테마 5종을 실사용하면서 부족한 구조를 추가하고 안 쓰는 구조를 뺀다. 이 목록은 렌더러 구현량과 직결되므로 실사용으로 검증한 뒤 고정한다.
-- **테마 마켓/공유** — 조직 계층이 없으므로 지금은 프로젝트 간 테마 공유가 JSON 내보내기/가져오기뿐이다. 수요가 확인되면 공용 테마 저장소를 검토한다.
 - **패턴 슬롯 타입 체계** — `text` · `media` · `action` 정도로 시작하되, 실제 패턴을 만들며 필요한 타입을 확정한다.
-- **스냅샷 보관 정책** — 개수 제한 또는 보관 기간. 테마를 함께 저장하므로 payload가 더 커진다. 실사용 데이터가 쌓인 뒤 결정한다.
+- **스냅샷 보관 정책** — 개수 제한 또는 보관 기간. 실사용 데이터가 쌓인 뒤 결정한다.
 - **revision 로그 압축** — 페이지당 revision이 수만 건이 되면 오래된 구간을 주기적으로 압축한다. 성능 문제가 실제로 관측되면 착수한다.

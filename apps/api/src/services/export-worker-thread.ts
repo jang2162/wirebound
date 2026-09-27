@@ -14,9 +14,8 @@ import type { ScreenBatch, ScreenRequest, ScreenResult } from './screen-render'
 const port = parentPort
 if (port === null) throw new Error('export-worker-thread 는 워커 스레드로만 띄운다(export-worker.ts)')
 
-// **워커는 메인과 모듈을 나눠 갖지 않는다** — 컴포넌트 레지스트리도 비어서 뜬다. 비어 있으면 테마 해석이 모든 컴포넌트
-// 테마를 «카탈로그에 없다»로 거절해 `asResolvedTheme`이 `null`이 되고, 번들의 `theme.css`와 pptx 화면이 **조용히 테마 없이**
-// 나온다(오류가 없다). 메인은 `buildApp`이 같은 함수를 부른다.
+// **워커는 메인과 모듈을 나눠 갖지 않는다** — 컴포넌트 레지스트리도 비어서 뜬다. 메인과 같은 함수로 채운다(메인은 `buildApp`이
+// 부른다).
 ensureCatalog()
 
 let spec: ExportJobSpec | null = null

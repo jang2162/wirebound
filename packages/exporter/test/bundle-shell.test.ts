@@ -100,7 +100,7 @@ describe('셸 CSS — 문서에 못 닿는다', () => {
     }
   })
 
-  /** 설계서 「컴파일」의 여섯 속성은 **테마의 어휘**다. 셸이 그것으로 적으면 셸이 문서를 꾸미게 된다. */
+  /** 설계서 「노드 속성」의 여섯 속성은 **테마의 어휘**다. 셸이 그것으로 적으면 셸이 문서를 꾸미게 된다. */
   it('data-wb-* 셀렉터가 없다', () => {
     for (const rule of RULES) {
       for (const selector of rule.selectors) expect(selector).not.toContain('[data-wb-')

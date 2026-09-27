@@ -136,7 +136,8 @@ const ALLOWED: { label: string; source: string }[] = [
     source: `<label htmlFor="wb-shell-preset-name" /><select id="wb-shell-preset-name" />`,
   },
   {
-    // `theme/use-theme-css.ts`·`theme/draft-css.ts`가 접두어 문자열을 상수로 든다.
+    // 접두어 문자열을 값으로 드는 코드의 꼴. 지금 `apps/web/src`에는 없다(검산: `git grep -n "'wb-shell-'" apps/web/src`) —
+    // 생기면 클래스로 세지 않아야 한다.
     label: '접두어 문자열 상수',
     source: `const SHELL_PREFIX = 'wb-shell-'\nif (name.startsWith('wb-shell-')) return`,
   },
@@ -177,7 +178,7 @@ const ALLOWED: { label: string; source: string }[] = [
     source: `<select id="wb-shell-picker-type" className="wb-shell-picker-select" />`,
   },
   {
-    // 타입 자리(`routes/editor.tsx`·`theme/theme-issues.tsx`)에 실재하는 형태.
+    // 타입 자리(`routes/editor.tsx`·`shell/shell-resizer.tsx`)에 실재하는 형태.
     label: '[닻] 타입 자리의 `className: string` 은 값에 리터럴이 없다',
     source: `function ShellRegion(props: { className: string; name: string }): ReactElement {}`,
   },

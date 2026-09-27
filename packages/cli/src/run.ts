@@ -107,7 +107,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     words: ['lint'],
-    summary: 'wireb lint [경로] [--fail-on warning]        페이지·테마의 결함 검사 (결함이 있으면 코드 10)',
+    summary: 'wireb lint [경로] [--fail-on warning]        설계서의 결함 검사 (결함이 있으면 코드 10)',
     options: {
       'fail-on': { type: 'string' },
     },

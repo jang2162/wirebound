@@ -724,63 +724,18 @@ describe('exportProjectBundle', () => {
     })
   })
 
-  it('테마를 프로젝트가 지금 쓰는 것으로 싣는다', async () => {
+  /**
+   * **번들은 테마 없이 SDK 기본 뷰 CSS 를 싣는다** — api 는 테마 코드를 싣지 않는다(`services/export-bundle.ts` 머리말).
+   * 기본 뷰 CSS 만 내는 선언(`--wb-node-grid-columns`)으로 잰다.
+   */
+  it('assets/theme.css 는 기본 뷰 CSS 이고 themeId 는 null 이다', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, '설계서 하나', 'one')
       const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
 
       const themeCss = bundle.files.find((file) => file.path === 'assets/theme.css')
-      expect(themeCss).toBeDefined()
-      // 새 프로젝트의 기본 레이아웃은 시스템 `admin`을 가리킨다(`repos/projects.ts`).
-      // **수를 여기 적지 않는다** — 시트가 비어 있지 않다는 것만 잰다.
-      expect(themeCss!.content.length).toBeGreaterThan(0)
-      expect(bundle.themeId).not.toBeNull()
-    })
-  })
-
-  /**
-   * **테마가 실제로 실렸는가.** `assets/theme.css`가 비어 있지 않은 것으로는 못 잰다 —
-   * 그 파일에는 **구조 기본 CSS**가 늘 들어 있어서 테마가 없어도 길이가 0이 아니다
-   * (테마를 버리는 변이가 그 검사를 뚫는다). 그래서 **테마를 벗긴 같은 프로젝트와 견준다.**
-   */
-  it('테마를 벗기면 assets/theme.css가 달라진다', async () => {
-    await withApi(async (ctx) => {
-      const fixture = await 설계서(ctx, '설계서 하나', 'one')
-      const 테마있음 = await exportProjectBundle(ctx.db, fixture.projectId)
-
-      const res = await ctx.app.inject({
-        method: 'PUT',
-        url: `/api/projects/${fixture.projectId}/theme`,
-        cookies: fixture.cookie,
-        payload: { themeId: null },
-      })
-      expect(res.statusCode).toBe(200)
-      const 테마없음 = await exportProjectBundle(ctx.db, fixture.projectId)
-
-      const css = (bundle: { files: { path: string; content: string }[] }) =>
-        bundle.files.find((file) => file.path === 'assets/theme.css')!.content
-
-      expect(css(테마있음)).not.toBe(css(테마없음))
-      // 카나리아: 둘 다 비어 있으면 위 견주기가 아무것도 안 지킨다.
-      expect(css(테마있음).length).toBeGreaterThan(0)
-      expect(css(테마없음).length).toBeGreaterThan(0)
-    })
-  })
-
-  it('테마를 벗긴 프로젝트도 번들이 나온다', async () => {
-    await withApi(async (ctx) => {
-      const fixture = await 설계서(ctx, '설계서 하나', 'one')
-      const res = await ctx.app.inject({
-        method: 'PUT',
-        url: `/api/projects/${fixture.projectId}/theme`,
-        cookies: fixture.cookie,
-        payload: { themeId: null },
-      })
-      expect(res.statusCode).toBe(200)
-
-      const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
+      expect(themeCss?.content).toContain('--wb-node-grid-columns')
       expect(bundle.themeId).toBeNull()
-      expect(pageFiles(bundle.files)).toHaveLength(4)
     })
   })
 })

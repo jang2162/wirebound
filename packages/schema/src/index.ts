@@ -22,7 +22,6 @@ export { defineComponent } from './component/define'
 export type { ComponentGroup } from './component/group'
 export { COMPONENT_GROUP_LABELS, COMPONENT_GROUPS, isComponentGroup } from './component/group'
 export {
-  defaultStructure,
   getComponent,
   listComponents,
   registerComponent,

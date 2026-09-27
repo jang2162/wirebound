@@ -1,6 +1,6 @@
 /**
  * 스냅샷 저장소. SQL만 안다 — HTTP도 zod도 payload를 **만드는** 일도 이 파일 밖이다
- * (`repos/themes.ts`·`repos/comments.ts`와 같은 관례). API가 주고받는 키는 camelCase,
+ * (`repos/comments.ts`와 같은 관례). API가 주고받는 키는 camelCase,
  * DB 컬럼은 snake_case이고 그 변환은 이 파일이 전담한다.
  *
  * ---
@@ -38,39 +38,20 @@
  * 500(서버가 잘못했다)이 아니라 400이어야 하므로 그 예외가 나기 전에 여기서 끊는다 —
  * `repos/comments.ts`와 같은 판단이다.
  *
- * ## payload 검사는 **죽은 코드가 아니다** — 도달 경로가 실재한다
+ * ## payload 검사는 지금 저장된 값으로는 도달하지 않는다 — 그래도 둔다
  *
- * ***"DB가 삽입 시점에 막으니 payload의 도달 경로는 0"*은 거짓 근거다.** 그 문장대로면
- * 이 검사는 지워도 되는 줄이 되고, 다음 사람이 지운다.
- *
- * 구멍은 `themes`다. 그 표의 절 다섯은 `jsonb`가 아니라 **`json`** 컬럼이고(0006 — 키 순서
- * 계약 때문에 그렇게 골랐다), **`json`은 NUL을 받는다.** 같은 값으로 두 캐스팅을 나란히 치면
- * 갈린다:
+ * payload 의 값은 전부 `text`·`jsonb` 칸에서 온다. 둘 다 NUL 을 **삽입 시점에** 막으므로(`22021` · `22P05`) 저장된 값으로는
+ * payload 에 NUL 이 실릴 수 없다. 막히지 않는 것은 `json` 칸이다 — 저장되는 것은 `JSON.stringify`가 만든 텍스트이고 거기서
+ * NUL 은 여섯 글자 이스케이프(`\u0000`)라 `json`은 원문 그대로 받고 `jsonb`는 파싱하며 풀다가 죽는다:
  *
  * | 대상 | 결과 |
  * |---|---|
- * | `'{"semantic":{"primary":"#fff\u0000"}}'::json` | **들어간다** |
+ * | `'{"a":"#fff\u0000"}'::json` | **들어간다** |
  * | 같은 값 `::jsonb` | **`22P05 unsupported Unicode escape sequence`** |
  *
- * **왜 들어가는가:** 저장되는 것은 `JSON.stringify`가 만든 텍스트이고 거기서 NUL은 여섯
- * 글자 이스케이프(`\u0000`)다 — **날 NUL 바이트가 아니다.** `json`은 원문을 그대로 두므로
- * 통과하고, `jsonb`는 파싱하면서 그 이스케이프를 실제 문자로 풀기 때문에 죽는다.
- *
- * **그래서 그 절을 막는 것은 DB가 아니라 `repos/themes.ts`의 `assertNoNulByte` 한 줄뿐이다.**
- * 그 줄을 끄면(변이로 심는다) 전체 사슬이 이렇게 간다:
- *
- * ```
- * POST /themes            → 201            (가드가 켜져 있으면 400)
- * findThemeById 되읽기    → NUL 있음 = true
- * captureSnapshot         → 'captured', payload에 NUL 있음 = true
- * POST /snapshots         → 400 "스냅샷에 NUL 문자(U+0000)를 포함할 수 없습니다"
- * 남은 snapshots 행       → 0
- * ```
- *
- * **마지막 400을 내는 것이 이 검사다.** 없으면 그 요청은 `payload::jsonb` 캐스팅에서
- * `22P05`로 죽어 **500**이 된다 — 사용자가 보낸 글자 때문에 서버가 잘못했다고 말하는 그
- * 형태다. `test/snapshots.test.ts`의 `payload에 NUL이 실리면 400이다`가 **프로덕션을 고치지
- * 않고** 같은 상태를 만든다(raw SQL로 `json` 컬럼에 넣는다 — DB가 실제로 허용하는 일이다).
+ * **이 검사는 `json` 칸이 payload 의 출처가 되는 날의 방벽이다.** 없으면 그 요청은 `payload::jsonb` 캐스팅에서 `22P05`로
+ * 죽어 **500**이 된다 — 사용자가 보낸 글자 때문에 서버가 잘못했다고 말하는 그 형태다. `test/repos-snapshots.test.ts`의
+ * «payload 안의 NUL도 막는다»가 `insertSnapshot`을 직접 불러 잰다(저장된 값으로 만들 길이 없어서다).
  *
  * **`tag`·`description`은 더 짧은 경로다** — 요청 본문에서 곧장 온다. 그 둘은 `text`라
  * DB가 삽입 시점에 막지만, 그 실패도 `pg`의 raw 예외라 500이다. 여기서 끊어 400으로 만든다.
@@ -187,7 +168,7 @@ function selectSnapshots(db: DbHandle) {
 /**
  * 스냅샷을 만든다. **`(project_id, tag)` 유니크 위반이 날 수 있으므로 `withTransaction`으로
  * 감싼다** — 그 실패가 세이브포인트 없이 나면 호출자의 트랜잭션이 `25P02`로 오염된다
- * (`repos/themes.ts`의 `insertTheme`와 같은 이유).
+ * (`db/tx.ts`의 `withTransaction` 머리말).
  *
  * **삽입과 조회가 두 문장인 것은 조인 때문이다** — `RETURNING`은 삽입한 테이블의 컬럼만
  * 낼 수 있어 `users.name`을 함께 받을 수 없다(`repos/comments.ts`의 `insertComment`와 같다).
@@ -315,15 +296,10 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  *
  * ## 지문은 개수 + 시각이 아니라 **내용**이다
  *
- * 지문을 *"`count` + `max(updated_at)`"* 꼴로 짜면 **변화를 못 보는 자리가 둘**이다.
- *
- * | 구멍 | 관찰된 값 | 원인 | 운영에서도 참인가 |
- * |---|---|---|---|
- * | 수집 도중 **테마를 고쳐도** 지문이 같다 | `captureSnapshot` → `'captured'`(기대: `'fingerprint-mismatch'`) | `updateTheme`이 `updated_at`을 **`now()`**(=트랜잭션 시작 시각)로 쓴다. api 테스트 하네스는 테스트 하나를 트랜잭션 하나로 감싸므로 그 값이 **얼어 있다** | **아니다** — 요청마다 트랜잭션이 갈리는 운영에서는 값이 움직인다. 이것은 **측정 장치(하네스)의 성질**이다 |
- * | 수집 도중 **메뉴 제목을 고쳐도** 지문이 같다 | 〃 | `menu_nodes`에 **`updated_at` 컬럼이 아예 없다**(`0003-menu-nodes.ts`). `count`도 `max(created_at)`도 제목 변경에 반응하지 않는다 | **그렇다** — 하네스와 무관한 시각 지문의 실제 구멍이다 |
- *
- * 앞쪽은 하네스의 성질이지만 **그 성질 때문에 케이스로 고정할 수 없다**는 점이 그대로
- * 대가다(잴 수 없는 방어는 다음 사람이 지우기 쉽다). 뒤쪽은 운영에서도 참인 구멍이다.
+ * 지문을 *"`count` + `max(updated_at)`"* 꼴로 짜면 **변화를 못 보는 자리가 있다** — 수집 도중 **메뉴 제목을 고쳐도**
+ * 지문이 같다: `menu_nodes`에 **`updated_at` 컬럼이 아예 없다**(`0003-menu-nodes.ts`). `count`도 `max(created_at)`도 제목
+ * 변경에 반응하지 않는다. 그리고 `updated_at`을 **`now()`**(=트랜잭션 시작 시각)로 쓰는 표는 api 테스트 하네스(테스트 하나를
+ * 트랜잭션 하나로 감싼다) 안에서 그 값이 얼어 있어, 시각 지문의 구멍을 케이스로 고정할 수 없다.
  * 그래서 시각에 기대지 않고 **payload에 실릴 내용 자체를 지문으로 삼는다.**
  *
  * 그러면 지문의 뜻이 한 문장이 된다: **"payload에 들어갈 값 중 무엇도 바뀌지 않았다."**
@@ -335,22 +311,15 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  * |---|---|---|---|
  * | 1 | `menu_nodes` | `(id, parent_id, title, sort_order)` 목록 | `menu[]` 전부 |
  * | 2 | `pages` | `(id, menu_node_id, title, description, sort_order, schema_version, head_seq, md5(schema))` 목록 | `pages[]` 전부 |
- * | 3 | `layouts` | `(id, name, theme_id, md5(schema))` 목록 | `layouts[]` 전부 |
- * | 4 | `themes` | **담기는 테마들**의 `(id, md5(행 전체))` 목록 | `themes[].theme` |
- * | 5 | `comments` | `(id, md5(행 전체), 작성자 이름)` 목록 | `comments[]` 전부 |
+ * | 3 | `layouts` | `(id, name, md5(schema))` 목록 | `layouts[]` 전부 |
+ * | 4 | `comments` | `(id, md5(행 전체), 작성자 이름)` 목록 | `comments[]` 전부 |
  *
- * **4가 "프로젝트의 테마 전부"가 아니라 "담기는 테마"인 것이 요점이다.** payload에 얼리는
- * 것은 레이아웃이 가리키는 테마뿐이므로, 그 조인을 지문이 그대로 쓴다. 프로젝트의 다른
- * 테마를 함께 넣으면 캡처와 무관한 편집이 409를 만든다. 반대로 **파생 테마의 base는 넣지
- * 않는다** — base는 DB 행이 아니라 **코드의 시스템 테마**이고(`systemTheme()`), 코드는 한
- * 요청 동안 바뀌지 않는다.
- *
- * **5가 `users.name`을 조인해 넣는 이유:** payload의 `comments[].authorName`이 코멘트 행이
+ * **4가 `users.name`을 조인해 넣는 이유:** payload의 `comments[].authorName`이 코멘트 행이
  * 아니라 **`users` 행**에서 온다(`repos/comments.ts` — *"조인해서 낸다, 스냅샷이 아니다"*).
  * 넣지 않으면 이름을 바꾸는 경로가 생기는 날 payload는 달라지는데 지문은 그대로다.
  *
  * **`md5`를 쓰는 자리와 안 쓰는 자리가 갈린다.** 값이 짧고 개수가 적은 컬럼은 그대로 담고,
- * 문서(`pages.schema`·`layouts.schema`)와 행 전체(`themes`·`comments`)는 해시로 접는다 —
+ * 문서(`pages.schema`·`layouts.schema`)와 행 전체(`comments`)는 해시로 접는다 —
  * 지문 문자열이 payload만큼 커지면 지문을 두 번 읽는 비용이 캡처 자체와 같아진다.
  * `pages.schema`를 **해시로라도 담는 것**은, 담지 않으면 *"`schema`는 `head_seq` 없이 바뀔
  * 수 없다"*는 다른 파일의 불변식(`repos/pages.ts`의 머리말)에 기대게 되기 때문이다 —
@@ -408,16 +377,10 @@ export async function readCaptureFingerprint(
       ),
       'layouts', (
         select coalesce(
-          json_agg(json_build_array(l.id, l.name, l.theme_id, md5(l.schema::text)) order by l.id),
+          json_agg(json_build_array(l.id, l.name, md5(l.schema::text)) order by l.id),
           '[]'::json
         )
         from layouts l where l.project_id = ${projectId}
-      ),
-      'themes', (
-        select coalesce(json_agg(json_build_array(t.id, md5(t::text)) order by t.id), '[]'::json)
-        from themes t
-        join layouts l on l.theme_id = t.id
-        where l.project_id = ${projectId}
       ),
       'comments', (
         select coalesce(json_agg(json_build_array(c.id, md5(c::text), u.name) order by c.id), '[]'::json)
@@ -466,7 +429,7 @@ export async function readCaptureFingerprint(
  * 레이아웃·코멘트)만 잠그면 `parent_id`가 `NULL`인 메뉴 노드 삽입이 그 모양이다.
  * `projects` 행을 잠그면 그것도 막힌다 — `menu_nodes.project_id`가 `projects(id)`를
  * 참조하므로 그 삽입도 `projects` 행에 `FOR KEY SHARE`를 걸기 때문이다.
- * `pages`·`layouts`·`snapshots`·`themes`도 같은 컬럼을 갖는다.
+ * `pages`·`layouts`·`snapshots`도 같은 컬럼을 갖는다.
  *
  * **그러니 "네 표를 잠근다"가 아니라 "프로젝트를 잠근다"가 이 함수의 뜻이다.**
  * 네 표의 행 잠금은 여전히 필요하다 — `projects` 행 잠금은 **UPDATE·DELETE를 막지
@@ -476,8 +439,7 @@ export async function readCaptureFingerprint(
  * ## 남는 구멍 — 정직하게
  *
  * - **이 프로젝트의 쓰기 중 막히지 않는 것**은 `test/restore-lock-census.test.ts`의 «막히지 않는 줄의 목록이 고정돼 있다»가
- *   목록과 까닭을 갖는다 — 여기 옮겨 적지 않는다. **테마 표는 잠그지 않는다**(복원이 테마 행을 쓰지 않는다) — 그래도 테마
- *   라우트는 막힌다(쓰기의 첫 잠금 · FK — 그 census 의 테마 줄).
+ *   목록과 까닭을 갖는다 — 여기 옮겨 적지 않는다.
  * - **다른 프로젝트는 잠그지 않는다.** 복원의 단위가 프로젝트다.
  *
  * ## 순서

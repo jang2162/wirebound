@@ -285,7 +285,7 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
     // **`description`이 `isProjectDetail`의 검사 밖이면 이 자리가 화면을 통째로 비운다.** 값이
     // 목록까지 닿고, 줄의 `<p>{project.description}</p>`가 그 값을 React 자식으로 그리다
     // `Objects are not valid as a React child`를 던진다. **목록에는 오류 경계가 없다** —
-    // `apps/web/src`의 경계는 캔버스의 `CanvasBoundary`와 테마 갤러리의 `GalleryBoundary`뿐이다.
+    // `apps/web/src`의 경계는 캔버스의 `CanvasBoundary` 하나다.
     //
     // **검사를 빼고 잰 값:** `<main>` 없음 · `innerHTML` **11자**. 관문이 막으면 다른 계약 위반과
     // 같은 경로(`ApiError('internal')` → 실패 → 화면 규칙)로 모여 **셸이 살고 문장이 남는다.**

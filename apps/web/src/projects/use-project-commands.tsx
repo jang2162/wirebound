@@ -29,7 +29,7 @@
  * ## 오류 경계 밖이다
  *
  * 이 훅이 그리는 화면 위에 오류 경계가 없다(`apps/web/src`의 경계는 캔버스의
- * `CanvasBoundary`와 테마 갤러리의 `GalleryBoundary`뿐이다 — 다시 세는 법:
+ * `CanvasBoundary` 하나다 — 다시 세는 법:
  * `rg -l getDerivedStateFromError apps/web/src`). **그래서 판정도 조립도 던지지 않아야 한다** —
  * `projects/project-actions.ts`가 같은 계약을 갖는 이유와 같다.
  */

@@ -11,8 +11,7 @@
  *
  * **JSON으로 표현할 수 있고 스택에 들어가는 트리에 대해 던지지 않는 것이 이 파일의 계약이다.**
  * `structure-actions.ts`와 같은 계약이고 근거도 같다: 여기는 렌더 중에 불리는데 **메뉴 트리도
- * 오류 경계 밖이다** — `apps/web/src`의 경계는 캔버스의 `CanvasBoundary`와 테마 갤러리의
- * `GalleryBoundary`뿐이라, 던지면 `.wb-shell`이 통째로 DOM에서 사라진다.
+ * 오류 경계 밖이다** — `apps/web/src`의 경계는 캔버스의 `CanvasBoundary` 하나라, 던지면 `.wb-shell`이 통째로 DOM에서 사라진다.
  *
  * **완결성 어휘는 잰 범위까지다.** 계약 밖인 두 부류를 재서 적는다.
  *

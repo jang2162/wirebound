@@ -1,8 +1,8 @@
 /**
  * 레이아웃 저장소. SQL만 안다 — HTTP도 zod도 이 파일 밖의 일이다.
  *
- * **레이아웃은 참조를 나르고 `Slot`을 담는 그릇이다.**
- * 편집 경로가 없으므로 쓰기 함수는 **생성**과 **테마 교체**(`updateLayoutTheme`)뿐이다 —
+ * **레이아웃은 `Slot`을 담는 그릇이다.**
+ * 편집 경로가 없으므로 쓰기 함수는 **생성**뿐이다 —
  * `pages`처럼 정렬 불변식도 revision 이력도 없다. 설계서 「레이아웃」의 레이아웃 편집기가
  * 서면 그때 갱신 경로가 생긴다.
  */
@@ -15,18 +15,15 @@ export interface LayoutRecord {
   id: string
   projectId: string
   name: string
-  /** `null`이면 테마를 고르지 않았다 — 화면은 구조 기본 CSS만으로 그려진다(`0007-layouts.ts` 머리말). */
-  themeId: string | null
   schema: LayoutDocument
 }
 
-const LAYOUT_COLUMNS = ['id', 'project_id', 'name', 'theme_id', 'schema'] as const
+const LAYOUT_COLUMNS = ['id', 'project_id', 'name', 'schema'] as const
 
 interface LayoutRow {
   id: string
   project_id: string
   name: string
-  theme_id: string | null
   schema: LayoutDocument
 }
 
@@ -35,7 +32,6 @@ function toRecord(row: LayoutRow): LayoutRecord {
     id: row.id,
     projectId: row.project_id,
     name: row.name,
-    themeId: row.theme_id,
     schema: row.schema,
   }
 }
@@ -47,8 +43,7 @@ export const DEFAULT_LAYOUT_NAME = '기본 레이아웃'
  * 기본 레이아웃의 문서 — **`Page` 하나와 그 안의 `Slot` 하나**다.
  *
  * 이것이 최소본인 이유: `validateLayout`이 레이아웃에 `Slot`이 **정확히 하나**일 것을
- * 요구하고(`packages/schema/src/validate.ts`), 그 이상을 담으면 참조를
- * 나르는 그릇 이상이 된다.
+ * 요구한다(`packages/schema/src/validate.ts`).
  *
  * **이 문서를 그리는 코드는 없다.** *"`Page > Slot`이면
  * `renderComposed(layout, page)`의 결과가 `renderDocument(page)`와 같다"*는
@@ -78,52 +73,23 @@ export function defaultLayoutDocument(): LayoutDocument {
  *
  * **`withTransaction`으로 감싸지 않는다.** 유일한 호출자가 `insertProject`이고
  * 그쪽이 이미 트랜잭션 안에서 부른다 — 여기서 한 겹 더 열면 세이브포인트만 늘고
- * 격리해야 할 실패(이 문장이 낼 수 있는 것은 `project_id`·`theme_id`의 FK 위반인데,
- * 둘 다 같은 트랜잭션이 방금 만들었거나 확인한 값이다)가 없다.
+ * 격리해야 할 실패(이 문장이 낼 수 있는 것은 `project_id`의 FK 위반인데, 같은 트랜잭션이 방금 만든 값이다)가 없다.
  */
 export async function insertLayout(
   db: DbHandle,
-  input: { projectId: string; name: string; themeId: string | null; schema: LayoutDocument },
+  input: { projectId: string; name: string; schema: LayoutDocument },
 ): Promise<LayoutRecord> {
   const row = await db
     .insertInto('layouts')
     .values({
       project_id: input.projectId,
       name: input.name,
-      theme_id: input.themeId,
       schema: JSON.stringify(input.schema),
     })
     .returning(LAYOUT_COLUMNS)
     .executeTakeFirstOrThrow()
 
   return toRecord(row as LayoutRow)
-}
-
-/**
- * 레이아웃이 가리키는 테마를 바꾼다. 없는 레이아웃이면 `null`이다.
- *
- * **이 파일에서 유일한 갱신 함수이고, 그것이 의도다.** 테마 고르개가 필요로 하는 것은
- * 이 테이블의 **한 필드**다. 레이아웃 CRUD를 여는 것은 설계서 「레이아웃」의 레이아웃
- * 편집기가 할 일이고 그쪽은 **선택 모델부터** 다시 정해야 한다(위 `defaultLayoutDocument`의
- * «이 문서를 그리는 코드는 없다»).
- *
- * **`themeId`의 유효성은 여기서 보지 않는다.** *"이 프로젝트에서 고를 수 있는가"*는
- * `listThemes`가 뜻하는 것이고 그 판정은 라우트가 한다 — 이 파일은 SQL만 안다.
- * 그래도 마지막 방벽이 하나 있다: `layouts.theme_id`의 FK가 없는 테마 행을 거부한다.
- */
-export async function updateLayoutTheme(
-  db: DbHandle,
-  layoutId: string,
-  themeId: string | null,
-): Promise<LayoutRecord | null> {
-  const row = await db
-    .updateTable('layouts')
-    .set({ theme_id: themeId })
-    .where('id', '=', layoutId)
-    .returning(LAYOUT_COLUMNS)
-    .executeTakeFirst()
-
-  return row ? toRecord(row as LayoutRow) : null
 }
 
 /**
@@ -159,8 +125,7 @@ export async function findLayoutById(db: DbHandle, layoutId: string): Promise<La
  * 프로젝트의 기본 레이아웃. `default_layout_id`가 `NULL`이면 `null`이다.
  *
  * `NULL`인 프로젝트는 이 마이그레이션(0007) 이전에 만들어진 것뿐이다 — `0007-layouts.ts`
- * 머리말(«이미 있는 프로젝트에 기본 레이아웃을 만들어 주지 않는다»)대로 그대로 둔다. 그 경우 테마 조회가 `null`을 내고 화면은 구조 기본
- * CSS만으로 그려진다.
+ * 머리말(«이미 있는 프로젝트에 기본 레이아웃을 만들어 주지 않는다»)대로 그대로 둔다.
  */
 export async function findDefaultLayout(db: DbHandle, projectId: string): Promise<LayoutRecord | null> {
   const row = await db

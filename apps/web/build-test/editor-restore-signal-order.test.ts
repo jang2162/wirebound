@@ -120,6 +120,8 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
    * **F1** — 답을 잃으면 «모른다»가 서고(`editor-restore-unanswered.test.ts`), 그 단추의 다시 읽기가 배너를 걷는다. 답을 잃었다는 것은 서버가
    * 아직 처리 중일 수 있다는 뜻이라, 다시 읽은 **뒤에** 커밋되면 그 신호만이 화면이 낡았다는 것을 안다. 연결을 빼던 판에서는 서버 `원문` ·
    * 캔버스 «바뀐 글» · 배너 없음 · `WS← restored` 없음이었다.
+   *
+   * 열린 팝오버가 배너 단추를 덮는 겹침은 이 케이스의 축이 아니다 — 닫고 잰다.
    */
   it('답을 잃음 · 다시 읽기보다 늦게 커밋 — 배너가 다시 서고, 그 단추가 화면을 서버 판으로 맞춘다', async () => {
     const alice = await stack.login(stack.users.alice)
@@ -146,7 +148,9 @@ describe.skipIf(!전제.ok)('내 복원의 신호와 답의 차례', () => {
       await restore(page)
       await poll('답을 잃은 배너가 선다', async () => banner(page), (shown) => shown, 10_000)
 
-      // 사람이 배너의 단추로 다시 읽는다 — 서버는 아직 복원 전이다(행을 쥐었다).
+      // 사람이 배너의 단추로 다시 읽는다 — 서버는 아직 복원 전이다(행을 쥐었다). 복원을 보낸 팝오버를 먼저 닫는다(머리말).
+      await page.keyboard.press('Escape')
+      await poll('스냅샷 팝오버가 닫힌다', async () => page.locator('.wb-shell-snapshots-body').count(), (count) => count === 0, 5_000)
       await page.locator('.wb-shell-remote-alert').getByRole('button', { name: '다시 불러오기' }).click()
       await poll('배너가 걷힌다', async () => banner(page), (shown) => !shown, 10_000)
       await page.waitForTimeout(500)

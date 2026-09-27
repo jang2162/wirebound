@@ -18,7 +18,7 @@ export async function runExportJob(
   render: (requests: readonly ScreenRequest[]) => Promise<ScreenBatch>,
 ): Promise<ExportJobResult> {
   if (spec.kind === 'html') {
-    const bundle = buildProjectBundle(rows, spec.theme)
+    const bundle = buildProjectBundle(rows)
     return {
       kind: 'html',
       zip: spec.zipRoot === null ? null : zipBundle(bundle.files, spec.zipRoot),
@@ -30,8 +30,7 @@ export async function runExportJob(
     }
   }
 
-  const screens: PptxScreenSource | undefined =
-    spec.screenTheme === null ? undefined : { theme: spec.screenTheme, render }
+  const screens: PptxScreenSource | undefined = spec.screens ? { render } : undefined
   const pptx = await buildProjectPptx(rows, screens)
   return {
     kind: 'pptx',

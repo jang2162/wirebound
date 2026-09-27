@@ -8,7 +8,9 @@
  * 판이 못 말하는 것 — **바뀌는 순간**(잠금 · 통지 · 다시 읽기가 실패하면 · 끊겼다 붙으면 · 답이 엇갈려 오면)을 잰다.
  * **그래서 이 파일은 그 자리들(메뉴 · 구조 툴바 · 되돌리기 · 속성 · 상호작용 · 코멘트)을 단언하지 않는다** — 단언하면 그 자리의
  * 변조가 이 파일과 그 판에서 함께 죽어 어느 쪽이 무엇을 소유하는지가 흐려진다. «역할이 섰다»의 표지로는 그 파일이 안 보는
- * 자리 — **테마 고르개**(owner 전용 · `chooseTheme`)와 통지 문장을 쓴다.
+ * 자리 — **뷰 모드 «페이지 설명» 탭의 편집기**(`canEdit` — owner · editor 에게 서고 viewer · 역할 모름에는 읽기 전용)와 통지
+ * 문장을 쓴다. 셸에 실행 중 역할을 따라가는 owner 전용 자리는 없다(스냅샷 팝오버는 열 때 역할을 읽는다) — 표지를 쓰는 케이스는
+ * 전부 owner 와 viewer · 역할 모름 사이를 오가므로 `canEdit` 으로 갈린다.
  */
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -87,10 +89,18 @@ function pick(nodeId: string): void {
   fireEvent.click(el)
 }
 
-/** 테마 고르개가 켜졌나(owner 전용) — `null`이면 아직 안 섰다. */
-const themeOn = (): boolean | null => {
-  const select = screen.queryByRole('combobox', { name: '테마' }) as HTMLSelectElement | null
-  return select === null ? null : !select.disabled
+/** 뷰 모드로 가 «페이지 설명» 탭을 연다 — 아래 `editOn` 이 읽는 자리다. */
+function openDescription(): void {
+  fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+  fireEvent.click(screen.getByRole('tab', { name: '페이지 설명' }))
+}
+
+/** 페이지 설명 편집기가 섰나(`canEdit`) — 읽기 전용이면 `false`, 탭이 아직 안 섰으면 `null`. */
+const editOn = (): boolean | null => {
+  const panel = screen.queryByRole('tabpanel')
+  if (panel === null) return null
+  if (within(panel).queryByRole('textbox', { name: '페이지 설명' }) !== null) return true
+  return panel.querySelector('.wb-shell-panel-title') === null ? null : false
 }
 const said = (lead: string): boolean => notice().some((text) => text.startsWith(lead))
 const titleBox = (): HTMLInputElement => within(screen.getByRole('tabpanel')).getByRole('textbox', { name: '제목' }) as HTMLInputElement
@@ -145,13 +155,14 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이', () => {
   it('다시 읽기가 실패하면(연결 · 시간 제한) 역할을 모른다 — 고칠 수 없는 쪽으로 서고 그렇다고 말한다', async () => {
     const server: Server = { role: 'owner', fail: null, reads: 0 }
     const rt = await open(server)
-    await waitFor(() => expect(themeOn()).toBe(true))
+    openDescription()
+    await waitFor(() => expect(editOn()).toBe(true))
 
     server.fail = new ApiError(0, 'internal', '서버에 연결할 수 없습니다')
     rt.deliver(MEMBERSHIP)
 
-    // 역할을 모르면 판정 함수의 «모르는 값» — owner 의 고르개까지 꺼진다.
-    await waitFor(() => expect(themeOn()).toBe(false))
+    // 역할을 모르면 판정 함수의 «모르는 값» — owner 의 편집기까지 읽기 전용이다.
+    await waitFor(() => expect(editOn()).toBe(false))
     expect(said('권한이 바뀌었는데 확인하지 못해')).toBe(true)
     // 셸은 남는다 — 읽기는 그대로다.
     expect(screen.getByRole('heading', { name: PROJECT_NAME })).toBeTruthy()
@@ -159,7 +170,7 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이', () => {
     // 다음 신호가 성공하면 돌아온다.
     server.fail = null
     rt.deliver(MEMBERSHIP)
-    await waitFor(() => expect(themeOn()).toBe(true))
+    await waitFor(() => expect(editOn()).toBe(true))
   })
 
   /**
@@ -171,7 +182,8 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이', () => {
   it('끊긴 동안 바뀐 역할은 다시 붙을 때 닿는다 — 그 다시 읽기가 실패하면 조용히 앞 역할이다', async () => {
     const server: Server = { role: 'owner', fail: null, reads: 0 }
     const rt = await open(server)
-    await waitFor(() => expect(themeOn()).toBe(true))
+    openDescription()
+    await waitFor(() => expect(editOn()).toBe(true))
 
     // 조용한 실패 먼저.
     server.fail = new ApiError(0, 'internal', '서버에 연결할 수 없습니다')
@@ -179,20 +191,21 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이', () => {
     rt.reconnect()
     await waitFor(() => expect(server.reads).toBe(readsBefore + 1))
     await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(themeOn()).toBe(true)
+    expect(editOn()).toBe(true)
     expect(notice().filter((text) => text.includes('권한'))).toEqual([])
 
     server.fail = null
     server.role = 'viewer'
     rt.reconnect()
-    await waitFor(() => expect(themeOn()).toBe(false))
+    await waitFor(() => expect(editOn()).toBe(false))
   })
 
   /** 혼자 죽는 변조: 다시 읽기의 성공 갈래가 차례(`reads`)를 안 본다. */
   it('두 신호의 답이 거꾸로 오면 늦게 낸 조회의 답이 선다', async () => {
     const server: Server = { role: 'owner', fail: null, reads: 0 }
     const rt = await open(server)
-    await waitFor(() => expect(themeOn()).toBe(true))
+    openDescription()
+    await waitFor(() => expect(editOn()).toBe(true))
 
     // 첫 신호의 조회(viewer)는 붙잡고, 둘째(editor)는 곧장 답한다 — 첫 답이 나중에 온다.
     let release = (): void => {}
@@ -207,7 +220,7 @@ describe('역할이 실행 중에 바뀐다 — 새로고침 없이', () => {
     await waitFor(() => expect(server.reads).toBe(readsBefore + 2))
     release()
     await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(themeOn()).toBe(true)
+    expect(editOn()).toBe(true)
     expect(notice().filter((text) => text.includes('권한'))).toEqual([])
   })
 })
@@ -221,13 +234,14 @@ describe('신호가 닿지 않는 창', () => {
   it('첫 조회와 룸 참가 사이에 강등되면 — 룸에 든 순간 다시 읽어 닿는다', async () => {
     const server: Server = { role: 'owner', fail: null, reads: 0 }
     const rt = await mount(server)
-    await waitFor(() => expect(themeOn()).toBe(true))
+    openDescription()
+    await waitFor(() => expect(editOn()).toBe(true))
 
     // 첫 조회의 답은 owner — 룸에 들기 전에 강등이 커밋됐다(신호는 룸에 든 연결에만 간다 — 이 연결은 못 받는다).
     server.role = 'viewer'
     rt.open()
 
-    await waitFor(() => expect(themeOn()).toBe(false))
+    await waitFor(() => expect(editOn()).toBe(false))
     expect(said('편집 권한이 없어져')).toBe(true)
     expect(server.reads).toBe(2)
   })
@@ -254,7 +268,8 @@ describe('신호가 닿지 않는 창', () => {
   it('신호의 조회가 밀리고 뒤의 조회가 실패하면 — 역할을 모른다(앞 역할로 조용히 서지 않는다)', async () => {
     const server: Server = { role: 'owner', fail: null, reads: 0 }
     const rt = await open(server)
-    await waitFor(() => expect(themeOn()).toBe(true))
+    openDescription()
+    await waitFor(() => expect(editOn()).toBe(true))
 
     let release = (): void => {}
     server.hold = new Promise<void>((resolve) => {
@@ -268,14 +283,14 @@ describe('신호가 닿지 않는 창', () => {
     await waitFor(() => expect(server.reads).toBe(readsBefore + 2))
     release()
 
-    await waitFor(() => expect(themeOn()).toBe(false))
+    await waitFor(() => expect(editOn()).toBe(false))
     expect(said('권한이 바뀌었는데 확인하지 못해')).toBe(true)
 
     // 다음 성공이 풀어 준다(그때의 역할로).
     server.fail = null
     server.role = 'owner'
     rt.reconnect()
-    await waitFor(() => expect(themeOn()).toBe(true))
+    await waitFor(() => expect(editOn()).toBe(true))
   })
 })
 
