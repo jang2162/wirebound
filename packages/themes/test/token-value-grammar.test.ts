@@ -84,3 +84,13 @@ describe('shadow 토큰 값 — 흔한 실제 값(A2 좁은 반증 2)', () => {
     expect(valueCodes('shadow', value)).toEqual([])
   })
 })
+
+describe('length 토큰 값 — 앞 점 소수', () => {
+  it.each(['.5rem', '-.25em', '0.5px'])('%j 를 받는다', (value) => {
+    expect(validateManifest({ ...head, tokens: { items: { l: { type: 'length', label: 'l', default: value } } } }).issues).toEqual([])
+  })
+  it.each(['.rem', '5.rem', '..5rem', '.5REM'])('%j 를 거절한다', (value) => {
+    expect(validateManifest({ ...head, tokens: { items: { l: { type: 'length', label: 'l', default: value } } } }).issues.map((i) => i.code)).toEqual(['token-default-type'])
+  })
+})
+
