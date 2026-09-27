@@ -91,14 +91,16 @@ apps/
 packages/
   schema     노드 타입 정의 + zod 검증 + JSON Patch 유틸 + lint 규칙
   renderer   schema → React 렌더링 (노드마다 테마 뷰를 그린다)
-  theme-sdk  테마 뷰 SDK — 뷰 계약 · SDK 기본 뷰와 그 CSS
-  themes     패턴 규격 · 스냅샷 payload 규격 · 설계 lint 입구
+  theme-sdk  테마 뷰 SDK — 뷰 계약 · SDK 기본 뷰와 그 CSS · 공유 런타임(`./runtime`)
+  themes     테마 manifest 규격 · 검증 · 토큰 CSS · `.wbtheme` 읽기 · 쓰기 · 패턴 규격 · 스냅샷 payload 규격 · 설계 lint 입구
+  theme-gallery 카탈로그 × variant 표본 갤러리
+  theme-kit  테마 작성 도구 — `wb-theme dev` · `wb-theme build` · 스타터 템플릿
   exporter   HTML 정적 번들 · PPTX 생성
   cli        wireb
   mcp        MCP 서버
 
 system-themes/
-  admin      저장소 테마 system-admin — 캔버스가 싣는다
+  admin      저장소 테마 system-admin — 캔버스가 소스로 싣고, 저장소 빌드가 `.wbtheme` 로 낸다
 ```
 
 ### 3.2 핵심 원칙
@@ -121,8 +123,10 @@ system-themes/
 |---|---|---|
 | `schema` | 노드 타입, props 정의, zod 검증, patch/inverse 생성, 마이그레이션, lint 규칙 | 없음 |
 | `renderer` | 스키마 트리 → 노드마다 테마 뷰(없으면 SDK 기본 뷰), 상호작용 런타임 | `schema`, `theme-sdk` |
-| `theme-sdk` | 뷰 계약(`view` · `Root` · `Focus`), manifest 타입, SDK 기본 뷰와 그 CSS | `schema` |
-| `themes` | 패턴 규격 · 검증 · 전개, 스냅샷 payload 규격과 lint 입력 변환, 설계 lint 입구(`lintProject`) | `schema` |
+| `theme-sdk` | 뷰 계약(`view` · `Root` · `Focus`), manifest 타입(`defineManifest`), SDK 기본 뷰와 그 CSS, 공유 런타임(`installRuntime` — `theme.js` 가 `__wirebound_runtime__` 에 등록한다) | 없음(react 는 peer) |
+| `themes` | 테마 manifest 규격 · 검증(`validateManifest`), 토큰 → CSS 변수(`tokensCss`), `.wbtheme` 읽기 · 쓰기(`readWbtheme` · `packWbtheme`), 패턴 규격 · 검증 · 전개, 스냅샷 payload 규격과 lint 입력 변환, 설계 lint 입구(`lintProject`) | `schema`, `theme-sdk`(타입만) |
+| `theme-gallery` | 카탈로그 × variant 표본을 그리는 갤러리(`ThemeGallery`) · 포커스 · 마커 겹쳐 보기 | `schema`, `renderer`, `theme-sdk` |
+| `theme-kit` | 작성자 도구 `wb-theme` — `dev`(갤러리 · 토큰 패널 · 뷰포트 프리셋 · HMR), `build`(`.wbtheme`), `pack-template`(스타터 템플릿 zip). 비공개 패키지(`schema` · `themes` · `renderer` · `theme-gallery`)는 산출물 안에 묶는다 | `theme-sdk`(peer), vite |
 | `exporter` | 정적 HTML 번들 · PPTX 생성 | `schema`, `renderer`, `theme-sdk` |
 | `cli` | 터미널 명령, API 클라이언트 | `schema`, `themes` |
 | `mcp` | MCP 도구 정의 | `cli` |
@@ -329,6 +333,7 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 - **캔버스는 same-origin iframe 안에서 SDK 뷰로 그리고, 저장소 테마 `system-admin` 하나를 싣는다**(`system-themes/admin`). 프로젝트가 테마를 고르는 기능 · 테마 업로드 · 토큰 편집은 아직 없다.
 - **변형은 manifest 가 선언한다** — `components[type].variants` · `defaultVariant` · `hideProps`. 노드의 `variant`가 선언 밖이면 렌더러가 `defaultVariant`로 그린다(페이지 데이터는 바꾸지 않는다). 속성 패널의 변형 칸과 감출 속성도 이 선언을 읽는다.
 - **내보내기(HTML 번들 · PPTX 화면)는 테마 없이 SDK 기본 뷰와 그 CSS로 그린다**(§11.3).
+- **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. `system-admin` 도 `pnpm build` 가 `.wbtheme` 로 낸다. **만든 `.wbtheme` 를 올리거나 싣는 길은 아직 없다** — 캔버스는 `system-admin` 을 소스로 싣는다.
 
 ### 6.1 노드 속성
 
@@ -728,7 +733,9 @@ migrations = [
 | `schema` | zod 검증 경계값, 마이그레이션 체인 |
 | `renderer` | 뷰 경로(테마 뷰 · 기본 뷰 · 뷰 예외의 노드 단위 폴백), `data-wb-*` 속성 계약 검증 |
 | `themes` | 패턴 규격 · 전개(슬롯 · id 재발급), 스냅샷 payload 규격 |
-| `theme-sdk` | 기본 뷰가 카탈로그 전부를 덮는지, 뷰 계약(`Root` · `Focus`) |
+| `theme-sdk` | 기본 뷰가 카탈로그 전부를 덮는지, 뷰 계약(`Root` · `Focus`), 공유 런타임 등록 · 받기 |
+| `themes` | manifest 거부 표(참조 · 순환 · 카탈로그 · variant · 패턴), `.wbtheme` 안전성(`..` · 절대 경로 · 링크 · 크기 · 항목 수 · 허용 목록) |
+| `theme-kit` | 빌드한 `theme.js` 에 SDK · react 가 묶이지 않음, dev 갤러리의 실브라우저 판(`build-test`), 템플릿 zip 을 풀어 빌드 · 타입검사(저장소 밖 설치는 `WB_TEMPLATE_INSTALL=1`) |
 | `api` | 동시편집 통합 테스트 — 두 클라이언트 동시 patch, 잠금 경합, 편집 중 권한 회수, WS 재연결 후 델타 복구 |
 | `api` | 권한 매트릭스 (역할 × 엔드포인트) |
 | `exporter` | 내보낸 HTML의 DOM과 웹 렌더 DOM의 동등성 검증 |
