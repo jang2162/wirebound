@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
-import { createServer, searchForWorkspaceRoot, type Plugin } from 'vite'
+import { createServer, type Plugin } from 'vite'
 import { EVENTS_PATH, PROJECT_PATH, type ProjectState } from './client/protocol'
 import { CONFIG_FILE, DEFAULT_ENTRY, loadProject } from './config'
 
@@ -119,7 +119,10 @@ export async function startDev(opts: { root: string; entry?: string; port?: numb
     server: {
       port: opts.port ?? 5190,
       host: opts.host ?? '127.0.0.1',
-      fs: { allow: [client, root, searchForWorkspaceRoot(root), searchForWorkspaceRoot(client)] },
+      // 갤러리 클라이언트와 작성자 프로젝트만 — 둘을 품은 워크스페이스 뿌리까지 열면 작성자 프로젝트가 큰 워크스페이스 안에 있을 때
+      // 그 워크스페이스 전체가 `/@fs` 로 읽힌다. 템플릿 설치판과 저장소 안 판(링크한 SDK) 둘 다 이 둘로 갤러리가 선다 — 저장소 안 판은
+      // `build-test/dev.test.ts` 가 잰다. 설치판은 케이스가 없다(`docs/superpowers/plans/2026-09-27-a2-fix-report.md` 의 탐침).
+      fs: { allow: [client, root] },
     },
   })
   await server.listen()

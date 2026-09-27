@@ -190,4 +190,12 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     expect(table.localhost).toEqual(local)
     expect(table[`evil.example:${port}`]).toEqual({ '/': '403', '/__wb/project': '403', '/frame.html': '403' })
   })
+
+  it('/@fs 로 작성자 프로젝트 · 갤러리 클라이언트 밖(저장소 뿌리의 README)을 못 읽는다', async () => {
+    const readme = await fetch(`${server.url.replace(/\/$/, '')}/@fs${join(repoRoot, 'README.md')}?raw`)
+    const own = await fetch(`${server.url.replace(/\/$/, '')}/@fs${join(root, 'theme.config.ts')}?raw`)
+    // 카나리아 — 프로젝트 안 파일은 읽힌다(이 판에서 /@fs 가 돈다).
+    expect(own.status).toBe(200)
+    expect(readme.status).toBe(403)
+  })
 })
