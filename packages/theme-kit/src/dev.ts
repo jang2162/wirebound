@@ -22,6 +22,17 @@ function clientDir(): string {
 }
 
 /**
+ * 로컬 이름으로 온 요청인가 — `localhost` · `127.0.0.1` · `[::1]`(포트가 붙어도). 셸 미들웨어는 vite 의 Host 검사보다 먼저 걸리므로
+ * 스스로 본다. 안 보면 DNS 재바인딩으로 남의 페이지가 같은 출처가 되어 `/__wb/project`(manifest · 설정 이슈)와 SSE 를 읽는다 —
+ * vite 가 지키는 `/frame.html` · `/@fs/…` 와 같은 판정이어야 한다.
+ */
+function isLocalHost(header: string | undefined): boolean {
+  if (header === undefined) return false
+  const host = header.toLowerCase().replace(/:\d+$/, '')
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]'
+}
+
+/**
  * 셸 페이지(`/`)는 vite 를 거치지 않고 내준다 — vite 의 HTML 변환이 HMR 클라이언트를 심으면, 뷰를 고쳐 프레임이 다시 실릴 때
  * 오는 `full-reload` 가 셸까지 다시 싣고 토큰 패널의 값이 날아간다. 셸은 SSE(`/__wb/events`)로 설정의 이슈만 받는다.
  * 프레임(`/frame.html`)은 vite 가 내준다 — 작성자 코드의 HMR 이 거기서 돈다.
@@ -54,7 +65,11 @@ function devPlugin(opts: { root: string; entry: string; clientDir: string }): Pl
       const shellHtml = readFileSync(join(opts.clientDir, 'index.html'), 'utf8')
       server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
         const path = (req.url ?? '/').split('?')[0]
-        if (path === '/' || path === '/index.html') {
+        const ours = path === '/' || path === '/index.html' || path === PROJECT_PATH || path === EVENTS_PATH
+        if (ours && !isLocalHost(req.headers.host)) {
+          res.statusCode = 403
+          res.end('로컬 이름(localhost · 127.0.0.1 · [::1])으로만 엽니다')
+        } else if (path === '/' || path === '/index.html') {
           res.setHeader('Content-Type', 'text/html; charset=utf-8')
           res.end(shellHtml)
         } else if (path === PROJECT_PATH) {

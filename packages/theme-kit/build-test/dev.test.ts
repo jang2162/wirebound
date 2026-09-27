@@ -164,4 +164,30 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     expect(await status('/frame.html')).toBe('403')
     expect({ shell: await status('/'), project: await status('/__wb/project') }).toEqual({ shell: '403', project: '403' })
   })
+
+  it('로컬 이름(localhost · 127.0.0.1 · [::1])으로 온 요청은 셸도 vite 의 경로도 받는다 — 두 판정이 같다', async () => {
+    const { port } = new URL(server.url)
+    const status = (host: string, path: string) =>
+      new Promise<string>((done, fail) => {
+        const socket = connect(Number(port), '127.0.0.1', () =>
+          socket.write(`GET ${path} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`),
+        )
+        let reply = ''
+        socket.on('data', (chunk) => { reply += chunk })
+        socket.on('end', () => done(reply.split('\r\n')[0]!.split(' ')[1]!))
+        socket.on('error', fail)
+      })
+    const table: Record<string, Record<string, string>> = {}
+    for (const host of [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`, 'localhost', `sub.localhost:${port}`, `evil.example:${port}`]) {
+      table[host] = {}
+      for (const path of ['/', '/__wb/project', '/frame.html']) table[host]![path] = await status(host, path)
+    }
+    console.log(`[dev host] ${JSON.stringify(table)}`)
+    const local = { '/': '200', '/__wb/project': '200', '/frame.html': '200' }
+    expect(table[`localhost:${port}`]).toEqual(local)
+    expect(table[`127.0.0.1:${port}`]).toEqual(local)
+    expect(table[`[::1]:${port}`]).toEqual(local)
+    expect(table.localhost).toEqual(local)
+    expect(table[`evil.example:${port}`]).toEqual({ '/': '403', '/__wb/project': '403', '/frame.html': '403' })
+  })
 })
