@@ -41,6 +41,8 @@ export { snapshotToLintInput } from './snapshot/lint-input'
 export type { ManifestIssue, ManifestIssueCode } from './manifest/schema'
 export { ManifestSchema, validateManifest } from './manifest/schema'
 export { compareVersions, SDK_RANGE_PATTERN, satisfiesSdk, VERSION_PATTERN } from './manifest/semver'
+// 토큰 → CSS 변수(spec 「토큰이 화면에 닿는 길」). kit dev 의 갤러리 · 캔버스 · 내보내기가 같은 함수로 `:root` 를 짓는다.
+export { tokensCss, tokenValues, tokenVar } from './manifest/tokens'
 
 // `.wbtheme` 읽기 · 쓰기(spec 「`.wbtheme` 파일」 · 「업로드 검증」). 빌드가 쓰고, 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
 export type { WbthemeFiles, WbthemeIssue, WbthemeIssueCode } from './wbtheme/read'

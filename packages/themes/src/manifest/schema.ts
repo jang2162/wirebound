@@ -10,6 +10,8 @@ export type ManifestIssueCode =
   | 'unknown-token-ref' | 'token-ref-type' | 'token-ref-cycle' | 'token-default-type' | 'token-select-default'
   | 'unknown-component' | 'variant-from-component' | 'duplicate-variant' | 'default-variant-missing' | 'unknown-hide-prop'
   | 'pattern'
+  /** `tokensCss` · `tokenValues` 에 받은 값의 키가 선언에 없다 — manifest 검증은 내지 않는다. */
+  | 'unknown-token'
 
 export interface ManifestIssue {
   code: ManifestIssueCode

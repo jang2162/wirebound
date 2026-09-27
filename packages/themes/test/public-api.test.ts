@@ -76,6 +76,8 @@ describe('공개 표면이 계약이다', () => {
     'ManifestSchema', 'validateManifest', 'compareVersions', 'satisfiesSdk', 'VERSION_PATTERN', 'SDK_RANGE_PATTERN',
     // `.wbtheme` 읽기 · 쓰기. 빌드 · 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
     'readWbtheme', 'packWbtheme', 'WBTHEME_LIMITS',
+    // 토큰 → CSS 변수 · 푼 값. 갤러리 · 캔버스 · 내보내기가 같은 함수로 짓는다.
+    'tokensCss', 'tokenValues', 'tokenVar',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {

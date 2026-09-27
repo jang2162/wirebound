@@ -1,4 +1,4 @@
-import type { TokenDecl, TokenType } from '@wirebound/theme-sdk'
+import type { ThemeManifest, TokenDecl, TokenType } from '@wirebound/theme-sdk'
 import type { ManifestIssue } from './schema'
 
 /** `{color.primary}` — 같은 타입 토큰의 참조. 기본값에만 쓴다(spec 「manifest」의 `tokens.items`). */
@@ -126,4 +126,78 @@ export function checkTokens(items: Readonly<Record<string, TokenDecl>>): Manifes
   }
 
   return issues
+}
+
+/** 토큰 키의 CSS 변수 이름. `color.primary` → `--wb-color-primary`(spec 「토큰이 화면에 닿는 길」). */
+export function tokenVar(key: string): string {
+  return `--wb-${key.replace(/\./g, '-')}`
+}
+
+type TokenValues = Readonly<Record<string, string | number>>
+
+/**
+ * 토큰마다 쓸 값 — 받은 값이 그 타입의 검증을 지나면 그것, 아니면 선언의 기본값. 버린 값은 이슈로 돌려준다.
+ * 기본값이 참조면 참조 그대로 둔다(`tokensCss` 는 `var()` 로, `tokenValues` 는 따라가서 푼다).
+ */
+function effectiveValues(
+  manifest: ThemeManifest,
+  values: TokenValues,
+): { chosen: Map<string, string | number>; issues: ManifestIssue[] } {
+  const items = manifest.tokens.items
+  const issues: ManifestIssue[] = []
+  const chosen = new Map<string, string | number>()
+
+  for (const key of Object.keys(values)) {
+    if (!(key in items)) issues.push({ code: 'unknown-token', path: `values.${key}`, message: `선언에 없는 토큰 ${key} 의 값을 버립니다` })
+  }
+  for (const [key, decl] of Object.entries(items)) {
+    if (key in values) {
+      const value = values[key]!
+      const reason = checkTokenValue(decl, value)
+      if (reason === null) {
+        chosen.set(key, value)
+        continue
+      }
+      issues.push({
+        code: decl.type === 'select' ? 'token-select-default' : 'token-default-type',
+        path: `values.${key}`,
+        message: `토큰 ${key} 의 값 ${JSON.stringify(value)} 을 버리고 기본값을 씁니다 — ${reason}`,
+      })
+    }
+    // 기본값도 한 번 더 본다 — 검증을 안 거친 manifest 의 값이 `:root` 블록 밖으로 새지 않게.
+    if (tokenRef(decl.default) !== null || checkTokenValue(decl, decl.default) === null) chosen.set(key, decl.default)
+  }
+  return { chosen, issues }
+}
+
+/**
+ * 토큰을 CSS 변수 선언 한 블록으로(spec 「토큰이 화면에 닿는 길」). `values` 는 기본값과 다른 값만 받는다(프로젝트의
+ * `theme_tokens`). 참조 기본값은 `var(--wb-…)` 라 대상의 값을 덮으면 따라온다.
+ */
+export function tokensCss(manifest: ThemeManifest, values: TokenValues = {}): { css: string; issues: ManifestIssue[] } {
+  const { chosen, issues } = effectiveValues(manifest, values)
+  let css = ':root {\n'
+  for (const [key, value] of chosen) {
+    const ref = tokenRef(value)
+    css += `  ${tokenVar(key)}: ${ref === null ? String(value) : `var(${tokenVar(ref)})`};\n`
+  }
+  return { css: `${css}}\n`, issues }
+}
+
+/** `useToken` 에 넘길 값 — 참조를 따라가 푼 값. 풀 수 없는 참조(없는 키 · 순환)는 싣지 않는다. */
+export function tokenValues(manifest: ThemeManifest, values: TokenValues = {}): Record<string, string | number> {
+  const { chosen } = effectiveValues(manifest, values)
+  const resolved: Record<string, string | number> = {}
+  for (const key of chosen.keys()) {
+    const seen = new Set<string>()
+    let value = chosen.get(key)
+    let ref = value === undefined ? null : tokenRef(value)
+    while (ref !== null && !seen.has(ref)) {
+      seen.add(ref)
+      value = chosen.get(ref)
+      ref = value === undefined ? null : tokenRef(value)
+    }
+    if (value !== undefined && ref === null) resolved[key] = value
+  }
+  return resolved
 }
