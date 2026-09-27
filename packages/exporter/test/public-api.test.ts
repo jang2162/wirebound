@@ -133,7 +133,7 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
     expect(Object.keys(manifest.dependencies).sort()).toEqual([
       '@wirebound/renderer',
       '@wirebound/schema',
-      '@wirebound/themes',
+      '@wirebound/theme-sdk',
       'react',
       'react-dom',
     ])

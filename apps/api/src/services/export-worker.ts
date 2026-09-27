@@ -712,7 +712,7 @@ export class ExportWorkerPool {
   /** 행을 **한 장씩** 보낸다 — 머리말 «메인이 쥐는 것». 끝났으면(끊김 · 죽음) 그만 보낸다. */
   private async feed(worker: Worker, rows: ExportRows, spec: ExportJobSpec, done: () => boolean): Promise<void> {
     const post = (message: ToWorker): void => worker.postMessage(message)
-    post({ t: 'job', spec: cloneableSpec(spec) })
+    post({ t: 'job', spec })
     post({ t: 'rows', part: 'menu', items: rows.menu })
     for (const page of rows.pages) {
       await yieldToLoop()
@@ -801,11 +801,6 @@ function plainError(error: unknown): Error {
   const plain = new Error(error instanceof Error ? error.message : String(error))
   if (error instanceof Error) plain.name = error.name
   return plain
-}
-
-function cloneableSpec(spec: ExportJobSpec): ExportJobSpec {
-  if (spec.kind !== 'pptx' || spec.screenTheme === null || spec.screenTheme.ok) return spec
-  return { ...spec, screenTheme: { ok: false, error: plainError(spec.screenTheme.error) } }
 }
 
 /** 워커가 넘긴 실패를 메인의 에러로 되살린다 — 도메인 에러는 **같은 클래스**다(`routes/export.ts`의 `orFail`). */

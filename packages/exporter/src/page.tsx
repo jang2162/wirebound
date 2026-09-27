@@ -1,11 +1,6 @@
-import {
-  installStructures,
-  renderDocument,
-  structureBaseCss,
-  type NodeRenderError,
-} from '@wirebound/renderer'
+import { NO_THEME, renderDocument, type NodeRenderError } from '@wirebound/renderer'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
-import { compileTheme, themeStructures, type ResolvedTheme } from '@wirebound/themes'
+import { defaultViewsCss, type ThemeDefinition } from '@wirebound/theme-sdk'
 import type { ReactElement, ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
@@ -36,16 +31,14 @@ export interface ExportPageOptions {
    */
   title: string
   /**
-   * 해석이 끝난 테마. **어디서 오는지는 호출자가 정한다.**
+   * 그릴 테마(뷰 · manifest). **어디서 오는지는 호출자가 정한다.**
    *
-   * *"테마를 스냅샷 payload에서 읽는다"*는 **스냅샷을 내보낼 때의 정책**이고, 라이브
-   * 페이지를 내보내면 라이브 테마가 맞다. 순수 패키지가 그 정책을 가질 자리가 아니므로 값만
-   * 받는다 — 무엇을 넘길지는 api 라우트가 판정한다.
-   *
-   * **없는 것이 정상이다**(`layouts.theme_id`가 `NULL`을 받는다). 그때 CSS는
-   * 구조 기본 CSS만이고 구조 선택은 카탈로그의 첫 구조다.
+   * **없는 것이 정상이다** — api 는 테마 코드를 싣지 않으므로(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`
+   * 「내보내기와 PPTX」) 늘 안 넘긴다. 그때 모든 노드가 SDK 기본 뷰로 그려진다(`NO_THEME`).
    */
-  theme?: ResolvedTheme | null
+  theme?: ThemeDefinition
+  /** 테마의 CSS. 기본 뷰 CSS 뒤에 싣는다(`pageCss`). */
+  themeCss?: string
   /** `<html lang>`. 기본은 `'ko'`다 — 이 도구의 카탈로그·문안이 한국어다. */
   lang?: string
 }
@@ -57,7 +50,7 @@ export interface ExportedPage {
    * 이 페이지가 기대는 CSS 한 장. **파일로 쓰지 않는다** — 설계서 「HTML 정적 번들」의
    * `assets/theme.css`를 만드는 것은 호출자이고, 링크로 걸지 인라인할지도 그쪽이 정한다.
    *
-   * **맨 앞에 문서 여백 초기화가 선다**(`STANDALONE_RESET`) — 그 뒤가 `pageCss(theme)`다. 까닭은 그 상수의 머리말.
+   * **맨 앞에 문서 여백 초기화가 선다**(`STANDALONE_RESET`) — 그 뒤가 `pageCss(themeCss)`다. 까닭은 그 상수의 머리말.
    */
   css: string
   /**
@@ -92,15 +85,14 @@ export interface ExportedPage {
  * `<!doctype html>`만 앞에 붙인다 — React가 그것을 내지 않는다.
  */
 export function exportPage(options: ExportPageOptions): ExportedPage {
-  const theme = options.theme ?? null
-  const { tree, errors } = renderPageTree(options.document, theme)
+  const { tree, errors } = renderPageTree(options.document, options.theme)
   const html = renderHtmlDocument({
     lang: options.lang ?? DEFAULT_LANG,
     title: options.title,
     head: null,
     body: tree,
   })
-  return { html, css: `${STANDALONE_RESET}${pageCss(theme)}`, errors }
+  return { html, css: `${STANDALONE_RESET}${pageCss(options.themeCss)}`, errors }
 }
 
 /**
@@ -116,7 +108,7 @@ export function exportPage(options: ExportPageOptions): ExportedPage {
  * 여백이라 여기서 지우지 않는다.
  *
  * **`<head>`에 싣지 않는다** — `exportPage`의 `<head>`는 비어 있고 CSS 는 값으로만 낸다(`test/page.test.ts`). **`pageCss`에
- * 넣지 않는다** — 그것은 번들의 `assets/theme.css`이고 테마 어휘(`data-wb-*`)로만 적힌다. 번들은 셸이 같은 초기화를 건다
+ * 넣지 않는다** — 그것은 번들의 `assets/theme.css`이고 문서 노드만 겨냥한다. 번들은 셸이 같은 초기화를 건다
  * (`bundle/shell-css.ts`).
  */
 const STANDALONE_RESET = 'html,\nbody {\n  margin: 0;\n}\n'
@@ -131,19 +123,12 @@ const STANDALONE_RESET = 'html,\nbody {\n  margin: 0;\n}\n'
  */
 export function renderPageTree(
   page: PageDocument,
-  theme: ResolvedTheme | null,
+  theme: ThemeDefinition | undefined,
 ): { tree: ReactElement; errors: NodeRenderError[] } {
   installRegistries()
   const errors: NodeRenderError[] = []
-  /**
-   * **구조 선택을 화면과 같은 함수에서 얻는다.** 이 함수는 `packages/themes`에 있고
-   * 캔버스도 같은 이름을 부른다 — 사본을 두면 「HTML 정적 번들」의 *"결과가 어긋날 수
-   * 없다"*가 바로 그 자리에서 거짓이 된다.
-   */
-  const tree = renderDocument(page, {
-    structures: themeStructures(theme),
-    onNodeError: (error) => errors.push(error),
-  })
+  // **테마를 안 받아도 뷰 경로로 그린다** — 캔버스와 같은 길이어야 「HTML 정적 번들」의 *"결과가 어긋날 수 없다"*가 선다.
+  const tree = renderDocument(page, { theme: theme ?? NO_THEME, onNodeError: (error) => errors.push(error) })
   return { tree, errors }
 }
 
@@ -185,7 +170,7 @@ export const DEFAULT_LANG = 'ko'
  *
  * **확인이 아니라 설치를 고른 이유 셋.**
  *
- * 1. **둘 다 멱등이고 이미 등록된 것을 건너뛴다**(`catalog/index.ts`·`structures/index.ts`).
+ * 1. **멱등이고 이미 등록된 것을 건너뛴다**(`catalog/index.ts`).
  *    그래서 여기서 부르는 것이 **호출자가 등록한 것을 덮지 않는다** — 값을 잃을 위험이
  *    없는 쪽에서 잊을 수 있는 자리를 없앨 수 있다. `apps/web`의 `catalog-setup`과
  *    `apps/api`의 `schema-setup`도 이미 그 멱등성에 기대고 있다.
@@ -202,22 +187,17 @@ export const DEFAULT_LANG = 'ko'
  */
 export function installRegistries(): void {
   installCatalog()
-  installStructures()
 }
 
 /**
- * 시트 **한 장**을 만든다. 순서는 구조 기본 CSS → 테마다.
+ * 시트 **한 장**을 만든다. 순서는 SDK 기본 뷰 CSS → 테마 CSS 다.
  *
- * **그 순서가 곧 *"테마가 이긴다"*이다** — 같은 특이도에서 나중에 온 규칙이 이긴다
- * (`packages/renderer/test/structure-css.test.ts`가 계산된 스타일로 쟀다). 화면은 같은
- * 순서로 `<style>` **둘**을 건다(`apps/web/src/theme/use-theme-css.ts`). 여기서 한
- * 장으로 합치는 것은 「HTML 정적 번들」이 `assets/theme.css` **하나**를 그리기 때문이고, 문서 순서가
- * 그대로 남으므로 캐스케이드는 같다.
+ * **그 순서가 곧 *"테마가 이긴다"*이다** — 같은 특이도에서 나중에 온 규칙이 이긴다. 캔버스 iframe 도 같은 순서로
+ * `<style>` 둘을 건다(`apps/web/src/canvas/canvas-theme.ts` 의 `CANVAS_STYLES`). 여기서 한 장으로 합치는 것은 「HTML 정적 번들」이
+ * `assets/theme.css` **하나**를 그리기 때문이고, 문서 순서가 그대로 남으므로 캐스케이드는 같다.
  *
- * **테마가 없으면 구조 기본 CSS만이다 — 빈 문자열이 아니다.** 그것이 없으면 테마 없는
- * 프로젝트의 번들이 아무 스타일도 없이 나간다.
+ * **테마가 없으면 기본 뷰 CSS 만이다 — 빈 문자열이 아니다.** 그것이 없으면 번들이 아무 스타일도 없이 나간다.
  */
-export function pageCss(theme: ResolvedTheme | null): string {
-  const base = structureBaseCss()
-  return theme === null ? base : `${base}\n${compileTheme(theme)}`
+export function pageCss(themeCss?: string): string {
+  return `${defaultViewsCss()}${themeCss ?? ''}`
 }

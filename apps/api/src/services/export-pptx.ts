@@ -11,14 +11,14 @@
  * 둘 다 `readExportRows` → `assembleExportSource`를 지난다(`export-source.ts`). 그래야 **같은 프로젝트를 같은 순서로 같은
  * 이름으로** 싣는다 — 두 파일을 나란히 열어 본 사람에게만 보이는 갈림을 막는 자리다.
  *
- * # 테마를 **래스터를 위해** 읽는다
+ * # 테마를 읽지 않는다
  *
  * **테마를 OOXML 색으로는 옮기지 않는다** — 설계서 「명시적으로 제외한 것 (YAGNI)」이 도형 변환을
  * 포기했으므로 `a:clrScheme`으로 옮길 이유가 없다.
  *
- * **그리는 입력으로서의 테마는 읽는다:** 슬라이드에 실릴 화면은 래스터이고 그 이미지가
- * 테마 색을 담는데, 그 이미지를 만드는 것이 여기다. 읽는 사슬은 번들과 같은 하나다
- * (`currentProjectTheme` → `asResolvedTheme`) — 두 산출물이 다른 테마를 싣지 않는다.
+ * **화면을 그리는 입력으로도 테마를 싣지 않는다** — api 는 테마 코드를 싣지 않아(spec
+ * `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「내보내기와 PPTX」) 화면은 번들과 같은 SDK 기본 뷰와 그 CSS 로
+ * 그린 와이어프레임이다(`export-bundle.ts` 머리말).
  *
  * # 그리는 것은 이음매 뒤다
  *
@@ -41,9 +41,7 @@
  */
 import { exportPage, exportPptx, type PptxPage, type PptxPart, type PptxScreen } from '@wirebound/exporter'
 import type { DbHandle } from '../db/tx'
-import type { Theme } from '@wirebound/themes'
 import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
-import { asResolvedTheme, currentProjectTheme } from './project-theme'
 import {
   errorLine,
   screenFileName,
@@ -99,34 +97,16 @@ export async function exportProjectPptx(
   const rows = await readExportRows(db, projectId)
   const renderer = options?.renderer
   const screens: PptxScreenSource | undefined =
-    renderer === undefined
-      ? undefined
-      : { theme: await readScreenTheme(db, projectId), render: (requests) => renderer.render(requests) }
+    renderer === undefined ? undefined : { render: (requests) => renderer.render(requests) }
   return buildProjectPptx(rows, screens)
 }
 
 /**
- * 화면을 그리는 데 드는 것 — **메인 스레드에만 있는 둘**이다. 테마는 DB 에서 읽고, 그리는 자(브라우저)는 메인이 쥔다.
- * 워커는 이것을 메시지로 흉내 낸다(`export-worker-thread.ts`).
+ * 화면을 그리는 자 — **메인 스레드에만 있다**(브라우저를 메인이 쥔다). 워커는 이것을 메시지로 흉내 낸다
+ * (`export-worker-thread.ts`).
  */
 export interface PptxScreenSource {
-  /** 테마를 읽은 결과. **읽다 던진 것도 값이다** — 아래 `drawScreens`의 한 `try`가 그것을 받는다. */
-  theme: ScreenTheme
   render(requests: readonly ScreenRequest[]): Promise<ScreenBatch>
-}
-
-export type ScreenTheme = { ok: true; theme: Theme | null } | { ok: false; error: unknown }
-
-/**
- * 화면용 테마를 읽는다. **던지지 않는다** — 던진 것은 `{ ok: false }`로 담아 `drawScreens`의 한 `try`가 받게 한다 —
- * 테마 읽기가 던져도 화면만 잃고 pptx 는 나온다(그 함수의 머리말 표 첫 줄).
- */
-export async function readScreenTheme(db: DbHandle, projectId: string): Promise<ScreenTheme> {
-  try {
-    return { ok: true, theme: (await currentProjectTheme(db, projectId)).theme }
-  } catch (error) {
-    return { ok: false, error }
-  }
 }
 
 /** 읽은 행으로 pptx 를 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다. */
@@ -185,19 +165,18 @@ interface DrawnScreens {
  * **이 부류는 두 길로 샌다.** 글꼴 물음의 예외가 `render` 밖으로 새는 길, 그리고
  * **`render` 자체가 던지면 라우트 둘이 500이 되는 길**이다.
  *
- * 그래서 **화면을 그리는 길의 자리 셋을 한 `try` 안에 넣는다.** 셋 다 화면 없는 pptx 는
+ * 그래서 **화면을 그리는 길의 자리 둘을 한 `try` 안에 넣는다.** 둘 다 화면 없는 pptx 는
  * **부르지도 않는** 것이라, 감싸지 않으면 *"화면 때문에 pptx 전체를 잃는다"*가 생긴다.
  *
  * | 자리 | 화면 없는 pptx 도 부르나 |
  * |---|---|
- * | `currentProjectTheme` · `asResolvedTheme` | **안 부른다** — 화면이 없으면 PPTX 는 테마를 안 읽는다 |
  * | `exportPage` | **안 부른다** — 그리지 않으므로 부를 일이 없다 |
  * | `renderer.render` | **안 부른다** — 이음매의 타입은 *"던지지 않는다"*를 강제하지 못한다 |
  *
  * **한 덩어리로 감싼다 — 자리마다 나누지 않는다.** 나누면 갈래마다 이유가 달라져 보기에
- * 좋지만 **그 갈래를 재는 자를 못 만든다**(이 저장소에서 `exportPage`나 테마 읽기를
+ * 좋지만 **그 갈래를 재는 자를 못 만든다**(이 저장소에서 `exportPage`를
  * 던지게 만드는 길이 라우트 밖에 없다). **재지 못하는 갈래를 늘리지 않는 것이 이 저장소의
- * 결이다** — 대신 셋 전부가 *"화면을 그리지 못했습니다"* 하나로 모이고, 그 하나를
+ * 결이다** — 대신 둘 다 *"화면을 그리지 못했습니다"* 하나로 모이고, 그 하나를
  * `export-pptx-screens.test.ts`가 죽인다.
  *
  * **대가를 적는다:** 한 페이지의 `exportPage`가 죽으면 **그 배치의 화면이 전부 빠진다.**
@@ -215,10 +194,8 @@ async function drawScreens(
 
   let batch: ScreenBatch
   try {
-    if (!source.theme.ok) throw source.theme.error
-    const resolved = asResolvedTheme(source.theme.theme)
     const requests: ScreenRequest[] = pages.map((page) => {
-      const rendered = exportPage({ document: page.document, title: page.title, theme: resolved })
+      const rendered = exportPage({ document: page.document, title: page.title })
       return { title: page.title, html: rendered.html, css: rendered.css }
     })
     batch = await source.render(requests)

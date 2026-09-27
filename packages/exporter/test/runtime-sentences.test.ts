@@ -9,7 +9,6 @@
  * 그리고 **검증기와 런타임의 문장을 갈래마다 잰다** — 여덟 갈래 중 여섯은 글자까지 같고
  * 둘은 런타임에만 있다. 아래 표가 그 여덟을 하나씩 짚는다.
  */
-import { installStructures } from '@wirebound/renderer'
 import {
   installCatalog,
   listInteractionSentences,
@@ -26,7 +25,6 @@ import { buildRuntimePlan } from '../src/runtime/plan'
 
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
 
 function documentWith(interactions: Interaction[]): PageDocument {
@@ -45,7 +43,7 @@ function documentWith(interactions: Interaction[]): PageDocument {
 }
 
 function planMessages(page: PageDocument): string[] {
-  const { plan } = buildRuntimePlan({ page, theme: null, hrefs: new Map(), baseErrors: [] })
+  const { plan } = buildRuntimePlan({ page, hrefs: new Map(), baseErrors: [] })
   return plan.events.flatMap((event) => event.issues.map((issue) => issue.message))
 }
 
@@ -112,7 +110,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
 
   it('규칙의 자리가 문장과 정확히 같다 — 트리거 4종 전부', () => {
     const page = documentWith(RULES)
-    const { plan } = buildRuntimePlan({ page, theme: null, hrefs: new Map(), baseErrors: [] })
+    const { plan } = buildRuntimePlan({ page, hrefs: new Map(), baseErrors: [] })
     const pressed = plan.events
       .flatMap((event) => event.rules.map((index) => `${event.nodeId}#${index}`))
       .sort()
@@ -151,7 +149,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
       ...page,
       root: { ...page.root, children: [...(page.root.children ?? []), null as unknown as never] },
     }
-    const { plan } = buildRuntimePlan({ page: broken, theme: null, hrefs: new Map(), baseErrors: [] })
+    const { plan } = buildRuntimePlan({ page: broken, hrefs: new Map(), baseErrors: [] })
     const pressed = plan.events
       .flatMap((event) => event.rules.map((index) => `${event.nodeId}#${index}`))
       .sort()
@@ -255,7 +253,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
     })
 
     it.each(OUT_OF_DOMAIN)('%s — 탭에는 문장이 있고 계획에는 없다', (_name, page) => {
-      const { plan } = buildRuntimePlan({ page, theme: null, hrefs: new Map(), baseErrors: [] })
+      const { plan } = buildRuntimePlan({ page, hrefs: new Map(), baseErrors: [] })
       expect(plan.events).toEqual([])
       const tree = nodesOnly(page.root)!
       expect(listInteractionSentences({ ...page, root: tree })).toHaveLength(1)
@@ -277,7 +275,7 @@ describe('탭의 문장과 눌리는 규칙이 같은 집합이다', () => {
    */
   it('액션이 없는 규칙은 그 사실을 말한다', () => {
     const page = documentWith([{ on: 'click', actions: [] }])
-    const { plan } = buildRuntimePlan({ page, theme: null, hrefs: new Map(), baseErrors: [] })
+    const { plan } = buildRuntimePlan({ page, hrefs: new Map(), baseErrors: [] })
     expect(plan.events).toHaveLength(1)
     expect(plan.events[0]).toMatchObject({ writes: [], issues: [], requests: [], rules: [0] })
     expect(listInteractionSentences(page)[0]?.text).toContain('아무 일도 일어나지 않습니다')

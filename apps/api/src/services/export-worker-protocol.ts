@@ -5,15 +5,18 @@
  * 도메인 에러는 클래스가 아니라 `ExportJobFailure`의 갈래로 넘기고 메인이 같은 클래스로 되살린다.
  */
 import type { BundleNodeError } from '@wirebound/exporter'
-import type { BrokenLink, BundleTheme, ExportedPageSummary } from './export-bundle'
-import type { ScreenFailure, ScreenTheme } from './export-pptx'
+import type { BrokenLink, ExportedPageSummary } from './export-bundle'
+import type { ScreenFailure } from './export-pptx'
 import type { ExportRows } from './export-source'
 import type { ScreenRequest, ScreenResult } from './screen-render'
 
-/** 어떤 산출물을 만들지. `zipRoot`·`zip`이 없으면 **압축하지 않는다** — 미리보기가 그것이다. */
+/**
+ * 어떤 산출물을 만들지. `zipRoot`·`zip`이 없으면 **압축하지 않는다** — 미리보기가 그것이다. `screens`가 거짓이면 pptx 의
+ * 화면을 그리지 않는다(메인에 그리는 자가 없다).
+ */
 export type ExportJobSpec =
-  | { kind: 'html'; theme: BundleTheme; zipRoot: string | null }
-  | { kind: 'pptx'; screenTheme: ScreenTheme | null; zip: boolean }
+  | { kind: 'html'; zipRoot: string | null }
+  | { kind: 'pptx'; screens: boolean; zip: boolean }
 
 export type HtmlJobResult = {
   kind: 'html'
@@ -22,7 +25,7 @@ export type HtmlJobResult = {
   pages: ExportedPageSummary[]
   duplicateTargets: string[]
   brokenLinks: BrokenLink[]
-  themeId: string | null
+  themeId: null
 }
 
 export type PptxJobResult = {

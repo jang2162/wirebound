@@ -24,7 +24,7 @@
   "dependencies": {
     "@wirebound/renderer": "workspace:*",
     "@wirebound/schema": "workspace:*",
-    "@wirebound/themes": "workspace:*",
+    "@wirebound/theme-sdk": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -48,5 +48,7 @@ export { renderComposed } from './compose'
 
 export { resolveVariant } from './variant'
 
+export { NO_THEME } from './no-theme'
+
 export type { Point } from './marker'
 export { focusElement, markerPoint } from './marker'

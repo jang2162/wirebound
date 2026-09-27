@@ -6,7 +6,7 @@
  *   index.html            트리 네비 + 뷰어 셸 (첫 페이지를 담는다)
  *   pages/….html          페이지마다 셸을 통째로
  *   assets/shell.css      뷰어 셸의 CSS
- *   assets/theme.css      구조 기본 CSS + 테마 컴파일 결과
+ *   assets/theme.css      SDK 기본 뷰 CSS + 테마 CSS
  *   assets/runtime.js     상호작용 런타임 (`runtime/plan.ts`)
  * ```
  *
@@ -27,13 +27,13 @@
  * ## `assets/shell.css`는 「HTML 정적 번들」의 목록에 없다 — 더한 것이고 근거가 있다
  *
  * 설계서의 예시는 `theme.css`와 `runtime.js`만 든다. 셸 CSS를 테마 CSS에 섞으면 `pageCss`의
- * 순서 계약(*"구조 기본 CSS → 테마"*)에 셸이 끼어들고, 페이지마다 `<style>`로 인라인하면
+ * 순서 계약(*"기본 뷰 CSS → 테마"*)에 셸이 끼어들고, 페이지마다 `<style>`로 인라인하면
  * 페이지마다 셸을 통째로 싣는 중복(`bundle/shell.tsx` 머리말)이 CSS만큼 더 커진다.
  * **설계서의 목록은 예시이지 닫힌 목록이 아니다**(페이지도 둘만 적혀 있다).
  */
 import type { NodeRenderError } from '@wirebound/renderer'
 import type { PageDocument } from '@wirebound/schema'
-import type { ResolvedTheme } from '@wirebound/themes'
+import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { DEFAULT_LANG, pageCss, renderHtmlDocument, renderPageTree } from '../page'
 import { buildRuntimePlan, RUNTIME_JS, RUNTIME_JS_PATH, type RuntimePlan } from '../runtime/plan'
 import { scriptJson } from '../script-json'
@@ -76,8 +76,10 @@ export interface BundlePage {
 export interface ExportBundleOptions {
   /** 페이지 목록. **순서가 곧 좌측 트리의 순서이고 파일 이름의 결정성이다.** */
   pages: readonly BundlePage[]
-  /** 해석이 끝난 테마. 없는 것이 정상이다 — `exportPage`와 같은 계약이다. */
-  theme?: ResolvedTheme | null
+  /** 그릴 테마. 없는 것이 정상이다 — `exportPage`와 같은 계약이다. */
+  theme?: ThemeDefinition
+  /** 테마의 CSS. `exportPage`와 같은 계약이다. */
+  themeCss?: string
   /** `<html lang>`. 기본은 `'ko'`다. */
   lang?: string
 }
@@ -118,7 +120,7 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
   const pages = options.pages
   if (pages.length === 0) throw new Error('번들에 실을 페이지가 없습니다')
 
-  const theme = options.theme ?? null
+  const theme = options.theme
   const lang = options.lang ?? DEFAULT_LANG
   const paths = pageFileNames(pages.map((page) => page.title)).map(
     (name) => `${PAGES_DIRECTORY}/${name}`,
@@ -169,7 +171,7 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
       content: pageHtml(options, paths, rendered, plans, index, paths[index]!, lang),
     })),
     { path: SHELL_CSS_PATH, content: SHELL_CSS },
-    { path: THEME_CSS_PATH, content: pageCss(theme) },
+    { path: THEME_CSS_PATH, content: pageCss(options.themeCss) },
     { path: RUNTIME_JS_PATH, content: RUNTIME_JS },
   ]
 

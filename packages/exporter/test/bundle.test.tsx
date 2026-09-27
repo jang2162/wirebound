@@ -8,29 +8,17 @@
  * 여기서 **안 재는 것**: 캔버스와의 견주기(`bundle-parity.test.tsx`) · 계산된 스타일
  * (시트를 안 건다) · 중복 비용(`bundle-size.test.ts`).
  */
-import { installStructures, structureBaseCss } from '@wirebound/renderer'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
-import { compileTheme, resolveTheme, systemTheme, THEME_ISSUE_SEVERITY } from '@wirebound/themes'
-import type { ResolvedTheme } from '@wirebound/themes'
+import { defaultViewsCss } from '@wirebound/theme-sdk'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { exportBundle } from '../src/bundle/index'
+import { markedTheme } from '../test-support/fixtures'
 
-/**
- * **테마 해석이 카탈로그를 본다** — 테마의 패턴이 컴포넌트 타입을 가리키므로 설치 없이
- * `resolveTheme`을 부르면 `bad-pattern-node` error가 쏟아진다. `exportBundle`이 스스로
- * 설치하므로 순서에 따라 통과하기도 하는데(먼저 부른 케이스가 설치해 준다), 그 순서에
- * 기대면 파일 하나를 따로 돌릴 때 결과가 달라진다.
- */
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
 
-function resolved(id: string): ResolvedTheme {
-  const { theme, issues } = resolveTheme(systemTheme(id)!)
-  expect(issues.filter((issue) => THEME_ISSUE_SEVERITY[issue.code] === 'error')).toEqual([])
-  return theme!
-}
+const THEME_CSS = '[data-wb-component="Button"] { color: red }'
 
 const LIST_PAGE: PageDocument = {
   version: 1,
@@ -77,7 +65,8 @@ function twoPages() {
       },
       { title: '회원 상세', document: DETAIL_PAGE },
     ],
-    theme: resolved('portal'),
+    theme: markedTheme(),
+    themeCss: THEME_CSS,
   })
 }
 
@@ -125,19 +114,16 @@ describe('exportBundle — 파일 트리', () => {
 })
 
 describe('exportBundle — CSS', () => {
-  it('테마 시트가 exportPage의 css와 같은 한 장이다', () => {
-    const theme = resolved('portal')
-    expect(fileAt(twoPages(), 'assets/theme.css')).toBe(
-      `${structureBaseCss()}\n${compileTheme(theme)}`,
-    )
+  it('테마 시트가 기본 뷰 CSS 뒤에 테마 CSS 를 싣는 한 장이다', () => {
+    expect(fileAt(twoPages(), 'assets/theme.css')).toBe(`${defaultViewsCss()}${THEME_CSS}`)
   })
 
-  it('테마가 없으면 구조 기본 CSS 그대로다', () => {
+  it('테마 CSS 가 없으면 기본 뷰 CSS 그대로다', () => {
     const bundle = exportBundle({ pages: [{ title: 'ㄱ', document: DETAIL_PAGE }] })
-    expect(fileAt(bundle, 'assets/theme.css')).toBe(structureBaseCss())
+    expect(fileAt(bundle, 'assets/theme.css')).toBe(defaultViewsCss())
   })
 
-  /** 셸 CSS가 테마 CSS에 섞이면 *"구조 기본 → 테마"* 순서에 셸이 끼어든다. */
+  /** 셸 CSS가 테마 CSS에 섞이면 *"기본 뷰 → 테마"* 순서에 셸이 끼어든다. */
   it('셸 CSS가 테마 시트에 섞이지 않는다', () => {
     expect(fileAt(twoPages(), 'assets/theme.css')).not.toContain('wb-export')
     expect(fileAt(twoPages(), 'assets/shell.css')).not.toContain('data-wb-')

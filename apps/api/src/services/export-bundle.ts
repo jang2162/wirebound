@@ -11,16 +11,15 @@
  *
  * 1. `readExportRows` → `assembleExportSource` — 메뉴·페이지·문서·코멘트·설명. **PPTX와 공유한다.**
  *    `export-source.ts`의 머리말이 수집 순서와 근거를 든다.
- * 2. `currentProjectTheme` → `asResolvedTheme` — 캔버스가 보는 것과 **같은 사슬**이다.
- *    **PPTX도 같은 둘을 지난다.** PPTX는 설계서 「테마 시스템」의 테마를 **OOXML 색으로**
- *    옮기지 않고 그 테마로 **래스터를 그린다** — 슬라이드의 화면이 곧 그 테마다.
- * 3. `exportBundle` — 파일과 `errors`.
- * 4. 못 이은 링크를 센다.
+ * 2. `exportBundle` — 파일과 `errors`. **테마를 넘기지 않는다** — api 는 테마 코드를 싣지 않아(spec
+ *    `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「내보내기와 PPTX」) 번들은 SDK 기본 뷰와 그 CSS 로 그린
+ *    와이어프레임이다. 프로젝트 테마는 내보내기가 브라우저 렌더로 옮길 때 싣는다.
+ * 3. 못 이은 링크를 센다.
  *
  * # 출처는 라이브 프로젝트다
  *
  * 페이지·문서는 `pages` 표의 **지금** 값이고, 코멘트는 `comments` 표의 **살아 있는**
- * 값이며, 테마는 프로젝트가 **지금** 쓰는 것이다. 설계서 「로드맵」의 MVP가 *"설계서를 배포한다"*이고
+ * 값이다. 설계서 「로드맵」의 MVP가 *"설계서를 배포한다"*이고
  * 그것은 **지금 설계서**다. 스냅샷 번들은 이 함수의 입력을 payload에서 읽어 오는 것으로
  * 바뀔 뿐이라(입력이 이미 값이다) 그 위에 얹힌다.
  *
@@ -46,7 +45,6 @@ import {
 } from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
 import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
-import { asResolvedTheme, currentProjectTheme, type CurrentProjectTheme } from './project-theme'
 
 /**
  * **도메인 에러 둘을 `export-source`가 소유한다.** 두 내보내기가 같은 수집을
@@ -93,8 +91,8 @@ export interface ProjectBundle {
   /** 둘 이상의 페이지가 든 타겟. 그 타겟을 겨눈 링크는 어디에도 안 생긴다. */
   duplicateTargets: string[]
   brokenLinks: BrokenLink[]
-  /** 이 번들이 실은 테마. `null`이면 구조 기본 CSS만으로 그려진 것이다. */
-  themeId: string | null
+  /** 이 번들이 실은 테마. 늘 `null` 이다 — 번들은 테마 없이 SDK 기본 뷰로 그린다(머리말의 둘째 단계). */
+  themeId: null
 }
 
 /**
@@ -106,14 +104,11 @@ export interface ProjectBundle {
  */
 export async function exportProjectBundle(db: DbHandle, projectId: string): Promise<ProjectBundle> {
   const rows = await readExportRows(db, projectId)
-  return buildProjectBundle(rows, await currentProjectTheme(db, projectId))
+  return buildProjectBundle(rows)
 }
 
-/** 번들이 싣는 테마 — `currentProjectTheme`이 낸 것 중 둘. */
-export type BundleTheme = Pick<CurrentProjectTheme, 'themeId' | 'theme'>
-
-/** 읽은 행과 테마로 번들을 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다. */
-export function buildProjectBundle(rows: ExportRows, { themeId, theme }: BundleTheme): ProjectBundle {
+/** 읽은 행으로 번들을 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다. */
+export function buildProjectBundle(rows: ExportRows): ProjectBundle {
   const { ordered, documentById, commentsById, descriptionById } = assembleExportSource(rows)
 
   const bundlePages: BundlePage[] = ordered.map((page) => ({
@@ -130,7 +125,7 @@ export function buildProjectBundle(rows: ExportRows, { themeId, theme }: BundleT
     target: page.target,
   }))
 
-  const { files, errors } = exportBundle({ pages: bundlePages, theme: asResolvedTheme(theme) })
+  const { files, errors } = exportBundle({ pages: bundlePages })
 
   return {
     files,
@@ -141,7 +136,7 @@ export function buildProjectBundle(rows: ExportRows, { themeId, theme }: BundleT
     pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
     duplicateTargets: duplicateTargets(ordered),
     brokenLinks: brokenLinks(ordered, documentById),
-    themeId,
+    themeId: null,
   }
 }
 

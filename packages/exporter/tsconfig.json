@@ -12,7 +12,7 @@
   "references": [
     { "path": "../schema" },
     { "path": "../renderer" },
-    { "path": "../themes" },
+    { "path": "../theme-sdk" },
     { "path": "./tsconfig.runtime.json" }
   ]
 }

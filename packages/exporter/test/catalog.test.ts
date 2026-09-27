@@ -20,19 +20,14 @@
  * `runtime-plan.test.tsx`의 *"카탈로그가 비어 있어도 판정한다"*가 잰다.
  *
  * **그래도 계약을 세우는 이유는 침묵이 아니라 산출물이다.** 폴백이 든 HTML은 **눈으로는
- * 그럴듯한 한 장**이고, 그것이 남에게 전달된다. 그리고 `installCatalog`·`installStructures`는
- * 둘 다 **이미 등록된 것을 건너뛰므로**(멱등) 부르는 것이 남의 등록을 덮지 않는다 —
+ * 그럴듯한 한 장**이고, 그것이 남에게 전달된다. 그리고 `installCatalog`는
+ * **이미 등록된 것을 건너뛰므로**(멱등) 부르는 것이 남의 등록을 덮지 않는다 —
  * 값을 잃을 위험이 없는 쪽에서 잊을 수 있는 자리를 없앤다.
  *
  * **이 파일은 전역 레지스트리를 비운다.** 케이스마다 자기 몸통에서 비우므로 실행 순서에
  * 기대지 않고, vitest가 파일 단위로 모듈을 격리하므로 다른 파일에 새지 않는다.
  */
-import {
-  installStructures,
-  listStructureKeys,
-  renderDocument,
-  resetStructures,
-} from '@wirebound/renderer'
+import { NO_THEME, renderDocument } from '@wirebound/renderer'
 import {
   installCatalog,
   listComponents,
@@ -56,9 +51,7 @@ const DOC: PageDocument = {
 /** 아무것도 설치되지 않은 상태로 되돌린다. */
 function empty(): void {
   resetRegistry()
-  resetStructures()
   expect(listComponents()).toEqual([])
-  expect(listStructureKeys()).toEqual([])
 }
 
 describe('설치 없이 부르면 무엇이 관찰되는가', () => {
@@ -70,7 +63,7 @@ describe('설치 없이 부르면 무엇이 관찰되는가', () => {
     empty()
     const errors: { nodeId: string; type: string; message: string }[] = []
     const html = renderToStaticMarkup(
-      renderDocument(DOC, { onNodeError: (error) => errors.push(error) }),
+      renderDocument(DOC, { theme: NO_THEME, onNodeError: (error) => errors.push(error) }),
     )
 
     expect(errors).toEqual([
@@ -79,22 +72,6 @@ describe('설치 없이 부르면 무엇이 관찰되는가', () => {
     ])
     expect(html).toContain('data-wb-error="알 수 없는 컴포넌트 타입: Page"')
     expect(html).not.toContain('data-wb-component=')
-  })
-
-  /**
-   * **카탈로그만 있고 구조 구현이 없는 중간 상태도 있다.** 이쪽은 메시지가 다르다 —
-   * 계약이 둘(`installCatalog`·`installStructures`)이라는 것을 값으로 남긴다.
-   */
-  it('카탈로그만 설치하면 구조가 없다고 말한다', () => {
-    empty()
-    installCatalog()
-    const errors: { nodeId: string; type: string; message: string }[] = []
-    renderToStaticMarkup(renderDocument(DOC, { onNodeError: (error) => errors.push(error) }))
-
-    expect(errors.map((error) => error.message)).toEqual([
-      '구현되지 않은 구조: List:table',
-      '구현되지 않은 구조: Page:default',
-    ])
   })
 })
 
@@ -114,25 +91,22 @@ describe('exportPage가 설치를 계약으로 든다', () => {
     exportPage({ document: DOC, title: '회원 목록' })
 
     expect(listComponents().length).toBeGreaterThan(0)
-    expect(listStructureKeys().length).toBeGreaterThan(0)
   })
 
   /**
    * **멱등이라 남의 등록을 덮지 않는다.** 이미 설치된 뒤에 다시 불러도 던지지 않고
-   * (`registerComponent`·`registerStructure` 자신은 중복 등록에 던진다) 결과가 같다.
+   * (`registerComponent` 자신은 중복 등록에 던진다) 결과가 같다.
    */
   it('이미 설치돼 있으면 두 번 불러도 같다', () => {
     empty()
     installCatalog()
-    installStructures()
-    const before = { components: listComponents().length, structures: listStructureKeys().length }
+    const before = listComponents().length
 
     const first = exportPage({ document: DOC, title: '회원 목록' })
     const second = exportPage({ document: DOC, title: '회원 목록' })
 
     expect(second.html).toBe(first.html)
-    expect(listComponents().length).toBe(before.components)
-    expect(listStructureKeys().length).toBe(before.structures)
+    expect(listComponents().length).toBe(before)
   })
 })
 

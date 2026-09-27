@@ -15,7 +15,7 @@
  * 어느 노드에 붙었는지**는 여기서 재고, **자리**는 여기서 재지 않는다(실브라우저가 있어야
  * 잰다).
  */
-import { installStructures, renderDocument, type InteractionOverlay } from '@wirebound/renderer'
+import { NO_THEME, renderDocument, type InteractionOverlay } from '@wirebound/renderer'
 import { installCatalog, type Interaction, type PageDocument, type WbNode } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -24,7 +24,6 @@ import { RUNTIME_JS } from '../src/runtime/plan'
 
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
 
 const CLICK: Interaction[] = [
@@ -232,9 +231,9 @@ function statusLines(): string[] {
   return [...box.querySelectorAll('.wb-export-status-line')].map((line) => line.textContent ?? '')
 }
 
-/** 겹layer가 얹힌 문서를 **렌더러가** 그린 것. jsdom을 지나게 해 직렬화를 맞춘다. */
+/** 겹layer가 얹힌 문서를 **렌더러가** 그린 것 — 번들과 같은 테마(`NO_THEME`)다. jsdom을 지나게 해 직렬화를 맞춘다. */
 function expected(overlay: InteractionOverlay): string {
-  const html = renderToStaticMarkup(renderDocument(LIST_PAGE, { interaction: { overlay } }))
+  const html = renderToStaticMarkup(renderDocument(LIST_PAGE, { theme: NO_THEME, interaction: { overlay } }))
   const parsed = new DOMParser().parseFromString(html, 'text/html')
   return parsed.body.innerHTML
 }
