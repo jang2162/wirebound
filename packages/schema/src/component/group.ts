@@ -13,11 +13,10 @@
  * 선언한다"*를 기계로 본다(`test/component/group.test.ts`). 선언과 파일이 갈리는 순간
  * 거기서 죽으므로, 선언의 단순함을 얻으면서 유도의 무결성을 잃지 않는다.
  *
- * ## 이것은 설계서 「컴파일」(테마)의 «여섯» 밖이다
+ * ## 이것은 설계서 「노드 속성」(테마)의 «여섯» 밖이다
  *
- * 「컴파일」이 못박은 여섯은 **렌더러가 내보내는 DOM 속성**이다(`data-wb-id` ·
- * `data-wb-component` · `data-wb-structure` · `data-wb-variant` · `data-wb-part` ·
- * `data-wb-state`). 갈래는 DOM에 나가지 않고 테마 셀렉터가 되지도 않는다 —
+ * 「노드 속성」의 여섯은 **노드 루트에 실리는 DOM 속성**이다(렌더러가 `data-wb-id` · `data-wb-component` ·
+ * `data-wb-variant` · `data-wb-state`, SDK 기본 뷰가 `data-wb-structure` · `data-wb-part`). 갈래는 DOM에 나가지 않고 테마 셀렉터가 되지도 않는다 —
  * 사람에게 보이는 축이지 테마의 어휘가 아니다. `define.ts`의 `ComponentDef` 주석이 그
  * 구분을 적는다.
  */

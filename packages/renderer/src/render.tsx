@@ -274,7 +274,7 @@ function renderNodeIn(root: WbNode, node: WbNode, options: RenderOptions): React
  * **`attrs`에 얹는 것이 요점이다.** 뷰는 노드 속성을 `Root`에 펴므로(`@wirebound/theme-sdk`) 여기 핸들러를 넣으면
  * **뷰를 한 글자도 안 고치고** 모든 컴포넌트가 상호작용을 받는다.
  *
- * **설계서 「컴파일」의 여섯 속성 계약을 넓히지 않는다.** 이것들은 `data-*` 속성이 아니라 React의
+ * **설계서 「노드 속성」의 여섯 속성 계약을 넓히지 않는다.** 이것들은 `data-*` 속성이 아니라 React의
  * 이벤트 prop이라 DOM에 속성으로 나가지 않고, 테마의 셀렉터 어휘에 아무것도 더하지
  * 않는다(`test/contract-attrs.test.ts`가 세는 것도 `data-wb-*`다). **일곱째 데이터 속성이
  * 필요해지면 만들기 전에 멈추고 묻는다.**

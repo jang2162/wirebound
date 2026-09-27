@@ -115,7 +115,7 @@ describe('끈 렌더는 바뀌지 않는다', () => {
 
   it('런타임을 켜도 HTML이 같다 — 핸들러는 DOM 속성이 아니다', () => {
     const doc = example(CLICK_SETS_LOADING)
-    // 설계서 「컴파일」의 여섯 속성 계약을 넓히지 않는다는 것을 **렌더 결과에서** 재는 자리다.
+    // 설계서 「노드 속성」의 여섯 속성 계약을 넓히지 않는다는 것을 **렌더 결과에서** 재는 자리다.
     // (원문을 세는 쪽은 `contract-attrs.test.ts`가 이미 한다.)
     expect(markup(doc, EMPTY_OVERLAY)).toBe(markup(doc))
   })

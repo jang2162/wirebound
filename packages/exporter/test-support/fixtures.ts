@@ -24,7 +24,7 @@ function id(): string {
  * 것으로 두었고 `validatePage`가 페이지에 있는 `Slot`을 `error`로 막는다. 그래서
  * `slotFixture()`가 따로 있다.
  *
- * props를 기본값으로 두지 않는 것은 「컴파일」의 여섯 속성 중 `data-wb-variant`·`data-wb-state`가
+ * props를 기본값으로 두지 않는 것은 「노드 속성」의 여섯 속성 중 `data-wb-variant`·`data-wb-state`가
  * **기본 props에서는 안 나오기** 때문이다.
  */
 export function broadFixture(): PageDocument {

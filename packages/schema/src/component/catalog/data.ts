@@ -24,7 +24,7 @@ export const ListDef = defineComponent({
     { prop: 'pagination', control: 'switch', label: '페이지네이션' },
     { prop: 'selectable', control: 'switch', label: '선택 가능' },
     // **아래 넷이 `states`와 짝이다.** `selected`·`disabled`가 빠지면
-    // 설계서 「components — 구조 + 스킨」이 상태의 쓸모로 든 *"선택된 행 강조"*를 목업에서 켤 수 없다 —
+    // 설계서 「컴포넌트 정의 구조」이 상태의 쓸모로 든 *"선택된 행 강조"*를 목업에서 켤 수 없다 —
     // `defineComponent`가 그 빠짐을 던진다.
     { prop: 'selected', control: 'switch', label: '선택 상태' },
     { prop: 'disabled', control: 'switch', label: '비활성' },

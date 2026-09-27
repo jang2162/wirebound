@@ -41,7 +41,7 @@ export interface ExpandedNodes {
  * |---|---|---|
  * | `'empty'` | 전개가 노드를 하나도 내지 않았다 | 다른 패턴을 고른다 |
  * | `'no-spot'` | 고른 자리에 꽂을 수 없다(선택이 문서에 없다·자리가 깨졌다) | 다른 노드를 고른다 |
- * | `'invalid'` | **패턴 자체가** 페이지에 놓일 수 없다 | 테마를 고친다(설계서 「테마 관리」) |
+ * | `'invalid'` | **패턴 자체가** 페이지에 놓일 수 없다 | 테마를 고친다(그 패턴은 테마 manifest 의 `patterns`에 있다) |
  */
 export type PatternInsertReason = 'empty' | 'no-spot' | 'invalid'
 

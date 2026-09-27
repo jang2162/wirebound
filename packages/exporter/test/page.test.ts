@@ -105,7 +105,7 @@ describe('exportPage — HTML 한 장의 모양', () => {
 })
 
 describe('exportPage — 문서를 렌더러로 그린다', () => {
-  it('설계서 「컴파일」의 속성이 붙은 채로 나온다', () => {
+  it('설계서 「노드 속성」의 속성이 붙은 채로 나온다', () => {
     const { html } = exportPage({ document: DOC, title: '회원 목록' })
     expect(html).toContain('data-wb-component="Page"')
     expect(html).toContain('data-wb-component="Text"')
