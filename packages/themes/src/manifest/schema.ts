@@ -10,6 +10,8 @@ export type ManifestIssueCode =
   | 'unknown-token-ref' | 'token-ref-type' | 'token-ref-cycle' | 'token-default-type' | 'token-select-default'
   | 'unknown-component' | 'variant-from-component' | 'duplicate-variant' | 'default-variant-missing' | 'unknown-hide-prop'
   | 'pattern'
+  /** 두 토큰 키가 같은 CSS 변수 이름이 된다(`a.b` · `a-b` → `--wb-a-b`). */
+  | 'token-var-collision'
   /** `tokensCss` · `tokenValues` 에 받은 값의 키가 선언에 없다 — manifest 검증은 내지 않는다. */
   | 'unknown-token'
 
@@ -66,6 +68,14 @@ export function validateManifest(raw: unknown): { manifest: ThemeManifest | null
   // 카탈로그를 안 깐 호출자(빌드 · 업로드)가 모든 컴포넌트를 «카탈로그에 없다» 로 거짓 거부받지 않게. 멱등이다.
   installCatalog()
 
+  const protoKeys = protoKeyPaths(raw)
+  if (protoKeys.length > 0) {
+    return {
+      manifest: null,
+      issues: protoKeys.map((path) => ({ code: 'shape', path, message: '__proto__ 키는 쓸 수 없습니다' })),
+    }
+  }
+
   const parsed = ManifestSchema.safeParse(raw, { error: getKoreanErrorMap() })
   if (!parsed.success) {
     return {
@@ -91,6 +101,18 @@ export function validateManifest(raw: unknown): { manifest: ThemeManifest | null
   if (manifest.patterns !== undefined) issues.push(...checkManifestPatterns(manifest.patterns))
 
   return { manifest: issues.length === 0 ? manifest : null, issues }
+}
+
+/**
+ * 원문 어디든 자기 속성 `__proto__` 가 있는 자리. `JSON.parse` 는 그 키를 자기 속성으로 만드는데(업로드 경로) zod 의 record 는
+ * 조용히 떨군다 — 떨군 선언은 검사 없이 지나고 저장되는 `manifest.json` 원문에는 남는다. 그래서 모양 검사 **전에** 본다.
+ */
+function protoKeyPaths(value: unknown, path: string[] = []): string[] {
+  if (value === null || typeof value !== 'object') return []
+  const found: string[] = []
+  if (Object.hasOwn(value, '__proto__')) found.push([...path, '__proto__'].join('.'))
+  for (const [key, child] of Object.entries(value)) found.push(...protoKeyPaths(child, [...path, key]))
+  return found
 }
 
 function checkComponents(components: NonNullable<ThemeManifest['components']>): ManifestIssue[] {

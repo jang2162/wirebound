@@ -137,7 +137,8 @@ export function checkTokens(items: Readonly<Record<string, TokenDecl>>): Manifes
     const path = `tokens.items.${key}.default`
     const ref = tokenRef(decl.default)
     if (ref !== null) {
-      const target = items[ref]
+      // 자기 속성만 본다 — `{toString}` 이 프로토타입의 함수를 집어 «타입이 다르다» 로 읽히지 않게.
+      const target = Object.hasOwn(items, ref) ? items[ref] : undefined
       if (!target) {
         issues.push({ code: 'unknown-token-ref', path, message: `토큰 ${key} 가 없는 토큰 ${ref} 를 가리킵니다` })
       } else if (target.type !== decl.type) {
@@ -159,6 +160,16 @@ export function checkTokens(items: Readonly<Record<string, TokenDecl>>): Manifes
         message: `토큰 ${key} 의 기본값 ${JSON.stringify(decl.default)} — ${reason}`,
       })
     }
+  }
+
+  // 키 규칙이 `.` 과 `-` 를 함께 받는데 CSS 변수 이름은 `.` 을 `-` 로 바꾼다 — `a.b` 와 `a-b` 가 한 변수가 되면 뒤 선언이 앞을
+  // 덮어, 앞 토큰을 고쳐도 화면이 안 바뀌고 `tokenValues`(`useToken`)와 CSS 가 갈린다.
+  const byVar = new Map<string, string>()
+  for (const key of Object.keys(items)) {
+    const name = tokenVar(key)
+    const first = byVar.get(name)
+    if (first === undefined) byVar.set(name, key)
+    else issues.push({ code: 'token-var-collision', path: `tokens.items.${key}`, message: `토큰 ${first} 와 ${key} 가 같은 CSS 변수 ${name} 이 됩니다` })
   }
 
   // 참조는 토큰마다 하나(기본값)라 사슬을 따라가면 된다. 한 고리를 고리의 토큰 수만큼 말하지 않게 한 번만 낸다.
@@ -205,10 +216,11 @@ function effectiveValues(
   const chosen = new Map<string, string | number>()
 
   for (const key of Object.keys(values)) {
-    if (!(key in items)) issues.push({ code: 'unknown-token', path: `values.${key}`, message: `선언에 없는 토큰 ${key} 의 값을 버립니다` })
+    if (!Object.hasOwn(items, key)) issues.push({ code: 'unknown-token', path: `values.${key}`, message: `선언에 없는 토큰 ${key} 의 값을 버립니다` })
   }
   for (const [key, decl] of Object.entries(items)) {
-    if (key in values) {
+    // `in` 은 프로토타입을 본다 — 선언한 `toString` 에 값을 안 줘도 «받은 값» 이 되어 거짓 이슈가 났다.
+    if (Object.hasOwn(values, key)) {
       const value = values[key]!
       const reason = checkTokenValue(decl, value)
       if (reason === null) {
