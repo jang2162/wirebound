@@ -1,0 +1,34 @@
+/*
+ * 테마 CSS. 호스트가 이 파일보다 먼저 두 가지를 싣는다 —
+ *   1) SDK 기본 뷰의 최소 CSS(Flex · Grid 의 배치 등)
+ *   2) 토큰: theme.config.ts 의 토큰마다 :root 의 CSS 변수 --wb-<키의 . 을 - 로> (color.primary → --wb-color-primary)
+ * 이미지 · 글꼴은 assets/ 아래 두고 이 파일에서 상대 경로로 가리킨다(url(../assets/logo.svg)).
+ */
+
+[data-wb-component='Page'] {
+  font-family: var(--wb-font-body);
+  color: var(--wb-color-text);
+}
+
+[data-wb-component='Card'] {
+  border: 1px solid #e2e8f0;
+  border-radius: var(--wb-radius-card);
+  padding: 12px;
+}
+
+[data-wb-component='Button'] {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 6px 12px;
+  background: #fff;
+}
+
+[data-wb-component='Button'][data-wb-variant='primary'] {
+  border-color: var(--wb-color-primary);
+  background: var(--wb-color-primary);
+  color: #fff;
+}
+
+[data-wb-component='Button'][data-wb-variant='primary']:hover {
+  background: var(--wb-color-primaryHover);
+}

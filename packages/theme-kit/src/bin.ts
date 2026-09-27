@@ -2,10 +2,12 @@
 import { parseArgs } from 'node:util'
 import { BuildError, buildTheme } from './build'
 import { startDev } from './dev'
+import { packTemplate } from './pack-template'
 
 const USAGE = [
   'wb-theme dev [--entry <경로>] [--port <번호>]',
   'wb-theme build [--entry <경로>] [--out <디렉터리>]',
+  'wb-theme pack-template [--out <파일>]   (저장소 안에서만)',
 ].join('\n  ')
 
 async function main(argv: string[]): Promise<number> {
@@ -26,6 +28,12 @@ async function main(argv: string[]): Promise<number> {
       process.once('SIGINT', stop)
       process.once('SIGTERM', stop)
     })
+  }
+  if (command === 'pack-template') {
+    const { values } = parseArgs({ args: rest, options: { out: { type: 'string' } } })
+    const r = await packTemplate({ outFile: values.out })
+    console.log(`✓ ${r.file} (${r.bytes} 바이트 · ${r.tarballs.map((t) => `${t.name} ${t.bytes} 바이트`).join(' · ')})`)
+    return 0
   }
   console.error(`쓰는 법:\n  ${USAGE}`)
   return 1
