@@ -60,7 +60,6 @@ import {
   type PageDocument,
   type PatchOp,
 } from '@wirebound/schema'
-import { systemTheme } from '@wirebound/themes'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
@@ -80,7 +79,6 @@ import {
   pageDetail,
   pageDoc,
 } from '../editor-harness'
-import { SYSTEM_ADMIN_THEME_ID } from '../helpers'
 
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
 
@@ -106,6 +104,19 @@ function shellStore(): EditorStore {
   if (store === undefined) throw new Error('셸이 EditorStore를 만들지 않았습니다')
   return store as EditorStore
 }
+
+
+/**
+ * **패턴 목록이 비지 않게 캔버스 테마의 manifest 에 패턴 하나를 싣는다** — 목록이 비면 고르개가 «패턴이 없습니다» 로 서서, 대조
+ * 케이스가 잠금 때문이 아니라 목록이 없어서 통과할 수 있다. 목이 닿았는지는 `factoryCalls` 로 센다.
+ */
+const patternMock = vi.hoisted(() => ({ factoryCalls: 0 }))
+vi.mock('../../src/canvas/canvas-theme', async (orig) => {
+  patternMock.factoryCalls += 1
+  const real = await orig<typeof import('../../src/canvas/canvas-theme')>()
+  const patterns = { 'hero.plain': { name: '민 히어로', schema: { type: 'Section' } } }
+  return { ...real, CANVAS_THEME: { ...real.CANVAS_THEME, manifest: { ...real.CANVAS_THEME.manifest, patterns } } }
+})
 
 /** 하네스의 사용자 id. `editor-harness.tsx`의 `USER`와 같은 값이다. */
 const ME = 'u-1'
@@ -230,9 +241,9 @@ async function board(): Promise<Board> {
     },
   }
 
-  // **고르개 둘이 목록을 조회한다.** 스텁하지 않으면 `notStubbed`가 던지고, 그 예외는
+  // **프리셋 고르개가 목록을 조회한다.** 스텁하지 않으면 `notStubbed`가 던지고, 그 예외는
   // 고르개 안에서 삼켜져 *"목록이 비었다"*로 위장된다 — 그러면 이 파일의 대조 케이스가
-  // 잠금 때문이 아니라 목록이 없어서 통과한다.
+  // 잠금 때문이 아니라 목록이 없어서 통과한다. 패턴 목록은 캔버스 테마의 manifest 가 준다(파일 머리의 목).
   const listPresets: ApiClient['listPresets'] = async () =>
     BUILTIN_PRESETS.map((preset) => ({
       id: `builtin:${preset.key}`,
@@ -242,15 +253,10 @@ async function board(): Promise<Board> {
       nodes: [...preset.nodes],
     }))
   const listComments: ApiClient['listComments'] = async () => []
-  const getProjectTheme: ApiClient['getProjectTheme'] = async () => ({
-    themeId: SYSTEM_ADMIN_THEME_ID,
-    theme: systemTheme('portal')!,
-    issues: [],
-  })
 
   await openPage(doc(), {
     realtime: setup,
-    apiOverrides: { patchOps, getPage, listPresets, listComments, getProjectTheme },
+    apiOverrides: { patchOps, getPage, listPresets, listComments },
   })
 
   return {
@@ -328,6 +334,10 @@ async function settle(): Promise<void> {
 }
 
 describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
+  it('캔버스 테마 모듈의 목이 닿는다 — 패턴 목록이 빈 판이 아니다', () => {
+    expect(patternMock.factoryCalls).toBe(1)
+  })
+
   /**
    * **이것이 도구가 새는 흔한 상태다.** 페이지를 열면 루트가 자동 선택되고, 남이 그 페이지의
    * 아무 노드나 잡으면 루트가 그 조상이라 `lockedBy(root)`가 그 잠금을 낸다.

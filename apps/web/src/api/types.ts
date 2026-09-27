@@ -10,7 +10,6 @@
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
 import type { PageDocument, PatchOp, ValidationIssue, WbNode } from '@wirebound/schema'
-import type { Theme, ThemeIssue } from '@wirebound/themes'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
 export type ProjectRole = 'owner' | 'editor' | 'viewer'
@@ -211,96 +210,6 @@ export interface RevisionSummary {
 export type RevisionInverse = Omit<RevisionSummary, 'ops'>
 
 /**
- * `GET /api/projects/:projectId/theme`의 응답 — **이 프로젝트의 화면이 지금 써야 할 테마**다.
- *
- * `theme`이 `null`인 경우가 셋이고 **전부 정상이다**(서버 README): 기본 레이아웃이 없다 ·
- * 레이아웃이 테마를 고르지 않았다 · 테마 행이 사라졌다. 그때 화면은 구조 기본 CSS만으로
- * 그려진다 — `theme/theme-source.ts`가 `null`을 낼 수 있는 것과 같은 상태다.
- *
- * **파생 테마는 서버가 이미 합쳐서 준다**(홀로 서는 테마 하나). 그래서 이 값을
- * `resolveTheme(theme)`에 base 없이 그대로 넣을 수 있고, `ThemeSource`가
- * `() => Theme | null`로 남는다. 편집용 형태(파생 문서 + `base`)는 `.../themes/:themeId`가
- * 내는 것이고 이 화면이 쓰지 않는다.
- *
- * `issues`는 **서버가 합치다 실패했을 때** 채워진다(그때 `theme`은 `null`이다).
- * 화면에 뿌리지 않고 콘솔에만 남긴다(근거는 `theme/use-project-theme.ts` 머리말의 «이슈는 콘솔에만»).
- */
-export interface ProjectTheme {
-  /**
-   * **지금 골라져 있는 테마의 행 id.** 고르지 않았거나 그 행이 사라졌으면 `null`이다.
-   *
-   * **`theme.meta.id`로 대신할 수 없다.** 그것은 slug이고 유일성 단위가
-   * `(project_id, slug)`라 **시스템 테마와 프로젝트 테마가 같은 slug를 가질 수 있다.**
-   * 게다가 파생 테마는 서버가 합쳐서 주므로 `meta`가 base의 것과 섞인다.
-   *
-   * **캔버스는 이 값을 안 읽는다** — 그리는 쪽은 유래가 필요 없다. 고르개만 쓴다.
-   */
-  themeId: string | null
-  theme: Theme | null
-  issues: { path: string; message: string }[]
-}
-
-/**
- * 테마 목록의 항목 — **고르개가 고를 수 있는 것 하나**다.
- *
- * `theme`을 통째로 싣는 것은 서버가 그렇게 내기 때문이고(`GET /:projectId/themes`),
- * 고르개가 실제로 읽는 것은 `id`·`system`·`theme.meta.name`이다. **목록에는 `base`가
- * 없다** — 파생 항목마다 시스템 테마 전문이 붙어 응답이 항목 수만큼 부풀기 때문이고,
- * 목록의 쓸모는 **고르기이지 그리기가 아니다**(서버 README).
- */
-export interface ThemeSummary {
-  id: string
-  /** `true`면 wirebound 내장 테마다(설계서 「테마 관리」 — 읽기 전용, 어느 프로젝트에서나 고를 수 있다). */
-  system: boolean
-  theme: Theme
-}
-
-/**
- * **테마 하나 — 저작 UI가 편집하는 대상**(`GET`·`POST`·`PUT .../themes[/:themeId]`).
- *
- * 서버 README가 *"바탕은 네 키 + 조건부 둘"*로 적은 그 형태다. **셋을 한 타입으로 두는
- * 것이 판정이다** — 세 라우트가 같은 `toResponse`를 지나고 조건부 키만 갈리므로
- * (`apps/api/src/routes/themes.ts`), 타입을 셋으로 쪼개면 내용이 같은 셋이 생겨 한쪽만
- * 고쳐지는 자리가 된다(`http-client.ts`의 `SHAPES.pageDetail`이 같은 판단을 적어 두었다).
- * **대신 어느 라우트가 무엇을 낼 수 있는지는 아래 두 필드가 말한다.**
- *
- * | 라우트 | `base` | `warnings` |
- * |---|---|---|
- * | `GET .../themes/:themeId` | 파생이면 붙는다 | **안 붙는다** — 이 라우트는 테마를 해석하지 않는다 |
- * | `POST .../themes` · `PUT .../themes/:themeId` | **안 붙는다** | 경고가 있으면 붙는다 |
- *
- * **`ThemeSummary`와 다른 타입이다.** 목록 항목에는 `updatedAt`이 없고 조건부 둘도 없다 —
- * 목록의 쓸모는 고르기이지 편집이 아니다(서버 README).
- */
-export interface ThemeDetail {
-  /** **행의 uuid다**(`theme.meta.id`는 slug다). 경로에 쓰는 것이 이 값이다. */
-  id: string
-  /** `true`면 편집할 수 없다(「테마 관리」). 서버가 `PUT`·`DELETE`를 403으로 막는다. */
-  system: boolean
-  updatedAt: string
-  /** **저장된 그대로다** — 파생이면 `meta.extends`를 지닌 채 온다(합쳐지지 않는다). */
-  theme: Theme
-  /**
-   * 상속 대상 시스템 테마 전문. **파생 테마의 상세 조회에만 붙는다.**
-   *
-   * `resolveTheme(document, base)`가 base 없이는 파생 문서의 해석 자체를 거부하므로
-   * (`bad-extends`), 편집 중 검증을 클라이언트가 돌려면 이것이 반드시 필요하다.
-   *
-   * **상속 대상이 코드에 없으면 파생인데도 키가 없다**(서버 `toDetailResponse` — 동기화가
-   * 남긴 낡은 파생). 그 상태는 *"열 수는 있지만 검증이 안 되는 테마"*이고, 화면이 그것을
-   * `theme.meta.extends`의 유무와 이 키의 유무를 함께 보고 판정해야 한다.
-   */
-  base?: Theme
-  /**
-   * 저장된 테마의 **경고**. **쓰기 둘에만, 경고가 있을 때만 붙는다 — 없으면 키 자체가
-   * 없다**(페이지 쪽 `warnings`·`clientOpId`와 같은 관례).
-   *
-   * `error`는 여기 오지 않는다 — 그것은 422이고 `ApiError.issues`로 온다.
-   */
-  warnings?: ThemeIssue[]
-}
-
-/**
  * 코멘트 하나. 근거는 `apps/api/README.md`의 엔드포인트 표와 "코멘트와 번호"다.
  *
  * **`marker`가 없는 것이 요점이다.** 번호는 코멘트가 아니라 **노드**의 값이라
@@ -466,7 +375,7 @@ export interface HtmlExportPreview {
   brokenLinks: ExportBrokenLink[]
   /** 그리지 못한 노드들. `title`이 **어느 페이지인지** 말한다. */
   errors: ExportNodeError[]
-  /** 번들이 실은 테마. `null`이면 구조 기본 CSS만으로 그려진 것이다. */
+  /** 번들이 실은 테마. 늘 `null` 이다 — 번들은 테마 없이 SDK 기본 뷰 CSS 로 그린다(서버 README 「내보내기」). */
   themeId: string | null
   /** 내려받을 때 붙을 이름. **화면이 지어내지 않는다** — 두 벌이면 갈린다. */
   fileName: string

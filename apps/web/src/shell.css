@@ -61,9 +61,8 @@
   파일의 **심기 표**가 그 열넷을 하나씩 심어 잡히는 것을 함께 잰다.
 */
 
-/* 셸의 팔레트. **화면 루트 넷이 공유한다** — 에디터 셸(설계서 「설계서 화면 구조」), 테마 저작 화면,
-   프로젝트 목록, 로그인. 뒤의 셋은 셸 안이 아니라 별도 라우트라 `.wb-shell` 아래에 있지
-   않다. 값을 두 벌 적으면 한쪽만 고쳐지는 자리가 되므로 선언을 여기 하나로 둔다.
+/* 셸의 팔레트. **화면 루트 셋이 공유한다** — 에디터 셸(설계서 「설계서 화면 구조」), 프로젝트 목록,
+   로그인. 뒤의 둘은 셸 안이 아니라 별도 라우트라 `.wb-shell` 아래에 있지 않다. 값을 두 벌 적으면 한쪽만 고쳐지는 자리가 되므로 선언을 여기 하나로 둔다.
 
    **`.wb-shell-snapshots`는 목록에 없다.** 스냅샷은 셸 밖 라우트가 아니라
    셸 머리의 팝오버라(`shell/snapshots-panel.tsx` 머리말) 그 상자는 `.wb-shell`
@@ -81,7 +80,7 @@
    문자열로 잡힌다. **셸 밖에 새 화면 루트를 만드는 사람은 여기 한 줄을 더해야 한다.**
 
    **일곱이다.** **이 수는 적어 두면 낡는다** — 다른 파일이 이 수를 근거로 적으면 변수가
-   늘거나 줄 때 조용히 거짓이 된다(`theme/use-theme-css.ts`는 수가 아니라 성질로 적는다).
+   늘거나 줄 때 조용히 거짓이 된다 — 수가 아니라 성질로 적는다.
    테마가 `:root`에 싣는 이름과 **교집합이 비어 있다**는 성질을 떠받치는 것은
    **접두어가 전부 `--wb-shell-`이라는 것**이므로 변수가 몇이 되든 참이다. 여기 적힌 수는 세어 보라는 안내일 뿐이다.
    검산: `grep -oE -- "^\s*--wb-shell-[a-z-]+:" apps/web/src/shell.css | sort -u | wc -l`
@@ -93,7 +92,6 @@
    흰 글자 11px 기준 대비 **4.83:1**로 WCAG AA(작은 텍스트 4.5:1)를 넘는다 —
    파랑 `#2f6fed`의 4.55:1보다 오히려 높다. **어둡게 조정하지 않은 근거가 이 실측이다.** */
 .wb-shell,
-.wb-shell-theme,
 .wb-shell-project-list,
 .wb-shell-login {
   --wb-shell-line: #dfe3e8;
@@ -155,7 +153,7 @@
      493 까지 · 단추 글자가 «편집 모/드» · «축/소»로 접힘). 상한을 창 폭에 두면 `flex-wrap`이 창 안에서 줄을 바꾼다. 안에서
      줄을 바꿔야 하는 묶음은 둘이다 — 도구(`.wb-shell-tools` — 모드 · 뷰포트 · 줌이 한 줄이면 390 에서 477px)와 세션
      (`.wb-shell-session` — 이름이 길면 넘친다: 한글 30자 이름에서 떼면 넘침 셋). 묶음이 줄을 바꾸면 단추는 줄어들지 않아
-     글자가 안 접힌다 — 단추마다 `nowrap`을 걸어 봤고 390 · 480 에서 아무것도 안 바뀌었다. 테마 고르개 묶음 · 이력은 자식이
+     글자가 안 접힌다 — 단추마다 `nowrap`을 걸어 봤고 390 · 480 에서 아무것도 안 바뀌었다. 이력은 자식이
      다 줄어들거나 짧아 걸 것이 없다(`test/shell-css-picker.test.ts`의 `ONE_LINE`).
      몸통(좌측 · 캔버스 · 우측)이 좁은 창에서 넘치는 것은 이 줄의 일이 아니다. */
   max-width: 100vw;
@@ -224,7 +222,7 @@
 
 /* 머리의 왼쪽 묶음 — 나가는 길과 제목. **하나로 싸는 것이 요점이다**: 머리가
    `justify-content: space-between`이라 둘을 따로 두면 그 사이를 벌려 링크가 제목에서
-   떨어져 나간다(`.wb-shell-theme-picker-group`이 같은 이유로 있다).
+   떨어져 나간다.
 
    `min-width: 0`은 제목의 `text-overflow: ellipsis`가 살아 있게 한다 — flex 아이템의
    기본 `min-width: auto`는 내용보다 작아지지 않아 줄임표 대신 묶음이 넘친다. */
@@ -235,10 +233,7 @@
   min-width: 0;
 }
 
-/* 프로젝트 목록으로 돌아가는 링크. **테마 저작 화면의 `.wb-shell-theme-back`과 같은 값이다** —
-   두 화면의 "돌아가기"가 같은 일이므로 크기·색이 갈리면 그 자체가 사용자에게 신호가 된다.
-   규칙을 합치지 않는 것은 `.wb-shell-zoom-fit`이 `.wb-shell-zoom-step`과 합치지 않는 것과
-   같은 근거다(한쪽의 생김새를 바꿀 때 다른 쪽이 끌려가면 안 된다).
+/* 프로젝트 목록으로 돌아가는 링크.
 
    `nowrap`인 것은 이 글자가 접히면 머리의 줄 높이가 흔들리기 때문이다 — 줄어들 것은 제목
    쪽이고, 그쪽이 줄임표를 갖고 있다. */
@@ -390,8 +385,7 @@
    **줄바꿈을 막으려고 조각을 줄이지 않는다.** `flex-wrap: wrap`은 이 머리가 원래 갖고 있던
    장치이고(위 `.wb-shell-header`의 주석 — 편집 실패 통지가 그 줄을 쓴다), 넘치는 것을
    가로 스크롤이나 잘림으로 두는 것보다 낫다. 문안을 줄여 버는 것은 55px(`프로젝트 목록으로
-   돌아가기` → `프로젝트 목록`)뿐이라 1366~1417 구간만 덮고, 그 대가로 이 앱의 "돌아가기"
-   문안이 두 벌이 된다(테마 저작 화면이 `설계서로 돌아가기`다).
+   돌아가기` → `프로젝트 목록`)뿐이라 1366~1417 구간만 덮는다.
 
    **내려간 묶음이 왼쪽에 서는 것은 `space-between`의 성질이다**(둘째 줄에 조각이 하나뿐이면
    flex-start). 오른쪽에 세우려면 이 규칙에 `margin-left: auto` 한 줄이면 되는데, 그러면
@@ -1727,30 +1721,6 @@
   color: var(--wb-shell-ink);
 }
 
-/* 테마 고르개. 셸 머리의 넷째 조각이라 `flex-wrap`이 이미 자리를 만들어 준다. */
-.wb-shell-theme-picker {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--wb-shell-ink);
-}
-
-.wb-shell-theme-select {
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  padding: 2px 4px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--wb-shell-ink);
-}
-
-/* owner가 아니면 `disabled`다 — 눌리지 않는다는 것이 보여야 한다(서버도 403으로 막는다). */
-.wb-shell-theme-select:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 /* 프로젝트 목록의 인라인 폼. 목록 화면은 셸 밖이지만 클래스 접두어는
    `wb-shell-`로 맞춘다 — `test/shell-css.test.ts`가 그 접두어를 기계로 지킨다. */
 .wb-shell-project-form {
@@ -2048,655 +2018,6 @@
   width: 100%;
   font-size: 13px;
   color: var(--wb-shell-ink);
-}
-
-/* ── 테마 저작 화면. **셸 밖의 별도 라우트다** ────────────────────────────
-   클래스 접두어를 `wb-shell-`로 맞추는 것은 프로젝트 목록과 같은 이유다 — 화면이 셸
-   안이든 밖이든 `test/shell-css.test.ts`가 그 접두어를 기계로 지킨다.
-
-   **`.wb-shell-theme-gallery`는 문서를 감싸는 상자다.** 갤러리가 카탈로그 컴포넌트를
-   렌더러로 그리므로 그 안에 문서 노드가 들어온다 — 여기 상속되는 속성을 걸면 머리말의
-   규칙이 깨지고, `test/shell-css-guard.ts`의 `WRAPPERS`가 그것을 막는다. */
-.wb-shell-theme {
-  display: grid;
-  grid-template-columns: minmax(320px, 30%) 1fr;
-  grid-template-rows: auto 1fr;
-  grid-template-areas:
-    'head head'
-    'edit gallery';
-  min-height: 100vh;
-}
-
-.wb-shell-theme-header {
-  grid-area: head;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--wb-shell-line);
-  background: var(--wb-shell-chrome);
-}
-
-.wb-shell-theme-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--wb-shell-ink);
-}
-
-.wb-shell-theme-back,
-.wb-shell-theme-edit-link {
-  font-size: 12px;
-  color: var(--wb-shell-ink);
-}
-
-/* 고르개와 편집 링크를 한 묶음으로 둔다 — 셸 머리의 `flex-wrap`이 그 묶음을 한 조각으로 본다. */
-.wb-shell-theme-picker-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.wb-shell-theme-readonly {
-  margin: 0;
-  font-size: 12px;
-  color: var(--wb-shell-muted);
-}
-
-.wb-shell-theme-derive {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.wb-shell-theme-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-}
-
-.wb-shell-theme-input {
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  padding: 2px 4px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--wb-shell-ink);
-}
-
-.wb-shell-theme-save {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.wb-shell-theme-action {
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  padding: 2px 8px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--wb-shell-ink);
-  background: var(--wb-shell-chrome);
-}
-
-.wb-shell-theme-action:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* **저장 안 한 변경은 늘 보인다**(알리되 막지 않는다). */
-.wb-shell-theme-dirty,
-.wb-shell-theme-blocked {
-  font-size: 12px;
-  color: var(--wb-shell-muted);
-}
-
-.wb-shell-theme-save-failure {
-  font-size: 12px;
-  color: var(--wb-shell-ink);
-}
-
-.wb-shell-theme-edit {
-  grid-area: edit;
-  overflow: auto;
-  padding: 12px;
-  border-right: 1px solid var(--wb-shell-line);
-  font-size: 12px;
-  color: var(--wb-shell-ink);
-}
-
-.wb-shell-theme-panes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.wb-shell-theme-slot {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* **이슈는 severity로 갈라 그린다.** 색이 아니라 자리와 문안으로 가르는 것은
-   `node-handle-overwrite`가 빨간 배지로 나오면 소음이 되기 때문이다. */
-.wb-shell-theme-issues {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.wb-shell-theme-issue-group {
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  padding: 6px 8px;
-}
-
-.wb-shell-theme-issue-heading {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.wb-shell-theme-issue-list {
-  margin: 0;
-  padding-left: 16px;
-}
-
-.wb-shell-theme-issue {
-  margin-bottom: 4px;
-}
-
-.wb-shell-theme-issue-path {
-  margin-right: 6px;
-  font-size: 11px;
-  color: var(--wb-shell-muted);
-}
-
-.wb-shell-theme-issue-message {
-  font-size: 12px;
-}
-
-.wb-shell-theme-issue-hint {
-  display: block;
-  font-size: 11px;
-  color: var(--wb-shell-muted);
-}
-
-/* **문서를 감싸는 상자다.** 상속되는 속성을 걸지 마라 — 위 머리말과 `WRAPPERS` 참고. */
-.wb-shell-theme-gallery {
-  grid-area: gallery;
-  overflow: auto;
-  padding: 12px;
-  background: var(--wb-shell-chrome);
-}
-
-/* ── 테마 저작 화면의 세 절(토큰 GUI · JSON 에디터 · 테마 갤러리). **자리를 미리 갈라 둔다** ──
-   각 절의 규칙은 **자기 절 안에만** 더한다. 파일 끝에 나란히 덧붙이면
-   같은 몇 줄을 여럿이 고쳐 병합이 충돌하고, **그 충돌은 회귀가 못 잡는다**(스텁 셋을
-   다 등록해도 전체 회귀에서 죽는 케이스가 없다).
-
-   지키는 것 둘:
-   - 클래스 접두어는 `wb-shell-`이다. `test/shell-css.test.ts`가 기계로 지킨다
-     (접두어 없는 클래스를 심으면 죽는다).
-   - **문서를 감싸는 상자에는 상속 속성을 걸지 마라.** 갤러리 상자가 그것이고
-     `WRAPPERS`에 이미 있다. */
-
-/* 토큰 GUI. 여기에만 더해라.
-
-   **값에서 나오는 것은 전부 인라인 `style`이다** — 색 견본·간격 막대·타이포 미리보기는
-   초안의 값을 그대로 그려야 하므로 정적 CSS로 쓸 수 없다. 커스텀 프로퍼티로 우회하지
-   않은 것은 그 이름이 테마가 `:root`에 싣는 이름과 겹칠 수 있기 때문이다(`token-editor.tsx`의
-   계약: *"CSS 변수를 만들 일이 있으면 그 이름은 테마의 것이지 셸의 것이 아니다"*).
-   **그래서 이 절에는 값이 없는 껍데기만 있다.** */
-
-.wb-shell-token-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.wb-shell-token-intro,
-.wb-shell-token-note,
-.wb-shell-token-empty {
-  margin: 0;
-  font-size: 11px;
-  color: var(--wb-shell-muted);
-}
-
-.wb-shell-token-layer {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  padding: 6px 8px;
-}
-
-.wb-shell-token-layer-title {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--wb-shell-ink);
-}
-
-.wb-shell-token-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.wb-shell-token-row,
-.wb-shell-token-add,
-.wb-shell-token-ref {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-
-/* 이름은 줄어들지 않는다 — 값 입력이 남는 폭을 가져간다. */
-.wb-shell-token-name {
-  flex: none;
-  min-width: 84px;
-  font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--wb-shell-ink);
-}
-
-/* **엔진이 해석한 값을 보이는 자리**(파생). 배경색은 인라인으로 온다. */
-.wb-shell-token-swatch {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 3px;
-}
-
-.wb-shell-token-preview {
-  flex: none;
-  width: 20px;
-  height: 16px;
-  border: 1px solid var(--wb-shell-line);
-}
-
-.wb-shell-token-input {
-  flex: 1 1 90px;
-  min-width: 0;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  padding: 1px 4px;
-  font: inherit;
-  font-size: 11px;
-  color: var(--wb-shell-ink);
-}
-
-.wb-shell-token-picker {
-  flex: none;
-  width: 24px;
-  height: 20px;
-  padding: 0;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-}
-
-.wb-shell-token-drop {
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  font: inherit;
-  font-size: 11px;
-  color: var(--wb-shell-ink);
-}
-
-.wb-shell-token-kind,
-.wb-shell-token-meta {
-  font-size: 10px;
-  color: var(--wb-shell-muted);
-}
-
-/* **이슈가 아니다** — 엔진이 이 층에서 아무 말도 안 하는 자리를 화면이 말하는 것이다
-   (`token-editor.tsx`의 머리말). 그래서 `wb-shell-theme-issue-*`와 모양을 나눈다. */
-.wb-shell-token-warn {
-  flex: 1 1 100%;
-  font-size: 10px;
-  color: var(--wb-shell-ink);
-}
-
-.wb-shell-token-mini {
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  padding: 0 4px;
-  font: inherit;
-  font-size: 10px;
-  color: var(--wb-shell-ink);
-  background: var(--wb-shell-chrome);
-}
-
-.wb-shell-token-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--wb-shell-line);
-}
-
-.wb-shell-token-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 4px;
-}
-
-.wb-shell-token-group-title {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin: 0;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--wb-shell-ink);
-}
-
-/* **`space.unit` 하나가 스물넷을 낳는 것을 보이는 자리.** 막대의 폭이 곧 그 값이라
-   인라인으로 온다. */
-.wb-shell-token-derived {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wb-shell-token-derived-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.wb-shell-token-bar {
-  height: 6px;
-  border-radius: 2px;
-  background: var(--wb-shell-accent);
-}
-
-/* 타이포 미리보기는 **글자 자체가 값이다** — 크기·굵기·자간이 인라인으로 온다. */
-.wb-shell-token-sample {
-  margin: 0;
-  overflow: hidden;
-  color: var(--wb-shell-ink);
-}
-
-/* JSON 에디터. 여기에만 더해라. */
-
-/* **절마다 상자 하나다.** 세로로 쌓는 것은 상자가 넷이고 각각이 여러 줄 입력이라
-   가로로 나누면 넷 다 못 읽을 폭이 되기 때문이다. */
-.wb-shell-theme-json {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.wb-shell-theme-json-derived {
-  margin: 0;
-  font-size: 11px;
-  color: var(--wb-shell-muted);
-}
-
-.wb-shell-theme-json-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.wb-shell-theme-json-label {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.wb-shell-theme-json-gloss {
-  margin: 0;
-  font-size: 11px;
-  color: var(--wb-shell-muted);
-}
-
-/* **경보가 아니다 — 늘 참인 사실이다.** 색으로 경보와 갈라 두지 않는 것은 셸에 경고색이
-   없기 때문이고(팔레트 일곱 중 붉은 것은 `--wb-shell-comment` 하나인데 그것은 코멘트의
-   표식이지 경고가 아니다), 무게는 `role`이 이미 가른다. */
-.wb-shell-theme-json-caveat {
-  margin: 0;
-  font-size: 11px;
-  color: var(--wb-shell-ink);
-}
-
-/* `font-family`를 고정폭으로 두는 것은 이 상자가 **JSON 원문**이기 때문이다.
-   **문서를 감싸는 상자가 아니므로**(문서 노드가 여기 안 들어온다) `WRAPPERS`의 허용 목록과
-   무관하다 — 상속되는 속성을 걸어도 되는 자리다. */
-.wb-shell-theme-json-input {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 6px;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  resize: vertical;
-}
-
-.wb-shell-theme-json-error {
-  margin: 0;
-  font-size: 11px;
-  color: var(--wb-shell-ink);
-}
-
-/* 둘째 문장을 줄을 갈라 두는 것은 앞 문장이 엔진의 문장(길이가 들쭉날쭉하다)이라
-   이어 붙이면 어디서 끝나는지 안 보이기 때문이다. */
-.wb-shell-theme-json-error-note {
-  display: block;
-  color: var(--wb-shell-muted);
-}
-
-/* 테마 갤러리. 여기에만 더해라. **`.wb-shell-theme-gallery` 자체는 위에 있고
-   그 상자에는 허용 목록의 속성만 걸 수 있다.** */
-
-/* **안내·오류·캡션은 감싸는 상자가 아니다.** 문서 노드를 품지 않으므로 글자 속성을 걸어도
-   머리말의 규칙이 깨지지 않는다 — `WRAPPERS`에 들어가는 것은 아래 `-list` · `-item` · `-patterns` 셋이다. */
-.wb-shell-gallery-notice {
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  background: #fff;
-  color: var(--wb-shell-muted);
-  font-size: 12px;
-}
-
-.wb-shell-gallery-error {
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  background: #fff;
-}
-
-.wb-shell-gallery-error-title {
-  margin: 0 0 4px;
-  color: var(--wb-shell-ink);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.wb-shell-gallery-error-list {
-  margin: 0;
-  padding-left: 16px;
-}
-
-.wb-shell-gallery-error-item {
-  margin: 0;
-  color: var(--wb-shell-muted);
-  font-size: 12px;
-}
-
-/* **감싸는 상자 1/2.** 항목 상자들이 여기 들어오고 그 안에 문서 노드가 있다. */
-.wb-shell-gallery-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
-}
-
-/* **감싸는 상자 2/2.** 문서 노드가 바로 이 안에 들어온다.
-   **테두리를 `border`가 아니라 `box-shadow`로 그린다** — `border`는 `WRAPPER_PROPERTIES`에
-   없다. 상속되지 않는 속성이라 목록에 더해도 되지만, 이미 허용된 `box-shadow`로 같은 선이
-   그려지므로 여럿이 공유하는 목록을 늘리지 않는다.
-   `display: grid`인 것도 같은 부류의 판단이다 — `flex-direction`이 허용 목록에 없어
-   세로로 쌓으려면 그리드가 유일한 길이다(그리드의 기본 흐름이 행이다). */
-.wb-shell-gallery-item {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  padding: 10px;
-  background: #fff;
-  box-shadow: 0 0 0 1px var(--wb-shell-line);
-}
-
-/* **감싸는 상자 3.** 패턴 항목 상자들이 여기 들어온다. 패턴은 섹션 하나라 컴포넌트 격자의 260px 칸에
-   넣으면 짓눌린다 — 한 줄에 하나씩 쌓는다(그리드의 기본 흐름). */
-.wb-shell-gallery-patterns {
-  display: grid;
-  gap: 12px;
-}
-
-/* 패턴 목록의 머리. 감싸는 상자가 아니다(문서 노드를 품지 않는다). */
-.wb-shell-gallery-heading {
-  margin: 20px 0 8px;
-  color: var(--wb-shell-ink);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-/* 캡션은 **항목 상자 안**에 있지만 감싸는 상자가 아니다 — 문서 노드는 그 형제로 들어온다.
-   상속 속성은 전부 여기에 건다. */
-.wb-shell-gallery-caption {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: baseline;
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.wb-shell-gallery-type {
-  color: var(--wb-shell-ink);
-  font-weight: 600;
-}
-
-.wb-shell-gallery-structure {
-  color: var(--wb-shell-muted);
-}
-
-.wb-shell-gallery-axis {
-  padding: 0 4px;
-  border-radius: 3px;
-  background: var(--wb-shell-chrome);
-  color: var(--wb-shell-ink);
-}
-
-/* **테마가 이 컴포넌트를 언급하지 않았다는 표시.** 오류가 아니므로 빨갛게 하지 않는다 —
-   `theme-issues.tsx`가 경고 안에서도 모양이 아니라 문안으로 가른 것과 같은 판단이다. */
-.wb-shell-gallery-untouched {
-  padding: 0 4px;
-  border: 1px dashed var(--wb-shell-line);
-  border-radius: 3px;
-  color: var(--wb-shell-muted);
-}
-
-/* ── 가져오기·내보내기. **문서 전체에 대한 조작이라 셸 머리, 저장 옆이다** ──────
-   자리의 근거는 `theme/theme-io-panel.tsx`의 머리말에 있다. 여기는 그 자리를 놓는 규칙만
-   든다 — 감싸는 상자가 아니다(문서 노드가 들어오지 않는다). */
-.wb-shell-theme-io {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  padding-top: 8px;
-  border-top: 1px solid var(--wb-shell-line);
-}
-
-/* 한 줄에 버튼 몇 개. **`flex-wrap`이다** — 머리가 좁아지면 줄이 늘어난다. */
-.wb-shell-theme-io-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-/* 가져오기 쪽(기본이 접힘이다 — `theme/theme-io-panel.tsx`의 머리말). `wb-shell-pagejson-import`와
-   같은 이유로 부모의 `gap`(6px)을 여기서 다시 세운다. */
-.wb-shell-theme-io-import {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* 내보낼 파일 이름. **버튼 옆에 늘 보인다** — 무엇이 저장될지가 이름 하나에 다 있다. */
-.wb-shell-theme-io-file {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  color: var(--wb-shell-muted);
-}
-
-/* 되돌리기의 2단계. **모달이 아니라 그 버튼 자리에 연다** — 프로젝트 삭제 확인과
-   같은 판단이다. */
-.wb-shell-theme-io-confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-
-/* 붙여 넣기 상자. **입력 자체의 꼴은 JSON 상자의 클래스를 그대로 쓴다**(고정폭·resize) —
-   같은 종류의 글자라 두 벌로 두면 갈린다. */
-.wb-shell-theme-io-paste {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-}
-
-/* **경보가 아니라 늘 참인 사실이다**(파생의 대가). `json-editor`의 `caveat`과
-   같은 무게로 그린다. */
-.wb-shell-theme-io-note {
-  margin: 0;
-  font-size: 12px;
-  color: var(--wb-shell-muted);
-}
-
-.wb-shell-theme-io-outcome {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-}
-
-.wb-shell-theme-io-notes {
-  margin: 0;
-  padding-left: 16px;
-  color: var(--wb-shell-muted);
-}
-
-/* **두 이슈 상자를 눈으로 가른다.** 이 한 줄이 없으면 제목이
-   `aria-label`로만 나가 보조 기술은 가르고 눈은 못 가른다. */
-.wb-shell-theme-issues-title {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--wb-shell-muted);
 }
 
 /* **상호작용 런타임의 알림**(설계서 「상호작용」 「실행」). 뷰 모드에서 방금 누른 것이 무엇을 못
@@ -3334,7 +2655,7 @@
 }
 
 /* 칸 하나. **`<label>`이 세로인 것은 좌측 패널이 좁기 때문이다** — 가로로 두면 이름과
-   입력이 서로를 밀어낸다(`wb-shell-theme-field`가 같은 자리에서 같은 판단). */
+   입력이 서로를 밀어낸다. */
 .wb-shell-pagejson-field {
   display: flex;
   flex-direction: column;

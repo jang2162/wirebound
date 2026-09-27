@@ -47,8 +47,6 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
   owner: {
     rename: true,
     remove: true,
-    chooseTheme: true,
-    editTheme: true,
     createSnapshot: true,
     restoreSnapshot: true,
     editDesign: true,
@@ -61,8 +59,6 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
   editor: {
     rename: false,
     remove: false,
-    chooseTheme: false,
-    editTheme: false,
     createSnapshot: true,
     restoreSnapshot: false,
     // 설계서 본문 전부(메뉴 · 페이지 · 노드 · 코멘트 · 잠금). 서버의 `projectGuard('editor')`와
@@ -72,8 +68,6 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
   viewer: {
     rename: false,
     remove: false,
-    chooseTheme: false,
-    editTheme: false,
     createSnapshot: false,
     restoreSnapshot: false,
     editDesign: false,
@@ -83,8 +77,6 @@ const EXPECTED: Record<ProjectRole, ProjectAbilities> = {
 const NOTHING: ProjectAbilities = {
   rename: false,
   remove: false,
-  chooseTheme: false,
-  editTheme: false,
   createSnapshot: false,
   restoreSnapshot: false,
   editDesign: false,
@@ -113,8 +105,6 @@ describe('projectAbilities', () => {
     expect(projectAbilities('owner')).toEqual({
       rename: true,
       remove: true,
-      chooseTheme: true,
-      editTheme: true,
       createSnapshot: true,
       restoreSnapshot: true,
       editDesign: true,
@@ -155,8 +145,6 @@ describe('projectAbilities', () => {
     expect(EXPECTED.owner).toEqual({
       rename: true,
       remove: true,
-      chooseTheme: true,
-      editTheme: true,
       createSnapshot: true,
       restoreSnapshot: true,
       editDesign: true,

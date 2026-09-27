@@ -44,8 +44,6 @@ const METHODS = [
   'createMenu', 'updateMenu', 'deleteMenu',
   'createPage', 'updatePage', 'deletePage', 'getPage', 'importPage',
   'patchOps', 'listMyRevisions', 'listRevisionsBefore',
-  'getProjectTheme', 'listProjectThemes', 'setProjectTheme',
-  'getTheme', 'createTheme', 'updateTheme',
   'listComments', 'createComment', 'updateComment', 'deleteComment', 'renumberComments',
   'listSnapshots', 'createSnapshot', 'restoreSnapshot',
   'listPresets', 'createPreset',
@@ -96,15 +94,9 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   listMyTokens: ['../src/routes/tokens.tsx'],
   revokeMyToken: ['../src/routes/tokens.tsx'],
   revokeAllMyTokens: ['../src/routes/tokens.tsx'],
-  // **소비자가 둘이고 읽는 것이 다르다.** 셸은 `name`·`id`를 그리려고 부르고, 테마 저작
-  // 화면은 **`role`** 때문에 부른다(설계서 「권한 모델」 — 쓰기가 owner 게이트라 읽기 전용인지
-  // 알아야 한다). **셋째는 스냅샷 화면이고** 역시 `role` 때문에 부른다 — 「권한 모델」이 생성을
-  // editor에게 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다).
-  getProject: [
-    '../src/routes/editor.tsx',
-    '../src/routes/theme-editor.tsx',
-    '../src/shell/snapshots-panel.tsx',
-  ],
+  // **소비자가 둘이고 읽는 것이 다르다.** 셸은 `name`·`id`를 그리려고 부르고, 스냅샷 화면은 **`role`** 때문에
+  // 부른다 — 「권한 모델」이 생성을 editor에게 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다).
+  getProject: ['../src/routes/editor.tsx', '../src/shell/snapshots-panel.tsx'],
   createProject: ['../src/projects/use-project-commands.tsx'],
   updateProject: ['../src/projects/use-project-commands.tsx'],
   deleteProject: ['../src/projects/use-project-commands.tsx'],
@@ -140,18 +132,6 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   patchOps: ['../src/edit/use-edit-commit.tsx'],
   listMyRevisions: ['../src/routes/editor.tsx'],
   listRevisionsBefore: ['../src/edit/use-edit-commit.tsx'],
-  // **소비자가 둘이고 서로 다른 것을 읽는다.** 캔버스 쪽 훅은 `theme`을
-  // 읽어 그리고, 고르개는 같은 응답의 `themeId`를 읽어 *"지금 무엇이 골라져 있는가"*를
-  // 그린다 — 목록(`listProjectThemes`)만으로는 그것을 알 수 없다.
-  getProjectTheme: ['../src/theme/use-project-theme.ts', '../src/theme/theme-picker.tsx'],
-  listProjectThemes: ['../src/theme/theme-picker.tsx'],
-  setProjectTheme: ['../src/theme/theme-picker.tsx'],
-  // 테마 저작 셋. **셋 다 한 파일에서만 불린다** — 저작 화면의 세 편집기(토큰 GUI·JSON
-  // 에디터·갤러리)는 초안 스토어만 만지고 서버에는 닿지 않는다는 것이 규칙이고,
-  // **이 줄이 그것을 실행으로 지킨다:** 어느 워커가 자기 화면에서 직접 저장하면 여기가 죽는다.
-  getTheme: ['../src/routes/theme-editor.tsx'],
-  createTheme: ['../src/routes/theme-editor.tsx'],
-  updateTheme: ['../src/routes/theme-editor.tsx'],
   // 코멘트 다섯. **쓰기 넷은 한 파일에서만 불린다** — 코멘트 탭이 표(본문)와
   // 문서(번호)를 잇는 유일한 자리라는 것이 규칙이고, **이 줄들이 그것을 실행으로 지킨다:**
   // 캔버스나 구조 트리가 직접 코멘트를 부르기 시작하면 여기가 죽는다.

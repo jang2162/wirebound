@@ -25,14 +25,15 @@
  * 한 겹 더 놓거나다. 뷰 모드 탭은 자기 조회를 이미 갖고 있어 요청이 하나도 늘지 않는다.
  */
 import type { ReactElement } from 'react'
-import { resolveStructureOf } from '@wirebound/renderer'
+import { resolveVariant } from '@wirebound/renderer'
 import {
   getComponent,
   type ComponentDef,
   type EditorField,
   type WbNode,
 } from '@wirebound/schema'
-import { useCanvasStructures } from '../canvas/canvas-structures'
+import type { ThemeManifest } from '@wirebound/theme-sdk'
+import { CANVAS_THEME } from '../canvas/canvas-theme'
 import { useEditCommit } from '../edit/use-edit-commit'
 // **schema의 `findNode`를 쓰지 않는다** — `children` 배열 안의 원소가 노드가 아니면
 // 던지고(`edit/safe-walk.ts` 머리말의 실측), 이 패널은 오류 경계 밖이라 그 예외가 셸을
@@ -111,8 +112,6 @@ export function PropertyPanel(props: {
   // 바뀔 때 다시 그리는 것과 그 답을 위젯에 잇는 것뿐이고, 목록을 손에 쥐는 자리는
   // `store/use-locked-by.ts` 하나다.
   const lockOf = useLockedBy()
-  // 캔버스가 그리는 구조 표. `visibleWhen`을 가를 때 쓴다(아래 `currentStructure`).
-  const structures = useCanvasStructures()
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
@@ -197,14 +196,15 @@ export function PropertyPanel(props: {
     )
   }
 
-  const fields = visibleFields(def, structures)
-  const variantField = variantFieldOf(def)
+  // **캔버스가 그리는 그 테마의 manifest 로 가른다** — 따로 읽으면 캔버스와 판정이 두 벌이 된다.
+  const fields = visibleFields(def, node, readProps(node), CANVAS_THEME.manifest)
+  const variantField = variantFieldOf(def, CANVAS_THEME.manifest)
 
   // **props 검증 실패는 이 패널이 말하지 않는다.** 캔버스는 그리지 못한 이유 둘(알 수 없는
   // 타입 / props 검증 실패)을 폴백과 배너로 알리는데, 여기는 앞의 하나만 안내하고 검증에
   // 실패한 노드에는 원본 값을 평범하게 보여 준다. 닫지 않는 이유는 둘이다 —
-  // 패널이 스스로 검증하면 렌더러의 판정과 갈라질 수 있고(같은 위험을 `currentStructure`의
-  // 주석이 구조 선택에 대해 적고 있다), 편집이 필요로 하는 것은 노드 단위 성패가
+  // 패널이 스스로 검증하면 렌더러의 판정과 갈라질 수 있고(같은 위험을 `visibleFields`의
+  // 주석이 variant 판정에 대해 적고 있다), 편집이 필요로 하는 것은 노드 단위 성패가
   // 아니라 **필드 단위** 결과라 노드 단위로 말하는 모양은 편집과 맞지 않는다.
   return (
     <>
@@ -221,7 +221,7 @@ export function PropertyPanel(props: {
           {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
           <dl className="wb-shell-props">
             {/* **변형이 맨 앞이다.** 개별 prop이 아니라 이 노드가 어떤 표현인가를 정하는
-                것이라 상위이고, 설계서 「components — 구조 + 스킨」도 `variants`를 `base`/`parts` 위의 층으로 둔다. */}
+                것이라 상위다. */}
             {variantField !== null && (
               <div className="wb-shell-prop" key={VARIANT_FIELD}>
                 <dt className="wb-shell-prop-label">
@@ -296,31 +296,25 @@ const VARIANT_LABEL = '변형'
  *
  * `EditorField.prop`은 **props의 키**를 가리키는데 `variant`는 **노드 봉투의 필드**다(설계서
  * 「페이지 스키마 노드」). 그래서 `editor`에 적을 수 없고 — 적으면 `defineComponent`가 던진다 —
- * 패널이 따로 다루지 않으면 `Button`·`Link`·`List`·`Section`·`Card`의 변형은 화면에서 닿을 수 없다.
+ * 패널이 따로 다룬다.
  *
- * **패널이 특수 취급하는 쪽(A안)을 골랐다.** 대가는 작다:
- *
- * - **읽는 것이 전부 카탈로그의 값이다** — `def.variants`·`def.variantFrom`. 패널이 새로
- *   갖는 지식은 *"variant는 봉투의 필드다"* 하나이고, 그것은 「페이지 스키마 노드」·설계서
- *   「컴파일」이 정한 **모델의
- *   사실**이지 컴포넌트별 지식이 아니다.
- * - **「컴포넌트 정의 구조」·「설계서 화면 구조」의 *"컴포넌트 정의에서 자동 생성"*이 그대로 성립한다.** 카탈로그가 늘어도 이
- *   파일은 안 바뀐다 — `test/panels/property-panel.test.tsx`의 전수 케이스가 그것을 센다.
- * - **B안(`ComponentDef`에 `variantField` 선언)이 담을 정보가 라벨 하나뿐이다.** 낼지 말지는
- *   아래 조건으로 카탈로그에서 이미 유도된다. 라벨 하나를 위해 「컴포넌트 정의 구조」의 계약을 넓히지 않는다.
+ * **선택지는 테마의 manifest 가 준다** — variant 는 테마가 선언한다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`
+ * 「manifest」). 그 컴포넌트를 선언하지 않았으면 칸이 없다. 라벨을 보이고 id 를 적는다. «(기본)»(`VariantControl`)은
+ * `variant` 를 지운다 — 그 노드는 `defaultVariant` 로 그려진다.
  *
  * **`variantFrom`이 있으면 내지 않는다.** 그쪽은 prop이 변형을 정하고 `node.variant`는
  * 버려진다 — 컨트롤을 내면 `ignored-variant` 경고를 **UI가 유도하는 셈**이다.
  * 그 컴포넌트의 변형은 이미 그 prop의 `select`로 도달한다(Text의 `역할`, Field의 `입력 종류`,
  * Divider의 `방향`).
- *
- * **`unknown-variant`도 UI에서 도달할 수 없다** — 선택지가 `def.variants` 그대로다.
  */
 export function variantFieldOf(
   def: ComponentDef,
-): { label: string; options: readonly string[] } | null {
-  if (def.variants.length === 0 || def.variantFrom !== undefined) return null
-  return { label: VARIANT_LABEL, options: def.variants }
+  manifest: ThemeManifest,
+): { label: string; options: readonly { id: string; label: string }[] } | null {
+  if (def.variantFrom !== undefined) return null
+  const decl = manifest.components?.[def.type]
+  if (decl === undefined) return null
+  return { label: VARIANT_LABEL, options: decl.variants.map((v) => ({ id: v.id, label: v.label })) }
 }
 
 /**
@@ -351,8 +345,9 @@ export function variantFieldOf(
  *   | Esc 키 | 0건 — Esc 에는 아무것도 걸려 있지 않아 칸에 초안이 남는다 | 새 값 · 옛 값 |
  *   | 창 닫기 · 새로고침 · 뒤로 가기 | 0건, **경고 없음** | — · 옛 값 |
  *
- *   마지막 줄은 이 저장소가 `beforeunload`를 안 거는 판단의 결과다(`routes/theme-editor.tsx`의
- *   «알리되 막지 않는다» — 반만 막는 것이 안 막는 것보다 나쁘다). 뒤로 가기는 CDP 로 낸
+ *   마지막 줄은 이 저장소가 `beforeunload`를 안 거는 판단의 결과다 — 그것은 **탭을 닫는 것만** 잡고 앱 안 이동은 못
+ *   잡는다(앱 안 이동을 막는 react-router 의 `useBlocker`는 데이터 라우터에서만 돌고 이 앱은 `<BrowserRouter>` + `<Routes>`다 —
+ *   `main.tsx`). **반만 막는 것이 안 막는 것보다 나쁘다** — 사용자가 막힌다고 믿게 된다. 뒤로 가기는 CDP 로 낸
  *   것이라 **브라우저의 뒤로 버튼**이 포커스를 옮기는지는 재지 않았다. **Chrome 만 쟀다** —
  *   Safari 는 클릭에 버튼을 포커스하지 않는다고 알려져 있지만, 그때도 포커스는 `BODY`로
  *   가 blur 가 나야 한다. 그것은 잰 값이 아니다.
@@ -411,29 +406,27 @@ function PropControl(props: {
 }
 
 /**
- * 지금 구조에서 보이는 필드만 남긴다(「컴포넌트 정의 구조」의 `visibleWhen`). 컬럼처럼 특정 구조에서만
- * 뜻이 있는 속성이 다른 구조에서 편집 가능한 것처럼 보이면 안 된다.
+ * 노드의 variant 에서 보이는 필드만 남긴다 — 그 variant 선언의 `hideProps` 칸을 감춘다(spec 「manifest」의 `components`).
+ * 카드 그리드처럼 컬럼이 뜻 없는 표현에서 컬럼을 편집할 수 있는 것처럼 보이면 안 된다.
+ *
+ * **variant 는 렌더러가 그리는 그 함수로 구한다**(`resolveVariant`) — 선언 밖이거나 없으면 `defaultVariant` 다. 패널이 따로
+ * 판정하면 캔버스와 갈려, 캔버스에 없는 속성을 내민다.
  */
-function visibleFields(def: ComponentDef, structures: Readonly<Record<string, string>>): EditorField[] {
-  const structure = currentStructure(def, structures)
-  return def.editor.filter(
-    (field) => field.visibleWhen === undefined || field.visibleWhen.structure === structure,
-  )
+export function visibleFields(
+  def: ComponentDef,
+  node: WbNode,
+  props: Record<string, unknown>,
+  manifest: ThemeManifest,
+): EditorField[] {
+  const variant = resolveVariant(def, node, props, manifest)
+  const hidden = new Set(manifest.components?.[def.type]?.variants.find((v) => v.id === variant)?.hideProps ?? [])
+  return def.editor.filter((field) => !hidden.has(field.prop))
 }
 
-/**
- * 이 노드가 **지금 그려지고 있는 구조** — 캔버스가 문서를 그릴 때 넘긴 **그 표**를 렌더러의 **그 함수**에
- * 넣어 얻는다(`packages/renderer/src/render.tsx`의 `resolveStructureOf`). 표는 캔버스가 싣는다
- * (`canvas/canvas-structures.tsx`). 테마를 여기서 따로 읽거나 첫 구조를 고르면 판정이 두 벌이 되어,
- * 테마가 첫 구조가 아닌 것을 고른 컴포넌트에서 캔버스에 없는 속성을 내민다
- * (`test/panels/panel-canvas-structure.test.tsx`).
- *
- * **테마가 없는 구조를 골랐으면 `null`이다.** 그때 캔버스는 폴백을 그리고 무엇이 없는지 말하므로,
- * 어느 구조에도 속하지 않는 노드로 보고 `visibleWhen`이 붙은 필드를 전부 감춘다.
- */
-function currentStructure(def: ComponentDef, structures: Readonly<Record<string, string>>): string | null {
-  const resolved = resolveStructureOf(def, { structures })
-  return resolved.ok ? resolved.structure : null
+/** 노드의 props. 객체가 아니면 빈 것이다 — `readProp`과 같은 판단이다. */
+function readProps(node: WbNode): Record<string, unknown> {
+  const props = (node as { props?: unknown }).props
+  return typeof props === 'object' && props !== null ? (props as Record<string, unknown>) : {}
 }
 
 /** 노드의 props에서 값 하나. 없으면 `undefined`다 — 기본값을 대신 채우지 않는다(아래). */

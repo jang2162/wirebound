@@ -256,7 +256,7 @@ describe('에디터 셸', () => {
     // 설계서 「설계서 화면 구조」의 여섯 값을 여기 다시 적는다. 구현이 쓰는 `VIEWPORT_PRESETS`를 테스트도
     // import하면 프리셋이 잘못 바뀌어도 테스트가 따라가 버린다.
     //
-    // **`within(select)`로 좁힌다.** 문서 전체의 `option`을 훑으면 머리의 테마 고르개
+    // **`within(select)`로 좁힌다.** 문서 전체의 `option`을 훑으면 다른 `<select>`의
     // 선택지까지 섞인다 — 이 케이스가 재려는 것은 **이 `<select>`의 선택지**이지
     // 화면에 있는 모든 선택지가 아니다.
     expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([

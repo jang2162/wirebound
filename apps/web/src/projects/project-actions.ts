@@ -48,34 +48,11 @@ export interface ProjectAbilities {
   rename: boolean
   remove: boolean
   /**
-   * 프로젝트가 쓸 테마를 고를 수 있는가(`PUT /:projectId/theme`).
-   *
-   * **테마는 페이지·메뉴와 등급이 다르다** — editor도 페이지를 고치지만 테마는 owner
-   * 전용이다(「권한 모델」·설계서 「테마 관리」). 이 한 번의 호출이 그 프로젝트의 **모든 화면**을 바꾸기 때문이다.
-   *
-   * 위 둘과 값이 같은데도 필드를 따로 두는 이유는 `rename`·`remove`가 그런 것과 같다 —
-   * 서버가 셋을 각각 다른 라우트로 받는다.
-   */
-  chooseTheme: boolean
-  /**
-   * 테마 **문서를 고칠** 수 있는가(`POST .../themes` · `PUT .../themes/:themeId`).
-   *
-   * **`chooseTheme`과 값이 같은데도 따로 두는 이유는 `rename`·`remove`가 그런 것과 같다** —
-   * 서버가 둘을 다른 라우트로 받는다. 그리고 둘은 **다른 질문**이다: 고르기는
-   * *"이 프로젝트가 무엇을 입을까"*이고 편집은 *"그 옷을 고쳐도 되는가"*다. 지금 둘 다
-   * owner인 것은 「권한 모델」의 관측이지 하나로 합쳐도 된다는 뜻이 아니다.
-   *
-   * **읽기는 이것으로 막지 않는다.** `GET .../themes/:themeId`는 viewer 게이트이고
-   * (`apps/api/src/routes/themes.ts`), 화면은 owner가 아닌 사람에게 **읽기 전용**으로
-   * 보여 준다 — 못 들어오게 하면 *"무엇이 적용돼 있는지"*조차 못 본다.
-   */
-  editTheme: boolean
-  /**
    * 지금 상태를 태그로 얼릴 수 있는가(`POST .../snapshots`).
    *
    * **이 필드가 이 표에서 처음으로 owner가 아닌 값을 갖는다.** 「권한 모델」이 스냅샷 **생성**을
-   * editor에게 열기 때문이다 — 위 넷과 갈리는 이유는 **스냅샷이 아무것도 바꾸지 않기**
-   * 때문이다. 이름을 바꾸는 것도, 옷을 갈아입히는 것도 아니고, 지금 상태를 적어 둘 뿐이다.
+   * editor에게 열기 때문이다 — 위 둘과 갈리는 이유는 **스냅샷이 아무것도 바꾸지 않기**
+   * 때문이다. 이름을 바꾸는 것도 지우는 것도 아니고, 지금 상태를 적어 둘 뿐이다.
    *
    * **복원은 이것이 아니다** — `restoreSnapshot`이 따로 있다. 「권한 모델」이 그것만 owner로 둔다.
    */
@@ -113,8 +90,6 @@ export interface ProjectAbilities {
 const NOTHING: ProjectAbilities = {
   rename: false,
   remove: false,
-  chooseTheme: false,
-  editTheme: false,
   createSnapshot: false,
   restoreSnapshot: false,
   editDesign: false,
@@ -160,8 +135,6 @@ export function projectAbilities(role: ProjectRole | undefined): ProjectAbilitie
     return {
       rename: true,
       remove: true,
-      chooseTheme: true,
-      editTheme: true,
       createSnapshot: true,
       restoreSnapshot: true,
       editDesign: true,

@@ -28,7 +28,6 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { useNavigate } from 'react-router'
 import type { WbNode } from '@wirebound/schema'
-import { systemTheme } from '@wirebound/themes'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type {
   PageDetail,
@@ -145,7 +144,7 @@ function fingerprintError(): ApiError {
 
 /**
  * **`fireEvent`다 — `@testing-library/user-event`는 이 저장소의 의존이 아니다**(전역 제약:
- * *"`apps/web`에 새 런타임 의존을 더하지 않는다"*). `theme-editor.test.tsx`가 같은 선례다.
+ * *"`apps/web`에 새 런타임 의존을 더하지 않는다"*).
  */
 function saveWith(tag: string, description?: string): void {
   fireEvent.change(screen.getByLabelText('태그'), { target: { value: tag } })
@@ -1173,8 +1172,8 @@ describe('복원 뒤 재동기화', () => {
   })
 
   /**
-   * **복원은 문서와 트리 말고도 코멘트 · 페이지 설명 · 레이아웃의 테마 선택을 바꾼다**(`services/restore-plan.ts`의 단계 표).
-   * 아래 넷은 그 셋을 떠 있는 채로 복원한 판이다 — 탭을 다녀와야 맞으면 안 된다.
+   * **복원은 문서와 트리 말고도 코멘트 · 페이지 설명을 바꾼다**(`services/restore-plan.ts`의 단계 표).
+   * 아래 둘은 그 둘을 떠 있는 채로 복원한 판이다 — 탭을 다녀와야 맞으면 안 된다.
    */
   it('코멘트 탭이 떠 있으면 목록을 다시 받는다 — 복원이 되살린 코멘트가 보인다', async () => {
     const withNode: WbNode = { id: 'n-old', type: 'Page', children: [{ id: 'n_a', type: 'Text', props: { content: '가' } }] }
@@ -1244,39 +1243,6 @@ describe('복원 뒤 재동기화', () => {
     await waitFor(() =>
       expect((screen.getByRole('textbox', { name: '페이지 설명' }) as HTMLTextAreaElement).value).toBe('스냅샷의 설명'),
     )
-  })
-
-  /** 복원이 레이아웃의 테마 선택을 `portal` 로 되돌리는 서버. 캔버스는 서버의 테마를 읽지 않으므로 고르개만 잰다. */
-  function themeAfterRestore(): Partial<ApiClient> {
-    const admin = systemTheme('admin')
-    const portal = systemTheme('portal')
-    if (admin === undefined || portal === undefined) throw new Error('시스템 테마가 없다')
-    let restored = false
-    return {
-      listProjectThemes: async () => [
-        { id: 'th-admin', system: true, theme: admin },
-        { id: 'th-portal', system: true, theme: portal },
-      ],
-      getProjectTheme: async () =>
-        restored
-          ? { themeId: 'th-portal', theme: portal, issues: [] }
-          : { themeId: 'th-admin', theme: admin, issues: [] },
-      restoreSnapshot: async () => {
-        restored = true
-        return restoreResult()
-      },
-    }
-  }
-
-  it('테마 고르개가 복원이 되돌린 선택을 다시 읽는다', async () => {
-    const { getPage } = pageThen(async () => pageDetail(PAGE_ID, pageDoc(새뿌리)))
-    await openConfirm({ getPage, ...themeAfterRestore() })
-    const select = screen.getByRole<HTMLSelectElement>('combobox', { name: '테마' })
-    await waitFor(() => expect(select.value).toBe('th-admin'))
-
-    fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
-
-    await waitFor(() => expect(select.value).toBe('th-portal'))
   })
 
   it('스냅샷을 저장하는 것만으로는 다시 읽지 않는다 — 프로젝트가 안 바뀌었다', async () => {

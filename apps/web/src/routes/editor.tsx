@@ -30,7 +30,6 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { PageDetail, ProjectDetail } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CanvasDocumentProvider } from '../canvas/canvas-document'
-import { CanvasStructuresProvider } from '../canvas/canvas-structures'
 import { CommentPanel } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { InteractionPanel } from '../panels/interaction-panel'
@@ -50,7 +49,6 @@ import { ExportPanel } from '../shell/export-panel'
 import { SnapshotsPanel } from '../shell/snapshots-panel'
 import { projectAbilities } from '../projects/project-actions'
 import { SessionMenu } from '../session/session-menu'
-import { ThemePicker } from '../theme/theme-picker'
 import {
   EditorStore,
   VIEWPORT_PRESETS,
@@ -486,18 +484,15 @@ export function EditorShellRoute(): ReactElement {
 
   return (
     <EditorStoreProvider store={store}>
-      {/* 캔버스가 그리는 구조 표를 속성 패널이 읽는 통로 — 둘의 공통 조상이 셸이라 여기서 감싼다. */}
-      <CanvasStructuresProvider>
-        {/* 캔버스 iframe 의 문서를 머리의 팝오버가 아는 통로 — 같은 까닭으로 셸째 감싼다. */}
-        <CanvasDocumentProvider>
-          <EditorShell
-            project={state.project}
-            roleKnown={roleKnown}
-            pageId={params.pageId}
-            onMembership={onMembership}
-          />
-        </CanvasDocumentProvider>
-      </CanvasStructuresProvider>
+      {/* 캔버스 iframe 의 문서를 머리의 팝오버가 아는 통로 — 캔버스와 머리의 공통 조상이 셸이라 셸째 감싼다. */}
+      <CanvasDocumentProvider>
+        <EditorShell
+          project={state.project}
+          roleKnown={roleKnown}
+          pageId={params.pageId}
+          onMembership={onMembership}
+        />
+      </CanvasDocumentProvider>
     </EditorStoreProvider>
   )
 }
@@ -528,7 +523,7 @@ function EditorShell(props: {
    * | 자리 | viewer 에게 | 왜 |
    * |---|---|---|
    * | **동작 입구** — 메뉴 편집 툴바 · 빈 트리의 «최상위 메뉴» · 페이지 JSON · 구조 편집 툴바(프리셋 · 패턴 포함) · 되돌리기 · 코멘트 폼 · 코멘트의 «수정» · «삭제» · 트리 두 곳의 단축키 | **숨긴다**(DOM 에서 뺀다) | 역할은 기다려서 풀리는 것이 아니다 — 켜질 길이 없는 회색 단추는 소음이다(스냅샷 복원 · 테마 파생 단추 · «페이지 설명»과 같은 판단). 뷰 모드가 편집 도구를 빼는 방식과도 같아서 viewer 의 편집 모드 좌측은 뷰 모드의 좌측과 같다 |
-   * | **값을 보이는 칸** — 속성 패널 · 상호작용 패널의 위젯 | **끄고 이유 한 줄**(`panels/property-panel.tsx`의 `VIEWER_NOTICE`) | 그 칸이 곧 값의 표시다 — 숨기면 viewer 가 읽을 것을 잃는다. 그리고 두 패널에는 «꺼진 이유» 관례가 이미 있다(남의 잠금 — `lockedNotice`). 테마 고르개가 owner 가 아니면 `disabled`로 서는 것과도 같다 |
+   * | **값을 보이는 칸** — 속성 패널 · 상호작용 패널의 위젯 | **끄고 이유 한 줄**(`panels/property-panel.tsx`의 `VIEWER_NOTICE`) | 그 칸이 곧 값의 표시다 — 숨기면 viewer 가 읽을 것을 잃는다. 그리고 두 패널에는 «꺼진 이유» 관례가 이미 있다(남의 잠금 — `lockedNotice`). |
    * | **잠금** — 노드를 고르는 것 | **잡지 않는다**(`useNodeLock`) | 고르기는 읽기다(속성 · 코멘트를 보려고 고른다). 서버는 viewer 의 `lock`을 조용히 버리지만(`MIN_ROLE_FOR_FRAME`) 보내는 것 자체가 쓰기 프레임이다 |
    *
    * **조회는 그대로다** — 모드 토글 · 뷰포트 · 줌 · 페이지 옮기기 · 노드 고르기 · 코멘트 읽기 · 탭 · 내보내기 · 스냅샷 목록.
@@ -585,7 +580,6 @@ function EditorShell(props: {
    * | 메뉴 · 페이지 목록 · 제목 | 좌측 트리(`MenuTree`의 `reloadToken`) |
    * | 열린 페이지의 문서 | 캔버스(`CanvasFrame`의 복원 재조회) — 구조 트리 · 속성 패널은 스토어에서 읽는다 |
    * | 코멘트 · 페이지 설명 | 우측 본문 — **탭을 다녀온 것처럼 다시 세운다**(`RightPanel`의 `key`) |
-   * | 레이아웃의 테마 선택 | 고르개(`ThemePicker`의 `reloadToken`) — 캔버스는 서버의 테마를 읽지 않는다(`canvas/canvas-theme.ts`) |
    *
    * **자리를 하나 빠뜨리면 탭을 다녀오거나 새로고침해야 맞는다** — 되돌렸다는 알림 아래 옛 코멘트 목록이 조용히 남는다
    * (Chrome: 스냅샷의 코멘트를 지운 뒤 복원하면 서버 1 · 탭 0). 복원이 바꾸는 것이 늘면 이 표에 줄을 더한다.
@@ -709,15 +703,11 @@ function EditorShell(props: {
 
             **나가는 길을 여기 둔다.** 제목은 `<h1>` 글자라 접근성 트리에서도 `heading`이고,
             이것이 없으면 프로젝트 목록으로 가는 길이 화면에 **없다** — 브라우저 뒤로
-            가기나 주소를 손으로 고치는 것뿐이다. 셸 밖 라우트인 테마 저작 화면의
-            `설계서로 돌아가기`(`routes/theme-editor.tsx`)와 짝이다. */}
+            가기나 주소를 손으로 고치는 것뿐이다. */}
         <div className="wb-shell-lead">
           {/* **제목 자체를 링크로 만들지 않는다.** 링크의 글자는 **갈 곳**을 말해야 하는데
               제목은 *"지금 여기"*를 말한다 — `관리자 콘솔 설계서`를 눌렀더니 프로젝트
               **목록**으로 가는 것은 그 계약을 어긴다. 옆에 따로 두면 글자가 곧 목적지다.
-
-              **문안을 테마 저작 화면과 같은 꼴로 맞춘다**(`<목적지>로 돌아가기`). 두 화면이
-              같은 일을 다른 말로 부르면 그 자체가 외울 것이 된다.
 
               `<button>`이 아니라 `<Link>`인 것은 **주소가 있는 이동**이기 때문이다 — 새 탭으로
               열거나 주소를 공유할 수 있어야 한다(`routes/project-list.tsx`의 `ProjectRow`와
@@ -743,16 +733,6 @@ function EditorShell(props: {
         {/* **viewer 에게는 없다**(`canEdit` — 되돌릴 것은 제 편집뿐이고 viewer 는 편집을 못 낸다). */}
         {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
         <ShellTools canvasRef={canvasRef} frameRef={frameRef} />
-        {/* **테마 고르개**. 셸 머리에 두는 것은 이것이 화면 **전체**를 바꾸기
-            때문이다 — 페이지 하나가 아니라 이 프로젝트의 모든 화면이 갈린다.
-            `abilities.chooseTheme`을 넘겨 owner가 아니면 읽기 전용으로 그린다(서버도 막는다). */}
-        <ThemePicker
-          projectId={props.project.id}
-          canChoose={abilities.chooseTheme}
-          reloadToken={restoredToken}
-          // 캔버스는 저장소 테마 하나를 그린다(`canvas/canvas-theme.ts`) — 골라도 캔버스는 안 바뀐다. 고르개는 A1b 가 걷는다.
-          onChanged={() => {}}
-        />
         {/* **스냅샷 팝오버**(셸 밖 별도 라우트가 아니라 팝오버인 근거는
             `shell/snapshots-panel.tsx` 머리말의 표에 있다). 내보내기 옆에 두는 것은 둘 다
             *"이 프로젝트 전체를 다루는 것"*이라 축이 같기 때문이다.

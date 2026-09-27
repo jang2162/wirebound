@@ -77,7 +77,7 @@
  * - **단축 속성을 펼치지 않는다.** `flex: 1 0 100%`는 `classDeclarations`가 `flex` 하나로
  *   담으므로 4번이 `flex-basis`로는 못 본다 — 그래서 **아래 `wantsOwnLine`이 단축형도 함께
  *   본다.** `shell.css`에 실제로 그 형태가 있다(`.wb-shell-snapshots-desc`, 고르개 밖이다).
- * - **`shell.css` 밖.** 인라인 `style`과 `use-theme-css.ts`의 시트는 읽지 않는다
+ * - **`shell.css` 밖.** 인라인 `style`과 캔버스 iframe 의 시트는 읽지 않는다
  *   (`shell-css-guard.ts` 머리말이 그 목록을 갖는다).
  */
 import { describe, expect, it } from 'vitest'
@@ -175,11 +175,11 @@ const OWN_LINE: { child: string; container: string; where: string }[] = [
  * `.wb-shell-picker`가 그랬다 — 프리셋 기본 상태의 자식 일곱 중 다섯이 auto 폭이고
  * 그 합이 240을 넘었다(371px). 감싸기가 그것을 고친 이유는 넘치는 것을 **다음 줄로**
  * 보내기 때문이다. **자식이 전부 줄어들 수 있으면 애초에 넘칠 것이 없고, 그때 감싸기는
- * 아무것도 하지 않는다** — 아래 셋이 그 경우이고, 셋 다 감싸기를 줘 보고 확인했다.
+ * 아무것도 하지 않는다** — 아래가 그 경우이고, 감싸기를 줘 보고 확인했다.
  *
  * **근거를 이렇게 적지 마라 — 둘 다 틀린다.** *"나뉘면 라벨이 자기 select와 갈린다"*는
- * `menu-picker-label`에 감싸기를 줘 보면 **아무 변화가 없어** 반증된다. `shell.css` 주석의
- * *"셸 머리의 `flex-wrap`이 자리를 만들어 준다"*를 인용하는 것은 **부모-자식 혼동이다** —
+ * `menu-picker-label`에 감싸기를 줘 보면 **아무 변화가 없어** 반증된다.
+ * *"부모의 `flex-wrap`이 자리를 만들어 준다"*를 근거로 드는 것은 **부모-자식 혼동이다** —
  * 부모가 감싼다는 것은 그 상자가 *자기 줄*을 받는다는 뜻이지 그 **안**이 안 넘친다는 뜻이
  * 아니다. 결론(한 줄로 둔다)이 맞아도 근거가 다른 말을 하면 다음 사람이 그 근거로 판단한다.
  *
@@ -194,14 +194,6 @@ const ONE_LINE: { name: string; why: string }[] = [
   {
     name: 'wb-shell-menu-picker-label',
     why: '자식 둘이 다 줄어든다 — `<select>`에 `min-width: 0`, 라벨은 한국어 텍스트라 아무 데서나 끊긴다. 감싸기를 줘 봤고 아무것도 안 바뀌었다(브라우저 실측 — "나뉘면 select와 갈린다"는 참이 아니다)',
-  },
-  {
-    name: 'wb-shell-theme-picker',
-    why: '같은 이유로 넘칠 것이 없다 — 자식이 라벨 텍스트와 `<select>`뿐이다. 감싸기를 줘 봐도 안 넘치고 높이만 21→32px로 늘었다(자식에 `flex-basis: 100%`를 심어 브라우저로 잰 값)',
-  },
-  {
-    name: 'wb-shell-theme-picker-group',
-    why: '같다 — 고르개와 편집 링크 둘 다 줄어든다. 다만 **`theme.meta.name`이 길면 이 줄이 실제로 넘친다** — 그것은 감싸기로 안 고쳐지고 원인이 다르다',
   },
 ]
 

@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import '../src/shell.css'
 
 /**
- * 머리 안에서 줄을 바꾸는 묶음. 테마 고르개 묶음 · 이력은 없다 — 자식이 다 줄어들거나 짧다(`src/shell.css`의
+ * 머리 안에서 줄을 바꾸는 묶음. 이력은 없다 — 자식이 다 줄어들거나 짧다(`src/shell.css`의
  * `.wb-shell-header` 주석 · `shell-css-picker.test.ts`의 `ONE_LINE`).
  */
 const WRAPPING_GROUPS = ['wb-shell-tools', 'wb-shell-session'] as const

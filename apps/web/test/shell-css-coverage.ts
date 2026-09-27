@@ -25,7 +25,7 @@
  *   `` className={`wb-shell-${kind}`} `` 나 `className={base + '-active'}` 처럼 이름을
  *   조립하는 형태는 토큰이 이름 꼴을 벗어나 버려진다. 지금 그런 자리는 없고,
  *   **`className={props.className}`으로 넘겨받는 자리 둘**(`routes/editor.tsx`의
- *   `ShellRegion`, `theme/theme-issues.tsx`)은 **부르는 쪽의 리터럴을 이 검사가 잡으므로**
+ *   `ShellRegion`, `shell/shell-resizer.tsx`)은 **부르는 쪽의 리터럴을 이 검사가 잡으므로**
  *   덮인다.
  *
  * - **`className = 식` (JSX 속성이 아니라 대입).** `el.className = cond ? 'a' : 'b'` 는
@@ -67,7 +67,7 @@
  *   `shell.css`는 id 선택자를 금지하므로 이들에 규칙이 있으면 **오히려 틀린 것이다.** 닻을
  *   `className`으로 좁힌 것이 이 넷을 자동으로 거른다.
  *
- * - **`shell.css` 밖의 스타일.** 인라인 `style`, `theme/use-theme-css.ts`가 `document.head`에
+ * - **`shell.css` 밖의 스타일.** 인라인 `style`, 캔버스 iframe 이 그 문서의 head 에
  *   붙이는 시트는 읽지 않는다. `shell-css-guard.ts` 머리말이 그 목록을 갖는다.
  *
  * - **오타의 방향.** *"코드에 있는데 CSS에 없다"*는 잡지만 그것이 오타인지 빠뜨린 규칙인지는
@@ -227,7 +227,7 @@ function readValue(source: string, at: number, separator: string): string | null
  * 찾는다.
  *
  * **`;`도 끝으로 보는 것은 방어이지 무엇을 재는 장치가 아니다.** 타입 자리
- * (`props: { className: string; name: string }` — `routes/editor.tsx`·`theme/theme-issues.tsx`에
+ * (`props: { className: string; name: string }` — `routes/editor.tsx`에
  * 실재한다)에서 `,`만 보면 뒤 속성까지 삼키는데, **삼켜도 지금은 결과가 같다**: 그 조각에
  * 문자열 리터럴이 없기 때문이다. 실측으로도 `;`를 종결자에서 빼면 `ALLOWED`·`NOT_SEEN`의
  * 어느 케이스도 결과가 바뀌지 않는다.

@@ -5,7 +5,6 @@
  */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import type { PageDocument } from '@wirebound/schema'
-import { systemTheme } from '@wirebound/themes'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail } from '../../src/api/types'
@@ -100,26 +99,11 @@ function reloadButton(): HTMLElement {
 }
 
 describe('남의 복원 배너의 «다시 불러오기»', () => {
-  it('누르면 복원된 판을 다시 읽고 배너가 풀린다 — 고르개의 테마 선택도 다시 읽는다', async () => {
-    const admin = systemTheme('admin')
-    const portal = systemTheme('portal')
-    if (admin === undefined || portal === undefined) throw new Error('시스템 테마가 없다')
-    let restored = false
+  it('누르면 복원된 판을 다시 읽고 배너가 풀린다', async () => {
     const view = await mount({
       after: async () => pageDetail(PAGE_ID, doc('n-after')),
-      api: {
-        listProjectThemes: async () => [
-          { id: 'th-admin', system: true, theme: admin },
-          { id: 'th-portal', system: true, theme: portal },
-        ],
-        getProjectTheme: async () =>
-          restored ? { themeId: 'th-portal', theme: portal, issues: [] } : { themeId: 'th-admin', theme: admin, issues: [] },
-      },
     })
-    const select = screen.getByRole<HTMLSelectElement>('combobox', { name: '테마' })
-    await waitFor(() => expect(select.value).toBe('th-admin'))
 
-    restored = true
     view.push(RESTORED_FRAME)
     expect(screen.getByRole('status').textContent).toContain('스냅샷이 복원됐습니다')
     // 누르기 전에는 다시 읽지 않는다 — 배너가 서는 것만으로 판을 갈지 않는다(보내지 않은 편집이 있을 수 있다).
@@ -129,7 +113,6 @@ describe('남의 복원 배너의 «다시 불러오기»', () => {
 
     await waitForNode('n-after')
     expect(nodeElement('n-before')).toBeNull()
-    await waitFor(() => expect(select.value).toBe('th-portal'))
     expect(screen.queryByRole('button', { name: '다시 불러오기' })).toBeNull()
     expect(screen.queryByText(/스냅샷이 복원됐습니다/)).toBeNull()
   })

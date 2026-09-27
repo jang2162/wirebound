@@ -17,7 +17,7 @@ import type { ProjectDetail, SessionUser } from '../../src/api/types'
 import { fakeApi, renderWithProviders } from '../helpers'
 
 /** 화면이 부르는 판정. 케이스가 이 값을 갈아 끼운다. */
-const abilities = { rename: true, remove: true, chooseTheme: true }
+const abilities = { rename: true, remove: true }
 
 vi.mock('../../src/projects/project-actions', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/projects/project-actions')>()

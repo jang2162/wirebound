@@ -26,13 +26,10 @@ import type {
   PatchResult,
   Preset,
   ProjectDetail,
-  ProjectTheme,
   RestoreResult,
   RevisionInverse,
   SessionUser,
   SnapshotSummary,
-  ThemeDetail,
-  ThemeSummary,
   TreeMenuNode,
 } from './types'
 
@@ -488,7 +485,7 @@ const SHAPES = {
    *
    * **어느 id를 빈 문자열까지 막는지는 "그 값이 주소가 되는가"로 가른다.** 주소를 만드는
    * 자리는 여럿이고 **그 목록을 여기 적지 않는다** — 적은 목록은 호출부가 늘면 조용히 낡는다.
-   * 아래 표는 이 shape의 값이 주소가 되는 자리이고, `pageImported`·`themeDetail`·`createProject`의
+   * 아래 표는 이 shape의 값이 주소가 되는 자리이고, `pageImported`·`createProject`의
    * 주소는 각자의 주석이 적는다. 페이지를 **지운 뒤** `/projects/:projectId`로 가는
    * `tree/use-tree-commands.tsx`의 `navigate`가 넣는 값도 `projectDetail.id`다(`routes/editor.tsx`가
    * **조회해 온** id를 트리에 넘기고 그 훅이 그대로 쓴다).
@@ -568,79 +565,9 @@ const SHAPES = {
     typeof value['seq'] === 'number' &&
     typeof value['revisionId'] === 'string' &&
     Array.isArray(value['inverse']) &&
-    // **`warnings`는 없을 수 있고, 있으면 배열이어야 한다**(테마 쪽 `themeDetail`과
-    // 같은 관례). 서버는 경고가 없으면 키를 만들지 않으므로 `undefined`를 통과시켜야 하고,
+    // **`warnings`는 없을 수 있고, 있으면 배열이어야 한다**. 서버는 경고가 없으면 키를 만들지 않으므로 `undefined`를 통과시켜야 하고,
     // 배열이 아닌 것을 통과시키면 셸 머리의 통지가 `.map`을 부르다 던진다 — 그 자리는
     // 오류 경계 **밖**이라 셸 전체가 흰 화면이 된다(`shell/edit-warnings.tsx`).
-    (value['warnings'] === undefined || Array.isArray(value['warnings'])),
-  /**
-   * 프로젝트의 현재 테마. **`theme`의 안쪽을 보지 않는다** — `resolveTheme`이 그것을
-   * 통째로 검증하고 이슈를 내며(`theme/use-theme-css.ts`), 여기서 한 겹 더 막으면
-   * *"해석기가 이슈로 말할 수 있는 것"*이 **읽을 수 없는 응답**으로 바뀐다.
-   * 두 층이 같은 것을 검사하면 문안이 갈리고 사용자는 원인을 두 번 다르게 듣는다.
-   *
-   * 여기서 보는 것은 **모양 하나**다: `theme`이 객체이거나 `null`인가. 그 자리에 문자열이나
-   * 배열이 오면 `resolveTheme`이 `bad-spec`을 내기는 하지만, 그건 계약 위반이지 테마
-   * 오류가 아니므로 `internal`로 끊는 편이 원인을 바로 가리킨다.
-   */
-  projectTheme: (value) =>
-    isRecord(value) &&
-    (value['themeId'] === null || typeof value['themeId'] === 'string') &&
-    (value['theme'] === null || isRecord(value['theme'])) &&
-    Array.isArray(value['issues']),
-  /**
-   * 테마 목록. **`id`가 빈 문자열이면 막는다** — 그 값이 그대로
-   * `PUT /:projectId/theme`의 본문이 되고, 빈 문자열은 서버의 `z.uuid()`에서 400이 된다.
-   * 위 표(`pageDetail` 머리말)의 축으로 읽으면 *"주소가 되지는 않지만 **요청 본문이 되는**
-   * 값"*이고, 손해의 모양이 같다: 통과시키면 사용자가 고르개를 눌렀을 때 이유 없는 400을 본다.
-   *
-   * **`theme` 안쪽은 보지 않는다** — `projectTheme`과 같은 경계다. 다만 `meta.name`이
-   * 고르개의 **표시 이름**이라 그것이 문자열인지는 본다: 없으면 빈 항목이 그려져
-   * 사용자가 무엇을 고르는지 모른 채 고르게 된다.
-   */
-  themeList: (value) =>
-    isArrayOf(
-      value,
-      (item) =>
-        isRecord(item) &&
-        typeof item['id'] === 'string' &&
-        item['id'] !== '' &&
-        typeof item['system'] === 'boolean' &&
-        isRecord(item['theme']) &&
-        isRecord((item['theme'] as Record<string, unknown>)['meta']) &&
-        typeof ((item['theme'] as Record<string, unknown>)['meta'] as Record<string, unknown>)['name'] ===
-          'string',
-    ),
-  /**
-   * 테마 하나 — 저작 UI가 편집하는 것. **소비자가 셋이고 읽는 값이 다르다.**
-   *
-   * | 소비자 | 읽는 값과 그 값이 되는 것 | 어긋나면 |
-   * |---|---|---|
-   * | `getTheme` | `theme`(초안 스토어에 실린다) · `base`(`resolveTheme`의 둘째 인자) · `system`(읽기 전용 판정) | 초안이 테마가 아닌 것을 들고, 파생의 검증이 `bad-extends`로 통째로 죽는다 |
-   * | `createTheme` | **`id`가 주소가 된다**(파생을 만든 뒤 그 편집 화면으로 간다) | `/projects/p1/themes/`가 되고 그 주소는 어느 라우트도 잡지 않는다 |
-   * | `updateTheme` | `warnings`(화면에 그린다) · `theme`(저장된 것으로 초안 기준을 갱신) | 배열이 아닌 것을 `.map`하다 저장 성공 경로에서 던진다 |
-   *
-   * **`theme` 안쪽은 보지 않는다** — `projectTheme`·`themeList`와 같은 경계다.
-   * `resolveTheme`이 그것을 통째로 검증하고 이슈로 말하며, 여기서 한 겹 더 막으면
-   * *"해석기가 이슈로 말할 수 있는 것"*이 **읽을 수 없는 응답**으로 바뀐다.
-   * **다만 `meta.name`이 화면의 제목이 되므로 그것이 문자열인지는 본다**(`themeList`가
-   * 표시 이름을 보는 것과 같은 이유).
-   *
-   * **조건부 두 키는 "없거나, 있으면 그 타입"이다.** 없는 것이 정상이므로
-   * `undefined`를 통과시켜야 하고(`base`는 파생이 아닐 때, `warnings`는 경고가 없을 때),
-   * **있는데 모양이 틀린 것은 막는다** — `warnings`가 배열이 아니면 저장 성공 경로에서
-   * 화면이 던지고, `base`가 객체가 아니면 `resolveTheme`이 계약 밖 인자를 받는다.
-   */
-  themeDetail: (value) =>
-    isRecord(value) &&
-    typeof value['id'] === 'string' &&
-    value['id'] !== '' &&
-    typeof value['system'] === 'boolean' &&
-    isRecord(value['theme']) &&
-    isRecord((value['theme'] as Record<string, unknown>)['meta']) &&
-    typeof ((value['theme'] as Record<string, unknown>)['meta'] as Record<string, unknown>)['name'] ===
-      'string' &&
-    (value['base'] === undefined || isRecord(value['base'])) &&
     (value['warnings'] === undefined || Array.isArray(value['warnings'])),
   /**
    * 코멘트 하나. 넷을 본다.
@@ -1035,14 +962,6 @@ const BODY_KEYS = {
     keyof Parameters<ApiClient['importPage']>[1],
     true
   >,
-  // 테마 쓰기 둘은 봉투 키가 `theme` 하나다(서버의 `ThemeBody`). 키가 하나뿐이라 초과
-  // 키가 생길 자리가 좁아 보이지만, **`declaredOnly`를 지나는 이유는 초과 키가 아니라
-  // 규칙의 단일성이다** — 그 함수 머리말의 *"자리마다 함수를 두면 같은 위험에 대한
-  // 규칙이 일곱 벌이 된다"*가 그것이다. 그리고 `getTheme` 응답을 그대로 되보내는 것
-  // (`{ id, system, updatedAt, theme, base }`)이 실제로 있을 법한 실수인데, 서버의
-  // `ThemeBody`가 `z.strictObject`라 그 본문은 400이다.
-  createTheme: { theme: true } satisfies Record<keyof Parameters<ApiClient['createTheme']>[1], true>,
-  updateTheme: { theme: true } satisfies Record<keyof Parameters<ApiClient['updateTheme']>[2], true>,
   // 코멘트 쓰기 둘. 서버의 본문 스키마가 `z.strictObject`라 선언되지 않은 키는
   // 그 자체로 400이고, **`marker`가 그 자리다** — 번호를 정하는 것은 서버이므로
   // 코멘트 응답(`{ id, nodeId, body, authorId, authorName, … }`)을 그대로 되보내면
@@ -1054,7 +973,7 @@ const BODY_KEYS = {
   updateComment: { body: true } satisfies Record<keyof Parameters<ApiClient['updateComment']>[3], true>,
   // 스냅샷 생성. 서버의 `SnapshotBody`가 `z.strictObject`라 선언되지 않은 키는 그
   // 자체로 400이고, **`payload`가 그 자리다** — 생성 응답에 그 키가 실려 오므로 응답 객체를
-  // 그대로 되보내는 실수가 실제로 있을 법하다(`createTheme`이 같은 자리에서 같은 판단).
+  // 그대로 되보내는 실수가 실제로 있을 법하다.
   createSnapshot: { tag: true, description: true } satisfies Record<
     keyof Parameters<ApiClient['createSnapshot']>[1],
     true
@@ -1247,9 +1166,6 @@ export function createHttpClient(
   const menuPath = (projectId: string, nodeId: string): string =>
     `${projectPath(projectId)}/menu/${encodeURIComponent(nodeId)}`
 
-  const themePath = (projectId: string, themeId: string): string =>
-    `${projectPath(projectId)}/themes/${encodeURIComponent(themeId)}`
-
   const commentsPath = (projectId: string, pageId: string): string =>
     `${pagePath(projectId, pageId)}/comments`
 
@@ -1391,41 +1307,6 @@ export function createHttpClient(
         // 컴파일러로 이어지고, **나가는 바이트는 삼항으로 적은 것과 같다**(선택 키 유무 두 갈래 전부).
         declaredOnly(body, BODY_KEYS.patchOps),
       ),
-    getProjectTheme: (projectId, options) =>
-      request<ProjectTheme>('GET', `${projectPath(projectId)}/theme`, SHAPES.projectTheme, undefined, options),
-    listProjectThemes: (projectId) =>
-      request<ThemeSummary[]>('GET', `${projectPath(projectId)}/themes`, SHAPES.themeList),
-    setProjectTheme: (projectId, themeId) =>
-      request<ProjectTheme>(
-        'PUT',
-        `${projectPath(projectId)}/theme`,
-        SHAPES.projectTheme,
-        // **`declaredOnly`를 안 지난다.** 그것이 막는 것은 *"응답 객체를 그대로 되보내는
-        // 것"*인데(`declaredOnly` 머리말) 여기 들어오는 것은 객체가 아니라 `string | null`
-        // 하나다 — 초과 키가 생길 자리가 없다.
-        { themeId },
-      ),
-    // 아래 셋이 테마 저작 경로다. **`getProjectTheme`과 경로가 한 글자 다르다**
-    // (`/theme` vs `/themes/:id`) — 소비자도 내는 것도 다르다(서버 README의 소비자 표).
-    getTheme: (projectId, themeId) =>
-      request<ThemeDetail>('GET', themePath(projectId, themeId), SHAPES.themeDetail),
-    createTheme: (projectId, body) =>
-      request<ThemeDetail>(
-        'POST',
-        `${projectPath(projectId)}/themes`,
-        SHAPES.themeDetail,
-        declaredOnly(body, BODY_KEYS.createTheme),
-      ),
-    // **`updateBody`를 안 지난다.** 그것이 막는 것은 *"바꿀 값이 하나도 없는 갱신"*인데,
-    // 이쪽은 키가 `theme` 하나이고 그 키가 없으면 바꿀 것이 없는 게 아니라 **본문이
-    // 없는 것**이다 — 서버도 그것을 400 봉투 위반으로 낸다. 갱신 셋과 위험의 모양이 다르다.
-    updateTheme: (projectId, themeId, body) =>
-      request<ThemeDetail>(
-        'PUT',
-        themePath(projectId, themeId),
-        SHAPES.themeDetail,
-        declaredOnly(body, BODY_KEYS.updateTheme),
-      ),
     // 코멘트 다섯. **경로가 전부 `.../pages/:pageId/comments` 아래다** — 코멘트는
     // 프로젝트가 아니라 **페이지의 노드**에 붙는다(노드 id는 그 문서 안에서만 뜻이 있다).
     listComments: (projectId, pageId, options) =>
@@ -1439,8 +1320,7 @@ export function createHttpClient(
         options,
       ),
     // **`updateBody`를 안 지난다.** 키가 `body` 하나뿐이라 *"바꿀 값이 하나도 없는 갱신"*이
-    // 성립하지 않는다 — 그 키가 없는 것은 본문이 없는 것이고 서버가 봉투 위반 400을 낸다
-    // (`updateTheme`과 같은 자리).
+    // 성립하지 않는다 — 그 키가 없는 것은 본문이 없는 것이고 서버가 봉투 위반 400을 낸다.
     updateComment: (projectId, pageId, commentId, body, options) =>
       request<Comment>(
         'PATCH',

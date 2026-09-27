@@ -10,7 +10,6 @@ import { KnownUserProvider, type KnownUserHolder } from '../src/api/known-user'
 import { act, render, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
-import { systemTheme } from '@wirebound/themes'
 import { ApiError, type ApiClient } from '../src/api/client'
 import { ApiProvider } from '../src/api/context'
 import { RealtimeProvider, type RealtimeSetup } from '../src/realtime/context'
@@ -28,13 +27,6 @@ function notStubbed(method: string): () => never {
     throw new Error(`fakeApi: ${method}가 스텁되지 않았습니다`)
   }
 }
-
-/**
- * 가짜가 쓰는 시스템 `admin`의 행 id. **실제 서버에서는 uuid이고 기동 동기화가 만든다** —
- * 값 자체에 뜻이 없고, `getProjectTheme`의 `themeId`와 `listProjectThemes`의 항목이
- * **같은 값을 가리키는 것**이 요점이다.
- */
-export const SYSTEM_ADMIN_THEME_ID = '00000000-0000-4000-8000-000000000001'
 
 /** 테스트가 명시적으로 스텁한 메서드만 동작하는 `ApiClient`. */
 export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
@@ -67,65 +59,11 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     updateComment: notStubbed('updateComment'),
     deleteComment: notStubbed('deleteComment'),
     renumberComments: notStubbed('renumberComments'),
-    /**
-      * **이 메서드만 `notStubbed`가 아니다 — 유일한 예외이고 근거가 있다.**
-      *
-      * 나머지는 화면이 **그 데이터를 쓰려고** 부르므로, 스텁하지 않았다는 것은 곧 그
-      * 테스트가 무엇을 그리는지 정하지 않았다는 뜻이다. 그런데 `getProjectTheme`은
-      * 캔버스가 **테스트가 요청하지 않아도** 부른다(`canvas.tsx`가 `useProjectTheme`을
-      * 쓴다). 여기서 던지면 캔버스를 지나가기만 하는 테스트 수십 개가 무관한 이유로
-      * 콘솔을 채우고, 그 소음이 진짜 오류를 가린다.
-      *
-      * **기본값이 시스템 `admin`인 것도 근거가 있다** — 서버가 프로젝트를 만들 때 기본
-      * 레이아웃을 시스템 `admin`에 걸어 두므로(`repos/projects.ts`), 새 프로젝트의
-      * **실제 상태**가 이것이다. `null`을 기본값으로 두면 테스트가 실재하지 않는 상태를
-      * 보게 된다.
-      *
-      * 테마가 판정에 걸리는 테스트는 **직접 스텁한다**
-      * (`theme/project-theme-cascade.test.tsx`가 그렇게 한다) — 그 파일들이 기본값에
-      * 기대지 않으므로 이 예외가 거짓 초록을 만들지 않는다.
-      */
-    getProjectTheme: async () => ({
-      themeId: SYSTEM_ADMIN_THEME_ID,
-      theme: systemTheme('admin') ?? null,
-      issues: [],
-    }),
     listMyRevisions: notStubbed('listMyRevisions'),
     listRevisionsBefore: notStubbed('listRevisionsBefore'),
     /**
-     * **`getProjectTheme`과 같은 이유로 `notStubbed`가 아니다.** 에디터 셸의 테마 고르개가
-     * **테스트가 요청하지 않아도** 부른다(`routes/editor.tsx`). 여기서 던지면 셸을 지나가는
-     * 테스트마다 무관한 콘솔 오류가 쌓이고, 그 소음이 진짜 오류를 가린다.
-     *
-     * **기본값이 시스템 `admin` 하나인 것도 실재하는 상태다** — 기동 동기화가 시스템
-     * 테마를 넣고(`services/system-themes.ts`) 새 프로젝트는 파생 테마가 없다.
-     * 위 `getProjectTheme`의 `themeId`와 같은 id를 쓰므로 **고르개가 "admin이 골라져
-     * 있다"를 일관되게 그린다** — 둘이 갈리면 고르개가 실재하지 않는 상태를 보인다.
-     */
-    listProjectThemes: async () => {
-      const admin = systemTheme('admin')
-      return admin === undefined ? [] : [{ id: SYSTEM_ADMIN_THEME_ID, system: true, theme: admin }]
-    },
-    /**
-     * **이쪽은 `notStubbed`다.** 위 둘은 화면이 스스로 부르는 **조회**이지만 이것은
-     * **쓰기**이고, 테스트가 요청하지 않았는데 불릴 자리가 없다 — 불렸다면 그 테스트가
-     * 무엇을 하는지 정하지 않은 것이다.
-     */
-    setProjectTheme: notStubbed('setProjectTheme'),
-    /**
-     * **셋 다 `notStubbed`다.** 위 두 예외(`getProjectTheme`·`listProjectThemes`)는
-     * *"테스트가 요청하지 않아도 화면이 부른다"*가 근거인데, 이 셋을 부르는 화면은
-     * 테마 저작 라우트 하나뿐이고 **그 주소로 가는 테스트만 그것을 지난다.**
-     * 그러므로 불렸는데 스텁이 없다면 그 테스트가 무엇을 그리는지 정하지 않은 것이다.
-     */
-    getTheme: notStubbed('getTheme'),
-    createTheme: notStubbed('createTheme'),
-    updateTheme: notStubbed('updateTheme'),
-    /**
-     * **셋 다 `notStubbed`다.** 위 두 예외(`getProjectTheme`·`listProjectThemes`)의 근거는
-     * *"테스트가 요청하지 않아도 화면이 부른다"*인데, 스냅샷 셋을 부르는 화면은 셸 머리의
-     * 스냅샷 팝오버 하나뿐이고 팝오버를 **열어야** 부른다 — **그것을 여는 테스트만 그것을
-     * 지난다**(테마 저작 셋과 같다).
+     * **셋 다 `notStubbed`다.** 스냅샷 셋을 부르는 화면은 셸 머리의 스냅샷 팝오버 하나뿐이고 팝오버를 **열어야**
+     * 부른다 — **그것을 여는 테스트만 그것을 지난다.**
      */
     listSnapshots: notStubbed('listSnapshots'),
     createSnapshot: notStubbed('createSnapshot'),
