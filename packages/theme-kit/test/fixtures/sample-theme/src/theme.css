@@ -1,0 +1,4 @@
+.sample-card {
+  border: 1px solid var(--wb-color-primary);
+  background: url(../assets/dot.svg);
+}
