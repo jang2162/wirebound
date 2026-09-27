@@ -109,3 +109,78 @@
 - 셸의 Host 판정이 vite 보다 좁다(`*.localhost`) — 작성자가 `*.localhost` 로 열면 셸만 403 이다.
 - 1e(`assets/．．/x.png` 전각 점)는 리뷰대로 이월 — 자산 이름으로 파일을 쓰거나 URL 로 내는 소비자(A3 · A5)가 서면 다시 잰다.
 - 토큰 값의 길이 한도는 두지 않았다(1 MB 낱말을 받는다) — 저장 한도는 A4 api 가 정한다.
+
+---
+
+## 좁은 반증 2 대응
+
+리뷰: `docs/superpowers/plans/2026-09-27-a2-review-2.md`(보고 `90301d3d` · 빨강 `b8481bc0` — `token-value-grammar.test.ts` 3 · `dev.test.ts` 1, 잠금 1). 시작 HEAD `90301d3d`.
+
+**재현 먼저**: 빨강 4 가 리뷰 값 그대로 죽었다 — 그림자 3 건 `expected [ 'token-default-type' ] to deeply equal []`, dev 1 건 `expected 403 to be 200`.
+
+### 커밋
+
+| 항목 | 커밋 | 내용 |
+|---|---|---|
+| F5 | `17d3f971` | 길이의 수가 앞 점 소수(`.5rem`)를 받음 — 그림자 · `length` 토큰 |
+| F6 | `29179e4b` | dev 의 `fs.allow` 에 작성자 프로젝트가 든 워크스페이스 뿌리의 `node_modules` 를 더함 |
+| F7 | `f5de2f06` | deflate 항목을 스트리밍으로 풀며 적힌 원래 크기를 넘는 순간 멈춤 |
+| 문장 | `d2b3e55d` | `readWbtheme` 머리말(로케이터 거절이 혼자 지키는 것) · `isLocalHost` 머리말(vite 보다 좁다) |
+| 보고 | (이 절과 한 커밋) | |
+
+### F5 — 앞 점 소수(중간)
+
+- **고침**: `LENGTH` 의 수를 `-?(?:\d+(?:\.\d+)?|\.\d+)` 로. `length` 토큰도 같은 식이라 함께 닫힌다(원래 있던 길).
+- **안 받음**(설계 판단 — 이 차수): 그림자 · 색의 `oklch()` · `calc()` · 대문자 단위(`1PX`) · `deg`(`hsl(120deg …)`).
+- **새 케이스** 7(`token-value-grammar.test.ts` «length 토큰 값 — 앞 점 소수»): 받음 `.5rem` · `-.25em` · `0.5px`, 거절 `.rem` · `5.rem` · `..5rem` · `.5REM`.
+- **변조**: 앞 점 갈래를 뗌 → 5 죽음(리뷰 3 · 새 받음 2), 모두 `expected [ 'token-default-type' ] to deeply equal []`.
+
+### F6 — 워크스페이스로 올린 `node_modules`(중간)
+
+- **고침**: `fs.allow` = `[client, root, join(searchForWorkspaceRoot(root), 'node_modules')]`.
+- **값**: 저장소 안 dev 판 10/10 — 리뷰의 글꼴 케이스(pnpm 워크스페이스) 초록, 대응 때 세운 «README 는 밖» 초록 그대로.
+- **리뷰의 워크스페이스 두 판**(코디네이터 스크래치 `rv2-a2/ws-pnpm` · `ws-npm`, `@fontsource/inter`): 설치된 kit 의 `dist` 를 지금 소스로 빌드한 `dist` 로 바꿔 끼우고 리뷰의 `ws-dev-probe.mjs` 를 돌렸다. 두 판 모두 칸 37 · 종류 19 · `data-wb-error` 0 · 4xx 0 · `Inter:loaded`(콘솔의 404 한 줄은 `/favicon.ico`). 탐침 뒤 두 워크스페이스의 kit `dist` 는 백업에서 되돌렸다(`diff -rq` 같음). npm 판은 케이스가 없다.
+- **변조**(서로 다른 케이스가 죽는다 — 두 겹이 각자 제 성질을 잡는다):
+  - `node_modules` 를 뗌(대응 판) → 글꼴 1 건 `expected 403 to be 200`.
+  - `node_modules` 대신 워크스페이스 뿌리 전체 → README 1 건 `expected 200 to be 403`.
+
+### F7 — deflate 원래 크기를 속인 zip 이 읽기를 쥔다(원래 있던 길 · 중간)
+
+- **케이스**(`wbtheme-reader-divergence.test.ts` «deflate 항목의 원래 크기를 작게 적은 zip 이 읽기를 오래 쥐지 않는다»): 0 바이트 256 MB 를 fflate 스트리밍 `Deflate`(level 9)로 지은 스트림 하나를 원래 크기 1 인 항목 195 개가 가리킨다(zip 276,361 B). 시간 한도 5 s 로 단언.
+- **고치기 전**(HEAD 소스): **425,711 ms** · 판정 `[]` → `expected 425710.84 to be less than 5000`. 리뷰가 잰 59 s 보다 길다 — 리뷰는 node `zlib` 으로 스트림을 지었고, 이 케이스는 fflate 로 지었다. 그 차이의 까닭은 재지 않았다.
+- **고침**(`packages/themes/src/wbtheme/read.ts`): `unzipSync` 는 stored 항목만 푼다. deflate 항목은 `inflateBounded` 가 푼다.
+  - 데이터 시작은 fflate 와 같게 로컬 머리의 이름 · 확장 길이로 찾는다.
+  - 4096 바이트씩 `Inflate.push` 하고, 나온 바이트가 적힌 원래 크기를 넘는 순간 멈춘다 → `bad-zip`.
+  - 압축 방식이 0 · 8 밖이면 `bad-zip`.
+- **고친 뒤**: 같은 케이스가 **14 ms** 에 `["bad-zip"]`.
+- **정상 `.wbtheme` 읽기**(한 번 읽는 시간 — 500 회 평균, 두 번 잼, 스크래치 `read-time.mjs` 가 빌드한 `dist` 를 부름):
+
+| 파일 | 고치기 전 | 고친 뒤 |
+|---|---|---|
+| `system-admin-0.1.0.wbtheme`(3,812 B) | 0.077 ms | 0.138 ms |
+| 템플릿 빌드 산출물 `my-theme-0.1.0.wbtheme`(3,096 B) | 0.048 ms | 0.102 ms |
+
+  비율로는 두 배 가깝다. 더해진 것은 한 번에 0.06 ms 안쪽이다(업로드 · 시딩에서 한 번 부른다).
+- **변조**:
+  - Ga 넘침 판정만 뗌 → **안 죽음**(26 초록, 14 ms). 버퍼(`originalSize`) 밖으로 쓰는 `out.set` 이 `RangeError` 를 던져 같은 자리에서 `bad-zip` 이 된다 — 두 번째 겹이다.
+  - Gb 판정을 떼고 넘친 쓰기를 버리며 계속 풂 → `expected 31909.27 to be less than 5000`.
+
+### 문장 두 곳
+
+- `readWbtheme` 머리말: «목록 대조는 외부 속성을 못 견주므로, 두 디렉터리가 이름까지 같은 zip64 판은 로케이터 거절이 혼자 막는다.» 를 더했다. 같은 머리말의 «deflate 항목은 원래 크기만큼 버퍼를 잡는다» 에 `inflateBounded` 도 같다고 덧붙였다.
+- `isLocalHost` 머리말: «vite 와 같은 판정이어야 한다» → «vite 보다 좁다 — `*.localhost` · IP 꼴은 셸만 403, 대문자는 셸만 받는다(브라우저는 Host 를 소문자로 보낸다)».
+
+### 게이트
+
+| 명령 | 결과 |
+|---|---|
+| `pnpm typecheck` | 오류 0 |
+| `pnpm test` | 342 파일 · **5941 통과 · 1 건너뜀 · 실패 0**(건너뜀은 전부터 있던 `log-destination` «Linux /dev/full»). DB 5442. 앞 게이트 5929 에 리뷰 빨강 3 · 잠금 1 · F5 7 · F7 1 |
+| `pnpm test:build` | 30 파일 · **177 통과 · 1 건너뜀 · 실패 0**(건너뜀은 템플릿 설치 판). dev 판 10(리뷰 빨강 1 더함) |
+| 리뷰 2 의 빨강 4 | 전부 초록 |
+
+### 이월
+
+- npm 워크스페이스의 dev 글꼴 판 · 설치판 dev 는 케이스가 없다(탐침으로만 확인).
+- 그림자 · 색의 `oklch` · `calc` · 대문자 단위 · `deg` 는 받지 않는다 — 받을지는 설계 판단이다.
+- 정상 파일의 읽기가 0.06 ms 늘었다 — 스트리밍 `Inflate` 의 비용이다. 한 번에 넣는 크기(4096)와의 관계는 재지 않았다.
