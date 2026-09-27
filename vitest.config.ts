@@ -16,6 +16,7 @@ const shared = {
       '@wirebound/theme-sdk/runtime': src('./packages/theme-sdk/src/runtime.ts'),
       '@wirebound/theme-sdk': src('./packages/theme-sdk/src/index.ts'),
       '@wirebound/renderer': src('./packages/renderer/src/index.ts'),
+      '@wirebound/theme-gallery': src('./packages/theme-gallery/src/index.ts'),
       '@wirebound/system-theme-admin': src('./system-themes/admin/src/index.ts'),
       '@wirebound/themes': src('./packages/themes/src/index.ts'),
       // **더 좁은 것을 먼저 둔다.** rollup의 alias는 `id === find || id.startsWith(find + '/')`로
