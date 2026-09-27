@@ -11,7 +11,6 @@
  */
 import {
   EMPTY_OVERLAY,
-  installStructures,
   NO_THEME,
   renderDocument,
   runInteraction,
@@ -35,7 +34,6 @@ import { markedTheme } from '../test-support/fixtures'
 
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
 
 const NO_HREFS = new Map<string, string | null>()
@@ -172,10 +170,14 @@ describe('DOM 이벤트 → 트리거 (plan.ts의 표가 렌더러와 같은가)
       if (element === null || typeof element !== 'object') return
       const props = (element as { props?: Record<string, unknown> }).props
       if (props === undefined) return
-      if (props['data-wb-id'] === nodeId && typeof props[dom] === 'function') {
-        found = props[dom] as (event: unknown) => void
+      // 핸들러는 노드의 `ViewHost`가 뷰에 넘기는 속성(`binding.attrs`)에 있다 — 뷰가 그것을 `Root`에 편다.
+      const attrs = (props['binding'] as { attrs?: Record<string, unknown> } | undefined)?.attrs
+      if (attrs?.['data-wb-id'] === nodeId && typeof attrs[dom] === 'function') {
+        found = attrs[dom] as (event: unknown) => void
       }
-      const children = props['children']
+      // `ViewHost`의 자식은 `viewProps.children`, `Fragment`의 자식은 `children`이다.
+      const viewProps = props['viewProps'] as { children?: unknown } | undefined
+      const children = viewProps !== undefined ? viewProps.children : props['children']
       if (Array.isArray(children)) for (const child of children) visit(child)
       else visit(children)
     }

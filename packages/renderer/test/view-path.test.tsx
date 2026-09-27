@@ -3,11 +3,10 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
 import { Root, view, type ThemeDefinition, type ThemeManifest } from '@wirebound/theme-sdk'
-import { installStructures, renderDocument, type NodeRenderError } from '@wirebound/renderer'
+import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
 
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
 
 // 이 저장소는 vitest `globals` 를 켜지 않아 RTL 이 cleanup 을 스스로 걸지 못한다.
@@ -24,7 +23,7 @@ function draw(doc: PageDocument, theme: ThemeDefinition, errors: NodeRenderError
   return render(<>{renderDocument(doc, { theme, onNodeError: (e) => errors.push(e) })}</>)
 }
 
-describe('테마 경로', () => {
+describe('뷰 경로', () => {
   it('테마 뷰가 있으면 그것으로, 없으면 기본 뷰로 그린다', () => {
     const Button = view(({ props }) => <Root as="button" className="mine">{String(props.label)}</Root>)
     const { container } = draw(page([{ id: 'b', type: 'Button', props: { label: '저장' } }, { id: 't', type: 'Text', props: { content: '안녕' } }]),
@@ -158,7 +157,7 @@ describe('테마 경로', () => {
     expect(errors.map((e) => e.nodeId)).toEqual(['b'])
   })
 
-  it('theme 을 안 주면 구조 경로 그대로다', () => {
+  it('theme 을 안 주면 기본 뷰로 그린다(NO_THEME)', () => {
     const { container } = render(<>{renderDocument(page([{ id: 'b', type: 'Button', props: { label: 'x' } }]))}</>)
     expect(container.querySelector('[data-wb-id="b"]')!.getAttribute('data-wb-structure')).toBe('solid')
   })

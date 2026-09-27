@@ -34,11 +34,9 @@ import { installCatalog, type LayoutDocument, type PageDocument } from '@wirebou
 import { beforeAll, describe, expect, it } from 'vitest'
 import { renderComposed } from '../src/compose'
 import { renderDocument } from '../src/render'
-import { installStructures } from '../src/structures/index'
 
 beforeAll(() => {
   installCatalog()
-  installStructures()
 })
 
 const page: PageDocument = {

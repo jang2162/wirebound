@@ -1,39 +1,53 @@
-import { ButtonDef, DividerDef, FieldDef, ListDef, TextDef } from '@wirebound/schema'
-import { describe, expect, it } from 'vitest'
-import { activeStates, nodeAttrs, partAttrs } from '../src/attrs'
+import { installCatalog, ListDef, type WbNode } from '@wirebound/schema'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { activeStates } from '../src/attrs'
+import { renderNode } from '../src/render'
 
-describe('nodeAttrs', () => {
-  it('id·컴포넌트·구조를 항상 낸다', () => {
-    const attrs = nodeAttrs({ id: 'n_000000000001', type: 'Text' }, TextDef, 'default', {})
-    expect(attrs).toEqual({
+beforeAll(() => {
+  installCatalog()
+})
+
+/**
+ * 노드 루트에 렌더러가 싣는 `data-wb-*` 속성(`WbAttrs`). 기본 뷰가 스스로 다는 마크업 훅(`data-wb-structure` ·
+ * `data-wb-part`)은 뺀다 — 그것은 `@wirebound/theme-sdk`의 몫이다.
+ */
+function rootAttrs(node: WbNode): Record<string, string> {
+  const html = renderToStaticMarkup(renderNode(node))
+  const tag = new RegExp(`<\\w+ ([^>]*data-wb-id="${node.id}"[^>]*)>`).exec(html)
+  if (!tag) throw new Error(`루트를 못 찾았다: ${html}`)
+  const out: Record<string, string> = {}
+  for (const [, name, value] of tag[1]!.matchAll(/(data-wb-[\w-]+)="([^"]*)"/g)) {
+    if (name === 'data-wb-structure' || name === 'data-wb-part') continue
+    out[name!] = value!
+  }
+  return out
+}
+
+describe('노드 루트의 속성', () => {
+  it('id·컴포넌트를 항상 낸다', () => {
+    expect(rootAttrs({ id: 'n_000000000001', type: 'Text' })).toEqual({
       'data-wb-id': 'n_000000000001',
       'data-wb-component': 'Text',
-      'data-wb-structure': 'default',
+      'data-wb-variant': 'body',
     })
   })
 
   it('variant가 있으면 함께 낸다', () => {
-    const attrs = nodeAttrs(
-      { id: 'n_000000000001', type: 'Button', variant: 'primary' },
-      ButtonDef,
-      'solid',
-      {},
-    )
-    expect(attrs['data-wb-variant']).toBe('primary')
+    expect(rootAttrs({ id: 'n_000000000001', type: 'Button', variant: 'primary' })['data-wb-variant']).toBe('primary')
   })
 
   it('활성 상태를 공백으로 이어 낸다', () => {
-    const attrs = nodeAttrs({ id: 'n_000000000001', type: 'List' }, ListDef, 'table', {
-      loading: true,
-      empty: true,
-      selected: false,
+    const attrs = rootAttrs({
+      id: 'n_000000000001',
+      type: 'List',
+      props: { loading: true, empty: true, selected: false },
     })
     expect(attrs['data-wb-state']).toBe('loading empty')
   })
 
   it('활성 상태가 없으면 data-wb-state를 내지 않는다', () => {
-    const attrs = nodeAttrs({ id: 'n_000000000001', type: 'List' }, ListDef, 'table', {})
-    expect(attrs['data-wb-state']).toBeUndefined()
+    expect(rootAttrs({ id: 'n_000000000001', type: 'List' })['data-wb-state']).toBeUndefined()
   })
 })
 
@@ -49,31 +63,18 @@ describe('activeStates', () => {
   })
 })
 
-describe('partAttrs', () => {
-  it('조각 이름을 낸다', () => {
-    expect(partAttrs('header')).toEqual({ 'data-wb-part': 'header' })
-  })
-})
-
-describe('nodeAttrs의 variantFrom', () => {
+describe('variantFrom', () => {
   it('enum prop 값이 data-wb-variant로 나온다', () => {
-    const attrs = nodeAttrs({ id: 'n_000000000001', type: 'Text' }, TextDef, 'default', {
-      role: 'h1',
-      content: '제목',
-    })
+    const attrs = rootAttrs({ id: 'n_000000000001', type: 'Text', props: { role: 'h1', content: '제목' } })
     expect(attrs['data-wb-variant']).toBe('h1')
   })
 
   it('Field의 control과 Divider의 direction도 같은 채널로 나온다', () => {
+    expect(rootAttrs({ id: 'n_000000000001', type: 'Field', props: { control: 'select' } })['data-wb-variant']).toBe(
+      'select',
+    )
     expect(
-      nodeAttrs({ id: 'n_000000000001', type: 'Field' }, FieldDef, 'outlined', {
-        control: 'select',
-      })['data-wb-variant'],
-    ).toBe('select')
-    expect(
-      nodeAttrs({ id: 'n_000000000001', type: 'Divider' }, DividerDef, 'default', {
-        direction: 'vertical',
-      })['data-wb-variant'],
+      rootAttrs({ id: 'n_000000000001', type: 'Divider', props: { direction: 'vertical' } })['data-wb-variant'],
     ).toBe('vertical')
   })
 
@@ -83,7 +84,7 @@ describe('nodeAttrs의 variantFrom', () => {
    * 셋 중에서 고른 근거:
    *
    * - **(b) `node.variant`가 이긴다**를 고르면 **같은 prop에서 파생된 것끼리 어긋난다.**
-   *   `TextDefault`는 `role`로 태그를 고르므로(`ROLE_TAG`) `role:'h1'` + `variant:'caption'`은
+   *   `Text`의 기본 뷰는 `role`로 태그를 고르므로 `role:'h1'` + `variant:'caption'`은
    *   `<h1 data-wb-variant="caption">`이 된다 — 태그는 제목이라 하고 스타일은 캡션이라 한다.
    *   `variantFrom`을 만든 이유가 *"prop이 단일 진실"*인데 그것을 스스로 깬다.
    * - **(c) 둘 다 있으면 막는 검증 이슈**는 설계서 「정방향 흐름」의 게이트가 편집을
@@ -92,38 +93,15 @@ describe('nodeAttrs의 variantFrom', () => {
    *   속성 패널은 `variantFrom`이 있는 컴포넌트에 변형 컨트롤을 내지 않는다
    *   (`apps/web/src/panels/property-panel.tsx`의 `variantFieldOf`).
    *
-   * **`node.variant`는 검증된다** — `validatePage`가 `variantFrom`이 있는 컴포넌트에는 값이
-   * 무엇이든 `ignored-variant`를, 없는 컴포넌트에는 `def.variants`와 대조해 `unknown-variant`를
-   * 낸다(`validate.ts`).
-   *
    * **남는 대가:** MCP·CLI·가져오기로 들어온 `variant`는 버려진다. 조용하지는 않다 —
    * `ignored-variant` 경고가 그것을 알린다.
    */
   it('variantFrom이 있으면 node.variant보다 prop이 이긴다', () => {
-    const attrs = nodeAttrs(
-      { id: 'n_000000000001', type: 'Text', variant: 'caption' },
-      TextDef,
-      'default',
-      { role: 'h1' },
-    )
+    const attrs = rootAttrs({ id: 'n_000000000001', type: 'Text', variant: 'caption', props: { role: 'h1' } })
     expect(attrs['data-wb-variant']).toBe('h1')
   })
 
   it('variantFrom이 없는 컴포넌트는 node.variant를 그대로 쓴다', () => {
-    const attrs = nodeAttrs(
-      { id: 'n_000000000001', type: 'Button', variant: 'primary' },
-      ButtonDef,
-      'solid',
-      {},
-    )
-    expect(attrs['data-wb-variant']).toBe('primary')
-  })
-
-  it('prop 값이 문자열이 아니면 속성을 내지 않는다', () => {
-    // 렌더러는 검증 전 문서를 받을 수 있다(설계서 「정방향 흐름」) — 값이 무엇이든 던지지 않는다.
-    const attrs = nodeAttrs({ id: 'n_000000000001', type: 'Text' }, TextDef, 'default', {
-      role: 42,
-    })
-    expect(attrs['data-wb-variant']).toBeUndefined()
+    expect(rootAttrs({ id: 'n_000000000001', type: 'Button', variant: 'primary' })['data-wb-variant']).toBe('primary')
   })
 })
