@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": { "wb-theme": "./dist/bin.js" },
+  "bin": { "wb-theme": "./bin/wb-theme.js" },
   "exports": {
     ".": {
       "development": "./src/index.ts",
@@ -19,7 +19,7 @@
       ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "default": "./dist/index.js" }
     }
   },
-  "files": ["dist", "template"],
+  "files": ["bin", "dist", "template"],
   "scripts": {
     "build": "tsdown && vite build -c vite.client.config.ts",
     "build:watch": "tsdown --watch"
