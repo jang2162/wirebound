@@ -5,7 +5,7 @@
  * 성질로 단언한다 — 거절해도 되고, 통과했으면 실린 것이 판독기가 본 것과 같아야 한다.
  * zip 은 손으로 짓는다(fflate `zipSync` 는 이런 머리를 안 쓴다).
  */
-import { strToU8 } from 'fflate'
+import { deflateSync, strToU8 } from 'fflate'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '@wirebound/schema'
 import { readWbtheme, WBTHEME_LIMITS } from '@wirebound/themes'
@@ -22,6 +22,8 @@ interface Entry {
   usize?: number
   /** 다른 항목의 로컬 머리를 가리킨다(그 항목의 차례). */
   sameLocalAs?: number
+  /** 압축 방식(0 stored · 8 deflate). 안 주면 0 — deflate 면 `data` 가 이미 압축한 바이트다. */
+  method?: number
 }
 
 /** 손으로 짓는 zip(stored). `total` 은 EOCD 의 전체 항목 수(e+10), `disk` 는 이 디스크의 항목 수(e+8). */
@@ -34,7 +36,7 @@ function build(entries: Entry[], eocd: { disk?: number; total?: number } = {}): 
     if (e.sameLocalAs !== undefined) { offsets.push(offsets[e.sameLocalAs]!); return }
     const name = strToU8(e.name)
     const h = new DataView(new ArrayBuffer(30))
-    h.setUint32(0, 0x04034b50, true); h.setUint16(6, 0x800, true)
+    h.setUint32(0, 0x04034b50, true); h.setUint16(6, 0x800, true); h.setUint16(8, e.method ?? 0, true)
     h.setUint32(18, e.data.length, true); h.setUint32(22, e.data.length, true); h.setUint16(26, name.length, true)
     offsets.push(pos)
     push(new Uint8Array(h.buffer)); push(name); push(e.data)
@@ -43,7 +45,7 @@ function build(entries: Entry[], eocd: { disk?: number; total?: number } = {}): 
   entries.forEach((e, i) => {
     const name = strToU8(e.name)
     const h = new DataView(new ArrayBuffer(46))
-    h.setUint32(0, 0x02014b50, true); h.setUint16(8, 0x800, true)
+    h.setUint32(0, 0x02014b50, true); h.setUint16(8, 0x800, true); h.setUint16(10, e.method ?? 0, true)
     h.setUint32(20, e.data.length, true); h.setUint32(24, e.usize ?? e.data.length, true)
     h.setUint16(28, name.length, true); h.setUint32(38, (0o100644 << 16) >>> 0, true); h.setUint32(42, offsets[i]!, true)
     push(new Uint8Array(h.buffer)); push(name)
@@ -129,5 +131,52 @@ describe('readWbtheme — 판독기와 fflate 가 같은 것을 읽는다', () =
     for (let i = 1; i < 6; i++) entries.push({ name: `assets/a${i}.png`, data: blob, usize: 0, sameLocalAs: 2 })
     const r = loaded(build(entries))
     expect(r === 'rejected' ? 0 : r.bytes).toBeLessThanOrEqual(WBTHEME_LIMITS.unzippedBytes)
+  })
+
+  /**
+   * 판정이 **풀기 전에** 서는지 메모리로 잰다 — 거절한 판에서 `arrayBuffers` 가 입력(최대 10 MB) 말고는 거의 안 는다. 세는 것은
+   * `readWbtheme` 한 번의 앞뒤 차다(입력은 그 전에 지었다). `rss` 는 macOS 의 압축 메모리로 작게 보일 수 있어 적기만 한다.
+   */
+  function measured(bytes: Uint8Array) {
+    const before = process.memoryUsage()
+    const result = readWbtheme(bytes)
+    const after = process.memoryUsage()
+    const grew = { arrayBuffers: after.arrayBuffers - before.arrayBuffers, rss: after.rss - before.rss }
+    console.log(`[wbtheme 메모리] 판정 ${JSON.stringify(result.issues.map((i) => i.code))} · arrayBuffers +${(grew.arrayBuffers / 1048576).toFixed(1)} MB · rss +${(grew.rss / 1048576).toFixed(1)} MB`)
+    return { result, grew }
+  }
+
+  it('stored 로컬 하나를 원래 크기 0 인 항목 여럿이 가리키면 풀기 전에 거절한다 — 메모리가 안 는다', () => {
+    // 9.5 MB 로컬 하나를 항목 40 개가 가리킨다 — 판정이 비켜 가면 380 MB 가 실린다.
+    const blob = new Uint8Array(9_500_000)
+    const entries: Entry[] = [...base(), { name: 'assets/a0.png', data: blob, usize: 0 }]
+    for (let i = 1; i < 40; i++) entries.push({ name: `assets/a${i}.png`, data: blob, usize: 0, sameLocalAs: 2 })
+    const bytes = build(entries)
+    expect(bytes.length).toBeLessThan(WBTHEME_LIMITS.zipBytes)
+    const { result, grew } = measured(bytes)
+    expect(result.issues.map((i) => i.code)).toEqual(['unzipped-too-large'])
+    expect(grew.arrayBuffers).toBeLessThan(32 * 1048576)
+  })
+
+  it('판독기가 안 본 deflate 항목이 원래 크기를 크게 적어도 풀기 전에 거절한다 — 메모리가 안 는다', () => {
+    // 셋째 항목은 EOCD 의 «전체 항목 수» 밖이다. fflate 가 그것을 풀면 원래 크기(4 GB 가까이)만큼 버퍼를 잡는다.
+    const packed = deflateSync(strToU8('x'))
+    const r = measured(build([...base(), { name: 'assets/big.png', data: packed, method: 8, usize: 0xfffffff0 }], { disk: 3, total: 2 }))
+    expect(r.result.files).toBeNull()
+    expect(r.result.issues.map((i) => i.code)).toEqual(['bad-zip'])
+    expect(r.grew.arrayBuffers).toBeLessThan(32 * 1048576)
+  })
+
+  it('filter 가 거절한 항목은 버퍼를 안 잡는다 — 목록을 읽는 것만으로 원래 크기를 펼치지 않는다', () => {
+    // 판독기와 fflate 가 같게 읽는 zip. 목록(filter 가 늘 거짓)은 원래 크기 4 GB 가까운 deflate 항목을 넘겨받고 크기 합으로 거절한다.
+    const packed = deflateSync(strToU8('x'))
+    const r = measured(build([...base(), { name: 'assets/big.png', data: packed, method: 8, usize: 0xfffffff0 }]))
+    expect(r.result.issues.map((i) => i.code)).toEqual(['unzipped-too-large'])
+    expect(r.grew.arrayBuffers).toBeLessThan(32 * 1048576)
+  })
+
+  it('끝 레코드의 두 항목 수가 같으면 받는다 — 거절이 두 수의 차에만 선다', () => {
+    const r = loaded(build(base(), { disk: 2, total: 2 }))
+    expect(r === 'rejected' ? r : r.themeJs).toBe(CHECKED)
   })
 })

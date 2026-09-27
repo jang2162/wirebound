@@ -1,5 +1,5 @@
 import type { ThemeManifest } from '@wirebound/theme-sdk'
-import { strFromU8, unzipSync } from 'fflate'
+import { strFromU8, unzipSync, type UnzipFileInfo } from 'fflate'
 import type { ManifestIssueCode } from '../manifest/schema'
 import { validateManifest } from '../manifest/schema'
 
@@ -33,7 +33,6 @@ const S_IFLNK = 0o120000
 
 interface CentralEntry {
   name: string
-  originalSize: number
   /** 외부 속성의 위 16 비트 — 유닉스에서 만든 zip 이면 파일 모드다. */
   mode: number
 }
@@ -41,10 +40,17 @@ interface CentralEntry {
 /**
  * `.wbtheme` 를 읽고 검증한다(spec 「업로드 검증」의 1 ~ 3). 이슈가 하나라도 있으면 `files` 는 `null` 이다.
  *
- * **크기 · 항목 수 · 경로 · 허용 목록 · 링크는 풀기 전에 중앙 디렉터리만 읽어 본다.** 풀린 바이트를 만든 뒤 세면 zip
- * 폭탄을 이미 펼친 것이다. fflate 의 `unzipSync` 는 항목마다 중앙 디렉터리가 적은 원래 크기만큼만 버퍼를 잡으므로
- * (그보다 긴 스트림은 잘린다) 그 크기의 합을 먼저 막으면 펼치는 양도 막힌다. 링크를 가를 외부 속성은 fflate 의
- * `filter` 가 주지 않아(`UnzipFileInfo` 는 이름 · 크기 · 압축 방식뿐) 중앙 디렉터리를 직접 읽는다.
+ * **크기 · 항목 수 · 경로 · 허용 목록 · 링크는 풀기 전에 본다** — 풀린 바이트를 만든 뒤 세면 zip 폭탄을 이미 펼친 것이다.
+ *
+ * **판정은 fflate 가 실제로 읽는 항목 목록에 맡긴다.** `unzipSync` 의 `filter` 가 늘 거짓을 돌려주면 fflate 는 아무것도 풀지
+ * 않고 제가 풀 항목(이름 · 압축 크기 · 원래 크기 · 압축 방식)을 차례로 넘긴다 — 검사하는 목록과 푸는 목록이 같은 코드에서
+ * 나온다. 손으로 읽는 중앙 디렉터리는 fflate 가 안 주는 외부 속성(링크 판정)만 얻고, 그 목록이 fflate 의 목록과 이름 ·
+ * 차례 · 수까지 같아야 쓴다. 손 판독기가 fflate 와 다른 칸을 읽으면(끝 레코드의 두 항목 수 · zip64 로케이터) 검사한 항목과
+ * 푸는 항목이 갈려 검사를 비켜 간 것이 실린다. 그래서 두 칸이 갈리는 zip(두 항목 수가 다름 · 로케이터가 있음)은 받지 않고,
+ * 남은 갈림은 목록 대조가 `bad-zip` 으로 막는다.
+ *
+ * **풀린 크기는 항목마다 `max(압축 크기, 원래 크기)` 로 센다** — fflate 는 stored 항목을 압축 크기로 잘라 싣고(원래 크기는 안
+ * 본다) deflate 항목은 원래 크기만큼 버퍼를 잡는다. 한쪽만 세면 다른 쪽을 속인 zip 이 상한을 비켜 간다.
  */
 export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; issues: WbthemeIssue[] } {
   if (bytes.length > WBTHEME_LIMITS.zipBytes) {
@@ -52,32 +58,37 @@ export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; is
   }
 
   const entries = readCentralDirectory(bytes)
-  if (entries === null) return fail({ code: 'bad-zip', path: '', message: 'zip 파일이 아닙니다' })
+  if (typeof entries === 'string') return fail({ code: 'bad-zip', path: '', message: entries })
   if (entries.length > WBTHEME_LIMITS.entries) {
     return fail({ code: 'too-many-entries', path: '', message: `항목이 ${WBTHEME_LIMITS.entries} 개를 넘습니다(${entries.length})` })
   }
+  const listed = listEntries(bytes)
+  if (typeof listed === 'string') return fail({ code: 'bad-zip', path: '', message: listed })
+  const divergence = listingDivergence(entries, listed)
+  if (divergence !== null) return fail({ code: 'bad-zip', path: '', message: divergence })
 
   const issues: WbthemeIssue[] = []
   const seen = new Set<string>()
   let unzipped = 0
-  for (const entry of entries) {
-    unzipped += entry.originalSize
+  entries.forEach((entry, index) => {
+    const file = listed[index]!
+    unzipped += Math.max(file.size, file.originalSize)
     const { name } = entry
     const isDir = name.endsWith('/')
     const reason = pathProblem(isDir ? name.slice(0, -1) : name)
     if (reason !== null) {
       issues.push({ code: 'bad-path', path: name, message: reason })
-      continue
+      return
     }
     if (seen.has(name)) {
       // 같은 이름이 둘이면 푸는 도구마다 다른 쪽을 고른다 — 검사한 쪽과 쓰이는 쪽이 갈린다.
       issues.push({ code: 'bad-path', path: name, message: '같은 경로의 항목이 둘입니다' })
-      continue
+      return
     }
     seen.add(name)
     if ((entry.mode & S_IFMT) === S_IFLNK) {
       issues.push({ code: 'symlink', path: name, message: '심볼릭 링크는 담을 수 없습니다' })
-      continue
+      return
     }
     if (!isDir && !isAllowed(name)) {
       issues.push({
@@ -86,7 +97,7 @@ export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; is
         message: 'manifest.json · theme.js · theme.css · assets/**(글꼴 · 이미지) 밖의 파일입니다',
       })
     }
-  }
+  })
   if (unzipped > WBTHEME_LIMITS.unzippedBytes) {
     issues.push({
       code: 'unzipped-too-large',
@@ -157,16 +168,19 @@ function isAllowed(path: string): boolean {
 
 const EOCD_SIGNATURE = 0x06054b50
 const CENTRAL_SIGNATURE = 0x02014b50
+const ZIP64_LOCATOR_SIGNATURE = 0x07064b50
 
 /**
- * 중앙 디렉터리의 항목들. zip 이 아니거나 구조가 어긋나면 `null`.
+ * 중앙 디렉터리의 항목들(이름 · 외부 속성). zip 이 아니거나 구조가 어긋나면 이유 한 문장.
  *
- * ZIP64 는 받지 않는다 — 상한(10 MB · 항목 500)이 ZIP64 가 필요한 크기보다 한참 작아, ZIP64 표지(`0xFFFF…`)가 있으면
- * 그 자체가 어긋난 파일이다.
+ * **fflate 와 같은 칸을 읽는 zip 만 받는다.** 끝 레코드의 «이 디스크의 항목 수»(`+8` — fflate 가 센다)와 «전체 항목 수»
+ * (`+10`)가 다르거나, 끝 레코드 앞 20 바이트에 zip64 로케이터가 있으면(fflate 는 그것이 가리키는 zip64 끝 레코드의 수 ·
+ * 오프셋을 믿는다) 거절한다 — 받으면 이 판독기와 fflate 가 서로 다른 항목 목록을 읽는다. zip64 표지(`0xFFFF…`)도 받지 않는다:
+ * 상한(10 MB · 항목 500)이 zip64 가 필요한 크기보다 한참 작아 그 자체가 어긋난 파일이다.
  */
-function readCentralDirectory(bytes: Uint8Array): CentralEntry[] | null {
+function readCentralDirectory(bytes: Uint8Array): CentralEntry[] | string {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  // 끝 레코드는 22 바이트 + 주석(최대 65535). 뒤에서부터 표지를 찾는다.
+  // 끝 레코드는 22 바이트 + 주석(최대 65535). fflate 와 같게 뒤에서부터 표지를 찾는다.
   let eocd = -1
   for (let at = bytes.length - 22; at >= Math.max(0, bytes.length - 22 - 0xffff); at--) {
     if (view.getUint32(at, true) === EOCD_SIGNATURE) {
@@ -174,29 +188,59 @@ function readCentralDirectory(bytes: Uint8Array): CentralEntry[] | null {
       break
     }
   }
-  if (eocd < 0) return null
+  if (eocd < 0) return 'zip 파일이 아닙니다'
+  const diskCount = view.getUint16(eocd + 8, true)
   const count = view.getUint16(eocd + 10, true)
   const size = view.getUint32(eocd + 12, true)
   const offset = view.getUint32(eocd + 16, true)
-  if (count === 0xffff || size === 0xffffffff || offset === 0xffffffff) return null
-  if (offset + size > eocd) return null
+  if (diskCount !== count) return `끝 레코드의 두 항목 수가 다릅니다(이 디스크 ${diskCount} · 전체 ${count})`
+  if (eocd >= 20 && view.getUint32(eocd - 20, true) === ZIP64_LOCATOR_SIGNATURE) return 'zip64 는 받지 않습니다(로케이터가 있습니다)'
+  if (count === 0xffff || size === 0xffffffff || offset === 0xffffffff) return 'zip64 는 받지 않습니다(표지가 있습니다)'
+  if (offset + size > eocd) return '중앙 디렉터리가 끝 레코드를 넘습니다'
 
   const entries: CentralEntry[] = []
   let at = offset
   for (let i = 0; i < count; i++) {
-    if (at + 46 > eocd || view.getUint32(at, true) !== CENTRAL_SIGNATURE) return null
+    if (at + 46 > eocd || view.getUint32(at, true) !== CENTRAL_SIGNATURE) return '중앙 디렉터리의 항목 머리가 어긋납니다'
     const flags = view.getUint16(at + 8, true)
-    const originalSize = view.getUint32(at + 24, true)
     const nameLength = view.getUint16(at + 28, true)
     const extraLength = view.getUint16(at + 30, true)
     const commentLength = view.getUint16(at + 32, true)
     const external = view.getUint32(at + 38, true)
-    if (originalSize === 0xffffffff) return null
-    if (at + 46 + nameLength > eocd) return null
-    // fflate 와 같은 규칙으로 이름을 읽는다 — 비트 11 이 서면 UTF-8, 아니면 latin1. 다르게 읽으면 검사한 이름과 푼 이름이 갈린다.
+    if (view.getUint32(at + 20, true) === 0xffffffff || view.getUint32(at + 24, true) === 0xffffffff) {
+      return 'zip64 는 받지 않습니다(항목 크기 표지)'
+    }
+    if (at + 46 + nameLength > eocd) return '중앙 디렉터리의 항목 이름이 끝 레코드를 넘습니다'
+    // fflate 와 같은 규칙으로 이름을 읽는다 — 비트 11 이 서면 UTF-8, 아니면 latin1. 어긋나면 `listingDivergence` 가 잡는다.
     const name = strFromU8(bytes.subarray(at + 46, at + 46 + nameLength), (flags & 0x800) === 0)
-    entries.push({ name, originalSize, mode: external >>> 16 })
+    entries.push({ name, mode: external >>> 16 })
     at += 46 + nameLength + extraLength + commentLength
   }
   return entries
+}
+
+/**
+ * fflate 가 풀 항목 목록 — `filter` 가 늘 거짓을 돌려줘 아무것도 풀지 않는다(항목마다 버퍼를 안 잡는다 — 케이스
+ * «filter 가 거절한 항목은 버퍼를 안 잡는다» 가 잰다). fflate 가 목록을 못 읽으면 이유 한 문장.
+ */
+function listEntries(bytes: Uint8Array): UnzipFileInfo[] | string {
+  const listed: UnzipFileInfo[] = []
+  try {
+    unzipSync(bytes, {
+      filter: (file) => {
+        listed.push(file)
+        return false
+      },
+    })
+  } catch (error) {
+    return `zip 을 읽을 수 없습니다: ${(error as Error).message}`
+  }
+  return listed
+}
+
+/** 두 목록이 이름 · 차례 · 수까지 같으면 `null`, 아니면 이유 한 문장. */
+function listingDivergence(entries: readonly CentralEntry[], listed: readonly UnzipFileInfo[]): string | null {
+  if (entries.length !== listed.length) return `중앙 디렉터리의 항목 수(${entries.length})와 푸는 항목 수(${listed.length})가 다릅니다`
+  const at = entries.findIndex((entry, index) => entry.name !== listed[index]!.name)
+  return at < 0 ? null : `${at} 번째 항목의 이름이 중앙 디렉터리(${entries[at]!.name})와 푸는 쪽(${listed[at]!.name})에서 다릅니다`
 }
