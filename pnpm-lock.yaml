@@ -78,6 +78,12 @@ importers:
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../../packages/schema
+      '@wirebound/system-theme-admin':
+        specifier: workspace:*
+        version: link:../../system-themes/admin
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../../packages/theme-sdk
       react:
         specifier: ^19.0.0
         version: 19.2.8

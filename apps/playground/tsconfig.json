@@ -5,7 +5,9 @@
     "outDir": ".tsbuild",
     "lib": ["ES2022", "DOM"],
     "jsx": "react-jsx",
-    "composite": true
+    "composite": true,
+    // `@wirebound/system-theme-admin` 이 테마 CSS 를 `?raw` 로 싣는다 — 그 선언이 vite 의 클라이언트 타입에 있다(`apps/web`과 같다).
+    "types": ["vite/client"]
   },
   "include": ["src", "test", "vite.config.ts"],
   "references": [{ "path": "../../packages/schema" }, { "path": "../../packages/renderer" }]
