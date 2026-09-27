@@ -7,7 +7,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:net'
+import { connect, createServer } from 'node:net'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { chromium, type Browser, type Frame, type Page } from 'playwright-core'
@@ -144,5 +144,24 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     const file = join(root, 'theme.config.ts')
     writeFileSync(file, readFileSync(file, 'utf8').replace("version: '1.0.0'", "version: '1.0'"))
     await page.waitForSelector('[data-wb-issue-code="bad-version"]', { timeout: 10_000 })
+  })
+
+  it('다른 Host 로 온 요청은 셸 경로(/ · /__wb/project)도 거절한다 — vite 의 경로와 같게', async () => {
+    // DNS 재바인딩 판: 남의 페이지가 제 이름을 127.0.0.1 로 돌려 같은 출처로 읽는다. vite 의 host 검사는 `/frame.html` ·
+    // `/@fs/…` 를 403 으로 막는데, 셸 미들웨어는 그 검사 앞에 걸려 manifest · 설정 이슈를 그대로 준다(A2 리뷰 항목 5).
+    const { port } = new URL(server.url)
+    const status = (path: string) =>
+      new Promise<string>((done, fail) => {
+        const socket = connect(Number(port), '127.0.0.1', () =>
+          socket.write(`GET ${path} HTTP/1.1\r\nHost: evil.example:${port}\r\nConnection: close\r\n\r\n`),
+        )
+        let reply = ''
+        socket.on('data', (chunk) => { reply += chunk })
+        socket.on('end', () => done(reply.split('\r\n')[0]!.split(' ')[1]!))
+        socket.on('error', fail)
+      })
+    // 카나리아 — vite 의 경로는 막힌다(이 판에서 host 검사가 돈다).
+    expect(await status('/frame.html')).toBe('403')
+    expect({ shell: await status('/'), project: await status('/__wb/project') }).toEqual({ shell: '403', project: '403' })
   })
 })
