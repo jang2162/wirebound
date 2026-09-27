@@ -1,9 +1,5 @@
 /**
  * 패턴 전개(`pattern/expand.ts`)를 잰다. 규격(`spec/patterns.ts`)은 전개를 하지 않는다.
- *
- * **세는 단위를 케이스가 만든다.** 패턴을 가진 시스템 테마의 수(*"다섯 중 둘"*)를 산문에
- * 적지 않고 여기서 세되, 세는 단위는 **`patterns` 객체의 키 하나**다 — `grep -c patterns`는
- * 주석의 언급과 절 이름을 함께 세므로 다른 수를 낸다.
  */
 import {
   WbNodeSchema,
@@ -16,7 +12,6 @@ import {
 } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { expandPattern } from '../src/pattern/expand'
-import { SYSTEM_THEME_IDS, systemTheme } from '../src/system/index'
 import type { ThemePattern } from '../src/spec/patterns'
 
 beforeAll(() => {
@@ -92,7 +87,7 @@ describe('expandPattern — slot이 결과에 남지 않는다', () => {
 describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다', () => {
   /**
    * **전개가 `props`를 참조로 넘기면** 전개된 노드의 props를 고치는 순간
-   * **`systemTheme('portal')`이 영구히 오염된다** — 시스템 테마는 모듈 상수라 그
+   * **템플릿이 영구히 오염된다** — 패턴은 테마 manifest 의 모듈 상수라 그
    * 프로세스가 사는 동안 같은 객체를 계속 돌려준다.
    *
    * **프리셋·JSON 가져오기가 이 전개 경로를 재사용하고 그쪽은 값을 만질 이유가 훨씬 많다.**
@@ -236,9 +231,9 @@ describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다
     expect(props.table.meta.tags).not.toBe(source.meta.tags)
   })
 
-  it('전개된 노드의 props를 고쳐도 시스템 테마가 오염되지 않는다', () => {
-    // **실제 테마로 잰다.** 위 케이스들은 참조를 보지만 이것은 **결과**를 본다.
-    const pattern = systemTheme('portal')!.patterns!['content.noticeBoard']!
+  it('전개된 노드의 props를 고쳐도 템플릿이 오염되지 않는다', () => {
+    // 위 케이스들은 참조를 보지만 이것은 **결과**를 본다.
+    const pattern = NOTICE
     const before = JSON.stringify(pattern)
 
     const { expanded } = expandPattern(pattern, counter())
@@ -250,7 +245,7 @@ describe('expandPattern — 템플릿과 결과가 값을 공유하지 않는다
       }
     }
 
-    expect(JSON.stringify(systemTheme('portal')!.patterns!['content.noticeBoard'])).toBe(before)
+    expect(JSON.stringify(NOTICE)).toBe(before)
   })
 
   it('같은 패턴을 두 번 전개하면 서로 독립이다', () => {
@@ -509,59 +504,16 @@ describe('expandPattern — 옮기는 필드', () => {
   })
 })
 
-describe('시스템 테마의 실제 패턴이 문서에 들어간다', () => {
-  /** 테마 id → `patterns` 객체의 **키 개수**. 세는 단위는 키 하나다. */
-  function patternKeyCount(themeId: string): number {
-    return Object.keys(systemTheme(themeId)?.patterns ?? {}).length
-  }
+describe('전개한 패턴이 문서에 들어간다', () => {
+  it('전개하면 validatePage가 통과하는 문서가 된다', () => {
+    const { expanded, issues } = expandPattern(NOTICE)
+    expect(issues).toEqual([])
 
-  it('패턴을 가진 시스템 테마와 그 개수를 센다', () => {
-    const counts = Object.fromEntries(SYSTEM_THEME_IDS.map((id) => [id, patternKeyCount(id)]))
-    expect(counts).toEqual({
-      admin: 0,
-      'saas-marketing': 0,
-      portal: 1,
-      commerce: 1,
-      docs: 0,
-    })
-    // *"다섯 중 둘"*을 산문이 아니라 케이스가 만든다.
-    expect(SYSTEM_THEME_IDS.length).toBe(5)
-    expect(SYSTEM_THEME_IDS.filter((id) => patternKeyCount(id) > 0)).toEqual(['portal', 'commerce'])
-  })
-
-  it('portal·commerce의 패턴을 전개하면 validatePage가 통과하는 문서가 된다', () => {
-    for (const themeId of ['portal', 'commerce']) {
-      const patterns = systemTheme(themeId)!.patterns!
-      for (const [key, pattern] of Object.entries(patterns)) {
-        const { expanded, issues } = expandPattern(pattern)
-        expect(issues, `${themeId}/${key}`).toEqual([])
-
-        const document: PageDocument = {
-          version: 1,
-          root: { id: 'n_root0000000', type: 'Page', children: expanded!.nodes },
-        }
-        const found = validatePage(document)
-        expect(
-          found,
-          `${themeId}/${key}: ${found.map((entry) => `${entry.path} ${entry.message}`).join(' | ')}`,
-        ).toEqual([])
-      }
+    const document: PageDocument = {
+      version: 1,
+      root: { id: 'n_root0000000', type: 'Page', children: expanded!.nodes },
     }
-  })
-
-  it('두 패턴의 슬롯 이름이 전부 매핑된다', () => {
-    const seen: Record<string, string[]> = {}
-    for (const themeId of ['portal', 'commerce']) {
-      for (const [key, pattern] of Object.entries(systemTheme(themeId)!.patterns!)) {
-        const { expanded } = expandPattern(pattern)
-        seen[`${themeId}/${key}`] = [...expanded!.slots.keys()]
-        // 선언한 슬롯과 매핑된 슬롯이 같다.
-        expect([...expanded!.slots.keys()].sort()).toEqual(Object.keys(pattern.slots ?? {}).sort())
-      }
-    }
-    expect(seen).toEqual({
-      'portal/content.noticeBoard': ['title', 'keyword'],
-      'commerce/content.product': ['image', 'title', 'price', 'cart'],
-    })
+    const found = validatePage(document)
+    expect(found, found.map((entry) => `${entry.path} ${entry.message}`).join(' | ')).toEqual([])
   })
 })

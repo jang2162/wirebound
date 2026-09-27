@@ -27,7 +27,7 @@ import {
   type LintPage,
   type PageDocument,
 } from '@wirebound/schema'
-import type { ProjectLintInput } from '../lint/project'
+import type { ProjectLintInput } from '../lint/index'
 import type { SnapshotPayload } from './payload'
 
 /**
@@ -101,7 +101,7 @@ export function snapshotToLintInput(payload: SnapshotPayload, config?: LintConfi
     nodeId: comment.nodeId,
   }))
 
-  return { input: { project: { menu, pages, comments }, themes: [], config }, notes }
+  return { input: { project: { menu, pages, comments }, config }, notes }
 }
 
 /**

@@ -2,6 +2,10 @@ import type { Kysely, Migration } from 'kysely'
 import { sql } from 'kysely'
 
 /**
+ * **이 표는 `0018-drop-json-themes.ts`가 걷는다.** 아래가 가리키는 코드(`repos/themes.ts` · `services/system-themes.ts` ·
+ * `packages/themes/src/emit/index.ts`의 테마 컴파일러)는 그때 함께 걷혔다 — 이 마이그레이션이 왜 이 모양인지 볼 때는
+ * `git show 34c6c9d0:<경로>`로 연다.
+ *
  * `themes` 테이블을 만든다 — 설계서 「테이블 정의」의 테마 저장소다. 테마 문서(설계서
  * 「테마 규격」의 여섯 절)를 **절마다 컬럼 하나**로 쪼개 담는다.
  *
@@ -18,7 +22,7 @@ import { sql } from 'kysely'
  *
  * **절 컬럼이 `jsonb`가 아니라 `json`이다**(설계서 「테이블 정의」도 json 이다).
  *
- * `compileTheme`의 계약은 **문서 키 순서가 곧 우선순위**다(`states`끼리, 그리고 한 스타일
+ * 테마 컴파일러의 계약은 **문서 키 순서가 곧 우선순위**다(`states`끼리, 그리고 한 스타일
  * 맵 안의 프로퍼티끼리). 그런데 Postgres `jsonb`는 키를 **(길이, 바이트)로 정규화**한다 —
  * 컨테이너에서 직접 쟀다(PostgreSQL 16.14):
  *
@@ -45,7 +49,7 @@ import { sql } from 'kysely'
  *
  * 나머지 두 갈래를 버린 이유: **순서를 배열로 옮기면** 설계서 「components — 구조 + 스킨」의 객체 표기가 바뀌어 설계
  * 문서·저작 UI·이미 쓴 시스템 테마가 함께 움직여야 하고, **순서 계약을 버리면**
- * `compileTheme`이 이름 정렬 같은 것을 써야 하는데 그것은 작성자가 적은 순서와 무관한
+ * 테마 컴파일러가 이름 정렬 같은 것을 써야 하는데 그것은 작성자가 적은 순서와 무관한
  * 우선순위를 만든다(같은 프로퍼티를 건드리는 상태 둘의 승자가 이름의 알파벳 순으로 정해진다).
  *
  * ---

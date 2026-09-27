@@ -1,49 +1,36 @@
 import { ISSUE_SEVERITY, ignoredVariantMessage, installCatalog, requireComponent, validatePage } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { THEME_ISSUE_SEVERITY, issue } from '../src/issue'
-import { resolveTheme } from '../src/resolve/index'
+import { checkPatterns } from '../src/spec/patterns'
 
 beforeAll(() => {
   installCatalog()
 })
 
 /**
- * **`themes`에 경고가 될 이슈가 있는가.**
- *
- * `resolveTheme`은 **`error`가 하나라도 있으면** `theme`을 `null`로 내고 경고는 통과시킨다.
- * 그래서 여기서 지키는 것은 **경고 목록이 정확히 무엇인가**다. 새 코드가
- * 조용히 `warning`이 되면 여기가 죽고, 그러면 `resolveTheme`·`assertResolvable`이
- * 그것을 통과시켜도 되는지 다시 묻게 된다.
+ * **패턴 이슈에 경고가 있는가.** 지금은 넷 다 `error`다(`issue.ts`의 표 머리말이 까닭을 든다). 새 코드가 조용히 `warning`이
+ * 되면 여기가 죽고, 그러면 그것을 통과시켜도 되는지 다시 묻게 된다.
  */
 describe('ThemeIssue.severity', () => {
-  it('경고인 코드가 정확히 이 둘이다 — 나머지는 전부 error다', () => {
+  it('패턴 이슈는 전부 error다', () => {
     const codes = Object.keys(THEME_ISSUE_SEVERITY)
-    expect(codes.length).toBeGreaterThan(0)
-
-    const warnings = codes.filter((code) => THEME_ISSUE_SEVERITY[code as never] === 'warning')
-    expect(warnings.sort()).toEqual(['node-handle-overwrite', 'suspicious-literal'])
-
-    // 나머지가 전부 error인 것까지 본다 — 세 번째 값이 생기면 여기가 죽는다.
+    expect(codes.sort()).toEqual(['bad-pattern-name', 'bad-pattern-node', 'unknown-slot', 'unused-slot'])
     for (const code of codes) {
-      expect(['error', 'warning']).toContain(THEME_ISSUE_SEVERITY[code as never])
+      expect(THEME_ISSUE_SEVERITY[code as never], code).toBe('error')
     }
   })
 
   it('issue()가 표에서 severity를 파생시킨다', () => {
-    expect(issue('bad-spec', 'meta', '가')).toEqual({
-      code: 'bad-spec',
+    expect(issue('bad-pattern-name', 'patterns.x', '가')).toEqual({
+      code: 'bad-pattern-name',
       severity: 'error',
-      path: 'meta',
+      path: 'patterns.x',
       message: '가',
     })
   })
 
-  it('resolveTheme이 낸 이슈도 severity를 단다', () => {
-    const { theme, issues } = resolveTheme({
-      meta: { id: 'a', name: '가', version: '1.0.0' },
-      tokens: { semantic: { primary: '{없는.토큰}' } },
-    })
-    expect(theme).toBeNull()
+  it('checkPatterns가 낸 이슈도 severity를 단다', () => {
+    const { issues } = checkPatterns({ '없는범주.x': { name: '가', schema: { type: '없는타입' } } })
     expect(issues.length).toBeGreaterThan(0)
     for (const entry of issues) {
       expect(entry.severity).toBe(THEME_ISSUE_SEVERITY[entry.code])
@@ -59,7 +46,7 @@ describe('ThemeIssue.severity', () => {
    *
    * 원인은 코드 유니온을 일부러 갈라 둔 것이다: 패턴 쪽은 catch-all
    * `bad-pattern-node`라 **타입 오타·props 위반·`Slot` 금지**를 함께 담으므로 통째로
-   * `warning`으로 내리면 진짜 오류가 저장을 통과한다. 갈라 내려면 전용 코드가 필요하고
+   * `warning`으로 내리면 진짜 오류가 통과한다. 갈라 내려면 전용 코드가 필요하고
    * 그것이 곧 평행 유니온이다. **이 케이스가 죽는 날은 그 결정을 바꾸는 날이다.**
    */
   it('같은 조건이 페이지에서는 경고, 패턴에서는 오류다 (알려진 비대칭)', () => {
@@ -79,13 +66,10 @@ describe('ThemeIssue.severity', () => {
     expect(pageIssues[0]!.severity).toBe(ISSUE_SEVERITY['ignored-variant'])
     expect(pageIssues[0]!.severity).toBe('warning')
 
-    const { issues: themeIssues } = resolveTheme({
-      meta: { id: 'a', name: '가', version: '1.0.0' },
-      patterns: {
-        'hero.split': {
-          name: '가',
-          schema: { type: 'Text', variant: 'caption', props: { role: 'h2' } },
-        },
+    const { issues: themeIssues } = checkPatterns({
+      'hero.split': {
+        name: '가',
+        schema: { type: 'Text', variant: 'caption', props: { role: 'h2' } },
       },
     })
     const sameCondition = themeIssues.filter((entry) => entry.message === message)

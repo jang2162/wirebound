@@ -37,10 +37,8 @@
  * 사이의 10이 **어느 관례와도 안 겹치는 가장 가까운 자리**다.
  *
  * **무엇이 이 번호를 만드는가 — `error`가 하나라도 있을 때다. `warning`만 있으면 0이다.**
- * 근거는 실측이다(그 수를 못박는 것은 `packages/themes/test/warning-channel.test.ts`): 시스템 테마
- * `portal`·`docs`는 `resolveTheme`이 내는 경고를 **하나씩** 갖는다
- * (`theme-other:warning` — `components.Tree.parts.node.paddingX`). `warning`으로 실패를
- * 내면 **문서를 아무리 잘 써도 그 테마를 고른 프로젝트가 CI에서 빨개진다.**
+ * `warning`은 저장을 막지 않는 판정이다(`schema`의 `partitionIssues`가 긋는 선) — 저장이 받아 준 것을 CI가 실패로 내면
+ * 같은 설계서를 두 자리가 다르게 판정한다.
  *
  * **올릴 수는 있다** — `wireb lint --fail-on warning`. 기본값은 바꾸지 않는다.
  */

@@ -64,11 +64,7 @@ describe('종료 코드', () => {
     expect(io.stdout.join('\n')).toContain('결함 없음')
   })
 
-  /**
-   * **근거는 실측이다**(그 수를 못박는 것은 `packages/themes/test/warning-channel.test.ts`):
-   * 시스템 테마 `portal`·`docs`가 `theme-other:warning`을 하나씩 갖는다. `warning`으로 실패를 내면
-   * 그 테마를 고른 프로젝트가 **문서를 아무리 잘 써도** CI에서 빨개진다.
-   */
+  /** 근거는 `src/exit.ts`의 `EXIT` 머리말(«무엇이 이 번호를 만드는가»)이다. */
   it('경고만 있으면 0이다', async () => {
     const io = 준비(경고가_있는_프로젝트())
     expect(await run(['lint'], io), io.stderr.join('\n')).toBe(EXIT.ok)

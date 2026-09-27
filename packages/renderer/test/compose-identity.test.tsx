@@ -75,8 +75,8 @@ describe('renderComposed와 renderDocument', () => {
   })
 
   /**
-   * **테마가 겨냥하는 자리가 늘어난다.** `compileTheme`의 컴포넌트 규칙은
-   * `[data-wb-component="Page"][data-wb-structure="…"]`인데, 합성 후에는 그 셀렉터에
+   * **테마가 겨냥하는 자리가 늘어난다.** 테마 CSS 가 컴포넌트를 겨냥하는 셀렉터는
+   * `[data-wb-component="Page"]`인데, 합성 후에는 그 셀렉터에
    * 맞는 엘리먼트가 **둘**이다. 여백·배경을 주는 테마면 그것이 중첩된다.
    */
   it('data-wb-component="Page"에 맞는 자리가 하나에서 둘로 는다', () => {

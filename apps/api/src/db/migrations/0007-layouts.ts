@@ -11,9 +11,10 @@ import { sql } from 'kysely'
  *
  * ---
  *
- * **`schema`는 `jsonb`다 — `themes`의 절이 `json`인 것과 갈린다.**
+ * **`schema`는 `jsonb`다 — `themes`의 절이 `json`인 것과 갈린다.** (`themes` 표와 `theme_id` 칸은 `0018-drop-json-themes.ts`가 걷는다 —
+ * 테마 컴파일러는 `git show 34c6c9d0:packages/themes/src/emit/index.ts`.)
  *
- * 순서 계약이 걸리는 것은 **테마의 절**뿐이기 때문이다(`compileTheme`이 `states`·스타일
+ * 순서 계약이 걸리는 것은 **테마의 절**뿐이기 때문이다(테마 컴파일러가 `states`·스타일
  * 맵의 문서 키 순서를 우선순위로 쓴다). 레이아웃의 `schema`는 노드 트리이고 그 안에서
  * 순서를 나르는 것은 `children` **배열**이다 — 배열 순서는 `jsonb`도 보존한다.
  * `pages.schema`가 `jsonb`인 것과 같은 이유이고, 「테이블 정의」도 여기서는 `jsonb`라고 적는다.
