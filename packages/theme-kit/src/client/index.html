@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>wb-theme dev</title>
+    <style>
+      html, body { margin: 0; height: 100%; font: 13px/1.5 system-ui, sans-serif; color: #0f172a; background: #f1f5f9; }
+      .shell { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: auto 1fr; height: 100%; }
+      header { grid-column: 1 / -1; display: flex; gap: 16px; align-items: center; padding: 8px 12px; background: #fff; border-bottom: 1px solid #e2e8f0; }
+      aside { overflow: auto; padding: 8px 12px; background: #fff; border-right: 1px solid #e2e8f0; }
+      main { overflow: auto; padding: 12px; }
+      iframe { display: block; height: calc(100vh - 80px); border: 0; background: #fff; box-shadow: 0 0 0 1px #cbd5e1; }
+      fieldset { margin: 0 0 12px; border: 1px solid #e2e8f0; }
+      .token { display: block; margin: 0 0 8px; }
+      .token-label { display: block; }
+      .token-controls { display: flex; gap: 4px; }
+      .token-controls input[type='text'], .token-controls input[type='number'], .token-controls select { flex: 1; min-width: 0; }
+      .issues { margin: 0 0 12px; padding: 8px 8px 8px 24px; color: #b91c1c; background: #fef2f2; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/shell.js"></script>
+  </body>
+</html>

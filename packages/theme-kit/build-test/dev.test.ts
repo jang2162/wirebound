@@ -1,0 +1,148 @@
+/**
+ * `wb-theme dev` 를 실브라우저로 잰다 — 빌드한 kit(`dist/`)을 절대 경로로 불러 픽스처 복사본에 dev 서버를 띄우고 Chrome 으로 셸을
+ * 연다. 이름(`@wirebound/theme-kit`)으로 부르면 vitest 의 alias 가 소스로 돌려 미리 빌드한 갤러리 클라이언트(`dist/client`)를 안 잰다.
+ *
+ * Chrome 은 `apps/web/build-test/editor-stack.ts` 와 같은 순서로 찾는다(`EDITOR_BROWSER_PATH` → 설치된 Chrome → playwright-core 캐시).
+ * **건너뛸 전제는 띄워 보고 정한다** — 못 띄우면 건너뛰고 그 까닭을 찍는다.
+ */
+import { execFileSync } from 'node:child_process'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { chromium, type Browser, type Frame, type Page } from 'playwright-core'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+const repoRoot = process.cwd()
+const KIT = resolve(repoRoot, 'packages/theme-kit')
+const FIXTURE = join(KIT, 'test/fixtures/sample-theme')
+// 설치한 작성자 프로젝트처럼 SDK · react 가 `node_modules` 로 풀리는 자리(`test/build.test.ts` 의 `TMP` 와 같은 까닭).
+const TMP = join(KIT, '.tmp')
+
+function chromeCandidates(): (string | undefined)[] {
+  const fromShell = process.env.EDITOR_BROWSER_PATH
+  if (fromShell !== undefined && fromShell !== '') return [fromShell]
+  return ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', undefined]
+}
+
+async function launchChrome(): Promise<Browser | string> {
+  const failures: string[] = []
+  for (const candidate of chromeCandidates()) {
+    try {
+      return await chromium.launch({ executablePath: candidate, headless: true })
+    } catch (error) {
+      failures.push(`${candidate ?? 'playwright-core 캐시'}: ${(error as Error).message.split('\n')[0]}`)
+    }
+  }
+  return failures.join(' · ')
+}
+
+function freePort(): Promise<number> {
+  return new Promise((done, fail) => {
+    const server = createServer()
+    server.once('error', fail)
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as { port: number }
+      server.close(() => done(port))
+    })
+  })
+}
+
+interface DistKit {
+  startDev(opts: { root: string; port?: number }): Promise<{ url: string; close(): Promise<void> }>
+}
+
+const launched = await launchChrome()
+if (typeof launched === 'string') console.warn(`[theme-kit dev] Chrome 을 못 띄워 건너뛴다 — ${launched}`)
+
+describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', () => {
+  const browser = launched as Browser
+  let root: string
+  let server: Awaited<ReturnType<DistKit['startDev']>>
+  let page: Page
+
+  beforeAll(async () => {
+    execFileSync('pnpm', ['--filter', '@wirebound/theme-kit...', 'build'], { cwd: repoRoot, stdio: 'pipe' })
+    const kit = (await import(/* @vite-ignore */ pathToFileURL(join(KIT, 'dist/index.js')).href)) as DistKit
+    mkdirSync(TMP, { recursive: true })
+    root = mkdtempSync(join(TMP, 'dev-'))
+    cpSync(FIXTURE, root, { recursive: true })
+    server = await kit.startDev({ root, port: await freePort() })
+    page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
+    await page.goto(server.url)
+    await galleryFrame()
+  })
+
+  afterAll(async () => {
+    await page?.close().catch(() => {})
+    await browser.close().catch(() => {})
+    await server?.close().catch(() => {})
+    rmSync(TMP, { recursive: true, force: true })
+  })
+
+  /** 프레임이 다시 실리면 `Frame` 이 바뀐다 — 매번 찾아 쓰고, 갤러리가 선 뒤에 돌려준다. */
+  async function galleryFrame(): Promise<Frame> {
+    const deadline = Date.now() + 20_000
+    for (;;) {
+      const frame = page.frames().find((f) => f.url().endsWith('/frame.html'))
+      if (frame) {
+        const ready = await frame.evaluate(() => document.querySelectorAll('[data-wb-gallery-item]').length).catch(() => 0)
+        if (ready > 0) return frame
+      }
+      if (Date.now() > deadline) throw new Error('갤러리 프레임이 20s 안에 서지 않았다')
+      await page.waitForTimeout(100)
+    }
+  }
+
+  it('갤러리가 카탈로그를 그린다', async () => {
+    const frame = await galleryFrame()
+    const kinds = await frame.evaluate(() => new Set([...document.querySelectorAll('[data-wb-component]')].map((el) => el.getAttribute('data-wb-component'))).size)
+    expect(kinds).toBe(19)
+  })
+
+  it('테마 뷰가 쓰인다 — SDK 한 벌', async () => {
+    const frame = await galleryFrame()
+    const probe = await frame.evaluate(() => ({
+      cards: document.querySelectorAll('.sample-card').length,
+      errors: document.querySelectorAll('[data-wb-error]').length,
+    }))
+    expect(probe).toEqual({ cards: 4, errors: 0 })
+  })
+
+  it('뷰포트 프리셋 — 375 를 고르면 프레임이 375 폭이다', async () => {
+    await page.selectOption('[data-wb-viewport]', '375')
+    const frame = await galleryFrame()
+    await expect.poll(async () => {
+      const iframe = await page.$eval('iframe', (el) => el.getBoundingClientRect().width)
+      const inner = await frame.evaluate(() => window.innerWidth)
+      return [iframe, inner]
+    }).toEqual([375, 375])
+    await page.selectOption('[data-wb-viewport]', '1280')
+  })
+
+  it('토큰 패널 — 주색을 바꾸면 프레임의 계산된 색이 바뀐다', async () => {
+    await page.fill('[data-wb-token-input="color.primary"]', '#00ff00')
+    const frame = await galleryFrame()
+    await expect.poll(() => frame.evaluate(() => getComputedStyle(document.querySelector('.sample-card')!).borderTopColor)).toBe('rgb(0, 255, 0)')
+  })
+
+  it('뷰 파일을 고치면 갤러리의 글자가 바뀐다 — 셸은 다시 안 실린다', async () => {
+    await page.evaluate(() => { (window as unknown as { __wbShellMark: number }).__wbShellMark = 1 })
+    const file = join(root, 'src/index.tsx')
+    writeFileSync(file, readFileSync(file, 'utf8').replace('샘플 카드', '고친 카드'))
+    await expect.poll(async () => {
+      const frame = await galleryFrame()
+      return frame.evaluate(() => document.querySelector('.sample-card-note')?.textContent ?? null).catch(() => null)
+    }, { timeout: 10_000 }).toBe('고친 카드')
+    expect(await page.evaluate(() => (window as unknown as { __wbShellMark?: number }).__wbShellMark)).toBe(1)
+    // 프레임이 다시 섰어도 셸의 토큰 값을 다시 받는다.
+    const frame = await galleryFrame()
+    await expect.poll(() => frame.evaluate(() => getComputedStyle(document.querySelector('.sample-card')!).borderTopColor)).toBe('rgb(0, 255, 0)')
+  })
+
+  it('설정을 틀리면 셸에 이슈가 선다', async () => {
+    const file = join(root, 'theme.config.ts')
+    writeFileSync(file, readFileSync(file, 'utf8').replace("version: '1.0.0'", "version: '1.0'"))
+    await page.waitForSelector('[data-wb-issue-code="bad-version"]', { timeout: 10_000 })
+  })
+})

@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util'
 import { BuildError, buildTheme } from './build'
+import { startDev } from './dev'
 
-const USAGE = `wb-theme build [--entry <경로>] [--out <디렉터리>]`
+const USAGE = [
+  'wb-theme dev [--entry <경로>] [--port <번호>]',
+  'wb-theme build [--entry <경로>] [--out <디렉터리>]',
+].join('\n  ')
 
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv
@@ -11,6 +15,17 @@ async function main(argv: string[]): Promise<number> {
     const r = await buildTheme({ root: process.cwd(), entry: values.entry, outDir: values.out })
     console.log(`✓ ${r.file} (${r.bytes} 바이트 · theme.js ${r.themeJsBytes} 바이트)`)
     return 0
+  }
+  if (command === 'dev') {
+    const { values } = parseArgs({ args: rest, options: { entry: { type: 'string' }, port: { type: 'string' } } })
+    const server = await startDev({ root: process.cwd(), entry: values.entry, port: values.port === undefined ? undefined : Number(values.port) })
+    console.log(`갤러리: ${server.url}`)
+    // 서버가 떠 있는 동안 돌아오지 않는다 — Ctrl-C 로 끝낸다.
+    return new Promise<number>((done) => {
+      const stop = () => void server.close().then(() => done(0))
+      process.once('SIGINT', stop)
+      process.once('SIGTERM', stop)
+    })
   }
   console.error(`쓰는 법:\n  ${USAGE}`)
   return 1

@@ -16,7 +16,7 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && vite build -c vite.client.config.ts",
     "build:watch": "tsdown --watch"
   },
   "dependencies": {
@@ -35,9 +35,12 @@
     "@types/node": "^26.1.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@wirebound/renderer": "workspace:*",
     "@wirebound/schema": "workspace:*",
+    "@wirebound/theme-gallery": "workspace:*",
     "@wirebound/theme-sdk": "workspace:*",
     "@wirebound/themes": "workspace:*",
+    "playwright-core": "^1.62.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tsdown": "^0.22.14"

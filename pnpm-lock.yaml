@@ -360,15 +360,24 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.0
         version: 19.2.4(@types/react@19.2.18)
+      '@wirebound/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../schema
+      '@wirebound/theme-gallery':
+        specifier: workspace:*
+        version: link:../theme-gallery
       '@wirebound/theme-sdk':
         specifier: workspace:*
         version: link:../theme-sdk
       '@wirebound/themes':
         specifier: workspace:*
         version: link:../themes
+      playwright-core:
+        specifier: ^1.62.1
+        version: 1.62.1
       react:
         specifier: ^19.0.0
         version: 19.2.8
