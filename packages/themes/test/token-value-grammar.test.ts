@@ -75,3 +75,12 @@ describe('color 토큰 값 — 색 함수의 괄호 안', () => {
     expect(validateManifest({ ...head, tokens: { items: { c: { type: 'color', label: 'c', default: value } } } }).issues).toEqual([])
   })
 })
+
+describe('shadow 토큰 값 — 흔한 실제 값(A2 좁은 반증 2)', () => {
+  // 앞 점 소수(`.5rem`)는 CSS 의 길이다 — Bootstrap 의 기본 그림자(`$box-shadow` · `$box-shadow-sm`)가 이 꼴이다. 그림자 문법이
+  // 길이를 `LENGTH`(앞에 숫자가 있어야 한다)로 재서 거절한다. 대응 전(거부 목록)에는 받던 값이다.
+  it.each(['0 .5rem 1rem rgba(0, 0, 0, .15)', '0 .125rem .25rem rgba(0,0,0,.075)', '0 -.5px 1px #000'])('%j 를 받는다', (value) => {
+    expect(defaultCodes('shadow', value)).toEqual([])
+    expect(valueCodes('shadow', value)).toEqual([])
+  })
+})

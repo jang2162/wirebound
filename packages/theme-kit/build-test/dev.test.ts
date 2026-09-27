@@ -198,4 +198,45 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     expect(own.status).toBe(200)
     expect(readme.status).toBe(403)
   })
+
+  it('작성자 프로젝트가 워크스페이스 안에 있으면 hoist 된 node_modules 의 CSS 가 부르는 글꼴도 받는다', async () => {
+    // A2 좁은 반증 2 — `fs.allow` 를 [갤러리 클라이언트, 작성자 프로젝트] 로 좁힌 판. 워크스페이스(pnpm · npm)는 의존을 뿌리의
+    // `node_modules` 로 올리므로 `@fontsource/*` 같은 패키지의 CSS 가 부르는 글꼴 파일은 작성자 프로젝트 밖에 있다. vite 는 JS 가
+    // import 한 모듈만 허용 목록 밖에서도 내주고, CSS `url()` 이 부르는 파일은 허용 목록으로만 판정한다 — 빌드(`wb-theme build`)는
+    // 그 글꼴을 `assets/` 로 싣는데 dev 만 403 이다. 템플릿을 워크스페이스 안에 풀어 `@fontsource/inter` 를 쓴 판이 그 값이었다.
+    const kit = (await import(/* @vite-ignore */ pathToFileURL(join(KIT, 'dist/index.js')).href)) as DistKit
+    const workspace = mkdtempSync(join(TMP, 'workspace-'))
+    writeFileSync(join(workspace, 'package.json'), JSON.stringify({ name: 'authors', private: true }))
+    writeFileSync(join(workspace, 'pnpm-workspace.yaml'), "packages:\n  - 'themes/*'\n")
+    const font = join(workspace, 'node_modules/wb-probe-font')
+    mkdirSync(join(font, 'files'), { recursive: true })
+    writeFileSync(join(font, 'package.json'), JSON.stringify({ name: 'wb-probe-font', version: '1.0.0' }))
+    writeFileSync(join(font, 'index.css'), "@font-face { font-family: WbProbe; src: url(./files/probe.woff2) format('woff2'); }\n")
+    writeFileSync(join(font, 'files/probe.woff2'), 'not a real font — only the status is read')
+    const project = join(workspace, 'themes/probe')
+    cpSync(FIXTURE, project, { recursive: true })
+    const entry = join(project, 'src/index.tsx')
+    writeFileSync(entry, `import 'wb-probe-font/index.css'\n${readFileSync(entry, 'utf8')}`)
+    writeFileSync(join(project, 'src/theme.css'), `${readFileSync(join(project, 'src/theme.css'), 'utf8')}\n* { font-family: WbProbe, sans-serif; }\n`)
+
+    const other = await kit.startDev({ root: project, port: await freePort() })
+    const probe = await browser.newPage({ viewport: { width: 1280, height: 800 } })
+    const statuses = new Map<string, number>()
+    probe.on('response', (response) => {
+      const name = new URL(response.url()).pathname.split('/').pop()!
+      if (name === 'probe.woff2' || name === 'index.css') statuses.set(name, response.status())
+    })
+    try {
+      await probe.goto(other.url)
+      // 카나리아 — 갤러리가 서고, 패키지의 CSS 가 실려 글꼴을 부른다(이 판에서 글꼴 요청이 난다).
+      await expect.poll(() => probe.frames().find((f) => f.url().endsWith('/frame.html'))
+        ?.evaluate(() => document.querySelectorAll('[data-wb-gallery-item]').length).catch(() => 0) ?? 0, { timeout: 20_000 }).toBeGreaterThan(0)
+      await expect.poll(() => statuses.has('probe.woff2'), { timeout: 10_000 }).toBe(true)
+      expect(statuses.get('index.css')).toBe(200)
+      expect(statuses.get('probe.woff2')).toBe(200)
+    } finally {
+      await probe.close().catch(() => {})
+      await other.close().catch(() => {})
+    }
+  })
 })

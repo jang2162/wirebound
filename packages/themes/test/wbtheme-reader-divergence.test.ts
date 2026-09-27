@@ -24,6 +24,8 @@ interface Entry {
   sameLocalAs?: number
   /** 압축 방식(0 stored · 8 deflate). 안 주면 0 — deflate 면 `data` 가 이미 압축한 바이트다. */
   method?: number
+  /** 중앙 디렉터리 외부 속성의 파일 모드. 안 주면 `0o100644`. */
+  mode?: number
 }
 
 /** 손으로 짓는 zip(stored). `total` 은 EOCD 의 전체 항목 수(e+10), `disk` 는 이 디스크의 항목 수(e+8). */
@@ -47,7 +49,7 @@ function build(entries: Entry[], eocd: { disk?: number; total?: number } = {}): 
     const h = new DataView(new ArrayBuffer(46))
     h.setUint32(0, 0x02014b50, true); h.setUint16(8, 0x800, true); h.setUint16(10, e.method ?? 0, true)
     h.setUint32(20, e.data.length, true); h.setUint32(24, e.usize ?? e.data.length, true)
-    h.setUint16(28, name.length, true); h.setUint32(38, (0o100644 << 16) >>> 0, true); h.setUint32(42, offsets[i]!, true)
+    h.setUint16(28, name.length, true); h.setUint32(38, ((e.mode ?? 0o100644) << 16) >>> 0, true); h.setUint32(42, offsets[i]!, true)
     push(new Uint8Array(h.buffer)); push(name)
   })
   const q = new DataView(new ArrayBuffer(22))
@@ -58,6 +60,42 @@ function build(entries: Entry[], eocd: { disk?: number; total?: number } = {}): 
   const out = new Uint8Array(pos)
   let at = 0
   for (const c of chunks) { out.set(c, at); at += c.length }
+  return out
+}
+
+/**
+ * 앞에 `fflateSees` 의 로컬 머리 · 중앙 디렉터리를, 뒤에 `readerSees` 의 zip 을 두고 끝에 zip64 끝 레코드 + 로케이터 + 끝 레코드를
+ * 붙인다 — 끝 레코드는 `readerSees` 의 중앙 디렉터리를, zip64 끝 레코드는 `fflateSees` 의 것을 가리킨다.
+ */
+function zip64Pointing(fflateSees: Uint8Array, readerSees: Uint8Array): Uint8Array {
+  const ev = new DataView(fflateSees.buffer)
+  const evEocd = fflateSees.length - 22
+  const evCount = ev.getUint16(evEocd + 10, true)
+  const evOffset = ev.getUint32(evEocd + 16, true)
+  const head = fflateSees.subarray(0, evEocd)
+
+  const gv = new DataView(readerSees.buffer)
+  const gEocd = readerSees.length - 22
+  const gCount = gv.getUint16(gEocd + 10, true)
+  const gOffset = gv.getUint32(gEocd + 16, true)
+  const gSize = gv.getUint32(gEocd + 12, true)
+  const tail = readerSees.slice(0, gEocd)
+  const tv = new DataView(tail.buffer)
+  for (let at = gOffset; at < gOffset + gSize; at += 46 + tv.getUint16(at + 28, true)) {
+    tv.setUint32(at + 42, tv.getUint32(at + 42, true) + head.length, true)
+  }
+
+  const z64At = head.length + tail.length
+  const out = new Uint8Array(z64At + 56 + 20 + 22)
+  const v = new DataView(out.buffer)
+  out.set(head, 0)
+  out.set(tail, head.length)
+  v.setUint32(z64At, 0x06064b50, true); v.setBigUint64(z64At + 4, 44n, true)
+  v.setUint32(z64At + 32, evCount, true); v.setUint32(z64At + 48, evOffset, true)
+  v.setUint32(z64At + 56, 0x07064b50, true); v.setUint32(z64At + 64, z64At, true)
+  const e = z64At + 76
+  v.setUint32(e, 0x06054b50, true); v.setUint16(e + 8, gCount, true); v.setUint16(e + 10, gCount, true)
+  v.setUint32(e + 12, gSize, true); v.setUint32(e + 16, gOffset + head.length, true)
   return out
 }
 
@@ -88,39 +126,19 @@ describe('readWbtheme — 판독기와 fflate 가 같은 것을 읽는다', () =
   })
 
   it('zip64 로케이터가 가리키는 다른 중앙 디렉터리의 항목이 실리지 않는다', () => {
-    // 앞: fflate 가 볼 중앙 디렉터리(검사 안 된 theme.js · 밖 경로). 뒤: 판독기가 볼 선량한 zip. 끝에 zip64 EOCD + 로케이터 + EOCD.
     const evil = build([{ name: 'manifest.json', data: MANIFEST }, { name: 'theme.js', data: strToU8('/*ZIP64*/') }, { name: '../outside.txt', data: strToU8('x') }])
-    const ev = new DataView(evil.buffer)
-    const evEocd = evil.length - 22
-    const evCount = ev.getUint16(evEocd + 10, true)
-    const evOffset = ev.getUint32(evEocd + 16, true)
-    const head = evil.subarray(0, evEocd)
-
-    const good = build(base())
-    const gv = new DataView(good.buffer)
-    const gEocd = good.length - 22
-    const gOffset = gv.getUint32(gEocd + 16, true)
-    const gSize = gv.getUint32(gEocd + 12, true)
-    const tail = good.slice(0, gEocd)
-    const tv = new DataView(tail.buffer)
-    for (let at = gOffset; at < gOffset + gSize; at += 46 + tv.getUint16(at + 28, true)) {
-      tv.setUint32(at + 42, tv.getUint32(at + 42, true) + head.length, true)
-    }
-
-    const z64At = head.length + tail.length
-    const out = new Uint8Array(z64At + 56 + 20 + 22)
-    const v = new DataView(out.buffer)
-    out.set(head, 0)
-    out.set(tail, head.length)
-    v.setUint32(z64At, 0x06064b50, true); v.setBigUint64(z64At + 4, 44n, true)
-    v.setUint32(z64At + 32, evCount, true); v.setUint32(z64At + 48, evOffset, true)
-    v.setUint32(z64At + 56, 0x07064b50, true); v.setUint32(z64At + 64, z64At, true)
-    const e = z64At + 76
-    v.setUint32(e, 0x06054b50, true); v.setUint16(e + 8, 2, true); v.setUint16(e + 10, 2, true)
-    v.setUint32(e + 12, gSize, true); v.setUint32(e + 16, gOffset + head.length, true)
-
-    const r = loaded(out)
+    const r = loaded(zip64Pointing(evil, build(base())))
     expect(r === 'rejected' ? r : r.themeJs).not.toBe('/*ZIP64*/')
+  })
+
+  it('zip64 로케이터가 이름이 같은 다른 중앙 디렉터리를 가리켜도 링크 판정은 fflate 가 읽는 디렉터리의 속성으로 선다', () => {
+    // A2 좁은 반증 2 — 목록 대조는 이름 · 차례 · 수만 견준다. 링크 판정(외부 속성)은 판독기의 디렉터리에서만 읽으므로, 두 디렉터리가
+    // 이름까지 같으면 목록 대조는 갈림을 못 본다. 이 판을 막는 것은 로케이터 거절 하나다(그 거절만 떼면 이 케이스만 죽는다).
+    const linked = build([{ name: 'manifest.json', data: MANIFEST }, { name: 'theme.js', data: strToU8('../../etc/passwd'), mode: 0o120777 }])
+    const { files, issues } = readWbtheme(zip64Pointing(linked, build(base())))
+    // 거절의 이유는 두 디렉터리가 갈린다는 것(`bad-zip`)이거나 링크(`symlink`)여야 한다 — 다른 이유로 막히면 이 판을 안 잰 것이다.
+    expect(files).toBeNull()
+    expect(['bad-zip', 'symlink']).toContain(issues[0]?.code)
   })
 
   it('stored 항목의 원래 크기를 0 으로 적어도 실린 바이트 합이 풀린 크기 상한을 안 넘는다', () => {
