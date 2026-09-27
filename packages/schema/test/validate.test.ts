@@ -72,17 +72,6 @@ describe('validatePage', () => {
     )
   })
 
-  it('정의되지 않은 variant는 unknown-variant', () => {
-    const doc = page({
-      id: 'n_000000000001',
-      type: 'Page',
-      children: [{ id: 'n_000000000002', type: 'Button', variant: 'rainbow' }],
-    })
-    expect(validatePage(doc)).toContainEqual(
-      expect.objectContaining({ code: 'unknown-variant', nodeId: 'n_000000000002' }),
-    )
-  })
-
   it('id가 중복되면 duplicate-id', () => {
     const doc = page({
       id: 'n_000000000001',
@@ -217,18 +206,18 @@ describe('variantFrom이 있는 컴포넌트의 node.variant', () => {
    *
    * | 입력 | 이슈 | 어긋나면 |
    * |---|---|---|
-   * | `variant:'없는변형'` + `role:'h1'` | `ignored-variant` | `unknown-variant` — 원인을 잘못 가리킨다 |
+   * | `variant:'없는변형'` + `role:'h1'` | `ignored-variant` | **이슈 0건** — 적은 값이 조용히 사라진다 |
    * | `variant:'caption'` + `role:'h2'` | `ignored-variant` | **이슈 0건** — 적은 값이 조용히 사라진다 |
    *
    * 둘 다 같은 일이 일어나므로(적은 값이 버려진다) 같은 이슈를 받는 것이 맞다.
    */
-  it('선언되지 않은 값이어도 unknown-variant가 아니라 ignored-variant다', () => {
+  it('enum 밖의 값이어도 ignored-variant다', () => {
     const issues = validatePage(doc('없는변형', { role: 'h1' }))
     expect(issues.map((issue) => issue.code)).toEqual(['ignored-variant'])
     expect(issues[0]!.path).toBe('/root/children/0/variant')
   })
 
-  it('선언된 값이어도 조용히 사라지지 않는다', () => {
+  it('enum 안의 값이어도 조용히 사라지지 않는다', () => {
     const issues = validatePage(doc('caption', { role: 'h2' }))
     expect(issues.map((issue) => issue.code)).toEqual(['ignored-variant'])
   })
@@ -241,7 +230,9 @@ describe('variantFrom이 있는 컴포넌트의 node.variant', () => {
     expect(message).toContain('role')
   })
 
-  it('variantFrom이 없는 컴포넌트는 그대로 unknown-variant다', () => {
+  // 대조군. «값을 판정하지 않는다» 축의 주인은 `component/theme-owned-vocabulary.test.ts`의
+  // «variant 는 스키마가 판정하지 않는다 — 아무 문자열이나 통과한다»다 — 이 케이스는 그것과 함께 죽는다.
+  it('variantFrom이 없는 컴포넌트는 이슈가 없다', () => {
     const issues = validatePage({
       version: 1,
       root: {
@@ -250,7 +241,7 @@ describe('variantFrom이 있는 컴포넌트의 node.variant', () => {
         children: [{ id: 'n_000000000002', type: 'Button', variant: 'rainbow' }],
       },
     })
-    expect(issues.map((issue) => issue.code)).toEqual(['unknown-variant'])
+    expect(issues).toEqual([])
   })
 
   it('variant를 안 주면 이슈가 없다', () => {

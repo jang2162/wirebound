@@ -118,9 +118,6 @@ describe('ensureCatalog', () => {
       group: 'document',
       props: z.strictObject({}),
       editor: [],
-      structures: ['default'],
-      parts: [],
-      variants: [],
       states: [],
       children: 'none',
     })

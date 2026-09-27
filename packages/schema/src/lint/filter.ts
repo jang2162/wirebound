@@ -23,7 +23,7 @@
  *
  * ## 자리가 없는 이슈는 **남지 않는다**
  *
- * 페이지를 골랐으면 테마 이슈와 메뉴 이름 이슈(`pageId`가 `null`이다)는 그 페이지의 것이
+ * 페이지를 골랐으면 메뉴 이름 이슈(`pageId`가 `null`이다)는 그 페이지의 것이
  * 아니다. 그래서 빠진다. **빠진 개수를 부르는 쪽이 말해야 한다** — `wireb lint`가
  * *"전체 N건 중 M건"*을 내는 것이 그 자리다.
  */
@@ -37,7 +37,7 @@ export interface LintIssueFilter {
   pageIds?: readonly string[]
 }
 
-/** 거르개를 통과한 이슈들. **순서를 바꾸지 않는다** — 설계서 이슈가 앞이고 테마가 뒤다. */
+/** 거르개를 통과한 이슈들. **순서를 바꾸지 않는다.** */
 export function filterLintIssues(
   issues: readonly LintIssue[],
   filter: LintIssueFilter = {},

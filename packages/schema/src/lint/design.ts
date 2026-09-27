@@ -65,7 +65,7 @@ const STRUCTURAL_GAPS: readonly { container: string; requires: string }[] = [
  * 상호작용 셋이 ③으로 가는 것은 「lint 규칙」의 줄(*"대상 노드가 삭제된 상호작용 규칙"*)이 그
  * 부류를 가리키기 때문이다. 셋을 갈라 세 규칙으로 두면 그 절에 없는 줄이 둘 생긴다.
  *
- * **테스트가 이 표를 통째로 못박는다**(`packages/themes/test/lint-mapping.test.ts` — 두 표를 함께 본다). 타입은 *"항목이 있는가"*만
+ * **테스트가 이 표를 통째로 못박는다**(`test/lint-mapping.test.ts`). 타입은 *"항목이 있는가"*만
  * 보므로 **오른쪽 값을 조용히 다른 줄로 옮기는 경로**가 타입만으로는 남는다 — 그 변이는
  * 아무 타입 오류도 안 낸다. 어느 코드가 「lint 규칙」의 어느 줄로 가는지는 **판단**이므로
  * 밖에서 볼 수 있어야 한다.
@@ -77,7 +77,6 @@ export const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
   'unknown-type': 'document-invalid',
   'invalid-props': 'document-invalid',
   'children-not-allowed': 'document-invalid',
-  'unknown-variant': 'document-invalid',
   'ignored-variant': 'document-invalid',
   'duplicate-id': 'document-invalid',
   'bad-root': 'document-invalid',

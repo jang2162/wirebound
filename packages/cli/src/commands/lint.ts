@@ -120,18 +120,9 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
 
 /**
  * 이슈 한 줄. **자리를 먼저 말한다** — 사람이 어느 문서를 열지부터 알아야 한다.
- *
- * `themeId`에 담기는 것은 **레이아웃의 id다**(`snapshotToLintInput`의 판정 ⓑ). 그래서
- * `테마 <uuid>`가 아니라 `레이아웃 <uuid>`라고 쓴다 — 필드 이름을 그대로 옮기면 사람이
- * 테마 행을 찾으러 간다.
  */
 function renderIssue(issue: LintIssue, pathOf: ReadonlyMap<string, string>): string {
-  const where =
-    issue.pageId !== null
-      ? (pathOf.get(issue.pageId) ?? `페이지 ${issue.pageId}`)
-      : issue.themeId !== null
-        ? `레이아웃 ${issue.themeId}`
-        : '프로젝트'
+  const where = issue.pageId !== null ? (pathOf.get(issue.pageId) ?? `페이지 ${issue.pageId}`) : '프로젝트'
   const node = issue.nodeId === null ? '' : ` (${issue.nodeId})`
   return `${issue.severity}\t${where}${node}\t${issue.rule}\t${issue.message}`
 }

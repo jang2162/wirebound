@@ -11,15 +11,6 @@ export const SearchFormDef = defineComponent({
     collapsed: z.boolean().default(false),
   }),
   editor: [{ prop: 'collapsed', control: 'switch', label: '접힌 상태' }],
-  structures: ['inline', 'stacked', 'collapsible'],
-  // `row`는 `stacked`가 자식 하나마다 내는 줄이다. **테마는 설계서 「components — 구조 + 스킨」에서 `parts`만 겨냥할 수
-  // 있고 자식 컴포넌트를 직접 겨냥할 수 없으므로**, 줄이 조각으로 나오지 않으면 줄 사이
-  // 간격·구분선에 손댈 길이 아예 없다 — `flex-direction: column`으로 대신할 수 없는 것이
-  // 그 부분이고, `stacked`가 `inline`과 DOM으로 갈리는 근거다.
-  // `toggle`은 `collapsible`이 내는 머리줄이다. 접혀 있을 때 화면에 남는 유일한 조각이라
-  // 테마가 그것만 따로 겨냥할 수 있어야 한다.
-  parts: ['fields', 'actions', 'row', 'toggle'],
-  variants: [],
   states: [],
   children: 'many',
 })
@@ -33,14 +24,6 @@ export const EntryFormDef = defineComponent({
     title: z.string().default(''),
   }),
   editor: [{ prop: 'title', control: 'text', label: '제목' }],
-  structures: ['labelLeft', 'labelTop', 'sectioned'],
-  // `section`·`sectionTitle`은 `sectioned`가 자식 하나마다 내는 구획과 그 머리글이다.
-  //
-  // **`control`은 어느 구조도 내지 않는다.** 선언만 있고 화면에 닿지 않는 이름이라
-  // `Field.help`와 같은 부류다 — 지우는 것은 테마 어휘를 좁히는 변경(그 이름에 스킨을 둔
-  // 테마가 검증에서 걸린다)이므로 여기서 하지 않는다. 어휘를 좁히기로 정할 때 함께 지운다.
-  parts: ['row', 'label', 'control', 'actions', 'section', 'sectionTitle'],
-  variants: [],
   states: [],
   children: 'many',
 })
@@ -73,10 +56,6 @@ export const FieldDef = defineComponent({
     { prop: 'disabled', control: 'switch', label: '비활성' },
     { prop: 'invalid', control: 'switch', label: '오류 상태' },
   ],
-  structures: ['outlined', 'filled', 'underlined'],
-  parts: ['label', 'control', 'help'],
-  // `control`의 enum 값 그대로다 — `defineComponent`가 두 집합이 같은지를 양방향으로 검사한다.
-  variants: ['text', 'number', 'select', 'date', 'dateRange', 'checkbox', 'radio', 'textarea', 'file'],
   variantFrom: 'control',
   states: ['required', 'disabled', 'invalid'],
   children: 'none',

@@ -7,13 +7,8 @@
  *    없다"*를 막듯, 이쪽은 *"화면에 낼 말이 없다"*·*"내면 화면이 깨진다"*를 막는다.
  * 2. **이름은 레지스트리에서 겹칠 수 없다.** `defineComponent`는 정의 하나만 보므로
  *    겹침을 볼 수 없고, `registerComponent`가 본다.
- * 3. **설계서 「컴파일」의 «여섯»은 DOM 속성이지 `ComponentDef`의 필드 수가 아니다.** 새 필드는
- *    `data-wb-*`를 하나도 만들지 않으므로 그 못을 건드리지 않는다. 그 사실을 렌더러 쪽에서
- *    이미 세는 가드가 있고(`packages/renderer/test/contract-attrs.test.ts` — 원문에서
- *    `data-wb-*`를 훑어 여섯 + 예외 하나만 허용한다), 테마 어휘 쪽은
- *    `packages/themes/test/spec-components.test.ts`가 잰다. 여기서는 **두 축이 같은 낱말을
- *    써도 서로를 침범하지 않는다**는 것을 본다 — 그 반대(겹침 금지)를 단언하면 카탈로그의
- *    옳은 선언을 막는다(그 케이스 자리에 근거를 적었다).
+ * 3. **사람이 읽을 필드는 `data-wb-*`를 하나도 만들지 않는다.** 렌더러가 노드에 싣는 속성은
+ *    `packages/renderer/test/contract-attrs.test.ts`가 원문에서 센다.
  * 4. **`COMPONENT_NOUNS`가 카탈로그에서 유도된다.** 이름 표가 두 벌이 아니라는 것과,
  *    그러면서도 `installCatalog()`와 무관하게 선다는 것(exporter가 그것에 기댄다).
  */
@@ -31,9 +26,6 @@ const base = {
   group: 'document' as const,
   props: z.strictObject({}),
   editor: [],
-  structures: ['default'],
-  parts: [],
-  variants: [],
   states: [],
   children: 'none' as const,
 }
@@ -102,27 +94,7 @@ describe('registerComponent — 이름 겹침', () => {
   })
 })
 
-describe('사람이 읽을 축은 테마 어휘가 아니다', () => {
-  it('두 축은 낱말이 겹쳐도 서로를 침범하지 않는다', () => {
-    // ***"새 필드 이름이 어휘 배열에 새지 않는다"*를 단언하면 틀린다.**
-    // `Tree`·`Button`·`Field`가 `parts: ['label']`을 갖고 있다 — 그리고
-    // 그것이 **맞다**. `data-wb-part="label"`은 *"이 조각이 라벨이다"*라는 테마 어휘이고,
-    // `ComponentDef.label`은 *"이 컴포넌트를 사람이 뭐라 부르는가"*다. 이름이 같을 뿐
-    // 서로 다른 이름공간이라, 겹침을 금지하면 옳은 선언을 막게 된다.
-    //
-    // **그래서 재는 것은 낱말이 아니라 «어느 쪽이 어느 쪽을 읽는가»다.** 축이 무너지는
-    // 형태는 필드 이름의 겹침이 아니라 검증기가 `Object.keys(def)`로 어휘를 모으는 것이고,
-    // 그것은 `packages/themes/test/spec-components.test.ts`가 잰다(테마가 `label`을
-    // 변형·상태 이름으로 쓰면 여전히 `unknown-*`이다).
-    installCatalog()
-    expect(getComponent('Tree')!.parts).toContain('label')
-    expect(getComponent('Tree')!.label).toBe('트리')
-    // 조각 `label`을 가진 컴포넌트가 넷인데 넷 다 자기 이름은 따로다.
-    const withLabelPart = CATALOG_DEFS.filter((def) => def.parts.includes('label'))
-    expect(withLabelPart.map((def) => def.type)).toEqual(['Tree', 'EntryForm', 'Field', 'Button'])
-    expect(withLabelPart.map((def) => def.label)).toEqual(['트리', '입력폼', '입력 필드', '버튼'])
-  })
-
+describe('사람이 읽을 축', () => {
   it('카탈로그가 사람이 읽을 축을 전부 채운다', () => {
     for (const def of CATALOG_DEFS) {
       expect(def.label.trim(), def.type).toBeTruthy()

@@ -883,13 +883,7 @@ wireb export --format html -o dir  정적 번들 생성
 - `EntryForm` 안에 `Field`가 하나도 없는 등 구조적 공백
 - 프로젝트 명명 규칙 위반 (설정 가능)
 
-**테마 규칙** (§6 규격 대조)
-- 컴포넌트 정의에 없는 `structure` · `part` · `state` 참조
-- 존재하지 않는 토큰 참조 (`semantic.brand` 오타 등)
-- 화이트리스트에 없는 스타일 프로퍼티
-- 노드가 쓰는 `variant`를 테마가 정의하지 않음
-- 패턴 `slots` 계약과 `schema` 불일치
-- `extends` 대상이 없거나 상속 깊이 위반
+**테마** — 테마 자체의 결함(manifest · 토큰 · 뷰)은 lint 가 아니라 테마 빌드와 업로드 검증이 막는다(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「업로드 검증」). 프로젝트가 고른 테마에 없는 `variant` 는 같은 문서 「CLI · MCP」의 lint 규칙이 본다.
 
 ### 12.5 스킬
 

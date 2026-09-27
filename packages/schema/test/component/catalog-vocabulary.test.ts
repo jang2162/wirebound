@@ -109,7 +109,7 @@ describe('patterns 예시의 Grid.props.gap', () => {
  * **분모를 손으로 적지 않는다.** 카탈로그를 훑어 센다 — 컴포넌트가 늘면
  * 여기가 먼저 죽는다.
  */
-describe('states·variants 도달성', () => {
+describe('states·variantFrom 도달성', () => {
   it('훑을 카탈로그가 실제로 있다', () => {
     // 분모가 비면 아래 케이스들이 조용히 통과한다.
     expect(CATALOG_TYPES.length).toBeGreaterThan(10)
@@ -158,31 +158,5 @@ describe('states·variants 도달성', () => {
       [...CATALOG_TYPES.filter((type) => getComponent(type)?.variantFrom !== undefined)].sort(),
     ).toEqual(['Divider', 'Field', 'Text'])
     expect(unreachable).toEqual([])
-  })
-
-  /**
-   * **`variantFrom`이 없는 컴포넌트의 `variants`는 `defineComponent`가 검사할 것이 없다.**
-   *
-   * 그 가지에서는 *"`variants`가 비어 있지 않으면 그것도 도달 가능해야 한다"*를
-   * `defineComponent`의 검사로 두지 않는다 — **패널이 카탈로그를 보고 변형 컨트롤을 자동으로
-   * 여닫으므로** 어긋날 자리 자체가 없다. 검사할 것이 없는 규칙을 검사로 두면
-   * **늘 참인 단언**이 하나 늘 뿐이다. `variantFrom`이 **있는** 가지는 다르다 —
-   * `variants ⊆ enum 값`을 `defineComponent`가 검사한다(`reachability.test.ts`).
-   *
-   * 그 대신 남는 것은 위 `variantFrom` 검사다 — 그쪽만이 실제로 구멍이 될 수 있다.
-   * 패널 쪽 전수 케이스는 `apps/web/test/panels/property-panel.test.tsx`에 있다.
-   */
-  it('variants가 비어 있지 않은 컴포넌트는 variantFrom이 있거나 패널이 자동으로 연다', () => {
-    // `schema`는 패널을 볼 수 없으므로 여기서 재는 것은 **그 조건이 카탈로그만으로
-    // 결정된다는 사실**이다 — 그것이 패널의 자동 여닫기가 새 선언을 필요로 하지 않는 이유다.
-    for (const type of CATALOG_TYPES) {
-      const def = getComponent(type)
-      if (def === undefined) continue
-      const opensAutomatically = def.variants.length > 0 && def.variantFrom === undefined
-      const reachesViaProp =
-        def.variantFrom !== undefined && def.editor.some((f) => f.prop === def.variantFrom)
-
-      expect(def.variants.length === 0 || opensAutomatically || reachesViaProp, type).toBe(true)
-    }
   })
 })

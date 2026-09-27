@@ -10,7 +10,6 @@ export type ValidationCode =
   | 'unknown-type'
   | 'invalid-props'
   | 'children-not-allowed'
-  | 'unknown-variant'
   /**
    * 노드가 `variant`를 들고 왔는데 그 컴포넌트는 **prop에서 변형을 파생한다**(`variantFrom`).
    * **작성자가 적은 값이 버려진다.**
@@ -90,16 +89,11 @@ export type IssueSeverity = 'error' | 'warning'
  *    없다. 셋을 `error`로 바꾸면 `edit-pipeline`이 삭제 편집을
  *    `reason: 'invalid'`로 거부한다(`test/interaction-validate.test.ts`의
  *    `타겟이 된 노드를 지우는 편집이 막히지 않는다`가 그 성질을 고정한다 — 다시 재려면 그 케이스를 돌린다).
- *
- * **`unknown-variant`가 `error`인 것과 어긋나지 않는다.** 그쪽은 **그 노드 자신의 필드**가
- * 렌더러에 닿는 값이라 남의 생사에 따라 유효성이 바뀌지 않는다. *"저장을 막으면 다른
- * 정당한 편집이 함께 막힌다"*는 성질은 **참조**에만 있다.
  */
 export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'unknown-type': 'error',
   'invalid-props': 'error',
   'children-not-allowed': 'error',
-  'unknown-variant': 'error',
   'ignored-variant': 'warning',
   'duplicate-id': 'error',
   'bad-root': 'error',
@@ -140,8 +134,8 @@ function makeIssue(
  * 한쪽만 고쳐지는 순간 갈린다.
  *
  * **부르는 자리를 여기 표로 적지 않는다.** 이 파일 자신의 `throwOnFirstIssue`(아래)부터
- * `apps/api`의 저장 게이트(`edit-pipeline` · `routes/pages.ts` · `routes/themes.ts`),
- * `packages/themes`의 해석, `apps/web`의 삽입 판정까지 자리가 계속 는다 — 수를 적어 두면
+ * `apps/api`의 저장 게이트(`edit-pipeline` · `routes/pages.ts`),
+ * `apps/web`의 삽입 판정까지 자리가 계속 는다 — 수를 적어 두면
  * 자리가 늘 때 아무 테스트도 안 죽은 채 표만 낡는다. 그리고 **행 하나에 두 파일을 묶어 적으면
  * 행 수와 호출 지점 수가 갈려, 검산해도 빠진 것이 안 보인다.** 지금 자리는 다시 센다:
  * `grep -rn --include="*.ts" "partitionIssues(" packages apps`에서 `node_modules`·`dist`·
@@ -154,10 +148,10 @@ function makeIssue(
  *
  * **`severity`를 가진 것이면 무엇이든 받는다 — 제네릭이다.**
  *
- * `packages/themes`의 `ThemeIssue`가 **코드 유니온을 일부러 갈라 두었기 때문**이다
- * (평행 유니온을 만들면 따로 썩는다). 그래서 `ValidationIssue[]`로 못박아
- * 두면 테마 쪽이 이 함수를 부를 수 없고, **선을 긋는 코드가 하나여야 한다**는 위 규칙이
- * 바로 그 자리에서 깨진다 — 테마 쪽이 자기 `filter`를 다시 쓰게 된다.
+ * 코드 유니온이 다른 이슈도 같은 `severity`를 든다 — `packages/themes`의 `ThemeIssue`(패턴 이슈)가 그렇다(평행 유니온을
+ * 만들면 따로 썩어 코드를 일부러 갈라 두었다). `ValidationIssue[]`로 못박아
+ * 두면 그쪽이 이 함수를 부를 수 없고, **선을 긋는 코드가 하나여야 한다**는 위 규칙이
+ * 바로 그 자리에서 깨진다 — 그쪽이 자기 `filter`를 다시 쓰게 된다.
  *
  * 제네릭인 것은 **입력의 타입뿐이고 판정은 하나다.** `T`가 그대로 나가므로 부르는 쪽이
  * 자기 이슈 타입을 잃지 않는다(`ThemeIssue[]`를 넣으면 `ThemeIssue[]`가 나온다).
@@ -354,29 +348,16 @@ function validateTree(root: WbNode): ValidationIssue[] {
       )
     }
 
-    if (node.variant !== undefined) {
-      if (def.variantFrom !== undefined) {
-        /**
-         * **`variantFrom`이 있으면 `unknown-variant`를 내지 않는다.** 그 컴포넌트에서는
-         * `node.variant`가 선언된 값이든 아니든 **똑같이 무시되므로**, "정의되지 않았다"는
-         * 문장이 원인을 잘못 가리킨다. 두 입력이 그것을 보여 준다: `unknown-variant`로 가르면
-         * `variant:'없는변형'`은 **아무 영향 없는 값 때문에 문서가 무효**가 되고(거짓 양성),
-         * `variant:'caption'`은 **이슈 0건으로 조용히 사라진다**(침묵). 그래서 둘 다 같은
-         * 이슈 하나를 받고, 그 문장이 무슨 일이 일어나는지 말한다.
-         */
-        issues.push(
-          makeIssue('ignored-variant', node.id, `${path}/variant`, ignoredVariantMessage(def, node.variant)),
-        )
-      } else if (!def.variants.includes(node.variant)) {
-        issues.push(
-          makeIssue(
-            'unknown-variant',
-            node.id,
-            `${path}/variant`,
-            `${node.type}에 정의되지 않은 variant입니다: ${node.variant}`,
-          ),
-        )
-      }
+    /**
+     * **`node.variant`의 값은 판정하지 않는다** — 고를 수 있는 변형은 테마 manifest 가 선언하고(`components[type].variants`)
+     * 스키마는 테마를 모른다. manifest 에 없는 값은 렌더러가 그 테마의 `defaultVariant`로 그린다(`renderer`의
+     * `resolveVariant`). 판정하는 것은 **값이 버려지는** 한 경우뿐이다 — `variantFrom`을 가진 컴포넌트는 `node.variant`를
+     * 무엇이든 무시하므로 그 사실을 경고로 말한다.
+     */
+    if (node.variant !== undefined && def.variantFrom !== undefined) {
+      issues.push(
+        makeIssue('ignored-variant', node.id, `${path}/variant`, ignoredVariantMessage(def, node.variant)),
+      )
     }
   }
 
