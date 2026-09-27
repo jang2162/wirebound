@@ -28,9 +28,9 @@ describe('경계 — themes가 무엇을 보지 않는가', () => {
     }
   })
 
-  it('package.json이 schema · theme-sdk · zod만 의존한다', () => {
+  it('package.json이 schema · theme-sdk · fflate · zod만 의존한다', () => {
     const manifest = JSON.parse(packageJson) as { dependencies: Record<string, string> }
-    expect(Object.keys(manifest.dependencies).sort()).toEqual(['@wirebound/schema', '@wirebound/theme-sdk', 'zod'])
+    expect(Object.keys(manifest.dependencies).sort()).toEqual(['@wirebound/schema', '@wirebound/theme-sdk', 'fflate', 'zod'])
   })
 
   it('theme-sdk 는 타입으로만 읽는다', () => {
@@ -74,6 +74,8 @@ describe('공개 표면이 계약이다', () => {
     'SNAPSHOT_PAYLOAD_VERSION', 'SNAPSHOT_RESOURCES', 'SnapshotPayloadSchema', 'snapshotToLintInput',
     // 테마 manifest 규격 · 검증 · semver 부분집합. 빌드(`wb-theme build`) · 업로드 · 호스트가 같은 함수를 부른다.
     'ManifestSchema', 'validateManifest', 'compareVersions', 'satisfiesSdk', 'VERSION_PATTERN', 'SDK_RANGE_PATTERN',
+    // `.wbtheme` 읽기 · 쓰기. 빌드 · 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
+    'readWbtheme', 'packWbtheme', 'WBTHEME_LIMITS',
   ].sort()
 
   it('공개 표면이 계약과 정확히 같다', () => {
