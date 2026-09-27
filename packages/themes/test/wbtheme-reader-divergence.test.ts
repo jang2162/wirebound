@@ -5,7 +5,7 @@
  * 성질로 단언한다 — 거절해도 되고, 통과했으면 실린 것이 판독기가 본 것과 같아야 한다.
  * zip 은 손으로 짓는다(fflate `zipSync` 는 이런 머리를 안 쓴다).
  */
-import { deflateSync, strToU8 } from 'fflate'
+import { Deflate, deflateSync, strToU8 } from 'fflate'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '@wirebound/schema'
 import { readWbtheme, WBTHEME_LIMITS } from '@wirebound/themes'
@@ -197,4 +197,25 @@ describe('readWbtheme — 판독기와 fflate 가 같은 것을 읽는다', () =
     const r = loaded(build(base(), { disk: 2, total: 2 }))
     expect(r === 'rejected' ? r : r.themeJs).toBe(CHECKED)
   })
+
+  it('deflate 항목의 원래 크기를 작게 적은 zip 이 읽기를 오래 쥐지 않는다 — 적힌 크기를 넘는 순간 멈춘다', () => {
+    // 0 바이트 256 MB 를 deflate 한 스트림(≈ 0.26 MB) 하나를 원래 크기 1 인 항목 195 개가 가리킨다 — `max(size, originalSize)` 합은
+    // 상한(50 MB) 안이다. 스트림을 끝까지 풀면 항목마다 256 MB 를 푸는 일이 든다(A2 좁은 반증 2 — 항목 195 에 59 s).
+    const zeros = new Uint8Array(1024 * 1024)
+    const parts: Uint8Array[] = []
+    const deflate = new Deflate({ level: 9 }, (chunk) => { parts.push(chunk) })
+    for (let i = 0; i < 256; i++) deflate.push(zeros)
+    deflate.push(new Uint8Array(0), true)
+    const packed = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
+    parts.reduce((at, p) => { packed.set(p, at); return at + p.length }, 0)
+    const entries: Entry[] = [...base(), { name: 'assets/a0.png', data: packed, method: 8, usize: 1 }]
+    for (let i = 1; i < 195; i++) entries.push({ name: `assets/a${i}.png`, data: packed, method: 8, usize: 1, sameLocalAs: 2 })
+    const bytes = build(entries)
+    const started = performance.now()
+    const { issues } = readWbtheme(bytes)
+    const ms = performance.now() - started
+    console.log(`[wbtheme 풀기] zip ${bytes.length} B · 판정 ${JSON.stringify(issues.map((i) => i.code))} · ${ms.toFixed(0)} ms`)
+    expect(ms).toBeLessThan(5_000)
+  }, 180_000)
 })
+

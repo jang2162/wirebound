@@ -1,5 +1,5 @@
 import type { ThemeManifest } from '@wirebound/theme-sdk'
-import { strFromU8, unzipSync, type UnzipFileInfo } from 'fflate'
+import { Inflate, strFromU8, unzipSync, type UnzipFileInfo } from 'fflate'
 import type { ManifestIssueCode } from '../manifest/schema'
 import { validateManifest } from '../manifest/schema'
 
@@ -35,6 +35,8 @@ interface CentralEntry {
   name: string
   /** 외부 속성의 위 16 비트 — 유닉스에서 만든 zip 이면 파일 모드다. */
   mode: number
+  /** 로컬 머리의 자리(중앙 디렉터리 `+42`) — deflate 항목을 스스로 풀 때 데이터 시작을 찾는다. */
+  offset: number
 }
 
 /**
@@ -109,11 +111,20 @@ export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; is
   if (!seen.has('theme.js')) issues.push({ code: 'missing-theme-js', path: 'theme.js', message: 'theme.js 가 없습니다' })
   if (issues.length > 0) return { files: null, issues }
 
+  // stored 항목은 fflate 가 자른다. deflate 항목은 스스로 푼다(`inflateBounded`) — fflate 의 `unzipSync` 는 적힌 원래 크기를 넘은
+  // 뒤에도 스트림을 끝까지 풀어(넘친 쓰기만 버린다) 작은 zip 하나가 읽기를 수십 초 쥔다.
   let raw: Record<string, Uint8Array>
   try {
-    raw = unzipSync(bytes, { filter: (file) => !file.name.endsWith('/') })
+    raw = unzipSync(bytes, { filter: (file) => !file.name.endsWith('/') && file.compression === 0 })
   } catch (error) {
     return fail({ code: 'bad-zip', path: '', message: `zip 을 풀 수 없습니다: ${(error as Error).message}` })
+  }
+  for (const [index, file] of listed.entries()) {
+    if (file.name.endsWith('/') || file.compression === 0) continue
+    if (file.compression !== 8) return fail({ code: 'bad-zip', path: file.name, message: `모르는 압축 방식입니다(${file.compression})` })
+    const data = inflateBounded(bytes, entries[index]!.offset, file.size, file.originalSize)
+    if (typeof data === 'string') return fail({ code: 'bad-zip', path: file.name, message: data })
+    raw[file.name] = data
   }
 
   let json: unknown
@@ -213,7 +224,7 @@ function readCentralDirectory(bytes: Uint8Array): CentralEntry[] | string {
     if (at + 46 + nameLength > eocd) return '중앙 디렉터리의 항목 이름이 끝 레코드를 넘습니다'
     // fflate 와 같은 규칙으로 이름을 읽는다 — 비트 11 이 서면 UTF-8, 아니면 latin1. 어긋나면 `listingDivergence` 가 잡는다.
     const name = strFromU8(bytes.subarray(at + 46, at + 46 + nameLength), (flags & 0x800) === 0)
-    entries.push({ name, mode: external >>> 16 })
+    entries.push({ name, mode: external >>> 16, offset: view.getUint32(at + 42, true) })
     at += 46 + nameLength + extraLength + commentLength
   }
   return entries
@@ -244,3 +255,39 @@ function listingDivergence(entries: readonly CentralEntry[], listed: readonly Un
   const at = entries.findIndex((entry, index) => entry.name !== listed[index]!.name)
   return at < 0 ? null : `${at} 번째 항목의 이름이 중앙 디렉터리(${entries[at]!.name})와 푸는 쪽(${listed[at]!.name})에서 다릅니다`
 }
+
+/** 한 번에 넣는 압축 바이트 — deflate 의 최대 비율(≈ 1032 배)로도 한 번의 출력이 몇 MB 안에 든다. */
+const INFLATE_STEP = 4096
+
+class InflateOverrun extends Error {}
+
+/**
+ * deflate 항목 하나를 푼다 — 나온 바이트를 세어 **중앙 디렉터리에 적힌 원래 크기를 넘는 순간** 멈추고 이유 한 문장을 돌려준다.
+ * 데이터 시작은 fflate 와 같게 로컬 머리의 이름 · 확장 길이로 찾는다(로컬 머리의 나머지 칸은 안 본다).
+ */
+function inflateBounded(bytes: Uint8Array, offset: number, size: number, originalSize: number): Uint8Array | string {
+  if (offset + 30 > bytes.length) return '로컬 머리가 파일 밖입니다'
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const start = offset + 30 + view.getUint16(offset + 26, true) + view.getUint16(offset + 28, true)
+  const input = bytes.subarray(start, start + size)
+  const out = new Uint8Array(originalSize)
+  let written = 0
+  const inflate = new Inflate((chunk) => {
+    if (written + chunk.length > originalSize) throw new InflateOverrun()
+    out.set(chunk, written)
+    written += chunk.length
+  })
+  try {
+    let at = 0
+    do {
+      const next = Math.min(at + INFLATE_STEP, input.length)
+      inflate.push(input.subarray(at, next), next >= input.length)
+      at = next
+    } while (at < input.length)
+  } catch (error) {
+    if (error instanceof InflateOverrun) return `풀린 바이트가 적힌 원래 크기(${originalSize})를 넘습니다`
+    return `zip 을 풀 수 없습니다: ${(error as Error).message}`
+  }
+  return written === originalSize ? out : out.subarray(0, written)
+}
+
