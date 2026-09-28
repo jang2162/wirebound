@@ -9,6 +9,7 @@
     "migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts latest",
     "migrate:down": "tsx --env-file-if-exists=.env src/db/migrate.ts down",
     "reset-password": "tsx --env-file-if-exists=.env src/db/reset-password.ts",
+    "admin": "tsx --env-file-if-exists=.env src/db/admin.ts",
     "unlock-login": "tsx --env-file-if-exists=.env src/auth/unlock-login.ts"
   },
   "dependencies": {

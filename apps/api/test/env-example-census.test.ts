@@ -46,8 +46,9 @@ describe('.env.example 이 무엇을 드나', () => {
     // 정규식이 헛돌아 빈 집합으로 초록이 되는 부류를 막는 카나리아다(`shell-css.test.ts`와 같은 부류).
     expect(keysInExample().length).toBeGreaterThan(5)
     expect(keysInObjectSchema(CONFIG_SOURCE, 'EnvSchema').length).toBeGreaterThan(5)
-    // 시딩 스키마는 셋뿐이라 분모가 작다 — 그래도 0 이면 정규식이 헛돈 것이다.
+    // 시딩 스키마는 넷뿐이라 분모가 작다 — 그래도 0 이면 정규식이 헛돈 것이다.
     expect(keysInObjectSchema(SEED_SOURCE, 'SeedEnvSchema')).toEqual([
+      'SEED_USER_ADMIN',
       'SEED_USER_EMAIL',
       'SEED_USER_NAME',
       'SEED_USER_PASSWORD',
@@ -72,6 +73,7 @@ describe('.env.example 이 무엇을 드나', () => {
     expect(EXAMPLE).toMatch(/^#SEED_USER_EMAIL=$/m)
     expect(EXAMPLE).toMatch(/^#SEED_USER_NAME=$/m)
     expect(EXAMPLE).toMatch(/^#SEED_USER_PASSWORD=$/m)
+    expect(EXAMPLE).toMatch(/^#SEED_USER_ADMIN=$/m)
     expect(EXAMPLE).not.toMatch(/^#?SEED_USER_PASSWORD=.+$/m)
   })
 
