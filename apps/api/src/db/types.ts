@@ -1,6 +1,6 @@
 import type { ColumnType, Generated, JSONColumnType } from 'kysely'
 import type { LayoutDocument, PageDocument, PatchOp, WbNode } from '@wirebound/schema'
-import type { SnapshotPayload } from '@wirebound/themes'
+import type { SnapshotPayload, ThemeManifest } from '@wirebound/themes'
 
 /**
  * `Database` 스키마 인터페이스. 테이블을 만드는 마이그레이션은 대응하는 인터페이스를
@@ -12,6 +12,8 @@ export interface UsersTable {
   name: string
   password_hash: string
   created_at: Generated<Date>
+  /** 테마를 올리고 숨기는 사람(`0019-theme-packages`). 바꾸는 길은 `db/admin.ts` 명령 · 시딩뿐이다. */
+  is_instance_admin: Generated<boolean>
 }
 
 export interface SessionsTable {
@@ -41,6 +43,16 @@ export interface ProjectsTable {
   default_layout_id: ColumnType<string | null, string | null | undefined, string | null>
   created_at: Generated<Date>
   updated_at: Generated<Date>
+  /**
+   * 고정한 테마 패키지(`0019-theme-packages`). 둘이 함께 null 이면 «아직 고정 안 됨» — 기동 시딩이 채운다
+   * (`services/system-themes.ts` 의 `backfillProjectThemes`).
+   */
+  theme_id: ColumnType<string | null, string | null | undefined, string | null>
+  theme_version: ColumnType<string | null, string | null | undefined, string | null>
+  /** 기본값과 다른 토큰 값만. `PagesTable.schema` 와 같은 비대칭(쓸 때 문자열 · 읽을 때 객체)이다. */
+  theme_tokens: ColumnType<Record<string, string | number>, string | undefined, string>
+  /** 바인딩 저장의 낙관적 동시성 번호. 저장 · 판 3 복원마다 1 오른다. */
+  theme_rev: ColumnType<number, number | undefined, number>
 }
 
 export interface ProjectMembersTable {
@@ -274,6 +286,27 @@ export interface ApiTokensTable {
   last_used_at: ColumnType<Date | null, Date | null | undefined, Date>
 }
 
+/**
+ * 올린 코드 테마 패키지(`0019-theme-packages`). 행은 `hidden_at` 말고 안 바뀐다 — 지우는 길이 없다.
+ *
+ * `files` 는 `.wbtheme` zip 원본이다. 읽을 때 `pg` 가 `Buffer` 로 준다. `manifest` 는 `json`(키 순서를 지킨다)이고 쓸 때 문자열이다.
+ */
+export interface ThemePackagesTable {
+  theme_id: string
+  version: string
+  name: string
+  description: string | null
+  sdk_range: string
+  manifest: ColumnType<ThemeManifest, string, never>
+  files: ColumnType<Buffer, Buffer | Uint8Array, never>
+  size: ColumnType<number, number, never>
+  sha256: ColumnType<string, string, never>
+  /** 올린 사람. null 이면 시스템 테마이거나 올린 사람이 지워졌다. */
+  uploaded_by: ColumnType<string | null, string | null, string | null>
+  uploaded_at: Generated<Date>
+  hidden_at: ColumnType<Date | null, Date | null | undefined, Date | null>
+}
+
 export interface Database {
   users: UsersTable
   sessions: SessionsTable
@@ -289,4 +322,5 @@ export interface Database {
   snapshots: SnapshotsTable
   presets: PresetsTable
   api_tokens: ApiTokensTable
+  theme_packages: ThemePackagesTable
 }
