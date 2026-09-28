@@ -7,7 +7,8 @@
  *
  * # 저장의 규칙
  *
- * - **`rev` 가 저장된 `theme_rev` 와 다르면 409** 와 지금 값(GET 과 같은 모양의 `current`). 조건은 갱신 문장에 있다(`updateProjectTheme`).
+ * - **`rev` 가 저장된 `theme_rev` 와 다르면 409** 와 지금 값(GET 과 같은 모양의 `current`). 핸들러가 읽은 바탕과 견주고, 갱신 문장이
+ *   같은 조건으로 다시 거른다(`updateProjectTheme`).
  * - **숨긴 판은 지금 고정한 그 `id@version` 일 때만** 받는다 — 토큰만 고치는 저장이다. 숨긴 판으로 새로 바꾸면 422 `hidden-version`.
  * - 토큰은 대상 manifest 로 검증한다(`tokensCss` 의 이슈면 422). 저장 전에 기본값과 같은 값을 뺀다. 값 하나 `TOKEN_VALUE_MAX` 글자 ·
  *   전체 `TOKENS_JSON_MAX` 바이트가 상한이다.
@@ -117,8 +118,11 @@ export function projectThemeRoutes() {
       if (target === null) throw notFound('테마 패키지를 찾을 수 없습니다')
       const current = await findProjectTheme(app.db, projectId)
       if (current === null) throw notFound('프로젝트를 찾을 수 없습니다')
-      // 숨긴 판은 새로 고를 수 없다 — 지금 고정한 판이면 토큰만 고치는 저장이다. 이 판정의 바탕(`current`)은 트랜잭션 밖에서 읽었지만
-      // 바인딩이 바뀌면 `theme_rev` 도 바뀌므로, 그 사이의 저장은 아래 갱신이 `rev` 로 걸러 409 가 된다.
+      // 아래 판정(숨긴 판)의 바탕은 트랜잭션 밖에서 읽은 `current` 다. «바탕을 읽은 뒤 안 바뀌었다» 를 두 겹이 함께 선다 — 여기서
+      // 요청의 `rev` 가 읽은 바탕의 `rev` 와 같은지 보고, 갱신 문장이 같은 `rev` 로 거른다(읽은 뒤 · 갱신 전에 남이 저장한 판).
+      // 여기를 떼면 옮긴 뒤의 `rev` 를 짐작해 실은 요청이 옛 바탕으로 숨김 판정을 지나 숨긴 판을 새로 고른다(`project-theme-review.test.ts`
+      // «숨긴 판을 다시 고르는 경주»). 행을 잠가 다시 읽는 길은 잠금 순서 인구조사를 넓혀 고르지 않았다.
+      if (current.rev !== body.rev) return sendConflict(reply, await themeView(app.db, current))
       const pinned = current.themeId === body.themeId && current.version === body.version
       if (target.hiddenAt !== null && !pinned) {
         throw validationFailed(REJECTED, [

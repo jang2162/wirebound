@@ -15,6 +15,7 @@ import {
   resetRealData,
   signup,
   withApi,
+  withProxiedRealApi,
   withRealApi,
   type SignedUpUser,
   type TestContext,
@@ -281,6 +282,32 @@ describe('PUT …/theme', () => {
       expect((await project()).json().themeRev).toBe(0)
       await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#111111' }, rev: 0 })
       expect((await project()).json().themeRev).toBe(1)
+    })
+  })
+})
+
+describe('두 owner 의 동시 저장', () => {
+  beforeEach(resetRealData)
+  afterEach(resetRealData)
+
+  // «바탕을 읽은 뒤 안 바뀌었다» 의 둘째 겹(갱신 문장의 `WHERE theme_rev`)을 혼자 잰다 — A 는 핸들러의 rev 견주기를 이미 지나
+  // 갱신 앞에 붙잡혀 있어 첫 겹이 못 본다. 첫 겹은 `project-theme-review.test.ts` «숨긴 판을 다시 고르는 경주» 가 잰다.
+  it('바탕을 읽고 갱신 앞에 선 저장은, 그 사이 같은 rev 로 커밋된 저장 뒤에 409 다', async () => {
+    await withProxiedRealApi(async (ctx) => {
+      const fx = await fixture(ctx)
+      const other = await signup(ctx)
+      await addMember(ctx, fx.projectId, other.user.id, 'owner')
+      const hold = ctx.proxy.holdQuery('update "projects"')
+      const pendingA = put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#aaaaaa' }, rev: 0 })
+      await hold.held
+      const b = await put(ctx, fx, other, { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#bbbbbb' }, rev: 0 })
+      expect(b.statusCode, b.body).toBe(200)
+      hold.release()
+      const a = await pendingA
+      expect(a.statusCode, a.body).toBe(409)
+      expect(a.json().current).toMatchObject({ tokens: { 'semantic.primary': '#bbbbbb' }, rev: 1 })
+      const row = await ctx.db.selectFrom('projects').select(['theme_tokens', 'theme_rev']).where('id', '=', fx.projectId).executeTakeFirstOrThrow()
+      expect(row).toEqual({ theme_tokens: { 'semantic.primary': '#bbbbbb' }, theme_rev: 1 })
     })
   })
 })
