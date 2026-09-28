@@ -19,6 +19,7 @@ import { presetRoutes } from './routes/presets'
 import { projectRoutes } from './routes/projects'
 import { revisionRoutes } from './routes/revisions'
 import { snapshotRoutes } from './routes/snapshots'
+import { themePackageRoutes } from './routes/theme-packages'
 import { myTokenRoutes, tokenRoutes } from './routes/tokens'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
@@ -255,6 +256,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 인스턴스 관리자의 테마 패키지 동작(`/api/admin/theme-packages` · `/api/admin/theme-template.zip`) — 세션 전용이고 판정은 핸들러
   // 안이다(`routes/admin-themes.ts`의 머리말).
   await app.register(adminThemeRoutes(config), { prefix: '/api/admin' })
+  // 테마 패키지 읽기 — 로그인한 사람 누구나 · 세션 전용(`routes/theme-packages.ts`의 머리말).
+  await app.register(themePackageRoutes(), { prefix: '/api/theme-packages' })
   await app.register(healthRoutes)
 
   return app
