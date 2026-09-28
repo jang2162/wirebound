@@ -35,6 +35,11 @@ export interface FaultProxy {
    * **`held`는 `heldWithinMs`(기본 `HOLD_WITHIN_MS`) 안에 안 붙잡히면 원인 문장으로 거절한다** — 질의의 글자가 바뀌었거나(조각은
    * SQL 모양에 매인다) 요청이 그 질의 앞에서 끝나면 판이 안 서는데, 한도가 없으면 케이스는 원인 없이 케이스 한도까지 멈춘다. 그때 이
    * 붙잡기도 거둔다 — 늦게 온 질의를 엉뚱하게 세우지 않는다. `held`를 안 기다리는 호출자에게 그 거절은 조용히 지난다.
+   *
+   * **붙잡을 요청이 그 질의 앞에서 끝나는 판**(고친 판의 앞선 판정)을 함께 받으려면 `held` 와 그 요청의 끝을 겨루고, 요청이 먼저
+   * 끝났으면 다음 요청을 보내기 전에 `release()` 로 칸을 푼다 — 안 풀면 무장한 칸이 `heldWithinMs` 까지 남아 다음 요청의 같은 글자
+   * 질의를 붙잡는다. 푼 칸도 다음 같은 글자 질의 하나에 쏴지고 사라지지만 붙잡지 않고 곧바로 넘긴다(`project-theme-review.test.ts`
+   * «숨긴 판을 다시 고르는 경주»).
    */
   holdQuery(fragment: string, heldWithinMs?: number): { held: Promise<void>; release: () => void }
   /**
