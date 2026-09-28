@@ -280,9 +280,9 @@ export function memberWriteRecheck(request: FastifyRequest): {
 
 /**
  * 요청을 채운 자격 — 세션이면 그 행의 id, 토큰이면 토큰 행의 id(`auth/plugin.ts`가 채운 값). 둘 다 없으면 가드를 안 지난
- * 요청이다(프로그래밍 오류).
+ * 요청이다(프로그래밍 오류). 관리자 쓰기의 재확인(`auth/admin.ts`)도 이것으로 자격을 읽는다.
  */
-function requestCredential(request: FastifyRequest): Credential {
+export function requestCredential(request: FastifyRequest): Credential {
   if (request.authKind === 'session' && request.sessionId !== null) return { kind: 'session', id: request.sessionId }
   if (request.authKind === 'token' && request.tokenActor !== null) return { kind: 'token', id: request.tokenActor.tokenId }
   throw new Error('recheckProjectRole은 자격(세션 · 토큰)으로 들어온 요청에서만 부른다')
@@ -320,8 +320,11 @@ export interface RecheckInput {
   credential: Credential
 }
 
-/** 자격 행을 잡고 산 것을 본다 — `recheckAtCommit`의 앞 절(그 머리말 «자격이 먼저다»). 죽었으면 401. */
-async function recheckCredential(trx: DbHandle, credential: Credential): Promise<void> {
+/**
+ * 자격 행을 잡고 산 것을 본다 — `recheckAtCommit`의 앞 절(그 머리말 «자격이 먼저다»). 죽었으면 401. 프로젝트 밖 쓰기(관리자 —
+ * `auth/admin.ts`의 `recheckInstanceAdmin`)도 같은 함수로 자격을 본다.
+ */
+export async function recheckCredential(trx: DbHandle, credential: Credential): Promise<void> {
   assertLocking(trx, 'recheckCredential')
   const live = credential.kind === 'session' ? await sessionIsLive(trx, credential.id, 'key-share') : await tokenIsLive(trx, credential.id)
   if (!live) throw unauthenticated()

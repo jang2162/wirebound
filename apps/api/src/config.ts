@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import { isIP } from 'node:net'
+import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import { getKoreanErrorMap } from '@wirebound/schema'
 import { DEFAULT_DB_TIME_LIMITS, type DbTimeLimits } from './db/client'
@@ -41,7 +42,22 @@ export interface ApiConfig {
    * 수백 MB 를 먹어 이 수가 곧 그리기의 메모리 상한이다 — 값을 고르는 법은 최상위 README 「배포하려면」의 「화면 그리기 상한」.
    */
   exportRenderLimit: number
+  /**
+   * 시스템 테마 산출물(`<이 디렉터리>/*\/dist/*.wbtheme`)을 찾는 곳 — 기동 시딩(`services/system-themes.ts`)이 읽는다. 기본은 저장소의
+   * `system-themes` 다(`DEFAULT_SYSTEM_THEMES_DIR`).
+   */
+  systemThemesDir: string
+  /** 관리자가 내려받는 스타터 템플릿 zip(`routes/admin-themes.ts`). 기본은 kit 이 짓는 자리다(`DEFAULT_THEME_TEMPLATE_ZIP`). */
+  themeTemplateZip: string
 }
+
+/** 저장소의 `system-themes` — 이 파일(`apps/api/src/config.ts`)에서 세 단계 위. 운영 이미지도 저장소를 통째로 싣는다(`Dockerfile`). */
+export const DEFAULT_SYSTEM_THEMES_DIR = fileURLToPath(new URL('../../../system-themes', import.meta.url))
+
+/** 저장소 빌드(`pnpm build:template`)가 짓는 템플릿 zip — kit 의 `pack-template` 기본 출력이다. */
+export const DEFAULT_THEME_TEMPLATE_ZIP = fileURLToPath(
+  new URL('../../../packages/theme-kit/dist/wirebound-theme-starter.zip', import.meta.url),
+)
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const
 
@@ -255,6 +271,10 @@ const EnvSchema = z.object({
    * **없으면 아무것도 안 잰다** — 자기 Postgres 를 쓰는 사람이 깨지면 안 된다.
    */
   POSTGRES_PORT: z.string().optional(),
+  /** `ApiConfig.systemThemesDir`. 비면 기본값이다. */
+  SYSTEM_THEMES_DIR: z.string().optional(),
+  /** `ApiConfig.themeTemplateZip`. 비면 기본값이다. */
+  THEME_TEMPLATE_ZIP: z.string().optional(),
   /**
    * `db/client.ts`의 `DbTimeLimits` — 없거나 비면 `DEFAULT_DB_TIME_LIMITS`. **0 은 싣지 않는다 — 서버·DB 설정을 따른다.**
    * 범위는 `dbTimeLimitEnv`의 머리말.
@@ -326,5 +346,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     },
     trustProxy: data.TRUST_PROXY,
     exportRenderLimit: data.EXPORT_RENDER_LIMIT,
+    systemThemesDir:
+      data.SYSTEM_THEMES_DIR === undefined || data.SYSTEM_THEMES_DIR === '' ? DEFAULT_SYSTEM_THEMES_DIR : data.SYSTEM_THEMES_DIR,
+    themeTemplateZip:
+      data.THEME_TEMPLATE_ZIP === undefined || data.THEME_TEMPLATE_ZIP === '' ? DEFAULT_THEME_TEMPLATE_ZIP : data.THEME_TEMPLATE_ZIP,
   }
 }

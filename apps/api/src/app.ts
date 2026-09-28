@@ -7,6 +7,7 @@ import type { ApiConfig } from './config'
 import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
 import { logDestination } from './log-destination'
+import { adminThemeRoutes } from './routes/admin-themes'
 import { authRoutes } from './routes/auth'
 import { commentRoutes } from './routes/comments'
 import { exportRoutes } from './routes/export'
@@ -15,13 +16,17 @@ import { memberRoutes } from './routes/members'
 import { menuRoutes } from './routes/menu'
 import { pageRoutes } from './routes/pages'
 import { presetRoutes } from './routes/presets'
+import { projectThemeRoutes } from './routes/project-theme'
 import { projectRoutes } from './routes/projects'
 import { revisionRoutes } from './routes/revisions'
 import { snapshotRoutes } from './routes/snapshots'
+import { themePackageRoutes } from './routes/theme-packages'
 import { myTokenRoutes, tokenRoutes } from './routes/tokens'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
 import type { ScreenRenderer } from './services/screen-render'
+import { backfillProjectThemes, seedSystemThemes } from './services/system-themes'
+import { withTransaction } from './db/tx'
 import { registerRealtime } from './ws'
 
 declare module 'fastify' {
@@ -188,6 +193,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 수백 번 부르므로 필수다(schema-setup.ts 참고).
   ensureCatalog()
 
+  // 시스템 테마를 넣고 테마가 빈 프로젝트를 채운다 — 산출물이 없거나 이미 올린 판의 내용이 바뀌었으면 던져 기동을 멈춘다
+  // (`services/system-themes.ts` 의 머리말). 한 트랜잭션이다 — 여러 판 가운데 뒤의 것이 걸리면 앞의 것도 안 남는다.
+  await withTransaction(db, async (trx) => {
+    await seedSystemThemes(trx, config.systemThemesDir)
+    await backfillProjectThemes(trx)
+  })
+
   // **라우트 등록보다 앞이어야 한다** — `onRoute` 훅은 자기보다 뒤에 등록된 것만 본다.
   if (onRoute) {
     const list = (hook: unknown): unknown[] => (hook === undefined ? [] : Array.isArray(hook) ? [...hook] : [hook])
@@ -239,9 +251,16 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 프로젝트 단위"*라고 적었으므로 그 밖에 둘 자리가 없다. 발급은 viewer 이상 누구나이고,
   // 이 셋은 **세션으로만** 부를 수 있다 — 근거는 `routes/tokens.ts`의 머리말에 있다.
   await app.register(tokenRoutes(), { prefix: '/api/projects' })
+  // 프로젝트가 고정한 테마(`/:projectId/theme`) — 토큰으로도 닿는다(CLI · MCP 의 lint 가 manifest 를 읽는다).
+  await app.register(projectThemeRoutes(), { prefix: '/api/projects' })
   // **로그인한 사람의 토큰 전부**는 프로젝트 밖(`/api/auth/tokens`)이다 — 멤버가 아닌 프로젝트의 토큰도 거둬야 한다
   // (`routes/tokens.ts`의 «내 토큰은 프로젝트를 가로지른다»).
   await app.register(myTokenRoutes(), { prefix: '/api/auth' })
+  // 인스턴스 관리자의 테마 패키지 동작(`/api/admin/theme-packages` · `/api/admin/theme-template.zip`) — 세션 전용이고 판정은 핸들러
+  // 안이다(`routes/admin-themes.ts`의 머리말).
+  await app.register(adminThemeRoutes(config), { prefix: '/api/admin' })
+  // 테마 패키지 읽기 — 로그인한 사람 누구나 · 세션 전용(`routes/theme-packages.ts`의 머리말).
+  await app.register(themePackageRoutes(), { prefix: '/api/theme-packages' })
   await app.register(healthRoutes)
 
   return app

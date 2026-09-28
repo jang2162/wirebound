@@ -198,7 +198,20 @@ describe('서버가 준 것을 규격으로 검사한다', () => {
   it('모르는 payload 형식은 경고하고 계속한다', async () => {
     const io = 준비(snapshotPayload({ payloadVersion: 99 }))
     expect(await run(['page', 'get', '관리자/회원/목록'], io), io.stderr.join('\n')).toBe(EXIT.ok)
-    expect(io.stderr.join('\n')).toContain('이 wireb는 2까지 압니다')
+    expect(io.stderr.join('\n')).toContain('이 wireb는 3까지 압니다')
+  })
+
+  it('판 3 payload(테마 바인딩)를 읽는다 — 경고 없음', async () => {
+    const io = 준비(snapshotPayload())
+    expect(await run(['page', 'get', '관리자/회원/목록'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.stderr).toEqual([])
+  })
+
+  it('판 2 payload(테마 절 없음)도 읽는다', async () => {
+    const { theme: _theme, ...v2 } = snapshotPayload({ payloadVersion: 2 })
+    const io = 준비(v2)
+    expect(await run(['page', 'get', '관리자/회원/목록'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    expect(io.stderr).toEqual([])
   })
 })
 

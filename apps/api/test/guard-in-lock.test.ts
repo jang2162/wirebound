@@ -2422,6 +2422,21 @@ const PROJECT_PROBES: ProjectProbe[] = [
     okStatus: 200,
   },
   {
+    route: 'PUT /api/projects/:projectId/theme',
+    label: '테마 바인딩 저장',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'PUT', `/api/projects/${fx.projectId}/theme`, {
+        themeId: 'system-admin',
+        version: '0.1.0',
+        tokens: { 'semantic.primary': '#123456' },
+        rev: 0,
+      }),
+    okStatus: 200,
+  },
+  {
     route: 'POST /api/projects/:projectId/snapshots',
     label: '스냅샷 생성',
     bobRole: 'editor',
@@ -2590,6 +2605,10 @@ const NOT_LOCKED: Record<string, string> = {
     '토큰 행 하나 — 위 줄과 같다(프로젝트를 안 보고 `user_id`로만 거른다 — `deleteUserToken`). 재확인하지 않는다(같은 까닭)',
   'DELETE /api/auth/tokens':
     '내 토큰 행 전부를 id 순으로 — 토큰 행 밖을 안 잡는다(`deleteAllUserTokens`). 프로젝트 삭제 · 멤버 제거가 쥔 토큰 행에는 서고(`my-tokens-lock.test.ts`), 재확인하지 않는다(같은 까닭)',
+  'POST /api/admin/theme-packages':
+    '프로젝트 밖 — `theme_packages` 행 하나를 넣는다(FK 가 올린 사람의 사용자 행에 `KEY SHARE`). 프로젝트 행을 안 잡는다. 커밋 직전에 자격 · 관리자 표시를 다시 본다 — `admin-themes.test.ts` «강등과 겹친 업로드»',
+  'PATCH /api/admin/theme-packages/:themeId/:version':
+    '프로젝트 밖 — `theme_packages` 행 하나의 `hidden_at` 만 고친다. 그 행을 가리키는 프로젝트의 FK 는 키를 안 바꾸는 UPDATE 에 안 선다. 커밋 직전에 자격 · 관리자 표시를 다시 본다(업로드와 같은 `recheckInstanceAdmin`)',
   'WS ping': '아무것도 안 쓴다',
   'WS lock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',
   'WS unlock': '메모리의 잠금 표만(`ws/lock.ts` — 동기 함수) — DB 를 안 쓴다',

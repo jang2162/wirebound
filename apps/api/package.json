@@ -9,6 +9,7 @@
     "migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts latest",
     "migrate:down": "tsx --env-file-if-exists=.env src/db/migrate.ts down",
     "reset-password": "tsx --env-file-if-exists=.env src/db/reset-password.ts",
+    "admin": "tsx --env-file-if-exists=.env src/db/admin.ts",
     "unlock-login": "tsx --env-file-if-exists=.env src/auth/unlock-login.ts"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "@fastify/websocket": "^11.3.0",
     "@wirebound/exporter": "workspace:*",
     "@wirebound/schema": "workspace:*",
+    "@wirebound/theme-sdk": "workspace:*",
     "@wirebound/themes": "workspace:*",
     "fastify": "^5.2.0",
     "fflate": "^0.8.3",
@@ -29,6 +31,7 @@
     "@types/node": "^26.1.2",
     "@types/pg": "^8.11.0",
     "@wirebound/test-support": "workspace:*",
+    "@wirebound/theme-kit": "workspace:*",
     "tsx": "^4.19.0"
   }
 }

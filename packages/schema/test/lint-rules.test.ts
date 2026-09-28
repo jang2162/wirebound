@@ -3,18 +3,19 @@ import designDoc from '../../../docs/superpowers/specs/2026-08-03-wirebound-desi
 import { LINT_RULES, lintRule } from '../src/lint/rules'
 
 /**
- * 설계서 「lint 규칙」의 «설계서 규칙» 소제목 아래 불릿을 **설계 문서에서 읽는다.** 손으로 옮긴 인용은 설계가 바뀌어도
+ * 설계서 「lint 규칙」의 «설계서 규칙» · «테마 규칙» 소제목 아래 불릿을 **설계 문서에서 읽는다.** 손으로 옮긴 인용은 설계가 바뀌어도
  * 조용하다. 다른 굵은 소제목이 나오면 그 뒤의 불릿은 세지 않는다.
  */
-function specLines(): { group: 'document'; text: string }[] {
+function specLines(): { group: 'document' | 'theme'; text: string }[] {
   const section = designDoc.slice(
     designDoc.indexOf('### 12.4 lint 규칙'),
     designDoc.indexOf('### 12.5 스킬'),
   )
-  const found: { group: 'document'; text: string }[] = []
-  let group: 'document' | null = null
+  const found: { group: 'document' | 'theme'; text: string }[] = []
+  let group: 'document' | 'theme' | null = null
   for (const line of section.split('\n')) {
     if (line.startsWith('**설계서 규칙**')) group = 'document'
+    else if (line.startsWith('**테마 규칙**')) group = 'theme'
     else if (line.startsWith('**')) group = null
     else if (line.startsWith('- ') && group !== null) found.push({ group, text: line.slice(2).trim() })
   }
@@ -28,6 +29,7 @@ describe('규칙 레지스트리가 설계서 lint 규칙 절을 센다', () => 
     // 파서가 어긋나면 빈 집합에서 아래 검사가 조용히 통과한다.
     expect(lines.length).toBeGreaterThan(0)
     expect(lines.filter((line) => line.group === 'document').length).toBeGreaterThan(0)
+    expect(lines.filter((line) => line.group === 'theme').length).toBeGreaterThan(0)
   })
 
   it('설계서 「lint 규칙」의 모든 줄이 규칙 하나를 갖는다', () => {
@@ -50,9 +52,9 @@ describe('규칙 레지스트리가 설계서 lint 규칙 절을 센다', () => 
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('규칙은 전부 schema가 구현하는 설계서 규칙이다', () => {
+  it('설계서 규칙은 schema 가, 테마 규칙은 themes 가 구현한다', () => {
     for (const rule of LINT_RULES) {
-      expect([rule.group, rule.owner], rule.id).toEqual(['document', 'schema'])
+      expect([rule.group, rule.owner], rule.id).toEqual(rule.group === 'theme' ? ['theme', 'themes'] : ['document', 'schema'])
     }
   })
 

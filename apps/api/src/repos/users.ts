@@ -76,13 +76,18 @@ export async function findUserByEmail(
  */
 export async function insertUser(
   db: DbHandle,
-  input: { email: string; name: string; passwordHash: string },
+  input: { email: string; name: string; passwordHash: string; isInstanceAdmin?: boolean },
 ): Promise<UserRecord> {
   try {
     return await withTransaction(db, (trx) =>
       trx
         .insertInto('users')
-        .values({ email: input.email, name: input.name, password_hash: input.passwordHash })
+        .values({
+          email: input.email,
+          name: input.name,
+          password_hash: input.passwordHash,
+          is_instance_admin: input.isInstanceAdmin ?? false,
+        })
         .returning(['id', 'email', 'name'])
         .executeTakeFirstOrThrow(),
     )
@@ -112,4 +117,44 @@ export async function countExistingUsers(db: DbHandle, ids: string[]): Promise<s
   if (ids.length === 0) return []
   const rows = await db.selectFrom('users').select('id').where('id', 'in', ids).execute()
   return rows.map((row) => row.id)
+}
+
+/**
+ * 인스턴스 관리자 표시를 바꾼다(`db/admin.ts` 명령). 이메일은 정규화된 값을 받는다(`findUserByEmail` 과 같다).
+ *
+ * **바꾸는 것은 `UPDATE` 한 문장이다** — 그 행에 잠금을 잡아, 관리자 쓰기가 커밋 직전에 `FOR SHARE` 로 다시 읽는 것
+ * (`auth/admin.ts` 의 `recheckInstanceAdmin`)과 줄을 선다. 강등이 먼저 커밋되면 그 쓰기는 거짓을 읽고 되돌아간다.
+ */
+export async function setInstanceAdmin(
+  db: DbHandle,
+  email: string,
+  value: boolean,
+): Promise<'changed' | 'unchanged' | 'missing'> {
+  const changed = await db
+    .updateTable('users')
+    .set({ is_instance_admin: value })
+    .where('email', '=', email)
+    .where('is_instance_admin', '<>', value)
+    .returning('id')
+    .executeTakeFirst()
+  if (changed !== undefined) return 'changed'
+  const found = await db.selectFrom('users').select('id').where('email', '=', email).executeTakeFirst()
+  return found === undefined ? 'missing' : 'unchanged'
+}
+
+/**
+ * 그 사용자가 지금 인스턴스 관리자인가. 없는 사용자는 `false`. **요청마다 부른다** — 세션에 얼려 두면 강등이 그 세션이 끝날
+ * 때까지 안 먹는다. `lock: 'share'` 는 커밋 직전 재확인이 쓴다(`setInstanceAdmin` 의 머리말).
+ */
+export async function isInstanceAdmin(db: DbHandle, userId: string, lock?: 'share'): Promise<boolean> {
+  let query = db.selectFrom('users').select('is_instance_admin').where('id', '=', userId)
+  if (lock === 'share') query = query.forShare()
+  const row = await query.executeTakeFirst()
+  return row?.is_instance_admin ?? false
+}
+
+/** 인스턴스 관리자 이메일 전부 — 이메일의 코드 포인트 순이다(콜레이션에 안 기댄다 · 출력이 기계마다 같다). */
+export async function listInstanceAdmins(db: DbHandle): Promise<string[]> {
+  const rows = await db.selectFrom('users').select('email').where('is_instance_admin', '=', true).execute()
+  return rows.map((row) => row.email).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 }

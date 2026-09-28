@@ -349,6 +349,13 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  * **그래서 `capturedAt`의 뜻이 정확히 이것이다:** *"캡처가 payload의 내용을 마지막으로
  * 확인한 순간(Postgres의 시계)."* `insertSnapshot`이 그 값을 `created_at`에 그대로 심으므로
  * 두 값이 같다.
+ *
+ * ---
+ *
+ * # 테마 바인딩도 덮는다
+ *
+ * `projects` 의 바인딩 칸 넷(토큰은 해시로)이다. `theme_rev` 만 담으면 «바인딩이 바뀌면 번호가 오른다»는 다른 파일의 불변식
+ * (`repos/projects.ts`의 `updateProjectTheme` · `restoreProjectTheme`)에 기대게 된다 — 페이지 문서를 해시로 담는 것과 같은 판정이다.
  */
 export async function readCaptureFingerprint(
   db: DbHandle,
@@ -388,6 +395,10 @@ export async function readCaptureFingerprint(
         join pages p on p.id = c.page_id
         join users u on u.id = c.author_id
         where p.project_id = ${projectId}
+      ),
+      'theme', (
+        select json_build_array(pr.theme_id, pr.theme_version, md5(pr.theme_tokens::text), pr.theme_rev)
+        from projects pr where pr.id = ${projectId}
       )
     )::text as fingerprint
   `.execute(db)

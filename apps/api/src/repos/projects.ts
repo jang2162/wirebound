@@ -11,6 +11,7 @@ import { assertNoNulBytes } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
 import { DEFAULT_LAYOUT_NAME, defaultLayoutDocument, insertLayout } from './layouts'
+import { DEFAULT_THEME_ID, latestVisibleVersion } from './theme-packages'
 
 export interface ProjectRecord {
   id: string
@@ -95,10 +96,20 @@ export async function insertProject(
   assertNoNulBytes(PROJECT_TEXT, input.name, input.description)
   try {
     return await withTransaction(db, async (trx) => {
+      // 새 프로젝트는 `system-admin` 의 최신판 · 빈 토큰으로 선다(spec 「데이터」). 판이 없으면(시딩 전) 비워 두고 다음 기동의
+      // 채우기가 채운다(`services/system-themes.ts` 의 `backfillProjectThemes`).
+      const themeVersion = await latestVisibleVersion(trx, DEFAULT_THEME_ID)
+
       // 1단계: 프로젝트. `default_layout_id`는 아직 비어 있다.
       const project = await trx
         .insertInto('projects')
-        .values({ name: input.name, slug: input.slug, description: input.description })
+        .values({
+          name: input.name,
+          slug: input.slug,
+          description: input.description,
+          theme_id: themeVersion === null ? null : DEFAULT_THEME_ID,
+          theme_version: themeVersion,
+        })
         .returning(['id', 'name', 'slug', 'description'])
         .executeTakeFirstOrThrow()
 
@@ -159,6 +170,75 @@ export async function findProjectById(db: DbHandle, projectId: string): Promise<
     .executeTakeFirst()
 
   return row ?? null
+}
+
+/** 프로젝트가 고정한 테마(`0019-theme-packages`). 둘이 함께 `null` 이면 아직 고정 안 됨 — 기동 시딩이 채운다. */
+export interface ProjectThemeBinding {
+  themeId: string | null
+  version: string | null
+  /** 기본값과 다른 토큰 값만. */
+  tokens: Record<string, string | number>
+  rev: number
+}
+
+const BINDING_COLUMNS = ['theme_id as themeId', 'theme_version as version', 'theme_tokens as tokens', 'theme_rev as rev'] as const
+
+export async function findProjectTheme(db: DbHandle, projectId: string): Promise<ProjectThemeBinding | null> {
+  const row = await db.selectFrom('projects').select(BINDING_COLUMNS).where('id', '=', projectId).executeTakeFirst()
+  return row ?? null
+}
+
+/**
+ * 바인딩을 바꾸고 `theme_rev` 를 1 올린다 — **`theme_rev` 가 `expectedRev` 일 때만**. 아니면(남이 먼저 저장했다 · 프로젝트가 지워졌다)
+ * 아무것도 안 쓰고 `null` 이다. 조건을 갱신 문장에 두는 것이 요점이다 — 먼저 읽어 견주고 쓰면 그 사이의 저장을 조용히 덮는다.
+ *
+ * `UPDATE projects` 라 복원(`FOR UPDATE`) · 트리 쓰기(`FOR NO KEY UPDATE`)가 쥔 프로젝트 행 뒤에 선다. 복원이 먼저 커밋하면 복원이 올린
+ * `theme_rev` 와 어긋나 `null` 이다.
+ */
+export async function updateProjectTheme(
+  trx: DbHandle,
+  projectId: string,
+  input: { themeId: string; version: string; tokens: Record<string, string | number> },
+  expectedRev: number,
+): Promise<ProjectThemeBinding | null> {
+  const row = await trx
+    .updateTable('projects')
+    .set((eb) => ({
+      theme_id: input.themeId,
+      theme_version: input.version,
+      theme_tokens: JSON.stringify(input.tokens),
+      theme_rev: eb('theme_rev', '+', 1),
+      updated_at: sql<Date>`now()`,
+    }))
+    .where('id', '=', projectId)
+    .where('theme_rev', '=', expectedRev)
+    .returning(BINDING_COLUMNS)
+    .executeTakeFirst()
+  return row ?? null
+}
+
+/**
+ * 판 3 스냅샷의 바인딩을 되돌린다(`services/restore.ts`의 `set-theme`). 값이 같아도 `theme_rev` 를 올린다 — 복원은 늘 `theme-changed`
+ * 를 보내고, 받는 쪽은 번호로 새것을 가린다. 숨긴 판이어도 된다(숨김은 «새로 고르기» 만 막는다). 복원이 프로젝트 행을 `FOR UPDATE` 로
+ * 쥐고 부른다.
+ */
+export async function restoreProjectTheme(
+  trx: DbHandle,
+  projectId: string,
+  theme: { themeId: string; version: string; tokens: Record<string, string | number> },
+): Promise<ProjectThemeBinding> {
+  return trx
+    .updateTable('projects')
+    .set((eb) => ({
+      theme_id: theme.themeId,
+      theme_version: theme.version,
+      theme_tokens: JSON.stringify(theme.tokens),
+      theme_rev: eb('theme_rev', '+', 1),
+      updated_at: sql<Date>`now()`,
+    }))
+    .where('id', '=', projectId)
+    .returning(BINDING_COLUMNS)
+    .executeTakeFirstOrThrow()
 }
 
 /**

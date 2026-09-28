@@ -68,7 +68,7 @@ function 빈문서(): unknown {
  */
 export function snapshotPayload(over: Partial<SnapshotPayload> = {}): SnapshotPayload {
   return {
-    payloadVersion: 2,
+    payloadVersion: 3,
     capturedAt: '2026-08-16T00:00:00.000Z',
     menu: [
       { id: MENU_ADMIN, parentId: null, title: '관리자', sortOrder: 0 },
@@ -93,6 +93,7 @@ export function snapshotPayload(over: Partial<SnapshotPayload> = {}): SnapshotPa
         updatedAt: '2026-08-16T01:00:00.000Z',
       },
     ],
+    theme: { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#123456' } },
     ...over,
   }
 }
@@ -136,4 +137,45 @@ export function 오류가_있는_프로젝트(): SnapshotPayload {
     }, null),
   )
   return payload
+}
+
+/**
+ * `GET .../theme` 의 응답(`apps/api`의 `routes/project-theme.ts`). 기본 manifest 는 `components` 를 선언하지 않는다 — 테마 규칙
+ * (`theme-variant`)이 아무것도 안 낸다. `components` 를 주면 그 선언으로 돈다.
+ *
+ * `packages/mcp` 도 이것을 본다(`@wirebound/cli/test-support`) — `wireb lint` 와 `validate` 가 같은 입력을 받아야 한다.
+ */
+export function projectThemeResponse(components?: Record<string, unknown>): Record<string, unknown> {
+  return {
+    themeId: 'system-admin',
+    version: '0.1.0',
+    tokens: {},
+    rev: 0,
+    manifest: {
+      id: 'system-admin',
+      name: '관리자',
+      version: '0.1.0',
+      sdk: '^1.0.0',
+      tokens: { items: {} },
+      ...(components === undefined ? {} : { components }),
+    },
+    latest: '0.1.0',
+  }
+}
+
+/** 이름만 다른 `List`(variant `grid`)가 든 페이지 하나를 더한다 — `table` · `cards` 를 선언한 테마에서 `theme-variant` 가 난다. */
+export function 테마에_없는_variant_프로젝트(): SnapshotPayload {
+  const payload = snapshotPayload()
+  payload.pages.push(
+    page('20000000-0000-4000-8000-00000000000a', MENU_MEMBER, '그리드', 10, {
+      version: 1,
+      root: { id: 'root', type: 'Page', children: [{ id: 'grid-list', type: 'List', variant: 'grid' }] },
+    }, null),
+  )
+  return payload
+}
+
+/** `List` 에 `table` · `cards` 를 선언한 테마. */
+export const LIST_VARIANTS = {
+  List: { variants: [{ id: 'table', label: '테이블' }, { id: 'cards', label: '카드' }], defaultVariant: 'table' },
 }

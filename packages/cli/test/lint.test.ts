@@ -9,11 +9,14 @@ import { EXIT } from '../src/exit'
 import { run } from '../src/run'
 import { createFakeIo, stub, type FakeIo } from './fake-io'
 import {
+  LIST_VARIANTS,
   MENU_MEMBER,
   page,
+  projectThemeResponse,
   snapshotPayload,
   경고가_있는_프로젝트,
   오류가_있는_프로젝트,
+  테마에_없는_variant_프로젝트,
 } from './snapshot-fixture'
 import type { SnapshotPayload } from '@wirebound/themes'
 
@@ -33,6 +36,7 @@ function 준비(payload: SnapshotPayload = snapshotPayload(), binding: Record<st
     },
   })
   stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, { status: 200, body: payload })
+  stub(io, 'GET', `/api/projects/${PROJECT}/theme`, { status: 200, body: projectThemeResponse() })
   return io
 }
 
@@ -275,6 +279,54 @@ describe('서버를 직접 부른다', () => {
     io.fs.set('/repo/wirebound-snapshot.json', JSON.stringify(오류가_있는_프로젝트()))
 
     expect(await run(['lint'], io), io.stderr.join('\n')).toBe(EXIT.ok)
-    expect(io.requests.map((request) => request.url)).toEqual([`${SERVER}/api/projects/${PROJECT}/snapshot`])
+    expect(io.requests.map((request) => request.url)).toEqual([
+      `${SERVER}/api/projects/${PROJECT}/snapshot`,
+      `${SERVER}/api/projects/${PROJECT}/theme`,
+    ])
+  })
+})
+
+describe('테마 규칙 — 현재 테마에 없는 variant', () => {
+  it('프로젝트가 고정한 테마가 선언하지 않은 variant 를 경고한다 — warning 이라 0 이다', async () => {
+    const io = 준비(테마에_없는_variant_프로젝트())
+    stub(io, 'GET', `/api/projects/${PROJECT}/theme`, { status: 200, body: projectThemeResponse(LIST_VARIANTS) })
+    expect(await run(['lint'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    const line = io.stdout.find((row) => row.includes('theme-variant'))
+    expect(line).toBe(
+      'warning\t관리자/회원/그리드 (grid-list)\ttheme-variant\tList 의 variant "grid" 는 테마 system-admin@0.1.0 에 없습니다 — table(기본)으로 그려집니다',
+    )
+  })
+
+  it('테마를 못 받아도(404) 나머지 lint 는 돌고, 빠진 것이 그렇다고 말한다', async () => {
+    const io = 준비(오류가_있는_프로젝트())
+    stub(io, 'GET', `/api/projects/${PROJECT}/theme`, {
+      status: 404,
+      body: { error: { code: 'not-found', message: '대상을 찾을 수 없습니다' } },
+    })
+    expect(await run(['lint'], io)).toBe(EXIT.findings)
+    const out = io.stdout.join('\n')
+    expect(out).toContain('검사에서 빠진 것:')
+    expect(out).toContain('프로젝트의 테마를 못 받아 «현재 테마에 없는 variant» 를 검사하지 않았습니다')
+    expect(out).toContain('알 수 없는 컴포넌트 타입: 없는컴포넌트')
+  })
+
+  it('테마를 아직 고정하지 않았으면 그렇다고 말한다', async () => {
+    const io = 준비()
+    stub(io, 'GET', `/api/projects/${PROJECT}/theme`, { status: 200, body: { ...projectThemeResponse(), themeId: null, version: null, manifest: null } })
+    expect(await run(['lint'], io)).toBe(EXIT.ok)
+    expect(io.stdout.join('\n')).toContain('프로젝트가 아직 테마를 고정하지 않았습니다')
+  })
+
+  it('서버가 준 manifest 가 규격 밖이면 테마 규칙을 안 돌리고 말한다', async () => {
+    const io = 준비(테마에_없는_variant_프로젝트())
+    const broken = projectThemeResponse(LIST_VARIANTS)
+    stub(io, 'GET', `/api/projects/${PROJECT}/theme`, {
+      status: 200,
+      body: { ...broken, manifest: { ...(broken.manifest as object), version: '1.0' } },
+    })
+    await run(['lint'], io)
+    const out = io.stdout.join('\n')
+    expect(out).toContain('서버가 준 manifest 가 규격과 다릅니다')
+    expect(out).not.toContain('theme-variant')
   })
 })

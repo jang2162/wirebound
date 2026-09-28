@@ -97,6 +97,9 @@ import { deleteComment, insertCommentWithId, writeCommentBody } from '../repos/c
 import { deleteMenuNodeRow, insertMenuNodeWithId, writeMenuNodePlacement } from '../repos/menu'
 import { deletePageRow, insertPageWithId, writePagePlacement } from '../repos/pages'
 import { findSnapshotById, insertSnapshot, lockProjectForRestore } from '../repos/snapshots'
+import { restoreProjectTheme, type ProjectThemeBinding } from '../repos/projects'
+import { findThemePackage } from '../repos/theme-packages'
+import { checkBindingTokens } from './theme-tokens'
 import { countExistingUsers } from '../repos/users'
 import { applyEdit, type EditOutcome } from './edit-pipeline'
 import { captureSnapshot, type CaptureHooks } from './snapshot-capture'
@@ -125,6 +128,13 @@ export function restoreActorLabel(tag: string): string {
 export interface RestoreResult {
   summary: RestoreSummary
   safety: { id: string; tag: string }
+  /** 판 3 이 되돌린 바인딩(올린 `theme_rev` 포함). 판 2 이하 · 캡처 때 바인딩이 비어 있던 판 3 이면 `null` — 라우트가 `theme-changed` 를 안 보낸다. */
+  theme: ProjectThemeBinding | null
+  /**
+   * 판 3 의 토큰 가운데 그 판의 manifest 를 못 지나 버린 키(그 키는 기본값으로 선다). 응답에는 안 싣고 라우트가 로그 한 줄로 남긴다 —
+   * 서버가 지은 payload 에서는 늘 비어 있고, 차는 것은 손댄 payload · 다른 인스턴스에서 온 DB · 뒤에 조여진 규칙이다.
+   */
+  droppedThemeTokens: string[]
 }
 
 export type RestoreOutcome =
@@ -138,6 +148,8 @@ export type RestoreOutcome =
   | { kind: 'invalid-document'; pageId: string; title: string; issues: ValidationIssue[] }
   | { kind: 'dangling-reference'; references: string[] }
   | { kind: 'missing-author'; authorIds: string[] }
+  /** 판 3 payload 가 가리킨 테마 패키지가 이 서버에 없다(다른 인스턴스의 스냅샷 · DB 복구). FK 위반의 500 대신 쓰기 전에 거절한다. */
+  | { kind: 'missing-theme'; themeId: string; version: string }
   /**
    * 페이지 문서를 되돌리다 편집 파이프라인이 거절했다. **`title`·`baseSeq`를 함께 든다** —
    * 라우트가 응답에 *"어느 페이지"*를 실어야 하기 때문이다(미지원 버전의 400이 페이지를 싣는 것과
@@ -260,6 +272,25 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
     if (missing.length > 0) throw new RestoreAbort({ kind: 'missing-author', authorIds: missing })
   }
 
+  // 6′단계. **판 3 이 가리킨 테마 패키지가 있는가** — `projects_theme_fk` 가 RESTRICT 라 없는 판을 쓰면 `23503` 이고 500 이 된다.
+  // 숨긴 판은 받는다(숨김은 새로 고르기만 막는다). **토큰은 그 판의 manifest 로 `PUT …/theme` 과 같은 검사를 지난다**
+  // (`services/theme-tokens.ts`) — 이슈가 난 키는 버리고 나머지를 쓴다. 거절하지 않는 까닭은 그 모듈의 머리말이다.
+  const droppedThemeTokens: string[] = []
+  for (const [index, step] of steps.entries()) {
+    if (step.kind !== 'set-theme') continue
+    const pkg = await findThemePackage(trx, step.theme.themeId, step.theme.version)
+    if (pkg === null) {
+      throw new RestoreAbort({ kind: 'missing-theme', themeId: step.theme.themeId, version: step.theme.version })
+    }
+    const checked = checkBindingTokens(pkg.manifest, step.theme.tokens)
+    // 전체 한도(`key` 가 `null`)에 걸리면 모두 기본값으로 선다.
+    const keys = checked.issues.some((issue) => issue.key === null)
+      ? Object.keys(step.theme.tokens)
+      : checked.issues.map((issue) => issue.key!)
+    droppedThemeTokens.push(...new Set(keys))
+    steps[index] = { kind: 'set-theme', theme: { ...step.theme, tokens: checked.tokens } }
+  }
+
   // 7단계. **첫 쓰기다.** 위의 어떤 갈래도 여기 도달하지 못한다.
   const safetyTag = `${SAFETY_TAG_PREFIX}${now.capturedAt}`
   let safety
@@ -278,6 +309,7 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
 
   // 8단계. 계획의 순서가 곧 FK 순서다(`services/restore-plan.ts`의 표).
   const headSeqByPage = new Map(now.pages.map((page) => [page.id, page.headSeq]))
+  let theme: ProjectThemeBinding | null = null
   const actorLabel = restoreActorLabel(target.tag)
 
   for (const step of steps) {
@@ -367,8 +399,11 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
           updatedAt: new Date(step.comment.updatedAt),
         })
         break
+      case 'set-theme':
+        theme = await restoreProjectTheme(trx, input.projectId, step.theme)
+        break
     }
   }
 
-  return { summary, safety: { id: safety.id, tag: safety.tag } }
+  return { summary, safety: { id: safety.id, tag: safety.tag }, theme, droppedThemeTokens }
 }

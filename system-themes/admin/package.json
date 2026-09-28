@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "wb-theme build --entry src/theme.tsx"
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && wb-theme build --entry src/theme.tsx"
   },
   "dependencies": {
     "@wirebound/theme-sdk": "workspace:*"

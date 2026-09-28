@@ -300,6 +300,15 @@ const PROBES: Probe[] = [
     blocked: true,
   },
   {
+    route: 'PUT /:projectId/theme',
+    label: '테마 바인딩 저장 — 판 3 복원이 되돌리는 바인딩 칸을 쓴다(`UPDATE projects` 라 프로젝트 행 뒤에 선다)',
+    method: 'PUT',
+    url: (ids) => `/api/projects/${ids.projectId}/theme`,
+    payload: () => ({ themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#123456' }, rev: 0 }),
+    restoreWrites: true,
+    blocked: true,
+  },
+  {
     route: 'DELETE /:projectId',
     label: '프로젝트 삭제',
     method: 'DELETE',

@@ -192,6 +192,8 @@ export interface WithRealApiOptions {
 export async function resetRealData(): Promise<void> {
   const db = getTestDb()
   await db.deleteFrom('projects').execute()
+  // 시스템 테마(`system-*`)는 기동 시딩이 넣은 것이라 남긴다 — 앱을 세울 때마다 다시 넣지 않는다.
+  await db.deleteFrom('theme_packages').where('theme_id', 'not like', 'system-%').execute()
   await db.deleteFrom('users').execute()
 }
 

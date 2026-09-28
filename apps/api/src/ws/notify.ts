@@ -137,6 +137,27 @@ export function notifyRestored(app: FastifyInstance, input: RestoredInput): void
     })
 }
 
+export interface ThemeChangedInput {
+  projectId: string
+  themeId: string
+  version: string
+  tokens: Record<string, string | number>
+  rev: number
+  actor: EventActor
+}
+
+/**
+ * 프로젝트의 테마 바인딩이 바뀌었다 — 저장(`routes/project-theme.ts`)과 판 3 복원(`routes/snapshots.ts`)이 커밋 뒤에 부른다.
+ *
+ * **낸 사람의 연결도 빼지 않는다**(`notifyRestored` 와 같은 판정) — 같은 사람이 다른 탭에서 같은 프로젝트를 열고 있을 수 있고, 저장한
+ * 탭은 `rev` 로 자기 것을 알아본다(프레임의 `rev` 가 자기가 받은 답의 `rev` 보다 크지 않으면 버린다).
+ */
+export function notifyThemeChanged(app: FastifyInstance, input: ThemeChangedInput): void {
+  void app.realtime.broadcast.send(input.projectId, { type: 'theme-changed', ...input }).catch((error: unknown) => {
+    app.log.error({ err: error, projectId: input.projectId }, 'theme-changed 알림 실패')
+  })
+}
+
 export interface MembershipChangedInput {
   projectId: string
   /** 멤버십이 바뀐 사람. **그 사람의 연결에만** 간다 — 룸의 다른 사람은 이것으로 할 일이 없다. */

@@ -66,6 +66,7 @@ export interface EventActor {
  * | `locks` | 잠금 목록이 바뀌었을 때(그리고 누가 들어올 때), **룸 전체에** — 설계서 「소프트 잠금」 |
  * | `lock-denied` | **낸 사람에게만.** `lock` 프레임을 받지 않았다 — 겹치는 자리를 남이 쥐고 있다(`ws/lock.ts`) |
  * | `membership-changed` | 그 사람의 역할이 바뀌었거나 멤버에서 빠졌을 때, **그 사람의 연결에만**(`ws/notify.ts`) |
+ * | `theme-changed` | 프로젝트의 테마 바인딩 · 토큰이 저장됐거나 판 3 스냅샷이 복원됐을 때, **룸 전체에**(낸 연결도) |
  */
 export type ServerFrame =
   | { type: 'joined'; projectId: string; connectionId: string; userId: string; role: ProjectRole }
@@ -168,6 +169,23 @@ export type ServerFrame =
    * 조회 하나로 수렴한다 — 제거된 사람은 그 조회가 404 다. `joined`가 싣는 `role`을 웹이 안 읽는 것과 같은 까닭이다.
    */
   | { type: 'membership-changed'; projectId: string }
+  /**
+   * **프로젝트의 테마가 바뀌었다** — 바인딩(`id@version`)이나 토큰 값. 받는 캔버스는 번들이 바뀌었으면 다시 싣고, 토큰만 바뀌었으면
+   * CSS 변수 · `useToken` 값만 바꾼다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「실시간」). 값을 통째로 싣는다 —
+   * 토큰은 작고(상한 16 KB — `routes/project-theme.ts`) 받는 쪽이 다시 읽지 않고 바로 칠한다. 놓친 탭은 `GET /projects/:id` 의
+   * `themeRev` 로 따라잡는다.
+   */
+  | {
+      type: 'theme-changed'
+      projectId: string
+      themeId: string
+      version: string
+      /** 기본값과 다른 값만(`projects.theme_tokens` 그대로). */
+      tokens: Record<string, string | number>
+      /** 바뀐 뒤의 `theme_rev`. 받는 쪽은 자기가 든 값보다 크지 않으면 버린다. */
+      rev: number
+      actor: EventActor
+    }
   | { type: 'pong' }
   | {
       type: 'patch-ack'

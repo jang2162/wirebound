@@ -20,7 +20,7 @@
  * 값은 전부 읽기 층이 만들고, 여기서는 그것을 에이전트가 읽을 봉투에 담는다. 무엇을 담을지가
  * 판정인 자리는 각 함수의 머리말에 있다.
  */
-import { CliError, lintReport, listProject, lookupPage, readLintConfig, type Io } from '@wirebound/cli/embed'
+import { CliError, fetchLintTheme, lintReport, listProject, lookupPage, readLintConfig, type Io } from '@wirebound/cli/embed'
 import { toolFailureResult, toolResult, type ToolOutcome } from './outcome'
 import { callProject, openProject, projectHead, rereadHeadSeq, type OpenProject } from './session'
 
@@ -124,7 +124,9 @@ const getPage: ToolHandler = async (io, args) => {
  */
 const validate: ToolHandler = async (io, args) => {
   const open = await openProject(io)
-  const outcome = lintReport(open.payload, readLintConfig(open.access.binding), optionalPath(args))
+  // `wireb lint` 와 같은 길 — 테마를 못 받으면 테마 규칙만 빠지고 `notes` 가 그렇다고 말한다.
+  const theme = await fetchLintTheme(io, open.access)
+  const outcome = lintReport(open.payload, readLintConfig(open.access.binding), optionalPath(args), theme)
   const head = projectHead(open)
 
   if (outcome.kind === 'no-such-path') {

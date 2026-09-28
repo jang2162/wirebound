@@ -154,6 +154,18 @@ const ACTOR_SITES: ActorSite[] = [
     why: '**프레임은 *"누가 지금 이걸 했나"*를 든다.** 아래 `services/restore.ts`의 revision actor와 답이 다른 것이 판정이다 — 그쪽은 *"무슨 사건인가"*를 든다',
   },
   {
+    file: 'routes/snapshots.ts',
+    label: '판 3 복원의 theme-changed 프레임',
+    origin: 'request-event',
+    why: '위 restored 프레임과 같은 판정이다 — 같은 복원을 낸 사람이다. 바인딩은 revision 을 안 남기므로 `복원: <태그>` 사건 라벨이 설 자리가 없다',
+  },
+  {
+    file: 'routes/project-theme.ts',
+    label: '테마 바인딩 저장의 theme-changed 프레임',
+    origin: 'request-event',
+    why: '**프레임은 *"누가 지금 이걸 했나"*를 든다.** 바인딩 저장은 revision 을 안 남긴다 — 이 프레임이 그 저장의 «누가»가 닿는 유일한 자리다. 토큰(`:projectId` 라우트)으로도 부를 수 있어 `mcp` · `cli` 가 올 수 있다',
+  },
+  {
     file: 'services/page-import.ts',
     label: '가져오기가 파이프라인에 넘기는 actor',
     origin: 'passthrough',
@@ -222,6 +234,18 @@ const ACTOR_SITES: ActorSite[] = [
   {
     file: 'ws/protocol.ts',
     label: '`restored` 프레임의 actor 선언',
+    origin: 'type',
+    why: '값을 만들지 않는다. 위와 같은 유니온을 든다',
+  },
+  {
+    file: 'ws/notify.ts',
+    label: '`ThemeChangedInput.actor` 선언',
+    origin: 'type',
+    why: '값을 만들지 않는다. 프레임 입력의 모양이다',
+  },
+  {
+    file: 'ws/protocol.ts',
+    label: '`theme-changed` 프레임의 actor 선언',
     origin: 'type',
     why: '값을 만들지 않는다. 위와 같은 유니온을 든다',
   },
@@ -934,6 +958,7 @@ describe('`:projectId` 라우트 전부가 나쁜 헤더를 핸들러 앞에서 
     'snapshots',
     'presets',
     'api_tokens',
+    'theme_packages',
   ] as const
 
   async function rowCounts(ctx: TestContext): Promise<Record<string, number>> {

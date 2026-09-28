@@ -133,6 +133,10 @@ describe('0018 — 옛 JSON 테마 걷기', () => {
     await migrateTo('0017-page-seq-floors')
     const { projectId, pageId, snapshotId } = await seedV1()
     await migrateTo('0018-drop-json-themes')
+    // 앱은 기동 때 시스템 테마를 넣는다(`services/system-themes.ts`) — 그 표는 뒤 마이그레이션이 만든다. 판 1 → 2 로 고친 payload 를
+    // 오늘의 스키마에서 복원하는 것이 이 케이스다.
+    const latest = await new Migrator({ db, provider: migrationProvider }).migrateToLatest()
+    if (latest.error !== undefined) throw latest.error
 
     const app = await buildApp({ db, config: testConfig() })
     try {

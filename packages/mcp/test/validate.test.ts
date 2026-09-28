@@ -6,7 +6,15 @@
  * 버리지 않는 것** · **정규식을 세션이 못 주는 것**.
  */
 import { describe, expect, it } from 'vitest'
-import { snapshotPayload, 경고가_있는_프로젝트, 오류가_있는_프로젝트 } from '@wirebound/cli/test-support'
+import {
+  LIST_VARIANTS,
+  projectThemeResponse,
+  snapshotPayload,
+  stub,
+  경고가_있는_프로젝트,
+  오류가_있는_프로젝트,
+  테마에_없는_variant_프로젝트,
+} from '@wirebound/cli/test-support'
 import { callTool } from '../src/server'
 import { PROJECT, SERVER, callJson, harness } from './harness'
 
@@ -20,7 +28,7 @@ interface Report {
   outsideErrors: number
   droppedProjectIssues: number
   notes: { kind: string; message: string }[]
-  issues: { rule: string; severity: string; message: string; pageId: string | null; pagePath: string | null }[]
+  issues: { rule: string; severity: string; message: string; pageId: string | null; nodeId: string | null; pagePath: string | null }[]
 }
 
 const 명명규칙 = { server: SERVER, projectId: PROJECT, lint: { naming: { page: '^[A-Z]+$', menu: '^[A-Z]+$' } } }
@@ -162,6 +170,30 @@ describe('검사에서 빠진 것을 싣는다', () => {
 
   it('빠진 것이 없으면 빈 배열이다 — 반대편', async () => {
     const said = (await callJson(harness({ payload: snapshotPayload() }), 'validate')) as Report
+    expect(said.notes).toEqual([])
+  })
+
+  it('테마를 못 받으면 theme-unavailable 을 싣고 나머지는 돈다', async () => {
+    const io = harness({ payload: 오류가_있는_프로젝트() })
+    stub(io, 'GET', `/api/projects/${PROJECT}/theme`, {
+      status: 404,
+      body: { error: { code: 'not-found', message: '대상을 찾을 수 없습니다' } },
+    })
+    const said = (await callJson(io, 'validate')) as Report
+    expect(said.notes.map((n) => n.kind)).toEqual(['theme-unavailable'])
+    expect(said.errors).toBeGreaterThan(0)
+  })
+})
+
+describe('테마 규칙', () => {
+  it('프로젝트가 고정한 테마가 선언하지 않은 variant 를 싣는다 — wireb lint 와 같은 값', async () => {
+    const said = (await callJson(
+      harness({ payload: 테마에_없는_variant_프로젝트(), theme: projectThemeResponse(LIST_VARIANTS) }),
+      'validate',
+    )) as Report
+    expect(said.issues.filter((issue) => issue.rule === 'theme-variant').map((issue) => [issue.nodeId, issue.severity])).toEqual([
+      ['grid-list', 'warning'],
+    ])
     expect(said.notes).toEqual([])
   })
 })

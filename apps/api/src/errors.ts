@@ -73,6 +73,11 @@ export interface ApiErrorIssue {
    * 실린다. 받는 쪽이 다시 읽지 않고 «다른 사람의 값»을 보이고, 그것을 새 바탕으로 덮을 수 있게.
    */
   current?: string | null
+  /**
+   * 테마 패키지 업로드의 manifest 이슈(`code: 'manifest'`)가 `validateManifest` 에서 받은 원래 코드 — 업로드 화면이 사유를 항목별로
+   * 가른다(`routes/admin-themes.ts`).
+   */
+  manifestCode?: string
 }
 
 /**

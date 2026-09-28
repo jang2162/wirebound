@@ -23,4 +23,7 @@ export {
   PAGE_LIST,
   경고가_있는_프로젝트,
   오류가_있는_프로젝트,
+  LIST_VARIANTS,
+  projectThemeResponse,
+  테마에_없는_variant_프로젝트,
 } from '../test/snapshot-fixture'

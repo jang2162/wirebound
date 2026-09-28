@@ -92,7 +92,7 @@ import { lockProjectShared } from '../repos/projects'
 import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture'
 import { runConfirmedTransaction } from '../services/lost-commit'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
-import { clientRestoreId, notifyRestored } from '../ws/notify'
+import { clientRestoreId, notifyRestored, notifyThemeChanged } from '../ws/notify'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const SnapshotParams = z.object({ projectId: z.uuid(), snapshotId: z.uuid() })
@@ -339,7 +339,24 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           actor: requestEventActor(request),
           clientRestoreId: clientRestoreId(request),
         })
+        // **판 3 은 테마 바인딩도 되돌렸다** — 값이 같아도 `theme_rev` 가 올랐으므로 늘 알린다(spec 「스냅샷」). 캔버스는 `restored` 로
+        // 문서를 다시 읽고, 테마는 이 프레임으로 다시 싣는다 — 둘이 따로 오는 것은 받는 자리가 다르기 때문이다(`ws/protocol.ts`).
+        const theme = outcome.result.theme
+        if (theme !== null && theme.themeId !== null && theme.version !== null) {
+          notifyThemeChanged(app, {
+            projectId,
+            themeId: theme.themeId,
+            version: theme.version,
+            tokens: theme.tokens,
+            rev: theme.rev,
+            actor: requestEventActor(request),
+          })
+        }
 
+        const dropped = outcome.result.droppedThemeTokens
+        if (dropped.length > 0) {
+          request.log.warn({ projectId, snapshotId, droppedThemeTokens: dropped }, `복원: 판의 manifest 를 못 지난 테마 토큰 ${dropped.length} 개를 버렸습니다(기본값으로 선다)`)
+        }
         return toRestoreResponse(outcome.result)
       },
     )
@@ -382,6 +399,8 @@ function restoreOutcomeToApiError(outcome: Exclude<RestoreOutcome, { kind: 'rest
       )
     case 'missing-author':
       return conflict(`스냅샷의 코멘트를 남긴 사용자가 더 이상 없습니다 (${outcome.authorIds.length}명)`)
+    case 'missing-theme':
+      return conflict(`스냅샷의 테마 패키지가 이 서버에 없습니다: ${outcome.themeId}@${outcome.version} — 복원하지 않았습니다`)
     case 'unsupported-version':
       // **어느 페이지가 어떤 버전이라 막혔는지**를 싣는다(설계서 「스키마 마이그레이션」이 *"400 응답이 최소한
       // 원인을 말해 주는 상태로 둔다"*고 한 것을 한 단계 민다).

@@ -142,7 +142,8 @@ describe('GET /api/auth/me', () => {
       const res = await ctx.app.inject({ method: 'GET', url: '/api/auth/me', cookies: cookie })
       expect(res.statusCode).toBe(200)
       expect(res.json().email).toBe('signup@example.com')
-      expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'name'])
+      // `isInstanceAdmin` 은 `/me` 에만 싣는다 — 관리자 링크를 그릴지 화면이 이 응답으로 정한다(값은 `admin-command.test.ts`).
+      expect(Object.keys(res.json()).sort()).toEqual(['email', 'id', 'isInstanceAdmin', 'name'])
     })
   })
 })

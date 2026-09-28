@@ -57,6 +57,7 @@ import { listProjectComments } from '../repos/comments'
 import { listLayouts } from '../repos/layouts'
 import { listMenuNodes } from '../repos/menu'
 import { listPages } from '../repos/pages'
+import { findProjectTheme } from '../repos/projects'
 import { readCaptureFingerprint } from '../repos/snapshots'
 import { SNAPSHOT_PAYLOAD_VERSION, SnapshotPayloadSchema, type SnapshotPayload } from '@wirebound/themes'
 
@@ -99,6 +100,7 @@ export async function captureSnapshot(
 
   const layouts = await listLayouts(db, projectId)
   const comments = await listProjectComments(db, projectId)
+  const binding = await findProjectTheme(db, projectId)
 
   const after = await readCaptureFingerprint(db, projectId)
   if (after.fingerprint !== before.fingerprint) return { kind: 'fingerprint-mismatch' }
@@ -142,6 +144,11 @@ export async function captureSnapshot(
       createdAt: comment.createdAt.toISOString(),
       updatedAt: comment.updatedAt.toISOString(),
     })),
+    // 테마는 참조로 얼린다 — 패키지는 지우지 않는다(`@wirebound/themes`의 `snapshot/payload.ts` 「테마는 참조로 얼린다」 절).
+    theme:
+      binding?.themeId == null || binding.version == null
+        ? null
+        : { themeId: binding.themeId, version: binding.version, tokens: binding.tokens },
   }
 
   // **규격을 지나게 한다.** 통과하지 못하면 그것은 이 파일의 버그이므로 조용히 저장하지

@@ -35,13 +35,14 @@ const SeedEnvSchema = z.object({
   SEED_USER_EMAIL: NormalizedEmail,
   SEED_USER_NAME: DisplayName.optional(),
   SEED_USER_PASSWORD: NewPassword,
+  SEED_USER_ADMIN: z.literal('1', { error: 'SEED_USER_ADMIN 은 1 이거나 비워 둡니다' }).optional(),
 })
 
 /** 시딩을 켜는 값 둘. **이름은 없어도 된다**(이메일에서 만든다). */
 const REQUIRED_KEYS = ['SEED_USER_EMAIL', 'SEED_USER_PASSWORD'] as const
 
-/** 이름까지 포함한 전부. 하나라도 있으면 *"시딩할 뜻이 있다"*로 읽는다. */
-const ALL_KEYS = ['SEED_USER_EMAIL', 'SEED_USER_NAME', 'SEED_USER_PASSWORD'] as const
+/** 이름 · 관리자 표시까지 포함한 전부. 하나라도 있으면 *"시딩할 뜻이 있다"*로 읽는다. */
+const ALL_KEYS = ['SEED_USER_EMAIL', 'SEED_USER_NAME', 'SEED_USER_PASSWORD', 'SEED_USER_ADMIN'] as const
 
 /**
  * 시딩이 값 때문에 멈췄을 때 던진다. **`message`에 비밀번호를 담지 않는다** —
@@ -57,13 +58,19 @@ export class SeedUserError extends Error {
 /** 시딩이 한 일. **셋 다 말한다** — 조용한 갈래를 두지 않는다. */
 export type SeedUserOutcome =
   | { kind: 'skipped' }
-  | { kind: 'created'; email: string }
-  | { kind: 'already-exists'; email: string }
+  | { kind: 'created'; email: string; admin?: true }
+  /** `adminNotChanged` — 관리자로 만들라 했지만 이미 있는 계정이라 바꾸지 않았다(`SEED_USER_ADMIN` 의 머리말). */
+  | { kind: 'already-exists'; email: string; adminNotChanged?: true }
 
 export interface SeedUserInput {
   email: string
   name: string
   password: string
+  /**
+   * 새로 만든 계정을 인스턴스 관리자로 만든다(`SEED_USER_ADMIN=1`). **이미 있는 계정은 바꾸지 않는다** — 비밀번호를 덮어쓰지 않는
+   * 것과 같은 판정이다. `migrate` 를 다시 돌린 것으로 권한이 바뀌면 안 된다. 그 계정을 관리자로 만드는 길은 `admin grant` 다.
+   */
+  admin?: boolean
 }
 
 /** 값이 비었는지. 공백만 든 값은 *"안 줬다"*와 같게 본다. */
@@ -102,6 +109,7 @@ export function readSeedUserEnv(env: NodeJS.ProcessEnv): SeedUserInput | undefin
       SEED_USER_EMAIL: env.SEED_USER_EMAIL,
       SEED_USER_NAME: present(env.SEED_USER_NAME) ? env.SEED_USER_NAME : undefined,
       SEED_USER_PASSWORD: env.SEED_USER_PASSWORD,
+      SEED_USER_ADMIN: present(env.SEED_USER_ADMIN) ? env.SEED_USER_ADMIN : undefined,
     },
     { error: getKoreanErrorMap() },
   )
@@ -113,6 +121,7 @@ export function readSeedUserEnv(env: NodeJS.ProcessEnv): SeedUserInput | undefin
     email: parsed.data.SEED_USER_EMAIL,
     name: parsed.data.SEED_USER_NAME ?? defaultNameFor(parsed.data.SEED_USER_EMAIL),
     password: parsed.data.SEED_USER_PASSWORD,
+    ...(parsed.data.SEED_USER_ADMIN === '1' ? { admin: true } : {}),
   }
 }
 
@@ -144,21 +153,26 @@ function defaultNameFor(email: string): string {
 export async function seedUser(db: DbHandle, input: SeedUserInput, scryptN: number): Promise<SeedUserOutcome> {
   const validated = validateInput(input)
 
+  const alreadyExists: SeedUserOutcome = {
+    kind: 'already-exists',
+    email: validated.email,
+    ...(input.admin === true ? { adminNotChanged: true } : {}),
+  }
   const existing = await findUserByEmail(db, validated.email)
   if (existing) {
-    return { kind: 'already-exists', email: validated.email }
+    return alreadyExists
   }
 
   const passwordHash = await hashPassword(validated.password, { ...DEFAULT_SCRYPT_PARAMS, N: scryptN })
   try {
-    await insertUser(db, { email: validated.email, name: validated.name, passwordHash })
+    await insertUser(db, { email: validated.email, name: validated.name, passwordHash, isInstanceAdmin: input.admin === true })
   } catch (error) {
     if (error instanceof DuplicateEmailError) {
-      return { kind: 'already-exists', email: validated.email }
+      return alreadyExists
     }
     throw error
   }
-  return { kind: 'created', email: validated.email }
+  return { kind: 'created', email: validated.email, ...(input.admin === true ? { admin: true } : {}) }
 }
 
 /** 환경변수를 안 지나는 호출자(테스트 픽스처)도 같은 게이트를 지나게 한다. */
@@ -196,9 +210,14 @@ export function describeSeedOutcome(outcome: SeedUserOutcome): string {
     case 'skipped':
       return `계정 시딩 건너뜀 — ${REQUIRED_KEYS.join('·')} 가 없습니다 (계정을 만들려면 그 둘을 준다)`
     case 'created':
-      return `계정 시딩: 만들었습니다 — ${outcome.email}`
+      return `계정 시딩: 만들었습니다 — ${outcome.email}${outcome.admin === true ? ' (인스턴스 관리자)' : ''}`
     case 'already-exists':
-      return `계정 시딩: 이미 있어 그대로 둡니다 — ${outcome.email} (비밀번호를 덮어쓰지 않습니다)`
+      return (
+        `계정 시딩: 이미 있어 그대로 둡니다 — ${outcome.email} (비밀번호를 덮어쓰지 않습니다)` +
+        (outcome.adminNotChanged === true
+          ? ` · 관리자 표시도 바꾸지 않았습니다 — 관리자로 만들려면 \`pnpm --filter @wirebound/api admin grant ${outcome.email}\``
+          : '')
+      )
   }
 }
 

@@ -19,7 +19,7 @@ import { createSession, destroySession, hashSessionToken } from '../auth/session
 import type { ApiConfig } from '../config'
 import { rateLimited, unauthenticated } from '../errors'
 import { parseBody } from '../http/parse'
-import { findUserByEmail } from '../repos/users'
+import { findUserByEmail, isInstanceAdmin } from '../repos/users'
 import { closeSessionConnections } from '../ws/notify'
 
 /**
@@ -133,7 +133,8 @@ export function authRoutes(config: ApiConfig, limiter: LoginLimiter) {
       if (!user) {
         throw unauthenticated()
       }
-      return { id: user.id, email: user.email, name: user.name }
+      // 관리자 표시는 요청마다 DB 에서 읽는다 — 세션에 얼리면 강등이 로그아웃까지 안 먹는다(`repos/users.ts` 의 `isInstanceAdmin`).
+      return { id: user.id, email: user.email, name: user.name, isInstanceAdmin: await isInstanceAdmin(app.db, user.id) }
     })
   }
 }

@@ -8,6 +8,7 @@
     "dev:api": "pnpm --filter @wirebound/api dev",
     "dev:web": "pnpm --filter @wirebound/web dev",
     "build": "pnpm --filter './packages/*' --filter './system-themes/*' -r build",
+    "build:template": "pnpm --filter @wirebound/theme-kit build && node packages/theme-kit/bin/wb-theme.js pack-template",
     "test": "vitest run --project '!build'",
     "test:watch": "vitest --project '!build'",
     "test:build": "vitest run --project build",
