@@ -16,6 +16,7 @@ import { memberRoutes } from './routes/members'
 import { menuRoutes } from './routes/menu'
 import { pageRoutes } from './routes/pages'
 import { presetRoutes } from './routes/presets'
+import { projectThemeRoutes } from './routes/project-theme'
 import { projectRoutes } from './routes/projects'
 import { revisionRoutes } from './routes/revisions'
 import { snapshotRoutes } from './routes/snapshots'
@@ -250,6 +251,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 프로젝트 단위"*라고 적었으므로 그 밖에 둘 자리가 없다. 발급은 viewer 이상 누구나이고,
   // 이 셋은 **세션으로만** 부를 수 있다 — 근거는 `routes/tokens.ts`의 머리말에 있다.
   await app.register(tokenRoutes(), { prefix: '/api/projects' })
+  // 프로젝트가 고정한 테마(`/:projectId/theme`) — 토큰으로도 닿는다(CLI · MCP 의 lint 가 manifest 를 읽는다).
+  await app.register(projectThemeRoutes(), { prefix: '/api/projects' })
   // **로그인한 사람의 토큰 전부**는 프로젝트 밖(`/api/auth/tokens`)이다 — 멤버가 아닌 프로젝트의 토큰도 거둬야 한다
   // (`routes/tokens.ts`의 «내 토큰은 프로젝트를 가로지른다»).
   await app.register(myTokenRoutes(), { prefix: '/api/auth' })

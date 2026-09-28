@@ -62,6 +62,23 @@ describe('읽는 것', () => {
     ])
   })
 
+  it('theme-changed 의 값을 그대로 옮긴다 — 토큰 값이 글자 · 수가 아니면 프레임을 버린다', () => {
+    const frame = {
+      type: 'theme-changed',
+      projectId: 'p',
+      themeId: 'sample',
+      version: '1.0.0',
+      tokens: { 'color.accent': '#e11d48', 'radius.md': 4 },
+      rev: 3,
+      actor: { type: 'user', label: '홍길동' },
+    }
+    expect(parseServerFrame(JSON.stringify(frame))).toEqual(frame)
+    expect(parseServerFrame(JSON.stringify({ ...frame, tokens: { 'color.accent': { evil: true } } }))).toBeNull()
+    expect(parseServerFrame(JSON.stringify({ ...frame, rev: '3' }))).toBeNull()
+    const { themeId: _omitted, ...withoutTheme } = frame
+    expect(parseServerFrame(JSON.stringify(withoutTheme))).toBeNull()
+  })
+
   it('restored 의 안전망 스냅샷 id 를 옮긴다 — 글자가 아니면 키를 안 만든다', () => {
     const base = { type: 'restored', projectId: 'p', snapshotId: 's', actor: { type: 'user', label: '홍길동' } }
 

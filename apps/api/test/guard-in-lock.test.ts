@@ -2422,6 +2422,21 @@ const PROJECT_PROBES: ProjectProbe[] = [
     okStatus: 200,
   },
   {
+    route: 'PUT /api/projects/:projectId/theme',
+    label: '테마 바인딩 저장',
+    bobRole: 'owner',
+    demotion: 'role',
+    holders: ['restore', 'tree'],
+    fire: (ctx, fx) =>
+      fireRest(ctx, fx, 'PUT', `/api/projects/${fx.projectId}/theme`, {
+        themeId: 'system-admin',
+        version: '0.1.0',
+        tokens: { 'semantic.primary': '#123456' },
+        rev: 0,
+      }),
+    okStatus: 200,
+  },
+  {
     route: 'POST /api/projects/:projectId/snapshots',
     label: '스냅샷 생성',
     bobRole: 'editor',

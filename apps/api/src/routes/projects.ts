@@ -20,6 +20,7 @@ import {
   DuplicateSlugError,
   deleteProject,
   findProjectById,
+  findProjectTheme,
   insertProject,
   listProjectsForUser,
   lockProjectRow,
@@ -93,13 +94,15 @@ export function projectRoutes() {
     app.get('/:projectId', { preHandler: projectGuard('viewer') }, async (request) => {
       const { projectId } = parseParams(ProjectIdParams, request.params)
       const project = await findProjectById(app.db, projectId)
+      const theme = await findProjectTheme(app.db, projectId)
       const role = request.projectRole
-      if (!project || !role) {
+      if (!project || !theme || !role) {
         // projectGuard를 통과했다면 항상 채워져 있다(가드 통과 직후 동시 삭제되는
         // 극단적인 경합이 아닌 한). 여기 도달했다면 존재를 숨기는 404가 맞다.
         throw notFound()
       }
-      return { ...project, role }
+      // `themeRev` — `theme-changed` 방송을 놓친 탭이 다시 읽을 때 따라잡는 값(`ws/protocol.ts`의 그 갈래).
+      return { ...project, role, themeRev: theme.rev }
     })
 
     app.patch('/:projectId', { preHandler: projectGuard('owner') }, async (request) => {

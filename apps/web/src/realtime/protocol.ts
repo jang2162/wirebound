@@ -105,6 +105,19 @@ export type ServerFrame =
    * 읽는다(위 `joined`의 머리말과 같은 까닭 · 서버 `ws/protocol.ts`의 그 갈래).
    */
   | { type: 'membership-changed'; projectId: string }
+  /**
+   * **프로젝트의 테마 바인딩 · 토큰이 바뀌었다**(서버 `ws/protocol.ts`의 그 갈래). 지금은 읽기만 한다 — 받는 자리가 없다(`use-realtime.ts`
+   * 의 `default`). 캔버스가 프로젝트의 `id@버전` 을 싣게 되면 그 자리가 이 프레임으로 다시 싣거나 CSS 변수를 바꾼다.
+   */
+  | {
+      type: 'theme-changed'
+      projectId: string
+      themeId: string
+      version: string
+      tokens: Record<string, string | number>
+      rev: number
+      actor: EventActor
+    }
   | { type: 'pong' }
   | {
       type: 'patch-ack'
@@ -277,6 +290,25 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         : null
     case 'membership-changed':
       return str(value.projectId) ? { type: 'membership-changed', projectId: value.projectId } : null
+    case 'theme-changed':
+      // 토큰 값은 하나씩 본다 — 글자 · 수 밖의 값이 CSS 변수로 흘러가지 않게.
+      return str(value.projectId) &&
+        str(value.themeId) &&
+        str(value.version) &&
+        typeof value.rev === 'number' &&
+        isRecord(value.tokens) &&
+        Object.values(value.tokens).every((token) => typeof token === 'string' || typeof token === 'number') &&
+        isRecord(value.actor)
+        ? {
+            type: 'theme-changed',
+            projectId: value.projectId,
+            themeId: value.themeId,
+            version: value.version,
+            tokens: value.tokens as Record<string, string | number>,
+            rev: value.rev,
+            actor: value.actor as unknown as EventActor,
+          }
+        : null
     case 'pong':
       return { type: 'pong' }
     case 'patch-ack':

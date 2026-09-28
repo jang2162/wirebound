@@ -17,6 +17,8 @@ interface Case {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT'
   /** :projectId 는 실제 id로 치환된다. */
   url: string
+  /** 붙일 질의(`?` 뒤). 라우트 표와 맞대는 키는 `url` 만이다. */
+  query?: string
   /**
    * 정적 값이면 그대로 보낸다. 함수면 `setup`이 반환한 치환 맵을 받아 payload를
    * 만든다 — `setup`이 실행 시점에 만드는 리소스 id(예: 새 페이지가 참조할
@@ -252,6 +254,21 @@ const CASES: Case[] = [
   { label: '프로젝트 조회', method: 'GET', url: '/api/projects/:projectId', allowed: ['owner', 'editor', 'viewer'] },
   { label: '프로젝트 수정', method: 'PATCH', url: '/api/projects/:projectId', payload: { name: '바뀐 이름' }, allowed: ['owner'] },
   { label: '프로젝트 삭제', method: 'DELETE', url: '/api/projects/:projectId', allowed: ['owner'] },
+  { label: '테마 바인딩 조회', method: 'GET', url: '/api/projects/:projectId/theme', allowed: ['owner', 'editor', 'viewer'] },
+  {
+    label: '테마 바인딩 저장',
+    method: 'PUT',
+    url: '/api/projects/:projectId/theme',
+    payload: { themeId: 'system-admin', version: '0.1.0', tokens: {}, rev: 0 },
+    allowed: ['owner'],
+  },
+  {
+    label: '테마 바꾸기 영향',
+    method: 'GET',
+    url: '/api/projects/:projectId/theme/impact',
+    query: 'themeId=system-admin&version=0.1.0',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
   { label: '멤버 목록', method: 'GET', url: '/api/projects/:projectId/members', allowed: ['owner', 'editor', 'viewer'] },
   { label: '멤버 초대', method: 'POST', url: '/api/projects/:projectId/members', payload: { email: 'invitee@example.com', role: 'viewer' }, allowed: ['owner'] },
   {
@@ -677,6 +694,7 @@ describe('권한 매트릭스 (역할 × 엔드포인트)', () => {
           for (const [key, value] of Object.entries(substitutions)) {
             url = url.replace(':' + key, value)
           }
+          if (testCase.query !== undefined) url += `?${testCase.query}`
           const payload =
             typeof testCase.payload === 'function'
               ? (testCase.payload as (substitutions: Record<string, string>) => unknown)(substitutions)
