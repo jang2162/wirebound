@@ -78,7 +78,9 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 `apps/api/test/system-theme-checksums.test.ts` 가 이 실행에서 다시 빌드한 산출물을 표와 견준다 — 어긋나면 **그 테마의 `version` 을
 올리고 표에 새 줄을 더한다. 이미 배포한 판의 줄은 고치지 않는다.** 빌드 의존(번들러 등)이 바뀌어 출력이 달라져도 같은 케이스가 같은
 문장으로 죽는다. 다른 기계에서도 같은 바이트다 — `docker build --target build` 이미지 안(Linux)에서 지은 `system-admin-0.1.0.wbtheme` 의
-sha256 이 macOS 빌드와 같은 `5ff20aed…` 였다(`docs/superpowers/plans/2026-09-28-a3-report.md` Task 4 — 같은 lockfile 판). 같은 입력이면 빌드가 같은 바이트를 낸다(`packWbtheme` 이 항목 시각 · 차례를 고정한다) — 다시 빌드한 것만으로는 sha256 이 안 바뀐다. 운영
+sha256 이 macOS 빌드와 같은 `5ff20aed…` 였다(`docs/superpowers/plans/2026-09-28-a3-report.md` Task 4 — 같은 lockfile 판). 다시 재는 법:
+`docker build --target build -t <이름> .` 뒤 `docker run --rm <이름> sha256sum /app/system-themes/admin/dist/system-admin-0.1.0.wbtheme` 를
+`system-themes/checksums.json` 의 그 줄과 견준다. 같은 입력이면 빌드가 같은 바이트를 낸다(`packWbtheme` 이 항목 시각 · 차례를 고정한다) — 다시 빌드한 것만으로는 sha256 이 안 바뀐다. 운영
 이미지는 `Dockerfile` 의 빌드 단계가 `pnpm build` · `pnpm build:template` 을 돌리고 `/app` 을 통째로 옮겨 싣는다. 관리자가 내려받는
 스타터 템플릿 zip 은 `pnpm build:template` 이 `packages/theme-kit/dist/wirebound-theme-starter.zip` 에 짓는다(`THEME_TEMPLATE_ZIP` 으로
 바꾼다 — 없으면 내려받기가 404 로 그 명령을 말한다).
