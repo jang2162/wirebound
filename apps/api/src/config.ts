@@ -47,10 +47,17 @@ export interface ApiConfig {
    * `system-themes` 다(`DEFAULT_SYSTEM_THEMES_DIR`).
    */
   systemThemesDir: string
+  /** 관리자가 내려받는 스타터 템플릿 zip(`routes/admin-themes.ts`). 기본은 kit 이 짓는 자리다(`DEFAULT_THEME_TEMPLATE_ZIP`). */
+  themeTemplateZip: string
 }
 
 /** 저장소의 `system-themes` — 이 파일(`apps/api/src/config.ts`)에서 세 단계 위. 운영 이미지도 저장소를 통째로 싣는다(`Dockerfile`). */
 export const DEFAULT_SYSTEM_THEMES_DIR = fileURLToPath(new URL('../../../system-themes', import.meta.url))
+
+/** 저장소 빌드(`pnpm build:template`)가 짓는 템플릿 zip — kit 의 `pack-template` 기본 출력이다. */
+export const DEFAULT_THEME_TEMPLATE_ZIP = fileURLToPath(
+  new URL('../../../packages/theme-kit/dist/wirebound-theme-starter.zip', import.meta.url),
+)
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const
 
@@ -266,6 +273,8 @@ const EnvSchema = z.object({
   POSTGRES_PORT: z.string().optional(),
   /** `ApiConfig.systemThemesDir`. 비면 기본값이다. */
   SYSTEM_THEMES_DIR: z.string().optional(),
+  /** `ApiConfig.themeTemplateZip`. 비면 기본값이다. */
+  THEME_TEMPLATE_ZIP: z.string().optional(),
   /**
    * `db/client.ts`의 `DbTimeLimits` — 없거나 비면 `DEFAULT_DB_TIME_LIMITS`. **0 은 싣지 않는다 — 서버·DB 설정을 따른다.**
    * 범위는 `dbTimeLimitEnv`의 머리말.
@@ -339,5 +348,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     exportRenderLimit: data.EXPORT_RENDER_LIMIT,
     systemThemesDir:
       data.SYSTEM_THEMES_DIR === undefined || data.SYSTEM_THEMES_DIR === '' ? DEFAULT_SYSTEM_THEMES_DIR : data.SYSTEM_THEMES_DIR,
+    themeTemplateZip:
+      data.THEME_TEMPLATE_ZIP === undefined || data.THEME_TEMPLATE_ZIP === '' ? DEFAULT_THEME_TEMPLATE_ZIP : data.THEME_TEMPLATE_ZIP,
   }
 }

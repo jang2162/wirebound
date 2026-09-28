@@ -7,6 +7,7 @@ import type { ApiConfig } from './config'
 import type { DbHandle } from './db/tx'
 import { registerErrorHandler } from './http/error-handler'
 import { logDestination } from './log-destination'
+import { adminThemeRoutes } from './routes/admin-themes'
 import { authRoutes } from './routes/auth'
 import { commentRoutes } from './routes/comments'
 import { exportRoutes } from './routes/export'
@@ -251,6 +252,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // **로그인한 사람의 토큰 전부**는 프로젝트 밖(`/api/auth/tokens`)이다 — 멤버가 아닌 프로젝트의 토큰도 거둬야 한다
   // (`routes/tokens.ts`의 «내 토큰은 프로젝트를 가로지른다»).
   await app.register(myTokenRoutes(), { prefix: '/api/auth' })
+  // 인스턴스 관리자의 테마 패키지 동작(`/api/admin/theme-packages` · `/api/admin/theme-template.zip`) — 세션 전용이고 판정은 핸들러
+  // 안이다(`routes/admin-themes.ts`의 머리말).
+  await app.register(adminThemeRoutes(config), { prefix: '/api/admin' })
   await app.register(healthRoutes)
 
   return app
