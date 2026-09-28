@@ -17,6 +17,7 @@
     "@fastify/websocket": "^11.3.0",
     "@wirebound/exporter": "workspace:*",
     "@wirebound/schema": "workspace:*",
+    "@wirebound/theme-sdk": "workspace:*",
     "@wirebound/themes": "workspace:*",
     "fastify": "^5.2.0",
     "fflate": "^0.8.3",
@@ -30,6 +31,7 @@
     "@types/node": "^26.1.2",
     "@types/pg": "^8.11.0",
     "@wirebound/test-support": "workspace:*",
+    "@wirebound/theme-kit": "workspace:*",
     "tsx": "^4.19.0"
   }
 }

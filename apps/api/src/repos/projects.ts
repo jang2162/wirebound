@@ -11,6 +11,7 @@ import { assertNoNulBytes } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
 import { DEFAULT_LAYOUT_NAME, defaultLayoutDocument, insertLayout } from './layouts'
+import { DEFAULT_THEME_ID, latestVisibleVersion } from './theme-packages'
 
 export interface ProjectRecord {
   id: string
@@ -95,10 +96,20 @@ export async function insertProject(
   assertNoNulBytes(PROJECT_TEXT, input.name, input.description)
   try {
     return await withTransaction(db, async (trx) => {
+      // 새 프로젝트는 `system-admin` 의 최신판 · 빈 토큰으로 선다(spec 「데이터」). 판이 없으면(시딩 전) 비워 두고 다음 기동의
+      // 채우기가 채운다(`services/system-themes.ts` 의 `backfillProjectThemes`).
+      const themeVersion = await latestVisibleVersion(trx, DEFAULT_THEME_ID)
+
       // 1단계: 프로젝트. `default_layout_id`는 아직 비어 있다.
       const project = await trx
         .insertInto('projects')
-        .values({ name: input.name, slug: input.slug, description: input.description })
+        .values({
+          name: input.name,
+          slug: input.slug,
+          description: input.description,
+          theme_id: themeVersion === null ? null : DEFAULT_THEME_ID,
+          theme_version: themeVersion,
+        })
         .returning(['id', 'name', 'slug', 'description'])
         .executeTakeFirstOrThrow()
 

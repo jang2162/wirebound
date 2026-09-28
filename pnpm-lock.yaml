@@ -32,6 +32,9 @@ importers:
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../../packages/schema
+      '@wirebound/theme-sdk':
+        specifier: workspace:*
+        version: link:../../packages/theme-sdk
       '@wirebound/themes':
         specifier: workspace:*
         version: link:../../packages/themes
@@ -66,6 +69,9 @@ importers:
       '@wirebound/test-support':
         specifier: workspace:*
         version: link:../../packages/test-support
+      '@wirebound/theme-kit':
+        specifier: workspace:*
+        version: link:../../packages/theme-kit
       tsx:
         specifier: ^4.19.0
         version: 4.23.5

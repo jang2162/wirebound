@@ -17,12 +17,19 @@
       "types": "./dist/runtime.d.ts",
       "import": "./dist/runtime.js",
       "default": "./dist/runtime.js"
+    },
+    "./version": {
+      "development": "./src/version.ts",
+      "types": "./dist/version.d.ts",
+      "import": "./dist/version.js",
+      "default": "./dist/version.js"
     }
   },
   "publishConfig": {
     "exports": {
       ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "default": "./dist/index.js" },
-      "./runtime": { "types": "./dist/runtime.d.ts", "import": "./dist/runtime.js", "default": "./dist/runtime.js" }
+      "./runtime": { "types": "./dist/runtime.d.ts", "import": "./dist/runtime.js", "default": "./dist/runtime.js" },
+      "./version": { "types": "./dist/version.d.ts", "import": "./dist/version.js", "default": "./dist/version.js" }
     }
   },
   "files": ["dist"],

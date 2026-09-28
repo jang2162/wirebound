@@ -1,8 +1,7 @@
 import type { ReactElement } from 'react'
 import type { ThemeDefinition, ThemeManifest, View, ViewProps } from './types'
 
-/** 호스트 SDK 판. 업로드 검증(A3)이 manifest 의 `sdk` 범위와 견준다. */
-export const SDK_VERSION = '1.0.0'
+export { SDK_VERSION } from './version'
 
 /** 정의를 그대로 돌려준다. 등록은 호스트가 한다 — 여기서 전역에 쓰면 테스트와 갤러리가 서로를 오염시킨다. */
 export function defineTheme(def: ThemeDefinition): ThemeDefinition {
