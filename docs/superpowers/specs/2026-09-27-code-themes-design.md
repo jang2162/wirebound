@@ -202,13 +202,13 @@ theme_packages(theme_id text, version text, name text, description text,
 
 ### 업로드 검증
 
-`POST /api/admin/theme-packages`(multipart, 관리자 세션만). 코드는 실행하지 않는다. 실패는 항목별 사유 목록과 함께 422 로 답한다.
+`POST /api/admin/theme-packages`(관리자 세션만). **본문은 `.wbtheme` zip 바이트 그대로다**(`Content-Type: application/zip` 또는 `application/octet-stream`) — multipart 를 쓰지 않는다. 서버에 새 런타임 의존이 안 들고, 화면은 `fetch(url, { body: file })` 로 보낸다. 다른 형식은 415, 10 MB 를 넘으면 413 이다. 코드는 실행하지 않는다. 실패는 항목별 사유 목록(`issues[].code`)과 함께 422 로 답한다.
 
 1. zip 크기 · 풀린 크기 · 항목 수 상한.
 2. 항목 경로 — 절대 경로 · `..` · 심볼릭 링크 거부. 허용 목록: `manifest.json` · `theme.js` · `theme.css` · `assets/**`(`png` · `jpg` · `jpeg` · `gif` · `webp` · `svg` · `woff` · `woff2` · `ttf` · `otf`).
-3. `manifest.json` 이 manifest zod 규격을 통과한다(「manifest」의 표).
-4. 호스트 SDK 판이 `sdk` 범위 안이다.
-5. `id` 가 `system-` 으로 시작하지 않는다.
+3. `manifest.json` 이 manifest zod 규격을 통과한다(「manifest」의 표) — 코드 `manifest`, 원래 코드는 `manifestCode`.
+4. 호스트 SDK 판이 `sdk` 범위 안이다 — 밖이면 `sdk-incompatible`.
+5. `id` 가 `system-` 으로 시작하지 않는다 — 시작하면 `reserved-id`.
 6. 같은 `id@version` 이 있으면 409.
 
 ### 버전과 숨김
@@ -244,14 +244,16 @@ theme_packages(theme_id text, version text, name text, description text,
 
 ```sql
 projects
-  + theme_id text not null
-  + theme_version text not null
+  + theme_id text null
+  + theme_version text null                    -- 둘이 함께 null 이거나 함께 값이다
   + theme_tokens json not null default '{}'   -- 기본값과 다른 값만
   + theme_rev int not null default 0
   FK (theme_id, theme_version) → theme_packages
 ```
 
-새 프로젝트는 `system-admin` 의 최신 버전으로 시작한다.
+새 프로젝트는 `system-admin` 의 최신 버전으로 시작한다. **바인딩 칸은 null 을 받는다** — 마이그레이션은 `.wbtheme` 를 못 보므로 이미 있던
+프로젝트는 null 로 선다. null 은 «아직 고정 안 됨» 이고 api 기동의 시스템 테마 시딩(「시스템 테마」)이 그 자리에서 `system-admin` 의 최신판으로
+채운다. 시딩 전에 만든 프로젝트도 다음 기동이 채운다.
 
 ### 권한
 
@@ -259,7 +261,7 @@ projects
 
 ### 테마 바꾸기와 버전 올리기
 
-`PUT /api/projects/:projectId/theme` `{ themeId, version, tokens, rev }`. 저장된 `theme_rev` 와 `rev` 가 다르면 409 와 현재 값을 돌려준다.
+`PUT /api/projects/:projectId/theme` `{ themeId, version, tokens, rev }`. 저장된 `theme_rev` 와 `rev` 가 다르면 409 와 현재 값을 돌려준다. 대상이 숨긴 버전이면 지금 고정한 그 `id@version` 일 때만 받고(토큰만 고치는 저장) 다른 판으로 바꾸는 것은 422 `hidden-version` 이다.
 
 화면(프로젝트 설정 페이지의 «테마» 절)은 보내기 전에 확인 창으로 둘을 알린다.
 
@@ -272,6 +274,7 @@ projects
 - 옆에 **테마 갤러리 iframe** — 모든 컴포넌트 · variant 를 SDK 가 주는 샘플 노드로 늘어놓은 화면. 폼을 고치면 CSS 변수와 `useToken` 값만 바꿔 즉시 반영한다. 저장 전에는 서버 · 다른 사람에게 가지 않는다.
 - «저장» 은 `PUT …/theme` 을 같은 `themeId@version` 으로 보낸다. 409 면 내 값과 서버 값을 나란히 보이고 고르게 한다.
 - 항목별 · 전체 «기본값으로».
+- 서버는 대상 manifest 로 값을 검증하고(`tokensCss` 의 이슈면 422) 기본값과 같은 값을 뺀 뒤 저장한다. 값 하나는 200 글자, 뺀 뒤의 토큰 JSON 전체는 16 KB 가 상한이다 — 넘으면 422 `token-too-long` · `token-too-large`. 토큰은 `theme-changed` 프레임에 통째로 실리므로 상한이 방송의 크기도 묶는다.
 
 ### 실시간
 

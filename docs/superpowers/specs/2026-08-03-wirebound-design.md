@@ -157,13 +157,24 @@ Project ──┬── ProjectMember (user, role: owner|editor|viewer)
 ### 4.2 테이블 정의
 
 ```sql
-users(id, email, name, password_hash, created_at)
+users(id, email, name, password_hash, is_instance_admin, created_at)
   UNIQUE (email)
+  is_instance_admin = 테마 패키지를 올리고 숨기는 사람(§10). 주는 길은 서버의 명령 · 시딩뿐이다
 
 sessions(id, user_id, expires_at, created_at, last_seen_at)
   id = 쿠키에 실린 세션 토큰의 sha256 해시 (원문은 저장하지 않는다)
 
-projects(id, name, slug, description, default_layout_id, created_at, updated_at)
+projects(id, name, slug, description, default_layout_id,
+         theme_id, theme_version, theme_tokens json, theme_rev int, created_at, updated_at)
+  FK (theme_id, theme_version) → theme_packages  RESTRICT
+  theme_id · theme_version 은 함께 NULL 이거나 함께 값이다 — NULL 은 «아직 고정 안 됨»(기동 시딩이 채운다)
+  theme_tokens = 기본값과 다른 토큰 값만 · theme_rev = 바인딩 저장 · 판 3 복원마다 1 오른다
+
+theme_packages(theme_id, version, name, description, sdk_range, manifest json,
+               files bytea, size, sha256, uploaded_by, uploaded_at, hidden_at)
+  PK (theme_id, version)
+  files = .wbtheme zip 원본 · uploaded_by NULL = 시스템 테마(또는 지워진 사용자)
+  행은 hidden_at 말고 안 바뀐다 — 지우는 길이 없다
 
 project_members(project_id, user_id, role, invited_at)
   PK (project_id, user_id)
@@ -246,13 +257,13 @@ snapshots(id, project_id, tag, description, payload jsonb,
 
 스냅샷은 **삭제 없는 태그**다.
 
-- 생성: 현재 프로젝트 전체 상태(메뉴·페이지·레이아웃·코멘트)를 `payload`에 압축 저장하고, 각 페이지의 `head_seq`를 함께 기록한다.
+- 생성: 현재 프로젝트 전체 상태(메뉴·페이지·레이아웃·코멘트와 테마 바인딩)를 `payload`에 압축 저장하고, 각 페이지의 `head_seq`를 함께 기록한다.
 - 복원: 이력을 지우지 않는다. 현재 상태에서 스냅샷 상태로 가는 patch를 계산해 **새 revision들로 append**한다. 따라서 복원 자체가 이력에 남고, 복원을 다시 되돌릴 수도 있다.
 - 복원이 지워진 페이지를 되살리면 **같은 id** 로 서고, `head_seq`는 **그 id 가 지워질 때까지 쓴 번호 다음**부터 센다(지워진 이력은 되살아나지 않는다). 0 부터 다시 세면 복원 방송을 못 받은 클라이언트(연결이 끊긴 탭 · MCP · CLI)의 번호와 남의 편집으로 오른 번호가 우연히 같아지고, 그 클라이언트의 편집이 되살린 문서의 다른 노드에 적용된다. 그래서 페이지를 지울 때 그 id 의 마지막 번호를 남긴다 — 수명은 프로젝트다(복원이 되살릴 수 있는 것의 바깥 경계). 남긴 번호가 없는 id(번호를 남기기 전에 지웠다)는 어디까지 셌는지 알 길이 없어(스냅샷의 번호는 하한이다) 2^32 에서 센다.
 
 payload를 통째로 저장하는 이유는 복원 속도 때문이다. revision replay는 페이지 수가 늘면 선형으로 느려지고, 스냅샷은 자주 만들지 않으므로 저장 비용이 문제되지 않는다.
 
-**테마는 아직 payload에 싣지 않는다** — 프로젝트가 테마를 고르는 기능이 없어 얼릴 것이 없다(§6). 프로젝트가 테마를 고르게 되면 스냅샷이 그 참조를 싣는다(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「스냅샷」).
+**테마는 참조로 얼린다**(payload 판 3) — 테마 내용이 아니라 프로젝트의 바인딩 `{ themeId, version, tokens }` 를 싣는다. 테마 패키지는 지우지 않으므로 참조로 충분하다. 판 3 복원은 바인딩도 되돌리고(숨긴 버전이어도 된다) 값이 같아도 `theme_rev` 를 올려 `theme-changed` 를 보낸다. 테마가 없는 판 2 스냅샷의 복원은 바인딩을 건드리지 않는다. 가리킨 패키지가 그 서버에 없으면 복원하지 않는다(409).
 
 ---
 
@@ -330,10 +341,13 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 
 **지금 서 있는 것:**
 
-- **캔버스는 same-origin iframe 안에서 SDK 뷰로 그리고, 저장소 테마 `system-admin` 하나를 싣는다**(`system-themes/admin`). 프로젝트가 테마를 고르는 기능 · 테마 업로드 · 토큰 편집은 아직 없다.
+- **캔버스는 same-origin iframe 안에서 SDK 뷰로 그리고, 저장소 테마 `system-admin` 하나를 싣는다**(`system-themes/admin`). 프로젝트가 고정한 테마를 캔버스가 싣는 것 · 테마를 고르고 토큰을 고치는 화면은 아직 없다 — 아래의 REST 가 그 바탕이다.
+- **서버는 테마 패키지를 받고 프로젝트가 그중 하나에 고정된다.** 인스턴스 관리자(§10)가 `.wbtheme` 를 올리고(`POST /api/admin/theme-packages` — 본문은 zip 바이트, 서버는 코드를 실행하지 않고 `readWbtheme` · manifest · SDK 범위 · `system-` 접두어 · 같은 `id@version` 을 본다) 버전을 숨기고 되살린다. 올린 패키지는 불변이고 지우는 길이 없다. 로그인한 사람은 목록 · manifest · 패키지 안의 파일을 읽는다(숨긴 버전은 목록에서 관리자에게만 보이고 파일은 누구에게나 나간다 — 고정한 프로젝트가 그려져야 한다). 한 테마의 «최신» 은 숨기지 않은 버전 가운데 semver 가 가장 큰 것이다.
+- **시스템 테마는 api 가 기동할 때 넣는다** — 저장소 빌드가 낸 `system-themes/*/dist/*.wbtheme` 가운데 DB 에 없는 `id@version` 만. 같은 `id@version` 인데 내용(sha256)이 다르면 기동을 멈춘다(판을 올려야 한다). 테마가 비어 있는 프로젝트는 그 자리에서 `system-admin` 최신판으로 채워지고, 새 프로젝트도 그 판으로 선다.
+- **프로젝트의 테마 바인딩은 owner 가 바꾼다**(`PUT /api/projects/:projectId/theme` — `theme_rev` 낙관적 동시성, 숨긴 버전은 지금 고정한 판의 토큰만 고칠 때만). 토큰은 대상 manifest 로 검증하고 기본값과 같은 값을 뺀 뒤 저장한다(값 200 글자 · 전체 16 KB 상한). 저장은 프로젝트 룸에 `theme-changed` 를 방송한다. 바꾸기 전의 영향(이어지는 · 버려지는 · 기본값으로 서는 토큰 수, 새 테마에 없는 variant 를 쓰는 노드 수)은 `GET …/theme/impact` 가 계산한다. lint 의 테마 규칙이 «현재 테마에 없는 variant» 를 본다(§12.4).
 - **변형은 manifest 가 선언한다** — `components[type].variants` · `defaultVariant` · `hideProps`. 노드의 `variant`가 선언 밖이면 렌더러가 `defaultVariant`로 그린다(페이지 데이터는 바꾸지 않는다). 속성 패널의 변형 칸과 감출 속성도 이 선언을 읽는다.
 - **내보내기(HTML 번들 · PPTX 화면)는 테마 없이 SDK 기본 뷰와 그 CSS로 그린다**(§11.3).
-- **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. `system-admin` 도 `pnpm build` 가 `.wbtheme` 로 낸다. **만든 `.wbtheme` 를 올리거나 싣는 길은 아직 없다** — 캔버스는 `system-admin` 을 소스로 싣는다.
+- **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. `system-admin` 도 `pnpm build` 가 `.wbtheme` 로 낸다. 만든 `.wbtheme` 는 관리자가 올린다(아래) — 캔버스는 아직 `system-admin` 을 소스로 싣는다.
 
 ### 6.1 노드 속성
 
@@ -541,7 +555,7 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 
 | 역할 | 가능한 일 |
 |---|---|
-| **owner** | 전부 + 멤버 초대/역할 변경, 프로젝트 삭제, 레이아웃 편집, 스냅샷 복원 |
+| **owner** | 전부 + 멤버 초대/역할 변경, 프로젝트 삭제, 레이아웃 편집, 스냅샷 복원, 프로젝트의 테마 바꾸기 · 토큰 고치기 |
 | **editor** | 메뉴·페이지·컴포넌트·코멘트·상호작용 편집, 스냅샷 생성 (복원 불가) |
 | **viewer** | 조회 전용 — 편집·코멘트 모두 불가. API 토큰 발급은 된다(토큰은 발급자의 권한을 넘지 않는다) |
 
@@ -557,7 +571,9 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 - API 토큰은 **발급자의 권한을 상속**한다. editor가 만든 토큰으로는 스냅샷 복원이 안 된다. 토큰 스코프는 프로젝트 단위다.
 - 토큰은 **세션으로만** 발급·조회·폐기한다(토큰으로 토큰을 다루지 않는다). 프로젝트 안에서는 자기가 만든 토큰만 보고 거두고, 계정 아래에서는 **자기 토큰 전부를 프로젝트를 가리지 않고** 보고 거둔다 — 멤버에서 빠진 프로젝트에 남은 토큰(다시 멤버가 되면 산다)까지다. 그 줄에는 프로젝트의 이름을 싣지 않는다(빠진 뒤의 이름을 숨긴다 — 비멤버에게 프로젝트를 숨기는 규칙과 같다). 에디터의 «API 토큰» 화면이 그 길이다.
 
-레이아웃 편집을 owner로 제한한 이유는 레이아웃이 프로젝트 전체 페이지의 외형을 한 번에 바꾸는 전역 자원이기 때문이다.
+- **인스턴스 관리자**는 프로젝트 역할과 별개인 표시다(`users.is_instance_admin`). 하는 일은 테마 패키지 업로드 · 버전 숨김과 되살림 · 스타터 템플릿 내려받기이고 프로젝트 권한을 넓히지 않는다. **API 에는 관리자를 만들거나 바꾸는 라우트가 없다** — 주는 길은 서버의 명령(`admin grant|revoke`)과 시딩(`SEED_USER_ADMIN`)뿐이다. 올라온 테마 코드는 같은 origin 에서 신뢰 코드로 돌기 때문이다. 관리자 판정은 요청마다 DB 에서 읽고, 관리자 쓰기는 커밋 직전에 자격과 그 표시를 다시 본다. 관리자 라우트 · 패키지 읽기 라우트는 `:projectId` 가 없어 세션으로만 부른다(토큰은 프로젝트 범위다).
+
+레이아웃 편집을 owner로 제한한 이유는 레이아웃이 프로젝트 전체 페이지의 외형을 한 번에 바꾸는 전역 자원이기 때문이다. 테마 바꾸기를 owner 로 둔 것도 같은 까닭이다.
 
 ---
 

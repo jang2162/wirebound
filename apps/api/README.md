@@ -17,6 +17,7 @@ pnpm --filter @wirebound/api migrate        # 마이그레이션 최신화 + 계
 pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린다 (반복하면 0까지)
 pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바꾼다 — 터미널에서 숨겨 묻는다 (최상위 README 「비밀번호를 잊었다」)
 pnpm --filter @wirebound/api unlock-login <이메일>     # 로그인 막힘을 푼다 — 떠 있는 api 에 보낸다 (최상위 README 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ)
+pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # 인스턴스 관리자를 주고 거둔다 (아래 «인스턴스 관리자»)
 ```
 
 ### `migrate` 가 계정도 만든다 — **가입 라우트가 없기 때문이다**
@@ -43,6 +44,36 @@ pnpm --filter @wirebound/api unlock-login <이메일>     # 로그인 막힘을 
 **`migrate:down` 은 계정을 안 건드린다.** 시딩이 마이그레이션 **파일 안**이 아니라 CLI
 진입점에 있기 때문이다 — 계정을 마이그레이션 파일로 만들면 롤백이 남의
 계정을 지우게 된다(`src/db/seed-user.ts` 의 머리말이 그 판정을 든다).
+
+### 인스턴스 관리자
+
+테마 패키지를 올리고 숨기고 스타터 템플릿을 내려받는 사람이다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「인스턴스
+관리자」). 프로젝트 역할과 별개이고 프로젝트 권한을 넓히지 않는다. **API 에는 관리자를 만들거나 바꾸는 라우트가 없다** — 주는 길은 둘이다.
+
+| 길 | 무엇 |
+|---|---|
+| `SEED_USER_ADMIN=1` (시딩과 함께) | **새로 만든** 계정을 관리자로 만든다. 이미 있는 계정은 바꾸지 않고 `admin grant` 명령을 말한다(비밀번호를 덮어쓰지 않는 것과 같은 판정) |
+| `admin grant <이메일>` · `admin revoke <이메일>` · `admin list` | 대상 DB 를 먼저 말한다. 0 바꿨다 · 1 바꾸지 않았다(이미 그렇다 · 계정 없음 · 이메일 형식 아님) · 2 인자가 어긋났다 |
+
+**판정은 요청마다 DB 에서 읽는다** — `revoke` 는 그 사람의 다음 요청부터 먹는다(세션은 그대로). 관리자 쓰기(업로드 · 숨김)는 커밋 직전에
+자격 · 관리자 표시를 다시 보므로(`src/auth/admin.ts`의 `recheckInstanceAdmin`) 강등 · 로그아웃과 겹친 쓰기는 되돌아간다(403 · 401).
+
+### 시스템 테마 — 기동 때 넣는다
+
+저장소 빌드(`pnpm build`)가 `system-themes/<이름>/dist/<id>-<version>.wbtheme` 를 낸다. **api 는 기동할 때 그 파일들 가운데 DB 에 없는
+`id@version` 만 넣고**(올린 사람 없음), 테마가 빈 프로젝트를 `system-admin` 의 최신판으로 채운다(`src/services/system-themes.ts`). 테스트
+앱도 `buildApp` 으로 서므로 같은 길을 탄다. 찾는 곳은 `SYSTEM_THEMES_DIR`(비우면 저장소의 `system-themes`)이다.
+
+| 기동이 멈추는 갈래 | 문장 | 고치는 법 |
+|---|---|---|
+| 산출물이 하나도 없다 | «시스템 테마 산출물이 없습니다 … `pnpm build` 를 먼저» | 저장소 뿌리에서 `pnpm build` |
+| 같은 `id@version` 인데 sha256 이 다르다 | «이미 올린 버전의 내용이 바뀌었습니다: system-admin@0.1.0 — 판을 올리십시오» | 그 테마의 `version` 을 올린다 — 이미 그 판에 고정한 프로젝트 · 스냅샷이 «그때 그 화면» 을 잃지 않게 |
+| 검증을 못 지난다(이슈 · `system-` 이 아닌 id · SDK 범위 밖) | 까닭과 파일 경로 | 테마를 고친다 |
+
+같은 입력이면 빌드가 같은 바이트를 낸다(`packWbtheme` 이 항목 시각 · 차례를 고정한다) — 다시 빌드한 것만으로는 sha256 이 안 바뀐다. 운영
+이미지는 `Dockerfile` 의 빌드 단계가 `pnpm build` · `pnpm build:template` 을 돌리고 `/app` 을 통째로 옮겨 싣는다. 관리자가 내려받는
+스타터 템플릿 zip 은 `pnpm build:template` 이 `packages/theme-kit/dist/wirebound-theme-starter.zip` 에 짓는다(`THEME_TEMPLATE_ZIP` 으로
+바꾼다 — 없으면 내려받기가 404 로 그 명령을 말한다).
 
 ### 이 서버가 env 를 읽는 방식
 
@@ -195,13 +226,14 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 | code | HTTP 상태 | 의미 |
 |---|---|---|
 | `bad-request` | 400 | 요청 형식이 잘못됨(zod 검증 실패, 스키마 봉투 위반 등) |
+| `bad-request` | **413** · **415** | 413 — 본문이 상한을 넘었다(«요청 본문이 너무 큽니다» — 앱 기본 1 MiB · 테마 업로드 10 MB). 415 — 그 라우트가 안 받는 `Content-Type`(테마 업로드는 `application/zip` · `application/octet-stream` 만 받는다) |
 | `unauthenticated` | 401 | 로그인이 필요함(세션 쿠키 없음/만료) |
 | `forbidden` | 403 | 로그인은 했지만 이 작업에 필요한 역할이 아님 |
 | `not-found` | 404 | 대상이 없음, **또는 프로젝트 멤버가 아님**(설계서 「권한 모델」 — 비멤버에게 프로젝트 존재 여부를 숨긴다) |
-| `conflict` | 409 | 유니크 제약 위반, 마지막 owner 제거 시도, 자식이 있는 메뉴 삭제 시도, **스냅샷 태그 중복**, **스냅샷 수집 중 프로젝트 변경**, **복원의 네 갈래**(지문 불일치·안전망 태그 중복·레이아웃 불일치·코멘트 작성자 없음) 등 |
+| `conflict` | 409 | 유니크 제약 위반, 마지막 owner 제거 시도, 자식이 있는 메뉴 삭제 시도, **스냅샷 태그 중복**, **스냅샷 수집 중 프로젝트 변경**, **복원의 다섯 갈래**(지문 불일치·안전망 태그 중복·레이아웃 불일치·코멘트 작성자 없음·테마 패키지 없음), **같은 테마 패키지 판 재업로드**, **테마 바인딩의 `rev` 불일치**(본문에 `current` — 아래 «테마 패키지와 프로젝트 테마») 등 |
 | `locked` | **423** | **다른 사용자가 편집 중인 노드**(설계서 「소프트 잠금」)를 건드렸다. `message`가 누가 잡고 있는지 말한다. **`conflict`(409)와 갈라 둔 것이 계약이다** — 아래 *"소프트 잠금"* 참고 |
 | `rate-limited` | **429** + `Retry-After` | **로그인 시도가 너무 많다**(`POST /api/auth/login`만). 비밀번호를 견주지 않았다 — 옳은 비밀번호도 이 답이다. `Retry-After`(초) 뒤에 풀린다 — 서버에 손이 닿는 사람이 명령으로 먼저 풀 수 있다. 규칙은 아래 «로그인 시도 제한» |
-| `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]` |
+| `validation-failed` | 422 | 봉투는 유효하지만 카탈로그 규칙(컴포넌트 타입·props·variant 등)을 위반함. `issues`에 `ValidationIssue[]`. **테마 패키지 · 바인딩의 거절도 이 줄이다** — `issues[].code` 가 까닭을 가른다(아래 «테마 패키지와 프로젝트 테마») |
 | `internal` | 500 | 예상하지 못한 서버 오류. **그 요청은 커밋 전이다**(웹의 코멘트 게시가 그렇게 읽는다). COMMIT 답을 잃은 쓰기가 **커밋 안 된 것을 확인한** 판도 이 줄이다 — «…요청이 반영되지 않았습니다 — 다시 시도하세요»(아래 «COMMIT 답을 잃은 편집») |
 | `internal` | **503** | **DB 가 답하지 않았다** — 연결이 끊겼거나 닿지 못했거나, **COMMIT 에 서버의 답이 아닌 거절이 왔다**. **그 요청이 반영됐는지 모른다**(COMMIT 의 답만 잃었을 수 있다). 500 과 갈라 둔 것이 계약이다 — 경계는 `src/db/connection-loss.ts`, 번역은 `src/http/error-handler.ts`. **문장은 메서드로 갈린다** — 쓰는 요청은 «…요청이 반영됐는지 알 수 없습니다», GET · HEAD · OPTIONS 는 «…불러오지 못했습니다 — 잠시 뒤 다시 시도하세요»(읽기는 «반영»을 말하지 않는다). WS `patch`의 `patch-error`도 같은 판에 같은 `status` · 쓰기 문장이다(`http/error-handler.ts`의 `dbUnreachableFailure`). 가르는 값은 숫자다 — 문장은 사람에게만 간다. **편집(`PATCH .../ops` · WS `patch`)은 COMMIT 답을 잃으면 먼저 확인한다** — 아래 "편집 파이프라인"의 «COMMIT 답을 잃은 편집» |
 | `internal` | **503** + `Retry-After` | **내보내기가 밀려 있다** — 떠 있는 내보내기가 한도(`EXPORT_JOB_LIMIT`)에 닿았거나 **그 사람의 것이** 한도(`EXPORT_PERSON_JOB_LIMIT`)에 닿아 **일을 받지 않았다**(내보내기 두 라우트만). 읽기뿐이라 `Retry-After`(초) 뒤 다시 보내도 안전하다. 두 한도는 문장으로 가른다(«내보내기가 밀려 있습니다 — …» · «내 내보내기가 이미 돌고 있습니다 — …»). 위 줄과는 머리와 문장으로 가른다 — 근거는 `src/services/export-worker.ts` 머리말 «줄은 길이로 묶는다» · «한 사람이 줄을 다 쥐지 않는다» |
@@ -249,13 +281,13 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 |---|---|---|---|---|
 | `/api/auth/login` | POST | (없음, 공개) | `{ email, password }` | 200 `{ id, email, name }`, 세션 쿠키 설정. 틀리면 401(없는 계정과 같은 답). 시도가 한도를 넘으면 429 + `Retry-After`(아래 «로그인 시도 제한») |
 | `/api/auth/logout` | POST | 로그인만 | — | 204. **그 세션의 WS 연결을 곧바로 닫고(4403) 그 연결의 잠금을 놓는다** — 같은 사람의 다른 로그인 · 남의 연결은 그대로다 |
-| `/api/auth/me` | GET | 로그인만 | — | 200 `{ id, email, name }` |
+| `/api/auth/me` | GET | 로그인만 | — | 200 `{ id, email, name, isInstanceAdmin }` — `isInstanceAdmin` 은 요청마다 DB 에서 읽는다(위 «인스턴스 관리자») |
 | `/api/auth/tokens` | GET | 로그인만(세션) | — | 200 `{ id, name, createdAt, lastUsedAt, projectId, projectName, member }[]` — **로그인한 사람의 토큰 전부**(프로젝트를 가리지 않는다), 오래된 것 먼저. 멤버가 아닌 프로젝트의 줄은 `projectName: null` · `member: false`. 아래 "API 토큰". 토큰으로 부르면 401 |
 | `/api/auth/tokens/:tokenId` | DELETE | 로그인만(세션) | — | 204 — 어느 프로젝트의 것이든. 남의 토큰·없는 id는 404. 토큰으로 부르면 401 |
 | `/api/auth/tokens` | DELETE | 로그인만(세션) | — | 200 `{ revoked }` — 그 순간의 내 토큰 전부를 폐기한 수. 토큰으로 부르면 401 |
 | `/api/projects` | POST | 로그인만 | `{ name, slug, description? }` | 201 `{ ...프로젝트, role }` — 호출자가 owner가 되므로 `role`은 항상 `"owner"`다 |
 | `/api/projects` | GET | 로그인만 | — | 200 `{ ...프로젝트, role }[]`(호출자가 속한 것만, `created_at` 오름차순). 각 항목의 `role`은 **그 호출자의** 역할이다 |
-| `/api/projects/:projectId` | GET | viewer | — | 200 `{ ...프로젝트, role }` |
+| `/api/projects/:projectId` | GET | viewer | — | 200 `{ ...프로젝트, role, themeRev }` — `themeRev` 는 테마 바인딩의 `rev`(`theme-changed` 를 놓친 탭이 따라잡는 값) |
 | `/api/projects/:projectId` | PATCH | owner | `{ name?, slug?, description? }`(하나 이상) | 200 `{ ...프로젝트, role }` |
 | `/api/projects/:projectId` | DELETE | owner | — | 204 |
 | `/api/projects/:projectId/members` | GET | viewer | — | 200 멤버 배열 — 항목은 `{ userId, email, name, role, invitedAt }` |
@@ -294,7 +326,49 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/tokens` | POST | viewer | `{ name }`(1~60자) | 201 `{ id, name, createdAt, lastUsedAt, value }` — **`value`(원문)가 실리는 유일한 응답이다.** 아래 "API 토큰". 토큰으로 부르면 403 |
 | `/api/projects/:projectId/tokens` | GET | viewer | — | 200 `{ id, name, createdAt, lastUsedAt }[]` — **자기가 만든 것만**, 오래된 것 먼저. **원문이 없다.** 토큰으로 부르면 403 |
 | `/api/projects/:projectId/tokens/:tokenId` | DELETE | viewer | — | 204. 남의 토큰·없는 id는 404. 토큰으로 부르면 403 |
+| `/api/projects/:projectId/theme` | GET | viewer | — | 200 `{ themeId, version, tokens, rev, manifest, latest }` — `latest` 는 같은 테마의 숨기지 않은 최신판(없으면 `null`). 바인딩이 비었으면 `themeId` · `version` · `manifest` 가 `null`. **토큰으로도 닿는다**(CLI · MCP 의 lint) |
+| `/api/projects/:projectId/theme` | PUT | owner | `{ themeId, version, tokens, rev }` | 200 GET 과 같은 모양(`rev` 가 1 오른다) · 409 `{ error, current }`(`rev` 가 저장값과 다르다 — `current` 는 GET 과 같은 모양) · 404 없는 패키지 · 422 `hidden-version` · `token-too-long` · `token-too-large` · 토큰 검증 코드. 커밋 뒤 `theme-changed` 를 룸 전체에(낸 연결도) 보낸다 |
+| `/api/projects/:projectId/theme/impact` | GET | viewer | `?themeId&version` | 200 `{ tokens: { kept, dropped, defaulted }, variants: [{ pageId, title, count }] }` — 그 판으로 바꾸면 무엇이 달라지나. `variants` 는 트리 차례, 0 인 페이지는 빠진다. 없는 패키지 404 · 질의 없음 400 |
+| `/api/theme-packages` | GET | 로그인만(세션) | — | 200 `[{ themeId, name, description, latest, versions: [{ themeId, version, name, preview, hidden, size, uploadedAt, uploadedBy: { id, name } \| null }] }]` — 테마 id 순, 판은 semver 가 큰 것부터. **숨긴 판은 관리자에게만 실린다**(비관리자에게는 판이 다 숨은 테마가 통째로 없다). 토큰으로 부르면 401 |
+| `/api/theme-packages/:themeId/:version/manifest` | GET | 로그인만(세션) | — | 200 manifest 전문(작성자의 키 순서 그대로) — 숨긴 판도. 없는 판 404 |
+| `/api/theme-packages/:themeId/:version/files/*` | GET | 로그인만(세션) | — | 200 패키지 안의 파일(`theme.js` · `theme.css` · `manifest.json` · `assets/**`) — 숨긴 판도. `Cache-Control: private, max-age=31536000, immutable` · `X-Content-Type-Options: nosniff` · 확장자에 맞는 `Content-Type`(텍스트는 `charset=utf-8`). **zip 안 이름과 정확히 같을 때만 낸다** — `..` · `./` · 대소문자가 다른 이름 · 디렉터리는 404 |
+| `/api/admin/theme-packages` | POST | **인스턴스 관리자**(세션) | 본문 = `.wbtheme` zip 바이트(`Content-Type: application/zip` 또는 `application/octet-stream`) | 201 `{ themeId, version, name, sha256, size }` · 409 같은 `id@version` · 413 10 MB 초과 · 415 다른 형식 · 422 `issues`(아래) · 비관리자 403 · 토큰 401 |
+| `/api/admin/theme-packages/:themeId/:version` | PATCH | 인스턴스 관리자(세션) | `{ hidden: boolean }` | 200 그 판(`versions[]` 한 줄과 같은 모양) · 없는 판 404 |
+| `/api/admin/theme-template.zip` | GET | 인스턴스 관리자(세션) | — | 200 `application/zip`(`Content-Disposition: attachment; filename="wirebound-theme-starter.zip"`) · 짓지 않았으면 404 «템플릿이 빌드되지 않았습니다 — `pnpm build:template`» |
 | `/health` | GET | (없음, 공개) | — | 200 `{ status: 'ok' }` |
+
+### 테마 패키지와 프로젝트 테마
+
+**패키지**(`theme_packages`)는 올린 `.wbtheme` 의 zip 원본과 읽어 둔 manifest 다. 행은 숨김 말고 안 바뀌고 **지우는 라우트가 없다** —
+프로젝트 · 스냅샷이 `id@version` 을 참조한다(FK `RESTRICT`). 시스템 테마(`system-*`)는 기동이 넣는다(위 «시스템 테마»).
+
+**업로드의 422 `issues[].code`**
+
+| code | 뜻 |
+|---|---|
+| `too-large` · `too-many-entries` · `unzipped-too-large` · `bad-path` · `not-allowed` · `symlink` · `missing-manifest` · `missing-theme-js` · `bad-json` · `bad-zip` | `.wbtheme` 읽기가 거절했다(`@wirebound/themes`의 `readWbtheme` — 풀기 전에 본다). 코드는 실행하지 않는다 |
+| `manifest` | manifest 규격 위반. `manifestCode` 가 `validateManifest` 의 원래 코드(`bad-version` · `unknown-token-ref` · …)를 든다 |
+| `reserved-id` | `id` 가 `system-` 로 시작한다 — 시스템 테마의 것이다 |
+| `sdk-incompatible` | 호스트 SDK 판이 manifest 의 `sdk` 범위 밖이다 |
+
+**숨김** — 숨긴 판은 새로 고를 수 없고(`PUT …/theme` 422 `hidden-version`), 이미 고정한 프로젝트는 그 판 그대로 토큰을 고친다. 목록에서는
+관리자에게만 보이고 manifest · 파일은 누구에게나 나간다 — 고정한 프로젝트가 그려져야 한다. 판 3 스냅샷 복원도 숨긴 판을 되살린다.
+
+**바인딩**(`projects.theme_id` · `theme_version` · `theme_tokens` · `theme_rev`) — 새 프로젝트는 `system-admin` 의 최신판 · 빈 토큰 ·
+`rev` 0 으로 선다(판이 없으면 비워 두고 다음 기동이 채운다). `PUT …/theme` 의 규칙:
+
+| 무엇 | 규칙 |
+|---|---|
+| 동시성 | `rev` 가 저장된 값과 다르면 409 와 `current`. 조건은 갱신 문장에 있다 — 먼저 읽고 견주지 않는다 |
+| 숨긴 판 | 지금 고정한 그 `id@version` 일 때만 받는다(토큰만 고치는 저장). 다른 판으로 바꾸는 대상이면 422 `hidden-version` |
+| 토큰 | 대상 manifest 로 검증한다 — 규격 밖 값 422 `token-default-type` · `token-select-default`, 선언에 없는 키 422 `unknown-token`. 저장 전에 **기본값과 같은 값을 뺀다** |
+| 한도 | 값 하나 200 글자(UTF-16) — 넘으면 422 `token-too-long`. 뺀 뒤의 JSON 16 KB(UTF-8) — 넘으면 422 `token-too-large` |
+| 권한 | owner. 커밋 직전에 역할 · 자격을 다시 본다(강등과 겹친 저장은 403) |
+| 방송 | 커밋 뒤 `theme-changed { themeId, version, tokens, rev, actor }` 를 룸 전체에(낸 연결도) |
+
+**스냅샷 payload 판 3** 이 바인딩을 얼린다(`theme: { themeId, version, tokens } | null`). 판 3 복원은 바인딩 · 토큰을 되돌리고 값이 같아도
+`rev` 를 올려 `restored` 에 더해 `theme-changed` 를 보낸다. 판 2 이하(테마 없음)는 바인딩을 건드리지 않는다. 스냅샷이 가리킨 패키지가 이
+서버에 없으면 409(아래 «복원의 오류 표»).
 
 ### 내보내기
 
@@ -582,7 +656,8 @@ payload는 `payloadVersion`·`capturedAt`을 스스로 들어 자기를 설명�
 
 위 표의 **`프로젝트`는 다섯 키다.** 프로젝트를 내는 네 응답(`POST /api/projects` ·
 `GET /api/projects`의 각 항목 · `GET /api/projects/:projectId` · `PATCH /api/projects/:projectId`)이
-**전부 같은 키 집합**을 낸다 — `role`을 포함해서다.
+**전부 같은 키 집합**을 낸다 — `role`을 포함해서다. **`GET /api/projects/:projectId` 만 `themeRev` 를 더 싣는다** — 셸이 프로젝트를
+다시 읽을 때 테마 방송을 놓쳤는지 가르는 값이다(위 «테마 패키지와 프로젝트 테마»).
 
 ```jsonc
 { "id": "…", "name": "…", "slug": "…", "description": null, "role": "owner" }
@@ -954,6 +1029,7 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 | `pages` | 페이지 + **저장된 문서 그대로** + `headSeq`(설계서 「스냅샷」의 요구) |
 | `layouts` | 레이아웃 **전부**(프로젝트당 하나라고 가정하지 않는다) |
 | `comments` | 코멘트 + 그 시점의 작성자 이름 |
+| `theme` | 프로젝트의 테마 바인딩 `{ themeId, version, tokens }` 또는 `null`(판 3 부터 — 아래 «테마는 참조로 얼린다») |
 
 **겹layer(런타임 상태)는 담지 않는다.** payload 규격이 `z.strictObject`라 선언되지 않은
 절이 실리면 그 자리에서 파싱이 죽는다.
@@ -962,8 +1038,10 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 페이지가 하나 있어도 캡처는 성공한다 — 캡처는 읽기이고, 읽기가 실패하면 사용자는 얼릴
 수단 자체를 잃는다(그 페이지의 `GET`은 여전히 400이다).
 
-**테마는 담지 않는다 — 판 2.** payload 에 테마 절도 레이아웃의 테마 참조도 없다. 판 1 payload(`themes` 절 ·
-`layouts[].themeId`가 있다)는 마이그레이션 0018 이 판 2 로 옮긴다 — 규격이 `z.strictObject`라 옮기지 않으면 판 2 규격이 못 읽는다.
+**테마는 참조로 얼린다 — 판 3.** 테마 내용이 아니라 프로젝트의 바인딩 `theme: { themeId, version, tokens }`(바인딩이 비었으면 `null`)을
+싣는다 — 패키지는 지우지 않으므로 참조로 충분하다. 레이아웃은 테마를 가리키지 않는다. 판 2 payload 에는 `theme` 가 없다(규격에서 선택이다).
+판 1 payload(`themes` 절 · `layouts[].themeId`가 있다)는 마이그레이션 0018 이 판 2 로 옮긴다 — 규격이 `z.strictObject`라 옮기지 않으면 못 읽는다.
+캡처의 지문은 바인딩 칸(토큰은 해시)과 `theme_rev` 도 덮는다 — 수집 도중 바인딩을 저장하면 409 다.
 
 **`payloadBytes`는 `octet_length(payload::text)`다** — DB가 들고 있는 문서의 옥텟 수이고,
 생성·목록·상세 셋이 같은 식을 쓴다. 설계서 「열린 질문」의 스냅샷 보관 정책을 닫을 관측이라 **상한은
@@ -1069,12 +1147,13 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 | 안전망 태그가 이미 있다 | 409 | 복원 전 상태를 저장할 태그(…)가 이미 있습니다. 다시 시도해 주세요 |
 | 레이아웃 id 집합이 다르다 | 409 | 레이아웃 구성이 스냅샷과 다릅니다 … 복원하지 않았습니다 |
 | 코멘트 작성자가 더 이상 없다 | 409 | 스냅샷의 코멘트를 남긴 사용자가 더 이상 없습니다 (N명) |
+| 판 3 이 가리킨 테마 패키지가 없다 | 409 | 스냅샷의 테마 패키지가 이 서버에 없습니다: id@version — 복원하지 않았습니다 |
 | 미지원 문서 버전 | 400 | 지원하지 않는 문서 버전이라 복원할 수 없습니다: 제목(현재\|스냅샷 버전 N) |
 | payload 안의 참조가 끊겼다 | 400 | 스냅샷 안의 참조가 끊겨 있습니다: … |
 | 만들 페이지의 문서가 검증에 걸렸다 | 422 | 복원할 페이지의 스키마 검증에 실패했습니다: 제목 |
 | `applyEdit` 실패 | 파이프라인 표 | **문장 앞에 페이지 제목이 붙는다.** 상태 코드는 `http/edit-outcome.ts` 하나가 소유한다(`stale` 409 · `patch-failed` 409 · `invalid` 422 · …) |
 
-**400과 409를 가르는 선은 *"다시 보내면 풀리는가"*다.** 409 넷은 지금 상태와의 충돌이라
+**400과 409를 가르는 선은 *"다시 보내면 풀리는가"*다.** 409 다섯은 지금 상태와의 충돌이라
 재시도나 프로젝트 수정으로 풀리고, 400 셋은 그 스냅샷·그 배포로는 풀리지 않는다.
 
 **어느 갈래에서 끊기든 아무것도 바뀌지 않는다.** 판정과 다섯 자원의 쓰기가 전부 한
@@ -1279,6 +1358,7 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 | `presence` | 누가 들어오거나 나갈 때, 룸 전체에 | `projectId` · `participants[{ connectionId, userId, userName }]` |
 | `page-changed` | `applyEdit`이 성공했을 때 | `projectId` · `pageId` · `seq` · `ops` · `warnings` · `actor` |
 | `restored` | 스냅샷 복원이 성공했을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `snapshotId` · `safetySnapshotId` · `actor` · (요청이 실어 왔으면) `clientRestoreId` |
+| `theme-changed` | 테마 바인딩 저장 · 판 3 복원이 커밋됐을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `themeId` · `version` · `tokens` · `rev` · `actor` — 받는 쪽은 자기가 든 `rev` 보다 크지 않으면 버린다 |
 | `patch-ack` | `patch` 프레임이 성공했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `seq` · `revisionId` · `inverse` · `warnings` |
 | `patch-error` | `patch` 프레임이 실패했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `status` · `code` · `message` · `issues` — **REST 에러 봉투와 같은 값이다** |
 | `locks` | 잠금이 바뀌었을 때와 **누가 들어올 때**, 룸 전체에 | `projectId` · `locks[{ pageId, nodeId, userId, userName }]` |
@@ -1466,6 +1546,7 @@ pnpm --filter @wirebound/api migrate               # 마이그레이션 최신�
 pnpm --filter @wirebound/api migrate:down          # 마이그레이션 하나 내리기(반복 시 0까지)
 pnpm --filter @wirebound/api reset-password <이메일>  # 비밀번호 바꾸기(터미널에서 숨겨 묻는다)
 pnpm --filter @wirebound/api unlock-login <이메일>    # 로그인 막힘 풀기(떠 있는 api 에 보낸다 · --address <주소>)
+pnpm --filter @wirebound/api admin grant <이메일>     # 인스턴스 관리자 주기(revoke · list — 위 «인스턴스 관리자»)
 pnpm vitest run --project api                      # api 테스트만 실행 (컨테이너 필요)
 ```
 
