@@ -63,7 +63,13 @@ export const migration: Migration = {
   },
 
   // **`down` 은 바인딩 · 패키지 · 관리자 표시를 버린다.** `test/global-setup.ts` 가 매 실행 latest → none → latest 를 왕복한다.
+  // 판 3 스냅샷 payload 는 `theme` 를 걷고 판 2 로 적는다(0018 `down` 이 판 2 를 판 1 로 되돌리는 것과 같은 꼴) — 안 걷으면 되돌린
+  // 배포가 판 3 을 `payload-version` 으로 거절해, 이 판에서 찍은 스냅샷(복원의 안전망 포함)으로 돌아갈 수 없다. 바인딩은 돌아오지 않는다.
   async down(db: Kysely<unknown>): Promise<void> {
+    await sql`
+      UPDATE snapshots SET payload = (payload - 'theme') || '{"payloadVersion": 2}'::jsonb
+      WHERE (payload->>'payloadVersion')::int = 3
+    `.execute(db)
     await db.schema.alterTable('projects').dropConstraint('projects_theme_pair').execute()
     await db.schema.alterTable('projects').dropConstraint('projects_theme_fk').execute()
     await db.schema
