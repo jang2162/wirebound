@@ -47,6 +47,7 @@ import {
   type LintIssue,
 } from '@wirebound/schema'
 import { lintProject, snapshotToLintInput, type SnapshotLintNote, type SnapshotPayload } from '@wirebound/themes'
+import type { LintTheme } from '../project'
 import { prepareCatalog } from './catalog'
 import { orderedPages } from './page'
 
@@ -89,11 +90,21 @@ export function lintReport(
   payload: SnapshotPayload,
   config: LintConfig | undefined,
   path: string | undefined,
+  /** 프로젝트가 고정한 테마(`project.ts`의 `fetchLintTheme`). 못 받았으면 테마 규칙이 안 돌고 `notes` 가 그렇다고 말한다. */
+  theme: LintTheme,
 ): LintOutcome {
   prepareCatalog()
 
   const plan = snapshotToLintInput(payload, config)
-  const all = lintProject(plan.input)
+  const notes: SnapshotLintNote[] = [...plan.notes]
+  if (theme.kind === 'unavailable') {
+    notes.push({
+      kind: 'theme-unavailable',
+      pageId: null,
+      message: `프로젝트의 테마를 못 받아 «현재 테마에 없는 variant» 를 검사하지 않았습니다 — ${theme.reason}`,
+    })
+  }
+  const all = lintProject({ ...plan.input, ...(theme.kind === 'bound' ? { themeManifest: theme.manifest } : {}) })
 
   const ordered = orderedPages(payload)
   // **접두를 벗겨 낸다** — 읽는 쪽이 이 문자열을 그대로 `get_page`·`wireb page get`에
@@ -112,7 +123,7 @@ export function lintReport(
         warnings: all.length - countErrors(all),
         outsideErrors: 0,
         droppedProjectIssues: 0,
-        notes: plan.notes,
+        notes,
         pathOf,
       },
     }
@@ -135,7 +146,7 @@ export function lintReport(
       // **`filterLintIssues`가 `pageId`로만 거른다** — 메뉴 이름 이슈는
       // `pageId`가 `null`이라 어느 경로를 줘도 빠진다.
       droppedProjectIssues: all.filter((issue) => issue.pageId === null).length,
-      notes: plan.notes,
+      notes,
       pathOf,
     },
   }

@@ -102,13 +102,17 @@ describe('표 전체가 이 한 자리에서 돈다', () => {
         comments: [],
       },
       config: { naming: { page: '^[가-힣 ]+$' } },
+      // `Button` 을 선언하되 `danger` 를 빼 — 테마 규칙(`theme-variant`)도 이 자리에서 난다.
+      themeManifest: {
+        id: 'acme',
+        name: 'ACME',
+        version: '1.0.0',
+        sdk: '^1.0.0',
+        tokens: { items: {} },
+        components: { Button: { variants: [{ id: 'primary', label: '주' }], defaultVariant: 'primary' } },
+      },
     })
 
-    // 테마 규칙(`theme-*`)은 이 함수가 내지 않는다 — 테마 lint 가 없다.
-    expect([...new Set(issues.map((issue) => issue.rule))].sort()).toEqual(
-      LINT_RULES.map((rule) => rule.id)
-        .filter((id) => !id.startsWith('theme-'))
-        .sort(),
-    )
+    expect([...new Set(issues.map((issue) => issue.rule))].sort()).toEqual(LINT_RULES.map((rule) => rule.id).sort())
   })
 })

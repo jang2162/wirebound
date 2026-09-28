@@ -6,7 +6,7 @@
  * **`wireb`의 케이스와 같은 픽스처를 본다.** 그것이 *"CLI와 MCP가 같은 함수를 부른다"*를
  * 케이스 층에서도 참으로 만든다 — 같은 입력에 두 도구가 다른 값을 내면 그 자리에서 드러난다.
  */
-import { PAGE_LIST, createFakeIo, snapshotPayload, stub, type FakeIo } from '@wirebound/cli/test-support'
+import { PAGE_LIST, createFakeIo, projectThemeResponse, snapshotPayload, stub, type FakeIo } from '@wirebound/cli/test-support'
 import type { SnapshotPayload } from '@wirebound/cli/embed'
 import { callTool } from '../src/server'
 
@@ -35,6 +35,8 @@ export interface HarnessOptions {
   payload?: SnapshotPayload
   /** 스냅샷 라우트를 아예 안 걸거나 오류를 내게 한다. */
   snapshot?: 'ok' | 'refused' | 'unreachable' | 'none'
+  /** `GET .../theme` 의 본문. 안 주면 `components` 없는 manifest(테마 규칙이 아무것도 안 낸다). */
+  theme?: Record<string, unknown>
   /** `PATCH .../ops`가 어떻게 답할지. */
   patch?: WriteMode
   /** `POST .../comments`가 어떻게 답할지. */
@@ -87,6 +89,9 @@ export function harness(options: HarnessOptions = {}): FakeIo {
   } else if (mode === 'unreachable') {
     stub(io, 'GET', path, () => new Error('connect ECONNREFUSED 127.0.0.1:443'))
   }
+
+  // `validate` 가 테마 규칙을 돌리려 프로젝트의 manifest 를 받는다(`fetchLintTheme`).
+  stub(io, 'GET', `/api/projects/${PROJECT}/theme`, { status: 200, body: options.theme ?? projectThemeResponse() })
 
   stubWrite(io, 'PATCH', `/api/projects/${PROJECT}/pages/${WRITE_PAGE}/ops`, options.patch ?? 'ok', {
     status: 200,

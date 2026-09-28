@@ -658,7 +658,8 @@ wireb export --format html -o dir  정적 번들 생성
 - `EntryForm` 안에 `Field`가 하나도 없는 등 구조적 공백
 - 프로젝트 명명 규칙 위반 (설정 가능)
 
-**테마** — 테마 자체의 결함(manifest · 토큰 · 뷰)은 lint 가 아니라 테마 빌드와 업로드 검증이 막는다(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「업로드 검증」). 프로젝트가 고른 테마에 없는 `variant` 는 같은 문서 「CLI · MCP」의 lint 규칙이 본다.
+**테마 규칙** — 테마 자체의 결함(manifest · 토큰 · 뷰)은 lint 가 아니라 테마 빌드와 업로드 검증이 막는다(`docs/superpowers/specs/2026-09-27-code-themes-design.md` 「업로드 검증」). lint 는 문서가 프로젝트가 고른 테마와 어긋나는 것을 본다 — `wireb lint` · MCP `validate` 가 `GET /api/projects/:projectId/theme` 으로 그 manifest 를 받고, 못 받으면 이 규칙은 돌지 않고 그렇다고 말한다(`theme-unavailable`).
+- 현재 테마에 없는 `variant` — 프로젝트가 고른 테마의 `components` 가 선언한 컴포넌트에서만 본다
 
 ### 12.5 스킬
 

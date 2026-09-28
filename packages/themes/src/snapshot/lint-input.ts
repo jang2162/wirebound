@@ -48,6 +48,11 @@ export type SnapshotLintNoteKind =
   | 'document-version'
   /** 소속 메뉴가 payload에 없어 조상 없는 타겟을 붙였다. */
   | 'menu-detached'
+  /**
+   * 프로젝트가 고정한 테마의 manifest 를 못 받아 테마 규칙(`theme-variant`)을 안 돌렸다. 이 함수가 아니라 manifest 를 받는 자리가 낸다
+   * (`packages/cli`의 `read/lint.ts`) — payload 에는 manifest 가 없다.
+   */
+  | 'theme-unavailable'
 
 /** `snapshotToLintInput`이 내는 것. **입력과 빠진 것을 함께 낸다.** */
 export interface SnapshotLintPlan {

@@ -37,7 +37,7 @@ export { CliError, EXIT, configError, serverError, unreachableError, usageError,
 export { BINDING_FILE, findBinding, readLintConfig, requireBinding, type Binding, type LoadedBinding } from './binding'
 export { findToken, type CredentialEntry } from './credentials'
 export { CLIENT_KIND_HEADER, callApi, parseJson, type ApiRequest, type ApiResponse } from './client'
-export { fetchSnapshot, requireProject, type ProjectAccess } from './project'
+export { fetchLintTheme, fetchSnapshot, requireProject, type LintTheme, type ProjectAccess } from './project'
 
 export {
   listProject,

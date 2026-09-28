@@ -37,12 +37,16 @@ import type { IssueSeverity } from '../validate'
 export type LintRuleId = (typeof LINT_RULES)[number]['id']
 
 /**
- * 「lint 규칙」의 소제목. 설계서 규칙 하나다 — 테마 자체의 결함은 테마 빌드와 업로드 검증이 막는다(설계서 「lint 규칙」).
+ * 「lint 규칙」의 소제목 — 설계서 규칙(`document`)과 테마 규칙(`theme`). 테마 자체의 결함은 lint 가 아니라 테마 빌드와 업로드
+ * 검증이 막는다(설계서 「lint 규칙」). 테마 규칙은 문서가 **프로젝트가 고른 테마**와 어긋나는 것을 본다.
  */
-export type LintRuleGroup = 'document'
+export type LintRuleGroup = 'document' | 'theme'
 
-/** 이 규칙을 **구현**하는 패키지. */
-export type LintRuleOwner = 'schema'
+/**
+ * 이 규칙을 **구현**하는 패키지. 테마 규칙은 `themes` 다 — manifest 규격이 거기 있고, `schema` 는 테마를 모른다(의존 방향
+ * `schema` ← `themes`).
+ */
+export type LintRuleOwner = 'schema' | 'themes'
 
 export interface LintRule {
   id: string
@@ -110,6 +114,15 @@ export const LINT_RULES = [
     owner: 'schema',
     severity: 'warning',
     requiresConfig: true,
+  },
+  // ── 테마 규칙 (「lint 규칙」) ───────────────────────────────────────────────
+  {
+    id: 'theme-variant',
+    spec: '현재 테마에 없는 `variant` — 프로젝트가 고른 테마의 `components` 가 선언한 컴포넌트에서만 본다',
+    group: 'theme',
+    owner: 'themes',
+    // 페이지 데이터는 그대로 서고 렌더러가 `defaultVariant` 로 그린다 — 문서를 무효로 만들지 않는다(머리말 «severity 축»).
+    severity: 'warning',
   },
   {
     id: 'document-invalid',

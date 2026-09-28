@@ -40,7 +40,7 @@ import type { SnapshotLintNote } from '@wirebound/themes'
 import { readLintConfig } from '../binding'
 import { EXIT } from '../exit'
 import type { Io } from '../io'
-import { fetchSnapshot, requireProject } from '../project'
+import { fetchLintTheme, fetchSnapshot, requireProject } from '../project'
 import { lintReport } from '../read/lint'
 
 /** `--fail-on`이 받는 값. **`error`가 기본이고 그것을 바꾸지 않는다.** */
@@ -58,8 +58,10 @@ export async function runLint(io: Io, path: string | undefined, options: LintOpt
   const access = await requireProject(io)
   const config = readLintConfig(access.binding)
   const payload = await fetchSnapshot(io, access)
+  // 테마 규칙은 프로젝트가 고정한 manifest 로 돈다 — 못 받아도 나머지는 돌고 «검사에서 빠진 것» 이 말한다.
+  const theme = await fetchLintTheme(io, access)
 
-  const outcome = lintReport(payload, config, path)
+  const outcome = lintReport(payload, config, path, theme)
   if (outcome.kind === 'no-such-path') {
     io.err(`그 경로의 페이지가 없습니다: ${outcome.path}`)
     return EXIT.usage

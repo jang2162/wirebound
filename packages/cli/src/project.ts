@@ -29,12 +29,19 @@
  * `wirebound-snapshot.json`은 사람이 커밋할 수도 있는 산출물이라 **낡을 수 있고**, 낡은
  * 파일로 읽으면 *"없는 결함을 말하거나 있는 결함을 놓친다."* 그래서 언제나 서버를 부른다.
  */
-import { SNAPSHOT_PAYLOAD_VERSION, SnapshotPayloadSchema, type SnapshotPayload } from '@wirebound/themes'
+import {
+  SNAPSHOT_PAYLOAD_VERSION,
+  SnapshotPayloadSchema,
+  validateManifest,
+  type SnapshotPayload,
+  type ThemeManifest,
+} from '@wirebound/themes'
 import { requireBinding, type LoadedBinding } from './binding'
 import { callApi, parseJson } from './client'
 import { findToken } from './credentials'
-import { configError, serverError } from './exit'
+import { CliError, configError, serverError } from './exit'
 import type { Io } from './io'
+import { prepareCatalog } from './read/catalog'
 
 /** 이 리포가 붙을 프로젝트와 그것에 쓸 자격. */
 export interface ProjectAccess {
@@ -76,6 +83,42 @@ export async function fetchSnapshot(io: Io, access: ProjectAccess): Promise<Snap
     )
   }
   return payload
+}
+
+/** 프로젝트가 고정한 테마 — lint 의 테마 규칙이 쓴다. 못 받았으면 까닭을 값으로 든다. */
+export type LintTheme = { kind: 'bound'; manifest: ThemeManifest } | { kind: 'unavailable'; reason: string }
+
+/**
+ * `GET .../theme`(토큰으로 닿는 `:projectId` 라우트)으로 프로젝트가 고정한 manifest 를 받는다.
+ *
+ * **실패해도 던지지 않는다** — 테마를 못 받은 것은 lint 의 테마 규칙 하나만 못 도는 것이다. 나머지 규칙은 스냅샷만으로 선다. 대신
+ * 까닭을 값으로 돌려주고, 부르는 쪽이 «검사에서 빠진 것» 으로 말한다(`read/lint.ts`의 `theme-unavailable`). 이 라우트가 없는 옛 서버
+ * (404)도 같은 갈래다. 서버가 준 manifest 는 규격으로 다시 본다 — 규격 밖이면 없는 결함을 말한다.
+ */
+export async function fetchLintTheme(io: Io, access: ProjectAccess): Promise<LintTheme> {
+  let body: unknown
+  try {
+    const response = await callApi(io, access.binding.server, {
+      method: 'GET',
+      path: `/api/projects/${access.binding.projectId}/theme`,
+      token: access.token,
+    })
+    body = parseJson(response, '프로젝트 테마')
+  } catch (error) {
+    if (error instanceof CliError) return { kind: 'unavailable', reason: error.message }
+    throw error
+  }
+  const manifest = typeof body === 'object' && body !== null ? (body as { manifest?: unknown }).manifest : undefined
+  if (manifest === null || manifest === undefined) {
+    return { kind: 'unavailable', reason: '프로젝트가 아직 테마를 고정하지 않았습니다' }
+  }
+  // manifest 검증은 컴포넌트 이름을 카탈로그로 본다.
+  prepareCatalog()
+  const checked = validateManifest(manifest)
+  if (checked.manifest === null) {
+    return { kind: 'unavailable', reason: `서버가 준 manifest 가 규격과 다릅니다: ${checked.issues[0]?.message ?? '알 수 없는 형식 오류'}` }
+  }
+  return { kind: 'bound', manifest: checked.manifest }
 }
 
 /** zod 오류에서 **첫 자리 한 줄**만 옮긴다. 전문을 터미널에 쏟지 않는다. */
