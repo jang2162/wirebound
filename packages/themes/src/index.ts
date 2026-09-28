@@ -31,6 +31,7 @@ export type {
   SnapshotMenuNode,
   SnapshotPage,
   SnapshotPayload,
+  SnapshotTheme,
 } from './snapshot/payload'
 export { SNAPSHOT_PAYLOAD_VERSION, SNAPSHOT_RESOURCES, SnapshotPayloadSchema } from './snapshot/payload'
 export type { SnapshotLintNote, SnapshotLintNoteKind, SnapshotLintPlan } from './snapshot/lint-input'

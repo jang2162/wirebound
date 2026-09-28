@@ -327,7 +327,9 @@ describe('방송 — theme-changed', () => {
       const viewer = await joinRoom(ctx.port, fx.projectId, fx.viewer.cookie.wb_session)
       opened.push(viewer)
       expect((await put(ctx, fx, fx.owner, { themeId: 'system-admin', version: '0.1.0', tokens: {}, rev: 7 })).statusCode).toBe(409)
-      expect(await viewer.quiet()).toEqual([])
+      // 조용한 창을 지난 뒤 받은 것 전부를 본다 — `quiet()` 의 반환은 창 안의 것뿐이라 답보다 먼저 닿은 프레임을 못 본다.
+      await viewer.quiet()
+      expect(viewer.received.filter((frame) => frame.type === 'theme-changed')).toEqual([])
     })
   })
 })

@@ -68,7 +68,7 @@ function 빈문서(): unknown {
  */
 export function snapshotPayload(over: Partial<SnapshotPayload> = {}): SnapshotPayload {
   return {
-    payloadVersion: 2,
+    payloadVersion: 3,
     capturedAt: '2026-08-16T00:00:00.000Z',
     menu: [
       { id: MENU_ADMIN, parentId: null, title: '관리자', sortOrder: 0 },
@@ -93,6 +93,7 @@ export function snapshotPayload(over: Partial<SnapshotPayload> = {}): SnapshotPa
         updatedAt: '2026-08-16T01:00:00.000Z',
       },
     ],
+    theme: { themeId: 'system-admin', version: '0.1.0', tokens: { 'semantic.primary': '#123456' } },
     ...over,
   }
 }

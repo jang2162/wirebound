@@ -218,6 +218,30 @@ export async function updateProjectTheme(
 }
 
 /**
+ * 판 3 스냅샷의 바인딩을 되돌린다(`services/restore.ts`의 `set-theme`). 값이 같아도 `theme_rev` 를 올린다 — 복원은 늘 `theme-changed`
+ * 를 보내고, 받는 쪽은 번호로 새것을 가린다. 숨긴 판이어도 된다(숨김은 «새로 고르기» 만 막는다). 복원이 프로젝트 행을 `FOR UPDATE` 로
+ * 쥐고 부른다.
+ */
+export async function restoreProjectTheme(
+  trx: DbHandle,
+  projectId: string,
+  theme: { themeId: string; version: string; tokens: Record<string, string | number> },
+): Promise<ProjectThemeBinding> {
+  return trx
+    .updateTable('projects')
+    .set((eb) => ({
+      theme_id: theme.themeId,
+      theme_version: theme.version,
+      theme_tokens: JSON.stringify(theme.tokens),
+      theme_rev: eb('theme_rev', '+', 1),
+      updated_at: sql<Date>`now()`,
+    }))
+    .where('id', '=', projectId)
+    .returning(BINDING_COLUMNS)
+    .executeTakeFirstOrThrow()
+}
+
+/**
  * 프로젝트 행을 `FOR UPDATE`로 잠근다. **프로젝트를 통째로 다루는 트랜잭션이 맨 먼저 잡는 잠금이다** — 부르는
  * 자리가 둘이다: 복원(`repos/snapshots.ts`의 `lockProjectForRestore`)과 프로젝트 삭제(`routes/projects.ts`).
  * 둘 다 이것을 **페이지보다 먼저** 잡는다. 한쪽이라도 페이지를 먼저 잡으면 «프로젝트 행을 쥐고 페이지를 기다림 ↔

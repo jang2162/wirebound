@@ -57,12 +57,16 @@
  *
  * ---
  *
- * # 테마를 싣지 않는다 — 판 2
+ * # 테마는 참조로 얼린다 — 판 3
  *
- * 테마는 코드 패키지이고(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`) 프로젝트가 테마를 고르는 기능이 아직
- * 없다 — 캔버스는 저장소 테마 하나를 그린다. 그래서 payload 에 테마 절이 없고, 레이아웃도 테마를 가리키지 않는다. 판 1 에는
- * `themes`(레이아웃마다 병합된 테마 문서)와 `layouts[].themeId` 가 있었다 — 저장된 판 1 은 마이그레이션(`apps/api`의
- * `0018-drop-json-themes.ts`)이 판 2 로 고친다.
+ * 테마는 코드 패키지이고 지우지 않는다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「스냅샷」). 그래서 테마 내용
+ * 대신 프로젝트의 바인딩 `{ themeId, version, tokens }` 를 싣는다(`theme`). 캡처 때 바인딩이 비어 있었으면 `null` 이다. 레이아웃은
+ * 테마를 가리키지 않는다(테마는 프로젝트당 하나다).
+ *
+ * **판 2 payload 에는 `theme` 가 없다** — 그래서 규격에서 선택이다. 판 2 를 복원하면 바인딩을 건드리지 않는다(`apps/api`의
+ * `services/restore-plan.ts`). 판 1 에는 `themes`(레이아웃마다 병합된 옛 JSON 테마)와 `layouts[].themeId` 가 있었다 — 저장된 판 1 은
+ * 마이그레이션(`apps/api`의 `0018-drop-json-themes.ts`)이 판 2 로 고친다. 판 3 을 이 판보다 앞선 `wireb` 는 못 읽는다(`z.strictObject`) —
+ * 저장소 안의 소비자는 같이 바뀐다.
  *
  * **레이아웃이 배열인 것은 그대로다** — `layouts`에는 `project_id` 유니크가 없고(`apps/api`의 `0007-layouts.ts`), 같은
  * 프로젝트에 두 번째 레이아웃을 넣으면 들어간다. 설계서 「레이아웃」의 레이아웃 에디터가 붙어도 규격이 바뀌지 않는다.
@@ -71,7 +75,7 @@
  *
  * # 겹layer(런타임 상태)를 담지 않는다
  *
- * payload 가 담는 넷은 메뉴·페이지·레이아웃·코멘트이고 그 밖은 없다. 겹layer를
+ * payload 가 담는 것은 메뉴·페이지·레이아웃·코멘트와 테마 바인딩이고 그 밖은 없다. 겹layer를
  * 넣으면 *"버튼을 눌러 둔 상태"*가 복원되어 **문서에 없는 것이 문서에서 온 것처럼 보인다.**
  * 아래 `SnapshotPayloadSchema`가 `z.strictObject`인 것이 그 규칙을 실행으로 지키는 자리다 —
  * 선언되지 않은 절이 payload에 실리면 그 자리에서 파싱이 죽는다.
@@ -84,7 +88,7 @@ import { DocumentEnvelopeSchema, type LayoutDocument, type PageDocument } from '
  * 자원이 늘거나, 필드의 뜻이 바뀌거나, 절이 사라질 때. 값이 늘어나는 것(예: 페이지가 하나
  * 더 생기는 것)은 형식 변경이 아니다.
  */
-export const SNAPSHOT_PAYLOAD_VERSION = 2
+export const SNAPSHOT_PAYLOAD_VERSION = 3
 
 /** 메뉴 트리 노드 하나. 트리로 접지 않고 **평평하게** 담는다 — `parentId`가 구조를 나른다. */
 export interface SnapshotMenuNode {
@@ -130,6 +134,13 @@ export interface SnapshotComment {
   updatedAt: string
 }
 
+/** 프로젝트의 테마 바인딩(판 3). 토큰은 기본값과 다른 값만이다(`projects.theme_tokens` 그대로). */
+export interface SnapshotTheme {
+  themeId: string
+  version: string
+  tokens: Record<string, string | number>
+}
+
 export interface SnapshotPayload {
   payloadVersion: number
   /**
@@ -149,6 +160,8 @@ export interface SnapshotPayload {
   pages: SnapshotPage[]
   layouts: SnapshotLayout[]
   comments: SnapshotComment[]
+  /** 판 3 부터. 판 2 이하에는 키가 없다. 캡처 때 바인딩이 비어 있었으면 `null`. */
+  theme?: SnapshotTheme | null
 }
 
 const MenuNodeSchema = z.strictObject({
@@ -187,6 +200,12 @@ const CommentSchema = z.strictObject({
   updatedAt: z.string(),
 })
 
+const ThemeSchema = z.strictObject({
+  themeId: z.string().min(1),
+  version: z.string().min(1),
+  tokens: z.record(z.string(), z.union([z.string(), z.number()])),
+})
+
 /**
  * payload 전체. **`z.strictObject`인 것이 규칙이다** — 겹layer든 무엇이든 선언되지 않은
  * 절이 실리면 파싱이 죽는다(위 "겹layer" 절).
@@ -202,6 +221,8 @@ export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.strictObject(
   pages: z.array(PageSchema),
   layouts: z.array(LayoutSchema),
   comments: z.array(CommentSchema),
+  // 판 2 이하 payload 에는 없다 — 선택이다(위 「테마는 참조로 얼린다」 절).
+  theme: ThemeSchema.nullable().optional(),
 }) as z.ZodType<SnapshotPayload>
 
 /**

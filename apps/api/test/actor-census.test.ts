@@ -154,6 +154,12 @@ const ACTOR_SITES: ActorSite[] = [
     why: '**프레임은 *"누가 지금 이걸 했나"*를 든다.** 아래 `services/restore.ts`의 revision actor와 답이 다른 것이 판정이다 — 그쪽은 *"무슨 사건인가"*를 든다',
   },
   {
+    file: 'routes/snapshots.ts',
+    label: '판 3 복원의 theme-changed 프레임',
+    origin: 'request-event',
+    why: '위 restored 프레임과 같은 판정이다 — 같은 복원을 낸 사람이다. 바인딩은 revision 을 안 남기므로 `복원: <태그>` 사건 라벨이 설 자리가 없다',
+  },
+  {
     file: 'routes/project-theme.ts',
     label: '테마 바인딩 저장의 theme-changed 프레임',
     origin: 'request-event',
