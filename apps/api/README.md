@@ -368,7 +368,10 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | 방송 | 커밋 뒤 `theme-changed { themeId, version, tokens, rev, actor }` 를 룸 전체에(낸 연결도) |
 
 **스냅샷 payload 판 3** 이 바인딩을 얼린다(`theme: { themeId, version, tokens } | null`). 판 3 복원은 바인딩 · 토큰을 되돌리고 값이 같아도
-`rev` 를 올려 `restored` 에 더해 `theme-changed` 를 보낸다. 판 2 이하(테마 없음)는 바인딩을 건드리지 않는다. 스냅샷이 가리킨 패키지가 이
+`rev` 를 올려 `restored` 에 더해 `theme-changed` 를 보낸다. 판 2 이하는 payload 에 `theme` 가 있어도 바인딩을 건드리지 않는다. 판 3 의
+토큰은 첫 쓰기 전에 그 판의 manifest 로 `PUT …/theme` 과 같은 검사를 지나고, **이슈가 난 키는 버린다**(기본값으로 선다 · 나머지는 쓴다 ·
+복원을 거절하지 않는다 · 버린 키는 응답에 없고 서버 로그에 `warn` 한 줄). 서버가 지은 payload 에서는 버릴 것이 없다 — 걸리는 것은 손댄
+payload · 다른 인스턴스에서 온 DB · 뒤에 조여진 규칙이다. 스냅샷이 가리킨 패키지가 이
 서버에 없으면 409(아래 «복원의 오류 표»).
 
 ### 내보내기

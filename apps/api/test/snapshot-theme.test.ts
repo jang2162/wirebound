@@ -9,6 +9,7 @@ import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readWbtheme, SNAPSHOT_PAYLOAD_VERSION, type ThemeManifest } from '@wirebound/themes'
 import { insertThemePackage, setThemePackageHidden } from '../src/repos/theme-packages'
+import { restoreSnapshot } from '../src/services/restore'
 import { captureSnapshot } from '../src/services/snapshot-capture'
 import { createProject, resetRealData, signup, withApi, withRealApi, type SignedUpUser, type TestContext } from './helpers'
 import { manifestOf, packed } from './theme-fixtures'
@@ -187,7 +188,107 @@ describe('복원 — 판 3', () => {
   })
 })
 
+describe('복원 — 판 3 토큰이 그 판의 manifest 를 못 지나면', () => {
+  // payload 는 서버만 짓는다 — 이 판들은 DB 의 payload 를 손으로 고쳐 세운다(다른 인스턴스 · 옛 판에서 온 DB 의 모양). 복원은 PUT 과 같은
+  // 검사(`services/theme-tokens.ts`)를 지나 이슈가 난 키를 버리고(기본값으로 선다) 나머지를 쓴다 — 거절하지 않는다.
+  const MULTI = manifestOf('multi', '1.0.0', {
+    tokens: {
+      items: {
+        'color.a': { type: 'color', label: 'a', default: '#e11d48' },
+        'color.b': { type: 'color', label: 'b', default: '#e11d48' },
+        'font.body': { type: 'font', label: '본문', default: 'serif' },
+      },
+    },
+  })
+
+  async function tamper(ctx: TestContext, snapshotId: string, theme: object) {
+    await sql`update snapshots set payload = jsonb_set(payload, '{theme}', ${JSON.stringify(theme)}::jsonb) where id = ${snapshotId}`.execute(ctx.db)
+  }
+
+  it('이슈가 난 키(없는 키 · 한도 밖 · 문법 밖)만 버리고 나머지를 쓴다', async () => {
+    await withApi(async (ctx) => {
+      await store(ctx, MULTI)
+      const fx = await fixture(ctx)
+      await putTheme(ctx, fx, { themeId: 'multi', version: '1.0.0', tokens: {} })
+      const snapshotId = await snapshot(ctx, fx, '손댄 토큰')
+      await tamper(ctx, snapshotId, {
+        themeId: 'multi',
+        version: '1.0.0',
+        tokens: {
+          'color.a': '#000000',
+          'color.b': 'x'.repeat(5000),
+          'font.body': 'a;}body{display:none',
+          'no.such': 'x',
+        },
+      })
+      await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: {} })
+
+      const outcome = await restoreSnapshot(ctx.db, { projectId: fx.projectId, snapshotId, actorId: fx.owner.user.id })
+      if (outcome.kind !== 'restored') throw new Error(outcome.kind)
+      expect([...outcome.result.droppedThemeTokens].sort()).toEqual(['color.b', 'font.body', 'no.such'])
+      const after = await binding(ctx, fx)
+      expect({ id: after.theme_id, version: after.theme_version, tokens: after.theme_tokens }).toEqual({
+        id: 'multi',
+        version: '1.0.0',
+        tokens: { 'color.a': '#000000' },
+      })
+    })
+  })
+
+  it('남긴 것이 전체 한도를 넘으면 모두 기본값으로 선다', async () => {
+    await withApi(async (ctx) => {
+      const items = Object.fromEntries(
+        Array.from({ length: 90 }, (_, i) => [`font.f${i}`, { type: 'font', label: `f${i}`, default: 'serif' }]),
+      )
+      await store(ctx, manifestOf('wide', '1.0.0', { tokens: { items } } as Partial<ThemeManifest>))
+      const fx = await fixture(ctx)
+      const snapshotId = await snapshot(ctx, fx, '큰 토큰')
+      const long = `"${'a'.repeat(190)}"`
+      await tamper(ctx, snapshotId, {
+        themeId: 'wide',
+        version: '1.0.0',
+        tokens: Object.fromEntries(Object.keys(items).map((key) => [key, long])),
+      })
+
+      const outcome = await restoreSnapshot(ctx.db, { projectId: fx.projectId, snapshotId, actorId: fx.owner.user.id })
+      if (outcome.kind !== 'restored') throw new Error(outcome.kind)
+      expect(outcome.result.droppedThemeTokens).toHaveLength(90)
+      const after = await binding(ctx, fx)
+      expect({ id: after.theme_id, tokens: after.theme_tokens }).toEqual({ id: 'wide', tokens: {} })
+    })
+  })
+
+  it('서버가 지은 판 3 payload 는 아무것도 버리지 않는다', async () => {
+    await withApi(async (ctx) => {
+      await store(ctx, MULTI)
+      const fx = await fixture(ctx)
+      await putTheme(ctx, fx, { themeId: 'multi', version: '1.0.0', tokens: { 'color.a': '#000000', 'font.body': '"Noto Sans KR", serif' } })
+      const snapshotId = await snapshot(ctx, fx, '그대로')
+      const outcome = await restoreSnapshot(ctx.db, { projectId: fx.projectId, snapshotId, actorId: fx.owner.user.id })
+      if (outcome.kind !== 'restored') throw new Error(outcome.kind)
+      expect(outcome.result.droppedThemeTokens).toEqual([])
+      expect((await binding(ctx, fx)).theme_tokens).toEqual({ 'color.a': '#000000', 'font.body': '"Noto Sans KR", serif' })
+    })
+  })
+})
+
 describe('복원 — 판 2(테마 없음)', () => {
+  it('판 2 payload 에 theme 가 있어도(손댄 DB) 바인딩을 안 건드린다', async () => {
+    await withApi(async (ctx) => {
+      await store(ctx, SAMPLE)
+      const fx = await fixture(ctx)
+      await putTheme(ctx, fx, { themeId: 'sample', version: '1.0.0', tokens: { 'color.accent': '#111111' } })
+      const snapshotId = await snapshot(ctx, fx, '판 2 + theme')
+      await sql`update snapshots set payload = payload || '{"payloadVersion": 2}'::jsonb where id = ${snapshotId}`.execute(ctx.db)
+      await putTheme(ctx, fx, { themeId: 'system-admin', version: '0.1.0', tokens: {} })
+      const before = await binding(ctx, fx)
+
+      const res = await restore(ctx, fx, snapshotId)
+      expect(res.statusCode, res.body).toBe(200)
+      expect(await binding(ctx, fx)).toEqual(before)
+    })
+  })
+
   it('바인딩을 건드리지 않는다 — rev 도 그대로', async () => {
     await withApi(async (ctx) => {
       await store(ctx, SAMPLE)

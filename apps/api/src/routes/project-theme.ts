@@ -10,13 +10,13 @@
  * - **`rev` 가 저장된 `theme_rev` 와 다르면 409** 와 지금 값(GET 과 같은 모양의 `current`). 핸들러가 읽은 바탕과 견주고, 갱신 문장이
  *   같은 조건으로 다시 거른다(`updateProjectTheme`).
  * - **숨긴 판은 지금 고정한 그 `id@version` 일 때만** 받는다 — 토큰만 고치는 저장이다. 숨긴 판으로 새로 바꾸면 422 `hidden-version`.
- * - 토큰은 대상 manifest 로 검증한다(`tokensCss` 의 이슈면 422). 저장 전에 기본값과 같은 값을 뺀다. 값 하나 `TOKEN_VALUE_MAX` 글자 ·
- *   전체 `TOKENS_JSON_MAX` 바이트가 상한이다.
+ * - 토큰은 대상 manifest 로 검증한다(`services/theme-tokens.ts` 의 `checkBindingTokens` — 이슈가 하나라도 있으면 422). 저장 전에
+ *   기본값과 같은 값을 뺀다. 판 3 복원도 같은 함수를 지난다(그쪽은 이슈가 난 키를 버린다).
  * - 커밋 직전에 역할 · 자격을 다시 보고(`recheckProjectRole`), 커밋 뒤 `theme-changed` 를 방송한다.
  */
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { z } from 'zod'
-import { tokensCss, type ThemeManifest } from '@wirebound/themes'
+import type { ThemeManifest } from '@wirebound/themes'
 import { requestEventActor } from '../auth/actor'
 import { projectGuard, recheckProjectRole } from '../auth/roles'
 import type { DbHandle } from '../db/tx'
@@ -26,15 +26,8 @@ import { parseBody, parseParams, parseQuery } from '../http/parse'
 import { findProjectTheme, updateProjectTheme, type ProjectThemeBinding } from '../repos/projects'
 import { findThemePackage, latestVisibleVersion } from '../repos/theme-packages'
 import { computeThemeImpact } from '../services/theme-impact'
+import { checkBindingTokens } from '../services/theme-tokens'
 import { notifyThemeChanged } from '../ws/notify'
-
-/**
- * 토큰 값 하나의 상한(글자 — UTF-16 단위). 여섯 타입의 정당한 값(색 · 길이 · 글꼴 목록 · 그림자)은 이보다 훨씬 짧다 — 상한은 한 값이
- * `:root` 블록 · 방송 프레임을 부풀리지 못하게 하는 자리다.
- */
-export const TOKEN_VALUE_MAX = 200
-/** 저장하는 토큰 JSON 전체의 상한(UTF-8 바이트). 바인딩은 `theme-changed` 프레임에 통째로 실린다. */
-export const TOKENS_JSON_MAX = 16_384
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
 const ThemeBody = z.strictObject({
@@ -67,32 +60,14 @@ async function themeView(db: DbHandle, binding: ProjectThemeBinding, manifest?: 
 
 /** 받은 토큰을 검증하고 기본값과 같은 것을 뺀다. 이슈가 있으면 422 로 던진다. */
 function cleanTokens(manifest: ThemeManifest, tokens: Record<string, string | number>): Record<string, string | number> {
-  const tooLong: ApiErrorIssue[] = Object.entries(tokens)
-    .filter(([, value]) => typeof value === 'string' && value.length > TOKEN_VALUE_MAX)
-    .map(([key, value]) => ({
-      code: 'token-too-long',
-      path: `tokens.${key}`,
-      message: `토큰 값은 ${TOKEN_VALUE_MAX} 글자까지입니다(${String(value).length})`,
-    }))
-  if (tooLong.length > 0) throw validationFailed(REJECTED, tooLong)
-
-  const { issues } = tokensCss(manifest, tokens)
-  if (issues.length > 0) {
+  const checked = checkBindingTokens(manifest, tokens)
+  if (checked.issues.length > 0) {
     throw validationFailed(
       REJECTED,
-      issues.map((issue) => ({ code: issue.code, path: issue.path.replace(/^values\./, 'tokens.'), message: issue.message })),
+      checked.issues.map(({ code, path, message }): ApiErrorIssue => ({ code, path, message })),
     )
   }
-
-  const items = manifest.tokens.items
-  const kept = Object.fromEntries(Object.entries(tokens).filter(([key, value]) => value !== items[key]!.default))
-  const bytes = Buffer.byteLength(JSON.stringify(kept), 'utf8')
-  if (bytes > TOKENS_JSON_MAX) {
-    throw validationFailed(REJECTED, [
-      { code: 'token-too-large', path: 'tokens', message: `토큰 전체는 ${TOKENS_JSON_MAX} 바이트까지입니다(${bytes})` },
-    ])
-  }
-  return kept
+  return checked.tokens
 }
 
 function sendConflict(reply: FastifyReply, current: Awaited<ReturnType<typeof themeView>>) {

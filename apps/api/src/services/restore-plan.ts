@@ -28,7 +28,7 @@
  * | 8 | `write-page-schema` | 페이지 행이 있어야 `applyEdit`이 잠글 수 있다 |
  * | 9 | `create-comment` | `comments.page_id` FK — 페이지가 먼저다 |
  * | 10 | `update-comment` | — |
- * | 11 | `set-theme` | 프로젝트 행의 바인딩 칸만 쓴다 — 어느 자리여도 되고 맨 끝에 둔다. **판 3 payload 에만 있다**(`theme` 가 있을 때) — 판 2 이하는 바인딩을 안 건드린다. 값이 지금과 같아도 넣는다 — 복원은 늘 `theme_rev` 를 올리고 `theme-changed` 를 보낸다 |
+ * | 11 | `set-theme` | 프로젝트 행의 바인딩 칸만 쓴다 — 어느 자리여도 되고 맨 끝에 둔다. **판 3 이상 payload 의 `theme` 로만 넣는다** — 판 2 이하는 `theme` 가 있어도(손댄 payload) 바인딩을 안 건드린다. 값이 지금과 같아도 넣는다 — 복원은 늘 `theme_rev` 를 올리고 `theme-changed` 를 보낸다 |
  *
  * **4·5가 6보다 앞인 것이 이 표에서 가장 안 보이는 자리다.** *"지우는 것을 먼저"*라는
  * 직관대로 짜면 *"payload에 남아 있는 자식이 지울 부모 밑에 있는"* 프로젝트에서
@@ -96,6 +96,9 @@ export interface RestoreCurrentState {
   layouts: Array<{ id: string }>
   comments: Array<{ id: string; pageId: string; body: string }>
 }
+
+/** 바인딩(`theme`)을 싣기 시작한 payload 판. */
+const THEME_PAYLOAD_VERSION = 3
 
 export type RestoreStep =
   // `pageId`를 함께 든다 — `deleteComment`가 `(pageId, commentId)`로 지운다(남의 페이지의
@@ -368,8 +371,9 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
     }
   }
 
-  // ── 11단계. 테마 바인딩(판 3). 패키지가 이 서버에 있는지는 DB 질문이라 `restore.ts`가 본다(작성자 확인과 같은 자리).
-  if (payload.theme != null) steps.push({ kind: 'set-theme', theme: payload.theme })
+  // ── 11단계. 테마 바인딩(판 3). 패키지가 이 서버에 있는지 · 토큰이 그 판의 manifest 를 지나는지는 패키지를 읽어야 하는 DB 질문이라
+  // `restore.ts`가 본다(작성자 확인과 같은 자리). 판을 함께 보는 까닭: 판 2 payload 에 `theme` 를 넣으면(손댄 DB) 판 2 복원이 바인딩을 썼다.
+  if (payload.payloadVersion >= THEME_PAYLOAD_VERSION && payload.theme != null) steps.push({ kind: 'set-theme', theme: payload.theme })
 
   return { kind: 'plan', plan: { steps, summary } }
 }

@@ -353,6 +353,10 @@ export function snapshotRoutes(options?: { captureHooks?: CaptureHooks }) {
           })
         }
 
+        const dropped = outcome.result.droppedThemeTokens
+        if (dropped.length > 0) {
+          request.log.warn({ projectId, snapshotId, droppedThemeTokens: dropped }, `복원: 판의 manifest 를 못 지난 테마 토큰 ${dropped.length} 개를 버렸습니다(기본값으로 선다)`)
+        }
         return toRestoreResponse(outcome.result)
       },
     )
