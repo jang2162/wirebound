@@ -218,6 +218,9 @@ describe('PUT …/theme', () => {
     it.each([
       ['CSS 를 깨는 값', { 'semantic.primary': 'red;}' }, 'token-default-type'],
       ['선언에 없는 키', { 'nope.key': '#000000' }, 'unknown-token'],
+      // 스냅샷 payload(`jsonb`)가 못 받는 글자 — 받으면 그 프로젝트의 스냅샷 · 복원이 막힌다(`project-theme-review.test.ts`).
+      ['NUL 이 든 값', { 'semantic.primary': 'red\u0000' }, 'token-value-char'],
+      ['짝 없는 서로게이트가 든 값', { 'semantic.primary': 'red\ud800' }, 'token-value-char'],
     ])('%s → 422 %s · 저장 안 됨', async (_label, tokens, code) => {
       await withApi(async (ctx) => {
         const fx = await fixture(ctx)

@@ -14,6 +14,8 @@ export type ManifestIssueCode =
   | 'token-var-collision'
   /** `tokensCss` · `tokenValues` 에 받은 값의 키가 선언에 없다 — manifest 검증은 내지 않는다. */
   | 'unknown-token'
+  /** 토큰 값(기본값 · 받은 값)에 C0 제어 글자 · U+007F · 짝 없는 서로게이트가 있다(`checkTokenValue`). */
+  | 'token-value-char'
 
 export interface ManifestIssue {
   code: ManifestIssueCode

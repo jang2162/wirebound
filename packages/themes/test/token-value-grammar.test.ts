@@ -27,7 +27,7 @@ const FONT_OK = [
 ]
 const FONT_BAD = [
   'Arial /*', 'Arial (', 'Arial [', 'Arial "', "Arial '", 'Arial \\', 'Arial )', 'Arial;', 'Arial !important',
-  'url(http://example.test/f)', 'var(--wb-a)', '"a</style><script>"', '"a\\"b"', 'Arial,', ', Arial', '', '   ', 'Arial\nx',
+  'url(http://example.test/f)', 'var(--wb-a)', '"a</style><script>"', '"a\\"b"', 'Arial,', ', Arial', '', '   ',
 ]
 const SHADOW_OK = [
   'none',
@@ -94,3 +94,45 @@ describe('length 토큰 값 — 앞 점 소수', () => {
   })
 })
 
+
+describe('토큰 값의 글자 — 모든 문자열 타입에서 token-value-char', () => {
+  // 받은 값은 api 의 `json` 칸에 들어가고 스냅샷 payload(`jsonb`)는 NUL · 짝 없는 서로게이트를 거절한다 — 그 프로젝트의 스냅샷 ·
+  // 복원이 막힌다(`apps/api/test/project-theme-review.test.ts`). 타입 문법보다 먼저 거른다.
+  const BAD_CHARS: [string, string][] = [
+    ['NUL', '"a\u0000b"'],
+    ['짝 없는 상위 서로게이트', '"a\ud800b"'],
+    ['짝 없는 하위 서로게이트', '"a\udc00b"'],
+    ['끝의 상위 서로게이트', '"ab"\ud800'],
+    ['U+001F', '"a\u001fb"'],
+    ['U+007F', '"a\u007fb"'],
+    ['탭', 'Arial,\tserif'],
+    ['줄바꿈', 'Arial\nx'],
+  ]
+  const valueFor = (type: 'font' | 'color' | 'select', label: string, value: string) => ({
+    ...head,
+    tokens: {
+      items: {
+        t:
+          type === 'select'
+            ? { type, label, options: ['a', value], default: value }
+            : { type, label, default: value },
+      },
+    },
+  })
+  it.each(BAD_CHARS)('font — %s 를 기본값 · 받은 값 모두 거절한다', (_label, value) => {
+    expect(defaultCodes('font', value)).toEqual(['token-value-char'])
+    expect(valueCodes('font', value)).toEqual(['token-value-char'])
+  })
+  it.each(BAD_CHARS)('color · select 기본값 — %s', (_label, value) => {
+    expect(validateManifest(valueFor('color', 'c', value)).issues.map((i) => i.code)).toEqual(['token-value-char'])
+    expect(validateManifest(valueFor('select', 's', value)).issues.map((i) => i.code)).toEqual(['token-value-char'])
+  })
+  it('짝이 맞는 서로게이트(이모지)는 글꼴 이름에서 받는다', () => {
+    expect(defaultCodes('font', '"😀 Sans", serif')).toEqual([])
+    expect(valueCodes('font', '"😀 Sans", serif')).toEqual([])
+  })
+  it('받은 값이 걸리면 그 키는 기본값으로 선다', () => {
+    const { manifest } = validateManifest({ ...head, tokens: { items: { t: { type: 'font', label: 't', default: 'serif' } } } })
+    expect(tokensCss(manifest!, { t: '"a\u0000b"' }).css).toContain('--wb-t: serif;')
+  })
+})

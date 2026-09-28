@@ -1,5 +1,5 @@
 import type { ThemeManifest, TokenDecl, TokenType } from '@wirebound/theme-sdk'
-import type { ManifestIssue } from './schema'
+import type { ManifestIssue, ManifestIssueCode } from './schema'
 
 /** `{color.primary}` — 같은 타입 토큰의 참조. 기본값에만 쓴다(spec 「manifest」의 `tokens.items`). */
 const REF = /^\{([^{}]+)\}$/
@@ -100,8 +100,25 @@ function isShadow(value: string): boolean {
 }
 
 /**
- * 토큰 값 하나가 그 타입에 맞는지. 맞으면 `null`, 아니면 이유 한 문장. manifest 의 기본값(`checkTokens`)과 받은 값
- * (`tokensCss` · `tokenValues`)이 이 함수 하나를 쓴다.
+ * C0 제어 글자(U+0000–U+001F) · U+007F · 짝 없는 서로게이트. `u` 플래그 없이 UTF-16 단위로 본다(서로게이트 반쪽을 글자로 보려고).
+ * `String.prototype.isWellFormed` 는 이 패키지의 `lib`(ES2022)에 없어 쓰지 않았다.
+ */
+const BAD_CHAR = /[\u0000-\u001f\u007f]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/
+
+/** 토큰 값이 안 맞는 까닭 — 이슈 코드와 한 문장. */
+export interface TokenValueProblem {
+  code: Extract<ManifestIssueCode, 'token-value-char' | 'token-default-type' | 'token-select-default'>
+  reason: string
+}
+
+/**
+ * 토큰 값 하나가 그 타입에 맞는지. 맞으면 `null`, 아니면 까닭. manifest 의 기본값(`checkTokens`)과 받은 값
+ * (`tokensCss` · `tokenValues` — api 의 바인딩 저장이 `tokensCss` 로 부른다)이 이 함수 하나를 쓴다.
+ *
+ * **문자열이면 타입보다 먼저 글자를 본다 — C0 제어 글자 · U+007F · 짝 없는 서로게이트는 `token-value-char`.** 받은 값은 api 의
+ * `projects.theme_tokens`(`json`)에 그대로 들어가지만 스냅샷 payload(`jsonb`)는 NUL(`\u0000`)과 짝 없는 서로게이트를 거절한다 —
+ * 그런 값이 들어간 프로젝트는 스냅샷도, 안전망 캡처를 먼저 하는 복원도 못 한다(`apps/api/test/project-theme-review.test.ts`
+ * «토큰 값이 스냅샷 · 복원을 막지 않는다»). 타입 문법 가운데 따옴표 글꼴 이름이 이 글자들을 받았다. 탭 · 줄바꿈도 C0 라 함께 거절한다.
  *
  * **값은 `:root { --wb-…: <값>; }` 에 그대로 실린다**(`tokensCss`) — 그래서 여기서 받는 것이 곧 CSS 에 들어가는 것이다.
  * **여섯 타입 모두 허용하는 꼴로 닫는다(거부 목록이 아니다).** 거부 목록은 «선언을 끝내는 글자» 만 보고 «뒤를 삼키는 구문»
@@ -109,7 +126,16 @@ function isShadow(value: string): boolean {
  * 잰 표 — `docs/superpowers/plans/2026-09-27-a2-review.md` 「2. 토큰 값 → tokensCss」). 꼴 밖의 함수(`url(` · `image-set(` ·
  * `var(`)도 이 꼴에 없어 저절로 거절된다 — 테마가 그 변수를 이미지 속성에 쓰면 보는 사람의 브라우저가 요청을 낸다.
  */
-export function checkTokenValue(decl: Pick<TokenDecl, 'type' | 'options'>, value: unknown): string | null {
+export function checkTokenValue(decl: Pick<TokenDecl, 'type' | 'options'>, value: unknown): TokenValueProblem | null {
+  if (typeof value === 'string' && BAD_CHAR.test(value)) {
+    return { code: 'token-value-char', reason: '제어 글자(U+0000–U+001F · U+007F)나 짝 없는 서로게이트가 들어 있습니다' }
+  }
+  const reason = typeReason(decl, value)
+  if (reason === null) return null
+  return { code: decl.type === 'select' ? 'token-select-default' : 'token-default-type', reason }
+}
+
+function typeReason(decl: Pick<TokenDecl, 'type' | 'options'>, value: unknown): string | null {
   const type: TokenType = decl.type
   if (type === 'number') {
     return typeof value === 'number' && Number.isFinite(value) ? null : '유한한 수가 아닙니다'
@@ -156,13 +182,9 @@ export function checkTokens(items: Readonly<Record<string, TokenDecl>>): Manifes
       }
       continue
     }
-    const reason = checkTokenValue(decl, decl.default)
-    if (reason !== null) {
-      issues.push({
-        code: decl.type === 'select' ? 'token-select-default' : 'token-default-type',
-        path,
-        message: `토큰 ${key} 의 기본값 ${JSON.stringify(decl.default)} — ${reason}`,
-      })
+    const problem = checkTokenValue(decl, decl.default)
+    if (problem !== null) {
+      issues.push({ code: problem.code, path, message: `토큰 ${key} 의 기본값 ${JSON.stringify(decl.default)} — ${problem.reason}` })
     }
   }
 
@@ -226,15 +248,15 @@ function effectiveValues(
     // `in` 은 프로토타입을 본다 — 선언한 `toString` 에 값을 안 줘도 «받은 값» 이 되어 거짓 이슈가 났다.
     if (Object.hasOwn(values, key)) {
       const value = values[key]!
-      const reason = checkTokenValue(decl, value)
-      if (reason === null) {
+      const problem = checkTokenValue(decl, value)
+      if (problem === null) {
         chosen.set(key, value)
         continue
       }
       issues.push({
-        code: decl.type === 'select' ? 'token-select-default' : 'token-default-type',
+        code: problem.code,
         path: `values.${key}`,
-        message: `토큰 ${key} 의 값 ${JSON.stringify(value)} 을 버리고 기본값을 씁니다 — ${reason}`,
+        message: `토큰 ${key} 의 값 ${JSON.stringify(value)} 을 버리고 기본값을 씁니다 — ${problem.reason}`,
       })
     }
     // 기본값도 한 번 더 본다 — 검증을 안 거친 manifest 의 값이 `:root` 블록 밖으로 새지 않게.

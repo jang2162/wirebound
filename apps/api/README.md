@@ -362,6 +362,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | 동시성 | `rev` 가 저장된 값과 다르면 409 와 `current`. 두 겹이 함께 «바탕을 읽은 뒤 안 바뀌었다» 를 선다 — 핸들러가 읽은 바인딩(숨긴 판 판정의 바탕)의 `rev` 와 견주고, 갱신 문장이 같은 `rev` 로 다시 거른다(읽은 뒤 · 갱신 전에 남이 저장한 판) |
 | 숨긴 판 | 지금 고정한 그 `id@version` 일 때만 받는다(토큰만 고치는 저장). 다른 판으로 바꾸는 대상이면 422 `hidden-version` |
 | 토큰 | 대상 manifest 로 검증한다 — 규격 밖 값 422 `token-default-type` · `token-select-default`, 선언에 없는 키 422 `unknown-token`. 저장 전에 **기본값과 같은 값을 뺀다** |
+| 글자 | 문자열 값에 C0 제어 글자(U+0000–U+001F — 탭 · 줄바꿈 포함) · U+007F · 짝 없는 서로게이트가 있으면 422 `token-value-char`(타입 검사보다 먼저). 스냅샷 payload(`jsonb`)가 NUL · 짝 없는 서로게이트를 못 받아, 받으면 그 프로젝트의 스냅샷 · 복원이 막힌다. manifest 기본값도 같은 검사를 지난다(업로드 422 `manifest` · `manifestCode: token-value-char`) |
 | 한도 | 값 하나 200 글자(UTF-16) — 넘으면 422 `token-too-long`. 뺀 뒤의 JSON 16 KB(UTF-8) — 넘으면 422 `token-too-large` |
 | 권한 | owner. 커밋 직전에 역할 · 자격을 다시 본다(강등과 겹친 저장은 403) |
 | 방송 | 커밋 뒤 `theme-changed { themeId, version, tokens, rev, actor }` 를 룸 전체에(낸 연결도) |
