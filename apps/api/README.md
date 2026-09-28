@@ -70,7 +70,8 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 | 같은 `id@version` 인데 sha256 이 다르다 | «이미 올린 버전의 내용이 바뀌었습니다: system-admin@0.1.0 — 판을 올리십시오» | 그 테마의 `version` 을 올린다 — 이미 그 판에 고정한 프로젝트 · 스냅샷이 «그때 그 화면» 을 잃지 않게 |
 | 검증을 못 지난다(이슈 · `system-` 이 아닌 id · SDK 범위 밖) | 까닭과 파일 경로 | 테마를 고친다 |
 
-같은 입력이면 빌드가 같은 바이트를 낸다(`packWbtheme` 이 항목 시각 · 차례를 고정한다) — 다시 빌드한 것만으로는 sha256 이 안 바뀐다. 운영
+시스템 테마의 `build` 스크립트는 **자기 `dist` 를 비우고** 낸다(테스트의 global-setup 도) — 판을 올린 뒤 옛 판 이름의 산출물이 남아 시딩이
+그것까지 읽는 일이 없다(작성자 프로젝트의 `wb-theme build` 는 `dist` 를 안 비운다). 같은 입력이면 빌드가 같은 바이트를 낸다(`packWbtheme` 이 항목 시각 · 차례를 고정한다) — 다시 빌드한 것만으로는 sha256 이 안 바뀐다. 운영
 이미지는 `Dockerfile` 의 빌드 단계가 `pnpm build` · `pnpm build:template` 을 돌리고 `/app` 을 통째로 옮겨 싣는다. 관리자가 내려받는
 스타터 템플릿 zip 은 `pnpm build:template` 이 `packages/theme-kit/dist/wirebound-theme-starter.zip` 에 짓는다(`THEME_TEMPLATE_ZIP` 으로
 바꾼다 — 없으면 내려받기가 404 로 그 명령을 말한다).

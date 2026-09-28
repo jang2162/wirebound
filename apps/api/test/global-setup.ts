@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildTheme } from '@wirebound/theme-kit'
 import { DEFAULT_SYSTEM_THEMES_DIR } from '../src/config'
@@ -10,10 +11,14 @@ import { missingDatabaseHint } from './missing-database-hint'
 /**
  * **시스템 테마를 실행마다 다시 빌드한다** — 모든 테스트 앱이 `buildApp` 의 기동 시딩을 지나고, 시딩은 `system-themes/*\/dist` 를 읽는다.
  * 앞에 남은 산출물을 믿으면 소스를 고친 뒤 옛 판으로 잰다(생성물이 gitignore 라 아무 경고가 없다). 빌드는 같은 입력이면 같은 바이트다.
+ * **`dist` 를 먼저 비운다** — 패키지의 `build` 스크립트와 같다(`system-themes/admin/package.json`). 판을 올린 뒤 옛 판 이름의 산출물이
+ * 남으면 시딩이 그것까지 읽는다(A3 리뷰 5b′ · 5c′).
  */
 async function buildSystemThemes(): Promise<void> {
   const started = Date.now()
-  await buildTheme({ root: join(DEFAULT_SYSTEM_THEMES_DIR, 'admin'), entry: 'src/theme.tsx' })
+  const root = join(DEFAULT_SYSTEM_THEMES_DIR, 'admin')
+  rmSync(join(root, 'dist'), { recursive: true, force: true })
+  await buildTheme({ root, entry: 'src/theme.tsx' })
   console.log(`[global-setup] system-admin 빌드 ${Date.now() - started}ms`)
 }
 
