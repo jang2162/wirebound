@@ -17,6 +17,12 @@ export interface CanvasFrame {
   window: Window
 }
 
+/**
+ * iframe 문서의 head 에 싣는 시트 하나. `css` 는 `<style>`, `href` 는 `<link rel=stylesheet>` 다 — 테마 번들의 `theme.css` 는 `<link>` 여야
+ * 한다: 그 안의 자산 경로(`./assets/…`)가 파일 URL 을 기준으로 풀려야 한다(spec 「`.wbtheme` 파일」).
+ */
+export type CanvasSheet = { readonly id: string; readonly css: string } | { readonly id: string; readonly href: string }
+
 /** 레이아웃이 없는 jsdom 에서 다시 재게 하는 신호. 실브라우저에서는 `ResizeObserver` 가 부른다. */
 const MEASURE_EVENT = 'wb-canvas-measure'
 
@@ -24,8 +30,11 @@ const MEASURE_EVENT = 'wb-canvas-measure'
 const MIN_HEIGHT = 320
 
 export function CanvasIframe(props: {
-  /** iframe 문서의 head 에 차례로 싣는 스타일. id 는 `data-wb-style` 값이다. */
-  styles: readonly { id: string; css: string }[]
+  /**
+   * iframe 문서의 head 에 **배열 차례대로** 싣는 시트. id 는 `data-wb-style` 값이다. 차례가 곧 겹침의 차례다 — 뒤의 것이 같은 특이도에서
+   * 이긴다(캔버스는 `base` → `theme` → `tokens` — `canvas/canvas.tsx`).
+   */
+  styles: readonly CanvasSheet[]
   width: number
   children: (frame: CanvasFrame) => ReactNode
   onFrame?: (frame: CanvasFrame | null) => void
@@ -62,17 +71,7 @@ export function CanvasIframe(props: {
 
   useLayoutEffect(() => {
     if (frame === null) return
-    const head = frame.document.head
-    for (const { id, css } of props.styles) {
-      // id 는 코드 상수(`base` · `theme`)라 셀렉터로 조립해도 된다 — 사용자 값이 아니다.
-      let tag = head.querySelector<HTMLStyleElement>(`style[data-wb-style="${id}"]`)
-      if (tag === null) {
-        tag = frame.document.createElement('style')
-        tag.setAttribute('data-wb-style', id)
-        head.appendChild(tag)
-      }
-      if (tag.textContent !== css) tag.textContent = css
-    }
+    syncSheets(frame.document, props.styles)
   }, [frame, props.styles])
 
   /**
@@ -131,4 +130,43 @@ export function CanvasIframe(props: {
       />
     </>
   )
+}
+
+/**
+ * head 의 시트를 `sheets` 와 같게 — 같은 id 의 같은 종류는 그 요소를 고쳐 쓰고(링크를 다시 받지 않게), 종류가 바뀌면 그 자리에서 바꾸고,
+ * 사라진 id 는 걷는다. 차례가 어긋났을 때만 다시 붙인다 — `<link>` 를 떼었다 붙이면 시트가 한 번 빠졌다 선다.
+ */
+function syncSheets(doc: Document, sheets: readonly CanvasSheet[]): void {
+  const head = doc.head
+  const existing = new Map<string, Element>()
+  for (const el of head.querySelectorAll('[data-wb-style]')) existing.set(el.getAttribute('data-wb-style') ?? '', el)
+  const wanted: Element[] = []
+  for (const sheet of sheets) {
+    let el = existing.get(sheet.id)
+    const tag = 'href' in sheet ? 'link' : 'style'
+    if (el !== undefined && el.tagName.toLowerCase() !== tag) {
+      const replacement = doc.createElement(tag)
+      replacement.setAttribute('data-wb-style', sheet.id)
+      el.replaceWith(replacement)
+      el = replacement
+    }
+    if (el === undefined) {
+      el = doc.createElement(tag)
+      el.setAttribute('data-wb-style', sheet.id)
+      head.appendChild(el)
+    }
+    if ('href' in sheet) {
+      if (el.getAttribute('rel') !== 'stylesheet') el.setAttribute('rel', 'stylesheet')
+      if (el.getAttribute('href') !== sheet.href) el.setAttribute('href', sheet.href)
+    } else if (el.textContent !== sheet.css) {
+      el.textContent = sheet.css
+    }
+    existing.delete(sheet.id)
+    wanted.push(el)
+  }
+  for (const stale of existing.values()) stale.remove()
+  const order = [...head.querySelectorAll('[data-wb-style]')]
+  if (order.length !== wanted.length || order.some((el, i) => el !== wanted[i])) {
+    for (const el of wanted) head.appendChild(el)
+  }
 }

@@ -41,6 +41,66 @@ describe('CanvasIframe', () => {
     expect(frameDoc(container).head.querySelectorAll('style')).toHaveLength(1)
   })
 
+  it('href 시트는 <link rel=stylesheet> 로 · 배열 차례대로 선다', async () => {
+    const { container } = render(
+      <CanvasIframe
+        styles={[{ id: 'base', css: 'p{}' }, { id: 'theme', href: '/api/theme-packages/a/1.0.0/files/theme.css' }, { id: 'tokens', css: ':root{}' }]}
+        width={1280}
+      >
+        {() => null}
+      </CanvasIframe>,
+    )
+    await waitFor(() => expect(frameDoc(container).head.querySelectorAll('[data-wb-style]')).toHaveLength(3))
+    const sheets = [...frameDoc(container).head.querySelectorAll('[data-wb-style]')]
+    expect(sheets.map((el) => `${el.tagName.toLowerCase()}:${el.getAttribute('data-wb-style')}`)).toEqual(['style:base', 'link:theme', 'style:tokens'])
+    expect(sheets[1]!.getAttribute('rel')).toBe('stylesheet')
+    expect(sheets[1]!.getAttribute('href')).toBe('/api/theme-packages/a/1.0.0/files/theme.css')
+  })
+
+  it('같은 id 의 종류가 바뀌면 그 자리에서 바꾼다 — css → href', async () => {
+    const at = (css: boolean) =>
+      [{ id: 'base', css: 'p{}' }, css ? { id: 'theme', css: 'a{}' } : { id: 'theme', href: '/t.css' }, { id: 'tokens', css: ':root{}' }]
+    const { container, rerender } = render(<CanvasIframe styles={at(true)} width={1280}>{() => null}</CanvasIframe>)
+    rerender(<CanvasIframe styles={at(false)} width={1280}>{() => null}</CanvasIframe>)
+    await waitFor(() => expect(frameDoc(container).head.querySelector('link[data-wb-style="theme"]')).not.toBeNull())
+    const ids = [...frameDoc(container).head.querySelectorAll('[data-wb-style]')].map((el) => el.getAttribute('data-wb-style'))
+    expect(ids).toEqual(['base', 'theme', 'tokens'])
+    expect(frameDoc(container).head.querySelector('style[data-wb-style="theme"]')).toBeNull()
+  })
+
+  it('href 가 바뀌면 같은 link 를 고쳐 쓴다', async () => {
+    const { container, rerender } = render(<CanvasIframe styles={[{ id: 'theme', href: '/a.css' }]} width={1280}>{() => null}</CanvasIframe>)
+    const first = await waitFor(() => frameDoc(container).head.querySelector('link')!)
+    rerender(<CanvasIframe styles={[{ id: 'theme', href: '/b.css' }]} width={1280}>{() => null}</CanvasIframe>)
+    await waitFor(() => expect(frameDoc(container).head.querySelector('link')!.getAttribute('href')).toBe('/b.css'))
+    expect(frameDoc(container).head.querySelector('link')).toBe(first)
+  })
+
+  it('사라진 id 는 걷는다 — 번들이 실패해 theme 시트를 뺀 판', async () => {
+    const { container, rerender } = render(
+      <CanvasIframe styles={[{ id: 'base', css: 'p{}' }, { id: 'theme', href: '/a.css' }, { id: 'tokens', css: ':root{}' }]} width={1280}>
+        {() => null}
+      </CanvasIframe>,
+    )
+    rerender(<CanvasIframe styles={[{ id: 'base', css: 'p{}' }, { id: 'tokens', css: ':root{}' }]} width={1280}>{() => null}</CanvasIframe>)
+    await waitFor(() => expect(frameDoc(container).head.querySelector('[data-wb-style="theme"]')).toBeNull())
+    const ids = [...frameDoc(container).head.querySelectorAll('[data-wb-style]')].map((el) => el.getAttribute('data-wb-style'))
+    expect(ids).toEqual(['base', 'tokens'])
+  })
+
+  it('차례가 바뀌면 그 차례로 다시 선다', async () => {
+    const { container, rerender } = render(
+      <CanvasIframe styles={[{ id: 'tokens', css: ':root{}' }, { id: 'theme', href: '/a.css' }]} width={1280}>{() => null}</CanvasIframe>,
+    )
+    rerender(<CanvasIframe styles={[{ id: 'theme', href: '/a.css' }, { id: 'tokens', css: ':root{}' }]} width={1280}>{() => null}</CanvasIframe>)
+    await waitFor(() =>
+      expect([...frameDoc(container).head.querySelectorAll('[data-wb-style]')].map((el) => el.getAttribute('data-wb-style'))).toEqual([
+        'theme',
+        'tokens',
+      ]),
+    )
+  })
+
   it('iframe 안 클릭이 호스트 onClick 에 닿는다', async () => {
     const onClick = vi.fn()
     const { container } = render(
