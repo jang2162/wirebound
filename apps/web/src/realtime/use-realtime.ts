@@ -51,10 +51,10 @@
  * 이 문장을 없애지 못하고 그 위에 얹힐 뿐이다. 방아쇠도 드물다(다른 탭이 로그인 화면을 거쳐 같은 사람으로 다시
  * 들어오는 그 순간 이 탭에 답을 기다리는 편집이 있다).
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { openRealtime } from './connection'
 import { useRealtimeSetup } from './context'
-import { realtimeUrl } from './protocol'
+import { realtimeUrl, type ServerFrame } from './protocol'
 import { useKnownUserHolder } from '../api/known-user'
 import { useSessionRenewal } from '../session/session-context'
 import { LOSS_RANK } from '../store/loss-notice'
@@ -94,12 +94,17 @@ export function useRealtime(
   onResync?: () => void,
   /** 역할을 다시 읽을 순간(`MembershipCause`). `onResync`와 같은 배치다. */
   onMembership?: (cause: MembershipCause) => void,
+  /** 테마 바인딩 · 토큰이 바뀌었다(`theme-changed`). 받는 것은 셸의 프로젝트 테마다(`theme/project-theme.tsx` 의 `applyFrame`). */
+  onThemeChanged?: (frame: Extract<ServerFrame, { type: 'theme-changed' }>) => void,
 ): void {
   const store = useEditorStoreInstance()
   const setup = useRealtimeSetup()
   const onRenewal = useSessionRenewal()
   // **이 탭이 아는 사용자를 핸드셰이크에 싣는다**(`api/known-user.tsx`). 없으면(화면 테스트) 싣지 않는다.
   const knownUser = useKnownUserHolder()
+  // 테마 프레임의 받는 쪽은 ref 로 쥔다 — 연결의 의존에 넣으면 받는 쪽이 새로 설 때마다 룸을 다시 연다.
+  const themeChanged = useRef(onThemeChanged)
+  themeChanged.current = onThemeChanged
 
   useEffect(() => {
     if (!setup || !projectId) return
@@ -153,6 +158,9 @@ export function useRealtime(
             break
           case 'membership-changed':
             onMembership?.('changed')
+            break
+          case 'theme-changed':
+            themeChanged.current?.(frame)
             break
           case 'locks':
             // **프로젝트 전체의 목록이다.** 어느 페이지의 것인지는 스토어가 `openPageId`로

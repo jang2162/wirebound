@@ -4,6 +4,7 @@ import { App } from '../../src/app'
 import type { SessionUser } from '../../src/api/types'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
 import { canvasQuery } from '../editor-harness'
+import { adminThemeView } from '../theme-loader'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -37,6 +38,7 @@ function renderAt(route: string): void {
         role: 'owner',
         themeRev: 0,
       }),
+      getProjectTheme: async () => adminThemeView(),
       // 셸의 세 자리가 각각 조회한다. 여기서 보는 것은 라우트 표뿐이지만, 스텁하지 않은
       // 메서드는 `fakeApi`가 던지므로 트리와 캔버스가 오류 화면이 된다 — 그러면 아래
       // 단언이 "라우트가 잡혔다"가 아니라 "오류가 떴다"를 보게 된다.

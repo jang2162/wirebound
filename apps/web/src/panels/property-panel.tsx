@@ -25,7 +25,7 @@
  * 한 겹 더 놓거나다. 뷰 모드 탭은 자기 조회를 이미 갖고 있어 요청이 하나도 늘지 않는다.
  */
 import type { ReactElement } from 'react'
-import { resolveVariant } from '@wirebound/renderer'
+import { NO_THEME, resolveVariant } from '@wirebound/renderer'
 import {
   getComponent,
   type ComponentDef,
@@ -33,7 +33,7 @@ import {
   type WbNode,
 } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
-import { CANVAS_THEME } from '../canvas/canvas-theme'
+import { useProjectTheme } from '../theme/project-theme'
 import { useEditCommit } from '../edit/use-edit-commit'
 // **schema의 `findNode`를 쓰지 않는다** — `children` 배열 안의 원소가 노드가 아니면
 // 던지고(`edit/safe-walk.ts` 머리말의 실측), 이 패널은 오류 경계 밖이라 그 예외가 셸을
@@ -112,6 +112,8 @@ export function PropertyPanel(props: {
   // 바뀔 때 다시 그리는 것과 그 답을 위젯에 잇는 것뿐이고, 목록을 손에 쥐는 자리는
   // `store/use-locked-by.ts` 하나다.
   const lockOf = useLockedBy()
+  // 캔버스가 그리는 그 바인딩의 manifest(`theme/project-theme.tsx`). 아직 못 읽었으면 테마 없음 — variant 칸은 카탈로그 기본이다.
+  const manifest = useProjectTheme().manifest ?? NO_THEME.manifest
 
   // 선택은 id 하나이고 노드는 문서에서 찾는다. 노드 객체를 스토어에 두면 낙관적
   // 패치가 문서를 갈아 끼울 때 패널만 옛 노드를 들고 있게 된다.
@@ -197,8 +199,8 @@ export function PropertyPanel(props: {
   }
 
   // **캔버스가 그리는 그 테마의 manifest 로 가른다** — 따로 읽으면 캔버스와 판정이 두 벌이 된다.
-  const fields = visibleFields(def, node, readProps(node), CANVAS_THEME.manifest)
-  const variantField = variantFieldOf(def, CANVAS_THEME.manifest)
+  const fields = visibleFields(def, node, readProps(node), manifest)
+  const variantField = variantFieldOf(def, manifest)
 
   // **props 검증 실패는 이 패널이 말하지 않는다.** 캔버스는 그리지 못한 이유 둘(알 수 없는
   // 타입 / props 검증 실패)을 폴백과 배너로 알리는데, 여기는 앞의 하나만 안내하고 검증에

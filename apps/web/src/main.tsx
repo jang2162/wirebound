@@ -10,6 +10,7 @@ import { createEditChannel } from './realtime/edit-channel'
 import { createLockChannel } from './realtime/lock-channel'
 import { DraftStoreProvider, openDraftStore } from './panels/draft-store'
 import { TabChannelProvider, openTabChannel } from './session/tab-channel'
+import { ThemeBundleProvider } from './theme/bundle-context'
 // 셸 CSS는 앱에서만 필요하다. 화면 테스트는 `App`을 직접 렌더하므로 이 파일을 지나지
 // 않고, 그래서 vitest가 CSS를 처리할 일이 없다.
 import './shell.css'
@@ -64,9 +65,12 @@ createRoot(root).render(
         <RealtimeProvider setup={{ holder: connectionIds, channel: editChannel, lockChannel }}>
           <TabChannelProvider channel={tabChannel}>
             <DraftStoreProvider store={draftStore}>
-              <BrowserRouter>
-                <App />
-              </BrowserRouter>
+              {/* **테마 번들을 싣는 로더는 세션에 하나다**(`theme/bundle-context.tsx`) — 화면 테스트는 시험용 로더를 끼운다. */}
+              <ThemeBundleProvider>
+                <BrowserRouter>
+                  <App />
+                </BrowserRouter>
+              </ThemeBundleProvider>
             </DraftStoreProvider>
           </TabChannelProvider>
         </RealtimeProvider>

@@ -3,9 +3,12 @@
  * `ThemeBundleProvider` 에 끼운다. 스크립트 적재 자체(realm · 캐시 · 한도)는 `test/theme/bundle-loader.test.ts` 가 경계를, 실브라우저 판이
  * 실물을 잰다.
  */
+import { createElement, type ReactElement, type ReactNode } from 'react'
 import { ADMIN_V0 } from '@wirebound/system-theme-admin'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
+import type { ProjectThemeView } from '../src/api/types'
 import { refKey, type BundleResult, type ThemeBundleLoader, type ThemeRef } from '../src/theme/bundle-loader'
+import { ProjectThemeValueProvider, type ProjectTheme } from '../src/theme/project-theme'
 
 /** 판마다 줄 것 — 정의 · `'fail'`(곧바로 실패) · `'hang'`(`release` 전까지 안 끝남). */
 export type StaticBundle = ThemeDefinition | 'fail' | 'hang'
@@ -48,4 +51,33 @@ export function staticBundleLoader(map: Record<string, StaticBundle> = { [refKey
     },
     forget() {},
   }
+}
+
+/** 기본 하네스가 `getProjectTheme` 으로 주는 바인딩 — 새 프로젝트가 서는 판 그대로다. */
+export function adminThemeView(tokens: Record<string, string | number> = {}, rev = 0): ProjectThemeView {
+  return { themeId: ADMIN_REF.themeId, version: ADMIN_REF.version, tokens, rev, manifest: ADMIN_V0.manifest, latest: ADMIN_REF.version }
+}
+
+/**
+ * **셸 없이 패널을 세우는 테스트의 공급자** — 조회 · 로더 없이 그 정의와 토큰으로 선 바인딩을 건넨다. 셸째 세우는 테스트는 기본 하네스의
+ * `getProjectTheme` · 로더를 쓴다(`editor-harness.tsx`).
+ */
+export function withProjectTheme(
+  definition: ThemeDefinition = ADMIN_V0,
+  tokens: Record<string, string | number> = {},
+): (props: { children: ReactNode }) => ReactElement {
+  const value: ProjectTheme = {
+    status: 'ready',
+    ref: { themeId: definition.manifest.id, version: definition.manifest.version },
+    manifest: definition.manifest,
+    tokens,
+    rev: 0,
+    definition,
+    bundled: true,
+    failure: null,
+    retry() {},
+    catchUp() {},
+    applyFrame() {},
+  }
+  return (props) => createElement(ProjectThemeValueProvider, { value }, props.children)
 }

@@ -9,7 +9,8 @@
  * 여기서 다시 확인하지 않는 것은 그 대조가 한 곳에 있기 때문이지, 어긋날 수 없어서가 아니다.
  *
  * **문서는 iframe 안에 그린다**(`./canvas-iframe.tsx`). 테마 CSS 는 그 iframe 문서에만 실려 에디터를 칠하지 않고,
- * 테마의 `@media` 는 뷰포트 프리셋 폭으로 판정된다. 테마는 저장소 테마 하나다(`./canvas-theme.ts`).
+ * 테마의 `@media` 는 뷰포트 프리셋 폭으로 판정된다. 테마는 프로젝트가 고정한 `id@버전` 이다(`theme/project-theme.tsx`) — 시트의
+ * 차례는 `canvasSheets` 가 갖는다.
  *
  * **이 파일이 그리는 것 중 문서 안쪽에 스타일을 주는 것은 없다.** 셸의 클래스가 붙는 것은 호스트 문서의 상자
  * (`wb-shell-canvas-surface` · `wb-shell-canvas-iframe`)와 문서 **옆에** 그려지는 셸의 장치
@@ -32,19 +33,22 @@ import {
   EMPTY_OVERLAY,
   focusElement,
   markerPoint,
+  NO_THEME,
   renderDocument,
   type InteractionEvent,
   type InteractionOverlay,
   type NodeRenderError,
 } from '@wirebound/renderer'
 import { describePageTarget, type PageDocument } from '@wirebound/schema'
-import { ThemeProvider } from '@wirebound/theme-sdk'
+import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
+import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
 import { walkSafely } from '../edit/safe-walk'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { usePublishCanvasDocument } from './canvas-document'
-import { CanvasIframe, type CanvasFrame } from './canvas-iframe'
-import { CANVAS_STYLES, CANVAS_THEME, canvasTokens } from './canvas-theme'
+import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
+import { themeFileUrl } from '../theme/bundle-loader'
+import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
 // 끝난다 — 그 모듈의 주석 참고.
 import '../catalog-setup'
@@ -77,6 +81,22 @@ interface MarkerBox {
  * 빈 배열의 참조를 유지하는 것과 같은 이유).
  */
 const NO_MARKERS: MarkerBox[] = []
+
+/** SDK 기본 뷰의 CSS — 테마 시트보다 **먼저** 와야 같은 특이도에서 테마가 이긴다. 판과 무관해 한 번만 짓는다. */
+const BASE_SHEET: CanvasSheet = { id: 'base', css: defaultViewsCss() }
+
+/**
+ * 캔버스 iframe 머리의 시트 — `base`(SDK 기본 뷰) → `theme`(그 판의 `theme.css` — `<link>` 라 자산 경로가 파일 주소 기준으로 풀린다) →
+ * `tokens`(토큰의 CSS 변수). **토큰이 테마 시트 뒤다** — 테마 CSS 가 `:root` 에 토큰의 기본값을 적으므로(system-admin 이 그렇다) 앞에 두면
+ * 저장한 토큰이 안 먹는다(실브라우저 판 `build-test/theme-canvas.test.ts` 가 계산값으로 잰다). 번들이 실패하면 `theme` 을 뺀다 — 기본 뷰는
+ * 그 판의 CSS 를 모른다. 설정 페이지의 미리보기도 같은 함수로 짓는다.
+ */
+export function canvasSheets(theme: Pick<ProjectThemeState, 'ref' | 'manifest' | 'tokens' | 'bundled'>): readonly CanvasSheet[] {
+  const sheets: CanvasSheet[] = [BASE_SHEET]
+  if (theme.bundled && theme.ref !== null) sheets.push({ id: 'theme', href: themeFileUrl(theme.ref, 'theme.css') })
+  sheets.push({ id: 'tokens', css: theme.manifest === null ? '' : tokensCss(theme.manifest, theme.tokens).css })
+  return sheets
+}
 
 /**
  * 상호작용 런타임이 캔버스에 남기는 상태.
@@ -145,7 +165,14 @@ export function Canvas(props: {
    * **두 노드를 더 그리고**, 그 id는 페이지 문서에 없어 아래 `nodeIdAt`이 유령 노드를
    * 고르게 된다. 측정과 그 결과는 `packages/renderer/test/compose-identity.test.tsx`에 있다.
    */
-  const tokens = useMemo(() => canvasTokens(CANVAS_THEME), [])
+  const theme = useProjectTheme()
+  // `useToken` 의 값 — 참조 기본값을 푼 값(`tokenValues`). 반쯤 친 값처럼 검사에 걸리는 토큰은 기본값으로 선다.
+  const tokens = useMemo(() => (theme.manifest === null ? {} : tokenValues(theme.manifest, theme.tokens)), [theme.manifest, theme.tokens])
+  const sheets = useMemo(
+    () => canvasSheets({ ref: theme.ref, manifest: theme.manifest, tokens: theme.tokens, bundled: theme.bundled }),
+    [theme.ref, theme.manifest, theme.tokens, theme.bundled],
+  )
+  const definition = theme.definition ?? NO_THEME
 
   const store = useEditorStoreInstance()
   // selector를 여러 번 부른다. 상태 객체 전체(`(s) => s`)를 고르면 어느 필드가 바뀌든
@@ -417,7 +444,7 @@ export function Canvas(props: {
           셸 CSS 가 있는 호스트 문서에 선다. 경계가 문서를 대신 그리는 동안 iframe 은 내려간다. */}
       <CanvasBoundary resetKey={doc}>
         <CanvasIframe
-          styles={CANVAS_STYLES}
+          styles={sheets}
           width={viewportWidth}
           onFrame={setFrame}
           onResize={bumpMeasure}
@@ -429,7 +456,7 @@ export function Canvas(props: {
         >
           {(f) => (
             <ThemeProvider value={{ tokens, window: f.window }}>
-              <CanvasDocument doc={doc} interaction={interaction} bannerHost={bannerHost} />
+              <CanvasDocument doc={doc} theme={definition} interaction={interaction} bannerHost={bannerHost} />
             </ThemeProvider>
           )}
         </CanvasIframe>
@@ -482,6 +509,7 @@ export function Canvas(props: {
  */
 function CanvasDocument(props: {
   doc: PageDocument
+  theme: ThemeDefinition
   /**
    * 상호작용 런타임(「실행」). **`undefined`면 꺼진 것이고 편집 모드가 그렇다.**
    * 켜고 끄는 판단은 `Canvas`가 하고 여기는 그대로 넘긴다.
@@ -497,7 +525,7 @@ function CanvasDocument(props: {
    */
   const errors: NodeRenderError[] = []
   const tree = renderDocument(props.doc, {
-    theme: CANVAS_THEME,
+    theme: props.theme,
     onNodeError: (error) => errors.push(error),
     // **키를 조건부로 넣는다.** `interaction: undefined`를 그냥 실어도 렌더러는 같게
     // 다루지만(`options.interaction === undefined` 검사), 켜지지 않았다는 것이 호출부에서

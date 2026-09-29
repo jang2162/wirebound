@@ -63,6 +63,9 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
+import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import type { ThemeManifest } from '@wirebound/theme-sdk'
+import { adminThemeView } from '../theme-loader'
 import type { RealtimeSocket } from '../../src/realtime/connection'
 import { createConnectionIdHolder, type RealtimeSetup } from '../../src/realtime/context'
 import { createEditChannel } from '../../src/realtime/edit-channel'
@@ -107,16 +110,15 @@ function shellStore(): EditorStore {
 
 
 /**
- * **패턴 목록이 비지 않게 캔버스 테마의 manifest 에 패턴 하나를 싣는다** — 목록이 비면 고르개가 «패턴이 없습니다» 로 서서, 대조
- * 케이스가 잠금 때문이 아니라 목록이 없어서 통과할 수 있다. 목이 닿았는지는 `factoryCalls` 로 센다.
+ * **패턴 목록이 비지 않게 셸이 읽는 바인딩의 manifest 에 패턴 하나를 싣는다** — 목록이 비면 고르개가 «패턴이 없습니다» 로 서서,
+ * 대조 케이스가 잠금 때문이 아니라 목록이 없어서 통과할 수 있다. 가짜가 닿았는지는 `themeReads` 로 센다.
  */
-const patternMock = vi.hoisted(() => ({ factoryCalls: 0 }))
-vi.mock('../../src/canvas/canvas-theme', async (orig) => {
-  patternMock.factoryCalls += 1
-  const real = await orig<typeof import('../../src/canvas/canvas-theme')>()
+const patternTheme = { themeReads: 0 }
+const getProjectTheme: ApiClient['getProjectTheme'] = async () => {
+  patternTheme.themeReads += 1
   const patterns = { 'hero.plain': { name: '민 히어로', schema: { type: 'Section' } } }
-  return { ...real, CANVAS_THEME: { ...real.CANVAS_THEME, manifest: { ...real.CANVAS_THEME.manifest, patterns } } }
-})
+  return { ...adminThemeView(), manifest: { ...ADMIN_V0.manifest, patterns } as ThemeManifest }
+}
 
 /** 하네스의 사용자 id. `editor-harness.tsx`의 `USER`와 같은 값이다. */
 const ME = 'u-1'
@@ -256,7 +258,7 @@ async function board(): Promise<Board> {
 
   await openPage(doc(), {
     realtime: setup,
-    apiOverrides: { patchOps, getPage, listPresets, listComments },
+    apiOverrides: { patchOps, getPage, listPresets, listComments, getProjectTheme },
   })
 
   return {
@@ -334,8 +336,10 @@ async function settle(): Promise<void> {
 }
 
 describe('잠긴 자리에서는 판정이 전부 꺼진다', () => {
-  it('캔버스 테마 모듈의 목이 닿는다 — 패턴 목록이 빈 판이 아니다', () => {
-    expect(patternMock.factoryCalls).toBe(1)
+  it('셸의 테마 읽기가 닿는다 — 패턴 목록이 빈 판이 아니다', async () => {
+    patternTheme.themeReads = 0
+    await board()
+    expect(patternTheme.themeReads).toBe(1)
   })
 
   /**

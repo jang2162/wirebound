@@ -70,7 +70,8 @@ beforeEach(() => {
 })
 
 /**
- * **테마 뷰를 갈아 끼운 판.** 캔버스가 그리는 테마(`src/canvas/canvas-theme.ts`)의 `List` 를 노드 id 로 가른다 —
+ * **테마 뷰를 갈아 끼운 판.** 캔버스가 그리는 테마(기본 하네스의 시험용 로더가 `system-admin@0.1.0` 에 주는 `ADMIN_V0` —
+ * `test/theme-loader.ts`)의 `List` 를 노드 id 로 가른다 —
  * `n-boom` 은 던지고, `n-focus` 는 `Focus` · `marker` 를 쓰는 뷰로 그린다. 나머지 `List` 는 기본 뷰 그대로라 이 파일의
  * 다른 케이스는 영향이 없다.
  *
@@ -79,9 +80,9 @@ beforeEach(() => {
  */
 const { boom } = vi.hoisted(() => ({ boom: { calls: 0, message: '테마 뷰가 터졌습니다 [A1A-BOOM]' } }))
 
-vi.mock('../../src/canvas/canvas-theme', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/canvas/canvas-theme')>()
-  const List = actual.CANVAS_THEME.views.List
+vi.mock('@wirebound/system-theme-admin', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@wirebound/system-theme-admin')>()
+  const List = actual.ADMIN_V0.views.List
   if (List === undefined) throw new Error('캔버스 테마에 List 뷰가 없다')
   const BoomList = view((props) => {
     if (props.nodeId === 'n-boom') {
@@ -100,7 +101,7 @@ vi.mock('../../src/canvas/canvas-theme', async (importOriginal) => {
     }
     return <List {...props} />
   })
-  return { ...actual, CANVAS_THEME: { ...actual.CANVAS_THEME, views: { ...actual.CANVAS_THEME.views, List: BoomList } } }
+  return { ...actual, ADMIN_V0: { ...actual.ADMIN_V0, views: { ...actual.ADMIN_V0.views, List: BoomList } } }
 })
 
 function shellStore(): EditorStore {
@@ -310,13 +311,14 @@ describe('캔버스', () => {
     expect(canvasDocument().querySelector('[data-wb-selected-id]')).toBeNull()
   })
 
-  it('iframe 의 head 에 base · theme 스타일이 차례로 있다 — 호스트 head 에는 테마가 없다', async () => {
+  it('iframe 의 head 에 base · theme · tokens 시트가 차례로 있다 — 호스트 head 에는 테마가 없다', async () => {
     await openPage(docWithText('t1', '안'))
-    const styles = [...canvasDocument().head.querySelectorAll('style[data-wb-style]')]
-    expect(styles.map((style) => style.getAttribute('data-wb-style'))).toEqual(['base', 'theme'])
-    // 저장소 테마의 CSS 가 실렸다 — 빈 시트로는 이 이름이 없다.
-    expect(styles[1]?.textContent).toContain('--wb-semantic-primary')
-    expect(document.head.querySelector('style[data-wb-style="theme"]')).toBeNull()
+    const sheets = [...canvasDocument().head.querySelectorAll('[data-wb-style]')]
+    expect(sheets.map((sheet) => sheet.getAttribute('data-wb-style'))).toEqual(['base', 'theme', 'tokens'])
+    // 테마 시트는 고정한 판의 파일이다(`<link>`) — 토큰 시트는 manifest 의 기본값을 싣는다.
+    expect(sheets[1]?.getAttribute('href')).toBe('/api/theme-packages/system-admin/0.1.0/files/theme.css')
+    expect(sheets[2]?.textContent).toContain('--wb-semantic-primary')
+    expect(document.head.querySelector('[data-wb-style]')).toBeNull()
   })
 
   it('iframe 의 빈 자리 클릭은 선택을 푼다', async () => {

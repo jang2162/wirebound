@@ -5,14 +5,17 @@
  * 직접 잰다. 여기서 재는 것은 그 결과가 **기존 커밋 경로를 그대로 타는가**와
  * **실패 갈래마다 무엇이 되돌아가는가**다.
  *
- * **패턴의 출처는 캔버스 테마의 manifest 다** — `pattern-picker.test.tsx` 와 같은 목으로 `manifest.patterns` 를 싣는다.
+ * **패턴의 출처는 셸이 쥔 바인딩의 manifest 다** — `pattern-picker.test.tsx` 와 같이 셸의 테마 읽기가 `manifest.patterns` 를 싣는다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { applyOps, invertOps, type PageDocument, type PatchOp } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
+import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { deselect, HEAD_SEQ, openPage, pageDetail, pageDoc, structureTypes } from '../editor-harness'
+import { adminThemeView } from '../theme-loader'
 
 /** 옛 시스템 테마 `portal` 이 선언하던 패턴 — 원본은 지워졌으므로 이 파일이 값을 든다(`pattern-picker.test.tsx` 와 같은 값). */
 const PORTAL_PATTERNS = {
@@ -34,19 +37,12 @@ const PORTAL_PATTERNS = {
   },
 }
 
-/** 목의 `manifest.patterns` 가 읽는 자리. 케이스가 바꾼다. */
-const holder = vi.hoisted(() => ({ patterns: undefined as unknown, factoryCalls: 0 }))
-
-vi.mock('../../src/canvas/canvas-theme', async (orig) => {
-  holder.factoryCalls += 1
-  const real = await orig<typeof import('../../src/canvas/canvas-theme')>()
-  const manifest = { ...real.CANVAS_THEME.manifest }
-  Object.defineProperty(manifest, 'patterns', { get: () => holder.patterns, enumerable: true })
-  return { ...real, CANVAS_THEME: { ...real.CANVAS_THEME, manifest } }
-})
+/** 가짜 바인딩의 `manifest.patterns` 가 읽는 자리. 케이스가 바꾼다. */
+const holder = { patterns: undefined as unknown, themeReads: 0 }
 
 beforeEach(() => {
   holder.patterns = PORTAL_PATTERNS
+  holder.themeReads = 0
 })
 
 /**
@@ -101,7 +97,13 @@ function server(options: { failPatch?: boolean } = {}): Server {
     return detail
   }
 
-  return { calls, api: { patchOps, getPage } }
+  // 셸의 테마 읽기 — 그 순간의 `holder.patterns` 를 실은 바인딩이다.
+  const getProjectTheme: ApiClient['getProjectTheme'] = async () => {
+    holder.themeReads += 1
+    return { ...adminThemeView(), manifest: { ...ADMIN_V0.manifest, patterns: holder.patterns } as ThemeManifest }
+  }
+
+  return { calls, api: { patchOps, getPage, getProjectTheme } }
 }
 
 function structureRegion(): HTMLElement {
@@ -137,8 +139,9 @@ async function insertPattern(): Promise<void> {
 }
 
 describe('패턴 삽입 — 기존 커밋 경로를 탄다', () => {
-  it('캔버스 테마 모듈의 목이 닿는다 — 팩토리가 한 번 불린다', () => {
-    expect(holder.factoryCalls).toBe(1)
+  it('셸의 테마 읽기가 닿는다 — 한 번 불린다', async () => {
+    await openPage(doc(), { apiOverrides: server().api })
+    expect(holder.themeReads).toBe(1)
   })
 
   it('편집 하나로 나가고 op은 꽂은 노드 수만큼이다', async () => {
@@ -332,7 +335,7 @@ describe('패턴 삽입 — 실패 갈래마다 무엇이 되돌아가는가', (
     // 덮는다. 그러면 구조 트리에 패턴이 **정상적으로 꽂히고**(`Section`·`SearchForm`·`List`가
     // 보인다) 알림은 `null`이다.
     await openPage(brokenDoc, {
-      apiOverrides: { patchOps: backend.api.patchOps! },
+      apiOverrides: { patchOps: backend.api.patchOps!, getProjectTheme: backend.api.getProjectTheme! },
     })
 
     await insertPattern()

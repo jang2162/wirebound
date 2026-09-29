@@ -17,6 +17,8 @@ import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
 import type { ProjectView, SessionUser } from '../../src/api/types'
 import type { EditorStore } from '../../src/store/editor-store'
+import { ThemeBundleProvider } from '../../src/theme/bundle-context'
+import { staticBundleLoader } from '../theme-loader'
 import {
   currentPath,
   expiringSession,
@@ -474,10 +476,12 @@ describe('프로젝트 전환', () => {
             id === 'p-1' ? Promise.resolve(project({ id, name: '일번 설계서' })) : pending,
         })}
       >
-        <MemoryRouter initialEntries={['/projects/p-1']}>
-          <App />
-          <GoTo to="/projects/p-2" />
-        </MemoryRouter>
+        <ThemeBundleProvider loader={staticBundleLoader()}>
+          <MemoryRouter initialEntries={['/projects/p-1']}>
+            <App />
+            <GoTo to="/projects/p-2" />
+          </MemoryRouter>
+        </ThemeBundleProvider>
       </ApiProvider>,
     )
 

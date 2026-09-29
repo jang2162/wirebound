@@ -22,7 +22,8 @@ import {
 import { ApiError, type ApiClient } from '../../src/api/client'
 import { ApiProvider } from '../../src/api/context'
 import { PropertyPanel, variantFieldOf } from '../../src/panels/property-panel'
-import { CANVAS_THEME } from '../../src/canvas/canvas-theme'
+import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import { withProjectTheme } from '../theme-loader'
 import { EditorStore } from '../../src/store/editor-store'
 import { EditorStoreProvider } from '../../src/store/use-editor-store'
 import type { PatchResult } from '../../src/api/types'
@@ -1123,12 +1124,17 @@ describe('문서가 밖에서 바뀔 때', () => {
     })
   }
 
+  /** 셸 없이 패널만 세운다 — 셸이 쥐는 바인딩은 시험용 공급자가 준다(저장소 테마 그대로). */
+  const Theme = withProjectTheme()
+
   function mountPanel(store: EditorStore): void {
     render(
       <ApiProvider client={fakeApi()}>
-        <EditorStoreProvider store={store}>
-          <PropertyPanel projectId="p-1" pageId="pg-1" canEdit />
-        </EditorStoreProvider>
+        <Theme>
+          <EditorStoreProvider store={store}>
+            <PropertyPanel projectId="p-1" pageId="pg-1" canEdit />
+          </EditorStoreProvider>
+        </Theme>
       </ApiProvider>,
     )
   }
@@ -1359,7 +1365,7 @@ describe('속성 패널 — 변형', () => {
       const def = getComponent(type)
       if (def === undefined) continue
 
-      const field = variantFieldOf(def, CANVAS_THEME.manifest)
+      const field = variantFieldOf(def, ADMIN_V0.manifest)
       if (field === null) continue
 
       for (const option of field.options) {
@@ -1395,7 +1401,7 @@ describe('속성 패널 — 변형', () => {
    * 선언 그대로인지 전수로 센다. 선언이 늘면 여기가 분모를 다시 센다.
    */
   it('manifest 전수 — 선언하고 variantFrom 이 없는 컴포넌트에만 컨트롤이 나오고 선택지가 선언 그대로다', () => {
-    const declared = CANVAS_THEME.manifest.components ?? {}
+    const declared = ADMIN_V0.manifest.components ?? {}
     // 카나리아 — 분모가 비면 아래 루프가 조용히 통과한다.
     expect(Object.keys(declared)).toEqual(['Section', 'Card', 'List', 'Button', 'Link'])
 
@@ -1404,7 +1410,7 @@ describe('속성 패널 — 변형', () => {
       if (def === undefined) continue
       const decl = declared[type]
       const shouldOpen = decl !== undefined && def.variantFrom === undefined
-      const field = variantFieldOf(def, CANVAS_THEME.manifest)
+      const field = variantFieldOf(def, ADMIN_V0.manifest)
       expect(field !== null, type).toBe(shouldOpen)
       if (decl !== undefined && field !== null) {
         expect(field.options, type).toEqual(decl.variants.map((v) => ({ id: v.id, label: v.label })))

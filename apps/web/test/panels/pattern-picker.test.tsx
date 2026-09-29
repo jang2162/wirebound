@@ -4,16 +4,18 @@
  * **여기서 재는 것은 목록이지 삽입이 아니다.** 꽂는 자리와 선택 이동은
  * `../edit/pattern-insert.test.ts`·`./structure-pattern.test.tsx`가 잰다.
  *
- * **패턴의 출처는 캔버스 테마의 manifest 다**(`panels/pattern-picker.tsx` 머리말). 저장소 테마 `system-admin` 첫 판에는
- * 패턴이 없으므로, 목록이 서는 판은 캔버스 테마 모듈을 목으로 바꿔 `manifest.patterns` 를 싣는다. 목이 실제로 닿았는지는
- * 팩토리가 불린 수로 센다(`CLAUDE.md` 「목 · 계측은 불린 수를 값으로 확인하고」).
+ * **패턴의 출처는 셸이 쥔 바인딩의 manifest 다**(`panels/pattern-picker.tsx` 머리말). 저장소 테마 `system-admin` 첫 판에는
+ * 패턴이 없으므로, 목록이 서는 판은 셸의 테마 읽기(`getProjectTheme`)가 `manifest.patterns` 를 실은 바인딩을 준다. 그 가짜가 실제로
+ * 닿았는지는 불린 수로 센다(`CLAUDE.md` 「목 · 계측은 불린 수를 값으로 확인하고」).
  */
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
-import { deselect, openPage, pageDoc } from '../editor-harness'
+import { ADMIN_V0 } from '@wirebound/system-theme-admin'
+import type { ThemeManifest } from '@wirebound/theme-sdk'
+import { deselect, openPage as openShell, pageDoc } from '../editor-harness'
 import { BROKEN_NOTICE, EMPTY_NOTICE, themePatterns } from '../../src/panels/pattern-picker'
-import { CANVAS_THEME } from '../../src/canvas/canvas-theme'
+import { adminThemeView } from '../theme-loader'
 
 /**
  * 옛 시스템 테마 `portal` 이 선언하던 패턴 — 목록이 서는 판의 표본이다. 원본(`packages/themes` 의 시스템 테마)은 지워졌으므로
@@ -38,20 +40,25 @@ const PORTAL_PATTERNS = {
   },
 }
 
-/** 목의 `manifest.patterns` 가 읽는 자리. 케이스가 바꾼다 — `undefined` 면 저장소 테마 그대로(패턴 없음)다. */
-const holder = vi.hoisted(() => ({ patterns: undefined as unknown, factoryCalls: 0 }))
-
-vi.mock('../../src/canvas/canvas-theme', async (orig) => {
-  holder.factoryCalls += 1
-  const real = await orig<typeof import('../../src/canvas/canvas-theme')>()
-  const manifest = { ...real.CANVAS_THEME.manifest }
-  Object.defineProperty(manifest, 'patterns', { get: () => holder.patterns, enumerable: true })
-  return { ...real, CANVAS_THEME: { ...real.CANVAS_THEME, manifest } }
-})
+/** 가짜 바인딩의 `manifest.patterns` 가 읽는 자리. 케이스가 바꾼다 — `undefined` 면 저장소 테마 그대로(패턴 없음)다. */
+const holder = { patterns: undefined as unknown, themeReads: 0 }
 
 beforeEach(() => {
   holder.patterns = PORTAL_PATTERNS
+  holder.themeReads = 0
 })
+
+/** 셸을 연다 — 테마 읽기가 부르는 그 순간의 `holder.patterns` 를 실은 바인딩을 준다. */
+function openPage(document_: PageDocument): Promise<void> {
+  return openShell(document_, {
+    apiOverrides: {
+      getProjectTheme: async () => {
+        holder.themeReads += 1
+        return { ...adminThemeView(), manifest: { ...ADMIN_V0.manifest, patterns: holder.patterns } as ThemeManifest }
+      },
+    },
+  })
+}
 
 function doc(): PageDocument {
   return pageDoc({
@@ -82,19 +89,21 @@ function notice(): string {
 }
 
 describe('패턴 고르개 — 출처', () => {
-  it('캔버스 테마 모듈의 목이 닿는다 — 팩토리가 한 번 불린다', () => {
-    expect(holder.factoryCalls).toBe(1)
-    expect(Object.keys(CANVAS_THEME.manifest.patterns ?? {})).toEqual(['content.noticeBoard'])
+  it('셸의 테마 읽기가 닿는다 — 한 번 불리고 그 패턴이 목록에 선다', async () => {
+    await openPicker()
+    expect(holder.themeReads).toBe(1)
+    const select = await screen.findByLabelText<HTMLSelectElement>('패턴')
+    expect([...select.options].map((option) => option.value)).toEqual(['content.noticeBoard'])
   })
 
   it('manifest 의 패턴을 규격으로 읽어 목록을 낸다', () => {
-    const { entries, broken } = themePatterns({ ...CANVAS_THEME.manifest, patterns: PORTAL_PATTERNS })
+    const { entries, broken } = themePatterns({ ...ADMIN_V0.manifest, patterns: PORTAL_PATTERNS })
     expect(entries.map(([key]) => key)).toEqual(['content.noticeBoard'])
     expect(broken).toBeNull()
   })
 
   it('규격을 통과하지 못하면 목록이 비고 그렇다고 말한다', () => {
-    const { entries, broken } = themePatterns({ ...CANVAS_THEME.manifest, patterns: { 'hero.x': { name: '' } } })
+    const { entries, broken } = themePatterns({ ...ADMIN_V0.manifest, patterns: { 'hero.x': { name: '' } } })
     expect(entries).toEqual([])
     expect(broken).toBe(BROKEN_NOTICE)
   })

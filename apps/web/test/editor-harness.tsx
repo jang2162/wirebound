@@ -29,7 +29,9 @@ import type { PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../src/
 import type { RealtimeSetup } from '../src/realtime/context'
 import type { TabChannel } from '../src/session/tab-channel'
 import type { DraftStore } from '../src/panels/draft-store'
+import type { ThemeBundleLoader } from '../src/theme/bundle-loader'
 import { fakeApi, renderWithProviders } from './helpers'
+import { adminThemeView } from './theme-loader'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 
@@ -147,6 +149,8 @@ export interface EditorOptions {
   tabChannel?: TabChannel
   /** 초안의 사본. 생략하면 초안은 메모리에만 산다(`helpers.tsx`의 그 필드). */
   draftStore?: DraftStore
+  /** 테마 번들 로더. 생략하면 `system-admin@0.1.0` 만 아는 시험용 로더다(`helpers.tsx`의 그 필드). */
+  bundleLoader?: ThemeBundleLoader
 }
 
 /** 셸을 렌더하기만 한다. 성공 대역을 기다리는 것은 호출자 몫이다. */
@@ -177,12 +181,15 @@ export function renderEditor(options: EditorOptions = {}): void {
         // 스텁하지 않으면 `notStubbed`가 던지고, 그 예외는 복원 쪽 `catch`가 삼켜서
         // **아무 일도 안 일어난 것과 구별되지 않는다.**
         listMyRevisions: async () => [],
+        // 셸이 프로젝트의 테마 바인딩을 읽는다 — 새 프로젝트가 서는 판(`system-admin@0.1.0`) 그대로다.
+        getProjectTheme: async () => adminThemeView(),
         ...options.apiOverrides,
       }),
       route: options.route ?? PAGE_ROUTE,
       ...(options.realtime === undefined ? {} : { realtime: options.realtime }),
       ...(options.tabChannel === undefined ? {} : { tabChannel: options.tabChannel }),
       ...(options.draftStore === undefined ? {} : { draftStore: options.draftStore }),
+      ...(options.bundleLoader === undefined ? {} : { bundleLoader: options.bundleLoader }),
     },
   )
 }
