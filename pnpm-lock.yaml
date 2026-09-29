@@ -118,6 +118,9 @@ importers:
       '@wirebound/schema':
         specifier: workspace:*
         version: link:../../packages/schema
+      '@wirebound/theme-gallery':
+        specifier: workspace:*
+        version: link:../../packages/theme-gallery
       '@wirebound/theme-sdk':
         specifier: workspace:*
         version: link:../../packages/theme-sdk

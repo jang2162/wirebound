@@ -15,6 +15,7 @@ import { toFailure } from '../api/failure'
 import type { ProjectThemeView, ProjectView } from '../api/types'
 import { projectAbilities } from '../projects/project-actions'
 import { ThemeChooser } from './theme-chooser'
+import { TokenEditor } from './token-editor'
 
 const LOAD_FAILURE = '테마를 불러오지 못했습니다'
 
@@ -78,6 +79,15 @@ export function ThemeSection(props: { project: ProjectView }): ReactElement {
           <CurrentTheme view={state.view} />
           {canChoose && state.view.themeId !== null && state.view.version !== null && (
             <ThemeChooser projectId={projectId} view={state.view} onSaved={saved} onStale={() => void reload()} />
+          )}
+          {state.view.themeId !== null && state.view.version !== null && state.view.manifest !== null && (
+            <TokenEditor
+              projectId={projectId}
+              view={state.view}
+              canEdit={canChoose}
+              onSaved={saved}
+              onStale={() => void reload()}
+            />
           )}
         </>
       )}

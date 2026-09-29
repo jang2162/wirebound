@@ -191,8 +191,8 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 에디터 셸의 프로젝트 테마가 바인딩 · manifest · 토큰을 읽는다 — 캔버스 · 속성 패널 · 패턴 고르개는 그 값을 받는다.
   // 설정 페이지의 «테마» 절이 지금 바인딩을 읽는다(고르개 · 토큰 편집기가 그 값에서 시작한다).
   getProjectTheme: ['../src/theme/project-theme.tsx', '../src/settings/theme-section.tsx'],
-  // 테마 고르개가 판을 바꾸며 저장한다(토큰 편집기도 같은 판으로 저장한다 — 그 자리가 서면 여기에 더한다).
-  putProjectTheme: ['../src/settings/theme-chooser.tsx'],
+  // 둘이 저장한다 — 고르개는 판을 바꾸며(잇는 토큰과 함께), 토큰 편집기는 같은 판으로 토큰만. 둘 다 절이 쥔 `rev` 로 보낸다.
+  putProjectTheme: ['../src/settings/theme-chooser.tsx', '../src/settings/token-editor.tsx'],
   // 고르개의 목록 · 확인 창(바꾸면 무엇이 달라지나 · 잇는 토큰을 셀 새 manifest).
   getThemeImpact: ['../src/settings/theme-chooser.tsx'],
   listThemePackages: ['../src/settings/theme-chooser.tsx'],

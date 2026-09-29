@@ -99,6 +99,7 @@ export interface Violation {
  * 2. `wb-shell-canvas` — 그 사슬 둘째
  * 3. `wb-shell-canvas-frame` — 셋째
  * 4. `wb-shell-canvas-surface` — 넷째. 여기 안에 페이지 문서가 들어온다
+ * 5. `wb-shell-settings-preview` — 설정 페이지의 갤러리 미리보기(`settings/theme-preview.tsx`). 문서(갤러리)가 iframe 째 들어온다
  *
  * > **문서를 감싸는 상자를 만드는 사람이 여기 한 줄을 더하는 것이 이 목록의 유일한 갱신
  * > 방법이다** — 목록에 없는 상자에 상속 속성을 걸면 **아무 케이스도 안 죽고**, 목록에 있으면
@@ -110,6 +111,7 @@ const WRAPPERS = new Set([
   'wb-shell-canvas',
   'wb-shell-canvas-frame',
   'wb-shell-canvas-surface',
+  'wb-shell-settings-preview',
 ])
 
 /**
