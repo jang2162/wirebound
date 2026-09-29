@@ -101,6 +101,57 @@ describe('CanvasIframe', () => {
     )
   })
 
+  /**
+   * link 시트가 실리는 동안 전이를 멈추는 시트의 수명. jsdom 은 link 를 싣지 않아 `load` · `error` 를 손으로 낸다 — 멈춤이 실제로 전이를
+   * 막는지(계산값)는 실브라우저 판 `apps/web/build-test/canvas-iframe.test.ts` 「늦게 온 테마 시트」 가 잰다.
+   */
+  describe('link 가 실리는 동안의 전이 멈춤', () => {
+    const hold = (container: HTMLElement) => frameDoc(container).head.querySelector('style[data-wb-hold]')
+
+    it('새 link 가 실리기 전에는 head 맨 앞에 서고, load 뒤 걷힌다 — 걷을 때 다시 잰다', async () => {
+      const { container } = render(
+        <CanvasIframe styles={[{ id: 'base', css: 'p{}' }, { id: 'theme', href: '/a.css' }]} width={1280}>{() => null}</CanvasIframe>,
+      )
+      await waitFor(() => expect(hold(container)).not.toBeNull())
+      const doc = frameDoc(container)
+      expect(doc.head.firstElementChild).toBe(hold(container))
+      const measured = vi.fn()
+      doc.defaultView!.addEventListener('wb-canvas-measure', measured)
+      await act(async () => { doc.head.querySelector('link')!.dispatchEvent(new Event('load')) })
+      expect({ hold: hold(container), measured: measured.mock.calls.length }).toEqual({ hold: null, measured: 1 })
+    })
+
+    it('error 도 걷는다 — 못 받은 시트를 끝없이 기다리지 않는다', async () => {
+      const { container } = render(<CanvasIframe styles={[{ id: 'theme', href: '/a.css' }]} width={1280}>{() => null}</CanvasIframe>)
+      await waitFor(() => expect(hold(container)).not.toBeNull())
+      await act(async () => { frameDoc(container).head.querySelector('link')!.dispatchEvent(new Event('error')) })
+      expect(hold(container)).toBeNull()
+    })
+
+    it('href 가 바뀌면 다시 선다 — 판을 바꾼 시트도 전이 없이 얹힌다', async () => {
+      const { container, rerender } = render(<CanvasIframe styles={[{ id: 'theme', href: '/a.css' }]} width={1280}>{() => null}</CanvasIframe>)
+      await waitFor(() => expect(hold(container)).not.toBeNull())
+      await act(async () => { frameDoc(container).head.querySelector('link')!.dispatchEvent(new Event('load')) })
+      expect(hold(container)).toBeNull()
+      rerender(<CanvasIframe styles={[{ id: 'theme', href: '/b.css' }]} width={1280}>{() => null}</CanvasIframe>)
+      await waitFor(() => expect(hold(container)).not.toBeNull())
+    })
+
+    it('css 시트만이면 서지 않는다 — 인라인 시트는 첫 계산에 있다', async () => {
+      const { container } = render(<CanvasIframe styles={[{ id: 'base', css: 'p{}' }]} width={1280}>{() => null}</CanvasIframe>)
+      await waitFor(() => expect(frameDoc(container).head.querySelector('style[data-wb-style="base"]')).not.toBeNull())
+      expect(hold(container)).toBeNull()
+    })
+
+    it('실리기 전에 걷힌 link 는 안 기다린다 — 번들이 실패해 theme 시트를 뺀 판', async () => {
+      const { container, rerender } = render(<CanvasIframe styles={[{ id: 'theme', href: '/a.css' }]} width={1280}>{() => null}</CanvasIframe>)
+      await waitFor(() => expect(hold(container)).not.toBeNull())
+      rerender(<CanvasIframe styles={[{ id: 'base', css: 'p{}' }]} width={1280}>{() => null}</CanvasIframe>)
+      await waitFor(() => expect(frameDoc(container).head.querySelector('link')).toBeNull())
+      expect(hold(container)).toBeNull()
+    })
+  })
+
   it('iframe 안 클릭이 호스트 onClick 에 닿는다', async () => {
     const onClick = vi.fn()
     const { container } = render(

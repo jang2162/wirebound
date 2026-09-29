@@ -26,6 +26,17 @@ export type CanvasSheet = { readonly id: string; readonly css: string } | { read
 /** 레이아웃이 없는 jsdom 에서 다시 재게 하는 신호. 실브라우저에서는 `ResizeObserver` 가 부른다. */
 const MEASURE_EVENT = 'wb-canvas-measure'
 
+/**
+ * link 시트가 실리는 동안 캔버스 문서의 전이를 멈추는 시트. `@layer` 안의 `!important` 는 층 밖(테마 시트)의 `!important` 를 이긴다 —
+ * 테마가 `transition` 에 `!important` 를 실어도 멈춘다. 층 이름은 head 맨 앞에서 처음 선언되므로 테마가 층을 써도 이 층이 먼저다(케이스는
+ * `!important` 없는 system-admin 으로만 잰다 — `build-test/canvas-iframe.test.ts` 「늦게 온 테마 시트」).
+ */
+const HOLD_ATTR = 'data-wb-hold'
+const HOLD_CSS = '@layer wb-hold { *, *::before, *::after { transition: none !important; } }'
+
+/** 문서마다 아직 안 실린 link 시트. */
+const pendingLinks = new WeakMap<Document, Set<HTMLLinkElement>>()
+
 /** 문서가 비었을 때의 높이. 빈 캔버스도 누를 자리가 있어야 선택을 풀 수 있다. */
 const MIN_HEIGHT = 320
 
@@ -71,7 +82,7 @@ export function CanvasIframe(props: {
 
   useLayoutEffect(() => {
     if (frame === null) return
-    syncSheets(frame.document, props.styles)
+    holdTransitions(frame, syncSheets(frame.document, props.styles))
   }, [frame, props.styles])
 
   /**
@@ -136,11 +147,12 @@ export function CanvasIframe(props: {
  * head 의 시트를 `sheets` 와 같게 — 같은 id 의 같은 종류는 그 요소를 고쳐 쓰고(링크를 다시 받지 않게), 종류가 바뀌면 그 자리에서 바꾸고,
  * 사라진 id 는 걷는다. 차례가 어긋났을 때만 다시 붙인다 — `<link>` 를 떼었다 붙이면 시트가 한 번 빠졌다 선다.
  */
-function syncSheets(doc: Document, sheets: readonly CanvasSheet[]): void {
+function syncSheets(doc: Document, sheets: readonly CanvasSheet[]): HTMLLinkElement[] {
   const head = doc.head
   const existing = new Map<string, Element>()
   for (const el of head.querySelectorAll('[data-wb-style]')) existing.set(el.getAttribute('data-wb-style') ?? '', el)
   const wanted: Element[] = []
+  const loading: HTMLLinkElement[] = []
   for (const sheet of sheets) {
     let el = existing.get(sheet.id)
     const tag = 'href' in sheet ? 'link' : 'style'
@@ -157,7 +169,10 @@ function syncSheets(doc: Document, sheets: readonly CanvasSheet[]): void {
     }
     if ('href' in sheet) {
       if (el.getAttribute('rel') !== 'stylesheet') el.setAttribute('rel', 'stylesheet')
-      if (el.getAttribute('href') !== sheet.href) el.setAttribute('href', sheet.href)
+      if (el.getAttribute('href') !== sheet.href) {
+        el.setAttribute('href', sheet.href)
+        loading.push(el as HTMLLinkElement)
+      }
     } else if (el.textContent !== sheet.css) {
       el.textContent = sheet.css
     }
@@ -168,5 +183,62 @@ function syncSheets(doc: Document, sheets: readonly CanvasSheet[]): void {
   const order = [...head.querySelectorAll('[data-wb-style]')]
   if (order.length !== wanted.length || order.some((el, i) => el !== wanted[i])) {
     for (const el of wanted) head.appendChild(el)
+  }
+  return loading
+}
+
+/**
+ * **새로 받는 link 시트가 실릴 때까지 전이를 멈춘다.** `<link>` 는 문서를 그린 뒤에 얹히므로(인라인 `<style>` 과 달리 첫 계산에 없다) 그 시트의
+ * `transition`(system-admin 의 단추는 padding 까지 옮긴다)이 기본값 → 테마 값을 전이로 그린다 — 노드가 수백 ms 동안 미끄러지고, 그 사이에 잰
+ * 선택 외곽선 · 마커가 옛 자리에 남는다(`build-test/canvas-iframe.test.ts` 「늦게 온 테마 시트」). 판을 바꿔 href 가 바뀔 때도 같다.
+ *
+ * 다 실리면(`load` · `error`) 시트가 얹힌 값을 한 번 계산하게 한 뒤 멈춤을 걷고 다시 잰다 — 같은 계산에서 걷으면 그 계산이 전이를 연다.
+ * 다시 재라는 신호는 `test/canvas/canvas-iframe.test.tsx` 가 센다. 그 신호 없이 실브라우저의 외곽선 · 마커가 틀리는 판은 못 세웠다 — 대개 시트가
+ * 실린 뒤에 서서 신호를 뗀 변조도 실브라우저 판은 초록이다. 노드는 시트가 실릴 때 body 크기를 안 바꾸고 옮길 수 있어(`ResizeObserver` 가
+ * 안 부른다) 둔다.
+ * 실리기 전에 걷힌 link(판이 또 바뀜)는 기다리지 않는다. jsdom 은 link 를 싣지 않아 `load` 가 안 온다 — 멈춤이 남지만 jsdom 에는 전이가 없다.
+ */
+function holdTransitions(frame: CanvasFrame, loading: readonly HTMLLinkElement[]): void {
+  const doc = frame.document
+  let waiting = pendingLinks.get(doc)
+  if (waiting === undefined) {
+    waiting = new Set()
+    pendingLinks.set(doc, waiting)
+  }
+  const pending = waiting
+  const release = () => {
+    const hold = doc.head.querySelector(`style[${HOLD_ATTR}]`)
+    if (hold === null) return
+    void doc.documentElement.getBoundingClientRect()
+    hold.remove()
+    frame.window.dispatchEvent(new Event(MEASURE_EVENT))
+  }
+  for (const link of [...pending]) if (!link.isConnected) pending.delete(link)
+  for (const link of loading) {
+    if (pending.has(link)) continue
+    pending.add(link)
+    const settle = () => {
+      link.removeEventListener('load', settle)
+      link.removeEventListener('error', settle)
+      pending.delete(link)
+      if (pending.size === 0) release()
+    }
+    link.addEventListener('load', settle)
+    link.addEventListener('error', settle)
+  }
+  if (pending.size === 0) {
+    release()
+    return
+  }
+  if (doc.head.querySelector(`style[${HOLD_ATTR}]`) === null) {
+    const hold = doc.createElement('style')
+    hold.setAttribute(HOLD_ATTR, '')
+    doc.head.prepend(hold)
+    // 글(`textContent`)이 아니라 규칙으로 넣는다 — jsdom 의 CSS 파서는 `@layer` 를 못 읽어 캔버스를 그릴 때마다 오류를 찍는다. 거기엔 전이가 없다.
+    try {
+      hold.sheet?.insertRule(HOLD_CSS)
+    } catch {
+      // `@layer` 를 못 읽는 문서 — 멈출 전이도 없다.
+    }
   }
 }

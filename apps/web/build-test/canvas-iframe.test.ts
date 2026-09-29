@@ -5,6 +5,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 문서가 iframe 안에 | 호스트 문서에 `data-wb-component` 가 있다 |
+ * | 늦게 온 테마 시트가 노드를 전이로 안 미끄러뜨린다 | theme.css(`<link>`)가 첫 그림 뒤에 얹혀 그 `transition` 이 단추 padding 을 전이로 키우고, 아래 노드가 수백 ms 동안 움직인다 — 외곽선 · 마커가 전이 도중에 잰 자리에 남는다 |
  * | 테마 CSS 가 에디터를 안 칠한다 | iframe 에 넣은 `button { … !important }` 가 셸의 모드 단추에 닿는다(카나리아: iframe 안의 버튼은 칠해진다) |
  * | `@media` 가 프리셋 폭으로 | iframe 폭이 아니라 창 폭(1440)으로 판정된다 |
  * | 클릭 선택 · 외곽선 자리 | 외곽선이 노드와 1px 넘게 어긋난다(줌 1 · 0.5) |
@@ -73,6 +74,40 @@ describe.skipIf(!전제.ok)('캔버스 iframe — 실브라우저', () => {
       })
       const settled = await settle(read, (value) => value.캔버스버튼 === 'rgb(1, 2, 3)' || value.셸버튼 !== before)
       expect(settled).toEqual({ 캔버스버튼: 'rgb(1, 2, 3)', 셸버튼: before })
+    })
+  })
+
+  it('늦게 온 테마 시트가 노드를 전이로 미끄러뜨리지 않는다 — 시트가 실리면 한 번에 선다', async () => {
+    const P = await fixture(stack, alice, 'iframe-still', 2)
+    await withTab(stack, async (page) => {
+      // 노드가 선 첫 프레임부터 600ms 동안 프레임마다 잰다 — 전이는 수백 ms 라 playwright 왕복 사이로 재면 끝난 뒤만 본다. 문서를 열기
+      // 전에 심어야 첫 프레임을 본다(초기화 스크립트는 문자열로 — 변환기가 함수에 끼우는 도우미가 페이지에 없다).
+      await page.addInitScript({
+        content: `(() => {
+          const ys = []; let first = 0
+          const tick = (now) => {
+            const iframe = document.querySelector('iframe.wb-shell-canvas-iframe')
+            const node = iframe && iframe.contentDocument && iframe.contentDocument.querySelector('[data-wb-id="n_text0000002"]')
+            if (node) { if (first === 0) first = now; ys.push(Math.round(node.getBoundingClientRect().y * 100) / 100) }
+            if (first !== 0 && now - first > 600) window.__wbStill = ys
+            else requestAnimationFrame(tick)
+          }
+          requestAnimationFrame(tick)
+        })()`,
+      })
+      await page.goto(P)
+      const ys = (await (await page.waitForFunction(() => (window as unknown as { __wbStill?: number[] }).__wbStill)).jsonValue()) as number[]
+      // 판 카나리아 — 테마 시트가 실렸고 그 단추 규칙에 전이가 있다(없으면 미끄러질 까닭이 없어 아무것도 안 잰다).
+      const canary = await canvasFrame(page).locator('button[data-wb-id]').evaluate((el) => ({
+        sheet: (el.ownerDocument.querySelector('link[data-wb-style="theme"]') as HTMLLinkElement | null)?.sheet !== null,
+        transition: getComputedStyle(el).transitionDuration !== '0s',
+      }))
+      // 시트가 오기 전의 첫 프레임은 테마 없는 자리다 — 거기서 테마 자리로 **한 번에** 뛰어야 한다(중간값이 있으면 전이다).
+      const positions = ys.filter((y, i) => i === 0 || y !== ys[i - 1])
+      expect({ canary, stops: positions.length <= 2 ? 'at most one jump' : positions }).toEqual({
+        canary: { sheet: true, transition: true },
+        stops: 'at most one jump',
+      })
     })
   })
 
@@ -154,17 +189,20 @@ async function withTab(stack: EditorStack, run: (page: Page) => Promise<void>): 
 }
 
 /**
- * 테마 시트(`style[data-wb-style="theme"]`)에 규칙을 덧붙인다 — **캔버스가 테마 CSS 를 실은 바로 그 자리**다. 시트가 어느 문서에
- * 있든(호스트 · iframe) 찾아 붙이므로, 캔버스가 테마를 호스트 문서에 싣는 판이면 이 규칙도 호스트에 닿아 케이스가 죽는다.
+ * 테마 시트(`[data-wb-style="theme"]` — `theme.css` 의 `<link>`) 바로 뒤에 규칙을 담은 `<style>` 을 둔다 — **캔버스가 테마 CSS 를 실은
+ * 바로 그 문서**다. 시트가 어느 문서에 있든(호스트 · iframe) 찾아 붙이므로, 캔버스가 테마를 호스트 문서에 싣는 판이면 이 규칙도 호스트에
+ * 닿아 케이스가 죽는다. `data-wb-style` 을 안 달아 캔버스의 시트 맞추기(`syncSheets`)가 걷지 않는다.
  */
 async function appendToThemeSheet(page: Page, css: string): Promise<void> {
   const found = await page.evaluate((text) => {
     const iframe = document.querySelector<HTMLIFrameElement>('iframe.wb-shell-canvas-iframe')
     const docs = [document, iframe?.contentDocument].filter((doc): doc is Document => doc !== null && doc !== undefined)
     for (const doc of docs) {
-      const sheet = doc.querySelector('style[data-wb-style="theme"]')
+      const sheet = doc.querySelector('[data-wb-style="theme"]')
       if (sheet !== null) {
-        sheet.textContent = `${sheet.textContent ?? ''}\n${text}`
+        const style = doc.createElement('style')
+        style.textContent = text
+        sheet.after(style)
         return true
       }
     }
