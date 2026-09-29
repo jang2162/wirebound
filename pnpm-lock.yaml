@@ -167,6 +167,9 @@ importers:
       '@wirebound/test-support':
         specifier: workspace:*
         version: link:../../packages/test-support
+      '@wirebound/theme-kit':
+        specifier: workspace:*
+        version: link:../../packages/theme-kit
       pg:
         specifier: ^8.13.0
         version: 8.22.0

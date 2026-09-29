@@ -1,0 +1,125 @@
+/**
+ * 테마 실브라우저 판(`theme-*.test.ts`)이 함께 쓰는 픽스처 — 한 판(`editor-stack.ts`) 위에 프로젝트 · 페이지 · 올린 테마를 세운다.
+ *
+ * 픽스처 테마는 kit 의 `sample-theme`(`packages/theme-kit/test/fixtures/sample-theme` — `sample@1.0.0`)를 **kit `buildTheme` 로 케이스
+ * 안에서 짓는다** — 업로드가 받는 진짜 산출물이고, 그 `Card` 뷰가 «샘플 카드» 를 그려 SDK 기본 뷰와 갈린다(시스템 테마 `system-admin` 의
+ * 첫 판은 뷰가 기본 뷰 그대로라 «테마 뷰로 그렸다» 를 못 가른다).
+ */
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { buildTheme } from '@wirebound/theme-kit'
+import type { Page } from 'playwright-core'
+import { canvasFrame, type EditorStack, type Session, type StackUser } from './editor-stack'
+
+const SAMPLE_ROOT = fileURLToPath(new URL('../../../packages/theme-kit/test/fixtures/sample-theme/', import.meta.url))
+
+/** `sample@1.0.0` 의 `.wbtheme` 바이트 — kit 으로 짓는다. */
+export async function sampleTheme(): Promise<Uint8Array> {
+  const outDir = mkdtempSync(join(tmpdir(), 'wb-browser-theme-'))
+  try {
+    const built = await buildTheme({ root: SAMPLE_ROOT, entry: 'src/index.tsx', outDir })
+    return new Uint8Array(readFileSync(built.file))
+  } finally {
+    rmSync(outDir, { recursive: true, force: true })
+  }
+}
+
+/** 인스턴스 관리자로 만든다 — API 에는 그 길이 없다(spec 「인스턴스 관리자」). 이 판의 DB 에 직접 쓴다. */
+export async function makeAdmin(stack: EditorStack, user: StackUser): Promise<void> {
+  await stack.query('update users set is_instance_admin = true where email = $1', [user.email])
+}
+
+/** zip 바이트를 그대로 올린다(`POST /api/admin/theme-packages` — JSON 이 아니다). */
+export async function uploadRaw(stack: EditorStack, session: Session, bytes: Uint8Array): Promise<number> {
+  const response = await fetch(`${stack.apiUrl}/api/admin/theme-packages`, {
+    method: 'POST',
+    headers: { cookie: session.cookie, 'content-type': 'application/zip' },
+    // 사본을 Blob 으로 — `fetch` 의 본문 타입이 `ArrayBuffer` 를 쥔 뷰만 받는다.
+    body: new Blob([new Uint8Array(bytes)]),
+  })
+  return response.status
+}
+
+type Call = (method: string, path: string, body?: unknown) => Promise<{ status: number; body: any }>
+
+function created(response: { status: number; body: any }, what: string): { id: string } {
+  if (response.status !== 201) throw new Error(`픽스처 ${what} ${response.status} ${JSON.stringify(response.body)}`)
+  return response.body
+}
+
+/**
+ * 프로젝트 하나 · 메뉴 하나 · 페이지 둘. 첫 페이지에는 글(`원문`)과 카드(`n_card000001`)를 둔다 — 카드가 테마 뷰(«샘플 카드»)와
+ * 기본 뷰를 가른다. `bob` 을 주면 editor 로 들인다.
+ */
+export async function themeProject(
+  stack: EditorStack,
+  owner: Session,
+  options: { bob?: boolean } = {},
+): Promise<{ id: string; first: string; second: string; call: Call }> {
+  const call: Call = (method, path, body) => stack.request(owner, method, path, body)
+  const project = created(await call('POST', '/projects', { name: '테마 판', slug: `theme-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }), '프로젝트')
+  const menu = created(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '메뉴' }), '메뉴')
+  const first = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' }), '첫째')
+  const second = created(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '둘째' }), '둘째')
+  const seeded = await call('PATCH', `/projects/${project.id}/pages/${first.id}/ops`, {
+    baseSeq: 0,
+    ops: [
+      { op: 'add', path: '/root/children/0', value: { id: 'n_text000001', type: 'Text', props: { content: '원문' } } },
+      { op: 'add', path: '/root/children/1', value: { id: 'n_card000001', type: 'Card', props: { title: '카드' } } },
+    ],
+  })
+  if (seeded.status >= 300) throw new Error(`픽스처 ops ${seeded.status} ${JSON.stringify(seeded.body)}`)
+  const other = await call('PATCH', `/projects/${project.id}/pages/${second.id}/ops`, {
+    baseSeq: 0,
+    ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_text000002', type: 'Text', props: { content: '둘째 글' } } }],
+  })
+  if (other.status >= 300) throw new Error(`픽스처 ops ${other.status}`)
+  if (options.bob === true) {
+    const member = await call('POST', `/projects/${project.id}/members`, { email: stack.users.bob.email, role: 'editor' })
+    if (member.status !== 201) throw new Error(`멤버 ${member.status} ${JSON.stringify(member.body)}`)
+  }
+  return { id: project.id, first: first.id, second: second.id, call }
+}
+
+/** 프로젝트 테마를 API 로 저장한다 — 지금 `rev` 를 읽어 싣는다. */
+export async function putTheme(call: Call, projectId: string, body: { themeId: string; version: string; tokens: Record<string, string | number> }): Promise<void> {
+  const now = await call('GET', `/projects/${projectId}/theme`)
+  const saved = await call('PUT', `/projects/${projectId}/theme`, { ...body, rev: now.body.rev })
+  if (saved.status !== 200) throw new Error(`테마 저장 ${saved.status} ${JSON.stringify(saved.body)}`)
+}
+
+/** 캔버스 문서의 `:root` 에서 토큰 변수의 **계산값** — 시트의 겹침까지 지난 값이다. */
+export async function canvasVar(page: Page, name: string): Promise<string> {
+  const handle = await page.$('iframe.wb-shell-canvas-iframe')
+  const frame = await handle?.contentFrame()
+  if (frame === null || frame === undefined) return ''
+  return frame.evaluate((variable) => getComputedStyle(document.documentElement).getPropertyValue(variable).trim(), name)
+}
+
+/** 캔버스 iframe 머리의 시트 차례 — `style:base` · `link:theme` · `style:tokens`. */
+export async function canvasSheets(page: Page): Promise<string[]> {
+  return canvasFrame(page)
+    .locator('head [data-wb-style]')
+    .evaluateAll((elements) => elements.map((el) => `${el.tagName.toLowerCase()}:${el.getAttribute('data-wb-style')}`))
+}
+
+/** 캔버스의 카드가 테마 뷰(«샘플 카드»)로 그려졌나. */
+export async function sampleCard(page: Page): Promise<boolean> {
+  return (await canvasFrame(page).locator('body', { hasText: '샘플 카드' }).count()) > 0
+}
+
+/** 이 탭이 낸 테마 파일 요청을 센다. */
+export function countThemeFiles(page: Page): { js: () => number; css: () => number; lines: string[] } {
+  const lines: string[] = []
+  page.on('request', (request) => {
+    const url = request.url()
+    if (url.includes('/files/theme.js') || url.includes('/files/theme.css')) lines.push(url.replace(/^.*\/api\/theme-packages\//, ''))
+  })
+  return {
+    js: () => lines.filter((line) => line.endsWith('theme.js')).length,
+    css: () => lines.filter((line) => line.endsWith('theme.css')).length,
+    lines,
+  }
+}
