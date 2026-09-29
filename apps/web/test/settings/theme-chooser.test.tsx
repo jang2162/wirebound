@@ -103,6 +103,17 @@ function options(name: string): string[] {
   return [...select(name).options].map((option) => `${option.textContent}${option.disabled ? ' [off]' : ''}`)
 }
 
+async function chooseAcme(api: ReturnType<typeof renderTheme>): Promise<HTMLElement> {
+  await ready()
+  await waitFor(() => expect(options('테마')).toContain('Acme'))
+  fireEvent.change(select('테마'), { target: { value: 'acme' } })
+  const confirm = await within(section()).findByRole('group', { name: '테마 바꾸기 확인' })
+  await waitFor(() => expect(within(confirm).getByText('이어짐 3 · 버려짐 1 · 기본값 2')).toBeDefined())
+  expect(api.getThemeManifest).toHaveBeenCalledWith({ themeId: 'acme', version: '1.0.0' }, expect.anything())
+  expect(api.getThemeImpact).toHaveBeenCalledWith('p-1', { themeId: 'acme', version: '1.0.0' }, expect.anything())
+  return confirm
+}
+
 describe('«테마» 절 — 지금 값', () => {
   it('이름 id@버전 과 더 높은 판이 있으면 «새 버전»', async () => {
     renderTheme()
@@ -147,17 +158,6 @@ describe('«테마» 절 — 목록', () => {
 })
 
 describe('«테마» 절 — 바꾸기 확인', () => {
-  async function chooseAcme(api: ReturnType<typeof renderTheme>): Promise<HTMLElement> {
-    await ready()
-    await waitFor(() => expect(options('테마')).toContain('Acme'))
-    fireEvent.change(select('테마'), { target: { value: 'acme' } })
-    const confirm = await within(section()).findByRole('group', { name: '테마 바꾸기 확인' })
-    await waitFor(() => expect(within(confirm).getByText('이어짐 3 · 버려짐 1 · 기본값 2')).toBeDefined())
-    expect(api.getThemeManifest).toHaveBeenCalledWith({ themeId: 'acme', version: '1.0.0' }, expect.anything())
-    expect(api.getThemeImpact).toHaveBeenCalledWith('p-1', { themeId: 'acme', version: '1.0.0' }, expect.anything())
-    return confirm
-  }
-
   it('다른 판을 고르면 인라인 확인에 토큰 수와 페이지별 variant 수가 선다', async () => {
     const api = renderTheme()
     const confirm = await chooseAcme(api)
@@ -210,5 +210,49 @@ describe('«테마» 절 — 바꾸기 확인', () => {
     const confirm = await chooseAcme(api)
     fireEvent.click(within(confirm).getByRole('button', { name: '바꾸기' }))
     await within(section()).findByText('이 판은 숨겨져 고를 수 없습니다')
+  })
+})
+
+/**
+ * 고르개의 저장 · 409 다시 읽기도 절의 바인딩을 바꾼다 — 옆 토큰 편집기의 저장 안 한 초안이 남는지(`settings/token-editor.tsx` 머리말
+ * «바인딩이 바뀌어도»). 실브라우저 판은 `build-test/theme-review.test.ts` 의 «토큰 초안을 둔 채 …» 둘이다.
+ */
+describe('«테마» 절 — 고르개와 토큰 초안', () => {
+  function draft(label: string): HTMLInputElement {
+    return within(screen.getByRole('group', { name: '토큰' })).getByLabelText(label)
+  }
+
+  it('다른 판으로 바꾸면 이어지는 칸의 초안은 남고, 옮기지 못한 칸의 수를 한 줄로 말한다', async () => {
+    const api = renderTheme()
+    await ready()
+    fireEvent.change(draft('주색'), { target: { value: '#123456' } })
+    // 위험 — 새 판에 없다 · 모서리(작게) — 새 판에서 타입이 다르다.
+    fireEvent.change(draft('위험'), { target: { value: '#bbbbbb' } })
+    fireEvent.change(draft('모서리(작게)'), { target: { value: '6' } })
+    const confirm = await chooseAcme(api)
+    fireEvent.click(within(confirm).getByRole('button', { name: '바꾸기' }))
+    await waitFor(() => expect(within(section()).getByText('Acme acme@1.0.0')).toBeDefined())
+    expect(draft('주색').value).toBe('#123456')
+    expect(draft('새것').value).toBe('#ffffff')
+    expect(within(screen.getByRole('group', { name: '토큰' })).getByText('바꾼 판으로 옮기지 못한 토큰 2 개의 초안을 버렸습니다')).toBeDefined()
+  })
+
+  it('고르개가 409 로 다시 읽어도 같은 판의 초안은 반쯤 친 값까지 남고, 초안이 없는 칸은 서버 값으로 선다', async () => {
+    const reread = { ...CURRENT, rev: 5, tokens: { ...CURRENT.tokens, 'semantic.danger': '#00aa00' } }
+    const api = renderTheme('owner', {
+      getProjectTheme: vi.fn().mockResolvedValueOnce(CURRENT).mockResolvedValue(reread),
+      putProjectTheme: vi.fn(async () => {
+        throw new ApiError(409, 'conflict', '다른 곳에서 테마를 먼저 저장했습니다', [], true, reread)
+      }),
+    })
+    await ready()
+    // 검사에 걸리는 값 — 판이 같으면 옮기지 않고 그대로 둔다(`migrateTokens` 는 이런 값을 버린다).
+    fireEvent.change(draft('주색'), { target: { value: '#12' } })
+    const confirm = await chooseAcme(api)
+    fireEvent.click(within(confirm).getByRole('button', { name: '바꾸기' }))
+    await within(section()).findByText('다른 사람이 먼저 바꿨습니다 — 지금 값을 다시 읽었습니다')
+    await waitFor(() => expect(draft('위험').value).toBe('#00aa00'))
+    expect(draft('주색').value).toBe('#12')
+    expect(within(screen.getByRole('group', { name: '토큰' })).queryByText(/옮기지 못한/)).toBeNull()
   })
 })

@@ -9,12 +9,16 @@
  * - **409** — 서버의 지금 값(`ApiError.current`)과 초안을 **다른 칸만** 나란히 보이고 고르게 한다: «서버 값으로»(초안 · `rev` 를 서버
  *   것으로) · «내 값으로 덮기»(서버 `rev` 로 다시 보낸다). 그 사이 남이 **판을 바꿨으면** 덮기가 판을 되돌려 버리므로 서버 값으로만 간다.
  * - **422** — `issues[].path` 가 `tokens.<키>` 면 그 칸에, `tokens`(전체 한도)면 저장 단추 옆에 선다.
+ * - **바인딩이 바뀌어도 저장 안 한 초안은 남는다** — 옆 고르개의 저장 · 409 다시 읽기도 절의 바인딩을 바꾼다. 바탕(옛 서버 값)과 다른
+ *   칸만 새 바탕 위에 얹고, 판이 바뀌었으면 `migrateTokens(옛 manifest, 새 manifest, 그 칸들)` 로 옮긴다(고르개가 서버 토큰을 옮기는 것과
+ *   같은 함수). 옮기지 못한 칸이 있으면 그 수를 머리에 한 줄로 말한다 — 말없이 사라지지 않게. **제 저장 · «서버 값으로» 뒤에는** 초안이
+ *   곧 서버 값이다(이 편집기가 바인딩을 넘긴 경우만 — `resetting`).
  * - owner 가 아니면 칸이 읽기 전용이고 저장 · «기본값으로» 가 없다 — 미리보기는 지금 값으로 선다.
  * - 저장하지 않은 초안을 두고 페이지를 떠나는 것은 막지 않는다.
  */
-import { useEffect, useId, useMemo, useState, type ReactElement } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react'
 import type { ThemeManifest, TokenDecl } from '@wirebound/theme-sdk'
-import { tokensCss } from '@wirebound/themes'
+import { migrateTokens, tokensCss } from '@wirebound/themes'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { toFailure } from '../api/failure'
@@ -24,6 +28,7 @@ import { TokenField } from './token-field'
 
 const SAVE_FAILURE = '토큰을 저장하지 못했습니다'
 const STALE = '다른 사람이 먼저 저장했습니다 — 지금 값을 다시 읽었습니다'
+const dropNotice = (count: number): string => `바꾼 판으로 옮기지 못한 토큰 ${count} 개의 초안을 버렸습니다`
 /** 무리 없는 키 · 선언에 없는 무리를 모으는 자리. */
 const OTHER_GROUP = '기타'
 
@@ -86,13 +91,35 @@ export function TokenEditor(props: {
   const [conflict, setConflict] = useState<ProjectThemeView | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [dropped, setDropped] = useState<string | null>(null)
   const heading = useId()
+  /** 초안이 얹혀 있던 바인딩 — 바뀐 뒤 «바탕과 다른 칸» 을 이것으로 가른다. */
+  const held = useRef(view)
+  /** 이 편집기가 바인딩을 넘겼다(제 저장 · «서버 값으로») — 다음 바인딩에서 초안이 서버 값으로 선다. */
+  const resetting = useRef(false)
 
-  // 바인딩이 바뀌면(저장 · 다른 판 · 서버 값으로) 초안이 그 값에서 다시 선다.
+  // 바인딩이 바뀌면 초안이 새 바탕에서 다시 서되, 저장 안 한 칸은 옮겨 얹는다(머리말 «바인딩이 바뀌어도»).
   useEffect(() => {
-    if (view.manifest !== null) setDraft(draftOf(view.manifest, view.tokens))
+    const before = held.current
+    held.current = view
     setServerIssues({})
     setConflict(null)
+    if (before === view || view.manifest === null) return
+    const fresh = draftOf(view.manifest, view.tokens)
+    if (resetting.current || before.manifest === null) {
+      resetting.current = false
+      setDropped(null)
+      setDraft(fresh)
+      return
+    }
+    const old = draftOf(before.manifest, before.tokens)
+    const unsaved: Draft = Object.fromEntries(Object.entries(draft).filter(([key, value]) => old[key] !== value))
+    const sameRef = before.themeId === view.themeId && before.version === view.version
+    // 같은 판이면 칸이 그대로다 — 반쯤 친 값(검사에 걸리는 값)도 남긴다. 다른 판이면 새 선언에 맞는 것만 옮긴다.
+    const moved = sameRef ? { tokens: unsaved, dropped: 0 } : migrateTokens(before.manifest, view.manifest, unsaved)
+    setDropped(moved.dropped > 0 ? dropNotice(moved.dropped) : null)
+    setDraft({ ...fresh, ...moved.tokens })
+    // 초안(`draft`)은 바인딩이 바뀐 그 렌더의 값을 읽는다 — 의존에 넣으면 칠 때마다 돈다.
   }, [view])
 
   const baseline = useMemo(() => draftOf(manifest, view.tokens), [manifest, view.tokens])
@@ -123,6 +150,7 @@ export function TokenEditor(props: {
     setMessage(null)
     try {
       const saved = await api.putProjectTheme(props.projectId, { ...ref, tokens, rev })
+      resetting.current = true
       props.onSaved(saved)
       setMessage('토큰을 저장했습니다')
     } catch (caught) {
@@ -159,6 +187,11 @@ export function TokenEditor(props: {
         <h3 className="wb-shell-settings-subtitle" id={heading}>
           토큰
         </h3>
+        {dropped !== null && (
+          <p className="wb-shell-project-notice" role="status">
+            {dropped}
+          </p>
+        )}
         {groups.map((group) => (
           <fieldset key={group.id || OTHER_GROUP} className="wb-shell-settings-token-group">
             <legend className="wb-shell-settings-legend">{group.label}</legend>
@@ -184,7 +217,10 @@ export function TokenEditor(props: {
             draft={draft}
             sameRef={conflict.themeId === ref.themeId && conflict.version === ref.version}
             busy={busy}
-            onServer={() => props.onSaved(conflict)}
+            onServer={() => {
+              resetting.current = true
+              props.onSaved(conflict)
+            }}
             onMine={() => void send(body, conflict.rev)}
           />
         )}
