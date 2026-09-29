@@ -8,7 +8,12 @@
  *   assets/shell.css      뷰어 셸의 CSS
  *   assets/views.css      SDK 기본 뷰 CSS(`defaultViewsCss()`)
  *   assets/runtime.js     내보내기 런타임 — 목업을 브라우저에서 그린다(`src/browser/`)
+ *   assets/theme/**       프로젝트 테마 패키지의 파일 그대로(theme.js · theme.css · assets/**) — 테마가 있을 때
+ *   assets/tokens.css     프로젝트 토큰 값 → CSS 변수(`tokensCss`) — 테마가 있을 때
  * ```
+ *
+ * 페이지 머리의 문서 시트는 캔버스와 같은 차례다 — 기본 뷰 → 테마(`theme.css` link) → 토큰(spec 「캔버스 iframe」 의 «머리의 시트는
+ * 셋이고 차례가 곧 겹침이다»). 패키지가 `theme.css` 를 안 실었으면 그 link 를 안 싣는다.
  *
  * ---
  *
@@ -37,10 +42,11 @@
  */
 import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
 import { installCatalog, isPageTargetAction, type PageDocument } from '@wirebound/schema'
-import { defaultViewsCss } from '@wirebound/theme-sdk'
+import { defaultViewsCss, type ThemeManifest } from '@wirebound/theme-sdk'
+import { tokensCss } from '@wirebound/themes'
 import { eachNode } from '../nodes'
 import { DEFAULT_LANG, renderHtmlDocument } from '../page'
-import { RUNTIME_JS_PATH, type ExportMarker, type ExportPageData } from '../page-data'
+import { RUNTIME_JS_PATH, THEME_DIRECTORY, type ExportMarker, type ExportPageData } from '../page-data'
 import { scriptJson } from '../script-json'
 import { commentEntries, type BundleComment } from './comments'
 import { bundleHref, pageFileNames } from './filename'
@@ -78,11 +84,29 @@ export interface BundlePage {
   target?: string
 }
 
+/**
+ * 번들에 실을 프로젝트 테마 — 프로젝트가 고정한 `테마@판` 의 패키지 파일과 저장한 토큰. **코드를 실행하지 않는다** — `themeJs` 는
+ * 글자로 실어 브라우저가 돌린다(spec 「내보내기와 PPTX」 의 «테마 코드는 브라우저에서만 돈다»).
+ */
+export interface BundleTheme {
+  ref: { themeId: string; version: string }
+  /** 서버 manifest — 런타임이 번들 정의의 manifest 를 이것으로 바꿔 끼운다(`adoptManifest`). 토큰 CSS 도 이것으로 짓는다. */
+  manifest: ThemeManifest
+  /** 프로젝트가 저장한 토큰(기본값과 다른 것만). */
+  tokens: Record<string, string | number>
+  themeJs: string
+  themeCss: string | null
+  /** 패키지의 `assets/**` — 키는 패키지 안 경로(`assets/…`). `theme.css` 가 상대 경로로 가리키므로 그 모양 그대로 싣는다. */
+  assets: readonly (readonly [string, Uint8Array])[]
+}
+
 export interface ExportBundleOptions {
   /** 페이지 목록. **순서가 곧 좌측 트리의 순서이고 파일 이름의 결정성이다.** */
   pages: readonly BundlePage[]
   /** 내보내기 런타임의 글자(`@wirebound/exporter/runtime.js` — 저장소 빌드가 짓는다). `assets/runtime.js` 에 그대로 싣는다. */
   runtimeJs: string
+  /** 프로젝트 테마. 없으면(`null` · 생략) 모든 노드를 SDK 기본 뷰로 그린다. */
+  theme?: BundleTheme | null
   /** `<html lang>`. 기본은 `'ko'`다. */
   lang?: string
 }
@@ -112,6 +136,9 @@ export interface ExportedBundle {
 const INDEX_PATH = 'index.html'
 const PAGES_DIRECTORY = 'pages'
 const VIEWS_CSS_PATH = 'assets/views.css'
+const TOKENS_CSS_PATH = 'assets/tokens.css'
+const THEME_JS_PATH = `${THEME_DIRECTORY}/theme.js`
+const THEME_CSS_PATH = `${THEME_DIRECTORY}/theme.css`
 
 /**
  * 번들 하나를 만든다.
@@ -153,9 +180,21 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
     { path: SHELL_CSS_PATH, content: SHELL_CSS },
     { path: VIEWS_CSS_PATH, content: defaultViewsCss() },
     { path: RUNTIME_JS_PATH, content: options.runtimeJs },
+    ...themeFiles(options.theme ?? null),
   ]
 
   return { files, errors, pagePaths: paths }
+}
+
+/** 테마 패키지의 파일 그대로 · 토큰 CSS. 테마가 없으면 하나도 안 싣는다. */
+function themeFiles(theme: BundleTheme | null): BundleFile[] {
+  if (theme === null) return []
+  return [
+    { path: THEME_JS_PATH, content: theme.themeJs },
+    ...(theme.themeCss === null ? [] : [{ path: THEME_CSS_PATH, content: theme.themeCss }]),
+    ...theme.assets.map(([path, bytes]) => ({ path: `${THEME_DIRECTORY}/${path}`, content: bytes })),
+    { path: TOKENS_CSS_PATH, content: tokensCss(theme.manifest, theme.tokens).css },
+  ]
 }
 
 /**
@@ -211,23 +250,26 @@ function pageHtml(
   for (const entry of comments) {
     if (entry.marker !== null) markers.push({ nodeId: entry.nodeId, marker: String(entry.marker) })
   }
+  const theme = options.theme ?? null
   const data: ExportPageData = {
     document: page.document,
     title: page.title,
     target: page.target ?? null,
-    themeRef: null,
-    manifest: null,
-    tokens: {},
+    themeRef: theme === null ? null : { themeId: theme.ref.themeId, version: theme.ref.version },
+    manifest: theme === null ? null : theme.manifest,
+    tokens: theme === null ? {} : theme.tokens,
     hrefs: hrefsFor(page.document, targets, at),
     markers,
   }
   return renderHtmlDocument({
     lang,
     title: page.title,
-    /** **셸 → 기본 뷰 차례다.** 문서 시트의 차례는 캔버스와 같다(기본 뷰 → 테마 → 토큰). */
+    /** **셸 → 문서 시트 차례다.** 문서 시트의 차례는 캔버스와 같다(기본 뷰 → 테마 → 토큰). */
     head: shellHead([
       { href: bundleHref(at, SHELL_CSS_PATH) },
       { href: bundleHref(at, VIEWS_CSS_PATH) },
+      ...(theme === null || theme.themeCss === null ? [] : [{ href: bundleHref(at, THEME_CSS_PATH), sheet: 'theme' as const }]),
+      ...(theme === null ? [] : [{ href: bundleHref(at, TOKENS_CSS_PATH) }]),
     ]),
     body: shellBody({
       nav,
@@ -237,7 +279,7 @@ function pageHtml(
       scripts: shellScripts({
         dataJson: scriptJson(data),
         runtimeHref: bundleHref(at, RUNTIME_JS_PATH),
-        themeHref: null,
+        themeHref: theme === null ? null : bundleHref(at, THEME_JS_PATH),
       }),
     }),
   })

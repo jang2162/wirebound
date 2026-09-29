@@ -446,8 +446,10 @@ export interface HtmlExportPreview {
   brokenLinks: ExportBrokenLink[]
   /** 그리지 못한 노드들. `title`이 **어느 페이지인지** 말한다. */
   errors: ExportNodeError[]
-  /** 번들이 실은 테마. 늘 `null` 이다 — 번들은 테마 없이 SDK 기본 뷰 CSS 로 그린다(서버 README 「내보내기」). */
+  /** 번들이 실은 테마(`"id@판"`) — 프로젝트가 고정한 판. 바인딩이 없거나 패키지를 못 읽었으면 `null`(기본 뷰 — 서버 README 「내보내기」). */
   themeId: string | null
+  /** 바인딩은 있는데 서버가 패키지를 못 읽어 기본 뷰로 내보낸다는 한 줄. 정상이면 `null`. */
+  themeWarning: string | null
   /** 내려받을 때 붙을 이름. **화면이 지어내지 않는다** — 두 벌이면 갈린다. */
   fileName: string
 }

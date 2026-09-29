@@ -725,6 +725,9 @@ export class ExportWorkerPool {
       if (done()) return
       post({ t: 'rows', part: 'comments', items: rows.comments.slice(at, at + COMMENTS_PER_MESSAGE) })
     }
+    await yieldToLoop()
+    if (done()) return
+    post({ t: 'rows', part: 'theme', theme: rows.theme, warning: rows.themeWarning })
     if (done()) return
     post({ t: 'run' })
   }

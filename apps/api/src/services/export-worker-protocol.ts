@@ -25,7 +25,8 @@ export type HtmlJobResult = {
   pages: ExportedPageSummary[]
   duplicateTargets: string[]
   brokenLinks: BrokenLink[]
-  themeId: null
+  themeId: string | null
+  themeWarning: string | null
 }
 
 export type PptxJobResult = {
@@ -59,6 +60,8 @@ export type ToWorker =
   | { t: 'rows'; part: 'menu'; items: ExportRows['menu'] }
   | { t: 'rows'; part: 'pages'; items: ExportRows['pages'] }
   | { t: 'rows'; part: 'comments'; items: ExportRows['comments'] }
+  /** 프로젝트 테마 — 패키지 파일 · 토큰(`ExportRows.theme`). 행 뒤 `run` 앞에 한 번 온다. */
+  | { t: 'rows'; part: 'theme'; theme: ExportRows['theme']; warning: ExportRows['themeWarning'] }
   | { t: 'run' }
   /** 그려 달라던 것의 답 — 한 장씩(`screen`) 오고 `screens-done`이 닫는다. */
   | { t: 'screen'; index: number; result: ScreenResult }

@@ -290,7 +290,8 @@ describe('exportProjectBundle', () => {
     })
   })
 
-  it('설계서 「HTML 정적 번들」의 파일 넷과 페이지마다 한 장을 낸다', async () => {
+  /** 새 프로젝트는 system-admin 에 고정돼 선다 — 테마 파일(패키지 그대로 · 토큰 CSS)이 뒤에 붙는다(`export-theme.test.ts` 가 내용을 잰다). */
+  it('설계서 「HTML 정적 번들」의 파일과 페이지마다 한 장을 낸다', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, '설계서 하나', 'one')
       const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
@@ -300,6 +301,9 @@ describe('exportProjectBundle', () => {
         'assets/shell.css',
         'assets/views.css',
         'assets/runtime.js',
+        'assets/theme/theme.js',
+        'assets/theme/theme.css',
+        'assets/tokens.css',
       ])
       expect(pageFiles(bundle.files)).toHaveLength(4)
     })
@@ -722,7 +726,7 @@ describe('exportProjectBundle', () => {
   })
 
   /** 번들이 기본 뷰 CSS 를 싣는다 — 기본 뷰 CSS 만 내는 선언(`--wb-node-grid-columns`)으로 잰다. 런타임은 api 가 쥔 글자 그대로다. */
-  it('assets/views.css 는 기본 뷰 CSS 이고 assets/runtime.js 는 api 가 쥔 런타임이다', async () => {
+  it('assets/views.css 는 기본 뷰 CSS · assets/runtime.js 는 api 가 쥔 런타임 · themeId 는 고정한 판이다', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, '설계서 하나', 'one')
       const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
@@ -730,7 +734,7 @@ describe('exportProjectBundle', () => {
       const viewsCss = bundle.files.find((file) => file.path === 'assets/views.css')
       expect(viewsCss?.content).toContain('--wb-node-grid-columns')
       expect(bundle.files.find((file) => file.path === 'assets/runtime.js')?.content).toBe(readExportRuntime())
-      expect(bundle.themeId).toBeNull()
+      expect(bundle.themeId).toBe('system-admin@0.1.0')
     })
   })
 })

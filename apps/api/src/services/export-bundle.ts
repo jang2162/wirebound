@@ -11,9 +11,9 @@
  *
  * 1. `readExportRows` → `assembleExportSource` — 메뉴·페이지·문서·코멘트·설명. **PPTX와 공유한다.**
  *    `export-source.ts`의 머리말이 수집 순서와 근거를 든다.
- * 2. `exportBundle` — 파일과 `errors`. **테마를 넘기지 않는다** — api 는 테마 코드를 싣지 않아(spec
- *    `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「내보내기와 PPTX」) 번들은 SDK 기본 뷰와 그 CSS 로 그린
- *    와이어프레임이다. 프로젝트 테마는 내보내기가 브라우저 렌더로 옮길 때 싣는다.
+ * 2. `exportBundle` — 파일과 `errors`. 프로젝트 테마의 패키지 파일 · 토큰을 **글자와 바이트로** 넘긴다 — 번들의 페이지가 브라우저에서
+ *    그 테마로 그린다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「내보내기와 PPTX」). api 는 테마 코드를 실행하지
+ *    않는다(`test/export-theme.test.ts` 가 `export-*` 소스를 센다).
  * 3. 못 이은 링크를 센다.
  *
  * # 출처는 라이브 프로젝트다
@@ -92,8 +92,10 @@ export interface ProjectBundle {
   /** 둘 이상의 페이지가 든 타겟. 그 타겟을 겨눈 링크는 어디에도 안 생긴다. */
   duplicateTargets: string[]
   brokenLinks: BrokenLink[]
-  /** 이 번들이 실은 테마. 늘 `null` 이다 — 번들은 테마 없이 SDK 기본 뷰로 그린다(머리말의 둘째 단계). */
-  themeId: null
+  /** 이 번들이 실은 테마(`"id@판"`). 바인딩이 없거나 패키지를 못 읽었으면 `null` — 기본 뷰로 그린다. */
+  themeId: string | null
+  /** 바인딩은 있는데 패키지를 못 읽은 까닭(`ExportRows.themeWarning`). */
+  themeWarning: string | null
 }
 
 /**
@@ -126,7 +128,7 @@ export function buildProjectBundle(rows: ExportRows): ProjectBundle {
     target: page.target,
   }))
 
-  const { files, errors } = exportBundle({ pages: bundlePages, runtimeJs: readExportRuntime() })
+  const { files, errors } = exportBundle({ pages: bundlePages, runtimeJs: readExportRuntime(), theme: rows.theme })
 
   return {
     files,
@@ -137,7 +139,8 @@ export function buildProjectBundle(rows: ExportRows): ProjectBundle {
     pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
     duplicateTargets: duplicateTargets(ordered),
     brokenLinks: brokenLinks(ordered, documentById),
-    themeId: null,
+    themeId: rows.theme === null ? null : `${rows.theme.ref.themeId}@${rows.theme.ref.version}`,
+    themeWarning: rows.themeWarning,
   }
 }
 

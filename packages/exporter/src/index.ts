@@ -9,6 +9,7 @@ export type {
   BundleFile,
   BundleNodeError,
   BundlePage,
+  BundleTheme,
   ExportBundleOptions,
   ExportedBundle,
 } from './bundle/index'

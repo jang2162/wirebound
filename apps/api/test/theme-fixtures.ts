@@ -30,12 +30,16 @@ export function manifestOf(id: string, version: string, extra: Partial<ThemeMani
   return { id, name: `${id} 테마`, version, sdk: '^1.0.0', tokens: { items: {} }, ...extra } as ThemeManifest
 }
 
-export function packed(manifest: ThemeManifest, files: { themeCss?: string; assets?: Record<string, string> } = {}): Uint8Array {
+/** 자산은 글자(UTF-8 로 담는다)나 바이트(그대로 — 글꼴처럼 UTF-8 이 아닌 것)다. */
+export function packed(
+  manifest: ThemeManifest,
+  files: { themeJs?: string; themeCss?: string; assets?: Record<string, string | Uint8Array> } = {},
+): Uint8Array {
   const encoder = new TextEncoder()
   return packWbtheme({
     manifest,
-    themeJs: ';',
+    themeJs: files.themeJs ?? ';',
     themeCss: files.themeCss ?? null,
-    assets: new Map(Object.entries(files.assets ?? {}).map(([name, body]) => [name, encoder.encode(body)])),
+    assets: new Map(Object.entries(files.assets ?? {}).map(([name, body]) => [name, typeof body === 'string' ? encoder.encode(body) : body])),
   })
 }

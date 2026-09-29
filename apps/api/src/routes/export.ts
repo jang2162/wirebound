@@ -347,7 +347,10 @@ export function exportRoutes(options?: { screenRenderer?: ScreenRenderer; render
         // `errors[].error`는 `NodeRenderError`다 — 그대로 싣는다. 화면이 `title`로
         // 어느 페이지인지 말한다(경로는 잘리거나 순번이 붙어 제목과 다를 수 있다).
         errors: bundle.errors,
+        /** 번들이 실은 테마(`"id@판"`) — 바인딩이 없거나 패키지를 못 읽었으면 `null`(기본 뷰). */
         themeId: bundle.themeId,
+        /** 바인딩은 있는데 패키지를 못 읽은 까닭. 정상이면 `null`. */
+        themeWarning: bundle.themeWarning,
         /** 내려받을 때 붙을 이름. **화면이 이것을 지어내지 않는다** — 두 벌이면 갈린다. */
         fileName: bundleFileName(await projectSlug(app, projectId)),
       }

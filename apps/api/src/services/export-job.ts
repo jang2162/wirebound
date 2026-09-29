@@ -27,6 +27,7 @@ export async function runExportJob(
       duplicateTargets: bundle.duplicateTargets,
       brokenLinks: bundle.brokenLinks,
       themeId: bundle.themeId,
+      themeWarning: bundle.themeWarning,
     }
   }
 

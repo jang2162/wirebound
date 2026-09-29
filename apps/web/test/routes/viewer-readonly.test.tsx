@@ -248,7 +248,7 @@ function mount(role: ProjectRole, draftStore?: DraftStore): Wire {
         200,
         format === 'pptx'
           ? { format, pages, screenless: [], screenFailures: [], fontWarning: null, fileName: 'deck.pptx' }
-          : { format: 'html', pages, duplicateTargets: [], brokenLinks: [], errors: [], themeId: null, fileName: 'site.zip' },
+          : { format: 'html', pages, duplicateTargets: [], brokenLinks: [], errors: [], themeId: null, themeWarning: null, fileName: 'site.zip' },
       )
     }
     // 내려받기 — 파일 그 자체. jsdom 에는 `URL.createObjectURL`이 없어 저장은 거기서 실패하지만 이 자가 세는 것은 쓰기다.

@@ -63,6 +63,8 @@ function syntheticRows(pages: number, nodes: number): ExportRows {
   return {
     menu: [{ id: 'm', parent_id: null, title: '메뉴', sort_order: 0 }],
     comments: [],
+    theme: null,
+    themeWarning: null,
     pages: Array.from({ length: pages }, (_, p) => ({
       id: `p${p}`,
       projectId: 'x',
@@ -246,7 +248,7 @@ describe('풀', () => {
   })
 
   it('워커로 도는 동안 메인의 루프가 서지 않는다 — 같은 스레드에서 돈 시간보다 한참 짧게만 선다', async () => {
-    const rows = syntheticRows(8, 7000)
+    const rows = syntheticRows(16, 7000)
     // 워커를 먼저 띄워 둔다 — 띄우는 동안 메인이 도는 모듈 적재는 이 케이스가 재는 것이 아니다.
     await pool.runHtml(syntheticRows(1, 1), HTML_NO_ZIP)
 
@@ -272,7 +274,8 @@ describe('풀', () => {
     }
 
     // 같은 스레드에서 돈 시간 전체가 한 번의 멈춤이다(`runExportJob`의 몸통은 동기다). 워커로 돌면 메인은 행을 한 장씩
-    // 복제하는 동안만 선다. 잰 값(이 케이스 · 15코어): 같은 스레드 0.44–0.53s · 워커 중 최장 6–15ms.
+    // 복제하는 동안만 선다. 잰 값(이 케이스 · 15코어 · 목업을 번들이 아니라 브라우저가 그리는 판 — 입력이 16 장인 까닭): 같은 스레드
+    // 0.54–0.59s · 워커 중 최장 6–7ms. 다시 재는 법: 두 값을 찍어 이 케이스만 돌린다(`-t '메인의 루프가 서지 않는다'`).
     expect(inThreadMs).toBeGreaterThan(300)
     expect(longestGap).toBeLessThan(inThreadMs / 4)
   }, 60_000)

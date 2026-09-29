@@ -19,9 +19,13 @@ if (port === null) throw new Error('export-worker-thread 는 워커 스레드로
 ensureCatalog()
 
 let spec: ExportJobSpec | null = null
-let rows: ExportRows = { menu: [], pages: [], comments: [] }
+let rows: ExportRows = emptyRows()
 /** 메인에 그려 달라고 보낸 뒤 답을 모으는 자리. */
 let pendingScreens: { results: ScreenResult[]; resolve(batch: ScreenBatch): void; reject(error: unknown): void } | null = null
+
+function emptyRows(): ExportRows {
+  return { menu: [], pages: [], comments: [], theme: null, themeWarning: null }
+}
 
 function send(message: FromWorker, transfer: ArrayBuffer[] = []): void {
   port!.postMessage(message, transfer)
@@ -59,19 +63,23 @@ port.on('message', (message: ToWorker) => {
   switch (message.t) {
     case 'job':
       spec = message.spec
-      rows = { menu: [], pages: [], comments: [] }
+      rows = emptyRows()
       send({ t: 'accepted' })
       return
     case 'rows':
       if (message.part === 'menu') rows.menu.push(...message.items)
       else if (message.part === 'pages') rows.pages.push(...message.items)
-      else rows.comments.push(...message.items)
+      else if (message.part === 'comments') rows.comments.push(...message.items)
+      else {
+        rows.theme = message.theme
+        rows.themeWarning = message.warning
+      }
       return
     case 'run': {
       const job = spec!
       const input = rows
       spec = null
-      rows = { menu: [], pages: [], comments: [] }
+      rows = emptyRows()
       void run(job, input)
       return
     }
