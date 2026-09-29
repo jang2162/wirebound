@@ -1,0 +1,140 @@
+/**
+ * **A5 리뷰가 세운 재현 판 — 두 결함을 실브라우저로 잠근다.** 지금은 **빨강이다**(고치지 않았다). 무엇을 재는지:
+ *
+ * 1. **준비 뒤 `data-wb-failed` 읽기에 한도가 없다.** `screen-render-chromium.ts` 의 `renderOne` 은 단계마다 `left()`(남은 한도)를
+ *    주는데, 준비 신호 뒤의 `page.evaluate("…getAttribute('data-wb-failed')")` 한 줄만 한도 없이 `await` 한다. `page.evaluate` 는
+ *    컨텍스트 기본 한도(`setDefaultTimeout`)를 안 받으므로(그 파일의 `measure` 머리말이 같은 함정을 적는다), 테마 코드가 그 DOM
+ *    읽기를 끝나지 않는 thenable 로 만들면 **그 장의 render 가 영영 안 끝나고 배치 전체(멀쩡한 장까지)가 멈춘다** — 그리기 칸을
+ *    쥔 채다. 테마 코드는 이 브랜치가 브라우저에서 실행한다(spec 「내보내기와 PPTX」) — main 은 서버가 목업을 그려 이 길이 없었다.
+ *
+ * 2. **가짜 origin 밖 요청 차단(`context.route(… route.abort())`)이 WebSocket · WebRTC 를 안 막는다.** playwright 의 `context.route`
+ *    는 fetch · 하위 자원만 가로채고 WebSocket 핸드셰이크와 WebRTC ICE(STUN · TURN)는 그 아래로 빠진다. 이 브랜치가 브라우저에서
+ *    돌리는 테마 코드가 `new WebSocket(…)` · `new RTCPeerConnection({ iceServers })` 로 **테마 작성자가 고른 주소에 실제로 소켓을
+ *    연다** — 서버의 헤드리스 Chromium 이 바깥으로 나간다. 그 채널의 존재 이유(`screen-render-chromium.ts` 머리말 「바깥으로 나가는
+ *    요청을 막는다」)를 정면으로 뚫는다. 여기서는 127.0.0.1 리스너로 «소켓이 열렸다» 만 센다 — 운영에서는 실제 공인 주소다.
+ *
+ * **고칠 방향(참고):** 1 — `data-wb-failed` 읽기를 `measure` 처럼 `Promise.race([evaluate, 마감])` 로 감싼다. 2 — 첫 그림 전
+ * 초기화 스크립트(`FREEZE_MOTION_INIT` 옆)에서 `WebSocket` · `RTCPeerConnection` · `EventSource` 를 지운다(정적 목업이라 필요 없다).
+ */
+import { createServer, type Socket } from 'node:net'
+import { createSocket } from 'node:dgram'
+import { installCatalog, type PageDocument } from '@wirebound/schema'
+import { chromium, type Browser } from 'playwright-core'
+import { describe, expect, it } from 'vitest'
+import { chromiumScreenRenderer } from '../src/services/screen-render-chromium'
+import { readApiEnvFile } from '../test/test-database-url'
+import { bundled, inlineTheme, jobOf } from './screen-jobs'
+
+installCatalog()
+
+function screenChromiumPath(): string | undefined {
+  const value = process.env.SCREEN_CHROMIUM_PATH ?? readApiEnvFile().SCREEN_CHROMIUM_PATH
+  return value === undefined || value === '' ? undefined : value
+}
+const EXECUTABLE_PATH = screenChromiumPath()
+const LAUNCH = EXECUTABLE_PATH === undefined ? {} : { executablePath: EXECUTABLE_PATH }
+
+async function browserLaunches(): Promise<boolean> {
+  try {
+    const browser = await chromium.launch(LAUNCH)
+    await browser.close()
+    return true
+  } catch {
+    return false
+  }
+}
+const 있다 = await browserLaunches()
+if (!있다) {
+  // eslint-disable-next-line no-console
+  console.log('[screen-sandbox-review] Chromium 을 띄우지 못해 건너뛴다 — `screen-chromium.test.ts` 와 같은 넣는 법')
+}
+
+const doc = (): PageDocument =>
+  ({ version: 1, root: { id: 'n_p', type: 'Page', children: [{ id: 'n_t', type: 'Text', props: { content: '한글 본문' } }] } }) as unknown as PageDocument
+
+describe.skipIf(!있다)('내보내기 화면 샌드박스 — A5 리뷰(현재 빨강)', () => {
+  /**
+   * 테마 코드가 `data-wb-failed` 읽기를 끝나지 않는 Promise 로 바꾼다. render 는 한 장의 한도(2s) 안에 그 장을 **실패**로 끝내고
+   * 돌아와야 한다. 지금은 그 evaluate 에 한도가 없어 render 가 영영 안 끝난다 — 멀쩡한 둘째 장은 다 그려도 배치가 멈춘다.
+   */
+  it('준비 뒤 data-wb-failed 읽기가 멈추면 그 장만 실패하고 배치는 한도 안에 끝난다', async () => {
+    const trap = inlineTheme({
+      id: 'evaluate-trap',
+      before: `const g = Element.prototype.getAttribute; Element.prototype.getAttribute = function (n) { return n === 'data-wb-failed' ? new Promise(() => {}) : g.call(this, n) }`,
+    })
+    const launched: Browser[] = []
+    const original = chromium.launch.bind(chromium)
+    ;(chromium as unknown as { launch: typeof chromium.launch }).launch = (async (o?: Parameters<typeof chromium.launch>[0]) => {
+      const b = await original(o)
+      launched.push(b)
+      return b
+    }) as typeof chromium.launch
+    const timeoutMs = 2000
+    const rendering = chromiumScreenRenderer({ ...LAUNCH, timeoutMs, concurrency: 2 }).render(
+      jobOf(bundled('덫', doc(), trap), bundled('멀쩡', doc())),
+    )
+    let verdict: 'hung' | 'returned' = 'hung'
+    try {
+      // 배치가 한 장의 한도의 네 배(8s) 안에 끝나야 한다. 안 끝나면 결함이다.
+      const got = await Promise.race([
+        rendering.then((batch) => ({ batch })),
+        new Promise<'guard'>((r) => setTimeout(() => r('guard'), timeoutMs * 4)),
+      ])
+      if (got !== 'guard') {
+        verdict = 'returned'
+        const reasons = got.batch.results.map((x) => (x.ok ? 'ok' : x.reason))
+        expect(reasons[0]).toContain('준비되지 않았습니다')
+      }
+    } finally {
+      ;(chromium as unknown as { launch: typeof chromium.launch }).launch = original
+      for (const b of launched.splice(0)) await b.close().catch(() => {})
+      rendering.catch(() => {})
+    }
+    expect(verdict).toBe('returned')
+  }, 30_000)
+
+  /**
+   * 테마 코드가 WebSocket · WebRTC(STUN · TURN)를 127.0.0.1 리스너로 연다. 차단이 온전하면 **어느 소켓도 리스너에 닿지 않아야**
+   * 한다. 지금은 세 채널 모두 실제로 소켓을 연다(운영에서는 공인 주소로 나간다).
+   */
+  it('테마 코드의 WebSocket · WebRTC 는 바깥으로 소켓을 열지 못한다', async () => {
+    const tcpHits: number[] = []
+    const tcp = createServer((s: Socket) => {
+      tcpHits.push(1)
+      s.destroy()
+    })
+    tcp.on('error', () => {})
+    await new Promise<void>((r) => tcp.listen(0, '127.0.0.1', r))
+    const wsPort = (tcp.address() as { port: number }).port
+    const turn = createServer((s: Socket) => {
+      tcpHits.push(1)
+      s.destroy()
+    })
+    turn.on('error', () => {})
+    await new Promise<void>((r) => turn.listen(0, '127.0.0.1', r))
+    const turnPort = (turn.address() as { port: number }).port
+    const udpHits: number[] = []
+    const udp = createSocket('udp4')
+    udp.on('message', () => udpHits.push(1))
+    await new Promise<void>((r) => udp.bind(0, '127.0.0.1', r))
+    const stunPort = (udp.address() as { port: number }).port
+
+    const before = [
+      `try { new WebSocket('wss://127.0.0.1:${wsPort}/exfil') } catch (e) {}`,
+      `try { const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:127.0.0.1:${stunPort}' }, { urls: 'turn:127.0.0.1:${turnPort}?transport=tcp', username: 'u', credential: 'c' }] }); pc.createDataChannel('x'); pc.createOffer().then((o) => pc.setLocalDescription(o)) } catch (e) {}`,
+    ].join('; ')
+    try {
+      const batch = await chromiumScreenRenderer({ ...LAUNCH, timeoutMs: 6000, concurrency: 1 }).render(
+        jobOf(bundled('바깥 채널', doc(), inlineTheme({ id: 'net-channels', before }))),
+      )
+      // 그 장은 그려진다(차단이 온전하면 채널이 열리기만 실패). 늦은 소켓까지 본다.
+      await new Promise((r) => setTimeout(r, 2500))
+      expect(batch.results[0]?.ok).toBe(true)
+      expect({ tcp: tcpHits.length, udp: udpHits.length }).toEqual({ tcp: 0, udp: 0 })
+    } finally {
+      tcp.close()
+      turn.close()
+      udp.close()
+    }
+  }, 40_000)
+})
