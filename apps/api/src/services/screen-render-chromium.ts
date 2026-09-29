@@ -318,12 +318,14 @@ async function renderOne(
     const page = await context.newPage()
     await page.goto(`${SCREEN_ORIGIN}/${encodePath(request.path)}${SCREEN_HASH}`, { waitUntil: 'commit', timeout: left() })
     if (!(await waitReady(page, left()))) return failure(notReady(timeoutMs))
-    // 번들 런타임이 테마를 못 썼다(등록 없음 · 판 불일치 · 뷰가 던짐) — 기본 뷰로 그린 장을 찍지 않고 그 까닭을 낸다.
-    const failed = await page.evaluate<string | null>(`document.documentElement.getAttribute('data-wb-failed')`)
+    // 번들 런타임이 테마를 못 썼다(등록 없음 · 판 불일치 · 뷰가 던짐) — 기본 뷰로 그린 장을 찍지 않고 그 까닭을 낸다. 이 읽기도 한 장의
+    // 한도 안이다(`withinLimit`) — 테마 코드가 `getAttribute` 를 끝나지 않는 thenable 로 덮으면 한도 없는 `evaluate` 가 배치째 멈췄다.
+    const failed = await withinLimit(page.evaluate<string | null>(`document.documentElement.getAttribute('data-wb-failed')`), left())
+    if (failed === LATE) return failure(notReady(timeoutMs))
     if (failed !== null) return failure(failed)
     // **찍기 전에 잰다** — 비트맵을 만드는 것이 비싼 몫이다(`SCREEN_DEFAULTS.maxArea`).
     const measured = await measure(page, left())
-    if (measured === null) return failure(notReady(timeoutMs))
+    if (measured === LATE) return failure(notReady(timeoutMs))
     const [width, height] = measured
     if (width * height > maxArea) return failure(tooLarge(width, height, maxArea))
     /**
@@ -333,7 +335,7 @@ async function renderOne(
     const bytes = await page.screenshot({ type: 'png', fullPage: FULL_PAGE, clip: { x: 0, y: 0, width, height }, timeout: left() })
     // **잘린 그림을 내지 않는다** — 묶어 찍은 뒤 자랐으면 그림은 위쪽만이다(`FULL_PAGE`의 판정).
     const after = await measure(page, left())
-    if (after === null) return failure(notReady(timeoutMs))
+    if (after === LATE) return failure(notReady(timeoutMs))
     const [afterWidth, afterHeight] = after
     if (afterWidth > width || afterHeight > height) return failure(grew(width, height, afterWidth, afterHeight))
     const size = readPngSize(bytes)
@@ -436,8 +438,11 @@ async function probeKoreanGlyphs(browser: Browser, timeoutMs: number): Promise<K
     context = await newRenderContext(browser, timeoutMs)
     const page = await context.newPage()
     await page.setContent('<!doctype html><html lang="ko"><body></body></html>', { waitUntil: 'load' })
-    // **판정을 여기서 하지 않는다** — 날 값만 받아 `decideKoreanGlyphs`에 넘긴다(그 함수의 머리말).
-    return decideKoreanGlyphs(await page.evaluate<KoreanGlyphSamples>(KOREAN_GLYPH_PROBE))
+    // **판정을 여기서 하지 않는다** — 날 값만 받아 `decideKoreanGlyphs`에 넘긴다(그 함수의 머리말). 한도 안에서 묻는다(`withinLimit`) —
+    // 못 받으면 «못 물었다»다.
+    const samples = await withinLimit(page.evaluate<KoreanGlyphSamples>(KOREAN_GLYPH_PROBE), timeoutMs)
+    if (samples === LATE) return { reason: `${KOREAN_PROBE_FAILED}: ${timeoutMs}ms 안에 답이 없습니다` }
+    return decideKoreanGlyphs(samples)
   } catch (error) {
     return { reason: `${KOREAN_PROBE_FAILED}: ${errorLine(error)}` }
   } finally {
@@ -488,25 +493,37 @@ const PAGE_SIZE = `(async () => {
 })()`
 
 /**
- * 화면 전체의 크기를 잰다 — **한 단계의 한도(`timeoutMs`) 안에서.** 넘으면 `null`.
+ * 화면 전체의 크기를 잰다 — **한 단계의 한도(`timeoutMs`) 안에서**(`withinLimit`). 넘으면 `LATE`.
  *
- * `page.evaluate` 는 컨텍스트의 기본 한도(`setDefaultTimeout`)를 안 받아, `PAGE_SIZE` 가 기다리는 `document.fonts.ready` 가 한도 없이
- * 기다렸다 — 그리기의 다른 단계에는 한도가 있다(`shutdown.ts` 「한도가 있는 까닭」). 받기가 끝나지 않는 글꼴은 페이지 내용만으로
- * 못 만들었지만(원격 요청은 끊기고 `data:` · `local()` · 낯선 스킴은 곧 끝난다) 막힌 원본을 가족마다 줄줄이 단 파생 테마는 받기가
- * 가족을 차례로 지나 원본 수만큼 길어진다(1MiB 안에서 한 장 15s). 다시 재는 법: `build-test/screen-chromium.test.ts` 「글꼴을
- * 기다리는 것도 한 장의 한도 안이다」.
- *
- * 한도를 넘긴 재기는 브라우저 안에서 계속 돈다 — 부른 쪽이 컨텍스트를 닫을 때 끊긴다(그때 던지는 것을 여기서 받는다).
+ * `PAGE_SIZE` 가 기다리는 `document.fonts.ready` 가 한도 없이 기다렸다. 받기가 끝나지 않는 글꼴은 페이지 내용만으로 못 만들었지만(원격
+ * 요청은 끊기고 `data:` · `local()` · 낯선 스킴은 곧 끝난다) 막힌 원본을 가족마다 줄줄이 단 파생 테마는 받기가 가족을 차례로 지나 원본
+ * 수만큼 길어진다(1MiB 안에서 한 장 15s). 다시 재는 법: `build-test/screen-chromium.test.ts` 「글꼴을 기다리는 것도 한 장의 한도 안이다」.
  */
-async function measure(page: Page, timeoutMs: number): Promise<[number, number] | null> {
-  const measured = page.evaluate<[number, number]>(PAGE_SIZE)
-  measured.catch(() => {})
+function measure(page: Page, timeoutMs: number): Promise<[number, number] | typeof LATE> {
+  return withinLimit(page.evaluate<[number, number]>(PAGE_SIZE), timeoutMs)
+}
+
+/** 한도 안에 답이 안 온 단계(`withinLimit`). */
+const LATE = Symbol('late')
+
+/**
+ * **`page.evaluate` 는 한도를 안 받는다** — 컨텍스트의 기본 한도(`setDefaultTimeout`)도, 옵션도 없다. 그래서 `evaluate` 는 전부 이것으로
+ * 감싼다 — 그리기의 다른 단계에는 한도가 있다(`shutdown.ts` 「한도가 있는 까닭」). 한도를 넘으면 `LATE`.
+ *
+ * 렌더러가 부르는 playwright 호출마다 한도를 받는지 잰 값(기본 한도 1s · 끝나지 않게 만든 페이지): `evaluate` 만 영영 기다렸다(6s 가드에
+ * 걸림). `goto` · `setContent` · `waitForSelector` 는 기본 한도에 던지고(렌더러는 그래도 `left()` 를 옵션으로 준다), `screenshot` 은
+ * `document.fonts.ready` 를 덮어도 곧 돌아오고, `newContext` · `newPage` · `addInitScript` · `close` 는 페이지 코드가 붙잡을 자리가 없다.
+ *
+ * 한도를 넘긴 `evaluate` 는 브라우저 안에서 계속 돈다 — 부른 쪽이 컨텍스트를 닫을 때 끊긴다(그때 던지는 것을 여기서 받는다).
+ */
+async function withinLimit<T>(pending: Promise<T>, timeoutMs: number): Promise<T | typeof LATE> {
+  pending.catch(() => {})
   let timer: ReturnType<typeof setTimeout> | undefined
-  const late = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), timeoutMs)
+  const late = new Promise<typeof LATE>((resolve) => {
+    timer = setTimeout(() => resolve(LATE), timeoutMs)
   })
   try {
-    return await Promise.race([measured, late])
+    return await Promise.race([pending, late])
   } finally {
     clearTimeout(timer)
   }
