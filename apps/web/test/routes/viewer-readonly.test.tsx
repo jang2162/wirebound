@@ -143,7 +143,7 @@ function reads(role: ProjectRole): Record<string, unknown> {
   const project = `/api/projects/${PROJECT_ID}`
   return {
     '/api/auth/me': ME,
-    [project]: { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role },
+    [project]: { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role, themeRev: 0 },
     [`${project}/tree`]: { menu: TREE },
     [`${project}/pages/${PAGE_ID}`]: page(PAGE_ID),
     [`${project}/pages/${OTHER_PAGE_ID}`]: page(OTHER_PAGE_ID),

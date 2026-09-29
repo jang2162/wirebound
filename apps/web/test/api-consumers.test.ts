@@ -48,6 +48,8 @@ const METHODS = [
   'listSnapshots', 'createSnapshot', 'restoreSnapshot',
   'listPresets', 'createPreset',
   'getExportPreview', 'downloadExport',
+  'getProjectTheme', 'putProjectTheme', 'getThemeImpact',
+  'listThemePackages', 'getThemeManifest', 'uploadThemePackage', 'setThemePackageHidden', 'downloadThemeTemplate',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -183,6 +185,15 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 그 다음에 앵커가 zip을 받는다.
   getExportPreview: ['../src/shell/export-panel.tsx'],
   downloadExport: ['../src/shell/export-panel.tsx'],
+  // 테마 여덟. 부르는 화면이 서면 여기에 적는다(`api/http-client.ts`의 shape 주석이 이 표를 근거로 삼는다).
+  getProjectTheme: [],
+  putProjectTheme: [],
+  getThemeImpact: [],
+  listThemePackages: [],
+  getThemeManifest: [],
+  uploadThemePackage: [],
+  setThemePackageHidden: [],
+  downloadThemeTemplate: [],
 }
 
 describe('ApiClient의 소비자', () => {

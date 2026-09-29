@@ -2,13 +2,13 @@
  * **테마를 바꾸면 무엇이 달라지나** — 설정 화면이 바꾸기 전에 확인 창으로 보이는 두 수(spec
  * `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「테마 바꾸기와 버전 올리기」).
  *
- * - 토큰 이전: 키가 같고 타입이 같으면 값을 잇는다(`kept`). 새 테마에 없는 키 · 타입이 다른 키는 버린다(`dropped`). 새 테마의 나머지
- *   키는 기본값으로 선다(`defaulted`). 세는 것은 저장된 값(기본값과 다른 것)이다.
+ * - 토큰 이전: `@wirebound/themes` 의 `migrateTokens` 가 센다 — 설정 화면이 «바꾸기» 로 보내는 본문이 같은 함수의 결과라 확인 창의
+ *   수와 보낸 값이 갈리지 않는다. 세는 것은 저장된 값(기본값과 다른 것)이다.
  * - 없는 variant: 대상 manifest 가 `components` 로 선언한 컴포넌트의 노드 가운데, `variant` 를 들고 있는데 그 값이 선언 밖인 것. 선언이
  *   없는 컴포넌트는 모든 값이 통과하고, `variant` 가 없는 노드는 `defaultVariant` 로 그려지므로 안 센다. 페이지 데이터는 바꾸지 않는다.
  */
 import type { WbNode } from '@wirebound/schema'
-import type { ThemeManifest } from '@wirebound/themes'
+import { migrateTokens, type ThemeManifest } from '@wirebound/themes'
 import type { DbHandle } from '../db/tx'
 import type { ProjectThemeBinding } from '../repos/projects'
 
@@ -23,13 +23,7 @@ export async function computeThemeImpact(
   current: { binding: ProjectThemeBinding; manifest: ThemeManifest | null },
   target: ThemeManifest,
 ): Promise<ThemeImpact> {
-  const targetItems = target.tokens.items
-  const currentItems = current.manifest?.tokens.items
-  const stored = Object.keys(current.binding.tokens)
-  // 지금 선언을 모르면(바인딩이 비었다) 타입을 못 견주므로 키만 본다.
-  const kept = stored.filter(
-    (key) => Object.hasOwn(targetItems, key) && (currentItems === undefined || currentItems[key]?.type === targetItems[key]!.type),
-  ).length
+  const { kept, dropped, defaulted } = migrateTokens(current.manifest, target, current.binding.tokens)
 
   const pages = await db
     .selectFrom('pages')
@@ -48,7 +42,7 @@ export async function computeThemeImpact(
   }
 
   return {
-    tokens: { kept, dropped: stored.length - kept, defaulted: Object.keys(targetItems).length - kept },
+    tokens: { kept, dropped, defaulted },
     variants,
   }
 }

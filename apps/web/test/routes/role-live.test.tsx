@@ -16,7 +16,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import { ApiError } from '../../src/api/client'
-import type { ProjectDetail, ProjectRole } from '../../src/api/types'
+import type { ProjectView, ProjectRole } from '../../src/api/types'
 import { OTHER_PAGE_ID, PAGE_ID, PROJECT_ID, PROJECT_NAME, openPage, pageDoc, waitForNode, canvasQuery } from '../editor-harness'
 import { fakeRealtime, type FakeRealtime } from '../fake-realtime'
 import '../../src/catalog-setup'
@@ -38,7 +38,7 @@ const OTHER_DOC: PageDocument = pageDoc({
   children: [{ id: 'n-x', type: 'Card', props: { title: '상세' } }],
 })
 
-const project = (role: ProjectRole): ProjectDetail => ({ id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role })
+const project = (role: ProjectRole): ProjectView => ({ id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin-console', description: null, role, themeRev: 0 })
 
 const MEMBERSHIP = { type: 'membership-changed', projectId: PROJECT_ID }
 /** 밥이 그 노드를 쥐었다 — 서버의 `locks` 프레임(프로젝트 전부). */

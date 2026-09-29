@@ -47,6 +47,9 @@ export { ManifestSchema, validateManifest } from './manifest/schema'
 export { compareVersions, SDK_RANGE_PATTERN, satisfiesSdk, VERSION_PATTERN } from './manifest/semver'
 // 토큰 → CSS 변수(spec 「토큰이 화면에 닿는 길」). kit dev 의 갤러리 · 캔버스 · 내보내기가 같은 함수로 `:root` 를 짓는다.
 export { tokensCss, tokenValues, tokenVar } from './manifest/tokens'
+// 테마를 바꿀 때 토큰을 잇는다 — 설정 화면이 보낼 본문과 api 의 impact 수가 같은 함수를 부른다.
+export type { TokenMigration } from './manifest/migrate'
+export { migrateTokens } from './manifest/migrate'
 
 // `.wbtheme` 읽기 · 쓰기(spec 「`.wbtheme` 파일」 · 「업로드 검증」). 빌드가 쓰고, 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
 export type { WbthemeFiles, WbthemeIssue, WbthemeIssueCode } from './wbtheme/read'

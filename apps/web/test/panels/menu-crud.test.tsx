@@ -17,18 +17,19 @@ import { ApiProvider } from '../../src/api/context'
 import { WRITE_DEADLINE_MS, WriteLedgerProvider } from '../../src/panels/write-ledger'
 import { SessionProvider } from '../../src/session/session-context'
 import { useTreeCommands, type TreeCommands } from '../../src/tree/use-tree-commands'
-import type { MenuNode, PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
+import type { MenuNode, PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { currentPath, fakeApi, renderWithProviders } from '../helpers'
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT_NAME = '설계서'
-const PROJECT: ProjectDetail = {
+const PROJECT: ProjectView = {
   id: 'p-1',
   name: PROJECT_NAME,
   slug: 'proj',
   description: null,
   role: 'owner',
+  themeRev: 0,
 }
 
 /**
@@ -1475,7 +1476,7 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
    */
   it('에디터 안에서 다른 프로젝트에 가 있는 동안 실패하면 그 트리는 말이 없고, 돌아온 트리가 «이 화면을 떠나 있는 동안 …»으로 말한다', async () => {
     const server = server2()
-    const OTHER: ProjectDetail = { ...PROJECT, id: 'p-2', name: '이번 설계서', slug: 'proj-2' }
+    const OTHER: ProjectView = { ...PROJECT, id: 'p-2', name: '이번 설계서', slug: 'proj-2' }
     const getTree = server.overrides.getTree!
     const harness = stubs({
       ...server.overrides,

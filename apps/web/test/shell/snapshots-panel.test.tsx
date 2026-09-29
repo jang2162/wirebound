@@ -31,7 +31,7 @@ import type { WbNode } from '@wirebound/schema'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type {
   PageDetail,
-  ProjectDetail,
+  ProjectView,
   ProjectRole,
   RestoreResult,
   SnapshotSummary,
@@ -60,8 +60,8 @@ const user = { id: 'u1', email: 'a@example.com', name: '홍길동' }
  * **이름은 하네스의 것을 쓴다.** `openPage()`가 그 이름을 기다려 *"셸이 성공 대역으로
  * 떴다"*를 확인하므로(`../editor-harness`), 다른 이름을 주면 거기서 멈춘다.
  */
-function project(role: ProjectRole): ProjectDetail {
-  return { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin', description: null, role }
+function project(role: ProjectRole): ProjectView {
+  return { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin', description: null, role, themeRev: 0 }
 }
 
 /**

@@ -10,7 +10,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '../../src/api/client'
-import type { MenuNode, PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../../src/api/types'
+import type { MenuNode, PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../../src/api/types'
 import { App } from '../../src/app'
 import { fakeApi, renderWithProviders } from '../helpers'
 import { stripComments } from '../store-access-guard'
@@ -29,7 +29,7 @@ const MENU_TREE_SOURCE = (
 )['../../src/panels/menu-tree.tsx'] as string
 
 const USER: SessionUser = { id: 'u-1', email: 'me@example.com', name: '테스터' }
-const PROJECT: ProjectDetail = { id: 'p-1', name: '설계서', slug: 'proj', description: null, role: 'owner' }
+const PROJECT: ProjectView = { id: 'p-1', name: '설계서', slug: 'proj', description: null, role: 'owner', themeRev: 0 }
 
 /** `menu-move.test.tsx`와 같은 모양 — 형제 셋이 있어야 가운데를 고를 수 있다. */
 function tree(): TreeMenuNode[] {

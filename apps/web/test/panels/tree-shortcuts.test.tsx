@@ -88,6 +88,7 @@ function boot() {
           slug: 's',
           description: null,
           role: 'owner' as const,
+          themeRev: 0,
         }),
         getTree: async () => tree(),
         getPage: async () => page(),

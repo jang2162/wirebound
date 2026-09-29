@@ -107,9 +107,12 @@ export function authRoutes(config: ApiConfig, limiter: LoginLimiter) {
       // 계정이 동시에 여러 기기·탭에서 로그인해 있을 수 있다(설계서 「권한 모델」,
       // WebSocket 인증도 이를 전제한다). "전부 로그아웃"이 필요하면
       // `destroyUserSessions`를 별도 경로(예: 비밀번호 변경)에서 명시적으로 쓴다.
+      // `/me` 와 같은 모양이다 — 로그인 직후 화면이 목록 머리의 관리자 링크를 `/me` 를 다시 부르지 않고 세운다. 세션을 만들기 전에
+      // 읽는다 — 이 읽기가 실패한 500 이 쿠키를 싣고 나가지 않게.
+      const admin = await isInstanceAdmin(app.db, found.id)
       const { token, expiresAt } = await createSession(app.db, found.id, config.sessionTtlHours)
       reply.setCookie(config.sessionCookieName, token, sessionCookieOptions(config, expiresAt))
-      return { id: found.id, email: found.email, name: found.name }
+      return { id: found.id, email: found.email, name: found.name, isInstanceAdmin: admin }
     })
 
     app.post('/logout', { preHandler: app.requireAuth }, async (request, reply) => {

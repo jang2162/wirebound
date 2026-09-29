@@ -66,6 +66,35 @@ function htmlResponse(status: number): Response {
 
 const user: SessionUser = { id: 'u1', email: 'a@b.c', name: '홍길동' }
 const project: ProjectDetail = { id: 'p1', name: '프로젝트', slug: 'proj', description: null, role: 'owner' }
+/** `GET /api/projects/:projectId` 만 `themeRev` 를 더 싣는다(`ProjectView`). */
+const projectView = { ...project, themeRev: 3 }
+
+/** 테마 manifest 하나 — 편집기 · 캔버스가 순회하는 `tokens.items` 까지. */
+const manifest = {
+  id: 'system-admin',
+  name: '관리자',
+  version: '0.1.0',
+  sdk: '^1.0.0',
+  tokens: { items: { 'color.primary': { type: 'color', label: '주색', default: '#2563eb' } } },
+}
+
+/** `GET · PUT …/theme` 의 응답 — 409 의 `current` 도 이 모양이다. */
+const projectTheme = { themeId: 'system-admin', version: '0.1.0', tokens: {}, rev: 2, manifest, latest: '0.1.0' }
+
+/** 판 한 줄 — 목록의 `versions[]` 와 숨김 응답. */
+const themeVersion = {
+  themeId: 'system-x',
+  version: '1.0.0',
+  name: 'X',
+  preview: null,
+  hidden: false,
+  size: 1234,
+  uploadedAt: '2026-09-28T00:00:00.000Z',
+  uploadedBy: null,
+}
+const themeSummary = { themeId: 'system-x', name: 'X', description: null, latest: '1.0.0', versions: [themeVersion] }
+const themeImpact = { tokens: { kept: 1, dropped: 0, defaulted: 2 }, variants: [{ pageId: 'pg1', title: '목록', count: 1 }] }
+const themeUploaded = { themeId: 'acme', version: '1.0.0', name: 'Acme', sha256: 'ab', size: 10 }
 
 const treeNode: TreeMenuNode = {
   id: 'm1',
@@ -230,7 +259,7 @@ const ENDPOINTS: Array<{
   { client: 'listMyTokens', url: '/api/auth/tokens', method: 'GET', body: [{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }], call: (c) => c.listMyTokens() },
   { client: 'revokeMyToken', url: '/api/auth/tokens/t1', method: 'DELETE', body: null, call: (c) => c.revokeMyToken('t1') },
   { client: 'revokeAllMyTokens', url: '/api/auth/tokens', method: 'DELETE', body: { revoked: 2 }, call: (c) => c.revokeAllMyTokens() },
-  { client: 'getProject', url: '/api/projects/p1', method: 'GET', body: project, call: (c) => c.getProject('p1') },
+  { client: 'getProject', url: '/api/projects/p1', method: 'GET', body: projectView, call: (c) => c.getProject('p1') },
   { client: 'getTree', url: '/api/projects/p1/tree', method: 'GET', body: { menu: [] }, call: (c) => c.getTree('p1') },
   { client: 'getPage', url: '/api/projects/p1/pages/pg1', method: 'GET', body: page, call: (c) => c.getPage('p1', 'pg1') },
   // --- 아래 줄들은 **각자 자기 describe에서도 URL이 단언되지만 이 표에도 있어야 한다** —
@@ -446,6 +475,54 @@ const ENDPOINTS: Array<{
     body: {},
     call: (c) => c.downloadExport('p1', 'pptx').catch(() => null),
   },
+  // **테마 여덟.** 바인딩 셋은 프로젝트 아래이고(API 토큰도 닿는다), 패키지 읽기 둘은 `/theme-packages`(세션 전용), 관리자 셋은
+  // `/admin` 아래다(api README 「테마 패키지와 프로젝트 테마」).
+  { client: 'getProjectTheme', url: '/api/projects/p1/theme', method: 'GET', body: projectTheme, call: (c) => c.getProjectTheme('p1') },
+  {
+    client: 'putProjectTheme',
+    url: '/api/projects/p1/theme',
+    method: 'PUT',
+    body: projectTheme,
+    call: (c) => c.putProjectTheme('p1', { themeId: 'system-admin', version: '0.1.0', tokens: {}, rev: 2 }),
+  },
+  // 질의 두 키가 다 있어야 한다 — 없으면 400 이다. 값은 인코딩한다.
+  {
+    client: 'getThemeImpact',
+    url: '/api/projects/p1/theme/impact?themeId=system-x&version=1.0.0%2Bb',
+    method: 'GET',
+    body: themeImpact,
+    call: (c) => c.getThemeImpact('p1', { themeId: 'system-x', version: '1.0.0+b' }),
+  },
+  { client: 'listThemePackages', url: '/api/theme-packages', method: 'GET', body: [themeSummary], call: (c) => c.listThemePackages() },
+  {
+    client: 'getThemeManifest',
+    url: '/api/theme-packages/system-admin/0.1.0/manifest',
+    method: 'GET',
+    body: manifest,
+    call: (c) => c.getThemeManifest({ themeId: 'system-admin', version: '0.1.0' }),
+  },
+  {
+    client: 'uploadThemePackage',
+    url: '/api/admin/theme-packages',
+    method: 'POST',
+    body: themeUploaded,
+    call: (c) => c.uploadThemePackage(new Blob([Uint8Array.from([0x50, 0x4b])])),
+  },
+  {
+    client: 'setThemePackageHidden',
+    url: '/api/admin/theme-packages/system-x/1.0.0',
+    method: 'PATCH',
+    body: themeVersion,
+    call: (c) => c.setThemePackageHidden({ themeId: 'system-x', version: '1.0.0' }, true),
+  },
+  // 파일 그 자체 — 형식 검사는 아래 `테마 클라이언트` 케이스가 잰다(이 표의 응답은 JSON 이라 거절된다).
+  {
+    client: 'downloadThemeTemplate',
+    url: '/api/admin/theme-template.zip',
+    method: 'GET',
+    body: {},
+    call: (c) => c.downloadThemeTemplate().catch(() => null),
+  },
 ]
 
 /**
@@ -463,7 +540,9 @@ const SHAPE_CASES: Array<{
   ok: unknown
   call: (c: Client) => Promise<unknown>
 }> = [
-  { shape: 'projectDetail', broken: { ...project, id: '' }, ok: project, call: (c) => c.getProject('p1') },
+  { shape: 'projectDetail', broken: { ...project, id: '' }, ok: project, call: (c) => c.updateProject('p1', { name: '가' }) },
+  // **`themeRev` 가 수가 아니면 막는다** — 셸의 다시 읽기가 `>` 로 견주므로 문자열이면 따라잡기가 조용히 안 돈다.
+  { shape: 'projectView', broken: { ...project, themeRev: '3' }, ok: projectView, call: (c) => c.getProject('p1') },
   { shape: 'projectList', broken: [{ ...project, id: '' }], ok: [project], call: (c) => c.listProjects() },
   // 폐기 주소가 되는 `id`는 빈 문자열까지 막는다 — 그 밖의 칸은 모양만 본다.
   { shape: 'myTokens', broken: [{ ...{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }, id: '' }], ok: [{ id: 't1', name: 'CI', createdAt: '2026-09-01T00:00:00.000Z', lastUsedAt: null, projectId: 'p1', projectName: null, member: false }], call: (c) => c.listMyTokens() },
@@ -592,6 +671,52 @@ const SHAPE_CASES: Array<{
     broken: { ...exportPreview, format: 'docx' },
     ok: exportPreview,
     call: (c) => c.getExportPreview('p1', 'html'),
+  },
+  // --- 테마. ---
+  // **`manifest.tokens.items` 가 레코드가 아니면 막는다** — 토큰 편집기 · 캔버스가 그것을 순회한다.
+  {
+    shape: 'projectTheme',
+    broken: { ...projectTheme, manifest: { ...manifest, tokens: {} } },
+    ok: projectTheme,
+    call: (c) => c.getProjectTheme('p1'),
+  },
+  // 바인딩이 빈 프로젝트(시딩 전)는 `null` 셋으로 온다 — 그것도 지나야 한다.
+  {
+    shape: 'projectTheme',
+    broken: { ...projectTheme, rev: '2' },
+    ok: { ...projectTheme, themeId: null, version: null, manifest: null, latest: null },
+    call: (c) => c.getProjectTheme('p1'),
+  },
+  {
+    shape: 'themeImpact',
+    broken: { ...themeImpact, tokens: { kept: '1', dropped: 0, defaulted: 2 } },
+    ok: themeImpact,
+    call: (c) => c.getThemeImpact('p1', { themeId: 'system-x', version: '1.0.0' }),
+  },
+  // **판의 `version` 이 빈 문자열이면 막는다** — `<option>` 의 값이고 manifest 주소가 된다.
+  {
+    shape: 'themePackageList',
+    broken: [{ ...themeSummary, versions: [{ ...themeVersion, version: '' }] }],
+    ok: [themeSummary],
+    call: (c) => c.listThemePackages(),
+  },
+  {
+    shape: 'themeManifest',
+    broken: { ...manifest, tokens: null },
+    ok: manifest,
+    call: (c) => c.getThemeManifest({ themeId: 'system-admin', version: '0.1.0' }),
+  },
+  {
+    shape: 'themeUploaded',
+    broken: { ...themeUploaded, version: 1 },
+    ok: themeUploaded,
+    call: (c) => c.uploadThemePackage(new Blob([])),
+  },
+  {
+    shape: 'themePackageVersion',
+    broken: { ...themeVersion, hidden: 'true' },
+    ok: themeVersion,
+    call: (c) => c.setThemePackageHidden({ themeId: 'system-x', version: '1.0.0' }, true),
   },
 ]
 
@@ -918,7 +1043,7 @@ describe('createHttpClient', () => {
       const treeStub = stubFetch(jsonResponse(200, { menu: [{ ...treeNode, pages: [{ id, title: '목록', sortOrder: 0 }], children: [] }] }))
       await expect(createHttpClient(treeStub.fetchImpl).getTree('p1'), id).resolves.toBeDefined()
 
-      const projectStub = stubFetch(jsonResponse(200, { ...project, id }))
+      const projectStub = stubFetch(jsonResponse(200, { ...projectView, id }))
       await expect(createHttpClient(projectStub.fetchImpl).getProject('p1'), id).resolves.toBeDefined()
     }
   })

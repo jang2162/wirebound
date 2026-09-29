@@ -25,7 +25,7 @@ import { useLocation } from 'react-router'
 import { CURRENT_DOCUMENT_VERSION, type PageDocument, type WbNode } from '@wirebound/schema'
 import { App } from '../src/app'
 import { ApiError, type ApiClient } from '../src/api/client'
-import type { PageDetail, ProjectDetail, SessionUser, TreeMenuNode } from '../src/api/types'
+import type { PageDetail, ProjectView, SessionUser, TreeMenuNode } from '../src/api/types'
 import type { RealtimeSetup } from '../src/realtime/context'
 import type { TabChannel } from '../src/session/tab-channel'
 import type { DraftStore } from '../src/panels/draft-store'
@@ -54,12 +54,13 @@ export const OTHER_PAGE_ROUTE = `${PROJECT_ROUTE}/pages/${OTHER_PAGE_ID}`
  */
 export const HEAD_SEQ = 7
 
-const PROJECT: ProjectDetail = {
+const PROJECT: ProjectView = {
   id: PROJECT_ID,
   name: PROJECT_NAME,
   slug: 'admin-console',
   description: '내부 운영 도구',
   role: 'owner',
+  themeRev: 0,
 }
 
 /** 페이지 둘. 두 번째는 "다른 페이지로 옮기면 …" 케이스가 쓴다. */

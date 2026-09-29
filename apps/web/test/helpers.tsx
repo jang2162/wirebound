@@ -70,6 +70,14 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     restoreSnapshot: notStubbed('restoreSnapshot'),
     getExportPreview: notStubbed('getExportPreview'),
     downloadExport: notStubbed('downloadExport'),
+    getProjectTheme: notStubbed('getProjectTheme'),
+    putProjectTheme: notStubbed('putProjectTheme'),
+    getThemeImpact: notStubbed('getThemeImpact'),
+    listThemePackages: notStubbed('listThemePackages'),
+    getThemeManifest: notStubbed('getThemeManifest'),
+    uploadThemePackage: notStubbed('uploadThemePackage'),
+    setThemePackageHidden: notStubbed('setThemePackageHidden'),
+    downloadThemeTemplate: notStubbed('downloadThemeTemplate'),
     ...overrides,
   }
 }

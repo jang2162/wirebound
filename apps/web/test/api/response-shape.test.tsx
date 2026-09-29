@@ -44,6 +44,8 @@ const UNREADABLE = '서버 응답을 이해할 수 없습니다'
 
 const USER = { id: 'u-1', email: 'me@example.com', name: '테스터' }
 const PROJECT = { id: 'p-1', name: '관리자 콘솔 설계서', slug: 'ac', description: null, role: 'owner' }
+/** `GET /api/projects/:projectId` 만 `themeRev` 를 더 싣는다(`ProjectView`). */
+const PROJECT_VIEW = { ...PROJECT, themeRev: 0 }
 const MENU = [{ id: 'mn-1', title: '회원관리', sortOrder: 1, pages: [], children: [] }]
 const PAGE = {
   id: 'pg-1',
@@ -201,13 +203,13 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
       '/auth/me': USER,
       '/projects/p-1/tree': { menu: MENU },
       '/projects/p-1/pages/pg-1': PAGE,
-      '/projects/p-1': PROJECT,
+      '/projects/p-1': PROJECT_VIEW,
       '/projects': [PROJECT],
     })
 
     await expect(api.me()).resolves.toEqual(USER)
     await expect(api.listProjects()).resolves.toEqual([PROJECT])
-    await expect(api.getProject('p-1')).resolves.toEqual(PROJECT)
+    await expect(api.getProject('p-1')).resolves.toEqual(PROJECT_VIEW)
     await expect(api.getTree('p-1')).resolves.toEqual(MENU)
     await expect(api.getPage('p-1', 'pg-1')).resolves.toEqual(PAGE)
   })
@@ -248,19 +250,19 @@ describe('성공 응답이 계약을 어기면 — http-client 층', () => {
     const api = client({
       '/projects/p-1/tree': { menu: [] },
       '/projects': [],
-      '/projects/p-1': { ...PROJECT, description: null },
+      '/projects/p-1': { ...PROJECT_VIEW, description: null },
     })
 
     await expect(api.getTree('p-1')).resolves.toEqual([])
     await expect(api.listProjects()).resolves.toEqual([])
-    await expect(api.getProject('p-1')).resolves.toEqual({ ...PROJECT, description: null })
+    await expect(api.getProject('p-1')).resolves.toEqual({ ...PROJECT_VIEW, description: null })
   })
 })
 
 describe('성공 응답이 계약을 어기면 — 화면 층', () => {
   it('트리 응답이 계약을 어겨도 셸이 산다', async () => {
     renderWithProviders(<App />, {
-      client: client({ '/auth/me': USER, '/tree': { menu: [{}] }, '/projects/p-1': PROJECT }),
+      client: client({ '/auth/me': USER, '/tree': { menu: [{}] }, '/projects/p-1': PROJECT_VIEW }),
       route: '/projects/p-1',
     })
 
@@ -317,7 +319,7 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
         '/auth/me': USER,
         '/tree': { menu: MENU },
         '/pages/pg-1': { ...PAGE, schema: {} },
-        '/projects/p-1': PROJECT,
+        '/projects/p-1': PROJECT_VIEW,
       }),
       route: '/projects/p-1/pages/pg-1',
     })
@@ -336,7 +338,7 @@ describe('성공 응답이 계약을 어기면 — 화면 층', () => {
         '/auth/me': USER,
         '/tree': { menu: MENU },
         '/pages/pg-1': { ...PAGE, schema: { version: 1, root: { id: 'n-root', type: 99 } } },
-        '/projects/p-1': PROJECT,
+        '/projects/p-1': PROJECT_VIEW,
       }),
       route: '/projects/p-1/pages/pg-1',
     })
