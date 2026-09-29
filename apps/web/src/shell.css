@@ -93,6 +93,7 @@
    파랑 `#2f6fed`의 4.55:1보다 오히려 높다. **어둡게 조정하지 않은 근거가 이 실측이다.** */
 .wb-shell,
 .wb-shell-project-list,
+.wb-shell-settings,
 .wb-shell-login {
   --wb-shell-line: #dfe3e8;
   --wb-shell-chrome: #f6f7f9;
@@ -1869,14 +1870,14 @@
 
 /* 이 화면의 버튼 셋 — **무게로 가른다.**
 
-   `.wb-shell-project-action` **하나가 만들기·취소·수정·삭제를 다 걸면** 실측으로
+   `.wb-shell-project-action` **하나가 만들기·취소·저장·삭제를 다 걸면** 실측으로
    넷 다 배경 흰색·글자 먹색이라 **주 동작과 취소가 구분되지 않고**, 규칙도
    갈린다 — 목록의 `새 프로젝트`(`-create`)와 로그인의 `-submit`은 강조색을
    받는데 폼의 `만들기`/`저장`만 못 받는다. 그래서 셋으로 나눈다.
 
    | 클래스 | 무엇 | 꼴 |
    |---|---|---|
-   | `-action` | 되돌릴 수 있는 것 — `수정` · `취소` · `삭제 취소` · 목록의 `삭제`(확인을 연다) | 흰 바탕 |
+   | `-action` | 되돌릴 수 있는 것 — `취소` · `삭제 취소` · 목록의 `삭제`(확인을 연다) | 흰 바탕 |
    | `-submit` | 그 폼의 주 동작 — `만들기` · `저장` | 강조색. `-create`·`-login-submit`과 같다 |
    | `-danger` | 되돌릴 수 없는 것 — `삭제 확정` | 붉은색(`#b42318`, 이 파일이 이미 쓰는 경고색) |
 
@@ -2809,4 +2810,101 @@
   order: 2;
   margin-left: auto;
   margin-top: 18px;
+}
+
+/* 목록 줄의 «설정»(`routes/project-list.tsx`) — 모든 멤버에게 있는 링크다. 줄의 단추들과 같은 높이 · 모서리로 서되, 링크라 밑줄을
+   지우고 강조색 글자로 가른다(계정 묶음의 «API 토큰» 링크와 같은 꼴). */
+.wb-shell-project-settings {
+  flex: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  font-size: 13px;
+  color: var(--wb-shell-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* 에디터 머리의 «설정»(`routes/editor.tsx`) — 스냅샷 · 내보내기 토글과 같은 글자 꼴이다. 링크라 밑줄만 지운다. */
+.wb-shell-settings-entry {
+  font-size: 13px;
+  color: var(--wb-shell-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* ── 프로젝트 설정(`routes/settings.tsx`) ─────────────────────────────────────────────────
+   화면 루트다(팔레트 블록의 루트 목록). 목록 화면보다 넓다 — «테마» 절의 미리보기(갤러리 iframe)가 폼 옆에 선다. 머리 · 알림 ·
+   단추는 프로젝트 목록의 것을 그대로 쓴다(`-project-head` · `-project-list-title` · `-project-submit` · `-project-alert` ·
+   `-project-notice`). 여기 있는 것은 이 화면에만 있는 칸이다. */
+.wb-shell-settings {
+  color-scheme: light;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-settings-nav {
+  display: flex;
+  gap: 16px;
+  margin: 0 0 16px;
+}
+
+/* 절 하나 — «일반» · «테마». 위아래로 쌓고 선으로 가른다(탭이 없다). */
+.wb-shell-settings-section {
+  border-top: 1px solid var(--wb-shell-line);
+  padding: 16px 0 24px;
+}
+
+.wb-shell-settings-section-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.wb-shell-settings-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 480px;
+}
+
+.wb-shell-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.wb-shell-settings-label {
+  font-size: 13px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-settings-input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  background: #fff;
+  font: inherit;
+  color: var(--wb-shell-ink);
+}
+
+/* 읽기 전용 칸(owner 가 아니다) — 고칠 수 없다는 것이 바탕으로 보이게 한다. */
+.wb-shell-settings-input:read-only {
+  background: var(--wb-shell-chrome);
+}
+
+/* 칸 하나의 사유(슬러그 409 · 토큰 값의 사유) — 그 칸 바로 밑이다. 색은 이 파일의 오류 문장 색이다. */
+.wb-shell-settings-field-alert {
+  margin: 0;
+  font-size: 12px;
+  color: #b42318;
 }

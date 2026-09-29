@@ -79,6 +79,8 @@ export function ProjectThemeProvider(props: { projectId: string; children: React
   const wanted = useRef(-1)
   const reading = useRef(false)
   const alive = useRef(true)
+  /** 셸을 떠나면 끊는다 — 떠난 셸의 조회가 브라우저 연결을 쥐지 않게(`api/client.ts` 의 `ReadOptions.cancel`). */
+  const leaving = useRef<AbortController | null>(null)
 
   const commit = useCallback((next: ProjectThemeState) => {
     current.current = next
@@ -90,7 +92,8 @@ export function ProjectThemeProvider(props: { projectId: string; children: React
     reading.current = true
     let view: ProjectThemeView
     try {
-      view = await api.getProjectTheme(props.projectId)
+      const cancel = leaving.current?.signal
+      view = await api.getProjectTheme(props.projectId, cancel === undefined ? undefined : { cancel })
     } catch (caught) {
       if (!alive.current || turn.current !== mine) return
       reading.current = false
@@ -138,10 +141,13 @@ export function ProjectThemeProvider(props: { projectId: string; children: React
 
   useEffect(() => {
     alive.current = true
+    const leave = new AbortController()
+    leaving.current = leave
     void reload()
     return () => {
       alive.current = false
       turn.current += 1
+      leave.abort()
     }
   }, [reload])
 

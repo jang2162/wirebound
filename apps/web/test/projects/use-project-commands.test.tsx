@@ -247,49 +247,4 @@ describe('useProjectCommands — 뼈대', () => {
     })
     expect(read('confirm')).toBe('p-1')
   })
-
-  it('조작이 나가 있는 동안에는 수정 폼도 열리지 않는다', async () => {
-    // **여는 것 셋을 다 잰다.** `openCreate`·`askDelete`만 재면 `openEdit`의 잠금을 지워도
-    // **아무 케이스도 안 죽는다.** 화면 케이스로는 안 잡힌다 —
-    // 버튼의 `disabled`는 `busy`(state)가 만들므로 `inFlight`(ref)를 지워도 살아남는다.
-    let release = (): void => {}
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    mount(
-      fakeApi({
-        listProjects: async () => [project()],
-        createProject: async () => {
-          await gate
-          return project({ id: 'p-new' })
-        },
-      }),
-    )
-    await waitFor(() => expect(read('status')).toBe('ready'))
-
-    act(() => {
-      grab().openCreate()
-    })
-    act(() => {
-      grab().submitForm({ name: '가', slug: 'ga', description: '' })
-    })
-    await waitFor(() => expect(read('busy')).toBe('true'))
-    act(() => {
-      grab().closeForm()
-    })
-    expect(read('form')).toBe('closed')
-
-    act(() => {
-      grab().openEdit(project())
-    })
-    expect(read('form')).toBe('closed')
-
-    release()
-    await waitFor(() => expect(read('busy')).toBe('false'))
-    // 잠금이 풀리면 열린다 — **영구 차단이 아니라 잠금이다.**
-    act(() => {
-      grab().openEdit(project())
-    })
-    expect(read('form')).toBe('open')
-  })
 })

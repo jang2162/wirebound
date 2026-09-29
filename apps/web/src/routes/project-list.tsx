@@ -1,6 +1,6 @@
 /**
  * 로그인 다음 화면. 내가 속한 프로젝트를 늘어놓고, 하나를 고르면 에디터로 들어간다.
- * **여기서 프로젝트를 만들고 고치고 지운다.**
+ * **여기서 프로젝트를 만들고 지운다** — 이름 · 슬러그 · 설명을 고치는 것은 줄의 «설정» 이 여는 설정 페이지다(`routes/settings.tsx`).
  *
  * **조회·잠금·조작은 `projects/use-project-commands.tsx`가 갖는다.** 이 파일은 그 결과를
  * 그리기만 한다 — 판정이 컴포넌트 안에 흩어지면 케이스가 화면을 지나야만 재진다.
@@ -59,13 +59,10 @@ export function ProjectListRoute(): ReactElement {
         새 프로젝트
       </button>
 
-      {/* 만들기 폼은 목록 **위**에 연다. `key`가 있어야 만들기↔수정을 오갈 때 새
-          인스턴스가 마운트되고 초기값이 다시 잡힌다. */}
-      {commands.form !== null && commands.form.project === null && (
+      {/* 만들기 폼은 목록 **위**에 연다. */}
+      {commands.form !== null && (
         <ProjectForm
-          key="create"
           submitLabel="만들기"
-          initial={null}
           busy={commands.busy}
           onSubmit={commands.submitForm}
           onCancel={commands.closeForm}
@@ -112,7 +109,6 @@ export function ProjectListRoute(): ReactElement {
 function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }): ReactElement {
   const { project, commands } = props
   const abilities = projectAbilities(project.role)
-  const editing = commands.form !== null && commands.form.project?.id === project.id
   const confirming = commands.confirmingDelete?.id === project.id
 
   return (
@@ -126,20 +122,15 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
         <p className="wb-shell-project-desc">{project.description}</p>
       )}
 
-      {/* **`owner`가 아니면 버튼 자체가 없다** — `editor`·`viewer`는 `PATCH`·`DELETE`
-          둘 다 403이다(`projects/project-actions.ts` 머리말의 서버 응답 표). 비활성으로 두지 않고 아예 그리지 않는 것은, 이 화면에서
-          역할이 바뀌는 길이 없어 "지금은 못 하지만 곧 될 수도 있다"가 아니기 때문이다. */}
-      {abilities.rename && (
-        <button
-          className="wb-shell-project-action"
-          type="button"
-          disabled={commands.busy}
-          onClick={() => commands.openEdit(project)}
-        >
-          {`${project.name} 수정`}
-        </button>
-      )}
+      {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다).
+          글자는 «설정» 하나이고 줄마다 갈리는 이름은 `aria-label` 이 싣는다. */}
+      <Link className="wb-shell-project-settings" to={`/projects/${project.id}/settings`} aria-label={`${project.name} 설정`}>
+        설정
+      </Link>
 
+      {/* **`owner`가 아니면 버튼 자체가 없다** — `editor`·`viewer`는 `DELETE`가 403이다(`projects/project-actions.ts` 머리말의
+          서버 응답 표). 비활성으로 두지 않고 아예 그리지 않는 것은, 이 화면에서 역할이 바뀌는 길이 없어 "지금은 못 하지만 곧 될
+          수도 있다"가 아니기 때문이다. */}
       {abilities.remove && (
         <button
           className="wb-shell-project-action"
@@ -151,17 +142,6 @@ function ProjectRow(props: { project: ProjectDetail; commands: ProjectCommands }
         </button>
       )}
 
-      {/* 수정 폼은 **그 항목 자리에** 연다 — 만들기는 목록 위다. */}
-      {editing && (
-        <ProjectForm
-          key={`edit-${project.id}`}
-          submitLabel="저장"
-          initial={project}
-          busy={commands.busy}
-          onSubmit={commands.submitForm}
-          onCancel={commands.closeForm}
-        />
-      )}
       {/* **`key`를 주지 않는다.** *"`key`가 있어야 다른 항목으로 옮길 때 친 이름이
           사라진다"*는 거짓이다: 각 `DeleteConfirm`은 서로 다른 `<li>`(그쪽이 `key={project.id}`를
           갖는다) 안에 있어, 항목을 옮기면 그 서브트리째 언마운트되고 친 이름도 사라진다.

@@ -1,5 +1,6 @@
 /**
- * 프로젝트의 이름·슬러그·설명을 묻는 인라인 폼. **만들기와 수정이 같은 것을 쓴다.**
+ * 새 프로젝트의 이름·슬러그·설명을 묻는 인라인 폼(목록 위). **고치기는 여기가 아니다** — 설정 페이지의 «일반» 절이
+ * 바뀐 키만 보낸다(`settings/general-section.tsx`).
  *
  * **`panels/tree-input.tsx`를 재사용하지 않는 근거:** 그쪽은 **필드가 하나**라 Enter·Esc·
  * blur를 입력 하나에 붙이면 끝이다. 여기는 셋이라 그 규칙이 필드마다 달라진다 — 특히 blur가
@@ -14,10 +15,6 @@
  * 않는다:** 필드 사이를 옮기는 것이 blur이므로, blur에 닫으면 이름을 치고 슬러그로 가는 순간
  * 폼이 사라진다. **`tree-input.tsx`의 blur 규칙은 입력이 하나일 때의 규칙이다.**
  *
- * **만들기와 수정을 한 컴포넌트로 두는 근거:** 묻는 것이 같고 다른 것은 초기값과 버튼 글자뿐이다.
- * 나누면 이 파일의 blur 규칙·포커스 규칙이 두 벌이 되고 한쪽만 고치는 자리가 생긴다 —
- * `tree-input.tsx`가 만들기와 이름 변경을 한 컴포넌트로 둔 것과 같은 판단이다.
- *
  * **`busy`를 받아 필드를 잠근다.** 요청이 나가 있는 동안 값이 바뀌면 사용자가 보낸 것과 화면에
  * 있는 것이 달라진다. **`tree-input.tsx`가 `disabled`를 걸지 않는 것과 반대인 이유는 그 자리가
  * 다르기 때문이다** — 그쪽은 제출하면서 입력이 DOM에서 사라지지만(요청 전에 `setEditing(null)`),
@@ -25,39 +22,30 @@
  * 동안 폼이 떠 있는" 상태가 실제로 만들어진다.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
-import type { ProjectDetail } from '../api/types'
 import type { ProjectFormValues } from './use-project-commands'
 
 export function ProjectForm(props: {
-  /** 수정이면 그 프로젝트, 만들기면 `null`. 초기값이 여기서 나온다. */
-  initial: ProjectDetail | null
   submitLabel: string
   busy: boolean
   onSubmit: (values: ProjectFormValues) => void
   onCancel: () => void
 }): ReactElement {
-  const [name, setName] = useState(props.initial?.name ?? '')
-  const [slug, setSlug] = useState(props.initial?.slug ?? '')
-  // **`description`이 `null`이면 빈 칸이다.** 서버의 "설명 없음"이 `null`이고 폼의 그것은
-  // 빈 문자열이다 — 되돌리는 변환은 훅이 한다(`submitForm`).
-  const [description, setDescription] = useState(props.initial?.description ?? '')
+  const [name, setName] = useState('')
+  const [slug, setSlug] = useState('')
+  // 빈 설명은 «설명 없음» 이다 — 키를 빼는 변환은 훅이 한다(`submitForm`).
+  const [description, setDescription] = useState('')
   const first = useRef<HTMLInputElement>(null)
 
   /**
    * 첫 필드에 포커스를 준다.
    *
    * **`autoFocus`가 아니라 `ref` + `useEffect`인 이유.** `autoFocus`는 새 인스턴스가
-   * 마운트될 때만 걸린다. `routes/project-list.tsx`가 이 컴포넌트에
-   * `key`를 준다(`"create"` / `` `edit-${id}` ``). 즉 만들기↔수정, 다른 항목의 수정으로 옮기면
-   * **새 인스턴스가 마운트되고 `autoFocus`도 걸린다.**
+   * 마운트될 때만 걸린다. 폼은 열 때마다 새로 마운트되므로(닫으면 DOM 에서 빠진다) **지금 두 구현은
+   * 구별되지 않는다** — `autoFocus`로 바꿔도 이 저장소의 케이스가 하나도 죽지 않는다(jsdom에서 `autoFocus`가
+   * 동작한다). `tree-input.tsx`가 같은 결론이고 근거도 같다.
    *
-   * **그래서 지금 두 구현은 구별되지 않는다** — `autoFocus`로 바꿔도 이 저장소의 케이스가
-   * 하나도 죽지 않는다(jsdom에서 `autoFocus`가 동작한다). `tree-input.tsx`가 같은
-   * 결론이고 근거도 같다.
-   *
-   * `ref`를 두는 근거는 **잰 것이 아니라 형태다**: `key`를 떼는 순간(같은 인스턴스를 남기고
-   * 초기값만 바꾸는 구현) `autoFocus`는 조용히 안 걸리는데 `ref`는 그 변화를 이 파일 안에서
-   * 흡수한다.
+   * `ref`를 두는 근거는 **잰 것이 아니라 형태다**: 같은 인스턴스를 남기는 구현으로 바뀌는 순간
+   * `autoFocus`는 조용히 안 걸리는데 `ref`는 그 변화를 이 파일 안에서 흡수한다.
    */
   useEffect(() => {
     first.current?.focus()

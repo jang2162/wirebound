@@ -20,7 +20,7 @@
  * | 갈래 | 무엇 | 잠금 |
  * |---|---|---|
  * | **요청** | `submitForm` · `confirmDelete` | `run`이 `inFlight`로 막는다 |
- * | **여는 것** | `openCreate` · `openEdit` · `askDelete` | **각자 `inFlight`를 본다** |
+ * | **여는 것** | `openCreate` · `askDelete` | **각자 `inFlight`를 본다** |
  * | **닫는 것** | `closeForm` · `cancelDelete` | 막지 않는다 — 닫는 것은 잠금 중에도 안전하다 |
  *
  * **닫는 것을 잠그지 않는 근거:** 잠그면 요청이 나가 있는 동안 사용자가 폼을 못 닫는다.
@@ -57,9 +57,12 @@ export type ProjectLoadState =
   | { status: 'ready'; projects: ProjectDetail[] }
   | { status: 'failed'; failure: Failure }
 
-/** 지금 열려 있는 폼. `project`가 `null`이면 만들기, 아니면 그 프로젝트의 수정이다. */
+/**
+ * 지금 열려 있는 폼 — 만들기 하나다. 이름 · 슬러그 · 설명을 **고치는** 자리는 설정 페이지의 «일반» 절이다(`settings/general-section.tsx`
+ * — 바뀐 키만 보내고 비운 설명을 `null` 로 지운다).
+ */
 export interface ProjectFormState {
-  project: ProjectDetail | null
+  kind: 'create'
 }
 
 /** 폼이 제출하는 값 셋. 서버가 받는 키와 같다(`ApiClient`의 본문). */
@@ -78,7 +81,6 @@ export interface ProjectCommands {
   /** 열려 있는 폼. 닫혀 있으면 `null`. */
   form: ProjectFormState | null
   openCreate: () => void
-  openEdit: (project: ProjectDetail) => void
   closeForm: () => void
   submitForm: (values: ProjectFormValues) => void
   /** 삭제 확인이 열린 프로젝트. 닫혀 있으면 `null`. **하나뿐이다.** */
@@ -217,23 +219,7 @@ export function useProjectCommands(): ProjectCommands {
     // **다른 조작을 시작하면 확인이 닫힌다.** 열어 둔 채로 폼을 쓰면 확인이 어느 항목에
     // 붙어 있는지가 화면에서 흐려진다.
     setConfirmingDelete(null)
-    setForm({ project: null })
-  }
-
-  /**
-   * 수정 폼을 연다. **`openCreate`와 같은 잠금이고**, 다른 것은 초기값이 실린다는 것뿐이다.
-   *
-   * **폼 컴포넌트를 나누지 않고 `form.project`로 가른다.**
-   * 묻는 것이 같고 다른 것은 초기값과 버튼 글자뿐이라, 나누면 `project-form.tsx`의 blur 규칙과 포커스 규칙이
-   * 두 벌이 되고 한쪽만 고치는 자리가 생긴다 — `panels/tree-input.tsx`가 만들기와 이름 변경을
-   * 한 컴포넌트로 둔 것과 같은 판단이다. **분기가 느는 값은 이 함수 하나와 `submitForm`의
-   * `target === null` 하나뿐이다.**
-   */
-  function openEdit(project: ProjectDetail): void {
-    if (inFlight.current) return
-    setFailure(null)
-    setConfirmingDelete(null)
-    setForm({ project })
+    setForm({ kind: 'create' })
   }
 
   /**
@@ -268,41 +254,17 @@ export function useProjectCommands(): ProjectCommands {
       description: values.description === '' ? undefined : values.description,
     }
 
-    const target = form.project
-    if (target === null) {
-      void run(
-        async () => {
-          const created = await api.createProject(body)
-          createdId.current = created.id
-        },
-        () => {
-          setForm(null)
-          // **만든 프로젝트로 간다.** `id`가 빈 문자열이면 `/projects/`가 되고 화면이
-          // 통째로 비는데, 그것은 `SHAPES.projectDetail`이 관문에서 막는다.
-          const id = createdId.current
-          if (id !== null) navigate(`/projects/${id}`)
-        },
-      )
-      return
-    }
-
-    // **수정은 세 필드를 함께 보낸다 — 부분 갱신이 아니다.**
-    //
-    // **바꿨는지 비교하지 않는 근거:** 서버가 제목을 정규화하지 않으므로
-    // (`' 가'`와 `'가'`가 다른 값이다) "같으니 보내지 않는다"로 막으면 사용자가 그 공백을
-    // 지울 방법이 없어진다. **필드가 셋이라 비교는 셋 다 필요해지고, 셋이 다 같으면 빈 본문이
-    // 되어 `updateBody`가 던진다** — 눌렀는데 아무 일도 안 나는 화면이 된다.
-    //
-    // **전체 갱신의 한계:** 설명을 지우면 `undefined`가 되어 그 키가 빠지므로
-    // **"바꾸지 않는다"가 되고 옛 설명이 서버에 남는다.** 지우는 뜻을 보내려면 `null`이어야
-    // 하는데, 폼이 "비움"과 "지움"을 가르지 못한다. 지우기는 없고,
-    // 케이스가 그 사실을 고정해 둔다.
     void run(
       async () => {
-        await api.updateProject(target.id, body)
+        const created = await api.createProject(body)
+        createdId.current = created.id
       },
       () => {
         setForm(null)
+        // **만든 프로젝트로 간다.** `id`가 빈 문자열이면 `/projects/`가 되고 화면이
+        // 통째로 비는데, 그것은 `SHAPES.projectDetail`이 관문에서 막는다.
+        const id = createdId.current
+        if (id !== null) navigate(`/projects/${id}`)
       },
     )
   }
@@ -354,7 +316,6 @@ export function useProjectCommands(): ProjectCommands {
     failure,
     form,
     openCreate,
-    openEdit,
     closeForm,
     submitForm,
     confirmingDelete,

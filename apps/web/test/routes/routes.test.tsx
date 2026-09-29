@@ -39,6 +39,7 @@ function renderAt(route: string): void {
         themeRev: 0,
       }),
       getProjectTheme: async () => adminThemeView(),
+      listThemePackages: async () => [],
       // 셸의 세 자리가 각각 조회한다. 여기서 보는 것은 라우트 표뿐이지만, 스텁하지 않은
       // 메서드는 `fakeApi`가 던지므로 트리와 캔버스가 오류 화면이 된다 — 그러면 아래
       // 단언이 "라우트가 잡혔다"가 아니라 "오류가 떴다"를 보게 된다.
@@ -73,6 +74,15 @@ function renderAt(route: string): void {
 // 아니라 **라우트가 잡히고 경로 파라미터가 풀린다**는 것, 그리고 **페이지 없이 들어온
 // 것과 페이지를 연 것이 화면에서 구분된다**는 것 둘이다.
 describe('라우트 표', () => {
+  it('설정 라우트는 projectId를 넘겨준다 — 셸 밖이다', async () => {
+    renderAt('/projects/p-7/settings')
+
+    await screen.findByRole('heading', { name: '설계서 p-7 설정' })
+    expect(currentPath()).toBe('/projects/p-7/settings')
+    // 셸의 랜드마크(캔버스)가 없다 — 설정은 셸 밖 라우트다(`routes/settings.tsx` 머리말).
+    expect(screen.queryByRole('main', { name: '캔버스' })).toBeNull()
+  })
+
   it('프로젝트 라우트는 projectId를 넘겨준다', async () => {
     renderAt('/projects/p-1')
 
