@@ -30,8 +30,8 @@ const DOC: PageDocument = {
 
 const encoder = new TextEncoder()
 
-function bytes(value: string): number {
-  return encoder.encode(value).length
+function bytes(value: string | Uint8Array): number {
+  return typeof value === 'string' ? encoder.encode(value).length : value.length
 }
 
 function bundleOf(pageCount: number) {
@@ -40,6 +40,7 @@ function bundleOf(pageCount: number) {
       title: `페이지 ${index + 1}`,
       document: DOC,
     })),
+    runtimeJs: '/* runtime */',
   })
 }
 

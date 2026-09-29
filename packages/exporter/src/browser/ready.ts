@@ -6,12 +6,14 @@
  * |---|---|
  * | `data-wb-ready` | 첫 커밋 → 테마 시트(`theme.css` link)가 실림(실패도) → `document.fonts.ready` → 한 프레임이 지났다 |
  * | `data-wb-failed="<까닭>"` | 테마를 못 썼거나 테마 뷰가 던졌다 — 준비 신호도 선다(HTML 은 기본 뷰 · 오류 노드로 그대로 보인다) |
- * | `data-wb-screen` | `#wb-screen` 으로 열렸다 — 셸을 숨기고 목업만 남긴다(`bundle/shell-css.ts`) |
+ *
+ * **화면 모드는 속성이 아니라 클래스다**(`SCREEN_CLASS` — `#wb-screen` 으로 열렸다: 셸을 숨기고 목업만 남긴다). 셸 CSS 가 그것을 셀렉터로
+ * 쓰는데 `[data-wb-…]` 는 테마의 어휘라 셸 CSS 가 쓰지 않는다(`bundle/shell-css.ts` 머리말의 둘째 규칙).
  */
 
 export const READY_ATTRIBUTE = 'data-wb-ready'
 export const FAILED_ATTRIBUTE = 'data-wb-failed'
-export const SCREEN_ATTRIBUTE = 'data-wb-screen'
+export const SCREEN_CLASS = 'wb-export-screen'
 
 /**
  * link 시트가 실렸거나(실패도) 창의 `load` 가 지났다. 머리의 시트는 뒤따르는 일반 스크립트를 막으므로(HTML 의 «script-blocking style

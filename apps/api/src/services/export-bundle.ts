@@ -44,6 +44,7 @@ import {
   type TargetedPage,
 } from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
+import { readExportRuntime } from './export-runtime'
 import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
 
 /**
@@ -125,7 +126,7 @@ export function buildProjectBundle(rows: ExportRows): ProjectBundle {
     target: page.target,
   }))
 
-  const { files, errors } = exportBundle({ pages: bundlePages })
+  const { files, errors } = exportBundle({ pages: bundlePages, runtimeJs: readExportRuntime() })
 
   return {
     files,

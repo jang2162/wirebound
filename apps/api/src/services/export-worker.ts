@@ -168,9 +168,10 @@
  * 워커만 낡은 `dist`를 도는 일이 없다. 운영 판(api 스크립트 · 같은 프로젝트를 같은 스레드와 워커로 내보냄)에서 html · pptx
  * 의 엔트리가 이름 · 순서 · 바이트까지 같았다.
  *
- * **vitest 에서는 변환기가 다르다** — 메인은 vite 가, 워커는 tsx 가 소스를 옮긴다. 함수의 `toString()`으로 만드는
- * `assets/runtime.js`만 그 하네스에서 글자가 갈린다(`test/export-worker.test.ts`가 그 하나만 갈리는 것을 잰다). tsx 는 tsconfig
- * 의 `include`에 든 파일에만 `jsx`를 걸어서 워커에 `apps/api/export-worker.tsconfig.json`을 준다(그 파일의 머리말).
+ * **vitest 에서는 변환기가 다르다** — 메인은 vite 가, 워커는 tsx 가 소스를 옮긴다. 산출물의 글자는 변환기가 짓지 않으므로 갈리지
+ * 않는다 — `assets/runtime.js` 도 빌드 산출물을 두 스레드가 각자 같은 파일에서 읽는다(`export-runtime.ts` · `test/export-worker.test.ts`
+ * 가 전 엔트리를 바이트로 견준다). tsx 는 tsconfig 의 `include`에 든 파일에만 `jsx`를 걸어서 워커에
+ * `apps/api/export-worker.tsconfig.json`을 준다(그 파일의 머리말).
  *
  * **워커는 모듈을 나눠 갖지 않는다** — 메인이 채운 레지스트리(컴포넌트 카탈로그)도 워커에서는 비어서 뜬다. 채우는 자리는
  * `export-worker-thread.ts`의 첫머리다.

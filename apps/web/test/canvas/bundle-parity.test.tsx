@@ -1,6 +1,7 @@
 /**
  * **캔버스가 그린 것과 번들이 그린 것을 견준다** — 설계서 「HTML 정적 번들」의 *"렌더러가 하나뿐이라 결과가
- * 어긋날 수 없다"*를 **진짜 화면**에 묶는 자리다.
+ * 어긋날 수 없다"*를 **진짜 화면**에 묶는 자리다. 번들 쪽은 번들 페이지가 부르는 진입(`@wirebound/exporter/browser` 의
+ * `mountExportDocument` — 번들 런타임이 목업 자리에 그리는 함수)을 jsdom 에서 곧바로 부른다.
  *
  * ---
  *
@@ -28,8 +29,9 @@
  * 번들에 **같은 테마 정의**를 넘겨 견준다 — 캔버스가 뷰 경로에 무엇을 더하거나 빼면 여기서 죽는다.
  */
 import { broadFixture, describeTree } from '@wirebound/exporter/test-support'
-import { exportPage } from '@wirebound/exporter'
+import { mountExportDocument } from '@wirebound/exporter/browser'
 import type { PageDocument } from '@wirebound/schema'
+import { act } from 'react'
 import { describe, expect, it } from 'vitest'
 import { ADMIN_V0 } from '@wirebound/system-theme-admin'
 import { canvasDocument, openPage } from '../editor-harness'
@@ -44,11 +46,15 @@ function canvasDocumentRoot(): Element {
   return root
 }
 
-/** 번들이 그린 문서 뿌리 — 캔버스와 같은 테마 정의로 그린다. */
+/** 번들이 그린 문서 뿌리 — 캔버스와 같은 테마 정의 · 같은 토큰(없음)으로 번들의 목업 자리에 그린다. 마커가 없어 첫 원소가 뿌리다. */
 function bundleDocumentRoot(document_: PageDocument): Element {
-  const { html } = exportPage({ document: document_, title: '견주기', theme: ADMIN_V0 })
-  const parsed = new DOMParser().parseFromString(html, 'text/html')
-  const root = parsed.body.firstElementChild
+  const canvas = document.createElement('div')
+  canvas.className = 'wb-export-canvas'
+  document.body.appendChild(canvas)
+  act(() => {
+    mountExportDocument(canvas, { document: document_, theme: ADMIN_V0, tokens: {}, window, hrefs: {}, markers: [], status: null })
+  })
+  const root = canvas.firstElementChild
   if (root === null) throw new Error('번들에 문서가 없습니다')
   return root
 }
@@ -75,7 +81,7 @@ describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
     const bundleNode = bundleDocumentRoot(broadFixture()).querySelector<HTMLElement>(
       '[data-wb-component="Tree"] > [data-wb-part="node"]',
     )
-    // 글자로 견주지 않는다 — 번들은 SSR 문자열(`--x:0`), 캔버스는 DOM 이 다시 쓴 꼴(`--x: 0;`)이라 같은 선언이 다르게 적힌다.
+    // 선언으로 견준다 — 적는 꼴이 아니라 선언이 계약이다(두 쪽 다 클라이언트 렌더라 오늘은 원문도 같다).
     const declarations = (node: HTMLElement | null | undefined) =>
       node === null || node === undefined ? null : Array.from(node.style, (name) => `${name}=${node.style.getPropertyValue(name).trim()}`)
     expect(declarations(canvasNode)).toEqual(['--wb-node-tree-level=0'])

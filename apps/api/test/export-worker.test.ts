@@ -183,14 +183,14 @@ describe('워커가 낸 것은 같은 스레드에서 낸 것과 같다', () => 
       const got = entries(new Uint8Array(res.rawPayload))
       const want = entries(referenceZip)
       expect(got.map(([name]) => name)).toEqual(want.map(([name]) => name))
-      // **`assets/runtime.js` 하나만 갈린다 — 이 하네스에서만.** 그 파일은 함수 하나의 `toString()`이라(`packages/exporter`의
-      // `RUNTIME_JS`) 글자가 **변환기가 낸 그대로**다. vitest 는 메인을 vite 로, 워커를 tsx 로 변환하므로 두 글자가 다르다.
-      // 운영은 두 스레드가 같은 `dist` 파일을 싣는다(`export-worker.ts`의 «워커가 싣는 코드는 메인과 같다»). 나머지는 바이트로 같다.
-      expect(differingEntries(got, want)).toEqual([`${bundleRootDirectory(fixture.slug)}/assets/runtime.js`])
-      // 카나리아 — 견준 것에 기본 뷰 CSS · 그려진 노드 · 코멘트가 실제로 들어 있다(없으면 둘이 우연히 같다).
-      const theme = got.find(([name]) => name.endsWith('assets/theme.css'))!
-      expect(strFromU8(theme[1])).toContain('--wb-node-grid-columns')
-      expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('data-wb-component="Button"')
+      // **전 엔트리가 바이트로 같다.** `assets/runtime.js` 는 빌드 산출물(`@wirebound/exporter/runtime.js`)을 두 스레드가 각자 같은 파일에서
+      // 읽는다(`services/export-runtime.ts`) — 변환기가 글자를 짓지 않는다.
+      expect(differingEntries(got, want)).toEqual([])
+      // 카나리아 — 견준 것에 기본 뷰 CSS · 런타임 · 문서 · 코멘트가 실제로 들어 있다(없으면 둘이 우연히 같다).
+      const views = got.find(([name]) => name.endsWith('assets/views.css'))!
+      expect(strFromU8(views[1])).toContain('--wb-node-grid-columns')
+      expect(got.find(([name]) => name.endsWith('assets/runtime.js'))![1].length).toBeGreaterThan(100_000)
+      expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('"type":"Button"')
       expect(got.map(([, bytes]) => strFromU8(bytes)).join('\n')).toContain('목록 코멘트 둘')
 
       const preview = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview`, cookies: fixture.cookie })

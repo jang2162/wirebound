@@ -25,6 +25,7 @@ const shared = {
       // 맞추고 **앞의 것이 이기므로**, 순서를 뒤집으면 `@wirebound/exporter/test-support`가
       // `…/src/index.ts/test-support`로 바뀐다.
       '@wirebound/exporter/test-support': src('./packages/exporter/test-support/index.ts'),
+      '@wirebound/exporter/browser': src('./packages/exporter/src/browser/index.ts'),
       '@wirebound/exporter': src('./packages/exporter/src/index.ts'),
       // 같은 규칙이 `@wirebound/cli`에도 걸린다 — **좁은 둘이 먼저다**.
       // `./embed`은 `packages/mcp`가 쓰는 **붙는 자리**이고 `./test-support`는 가짜 `io`와

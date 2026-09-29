@@ -268,7 +268,7 @@ describe('GET /:projectId/export', () => {
 
       const names = Object.keys(unzipSync(new Uint8Array(res.rawPayload)))
       expect(names).toContain('wirebound-export-one/index.html')
-      expect(names).toContain('wirebound-export-one/assets/theme.css')
+      expect(names).toContain('wirebound-export-one/assets/views.css')
       expect(names).toContain('wirebound-export-one/assets/runtime.js')
       expect(names.filter((name) => name.includes('/pages/'))).toHaveLength(3)
     })

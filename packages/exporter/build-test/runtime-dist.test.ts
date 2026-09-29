@@ -13,16 +13,22 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // **`import.meta.url`을 안 쓴다** — jsdom 환경에서는 그것이 `file:` 스킴이 아니다. vitest 의 cwd 는 저장소 뿌리다.
 const repoRoot = process.cwd()
 const runtimePath = resolve(repoRoot, 'packages/exporter/dist/runtime.js')
+const distPath = resolve(repoRoot, 'packages/exporter/dist/index.js')
 
 let runtimeJs = ''
 
+/**
+ * **`packages/*` 를 전부 짓는다** — 받는 쪽(api 는 `dist/index.js` 를 부른다)이 받는 것으로 번들을 짓고 그 런타임으로 연다. exporter 의
+ * `build` 가 tsdown 뒤 런타임(vite)을 짓는다.
+ */
 beforeAll(() => {
-  execFileSync('pnpm', ['--filter', '@wirebound/exporter', 'build:runtime'], { cwd: repoRoot, stdio: 'pipe' })
+  execFileSync('pnpm', ['--filter', './packages/*', '-r', 'build'], { cwd: repoRoot, stdio: 'pipe' })
   runtimeJs = readFileSync(runtimePath, 'utf8')
 }, 300_000)
 
@@ -79,8 +85,21 @@ describe('나가는 runtime.js 의 글자', () => {
     expect(runtimeJs).not.toContain('jsxDEV')
   })
 
+  /** `file://` 에서는 `styleSheets[i].cssRules` 가 `SecurityError` 를 던진다 — 시트가 붙고 적용되는데도 그렇다. 런타임은 시트를 안 읽는다. */
+  it('시트를 읽지 않는다', () => {
+    expect(runtimeJs).not.toContain('cssRules')
+  })
+
   it('비어 있지 않다 — 카나리아(react-dom 을 묶었다)', () => {
     expect(runtimeJs.length).toBeGreaterThan(100_000)
+  })
+
+  /**
+   * **자릿수 상한(UTF-8 바이트).** 지금 판은 react · react-dom · 카탈로그(zod) · 렌더러 · SDK 를 묶어 수백 KB 다 — 개발 React 가 묶이거나
+   * 워크스페이스 패키지가 두 벌 실리는 회귀는 크기를 배로 키워 여기 걸린다. 크기 자체는 이 케이스의 실패 값이 말한다.
+   */
+  it('자릿수 상한(1 MB) 안이다', () => {
+    expect(new TextEncoder().encode(runtimeJs).length).toBeLessThan(1_000_000)
   })
 })
 
@@ -127,10 +146,109 @@ describe('나가는 runtime.js 를 돌린다', () => {
   })
 })
 
+/** `dist` 가 내는 것 중 이 파일이 쓰는 것만. */
+interface DistExporter {
+  exportBundle: (options: {
+    pages: readonly { title: string; document: unknown; comments?: readonly { nodeId: string; body: string }[]; target?: string }[]
+    runtimeJs: string
+  }) => { files: { path: string; content: string | Uint8Array }[]; errors: unknown[] }
+}
+
+/** 상호작용 · 마커가 든 문서 — 누른 결과가 셋(setProp · switchTab · setVisible) 다 보이게. */
+const PRESSED = {
+  version: 1,
+  root: {
+    id: 'n_root',
+    type: 'Page',
+    children: [
+      {
+        id: 'n_btn',
+        type: 'Button',
+        props: { label: '검색' },
+        marker: 1,
+        interactions: [
+          {
+            on: 'click',
+            actions: [
+              { type: 'setProp', target: 'n_list', prop: 'loading', value: true },
+              { type: 'switchTab', target: 'n_tabs', tab: 1 },
+              { type: 'setVisible', target: 'n_card', value: false },
+            ],
+          },
+        ],
+      },
+      { id: 'n_list', type: 'List', props: {}, marker: 2 },
+      { id: 'n_tabs', type: 'Tabs', props: { tabs: ['ㄱ', 'ㄴ'], active: 0 } },
+      { id: 'n_card', type: 'Card', props: { title: '회원' } },
+    ],
+  },
+}
+
+describe('받는 쪽이 받는 dist 로 지은 번들을 나가는 런타임으로 연다', () => {
+  let files: { path: string; content: string | Uint8Array }[] = []
+
+  beforeAll(async () => {
+    const dist = (await import(/* @vite-ignore */ pathToFileURL(distPath).href)) as DistExporter
+    files = dist.exportBundle({
+      pages: [{ title: '회원 목록', document: PRESSED, comments: [{ nodeId: 'n_list', body: '기본 정렬은 가입일 역순' }] }],
+      runtimeJs,
+    }).files
+  })
+
+  function fileAt(path: string): string {
+    const found = files.find((file) => file.path === path)
+    if (found === undefined || typeof found.content !== 'string') throw new Error(`번들에 없는 글자 파일: ${path}`)
+    return found.content
+  }
+
+  it('dist 가 번들의 파일 트리를 내고 런타임 글자를 그대로 싣는다', () => {
+    expect(files.map((file) => file.path)).toEqual(['index.html', 'pages/회원-목록.html', 'assets/shell.css', 'assets/views.css', 'assets/runtime.js'])
+    expect(fileAt('assets/runtime.js')).toBe(runtimeJs)
+  })
+
+  it('페이지를 싣고 런타임을 돌리면 목업 · 마커가 서고 눌러 바뀐다', async () => {
+    const parsed = new DOMParser().parseFromString(fileAt('pages/회원-목록.html'), 'text/html')
+    document.head.innerHTML = parsed.head.innerHTML
+    document.body.innerHTML = parsed.body.innerHTML
+    document.documentElement.removeAttribute('data-wb-ready')
+    new Function(fileAt('assets/runtime.js'))()
+    await bootPage()
+    const canvas = document.querySelector('.wb-export-canvas')!
+    expect(document.documentElement.hasAttribute('data-wb-ready')).toBe(true)
+    expect([...document.querySelectorAll('.wb-export-marker')].map((badge) => [badge.getAttribute('data-wb-marker-for'), badge.textContent])).toEqual([
+      ['n_btn', '1'],
+      ['n_list', '2'],
+    ])
+    canvas.querySelector('[data-wb-id="n_btn"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    // 런타임의 React 는 이벤트 뒤 다시 그리기를 다음 마이크로태스크에 한다.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(canvas.querySelector('[data-wb-id="n_list"]')?.getAttribute('data-wb-state')).toBe('loading')
+    expect([...canvas.querySelectorAll('[data-wb-id="n_tabs"] [data-wb-part="tab"]')].map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true'])
+    expect(canvas.querySelector('[data-wb-id="n_card"]')).toBeNull()
+  })
+
+  /** 소스 파일에도 날 제어 바이트가 없어야 하듯, **나가는 자산에도** 없어야 한다. */
+  it('나가는 글자 자산에 날 제어 바이트가 없다', () => {
+    for (const file of files) {
+      if (typeof file.content !== 'string') continue
+      expect(CONTROL_BYTES.test(file.content), file.path).toBe(false)
+    }
+  })
+})
+
+/** 날 제어 바이트. **소스에 날로 적지 않는다** — census가 이 파일도 훑는다. */
+const CONTROL_BYTES = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u
+
 /** 이 파일이 진짜 산출물을 봤는지. 경로가 어긋나면 위가 공허하게 통과한다. */
 describe('자가 dist 를 본다 — 카나리아', () => {
   it('cwd 가 저장소 뿌리이고 dist/runtime.js 가 실재한다', () => {
     expect(existsSync(resolve(repoRoot, 'pnpm-workspace.yaml'))).toBe(true)
     expect(existsSync(runtimePath)).toBe(true)
+  })
+
+  it('dist/index.js 가 실재하고 소스가 아니다', () => {
+    const text = readFileSync(distPath, 'utf8')
+    expect(text.length).toBeGreaterThan(1_000)
+    expect(text).not.toContain("from '@wirebound/schema/src")
   })
 })

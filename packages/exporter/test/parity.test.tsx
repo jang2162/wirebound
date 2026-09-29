@@ -8,7 +8,7 @@
  * | 경로 | 무엇 |
  * |---|---|
  * | 화면 | jsdom에서 `renderDocument(doc, { theme })`를 React 클라이언트로 그린다(캔버스가 하는 것) |
- * | 번들 | `exportPage`의 `html`을 `DOMParser`로 판다 |
+ * | 번들 | 번들 런타임의 진입(`mountExportDocument` — `src/browser/mount.tsx`)이 목업 자리에 그린 것 |
  *
  * ---
  *
@@ -25,14 +25,11 @@
  *    없고, SSR과 클라이언트가 그 순서를 다르게 낼 이유가 있다.
  * 4. **텍스트** — **이어 붙은 텍스트 노드는 한 덩이로 본다.**
  *
- * **정규화가 셋 있고 셋 다 재서 넣었다.** 그냥 넣은 것이 아니라 **두 경로가 실제로
- * 갈렸고, 갈린 원인을 판정한 결과**다. `style` 속성의 적는 꼴(`normalizeStyle`) · 위 4의
- * 텍스트 노드 경계(`childItems`) · 선언 없는 `style` 속성(`attributeLine`)이다. ㉠·㉡ 은 아래
- * *"갈렸던 자리"* 절이 원문을 값으로 든다. ㉢ 은 React 가 같은 원소를 다시 쓰며 `style` 선언을 걷을 때 남는 빈 속성이다 —
- * 뷰는 테마가 바뀌면 컴포넌트가 달라 원소를 새로 세우므로 이 파일에는 그 판을 세울 길이 없고, 접어도 무해해 남긴다
- * (자 케이스 *"선언 없는 style 속성은 없는 것과 같다"*가 잰다).
- * **조용히 맞추지 않았다는 근거가 그 절이다** — 정규화를 지우면 본론이 죽고, 정규화가
- * 지나치면 구분력 케이스가 죽는다.
+ * **정규화가 셋 있다** — `style` 속성의 적는 꼴(`normalizeStyle`) · 위 4의 텍스트 노드 경계(`childItems`) · 선언 없는 `style`
+ * 속성(`attributeLine`). 앞 둘은 번들이 목업을 서버에서(정적 마크업으로) 그리던 때 두 경로가 실제로 갈린 자리이고, 셋째는 React 가
+ * 같은 원소를 다시 쓰며 `style` 선언을 걷을 때 남는 빈 속성이다. 지금은 두 경로가 모두 클라이언트 렌더라 갈리지 않는다(아래
+ * *"두 경로가 모두 클라이언트 렌더다"* 가 원문으로 잰다). 정규화는 `apps/web` 의 견주기가 같은 자를 쓰고 접어도 무해해 남긴다 —
+ * 정규화가 지나치면 구분력 케이스가 죽는다.
  *
  * 보지 않는 것: 계산된 스타일(시트를 안 걸었다) · 이벤트 핸들러(상호작용 런타임은
  * `runtime-bundle.test.ts`가 잰다).
@@ -57,8 +54,8 @@
  * 그것이 결함이 아니라 **이 파일이 재려는 것 자체**다 — *"한 벌인가"*를 재는 것이지
  * *"렌더러가 옳은가"*를 재는 것이 아니고, 렌더러의 옳음은 `packages/renderer/test`가 든다.
  *
- * **여기서 죽는 것은 `exportPage`가 렌더 경로에 더하거나 뺀 것이다** — 테마를
- * 안 넘기거나, 트리를 감싸거나, 카탈로그를 안 설치하는 것.
+ * **여기서 죽는 것은 번들 런타임이 렌더 경로에 더하거나 뺀 것이다** — 테마를
+ * 안 넘기거나, 트리를 감싸는 것.
  *
  * **견주는 자(`describeTree`) 자신이 무디면 이 파일이 공허하게 통과한다.** 그래서 자를
  * 먼저 잰다 — 알려진 차이 아홉을 실제로 갈라내는지 본다.
@@ -67,7 +64,6 @@ import { NO_THEME, renderDocument } from '@wirebound/renderer'
 import {
   CATALOG_TYPES,
   installCatalog,
-  resetRegistry,
   validatePage,
   type PageDocument,
 } from '@wirebound/schema'
@@ -75,7 +71,8 @@ import { defineTheme, Root, view, type ThemeDefinition } from '@wirebound/theme-
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { exportPage } from '../src/page'
+import { mountExportDocument } from '../src/browser/mount'
+import { exportBundle } from '../src/bundle/index'
 import { describeTree, normalizeStyle } from '../test-support/dom-compare'
 import {
   brokenFixture,
@@ -97,7 +94,7 @@ beforeAll(() => {
 
 /**
  * 화면 경로 — 캔버스가 하는 것과 같다(`apps/web/src/canvas/canvas.tsx`). 테마를 안 받은 판은 `NO_THEME` 으로 그린다 —
- * 번들이 테마 없이 불렸을 때 쓰는 값이다(`page.tsx` 의 `renderPageTree`).
+ * 번들이 테마 없이 불렸을 때 쓰는 값이다(`browser/boot.tsx`).
  */
 function screenTree(document_: PageDocument, theme: ThemeDefinition | undefined): Element {
   const container = window.document.createElement('div')
@@ -111,11 +108,15 @@ function screenTree(document_: PageDocument, theme: ThemeDefinition | undefined)
   return rendered!
 }
 
-/** 번들 경로 — `exportPage`가 낸 HTML을 판다. */
+/** 번들 경로 — 번들 런타임의 진입이 목업 자리(`.wb-export-canvas`)에 그린 것. 마커가 없는 판이라 첫 원소가 문서 뿌리다. */
 function bundleTree(document_: PageDocument, theme: ThemeDefinition | undefined): Element {
-  const { html } = exportPage({ document: document_, title: '견주기', ...(theme === undefined ? {} : { theme }) })
-  const parsed = new DOMParser().parseFromString(html, 'text/html')
-  const rendered = parsed.body.firstElementChild
+  const canvas = window.document.createElement('div')
+  canvas.className = 'wb-export-canvas'
+  window.document.body.append(canvas)
+  act(() => {
+    mountExportDocument(canvas, { document: document_, theme: theme ?? NO_THEME, tokens: {}, window, hrefs: {}, markers: [], status: null })
+  })
+  const rendered = canvas.firstElementChild
   expect(rendered, '번들 경로가 아무것도 그리지 않았다').not.toBeNull()
   return rendered!
 }
@@ -226,37 +227,13 @@ describe('견주는 자가 실제로 갈라낸다', () => {
   })
 })
 
-/* ------------------------------------------- 갈렸던 자리를 값으로 남긴다 */
+/* ------------------------------------------- 두 경로가 모두 클라이언트 렌더다 */
 
-describe('갈렸던 자리 ㉠ — style 속성의 적는 꼴', () => {
-  function rawStyleOf(root: Element, componentType: string): string {
-    const found = root.querySelector(`[data-wb-component="${componentType}"]`)
-    expect(found, componentType).not.toBeNull()
-    return found!.getAttribute('style') ?? ''
-  }
-
-  it('Grid의 style 원문이 두 경로에서 다르다', () => {
-    const screen = rawStyleOf(screenTree(broadFixture(), undefined), 'Grid')
-    const bundle = rawStyleOf(bundleTree(broadFixture(), undefined), 'Grid')
-
-    expect(screen).toBe('--wb-node-grid-columns: 3;')
-    expect(bundle).toBe('--wb-node-grid-columns:3')
-    expect(screen).not.toBe(bundle)
-  })
-
-  it('같은 CSSOM에 넣으면 같아진다 — 선언이 같기 때문이다', () => {
-    const screen = rawStyleOf(screenTree(broadFixture(), undefined), 'Grid')
-    const bundle = rawStyleOf(bundleTree(broadFixture(), undefined), 'Grid')
-    const probe = window.document.createElement('div')
-
-    expect(normalizeStyle(bundle, probe)).toBe(normalizeStyle(screen, probe))
-  })
-})
-
-describe('갈렸던 자리 ㉡ — 텍스트 노드 경계', () => {
+describe('두 경로가 모두 클라이언트 렌더다', () => {
   /**
-   * **JSX 의 글자와 식이 이웃하면 클라이언트는 텍스트 노드 둘, 정적 마크업은 하나를 낸다.** 테마 뷰가 흔히 쓰는 꼴이라
-   * (`구획 {n}`) 뷰 하나로 판을 세운다.
+   * 번들이 목업을 정적 마크업으로 그리던 때는 이 둘이 갈렸다 — `style` 원문(`--wb-node-grid-columns:3`) · 이웃한 글자와 식의 텍스트
+   * 노드(하나). 지금은 번들 런타임이 캔버스와 같은 `react-dom/client` 로 그리므로 **원문 그대로** 같다. 번들 경로가 서버 렌더로
+   * 되돌아가면 여기가 먼저 죽는다(본론은 정규화로 접어 같다고 한다).
    */
   const SECTIONED: ThemeDefinition = defineTheme({
     manifest: EMPTY_MANIFEST,
@@ -267,32 +244,16 @@ describe('갈렸던 자리 ㉡ — 텍스트 노드 경계', () => {
     },
   })
 
-  function sectionTitleOf(root: Element): ChildNode[] {
-    const found = root.querySelector('[data-probe="title"]')
-    expect(found, 'title').not.toBeNull()
-    return [...found!.childNodes]
-  }
-
-  it('화면은 텍스트 노드 둘, 번들은 하나다', () => {
-    const screen = sectionTitleOf(screenTree(broadFixture(), SECTIONED))
-    const bundle = sectionTitleOf(bundleTree(broadFixture(), SECTIONED))
-
-    expect(screen.map((node) => node.nodeValue)).toEqual(['구획 ', '1'])
-    expect(bundle.map((node) => node.nodeValue)).toEqual(['구획 1'])
+  it('Grid 의 style 원문이 같다', () => {
+    const raw = (root: Element): string | null => root.querySelector('[data-wb-component="Grid"]')?.getAttribute('style') ?? null
+    expect(raw(bundleTree(broadFixture(), undefined))).toBe(raw(screenTree(broadFixture(), undefined)))
+    expect(raw(bundleTree(broadFixture(), undefined))).toBe('--wb-node-grid-columns: 3;')
   })
 
-  it('보이는 글자는 같다', () => {
-    const screen = screenTree(broadFixture(), SECTIONED).querySelector('[data-probe="title"]')
-    const bundle = bundleTree(broadFixture(), SECTIONED).querySelector('[data-probe="title"]')
-
-    expect(bundle?.textContent).toBe(screen?.textContent)
-    expect(bundle?.textContent).toBe('구획 1')
-  })
-
-  /** **하이드레이션용 구분자가 없다** — `renderToString`이 넣는 `<!-- -->`가 그것이다. */
-  it('번들에 주석 노드가 없다', () => {
-    const { html } = exportPage({ document: broadFixture(), title: '견주기', theme: SECTIONED })
-    expect(html).not.toContain('<!--')
+  it('이웃한 글자와 식이 텍스트 노드 둘이다 — 화면과 같다', () => {
+    const nodes = (root: Element): (string | null)[] => [...root.querySelector('[data-probe="title"]')!.childNodes].map((node) => node.nodeValue)
+    expect(nodes(bundleTree(broadFixture(), SECTIONED))).toEqual(['구획 ', '1'])
+    expect(nodes(bundleTree(broadFixture(), SECTIONED))).toEqual(nodes(screenTree(broadFixture(), SECTIONED)))
   })
 })
 
@@ -300,15 +261,14 @@ describe('갈렸던 자리 ㉡ — 텍스트 노드 경계', () => {
 
 describe('번들의 머리를 파서가 무엇으로 읽나', () => {
   function parsed(): Document {
-    const { html } = exportPage({ document: broadFixture(), title: '회원 <목록>', lang: 'ko' })
-    return new DOMParser().parseFromString(html, 'text/html')
+    const bundle = exportBundle({ pages: [{ title: '회원 <목록>', document: broadFixture() }], runtimeJs: '/* runtime */', lang: 'ko' })
+    return new DOMParser().parseFromString(bundle.files[0]!.content as string, 'text/html')
   }
 
   /**
-   * **원문은 `<meta charSet="utf-8"/>`이다** — React가 JSX prop 이름을 그대로 낸다
-   * (`page.test.ts`가 그 문자열을 든다). HTML의 속성 이름은 대소문자를 가리지 않으므로
-   * 파서가 `charset`으로 읽는다. **그 왕복을 여기서 잰다** — 원문만 보고 *"인코딩이
-   * 선언돼 있다"*고 말하면 그것은 단언이지 측정이 아니다.
+   * **원문은 `<meta charSet="utf-8"/>`이다** — React가 JSX prop 이름을 그대로 낸다. HTML의 속성 이름은 대소문자를 가리지 않으므로
+   * 파서가 `charset`으로 읽는다. **그 왕복을 여기서 잰다** — 원문만 보고 *"인코딩이 선언돼 있다"*고 말하면 그것은 단언이지 측정이
+   * 아니다.
    */
   it('charSet이 charset으로 읽힌다', () => {
     const meta = parsed().querySelector('meta')
@@ -322,10 +282,10 @@ describe('번들의 머리를 파서가 무엇으로 읽나', () => {
     expect(parsed().title).toBe('회원 <목록>')
   })
 
-  /** 머리에 셸이 없다 — 스타일도 스크립트도 번들(`exportBundle`)이 건다. */
-  it('머리에 style도 script도 link도 없다', () => {
+  /** 머리에는 시트 링크만 선다 — 스크립트는 몸의 끝이다(`bundle.test.tsx` 가 개수 · 차례를 센다). */
+  it('머리에 style도 script도 없다', () => {
     const head = parsed().head
-    expect(head.querySelectorAll('style, script, link')).toHaveLength(0)
+    expect(head.querySelectorAll('style, script')).toHaveLength(0)
   })
 })
 
@@ -369,8 +329,8 @@ describe('무엇을 덮었나 (문서 하나로 재지 마라)', () => {
 
   /** 폴백 픽스처가 실제로 폴백을 그리는지. 안 그리면 아래 견주기가 그 상자를 안 재는 것이다. */
   it('폴백 픽스처가 폴백 상자를 그린다', () => {
-    const { errors } = exportPage({ document: brokenFixture(), title: '깨진 문서' })
-    expect(errors.map((error) => error.message)).toEqual([
+    const { errors } = exportBundle({ pages: [{ title: '깨진 문서', document: brokenFixture() }], runtimeJs: '/* runtime */' })
+    expect(errors.map((item) => item.error.message)).toEqual([
       '알 수 없는 컴포넌트 타입: 없는타입',
       'List의 props가 올바르지 않습니다:  인식할 수 없는 키: "없는프롭"',
       '노드가 객체가 아닙니다: null',
@@ -450,20 +410,4 @@ describe('화면과 번들이 같은 DOM을 낸다', () => {
     expect(shapes.size).toBe(count)
   })
 
-  /**
-   * **카탈로그가 안 설치된 자리에서도 같은가.** 화면은 `catalog-setup`이 import만으로
-   * 설치하고 번들은 `exportPage`가 설치한다 — 출발이 다르므로 여기서 갈릴 수 있다.
-   * 번들을 **먼저** 부르는 순서로 재는 것이 요점이다: `exportPage`가 설치하지 않으면
-   * 화면 쪽이 빈 레지스트리를 만나 폴백을 그린다.
-   */
-  it('둘 다 빈 레지스트리에서 출발해도 같다', () => {
-    resetRegistry()
-
-    const bundle = describeTree(bundleTree(broadFixture(), undefined))
-    const screen = describeTree(screenTree(broadFixture(), undefined))
-
-    expect(bundle).toEqual(screen)
-    expect(bundle.join('\n')).toContain('data-wb-component=')
-    expect(bundle.join('\n')).not.toContain('data-wb-error=')
-  })
 })

@@ -14,7 +14,7 @@ import { adoptManifest, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
 import { tokenValues } from '@wirebound/themes'
 import { PAGE_DATA_ID, SCREEN_HASH, THEME_SCRIPT_ID, type ExportPageData } from '../page-data'
 import { mountExportDocument, type ExportMount } from './mount'
-import { FAILED_ATTRIBUTE, fontsSettled, nextFrame, READY_ATTRIBUTE, SCREEN_ATTRIBUTE, sheetSettled } from './ready'
+import { FAILED_ATTRIBUTE, fontsSettled, nextFrame, READY_ATTRIBUTE, SCREEN_CLASS, sheetSettled } from './ready'
 
 /** 셸이 테마 시트 link 에 다는 표지(`bundle/shell.tsx`). */
 export const THEME_SHEET_SELECTOR = 'link[data-wb-sheet="theme"]'
@@ -38,7 +38,7 @@ export async function boot(env: BootEnv): Promise<BootResult> {
   const win = env.window
   const doc = win.document
   const html = doc.documentElement
-  if (win.location.hash === SCREEN_HASH) html.setAttribute(SCREEN_ATTRIBUTE, '')
+  if (win.location.hash === SCREEN_HASH) html.classList.add(SCREEN_CLASS)
 
   const failures: string[] = []
   const finish = async (mount: ExportMount | null): Promise<BootResult> => {

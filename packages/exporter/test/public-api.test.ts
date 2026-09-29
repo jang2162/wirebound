@@ -19,7 +19,7 @@ import * as api from '../src/index'
  * 검사한다. 명제를 지우지 않고 *"정확히 이것이 예외다"*로 센다 —
  * 목록이 `src`에 있으면 파일을 더하는 손이 목록도 함께 고쳐 아무것도 안 재게 된다. `/` 로 끝나면 그 디렉터리 전부다.
  */
-const BROWSER_SOURCES = ['../src/runtime/browser.ts', '../src/browser/']
+const BROWSER_SOURCES = ['../src/browser/']
 
 /** 두 프로그램이 함께 드는 DOM 없는 계약(페이지 JSON 의 모양) — 브라우저 쪽이 import 하므로 그 `tsconfig` 에도 든다. */
 const SHARED_SOURCES = ['../src/page-data.ts']

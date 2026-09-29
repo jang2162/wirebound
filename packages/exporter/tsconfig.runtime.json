@@ -7,7 +7,7 @@
     "jsx": "react-jsx",
     "composite": true
   },
-  "include": ["src/runtime/browser.ts", "src/browser", "src/page-data.ts"],
+  "include": ["src/browser", "src/page-data.ts"],
   "references": [
     { "path": "../schema" },
     { "path": "../renderer" },

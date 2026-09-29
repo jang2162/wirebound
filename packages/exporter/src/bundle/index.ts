@@ -3,39 +3,44 @@
  *
  * ```
  * wirebound-export/
- *   index.html            트리 네비 + 뷰어 셸 (첫 페이지를 담는다)
- *   pages/….html          페이지마다 셸을 통째로
+ *   index.html            첫 페이지의 사본
+ *   pages/….html          셸(여기서 그린다) + 빈 목업 자리 + 페이지 JSON + 스크립트
  *   assets/shell.css      뷰어 셸의 CSS
- *   assets/theme.css      SDK 기본 뷰 CSS + 테마 CSS
- *   assets/runtime.js     상호작용 런타임 (`runtime/plan.ts`)
+ *   assets/views.css      SDK 기본 뷰 CSS(`defaultViewsCss()`)
+ *   assets/runtime.js     내보내기 런타임 — 목업을 브라우저에서 그린다(`src/browser/`)
  * ```
  *
  * ---
  *
+ * ## 목업은 브라우저가 그린다 — 여기는 셸과 데이터만 낸다
+ *
+ * 목업은 테마 코드(뷰)로 그려지고 **테마 코드는 브라우저에서만 돈다**(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`
+ * 「내보내기와 PPTX」). 그래서 페이지는 목업 자리를 비워 두고 페이지 JSON(`page-data.ts` 의 `ExportPageData`)을 싣는다 —
+ * `runtime.js` 가 그것을 캔버스 미리보기와 같은 렌더러로 그린다. 셸(트리 · 설명 · 코멘트 · 상호작용 문장)은 이 패키지의 코드라
+ * 지금처럼 여기서 그린다.
+ *
  * ## 파일 시스템을 모른다
  *
- * `exportPage`와 같은 규칙이다. 소비자마다 결과를 쓰는 자리가 다르다 — api(zip으로
- * 흘려보낸다) · 케이스(메모리에서 견준다). `fs`를 부르면 자리가 하나가 되고 케이스가 임시
- * 디렉터리를 만들어야 한다.
+ * 소비자마다 결과를 쓰는 자리가 다르다 — api(zip으로 흘려보낸다 · PPTX 의 Chromium 에 메모리로 내준다) · 케이스(메모리에서 견준다).
+ * `fs`를 부르면 자리가 하나가 되고 케이스가 임시 디렉터리를 만들어야 한다. 런타임 글자(`runtimeJs`)도 그래서 호출자가 읽어 넘긴다.
  *
- * ## `errors`를 삼키지 않는다
+ * ## `errors` — 기본 뷰로도 못 그리는 노드
  *
- * `exportPage`가 그리지 못한 노드를 `errors`로 낸다. 번들은 그것을 **페이지 이름과 함께**
- * 모아 낸다. 폴백이 든 HTML도 눈으로는 그럴듯한 한 장이고 **번들은 그것을 남에게 전달한다** —
- * 여기서 값을 잃으면 호출자가 화면에서 그것을 말할 수 없다.
+ * 노드의 모양이 카탈로그에 안 맞으면 렌더러가 폴백 상자를 그리고 `onNodeError` 로 보고한다 — 그 판정은 엘리먼트를 지을 때
+ * 동기로 끝나므로 그리지 않고도 센다(`structuralErrors`). 폴백이 든 번들도 눈으로는 그럴듯한 한 장이라 **페이지 이름과 함께**
+ * 모아 낸다. 테마 뷰가 던지는 것은 브라우저에서만 난다 — 그것은 런타임이 상태 줄과 `data-wb-failed` 로 말한다(`browser/boot.tsx`).
  *
  * ## `assets/shell.css`는 「HTML 정적 번들」의 목록에 없다 — 더한 것이고 근거가 있다
  *
- * 설계서의 예시는 `theme.css`와 `runtime.js`만 든다. 셸 CSS를 테마 CSS에 섞으면 `pageCss`의
- * 순서 계약(*"기본 뷰 CSS → 테마"*)에 셸이 끼어들고, 페이지마다 `<style>`로 인라인하면
- * 페이지마다 셸을 통째로 싣는 중복(`bundle/shell.tsx` 머리말)이 CSS만큼 더 커진다.
- * **설계서의 목록은 예시이지 닫힌 목록이 아니다**(페이지도 둘만 적혀 있다).
+ * 셸 CSS를 문서 CSS에 섞으면 문서 시트의 차례(기본 뷰 → 테마 → 토큰)에 셸이 끼어든다. **설계서의 목록은 예시이지 닫힌 목록이
+ * 아니다**(페이지도 둘만 적혀 있다).
  */
-import type { NodeRenderError } from '@wirebound/renderer'
-import type { PageDocument } from '@wirebound/schema'
-import type { ThemeDefinition } from '@wirebound/theme-sdk'
-import { DEFAULT_LANG, pageCss, renderHtmlDocument, renderPageTree } from '../page'
-import { buildRuntimePlan, RUNTIME_JS, RUNTIME_JS_PATH, type RuntimePlan } from '../runtime/plan'
+import { renderDocument, type NodeRenderError } from '@wirebound/renderer'
+import { installCatalog, isPageTargetAction, type PageDocument } from '@wirebound/schema'
+import { defaultViewsCss } from '@wirebound/theme-sdk'
+import { eachNode } from '../nodes'
+import { DEFAULT_LANG, renderHtmlDocument } from '../page'
+import { RUNTIME_JS_PATH, type ExportMarker, type ExportPageData } from '../page-data'
 import { scriptJson } from '../script-json'
 import { commentEntries, type BundleComment } from './comments'
 import { bundleHref, pageFileNames } from './filename'
@@ -46,7 +51,7 @@ import { shellBody, shellHead, shellScripts, type ShellNavItem } from './shell'
 export interface BundlePage {
   /** `<title>`·좌측 트리의 이름이자 **파일 이름의 재료**다. */
   title: string
-  /** 그릴 문서. `exportPage`와 같은 `PageDocument`다. */
+  /** 그릴 문서. 페이지 문서다 — 레이아웃을 합성하지 않는다(캔버스가 그리는 것과 같다). */
   document: PageDocument
   /**
    * 설계서 「페이지 JSON」 봉투의 `page.description`. 우측 *"페이지 설명"* 탭이 그린다.
@@ -76,10 +81,8 @@ export interface BundlePage {
 export interface ExportBundleOptions {
   /** 페이지 목록. **순서가 곧 좌측 트리의 순서이고 파일 이름의 결정성이다.** */
   pages: readonly BundlePage[]
-  /** 그릴 테마. 없는 것이 정상이다 — `exportPage`와 같은 계약이다. */
-  theme?: ThemeDefinition
-  /** 테마의 CSS. `exportPage`와 같은 계약이다. */
-  themeCss?: string
+  /** 내보내기 런타임의 글자(`@wirebound/exporter/runtime.js` — 저장소 빌드가 짓는다). `assets/runtime.js` 에 그대로 싣는다. */
+  runtimeJs: string
   /** `<html lang>`. 기본은 `'ko'`다. */
   lang?: string
 }
@@ -87,7 +90,7 @@ export interface ExportBundleOptions {
 /** 번들 안의 파일 하나. **경로는 번들 뿌리 기준의 상대 경로다.** */
 export interface BundleFile {
   path: string
-  content: string
+  content: string | Uint8Array
 }
 
 /** 그리지 못한 노드 하나. **어느 페이지의 것인지 함께 든다.** */
@@ -102,11 +105,13 @@ export interface BundleNodeError {
 export interface ExportedBundle {
   files: BundleFile[]
   errors: BundleNodeError[]
+  /** 페이지마다 번들 안 경로 — `pages` 와 같은 순서(`index.html` 은 첫 페이지의 사본이라 따로 없다). */
+  pagePaths: string[]
 }
 
 const INDEX_PATH = 'index.html'
 const PAGES_DIRECTORY = 'pages'
-const THEME_CSS_PATH = 'assets/theme.css'
+const VIEWS_CSS_PATH = 'assets/views.css'
 
 /**
  * 번들 하나를 만든다.
@@ -120,81 +125,67 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
   const pages = options.pages
   if (pages.length === 0) throw new Error('번들에 실을 페이지가 없습니다')
 
-  const theme = options.theme
   const lang = options.lang ?? DEFAULT_LANG
-  const paths = pageFileNames(pages.map((page) => page.title)).map(
-    (name) => `${PAGES_DIRECTORY}/${name}`,
-  )
+  const paths = pageFileNames(pages.map((page) => page.title)).map((name) => `${PAGES_DIRECTORY}/${name}`)
 
   /**
-   * **페이지마다 한 번만 그린다.** `index.html`이 첫 페이지를 담지만 같은 트리를 다시
-   * 쓴다 — 두 번 그리면 `errors`가 두 벌이 되어 **같은 노드가 두 번 세어진다.**
-   */
-  const rendered = pages.map((page) => renderPageTree(page.document, theme))
-
-  /**
-   * **상호작용 타겟 → 번들 안의 경로.** 자리마다 다른 상대 링크로 바꾸는 것은 아래
-   * `localized`가 한다 — 계획은 페이지마다 **한 번만** 만든다(판을 미리 그리는 것이
-   * 비싸고, 두 번 만들면 오류도 두 벌이 된다).
+   * **상호작용 타겟 → 번들 안의 경로.** 자리마다 다른 상대 링크로 바꾸는 것은 `pageHtml` 이 한다.
+   *
+   * **먼저 온 것을 이기게 두지 않는다.** 둘 이상이면 `null`이고, 그러면 링크가 안 생기며 런타임이 *"둘 이상"*이라고 말한다 —
+   * 조용히 첫 페이지로 가면 읽는 사람이 그것을 알아챌 방법이 없다.
    */
   const targets = new Map<string, string | null>()
   for (const [index, page] of pages.entries()) {
     if (page.target === undefined) continue
-    // **먼저 온 것을 이기게 두지 않는다.** 둘 이상이면 `null`이고, 그러면 링크가 안 생기며
-    // 런타임이 *"둘 이상"*이라고 말한다 — 조용히 첫 페이지로 가면 읽는 사람이 그것을
-    // 알아챌 방법이 없다.
     targets.set(page.target, targets.has(page.target) ? null : paths[index]!)
   }
 
-  /** **판정과 실행이 여기서 일어난다.** 브라우저로 나가는 것은 그 답이다. */
-  const plans = pages.map((page, index) =>
-    buildRuntimePlan({
-      page: page.document,
-      theme,
-      hrefs: targets,
-      baseErrors: rendered[index]!.errors,
-    }),
-  )
-
   const errors = pages.flatMap((page, index) =>
-    [...rendered[index]!.errors, ...plans[index]!.errors].map((error) => ({
-      path: paths[index]!,
-      title: page.title,
-      error,
-    })),
+    structuralErrors(page.document).map((error) => ({ path: paths[index]!, title: page.title, error })),
   )
 
   const files: BundleFile[] = [
-    { path: INDEX_PATH, content: pageHtml(options, paths, rendered, plans, 0, INDEX_PATH, lang) },
+    { path: INDEX_PATH, content: pageHtml(options, paths, targets, 0, INDEX_PATH, lang) },
     ...pages.map((_page, index) => ({
       path: paths[index]!,
-      content: pageHtml(options, paths, rendered, plans, index, paths[index]!, lang),
+      content: pageHtml(options, paths, targets, index, paths[index]!, lang),
     })),
     { path: SHELL_CSS_PATH, content: SHELL_CSS },
-    { path: THEME_CSS_PATH, content: pageCss(options.themeCss) },
-    { path: RUNTIME_JS_PATH, content: RUNTIME_JS },
+    { path: VIEWS_CSS_PATH, content: defaultViewsCss() },
+    { path: RUNTIME_JS_PATH, content: options.runtimeJs },
   ]
 
-  return { files, errors }
+  return { files, errors, pagePaths: paths }
 }
 
 /**
- * 계획의 링크를 **이 파일에서 보는 상대 경로**로 바꾼다.
- *
- * 계획은 번들 뿌리 기준의 경로를 든다. `index.html`과 `pages/….html`이 같은 페이지를 다른
- * 자리에서 가리키므로 링크는 파일마다 다르다 — 시트 링크가 그런 것과 같다.
+ * 기본 뷰로도 못 그리는 노드(머리말의 `errors`). 엘리먼트만 짓고 그리지 않는다 — 판정이 짓는 동안 동기로 끝난다(렌더러의
+ * `onNodeError`). **카탈로그를 스스로 설치한다** — 멱등이고 이미 등록된 것을 건너뛴다(`packages/schema` 의 `installCatalog`).
  */
-function localized(plan: RuntimePlan, at: string): RuntimePlan {
-  return {
-    ...plan,
-    events: plan.events.map((event) => ({
-      ...event,
-      requests: event.requests.map((request) => ({
-        ...request,
-        href: request.href === null ? null : bundleHref(at, request.href),
-      })),
-    })),
+function structuralErrors(page: PageDocument): NodeRenderError[] {
+  installCatalog()
+  const errors: NodeRenderError[] = []
+  renderDocument(page, { onNodeError: (error) => errors.push(error) })
+  return errors
+}
+
+/**
+ * 이 문서가 겨누는 타겟 → **이 파일에서 본** 상대 경로(`ExportPageData.hrefs`). 겨누지 않는 타겟은 싣지 않는다 — 페이지마다 번들
+ * 전체의 표를 실으면 크기가 페이지 수의 제곱이 된다.
+ */
+function hrefsFor(page: PageDocument, targets: ReadonlyMap<string, string | null>, at: string): Record<string, string | null> {
+  const hrefs: Record<string, string | null> = {}
+  for (const node of eachNode(page.root)) {
+    for (const interaction of Array.isArray(node.interactions) ? node.interactions : []) {
+      for (const action of Array.isArray(interaction?.actions) ? interaction.actions : []) {
+        if (action === null || typeof action !== 'object' || !isPageTargetAction(action) || typeof action.target !== 'string') continue
+        if (!targets.has(action.target)) continue
+        const path = targets.get(action.target)!
+        hrefs[action.target] = path === null ? null : bundleHref(at, path)
+      }
+    }
   }
+  return hrefs
 }
 
 /**
@@ -204,8 +195,7 @@ function localized(plan: RuntimePlan, at: string): RuntimePlan {
 function pageHtml(
   options: ExportBundleOptions,
   paths: readonly string[],
-  rendered: readonly { tree: ReturnType<typeof renderPageTree>['tree'] }[],
-  plans: readonly { plan: RuntimePlan }[],
+  targets: ReadonlyMap<string, string | null>,
   index: number,
   at: string,
   lang: string,
@@ -216,20 +206,38 @@ function pageHtml(
     href: bundleHref(at, paths[position]!),
     current: position === index,
   }))
+  const comments = commentEntries(page.document, page.comments ?? [])
+  const markers: ExportMarker[] = []
+  for (const entry of comments) {
+    if (entry.marker !== null) markers.push({ nodeId: entry.nodeId, marker: String(entry.marker) })
+  }
+  const data: ExportPageData = {
+    document: page.document,
+    title: page.title,
+    target: page.target ?? null,
+    themeRef: null,
+    manifest: null,
+    tokens: {},
+    hrefs: hrefsFor(page.document, targets, at),
+    markers,
+  }
   return renderHtmlDocument({
     lang,
     title: page.title,
-    /** **셸 → 테마 순서다.** 셸이 먼저이므로 같은 특이도에서 테마가 이긴다. */
-    head: shellHead([bundleHref(at, SHELL_CSS_PATH), bundleHref(at, THEME_CSS_PATH)]),
+    /** **셸 → 기본 뷰 차례다.** 문서 시트의 차례는 캔버스와 같다(기본 뷰 → 테마 → 토큰). */
+    head: shellHead([
+      { href: bundleHref(at, SHELL_CSS_PATH) },
+      { href: bundleHref(at, VIEWS_CSS_PATH) },
+    ]),
     body: shellBody({
       nav,
       description: page.description ?? null,
-      comments: commentEntries(page.document, page.comments ?? []),
+      comments,
       page: page.document,
-      documentTree: rendered[index]!.tree,
       scripts: shellScripts({
-        dataJson: scriptJson(localized(plans[index]!.plan, at)),
+        dataJson: scriptJson(data),
         runtimeHref: bundleHref(at, RUNTIME_JS_PATH),
+        themeHref: null,
       }),
     }),
   })

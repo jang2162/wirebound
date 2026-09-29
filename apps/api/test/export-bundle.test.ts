@@ -28,6 +28,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import { exportProjectBundle, EmptyProjectError } from '../src/services/export-bundle'
+import { readExportRuntime } from '../src/services/export-runtime'
 import {
   addMember,
   createMenuNode,
@@ -215,20 +216,18 @@ async function 설계서(ctx: TestContext, name: string, slug: string): Promise<
 }
 
 /**
- * 번들이 **실제로 이은 링크.** 페이지 HTML의 `<script>`에 심긴 런타임 계획에서 읽는다.
+ * 번들이 **실제로 이은 링크.** 페이지 HTML의 `<script>`에 심긴 페이지 JSON 의 `hrefs`(타겟 → 이 파일에서 본 경로 · 둘 이상이면 `null` ·
+ * 없으면 키가 없다)에서 읽는다.
  *
  * **왜 이것을 따로 재는가:** 미리보기의 `brokenLinks`는 `targetedPages`가 낸 값으로
  * 세지만, 번들의 링크는 `exportBundle`에 넘긴 `BundlePage.target`으로 만들어진다.
  * **둘이 다른 값에서 나오므로 갈릴 수 있다** — 모든 페이지가 첫 페이지의 타겟을 드는
  * 변이는 미리보기를 멀쩡히 둔 채 번들의 링크를 전부 죽인다.
  */
-function runtimeRequests(
-  content: string,
-): { type: string; target: string; href: string | null; problem: string | null }[] {
-  const match = /<script type="application\/json" id="wb-export-runtime-data">(.*?)<\/script>/s.exec(content)
-  if (!match) throw new Error('페이지에 런타임 데이터가 없습니다')
-  const plan = JSON.parse(match[1]!) as { events?: { requests?: unknown[] }[] }
-  return (plan.events ?? []).flatMap((event) => (event.requests ?? []) as never[])
+function pageHrefs(content: string | Uint8Array): Record<string, string | null> {
+  const match = /<script type="application\/json" id="wb-export-page">(.*?)<\/script>/s.exec(content as string)
+  if (!match) throw new Error('페이지에 페이지 JSON 이 없습니다')
+  return (JSON.parse(match[1]!) as { hrefs: Record<string, string | null> }).hrefs
 }
 
 /**
@@ -278,8 +277,8 @@ async function 그리지못할노드를심는다(
 }
 
 /** `pages/….html` 파일들만, 번들이 낸 순서 그대로. */
-function pageFiles(files: readonly { path: string; content: string }[]): { path: string; content: string }[] {
-  return files.filter((file) => file.path.startsWith('pages/'))
+function pageFiles(files: readonly { path: string; content: string | Uint8Array }[]): { path: string; content: string }[] {
+  return files.filter((file) => file.path.startsWith('pages/')) as { path: string; content: string }[]
 }
 
 describe('exportProjectBundle', () => {
@@ -299,7 +298,7 @@ describe('exportProjectBundle', () => {
       expect(bundle.files.map((file) => file.path).filter((path) => !path.startsWith('pages/'))).toEqual([
         'index.html',
         'assets/shell.css',
-        'assets/theme.css',
+        'assets/views.css',
         'assets/runtime.js',
       ])
       expect(pageFiles(bundle.files)).toHaveLength(4)
@@ -545,7 +544,8 @@ describe('exportProjectBundle', () => {
       await 설계서(ctx, '설계서 둘', 'two')
 
       const bundle = await exportProjectBundle(ctx.db, 하나.projectId)
-      const 전문 = bundle.files.map((file) => file.content).join('\n')
+      // 런타임(`assets/runtime.js`)은 프로젝트와 무관한 빌드 산출물이라 뺀다 — 줄인 글자에 `two` 가 우연히 있다.
+      const 전문 = bundle.files.filter((file) => file.path !== 'assets/runtime.js').map((file) => file.content).join('\n')
 
       expect(전문).toContain('one 목록 버튼')
       expect(전문).not.toContain('two')
@@ -626,27 +626,24 @@ describe('exportProjectBundle', () => {
       const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
 
       // 0=대시보드 1=목록 2=상세 3=랜딩
-      const 목록 = runtimeRequests(pageFiles(bundle.files)[1]!.content)
-      const 상세로 = 목록.find((request) => request.target === 'page:관리자/회원/상세')
+      const 목록 = pageHrefs(pageFiles(bundle.files)[1]!.content)
+      const 상세로 = 목록['page:관리자/회원/상세']
 
-      expect(상세로).toBeDefined()
-      expect(상세로!.href).not.toBeNull()
-      expect(decodeURIComponent(상세로!.href!)).toBe('관리자-회원-상세.html')
-      expect(상세로!.problem).toBeNull()
+      expect(typeof 상세로).toBe('string')
+      expect(decodeURIComponent(상세로!)).toBe('관리자-회원-상세.html')
     })
   })
 
-  it('못 이은 타겟은 번들 안에서 링크가 없고 이유가 실린다', async () => {
+  /** 런타임은 키가 없는 타겟을 «이 번들에 없는 페이지입니다» 로 말한다(`packages/exporter` 의 `browser/mount.tsx`). */
+  it('못 이은 타겟은 번들 안에서 링크가 없다 — 표에 키가 없다', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, '설계서 하나', 'one')
       const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
 
-      const 상세 = runtimeRequests(pageFiles(bundle.files)[2]!.content)
-      const 없는곳으로 = 상세.find((request) => request.target === 'page:없는/페이지')
-
-      expect(없는곳으로).toBeDefined()
-      expect(없는곳으로!.href).toBeNull()
-      expect(없는곳으로!.problem).not.toBeNull()
+      const 상세 = pageHrefs(pageFiles(bundle.files)[2]!.content)
+      // 카나리아 — 이 페이지의 문서가 그 타겟을 실제로 겨눈다.
+      expect(pageFiles(bundle.files)[2]!.content).toContain('page:없는/페이지')
+      expect('page:없는/페이지' in 상세).toBe(false)
     })
   })
 
@@ -724,17 +721,15 @@ describe('exportProjectBundle', () => {
     })
   })
 
-  /**
-   * **번들은 테마 없이 SDK 기본 뷰 CSS 를 싣는다** — api 는 테마 코드를 싣지 않는다(`services/export-bundle.ts` 머리말).
-   * 기본 뷰 CSS 만 내는 선언(`--wb-node-grid-columns`)으로 잰다.
-   */
-  it('assets/theme.css 는 기본 뷰 CSS 이고 themeId 는 null 이다', async () => {
+  /** 번들이 기본 뷰 CSS 를 싣는다 — 기본 뷰 CSS 만 내는 선언(`--wb-node-grid-columns`)으로 잰다. 런타임은 api 가 쥔 글자 그대로다. */
+  it('assets/views.css 는 기본 뷰 CSS 이고 assets/runtime.js 는 api 가 쥔 런타임이다', async () => {
     await withApi(async (ctx) => {
       const fixture = await 설계서(ctx, '설계서 하나', 'one')
       const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
 
-      const themeCss = bundle.files.find((file) => file.path === 'assets/theme.css')
-      expect(themeCss?.content).toContain('--wb-node-grid-columns')
+      const viewsCss = bundle.files.find((file) => file.path === 'assets/views.css')
+      expect(viewsCss?.content).toContain('--wb-node-grid-columns')
+      expect(bundle.files.find((file) => file.path === 'assets/runtime.js')?.content).toBe(readExportRuntime())
       expect(bundle.themeId).toBeNull()
     })
   })
