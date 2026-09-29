@@ -14,6 +14,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { ProjectView } from '../api/types'
 import { SessionMenu } from '../session/session-menu'
 import { GeneralSection } from '../settings/general-section'
+import { ThemeSection } from '../settings/theme-section'
 
 const LOAD_FAILURE = '프로젝트를 불러오지 못했습니다'
 
@@ -80,6 +81,7 @@ export function SettingsRoute(): ReactElement {
           onSaved={(updated) => setState((prev) => (prev.status === 'ready' ? { status: 'ready', project: { ...prev.project, ...updated } } : prev))}
         />
       )}
+      {state.status === 'ready' && <ThemeSection key={`theme-${state.project.id}`} project={state.project} />}
     </main>
   )
 }

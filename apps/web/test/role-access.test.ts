@@ -74,6 +74,8 @@ describe('역할을 읽는 자리', () => {
       '../src/shell/snapshots-panel.tsx',
       // 설정 페이지의 «일반» 절이 칸을 열지(`rename`)를 안다 — 역할은 설정 라우트의 `getProject` 에서 온다.
       '../src/settings/general-section.tsx',
+      // «테마» 절이 고르개를 열지(`chooseTheme`)를 안다.
+      '../src/settings/theme-section.tsx',
     ].sort())
   })
 

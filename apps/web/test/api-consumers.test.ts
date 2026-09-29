@@ -189,11 +189,14 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   downloadExport: ['../src/shell/export-panel.tsx'],
   // 테마 여덟. 부르는 화면이 서면 여기에 적는다(`api/http-client.ts`의 shape 주석이 이 표를 근거로 삼는다).
   // 에디터 셸의 프로젝트 테마가 바인딩 · manifest · 토큰을 읽는다 — 캔버스 · 속성 패널 · 패턴 고르개는 그 값을 받는다.
-  getProjectTheme: ['../src/theme/project-theme.tsx'],
-  putProjectTheme: [],
-  getThemeImpact: [],
-  listThemePackages: [],
-  getThemeManifest: [],
+  // 설정 페이지의 «테마» 절이 지금 바인딩을 읽는다(고르개 · 토큰 편집기가 그 값에서 시작한다).
+  getProjectTheme: ['../src/theme/project-theme.tsx', '../src/settings/theme-section.tsx'],
+  // 테마 고르개가 판을 바꾸며 저장한다(토큰 편집기도 같은 판으로 저장한다 — 그 자리가 서면 여기에 더한다).
+  putProjectTheme: ['../src/settings/theme-chooser.tsx'],
+  // 고르개의 목록 · 확인 창(바꾸면 무엇이 달라지나 · 잇는 토큰을 셀 새 manifest).
+  getThemeImpact: ['../src/settings/theme-chooser.tsx'],
+  listThemePackages: ['../src/settings/theme-chooser.tsx'],
+  getThemeManifest: ['../src/settings/theme-chooser.tsx'],
   uploadThemePackage: [],
   setThemePackageHidden: [],
   downloadThemeTemplate: [],
