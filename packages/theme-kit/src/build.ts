@@ -79,6 +79,11 @@ async function bundleTheme(project: LoadedProject): Promise<Bundled> {
     mode: 'production',
     base: './',
     plugins: [react(), entryPlugin(project.entry)],
+    // **셸의 NODE_ENV 와 무관하게 운영 JSX 다.** vite 는 이미 선 NODE_ENV(`test` · `development`)를 안 덮고, 그러면 개발 JSX(`jsxDEV`)가
+    // 나와 `react/jsx-dev-runtime` 이 번들에 묶인다 — 그것은 개발 React 의 내부(`getOwner`)를 불러 운영 호스트에서 뷰가 던진다
+    // (`test/build.test.ts` «NODE_ENV 가 production 이 아닌 셸»). JSX 는 공유 런타임의 `react/jsx-runtime` 으로만 간다. 작성자 코드의
+    // `process.env.NODE_ENV` 갈래는 여전히 셸의 값으로 풀린다 — 그 판을 재는 케이스가 없어 치환은 두지 않았다.
+    esbuild: { jsxDev: false },
     build: {
       write: false,
       assetsInlineLimit: 0,
