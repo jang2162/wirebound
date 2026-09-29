@@ -289,7 +289,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 
 | 경로 | 메서드 | 최소 역할 | 요청 | 응답 |
 |---|---|---|---|---|
-| `/api/auth/login` | POST | (없음, 공개) | `{ email, password }` | 200 `{ id, email, name }`, 세션 쿠키 설정. 틀리면 401(없는 계정과 같은 답). 시도가 한도를 넘으면 429 + `Retry-After`(아래 «로그인 시도 제한») |
+| `/api/auth/login` | POST | (없음, 공개) | `{ email, password }` | 200 `{ id, email, name, isInstanceAdmin }`(`/me` 와 같은 모양 — 로그인 직후 화면이 관리자 링크를 세운다), 세션 쿠키 설정. 틀리면 401(없는 계정과 같은 답). 시도가 한도를 넘으면 429 + `Retry-After`(아래 «로그인 시도 제한») |
 | `/api/auth/logout` | POST | 로그인만 | — | 204. **그 세션의 WS 연결을 곧바로 닫고(4403) 그 연결의 잠금을 놓는다** — 같은 사람의 다른 로그인 · 남의 연결은 그대로다 |
 | `/api/auth/me` | GET | 로그인만 | — | 200 `{ id, email, name, isInstanceAdmin }` — `isInstanceAdmin` 은 요청마다 DB 에서 읽는다(위 «인스턴스 관리자») |
 | `/api/auth/tokens` | GET | 로그인만(세션) | — | 200 `{ id, name, createdAt, lastUsedAt, projectId, projectName, member }[]` — **로그인한 사람의 토큰 전부**(프로젝트를 가리지 않는다), 오래된 것 먼저. 멤버가 아닌 프로젝트의 줄은 `projectName: null` · `member: false`. 아래 "API 토큰". 토큰으로 부르면 401 |

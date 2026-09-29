@@ -746,14 +746,14 @@ export class EditorStore {
 
   /**
    * **마지막 복원 뒤 다시 읽기가 시작될 때의 신호 수**(`beginRestoreReread`). 그 다시 읽기의 판(`loadPage` · `clearPage`의 `restoreReread`)은
-   * 이 수가 지금 수와 같을 때만 복원 낡음을 푼다 — 그 사이 신호가 왔으면 다시 읽기의 몇 조회(메뉴 · 코멘트 · 테마는 곧바로, 페이지는 보낸
+   * 이 수가 지금 수와 같을 때만 복원 낡음을 푼다 — 그 사이 신호가 왔으면 다시 읽기의 몇 조회(메뉴 · 코멘트는 곧바로, 페이지는 보낸
    * 편집의 답 뒤에 읽는다)가 그 복원 앞을 읽었을 수 있다. 시작한 적이 없으면 `-1`이다.
    */
   #rereadMark = -1
 
   /**
    * **마지막 복원 뒤 다시 읽기가 시작될 때까지 시작한 조회 수**(`beginRestoreReread`). 그 뒤에 시작한 페이지 조회의 판은, 그 사이 신호가 없으면
-   * 복원 낡음을 푼다(`#keepsRestored`) — 다시 읽기가 메뉴 · 코멘트 · 설명 · 테마를 곧바로 다시 읽기 시작했으니(`routes/editor.tsx`의
+   * 복원 낡음을 푼다(`#keepsRestored`) — 다시 읽기가 메뉴 · 코멘트 · 설명을 곧바로 다시 읽기 시작했으니(`routes/editor.tsx`의
    * `restoredToken`) 남은 것은 페이지뿐이고, 그 조회는 복원 뒤를 읽었다.
    */
   #rereadBegun = Number.POSITIVE_INFINITY
@@ -909,7 +909,7 @@ export class EditorStore {
       // 지나온 문서는 정의상 낡지 않았다. 안 풀면 *"새로고침하세요"*가 새로고침한 뒤에도
       // 남는다 — *"고쳤는데 고쳤다고 말하지 않는"* 부류다. **복원 신호 앞에 시작한 조회의 판만 예외다**(위 `beforeRestore`) — 푸는
       // 쪽이 복원 앞 판을 최신처럼 보이게 한다(스토어: 창 안 복원 신호 → 복원 앞 답 → 낡음 `null`). **복원 낡음은 페이지 판으로 안
-      // 푼다**(`#keepsRestored`) — 복원은 메뉴 · 코멘트 · 테마도 바꿨다.
+      // 푼다**(`#keepsRestored`) — 복원은 메뉴 · 코멘트도 바꿨다.
       remoteStale: beforeRestore || this.#keepsRestored(options.restoreReread === true, ticket) ? this.#restoredStale() : null,
       documentLoads: this.#state.documentLoads + 1,
     })
@@ -2023,7 +2023,7 @@ export class EditorStore {
    *
    * ## 왜 페이지 판으로 안 푸나
    *
-   * 복원은 메뉴 · 페이지 목록 · 코멘트 · 설명 · 테마 선택까지 바꾼다(`restoredToken`의 표). 페이지만 다시 읽는 조회(재연결 재조회 · 다른
+   * 복원은 메뉴 · 페이지 목록 · 코멘트 · 설명까지 바꾼다(`restoredToken`의 표 — 테마 바인딩은 복원의 `theme-changed` 가 따로 따라잡는다). 페이지만 다시 읽는 조회(재연결 재조회 · 다른
    * 페이지 열기 · 편집 실패 수습)가 배너를 풀면 나머지가 복원 앞 판인 채 «다시 불러오기»가 사라진다 — 거짓 경보 하나를 지우고 조용한
    * 낡음을 연다(jsdom: 신호 뒤 재연결 재조회 · 다른 페이지 열기가 배너를 풀었고 트리 조회는 1 번 그대로).
    */
@@ -2037,7 +2037,7 @@ export class EditorStore {
    * 복원 뒤 다시 읽기의 것도 아니고 그 다시 읽기가 시작된 뒤에 시작한 페이지 조회(`ticket` — `#rereadBegun`)의 판도 아니면 참이다.
    *
    * **다시 읽기 뒤에 시작한 조회도 푼다** — 다시 읽기가 도는 사이 다른 페이지로 옮기면 복원 이펙트는 판을 못 싣고 물러나고, 옮긴 페이지의
-   * 여는 조회가 판을 싣는다. 그 판이 안 풀면 메뉴 · 테마는 다시 읽혔는데 배너가 남는다(Chrome: «다시 불러오기» 뒤 둘째로 옮기면 2.5s 뒤에도
+   * 여는 조회가 판을 싣는다. 그 판이 안 풀면 메뉴는 다시 읽혔는데 배너가 남는다(Chrome: «다시 불러오기» 뒤 둘째로 옮기면 2.5s 뒤에도
    * 배너 — `apps/web/build-test/editor-banner-reload.test.ts`). 다시 읽기 **앞에** 시작한 조회(재연결 재조회 · 여는 조회)는 그대로 둔다 —
    * 그 판을 실어도 나머지가 다시 읽혔는지 모른다.
    */
@@ -2109,7 +2109,7 @@ export class EditorStore {
       // 떠나며 버린 편집을 말하는 조각만 남긴다(`#lossParts`의 `sticky`).
       editFailure: this.#keptLoss(),
       editWarnings: this.#state.editWarnings.length === 0 ? this.#state.editWarnings : NO_WARNINGS,
-      // 복원 낡음은 복원 뒤 다시 읽기만 푼다(`beginRestoreReread`) — 페이지를 옮기며 비우는 판은 메뉴 · 코멘트 · 테마를 다시 안 읽었다.
+      // 복원 낡음은 복원 뒤 다시 읽기만 푼다(`beginRestoreReread`) — 페이지를 옮기며 비우는 판은 메뉴 · 코멘트를 다시 안 읽었다.
       remoteStale: this.#keepsRestored(options.restoreReread === true) ? this.#restoredStale() : null,
     })
     return pending
