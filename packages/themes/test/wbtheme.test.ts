@@ -37,6 +37,21 @@ describe('readWbtheme', () => {
     expect(codes(zip({ ...base(), ...extra }))).toContain(code)
   })
 
+  /**
+   * 대소문자 · 유니코드 정규화만 다른 두 항목은 대소문자를 무시하는 파일시스템(macOS 기본)에 풀면 한 파일이 된다 — 뒤의 것이 앞의 것을
+   * 덮어 자산 하나가 조용히 사라진다(`wireb export` 로 받은 번들을 풀 때). 한글 이름은 NFC · NFD 둘로 적힐 수 있다.
+   */
+  it.each([
+    ['대소문자만 다름', 'assets/Case.png', 'assets/case.png'],
+    ['디렉터리의 대소문자만 다름', 'assets/Img/a.png', 'assets/img/a.png'],
+    ['NFC · NFD 만 다름', 'assets/한글.png', 'assets/한글.png'.normalize('NFD')],
+  ])('%s — 두 번째 항목을 bad-path 로 거절한다', (_l, first, second) => {
+    expect(first).not.toBe(second)
+    const { files, issues } = readWbtheme(zip({ ...base(), [first]: strToU8('a'), [second]: strToU8('b') }))
+    expect(files).toBeNull()
+    expect(issues.map((i) => [i.code, i.path])).toEqual([['bad-path', second]])
+  })
+
   it('심볼릭 링크 항목을 거절한다', () => {
     // 외부 속성의 위 16 비트가 유닉스 파일 모드다 — 0o120000 이 링크. fflate 가 `os: 3` · `attrs` 로 그 값을 쓴다.
     const link: [Uint8Array, { os: number; attrs: number }] = [strToU8('/etc/passwd'), { os: 3, attrs: (0o120777 << 16) >>> 0 }]

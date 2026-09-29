@@ -72,6 +72,8 @@ export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; is
 
   const issues: WbthemeIssue[] = []
   const seen = new Set<string>()
+  /** 파일 항목의 «접은 이름»(NFC · 소문자) → 먼저 온 이름. */
+  const foldedFiles = new Map<string, string>()
   let unzipped = 0
   entries.forEach((entry, index) => {
     const file = listed[index]!
@@ -89,6 +91,15 @@ export function readWbtheme(bytes: Uint8Array): { files: WbthemeFiles | null; is
       return
     }
     seen.add(name)
+    // 대소문자 · 유니코드 정규화(NFC)만 다른 두 파일은 대소문자를 무시하는 파일시스템(macOS 기본)에 풀면 한 파일이다 — 뒤의 것이 앞의 것을
+    // 덮어 자산 하나가 조용히 사라진다(`wireb export` 로 받은 번들을 풀 때). 한글 이름은 NFC · NFD 둘로 적힐 수 있다.
+    const folded = name.normalize('NFC').toLowerCase()
+    const clash = isDir ? undefined : foldedFiles.get(folded)
+    if (clash !== undefined) {
+      issues.push({ code: 'bad-path', path: name, message: `대소문자나 유니코드 정규화만 다른 항목이 있습니다(${clash})` })
+      return
+    }
+    if (!isDir) foldedFiles.set(folded, name)
     if ((entry.mode & S_IFMT) === S_IFLNK) {
       issues.push({ code: 'symlink', path: name, message: '심볼릭 링크는 담을 수 없습니다' })
       return

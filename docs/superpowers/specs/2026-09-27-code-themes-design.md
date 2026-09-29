@@ -221,7 +221,7 @@ theme_packages(theme_id text, version text, name text, description text,
 `POST /api/admin/theme-packages`(관리자 세션만). **본문은 `.wbtheme` zip 바이트 그대로다**(`Content-Type: application/zip` 또는 `application/octet-stream`) — multipart 를 쓰지 않는다. 서버에 새 런타임 의존이 안 들고, 화면은 `fetch(url, { body: file })` 로 보낸다. 다른 형식은 415, 10 MB 를 넘으면 413 이다. 코드는 실행하지 않는다. 실패는 항목별 사유 목록(`issues[].code`)과 함께 422 로 답한다.
 
 1. zip 크기 · 풀린 크기 · 항목 수 상한.
-2. 항목 경로 — 절대 경로 · `..` · 심볼릭 링크 거부. 허용 목록: `manifest.json` · `theme.js` · `theme.css` · `assets/**`(`png` · `jpg` · `jpeg` · `gif` · `webp` · `svg` · `woff` · `woff2` · `ttf` · `otf`).
+2. 항목 경로 — 절대 경로 · `..` · 심볼릭 링크 거부. 대소문자 · 유니코드 정규화(NFC)만 다른 두 파일도 거부한다 — 대소문자를 무시하는 파일시스템에 풀면 한 파일이 된다. 허용 목록: `manifest.json` · `theme.js` · `theme.css` · `assets/**`(`png` · `jpg` · `jpeg` · `gif` · `webp` · `svg` · `woff` · `woff2` · `ttf` · `otf`).
 3. `manifest.json` 이 manifest zod 규격을 통과한다(「manifest」의 표) — 코드 `manifest`, 원래 코드는 `manifestCode`.
 4. 호스트 SDK 판이 `sdk` 범위 안이다 — 밖이면 `sdk-incompatible`.
 5. `id` 가 `system-` 으로 시작하지 않는다 — 시작하면 `reserved-id`.
