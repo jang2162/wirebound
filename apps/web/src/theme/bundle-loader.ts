@@ -19,6 +19,9 @@
  * - **등록은 `load` 이벤트 안에서 곧바로 받는다.** 외부 스크립트는 실행을 마친 그 자리에서 `load` 를 쏘므로(HTML 「execute the script
  *   element」) 여러 판이 한 realm 에 섞여 실려도 방금 돈 스크립트의 등록을 받는다. 한도 뒤에 늦게 돈 스크립트의 등록도 그 `load` 에서
  *   비워 버린다 — 안 비우면 다음 적재가 그것을 제 정의로 받는다.
+ * - **그 `load` 를 낸 스크립트의 등록만 받는다**(`take(script)` — 런타임이 등록마다 `currentScript` 를 적는다). 스크립트가 끝난 뒤에
+ *   미룬 등록(`setTimeout`)은 제 `load` 를 놓치고 칸에 남는데, 다음 번들의 `load` 가 그것을 버린다 — 등록하지 않는 번들이 앞 번들의 뷰로
+ *   «성공» 하지 않게.
  */
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { installRuntime, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
@@ -83,8 +86,8 @@ export function createScriptBundleLoader(host: Document = document, deadlineMs: 
       }
       const script = doc.createElement('script')
       script.addEventListener('load', () => {
-        // 늦게 돈 스크립트여도 등록은 비운다(머리말 «등록은 load 이벤트 안에서 곧바로»).
-        const definition = runtime.take()
+        // 늦게 돈 스크립트여도 등록은 비운다(머리말 «등록은 load 이벤트 안에서 곧바로» · «그 load 를 낸 스크립트의 등록만»).
+        const definition = runtime.take(script)
         settle(definition === null ? { status: 'failed', reason: `테마 번들이 등록하지 않았습니다(${name})` } : { status: 'ok', definition })
       })
       script.addEventListener('error', () => settle({ status: 'failed', reason: `테마 번들을 받지 못했습니다(${name})` }))

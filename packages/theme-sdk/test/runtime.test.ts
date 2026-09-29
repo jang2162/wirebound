@@ -31,6 +31,37 @@ describe('installRuntime', () => {
     expect(handle.take()).toBe(other)
     expect(warn).toHaveBeenCalledTimes(1)
   })
+  it('take(script) 는 그 스크립트가 도는 동안 들어온 등록만 받는다 — 밖의 등록은 버리고 경고한다', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const realm = { document: { currentScript: null as object | null } }
+    handle = installRuntime(realm as unknown as typeof globalThis)
+    const rt = (realm as any)[WB_RUNTIME_GLOBAL]
+    const a = {} as Element
+    const b = {} as Element
+    realm.document.currentScript = a
+    rt.register(def)
+    realm.document.currentScript = null
+    expect(handle.take(a)).toBe(def)
+    // 스크립트 밖(미룬 것)의 등록 → 다음 스크립트의 take 는 받지 않는다.
+    rt.register(def)
+    expect(handle.take(b)).toBeNull()
+    expect(warn.mock.calls).toEqual([['테마 번들 스크립트 밖에서 온 등록을 버렸습니다']])
+    // 버린 것은 칸에 안 남는다.
+    expect(handle.take()).toBeNull()
+  })
+  it('밖의 등록이 칸에 있는데 스크립트가 등록하면 밖의 것을 버리고 경고한다 — «두 번 등록» 이 아니다', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const realm = { document: { currentScript: null as object | null } }
+    handle = installRuntime(realm as unknown as typeof globalThis)
+    const rt = (realm as any)[WB_RUNTIME_GLOBAL]
+    const own = { ...def }
+    const b = {} as Element
+    rt.register(def)
+    realm.document.currentScript = b
+    rt.register(own)
+    expect(handle.take(b)).toBe(own)
+    expect(warn.mock.calls).toEqual([['테마 번들 스크립트 밖에서 온 등록을 버렸습니다']])
+  })
   it('uninstall 은 전역을 걷는다', () => {
     handle = installRuntime(); handle.uninstall(); handle = null
     expect(WB_RUNTIME_GLOBAL in globalThis).toBe(false)

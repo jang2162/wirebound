@@ -21,10 +21,24 @@ function scripts(): HTMLScriptElement[] {
   return realms().flatMap((realm) => [...realm.contentDocument!.querySelectorAll('script')])
 }
 
-/** 스크립트가 돌아 등록한 판 — 실브라우저에서는 `theme.js` 가 `load` 이벤트 직전에 이것을 부른다. */
+function runtime(): WbRuntime {
+  return (realms()[0]!.contentWindow as unknown as Record<string, WbRuntime>)[WB_RUNTIME_GLOBAL]!
+}
+
+/**
+ * 스크립트가 돌아 등록한 판 — 실브라우저에서는 `theme.js` 가 `load` 이벤트 직전에 이것을 부른다. 도는 동안 realm 문서의
+ * `currentScript` 가 그 스크립트다 — jsdom 은 `src` 스크립트를 돌리지 않으므로 그 값을 얹어 흉내 낸다.
+ */
 function runScript(script: HTMLScriptElement, def: ThemeDefinition | null): void {
-  const realm = realms()[0]!.contentWindow as unknown as Record<string, WbRuntime>
-  if (def !== null) realm[WB_RUNTIME_GLOBAL]!.register(def)
+  if (def !== null) {
+    const doc = realms()[0]!.contentDocument!
+    Object.defineProperty(doc, 'currentScript', { configurable: true, get: () => script })
+    try {
+      runtime().register(def)
+    } finally {
+      delete (doc as unknown as Record<string, unknown>)['currentScript']
+    }
+  }
   script.dispatchEvent(new Event('load'))
 }
 
@@ -99,6 +113,36 @@ describe('createScriptBundleLoader', () => {
     const next = loader.load(OTHER)
     runScript(scripts()[1]!, null)
     expect(await next).toMatchObject({ status: 'failed' })
+  })
+
+  it('스크립트가 끝난 뒤 미룬 등록은 다음 적재의 정의가 되지 않는다 — 버리고 경고한다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const loader = createScriptBundleLoader(document)
+    const late = loader.load(REF)
+    runScript(scripts()[0]!, null)
+    expect(await late).toMatchObject({ status: 'failed' })
+    // `setTimeout(() => register(…))` — 어느 스크립트도 돌지 않을 때 온다.
+    runtime().register(definition('late'))
+    const silent = loader.load(OTHER)
+    runScript(scripts()[1]!, null)
+    expect(await silent).toEqual({ status: 'failed', reason: '테마 번들이 등록하지 않았습니다(acme@1.0.0)' })
+    expect(warn.mock.calls).toEqual([['테마 번들 스크립트 밖에서 온 등록을 버렸습니다']])
+    warn.mockRestore()
+  })
+
+  it('미룬 등록이 칸에 있어도 다음 스크립트가 등록하면 그 정의를 받는다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const loader = createScriptBundleLoader(document)
+    const late = loader.load(REF)
+    runScript(scripts()[0]!, null)
+    await late
+    runtime().register(definition('late'))
+    const next = loader.load(OTHER)
+    const own = definition('acme')
+    runScript(scripts()[1]!, own)
+    expect(await next).toEqual({ status: 'ok', definition: own })
+    expect(warn.mock.calls).toEqual([['테마 번들 스크립트 밖에서 온 등록을 버렸습니다']])
+    warn.mockRestore()
   })
 
   it('failed 는 캐시하지 않는다 — 다시 부르면 새 스크립트를 붙인다', async () => {
