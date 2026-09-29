@@ -14,6 +14,7 @@ import { DeleteConfirm } from '../projects/delete-confirm'
 import { projectAbilities } from '../projects/project-actions'
 import { ProjectForm } from '../projects/project-form'
 import { useProjectCommands, type ProjectCommands } from '../projects/use-project-commands'
+import { useSessionUser } from '../session/session-context'
 import { SessionMenu } from '../session/session-menu'
 import type { ProjectDetail } from '../api/types'
 
@@ -23,6 +24,8 @@ const EMPTY_NOTICE = '참여 중인 프로젝트가 없습니다'
 export function ProjectListRoute(): ReactElement {
   const commands = useProjectCommands()
   const { state } = commands
+  // 인스턴스 관리자에게만 «테마 관리»(spec 「관리자 화면」). 값은 세션 사용자의 것 — 로그인 응답 · `/me` 가 싣는다.
+  const admin = useSessionUser()?.isInstanceAdmin === true
 
   // 세션이 끊겼으면 목록 대신 로그인이다. 화면 **전체**를 대신하는 것이라 아래 JSX보다
   // 앞에 둔다 — 아래 JSX 안에 `<SignedOut />`을 끼우면 실패한 커밋에 목록 **틀**이 함께
@@ -44,6 +47,11 @@ export function ProjectListRoute(): ReactElement {
           `var(--wb-shell-*)`도 여기서 정의돼 있다 — 없으면 조용히 검게 나온다. */}
       <div className="wb-shell-project-head">
         <h1 className="wb-shell-project-list-title">프로젝트</h1>
+        {admin && (
+          <Link className="wb-shell-project-admin" to="/admin/themes">
+            테마 관리
+          </Link>
+        )}
         <SessionMenu />
       </div>
 

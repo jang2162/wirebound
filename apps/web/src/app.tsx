@@ -6,6 +6,7 @@
 import type { ReactElement } from 'react'
 import { Outlet, Route, Routes } from 'react-router'
 import { WriteLedgerProvider } from './panels/write-ledger'
+import { AdminThemesRoute } from './routes/admin-themes'
 import { EditorShellRoute } from './routes/editor'
 import { LoginRoute } from './routes/login'
 import { ProjectListRoute } from './routes/project-list'
@@ -57,6 +58,8 @@ export function App(): ReactElement {
             <Route path="/" element={<ProjectListRoute />} />
             {/* **내 API 토큰은 계정의 것이라 프로젝트 밖 라우트다** — 근거는 `routes/tokens.tsx` 머리말. */}
             <Route path="/tokens" element={<TokensRoute />} />
+            {/* **테마 관리는 인스턴스의 것이라 프로젝트 밖 라우트다**(`routes/admin-themes.tsx` 머리말). */}
+            <Route path="/admin/themes" element={<AdminThemesRoute />} />
             {/* 두 주소가 같은 셸이다. 페이지를 연 것은 셸 안의 캔버스가 달라지는 일이지
                 다른 화면이 아니므로, 라우터가 컴포넌트를 다시 마운트하지 않고 편집 상태가
                 그대로 이어진다. */}

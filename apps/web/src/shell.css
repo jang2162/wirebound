@@ -3070,3 +3070,70 @@
   padding: 12px;
   background: var(--wb-shell-chrome);
 }
+
+/* 목록 머리의 «테마 관리»(`routes/project-list.tsx` — 인스턴스 관리자에게만). 계정 묶음의 «API 토큰» 링크와 같은 꼴이다. */
+.wb-shell-project-admin {
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff;
+  color: var(--wb-shell-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* ── 테마 관리(`routes/admin-themes.tsx`) ──────────────────────────────────────────────────
+   화면 루트는 `.wb-shell-project-list`(팔레트 · 폭 · 글꼴)이고 줄 · 단추는 목록 · «내 API 토큰» 의 것을 그대로 쓴다. 여기 있는 것은
+   이 화면에만 있는 칸이다. */
+.wb-shell-admin-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.wb-shell-admin-upload {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.wb-shell-admin-file {
+  font: inherit;
+  font-size: 13px;
+}
+
+/* 업로드를 거절한 까닭 — 줄마다 `경로 — 문장 (manifest 코드)`. 색은 이 파일의 오류 문장 색이다. */
+.wb-shell-admin-issues {
+  margin: 12px 0 0;
+  padding-left: 16px;
+  font-size: 13px;
+  color: #b42318;
+}
+
+.wb-shell-admin-issue {
+  margin: 0;
+  word-break: break-word;
+}
+
+.wb-shell-admin-theme {
+  margin: 16px 0 0;
+}
+
+.wb-shell-admin-theme-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* 숨긴 판의 표시. 단추(«되살림»)가 같은 뜻을 말하지만 줄을 훑는 눈에 먼저 걸리게 둔다. */
+.wb-shell-admin-hidden {
+  flex: none;
+  border-radius: 4px;
+  padding: 0 6px;
+  background: var(--wb-shell-chrome);
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}

@@ -195,11 +195,13 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   putProjectTheme: ['../src/settings/theme-chooser.tsx', '../src/settings/token-editor.tsx'],
   // 고르개의 목록 · 확인 창(바꾸면 무엇이 달라지나 · 잇는 토큰을 셀 새 manifest).
   getThemeImpact: ['../src/settings/theme-chooser.tsx'],
-  listThemePackages: ['../src/settings/theme-chooser.tsx'],
+  // 고르개의 목록(숨긴 판은 관리자에게만 «숨김» 으로) · 관리자 화면의 판 목록.
+  listThemePackages: ['../src/settings/theme-chooser.tsx', '../src/routes/admin-themes.tsx'],
   getThemeManifest: ['../src/settings/theme-chooser.tsx'],
-  uploadThemePackage: [],
-  setThemePackageHidden: [],
-  downloadThemeTemplate: [],
+  // 관리자 셋 — 관리자 화면 하나에서만 불린다(`routes/admin-themes.tsx`).
+  uploadThemePackage: ['../src/routes/admin-themes.tsx'],
+  setThemePackageHidden: ['../src/routes/admin-themes.tsx'],
+  downloadThemeTemplate: ['../src/routes/admin-themes.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {
