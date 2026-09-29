@@ -1,6 +1,7 @@
 /**
- * **A4 리뷰가 찾은 틈** — 실브라우저 판(`docs/superpowers/plans/2026-09-28-a4-review.md`). 앞 넷은 고칠 때까지 빨강이다 — 리뷰어는 고치지
- * 않았다. 마지막 하나는 원래 성질(층 안의 전이 멈춤이 층 밖 `!important` 전이를 이긴다)을 잠근다 — 그 성질을 재는 케이스가 없었다.
+ * **A4 리뷰가 찾은 틈** — 실브라우저 판(`docs/superpowers/plans/2026-09-28-a4-review.md`). 앞 넷은 그 틈이 다시 서지 않는지 잰다 —
+ * 고치기 전 소스에서 빨강이었다(`docs/superpowers/plans/2026-09-28-a4-fix-report.md`). 마지막 하나는 원래 성질(층 안의 전이 멈춤이 층 밖
+ * `!important` 전이를 이긴다)을 잠근다 — 그 성질을 재는 케이스가 없었다.
  *
  * 픽스처 테마는 kit 이 지은 `sample@1.0.0`(`theme-fixtures.ts` 의 `sampleTheme`)의 `theme.js` · `manifest.json` 을 글자로 고쳐 다시 묶는다
  * (`packWbtheme`) — 업로드가 받는 진짜 모양이고, 고친 자리는 케이스마다 적었다.
@@ -72,8 +73,8 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
   })
 
   /**
-   * 토큰 편집기는 절이 넘긴 바인딩(`view`)이 바뀔 때마다 초안을 그 값으로 다시 세운다(`settings/token-editor.tsx` 의 `[view]` 이펙트).
-   * 고르개의 저장 · 고르개의 409 다시 읽기도 그 바인딩을 바꾼다 — 저장 안 한 초안이 말없이 사라진다. 판정: 초안이 새 판에도 있는 키면 남는다.
+   * 고르개의 저장 · 고르개의 409 다시 읽기도 절이 토큰 편집기에 넘기는 바인딩(`view`)을 바꾼다 — 편집기가 그때 초안을 서버 값으로 다시
+   * 세우면 저장 안 한 값이 말없이 사라진다(`settings/token-editor.tsx` 머리말 «바인딩이 바뀌어도»). 판정: 초안이 새 판에도 있는 키면 남는다.
    */
   it('토큰 초안을 둔 채 같은 테마의 새 판으로 바꿔도 친 값이 말없이 사라지지 않는다', async () => {
     const project = await themeProject(stack, alice)
@@ -118,9 +119,9 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
   })
 
   /**
-   * 로더는 `load` 이벤트 안에서 `take()` 로 등록을 비운다(`theme/bundle-loader.ts`). 번들이 등록을 미루면(`setTimeout`) 그 `load` 는 빈손으로
-   * 실패하고, 미룬 등록은 런타임의 칸에 남아 **다음 번들의 `load`** 가 제 정의로 받는다 — 등록하지 않는 번들이 앞 번들의 뷰로 «성공» 하고
-   * 캐시된다. 판정: 등록하지 않은 번들은 실패로 알린다.
+   * 번들이 등록을 미루면(`setTimeout`) 그 `load` 는 빈손으로 실패하고, 미룬 등록은 런타임의 칸에 남는다. 로더가 그 칸을 가리지 않고 받으면
+   * **다음 번들의 `load`** 가 제 정의로 받아 등록하지 않는 번들이 앞 번들의 뷰로 «성공» 하고 캐시된다(`theme/bundle-loader.ts` 머리말 «그
+   * load 를 낸 스크립트의 등록만»). 판정: 등록하지 않은 번들은 실패로 알린다.
    */
   it('늦게 등록한 번들의 정의를 다음 번들이 제 것으로 받지 않는다', async () => {
     await upload(remake(base, { id: 'late', version: '1.0.0', js: (js) => js.replace('"샘플 카드"', '"늦은 카드"').replace(REGISTER, `setTimeout(()=>${REGISTER},0)`) }))
@@ -150,9 +151,10 @@ describe.skipIf(!전제.ok)('A4 리뷰', () => {
   })
 
   /**
-   * 캔버스는 번들 정의의 manifest(`definition.manifest` — 렌더러의 `resolveVariant`)로 variant 를 풀고, 속성 패널 · 패턴 고르개는 서버의
-   * manifest(`GET …/theme`)로 칸을 짓는다. 둘이 다른 패키지(업로드는 `theme.js` 를 실행하지 않아 못 견준다)에서 패널이 고른 variant 를
-   * 캔버스가 말없이 기본으로 그린다. 판정: 패널이 보이는 값과 캔버스가 그린 값이 같다.
+   * 캔버스는 정의의 manifest(`definition.manifest` — 렌더러의 `resolveVariant`)로 variant 를 풀고, 속성 패널 · 패턴 고르개는 서버의
+   * manifest(`GET …/theme`)로 칸을 짓는다. 정의가 번들이 실은 manifest 를 그대로 쓰면 둘이 다른 패키지(업로드는 `theme.js` 를 실행하지 않아
+   * 못 견준다)에서 패널이 고른 variant 를 캔버스가 말없이 기본으로 그린다(`theme/bundle-loader.ts` 의 `withServerManifest`). 판정: 패널이
+   * 보이는 값과 캔버스가 그린 값이 같다.
    */
   it('번들 안 manifest 가 서버 manifest 와 달라도 패널이 보이는 variant 와 캔버스가 그리는 variant 가 같다', async () => {
     await upload(
