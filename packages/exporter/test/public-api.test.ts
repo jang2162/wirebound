@@ -176,7 +176,6 @@ describe('공개 표면이 계약이다', () => {
   const CONTRACT = [
     'PACKAGE_NAME',
     'exportBundle',
-    'exportPage',
     'scriptJson',
     // `NO_SCREEN`은 **화면 이미지가 없는 자리의 말**이고, 라우트·CLI가 사람에게 그 상태를
     // 말할 때 같은 글자를 쓰라고 밖으로 낸다(두 벌이 되는 것을 막는다).
@@ -189,7 +188,7 @@ describe('공개 표면이 계약이다', () => {
   })
 
   it('내부 헬퍼가 새어 나가지 않는다', () => {
-    for (const name of ['installRegistries', 'pageCss', 'DOCTYPE', 'DEFAULT_LANG']) {
+    for (const name of ['installRegistries', 'renderHtmlDocument', 'DOCTYPE', 'DEFAULT_LANG']) {
       expect(Object.keys(api), name).not.toContain(name)
     }
   })

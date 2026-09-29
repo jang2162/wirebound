@@ -21,7 +21,7 @@
  * # 실패는 값이다
  *
  * 페이지 N장을 그리다 하나가 죽어도(타임아웃·렌더 오류) **나머지는 살고 pptx는 나온다.**
- * 그래서 `render`는 던지지 않고 요청과 **같은 길이·같은 순서**의 결과를 낸다.
+ * 그래서 `render`는 던지지 않고 찍을 페이지와 **같은 길이·같은 순서**의 결과를 낸다.
  *
  * **`screenless`와 갈린다.** `screenless`는 *"아무도 안 그렸다"*이고 여기 실패는
  * *"그리려다 죽었다"*다. 둘을 한 값에 접으면 화면이 거짓을 말한다.
@@ -36,14 +36,24 @@
  * 머리를 읽는다**(`readPngSize`). 못 읽으면 그것은 성공이 아니라 실패다.
  */
 
-/** 그릴 페이지 한 장. **`exportPage`가 낸 값을 그대로 담는다**(새 HTML을 만들지 않는다). */
-export interface ScreenRequest {
+/**
+ * 그릴 것 — **HTML 번들 그대로**(`@wirebound/exporter` 의 `exportBundle` 이 낸 파일 전부)와 찍을 페이지들. 새 HTML 을 만들지 않는다 —
+ * 그리는 자가 번들의 페이지를 브라우저로 열어 번들 런타임이 그린 목업을 찍는다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`
+ * 「PPTX」). 그래서 화면 · 번들 · PPTX 가 한 벌이다.
+ */
+export interface ScreenJob {
+  /** 번들 뿌리 기준 경로 → 내용. 그리는 자는 파일 시스템을 안 쓰고 이것을 메모리에서 내준다. */
+  files: ReadonlyMap<string, string | Uint8Array>
+  /** 찍을 페이지 — **결과가 이 순서 · 이 길이다.** */
+  pages: readonly ScreenPage[]
+}
+
+/** 찍을 페이지 한 장. */
+export interface ScreenPage {
   /** 실패 목록에 실릴 이름. **`PptxPage.title`과 같은 이름이다**(조상 메뉴가 붙은 번들 이름). */
   title: string
-  /** `exportPage().html` — 완전한 한 장이다. */
-  html: string
-  /** `exportPage().css` — 그 한 장이 기대는 시트. */
-  css: string
+  /** 번들 안의 경로(`pages/<이름>.html`). */
+  path: string
 }
 
 /** 그린 결과 하나. **실패가 예외가 아니라 이 유니온의 한쪽이다**(머리말 「실패는 값이다」). */
@@ -52,7 +62,7 @@ export type ScreenResult =
   | { ok: false; reason: string }
 
 export interface ScreenBatch {
-  /** **요청과 같은 길이·같은 순서다.** 부르는 쪽이 인덱스로 짝짓는다. */
+  /** **`ScreenJob.pages` 와 같은 길이·같은 순서다.** 부르는 쪽이 인덱스로 짝짓는다. */
   results: ScreenResult[]
   /**
    * 그린 기계에 한글 글꼴이 없었다. 없으면 `null`이다.
@@ -73,7 +83,7 @@ export interface ScreenBatch {
  * **구현이 정한다**(`screen-render-chromium.ts`의 「어디에 상태를 두나」). 이 인터페이스는 그 상태를 갖지 않는다.
  */
 export interface ScreenRenderer {
-  render(requests: readonly ScreenRequest[]): Promise<ScreenBatch>
+  render(job: ScreenJob): Promise<ScreenBatch>
 }
 
 /**

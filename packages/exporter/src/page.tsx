@@ -1,139 +1,16 @@
-import { NO_THEME, renderDocument, type NodeRenderError } from '@wirebound/renderer'
-import { installCatalog, type PageDocument } from '@wirebound/schema'
-import { defaultViewsCss, type ThemeDefinition } from '@wirebound/theme-sdk'
-import type { ReactElement, ReactNode } from 'react'
+/**
+ * **번들 페이지의 `<html>` 을 짓는 조각** — 번들(`bundle/index.ts`)과 PPTX(`pptx/index.ts`)가 함께 쓴다. 목업은 여기서 그리지 않는다 —
+ * 번들 런타임이 브라우저에서 그린다(`browser/`).
+ *
+ * `renderToStaticMarkup` 으로 셸 마크업만 짓는다 — 브라우저 API 를 쓰지 않는다(`tsconfig.json`이 `DOM` lib을 주지 않으므로 컴파일러가
+ * 그것을 지킨다).
+ */
+import { installCatalog } from '@wirebound/schema'
+import type { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-export interface ExportPageOptions {
-  /**
-   * 그릴 페이지 문서.
-   *
-   * **`AnyDocument`가 아니라 `PageDocument`다.** `renderComposed(layout, page)`의
-   * 결과는 `renderDocument(page)`와 **같지 않다** — `Slot`이 구멍이 아니라 그려지는 노드라
-   * 합성이 노드 둘을 더한다(`packages/renderer/test/compose-identity.test.tsx`가 잰다).
-   * 그래서 캔버스는 페이지 문서만 그리고, 이 패키지가 지키려는 것이 *"화면과 같다"*이므로
-   * 여기도 같은 것을 그려야 한다.
-   *
-   * 번들도 레이아웃을 싣지 않는다 — `BundlePage.document`도 페이지 문서다.
-   */
-  document: PageDocument
-  /**
-   * `<title>`에 실을 이름.
-   *
-   * **선택이 아니라 필수다 — 문서가 제목을 들지 않기 때문이다.** `PageDocument`는
-   * `{ version, root }`뿐이고 제목은 `pages.title`(설계서 「테이블 정의」)과 「페이지 JSON」
-   * 봉투의 `page.title`에
-   * 산다. 즉 이 함수가 제목을 **만들어 낼 방법이 없다.**
-   *
-   * 기본값(`'무제'` 따위)을 두지 않는 것은 그러면 **호출자가 빠뜨린 것과 정말로 이름이
-   * 없는 것이 같은 값**이 되기 때문이다. 필수로 두면 호출자가 어디서 제목을 얻을지를
-   * 컴파일러가 묻는다.
-   */
-  title: string
-  /**
-   * 그릴 테마(뷰 · manifest). **어디서 오는지는 호출자가 정한다.**
-   *
-   * **없는 것이 정상이다** — api 는 테마 코드를 싣지 않으므로(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md`
-   * 「내보내기와 PPTX」) 늘 안 넘긴다. 그때 모든 노드가 SDK 기본 뷰로 그려진다(`NO_THEME`).
-   */
-  theme?: ThemeDefinition
-  /** 테마의 CSS. 기본 뷰 CSS 뒤에 싣는다(`pageCss`). */
-  themeCss?: string
-  /** `<html lang>`. 기본은 `'ko'`다 — 이 도구의 카탈로그·문안이 한국어다. */
-  lang?: string
-}
-
-export interface ExportedPage {
-  /** 정적 HTML 한 장. */
-  html: string
-  /**
-   * 이 페이지가 기대는 CSS 한 장. **파일로 쓰지 않는다** — 설계서 「HTML 정적 번들」의
-   * `assets/theme.css`를 만드는 것은 호출자이고, 링크로 걸지 인라인할지도 그쪽이 정한다.
-   *
-   * **맨 앞에 문서 여백 초기화가 선다**(`STANDALONE_RESET`) — 그 뒤가 `pageCss(themeCss)`다. 까닭은 그 상수의 머리말.
-   */
-  css: string
-  /**
-   * 그리지 못한 노드. **캔버스가 배너로 알리는 것과 같은 값이다**(`canvas.tsx`의
-   * `CanvasDocument`).
-   *
-   * 내는 이유: 번들은 *"화면에서는 됐는데 내보낸 것은 다르다"*를 만들 수 있는 자리이고,
-   * 폴백이 조용히 실린 HTML은 **눈으로는 그럴듯하다.** 값으로 내면 호출자가 그것을 말할 수
-   * 있다.
-   */
-  errors: NodeRenderError[]
-}
-
 /**
- * 페이지 문서 하나를 정적 HTML 한 장으로 만든다(「HTML 정적 번들」).
- *
- * ---
- *
- * **파일 시스템을 모른다.** 값을 낸다. 소비자마다 결과를 쓰는 자리가 다른데(api는 HTML을
- * 파일로 쓰지 않고 브라우저에 그대로 띄운다 · 케이스는 메모리에서 견준다) `fs`를 부르면
- * 자리가 하나가 되고, 케이스가 임시 디렉터리를 만들어야 한다.
- *
- * **`renderer`를 서버에서 실행한다.** 「HTML 정적 번들」의 문장 그대로다. `react-dom/server`의
- * `renderToStaticMarkup`을 쓰고 브라우저 API를 쓰지 않는다(`tsconfig.json`이 `DOM` lib을
- * 주지 않으므로 컴파일러가 그것을 지킨다).
- *
- * **`<html>`까지 React가 그린다.** `<head>`만 손으로 이어 붙이지 않는 이유는
- * **이스케이프를 두 벌 두지 않기 위해서다** — 제목과 `lang`은 사용자가 적은 문자열이고,
- * 우리가 따로 escape 함수를 쓰면 React의 것과 규칙이 갈린다. 무엇이 어떻게 이스케이프되는지는
- * `test/escape.test.ts`가 표로 잰다.
- *
- * `<!doctype html>`만 앞에 붙인다 — React가 그것을 내지 않는다.
- */
-export function exportPage(options: ExportPageOptions): ExportedPage {
-  const { tree, errors } = renderPageTree(options.document, options.theme)
-  const html = renderHtmlDocument({
-    lang: options.lang ?? DEFAULT_LANG,
-    title: options.title,
-    head: null,
-    body: tree,
-  })
-  return { html, css: `${STANDALONE_RESET}${pageCss(options.themeCss)}`, errors }
-}
-
-/**
- * **문서 한 장이 혼자 뜰 때 `<html>` · `<body>`의 여백을 0 으로 둔다** — `exportPage`의 `css` 맨 앞.
- *
- * 이 한 장은 셸 없이 혼자 뜬다(pptx 화면 이미지가 이것을 뷰포트에 그대로 띄운다 — `apps/api`의
- * `services/screen-render-chromium.ts`). 초기화가 없으면 브라우저 기본 여백(8px)이 붙어 문서가 뷰포트보다 16px 좁게
- * 그려지고 왼쪽에 8px 흰 띠가 선다. 캔버스는 문서를 흰 프레임에 여백 없이 프리셋 폭 그대로 담는다 — 같게 보이려면 0 이다.
- *
- * 잰 값(실브라우저 — 헤드리스 Chrome · 뷰포트 720 · 첫 노드가 글 하나인 페이지 · 테마를 얹은 시트): 초기화 없이 문서 폭
- * 704px · 첫 글자 (8, 14) / 초기화하면 720px · (0, 14) / 캔버스는 흰 프레임 기준 (0, 0). 위쪽 14px 는 첫 문단의 여백이다 —
- * 캔버스에서는 그 여백이 프레임 **밖**(회색 바탕)으로 겹쳐 나가고, 혼자 뜬 한 장에는 그 밖이 없어 그림 안에 남는다. 문서의
- * 여백이라 여기서 지우지 않는다.
- *
- * **`<head>`에 싣지 않는다** — `exportPage`의 `<head>`는 비어 있고 CSS 는 값으로만 낸다(`test/page.test.ts`). **`pageCss`에
- * 넣지 않는다** — 그것은 번들의 `assets/theme.css`이고 문서 노드만 겨냥한다. 번들은 셸이 같은 초기화를 건다
- * (`bundle/shell-css.ts`).
- */
-const STANDALONE_RESET = 'html,\nbody {\n  margin: 0;\n}\n'
-
-/**
- * 문서 하나를 그린다. **`exportPage`와 번들이 같은 이 함수를 쓴다.**
- *
- * **패키지 밖으로 내지 않는다** — `src/index.ts`가 수출하지 않으므로 소비자의 표면에 없다.
- * 안에서 나눠 둔 것은 번들이 셸을 씌우면서도 **렌더 경로를 새로 만들지 않게** 하기
- * 위해서다. 경로가 둘이면 「HTML 정적 번들」의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*가
- * exporter 안에서부터 거짓이 된다.
- */
-export function renderPageTree(
-  page: PageDocument,
-  theme: ThemeDefinition | undefined,
-): { tree: ReactElement; errors: NodeRenderError[] } {
-  installRegistries()
-  const errors: NodeRenderError[] = []
-  // **테마를 안 받아도 뷰 경로로 그린다** — 캔버스와 같은 길이어야 「HTML 정적 번들」의 *"결과가 어긋날 수 없다"*가 선다.
-  const tree = renderDocument(page, { theme: theme ?? NO_THEME, onNodeError: (error) => errors.push(error) })
-  return { tree, errors }
-}
-
-/**
- * `<html>` 한 장을 짓는다. **`exportPage`와 번들이 같은 이 함수를 쓴다.**
+ * 번들 페이지의 `<html>` 한 장을 짓는다(`bundle/index.ts`).
  *
  * `<head>`와 `<body>`를 둘 다 React가 그린다 — **이스케이프를 두 벌 두지 않기 위해서다.**
  * 제목·`lang`·링크의 `href`가 전부 사용자가 적은 값에서 오고, 우리가 따로
@@ -142,7 +19,7 @@ export function renderPageTree(
 export function renderHtmlDocument(parts: {
   lang: string
   title: string
-  /** `<head>`에 더 얹을 것. **`exportPage`는 아무것도 얹지 않는다.** */
+  /** `<head>`에 더 얹을 것(시트 링크). */
   head: ReactNode
   body: ReactNode
 }): string {
@@ -189,15 +66,3 @@ export function installRegistries(): void {
   installCatalog()
 }
 
-/**
- * 시트 **한 장**을 만든다. 순서는 SDK 기본 뷰 CSS → 테마 CSS 다.
- *
- * **그 순서가 곧 *"테마가 이긴다"*이다** — 같은 특이도에서 나중에 온 규칙이 이긴다. 캔버스 iframe 도 같은 순서로
- * `<style>` 둘을 건다(`apps/web/src/canvas/canvas-theme.ts` 의 `CANVAS_STYLES`). 여기서 한 장으로 합치는 것은 「HTML 정적 번들」이
- * `assets/theme.css` **하나**를 그리기 때문이고, 문서 순서가 그대로 남으므로 캐스케이드는 같다.
- *
- * **테마가 없으면 기본 뷰 CSS 만이다 — 빈 문자열이 아니다.** 그것이 없으면 번들이 아무 스타일도 없이 나간다.
- */
-export function pageCss(themeCss?: string): string {
-  return `${defaultViewsCss()}${themeCss ?? ''}`
-}

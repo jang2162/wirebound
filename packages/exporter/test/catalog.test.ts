@@ -15,7 +15,7 @@
  * > 성립하지 않아서다. 아래 `validatePage` 절이 그 둘을 값으로 든다.
  *
  * **진짜 침묵은 상호작용 판정**(`checkNodeAction`)의 것이다 — 카탈로그 없이 판정하면 깨진
- * 규칙이 아무 말 없이 지나가고 없는 prop이 그대로 얹힌다. `exportPage`는 그것을 부르지
+ * 규칙이 아무 말 없이 지나가고 없는 prop이 그대로 얹힌다. `exportBundle`은 그것을 부르지
  * 않고 번들 런타임이 브라우저에서 부른다(렌더러의 상호작용 런타임) — 런타임의 진입(`browser/runtime.tsx`)이 스스로 설치하는
  * 것은 `build-test/runtime-dist.test.ts` 가 나가는 글자로 잰다(설치가 없으면 노드가 폴백으로 그려진다).
  *
@@ -37,7 +37,7 @@ import {
 } from '@wirebound/schema'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { exportPage } from '../src/page'
+import { exportBundle } from '../src/bundle/index'
 
 const DOC: PageDocument = {
   version: 1,
@@ -56,7 +56,7 @@ function empty(): void {
 
 describe('설치 없이 부르면 무엇이 관찰되는가', () => {
   /**
-   * **렌더러를 맨손으로 부른 값이다.** `exportPage`가 아니라 `renderDocument`를 직접
+   * **렌더러를 맨손으로 부른 값이다.** `exportBundle`이 아니라 `renderDocument`를 직접
    * 부른다 — 이것이 계약이 없을 때의 관찰값이고, 아래 케이스들이 그것과 갈리는지 본다.
    */
   it('renderDocument를 맨손으로 부르면 노드마다 폴백이다', () => {
@@ -75,20 +75,24 @@ describe('설치 없이 부르면 무엇이 관찰되는가', () => {
   })
 })
 
-describe('exportPage가 설치를 계약으로 든다', () => {
-  it('아무것도 설치되지 않은 채 불려도 문서를 제대로 그린다', () => {
-    empty()
-    const { html, errors } = exportPage({ document: DOC, title: '회원 목록' })
+/** 번들 한 벌 — 런타임은 글자만 둔다(여기서 재는 것은 설치와 구조 판정이다). */
+function bundle() {
+  return exportBundle({ pages: [{ title: '회원 목록', document: DOC }], runtimeJs: '/* runtime */' })
+}
 
-    expect(errors).toEqual([])
-    expect(html).toContain('data-wb-component="Page"')
-    expect(html).toContain('data-wb-component="List"')
-    expect(html).not.toContain('data-wb-error')
+/**
+ * **번들이 설치를 계약으로 든다** — 번들은 목업을 그리지 않지만 기본 뷰로도 못 그리는 노드를 서버에서 센다(`errors` — `bundle/index.ts`
+ * 의 `structuralErrors`). 설치 없이 세면 위 첫 케이스처럼 노드마다 «알 수 없는 컴포넌트»가 선다.
+ */
+describe('exportBundle이 설치를 계약으로 든다', () => {
+  it('아무것도 설치되지 않은 채 불려도 구조 판정이 조용하다', () => {
+    empty()
+    expect(bundle().errors).toEqual([])
   })
 
   it('부른 뒤에는 레지스트리가 차 있다', () => {
     empty()
-    exportPage({ document: DOC, title: '회원 목록' })
+    bundle()
 
     expect(listComponents().length).toBeGreaterThan(0)
   })
@@ -102,10 +106,10 @@ describe('exportPage가 설치를 계약으로 든다', () => {
     installCatalog()
     const before = listComponents().length
 
-    const first = exportPage({ document: DOC, title: '회원 목록' })
-    const second = exportPage({ document: DOC, title: '회원 목록' })
+    const first = bundle()
+    const second = bundle()
 
-    expect(second.html).toBe(first.html)
+    expect(second.files).toEqual(first.files)
     expect(listComponents().length).toBe(before)
   })
 })
@@ -113,7 +117,7 @@ describe('exportPage가 설치를 계약으로 든다', () => {
 /**
  * **`validatePage`가 카탈로그 없이 무엇을 내는가.**
  *
- * `exportPage`는 이 함수를 부르지 않는다. 그래도 여기서 재는 것은 **머리말이 계약의 근거로
+ * 번들은 이 함수를 부르지 않는다. 그래도 여기서 재는 것은 **머리말이 계약의 근거로
  * 쓴 문장**(무엇이 조용해지나)**이 참인지**가 걸려 있기 때문이고, 산문으로만 적으면 다시
  * 낡는다.
  */

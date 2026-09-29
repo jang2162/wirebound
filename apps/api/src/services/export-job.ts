@@ -10,12 +10,12 @@ import { buildProjectPptx, type PptxScreenSource } from './export-pptx'
 import type { ExportRows } from './export-source'
 import type { ExportJobResult, ExportJobSpec } from './export-worker-protocol'
 import { zipBundle, zipParts } from './export-zip'
-import type { ScreenBatch, ScreenRequest } from './screen-render'
+import type { ScreenBatch, ScreenJob } from './screen-render'
 
 export async function runExportJob(
   spec: ExportJobSpec,
   rows: ExportRows,
-  render: (requests: readonly ScreenRequest[]) => Promise<ScreenBatch>,
+  render: (job: ScreenJob) => Promise<ScreenBatch>,
 ): Promise<ExportJobResult> {
   if (spec.kind === 'html') {
     const bundle = buildProjectBundle(rows)

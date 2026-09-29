@@ -8,7 +8,7 @@ import type { BundleNodeError } from '@wirebound/exporter'
 import type { BrokenLink, ExportedPageSummary } from './export-bundle'
 import type { ScreenFailure } from './export-pptx'
 import type { ExportRows } from './export-source'
-import type { ScreenRequest, ScreenResult } from './screen-render'
+import type { ScreenPage, ScreenResult } from './screen-render'
 
 /**
  * 어떤 산출물을 만들지. `zipRoot`·`zip`이 없으면 **압축하지 않는다** — 미리보기가 그것이다. `screens`가 거짓이면 pptx 의
@@ -69,12 +69,13 @@ export type ToWorker =
   | { t: 'screens-failed'; error: unknown }
 
 /**
- * 워커 → 메인. 그려 달라는 요청도 한 장씩(`screen-request`) 보내고 `render`가 닫는다. `accepted`는 `job`을 받자마자
+ * 워커 → 메인. 그려 달라는 요청도 번들 파일 하나씩(`screen-file`) · 찍을 페이지 하나씩(`screen-page`) 보내고 `render`가 닫는다. `accepted`는 `job`을 받자마자
  * 보낸다 — 메인이 «쉬는 동안 죽어 있던 워커»와 «이 일을 하다 죽은 워커»를 가른다(`export-worker.ts`).
  */
 export type FromWorker =
   | { t: 'accepted' }
-  | { t: 'screen-request'; request: ScreenRequest }
+  | { t: 'screen-file'; path: string; content: string | Uint8Array }
+  | { t: 'screen-page'; page: ScreenPage }
   | { t: 'render' }
   | { t: 'done'; result: ExportJobResult }
   | { t: 'failed'; failure: ExportJobFailure }

@@ -9,7 +9,7 @@ import { ensureCatalog } from '../schema-setup'
 import { EmptyProjectError, UnsupportedDocumentError, type ExportRows } from './export-source'
 import { runExportJob } from './export-job'
 import type { ExportJobFailure, ExportJobSpec, FromWorker, ToWorker } from './export-worker-protocol'
-import type { ScreenBatch, ScreenRequest, ScreenResult } from './screen-render'
+import type { ScreenBatch, ScreenJob, ScreenResult } from './screen-render'
 
 const port = parentPort
 if (port === null) throw new Error('export-worker-thread 는 워커 스레드로만 띄운다(export-worker.ts)')
@@ -31,11 +31,12 @@ function send(message: FromWorker, transfer: ArrayBuffer[] = []): void {
   port!.postMessage(message, transfer)
 }
 
-/** 그려 달라는 요청 — 한 장씩 보내고 `render`로 닫는다(메인의 루프가 큰 메시지 하나를 복제하느라 멈추지 않게). */
-function render(requests: readonly ScreenRequest[]): Promise<ScreenBatch> {
+/** 그려 달라는 요청 — 번들 파일 하나씩 · 찍을 페이지 하나씩 보내고 `render`로 닫는다(메인의 루프가 큰 메시지 하나를 복제하느라 멈추지 않게). */
+function render(job: ScreenJob): Promise<ScreenBatch> {
   return new Promise((resolve, reject) => {
     pendingScreens = { results: [], resolve, reject }
-    for (const request of requests) send({ t: 'screen-request', request })
+    for (const [path, content] of job.files) send({ t: 'screen-file', path, content })
+    for (const page of job.pages) send({ t: 'screen-page', page })
     send({ t: 'render' })
   })
 }

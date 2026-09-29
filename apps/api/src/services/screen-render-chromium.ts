@@ -22,20 +22,22 @@
  * 렌더러는 **던지지 않고 전부 실패로 낸다**(`screen-render.ts`의 「실패는 값이다」). 그래서 배포 형태(`Dockerfile`)를
  * 만들 때는 브라우저를 함께 실어야 한다 — 없으면 pptx 가 화면 없이 나간다.
  *
- * # 무엇을 그리나
+ * # 무엇을 그리나 — 번들의 페이지 그대로
  *
- * `exportPage`가 낸 HTML을 **파일로 쓰지 않고** 그대로 띄우고(`setContent`) 같은 함수가
- * 낸 CSS를 얹는다(`addStyleTag`). 새 HTML을 만들면 화면·번들·PPTX가 세 벌이 되고
- * 설계서 「HTML 정적 번들」의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*가 거짓이 된다.
+ * **HTML 번들의 페이지를 그대로 연다**(`ScreenJob` — `exportBundle` 이 낸 파일 전부). 파일은 쓰지 않고 가짜 origin(`SCREEN_ORIGIN`)에서
+ * 메모리로 내준다(`route.fulfill`). 페이지는 `#wb-screen` 으로 열어 셸을 숨기고(화면 모드), 번들 런타임이 프로젝트 테마로 목업을 그린 뒤
+ * 세우는 `<html data-wb-ready>` 를 **한 장의 한도 안에서** 기다린다 — 테마 적재 · 글꼴 · 첫 렌더가 그 한도에 든다. 런타임이
+ * `data-wb-failed` 를 세웠으면(테마 등록 없음 · 판 불일치 · 뷰가 던짐) 그 까닭으로 그 장을 건너뛴다. 새 HTML 을 만들지 않으므로 화면 ·
+ * 번들 · PPTX 가 한 벌이다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「PPTX」).
  *
  * # 바깥으로 나가는 요청을 막는다
  *
- * 이 자는 받은 HTML 과 시트(`ScreenRequest.css`)를 그대로 띄운다 — 시트의 `@font-face`·`url()`이 가리키는 주소를 서버가 가져오면
- * 시트를 만든 쪽이 적은 주소로 **서버가 요청을 보내는 자리**가 된다. 그래서 라우팅되는 요청을 전부 끊는다 —
+ * 번들에는 관리자가 올린 테마 코드 · CSS 가 실린다 — 그것이 가리키는 바깥 주소(`@font-face` · `url()` · 스크립트의 `fetch`)를 서버가
+ * 가져오면 그 코드를 적은 쪽이 고른 주소로 **서버가 요청을 보내는 자리**가 된다. 그래서 가짜 origin 밖의 요청을 전부 끊는다 —
  * `data:`는 네트워크를 안 타므로 그대로 산다.
  *
- * **대가:** 원격 웹폰트를 든 시트는 대체 글꼴로 그려진다. 지금 내보내기가 싣는 시트는 SDK 기본 뷰의 CSS 뿐이다
- * (`export-pptx.ts` 머리말 「테마를 읽지 않는다」).
+ * **대가:** 원격 웹폰트를 든 시트는 대체 글꼴로 그려진다 — 번들이 오프라인에서도 같게 보이려면 테마가 글꼴을 패키지에 싣는다
+ * (spec 「스킬」 의 금지 사항).
  *
  * # 어디에 상태를 두나
  *
@@ -54,8 +56,9 @@ import {
   type KoreanGlyphSamples,
   type KoreanGlyphVerdict,
   type ScreenBatch,
+  type ScreenJob,
+  type ScreenPage,
   type ScreenRenderer,
-  type ScreenRequest,
   type ScreenResult,
 } from './screen-render'
 
@@ -98,11 +101,20 @@ const FULL_PAGE = true
  */
 export const LEAVE_SIGNALS_TO_SERVER = { handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false } as const
 
+/**
+ * 번들을 내주는 가짜 origin. `.invalid` 는 이름이 풀리지 않는 최상위 도메인이라(RFC 2606) 끊기지 않은 요청이 있어도 어디에도
+ * 닿지 않는다. 이 origin 의 요청은 받은 파일에서 내주고, 그 밖은 끊는다(`newRenderContext`).
+ */
+export const SCREEN_ORIGIN = 'https://export.wirebound.invalid'
+
+/** 화면 모드로 여는 해시 — 번들 런타임이 셸을 숨긴다(`@wirebound/exporter` 의 `SCREEN_HASH`). */
+const SCREEN_HASH = '#wb-screen'
+
 /** 기본값들. `chromiumScreenRenderer`의 인자로 덮을 수 있다. */
 export const SCREEN_DEFAULTS = {
   /** 동시에 여는 페이지 수. 늘려도 얻는 것이 빠르게 줄고 최고 메모리는 그대로 는다. */
   concurrency: 4,
-  /** 한 장을 기다리는 시간. 넘으면 **그 장만** 실패한다. */
+  /** 한 장을 기다리는 시간 — 여는 것 · 테마 적재 · 글꼴 · 첫 렌더 · 재기가 모두 든다. 넘으면 **그 장만** 실패한다. */
   timeoutMs: 10_000,
   /**
    * 그릴 페이지 수의 상한.
@@ -202,7 +214,8 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
   const maxArea = options?.maxArea ?? SCREEN_DEFAULTS.maxArea
 
   return {
-    async render(requests: readonly ScreenRequest[]): Promise<ScreenBatch> {
+    async render(job: ScreenJob): Promise<ScreenBatch> {
+      const requests = job.pages
       if (requests.length === 0) return { results: [], fontWarning: null }
 
       let browser: Browser
@@ -238,7 +251,7 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
            */
           return { results: requests.map(() => failure(korean.reason)), fontWarning: null }
         }
-        return { results: await renderAll(browser, requests, { concurrency, timeoutMs, maxPages, maxArea }), fontWarning: null }
+        return { results: await renderAll(browser, job, { concurrency, timeoutMs, maxPages, maxArea }), fontWarning: null }
       } finally {
         /**
          * **닫는 데 실패해도 다 그린 배치를 잃지 않는다.** 여기서 던지면 그 예외가 `render`
@@ -258,9 +271,10 @@ export function chromiumScreenRenderer(options?: ChromiumScreenRendererOptions):
  */
 async function renderAll(
   browser: Browser,
-  requests: readonly ScreenRequest[],
+  job: ScreenJob,
   limits: { concurrency: number; timeoutMs: number; maxPages: number; maxArea: number },
 ): Promise<ScreenResult[]> {
+  const requests = job.pages
   const results: ScreenResult[] = new Array(requests.length)
   let next = 0
 
@@ -275,7 +289,7 @@ async function renderAll(
         )
         continue
       }
-      results[index] = await renderOne(browser, requests[index]!, limits.timeoutMs, limits.maxArea)
+      results[index] = await renderOne(browser, job.files, requests[index]!, limits.timeoutMs, limits.maxArea)
     }
   }
 
@@ -288,31 +302,38 @@ async function renderAll(
 /** 한 장. **여기서 던지는 것은 전부 값이 된다**(`screen-render.ts`의 「실패는 값이다」). */
 async function renderOne(
   browser: Browser,
-  request: ScreenRequest,
+  files: ScreenJob['files'],
+  request: ScreenPage,
   timeoutMs: number,
   maxArea: number,
 ): Promise<ScreenResult> {
   let context: BrowserContext | undefined
+  // **한 장의 한도 하나를 단계들이 나눠 쓴다** — 단계마다 한도를 새로 주면 한도가 단계 수만큼 곱해진다.
+  const started = Date.now()
+  const left = (): number => Math.max(1, timeoutMs - (Date.now() - started))
   try {
-    context = await newRenderContext(browser, timeoutMs)
+    context = await newRenderContext(browser, timeoutMs, files)
+    // 첫 그림 전에 움직임을 끈다(`FREEZE_MOTION`) — 테마 시트가 늦게 와도 전이가 시작도 안 한다.
+    await context.addInitScript({ content: FREEZE_MOTION_INIT })
     const page = await context.newPage()
-    await page.setContent(request.html, { waitUntil: 'load' })
-    // 테마 시트보다 먼저 얹어 전이가 시작도 안 하게 한다(`FREEZE_MOTION`). 뒤에 얹어도 시작한 전이가 끊겨 끝 값으로 간다 — 잰 값이 같았다.
-    await page.addStyleTag({ content: FREEZE_MOTION })
-    await page.addStyleTag({ content: request.css })
+    await page.goto(`${SCREEN_ORIGIN}/${encodePath(request.path)}${SCREEN_HASH}`, { waitUntil: 'commit', timeout: left() })
+    if (!(await waitReady(page, left()))) return failure(notReady(timeoutMs))
+    // 번들 런타임이 테마를 못 썼다(등록 없음 · 판 불일치 · 뷰가 던짐) — 기본 뷰로 그린 장을 찍지 않고 그 까닭을 낸다.
+    const failed = await page.evaluate<string | null>(`document.documentElement.getAttribute('data-wb-failed')`)
+    if (failed !== null) return failure(failed)
     // **찍기 전에 잰다** — 비트맵을 만드는 것이 비싼 몫이다(`SCREEN_DEFAULTS.maxArea`).
-    const measured = await measure(page, timeoutMs)
-    if (measured === null) return failure(`${SCREEN_FONTS_LATE} — ${timeoutMs}ms`)
+    const measured = await measure(page, left())
+    if (measured === null) return failure(notReady(timeoutMs))
     const [width, height] = measured
     if (width * height > maxArea) return failure(tooLarge(width, height, maxArea))
     /**
      * **잰 크기로 묶어 찍는다.** playwright 는 찍으면서 크기를 다시 재고 그 크기로 비트맵을 만든다 — 잰 뒤에 자라는
-     * 페이지(위 두 겹이 못 닫는 수단)가 상한을 지난 비트맵이 된다. `clip` 이 있으면 그 재기를 `clip` 안으로 자른다.
+     * 페이지(움직임 끄기가 못 닫는 수단)가 상한을 지난 비트맵이 된다. `clip` 이 있으면 그 재기를 `clip` 안으로 자른다.
      */
-    const bytes = await page.screenshot({ type: 'png', fullPage: FULL_PAGE, clip: { x: 0, y: 0, width, height } })
+    const bytes = await page.screenshot({ type: 'png', fullPage: FULL_PAGE, clip: { x: 0, y: 0, width, height }, timeout: left() })
     // **잘린 그림을 내지 않는다** — 묶어 찍은 뒤 자랐으면 그림은 위쪽만이다(`FULL_PAGE`의 판정).
-    const after = await measure(page, timeoutMs)
-    if (after === null) return failure(`${SCREEN_FONTS_LATE} — ${timeoutMs}ms`)
+    const after = await measure(page, left())
+    if (after === null) return failure(notReady(timeoutMs))
     const [afterWidth, afterHeight] = after
     if (afterWidth > width || afterHeight > height) return failure(grew(width, height, afterWidth, afterHeight))
     const size = readPngSize(bytes)
@@ -327,25 +348,78 @@ async function renderOne(
   }
 }
 
+/** 번들 안 경로를 URL 경로로 — 마디마다 인코딩한다(한글 파일 이름). 받는 쪽(`newRenderContext`)이 되돌린다. */
+function encodePath(path: string): string {
+  return path.split('/').map((segment) => encodeURIComponent(segment)).join('/')
+}
+
+/** 준비 신호(`<html data-wb-ready>`)가 한도 안에 섰나. 한도를 넘으면 `false` — 다른 실패는 던진다(부른 쪽이 값으로 바꾼다). */
+async function waitReady(page: Page, timeoutMs: number): Promise<boolean> {
+  try {
+    await page.waitForSelector('html[data-wb-ready]', { state: 'attached', timeout: timeoutMs })
+    return true
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') return false
+    throw error
+  }
+}
+
+/** 확장자 → `Content-Type`. 번들이 싣는 것(HTML · CSS · JS · 패키지 자산의 허용 확장자)만 안다 — 모르는 것은 바이트로 낸다. */
+const CONTENT_TYPES: Record<string, string> = {
+  html: 'text/html; charset=utf-8',
+  css: 'text/css; charset=utf-8',
+  js: 'text/javascript; charset=utf-8',
+  json: 'application/json; charset=utf-8',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+  ttf: 'font/ttf',
+  otf: 'font/otf',
+}
+
+function contentTypeOf(path: string): string {
+  const dot = path.lastIndexOf('.')
+  return (dot === -1 ? undefined : CONTENT_TYPES[path.slice(dot + 1).toLowerCase()]) ?? 'application/octet-stream'
+}
+
 /**
- * 그리는 컨텍스트 하나. **바깥으로 나가는 요청을 끊는다**(위 머리말).
+ * 그리는 컨텍스트 하나. **가짜 origin 의 요청은 받은 파일에서 내주고, 그 밖은 끊는다**(위 머리말). 없는 파일은 404 로 답한다 — 끊지
+ * 않아야 `<link>` · `<script>` 가 곧바로 `error` 를 내 번들 런타임이 기다리지 않는다.
  *
  * **페이지가 아니라 컨텍스트에 건다.** `page.route`는 **그 페이지 하나**에만 걸리므로
  * `window.open`이 만드는 새 페이지가 규칙 밖으로 나간다 — 그 새 페이지의 요청은 실제로
- * 바깥에 닿는다.
- *
- * **지금 `exportPage`가 `<script>`를 안 내므로 도달할 길이 없다는 것도 값이다**
- * (`test/export-pptx-screens.test.ts`가 그것을 센다). 그래도 컨텍스트로 올린 이유는
- * *"지금 도달 불가"*가 **산문**이면 `exportPage`가 바뀔 때 조용히 열리기 때문이다.
+ * 바깥에 닿는다. 번들에는 테마 스크립트가 실리므로 그 길이 열려 있다(`build-test/screen-chromium.test.ts` 「일곱 길」).
  */
-async function newRenderContext(browser: Browser, timeoutMs: number): Promise<BrowserContext> {
+async function newRenderContext(browser: Browser, timeoutMs: number, files: ScreenJob['files'] = new Map()): Promise<BrowserContext> {
   const context = await browser.newContext({
     viewport: VIEWPORT,
     deviceScaleFactor: DEVICE_SCALE_FACTOR,
   })
   context.setDefaultTimeout(timeoutMs)
   await context.route('**/*', (route) => {
-    void route.abort()
+    const url = new URL(route.request().url())
+    if (url.origin !== SCREEN_ORIGIN) {
+      void route.abort()
+      return
+    }
+    let body: string | Uint8Array | undefined
+    let path = ''
+    try {
+      path = decodeURIComponent(url.pathname.slice(1))
+      body = files.get(path)
+    } catch {
+      body = undefined
+    }
+    if (body === undefined) {
+      void route.fulfill({ status: 404, body: '' })
+      return
+    }
+    void route.fulfill({ status: 200, contentType: contentTypeOf(path), body: typeof body === 'string' ? body : Buffer.from(body) })
   })
   return context
 }
@@ -372,12 +446,12 @@ async function probeKoreanGlyphs(browser: Browser, timeoutMs: number): Promise<K
 }
 
 /**
- * **움직임을 끈다 — 잰 크기와 찍는 크기가 같은 상태를 보게.** 테마 시트는 HTML 을 띄운 **뒤에** 얹으므로 테마의
- * `transition` 은 기본값에서 테마 값으로 옮겨 가는 전이를 시작한다. 그 사이에 재면 작게 재고 크게 찍는다(여백 20000px 을
- * 전이로 건 파생 테마가 상한의 4.9배 비트맵을 냈다 — 운영 compose 의 api 컨테이너에서 한 장에 cgroup 최고 2GB 안팎) — 시스템 테마도
- * 단추에 `transition` 을 걸어 그림이 옮겨 가는 중간에 찍혔다. 다시 재는 법: `build-test/screen-chromium.test.ts` 「잰 크기와 찍는
- * 크기」(끄기 · 층 · 글꼴 기다림 · 묶어 찍기 · 찍은 뒤 다시 재기를 하나씩 떼면 거기 케이스가 죽는다) · 최상위 README
- * 「화면 그리기 상한」의 잰 값.
+ * **움직임을 끈다 — 잰 크기와 찍는 크기가 같은 상태를 보게.** 테마의 `transition` 은 시트가 늦게 실리거나 번들 런타임이 다시 그릴 때
+ * 옛 값에서 새 값으로 옮겨 가는 전이를 시작한다. 그 사이에 재면 작게 재고 크게 찍는다(여백 20000px 을 전이로 건 파생 테마가 상한의
+ * 4.9배 비트맵을 냈다 — 운영 compose 의 api 컨테이너에서 한 장에 cgroup 최고 2GB 안팎) — 시스템 테마도 단추에 `transition` 을 걸어
+ * 그림이 옮겨 가는 중간에 찍혔다. **첫 그림 전에 건다**(초기화 스크립트 · `FREEZE_MOTION_INIT`). 다시 재는 법:
+ * `build-test/screen-chromium.test.ts` 「잰 크기와 찍는 크기」(끄기 · 층 · 글꼴 기다림 · 묶어 찍기 · 찍은 뒤 다시 재기를 하나씩 떼면
+ * 거기 케이스가 죽는다) · 최상위 README 「화면 그리기 상한」의 잰 값.
  *
  * **층(`@layer`)에 둔다** — 층 안의 `!important` 는 층 밖의 `!important` 를 특이도와 상관없이 이긴다. 테마 값은 `!important` 를
  * 실을 수 있고(컴파일이 받는다) 그 셀렉터가 `*` 보다 구체적이라, 층 없이 두면 테마가 이 끄기를 이긴다.
@@ -386,8 +460,19 @@ export const FREEZE_MOTION =
   '@layer wb-freeze-motion { *, *::before, *::after { transition: none !important; animation: none !important } }'
 
 /**
+ * `FREEZE_MOTION` 을 문서가 서자마자 싣는 초기화 스크립트. **`<style>` 을 끼우지 않고 문서가 채택한 시트로 둔다** — 초기화 스크립트가
+ * 도는 때는 아직 `<html>` 이 없을 수 있고, 채택한 시트는 DOM 이 서기 전에도 걸리며 페이지가 머리를 다시 짜도 남는다. 글자로 넘기는
+ * 까닭은 `KOREAN_GLYPH_PROBE`와 같다.
+ */
+const FREEZE_MOTION_INIT = `(() => {
+  const sheet = new CSSStyleSheet()
+  sheet.replaceSync(${JSON.stringify(FREEZE_MOTION)})
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]
+})()`
+
+/**
  * 화면 전체의 크기(CSS px) — playwright 가 `fullPage` 로 찍을 때 재는 식(`body`·`documentElement` 의 scroll · offset · client
- * 최대)과 같다. **글꼴을 기다린 뒤 잰다** — 테마의 `@font-face` 는 시트를 얹은 뒤에야 받기 시작하고 playwright 도 찍기 전에
+ * 최대)과 같다. **글꼴을 기다린 뒤 잰다** — 테마의 `@font-face` 는 그 글꼴을 쓰는 레이아웃이 선 뒤에야 받기 시작하고 playwright 도 찍기 전에
  * `document.fonts.ready` 를 기다린다(세로 지표가 큰 글꼴이 오기 전에 재면 작게 잰다). 먼저 레이아웃을 세워야 쓰이는 글꼴의 받기가
  * 시작된다. 글자로 넘기는 까닭은 `KOREAN_GLYPH_PROBE`와 같다.
  */
@@ -440,8 +525,12 @@ export function grew(width: number, height: number, afterWidth: number, afterHei
   return `${SCREEN_GREW} — ${width}×${height}px 에서 ${afterWidth}×${afterHeight}px`
 }
 
-/** 글꼴을 기다리다 한도를 넘은 장의 이유 머리. 뒤에 한도를 붙인다(`measure`). */
-export const SCREEN_FONTS_LATE = '글꼴을 기다리다 한 장의 한도를 넘어 화면을 그리지 않았습니다'
+/** 한 장의 한도 안에 준비되지 않은 장(테마 적재 · 글꼴 · 첫 렌더 · 재기)의 이유 머리. 뒤에 한도를 붙인다(`notReady`). */
+export const SCREEN_NOT_READY = '한 장의 한도 안에 준비되지 않았습니다'
+
+function notReady(timeoutMs: number): string {
+  return `${SCREEN_NOT_READY} — ${timeoutMs}ms`
+}
 
 /** 잰 뒤에 자란 장의 이유 머리. */
 export const SCREEN_GREW = '페이지가 그리는 동안 커져 화면을 그리지 않았습니다'

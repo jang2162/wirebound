@@ -35,6 +35,7 @@ import {
   type BundleFile,
   type BundleNodeError,
   type BundlePage,
+  type ExportedBundle,
 } from '@wirebound/exporter'
 import {
   duplicateTargets,
@@ -45,7 +46,7 @@ import {
 } from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
 import { readExportRuntime } from './export-runtime'
-import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
+import { assembleExportSource, readExportRows, type ExportRows, type ExportSource } from './export-source'
 
 /**
  * **도메인 에러 둘을 `export-source`가 소유한다.** 두 내보내기가 같은 수집을
@@ -112,7 +113,30 @@ export async function exportProjectBundle(db: DbHandle, projectId: string): Prom
 
 /** 읽은 행으로 번들을 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다. */
 export function buildProjectBundle(rows: ExportRows): ProjectBundle {
-  const { ordered, documentById, commentsById, descriptionById } = assembleExportSource(rows)
+  const source = assembleExportSource(rows)
+  const { ordered, documentById } = source
+  const { files, errors } = projectBundle(rows, source)
+
+  return {
+    files,
+    errors,
+    // **`bundleTitle`이다.** 맨 제목을 내면 화면의 페이지 목록이 `목록`·`목록`으로 보인다 —
+    // 번들의 좌측 트리가 조상을 붙여 피하는 것과 같은 결함이고, 여기는 `errors[].title`(늘 번들 이름)과
+    // 같은 응답이라 두 벌이 되기까지 한다.
+    pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
+    duplicateTargets: duplicateTargets(ordered),
+    brokenLinks: brokenLinks(ordered, documentById),
+    themeId: rows.theme === null ? null : `${rows.theme.ref.themeId}@${rows.theme.ref.version}`,
+    themeWarning: rows.themeWarning,
+  }
+}
+
+/**
+ * 조립한 수집 → **번들 그 자체**. HTML 번들과 PPTX 화면이 이 함수 하나를 지난다 — PPTX 의 그리는 자가 이 번들의 페이지를
+ * 그대로 연다(`export-pptx.ts`). 두 벌을 두면 화면에 찍힌 것과 내려받은 번들이 갈린다.
+ */
+export function projectBundle(rows: ExportRows, source: ExportSource): ExportedBundle {
+  const { ordered, documentById, commentsById, descriptionById } = source
 
   const bundlePages: BundlePage[] = ordered.map((page) => ({
     /**
@@ -128,20 +152,7 @@ export function buildProjectBundle(rows: ExportRows): ProjectBundle {
     target: page.target,
   }))
 
-  const { files, errors } = exportBundle({ pages: bundlePages, runtimeJs: readExportRuntime(), theme: rows.theme })
-
-  return {
-    files,
-    errors,
-    // **`bundleTitle`이다.** 맨 제목을 내면 화면의 페이지 목록이 `목록`·`목록`으로 보인다 —
-    // 번들의 좌측 트리가 조상을 붙여 피하는 것과 같은 결함이고, 여기는 `errors[].title`(늘 번들 이름)과
-    // 같은 응답이라 두 벌이 되기까지 한다.
-    pages: ordered.map((page) => ({ id: page.id, title: page.bundleTitle, target: page.target })),
-    duplicateTargets: duplicateTargets(ordered),
-    brokenLinks: brokenLinks(ordered, documentById),
-    themeId: rows.theme === null ? null : `${rows.theme.ref.themeId}@${rows.theme.ref.version}`,
-    themeWarning: rows.themeWarning,
-  }
+  return exportBundle({ pages: bundlePages, runtimeJs: readExportRuntime(), theme: rows.theme })
 }
 
 /**

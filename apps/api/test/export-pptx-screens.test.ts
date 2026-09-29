@@ -16,7 +16,7 @@ import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import { SCREEN_FAILURES_HEADER, SCREENLESS_HEADER } from '../src/routes/export'
 import { SCREEN_PATH_FAILED } from '../src/services/export-pptx'
-import { NO_KOREAN_FONT, type ScreenBatch, type ScreenRenderer, type ScreenRequest, type ScreenResult } from '../src/services/screen-render'
+import { NO_KOREAN_FONT, type ScreenBatch, type ScreenJob, type ScreenRenderer, type ScreenResult } from '../src/services/screen-render'
 import { createMenuNode, createPage, createProject, signup, withApi, type TestContext } from './helpers'
 
 /** 진짜 1×1 PNG 바이트. `packages/exporter/test/pptx.test.ts`가 같은 것을 든다. */
@@ -29,23 +29,23 @@ const PNG_1X1 = Uint8Array.from([
 ])
 
 /**
- * **케이스가 쓰는 가짜 그리는 자.** 받은 요청을 그대로 들고 있어서 *"무엇을 넘겼나"*를
- * 잴 수 있다 — *"`exportPage`가 낸 HTML을 그대로 띄운다"*를 지키는 자가 그것이다.
+ * **케이스가 쓰는 가짜 그리는 자.** 받은 번들을 그대로 들고 있어서 *"무엇을 넘겼나"*를
+ * 잴 수 있다 — *"HTML 번들의 페이지를 그대로 연다"*를 지키는 자가 그것이다.
  */
 class FakeRenderer implements ScreenRenderer {
-  readonly seen: ScreenRequest[][] = []
+  readonly seen: ScreenJob[] = []
 
   constructor(
-    private readonly reply: (requests: readonly ScreenRequest[]) => ScreenBatch,
+    private readonly reply: (requests: ScreenJob['pages']) => ScreenBatch,
   ) {}
 
-  async render(requests: readonly ScreenRequest[]): Promise<ScreenBatch> {
-    this.seen.push([...requests])
-    return this.reply(requests)
+  async render(job: ScreenJob): Promise<ScreenBatch> {
+    this.seen.push(job)
+    return this.reply(job.pages)
   }
 
-  /** 마지막 배치가 받은 요청들. */
-  get last(): ScreenRequest[] {
+  /** 마지막 배치가 받은 번들. */
+  get last(): ScreenJob {
     const found = this.seen[this.seen.length - 1]
     if (!found) throw new Error('그리는 자가 한 번도 안 불렸습니다')
     return found
@@ -405,32 +405,43 @@ describe('못 읽은 화소를 계약에 넣지 않는다', () => {
 })
 
 describe('무엇을 그리라고 넘기나', () => {
-  it('`exportPage` 가 낸 한 장을 그대로 넘긴다 — 새 HTML 을 만들지 않는다', async () => {
+  /** HTML 내려받기의 zip — 번들 뿌리 기준 경로 → 바이트. */
+  async function htmlZip(ctx: TestContext, fixture: Fixture): Promise<Map<string, Uint8Array>> {
+    const res = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export`, cookies: fixture.cookie })
+    if (res.statusCode !== 200) throw new Error(`내려받기 실패 (${res.statusCode}): ${res.body}`)
+    return new Map(Object.entries(unzipSync(new Uint8Array(res.rawPayload))).map(([name, bytes]) => [name.slice(name.indexOf('/') + 1), bytes]))
+  }
+
+  /**
+   * **HTML 번들을 그대로 넘긴다 — 새 HTML 을 만들지 않는다.** 넘긴 파일이 같은 프로젝트를 HTML 로 내려받은 zip 의 파일과 경로 · 바이트로
+   * 같고, 찍을 페이지는 번들의 페이지 파일이다(그 파일의 페이지 JSON 이 그 제목을 든다). 그리는 자가 그 페이지를 연다
+   * (`screen-render-chromium.ts` 머리말).
+   */
+  it('HTML 번들의 파일 그대로와 페이지 경로를 넘긴다', async () => {
     const renderer = allOk()
     await withApi(
       async (ctx) => {
         const fixture = await 설계서(ctx, 'screens-input')
         await download(ctx, fixture)
+        const job = renderer.last
+        const zip = await htmlZip(ctx, fixture)
 
-        const requests = renderer.last
-        expect(requests.map((request) => request.title)).toEqual(fixture.titles)
-        for (const request of requests) {
-          expect(request.html.startsWith('<!doctype html>')).toBe(true)
-          expect(request.html).toContain('<html lang="ko">')
-          // 제목은 `exportPage`가 `<title>`에 싣는다 — **번들 이름 그대로다.**
-          expect(request.html).toContain(`<title>${request.title}</title>`)
-          // CSS 는 따로 온다(`exportPage`의 계약) — HTML 안에 시트가 없다.
-          expect(request.html).not.toContain('<style')
-          expect(request.css.length).toBeGreaterThan(0)
-          /**
-           * **`<script>`가 없다는 것이 값이어야 한다.** *"팝업으로 나갈 길이 없다"*의 근거가
-           * **산문이면 `exportPage`가 바뀌는 날 조용히 열린다.** 차단은 컨텍스트에
-           * 있고(`screen-render-chromium.ts`), 이 줄은 그 위의 두 번째 방벽이다.
-           */
-          expect(request.html).not.toContain('<script')
+        const encoder = new TextEncoder()
+        const bytesOf = (content: string | Uint8Array): number[] => [...(typeof content === 'string' ? encoder.encode(content) : content)]
+        expect([...job.files.keys()]).toEqual([...zip.keys()])
+        for (const [path, content] of job.files) expect(bytesOf(content), path).toEqual([...zip.get(path)!])
+
+        expect(job.pages.map((page) => page.title)).toEqual(fixture.titles)
+        for (const page of job.pages) {
+          expect(page.path.startsWith('pages/') && page.path.endsWith('.html'), page.path).toBe(true)
+          const html = String(job.files.get(page.path))
+          expect(html, page.path).toContain(`<title>${page.title}</title>`)
+          expect(html, page.path).toContain('id="wb-export-page"')
         }
-        // 페이지 문서가 실제로 그려졌다 — 버튼의 글자가 HTML 에 있다.
-        expect(requests[0]!.html).toContain('대시보드 버튼')
+        // 카나리아 — 넘긴 번들에 페이지 문서 · 런타임 · 프로젝트 테마가 실제로 든다.
+        expect(String(job.files.get(job.pages[0]!.path))).toContain('대시보드 버튼')
+        expect(job.files.has('assets/runtime.js')).toBe(true)
+        expect(job.files.has('assets/theme/theme.js')).toBe(true)
       },
       { screenRenderer: renderer },
     )
@@ -445,25 +456,26 @@ describe('무엇을 그리라고 넘기나', () => {
         await download(ctx, fixture)
 
         expect(renderer.seen).toHaveLength(2)
-        expect(renderer.seen[0]!.map((request) => request.html)).toEqual(
-          renderer.seen[1]!.map((request) => request.html),
-        )
+        expect(renderer.seen[0]).toEqual(renderer.seen[1])
       },
       { screenRenderer: renderer },
     )
   })
 
   /**
-   * **그리는 입력의 시트는 SDK 기본 뷰 CSS 다** — api 는 테마 코드를 싣지 않아 화면은 번들과 같은 와이어프레임이다
-   * (`services/export-pptx.ts` 머리말 「테마를 읽지 않는다」). 기본 뷰 CSS 만 내는 선언(`--wb-node-grid-columns`)으로 잰다.
+   * **그리는 입력은 프로젝트 테마를 실은 번들이다** — 새 프로젝트는 system-admin 에 고정돼 선다. 기본 뷰 CSS(`--wb-node-grid-columns`) ·
+   * 테마 시트 · 토큰 시트가 다 든다.
    */
-  it('기본 뷰 CSS 가 그리는 입력으로 들어간다 — 시트가 빈 문자열이 아니다', async () => {
+  it('기본 뷰 CSS · 테마 · 토큰 시트가 그리는 입력에 든다', async () => {
     const renderer = allOk()
     await withApi(
       async (ctx) => {
         const fixture = await 설계서(ctx, 'screens-theme')
         await download(ctx, fixture)
-        expect(renderer.last[0]!.css).toContain('--wb-node-grid-columns')
+        const files = renderer.last.files
+        expect(String(files.get('assets/views.css'))).toContain('--wb-node-grid-columns')
+        expect(files.has('assets/theme/theme.css')).toBe(true)
+        expect(files.has('assets/tokens.css')).toBe(true)
       },
       { screenRenderer: renderer },
     )

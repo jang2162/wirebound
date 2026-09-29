@@ -1,9 +1,6 @@
 export const PACKAGE_NAME = '@wirebound/exporter'
 
-export type { ExportPageOptions, ExportedPage } from './page'
-export { exportPage } from './page'
-
-// 설계서 「HTML 정적 번들」. `exportPage`가 페이지 한 장이고 이것이 그 위의 파일 트리다.
+// 설계서 「HTML 정적 번들」 — 페이지마다 셸을 든 파일 트리. 목업은 번들 런타임이 브라우저에서 그린다.
 export type {
   BundleComment,
   BundleFile,

@@ -86,7 +86,7 @@
  *
  * | 작은 것을 넣은 때 | 칸이 하나일 때 | 칸이 둘일 때 | 같은 스레드일 때 |
  * |---|---|---|---|
- * | 1.5s — 큰 둘이 아직 CPU 몫(`exportPage` × 72)을 도는 중 | 7.4s(큰 둘이 끝날 때 같이 끝남) | 1.4–1.7s(큰 둘이 그리기로 넘어가 칸을 내놓을 때까지) | 2.0s(루프 멈춤) |
+ * | 1.5s — 큰 둘이 아직 CPU 몫(72 장을 짓는 것)을 도는 중 | 7.4s(큰 둘이 끝날 때 같이 끝남) | 1.4–1.7s(큰 둘이 그리기로 넘어가 칸을 내놓을 때까지) | 2.0s(루프 멈춤) |
  * | 4.5s — 큰 둘이 그리는 중 | 4.9–5.1s | 54–665ms(첫 번은 셋째 워커를 띄우는 비용) | — |
  *
  * # 줄은 길이로 묶는다
@@ -190,7 +190,7 @@ import type {
   PptxJobResult,
   ToWorker,
 } from './export-worker-protocol'
-import { errorLine, type ScreenBatch, type ScreenRequest } from './screen-render'
+import { errorLine, type ScreenBatch, type ScreenJob, type ScreenPage } from './screen-render'
 
 /** CPU 칸 수 — 머리말의 표. 코어가 하나뿐인 기계에서는 하나다. */
 export const EXPORT_WORKER_LIMIT = Math.max(1, Math.min(2, availableParallelism() - 1))
@@ -265,7 +265,7 @@ export interface ExportRunOptions {
   /** 끊기면 일을 버린다 — 머리말의 표. */
   signal?: AbortSignal
   /** pptx 의 화면을 그리는 자. 워커가 부르면 메인에서 돈다(브라우저를 메인이 쥔다). */
-  render?: (requests: readonly ScreenRequest[]) => Promise<ScreenBatch>
+  render?: (job: ScreenJob) => Promise<ScreenBatch>
   /** 먼저 잡아 둔 자리(`admit`). 없으면 여기서 잡는다 — 넘치면 `ExportBusyError`. 일이 끝나면 풀이 내놓는다. */
   admission?: ExportAdmission
 }
@@ -636,7 +636,8 @@ export class ExportWorkerPool {
     // 이 일이 끝났다(답 · 실패 · 끊김 · 죽음) — 칸을 기다리던 그리기 뒤처리도 이것으로 멈춘다.
     const ended = new AbortController()
     return new Promise<ExportJobResult>((resolve, reject) => {
-      const requests: ScreenRequest[] = []
+      const files = new Map<string, string | Uint8Array>()
+      const pages: ScreenPage[] = []
       /** 워커가 이 일을 받았다고 답했다 — 그 전의 죽음은 쉬는 동안의 죽음이다(머리말 «쉬는 동안 죽은 워커»). */
       let accepted = false
       /** 워커가 이미 그려 달라고 했다 — 그리기는 일마다 한 번이다(`renderFor`). */
@@ -670,8 +671,11 @@ export class ExportWorkerPool {
           case 'accepted':
             accepted = true
             return
-          case 'screen-request':
-            requests.push(message.request)
+          case 'screen-file':
+            files.set(message.path, message.content)
+            return
+          case 'screen-page':
+            pages.push(message.page)
             return
           case 'render':
             // **둘째 부탁은 받지 않는다** — 칸은 한 번 그릴 몫만 얻어 두었다(`run`). 받으면 그리기 칸을 하나 더 얻고, 이미
@@ -684,7 +688,7 @@ export class ExportWorkerPool {
               return
             }
             asked = true
-            void this.renderFor(worker, job, requests.splice(0), options?.render, ended.signal)
+            void this.renderFor(worker, job, { files, pages }, options?.render, ended.signal)
             return
           case 'done':
             finish(() => resolve(message.result))
@@ -745,7 +749,7 @@ export class ExportWorkerPool {
   private async renderFor(
     worker: Worker,
     job: Job,
-    requests: ScreenRequest[],
+    screenJob: ScreenJob,
     render: ExportRunOptions['render'],
     ended: AbortSignal,
   ): Promise<void> {
@@ -765,7 +769,7 @@ export class ExportWorkerPool {
     let batch: ScreenBatch | null = null
     let failure: unknown = null
     try {
-      batch = await render(requests)
+      batch = await render(screenJob)
     } catch (error) {
       failure = error
     } finally {

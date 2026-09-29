@@ -11,14 +11,15 @@
  * 둘 다 `readExportRows` → `assembleExportSource`를 지난다(`export-source.ts`). 그래야 **같은 프로젝트를 같은 순서로 같은
  * 이름으로** 싣는다 — 두 파일을 나란히 열어 본 사람에게만 보이는 갈림을 막는 자리다.
  *
- * # 테마를 읽지 않는다
+ * # 화면은 번들의 페이지다 — 테마는 거기서 온다
  *
  * **테마를 OOXML 색으로는 옮기지 않는다** — 설계서 「명시적으로 제외한 것 (YAGNI)」이 도형 변환을
  * 포기했으므로 `a:clrScheme`으로 옮길 이유가 없다.
  *
- * **화면을 그리는 입력으로도 테마를 싣지 않는다** — api 는 테마 코드를 싣지 않아(spec
- * `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「내보내기와 PPTX」) 화면은 번들과 같은 SDK 기본 뷰와 그 CSS 로
- * 그린 와이어프레임이다(`export-bundle.ts` 머리말).
+ * **화면은 HTML 번들의 페이지 그대로다** — 같은 번들(`projectBundle` — 프로젝트 테마의 패키지 · 토큰을 싣는다)을 지어 그 파일과
+ * 페이지 경로를 그리는 자에게 넘기고, 그리는 자가 브라우저로 열어 번들 런타임이 그린 목업을 찍는다(spec
+ * `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「PPTX」). api 는 테마 코드를 실행하지 않는다 — 브라우저가 돌린다.
+ * 테마를 못 쓴 장(등록 없음 · 뷰가 던짐)은 찍지 않고 까닭이 `screenFailures` 에 간다.
  *
  * # 그리는 것은 이음매 뒤다
  *
@@ -39,15 +40,16 @@
  * 둘이고, 이유가 있는 쪽을 덜어 낸 나머지가 `screenless`다. 한 값에 접으면 화면이
  * *"아직 안 만들었다"*와 *"만들려다 실패했다"*를 같은 말로 하게 된다.
  */
-import { exportPage, exportPptx, type PptxPage, type PptxPart, type PptxScreen } from '@wirebound/exporter'
+import { exportPptx, type PptxPage, type PptxPart, type PptxScreen } from '@wirebound/exporter'
 import type { DbHandle } from '../db/tx'
+import { projectBundle } from './export-bundle'
 import { assembleExportSource, readExportRows, type ExportRows } from './export-source'
 import {
   errorLine,
   screenFileName,
   type ScreenBatch,
+  type ScreenJob,
   type ScreenRenderer,
-  type ScreenRequest,
 } from './screen-render'
 
 /** 화면 이미지를 못 그린 페이지 하나와 그 이유(머리말 「`screenless`와 실패를 가른다」). */
@@ -97,7 +99,7 @@ export async function exportProjectPptx(
   const rows = await readExportRows(db, projectId)
   const renderer = options?.renderer
   const screens: PptxScreenSource | undefined =
-    renderer === undefined ? undefined : { render: (requests) => renderer.render(requests) }
+    renderer === undefined ? undefined : { render: (job) => renderer.render(job) }
   return buildProjectPptx(rows, screens)
 }
 
@@ -106,7 +108,7 @@ export async function exportProjectPptx(
  * (`export-worker-thread.ts`).
  */
 export interface PptxScreenSource {
-  render(requests: readonly ScreenRequest[]): Promise<ScreenBatch>
+  render(job: ScreenJob): Promise<ScreenBatch>
 }
 
 /** 읽은 행으로 pptx 를 조립한다. **DB 를 모른다** — 워커에서도 같은 스레드에서도 이 함수 하나다. */
@@ -114,7 +116,8 @@ export async function buildProjectPptx(
   rows: ExportRows,
   screenSource: PptxScreenSource | undefined,
 ): Promise<ProjectPptx> {
-  const { ordered, documentById, commentsById, descriptionById } = assembleExportSource(rows)
+  const source = assembleExportSource(rows)
+  const { ordered, documentById, commentsById, descriptionById } = source
 
   const pages: PptxPage[] = ordered.map((page) => ({
     /** **번들과 같은 이름이다**(`bundleTitle` — 조상 메뉴가 붙어 있다). */
@@ -124,7 +127,15 @@ export async function buildProjectPptx(
     comments: commentsById.get(page.id) ?? [],
   }))
 
-  const { screens, failures, fontWarning } = await drawScreens(pages, screenSource)
+  // 번들은 그릴 때만 짓는다(`drawScreens` 가 부른다) — 화면 없는 pptx 는 부르지 않는다.
+  const { screens, failures, fontWarning } = await drawScreens(pages, screenSource, () => {
+    const bundle = projectBundle(rows, source)
+    return {
+      files: new Map(bundle.files.map((file) => [file.path, file.content])),
+      // 번들의 페이지 경로는 `pages` 와 같은 순서다(`ExportedBundle.pagePaths`) — 두 산출물이 같은 순회(`ordered`)를 지난다.
+      pages: pages.map((page, index) => ({ title: page.title, path: bundle.pagePaths[index]! })),
+    }
+  })
 
   const { parts, screenless } = exportPptx({
     pages: pages.map((page, index) => ({ ...page, screen: screens[index] ?? null })),
@@ -152,7 +163,7 @@ interface DrawnScreens {
  * 페이지들의 화면 이미지를 그린다. **이 함수는 던지지 않는다** — 머리말 「`screenless`와 실패를 가른다」가 규율이 아니라
  * **구조**가 되는 자리다.
  *
- * **`exportPage`가 낸 HTML을 그대로 넘긴다** — 새 HTML을 만들면 화면·번들·PPTX가
+ * **HTML 번들을 그대로 넘긴다**(`job` — 파일 전부와 찍을 페이지 경로) — 새 HTML을 만들면 화면·번들·PPTX가
  * 세 벌이 되고 설계서 「HTML 정적 번들」의 *"렌더러가 하나뿐이라 결과가 어긋날 수 없다"*가 거짓이 된다.
  *
  * **화소가 0이면 그린 것으로 치지 않는다**. 이음매가 이미 걸러 내지만 여기서 한 번 더
@@ -170,16 +181,16 @@ interface DrawnScreens {
  *
  * | 자리 | 화면 없는 pptx 도 부르나 |
  * |---|---|
- * | `exportPage` | **안 부른다** — 그리지 않으므로 부를 일이 없다 |
+ * | 그릴 것을 모으는 `job()`(번들 파일의 표) | **안 부른다** — 그리지 않으므로 부를 일이 없다 |
  * | `renderer.render` | **안 부른다** — 이음매의 타입은 *"던지지 않는다"*를 강제하지 못한다 |
  *
  * **한 덩어리로 감싼다 — 자리마다 나누지 않는다.** 나누면 갈래마다 이유가 달라져 보기에
- * 좋지만 **그 갈래를 재는 자를 못 만든다**(이 저장소에서 `exportPage`를
+ * 좋지만 **그 갈래를 재는 자를 못 만든다**(이 저장소에서 `job()`을
  * 던지게 만드는 길이 라우트 밖에 없다). **재지 못하는 갈래를 늘리지 않는 것이 이 저장소의
  * 결이다** — 대신 둘 다 *"화면을 그리지 못했습니다"* 하나로 모이고, 그 하나를
  * `export-pptx-screens.test.ts`가 죽인다.
  *
- * **대가를 적는다:** 한 페이지의 `exportPage`가 죽으면 **그 배치의 화면이 전부 빠진다.**
+ * **대가를 적는다:** 그릴 것을 모으다 죽으면 **그 배치의 화면이 전부 빠진다.**
  * pptx 는 그래도 나온다 — 그것이 머리말 「`screenless`와 실패를 가른다」가 지키려는 것이다.
  *
  * **수집(`readExportRows` · `assembleExportSource`)은 여기 없다** — 화면과 무관하게 pptx 를 만드는 자리이고 도메인 에러를
@@ -188,17 +199,14 @@ interface DrawnScreens {
 async function drawScreens(
   pages: readonly PptxPage[],
   source: PptxScreenSource | undefined,
+  job: () => ScreenJob,
 ): Promise<DrawnScreens> {
   const empty: DrawnScreens = { screens: pages.map(() => null), failures: [], fontWarning: null }
   if (source === undefined || pages.length === 0) return empty
 
   let batch: ScreenBatch
   try {
-    const requests: ScreenRequest[] = pages.map((page) => {
-      const rendered = exportPage({ document: page.document, title: page.title })
-      return { title: page.title, html: rendered.html, css: rendered.css }
-    })
-    batch = await source.render(requests)
+    batch = await source.render(job())
   } catch (error) {
     // **그리는 길이 던졌다.** 화면은 전부 잃지만 **pptx 는 나온다**.
     return allFailed(pages, `${SCREEN_PATH_FAILED}: ${errorLine(error)}`)

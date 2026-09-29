@@ -3,7 +3,8 @@
  *
  * `pnpm test`는 이음매(`src/services/screen-render.ts`)에 가짜를 넣어 재고, **여기서 한 번은
  * 진짜로 그린다** — 안 재면 그 이음매의 계약(PNG 형식 · 바이트에서 읽은 화소 · pptx 에 실리는
- * 자리)이 맞는지 아무도 모른다.
+ * 자리)이 맞는지 아무도 모른다. 넘기는 것은 HTML 번들 그대로이고(`screen-jobs.ts` 의 `bundled` — 런타임은 저장소 빌드가 지은
+ * `@wirebound/exporter/runtime.js`), 그리는 자가 그 페이지를 열어 번들 런타임이 프로젝트 테마로 그린 목업을 찍는다.
  *
  * ---
  *
@@ -26,25 +27,29 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { fileURLToPath } from 'node:url'
-import { exportPptx, exportPage, type PptxScreen } from '@wirebound/exporter'
+import { exportBundle, exportPptx, type PptxScreen } from '@wirebound/exporter'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
-import { chromium, type Page } from 'playwright-core'
+import { chromium, type Page, type Route } from 'playwright-core'
 import { describe, expect, it } from 'vitest'
 import {
   chromiumScreenRenderer,
   KOREAN_GLYPH_PROBE,
   SCREEN_DEFAULTS,
-  SCREEN_FONTS_LATE,
   SCREEN_GREW,
+  SCREEN_NOT_READY,
+  SCREEN_ORIGIN,
   SCREEN_TOO_LARGE,
 } from '../src/services/screen-render-chromium'
+import { readExportRuntime } from '../src/services/export-runtime'
 import {
   decideKoreanGlyphs,
   readPngSize,
   type KoreanGlyphSamples,
-  type ScreenRequest,
+  type ScreenJob,
 } from '../src/services/screen-render'
+import { builtSample } from '../test/theme-fixtures'
 import { readApiEnvFile } from '../test/test-database-url'
+import { bundled, countColor, inlineTheme, jobOf, packageTheme, raw, type Entry } from './screen-jobs'
 
 installCatalog()
 
@@ -127,11 +132,14 @@ function doc(index: number, rows: number): PageDocument {
   } as unknown as PageDocument
 }
 
-/** 한 장의 요청. `themeCss` 는 기본 뷰 CSS 뒤에 얹힌다(`exportPage`) — 테마 CSS 가 화면에 닿는 판을 세울 때 준다. */
-function requestFor(index: number, rows: number, themeCss?: string): ScreenRequest {
-  const title = `관리자 회원 목록${index}`
-  const rendered = exportPage({ document: doc(index, rows), title, ...(themeCss === undefined ? {} : { themeCss }) })
-  return { title, html: rendered.html, css: rendered.css }
+/** 번들 한 장. `themeCss` 를 주면 그 CSS 를 `theme.css` 로 싣는 작은 테마로 그린다 — 테마 CSS 가 화면에 닿는 판을 세울 때 준다. */
+function requestFor(index: number, rows: number, themeCss?: string): Entry {
+  return bundled(`관리자 회원 목록${index}`, doc(index, rows), themeCss === undefined ? null : inlineTheme({ themeCss }))
+}
+
+/** 장들을 그린다(`jobOf`). */
+function draw(entries: Entry[], options: Parameters<typeof chromiumScreenRenderer>[0] = {}) {
+  return renderer(options).render(jobOf(...entries))
 }
 
 describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
@@ -139,7 +147,7 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
     const drawing = renderer()
     // **하나짜리로 재지 않는다.** 셋이고 길이가 서로 다르다.
     const requests = [requestFor(1, 4), requestFor(2, 40), requestFor(3, 4)]
-    const batch = await drawing.render(requests)
+    const batch = await drawing.render(jobOf(...requests))
 
     expect(batch.results).toHaveLength(3)
     expect(batch.fontWarning).toBeNull()
@@ -165,14 +173,14 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
   })
 
   it('한글이 두부가 아니다 — 이 기계에는 글꼴이 있다', async () => {
-    const batch = await renderer().render([requestFor(1, 4)])
+    const batch = await draw([requestFor(1, 4)])
     expect(batch.fontWarning).toBeNull()
     expect(batch.results[0]!.ok).toBe(true)
   })
 
   it('그린 것이 pptx 의 매체로 그대로 실린다 — 계약이 이어진다', async () => {
     const requests = [requestFor(1, 6), requestFor(2, 6)]
-    const batch = await renderer().render(requests)
+    const batch = await draw(requests)
 
     const screens: (PptxScreen | null)[] = batch.results.map((result, index) =>
       result.ok
@@ -204,7 +212,7 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
    */
   it('한 장도 못 그려도 던지지 않는다 — 타임아웃이 값이 된다', async () => {
     const requests = [requestFor(1, 4), requestFor(2, 4)]
-    const batch = await renderer({ timeoutMs: 1 }).render(requests)
+    const batch = await draw(requests, { timeoutMs: 1 })
 
     expect(batch.results).toHaveLength(requests.length)
     expect(batch.results.map((result) => result.ok)).toEqual([false, false])
@@ -230,21 +238,20 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
    * `chromiumScreenRenderer`의 요청 차단을 지우고 이 케이스가 죽는지로 다시 잰다.
    */
   it('바깥 자원을 든 페이지도 그려진다 — 요청을 끊으므로 기다리지 않는다', async () => {
-    const request: ScreenRequest = {
-      title: '바깥 자원',
-      html:
-        '<!doctype html><html lang="ko"><head>' +
+    const request = raw(
+      '바깥 자원',
+      '<!doctype html><html lang="ko"><head>' +
         '<link rel="stylesheet" href="http://10.255.255.1/x.css">' +
         '</head><body><h1>회원 목록</h1></body></html>',
-      css: 'body { color: #111 }',
-    }
-    const batch = await renderer({ timeoutMs: 3000 }).render([request])
+      'body { color: #111 }',
+    )
+    const batch = await draw([request], { timeoutMs: 3000 })
     expect(batch.results[0]!.ok).toBe(true)
   })
 
   it('상한을 넘은 장은 조용히 빠지지 않고 분모를 말한다', async () => {
     const requests = [requestFor(1, 4), requestFor(2, 4), requestFor(3, 4)]
-    const batch = await renderer({ maxPages: 2 }).render(requests)
+    const batch = await draw(requests, { maxPages: 2 })
 
     expect(batch.results.slice(0, 2).every((result) => result.ok)).toBe(true)
     const last = batch.results[2]!
@@ -260,13 +267,14 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
    * 메모리를 다 먹는다. 상한 바로 밑은 그린다 — 상한이 멀쩡한 페이지를 막지 않는다. 폭이 뷰포트를 넘는 페이지도 넓이로 잰다.
    */
   it('넓이 상한을 넘은 장은 그리지 않고 크기와 상한을 말한다 — 바로 밑은 그린다', async () => {
-    const block = (width: number, height: number): ScreenRequest => ({
-      title: `${width}×${height}`,
-      html: `<!doctype html><html lang="ko"><body style="margin:0"><div style="width:${width}px;height:${height}px">긴 페이지</div></body></html>`,
-      css: 'body { color: #111 }',
-    })
+    const block = (width: number, height: number): Entry =>
+      raw(
+        `${width}×${height}`,
+        `<!doctype html><html lang="ko"><body style="margin:0"><div style="width:${width}px;height:${height}px">긴 페이지</div></body></html>`,
+        'body { color: #111 }',
+      )
     const maxHeight = SCREEN_DEFAULTS.maxArea / 720
-    const batch = await renderer().render([block(720, maxHeight), block(720, maxHeight + 1), block(1440, maxHeight / 2 + 1)])
+    const batch = await draw([block(720, maxHeight), block(720, maxHeight + 1), block(1440, maxHeight / 2 + 1)])
     const [under, tall, wide] = batch.results
     expect(under!.ok ? [under!.width, under!.height] : under).toEqual([1440, maxHeight * 2])
     expect(tall).toEqual({ ok: false, reason: `${SCREEN_TOO_LARGE} — 720×${maxHeight + 1}px(상한 720×${maxHeight}px 넓이)` })
@@ -284,12 +292,12 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
  */
 describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
   /** 여백 20000px 를 전이로 거는 테마 CSS 의 페이지 — 테마 CSS 는 무엇이든 적을 수 있다(`!important` 도). */
-  function growingPage(transition: string): ScreenRequest {
+  function growingPage(transition: string): Entry {
     return requestFor(1, 4, `[data-wb-component="Page"] { padding-top: 20000px; padding-bottom: 20000px; transition: ${transition} }`)
   }
 
   it('전이로 자라는 페이지는 끝 크기로 재서 거절한다 — 값에 `!important` 를 실어도', async () => {
-    const batch = await renderer().render([growingPage('padding 1ms linear 5s'), growingPage('padding 1ms linear 5s !important')])
+    const batch = await draw([growingPage('padding 1ms linear 5s'), growingPage('padding 1ms linear 5s !important')])
     const seen = batch.results.map((result) => (result.ok ? `그림 ${result.width}×${result.height}` : result.reason))
     // 끝 크기는 여백 둘(40000px) 너머 — 전이 앞에 재면 뷰포트(552px)다.
     const final = expect.stringMatching(new RegExp(`^${SCREEN_TOO_LARGE} — 720×4\\d{4}px\\(`))
@@ -298,15 +306,15 @@ describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
 
   it('늦게 오는 글꼴은 기다린 뒤 잰다', async () => {
     const lines = Array.from({ length: 40 }, (_unused, index) => `<p style="margin:0">line ${index}</p>`).join('')
-    const blocked = Array.from({ length: 10 }, (_unused, index) => `url(http://font.invalid/${index}.ttf)`).join(', ')
+    const blocked = Array.from({ length: 10 }, (_unused, index) => `url(https://font.invalid/${index}.ttf)`).join(', ')
     // 막힌 원본 뒤에 이 기계에 있는 글꼴을 두고 세로 지표를 15배로 — 오면 40줄이 상한(8192px)을 넘는다. 어느 것도 없으면 대체 글꼴로 작게 그려져 여기서 죽는다.
     const local = ['Arial', 'DejaVu Sans', 'Noto Sans CJK KR', 'NotoSansCJKkr-Regular'].map((name) => `local("${name}")`).join(', ')
-    const batch = await renderer().render([
-      {
-        title: '늦은 글꼴',
-        html: `<!doctype html><html lang="ko"><body style="margin:0">${lines}</body></html>`,
-        css: `@font-face { font-family: Tall; src: ${blocked}, ${local}; ascent-override: 1500% } body { font-family: Tall; font-size: 16px }`,
-      },
+    const batch = await draw([
+      raw(
+        '늦은 글꼴',
+        `<!doctype html><html lang="ko"><body style="margin:0">${lines}</body></html>`,
+        `@font-face { font-family: Tall; src: ${blocked}, ${local}; ascent-override: 1500% } body { font-family: Tall; font-size: 16px }`,
+      ),
     ])
     const [result] = batch.results
     expect(result!.ok ? `그림 ${result!.width}×${result!.height}` : result!.reason).toMatch(new RegExp(`^${SCREEN_TOO_LARGE} — 720×\\d+px\\(`))
@@ -323,19 +331,16 @@ describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
     const families = Array.from({ length: 40 }, (_unused, family) => family)
     const faces = families
       .map((family) => {
-        const blocked = Array.from({ length: 800 }, (_unused, index) => `url(http://font.invalid/${family}/${index}.ttf)`).join(', ')
+        const blocked = Array.from({ length: 800 }, (_unused, index) => `url(https://font.invalid/${family}/${index}.ttf)`).join(', ')
         return `@font-face { font-family: Slow${family}; src: ${blocked} }`
       })
       .join('\n')
     const chain = families.map((family) => `Slow${family}`).join(', ')
-    const batch = await renderer({ timeoutMs: 3000 }).render([
-      {
-        title: '느린 글꼴',
-        html: '<!doctype html><html lang="ko"><body><p>회원 목록</p></body></html>',
-        css: `${faces}\nbody { font-family: ${chain}, sans-serif }`,
-      },
-    ])
-    expect(batch.results).toEqual([{ ok: false, reason: `${SCREEN_FONTS_LATE} — 3000ms` }])
+    const batch = await draw(
+      [raw('느린 글꼴', '<!doctype html><html lang="ko"><body><p>회원 목록</p></body></html>', `${faces}\nbody { font-family: ${chain}, sans-serif }`)],
+      { timeoutMs: 3000 },
+    )
+    expect(batch.results).toEqual([{ ok: false, reason: `${SCREEN_NOT_READY} — 3000ms` }])
   })
 
   it('찍는 사이에 자라도 비트맵은 잰 크기를 안 넘고, 위쪽만 잘린 그림을 내지 않는다', async () => {
@@ -353,8 +358,8 @@ describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
     }
     let batch
     try {
-      batch = await renderer().render([
-        { title: '자라는 장', html: '<!doctype html><html lang="ko"><body style="margin:0"><div style="height:100px">자란다</div></body></html>', css: 'body { color: #111 }' },
+      batch = await draw([
+        raw('자라는 장', '<!doctype html><html lang="ko"><body style="margin:0"><div style="height:100px">자란다</div></body></html>', 'body { color: #111 }'),
       ])
     } finally {
       proto.screenshot = original
@@ -365,14 +370,14 @@ describe.skipIf(!있다)('잰 크기와 찍는 크기', () => {
   })
 
   /**
-   * **테마 CSS 의 전이는 끝 상태로 찍힌다.** 테마 시트는 HTML 을 띄운 뒤에 얹으므로 테마의 `transition` 은 기본값에서 테마 값으로
-   * 옮겨 가는 전이를 시작한다 — 끄기 전에는 그림이 옮겨 가는 중간에 찍혔다(전이를 걷은 CSS 와 그림이 다르고 높이도 흔들렸다). 끄기
-   * 없이 찍은 뒤에 다시 재면 이 전이가 «그리는 동안 커짐»으로 멀쩡한 장을 거절한다.
+   * **테마 CSS 의 전이는 끝 상태로 찍힌다.** 번들 런타임이 목업을 다시 그리거나(마커 · 글꼴 뒤 다시 재기) 시트가 늦게 실리면 테마의
+   * `transition` 이 옛 값에서 새 값으로 옮겨 가는 전이를 시작한다 — 그 중간에 찍히면 전이를 걷은 CSS 와 그림이 다르다. 끄기 없이 찍은
+   * 뒤에 다시 재면 이 전이가 «그리는 동안 커짐»으로 멀쩡한 장을 거절한다.
    */
   it('테마 CSS 의 전이는 끝 상태로 찍힌다 — 전이를 걷은 CSS 와 같은 그림이고 멀쩡한 장이 거절되지 않는다', async () => {
     const skin = '[data-wb-component="Button"] { padding: 24px 48px; background: #2563eb; color: #fff }'
     const moving = `${skin}\n[data-wb-component="Button"] { transition: padding 150ms, background-color 150ms }`
-    const batch = await renderer().render([requestFor(1, 40, moving), requestFor(1, 40, skin)])
+    const batch = await draw([requestFor(1, 40, moving), requestFor(1, 40, skin)])
     const [movingShot, calmShot] = batch.results
     expect(movingShot!.ok && calmShot!.ok ? Buffer.compare(movingShot!.bytes, calmShot!.bytes) : batch.results).toBe(0)
   })
@@ -384,8 +389,7 @@ describe('바이너리가 없으면', () => {
    * 그때 내보내기가 통째로 500이 되면 pptx를 아예 못 받는다.
    */
   it('던지지 않고 전부 실패로 낸다 — pptx 는 여전히 나온다', async () => {
-    const bad = renderer({ executablePath: '/tmp/wirebound-no-such-chromium' })
-    const batch = await bad.render([requestFor(1, 4), requestFor(2, 4)])
+    const batch = await draw([requestFor(1, 4), requestFor(2, 4)], { executablePath: '/tmp/wirebound-no-such-chromium' })
 
     expect(batch.results.map((result) => result.ok)).toEqual([false, false])
     for (const result of batch.results) {
@@ -444,7 +448,7 @@ function browserProcesses(): number {
 
 /** `render`가 도는 동안의 **최고** 프로세스 수와 끝난 뒤의 수. */
 async function processWatch(
-  requests: readonly ScreenRequest[],
+  requests: readonly Entry[],
   concurrency: number,
 ): Promise<{ peak: number; after: number }> {
   let peak = 0
@@ -455,7 +459,7 @@ async function processWatch(
     if (now > peak) peak = now
   }, 100)
   try {
-    await renderer({ concurrency }).render(requests)
+    await renderer({ concurrency }).render(jobOf(...requests))
   } finally {
     clearInterval(timer)
   }
@@ -610,7 +614,7 @@ describe.skipIf(!있다)('두부 판정자', () => {
    */
   it('다섯 번을 물어도 늘 「있다」다 — 조용한 거짓 경고가 없다', async () => {
     for (let 회 = 0; 회 < 5; 회 += 1) {
-      const batch = await renderer().render([requestFor(회, 3)])
+      const batch = await draw([requestFor(회, 3)])
       expect(batch.fontWarning).toBeNull()
       expect(batch.results[0]!.ok).toBe(true)
     }
@@ -619,7 +623,7 @@ describe.skipIf(!있다)('두부 판정자', () => {
 
 describe.skipIf(!있다)('시트가 그림에 반영되나', () => {
   /**
-   * **이 케이스가 없으면 `addStyleTag`를 지워도 아무도 안 죽는다.** 곧
+   * **이 케이스가 없으면 번들의 테마 시트가 안 실려도 아무도 안 죽는다.** 곧
    * *"슬라이드의 화면이 곧 그 테마다"*를 지키는 자가 없다.
    *
    * **바이트로는 못 잰다** — 같은 입력을 여러 번 그려도 바이트 수가 갈린다. **화소는
@@ -627,10 +631,10 @@ describe.skipIf(!있다)('시트가 그림에 반영되나', () => {
    * 시트**를 얹어 높이가 따라 변하는지로 잰다.
    */
   it('시트가 자리를 바꾸면 그림의 높이가 따라 바뀐다', async () => {
-    const 그대로 = requestFor(1, 4)
-    const 여백 = { ...그대로, css: `${그대로.css}\nbody { padding-top: 800px }` }
+    const 그대로 = requestFor(1, 4, '')
+    const 여백 = requestFor(1, 4, '[data-wb-component="Page"] { padding-top: 800px }')
 
-    const batch = await renderer({ concurrency: 1 }).render([그대로, 여백])
+    const batch = await draw([그대로, 여백], { concurrency: 1 })
     const [a, b] = batch.results
     expect(a!.ok).toBe(true)
     expect(b!.ok).toBe(true)
@@ -652,11 +656,9 @@ describe('스모크 픽스처가 진짜 화면인가', () => {
    * **브라우저가 없어도 도는 케이스다** — 그리기 전 단계를 잰다.
    */
   it('픽스처가 폴백 없이 그려진다 — 그린 것이 진짜 화면이다', () => {
-    const rendered = exportPage({ document: doc(1, 4), title: '관리자 회원 목록1' })
-    expect(rendered.errors).toEqual([])
-    expect(rendered.html).not.toContain('알 수 없는 컴포넌트')
-    expect(rendered.html).not.toContain('올바르지 않습니다')
-    expect(rendered.html).toContain('회원 목록 1')
+    const bundle = exportBundle({ pages: [{ title: '관리자 회원 목록1', document: doc(1, 4) }], runtimeJs: readExportRuntime() })
+    expect(bundle.errors).toEqual([])
+    expect(String(bundle.files.find((file) => file.path === bundle.pagePaths[0])!.content)).toContain('회원 목록 1')
   })
 })
 
@@ -665,11 +667,14 @@ describe.skipIf(!있다)('바깥으로 나가는 요청 — 일곱 길 전부', 
    * **`page.route`는 그 페이지 하나에만 걸린다** — 차단을 페이지에 걸면 일곱 길 가운데
    * **`window.open`만 규칙 밖으로 나간다.** 그래서 차단은 컨텍스트에 건다.
    *
-   * 지금 `exportPage`가 `<script>`를 안 내므로 도달할 길이 없다 — **그러나 그것이
-   * 산문이면 `exportPage`가 바뀌는 날 조용히 열린다.** 그래서 이 케이스가 일곱 길을
-   * **전부** 센다.
+   * 번들에는 테마 스크립트 · 테마 CSS 가 실리므로 이 길들이 **실제로 열려 있다** — 두 판을 잰다: 바깥을 가리키는 HTML 한 장, 그리고
+   * `theme.css` · `theme.js` 가 바깥을 가리키는 번들 페이지. 테마 판은 그려져야 한다(테마가 등록한다) — 그래야 스크립트가 돌았다.
+   *
+   * **서버에 안 닿은 것만으로는 이 차단을 못 잰다.** 페이지가 https 가짜 origin 에 서므로 브라우저가 루프백 http 요청을 스스로도
+   * 막는다 — 차단을 `route.continue()` 로 바꾼 판에서 서버에 닿은 것은 팝업 둘뿐이었다. 그래서 **길마다 차단이 끊었는지**(`abort` 에
+   * 온 주소)를 함께 센다 — 막는 것이 브라우저의 다른 규칙이 아니라 이 차단임을 그것이 가른다.
    */
-  it('일곱 길 어느 것도 서버에 닿지 않는다', async () => {
+  it('일곱 길 어느 것도 서버에 닿지 않는다 — HTML 한 장도, 테마 CSS · 스크립트가 가리켜도', async () => {
     const hits: string[] = []
     const server: Server = createServer((request, response) => {
       hits.push(request.url ?? '')
@@ -686,7 +691,7 @@ describe.skipIf(!있다)('바깥으로 나가는 요청 — 일곱 길 전부', 
         '<!doctype html><html lang="ko"><head>',
         `<link rel="stylesheet" href="${base}/link.css">`,
         `<style>@font-face { font-family: probe; src: url(${base}/font.woff2) }`,
-        `body { background-image: url(${base}/bg.png) }</style>`,
+        `body { font-family: probe; background-image: url(${base}/bg.png) }</style>`,
         `<script src="${base}/script.js"></script>`,
         '</head><body><h1>회원 목록</h1>',
         `<img src="${base}/img.png" alt="">`,
@@ -695,16 +700,201 @@ describe.skipIf(!있다)('바깥으로 나가는 요청 — 일곱 길 전부', 
         `window.open('${base}/popup.html');</script>`,
         '</body></html>',
       ].join('')
+      const themeCss = [
+        `@import url(${base}/theme-import.css);`,
+        `@font-face { font-family: probe; src: url(${base}/theme-font.woff2) }`,
+        `[data-wb-component="Page"] { font-family: probe; background-image: url(${base}/theme-bg.png) }`,
+      ].join('\n')
+      const before = [
+        `const add = (tag, attrs) => { const el = document.createElement(tag); Object.assign(el, attrs); document.head.appendChild(el) }`,
+        `add('link', { rel: 'stylesheet', href: '${base}/theme-link.css' })`,
+        `add('script', { src: '${base}/theme-script.js' })`,
+        `add('img', { src: '${base}/theme-img.png' })`,
+        `add('iframe', { src: '${base}/theme-frame.html' })`,
+        `fetch('${base}/theme-fetch.json').catch(() => {})`,
+        `window.open('${base}/theme-popup.html')`,
+      ].join('; ')
 
-      const batch = await renderer({ timeoutMs: 5000 }).render([
-        { title: '바깥 자원 일곱 길', html, css: 'body { color: #111 }' },
-      ])
-      expect(batch.results[0]!.ok).toBe(true)
+      const proto = (await routeClass()) as unknown as { abort: Route['abort'] }
+      const originalAbort = proto.abort
+      const aborted: string[] = []
+      proto.abort = function (this: Route, code) {
+        aborted.push(this.request().url())
+        return originalAbort.call(this, code)
+      }
+      let batch
+      try {
+        batch = await draw(
+          [raw('바깥 자원 일곱 길', html, 'body { color: #111 }'), bundled('테마가 가리키는 바깥', doc(1, 2), inlineTheme({ themeCss, before }))],
+          { timeoutMs: 5000 },
+        )
+      } finally {
+        proto.abort = originalAbort
+      }
+      expect(batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual(['ok', 'ok'])
       // 팝업이 뜨고 나가는 데 시간이 걸릴 수 있다. 그려진 뒤에도 잠깐 더 본다.
       await new Promise((resolve) => setTimeout(resolve, 500))
       expect(hits).toEqual([])
+      const roads = ['link.css', 'font.woff2', 'bg.png', 'script.js', 'img.png', 'frame.html', 'fetch.json', 'popup.html']
+      const expected = [...roads, ...roads.map((road) => `theme-${road}`), 'theme-import.css']
+      expect([...new Set(aborted.map((url) => url.slice(base.length + 1)))].sort()).toEqual(expected.sort())
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
+  })
+})
+
+/** 저장소 빌드가 지은 시스템 테마 패키지(`system-themes/admin/dist`) — api 가 기동 때 시딩하는 그 바이트다. */
+function systemAdminBytes(): Uint8Array {
+  const dir = fileURLToPath(new URL('../../../system-themes/admin/dist/', import.meta.url))
+  const name = readdirSync(dir).find((file) => file.endsWith('.wbtheme'))
+  if (name === undefined) throw new Error(`시스템 테마 패키지가 없다(${dir}) — 저장소 뿌리에서 \`pnpm build\``)
+  return new Uint8Array(readFileSync(`${dir}${name}`))
+}
+
+/**
+ * **렌더러가 쓰는 그 `Route` 클래스** — 같은 `playwright-core` 모듈이다(`Route` 는 값으로 안 내보낸다). 가짜 origin 의 응답을 늦추는 데
+ * 쓴다: 번들 파일은 메모리에서 곧바로 나가므로 «늦게 오는 글꼴»은 응답을 붙잡아야 선다.
+ */
+async function routeClass(): Promise<{ fulfill: Route['fulfill'] }> {
+  const probe = await chromium.launch(LAUNCH)
+  try {
+    const context = await probe.newContext()
+    let proto: { fulfill: Route['fulfill'] } | undefined
+    await context.route('**/*', (route) => {
+      proto ??= Object.getPrototypeOf(route) as { fulfill: Route['fulfill'] }
+      void route.fulfill({ status: 200, contentType: 'text/html', body: '' })
+    })
+    await (await context.newPage()).goto('https://route.invalid/')
+    if (proto === undefined) throw new Error('Route 를 못 붙잡았다')
+    return proto
+  } finally {
+    await probe.close()
+  }
+}
+
+/** 경로가 `suffix` 로 끝나는 응답을 `ms` 늦춘다. 되돌리는 함수를 낸다. 늦춘 뒤 컨텍스트가 닫혔으면 조용히 버린다. */
+async function delayResponses(suffix: string, ms: number): Promise<() => void> {
+  const proto = await routeClass()
+  const original = proto.fulfill
+  proto.fulfill = function (this: Route, options) {
+    if (!this.request().url().endsWith(suffix)) return original.call(this, options)
+    return new Promise<void>((resolve) => setTimeout(resolve, ms)).then(() => original.call(this, options).catch(() => {}))
+  }
+  return () => {
+    proto.fulfill = original
+  }
+}
+
+/**
+ * **번들 페이지를 연다** — 그리는 자가 `pages/<이름>.html#wb-screen` 을 가짜 origin 에서 열고 번들 런타임의 준비 신호를 기다린다
+ * (`src/services/screen-render-chromium.ts` 머리말).
+ */
+describe.skipIf(!있다)('번들 페이지를 연다', () => {
+  /** 셸의 바탕(`.wb-export` — `packages/exporter/src/bundle/shell-css.ts`). 화면 모드에서는 셸을 걷으므로 한 화소도 없어야 한다. */
+  const SHELL_BACKGROUND: [number, number, number] = [0xee, 0xf0, 0xf4]
+
+  it('시스템 테마로 그린 장은 목업만이다 — 폭이 뷰포트 그대로이고 셸의 바탕이 한 화소도 없다', async () => {
+    const batch = await draw([bundled('관리자 회원 목록', doc(1, 4), packageTheme(systemAdminBytes()))])
+    const [shot] = batch.results
+    expect(shot!.ok ? [shot!.width, countColor(shot!.bytes, SHELL_BACKGROUND)] : shot).toEqual([1440, 0])
+  })
+
+  /** 샘플 테마(kit 픽스처 — `packages/theme-kit/test/fixtures/sample-theme`)의 `Card` 뷰는 테두리를 주색 토큰(`#e11d48`)으로 그린다. */
+  it('kit 으로 지은 테마의 뷰가 화면에 선다 — 주색 테두리가 테마 판에만 있다', async () => {
+    const card = {
+      version: 1,
+      root: { id: 'n_page', type: 'Page', children: [{ id: 'n_card', type: 'Card', props: { title: '카드' }, children: [] }] },
+    } as unknown as PageDocument
+    const theme = packageTheme(await builtSample())
+    const batch = await draw([bundled('샘플 테마', card, theme), bundled('테마 없음', card)])
+    const counts = batch.results.map((result) => (result.ok ? countColor(result.bytes, [0xe1, 0x1d, 0x48]) : result.reason))
+    expect(counts[0]).toBeGreaterThan(0)
+    expect(counts[1]).toBe(0)
+  })
+
+  it('번들이 등록하지 않은 테마 · 던지는 뷰는 그 장만 실패하고 까닭을 말한다', async () => {
+    const batch = await draw([
+      requestFor(1, 2),
+      bundled('등록 안 함', doc(2, 2), inlineTheme({ id: 'silent', register: false })),
+      bundled('던지는 뷰', doc(3, 2), inlineTheme({ id: 'thrower', views: `{ Button: rt.sdk.view(() => { throw new Error('뷰가 던진다') }) }` })),
+      requestFor(4, 2),
+    ])
+    expect(batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual([
+      'ok',
+      '테마 번들이 등록하지 않았습니다(silent@1.0.0)',
+      '테마 뷰가 던졌습니다: n_btn_3',
+      'ok',
+    ])
+  })
+
+  /**
+   * 테마 자산의 글꼴(`late.woff2`)을 늦게 내준다. 원본이 실패하면 `local()` 로 떨어지되 `ascent-override` 가 줄을 높인다 — 글꼴을
+   * 기다렸으면 늦춘 판과 안 늦춘 판의 높이가 같고, 안 기다렸으면 늦춘 판이 대체 글꼴 높이로 짧다.
+   */
+  const lateFont = (): Entry => {
+    const local = ['Arial', 'DejaVu Sans', 'Noto Sans CJK KR', 'NotoSansCJKkr-Regular'].map((name) => `local("${name}")`).join(', ')
+    return bundled(
+      '늦은 글꼴',
+      doc(1, 20),
+      inlineTheme({
+        themeCss: `@font-face { font-family: Late; src: url(../assets/late.woff2), ${local}; ascent-override: 1500% }\n[data-wb-component="Page"] { font-family: Late }`,
+        assets: [['assets/late.woff2', new Uint8Array([1, 2, 3, 4])]],
+      }),
+    )
+  }
+
+  it('테마의 늦은 글꼴을 기다린 뒤 잰다 — 늦춘 판과 안 늦춘 판의 높이가 같다', async () => {
+    const calm = await draw([lateFont()])
+    const restore = await delayResponses('/late.woff2', 1500)
+    let late
+    try {
+      late = await draw([lateFont()], { timeoutMs: 10_000 })
+    } finally {
+      restore()
+    }
+    const [calmShot] = calm.results
+    const [lateShot] = late.results
+    expect(calmShot!.ok && lateShot!.ok ? [lateShot!.height, lateShot!.height > 1104] : late.results).toEqual([
+      calmShot!.ok ? calmShot!.height : -1,
+      true,
+    ])
+  })
+
+  it('테마의 글꼴이 한 장의 한도를 넘기면 그 장이 실패하고 한도를 말한다', async () => {
+    const restore = await delayResponses('/late.woff2', 8000)
+    let batch
+    try {
+      batch = await draw([lateFont()], { timeoutMs: 3000 })
+    } finally {
+      restore()
+    }
+    expect(batch.results).toEqual([{ ok: false, reason: `${SCREEN_NOT_READY} — 3000ms` }])
+  })
+
+  /**
+   * **움직임 끄기는 첫 스크립트보다 먼저 선다**(초기화 스크립트) — 머리의 스크립트가 `<html>` 의 계산된 `transition-duration` 을 읽어
+   * 끄기가 없으면 몸을 3000px 키운다. 끄기가 늦게 서면(찍기 직전에 얹으면) 그 스크립트가 이미 켜진 전이를 본다.
+   */
+  it('움직임 끄기가 페이지의 첫 스크립트보다 먼저 선다', async () => {
+    const page = [
+      '<!doctype html><html lang="ko"><head>',
+      '<style>html { transition: color 5s }</style>',
+      `<script>window.__moving = getComputedStyle(document.documentElement).transitionDuration !== '0s'</script>`,
+      '</head><body style="margin:0"><div id="box" style="height:100px">움직임</div>',
+      `<script>if (window.__moving) document.getElementById('box').style.height = '3000px'</script>`,
+      '</body></html>',
+    ].join('')
+    const batch = await draw([raw('움직임 끄기', page)])
+    const [shot] = batch.results
+    expect(shot!.ok ? shot!.height : shot).toBe(1104)
+  })
+
+  it('가짜 origin 에서 연다 — 번들 밖 경로는 404 이고 페이지 경로의 한글 이름을 그대로 찾는다', async () => {
+    const entry = bundled('회원 목록 — 한글 이름', doc(1, 2))
+    expect(entry.path).toMatch(/[가-힣]/)
+    const batch = await draw([entry])
+    expect(batch.results.map((result) => (result.ok ? 'ok' : result.reason))).toEqual(['ok'])
+    expect(SCREEN_ORIGIN).toMatch(/^https:\/\/[^/]+\.invalid$/)
   })
 })

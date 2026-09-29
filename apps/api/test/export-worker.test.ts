@@ -35,7 +35,7 @@ import {
 } from '../src/services/export-worker'
 import type { ExportJobSpec } from '../src/services/export-worker-protocol'
 import { bundleRootDirectory, zipBundle, zipParts } from '../src/services/export-zip'
-import type { ScreenBatch, ScreenRenderer, ScreenRequest } from '../src/services/screen-render'
+import type { ScreenBatch, ScreenJob, ScreenRenderer } from '../src/services/screen-render'
 import {
   addMember,
   createMenuNode,
@@ -158,16 +158,16 @@ async function 채울사람들(ctx: TestContext, projectId: string): Promise<{ w
 
 /** 페이지마다 **다른 크기**를 답하는 가짜 그리는 자 — 그림이 엉뚱한 페이지에 붙으면 슬라이드가 갈린다. */
 class SizedRenderer implements ScreenRenderer {
-  readonly seen: ScreenRequest[][] = []
-  last(): ScreenRequest[] {
+  readonly seen: ScreenJob[] = []
+  last(): ScreenJob {
     const found = this.seen[this.seen.length - 1]
     if (!found) throw new Error('그리는 자가 한 번도 안 불렸습니다')
     return found
   }
-  async render(requests: readonly ScreenRequest[]): Promise<ScreenBatch> {
-    this.seen.push([...requests])
+  async render(job: ScreenJob): Promise<ScreenBatch> {
+    this.seen.push(job)
     return {
-      results: requests.map((_, index) => ({ ok: true as const, bytes: PNG_1X1, width: 1000 + index * 100, height: 700 + index * 50 })),
+      results: job.pages.map((_, index) => ({ ok: true as const, bytes: PNG_1X1, width: 1000 + index * 100, height: 700 + index * 50 })),
       fontWarning: '글꼴 경고 — 워커를 건너 와야 한다',
     }
   }
@@ -221,9 +221,12 @@ describe('워커가 낸 것은 같은 스레드에서 낸 것과 같다', () => 
         const want = entries(zipParts(reference.parts))
         expect(got.map(([name]) => name)).toEqual(want.map(([name]) => name))
         expect(differingEntries(got, want)).toEqual([])
-        // 그리라고 넘긴 HTML · 시트가 같다 — 기본 뷰 CSS 가 든 시트여야 견준 것이 뜻이 있다.
+        // 그리라고 넘긴 번들(파일 전부 · 찍을 페이지)이 같다 — 기본 뷰 CSS · 런타임 · 테마가 든 번들이어야 견준 것이 뜻이 있다.
         expect(viaRoute.last()).toEqual(inThread.last())
-        expect(inThread.last()[0]!.css).toContain('--wb-node-grid-columns')
+        expect(String(inThread.last().files.get('assets/views.css'))).toContain('--wb-node-grid-columns')
+        expect(inThread.last().files.has('assets/theme/theme.js')).toBe(true)
+        expect(inThread.last().pages.map((page) => page.title)).toEqual(reference.pages.map((page) => page.title))
+        expect(inThread.last().pages.every((page) => inThread.last().files.has(page.path))).toBe(true)
 
         const preview = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export/preview?format=pptx`, cookies: fixture.cookie })
         const body = preview.json()
@@ -397,13 +400,13 @@ class HeldRenderer {
   active = 0
   maxActive = 0
   private readonly releases: (() => void)[] = []
-  readonly render = async (requests: readonly ScreenRequest[]): Promise<ScreenBatch> => {
+  readonly render = async (job: ScreenJob): Promise<ScreenBatch> => {
     this.started++
     this.active++
     this.maxActive = Math.max(this.maxActive, this.active)
     await new Promise<void>((resolve) => this.releases.push(resolve))
     this.active--
-    return { results: requests.map(() => ({ ok: true as const, bytes: PNG_1X1, width: 1, height: 1 })), fontWarning: null }
+    return { results: job.pages.map(() => ({ ok: true as const, bytes: PNG_1X1, width: 1, height: 1 })), fontWarning: null }
   }
   /** 그리는 중인 것 하나를 끝낸다(먼저 시작한 것부터). */
   releaseOne(): void {

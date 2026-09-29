@@ -196,7 +196,7 @@ function buildPptxOrFail(
       return workers.runPptx(
         rows,
         { kind: 'pptx', screens: renderer !== undefined, zip },
-        { signal, admission, ...(renderer === undefined ? {} : { render: (requests) => renderer.render(requests) }) },
+        { signal, admission, ...(renderer === undefined ? {} : { render: (job) => renderer.render(job) }) },
       )
     }),
   )

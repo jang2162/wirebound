@@ -1,8 +1,7 @@
 /**
  * **값을 `<script>` 안에 실어도 되는 JSON 리터럴로 만든다.**
  *
- * `exportPage`는 `<script>`를 하나도 내지 않는다(케이스가 그것을 지킨다). 이 함수를 쓰는
- * 것은 번들이다 — `runtime.js`가 읽을 데이터를 `<script>`에 심는다(`bundle/index.ts` →
+ * 이 함수를 쓰는 것은 번들이다 — `runtime.js`가 읽을 페이지 JSON 을 `<script>`에 심는다(`bundle/index.ts` →
  * `shellScripts`). **규칙을 문서의 스니펫으로 두지 않고 함수로 두는 것은 스니펫은 복사되고
  * 어떤 검사도 지키지 않기 때문**이다.
  *
