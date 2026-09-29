@@ -163,7 +163,9 @@ export default defineConfig({
           // — `--maxWorkers=25%`로 돌리면 mcp `dist-smoke`가 죽는다). 워커 수를 CLI 로 얼마를 주든 이 줄이 막는다.
           // `fileParallelism`은 여기 쓰면 조용히 무시된다(위 api 프로젝트 주석) — 같은 이유로 `singleFork`다.
           // 에디터 판(`apps/web/build-test`)은 이 줄에 기대지 않는다 — `dist` 를 안 읽고 포트 · DB 를 판마다 새로 받는다. 다시 재는
-          // 법: `pnpm test:browser` 둘을 한꺼번에 띄운다(같은 워크트리에서도 둘 다 전 케이스 통과였다).
+          // 법: `pnpm test:browser` 둘을 한꺼번에 띄운다. 하나만 `dist` 에 닿는다 — `export-bundle.test.ts` 가 번들에 실릴
+          // `packages/exporter/dist/runtime.js` 를 제 `beforeAll` 에서 다시 짓는다(그 파일 하나만 덮고 `dist` 를 비우지 않는다 —
+          // `vite.runtime.config.ts` 의 `emptyOutDir`).
           pool: 'forks',
           poolOptions: { forks: { singleFork: true } },
         },

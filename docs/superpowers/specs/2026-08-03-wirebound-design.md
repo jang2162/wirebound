@@ -347,7 +347,7 @@ wirebound는 관리자 화면에 한정되지 않는다. 마케팅 사이트, �
 - **시스템 테마는 api 가 기동할 때 넣는다** — 저장소 빌드가 낸 `system-themes/*/dist/*.wbtheme` 가운데 DB 에 없는 `id@version` 만. 같은 `id@version` 인데 내용(sha256)이 다르면 기동을 멈춘다(판을 올려야 한다). 테마가 비어 있는 프로젝트는 그 자리에서 `system-admin` 최신판으로 채워지고, 새 프로젝트도 그 판으로 선다.
 - **프로젝트의 테마 바인딩은 owner 가 바꾼다**(`PUT /api/projects/:projectId/theme` — `theme_rev` 낙관적 동시성, 숨긴 버전은 지금 고정한 판의 토큰만 고칠 때만). 토큰은 대상 manifest 로 검증하고 기본값과 같은 값을 뺀 뒤 저장한다(값 200 글자 · 전체 16 KB 상한). 저장은 프로젝트 룸에 `theme-changed` 를 방송한다. 바꾸기 전의 영향(이어지는 · 버려지는 · 기본값으로 서는 토큰 수, 새 테마에 없는 variant 를 쓰는 노드 수)은 `GET …/theme/impact` 가 계산한다. lint 의 테마 규칙이 «현재 테마에 없는 variant» 를 본다(§12.4).
 - **변형은 manifest 가 선언한다** — `components[type].variants` · `defaultVariant` · `hideProps`. 노드의 `variant`가 선언 밖이면 렌더러가 `defaultVariant`로 그린다(페이지 데이터는 바꾸지 않는다). 속성 패널의 변형 칸과 감출 속성도 이 선언을 읽는다.
-- **내보내기(HTML 번들 · PPTX 화면)는 테마 없이 SDK 기본 뷰와 그 CSS로 그린다**(§11.3).
+- **내보내기(HTML 번들 · PPTX 화면)도 프로젝트가 고정한 `id@버전` 의 번들 · CSS · 토큰으로 그린다**(§11.3). 테마 코드는 브라우저(내보낸 페이지 · PPTX 의 Chromium)에서만 돈다 — api 의 Node 프로세스는 패키지 파일을 바이트로 번들에 싣기만 한다.
 - **테마는 저장소 밖에서 짜서 `.wbtheme` 한 파일로 빌드한다.** 스타터 템플릿(`wb-theme pack-template` 이 짓는 zip — SDK · kit tarball 과 코딩 에이전트용 `SKILL.md` 동봉)을 풀고 `wb-theme dev` 로 갤러리를 보며 짜고, `wb-theme build` 가 manifest 를 검증해 `dist/<id>-<version>.wbtheme` 를 낸다. `.wbtheme` 는 zip 이고 `manifest.json` · `theme.js`(IIFE — `react` · `react/jsx-runtime` · `@wirebound/theme-sdk` 를 번들에 넣지 않고 호스트가 세운 `__wirebound_runtime__` 에서 읽는다) · `theme.css` · `assets/**` 만 든다. 읽기(`readWbtheme`)는 크기 · 항목 수 · 경로 · 허용 목록 · 링크를 풀기 전에 본다. `system-admin` 도 `pnpm build` 가 `.wbtheme` 로 낸다. 만든 `.wbtheme` 는 관리자가 올린다(위 «테마 관리»).
 
 ### 6.1 노드 속성
@@ -615,16 +615,19 @@ MCP의 `patch_page`는 WebSocket 대신 REST로 들어오지만, 그 뒤 파이�
 
 ```
 wirebound-export/
-  index.html            트리 네비 + 뷰어 셸
+  index.html            첫 페이지의 사본
   pages/
     관리자-회원-목록.html
     관리자-회원-상세.html
   assets/
-    theme.css           SDK 기본 뷰의 CSS (테마는 아직 싣지 않는다 — §6.0)
-    runtime.js          상호작용 런타임
+    shell.css           뷰어 셸의 CSS
+    views.css           SDK 기본 뷰의 CSS
+    runtime.js          내보내기 런타임 — react · 카탈로그 · renderer · theme-sdk 런타임
+    theme/theme.js      프로젝트가 고정한 패키지의 파일 그대로 (theme.css · assets/** 도)
+    tokens.css          프로젝트 토큰 값 → CSS 변수
 ```
 
-`exporter`가 `renderer`를 서버에서 실행해 정적 HTML을 만든다. 트리 네비게이션·목업·코멘트 3분할이 웹 앱과 동일하고, 상호작용도 동작한다. 렌더러가 하나뿐이라 결과가 어긋날 수 없다.
+`exporter`는 셸(트리 네비게이션 · 설명 · 코멘트 · 상호작용 목록)만 서버에서 짓고, 목업은 페이지에 실린 문서 JSON 을 **내보내기 런타임이 브라우저에서** 그린다 — 캔버스와 같은 `renderer` · 같은 시트 차례(기본 뷰 → 테마 → 토큰) · 같은 상호작용 런타임 · 같은 마커 좌표 함수라 결과가 어긋날 수 없다. 모든 스크립트가 일반 스크립트라 `file://` 로 열어도 돈다. 테마 번들을 못 쓰면(등록 없음 · 다른 판 · 뷰가 던짐) 기본 뷰로 그리고 까닭을 상태 줄에 적는다. PPTX 의 화면은 Chromium 이 이 번들의 페이지를 셸 없이(`#wb-screen`) 열어 찍는다 — 설계는 `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「내보내기와 PPTX」.
 
 ---
 
