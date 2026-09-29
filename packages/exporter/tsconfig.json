@@ -8,7 +8,7 @@
     "composite": true
   },
   "include": ["src"],
-  "exclude": ["src/runtime/browser.ts"],
+  "exclude": ["src/runtime/browser.ts", "src/browser"],
   "references": [
     { "path": "../schema" },
     { "path": "../renderer" },

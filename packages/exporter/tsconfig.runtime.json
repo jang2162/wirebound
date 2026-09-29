@@ -4,7 +4,14 @@
     "rootDir": ".",
     "outDir": ".tsbuild-runtime",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "composite": true
   },
-  "include": ["src/runtime/browser.ts"]
+  "include": ["src/runtime/browser.ts", "src/browser", "src/page-data.ts"],
+  "references": [
+    { "path": "../schema" },
+    { "path": "../renderer" },
+    { "path": "../theme-sdk" },
+    { "path": "../themes" }
+  ]
 }

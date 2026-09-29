@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import * as Sdk from '@wirebound/theme-sdk'
-import { installRuntime, WB_RUNTIME_GLOBAL } from '@wirebound/theme-sdk/runtime'
+import { adoptManifest, installRuntime, WB_RUNTIME_GLOBAL } from '@wirebound/theme-sdk/runtime'
 
 const def = Sdk.defineTheme({ manifest: { id: 't', name: 't', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} } }, views: {} })
 let handle: ReturnType<typeof installRuntime> | null = null
@@ -77,5 +77,34 @@ describe('defineManifest', () => {
   it('받은 manifest 를 그대로 돌려준다 — theme.config.ts 에 타입만 준다', () => {
     const m = { id: 'm', name: 'm', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} } }
     expect(Sdk.defineManifest(m)).toBe(m)
+  })
+})
+
+describe('adoptManifest', () => {
+  const server = { id: 'acme', name: 'ACME', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} } }
+  const views = { Text: () => null } as unknown as Sdk.ThemeDefinition['views']
+
+  it('id · 판이 같으면 서버 manifest 를 끼운다 — 뷰는 번들 것, components 가 달라도 서버 것', () => {
+    const bundled = { manifest: { ...server, components: { Card: { variants: [{ id: 'plain', label: '보통' }], defaultVariant: 'plain' } } }, views }
+    const result = adoptManifest(bundled as Sdk.ThemeDefinition, server)
+    expect(result).toEqual({ ok: true, definition: { manifest: server, views } })
+    expect(result.ok && result.definition.manifest).toBe(server)
+  })
+
+  it.each([
+    ['id 가', { ...server, id: 'other' }, 'other@1.0.0'],
+    ['판이', { ...server, version: '2.0.0' }, 'acme@2.0.0'],
+  ])('%s 다르면 까닭 — 다른 테마의 번들이다', (_what, manifest, got) => {
+    expect(adoptManifest({ manifest, views } as Sdk.ThemeDefinition, server)).toEqual({
+      ok: false,
+      reason: `테마 번들이 다른 테마를 등록했습니다(acme@1.0.0 — 번들은 ${got})`,
+    })
+  })
+
+  it('번들이 manifest 를 안 실었으면 «없음» 이라 말한다', () => {
+    expect(adoptManifest({ views } as unknown as Sdk.ThemeDefinition, server)).toEqual({
+      ok: false,
+      reason: '테마 번들이 다른 테마를 등록했습니다(acme@1.0.0 — 번들은 없음)',
+    })
   })
 })

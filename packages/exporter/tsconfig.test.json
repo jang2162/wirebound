@@ -8,5 +8,5 @@
     "composite": true
   },
   "include": ["test", "test-support", "build-test"],
-  "references": [{ "path": "./" }]
+  "references": [{ "path": "./" }, { "path": "./tsconfig.runtime.json" }]
 }

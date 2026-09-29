@@ -14,12 +14,24 @@ import * as api from '../src/index'
 /**
  * **DOM을 봐도 되는 자리. 목록이 여기 사는 것이 요점이다.**
  *
- * `assets/runtime.js`를 만드는 파일 하나는 브라우저에서 돈다. 그 파일은 `src`에 살지만
- * **Node에서는 한 줄도 돌지 않고**(글자로 나가 브라우저가 판다) 자기 `tsconfig`가 따로
- * 검사한다. 명제를 지우지 않고 *"정확히 이것 하나가 예외다"*로 센다 —
- * 목록이 `src`에 있으면 파일을 더하는 손이 목록도 함께 고쳐 아무것도 안 재게 된다.
+ * `assets/runtime.js`를 만드는 소스는 브라우저에서 돈다. 그 파일들은 `src`에 살지만
+ * **Node에서는 한 줄도 돌지 않고**(vite 가 묶어 브라우저가 판다) 자기 `tsconfig`가 따로
+ * 검사한다. 명제를 지우지 않고 *"정확히 이것이 예외다"*로 센다 —
+ * 목록이 `src`에 있으면 파일을 더하는 손이 목록도 함께 고쳐 아무것도 안 재게 된다. `/` 로 끝나면 그 디렉터리 전부다.
  */
-const BROWSER_SOURCES = ['../src/runtime/browser.ts']
+const BROWSER_SOURCES = ['../src/runtime/browser.ts', '../src/browser/']
+
+/** 두 프로그램이 함께 드는 DOM 없는 계약(페이지 JSON 의 모양) — 브라우저 쪽이 import 하므로 그 `tsconfig` 에도 든다. */
+const SHARED_SOURCES = ['../src/page-data.ts']
+
+function isBrowserSource(path: string): boolean {
+  return BROWSER_SOURCES.some((entry) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry))
+}
+
+/** `tsconfig` 에 적는 꼴 — `../` 를 떼고 디렉터리의 끝 `/` 를 뗀다. */
+function asConfigPath(entry: string): string {
+  return entry.replace('../', '').replace(/\/$/, '')
+}
 
 /** `src/`의 모든 파일. */
 const sources = import.meta.glob('../src/**/*.{ts,tsx}', {
@@ -52,7 +64,7 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
       exclude: string[]
     }
     expect(parsed.compilerOptions.lib).toEqual(['ES2022'])
-    expect(parsed.exclude).toEqual(BROWSER_SOURCES.map((path) => path.replace('../', '')))
+    expect(parsed.exclude).toEqual(BROWSER_SOURCES.map(asConfigPath))
   })
 
   /**
@@ -66,7 +78,7 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
       include: string[]
     }
     expect(parsed.compilerOptions.lib).toEqual(['ES2022', 'DOM', 'DOM.Iterable'])
-    expect(parsed.include).toEqual(BROWSER_SOURCES.map((path) => path.replace('../', '')))
+    expect(parsed.include).toEqual([...BROWSER_SOURCES, ...SHARED_SOURCES].map(asConfigPath))
   })
 
   it('케이스의 tsconfig만 DOM을 받는다', () => {
@@ -85,16 +97,17 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
    */
   it('src가 DOM 전역을 이름으로 부르지 않는다', () => {
     for (const [path, source] of Object.entries(sources)) {
-      if (BROWSER_SOURCES.includes(path)) continue
+      if (isBrowserSource(path)) continue
       expect(source as string, path).not.toMatch(/\b(document|window|navigator|localStorage)\./)
     }
   })
 
   /** 예외 목록이 **실재하는 파일**을 가리키는지 본다. 오타면 위 검사가 아무것도 안 뺀다. */
-  it('예외로 적은 파일이 실제로 있고 실제로 DOM을 부른다', () => {
-    for (const path of BROWSER_SOURCES) {
-      expect(Object.keys(sources), path).toContain(path)
-      expect(sources[path] as string, path).toMatch(/\bdocument\./)
+  it('예외로 적은 자리가 실제로 있고 실제로 DOM을 부른다', () => {
+    for (const entry of BROWSER_SOURCES) {
+      const inside = Object.keys(sources).filter((path) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry))
+      expect(inside.length, entry).toBeGreaterThan(0)
+      expect(inside.map((path) => sources[path] as string).join('\n'), entry).toMatch(/\b(document|window)\./)
     }
   })
 
@@ -134,6 +147,7 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
       '@wirebound/renderer',
       '@wirebound/schema',
       '@wirebound/theme-sdk',
+      '@wirebound/themes',
       'react',
       'react-dom',
     ])
@@ -150,7 +164,7 @@ describe('경계 — exporter가 무엇을 보지 않는가', () => {
       exports: Record<string, unknown>
     }
     expect(manifest.files).toEqual(['dist'])
-    expect(Object.keys(manifest.exports).sort()).toEqual(['.', './test-support'])
+    expect(Object.keys(manifest.exports).sort()).toEqual(['.', './browser', './runtime.js', './test-support'])
   })
 })
 

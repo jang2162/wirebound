@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildTheme } from '@wirebound/theme-kit'
@@ -23,6 +24,16 @@ async function buildSystemThemes(): Promise<void> {
 }
 
 /**
+ * **내보내기 런타임(`packages/exporter/dist/runtime.js`)을 실행마다 다시 빌드한다** — `buildApp` 이 기동 때 그것을 읽고(없으면 멈춘다) 내보낸
+ * 번들이 그 글자를 싣는다. 시스템 테마와 같은 까닭이다: 앞에 남은 산출물을 믿으면 브라우저 소스를 고친 뒤 옛 런타임으로 잰다.
+ */
+function buildExportRuntime(): void {
+  const started = Date.now()
+  execFileSync('pnpm', ['--filter', '@wirebound/exporter', 'build:runtime'], { cwd: process.cwd(), stdio: 'pipe' })
+  console.log(`[global-setup] 내보내기 런타임 빌드 ${Date.now() - started}ms`)
+}
+
+/**
  * vitest가 api 프로젝트 전체 실행 전 딱 한 번 부른다.
  *
  * latest → none → latest 한 사이클을 돈다. 단순히 최신까지 올리기만 하면
@@ -34,6 +45,7 @@ async function buildSystemThemes(): Promise<void> {
  */
 export default async function setup(): Promise<void> {
   await buildSystemThemes()
+  buildExportRuntime()
   const pool = createPool(TEST_DATABASE_URL)
   const db = createDb(pool)
   try {

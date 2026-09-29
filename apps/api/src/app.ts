@@ -25,6 +25,7 @@ import { myTokenRoutes, tokenRoutes } from './routes/tokens'
 import { treeRoutes } from './routes/tree'
 import { ensureCatalog } from './schema-setup'
 import type { ScreenRenderer } from './services/screen-render'
+import { readExportRuntime } from './services/export-runtime'
 import { backfillProjectThemes, seedSystemThemes } from './services/system-themes'
 import { withTransaction } from './db/tx'
 import { registerRealtime } from './ws'
@@ -86,6 +87,11 @@ export interface BuildAppOptions {
    * `test/screen-renderer-census.test.ts`가 그것을 소스에서 센다.
    */
   screenRenderer?: ScreenRenderer
+  /**
+   * 테스트 전용: 내보내기 런타임(`runtime.js`)을 읽을 자리. 운영 코드(`main.ts`)는 채우지 않는다 — 생략하면 `@wirebound/exporter` 가 낸
+   * 파일이다(`services/export-runtime.ts`). 이 필드가 있는 유일한 이유는 «없으면 기동이 멈춘다» 를 재는 `test/export-runtime.test.ts` 다.
+   */
+  exportRuntimePath?: string
 }
 
 /** `BuildAppOptions.onRoute`가 흘리는 한 줄. 인구조사가 쓰는 것만 담는다. */
@@ -192,6 +198,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 레지스트리를 채운다. ensureCatalog는 멱등하다 — 이 스위트가 buildApp을
   // 수백 번 부르므로 필수다(schema-setup.ts 참고).
   ensureCatalog()
+
+  // 내보내기 런타임을 읽어 쥔다 — 없으면 기동을 멈춘다(`services/export-runtime.ts` 의 머리말). 내보낸 번들의 목업을 브라우저가 이것으로 그린다.
+  readExportRuntime(options.exportRuntimePath)
 
   // 시스템 테마를 넣고 테마가 빈 프로젝트를 채운다 — 산출물이 없거나 이미 올린 판의 내용이 바뀌었으면 던져 기동을 멈춘다
   // (`services/system-themes.ts` 의 머리말). 한 트랜잭션이다 — 여러 판 가운데 뒤의 것이 걸리면 앞의 것도 안 남는다.
